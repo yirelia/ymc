@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OMC 编译全流程导读</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d0d7de;
+    --code-bg: #f6f8fa; --kw: #cf222e; --str: #0a3069; --com: #6e7781;
+    --fn: #8250df; --num: #0550ae; --accent: #0969da; --accent-bg: #ddf4ff;
+    --card: #f6f8fa; --line: #57606a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #8b949e; --border: #30363d;
+      --code-bg: #161b22; --kw: #ff7b72; --str: #a5d6ff; --com: #8b949e;
+      --fn: #d2a8ff; --num: #79c0ff; --accent: #58a6ff; --accent-bg: #132436;
+      --card: #161b22; --line: #8b949e;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.75; font-size: 16px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 2.5rem 1.5rem 6rem; }
+  header.hero { border-bottom: 1px solid var(--border); padding-bottom: 1.5rem; margin-bottom: 2rem; }
+  h1 { font-size: 2rem; margin: 0 0 .4rem; letter-spacing: -.02em; }
+  .sub { color: var(--muted); font-size: .95rem; margin: 0; }
+  .sub code { background: var(--code-bg); padding: .1em .4em; border-radius: 5px; font-size: .85em; }
+  h2 {
+    font-size: 1.4rem; margin: 3rem 0 1rem; padding-top: .5rem;
+    border-top: 1px solid var(--border);
+  }
+  h2 .n { color: var(--accent); font-variant-numeric: tabular-nums; }
+  h3 { font-size: 1.1rem; margin: 1.8rem 0 .6rem; }
+  p { margin: .8rem 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: "SFMono-Regular", "Cascadia Code", Consolas, "Liberation Mono", monospace; font-size: .88em; }
+  p code, li code, td code { background: var(--code-bg); padding: .1em .4em; border-radius: 5px; color: var(--fg); }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.1rem; overflow-x: auto; font-size: .84rem; line-height: 1.6; margin: 1rem 0;
+  }
+  pre code { background: none; padding: 0; color: var(--fg); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; }
+  .fn { color: var(--fn); } .num { color: var(--num); }
+  .ln { color: var(--line); user-select: none; }
+  .lead {
+    background: var(--accent-bg); border-left: 3px solid var(--accent);
+    padding: .9rem 1.1rem; border-radius: 0 8px 8px 0; margin: 1.2rem 0;
+  }
+  .lead strong { color: var(--fg); }
+  .note {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: .9rem 1.1rem; margin: 1.2rem 0; font-size: .95rem;
+  }
+  .note .tag { font-weight: 600; color: var(--accent); }
+  .toc {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.4rem; margin: 1.5rem 0 2.5rem;
+  }
+  .toc-title { font-weight: 600; margin: 0 0 .5rem; font-size: .9rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .toc ol { margin: 0; padding-left: 1.4rem; }
+  .toc li { margin: .25rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--card); font-weight: 600; }
+  .fileref { color: var(--muted); font-size: .82rem; font-family: "SFMono-Regular", Consolas, monospace; }
+  .diagram {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1.2rem; overflow-x: auto; font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: .82rem; line-height: 1.65; white-space: pre; color: var(--fg);
+  }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>OMC 编译全流程导读</h1>
+  <p class="sub">总览篇 · 新前端 <code>NFFrontEnd/</code> + 新后端 <code>NBackEnd/</code> · 从 <code>Demo.mo</code> 到 <code>Demo_res.mat</code> · 行号来自当前工作区源码（<code>v1.27.0-dev-372-g3ceb0c9d06</code>），实跑输出来自工作区自编译的同版本 omc</p>
+</header>
+
+<p class="lead">
+  <strong>一句话抓住主线：</strong>Modelica 编译器不是在"翻译语句"，而是在<strong>把一组方程变成一个能按时间步进求值的程序</strong>。
+  前端负责把面向对象的模型<strong>压平</strong>成一张变量表 + 一张方程表；后端负责把"方程组"变成"<strong>按顺序赋值</strong>"的因果化序列；
+  代码生成把这个序列印成 C 函数；运行时提供一个积分器循环，一步一步去调这些函数。
+</p>
+<p class="lead">
+  <strong>前端管"是什么"，后端管"怎么算"，运行时管"什么时候算"。</strong>
+</p>
+
+<div class="note">
+  <span class="tag">为什么全篇讲新后端。</span>
+  仓库里有两个后端：<code>Compiler/BackEnd/</code>（旧，1.25 发行版默认）和 <code>Compiler/NBackEnd/</code>（新，<code>--newBackend</code> 打开）。
+  新后端是正在替换旧后端的重写版：数据结构重新设计、<strong>不标量化数组</strong>（<code>for</code> 方程整段保留）、模块顺序写死在代码里而不是靠字符串 flag 拼。
+  两者的<em>思想</em>完全一样（匹配 → 排序 → 撕裂 → 求解），但新后端代码更干净、更适合学习。本系列所有细读都基于新后端。
+  旧后端只需记住一个入口 <code>BackendDAEUtil.getSolvedSystem</code> <span class="fileref">BackEnd/BackendDAEUtil.mo:7659</span>，读法与本文第 5 节同构。
+</div>
+
+<nav class="toc">
+  <p class="toc-title">目录</p>
+  <ol>
+    <li><a href="#map">全景图 — 五个阶段，四种中间表示</a></li>
+    <li><a href="#entry">入口 — omc 是怎么被叫起来的</a></li>
+    <li><a href="#parse">解析 — 文本 → Absyn</a></li>
+    <li><a href="#frontend">前端 — Absyn → SCode → 实例树 → FlatModel</a></li>
+    <li><a href="#lower">后端 ① lower — FlatModel → BackendDAE：把变量和方程分类装箱</a></li>
+    <li><a href="#modules">后端 ② main — 18 个模块按顺序跑</a></li>
+    <li><a href="#causalize">后端 ③ Causalize — 匹配 + 排序，后端的心脏</a></li>
+    <li><a href="#post">后端 ④ Solve / Tearing / Jacobian — 把强连通分量变成可执行的东西</a></li>
+    <li><a href="#simcode">NSimCode — 新后端接回旧模板的桥</a></li>
+    <li><a href="#codegen">代码生成 — Susan 模板印出 C 文件</a></li>
+    <li><a href="#runtime">运行时 — 积分器循环怎么调生成的代码</a></li>
+    <li><a href="#dump">每一层怎么 dump 出来看</a></li>
+    <li><a href="#verify">动手验证</a></li>
+    <li><a href="#series">细读篇索引</a></li>
+  </ol>
+</nav>
+
+<h2 id="map"><span class="n">0.</span> 全景图 — 五个阶段，四种中间表示</h2>
+<p>
+  先把整条流水线放在一张图上。<strong>每个箭头上的名字是数据结构</strong>，每个方框是把它变成下一种数据结构的模块。
+  读源码时，先问"我手里拿的是哪种数据结构"，就知道自己在流水线的哪个位置。
+</p>
+<div class="diagram">  Demo.mo (文本)
+     │
+     │  ANTLR3  Parser/Modelica.g + parse.c          ← 唯一用 C 写的编译阶段
+     ▼
+  Absyn.Program            语法树：还保留 extends / redeclare / 修饰、类的层次
+     │
+     │  AbsynToSCode.translateAbsyn2SCode
+     ▼
+  SCode.Program            规范化语法树：结构一样，但把语法糖归一
+     │
+     │  NFInst.instClassInProgram   ← NFFrontEnd/，这一步最重
+     │    instantiate → typeClass → flatten(+resolveConnections) → simplify
+     ▼
+  FlatModel                扁平模型：没有类、没有继承、没有 connect 了，只剩
+     │                     variables[] + equations[] + initialEquations[] + algorithms[]
+     │                     （--newBackend 下数组不标量化，x[3] 还是一个变量）
+     │  NBackendDAE.lower
+     ▼
+  BackendDAE.MAIN          varData: 变量按种类分箱 (states / algebraics / parameters / …)
+     │                     eqData:  方程按种类分箱 (continuous / discretes / initials / …)
+     │  NBackendDAE.main  ──  pre: Bindings → Alias → DetectStates → Events
+     │                        main: Partitioning → Causalize(匹配+排序+指标约简) → Initialization
+     │                        post: Tearing → Solve → Jacobian
+     ▼
+  BackendDAE.MAIN          ode / algebraic / init 各自是 Partition 列表，
+     │                     每个 Partition 里有 strongComponents[]：已排序的求解块
+     │  NSimCode.SimCode.create → convert
+     ▼
+  SimCode.SIMCODE          面向代码生成的视图：方程按用途分桶
+     │                     odeEquations / algebraicEquations / initialEquations / …
+     │  CodegenC.tpl (Susan 模板)   ← 与旧后端完全共用
+     ▼
+  Demo.c  Demo_06inz.c  Demo_09alg.c … Demo.makefile  Demo_init.xml
+     │
+     │  clang / make -f Demo.makefile
+     ▼
+  Demo.exe  ──链接──▶ libSimulationRuntimeC  (SimulationRuntime/c/：积分器、事件、结果文件)
+     │
+     │  ./Demo.exe
+     ▼
+  Demo_res.mat</div>
+
+<div class="note">
+  <span class="tag">目录对应关系。</span>
+  <code>OMCompiler/Parser/</code> 解析（C）·
+  <code>Compiler/FrontEnd/</code> Absyn/SCode 数据结构定义 ·
+  <code>Compiler/NFFrontEnd/</code> 新前端 ·
+  <code>Compiler/NBackEnd/Classes/</code> 后端数据结构（<code>NBackendDAE</code> / <code>NBVariable</code> / <code>NBEquation</code> / <code>NBPartition</code> / <code>NBStrongComponent</code>）·
+  <code>NBackEnd/Modules/1_Main/ 2_Pre/ 3_Post/</code> 后端模块 ·
+  <code>NBackEnd/Util/</code> 邻接矩阵、微分、切片 ·
+  <code>Compiler/NSimCode/</code> 新后端 → SimCode ·
+  <code>Compiler/Template/</code> 代码生成模板 ·
+  <code>Compiler/Script/</code> 脚本 API ·
+  <code>SimulationRuntime/c/</code> 运行时（C）。
+</div>
+
+<h2 id="entry"><span class="n">1.</span> 入口 — omc 是怎么被叫起来的</h2>
+<p>
+  不管你是在 OMEdit 里点"仿真"、写 <code>.mos</code> 脚本、还是命令行 <code>omc Demo.mo</code>，最后都汇到<strong>同一个函数</strong>：
+  <code>SimCodeMain.translateModel</code> <span class="fileref">SimCode/SimCodeMain.mo:1143</span>。它是前端→后端→SimCode→代码生成的总调度。
+</p>
+<pre><code>Main.main                                          <span class="ln">Main/Main.mo:718</span>
+ └ translateFile → Parser.parseexp(脚本) → Interactive.evaluateToStdOut   <span class="ln">:475 :483</span>
+    └ CevalScriptBackend.cevalInteractiveFunctions3  <span class="ln">Script/CevalScriptBackend.mo:593</span>   <span class="com">// 一个巨大的 match，按函数名分派</span>
+       └ <span class="kw">case</span> (<span class="str">"simulate"</span>, …)                       <span class="ln">:1370</span>
+          ├ buildModel                              <span class="ln">:5903</span>
+          │  ├ CevalScriptBackend.translateModel    <span class="ln">:3725</span>
+          │  │  └ <span class="fn">SimCodeMain.translateModel</span>        <span class="ln">SimCode/SimCodeMain.mo:1143</span>   <span class="com">// ★ 前端 + 后端 + SimCode + 代码生成全在这里面</span>
+          │  └ CevalScript.compileModel             <span class="ln">Script/CevalScript.mo:232</span>      <span class="com">// 调 make / Compile.bat 把 C 编成 exe</span>
+          └ System.systemCallRestrictedEnv(<span class="str">"Demo.exe …"</span>)   <span class="ln">:1428</span>              <span class="com">// 运行 exe，读回 Demo_res.mat</span></code></pre>
+<p><code>SimCodeMain.translateModel</code> 里面只有一个大分叉（<span class="fileref">:1185</span>），本文走 <code>if</code> 分支：</p>
+<pre><code><span class="kw">if</span> Flags.getConfigBool(Flags.NEW_BACKEND) <span class="kw">then</span>                                <span class="ln">:1185</span>
+  (flatModel, funcTree, _) := CevalScriptBackend.<span class="fn">runFrontEndWorkNF</span>(className, …);  <span class="ln">:1190</span>
+  … := <span class="fn">translateModelCallBackendNB</span>(flatModel, funcMap, …);                        <span class="ln">:1196</span>
+<span class="kw">else</span>
+  … := CevalScriptBackend.<span class="fn">runFrontEnd</span>(…);  … := <span class="fn">translateModelCallBackendOB</span>(…);   <span class="ln">:1215 :1248</span>  <span class="com">// 旧后端</span>
+<span class="kw">end if</span>;
+
+<span class="kw">function</span> <span class="fn">translateModelCallBackendNB</span>                                             <span class="ln">:1531</span>
+  bdae := NBackendDAE.<span class="fn">lower</span>(flatModel, funcMap);     <span class="ln">:1550</span>   <span class="com">// 第 4 节</span>
+  bdae := NBackendDAE.<span class="fn">main</span>(bdae);                    <span class="ln">:1554</span>   <span class="com">// 第 5–7 节</span>
+  <span class="fn">generateModelCodeNewBackend</span>(bdae, …);              <span class="ln">:1559</span>   <span class="com">// 第 8–9 节</span></code></pre>
+<p>
+  注意新后端<strong>直接吃 <code>FlatModel</code></strong>，不再经过 <code>DAE.DAElist</code> 这层旧格式转换——这是它比旧后端少一道"翻译"的地方。
+</p>
+
+<h2 id="parse"><span class="n">2.</span> 解析 — 文本 → Absyn</h2>
+<p>
+  语法在 <code>Parser/Modelica.g</code>（ANTLR3 文法，起始规则 <code>stored_definition</code> <span class="fileref">:225</span>），
+  词法按方言拆成多个 <code>*_Lexer.g</code>（共享 <code>BaseModelica_Lexer.g</code>）。
+</p>
+<pre><code>parse.c:<span class="fn">parseFile</span>            <span class="ln">Parser/parse.c:408</span>   <span class="com">// 处理编码、.mol 加密库</span>
+ └ <span class="fn">parseStream</span>              <span class="ln">:269</span>                 <span class="com">// 按 acceptedGrammar 选 lexer</span>
+    └ psr-&gt;<span class="fn">stored_definition</span>(psr)   <span class="ln">:343</span>           <span class="com">// ANTLR 语法动作直接构造 MetaModelica 的 Absyn 节点</span>
+
+Parser_omc.c:<span class="fn">ParserExt_parse</span>   <span class="ln">Parser/Parser_omc.c:55</span>   <span class="com">// C ↔ MetaModelica 的桥</span>
+ParserExt.mo:<span class="fn">parse</span>            <span class="ln">FrontEnd/ParserExt.mo:49</span>  <span class="com">// external "C"</span>
+Parser.mo:<span class="fn">parse</span>               <span class="ln">FrontEnd/Parser.mo:62</span>     <span class="com">// 编译器里用的入口</span></code></pre>
+<p>产物 <code>Absyn.Program</code> <span class="fileref">FrontEnd/Absyn.mo:99</span> 就是个类列表；一个类的 <code>PARTS</code>（<span class="fileref">:147</span>）装着 element / equation / algorithm 段。它忠实于源码——连注释和行号都留着，因为 OMEdit 要靠它做图形编辑和反解析。</p>
+
+<h2 id="frontend"><span class="n">3.</span> 前端 — Absyn → SCode → 实例树 → FlatModel</h2>
+<p>
+  前端的任务用一句话说：<strong>把面向对象的东西全部消掉</strong>。继承、修饰、redeclare、connect，出前端的时候一个都不剩。
+</p>
+<h3>3.1 Absyn → SCode</h3>
+<p>
+  <code>AbsynToSCode.translateAbsyn2SCode</code> <span class="fileref">FrontEnd/AbsynToSCode.mo:73</span>。结构几乎一样，但把语法糖归一化——
+  <code>Real x, y;</code> 在 Absyn 里是一个 <code>COMPONENTS</code> 带两个名字，SCode 里拆成两个独立 <code>COMPONENT</code>（<span class="fileref">FrontEnd/SCode.mo:571</span>）。
+</p>
+<h3>3.2 NFInst.instClassInProgram — 前端主干 <span class="fileref">NFFrontEnd/NFInst.mo:148</span></h3>
+<table>
+  <tr><th>#</th><th>调用</th><th>行</th><th>干什么</th></tr>
+  <tr><td>1</td><td><code>makeTopNode</code> + <code>lookupRootClass</code></td><td class="fileref">:171 :174</td><td>建顶层作用域，查到要编译的类</td></tr>
+  <tr><td>2</td><td><code>instantiateRootClass</code> → <code>instantiate</code> → <code>expand</code></td><td class="fileref">:185</td><td><strong>实例化</strong>：展开 <code>extends</code>、合并修饰、应用 <code>redeclare</code>，长出实例树（<code>InstNode</code>）</td></tr>
+  <tr><td>3</td><td><code>instExpressions</code></td><td class="fileref">:194</td><td>实例化绑定值、数组维度、修饰里的表达式，把名字解析到实例树节点</td></tr>
+  <tr><td>4</td><td><code>updateImplicitVariability</code></td><td class="fileref">:198</td><td>标记结构参数</td></tr>
+  <tr><td>5</td><td><code>Typing.typeClass</code></td><td class="fileref">:202</td><td><strong>类型检查</strong>：<code>typeComponents</code> → <code>typeBindings</code> → <code>typeClassSections</code>（<span class="fileref">NFTyping.mo:124</span>）</td></tr>
+  <tr><td>6</td><td><code>Flatten.flatten</code></td><td class="fileref">:205</td><td><strong>压平</strong>：带前缀遍历实例树；<code>connect</code> 在 <code>resolveConnections</code> 里展开成方程。细读见 <a href="NFFlatten-主流程导读.html">主流程</a> / <a href="NFFlatten-方程与连接导读.html">方程与连接</a></td></tr>
+  <tr><td>7</td><td><code>EvalConstants.evaluate</code></td><td class="fileref">:206</td><td>常量折叠</td></tr>
+  <tr><td>8</td><td><code>UnitCheck.checkUnits</code></td><td class="fileref">:211</td><td>单位检查（只报警）</td></tr>
+  <tr><td>9</td><td><code>SimplifyModel.simplify</code></td><td class="fileref">:215</td><td>表达式化简、删 <code>if false</code> 分支</td></tr>
+  <tr><td>10</td><td><code>Package.collectConstants</code> / <code>Flatten.collectFunctions</code></td><td class="fileref">:221 :224</td><td>收集还在用的包常量和函数</td></tr>
+  <tr><td>11</td><td><code>Scalarize.scalarize</code></td><td class="fileref">:236</td><td><strong>新后端跳过</strong>：<code>--newBackend</code> 在 <code>resetGlobalFlags</code>（<span class="fileref">:328–333</span>）里关掉 <code>nfScalarize</code>，数组变量和 <code>for</code> 方程整段保留</td></tr>
+  <tr><td>12</td><td><code>SimplifyModel.combineBinaries</code> + <code>Call.toArrayConstructor</code></td><td class="fileref">:251–260</td><td><strong>新后端专属</strong>：<code>a+b+c</code> 合并成一个多元 <code>MULTARY</code> 节点（微分和化简更方便）；能写成数组构造子的调用改写掉</td></tr>
+  <tr><td>13</td><td><code>VerifyModel.verify</code></td><td class="fileref">:262</td><td>合法性检查</td></tr>
+</table>
+<p>
+  产物是 <code>FlatModel</code>：<code>variables</code>、<code>equations</code>、<code>initialEquations</code>、<code>algorithms</code> 四张表。
+  用 <code>-d=execstat</code> 跑一次，<code>Performance of NFInst.… / NFTyping.… / NFFlatten.…</code> 那几行就是上表的顺序。
+</p>
+<h3>3.3 拿 Demo 看前端的输出</h3>
+<p>本文全程用这个 8 行模型（一个一阶衰减 + 一个代数变量）：</p>
+<pre><code><span class="kw">model</span> Demo
+  <span class="kw">parameter</span> Real k = 2;
+  Real x(start = 1, fixed = <span class="kw">true</span>);
+  Real y;
+<span class="kw">equation</span>
+  <span class="fn">der</span>(x) = -k * x;
+  y = 2 * x;
+<span class="kw">end</span> Demo;</code></pre>
+<p><code>instantiateModel(Demo)</code> 打出的 FlatModel 和源码几乎一样（<code>2</code> 变成 <code>2.0</code>，<code>model</code> 变成 <code>class</code>）——这个模型没有子组件和 connect，看不出压平的效果。换成 <code>Modelica.Electrical.Analog.Examples.Rectifier</code> 就会看到几百个 <code>diode1.p.v</code> 形式的变量，和 <code>connect</code> 变出来的 <code>diode1.p.i + resistor.n.i = 0</code>。</p>
+
+<h2 id="lower"><span class="n">4.</span> 后端 ① lower — FlatModel → BackendDAE：把变量和方程分类装箱</h2>
+<p class="lead">
+  <strong>后端解决的核心问题只有一个：</strong>Modelica 方程是<em>无因果</em>的（<code>y = 2*x</code> 和 <code>2*x = y</code> 一样合法），
+  但计算机只会执行<em>赋值</em>。后端要给每个方程指定它负责解哪个变量，再排出求解顺序。这叫<strong>因果化（causalization）</strong>。
+  但在因果化之前，先得知道"哪些变量是未知量"——这就是 lower 干的事。
+</p>
+<p>
+  <code>NBackendDAE.lower</code> <span class="fileref">NBackEnd/Classes/NBackendDAE.mo:259</span> 只有三行：
+  <code>lowerVariableData</code>（<span class="fileref">:540</span>）→ <code>lowerEquationData</code>（<span class="fileref">:882</span>）→ 组装 <code>BackendDAE.MAIN</code>（<span class="fileref">:111</span>）。
+</p>
+<h3>4.1 变量分箱：<code>VarData.VAR_DATA_SIM</code> <span class="fileref">NBVariable.mo:2450</span></h3>
+<p>
+  <code>lowerVariableData</code> 遍历每个变量，按前端标好的 <code>varKind</code>（<span class="fileref">NFFrontEnd/NFBackendExtension.mo:198</span> 的 <code>VariableKind</code>）扔进不同的桶。
+  <strong>一个变量可以同时在多个桶里</strong>——桶是"视图"，底层都是指针（<code>Pointer&lt;Variable&gt;</code>）指向同一个对象：
+</p>
+<table>
+  <tr><th>varKind</th><th>行</th><th>进哪些桶</th><th>意思</th></tr>
+  <tr><td><code>ALGEBRAIC</code></td><td class="fileref">:595</td><td><code>algebraics</code>, <code>unknowns</code>, <code>initials</code></td><td>代数变量：仿真时的未知量</td></tr>
+  <tr><td><code>STATE</code></td><td class="fileref">:601</td><td><code>states</code>, <code>knowns</code>, <code>initials</code></td><td>状态：仿真时是<strong>已知量</strong>（积分器给），初始化时是未知量</td></tr>
+  <tr><td><code>STATE_DER</code></td><td class="fileref">:616</td><td><code>derivatives</code>, <code>unknowns</code>, <code>initials</code></td><td><code>$DER.x</code>：仿真时要解的量</td></tr>
+  <tr><td><code>DISCRETE</code></td><td class="fileref">:622</td><td><code>discretes</code>, <code>unknowns</code>, <code>initials</code></td><td>离散变量</td></tr>
+  <tr><td><code>PARAMETER</code></td><td class="fileref">:634</td><td><code>parameters</code>, <code>knowns</code></td><td>参数（<em>不</em>进 initials，初始化模块之后再决定）</td></tr>
+  <tr><td><code>CONSTANT</code></td><td class="fileref">:643</td><td><code>constants</code>, <code>knowns</code></td><td></td></tr>
+</table>
+<p>
+  桶的完整清单在 <code>VAR_DATA_SIM</code> 的 23 个字段里（<span class="fileref">:2452–2483</span>）：<code>variables</code> 全集、<code>unknowns</code>/<code>knowns</code> 仿真视角、<code>initials</code> 初始化视角、
+  <code>aliasVars</code> 被别名消掉的、<code>derivatives</code>/<code>states</code>/<code>algebraics</code>/<code>discretes</code>/<code>parameters</code> 按种类、<code>state_order</code> 状态序映射。
+  每个桶是一个 <code>VariablePointers</code>（<span class="fileref">:1949</span>）：<code>UnorderedMap&lt;cref, index&gt;</code> + <code>ExpandableArray&lt;Pointer&lt;Variable&gt;&gt;</code>。
+</p>
+<div class="note">
+  <span class="tag">"states 在 knowns 里"这句话值得停一下。</span>
+  仿真系统只回答一个问题："给定 <code>x</code>，<code>der(x)</code> 是多少"——<code>x</code> 是积分器喂进来的，所以是已知量；未知量是 <code>$DER.x</code>。
+  而初始化系统要在 t=0 解出 <code>x</code> 本身，所以 <code>x</code> 又在 <code>initials</code> 里。同一个变量在两个系统里身份不同，桶就是用来表达这种身份的。
+</div>
+<h3>4.2 方程分箱：<code>EqData.EQ_DATA_SIM</code> <span class="fileref">NBEquation.mo:4683</span></h3>
+<p>
+  <code>lowerEquationData</code> 把 FlatModel 的四个列表变成 <code>Equation</code>（<span class="fileref">:1110</span>）并起唯一名字（<code>$RES_SIM_0</code> 这种），
+  然后 <code>BEquation.typeList</code>（<span class="fileref">NBackendDAE.mo:912</span>）分箱：<code>equations</code> 全集、<code>simulation</code>、<code>continuous</code>、<code>discretes</code>、<code>initials</code>（只有 initial equation）、<code>auxiliaries</code>、<code>removed</code>。
+</p>
+<p><code>Equation</code> 的种类（<span class="fileref">:1111–1177</span>）——注意 <code>FOR_EQUATION</code>，它是新后端"不标量化"的核心：</p>
+<pre><code><span class="kw">record</span> SCALAR_EQUATION  ty, lhs, rhs, source, attr                     <span class="ln">:1111</span>
+<span class="kw">record</span> ARRAY_EQUATION   同上 + recordSize                              <span class="ln">:1119</span>
+<span class="kw">record</span> FOR_EQUATION     size, <span class="fn">iter : Iterator</span>, body : list&lt;Equation&gt;, … <span class="ln">:1152</span>  <span class="com">// for i in 1:n loop x[i] = … end for 整段保留</span>
+<span class="kw">record</span> IF_EQUATION / WHEN_EQUATION / ALGORITHM / AUX_EQUATION          <span class="ln">:1145 :1160 :1137 :1167</span></code></pre>
+<p>
+  每条方程带 <code>EquationAttributes</code>（<span class="fileref">:4088</span>）：<code>kind</code>（CONTINUOUS / DISCRETE / CLOCKED）、<code>residualVar</code>（残差变量，也代表方程本身）、<code>derivative</code>（对时间求过导的结果，缓存用，指标约简会用到）、<code>exclusively_initial</code>。
+</p>
+
+<h2 id="modules"><span class="n">5.</span> 后端 ② main — 18 个模块按顺序跑</h2>
+<p>
+  <code>NBackendDAE.main</code> <span class="fileref">NBackendDAE.mo:275</span>。三张模块表直接写在代码里（不像旧后端靠 <code>--preOptModules</code> 字符串拼），
+  每个模块的签名都是 <code>input output BackendDAE bdae</code>——<strong>整个后端就是一串 <code>bdae := f(bdae)</code></strong>。
+  <code>applyModules</code>（<span class="fileref">:358</span>）挨个调，每个调完记时间、打 execstat、按 flag 决定要不要 dump（<span class="fileref">:410</span>）。
+</p>
+<pre><code>preOptModules := {                                                 <span class="ln">:307</span>   <span class="com">// 注释 :306：顺序不可变 SIMPLIFY → ALIAS → EVENTS → DETECTSTATES</span>
+  (Bindings.main,      <span class="str">"Bindings"</span>),
+  (FunctionAlias.main, <span class="str">"FunctionAlias"</span>),
+  (Inline.main,        <span class="str">"Early Inline"</span>),
+  (simplify,           <span class="str">"Simplify 1"</span>),
+  (Alias.main,         <span class="str">"Alias"</span>),
+  (simplify,           <span class="str">"Simplify 2"</span>),
+  (removeStream,       <span class="str">"Remove Stream"</span>),
+  (DetectStates.main,  <span class="str">"Detect States"</span>),
+  (Events.main,        <span class="str">"Events"</span>)
+};
+mainModules := {                                                   <span class="ln">:320</span>
+  (Partitioning.main(kind = ODE),  <span class="str">"Partitioning"</span>),
+  (Causalize.main(kind = ODE),     <span class="str">"Causalize"</span>),
+  (Inline.main(AFTER_INDEX_RED),   <span class="str">"After Index Reduction Inline"</span>),
+  (Initialization.main,            <span class="str">"Initialization"</span>)
+};
+postOptModules := {                                                <span class="ln">:328</span>   <span class="com">// 注释 :327：SOLVE → JACOBIAN 顺序不可变</span>
+  (Evaluation.removeDummies,       <span class="str">"Remove Dummies"</span>),
+  (Tearing.main(kind),             <span class="str">"Tearing"</span>),
+  (Partitioning.categorize,        <span class="str">"Categorize"</span>),
+  (Solve.main,                     <span class="str">"Solve"</span>),
+  (Jacobian.main(kind),            <span class="str">"Jacobian"</span>)
+};</code></pre>
+<table>
+  <tr><th>模块</th><th>入口</th><th>干什么</th></tr>
+  <tr><td><strong>Bindings</strong></td><td class="fileref">2_Pre/NBBindings.mo:55</td><td>变量的绑定值变成方程：<code>Real y = 2*x;</code> → 方程 <code>y = 2*x</code>。后端从此只有方程没有绑定</td></tr>
+  <tr><td><strong>FunctionAlias</strong></td><td class="fileref">2_Pre/NBFunctionAlias.mo:75</td><td>公共子表达式 / 函数调用提成辅助变量：<code>y = z + sin(w)</code> 变成 <code>$FUN_1 = sin(w)</code> + <code>y = z + $FUN_1</code>（后面代数环的 dump 里会看到）</td></tr>
+  <tr><td>Early Inline</td><td class="fileref">2_Pre/NBInline.mo:83</td><td>内联标了 <code>Inline=true</code> 的函数</td></tr>
+  <tr><td>Simplify</td><td class="fileref">NBackendDAE.mo:422</td><td>对每条方程 <code>Equation.simplify</code></td></tr>
+  <tr><td><strong>Alias</strong></td><td class="fileref">2_Pre/NBAlias.mo:118</td><td><strong>最重要的化简</strong>：<code>a = b</code>、<code>a = -b</code>、<code>a = 2*b</code> 这种方程整条删掉，变量进 <code>aliasVars</code> / <code>nonTrivialAlias</code>，全系统替换。大模型能砍掉一半以上的方程。旧后端叫 removeSimpleEquations</td></tr>
+  <tr><td>Remove Stream</td><td class="fileref">NBackendDAE.mo:481</td><td><code>inStream</code>/<code>actualStream</code> 展开</td></tr>
+  <tr><td><strong>Detect States</strong></td><td class="fileref">2_Pre/NBDetectStates.mo:79</td><td>凡在 <code>der(x)</code> 里出现的 <code>x</code> 标成 <code>STATE</code>，造配套的 <code>$DER.x</code>（<code>STATE_DER</code>）；<code>pre(d)</code> 同理造 <code>$PRE.d</code>。表达式里的 <code>der(x)</code> 被替换成变量 <code>$DER.x</code></td></tr>
+  <tr><td><strong>Events</strong></td><td class="fileref">2_Pre/NBEvents.mo:88</td><td>所有关系式 <code>x &gt; 0</code>、<code>time &gt;= 1</code> 提成事件条件变量 <code>$SEV_n</code>（状态事件）/ <code>$TEV_n</code>（时间事件），汇总进 <code>EventInfo</code>——运行时的过零函数由此而来</td></tr>
+  <tr><td><strong>Partitioning</strong></td><td class="fileref">1_Main/NBPartitioning.mo:472</td><td>用并查集（<span class="fileref">:869</span>）把互不相关的方程/变量拆成独立分区（时钟分区也在这里分）。初始化系统强制一个分区（<span class="fileref">:496–503</span>）</td></tr>
+  <tr><td><strong>Causalize</strong></td><td class="fileref">1_Main/NBCausalize.mo:89</td><td>★ 第 6 节</td></tr>
+  <tr><td><strong>Initialization</strong></td><td class="fileref">1_Main/NBInitialization.mo:82</td><td>造第二个方程系统（<code>bdae.init</code>），自带一条子管线；细读见 <a href="NB-初始化系统导读.html">初始化系统</a></td></tr>
+  <tr><td>Remove Dummies</td><td class="fileref">3_Post/NBEvaluation.mo</td><td>清掉占位方程</td></tr>
+  <tr><td><strong>Tearing</strong></td><td class="fileref">3_Post/NBTearing.mo:138</td><td>代数环撕裂；细读见 <a href="NB-撕裂导读.html">撕裂</a></td></tr>
+  <tr><td>Categorize</td><td class="fileref">1_Main/NBPartitioning.mo:526</td><td>每个分区按"有没有状态导数 / 有没有离散变量"归到 <code>ode / algebraic / ode_event / alg_event</code> 四个桶（<span class="fileref">NBPartition.mo:413</span>）</td></tr>
+  <tr><td><strong>Solve</strong></td><td class="fileref">3_Post/NBSolve.mo:92</td><td>★ 第 7 节</td></tr>
+  <tr><td><strong>Jacobian</strong></td><td class="fileref">3_Post/NBJacobian.mo:109</td><td>★ 第 7 节</td></tr>
+</table>
+<div class="note">
+  <span class="tag">Demo 跑过 Alias 之后长什么样。</span>
+  <code>-d=dumpSimCode</code> 显示：<code>stateVars: y</code>、<code>algVars: x</code>、<code>algebraicEquations: x = 0.5 * y</code>、<code>odeEquations: $DER.y = -2.0 * k * 0.5 * y</code>。
+  也就是说 Alias 模块拿 <code>y = 2*x</code> 把 <strong>x 消掉了、y 留下当状态</strong>——和源码里"x 是状态"相反。这不是 bug：数学上 x 和 y 只差一个系数，谁当状态都行；
+  Alias 的选择规则见 <code>NBAlias.mo</code>。旧后端在这个模型上会保留 x 当状态。看到这种"和你想的不一样"，第一反应应该是去查 Alias 的 dump（<code>-d=debugAlias</code>）。
+</div>
+
+<h2 id="causalize"><span class="n">6.</span> 后端 ③ Causalize — 匹配 + 排序，后端的心脏</h2>
+<p>
+  <code>Causalize.main</code> <span class="fileref">NBCausalize.mo:89</span> 对每个分区调 <code>causalizePseudoArray</code> <span class="fileref">:247</span>（名字里的 pseudo-array 是指方法：数组方程不真的拆开，只在邻接矩阵里按标量下标展开，解完再合回去）。
+  非初始分区的顺序（<span class="fileref">:308–328</span>）：
+</p>
+<pre><code>full := Adjacency.Matrix.<span class="fn">createFull</span>(variables, equations, kind);              <span class="ln">:317</span>   <span class="com">// ① 邻接矩阵：每条方程里出现了哪些变量，以及"能不能解出它"</span>
+adj  := Adjacency.Matrix.<span class="fn">fullToFinal</span>(full, …, MatrixStrictness.MATCHING);      <span class="ln">:320</span>   <span class="com">//    只保留可解的边</span>
+(matching, …) := Matching.<span class="fn">singular</span>(EMPTY_MATCHING, adj, full, …);            <span class="ln">:323</span>   <span class="com">// ② 匹配；匹配不上就指标约简，再匹配</span>
+adj  := Adjacency.Matrix.<span class="fn">upgrade</span>(adj, full, …, MatrixStrictness.SORTING);     <span class="ln">:326</span>   <span class="com">//    加回所有依赖边（排序要看全部依赖）</span>
+comps := Sorting.<span class="fn">tarjan</span>(adj, matching, variables, equations);                <span class="ln">:327</span>   <span class="com">// ③ 强连通分量 + 拓扑序</span>
+partition.strongComponents := SOME(comps);                                   <span class="ln">:334</span></code></pre>
+<table>
+  <tr><th>步骤</th><th>问题</th><th>做法</th><th>代码</th></tr>
+  <tr><td><strong>① 邻接矩阵</strong></td><td>谁依赖谁？</td><td><code>Adjacency.Matrix.FULL</code>（<span class="fileref">Util/NBAdjacency.mo:388</span>）：每条方程一行，记录出现的变量集合和每个变量的<em>可解性</em>（<code>Solvability</code> <span class="fileref">:1669</span>：EXPLICIT_LINEAR / EXPLICIT_NONLINEAR / IMPLICIT / UNSOLVABLE）。可解性靠对残差求偏导判断（<span class="fileref">:884–902</span>）。<code>Mapping</code>（<span class="fileref">:96</span>）维护标量下标 ↔ 数组下标的双向映射——这就是 pseudo-array</td><td><code>NBAdjacency.mo</code></td></tr>
+  <tr><td><strong>② 匹配</strong></td><td>每条方程解哪个变量？</td><td>二分图完美匹配（<code>MATCHING(var_to_eqn[], eqn_to_var[])</code> <span class="fileref">NBMatching.mo:74</span>）。<code>singular</code>（<span class="fileref">:119</span>）：先匹配；有没匹配上的 → 非初始分区调 <code>ResolveSingularities.indexReduction</code>（Pantelides），初始分区调 <code>balanceInitialization</code>（<span class="fileref">:162–168</span>）；改动了就重建矩阵递归再来</td><td><code>NBMatching.mo</code></td></tr>
+  <tr><td><strong>③ 排序</strong></td><td>先算谁后算谁？</td><td>Tarjan 强连通分量（<span class="fileref">NBSorting.mo:233</span>），三阶段：标量层 Tarjan → 合并成超节点（数组、for 循环在这里重建）→ 再 Tarjan。一个分量 = 一个求解块：一条方程的分量是单赋值；多条方程互相依赖的分量是<strong>代数环</strong></td><td><code>NBSorting.mo</code></td></tr>
+</table>
+<p>排序的产物是 <code>StrongComponent</code> 数组（<span class="fileref">Classes/NBStrongComponent.mo:109–173</span>），种类决定后面怎么生成代码：</p>
+<table>
+  <tr><th>Record</th><th>行</th><th>含义</th></tr>
+  <tr><td><code>SINGLE_COMPONENT(var, eqn, status)</code></td><td class="fileref">:109</td><td>一条方程解一个变量——最常见</td></tr>
+  <tr><td><code>MULTI_COMPONENT(vars, eqn)</code></td><td class="fileref">:117</td><td>一条方程解多个变量（algorithm / when / if）</td></tr>
+  <tr><td><code>SLICED_COMPONENT</code> / <code>RESIZABLE_COMPONENT</code> / <code>GENERIC_COMPONENT</code></td><td class="fileref">:125 :133 :142</td><td>for 方程的切片：只解数组的一部分下标；生成代码时变成带索引列表的循环调用</td></tr>
+  <tr><td><code>ENTWINED_COMPONENT</code></td><td class="fileref">:150</td><td>几个 for 方程交织在一起但不成环（<code>x[i]</code> 依赖 <code>y[i-1]</code> 这种）</td></tr>
+  <tr><td><code>ALGEBRAIC_LOOP(idx, strict, casual, linear, mixed, homotopy, status)</code></td><td class="fileref">:157</td><td><strong>代数环</strong>：<code>strict : TEARING_SET</code>（<span class="fileref">NBTearing.mo:85</span>）装着迭代变量、残差方程、inner 方程、雅可比</td></tr>
+  <tr><td><code>ALIAS(aliasInfo, original)</code></td><td class="fileref">:168</td><td>"和 INI 分区第 3 块一模一样"——Solve 发现重复分量时用它省一份代码</td></tr>
+</table>
+<div class="note">
+  <span class="tag">指标约简放在哪。</span>
+  它不是独立模块，是 <code>Matching.singular</code> 里"匹配失败 → 求导 → 再匹配"的循环。单摆的约束方程 <code>x²+y²=L²</code> 里没有 <code>der</code>，
+  匹配不上 <code>$DER.vy</code>，于是对它求导得 <code>2x·vx + 2y·vy = 0</code>，再匹配，直到成功；然后从候选状态里选"哑状态"（dummy state）。
+  细读见 <a href="NB-指标约简导读.html">指标约简</a>——那篇也如实记录了当前 dev 版本在单摆这种 index-3 系统上还会失败在哪一步。
+</div>
+
+<h2 id="post"><span class="n">7.</span> 后端 ④ Solve / Tearing / Jacobian — 把强连通分量变成可执行的东西</h2>
+<p>
+  Causalize 之后每个分量都知道"这条方程负责解这个变量"，但方程还是 <code>2.0 * y = x + 1</code> 这种形式。三个 post 模块把它们变成能直接生成代码的样子：
+</p>
+<h3>7.1 Solve <span class="fileref">3_Post/NBSolve.mo:92</span></h3>
+<p>
+  对每个分量真的把方程<strong>解成 <code>var = expr</code></strong>。核心在 <code>solveBody</code>（<span class="fileref">:637</span>）：
+</p>
+<pre><code>status := <span class="fn">solveSimple</span>(eqn, cref);                <span class="ln">:663</span>  <span class="com">// 先试纯结构匹配：lhs 或 rhs 恰好就是这个变量、或它的相反数</span>
+<span class="kw">if</span> status == UNPROCESSED <span class="kw">then</span>
+  residual   := Equation.getResidualExp(eqn);    <span class="com">// f(x) = lhs - rhs</span>
+  derivative := Differentiate.<span class="fn">differentiateExpression</span>(residual, simpleCref(cref));   <span class="ln">:666–669</span>  <span class="com">// 对要解的变量求导</span>
+  <span class="kw">if</span> isZero(derivative)       <span class="kw">then</span> status := UNSOLVABLE;                       <span class="ln">:671</span>
+  <span class="kw">elseif</span> not containsCref(derivative) <span class="kw">then</span> <span class="fn">solveLinear</span>(…); status := EXPLICIT;   <span class="ln">:676</span>  <span class="com">// 导数是常数 → 线性 → x = -f(0)/f'(0)</span>
+  <span class="kw">else</span> status := <span class="fn">solveUnique</span>(…);                                               <span class="ln">:682</span>  <span class="com">// 非线性但变量只出现一次 → 逐层取逆运算；否则 IMPLICIT</span></code></pre>
+<p>
+  结果状态 <code>Solve.Status = UNPROCESSED | EXPLICIT | IMPLICIT | UNSOLVABLE</code>（<span class="fileref">:75</span>）。
+  <code>IMPLICIT</code> 的单方程被 <code>Tearing.implicit</code>（<span class="fileref">NBTearing.mo:179</span>）包成一个 1×1 的 <code>ALGEBRAIC_LOOP</code>——运行时用牛顿法解。
+  Solve 还维护一张 <code>duplicate_map</code>（<span class="fileref">:98</span>）：ODE 分区里和 INI 分区一模一样的分量直接变 <code>ALIAS</code>，dump 里的 <code>--- Alias of INI[1 | 3] ---</code> 就是它。
+</p>
+<h3>7.2 Tearing <span class="fileref">3_Post/NBTearing.mo:138</span></h3>
+<p>
+  对 n 条方程的代数环，挑几个"撕裂变量"当迭代量，其余变成显式的 inner 方程，非线性求解器只迭代 m 维。
+  <strong>当前新后端的默认实现（<code>minimal</code> <span class="fileref">:403</span>）只把离散子系统抽成 inner，连续代数环一个变量都不撕</strong>——
+  这就是为什么 3 未知量的环在 dump 里迭代变量是全部 3（4）个。细读见 <a href="NB-撕裂导读.html">撕裂</a>。
+</p>
+<h3>7.3 Jacobian <span class="fileref">3_Post/NBJacobian.mo:109</span></h3>
+<p>
+  两件事，同一套机器（<code>partJacobian</code> <span class="fileref">:1015</span>）：每个代数环的局部雅可比 ∂残差/∂迭代变量（<code>compJacobian</code> <span class="fileref">:1076</span>），
+  和整个 ODE 的 A 矩阵 ∂der(x)/∂x（<span class="fileref">:1044–1073</span>）。
+  做法是符号微分（<code>Util/NBDifferentiate.mo</code>，<code>DifferentiationType.JACOBIAN</code>）：造 <code>$SEED_*</code> 变量当微分方向，<code>$pDER_*</code> 变量接结果，再算稀疏模式和着色（<span class="fileref">:413</span>）。
+  隐式积分器（DASSL/IDA）和牛顿法都靠它。
+</p>
+
+<h2 id="simcode"><span class="n">8.</span> NSimCode — 新后端接回旧模板的桥</h2>
+<p>
+  <code>generateModelCodeNewBackend</code> <span class="fileref">SimCode/SimCodeMain.mo:395</span> 调
+  <code>NSimCode.SimCode.create</code>（<span class="fileref">NSimCode/NSimCode.mo:272</span>）造新的 <code>SIM_CODE</code>，再 <code>convert</code>（<span class="fileref">:493</span>）转成<strong>旧的</strong> <code>SimCode.SIMCODE</code>——之后模板、运行时和旧后端完全共用。
+</p>
+<pre><code>SimCode.<span class="fn">create</span>(bdae, …)                                        <span class="ln">NSimCode.mo:272</span>
+  init    := Block.<span class="fn">createInitialBlocks</span>(bdae.init, …)             <span class="ln">:353</span>   <span class="com">// 初始化系统最先编号（注释："init before everything else!"）</span>
+  init_0  := … bdae.init_0 …                                    <span class="ln">:355</span>   <span class="com">// homotopy λ=0 系统</span>
+  ode     := Block.<span class="fn">createBlocks</span>(bdae.ode, …)                     <span class="ln">:376</span>
+  algebraic := Block.<span class="fn">createBlocks</span>(bdae.algebraic, …)             <span class="ln">:377</span>
+  ode_event / alg_event / clocked …                            <span class="ln">:378–383</span>
+
+SimCode.<span class="fn">convert</span>(simCode) → OldSimCode.SIMCODE                  <span class="ln">:493</span>
+  ode → odeEquations, algebraic → algebraicEquations,           <span class="ln">:531 :532</span>
+  init → initialEquations, init_0 → initialEquations_lambda0    <span class="ln">:534 :535</span></code></pre>
+<p>
+  每个 <code>StrongComponent</code> 经 <code>Block.fromStrongComponent</code>（<span class="fileref">NSimStrongComponent.mo:640</span>）变成一个 <code>Block</code>（<span class="fileref">:94</span>），再由 <code>Block.convert</code>（<span class="fileref">:1068</span>）映射到旧的 <code>SES_*</code>：
+</p>
+<table>
+  <tr><th>NB StrongComponent</th><th>NSimCode Block</th><th>旧 SimEqSystem</th><th>生成的 C</th></tr>
+  <tr><td><code>SINGLE_COMPONENT</code> (EXPLICIT)</td><td><code>SIMPLE_ASSIGN</code></td><td><code>SES_SIMPLE_ASSIGN</code></td><td>一个 <code>eqFunction_N</code>：<code>lhs = rhs;</code></td></tr>
+  <tr><td><code>SLICED/RESIZABLE/GENERIC_COMPONENT</code></td><td><code>GENERIC_ASSIGN</code> / <code>RESIZABLE_ASSIGN</code></td><td><code>SES_GENERIC_ASSIGN</code></td><td>带下标列表的循环调用（<code>generic_loop_calls</code>）——新后端独有</td></tr>
+  <tr><td><code>ALGEBRAIC_LOOP</code></td><td><code>NONLINEAR</code></td><td><code>SES_NONLINEAR</code></td><td><code>&lt;M&gt;_02nls.c</code> 里的 <code>residualFunc_N</code>；<strong>线性环目前也走这里</strong>（<span class="fileref">:761–774</span> 一律构造 NONLINEAR，<code>_03lsy.c</code> 对新后端是空的）</td></tr>
+  <tr><td><code>ALIAS</code></td><td><code>ALIAS</code></td><td><code>SES_ALIAS</code></td><td>直接调已生成的同名函数</td></tr>
+</table>
+
+<h2 id="codegen"><span class="n">9.</span> 代码生成 — Susan 模板印出 C 文件</h2>
+<p>
+  <code>SimCodeMain.callTargetTemplates</code> <span class="fileref">SimCode/SimCodeMain.mo:494</span>，<code>case "C"</code> <span class="fileref">:581</span>。模板语言叫 Susan（<code>.tpl</code>），主模板 <code>Template/CodegenC.tpl</code>，
+  代码生成是并行的（<span class="fileref">:646</span>），Makefile 最后写（<span class="fileref">:663</span>）。细读见 <a href="NB-Susan模板与代码生成导读.html">Susan 模板</a>。
+</p>
+<table>
+  <tr><th>文件</th><th>模板函数</th><th>内容</th></tr>
+  <tr><td><code>Demo.c</code></td><td><code>simulationFile</code> <span class="fileref">CodegenC.tpl:1276</span></td><td>主文件：<code>main()</code>、<code>Demo_callback</code> 回调表、<code>functionODE</code>、<code>functionDAE</code>、<code>setupDataStruc</code>，并 <code>#include</code> 运行时的主循环 <code>perform_simulation.c.inc</code></td></tr>
+  <tr><td><code>Demo_model.h</code></td><td><code>simulationHeaderFile</code> <span class="fileref">:137</span></td><td>变量下标宏、函数声明</td></tr>
+  <tr><td><code>Demo_functions.c/.h</code></td><td><code>CodegenCFunctions.tpl</code></td><td>模型里用到的 Modelica 函数翻译成 C</td></tr>
+  <tr><td><code>Demo_01exo.c</code> … <code>Demo_18spd.c</code></td><td><code>simulationFile_exo</code> … <span class="fileref">:647–1219</span></td><td>按功能拆的 18 个文件：外部对象、<strong>非线性系统 (02nls)</strong>、线性系统 (03lsy)、状态集、<strong>事件 (05evt)</strong>、<strong>初始化 (06inz)</strong>、延迟、绑定 (08bnd)、<strong>代数方程 (09alg)</strong>、断言、混合系统、<strong>雅可比 (12jac)</strong>、优化、线性化、同步、DAE 模式、内联、空间分布</td></tr>
+  <tr><td><code>Demo_init.xml</code></td><td><code>SerializeInitXML</code></td><td>运行时启动时读：变量的 start/nominal/min/max、仿真设置</td></tr>
+  <tr><td><code>Demo_info.json</code></td><td><code>SerializeModelInfo</code></td><td>方程 ↔ 源码位置映射</td></tr>
+  <tr><td><code>Demo.makefile</code></td><td><code>simulationMakefile</code> <span class="fileref">:6951</span></td><td><code>CC=clang</code>，链接 <code>-lSimulationRuntimeC -lomcgc -lopenblas</code>…</td></tr>
+</table>
+<h3>一条方程变成了什么</h3>
+<p>后端里的 <code>$DER.y = -2.0 * k * 0.5 * y</code>（Alias 之后的形式），生成出来是（在 <code>Demo_06inz.c:25</code>）：</p>
+<pre><code><span class="com">/*
+equation index: 1
+type: SIMPLE_ASSIGN
+$DER.y = -2.0 * k * 0.5 * y
+*/</span>
+<span class="kw">void</span> <span class="fn">Demo_eqFunction_1</span>(DATA *data, threadData_t *threadData)
+{
+  (data-&gt;localData[0]-&gt;realVars[data-&gt;simulationInfo-&gt;realVarsIndex[1]] <span class="com">/* der(y) STATE_DER */</span>)
+    = (-((2.0) * (((data-&gt;simulationInfo-&gt;realParameter[0] <span class="com">/* k PARAM */</span>))
+      * ((0.5) * ((data-&gt;localData[0]-&gt;realVars[data-&gt;simulationInfo-&gt;realVarsIndex[0]] <span class="com">/* y STATE(1,der(y)) */</span>))))));
+}</code></pre>
+<p>
+  四点值得注意：① <strong>没有变量名了</strong>，全是 <code>realVars[下标]</code>——运行时把所有实数变量放在一个大数组里，状态在前、状态导数紧随其后、代数变量在后；
+  ② 注释里保留了 <code>equation index</code>，和 <code>Demo_info.json</code> 对上就能回溯到源码；③ 每个方程一个函数，然后 <code>functionODE</code> 按 BLT 顺序挨个调；
+  ④ <strong>这个 ODE 方程的函数体为什么在初始化文件 <code>_06inz.c</code> 里？</strong>因为 Solve 模块的 <code>duplicate_map</code> 发现 ODE 分区的这个分量和 INI 分区的第 3 块一模一样（dump 里的 <code>--- Alias of INI[1 | 3] ---</code>），
+  把它标成 <code>ALIAS</code>；NSimCode 把 init 最先编号（第 8 节），所以函数体随 init 生成，<code>Demo.c</code> 的 <code>functionODE_system0</code> 只 <code>extern void Demo_eqFunction_1(...)</code> 然后调用。<code>-d=dumpSimCode</code> 里 <code>odeEquations: 4: alias of 1</code> 说的就是这件事。
+</p>
+<h3>生成代码和运行时的接口：一张回调表</h3>
+<p>运行时库是预编译好的，它怎么知道去调 <code>Demo_functionODE</code>？答案是 <code>Demo.c</code> 里的一个结构体（模板 <span class="fileref">CodegenC.tpl:1380</span>）：</p>
+<pre><code><span class="kw">struct</span> OpenModelicaGeneratedFunctionCallbacks Demo_callback = {
+   Demo_performSimulation,        <span class="com">// 主循环（perform_simulation.c.inc 被 #include 进来编译的）</span>
+   …
+   Demo_functionODE,              <span class="com">// 给定 x 算 der(x)</span>
+   Demo_functionAlgebraics,       <span class="com">// 算 y 这类输出量</span>
+   Demo_functionDAE,              <span class="com">// 全部方程，事件时用</span>
+   …
+   Demo_functionInitialEquations, <span class="com">// t=0 的初始化</span>
+   Demo_function_ZeroCrossings,   <span class="com">// 过零函数</span>
+   …
+};
+<span class="kw">void</span> <span class="fn">Demo_setupDataStruc</span>(DATA *data, threadData_t *threadData)
+{
+  data-&gt;callback = &amp;Demo_callback;    <span class="com">// ★ 运行时从此只通过 data-&gt;callback-&gt;xxx 调模型</span>
+  …</code></pre>
+<p>这个模式和 FMI 的 <code>fmi2GetDerivatives</code> 等价：<strong>模型 = 一组固定签名的 C 函数</strong>，运行时只认签名不认模型。</p>
+
+<h2 id="runtime"><span class="n">10.</span> 运行时 — 积分器循环怎么调生成的代码</h2>
+<pre><code><span class="fn">main</span>()                                             <span class="com">// Demo.c，模板 CodegenC.tpl:1310</span>
+ ├ Demo_setupDataStruc(&amp;data)                      <span class="com">// 装回调表</span>
+ ├ _main_initRuntimeAndSimulation                  <span class="ln">simulation/simulation_runtime.cpp:1337</span>
+ │   └ initRuntimeAndSimulation                    <span class="ln">:946</span>    <span class="com">// 解析命令行；读 Demo_init.xml 填 start 值</span>
+ └ _main_SimulationRuntime                         <span class="ln">:1356</span>
+     └ startNonInteractiveSimulation → callSolver <span class="ln">:458 :765</span>
+         ├ initializeResultData                    <span class="ln">:712</span>    <span class="com">// 选 mat4 / csv，打开 Demo_res.mat</span>
+         └ <span class="fn">solver_main</span>                             <span class="ln">simulation/solver/solver_main.c:599</span>
+             ├ initializeModel                     <span class="ln">:661</span>    <span class="com">// 调 callback-&gt;functionInitialEquations，解 t=0 的一致初值</span>
+             └ data-&gt;callback-&gt;<span class="fn">performSimulation</span>   <span class="ln">:732</span>    <span class="com">// 进主循环</span></code></pre>
+<p>主循环在 <code>perform_simulation.c.inc</code> <span class="fileref">:383</span>，被 <code>#include</code> 进 <code>Demo.c</code> 一起编译：</p>
+<pre><code><span class="kw">while</span> (solverInfo-&gt;currentTime &lt; simInfo-&gt;stopTime)            <span class="ln">:422</span>
+{
+  <span class="com">// 1. 算下一步步长</span>                                              <span class="ln">:482–512</span>
+  simulationStep(…) → <span class="fn">solver_main_step</span>                            <span class="ln">:183 → solver_main.c:96</span>
+    → <span class="kw">switch</span>(solverMethod): dassl_step / euler_ex_step / cvode / ida / gbode …
+        → 积分器内部反复调 data-&gt;callback-&gt;<span class="fn">functionODE</span>           <span class="com">// 给我 x，还你 der(x)</span>
+  handleEvents(…)                                                <span class="ln">:125</span>  <span class="com">// 过零函数变号？time event 到了？</span>
+  data-&gt;callback-&gt;<span class="fn">functionAlgebraics</span>(…)                          <span class="com">// 这时才算 y</span>
+  sim_result.<span class="fn">emit</span>(…)                                             <span class="ln">:278</span>  <span class="com">// 追加到 Demo_res.mat</span>
+}</code></pre>
+<p>
+  积分器（<code>-s=</code> 选）都在 <code>simulation/solver/</code>：<code>dassl.c</code>（默认，隐式 BDF，用雅可比）、<code>euler_ex_step</code>、<code>rungekutta_step</code>、<code>cvode_solver.c</code>、<code>ida_solver.c</code>、<code>gbode_main.c</code>。
+  代数环的求解器也在这里：<code>nonlinearSystem.c</code>（Newton / Hybrd / Homotopy / KINSOL）、<code>linearSystem.c</code>（LAPACK / KLU）。
+</p>
+<div class="note">
+  <span class="tag">Demo 实跑统计（<code>Demo.exe -lv=LOG_STATS</code>）。</span>
+  <code>solver: dassl · 57 steps taken · 70 calls of functionODE · 16 evaluations of jacobian</code>。
+  57 步积分完 0→1 秒，每步平均调 1 次多 ODE，雅可比来自 <code>Demo_12jac.c</code> 的符号表达式。（旧后端编出来的同一模型是 44 步 / 51 次——状态选 x 还是 y，步长控制的路径会有细微差别。）
+</div>
+
+<h2 id="dump"><span class="n">11.</span> 每一层怎么 dump 出来看</h2>
+<p>学编译器最快的办法是在每个箭头上把数据结构打出来。新后端的 dump 口子（定义都在 <code>Util/Flags.mo</code>）：</p>
+<table>
+  <tr><th>想看</th><th>怎么看</th><th>定义处</th></tr>
+  <tr><td>FlatModel（前端结果）</td><td><code>instantiateModel(Demo)</code></td><td>—</td></tr>
+  <tr><td>每一阶段耗时（相当于流水线的目录）</td><td><code>-d=execstat</code></td><td class="fileref">:230</td></tr>
+  <tr><td><strong>Causalize 和 Solve 之后的每个分区、每个强连通分量</strong></td><td><code>-d=bltdump</code>（新后端只在这两个模块后 dump，<span class="fileref">NBackendDAE.mo:410</span>）</td><td class="fileref">:270</td></tr>
+  <tr><td>每个模块之后整个 BackendDAE</td><td><code>-d=optdaedump</code>（很长）</td><td class="fileref">:278</td></tr>
+  <tr><td>只跟踪某几条方程</td><td><code>--debugFollowEquations=$RES_SIM_0,$RES_SIM_3</code></td><td class="fileref">:1372</td></tr>
+  <tr><td>后端统计（状态数、分区数、强连通分量分类）</td><td><code>-d=backenddaeinfo</code></td><td class="fileref">:304</td></tr>
+  <tr><td>指标约简每一轮</td><td><code>-d=dummyselect</code> / <code>-d=stateselection</code></td><td class="fileref">:272 :308</td></tr>
+  <tr><td>初始化系统的平衡过程</td><td><code>-d=initialization</code></td><td class="fileref">:340</td></tr>
+  <tr><td>撕裂结果</td><td><code>-d=tearingdump</code></td><td class="fileref">:256</td></tr>
+  <tr><td>Solve 里每条方程怎么解的</td><td><code>-d=dumpSolve</code></td><td class="fileref">:558</td></tr>
+  <tr><td>雅可比 / 稀疏模式</td><td><code>-d=symjacdump</code> / <code>-d=dumpSparsePattern</code></td><td class="fileref">:258 :266</td></tr>
+  <tr><td>每个模块耗时（只新后端）</td><td><code>-d=dumpBackendClocks</code></td><td class="fileref">:544</td></tr>
+  <tr><td>SimCode</td><td><code>-d=dumpSimCode</code></td><td class="fileref">:318</td></tr>
+  <tr><td>运行时每步细节</td><td><code>Demo.exe -lv=LOG_SOLVER,LOG_EVENTS,LOG_STATS</code></td><td>—</td></tr>
+</table>
+<div class="note">
+  <span class="tag">bltdump 的读法。</span>
+  <code>[ODE] Differential-Algebraic: (Causalize)</code> 是"哪个系统 · 哪个模块之后"；<code>(1) Continuous ODE Partition</code> 是分区；
+  <code>BLOCK n: Single Strong Component (status = Solve.UNPROCESSED)</code> 是一个强连通分量，Causalize 后 status 都是 UNPROCESSED，Solve 后变 EXPLICIT/IMPLICIT；
+  方程后面括号里的 <code>$RES_SIM_3</code> 是方程的唯一名，跨模块追踪就靠它。
+</div>
+
+<h2 id="verify"><span class="n">12.</span> 动手验证</h2>
+<p>
+  工作区里 <code>build_cmake/install_cmake/bin/omc.exe</code> 是用当前源码编的（<code>omc --version</code> 的提交号 = <code>git log</code> 的 HEAD），
+  用它跑，dump 里的行为和你读的源码是同一份。安装版 1.25.0 也能跑，但新后端差了一年多的提交（比如 1.25 的新后端还完全没有指标约简）。
+</p>
+<pre><code><span class="com"># 前端结果</span>
+omc --newBackend -d=execstat --simCodeTarget=None -s Demo.mo        <span class="com"># 各阶段目录（前端 + 后端 18 个模块）</span>
+<span class="com"># 后端：Causalize / Solve 后的分区与强连通分量</span>
+omc --newBackend -d=bltdump,backenddaeinfo --simCodeTarget=None -s Demo.mo
+<span class="com"># SimCode 分桶</span>
+omc --newBackend -d=dumpSimCode --simCodeTarget=None -s Demo.mo
+<span class="com"># 生成 C + 编译 + 跑（用 .mos）</span>
+omc run.mos            <span class="com"># 里面：setCommandLineOptions("--newBackend"); buildModel(Demo);</span>
+.\Demo.exe -override=stopTime=1 -lv=LOG_STATS</code></pre>
+<p>看完之后建议做三件事：</p>
+<ol>
+  <li>把 <code>-d=execstat</code> 输出里 <code>Performance of [SIM] Bindings … Jacobian</code> 那 18 行和第 5 节的三张表逐条对上。</li>
+  <li>打开 <code>Demo.c</code>，从 <code>Demo_callback</code> 顺着找 <code>Demo_functionODE</code> → <code>Demo_eqFunction_4</code>，看方程怎么落地；对照 <code>-d=bltdump</code> 里 <code>[ODE] … (Solve)</code> 那一块。</li>
+  <li>把模型改成有代数环的（三篇细读里各有一个现成模型），重跑，观察 <code>Strong Component statistics</code> 里 <code>algebraic-loop</code> 从 0 变 1，<code>Demo_02nls.c</code> 从空文件变成有 <code>residualFunc</code>。</li>
+</ol>
+
+<h2 id="series"><span class="n">13.</span> 细读篇索引</h2>
+<p>本文是总览，下面七篇把最重的环节拆开细读，全部基于新前端 + 新后端：</p>
+<table>
+  <tr><th>篇目</th><th>覆盖流水线的哪一段</th></tr>
+  <tr><td><a href="NFFlatten-主流程导读.html">NFFlatten 主流程导读</a></td><td>第 3 节第 6 步：实例树 → FlatModel，带前缀的树遍历</td></tr>
+  <tr><td><a href="NFFlatten-方程与连接导读.html">NFFlatten 方程与连接导读</a></td><td>同上，方程前缀下推 + <code>connect</code> 怎么展开成方程</td></tr>
+  <tr><td><a href="NFBackend-匹配与排序导读.html">NFBackend 匹配与排序导读</a></td><td>第 6 节的 ②③：二分图匹配 + Tarjan 强连通分量</td></tr>
+  <tr><td><a href="NB-指标约简导读.html">NB 指标约简导读</a></td><td>第 6 节的 <code>Matching.singular</code> → <code>indexReduction</code>：Pantelides + 静态哑导数选择</td></tr>
+  <tr><td><a href="NB-撕裂导读.html">NB 撕裂导读</a></td><td>第 7.2 节：<code>TEARING_SET</code>、<code>minimal</code> / <code>guru</code>、残差方程怎么生成、为什么当前不撕连续环</td></tr>
+  <tr><td><a href="NB-初始化系统导读.html">NB 初始化系统导读</a></td><td>第 5 节 Initialization 模块：<code>$START</code> 方程、参数变未知量、三阶段匹配、<code>balanceInitialization</code>、homotopy λ=0</td></tr>
+  <tr><td><a href="NB-Susan模板与代码生成导读.html">NB Susan 模板与代码生成导读</a></td><td>第 8–9 节：NSimCode 桥 + Susan 语言 + 一条方程在 <code>CodegenC.tpl</code> 里的旅程</td></tr>
+</table>
+
+<footer>
+  行号基于工作区 <code>feat_OMEncryption</code> 分支（HEAD <code>3ceb0c9d06</code>）；实跑输出来自 <code>build_cmake/install_cmake/bin/omc.exe</code>（同一提交）。运行时统计用安装版 1.25.0 的 exe（运行时库两版一致）。
+</footer>
+
+</div>
+</body>
+</html>

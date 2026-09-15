@@ -1,0 +1,12 @@
+{
+  "_doc": "阶段→语料子集→对比类型（FR-050）。corpora 为相对 testsuite 根的目录；compare∈{L1,L2,L3,struct}；dymola=该阶段是否比 Dymola；threshold=通过率门槛（TBD-08，先留 null）。见方案 §5、需求规格 §8。",
+  "S0": {"corpora": ["flattening/modelica/scoping"], "compare": ["L1"], "dymola": false, "threshold": null},
+  "S1": {"corpora": ["flattening/modelica"], "compare": ["L1"], "dymola": false, "threshold": null},
+  "S2": {"corpora": ["flattening/modelica/packages"], "compare": ["L1"], "dymola": false, "threshold": null},
+  "S3": {"corpora": ["flattening/modelica"], "compare": ["L1", "struct"], "dymola": true, "threshold": null},
+  "S4": {"corpora": ["flattening/modelica/mosfiles"], "compare": ["L3"], "dymola": false, "threshold": null},
+  "S5": {"corpora": ["simulation/modelica/NBackend"], "compare": ["struct"], "dymola": true, "threshold": null},
+  "S6": {"corpora": ["simulation/modelica/NBackend"], "compare": ["L2"], "dymola": true, "threshold": null},
+  "S7": {"corpora": ["simulation/modelica/NBackend"], "compare": ["L2"], "dymola": true, "threshold": null},
+  "S8": {"corpora": [], "compare": [], "dymola": true, "threshold": null}
+}

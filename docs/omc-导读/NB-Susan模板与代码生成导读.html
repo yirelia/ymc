@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NB Susan 模板与代码生成导读</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d0d7de;
+    --code-bg: #f6f8fa; --kw: #cf222e; --str: #0a3069; --com: #6e7781;
+    --fn: #8250df; --num: #0550ae; --accent: #0969da; --accent-bg: #ddf4ff;
+    --card: #f6f8fa; --line: #57606a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #8b949e; --border: #30363d;
+      --code-bg: #161b22; --kw: #ff7b72; --str: #a5d6ff; --com: #8b949e;
+      --fn: #d2a8ff; --num: #79c0ff; --accent: #58a6ff; --accent-bg: #132436;
+      --card: #161b22; --line: #8b949e;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.75; font-size: 16px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 2.5rem 1.5rem 6rem; }
+  header.hero { border-bottom: 1px solid var(--border); padding-bottom: 1.5rem; margin-bottom: 2rem; }
+  h1 { font-size: 2rem; margin: 0 0 .4rem; letter-spacing: -.02em; }
+  .sub { color: var(--muted); font-size: .95rem; margin: 0; }
+  .sub code { background: var(--code-bg); padding: .1em .4em; border-radius: 5px; font-size: .85em; }
+  h2 {
+    font-size: 1.4rem; margin: 3rem 0 1rem; padding-top: .5rem;
+    border-top: 1px solid var(--border);
+  }
+  h2 .n { color: var(--accent); font-variant-numeric: tabular-nums; }
+  h3 { font-size: 1.1rem; margin: 1.8rem 0 .6rem; }
+  p { margin: .8rem 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: "SFMono-Regular", "Cascadia Code", Consolas, "Liberation Mono", monospace; font-size: .88em; }
+  p code, li code, td code { background: var(--code-bg); padding: .1em .4em; border-radius: 5px; color: var(--fg); }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.1rem; overflow-x: auto; font-size: .84rem; line-height: 1.6; margin: 1rem 0;
+  }
+  pre code { background: none; padding: 0; color: var(--fg); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; }
+  .fn { color: var(--fn); } .num { color: var(--num); }
+  .ln { color: var(--line); user-select: none; }
+  .lead {
+    background: var(--accent-bg); border-left: 3px solid var(--accent);
+    padding: .9rem 1.1rem; border-radius: 0 8px 8px 0; margin: 1.2rem 0;
+  }
+  .lead strong { color: var(--fg); }
+  .note {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: .9rem 1.1rem; margin: 1.2rem 0; font-size: .95rem;
+  }
+  .note .tag { font-weight: 600; color: var(--accent); }
+  .toc {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.4rem; margin: 1.5rem 0 2.5rem;
+  }
+  .toc-title { font-weight: 600; margin: 0 0 .5rem; font-size: .9rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .toc ol { margin: 0; padding-left: 1.4rem; }
+  .toc li { margin: .25rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--card); font-weight: 600; }
+  .fileref { color: var(--muted); font-size: .82rem; font-family: "SFMono-Regular", Consolas, monospace; }
+  .diagram {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1.2rem; overflow-x: auto; font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: .82rem; line-height: 1.65; white-space: pre; color: var(--fg);
+  }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>Susan 模板与代码生成</h1>
+  <p class="sub">新后端细读 · 桥 <code>Compiler/NSimCode/</code>（<code>NSimCode.mo</code> 924 行 · <code>NSimStrongComponent.mo</code> 1443 行）· 模板 <code>Compiler/Template/CodegenC.tpl</code>（7668 行 → 生成 <code>CodegenC.mo</code> 43228 行）· 运行时 <code>Tpl.mo</code></p>
+</header>
+
+<p class="lead">
+  <strong>一句话抓住主线：</strong>Susan 是一门"<strong>输出即返回值</strong>"的纯函数式模板语言——每个 <code>template</code> 编译成一个 <code>Text → Text</code> 的 MetaModelica 函数，文本一路线性穿过；
+  C 代码里躲不掉的副作用（临时变量声明、前置语句）靠 <code>&amp;</code> 文本缓冲区当"出参"传。
+</p>
+<p class="lead">
+  <strong>新后端不直接喂模板。</strong><code>NSimCode</code> 先把 <code>NBackendDAE</code> 建成一套新的 <code>SIM_CODE</code>，再 <code>convert</code> 回旧的 <code>SimCode.SIMCODE</code>，之后模板层（<code>SimCodeTV.mo</code> + 所有 <code>.tpl</code>）对新旧后端一视同仁。
+</p>
+
+<nav class="toc">
+  <p class="toc-title">目录</p>
+  <ol>
+    <li><a href="#where">模板层在管线的位置 — 六步 + 一张文件表</a></li>
+    <li><a href="#create">桥 ①：<code>SimCode.create</code> — 从分区到 Block</a></li>
+    <li><a href="#index">桥 ②：变量下标是怎么分配的 — <code>realVarsIndex[i]</code> 的 i</a></li>
+    <li><a href="#convert">桥 ③：<code>convert</code> 回旧结构 — 以及留空的字段清单</a></li>
+    <li><a href="#susan">Susan 语言速成 — 全部用 CodegenC 里的真代码</a></li>
+    <li><a href="#compile">.tpl 怎么变成 .mo — 自举的 Susan 编译器</a></li>
+    <li><a href="#typeview"><code>SimCodeTV.mo</code> — 模板能看见的类型</a></li>
+    <li><a href="#journey">一条方程的旅程 — 从 <code>translateModel</code> 到 <code>realVars[…]</code></a></li>
+    <li><a href="#loops">代数环与 for 方程怎么生成</a></li>
+    <li><a href="#verify">动手验证</a></li>
+  </ol>
+</nav>
+
+<h2 id="where"><span class="n">1.</span> 模板层在管线的位置 — 六步 + 一张文件表</h2>
+<pre><code><span class="fn">generateModelCodeNewBackend</span>(bdae, className, fileNamePrefix, simSettingsOpt)     <span class="ln">SimCode/SimCodeMain.mo:395</span>
+  (simCode, oldFunctionTree) := NSimCode.SimCode.<span class="fn">create</span>(bdae, …);                   <span class="ln">:414</span>   <span class="com">// ① 建新 SimCode（第 2 节）</span>
+  <span class="kw">if</span> Flags.isSet(Flags.DUMP_SIMCODE) <span class="kw">then</span> print(NSimCode.SimCode.toString(simCode));  <span class="ln">:415–417</span>   <span class="com">// -d=dumpSimCode</span>
+  (fileDir, libs) := NSimCode.SimCode.getDirectoryAndLibs(simCode);                <span class="ln">:418</span>
+  oldSimCode := NSimCode.SimCode.<span class="fn">convert</span>(simCode);                                  <span class="ln">:419</span>   <span class="com">// ③ 转回旧结构（第 4 节）</span>
+  ExecStat.execStat(<span class="str">"SimCode"</span>);                                                    <span class="ln">:425</span>
+  <span class="fn">callTargetTemplates</span>(oldSimCode, Config.simCodeTarget());                          <span class="ln">:433</span>   <span class="com">// ★ 和旧后端同一个入口</span>
+  ExecStat.execStat(<span class="str">"Templates"</span>);                                                  <span class="ln">:435</span></code></pre>
+<p><code>callTargetTemplates</code> <span class="fileref">:494</span>，<code>case "C"</code> <span class="fileref">:581</span>：先把主模板和 init.xml 塞进任务表（<span class="fileref">:587–588</span>），再把 20 个分片文件逐个注册（<span class="fileref">:589–611</span>），<strong>并行</strong>跑（<span class="fileref">:646</span> <code>System.launchParallelTasks</code>）。所以 <code>CodegenC.tpl:118</code> 有注释 "write the main .c file last!"。</p>
+<table>
+  <tr><th>模板函数（<code>CodegenC.tpl</code>）</th><th>行</th><th>产物</th></tr>
+  <tr><td><code>translateModel</code>（根；自己写 <code>_literals.h</code>、<code>_functions.h</code>、<code>_includes.h</code>、<code>_records.c</code>）</td><td class="fileref">:90</td><td>—</td></tr>
+  <tr><td><code>simulationFile</code></td><td class="fileref">:1276</td><td><code>&lt;M&gt;.c</code></td></tr>
+  <tr><td><code>simulationHeaderFile</code></td><td class="fileref">:137</td><td><code>&lt;M&gt;_model.h</code></td></tr>
+  <tr><td><code>simulationFile_exo … simulationFile_inl</code></td><td class="fileref">:647 … :1219</td><td><code>&lt;M&gt;_01exo.c … &lt;M&gt;_18spd.c</code></td></tr>
+  <tr><td><code>simulationFile_nls</code> / <code>simulationFile_lsy</code></td><td class="fileref">:668 :696</td><td><code>_02nls.c</code> / <code>_03lsy.c</code></td></tr>
+  <tr><td><code>simulationFile_inz</code></td><td class="fileref">:773</td><td><code>_06inz.c</code></td></tr>
+  <tr><td><code>simulationMakefile</code></td><td class="fileref">:6951</td><td><code>&lt;M&gt;.makefile</code></td></tr>
+</table>
+
+<h2 id="create"><span class="n">2.</span> 桥 ①：<code>SimCode.create</code> — 从分区到 Block <span class="fileref">NSimCode/NSimCode.mo:272</span></h2>
+<p>匹配 <code>BackendDAE.MAIN(varData = VAR_DATA_SIM(), eqData = EQ_DATA_SIM())</code>（<span class="fileref">:320</span>），主要步骤：</p>
+<pre><code>simCodeIndices := EMPTY_SIM_CODE_INDICES();                                       <span class="ln">:322</span>   <span class="com">// 一个 record 装全部计数器（第 3 节），值传递串过整个 create</span>
+(vars, simCodeIndices) := SimVars.<span class="fn">create</span>(varData, residual_vars, simCodeIndices);  <span class="ln">:331</span>   <span class="com">// ★ 变量下标在这里全部分配</span>
+simcode_map := SimCodeUtil.createSimCodeMap(vars, extObjInfo);                    <span class="ln">:333</span>   <span class="com">// cref → SimVar，模板里 cref2simvar 查的表</span>
+nominal / min / max / param := {}                                                 <span class="ln">:344–349</span>   <span class="com">// 参数方程全折进初始化系统了</span>
+(init, …)   := Block.<span class="fn">createInitialBlocks</span>(bdae.init, …)                              <span class="ln">:351</span>   <span class="com">// "init before everything else!" 最先编号</span>
+(init_0, …) := … bdae.init_0 …                                                    <span class="ln">:352–356</span>
+(ode, allSim, …)       := Block.<span class="fn">createBlocks</span>(bdae.ode, allSim, …)                  <span class="ln">:376</span>
+(algebraic, allSim, …) := Block.<span class="fn">createBlocks</span>(bdae.algebraic, allSim, …)            <span class="ln">:377</span>
+(ode, allSim, event_blocks, …) := Block.<span class="fn">createDiscreteBlocks</span>(bdae.ode_event, …)  <span class="ln">:378</span>   <span class="com">// 事件分区并入 ode，离散方程抽到 event_blocks（过零函数）</span>
+(clockedPartitions, …) := Block.<span class="fn">createClockedBlocks</span>(bdae.clocked, …)             <span class="ln">:383</span>
+(linearLoops, nonlinearLoops, jacobians, …) := <span class="fn">collectAlgebraicLoops</span>(init, init_0, ode, algebraic, …)   <span class="ln">:415</span>
+jacA := SimJacobian.<span class="fn">createSimulationJacobian</span>(…);  jacB/C/D/F/H := SimJacobian.empty(…)   <span class="ln">:417–429</span>   <span class="com">// 只有 A 是真的</span>
+generic_loop_calls := list(SimGenericCall.fromIdentifier(tpl) for tpl in generic_call_map)   <span class="ln">:444</span>   <span class="com">// for 方程（第 9 节）</span>
+modelInfo := ModelInfo.<span class="fn">create</span>(vars, name, directory, functions, …)                <span class="ln">:448</span></code></pre>
+<p><code>Block.createBlocks</code> <span class="fileref">NSimStrongComponent.mo:426</span> 对每个分区调 <code>fromPartition</code>（<span class="fileref">:603</span>，<strong>倒序</strong>遍历强连通分量 <span class="fileref">:618</span>，同时维护 ALIAS 映射 <span class="fileref">:621–628</span>），每个分量经 <code>fromStrongComponent</code>（<span class="fileref">:640</span>）变成一个 <code>Block</code>：</p>
+<table>
+  <tr><th>NB <code>StrongComponent</code></th><th>行</th><th>→ <code>Block</code></th></tr>
+  <tr><td><code>SINGLE_COMPONENT</code></td><td class="fileref">:674</td><td><code>createEquation</code>（<span class="fileref">:852</span>）按方程种类：SCALAR→<code>SIMPLE_ASSIGN</code>、ARRAY→<code>ARRAY_ASSIGN</code>、WHEN→<code>WHEN</code>、IF→<code>IF</code>、ALGORITHM→<code>ALGORITHM</code>；status=IMPLICIT→<code>createImplicitEquation</code>（<span class="fileref">:915</span>，包成 1×1 环再递归）</td></tr>
+  <tr><td><code>MULTI_COMPONENT</code></td><td class="fileref">:678</td><td>同上，变量用 DUMMY</td></tr>
+  <tr><td><code>SLICED / RESIZABLE / GENERIC_COMPONENT</code></td><td class="fileref">:682–716</td><td><code>GENERIC_ASSIGN</code> / <code>RESIZABLE_ASSIGN</code>：方程体注册进 <code>generic_call_map</code>（<code>Identifier</code> 去重），Block 只留 <code>call_index</code> + 下标列表</td></tr>
+  <tr><td><code>ENTWINED_COMPONENT</code></td><td class="fileref">:718</td><td><code>ENTWINED_ASSIGN</code></td></tr>
+  <tr><td><code>ALGEBRAIC_LOOP</code></td><td class="fileref">:734–773</td><td>一律 <code>NONLINEAR</code>（雅可比 <code>if false</code> 丢弃 <span class="fileref">:756</span>）——见 <a href="NB-撕裂导读.html">撕裂导读</a></td></tr>
+  <tr><td><code>ALIAS</code></td><td class="fileref">:775</td><td><code>ALIAS(aliasOf)</code></td></tr>
+</table>
+
+<h2 id="index"><span class="n">3.</span> 桥 ②：变量下标是怎么分配的 — <code>realVarsIndex[i]</code> 的 i <span class="fileref">NSimCode/NSimVar.mo</span></h2>
+<p><code>SimCodeIndices</code>（<span class="fileref">NSimCode.mo:98–132</span>）里有两类计数器：<code>uniqueIndex</code>（全局唯一）和 <code>realVarIndex / integerVarIndex / … / realParamIndex / realAliasIndex …</code>（<strong>按类型连续编号</strong>）。<code>SimVar.traverseCreate</code> <span class="fileref">NSimVar.mo:213–259</span>：</p>
+<pre><code><span class="kw">case</span> VarType.SIMULATION <span class="kw">algorithm</span>
+  Pointer.update(acc, <span class="fn">create</span>(var, simCodeIndices.uniqueIndex, simCodeIndices.realVarIndex) :: …);   <span class="ln">:224</span>
+  simCodeIndices.uniqueIndex  := simCodeIndices.uniqueIndex + 1;        <span class="com">// → SimVar.variable_index（FMI value reference）</span>
+  simCodeIndices.realVarIndex := simCodeIndices.realVarIndex + 1;       <span class="com">// → SimVar.index（realVars[] 里的位置）</span>
+<span class="com">// PARAMETER 用 realParamIndex (:229)，ALIAS 用 realAliasIndex (:235)，RESIDUAL 用 residualIndex (:241)</span></code></pre>
+<p><code>SimVars.create</code> <span class="fileref">:790–885</span> 的<strong>调用顺序就是下标顺序</strong>（<span class="fileref">:817–839</span>）：</p>
+<pre><code>stateVars      := createSimVarLists(varData.states, …, VarType.SIMULATION)        <span class="com">// 状态最先 → index 0..</span>
+derivativeVars := createSimVarLists(varData.derivatives, …)                      <span class="com">// 紧接着状态导数</span>
+algVars        := createSimVarLists(varData.algebraics, …)                       <span class="com">// 然后代数变量</span>
+discreteAlgVars, intAlgVars, boolAlgVars, … := createSimVarLists(varData.discretes, …, SplitType.TYPE, …)   <span class="com">// 按 Real/Int/Bool/String/Enum 五路分</span>
+aliasVars … := createSimVarLists(varData.aliasVars, …, VarType.ALIAS)
+paramVars … := createSimVarLists(varData.parameters, …, VarType.PARAMETER)
+residualVars := createSimVarLists(residual_vars, …, VarType.RESIDUAL)</code></pre>
+<p>Demo（新后端）的 <code>-d=dumpSimCode</code> 正好印证：<code>stateVars index:0: y · derivativeVars index:1: $DER.y · algVars index:2: x · paramVars index:0: k</code>。这就是生成代码里 <code>realVars[realVarsIndex[0]] /* y */</code>、<code>realVars[realVarsIndex[1]] /* der(y) */</code>、<code>realVars[realVarsIndex[2]] /* x */</code>、<code>realParameter[0] /* k */</code> 的来源。</p>
+<p><code>VarInfo.create</code> <span class="fileref">:1266–1308</span> 把计数器结算成 <code>numStateVars / numEquations / numNonLinearSystems …</code>，其中 <code>numMixedSystems = 0</code>、<code>numStateSets = 0</code>（<span class="fileref">:1291–1307</span>）——模板 <code>CodegenC.tpl:1385–1387</code> 看到 0 就在回调表里填 <code>NULL</code>。</p>
+
+<h2 id="convert"><span class="n">4.</span> 桥 ③：<code>convert</code> 回旧结构 — 以及留空的字段清单 <span class="fileref">NSimCode.mo:493</span></h2>
+<p>前置：<code>ModelInfo.convert</code>、<code>EventInfo.convert</code>（过零函数、关系式、时间事件，<span class="fileref">2_Pre/NBEvents.mo:289</span>）、<code>convertSimCodeMap</code>（新 <code>UnorderedMap</code> → 旧 <code>HashTableCrefSimVar</code>，模板 <code>cref2simvar</code> 用的就是它，<span class="fileref">NSimCodeUtil.mo:105</span>）。字段映射（<span class="fileref">:523–576</span>）：</p>
+<table>
+  <tr><th>旧 <code>SIMCODE</code> 字段</th><th>新来源</th><th>行</th></tr>
+  <tr><td><code>odeEquations</code> / <code>algebraicEquations</code></td><td><code>convertListList(ode / algebraic)</code></td><td class="fileref">:531 :532</td></tr>
+  <tr><td><code>initialEquations</code> / <code>initialEquations_lambda0</code></td><td><code>convertList(init / init_0)</code></td><td class="fileref">:534 :535</td></tr>
+  <tr><td><code>equationsForZeroCrossings</code></td><td><code>convertList(event_blocks)</code></td><td class="fileref">:544</td></tr>
+  <tr><td><code>jacobianEquations</code> / <code>jacobianMatrices</code></td><td><code>convertList(jac_blocks)</code> / <code>SimJacobian.convert</code></td><td class="fileref">:545 :557</td></tr>
+  <tr><td><code>startValueEquations / parameterEquations / nominal / min / max / removedInitialEquations</code></td><td>全部空列表（折进 init 了）</td><td class="fileref">:536–541</td></tr>
+</table>
+<p><code>Block.convert</code> <span class="fileref">NSimStrongComponent.mo:1068–1162</span>：<code>SIMPLE_ASSIGN→SES_SIMPLE_ASSIGN</code>（:1099）、<code>ARRAY_ASSIGN→SES_ARRAY_CALL_ASSIGN</code>、<code>GENERIC_ASSIGN→SES_GENERIC_ASSIGN</code>、<code>IF→SES_IFEQUATION</code>、<code>WHEN→SES_WHEN</code>、<code>NONLINEAR→SES_NONLINEAR</code>（:1145，eqAttr 默认值，注释 <code>/* dangerous! */</code>）、<code>ALIAS→SES_ALIAS</code>；<strong>没有 <code>LINEAR</code> / <code>HYBRID</code> / <code>INVERSE_ALGORITHM</code></strong>，落到 else 报 INTERNAL_ERROR（:1151 <code>ToDo: add all the other cases here!</code>）。</p>
+<div class="note">
+  <span class="tag">留空字段 = 新后端当前不支持的功能清单。</span>
+  <code>stateSets = {}</code>（:546）、<code>constraints = {}</code>（:547）、<code>classAttributes = {}</code>（:548）、<code>delayedExps = DELAYED_EXPRESSIONS({}, 0)</code>（:555）、<code>spatialInfo</code>（:556）、
+  <code>fullPathPrefix / fmuTargetName = ""</code>（:560–561 "FMI stuff"）、<code>hpcomData = empty</code>（:562）、<code>backendMapping = NONE()</code>（:567）、<code>modelStructure = NONE()</code>（:568）、<code>omsiData = NONE()</code>（:574）。
+  即：动态状态选择的 StateSet、Optimica 约束、<code>delay()</code>、<code>spatialDistribution()</code>、HPCOM 并行、FMI 导出的结构信息、OMSI——新后端都还没接。
+</div>
+
+<h2 id="susan"><span class="n">5.</span> Susan 语言速成 — 全部用 CodegenC 里的真代码</h2>
+<h3>5.1 包与导入 <span class="fileref">CodegenC.tpl:81–88</span></h3>
+<pre><code><span class="kw">package</span> CodegenC
+<span class="kw">import interface</span> SimCodeTV;          <span class="com">// 类型视图（第 7 节）</span>
+<span class="kw">import interface</span> SimCodeBackendTV;
+<span class="kw">import</span> CodegenUtil.*;                <span class="com">// 别的模板包</span>
+<span class="kw">import</span> CodegenCFunctions.*;</code></pre>
+<h3>5.2 模板定义 <span class="fileref">CodegenUtil.tpl:86–90</span></h3>
+<pre><code><span class="com">/* public */</span> <span class="kw">template</span> <span class="fn">symbolName</span>(String modelNamePrefix, String symbolName)
+  <span class="str">"Creates a unique name for the function"</span>
+::=
+  modelNamePrefix + <span class="str">"_"</span> + symbolName
+<span class="kw">end</span> symbolName;
+<span class="com">// /* public */ 不是普通注释，是给 Susan 编译器的可见性标记 → 生成 public function；没有就是 protected</span></code></pre>
+<h3>5.3 <code>match</code> / <code>case REC(__)</code> <span class="fileref">CodegenCFunctions.tpl:4876–4887</span></h3>
+<pre><code><span class="com">/* public */</span> <span class="kw">template</span> <span class="fn">cref</span>(ComponentRef cr, Text &amp;sub)
+::=
+  <span class="kw">match</span> cr
+  <span class="kw">case</span> CREF_IDENT(ident = <span class="str">"time"</span>) <span class="kw">then</span> <span class="str">"data-&gt;localData[0]-&gt;timeValue"</span>
+  <span class="kw">case</span> WILD(__) <span class="kw">then</span> ''
+  <span class="kw">else</span> crefToCStr(cr, 0, false, false, &amp;sub)
+<span class="kw">end</span> cref;
+<span class="com">// (__) = 匹配这个 record 但不绑定字段；case e as SES_LINEAR(__) 可以起别名</span></code></pre>
+<h3>5.4 <code>&lt;% %&gt;</code> 插值、<code>&lt;&lt; &gt;&gt;</code> 文本块、缩进规则 <span class="fileref">CodegenC.tpl:6259–6265</span></h3>
+<pre><code>  &lt;&lt;
+  &lt;%modelicaLine(eqInfo(eq))%&gt;
+  &lt;%preExp%&gt;
+  &lt;%contextCref(cref, context, &amp;preExp, &amp;varDecls, auxFunction, &amp;sub)%&gt; = &lt;%expPart%&gt;;
+  &lt;%postExp%&gt;
+  &lt;%endModelicaLine()%&gt;
+  &gt;&gt;</code></pre>
+<p><code>&lt;&lt;</code> 后第一个换行被吃掉，块内公共前导空白被剥离，<strong>插值处的列位置成为被插入多行文本的缩进基准</strong>——所以 <code>&lt;%preExp%&gt;</code> 是多行 C 代码也能对齐。运行时靠 <code>Tpl.pushBlock / popBlock</code>（<span class="fileref">Tpl.mo:536 :600</span>）实现。单引号 <code>'…'</code> 是单行版。</p>
+<h3>5.5 <code>let</code>、<code>|&gt;</code> 映射、<code>hasindex</code>、<code>;separator</code> <span class="fileref">CodegenC.tpl:4506–4508</span></h3>
+<pre><code><span class="kw">template</span> <span class="fn">functionXXX_systems</span>(list&lt;list&lt;SimEqSystem&gt;&gt; eqs, String name, Text &amp;loop, Text &amp;varDecls, String modelNamePrefixStr)
+::=
+  <span class="kw">let</span> funcs = (eqs |&gt; eq <span class="kw">hasindex</span> i0 <span class="kw">fromindex</span> 0 =&gt; functionXXX_system(eq,name,i0,modelNamePrefixStr) ; separator=<span class="str">"\n"</span>)
+<span class="com">// 另一种写法：|&gt; 左边直接解构  (:6504)</span>
+  &lt;%ls.vars |&gt; SIMVAR(__) <span class="kw">hasindex</span> i0 =&gt; '&lt;%contextCrefNoPrevExp(name, context, auxFunctions)%&gt; = aux_x[&lt;%i0%&gt;];' ;separator=<span class="str">"\n"</span>%&gt;</code></pre>
+<h3>5.6 <code>&amp;</code> 文本缓冲区 —— CodegenC 最核心的惯用法</h3>
+<pre><code><span class="com">// 声明、追加、重定向到文件  (CodegenC.tpl:99–102，translateModel 内)</span>
+<span class="kw">let</span> &amp;literalsFile = <span class="kw">buffer</span> <span class="str">""</span>
+<span class="kw">let</span> &amp;literalsFile += redirectToFile('&lt;%fileNamePrefix%&gt;_literals.h')
+<span class="kw">let</span> &amp;literalsFile += simulationLiteralsFile(fileNamePrefix, literals)
+<span class="kw">let</span> &amp;literalsFile += closeFile()
+
+<span class="com">// 当出参传递  (CodegenCFunctions.tpl:5154 的签名，整个 CodegenC 都是这个形状)</span>
+<span class="com">/* public */</span> <span class="kw">template</span> <span class="fn">daeExp</span>(Exp exp, Context context, Text &amp;preExp, Text &amp;varDecls, Text &amp;auxFunction)
+
+<span class="com">// 为什么需要它  (CodegenCFunctions.tpl:5799–5802，daeExpBinary 里字符串加法)</span>
+<span class="kw">case</span> ADD(ty = T_STRING(__)) <span class="kw">then</span>
+  <span class="kw">let</span> tmpStr = tempDecl(<span class="str">"modelica_metatype"</span>, &amp;varDecls)                      <span class="com">// 往调用者的声明区塞一个临时变量</span>
+  <span class="kw">let</span> &amp;preExp += '&lt;%tmpStr%&gt; = stringAppend(&lt;%e1%&gt;,&lt;%e2%&gt;);&lt;%\n%&gt;'         <span class="com">// 往调用者的前置语句区塞一条语句</span>
+  tmpStr                                                                    <span class="com">// 模板的"返回值"只是那个临时变量名</span></code></pre>
+<p>
+  C 表达式不总能内联。模板返回的是表达式，副作用语句推进 <code>&amp;preExp</code>、声明推进 <code>&amp;varDecls</code>，调用者在 5.4 那段把 <code>&lt;%preExp%&gt;</code> 放在赋值前输出。
+  <strong>这就是 Susan 在纯函数式语言里实现"输出参数"的全部机制。</strong><code>CodegenC.tpl:44–64</code> 有一段给维护者的新旧语法对照。
+</p>
+<p>其它：<code>let() = System.tmpTickResetIndex(0,2)</code>（<span class="fileref">:94</span>）丢弃返回值、只要副作用；<code>;empty</code> 修饰符让空列表整体产出空（<span class="fileref">:6358</span>）。</p>
+
+<h2 id="compile"><span class="n">6.</span> .tpl 怎么变成 .mo — 自举的 Susan 编译器</h2>
+<pre><code><span class="com"># Template/Makefile.common:34–37</span>
+CodegenC.mo : CodegenC.tpl CodegenCFunctions.tpl SimCodeTV.mo CodegenUtil.tpl
+	$(OMC) $&lt; &gt; $@.log || (cat $@.log &amp;&amp; false)          <span class="com"># 就是 omc CodegenC.tpl</span>
+<span class="com"># CMake 版：Compiler/.cmake/template_compilation.cmake:36  omc -d=failtrace CodegenC.tpl，WORKING_DIRECTORY = 源码目录（omc tpl 只在当前目录找 import）</span></code></pre>
+<p>omc 收到 <code>.tpl</code> 参数走 <code>Main.mo:490</code> <code>TplMain.main(f)</code>，三步（<span class="fileref">Template/TplMain.mo:112–116</span>）：<code>TplParser.templPackageFromFile</code>（解析器 6239 行）→ <code>TplAbsyn.transformAST</code> → <code>TplCodegen.mmPackage</code>。
+  <strong><code>TplCodegen</code> 本身是用 Susan 写的</strong>（<code>Compiler/susan_codegen/TplCodegen.tpl</code>，构建规则 <span class="fileref">Makefile.common:189–192</span>）——自举。语法参考 <code>susan_codegen/SusanGrammar.txt</code>。</p>
+<p>生成物 <code>CodegenC.mo:95</code>（对照 <code>CodegenC.tpl:90</code>）：</p>
+<pre><code><span class="kw">public function</span> <span class="fn">translateModel</span>
+  <span class="kw">input</span> Tpl.Text in_txt;                 <span class="com">// 文本作为第一个 input</span>
+  <span class="kw">input</span> SimCode.SimCode in_a_simCode;
+  <span class="kw">output</span> Tpl.Text out_txt;               <span class="com">// 和唯一 output，线性穿过</span>
+<span class="kw">algorithm</span>
+  out_txt := <span class="kw">match</span>(in_txt, in_a_simCode)
+    <span class="kw">case</span> ( txt, SimCode.SIMCODE(modelInfo = SimCode.MODELINFO(functions = i_modelInfo_functions), …) )
+      <span class="kw">equation</span>
+        txt_1 = Tpl.writeStr(Tpl.emptyTxt, i_fileNamePrefix);
+        txt_1 = Tpl.writeTok(txt_1, Tpl.ST_STRING(<span class="str">"_literals.h"</span>));
+        l_literalsFile = Tpl.redirectToFile(l_literalsFile, Tpl.textString(txt_1));
+        …
+<span class="com">// |&gt; 映射降解成递归辅助函数 lm_NN (CodegenC.mo:183 lm_51)；if 分支降解成 fun_NN；hasindex → Tpl.getIteri_i0；;separator → Tpl.nextIter</span></code></pre>
+<p>运行时 <code>Template/Tpl.mo</code>：<code>uniontype Text</code> <span class="fileref">:66</span>（<code>MEM_TEXT</code> 内存 token 链 :67 / <code>FILE_TEXT</code> 直接落盘 :71）、<code>writeTok</code> <span class="fileref">:206</span>、<code>textString</code> <span class="fileref">:909</span>、<code>tplString</code> <span class="fileref">:2144</span>（调用 + 错误检查 + 渲染）、<code>textFile</code> <span class="fileref">:2331</span>、<code>redirectToFile</code> <span class="fileref">:2456</span>（把 <code>Text</code> 从内存切换成文件，后续 <code>writeTok</code> 直接写盘——<code>translateModel</code> 一次生成十几个文件不爆内存的关键）。</p>
+
+<h2 id="typeview"><span class="n">7.</span> <code>SimCodeTV.mo</code> — 模板能看见的类型 <span class="fileref">Template/SimCodeTV.mo</span></h2>
+<p>
+  <code>.tpl</code> 不 import MetaModelica 包，它 import 一个 <strong>typeview</strong>：<code>interface package SimCodeTV</code>（<span class="fileref">:36</span>）只声明 uniontype / record 的结构和函数签名，没有实现。Susan 编译器靠它做 pattern 的类型检查和字段名解析；真正实现在 <code>Compiler/SimCode/SimCode.mo</code>。
+  改了 <code>SimCode.mo</code> 的 record 而忘了同步 <code>SimCodeTV.mo</code>，模板编译就会挂——Makefile 把它列为依赖（<span class="fileref">Makefile.common:34</span>）。
+</p>
+<table>
+  <tr><th>声明</th><th>行</th></tr>
+  <tr><td><code>package SimCode</code> … <code>record SIMCODE</code></td><td class="fileref">:420 · :459</td></tr>
+  <tr><td><code>uniontype SimEqSystem</code>：<code>SES_SIMPLE_ASSIGN</code> / <code>SES_GENERIC_ASSIGN</code> / <code>SES_LINEAR</code> / <code>SES_NONLINEAR</code> / <code>SES_WHEN</code> / <code>SES_ALIAS</code></td><td class="fileref">:606 · :634 :668 :708 :714 :729 :760</td></tr>
+  <tr><td><code>uniontype SimGenericCall</code> / <code>SINGLE_GENERIC_CALL</code></td><td class="fileref">:929 :930</td></tr>
+  <tr><td><code>uniontype Context</code>（SIMULATION / FUNCTION / JACOBIAN …）</td><td class="fileref">:1184</td></tr>
+  <tr><td><code>package SimCodeUtil</code>（<code>cref2simvar</code>）、<code>package Tpl</code>、<code>package Flags</code></td><td class="fileref">:1234 :1992 :4124</td></tr>
+</table>
+
+<h2 id="journey"><span class="n">8.</span> 一条方程的旅程 — 从 <code>translateModel</code> 到 <code>realVars[…]</code></h2>
+<p>以 Demo 的 <code>$DER.y = -2.0 * k * 0.5 * y</code> 为例（<code>SES_SIMPLE_ASSIGN</code>，最后落在 <code>Demo_06inz.c</code> 的 <code>Demo_eqFunction_1</code>）：</p>
+<div class="diagram">CodegenC.translateModel                        CodegenC.tpl:90
+ └ simulationFile                              :1276
+    └ functionODE(odeEquations, …)             :4659   let &amp;fncalls = buffer ""  ← 出参
+       └ functionXXX_systems(eqs, "ODE", &amp;fncalls, …)   :4506   1 个分区 → 直接 functionODE_system0(data, threadData);
+          └ functionXXX_system(eq, name, n, …)          :4493   static void functionODE_system0(…) { equations_call(…) }
+             └ equations_call → equation_call            :6144 → :6129   Demo_eqFunction_1(data, threadData);
+                └ (函数体) equation_impl2                 :5961   ★ 分发中枢：match eq
+                   ├ SES_SIMPLE_ASSIGN → equationSimpleAssign   :6229
+                   ├ SES_GENERIC_ASSIGN → equationGenericAssign :6347
+                   ├ SES_LINEAR        → equationLinear         :6477
+                   ├ SES_NONLINEAR     → equationNonlinear      :6563
+                   ├ SES_ALIAS         → 只发一条 extern 声明    :5978
+                   └ else "NOT IMPLEMENTED EQUATION equation_"  :6045</div>
+<p><code>equationSimpleAssign</code> <span class="fileref">:6239–6242</span> + 5.4 那七行：</p>
+<pre><code><span class="kw">let</span> &amp;preExp = <span class="kw">buffer</span> <span class="str">""</span>
+<span class="kw">let</span> expPart = daeExp(exp, context, &amp;preExp, &amp;varDecls, &amp;auxFunction)          <span class="com">// 右边：表达式</span>
+…
+&lt;%contextCref(cref, context, &amp;preExp, &amp;varDecls, auxFunction, &amp;sub)%&gt; = &lt;%expPart%&gt;;   <span class="com">// 左边：变量引用</span></code></pre>
+<h3>右边：<code>daeExp</code> <span class="fileref">CodegenCFunctions.tpl:5154</span></h3>
+<p>一张 38 行的分发表：<code>CREF→daeExpCrefRhs</code>（:5435）、<code>BINARY→daeExpBinary</code>（:5788）、<code>CALL→daeExpCall</code>（:6378）…。<code>daeExpBinary</code> 里 <code>MUL</code> 无条件加括号、<code>SUB</code> 按 <code>isAtomic</code> 判断（<span class="fileref">:5803–5810</span>）——这就是生成代码里 <code>(-((2.0) * (((k)) * ((0.5) * ((y))))))</code> 那一堆括号的来源。
+<code>daeExpCall</code> 对 <code>der(x)</code> 的处理是 <code>cref(crefPrefixDer(arg.componentRef))</code>：<strong>代码生成层把微分当命名约定</strong>，直接换成 <code>$DER.x</code> 走普通 cref 路径。</p>
+<h3>左边：<code>contextCref</code> → 数组下标 <span class="fileref">CodegenCFunctions.tpl:4723 → 4941 → 7917</span></h3>
+<pre><code><span class="kw">template</span> <span class="fn">contextCref</span>(ComponentRef cr, Context context, …)        <span class="ln">:4723</span>
+  <span class="kw">match</span> context
+  <span class="kw">case</span> FUNCTION_CONTEXT(__) <span class="kw">then</span> functionContextCref(…)           <span class="com">// 函数里：_x 下划线拼接</span>
+  <span class="kw">case</span> JACOBIAN_CONTEXT(__) <span class="kw">then</span> jacCrefs(…)                      <span class="com">// 雅可比里：另一套</span>
+  <span class="kw">else</span> cref(cr, &amp;sub)                                            <span class="com">// 仿真里：数组下标 ↓</span>
+
+<span class="kw">template</span> <span class="fn">crefToCStr</span>(ComponentRef cr, Integer ix, Boolean isPre, Boolean isStart, Text &amp;sub)   <span class="ln">:4941</span>
+  <span class="kw">case</span> CREF_QUAL(ident = <span class="str">"$PRE"</span>)   <span class="kw">then</span> crefToCStr(componentRef, ix, true, isStart, &amp;sub)      <span class="com">// $PRE.x → 翻 isPre 递归</span>
+  <span class="kw">case</span> CREF_QUAL(ident = <span class="str">"$START"</span>) <span class="kw">then</span> crefToCStr(componentRef, ix, isPre, true, &amp;sub)
+  <span class="kw">else</span> <span class="kw">match</span> cref2simvar(cr, getSimCode())                                                   <span class="com">// ★ 查第 2 节的 simcode_map</span>
+    <span class="kw">case</span> SIMVAR(aliasvar = ALIAS(varName)) <span class="kw">then</span> crefToCStr(varName, …)                       <span class="com">// 别名 → 递归到目标</span>
+    <span class="kw">case</span> v as SIMVAR(__) <span class="kw">then</span> varArrayNameValues(v, ix, isPre, isStart, &amp;sub)
+
+<span class="kw">template</span> <span class="fn">varArrayNameValues</span>(SimVar var, Integer ix, …)               <span class="ln">:7917</span>
+  <span class="kw">case</span> SIMVAR(varKind=PARAM()) <span class="kw">then</span>
+    '(data-&gt;simulationInfo-&gt;&lt;%ty%&gt;Parameter[data-&gt;simulationInfo-&gt;&lt;%ty%&gt;ParamsIndex[&lt;%index%&gt;]]&lt;%c_comment%&gt;)'   <span class="ln">:7946</span>
+  <span class="kw">case</span> SIMVAR(__) <span class="kw">then</span>
+    '(data-&gt;localData[&lt;%ix%&gt;]-&gt;&lt;%ty%&gt;Vars[data-&gt;simulationInfo-&gt;&lt;%ty%&gt;VarsIndex[&lt;%index%&gt;]]&lt;%sub%&gt;'          <span class="ln">:7963</span>
+<span class="com">//   ty = crefShortType(name) → real/integer/boolean/string；ix = localData 时间环下标（0 = 当前）；index = 第 3 节分配的 SimVar.index</span></code></pre>
+<p>把 Demo 的数字代进去：<code>y</code> 是 <code>SIMVAR(index=0)</code> → <code>data-&gt;localData[0]-&gt;realVars[data-&gt;simulationInfo-&gt;realVarsIndex[0]]</code>；<code>k</code> 是 <code>PARAM, index=0</code> → <code>data-&gt;simulationInfo-&gt;realParameter[0]</code>。注释 <code>/* y STATE(1,der(y)) */</code> 来自 <code>crefCCommentWithVariability</code>（<span class="fileref">CodegenUtil.tpl:220</span>）。</p>
+<div class="note">
+  <span class="tag">同一个 x，三种长相。</span>
+  仿真主循环里是 <code>realVars[realVarsIndex[i]]</code>，Modelica 函数体里是 <code>_x</code>，雅可比列函数里是 <code>parentJacobian-&gt;seedVars[i]</code>（<span class="fileref">:4960</span> 附近 <code>SEED_VAR</code> 分支）。<code>Context</code> 参数存在的全部理由就是这个。
+</div>
+
+<h2 id="loops"><span class="n">9.</span> 代数环与 for 方程怎么生成</h2>
+<h3>9.1 非线性系统 <span class="fileref">CodegenC.tpl:6563 · :668</span></h3>
+<p><code>equationNonlinear</code>（<span class="fileref">:6563–6596</span>）生成的不是表达式而是"调求解器"：保存迭代变量旧值到 <code>nlsxOld</code>（<span class="fileref">:6580–6584</span>）→ <code>solve_nonlinear_system(data, threadData, index)</code>（<span class="fileref">:6585</span>）→ 从 <code>nlsx</code> 写回（<span class="fileref">:6592–6594</span>）。残差函数由 <code>simulationFile_nls</code>（<span class="fileref">:668</span>）→ <code>functionNonLinearResidualsMultiFile</code>（<span class="fileref">:2934</span>）生成到 <code>_02nls.c</code>；系统注册表 <code>functionInitialNonLinearSystems</code>（<span class="fileref">:2724</span>）。<code>equation_impl2</code> 在 <span class="fileref">:6017–6018</span> 先把 NLS 内部方程的函数原型追加进 <code>&amp;tempeqns</code>。</p>
+<h3>9.2 for 方程 → generic call：n 条方程的代码量从 O(n) 到 O(1)</h3>
+<p>新后端不标量化，<code>for i in 1:n loop x[i] = f(i) end for</code> 到 SimCode 是一个 <code>GENERIC_ASSIGN(call_index, scal_indices)</code>，方程体只在 <code>generic_loop_calls</code> 里出现一次（<code>NSimGenericCall.fromIdentifier</code> <span class="fileref">NSimGenericCall.mo:126–170</span>：<code>FOR_EQUATION</code> → <code>SINGLE_GENERIC_CALL(index, iters, lhs, rhs)</code>，if/when 体另有两种）。模板两端：</p>
+<pre><code><span class="com">// 函数体，生成一次  (genericCallBodies CodegenC.tpl:7433，SINGLE_GENERIC_CALL 分支 :7446–7464)</span>
+<span class="kw">void</span> genericCall_&lt;%index%&gt;(DATA *data, threadData_t *threadData, <span class="kw">const int</span> equationIndexes[2], <span class="kw">int</span> idx)
+{
+  &lt;%iter_%&gt;      <span class="com">// 由 idx 反算出各层循环变量</span>
+  &lt;%preExp%&gt;
+  &lt;%body_%&gt;;     <span class="com">// lhs = rhs</span>
+}
+<span class="com">// 调用点  (equationGenericAssign :6347，SES_GENERIC_ASSIGN 分支 :6368–6375)</span>
+<span class="kw">const int</span> idx_lst[&lt;%idx_len%&gt;] = {&lt;%scal_indices …%&gt;};
+<span class="kw">for</span>(<span class="kw">int</span> i=0; i&lt;&lt;%idx_len%&gt;; i++)
+  genericCall_&lt;%call_index%&gt;(data, threadData, equationIndexes, idx_lst[i]);</code></pre>
+<p>调用点只发一个下标表 + 一个循环。这是新后端"不标量化"在生成代码里最直接的收益；<code>RESIZABLE_ASSIGN</code>（<span class="fileref">:6356–6367</span>）更进一步，连下标表都不用，直接嵌套 <code>for</code>。雅可比上下文下函数名前缀 <code>jac_</code>、多一个 <code>JACOBIAN *</code> 参数（<span class="fileref">:7437–7438</span>）。头文件声明由 <code>genericCallHeaders</code>（<span class="fileref">:7648</span>）写进 <code>_functions.h</code>。</p>
+<h3>9.3 回调表与主循环 <span class="fileref">CodegenC.tpl:1339 · :1380</span></h3>
+<p><code>#define prefixedName_performSimulation &lt;M&gt;_performSimulation</code> + <code>#include &lt;simulation/solver/perform_simulation.c.inc&gt;</code>（<span class="fileref">:1337–1339</span>）——用 C 宏把运行时的通用主循环"实例化"进本模型；<code>struct OpenModelicaGeneratedFunctionCallbacks &lt;M&gt;_callback = { … }</code>（<span class="fileref">:1380–1435</span>）是生成代码与运行时之间唯一的 ABI。细节见 <a href="OMC-编译全流程导读.html#codegen">总览篇第 9 节</a>。</p>
+
+<h2 id="verify"><span class="n">10.</span> 动手验证</h2>
+<pre><code>omc --newBackend -d=dumpSimCode --simCodeTarget=None -s Demo.mo        <span class="com"># 看 stateVars/algVars 的 index，对上生成代码的下标</span>
+omc --newBackend -s Demo.mo                                              <span class="com"># 生成 C，打开 Demo_06inz.c / Demo.c</span>
+<span class="com"># 编一次模板（需要能跑的 omc 在 PATH，在 Template 目录里执行）</span>
+cd OMCompiler\Compiler\Template; omc CodegenC.tpl &gt; CodegenC.mo.log      <span class="com"># 产出 CodegenC.mo</span></code></pre>
+<p>三个练习：</p>
+<ol>
+  <li>在 <code>CodegenC.mo</code> 里搜 <code>function equationSimpleAssign</code>，对照 <code>CodegenC.tpl:6229</code>，看 <code>&amp;preExp</code> 变成了什么（提示：一个 <code>Tpl.Text</code> 参数进、一个出）。再搜 <code>lm_</code> 找一个由 <code>|&gt;</code> 降解出来的递归函数。</li>
+  <li>写一个带 <code>Real x[100]; equation for i in 1:100 loop der(x[i]) = -i * x[i]; end for;</code> 的模型，新旧后端各生成一次，比较 <code>_functions.c</code> 里 <code>genericCall_</code> 的存在与否、<code>&lt;M&gt;.c</code> 的行数。</li>
+  <li>给 <code>CodegenC.tpl:6259</code> 那块 <code>&lt;&lt; &gt;&gt;</code> 加一行注释文本，重编模板，看新的 <code>CodegenC.mo</code> 和生成的 C 里它出现在哪、缩进是否跟着变。</li>
+</ol>
+
+<footer>
+  行号基于工作区 <code>feat_OMEncryption</code> 分支（HEAD <code>3ceb0c9d06</code>）；行数用 <code>(Get-Content f).Count</code> 统计；生成代码来自安装版 1.25.0（<code>--newBackend</code>）。
+  返回 <a href="OMC-编译全流程导读.html">总览篇</a>。
+</footer>
+
+</div>
+</body>
+</html>

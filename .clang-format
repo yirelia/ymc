@@ -1,0 +1,9 @@
+# 方案 §3.1。现在机器上没有 clang-format，先放着；装了之后 `clang-format -i` 即可。
+BasedOnStyle: Google
+IndentWidth: 2
+ColumnLimit: 110
+DerivePointerAlignment: false
+PointerAlignment: Left
+AllowShortFunctionsOnASingleLine: Inline
+SortIncludes: true
+IncludeBlocks: Regroup

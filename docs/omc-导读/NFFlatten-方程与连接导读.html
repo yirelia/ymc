@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NFFlatten.mo 第二篇 · 方程前缀下推与连接解析</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d0d7de;
+    --code-bg: #f6f8fa; --kw: #cf222e; --str: #0a3069; --com: #6e7781;
+    --fn: #8250df; --num: #0550ae; --accent: #0969da; --accent-bg: #ddf4ff;
+    --card: #f6f8fa; --line: #57606a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #8b949e; --border: #30363d;
+      --code-bg: #161b22; --kw: #ff7b72; --str: #a5d6ff; --com: #8b949e;
+      --fn: #d2a8ff; --num: #79c0ff; --accent: #58a6ff; --accent-bg: #132436;
+      --card: #161b22; --line: #8b949e;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.75; font-size: 16px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 2.5rem 1.5rem 6rem; }
+  header.hero { border-bottom: 1px solid var(--border); padding-bottom: 1.5rem; margin-bottom: 2rem; }
+  h1 { font-size: 2rem; margin: 0 0 .4rem; letter-spacing: -.02em; }
+  .sub { color: var(--muted); font-size: .95rem; margin: 0; }
+  .sub code { background: var(--code-bg); padding: .1em .4em; border-radius: 5px; font-size: .85em; }
+  .crumb { display: inline-block; margin-bottom: 1rem; font-size: .85rem; }
+  h2 {
+    font-size: 1.4rem; margin: 3rem 0 1rem; padding-top: .5rem;
+    border-top: 1px solid var(--border);
+  }
+  h2 .n { color: var(--accent); font-variant-numeric: tabular-nums; }
+  h3 { font-size: 1.1rem; margin: 1.8rem 0 .6rem; }
+  .part { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); font-weight: 700; margin-top: 3.5rem; }
+  p { margin: .8rem 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: "SFMono-Regular", "Cascadia Code", Consolas, "Liberation Mono", monospace; font-size: .88em; }
+  p code, li code, td code { background: var(--code-bg); padding: .1em .4em; border-radius: 5px; color: var(--fg); }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.1rem; overflow-x: auto; font-size: .84rem; line-height: 1.6; margin: 1rem 0;
+  }
+  pre code { background: none; padding: 0; color: var(--fg); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; }
+  .fn { color: var(--fn); } .num { color: var(--num); }
+  .ln { color: var(--line); user-select: none; }
+  .lead {
+    background: var(--accent-bg); border-left: 3px solid var(--accent);
+    padding: .9rem 1.1rem; border-radius: 0 8px 8px 0; margin: 1.2rem 0;
+  }
+  .lead strong { color: var(--fg); }
+  .note {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: .9rem 1.1rem; margin: 1.2rem 0; font-size: .95rem;
+  }
+  .note .tag { font-weight: 600; color: var(--accent); }
+  .toc {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.4rem; margin: 1.5rem 0 2.5rem;
+  }
+  .toc-title { font-weight: 600; margin: 0 0 .5rem; font-size: .9rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .toc ol { margin: 0; padding-left: 1.4rem; }
+  .toc li { margin: .25rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--card); font-weight: 600; }
+  .fileref { color: var(--muted); font-size: .82rem; font-family: "SFMono-Regular", Consolas, monospace; }
+  .diagram {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1.2rem; overflow-x: auto; font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: .82rem; line-height: 1.65; white-space: pre; color: var(--fg);
+  }
+  .flow {
+    display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin: 1.2rem 0;
+    font-family: "SFMono-Regular", Consolas, monospace; font-size: .8rem;
+  }
+  .flow .box {
+    background: var(--card); border: 1px solid var(--border); border-radius: 6px;
+    padding: .4rem .7rem; white-space: nowrap;
+  }
+  .flow .arr { color: var(--accent); font-weight: 700; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <a class="crumb" href="NFFlatten-主流程导读.html">← 第一篇 · 主流程导读</a>
+  <h1>方程前缀下推 与 连接解析</h1>
+  <p class="sub">NFFlatten.mo 第二篇 · <code>flattenEquation</code> / <code>flattenExp</code> / <code>resolveConnections</code></p>
+</header>
+
+<p class="lead">
+  <strong>本篇讲「扁平方程表最终怎么成形」的两件事：</strong>
+  一是把方程里的名字统统加上前缀（<code>v</code> → <code>resistor1.v</code>），
+  二是把 <code>connect(a, b)</code> 这种关系式，真正展开成可求解的方程。
+  第一件是机械下推，第二件是 flatten 里最有 Modelica 特色的一段。
+</p>
+
+<nav class="toc">
+  <p class="toc-title">目录</p>
+  <ol>
+    <li><a href="#eq">flattenEquation — 按方程种类分派</a></li>
+    <li><a href="#exp">flattenExp — 前缀真正下推到 cref 的地方</a></li>
+    <li><a href="#connect-what">connect 的语义：across 相等，through 求和为零</a></li>
+    <li><a href="#resolve">resolveConnections — 六步流水线</a></li>
+    <li><a href="#gen">generateEquations — 连接集怎么变成方程</a></li>
+    <li><a href="#map">全景图</a></li>
+  </ol>
+</nav>
+
+<p class="part">Part A — 前缀下推</p>
+
+<h2 id="eq"><span class="n">1.</span> flattenEquation — 按方程种类分派 <span class="fileref">:1862</span></h2>
+<p>
+  第一篇里 <code>flattenSections</code>（<span class="fileref">:490</span>）对每条方程调的就是它。函数体是一个大
+  <code>match eq</code>，<strong>对每种方程种类，把里面的每个表达式都送进 <code>flattenExp</code> 加前缀</strong>，
+  然后重新装回同种类的方程。最普通的等式：
+</p>
+<pre><code><span class="kw">case</span> Equation.<span class="fn">EQUALITY</span>()
+  e1 := <span class="fn">flattenExp</span>(eq.lhs, prefix, info);   <span class="ln">// :1878</span> <span class="com">左边加前缀</span>
+  e2 := <span class="fn">flattenExp</span>(eq.rhs, prefix, info);   <span class="ln">// :1879</span> <span class="com">右边加前缀</span>
+  ty := <span class="fn">flattenType</span>(eq.ty, prefix, info);
+<span class="kw">then</span>
+  Equation.<span class="fn">EQUALITY</span>(e1, e2, ty, eq.scope, eq.source) :: equations;   <span class="ln">// :1882</span></code></pre>
+<p>其余分支都是同一个套路，差别只在「有几个表达式要下推」和「要不要额外展开」：</p>
+<table>
+  <tr><th>方程种类</th><th>处理</th><th>位置</th></tr>
+  <tr><td><code>EQUALITY</code></td><td>lhs / rhs 各下推一次</td><td class="fileref">:1876</td></tr>
+  <tr><td><code>FOR</code></td><td>scalarize 时 <code>unrollForLoop</code> 整个展开；否则 <code>splitForLoop</code></td><td class="fileref">:1884</td></tr>
+  <tr><td><code>CONNECT</code></td><td>lhs / rhs 加前缀，<strong>但暂不展开</strong>——留给后面的 resolveConnections</td><td class="fileref">:1893</td></tr>
+  <tr><td><code>IF</code></td><td><code>flattenIfEquation</code>：结构条件在这里就求值，可能整支删掉</td><td class="fileref">:1900</td></tr>
+  <tr><td><code>WHEN</code></td><td>逐个分支下推</td><td class="fileref">:1903</td></tr>
+  <tr><td><code>ASSERT / TERMINATE / REINIT / NORETCALL</code></td><td>把各自的表达式字段下推</td><td class="fileref">:1909–1934</td></tr>
+</table>
+<div class="note">
+  <span class="tag">关键观察</span> <code>CONNECT</code> 在这一步<strong>只加前缀、不展开</strong>（<span class="fileref">:1893</span>）。
+  <code>connect(p, n)</code> 里的 <code>p</code>、<code>n</code> 先变成完整名字 <code>resistor1.p</code> / <code>resistor1.n</code>，
+  但它还是一条 <code>CONNECT</code> 方程，静静躺在方程表里，等 Part B 的 <code>resolveConnections</code> 来收拾。
+  这就是为什么连接解析必须放在 flatten 主体<strong>之后</strong>——它需要看到全模型所有连接后才能建连接集。
+</div>
+
+<h2 id="exp"><span class="n">2.</span> flattenExp — 前缀真正下推到 cref 的地方 <span class="fileref">:1611</span></h2>
+<p>
+  上面所有 <code>flattenExp</code> 调用最终都汇到这里。它也是一个 <code>match exp</code>，但真正干活的只有一个 case——
+  遇到<strong>组件引用</strong>（cref）时给它套前缀：
+</p>
+<pre><code><span class="kw">case</span> Expression.<span class="fn">CREF</span>(cref = ComponentRef.<span class="fn">CREF</span>())
+  exp.cref := ComponentRef.<span class="fn">mapExpShallow</span>(exp.cref, ...);   <span class="ln">// :1619</span> <span class="com">先处理下标里的表达式</span>
+  exp.cref := <span class="fn">flattenCref</span>(exp.cref, prefix, info);      <span class="ln">// :1620</span> <span class="com">← 套前缀</span>
+  exp.ty   := <span class="fn">flattenType</span>(exp.ty, prefix, info);
+<span class="kw">then</span> exp;
+
+<span class="com">// ... 其它 case 略 ...</span>
+
+<span class="kw">else</span> Expression.<span class="fn">mapShallow</span>(exp, <span class="kw">function</span> <span class="fn">flattenExp</span>(prefix = prefix, info = info));   <span class="ln">// :1636</span></code></pre>
+<p>
+  最后那行 <code>else</code>（<span class="fileref">:1636</span>）是精髓：对于加减乘除、函数调用这类<strong>复合表达式，
+  用 <code>mapShallow</code> 递归到每个子表达式</strong>，自己不用为每种运算符写一个 case。所以
+  <code>R * i</code> 会自动变成 <code>resistor1.R * resistor1.i</code>——不是 flattenExp 认识乘法，
+  而是它把前缀下推给了两个操作数，操作数是 cref 才被真正改写。
+</p>
+<p>真正套前缀的一行在 <code>flattenCref</code>（<span class="fileref">:1685</span>）：</p>
+<pre><code>cref := Prefix.<span class="fn">apply</span>(prefix, cref);   <span class="ln">// :1692</span></code></pre>
+<p>
+  而 <code>Prefix.apply</code>（<span class="fileref">:264</span>）实际是 <code>transferSubscripts</code>——把前缀里累积的
+  节点路径与下标接到这个 cref 前面。至此，一个在 <code>resistor1</code> 作用域里写的裸名 <code>v</code>，
+  就带上了它的完整身份 <code>resistor1.v</code>。
+</p>
+<div class="note">
+  <span class="tag">另外三个特殊 case</span>
+  <code>SUBSCRIPTED_EXP(split=true)</code>（<span class="fileref">:1625</span>）处理未标量化数组的下标替换；
+  <code>IF</code> + <code>CONDITIONAL_ARRAY</code>（<span class="fileref">:1630</span>）处理条件数组；
+  <code>INSTANCE_NAME()</code>（<span class="fileref">:1633</span>）把内建的 <code>getInstanceName()</code> 直接替换成当前前缀字符串。
+  主线上不必深究，知道它们是「需要特殊对待、不能只靠 mapShallow 递归」的少数派即可。
+</div>
+
+<p class="part">Part B — 连接解析</p>
+
+<h2 id="connect-what"><span class="n">3.</span> connect 的语义：先想清楚要生成什么</h2>
+<p>
+  <code>connect(a, b)</code> 不是赋值，是「这两个连接器接在一起」的声明。连接器里的变量分两种，
+  展开规则完全不同：
+</p>
+<table>
+  <tr><th>变量种类</th><th>物理含义</th><th>展开规则</th><th>例</th></tr>
+  <tr><td><strong>potential</strong>（across，势变量）</td><td>电压、温度、位置</td><td>同一连接集里<strong>全部相等</strong>，n 个连接器给 n−1 条等式</td><td><code>a.v = b.v</code></td></tr>
+  <tr><td><strong>flow</strong>（through，流变量）</td><td>电流、热流、力</td><td>同一连接集里<strong>求和为零</strong>（基尔霍夫定律）</td><td><code>a.i + b.i = 0</code></td></tr>
+  <tr><td><strong>stream</strong></td><td>焓流等</td><td>特殊的 <code>inStream</code> 加权公式</td><td>见 <code>generateStreamEquations</code></td></tr>
+</table>
+<p>
+  难点在于连接是<strong>传递</strong>的：<code>connect(a,b)</code> 加 <code>connect(b,c)</code> 意味着 a、b、c 同属一个集合，
+  potential 变量三者全等。所以不能一条条 connect 各自处理，必须先把所有 connect 汇总成
+  <strong>连接集（connection sets）</strong>——本质是对「连接器」这些节点求<strong>并查集 / 连通分量</strong>。
+</p>
+
+<h2 id="resolve"><span class="n">4.</span> resolveConnections — 六步流水线 <span class="fileref">:2433</span></h2>
+<p>
+  这个函数在 <code>flatten</code> 主体跑完后被调用（第一篇 <span class="fileref">:388</span>）。它把散落在方程表里的
+  <code>CONNECT</code> 方程收集、建集、生成真方程、再塞回方程表。骨架六步：
+</p>
+<pre><code><span class="com">// ① 建一张 名字 → 变量 的查找表，后面生成方程要按名字取变量属性</span>
+<span class="kw">for</span> v <span class="kw">in</span> flatModel.variables <span class="kw">loop</span> UnorderedMap.<span class="fn">addNew</span>(v.name, v, vars); <span class="kw">end for</span>;   <span class="ln">// :2453</span>
+
+<span class="com">// ② 从方程表里把所有 CONNECT 收集出来（并从普通方程表里摘掉）</span>
+(flatModel, conns) := Connections.<span class="fn">collectConnections</span>(flatModel, ...);   <span class="ln">// :2458</span>
+
+<span class="com">// ③ 展开可扩展连接器 expandable，再收集 flow 变量</span>
+(flatModel, conns) := ExpandableConnectors.<span class="fn">elaborate</span>(flatModel, conns);   <span class="ln">// :2463</span>
+conns := Connections.<span class="fn">collectFlows</span>(flatModel, conns);                     <span class="ln">// :2468</span>
+
+<span class="com">// ④ 拆分 + 标量化连接（数组连接器 a[3] 展成 a[1],a[2],a[3]）</span>
+conns := Connections.<span class="fn">split</span>(conns);                                       <span class="ln">// :2482</span>
+conns := Connections.<span class="fn">scalarize</span>(conns, ...);                              <span class="ln">// :2483</span>
+
+<span class="com">// ⑤ 建连接集（连通分量），再抽成一组组连接器数组</span>
+csets       := ConnectionSets.<span class="fn">fromConnections</span>(conns);   <span class="ln">// :2485</span>
+csets_array := ConnectionSets.<span class="fn">extractSets</span>(csets);       <span class="ln">// :2486</span>
+
+<span class="com">// ⑥ 每个连接集生成方程，追加回方程表</span>
+(conn_eql, connectedLocalIOs) := ConnectEquations.<span class="fn">generateEquations</span>(csets_array, vars);  <span class="ln">// :2488</span>
+flatModel.equations := <span class="fn">listAppend</span>(conn_eql, flatModel.equations);                    <span class="ln">// :2497</span></code></pre>
+<p>
+  中间还夹着 overconstrained 连接（力学里的闭环，<span class="fileref">:2475</span>）和 stream/cardinality 算子求值
+  （<span class="fileref">:2508</span>）两段可选逻辑，初学可跳过。主干就是
+  <strong>收集 → 建集 → 生成 → 追加</strong>。
+</p>
+<div class="flow">
+  <span class="box">方程表里的 CONNECT</span><span class="arr">→</span>
+  <span class="box">Connections（收集）</span><span class="arr">→</span>
+  <span class="box">ConnectionSets（连通分量）</span><span class="arr">→</span>
+  <span class="box">generateEquations</span><span class="arr">→</span>
+  <span class="box">真方程追加回表</span>
+</div>
+
+<h2 id="gen"><span class="n">5.</span> generateEquations — 连接集怎么变成方程 <span class="fileref">NFConnectEquations.mo:86</span></h2>
+<p>
+  每个连接集（一组接在一起的连接器）在这里落成方程。核心是 potential 与 flow 分开处理。
+</p>
+<h3>potential：全部相等，n 个给 n−1 条 <span class="fileref">:202</span></h3>
+<p>源码注释写得很清楚——集合 {X, Y.A, Z.B} 生成 <code>X = Y.A</code> 和 <code>X = Z.B</code>：</p>
+<pre><code><span class="kw">function</span> <span class="fn">generatePotentialEquations</span>
+  c1 := <span class="fn">listHead</span>(elements);   <span class="com">// 取第一个当基准</span>
+  equations := <span class="fn">list</span>(<span class="fn">makeEqualityEquation</span>(c1.name, ..., c2.name, ...)
+                    <span class="kw">for</span> c2 <span class="kw">in</span> <span class="fn">listRest</span>(elements));   <span class="ln">// :216</span> <span class="com">其余每个都 = 基准</span></code></pre>
+<p>（若连接的是参数级变量，生成的是 <code>assert</code> 相等检查而非方程，<span class="fileref">:232</span>。）</p>
+<h3>flow：求和为零 <span class="fileref">:371</span></h3>
+<p>把集合里所有 flow 变量（inside 取正、outside 取负，由 <code>makeFlowExp</code> 定号）累加，令和为 0：</p>
+<pre><code>sum := Expression.<span class="fn">fromCref</span>(c.name);                          <span class="ln">// :387</span> <span class="com">第一个</span>
+<span class="kw">for</span> e <span class="kw">in</span> rest <span class="kw">loop</span>
+  sum := Expression.<span class="fn">BINARY</span>(sum, Operator.<span class="fn">makeAdd</span>(...), <span class="fn">makeFlowExp</span>(e));   <span class="ln">// :392</span> <span class="com">逐个相加</span>
+<span class="kw">end for</span>;
+equations := {Equation.<span class="fn">EQUALITY</span>(sum, Expression.<span class="fn">REAL</span>(<span class="num">0.0</span>), ...)};   <span class="ln">// :397</span> <span class="com">和 = 0</span></code></pre>
+<p class="lead">
+  于是一句 <code>connect(resistor1.p, capacitor1.n)</code> 最终落成两条方程：
+  <code>resistor1.p.v = capacitor1.n.v</code>（势相等）和
+  <code>resistor1.p.i + capacitor1.n.i = 0</code>（流求和为零）。这正是第一篇开头那个例子的来源。
+</p>
+
+<h2 id="map"><span class="n">6.</span> 把两篇串成一张图</h2>
+<div class="diagram">flatten(根类)
+ ├─ flattenClass / flattenComponent ...        ← 第一篇：树遍历产出变量
+ │   └─ flattenSections
+ │        └─ flattenEquation(每条方程)          ← 本篇 Part A
+ │             ├─ EQUALITY → flattenExp(lhs/rhs)   给名字加前缀 v→resistor1.v
+ │             │              └─ flattenCref → Prefix.apply
+ │             └─ CONNECT   → 只加前缀，不展开！留着
+ │
+ └─ resolveConnections(全模型)                  ← 本篇 Part B（主体之后才跑）
+      ① collectConnections   从方程表摘出所有 CONNECT
+      ② ConnectionSets        建连通分量（谁和谁接在一起）
+      ③ generateEquations
+      │    potential → a.v = b.v          (n 个连接器给 n-1 条)
+      │    flow      → a.i + b.i = 0       (求和为零)
+      └─ 追加回 flatModel.equations</div>
+<p class="lead">
+  <strong>两篇合起来，你就完整看懂了「一个面向对象的 Modelica 模型，如何变成一张纯变量表 + 纯方程表」。</strong>
+  这张扁平方程表，就是交给后端（matching / sorting / index reduction / tearing）的输入。
+</p>
+
+<footer>
+  基于 OpenModelica 仓库 <code>NFFrontEnd/NFFlatten.mo</code> 与 <code>NFConnectEquations.mo</code> 实际源码整理 ·
+  离线自包含文档，可直接双击在浏览器打开 · 第一篇见 <a href="NFFlatten-主流程导读.html">主流程导读</a>。
+</footer>
+
+</div>
+</body>
+</html>

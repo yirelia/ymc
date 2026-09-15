@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NB 指标约简导读</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d0d7de;
+    --code-bg: #f6f8fa; --kw: #cf222e; --str: #0a3069; --com: #6e7781;
+    --fn: #8250df; --num: #0550ae; --accent: #0969da; --accent-bg: #ddf4ff;
+    --card: #f6f8fa; --line: #57606a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #8b949e; --border: #30363d;
+      --code-bg: #161b22; --kw: #ff7b72; --str: #a5d6ff; --com: #8b949e;
+      --fn: #d2a8ff; --num: #79c0ff; --accent: #58a6ff; --accent-bg: #132436;
+      --card: #161b22; --line: #8b949e;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.75; font-size: 16px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 2.5rem 1.5rem 6rem; }
+  header.hero { border-bottom: 1px solid var(--border); padding-bottom: 1.5rem; margin-bottom: 2rem; }
+  h1 { font-size: 2rem; margin: 0 0 .4rem; letter-spacing: -.02em; }
+  .sub { color: var(--muted); font-size: .95rem; margin: 0; }
+  .sub code { background: var(--code-bg); padding: .1em .4em; border-radius: 5px; font-size: .85em; }
+  h2 {
+    font-size: 1.4rem; margin: 3rem 0 1rem; padding-top: .5rem;
+    border-top: 1px solid var(--border);
+  }
+  h2 .n { color: var(--accent); font-variant-numeric: tabular-nums; }
+  h3 { font-size: 1.1rem; margin: 1.8rem 0 .6rem; }
+  p { margin: .8rem 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: "SFMono-Regular", "Cascadia Code", Consolas, "Liberation Mono", monospace; font-size: .88em; }
+  p code, li code, td code { background: var(--code-bg); padding: .1em .4em; border-radius: 5px; color: var(--fg); }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.1rem; overflow-x: auto; font-size: .84rem; line-height: 1.6; margin: 1rem 0;
+  }
+  pre code { background: none; padding: 0; color: var(--fg); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; }
+  .fn { color: var(--fn); } .num { color: var(--num); }
+  .ln { color: var(--line); user-select: none; }
+  .lead {
+    background: var(--accent-bg); border-left: 3px solid var(--accent);
+    padding: .9rem 1.1rem; border-radius: 0 8px 8px 0; margin: 1.2rem 0;
+  }
+  .lead strong { color: var(--fg); }
+  .note {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: .9rem 1.1rem; margin: 1.2rem 0; font-size: .95rem;
+  }
+  .note .tag { font-weight: 600; color: var(--accent); }
+  .toc {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.4rem; margin: 1.5rem 0 2.5rem;
+  }
+  .toc-title { font-weight: 600; margin: 0 0 .5rem; font-size: .9rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .toc ol { margin: 0; padding-left: 1.4rem; }
+  .toc li { margin: .25rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--card); font-weight: 600; }
+  .fileref { color: var(--muted); font-size: .82rem; font-family: "SFMono-Regular", Consolas, monospace; }
+  .diagram {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1.2rem; overflow-x: auto; font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: .82rem; line-height: 1.65; white-space: pre; color: var(--fg);
+  }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>指标约简（Index Reduction）</h1>
+  <p class="sub">新后端细读 · <code>NBackEnd/Modules/1_Main/NBResolveSingularities.mo</code>（<code>indexReduction</code> :67）· 触发点在 <code>NBMatching.mo</code>（<code>singular</code> :119）· 微分器 <code>NBackEnd/Util/NBDifferentiate.mo</code></p>
+</header>
+
+<p class="lead">
+  <strong>一句话抓住主线：</strong>指标约简 = "<strong>匹配失败的方程拿去对时间求导，直到每条方程都能配上一个未知量</strong>"，然后从多出来的状态候选里挑一些降级成"哑状态"。
+  新后端里它<strong>不是独立模块</strong>，是 <code>Matching.singular</code> 那个"匹配 → 失败 → 求导 → 再匹配"循环里的失败分支。
+</p>
+
+<nav class="toc">
+  <p class="toc-title">目录</p>
+  <ol>
+    <li><a href="#problem">问题是什么 — 为什么会匹配不上</a></li>
+    <li><a href="#where">它在管线的哪里</a></li>
+    <li><a href="#detect">前置：DetectStates 先把 <code>der(x)</code> 变成变量 <code>$DER.x</code></a></li>
+    <li><a href="#loop">Matching.singular — 触发循环</a></li>
+    <li><a href="#algo">indexReduction — 六步</a></li>
+    <li><a href="#diff">微分器 — <code>$DER.$DER.x</code> 是怎么长出来的</a></li>
+    <li><a href="#index2">实跑 ① Index2 — 一次求导就够</a></li>
+    <li><a href="#pendulum">实跑 ② 单摆 — 当前实现在哪里停下</a></li>
+    <li><a href="#limits">已知边界与 TODO</a></li>
+    <li><a href="#verify">动手验证</a></li>
+  </ol>
+</nav>
+
+<h2 id="problem"><span class="n">1.</span> 问题是什么 — 为什么会匹配不上</h2>
+<p>
+  后端把仿真系统看成"给定状态 <code>x</code>，求 <code>$DER.x</code> 和代数变量"。所以匹配时，<strong>状态是已知量，不参与匹配</strong>；未知量只有状态导数和代数变量。
+  这就出问题了：一个约束方程如果里面只有状态、没有导数也没有代数变量，它就没有任何可以匹配的未知量。
+</p>
+<pre><code><span class="kw">model</span> Index2
+  Real x(start = 0);
+  Real z;
+<span class="kw">equation</span>
+  <span class="fn">der</span>(x) = z;          <span class="com">// 未知量 $DER.x、z 都在，能匹配</span>
+  x = <span class="fn">sin</span>(time);      <span class="com">// x 是状态（已知），time 是已知 → 这条方程一个未知量都没有 ✗</span>
+<span class="kw">end</span> Index2;</code></pre>
+<p>
+  两个未知量（<code>$DER.x</code>、<code>z</code>），两条方程，数量对得上，但第二条方程结构上解不出任何未知量——这叫<strong>结构奇异</strong>（structurally singular）。
+  数学上这是一个 index-2 的 DAE：要对约束求一次导才能显式解出所有导数。单摆（<code>x²+y²=L²</code>）是 index-3，要求两次。
+</p>
+<p>
+  解决办法是 Pantelides（1988）的观察：<strong>约束在所有时刻成立，所以它的时间导数也成立</strong>。<code>x = sin(time)</code> 求导得 <code>$DER.x = cos(time)</code>，这条新方程里有未知量了。
+  代价是：现在 3 条方程 2 个未知量，多了一条。于是必须把某个状态<strong>降级</strong>成普通代数变量（它不再由积分器积分，而是由方程算出来）——这个降级的变量叫<strong>哑状态</strong>（dummy state），它的导数叫<strong>哑导数</strong>（dummy derivative）。
+</p>
+
+<h2 id="where"><span class="n">2.</span> 它在管线的哪里</h2>
+<div class="diagram">NBackendDAE.main  (Classes/NBackendDAE.mo:275)
+  pre:  … → DetectStates.main (2_Pre/NBDetectStates.mo:79)   ← der(x) 变成 $DER.x，x 标成 STATE
+  main: Partitioning → <b>Causalize.main</b> (1_Main/NBCausalize.mo:89)
+                          └ causalizePseudoArray (:247)
+                              └ Matching.<b>singular</b> (1_Main/NBMatching.mo:119)
+                                   ├ 非初始分区 → ResolveSingularities.<b>indexReduction</b> (NBResolveSingularities.mo:67)   ← 本文
+                                   └ 初始分区   → ResolveSingularities.balanceInitialization (:344)   ← 见「初始化系统导读」
+        → "After Index Reduction Inline" (Inline.main, AFTER_INDEX_RED_INLINE)
+        → Initialization.main   ← 初始化系统看到的是已经约简过的模型</div>
+<p>
+  两点先记住：① 指标约简<strong>只对非初始分区跑</strong>；初始化系统走另一条路（<span class="fileref">NBMatching.mo:162–168</span> 的 <code>if Partition.kindIsInitial(kind)</code>）。
+  ② 它在 <code>Initialization.main</code> <em>之前</em>（<span class="fileref">NBackendDAE.mo:321–324</span>），所以初始化系统天然包含求导出来的新方程，哑状态在初始化里也是代数变量。
+</p>
+
+<h2 id="detect"><span class="n">3.</span> 前置：DetectStates 先把 <code>der(x)</code> 变成变量 <code>$DER.x</code></h2>
+<p>
+  指标约简要操作的是"变量"而不是表达式，所以 pre 阶段的 <code>DetectStates</code> 模块先把 <code>der(x)</code> 换成一个真正的变量：
+</p>
+<pre><code><span class="fn">collectStatesAndDerivatives</span>                       <span class="ln">2_Pre/NBDetectStates.mo:235–275</span>
+  遇到 der(x)：
+    x 不连续 → 0                                     <span class="com">// der(离散量) 恒 0</span>
+    x 已有导数变量 → 复用
+    否则 (der_cref, der_var) := BVariable.<span class="fn">makeDerVar</span>(state_cref, scalarized);   <span class="ln">:263</span>
+         BVariable.<span class="fn">setStateDerivativeVar</span>(state_var, der_var);
+    表达式里的 der(x) 替换成 $DER.x</code></pre>
+<p><code>makeDerVar</code> <span class="fileref">Classes/NBVariable.mo:1145–1179</span> 造一个名字前缀 <code>$DER</code>（常量 <code>DERIVATIVE_STR</code> <span class="fileref">:107</span>）的新变量，种类设为 <code>STATE_DER(state)</code>；原变量种类设为 <code>STATE(index=1, derivative=SOME(der), natural=true)</code>。两个变量互相持有指针——这对"伙伴关系"后面反复用到。</p>
+<p>变量种类定义在前端扩展里 <span class="fileref">NFFrontEnd/NFBackendExtension.mo:201–213</span>：</p>
+<pre><code><span class="kw">record</span> STATE        Integer index; Option&lt;Pointer&lt;Variable&gt;&gt; derivative; Boolean natural;   <span class="ln">:201</span>  <span class="com">// natural=false：被 StateSelect 或指标约简强制成状态的</span>
+<span class="kw">record</span> STATE_DER    Pointer&lt;Variable&gt; state; Option&lt;Expression&gt; alias;                     <span class="ln">:206</span>
+<span class="kw">record</span> DUMMY_DER    Pointer&lt;Variable&gt; dummy_state;                                         <span class="ln">:210</span>
+<span class="kw">record</span> DUMMY_STATE  Pointer&lt;Variable&gt; dummy_der;                                           <span class="ln">:213</span>  <span class="com">// 注释：ToDo: maybe dynamic state for dynamic state selection</span></code></pre>
+<p>
+  <code>updateStatesAndDerivatives</code>（<span class="fileref">:340–374</span>）把 <code>$DER.x</code> 放进 <code>unknowns / derivatives / initials</code>，把 <code>x</code> 放进 <code>states</code> 并<strong>从 <code>unknowns</code> 移除</strong>（<span class="fileref">:363–364</span>）——这就是第 1 节说的"状态不参与匹配"的代码来源。
+  另外 <code>stateOrder</code>（<span class="fileref">:635–680</span>）记录 <code>a = der(b)</code> 这种关系，存进 <code>varData.state_order</code>，求导时用它做"链式查表"。
+</p>
+
+<h2 id="loop"><span class="n">4.</span> Matching.singular — 触发循环 <span class="fileref">NBMatching.mo:119–183</span></h2>
+<p>函数头注释（<span class="fileref">:127–132</span>）把算法说得很清楚：(1) 跑匹配但把奇异标记攒起来；(2) 没全匹配上 → 指标约简或平衡初始化；(3) 第 2 步改了分区就重来。核心代码：</p>
+<pre><code>(matching, marked_eqns, …) := <span class="fn">continue_</span>(matching, adj, transposed, clear);        <span class="ln">:151–159</span>  <span class="com">// 跑一遍匹配</span>
+
+<span class="kw">if</span> Partition.kindIsInitial(kind) <span class="kw">then</span>                                            <span class="ln">:162</span>
+  (adj, full, vars, eqns, varData, eqData, changed) := ResolveSingularities.<span class="fn">balanceInitialization</span>(…);
+<span class="kw">else</span>
+  (adj, full, vars, eqns, varData, eqData, changed) := ResolveSingularities.<span class="fn">indexReduction</span>(…);   <span class="ln">:167</span>
+<span class="kw">end if</span>;
+
+<span class="kw">if</span> changed <span class="kw">then</span>                                                                  <span class="ln">:171–182</span>
+  full := Adjacency.Matrix.createFull(…);  adj := fullToFinal(…);                <span class="com">// 从头重建邻接矩阵（ToDo :172：只更新改动的部分）</span>
+  matching := <span class="fn">singular</span>(…);                                                        <span class="com">// 递归：Pantelides 可能要跑好几轮</span>
+<span class="kw">end if</span>;</code></pre>
+<div class="note">
+  <span class="tag">"奇异"到底是在哪判断的——一个值得知道的实现细节。</span>
+  <code>Matching.regular</code>（<span class="fileref">:100–117</span>）本来在 <code>marked_eqns</code> 非空时报错，但默认匹配算法走的是外部 C 实现 <code>PFPlusExternal</code>（<span class="fileref">:428–443</span>），
+  它的 <code>marked_eqns</code> 输出声明为 <code>{}</code> 且从未赋值，所以这条报错永远不会触发。真正的判断在 <code>indexReduction</code> 内部：
+  直接扫匹配结果数组，<code>matching.eqn_to_var[eqn] == -1</code> 就是没匹配上的方程（<span class="fileref">NBResolveSingularities.mo:466–470</span>）。
+  纯 MetaModelica 的 <code>scalarMatching</code> / <code>augmentPath</code>（<span class="fileref">:340–426</span>）是死代码，没人调用。
+</div>
+
+<h2 id="algo"><span class="n">5.</span> indexReduction — 六步 <span class="fileref">NBResolveSingularities.mo:67</span></h2>
+<p>函数头注释（<span class="fileref">:68–104</span>）就是算法说明书。逐步对照：</p>
+
+<h3>5.1 找出最小结构奇异子集 MSSS — <code>getMSSS</code> <span class="fileref">:450–494</span></h3>
+<p>
+  不是教科书里"沿增广路径标记"，而是<strong>染色泛洪</strong>：每条没匹配上的方程（<span class="fileref">:466</span>）分配一个新颜色，沿二分图泛洪（<code>fillColorEqn</code> <span class="fileref">:496</span> / <code>fillColorVar</code> <span class="fileref">:515</span>，顺着 <code>matching.var_to_eqn</code> 走 <span class="fileref">:528–536</span>），
+  颜色相撞就合并（<code>colorClustering</code> <span class="fileref">:542</span>）。最后按颜色分桶，每个桶就是一个 MSSS——"这一小撮方程加起来缺一个未知量"。离散方程被跳过（<span class="fileref">:486</span>）。
+</p>
+<p><code>changed := arrayLength(msss) &lt;&gt; 0</code>（<span class="fileref">:150</span>）。没有 MSSS 就直接返回 <code>changed = false</code>（<span class="fileref">:339–341</span>），<code>singular</code> 不再递归。</p>
+
+<h3>5.2 约束方程与状态候选 — <code>getConstraintsAndCandidates</code> <span class="fileref">:567–603</span></h3>
+<p>
+  MSSS 里的方程就是<strong>约束方程</strong>。把它们里出现的所有<strong>连续变量</strong>（不含 <code>time</code>、不含 dummy）收集起来作为<strong>状态候选</strong>（<code>getStateCandidate</code> <span class="fileref">:605–627</span>，record 递归进子元素）。
+  候选数 &lt; 约束数就直接失败（<span class="fileref">:164–168</span>）——没东西可降级了。
+</p>
+
+<h3>5.3 求导 — <span class="fileref">:236–253</span></h3>
+<pre><code>diffArguments := Differentiate.DifferentiationArguments.<span class="fn">default</span>(DifferentiationType.TIME, funcMap);   <span class="ln">:236</span>
+diffArguments.diff_map := SOME(VarData.getStateOrder(varData));                                        <span class="ln">:237</span>  <span class="com">// a = der(b) 这类关系的查表</span>
+<span class="kw">for</span> constraint <span class="kw">in</span> EquationPointers.toList(constraint_ptrs) <span class="kw">loop</span>
+  diffed_eqn := Differentiate.<span class="fn">differentiateEquationPointer</span>(constraint, diffArguments_ptr);              <span class="ln">:250</span>
+  new_eqns := diffed_eqn :: new_eqns;
+<span class="kw">end for</span>;</code></pre>
+<p>
+  三个要点：① <strong>原方程保留，导数方程追加</strong>（<span class="fileref">:329</span> <code>EqData.addTypedList(…, EqType.CONTINUOUS)</code>、<span class="fileref">:338</span> <code>EquationPointers.addList</code>）——所以方程数增加，需要哑状态来平衡；
+  ② 求导结果缓存在 <code>EquationAttributes.derivative</code>（<span class="fileref">NBEquation.mo:4089</span>，由 <code>Equation.setDerivative</code> <span class="fileref">:1591</span> 写入），同一条方程第二轮再来不会重复求导（<span class="fileref">NBDifferentiate.mo:371–373</span>）；
+  ③ 求导过程中<strong>顺手创造的新导数变量</strong>攒在 <code>diffArguments.new_vars</code>，之后过滤出 <code>STATE_DER</code>（<span class="fileref">:315</span>）注册进分区（<span class="fileref">:322 :332</span>）。
+</p>
+
+<h3>5.4 状态选择 = 一次分阶段的匹配 — <span class="fileref">:181–233</span></h3>
+<p>
+  多出来的方程要靠哑状态平衡。选谁当哑状态？做法很巧：<strong>在"状态候选 ↔ 约束方程"之间再做一次匹配，匹配上的候选变成哑状态，没匹配上的留作状态</strong>。
+  优先级不是靠排序，而是把邻接矩阵<strong>分五个阶段逐步放开</strong>——早放进来的先被匹配、先变哑状态：
+</p>
+<pre><code>stages := {                                                                        <span class="ln">:191–197</span>
+  (<span class="str">"1. StateSelect.NEVER"</span>,    BVariable.isStateSelect(NEVER)),      <span class="com">// 用户说"别当状态" → 最先变哑状态</span>
+  (<span class="str">"2. StateSelect.AVOID"</span>,    BVariable.isStateSelect(AVOID)),
+  (<span class="str">"3. Artificial Variables"</span>, BVariable.isArtificial),              <span class="com">// 名字以 $ 开头的（$DER.x、$AUX…）优先于用户变量</span>
+  (<span class="str">"4. StateSelect.DEFAULT"</span>,  BVariable.isStateSelect(DEFAULT)),
+  (<span class="str">"5. StateSelect.PREFER"</span>,   BVariable.isStateSelect(PREFER))      <span class="com">// 最后才轮到 prefer</span>
+};
+<span class="kw">for</span> (name, filter) <span class="kw">in</span> stages <span class="kw">loop</span>
+  (this_stage, rest) := List.splitOnTrue(candidates, filter);                    <span class="ln">:202</span>
+  set_adj := Adjacency.Matrix.<span class="fn">expand</span>(set_adj, this_stage, …);                    <span class="ln">:214</span>  <span class="com">// 只把这一阶段的候选加进矩阵</span>
+  set_matching := Matching.<span class="fn">regular</span>(set_matching, set_adj, false, partially=true, clear=false);   <span class="ln">:216</span>  <span class="com">// 增量匹配，不清空、不报错</span>
+<span class="kw">end for</span>;
+(dummy_states, states, matched_eqns, unmatched_eqns) := Matching.<span class="fn">getMatches</span>(set_matching, …);   <span class="ln">:233</span>
+<span class="com">//  ↑ 匹配上的 = 哑状态          ↑ 没匹配上的 = 继续当状态</span></code></pre>
+<p>
+  <strong><code>StateSelect.ALWAYS</code> 故意不在列表里</strong>——always 的变量永远不会被当成哑状态候选，所以一定保持状态。这是"隐式处理"，头注释 <span class="fileref">:79–80</span> 的 ToDo 承认这一点（"remove always vars" / "fail if a never variable could not be chosen"）。
+</p>
+
+<h3>5.5 造哑状态 — <span class="fileref">:259–265</span> → <code>makeDummyState</code> <span class="fileref">NBVariable.mo:1268–1296</span></h3>
+<pre><code><span class="kw">for</span> dummy <span class="kw">in</span> dummy_states <span class="kw">loop</span>
+  dummy_derivatives := BVariable.<span class="fn">makeDummyState</span>(Slice.getT(dummy)) :: dummy_derivatives;   <span class="ln">:263</span>
+<span class="kw">end for</span>;
+
+<span class="com">// makeDummyState 干三件事 (NBVariable.mo:1283–1286)：</span>
+<span class="com">//   x 的种类 STATE(derivative=SOME(d))  →  DUMMY_STATE(d)</span>
+<span class="com">//   d 的种类 STATE_DER(x)               →  DUMMY_DER(x)，并 setStateSelect(AVOID)</span>
+<span class="com">//   名字都不变——没有 $DUMMY 前缀，只改种类</span></code></pre>
+<p>
+  然后重新分类（<span class="fileref">:315–338</span>）：没匹配上的候选 → <code>VarType.STATE</code>；新导数 → <code>STATE_DER</code>；<strong>哑状态和哑导数 → <code>ALGEBRAIC</code></strong>（进 unknowns，由方程解）；真正的状态从分区的 unknowns 里移除（<span class="fileref">:336</span>）。
+</p>
+
+<h3>5.6 静态 or 动态 — <span class="fileref">:292–308</span></h3>
+<pre><code><span class="kw">if</span> listEmpty(unmatched_eqns) <span class="kw">then</span>
+  <span class="com">// STATIC STATE SELECTION：候选足够，哑状态选完约束方程全匹配上了，结束</span>        <span class="ln">:292–298</span>
+<span class="kw">else</span>
+  <span class="com">// 还有约束没匹配上 → 需要动态状态选择（运行时切换哪个当状态）</span>
+  Error.addMessage(Error.INTERNAL_ERROR, {… <span class="str">"dynamic state selection is not yet supported."</span>});   <span class="ln">:306–307</span>
+  fail();
+<span class="kw">end if</span>;</code></pre>
+<p>
+  <strong>新后端目前只有静态哑导数法，没有 <code>StateSet</code></strong>。头注释 <span class="fileref">:92–98</span> 画了动态选择的设计草图（<code>$SET.x</code>、<code>$SET.dx</code>、<code>$SET.A</code>），代码还没有。旧后端两者都有（<code>BackEnd/IndexReduction.mo</code>）。
+</p>
+
+<h2 id="diff"><span class="n">6.</span> 微分器 — <code>$DER.$DER.x</code> 是怎么长出来的 <span class="fileref">Util/NBDifferentiate.mo</span></h2>
+<p>
+  <code>DifferentiationType = enumeration(TIME, SIMPLE, FUNCTION, JACOBIAN)</code>（<span class="fileref">:91</span>）——同一套微分器服务四个客户：指标约简（TIME）、Solve 里判线性（SIMPLE，对某个变量求偏导）、函数微分、雅可比。
+  对一个变量引用求时间导数的规则表在 <code>differentiateComponentRef</code>（<span class="fileref">:809</span>，TIME 分支的规则在 <span class="fileref">:872–957</span>），按顺序：
+</p>
+<table>
+  <tr><th>遇到</th><th>结果</th><th>行</th></tr>
+  <tr><td><code>time</code></td><td><code>1</code></td><td class="fileref">:874</td></tr>
+  <tr><td><code>$START.x</code>、参数、常量、离散量</td><td><code>0</code></td><td class="fileref">:886 :905 :917</td></tr>
+  <tr><td>在 <code>state_order</code> 表里</td><td>查表得到的 cref</td><td class="fileref">:923–929</td></tr>
+  <tr><td>哑状态</td><td>它的伙伴哑导数 <code>getVarDummyDer</code></td><td class="fileref">:933–935</td></tr>
+  <tr><td>状态</td><td>它的伙伴导数 <code>getVarDer</code>（即 <code>$DER.x</code>）</td><td class="fileref">:940–942</td></tr>
+  <tr><td><strong>其他连续变量——包括已经是 <code>$DER.x</code> 的</strong></td><td><code>makeDerVar</code> 现造一个，并把原变量提升成 STATE</td><td class="fileref">:948–957</td></tr>
+</table>
+<pre><code><span class="com">// :948–957 最后一条规则：</span>
+(derCref, der_ptr) := BVariable.<span class="fn">makeDerVar</span>(exp.cref);
+diffArguments.new_vars := der_ptr :: diffArguments.new_vars;
+BVariable.<span class="fn">setStateDerivativeVar</span>(var_ptr, der_ptr);</code></pre>
+<p>
+  <strong>这就是二阶导的来源</strong>：对 <code>$DER.vx</code>（种类 <code>STATE_DER</code>，不满足 <code>isState</code>）求导，走到最后一条规则，造出 <code>$DER.$DER.vx</code>，并把 <code>$DER.vx</code> 提升成 <code>STATE</code>。单摆的 dump 里那些 <code>[DER-] $DER.$DER.vx</code> 就是这么来的。
+</p>
+
+<h2 id="index2"><span class="n">7.</span> 实跑 ① Index2 — 一次求导就够</h2>
+<p><code>omc --newBackend -d=dummyselect,bltdump --simCodeTarget=None -s Index2.mo</code>（工作区 omc，<code>v1.27.0-dev-372-g3ceb0c9d06</code>）：</p>
+<pre><code>    Index Reduction
+State Candidate Variables (1/1)
+(1)       [STAT] (1) Real x (start = 0.0)                 <span class="com">← 5.2：候选只有 x</span>
+Constraint Equations (1/1)
+(1)       [SCAL] (1) x = sin(time) ($RES_AUX_2)           <span class="com">← 5.1：MSSS 就这一条</span>
+
+[dummyselect] 1. Differentiate the constraint equations
+[dummyselect] constraint eqn:       [SCAL] (1) x = sin(time) ($RES_AUX_2)
+[dummyselect] differentiated eqn:   [SCAL] (1) z = cos(time) ($RES_AUX_2)    <span class="com">← 5.3：$DER.x 经 state_order 查表直接变成 z</span>
+
+[dummyselect] (0) Selected States                          <span class="com">← 5.4：候选 x 被匹配上 → 哑状态；留下的状态 0 个</span>
+  STATIC STATE SELECTION  (no unmatched equations)         <span class="com">← 5.6：静态，结束</span></code></pre>
+<p>Causalize 之后的分区（3 个单赋值块，<strong>没有代数环</strong>）：</p>
+<pre><code>BLOCK 1: Real z        ← [SCAL] z = cos(time) ($RES_SIM_3)       <span class="com">// 求导出来的新方程</span>
+BLOCK 2: Real $DER.x   ← [SCAL] $DER.x = z ($RES_SIM_1)
+BLOCK 3: Real x        ← [SCAL] x = sin(time) ($RES_AUX_2)      <span class="com">// 原约束保留，现在用来解哑状态 x</span></code></pre>
+<p>
+  <code>backenddaeinfo</code>：<code>Number of states: 0</code>。<code>Categorize</code> 因为分区里没有状态导数（<code>$DER.x</code> 现在是哑导数、种类 ALGEBRAIC），把它归成 <code>[ALG] Algebraic</code> 分区——积分器根本不会被调用，整个模型是纯代数求值。
+  三个块在 Solve 后都标成 <code>--- Alias of INI[…] ---</code>：初始化系统和仿真系统一模一样。
+</p>
+
+<h2 id="pendulum"><span class="n">8.</span> 实跑 ② 单摆 — 当前实现在哪里停下</h2>
+<pre><code><span class="kw">model</span> Pendulum
+  <span class="kw">parameter</span> Real L = 1, g = 9.81;
+  Real x(start = 0.5, fixed = <span class="kw">true</span>), y(start = -0.866);
+  Real vx(start = 0, fixed = <span class="kw">true</span>), vy;
+  Real F;
+<span class="kw">equation</span>
+  <span class="fn">der</span>(x) = vx;  <span class="fn">der</span>(y) = vy;
+  <span class="fn">der</span>(vx) = -x * F;  <span class="fn">der</span>(vy) = -y * F - g;
+  x^2 + y^2 = L^2;
+<span class="kw">end</span> Pendulum;</code></pre>
+<p>
+  4 个状态候选（x, y, vx, vy）、5 条方程、5 个未知量（4 个导数 + F），约束 <code>x²+y²=L²</code> 匹配不上 <code>$DER.vy</code>。教科书答案：求两次导，最终 2 个状态（比如 x 和 vx），y 和 vy 是哑状态。
+  工作区 omc 的实际过程（<code>-d=dummyselect</code>，共 6 轮）：
+</p>
+<table>
+  <tr><th>轮</th><th>约束方程</th><th>求导得到</th><th>哑状态选择结果</th></tr>
+  <tr><td>1</td><td><code>x²+y²=L²</code></td><td><code>2x·vx + 2y·vy = 0</code></td><td>x → 哑状态（下轮显示 <code>[DSTA] x</code>）；y 保留</td></tr>
+  <tr><td>2</td><td>上一条 + 原约束</td><td><code>2vx² + 2x·$DER.vx + 2vy² + 2y·$DER.vy = 0</code></td><td>vx、vy 保留为状态；<strong>y 也变哑状态</strong></td></tr>
+  <tr><td>3</td><td>1 条</td><td>同上（缓存命中）</td><td>x 又出现在"Selected States"里</td></tr>
+  <tr><td>4</td><td>3 条，候选里出现 <code>[DER-] $DER.vx</code>、<code>$DER.vy</code></td><td>三阶项 <code>$DER.$DER.vx</code>…</td><td><code>$DER.vx</code> 被选成状态、<code>$DER.vy</code> 变哑导数</td></tr>
+  <tr><td>5–6</td><td>5 条 → 8 条，候选 10 个</td><td><code>$DER.$DER.$DER.vx</code>…</td><td><code>Error: NBVariable.makeDummyState failed for $DER.$DER.vx</code></td></tr>
+</table>
+<p>
+  <strong>为什么会这样。</strong>第 1 轮把 x 选成哑状态是合理的；但第 2 轮的求导方程里出现了 <code>$DER.vx</code>、<code>$DER.vy</code>，
+  下一轮的候选集合就把这些<em>导数变量</em>也当成了状态候选（它们是连续变量，满足 <code>getStateCandidate</code>），于是算法开始对导数变量做哑状态选择、对方程再求导，雪球越滚越大，直到 <code>makeDummyState</code> 遇到一个种类不是 <code>STATE</code> 的变量。
+  根源是 5.4 的阶段列表把 <code>$DER.*</code> 归入"3. Artificial Variables"高优先级——对 index-2 无害，对 index-3 就把导数变量当哑状态用了。
+  加 <code>StateSelect.prefer</code>/<code>avoid</code> 注解（<code>PendulumSS.mo</code>：x、vx 标 prefer，y、vy 标 avoid）在这个版本上更糟——<strong>Pantelides 无限循环</strong>，
+  25 分钟 CPU 打了 1.5 GB 的 dummyselect 输出，没有任何终止条件拦住它。原因同上：avoid 的变量在第 2 阶段被优先选成哑状态，第 5.4 节的分阶段匹配每轮都能"成功"，
+  <code>changed</code> 永远为真，<code>singular</code> 就永远递归。跑它之前先想好怎么 kill。
+</p>
+<div class="note">
+  <span class="tag">两个版本的边界。</span>
+  安装版 <strong>1.25.0</strong> 的新后端直接报 <code>NBResolveSingularities.noIndexReduction failed</code>——那时新后端<em>完全没有</em>指标约简，任何结构奇异模型都过不去；
+  <code>--indexReductionMethod=…</code> 四个取值都无效（新后端不读这个 flag，<span class="fileref">Flags.mo:688</span> 定义的选项只有旧后端用）。
+  工作区 <strong>1.27-dev</strong> 有了 Pantelides + 静态哑导数，index-2 能过，index-3 单摆过不去。
+  真要仿真单摆，现阶段用旧后端（默认）——它有动态状态选择，<code>-d=bltdump</code> 能看到 <code>StateSet</code>。
+</div>
+
+<h2 id="limits"><span class="n">9.</span> 已知边界与 TODO</h2>
+<table>
+  <tr><th>限制</th><th>位置</th></tr>
+  <tr><td>动态状态选择未实现，遇到就 fail</td><td class="fileref">NBResolveSingularities.mo:306–307</td></tr>
+  <tr><td>数组切片场景的指标约简未实现（"slicing during index reduction is not yet supported"）</td><td class="fileref">:267–279</td></tr>
+  <tr><td><code>StateSelect.always</code> 只是"不在候选里"，<code>never</code> 选不上也不报错</td><td class="fileref">:79–80 ToDo</td></tr>
+  <tr><td>5.4 的提前退出条件 <code>isEmpty(set_matching) and isPerfect(set_matching)</code> 逻辑上只在空匹配时成立，实际五个阶段总是全跑</td><td class="fileref">:223</td></tr>
+  <tr><td>每轮 Pantelides 从头重建邻接矩阵</td><td class="fileref">NBMatching.mo:171–172</td></tr>
+  <tr><td>DAE 模式下 causalize 是空操作，没有指标约简</td><td class="fileref">NBCausalize.mo:338–341</td></tr>
+  <tr><td>死代码：<code>candidatePriority</code> / <code>sortCandidates</code>（被分阶段匹配取代）、<code>scalarMatching</code>、<code>PFPlusExternal</code> 的 <code>marked_eqns</code></td><td class="fileref">:629–663 · NBMatching.mo:340 :434</td></tr>
+</table>
+<p>相关 flag：<code>-d=dummyselect</code>（<span class="fileref">Flags.mo:272</span>，每轮的候选/约束/求导/选择）、<code>-d=stateselection</code>（<span class="fileref">:308</span>，最终的状态与哑状态列表）、<code>-d=debugDifferentiation</code>（<span class="fileref">:434</span>）。</p>
+
+<h2 id="verify"><span class="n">10.</span> 动手验证</h2>
+<pre><code><span class="com"># 用工作区 omc（和源码同一提交）</span>
+$omc = <span class="str">"C:\dev\OpenModelica\build_cmake\install_cmake\bin\omc.exe"</span>
+&amp; $omc --newBackend -d=dummyselect,bltdump,backenddaeinfo --simCodeTarget=None -s Index2.mo     <span class="com"># 成功：0 状态，ALG 分区</span>
+&amp; $omc --newBackend -d=dummyselect,bltdump,backenddaeinfo --simCodeTarget=None -s Pendulum.mo   <span class="com"># 看 6 轮怎么滚雪球</span>
+omc --newBackend -d=bltdump -s Pendulum.mo                                                        <span class="com"># 1.25.0：noIndexReduction</span>
+omc -d=bltdump,dummyselect --simCodeTarget=None -s Pendulum.mo                                    <span class="com"># 旧后端对照：能过，看 StateSet</span></code></pre>
+<p>建议三个练习：</p>
+<ol>
+  <li>把 Index2 的 <code>x = sin(time)</code> 改成 <code>x = sin(time) + z</code>——现在方程里有未知量 z 了，指标约简还会触发吗？（不会：dump 里没有 "Index Reduction" 段。）</li>
+  <li>在 Index2 里加一条 <code>Real w; der(w) = x;</code>：w 是真状态、x 是哑状态，观察 <code>Number of states: 1</code> 和分区从 ALG 变回 ODE。</li>
+  <li>写一个最小的 index-3 例子看它在第几轮失败，再对照旧后端 <code>-d=bltdump</code> 的 StateSet 输出，体会"动态状态选择"到底在解决什么。</li>
+</ol>
+
+<footer>
+  行号基于工作区 <code>feat_OMEncryption</code> 分支（HEAD <code>3ceb0c9d06</code>）；实跑输出来自 <code>build_cmake/install_cmake/bin/omc.exe</code>（同一提交）与安装版 1.25.0。
+  返回 <a href="OMC-编译全流程导读.html">总览篇</a>。
+</footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NB 撕裂导读</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d0d7de;
+    --code-bg: #f6f8fa; --kw: #cf222e; --str: #0a3069; --com: #6e7781;
+    --fn: #8250df; --num: #0550ae; --accent: #0969da; --accent-bg: #ddf4ff;
+    --card: #f6f8fa; --line: #57606a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #8b949e; --border: #30363d;
+      --code-bg: #161b22; --kw: #ff7b72; --str: #a5d6ff; --com: #8b949e;
+      --fn: #d2a8ff; --num: #79c0ff; --accent: #58a6ff; --accent-bg: #132436;
+      --card: #161b22; --line: #8b949e;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.75; font-size: 16px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 2.5rem 1.5rem 6rem; }
+  header.hero { border-bottom: 1px solid var(--border); padding-bottom: 1.5rem; margin-bottom: 2rem; }
+  h1 { font-size: 2rem; margin: 0 0 .4rem; letter-spacing: -.02em; }
+  .sub { color: var(--muted); font-size: .95rem; margin: 0; }
+  .sub code { background: var(--code-bg); padding: .1em .4em; border-radius: 5px; font-size: .85em; }
+  h2 {
+    font-size: 1.4rem; margin: 3rem 0 1rem; padding-top: .5rem;
+    border-top: 1px solid var(--border);
+  }
+  h2 .n { color: var(--accent); font-variant-numeric: tabular-nums; }
+  h3 { font-size: 1.1rem; margin: 1.8rem 0 .6rem; }
+  p { margin: .8rem 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: "SFMono-Regular", "Cascadia Code", Consolas, "Liberation Mono", monospace; font-size: .88em; }
+  p code, li code, td code { background: var(--code-bg); padding: .1em .4em; border-radius: 5px; color: var(--fg); }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.1rem; overflow-x: auto; font-size: .84rem; line-height: 1.6; margin: 1rem 0;
+  }
+  pre code { background: none; padding: 0; color: var(--fg); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; }
+  .fn { color: var(--fn); } .num { color: var(--num); }
+  .ln { color: var(--line); user-select: none; }
+  .lead {
+    background: var(--accent-bg); border-left: 3px solid var(--accent);
+    padding: .9rem 1.1rem; border-radius: 0 8px 8px 0; margin: 1.2rem 0;
+  }
+  .lead strong { color: var(--fg); }
+  .note {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: .9rem 1.1rem; margin: 1.2rem 0; font-size: .95rem;
+  }
+  .note .tag { font-weight: 600; color: var(--accent); }
+  .toc {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.4rem; margin: 1.5rem 0 2.5rem;
+  }
+  .toc-title { font-weight: 600; margin: 0 0 .5rem; font-size: .9rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .toc ol { margin: 0; padding-left: 1.4rem; }
+  .toc li { margin: .25rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--card); font-weight: 600; }
+  .fileref { color: var(--muted); font-size: .82rem; font-family: "SFMono-Regular", Consolas, monospace; }
+  .diagram {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1.2rem; overflow-x: auto; font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: .82rem; line-height: 1.65; white-space: pre; color: var(--fg);
+  }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>撕裂（Tearing）与代数环</h1>
+  <p class="sub">新后端细读 · <code>NBackEnd/Modules/3_Post/NBTearing.mo</code>（<code>main</code> :138 · <code>TEARING_SET</code> :85）· 求解 <code>NBSolve.mo</code> · 环的雅可比 <code>NBJacobian.mo</code> · 落地 <code>NSimCode/NSimStrongComponent.mo</code></p>
+</header>
+
+<p class="lead">
+  <strong>一句话抓住主线：</strong>撕裂 = 对一个 n 条方程互相依赖的代数环，挑 m 个"<strong>迭代变量</strong>"当未知量，其余 n−m 条方程按顺序变成显式赋值（"<strong>inner 方程</strong>"），
+  剩下 m 条当"<strong>残差方程</strong>"交给牛顿法。求解器从迭代 n 维降到迭代 m 维。
+</p>
+<p class="lead">
+  <strong>新后端现状：</strong>数据结构和三段式管线都齐了，但默认方法 <code>minimal</code> <strong>只把离散子系统抽成 inner 方程，连续代数环一个变量都不撕</strong>；
+  真正按注解撕的只有 <code>guruTearing</code>；每个环的雅可比算出来了却在 SimCode 侧被 <code>if false</code> 丢掉；所有环无论线性与否都当非线性系统生成到 <code>_02nls.c</code>。
+</p>
+
+<nav class="toc">
+  <p class="toc-title">目录</p>
+  <ol>
+    <li><a href="#loop">什么是代数环 — Loop 模型</a></li>
+    <li><a href="#ds">数据结构 — <code>TEARING_SET</code> 与 <code>ALGEBRAIC_LOOP</code></a></li>
+    <li><a href="#born">环是怎么诞生的 — Sorting 之后所有变量都是迭代变量</a></li>
+    <li><a href="#pipeline">管线位置与三段式：initialize → 方法 → finalize</a></li>
+    <li><a href="#methods">方法选择 — 四个名字，两种实现</a></li>
+    <li><a href="#minimal"><code>minimal</code> — 默认实现到底做了什么</a></li>
+    <li><a href="#guru"><code>guru</code> — 唯一会缩小连续环的方法</a></li>
+    <li><a href="#residual">finalize — 残差方程怎么生成</a></li>
+    <li><a href="#linear">线性判定 — 以及一个空集陷阱</a></li>
+    <li><a href="#solve">Solve — inner 方程求解，1×1 隐式环的诞生</a></li>
+    <li><a href="#jac">每个环的雅可比 — <code>compJacobian</code></a></li>
+    <li><a href="#codegen">落地：NSimCode → <code>_02nls.c</code> → 运行时牛顿法</a></li>
+    <li><a href="#flags">Flags 与已知边界</a></li>
+    <li><a href="#verify">动手验证</a></li>
+  </ol>
+</nav>
+
+<h2 id="loop"><span class="n">1.</span> 什么是代数环 — Loop 模型</h2>
+<pre><code><span class="kw">model</span> Loop
+  Real x, y, w;
+  Real z(start = 1, fixed = <span class="kw">true</span>);
+<span class="kw">equation</span>
+  <span class="fn">der</span>(z) = -z + x;
+  x = 2 * y + w;         <span class="com">// x 要 y, w</span>
+  y = z + <span class="fn">sin</span>(w);        <span class="com">// y 要 w</span>
+  w = x * y / 5 - 1;     <span class="com">// w 要 x, y  → x→y→w→x 成环</span>
+<span class="kw">end</span> Loop;</code></pre>
+<p>
+  匹配没问题（x↔第 2 条，y↔第 3 条，w↔第 4 条），但 Tarjan 排序时三条方程互相依赖、缩成一个强连通分量——没有一个"先算谁"的顺序。这就是<strong>代数环</strong>。
+  教科书解法：挑 w 当迭代变量，则 <code>y = z + sin(w)</code>、<code>x = 2y + w</code> 顺序可算（inner），只剩 <code>w − (x·y/5 − 1) = 0</code> 一条残差给牛顿法——1 维迭代，不是 3 维。
+</p>
+<p>
+  实际 dump 里环是 <strong>4×4</strong>：pre 阶段的 <code>FunctionAlias</code> 模块把函数调用 <code>sin(w)</code> 提成了辅助变量 <code>$FUN_1 = sin(w)</code>（方程名 <code>$RES_AUX_4</code>）。这个细节后面一直会出现。
+</p>
+
+<h2 id="ds"><span class="n">2.</span> 数据结构 — <code>TEARING_SET</code> 与 <code>ALGEBRAIC_LOOP</code></h2>
+<pre><code><span class="kw">record</span> TEARING_SET                                          <span class="ln">3_Post/NBTearing.mo:85–90</span>
+  list&lt;Slice&lt;VariablePointer&gt;&gt; iteration_vars   <span class="com">"the variables used for iteration"</span>
+  list&lt;Slice&lt;EquationPointer&gt;&gt; residual_eqns    <span class="com">"implicitely solved residual equations"</span>
+  array&lt;StrongComponent&gt; innerEquations         <span class="com">"array of matched equations and variables"   ← 本身就是强连通分量数组</span>
+  Option&lt;Jacobian&gt; jac                          <span class="com">"optional jacobian"                          ← Jacobian = NBackendDAE.BackendDAE，一个完整的 JACOBIAN 对象</span>
+<span class="kw">end</span> TEARING_SET;
+
+<span class="kw">record</span> ALGEBRAIC_LOOP                                       <span class="ln">Classes/NBStrongComponent.mo:157–166</span>
+  Integer idx;
+  Tearing strict;                <span class="com">// 严格撕裂集：可解性由偏导判定</span>
+  Option&lt;Tearing&gt; casual;        <span class="com">// 宽松撕裂集（动态撕裂用）——新后端 5 处构造点全写死 NONE()</span>
+  Boolean linear;
+  Boolean mixed;                 <span class="com">// 含离散变量</span>
+  Boolean homotopy;              <span class="com">// 含 homotopy()</span>
+  Solve.Status status;
+<span class="kw">end</span> ALGEBRAIC_LOOP;</code></pre>
+<p>
+  <code>innerEquations</code> 是 <code>StrongComponent</code> 数组这一点很关键：inner 方程就是普通的 <code>SINGLE_COMPONENT</code>，Solve 模块用同一套代码递归解它们，代码生成时也和环外的方程没区别。
+  <code>strict / casual</code> 两套集合是旧后端"动态撕裂"（运行时按可解性切换）的设计遗产（<span class="fileref">Flags.mo:945</span> <code>--dynamicTearing</code>），新后端还没实现，<code>casual</code> 永远是 <code>NONE()</code>。
+</p>
+
+<h2 id="born"><span class="n">3.</span> 环是怎么诞生的 — Sorting 之后所有变量都是迭代变量</h2>
+<p>
+  Tarjan 找出一个 size &gt; 1 的强连通分量后，<code>createPseudoScalar</code> <span class="fileref">NBStrongComponent.mo:1059</span> 直接把它包成环，<strong>初始撕裂集是"全部变量都迭代、全部方程都残差、没有 inner"</strong>：
+</p>
+<pre><code>tearingSet := Tearing.TEARING_SET(
+  iteration_vars  = comp_vars,      <span class="com">// 环里全部变量</span>
+  residual_eqns   = comp_eqns,      <span class="com">// 环里全部方程</span>
+  innerEquations  = listArray({}),
+  jac             = NONE());
+<span class="kw">then</span> ALGEBRAIC_LOOP(idx = -1, strict = tearingSet, casual = NONE(), linear = false, mixed = false,
+                    homotopy = …, status = NBSolve.Status.IMPLICIT);</code></pre>
+<p>Causalize 之后的 dump 看到的就是这个状态（工作区 omc，<code>-d=bltdump</code>）：</p>
+<pre><code>BLOCK 1: Algebraic Loop (Linear = false, Mixed = false, Homotopy = false, size = 4)
+Strict Tearing Set
+### Iteration Variables:
+	[ALGB] (1) Real y;  [ALGB] (1) Real x;  [ALGB] (1) Real w;  [ALGB] (1) Real $FUN_1;
+### Residual Equations:
+	[SCAL] (1) x = 2.0 * y + w ($RES_SIM_2);
+	[SCAL] (1) w = (-1.0) + 0.2 * y * x ($RES_SIM_0);
+	[SCAL] (1) $FUN_1 = sin(w) ($RES_AUX_4);
+	[SCAL] (1) y = z + $FUN_1 ($RES_SIM_1);
+### Inner Equations:
+	<span class="com">(空)</span></code></pre>
+<p>撕裂模块的工作就是把这个"全迭代"的集合<strong>缩小</strong>。</p>
+
+<h2 id="pipeline"><span class="n">4.</span> 管线位置与三段式：initialize → 方法 → finalize</h2>
+<div class="diagram">NBackendDAE.main (Classes/NBackendDAE.mo:328)   postOptModules:
+  Remove Dummies → <b>Tearing.main(kind)</b> → Categorize → Solve.main → Jacobian.main
+                        │
+Initialization.main (1_Main/NBInitialization.mo:160) 的子管线里对 INI 分区也跑一次：
+  … → Causalize.main(INI) → <b>Tearing.main(INI)</b>
+
+Tearing.main (NBTearing.mo:138)
+  funcs := getModule()                                    :144   ← 返回一个函数列表（三段）
+  ODE  → bdae.ode  := tearingTraverser(bdae.ode, …)        :155
+  INI  → bdae.init / bdae.init_0                           :160–166
+  DAE  → bdae.dae，然后递归 main(bdae, ODE)                :168–173
+
+tearingTraverser (:295)
+  对每个分区、每个强连通分量 i：
+    tmp := strongComponents[i];
+    for func in funcs loop  tmp := func(tmp, full, …)  end for;   :312–322   ← 三段依次作用在同一个分量上
+    full 被逐分量精化后写回分区                                 :323–324</div>
+<p>接口签名在 <span class="fileref">Modules/NBModule.mo:302–315</span>（<code>tearingInterface</code>）：输入分量、完整邻接矩阵 <code>full</code>、函数表、当前环编号、分区的变量和方程、分区种类；输出分量和更新后的 <code>full</code>。</p>
+
+<h2 id="methods"><span class="n">5.</span> 方法选择 — 四个名字，两种实现 <span class="fileref">NBTearing.mo:243–262</span></h2>
+<pre><code>func := <span class="kw">match</span> Flags.getConfigString(Flags.TEARING_METHOD)     <span class="ln">:247</span>   <span class="com">// --tearingMethod，默认 "cellier" (Flags.mo:836)</span>
+  <span class="kw">case</span> <span class="str">"minimalTearing"</span> <span class="kw">then</span> {initialize(varFunc = isDiscontinuous, eqnFunc = isDiscontinuous), minimal, finalize};
+  <span class="kw">case</span> <span class="str">"cellier"</span>        <span class="kw">then</span> {… 同上 …};   <span class="com">// TODO set `minimal = false` when it's actually doing something   :256</span>
+  <span class="kw">case</span> <span class="str">"omcTearing"</span>     <span class="kw">then</span> {… 同上 …};   <span class="com">// TODO 同上                                                     :257</span>
+  <span class="kw">case</span> <span class="str">"guruTearing"</span>    <span class="kw">then</span> {initialize(varFunc = isNotGuruVar, eqnFunc = noFilterEqn), guru, finalize};
+  <span class="kw">else</span> fail();</code></pre>
+<table>
+  <tr><th>flag 值</th><th>实际跑的</th><th>说明</th></tr>
+  <tr><td><code>cellier</code>（默认）/ <code>omcTearing</code> / <code>minimalTearing</code></td><td><code>minimal</code></td><td>Cellier 启发式（选出现次数最多的变量→尽量因果化→重复）在新后端<strong>尚未实现</strong>，那套只存在于旧后端 <code>BackEnd/Tearing.mo</code></td></tr>
+  <tr><td><code>guruTearing</code></td><td><code>guru</code></td><td>完全由 <code>__OpenModelica_tearingSelect</code> 注解驱动</td></tr>
+  <tr><td><code>noTearing</code></td><td>—</td><td>已废弃，<code>FlagsUtil.mo:1180–1182</code> 静默改写成 <code>minimalTearing</code></td></tr>
+</table>
+
+<h2 id="minimal"><span class="n">6.</span> <code>minimal</code> — 默认实现到底做了什么 <span class="fileref">NBTearing.mo:403–466</span></h2>
+<p>函数第一行注释就是全部真相：<code>// only extracts discrete variables to be solved as inner equations</code>（<span class="fileref">:404</span>）。步骤：</p>
+<pre><code>(cont_vars, disc_vars) := <span class="fn">filterDiscreteVariables</span>(vars_lst, isInit);            <span class="ln">:423</span>   <span class="com">// 变量分连续 / 离散</span>
+(cont_eqns, disc_eqns) := List.splitOnTrue(eqns_lst, Equation.isContinousRecordAware);   <span class="ln">:424</span>
+
+<span class="kw">if not</span> listEmpty(disc_eqns) <span class="kw">then</span>                                            <span class="ln">:429</span>   <span class="com">// ★ 没有离散方程 → 什么都不做，原样返回</span>
+  comp.mixed := true;
+  adj      := Adjacency.Matrix.<span class="fn">fullToFinal</span>(full, v, e, …, MATCHING);         <span class="ln">:437</span>   <span class="com">// 只看离散子系统</span>
+  matching := Matching.<span class="fn">regular</span>(EMPTY_MATCHING, adj, true, true);              <span class="ln">:438</span>   <span class="com">// 离散方程 ↔ 离散变量匹配</span>
+  <span class="com">// 匹配上的离散变量从迭代变量里剔除</span>                                        <span class="ln">:441–451</span>
+  adj         := Adjacency.Matrix.<span class="fn">upgrade</span>(adj, full, v, e, …, SORTING);      <span class="ln">:454</span>
+  inner_comps := Sorting.<span class="fn">tarjan</span>(adj, matching, variables, equations);        <span class="ln">:455</span>   <span class="com">// 离散子系统排序 → inner 方程</span>
+  strict.innerEquations := listArray(inner_comps);
+  strict.residual_eqns  := list(SLICE(eqn, {}) for eqn in cont_eqns);        <span class="ln">:459</span>   <span class="com">// 残差 = 全部连续方程</span>
+  strict.iteration_vars := listReverse(iteration_vars);                      <span class="ln">:460</span>
+<span class="kw">end if</span>;</code></pre>
+<p>
+  所以：<strong>残差方程 = 连续方程；迭代变量 = 没被离散匹配吃掉的变量；inner = 离散子系统的 Tarjan 分量</strong>。
+  对一个纯连续环（Loop、LinLoop 都是），<code>disc_eqns</code> 为空，函数在 <span class="fileref">:429</span> 直接跳过——这就是 dump 里 4 个迭代变量一个都没少、Inner Equations 为空的原因。
+  这个行为在 1.25.0 和当前 dev 版完全一致。
+</p>
+<div class="note">
+  <span class="tag">那"混合环"是什么样。</span>
+  一个既有 <code>Real</code> 又有 <code>Boolean/Integer</code> 变量的环（比如带 <code>if x &gt; 0 then … else …</code> 的关系变量 <code>$SEV_n</code>），<code>minimal</code> 会把离散变量按离散方程匹配、排序后放进 inner；
+  牛顿法只迭代连续变量，每次迭代顺手把离散量算一遍。这正是"mixed system"在运行时的求解方式，也是 <code>minimal</code> 唯一真正干的活。
+</div>
+
+<h2 id="guru"><span class="n">7.</span> <code>guru</code> — 唯一会缩小连续环的方法 <span class="fileref">NBTearing.mo:468–596</span></h2>
+<p>完全听用户注解 <code>__OpenModelica_tearingSelect</code>（枚举 <code>NEVER, AVOID, DEFAULT, PREFER, ALWAYS</code> <span class="fileref">NFFrontEnd/NFBackendExtension.mo:1501</span>，存在 <code>VariableAttributes.tearingSelect</code> <span class="fileref">:344</span>）：</p>
+<pre><code>(inner_vars, guru_vars) := List.splitOnTrue(strict.iteration_vars,
+    Slice.check(BVariable.hasTearingSelect(compareTS = PREFER, func = intLt)));   <span class="ln">:492–493</span>
+<span class="com">//  TS &lt; PREFER（never/avoid/default）→ inner 变量；TS ≥ PREFER（prefer/always）→ 迭代变量</span>
+<span class="com">//  没有 guru 变量 → INTERNAL_ERROR (:495–498)；guru 变量里有离散的 → fail (:500–505)</span>
+
+<span class="kw">while</span> 还有未解的 inner 变量 <span class="kw">loop</span>                                            <span class="ln">:521–582</span>
+  扫每一条方程 i，看 full.occurrences[i] 里"尚未求解的 inner 变量"有几个：
+    恰好 1 个 → createSliceOrSingle(var, eqn) 加入 inner_comps，从待解表删掉，重新扫   <span class="ln">:543–555</span>
+    多于 1 个 → 先跳过                                                         <span class="ln">:558</span>
+    0 个     → 这条方程成为残差                                                 <span class="ln">:561–564</span>
+  一整轮没解出任何变量 → fail                                                  <span class="ln">:577–581</span>
+<span class="kw">end while</span>;
+strict.iteration_vars := guru_vars;  strict.innerEquations := inner_comps;  residual_eqns := 剩下的   <span class="ln">:587–590</span></code></pre>
+<p>
+  注意它把注解语义收窄成二元：<strong><code>always</code> ≡ <code>prefer</code>，<code>never</code> ≡ <code>avoid</code> ≡ <code>default</code></strong>。而且默认的 <code>minimal</code> 路径<strong>完全不读</strong>这个注解（只有 <span class="fileref">:251 :493</span> 两处引用），
+  也不像旧后端那样在注解被忽略时发 warning。别名消除时注解会传播（取秩最高，<span class="fileref">2_Pre/NBAlias.mo:1248–1268</span>）。
+</p>
+
+<h2 id="residual"><span class="n">8.</span> finalize — 残差方程怎么生成 <span class="fileref">NBTearing.mo:380–401</span></h2>
+<pre><code>acc := list(Inline.inlineRecordSliceEquation(eqn, …) for eqn in strict.residual_eqns);   <span class="ln">:389</span>   <span class="com">// record 方程先内联展开</span>
+strict.residual_eqns := list(Slice.apply(eqn,
+    Equation.<span class="fn">createResidual</span>(residualCref_opt = NONE(), new = true, allowFail = false)) …);  <span class="ln">:392</span></code></pre>
+<p>
+  <code>Equation.createResidual</code> <span class="fileref">Classes/NBEquation.mo:2151</span>：把 <code>lhs = rhs</code> 改写成 <code>$RES_name := rhs − lhs</code>，残差变量种类 <code>RESIDUAL_VAR</code>（<span class="fileref">NBVariable.mo:1533–1556</span>，前缀 <code>$RES</code>）。
+  Tearing 之后的 dump（<code>-d=tearingdump</code> 打印 "Tearing Result"）：
+</p>
+<pre><code>[ODE] Tearing Result 1
+BLOCK: Algebraic Loop (Linear = true, Mixed = false, Homotopy = false, size = 4)   <span class="com">← 注意这个 Linear = true，第 9 节</span>
+### Residual Equations:
+	[SCAL] (1) $RES_SIM_2 = (2.0 * y + w) - x ($RES_SIM_2);
+	[SCAL] (1) $RES_SIM_0 = ((-1.0) + 0.2 * y * x) - w ($RES_SIM_0);
+	[SCAL] (1) $RES_AUX_4 = sin(w) - $FUN_1 ($RES_AUX_4);
+	[SCAL] (1) $RES_SIM_1 = (z + $FUN_1) - y ($RES_SIM_1);</code></pre>
+<p>牛顿法的目标就是让这 4 个 <code>$RES_*</code> 同时为 0。</p>
+
+<h2 id="linear"><span class="n">9.</span> 线性判定 — 以及一个空集陷阱</h2>
+<p><code>initialize</code> <span class="fileref">NBTearing.mo:342–378</span> 做四件事：分配环编号（<span class="fileref">:358</span>）、按 <code>varFunc</code>/<code>eqnFunc</code> 过滤变量和方程（<span class="fileref">:362–363</span>）、精化邻接矩阵的可解性（<span class="fileref">:373</span>）、判线性（<span class="fileref">:374</span>）：</p>
+<pre><code>vars_lst := list(… <span class="kw">for</span> var <span class="kw">guard</span> varFunc(Slice.getT(var), init) <span class="kw">in</span> strict.iteration_vars);   <span class="ln">:362</span>
+eqns_lst := list(… <span class="kw">for</span> eqn <span class="kw">guard</span> eqnFunc(Slice.getT(eqn)) <span class="kw">in</span> strict.residual_eqns);          <span class="ln">:363</span>
+v := UnorderedMap.subMap(variables.map, vars_lst);  e := UnorderedMap.subMap(equations.map, eqns_lst);
+full := Adjacency.Matrix.<span class="fn">refine</span>(full, funcMap, v, e, …);                                     <span class="ln">:373</span>
+comp.linear := <span class="fn">checkLinearity</span>(full, v, e);                                                   <span class="ln">:374</span></code></pre>
+<p><code>Adjacency.Matrix.refine</code> <span class="fileref">Util/NBAdjacency.mo:838–909</span> 对每条方程、每个变量求偏导来定"可解性"（<span class="fileref">:884–902</span>）：</p>
+<pre><code>diffArgs.diffCref := var;
+exp := Differentiate.<span class="fn">differentiateExpression</span>(residual, diffArgs);   exp := SimplifyExp.simplify(exp);
+<span class="kw">if</span> Expression.isZero(exp)                          <span class="kw">then</span> sol := Solvability.UNSOLVABLE();          <span class="com">// 变量根本不在里面</span>
+<span class="kw">elseif</span> Expression.containsCrefSet(exp, vars_set)  <span class="kw">then</span> sol := Solvability.EXPLICIT_NONLINEAR(…); <span class="com">// 偏导里还含环内变量 → 非线性</span>
+<span class="kw">else</span>                                                   sol := Solvability.EXPLICIT_LINEAR(pars, vars);  <span class="com">// 偏导是常数/参数 → 线性</span></code></pre>
+<p><code>checkLinearity</code> <span class="fileref">NBTearing.mo:598–625</span>：<code>e</code> 里每条方程、<code>occurrences</code> 里每个变量，只要它在 <code>v</code> 中且可解性是 NONLINEAR/IMPLICIT 就判非线性；否则线性。</p>
+<div class="note">
+  <span class="tag">陷阱：默认方法下 v 和 e 只有离散量。</span>
+  第 5 节的 <code>getModule</code> 给 <code>cellier</code>/<code>minimal</code> 传的过滤器是 <code>isDiscontinuous</code>（= <code>not isContinuous</code>，<span class="fileref">NBVariable.mo:418</span> / <span class="fileref">NBEquation.mo:2362</span>）。
+  对一个纯连续环，<code>e</code> 是空 map；<code>UnorderedMap.all</code> 在空集上返回 true（<span class="fileref">Util/UnorderedMap.mo:674–687</span>）——于是 <strong><code>linear = true</code></strong>。
+  这就是上面 dump 里 Loop（含 <code>sin(w)</code>、<code>x·y</code>，明显非线性）在 Tearing 之后显示 <code>Linear = true</code>、<code>backenddaeinfo</code> 统计 <code>algebraic-loop … (linear: 1, nonlinear:0)</code> 的原因。
+  1.25.0 的 <code>initialize</code> 还没加这个过滤器，所以那个版本 Loop 正确地显示 <code>Linear = false</code>、LinLoop 显示 <code>true</code>。
+  目前这个错判<strong>不影响生成代码</strong>——第 12 节会看到 SimCode 根本不看 <code>linear</code>——只影响 dump、统计计数和雅可比的命名（<code>_LS_JAC_</code> vs <code>_NLS_JAC_</code>，<span class="fileref">NBJacobian.mo:1106</span>）。
+</div>
+
+<h2 id="solve"><span class="n">10.</span> Solve — inner 方程求解，1×1 隐式环的诞生 <span class="fileref">3_Post/NBSolve.mo</span></h2>
+<p><code>solveStrongComponent</code> <span class="fileref">:175</span> 的 <code>ALGEBRAIC_LOOP</code> 分支（<span class="fileref">:305–331</span>）：<strong>倒序</strong>递归解每个 <code>innerEquations[i]</code>；任何一个 inner 解不成 <code>EXPLICIT</code> 就报 <code>INTERNAL_ERROR</code>（<span class="fileref">:317–326</span>）；环本身 <code>status := IMPLICIT</code>。</p>
+<p>更有意思的是<strong>反向</strong>：一条本来不在环里的单方程，Solve 发现解不出来（<code>solveBody</code> <span class="fileref">:637</span> 走到 <code>solveUnique</code> <span class="fileref">:918</span> 返回 <code>IMPLICIT</code>，比如 <code>x = cos(x)</code>），怎么办？</p>
+<pre><code><span class="kw">if</span> solve_status == Status.IMPLICIT <span class="kw">and</span> List.hasOneElement(solved_comps) <span class="kw">then</span>       <span class="ln">NBSolve.mo:386</span>
+  (implicit_comp, implicit_index) := Tearing.<span class="fn">implicit</span>(comp = listHead(solved_comps), …);   <span class="com">// 包成 1×1 环</span>
+<span class="kw">elseif</span> solve_status &gt; Status.EXPLICIT <span class="kw">then</span>
+  Error.addMessage(Error.INTERNAL_ERROR, …);  fail();                                <span class="com">// UNSOLVABLE 是硬错误</span></code></pre>
+<p>
+  <code>Tearing.implicit</code> <span class="fileref">NBTearing.mo:179–231</span> 用 <code>singleImplicit</code>（<span class="fileref">:233</span>：迭代变量 = 那一个变量，残差 = 那一条方程）构造 <code>ALGEBRAIC_LOOP</code>，立刻 <code>finalize</code> 生成残差。
+  <code>MULTI_COMPONENT</code> 分支有个自己标注的 bug：<span class="fileref">:208</span> <code>singleImplicit(Slice.getT(listHead(comp.vars)), …) // this is wrong! need to take all vars</code>。
+</p>
+<p>Solve 还负责去重：<code>duplicate_map</code>（<span class="fileref">:98</span>，以 <code>Tearing.hash / isEqual</code> <span class="fileref">NBTearing.mo:92–114</span> 为键）让 ODE 里和 INI 里一模一样的环变成 <code>ALIAS</code>——Loop 的 dump 里 <code>$DER.z</code> 那块标了 <code>Alias of INI[1 | 3]</code>，环本身在 1.25 的输出里也是。</p>
+
+<h2 id="jac"><span class="n">11.</span> 每个环的雅可比 — <code>compJacobian</code> <span class="fileref">3_Post/NBJacobian.mo:1076–1116</span></h2>
+<pre><code>residual_comps  := list(StrongComponent.fromSolvedEquationSlice(eqn) for eqn in strict.residual_eqns);
+seed_candidates := list(Slice.getT(var) for var in strict.iteration_vars);           <span class="com">// 列：对谁求偏导 → 迭代变量</span>
+residual_vars   := list(Equation.getResidualVar(Slice.getT(eqn)) for eqn in strict.residual_eqns);   <span class="com">// 行：$RES_*</span>
+inner_vars      := … strict.innerEquations 里的连续变量 …                             <span class="com">// 链式法则的中间量</span>
+strict.jac := <span class="fn">nonlinear</span>(seedCandidates = 迭代变量, partialCandidates = residual_vars ++ inner_vars,
+                       comps = innerEquations ++ residual_comps,                    <span class="com">// 先 inner 后 residual，顺序就是求值顺序</span>
+                       name = kind + (if comp.linear then <span class="str">"_LS_JAC_"</span> else <span class="str">"_NLS_JAC_"</span>) + idx, …);   <span class="ln">:1106</span></code></pre>
+<p>
+  <code>nonlinear</code> <span class="fileref">:169–195</span> 按 <code>-d=NLSanalyticJacobian</code>（<span class="fileref">Flags.mo:334</span>，默认 <strong>true</strong>）选符号微分 <code>jacobianSymbolic</code> <span class="fileref">:1118</span>：造 <code>$SEED_*</code>（微分方向）和 <code>$pDER_*</code>（结果）变量，用 <code>DifferentiationType.JACOBIAN</code> 对每个分量微分，再算稀疏模式和着色（<code>SparsityPattern.create</code> <span class="fileref">:413</span>）。
+  1.25 的 dump 把它打了出来（<code>[NLS] Jacobian ODE_NLS_JAC_1</code>）：
+</p>
+<pre><code>Partial Derivative Variables (4/4)  $pDER_INI_NLS_JAC_1.$RES_SIM_1 …      <span class="com">// 4 行</span>
+Seed Variables (4/4)                $SEED_INI_NLS_JAC_1.$FUN_1 / w / x / y  <span class="com">// 4 列</span>
+BLOCK 2: $pDER….$RES_SIM_0 = (0.2 * $SEED.y * x + 0.2 * y * $SEED.x) - $SEED.w   <span class="com">// ∂(0.2xy − w)/∂(seed)，乘积法则</span>
+BLOCK 3: $pDER….$RES_AUX_4 = cos(w) * $SEED.w - $SEED.$FUN_1                     <span class="com">// ∂(sin w − $FUN_1)</span>
+Sparsity Pattern (nnz: 10)     Columns: (w) affects {$RES_AUX_4, $RES_SIM_2, $RES_SIM_0} …
+Sparsity Coloring              Color (1) {y}  Color (2) {$FUN_1, x}  Color (3) {w}     <span class="com">// 3 种颜色 → 3 次方向导数就能填满 4×4</span></code></pre>
+<p>同一套机器也算整个 ODE 的 A 矩阵（<code>partJacobian</code> <span class="fileref">:1015</span>：seed = 状态，partial = 全部未知量）。</p>
+
+<h2 id="codegen"><span class="n">12.</span> 落地：NSimCode → <code>_02nls.c</code> → 运行时牛顿法</h2>
+<p><code>Block.fromStrongComponent</code> <span class="fileref">NSimCode/NSimStrongComponent.mo:734–773</span> 的 <code>ALGEBRAIC_LOOP</code> 分支：</p>
+<pre><code><span class="com">// :735–738  inner 方程递归转成普通 Block（SIMPLE_ASSIGN 等）</span>
+<span class="com">// :739–743  残差方程 → createResidual (:794) → RESIDUAL / ARRAY_RESIDUAL / FOR_RESIDUAL</span>
+<span class="com">// :754–759  雅可比：</span>
+<span class="com">// reactivate this once nonlinear loops actually work</span>
+<span class="kw">if</span> <span class="kw">false</span> <span class="kw">and</span> Util.isSome(strict.jac) <span class="kw">then</span>                                             <span class="ln">:756</span>
+  (jacobian, simCodeIndices) := SimJacobian.create(Util.getOption(strict.jac), …);
+<span class="kw">else</span>
+  jacobian := NONE();
+<span class="kw">end if</span>;
+<span class="com">// :760–770  一律构造 NONLINEAR_SYSTEM(…, torn = true)，返回 NONLINEAR(system, NONE())</span></code></pre>
+<p>三个后果，全部能在生成代码里验证：</p>
+<table>
+  <tr><th>源码事实</th><th>生成代码里的样子（Loop / LinLoop，1.25）</th></tr>
+  <tr><td><code>comp.linear</code> 在这里根本没被读；<code>LinearSystem.convert</code> 整段被注释（<span class="fileref">:1357–1379</span> <code>/* ToDo: fix this</code>）；<code>Block.convert</code> 没有 <code>case LINEAR()</code>（<span class="fileref">:1151</span> <code>ToDo: add all the other cases here!</code>）</td><td>LinLoop 明明是线性环（<code>v = R1·i1</code>, <code>v = R2·i2</code>, <code>i1 + i2 = I</code>），<code>LinLoop_03lsy.c</code> 是空文件，环落在 <code>LinLoop_06inz.c</code> / <code>LinLoop.c</code> 里的 <code>type: NONLINEAR</code>、<code>nonlinearSystemData[1]</code></td></tr>
+  <tr><td>雅可比 <code>if false</code> 丢弃</td><td><code>Loop_02nls.c:217</code>：<code>analyticalJacobianColumn = NULL; jacobianIndex = -1;</code> → 运行时用<strong>数值差分</strong>雅可比，第 11 节的符号结果白算了</td></tr>
+  <tr><td><code>NONLINEAR</code> → <code>SES_NONLINEAR</code>，eqAttr 用默认值（<span class="fileref">:1145</span> 注释 <code>/* dangerous! */</code>）</td><td>—</td></tr>
+</table>
+<p>生成的残差函数（<code>Loop_02nls.c</code>，模板 <code>CodegenC.tpl:668</code> <code>simulationFile_nls</code>）——就是第 8 节四个 <code>$RES_*</code> 的 C 版本：</p>
+<pre><code><span class="kw">void</span> <span class="fn">residualFunc6</span>(RESIDUAL_USERDATA* userData, <span class="kw">const double</span>* xloc, <span class="kw">double</span>* res, <span class="kw">const int</span>* iflag)
+{
+  <span class="com">/* iteration variables */</span>
+  (… realVars[realVarsIndex[2]] <span class="com">/* x */</span>) = xloc[0];   (… <span class="com">/* y */</span>) = xloc[1];
+  (… <span class="com">/* w */</span>) = xloc[2];                             (… <span class="com">/* $FUN_1 */</span>) = xloc[3];
+  <span class="com">/* body */</span>
+  res[0] = -1.0 + (0.2) * (y * x) - w;
+  res[1] = (2.0) * y + w - x;
+  res[2] = sin(w) - $FUN_1;
+  res[3] = z + $FUN_1 - y;
+}
+<span class="com">// Loop_initialNonLinearSystem 里注册：size = 4, residualFunc = residualFunc6, jacobianIndex = -1</span></code></pre>
+<p>
+  运行时 <code>SimulationRuntime/c/simulation/solver/nonlinearSystem.c</code> 在 <code>functionODE</code> 里遇到这个系统时调 <code>solve_nonlinear_system</code>，默认 Hybrd（MINPACK）或 Newton，
+  用上一步的解做初值（<code>nlsxOld</code>）。Loop 跑 0→1 秒：<code>47 steps taken · 64 calls of functionODE</code>，每次 <code>functionODE</code> 里都要收敛一次 4 维牛顿。撕裂本来能把这 4 维变成 1 维——这就是它的价值，也是新后端还没兑现的部分。
+</p>
+
+<h2 id="flags"><span class="n">13.</span> Flags 与已知边界</h2>
+<table>
+  <tr><th>Flag</th><th>Flags.mo</th><th>新后端读它的地方</th></tr>
+  <tr><td><code>--tearingMethod</code>（默认 <code>cellier</code>）</td><td class="fileref">:836–844</td><td class="fileref">NBTearing.mo:247</td></tr>
+  <tr><td><code>-d=tearingdump</code></td><td class="fileref">:256</td><td class="fileref">NBTearing.mo:147 :395 · NBSolve.mo:318</td></tr>
+  <tr><td><code>-d=dumpSolve</code></td><td class="fileref">:558</td><td class="fileref">NBSolve.mo:659 :697 …</td></tr>
+  <tr><td><code>-d=NLSanalyticJacobian</code>（默认 true）</td><td class="fileref">:334</td><td class="fileref">NBJacobian.mo:180</td></tr>
+  <tr><td><code>--generateDynamicJacobian</code>（A 矩阵，默认 numeric）</td><td class="fileref">:889</td><td class="fileref">NBJacobian.mo:292</td></tr>
+  <tr><td><code>-d=symjacdump</code> / <code>-d=dumpSparsePattern</code></td><td class="fileref">:258 :266</td><td class="fileref">NBJacobian.mo:124 :513</td></tr>
+</table>
+<p><strong>新后端完全忽略</strong>（<code>NBackEnd/</code> 下无引用）：<code>--maxSizeLinearTearing</code>、<code>--maxSizeNonlinearTearing</code>、<code>--tearingHeuristic</code>、<code>--noTearingForComponent</code>、<code>--setTearingVars</code> / <code>--setResidualEqns</code>、<code>--dynamicTearing</code>、<code>-d=tearingdumpV</code>。</p>
+<table>
+  <tr><th>TODO / 边界</th><th>位置</th></tr>
+  <tr><td>Cellier / omcTearing 未实现，都映射到 <code>minimal</code></td><td class="fileref">NBTearing.mo:256–257</td></tr>
+  <tr><td><code>MULTI_COMPONENT</code> 包成隐式环时只取第一个变量（"this is wrong!"）</td><td class="fileref">:208</td></tr>
+  <tr><td><code>guru</code> 不处理算法块；不检查 inner 方程是否真的可解</td><td class="fileref">:540 :544–545</td></tr>
+  <tr><td><code>minimal</code> 里 <code>Sorting.tarjan</code> 传的变量集合存疑（"probably need other variables and equations here?"）</td><td class="fileref">:455</td></tr>
+  <tr><td>环内依赖收集假设全依赖，对数组不精确</td><td class="fileref">NBStrongComponent.mo:1184 :793</td></tr>
+  <tr><td>torn loop 雅可比在 SimCode 侧被关闭</td><td class="fileref">NSimStrongComponent.mo:755–756</td></tr>
+  <tr><td><code>LINEAR</code> block 转换整段注释掉；无 <code>SES_LINEAR</code> 输出</td><td class="fileref">:1357–1379 :1151</td></tr>
+  <tr><td>if 方程的可解性一律 IMPLICIT（"TODO more thorough analysis"）</td><td class="fileref">NBAdjacency.mo:881</td></tr>
+</table>
+
+<h2 id="verify"><span class="n">14.</span> 动手验证</h2>
+<pre><code>$omc = <span class="str">"C:\dev\OpenModelica\build_cmake\install_cmake\bin\omc.exe"</span>
+&amp; $omc --newBackend -d=bltdump,tearingdump,backenddaeinfo --simCodeTarget=None -s Loop.mo      <span class="com"># 看 Tearing Result 与 Linear = true 的错判</span>
+&amp; $omc --newBackend --tearingMethod=guruTearing -d=tearingdump --simCodeTarget=None -s Loop.mo   <span class="com"># 没有注解 → INTERNAL_ERROR (:495)</span>
+omc --newBackend -d=bltdump -s Loop.mo                                                            <span class="com"># 1.25.0：能看到 [NLS] Jacobian 和 Linear = false</span>
+omc -d=tearingdump --simCodeTarget=None -s Loop.mo                                                <span class="com"># 旧后端对照：Cellier 真的撕成 1 个迭代变量</span></code></pre>
+<p>三个练习：</p>
+<ol>
+  <li>给 Loop 的 <code>w</code> 加 <code>annotation(__OpenModelica_tearingSelect = TearingSelect.prefer)</code>，用 <code>--tearingMethod=guruTearing</code> 跑，看 Inner Equations 里出现 <code>y = z + $FUN_1</code>、<code>x = 2y + w</code>，迭代变量只剩 <code>w</code>，残差只剩 1 条。再看 <code>Loop_02nls.c</code> 里 <code>residualFunc</code> 的 <code>/* inner equations */</code> 段不再是空的。</li>
+  <li>在 Loop 里加一个离散量：<code>Boolean b = x &gt; 0; </code>并让某条方程用 <code>if b then … else …</code>。默认 <code>minimal</code> 会把 <code>b</code> 抽进 inner，dump 里 <code>Mixed = true</code>。</li>
+  <li>写 <code>x = cos(x)</code> 这样一条单方程，看 Solve 怎么把它包成 1×1 的 <code>ALGEBRAIC_LOOP</code>（<code>-d=dumpSolve</code>）。</li>
+</ol>
+
+<footer>
+  行号基于工作区 <code>feat_OMEncryption</code> 分支（HEAD <code>3ceb0c9d06</code>）；dump 来自 <code>build_cmake/install_cmake/bin/omc.exe</code>（同一提交）与安装版 1.25.0；生成的 C 和运行统计来自 1.25.0。
+  返回 <a href="OMC-编译全流程导读.html">总览篇</a>。
+</footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ymc 编译器设计总览</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d0d7de;
+    --code-bg: #f6f8fa; --kw: #cf222e; --str: #0a3069; --com: #6e7781;
+    --fn: #8250df; --num: #0550ae; --accent: #0969da; --accent-bg: #ddf4ff;
+    --card: #f6f8fa; --line: #57606a; --warn-bg: #fff8c5; --warn: #9a6700;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #8b949e; --border: #30363d;
+      --code-bg: #161b22; --kw: #ff7b72; --str: #a5d6ff; --com: #8b949e;
+      --fn: #d2a8ff; --num: #79c0ff; --accent: #58a6ff; --accent-bg: #132436;
+      --card: #161b22; --line: #8b949e; --warn-bg: #2d2a14; --warn: #e3b341;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.75; font-size: 16px;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 2.5rem 1.5rem 6rem; }
+  header.hero { border-bottom: 1px solid var(--border); padding-bottom: 1.5rem; margin-bottom: 2rem; }
+  h1 { font-size: 2rem; margin: 0 0 .4rem; letter-spacing: -.02em; }
+  .sub { color: var(--muted); font-size: .95rem; margin: 0; }
+  .sub code { background: var(--code-bg); padding: .1em .4em; border-radius: 5px; font-size: .85em; }
+  h2 { font-size: 1.4rem; margin: 3rem 0 1rem; padding-top: .5rem; border-top: 1px solid var(--border); }
+  h2 .n { color: var(--accent); font-variant-numeric: tabular-nums; }
+  h3 { font-size: 1.1rem; margin: 1.8rem 0 .6rem; }
+  h4 { font-size: 1rem; margin: 1.4rem 0 .4rem; }
+  p { margin: .8rem 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: "SFMono-Regular", "Cascadia Code", Consolas, "Liberation Mono", monospace; font-size: .88em; }
+  p code, li code, td code { background: var(--code-bg); padding: .1em .4em; border-radius: 5px; color: var(--fg); }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.1rem; overflow-x: auto; font-size: .84rem; line-height: 1.6; margin: 1rem 0; }
+  pre code { background: none; padding: 0; color: var(--fg); }
+  .lead { background: var(--accent-bg); border-left: 3px solid var(--accent); padding: .9rem 1.1rem; border-radius: 0 8px 8px 0; margin: 1.2rem 0; }
+  .note { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: .9rem 1.1rem; margin: 1.2rem 0; font-size: .95rem; }
+  .note .tag { font-weight: 600; color: var(--accent); }
+  .warn { background: var(--warn-bg); border: 1px solid var(--warn); border-radius: 8px; padding: .9rem 1.1rem; margin: 1.2rem 0; font-size: .95rem; }
+  .warn .tag { font-weight: 600; color: var(--warn); }
+  .toc { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.4rem; margin: 1.5rem 0 2.5rem; }
+  .toc-title { font-weight: 600; margin: 0 0 .5rem; font-size: .9rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .toc ol { margin: 0; padding-left: 1.4rem; }
+  .toc li { margin: .25rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .9rem; }
+  th, td { border: 1px solid var(--border); padding: .45rem .65rem; text-align: left; vertical-align: top; }
+  th { background: var(--card); font-weight: 600; }
+  .fileref { color: var(--muted); font-size: .82rem; font-family: "SFMono-Regular", Consolas, monospace; }
+  .diagram { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem; overflow-x: auto; font-family: "SFMono-Regular", Consolas, monospace; font-size: .82rem; line-height: 1.65; white-space: pre; color: var(--fg); }
+  .card { border: 1px solid var(--border); border-radius: 8px; padding: .8rem 1.1rem; margin: 1rem 0; }
+  .card h4 { margin: 0 0 .4rem; }
+  .card .meta { color: var(--muted); font-size: .85rem; margin-bottom: .4rem; }
+  .lvl { display: inline-block; font-size: .78rem; padding: .05em .5em; border-radius: 999px; border: 1px solid var(--border); margin-left: .4em; vertical-align: middle; }
+  .lvl.h { background: #ffebe9; color: #a40e26; border-color: #ff8182; }
+  .lvl.m { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
+  .lvl.l { background: #dafbe1; color: #116329; border-color: #4ac26b; }
+  @media (prefers-color-scheme: dark) { .lvl.h { background: #3a1416; color: #ff9b9b; } .lvl.l { background: #12261e; color: #7ee787; } }
+  dl { margin: .4rem 0; } dt { font-weight: 600; margin-top: .5rem; } dd { margin: .1rem 0 .3rem 1.2rem; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>ymc 编译器设计总览</h1>
+  <p class="sub">整合篇 · 设计思路 · 难点账本 · 分阶段路线 · 基线 OMC <code>3ceb0c9d06</code>（新前端 <code>NFFrontEnd/</code> + 新后端 <code>NBackEnd/</code>）· 规范 MLS 3.6 · 2026-09-14</p>
+</header>
+
+<p class="lead">
+  <strong>一句话：</strong>Modelica 编译器不是在翻译语句，而是在<strong>把一组面向对象的方程压平成方程组，再把方程组因果化成一个能按时间步进求值的程序</strong>。
+  ymc 的设计思路只有一条主线：<strong>拿 OMC 当标准答案，把这条流水线切成可以单独验证的段，每段用 C++ 重写、用 OMC 的输出差分验收。</strong>
+</p>
+
+<div class="note">
+  <span class="tag">本文与其他文档的关系。</span>
+  《自研编译器技术方案-C++.md》是<em>规范</em>（编码规则、可调试规则、验收命令、任务卡模板），本文是<em>地图</em>：先看全局，再看每个难点难在哪、OMC 怎么做、ymc 打算怎么做、怎么验证。
+  八篇 OMC 导读是每个难点的<em>细读</em>。三者的分工见 <a href="#docs">§7 文档地图</a>。文中所有 OMC 行号都已在基线提交上 grep 核对；所有"OMC 现状"都来自实跑。
+</div>
+
+<nav class="toc">
+  <p class="toc-title">目录</p>
+  <ol>
+    <li><a href="#goal">目标与边界（一页纸）</a></li>
+    <li><a href="#map">全景：流水线、中间表示、两条接缝</a></li>
+    <li><a href="#decisions">六个核心设计决定</a></li>
+    <li><a href="#hard">难点账本（前端 9 · 后端 9 · 生成与运行时 3 · 工程 6）</a></li>
+    <li><a href="#stages">难点 × 阶段：谁在哪一步被解决</a></li>
+    <li><a href="#verify">验证体系：为什么这条路线能走稳</a></li>
+    <li><a href="#risk">风险、未决与体量参照</a></li>
+    <li><a href="#docs">文档地图</a></li>
+  </ol>
+</nav>
+
+<!-- ============================================================ -->
+<h2 id="goal"><span class="n">0.</span> 目标与边界（一页纸）</h2>
+
+<table>
+  <tr><th style="width:9em">项</th><th>决定</th></tr>
+  <tr><td>对标</td><td>Dymola（能力上限：动态状态选择、成熟撕裂、内联积分、数值鲁棒性）</td></tr>
+  <tr><td>参考实现</td><td>OMC 新前端 + 新后端。旧后端 <code>BackEnd/</code> 只在新后端缺功能时看（动态状态选择、Cellier 撕裂）</td></tr>
+  <tr><td>验收对象</td><td>OMC <code>testsuite/</code>：3934 个 <code>.mos</code> + 2641 个压平 <code>.mo</code>。OMC 能跑的 ymc 必须跑；不在范围的<strong>显式标 skip 并计数</strong></td></tr>
+  <tr><td>语言</td><td>C++20，双工具链零警告（GCC 默认，MSVC 调试 + ASan），三套预设已验证</td></tr>
+  <tr><td>分工</td><td>核心（解析、实例化、后端算法、代码生成、运行时）你手写；基建（构建、测试运行器、oracle 脚本、dump/diff、任务卡、评审）Claude 提供</td></tr>
+  <tr><td>第一版不做</td><td>同步时钟、状态机、数组保持（不标量化）、DAE 模式、动态优化、FMI、OMEdit 接口、C++ 运行时目标。全部放 S8 或永久排除，见方案 §1.4</td></tr>
+</table>
+
+<h3>两个决定验收方式的硬事实</h3>
+<ul>
+  <li><strong>2030 个 <code>.mos</code> 钉在旧前端上</strong>（<code>// cflags: -d=-newInst</code>）。旧前端的压平文本和新前端不同，ymc 只实现一套语义（对齐新前端），所以这些用例<strong>只做数值级验收</strong>，不做文本级。</li>
+  <li><strong>脚本 API 决定了"能跑用例"的门槛</strong>：<code>getErrorString</code> 出现在 3269 个文件、<code>simulate</code> 2068、<code>loadFile</code> 1232、<code>loadModel</code> 1136、<code>loadString</code> 987。没有一个 <code>.mos</code> 解释器子集，后端再好也跑不了 testsuite。这就是为什么 S4 被排在 S5 前面。</li>
+</ul>
+
+<h3>六条约束怎么落成设计</h3>
+<table>
+  <tr><th style="width:11em">你的约束</th><th>设计上的直接后果</th></tr>
+  <tr><td>C++ 干中学</td><td>每阶段只引入该阶段必须的语言特性；核心算法不写模板、不用继承表示 IR、不用 <code>variant</code></td></tr>
+  <tr><td>核心手写</td><td>任务卡给接口 + 测试 + 坑位，不给实现；评审看"来源标注、不变量、为什么注释、零警告"</td></tr>
+  <tr><td>OMC 用例全支持</td><td>验收对象是 testsuite 本身，运行器复刻 <code>rtest</code> 协议；skip 有清单有计数</td></tr>
+  <tr><td>路线清晰分阶段</td><td>九个阶段，阶段间用<strong>文本 IR</strong>隔开，任何阶段可以从文件单独启动</td></tr>
+  <tr><td>不臆想</td><td>每条语义结论三选一来源：MLS 章节 / OMC 文件:行 / 探针模型实跑；写不出来源的进 <code>open-questions.md</code></td></tr>
+  <tr><td>全部可调试</td><td>稳定 Id、SourceLoc 贯穿到生成的 C、<code>--dump-after</code>、<code>--trace</code>、确定性输出、ASan、natvis</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="map"><span class="n">1.</span> 全景：流水线、中间表示、两条接缝</h2>
+
+<p>每个箭头上是数据结构，每个方框是把它变成下一种数据结构的阶段。<strong>ymc 的阶段划分与 OMC 一一对应</strong>，这不是巧合，是为了每一段都能和 OMC 并排比。</p>
+
+<div class="diagram">  .mo 源码
+     │  S1  词法 + 手写递归下降           OMC: Parser/Modelica.g (ANTLR3, 2140 行) + parse.c
+     ▼
+  Absyn ──────── 文本: unparse 回 Modelica ── 验收: parse→unparse→parse 两次 byte-identical
+     │  S2  归一化 + 包加载               OMC: AbsynToSCode.mo:73 translateAbsyn2SCode, ClassLoader.mo:823
+     ▼
+  SCode ──────── 文本: .scode（仅调试）
+     │  S3  查找 / 实例化 / 修饰 / 类型 / connect / 求值 / 压平 / 标量化
+     │        OMC: NFInst.mo:148 instClassInProgram → NFTyping.mo:124 → NFFlatten.mo:320
+     ▼
+  FlatModel ──── 文本: Base Modelica  ◀━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 接缝 ①
+     │  S5  lower → 预处理 → 因果化 → 指标约简 → 初始化 → 求解/撕裂/雅可比
+     │        OMC: NBackendDAE.mo:259 lower / :275 main；NBCausalize.mo:247；NBResolveSingularities.mo:67；
+     │             NBInitialization.mo:82；NBSolve.mo:92；NBTearing.mo:138；NBJacobian.mo:109
+     ▼
+  BackendDAE ─── 文本: .bdae（对齐 -d=bltdump 块格式）
+     │  S6  分桶 + C 打印器              OMC: NSimCode.mo:272/:493 → CodegenC.tpl:1276 (Susan 模板)
+     ▼
+  C 源码 + init.xml + info.json ── 填回调表 struct OpenModelicaGeneratedFunctionCallbacks  ◀━━ 接缝 ②
+     │  S6 先链 OMC 的 libSimulationRuntimeC；S7 逐块换成自研 runtime/
+     ▼
+  M.exe ──▶ M_res.mat ──▶ 与 OMC 的 .mat 逐变量插值比对（L2）
+
+  S4（.mos 脚本子集）横跨所有阶段：loadFile / instantiateModel / simulate / val / diffSimulationResults …</div>
+
+<h3>两条接缝为什么重要</h3>
+<div class="card">
+  <h4>接缝 ①：Base Modelica / FlatModel 文本</h4>
+  <p class="meta">OMC <code>--baseModelicaOptions</code> 把新前端的 FlatModel 打成标准文本（<span class="fileref">NFInst.mo:227-229 / :247-249 → InstUtil.dumpFlatModel</span>）</p>
+  <p>它同时是<strong>前端的验收 oracle</strong>和<strong>后端的输入格式</strong>。后果：后端（S5）可以拿 OMC 产出的 Base Modelica 文件启动，不必等前端（S3，最重的阶段）写完；调试时可以把出错阶段的输入存成文件反复重放。</p>
+</div>
+<div class="card">
+  <h4>接缝 ②：运行时回调表 ABI</h4>
+  <p class="meta"><span class="fileref">include/omc/c/openmodelica_func.h:56</span> <code>struct OpenModelicaGeneratedFunctionCallbacks</code>（<code>functionODE</code> :109、<code>functionAlgebraics</code> :113、<code>functionDAE</code> :117、<code>functionInitialEquations</code> :163 …）</p>
+  <p>S6 生成的 C 只要填满这张表、链接 OMC 1.25.0 的 <code>libSimulationRuntimeC</code>，就能<strong>白嫖 OMC 全部求解器、事件处理、初始化、结果文件</strong>来做数值验收。S7 再一块一块换成自研运行时，每换一块都有"正确答案"可比。这条接缝把"运行时数值鲁棒性"这个最难磨的问题推迟到了后端已经正确之后。</p>
+</div>
+
+<h3>阶段与验收级别</h3>
+<table>
+  <tr><th>阶段</th><th>输入 → 输出</th><th>验收</th><th>testsuite 子集</th><th>预估</th></tr>
+  <tr><td>S0 基建</td><td>—</td><td>三套预设全绿；运行器对 OMC 自身跑 <code>flattening/modelica/scoping</code> 全 PASS</td><td>—</td><td>2 周</td></tr>
+  <tr><td>S1 解析</td><td>文本 → Absyn</td><td>2641 个 <code>.mo</code> + MSL 全部文件零错误；round-trip 两次一致</td><td><code>flattening/</code>（仅解析）</td><td>3–4 周</td></tr>
+  <tr><td>S2 SCode</td><td>Absyn → SCode</td><td>加载 MSL 4.0.0 无错；元素计数与 OMC 一致</td><td>—</td><td>2 周</td></tr>
+  <tr><td>S3 实例化</td><td>SCode → FlatModel</td><td><strong>L1 文本一致</strong>（Base Modelica diff）；MSL Examples 压平通过率</td><td><code>flattening/modelica/*</code>（分 7 个子阶段）</td><td>4–6 个月</td></tr>
+  <tr><td>S4 脚本</td><td><code>.mos</code> → 逐语句输出</td><td><strong>L3 脚本一致</strong>；25 个 API 输出格式对齐</td><td><code>mosfiles</code>（51）</td><td>2–3 周</td></tr>
+  <tr><td>S5 后端</td><td>FlatModel → BackendDAE</td><td>结构级：<code>backenddaeinfo</code> 统计、<code>bltdump</code> 块序列一致；数值级要等 S6</td><td><code>simulation/modelica/*</code>（分 5 个子阶段）</td><td>3–4 个月</td></tr>
+  <tr><td>S6 代码生成</td><td>BackendDAE → C → exe</td><td><strong>L2 数值一致</strong>（借 OMC 运行时）</td><td><code>others, equations, parameters, arrays, events</code> …</td><td>1 个月</td></tr>
+  <tr><td>S7 运行时</td><td>自研 C 运行时</td><td>S6 通过的用例全部在自研运行时 PASS（差分 <code>.mat</code>）</td><td>同 S6</td><td>2–3 个月</td></tr>
+  <tr><td>S8 Dymola 级</td><td>撕裂补全、动态状态选择、时钟、状态机、FMI …</td><td>逐项单独出方案</td><td><code>synchronous, daemode, fmi</code> …</td><td>长期</td></tr>
+</table>
+<p class="note"><span class="tag">预估口径。</span>方案里的预估按"一人全职 + 有经验"。C++ 基础弱、边学边写，S1–S3 至少乘 1.5；但时间大部分花在 S3，这正是学到最多的地方，不要为了赶进度砍它。</p>
+
+<!-- ============================================================ -->
+<h2 id="decisions"><span class="n">2.</span> 六个核心设计决定</h2>
+<p>这六条是"第一天定下、之后改不动"的决定。每条写清楚<strong>为什么</strong>，因为你以后会在某个深夜想推翻它们。</p>
+
+<h3>D1 IR 用 <code>struct</code> + <code>enum class Kind</code> + <code>switch</code>，不用继承、不用 <code>std::variant</code></h3>
+<p>OMC 的 MetaModelica 代码 90% 是 <code>match</code> + 不可变 uniontype，翻成 C++ 有三条路：class 继承 + visitor（啰嗦，调试器里看到的是基类指针）、<code>std::variant</code> + <code>std::visit</code>（编译慢、模板报错读不懂、调试器里看不清）、<strong>tagged struct + switch</strong>。选第三条，原因只有一个：它最接近 <code>match</code> 的原味，且配 <code>-Werror=switch</code> / <code>/we4062</code> 能得到<strong>编译期穷尽检查</strong>：新增一种 <code>ExprKind</code>，所有漏处理的 <code>switch</code> 一起报错。这是保证"改一处、全链路一致"的唯一廉价手段。</p>
+
+<h3>D2 内存：Arena + 强类型 <code>Id&lt;T&gt;</code> + Symbol 驻留，IR 里禁止 <code>shared_ptr</code> 和裸指针</h3>
+<p>OMC 的实例树（<code>InstNode</code>）是<strong>可变、大量共享</strong>的：一个类节点被几百个组件引用，修饰沿树往下推时原地改。C++ 里要么 <code>shared_ptr</code> 到处飞（循环引用、调试器里全是引用计数），要么 <strong>arena 拥有一切、节点之间用 32 位整数 Id 互指</strong>。选后者，附带三个好处：Id 稳定且可打印（两次运行同 Id，dump 能对比）；<code>Id&lt;Expr&gt;</code> 和 <code>Id&lt;Var&gt;</code> 是不同类型，传错直接编译错；序列化天然简单。代价是一条必须刻进肌肉的规则：<strong>持有 Id，不持有引用跨越 <code>add()</code></strong>——vector 扩容会让引用悬垂，这是你在 T-S0-02 里要亲手做的实验。</p>
+
+<h3>D3 每个 pass 有文本 IR，至少 Base Modelica 与 <code>.bdae</code> 可回读</h3>
+<p>这是"全部可调试"的核心机制：<code>--dump-after=&lt;pass&gt;</code> 看任意一层，<code>--from=&lt;file&gt; --run=&lt;pass&gt;</code> 单独重放一层。它同时决定了工程顺序：后端可以在前端完成前用 OMC 的输出开工。格式对齐 OMC 的 dump（<code>-d=bltdump</code>、<code>-d=dumpSimCode</code>），并排 diff 才有意义。</p>
+
+<h3>D4 先标量化，数组保持留作研究题</h3>
+<p>OMC 新后端最大的特色是<strong>不标量化</strong>（<code>for</code> 方程整段保留，<code>causalizePseudoArray</code> <span class="fileref">NBCausalize.mo:247</span>），这是团队做了多年还在做的事。ymc 第一版走 <code>NFScalarize</code>（<span class="fileref">NFInst.mo:236</span>）那条路：全部展开成标量。代价是 MSL 大模型编译慢、生成的 C 大；收益是后端所有算法回到教科书形态（邻接矩阵是 0/1、匹配是标准二分图匹配），验收也简单。数组保持排 S8 之后，作为独立研究题。</p>
+
+<h3>D5 运行时先借后换</h3>
+<p>见接缝 ②。数值鲁棒性（事件定位、步长控制、同伦初始化、非线性求解器的阻尼）是"只能靠海量模型磨"的东西，没有正确答案就自己写，等于在没有测试的情况下调数值代码。先借 OMC 运行时把后端验证到 L2，再逐块替换，每块替换都是差分回归。</p>
+
+<h3>D6 确定性：影响输出顺序的遍历禁止走 <code>unordered_*</code></h3>
+<p>L1 验收是文本 diff，OMC 的变量/方程顺序是确定的，ymc 必须复现同一顺序。这条规则逼你把遍历顺序做对，也让"同一输入两次运行 byte-identical"成为一条随时可查的不变量。</p>
+
+<!-- ============================================================ -->
+<h2 id="hard"><span class="n">3.</span> 难点账本</h2>
+<p>每条难点固定四栏：<strong>难在哪 / OMC 现状（实证）/ ymc 策略 / 怎么验证</strong>。难度标签：<span class="lvl h">硬</span> 研究级或规范空白多；<span class="lvl m">中</span> 算法清楚但细节多；<span class="lvl l">体力</span> 量大但路清楚。</p>
+
+<h3>3.1 前端：真正的硬骨头（占总工作量 60% 以上）</h3>
+<p class="lead"><strong>难点不在解析，在实例化。</strong>解析器手写递归下降一两周就能过 MSL；难的是把面向对象的模型变成 FlatModel 那一步。OMC 新前端 <code>NFFrontEnd/</code> 是 81,913 行 MetaModelica（今日统计），而且已经是重写过一次的干净版。</p>
+
+<div class="card">
+  <h4>F1 名字查找与作用域 <span class="lvl m">中</span></h4>
+  <p class="meta">MLS 3.6 §5 · OMC <code>NFLookup.mo</code>、<code>NFInst.mo:185 instantiateRootClass</code></p>
+  <dl>
+    <dt>难在哪</dt><dd>嵌套类、<code>import</code> 四种形式、<code>encapsulated</code> 截断、<code>inner/outer</code> 跨层配对、enclosing scope 逐层回溯、<code>extends</code> 引入的名字与本地名字的优先级、条件组件。规则本身能背下来，组合起来的边角非常多。</dd>
+    <dt>ymc 策略</dt><dd>S3a：先做无数组、无修饰的骨架，实例树 = arena + Id；每条查找规则的函数头注释引用 MLS 小节。</dd>
+    <dt>验证</dt><dd><code>flattening/modelica/scoping</code>、<code>packages</code>、<code>declarations</code> L1 全 PASS。</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h4>F2 修饰合并 + 继承 + redeclare <span class="lvl h">硬</span></h4>
+  <p class="meta">MLS §7（继承、修饰、重声明）· OMC <code>NFInst.mo:194 instExpressions</code>、<code>NFModifier.mo</code>、<code>NFInst</code> 的 <code>expand</code></p>
+  <dl>
+    <dt>难在哪</dt><dd><code>extends A(x=1, redeclare B b)</code> 的修饰要沿继承链和组件树往下推、合并、覆盖；<code>each</code>、<code>final</code>、<code>replaceable/constrainedby</code> 的类型约束检查；<code>redeclare class</code> 与 <code>redeclare component</code> 语义不同。这是 Modelica 里出名最绕的一块，MSL 的每个 <code>Interfaces.Partial*</code> 都在用它。</dd>
+    <dt>ymc 策略</dt><dd>S3b。修饰合并单独 dump（对齐 OMC 的 modifier 打印），每个规范角落一个探针模型 + OMC 输出存档。</dd>
+    <dt>验证</dt><dd><code>extends</code>、<code>modification</code>、<code>redeclare</code>、<code>scodeinst</code> 子集 L1。</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h4>F3 类型系统与数组维度 <span class="lvl m">中</span></h4>
+  <p class="meta">MLS §6（类型关系）、§10（数组）· OMC <code>NFTyping.mo:124 typeClass</code>（typeComponents :140 → typeBindings :950 → typeClassSections :2727）、<code>NFType.mo</code>、<code>NFDimension.mo</code></p>
+  <dl>
+    <dt>难在哪</dt><dd>结构化子类型（插头兼容）；数组维度可能来自绑定值或 <code>:</code>（未知，要从绑定反推）；<code>Real</code> 的属性（unit/min/max/start/nominal）是类型的一部分；切片、<code>for</code> 表达式、归约；函数重载靠 <code>operator record</code>。</dd>
+    <dt>ymc 策略</dt><dd>S3c。类型对象 arena 化 + hash-consing（同结构同 Id），维度推断分"已知/待推/未知"三态。</dd>
+    <dt>验证</dt><dd><code>types</code>、<code>arrays</code>、<code>enums</code>、<code>operators</code>、<code>built-in-functions</code>。</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h4>F4 编译期求值 = 编译器里内置一个 Modelica 函数解释器 <span class="lvl h">硬</span></h4>
+  <p class="meta">MLS §12（函数）、§3（表达式）· OMC <code>NFCeval.mo</code>、<code>NFEvalFunction.mo</code>、<code>NFEvalConstants.mo</code>、<code>NFInst.mo:198 updateImplicitVariability</code></p>
+  <dl>
+    <dt>难在哪</dt><dd>数组维度、结构参数、<code>if</code> 方程的参数条件都要在编译期算出来，所以编译器必须能<strong>执行</strong> Modelica 函数：record、数组、循环、递归、以及白名单内的 <code>external "C"</code>（MSL 的表格与字符串函数）。变量性推断（哪个 parameter 其实是 structural）决定了什么必须求值。</dd>
+    <dt>ymc 策略</dt><dd>S3e。解释器的值系统与 S4 脚本层的 <code>Values</code> 共用；外部 C 函数白名单从 MSL 实际用到的列表倒推。</dd>
+    <dt>验证</dt><dd><code>algorithms-functions</code>、<code>records</code>、<code>external-functions</code>、<code>external-objects</code>（L1）；<code>functions_eval</code>（L2）。</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h4>F5 connect 语义：flow / stream / expandable / 过约束图 <span class="lvl h">硬</span></h4>
+  <p class="meta">MLS §9（连接）、§15（流连接器）· OMC <code>NFFlatten.mo:2433 resolveConnections</code>、<code>NFOCConnectionGraph.mo</code>、<code>NFArrayConnections.mo</code> · 细读：《NFFlatten-方程与连接导读》</p>
+  <dl>
+    <dt>难在哪</dt><dd>flow 变量求和的符号约定；stream 的 <code>inStream/actualStream</code> 展开公式（含正则化 <code>positiveMax</code>）；expandable connector 的成员是连接时才确定的；过约束连接图（<code>Connections.root/branch/potentialRoot</code>）要做生成树并删边。MSL 的 Fluid、MultiBody 分别把 stream 和过约束图用到极限。</dd>
+    <dt>ymc 策略</dt><dd>S3d。连接集用并查集；过约束图单独一个 pass、单独 dump。</dd>
+    <dt>验证</dt><dd><code>connectors</code>、<code>streams</code>、<code>expandable</code>。</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h4>F6 平衡检查与诊断质量 <span class="lvl m">中</span></h4>
+  <p class="meta">MLS §4.7（平衡模型）· OMC <code>NFVerifyModel.mo</code>（<span class="fileref">NFInst.mo:262</span>）</p>
+  <dl>
+    <dt>难在哪</dt><dd>"连接器的势变量数 = 流变量数"、partial 类的计数规则、模型是否平衡——规则本身一页纸，但用户对工具的第一印象就是<strong>报错说了什么</strong>。而且 L3 验收要求 <code>getErrorString</code> 的文本和 OMC 一致（3269 个文件用它）。</dd>
+    <dt>ymc 策略</dt><dd><code>Diagnostics</code> 从 S0 就带错误码 + SourceLoc；消息文本逐条对齐 OMC 的 <code>Error.mo</code> 模板，错误位置一致优先、措辞其次。</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h4>F7 语法本身 <span class="lvl l">体力</span></h4>
+  <p class="meta">MLS 3.6 文法附录 · OMC <code>Parser/Modelica.g</code>（<code>stored_definition</code> :225、表达式 :1554、脚本语句 :2246）、<code>Dump.mo</code>（反解析）</p>
+  <dl>
+    <dt>难在哪</dt><dd>不难，但宽：注解（<code>annotation</code>）是完整的修饰语法；<code>.</code> 与数字、Q-IDENT、字符串转义的词法边角；表达式优先级；<code>.mos</code> 脚本语句和表达式共用文法。手写递归下降 + Pratt 表达式解析足够，禁止解析器生成器是为了让你完全掌控错误恢复。</dd>
+    <dt>验证</dt><dd>round-trip：parse → unparse → parse → unparse 两次输出 byte-identical，对 2641 个 <code>.mo</code> + 整个 MSL。这是免费的大测试。</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h4>F8 MSL 4.0.0 全量压平 = 真正的前端验收 <span class="lvl h">硬</span></h4>
+  <p class="meta">MSL 位置 <code>%APPDATA%\.openmodelica\libraries\Modelica 4.0.0+maint.om</code> · 验收 oracle：OMC <code>instantiateModel</code> / Base Modelica 输出</p>
+  <dl>
+    <dt>难在哪</dt><dd>MSL 用到了 F1–F7 的每一条，而且是同时用。OMC 前端能到今天，靠的是上千个 testsuite 用例和十几年"Dymola 是怎么做的"的经验——规范有大量空白角落。另外是<strong>性能</strong>：大模型压平要快，cref 哈希、避免深拷贝、interning 缺一不可（OMC 新前端花了几年才快起来，基线耗时待测，方案 §8 #5）。</dd>
+    <dt>ymc 策略</dt><dd>S3g 用 MSL 全部 <code>Examples</code> 的 L1 diff 作为退出条件；通过率报告按包分类，逐包攻。</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h4>F9 同步时钟与状态机（第一版不做）<span class="lvl h">硬</span></h4>
+  <p class="meta">MLS §16、§17 · OMC <code>NBPartitioning.mo:472</code>（时钟分区）</p>
+  <p>单独两章规范，有自己的分区、求解和代码生成路径。testsuite 里 <code>synchronous</code> 22 + <code>synchronous_c</code> 18 + 状态机 14 个用例，标 skip 计数，S8 再做。</p>
+</div>
+
+<div class="warn"><span class="tag">C++ 特有的痛。</span>OMC 前端到处是"一个节点被很多地方共享并原地修改"，这正是 D1/D2 在第一天就要定死的原因。你会踩的第一个大坑不是算法，是<strong>arena 扩容后悬垂引用</strong>——T-S0-02 的强制实验就是为了让你在 100 行代码里先踩一次，而不是在 3 万行里。</div>
+
+<h3>3.2 后端：算法都有论文，难在"配合"</h3>
+<p class="lead">单个算法不难：匹配、Tarjan、Pantelides 各是几百行。难的是它们<strong>互相咬合</strong>的地方，也正是这几天在新后端里实证看到"留白"的地方。OMC 新后端 33,047 行、旧后端 125,409 行（今日统计）——后者的体量差就是"配合"的成本。</p>
+
+<div class="card">
+  <h4>B1 别名消除 <span class="lvl m">中</span></h4>
+  <p class="meta">OMC <code>2_Pre/NBAlias.mo:118</code>（1,363 行）；旧后端 <code>RemoveSimpleEquations.mo</code> 更大</p>
+  <dl>
+    <dt>难在哪</dt><dd>看着简单（<code>a = b</code> 合并），实际要处理符号与增益、start/nominal/min/max 属性冲突、<strong>留谁当状态</strong>（StateSelect、fixed）、替换要贯穿 when/initial 段。实证：Demo 模型里 Alias 模块把 <code>y</code> 选成了状态而不是 <code>x</code>，这类"哪个变量活下来"的决定直接影响后面每一层的 dump。</dd>
+    <dt>ymc 策略</dt><dd>S5a。别名集用并查集 + 代表元选择规则显式写成表（优先级：StateSelect &gt; fixed start &gt; 用户变量 &gt; 生成变量）；代表元选择单独 dump 并与 OMC 对比。</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h4>B2 匹配 + 排序（因果化） <span class="lvl l">体力</span></h4>
+  <p class="meta">OMC <code>NBCausalize.mo:247</code>；<code>NBMatching.mo:394 augmentPath</code>（增广路）、<code>:428 PFPlusExternal</code>（外部 C 实现的 PF+）；<code>NBSorting.mo:233 tarjan</code>；<code>NBAdjacency.mo:81 strictness / :838 refine</code> · 细读：《NFBackend-匹配与排序导读》</p>
+  <dl>
+    <dt>难在哪</dt><dd>算法是教科书的（增广路二分匹配 + Tarjan 强连通分量）。难点在<strong>邻接矩阵怎么建</strong>：一个变量出现在方程里不等于能从这条方程解出它（可解性靠偏导判断，OMC 用 strictness 分级），以及 NB 的伪数组邻接。ymc 走标量化，邻接就是 0/1 矩阵，这一条被 D4 简化掉了。</dd>
+    <dt>验证</dt><dd><code>backenddaeinfo</code> 的强连通分量按类型计数、<code>bltdump</code> 块大小序列与 OMC 一致。</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h4>B3 指标约简 + 状态选择 <span class="lvl h">硬</span>（对标 Dymola 的第一道分水岭）</h4>
+  <p class="meta">Pantelides 1988；Mattsson–Söderlind 1993（哑导数）· OMC <code>NBResolveSingularities.mo:67 indexReduction</code>、<code>:450 getMSSS</code>、静态/动态分支 <code>:292-308</code>；<code>NBMatching.mo:119 singular</code> · 细读：《NB-指标约简导读》</p>
+  <dl>
+    <dt>OMC 现状（实证）</dt><dd>1.25.0 发行版的新后端<strong>没有</strong>指标约简；工作区 dev 版有 Pantelides + <strong>静态</strong>哑导数，动态状态选择分支直接 fail；带 <code>StateSelect</code> 的单摆（PendulumSS）让 dev omc 陷入无限循环并写出 1.5 GB 输出。动态选择只在旧后端 <code>BackEnd/IndexReduction.mo</code>（StateSet）+ 运行时 <code>stateset.c</code>。</dd>
+    <dt>难在哪</dt><dd>Pantelides 只是前半段。单摆这类模型要在<strong>运行时</strong>按雅可比主元换状态，编译器（StateSet 生成、每个候选集的方程）和求解器（<code>stateset.c</code>）要配合。这是 Dymola 稳定支持而 OMC 新后端还没做到的能力。</dd>
+    <dt>ymc 策略</dt><dd>S5c 做 Pantelides + 静态哑导数（与 dev NB 对齐，可差分）；动态状态选择放 S8，参照旧后端 + 运行时接口（方案 §8 #9 待读）。</dd>
+    <dt>验证</dt><dd><code>indexreduction</code>（8）、<code>start_value_selection</code>（8）；动态选择用例在 S8 前标 skip。</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h4>B4 符号微分 <span class="lvl m">中</span></h4>
+  <p class="meta">OMC <code>Util/NBDifferentiate.mo</code></p>
+  <dl>
+    <dt>难在哪</dt><dd>四个客户共用它：指标约简（方程求导）、雅可比、线性判定、方程求解。要支持 <code>annotation(derivative=…)</code> 的函数、record、数组、<code>smooth/noEvent</code>、<code>der</code> 的嵌套。任何一处微分规则错，四个客户一起错。</dd>
+    <dt>ymc 策略</dt><dd>S5c 先做指标约简够用的子集，S5e 扩到函数与雅可比；每条微分规则一个单测快照。</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h4>B5 方程符号求解 <span class="lvl m">中</span></h4>
+  <p class="meta">OMC <code>NBSolve.mo:92 main / :637 solveBody</code>（solveSimple / solveLinear / solveUnique）</p>
+  <dl>
+    <dt>难在哪</dt><dd><code>f(x) = g(x)</code> 解出 <code>x</code>：线性提取、逆函数、"唯一出现"判定、除零保护、<code>if</code> 表达式两支都要解。这类代码写起来全是特例，OMC 的规则集是多年积累的。</dd>
+    <dt>ymc 策略</dt><dd>S5e。规则表驱动 + 解不出就退化为非线性块（永远有正确但慢的兜底）。</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h4>B6 撕裂 + 线性/非线性判定 <span class="lvl h">硬</span>（对标 Dymola 的第二道分水岭）</h4>
+  <p class="meta">Elmqvist–Otter 1994；Cellier–Kofman 2006 · OMC <code>NBTearing.mo:138</code>、<code>getModule :243</code>、<code>minimal :403</code>、<code>checkLinearity :598</code>；旧后端 <code>BackEnd/Tearing.mo</code>（cellier / omcTearing，方案 §8 #8）· 细读：《NB-撕裂导读》</p>
+  <dl>
+    <dt>OMC 现状（实证）</dt><dd>新后端 <code>--tearingMethod=cellier</code> 实际映射到 <code>minimal</code>，而 <code>minimal</code> 只处理离散子系统；<code>checkLinearity</code> 对连续环恒为真（空判定）；所有代数环都变成 <code>SES_NONLINEAR</code>（<span class="fileref">NSimStrongComponent.mo:640</span>），<code>_03lsy.c</code> 为空；环的雅可比被 <code>if false</code> 丢弃（<span class="fileref">:756</span>）。也就是说，新后端的撕裂与线性求解路径目前是<strong>占位</strong>。</dd>
+    <dt>难在哪</dt><dd>Cellier 启发式本身不难，难在和线性/非线性判定、初始化系统、混合系统三方配合，以及撕裂变量的选择对数值收敛的影响（这是 Dymola 的看家本领之一）。</dd>
+    <dt>ymc 策略</dt><dd>S5e：自己做线性判定（对撕裂后的残差方程求雅可比、检查是否与未知量无关）→ 线性块走 LAPACK/KLU；非线性块做 Cellier 撕裂，参照旧后端实现范围。</dd>
+    <dt>验证</dt><dd><code>tearing</code>（108）、<code>nonlinear_system</code>（61）、<code>linear_system</code>（16）、<code>resolveLoops</code>（13）。</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h4>B7 初始化系统 <span class="lvl m">中</span></h4>
+  <p class="meta">MLS §8.6 · OMC <code>NBInitialization.mo:82</code>（<code>createStartEquation :206</code>、<code>createParameterEquation :413</code>）、<code>NBResolveSingularities.mo:344 balanceInitialization</code>、<code>NBCausalize.mo:262</code>（三阶段匹配）· 细读：《NB-初始化系统导读》</p>
+  <dl>
+    <dt>OMC 现状（实证）</dt><dd>克隆仿真系统 + <code>$START</code> 变量 + 参数变未知量 + 三阶段匹配 + 平衡（过定删方程、欠定补 start 方程）+ 同伦 λ=0；参数方程被折进初始化系统（<code>_08bnd.c</code> 为空）。</dd>
+    <dt>难在哪</dt><dd>过/欠定的自动修复要"猜"用户意图（哪个 start 值该当 fixed），错了就是一句让人困惑的报错；同伦路径要和非线性求解器配合。</dd>
+    <dt>ymc 策略</dt><dd>S5d 完整复刻 NB 的流程（可差分）；诊断消息对齐 OMC。</dd>
+    <dt>验证</dt><dd><code>initialization</code>（91）。</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h4>B8 事件与混合系统 <span class="lvl h">硬</span>（最想警告你的一条）</h4>
+  <p class="meta">MLS §8.5（事件）、§3.7（事件相关算子）· OMC <code>2_Pre/NBEvents.mo:88</code>（关系式 → <code>$SEV/$TEV</code>）；运行时 <code>solver/events.c</code>、<code>perform_simulation.c.inc:383</code></p>
+  <dl>
+    <dt>难在哪</dt><dd>过零函数提取、关系式滞回、<code>sample</code> 时间事件、<code>when</code> 的优先级与嵌套、<code>pre/edge/change</code>、<code>reinit</code>、<strong>事件迭代</strong>（同步数据流原则：事件后迭代到不动点）、连续/离散混合环。自己写的仿真器 90% 在这里"差一点"：抖振、漏事件、when 触发顺序错。</dd>
+    <dt>ymc 策略</dt><dd>编译侧（S5a）复刻 NB 的事件提取；运行侧先借 OMC 运行时（S6），自研运行时（S7）把事件处理排在显式 Euler 之后、求解器之前做，因为它决定了正确性而不是精度。</dd>
+    <dt>验证</dt><dd><code>events</code>（35）在 S6 借运行时的前提下 PASS；S7 替换后差分。</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h4>B9 数组保持（不标量化）<span class="lvl h">硬</span>（研究题）</h4>
+  <p>OMC 新后端的核心卖点，团队做了多年还在做。ymc 第一版按 D4 全标量化；等 MSL 大模型的编译时间成为实际瓶颈时再作为独立研究题立项。</p>
+</div>
+
+<h3>3.3 代码生成与运行时：不难但很宽</h3>
+
+<div class="card">
+  <h4>C1 与 OMC 运行时 ABI 对齐 <span class="lvl l">体力</span></h4>
+  <p class="meta"><code>openmodelica_func.h:56</code>；数据布局 <code>simulation_data.h</code>；变量下标顺序 <code>NSimVar.mo:213 traverseCreate</code>（状态 → 导数 → 代数 → 离散 …）；文件切分 <code>SimCodeMain.mo:589-611</code>；<code>_init.xml</code> / <code>_info.json</code> 序列化 · 细读：《NB-Susan模板与代码生成导读》</p>
+  <p>回调表几十个字段，哪些可为 NULL、变量数组的下标约定、<code>equationIndexes</code> 与 <code>#line</code> 的对应，都要逐字段对齐。方案 §8 #7 待验证：1.25.0 的公开头文件是否够用（不需要 OMC 私有头）。ymc 不用 Susan 模板，用手写的 C 打印器（AST → C），因为模板语言本身是另一门要学的东西，而且不可调试。</p>
+</div>
+
+<div class="card">
+  <h4>C2 生成代码的体量与编译时间 <span class="lvl m">中</span></h4>
+  <p>全标量化后 MSL 大模型会生成几 MB 的 C，优化编译要几分钟。第一版接受；长期的两条出路是 for 循环保持（NB 的 <code>genericCall</code> 思路）或 JIT。生成阶段本身要注意 <code>std::string +=</code> 的二次方陷阱（用 <code>fmt::memory_buffer</code>）。</p>
+</div>
+
+<div class="card">
+  <h4>C3 自研运行时的数值鲁棒性 <span class="lvl h">硬</span></h4>
+  <p class="meta">OMC <code>solver_main.c:599</code>、<code>initialization.c:753</code>、<code>nonlinearSolverNewton/Homotopy.c</code>；MAT v4 写出 <code>simulation_result_mat4.cpp</code></p>
+  <p>积分器可以链 SUNDIALS（CVODE/IDA）和 LAPACK/KLU，但事件定位（root function + 二分）、事件后重启求解器、步长控制与不连续点、同伦初始化、MAT v4 结果文件、参数覆盖、日志——这些胶水加起来体量和后端同级（OMC <code>SimulationRuntime/c</code> 83,584 行 C），而且数值鲁棒性只能靠海量模型磨。这就是 D5 的全部理由。ModelicaExternalC（MSL 的表格/文件/字符串函数）BSD 许可，直接链。</p>
+</div>
+
+<h3>3.4 贯穿始终的工程难点</h3>
+
+<div class="card">
+  <h4>E1 没有测试就是盲飞 <span class="lvl h">硬</span></h4>
+  <p>全部重写最大的风险。解法就是本文的主线：OMC 当 oracle，每层差分——前端比 Base Modelica 文本（L1），后端比 <code>bltdump</code> / <code>backenddaeinfo</code> 的结构，仿真比 <code>_res.mat</code>（L2），脚本比逐语句输出（L3）。日常主工具是 <code>tools/diff_omc.py M.mo</code>：同一模型分别过 OMC 与 ymc，逐阶段并排 dump，第一处不同即停。前提是 S0 把运行器做对：运行器对 OMC 自身跑 <code>scoping</code> 目录必须全 PASS，否则它报的 FAIL 没有意义。</p>
+</div>
+
+<div class="card">
+  <h4>E2 旧前端用例的文本不可比 <span class="lvl m">中</span></h4>
+  <p>2030 个 <code>-d=-newInst</code> 用例只做数值级；有多少在数值级仍与新前端一致，是方案 §8 #2 待测的数字。它决定了 L2 验收的真实上限。</p>
+</div>
+
+<div class="card">
+  <h4>E3 输出格式与错误消息逐字对齐 <span class="lvl l">体力</span></h4>
+  <p>L3 要求 <code>true</code>、<code>""</code>、record 打印、<code>getErrorString</code> 文本与 OMC 一致。<code>omc-diff</code> 的模糊比对规则（浮点容差、空白）尚未复刻（§8 #1），这是 S0 剩余的基建之一。</p>
+</div>
+
+<div class="card">
+  <h4>E4 编译器自身性能 <span class="lvl m">中</span></h4>
+  <p>MSL 压平的耗时基线待测（§8 #5）。设计上已经预留：Symbol/cref 驻留、arena、hash-consing、无深拷贝的 Id 引用。规则是先正确再快，但数据结构要从第一天就不给"慢"留后门。</p>
+</div>
+
+<div class="card">
+  <h4>E5 C++ 本身，对一个基础弱的人 <span class="lvl h">硬</span></h4>
+  <p>未定义行为不会报错、迭代器失效、所有权、模板报错读不懂。应对全在方案 §3.4/§3.5：IR 不用指针、不用 <code>shared_ptr</code>、不用 <code>variant</code>、核心算法不写模板、ASan 每周全量、每个 pass 先写 dump 快照再写代码、VS 图形调试器为主。每张任务卡把该任务会踩的坑提前标出来，你踩一次记一条 lessons。</p>
+</div>
+
+<div class="card">
+  <h4>E6 规范空白 <span class="lvl m">中</span></h4>
+  <p>很多角落是"Dymola 怎么做就怎么做"。ymc 的规则：写不出 MLS 章节 / OMC 函数 / 探针模型三者之一的来源，就不写代码，进 <code>open-questions.md</code>。探针模型库（每个规范角落一个最小模型 + OMC 输出）是 S3 的固定配套。</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="stages"><span class="n">4.</span> 难点 × 阶段：谁在哪一步被解决</h2>
+<table>
+  <tr><th>阶段</th><th>解决的难点</th><th>退出条件（可执行的那句话）</th></tr>
+  <tr><td>S0</td><td>E1（运行器）、E3（omc-diff 规则）、E5（基建与规则）</td><td>三套预设全绿；运行器对 OMC 自身跑 <code>scoping</code> 全 PASS；Symbol/Arena 两张卡评审通过</td></tr>
+  <tr><td>S1</td><td>F7</td><td>2641 + MSL 全部文件解析零错误；round-trip 两次 byte-identical</td></tr>
+  <tr><td>S2</td><td>包加载、版本解析</td><td>MSL 4.0.0 + Complex + ModelicaServices 加载无错，元素计数与 OMC 一致</td></tr>
+  <tr><td>S3a–3g</td><td>F1 → F2 → F3 → F5 → F4 → F6 → F8（顺序即依赖）</td><td>各子集 L1 全 PASS；MSL Examples 压平通过率报告</td></tr>
+  <tr><td>S4</td><td>E3（脚本输出格式）、F4 的值系统复用</td><td><code>mosfiles</code>（51）L3 全 PASS</td></tr>
+  <tr><td>S5a</td><td>B1、B8（编译侧）</td><td rowspan="5"><code>backenddaeinfo</code> 统计与 <code>bltdump</code> 块序列与 OMC 一致；数值级等 S6</td></tr>
+  <tr><td>S5b</td><td>B2</td></tr>
+  <tr><td>S5c</td><td>B3（静态）、B4（子集）</td></tr>
+  <tr><td>S5d</td><td>B7</td></tr>
+  <tr><td>S5e</td><td>B5、B6、B4（完整）</td></tr>
+  <tr><td>S6</td><td>C1、C2、E2</td><td>列出的 simulation 子集 L2 PASS（借 OMC 运行时）</td></tr>
+  <tr><td>S7</td><td>C3、B8（运行侧）</td><td>S6 通过的用例在自研运行时全部 PASS（差分 <code>.mat</code>）</td></tr>
+  <tr><td>S8</td><td>B3（动态）、B6（补全）、B9、F9、FMI</td><td>逐项单独出方案</td></tr>
+</table>
+<p class="note"><span class="tag">为什么 S4 在 S5 前。</span>S5 的验收子集全在 <code>simulation/</code>，都是 <code>.mos</code>；没有脚本层，后端的每个用例都要手工跑。S4 只有两三周，却是后面所有阶段的运行器前提，而且可以和 S3 后半并行。</p>
+
+<!-- ============================================================ -->
+<h2 id="verify"><span class="n">5.</span> 验证体系：为什么这条路线能走稳</h2>
+
+<table>
+  <tr><th>级别</th><th>比什么</th><th>oracle 命令（OMC 侧）</th><th>适用</th></tr>
+  <tr><td><strong>L1 文本</strong></td><td>压平输出经归一化后与 <code>// Result:</code> 块一致；变量/方程<strong>顺序不排序</strong>（必须复现 OMC 顺序）</td><td><code>omc -d=newInst M.mo</code>；<code>--baseModelicaOptions</code></td><td><code>flattening/**/*.mo</code>（2641）、<code>instantiateModel</code>（179 个文件）</td></tr>
+  <tr><td><strong>L2 数值</strong></td><td><code>.mat</code> 逐变量插值比对，容差对齐 <code>diffSimulationResults(reltol, reltolDiffMinMax, rangeDelta)</code>（<span class="fileref">CevalScriptBackend.mo:2373</span>）</td><td><code>simulate</code> + <code>compareSimulationResults</code> / <code>diffSimulationResults</code> / <code>val</code></td><td><code>simulation/**/*.mos</code>（2626）</td></tr>
+  <tr><td><strong>L3 脚本</strong></td><td><code>.mos</code> 逐语句输出与 <code>// Result:</code> 一致</td><td><code>omc script.mos</code></td><td>所有 <code>.mos</code></td></tr>
+  <tr><td><strong>结构级</strong>（S5 专用）</td><td><code>backenddaeinfo</code> 统计、<code>bltdump</code> 块大小序列、邻接矩阵 dump</td><td><code>omc --newBackend -d=bltdump,backenddaeinfo --simCodeTarget=None -s M.mo</code></td><td>后端每个 pass</td></tr>
+</table>
+
+<p><strong>三个"证明测试本身正确"的动作</strong>，缺一个整套验收就是自欺：</p>
+<ol>
+  <li>运行器先对 OMC 自身跑，全 PASS 后才用于 ymc（S0）。</li>
+  <li>每个 pass 先写期望 dump 快照，再写代码（方案 §3.5 第 11 条）。</li>
+  <li>skip 清单有文件、有原因、有计数；通过率报告永远显示"PASS / FAIL / SKIP"三个数，不只显示 PASS。</li>
+</ol>
+
+<div class="warn"><span class="tag">跑 OMC 做 oracle 的两个坑。</span>① 工作区 dev omc 对 index-3 + StateSelect 模型会无限循环并写出 GB 级输出，务必带超时；② 安装版 1.25.0 与工作区 dev 版的新后端行为不同（前者无指标约简），差分时写清楚用的是哪一个。</div>
+
+<!-- ============================================================ -->
+<h2 id="risk"><span class="n">6.</span> 风险、未决与体量参照</h2>
+
+<h3>未决清单（方案 §8 的活文档，验证前不得据此写代码）</h3>
+<table>
+  <tr><th>#</th><th>待验证</th><th>影响</th></tr>
+  <tr><td>1</td><td><code>omc-diff</code> 模糊比对规则</td><td>S0 运行器</td></tr>
+  <tr><td>2</td><td>2030 个旧前端用例在数值级与新前端的一致率</td><td>L2 上限</td></tr>
+  <tr><td>3</td><td><code>runScript</code> 指向的 <code>ModelTesting*.mos</code> 框架用了哪些 API</td><td>S4 范围</td></tr>
+  <tr><td>4</td><td><code>getEnvironmentVar</code> 依赖的环境变量清单</td><td>S4</td></tr>
+  <tr><td>5</td><td>OMC 压平 MSL Examples 的耗时基线</td><td>S3g 性能目标</td></tr>
+  <tr><td>7</td><td>1.25.0 公开头文件是否足以链接 <code>libSimulationRuntimeC</code></td><td>S6 接缝 ② 成立与否</td></tr>
+  <tr><td>8</td><td>旧后端 <code>Tearing.mo</code> 的 Cellier 实现范围</td><td>S5e</td></tr>
+  <tr><td>9</td><td>动态状态选择的运行时接口（<code>stateset.c</code>）</td><td>S8</td></tr>
+  <tr><td>10</td><td>MAP-LIB 参考结果的格式与覆盖</td><td>S6 末 MSL 回归</td></tr>
+</table>
+<p>#6（双编译器预设可行性）已于 2026-09-13 验证关闭。#7 是<strong>整条路线里最该尽早验证的一条</strong>：如果接缝 ② 不成立，S6/S7 的顺序要重排。建议在 S1 期间顺手做：拿 OMC 生成的 <code>Demo.c</code> 用 MSVC 手工编译链接一次。</p>
+
+<h3>体量参照（用来排顺序，不是劝退）</h3>
+<table>
+  <tr><th>参照</th><th>数字</th></tr>
+  <tr><td>OMC 新前端 / 新后端 / 旧后端 / C 运行时</td><td>81,913 / 33,047 / 125,409 / 83,584 行（今日统计，不含解析器与模板）</td></tr>
+  <tr><td>OpenModelica 项目</td><td>25 年，20+ 贡献者；Dymola 25 年；JModelica 靠一家公司撑；Marco（MLIR）五年多前端仍是子集</td></tr>
+  <tr><td>一个"可用子集"（无时钟/状态机、全标量化、复用 OMC 运行时、跑通 MSL 基础例子）</td><td>约 3–6 万行 C++；有经验者 1–2 人年</td></tr>
+  <tr><td>对齐完整 MSL + 自研运行时</td><td>多年工程</td></tr>
+</table>
+<p>这组数字给出的结论只有一个：<strong>顺序比速度重要</strong>。S3 会吃掉大半时间，但它也是编译原理里"面向对象语言的语义分析"这一课真正被学会的地方；后端算法反而是有论文、有 OMC 代码可对照的部分。</p>
+
+<!-- ============================================================ -->
+<h2 id="docs"><span class="n">7.</span> 文档地图</h2>
+<table>
+  <tr><th>文档</th><th>作用</th><th>覆盖的难点</th></tr>
+  <tr><td><a href="自研编译器技术方案-C++.md"><code>自研编译器技术方案-C++.md</code></a>（仓库根目录）</td><td>规范：约束→原则、验收总纲、工程规范（§3.4 编码 15 条、§3.5 可调试 12 条、§3.6 不臆想）、数据结构、S0–S8 详表、测试基建、任务卡模板、风险</td><td>全部（规则层面）</td></tr>
+  <tr><td>本文 <code>C:\dev\ymc\ymc-设计总览.html</code>（仓库根目录）</td><td>地图：设计决定与难点账本</td><td>全部（判断层面）</td></tr>
+  <tr><td><code>docs/tasks/T-S0-01</code>、<code>T-S0-02</code></td><td>当前任务卡：Symbol/Interner、Arena/Id</td><td>D2、E5</td></tr>
+  <tr><td><code>docs/cpp/00-basics-for-S0.md</code></td><td>C++ 入门（只讲 S0 需要的 13 节）</td><td>E5</td></tr>
+  <tr><td><a href="docs/omc-导读/OMC-编译全流程导读.html">《OMC-编译全流程导读》</a></td><td>OMC 五阶段四种 IR 总览（8 篇导读都在 <code>docs/omc-导读/</code>）</td><td>§1 全景</td></tr>
+  <tr><td><a href="docs/omc-导读/NFFlatten-主流程导读.html">《NFFlatten-主流程导读》</a><a href="docs/omc-导读/NFFlatten-方程与连接导读.html">《NFFlatten-方程与连接导读》</a></td><td>前端压平与 connect</td><td>F5、S3f</td></tr>
+  <tr><td><a href="docs/omc-导读/NFBackend-匹配与排序导读.html">《NFBackend-匹配与排序导读》</a></td><td>邻接、匹配、Tarjan</td><td>B2</td></tr>
+  <tr><td><a href="docs/omc-导读/NB-指标约简导读.html">《NB-指标约简导读》</a></td><td>Pantelides、哑导数、NB 的静态/动态分支</td><td>B3</td></tr>
+  <tr><td><a href="docs/omc-导读/NB-撕裂导读.html">《NB-撕裂导读》</a></td><td>撕裂集、NB 的占位现状</td><td>B6</td></tr>
+  <tr><td><a href="docs/omc-导读/NB-初始化系统导读.html">《NB-初始化系统导读》</a></td><td>初始化子流水线</td><td>B7</td></tr>
+  <tr><td><a href="docs/omc-导读/NB-Susan模板与代码生成导读.html">《NB-Susan模板与代码生成导读》</a></td><td>SimCode 分桶、模板、回调表</td><td>C1</td></tr>
+  <tr><td><code>docs/adr/</code>、<code>tasks/lessons.md</code>、<code>docs/open-questions.md</code></td><td>不可逆决定、踩坑规则、待验证清单</td><td>D1–D6、E5、E6</td></tr>
+</table>
+
+<footer>
+  来源约定：文中 OMC 行号均对应基线提交 <code>3ceb0c9d06</code>（工作区 <code>v1.27.0-dev-372</code>），引用前请重新 grep；"OMC 现状（实证）"来自安装版 1.25.0 与工作区 dev omc 的实跑，记录在对应导读中；MLS 章节按 3.6 版本；代码行数为 2026-09-14 <code>Measure-Object -Line</code> 统计。
+</footer>
+
+</div>
+</body>
+</html>

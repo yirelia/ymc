@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NB 初始化系统导读</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d0d7de;
+    --code-bg: #f6f8fa; --kw: #cf222e; --str: #0a3069; --com: #6e7781;
+    --fn: #8250df; --num: #0550ae; --accent: #0969da; --accent-bg: #ddf4ff;
+    --card: #f6f8fa; --line: #57606a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #8b949e; --border: #30363d;
+      --code-bg: #161b22; --kw: #ff7b72; --str: #a5d6ff; --com: #8b949e;
+      --fn: #d2a8ff; --num: #79c0ff; --accent: #58a6ff; --accent-bg: #132436;
+      --card: #161b22; --line: #8b949e;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.75; font-size: 16px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 2.5rem 1.5rem 6rem; }
+  header.hero { border-bottom: 1px solid var(--border); padding-bottom: 1.5rem; margin-bottom: 2rem; }
+  h1 { font-size: 2rem; margin: 0 0 .4rem; letter-spacing: -.02em; }
+  .sub { color: var(--muted); font-size: .95rem; margin: 0; }
+  .sub code { background: var(--code-bg); padding: .1em .4em; border-radius: 5px; font-size: .85em; }
+  h2 {
+    font-size: 1.4rem; margin: 3rem 0 1rem; padding-top: .5rem;
+    border-top: 1px solid var(--border);
+  }
+  h2 .n { color: var(--accent); font-variant-numeric: tabular-nums; }
+  h3 { font-size: 1.1rem; margin: 1.8rem 0 .6rem; }
+  p { margin: .8rem 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: "SFMono-Regular", "Cascadia Code", Consolas, "Liberation Mono", monospace; font-size: .88em; }
+  p code, li code, td code { background: var(--code-bg); padding: .1em .4em; border-radius: 5px; color: var(--fg); }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.1rem; overflow-x: auto; font-size: .84rem; line-height: 1.6; margin: 1rem 0;
+  }
+  pre code { background: none; padding: 0; color: var(--fg); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; }
+  .fn { color: var(--fn); } .num { color: var(--num); }
+  .ln { color: var(--line); user-select: none; }
+  .lead {
+    background: var(--accent-bg); border-left: 3px solid var(--accent);
+    padding: .9rem 1.1rem; border-radius: 0 8px 8px 0; margin: 1.2rem 0;
+  }
+  .lead strong { color: var(--fg); }
+  .note {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: .9rem 1.1rem; margin: 1.2rem 0; font-size: .95rem;
+  }
+  .note .tag { font-weight: 600; color: var(--accent); }
+  .toc {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.4rem; margin: 1.5rem 0 2.5rem;
+  }
+  .toc-title { font-weight: 600; margin: 0 0 .5rem; font-size: .9rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .toc ol { margin: 0; padding-left: 1.4rem; }
+  .toc li { margin: .25rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--card); font-weight: 600; }
+  .fileref { color: var(--muted); font-size: .82rem; font-family: "SFMono-Regular", Consolas, monospace; }
+  .diagram {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1.2rem; overflow-x: auto; font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: .82rem; line-height: 1.65; white-space: pre; color: var(--fg);
+  }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>初始化系统（Initialization）</h1>
+  <p class="sub">新后端细读 · <code>NBackEnd/Modules/1_Main/NBInitialization.mo</code>（<code>main</code> :82）· 平衡 <code>NBResolveSingularities.balanceInitialization</code> :344 · 三阶段匹配 <code>NBCausalize.mo</code> :262 · 运行时 <code>simulation/solver/initialization/initialization.c</code></p>
+</header>
+
+<p class="lead">
+  <strong>一句话抓住主线：</strong>仿真系统只回答"给定 <code>x</code> 算 <code>der(x)</code>"；但 t=0 时 <code>x</code> 自己也是未知的。所以后端<strong>克隆一份仿真方程，再加上 <code>initial equation</code>、<code>x = $START.x</code>、参数绑定方程，拼成第二个方程系统</strong>，
+  单独匹配、排序、撕裂、求解，生成到 <code>_06inz.c</code>。方程不够就自动补 <code>$START</code>，多了就删——这叫<strong>平衡</strong>。
+</p>
+
+<nav class="toc">
+  <p class="toc-title">目录</p>
+  <ol>
+    <li><a href="#why">为什么需要第二个系统 — Init 模型</a></li>
+    <li><a href="#where">它在管线的哪里 — 一个模块，自带一条子管线</a></li>
+    <li><a href="#assemble">组装初始系统 — <code>main</code> 的七步</a></li>
+    <li><a href="#start"><code>x = $START.x</code> — fixed 的含义</a></li>
+    <li><a href="#param">参数变成未知量 — <code>createParameterEquations</code></a></li>
+    <li><a href="#when"><code>when</code> 与 <code>pre</code> 在初始化里</a></li>
+    <li><a href="#causalize">三阶段匹配 — 初始系统专用的 Causalize</a></li>
+    <li><a href="#balance">平衡 — 欠定补 <code>$START</code>，超定删方程</a></li>
+    <li><a href="#homotopy">homotopy 与 λ=0 系统</a></li>
+    <li><a href="#codegen">落地：NSimCode → <code>_06inz.c</code> → 运行时</a></li>
+    <li><a href="#run">实跑 Init — 每一步在 dump 里的样子</a></li>
+    <li><a href="#flags">Flags 与已知边界</a></li>
+    <li><a href="#verify">动手验证</a></li>
+  </ol>
+</nav>
+
+<h2 id="why"><span class="n">1.</span> 为什么需要第二个系统 — Init 模型</h2>
+<pre><code><span class="kw">model</span> Init
+  <span class="kw">parameter</span> Real p(fixed = <span class="kw">false</span>)   <span class="com">// 参数，但不知道值——要由初始条件反算</span>;
+  Real x(start = 1, fixed = <span class="kw">false</span>)  <span class="com">// 状态，初值不固定</span>;
+  Real v(start = 0, fixed = <span class="kw">true</span>)   <span class="com">// 状态，初值固定 = 0</span>;
+  Real y;
+<span class="kw">equation</span>
+  <span class="fn">der</span>(x) = v;
+  <span class="fn">der</span>(v) = -p * x;
+  y = 2 * x;
+<span class="kw">initial equation</span>
+  x = 3;
+  <span class="fn">der</span>(v) = -6;                     <span class="com">// 配合 x = 3 → p = 2</span>
+<span class="kw">end</span> Init;</code></pre>
+<p>
+  仿真系统：已知 x、v、p，未知 <code>$DER.x</code>、<code>$DER.v</code>、y。3 条方程 3 个未知量，简单。
+  初始系统：<strong>x、v、p 也是未知的</strong>——6 个未知量（x, v, p, $DER.x, $DER.v, y），手里只有 3 条仿真方程 + 2 条初始方程 = 5 条。还差 1 条。
+  差的那条就是 <code>v = $START.v</code>——<code>fixed = true</code> 的意思正是"请把 start 当成一条方程"。
+</p>
+
+<h2 id="where"><span class="n">2.</span> 它在管线的哪里 — 一个模块，自带一条子管线</h2>
+<div class="diagram">NBackendDAE.main (Classes/NBackendDAE.mo:320–325)   mainModules:
+  Partitioning(ODE) → Causalize(ODE) → After Index Reduction Inline → <b>Initialization.main</b>
+                                                                          │
+Initialization.main (1_Main/NBInitialization.mo:82)                       │
+  ① 组装：克隆仿真方程 + initial equation + $START 方程 + 参数方程         :106–139
+  ② 自己的子管线                                                          :154–162
+       modules := {
+         (BackendDAE.simplify(init = true),        "Simplify"),      ← 对 eqData.initials 化简
+         (Inline.main(…, init = true),             "Inline"),
+         (Partitioning.main(kind = INI),           "Partitioning"),  ← 强制一个分区 (NBPartitioning.mo:496–503 → partitioningNone)
+         (cleanup,                                 "Cleanup"),       ← 处理 initial() / homotopy()，生成 init_0
+         (Causalize.main(kind = INI),              "Causalize"),     ← 三阶段匹配 + balanceInitialization
+         (Tearing.main(kind = INI),                "Tearing")
+       };
+  写回 bdae.init（和可选的 bdae.init_0）
+
+postOptModules 里 Solve.main 和 Jacobian.main 也会处理 init（NBSolve.mo:107–110："Has to be the same order as in SimCode!"）</div>
+<p>
+  两个要点：① 初始化在 ODE 的 Causalize <em>之后</em>——所以它看到的是<strong>指标约简之后</strong>的模型（哑状态已经是代数变量、求导出来的方程已经在了）；
+  ② 初始系统<strong>不做指标约简</strong>，<code>Matching.singular</code> 对 INI 分区调的是 <code>balanceInitialization</code>（<span class="fileref">NBMatching.mo:162–168</span>）。
+</p>
+
+<h2 id="assemble"><span class="n">3.</span> 组装初始系统 — <code>main</code> 的七步 <span class="fileref">NBInitialization.mo:82–162</span></h2>
+<table>
+  <tr><th>#</th><th>行</th><th>做什么</th></tr>
+  <tr><td>1</td><td class="fileref">:106–107</td><td><strong>深克隆</strong>仿真方程（<code>EquationPointers.clone(equations, false)</code>），把已有的 <code>initial equation</code>（<code>eqData.initials</code>，lower 阶段就分好了，<span class="fileref">NBackendDAE.mo:958–967</span>）加进去</td></tr>
+  <tr><td>2</td><td class="fileref">:108–109</td><td>删掉 clocked 方程；<code>$getPart</code> 之类替换成 0</td></tr>
+  <tr><td>3</td><td class="fileref">:112–113</td><td><code>when</code> 处理（第 6 节）</td></tr>
+  <tr><td>4</td><td class="fileref">:116</td><td>收集算法块的输出变量——它们由算法赋值，不该再造 <code>$START</code> 方程</td></tr>
+  <tr><td>5</td><td class="fileref">:119–123</td><td><code>createStartEquations</code> ×5：对 <code>states / algebraics / discretes / discrete_states / clocked_states</code>（第 4 节）</td></tr>
+  <tr><td>6</td><td class="fileref">:124–126</td><td><code>createParameterEquations</code>：对 <code>parameters / records / external_objects</code>（第 5 节）</td></tr>
+  <tr><td>7</td><td class="fileref">:129–139</td><td>写回 <code>varData.initials</code>、<code>eqData.initials</code>，新造的迭代变量注册为 <code>VarType.ITERATOR</code></td></tr>
+</table>
+<p>
+  初始系统的未知量在 <code>VarData.initials</code>（<span class="fileref">NBVariable.mo:2457</span>："unknowns + states + previous + parameters(non const binding)"）。
+  lower 阶段就把代数变量、状态、状态导数、离散量、<code>$PRE</code> 放进去了（<span class="fileref">NBackendDAE.mo:595–663</span>）；<strong>参数不在其中</strong>——第 5 节决定哪些参数加入。
+</p>
+
+<h2 id="start"><span class="n">4.</span> <code>x = $START.x</code> — fixed 的含义 <span class="fileref">NBInitialization.mo:176–277</span></h2>
+<p><code>createStartEquation</code> <span class="fileref">:206</span> 对每个变量：</p>
+<table>
+  <tr><th>情况</th><th>行</th><th>生成</th></tr>
+  <tr><td>是算法块输出</td><td class="fileref">:215</td><td>跳过</td></tr>
+  <tr><td>数组</td><td class="fileref">:225–231</td><td><code>createStartEquationSlice</code>：一条 <code>for</code> 方程</td></tr>
+  <tr><td><strong>标量，<code>fixed = true</code></strong></td><td class="fileref">:234–252</td><td>start 是字面量 → 造 <code>$START.x</code> 变量，方程 <code>x = $START.x</code>；start 是表达式 → 直接 <code>x = 表达式</code>。<code>$START.x</code> 的值由 <code>_init.xml</code> 在启动时填</td></tr>
+  <tr><td>标量，<code>fixed = false</code>，start 是非字面量表达式</td><td class="fileref">:255–272</td><td><code>$START.x = 表达式</code>，且 <code>$START.x</code> 成为一个<em>额外的初始未知量</em>（给牛顿法当初值用）</td></tr>
+  <tr><td>标量，<code>fixed = false</code>，start 是字面量</td><td>—</td><td>什么都不生成；这个变量要靠其它方程解出来，解不出来就等第 8 节的平衡来补</td></tr>
+</table>
+<pre><code><span class="com">// :249–250 造方程的那两行</span>
+kind := <span class="kw">if</span> BVariable.isContinuous(var, true) <span class="kw">then</span> EquationKind.CONTINUOUS <span class="kw">else</span> EquationKind.DISCRETE;
+start_eq := Equation.<span class="fn">makeAssignment</span>(Expression.fromCref(name), start_exp, idx, NBEquation.START_STR, Iterator.EMPTY(), EquationAttributes.default(kind, true));
+<span class="com">//                                                                            ↑ "SRT"：方程名 $RES_SRT_n 的来源           ↑ exclusively_initial = true</span></code></pre>
+<p>
+  <code>createStartVar</code> <span class="fileref">:334</span> 的头注释写了一个 <code>$PRE</code> 的扭转（<span class="fileref">:338</span>）：<code>normal: var = $START.var</code>，但对离散状态是 <code>$PRE.dst = $START.dst</code>——因为离散状态在 t=0 的"上一个值"才是 start。
+  <code>$START</code> 变量本身由 <code>BVariable.makeStartVar</code> <span class="fileref">NBVariable.mo:1477</span> 造（前缀 <code>START_STR = "$START"</code> <span class="fileref">:115</span>，种类 <code>VariableKind.START(original)</code>，幂等）。
+</p>
+
+<h2 id="param"><span class="n">5.</span> 参数变成未知量 — <code>createParameterEquations</code> <span class="fileref">NBInitialization.mo:386–468</span></h2>
+<p>头注释："creates parameter equations of the form param = $START.param for all fixed params"。<code>createParameterEquation</code> <span class="fileref">:413</span> 对非 record 参数（<span class="fileref">:455–467</span>）：</p>
+<pre><code><span class="kw">if not</span> BVariable.hasEvaluableBinding(var) <span class="kw">then</span>
+  initial_param_vars := var :: initial_param_vars;          <span class="com">// ★ 参数成为初始系统的未知量</span>
+  <span class="kw">if</span> BVariable.isFixed(var) <span class="kw">then</span>
+    parameter_eqs := Equation.<span class="fn">generateBindingEquation</span>(var, idx, true, new_iters) :: parameter_eqs;   <span class="com">// fixed → 方程 p = binding</span>
+  <span class="kw">end if</span>;                                                   <span class="com">// fixed=false → 未知量但没有方程，靠别的方程解</span>
+<span class="kw">elseif</span> BVariable.isBound(var) <span class="kw">then</span>
+  BVariable.<span class="fn">setBindingAsStart</span>(var, true);                    <span class="com">// 能直接算出来的绑定 → 折进 start 属性，不进系统</span>
+<span class="kw">end if</span>;</code></pre>
+<table>
+  <tr><th>参数写法</th><th>初始系统里</th></tr>
+  <tr><td><code>parameter Real k = 2;</code></td><td>可求值绑定 → 不进系统，值进 start / <code>_init.xml</code></td></tr>
+  <tr><td><code>parameter Real k = a * b;</code>（a、b 也是参数）</td><td>不可直接求值 → 未知量 + 方程 <code>k = a * b</code></td></tr>
+  <tr><td><code>parameter Real p(fixed = false);</code></td><td>未知量，无方程——必须由 initial equation 决定（Init 模型里 <code>der(v) = -6</code> 就是给它的）</td></tr>
+</table>
+<div class="note">
+  <span class="tag">和旧后端的一个显著差别。</span>
+  旧后端有单独的 <code>parameterEquations</code> 桶，生成到 <code>_08bnd.c</code> 的 <code>updateBoundParameters</code>。新后端的 NSimCode 把它置空（<span class="fileref">NSimCode/NSimCode.mo:344–349</span>，注释 "all non constant parameter equations will be added to the initial system. There is no actual need for parameter equations block"）——
+  所以新后端生成的 <code>Init_08bnd.c</code> 里 <code>updateBoundParameters</code> 是<strong>空函数</strong>，参数计算全在 <code>_06inz.c</code>。
+</div>
+
+<h2 id="when"><span class="n">6.</span> <code>when</code> 与 <code>pre</code> 在初始化里 <span class="fileref">NBInitialization.mo:805–903</span></h2>
+<p>
+  <code>removeWhenEquation</code> <span class="fileref">:805</span> 递归进 for / when / if / algorithm：一条 <code>when</code> 方程只保留条件满足 <code>isInitialCall</code>（<span class="fileref">:1004–1020</span>：<code>initial()</code>、或含 <code>initial()</code> 的 <code>or</code>；<strong><code>and</code> 构造被忽略</strong>，<span class="fileref">:1017</span>）的那个分支，变成普通 <code>ALGORITHM</code>；
+  其它分支整条方程变 <code>DUMMY_EQUATION</code>，它赋值的变量收集起来，每个生成 <code>x = $PRE.x</code>（<code>createWhenReplacementEquation</code> <span class="fileref">:303–332</span>）——"初始化时离散量等于它的 pre 值"。
+  没有 <code>$PRE</code> 伙伴的变量在这里报 <code>INTERNAL_ERROR</code>（<span class="fileref">:328–330</span>）。
+</p>
+<p><code>createPreEquation</code>（<span class="fileref">:625</span>）和 <code>createPreEquationSlice</code>（<span class="fileref">:645</span>）虽然存在但<strong>没有任何调用者</strong>，是死代码；活着的是上面这条 when 替换路径。</p>
+
+<h2 id="causalize"><span class="n">7.</span> 三阶段匹配 — 初始系统专用的 Causalize <span class="fileref">NBCausalize.mo:262–306</span></h2>
+<p><code>causalizePseudoArray</code> 里 <code>if Partition.kindIsInitial(kind)</code> 的分支。变量按 <code>isFixable</code> 分成两组，方程按 <code>isInitial</code> 分成两组（<span class="fileref">:268–269</span>），然后：</p>
+<table>
+  <tr><th>阶段</th><th>行</th><th>方程 ↔ 变量</th><th>目的</th></tr>
+  <tr><td>I</td><td class="fileref">:276–281</td><td><code>initial equation</code> ↔ 不可 fix 的变量</td><td>用户写的初始方程优先去解那些"没法靠 start 补"的量（代数变量、状态导数）</td></tr>
+  <tr><td>II</td><td class="fileref">:284–291</td><td>全部方程 ↔ 不可 fix 的变量</td><td>仿真方程接着解剩下的不可 fix 量</td></tr>
+  <tr><td>III</td><td class="fileref">:294–301</td><td>全部方程 ↔ 全部变量（含可 fix 的）</td><td>只有这一阶段调 <code>Matching.singular</code>，触发平衡</td></tr>
+</table>
+<p>前两阶段用 <code>Matching.regular(…, transposed=true, partially=true)</code>，注释（<span class="fileref">:274</span>）明确说这两阶段<em>不</em>解决奇异性。设计意图：把"能 fix"的变量留到最后，让方程尽量先去解那些不能靠 <code>$START</code> 兜底的量。</p>
+<p><code>isFixable</code> <span class="fileref">NBVariable.mo:912–924</span> 是<strong>按种类</strong>决定的，和 StateSelect、nominal 无关：</p>
+<pre><code><span class="kw">case</span> VariableKind.STATE()          <span class="kw">then</span> not isFixed(var_ptr);                    <span class="com">// 没 fixed 的状态可以补 $START</span>
+<span class="kw">case</span> VariableKind.DISCRETE_STATE() <span class="kw">then</span> not isFixed(var_ptr) or hasPre(var_ptr);
+<span class="kw">case</span> VariableKind.PARAMETER()      <span class="kw">then</span> not isFixed(var_ptr);                    <span class="com">// fixed=false 的参数可以补</span>
+<span class="kw">case</span> VariableKind.PREVIOUS()       <span class="kw">then</span> true;
+<span class="kw">else</span> false;                                                                      <span class="com">// 代数变量、状态导数永远不能靠 start 兜底</span></code></pre>
+
+<h2 id="balance"><span class="n">8.</span> 平衡 — 欠定补 <code>$START</code>，超定删方程 <span class="fileref">NBResolveSingularities.mo:344–447</span></h2>
+<pre><code>(…, unmatched_vars, …, unmatched_eqns) := Matching.<span class="fn">getMatches</span>(…);                 <span class="ln">:358</span>
+
+<span class="com">// 超定：方程多了</span>                                                                <span class="ln">:371–383</span>
+Error.addMessage(Error.COMPILER_WARNING, {… <span class="str">" reports an overdetermined initialization!\nChecking for consistency is not yet supported, following equations had to be removed:\n"</span> …});
+equations := EquationPointers.removeList(unmatched_eqns, equations);             <span class="com">// 直接删，不检查一致性（ToDo :367–369）</span>
+
+<span class="com">// 欠定：变量多了</span>                                                                <span class="ln">:388–398</span>
+<span class="kw">for</span> var <span class="kw">in</span> unmatched_vars <span class="kw">loop</span>
+  <span class="kw">if</span> BVariable.isFixable(var_ptr) <span class="kw">then</span>
+    Initialization.<span class="fn">createStartEquationSlice</span>(var, ptr_start_vars, ptr_start_eqns, idx, true);   <span class="com">// 补 var = $START.var</span>
+    <span class="com">// DO NOT SET VARIABLE TO FIXED! we might have to fix it again for Lambda=0 system     :393</span>
+  <span class="kw">end if</span>;
+<span class="kw">end for</span>;
+<span class="com">// 剩下不可 fix 的 → INTERNAL_ERROR，提示 -d=initialization / -d=bltdump                 :424–443</span></code></pre>
+<p>
+  新方程注册为 <code>EqType.INITIAL</code>、新变量为 <code>VarType.START</code>（<span class="fileref">:409–410</span>），邻接矩阵扩展（<span class="fileref">:416–418</span>），返回 <code>changed = true</code>；
+  <code>Matching.singular</code> 随后<strong>只重新匹配一次</strong>，不再重复平衡（<span class="fileref">NBMatching.mo:175–177</span> <code>// ####### DO NOT REDO BALANCING INITIALIZATION #######</code>）。
+</p>
+<div class="note">
+  <span class="tag">和旧后端的差别。</span>
+  旧后端会 warning "Assuming fixed start value for the following N variables"；新后端补 <code>$START</code> 时<strong>静默</strong>，只有 <code>-d=initialization</code> 才打印。
+  超定时旧后端会做一致性检查（<code>functionRemovedInitialEquations</code>），新后端直接删方程并 warning。
+</div>
+
+<h2 id="homotopy"><span class="n">9.</span> homotopy 与 λ=0 系统 <span class="fileref">NBInitialization.mo:691–803</span></h2>
+<p><code>cleanup</code> <span class="fileref">:691</span> 是子管线里 Partitioning 和 Causalize 之间的那个模块，负责两个内建函数：</p>
+<table>
+  <tr><th>系统</th><th><code>initial()</code></th><th><code>homotopy(actual, simplified)</code></th><th>行</th></tr>
+  <tr><td>仿真（ode / algebraic / …）</td><td>→ <code>false</code></td><td>→ <code>actual</code></td><td class="fileref">:701–715</td></tr>
+  <tr><td><code>init</code></td><td>→ <code>true</code></td><td>→ <code>actual</code></td><td class="fileref">:733</td></tr>
+  <tr><td><code>init_0</code>（仅当方程里有 homotopy 调用，<code>containsLambda0</code> <span class="fileref">:789</span>）</td><td>→ <code>true</code></td><td>→ <code>simplified</code></td><td class="fileref">:721–730</td></tr>
+</table>
+<pre><code>init_0 := list(Partition.setKind(Partition.clone(par, false), NBPartition.Kind.INI_0) for par in bdae.init);   <span class="ln">:722</span>
+init_0 := list(Partition.mapExp(par, cleanupHomotopy(init0 = true)) for par in init_0);                       <span class="ln">:724</span>
+bdae.init_0 := SOME(init_0);
+<span class="com">// cleanupHomotopy (:769) 本质就是 listGet(Call.arguments(exp.call), if init0 then 2 else 1)</span></code></pre>
+<p>
+  <code>INI_0</code> 是 <code>INI</code> 的深克隆，之后一路跟着 Causalize / Tearing / Solve / Jacobian（各模块都有 <code>init_0</code> 分支），最终生成 <code>functionInitialEquations_lambda0</code>。
+  运行时先解简化系统（λ=0）得到一个好初值，再沿 λ 走到真实系统（第 10 节）。分区种类枚举：<code>Kind = enumeration(ODE, ALG, ODE_EVT, ALG_EVT, INI, INI_0, DAE, JAC, CLK)</code> <span class="fileref">NBPartition.mo:73</span>。
+</p>
+
+<h2 id="codegen"><span class="n">10.</span> 落地：NSimCode → <code>_06inz.c</code> → 运行时</h2>
+<pre><code>SimCode.create                                                   <span class="ln">NSimCode/NSimCode.mo</span>
+  nominal / min / max / param := {}                              <span class="ln">:344–349</span>   <span class="com">// 全折进 init 了</span>
+  init   := Block.createInitialBlocks(bdae.init, …)              <span class="ln">:351</span>       <span class="com">// "init before everything else!" 最先编号</span>
+  init_0 := Block.createInitialBlocks(bdae.init_0, …)            <span class="ln">:352–356</span>
+  start / init_no_ret := {}                                      <span class="ln">:363–364</span>
+SimCode.convert
+  initialEquations         = convertList(init)                   <span class="ln">:534</span>
+  initialEquations_lambda0 = convertList(init_0)                 <span class="ln">:535</span>
+  startValueEquations / parameterEquations / nominal… = {}       <span class="ln">:537–541</span>   <span class="com">// 新后端下这些桶永远是空的</span></code></pre>
+<table>
+  <tr><th>模板（<code>Template/CodegenC.tpl</code>）</th><th>行</th><th>生成</th></tr>
+  <tr><td><code>functionInitialEquations</code></td><td class="fileref">:3698–3719</td><td><code>&lt;M&gt;_06inz.c</code>，<code>int &lt;M&gt;_functionInitialEquations(DATA*, threadData_t*)</code></td></tr>
+  <tr><td><code>functionInitialEquations_lambda0</code></td><td class="fileref">:3721–3748</td><td>内联在主 <code>.c</code>；没有 λ=0 系统时只留注释，回调表里填 <code>NULL</code>（<span class="fileref">:1412</span>）</td></tr>
+  <tr><td><code>functionUpdateBoundParameters</code></td><td class="fileref">:3621–3640</td><td><code>&lt;M&gt;_08bnd.c</code>——新后端下是空函数</td></tr>
+</table>
+<p>运行时 <code>SimulationRuntime/c/simulation/solver/initialization/initialization.c</code>：</p>
+<pre><code><span class="kw">int</span> <span class="fn">initialization</span>(DATA *data, threadData_t *threadData, <span class="kw">const char</span>* pInitMethod, …)   <span class="ln">:753</span>
+  initMethod = IIM_SYMBOLIC;                                       <span class="ln">:755</span>   <span class="com">// -iim=none|symbolic，只有这两种</span>
+  setAllParamsToStart / setAllVarsToStart                         <span class="ln">:766 :783</span>   <span class="com">// 所有变量先取 start（$START.x 的值就在这里进来）</span>
+  updateBoundParameters + updateBoundVariableAttributes           <span class="ln">:787–788</span>   <span class="com">// _08bnd.c</span>
+  data-&gt;simulationInfo-&gt;initial = 1;                              <span class="ln">:820</span>   <span class="com">// 运行时的 initial() 开关</span>
+  → <span class="fn">symbolic_initialization</span>                                     <span class="ln">:281</span>
+      无 homotopy：lambda = 1.0; callback-&gt;<span class="fn">functionInitialEquations</span>(…)      <span class="ln">:323–325</span>   <span class="com">// 就是 _06inz.c 那个函数</span>
+      有 homotopy：先试不用 homotopy (:332–363)，失败则等距 λ 步进 (:368–443)：
+                   step 0 调 functionInitialEquations_lambda0，之后每步调 functionInitialEquations</code></pre>
+
+<h2 id="run"><span class="n">11.</span> 实跑 Init — 每一步在 dump 里的样子</h2>
+<p><code>-d=bltdump</code>（安装版 1.25.0，<code>--newBackend</code>；工作区 omc 输出一致）。先看 Alias 模块的影响：<code>y = 2x</code> 让 <strong>x 被消掉、y 当状态</strong>，所以下面全是 y。INI 分区 Causalize 之后：</p>
+<pre><code>[INI] Initialization: (Causalize)
+BLOCK 1: Real v        ← [SCAL] v = $START.v ($RES_SRT_6)              <span class="com">// 第 4 节：v 是 fixed=true → 造了 $START 方程（SRT）</span>
+BLOCK 2: Real y        ← [SCAL] 0.5 * y = 3.0 ($RES_SIM_1)             <span class="com">// initial equation x = 3，经 alias 变成 0.5y = 3</span>
+BLOCK 3: Real $DER.y   ← [SCAL] 0.5 * $DER.y = v ($RES_SIM_4)          <span class="com">// 仿真方程 der(x) = v 的克隆</span>
+BLOCK 4: Real $DER.v   ← [SCAL] $DER.v = -6.0 ($RES_SIM_0)             <span class="com">// initial equation der(v) = -6</span>
+BLOCK 5: parameter Real p  ← [SCAL] $DER.v = -p * (0.5 * y) ($RES_SIM_3)   <span class="com">// ★ 仿真方程 der(v) = -p*x 在这里解的是参数 p！</span></code></pre>
+<p>
+  6 个未知量对 5+1 条方程，正好平衡；x 没有出现是因为它是 y 的别名。<code>-d=initialization</code> 会在这之前打印 "Balance Initialization / Not underdetermined."。
+  Solve 之后：
+</p>
+<pre><code>[INI] Initialization: (Solve)
+BLOCK 2:  y = 6.0                       (EXPLICIT)
+BLOCK 5:  p = -$DER.v / (0.5 * y)       (EXPLICIT)     <span class="com">// 同一条方程，仿真时解 $DER.v，初始化时解 p——两个系统里因果方向不同</span></code></pre>
+<p>生成的 <code>Init_06inz.c</code>，五个函数按 BLT 顺序调：</p>
+<pre><code><span class="kw">void</span> <span class="fn">Init_functionInitialEquations_0</span>(DATA *data, threadData_t *threadData)
+{
+  Init_eqFunction_5(data, threadData);   <span class="com">// v = $START.v   ← (realVarsData[1]).attribute.start</span>
+  Init_eqFunction_4(data, threadData);   <span class="com">// y = 6.0</span>
+  Init_eqFunction_3(data, threadData);   <span class="com">// $DER.y = 2.0 * v</span>
+  Init_eqFunction_2(data, threadData);   <span class="com">// $DER.v = -6.0</span>
+  Init_eqFunction_1(data, threadData);   <span class="com">// p = -$DER.v / (0.5 * y)   ← 写进 realParameter[0]</span>
+}</code></pre>
+<p>而 ODE 分区的两个块在 Solve 后标成 <code>--- Alias of INI[1 | 3] ---</code>：仿真方程和初始化里那份克隆解法一样，代码只生成一次。运行：<code>The initialization finished successfully without homotopy method.</code></p>
+
+<h2 id="flags"><span class="n">12.</span> Flags 与已知边界</h2>
+<table>
+  <tr><th>Flag</th><th>Flags.mo</th><th>用处</th></tr>
+  <tr><td><code>-d=initialization</code></td><td class="fileref">:340</td><td>平衡过程、补的 <code>$START</code> 方程、三阶段匹配的 headline（<span class="fileref">NBCausalize.mo:112</span>、<span class="fileref">NBInitialization.mo:200 :297 :407</span>）</td></tr>
+  <tr><td><code>-d=dumpBindings</code></td><td class="fileref">:262</td><td>参数绑定方程</td></tr>
+  <tr><td><code>--allowNonStandardModelica=initialSimplified</code></td><td class="fileref">:1283</td><td>实验性 <code>initialSimplified()</code> 算子，也会触发 <code>init_0</code></td></tr>
+  <tr><td><code>Demo.exe -iim=none|symbolic</code>、<code>-lv=LOG_INIT</code></td><td>运行时</td><td></td></tr>
+</table>
+<p><strong>不存在或新后端不读的</strong>：<code>--initialGuess</code>、<code>-d=dumpInitialSystem</code>（根本没定义）；<code>--homotopyApproach</code>（<span class="fileref">:1147</span>）只影响运行时，新后端有 homotopy 调用就一定造 <code>init_0</code>；<code>-d=partitionInitialization</code>、<code>-d=dumpHomotopy</code> 是旧后端的。</p>
+<table>
+  <tr><th>TODO / 边界</th><th>位置</th></tr>
+  <tr><td>超定时不做一致性检查，直接删方程</td><td class="fileref">NBResolveSingularities.mo:367–373</td></tr>
+  <tr><td>删方程的路径不考虑数组（"update this for potential arrays!"）</td><td class="fileref">:375</td></tr>
+  <tr><td><code>when initial() and cond</code> 不被识别为初始分支</td><td class="fileref">NBInitialization.mo:1017</td></tr>
+  <tr><td><code>isFixed</code> 有 FIXME（"use VariableAttributes.isFixed()?"）——决定整个 <code>$START</code> 逻辑的谓词</td><td class="fileref">NBVariable.mo:899</td></tr>
+  <tr><td>死代码：<code>createPreEquation</code> / <code>createPreEquationSlice</code> / <code>containsHomotopyCall</code></td><td class="fileref">:625 :645 :780</td></tr>
+  <tr><td>"add init_1 for lambda = 1?" 的想法</td><td class="fileref">NBackendDAE.mo:119</td></tr>
+</table>
+
+<h2 id="verify"><span class="n">13.</span> 动手验证</h2>
+<pre><code>omc --newBackend -d=bltdump,initialization,backenddaeinfo --simCodeTarget=None -s Init.mo
+<span class="com"># 然后用 .mos 里 setCommandLineOptions("--newBackend"); buildModel(Init); 生成 C，看 Init_06inz.c 和空的 Init_08bnd.c</span>
+.\Init.exe -lv=LOG_INIT</code></pre>
+<p>三个练习：</p>
+<ol>
+  <li>把 <code>x(start = 1, fixed = false)</code> 改成 <code>fixed = true</code>，同时保留 <code>initial equation x = 3</code>——现在超定了。看 warning "reports an overdetermined initialization!" 和哪条方程被删。</li>
+  <li>把 <code>initial equation der(v) = -6</code> 删掉——现在 p 没方程了。p 是 <code>fixed=false</code> 的参数，<code>isFixable</code> 为真，平衡会补 <code>p = $START.p</code>；用 <code>-d=initialization</code> 看它出现，<code>_init.xml</code> 里 p 的 start 会是多少？</li>
+  <li>给方程加 <code>homotopy(actual = -p * x, simplified = -x)</code>，看 <code>-d=bltdump</code> 里多出来的 <code>[INI_0] Initialization Lambda=0</code> 段，以及主 <code>.c</code> 里的 <code>functionInitialEquations_lambda0</code>。</li>
+</ol>
+
+<footer>
+  行号基于工作区 <code>feat_OMEncryption</code> 分支（HEAD <code>3ceb0c9d06</code>）；dump 与生成代码来自安装版 1.25.0（<code>--newBackend</code>），工作区 omc 的输出与之一致。
+  返回 <a href="OMC-编译全流程导读.html">总览篇</a>。
+</footer>
+
+</div>
+</body>
+</html>

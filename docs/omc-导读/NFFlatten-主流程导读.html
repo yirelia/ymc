@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NFFlatten.mo 主流程导读</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d0d7de;
+    --code-bg: #f6f8fa; --kw: #cf222e; --str: #0a3069; --com: #6e7781;
+    --fn: #8250df; --num: #0550ae; --accent: #0969da; --accent-bg: #ddf4ff;
+    --card: #f6f8fa; --line: #57606a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #8b949e; --border: #30363d;
+      --code-bg: #161b22; --kw: #ff7b72; --str: #a5d6ff; --com: #8b949e;
+      --fn: #d2a8ff; --num: #79c0ff; --accent: #58a6ff; --accent-bg: #132436;
+      --card: #161b22; --line: #8b949e;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.75; font-size: 16px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 2.5rem 1.5rem 6rem; }
+  header.hero { border-bottom: 1px solid var(--border); padding-bottom: 1.5rem; margin-bottom: 2rem; }
+  h1 { font-size: 2rem; margin: 0 0 .4rem; letter-spacing: -.02em; }
+  .sub { color: var(--muted); font-size: .95rem; margin: 0; }
+  .sub code { background: var(--code-bg); padding: .1em .4em; border-radius: 5px; font-size: .85em; }
+  h2 {
+    font-size: 1.4rem; margin: 3rem 0 1rem; padding-top: .5rem;
+    border-top: 1px solid var(--border);
+  }
+  h2 .n { color: var(--accent); font-variant-numeric: tabular-nums; }
+  h3 { font-size: 1.1rem; margin: 1.8rem 0 .6rem; }
+  p { margin: .8rem 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: "SFMono-Regular", "Cascadia Code", Consolas, "Liberation Mono", monospace; font-size: .88em; }
+  p code, li code, td code { background: var(--code-bg); padding: .1em .4em; border-radius: 5px; color: var(--fg); }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.1rem; overflow-x: auto; font-size: .84rem; line-height: 1.6; margin: 1rem 0;
+  }
+  pre code { background: none; padding: 0; color: var(--fg); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; }
+  .fn { color: var(--fn); } .num { color: var(--num); }
+  .ln { color: var(--line); user-select: none; } /* :line labels inside code */
+  .lead {
+    background: var(--accent-bg); border-left: 3px solid var(--accent);
+    padding: .9rem 1.1rem; border-radius: 0 8px 8px 0; margin: 1.2rem 0;
+  }
+  .lead strong { color: var(--fg); }
+  .note {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: .9rem 1.1rem; margin: 1.2rem 0; font-size: .95rem;
+  }
+  .note .tag { font-weight: 600; color: var(--accent); }
+  .toc {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.4rem; margin: 1.5rem 0 2.5rem;
+  }
+  .toc-title { font-weight: 600; margin: 0 0 .5rem; font-size: .9rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .toc ol { margin: 0; padding-left: 1.4rem; }
+  .toc li { margin: .25rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--card); font-weight: 600; }
+  .fileref { color: var(--muted); font-size: .82rem; font-family: "SFMono-Regular", Consolas, monospace; }
+  .diagram {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1.2rem; overflow-x: auto; font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: .82rem; line-height: 1.65; white-space: pre; color: var(--fg);
+  }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>NFFlatten.mo 主流程导读</h1>
+  <p class="sub">OpenModelica 新前端 · <code>OMCompiler/Compiler/NFFrontEnd/NFFlatten.mo</code> · 全文 3343 行</p>
+</header>
+
+<p class="lead">
+  <strong>一句话抓住主线：</strong>flatten 就是一次<strong>带前缀的实例树遍历</strong>——沿着实例树往下走，一路把
+  <code>a.b.c</code> 这样的点号名字拼起来，走到叶子就吐出一个扁平变量。把这条主线抓住，其余 3000 行都是细节。
+</p>
+
+<nav class="toc">
+  <p class="toc-title">目录</p>
+  <ol>
+    <li><a href="#what">这一步到底在干什么</a></li>
+    <li><a href="#flatten">flatten — 驱动器</a></li>
+    <li><a href="#recursion">flattenClass ↔ flattenComponent — 递归核心</a></li>
+    <li><a href="#leaf">flattenSimpleComponent — 叶子，产出变量</a></li>
+    <li><a href="#complex">flattenComplexComponent — 往下钻</a></li>
+    <li><a href="#prefix">Prefix — 名字怎么拼出来</a></li>
+    <li><a href="#sections">flattenSections — 方程也要加前缀</a></li>
+    <li><a href="#map">全景调用图</a></li>
+    <li><a href="#verify">动手验证</a></li>
+  </ol>
+</nav>
+
+<h2 id="what">这一步到底在干什么</h2>
+<p>
+  输入是<strong>实例树</strong>（instance tree）——<code>NFInst</code> 阶段已经把 <code>extends</code>、
+  <code>redeclare</code>、修饰都展开好的、带层次结构的对象树。输出是 <code>FlatModel</code>（<code>flatten</code>
+  的返回值，<span class="fileref">:324</span>），里面只有四样东西：一串 <code>Variable</code>、一串
+  <code>Equation</code>、初始方程、算法。
+</p>
+<p>
+  <strong>没有层次、没有类、没有继承了</strong>——<code>resistor1.p.v</code> 从一个「树里的路径」变成一个
+  「名字里带点的普通标量变量」。
+</p>
+<p class="lead">
+  <strong>flatten = 把面向对象的树，压平成一张变量表 + 一张方程表。</strong>
+</p>
+
+<h2 id="flatten"><span class="n">1.</span> flatten — 驱动器 <span class="fileref">:320</span></h2>
+<p>这个函数自己不干递归，只是搭台子：</p>
+<pre><code><span class="n">prefix</span> := Prefix.<span class="fn">new</span>(classInst, ...);        <span class="ln">// :347</span> <span class="com">空前缀，从根类开始</span>
+sections := Sections.<span class="fn">EMPTY</span>();                <span class="ln">// :349</span> <span class="com">方程/算法的累加器</span>
+deleted_vars := UnorderedSet.<span class="fn">new</span>(...);       <span class="ln">// :354</span> <span class="com">记录被条件删掉的变量</span>
+
+(vars, sections) := <span class="fn">flattenClass</span>(InstNode.<span class="fn">getClass</span>(classInst), prefix, ...);  <span class="ln">// :356</span> <span class="com">真正的活</span>
+vars := <span class="fn">listReverseInPlace</span>(vars);            <span class="ln">// :358</span> <span class="com">见下方「为什么要 reverse」</span></code></pre>
+<p>
+  拿到结果后组装成 <code>FLAT_MODEL</code>（<span class="fileref">:368</span>），然后做<strong>连接解析</strong>
+  （<span class="fileref">:380–391</span>）——这是 flatten 的第二大件事，把 <code>connect(a, b)</code> 展开成真正的方程
+  （<code>a.v = b.v</code>，以及 flow 变量求和 <code>a.i + b.i = 0</code>）。这块先记住它在这儿，细节在
+  <code>resolveConnections</code> 里，不在主流程。
+</p>
+<div class="note">
+  <span class="tag">为什么到处 listReverseInPlace？</span> 因为累加变量表用的是 <code>v :: vars</code>
+  （在表头插入，<span class="fileref">:748</span>），这是 MetaModelica 里唯一 O(1) 的加法。代价是顺序反了，最后翻回来。
+  这是贯穿整个编译器的惯用法，看到就懂。
+</div>
+
+<h2 id="recursion"><span class="n">2.</span> flattenClass ↔ flattenComponent — 互相递归的核心 <span class="fileref">:451 · :512</span></h2>
+<p>
+  这两个函数当一对看。<strong>类含有组件，组件又是某个类的实例</strong>，所以它俩来回调，就把整棵树走完了。
+</p>
+<p>
+  <code>flattenClass</code>（<span class="fileref">:465</span> 的 match）对一个类：遍历它的所有组件，逐个调
+  <code>flattenComponent</code>（<span class="fileref">:480–482</span>）；然后处理这个类自己的方程段
+  <code>flattenSections</code>（<span class="fileref">:490</span>）。
+</p>
+<pre><code><span class="kw">case</span> Class.<span class="fn">INSTANCED_CLASS</span>(elements = ClassTree.<span class="fn">FLAT_TREE</span>(components = comps))
+  <span class="kw">for</span> c <span class="kw">in</span> comps <span class="kw">loop</span>
+    (vars, sections) := <span class="fn">flattenComponent</span>(c, prefix, ...);   <span class="com">// 对每个组件递归</span>
+  ...
+  sections := <span class="fn">flattenSections</span>(cls.sections, ..., prefix, ...);   <span class="com">// 处理本类方程</span></code></pre>
+<p>
+  注意 <code>TYPED_DERIVED</code>（<span class="fileref">:494</span>）那个 case——<code>type Voltage = Real</code>
+  这种派生类型，直接钻到基类去 flatten。
+</p>
+<p>
+  <code>flattenComponent</code>（<span class="fileref">:538</span> 的 match）对一个组件，做三件判断：
+</p>
+<table>
+  <tr><th>步骤</th><th>做什么</th><th>位置</th></tr>
+  <tr><td>条件删除</td><td><code>outer</code> 组件跳过；<code>if condition</code> 为假的组件删掉（记进 <code>deleted_vars</code>）</td><td class="fileref">:531 :542</td></tr>
+  <tr><td>分类</td><td><code>getComponentType</code>：简单类型 / 复杂类型 / record？</td><td class="fileref">:550</td></tr>
+  <tr><td>分派</td><td>见下</td><td class="fileref">:550–571</td></tr>
+</table>
+<table>
+  <tr><th>类型</th><th>去向</th><th>含义</th></tr>
+  <tr><td><code>NORMAL</code></td><td><code>flattenSimpleComponent</code> <span class="fileref">:555</span></td><td>叶子，产出一个变量</td></tr>
+  <tr><td><code>COMPLEX</code></td><td><code>flattenComplexComponent</code> <span class="fileref">:551</span></td><td>继续往下递归</td></tr>
+  <tr><td><code>RECORD</code></td><td>两者都做 <span class="fileref">:559</span></td><td>record 既要展开成员，本身又作为一个变量存在</td></tr>
+</table>
+
+<h2 id="leaf"><span class="n">3.</span> flattenSimpleComponent — 叶子，真正产出变量 <span class="fileref">:664</span></h2>
+<p>递归的终点。一个标量（或数组）变量在这里被造出来并塞进 <code>vars</code>。关键三行：</p>
+<pre><code>pre  := Prefix.<span class="fn">push</span>(comp_node, ty, ...);     <span class="ln">// :727</span> <span class="com">把自己的名字接到前缀上</span>
+name := Prefix.<span class="fn">prefix</span>(pre);                  <span class="ln">// :739</span> <span class="com">得到完整点号名字 a.b.c</span>
+v    := Variable.<span class="fn">VARIABLE</span>(name, ty, binding, visibility, comp_attr, ...);  <span class="ln">// :740</span>
+vars := v :: vars;                           <span class="ln">// :748</span> <span class="com">加入结果表</span></code></pre>
+<p>
+  <code>flattenBinding</code>（<span class="fileref">:689</span>）在这里把绑定值（<code>R = 100</code>）也带上前缀。
+  中间那一大坨（<span class="fileref">:695–723</span>）是个特例：数组变量 + 有绑定 + 要 scalarize 时，把绑定改写成一条
+  <code>ARRAY_EQUALITY</code> 方程而不是留作绑定——初学可以先跳过，知道「绑定有时会变成方程」即可。
+</p>
+
+<h2 id="complex"><span class="n">4.</span> flattenComplexComponent — 往下钻 <span class="fileref">:920</span></h2>
+<p>
+  组件本身是个复合类（比如一个 <code>Resistor</code>），就走这里。核心在最后
+  （<span class="fileref">:1013–1024</span>）：
+</p>
+<pre><code>pre := Prefix.<span class="fn">push</span>(node, ty, dims, prefix);   <span class="ln">// :1013</span> <span class="com">名字加一层</span>
+
+<span class="kw">if</span> <span class="fn">listEmpty</span>(dims) <span class="kw">then</span>                        <span class="com">// 标量：直接递归回 flattenClass</span>
+  (vars, sections) := <span class="fn">flattenClass</span>(cls, pre, ...);      <span class="ln">// :1017</span>
+<span class="kw">elseif</span> settings.scalarize <span class="kw">then</span>                 <span class="com">// 数组+要标量化：展成 a[1],a[2]...</span>
+  ... <span class="fn">flattenArray</span>(...)                        <span class="ln">// :1021</span>
+<span class="kw">else</span>                                           <span class="com">// 数组+不标量化：保留数组（新后端）</span>
+  ... <span class="fn">vectorizeArray</span>(...)                      <span class="ln">// :1023</span></code></pre>
+<p class="lead">
+  看到 <span class="fileref">:1017</span> 那行了吗——它<strong>又调回了 <code>flattenClass</code></strong>。这就是互相递归闭环的地方：
+  <code>flattenClass → flattenComponent → flattenComplexComponent → flattenClass → …</code>
+  一直到所有组件都是简单类型为止。
+</p>
+<p>
+  前面那一大段（<span class="fileref">:952–1011</span>）处理「复杂组件带绑定」——比如
+  <code>Complex c = Complex(1, 2)</code>，得把这个 record 绑定拆到每个字段上，拆不开就变成初始方程。细节多，但不影响主干。
+</p>
+
+<h2 id="prefix"><span class="n">5.</span> Prefix — 名字是怎么拼出来的 <span class="fileref">:150 · :192</span></h2>
+<p>
+  这是理解整个 flatten 的钥匙。Prefix 就是一个 cref（component reference），随递归下降不断 <code>push</code>：
+</p>
+<pre><code><span class="kw">function</span> <span class="fn">push</span>(node, ty, dims, prefix):        <span class="ln">// :192</span>
+  prefix.prefix := ComponentRef.<span class="fn">prefixCref</span>(node, ty, {}, prefix.prefix);</code></pre>
+<p>
+  进 <code>resistor1</code> 时 push 一层 → 前缀变 <code>resistor1</code>；再进它内部的 <code>p</code> →
+  <code>resistor1.p</code>；再进 <code>p</code> 里的 <code>v</code> → <code>resistor1.p.v</code>。到叶子时
+  <code>Prefix.prefix(pre)</code> 取出来的就是这个完整名字。<strong>下降 push，上升 pop</strong>
+  （<span class="fileref">:216</span>），典型的栈式前缀累加。
+</p>
+<div class="note">
+  <span class="tag">INDEXED_PREFIX</span>（<span class="fileref">:156</span>）是给数组不标量化时用的，多维护一个带下标迭代器的前缀，
+  初学先不管。
+</div>
+
+<h2 id="sections"><span class="n">6.</span> flattenSections / flattenEquations — 方程也要加前缀 <span class="fileref">:1826 · :1862</span></h2>
+<p>
+  每个类自带的方程（<code>equation</code> 段里的），在 <code>flattenClass</code> 处理完组件后
+  （<span class="fileref">:490</span>）统一加前缀。逻辑和变量一样：一条方程 <code>v = R*i</code>，在
+  <code>resistor1</code> 这层被处理时，里面的 <code>v</code>、<code>R</code>、<code>i</code> 全都被
+  <code>flattenEquation</code>（<span class="fileref">:1862</span>）加上 <code>resistor1.</code> 前缀，变成
+  <code>resistor1.v = resistor1.R * resistor1.i</code>。
+</p>
+
+<h2 id="map"><span class="n">7.</span> 把它串成一张图</h2>
+<div class="diagram">flatten(根类)                              ← 搭台子，最后做连接解析
+ └─ flattenClass(类, 前缀="")              ← 遍历组件 + 处理本类方程
+     ├─ flattenComponent(组件)             ← 判断: 删除? 分类? 分派?
+     │   ├─ flattenSimpleComponent  ─────► 产出一个 Variable(叶子，名字=前缀)
+     │   └─ flattenComplexComponent
+     │        └─ Prefix.push(名字加一层)
+     │           └─ flattenClass(子类, 前缀="resistor1")   ← 递归回去!
+     │                └─ ... 一直到全是简单类型
+     └─ flattenSections ──► flattenEquation(给方程里的名字加前缀)</div>
+<p class="lead">
+  <strong>主流程就这么多。</strong>剩下 3000 行是四类细节：数组的标量化/向量化
+  （<code>flattenArray</code> / <code>vectorizeArray</code>）、record 绑定拆分、连接解析
+  （<code>resolveConnections</code>）、以及各种绑定/表达式的前缀下推
+  （<code>flattenExp</code> / <code>flattenBinding</code>）。
+</p>
+
+<h2 id="verify"><span class="n">8.</span> 建议现在做一件事验证理解</h2>
+<p>拿个两电阻模型，亲眼看输入输出的对照：</p>
+<pre><code>omc -d=dumpFlatModel Model.mo</code></pre>
+<p>
+  对着 dump 出来的扁平变量表，回想每个 <code>resistor1.p.v</code> 是走了哪条
+  <code>flattenClass → flattenComplexComponent → flattenClass → flattenSimpleComponent</code>
+  的路径产生的。这一对照，主流程就彻底刻进去了。
+</p>
+
+<footer>
+  基于 OpenModelica 仓库 <code>NFFrontEnd/NFFlatten.mo</code> 实际源码整理 · 行号对应 3343 行版本 ·
+  离线自包含文档，可直接双击在浏览器打开。
+</footer>
+
+</div>
+</body>
+</html>

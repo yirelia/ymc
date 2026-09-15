@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>后端第一篇 · 匹配与排序（Matching + BLT Sorting）</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #656d76; --border: #d0d7de;
+    --code-bg: #f6f8fa; --kw: #cf222e; --str: #0a3069; --com: #6e7781;
+    --fn: #8250df; --num: #0550ae; --accent: #0969da; --accent-bg: #ddf4ff;
+    --card: #f6f8fa; --line: #57606a; --ok: #1a7f37; --warn: #9a6700;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #8b949e; --border: #30363d;
+      --code-bg: #161b22; --kw: #ff7b72; --str: #a5d6ff; --com: #8b949e;
+      --fn: #d2a8ff; --num: #79c0ff; --accent: #58a6ff; --accent-bg: #132436;
+      --card: #161b22; --line: #8b949e; --ok: #3fb950; --warn: #d29922;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.75; font-size: 16px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 2.5rem 1.5rem 6rem; }
+  header.hero { border-bottom: 1px solid var(--border); padding-bottom: 1.5rem; margin-bottom: 2rem; }
+  h1 { font-size: 2rem; margin: 0 0 .4rem; letter-spacing: -.02em; }
+  .sub { color: var(--muted); font-size: .95rem; margin: 0; }
+  .sub code { background: var(--code-bg); padding: .1em .4em; border-radius: 5px; font-size: .85em; }
+  .crumb { display: inline-block; margin-bottom: 1rem; font-size: .85rem; }
+  h2 { font-size: 1.4rem; margin: 3rem 0 1rem; padding-top: .5rem; border-top: 1px solid var(--border); }
+  h2 .n { color: var(--accent); font-variant-numeric: tabular-nums; }
+  h3 { font-size: 1.1rem; margin: 1.8rem 0 .6rem; }
+  .part { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); font-weight: 700; margin-top: 3.5rem; }
+  p { margin: .8rem 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: "SFMono-Regular", "Cascadia Code", Consolas, "Liberation Mono", monospace; font-size: .88em; }
+  p code, li code, td code { background: var(--code-bg); padding: .1em .4em; border-radius: 5px; color: var(--fg); }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.1rem; overflow-x: auto; font-size: .84rem; line-height: 1.6; margin: 1rem 0;
+  }
+  pre code { background: none; padding: 0; color: var(--fg); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .com { color: var(--com); font-style: italic; }
+  .fn { color: var(--fn); } .num { color: var(--num); }
+  .ln { color: var(--line); user-select: none; }
+  .lead {
+    background: var(--accent-bg); border-left: 3px solid var(--accent);
+    padding: .9rem 1.1rem; border-radius: 0 8px 8px 0; margin: 1.2rem 0;
+  }
+  .lead strong { color: var(--fg); }
+  .note {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: .9rem 1.1rem; margin: 1.2rem 0; font-size: .95rem;
+  }
+  .note .tag { font-weight: 600; color: var(--accent); }
+  .warn-box { border-left-color: var(--warn); }
+  .warn-box .tag { color: var(--warn); }
+  .toc {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.4rem; margin: 1.5rem 0 2.5rem;
+  }
+  .toc-title { font-weight: 600; margin: 0 0 .5rem; font-size: .9rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .toc ol { margin: 0; padding-left: 1.4rem; }
+  .toc li { margin: .25rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--card); font-weight: 600; }
+  .fileref { color: var(--muted); font-size: .82rem; font-family: "SFMono-Regular", Consolas, monospace; }
+  .diagram {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1.2rem; overflow-x: auto; font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: .82rem; line-height: 1.65; white-space: pre; color: var(--fg);
+  }
+  .ok { color: var(--ok); font-weight: 600; }
+  .bad { color: var(--warn); font-weight: 600; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <a class="crumb" href="NFFlatten-方程与连接导读.html">← 第二篇 · 方程与连接</a>
+  <h1>匹配 与 排序（Matching + BLT Sorting）</h1>
+  <p class="sub">后端第一篇 · <code>NBackEnd/Modules/1_Main/NBMatching.mo</code> · <code>NBSorting.mo</code></p>
+</header>
+
+<p class="lead">
+  <strong>前两篇把模型压成了一张扁平方程表，本篇是后端拿到它之后做的第一件事：</strong>
+  给每个变量指派一条「负责求解它」的方程（<strong>匹配</strong>），
+  再把方程排成一个能依次求解的顺序（<strong>BLT 排序</strong>）。
+  这两步合起来叫<strong>因果化（causalization）</strong>——把一堆无序的 <code>=</code> 关系，
+  变成一段有先后、可执行的计算流程。
+</p>
+
+<nav class="toc">
+  <p class="toc-title">目录</p>
+  <ol>
+    <li><a href="#why">为什么需要这一步：= 不是赋值</a></li>
+    <li><a href="#graph">二部图与邻接矩阵</a></li>
+    <li><a href="#match">Matching — 增广路径匹配</a></li>
+    <li><a href="#singular">匹配失败意味着什么：结构奇异 → 指标约简</a></li>
+    <li><a href="#sort">Sorting — Tarjan 强连通分量 → BLT</a></li>
+    <li><a href="#block">代数环：多元素分块从哪来</a></li>
+    <li><a href="#map">全景图与下一步</a></li>
+  </ol>
+</nav>
+
+<h2 id="why"><span class="n">1.</span> 为什么需要这一步：<code>=</code> 不是赋值</h2>
+<p>
+  扁平模型里的方程是<strong>数学等式</strong>，没有方向。<code>resistor1.v = resistor1.R * resistor1.i</code>
+  既可以「已知 R、i 求 v」，也可以「已知 v、R 求 i」。一个含 n 个未知量的模型，就是 n 个这样的无向等式。
+</p>
+<p>
+  但计算机要的是<strong>顺序执行的赋值</strong>：先算谁、后算谁。所以后端必须回答两个问题：
+</p>
+<table>
+  <tr><th>问题</th><th>解决它的步骤</th><th>输出</th></tr>
+  <tr><td>每个未知量由<strong>哪条方程</strong>来解？</td><td>Matching（匹配）</td><td>变量 ↔ 方程 的一一对应</td></tr>
+  <tr><td>这些方程该<strong>按什么顺序</strong>解？</td><td>Sorting（BLT 排序）</td><td>拓扑有序的方程块序列</td></tr>
+</table>
+<div class="note">
+  <span class="tag">前提：结构平衡</span> 匹配的存在前提是<strong>方程数 = 未知量数</strong>。这正是前端
+  <code>NFCheckModel</code> 反复强调「模型必须 balanced」的原因——不平衡的模型在这一步根本无法匹配。
+</div>
+
+<h2 id="graph"><span class="n">2.</span> 二部图与邻接矩阵</h2>
+<p>
+  把「变量」和「方程」看成二部图的两侧节点：<strong>若变量 v 出现在方程 e 里，就在 e 和 v 之间连一条边</strong>。
+  代码里这张图就是邻接矩阵 <code>m</code>——<code>m[e]</code> 是方程 e 里出现的所有变量下标列表（由
+  <code>NBAdjacency</code> 构造）。
+</p>
+<div class="diagram">模型:                          二部图 (m[eqn] = 该方程含的变量):
+  eq1: a = 2                     eq1 ──── a
+  eq2: b = a + 1                 eq2 ──┬─ a
+  eq3: c = b + a                       └─ b
+                                 eq3 ──┬─ a
+                                       ├─ b
+                                       └─ c
+</div>
+<p>
+  匹配问题 = 在这张二部图里找一个<strong>完美匹配</strong>：给每条方程挑一个变量、每个变量恰好被一条方程挑中，
+  互不冲突。图论上这是经典的二部图最大匹配。
+</p>
+
+<p class="part">Part A — 匹配</p>
+
+<h2 id="match"><span class="n">3.</span> Matching — 增广路径匹配 <span class="fileref">NBMatching.mo:340</span></h2>
+<p>
+  入口 <code>scalarMatching</code> 的骨架非常直白：<strong>对每条方程，尝试找一条「增广路径」把它匹配到某个变量</strong>。
+</p>
+<pre><code>var_to_eqn := arrayCreate(nVars, -1);       <span class="ln">// -1 = 尚未匹配</span>
+<span class="kw">for</span> eqn <span class="kw">in</span> 1:nEqns <span class="kw">loop</span>                     <span class="ln">// :359</span>
+  var_marks := arrayCreate(nVars, false);   <span class="com">// 本轮 DFS 的访问标记</span>
+  eqn_marks := arrayCreate(nEqns, false);
+  (var_to_eqn, ..., pathFound) := <span class="fn">augmentPath</span>(eqn, m, mT, var_to_eqn, ...);   <span class="ln">// :362</span>
+  <span class="kw">if</span> <span class="kw">not</span> pathFound <span class="kw">then</span>
+    <span class="com">// 找不到 → 结构奇异，需要指标约简（见下一节）</span>
+    marked_eqns := ... :: marked_eqns;      <span class="ln">// :369/371</span>
+  <span class="kw">end if</span>;
+<span class="kw">end for</span>;</code></pre>
+<p>核心递归 <code>augmentPath</code>（<span class="fileref">:394</span>）就是匈牙利算法的那一步，分两轮：</p>
+<pre><code><span class="com">// 第一轮：有没有边直接连到一个「还没被占用」的变量？有就占它。</span>
+<span class="kw">for</span> var <span class="kw">in</span> m[eqn] <span class="kw">loop</span>                    <span class="ln">// :405</span>
+  <span class="kw">if</span> var_to_eqn[var] &lt;= 0 <span class="kw">then</span>            <span class="com">// 该变量空闲</span>
+    var_to_eqn[var] := eqn; pathFound := true; <span class="kw">return</span>;   <span class="ln">// :406-409</span>
+  <span class="kw">end if</span>;
+<span class="kw">end for</span>;
+
+<span class="com">// 第二轮：都被占了 → 试着「请占用者让位」。递归地帮那条方程另找变量。</span>
+<span class="kw">for</span> var <span class="kw">in</span> m[eqn] <span class="kw">loop</span>                    <span class="ln">// :415</span>
+  <span class="kw">if</span> <span class="kw">not</span> var_marks[var] <span class="kw">then</span>
+    var_marks[var] := true;
+    (...) := <span class="fn">augmentPath</span>(var_to_eqn[var], ...);   <span class="ln">// :419 让现占用者去别处</span>
+    <span class="kw">if</span> pathFound <span class="kw">then</span>
+      var_to_eqn[var] := eqn; <span class="kw">return</span>;         <span class="ln">// :421 让位成功，我占下</span>
+    <span class="kw">end if</span>;
+  <span class="kw">end if</span>;
+<span class="kw">end for</span>;</code></pre>
+<p class="lead">
+  <strong>一句话理解增广路径：</strong>「我想要的变量都被别人占了？那就问占用者能不能换一个。
+  只要顺着这条链最终腾出一个空变量，整条链集体挪一格，就多匹配上一对。」
+  对 n 条方程各跑一次，就得到完整的变量↔方程双射 <code>var_to_eqn</code> / <code>eqn_to_var</code>（<span class="fileref">:377-382</span>）。
+</p>
+<div class="note">
+  <span class="tag">性能旁路</span> 除了这份纯 MetaModelica 实现，还有 <code>PFPlusExternal</code>（<span class="fileref">:428</span>），
+  调用 C 外部库 <code>BackendDAEEXT</code> 里的 push-relabel 匹配，用于大模型。算法思想一致，只是换了更快的实现。
+</div>
+
+<h2 id="singular"><span class="n">4.</span> 匹配失败 = 结构奇异 → 指标约简 <span class="fileref">:364</span></h2>
+<p>
+  如果某条方程<strong>怎么都找不到增广路径</strong>，说明这张二部图没有完美匹配——模型<strong>结构奇异</strong>。
+  这几乎总是因为模型是<strong>高指标 DAE</strong>：约束之间存在隐藏的微分关系，导致方程「数量够但结构上不够独立」。
+</p>
+<pre><code><span class="kw">if</span> <span class="kw">not</span> pathFound <span class="kw">then</span>
+  <span class="kw">if</span> <span class="kw">not</span> partially <span class="kw">then</span>
+    Error.<span class="fn">addMessage</span>(..., <span class="str">"structurally singular ... Index Reduction"</span>);   <span class="ln">// :366</span>
+  <span class="kw">else</span>
+    marked_eqns := BackendUtil.<span class="fn">findTrueIndices</span>(eqn_marks) :: marked_eqns;   <span class="ln">// :371</span>
+  <span class="kw">end if</span>;
+<span class="kw">end if</span>;</code></pre>
+<p>
+  这里 <code>marked_eqns</code> 收集的正是「DFS 走过却匹配不上的那组方程」——它们就是需要被<strong>微分</strong>的约束。
+  下游的 <code>NBResolveSingularities</code> 用 Pantelides 算法对这组方程求导、引入 dummy derivative，
+  把指标降到 1，再回来重新匹配。经典例子是理想约束的摆锤 / 无质量刚性连接。
+</p>
+<div class="note warn-box">
+  <span class="tag">学习提示</span> 指标约简（Pantelides + dummy derivative）是后端<strong>数学上最难的一块</strong>，
+  自成一篇。本篇只需记住：<strong>匹配失败不是 bug，是信号</strong>——它精确地指出「哪几条方程需要微分」，
+  这是 matching 除了排序之外的第二大价值。
+</div>
+
+<p class="part">Part B — 排序</p>
+
+<h2 id="sort"><span class="n">5.</span> Sorting — Tarjan 强连通分量 → BLT <span class="fileref">NBSorting.mo:307</span></h2>
+<p>
+  匹配给了「谁解谁」，但没给顺序。<code>eq2: b = a + 1</code> 必须在 <code>eq1: a = 2</code> 之后算。
+  这种「依赖」把二部图变成了<strong>有向图</strong>：
+</p>
+<pre><code><span class="com">// predecessors: 方程 eqn 用到的变量，各自由哪条方程求解 → eqn 依赖那些方程</span>
+<span class="kw">function</span> <span class="fn">predecessors</span>(idx, m, mapping):        <span class="ln">// :695</span>
+  pre_lst := <span class="fn">list</span>(mapping[cand] <span class="kw">for</span> cand <span class="kw">guard</span>(...) <span class="kw">in</span> m[idx]);</code></pre>
+<p>
+  在这张有向图上跑 <strong>Tarjan 算法</strong> 求强连通分量（SCC），并且天然得到<strong>拓扑序</strong>。
+  <code>tarjanScalar</code>（<span class="fileref">:307</span>）遍历每个已匹配变量对应的方程，未访问就进 <code>strongConnect</code>：
+</p>
+<pre><code><span class="kw">for</span> var <span class="kw">in</span> 1:N <span class="kw">loop</span>                          <span class="ln">// :327</span>
+  eqn := matching.var_to_eqn[var];
+  <span class="kw">if</span> eqn &gt; 0 <span class="kw">and</span> number[eqn] == -1 <span class="kw">then</span>       <span class="com">// 尚未访问</span>
+    (stack, index, comps) := <span class="fn">strongConnect</span>(m, matching.var_to_eqn, eqn, ...);   <span class="ln">// :330</span>
+  <span class="kw">end if</span>;
+<span class="kw">end loop</span>;</code></pre>
+<p><code>strongConnect</code>（<span class="fileref">:647</span>）是教科书式的 Tarjan——<code>number</code> 是访问序号、<code>lowlink</code> 是能回溯到的最小序号、栈记录当前分量：</p>
+<pre><code>arrayUpdate(number, eqn, index);
+arrayUpdate(lowlink, eqn, index);            <span class="ln">// :663-664</span>
+stack := eqn::stack;
+
+<span class="kw">for</span> eqn2 <span class="kw">in</span> <span class="fn">predecessors</span>(eqn, m, var_to_eqn) <span class="kw">loop</span>   <span class="ln">// :670</span>
+  <span class="kw">if</span> number[eqn2] == -1 <span class="kw">then</span>
+    <span class="fn">strongConnect</span>(... eqn2 ...);                        <span class="com">// 递归到未访问的后继</span>
+    lowlink[eqn] := <span class="fn">intMin</span>(lowlink[eqn], lowlink[eqn2]);   <span class="ln">// :674</span>
+  <span class="kw">elseif</span> onStack[eqn2] <span class="kw">then</span>
+    lowlink[eqn] := <span class="fn">intMin</span>(lowlink[eqn], number[eqn2]);    <span class="ln">// :677 回边，同属一个 SCC</span>
+  <span class="kw">end if</span>;
+<span class="kw">end loop</span>;
+
+<span class="kw">if</span> lowlink[eqn] == number[eqn] <span class="kw">then</span>          <span class="ln">// :682 eqn 是分量的根 → 弹栈成一个 SCC</span>
+  ... SCC := 弹出直到 eqn ...
+  comps := SCC :: comps;
+<span class="kw">end if</span>;</code></pre>
+<p class="lead">
+  <strong>输出 <code>comps</code> 就是 BLT（Block Lower Triangular，块下三角）：</strong>
+  一个按依赖顺序排好的方程分组列表。每个分组（SCC）是一个「必须一起解」的块，
+  分组之间已经拓扑有序——照着从前往后算，每一块要用的输入都在前面算好了。
+</p>
+
+<h2 id="block"><span class="n">6.</span> 代数环：多元素分块从哪来</h2>
+<p>SCC 的大小揭示了模型的结构。看两个对照例子：</p>
+<div class="diagram">A. 可依次求解（每块 1 个方程 = 下三角）
+   eq1: a = 2          SCC1 = {eq1}   → a := 2
+   eq2: b = a + 1      SCC2 = {eq2}   → b := a + 1
+   eq3: c = b + a      SCC3 = {eq3}   → c := b + a
+   <span class="ok">三个单元素块，直接顺序赋值，无需迭代。</span>
+
+B. 代数环（一块含多个方程 = 需联立）
+   eq1: x + y = 3      SCC1 = {eq1, eq2}   → 2×2 线性系统，一起解
+   eq2: x - y = 1
+   <span class="bad">x 依赖 eq2、y 依赖 eq1，互相引用 → 强连通 → 同一个块。</span>
+</div>
+<table>
+  <tr><th>SCC 大小</th><th>含义</th><th>后端怎么处理</th></tr>
+  <tr><td>1 个方程</td><td>可直接解出一个变量</td><td>生成一句赋值（必要时符号求解 <code>NBSolve</code>）</td></tr>
+  <tr><td>多个方程</td><td><strong>代数环</strong>：一组变量互相耦合</td><td>线性 → 生成矩阵求解；非线性 → 交给 <strong>Tearing</strong> 撕裂后用 Newton 迭代</td></tr>
+</table>
+<p>
+  这就接上了下一步：<strong>Tearing</strong>（<code>NBTearing.mo</code>）的存在意义，正是为了把这些多元素 SCC 尽量缩小——
+  选出少量「撕裂变量」当迭代未知量，其余变量用它们显式表达，把一个大的非线性块变成一个小得多的迭代问题。
+</p>
+
+<h2 id="map"><span class="n">7.</span> 全景图与下一步</h2>
+<div class="diagram">扁平方程表 (前两篇的产物: 纯变量 + 纯方程, #eqn = #var)
+   │
+   ▼  NBAdjacency        构造邻接矩阵 m[eqn] = 该方程含的变量
+二部图
+   │
+   ▼  NBMatching         augmentPath 增广路径 → 变量↔方程 双射
+   │                     匹配失败? → marked_eqns → 指标约简(Pantelides)
+匹配 (谁解谁)
+   │
+   ▼  NBSorting          predecessors 定向 → Tarjan SCC → 拓扑序
+BLT 分块 (谁先算 + 哪些要联立)
+   │
+   ├─ 单元素块 ─────────► NBSolve   符号求解成一句赋值
+   └─ 多元素块(代数环) ──► NBTearing 撕裂 + Newton 迭代
+   │
+   ▼
+可执行的计算序列  →  SimCode → C 代码 → SUNDIALS 积分</div>
+<p class="lead">
+  <strong>到这里，「无序的等式集合」已经变成「有先后、可执行的计算流程」。</strong>
+  匹配 + 排序 = 因果化，是符号求解型仿真编译器的心脏。剩下的 Tearing、指标约简、符号雅可比，
+  都是围绕这张 BLT 图做的进一步优化与特例处理。
+</p>
+
+<footer>
+  基于 OpenModelica 仓库 <code>NBackEnd/Modules/1_Main/NBMatching.mo</code> 与 <code>NBSorting.mo</code> 实际源码整理 ·
+  离线自包含文档 · 系列：<a href="NFFlatten-主流程导读.html">① 主流程</a> ·
+  <a href="NFFlatten-方程与连接导读.html">② 方程与连接</a> · ③ 匹配与排序（本篇）。
+</footer>
+
+</div>
+</body>
+</html>
