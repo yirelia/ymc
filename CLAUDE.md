@@ -25,6 +25,20 @@ cmake --preset msvc-asan && cmake --build --preset msvc-asan && ctest --preset m
 ```
 新增 `.cpp`/`.h` 后要重新 configure（`file(GLOB … CONFIGURE_DEPENDS)` + `if(EXISTS)` 门控）。两套编译器都必须零警告。
 
+## 任务收尾必须与 OMC 对拍（硬性，来自用户）
+**每一个任务/加宽桶结束后，都必须把结果和 OMC 做对比**——不是凭印象说"应该对了"，而是实跑对拍。收尾清单逐条过：
+1. **门扫描 + 实跑 oracle 对拍**（权威）：
+   ```
+   python tools/flat_sweep.py --cases-from docs/research/s3-easy-slice.json --oracle-live
+   ```
+   要求：`FAIL 0`（对 testsuite 文件 `// Result:`）**且** `oracle=live` 段 `不一致 0`（每个 PASS 用例与**实跑 omc 1.25.0** 逐字节一致）。
+   `--oracle-live` 会把每个 PASS 再和实跑安装版 omc 1.25.0 逐字节比；只有文件 Result 与 1.25.0 本身分歧的用例（omc 自身报错/不同版本行为）才允许落在 `omc 自身报错/超时` 桶，且**必须**在 `docs/open-questions.md` 分歧账本里有记录（ymc 一律以 **1.25.0 实测**为准，不以文件为准）。
+2. **横切特性对广语料**：改动若涉及 cref/表达式/折叠/数组等横切逻辑，还要 `python tools/flat_sweep.py --oracle-live`（全 scodeinst）确认**无新增真 FAIL**（curated slice 不含未做特性的坑，见 lessons）。
+3. **三套编译器 + ASan**：gcc-debug / msvc-debug / msvc-asan 各 `ctest` 全绿、零警告、ASan 0 报告。
+4. 新 PASS 用例加进 `docs/research/s3-easy-slice.json` 固化进门；单测期望值必须来自 oracle（探针实跑或引 MLS/OMC 行号），不能照自己实现写（否则自证，见 lessons）。
+
+只有这四条都过，任务才算"验证完成"，才能自行提交（提交流程见用户记忆 ymc-commit-workflow）。
+
 ## 跑 OMC 做 oracle 的坑
 - 安装版 `omc`（1.25.0，在 PATH）的新后端无指标约简；工作区版 `C:\dev\OpenModelica\build_cmake\install_cmake\bin\omc.exe`（= 源码 HEAD）对 index-3 + StateSelect 模型会无限循环并写 GB 级输出，**必须带超时**。
 - 项目前缀统一为 `ymc` / `YMC_`；OMC 自己的 `MMC_` 是 MetaModelica Compiler，别混。

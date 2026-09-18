@@ -18,6 +18,7 @@ import collections
 import json
 import os
 import re
+import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
@@ -45,6 +46,9 @@ def main():
     ap.add_argument("--status", help="只跑该 status（correct / incorrect）")
     ap.add_argument("--show", type=int, default=20, help="列出前 N 个 FAIL 的首个差异")
     ap.add_argument("--show-skips", action="store_true", help="列出 SKIP 原因分布")
+    ap.add_argument("--oracle-live", action="store_true",
+                    help="把每个 PASS 用例再和**实跑 omc 1.25.0** 逐字节对拍（权威 oracle，非文件 Result）")
+    ap.add_argument("--omc", default="omc", help="omc 可执行文件（默认 PATH 上的安装版 1.25.0）")
     ap.add_argument("--json")
     args = ap.parse_args()
     if args.ymc:
@@ -100,10 +104,48 @@ def main():
             print(f"    实际 | {str(fd.get('actual'))[:140]}")
     if len(fails) > args.show:
         print(f"\n（另有 {len(fails) - args.show} 个 FAIL 未展示）")
+    live_diff = 0
+    if args.oracle_live:
+        passes = [r["path"] for r in records if r["verdict"] == "PASS"]
+
+        def check(relpath):
+            path = os.path.join(rt.TESTSUITE_ROOT, relpath.replace("/", os.sep))
+
+            def run(cmd):
+                try:
+                    return subprocess.run(cmd, capture_output=True, text=True,
+                                          timeout=args.timeout).stdout.replace("\r\n", "\n").strip()
+                except Exception:
+                    return None
+            y = run([rt.YMC, path])
+            o = run([args.omc, path])
+            if o is None:
+                return ("omc-timeout", relpath)
+            if not o.startswith("class"):
+                return ("omc-error", relpath)   # 1.25.0 自己报错（反向分歧，见账本）
+            if y is None:
+                return ("ymc-fail", relpath)
+            return ("ok" if y == o else "diff", relpath)
+
+        with ThreadPoolExecutor(max_workers=args.jobs) as ex:
+            res = list(ex.map(check, passes))
+        ok = [p for k, p in res if k == "ok"]
+        diff = [p for k, p in res if k == "diff"]
+        oe = [p for k, p in res if k in ("omc-error", "omc-timeout")]
+        live_diff = len(diff)
+        print(f"\n== oracle=live（实跑 omc 1.25.0）：{len(passes)} 个 PASS 用例 | 逐字节一致 {len(ok)}"
+              f" | 不一致 {len(diff)} | omc 自身报错/超时 {len(oe)} ==")
+        for p in diff:
+            print(f"  ✗ 与 omc 1.25.0 不一致：{os.path.basename(p)}")
+        for p in oe:
+            print(f"  · omc 1.25.0 报错/超时（分歧账本）：{os.path.basename(p)}")
+        if not diff:
+            print("  ✓ 所有 PASS 用例与实跑 omc 1.25.0 逐字节一致")
+
     if args.json:
         with open(args.json, "w", encoding="utf-8") as f:
             json.dump({"total": dict(tot), "records": records}, f, ensure_ascii=False, indent=1)
-    return 0 if tot["FAIL"] == 0 else 1
+    return 0 if (tot["FAIL"] == 0 and live_diff == 0) else 1
 
 
 if __name__ == "__main__":
