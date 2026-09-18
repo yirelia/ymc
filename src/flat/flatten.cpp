@@ -2,6 +2,7 @@
 #include "flat/flatten.h"
 
 #include <cmath>
+#include <optional>
 #include <cstdlib>
 #include <string_view>
 #include <unordered_map>
@@ -625,6 +626,145 @@ class Flattener {
     return nullptr;
   }
 
+  // ---- package 限定常量：SCODE 作用域链解析 + 值语义常量求值 ----
+  // package 常量往往没被实例化（没走 inst 树），所以直接在 SCODE 上按名解析 + 递归求值，不经 inst_exp/cref。
+  struct CVal {
+    enum class K { Int, Real, Bool, Str } k = K::Int;
+    std::int64_t i = 0;
+    double r = 0.0;
+    bool b = false;
+    Symbol s;
+    static CVal I(std::int64_t v) { CVal c; c.k = K::Int; c.i = v; return c; }
+    static CVal R(double v) { CVal c; c.k = K::Real; c.r = v; return c; }
+    static CVal B(bool v) { CVal c; c.k = K::Bool; c.b = v; return c; }
+    static CVal S(Symbol v) { CVal c; c.k = K::Str; c.s = v; return c; }
+    double as_r() const { return k == K::Int ? static_cast<double>(i) : r; }
+  };
+  using ScodeScope = std::vector<Id<SElement>>;   // 类 SElement，内→外
+
+  // enclosing 实例的词法作用域链 → 类 SElement 列表（内→外，<top>/无 def 跳过）。
+  ScodeScope scode_scope_of(NodeId enclosing) {
+    ScodeScope s;
+    for (NodeId n = enclosing; n.is_valid() && !I_.nodes[n].is_empty(); n = I_.nodes[n].parent_scope) {
+      const Id<SElement> d = I_.nodes[n].def;
+      if (d.is_valid() && I_.scode.elems[d].kind == SElementKind::Class) s.push_back(d);
+    }
+    return s;
+  }
+
+  // 在作用域链（内→外）+ 顶层 program 里找名为 name 的类或组件元素（内层优先 → 支持遮蔽）。
+  Id<SElement> find_scode_element(Symbol name, const ScodeScope& scope) {
+    auto scan = [&](const std::vector<Id<SElement>>& elems) -> Id<SElement> {
+      for (Id<SElement> e : elems) {
+        const SElement& el = I_.scode.elems[e];
+        if (el.name == name && (el.kind == SElementKind::Class || el.kind == SElementKind::Component)) return e;
+      }
+      return Id<SElement>{};
+    };
+    for (Id<SElement> cls : scope) {
+      Id<SElement> f = scan(I_.scode.elems[cls].def.elements);
+      if (f.is_valid()) return f;
+    }
+    return scan(I_.scode.program);   // 顶层
+  }
+
+  // 解析限定名 parts 到 constant 组件；out_scope = 该常量所在类的作用域链（求它的绑定用）。前导点 = 从顶层。
+  bool resolve_qual_const(const std::vector<Symbol>& parts, bool leading_dot, const ScodeScope& scope,
+                          Id<SElement>& out_comp, ScodeScope& out_scope) {
+    if (parts.empty()) return false;
+    ScodeScope cur = leading_dot ? ScodeScope{} : scope;
+    Id<SElement> el = find_scode_element(parts[0], cur);
+    if (!el.is_valid()) return false;
+    for (std::size_t idx = 1; idx < parts.size(); ++idx) {
+      if (I_.scode.elems[el].kind != SElementKind::Class) return false;   // 中间段必须是类
+      cur.insert(cur.begin(), el);   // 进入该类（压到作用域链最内）
+      Id<SElement> nxt;
+      for (Id<SElement> e : I_.scode.elems[el].def.elements) {
+        const SElement& c = I_.scode.elems[e];
+        if (c.name == parts[idx] && (c.kind == SElementKind::Class || c.kind == SElementKind::Component)) { nxt = e; break; }
+      }
+      if (!nxt.is_valid()) return false;
+      el = nxt;
+    }
+    if (I_.scode.elems[el].kind != SElementKind::Component) return false;
+    if (I_.scode.elems[el].attr.var != SVariability::Const) return false;   // 只内联 constant
+    out_comp = el;
+    out_scope = cur;
+    return true;
+  }
+
+  // 在 SCODE 作用域链上求值一个常量表达式（字面量 / 限定常量引用 / 算术）；折不成常量返回 nullopt。
+  std::optional<CVal> eval_scode(Id<Exp> exp, const ScodeScope& scope, int depth) {
+    if (depth > 100) return std::nullopt;
+    const Exp& e = I_.absyn.exps[exp];
+    switch (e.kind) {
+      case ExpKind::IntLit: return CVal::I(e.ival);
+      case ExpKind::RealLit: return CVal::R(e.rval);
+      case ExpKind::BoolLit: return CVal::B(e.bval);
+      case ExpKind::StringLit: return CVal::S(in_.intern(unescape_modelica_string(in_.str(e.sval))));
+      case ExpKind::Tuple:
+        return e.args.size() == 1 ? eval_scode(e.args[0], scope, depth + 1) : std::nullopt;   // 括号
+      case ExpKind::CrefExp: {
+        const Cref& c = I_.absyn.crefs[e.cref];
+        std::vector<Symbol> names;
+        for (const CrefPart& p : c.parts) {
+          if (!p.subscripts.empty()) return std::nullopt;
+          names.push_back(p.name);
+        }
+        Id<SElement> comp;
+        ScodeScope cscope;
+        if (!resolve_qual_const(names, c.leading_dot, scope, comp, cscope)) return std::nullopt;
+        const Id<SMod> m = I_.scode.elems[comp].mod;
+        if (!m.is_valid() || !I_.scode.mods[m].binding.is_valid()) return std::nullopt;
+        return eval_scode(I_.scode.mods[m].binding, cscope, depth + 1);
+      }
+      case ExpKind::Unary: {
+        if (e.op != Op::UMinus) return e.op == Op::UPlus ? eval_scode(e.a, scope, depth + 1) : std::nullopt;
+        auto v = eval_scode(e.a, scope, depth + 1);
+        if (!v) return std::nullopt;
+        if (v->k == CVal::K::Int) return CVal::I(-v->i);
+        if (v->k == CVal::K::Real) return CVal::R(-v->r);
+        return std::nullopt;
+      }
+      case ExpKind::Binary: {
+        BinOp op;
+        if (!map_binop(e.op, op)) return std::nullopt;   // 只做算术
+        auto a = eval_scode(e.a, scope, depth + 1), b = eval_scode(e.b, scope, depth + 1);
+        if (!a || !b) return std::nullopt;
+        const bool both_int = a->k == CVal::K::Int && b->k == CVal::K::Int && op != BinOp::Div && op != BinOp::Pow;
+        if (both_int) {
+          switch (op) {
+            case BinOp::Add: return CVal::I(a->i + b->i);
+            case BinOp::Sub: return CVal::I(a->i - b->i);
+            case BinOp::Mul: return CVal::I(a->i * b->i);
+            default: break;
+          }
+        }
+        const double x = a->as_r(), y = b->as_r();
+        switch (op) {
+          case BinOp::Add: return CVal::R(x + y);
+          case BinOp::Sub: return CVal::R(x - y);
+          case BinOp::Mul: return CVal::R(x * y);
+          case BinOp::Div: return y != 0.0 ? std::optional<CVal>(CVal::R(x / y)) : std::nullopt;
+          case BinOp::Pow: return CVal::R(std::pow(x, y));
+        }
+        return std::nullopt;
+      }
+      default:
+        return std::nullopt;
+    }
+  }
+
+  Id<Expr> literal_of(const CVal& v) {
+    switch (v.k) {
+      case CVal::K::Int: return lit_int(v.i);
+      case CVal::K::Real: return lit_real(v.r);
+      case CVal::K::Bool: return lit_bool(v.b);
+      case CVal::K::Str: { Expr e; e.kind = ExprKind::StringLit; e.sval = v.s; e.ty = Type::string(); return add(std::move(e)); }
+    }
+    return lit_int(0);
+  }
+
   // ---- instExpressions：Absyn Exp → 类型化 Expr（在 model.exprs）----
   // 解析 cref（对 enclosing 的 FlatTree 组件），本地 cref 前缀改写；标量定型 + 整型→实型字面量折叠。
   Id<Expr> inst_exp(Id<Exp> ae, NodeId enclosing, const std::vector<Symbol>& prefix) {
@@ -761,8 +901,26 @@ class Flattener {
           for (const SEnumItem& it : ed->enum_items)
             if (it.literal == c.parts.back().name) return make_enum_lit(c, enclosing);
       }
-      // 单段未解析（time 等内建）v1 当 Real 保留；多段未解析（跨包常量 A.B.c、package 常量）v1 未做完整
-      // package lookup——omc 会内联成值，标 unsupported（driver 退 66）。
+      // 多段名先试 **package 限定常量** `P.A.B.c`：SCODE 作用域链解析到 constant + 值语义求值 → 内联字面量。
+      if (c.parts.size() > 1) {
+        std::vector<Symbol> names;
+        bool ok = true;
+        for (const CrefPart& p : c.parts) {
+          if (!p.subscripts.empty()) { ok = false; break; }
+          names.push_back(p.name);
+        }
+        Id<SElement> qcomp;
+        ScodeScope qscope;
+        if (ok && resolve_qual_const(names, c.leading_dot, scode_scope_of(enclosing), qcomp, qscope)) {
+          const Id<SMod> m = I_.scode.elems[qcomp].mod;
+          if (m.is_valid() && I_.scode.mods[m].binding.is_valid()) {
+            std::optional<CVal> v = eval_scode(I_.scode.mods[m].binding, qscope, 0);
+            if (v) return literal_of(*v);
+          }
+        }
+      }
+      // 单段未解析（time 等内建）v1 当 Real 保留；多段解析不出（package 常量非字面量、redeclare、跨包 extends…）
+      // → omc 会内联成值，标 unsupported（driver 退 66）。
       if (c.parts.size() > 1) set_unsupported("qualified/cross-scope reference");
       for (const CrefPart& p : c.parts)
         if (!p.subscripts.empty()) set_unsupported("subscript on non-array");   // `time[2]` → omc 报错

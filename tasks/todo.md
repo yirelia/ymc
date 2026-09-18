@@ -255,8 +255,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       ceval3 的 `fixed = <参数>` 需参数求值（omc 求值成字面量 + 标 final）→ 加 `fixed` 非字面量 SKIP 守卫，避免退成 FAIL。
       → easy-slice **106 PASS / 0 FAIL**（CevalRelation1/Logical1/IntegerEnum1 转正）；oracle=live 105 逐字节一致；
       全 scodeinst PASS 106→109，FAIL 71 不变（无新增真 FAIL）；三套编译器 10/10 零警告，ASan 0，+3 单测。
-- [ ] **下一子步（按 SKIP 桶加宽，每步对拍）**：package 限定常量 `P.A.B.c`（完整 lookup + import）→
-      参数求值/final（ceval3、evaluateAllParams 邻域）→ 数组进阶 → 复合 inner/outer → 记录 → connect
+- [x] **加宽⑫package 限定常量**（2026-09-18）：限定名 `P.A.B.c` 在 **SCODE 作用域链**上解析（不经 inst 树，因 package
+      常量常未实例化）+ 值语义求值（CVal：字面量/限定常量引用/算术）。作用域链内→外查（支持遮蔽 const17）、前导点从顶层
+      （const14）、下钻嵌套包。cref 多段名先试限定常量、再退 SKIP。
+      → easy-slice **108 PASS / 0 FAIL**（const14/17 转正 + 常见 `P.c` 模式）；oracle=live 107 逐字节一致；
+      全 scodeinst PASS 109→111，FAIL 71 不变（无新增真 FAIL）；三套编译器 10/10 零警告，ASan 0，+2 单测。
+      SKIP：const11/16（跨包 `extends P.M`）、ih2/3（package redeclare `package P1=P(i=2)`）——各需另一特性。
+- [ ] **下一子步（按 SKIP 桶加宽，每步对拍）**：参数求值/final（ceval3、evaluateAllParams 邻域）→ 跨包 extends →
+      数组进阶 → 复合 inner/outer → 记录 → connect → package redeclare
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

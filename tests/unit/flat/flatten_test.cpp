@@ -305,6 +305,22 @@ YMC_TEST(flatten_logical_and_integer_enum_fold) {
       std::string("class M\n  constant Integer i = 2;\nend M;\n"));
 }
 
+YMC_TEST(flatten_package_qualified_constant) {
+  // 顶层包常量 `P.c`、同包内引用 `d = c + 1.0`（限定名 SCODE 解析 + 求值）。期望 = omc 1.25.0。
+  const char* src =
+      "package P\n  constant Real c = 2.0;\n  constant Real d = c + 1.0;\nend P;\n"
+      "model M\n  Real x = P.c;\n  Real y = P.d;\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string("class M\n  Real x = 2.0;\n  Real y = 3.0;\nend M;\n"));
+}
+
+YMC_TEST(flatten_nested_package_constant) {
+  // 嵌套包 `P.Q.n` + 上层引用 `m = Q.n + 1`（作用域链下钻 + 内联）。
+  const char* src =
+      "package P\n  package Q\n    constant Integer n = 3;\n  end Q;\n  constant Integer m = Q.n + 1;\nend P;\n"
+      "model M\n  Integer a = P.Q.n;\n  Real b = P.m;\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string("class M\n  Integer a = 3;\n  Real b = 4.0;\nend M;\n"));
+}
+
 YMC_TEST(flatten_unbound_parameter_with_start_unsupported) {
   // 无绑定 parameter 带 start → omc 补默认绑定 + 告警（参数默认值规则），本桶未做 → 干净 SKIP。
   bool uns = false;
