@@ -191,6 +191,26 @@ YMC_TEST(flatten_extends_modifier_on_nested_type_unsupported) {
   YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
 }
 
+YMC_TEST(flatten_inner_outer_scalar) {
+  // inner/outer：outer x 不产变量，引用连到最近外层 inner x 的全名（InnerOuter1）。
+  const char* src =
+      "model A\n  outer Real x;\n  Real y;\nequation\n  y = x;\nend A;\n"
+      "model M\n  inner Real x = 1.0;\n  A a1, a2;\nend M;\n";
+  const char* want =
+      "class M\n  Real x = 1.0;\n  Real a1.y;\n  Real a2.y;\n"
+      "equation\n  a1.y = x;\n  a2.y = x;\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string(want));
+}
+
+YMC_TEST(flatten_outer_without_inner_unsupported) {
+  // 没有匹配 inner 的 outer → 干净 SKIP（omc 报错，v1 未做诊断）。
+  bool uns = false;
+  std::string t = flatten_src("model A\n  outer Real x;\n  Real y = x;\nend A;\n"
+                              "model M\n  A a;\nend M;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+}
+
 YMC_TEST(flatten_unbound_parameter_with_start_unsupported) {
   // 无绑定 parameter 带 start → omc 补默认绑定 + 告警（参数默认值规则），本桶未做 → 干净 SKIP。
   bool uns = false;

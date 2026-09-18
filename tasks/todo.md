@@ -214,8 +214,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       修饰命名非组件（嵌套类型 mod9 `A(MyReal(start=y))`）→ 标 unsupported（类修饰未做）。SKIP：extends 内建/短类、重复元素、复合目标。
       顺带修单测助手 flatten_src：未实现判定要合并 inst+flatten 两阶段（原来漏 Instantiator.unsupported()，见 lessons）。
       → **47 PASS / 170 SKIP / 0 FAIL**（217 例）；三套编译器 10/10 零警告，ASan 0 报告，+3 单测。
-- [ ] **下一子步（按 SKIP 桶加宽，每步对拍）**：evalConstants（constant/package 常量内联、参数默认值 borrow start）→
-      完整 lookup（import、复合名跨包）→ inner/outer → 函数/ceval → 数组 → connect
+- [x] **加宽⑥inner/outer**（2026-09-18）：标量 inner/outer 连接（R11 §5）。flatten DFS 带 inner 作用域栈（外层+本层 inner），
+      outer 组件不产变量、按名连到最近外层 inner，记重定向表；cref 解析（首段或多段叶子）命中 outer → 换成 inner 全名（不加前缀）。
+      inst：outer 只解析标量类型、不实例化子树（避免 `outer B b` 自引用递归）。深嵌套（InnerOuter2）也过。
+      SKIP：复合 outer（`outer A a`）、无匹配 inner。→ **54 PASS / 163 SKIP / 0 FAIL**（217 例）；三套编译器 10/10 零警告，ASan 0 报告，+2 单测。
+      注：InnerOuter13 反向分歧记账本（1.25.0 报错、文件+较新 OMC 接受，ymc 按文件 PASS）。
+- [ ] **下一子步（按 SKIP 桶加宽，每步对拍）**：evalConstants（constant/package 常量内联、参数默认值 borrow start；多数还牵数组）→
+      复合 inner/outer → 完整 lookup（import、复合名跨包）→ 函数/ceval → 数组 → connect
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

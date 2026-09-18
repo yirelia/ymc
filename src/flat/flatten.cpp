@@ -1,12 +1,20 @@
 // 压平实现（S3 第一里程碑）。锚点见 flatten.h 头注与各处 R11/R13/R14 引用。
 #include "flat/flatten.h"
 
+#include <unordered_map>
+
 #include "absyn/absyn.h"
 #include "base/strings.h"   // unescape_modelica_string
 
 namespace ymc {
 
 namespace {
+
+// inner 声明在作用域里的记录（R11 §5）：outer 组件按名连到最近外层的 inner，用它的压平全名替换引用。
+struct InnerVar {
+  Symbol name;
+  std::vector<Symbol> flat_name;   // inner 的压平全名（prefix + 名）
+};
 
 // 内建属性表（R13 §4.2：压平属性顺序 = 内建组件数组顺序，与书写序无关）。
 // vk 决定值的处理：Str/Int/Bool 直译字面量；Real 需整型→实型强转；StateSel/EnumComp 是枚举字面量（`T.lit`）。
@@ -75,7 +83,7 @@ class Flattener {
       for (const SSubMod& s : I_.scode.mods[el.cmt.annotation].subs)
         if (s.ident == in_.intern("__OpenModelica_commandLineOptions"))
           set_unsupported("__OpenModelica_commandLineOptions annotation");
-    flatten_class(root, {}, /*protected_ctx=*/false, ModCtx{});
+    flatten_class(root, {}, /*protected_ctx=*/false, ModCtx{}, {});
     // 重复变量名 → omc 会去重（R11 §3.4-3）；v1 未做，标 unsupported（driver 退 66）。
     for (std::size_t i = 0; i < result_.model.variables.size(); ++i)
       for (std::size_t j = i + 1; j < result_.model.variables.size(); ++j)
@@ -91,7 +99,7 @@ class Flattener {
   // ---- flatten：带前缀 DFS（R11 §3.4）----
   // protected_ctx：外层组件是 protected 时，其所有子变量也 protected（R13 §3；ComponentAttributes1）。
   void flatten_class(NodeId inst_node, const std::vector<Symbol>& prefix, bool protected_ctx,
-                     const ModCtx& ctx) {
+                     const ModCtx& ctx, const std::vector<InnerVar>& outer_inners) {
     // 算法段 v1 未做（方程段的 Equals 已支持，见文末 collect_equations）。
     const SElement& def = I_.scode.elems[I_.nodes[inst_node].def];
     if (!def.def.algorithms.empty() || !def.def.initial_algorithms.empty())
@@ -106,6 +114,14 @@ class Flattener {
     // 校验：外来修饰的每个子名都必须命中本类某个组件——否则是嵌套类修饰 `a(B(...))`（ClassMod1）或写错名，
     // 本桶未做 → 标 unsupported（保 FAIL=0）。
     check_modifier_names(comps, ctx);
+    // inner 作用域（R11 §5）：外层可见 inner + 本层 inner，供本层及子层的 outer 按名连接。
+    std::vector<InnerVar> inners = outer_inners;
+    for (NodeId cn : comps)
+      if (I_.comps[I_.nodes[cn].comp].attributes.is_inner) {
+        std::vector<Symbol> fn = prefix;
+        fn.push_back(I_.nodes[cn].name);
+        inners.push_back({I_.nodes[cn].name, std::move(fn)});
+      }
     for (NodeId cn : comps) {
       const CompId cid = I_.nodes[cn].comp;
       const Symbol cname = I_.nodes[cn].name;
@@ -113,8 +129,15 @@ class Flattener {
       const SElement& cel = I_.scode.elems[I_.comps[cid].def];
       if (!cel.attr.dims.empty() || !cel.type.dims.empty()) set_unsupported("array");
       if (cel.condition.is_valid()) set_unsupported("conditional component");
-      if (I_.comps[cid].attributes.is_inner || I_.comps[cid].attributes.is_outer)
-        set_unsupported("inner/outer");   // v1 还没做 inner/outer 链接（R11 §5）
+      // outer 组件：不产出变量，按名连到最近外层 inner，记重定向表供 cref 改写（R11 §5）。找不到 inner → SKIP。
+      if (I_.comps[cid].attributes.is_outer) {
+        const InnerVar* found = nullptr;
+        for (auto it = inners.rbegin(); it != inners.rend(); ++it)
+          if (it->name == cname) { found = &*it; break; }
+        if (!found) { set_unsupported("outer without matching inner"); continue; }
+        outer_redirect_[cn.raw] = found->flat_name;
+        continue;
+      }
       bool is_prot = protected_ctx || vis == Visibility::Protected;
       std::vector<Symbol> name = prefix;
       name.push_back(cname);
@@ -159,7 +182,7 @@ class Flattener {
         } else if (own) {
           child.mods = {cel.mod}; child.scope = inst_node; child.vprefix = prefix;
         }
-        flatten_class(ci, name, is_prot, child);
+        flatten_class(ci, name, is_prot, child, inners);
         continue;
       }
       emit_variable(cid, name, is_prot, prefix, inst_node, matched, ctx.scope, ctx.vprefix, comp_final);
@@ -394,6 +417,15 @@ class Flattener {
         cur = nxt;
         leaf = nxt;
       }
+      // 叶子是 outer 组件 → 整条引用换成它连接到的 inner 全名（不加前缀）：`a.x`(x outer) → `c.x`（R11 §5）。
+      if (ok) {
+        auto it = outer_redirect_.find(leaf.raw);
+        if (it != outer_redirect_.end()) {
+          e.ty = I_.comps[I_.nodes[leaf].comp].ty;
+          for (Symbol s : it->second) e.cref.parts.push_back({s, {}});
+          return add(std::move(e));
+        }
+      }
       if (!ok) {
         set_unsupported("unresolved sub-component reference");
         e.ty = Type::real();
@@ -556,6 +588,7 @@ class Flattener {
   Inst& I_;
   Interner& in_;
   FlattenResult result_;
+  std::unordered_map<std::uint32_t, std::vector<Symbol>> outer_redirect_;   // outer 组件节点 raw → inner 全名
 };
 
 }  // namespace

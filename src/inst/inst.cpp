@@ -383,12 +383,17 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
     comp.state = CompState::PartiallyInstantiated;
   }
 
-  // outer 组件指向别处的 inner，不应实例化自己的类型——v1 没做 inner/outer 链接，若照常实例化会在
-  // `outer B b`（B 里又含 outer B）这类结构上无限递归。标 unsupported 并当叶处理（不递归）。
+  // outer 组件指向别处的 inner，不实例化自己的子树（否则 `outer B b`（B 里又含 outer B）会无限递归）。
+  // v1 只做标量 outer：解析类型名，是内建标量就记类型（flatten 靠名字连到 inner）；复合 outer 暂不做。
   if (el.prefixes.io == SInnerOuter::Outer || el.prefixes.io == SInnerOuter::InnerOuter) {
-    mark_unsupported("inner/outer");
+    NodeId tn = lookup_class_name(el.type.path, enclosing);   // arena add：下面重新取组件引用
+    Type oty = Type::unknown();
+    for (int i = 0; i < 4; ++i)
+      if (tn == builtin_[i]) { oty = Type::of(kBuiltinKinds[i]); break; }
+    if (oty.kind == TypeKind::Unknown) mark_unsupported("composite/unresolved outer");
     Component& comp = I_.comps[cid];
-    comp.ty = Type::unknown();
+    comp.ty = oty;
+    comp.class_inst = Inst::empty_node();
     comp.state = CompState::FullyInstantiated;
     return;
   }
