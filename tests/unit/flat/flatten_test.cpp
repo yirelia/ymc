@@ -343,6 +343,16 @@ YMC_TEST(flatten_cross_package_extends) {
                std::string("class M\n  Real x = 1.0;\n  Real y;\n  Real z = x;\nend M;\n"));
 }
 
+YMC_TEST(flatten_array_param_and_size_dimension) {
+  // 数组维度求值：参数维 `x[n]`（n→3 + n 标 final）、`y[size(x,1)]`（size 求值）。期望 = omc 1.25.0（Dim1/DimSize1）。
+  const char* src =
+      "model M\n  parameter Integer n = 3;\n  Real x[n];\n  Real y[size(x, 1)];\nend M;\n";
+  const char* want =
+      "class M\n  final parameter Integer n = 3;\n"
+      "  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real y[1];\n  Real y[2];\n  Real y[3];\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string(want));
+}
+
 YMC_TEST(flatten_unbound_parameter_with_start_unsupported) {
   // 无绑定 parameter 带 start → omc 补默认绑定 + 告警（参数默认值规则），本桶未做 → 干净 SKIP。
   bool uns = false;

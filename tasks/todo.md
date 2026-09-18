@@ -272,7 +272,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       （const16 的 `P.P.i` 在 P.M 里命中嵌套 P.P 的遮蔽，而非派生类）。flatten 记 decl_scope_ 供 cref 限定解析用。
       → easy-slice **110 PASS / 0 FAIL**（const16 转正）；oracle=live 109 逐字节一致；全 scodeinst PASS 112→113，FAIL 71 不变；三编译器 10/10，ASan 0，+1 单测。
       SKIP：const11（还叠加组件修饰 `A a(j=3)` + 成员访问 `a.j`）、import-extends（ExtendImport，需 import 解析）、外部对象/replaceable extends。
-- [ ] **今日剩余（按序，每桶完整验证）**：数组进阶 → connect → 记录
+- [x] **加宽⑮数组进阶（维度求值）**（2026-09-19）：数组维度支持参数/常量/size()/算术求值（不再只字面量）——eval_dim 走 eval_scode
+      结构模式；`Real x[n]`（n 参数→3 + n 标 final，Dim1）、`Real y[size(x,1)]`（size 求值，DimSize1）。eval_scode 加 size(arr,d)
+      解析组件维度、按声明类型强转常量值（Real n=3→3.0；Integer=Real 收窄视为类型错→SKIP，ceval5）。
+      → easy-slice **120 PASS / 0 FAIL**（+10：DimSize1/2、dim1/7/18、const2/3/5、ceval1、inst3）；oracle=live 119 逐字节一致；
+      全 scodeinst PASS 113→123，FAIL 71 不变；三编译器 10/10，ASan 0，+1 单测。
+      未做（留后续数组桶）：参数/常量数组绑定摊元素（BindingArray8，多维+cref 元素）、复合数组 `A a[2]`、数组运算/矩阵积。
+- [ ] **今日剩余（按序，每桶完整验证）**：connect → 记录
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

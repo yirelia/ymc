@@ -131,6 +131,8 @@ class Flattener {
  public:
   Flattener(Inst& inst, Interner& in) : I_(inst), in_(in) {}
 
+  using ScodeScope = std::vector<Id<SElement>>;   // SCODE 作用域链：类 SElement，内→外（前置声明，供 eval_dim 等用）
+
   FlattenResult run(NodeId root) {
     // 全名（R13 §2）：v1 根类是顶层类，全名 = 类名。
     result_.model.name = {I_.nodes[root].name};
@@ -181,9 +183,15 @@ class Flattener {
     {
       const ScodeScope fscope = scode_scope_of(inst_node);
       const Symbol fixed_sym = in_.intern("fixed");
+      std::vector<std::int64_t> tmp;
       for (NodeId cn : comps) {
         const Id<SElement> fd = I_.comps[I_.nodes[cn].comp].def;
-        const Id<SMod> fm = I_.scode.elems[fd].mod;
+        const SElement& fel = I_.scode.elems[fd];
+        // 数组维度里的参数（`Real x[n]` → n）被求值成结构参数 → final（Dim1）。
+        for (Id<Exp> d : fel.attr.dims) { tmp.clear(); eval_dim(d, tmp, fscope, &final_params); }
+        for (Id<Exp> d : fel.type.dims) { tmp.clear(); eval_dim(d, tmp, fscope, &final_params); }
+        // fixed 属性里的参数（ceval3）。
+        const Id<SMod> fm = fel.mod;
         if (!fm.is_valid()) continue;
         for (const SSubMod& s : I_.scode.mods[fm].subs)
           if (s.ident == fixed_sym) {
@@ -422,12 +430,13 @@ class Flattener {
                   const std::vector<Symbol>& prefix, NodeId enclosing,
                   const std::vector<Id<SMod>>& mod_subs, NodeId mod_scope,
                   const std::vector<Symbol>& mod_prefix, bool force_final, const SElement& cel) {
-    // 维度：组件维在前、类型维在后（R13 §3）。只收字面量整数维。
+    // 维度：组件维在前、类型维在后（R13 §3）。字面量 + 参数/常量/size()/算术求值。
+    const ScodeScope dscope = scode_scope_of(enclosing);
     std::vector<std::int64_t> dims;
     for (Id<Exp> d : cel.attr.dims)
-      if (!eval_dim(d, dims)) { set_unsupported("non-literal array dimension"); return; }
+      if (!eval_dim(d, dims, dscope)) { set_unsupported("non-literal array dimension"); return; }
     for (Id<Exp> d : cel.type.dims)
-      if (!eval_dim(d, dims)) { set_unsupported("non-literal array dimension"); return; }
+      if (!eval_dim(d, dims, dscope)) { set_unsupported("non-literal array dimension"); return; }
     if (dims.empty()) { set_unsupported("array dimension"); return; }
     // 属性修饰（逐元素分配 / SPLIT_PROXY，R15 §4）v1 未做。
     if (cel.mod.is_valid() && !I_.scode.mods[cel.mod].subs.empty()) { set_unsupported("array attribute modifier"); return; }
@@ -529,9 +538,13 @@ class Flattener {
   }
 
   // 数组维度求值（v1：只认字面量整数；参数/size/: 等 → false）。
-  bool eval_dim(Id<Exp> d, std::vector<std::int64_t>& out) {
+  bool eval_dim(Id<Exp> d, std::vector<std::int64_t>& out, const ScodeScope& scope,
+                std::unordered_set<std::uint32_t>* used = nullptr) {
     const Exp& e = I_.absyn.exps[d];
     if (e.kind == ExpKind::IntLit && e.ival >= 0) { out.push_back(e.ival); return true; }
+    // 参数/常量/size()/算术维度：结构求值成整数（Dim1/DimSize1）；用到的参数记入 used（→ 标 final）。
+    std::optional<CVal> cv = eval_scode(d, scope, 0, /*allow_param=*/true, used);
+    if (cv && cv->k == CVal::K::Int && cv->i >= 0) { out.push_back(cv->i); return true; }
     return false;
   }
 
@@ -675,7 +688,6 @@ class Flattener {
     static CVal S(Symbol v) { CVal c; c.k = K::Str; c.s = v; return c; }
     double as_r() const { return k == K::Int ? static_cast<double>(i) : r; }
   };
-  using ScodeScope = std::vector<Id<SElement>>;   // 类 SElement，内→外
 
   // enclosing 实例的词法作用域链 → 类 SElement 列表（内→外，<top>/无 def 跳过）。
   ScodeScope scode_scope_of(NodeId enclosing) {
@@ -705,7 +717,8 @@ class Flattener {
 
   // 解析限定名 parts 到 constant（allow_param 时也接 parameter）组件；out_scope = 该组件所在类的作用域链。前导点 = 从顶层。
   bool resolve_qual_const(const std::vector<Symbol>& parts, bool leading_dot, const ScodeScope& scope,
-                          Id<SElement>& out_comp, ScodeScope& out_scope, bool allow_param = false) {
+                          Id<SElement>& out_comp, ScodeScope& out_scope, bool allow_param = false,
+                          bool allow_any = false) {
     if (parts.empty()) return false;
     ScodeScope cur = leading_dot ? ScodeScope{} : scope;
     Id<SElement> el = find_scode_element(parts[0], cur);
@@ -722,8 +735,10 @@ class Flattener {
       el = nxt;
     }
     if (I_.scode.elems[el].kind != SElementKind::Component) return false;
-    const SVariability v = I_.scode.elems[el].attr.var;
-    if (v != SVariability::Const && !(allow_param && v == SVariability::Param)) return false;
+    if (!allow_any) {
+      const SVariability v = I_.scode.elems[el].attr.var;
+      if (v != SVariability::Const && !(allow_param && v == SVariability::Param)) return false;
+    }
     out_comp = el;
     out_scope = cur;
     return true;
@@ -755,7 +770,9 @@ class Flattener {
         if (used && I_.scode.elems[comp].attr.var == SVariability::Param) used->insert(comp.raw);
         const Id<SMod> m = I_.scode.elems[comp].mod;
         if (!m.is_valid() || !I_.scode.mods[m].binding.is_valid()) return std::nullopt;
-        return eval_scode(I_.scode.mods[m].binding, cscope, depth + 1, allow_param, used);
+        auto v = eval_scode(I_.scode.mods[m].binding, cscope, depth + 1, allow_param, used);
+        if (v) v = coerce_cval(*v, I_.scode.elems[comp].type.path);   // 按声明类型强转（Real n=3 → 3.0）
+        return v;
       }
       case ExpKind::Unary: {
         auto v = eval_scode(e.a, scope, depth + 1, allow_param, used);
@@ -808,9 +825,41 @@ class Flattener {
         }
         return std::nullopt;
       }
+      case ExpKind::Call: {
+        // size(arr, d)：解析数组组件 arr（任意可变性），求它第 d 维（DimSize1）。
+        const Cref& fn = I_.absyn.crefs[e.cref];
+        if (fn.parts.size() != 1 || in_.str(fn.parts[0].name) != "size" || e.args.size() != 2) return std::nullopt;
+        const Exp& ae = I_.absyn.exps[e.args[0]];
+        auto dv = eval_scode(e.args[1], scope, depth + 1, allow_param, used);
+        if (ae.kind != ExpKind::CrefExp || !dv || dv->k != CVal::K::Int) return std::nullopt;
+        std::vector<Symbol> anames;
+        for (const CrefPart& p : I_.absyn.crefs[ae.cref].parts) {
+          if (!p.subscripts.empty()) return std::nullopt;
+          anames.push_back(p.name);
+        }
+        Id<SElement> acomp;
+        ScodeScope ascope;
+        if (!resolve_qual_const(anames, I_.absyn.crefs[ae.cref].leading_dot, scope, acomp, ascope,
+                                /*allow_param=*/true, /*allow_any=*/true))
+          return std::nullopt;
+        std::vector<Id<Exp>> adims = I_.scode.elems[acomp].attr.dims;
+        for (Id<Exp> td : I_.scode.elems[acomp].type.dims) adims.push_back(td);
+        const std::int64_t di = dv->i;   // 1 基
+        if (di < 1 || static_cast<std::size_t>(di) > adims.size()) return std::nullopt;
+        return eval_scode(adims[di - 1], ascope, depth + 1, allow_param, used);
+      }
       default:
         return std::nullopt;
     }
+  }
+
+  // 按组件声明类型强转常量值：Int→Real 加宽 OK；Real→Integer 是收窄（omc 视为类型错，ceval5）→ nullopt（不产值）。
+  std::optional<CVal> coerce_cval(const CVal& v, const std::vector<Symbol>& type_path) {
+    if (type_path.size() != 1) return v;   // 派生/限定类型不处理
+    const std::string_view tn = in_.str(type_path[0]);
+    if (tn == "Real" && v.k == CVal::K::Int) return CVal::R(static_cast<double>(v.i));
+    if (tn == "Integer" && v.k == CVal::K::Real) return std::nullopt;   // 收窄 → 类型错
+    return v;
   }
 
   Id<Expr> literal_of(const CVal& v) {
@@ -922,8 +971,9 @@ class Flattener {
           } else {
             std::vector<std::int64_t> ldims;
             bool lit = true;
-            for (Id<Exp> d : lcel.attr.dims) if (!eval_dim(d, ldims)) lit = false;
-            for (Id<Exp> d : lcel.type.dims) if (!eval_dim(d, ldims)) lit = false;
+            const ScodeScope lscope = scode_scope_of(enclosing);
+            for (Id<Exp> d : lcel.attr.dims) if (!eval_dim(d, ldims, lscope)) lit = false;
+            for (Id<Exp> d : lcel.type.dims) if (!eval_dim(d, ldims, lscope)) lit = false;
             if (!lit || subs.size() != ldims.size()) {
               set_unsupported("array subscript");
             } else {
