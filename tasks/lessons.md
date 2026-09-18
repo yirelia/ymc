@@ -94,3 +94,7 @@
 ## 2026-09-18 — 单测的流水线要和 driver 完全一致，否则漏判 inst 阶段的 SKIP
 - 模式：加 extends 修饰后，`flatten_extends_modifier_on_nested_type_unsupported` 期望 SKIP 但单测判 uns=false。原因：`flatten_src` 助手只读了 `FlattenResult.unsupported`，没读 `Instantiator.unsupported()`——而 nested-type extends 修饰是在 **inst 阶段** mark 的。driver（main.cpp）两个都查，单测助手漏了一个，于是"未实现"被误判成"已支持并产出"。ymc 二进制本身行为正确（退 66），只是单测助手失真。
 - 规则：**单测的端到端助手必须复刻 driver 的完整判定链**。unsupported 是 inst + flatten 两阶段的并集（`I.unsupported() || fr.unsupported`），助手要合并两者再返回。凡是"驱动器查了 N 个条件、助手只查了 M<N 个"的地方都会漏判——写助手时对着 driver 主循环逐条抄。
+
+## 2026-09-18 — 横切特性（数组）的 FAIL=0 要对着"广语料"验，curated slice 会漏
+- 模式：数组标量化的最小版只在 easy-slice（217 例，几乎没数组）上验，显示 FAIL=0，就以为没事。一扫全 scodeinst（1325 例）冒出 34 个数组 FAIL：参数数组绑定要摊到每元素（我只做连续数组的数组方程）、数组运算 `x+y`/矩阵积（整体数组引用我当标量处理）、越界/类型错绑定（omc 报错、ymc 无验证 pass 照产出）、派生类型带维度 `type V=Real[3]`（塌陷时把维度丢了，维度在 derived_attr.dims 不是 derived_type.dims）。都是"我这版不支持却硬产出错文本"。
+- 规则：(1) 数组/求值这类**横切**特性，FAIL=0 必须对**广语料**（全目录）验，不能只看 curated slice——slice 是"已达标"集合，天然不含未做特性的坑。(2) 部分实现必须把不支持的分支**显式 SKIP**：参数数组绑定、整体数组引用（数组运算/方程）、非字面量维度、越界/类型不符绑定、派生类型维度——每个都在会产错文本的操作前拦。(3) ymc 无验证 pass，凡是 omc 靠类型/边界检查**报错**的用例（invalid model），ymc 只能靠"形状/类型/边界的最小检查"退成 SKIP，别硬产出。(4) 字段存哪要 grep 确认（derived 维度在 derived_attr.dims），别照名字猜。

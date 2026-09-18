@@ -31,7 +31,8 @@ enum class FlatVarKind : std::uint8_t { Var, Discrete, Parameter, Constant };  /
 enum class FlatDirection : std::uint8_t { None, Input, Output };
 
 struct FlatVariable {
-  std::vector<Symbol> name;              // 点分标量名（`b.x` → {b, x}）；下标（数组）v1 无
+  std::vector<Symbol> name;              // 点分名（`b.x` → {b, x}）
+  std::vector<std::int64_t> subscripts;  // 数组标量化后的下标（`b.x[1,2]` → {1,2}）；空 = 标量。v1 只叶组件是数组
   Type ty;                               // 塌陷后的内建/枚举标量类型
   // 前缀（R13 §3.1 固定顺序：protected final par* const|param|discrete in|out 类型 名字）
   bool is_protected = false;

@@ -219,8 +219,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       inst：outer 只解析标量类型、不实例化子树（避免 `outer B b` 自引用递归）。深嵌套（InnerOuter2）也过。
       SKIP：复合 outer（`outer A a`）、无匹配 inner。→ **54 PASS / 163 SKIP / 0 FAIL**（217 例）；三套编译器 10/10 零警告，ASan 0 报告，+2 单测。
       注：InnerOuter13 反向分歧记账本（1.25.0 报错、文件+较新 OMC 接受，ymc 按文件 PASS）。
-- [ ] **下一子步（按 SKIP 桶加宽，每步对拍）**：evalConstants（constant/package 常量内联、参数默认值 borrow start；多数还牵数组）→
-      复合 inner/outer → 完整 lookup（import、复合名跨包）→ 函数/ceval → 数组 → connect
+- [x] **加宽⑦数组（字面量维标量化）**（2026-09-18）：叶数组按字面量维度行主序标量化成逐元素变量行（`x[1]…`，IR 加
+      FlatVariable.subscripts + dump `[i,j]`）；连续数组绑定 `= {…}` → 数组方程 `x = {1.0,…}`（omc 默认不摊到每元素）；
+      下标引用 `x[2]` 保留（cref 下标 + expr_dump `[..]`）。**honest-SKIP 守卫**（对全 scodeinst 1325 例验，数组 FAIL 34→0）：
+      参数/常量数组绑定（omc 摊每元素）、整体数组引用（数组运算/方程）、非字面量维、越界/类型不符绑定/下标（ymc 无验证 pass）、
+      派生类型带维度 `type V=Real[3]`（维在 derived_attr.dims）、复合数组。
+      → easy-slice **55 PASS / 163 SKIP / 0 FAIL**（218 例，加 Subscript1）；三套编译器 10/10 零警告，ASan 0 报告，+4 单测。
+- [ ] **下一子步（按 SKIP 桶加宽，每步对拍）**：evalConstants（constant/package 常量内联、参数默认值 borrow start）→
+      数组进阶（参数数组绑定摊元素、size()/参数维、数组运算/矩阵积、connect）→ 复合 inner/outer → 完整 lookup → 函数/ceval
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

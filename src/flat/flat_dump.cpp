@@ -62,6 +62,14 @@ class FlatDumper {
     type_name(v.ty);
     out_ += ' ';
     dotted(v.name);
+    if (!v.subscripts.empty()) {   // 数组标量化下标 `[1,2]`（`,` 无空格，R13 §4.2）
+      out_ += '[';
+      for (std::size_t i = 0; i < v.subscripts.size(); ++i) {
+        if (i) out_ += ',';
+        out_ += std::to_string(v.subscripts[i]);
+      }
+      out_ += ']';
+    }
     attributes(v.attributes);
     if (v.binding.is_valid()) {
       out_ += " = ";

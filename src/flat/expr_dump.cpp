@@ -125,7 +125,15 @@ class ExprDumper {
         for (std::size_t i = 0; i < e.cref.parts.size(); ++i) {
           if (i) out_ += '.';
           out_ += in_.str(e.cref.parts[i].name);
-          // v1 无下标；数组竖切片时在此打印 [i,j]
+          const auto& subs = e.cref.parts[i].subscripts;
+          if (!subs.empty()) {   // `x[2]`、`m[1,2]`：`,` 无空格（R13 §4.2 dumpSubscripts）
+            out_ += '[';
+            for (std::size_t k = 0; k < subs.size(); ++k) {
+              if (k) out_ += ',';
+              exp(subs[k]);
+            }
+            out_ += ']';
+          }
         }
         break;
       case ExprKind::Binary:

@@ -424,6 +424,9 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
     if (!ce.is_valid()) break;
     if (I_.scode.elems[ce].def.kind != SClassDefKind::Derived) break;   // Enumeration/Parts/… 到底
     const SClassDef& cd = I_.scode.elems[ce].def;
+    // 派生类型带维度（`type V = Real[3]`，维度在 derived_attr.dims）→ 组件维要拼上类型维（TypeDim1/Subscript4），
+    // v1 未做 → SKIP。
+    if (!cd.derived_attr.dims.empty()) mark_unsupported("derived-type array dimension");
     if (cd.derived_mod.is_valid()) {
       const SMod& dm = I_.scode.mods[cd.derived_mod];
       if (!dm.subs.empty() || dm.binding.is_valid()) derived_mods.push_back(cd.derived_mod);

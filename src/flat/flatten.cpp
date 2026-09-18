@@ -87,7 +87,8 @@ class Flattener {
     // 重复变量名 → omc 会去重（R11 §3.4-3）；v1 未做，标 unsupported（driver 退 66）。
     for (std::size_t i = 0; i < result_.model.variables.size(); ++i)
       for (std::size_t j = i + 1; j < result_.model.variables.size(); ++j)
-        if (result_.model.variables[i].name == result_.model.variables[j].name) {
+        if (result_.model.variables[i].name == result_.model.variables[j].name &&
+            result_.model.variables[i].subscripts == result_.model.variables[j].subscripts) {
           set_unsupported("duplicate variable");
           i = result_.model.variables.size();
           break;
@@ -127,10 +128,11 @@ class Flattener {
       const Symbol cname = I_.nodes[cn].name;
       const Visibility vis = I_.nodes[cn].visibility;
       const SElement& cel = I_.scode.elems[I_.comps[cid].def];
-      if (!cel.attr.dims.empty() || !cel.type.dims.empty()) set_unsupported("array");
+      const bool has_dims = !cel.attr.dims.empty() || !cel.type.dims.empty();
       if (cel.condition.is_valid()) set_unsupported("conditional component");
       // outer 组件：不产出变量，按名连到最近外层 inner，记重定向表供 cref 改写（R11 §5）。找不到 inner → SKIP。
       if (I_.comps[cid].attributes.is_outer) {
+        if (has_dims) { set_unsupported("outer array"); continue; }
         const InnerVar* found = nullptr;
         for (auto it = inners.rbegin(); it != inners.rend(); ++it)
           if (it->name == cname) { found = &*it; break; }
@@ -154,6 +156,13 @@ class Flattener {
             matched.push_back(s.mod);
           }
       const bool comp_final = ctx.final_all || sub_final || I_.comps[cid].attributes.is_final;
+
+      // 数组组件（v1 只做叶数组标量化）：复合数组 SKIP，其余走 emit_array。
+      if (has_dims) {
+        if (I_.comps[cid].ty.kind == TypeKind::Complex) { set_unsupported("composite array"); continue; }
+        emit_array(cid, name, is_prot, prefix, inst_node, matched, ctx.scope, ctx.vprefix, comp_final, cel);
+        continue;
+      }
 
       if (I_.comps[cid].ty.kind == TypeKind::Complex) {
         // 复合组件的类型必须是长类（PARTS）；短类/枚举/derived 走到这里说明 v1 还没做。
@@ -202,6 +211,11 @@ class Flattener {
     }
     Id<Expr> a = inst_exp(eq.a, enclosing, prefix);
     Id<Expr> b = inst_exp(eq.b, enclosing, prefix);
+    // 用户数组方程 `x = {…}` 要逐元素定型/强转（数组 typing），v1 只做数组绑定 → SKIP。
+    if (result_.model.exprs[a].kind == ExprKind::Array || result_.model.exprs[b].kind == ExprKind::Array) {
+      set_unsupported("array equation");
+      return;
+    }
     // 等式两侧整型↔实型强制（R14）：eq1 的 `x = 2`（x:Real）→ `x = 2.0`。
     TypeKind ta = result_.model.exprs[a].ty.kind, tb = result_.model.exprs[b].ty.kind;
     if (ta == TypeKind::Real && tb == TypeKind::Integer) b = to_real(b);
@@ -293,6 +307,140 @@ class Flattener {
     result_.model.variables.push_back(std::move(v));
   }
 
+  // 数组叶组件标量化（R13 §3/§4）：字面量维度 → 行主序逐元素变量行（无绑定/属性）；数组绑定 `= {…}` 变成
+  // 一条数组方程 `name = {…}`（omc 默认不把绑定摊到每元素，见 Subscript1）。v1 SKIP：非字面量维度、数组属性修饰、
+  // 非数组字面量的数组绑定。
+  void emit_array(CompId cid, const std::vector<Symbol>& name, bool is_protected,
+                  const std::vector<Symbol>& prefix, NodeId enclosing,
+                  const std::vector<Id<SMod>>& mod_subs, NodeId mod_scope,
+                  const std::vector<Symbol>& mod_prefix, bool force_final, const SElement& cel) {
+    // 维度：组件维在前、类型维在后（R13 §3）。只收字面量整数维。
+    std::vector<std::int64_t> dims;
+    for (Id<Exp> d : cel.attr.dims)
+      if (!eval_dim(d, dims)) { set_unsupported("non-literal array dimension"); return; }
+    for (Id<Exp> d : cel.type.dims)
+      if (!eval_dim(d, dims)) { set_unsupported("non-literal array dimension"); return; }
+    if (dims.empty()) { set_unsupported("array dimension"); return; }
+    // 属性修饰（逐元素分配 / SPLIT_PROXY，R15 §4）v1 未做。
+    if (cel.mod.is_valid() && !I_.scode.mods[cel.mod].subs.empty()) { set_unsupported("array attribute modifier"); return; }
+    for (Id<SMod> m : mod_subs)
+      if (!I_.scode.mods[m].subs.empty()) { set_unsupported("array attribute modifier"); return; }
+    if (!I_.comps[cid].derived_mods.empty()) { set_unsupported("array derived-type modifier"); return; }
+    // 绑定：外来修饰优先，否则声明绑定。要求是数组字面量 `{…}`，否则 SKIP。
+    Id<Exp> braw;
+    for (Id<SMod> m : mod_subs)
+      if (I_.scode.mods[m].binding.is_valid()) { braw = I_.scode.mods[m].binding; break; }
+    NodeId bscope = mod_scope;
+    std::vector<Symbol> bprefix = mod_prefix;
+    if (!braw.is_valid()) {
+      const Binding& b = I_.comps[cid].binding;
+      if (b.kind == BindingKind::Raw && b.raw_exp.is_valid()) { braw = b.raw_exp; bscope = enclosing; bprefix = prefix; }
+    }
+    if (braw.is_valid() && I_.absyn.exps[braw].kind != ExpKind::Array) {
+      set_unsupported("non-literal array binding"); return;
+    }
+
+    const Type cty = I_.comps[cid].ty;
+    FlatVarKind vk = FlatVarKind::Var;
+    switch (I_.comps[cid].attributes.variability) {
+      case SVariability::Var: vk = FlatVarKind::Var; break;
+      case SVariability::Discrete: vk = FlatVarKind::Discrete; break;
+      case SVariability::Param: vk = FlatVarKind::Parameter; break;
+      case SVariability::Const: vk = FlatVarKind::Constant; break;
+    }
+    // 参数/常量数组的绑定 omc 摊到每元素（`x[1]=1.0`…），连续数组才变成数组方程（`x = {…}`）。v1 只做后者。
+    if (braw.is_valid() && vk != FlatVarKind::Var) { set_unsupported("parameter/constant array binding"); return; }
+    // 数组字面量绑定的形状/类型要与数组匹配（omc 会做类型检查并报错，如 BindingInvalidType3/5）——ymc 无验证 pass，
+    // 只放行形状+叶类型都对上的字面量绑定，否则 SKIP。
+    if (braw.is_valid() && !array_lit_matches(braw, dims, 0, cty.kind)) {
+      set_unsupported("array binding shape/type mismatch"); return;
+    }
+    const bool is_final = I_.comps[cid].attributes.is_final || force_final;
+    FlatDirection dir = FlatDirection::None;
+    if (prefix.empty()) {
+      if (I_.comps[cid].attributes.direction == SDirection::Input) dir = FlatDirection::Input;
+      else if (I_.comps[cid].attributes.direction == SDirection::Output) dir = FlatDirection::Output;
+    }
+
+    // 行主序枚举下标元组（1 基），逐元素产出变量行（无绑定/属性）。
+    std::vector<std::int64_t> idx(dims.size(), 1);
+    for (bool more = true; more;) {
+      FlatVariable v;
+      v.name = name;
+      v.subscripts = idx;
+      v.ty = cty;
+      v.is_protected = is_protected;
+      v.is_final = is_final;
+      v.var_kind = vk;
+      v.direction = dir;
+      v.loc = I_.comps[cid].loc;
+      result_.model.variables.push_back(std::move(v));
+      // 递增（最后一维最快）。
+      std::size_t k = dims.size();
+      while (k > 0) {
+        --k;
+        if (++idx[k] <= dims[k]) break;
+        idx[k] = 1;
+        if (k == 0) more = false;
+      }
+    }
+
+    // 数组绑定 → 数组方程 `name = {…}`（元素按叶类型强转）。
+    if (braw.is_valid()) {
+      Id<Expr> rhs = coerce_deep(inst_exp(braw, bscope, bprefix), cty.kind);
+      Expr lhs;
+      lhs.kind = ExprKind::Cref;
+      lhs.ty = cty;
+      for (Symbol s : name) lhs.cref.parts.push_back({s, {}});
+      FlatEquation fe;
+      fe.kind = FlatEqKind::Equality;
+      fe.a = add(std::move(lhs));
+      fe.b = rhs;
+      fe.loc = I_.comps[cid].loc;
+      result_.model.equations.push_back(result_.model.add_eq(std::move(fe)));
+    }
+  }
+
+  // 数组字面量绑定与维度/元素类型是否匹配（形状 + 叶类型）；否则视为类型错误 → SKIP（ymc 无验证 pass）。
+  bool array_lit_matches(Id<Exp> b, const std::vector<std::int64_t>& dims, std::size_t di, TypeKind elem) {
+    const Exp& e = I_.absyn.exps[b];
+    if (di < dims.size()) {
+      if (e.kind != ExpKind::Array || static_cast<std::int64_t>(e.args.size()) != dims[di]) return false;
+      for (Id<Exp> a : e.args)
+        if (!array_lit_matches(a, dims, di + 1, elem)) return false;
+      return true;
+    }
+    switch (e.kind) {   // 叶：标量字面量，类型与元素类型相容
+      case ExpKind::IntLit:
+      case ExpKind::Unary: return elem == TypeKind::Real || elem == TypeKind::Integer;
+      case ExpKind::RealLit: return elem == TypeKind::Real;
+      case ExpKind::BoolLit: return elem == TypeKind::Boolean;
+      case ExpKind::StringLit: return elem == TypeKind::String;
+      default: return false;   // cref/调用等 v1 数组绑定不做
+    }
+  }
+
+  // 数组维度求值（v1：只认字面量整数；参数/size/: 等 → false）。
+  bool eval_dim(Id<Exp> d, std::vector<std::int64_t>& out) {
+    const Exp& e = I_.absyn.exps[d];
+    if (e.kind == ExpKind::IntLit && e.ival >= 0) { out.push_back(e.ival); return true; }
+    return false;
+  }
+
+  // 把（可能嵌套的）数组字面量逐叶元素强转到 Real（`{1,2}` → `{1.0,2.0}`）；非 Real 或非数组原样。
+  Id<Expr> coerce_deep(Id<Expr> id, TypeKind elem) {
+    if (elem != TypeKind::Real) return id;
+    if (result_.model.exprs[id].kind != ExprKind::Array) return to_real(id);
+    const std::vector<Id<Expr>> args = result_.model.exprs[id].args;   // 拷贝：下面 add 会失效引用
+    std::vector<Id<Expr>> out;
+    for (Id<Expr> a : args) out.push_back(coerce_deep(a, elem));
+    Expr r;
+    r.kind = ExprKind::Array;
+    r.ty = Type::real();
+    r.args = std::move(out);
+    return add(std::move(r));
+  }
+
   // 校验外来修饰的每个子名都命中本类某组件——否则是嵌套类修饰 `a(B(...))`（ClassMod1）或写错名 → unsupported。
   void check_modifier_names(const std::vector<NodeId>& comps, const ModCtx& ctx) {
     for (Id<SMod> m : ctx.mods)
@@ -382,6 +530,15 @@ class Flattener {
       case ExpKind::Unary: return unary(e, enclosing, prefix);
       case ExpKind::IfExp: return if_exp(e, enclosing, prefix);
       case ExpKind::Call: return call(e, enclosing, prefix);
+      case ExpKind::Array: {
+        Expr r;
+        r.kind = ExprKind::Array;
+        r.ty = Type::real();   // 元素类型粗略；dump 不看，强转在 emit_array/coerce_deep 里做
+        std::vector<Id<Expr>> els;
+        for (Id<Exp> a : e.args) els.push_back(inst_exp(a, enclosing, prefix));
+        r.args = std::move(els);
+        return add(std::move(r));
+      }
       default:
         set_unsupported("expression kind");
         return lit_int(0);   // 占位，driver 会因 unsupported 退 66
@@ -436,6 +593,33 @@ class Flattener {
             (lc.attributes.variability == SVariability::Param && lc.attributes.is_final))
           set_unsupported("constant evaluation");
         e.ty = lc.ty;
+        // 数组叶引用：整体引用（数组运算/方程）v1 未做；下标引用需字面量且在界内（ymc 无验证 pass）。
+        const SElement& lcel = I_.scode.elems[I_.comps[I_.nodes[leaf].comp].def];
+        const bool leaf_array = !lcel.attr.dims.empty() || !lcel.type.dims.empty();
+        if (!leaf_array && !c.parts.back().subscripts.empty())
+          set_unsupported("subscript on non-array");   // `time[2]`、标量下标 → omc 报错，ymc 无验证 → SKIP
+        if (leaf_array) {
+          const std::vector<Id<Exp>>& subs = c.parts.back().subscripts;
+          if (subs.empty()) {
+            set_unsupported("whole-array reference");
+          } else {
+            std::vector<std::int64_t> ldims;
+            bool lit = true;
+            for (Id<Exp> d : lcel.attr.dims) if (!eval_dim(d, ldims)) lit = false;
+            for (Id<Exp> d : lcel.type.dims) if (!eval_dim(d, ldims)) lit = false;
+            if (!lit || subs.size() != ldims.size()) {
+              set_unsupported("array subscript");
+            } else {
+              for (std::size_t k = 0; k < subs.size(); ++k) {
+                const Exp& se = I_.absyn.exps[subs[k]];
+                if (se.kind != ExpKind::IntLit || se.ival < 1 || se.ival > ldims[k]) {
+                  set_unsupported("array subscript out of range");
+                  break;
+                }
+              }
+            }
+          }
+        }
       }
       for (Symbol p : prefix) e.cref.parts.push_back({p, {}});
       e.cref.resolved_node = local.raw;
@@ -443,11 +627,14 @@ class Flattener {
       // 单段未解析（time 等内建）v1 当 Real 保留；多段未解析（跨包常量 A.B.c、package 常量）我们既不解析也不
       // 求值，omc 会把它内联成值——标 unsupported（driver 退 66）。
       if (c.parts.size() > 1) set_unsupported("qualified/cross-scope reference");
+      for (const CrefPart& p : c.parts)
+        if (!p.subscripts.empty()) set_unsupported("subscript on non-array");   // `time[2]` → omc 报错
       e.ty = Type::real();
     }
     for (const CrefPart& p : c.parts) {
-      if (!p.subscripts.empty()) set_unsupported("subscripted cref");
-      e.cref.parts.push_back({p.name, {}});
+      std::vector<Id<Expr>> subs;
+      for (Id<Exp> s : p.subscripts) subs.push_back(inst_exp(s, enclosing, prefix));
+      e.cref.parts.push_back({p.name, std::move(subs)});
     }
     return add(std::move(e));
   }

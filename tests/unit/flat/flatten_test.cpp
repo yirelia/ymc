@@ -211,6 +211,36 @@ YMC_TEST(flatten_outer_without_inner_unsupported) {
   YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
 }
 
+YMC_TEST(flatten_array_scalarize_binding_and_subscript) {
+  // 数组：变量行行主序标量化；连续数组绑定 → 数组方程；下标引用保留（Subscript1，omc 1.25.0 实测）。
+  const char* src = "model M\n  Real x[3] = {1, 2, 3};\n  Real y = x[2];\nend M;\n";
+  const char* want =
+      "class M\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real y = x[2];\n"
+      "equation\n  x = {1.0, 2.0, 3.0};\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string(want));
+}
+
+YMC_TEST(flatten_array_multidim_rowmajor) {
+  // 多维数组行主序标量化：m[2,2] → [1,1][1,2][2,1][2,2]。
+  YMC_CHECK_EQ(
+      flatten_src("model M\n  Real m[2,2];\nend M;\n"),
+      std::string("class M\n  Real m[1,1];\n  Real m[1,2];\n  Real m[2,1];\n  Real m[2,2];\nend M;\n"));
+}
+
+YMC_TEST(flatten_param_array_binding_unsupported) {
+  // 参数数组绑定 omc 摊到每元素，v1 未做 → SKIP。
+  bool uns = false;
+  flatten_src("model M\n  parameter Real x[2] = {1, 2};\nend M;\n", &uns);
+  YMC_CHECK(uns);
+}
+
+YMC_TEST(flatten_whole_array_reference_unsupported) {
+  // 数组整体引用（数组运算/方程）v1 未做 → SKIP。
+  bool uns = false;
+  flatten_src("model M\n  Real x[3];\n  Real y[3];\nequation\n  y = x;\nend M;\n", &uns);
+  YMC_CHECK(uns);
+}
+
 YMC_TEST(flatten_unbound_parameter_with_start_unsupported) {
   // 无绑定 parameter 带 start → omc 补默认绑定 + 告警（参数默认值规则），本桶未做 → 干净 SKIP。
   bool uns = false;
