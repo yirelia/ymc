@@ -353,6 +353,23 @@ YMC_TEST(flatten_array_param_and_size_dimension) {
   YMC_CHECK_EQ(flatten_src(src), std::string(want));
 }
 
+YMC_TEST(flatten_connector_unconnected_flow) {
+  // 连接器摊开成员 + 未连接 flow → `c.f = 0.0`（R13 §6-2）。期望 = omc 1.25.0（Connect1）。
+  const char* src =
+      "connector C\n  Real e;\n  flow Real f;\nend C;\n"
+      "model M\n  C c;\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class M\n  Real c.e;\n  Real c.f;\nequation\n  c.f = 0.0;\nend M;\n"));
+}
+
+YMC_TEST(flatten_flow_outside_connector_unsupported) {
+  // `flow` 加在非连接器变量上：omc 告警后当普通变量；ymc 不产告警文本 → 干净 SKIP（NonConnectorFlow1）。
+  bool uns = false;
+  std::string t = flatten_src("model M\n  flow Real f = 1.0;\nend M;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+}
+
 YMC_TEST(flatten_unbound_parameter_with_start_unsupported) {
   // 无绑定 parameter 带 start → omc 补默认绑定 + 告警（参数默认值规则），本桶未做 → 干净 SKIP。
   bool uns = false;

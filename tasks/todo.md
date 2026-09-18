@@ -278,7 +278,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       → easy-slice **120 PASS / 0 FAIL**（+10：DimSize1/2、dim1/7/18、const2/3/5、ceval1、inst3）；oracle=live 119 逐字节一致；
       全 scodeinst PASS 113→123，FAIL 71 不变；三编译器 10/10，ASan 0，+1 单测。
       未做（留后续数组桶）：参数/常量数组绑定摊元素（BindingArray8，多维+cref 元素）、复合数组 `A a[2]`、数组运算/矩阵积。
-- [ ] **今日剩余（按序，每桶完整验证）**：connect → 记录
+- [x] **加宽⑯connect（未连接 flow=0）**（2026-09-19）：普通连接器当复合组件摊开成员（`C c`→`c.e`/`c.f`），连接器内未连接
+      flow 变量补 `name = 0.0`（R13 §6-2，排在本类方程后）——含 connect() 的模型仍在 collect_equation 整体 SKIP。
+      → easy-slice **121 PASS / 0 FAIL**（+1 Connect1）；oracle=live 120 逐字节一致；全 scodeinst FAIL 71 不变；三编译器 10/10，ASan 0，+2 单测。
+      诚实 SKIP（各需另一特性）：connect() 方程展开（Connect2+，连接集/inside-outside 符号）、expandable connector、stream、
+      连接器成员方向 inside/outside 保留（Direction1）、`flow C c` 前缀下沉复合成员（conn9）、flow 用在非连接器（NonConnectorFlow1，omc 只告警）。
+- [ ] **今日剩余（按序，每桶完整验证）**：记录
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

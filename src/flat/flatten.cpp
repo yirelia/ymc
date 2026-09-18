@@ -146,6 +146,20 @@ class Flattener {
         if (s.ident == in_.intern("__OpenModelica_commandLineOptions"))
           set_unsupported("__OpenModelica_commandLineOptions annotation");
     flatten_class(root, {}, /*protected_ctx=*/false, ModCtx{}, {});
+    // 未连接 flow 变量的 `name = 0.0` 方程（排在本类方程之后，R13 §6）。到这里的 flow 都属"无 connect"模型
+    // （有 connect() 的模型已在 collect_equation 整体 SKIP）→ 全部未连接。
+    for (const FlowVar& fv : flow_vars_) {
+      Expr lhs;
+      lhs.kind = ExprKind::Cref;
+      lhs.ty = fv.ty;
+      for (Symbol s : fv.name) lhs.cref.parts.push_back({s, {}});
+      FlatEquation fe;
+      fe.kind = FlatEqKind::Equality;
+      fe.a = add(std::move(lhs));
+      fe.b = lit_real(0.0);
+      fe.loc = fv.loc;
+      result_.model.equations.push_back(result_.model.add_eq(std::move(fe)));
+    }
     // 重复变量名 → omc 会去重（R11 §3.4-3）；v1 未做，标 unsupported（driver 退 66）。
     for (std::size_t i = 0; i < result_.model.variables.size(); ++i)
       for (std::size_t j = i + 1; j < result_.model.variables.size(); ++j)
@@ -260,10 +274,13 @@ class Flattener {
           set_unsupported("short/enum/derived type");
           continue;
         }
-        // 连接器（含 expandable）要 connect 展开 + 方向/flow 规则（R13 §3/§6）——v1 未做，整个标 unsupported。
+        // 普通连接器当复合组件摊开成员（c.e/c.f）；未连接 flow 变量的 `=0` 方程在 emit_variable 落。
+        // expandable connector 要按连接推断成员，v1 未做 → SKIP。含 connect() 的模型在 collect_equation SKIP。
         SRestriction r = I_.scode.elems[cdef].restriction;
-        if (r == SRestriction::Connector || r == SRestriction::ExpandableConnector)
-          set_unsupported("connector type");
+        if (r == SRestriction::ExpandableConnector) set_unsupported("expandable connector");
+        // `flow C c`：flow/stream 前缀加在连接器**组件**上 → 前缀下沉到每个标量成员（conn9），v1 未做 → SKIP。
+        if (I_.comps[cid].attributes.connector != SConnectorType::Potential)
+          set_unsupported("flow/stream on composite component");
         // 整体绑定 `A a = A(...)`（外来修饰或组件自身声明给复合/记录组件挂了 binding，如记录构造 `P.Clock(1)`）
         // 需把字段值分配到子变量，v1 未做 → SKIP（Clock6）。
         for (Id<SMod> m : matched)
@@ -385,8 +402,16 @@ class Flattener {
         if (fn == "initial" || fn == "terminal") set_unsupported("binding variability");
       }
     }
-    // flow/stream 变量需要连接方程（未连接顶层 flow → `x = 0.0`，R13 §6-2）——v1 未做 connect，标 unsupported。
-    if (comp.attributes.connector != SConnectorType::Potential) set_unsupported("connector (flow/stream)");
+    // stream 变量的连接方程（inStream/actualStream）v1 未做 → SKIP。flow 变量正常打印（flow 前缀不打，R13 §3.1），
+    // 未连接的 flow → `name = 0.0`（R13 §6-2）在下方压平后落；含 connect() 的模型已在 collect_equation 整体 SKIP。
+    if (comp.attributes.connector == SConnectorType::Stream) set_unsupported("stream connector");
+    const bool in_conn = enclosing_is_connector(enclosing);
+    // 连接器成员带方向（input/output）的 inside/outside 保留规则（顶层连接器保留、深层抹掉，R13 §3.1）v1 未做 → SKIP（Direction1）。
+    if (in_conn && comp.attributes.direction != SDirection::Bidir) set_unsupported("connector direction");
+    // `flow` 在连接器里生成 `=0`；非连接器里的 flow 前缀 OMC 告警后当普通变量——ymc 不产告警文本，
+    // 与期望的 Warning 行对不上 → SKIP（NonConnectorFlow1）。
+    if (comp.attributes.connector == SConnectorType::Flow && !in_conn) set_unsupported("flow outside connector");
+    const bool is_flow = comp.attributes.connector == SConnectorType::Flow && in_conn;
     FlatVariable v;
     v.name = name;
     v.ty = comp.ty;
@@ -421,6 +446,8 @@ class Flattener {
     v.attributes = std::move(attrs);
     v.loc = comp.loc;
     result_.model.variables.push_back(std::move(v));
+    // 未连接 flow → `name = 0.0`；`=0` 方程要排在本类方程之后（R13 §6），故先攒起来，run() 末尾统一追加。
+    if (is_flow) flow_vars_.push_back({name, cty, comp.loc});
   }
 
   // 数组叶组件标量化（R13 §3/§4）：字面量维度 → 行主序逐元素变量行（无绑定/属性）；数组绑定 `= {…}` 变成
@@ -1569,12 +1596,23 @@ class Flattener {
     if (!result_.unsupported) { result_.unsupported = true; result_.unsupported_reason = why; }
   }
 
+  // 某实例节点的类是否连接器（flow 语义/方向保留只在连接器内成立）。
+  bool enclosing_is_connector(NodeId enclosing) {
+    if (I_.nodes[enclosing].is_empty()) return false;
+    Id<SElement> d = I_.nodes[enclosing].def;
+    if (!d.is_valid()) return false;
+    SRestriction r = I_.scode.elems[d].restriction;
+    return r == SRestriction::Connector || r == SRestriction::ExpandableConnector;
+  }
+
   Inst& I_;
   Interner& in_;
   FlattenResult result_;
   std::unordered_map<std::uint32_t, std::vector<Symbol>> outer_redirect_;   // outer 组件节点 raw → inner 全名
   std::unordered_set<std::uint32_t> evaluating_;   // 正在求值的常量节点（环检测）
   NodeId decl_scope_;   // 当前正在算绑定的组件声明处作用域（限定名在此解析；继承成员 = 基类作用域）
+  struct FlowVar { std::vector<Symbol> name; Type ty; SourceLoc loc; };
+  std::vector<FlowVar> flow_vars_;   // 未连接 flow 变量（run() 末尾统一补 `=0` 方程）
 };
 
 }  // namespace
