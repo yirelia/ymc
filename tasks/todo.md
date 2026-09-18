@@ -283,7 +283,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       → easy-slice **121 PASS / 0 FAIL**（+1 Connect1）；oracle=live 120 逐字节一致；全 scodeinst FAIL 71 不变；三编译器 10/10，ASan 0，+2 单测。
       诚实 SKIP（各需另一特性）：connect() 方程展开（Connect2+，连接集/inside-outside 符号）、expandable connector、stream、
       连接器成员方向 inside/outside 保留（Direction1）、`flow C c` 前缀下沉复合成员（conn9）、flow 用在非连接器（NonConnectorFlow1，omc 只告警）。
-- [ ] **今日剩余（按序，每桶完整验证）**：记录
+- [x] **加宽⑰记录（构造整体绑定）**（2026-09-19）：记录构造 `R r = R(4.0, 5.0)` 翻成类修饰 `R r(x=4.0, y=5.0)`
+      （build_record_ctor_mod：位置实参按声明序、命名实参按名匹配字段，合成 SMod 走既有修饰机制；缺省实参保留字段默认）。
+      → easy-slice **124 PASS / 0 FAIL**（+3 RecordBinding1/Clock5/Clock6）；oracle=live 123 逐字节一致；
+      全 scodeinst PASS 124→127、FAIL 71→70（0 新增，含 Clock6 从整体绑定 SKIP 转 PASS）；三编译器 10/10，ASan 0，+3 单测。
+      诚实 SKIP（各需另一特性）：`constant/parameter R r` 变率下沉成员 + 常量字段引用求值（CevalRecord3/5）、
+      记录数组 `R r[2]`（复合数组）、记录 extends（RecordExtends）、构造绑定叠加字段修饰、算法段里的 `r := R(...)`（RecordConstructor1）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

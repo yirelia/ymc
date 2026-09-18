@@ -362,6 +362,34 @@ YMC_TEST(flatten_connector_unconnected_flow) {
                std::string("class M\n  Real c.e;\n  Real c.f;\nequation\n  c.f = 0.0;\nend M;\n"));
 }
 
+YMC_TEST(flatten_record_constructor_binding) {
+  // 记录构造整体绑定 `R r = R(4,5)` = 类修饰 `R r(x=4,y=5)`：位置实参按声明序摊到字段，缺省实参保留默认。
+  // 期望 = omc 1.25.0（RecordBinding1）。
+  const char* src =
+      "record R\n  Real x = 1.0;\n  Real y = 2.0;\n  Real z = 3.0;\nend R;\n"
+      "model M\n  R r = R(4.0, 5.0);\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class M\n  Real r.x = 4.0;\n  Real r.y = 5.0;\n  Real r.z = 3.0;\nend M;\n"));
+}
+
+YMC_TEST(flatten_record_constructor_named_arg) {
+  // 命名实参 `R(y=5)` 按名匹配字段；未给的 x/z 保留默认。期望 = omc 1.25.0。
+  const char* src =
+      "record R\n  Real x = 1.0;\n  Real y = 2.0;\nend R;\n"
+      "model M\n  R r = R(y = 5.0);\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class M\n  Real r.x = 1.0;\n  Real r.y = 5.0;\nend M;\n"));
+}
+
+YMC_TEST(flatten_constant_record_unsupported) {
+  // `constant R r` 变率前缀要下沉成员 + 常量字段引用求值（CevalRecord3/5），本桶未做 → 干净 SKIP。
+  bool uns = false;
+  std::string t = flatten_src(
+      "record R\n  Real x;\nend R;\nmodel M\n  constant R r = R(1.0);\nend M;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+}
+
 YMC_TEST(flatten_flow_outside_connector_unsupported) {
   // `flow` 加在非连接器变量上：omc 告警后当普通变量；ymc 不产告警文本 → 干净 SKIP（NonConnectorFlow1）。
   bool uns = false;

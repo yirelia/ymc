@@ -281,18 +281,39 @@ class Flattener {
         // `flow C c`：flow/stream 前缀加在连接器**组件**上 → 前缀下沉到每个标量成员（conn9），v1 未做 → SKIP。
         if (I_.comps[cid].attributes.connector != SConnectorType::Potential)
           set_unsupported("flow/stream on composite component");
-        // 整体绑定 `A a = A(...)`（外来修饰或组件自身声明给复合/记录组件挂了 binding，如记录构造 `P.Clock(1)`）
-        // 需把字段值分配到子变量，v1 未做 → SKIP（Clock6）。
+        // `constant/parameter R r`：变率前缀要下沉到每个成员，且常量记录字段引用 `r.x` 要求值（CevalRecord3/5）——
+        // 两者本桶都未做 → SKIP（否则字段丢 constant 前缀、引用不折叠）。
+        if (I_.comps[cid].attributes.variability != SVariability::Var)
+          set_unsupported("variability on composite component");
+        // 整体绑定 `A a = A(...)`（外来修饰或组件自身声明）。记录构造 `R r = R(4,5)` 翻成类修饰 `R r(x=4,y=5)`
+        // 走既有修饰机制摊到字段（RecordBinding1）；其余整体绑定（记录构造以外的复合绑定，Clock6）仍 SKIP。
+        Id<Exp> whole_raw;
+        NodeId whole_scope = inst_node;
+        std::vector<Symbol> whole_vpfx = prefix;
         for (Id<SMod> m : matched)
-          if (I_.scode.mods[m].binding.is_valid()) set_unsupported("record/whole binding");
-        if (I_.comps[cid].binding.kind == BindingKind::Raw && I_.comps[cid].binding.raw_exp.is_valid())
-          set_unsupported("composite/record binding");
+          if (I_.scode.mods[m].binding.is_valid()) {
+            whole_raw = I_.scode.mods[m].binding; whole_scope = ctx.scope; whole_vpfx = ctx.vprefix; break;
+          }
+        if (!whole_raw.is_valid() && I_.comps[cid].binding.kind == BindingKind::Raw &&
+            I_.comps[cid].binding.raw_exp.is_valid())
+          whole_raw = I_.comps[cid].binding.raw_exp;
+        Id<SMod> ctor_mod;
+        if (r == SRestriction::Record && whole_raw.is_valid())
+          ctor_mod = build_record_ctor_mod(whole_raw, ci, cdef);
+        if (whole_raw.is_valid() && !ctor_mod.is_valid()) set_unsupported("composite/record binding");
         // 组子层修饰上下文（R15 §3.3 优先级：外层实例修饰 > 组件自身声明修饰）。两者同时非空要合并两套作用域，
         // 本桶未做 → 标 unsupported（easy slice 不出现）。
         const bool own = cel.mod.is_valid() && !I_.scode.mods[cel.mod].subs.empty();
+        bool matched_field = false;
+        for (Id<SMod> m : matched)
+          if (!I_.scode.mods[m].subs.empty()) { matched_field = true; break; }
         ModCtx child;
         child.final_all = comp_final;
-        if (!matched.empty() && own) {
+        if (ctor_mod.is_valid()) {
+          // 构造绑定与另有字段修饰叠加（`R r(z=9) = R(4,5)`）要合并两套 → 本桶未做 SKIP。
+          if (own || matched_field) set_unsupported("record ctor + field modifier");
+          else { child.mods = {ctor_mod}; child.scope = whole_scope; child.vprefix = whole_vpfx; }
+        } else if (!matched.empty() && own) {
           set_unsupported("stacked modifier scopes");
         } else if (!matched.empty()) {
           child.mods = matched; child.scope = ctx.scope; child.vprefix = ctx.vprefix;
@@ -1594,6 +1615,44 @@ class Flattener {
   Id<Expr> add(Expr e) { return result_.model.exprs.add(std::move(e)); }
   void set_unsupported(const char* why) {
     if (!result_.unsupported) { result_.unsupported = true; result_.unsupported_reason = why; }
+  }
+
+  // 记录构造整体绑定 `R r = R(a, b, x=c)` = 类修饰 `R r(字段=实参…)`：把构造实参按声明序（位置实参）
+  // 或名字（命名实参）匹配到字段，合成一个类修饰 SMod（缺省实参不进 subs → 该字段保留声明默认，RecordBinding1）。
+  // 返回 invalid = 不适用/未支持（非构造调用、名字对不上、记录有 extends…），调用方据此仍走整体绑定 SKIP。
+  Id<SMod> build_record_ctor_mod(Id<Exp> callraw, NodeId ci, Id<SElement> cdef) {
+    const Exp& call = I_.absyn.exps[callraw];
+    if (call.kind != ExpKind::Call) return {};
+    if (call.partial_fn || call.call_suffix.is_valid()) return {};
+    // 构造函数名末段必须 == 记录类名（否则是返回记录的用户函数等 → SKIP）。
+    const Cref& fn = I_.absyn.crefs[call.cref];
+    if (fn.parts.empty() || !fn.parts.back().subscripts.empty()) return {};
+    if (fn.parts.back().name != I_.scode.elems[cdef].name) return {};
+    // 记录含 extends（继承字段的构造序/约束）本桶未验证 → SKIP（RecordExtends）。
+    for (Id<SElement> eid : I_.scode.elems[cdef].def.elements)
+      if (I_.scode.elems[eid].kind == SElementKind::Extends) return {};
+    const std::vector<NodeId>& fields = I_.trees[I_.node_class(ci).tree].components;
+    std::vector<SSubMod> subs;
+    std::size_t pos = 0;
+    for (std::size_t i = 0; i < call.args.size(); ++i) {
+      Symbol fld;
+      if (i < call.arg_names.size() && call.arg_names[i].is_valid()) {
+        fld = call.arg_names[i];                       // 命名实参 R(x=..)
+      } else {                                          // 位置实参 → 第 pos 个字段（声明序）
+        if (pos >= fields.size()) return {};            // 实参多于字段 → 越界，交给上层 SKIP
+        fld = I_.nodes[fields[pos++]].name;
+      }
+      SMod fm;
+      fm.kind = SModKind::Mod;
+      fm.binding = call.args[i];
+      fm.loc = call.loc;
+      subs.push_back({fld, I_.scode.add_mod(std::move(fm))});
+    }
+    SMod outer;
+    outer.kind = SModKind::Mod;
+    outer.subs = std::move(subs);
+    outer.loc = call.loc;
+    return I_.scode.add_mod(std::move(outer));
   }
 
   // 某实例节点的类是否连接器（flow 语义/方向保留只在连接器内成立）。
