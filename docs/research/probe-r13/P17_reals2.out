@@ -1,0 +1,26 @@
+function P17_reals2.fv
+  input Real[3] v;
+  output Real y;
+algorithm
+  y := v[1] + v[2] + v[3];
+end P17_reals2.fv;
+
+class P17_reals2
+  constant Real c1 = 1e4;
+  constant Real c2 = 12000.0;
+  constant Real c3 = 1.2e5;
+  constant Real c4 = 1234.5;
+  constant Real c5 = 1.2e-4;
+  constant Real c6 = 123000.0;
+  constant Real c7 = 1.23e6;
+  constant Real c8 = 100.0;
+  constant Real c9 = 0.01;
+  Integer iv[1];
+  Integer iv[2];
+  Integer iv[3];
+  Real y = P17_reals2.fv(/*Real[3]*/(iv));
+equation
+  iv[1] = integer(time);
+  iv[2] = 2;
+  iv[3] = 3;
+end P17_reals2;

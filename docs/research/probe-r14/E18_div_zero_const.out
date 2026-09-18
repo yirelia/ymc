@@ -1,0 +1,7 @@
+Error processing file: E18_div_zero_const.mo
+[C:/dev/ymc/docs/research/probe-r14/E18_div_zero_const.mo:2:3-2:26:writable] Error: Division by zero in 1.0 / 0.0
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

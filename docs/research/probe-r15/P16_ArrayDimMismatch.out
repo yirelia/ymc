@@ -1,0 +1,8 @@
+Error processing file: P16_ArrayDimMismatch.mo
+[C:/dev/ymc/docs/research/probe-r15/P16_ArrayDimMismatch.mo:6:10-6:20:writable] Notification: From here:
+[C:/dev/ymc/docs/research/probe-r15/P16_ArrayDimMismatch.mo:2:3-2:23:writable] Error: Type mismatch in binding 'p = {1.0, 2.0}', expected array dimensions [3], got [2].
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

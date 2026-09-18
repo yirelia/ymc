@@ -1,0 +1,5 @@
+class P01b
+  Real x = 1.5;
+  Integer f = 1;
+end P01b;
+exit=0

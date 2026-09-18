@@ -1,0 +1,8 @@
+Error processing file: p33_class_via_comp_call.mo
+[C:/dev/ymc/docs/research/probe-r12/p33_class_via_comp_call.mo:9:3-9:23:writable] Error: Expected a.R to be a function, but found class instead.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

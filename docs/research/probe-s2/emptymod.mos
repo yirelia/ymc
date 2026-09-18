@@ -1,0 +1,16 @@
+loadString("package PAnn
+  model A annotation(__Dymola_Commands, Evaluate = true); end A;
+  model B
+    Real x annotation(Foo, Bar(baz), Qux(a = 1, b), Zed());
+  end B;
+  model C
+    Real x(final y, each z, w(), v(u), t \"cmt\") = 1;
+  end C;
+  model D annotation(Foo); end D;
+  model E
+    Real y = if a then 1 elseif b then 2 elseif c then 3 else 4;
+  equation
+    y = if a then 1 elseif b then 2 elseif c then 3 elseif d then 5 else 4;
+  end E;
+end PAnn;"); getErrorString();
+print(list(PAnn, exportKind=OpenModelica.Scripting.ExportKind.SCode));

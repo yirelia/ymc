@@ -1,0 +1,9 @@
+Error processing file: ts_ImportNamedInvalid1.mo
+[C:/dev/ymc/docs/research/probe-r12/ts_ImportNamedInvalid1.mo:9:3-9:17:writable] Error: Import P.M not found in scope <top>.
+[C:/dev/ymc/docs/research/probe-r12/ts_ImportNamedInvalid1.mo:10:3-10:6:writable] Error: Class M not found in scope ImportNamedInvalid1.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

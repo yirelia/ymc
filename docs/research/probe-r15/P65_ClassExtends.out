@@ -1,0 +1,6 @@
+class P65_ClassExtends
+  Real b.x = 1.0;
+  Real b.y = 2.0;
+  Real b2.x = 1.0;
+  Real b2.y = 2.0;
+end P65_ClassExtends;

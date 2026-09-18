@@ -1,0 +1,18 @@
+loadModel(Modelica,{"3.2.3","4.0.0"}); getSourceFile(Modelica); getErrorString();
+clear(); loadModel(Modelica,{"4.0.0","3.2.3"}); getSourceFile(Modelica); getErrorString();
+clear(); loadModel(Modelica,{"3.2.1","4.0.0"}, requireExactVersion=true); getSourceFile(Modelica); getErrorString();
+clear(); loadModel(Modelica,{"3.2.3","4.0.0"}, requireExactVersion=true); getSourceFile(Modelica); getErrorString();
+clear(); loadModel(Modelica,{"4.0.0","3.2.3"}, requireExactVersion=true); getSourceFile(Modelica); getErrorString();
+setModelicaPath("C:/Users/yangrui/AppData/Local/Temp/claude/C--dev-ymc/4e49f17e-0607-4a2d-8c06-17ac54b3dead/scratchpad/probe-r8/lib");
+clear(); loadModel(Foo,{"1.0.0","2.0.0"}); getSourceFile(Foo); getErrorString();
+clear(); loadModel(Foo,{"2.0.0","1.0.0"}); getSourceFile(Foo); getErrorString();
+clear(); loadModel(Foo,{"9.9","1.0.0"}); getSourceFile(Foo); getErrorString();
+clear(); loadModel(Foo,{"3.0.0-beta.1"}); getSourceFile(Foo); getErrorString();
+clear(); loadModel(Foo,{"3.0.0-beta"}); getSourceFile(Foo); getErrorString();
+clear(); loadModel(Foo,{"3.0.0-rc"}); getSourceFile(Foo); getErrorString();
+clear(); loadModel(Foo,{"3.0.0"}, requireExactVersion=true); getSourceFile(Foo); getErrorString();
+clear(); loadModel(UsesTest); getClassNames(); getErrorString();
+clear(); loadModel(UsesTest, notify=true); getSourceFile(Foo); getErrorString();
+clear(); loadFile("C:/Users/yangrui/AppData/Local/Temp/claude/C--dev-ymc/4e49f17e-0607-4a2d-8c06-17ac54b3dead/scratchpad/probe-r8/lib/UsesTest.mo"); getClassNames(); getErrorString();
+clear(); loadFile("C:/Users/yangrui/AppData/Local/Temp/claude/C--dev-ymc/4e49f17e-0607-4a2d-8c06-17ac54b3dead/scratchpad/probe-r8/lib/UsesTest.mo", uses=false); getClassNames(); getErrorString();
+clear(); loadModel(Foo,{"2.0.0"}); loadModel(UsesTest); getSourceFile(Foo); getErrorString();

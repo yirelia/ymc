@@ -1,0 +1,8 @@
+Error processing file: p32_class_via_comp_func.mo
+[C:/dev/ymc/docs/research/probe-r12/p32_class_via_comp_func.mo:13:3-13:21:writable] Error: Illegal access of class 'M' via a component when looking for 'P.c.M.f'.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

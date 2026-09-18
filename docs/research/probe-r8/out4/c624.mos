@@ -1,0 +1,9 @@
+loadModel(Modelica, {"4.0.0"});
+x := getClassNames(Modelica, recursive=true, qualified=true, showProtected=true, includeConstants=true);
+size(x,1);
+x[1]; x[2]; x[3]; x[size(x,1)];
+y := getClassNames(Modelica, recursive=true, qualified=true, showProtected=true);
+y[1]; y[2]; y[3]; y[size(y,1)];
+getClassNames(Modelica.Utilities.Types.Compare, recursive=true, qualified=true);
+getClassNames(Modelica.Icons.Package, recursive=true, qualified=true);
+getClassNames(Modelica.Math.Vectors, recursive=false, qualified=true, showProtected=true, includeConstants=true);

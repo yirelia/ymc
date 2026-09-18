@@ -1,0 +1,19 @@
+class E03_struct_dim
+  final parameter Integer n = 2;
+  final parameter Integer m = 3;
+  parameter Integer k = 4;
+  parameter Real w = 2.0;
+  Real x[1];
+  Real x[2];
+  Real y[1];
+  Real y[2];
+  Real y[3];
+  Real s;
+equation
+  x[1] = w;
+  x[2] = w;
+  y[1] = /*Real*/(k + 2);
+  y[2] = /*Real*/(2 * k + 2);
+  y[3] = /*Real*/(3 * k + 2);
+  s = x[1] + x[2] + 2.0 + 3.0 + /*Real*/(k);
+end E03_struct_dim;

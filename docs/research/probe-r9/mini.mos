@@ -1,0 +1,4 @@
+loadString("model A Real x, y(start=1); equation x = 1; equation y = 2; end A;"); getErrorString();
+list(A, exportKind=ExportKind.SCode); getErrorString();
+s := list(A, exportKind=ExportKind.SCode); getErrorString();
+writeFile("mini_out.txt", s); getErrorString();

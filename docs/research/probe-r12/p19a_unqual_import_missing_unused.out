@@ -1,0 +1,8 @@
+Error processing file: p19a_unqual_import_missing_unused.mo
+[C:/dev/ymc/docs/research/probe-r12/p19a_unqual_import_missing_unused.mo:2:3-2:16:writable] Error: Import Nope not found in scope <top>.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

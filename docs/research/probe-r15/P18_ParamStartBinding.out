@@ -1,0 +1,16 @@
+class P18_ParamStartBinding
+  parameter Real a.p(start = 1.0) = 1.0;
+  parameter Real a.w[1](start = 3.0) = 3.0;
+  parameter Real a.w[2](start = 3.0) = 3.0;
+  parameter Real b[1].p(start = 5.0) = 5.0;
+  parameter Real b[1].w[1](start = 3.0) = 3.0;
+  parameter Real b[1].w[2](start = 3.0) = 3.0;
+  parameter Real b[2].p(start = 6.0) = 6.0;
+  parameter Real b[2].w[1](start = 3.0) = 3.0;
+  parameter Real b[2].w[2](start = 3.0) = 3.0;
+end P18_ParamStartBinding;
+[C:/dev/ymc/docs/research/probe-r15/P18_ParamStartBinding.mo:3:3-3:30:writable] Warning: Parameter a.p has no value, and is fixed during initialization (fixed=true), using available start value (start=1) as default value.
+[C:/dev/ymc/docs/research/probe-r15/P18_ParamStartBinding.mo:4:3-4:38:writable] Warning: Parameter a.w has no value, and is fixed during initialization (fixed=true), using available start value (start=3) as default value.
+[C:/dev/ymc/docs/research/probe-r15/P18_ParamStartBinding.mo:3:3-3:30:writable] Warning: Parameter b.p has no value, and is fixed during initialization (fixed=true), using available start value (start={5, 6}) as default value.
+[C:/dev/ymc/docs/research/probe-r15/P18_ParamStartBinding.mo:4:3-4:38:writable] Warning: Parameter b.w has no value, and is fixed during initialization (fixed=true), using available start value (start=3) as default value.
+

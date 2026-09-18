@@ -1,0 +1,7 @@
+Error processing file: P30_MissingOrder.mo
+[C:/dev/ymc/docs/research/probe-r15/P30_MissingOrder.mo:7:15-7:21:writable] Error: Modified element bb not found in class A.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

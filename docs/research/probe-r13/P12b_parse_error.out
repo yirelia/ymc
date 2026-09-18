@@ -1,0 +1,10 @@
+Error processing file: P12b_parse_error.mo
+Failed to parse file: P12b_parse_error.mo!
+
+[C:/dev/ymc/docs/research/probe-r13/P12b_parse_error.mo:23:17-23:17:writable] Error: Missing token: SEMICOLON
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+Failed to parse file: P12b_parse_error.mo!
+
+Execution failed!

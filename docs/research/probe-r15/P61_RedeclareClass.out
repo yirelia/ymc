@@ -1,0 +1,4 @@
+class P61_RedeclareClass
+  Real a.b.x = 1.0;
+  Real a.b.z = 5.0;
+end P61_RedeclareClass;

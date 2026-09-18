@@ -1,0 +1,14 @@
+loadModel(Modelica, {"3.2.3"}); print(getErrorString());
+getClassNames();
+getSourceFile(Complex); getSourceFile(ModelicaServices);
+print("--- request 3.2.1 ---\n");
+clear();
+loadModel(Modelica, {"3.2.1"}); print(getErrorString());
+getSourceFile(Modelica);
+print("--- request Complex 3.2.3 directly ---\n");
+clear();
+loadModel(Complex, {"3.2.3"}); print(getErrorString());
+getSourceFile(Complex);
+print("--- request 4.1.0 ---\n");
+clear();
+loadModel(Modelica, {"4.1.0"}); print(getErrorString());

@@ -1,0 +1,12 @@
+class E05_struct_ifeq
+  final parameter Boolean flag = true;
+  final parameter Integer mode = 2;
+  parameter Real p = 3.0;
+  Real x;
+  Real y;
+  Real z;
+equation
+  x = p;
+  y = 2.0;
+  z = p;
+end E05_struct_ifeq;

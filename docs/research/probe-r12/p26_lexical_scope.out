@@ -1,0 +1,5 @@
+class P26
+  constant Real k = 100.0;
+  Real a.x = 7.0;
+end P26;
+exit=0

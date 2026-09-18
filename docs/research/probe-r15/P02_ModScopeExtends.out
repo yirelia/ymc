@@ -1,0 +1,6 @@
+class P02_ModScopeExtends
+  parameter Real p = k + r;
+  parameter Real k = 7.0;
+  Real x = p;
+  parameter Real r = 5.0;
+end P02_ModScopeExtends;

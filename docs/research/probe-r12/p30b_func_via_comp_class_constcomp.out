@@ -1,0 +1,8 @@
+Error processing file: p30b_func_via_comp_class_constcomp.mo
+[C:/dev/ymc/docs/research/probe-r12/p30b_func_via_comp_class_constcomp.mo:8:3-8:15:writable] Error: Found non-class c while looking for function via component. The only valid form is c1..cN.C1..CN.f where c1..cN are scalar components and C1..CN are classes.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

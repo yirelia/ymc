@@ -1,0 +1,10 @@
+Error processing file: DuplicateElements5.mo
+[C:/dev/OpenModelica/testsuite/flattening/modelica/scodeinst/DuplicateElements5.mo:9:3-9:9:writable] Notification: From here:
+[C:/dev/OpenModelica/testsuite/flattening/modelica/scodeinst/DuplicateElements5.mo:14:3-14:12:writable] Error: Duplicate elements (due to inherited elements) not identical:
+  first element is:  Real x
+  second element is: Integer x
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

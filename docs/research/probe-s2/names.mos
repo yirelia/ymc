@@ -1,0 +1,12 @@
+loadModel(Modelica, {"4.0.0"}); getErrorString();
+n := size(getClassNames(Modelica, recursive=true, qualified=true, showProtected=true, includeConstants=false), 1);
+print("count_all_recursive_protected=" + String(n) + "\n");
+n2 := size(getClassNames(Modelica, recursive=true, qualified=true, showProtected=false, includeConstants=false), 1);
+print("count_public_only=" + String(n2) + "\n");
+n3 := size(getClassNames(Modelica, recursive=true, qualified=true, showProtected=true, includeConstants=true), 1);
+print("count_with_constants=" + String(n3) + "\n");
+l := getClassNames(Modelica.Blocks.Continuous, recursive=false, qualified=true, showProtected=true);
+print("sample_Blocks_Continuous_direct=" + String(size(l,1)) + "\n");
+print(sum(String(l[i]) + "\n" for i in 1:min(6, size(l,1))));
+print("loaded_top=" + String(size(getClassNames(), 1)) + "\n");
+print(sum(String(c) + " " for c in getClassNames()) + "\n");

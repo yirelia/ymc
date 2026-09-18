@@ -1,0 +1,8 @@
+Error processing file: p09a_var_not_found.mo
+[C:/dev/ymc/docs/research/probe-r12/p09a_var_not_found.mo:2:3-2:16:writable] Error: Variable nope not found in scope P09a.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

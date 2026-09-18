@@ -1,0 +1,4 @@
+class P22_ClassMod
+  Real a.x(start = 5.0);
+  parameter Real a.i.k = 8.0;
+end P22_ClassMod;

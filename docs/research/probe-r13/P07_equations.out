@@ -1,0 +1,74 @@
+class P07_equations
+  Real r1.p.v;
+  Real r1.p.i;
+  Real r1.n.v;
+  Real r1.n.i;
+  parameter Real r1.R = 1.0;
+  Real r2.p.v;
+  Real r2.p.i;
+  Real r2.n.v;
+  Real r2.n.i;
+  parameter Real r2.R = 1.0;
+  Real x(start = 1.0);
+  Real y;
+  Real z;
+  discrete Real d1;
+  discrete Real d2;
+  final parameter Boolean flag = true;
+  parameter Boolean pb(fixed = false);
+  final parameter Integer n = 3;
+  Real arr[1];
+  Real arr[2];
+  Real arr[3];
+  Boolean cond;
+initial equation
+  pb = true;
+  if pb then
+    y = 1.0;
+  else
+    y = 2.0;
+  end if;
+equation
+  r1.n.v = r2.p.v;
+  r1.p.v = r2.n.v;
+  r2.n.i + r1.p.i = 0.0;
+  r2.p.i + r1.n.i = 0.0;
+  r1.p.v - r1.n.v = r1.R * r1.p.i;
+  r1.p.i + r1.n.i = 0.0;
+  r2.p.v - r2.n.v = r2.R * r2.p.i;
+  r2.p.i + r2.n.i = 0.0;
+  r1.p.v = 0.0;
+  der(x) = -x "equation comment";
+  cond = x > 0.5;
+  if cond then
+    z = 1.0;
+  elseif x > 0.2 then
+    z = 2.0;
+    assert(z > 0.0, "inner assert");
+  elseif x > 0.1 then
+    z = 3.0;
+  else
+    z = 4.0;
+  end if;
+  y = x;
+  arr[1] = x;
+  arr[2] = 2.0 * x;
+  arr[3] = 3.0 * x;
+  when x < 0.5 then
+    d1 = pre(d1) + 1.0;
+    reinit(x, 1.0);
+  elsewhen x < 0.3 then
+    d1 = 0.0;
+  elsewhen {x < 0.2, x < 0.1} then
+    d1 = -1.0;
+  end when;
+  when initial() then
+    d2 = 1.0;
+  end when;
+  assert(x > -1.0, "x too small");
+  assert(x < 10.0, "x large: " + String(x, 6, 0, true), AssertionLevel.warning);
+  assert(x < 20.0, "x larger");
+  when x < 0.05 then
+    terminate("done");
+  end when;
+end P07_equations;

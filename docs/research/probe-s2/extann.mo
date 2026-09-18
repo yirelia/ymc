@@ -1,0 +1,46 @@
+package PE
+  function f1
+    input Real x;
+    output Real y;
+    external "C" y = foo(x) annotation(Library = "a");
+    annotation(derivative = df, Inline = false);
+  end f1;
+  function f2
+    input Real x;
+    output Real y;
+    external "C" y = foo(x);
+    annotation(Library = "b", derivative = df);
+  end f2;
+  function f3
+    input Real x;
+    output Real y;
+    external "C" y = foo(x) annotation(Library = "a");
+  end f3;
+  function f4
+    input Real x;
+    output Real y;
+    external "C" y = foo(x);
+    annotation(derivative = df);
+  end f4;
+  function f5
+    input Real x;
+    output Real y;
+    annotation(derivative = df);
+    external "C" y = foo(x) annotation(Library = "a");
+  end f5;
+  function f6
+    input Real x;
+    output Real y;
+    external "C" y = foo(x) annotation(Library = "a");
+    annotation(Inline = false);
+  end f6;
+  model M
+    Real x;
+    annotation(experiment(StopTime = 1));
+    annotation(Inline = false);
+  end M;
+  model N
+    Real y(start = 1 "c1") "c2" annotation(Evaluate = true);
+    annotation(experiment(StopTime = 1));
+  end N;
+end PE;

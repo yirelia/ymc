@@ -1,0 +1,6 @@
+loadString("model A Real x; end A;"); getErrorString();
+print("--1 list()--\n"); print(list()); getErrorString();
+print("--2 list(A)--\n"); print(list(A)); getErrorString();
+print("--3 OpenModelica.Scripting.list--\n"); print(OpenModelica.Scripting.list(A, exportKind=OpenModelica.Scripting.ExportKind.SCode)); getErrorString();
+print("--4 listVariables--\n"); print(sum(listVariables())); getErrorString();
+print("--5 getVersion--\n"); print(getVersion()); getErrorString();

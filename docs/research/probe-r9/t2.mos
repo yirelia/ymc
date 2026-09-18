@@ -1,0 +1,4 @@
+loadString("model A Real x; end A;"); getErrorString();
+print("--unqualified ExportKind--\n"); print(list(A, exportKind=ExportKind.SCode)); getErrorString();
+print("--qualified ExportKind--\n"); print(list(A, exportKind=OpenModelica.Scripting.ExportKind.SCode)); getErrorString();
+print("--all loaded, SCode--\n"); print(list(exportKind=OpenModelica.Scripting.ExportKind.SCode)); getErrorString();

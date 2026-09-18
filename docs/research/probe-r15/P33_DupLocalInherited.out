@@ -1,0 +1,5 @@
+class P33_DupLocalInherited
+  Real x = 1.0;
+  Real y;
+  Real z;
+end P33_DupLocalInherited;

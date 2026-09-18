@@ -1,0 +1,5 @@
+loadFile("p09a_var_not_found.mo"); getErrorString();
+instantiateModel(P09a); getErrorString();
+loadFile("p08_protected_class.mo"); getErrorString();
+instantiateModel(P08); getErrorString();
+instantiateModel(NoSuchModel); getErrorString();

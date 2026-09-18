@@ -1,0 +1,9 @@
+Error processing file: ts_PackageConstant5.mo
+[C:/dev/ymc/docs/research/probe-r12/ts_PackageConstant5.mo:7:3-7:9:writable] Notification: From here:
+[C:/dev/ymc/docs/research/probe-r12/ts_PackageConstant5.mo:10:5-10:15:writable] Error: Component 'x' was found in an enclosing scope but is not a constant.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

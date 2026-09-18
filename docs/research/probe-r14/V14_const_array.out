@@ -1,0 +1,13 @@
+class V14_const_array
+  constant Real c[1] = 1.0;
+  constant Real c[2] = 2.0;
+  constant Real c[3] = 3.0;
+  constant Integer idx = 2;
+  final parameter Integer pi = 1;
+  Integer vi = 3;
+  Real x = 2.0;
+  Real y = 1.0;
+  Real z = {1.0, 2.0, 3.0}[vi];
+  Real s = 6.0;
+  Real w = 1.0 + 2.0 * x;
+end V14_const_array;

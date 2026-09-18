@@ -1,0 +1,4 @@
+class P07
+  Real y = Q.x;
+end P07;
+exit=0

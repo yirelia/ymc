@@ -1,0 +1,5 @@
+class P02c
+  constant Real c = 4.0;
+  Real a = 4.0;
+end P02c;
+exit=0

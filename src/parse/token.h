@@ -26,8 +26,10 @@ enum class TokenKind : std::uint8_t {
   DotPlus, DotMinus, DotStar, DotSlash, DotCaret,   // 逐元素算子 .+ .- .* ./ .^
   Less, LessEq, Greater, GreaterEq, EqEq, NotEq,    // < <= > >= == <>
 
-  // 关键字（MLS 附录 B.2.7 保留字）
-  Kw_algorithm, Kw_and, Kw_annotation, Kw_assert, Kw_block, Kw_break, Kw_class,
+  // 关键字（MLS 附录 B.1 保留字；与 OMC BaseModelica_Lexer.g 逐词核对过。
+  // 注意 assert / reinit / terminate / sample 等内置函数**不是**保留字，可当标识符：
+  // Buildings 9.1.0 里就有组件叫 `assert`）
+  Kw_algorithm, Kw_and, Kw_annotation, Kw_block, Kw_break, Kw_class,
   Kw_connect, Kw_connector, Kw_constant, Kw_constrainedby, Kw_der, Kw_discrete,
   Kw_each, Kw_else, Kw_elseif, Kw_elsewhen, Kw_encapsulated, Kw_end, Kw_enumeration,
   Kw_equation, Kw_expandable, Kw_extends, Kw_external, Kw_false, Kw_final, Kw_flow,

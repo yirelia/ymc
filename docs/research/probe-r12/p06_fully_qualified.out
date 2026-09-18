@@ -1,0 +1,5 @@
+class P06
+  Real m.x = 2.0;
+  Real m.y = 1.0;
+end P06;
+exit=0

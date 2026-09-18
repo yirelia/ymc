@@ -1,0 +1,3 @@
+class P51_CondMod
+  final parameter Boolean on = false;
+end P51_CondMod;

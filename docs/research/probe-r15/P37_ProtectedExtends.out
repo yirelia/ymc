@@ -1,0 +1,5 @@
+class P37_ProtectedExtends
+  protected parameter Real b.p = 1.0;
+  protected Real b.x = b.p;
+  Real b.y = b.x;
+end P37_ProtectedExtends;

@@ -1,0 +1,21 @@
+class P14_small
+  String s(start = "abc");
+  Real xe[E.a];
+  Real xe[E.b];
+  Real xb[false];
+  Real xb[true];
+  Integer k(start = -1);
+  Integer j = k * -1 - 3 + k;
+  Real r = /*Real*/(k) - 7.0;
+  Real t = xe[E.a] + xb[true];
+  parameter Real pneg = -1.0;
+  parameter Integer ineg = -2;
+  Real u = /*Real*/(ineg) - pneg;
+equation
+  xe = {1.0, 2.0};
+  xb = {3.0, 4.0};
+  when time > 1.0 then
+    s = "x";
+    k = pre(k) - 1;
+  end when;
+end P14_small;

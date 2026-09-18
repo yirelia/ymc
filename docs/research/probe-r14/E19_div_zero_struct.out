@@ -1,0 +1,7 @@
+Error processing file: E19_div_zero_struct.mo
+[C:/dev/ymc/docs/research/probe-r14/E19_div_zero_struct.mo:3:3-3:12:writable] Error: Division by zero in 4 / 0
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

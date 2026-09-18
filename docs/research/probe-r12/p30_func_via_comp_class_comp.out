@@ -1,0 +1,9 @@
+Error processing file: p30_func_via_comp_class_comp.mo
+[C:/dev/ymc/docs/research/probe-r12/p30_func_via_comp_class_comp.mo:7:3-7:6:writable] Notification: From here:
+[C:/dev/ymc/docs/research/probe-r12/p30_func_via_comp_class_comp.mo:15:3-15:22:writable] Error: Class B does not satisfy the requirements for a package. Lookup is therefore restricted to encapsulated elements, but c is not encapsulated.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

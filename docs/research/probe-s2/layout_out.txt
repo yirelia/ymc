@@ -1,0 +1,114 @@
+true
+""
+package PA
+  model Empty annotation(Evaluate = true); end Empty;
+
+  model Full
+    Real x;
+    annotation(experiment(StopTime = 1));
+  end Full;
+
+  model Blank end Blank;
+
+  model Hidden end Hidden;
+
+  type T = Real annotation(Evaluate = true);
+
+  connector C
+    Real v;
+  protected
+    Real w;
+  end C;
+
+  pure function f2
+    input Real x;
+    output Real y;
+  algorithm
+    y := x;
+    annotation(Inline = true);
+  end f2;
+
+  impure function f3
+    input Real x;
+    output Real y;
+  algorithm
+    y := x;
+  end f3;
+
+  package Q
+    model A end A;
+
+  protected
+    model B end B;
+
+    Real z;
+  end Q;
+
+  model Cm
+    Real s = 1 "a \"q\" b";
+    parameter String t = "x\ny";
+  end Cm;
+end PA
+
+
+package PA
+  model Empty
+    annotation(
+      Evaluate = true);
+  end Empty;
+
+  model Full
+    Real x;
+    annotation(
+      experiment(StopTime = 1),
+      Documentation(info = "d"));
+  end Full;
+
+  model Blank
+  end Blank;
+
+  model Hidden
+    annotation(
+      Documentation(info = "d"));
+  end Hidden;
+
+  type T = Real annotation(
+    Evaluate = true);
+
+  connector C
+    Real v;
+  protected
+    Real w;
+  end C;
+
+  pure function f2
+    input Real x;
+    output Real y;
+  algorithm
+    y := x;
+    annotation(
+      Inline = true);
+  end f2;
+
+  impure function f3
+    input Real x;
+    output Real y;
+  algorithm
+    y := x;
+  end f3;
+
+  package Q
+    model A
+    end A;
+  protected
+    model B
+    end B;
+
+    Real z;
+  end Q;
+
+  model Cm
+    Real s = 1 "a \"q\" b";
+    parameter String t = "x\ny";
+  end Cm;
+end PA;

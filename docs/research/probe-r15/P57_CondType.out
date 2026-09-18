@@ -1,0 +1,7 @@
+Error processing file: P57_CondType.mo
+[C:/dev/ymc/docs/research/probe-r15/P57_CondType.mo:3:3-3:14:writable] Error: Type error in conditional 'r'. Expected Boolean, got Real.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

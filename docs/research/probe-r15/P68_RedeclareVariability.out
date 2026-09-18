@@ -1,0 +1,7 @@
+Error processing file: P68_RedeclareVariability.mo
+[C:/dev/ymc/docs/research/probe-r15/P68_RedeclareVariability.mo:6:7-6:33:writable] Error: Invalid redeclaration 'parameter x', original element is declared 'constant'.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

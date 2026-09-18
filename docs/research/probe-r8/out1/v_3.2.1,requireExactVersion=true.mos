@@ -1,0 +1,6 @@
+loadModel(Modelica, {"3.2.1"},requireExactVersion=true, notify=true);
+getErrorString();
+getSourceFile(Modelica);
+getVersion(Modelica);
+getClassNames();
+getErrorString();

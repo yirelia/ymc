@@ -1,0 +1,6 @@
+class P05a
+  parameter Real q = 10.0;
+  parameter Real a.p = q;
+  parameter Real a.q = 2.0;
+end P05a;
+exit=0

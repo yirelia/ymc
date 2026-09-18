@@ -1,0 +1,8 @@
+Error processing file: p09d_class_not_found.mo
+[C:/dev/ymc/docs/research/probe-r12/p09d_class_not_found.mo:4:3-4:11:writable] Error: Class P.Nope not found in scope P09d.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

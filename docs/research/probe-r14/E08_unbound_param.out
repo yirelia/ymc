@@ -1,0 +1,13 @@
+class E08_unbound_param
+  parameter Real q(start = 2.5) = 2.5;
+  parameter Integer n(start = 3) = 3;
+  parameter Real r(fixed = false);
+  Real x;
+initial equation
+  r = 1.0;
+equation
+  x = q + /*Real*/(n) + r;
+end E08_unbound_param;
+[C:/dev/ymc/docs/research/probe-r14/E08_unbound_param.mo:2:3-2:32:writable] Warning: Parameter q has no value, and is fixed during initialization (fixed=true), using available start value (start=2.5) as default value.
+[C:/dev/ymc/docs/research/probe-r14/E08_unbound_param.mo:3:3-3:33:writable] Warning: Parameter n has no value, and is fixed during initialization (fixed=true), using available start value (start=3) as default value.
+

@@ -1,0 +1,5 @@
+loadModel(Modelica, {"4.0.0"}); getErrorString();
+getClassNames(Modelica.Blocks.Continuous, recursive=true, qualified=true, showProtected=true);
+getClassNames(Modelica.Blocks.Continuous.Internal, recursive=true, qualified=true, showProtected=true);
+getModelicaPath();
+getEnvironmentVar("MODELICAPATH");

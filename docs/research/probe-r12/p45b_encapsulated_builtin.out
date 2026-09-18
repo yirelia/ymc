@@ -1,0 +1,8 @@
+class P45b
+  Real x(start = 1.0, stateSelect = StateSelect.prefer);
+  Integer n = 4;
+  String s = String(n, 0, true);
+equation
+  der(x) = -x;
+end P45b;
+exit=0

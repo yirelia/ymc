@@ -1,0 +1,9 @@
+Error processing file: p44_top_level_sin.mo
+[C:/Program Files/OpenModelica1.25.0-64bit/lib/omc/NFModelicaBuiltin.mo:173:1-180:8:writable] Notification: From here:
+[C:/dev/ymc/docs/research/probe-r12/p44_top_level_sin.mo:1:1-6:8:writable] Error: An element with name sin is already declared in this scope.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

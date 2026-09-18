@@ -1,0 +1,2 @@
+Error processing file: ConditionInvalidContext1.mo
+[C:/dev/OpenModelica/testsuite/flattening/modelica/scodeinst/ConditionInvalidContext1.mo:9:3-9:8:writable] Error: Conditional component 'x' is used in a non-connect context.

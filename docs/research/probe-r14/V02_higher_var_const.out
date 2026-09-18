@@ -1,0 +1,7 @@
+Error processing file: V02_higher_var_const.mo
+[C:/dev/ymc/docs/research/probe-r14/V02_higher_var_const.mo:3:3-3:22:writable] Error: Component c of variability constant has binding 'p' of higher variability parameter.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

@@ -1,0 +1,8 @@
+Error processing file: P06_FinalOverride.mo
+[C:/dev/ymc/docs/research/probe-r15/P06_FinalOverride.mo:10:9-10:14:writable] Notification: From here:
+[C:/dev/ymc/docs/research/probe-r15/P06_FinalOverride.mo:6:13-6:18:writable] Error: Trying to override final element p with modifier '= 3'.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

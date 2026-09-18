@@ -1,0 +1,4 @@
+class P02a
+  Real a = 2.0;
+end P02a;
+exit=0

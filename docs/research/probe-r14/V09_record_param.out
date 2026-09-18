@@ -1,0 +1,12 @@
+class V09_record_param
+  parameter Real r.a = 1.0;
+  parameter Integer r.n = 2;
+  constant Real cr.a = 3.0;
+  constant Integer cr.n = 2;
+  Real vr.a = 1.0;
+  Integer vr.n = 2;
+  Real x = r.a + 3.0 + 2.0;
+equation
+  vr.a = time;
+  vr.n = 1;
+end V09_record_param;

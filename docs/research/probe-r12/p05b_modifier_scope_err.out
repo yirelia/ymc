@@ -1,0 +1,8 @@
+Error processing file: p05b_modifier_scope_err.mo
+[C:/dev/ymc/docs/research/probe-r12/p05b_modifier_scope_err.mo:6:7-6:13:writable] Error: Variable zz not found in scope P05b.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

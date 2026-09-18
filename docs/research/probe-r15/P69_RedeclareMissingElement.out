@@ -1,0 +1,7 @@
+Error processing file: P69_RedeclareMissingElement.mo
+[C:/dev/ymc/docs/research/probe-r15/P69_RedeclareMissingElement.mo:2:3-2:25:writable] Error: Illegal redeclare of element x, no inherited element with that name exists.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

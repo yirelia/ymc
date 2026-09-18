@@ -1,0 +1,10 @@
+Error processing file: P32_DupNotIdentical.mo
+[C:/dev/ymc/docs/research/probe-r15/P32_DupNotIdentical.mo:2:3-2:13:writable] Notification: From here:
+[C:/dev/ymc/docs/research/probe-r15/P32_DupNotIdentical.mo:5:3-5:13:writable] Error: Duplicate elements (due to inherited elements) not identical:
+  first element is:  Real x = 1
+  second element is: Real x = 2
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

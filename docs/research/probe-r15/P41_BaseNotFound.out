@@ -1,0 +1,7 @@
+Error processing file: P41_BaseNotFound.mo
+[C:/dev/ymc/docs/research/probe-r15/P41_BaseNotFound.mo:2:3-2:25:writable] Error: Base class Missing not found in scope P41_BaseNotFound.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

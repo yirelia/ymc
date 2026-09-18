@@ -1,0 +1,7 @@
+Error processing file: ExtendsLoop1.mo
+[C:/dev/OpenModelica/testsuite/flattening/modelica/scodeinst/ExtendsLoop1.mo:9:5-9:25:writable] Error: extends ExtendsLoop1 causes an instantiation loop.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

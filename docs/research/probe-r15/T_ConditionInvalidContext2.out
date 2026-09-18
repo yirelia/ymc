@@ -1,0 +1,6 @@
+class ConditionInvalidContext2
+equation
+  a.x = 1.0;
+end ConditionInvalidContext2;
+[C:/dev/OpenModelica/testsuite/flattening/modelica/scodeinst/ConditionInvalidContext2.mo:13:3-13:10:writable] Warning: Conditional component 'a' is used in a non-connect context.
+

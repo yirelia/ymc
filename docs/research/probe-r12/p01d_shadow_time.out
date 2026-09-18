@@ -1,0 +1,5 @@
+class P01d
+  Real time = 3.0;
+  Real z = time;
+end P01d;
+exit=0

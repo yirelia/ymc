@@ -1,0 +1,7 @@
+Error processing file: P10_records.mo
+[C:/OM125/OM64bit/OMCompiler/Compiler/NFFrontEnd/NFInst.mo:2903:9-2903:123:writable] Error: Internal error NFInst.instExp got unknown expression: mk(time).a
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

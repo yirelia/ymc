@@ -1,0 +1,10 @@
+Error processing file: ts_PartialLookup2.mo
+[C:/dev/ymc/docs/research/probe-r12/ts_PartialLookup2.mo:9:3-11:9:writable] Notification: From here:
+[C:/dev/ymc/docs/research/probe-r12/ts_PartialLookup2.mo:17:3-17:6:writable] Error: component a contains the definition of a partial class PP.
+Please redeclare it to any package compatible with A.PP.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

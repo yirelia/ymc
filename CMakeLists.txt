@@ -21,6 +21,8 @@ if(MSVC)
     /wd4127                     # "条件表达式是常量"——测试宏 YMC_CHECK(常量) 会触发，纯噪音
     /utf-8                      # 源码按 UTF-8 解释（注释里有中文）
   )
+  # std::getenv 等标准函数在 MSVC 下默认报 C4996"不安全"，这是 MSVC 私货，不是标准问题；关掉它保持零警告
+  target_compile_definitions(ymc_warnings INTERFACE _CRT_SECURE_NO_WARNINGS)
 else()
   target_compile_options(ymc_warnings INTERFACE
     -Wall -Wextra -Wpedantic
@@ -56,11 +58,15 @@ else()
   target_link_libraries(ymc_base INTERFACE ymc_warnings)
 endif()
 
-# ---- 前端库 src/parse + src/absyn（S1：词法/语法/Absyn/unparse）----
+# ---- 前端库 src/parse + src/absyn + src/scode + src/inst + src/flat
+#      （S1：词法/语法/Absyn/unparse；S2：SCode/包加载；S3：实例化/压平）----
 # 有源码时编成 ymc_frontend；没有时不建，由 if(TARGET) 门控链接。
 file(GLOB YMC_FRONTEND_SOURCES CONFIGURE_DEPENDS
   "${CMAKE_SOURCE_DIR}/src/parse/*.cpp"
-  "${CMAKE_SOURCE_DIR}/src/absyn/*.cpp")
+  "${CMAKE_SOURCE_DIR}/src/absyn/*.cpp"
+  "${CMAKE_SOURCE_DIR}/src/scode/*.cpp"
+  "${CMAKE_SOURCE_DIR}/src/inst/*.cpp"
+  "${CMAKE_SOURCE_DIR}/src/flat/*.cpp")
 if(YMC_FRONTEND_SOURCES)
   add_library(ymc_frontend STATIC ${YMC_FRONTEND_SOURCES})
   target_link_libraries(ymc_frontend PUBLIC ymc_base ymc_warnings)

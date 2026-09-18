@@ -1,0 +1,5 @@
+class P02b
+  constant Real c = 3.0;
+  Real a = 3.0;
+end P02b;
+exit=0

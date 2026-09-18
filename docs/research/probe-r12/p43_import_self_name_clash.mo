@@ -1,0 +1,12 @@
+package P
+  model M
+    Real x;
+  end M;
+end P;
+model P43
+  import P.M;
+  model M
+    Real y;
+  end M;
+  M m;
+end P43;

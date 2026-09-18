@@ -1,0 +1,8 @@
+print("2.2.2: "); loadModel(Modelica, {"2.2.2"}); getSourceFile(Modelica); print(getErrorString()); clear();
+print("2.1: "); loadModel(Modelica, {"2.1"}); getSourceFile(Modelica); print(getErrorString()); clear();
+print("3.2.2: "); loadModel(Modelica, {"3.2.2"}); getSourceFile(Modelica); print(getErrorString()); clear();
+print("3.1: "); loadModel(Modelica, {"3.1"}); getSourceFile(Modelica); print(getErrorString()); clear();
+print("3.2: "); loadModel(Modelica, {"3.2"}); getSourceFile(Modelica); print(getErrorString()); clear();
+print("default: "); loadModel(Modelica); getSourceFile(Modelica); print(getErrorString()); clear();
+print("list {3.2.1,4.0.0}: "); loadModel(Modelica, {"3.2.1","4.0.0"}); getSourceFile(Modelica); print(getErrorString()); clear();
+print("list {4.0.0,3.2.1}: "); loadModel(Modelica, {"4.0.0","3.2.1"}); getSourceFile(Modelica); print(getErrorString());

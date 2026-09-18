@@ -1,0 +1,7 @@
+Error processing file: C:/dev/ymc/docs/research/probe-r14/T08_ifcond_type.mo
+[C:/dev/ymc/docs/research/probe-r14/T08_ifcond_type.mo:4:3-4:26:writable] Error: Type error in conditional '1'. Expected Boolean, got Integer.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

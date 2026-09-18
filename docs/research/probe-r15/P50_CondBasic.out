@@ -1,0 +1,13 @@
+class P50_CondBasic
+  final parameter Boolean on = false;
+  final parameter Boolean on2 = true;
+  Real c2.e;
+  Real c2.f;
+  Real c3.e;
+  Real c3.f;
+equation
+  c2.e = c3.e;
+  -(c2.f + c3.f) = 0.0;
+  c2.f = 0.0;
+  c3.f = 0.0;
+end P50_CondBasic;

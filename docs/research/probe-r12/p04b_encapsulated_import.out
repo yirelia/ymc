@@ -1,0 +1,5 @@
+class P04b
+  Real x = 5.0 + sin(time);
+  Integer n = 2;
+end P04b;
+exit=0

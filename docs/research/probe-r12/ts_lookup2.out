@@ -1,0 +1,8 @@
+Error processing file: ts_lookup2.mo
+[C:/dev/ymc/docs/research/probe-r12/ts_lookup2.mo:18:3-18:10:writable] Error: Class name 'A.b.C' was found via a component (only component and function call names may be accessed in this way).
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

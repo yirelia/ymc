@@ -1,0 +1,3 @@
+class P11_DupModBindingAndSub
+  Real a.x(start = 2.0) = 1.0;
+end P11_DupModBindingAndSub;

@@ -1,0 +1,7 @@
+Error processing file: P25_MissingExtendsMod.mo
+[C:/dev/ymc/docs/research/probe-r15/P25_MissingExtendsMod.mo:5:13-5:18:writable] Error: Modified element y not found in class A.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

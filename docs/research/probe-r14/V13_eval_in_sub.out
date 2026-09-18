@@ -1,0 +1,12 @@
+class V13_eval_in_sub
+  final parameter Real top = 5.0;
+  final parameter Real a1.k = 1.0;
+  parameter Real a1.g = 2.0;
+  Real a1.y = a1.g;
+  final parameter Real a2.k = 5.0;
+  parameter Real a2.g = 2.0;
+  Real a2.y = 5.0 * a2.g;
+  final parameter Real a3.k = 7.0;
+  final parameter Real a3.g = 5.0;
+  Real a3.y = 35.0;
+end V13_eval_in_sub;

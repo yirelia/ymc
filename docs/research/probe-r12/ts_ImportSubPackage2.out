@@ -1,0 +1,4 @@
+class ImportSubPackage2
+  Real a.x;
+end ImportSubPackage2;
+exit=0

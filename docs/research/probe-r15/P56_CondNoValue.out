@@ -1,0 +1,7 @@
+Error processing file: P56_CondNoValue.mo
+[C:/dev/ymc/docs/research/probe-r15/P56_CondNoValue.mo:2:3-2:23:writable] Error: Parameter on has neither value nor start value, and is fixed during initialization (fixed=true).
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

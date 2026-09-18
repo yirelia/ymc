@@ -1,0 +1,8 @@
+Error processing file: p01e_shadow_time_param.mo
+[C:/dev/ymc/docs/research/probe-r12/p01e_shadow_time_param.mo:3:3-3:26:writable] Error: Component z of variability parameter has binding 'time' of higher variability continuous.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

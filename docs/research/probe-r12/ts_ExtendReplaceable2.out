@@ -1,0 +1,9 @@
+Error processing file: ts_ExtendReplaceable2.mo
+[C:/dev/ymc/docs/research/probe-r12/ts_ExtendReplaceable2.mo:8:17-10:10:writable] Notification: From here:
+[C:/dev/ymc/docs/research/probe-r12/ts_ExtendReplaceable2.mo:13:3-13:14:writable] Error: Class 'B' in 'extends A.<B>' is replaceable, the base class name must be transitively non-replaceable.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

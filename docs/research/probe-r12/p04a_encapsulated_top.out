@@ -1,0 +1,8 @@
+Error processing file: p04a_encapsulated_top.mo
+[C:/dev/ymc/docs/research/probe-r12/p04a_encapsulated_top.mo:5:3-5:17:writable] Error: Variable Top.k not found in scope P04a.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

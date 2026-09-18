@@ -1,0 +1,3 @@
+loadString("package B model Base end Base; model C replaceable model M = Base constrainedby Base(k = 3) \"M comment\"; replaceable model M2 = Base \"M2 comment\"; replaceable Base rb constrainedby Base \"rb comment\"; Real a, b \"ab comment\" annotation(x=1); end C; end B;"); getErrorString();
+list(B.C); getErrorString();
+list(B.C, exportKind=OpenModelica.Scripting.ExportKind.SCode); getErrorString();

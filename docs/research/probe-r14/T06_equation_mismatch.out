@@ -1,0 +1,7 @@
+Error processing file: C:/dev/ymc/docs/research/probe-r14/T06_equation_mismatch.mo
+[C:/dev/ymc/docs/research/probe-r14/T06_equation_mismatch.mo:4:3-4:10:writable] Error: Type mismatch in equation 1 = "a" of type Integer = String.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

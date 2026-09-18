@@ -1,0 +1,11 @@
+function P1.P3.f
+  input Real x;
+end P1.P3.f;
+
+class ExtendsShort3
+  Real a1.x;
+  Real a2.x;
+equation
+  P1.P3.f(a1.x);
+  P1.P3.f(a2.x);
+end ExtendsShort3;

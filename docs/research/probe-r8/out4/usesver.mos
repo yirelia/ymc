@@ -1,0 +1,7 @@
+loadModel(Modelica, {"4.0.0"}); getErrorString();
+loadFile("C:/Users/yangrui/AppData/Local/Temp/claude/C--dev-ymc/4e49f17e-0607-4a2d-8c06-17ac54b3dead/scratchpad/probe-r8/lib/UsesMsl323.mo"); getErrorString();
+loadFile("C:/Users/yangrui/AppData/Local/Temp/claude/C--dev-ymc/4e49f17e-0607-4a2d-8c06-17ac54b3dead/scratchpad/probe-r8/lib/UsesMsl401.mo"); getErrorString();
+loadFile("C:/Users/yangrui/AppData/Local/Temp/claude/C--dev-ymc/4e49f17e-0607-4a2d-8c06-17ac54b3dead/scratchpad/probe-r8/lib/UsesMsl40.mo"); getErrorString();
+loadFile("C:/Users/yangrui/AppData/Local/Temp/claude/C--dev-ymc/4e49f17e-0607-4a2d-8c06-17ac54b3dead/scratchpad/probe-r8/lib/UsesMsl32.mo"); getErrorString();
+getVersion(Modelica);
+getConversionsFromVersions(Modelica);

@@ -1,0 +1,4 @@
+class P40
+  Real x = 3.0;
+end P40;
+exit=0

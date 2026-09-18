@@ -1,0 +1,11 @@
+class E15_param_ifeq_eval_false
+  parameter Boolean flag = true;
+  parameter Real p = 3.0;
+  Real x;
+equation
+  if flag then
+    x = p;
+  else
+    x = 2.0 * p;
+  end if;
+end E15_param_ifeq_eval_false;

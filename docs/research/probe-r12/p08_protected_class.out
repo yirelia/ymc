@@ -1,0 +1,9 @@
+Error processing file: p08_protected_class.mo
+[C:/dev/ymc/docs/research/probe-r12/p08_protected_class.mo:3:3-5:8:writable] Error: Illegal access of protected element M.
+[C:/dev/ymc/docs/research/probe-r12/p08_protected_class.mo:8:3-8:8:writable] Error: Class P.M not found in scope P08.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

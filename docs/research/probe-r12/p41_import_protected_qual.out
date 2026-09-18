@@ -1,0 +1,10 @@
+Error processing file: p41_import_protected_qual.mo
+[C:/dev/ymc/docs/research/probe-r12/p41_import_protected_qual.mo:3:3-3:22:writable] Error: Illegal access of protected element c.
+[C:/dev/ymc/docs/research/probe-r12/p41_import_protected_qual.mo:6:3-6:13:writable] Error: Import P.c not found in scope <top>.
+[C:/dev/ymc/docs/research/probe-r12/p41_import_protected_qual.mo:7:3-7:13:writable] Error: Variable c not found in scope P41.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

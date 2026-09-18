@@ -1,0 +1,3 @@
+setCommandLineOptions("--showAnnotations"); getErrorString();
+loadFile("probe.mo"); getErrorString();
+print(list(Probe.Main, exportKind=OpenModelica.Scripting.ExportKind.SCode)); getErrorString();

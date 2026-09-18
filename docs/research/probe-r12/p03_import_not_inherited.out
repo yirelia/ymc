@@ -1,0 +1,8 @@
+Error processing file: p03_import_not_inherited.mo
+[C:/dev/ymc/docs/research/probe-r12/p03_import_not_inherited.mo:10:3-10:13:writable] Error: Variable c not found in scope P03.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

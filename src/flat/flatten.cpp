@@ -1,0 +1,350 @@
+// 压平实现（S3 第一里程碑）。锚点见 flatten.h 头注与各处 R11/R13/R14 引用。
+#include "flat/flatten.h"
+
+#include "absyn/absyn.h"
+#include "base/strings.h"   // unescape_modelica_string
+
+namespace ymc {
+
+namespace {
+
+class Flattener {
+ public:
+  Flattener(Inst& inst, Interner& in) : I_(inst), in_(in) {}
+
+  FlattenResult run(NodeId root) {
+    // 全名（R13 §2）：v1 根类是顶层类，全名 = 类名。
+    result_.model.name = {I_.nodes[root].name};
+    const SElement& el = I_.scode.elems[I_.nodes[root].def];
+    result_.model.comment = el.cmt.str;
+    if (el.def.kind != SClassDefKind::Parts) set_unsupported("short/derived/enum root class");
+    // __OpenModelica_commandLineOptions（-d=evaluateAllParameters / mergeComponents …）会重写整个
+    // 展平结果，是 OMC 专属变换，v1 不做 → 标 unsupported（driver 退 66，记 SKIP 不是 FAIL）。
+    if (el.cmt.annotation.is_valid())
+      for (const SSubMod& s : I_.scode.mods[el.cmt.annotation].subs)
+        if (s.ident == in_.intern("__OpenModelica_commandLineOptions"))
+          set_unsupported("__OpenModelica_commandLineOptions annotation");
+    flatten_class(root, {}, /*protected_ctx=*/false);
+    // 重复变量名 → omc 会去重（R11 §3.4-3）；v1 未做，标 unsupported（driver 退 66）。
+    for (std::size_t i = 0; i < result_.model.variables.size(); ++i)
+      for (std::size_t j = i + 1; j < result_.model.variables.size(); ++j)
+        if (result_.model.variables[i].name == result_.model.variables[j].name) {
+          set_unsupported("duplicate variable");
+          i = result_.model.variables.size();
+          break;
+        }
+    return std::move(result_);
+  }
+
+ private:
+  // ---- flatten：带前缀 DFS（R11 §3.4）----
+  // protected_ctx：外层组件是 protected 时，其所有子变量也 protected（R13 §3；ComponentAttributes1）。
+  void flatten_class(NodeId inst_node, const std::vector<Symbol>& prefix, bool protected_ctx) {
+    // 算法段 v1 未做（方程段的 Equals 已支持，见文末 collect_equations）。
+    const SElement& def = I_.scode.elems[I_.nodes[inst_node].def];
+    if (!def.def.algorithms.empty() || !def.def.initial_algorithms.empty())
+      set_unsupported("algorithms");
+    if (def.def.external.present) set_unsupported("external function");
+    for (Id<SElement> eid : def.def.elements) {
+      SElementKind k = I_.scode.elems[eid].kind;
+      if (k == SElementKind::Import) set_unsupported("import");   // v1 未做 import 解析
+    }
+    ClassTreeId tree = I_.node_class(inst_node).tree;
+    const std::vector<NodeId> comps = I_.trees[tree].components;  // 拷一份（下面会往 arena add）
+    for (NodeId cn : comps) {
+      const CompId cid = I_.nodes[cn].comp;
+      const Symbol cname = I_.nodes[cn].name;
+      const Visibility vis = I_.nodes[cn].visibility;
+      // v1 未实现的组件级构造：数组、条件组件、属性修饰（start=…）——碰到就标 unsupported（driver 退 66）。
+      const SElement& cel = I_.scode.elems[I_.comps[cid].def];
+      if (!cel.attr.dims.empty() || !cel.type.dims.empty()) set_unsupported("array");
+      if (cel.condition.is_valid()) set_unsupported("conditional component");
+      if (cel.mod.is_valid() && !I_.scode.mods[cel.mod].subs.empty()) set_unsupported("attribute modifier");
+      if (I_.comps[cid].attributes.is_inner || I_.comps[cid].attributes.is_outer)
+        set_unsupported("inner/outer");   // v1 还没做 inner/outer 链接（R11 §5）
+      bool is_prot = protected_ctx || vis == Visibility::Protected;
+      std::vector<Symbol> name = prefix;
+      name.push_back(cname);
+      if (I_.comps[cid].ty.kind == TypeKind::Complex) {
+        // 复合组件的类型必须是长类（PARTS）；短类/枚举/derived 走到这里说明 v1 还没做。
+        NodeId ci = I_.comps[cid].class_inst;
+        Id<SElement> cdef = I_.nodes[ci].def;
+        if (!cdef.is_valid() || I_.scode.elems[cdef].def.kind != SClassDefKind::Parts) {
+          set_unsupported("short/enum/derived type");
+        } else {
+          // 连接器（含 expandable）要 connect 展开 + 方向/flow 规则（R13 §3/§6）——v1 未做，整个标 unsupported。
+          SRestriction r = I_.scode.elems[cdef].restriction;
+          if (r == SRestriction::Connector || r == SRestriction::ExpandableConnector)
+            set_unsupported("connector type");
+          flatten_class(ci, name, is_prot);   // 复合组件递归（protected 传播给子变量）
+        }
+        continue;
+      }
+      emit_variable(cid, name, is_prot, prefix, inst_node);
+    }
+    // 本类方程（子组件方程已在上面递归时加入 → 符合 R11 §3.4-6"子组件先、本类后"）。
+    // 段序：initial equation 先于 equation（R13 §2）；enclosing = 本实例，cref 前缀 = prefix。
+    for (Id<SEquation> eid : def.def.initial_equations) collect_equation(eid, inst_node, prefix, /*initial=*/true);
+    for (Id<SEquation> eid : def.def.equations) collect_equation(eid, inst_node, prefix, /*initial=*/false);
+  }
+
+  // 翻译一条方程（v1 只做 Equals；其余 kind 标 unsupported）。
+  void collect_equation(Id<SEquation> eid, NodeId enclosing, const std::vector<Symbol>& prefix, bool is_initial) {
+    const SEquation& eq = I_.scode.eqs[eid];
+    if (eq.kind != SEqKind::Equals) {
+      set_unsupported("non-equality equation (connect/if/for/when/assert…)");
+      return;
+    }
+    Id<Expr> a = inst_exp(eq.a, enclosing, prefix);
+    Id<Expr> b = inst_exp(eq.b, enclosing, prefix);
+    // 等式两侧整型↔实型强制（R14）：eq1 的 `x = 2`（x:Real）→ `x = 2.0`。
+    TypeKind ta = result_.model.exprs[a].ty.kind, tb = result_.model.exprs[b].ty.kind;
+    if (ta == TypeKind::Real && tb == TypeKind::Integer) b = to_real(b);
+    else if (ta == TypeKind::Integer && tb == TypeKind::Real) a = to_real(a);
+    FlatEquation fe;
+    fe.kind = FlatEqKind::Equality;
+    fe.a = a;
+    fe.b = b;
+    fe.loc = eq.loc;
+    if (eq.cmt.str.is_valid()) fe.comment = in_.intern(unescape_modelica_string(in_.str(eq.cmt.str)));
+    Id<FlatEquation> id = result_.model.add_eq(std::move(fe));
+    if (is_initial) result_.model.initial_equations.push_back(id);
+    else result_.model.equations.push_back(id);
+  }
+
+  void emit_variable(CompId cid, const std::vector<Symbol>& name, bool is_protected,
+                     const std::vector<Symbol>& prefix, NodeId enclosing) {
+    // 先把绑定算出来（会往 model.exprs add），再取组件字段——不跨 add 持组件引用（arena 纪律）。
+    Id<Expr> binding;
+    {
+      const Component& c = I_.comps[cid];
+      if (c.binding.kind == BindingKind::Raw && c.binding.raw_exp.is_valid())
+        binding = inst_exp(c.binding.raw_exp, enclosing, prefix);
+    }
+    const Component& comp = I_.comps[cid];
+    // flow/stream 变量需要连接方程（未连接顶层 flow → `x = 0.0`，R13 §6-2）——v1 未做 connect，标 unsupported。
+    if (comp.attributes.connector != SConnectorType::Potential) set_unsupported("connector (flow/stream)");
+    FlatVariable v;
+    v.name = name;
+    v.ty = comp.ty;
+    v.is_protected = is_protected;
+    v.is_final = comp.attributes.is_final;
+    switch (comp.attributes.variability) {
+      case SVariability::Var: v.var_kind = FlatVarKind::Var; break;
+      case SVariability::Discrete: v.var_kind = FlatVarKind::Discrete; break;
+      case SVariability::Param: v.var_kind = FlatVarKind::Parameter; break;
+      case SVariability::Const: v.var_kind = FlatVarKind::Constant; break;
+    }
+    // 顶层 input/output 才打印方向（R13 §3.1；非顶层在 removeNonTopLevelDirections 抹掉，R11 §1 步骤 20）。
+    if (prefix.empty()) {
+      if (comp.attributes.direction == SDirection::Input) v.direction = FlatDirection::Input;
+      else if (comp.attributes.direction == SDirection::Output) v.direction = FlatDirection::Output;
+    }
+    // constant 组件的绑定 omc 一定求值成字面量（R14 §3）；绑定若还是表达式，说明要 evalConstants，v1 没做。
+    if (v.var_kind == FlatVarKind::Constant && binding.is_valid()) {
+      ExprKind bk = result_.model.exprs[binding].kind;
+      bool is_lit = bk == ExprKind::IntLit || bk == ExprKind::RealLit || bk == ExprKind::BoolLit ||
+                    bk == ExprKind::StringLit || bk == ExprKind::EnumLit;
+      if (!is_lit) set_unsupported("constant evaluation");
+    }
+    v.binding = binding;
+    v.loc = comp.loc;
+    result_.model.variables.push_back(std::move(v));
+  }
+
+  // ---- instExpressions：Absyn Exp → 类型化 Expr（在 model.exprs）----
+  // 解析 cref（对 enclosing 的 FlatTree 组件），本地 cref 前缀改写；标量定型 + 整型→实型字面量折叠。
+  Id<Expr> inst_exp(Id<Exp> ae, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    const Exp& e = I_.absyn.exps[ae];
+    switch (e.kind) {
+      case ExpKind::IntLit: return lit_int(e.ival);
+      case ExpKind::RealLit: return lit_real(e.rval);
+      case ExpKind::BoolLit: return lit_bool(e.bval);
+      case ExpKind::StringLit: return lit_string(e.sval);
+      case ExpKind::CrefExp: return cref(e.cref, enclosing, prefix);
+      case ExpKind::Binary: return binary(e, enclosing, prefix);
+      case ExpKind::Unary: return unary(e, enclosing, prefix);
+      case ExpKind::IfExp: return if_exp(e, enclosing, prefix);
+      case ExpKind::Call: return call(e, enclosing, prefix);
+      default:
+        set_unsupported("expression kind");
+        return lit_int(0);   // 占位，driver 会因 unsupported 退 66
+    }
+  }
+
+  Id<Expr> lit_int(std::int64_t v) { Expr e; e.kind = ExprKind::IntLit; e.ival = v; e.ty = Type::integer(); return add(std::move(e)); }
+  Id<Expr> lit_real(double v) { Expr e; e.kind = ExprKind::RealLit; e.rval = v; e.ty = Type::real(); return add(std::move(e)); }
+  Id<Expr> lit_bool(bool v) { Expr e; e.kind = ExprKind::BoolLit; e.bval = v; e.ty = Type::boolean(); return add(std::move(e)); }
+  Id<Expr> lit_string(Symbol raw) {
+    // Absyn 存源码原文（转义序列原样，S1 决定）；类型化 Expr 存实际值，dump 时再 escape。
+    Expr e; e.kind = ExprKind::StringLit; e.ty = Type::string();
+    e.sval = in_.intern(unescape_modelica_string(in_.str(raw)));
+    return add(std::move(e));
+  }
+
+  // cref：解析首段到 enclosing 的本地组件；命中 → 前缀改写 + 取其类型；否则（time 等内建）原样、类型 Real。
+  Id<Expr> cref(Id<Cref> ac, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    const Cref& c = I_.absyn.crefs[ac];
+    Expr e;
+    e.kind = ExprKind::Cref;
+    NodeId local = c.parts.empty() ? Inst::empty_node() : find_local(enclosing, c.parts[0].name);
+    if (local.is_valid() && !I_.nodes[local].is_empty()) {
+      const Component& lc = I_.comps[I_.nodes[local].comp];
+      // 引用到 constant 或 final parameter → omc 内联成值（R14 §3）；v1 未做 evalConstants，标 unsupported。
+      if (lc.attributes.variability == SVariability::Const ||
+          (lc.attributes.variability == SVariability::Param && lc.attributes.is_final))
+        set_unsupported("constant evaluation");
+      for (Symbol p : prefix) e.cref.parts.push_back({p, {}});
+      e.cref.resolved_node = local.raw;
+      e.ty = lc.ty;
+    } else {
+      // 单段未解析（time 等内建）v1 当 Real 保留；多段未解析（跨包常量 A.B.c、package 常量）我们既不解析也不
+      // 求值，omc 会把它内联成值——标 unsupported（driver 退 66）。
+      if (c.parts.size() > 1) set_unsupported("qualified/cross-scope reference");
+      e.ty = Type::real();
+    }
+    for (const CrefPart& p : c.parts) {
+      if (!p.subscripts.empty()) set_unsupported("subscripted cref");
+      e.cref.parts.push_back({p.name, {}});
+    }
+    return add(std::move(e));
+  }
+
+  // 在 enclosing 实例的 FlatTree 组件里按名字找（v1：直接线性找，规模小）。
+  NodeId find_local(NodeId enclosing, Symbol name) {
+    if (I_.nodes[enclosing].kind != NodeKind::Class) return Inst::empty_node();
+    ClassTreeId t = I_.node_class(enclosing).tree;
+    for (NodeId cn : I_.trees[t].components)
+      if (I_.nodes[cn].kind == NodeKind::Component && I_.nodes[cn].name == name) return cn;
+    return Inst::empty_node();
+  }
+
+  Id<Expr> binary(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    BinOp op;
+    bool is_arith = map_binop(e.op, op);
+    if (!is_arith) {  // 关系 / 逻辑
+      return rel_or_logic(e, enclosing, prefix);
+    }
+    Id<Expr> a = inst_exp(e.a, enclosing, prefix);
+    Id<Expr> b = inst_exp(e.b, enclosing, prefix);
+    bool real = result_.model.exprs[a].ty.kind == TypeKind::Real || result_.model.exprs[b].ty.kind == TypeKind::Real;
+    if (real) {  // 整型操作数提升到实型：字面量直接折叠，非字面量插 Cast（R13 §4.3 / R14 §1）
+      a = to_real(a);
+      b = to_real(b);
+    }
+    Expr r;
+    r.kind = ExprKind::Binary;
+    r.bin = op;
+    r.a = a;
+    r.b = b;
+    r.ty = real ? Type::real() : Type::integer();
+    return add(std::move(r));
+  }
+
+  Id<Expr> rel_or_logic(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    Id<Expr> a = inst_exp(e.a, enclosing, prefix);
+    Id<Expr> b = inst_exp(e.b, enclosing, prefix);
+    RelOp rop;
+    LogOp lop;
+    if (map_relop(e.op, rop)) {
+      bool real = result_.model.exprs[a].ty.kind == TypeKind::Real || result_.model.exprs[b].ty.kind == TypeKind::Real;
+      if (real) { a = to_real(a); b = to_real(b); }
+      Expr r; r.kind = ExprKind::Relation; r.rel = rop; r.a = a; r.b = b; r.ty = Type::boolean();
+      return add(std::move(r));
+    }
+    if (map_logop(e.op, lop)) {
+      // omc 会折叠常量关系/逻辑（`false and false`→`false`，R14 §4）——v1 未做 simplify，标 unsupported。
+      set_unsupported("relational/logical simplification");
+      Expr r; r.kind = ExprKind::Logical; r.log = lop; r.a = a; r.b = b; r.ty = Type::boolean();
+      return add(std::move(r));
+    }
+    set_unsupported("binary op");
+    return lit_int(0);
+  }
+
+  Id<Expr> unary(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    if (e.op == Op::UPlus) return inst_exp(e.a, enclosing, prefix);   // +a → a（R13 §4.3）
+    Id<Expr> a = inst_exp(e.a, enclosing, prefix);
+    if (e.op == Op::Not) {
+      Expr r; r.kind = ExprKind::LogicalNot; r.a = a; r.ty = Type::boolean();
+      return add(std::move(r));
+    }
+    // UMinus
+    Expr r; r.kind = ExprKind::Unary; r.un = UnOp::Minus; r.a = a; r.ty = result_.model.exprs[a].ty;
+    return add(std::move(r));
+  }
+
+  Id<Expr> if_exp(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    Id<Expr> c = inst_exp(e.a, enclosing, prefix);
+    Id<Expr> t = inst_exp(e.b, enclosing, prefix);
+    Id<Expr> f = inst_exp(e.c, enclosing, prefix);
+    Expr r; r.kind = ExprKind::IfExp; r.a = c; r.b = t; r.c = f; r.ty = result_.model.exprs[t].ty;
+    return add(std::move(r));
+  }
+
+  Id<Expr> call(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    // v1 未做函数求值/内联：omc 会把内建数学函数在常量实参上折叠（abs/sin/…，R14 §4），用户函数会打印
+    // 函数定义块。两者都没做，标 unsupported（driver 退 66）。仍构造 Call 节点占位，避免半途空指针。
+    set_unsupported("function call / ceval");
+    const Cref& fn = I_.absyn.crefs[e.cref];
+    Expr r;
+    r.kind = ExprKind::Call;
+    for (const CrefPart& p : fn.parts) r.call_name.push_back(p.name);
+    for (Id<Exp> arg : e.args) r.args.push_back(inst_exp(arg, enclosing, prefix));
+    r.ty = r.args.empty() ? Type::real() : result_.model.exprs[r.args[0]].ty;
+    return add(std::move(r));
+  }
+
+  // 把表达式提升到 Real：字面量折叠（IntLit→RealLit），否则插 Cast。
+  Id<Expr> to_real(Id<Expr> e) {
+    const Expr& x = result_.model.exprs[e];
+    if (x.ty.kind == TypeKind::Real) return e;
+    if (x.kind == ExprKind::IntLit) return lit_real(static_cast<double>(x.ival));
+    Expr c; c.kind = ExprKind::Cast; c.a = e; c.ty = Type::real();
+    return add(std::move(c));
+  }
+
+  static bool map_binop(Op op, BinOp& out) {
+    switch (op) {
+      case Op::Add: case Op::EWAdd: out = BinOp::Add; return true;
+      case Op::Sub: case Op::EWSub: out = BinOp::Sub; return true;
+      case Op::Mul: case Op::EWMul: out = BinOp::Mul; return true;
+      case Op::Div: case Op::EWDiv: out = BinOp::Div; return true;
+      case Op::Pow: case Op::EWPow: out = BinOp::Pow; return true;
+      default: return false;
+    }
+  }
+  static bool map_relop(Op op, RelOp& out) {
+    switch (op) {
+      case Op::Lt: out = RelOp::Lt; return true;
+      case Op::Le: out = RelOp::Le; return true;
+      case Op::Gt: out = RelOp::Gt; return true;
+      case Op::Ge: out = RelOp::Ge; return true;
+      case Op::Eq: out = RelOp::Eq; return true;
+      case Op::Ne: out = RelOp::Ne; return true;
+      default: return false;
+    }
+  }
+  static bool map_logop(Op op, LogOp& out) {
+    switch (op) {
+      case Op::And: out = LogOp::And; return true;
+      case Op::Or: out = LogOp::Or; return true;
+      default: return false;
+    }
+  }
+
+  Id<Expr> add(Expr e) { return result_.model.exprs.add(std::move(e)); }
+  void set_unsupported(const char* why) {
+    if (!result_.unsupported) { result_.unsupported = true; result_.unsupported_reason = why; }
+  }
+
+  Inst& I_;
+  Interner& in_;
+  FlattenResult result_;
+};
+
+}  // namespace
+
+FlattenResult flatten(Inst& inst, Interner& in, NodeId root) { return Flattener(inst, in).run(root); }
+
+}  // namespace ymc

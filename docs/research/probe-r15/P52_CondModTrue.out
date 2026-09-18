@@ -1,0 +1,7 @@
+Error processing file: P52_CondModTrue.mo
+[C:/dev/ymc/docs/research/probe-r15/P52_CondModTrue.mo:3:3-3:22:writable] Error: Type mismatch in binding y = true, expected subtype of Real, got type Boolean.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

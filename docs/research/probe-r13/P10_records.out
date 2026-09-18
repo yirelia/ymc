@@ -1,0 +1,52 @@
+function R "Automatically generated record constructor for R"
+  input Real x;
+  input Integer n = 1;
+  input Real p = 2.0;
+  input Real c = 3.0;
+  protected Real fin = 4.0;
+  input Real[2] arr;
+  output R res;
+end R;
+
+function Small "Automatically generated record constructor for Small"
+  input Real a;
+  input Real b;
+  output Small res;
+end Small;
+
+function mk
+  input Real u;
+  output Small s;
+algorithm
+  s := Small(u, 2.0 * u);
+end mk;
+
+function useR
+  input R r;
+  output Real y;
+algorithm
+  y := r.x + r.arr[1];
+end useR;
+
+class P10_records
+  Real s1.a = 1.0;
+  Real s1.b = 2.0;
+  Real s2.a;
+  Real s2.b;
+  Real s3.a;
+  Real s3.b;
+  parameter Real ps.a = 3.0;
+  parameter Real ps.b = 4.0;
+  Real r.x = 1.0 "x comment";
+  Integer r.n = 1;
+  parameter Real r.p = 2.0;
+  constant Real r.c = 3.0;
+  final Real r.fin = 4.0;
+  Real r.arr[1];
+  Real r.arr[2];
+  Real y = useR(r);
+equation
+  s2 = mk(time);
+  r.arr = {1.0, 2.0};
+  s3 = mk(2.0 * time);
+end P10_records;

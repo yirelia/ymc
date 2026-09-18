@@ -32,12 +32,14 @@ class Diagnostics {
   [[nodiscard]] const std::vector<Diagnostic>& items() const noexcept { return items_; }
 
   // 打印到给定流（用 FILE* 以免拖入 <iostream>）。
-  void print(std::FILE* out) const {
+  // 位置框架对齐 OMC 的 `[file:sl:sc-el:ec:writable] Error: msg`（Error.mo 的 getErrorString 格式），
+  // 结束位置 = 起点 + 记号长度；这样 testsuite 的 `// Result:` 文本比对与 S1 验收 ③ 的位置对齐都能复用。
+  void print(std::FILE* out, const char* file_name = "") const {
     for (const Diagnostic& d : items_) {
       const char* lvl = d.level == DiagLevel::Error ? "Error"
-                        : d.level == DiagLevel::Warning ? "Warning" : "Note";
-      std::fprintf(out, "[%u:%u:%u] %s: %s\n", d.loc.line, d.loc.col, d.loc.len, lvl,
-                   d.msg.c_str());
+                        : d.level == DiagLevel::Warning ? "Warning" : "Notification";
+      std::fprintf(out, "[%s:%u:%u-%u:%u:writable] %s: %s\n", file_name, d.loc.line, d.loc.col,
+                   d.loc.line, d.loc.col + d.loc.len, lvl, d.msg.c_str());
     }
   }
 

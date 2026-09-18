@@ -1,0 +1,8 @@
+Error processing file: p31_class_in_comp_name.mo
+[C:/dev/ymc/docs/research/probe-r12/p31_class_in_comp_name.mo:11:3-11:19:writable] Error: Found class M during lookup of composite component name 'P.c.M.x', expected component.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

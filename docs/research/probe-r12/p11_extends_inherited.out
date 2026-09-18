@@ -1,0 +1,8 @@
+Error processing file: p11_extends_inherited.mo
+[C:/dev/ymc/docs/research/probe-r12/p11_extends_inherited.mo:9:3-9:12:writable] Error: Base class B not found in scope P11.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

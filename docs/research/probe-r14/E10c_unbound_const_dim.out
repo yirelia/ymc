@@ -1,0 +1,7 @@
+Error processing file: E10c_unbound_const_dim.mo
+[C:/dev/ymc/docs/research/probe-r14/E10c_unbound_const_dim.mo:3:3-3:12:writable] Error: Could not evaluate structural parameter (or constant): n which gives dimensions of array: x. Array dimensions must be known at compile time.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

@@ -1,0 +1,7 @@
+Error processing file: E09_cyclic_const.mo
+[C:/dev/ymc/docs/research/probe-r14/E09_cyclic_const.mo:3:3-3:26:writable] Error: Variable 'b' has a cyclic dependency and has variability constant.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

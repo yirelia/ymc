@@ -1,0 +1,11 @@
+loadModel(Modelica, {"4.0.0"});
+size(getClassNames(Modelica.Icons, recursive=true, qualified=true, showProtected=true),1);
+size(getClassNames(Modelica.Units, recursive=true, qualified=true, showProtected=true),1);
+size(getClassNames(Modelica.Constants, recursive=true, qualified=true, showProtected=true),1);
+getClassNames(Modelica, showProtected=true);
+size(getClassNames(Complex, recursive=true, qualified=true, showProtected=true),1);
+size(getClassNames(ModelicaServices, recursive=true, qualified=true, showProtected=true),1);
+getClassNames(Modelica.Units.Icons, recursive=true, qualified=true);
+getSourceFile(Modelica.Units);
+getSourceFile(Modelica.Units.SI);
+getSourceFile(Modelica.Units.SI.Voltage);

@@ -1,0 +1,5 @@
+loadFile("probe2.mo"); getErrorString();
+print("=====SCODE-ALL=====\n");
+print(list(Probe2, exportKind=OpenModelica.Scripting.ExportKind.SCode)); getErrorString();
+print("\n=====ABSYN-DUP=====\n");
+print(list(Probe2.Dup, exportKind=OpenModelica.Scripting.ExportKind.Absyn)); getErrorString();

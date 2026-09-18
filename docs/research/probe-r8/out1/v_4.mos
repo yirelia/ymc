@@ -1,0 +1,6 @@
+loadModel(Modelica, {"4"}, notify=true);
+getErrorString();
+getSourceFile(Modelica);
+getVersion(Modelica);
+getClassNames();
+getErrorString();

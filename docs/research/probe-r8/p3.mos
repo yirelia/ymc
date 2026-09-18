@@ -1,0 +1,12 @@
+loadModel(Modelica,{"2.2.2"}); getSourceFile(Modelica); getErrorString();
+clear(); loadModel(Modelica,{"2.1"}); getSourceFile(Modelica); getErrorString();
+clear(); loadModel(Modelica,{"1.0"}); getSourceFile(Modelica); getErrorString();
+clear(); loadModel(Complex,{"3.2.3"}); getSourceFile(Complex); getErrorString();
+clear(); loadModel(Complex,{"2.0"}); getSourceFile(Complex); getErrorString();
+clear(); loadModel(Modelica,{"4.0.0"}); loadFile("uses323.mo"); getErrorString();
+clear(); loadModel(Modelica,{"4.0.0"}); loadFile("uses410.mo"); getErrorString();
+clear(); loadModel(Modelica,{"3.2.3"}); loadFile("uses410.mo"); getErrorString();
+clear(); loadFile("uses410.mo"); getErrorString(); getClassNames();
+clear(); getClassNames(); size(getClassNames(builtin=true)); getClassNames(builtin=true);
+clear(); loadModel(Modelica); size(getClassNames(Modelica)); size(getClassNames(Modelica, includeConstants=true)); size(getClassNames(Modelica.Constants)); size(getClassNames(Modelica.Constants, includeConstants=true)); size(getClassNames(Modelica, recursive=true)); size(getClassNames(Modelica, recursive=true, includeConstants=true)); x:=getClassNames(Modelica, recursive=true); x[1:3]; y:=getClassNames(Modelica.Constants, includeConstants=true, qualified=true); y[1:4]; size(getClassNames(Modelica.Units.SI)); size(getClassNames(Modelica.Units.SI, includeConstants=true)); size(getClassNames(Modelica, showProtected=true)); getErrorString();
+clear(); loadModel(Complex); loadModel(Modelica); getClassNames(); loadModel(ModelicaReference); getClassNames();

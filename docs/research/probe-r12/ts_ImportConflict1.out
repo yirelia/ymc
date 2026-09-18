@@ -1,0 +1,10 @@
+Error processing file: ts_ImportConflict1.mo
+[C:/dev/ymc/docs/research/probe-r12/ts_ImportConflict1.mo:19:3-19:17:writable] Notification: From here:
+[C:/dev/ymc/docs/research/probe-r12/ts_ImportConflict1.mo:20:3-20:17:writable] Error: Qualified import name M already exists in this scope.
+[C:/dev/ymc/docs/research/probe-r12/ts_ImportConflict1.mo:21:3-21:6:writable] Error: Class M not found in scope ImportConflict1.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

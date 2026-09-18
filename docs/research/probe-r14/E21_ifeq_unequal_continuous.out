@@ -1,0 +1,11 @@
+class IFBR
+  Real x;
+  Real y;
+equation
+  if time > 1.0 then
+    x = 1.0;
+    y = 2.0;
+  else
+    x = 3.0;
+  end if;
+end IFBR;

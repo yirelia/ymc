@@ -1,0 +1,7 @@
+Error processing file: E08b_unbound_param_err.mo
+[C:/dev/ymc/docs/research/probe-r14/E08b_unbound_param_err.mo:2:3-2:19:writable] Error: Parameter p has neither value nor start value, and is fixed during initialization (fixed=true).
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

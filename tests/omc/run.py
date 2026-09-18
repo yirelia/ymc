@@ -150,24 +150,15 @@ def omc_path(which):
     return OMC_INSTALLED if which == "installed" else OMC_WORKSPACE
 
 
-# ymc 未实现某 pass 时的识别：当前 S0 骨架对任意输入只打印帮助横幅。
-# 契约（写入任务卡）：ymc 未实现的操作应打印含下列标记之一的横幅、或以退出码 66 退出；
-# 运行器据此标 SKIP:not-implemented，而非 FAIL。ymc 长出真实 pass 后此判定自然失效。
+# ymc 未实现某特性时的契约：以退出码 66 退出，并在输出里给一行 `ymc: not implemented: <特性>`。
+# 运行器据此标 SKIP:not-implemented:<特性>，而非 FAIL——这样扫描结果分三类：PASS / FAIL（输出错了）/ SKIP（还没做）。
+# S0 骨架时期的帮助横幅同样算未实现。
 YMC_NOT_IMPL_MARKERS = ("S0 skeleton", "usage:")
+YMC_NOT_IMPL_EXIT = 66
+_NOT_IMPL_LINE = re.compile(r"not implemented:\s*(.+)")
 
-
-def _ymc_unimplemented(payload, path):
-    """探测 ymc 是否尚未实现该操作（骨架横幅）。"""
-    try:
-        r = subprocess.run([YMC] + payload + [os.path.basename(path)],
-                           cwd=os.path.dirname(path), stdout=subprocess.PIPE,
-                           stderr=subprocess.STDOUT, text=True, timeout=30)
-    except Exception:
-        return True
-    out = r.stdout or ""
-    if r.returncode == 66:
-        return True
-    return any(mark in out for mark in YMC_NOT_IMPL_MARKERS)
+# 旧前端用例：flattening/modelica 下大多数目录用文件内注解而不是 // cflags 选旧前端
+_OLD_FRONTEND_ANN = re.compile(r"__OpenModelica_commandLineOptions\s*=\s*\"[^\"]*-d=-newInst")
 
 
 def run_case(path, tool, omc_which, cmap, timeout):
@@ -188,8 +179,12 @@ def run_case(path, tool, omc_which, cmap, timeout):
 
     env = dict(os.environ)
     if tool == "ymc":
-        if not os.path.exists(YMC) or _ymc_unimplemented(payload, path):
-            rec.update(verdict="SKIP", skip_reason="not-implemented",
+        if not os.path.exists(YMC):
+            rec.update(verdict="SKIP", skip_reason="not-implemented:no-binary",
+                       compare_kind="L1" if not is_mos else "L3")
+            return rec
+        if _OLD_FRONTEND_ANN.search(text):  # 方案 §6.2：旧前端用例不做 L1
+            rec.update(verdict="SKIP", skip_reason="old-frontend",
                        compare_kind="L1" if not is_mos else "L3")
             return rec
         exe = [YMC]
@@ -215,6 +210,13 @@ def run_case(path, tool, omc_which, cmap, timeout):
                    fail_summary="timeout", duration_s=round(time.time() - t0, 3))
         return rec
     dur = round(time.time() - t0, 3)
+
+    if tool == "ymc" and (code == YMC_NOT_IMPL_EXIT or any(m in out for m in YMC_NOT_IMPL_MARKERS)):
+        m = _NOT_IMPL_LINE.search(out)
+        feature = m.group(1).strip()[:60] if m else "unspecified"
+        rec.update(verdict="SKIP", skip_reason=f"not-implemented:{feature}",
+                   compare_kind="L1" if not is_mos else "L3", duration_s=dur)
+        return rec
 
     expected = extract_expected(text)
     got = normalize(out)

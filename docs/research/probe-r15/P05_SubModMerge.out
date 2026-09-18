@@ -1,0 +1,3 @@
+class P05_SubModMerge
+  Real b.a.x(min = -5.0, start = 2.0, fixed = true) = 3.0;
+end P05_SubModMerge;

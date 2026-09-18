@@ -1,0 +1,7 @@
+Error processing file: V03_higher_var_discrete.mo
+[C:/dev/ymc/docs/research/probe-r14/V03_higher_var_discrete.mo:3:3-3:22:writable] Error: Type mismatch in binding i = x > 0.5, expected subtype of Integer, got type Boolean.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

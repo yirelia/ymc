@@ -1,0 +1,8 @@
+Error processing file: ts_lookup4.mo
+[C:/dev/ymc/docs/research/probe-r12/ts_lookup4.mo:22:3-22:21:writable] Error: Found component 'd' in composite name 'a.b.C.d.x', expected class.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

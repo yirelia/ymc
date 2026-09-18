@@ -1,0 +1,9 @@
+class E07_final_param
+  final parameter Real a = 2.0;
+  final parameter Real b = a * 3.0;
+  final constant Real k = 7.0;
+  parameter Real c = a + 7.0;
+  Real x(start = a);
+equation
+  der(x) = a + b + c;
+end E07_final_param;

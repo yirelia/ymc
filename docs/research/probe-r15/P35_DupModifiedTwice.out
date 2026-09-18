@@ -1,0 +1,9 @@
+Error processing file: P35_DupModifiedTwice.mo
+[C:/dev/ymc/docs/research/probe-r15/P35_DupModifiedTwice.mo:3:3-3:23:writable] Error: Duplicate elements (due to inherited elements) not identical:
+  first element is:  parameter Real p = 2
+  second element is: parameter Real p = 3
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

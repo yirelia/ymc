@@ -1,0 +1,54 @@
+class S02_builtin_fold
+  Real x;
+  Boolean bb;
+  Real f01 = 0.0;
+  Real f02 = 1.0;
+  Real f03 = 0.8414709848078965;
+  Real f04 = 2.718281828459045;
+  Real f05 = 2.302585092994046;
+  Real f06 = 1.4142135623730951;
+  Real f07 = 2.5;
+  Integer f08 = 3;
+  Real f09 = 2.5;
+  Integer f10 = 3;
+  Integer f11 = 3;
+  Integer f12 = 1;
+  Integer f13 = -1;
+  Real f14 = 1.5;
+  Integer f15 = 3;
+  Integer f16 = -4;
+  Real f17 = 2.0;
+  Real f18 = 3.0;
+  Integer f19 = -1;
+  String f20 = "3";
+  String f21 = "2.5";
+  String f22 = "true";
+  String f23 = "two";
+  String f24 = "a3b";
+  Real f25 = 0.7853981633974483;
+  Real f26 = sqrt(-1.0);
+  Real f27 = log(0.0);
+  Integer f28 = 3;
+  Real f29 = max(x, 2.0);
+  Real f30 = abs(x);
+  Real f31 = sin(x);
+  Real f32 = 3.0;
+  Real f33 = 6.0;
+  Real f34 = 6.0;
+  Real f35 = 6.0;
+  Integer f36 = 3;
+  Real f37 = 5.0;
+  Real f38 = 0.46211715726000974;
+  Real f39 = 3.0;
+  Integer f40 = integer(x);
+  Real f41 = 2.0 * x;
+  Boolean f42 = initial();
+  Real f43 = if initial() then 1.0 else 2.0;
+  Real f44 = der(x);
+  Real f45 = homotopy(x, 6.0);
+equation
+  x = time;
+  bb = x > 1.0;
+end S02_builtin_fold;
+Error: Model error: Argument of sqrt(unbox(arg.value)) was -1 should be >= 0
+

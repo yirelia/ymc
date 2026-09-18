@@ -1,0 +1,36 @@
+class P02_prefixes
+  Real g = 9.81;
+  Real sub.v = g;
+  Real c.e;
+  Real c.f;
+  Real c.s;
+  input Real u;
+  output Real yo;
+  discrete Real d;
+  parameter Real p1 = 1.0;
+  final parameter Real p2 = 2.0;
+  constant Real k = 3.0;
+  final constant Integer n = 2;
+  final parameter Integer m = 3;
+  Real arr[1];
+  Real arr[2];
+  discrete input Integer di;
+  parameter input Real pin = 1.0;
+  protected parameter Real pp = 4.0;
+  protected final parameter Boolean fb = true;
+  protected constant String s = "str";
+  protected discrete Integer i;
+  protected output Real po;
+equation
+  c.f = 0.0;
+  yo = u;
+  po = u;
+  arr[1] = 1.0;
+  arr[2] = 2.0;
+  c.e = 1.0;
+  c.s = 1.0;
+  when time > 1.0 then
+    d = 1.0;
+    i = 1;
+  end when;
+end P02_prefixes;

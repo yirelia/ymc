@@ -1,0 +1,4 @@
+class Encapsulated2
+  Real x = div(1.0, time);
+end Encapsulated2;
+exit=0

@@ -1,0 +1,8 @@
+Error processing file: p34_func_ref_via_comp.mo
+[C:/dev/ymc/docs/research/probe-r12/p34_func_ref_via_comp.mo:8:3-8:15:writable] Error: Type mismatch in binding x = P34.a.f, expected subtype of Real, got type P34.a.f<function>() => Real y.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

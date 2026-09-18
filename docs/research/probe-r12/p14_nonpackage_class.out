@@ -1,0 +1,5 @@
+class P14
+  Real b.x;
+  Real y = 1.0;
+end P14;
+exit=0

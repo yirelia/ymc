@@ -18,8 +18,12 @@ namespace ymc {
 
 class Lexer {
  public:
-  Lexer(std::string_view src, std::uint32_t file, Interner& interner, Diagnostics& diags)
-      : src_(src), file_(file), interner_(interner), diags_(diags) {}
+  // pure_impure_keywords：pure/impure 是 MLS 3.3 引入的保留字；--std=3.2 及更早时它们是普通标识符
+  //（OMC 用同一开关，见 testsuite/openmodelica/parser/PureImpure3.mo）。
+  Lexer(std::string_view src, std::uint32_t file, Interner& interner, Diagnostics& diags,
+        bool pure_impure_keywords = true)
+      : src_(src), file_(file), interner_(interner), diags_(diags),
+        pure_impure_keywords_(pure_impure_keywords) {}
 
   [[nodiscard]] std::vector<Token> tokenize();
 
@@ -44,6 +48,7 @@ class Lexer {
   std::size_t pos_ = 0;
   std::uint32_t line_ = 1;
   std::uint32_t col_ = 1;
+  bool pure_impure_keywords_ = true;
 };
 
 }  // namespace ymc

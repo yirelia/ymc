@@ -1,0 +1,6 @@
+loadString("model A Real x, y(start=1); equation x = 1; equation y = 2; end A;"); getErrorString();
+list(); getErrorString();
+list(A); getErrorString();
+list(A, false, false, ExportKind.SCode); getErrorString();
+list(class_=A, exportKind=ExportKind.SCode); getErrorString();
+list(A, exportKind=ExportKind.Absyn); getErrorString();

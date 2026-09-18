@@ -1,0 +1,7 @@
+Error processing file: C:/dev/ymc/docs/research/probe-r14/T05_ifexp_mismatch.mo
+[C:/dev/ymc/docs/research/probe-r14/T05_ifexp_mismatch.mo:2:3-2:39:writable] Error: Type mismatch in if-expression in component . True branch: 1 has type Integer, false branch: "a" has type String.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

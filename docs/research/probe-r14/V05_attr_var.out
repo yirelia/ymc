@@ -1,0 +1,7 @@
+Error processing file: V05_attr_var.mo
+[C:/dev/ymc/docs/research/probe-r14/V05_attr_var.mo:3:10-3:19:writable] Error: Component start of variability parameter has binding 'x' of higher variability continuous.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

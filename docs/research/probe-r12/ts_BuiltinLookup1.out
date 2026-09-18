@@ -1,0 +1,8 @@
+Error processing file: ts_BuiltinLookup1.mo
+[C:/dev/ymc/docs/research/probe-r12/ts_BuiltinLookup1.mo:11:3-11:21:writable] Error: Variable Boolean.x not found in scope BuiltinLookup1.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

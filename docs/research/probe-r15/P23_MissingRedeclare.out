@@ -1,0 +1,7 @@
+Error processing file: P23_MissingRedeclare.mo
+[C:/dev/ymc/docs/research/probe-r15/P23_MissingRedeclare.mo:11:7-11:15:writable] Error: Missing redeclare keyword on attempted redeclaration of class In.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

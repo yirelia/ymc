@@ -1,0 +1,4 @@
+class P31_DupIdentical
+  parameter Real p = 1.0;
+  Real x = p;
+end P31_DupIdentical;

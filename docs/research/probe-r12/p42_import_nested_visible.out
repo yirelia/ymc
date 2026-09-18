@@ -1,0 +1,4 @@
+class P42
+  Real i.x = 2.0;
+end P42;
+exit=0

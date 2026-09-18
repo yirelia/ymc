@@ -1,0 +1,12 @@
+class P58_CondFromMod
+  final parameter Boolean a1.on = false;
+  Real a1.y = 2.0;
+  final parameter Boolean a2.on = true;
+  Real a2.x = 1.0;
+  Real a2.y = 2.0;
+  final parameter Boolean a3[1].on = true;
+  Real a3[1].x = 1.0;
+  Real a3[1].y = 2.0;
+  final parameter Boolean a3[2].on = false;
+  Real a3[2].y = 2.0;
+end P58_CondFromMod;

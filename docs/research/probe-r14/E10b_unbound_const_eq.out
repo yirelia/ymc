@@ -1,0 +1,8 @@
+Error processing file: E10b_unbound_const_eq.mo
+[C:/dev/ymc/docs/research/probe-r14/E10b_unbound_const_eq.mo:2:3-2:18:writable] Notification: From here:
+[C:/dev/ymc/docs/research/probe-r14/E10b_unbound_const_eq.mo:3:3-3:26:writable] Error: Constant a is used without having been given a value.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

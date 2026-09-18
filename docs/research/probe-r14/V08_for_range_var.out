@@ -1,0 +1,7 @@
+Error processing file: V08_for_range_var.mo
+[C:/dev/ymc/docs/research/probe-r14/V08_for_range_var.mo:5:3-7:10:writable] Error: The iteration range 1:n is not a constant or parameter expression.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

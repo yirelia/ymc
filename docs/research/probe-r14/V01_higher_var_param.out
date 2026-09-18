@@ -1,0 +1,7 @@
+Error processing file: V01_higher_var_param.mo
+[C:/dev/ymc/docs/research/probe-r14/V01_higher_var_param.mo:3:3-3:23:writable] Error: Component p of variability parameter has binding 'x' of higher variability continuous.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

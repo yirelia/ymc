@@ -1,0 +1,11 @@
+class P21_ShortChain
+  parameter Real s.p = 3.0;
+  parameter Real s.q = 2.0;
+  parameter Real s.r = 4.0;
+  parameter Real t[1].p = 3.0;
+  parameter Real t[1].q = 5.0;
+  parameter Real t[1].r = 6.0;
+  parameter Real t[2].p = 3.0;
+  parameter Real t[2].q = 5.0;
+  parameter Real t[2].r = 7.0;
+end P21_ShortChain;

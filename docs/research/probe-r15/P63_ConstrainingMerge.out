@@ -1,0 +1,3 @@
+class P63_ConstrainingMerge
+  Real a.x(min = 1.0, start = 1.0);
+end P63_ConstrainingMerge;

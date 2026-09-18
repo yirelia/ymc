@@ -1,0 +1,6 @@
+class P40_ExtendsOrder
+  Real x;
+  Real a1;
+  Real a2;
+  Real y;
+end P40_ExtendsOrder;

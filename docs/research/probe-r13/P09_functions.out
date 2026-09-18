@@ -1,0 +1,59 @@
+impure function P09.ext2
+  input Real[:] x;
+  output Real y;
+
+  external "C" y = my_sum(x, size(x, 1));
+end P09.ext2;
+
+impure function P09.ext3
+  input Real x;
+  output Real y;
+
+  external "C" y = ext3(x);
+end P09.ext3;
+
+impure function P09.imp
+  input Real x;
+  output Real y;
+algorithm
+  y := x;
+end P09.imp;
+
+function P09.noalg
+  input Real x;
+  output Real y = x + 1.0;
+end P09.noalg;
+
+function P09.zeta "zeta comment"
+  input Real x "in x";
+  input Integer n = 2 "default";
+  input Real[:] v "vector";
+  input Real[:, 2] m;
+  output Real y "out y";
+  output Real[size(v, 1)] w;
+  protected Real tmp(start = 1.0) = 2.0 * x "local";
+  protected constant Real k = 3.0;
+  protected parameter Integer q = 1;
+  protected Real[n] loc;
+algorithm
+  tmp := tmp + x ^ /*Real*/(n);
+  y := tmp * sum(v) + k + m[1,2];
+  w := v * 2.0;
+  for i in 1:size(v, 1) loop
+    w[i] := w[i] + loc[1];
+  end for;
+end P09.zeta;
+
+class P09.M
+  Real a = P09.zeta(time, 2, {1.0, 2.0}, {{1.0, 2.0}})[1];
+  Real b = sin(time);
+  Real c = P09.zeta(time, 3, {1.0}, {{1.0, 2.0}, {3.0, 4.0}})[1];
+  Real d = P09.ext2({time, 2.0});
+  Real e = P09.ext3(time);
+  Real f = P09.imp(time);
+  Real g = P09.noalg(time);
+  Real w2[1];
+  Real w2[2];
+equation
+  (_, w2) = P09.zeta(time, 3, {1.0, 2.0}, {{1.0, 2.0}});
+end P09.M;

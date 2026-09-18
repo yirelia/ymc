@@ -1,0 +1,10 @@
+class E14_struct_ifeq_unequal
+  final parameter Boolean flag = false;
+  parameter Real p = 3.0;
+  Real x;
+  Real y;
+equation
+  x = 2.0 * p;
+  y = 1.0;
+  y = time;
+end E14_struct_ifeq_unequal;

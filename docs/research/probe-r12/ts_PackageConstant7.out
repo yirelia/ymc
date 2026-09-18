@@ -1,0 +1,9 @@
+Error processing file: ts_PackageConstant7.mo
+[C:/dev/ymc/docs/research/probe-r12/ts_PackageConstant7.mo:8:5-8:11:writable] Notification: From here:
+[C:/dev/ymc/docs/research/probe-r12/ts_PackageConstant7.mo:11:3-11:15:writable] Error: Class R does not satisfy the requirements for a package. Lookup is therefore restricted to encapsulated elements, but x is not encapsulated.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

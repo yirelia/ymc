@@ -1,0 +1,8 @@
+Error processing file: p09b_func_not_found.mo
+[C:/dev/ymc/docs/research/probe-r12/p09b_func_not_found.mo:2:3-2:21:writable] Error: Function nope not found in scope P09b.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

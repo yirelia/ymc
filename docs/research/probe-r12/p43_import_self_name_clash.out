@@ -1,0 +1,4 @@
+class P43
+  Real m.y;
+end P43;
+exit=0

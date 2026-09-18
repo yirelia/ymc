@@ -1,0 +1,7 @@
+Error processing file: ConditionInvalidBinding1.mo
+[C:/dev/OpenModelica/testsuite/flattening/modelica/scodeinst/ConditionInvalidBinding1.mo:7:3-7:28:writable] Error: Type mismatch in binding x = "string", expected subtype of Real, got type String.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

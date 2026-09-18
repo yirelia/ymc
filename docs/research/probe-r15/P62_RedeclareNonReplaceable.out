@@ -1,0 +1,7 @@
+Error processing file: P62_RedeclareNonReplaceable.mo
+[C:/dev/ymc/docs/research/probe-r15/P62_RedeclareNonReplaceable.mo:15:16-15:29:writable] Error: Redeclaration with a new type requires 'a' to be replaceable.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

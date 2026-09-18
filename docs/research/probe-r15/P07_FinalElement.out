@@ -1,0 +1,8 @@
+Error processing file: P07_FinalElement.mo
+[C:/dev/ymc/docs/research/probe-r15/P07_FinalElement.mo:8:7-8:21:writable] Notification: From here:
+[C:/dev/ymc/docs/research/probe-r15/P07_FinalElement.mo:4:3-4:28:writable] Error: Trying to override final element x with modifier '(start = 2.0)'.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

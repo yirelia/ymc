@@ -1,0 +1,6 @@
+setModelicaPath("C:/Users/yangrui/AppData/Local/Temp/claude/C--dev-ymc/4e49f17e-0607-4a2d-8c06-17ac54b3dead/scratchpad/probe-r8/lib");
+loadModel(Foo,{"1.0.0"});
+getVersion(Foo);
+loadModel(Foo,{"2.0.0"});
+getVersion(Foo);
+getErrorString();

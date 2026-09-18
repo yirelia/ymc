@@ -1,0 +1,8 @@
+Error processing file: P12a_final_override.mo
+[C:/dev/ymc/docs/research/probe-r13/P12a_final_override.mo:9:14-9:25:writable] Notification: From here:
+[C:/dev/ymc/docs/research/probe-r13/P12a_final_override.mo:1:65-1:74:writable] Error: Trying to override final element unit with modifier '= "mV"'.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

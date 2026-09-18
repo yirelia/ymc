@@ -1,0 +1,8 @@
+Error processing file: P10_DupModNested.mo
+[C:/dev/ymc/docs/research/probe-r15/P10_DupModNested.mo:8:10-8:19:writable] Notification: From here:
+[C:/dev/ymc/docs/research/probe-r15/P10_DupModNested.mo:8:24-8:33:writable] Error: Duplicate modification of element x.start on component a2.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

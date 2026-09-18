@@ -1,0 +1,10 @@
+class E13_unbound_struct_start
+  final parameter Integer n(start = 2) = 2;
+  final parameter Boolean b(start = true) = true;
+  Real x[1];
+  Real x[2];
+  Real y;
+end E13_unbound_struct_start;
+[C:/dev/ymc/docs/research/probe-r14/E13_unbound_struct_start.mo:2:3-2:33:writable] Warning: Parameter n has no value, and is fixed during initialization (fixed=true), using available start value (start=2) as default value.
+[C:/dev/ymc/docs/research/probe-r14/E13_unbound_struct_start.mo:3:3-3:36:writable] Warning: Parameter b has no value, and is fixed during initialization (fixed=true), using available start value (start=true) as default value.
+

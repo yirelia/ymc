@@ -1,0 +1,4 @@
+class P19b
+  Real x;
+end P19b;
+exit=0

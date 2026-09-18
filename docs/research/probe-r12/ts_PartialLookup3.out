@@ -1,0 +1,8 @@
+Error processing file: ts_PartialLookup3.mo
+[C:/dev/ymc/docs/research/probe-r12/ts_PartialLookup3.mo:17:3-17:17:writable] Error: P2 is partial, name lookup is not allowed in partial classes.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

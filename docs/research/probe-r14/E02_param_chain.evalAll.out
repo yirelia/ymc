@@ -1,0 +1,12 @@
+class E02_param_chain
+  final parameter Real q = 1.5;
+  final parameter Real p = 3.0;
+  final parameter Real r = 5.5;
+  final parameter Integer n = 2;
+  final parameter Integer m = 6;
+  Real x;
+  Real y;
+equation
+  x = 3.0 * time + 6.0;
+  y = 35.0;
+end E02_param_chain;

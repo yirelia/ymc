@@ -1,0 +1,3 @@
+class ExtendSelf1
+  Real x = 1.0;
+end ExtendSelf1;

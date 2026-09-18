@@ -1,0 +1,3 @@
+class P36_DupModOneSide
+  parameter Real b.p = 5.0;
+end P36_DupModOneSide;

@@ -1,0 +1,11 @@
+setModelicaPath("C:/Users/yangrui/AppData/Local/Temp/claude/C--dev-ymc/4e49f17e-0607-4a2d-8c06-17ac54b3dead/scratchpad/probe-r8/lib");
+loadModel(Baz);
+getErrorString();
+getClassNames(Baz);
+getClassNames(Baz, includeConstants=true);
+getSourceFile(Baz.A);
+getSourceFile(Baz.B);
+getSourceFile(Baz.C);
+getSourceFile(Baz.Inline);
+list(Baz);
+getErrorString();

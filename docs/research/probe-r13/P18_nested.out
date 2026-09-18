@@ -1,0 +1,58 @@
+function P18_nested.early
+  input Real x;
+  output Real y;
+algorithm
+  y := x;
+  if x > 1.0 then
+    return;
+  end if;
+  while true loop
+    y := y + 1.0;
+    if y > 10.0 then
+      break;
+    end if;
+  end while;
+end P18_nested.early;
+
+function P18_nested.noret
+  input Real x;
+algorithm
+  assert(x > -100.0, "neg");
+end P18_nested.noret;
+
+class P18_nested
+  Real x(start = 1.0);
+  Real y;
+  Real z;
+  discrete Real d;
+  Boolean c1;
+  Boolean c2;
+equation
+  der(x) = -x;
+  c1 = x > 0.5;
+  c2 = x > 0.25;
+  P18_nested.noret(x) "call comment";
+  y = P18_nested.early(x);
+  if c1 then
+    if c2 then
+      z = 1.0 "inner eq comment";
+    else
+      z = 2.0;
+    end if "inner if comment";
+  else
+    z = 3.0;
+  end if "outer if comment";
+  when c1 then
+    d = 1.0;
+  elsewhen c2 then
+    d = 2.0;
+  end when "when comment";
+algorithm
+  when c1 then
+    if c2 then
+      for i in 1:2 loop
+        P18_nested.noret(x + /*Real*/(i));
+      end for "for comment";
+    end if "if stmt comment";
+  end when "when stmt comment";
+end P18_nested;

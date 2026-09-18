@@ -1,0 +1,5 @@
+class P03_ModScopeShort
+  constant Real c = 1000.0;
+  parameter Real s.p = 42.0;
+  constant Real s.c = -1.0;
+end P03_ModScopeShort;

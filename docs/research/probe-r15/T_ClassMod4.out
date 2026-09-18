@@ -1,0 +1,5 @@
+class ClassMod4
+  Real a.t[1](start = 1.0);
+  Real a.t[2](start = 1.0);
+  Real a.t[3](start = 1.0);
+end ClassMod4;

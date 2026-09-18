@@ -1,0 +1,7 @@
+model V04_int_from_real
+  Real x = time;
+  Integer i = integer(x);
+  Integer j = if x > 0.5 then 1 else 0;
+  Boolean b = x > 0.5;
+  Real y = noEvent(if x > 0.5 then 1 else 0);
+end V04_int_from_real;

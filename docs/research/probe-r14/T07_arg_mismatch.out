@@ -1,0 +1,10 @@
+Error processing file: C:/dev/ymc/docs/research/probe-r14/T07_arg_mismatch.mo
+[C:/dev/ymc/docs/research/probe-r14/T07_arg_mismatch.mo:2:3-2:20:writable] Error: Type mismatch for positional argument 1 in sin(x="a"). The argument has type:
+  String
+expected type:
+  Real
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

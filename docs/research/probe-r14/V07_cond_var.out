@@ -1,0 +1,7 @@
+Error processing file: V07_cond_var.mo
+[C:/dev/ymc/docs/research/probe-r14/V07_cond_var.mo:3:3-3:14:writable] Error: Component condition must be parameter or constant expression (in b).
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

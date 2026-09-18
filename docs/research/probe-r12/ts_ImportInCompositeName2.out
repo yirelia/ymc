@@ -1,0 +1,8 @@
+Error processing file: ts_ImportInCompositeName2.mo
+[C:/dev/ymc/docs/research/probe-r12/ts_ImportInCompositeName2.mo:16:3-16:17:writable] Error: Found imported name 'PI' while looking up composite name 'P2.PI'.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

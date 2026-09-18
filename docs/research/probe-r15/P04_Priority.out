@@ -1,0 +1,6 @@
+class P04_Priority
+  parameter Real c.b.p = 4.0;
+  parameter Real c.b.q = 3.0;
+  parameter Real c.b.r = 2.0;
+  parameter Real c.b.s = 1.0;
+end P04_Priority;

@@ -450,8 +450,10 @@
 ### TR-005: loadModel 版本映射策略
 
 - **描述**：OMC 把 `loadModel(Modelica,{"3.2.1"})` 映射到 `3.2.3+maint.om`、`{"2.2.2"}` 映射到 `4.0.0+maint.om`（R7§5 探针实证）。testsuite 里仅 27 个 .mos 请求 MSL ≥4.0.0，151 个请求 3.2.x、26 个请求 2.2.x。ymc 的 `loadModel` 须定版本匹配策略（是否复刻 OMC 回退映射，还是只支持 4.0.0 并把 3.2.x 用例标 skip）。
-- **策略**：先只支持 4.0.0，3.2.x/2.2.x 依赖用例标 `skip:msl-version`；是否复刻回退映射列 TBD-05。
-- **来源**：R7§5/§对规格建议3
+- **策略（2026-09-17 定稿，TBD-05 关闭）**：复刻 OMC 1.25.0 的选择**结果**（两层机制：provides 替换 + 版本前缀逐级放宽），
+  但不读 OMC 的 `index.json`，provides 信息从候选库自身的 `conversion` 注解重建；3.2.x / 2.2.x 用例**不再标 skip**。
+  细则与依据见 `docs/adr/005-library-lookup-and-versions.md`；判别探针 13 + 9 例固化在 `tests/unit/scode/loader_test.cpp`。
+- **来源**：R7§5/§对规格建议3；R8（`docs/research/R8-omc-classloader.md`）
 
 ---
 
@@ -631,7 +633,7 @@
 | TBD-02 | Dymola 结构统计批量解析可行性 | getLastError 文本格式仅有 CoupledClutches 一例（R3§4/§未找到5） | 对若干 MSL 模型实跑取样后定正则（M3 前） |
 | TBD-03 | Dymola `Advanced.*` 翻译开关（EliminateAliasVariables/OutputModelicaCode 等）是否存在 | Python 文档 0 命中（R3§未找到1） | 在 Dymola 里 `list(variables={"Advanced.*"})` 探针 |
 | TBD-04 | reference_reltol/reltolDiffMinMax/rangeDelta 三名字来源 | testsuite 全树 0 命中（R2§未找到1） | 核对 OpenModelicaLibraryTesting（外部仓库） |
-| TBD-05 | ymc loadModel 版本回退映射是否复刻 OMC | OMC 映射规则未在源码定位（R7§未找到3） | 决策：先只支持 4.0.0，3.2.x 标 skip；是否复刻回退待定 |
+| ~~TBD-05~~ | ymc loadModel 版本回退映射是否复刻 OMC | **已关闭（2026-09-17）**：规则已在源码定位（R8：`ClassLoader.mo:152-166`、`PackageManagement.mo:352-371`、`systemimpl.c:2211-2270`）并实现 | 复刻结果、不读 index.json（ADR-005）；MSL 3.2.3 / Buildings 9.1.0 装载集合与 OMC 一致 |
 | TBD-06 | 性能门阈值 | 基线未测（NFR-003） | S3g/S6 基线测得后定倍数阈值 |
 | TBD-07 | dsmodel.mof 能否经 Dymola 取得 | Python 接口未暴露（R3§7） | 探针 runTestCases generateReferenceTranslationStructure 或读 User Manual 2C |
 | TBD-08 | 各阶段 G1/G2 通过率阈值、S7 退出阈值 | 需用户定 | 用户决定；先在 stages.json 留空 |

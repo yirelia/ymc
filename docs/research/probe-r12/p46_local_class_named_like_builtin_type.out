@@ -1,0 +1,4 @@
+class P46
+  String s;
+end P46;
+exit=0

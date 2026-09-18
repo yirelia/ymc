@@ -1,0 +1,21 @@
+class E16_struct_dep_chain
+  final parameter Integer a = 2;
+  final parameter Integer b = 3;
+  final parameter Integer c = 6;
+  parameter Real w = 6.0;
+  parameter Real v = 3.0;
+  Real x[1];
+  Real x[2];
+  Real x[3];
+  Real x[4];
+  Real x[5];
+  Real x[6];
+  Real y = 11.0;
+equation
+  x[1] = v;
+  x[2] = v;
+  x[3] = v;
+  x[4] = v;
+  x[5] = v;
+  x[6] = v;
+end E16_struct_dep_chain;

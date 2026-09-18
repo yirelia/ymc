@@ -1,0 +1,8 @@
+class P54_CondUse
+  final parameter Boolean on = false;
+  Real y;
+equation
+  y = x;
+end P54_CondUse;
+[C:/dev/ymc/docs/research/probe-r15/P54_CondUse.mo:7:3-7:8:writable] Warning: Conditional component 'x' is used in a non-connect context.
+

@@ -1,0 +1,7 @@
+Error processing file: V06_dim_var.mo
+[C:/dev/ymc/docs/research/probe-r14/V06_dim_var.mo:3:3-3:12:writable] Error: Dimensions must be parameter or constant expression (in n).
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

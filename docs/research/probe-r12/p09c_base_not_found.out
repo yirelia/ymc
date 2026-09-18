@@ -1,0 +1,8 @@
+Error processing file: p09c_base_not_found.mo
+[C:/dev/ymc/docs/research/probe-r12/p09c_base_not_found.mo:2:3-2:20:writable] Error: Base class Nope.Base not found in scope P09c.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

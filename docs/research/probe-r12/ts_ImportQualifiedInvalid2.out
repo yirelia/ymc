@@ -1,0 +1,9 @@
+Error processing file: ts_ImportQualifiedInvalid2.mo
+[C:/dev/ymc/docs/research/probe-r12/ts_ImportQualifiedInvalid2.mo:15:3-15:13:writable] Error: Import P.M not found in scope <top>.
+[C:/dev/ymc/docs/research/probe-r12/ts_ImportQualifiedInvalid2.mo:16:3-16:6:writable] Error: Class M not found in scope ImportQualifiedInvalid2.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

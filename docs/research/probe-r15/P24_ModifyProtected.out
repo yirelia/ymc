@@ -1,0 +1,8 @@
+Error processing file: P24_ModifyProtected.mo
+[C:/dev/ymc/docs/research/probe-r15/P24_ModifyProtected.mo:10:7-10:12:writable] Notification: From here:
+[C:/dev/ymc/docs/research/probe-r15/P24_ModifyProtected.mo:3:3-3:23:writable] Error: Protected element 'p' may not be modified, got 'p = 3'.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

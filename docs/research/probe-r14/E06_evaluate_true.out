@@ -1,0 +1,12 @@
+class E06_evaluate_true
+  final parameter Real a = 2.0;
+  parameter Real b = 6.0;
+  parameter Real c = 4.0;
+  parameter Real d = c + 1.0;
+  final parameter Real e = 10.0;
+  final parameter Real f = 5.0;
+  parameter Real h = 1.0;
+  Real x;
+equation
+  x = 2.0 + b + c + d + 10.0 + 5.0 + h;
+end E06_evaluate_true;

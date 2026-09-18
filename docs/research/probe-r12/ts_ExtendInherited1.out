@@ -1,0 +1,9 @@
+Error processing file: ts_ExtendInherited1.mo
+[C:/dev/ymc/docs/research/probe-r12/ts_ExtendInherited1.mo:15:3-15:12:writable] Notification: From here:
+[C:/dev/ymc/docs/research/probe-r12/ts_ExtendInherited1.mo:9:3-11:8:writable] Error: Found other base class for extends A after instantiating extends.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

@@ -1,0 +1,10 @@
+print("3.2.4: "); loadModel(Modelica, {"3.2.4"}); getSourceFile(Modelica); print(getErrorString()); clear();
+print("3.3: "); loadModel(Modelica, {"3.3"}); getSourceFile(Modelica); print(getErrorString()); clear();
+print("3.0: "); loadModel(Modelica, {"3.0"}); getSourceFile(Modelica); print(getErrorString()); clear();
+print("4.0: "); loadModel(Modelica, {"4.0"}); getSourceFile(Modelica); print(getErrorString()); clear();
+print("2.0: "); loadModel(Modelica, {"2.0"}); getSourceFile(Modelica); print(getErrorString()); clear();
+print("1.0: "); loadModel(Modelica, {"1.0"}); getSourceFile(Modelica); print(getErrorString()); clear();
+print("Complex 2.0: "); loadModel(Complex, {"2.0"}); getSourceFile(Complex); print(getErrorString()); clear();
+print("Complex 1.0: "); loadModel(Complex, {"1.0"}); getSourceFile(Complex); print(getErrorString()); clear();
+print("default: "); loadModel(Modelica); getSourceFile(Modelica); print(getErrorString()); clear();
+print("list 3.2.1,4.0.0: "); loadModel(Modelica, {"3.2.1","4.0.0"}); getSourceFile(Modelica); print(getErrorString());

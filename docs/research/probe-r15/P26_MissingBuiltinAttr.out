@@ -1,0 +1,7 @@
+Error processing file: P26_MissingBuiltinAttr.mo
+[C:/dev/ymc/docs/research/probe-r15/P26_MissingBuiltinAttr.mo:2:10-2:19:writable] Error: Modified element strat not found in class Real.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

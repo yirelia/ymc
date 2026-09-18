@@ -1,0 +1,7 @@
+Error processing file: V11_discrete_real.mo
+[C:/dev/ymc/docs/research/probe-r14/V11_discrete_real.mo:3:3-3:22:writable] Error: Component d of variability discrete has binding 'x' of higher variability continuous.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

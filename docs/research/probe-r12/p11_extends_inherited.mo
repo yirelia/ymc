@@ -1,0 +1,10 @@
+model A
+  model B
+    Real y;
+  end B;
+  Real x;
+end A;
+model P11
+  extends A;
+  extends B;
+end P11;

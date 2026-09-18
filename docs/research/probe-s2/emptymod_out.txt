@@ -1,0 +1,24 @@
+true
+""
+package PAnn
+  model A annotation(Evaluate = true); end A;
+
+  model B
+    Real x annotation(Qux(a = 1));
+  end B;
+
+  model C
+    Real x(final y, each z) = 1;
+  end C;
+
+  model D end D;
+
+  model E
+    Real y = if a then 1 elseif b then 2
+     elseif c then 3 else 4;
+  equation
+    y = if a then 1 elseif b then 2
+     elseif c then 3
+     elseif d then 5 else 4;
+  end E;
+end PAnn

@@ -1,0 +1,7 @@
+Error processing file: P53_CondMissingMod.mo
+[C:/dev/ymc/docs/research/probe-r15/P53_CondMissingMod.mo:7:7-7:12:writable] Error: Modified element q not found in class A.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

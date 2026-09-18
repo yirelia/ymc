@@ -1,0 +1,9 @@
+Error processing file: p25_import_via_component.mo
+[C:/dev/ymc/docs/research/probe-r12/p25_import_via_component.mo:10:3-10:15:writable] Error: Class name 'A.b.C' was found via a component (only component and function call names may be accessed in this way).
+[C:/dev/ymc/docs/research/probe-r12/p25_import_via_component.mo:11:3-11:6:writable] Error: Class C not found in scope P25.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

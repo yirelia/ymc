@@ -1,0 +1,8 @@
+Error processing file: ts_ComponentAsTypeError.mo
+[C:/dev/ymc/docs/research/probe-r12/ts_ComponentAsTypeError.mo:10:3-10:6:writable] Error: Expected x to be a class, but found component instead.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

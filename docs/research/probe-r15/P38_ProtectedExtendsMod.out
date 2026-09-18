@@ -1,0 +1,8 @@
+Error processing file: P38_ProtectedExtendsMod.mo
+[C:/dev/ymc/docs/research/probe-r15/P38_ProtectedExtendsMod.mo:9:7-9:12:writable] Notification: From here:
+[C:/dev/ymc/docs/research/probe-r15/P38_ProtectedExtendsMod.mo:2:3-2:23:writable] Error: Protected element 'p' may not be modified, got 'p = 2'.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

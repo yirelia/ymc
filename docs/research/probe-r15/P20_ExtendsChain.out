@@ -1,0 +1,8 @@
+class P20_ExtendsChain
+  parameter Real p = 3.0;
+  parameter Real q = 2.0;
+  parameter Real r = 1.0;
+  parameter Real c.p = 3.0;
+  parameter Real c.q = 2.0;
+  parameter Real c.r = 9.0;
+end P20_ExtendsChain;

@@ -1,0 +1,4 @@
+class P18
+  Real x = 3.0;
+end P18;
+exit=0

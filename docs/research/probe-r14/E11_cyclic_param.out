@@ -1,0 +1,5 @@
+class E11_cyclic_param
+  parameter Real a = b + 1.0;
+  parameter Real b = a * 2.0;
+  Real x = a;
+end E11_cyclic_param;

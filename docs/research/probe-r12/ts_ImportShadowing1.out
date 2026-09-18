@@ -1,0 +1,4 @@
+class ImportShadowing1
+  Real M;
+end ImportShadowing1;
+exit=0

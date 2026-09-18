@@ -1,0 +1,9 @@
+class E06b_evaluate_unbound
+  final parameter Real g(start = 1.0) = 1.0;
+  parameter Real h(fixed = false) = 3.0;
+  Real x;
+equation
+  x = 1.0 + h;
+end E06b_evaluate_unbound;
+[C:/dev/ymc/docs/research/probe-r14/E06b_evaluate_unbound.mo:2:3-2:60:writable] Warning: Parameter g has no value, and is fixed during initialization (fixed=true), using available start value (start=1.0) as default value.
+

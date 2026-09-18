@@ -1,0 +1,4 @@
+class P15_EachOnScalar
+  parameter Real a.p = 1.0;
+  Real x(start = 2.0);
+end P15_EachOnScalar;

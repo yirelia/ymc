@@ -1,0 +1,9 @@
+Error processing file: ts_Visibility3.mo
+[C:/dev/ymc/docs/research/probe-r12/ts_Visibility3.mo:7:13-7:19:writable] Error: Illegal access of protected element x.
+[C:/dev/ymc/docs/research/probe-r12/ts_Visibility3.mo:11:3-11:15:writable] Error: Variable a.x not found in scope Visibility3.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

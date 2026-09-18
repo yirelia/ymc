@@ -1,0 +1,4 @@
+class P01a
+  Real x = 1.5;
+end P01a;
+exit=0

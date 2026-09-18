@@ -1,0 +1,121 @@
+package ProbeR9 "probe for SCode dump"
+  import Modelica.Math.sin;
+  import SI = Modelica.Units.SI;
+  import Modelica.Constants.{pi, e2 = e};
+  import Modelica.Math.*;
+  connector Pin
+    Real v;
+    flow Real i;
+  end Pin;
+  type Angle = Real(unit = "rad", displayUnit = "deg") "angle";
+  type Color = enumeration(red "R comment", green, blue) "colors";
+  partial model Base
+    parameter Real k = 1;
+    Pin p;
+  end Base;
+  model Comp
+    extends Base(k = 2) annotation(Documentation(info = "ext"));
+    Real a, b(start = 1, fixed = true) "b comment";
+    Real c[2], d[3] annotation(HideResult = true);
+    Real[2] m2[3];
+    replaceable model M = Base constrainedby Base(k = 3) "M comment";
+    replaceable Base rb constrainedby Base(k = 4);
+    Boolean useX = true;
+    Real x if useX;
+    final parameter Integer n = 3;
+    inner Real g = 9.81;
+    Color col = Color.red;
+    Real q(y.start = 5);
+    final Real fq;
+    Real sub(start = 1) = 2;
+  protected
+    Real z;
+    discrete Real w;
+  equation
+    a = sin(time);
+    b = a + k;
+    assert(a > -2, "a too small");
+    assert(b > -2, "b too small", AssertionLevel.warning);
+    assert(a > -3, "named level", level = AssertionLevel.warning);
+    Modelica.Utilities.Streams.print("hi");
+    when a > 0.5 then
+      reinit(g, 0);
+    elsewhen a < -0.5 then
+      w = 1;
+    end when;
+    if useX then
+      x = 1;
+    elseif n > 2 then
+      x = 2;
+    else
+      x = 3;
+    end if;
+    for i in 1:2, j in 1:3 loop
+      m2[i, j] = 0;
+    end for;
+    for k2 loop
+      d[k2] = 0;
+    end for;
+    connect(p, rb.p);
+  equation
+    p.v = 0;
+  initial equation
+    z = 0;
+  algorithm
+    (a, b) := two(1.0);
+    while a < 0 loop
+      a := a + 1;
+    end while;
+    when b > 1 then
+      w := 2;
+    elsewhen b < 0 then
+      w := 3;
+    end when;
+    if a > 1 then
+      z := 1;
+    elseif a > 0 then
+      z := 2;
+    else
+      z := 3;
+    end if;
+    assert(a > 0, "alg assert");
+    terminate("done");
+    reinit(g, 1);
+    Modelica.Utilities.Streams.print("alg");
+    annotation(Documentation(info = "Comp doc"), Icon(graphics = {Line(points = {{0, 0}, {1, 1}})}));
+  end Comp;
+  model Sys
+    Comp comp(redeclare model M = Base, a(start = 0), b.start = 3, each c = {1, 2}, final n = 4);
+    Comp comp2(redeclare replaceable model M = Base(k = 5) constrainedby Base, redeclare final Base rb(k = 6));
+  end Sys;
+  package Lib
+    replaceable model Ext
+      parameter Real k = 1;
+    end Ext;
+  end Lib;
+  package P2
+    extends Lib;
+    model extends Ext(k = 7)
+      Real q2;
+    end Ext;
+  end P2;
+  function f
+    input Real x;
+    output Real y;
+  external "C" y = foo(x) annotation(Library = "bar");
+  end f;
+  function f2
+    input Real x;
+    output Real y;
+  external "C";
+  end f2;
+  function two
+    input Real x;
+    output Real y1;
+    output Real y2;
+  algorithm
+    y1 := x;
+    y2 := x;
+  end two;
+  function df = der(f, x);
+end ProbeR9;

@@ -1,0 +1,37 @@
+class P03_attributes
+  Real a(quantity = "Length", unit = "m", displayUnit = "mm", min = -100.0, max = 100.0, start = 1.0, fixed = true, nominal = 10.0, stateSelect = StateSelect.prefer);
+  Real v(quantity = "ElectricPotential", unit = "V", displayUnit = "kV", start = 0.5);
+  Real v2(quantity = "ElectricPotential", unit = "V", displayUnit = "mV", nominal = 0.001);
+  Integer i(quantity = "count", min = 1, max = 5, start = 2, fixed = true);
+  Integer mi(min = 0, max = 10, start = 3);
+  Boolean b(quantity = "flag", start = false, fixed = true);
+  String s(quantity = "name", start = "abc");
+  enumeration(red, green, blue) c(quantity = "col", min = Color.red, max = Color.blue, start = Color.green, fixed = true);
+  Real u(start = 2.0);
+  Real ss1(stateSelect = StateSelect.never);
+  Real ss2(stateSelect = StateSelect.avoid);
+  Real ss3(stateSelect = StateSelect.default);
+  Real ss4(stateSelect = StateSelect.always);
+  parameter Real p(start = 1.5, fixed = false);
+  parameter Real q(min = 0.0) = 2.0 "with binding and attr";
+  Real r(start = q + 1.0);
+initial equation
+  p = 3.0;
+equation
+  der(a) = 1.0;
+  v = 1.0;
+  v2 = 1.0;
+  when time > 1.0 then
+    i = 3;
+    mi = 4;
+    b = true;
+    s = "x";
+    c = Color.red;
+  end when;
+  u = 1.0;
+  ss1 = 1.0;
+  ss2 = 1.0;
+  ss3 = 1.0;
+  ss4 = 1.0;
+  r = 1.0;
+end P03_attributes;

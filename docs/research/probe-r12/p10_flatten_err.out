@@ -1,0 +1,16 @@
+true
+""
+""
+"[C:/dev/ymc/docs/research/probe-r12/p09a_var_not_found.mo:2:3-2:16:writable] Error: Variable nope not found in scope P09a.
+"
+true
+""
+""
+"[C:/dev/ymc/docs/research/probe-r12/p08_protected_class.mo:3:3-5:8:writable] Error: Illegal access of protected element M.
+[C:/dev/ymc/docs/research/probe-r12/p08_protected_class.mo:8:3-8:8:writable] Error: Class P.M not found in scope P08.
+"
+""
+"Error: Failed to load package NoSuchModel (default) using MODELICAPATH C:/Users/yangrui/AppData/Roaming/.openmodelica/libraries/.
+Error: Class NoSuchModel not found in scope <top>.
+"
+exit=0

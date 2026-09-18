@@ -8,8 +8,10 @@ namespace ymc {
 
 namespace {
 
+// '$' 是 OMC 兼容扩展：testsuite 与 OMC 内部名用 $overload / $cpuTime / $DER 等
+// （OMC 词法 IDENT2 单列了 '$cpuTime'，语法层再认 $overload；这里统一放宽到标识符字符）。
 bool is_ident_start(char c) {
-  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' || c == '$';
 }
 bool is_ident_cont(char c) {
   return is_ident_start(c) || (c >= '0' && c <= '9');
@@ -19,7 +21,7 @@ bool is_digit(char c) { return c >= '0' && c <= '9'; }
 const std::unordered_map<std::string_view, TokenKind>& keyword_table() {
   static const std::unordered_map<std::string_view, TokenKind> kw = {
       {"algorithm", TokenKind::Kw_algorithm}, {"and", TokenKind::Kw_and},
-      {"annotation", TokenKind::Kw_annotation}, {"assert", TokenKind::Kw_assert},
+      {"annotation", TokenKind::Kw_annotation},
       {"block", TokenKind::Kw_block}, {"break", TokenKind::Kw_break},
       {"class", TokenKind::Kw_class}, {"connect", TokenKind::Kw_connect},
       {"connector", TokenKind::Kw_connector}, {"constant", TokenKind::Kw_constant},
@@ -131,6 +133,8 @@ Token Lexer::lex_ident(std::size_t start, std::uint32_t sl, std::uint32_t sc) {
   while (is_ident_cont(peek())) advance();
   std::string_view lex = src_.substr(start, pos_ - start);
   TokenKind kind = keyword_kind(lex);
+  if (!pure_impure_keywords_ && (kind == TokenKind::Kw_pure || kind == TokenKind::Kw_impure))
+    kind = TokenKind::Ident;  // --std < 3.3
   return Token{kind, loc_from(start, sl, sc), interner_.intern(lex)};
 }
 
@@ -152,23 +156,13 @@ Token Lexer::lex_qident(std::size_t start, std::uint32_t sl, std::uint32_t sc) {
 
 Token Lexer::lex_string(std::size_t start, std::uint32_t sl, std::uint32_t sc) {
   advance();  // 开头的 "
+  // 原文保留转义序列（同 OMC：Absyn.STRING 存 BaseModelica_Lexer.g:338 STRING_GUTS 的原文，只做编码转换）。
+  // 为什么：Absyn/SCode 的 dump 要与 OMC 逐字一致；解转义是语义动作，放在需要的地方（base/strings.h）。
   std::string content;
   while (!at_end() && peek() != '"') {
     char c = advance();
-    if (c == '\\' && !at_end()) {
-      char e = advance();
-      switch (e) {
-        case 'n': content.push_back('\n'); break;
-        case 't': content.push_back('\t'); break;
-        case 'r': content.push_back('\r'); break;
-        case '"': content.push_back('"'); break;
-        case '\\': content.push_back('\\'); break;
-        case '\'': content.push_back('\''); break;
-        default: content.push_back(e); break;
-      }
-    } else {
-      content.push_back(c);
-    }
+    content.push_back(c);
+    if (c == '\\' && !at_end()) content.push_back(advance());  // 转义对：\" 不结束字符串
   }
   if (peek() == '"') {
     advance();
@@ -180,17 +174,24 @@ Token Lexer::lex_string(std::size_t start, std::uint32_t sl, std::uint32_t sc) {
 
 std::vector<Token> Lexer::tokenize() {
   std::vector<Token> toks;
+  // 跳过 UTF-8 BOM（EF BB BF）：MLS §13.4 要求 .mo 为 UTF-8，Windows 工具常带 BOM；不算列
+  if (src_.size() >= 3 && static_cast<unsigned char>(src_[0]) == 0xEF &&
+      static_cast<unsigned char>(src_[1]) == 0xBB && static_cast<unsigned char>(src_[2]) == 0xBF)
+    pos_ = 3;
   for (;;) {
     skip_trivia();
     std::size_t start = pos_;
     std::uint32_t sl = line_, sc = col_;
     if (at_end()) {
-      toks.push_back(Token{TokenKind::Eof, SourceLoc{file_, sl, sc, 0}, Symbol{}});
+      // EOF 的列记 0：对齐 OMC 报 "<EOF>" 时的 `line:0`（如 MissingSemicolon.mo 期望 20:0）
+      (void)sc;
+      toks.push_back(Token{TokenKind::Eof, SourceLoc{file_, sl, 0, 0}, Symbol{}});
       return toks;
     }
     char c = peek();
 
-    if (is_digit(c)) {
+    // 数字；OMC 的词法器也接受无整数部分的实数（如 .13E2），跟它对齐（Modelica_3_Lexer.g）
+    if (is_digit(c) || (c == '.' && is_digit(peek(1)))) {
       toks.push_back(lex_number(start, sl, sc));
       continue;
     }

@@ -1,0 +1,4 @@
+class P60_RedeclareComp
+  Real w.c.x = 1.0;
+  Real w.c.y = 2.0;
+end P60_RedeclareComp;

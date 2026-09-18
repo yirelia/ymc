@@ -1,0 +1,62 @@
+// 实例化 pass（S3）——对标 OMC NFFrontEnd/NFInst.mo 的 makeTopNode / partialInstClass / expandClass / instClass。
+//
+// 三趟里的第一趟（R11 §1 要点、§3）：instantiate = **只建树 + 解析 extends + 递归组件**，**不碰表达式**
+//（绑定/维度/方程的 cref 解析留给后续 instExpressions）。本文件实现到 instClass 为止；
+// instExpressions/typeClass/flatten 是后续 pass。
+//
+// v1 竖切片第一里程碑（ADR-006 D6）：单类 + 标量内建组件（Real/Integer/Boolean/String）+ 单继承 extends +
+// 复合组件（组件类型是用户类）。**尚未做**：修饰合并、绑定/维度实例化、短类、内建属性、inner/outer、
+// redeclare、数组——按落地顺序在后续子步补，每步配探针对拍。
+#pragma once
+#include <string>
+
+#include "base/diag.h"
+#include "inst/inode.h"
+
+namespace ymc {
+
+class Instantiator {
+ public:
+  Instantiator(Inst& inst, Diagnostics& diags) : I_(inst), diags_(diags) {}
+
+  // 建 <top>：内建类型节点 + 顶层类节点（NotInstantiated），登记进 top 的 ClassTree。
+  void make_top_node();
+
+  // 实例化一个顶层类（按名字），返回其实例节点（root）；找不到/不可实例化返回 invalid 并报错。
+  // 对标 lookupRootClass + instantiateRootClass。
+  NodeId instantiate_root(Symbol name);
+
+  // v1 还没做的构造（内建枚举/时钟类型、extends 内建类型…）在实例化阶段就撞上时标记，
+  // driver 据此退 66（记 SKIP，不是 FAIL）。与 flatten 的 unsupported 合并判断。
+  [[nodiscard]] bool unsupported() const noexcept { return unsupported_; }
+  [[nodiscard]] const std::string& unsupported_reason() const noexcept { return unsupported_reason_; }
+
+ private:
+  // ---- 三趟 ----
+  void partial_inst(NodeId cls);                 // 建 ClassTree（本地类/组件/extends 占位）
+  void expand(NodeId cls);                        // 解析 extends、递归 expand 基类
+  NodeId instantiate(NodeId def_node, NodeId parent);  // 克隆 def 节点 + instClass 填实例树
+  void inst_class(NodeId inst_node, NodeId def_node);  // 建 FlatTree：递归组件 + extends 就地展开
+  void inst_component(NodeId comp_node, NodeId enclosing);  // 解析组件类型（叶/复合）
+
+  // ---- 查找（最小版，只够 v1：内建类型 + 本类/嵌套类 + 顶层）----
+  NodeId lookup_class_name(const std::vector<Symbol>& path, NodeId scope);
+  NodeId lookup_simple_class(Symbol name, NodeId scope);
+
+  // ---- 内建 ----
+  void make_builtin_types();
+  NodeId builtin_node(TypeKind k) const;
+
+  void mark_unsupported(const char* why) {
+    if (!unsupported_) { unsupported_ = true; unsupported_reason_ = why; }
+  }
+
+  Inst& I_;
+  Diagnostics& diags_;
+  NodeId builtin_[4];   // Real/Integer/Boolean/String（按 TypeKind 序）
+  bool unsupported_ = false;
+  std::string unsupported_reason_;
+  int depth_ = 0;   // instantiate 递归深度（防无限递归栈溢出）
+};
+
+}  // namespace ymc

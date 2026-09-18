@@ -1,0 +1,9 @@
+Error processing file: ts_InnerOuterInvalidType1.mo
+[C:/dev/ymc/docs/research/probe-r12/ts_InnerOuterInvalidType1.mo:7:3-7:15:writable] Notification: From here:
+[C:/dev/ymc/docs/research/probe-r12/ts_InnerOuterInvalidType1.mo:11:9-11:20:writable] Error: Found inner class x instead of expected component.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

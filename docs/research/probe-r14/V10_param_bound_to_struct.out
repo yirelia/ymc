@@ -1,0 +1,8 @@
+class V10_param_bound_to_struct
+  final parameter Integer n = 2;
+  final parameter Integer m = 2;
+  parameter Integer k = 3;
+  Real x[1];
+  Real x[2];
+  Real y = /*Real*/(2 + k);
+end V10_param_bound_to_struct;

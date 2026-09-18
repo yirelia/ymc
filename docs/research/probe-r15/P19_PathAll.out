@@ -1,0 +1,12 @@
+class P19_PathAll
+  parameter Real n.p = 2.0;
+  Real n.x(start = n.p);
+  parameter Real b.p = 3.0;
+  Real b.x(start = b.p);
+  parameter Real m.p = 4.0;
+  Real m.x(start = m.p);
+  parameter Real m2.p = 5.0;
+  Real m2.x(start = m2.p);
+  parameter Real b2.p = 6.0;
+  Real b2.x(start = 7.0);
+end P19_PathAll;

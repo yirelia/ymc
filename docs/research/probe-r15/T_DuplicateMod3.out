@@ -1,0 +1,8 @@
+Error processing file: DuplicateMod3.mo
+[C:/dev/OpenModelica/testsuite/flattening/modelica/scodeinst/DuplicateMod3.mo:15:9-15:14:writable] Notification: From here:
+[C:/dev/OpenModelica/testsuite/flattening/modelica/scodeinst/DuplicateMod3.mo:15:19-15:24:writable] Error: Duplicate modification of element a.x on component b.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

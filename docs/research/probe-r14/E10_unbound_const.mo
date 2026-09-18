@@ -1,0 +1,4 @@
+model E10_unbound_const
+  constant Real a;
+  Real x = a;
+end E10_unbound_const;

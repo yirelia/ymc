@@ -1,0 +1,10 @@
+Error processing file: P34_DupLocalInheritedDiff.mo
+[C:/dev/ymc/docs/research/probe-r15/P34_DupLocalInheritedDiff.mo:2:3-2:13:writable] Notification: From here:
+[C:/dev/ymc/docs/research/probe-r15/P34_DupLocalInheritedDiff.mo:6:3-6:16:writable] Error: Duplicate elements (due to inherited elements) not identical:
+  first element is:  Real x = 1
+  second element is: Integer x = 1
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

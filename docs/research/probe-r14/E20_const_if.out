@@ -1,0 +1,9 @@
+class E20_const_if
+  constant Boolean useA = false;
+  constant Real a = 1.0;
+  parameter Real b = 2.0;
+  Real x = b;
+  Real y = b;
+equation
+  assert(b > 0.0, "b must be positive");
+end E20_const_if;

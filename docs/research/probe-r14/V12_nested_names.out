@@ -1,0 +1,17 @@
+class V12_nested_names
+  parameter Real a.q(start = 2.5) = 2.5;
+  final parameter Integer a.n = 2;
+  Real a.x[1];
+  Real a.x[2];
+  parameter Real b.q(start = 2.5) = 2.5;
+  final parameter Integer b.n = 3;
+  Real b.x[1];
+  Real b.x[2];
+  Real b.x[3];
+equation
+  a.x = {a.q, a.q};
+  b.x = {b.q, b.q, b.q};
+end V12_nested_names;
+[C:/dev/ymc/docs/research/probe-r14/V12_nested_names.mo:3:5-3:34:writable] Warning: Parameter a.q has no value, and is fixed during initialization (fixed=true), using available start value (start=2.5) as default value.
+[C:/dev/ymc/docs/research/probe-r14/V12_nested_names.mo:3:5-3:34:writable] Warning: Parameter b.q has no value, and is fixed during initialization (fixed=true), using available start value (start=2.5) as default value.
+

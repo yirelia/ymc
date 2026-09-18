@@ -1,0 +1,18 @@
+function E17P.f
+  input Real u;
+  output Real y;
+algorithm
+  y := 2.0 * u + 1.0;
+end E17P.f;
+
+class E17_func_eval
+  constant Real c = 5.0;
+  parameter Real p = 7.0;
+  parameter Real q = 1.0;
+  parameter Real r = E17P.f(q);
+  Integer vi = 2;
+  Real x = 9.0;
+  Real y = E17P.f(x);
+  Real z = {10.0, 20.0, 30.0}[vi];
+  Real w = 20.0;
+end E17_func_eval;

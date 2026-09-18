@@ -1,0 +1,7 @@
+class P01_ModScope
+  parameter Real q = 3.0;
+  parameter Real b.q = q + 1.0;
+  parameter Real b.a.p = b.q;
+  parameter Real b.a.q = q * 100.0;
+  Real b.a.x = b.a.p;
+end P01_ModScope;

@@ -1,0 +1,8 @@
+Error processing file: ts_ExtendSelf3.mo
+[C:/dev/ymc/docs/research/probe-r12/ts_ExtendSelf3.mo:9:3-9:22:writable] Error: extends ExtendSelf3 causes an instantiation loop.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
+exit=1

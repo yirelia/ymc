@@ -1,0 +1,7 @@
+Error processing file: C:/dev/ymc/docs/research/probe-r14/T09_unresolvable_bool.mo
+[C:/dev/ymc/docs/research/probe-r14/T09_unresolvable_bool.mo:2:3-2:20:writable] Error: Cannot resolve type of expression true + 1. The operands have types Boolean, Integer in component <NO_COMPONENT>.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

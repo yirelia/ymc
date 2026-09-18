@@ -1,0 +1,7 @@
+Error processing file: P55_CondNonParam.mo
+[C:/dev/ymc/docs/research/probe-r15/P55_CondNonParam.mo:3:3-3:14:writable] Error: Component condition must be parameter or constant expression (in b).
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!

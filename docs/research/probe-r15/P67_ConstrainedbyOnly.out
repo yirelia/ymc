@@ -1,0 +1,3 @@
+class P67_ConstrainedbyOnly
+  Real x(start = 1.0);
+end P67_ConstrainedbyOnly;

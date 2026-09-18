@@ -1,0 +1,15 @@
+class E01_const_chain
+  constant Real PI = 3.14;
+  constant Real TWO_PI = 6.28;
+  constant Real c3 = 16.09;
+  constant Integer n = 4;
+  parameter Real p = 6.28;
+  parameter Real p2 = 9.81;
+  Real x;
+  Real y;
+  Real z(start = 3.14);
+equation
+  x = 6.28;
+  y = 6.28 * x + 9.81 + 4.0;
+  z = 16.09 * time;
+end E01_const_chain;

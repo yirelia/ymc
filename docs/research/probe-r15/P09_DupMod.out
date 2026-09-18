@@ -1,0 +1,8 @@
+Error processing file: P09_DupMod.mo
+[C:/dev/ymc/docs/research/probe-r15/P09_DupMod.mo:7:14-7:19:writable] Notification: From here:
+[C:/dev/ymc/docs/research/probe-r15/P09_DupMod.mo:7:7-7:12:writable] Error: Duplicate modification of element p on component a.
+
+# Error encountered! Exiting...
+# Please check the error message and the flags.
+
+Execution failed!
