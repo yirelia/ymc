@@ -210,11 +210,8 @@ void Instantiator::expand(NodeId cls) {
   const std::vector<NodeId> exts = I_.trees[tree_id].exts;   // 拷一份避免遍历中 arena 变动
   for (NodeId ext : exts) {
     const SElement& ee = I_.scode.elems[I_.nodes[ext].def];
-    // extends 带修饰 `extends A(x = 1)` 要修饰合并——v1 未做，标 unsupported。
-    if (ee.mod.is_valid() && I_.node_class(cls).state == ClassState::ExpandedClass) {
-      const SMod& m = I_.scode.mods[ee.mod];
-      if (!m.subs.empty() || m.binding.is_valid()) mark_unsupported("extends modifier");
-    }
+    // extends 带整体绑定 `extends A = expr` 不合法/未做；子修饰 `extends A(x=1)` 在 inst_class 合并（见下）。
+    if (ee.mod.is_valid() && I_.scode.mods[ee.mod].binding.is_valid()) mark_unsupported("extends whole binding");
     NodeId base = lookup_class_name(ee.base_path, I_.nodes[cls].parent_scope);
     if (!base.is_valid() || I_.nodes[base].is_empty()) {
       // v1 的最小 lookup 没做 import/内建枚举——基类查不到先当 v1 gap 标 unsupported（driver 退 66），不硬报错。
@@ -304,13 +301,24 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node) {
       if (!bd.equations.empty() || !bd.initial_equations.empty() || !bd.algorithms.empty() ||
           !bd.initial_algorithms.empty())
         mark_unsupported("extends with equations/algorithms");
+      const Id<SMod> ext_mod = ee.mod;   // extends 修饰（在 base_def lookup 之后取，避免跨 add 持 SElement 引用）
       NodeId base_inst = instantiate(base_def, inst_node);
       bool prot = I_.nodes[ext].visibility == Visibility::Protected;
       ClassTreeId btree = I_.node_class(base_inst).tree;
-      for (NodeId bc : I_.trees[btree].components) {
+      const std::vector<NodeId> base_comps = I_.trees[btree].components;   // 拷一份
+      for (NodeId bc : base_comps) {
         if (prot) I_.nodes[bc].visibility = Visibility::Protected;   // protected extends（R11 §3.4-2）
+        apply_extends_modifier(bc, ext_mod, inst_node);              // extends 修饰合并到继承组件
         flat.components.push_back(bc);
       }
+      // extends 修饰命名了非组件（嵌套类型/类，如 mod9 `extends A(MyReal(start=y))`）→ v1 未做类修饰，标 unsupported。
+      if (ext_mod.is_valid())
+        for (const SSubMod& s : I_.scode.mods[ext_mod].subs) {
+          bool found = false;
+          for (NodeId bc : base_comps)
+            if (I_.nodes[bc].name == s.ident) { found = true; break; }
+          if (!found) mark_unsupported("extends modifier names non-component (nested class)");
+        }
     } else {  // 普通组件：克隆 + 实例化
       const INode& dc = I_.nodes[cn];
       Component nc = I_.comps[dc.comp];   // 拷贝（CompDef）
@@ -325,6 +333,33 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node) {
   Class& ic = I_.classes[I_.nodes[inst_node].cls];
   ic.tree = I_.trees.add(std::move(flat));
   ic.state = ClassState::InstancedClass;
+}
+
+// extends 修饰合并到继承组件（R15 §3.2(b)：extends 修饰当作外来修饰压进基类元素）。
+// 只处理叶组件的绑定/属性/final；复合组件带子修饰、redeclare/break、each 数组等 v1 未做 → 标 unsupported。
+// 不做 arena add：只改已存在的 comp 字段（绑定/属性引用留给 flatten 在派生作用域解析）。
+void Instantiator::apply_extends_modifier(NodeId bc, Id<SMod> mod, NodeId scope) {
+  if (!mod.is_valid()) return;
+  const Symbol name = I_.nodes[bc].name;
+  const CompId cid = I_.nodes[bc].comp;
+  for (const SSubMod& s : I_.scode.mods[mod].subs) {
+    if (s.ident != name) continue;
+    const SMod& sm = I_.scode.mods[s.mod];
+    if (sm.kind != SModKind::Mod) { mark_unsupported("extends redeclare/break modifier"); return; }
+    Component& comp = I_.comps[cid];
+    if (comp.ty.kind == TypeKind::Complex && !sm.subs.empty()) {
+      mark_unsupported("extends modifier on composite");   // 需往子树传，v1 未做（easy slice 都是叶）
+      return;
+    }
+    if (sm.binding.is_valid()) {   // 绑定覆盖（extends A(x = 1)）——值在派生作用域解析
+      comp.binding.kind = BindingKind::Raw;
+      comp.binding.raw_exp = sm.binding;
+      comp.binding.scope = scope;
+    }
+    if (sm.is_final) comp.attributes.is_final = true;
+    if (!sm.subs.empty())   // 属性修饰（extends D(x(unit="kg"))）——最高优先（靠近派生），插到前面
+      comp.derived_mods.insert(comp.derived_mods.begin(), s.mod);
+  }
 }
 
 void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {

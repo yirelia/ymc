@@ -90,3 +90,7 @@
 ## 2026-09-18 — 单测拿"自己实现的输出"当期望值 = 自我确认，扫描门（真 oracle）才抓得住
 - 模式：expr_dump 把 `* / ^` 打成无空格（`a*b`、`r1^r2`），flat_dump_test 的 20 条优先级用例期望值又是照着这个错实现手写的，于是单测全绿。真相是 OMC `ExpressionDump.mo:112-116` binopSymbol1 所有二元算符两侧都带空格（`" * "` `" / "` `" ^ "`），R13 §4.2 line126 本来也写对了（"两侧各一空格；标量 + - * / ^"）——是我实现时凭印象去了空格，又用自证的单测把错误锁死。只有 flat_sweep（逐字节比真 omc 输出）在 OperationPow1 上暴露 `r1^r2` vs `r1 ^ r2`。
 - 规则：**打印器/格式化的期望值必须来自 oracle，不能来自自己的实现**。写 `*_dump` 单测时，每条期望字符串要么引 MLS/OMC 源码行号，要么先 `omc probe.mo` 实跑取真值粘进去，不能"我觉得应该长这样"。有 oracle 的阶段（S2 scode dump、S3 flat dump）优先靠 sweep/对拍守正确性，单测只锁"已对拍确认过"的样子——单测防回归，对拍防臆想。
+
+## 2026-09-18 — 单测的流水线要和 driver 完全一致，否则漏判 inst 阶段的 SKIP
+- 模式：加 extends 修饰后，`flatten_extends_modifier_on_nested_type_unsupported` 期望 SKIP 但单测判 uns=false。原因：`flatten_src` 助手只读了 `FlattenResult.unsupported`，没读 `Instantiator.unsupported()`——而 nested-type extends 修饰是在 **inst 阶段** mark 的。driver（main.cpp）两个都查，单测助手漏了一个，于是"未实现"被误判成"已支持并产出"。ymc 二进制本身行为正确（退 66），只是单测助手失真。
+- 规则：**单测的端到端助手必须复刻 driver 的完整判定链**。unsupported 是 inst + flatten 两阶段的并集（`I.unsupported() || fr.unsupported`），助手要合并两者再返回。凡是"驱动器查了 N 个条件、助手只查了 M<N 个"的地方都会漏判——写助手时对着 driver 主循环逐条抄。

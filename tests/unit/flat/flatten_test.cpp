@@ -36,9 +36,11 @@ std::string flatten_src(const char* src, bool* unsupported = nullptr) {
   I.make_top_node();
   NodeId root = I.instantiate_root(sc.elems[sc.program.back()].name);
   if (!root.is_valid() || inst.nodes[root].is_empty() || d.has_errors()) return "<error>";
+  // 未实现判定要合并 inst 与 flatten 两阶段（同 driver）：inst 阶段的 mark_unsupported 不体现在 FlattenResult 上。
   FlattenResult fr = flatten(inst, in, root);
-  if (unsupported) *unsupported = fr.unsupported;
-  if (fr.unsupported) return "<unsupported:" + fr.unsupported_reason + ">";
+  const bool uns = I.unsupported() || fr.unsupported;
+  if (unsupported) *unsupported = uns;
+  if (uns) return "<unsupported:" + (I.unsupported() ? I.unsupported_reason() : fr.unsupported_reason) + ">";
   return dump_flat(fr.model, in);
 }
 
@@ -162,6 +164,31 @@ YMC_TEST(flatten_enum_type_and_literal_binding) {
   YMC_CHECK_EQ(
       flatten_src("model M\n  type E = enumeration(one, two, three);\n  E e = E.one;\nend M;\n"),
       std::string("class M\n  enumeration(one, two, three) e = E.one;\nend M;\n"));
+}
+
+YMC_TEST(flatten_extends_modifier_binding) {
+  // extends 修饰绑定覆盖：extends A(x=1) → 继承的 x 拿到绑定（ExtendsMod1）。
+  YMC_CHECK_EQ(flatten_src("model A\n  Real x;\nend A;\nmodel M\n  extends A(x = 1);\nend M;\n"),
+               std::string("class M\n  Real x = 1.0;\nend M;\n"));
+}
+
+YMC_TEST(flatten_extends_modifier_chain_attrs) {
+  // extends 修饰属性沿继承链累积（PropagateExtends）：B extends A(x(unit)), C extends B(x(start))。
+  YMC_CHECK_EQ(
+      flatten_src("model A\n  Real x;\nend A;\n"
+                  "model B\n  extends A(x(unit = \"kg\"));\nend B;\n"
+                  "model C\n  extends B(x(start = 1));\nend C;\n"),
+      std::string("class C\n  Real x(unit = \"kg\", start = 1.0);\nend C;\n"));
+}
+
+YMC_TEST(flatten_extends_modifier_on_nested_type_unsupported) {
+  // extends 修饰命名嵌套类型（类修饰 mod9）→ 干净 SKIP。
+  bool uns = false;
+  std::string t = flatten_src(
+      "model A\n  type MyReal = Real;\n  MyReal x;\nend A;\n"
+      "model B\n  extends A(MyReal(start = 2.0));\nend B;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
 }
 
 YMC_TEST(flatten_unbound_parameter_with_start_unsupported) {

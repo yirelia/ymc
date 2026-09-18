@@ -38,6 +38,8 @@ class Instantiator {
   NodeId instantiate(NodeId def_node, NodeId parent);  // 克隆 def 节点 + instClass 填实例树
   void inst_class(NodeId inst_node, NodeId def_node);  // 建 FlatTree：递归组件 + extends 就地展开
   void inst_component(NodeId comp_node, NodeId enclosing);  // 解析组件类型（叶/复合）
+  // extends 修饰 `extends A(x = 1)`：把 mod 按名合并到继承来的组件 bc 上（绑定覆盖 + 属性 + final）。
+  void apply_extends_modifier(NodeId bc, Id<SMod> mod, NodeId scope);
 
   // ---- 查找（最小版，只够 v1：内建类型 + 本类/嵌套类 + 顶层）----
   NodeId lookup_class_name(const std::vector<Symbol>& path, NodeId scope);

@@ -209,6 +209,11 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       SKIP：短类别名到长类 `model M = P.M`（牵出常量内联）、extends 短类。
       → **43 PASS / 174 SKIP / 0 FAIL**（217 例，含 BuiltinAttribute1 解锁）；三套编译器 10/10 零警告，ASan 0 报告，+3 单测。
       注：OperationRelational1 从 slice 剔除记入分歧账本 —— flat 模型与 omc 1.25.0 逐字一致，仅文件 Result 多两行 `==` on Real 弃用告警（ymc 尚无诊断）。
+- [x] **加宽⑤extends 修饰**（2026-09-18）：`extends A(x=1)` 的修饰在 inst_class 拼接基类组件时合并进继承组件
+      （apply_extends_modifier）：绑定覆盖 + 属性（存 derived_mods，靠近派生的优先，沿继承链累积 PropagateExtends）+ final。
+      修饰命名非组件（嵌套类型 mod9 `A(MyReal(start=y))`）→ 标 unsupported（类修饰未做）。SKIP：extends 内建/短类、重复元素、复合目标。
+      顺带修单测助手 flatten_src：未实现判定要合并 inst+flatten 两阶段（原来漏 Instantiator.unsupported()，见 lessons）。
+      → **47 PASS / 170 SKIP / 0 FAIL**（217 例）；三套编译器 10/10 零警告，ASan 0 报告，+3 单测。
 - [ ] **下一子步（按 SKIP 桶加宽，每步对拍）**：evalConstants（constant/package 常量内联、参数默认值 borrow start）→
       完整 lookup（import、复合名跨包）→ inner/outer → 函数/ceval → 数组 → connect
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
