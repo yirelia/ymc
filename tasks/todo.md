@@ -261,8 +261,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       → easy-slice **108 PASS / 0 FAIL**（const14/17 转正 + 常见 `P.c` 模式）；oracle=live 107 逐字节一致；
       全 scodeinst PASS 109→111，FAIL 71 不变（无新增真 FAIL）；三套编译器 10/10 零警告，ASan 0，+2 单测。
       SKIP：const11/16（跨包 `extends P.M`）、ih2/3（package redeclare `package P1=P(i=2)`）——各需另一特性。
-- [ ] **下一子步（按 SKIP 桶加宽，每步对拍）**：参数求值/final（ceval3、evaluateAllParams 邻域）→ 跨包 extends →
-      数组进阶 → 复合 inner/outer → 记录 → connect → package redeclare
+- [x] **加宽⑬参数求值/final（结构参数）**（2026-09-18）：参数用在 `fixed=` 属性 → 求值成字面量 + 该参数及其依赖参数标
+      `final parameter`、绑定也求值成字面量（ceval3：`fixed = init_x`→`true`，init_x/p1/p2 全 final）。
+      eval_scode 扩到结构模式（allow_param + 收集用到的参数 + 逻辑/关系）；flatten_class 预扫各组件 fixed 收集 final 参数集，
+      emit_variable 据此标 final + 求值绑定；collect_attributes 对 fixed 做结构求值。
+      → easy-slice **109 PASS / 0 FAIL**；oracle=live 108 逐字节一致；全 scodeinst PASS 111→112，FAIL 71 不变；三编译器 10/10，ASan 0，+1 单测。
+      注：`start=a`、`y=b` 等非结构上下文的参数**不**求值/不 final（探针确认）；数组维度参数（Dim1）留给数组进阶桶。
+- [ ] **今日剩余（按序，每桶完整验证）**：跨包 extends → 数组进阶 → connect → 记录
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

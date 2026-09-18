@@ -321,6 +321,19 @@ YMC_TEST(flatten_nested_package_constant) {
   YMC_CHECK_EQ(flatten_src(src), std::string("class M\n  Integer a = 3;\n  Real b = 4.0;\nend M;\n"));
 }
 
+YMC_TEST(flatten_structural_param_fixed_final) {
+  // 参数用在 fixed → 求值成字面量 + 该参数及依赖标 final parameter（ceval3）。期望 = omc 1.25.0。
+  const char* src =
+      "model M\n  Real x(start = 2.0, fixed = c);\n"
+      "  parameter Boolean c = p or q;\n  parameter Boolean p = false;\n  parameter Boolean q = true;\n"
+      "equation\n  der(x) = -1;\nend M;\n";
+  const char* want =
+      "class M\n  Real x(start = 2.0, fixed = true);\n"
+      "  final parameter Boolean c = true;\n  final parameter Boolean p = false;\n"
+      "  final parameter Boolean q = true;\nequation\n  der(x) = -1.0;\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string(want));
+}
+
 YMC_TEST(flatten_unbound_parameter_with_start_unsupported) {
   // 无绑定 parameter 带 start → omc 补默认绑定 + 告警（参数默认值规则），本桶未做 → 干净 SKIP。
   bool uns = false;
