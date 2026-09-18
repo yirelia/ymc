@@ -1,7 +1,9 @@
 // 压平实现（S3 第一里程碑）。锚点见 flatten.h 头注与各处 R11/R13/R14 引用。
 #include "flat/flatten.h"
 
+#include <cmath>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "absyn/absyn.h"
 #include "base/strings.h"   // unescape_modelica_string
@@ -209,8 +211,8 @@ class Flattener {
       set_unsupported("non-equality equation (connect/if/for/when/assert…)");
       return;
     }
-    Id<Expr> a = inst_exp(eq.a, enclosing, prefix);
-    Id<Expr> b = inst_exp(eq.b, enclosing, prefix);
+    Id<Expr> a = simplify_expr(inst_exp(eq.a, enclosing, prefix));
+    Id<Expr> b = simplify_expr(inst_exp(eq.b, enclosing, prefix));
     // 用户数组方程 `x = {…}` 要逐元素定型/强转（数组 typing），v1 只做数组绑定 → SKIP。
     if (result_.model.exprs[a].kind == ExprKind::Array || result_.model.exprs[b].kind == ExprKind::Array) {
       set_unsupported("array equation");
@@ -258,7 +260,10 @@ class Flattener {
                                                                             : inst_exp(raw, enclosing, prefix);
       }
     }
-    if (binding.is_valid() && cty.kind == TypeKind::Real) binding = to_real(binding);   // `= 2` → `= 2.0`
+    if (binding.is_valid()) {
+      binding = simplify_expr(binding);   // 折叠常量子表达式（`1+2`→`3.0`）+ 已在 cref 内联的常量
+      if (cty.kind == TypeKind::Real) binding = to_real(binding);   // `= 2` → `= 2.0`
+    }
     // 属性来源（优先级序 R15 §3.4）：外来子修饰 > 组件自身声明修饰 > 短类链派生修饰（外层派生在前）。
     std::vector<ModSource> asrc;
     for (Id<SMod> m : mod_subs) asrc.push_back({m, mod_scope, mod_prefix});
@@ -387,7 +392,7 @@ class Flattener {
 
     // 数组绑定 → 数组方程 `name = {…}`（元素按叶类型强转）。
     if (braw.is_valid()) {
-      Id<Expr> rhs = coerce_deep(inst_exp(braw, bscope, bprefix), cty.kind);
+      Id<Expr> rhs = coerce_deep(simplify_expr(inst_exp(braw, bscope, bprefix)), cty.kind);
       Expr lhs;
       lhs.kind = ExprKind::Cref;
       lhs.ty = cty;
@@ -492,10 +497,10 @@ class Flattener {
     switch (vk) {
       case AttrVK::StateSel:
       case AttrVK::EnumComp: return enum_lit_value(val);   // `StateSelect.never` / `E.two`
-      case AttrVK::Real: return to_real(inst_exp(val, enclosing, prefix));   // `min = -100` → `-100.0`
+      case AttrVK::Real: return to_real(simplify_expr(inst_exp(val, enclosing, prefix)));   // `min = -100` → `-100.0`
       case AttrVK::Str:
       case AttrVK::Int:
-      case AttrVK::Bool: return inst_exp(val, enclosing, prefix);
+      case AttrVK::Bool: return simplify_expr(inst_exp(val, enclosing, prefix));
     }
     return inst_exp(val, enclosing, prefix);
   }
@@ -530,6 +535,11 @@ class Flattener {
       case ExpKind::Unary: return unary(e, enclosing, prefix);
       case ExpKind::IfExp: return if_exp(e, enclosing, prefix);
       case ExpKind::Call: return call(e, enclosing, prefix);
+      case ExpKind::Tuple:
+        // 单元素 Tuple = 源码括号分组（S1 保留括号成 1 元 Tuple）；解开即可，dump 再按优先级表重新加括号。
+        if (e.args.size() == 1) return inst_exp(e.args[0], enclosing, prefix);
+        set_unsupported("tuple");
+        return lit_int(0);
       case ExpKind::Array: {
         Expr r;
         r.kind = ExprKind::Array;
@@ -587,12 +597,17 @@ class Flattener {
         set_unsupported("unresolved sub-component reference");
         e.ty = Type::real();
       } else {
-        const Component& lc = I_.comps[I_.nodes[leaf].comp];
-        // 引用到 constant 或 final parameter → omc 内联成值（R14 §3）；v1 未做 evalConstants，标 unsupported。
-        if (lc.attributes.variability == SVariability::Const ||
-            (lc.attributes.variability == SVariability::Param && lc.attributes.is_final))
+        // 引用到 constant → omc 内联成值（R14 §3）。求值成功就直接返回字面量；求不出（非常量绑定 / 未支持算子 /
+        // 跨作用域常量）→ SKIP。final parameter omc 1.25.0 **不**内联（保留 `y = x`），当普通 cref 处理。
+        // 字段先拷贝（eval 会 arena add）。
+        const SVariability var = I_.comps[I_.nodes[leaf].comp].attributes.variability;
+        const Type lty = I_.comps[I_.nodes[leaf].comp].ty;
+        if (var == SVariability::Const) {
+          Id<Expr> v = eval_const_value(leaf);
+          if (v.is_valid()) return v;
           set_unsupported("constant evaluation");
-        e.ty = lc.ty;
+        }
+        e.ty = lty;
         // 数组叶引用：整体引用（数组运算/方程）v1 未做；下标引用需字面量且在界内（ymc 无验证 pass）。
         const SElement& lcel = I_.scode.elems[I_.comps[I_.nodes[leaf].comp].def];
         const bool leaf_array = !lcel.attr.dims.empty() || !lcel.type.dims.empty();
@@ -738,6 +753,145 @@ class Flattener {
     return add(std::move(c));
   }
 
+  // ---- evalConstants：常量折叠 + 常量/final 参数内联（R14）----
+  // omc 对每个绑定/方程/属性都折叠常量子表达式（`1+2`→`3.0`、`x+(1+2)`→`x+3.0`）。这里在类型化 Expr 上做：
+  // 整棵/子树是数值/布尔字面量就算出来，常量 cref 已在 cref() 里内联成字面量。v1 只折 Int/Real 算术、Int/Real 关系、
+  // 逻辑、Cast、if（常量条件）；枚举/布尔/字符串关系、内建函数不折（留给后续桶）。
+  bool is_num_lit(const Expr& e) const { return e.kind == ExprKind::IntLit || e.kind == ExprKind::RealLit; }
+  double as_real(Id<Expr> id) const {
+    const Expr& e = result_.model.exprs[id];
+    return e.kind == ExprKind::IntLit ? static_cast<double>(e.ival) : e.rval;
+  }
+
+  Id<Expr> simplify_expr(Id<Expr> id) {
+    const ExprKind k = result_.model.exprs[id].kind;
+    switch (k) {
+      case ExprKind::Binary: {
+        const Id<Expr> a0 = result_.model.exprs[id].a, b0 = result_.model.exprs[id].b;
+        const BinOp op = result_.model.exprs[id].bin;
+        const Type ty = result_.model.exprs[id].ty;
+        Id<Expr> a = simplify_expr(a0), b = simplify_expr(b0);
+        if (is_num_lit(result_.model.exprs[a]) && is_num_lit(result_.model.exprs[b])) {
+          const bool both_int = result_.model.exprs[a].kind == ExprKind::IntLit &&
+                                result_.model.exprs[b].kind == ExprKind::IntLit &&
+                                op != BinOp::Div && op != BinOp::Pow;
+          if (both_int) {
+            std::int64_t x = result_.model.exprs[a].ival, y = result_.model.exprs[b].ival;
+            switch (op) {
+              case BinOp::Add: return lit_int(x + y);
+              case BinOp::Sub: return lit_int(x - y);
+              case BinOp::Mul: return lit_int(x * y);
+              default: break;
+            }
+          }
+          double x = as_real(a), y = as_real(b);
+          switch (op) {
+            case BinOp::Add: return lit_real(x + y);
+            case BinOp::Sub: return lit_real(x - y);
+            case BinOp::Mul: return lit_real(x * y);
+            case BinOp::Div: if (y != 0.0) return lit_real(x / y); break;
+            case BinOp::Pow: return lit_real(std::pow(x, y));
+          }
+        }
+        Expr r; r.kind = ExprKind::Binary; r.bin = op; r.a = a; r.b = b; r.ty = ty;
+        return add(std::move(r));
+      }
+      case ExprKind::Unary: {
+        const Id<Expr> a0 = result_.model.exprs[id].a;
+        const UnOp op = result_.model.exprs[id].un;
+        const Type ty = result_.model.exprs[id].ty;
+        Id<Expr> a = simplify_expr(a0);
+        const Expr& ea = result_.model.exprs[a];
+        if (op == UnOp::Minus) {
+          if (ea.kind == ExprKind::IntLit) return lit_int(-ea.ival);
+          if (ea.kind == ExprKind::RealLit) return lit_real(-ea.rval);
+        }
+        Expr r; r.kind = ExprKind::Unary; r.un = op; r.a = a; r.ty = ty;
+        return add(std::move(r));
+      }
+      case ExprKind::Relation: {
+        const Id<Expr> a0 = result_.model.exprs[id].a, b0 = result_.model.exprs[id].b;
+        const RelOp op = result_.model.exprs[id].rel;
+        Id<Expr> a = simplify_expr(a0), b = simplify_expr(b0);
+        if (is_num_lit(result_.model.exprs[a]) && is_num_lit(result_.model.exprs[b])) {
+          double x = as_real(a), y = as_real(b);
+          switch (op) {
+            case RelOp::Lt: return lit_bool(x < y);
+            case RelOp::Le: return lit_bool(x <= y);
+            case RelOp::Gt: return lit_bool(x > y);
+            case RelOp::Ge: return lit_bool(x >= y);
+            case RelOp::Eq: return lit_bool(x == y);
+            case RelOp::Ne: return lit_bool(x != y);
+          }
+        }
+        Expr r; r.kind = ExprKind::Relation; r.rel = op; r.a = a; r.b = b; r.ty = Type::boolean();
+        return add(std::move(r));
+      }
+      case ExprKind::Logical: {
+        const Id<Expr> a0 = result_.model.exprs[id].a, b0 = result_.model.exprs[id].b;
+        const LogOp op = result_.model.exprs[id].log;
+        Id<Expr> a = simplify_expr(a0), b = simplify_expr(b0);
+        const Expr& ea = result_.model.exprs[a];
+        const Expr& eb = result_.model.exprs[b];
+        if (ea.kind == ExprKind::BoolLit && eb.kind == ExprKind::BoolLit)
+          return lit_bool(op == LogOp::And ? (ea.bval && eb.bval) : (ea.bval || eb.bval));
+        Expr r; r.kind = ExprKind::Logical; r.log = op; r.a = a; r.b = b; r.ty = Type::boolean();
+        return add(std::move(r));
+      }
+      case ExprKind::LogicalNot: {
+        const Id<Expr> a0 = result_.model.exprs[id].a;
+        Id<Expr> a = simplify_expr(a0);
+        const Expr& ea = result_.model.exprs[a];
+        if (ea.kind == ExprKind::BoolLit) return lit_bool(!ea.bval);
+        Expr r; r.kind = ExprKind::LogicalNot; r.a = a; r.ty = Type::boolean();
+        return add(std::move(r));
+      }
+      case ExprKind::Cast: {
+        const Id<Expr> a0 = result_.model.exprs[id].a;
+        Id<Expr> a = simplify_expr(a0);
+        const Expr& ea = result_.model.exprs[a];
+        if (ea.kind == ExprKind::IntLit) return lit_real(static_cast<double>(ea.ival));
+        if (ea.kind == ExprKind::RealLit) return a;
+        Expr r; r.kind = ExprKind::Cast; r.a = a; r.ty = Type::real();
+        return add(std::move(r));
+      }
+      case ExprKind::IfExp: {
+        const Id<Expr> c0 = result_.model.exprs[id].a, t0 = result_.model.exprs[id].b,
+                       e0 = result_.model.exprs[id].c;
+        const Type ty = result_.model.exprs[id].ty;
+        Id<Expr> cc = simplify_expr(c0);
+        const Expr& ec = result_.model.exprs[cc];
+        if (ec.kind == ExprKind::BoolLit) return simplify_expr(ec.bval ? t0 : e0);
+        Id<Expr> tt = simplify_expr(t0), ee = simplify_expr(e0);
+        Expr r; r.kind = ExprKind::IfExp; r.a = cc; r.b = tt; r.c = ee; r.ty = ty;
+        return add(std::move(r));
+      }
+      default:
+        return id;   // 叶（cref/time/…）、Array、Call 等原样
+    }
+  }
+
+  bool is_literal(Id<Expr> id) const {
+    ExprKind k = result_.model.exprs[id].kind;
+    return k == ExprKind::IntLit || k == ExprKind::RealLit || k == ExprKind::BoolLit ||
+           k == ExprKind::StringLit || k == ExprKind::EnumLit;
+  }
+
+  // 求一个 constant / final parameter 组件的值：实例化它的声明绑定（同作用域常量会递归内联）+ 折叠。
+  // 成功返回字面量 Id，失败（无绑定 / 折不成字面量 / 循环）返回 invalid。
+  Id<Expr> eval_const_value(NodeId leaf) {
+    const std::uint32_t key = leaf.raw;
+    if (evaluating_.count(key)) return {};   // 循环常量（`x=y; y=x`）
+    const Binding& bnd = I_.comps[I_.nodes[leaf].comp].binding;
+    if (bnd.kind != BindingKind::Raw || !bnd.raw_exp.is_valid()) return {};
+    const Id<Exp> raw = bnd.raw_exp;
+    const NodeId scope = bnd.scope;
+    evaluating_.insert(key);
+    Id<Expr> e = simplify_expr(inst_exp(raw, scope, {}));   // 常量值与前缀无关
+    evaluating_.erase(key);
+    return is_literal(e) ? e : Id<Expr>{};
+  }
+
   static bool map_binop(Op op, BinOp& out) {
     switch (op) {
       case Op::Add: case Op::EWAdd: out = BinOp::Add; return true;
@@ -776,6 +930,7 @@ class Flattener {
   Interner& in_;
   FlattenResult result_;
   std::unordered_map<std::uint32_t, std::vector<Symbol>> outer_redirect_;   // outer 组件节点 raw → inner 全名
+  std::unordered_set<std::uint32_t> evaluating_;   // 正在求值的常量节点（环检测）
 };
 
 }  // namespace

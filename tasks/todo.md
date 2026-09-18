@@ -225,8 +225,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       参数/常量数组绑定（omc 摊每元素）、整体数组引用（数组运算/方程）、非字面量维、越界/类型不符绑定/下标（ymc 无验证 pass）、
       派生类型带维度 `type V=Real[3]`（维在 derived_attr.dims）、复合数组。
       → easy-slice **55 PASS / 163 SKIP / 0 FAIL**（218 例，加 Subscript1）；三套编译器 10/10 零警告，ASan 0 报告，+4 单测。
-- [ ] **下一子步（按 SKIP 桶加宽，每步对拍）**：evalConstants（constant/package 常量内联、参数默认值 borrow start）→
-      数组进阶（参数数组绑定摊元素、size()/参数维、数组运算/矩阵积、connect）→ 复合 inner/outer → 完整 lookup → 函数/ceval
+- [x] **加宽⑧evalConstants 常量折叠**（2026-09-18）：类型化 Expr 上的 simplify_expr —— 折叠 Int/Real 算术、Int/Real 关系、
+      逻辑、Cast、if（常量条件），部分折叠（`x+(1+2)`→`x+3.0`）；constant cref 内联成值（eval_const_value 递归 + 环检测，
+      同作用域常量，bindings1 前向引用也过）。应用到每个绑定/方程/属性。**final parameter 不内联**（omc 1.25.0 保留 `y=x`，
+      分歧账本 +FinalParameter1）。顺带修：括号子表达式（S1 存成 1 元 Tuple）在 inst_exp 解开——原来任何带括号的表达式都 SKIP。
+      SKIP：枚举/布尔/字符串关系（需序数）、内建函数 ceval、跨作用域/package 常量、记录。
+      → easy-slice **59 PASS / 158 SKIP / 0 FAIL**（217 例）；全 scodeinst 无新增 FAIL（PASS 56→62）；三套编译器 10/10 零警告，ASan 0 报告，+5 单测。
+- [ ] **下一子步（按 SKIP 桶加宽，每步对拍）**：跨作用域/package 常量（完整 lookup + import）→ 内建函数 ceval（abs/sqrt/sin…）→
+      枚举/布尔关系折叠 → 数组进阶（参数数组绑定摊元素、size()/参数维、数组运算）→ 复合 inner/outer → 记录 → connect
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

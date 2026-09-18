@@ -241,6 +241,37 @@ YMC_TEST(flatten_whole_array_reference_unsupported) {
   YMC_CHECK(uns);
 }
 
+YMC_TEST(flatten_const_fold_and_inline) {
+  // 常量内联 + 算术折叠：constant z = x + y → 3.0（CevalBinding1）。
+  YMC_CHECK_EQ(
+      flatten_src("model M\n  constant Real x = 1.0;\n  constant Real y = 2.0;\n  constant Real z = x + y;\nend M;\n"),
+      std::string("class M\n  constant Real x = 1.0;\n  constant Real y = 2.0;\n  constant Real z = 3.0;\nend M;\n"));
+}
+
+YMC_TEST(flatten_const_inline_int_to_real) {
+  // 常量 Integer 内联进 Real 绑定 + 强转（CevalConstant1）。
+  YMC_CHECK_EQ(flatten_src("model M\n  constant Integer n = 3;\n  Real x = n;\nend M;\n"),
+               std::string("class M\n  constant Integer n = 3;\n  Real x = 3.0;\nend M;\n"));
+}
+
+YMC_TEST(flatten_partial_fold_keeps_variable) {
+  // 部分折叠：变量 + 常量子表达式 → 只折常量部分（`x + (1 + 2)` → `x + 3.0`）。
+  YMC_CHECK_EQ(flatten_src("model M\n  Real x;\n  Real y = x + (1 + 2);\nend M;\n"),
+               std::string("class M\n  Real x;\n  Real y = x + 3.0;\nend M;\n"));
+}
+
+YMC_TEST(flatten_final_parameter_not_inlined) {
+  // omc 1.25.0 不内联 final parameter：`Real y = x` 保留（分歧账本）。
+  YMC_CHECK_EQ(flatten_src("model M\n  final parameter Real x = 3.0;\n  Real y = x;\nend M;\n"),
+               std::string("class M\n  final parameter Real x = 3.0;\n  Real y = x;\nend M;\n"));
+}
+
+YMC_TEST(flatten_const_relation_fold) {
+  // 关系折叠（Int/Real）：constant Boolean b = 1 < 2 → true。
+  YMC_CHECK_EQ(flatten_src("model M\n  constant Boolean b = 1 < 2;\nend M;\n"),
+               std::string("class M\n  constant Boolean b = true;\nend M;\n"));
+}
+
 YMC_TEST(flatten_unbound_parameter_with_start_unsupported) {
   // 无绑定 parameter 带 start → omc 补默认绑定 + 告警（参数默认值规则），本桶未做 → 干净 SKIP。
   bool uns = false;
