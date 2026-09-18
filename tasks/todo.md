@@ -267,7 +267,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       emit_variable 据此标 final + 求值绑定；collect_attributes 对 fixed 做结构求值。
       → easy-slice **109 PASS / 0 FAIL**；oracle=live 108 逐字节一致；全 scodeinst PASS 111→112，FAIL 71 不变；三编译器 10/10，ASan 0，+1 单测。
       注：`start=a`、`y=b` 等非结构上下文的参数**不**求值/不 final（探针确认）；数组维度参数（Dim1）留给数组进阶桶。
-- [ ] **今日剩余（按序，每桶完整验证）**：跨包 extends → 数组进阶 → connect → 记录
+- [x] **加宽⑭跨包 extends**（2026-09-19）：基本 `extends P.Base`（限定基类名）本来就靠 lookup_class_name 走通；本桶修**继承成员的
+      词法作用域**——inst_class 拼接时把继承组件的 parent_scope 设成基类实例，使其限定名/常量按**基类作用域**解析
+      （const16 的 `P.P.i` 在 P.M 里命中嵌套 P.P 的遮蔽，而非派生类）。flatten 记 decl_scope_ 供 cref 限定解析用。
+      → easy-slice **110 PASS / 0 FAIL**（const16 转正）；oracle=live 109 逐字节一致；全 scodeinst PASS 112→113，FAIL 71 不变；三编译器 10/10，ASan 0，+1 单测。
+      SKIP：const11（还叠加组件修饰 `A a(j=3)` + 成员访问 `a.j`）、import-extends（ExtendImport，需 import 解析）、外部对象/replaceable extends。
+- [ ] **今日剩余（按序，每桶完整验证）**：数组进阶 → connect → 记录
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

@@ -308,6 +308,8 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node) {
       const std::vector<NodeId> base_comps = I_.trees[btree].components;   // 拷一份
       for (NodeId bc : base_comps) {
         if (prot) I_.nodes[bc].visibility = Visibility::Protected;   // protected extends（R11 §3.4-2）
+        // 继承成员的词法作用域 = 基类（限定名/常量按基类作用域解析，const16 的 `P.P.i` 要在 P.M 里找）。
+        I_.nodes[bc].parent_scope = base_inst;
         apply_extends_modifier(bc, ext_mod, inst_node);              // extends 修饰合并到继承组件
         flat.components.push_back(bc);
       }

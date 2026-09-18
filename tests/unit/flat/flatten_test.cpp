@@ -334,6 +334,15 @@ YMC_TEST(flatten_structural_param_fixed_final) {
   YMC_CHECK_EQ(flatten_src(src), std::string(want));
 }
 
+YMC_TEST(flatten_cross_package_extends) {
+  // 跨包 extends：`extends P.Base` 把 P.Base 的成员并进来。期望 = omc 1.25.0。
+  const char* src =
+      "package P\n  model Base\n    Real x = 1.0;\n    Real y;\n  end Base;\nend P;\n"
+      "model M\n  extends P.Base;\n  Real z = x;\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class M\n  Real x = 1.0;\n  Real y;\n  Real z = x;\nend M;\n"));
+}
+
 YMC_TEST(flatten_unbound_parameter_with_start_unsupported) {
   // 无绑定 parameter 带 start → omc 补默认绑定 + 告警（参数默认值规则），本桶未做 → 干净 SKIP。
   bool uns = false;

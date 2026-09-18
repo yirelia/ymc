@@ -277,7 +277,9 @@ class Flattener {
         flatten_class(ci, name, is_prot, child, inners);
         continue;
       }
+      decl_scope_ = cn;   // 组件声明处的词法作用域（继承成员 = 基类作用域，供限定名在原作用域解析，const16）
       emit_variable(cid, name, is_prot, prefix, inst_node, matched, ctx.scope, ctx.vprefix, comp_final, final_params);
+      decl_scope_ = Inst::empty_node();
     }
     // 本类方程（子组件方程已在上面递归时加入 → 符合 R11 §3.4-6"子组件先、本类后"）。
     // 段序：initial equation 先于 equation（R13 §2）；enclosing = 本实例，cref 前缀 = prefix。
@@ -965,9 +967,11 @@ class Flattener {
           if (!p.subscripts.empty()) { ok = false; break; }
           names.push_back(p.name);
         }
+        // 限定名在**声明处**作用域解析（继承成员 = 基类，const16 的 `P.P.i` 要在 P.M 里解析而非派生类）。
+        const NodeId qres = decl_scope_.is_valid() && !I_.nodes[decl_scope_].is_empty() ? decl_scope_ : enclosing;
         Id<SElement> qcomp;
         ScodeScope qscope;
-        if (ok && resolve_qual_const(names, c.leading_dot, scode_scope_of(enclosing), qcomp, qscope)) {
+        if (ok && resolve_qual_const(names, c.leading_dot, scode_scope_of(qres), qcomp, qscope)) {
           const Id<SMod> m = I_.scode.elems[qcomp].mod;
           if (m.is_valid() && I_.scode.mods[m].binding.is_valid()) {
             std::optional<CVal> v = eval_scode(I_.scode.mods[m].binding, qscope, 0);
@@ -1520,6 +1524,7 @@ class Flattener {
   FlattenResult result_;
   std::unordered_map<std::uint32_t, std::vector<Symbol>> outer_redirect_;   // outer 组件节点 raw → inner 全名
   std::unordered_set<std::uint32_t> evaluating_;   // 正在求值的常量节点（环检测）
+  NodeId decl_scope_;   // 当前正在算绑定的组件声明处作用域（限定名在此解析；继承成员 = 基类作用域）
 };
 
 }  // namespace
