@@ -237,7 +237,19 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       **踩坑**：`empty_node()=raw0` 也 `is_valid()`，判"找到没"必须用 `!nodes[x].is_empty()`——原来 12 个带 time/import 的用例全崩（lessons）。
       SKIP：package 限定名 `P.A.B.i`（const11/14/16/17）、package redeclare 修饰 `package P1=P(i=2)`（ih2/3）——要完整 package lookup。
       → easy-slice **60 PASS / 157 SKIP / 0 FAIL**；oracle=live 59 逐字节一致；全 scodeinst 无新增 FAIL（PASS 62→63）；三套编译器 10/10 零警告，ASan 0，+1 单测。
-- [ ] **下一子步（按 SKIP 桶加宽，每步对拍）**：package 限定常量 `P.A.B.c`（完整 lookup + import）→ 内建函数 ceval（abs/sqrt/sin…）→
+- [x] **加宽⑩标量内建函数**（2026-09-18）：白名单 Call 定型/符号打印 + 数值字面量常量折叠；覆盖数学函数、
+      `abs/sign/integer/div/mod/rem/max/min` 与 `der/pre/initial/terminal/edge/change/sample/smooth/semiLinear/homotopy`。
+      参数/常量 `der` 按 ParameterDer 折为 `0.0`；混合数值二元实参提升到 Real；非法常量域、除零、错误 smooth 类型/变率诚实 SKIP。
+      SKIP：`Integer(enum)`（Expr 尚无 ordinal）、`delay`/`noEvent`（任务卡“恒符号”与 testsuite 规范化/去包装语义冲突）、
+      数组/命名/限定/用户函数。新增 `FuncBuiltinSample.mo` 门用例与 2 个单测。
+      → easy-slice **103 PASS / 115 SKIP / 0 FAIL**（218 例）；oracle=live **102 一致 / 0 不一致 / 1 已登记 OMC 错误**；
+      全 scodeinst：改前既有 FAIL 91 → 改后 **71**（内建函数净修好 20 个广语料用例），`Func` 18 PASS / 0 FAIL，live 105/0 不一致；
+      gcc-debug / msvc-debug / msvc-asan 均 **10/10**，零警告，ASan 0 报告。
+      **实现由 Codex 按任务卡 `docs/tasks/T-S3-02-builtin-functions.md` 完成，Claude 验收修 3 处**（der 揭出的既有缺口）：
+      (1) if 表达式分支类型统一 `if c then der(x) else 0`→`else 0.0`（IfExpression17/InnerOuter3）；
+      (2) 复合/记录组件带整体声明绑定 `P.Clock(1)` → SKIP（Clock6，记录构造未做）；
+      (3) `inner outer` 组合前缀 → SKIP（InnerOuter3）。IfExpression17 记入分歧账本（1.25.0 不做 final 参数求值/if 化简，ymc 与 1.25.0 一致）。
+- [ ] **下一子步（按 SKIP 桶加宽，每步对拍）**：package 限定常量 `P.A.B.c`（完整 lookup + import）→
       枚举/布尔关系折叠 → 数组进阶 → 复合 inner/outer → 记录 → connect
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

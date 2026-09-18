@@ -106,6 +106,7 @@
 "FuncBuiltinMod.mo",
 "FuncBuiltinPre.mo",
 "FuncBuiltinRem.mo",
+"FuncBuiltinSample.mo",
 "FuncBuiltinScalar.mo",
 "FuncBuiltinSemiLinear.mo",
 "FuncBuiltinSign.mo",

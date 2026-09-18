@@ -26,6 +26,9 @@
 | — | omc 版本回退映射函数位置（R7§未找到3） | grep OMC 源码 conversion(noneFromVersion/from) | TBD-05 |
 | — | Blocks/Tables.mo 去 Include= 后 OMC 如何找头文件（R7§未找到） | 读 OMC codegen | 外部函数 S3e/S6 |
 | — | R4：$cse/$DER 默认可见性、name 数组下标逐字节、CSV 换行 \r\n？ | 实跑 dump 一份 .mat 探针 | resultio 精度 |
+| — | `integer(Real)` 在 NFCeval.mo:2476 调 `realInt`，但 omc 1.25.0 实跑 `integer(-9.9)=-10`（floor） | 查 1.25.0 `realInt` 运行时实现及负数约定；当前按 oracle 实测 floor | S3 标量内建常量折叠 |
+| — | `Integer(E.two)` 需枚举字面量 1 基序数；当前 Expr::EnumLit 只有路径、无 ordinal | 枚举 typing 桶给 EnumLit 补 ordinal 后实现 NFCeval.mo:2481-2487 | S3 枚举求值；当前 SKIP `enum ordinal` |
+| — | 任务卡把 `delay`/`noEvent` 列为恒符号，但 testsuite `FuncBuiltinDelay.mo` 会补第三参并化简零延迟，`CevalNoEvent1.mo` 会去包装 | 后续按两个测试文件补专用规范化语义；当前继续诚实 SKIP，避免把既有 SKIP 变真 FAIL | S3 内建函数加宽 |
 
 ## Oracle 分歧账本（testsuite `// Result:` vs 安装版 omc 1.25.0）
 
@@ -39,6 +42,7 @@ ymc 以 **omc 1.25.0 实测**为准；这些用例从 `docs/research/s3-easy-sli
 | flattening/.../FinalParameter3.mo | `Real y = 3.0;` | `Real y = a.x;` | 同上。 |
 | flattening/.../OperationRelational1.mo | class 体 + 2 行 `Warning: … == on Real operands is deprecated …` | 仅 class 体（告警走 stderr） | flat 模型逐字一致；ymc 尚无诊断/告警（S 级诊断另做）。文件 Result 含 omc 告警文本。 |
 | flattening/.../InnerOuter13.mo（反向） | `class InnerOuter13 Real x = 1.0;`（成功） | **报错退出**（1.25.0 更严） | 罕见反向：1.25.0 拒绝、文件+较新 OMC 接受。ymc 与文件/较新 OMC 一致（嵌套 outer 连接到 inner），sweep 按文件对拍 PASS。 |
+| flattening/.../IfExpression17.mo | `final parameter … dynamic = false;` + if 化简成 `m.x = m.u;` | `parameter … dynamic=false;` + 保留 `(if m.dynamic then der(m.x) else 0.0) + m.x = m.u;` | 较新 OMC 把常量参数求值成 final 并按 dynamic=false 化简 if；1.25.0 不做。ymc 与 1.25.0 逐字一致（if 分支类型统一 `0`→`0.0` 已修）。 |
 
 ## 已解决（并入工具/规格）
 

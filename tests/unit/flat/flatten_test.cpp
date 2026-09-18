@@ -289,4 +289,48 @@ YMC_TEST(flatten_unbound_parameter_with_start_unsupported) {
   YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
 }
 
+YMC_TEST(flatten_scalar_builtin_fold_and_symbolic) {
+  // 期望值来自安装版 omc 1.25.0 实跑 YmcBuiltinUnitProbe（2026-09-18）。
+  const char* src =
+      "model YmcBuiltinUnitProbe\n"
+      "  Real r1;\n"
+      "  Real r2;\n"
+      "  Integer i1;\n"
+      "  Integer i2;\n"
+      "  Real sqrtConst = sqrt(25);\n"
+      "  Real sqrtSymbol = sqrt(r1 + r2);\n"
+      "  Real absReal = abs(-2.0);\n"
+      "  Integer absInt = abs(3);\n"
+      "  Integer integerNeg = integer(-9.9);\n"
+      "  Integer divNeg = div(-10, 3);\n"
+      "  Real x;\n"
+      "  Real dx = der(x);\n"
+      "  Integer signSymbol = sign(i1 + i2);\n"
+      "end YmcBuiltinUnitProbe;\n";
+  const char* want =
+      "class YmcBuiltinUnitProbe\n"
+      "  Real r1;\n"
+      "  Real r2;\n"
+      "  Integer i1;\n"
+      "  Integer i2;\n"
+      "  Real sqrtConst = 5.0;\n"
+      "  Real sqrtSymbol = sqrt(r1 + r2);\n"
+      "  Real absReal = 2.0;\n"
+      "  Integer absInt = 3;\n"
+      "  Integer integerNeg = -10;\n"
+      "  Integer divNeg = -3;\n"
+      "  Real x;\n"
+      "  Real dx = der(x);\n"
+      "  Integer signSymbol = sign(/*Real*/(i1 + i2));\n"
+      "end YmcBuiltinUnitProbe;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string(want));
+}
+
+YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
+  bool uns = false;
+  const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(out, std::string("<unsupported:division by zero in constant>"));
+}
+
 YMC_TEST_MAIN

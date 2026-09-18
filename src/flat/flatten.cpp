@@ -2,6 +2,8 @@
 #include "flat/flatten.h"
 
 #include <cmath>
+#include <cstdlib>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -47,6 +49,61 @@ const std::vector<AttrSpec>& attr_table(TypeKind k) {
     case TypeKind::Enumeration: return enum_;
     default: return none_;
   }
+}
+
+// 标量内建函数白名单。求值语义锚点：OMC NFCeval.mo:2074-2129（分派）、2172-3059（evalBuiltin*）；
+// 逐字输出锚点：testsuite/flattening/modelica/scodeinst/{FuncBuiltin*,Ceval*}.mo。
+enum class BFArg : std::uint8_t { Keep, Real };
+enum class BFRes : std::uint8_t { SameArg0, Real, Integer, Boolean, SameArg1, CommonNum, DivType };
+struct BuiltinFn {
+  const char* name;
+  int arity;
+  bool foldable;
+  BFArg argdom;
+  BFRes res;
+};
+
+const BuiltinFn* lookup_builtin(std::string_view name) {
+  static constexpr BuiltinFn fns[] = {
+      {"abs", 1, true, BFArg::Keep, BFRes::SameArg0},
+      {"sign", 1, true, BFArg::Real, BFRes::Integer},
+      {"sqrt", 1, true, BFArg::Real, BFRes::Real},
+      {"sin", 1, true, BFArg::Real, BFRes::Real},
+      {"cos", 1, true, BFArg::Real, BFRes::Real},
+      {"tan", 1, true, BFArg::Real, BFRes::Real},
+      {"asin", 1, true, BFArg::Real, BFRes::Real},
+      {"acos", 1, true, BFArg::Real, BFRes::Real},
+      {"atan", 1, true, BFArg::Real, BFRes::Real},
+      {"atan2", 2, true, BFArg::Real, BFRes::Real},
+      {"sinh", 1, true, BFArg::Real, BFRes::Real},
+      {"cosh", 1, true, BFArg::Real, BFRes::Real},
+      {"tanh", 1, true, BFArg::Real, BFRes::Real},
+      {"exp", 1, true, BFArg::Real, BFRes::Real},
+      {"log", 1, true, BFArg::Real, BFRes::Real},
+      {"log10", 1, true, BFArg::Real, BFRes::Real},
+      {"ceil", 1, true, BFArg::Real, BFRes::Real},
+      {"floor", 1, true, BFArg::Real, BFRes::Real},
+      {"integer", 1, true, BFArg::Keep, BFRes::Integer},
+      {"div", 2, true, BFArg::Keep, BFRes::DivType},
+      {"mod", 2, true, BFArg::Keep, BFRes::DivType},
+      {"rem", 2, true, BFArg::Keep, BFRes::DivType},
+      {"Integer", 1, true, BFArg::Keep, BFRes::Integer},
+      {"max", 2, true, BFArg::Keep, BFRes::CommonNum},
+      {"min", 2, true, BFArg::Keep, BFRes::CommonNum},
+      {"der", 1, false, BFArg::Real, BFRes::Real},
+      {"pre", 1, false, BFArg::Keep, BFRes::SameArg0},
+      {"initial", 0, false, BFArg::Keep, BFRes::Boolean},
+      {"terminal", 0, false, BFArg::Keep, BFRes::Boolean},
+      {"edge", 1, false, BFArg::Keep, BFRes::Boolean},
+      {"change", 1, false, BFArg::Keep, BFRes::Boolean},
+      {"sample", 2, false, BFArg::Real, BFRes::Boolean},
+      {"smooth", 2, false, BFArg::Keep, BFRes::SameArg1},
+      {"semiLinear", 3, false, BFArg::Real, BFRes::Real},
+      {"homotopy", 2, false, BFArg::Keep, BFRes::SameArg0},
+  };
+  for (const BuiltinFn& fn : fns)
+    if (name == fn.name) return &fn;
+  return nullptr;
 }
 
 // 修饰传播上下文（R15 §3.3：没有全局修饰环境，每层 instClassDef 只把 mod 按名拆成子修饰传给下一层）。
@@ -134,6 +191,8 @@ class Flattener {
       if (cel.condition.is_valid()) set_unsupported("conditional component");
       // outer 组件：不产出变量，按名连到最近外层 inner，记重定向表供 cref 改写（R11 §5）。找不到 inner → SKIP。
       if (I_.comps[cid].attributes.is_outer) {
+        // `inner outer` 组合前缀：既声明本层变量又连外层 inner（InnerOuter3），v1 只做纯 outer → SKIP。
+        if (I_.comps[cid].attributes.is_inner) { set_unsupported("inner outer combined"); continue; }
         if (has_dims) { set_unsupported("outer array"); continue; }
         const InnerVar* found = nullptr;
         for (auto it = inners.rbegin(); it != inners.rend(); ++it)
@@ -178,9 +237,12 @@ class Flattener {
         SRestriction r = I_.scode.elems[cdef].restriction;
         if (r == SRestriction::Connector || r == SRestriction::ExpandableConnector)
           set_unsupported("connector type");
-        // 整体绑定 `A a = A(...)`（外来修饰给复合组件挂了 binding）v1 未做。
+        // 整体绑定 `A a = A(...)`（外来修饰或组件自身声明给复合/记录组件挂了 binding，如记录构造 `P.Clock(1)`）
+        // 需把字段值分配到子变量，v1 未做 → SKIP（Clock6）。
         for (Id<SMod> m : matched)
           if (I_.scode.mods[m].binding.is_valid()) set_unsupported("record/whole binding");
+        if (I_.comps[cid].binding.kind == BindingKind::Raw && I_.comps[cid].binding.raw_exp.is_valid())
+          set_unsupported("composite/record binding");
         // 组子层修饰上下文（R15 §3.3 优先级：外层实例修饰 > 组件自身声明修饰）。两者同时非空要合并两套作用域，
         // 本桶未做 → 标 unsupported（easy slice 不出现）。
         const bool own = cel.mod.is_valid() && !I_.scode.mods[cel.mod].subs.empty();
@@ -274,6 +336,15 @@ class Flattener {
     for (Id<SMod> dm : I_.comps[cid].derived_mods) asrc.push_back({dm, enclosing, prefix});
     std::vector<FlatVarAttr> attrs = collect_attributes(cid, asrc);
     const Component& comp = I_.comps[cid];
+    // initial()/terminal() 是 discrete；绑定到 parameter 会被 OMC 拒绝（FuncBuiltinInitial2/Terminal2）。
+    if (binding.is_valid() && comp.attributes.variability == SVariability::Param &&
+        result_.model.exprs[binding].kind == ExprKind::Call) {
+      const std::vector<Symbol>& call_name = result_.model.exprs[binding].call_name;
+      if (call_name.size() == 1) {
+        const std::string_view fn = in_.str(call_name[0]);
+        if (fn == "initial" || fn == "terminal") set_unsupported("binding variability");
+      }
+    }
     // flow/stream 变量需要连接方程（未连接顶层 flow → `x = 0.0`，R13 §6-2）——v1 未做 connect，标 unsupported。
     if (comp.attributes.connector != SConnectorType::Potential) set_unsupported("connector (flow/stream)");
     FlatVariable v;
@@ -732,20 +803,131 @@ class Flattener {
     Id<Expr> c = inst_exp(e.a, enclosing, prefix);
     Id<Expr> t = inst_exp(e.b, enclosing, prefix);
     Id<Expr> f = inst_exp(e.c, enclosing, prefix);
+    // 分支类型统一（MLS §10.6.4）：一支 Real 一支 Integer → 两支都提到 Real
+    //（`if c then der(x) else 0` → `else 0.0`，IfExpression17/InnerOuter3）。
+    const TypeKind tk = result_.model.exprs[t].ty.kind, fk = result_.model.exprs[f].ty.kind;
+    if ((tk == TypeKind::Real && fk == TypeKind::Integer) ||
+        (tk == TypeKind::Integer && fk == TypeKind::Real)) {
+      t = to_real(t);
+      f = to_real(f);
+    }
     Expr r; r.kind = ExprKind::IfExp; r.a = c; r.b = t; r.c = f; r.ty = result_.model.exprs[t].ty;
     return add(std::move(r));
   }
 
   Id<Expr> call(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
-    // v1 未做函数求值/内联：omc 会把内建数学函数在常量实参上折叠（abs/sin/…，R14 §4），用户函数会打印
-    // 函数定义块。两者都没做，标 unsupported（driver 退 66）。仍构造 Call 节点占位，避免半途空指针。
-    set_unsupported("function call / ceval");
     const Cref& fn = I_.absyn.crefs[e.cref];
+    const std::string_view builtin_name = fn.parts.size() == 1 ? in_.str(fn.parts[0].name) : std::string_view{};
+    const BuiltinFn* bf = nullptr;
+    bool supported = true;
+    if (fn.parts.size() != 1) {
+      set_unsupported("qualified function call");
+      supported = false;
+    }
+    for (Symbol name : e.arg_names)
+      if (name.is_valid()) {
+        set_unsupported("named function argument");
+        supported = false;
+        break;
+    }
+    if (supported) {
+      bf = lookup_builtin(builtin_name);
+      if (!bf) {
+        const std::string why = "function: " + std::string(builtin_name);
+        set_unsupported(why.c_str());
+        supported = false;
+      } else if (bf->arity >= 0 && static_cast<std::size_t>(bf->arity) != e.args.size()) {
+        set_unsupported("function arity");
+        supported = false;
+      }
+    }
+
+    std::vector<Id<Expr>> args;
+    args.reserve(e.args.size());
+    for (Id<Exp> arg : e.args) {
+      // 大写 Integer 只接枚举；先建 EnumLit，避免通用 cref 把 E.two 误记成跨作用域引用。
+      Id<Expr> a = supported && builtin_name == "Integer" && is_cref_exp(arg)
+                       ? enum_lit_value(arg)
+                       : inst_exp(arg, enclosing, prefix);
+      if (result_.model.exprs[a].kind == ExprKind::Array) {
+        set_unsupported("array function argument");
+        supported = false;
+      }
+      args.push_back(a);
+    }
+    if (supported) {
+      for (Id<Expr> a : args) {
+        const TypeKind k = result_.model.exprs[a].ty.kind;
+        const bool numeric = k == TypeKind::Integer || k == TypeKind::Real;
+        if ((bf->argdom == BFArg::Real || (bf->foldable && builtin_name != "Integer")) && !numeric) {
+          set_unsupported("non-numeric function argument");
+          supported = false;
+          break;
+        }
+      }
+    }
+    if (supported && builtin_name == "smooth") {
+      const TypeKind order_ty = result_.model.exprs[args[0]].ty.kind;
+      const TypeKind value_ty = result_.model.exprs[args[1]].ty.kind;
+      bool parameter_order = result_.model.exprs[args[0]].kind == ExprKind::IntLit;
+      if (!parameter_order && result_.model.exprs[args[0]].kind == ExprKind::Cref) {
+        const std::uint32_t raw = result_.model.exprs[args[0]].cref.resolved_node;
+        if (raw != Id<INode>::kInvalid) {
+          const NodeId node = NodeId::from_index(raw);
+          if (I_.nodes.contains(node) && !I_.nodes[node].is_empty() && I_.nodes[node].comp.is_valid()) {
+            const SVariability var = I_.comps[I_.nodes[node].comp].attributes.variability;
+            parameter_order = var == SVariability::Param || var == SVariability::Const;
+          }
+        }
+      }
+      if (order_ty != TypeKind::Integer || value_ty != TypeKind::Real || !parameter_order) {
+        set_unsupported("smooth argument type/variability");
+        supported = false;
+      }
+    }
+    if (supported && bf->argdom == BFArg::Real)
+      for (Id<Expr>& a : args) a = to_real(a);
+    // `/` 的结果域是 Real；任务卡的 integer(r1/r2) 与 FuncBuiltinInteger.mo 要求在调用内保留该强转。
+    if (supported && builtin_name == "integer" && args.size() == 1 &&
+        result_.model.exprs[args[0]].kind == ExprKind::Binary &&
+        result_.model.exprs[args[0]].bin == BinOp::Div && result_.model.exprs[args[0]].ty.kind == TypeKind::Integer) {
+      const Id<Expr> left0 = result_.model.exprs[args[0]].a;
+      const Id<Expr> right0 = result_.model.exprs[args[0]].b;
+      Id<Expr> left = to_real(left0);
+      Id<Expr> right = to_real(right0);
+      Expr div; div.kind = ExprKind::Binary; div.bin = BinOp::Div; div.a = left; div.b = right; div.ty = Type::real();
+      args[0] = add(std::move(div));
+    }
+    // 二元数值内建按公共数值类型调用；Encapsulated2/FuncBuiltinMax/Min 的 Result 会把混合实参提升到 Real。
+    if (supported && (bf->res == BFRes::CommonNum || bf->res == BFRes::DivType)) {
+      bool real = false;
+      for (Id<Expr> a : args) real |= result_.model.exprs[a].ty.kind == TypeKind::Real;
+      if (real)
+        for (Id<Expr>& a : args) a = to_real(a);
+    }
+
     Expr r;
     r.kind = ExprKind::Call;
     for (const CrefPart& p : fn.parts) r.call_name.push_back(p.name);
-    for (Id<Exp> arg : e.args) r.args.push_back(inst_exp(arg, enclosing, prefix));
-    r.ty = r.args.empty() ? Type::real() : result_.model.exprs[r.args[0]].ty;
+    r.args = std::move(args);
+    if (!supported) {
+      r.ty = Type::real();
+    } else {
+      switch (bf->res) {
+        case BFRes::SameArg0: r.ty = result_.model.exprs[r.args[0]].ty; break;
+        case BFRes::Real: r.ty = Type::real(); break;
+        case BFRes::Integer: r.ty = Type::integer(); break;
+        case BFRes::Boolean: r.ty = Type::boolean(); break;
+        case BFRes::SameArg1: r.ty = result_.model.exprs[r.args[1]].ty; break;
+        case BFRes::CommonNum:
+        case BFRes::DivType: {
+          bool real = false;
+          for (Id<Expr> a : r.args) real |= result_.model.exprs[a].ty.kind == TypeKind::Real;
+          r.ty = real ? Type::real() : Type::integer();
+          break;
+        }
+      }
+    }
     return add(std::move(r));
   }
 
@@ -766,7 +948,7 @@ class Flattener {
   // ---- evalConstants：常量折叠 + 常量/final 参数内联（R14）----
   // omc 对每个绑定/方程/属性都折叠常量子表达式（`1+2`→`3.0`、`x+(1+2)`→`x+3.0`）。这里在类型化 Expr 上做：
   // 整棵/子树是数值/布尔字面量就算出来，常量 cref 已在 cref() 里内联成字面量。v1 只折 Int/Real 算术、Int/Real 关系、
-  // 逻辑、Cast、if（常量条件）；枚举/布尔/字符串关系、内建函数不折（留给后续桶）。
+  // 逻辑、Cast、if（常量条件）及白名单标量内建函数；枚举/布尔/字符串关系仍不折。
   bool is_num_lit(const Expr& e) const { return e.kind == ExprKind::IntLit || e.kind == ExprKind::RealLit; }
   double as_real(Id<Expr> id) const {
     const Expr& e = result_.model.exprs[id];
@@ -876,8 +1058,109 @@ class Flattener {
         Expr r; r.kind = ExprKind::IfExp; r.a = cc; r.b = tt; r.c = ee; r.ty = ty;
         return add(std::move(r));
       }
+      case ExprKind::Call: {
+        const std::vector<Symbol> call_name = result_.model.exprs[id].call_name;
+        const std::vector<Id<Expr>> args0 = result_.model.exprs[id].args;
+        const Type ty = result_.model.exprs[id].ty;
+        std::vector<Id<Expr>> args;
+        args.reserve(args0.size());
+        for (Id<Expr> a : args0) args.push_back(simplify_expr(a));
+
+        auto rebuild = [&]() {
+          Expr r; r.kind = ExprKind::Call; r.call_name = call_name; r.args = args; r.ty = ty;
+          return add(std::move(r));
+        };
+        if (call_name.size() != 1) return rebuild();
+        const std::string_view name = in_.str(call_name[0]);
+        const BuiltinFn* bf = lookup_builtin(name);
+        if (!bf) return rebuild();
+        if (bf->arity >= 0 && static_cast<std::size_t>(bf->arity) != args.size()) return rebuild();
+        // ParameterDer.mo：常量/参数的导数为 0；普通变量仍保持 der(x) 符号形式。
+        if (name == "der" && args.size() == 1) {
+          bool zero = is_num_lit(result_.model.exprs[args[0]]);
+          if (!zero && result_.model.exprs[args[0]].kind == ExprKind::Cref) {
+            const std::uint32_t raw = result_.model.exprs[args[0]].cref.resolved_node;
+            if (raw != Id<INode>::kInvalid) {
+              const NodeId node = NodeId::from_index(raw);
+              if (I_.nodes.contains(node) && !I_.nodes[node].is_empty() && I_.nodes[node].comp.is_valid()) {
+                const SVariability var = I_.comps[I_.nodes[node].comp].attributes.variability;
+                zero = var == SVariability::Param || var == SVariability::Const;
+              }
+            }
+          }
+          if (zero) return lit_real(0.0);
+        }
+        if (!bf->foldable) return rebuild();
+        if (name == "Integer") {
+          set_unsupported("enum ordinal");
+          return rebuild();
+        }
+        for (Id<Expr> a : args)
+          if (!is_num_lit(result_.model.exprs[a])) return rebuild();
+
+        const double x = as_real(args[0]);
+        if (name == "abs") {
+          if (result_.model.exprs[args[0]].kind == ExprKind::IntLit)
+            return lit_int(std::llabs(result_.model.exprs[args[0]].ival));
+          return lit_real(std::fabs(x));
+        }
+        if (name == "sign") return lit_int(x > 0.0 ? 1 : x < 0.0 ? -1 : 0);
+        if (name == "sqrt") {
+          if (x < 0.0) { set_unsupported("constant function domain"); return rebuild(); }
+          return lit_real(std::sqrt(x));
+        }
+        if (name == "sin") return lit_real(std::sin(x));
+        if (name == "cos") return lit_real(std::cos(x));
+        if (name == "tan") return lit_real(std::tan(x));
+        if (name == "asin" || name == "acos") {
+          if (x < -1.0 || x > 1.0) { set_unsupported("constant function domain"); return rebuild(); }
+          return lit_real(name == "asin" ? std::asin(x) : std::acos(x));
+        }
+        if (name == "atan") return lit_real(std::atan(x));
+        if (name == "sinh") return lit_real(std::sinh(x));
+        if (name == "cosh") return lit_real(std::cosh(x));
+        if (name == "tanh") return lit_real(std::tanh(x));
+        if (name == "exp") return lit_real(std::exp(x));
+        if (name == "log" || name == "log10") {
+          if (x <= 0.0) { set_unsupported("constant function domain"); return rebuild(); }
+          return lit_real(name == "log" ? std::log(x) : std::log10(x));
+        }
+        if (name == "ceil") return lit_real(std::ceil(x));
+        if (name == "floor") return lit_real(std::floor(x));
+        if (name == "integer") return lit_int(static_cast<std::int64_t>(std::floor(x)));
+
+        const double y = as_real(args[1]);
+        if (name == "atan2") return lit_real(std::atan2(x, y));   // NFCeval.mo:2248-2252：atan2(y, x)
+        if ((name == "div" || name == "mod" || name == "rem") && y == 0.0) {
+          set_unsupported("division by zero in constant");
+          return rebuild();
+        }
+        const bool real = ty.kind == TypeKind::Real;
+        if (name == "div") {
+          if (real) return lit_real(std::trunc(x / y));
+          return lit_int(result_.model.exprs[args[0]].ival / result_.model.exprs[args[1]].ival);
+        }
+        if (name == "mod") {
+          if (real) return lit_real(x - std::floor(x / y) * y);
+          const std::int64_t ix = result_.model.exprs[args[0]].ival;
+          const std::int64_t iy = result_.model.exprs[args[1]].ival;
+          std::int64_t r = ix % iy;
+          if (r != 0 && ((r < 0) != (iy < 0))) r += iy;
+          return lit_int(r);
+        }
+        if (name == "rem") {
+          if (real) return lit_real(x - std::trunc(x / y) * y);
+          return lit_int(result_.model.exprs[args[0]].ival % result_.model.exprs[args[1]].ival);
+        }
+        if (name == "max" || name == "min") {
+          const bool take_x = name == "max" ? x >= y : x <= y;
+          if (real) return lit_real(take_x ? x : y);
+          return lit_int(take_x ? result_.model.exprs[args[0]].ival : result_.model.exprs[args[1]].ival);
+        }
+        return rebuild();
+      }
       default:
-        return id;   // 叶（cref/time/…）、Array、Call 等原样
+        return id;   // 叶（cref/time/…）、Array 等原样
     }
   }
 
