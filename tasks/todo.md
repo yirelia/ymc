@@ -187,8 +187,15 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       (2) expr_dump 的 `* / ^` 漏了两侧空格（OMC ExpressionDump.mo:112-116 全带空格）→ 补上并改正自证的单测。
       `__OpenModelica_commandLineOptions`（evaluateAllParameters/mergeComponents）会重写整个结果 → 标 unsupported。
       → **21 PASS / 199 SKIP / 0 FAIL**；三套编译器 10/10 零警告，ASan 0 报告。
-- [ ] **下一子步（按 SKIP 桶加宽，每步对拍）**：内建属性（start/unit…，19 例）→ 修饰合并（extends 修饰 13）→
-      evalConstants（常量/final 内联）→ 完整 lookup（复合名/import/内建枚举）→ inner/outer → 短类塌陷 → 函数/ceval → 数组
+- [x] **加宽②内建属性 start/unit**（2026-09-18）：标量叶组件的内建属性修饰 `x(start=…, unit=…, min=…, stateSelect=…)`
+      → 有序属性表（R13 §4.2，按类型属性序产出，与书写序无关）+ Real 属性 int→real 强转（`to_real` 补折 `-<intlit>`）+
+      枚举字面量值（`StateSelect.never`/`E.two` 直接建 EnumLit，绕过跨作用域 cref 检查）。丢弃 Real.unbounded/String.fixed。
+      复合组件上的修饰（`B b(x=1.0)`）→ 标 "modifier merge"（下一桶）；无绑定 parameter 带 start → 标 unsupported（参数默认值规则）。
+      → **22 PASS / 198 SKIP / 0 FAIL**（StateSelect1 新过；机制另用探针 5 类型逐字对拍 omc）；三套编译器 10/10 零警告，ASan 0 报告。
+      注：BuiltinAttribute1 的 Real/Int/Bool/String 行已正确，但整例被其枚举类型组件 `E e`（短类）挡在 SKIP —— 机制已就绪，
+      待"短类塌陷"桶补上枚举类型组件后自然转 PASS；Each4/BreakModifier3 的子组件属性也复用本机制，待"修饰合并"桶。
+- [ ] **下一子步（按 SKIP 桶加宽，每步对拍）**：修饰合并（复合组件绑定传播 `B b(x=1.0)`、final 传播、each、嵌套 `a(m(z=…))`，16 例）→
+      evalConstants（常量/final 内联、参数默认值）→ 完整 lookup（复合名/import/内建枚举）→ inner/outer → 短类塌陷 → 函数/ceval → 数组
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

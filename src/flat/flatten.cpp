@@ -8,6 +8,37 @@ namespace ymc {
 
 namespace {
 
+// 内建属性表（R13 §4.2：压平属性顺序 = 内建组件数组顺序，与书写序无关）。
+// vk 决定值的处理：Str/Int/Bool 直译字面量；Real 需整型→实型强转；StateSel/EnumComp 是枚举字面量（`T.lit`）。
+// 表内没有的名字（Real 的 unbounded/startOrigin、String 的 fixed）= 合法但 omc 丢弃（见 collect_attributes）。
+enum class AttrVK : std::uint8_t { Str, Real, Int, Bool, StateSel, EnumComp };
+struct AttrSpec { const char* name; AttrVK vk; };
+
+const std::vector<AttrSpec>& attr_table(TypeKind k) {
+  static const std::vector<AttrSpec> real_{
+      {"quantity", AttrVK::Str}, {"unit", AttrVK::Str}, {"displayUnit", AttrVK::Str},
+      {"min", AttrVK::Real}, {"max", AttrVK::Real}, {"start", AttrVK::Real}, {"fixed", AttrVK::Bool},
+      {"nominal", AttrVK::Real}, {"stateSelect", AttrVK::StateSel}};
+  static const std::vector<AttrSpec> int_{
+      {"quantity", AttrVK::Str}, {"min", AttrVK::Int}, {"max", AttrVK::Int},
+      {"start", AttrVK::Int}, {"fixed", AttrVK::Bool}};
+  static const std::vector<AttrSpec> bool_{
+      {"quantity", AttrVK::Str}, {"start", AttrVK::Bool}, {"fixed", AttrVK::Bool}};
+  static const std::vector<AttrSpec> string_{{"quantity", AttrVK::Str}, {"start", AttrVK::Str}};
+  static const std::vector<AttrSpec> enum_{
+      {"quantity", AttrVK::Str}, {"min", AttrVK::EnumComp}, {"max", AttrVK::EnumComp},
+      {"start", AttrVK::EnumComp}, {"fixed", AttrVK::Bool}};
+  static const std::vector<AttrSpec> none_{};
+  switch (k) {
+    case TypeKind::Real: return real_;
+    case TypeKind::Integer: return int_;
+    case TypeKind::Boolean: return bool_;
+    case TypeKind::String: return string_;
+    case TypeKind::Enumeration: return enum_;
+    default: return none_;
+  }
+}
+
 class Flattener {
  public:
   Flattener(Inst& inst, Interner& in) : I_(inst), in_(in) {}
@@ -59,13 +90,16 @@ class Flattener {
       const SElement& cel = I_.scode.elems[I_.comps[cid].def];
       if (!cel.attr.dims.empty() || !cel.type.dims.empty()) set_unsupported("array");
       if (cel.condition.is_valid()) set_unsupported("conditional component");
-      if (cel.mod.is_valid() && !I_.scode.mods[cel.mod].subs.empty()) set_unsupported("attribute modifier");
       if (I_.comps[cid].attributes.is_inner || I_.comps[cid].attributes.is_outer)
         set_unsupported("inner/outer");   // v1 还没做 inner/outer 链接（R11 §5）
       bool is_prot = protected_ctx || vis == Visibility::Protected;
       std::vector<Symbol> name = prefix;
       name.push_back(cname);
       if (I_.comps[cid].ty.kind == TypeKind::Complex) {
+        // 复合组件上的修饰（`B b(x = 1.0)`、`final A a(...)`）要把绑定/final 传播进实例树 —— 属于"修饰合并"桶，
+        // v1 还没做，标 unsupported（本桶只做标量叶组件的内建属性修饰）。
+        if (cel.mod.is_valid() && !I_.scode.mods[cel.mod].subs.empty())
+          set_unsupported("modifier merge");
         // 复合组件的类型必须是长类（PARTS）；短类/枚举/derived 走到这里说明 v1 还没做。
         NodeId ci = I_.comps[cid].class_inst;
         Id<SElement> cdef = I_.nodes[ci].def;
@@ -121,6 +155,8 @@ class Flattener {
       if (c.binding.kind == BindingKind::Raw && c.binding.raw_exp.is_valid())
         binding = inst_exp(c.binding.raw_exp, enclosing, prefix);
     }
+    // 内建属性修饰 `x(start=…, unit=…)` → 有序属性表（也会往 model.exprs add，故在取 comp 引用之前算）。
+    std::vector<FlatVarAttr> attrs = collect_attributes(cid, enclosing, prefix);
     const Component& comp = I_.comps[cid];
     // flow/stream 变量需要连接方程（未连接顶层 flow → `x = 0.0`，R13 §6-2）——v1 未做 connect，标 unsupported。
     if (comp.attributes.connector != SConnectorType::Potential) set_unsupported("connector (flow/stream)");
@@ -140,6 +176,13 @@ class Flattener {
       if (comp.attributes.direction == SDirection::Input) v.direction = FlatDirection::Input;
       else if (comp.attributes.direction == SDirection::Output) v.direction = FlatDirection::Output;
     }
+    // 无绑定 parameter 若带 start：omc 把 start 当默认值补成绑定（`x(start=1.0) = 1.0`）并告警（fixed=true 初始化）。
+    // 这是参数默认值规则（evalConstants 邻域），本桶只做属性打印 → 标 unsupported（保 FAIL=0）。
+    if (v.var_kind == FlatVarKind::Parameter && !binding.is_valid()) {
+      const Symbol start = in_.intern("start");
+      for (const FlatVarAttr& a : attrs)
+        if (a.name == start) { set_unsupported("unbound parameter default from start"); break; }
+    }
     // constant 组件的绑定 omc 一定求值成字面量（R14 §3）；绑定若还是表达式，说明要 evalConstants，v1 没做。
     if (v.var_kind == FlatVarKind::Constant && binding.is_valid()) {
       ExprKind bk = result_.model.exprs[binding].kind;
@@ -148,8 +191,77 @@ class Flattener {
       if (!is_lit) set_unsupported("constant evaluation");
     }
     v.binding = binding;
+    v.attributes = std::move(attrs);
     v.loc = comp.loc;
     result_.model.variables.push_back(std::move(v));
+  }
+
+  // 收集标量叶组件的内建属性修饰（本桶：R13 §4.2）。按类型属性表的**顺序**产出，与书写序无关。
+  // 遇到 v1 范围外的修饰形态（each/final/嵌套子修饰/redeclare/break、或类型无此属性名）→ 标 unsupported。
+  std::vector<FlatVarAttr> collect_attributes(CompId cid, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    std::vector<FlatVarAttr> out;
+    const Id<SMod> modid = I_.scode.elems[I_.comps[cid].def].mod;
+    if (!modid.is_valid()) return out;
+    // 拷贝 subs 与 type：下面 inst_exp/to_real 会往 model.exprs add；虽只动 exprs arena，拷一份最省心。
+    const std::vector<SSubMod> subs = I_.scode.mods[modid].subs;
+    if (subs.empty()) return out;
+    const Type ty = I_.comps[cid].ty;
+    const std::vector<AttrSpec>& table = attr_table(ty.kind);
+
+    // 合法但被 omc 丢弃的属性名：Real 的 unbounded/startOrigin、String 的 fixed（R13 §4.2）。
+    auto droppable = [&](Symbol name) -> bool {
+      if (name == in_.intern("unbounded") || name == in_.intern("startOrigin")) return true;
+      return ty.kind == TypeKind::String && name == in_.intern("fixed");
+    };
+    // 校验：每个 sub 必须是简单 `名=值`，且名字在表内或可丢弃；否则整例 unsupported（保 FAIL=0）。
+    for (const SSubMod& s : subs) {
+      const SMod& sm = I_.scode.mods[s.mod];
+      bool simple = sm.kind == SModKind::Mod && !sm.is_each && !sm.is_final &&
+                    sm.subs.empty() && sm.binding.is_valid();
+      bool named = droppable(s.ident);
+      for (const AttrSpec& a : table)
+        if (s.ident == in_.intern(a.name)) named = true;
+      if (!simple || !named) { set_unsupported("attribute modifier"); return out; }
+    }
+    // 按表序产出。
+    for (const AttrSpec& a : table) {
+      const Symbol an = in_.intern(a.name);
+      Id<SMod> smid;
+      for (const SSubMod& s : subs)
+        if (s.ident == an) { smid = s.mod; break; }
+      if (!smid.is_valid()) continue;
+      const Id<Exp> val = I_.scode.mods[smid].binding;
+      out.push_back({an, attr_value(a.vk, val, enclosing, prefix)});
+    }
+    return out;
+  }
+
+  Id<Expr> attr_value(AttrVK vk, Id<Exp> val, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    switch (vk) {
+      case AttrVK::StateSel:
+      case AttrVK::EnumComp: return enum_lit_value(val);   // `StateSelect.never` / `E.two`
+      case AttrVK::Real: return to_real(inst_exp(val, enclosing, prefix));   // `min = -100` → `-100.0`
+      case AttrVK::Str:
+      case AttrVK::Int:
+      case AttrVK::Bool: return inst_exp(val, enclosing, prefix);
+    }
+    return inst_exp(val, enclosing, prefix);
+  }
+
+  // 枚举属性值形如 `T.lit`（StateSelect.never、E.two）：直接按 cref 各段建 EnumLit，dump 打全路径（R13 §4.2）。
+  // 不走通用 cref 解析（它会把多段名当跨作用域引用标 unsupported）。
+  Id<Expr> enum_lit_value(Id<Exp> val) {
+    const Exp& e = I_.absyn.exps[val];
+    if (e.kind != ExpKind::CrefExp) { set_unsupported("enum attribute value"); return lit_int(0); }
+    const Cref& c = I_.absyn.crefs[e.cref];
+    Expr r;
+    r.kind = ExprKind::EnumLit;
+    r.ty = Type::of(TypeKind::Enumeration);
+    for (const CrefPart& p : c.parts) {
+      if (!p.subscripts.empty()) { set_unsupported("subscripted enum value"); return lit_int(0); }
+      r.enum_path.push_back(p.name);
+    }
+    return add(std::move(r));
   }
 
   // ---- instExpressions：Absyn Exp → 类型化 Expr（在 model.exprs）----
@@ -300,6 +412,11 @@ class Flattener {
     const Expr& x = result_.model.exprs[e];
     if (x.ty.kind == TypeKind::Real) return e;
     if (x.kind == ExprKind::IntLit) return lit_real(static_cast<double>(x.ival));
+    // 折叠 `-<intlit>`（如属性 `min = -100` → `-100.0`）：omc 前端会把整型常量按目标实型求值成实字面量。
+    if (x.kind == ExprKind::Unary && x.un == UnOp::Minus) {
+      const Expr& inner = result_.model.exprs[x.a];
+      if (inner.kind == ExprKind::IntLit) { double v = -static_cast<double>(inner.ival); return lit_real(v); }
+    }
     Expr c; c.kind = ExprKind::Cast; c.a = e; c.ty = Type::real();
     return add(std::move(c));
   }

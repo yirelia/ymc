@@ -89,4 +89,36 @@ YMC_TEST(flatten_connect_equation_still_unsupported) {
   YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
 }
 
+YMC_TEST(flatten_builtin_attributes) {
+  // 内建属性修饰：写序打乱 → 按类型属性表序产出；Real 属性 int→real 强转；Integer 不强转；
+  // String 的 fixed、Real 的 unbounded 被丢弃；stateSelect 是枚举字面量（全路径）。期望值 = omc 1.25.0 实测。
+  const char* src =
+      "model M\n"
+      "  Real r(start = 10, min = -100, max = 100, nominal = 1, unit = \"kg\", fixed = true, "
+      "unbounded = true, quantity = \"m\", displayUnit = \"mm\");\n"
+      "  Integer i(min = -100, max = 100, start = 10, fixed = true, quantity = \"c\");\n"
+      "  Boolean b(start = false, fixed = true, quantity = \"flag\");\n"
+      "  String s(start = \"hi\", fixed = true, quantity = \"name\");\n"
+      "  Real p(stateSelect = StateSelect.prefer);\n"
+      "end M;\n";
+  const char* want =
+      "class M\n"
+      "  Real r(quantity = \"m\", unit = \"kg\", displayUnit = \"mm\", min = -100.0, max = 100.0, "
+      "start = 10.0, fixed = true, nominal = 1.0);\n"
+      "  Integer i(quantity = \"c\", min = -100, max = 100, start = 10, fixed = true);\n"
+      "  Boolean b(quantity = \"flag\", start = false, fixed = true);\n"
+      "  String s(quantity = \"name\", start = \"hi\");\n"
+      "  Real p(stateSelect = StateSelect.prefer);\n"
+      "end M;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string(want));
+}
+
+YMC_TEST(flatten_unbound_parameter_with_start_unsupported) {
+  // 无绑定 parameter 带 start → omc 补默认绑定 + 告警（参数默认值规则），本桶未做 → 干净 SKIP。
+  bool uns = false;
+  std::string t = flatten_src("model M\n  parameter Real x(start = 1.0);\nend M;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+}
+
 YMC_TEST_MAIN
