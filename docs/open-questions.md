@@ -36,6 +36,7 @@ ymc 以 **omc 1.25.0 实测**为准；这些用例从 `docs/research/s3-easy-sli
 |---|---|---|---|
 | flattening/.../FinalParameter2.mo | `Real y = 3.0;`（final 参数内联） | `Real y = a.x;`（不内联） | 1.25.0 默认 DAE dump 不内联 final parameter；ymc 与 1.25.0 逐字一致。较新 OMC 才内联。 |
 | flattening/.../FinalParameter3.mo | `Real y = 3.0;` | `Real y = a.x;` | 同上。 |
+| flattening/.../OperationRelational1.mo | class 体 + 2 行 `Warning: … == on Real operands is deprecated …` | 仅 class 体（告警走 stderr） | flat 模型逐字一致；ymc 尚无诊断/告警（S 级诊断另做）。文件 Result 含 omc 告警文本。 |
 
 ## 已解决（并入工具/规格）
 

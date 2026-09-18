@@ -202,8 +202,15 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       → **31 PASS / 187 SKIP / 0 FAIL**（218 例）；mod/Each/Final/Mod/Visibility 桶转正；三套编译器 10/10 零警告，ASan 0 报告，+3 单测。
       注：FinalParameter2/3 从 slice 剔除并记入 open-questions 分歧账本 —— 文件 `// Result:` 是较新 OMC 生成（内联 final 参数 `y=3.0`），
       安装版 omc 1.25.0（本项目 oracle）实测 `y=a.x` 不内联，ymc 与 1.25.0 逐字一致。
-- [ ] **下一子步（按 SKIP 桶加宽，每步对拍）**：短类塌陷（`type V=Real(unit=…)` 派生/枚举类型组件，23 例，也解锁 BuiltinAttribute1）→
-      evalConstants（常量内联、参数默认值）→ 完整 lookup（复合名/import/内建枚举）→ inner/outer → 函数/ceval → 数组
+- [x] **加宽④短类塌陷**（2026-09-18）：inst 里把 `type V = Base(mods)` 顺链解析到内建/枚举底（R15 EXPANDED_DERIVED），
+      累积属性修饰（存 Component.derived_mods，外层派生优先）+ 累积前缀属性（constant/input/… 沿链，组件自身 > 靠近用处的派生）。
+      枚举类型组件塌成 `enumeration(lits)`（enum_literals 取自底层 ENUM 类）；枚举绑定 `E.one`/`P.E.one` 建 EnumLit 打全路径。
+      flatten：derived_mods 作为最低优先属性来源并入 collect_attributes；多段本地 cref 解析到叶子取正确类型。
+      SKIP：短类别名到长类 `model M = P.M`（牵出常量内联）、extends 短类。
+      → **43 PASS / 174 SKIP / 0 FAIL**（217 例，含 BuiltinAttribute1 解锁）；三套编译器 10/10 零警告，ASan 0 报告，+3 单测。
+      注：OperationRelational1 从 slice 剔除记入分歧账本 —— flat 模型与 omc 1.25.0 逐字一致，仅文件 Result 多两行 `==` on Real 弃用告警（ymc 尚无诊断）。
+- [ ] **下一子步（按 SKIP 桶加宽，每步对拍）**：evalConstants（constant/package 常量内联、参数默认值 borrow start）→
+      完整 lookup（import、复合名跨包）→ inner/outer → 函数/ceval → 数组 → connect
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

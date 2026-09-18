@@ -208,23 +208,28 @@ class Flattener {
       Id<Exp> mraw;
       for (Id<SMod> m : mod_subs)
         if (I_.scode.mods[m].binding.is_valid()) { mraw = I_.scode.mods[m].binding; break; }
+      // 枚举类型的绑定值 `E.one` / `P.E.one` 是枚举字面量（打全路径），不走会 SKIP 多段名的通用 cref 解析。
       if (mraw.is_valid()) {
-        binding = inst_exp(mraw, mod_scope, mod_prefix);
+        binding = (cty.kind == TypeKind::Enumeration && is_cref_exp(mraw)) ? enum_lit_value(mraw)
+                                                                           : inst_exp(mraw, mod_scope, mod_prefix);
       } else {
         const Binding& b = I_.comps[cid].binding;
         const BindingKind bk = b.kind;
         const Id<Exp> raw = b.raw_exp;
-        if (bk == BindingKind::Raw && raw.is_valid()) binding = inst_exp(raw, enclosing, prefix);
+        if (bk == BindingKind::Raw && raw.is_valid())
+          binding = (cty.kind == TypeKind::Enumeration && is_cref_exp(raw)) ? enum_lit_value(raw)
+                                                                            : inst_exp(raw, enclosing, prefix);
       }
     }
     if (binding.is_valid() && cty.kind == TypeKind::Real) binding = to_real(binding);   // `= 2` → `= 2.0`
-    // 属性来源（优先级序）：外来子修饰的子属性，再是组件自身声明修饰。
+    // 属性来源（优先级序 R15 §3.4）：外来子修饰 > 组件自身声明修饰 > 短类链派生修饰（外层派生在前）。
     std::vector<ModSource> asrc;
     for (Id<SMod> m : mod_subs) asrc.push_back({m, mod_scope, mod_prefix});
     {
       const Id<SMod> dm = I_.scode.elems[I_.comps[cid].def].mod;
       if (dm.is_valid()) asrc.push_back({dm, enclosing, prefix});
     }
+    for (Id<SMod> dm : I_.comps[cid].derived_mods) asrc.push_back({dm, enclosing, prefix});
     std::vector<FlatVarAttr> attrs = collect_attributes(cid, asrc);
     const Component& comp = I_.comps[cid];
     // flow/stream 变量需要连接方程（未连接顶层 flow → `x = 0.0`，R13 §6-2）——v1 未做 connect，标 unsupported。
@@ -359,6 +364,8 @@ class Flattener {
         return lit_int(0);   // 占位，driver 会因 unsupported 退 66
     }
   }
+
+  bool is_cref_exp(Id<Exp> ae) const { return I_.absyn.exps[ae].kind == ExpKind::CrefExp; }
 
   Id<Expr> lit_int(std::int64_t v) { Expr e; e.kind = ExprKind::IntLit; e.ival = v; e.ty = Type::integer(); return add(std::move(e)); }
   Id<Expr> lit_real(double v) { Expr e; e.kind = ExprKind::RealLit; e.rval = v; e.ty = Type::real(); return add(std::move(e)); }

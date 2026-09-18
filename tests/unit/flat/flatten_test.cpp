@@ -145,6 +145,25 @@ YMC_TEST(flatten_nested_class_modifier_unsupported) {
   YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
 }
 
+YMC_TEST(flatten_derived_type_collapses) {
+  // 短类塌陷：`type MyReal = Real(start=1.0)` → 组件 `MyReal x` 塌成 `Real x(start = 1.0)`。期望 = omc 1.25.0。
+  YMC_CHECK_EQ(flatten_src("type MyReal = Real(start = 1.0);\nmodel M\n  MyReal x;\nend M;\n"),
+               std::string("class M\n  Real x(start = 1.0);\nend M;\n"));
+}
+
+YMC_TEST(flatten_derived_prefix_accumulates) {
+  // 短类前缀累积：input + constant 沿链累积到组件（ClassAttributes2）。
+  YMC_CHECK_EQ(flatten_src("model M\n  type IR = input Real;\n  type CIR = constant IR;\n  CIR x = 1;\nend M;\n"),
+               std::string("class M\n  constant input Real x = 1.0;\nend M;\n"));
+}
+
+YMC_TEST(flatten_enum_type_and_literal_binding) {
+  // 枚举类型组件塌成 `enumeration(lits)`；绑定 `E.one` 是枚举字面量打全路径（enum1）。
+  YMC_CHECK_EQ(
+      flatten_src("model M\n  type E = enumeration(one, two, three);\n  E e = E.one;\nend M;\n"),
+      std::string("class M\n  enumeration(one, two, three) e = E.one;\nend M;\n"));
+}
+
 YMC_TEST(flatten_unbound_parameter_with_start_unsupported) {
   // 无绑定 parameter 带 start → omc 补默认绑定 + 告警（参数默认值规则），本桶未做 → 干净 SKIP。
   bool uns = false;

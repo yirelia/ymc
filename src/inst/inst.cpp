@@ -366,20 +366,59 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
     return;
   }
 
-  // 内建标量 → 叶组件；用户类 → 复合组件（递归实例化）。把结果先算进局部，最后再回写组件。
+  // 短类塌陷（R15 EXPANDED_DERIVED）：`type V = Base(mods)` 顺链解析到内建/枚举底，累积属性修饰
+  // （外层派生在前 = 优先级高）。lookup_class_name 会 arena add，循环里不缓存 INode 引用（只用 Id）。
+  std::vector<Id<SMod>> derived_mods;
+  // 短类的前缀属性（`type InputReal = input Real`、`type C = constant …`）累积到组件上：
+  // 组件自身 > 靠近用处的派生 > 更远派生（loop 外→内，first-non-default 胜）。
+  SVariability mvar = el.attr.var;
+  SDirection mdir = el.attr.dir;
+  SConnectorType mct = el.attr.ct;
+  NodeId base = ty_node;
+  for (int guard = 0; guard < 100 && base.is_valid() && !I_.nodes[base].is_empty(); ++guard) {
+    bool builtin = false;
+    for (int i = 0; i < 4; ++i)
+      if (base == builtin_[i]) { builtin = true; break; }
+    if (builtin) break;
+    const Id<SElement> ce = I_.nodes[base].def;
+    if (!ce.is_valid()) break;
+    if (I_.scode.elems[ce].def.kind != SClassDefKind::Derived) break;   // Enumeration/Parts/… 到底
+    const SClassDef& cd = I_.scode.elems[ce].def;
+    if (cd.derived_mod.is_valid()) {
+      const SMod& dm = I_.scode.mods[cd.derived_mod];
+      if (!dm.subs.empty() || dm.binding.is_valid()) derived_mods.push_back(cd.derived_mod);
+    }
+    if (mvar == SVariability::Var && cd.derived_attr.var != SVariability::Var) mvar = cd.derived_attr.var;
+    if (mdir == SDirection::Bidir && cd.derived_attr.dir != SDirection::Bidir) mdir = cd.derived_attr.dir;
+    if (mct == SConnectorType::Potential && cd.derived_attr.ct != SConnectorType::Potential) mct = cd.derived_attr.ct;
+    NodeId nxt = lookup_class_name(cd.derived_type.path, I_.nodes[base].parent_scope);
+    base = (nxt.is_valid() && !I_.nodes[nxt].is_empty()) ? nxt : Inst::empty_node();
+  }
+
+  // base = 内建 / 枚举 / 长类（复合）/ 解析失败。把结果算进局部，最后回写组件。
   NodeId class_inst = Inst::empty_node();
   Type ty;
-  bool is_builtin = false;
-  for (int i = 0; i < 4; ++i) {
-    if (ty_node == builtin_[i]) {
-      ty = Type::of(kBuiltinKinds[i]);
-      class_inst = ty_node;
-      is_builtin = true;
-      break;
-    }
+  bool leaf = false;
+  for (int i = 0; i < 4; ++i)
+    if (base == builtin_[i]) { ty = Type::of(kBuiltinKinds[i]); class_inst = base; leaf = true; break; }
+  if (!leaf && base.is_valid() && !I_.nodes[base].is_empty() &&
+      I_.scode.elems[I_.nodes[base].def].def.kind == SClassDefKind::Enumeration) {
+    const SClassDef& cd = I_.scode.elems[I_.nodes[base].def].def;
+    ty.kind = TypeKind::Enumeration;
+    ty.enum_path = {I_.nodes[base].name};   // 类型名（dump 用 enum_literals 打声明，enum_path 备用）
+    for (const SEnumItem& it : cd.enum_items) ty.enum_literals.push_back(it.literal);
+    class_inst = base;
+    leaf = true;
   }
-  if (!is_builtin) {
-    class_inst = instantiate(ty_node, comp_node);   // ← arena add：此后不得用先前取的组件引用
+  if (!leaf) {
+    if (!base.is_valid() || I_.nodes[base].is_empty()) {   // 派生链解析失败
+      mark_unsupported("unresolved derived base");
+      I_.comps[cid].kind = CompKind::Invalid;
+      return;
+    }
+    // 短类别名到长类（`model M = P.M`）会牵出常量内联等（ExtendsShort1 里 `x = n` → omc 内联成 2），v1 未做 → SKIP。
+    if (base != ty_node) mark_unsupported("short class aliasing composite");
+    class_inst = instantiate(base, comp_node);   // ← arena add：此后不得用先前取的组件引用
     ty.kind = TypeKind::Complex;
     ty.complex_node = class_inst.raw;
   }
@@ -389,6 +428,10 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
   Component& comp = I_.comps[cid];
   comp.class_inst = class_inst;
   comp.ty = ty;
+  comp.derived_mods = std::move(derived_mods);
+  comp.attributes.variability = mvar;   // 含短类前缀（constant/input/…）累积
+  comp.attributes.direction = mdir;
+  comp.attributes.connector = mct;
   if (bind.is_valid()) {
     comp.binding.kind = BindingKind::Raw;
     comp.binding.raw_exp = bind;
