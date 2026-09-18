@@ -603,7 +603,7 @@ class Flattener {
         const SVariability var = I_.comps[I_.nodes[leaf].comp].attributes.variability;
         const Type lty = I_.comps[I_.nodes[leaf].comp].ty;
         if (var == SVariability::Const) {
-          Id<Expr> v = eval_const_value(leaf);
+          Id<Expr> v = eval_const_value(leaf, enclosing);
           if (v.is_valid()) return v;
           set_unsupported("constant evaluation");
         }
@@ -639,8 +639,18 @@ class Flattener {
       for (Symbol p : prefix) e.cref.parts.push_back({p, {}});
       e.cref.resolved_node = local.raw;
     } else {
-      // 单段未解析（time 等内建）v1 当 Real 保留；多段未解析（跨包常量 A.B.c、package 常量）我们既不解析也不
-      // 求值，omc 会把它内联成值——标 unsupported（driver 退 66）。
+      // 本层没找到：单段名先试**跨作用域常量**（沿词法 parent_scope 找同名 constant，const10 的 `j = i`）。
+      if (c.parts.size() == 1 && c.parts[0].subscripts.empty()) {
+        NodeId cscope;
+        NodeId cc = lookup_const_upscope(enclosing, c.parts[0].name, cscope);
+        if (cc.is_valid() && !I_.nodes[cc].is_empty()) {   // empty_node()=raw0 也 is_valid()，必须查 is_empty
+          Id<Expr> v = eval_const_value(cc, cscope);
+          if (v.is_valid()) return v;
+          set_unsupported("constant evaluation");
+        }
+      }
+      // 单段未解析（time 等内建）v1 当 Real 保留；多段未解析（跨包常量 A.B.c、package 常量）v1 未做完整
+      // package lookup——omc 会内联成值，标 unsupported（driver 退 66）。
       if (c.parts.size() > 1) set_unsupported("qualified/cross-scope reference");
       for (const CrefPart& p : c.parts)
         if (!p.subscripts.empty()) set_unsupported("subscript on non-array");   // `time[2]` → omc 报错
@@ -877,19 +887,48 @@ class Flattener {
            k == ExprKind::StringLit || k == ExprKind::EnumLit;
   }
 
-  // 求一个 constant / final parameter 组件的值：实例化它的声明绑定（同作用域常量会递归内联）+ 折叠。
+  // 求一个 constant 组件的值：取它的声明绑定 + 在它的声明作用域里实例化（同/跨作用域常量都会递归内联）+ 折叠。
+  // decl_scope = 该常量所在的类（跨作用域时是找到它的那层 parent_scope；同作用域时 = 引用处 enclosing）。
+  // 绑定优先取实例化后的 comps.binding（含修饰覆盖）；def-only 组件（未完整实例化，跨作用域常量）从 SCODE 现取。
   // 成功返回字面量 Id，失败（无绑定 / 折不成字面量 / 循环）返回 invalid。
-  Id<Expr> eval_const_value(NodeId leaf) {
+  Id<Expr> eval_const_value(NodeId leaf, NodeId decl_scope) {
     const std::uint32_t key = leaf.raw;
     if (evaluating_.count(key)) return {};   // 循环常量（`x=y; y=x`）
-    const Binding& bnd = I_.comps[I_.nodes[leaf].comp].binding;
-    if (bnd.kind != BindingKind::Raw || !bnd.raw_exp.is_valid()) return {};
-    const Id<Exp> raw = bnd.raw_exp;
-    const NodeId scope = bnd.scope;
+    const CompId cid = I_.nodes[leaf].comp;
+    Id<Exp> raw;
+    NodeId scope;
+    const Binding& bnd = I_.comps[cid].binding;
+    if (bnd.kind == BindingKind::Raw && bnd.raw_exp.is_valid()) {
+      raw = bnd.raw_exp;
+      scope = bnd.scope;
+    } else {   // def-only：从 SCODE 取声明绑定，在声明作用域求值
+      const Id<SMod> m = I_.scode.elems[I_.comps[cid].def].mod;
+      if (m.is_valid()) raw = I_.scode.mods[m].binding;
+      scope = decl_scope;
+    }
+    if (!raw.is_valid()) return {};
     evaluating_.insert(key);
     Id<Expr> e = simplify_expr(inst_exp(raw, scope, {}));   // 常量值与前缀无关
     evaluating_.erase(key);
     return is_literal(e) ? e : Id<Expr>{};
+  }
+
+  // 跨作用域常量查找：沿词法 parent_scope 链找同名 constant 组件（从 SCODE 读可变性，def 组件 attributes 未填）。
+  // 命中返回组件节点并回填它所在作用域；否则返回 invalid。
+  NodeId lookup_const_upscope(NodeId scope, Symbol name, NodeId& found_scope) {
+    for (NodeId cur = scope; cur.is_valid() && !I_.nodes[cur].is_empty(); cur = I_.nodes[cur].parent_scope) {
+      // 防守：只碰有效 cls + 有效 tree 的 Class 节点（parent_scope 链可能有 <top>/未建树的节点，node_class 会断言）。
+      if (I_.nodes[cur].kind != NodeKind::Class || !I_.nodes[cur].cls.is_valid()) continue;
+      if (!I_.node_class(cur).tree.is_valid()) continue;
+      NodeId comp = find_local(cur, name);   // 未命中返回 empty_node()=raw0（is_valid 仍 true，须查 is_empty）
+      if (I_.nodes[comp].is_empty() || !I_.nodes[comp].comp.is_valid()) continue;
+      const Id<SElement> def = I_.comps[I_.nodes[comp].comp].def;
+      if (def.is_valid() && I_.scode.elems[def].attr.var == SVariability::Const) {
+        found_scope = cur;
+        return comp;
+      }
+    }
+    return Inst::empty_node();
   }
 
   static bool map_binop(Op op, BinOp& out) {

@@ -272,6 +272,15 @@ YMC_TEST(flatten_const_relation_fold) {
                std::string("class M\n  constant Boolean b = true;\nend M;\n"));
 }
 
+YMC_TEST(flatten_cross_scope_constant_inline) {
+  // 跨作用域常量：嵌套类 B 的 `j = i` 引用外层 A 的 constant i，沿 parent_scope 内联（const10）。
+  const char* src =
+      "model A\n  constant Integer i = 3;\n  model B\n    constant Integer j = i;\n    Real x = j;\n  end B;\nend A;\n"
+      "model C\n  A.B b;\nend C;\n";
+  const char* want = "class C\n  constant Integer b.j = 3;\n  Real b.x = 3.0;\nend C;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string(want));
+}
+
 YMC_TEST(flatten_unbound_parameter_with_start_unsupported) {
   // 无绑定 parameter 带 start → omc 补默认绑定 + 告警（参数默认值规则），本桶未做 → 干净 SKIP。
   bool uns = false;

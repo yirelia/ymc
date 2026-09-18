@@ -231,8 +231,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       分歧账本 +FinalParameter1）。顺带修：括号子表达式（S1 存成 1 元 Tuple）在 inst_exp 解开——原来任何带括号的表达式都 SKIP。
       SKIP：枚举/布尔/字符串关系（需序数）、内建函数 ceval、跨作用域/package 常量、记录。
       → easy-slice **59 PASS / 158 SKIP / 0 FAIL**（217 例）；全 scodeinst 无新增 FAIL（PASS 56→62）；三套编译器 10/10 零警告，ASan 0 报告，+5 单测。
-- [ ] **下一子步（按 SKIP 桶加宽，每步对拍）**：跨作用域/package 常量（完整 lookup + import）→ 内建函数 ceval（abs/sqrt/sin…）→
-      枚举/布尔关系折叠 → 数组进阶（参数数组绑定摊元素、size()/参数维、数组运算）→ 复合 inner/outer → 记录 → connect
+- [x] **加宽⑨跨作用域常量（enclosing-scope）**（2026-09-18）：cref 本层 find_local 未命中时，沿词法 parent_scope 链找同名
+      constant 组件（lookup_const_upscope，从 SCODE 读可变性——def-only 组件 attributes 未填），命中就 eval + 内联（const10 的 `j = i`）。
+      eval_const_value 加 decl_scope 参数 + SCODE 绑定回退（跨作用域常量是 def-only，comps.binding 未设）。
+      **踩坑**：`empty_node()=raw0` 也 `is_valid()`，判"找到没"必须用 `!nodes[x].is_empty()`——原来 12 个带 time/import 的用例全崩（lessons）。
+      SKIP：package 限定名 `P.A.B.i`（const11/14/16/17）、package redeclare 修饰 `package P1=P(i=2)`（ih2/3）——要完整 package lookup。
+      → easy-slice **60 PASS / 157 SKIP / 0 FAIL**；oracle=live 59 逐字节一致；全 scodeinst 无新增 FAIL（PASS 62→63）；三套编译器 10/10 零警告，ASan 0，+1 单测。
+- [ ] **下一子步（按 SKIP 桶加宽，每步对拍）**：package 限定常量 `P.A.B.c`（完整 lookup + import）→ 内建函数 ceval（abs/sqrt/sin…）→
+      枚举/布尔关系折叠 → 数组进阶 → 复合 inner/outer → 记录 → connect
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

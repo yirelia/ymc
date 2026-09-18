@@ -98,3 +98,7 @@
 ## 2026-09-18 — 横切特性（数组）的 FAIL=0 要对着"广语料"验，curated slice 会漏
 - 模式：数组标量化的最小版只在 easy-slice（217 例，几乎没数组）上验，显示 FAIL=0，就以为没事。一扫全 scodeinst（1325 例）冒出 34 个数组 FAIL：参数数组绑定要摊到每元素（我只做连续数组的数组方程）、数组运算 `x+y`/矩阵积（整体数组引用我当标量处理）、越界/类型错绑定（omc 报错、ymc 无验证 pass 照产出）、派生类型带维度 `type V=Real[3]`（塌陷时把维度丢了，维度在 derived_attr.dims 不是 derived_type.dims）。都是"我这版不支持却硬产出错文本"。
 - 规则：(1) 数组/求值这类**横切**特性，FAIL=0 必须对**广语料**（全目录）验，不能只看 curated slice——slice 是"已达标"集合，天然不含未做特性的坑。(2) 部分实现必须把不支持的分支**显式 SKIP**：参数数组绑定、整体数组引用（数组运算/方程）、非字面量维度、越界/类型不符绑定、派生类型维度——每个都在会产错文本的操作前拦。(3) ymc 无验证 pass，凡是 omc 靠类型/边界检查**报错**的用例（invalid model），ymc 只能靠"形状/类型/边界的最小检查"退成 SKIP，别硬产出。(4) 字段存哪要 grep 确认（derived 维度在 derived_attr.dims），别照名字猜。
+
+## 2026-09-18 — empty_node()=raw 0 也 is_valid()：判"找到没"必须用 !nodes[x].is_empty()，不是 id.is_valid()
+- 模式：跨作用域常量沿 parent_scope 链 find_local，未命中时 find_local 返回 `Inst::empty_node()`（= `NodeId::from_index(0)`，raw 0）。我用 `if (cc.is_valid())` 判是否命中——但 raw 0 的 `is_valid()` 返回 **true**（0 是合法下标，哨兵语义靠 arena 里的"空节点"体现，不是靠 id 无效）。于是空结果被当成命中，`eval_const_value(空节点, 未初始化 scope)` 一路 `comps[空].def` 越界 → `contains(id)` 断言崩。12 个用带 `time`/import 的用例全崩（它们的名字解析不到本地，触发跨作用域查找返回空）。
+- 规则：**本仓库 NodeId 的"无效/空"是 raw 0，且 `is_valid()` 对 raw 0 返回 true**。判一个节点 id 是否真的指向实体，一律照 callers 的既有写法 `x.is_valid() && !I_.nodes[x].is_empty()`（或至少 `!I_.nodes[x].is_empty()`），**不能只用 `id.is_valid()`**。find_local 之类"未命中返回 empty_node()"的函数，其返回值必须这样判。新写任何走 parent_scope/instance_parent 链、或接收 find_* 返回值的代码都按此审。
