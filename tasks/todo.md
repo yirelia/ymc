@@ -249,8 +249,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       (1) if 表达式分支类型统一 `if c then der(x) else 0`→`else 0.0`（IfExpression17/InnerOuter3）；
       (2) 复合/记录组件带整体声明绑定 `P.Clock(1)` → SKIP（Clock6，记录构造未做）；
       (3) `inner outer` 组合前缀 → SKIP（InnerOuter3）。IfExpression17 记入分歧账本（1.25.0 不做 final 参数求值/if 化简，ymc 与 1.25.0 一致）。
+- [x] **加宽⑪枚举/布尔关系折叠**（2026-09-18）：EnumLit 补 1 基序数（Expr.enum_index；扫作用域 SCODE 元素找 enumeration 类，
+      cref 也认 `E.lit` 建 EnumLit）；simplify_expr 关系折叠扩到枚举（序数）、布尔（false<true）、字符串（字典序），
+      加常量逻辑折叠（去掉 rel_or_logic 的过时 SKIP，符号 `a and b` 照打）、`Integer(enum)`→序数。
+      ceval3 的 `fixed = <参数>` 需参数求值（omc 求值成字面量 + 标 final）→ 加 `fixed` 非字面量 SKIP 守卫，避免退成 FAIL。
+      → easy-slice **106 PASS / 0 FAIL**（CevalRelation1/Logical1/IntegerEnum1 转正）；oracle=live 105 逐字节一致；
+      全 scodeinst PASS 106→109，FAIL 71 不变（无新增真 FAIL）；三套编译器 10/10 零警告，ASan 0，+3 单测。
 - [ ] **下一子步（按 SKIP 桶加宽，每步对拍）**：package 限定常量 `P.A.B.c`（完整 lookup + import）→
-      枚举/布尔关系折叠 → 数组进阶 → 复合 inner/outer → 记录 → connect
+      参数求值/final（ceval3、evaluateAllParams 邻域）→ 数组进阶 → 复合 inner/outer → 记录 → connect
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

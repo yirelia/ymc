@@ -281,6 +281,30 @@ YMC_TEST(flatten_cross_scope_constant_inline) {
   YMC_CHECK_EQ(flatten_src(src), std::string(want));
 }
 
+YMC_TEST(flatten_enum_relation_fold) {
+  // 枚举关系按序数折叠（E.one=1 < E.two=2 → true）。期望 = omc 1.25.0（CevalRelation1）。
+  YMC_CHECK_EQ(
+      flatten_src("model M\n  type E = enumeration(one, two, three);\n  constant Boolean b = E.one < E.two;\nend M;\n"),
+      std::string("class M\n  constant Boolean b = true;\nend M;\n"));
+}
+
+YMC_TEST(flatten_bool_and_string_relation_fold) {
+  // 布尔关系 false<true（`true < false`→false）、字符串字典序（`\"1\" < \"2\"`→true）。
+  YMC_CHECK_EQ(flatten_src("model M\n  constant Boolean b = true < false;\nend M;\n"),
+               std::string("class M\n  constant Boolean b = false;\nend M;\n"));
+  YMC_CHECK_EQ(flatten_src("model M\n  constant Boolean b = \"1\" < \"2\";\nend M;\n"),
+               std::string("class M\n  constant Boolean b = true;\nend M;\n"));
+}
+
+YMC_TEST(flatten_logical_and_integer_enum_fold) {
+  // 常量逻辑折叠（`false and true`→false）；Integer(enum) → 序数（CevalIntegerEnum1）。
+  YMC_CHECK_EQ(flatten_src("model M\n  constant Boolean b = false and true;\nend M;\n"),
+               std::string("class M\n  constant Boolean b = false;\nend M;\n"));
+  YMC_CHECK_EQ(
+      flatten_src("model M\n  type E = enumeration(one, two, three);\n  constant Integer i = Integer(E.two);\nend M;\n"),
+      std::string("class M\n  constant Integer i = 2;\nend M;\n"));
+}
+
 YMC_TEST(flatten_unbound_parameter_with_start_unsupported) {
   // 无绑定 parameter 带 start → omc 补默认绑定 + 告警（参数默认值规则），本桶未做 → 干净 SKIP。
   bool uns = false;

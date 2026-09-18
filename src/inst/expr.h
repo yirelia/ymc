@@ -74,6 +74,7 @@ struct Expr {
   bool bval = false;           // BoolLit
   Symbol sval;                 // StringLit：解转义后的值（打印时再 escapedString）
   std::vector<Symbol> enum_path;  // EnumLit：全限定字面量 Pkg.E.lit（R13：打印全路径）
+  std::int64_t enum_index = 0;    // EnumLit：1 基序数（枚举关系/Integer() 折叠用）；0 = 未解析
 
   // 引用 / 运算
   ExprCref cref;               // Cref

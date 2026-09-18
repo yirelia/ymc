@@ -311,14 +311,14 @@ class Flattener {
         if (I_.scode.mods[m].binding.is_valid()) { mraw = I_.scode.mods[m].binding; break; }
       // 枚举类型的绑定值 `E.one` / `P.E.one` 是枚举字面量（打全路径），不走会 SKIP 多段名的通用 cref 解析。
       if (mraw.is_valid()) {
-        binding = (cty.kind == TypeKind::Enumeration && is_cref_exp(mraw)) ? enum_lit_value(mraw)
+        binding = (cty.kind == TypeKind::Enumeration && is_cref_exp(mraw)) ? enum_lit_value(mraw, mod_scope)
                                                                            : inst_exp(mraw, mod_scope, mod_prefix);
       } else {
         const Binding& b = I_.comps[cid].binding;
         const BindingKind bk = b.kind;
         const Id<Exp> raw = b.raw_exp;
         if (bk == BindingKind::Raw && raw.is_valid())
-          binding = (cty.kind == TypeKind::Enumeration && is_cref_exp(raw)) ? enum_lit_value(raw)
+          binding = (cty.kind == TypeKind::Enumeration && is_cref_exp(raw)) ? enum_lit_value(raw, enclosing)
                                                                             : inst_exp(raw, enclosing, prefix);
       }
     }
@@ -557,7 +557,11 @@ class Flattener {
         for (const SSubMod& s : I_.scode.mods[src.mod].subs)
           if (s.ident == an) { smid = s.mod; break; }
         if (!smid.is_valid()) continue;
-        out.push_back({an, attr_value(a.vk, I_.scode.mods[smid].binding, src.scope, src.vprefix)});
+        const Id<Expr> v = attr_value(a.vk, I_.scode.mods[smid].binding, src.scope, src.vprefix);
+        // `fixed` 必是参数/常量 Boolean，omc 求值成字面量（并把参数标 final），ceval3 的 `fixed = init_x`→`true`；
+        // ymc 只折常量，参数引用折不成字面量 → 需参数求值，v1 未做 → SKIP。
+        if (an == in_.intern("fixed") && !is_literal(v)) { set_unsupported("parameter evaluation in attribute"); return out; }
+        out.push_back({an, v});
         break;
       }
     }
@@ -567,7 +571,7 @@ class Flattener {
   Id<Expr> attr_value(AttrVK vk, Id<Exp> val, NodeId enclosing, const std::vector<Symbol>& prefix) {
     switch (vk) {
       case AttrVK::StateSel:
-      case AttrVK::EnumComp: return enum_lit_value(val);   // `StateSelect.never` / `E.two`
+      case AttrVK::EnumComp: return enum_lit_value(val, enclosing);   // `StateSelect.never` / `E.two`
       case AttrVK::Real: return to_real(simplify_expr(inst_exp(val, enclosing, prefix)));   // `min = -100` → `-100.0`
       case AttrVK::Str:
       case AttrVK::Int:
@@ -578,10 +582,15 @@ class Flattener {
 
   // 枚举属性值形如 `T.lit`（StateSelect.never、E.two）：直接按 cref 各段建 EnumLit，dump 打全路径（R13 §4.2）。
   // 不走通用 cref 解析（它会把多段名当跨作用域引用标 unsupported）。
-  Id<Expr> enum_lit_value(Id<Exp> val) {
+  Id<Expr> enum_lit_value(Id<Exp> val, NodeId scope) {
     const Exp& e = I_.absyn.exps[val];
     if (e.kind != ExpKind::CrefExp) { set_unsupported("enum attribute value"); return lit_int(0); }
-    const Cref& c = I_.absyn.crefs[e.cref];
+    return make_enum_lit(I_.absyn.crefs[e.cref], scope);
+  }
+
+  // 从 cref `E.lit` / `P.E.lit` 建 EnumLit：enum_path 打全路径；若能把倒数第二段当枚举类名解析（同/外层作用域的
+  // SCODE 元素里找 enumeration 类），补 1 基序数（关系/Integer() 折叠用）；解析不到序数留 0（仍能正确 dump）。
+  Id<Expr> make_enum_lit(const Cref& c, NodeId scope) {
     Expr r;
     r.kind = ExprKind::EnumLit;
     r.ty = Type::of(TypeKind::Enumeration);
@@ -589,7 +598,31 @@ class Flattener {
       if (!p.subscripts.empty()) { set_unsupported("subscripted enum value"); return lit_int(0); }
       r.enum_path.push_back(p.name);
     }
+    if (c.parts.size() >= 2) {
+      const SClassDef* ed = find_enum_def(scope, c.parts[c.parts.size() - 2].name);
+      if (ed) {
+        const Symbol lit = c.parts.back().name;
+        for (std::size_t i = 0; i < ed->enum_items.size(); ++i)
+          if (ed->enum_items[i].literal == lit) { r.enum_index = static_cast<std::int64_t>(i) + 1; break; }
+      }
+    }
     return add(std::move(r));
+  }
+
+  // 沿词法 parent_scope 链，在各作用域类的 SCODE 元素里找名为 name 的 enumeration 类，返回其 SClassDef；否则 null。
+  // （实例的 FlatTree 只存 components 不存嵌套类，所以直接扫 SCODE 元素，不走实例树。）
+  const SClassDef* find_enum_def(NodeId scope, Symbol name) {
+    for (NodeId s = scope; s.is_valid() && !I_.nodes[s].is_empty(); s = I_.nodes[s].parent_scope) {
+      const Id<SElement> d = I_.nodes[s].def;
+      if (!d.is_valid()) continue;
+      for (Id<SElement> eid : I_.scode.elems[d].def.elements) {
+        const SElement& el = I_.scode.elems[eid];
+        if (el.kind == SElementKind::Class && el.name == name &&
+            el.def.kind == SClassDefKind::Enumeration)
+          return &el.def;
+      }
+    }
+    return nullptr;
   }
 
   // ---- instExpressions：Absyn Exp → 类型化 Expr（在 model.exprs）----
@@ -720,6 +753,14 @@ class Flattener {
           set_unsupported("constant evaluation");
         }
       }
+      // 多段名先试**枚举字面量** `E.lit`：倒数第二段是作用域里的 enumeration 类、末段是它的字面量 → 建 EnumLit
+      //（带序数，供关系/Integer() 折叠；如 `E.one < E.two`）。
+      if (c.parts.size() >= 2 && c.parts.back().subscripts.empty()) {
+        const SClassDef* ed = find_enum_def(enclosing, c.parts[c.parts.size() - 2].name);
+        if (ed)
+          for (const SEnumItem& it : ed->enum_items)
+            if (it.literal == c.parts.back().name) return make_enum_lit(c, enclosing);
+      }
       // 单段未解析（time 等内建）v1 当 Real 保留；多段未解析（跨包常量 A.B.c、package 常量）v1 未做完整
       // package lookup——omc 会内联成值，标 unsupported（driver 退 66）。
       if (c.parts.size() > 1) set_unsupported("qualified/cross-scope reference");
@@ -778,8 +819,7 @@ class Flattener {
       return add(std::move(r));
     }
     if (map_logop(e.op, lop)) {
-      // omc 会折叠常量关系/逻辑（`false and false`→`false`，R14 §4）——v1 未做 simplify，标 unsupported。
-      set_unsupported("relational/logical simplification");
+      // 常量逻辑由 simplify_expr 折叠（`false and false`→`false`）；非常量 `a and b` 保持符号，dump 照打。
       Expr r; r.kind = ExprKind::Logical; r.log = lop; r.a = a; r.b = b; r.ty = Type::boolean();
       return add(std::move(r));
     }
@@ -847,7 +887,7 @@ class Flattener {
     for (Id<Exp> arg : e.args) {
       // 大写 Integer 只接枚举；先建 EnumLit，避免通用 cref 把 E.two 误记成跨作用域引用。
       Id<Expr> a = supported && builtin_name == "Integer" && is_cref_exp(arg)
-                       ? enum_lit_value(arg)
+                       ? enum_lit_value(arg, enclosing)
                        : inst_exp(arg, enclosing, prefix);
       if (result_.model.exprs[a].kind == ExprKind::Array) {
         set_unsupported("array function argument");
@@ -1005,17 +1045,28 @@ class Flattener {
         const Id<Expr> a0 = result_.model.exprs[id].a, b0 = result_.model.exprs[id].b;
         const RelOp op = result_.model.exprs[id].rel;
         Id<Expr> a = simplify_expr(a0), b = simplify_expr(b0);
-        if (is_num_lit(result_.model.exprs[a]) && is_num_lit(result_.model.exprs[b])) {
-          double x = as_real(a), y = as_real(b);
+        // 关系折叠：< <= > >= == <>，比较键按类型取（数值→double、布尔→0/1(false<true)、
+        // 枚举→序数、字符串→字典序）。omc CevalRelation1。
+        auto rel = [op](auto x, auto y) -> bool {
           switch (op) {
-            case RelOp::Lt: return lit_bool(x < y);
-            case RelOp::Le: return lit_bool(x <= y);
-            case RelOp::Gt: return lit_bool(x > y);
-            case RelOp::Ge: return lit_bool(x >= y);
-            case RelOp::Eq: return lit_bool(x == y);
-            case RelOp::Ne: return lit_bool(x != y);
+            case RelOp::Lt: return x < y;
+            case RelOp::Le: return x <= y;
+            case RelOp::Gt: return x > y;
+            case RelOp::Ge: return x >= y;
+            case RelOp::Eq: return x == y;
+            case RelOp::Ne: return x != y;
           }
-        }
+          return false;
+        };
+        const Expr& ea = result_.model.exprs[a];
+        const Expr& eb = result_.model.exprs[b];
+        if (is_num_lit(ea) && is_num_lit(eb)) return lit_bool(rel(as_real(a), as_real(b)));
+        if (ea.kind == ExprKind::BoolLit && eb.kind == ExprKind::BoolLit)
+          return lit_bool(rel(ea.bval ? 1 : 0, eb.bval ? 1 : 0));
+        if (ea.kind == ExprKind::EnumLit && eb.kind == ExprKind::EnumLit && ea.enum_index && eb.enum_index)
+          return lit_bool(rel(ea.enum_index, eb.enum_index));
+        if (ea.kind == ExprKind::StringLit && eb.kind == ExprKind::StringLit)
+          return lit_bool(rel(in_.str(ea.sval), in_.str(eb.sval)));
         Expr r; r.kind = ExprKind::Relation; r.rel = op; r.a = a; r.b = b; r.ty = Type::boolean();
         return add(std::move(r));
       }
@@ -1092,7 +1143,9 @@ class Flattener {
         }
         if (!bf->foldable) return rebuild();
         if (name == "Integer") {
-          set_unsupported("enum ordinal");
+          const Expr& ea = result_.model.exprs[args[0]];
+          if (ea.kind == ExprKind::EnumLit && ea.enum_index) return lit_int(ea.enum_index);
+          set_unsupported("enum ordinal");   // 序数没解析出来（跨包枚举等）→ SKIP
           return rebuild();
         }
         for (Id<Expr> a : args)
