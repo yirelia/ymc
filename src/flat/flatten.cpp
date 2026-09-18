@@ -39,6 +39,26 @@ const std::vector<AttrSpec>& attr_table(TypeKind k) {
   }
 }
 
+// 修饰传播上下文（R15 §3.3：没有全局修饰环境，每层 instClassDef 只把 mod 按名拆成子修饰传给下一层）。
+// flatten 的 DFS 本身就是这个逐层下降，这里把"适用于本层各子元素的修饰"顺着 DFS 带下去。
+//   mods    ：本层子元素可能命中的修饰节点（其 subs 按子元素名匹配；多个 = 重名/多来源并集，如 mod4 的两个 a(...)）。
+//   scope   ：修饰里表达式 cref 的解析作用域（= 修饰书写处的实例；R15 §1 binding 自带作用域）。
+//   vprefix ：修饰里表达式解析后要加的前缀（= 书写处的前缀）。
+//   final_all：上层 final 传播（`final A a(...)` → a 整棵子树 final）。
+struct ModCtx {
+  std::vector<Id<SMod>> mods;
+  NodeId scope;
+  std::vector<Symbol> vprefix;
+  bool final_all = false;
+};
+
+// 单个属性/绑定的来源：一个修饰节点 + 它的解析作用域。按优先级排列（外层实例修饰在前）。
+struct ModSource {
+  Id<SMod> mod;
+  NodeId scope;
+  std::vector<Symbol> vprefix;
+};
+
 class Flattener {
  public:
   Flattener(Inst& inst, Interner& in) : I_(inst), in_(in) {}
@@ -55,7 +75,7 @@ class Flattener {
       for (const SSubMod& s : I_.scode.mods[el.cmt.annotation].subs)
         if (s.ident == in_.intern("__OpenModelica_commandLineOptions"))
           set_unsupported("__OpenModelica_commandLineOptions annotation");
-    flatten_class(root, {}, /*protected_ctx=*/false);
+    flatten_class(root, {}, /*protected_ctx=*/false, ModCtx{});
     // 重复变量名 → omc 会去重（R11 §3.4-3）；v1 未做，标 unsupported（driver 退 66）。
     for (std::size_t i = 0; i < result_.model.variables.size(); ++i)
       for (std::size_t j = i + 1; j < result_.model.variables.size(); ++j)
@@ -70,7 +90,8 @@ class Flattener {
  private:
   // ---- flatten：带前缀 DFS（R11 §3.4）----
   // protected_ctx：外层组件是 protected 时，其所有子变量也 protected（R13 §3；ComponentAttributes1）。
-  void flatten_class(NodeId inst_node, const std::vector<Symbol>& prefix, bool protected_ctx) {
+  void flatten_class(NodeId inst_node, const std::vector<Symbol>& prefix, bool protected_ctx,
+                     const ModCtx& ctx) {
     // 算法段 v1 未做（方程段的 Equals 已支持，见文末 collect_equations）。
     const SElement& def = I_.scode.elems[I_.nodes[inst_node].def];
     if (!def.def.algorithms.empty() || !def.def.initial_algorithms.empty())
@@ -82,11 +103,13 @@ class Flattener {
     }
     ClassTreeId tree = I_.node_class(inst_node).tree;
     const std::vector<NodeId> comps = I_.trees[tree].components;  // 拷一份（下面会往 arena add）
+    // 校验：外来修饰的每个子名都必须命中本类某个组件——否则是嵌套类修饰 `a(B(...))`（ClassMod1）或写错名，
+    // 本桶未做 → 标 unsupported（保 FAIL=0）。
+    check_modifier_names(comps, ctx);
     for (NodeId cn : comps) {
       const CompId cid = I_.nodes[cn].comp;
       const Symbol cname = I_.nodes[cn].name;
       const Visibility vis = I_.nodes[cn].visibility;
-      // v1 未实现的组件级构造：数组、条件组件、属性修饰（start=…）——碰到就标 unsupported（driver 退 66）。
       const SElement& cel = I_.scode.elems[I_.comps[cid].def];
       if (!cel.attr.dims.empty() || !cel.type.dims.empty()) set_unsupported("array");
       if (cel.condition.is_valid()) set_unsupported("conditional component");
@@ -95,26 +118,51 @@ class Flattener {
       bool is_prot = protected_ctx || vis == Visibility::Protected;
       std::vector<Symbol> name = prefix;
       name.push_back(cname);
+
+      // 从外来修饰里取命中本组件名的子修饰（重名并集：mod4 的两个 a(...)）；判 final、判不支持形态。
+      std::vector<Id<SMod>> matched;
+      bool sub_final = false;
+      for (Id<SMod> m : ctx.mods)
+        for (const SSubMod& s : I_.scode.mods[m].subs)
+          if (s.ident == cname) {
+            const SMod& sm = I_.scode.mods[s.mod];
+            if (sm.kind != SModKind::Mod) set_unsupported("redeclare/break modifier");
+            if (sm.is_final) sub_final = true;
+            matched.push_back(s.mod);
+          }
+      const bool comp_final = ctx.final_all || sub_final || I_.comps[cid].attributes.is_final;
+
       if (I_.comps[cid].ty.kind == TypeKind::Complex) {
-        // 复合组件上的修饰（`B b(x = 1.0)`、`final A a(...)`）要把绑定/final 传播进实例树 —— 属于"修饰合并"桶，
-        // v1 还没做，标 unsupported（本桶只做标量叶组件的内建属性修饰）。
-        if (cel.mod.is_valid() && !I_.scode.mods[cel.mod].subs.empty())
-          set_unsupported("modifier merge");
         // 复合组件的类型必须是长类（PARTS）；短类/枚举/derived 走到这里说明 v1 还没做。
         NodeId ci = I_.comps[cid].class_inst;
         Id<SElement> cdef = I_.nodes[ci].def;
         if (!cdef.is_valid() || I_.scode.elems[cdef].def.kind != SClassDefKind::Parts) {
           set_unsupported("short/enum/derived type");
-        } else {
-          // 连接器（含 expandable）要 connect 展开 + 方向/flow 规则（R13 §3/§6）——v1 未做，整个标 unsupported。
-          SRestriction r = I_.scode.elems[cdef].restriction;
-          if (r == SRestriction::Connector || r == SRestriction::ExpandableConnector)
-            set_unsupported("connector type");
-          flatten_class(ci, name, is_prot);   // 复合组件递归（protected 传播给子变量）
+          continue;
         }
+        // 连接器（含 expandable）要 connect 展开 + 方向/flow 规则（R13 §3/§6）——v1 未做，整个标 unsupported。
+        SRestriction r = I_.scode.elems[cdef].restriction;
+        if (r == SRestriction::Connector || r == SRestriction::ExpandableConnector)
+          set_unsupported("connector type");
+        // 整体绑定 `A a = A(...)`（外来修饰给复合组件挂了 binding）v1 未做。
+        for (Id<SMod> m : matched)
+          if (I_.scode.mods[m].binding.is_valid()) set_unsupported("record/whole binding");
+        // 组子层修饰上下文（R15 §3.3 优先级：外层实例修饰 > 组件自身声明修饰）。两者同时非空要合并两套作用域，
+        // 本桶未做 → 标 unsupported（easy slice 不出现）。
+        const bool own = cel.mod.is_valid() && !I_.scode.mods[cel.mod].subs.empty();
+        ModCtx child;
+        child.final_all = comp_final;
+        if (!matched.empty() && own) {
+          set_unsupported("stacked modifier scopes");
+        } else if (!matched.empty()) {
+          child.mods = matched; child.scope = ctx.scope; child.vprefix = ctx.vprefix;
+        } else if (own) {
+          child.mods = {cel.mod}; child.scope = inst_node; child.vprefix = prefix;
+        }
+        flatten_class(ci, name, is_prot, child);
         continue;
       }
-      emit_variable(cid, name, is_prot, prefix, inst_node);
+      emit_variable(cid, name, is_prot, prefix, inst_node, matched, ctx.scope, ctx.vprefix, comp_final);
     }
     // 本类方程（子组件方程已在上面递归时加入 → 符合 R11 §3.4-6"子组件先、本类后"）。
     // 段序：initial equation 先于 equation（R13 §2）；enclosing = 本实例，cref 前缀 = prefix。
@@ -146,17 +194,38 @@ class Flattener {
     else result_.model.equations.push_back(id);
   }
 
+  // mod_subs：命中本叶组件名的外来子修饰（优先级序），其 .binding 覆盖声明绑定、.subs 覆盖声明属性；
+  // mod_scope/mod_prefix：这些修饰值的解析作用域（书写处）。force_final：上层 final 传播。
   void emit_variable(CompId cid, const std::vector<Symbol>& name, bool is_protected,
-                     const std::vector<Symbol>& prefix, NodeId enclosing) {
-    // 先把绑定算出来（会往 model.exprs add），再取组件字段——不跨 add 持组件引用（arena 纪律）。
+                     const std::vector<Symbol>& prefix, NodeId enclosing,
+                     const std::vector<Id<SMod>>& mod_subs, NodeId mod_scope,
+                     const std::vector<Symbol>& mod_prefix, bool force_final) {
+    // 先算绑定/属性（会往 model.exprs add），再取组件字段——不跨 add 持组件引用（arena 纪律）。
+    const Type cty = I_.comps[cid].ty;   // 拷贝，跨 add 稳定
+    // 绑定：外来修饰优先（第一个带绑定的子修饰），否则组件自身声明绑定（R15 §3.4 外层实例修饰 > 声明默认）。
     Id<Expr> binding;
     {
-      const Component& c = I_.comps[cid];
-      if (c.binding.kind == BindingKind::Raw && c.binding.raw_exp.is_valid())
-        binding = inst_exp(c.binding.raw_exp, enclosing, prefix);
+      Id<Exp> mraw;
+      for (Id<SMod> m : mod_subs)
+        if (I_.scode.mods[m].binding.is_valid()) { mraw = I_.scode.mods[m].binding; break; }
+      if (mraw.is_valid()) {
+        binding = inst_exp(mraw, mod_scope, mod_prefix);
+      } else {
+        const Binding& b = I_.comps[cid].binding;
+        const BindingKind bk = b.kind;
+        const Id<Exp> raw = b.raw_exp;
+        if (bk == BindingKind::Raw && raw.is_valid()) binding = inst_exp(raw, enclosing, prefix);
+      }
     }
-    // 内建属性修饰 `x(start=…, unit=…)` → 有序属性表（也会往 model.exprs add，故在取 comp 引用之前算）。
-    std::vector<FlatVarAttr> attrs = collect_attributes(cid, enclosing, prefix);
+    if (binding.is_valid() && cty.kind == TypeKind::Real) binding = to_real(binding);   // `= 2` → `= 2.0`
+    // 属性来源（优先级序）：外来子修饰的子属性，再是组件自身声明修饰。
+    std::vector<ModSource> asrc;
+    for (Id<SMod> m : mod_subs) asrc.push_back({m, mod_scope, mod_prefix});
+    {
+      const Id<SMod> dm = I_.scode.elems[I_.comps[cid].def].mod;
+      if (dm.is_valid()) asrc.push_back({dm, enclosing, prefix});
+    }
+    std::vector<FlatVarAttr> attrs = collect_attributes(cid, asrc);
     const Component& comp = I_.comps[cid];
     // flow/stream 变量需要连接方程（未连接顶层 flow → `x = 0.0`，R13 §6-2）——v1 未做 connect，标 unsupported。
     if (comp.attributes.connector != SConnectorType::Potential) set_unsupported("connector (flow/stream)");
@@ -164,7 +233,7 @@ class Flattener {
     v.name = name;
     v.ty = comp.ty;
     v.is_protected = is_protected;
-    v.is_final = comp.attributes.is_final;
+    v.is_final = comp.attributes.is_final || force_final;
     switch (comp.attributes.variability) {
       case SVariability::Var: v.var_kind = FlatVarKind::Var; break;
       case SVariability::Discrete: v.var_kind = FlatVarKind::Discrete; break;
@@ -196,42 +265,49 @@ class Flattener {
     result_.model.variables.push_back(std::move(v));
   }
 
-  // 收集标量叶组件的内建属性修饰（本桶：R13 §4.2）。按类型属性表的**顺序**产出，与书写序无关。
-  // 遇到 v1 范围外的修饰形态（each/final/嵌套子修饰/redeclare/break、或类型无此属性名）→ 标 unsupported。
-  std::vector<FlatVarAttr> collect_attributes(CompId cid, NodeId enclosing, const std::vector<Symbol>& prefix) {
+  // 校验外来修饰的每个子名都命中本类某组件——否则是嵌套类修饰 `a(B(...))`（ClassMod1）或写错名 → unsupported。
+  void check_modifier_names(const std::vector<NodeId>& comps, const ModCtx& ctx) {
+    for (Id<SMod> m : ctx.mods)
+      for (const SSubMod& s : I_.scode.mods[m].subs) {
+        bool found = false;
+        for (NodeId cn : comps)
+          if (I_.nodes[cn].kind == NodeKind::Component && I_.nodes[cn].name == s.ident) { found = true; break; }
+        if (!found) set_unsupported("modifier names non-component (nested class / typo)");
+      }
+  }
+
+  // 收集标量叶组件的内建属性（R13 §4.2）。sources 按优先级排（外来修饰在前、组件声明修饰在后），
+  // 只看各来源的 **子修饰**（.subs）——顶层 .binding 是叶绑定另行处理。按类型属性表顺序产出，每属性取最高优先来源。
+  // 遇到 v1 范围外的修饰形态（嵌套子修饰/final/redeclare/break、或类型无此属性名）→ 标 unsupported。
+  std::vector<FlatVarAttr> collect_attributes(CompId cid, const std::vector<ModSource>& sources) {
     std::vector<FlatVarAttr> out;
-    const Id<SMod> modid = I_.scode.elems[I_.comps[cid].def].mod;
-    if (!modid.is_valid()) return out;
-    // 拷贝 subs 与 type：下面 inst_exp/to_real 会往 model.exprs add；虽只动 exprs arena，拷一份最省心。
-    const std::vector<SSubMod> subs = I_.scode.mods[modid].subs;
-    if (subs.empty()) return out;
     const Type ty = I_.comps[cid].ty;
     const std::vector<AttrSpec>& table = attr_table(ty.kind);
-
-    // 合法但被 omc 丢弃的属性名：Real 的 unbounded/startOrigin、String 的 fixed（R13 §4.2）。
     auto droppable = [&](Symbol name) -> bool {
       if (name == in_.intern("unbounded") || name == in_.intern("startOrigin")) return true;
       return ty.kind == TypeKind::String && name == in_.intern("fixed");
     };
-    // 校验：每个 sub 必须是简单 `名=值`，且名字在表内或可丢弃；否则整例 unsupported（保 FAIL=0）。
-    for (const SSubMod& s : subs) {
-      const SMod& sm = I_.scode.mods[s.mod];
-      bool simple = sm.kind == SModKind::Mod && !sm.is_each && !sm.is_final &&
-                    sm.subs.empty() && sm.binding.is_valid();
-      bool named = droppable(s.ident);
-      for (const AttrSpec& a : table)
-        if (s.ident == in_.intern(a.name)) named = true;
-      if (!simple || !named) { set_unsupported("attribute modifier"); return out; }
-    }
-    // 按表序产出。
+    // 校验各来源的属性子（each 在标量属性上无害，如 Each4 的 `each fixed=true` → 允许）。
+    for (const ModSource& src : sources)
+      for (const SSubMod& s : I_.scode.mods[src.mod].subs) {
+        const SMod& sm = I_.scode.mods[s.mod];
+        bool simple = sm.kind == SModKind::Mod && !sm.is_final && sm.subs.empty() && sm.binding.is_valid();
+        bool named = droppable(s.ident);
+        for (const AttrSpec& a : table)
+          if (s.ident == in_.intern(a.name)) named = true;
+        if (!simple || !named) { set_unsupported("attribute modifier"); return out; }
+      }
+    // 按表序产出：每个属性取第一个提供它的来源（优先级）。
     for (const AttrSpec& a : table) {
       const Symbol an = in_.intern(a.name);
-      Id<SMod> smid;
-      for (const SSubMod& s : subs)
-        if (s.ident == an) { smid = s.mod; break; }
-      if (!smid.is_valid()) continue;
-      const Id<Exp> val = I_.scode.mods[smid].binding;
-      out.push_back({an, attr_value(a.vk, val, enclosing, prefix)});
+      for (const ModSource& src : sources) {
+        Id<SMod> smid;
+        for (const SSubMod& s : I_.scode.mods[src.mod].subs)
+          if (s.ident == an) { smid = s.mod; break; }
+        if (!smid.is_valid()) continue;
+        out.push_back({an, attr_value(a.vk, I_.scode.mods[smid].binding, src.scope, src.vprefix)});
+        break;
+      }
     }
     return out;
   }
@@ -301,14 +377,29 @@ class Flattener {
     e.kind = ExprKind::Cref;
     NodeId local = c.parts.empty() ? Inst::empty_node() : find_local(enclosing, c.parts[0].name);
     if (local.is_valid() && !I_.nodes[local].is_empty()) {
-      const Component& lc = I_.comps[I_.nodes[local].comp];
-      // 引用到 constant 或 final parameter → omc 内联成值（R14 §3）；v1 未做 evalConstants，标 unsupported。
-      if (lc.attributes.variability == SVariability::Const ||
-          (lc.attributes.variability == SVariability::Param && lc.attributes.is_final))
-        set_unsupported("constant evaluation");
+      // 多段 `a.x`：逐段深入复合组件解析到叶子，取**叶子**的类型/可变性（否则会用复合类型误加 Cast）。
+      NodeId leaf = local, cur = local;
+      bool ok = true;
+      for (std::size_t i = 1; i < c.parts.size(); ++i) {
+        NodeId cls = I_.comps[I_.nodes[cur].comp].class_inst;
+        NodeId nxt = cls.is_valid() ? find_local(cls, c.parts[i].name) : Inst::empty_node();
+        if (!nxt.is_valid() || I_.nodes[nxt].is_empty()) { ok = false; break; }
+        cur = nxt;
+        leaf = nxt;
+      }
+      if (!ok) {
+        set_unsupported("unresolved sub-component reference");
+        e.ty = Type::real();
+      } else {
+        const Component& lc = I_.comps[I_.nodes[leaf].comp];
+        // 引用到 constant 或 final parameter → omc 内联成值（R14 §3）；v1 未做 evalConstants，标 unsupported。
+        if (lc.attributes.variability == SVariability::Const ||
+            (lc.attributes.variability == SVariability::Param && lc.attributes.is_final))
+          set_unsupported("constant evaluation");
+        e.ty = lc.ty;
+      }
       for (Symbol p : prefix) e.cref.parts.push_back({p, {}});
       e.cref.resolved_node = local.raw;
-      e.ty = lc.ty;
     } else {
       // 单段未解析（time 等内建）v1 当 Real 保留；多段未解析（跨包常量 A.B.c、package 常量）我们既不解析也不
       // 求值，omc 会把它内联成值——标 unsupported（driver 退 66）。

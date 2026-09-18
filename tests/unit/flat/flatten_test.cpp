@@ -113,6 +113,38 @@ YMC_TEST(flatten_builtin_attributes) {
   YMC_CHECK_EQ(flatten_src(src), std::string(want));
 }
 
+YMC_TEST(flatten_modifier_merge) {
+  // 复合组件修饰传播：嵌套 a(x=2.0, m(z=p))、final 沿子树传播、修饰值 `z=p` 在书写作用域解析。
+  // 期望值 = omc 1.25.0 实测。
+  const char* src =
+      "model MOuter\n  Real z;\nend MOuter;\n"
+      "model AInner\n  Real x;\n  MOuter m;\nend AInner;\n"
+      "model MM\n  parameter Real p = 1.0;\n  final AInner a(x = 2.0, m(z = p));\nend MM;\n";
+  const char* want =
+      "class MM\n"
+      "  parameter Real p = 1.0;\n"
+      "  final Real a.x = 2.0;\n"
+      "  final Real a.m.z = p;\n"
+      "end MM;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string(want));
+}
+
+YMC_TEST(flatten_modifier_override_wins) {
+  // 外层实例修饰 > 声明默认（R15 §3.4）：A a(x=2.0) 覆盖 A 里的 Real x = 1.0。
+  const char* src = "model A\n  Real x = 1.0;\nend A;\nmodel M\n  A a(x = 2.0);\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string("class M\n  Real a.x = 2.0;\nend M;\n"));
+}
+
+YMC_TEST(flatten_nested_class_modifier_unsupported) {
+  // 嵌套类修饰 a(B(x=2.0))（B 是类名非组件名）→ 干净 SKIP。
+  bool uns = false;
+  std::string t = flatten_src(
+      "model A\n  model B\n    Real x = 1.0;\n  end B;\n  B b;\nend A;\n"
+      "model M\n  A a(B(x = 2.0));\nend M;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+}
+
 YMC_TEST(flatten_unbound_parameter_with_start_unsupported) {
   // 无绑定 parameter 带 start → omc 补默认绑定 + 告警（参数默认值规则），本桶未做 → 干净 SKIP。
   bool uns = false;

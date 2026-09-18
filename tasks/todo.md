@@ -194,8 +194,16 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       → **22 PASS / 198 SKIP / 0 FAIL**（StateSelect1 新过；机制另用探针 5 类型逐字对拍 omc）；三套编译器 10/10 零警告，ASan 0 报告。
       注：BuiltinAttribute1 的 Real/Int/Bool/String 行已正确，但整例被其枚举类型组件 `E e`（短类）挡在 SKIP —— 机制已就绪，
       待"短类塌陷"桶补上枚举类型组件后自然转 PASS；Each4/BreakModifier3 的子组件属性也复用本机制，待"修饰合并"桶。
-- [ ] **下一子步（按 SKIP 桶加宽，每步对拍）**：修饰合并（复合组件绑定传播 `B b(x=1.0)`、final 传播、each、嵌套 `a(m(z=…))`，16 例）→
-      evalConstants（常量/final 内联、参数默认值）→ 完整 lookup（复合名/import/内建枚举）→ inner/outer → 短类塌陷 → 函数/ceval → 数组
+- [x] **加宽③修饰合并**（2026-09-18）：复合组件修饰沿 flatten DFS 逐层剥离传播（R15 §3.3：无全局环境，每层按名拆子修饰）。
+      支持：外层实例修饰覆盖声明默认（`A a(x=2.0)` > `Real x=1.0`）、嵌套 `b(a(m(z=…)))`、重名并集（mod4 两个 `a(...)`）、
+      final 沿子树传播（`final A a` / `A a(final x=…)`）、each 在标量上无害、修饰值在书写作用域解析（ModScope1 `a(x=x)`→`c.a.x=c.x`）、
+      多段本地 cref `a.x` 解析到叶子取正确类型（避免误 Cast，Visibility2）。SKIP：嵌套类修饰 `a(B(...))`、redeclare/break、
+      整体绑定 `A a=A(...)`、双作用域叠加。ClassMod1/BreakModifier/ceval 仍 SKIP。
+      → **31 PASS / 187 SKIP / 0 FAIL**（218 例）；mod/Each/Final/Mod/Visibility 桶转正；三套编译器 10/10 零警告，ASan 0 报告，+3 单测。
+      注：FinalParameter2/3 从 slice 剔除并记入 open-questions 分歧账本 —— 文件 `// Result:` 是较新 OMC 生成（内联 final 参数 `y=3.0`），
+      安装版 omc 1.25.0（本项目 oracle）实测 `y=a.x` 不内联，ymc 与 1.25.0 逐字一致。
+- [ ] **下一子步（按 SKIP 桶加宽，每步对拍）**：短类塌陷（`type V=Real(unit=…)` 派生/枚举类型组件，23 例，也解锁 BuiltinAttribute1）→
+      evalConstants（常量内联、参数默认值）→ 完整 lookup（复合名/import/内建枚举）→ inner/outer → 函数/ceval → 数组
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

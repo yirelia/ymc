@@ -27,6 +27,16 @@
 | — | Blocks/Tables.mo 去 Include= 后 OMC 如何找头文件（R7§未找到） | 读 OMC codegen | 外部函数 S3e/S6 |
 | — | R4：$cse/$DER 默认可见性、name 数组下标逐字节、CSV 换行 \r\n？ | 实跑 dump 一份 .mat 探针 | resultio 精度 |
 
+## Oracle 分歧账本（testsuite `// Result:` vs 安装版 omc 1.25.0）
+
+testsuite 的 `// Result:` 由某版 OMC 生成，与项目 oracle（安装版 omc 1.25.0）行为不一致时记此。
+ymc 以 **omc 1.25.0 实测**为准；这些用例从 `docs/research/s3-easy-slice.json`（文件 Result 对拍）剔除，避免误记 FAIL。
+
+| 用例 | 文件 `// Result:` | omc 1.25.0 实测 | 结论 |
+|---|---|---|---|
+| flattening/.../FinalParameter2.mo | `Real y = 3.0;`（final 参数内联） | `Real y = a.x;`（不内联） | 1.25.0 默认 DAE dump 不内联 final parameter；ymc 与 1.25.0 逐字一致。较新 OMC 才内联。 |
+| flattening/.../FinalParameter3.mo | `Real y = 3.0;` | `Real y = a.x;` | 同上。 |
+
 ## 已解决（并入工具/规格）
 
 - omc-diff 模糊比对规则（方案 §8 #1）→ `tests/omc/omc_diff.py`，对拍 omc-diff.exe 一致。
