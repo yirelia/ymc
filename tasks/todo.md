@@ -333,6 +333,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       → easy-slice **152 PASS / 0 FAIL**（+7：CevalFunc1、FuncSimple、FuncDefaultArg1/5、FuncLocals、FuncWildcard、ceval4）；
       oracle=live 逐字节一致；全 scodeinst PASS 148→155、FAIL 69 不变（0 新增）；三编译器 10/10，ASan 0，+3 单测。
       诚实 SKIP（下个函数增量）：if/for/while/return 控制流（CevalFuncFor/If/While）、数组/记录参数与返回、函数块发射（非常量实参调用）。
+- [x] **加宽㉔用户函数控制流**（2026-09-19）：函数体解释加 if/elseif/else、for（range `a:b`/`a:step:b` 展开）、while、return、break
+      （exec_stmt 返回 Flow 信号，exec_body 传播；eval_range 求常量整数序列）。for/while 迭代上限 100000（omc evalLoopLimit）、
+      递归靠 eval_scode depth≤100——超限放弃折叠（→ SKIP，omc 也报 loop/recursion limit）。守卫：顶层 break（不在循环内）→ SKIP（Break2）。
+      → easy-slice **159 PASS / 0 FAIL**（+7：CevalFuncIf1、CevalFuncFor1/2、CevalFuncWhile1、Break1、Return1、FunctionRecursive1）；
+      oracle=live 逐字节一致；全 scodeinst PASS 155→162、FAIL 69 不变（0 新增）；三编译器 10/10，ASan 0，+1 单测。
+      诚实 SKIP：when/assert/terminate 语句、数组/记录参数与返回、函数块发射（非常量实参调用）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

@@ -1151,10 +1151,12 @@ class Flattener {
       std::optional<CVal> v = eval_scode(I_.scode.mods[oel.mod].binding, fscope, depth + 1, true);
       if (v) env[oel.name.id] = *v;
     }
-    // 算法段（只做直线赋值；if/for/while/return/break → SKIP）。
-    for (const SAlgorithm& alg : I_.scode.elems[fe].def.algorithms)
-      for (Id<SStatement> sid : alg.stmts)
-        if (!exec_stmt(sid, fscope, depth + 1)) return fail();
+    // 算法段：直线赋值 + if/for/while/return（exec_body 返回控制信号）。
+    for (const SAlgorithm& alg : I_.scode.elems[fe].def.algorithms) {
+      const Flow f = exec_body(alg.stmts, fscope, depth + 1);
+      if (f == Flow::Fail || f == Flow::Break) return fail();   // 顶层 break（不在循环内）是错误（Break2）→ SKIP
+      if (f == Flow::Return) break;   // return 提前结束函数
+    }
     // 读单输出。
     auto it = env.find(oel.name.id);
     std::optional<CVal> result;
@@ -1164,19 +1166,88 @@ class Flattener {
     return result;
   }
 
-  // 直线赋值语句解释：`y := expr`（lhs 单名局部/输出）。其余语句形态 → false（调用方 SKIP）。
-  bool exec_stmt(Id<SStatement> sid, const ScodeScope& fscope, int depth) {
+  // 函数体执行的控制信号。
+  enum class Flow { Normal, Return, Break, Fail };
+
+  // 顺序执行语句列表，遇 Return/Break/Fail 提前返回该信号。
+  Flow exec_body(const std::vector<Id<SStatement>>& body, const ScodeScope& fscope, int depth) {
+    if (depth > 100) return Flow::Fail;
+    for (Id<SStatement> sid : body) {
+      const Flow f = exec_stmt(sid, fscope, depth);
+      if (f != Flow::Normal) return f;
+    }
+    return Flow::Normal;
+  }
+
+  // 常量 range `a:b` / `a:step:b` → 整数序列（供 for 展开）；非常量/非整数/过大 → nullopt。
+  std::optional<std::vector<std::int64_t>> eval_range(Id<Exp> rexp, const ScodeScope& fscope, int depth) {
+    const Exp& e = I_.absyn.exps[rexp];
+    if (e.kind != ExpKind::Range || !e.a.is_valid() || !e.b.is_valid()) return std::nullopt;
+    const bool has_step = e.c.is_valid();   // a:step:b（c 为终点）；否则 a:b
+    auto sv = eval_scode(e.a, fscope, depth + 1, true);
+    auto ev = eval_scode(has_step ? e.c : e.b, fscope, depth + 1, true);
+    std::optional<CVal> stv = has_step ? eval_scode(e.b, fscope, depth + 1, true) : std::optional<CVal>(CVal::I(1));
+    if (!sv || !ev || !stv || sv->k != CVal::K::Int || ev->k != CVal::K::Int || stv->k != CVal::K::Int) return std::nullopt;
+    const std::int64_t a = sv->i, b = ev->i, step = stv->i;
+    if (step == 0) return std::nullopt;
+    std::vector<std::int64_t> out;
+    for (std::int64_t i = a; (step > 0 ? i <= b : i >= b); i += step) {
+      if (out.size() > 100000) return std::nullopt;   // omc evalLoopLimit=100000：超限放弃折叠
+      out.push_back(i);
+    }
+    return out;
+  }
+
+  // 单语句解释：赋值 / if-elseif-else / for / while / return / break。其余 → Fail（调用方 SKIP）。
+  Flow exec_stmt(Id<SStatement> sid, const ScodeScope& fscope, int depth) {
     const SStatement& st = I_.scode.stmts[sid];
-    if (st.kind != SStmtKind::Assign) return false;
-    const Exp& lhs = I_.absyn.exps[st.a];
-    if (lhs.kind != ExpKind::CrefExp) return false;
-    const Cref& lc = I_.absyn.crefs[lhs.cref];
-    if (lc.parts.size() != 1 || !lc.parts[0].subscripts.empty()) return false;
-    if (input_names_ && input_names_->count(lc.parts[0].name.id)) return false;   // 给输入赋值是错误（AssignInput1）→ SKIP
-    std::optional<CVal> v = eval_scode(st.b, fscope, depth + 1, true);
-    if (!v) return false;
-    (*locals_)[lc.parts[0].name.id] = *v;
-    return true;
+    switch (st.kind) {
+      case SStmtKind::Assign: {
+        const Exp& lhs = I_.absyn.exps[st.a];
+        if (lhs.kind != ExpKind::CrefExp) return Flow::Fail;
+        const Cref& lc = I_.absyn.crefs[lhs.cref];
+        if (lc.parts.size() != 1 || !lc.parts[0].subscripts.empty()) return Flow::Fail;
+        if (input_names_ && input_names_->count(lc.parts[0].name.id)) return Flow::Fail;   // 给输入赋值 = 错误（AssignInput1）
+        std::optional<CVal> v = eval_scode(st.b, fscope, depth + 1, true);
+        if (!v) return Flow::Fail;
+        (*locals_)[lc.parts[0].name.id] = *v;
+        return Flow::Normal;
+      }
+      case SStmtKind::If: {
+        for (const SStmtBranch& br : st.branches) {   // if + elseif（保留列表）
+          std::optional<CVal> c = eval_scode(br.cond, fscope, depth + 1, true);
+          if (!c || c->k != CVal::K::Bool) return Flow::Fail;
+          if (c->b) return exec_body(br.body, fscope, depth + 1);
+        }
+        return exec_body(st.else_body, fscope, depth + 1);   // else（可空）
+      }
+      case SStmtKind::For: {
+        auto seq = eval_range(st.a, fscope, depth);
+        if (!seq) return Flow::Fail;
+        for (std::int64_t iv : *seq) {
+          (*locals_)[st.index.id] = CVal::I(iv);
+          const Flow f = exec_body(st.body, fscope, depth + 1);
+          if (f == Flow::Break) break;
+          if (f == Flow::Return || f == Flow::Fail) return f;
+        }
+        return Flow::Normal;
+      }
+      case SStmtKind::While: {
+        if (!st.a.is_valid()) return Flow::Fail;   // While: cond=st.a, body=st.body
+        for (std::int64_t guard = 0; guard < 100000; ++guard) {   // omc evalLoopLimit=100000：超限放弃折叠
+          std::optional<CVal> c = eval_scode(st.a, fscope, depth + 1, true);
+          if (!c || c->k != CVal::K::Bool) return Flow::Fail;
+          if (!c->b) return Flow::Normal;
+          const Flow f = exec_body(st.body, fscope, depth + 1);
+          if (f == Flow::Break) return Flow::Normal;
+          if (f == Flow::Return || f == Flow::Fail) return f;
+        }
+        return Flow::Fail;   // 超迭代上限 → 放弃折叠
+      }
+      case SStmtKind::Return: return Flow::Return;
+      case SStmtKind::Break: return Flow::Break;
+      default: return Flow::Fail;   // when/assert/terminate/reinit/noretcall → 未做
+    }
   }
 
   Id<Expr> literal_of(const CVal& v) {

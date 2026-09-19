@@ -401,6 +401,26 @@ YMC_TEST(flatten_user_function_default_and_named_args) {
   YMC_CHECK_EQ(flatten_src(src), std::string("class M\n  Real a = 6.0;\n  Real b = 7.0;\nend M;\n"));
 }
 
+YMC_TEST(flatten_user_function_control_flow) {
+  // 函数体控制流常量折叠：if/elseif/else、for(累加)、while(倒数累加)。期望 = omc 1.25.0（CevalFuncIf1/For1/While1）。
+  const char* if_src =
+      "function f\n  input Real x;\n  output Real y;\nalgorithm\n"
+      "  if x > 4 then\n    y := 3.0;\n  elseif x > 2 then\n    y := 5.0;\n  else\n    y := 7.0;\n  end if;\nend f;\n"
+      "model M\n  constant Real a = f(1.0);\n  constant Real b = f(3.0);\n  constant Real c = f(5.0);\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(if_src),
+               std::string("class M\n  constant Real a = 7.0;\n  constant Real b = 5.0;\n  constant Real c = 3.0;\nend M;\n"));
+  const char* for_src =
+      "function f\n  input Integer n;\n  output Integer res;\nalgorithm\n  res := 0;\n"
+      "  for i in 1:n loop\n    res := res + i;\n  end for;\nend f;\n"
+      "model M\n  constant Integer a = f(10);\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(for_src), std::string("class M\n  constant Integer a = 55;\nend M;\n"));
+  const char* while_src =
+      "function f\n  input Integer n;\n  output Integer res;\nprotected\n  Integer i;\nalgorithm\n"
+      "  i := n;\n  res := 0;\n  while i > 0 loop\n    res := res + i;\n    i := i - 1;\n  end while;\nend f;\n"
+      "model M\n  constant Integer a = f(10);\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(while_src), std::string("class M\n  constant Integer a = 55;\nend M;\n"));
+}
+
 YMC_TEST(flatten_function_assign_to_input_unsupported) {
   // 给输入赋值是错误（omc 报错），ymc 折叠时拒绝 → SKIP（AssignInput1）。
   bool uns = false;
