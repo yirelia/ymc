@@ -401,6 +401,15 @@ YMC_TEST(flatten_user_function_default_and_named_args) {
   YMC_CHECK_EQ(flatten_src(src), std::string("class M\n  Real a = 6.0;\n  Real b = 7.0;\nend M;\n"));
 }
 
+YMC_TEST(flatten_noevent_fold_and_continuity_guard) {
+  // noEvent(常量)脱壳折叠；Boolean 绑定连续表达式（noEvent(time>1)）是错误 → SKIP（NoEvent1）。期望 = omc 1.25.0（CevalNoEvent1）。
+  YMC_CHECK_EQ(flatten_src("model M\n  constant Real r = noEvent(1.0 / 4.0);\nend M;\n"),
+               std::string("class M\n  constant Real r = 0.25;\nend M;\n"));
+  bool uns = false;
+  flatten_src("model M\n  Real x = time;\n  Boolean b = noEvent(x > 1);\nend M;\n", &uns);
+  YMC_CHECK(uns);
+}
+
 YMC_TEST(flatten_when_equation) {
   // when/elsewhen 方程 + reinit（cond Int→Real、value Int→Real）。期望 = omc 1.25.0（When5/Reinit1）。
   const char* when5 =

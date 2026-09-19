@@ -105,6 +105,7 @@ const BuiltinFn* lookup_builtin(std::string_view name) {
       {"smooth", 2, false, BFArg::Keep, BFRes::SameArg1},
       {"semiLinear", 3, false, BFArg::Real, BFRes::Real},
       {"homotopy", 2, false, BFArg::Keep, BFRes::SameArg0},
+      {"noEvent", 1, false, BFArg::Keep, BFRes::SameArg0},
   };
   for (const BuiltinFn& fn : fns)
     if (name == fn.name) return &fn;
@@ -741,6 +742,13 @@ class Flattener {
       bool is_lit = bk == ExprKind::IntLit || bk == ExprKind::RealLit || bk == ExprKind::BoolLit ||
                     bk == ExprKind::StringLit || bk == ExprKind::EnumLit;
       if (!is_lit) set_unsupported("constant evaluation");
+    }
+    // Boolean 变量绑定到（未折叠的）noEvent(…)：noEvent 抑制事件 → 连续，绑到离散 Boolean 是错误（omc 报错，NoEvent1）→ SKIP。
+    // 普通关系 `b = x > 1` 会产生事件→离散，合法，不在此列。
+    if (binding.is_valid() && cty.kind == TypeKind::Boolean &&
+        result_.model.exprs[binding].kind == ExprKind::Call) {
+      const std::vector<Symbol>& cn = result_.model.exprs[binding].call_name;
+      if (cn.size() == 1 && in_.str(cn[0]) == "noEvent") set_unsupported("noEvent bound to discrete variable");
     }
     v.binding = binding;
     v.attributes = std::move(attrs);
@@ -2172,6 +2180,8 @@ class Flattener {
           }
           if (zero) return lit_real(0.0);
         }
+        // noEvent(const) → 脱壳折叠成字面量；符号参数保留 `noEvent(...)`（CevalNoEvent1）。
+        if (name == "noEvent" && args.size() == 1) return is_literal(args[0]) ? args[0] : rebuild();
         if (!bf->foldable) return rebuild();
         if (name == "Integer") {
           const Expr& ea = result_.model.exprs[args[0]];

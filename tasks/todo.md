@@ -374,6 +374,11 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       → easy-slice **183 PASS / 0 FAIL**（+8 When1/4/5/6、Reinit1、WhenCondition1/3、WhenInitial2）；oracle=live 逐字节一致；
       全 scodeinst PASS 178→186、FAIL 69 不变（0 新增）；三编译器 10/10，ASan 0，+2 单测。
       诚实 SKIP：数组/Clock/not-initial/pre/noEvent 条件、数组体、嵌套 when、when 在算法段、ReinitInvalid（离散/参/常/数组目标）。
+- [x] **加宽㉛noEvent 常量折叠**（2026-09-19，子agent survey出卡）：`noEvent(常量)` 脱壳成字面量、符号参数保留 `noEvent(...)`。
+      守卫：Boolean 变量绑定到符号 noEvent(…)（noEvent 抑制事件→连续，绑离散是错误）→ SKIP（NoEvent1；窄化到 noEvent-Call，
+      不误伤合法 `Boolean b = x>1`）。→ easy-slice **184 PASS / 0 FAIL**（+1 CevalNoEvent1）；oracle=live 逐字节一致；
+      全 scodeinst PASS 186→187、FAIL 69 不变（0 新增/0 丢失）；三编译器 10/10，ASan 0，+1 单测。
+      子agent 另确认：tan/asin/exp/log/… 等标量内建早已在表内；String()/pure()/枚举构造器需另加基建，暂缓。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples
