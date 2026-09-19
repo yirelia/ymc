@@ -359,6 +359,11 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       迭代变量（omc 告警，ForEquationShadow1）→ SKIP。
       → easy-slice **172 PASS / 0 FAIL**（+7 ForEquation1–7）；oracle=live 逐字节一致；全 scodeinst PASS 168→175、FAIL 69 不变
       （0 新增）；三编译器 10/10，ASan 0，+2 单测。诚实 SKIP：for 语句（算法段）、if/when 方程、非常量下标、数组方程。
+- [x] **加宽㉘assert 方程**（2026-09-19）：`assert(cond, msg[, level])` → FlatEqKind::Assert（flat_dump 已支持）；默认
+      level=AssertionLevel.error 省略（比 eq.c 与 scode.assertion_level_error 哨兵）。参数类型校验（omc 报错 → SKIP）：
+      cond 须 Boolean、msg 须 String、显式 level 须枚举（AssertInvalid1/2/3）。
+      → easy-slice **174 PASS / 0 FAIL**（+2 Assert1/2）；oracle=live 逐字节一致；全 scodeinst PASS 175→177、FAIL 69 不变
+      （0 新增）；三编译器 10/10，ASan 0，+1 单测。诚实 SKIP：显式非默认 level（AssertionLevel.warning 等，inst 未解析内建枚举，Assert3）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

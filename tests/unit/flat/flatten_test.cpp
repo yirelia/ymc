@@ -401,6 +401,16 @@ YMC_TEST(flatten_user_function_default_and_named_args) {
   YMC_CHECK_EQ(flatten_src(src), std::string("class M\n  Real a = 6.0;\n  Real b = 7.0;\nend M;\n"));
 }
 
+YMC_TEST(flatten_assert_equation) {
+  // assert 方程：默认 level 省略、cond Int→Real 强转（`time > 1` → `time > 1.0`）。期望 = omc 1.25.0（Assert1）。
+  YMC_CHECK_EQ(flatten_src("model M\nequation\n  assert(time > 1, \"test\");\nend M;\n"),
+               std::string("class M\nequation\n  assert(time > 1.0, \"test\");\nend M;\n"));
+  // 参数类型错（cond 非 Boolean）→ SKIP（AssertInvalid1）。
+  bool uns = false;
+  flatten_src("model M\nequation\n  assert(\"true\", \"msg\");\nend M;\n", &uns);
+  YMC_CHECK(uns);
+}
+
 YMC_TEST(flatten_for_equation_expands) {
   // for 方程展开：常量范围逐值展开体方程，`x[i]=i` → `x[1]=1.0`…（迭代变量作下标与值）。期望 = omc 1.25.0（ForEquation1）。
   const char* src =

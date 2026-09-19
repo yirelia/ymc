@@ -470,8 +470,27 @@ class Flattener {
       }
       return;
     }
+    if (eq.kind == SEqKind::Assert) {
+      // assert(cond, msg[, level])：默认 level = AssertionLevel.error 省略（R13 §6-6，flat_dump 决定）。
+      FlatEquation fe;
+      fe.kind = FlatEqKind::Assert;
+      fe.a = simplify_expr(inst_exp(eq.a, enclosing, prefix));
+      fe.b = simplify_expr(inst_exp(eq.b, enclosing, prefix));
+      // 参数类型校验（omc 报错，AssertInvalid1/2/3）：cond=Boolean、msg=String、显式 level=枚举。
+      if (result_.model.exprs[fe.a].ty.kind != TypeKind::Boolean) { set_unsupported("assert condition type"); return; }
+      if (result_.model.exprs[fe.b].ty.kind != TypeKind::String) { set_unsupported("assert message type"); return; }
+      if (eq.c.is_valid() && eq.c.raw != I_.scode.assertion_level_error.raw) {
+        fe.c = simplify_expr(inst_exp(eq.c, enclosing, prefix));   // 显式非默认 level
+        if (result_.model.exprs[fe.c].ty.kind != TypeKind::Enumeration) { set_unsupported("assert level type"); return; }
+      }
+      fe.loc = eq.loc;
+      Id<FlatEquation> id = result_.model.add_eq(std::move(fe));
+      if (is_initial) result_.model.initial_equations.push_back(id);
+      else result_.model.equations.push_back(id);
+      return;
+    }
     if (eq.kind != SEqKind::Equals) {
-      set_unsupported("non-equality equation (if/when/assert…)");
+      set_unsupported("non-equality equation (if/when/…)");
       return;
     }
     Id<Expr> a = simplify_expr(inst_exp(eq.a, enclosing, prefix));
