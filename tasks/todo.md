@@ -289,6 +289,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       全 scodeinst PASS 124→127、FAIL 71→70（0 新增，含 Clock6 从整体绑定 SKIP 转 PASS）；三编译器 10/10，ASan 0，+3 单测。
       诚实 SKIP（各需另一特性）：`constant/parameter R r` 变率下沉成员 + 常量字段引用求值（CevalRecord3/5）、
       记录数组 `R r[2]`（复合数组）、记录 extends（RecordExtends）、构造绑定叠加字段修饰、算法段里的 `r := R(...)`（RecordConstructor1）。
+- [x] **加宽⑱connect() 连接集展开（2-连接器）**（2026-09-19）：单条 connect、根层、两个标量连接器——按名匹配成员，
+      potential 相等（A 声明序）在前、flow 求和在后；符号 inside=+/outside=−，both-inside 项序反转（复刻 OMC DisjointSets
+      seed 反序），both-outside `-(a+b)`、混合 `pos-neg`；flow=0 精化：outside 恒 =0、inside 仅未连接时 =0。
+      resolve_connector 把 connect 实参解析成 flat 路径+face+标量成员表。
+      → easy-slice **127 PASS / 0 FAIL**（+3 Connect2/Connect5/ConnectDiffOrder1）；oracle=live 逐字节一致；
+      全 scodeinst PASS 127→130、FAIL 70 不变（0 新增）；三编译器 10/10，ASan 0，+3 单测；Connect3 分歧记账本。
+      诚实 SKIP（各需另一特性）：多条 connect（连接集 union-find、元素序是 OMC 内部产物）、connect 在子模型（前缀化）、
+      数组连接器/成员、嵌套连接器 `c1.c2`/深层 `b.a.c`、parameter/constant 成员（连接生成 assert 相等）、stream、expandable。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

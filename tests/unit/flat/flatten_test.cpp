@@ -390,6 +390,38 @@ YMC_TEST(flatten_constant_record_unsupported) {
   YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
 }
 
+YMC_TEST(flatten_connect_both_outside) {
+  // connect 两个顶层连接器：potential 相等 + flow 求和（both outside → -(a+b)）+ 各自边界 =0。期望 = omc 1.25.0（Connect2）。
+  const char* src =
+      "connector C\n  Real e;\n  flow Real f;\nend C;\n"
+      "model M\n  C c1, c2;\nequation\n  connect(c1, c2);\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class M\n  Real c1.e;\n  Real c1.f;\n  Real c2.e;\n  Real c2.f;\n"
+                           "equation\n  c1.e = c2.e;\n  -(c1.f + c2.f) = 0.0;\n  c1.f = 0.0;\n  c2.f = 0.0;\nend M;\n"));
+}
+
+YMC_TEST(flatten_connect_inside_outside) {
+  // connect(内部连接器, 顶层连接器)：inside 取正、outside 取负 → `a.c1.f - c2.f = 0`；只有 outside 的 c2 得边界 =0。
+  // inside 的 a.c1 已连接 → 不单列 =0。期望 = omc 1.25.0（Connect5 结构）。
+  const char* src =
+      "connector C\n  Real e;\n  flow Real f;\nend C;\n"
+      "model A\n  C c1;\nend A;\n"
+      "model M\n  A a;\n  C c2;\nequation\n  connect(a.c1, c2);\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class M\n  Real a.c1.e;\n  Real a.c1.f;\n  Real c2.e;\n  Real c2.f;\n"
+                           "equation\n  a.c1.e = c2.e;\n  a.c1.f - c2.f = 0.0;\n  c2.f = 0.0;\nend M;\n"));
+}
+
+YMC_TEST(flatten_multiple_connect_unsupported) {
+  // 多条 connect 要连接集合并（union-find，元素序是 OMC 内部产物）→ v1 未做，干净 SKIP。
+  bool uns = false;
+  std::string t = flatten_src(
+      "connector C\n  Real e;\n  flow Real f;\nend C;\n"
+      "model M\n  C c1, c2, c3;\nequation\n  connect(c1, c2);\n  connect(c2, c3);\nend M;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+}
+
 YMC_TEST(flatten_flow_outside_connector_unsupported) {
   // `flow` 加在非连接器变量上：omc 告警后当普通变量；ymc 不产告警文本 → 干净 SKIP（NonConnectorFlow1）。
   bool uns = false;
