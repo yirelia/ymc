@@ -227,13 +227,6 @@ YMC_TEST(flatten_array_multidim_rowmajor) {
       std::string("class M\n  Real m[1,1];\n  Real m[1,2];\n  Real m[2,1];\n  Real m[2,2];\nend M;\n"));
 }
 
-YMC_TEST(flatten_param_array_binding_unsupported) {
-  // 参数数组绑定 omc 摊到每元素，v1 未做 → SKIP。
-  bool uns = false;
-  flatten_src("model M\n  parameter Real x[2] = {1, 2};\nend M;\n", &uns);
-  YMC_CHECK(uns);
-}
-
 YMC_TEST(flatten_whole_array_reference_unsupported) {
   // 数组整体引用（数组运算/方程）v1 未做 → SKIP。
   bool uns = false;
@@ -388,6 +381,18 @@ YMC_TEST(flatten_constant_record_unsupported) {
       "record R\n  Real x;\nend R;\nmodel M\n  constant R r = R(1.0);\nend M;\n", &uns);
   YMC_CHECK(uns);
   YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+}
+
+YMC_TEST(flatten_param_array_binding_spreads_to_elements) {
+  // 参数/常量数组绑定摊到每元素（Var 才留数组方程）；矩阵行含 cref 数组 → `x[i]` 元素引用。期望 = omc 1.25.0（BindingArray8）。
+  const char* src =
+      "model M\n  parameter Real x[4] = {1, 2, 3, 4};\n  parameter Real y[2, 4] = {x, {5, 6, 7, 8}};\nend M;\n";
+  const char* want =
+      "class M\n"
+      "  parameter Real x[1] = 1.0;\n  parameter Real x[2] = 2.0;\n  parameter Real x[3] = 3.0;\n  parameter Real x[4] = 4.0;\n"
+      "  parameter Real y[1,1] = x[1];\n  parameter Real y[1,2] = x[2];\n  parameter Real y[1,3] = x[3];\n  parameter Real y[1,4] = x[4];\n"
+      "  parameter Real y[2,1] = 5.0;\n  parameter Real y[2,2] = 6.0;\n  parameter Real y[2,3] = 7.0;\n  parameter Real y[2,4] = 8.0;\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string(want));
 }
 
 YMC_TEST(flatten_conditional_component_true_false) {

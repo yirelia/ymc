@@ -557,8 +557,9 @@ class Flattener {
       case SVariability::Param: vk = FlatVarKind::Parameter; break;
       case SVariability::Const: vk = FlatVarKind::Constant; break;
     }
-    // 参数/常量数组的绑定 omc 摊到每元素（`x[1]=1.0`…），连续数组才变成数组方程（`x = {…}`）。v1 只做后者。
-    if (braw.is_valid() && vk != FlatVarKind::Var) { set_unsupported("parameter/constant array binding"); return; }
+    // 参数/常量数组绑定 omc 摊到每元素（`x[1]=1.0`…），连续（Var）数组才变成数组方程（`x = {…}`，Subscript1）。
+    // v1 摊分只做"字面量元素"（下降 Array 到标量）；元素含 cref 数组等 → 逐元素时命中会 SKIP。
+    const bool spread = braw.is_valid() && vk != FlatVarKind::Var;
     // 数组字面量绑定的形状/类型要与数组匹配（omc 会做类型检查并报错，如 BindingInvalidType3/5）——ymc 无验证 pass，
     // 只放行形状+叶类型都对上的字面量绑定，否则 SKIP。
     if (braw.is_valid() && !array_lit_matches(braw, dims, 0, cty.kind)) {
@@ -571,7 +572,7 @@ class Flattener {
       else if (I_.comps[cid].attributes.direction == SDirection::Output) dir = FlatDirection::Output;
     }
 
-    // 行主序枚举下标元组（1 基），逐元素产出变量行（无绑定/属性）。
+    // 行主序枚举下标元组（1 基），逐元素产出变量行；param/const 数组把绑定摊到每元素。
     std::vector<std::int64_t> idx(dims.size(), 1);
     for (bool more = true; more;) {
       FlatVariable v;
@@ -583,6 +584,21 @@ class Flattener {
       v.var_kind = vk;
       v.direction = dir;
       v.loc = I_.comps[cid].loc;
+      if (spread) {
+        // 该下标处的字面量元素（下降 Array 到标量）；命中 cref 数组等 → 本增量 SKIP。
+        Id<Exp> el = array_scalar_elem(braw, idx, 0);
+        if (!el.is_valid()) { set_unsupported("array binding element spread"); return; }
+        Id<Expr> eb = simplify_expr(inst_exp(el, bscope, bprefix));
+        if (cty.kind == TypeKind::Real) eb = to_real(eb);
+        // constant 元素必须求值成字面量（同标量 constant 规则，R14 §3）。
+        if (vk == FlatVarKind::Constant) {
+          const ExprKind bk = result_.model.exprs[eb].kind;
+          const bool is_lit = bk == ExprKind::IntLit || bk == ExprKind::RealLit || bk == ExprKind::BoolLit ||
+                              bk == ExprKind::StringLit || bk == ExprKind::EnumLit;
+          if (!is_lit) { set_unsupported("constant evaluation"); return; }
+        }
+        v.binding = eb;
+      }
       result_.model.variables.push_back(std::move(v));
       // 递增（最后一维最快）。
       std::size_t k = dims.size();
@@ -594,8 +610,8 @@ class Flattener {
       }
     }
 
-    // 数组绑定 → 数组方程 `name = {…}`（元素按叶类型强转）。
-    if (braw.is_valid()) {
+    // Var 数组绑定 → 单条数组方程 `name = {…}`（param/const 已在上面摊成逐元素绑定）。
+    if (braw.is_valid() && !spread) {
       Id<Expr> rhs = coerce_deep(simplify_expr(inst_exp(braw, bscope, bprefix)), cty.kind);
       Expr lhs;
       lhs.kind = ExprKind::Cref;
@@ -610,10 +626,44 @@ class Flattener {
     }
   }
 
+  // 数组字面量绑定在多下标 idx 处的标量元素（Absyn）：逐维下降 Array（1 基）。命中非 Array 但仍有剩余下标
+  //（cref 数组元素 `{x, …}` 等）→ 返回 invalid，调用方 SKIP（本增量只做纯字面量下降）。
+  Id<Exp> array_scalar_elem(Id<Exp> e, const std::vector<std::int64_t>& idx, std::size_t start) {
+    if (start == idx.size()) return e;
+    const ExpKind k = I_.absyn.exps[e].kind;
+    if (k == ExpKind::Array) {
+      const std::int64_t i = idx[start];
+      const std::size_t n = I_.absyn.exps[e].args.size();
+      if (i < 1 || static_cast<std::size_t>(i) > n) return {};
+      const Id<Exp> next = I_.absyn.exps[e].args[i - 1];
+      return array_scalar_elem(next, idx, start + 1);
+    }
+    if (k == ExpKind::CrefExp) {
+      // cref 数组元素（`{x, …}` 里的 x）：把剩余下标补到 cref 末段 → `x[i,j]`（要求末段原本无下标）。
+      Cref nc = I_.absyn.crefs[I_.absyn.exps[e].cref];   // 拷贝（下面会往 absyn arena add）
+      if (nc.parts.empty() || !nc.parts.back().subscripts.empty()) return {};
+      std::vector<Id<Exp>> subs;
+      for (std::size_t j = start; j < idx.size(); ++j) {
+        Exp lit;
+        lit.kind = ExpKind::IntLit;
+        lit.ival = idx[j];
+        subs.push_back(I_.absyn.add_exp(std::move(lit)));
+      }
+      nc.parts.back().subscripts = std::move(subs);
+      Exp ce;
+      ce.kind = ExpKind::CrefExp;
+      ce.cref = I_.absyn.add_cref(std::move(nc));
+      return I_.absyn.add_exp(std::move(ce));
+    }
+    return {};   // 剩余下标落在标量表达式 → 本增量 SKIP
+  }
+
   // 数组字面量绑定与维度/元素类型是否匹配（形状 + 叶类型）；否则视为类型错误 → SKIP（ymc 无验证 pass）。
   bool array_lit_matches(Id<Exp> b, const std::vector<std::int64_t>& dims, std::size_t di, TypeKind elem) {
     const Exp& e = I_.absyn.exps[b];
     if (di < dims.size()) {
+      // cref 数组元素（`{x, …}` 的 x）填一整段维度：静态形状无法只看 Absyn 校验，交给 inst/摊分（BindingArray8）。
+      if (e.kind == ExpKind::CrefExp) return true;
       if (e.kind != ExpKind::Array || static_cast<std::int64_t>(e.args.size()) != dims[di]) return false;
       for (Id<Exp> a : e.args)
         if (!array_lit_matches(a, dims, di + 1, elem)) return false;

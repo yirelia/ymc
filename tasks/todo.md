@@ -305,6 +305,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       → easy-slice **136 PASS / 0 FAIL**（+9：Condition1/2/3/4/5/10、ConditionInvalidBinding2、DimNegative2、PartialFunction2）；
       oracle=live 逐字节一致；全 scodeinst PASS 130→139、FAIL 70→69（0 新增，反修一例）；三编译器 10/10，ASan 0，+4 单测。
       诚实 SKIP：条件里数组组件（Condition7/8，复合数组）、嵌套条件连接器成员（Condition9）、redeclare+条件语义。
+- [x] **加宽⑳数组绑定摊元素（sub-bucket 1/3）**（2026-09-19）：参数/常量数组绑定摊成逐元素绑定（`x[i]=lit`），Var 数组仍留
+      单条数组方程（Subscript1）。array_scalar_elem 逐维下降 Array 字面量到标量；矩阵行含 cref 数组 → 剩余下标补到末段成
+      `x[i]` 元素引用（BindingArray8 的 `y[1,j]=x[j]`）。constant 元素须求值成字面量。
+      → easy-slice **137 PASS / 0 FAIL**（+1 BindingArray8）；oracle=live 逐字节一致；全 scodeinst PASS 139→140、FAIL 69 不变；
+      三编译器 10/10，ASan 0，改 1 旧单测 + 1 新单测。纯字面量 param 数组本身 testsuite 无独立用例（多被 `:` 维/复合数组卡住）。
+      诚实 SKIP（下个 sub-bucket）：复合数组 `A a[2]`（80 例，payoff 最大）、`:` 维绑定推断、constant 数组元素下标内联、数组运算。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples
