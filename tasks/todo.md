@@ -339,6 +339,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       → easy-slice **159 PASS / 0 FAIL**（+7：CevalFuncIf1、CevalFuncFor1/2、CevalFuncWhile1、Break1、Return1、FunctionRecursive1）；
       oracle=live 逐字节一致；全 scodeinst PASS 155→162、FAIL 69 不变（0 新增）；三编译器 10/10，ASan 0，+1 单测。
       诚实 SKIP：when/assert/terminate 语句、数组/记录参数与返回、函数块发射（非常量实参调用）。
+- [x] **加宽㉕函数返回记录常量折叠**（2026-09-19）：CVal 加 Record 变体（shared_ptr + COW set_field）。函数解释器：output
+      记录用字段修饰 `r(x=x,y=y)` 建 Record、算法字段赋值 `r.x:=x` 增量建 Record；`constant/parameter R r = f(…)` 若折成
+      Record 常量 → emit_record_fields 直接发射 `constant Real r.x=1.0` 等（继承 r 变率/final，绕开"变率复合" SKIP）。
+      → easy-slice **161 PASS / 0 FAIL**（+2 CevalFuncRecord1/2）；oracle=live 逐字节一致；全 scodeinst PASS 162→164、FAIL 69 不变；
+      三编译器 10/10，ASan 0，+1 单测。诚实 SKIP：符号函数求值（CevalFuncRecord3 `f(r1)` 字段未赋值 → `r2.x=r1.x`）、
+      数组值/`:` 维推断（CevalFuncArray）、嵌套记录/数组字段、`constant R r = R(…)` 记录构造的常量传播（CevalRecord3/5 还需字段引用求值）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

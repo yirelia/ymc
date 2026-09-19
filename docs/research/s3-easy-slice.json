@@ -29,6 +29,8 @@
 "CevalFunc1.mo",
 "CevalFuncFor1.mo",
 "CevalFuncFor2.mo",
+"CevalFuncRecord1.mo",
+"CevalFuncRecord2.mo",
 "CevalFuncIf1.mo",
 "CevalFuncWhile1.mo",
 "CevalCos1.mo",

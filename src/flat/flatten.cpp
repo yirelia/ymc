@@ -4,9 +4,11 @@
 #include <cmath>
 #include <optional>
 #include <cstdlib>
+#include <memory>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 #include "absyn/absyn.h"
 #include "base/strings.h"   // unescape_modelica_string
@@ -369,6 +371,23 @@ class Flattener {
         // `flow C c`：flow/stream 前缀加在连接器**组件**上 → 前缀下沉到每个标量成员（conn9），v1 未做 → SKIP。
         if (I_.comps[cid].attributes.connector != SConnectorType::Potential)
           set_unsupported("flow/stream on composite component");
+        // 记录常量折叠：`constant/parameter R r = f(…)`（函数返回记录）→ 直接发射字段（继承 r 变率 + 折叠值），
+        // 绕开下面的"变率复合" SKIP（CevalFuncRecord1/2）。
+        if (r == SRestriction::Record) {
+          Id<Exp> wb;
+          NodeId ws = inst_node;
+          for (Id<SMod> m : matched)
+            if (I_.scode.mods[m].binding.is_valid()) { wb = I_.scode.mods[m].binding; ws = ctx.scope; break; }
+          if (!wb.is_valid() && I_.comps[cid].binding.kind == BindingKind::Raw && I_.comps[cid].binding.raw_exp.is_valid())
+            wb = I_.comps[cid].binding.raw_exp;
+          if (wb.is_valid() && I_.absyn.exps[wb].kind == ExpKind::Call) {
+            std::optional<CVal> rv = eval_user_call(I_.absyn.exps[wb], scode_scope_of(ws), 0);
+            if (rv && rv->k == CVal::K::Record) {
+              if (emit_record_fields(cid, name, prefix, psubs, ci, *rv, is_prot, comp_final)) continue;
+              set_unsupported("record function fold field"); continue;
+            }
+          }
+        }
         // `constant/parameter R r`：变率前缀要下沉到每个成员，且常量记录字段引用 `r.x` 要求值（CevalRecord3/5）——
         // 两者本桶都未做 → SKIP（否则字段丢 constant 前缀、引用不折叠）。
         if (I_.comps[cid].attributes.variability != SVariability::Var)
@@ -884,16 +903,25 @@ class Flattener {
   // ---- package 限定常量：SCODE 作用域链解析 + 值语义常量求值 ----
   // package 常量往往没被实例化（没走 inst 树），所以直接在 SCODE 上按名解析 + 递归求值，不经 inst_exp/cref。
   struct CVal {
-    enum class K { Int, Real, Bool, Str } k = K::Int;
+    enum class K { Int, Real, Bool, Str, Record } k = K::Int;
     std::int64_t i = 0;
     double r = 0.0;
     bool b = false;
     Symbol s;
+    // Record：字段名→值（保序）。用 shared_ptr 保持 CVal 拷贝廉价；set_field 写时复制避免别名污染。
+    std::shared_ptr<std::vector<std::pair<Symbol, CVal>>> rec;
     static CVal I(std::int64_t v) { CVal c; c.k = K::Int; c.i = v; return c; }
     static CVal R(double v) { CVal c; c.k = K::Real; c.r = v; return c; }
     static CVal B(bool v) { CVal c; c.k = K::Bool; c.b = v; return c; }
     static CVal S(Symbol v) { CVal c; c.k = K::Str; c.s = v; return c; }
+    static CVal Rec() { CVal c; c.k = K::Record; c.rec = std::make_shared<std::vector<std::pair<Symbol, CVal>>>(); return c; }
     double as_r() const { return k == K::Int ? static_cast<double>(i) : r; }
+    void set_field(Symbol name, CVal v) {
+      if (!rec) rec = std::make_shared<std::vector<std::pair<Symbol, CVal>>>();
+      else if (rec.use_count() > 1) rec = std::make_shared<std::vector<std::pair<Symbol, CVal>>>(*rec);   // COW
+      for (auto& f : *rec) if (f.first == name) { f.second = std::move(v); return; }
+      rec->push_back({name, std::move(v)});
+    }
   };
 
   // enclosing 实例的词法作用域链 → 类 SElement 列表（内→外，<top>/无 def 跳过）。
@@ -920,6 +948,16 @@ class Flattener {
       if (f.is_valid()) return f;
     }
     return scan(I_.scode.program);   // 顶层
+  }
+
+  // 单段类型名解析到记录类（restriction Record）；否则 invalid。限定记录类型暂不做。
+  Id<SElement> resolve_record_class(const std::vector<Symbol>& path, const ScodeScope& scope) {
+    if (path.size() != 1) return {};
+    Id<SElement> e = find_scode_element(path[0], scope);
+    if (e.is_valid() && I_.scode.elems[e].kind == SElementKind::Class &&
+        I_.scode.elems[e].restriction == SRestriction::Record)
+      return e;
+    return {};
   }
 
   // 解析限定名 parts 到 constant（allow_param 时也接 parameter）组件；out_scope = 该组件所在类的作用域链。前导点 = 从顶层。
@@ -1145,9 +1183,21 @@ class Flattener {
       if (!v) return fail();
       env[I_.scode.elems[inputs[i]].name.id] = *v;
     }
-    // 输出默认绑定 init（`output Real y = expr`）。
+    // 输出 init：记录输出（`output R r(x=x,y=y)`）→ 空 Record + 字段修饰；标量输出（`output Real y = expr`）→ 求绑定。
     const SElement& oel = I_.scode.elems[outputs[0]];
-    if (oel.mod.is_valid() && I_.scode.mods[oel.mod].binding.is_valid()) {
+    const Id<SElement> orec = resolve_record_class(oel.type.path, fscope);
+    if (orec.is_valid()) {
+      CVal rv = CVal::Rec();
+      if (oel.mod.is_valid())
+        for (const SSubMod& sub : I_.scode.mods[oel.mod].subs) {
+          const SMod& sm = I_.scode.mods[sub.mod];
+          if (!sm.binding.is_valid() || !sm.subs.empty()) return fail();   // 属性/嵌套修饰 → SKIP
+          std::optional<CVal> v = eval_scode(sm.binding, fscope, depth + 1, true);
+          if (!v) return fail();
+          rv.set_field(sub.ident, *v);
+        }
+      env[oel.name.id] = std::move(rv);
+    } else if (oel.mod.is_valid() && I_.scode.mods[oel.mod].binding.is_valid()) {
       std::optional<CVal> v = eval_scode(I_.scode.mods[oel.mod].binding, fscope, depth + 1, true);
       if (v) env[oel.name.id] = *v;
     }
@@ -1206,11 +1256,18 @@ class Flattener {
         const Exp& lhs = I_.absyn.exps[st.a];
         if (lhs.kind != ExpKind::CrefExp) return Flow::Fail;
         const Cref& lc = I_.absyn.crefs[lhs.cref];
-        if (lc.parts.size() != 1 || !lc.parts[0].subscripts.empty()) return Flow::Fail;
+        if (lc.parts.empty() || (lc.parts.size() != 1 && lc.parts.size() != 2)) return Flow::Fail;   // 标量或记录字段 `r.x`
+        for (const CrefPart& p : lc.parts) if (!p.subscripts.empty()) return Flow::Fail;   // 数组赋值未做
         if (input_names_ && input_names_->count(lc.parts[0].name.id)) return Flow::Fail;   // 给输入赋值 = 错误（AssignInput1）
         std::optional<CVal> v = eval_scode(st.b, fscope, depth + 1, true);
         if (!v) return Flow::Fail;
-        (*locals_)[lc.parts[0].name.id] = *v;
+        if (lc.parts.size() == 1) {
+          (*locals_)[lc.parts[0].name.id] = *v;
+        } else {   // 记录字段赋值 `r.x := …`
+          CVal& rec = (*locals_)[lc.parts[0].name.id];
+          if (rec.k != CVal::K::Record) rec = CVal::Rec();
+          rec.set_field(lc.parts[1].name, *v);
+        }
         return Flow::Normal;
       }
       case SStmtKind::If: {
@@ -1250,12 +1307,56 @@ class Flattener {
     }
   }
 
+  // 记录常量折叠的字段直接发射：`constant R r = f(…)` 折成记录值 rv → 逐字段 `r.field = 值`（继承 r 的变率/final）。
+  // 字段须标量内建（非数组/嵌套记录），且折叠值含该字段并能按字段类型强转，否则 false（调用方 SKIP）。
+  bool emit_record_fields(CompId cid, const std::vector<Symbol>& name, const std::vector<Symbol>& prefix,
+                          const PSubs& psubs, NodeId reci, const CVal& rv, bool is_protected, bool force_final) {
+    (void)prefix;
+    FlatVarKind vk = FlatVarKind::Var;
+    switch (I_.comps[cid].attributes.variability) {
+      case SVariability::Var: vk = FlatVarKind::Var; break;
+      case SVariability::Discrete: vk = FlatVarKind::Discrete; break;
+      case SVariability::Param: vk = FlatVarKind::Parameter; break;
+      case SVariability::Const: vk = FlatVarKind::Constant; break;
+    }
+    const bool fin = I_.comps[cid].attributes.is_final || force_final;
+    const std::vector<NodeId> fields = I_.trees[I_.node_class(reci).tree].components;   // 拷贝（不跨 add 持引用）
+    for (NodeId fn : fields) {
+      const CompId fc = I_.nodes[fn].comp;
+      const SElement& fcel = I_.scode.elems[I_.comps[fc].def];
+      if (!fcel.attr.dims.empty() || !fcel.type.dims.empty()) return false;   // 数组字段 → SKIP
+      if (I_.comps[fc].ty.kind == TypeKind::Complex) return false;            // 嵌套记录字段 → SKIP
+      const CVal* fv = nullptr;
+      if (rv.rec)
+        for (const auto& f : *rv.rec) if (f.first == I_.nodes[fn].name) { fv = &f.second; break; }
+      if (!fv) return false;
+      std::optional<CVal> cv = coerce_cval(*fv, fcel.type.path);
+      if (!cv || cv->k == CVal::K::Record) return false;
+      const Type fty = I_.comps[fc].ty;
+      const SourceLoc floc = I_.comps[fc].loc;
+      FlatVariable v;
+      v.name = name;
+      v.name.push_back(I_.nodes[fn].name);
+      v.name_subs = psubs;
+      v.name_subs.resize(v.name.size());   // 逐段无下标
+      v.ty = fty;
+      v.is_protected = is_protected;
+      v.is_final = fin;
+      v.var_kind = vk;
+      v.binding = literal_of(*cv);
+      v.loc = floc;
+      result_.model.variables.push_back(std::move(v));
+    }
+    return true;
+  }
+
   Id<Expr> literal_of(const CVal& v) {
     switch (v.k) {
       case CVal::K::Int: return lit_int(v.i);
       case CVal::K::Real: return lit_real(v.r);
       case CVal::K::Bool: return lit_bool(v.b);
       case CVal::K::Str: { Expr e; e.kind = ExprKind::StringLit; e.sval = v.s; e.ty = Type::string(); return add(std::move(e)); }
+      case CVal::K::Record: break;   // 记录值不应到这里（emit_record_fields 已按字段拆开）
     }
     return lit_int(0);
   }

@@ -401,6 +401,23 @@ YMC_TEST(flatten_user_function_default_and_named_args) {
   YMC_CHECK_EQ(flatten_src(src), std::string("class M\n  Real a = 6.0;\n  Real b = 7.0;\nend M;\n"));
 }
 
+YMC_TEST(flatten_function_returns_record_constant) {
+  // 函数返回记录常量：output 字段修饰 `r(x=x,y=y)` 与算法字段赋值 `r.x:=x` 两种；`constant R r = f(…)` 摊字段。
+  // 期望 = omc 1.25.0（CevalFuncRecord1/2）。
+  const char* out_mod =
+      "record R\n  Real x;\n  Real y;\nend R;\n"
+      "function f\n  input Real x;\n  input Real y;\n  output R r(x = x, y = y);\nend f;\n"
+      "model M\n  constant R r = f(1.0, 2.0);\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(out_mod),
+               std::string("class M\n  constant Real r.x = 1.0;\n  constant Real r.y = 2.0;\nend M;\n"));
+  const char* algo =
+      "record R\n  Real x;\n  Real y;\nend R;\n"
+      "function f\n  input Real x;\n  input Real y;\n  output R r;\nalgorithm\n  r.x := x;\n  r.y := y;\nend f;\n"
+      "model M\n  constant R r = f(1.0, 2.0);\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(algo),
+               std::string("class M\n  constant Real r.x = 1.0;\n  constant Real r.y = 2.0;\nend M;\n"));
+}
+
 YMC_TEST(flatten_user_function_control_flow) {
   // 函数体控制流常量折叠：if/elseif/else、for(累加)、while(倒数累加)。期望 = omc 1.25.0（CevalFuncIf1/For1/While1）。
   const char* if_src =
