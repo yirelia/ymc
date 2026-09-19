@@ -45,6 +45,53 @@ ymc 以 **omc 1.25.0 实测**为准；这些用例从 `docs/research/s3-easy-sli
 | flattening/.../IfExpression17.mo | `final parameter … dynamic = false;` + if 化简成 `m.x = m.u;` | `parameter … dynamic=false;` + 保留 `(if m.dynamic then der(m.x) else 0.0) + m.x = m.u;` | 较新 OMC 把常量参数求值成 final 并按 dynamic=false 化简 if；1.25.0 不做。ymc 与 1.25.0 逐字一致（if 分支类型统一 `0`→`0.0` 已修）。 |
 | flattening/.../Connect3.mo | `class Connect3 … (-c1.f) + (-c2.f) = 0.0; …`（连接器别名 `class C2 = C` 成功） | **报错退出**：`c1 is not a valid connector`（短类别名当连接器，1.25.0 拒绝） | ymc 也 SKIP（`short class aliasing composite`），与 1.25.0 一致（都不产出）；文件+较新 OMC 才接受。故 Connect3 不进 easy-slice。 |
 
+## 已研究待实现：多条 connect 连接集（union-find）
+
+**状态**：算法已从 OMC 新前端源码 + 实跑 omc 1.25.0 探针完整摸清，暂不实现——理由是当前 testsuite 里
+每个多条-connect 标量用例都被另一未做特性卡住（expandable / 条件组件 / stream / 数组连接器），做了 **+0 新 PASS**，
+且只能拿合成探针对拍。真正需要它的是 **S3.g / MSL Examples** 里的真实多路连接。届时按下述算法忠实实现即可。
+单条 connect（2 连接器）已在 `flatten.cpp:process_connects` 落地并逐字节验证；多条只差把"连接集数据结构"补全。
+
+来源：`OMCompiler/Compiler/NFFrontEnd/NFConnectEquations.mo`、`NFConnectionSets.mo`、`NFConnector.mo`、
+`NFConnections.mo`、`Util/DisjointSets.mo`、`Util/UnorderedMap.mo`（新前端）。实跑校核：Connect2/Connect5/
+ConnectDiffOrder1/BothInside/ThreeWay（探针在 scratchpad）。
+
+**数据结构**：`DisjointSets` = 并查集，元素 = **标量连接器变量**，键 = `(flat cref, face)`，face ∈ {INSIDE, OUTSIDE}。
+`UnorderedMap` 的 `toArray` 按**插入序**返回键（非哈希序，可复刻，UnorderedMap.mo:494-510）。
+
+**建集 `NFConnectionSets.fromConnections`（NFConnectionSets.mo:77-82）**：
+1. **seed（`collectFlows`, NFConnections.mo:151-156）**：把**每个 flow 变量**当 **INSIDE** 单元素集加入，`addFlow`
+   **前插**（line 95）→ seed 列表 = **声明序的反序**。（受 `Flags.DISABLE_SINGLE_FLOW_EQ` 门控，默认开。）
+2. **merge**：按源码 connect 顺序，每条 `connect(a,b)` 展开成"每个同名成员变量"的连接对；对每对，两端各按
+   `(cref, face)` `findSet`（不存在则**追加插入**新元素）后 union。
+   - **face（`NFConnector.crefFace`, NFConnector.mo:312-326）**：简单标识符 `c` → OUTSIDE；否则 `firstNonScope(cref)`
+     是连接器 → OUTSIDE，是非连接器组件（`m.c`）→ INSIDE。
+   - INSIDE 端命中已 seed 的 `(cref, INSIDE)` → **复用** seed 元素；OUTSIDE 端的 `(cref, OUTSIDE)` 与 seed 的
+     `(cref, INSIDE)` **键不同** → **新插**元素，原 INSIDE seed 存活成单元素集 → 该 flow 出 `f = 0`（这正是
+     "outside/未连接连接器的 flow=0"的真正来源，`Connector.isEqual` 比较 name **且** face，NFConnector.mo:146-147）。
+
+**取集 `DisjointSets.extractSets`（DisjointSets.mo:326-339）**：对 `toArray`（插入序）**反向**遍历，每个元素**前插**到其
+根所属集合的列表 → 集合内元素序 = 由此涌现（非声明序、非根序）。
+
+**出方程 `NFConnectEquations`**：
+- `generateEquations`（NFConnectEquations.mo:110-127）按**集合创建序**（根首次出现序，DisjointSets.mo:313-318）逐集处理，
+  每集方程 `listAppend(set_eql, equations)` **前插**进累加器；整块再 `listAppend(conn_eql, flatModel.equations)`
+  **前插**到模型方程（NFFlatten.mo:2497）——**没有**"potential 全前、flow 全后"的硬编码相位，观测到的顺序是
+  上述创建序 + 两次前插的涌现结果，**复刻它要按创建序模拟、别按 kind 排序**。
+- **potential（`generatePotentialEquations`, 213-217）**：`c1 = listHead(elements)`，`c1.v = c2.v for c2 in rest`——
+  **以集合表头为参照星形展开**（非相邻链），2 连接器即 `a.v = b.v`。
+- **flow 求和（`makeFlowExp`, 406-421 / `generateFlowEquations`, 364-404）**：按集合元素序左折叠 `sum := makeFlowExp(e0)`，
+  `for e in rest: sum := BINARY(sum, Add, makeFlowExp(e))`；INSIDE 取裸 cref、OUTSIDE 取 `UNARY(-, cref)`（418-420）。
+  SimplifyExp 后：全 OUTSIDE→`-(a+b+…)`、全 INSIDE→`a+b+…`、混合→`inside − outside`。单元素集（存活 seed）→ `f = 0`（386-387,397）。
+
+**实测涌现结果（用来对拍模拟）**：
+- `connect(c1,c2)` 都 outside：集元素序 `[c1,c2]`，`c1.e=c2.e; -(c1.f+c2.f)=0; c1.f=0; c2.f=0`。
+- `connect(a1.c,a2.c)` 都 inside：集元素序 `[a2.c,a1.c]`（**反序**，源自 seed 前插），`a1.c.e=a2.c.e; a2.c.f+a1.c.f=0`（无 f=0）。
+- `connect(a.c1,c2)` inside+outside：`a.c1.e=c2.e; a.c1.f−c2.f=0; c2.f=0`（inside seed 被并、outside seed 存活）。
+- `connect(c1,c2);connect(c2,c3)` 都 outside（ThreeWay 探针）：集元素序 `[c2,c3,c1]`，出
+  `c2.e=c3.e; c2.e=c1.e; -(c2.f+c3.f+c1.f)=0; c1.f=0; c2.f=0; c3.f=0`——3 路的元素序 `[c2,c3,c1]` 必须靠忠实模拟
+  seed 反序 + merge 插入 + extract 反序才能复刻，**不能臆想**。
+
 ## 已解决（并入工具/规格）
 
 - omc-diff 模糊比对规则（方案 §8 #1）→ `tests/omc/omc_diff.py`，对拍 omc-diff.exe 一致。
