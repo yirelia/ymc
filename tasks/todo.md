@@ -345,6 +345,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       → easy-slice **161 PASS / 0 FAIL**（+2 CevalFuncRecord1/2）；oracle=live 逐字节一致；全 scodeinst PASS 162→164、FAIL 69 不变；
       三编译器 10/10，ASan 0，+1 单测。诚实 SKIP：符号函数求值（CevalFuncRecord3 `f(r1)` 字段未赋值 → `r2.x=r1.x`）、
       数组值/`:` 维推断（CevalFuncArray）、嵌套记录/数组字段、`constant R r = R(…)` 记录构造的常量传播（CevalRecord3/5 还需字段引用求值）。
+- [x] **加宽㉖常量数组规约（sum/product/min/max）**（2026-09-19）：CVal 加 Array 变体（shared_ptr）。eval_scode 数组字面量
+      `{…}`（可嵌套）→ CVal::Array；eval_reduction 把单数组实参的 sum/product/min/max 摊平后规约成标量（Int→Int、含 Real→Real；
+      min/max 保留胜出元素类型）。call() 与 eval_scode Call 都先试规约折叠。顺带修 for 隐式范围 `for i loop`（无 in range）
+      崩溃 → 干净 SKIP（ImplicitRangeAlg2；eval_range 守 invalid）。
+      → easy-slice **165 PASS / 0 FAIL**（+4 CevalSum1、CevalProduct1、CevalMin2、CevalMax2）；oracle=live 逐字节一致；
+      全 scodeinst PASS 164→168、FAIL 69 不变（0 新增）；三编译器 10/10，ASan 0，+1 单测。
+      诚实 SKIP（下个数组增量）：带迭代器规约 `sum(e for i in …)`（Reduction 表达式，CevalReduction）、局部数组下标 `x[i]`、
+      数组函数值 + `:` 维推断（CevalFuncArray）、数组方程/运算。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

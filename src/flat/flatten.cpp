@@ -903,18 +903,20 @@ class Flattener {
   // ---- package 限定常量：SCODE 作用域链解析 + 值语义常量求值 ----
   // package 常量往往没被实例化（没走 inst 树），所以直接在 SCODE 上按名解析 + 递归求值，不经 inst_exp/cref。
   struct CVal {
-    enum class K { Int, Real, Bool, Str, Record } k = K::Int;
+    enum class K { Int, Real, Bool, Str, Record, Array } k = K::Int;
     std::int64_t i = 0;
     double r = 0.0;
     bool b = false;
     Symbol s;
     // Record：字段名→值（保序）。用 shared_ptr 保持 CVal 拷贝廉价；set_field 写时复制避免别名污染。
     std::shared_ptr<std::vector<std::pair<Symbol, CVal>>> rec;
+    std::shared_ptr<std::vector<CVal>> arr;   // Array：元素（可嵌套）
     static CVal I(std::int64_t v) { CVal c; c.k = K::Int; c.i = v; return c; }
     static CVal R(double v) { CVal c; c.k = K::Real; c.r = v; return c; }
     static CVal B(bool v) { CVal c; c.k = K::Bool; c.b = v; return c; }
     static CVal S(Symbol v) { CVal c; c.k = K::Str; c.s = v; return c; }
     static CVal Rec() { CVal c; c.k = K::Record; c.rec = std::make_shared<std::vector<std::pair<Symbol, CVal>>>(); return c; }
+    static CVal Arr(std::vector<CVal> v) { CVal c; c.k = K::Array; c.arr = std::make_shared<std::vector<CVal>>(std::move(v)); return c; }
     double as_r() const { return k == K::Int ? static_cast<double>(i) : r; }
     void set_field(Symbol name, CVal v) {
       if (!rec) rec = std::make_shared<std::vector<std::pair<Symbol, CVal>>>();
@@ -1002,6 +1004,16 @@ class Flattener {
       case ExpKind::StringLit: return CVal::S(in_.intern(unescape_modelica_string(in_.str(e.sval))));
       case ExpKind::Tuple:
         return e.args.size() == 1 ? eval_scode(e.args[0], scope, depth + 1, allow_param, used) : std::nullopt;
+      case ExpKind::Array: {   // 数组字面量 → CVal::Array（元素逐个求值，可嵌套）
+        std::vector<CVal> els;
+        els.reserve(e.args.size());
+        for (Id<Exp> a : e.args) {
+          std::optional<CVal> v = eval_scode(a, scope, depth + 1, allow_param, used);
+          if (!v) return std::nullopt;
+          els.push_back(std::move(*v));
+        }
+        return CVal::Arr(std::move(els));
+      }
       case ExpKind::CrefExp: {
         const Cref& c = I_.absyn.crefs[e.cref];
         // 用户函数解释期：单名命中局部环境（输入/局部/输出）→ 直接返回其值。
@@ -1078,8 +1090,10 @@ class Flattener {
       case ExpKind::Call: {
         // size(arr, d)：解析数组组件 arr（任意可变性），求它第 d 维（DimSize1）。
         const Cref& fn = I_.absyn.crefs[e.cref];
-        if (fn.parts.size() != 1 || in_.str(fn.parts[0].name) != "size" || e.args.size() != 2)
+        if (fn.parts.size() != 1 || in_.str(fn.parts[0].name) != "size" || e.args.size() != 2) {
+          if (auto rv = eval_reduction(e, scope, depth)) return rv;   // sum/product/min/max(常量数组)
           return eval_user_call(e, scope, depth);   // 非 size → 试用户函数常量折叠
+        }
         const Exp& ae = I_.absyn.exps[e.args[0]];
         auto dv = eval_scode(e.args[1], scope, depth + 1, allow_param, used);
         if (ae.kind != ExpKind::CrefExp || !dv || dv->k != CVal::K::Int) return std::nullopt;
@@ -1231,6 +1245,7 @@ class Flattener {
 
   // 常量 range `a:b` / `a:step:b` → 整数序列（供 for 展开）；非常量/非整数/过大 → nullopt。
   std::optional<std::vector<std::int64_t>> eval_range(Id<Exp> rexp, const ScodeScope& fscope, int depth) {
+    if (!rexp.is_valid()) return std::nullopt;
     const Exp& e = I_.absyn.exps[rexp];
     if (e.kind != ExpKind::Range || !e.a.is_valid() || !e.b.is_valid()) return std::nullopt;
     const bool has_step = e.c.is_valid();   // a:step:b（c 为终点）；否则 a:b
@@ -1279,6 +1294,7 @@ class Flattener {
         return exec_body(st.else_body, fscope, depth + 1);   // else（可空）
       }
       case SStmtKind::For: {
+        if (!st.a.is_valid()) return Flow::Fail;   // 隐式范围 `for i loop`（无 in range）v1 未做 → SKIP（ImplicitRangeAlg2）
         auto seq = eval_range(st.a, fscope, depth);
         if (!seq) return Flow::Fail;
         for (std::int64_t iv : *seq) {
@@ -1357,8 +1373,48 @@ class Flattener {
       case CVal::K::Bool: return lit_bool(v.b);
       case CVal::K::Str: { Expr e; e.kind = ExprKind::StringLit; e.sval = v.s; e.ty = Type::string(); return add(std::move(e)); }
       case CVal::K::Record: break;   // 记录值不应到这里（emit_record_fields 已按字段拆开）
+      case CVal::K::Array: break;    // 数组值不应到这里（标量上下文才调 literal_of）
     }
     return lit_int(0);
+  }
+
+  // 摊平嵌套数组 CVal 成标量元素序列（规约用）。
+  static void flatten_cval_array(const CVal& v, std::vector<CVal>& out) {
+    if (v.k == CVal::K::Array) { if (v.arr) for (const CVal& e : *v.arr) flatten_cval_array(e, out); }
+    else out.push_back(v);
+  }
+
+  // 常量数组规约 sum/product/min/max（单数组实参）→ 标量常量。min(a,b) 等标量形态不在此（返回 nullopt）。
+  std::optional<CVal> eval_reduction(const Exp& call, const ScodeScope& scope, int depth) {
+    const Cref& fn = I_.absyn.crefs[call.cref];
+    if (fn.parts.size() != 1 || !fn.parts[0].subscripts.empty() || call.args.size() != 1) return std::nullopt;
+    const std::string_view nm = in_.str(fn.parts[0].name);
+    const bool is_sum = nm == "sum", is_prod = nm == "product", is_min = nm == "min", is_max = nm == "max";
+    if (!is_sum && !is_prod && !is_min && !is_max) return std::nullopt;
+    std::optional<CVal> av = eval_scode(call.args[0], scope, depth + 1, true);
+    if (!av || av->k != CVal::K::Array) return std::nullopt;
+    std::vector<CVal> flat;
+    flatten_cval_array(*av, flat);
+    if (flat.empty()) return std::nullopt;
+    bool all_int = true;
+    for (const CVal& c : flat) {
+      if (c.k != CVal::K::Int && c.k != CVal::K::Real) return std::nullopt;   // 只规约数值
+      if (c.k != CVal::K::Int) all_int = false;
+    }
+    if (is_sum || is_prod) {
+      if (all_int) {
+        std::int64_t acc = is_sum ? 0 : 1;
+        for (const CVal& c : flat) acc = is_sum ? acc + c.i : acc * c.i;
+        return CVal::I(acc);
+      }
+      double acc = is_sum ? 0.0 : 1.0;
+      for (const CVal& c : flat) acc = is_sum ? acc + c.as_r() : acc * c.as_r();
+      return CVal::R(acc);
+    }
+    CVal best = flat[0];   // min/max：保留胜出元素的类型
+    for (const CVal& c : flat)
+      if (is_min ? (c.as_r() < best.as_r()) : (c.as_r() > best.as_r())) best = c;
+    return best;
   }
 
   // ---- instExpressions：Absyn Exp → 类型化 Expr（在 model.exprs）----
@@ -1636,7 +1692,11 @@ class Flattener {
     const Cref& fn = I_.absyn.crefs[e.cref];
     // 用户函数常量折叠优先（支持命名/默认实参）：单名解析到 function 类且实参可求常量 → 折成字面量（CevalFunc1/FuncSimple）。
     if (fn.parts.size() == 1)
-      if (auto uv = eval_user_call(e, scode_scope_of(enclosing), 0)) return literal_of(*uv);
+    {
+      const ScodeScope sc = scode_scope_of(enclosing);
+      if (auto rv = eval_reduction(e, sc, 0)) return literal_of(*rv);   // sum/product/min/max(常量数组) → 字面量
+      if (auto uv = eval_user_call(e, sc, 0)) return literal_of(*uv);
+    }
     const std::string_view builtin_name = fn.parts.size() == 1 ? in_.str(fn.parts[0].name) : std::string_view{};
     const BuiltinFn* bf = nullptr;
     bool supported = true;

@@ -401,6 +401,19 @@ YMC_TEST(flatten_user_function_default_and_named_args) {
   YMC_CHECK_EQ(flatten_src(src), std::string("class M\n  Real a = 6.0;\n  Real b = 7.0;\nend M;\n"));
 }
 
+YMC_TEST(flatten_array_reduction_constant_fold) {
+  // 常量数组规约 sum/product/min/max（含嵌套数组摊平；Int→Int、含 Real→Real）。期望 = omc 1.25.0（CevalSum1/Min2/…）。
+  const char* src =
+      "model M\n"
+      "  constant Integer s = sum({1, 2, 3, 4});\n"
+      "  constant Real p = product({1.0, 2.0, 3.0, 4.0});\n"
+      "  constant Real lo = min({{3.0, 1.0}, {2.0, 5.0}});\n"
+      "  constant Real hi = max({3.0, 1.0, 7.0, 2.0});\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class M\n  constant Integer s = 10;\n  constant Real p = 24.0;\n"
+                           "  constant Real lo = 1.0;\n  constant Real hi = 7.0;\nend M;\n"));
+}
+
 YMC_TEST(flatten_function_returns_record_constant) {
   // 函数返回记录常量：output 字段修饰 `r(x=x,y=y)` 与算法字段赋值 `r.x:=x` 两种；`constant R r = f(…)` 摊字段。
   // 期望 = omc 1.25.0（CevalFuncRecord1/2）。
