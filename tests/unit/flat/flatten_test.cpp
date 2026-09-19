@@ -383,6 +383,32 @@ YMC_TEST(flatten_constant_record_unsupported) {
   YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
 }
 
+YMC_TEST(flatten_user_function_constant_fold) {
+  // 用户函数常量折叠：output 绑定 `y=x` + 算法 `y:=x*2`。期望 = omc 1.25.0（FuncSimple/CevalFunc1）。
+  YMC_CHECK_EQ(flatten_src("function f\n  input Real x;\n  output Real y = x;\nend f;\n"
+                           "model M\n  Real a = f(1.0);\nend M;\n"),
+               std::string("class M\n  Real a = 1.0;\nend M;\n"));
+  YMC_CHECK_EQ(flatten_src("function f\n  input Real x;\n  output Real y;\nalgorithm\n  y := x * 2;\nend f;\n"
+                           "model M\n  constant Real a = f(3.0);\nend M;\n"),
+               std::string("class M\n  constant Real a = 6.0;\nend M;\n"));
+}
+
+YMC_TEST(flatten_user_function_default_and_named_args) {
+  // 默认参数 + 命名实参：`f(4.0, z=2.0)` 中间参数 y 用默认 1.0 → 4+1+2=7。期望 = omc 1.25.0（FuncDefaultArg1）。
+  const char* src =
+      "function f\n  input Real x;\n  input Real y = 1.0;\n  input Real z;\n  output Real w = x + y + z;\nend f;\n"
+      "model M\n  Real a = f(1.0, 2.0, 3.0);\n  Real b = f(4.0, z = 2.0);\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string("class M\n  Real a = 6.0;\n  Real b = 7.0;\nend M;\n"));
+}
+
+YMC_TEST(flatten_function_assign_to_input_unsupported) {
+  // 给输入赋值是错误（omc 报错），ymc 折叠时拒绝 → SKIP（AssignInput1）。
+  bool uns = false;
+  flatten_src("function f\n  input Real x;\n  output Real y;\nalgorithm\n  x := x + 1;\n  y := x;\nend f;\n"
+              "model M\n  constant Real a = f(2.0);\nend M;\n", &uns);
+  YMC_CHECK(uns);
+}
+
 YMC_TEST(flatten_composite_array_scalarizes) {
   // 复合数组 `A a[2]` 逐元素以 `a[i]` 前缀展开成员；元素内 cref（`z = x`）带段下标 → `a[i].z = a[i].x`。
   // 期望 = omc 1.25.0（Prefix1 邻域）。

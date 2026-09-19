@@ -324,7 +324,15 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       → easy-slice **145 PASS / 0 FAIL**（+4 BindingArray1/2、eq4、eq7）；oracle=live 逐字节一致；全 scodeinst PASS 144→148、
       FAIL 69 不变（0 新增）；三编译器 10/10，ASan 0，+1 单测。
       诚实 SKIP：修饰提供值 + 跨成员常量求值（CevalBinding3 的 `z=x+y` 需 eval 解析修饰值，ymc eval_const_value 只看节点绑定）。
-      **sub-bucket 2 完成**；剩 sub-bucket 3 数组 connect（连接器数组 + for-connect + 连接集）。
+      **sub-bucket 2 完成**；剩 sub-bucket 3 数组 connect（连接器数组 + for-connect + 连接集）暂缓（记 open-questions）。
+- [x] **加宽㉓用户函数常量折叠**（2026-09-19）：`f(3.0)` 解析到 function 类 → 解释函数体求常量（无函数块发射）。
+      eval_user_call：绑定实参（位置/命名/缺省）到输入 → 局部环境 locals_（eval_scode 单名 cref 先查它）→ 解释 output 绑定
+      `output T y=expr` + 直线赋值算法 `y:=expr`（exec_stmt）→ 读单输出、按声明类型强转。call() 与 eval_scode Call 都先试折叠。
+      守卫（各为 omc 报错/须发射 → SKIP）：impure 函数（须发射 ImpureCall1）、函数注解 inverse/derivative（告警
+      FunctionInverseInvalid1/2）、公开非-io 变量（FunctionNonInputOutputParameter）、给输入赋值（AssignInput1）、多输出/外部/短类。
+      → easy-slice **152 PASS / 0 FAIL**（+7：CevalFunc1、FuncSimple、FuncDefaultArg1/5、FuncLocals、FuncWildcard、ceval4）；
+      oracle=live 逐字节一致；全 scodeinst PASS 148→155、FAIL 69 不变（0 新增）；三编译器 10/10，ASan 0，+3 单测。
+      诚实 SKIP（下个函数增量）：if/for/while/return 控制流（CevalFuncFor/If/While）、数组/记录参数与返回、函数块发射（非常量实参调用）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

@@ -966,6 +966,11 @@ class Flattener {
         return e.args.size() == 1 ? eval_scode(e.args[0], scope, depth + 1, allow_param, used) : std::nullopt;
       case ExpKind::CrefExp: {
         const Cref& c = I_.absyn.crefs[e.cref];
+        // 用户函数解释期：单名命中局部环境（输入/局部/输出）→ 直接返回其值。
+        if (locals_ && c.parts.size() == 1 && c.parts[0].subscripts.empty()) {
+          auto it = locals_->find(c.parts[0].name.id);
+          if (it != locals_->end()) return it->second;
+        }
         std::vector<Symbol> names;
         for (const CrefPart& p : c.parts) {
           if (!p.subscripts.empty()) return std::nullopt;
@@ -1035,7 +1040,8 @@ class Flattener {
       case ExpKind::Call: {
         // size(arr, d)：解析数组组件 arr（任意可变性），求它第 d 维（DimSize1）。
         const Cref& fn = I_.absyn.crefs[e.cref];
-        if (fn.parts.size() != 1 || in_.str(fn.parts[0].name) != "size" || e.args.size() != 2) return std::nullopt;
+        if (fn.parts.size() != 1 || in_.str(fn.parts[0].name) != "size" || e.args.size() != 2)
+          return eval_user_call(e, scope, depth);   // 非 size → 试用户函数常量折叠
         const Exp& ae = I_.absyn.exps[e.args[0]];
         auto dv = eval_scode(e.args[1], scope, depth + 1, allow_param, used);
         if (ae.kind != ExpKind::CrefExp || !dv || dv->k != CVal::K::Int) return std::nullopt;
@@ -1067,6 +1073,110 @@ class Flattener {
     if (tn == "Real" && v.k == CVal::K::Int) return CVal::R(static_cast<double>(v.i));
     if (tn == "Integer" && v.k == CVal::K::Real) return std::nullopt;   // 收窄 → 类型错
     return v;
+  }
+
+  // 用户函数常量折叠（v1）：解析到 function 类，绑定实参（位置/命名/默认）到输入，解释函数体（输出绑定 + 直线赋值算法），
+  // 返回**单**输出的常量值。任何超范围（多输出、外部函数、数组/记录、非直线控制流、非常量实参）→ nullopt（调用方 SKIP）。
+  std::optional<CVal> eval_user_call(const Exp& call, const ScodeScope& scope, int depth) {
+    if (depth > 100) return std::nullopt;
+    const Cref& fn = I_.absyn.crefs[call.cref];
+    if (fn.parts.size() != 1 || !fn.parts[0].subscripts.empty()) return std::nullopt;
+    const Id<SElement> fe = find_scode_element(fn.parts[0].name, scope);
+    if (!fe.is_valid()) return std::nullopt;
+    if (I_.scode.elems[fe].kind != SElementKind::Class ||
+        I_.scode.elems[fe].restriction != SRestriction::Function ||
+        I_.scode.elems[fe].def.kind != SClassDefKind::Parts || I_.scode.elems[fe].def.external.present)
+      return std::nullopt;
+    if (I_.scode.elems[fe].purity == Purity::Impure) return std::nullopt;   // 不纯函数不能常量折叠（须发射，ImpureCall1）
+    if (I_.scode.elems[fe].cmt.annotation.is_valid()) return std::nullopt;  // 带函数注解（inverse/derivative…）→ 保守 SKIP（FunctionInverseInvalid1/2 告警）
+    // 输入/输出（声明序）；非 input/output 的公开变量是错误（须 protected，FunctionNonInputOutputParameter）→ SKIP。
+    std::vector<Id<SElement>> inputs, outputs;
+    for (Id<SElement> eid : I_.scode.elems[fe].def.elements) {
+      const SElement& c = I_.scode.elems[eid];
+      if (c.kind != SElementKind::Component) continue;
+      if (c.attr.dir == SDirection::Input) inputs.push_back(eid);
+      else if (c.attr.dir == SDirection::Output) outputs.push_back(eid);
+      else if (c.prefixes.vis != SVisibility::Protected) return std::nullopt;   // 公开非 io 变量 → 无效函数
+    }
+    if (outputs.size() != 1) return std::nullopt;   // 多输出（元组）/无输出 → SKIP
+    // 实参匹配输入（位置 + 命名）。
+    std::vector<Id<Exp>> bound(inputs.size());   // 每输入的实参 Exp（invalid = 用默认）
+    std::size_t pos = 0;
+    for (std::size_t i = 0; i < call.args.size(); ++i) {
+      if (i < call.arg_names.size() && call.arg_names[i].is_valid()) {
+        std::size_t j = 0;
+        for (; j < inputs.size(); ++j)
+          if (I_.scode.elems[inputs[j]].name == call.arg_names[i]) break;
+        if (j >= inputs.size() || bound[j].is_valid()) return std::nullopt;
+        bound[j] = call.args[i];
+      } else {
+        if (pos >= inputs.size()) return std::nullopt;
+        bound[pos++] = call.args[i];
+      }
+    }
+    // 先在**调用者**上下文求所有显式实参（用当前 locals_，支持嵌套 f(g(x))）。
+    std::unordered_map<std::uint32_t, CVal> env;
+    for (std::size_t i = 0; i < inputs.size(); ++i) {
+      if (!bound[i].is_valid()) continue;
+      std::optional<CVal> v = eval_scode(bound[i], scope, depth + 1, /*allow_param=*/true);
+      if (!v) return std::nullopt;
+      v = coerce_cval(*v, I_.scode.elems[inputs[i]].type.path);
+      if (!v) return std::nullopt;
+      env[I_.scode.elems[inputs[i]].name.id] = *v;
+    }
+    // 切到函数局部环境（含已绑定输入）；函数 scope = 函数类 + 调用者作用域。
+    ScodeScope fscope = scope;
+    fscope.insert(fscope.begin(), fe);
+    std::unordered_set<std::uint32_t> inset;
+    for (Id<SElement> ii : inputs) inset.insert(I_.scode.elems[ii].name.id);
+    auto* saved = locals_;
+    auto* saved_in = input_names_;
+    locals_ = &env;
+    input_names_ = &inset;
+    auto fail = [&]() -> std::optional<CVal> { locals_ = saved; input_names_ = saved_in; return std::nullopt; };
+    // 缺省输入（声明序，可引用前面输入）。
+    for (std::size_t i = 0; i < inputs.size(); ++i) {
+      if (bound[i].is_valid()) continue;
+      const Id<SMod> m = I_.scode.elems[inputs[i]].mod;
+      if (!m.is_valid() || !I_.scode.mods[m].binding.is_valid()) return fail();   // 无实参无默认
+      std::optional<CVal> v = eval_scode(I_.scode.mods[m].binding, fscope, depth + 1, true);
+      if (!v) return fail();
+      v = coerce_cval(*v, I_.scode.elems[inputs[i]].type.path);
+      if (!v) return fail();
+      env[I_.scode.elems[inputs[i]].name.id] = *v;
+    }
+    // 输出默认绑定 init（`output Real y = expr`）。
+    const SElement& oel = I_.scode.elems[outputs[0]];
+    if (oel.mod.is_valid() && I_.scode.mods[oel.mod].binding.is_valid()) {
+      std::optional<CVal> v = eval_scode(I_.scode.mods[oel.mod].binding, fscope, depth + 1, true);
+      if (v) env[oel.name.id] = *v;
+    }
+    // 算法段（只做直线赋值；if/for/while/return/break → SKIP）。
+    for (const SAlgorithm& alg : I_.scode.elems[fe].def.algorithms)
+      for (Id<SStatement> sid : alg.stmts)
+        if (!exec_stmt(sid, fscope, depth + 1)) return fail();
+    // 读单输出。
+    auto it = env.find(oel.name.id);
+    std::optional<CVal> result;
+    if (it != env.end()) result = coerce_cval(it->second, oel.type.path);
+    locals_ = saved;
+    input_names_ = saved_in;
+    return result;
+  }
+
+  // 直线赋值语句解释：`y := expr`（lhs 单名局部/输出）。其余语句形态 → false（调用方 SKIP）。
+  bool exec_stmt(Id<SStatement> sid, const ScodeScope& fscope, int depth) {
+    const SStatement& st = I_.scode.stmts[sid];
+    if (st.kind != SStmtKind::Assign) return false;
+    const Exp& lhs = I_.absyn.exps[st.a];
+    if (lhs.kind != ExpKind::CrefExp) return false;
+    const Cref& lc = I_.absyn.crefs[lhs.cref];
+    if (lc.parts.size() != 1 || !lc.parts[0].subscripts.empty()) return false;
+    if (input_names_ && input_names_->count(lc.parts[0].name.id)) return false;   // 给输入赋值是错误（AssignInput1）→ SKIP
+    std::optional<CVal> v = eval_scode(st.b, fscope, depth + 1, true);
+    if (!v) return false;
+    (*locals_)[lc.parts[0].name.id] = *v;
+    return true;
   }
 
   Id<Expr> literal_of(const CVal& v) {
@@ -1352,6 +1462,9 @@ class Flattener {
 
   Id<Expr> call(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
     const Cref& fn = I_.absyn.crefs[e.cref];
+    // 用户函数常量折叠优先（支持命名/默认实参）：单名解析到 function 类且实参可求常量 → 折成字面量（CevalFunc1/FuncSimple）。
+    if (fn.parts.size() == 1)
+      if (auto uv = eval_user_call(e, scode_scope_of(enclosing), 0)) return literal_of(*uv);
     const std::string_view builtin_name = fn.parts.size() == 1 ? in_.str(fn.parts[0].name) : std::string_view{};
     const BuiltinFn* bf = nullptr;
     bool supported = true;
@@ -2028,6 +2141,8 @@ class Flattener {
   std::unordered_set<std::uint32_t> evaluating_;   // 正在求值的常量节点（环检测）
   NodeId decl_scope_;   // 当前正在算绑定的组件声明处作用域（限定名在此解析；继承成员 = 基类作用域）
   PSubs cur_psubs_;     // 当前 prefix 的逐段下标（复合数组 `a[i]`）；cref 前缀改写读它。emit_*/collect_equation 入口设置
+  std::unordered_map<std::uint32_t, CVal>* locals_ = nullptr;   // 用户函数解释期的局部环境（输入/局部/输出名→值）
+  std::unordered_set<std::uint32_t>* input_names_ = nullptr;    // 当前函数的输入名（禁止对其赋值，AssignInput1）
   struct FlowVar { std::vector<Symbol> name; Type ty; SourceLoc loc; };
   std::vector<FlowVar> flow_vars_;   // flow 变量（run() 末尾按 outside/未连接补 `=0` 方程）
   struct ConnectStmt { Id<Exp> a, b; NodeId enclosing; std::vector<Symbol> prefix; SourceLoc loc; };

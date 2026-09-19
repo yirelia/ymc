@@ -92,6 +92,16 @@ ConnectDiffOrder1/BothInside/ThreeWay（探针在 scratchpad）。
   `c2.e=c3.e; c2.e=c1.e; -(c2.f+c3.f+c1.f)=0; c1.f=0; c2.f=0; c3.f=0`——3 路的元素序 `[c2,c3,c1]` 必须靠忠实模拟
   seed 反序 + merge 插入 + extract 反序才能复刻，**不能臆想**。
 
+## 已研究待实现：数组 connect（sub-bucket 3，暂缓）
+
+数组进阶已做 spread（BindingArray8）+ 复合数组标量化/修饰分发（phase 2a/2b，+8）。**数组 connect** 是硬尾巴——
+非单桶，而是一簇特性叠加：(1) 连接器数组 `C c[n]` 标量化 + 逐元素 flow=0；(2) for 循环方程展开
+`for i loop connect(a[i],b[i]) end for`；(3) 切片/整体 connect `connect(a[1:n-1], a[2:n])` / `connect(x, y[2:p+1])`
+按元素配对展开；(4) 多条 connect 连接集（**依赖已延后的 union-find**，见上节；ArrayConnect1 的 for-connect 成多路集）。
+且多数用例还带 `-nfScalarize` 注解或大维（omc 本就不标量化）。部分做（如仅连接器数组标量化）payoff ≈ 0（testsuite
+无独立无-connect 连接器数组用例）。故整簇暂缓，待 union-find + for 循环 + 切片下标就绪后一并做。
+连接器数组标量化的最小目标（探针实测）：`C c[2]` → `c[1].e c[1].f c[2].e c[2].f` + `c[i].f = 0.0`。
+
 ## 已解决（并入工具/规格）
 
 - omc-diff 模糊比对规则（方案 §8 #1）→ `tests/omc/omc_diff.py`，对拍 omc-diff.exe 一致。
