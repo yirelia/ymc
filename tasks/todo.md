@@ -318,6 +318,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       （ArrayConnect3 cells[1000,100] 爆量）、表达式里显式下标引用复合数组元素 `a[3].x` 保守 SKIP（越界校验未做，ArrayBounds2）。
       → easy-slice **141 PASS / 0 FAIL**（+4 Prefix1/2、bindings4、eq6）；oracle=live 逐字节一致；全 scodeinst PASS 140→144、
       FAIL 69 不变（0 新增）；三编译器 10/10，ASan 0，+2 单测。**phase 2a 只做无修饰**；数组修饰分发 `a[3](x={…})` 留 phase 2b。
+- [x] **加宽㉒复合数组修饰分发（sub-bucket 2/3，phase 2b）**（2026-09-19）：组件自身声明修饰 `A a[3](x={1,2,3})` 逐元素分发
+      （distribute_mod：每个子修饰绑定按元素下标 aidx 逐维下降取标量 → `a[i].x=vi`；`each` 子修饰对每元素保持原值），
+      合成 SMod 走既有修饰机制。外来/派生修饰的数组分发、子修饰带嵌套属性（`x(start=…)`）仍 SKIP。
+      → easy-slice **145 PASS / 0 FAIL**（+4 BindingArray1/2、eq4、eq7）；oracle=live 逐字节一致；全 scodeinst PASS 144→148、
+      FAIL 69 不变（0 新增）；三编译器 10/10，ASan 0，+1 单测。
+      诚实 SKIP：修饰提供值 + 跨成员常量求值（CevalBinding3 的 `z=x+y` 需 eval 解析修饰值，ymc eval_const_value 只看节点绑定）。
+      **sub-bucket 2 完成**；剩 sub-bucket 3 数组 connect（连接器数组 + for-connect + 连接集）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

@@ -394,6 +394,16 @@ YMC_TEST(flatten_composite_array_scalarizes) {
   YMC_CHECK_EQ(flatten_src(src), std::string(want));
 }
 
+YMC_TEST(flatten_composite_array_modifier_distributes) {
+  // 数组修饰 `A a[3](x={1,2,3})` 逐元素分发：a[i].x = 第 i 个值。期望 = omc 1.25.0（BindingArray1）。
+  const char* src =
+      "model A\n  Real x = 1.0;\nend A;\n"
+      "model M\n  A a[3](x = {1, 2, 3});\nend M;\n";
+  const char* want =
+      "class M\n  Real a[1].x = 1.0;\n  Real a[2].x = 2.0;\n  Real a[3].x = 3.0;\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string(want));
+}
+
 YMC_TEST(flatten_composite_array_element_ref_unsupported) {
   // 表达式里显式下标引用复合数组元素 `a[3].x`（越界/无界校验未做）→ 保守 SKIP（ArrayBounds2）。
   bool uns = false;

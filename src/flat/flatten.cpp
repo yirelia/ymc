@@ -313,11 +313,13 @@ class Flattener {
           if (I_.comps[cid].binding.kind == BindingKind::Raw && I_.comps[cid].binding.raw_exp.is_valid()) {
             set_unsupported("composite array whole binding"); continue;
           }
-          // 数组修饰分发 `a[3](x={…})` 留 2b：此处有任何子修饰/整体绑定 → SKIP。
-          bool has_mod = cel.mod.is_valid() && !I_.scode.mods[cel.mod].subs.empty();
+          // 数组修饰分发（phase 2b）：只处理组件自身声明修饰 cel.mod（`a[3](x={…})`）；外来 matched/派生修饰的数组
+          // 分发留后续 → SKIP。
+          bool ext_mod = false;
           for (Id<SMod> m : matched)
-            if (!I_.scode.mods[m].subs.empty() || I_.scode.mods[m].binding.is_valid()) has_mod = true;
-          if (has_mod || !I_.comps[cid].derived_mods.empty()) { set_unsupported("composite array modifier"); continue; }
+            if (!I_.scode.mods[m].subs.empty() || I_.scode.mods[m].binding.is_valid()) ext_mod = true;
+          if (ext_mod || !I_.comps[cid].derived_mods.empty()) { set_unsupported("composite array external modifier"); continue; }
+          const bool own_mod = cel.mod.is_valid() && !I_.scode.mods[cel.mod].subs.empty();
           std::vector<std::int64_t> adims;
           const ScodeScope adscope = scode_scope_of(inst_node);
           bool okdim = true;
@@ -328,12 +330,20 @@ class Flattener {
           std::int64_t total = 1;
           for (std::int64_t d : adims) total *= (d > 0 ? d : 0);
           if (total > 1024) { set_unsupported("composite array too large"); continue; }
-          ModCtx achild;
-          achild.final_all = comp_final;
           std::vector<std::int64_t> aidx(adims.size(), 1);
           for (bool more = true; more;) {
             PSubs cps = psubs;
             cps.push_back(aidx);   // 该复合数组段 `a` 带下标 [i…]
+            ModCtx achild;
+            achild.final_all = comp_final;
+            if (own_mod) {
+              // 该元素的合成修饰：每个子修饰绑定按 aidx 下降取标量（`x={1,2,3}`→`x=vi`；each 保持原值）。
+              Id<SMod> em = distribute_mod(cel.mod, aidx);
+              if (!em.is_valid()) { set_unsupported("composite array modifier distribution"); break; }
+              achild.mods = {em};
+              achild.scope = inst_node;
+              achild.vprefix = prefix;
+            }
             flatten_class(ci, name, cps, is_prot, achild, inners);
             std::size_t k = adims.size();
             while (k > 0) { --k; if (++aidx[k] <= adims[k]) break; aidx[k] = 1; if (k == 0) more = false; }
@@ -1821,6 +1831,31 @@ class Flattener {
     outer.kind = SModKind::Mod;
     outer.subs = std::move(subs);
     outer.loc = call.loc;
+    return I_.scode.add_mod(std::move(outer));
+  }
+
+  // 复合数组第 aidx 个元素的合成修饰：把每个子修饰的绑定按 aidx 逐维下降取标量（`x={1,2,3}` 的元素 i → `x=vi`）；
+  // each 子修饰保持原绑定（对每元素相同）。子修饰带嵌套 subs（属性修饰 `x(start=…)`）或无绑定 → 返回 invalid（本 phase 未做）。
+  Id<SMod> distribute_mod(Id<SMod> m, const std::vector<std::int64_t>& aidx) {
+    const std::vector<SSubMod> subs = I_.scode.mods[m].subs;   // 拷贝（下面 add_mod 会 realloc mods arena）
+    const SourceLoc mloc = I_.scode.mods[m].loc;
+    std::vector<SSubMod> out;
+    for (const SSubMod& s : subs) {
+      const SMod sub = I_.scode.mods[s.mod];   // 拷贝
+      if (!sub.subs.empty() || !sub.binding.is_valid()) return {};
+      Id<Exp> bexp = sub.is_each ? sub.binding : array_scalar_elem(sub.binding, aidx, 0);
+      if (!bexp.is_valid()) return {};
+      SMod nsub;
+      nsub.kind = SModKind::Mod;
+      nsub.binding = bexp;
+      nsub.is_final = sub.is_final;
+      nsub.loc = sub.loc;
+      out.push_back({s.ident, I_.scode.add_mod(std::move(nsub))});
+    }
+    SMod outer;
+    outer.kind = SModKind::Mod;
+    outer.subs = std::move(out);
+    outer.loc = mloc;
     return I_.scode.add_mod(std::move(outer));
   }
 
