@@ -401,6 +401,15 @@ YMC_TEST(flatten_user_function_default_and_named_args) {
   YMC_CHECK_EQ(flatten_src(src), std::string("class M\n  Real a = 6.0;\n  Real b = 7.0;\nend M;\n"));
 }
 
+YMC_TEST(flatten_terminate_equation) {
+  // terminate(msg) 方程；msg 非 String → SKIP（TerminateInvalid1）。期望 = omc 1.25.0（Terminate1）。
+  YMC_CHECK_EQ(flatten_src("model M\nequation\n  terminate(\"test\");\nend M;\n"),
+               std::string("class M\nequation\n  terminate(\"test\");\nend M;\n"));
+  bool uns = false;
+  flatten_src("model M\nequation\n  terminate(1.0);\nend M;\n", &uns);
+  YMC_CHECK(uns);
+}
+
 YMC_TEST(flatten_assert_equation) {
   // assert 方程：默认 level 省略、cond Int→Real 强转（`time > 1` → `time > 1.0`）。期望 = omc 1.25.0（Assert1）。
   YMC_CHECK_EQ(flatten_src("model M\nequation\n  assert(time > 1, \"test\");\nend M;\n"),

@@ -489,8 +489,20 @@ class Flattener {
       else result_.model.equations.push_back(id);
       return;
     }
+    if (eq.kind == SEqKind::Terminate) {
+      // terminate(msg)：msg 须 String（omc 报错 → SKIP，TerminateInvalid1）。
+      FlatEquation fe;
+      fe.kind = FlatEqKind::Terminate;
+      fe.a = simplify_expr(inst_exp(eq.a, enclosing, prefix));
+      if (result_.model.exprs[fe.a].ty.kind != TypeKind::String) { set_unsupported("terminate message type"); return; }
+      fe.loc = eq.loc;
+      Id<FlatEquation> id = result_.model.add_eq(std::move(fe));
+      if (is_initial) result_.model.initial_equations.push_back(id);
+      else result_.model.equations.push_back(id);
+      return;
+    }
     if (eq.kind != SEqKind::Equals) {
-      set_unsupported("non-equality equation (if/when/…)");
+      set_unsupported("non-equality equation (if/when/reinit…)");
       return;
     }
     Id<Expr> a = simplify_expr(inst_exp(eq.a, enclosing, prefix));

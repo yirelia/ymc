@@ -364,6 +364,9 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       cond 须 Boolean、msg 须 String、显式 level 须枚举（AssertInvalid1/2/3）。
       → easy-slice **174 PASS / 0 FAIL**（+2 Assert1/2）；oracle=live 逐字节一致；全 scodeinst PASS 175→177、FAIL 69 不变
       （0 新增）；三编译器 10/10，ASan 0，+1 单测。诚实 SKIP：显式非默认 level（AssertionLevel.warning 等，inst 未解析内建枚举，Assert3）。
+- [x] **加宽㉙terminate 方程**（2026-09-19）：`terminate(msg)` → FlatEqKind::Terminate；msg 须 String（omc 报错 →
+      SKIP，TerminateInvalid1）。→ easy-slice **175 PASS / 0 FAIL**（+1 Terminate1）；oracle=live 逐字节一致；全 scodeinst
+      PASS 177→178、FAIL 69 不变（0 新增）；三编译器 10/10，ASan 0，+1 单测。reinit 留待 when 方程（Reinit1 在 when 里）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples
