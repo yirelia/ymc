@@ -367,6 +367,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
 - [x] **加宽㉙terminate 方程**（2026-09-19）：`terminate(msg)` → FlatEqKind::Terminate；msg 须 String（omc 报错 →
       SKIP，TerminateInvalid1）。→ easy-slice **175 PASS / 0 FAIL**（+1 Terminate1）；oracle=live 逐字节一致；全 scodeinst
       PASS 177→178、FAIL 69 不变（0 新增）；三编译器 10/10，ASan 0，+1 单测。reinit 留待 when 方程（Reinit1 在 when 里）。
+- [x] **加宽㉚when 方程 + reinit**（2026-09-19，并行子agent出任务卡）：`when/elsewhen … then …` → FlatEqKind::When（flat_dump 已支持）。
+      条件白名单（标量 Boolean：关系[操作数非调用]/Boolean 变量/initial()）；体只做标量 Equals + reinit（目标须连续 Real 变量）；
+      所有分支须解同一组 LHS（When7/VariableMismatch）；initial 段禁 when。顺带补 der 校验：der 作用于离散变量或非-Real（被插 Cast）
+      → SKIP（FuncBuiltinDerInvalid1/2，之前被 when SKIP 掩盖）。
+      → easy-slice **183 PASS / 0 FAIL**（+8 When1/4/5/6、Reinit1、WhenCondition1/3、WhenInitial2）；oracle=live 逐字节一致；
+      全 scodeinst PASS 178→186、FAIL 69 不变（0 新增）；三编译器 10/10，ASan 0，+2 单测。
+      诚实 SKIP：数组/Clock/not-initial/pre/noEvent 条件、数组体、嵌套 when、when 在算法段、ReinitInvalid（离散/参/常/数组目标）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

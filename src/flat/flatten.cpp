@@ -5,6 +5,8 @@
 #include <optional>
 #include <cstdlib>
 #include <memory>
+#include <set>
+#include <string>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
@@ -501,8 +503,31 @@ class Flattener {
       else result_.model.equations.push_back(id);
       return;
     }
+    if (eq.kind == SEqKind::When) {
+      // when/elsewhen 方程：每分支条件（标量 Boolean）+ 体（标量方程 / reinit）。所有分支须解同一组 LHS 变量
+      // （When7/WhenVariableMismatch）。initial 段不许 when（WhenInitial1）。数组条件/体、pre/noEvent 条件、嵌套 when 等 SKIP。
+      if (is_initial) { set_unsupported("when in initial equation"); return; }
+      FlatEquation fe;
+      fe.kind = FlatEqKind::When;
+      fe.loc = eq.loc;
+      std::vector<std::set<std::string>> solved;
+      for (const SEqBranch& br : eq.branches) {
+        Id<Expr> cond = simplify_expr(inst_exp(br.cond, enclosing, prefix));
+        if (!when_cond_ok(cond)) { set_unsupported("when condition form"); return; }
+        FlatEqBranch fb;
+        fb.cond = cond;
+        std::set<std::string> lhs;
+        if (!collect_when_body(br.body, enclosing, prefix, fb.body, lhs)) return;   // 内部已 set_unsupported
+        solved.push_back(std::move(lhs));
+        fe.branches.push_back(std::move(fb));
+      }
+      for (std::size_t i = 1; i < solved.size(); ++i)
+        if (solved[i] != solved[0]) { set_unsupported("when branch solved-variable mismatch"); return; }
+      result_.model.equations.push_back(result_.model.add_eq(std::move(fe)));
+      return;
+    }
     if (eq.kind != SEqKind::Equals) {
-      set_unsupported("non-equality equation (if/when/reinit…)");
+      set_unsupported("non-equality equation (if/reinit…)");
       return;
     }
     Id<Expr> a = simplify_expr(inst_exp(eq.a, enclosing, prefix));
@@ -525,6 +550,87 @@ class Flattener {
     Id<FlatEquation> id = result_.model.add_eq(std::move(fe));
     if (is_initial) result_.model.initial_equations.push_back(id);
     else result_.model.equations.push_back(id);
+  }
+
+  // when 条件白名单（v1 只做标量 Boolean 的可判别形态）：关系（操作数非调用，排除 pre/noEvent）、Boolean 变量、initial()。
+  // 数组条件、Clock、not initial()、pre(x)>… 等 → false（调用方 SKIP）。
+  bool when_cond_ok(Id<Expr> c) {
+    const Expr& e = result_.model.exprs[c];
+    if (e.ty.kind != TypeKind::Boolean) return false;
+    switch (e.kind) {
+      case ExprKind::Relation: {
+        auto simple = [&](Id<Expr> x) {
+          const ExprKind k = result_.model.exprs[x].kind;
+          return k == ExprKind::Cref || k == ExprKind::IntLit || k == ExprKind::RealLit ||
+                 k == ExprKind::Binary || k == ExprKind::Unary;
+        };
+        return simple(e.a) && simple(e.b);
+      }
+      case ExprKind::Cref: return true;
+      case ExprKind::Call:
+        return e.call_name.size() == 1 && in_.str(e.call_name[0]) == "initial" && e.args.empty();
+      default: return false;
+    }
+  }
+
+  // 收集 when 分支体（标量方程 / reinit）；填 out + 该分支解的 LHS 变量名集合 solved。任何超范围体项 → set_unsupported+false。
+  bool collect_when_body(const std::vector<Id<SEquation>>& body, NodeId enclosing,
+                         const std::vector<Symbol>& prefix, std::vector<Id<FlatEquation>>& out,
+                         std::set<std::string>& solved) {
+    for (Id<SEquation> beid : body) {
+      const SEquation& b = I_.scode.eqs[beid];
+      if (b.kind == SEqKind::Equals) {
+        Id<Expr> a = simplify_expr(inst_exp(b.a, enclosing, prefix));
+        Id<Expr> rhs = simplify_expr(inst_exp(b.b, enclosing, prefix));
+        if (result_.model.exprs[a].kind != ExprKind::Cref) { set_unsupported("when-eq LHS not cref"); return false; }
+        if (result_.model.exprs[a].kind == ExprKind::Array || result_.model.exprs[rhs].kind == ExprKind::Array) {
+          set_unsupported("array in when body"); return false;
+        }
+        const ExprCref& cr = result_.model.exprs[a].cref;
+        if (cr.parts.empty() || !cr.parts.back().subscripts.empty()) { set_unsupported("array when-eq"); return false; }
+        const TypeKind ta = result_.model.exprs[a].ty.kind, tb = result_.model.exprs[rhs].ty.kind;
+        if (ta == TypeKind::Real && tb == TypeKind::Integer) rhs = to_real(rhs);
+        else if (ta == TypeKind::Integer && tb == TypeKind::Real) a = to_real(a);
+        FlatEquation fe;
+        fe.kind = FlatEqKind::Equality;
+        fe.a = a;
+        fe.b = rhs;
+        fe.loc = b.loc;
+        out.push_back(result_.model.add_eq(std::move(fe)));
+        std::string nm;
+        for (const ExprCrefPart& p : result_.model.exprs[fe.a].cref.parts) { if (!nm.empty()) nm += '.'; nm += in_.str(p.name); }
+        solved.insert(nm);
+      } else if (b.kind == SEqKind::Reinit) {
+        Id<Expr> tgt = simplify_expr(inst_exp(b.a, enclosing, prefix));
+        Id<Expr> val = simplify_expr(inst_exp(b.b, enclosing, prefix));
+        if (result_.model.exprs[tgt].kind != ExprKind::Cref) { set_unsupported("reinit arg0 not cref"); return false; }
+        const ExprCref& tc = result_.model.exprs[tgt].cref;
+        if (result_.model.exprs[tgt].ty.kind != TypeKind::Real || tc.parts.empty() ||
+            !tc.parts.back().subscripts.empty() || result_.model.exprs[val].kind == ExprKind::Array) {
+          set_unsupported("reinit non-scalar-Real"); return false;
+        }
+        // reinit 目标须连续时间变量（Var）。ReinitInvalid1/2/3：discrete/param/const → SKIP。
+        bool cont = false;
+        const std::uint32_t raw = tc.resolved_node;
+        if (raw != Id<INode>::kInvalid) {
+          const NodeId node = NodeId::from_index(raw);
+          if (I_.nodes.contains(node) && !I_.nodes[node].is_empty() && I_.nodes[node].comp.is_valid())
+            cont = I_.comps[I_.nodes[node].comp].attributes.variability == SVariability::Var;
+        }
+        if (!cont) { set_unsupported("reinit target not continuous"); return false; }
+        val = to_real(val);
+        FlatEquation fe;
+        fe.kind = FlatEqKind::Reinit;
+        fe.a = tgt;
+        fe.b = val;
+        fe.loc = b.loc;
+        out.push_back(result_.model.add_eq(std::move(fe)));   // reinit 不计入 solved（When7 靠此判失配）
+      } else {
+        set_unsupported("unsupported when-body equation");     // 嵌套 when / if / for / connect → SKIP
+        return false;
+      }
+    }
+    return true;
   }
 
   // mod_subs：命中本叶组件名的外来子修饰（优先级序），其 .binding 覆盖声明绑定、.subs 覆盖声明属性；
@@ -2049,6 +2155,8 @@ class Flattener {
         if (bf->arity >= 0 && static_cast<std::size_t>(bf->arity) != args.size()) return rebuild();
         // ParameterDer.mo：常量/参数的导数为 0；普通变量仍保持 der(x) 符号形式。
         if (name == "der" && args.size() == 1) {
+          // der 实参须 Real：非 Real 原实参会被插 Cast（如 der(Integer)）→ omc 报错（DerInvalid2）→ SKIP。
+          if (result_.model.exprs[args[0]].kind == ExprKind::Cast) set_unsupported("der of non-Real argument");
           bool zero = is_num_lit(result_.model.exprs[args[0]]);
           if (!zero && result_.model.exprs[args[0]].kind == ExprKind::Cref) {
             const std::uint32_t raw = result_.model.exprs[args[0]].cref.resolved_node;
@@ -2057,6 +2165,8 @@ class Flattener {
               if (I_.nodes.contains(node) && !I_.nodes[node].is_empty() && I_.nodes[node].comp.is_valid()) {
                 const SVariability var = I_.comps[I_.nodes[node].comp].attributes.variability;
                 zero = var == SVariability::Param || var == SVariability::Const;
+                // der 作用于离散变量是错误（omc 报错，FuncBuiltinDerInvalid1/2）→ SKIP。
+                if (var == SVariability::Discrete) set_unsupported("der of discrete variable");
               }
             }
           }

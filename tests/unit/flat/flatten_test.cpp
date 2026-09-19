@@ -401,6 +401,26 @@ YMC_TEST(flatten_user_function_default_and_named_args) {
   YMC_CHECK_EQ(flatten_src(src), std::string("class M\n  Real a = 6.0;\n  Real b = 7.0;\nend M;\n"));
 }
 
+YMC_TEST(flatten_when_equation) {
+  // when/elsewhen 方程 + reinit（cond Int→Real、value Int→Real）。期望 = omc 1.25.0（When5/Reinit1）。
+  const char* when5 =
+      "model M\n  Real x;\nequation\n  when time > 0 then\n    x = 1;\n  elsewhen time > 1 then\n    x = 2;\n  end when;\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(when5),
+               std::string("class M\n  Real x;\nequation\n  when time > 0.0 then\n    x = 1.0;\n"
+                           "  elsewhen time > 1.0 then\n    x = 2.0;\n  end when;\nend M;\n"));
+  const char* reinit =
+      "model M\n  Real x;\nequation\n  when time > 1 then\n    reinit(x, 2);\n  end when;\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(reinit),
+               std::string("class M\n  Real x;\nequation\n  when time > 1.0 then\n    reinit(x, 2.0);\n  end when;\nend M;\n"));
+}
+
+YMC_TEST(flatten_when_reinit_of_parameter_unsupported) {
+  // reinit 目标须连续变量（Var）；参数目标是错误 → SKIP（ReinitInvalid2 邻域）。
+  bool uns = false;
+  flatten_src("model M\n  parameter Real x = 0.0;\nequation\n  when time > 1 then\n    reinit(x, 2);\n  end when;\nend M;\n", &uns);
+  YMC_CHECK(uns);
+}
+
 YMC_TEST(flatten_terminate_equation) {
   // terminate(msg) 方程；msg 非 String → SKIP（TerminateInvalid1）。期望 = omc 1.25.0（Terminate1）。
   YMC_CHECK_EQ(flatten_src("model M\nequation\n  terminate(\"test\");\nend M;\n"),
