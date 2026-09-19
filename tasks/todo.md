@@ -351,8 +351,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       崩溃 → 干净 SKIP（ImplicitRangeAlg2；eval_range 守 invalid）。
       → easy-slice **165 PASS / 0 FAIL**（+4 CevalSum1、CevalProduct1、CevalMin2、CevalMax2）；oracle=live 逐字节一致；
       全 scodeinst PASS 164→168、FAIL 69 不变（0 新增）；三编译器 10/10，ASan 0，+1 单测。
-      诚实 SKIP（下个数组增量）：带迭代器规约 `sum(e for i in …)`（Reduction 表达式，CevalReduction）、局部数组下标 `x[i]`、
+      诚实 SKIP（下个数组增量）：带迭代器规约 `sum(e for i in …)`（Reduction；CevalReduction 还需多迭代器/空范围默认/bool·enum，暂缓）、
       数组函数值 + `:` 维推断（CevalFuncArray）、数组方程/运算。
+- [x] **加宽㉗for 方程展开**（2026-09-19）：`for i in RANGE loop … end for` 常量范围（`a:b`/`a:step:b`/整数数组）逐值展开体方程
+      （collect_equation For；loop_vars_ 迭代变量→值）。迭代变量作值 `=i` → 内联字面量（cref）、作下标 `x[i]` → `x[1]`
+      （subscript_int 解析下标）、嵌套依赖范围 `i+1:i+3`（eval_scode 也读 loop_vars_）。守卫：非常量范围/隐式范围/遮蔽同名
+      迭代变量（omc 告警，ForEquationShadow1）→ SKIP。
+      → easy-slice **172 PASS / 0 FAIL**（+7 ForEquation1–7）；oracle=live 逐字节一致；全 scodeinst PASS 168→175、FAIL 69 不变
+      （0 新增）；三编译器 10/10，ASan 0，+2 单测。诚实 SKIP：for 语句（算法段）、if/when 方程、非常量下标、数组方程。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

@@ -401,6 +401,24 @@ YMC_TEST(flatten_user_function_default_and_named_args) {
   YMC_CHECK_EQ(flatten_src(src), std::string("class M\n  Real a = 6.0;\n  Real b = 7.0;\nend M;\n"));
 }
 
+YMC_TEST(flatten_for_equation_expands) {
+  // for 方程展开：常量范围逐值展开体方程，`x[i]=i` → `x[1]=1.0`…（迭代变量作下标与值）。期望 = omc 1.25.0（ForEquation1）。
+  const char* src =
+      "model M\n  Real x[3];\nequation\n  for i in 1:3 loop\n    x[i] = i;\n  end for;\nend M;\n";
+  const char* want =
+      "class M\n  Real x[1];\n  Real x[2];\n  Real x[3];\n"
+      "equation\n  x[1] = 1.0;\n  x[2] = 2.0;\n  x[3] = 3.0;\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string(want));
+}
+
+YMC_TEST(flatten_for_equation_nested_dependent_range) {
+  // 嵌套 for，内层范围依赖外层迭代变量 `i+1:i+2`（eval_scode 解析迭代变量）。期望 = omc 1.25.0（ForEquation7 邻域）。
+  const char* src =
+      "model M\n  Real y;\nequation\n  for i in 1:2 loop\n    for j in i+1:i+2 loop\n      y = j;\n    end for;\n  end for;\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class M\n  Real y;\nequation\n  y = 2.0;\n  y = 3.0;\n  y = 3.0;\n  y = 4.0;\nend M;\n"));
+}
+
 YMC_TEST(flatten_array_reduction_constant_fold) {
   // 常量数组规约 sum/product/min/max（含嵌套数组摊平；Int→Int、含 Real→Real）。期望 = omc 1.25.0（CevalSum1/Min2/…）。
   const char* src =

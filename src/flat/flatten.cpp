@@ -453,8 +453,25 @@ class Flattener {
       connects_.push_back({eq.a, eq.b, enclosing, prefix, eq.loc});
       return;
     }
+    if (eq.kind == SEqKind::For) {
+      // `for i in RANGE loop … end for`：常量范围 → 逐值展开体方程（loop_vars_ 供 cref 解析迭代变量与下标）。
+      if (!eq.a.is_valid() || !eq.index.is_valid()) { set_unsupported("for equation (implicit range)"); return; }
+      // 迭代变量遮蔽外层同名迭代变量：omc 会告警，ymc 不产告警文本 → 与期望的 Warning 行对不上 → SKIP（ForEquationShadow1）。
+      if (loop_vars_.count(eq.index.id)) { set_unsupported("shadowed for iterator"); return; }
+      std::optional<std::vector<std::int64_t>> seq = eval_range(eq.a, scode_scope_of(enclosing), 0);
+      if (!seq) { set_unsupported("for equation (non-constant range)"); return; }
+      for (std::int64_t v : *seq) {
+        auto prev = loop_vars_.find(eq.index.id);
+        const bool had = prev != loop_vars_.end();
+        const std::int64_t old = had ? prev->second : 0;
+        loop_vars_[eq.index.id] = v;
+        for (Id<SEquation> beid : eq.body) collect_equation(beid, enclosing, prefix, psubs, is_initial);
+        if (had) loop_vars_[eq.index.id] = old; else loop_vars_.erase(eq.index.id);
+      }
+      return;
+    }
     if (eq.kind != SEqKind::Equals) {
-      set_unsupported("non-equality equation (if/for/when/assert…)");
+      set_unsupported("non-equality equation (if/when/assert…)");
       return;
     }
     Id<Expr> a = simplify_expr(inst_exp(eq.a, enclosing, prefix));
@@ -1021,6 +1038,11 @@ class Flattener {
           auto it = locals_->find(c.parts[0].name.id);
           if (it != locals_->end()) return it->second;
         }
+        // for 方程迭代变量（嵌套 for 的依赖范围 `i+1:i+3`，ForEquation7）。
+        if (!loop_vars_.empty() && c.parts.size() == 1 && c.parts[0].subscripts.empty()) {
+          auto it = loop_vars_.find(c.parts[0].name.id);
+          if (it != loop_vars_.end()) return CVal::I(it->second);
+        }
         std::vector<Symbol> names;
         for (const CrefPart& p : c.parts) {
           if (!p.subscripts.empty()) return std::nullopt;
@@ -1243,10 +1265,19 @@ class Flattener {
     return Flow::Normal;
   }
 
-  // 常量 range `a:b` / `a:step:b` → 整数序列（供 for 展开）；非常量/非整数/过大 → nullopt。
+  // 常量 range `a:b` / `a:step:b` 或整数数组 `{1,2,3}` → 整数序列（供 for 展开）；非常量/非整数/过大 → nullopt。
   std::optional<std::vector<std::int64_t>> eval_range(Id<Exp> rexp, const ScodeScope& fscope, int depth) {
     if (!rexp.is_valid()) return std::nullopt;
     const Exp& e = I_.absyn.exps[rexp];
+    if (e.kind == ExpKind::Array) {   // `for i in {1,2,3,…}`
+      std::vector<std::int64_t> out;
+      for (Id<Exp> el : e.args) {
+        std::optional<CVal> cv = eval_scode(el, fscope, depth + 1, true);
+        if (!cv || cv->k != CVal::K::Int) return std::nullopt;
+        out.push_back(cv->i);
+      }
+      return out;
+    }
     if (e.kind != ExpKind::Range || !e.a.is_valid() || !e.b.is_valid()) return std::nullopt;
     const bool has_step = e.c.is_valid();   // a:step:b（c 为终点）；否则 a:b
     auto sv = eval_scode(e.a, fscope, depth + 1, true);
@@ -1463,9 +1494,28 @@ class Flattener {
     return add(std::move(e));
   }
 
+  // 下标常量值：整型字面量，或 for 方程迭代变量的当前值（ForEquation1 的 `x[i]`）；否则 nullopt。
+  std::optional<std::int64_t> subscript_int(Id<Exp> s) {
+    const Exp& e = I_.absyn.exps[s];
+    if (e.kind == ExpKind::IntLit) return e.ival;
+    if (e.kind == ExpKind::CrefExp) {
+      const Cref& c = I_.absyn.crefs[e.cref];
+      if (c.parts.size() == 1 && c.parts[0].subscripts.empty()) {
+        auto it = loop_vars_.find(c.parts[0].name.id);
+        if (it != loop_vars_.end()) return it->second;
+      }
+    }
+    return std::nullopt;
+  }
+
   // cref：解析首段到 enclosing 的本地组件；命中 → 前缀改写 + 取其类型；否则（time 等内建）原样、类型 Real。
   Id<Expr> cref(Id<Cref> ac, NodeId enclosing, const std::vector<Symbol>& prefix) {
     const Cref& c = I_.absyn.crefs[ac];
+    // for 方程迭代变量作为值：`… = i` → 内联成整数字面量（ForEquation1 的 RHS）。
+    if (!loop_vars_.empty() && c.parts.size() == 1 && c.parts[0].subscripts.empty()) {
+      auto it = loop_vars_.find(c.parts[0].name.id);
+      if (it != loop_vars_.end()) return lit_int(it->second);
+    }
     Expr e;
     e.kind = ExprKind::Cref;
     NodeId local = c.parts.empty() ? Inst::empty_node() : find_local(enclosing, c.parts[0].name);
@@ -1537,8 +1587,8 @@ class Flattener {
               set_unsupported("array subscript");
             } else {
               for (std::size_t k = 0; k < subs.size(); ++k) {
-                const Exp& se = I_.absyn.exps[subs[k]];
-                if (se.kind != ExpKind::IntLit || se.ival < 1 || se.ival > ldims[k]) {
+                std::optional<std::int64_t> iv = subscript_int(subs[k]);
+                if (!iv || *iv < 1 || *iv > ldims[k]) {
                   set_unsupported("array subscript out of range");
                   break;
                 }
@@ -2375,6 +2425,7 @@ class Flattener {
   PSubs cur_psubs_;     // 当前 prefix 的逐段下标（复合数组 `a[i]`）；cref 前缀改写读它。emit_*/collect_equation 入口设置
   std::unordered_map<std::uint32_t, CVal>* locals_ = nullptr;   // 用户函数解释期的局部环境（输入/局部/输出名→值）
   std::unordered_set<std::uint32_t>* input_names_ = nullptr;    // 当前函数的输入名（禁止对其赋值，AssignInput1）
+  std::unordered_map<std::uint32_t, std::int64_t> loop_vars_;   // for 方程展开期的迭代变量→值（cref/下标解析）
   struct FlowVar { std::vector<Symbol> name; Type ty; SourceLoc loc; };
   std::vector<FlowVar> flow_vars_;   // flow 变量（run() 末尾按 outside/未连接补 `=0` 方程）
   struct ConnectStmt { Id<Exp> a, b; NodeId enclosing; std::vector<Symbol> prefix; SourceLoc loc; };
