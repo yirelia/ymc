@@ -311,6 +311,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       → easy-slice **137 PASS / 0 FAIL**（+1 BindingArray8）；oracle=live 逐字节一致；全 scodeinst PASS 139→140、FAIL 69 不变；
       三编译器 10/10，ASan 0，改 1 旧单测 + 1 新单测。纯字面量 param 数组本身 testsuite 无独立用例（多被 `:` 维/复合数组卡住）。
       诚实 SKIP（下个 sub-bucket）：复合数组 `A a[2]`（80 例，payoff 最大）、`:` 维绑定推断、constant 数组元素下标内联、数组运算。
+- [x] **加宽㉑复合数组标量化（sub-bucket 2/3，phase 2a）**（2026-09-19）：`A a[2]` 逐元素以 `a[i]` 前缀递归展开成员
+      （`a[1].x` `a[2].x`）。名字模型加逐段下标 name_subs（与 name 平行，末段叶数组仍用 subscripts）；PSubs 穿过
+      flatten_class/emit_*/collect_equation，cref 前缀改写读成员 cur_psubs_ → 元素内引用带段下标（`a[i].z=a[i].x`）。
+      去重比较加 name_subs。守卫：flatten_class 入口 `if unsupported return`（大数组早停）、复合数组元素数 >1024 SKIP
+      （ArrayConnect3 cells[1000,100] 爆量）、表达式里显式下标引用复合数组元素 `a[3].x` 保守 SKIP（越界校验未做，ArrayBounds2）。
+      → easy-slice **141 PASS / 0 FAIL**（+4 Prefix1/2、bindings4、eq6）；oracle=live 逐字节一致；全 scodeinst PASS 140→144、
+      FAIL 69 不变（0 新增）；三编译器 10/10，ASan 0，+2 单测。**phase 2a 只做无修饰**；数组修饰分发 `a[3](x={…})` 留 phase 2b。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

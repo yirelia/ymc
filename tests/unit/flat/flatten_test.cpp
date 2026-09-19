@@ -383,6 +383,26 @@ YMC_TEST(flatten_constant_record_unsupported) {
   YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
 }
 
+YMC_TEST(flatten_composite_array_scalarizes) {
+  // 复合数组 `A a[2]` 逐元素以 `a[i]` 前缀展开成员；元素内 cref（`z = x`）带段下标 → `a[i].z = a[i].x`。
+  // 期望 = omc 1.25.0（Prefix1 邻域）。
+  const char* src =
+      "model A\n  Real x;\n  Real z = x;\nend A;\n"
+      "model M\n  A a[2];\nend M;\n";
+  const char* want =
+      "class M\n  Real a[1].x;\n  Real a[1].z = a[1].x;\n  Real a[2].x;\n  Real a[2].z = a[2].x;\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string(want));
+}
+
+YMC_TEST(flatten_composite_array_element_ref_unsupported) {
+  // 表达式里显式下标引用复合数组元素 `a[3].x`（越界/无界校验未做）→ 保守 SKIP（ArrayBounds2）。
+  bool uns = false;
+  std::string t = flatten_src(
+      "model A\n  Real x;\nend A;\nmodel M\n  A a[2];\n  Real y = a[1].x;\nend M;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+}
+
 YMC_TEST(flatten_param_array_binding_spreads_to_elements) {
   // 参数/常量数组绑定摊到每元素（Var 才留数组方程）；矩阵行含 cref 数组 → `x[i]` 元素引用。期望 = omc 1.25.0（BindingArray8）。
   const char* src =

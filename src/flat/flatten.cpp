@@ -132,6 +132,7 @@ class Flattener {
   Flattener(Inst& inst, Interner& in) : I_(inst), in_(in) {}
 
   using ScodeScope = std::vector<Id<SElement>>;   // SCODE 作用域链：类 SElement，内→外（前置声明，供 eval_dim 等用）
+  using PSubs = std::vector<std::vector<std::int64_t>>;   // 与 prefix 平行的逐段下标（复合数组 `a[1].x`；空段=无下标）
 
   FlattenResult run(NodeId root) {
     // 全名（R13 §2）：v1 根类是顶层类，全名 = 类名。
@@ -145,7 +146,7 @@ class Flattener {
       for (const SSubMod& s : I_.scode.mods[el.cmt.annotation].subs)
         if (s.ident == in_.intern("__OpenModelica_commandLineOptions"))
           set_unsupported("__OpenModelica_commandLineOptions annotation");
-    flatten_class(root, {}, /*protected_ctx=*/false, ModCtx{}, {});
+    flatten_class(root, {}, {}, /*protected_ctx=*/false, ModCtx{}, {});
     // connect 连接集展开（potential 相等 + flow 求和），填 connected_inside_（已连接的 inside 连接器）。
     process_connects();
     // flow 边界/未连接方程（排在连接集方程之后，R13 §6）：outside（顶层）连接器的 flow 恒 =0；
@@ -176,6 +177,7 @@ class Flattener {
     for (std::size_t i = 0; i < result_.model.variables.size(); ++i)
       for (std::size_t j = i + 1; j < result_.model.variables.size(); ++j)
         if (result_.model.variables[i].name == result_.model.variables[j].name &&
+            result_.model.variables[i].name_subs == result_.model.variables[j].name_subs &&
             result_.model.variables[i].subscripts == result_.model.variables[j].subscripts) {
           set_unsupported("duplicate variable");
           i = result_.model.variables.size();
@@ -187,8 +189,10 @@ class Flattener {
  private:
   // ---- flatten：带前缀 DFS（R11 §3.4）----
   // protected_ctx：外层组件是 protected 时，其所有子变量也 protected（R13 §3；ComponentAttributes1）。
-  void flatten_class(NodeId inst_node, const std::vector<Symbol>& prefix, bool protected_ctx,
-                     const ModCtx& ctx, const std::vector<InnerVar>& outer_inners) {
+  void flatten_class(NodeId inst_node, const std::vector<Symbol>& prefix, const PSubs& psubs,
+                     bool protected_ctx, const ModCtx& ctx, const std::vector<InnerVar>& outer_inners) {
+    // 已判 unsupported 就早停：模型必 SKIP，继续摊分（尤其大复合数组）只是白烧时间/内存（ArrayConnect3 cells[1000,100]）。
+    if (result_.unsupported) return;
     // 算法段 v1 未做（方程段的 Equals 已支持，见文末 collect_equations）。
     const SElement& def = I_.scode.elems[I_.nodes[inst_node].def];
     if (!def.def.algorithms.empty() || !def.def.initial_algorithms.empty())
@@ -292,10 +296,51 @@ class Flattener {
           }
       const bool comp_final = ctx.final_all || sub_final || I_.comps[cid].attributes.is_final;
 
-      // 数组组件（v1 只做叶数组标量化）：复合数组 SKIP，其余走 emit_array。
+      // 数组组件：叶数组走 emit_array；复合数组 `A a[2]` 逐元素以 `a[i]` 前缀递归展开（2a 只做无修饰/无整体绑定）。
       if (has_dims) {
-        if (I_.comps[cid].ty.kind == TypeKind::Complex) { set_unsupported("composite array"); continue; }
-        emit_array(cid, name, is_prot, prefix, inst_node, matched, ctx.scope, ctx.vprefix, comp_final, cel);
+        if (I_.comps[cid].ty.kind == TypeKind::Complex) {
+          NodeId ci = I_.comps[cid].class_inst;
+          Id<SElement> cdef = I_.nodes[ci].def;
+          if (!cdef.is_valid() || I_.scode.elems[cdef].def.kind != SClassDefKind::Parts) {
+            set_unsupported("composite array (non-parts type)"); continue;
+          }
+          SRestriction r = I_.scode.elems[cdef].restriction;
+          if (r == SRestriction::Connector || r == SRestriction::ExpandableConnector) {
+            set_unsupported("connector array"); continue;   // 数组 connect（另一 sub-bucket）
+          }
+          if (I_.comps[cid].attributes.variability != SVariability::Var) { set_unsupported("variability on composite array"); continue; }
+          if (I_.comps[cid].attributes.connector != SConnectorType::Potential) { set_unsupported("flow/stream on composite array"); continue; }
+          if (I_.comps[cid].binding.kind == BindingKind::Raw && I_.comps[cid].binding.raw_exp.is_valid()) {
+            set_unsupported("composite array whole binding"); continue;
+          }
+          // 数组修饰分发 `a[3](x={…})` 留 2b：此处有任何子修饰/整体绑定 → SKIP。
+          bool has_mod = cel.mod.is_valid() && !I_.scode.mods[cel.mod].subs.empty();
+          for (Id<SMod> m : matched)
+            if (!I_.scode.mods[m].subs.empty() || I_.scode.mods[m].binding.is_valid()) has_mod = true;
+          if (has_mod || !I_.comps[cid].derived_mods.empty()) { set_unsupported("composite array modifier"); continue; }
+          std::vector<std::int64_t> adims;
+          const ScodeScope adscope = scode_scope_of(inst_node);
+          bool okdim = true;
+          for (Id<Exp> d : cel.attr.dims) if (!eval_dim(d, adims, adscope)) okdim = false;
+          for (Id<Exp> d : cel.type.dims) if (!eval_dim(d, adims, adscope)) okdim = false;
+          if (!okdim || adims.empty()) { set_unsupported("non-literal array dimension"); continue; }
+          // 元素数上限：大复合数组 omc 常不标量化（-nfScalarize），ymc 摊分会爆量 → 超阈值 SKIP。
+          std::int64_t total = 1;
+          for (std::int64_t d : adims) total *= (d > 0 ? d : 0);
+          if (total > 1024) { set_unsupported("composite array too large"); continue; }
+          ModCtx achild;
+          achild.final_all = comp_final;
+          std::vector<std::int64_t> aidx(adims.size(), 1);
+          for (bool more = true; more;) {
+            PSubs cps = psubs;
+            cps.push_back(aidx);   // 该复合数组段 `a` 带下标 [i…]
+            flatten_class(ci, name, cps, is_prot, achild, inners);
+            std::size_t k = adims.size();
+            while (k > 0) { --k; if (++aidx[k] <= adims[k]) break; aidx[k] = 1; if (k == 0) more = false; }
+          }
+          continue;
+        }
+        emit_array(cid, name, is_prot, prefix, psubs, inst_node, matched, ctx.scope, ctx.vprefix, comp_final, cel);
         continue;
       }
 
@@ -353,21 +398,25 @@ class Flattener {
         } else if (own) {
           child.mods = {cel.mod}; child.scope = inst_node; child.vprefix = prefix;
         }
-        flatten_class(ci, name, is_prot, child, inners);
+        PSubs cps = psubs;
+        cps.push_back({});   // 标量复合段无下标
+        flatten_class(ci, name, cps, is_prot, child, inners);
         continue;
       }
       decl_scope_ = cn;   // 组件声明处的词法作用域（继承成员 = 基类作用域，供限定名在原作用域解析，const16）
-      emit_variable(cid, name, is_prot, prefix, inst_node, matched, ctx.scope, ctx.vprefix, comp_final, final_params);
+      emit_variable(cid, name, is_prot, prefix, psubs, inst_node, matched, ctx.scope, ctx.vprefix, comp_final, final_params);
       decl_scope_ = Inst::empty_node();
     }
     // 本类方程（子组件方程已在上面递归时加入 → 符合 R11 §3.4-6"子组件先、本类后"）。
     // 段序：initial equation 先于 equation（R13 §2）；enclosing = 本实例，cref 前缀 = prefix。
-    for (Id<SEquation> eid : def.def.initial_equations) collect_equation(eid, inst_node, prefix, /*initial=*/true);
-    for (Id<SEquation> eid : def.def.equations) collect_equation(eid, inst_node, prefix, /*initial=*/false);
+    for (Id<SEquation> eid : def.def.initial_equations) collect_equation(eid, inst_node, prefix, psubs, /*initial=*/true);
+    for (Id<SEquation> eid : def.def.equations) collect_equation(eid, inst_node, prefix, psubs, /*initial=*/false);
   }
 
   // 翻译一条方程（v1：Equals + 攒 connect 待 run() 展开；其余 kind 标 unsupported）。
-  void collect_equation(Id<SEquation> eid, NodeId enclosing, const std::vector<Symbol>& prefix, bool is_initial) {
+  void collect_equation(Id<SEquation> eid, NodeId enclosing, const std::vector<Symbol>& prefix, const PSubs& psubs,
+                        bool is_initial) {
+    cur_psubs_ = psubs;   // cref 前缀改写用（本类方程里的引用带 `a[i]` 段下标）
     const SEquation& eq = I_.scode.eqs[eid];
     if (eq.kind == SEqKind::Connect) {
       // connect 攒起来在 run() 末尾按连接集展开（potential 相等 + flow 求和）。initial 段里的 connect 罕见 → SKIP。
@@ -404,10 +453,11 @@ class Flattener {
   // mod_subs：命中本叶组件名的外来子修饰（优先级序），其 .binding 覆盖声明绑定、.subs 覆盖声明属性；
   // mod_scope/mod_prefix：这些修饰值的解析作用域（书写处）。force_final：上层 final 传播。
   void emit_variable(CompId cid, const std::vector<Symbol>& name, bool is_protected,
-                     const std::vector<Symbol>& prefix, NodeId enclosing,
+                     const std::vector<Symbol>& prefix, const PSubs& psubs, NodeId enclosing,
                      const std::vector<Id<SMod>>& mod_subs, NodeId mod_scope,
                      const std::vector<Symbol>& mod_prefix, bool force_final,
                      const std::unordered_set<std::uint32_t>& final_params) {
+    cur_psubs_ = psubs;   // 绑定里 cref 前缀改写用（复合数组元素 `a[i].y = a[i].x`）
     // 先算绑定/属性（会往 model.exprs add），再取组件字段——不跨 add 持组件引用（arena 纪律）。
     const Type cty = I_.comps[cid].ty;   // 拷贝，跨 add 稳定
     // 结构 final（ceval3）：本参数被某 fixed 用到 → final parameter + 绑定求值成字面量。
@@ -479,6 +529,8 @@ class Flattener {
     const bool is_flow = comp.attributes.connector == SConnectorType::Flow && in_conn;
     FlatVariable v;
     v.name = name;
+    v.name_subs = psubs;
+    v.name_subs.push_back({});   // 叶段（标量）无逐段下标；与 name 平行
     v.ty = comp.ty;
     v.is_protected = is_protected;
     v.is_final = comp.attributes.is_final || force_final || struct_final;
@@ -519,9 +571,10 @@ class Flattener {
   // 一条数组方程 `name = {…}`（omc 默认不把绑定摊到每元素，见 Subscript1）。v1 SKIP：非字面量维度、数组属性修饰、
   // 非数组字面量的数组绑定。
   void emit_array(CompId cid, const std::vector<Symbol>& name, bool is_protected,
-                  const std::vector<Symbol>& prefix, NodeId enclosing,
+                  const std::vector<Symbol>& prefix, const PSubs& psubs, NodeId enclosing,
                   const std::vector<Id<SMod>>& mod_subs, NodeId mod_scope,
                   const std::vector<Symbol>& mod_prefix, bool force_final, const SElement& cel) {
+    cur_psubs_ = psubs;   // 数组绑定/摊分里 cref 前缀改写用
     // 维度：组件维在前、类型维在后（R13 §3）。字面量 + 参数/常量/size()/算术求值。
     const ScodeScope dscope = scode_scope_of(enclosing);
     std::vector<std::int64_t> dims;
@@ -577,6 +630,8 @@ class Flattener {
     for (bool more = true; more;) {
       FlatVariable v;
       v.name = name;
+      v.name_subs = psubs;
+      v.name_subs.push_back({});   // 叶数组的下标走 v.subscripts（末段），逐段 name_subs 末段留空
       v.subscripts = idx;
       v.ty = cty;
       v.is_protected = is_protected;
@@ -1072,6 +1127,14 @@ class Flattener {
       e.ty = Type::real();
       return add(std::move(e));
     }
+    // 非末段带下标（复合数组元素引用 `a[3].x`）：ymc 未做复合数组下标越界/求值校验 → 保守 SKIP（ArrayBounds2 越界）。
+    if (local.is_valid() && !I_.nodes[local].is_empty())
+      for (std::size_t i = 0; i + 1 < c.parts.size(); ++i)
+        if (!c.parts[i].subscripts.empty()) {
+          set_unsupported("composite array element reference");
+          e.ty = Type::real();
+          return add(std::move(e));
+        }
     if (local.is_valid() && !I_.nodes[local].is_empty()) {
       // 多段 `a.x`：逐段深入复合组件解析到叶子，取**叶子**的类型/可变性（否则会用复合类型误加 Cast）。
       NodeId leaf = local, cur = local;
@@ -1136,7 +1199,13 @@ class Flattener {
           }
         }
       }
-      for (Symbol p : prefix) e.cref.parts.push_back({p, {}});
+      // 前缀改写：逐段带上 cur_psubs_ 的下标（复合数组 `a[i].x`）；无则空下标（普通嵌套）。
+      for (std::size_t i = 0; i < prefix.size(); ++i) {
+        std::vector<Id<Expr>> psub;
+        if (i < cur_psubs_.size())
+          for (std::int64_t s : cur_psubs_[i]) psub.push_back(lit_int(s));
+        e.cref.parts.push_back({prefix[i], std::move(psub)});
+      }
       e.cref.resolved_node = local.raw;
     } else {
       // 本层没找到：单段名先试**跨作用域常量**（沿词法 parent_scope 找同名 constant，const10 的 `j = i`）。
@@ -1923,6 +1992,7 @@ class Flattener {
   std::unordered_map<std::uint32_t, std::vector<Symbol>> outer_redirect_;   // outer 组件节点 raw → inner 全名
   std::unordered_set<std::uint32_t> evaluating_;   // 正在求值的常量节点（环检测）
   NodeId decl_scope_;   // 当前正在算绑定的组件声明处作用域（限定名在此解析；继承成员 = 基类作用域）
+  PSubs cur_psubs_;     // 当前 prefix 的逐段下标（复合数组 `a[i]`）；cref 前缀改写读它。emit_*/collect_equation 入口设置
   struct FlowVar { std::vector<Symbol> name; Type ty; SourceLoc loc; };
   std::vector<FlowVar> flow_vars_;   // flow 变量（run() 末尾按 outside/未连接补 `=0` 方程）
   struct ConnectStmt { Id<Exp> a, b; NodeId enclosing; std::vector<Symbol> prefix; SourceLoc loc; };

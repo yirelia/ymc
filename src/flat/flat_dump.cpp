@@ -61,15 +61,19 @@ class FlatDumper {
     else if (v.direction == FlatDirection::Output) out_ += "output ";
     type_name(v.ty);
     out_ += ' ';
-    dotted(v.name);
-    if (!v.subscripts.empty()) {   // 数组标量化下标 `[1,2]`（`,` 无空格，R13 §4.2）
+    // 逐段名 + 该段下标（复合数组 `a[1].x`）；末段后再补叶数组下标 subscripts（`b.x[1,2]`）。R13 §4.2：`,` 无空格。
+    auto emit_subs = [&](const std::vector<std::int64_t>& s) {
+      if (s.empty()) return;
       out_ += '[';
-      for (std::size_t i = 0; i < v.subscripts.size(); ++i) {
-        if (i) out_ += ',';
-        out_ += std::to_string(v.subscripts[i]);
-      }
+      for (std::size_t i = 0; i < s.size(); ++i) { if (i) out_ += ','; out_ += std::to_string(s[i]); }
       out_ += ']';
+    };
+    for (std::size_t i = 0; i < v.name.size(); ++i) {
+      if (i) out_ += '.';
+      out_ += in_.str(v.name[i]);
+      if (i < v.name_subs.size()) emit_subs(v.name_subs[i]);
     }
+    emit_subs(v.subscripts);
     attributes(v.attributes);
     if (v.binding.is_valid()) {
       out_ += " = ";
