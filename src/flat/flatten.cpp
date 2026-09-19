@@ -453,6 +453,7 @@ class Flattener {
     if (eq.kind == SEqKind::Connect) {
       // connect 攒起来在 run() 末尾按连接集展开（potential 相等 + flow 求和）。initial 段里的 connect 罕见 → SKIP。
       if (is_initial) { set_unsupported("connect in initial equation"); return; }
+      if (in_if_) { set_unsupported("connect in if equation"); return; }   // 分支体里的 connect 未做
       connects_.push_back({eq.a, eq.b, enclosing, prefix, eq.loc});
       return;
     }
@@ -527,8 +528,46 @@ class Flattener {
       result_.model.equations.push_back(result_.model.add_eq(std::move(fe)));
       return;
     }
+    if (eq.kind == SEqKind::If) {
+      // if 方程：常量条件求值折叠（选中真分支 / 丢弃假分支），否则发射 flat if。参数条件 omc 会把参数标 final——
+      // ymc 的 if 路径不标 final，故只折**纯字面量/迭代变量**条件（used 为空），参数条件 → SKIP。
+      std::vector<FlatEqBranch> out_branches;
+      for (const SEqBranch& br : eq.branches) {   // if + elseif（保序）
+        Id<Expr> ce = simplify_expr(inst_exp(br.cond, enclosing, prefix));
+        if (result_.unsupported) return;
+        if (result_.model.exprs[ce].ty.kind != TypeKind::Boolean) { set_unsupported("if condition type"); return; }
+        std::unordered_set<std::uint32_t> used;
+        std::optional<CVal> cv = eval_scode(br.cond, scode_scope_of(enclosing), 0, /*allow_param=*/true, &used);
+        if (cv && cv->k == CVal::K::Bool) {
+          if (!used.empty()) { set_unsupported("if condition folds via parameter"); return; }
+          if (cv->b) {   // 字面量真：选中该分支，丢弃其余
+            if (out_branches.empty()) {   // 无前置分支 → 直接内联体（无 if 外壳）
+              for (Id<SEquation> beid : br.body) collect_equation(beid, enclosing, prefix, psubs, is_initial);
+            } else {   // 有前置分支 → 该分支成为 else
+              std::vector<Id<FlatEquation>> else_ids = collect_if_body(br.body, enclosing, prefix, psubs, is_initial);
+              if (result_.unsupported) return;
+              emit_if(std::move(out_branches), std::move(else_ids), eq.loc, is_initial);
+            }
+            return;
+          }
+          continue;   // 字面量假 → 丢弃该分支
+        }
+        if (!cond_is_runtime(ce)) { set_unsupported("if condition not evaluable"); return; }
+        std::vector<Id<FlatEquation>> body_ids = collect_if_body(br.body, enclosing, prefix, psubs, is_initial);
+        if (result_.unsupported) return;
+        out_branches.push_back(FlatEqBranch{ce, std::move(body_ids)});
+      }
+      if (out_branches.empty()) {   // 所有 if/elseif 都假（或空）→ else 恒成立
+        for (Id<SEquation> beid : eq.else_body) collect_equation(beid, enclosing, prefix, psubs, is_initial);
+        return;
+      }
+      std::vector<Id<FlatEquation>> else_ids = collect_if_body(eq.else_body, enclosing, prefix, psubs, is_initial);
+      if (result_.unsupported) return;
+      emit_if(std::move(out_branches), std::move(else_ids), eq.loc, is_initial);
+      return;
+    }
     if (eq.kind != SEqKind::Equals) {
-      set_unsupported("non-equality equation (if/reinit…)");
+      set_unsupported("non-equality equation (reinit…)");
       return;
     }
     Id<Expr> a = simplify_expr(inst_exp(eq.a, enclosing, prefix));
@@ -632,6 +671,66 @@ class Flattener {
       }
     }
     return true;
+  }
+
+  // 收集 if 分支体成独立的 flat 方程序列：体方程照常 collect_equation（追加到主方程表），再把新增尾段搬出。
+  // in_if_ 期内禁 connect（分支体里的 connect 未做）；save/restore 支持嵌套 if。
+  std::vector<Id<FlatEquation>> collect_if_body(const std::vector<Id<SEquation>>& body, NodeId enclosing,
+                                                const std::vector<Symbol>& prefix, const PSubs& psubs,
+                                                bool is_initial) {
+    std::vector<Id<FlatEquation>>& sink = is_initial ? result_.model.initial_equations : result_.model.equations;
+    const std::size_t start = sink.size();
+    const bool saved = in_if_;
+    in_if_ = true;
+    for (Id<SEquation> beid : body) {
+      collect_equation(beid, enclosing, prefix, psubs, is_initial);
+      if (result_.unsupported) break;
+    }
+    in_if_ = saved;
+    std::vector<Id<FlatEquation>> out(sink.begin() + start, sink.end());
+    sink.erase(sink.begin() + start, sink.end());
+    return out;
+  }
+
+  // 条件是否为运行时（可作为 flat if 保留）：引用 time（未解析）或连续/离散变量，或残留调用。参数/常量 → false（SKIP）。
+  bool cond_is_runtime(Id<Expr> id) {
+    const Expr& e = result_.model.exprs[id];
+    switch (e.kind) {
+      case ExprKind::Cref: {
+        const std::uint32_t raw = e.cref.resolved_node;
+        if (raw == Id<INode>::kInvalid) return true;   // time / 内建 → 运行时
+        const NodeId n = NodeId::from_index(raw);
+        if (I_.nodes.contains(n) && !I_.nodes[n].is_empty() && I_.nodes[n].comp.is_valid()) {
+          const SVariability v = I_.comps[I_.nodes[n].comp].attributes.variability;
+          return v == SVariability::Var || v == SVariability::Discrete;
+        }
+        return true;
+      }
+      case ExprKind::Relation:
+      case ExprKind::Logical:
+      case ExprKind::Binary:
+        return cond_is_runtime(e.a) || cond_is_runtime(e.b);
+      case ExprKind::Unary:
+      case ExprKind::LogicalNot:
+      case ExprKind::Cast:
+        return cond_is_runtime(e.a);
+      case ExprKind::IfExp:
+        return cond_is_runtime(e.a) || cond_is_runtime(e.b) || cond_is_runtime(e.c);
+      case ExprKind::Call: return true;
+      default: return false;
+    }
+  }
+
+  void emit_if(std::vector<FlatEqBranch> branches, std::vector<Id<FlatEquation>> else_body,
+               SourceLoc loc, bool is_initial) {
+    FlatEquation fe;
+    fe.kind = FlatEqKind::If;
+    fe.branches = std::move(branches);
+    fe.else_body = std::move(else_body);
+    fe.loc = loc;
+    Id<FlatEquation> id = result_.model.add_eq(std::move(fe));
+    if (is_initial) result_.model.initial_equations.push_back(id);
+    else result_.model.equations.push_back(id);
   }
 
   // mod_subs：命中本叶组件名的外来子修饰（优先级序），其 .binding 覆盖声明绑定、.subs 覆盖声明属性；
@@ -2577,6 +2676,7 @@ class Flattener {
   std::unordered_map<std::uint32_t, CVal>* locals_ = nullptr;   // 用户函数解释期的局部环境（输入/局部/输出名→值）
   std::unordered_set<std::uint32_t>* input_names_ = nullptr;    // 当前函数的输入名（禁止对其赋值，AssignInput1）
   std::unordered_map<std::uint32_t, std::int64_t> loop_vars_;   // for 方程展开期的迭代变量→值（cref/下标解析）
+  bool in_if_ = false;   // 正在收集 if 分支体（connect 不能进分支体 → SKIP）
   struct FlowVar { std::vector<Symbol> name; Type ty; SourceLoc loc; };
   std::vector<FlowVar> flow_vars_;   // flow 变量（run() 末尾按 outside/未连接补 `=0` 方程）
   struct ConnectStmt { Id<Exp> a, b; NodeId enclosing; std::vector<Symbol> prefix; SourceLoc loc; };

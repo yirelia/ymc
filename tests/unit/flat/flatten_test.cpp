@@ -401,6 +401,18 @@ YMC_TEST(flatten_user_function_default_and_named_args) {
   YMC_CHECK_EQ(flatten_src(src), std::string("class M\n  Real a = 6.0;\n  Real b = 7.0;\nend M;\n"));
 }
 
+YMC_TEST(flatten_if_equation_emit_and_fold) {
+  // 运行时条件 → 发射 flat if；常量条件 → 折叠选中分支。期望 = omc 1.25.0（IfEquation1 / IfEquationEval2）。
+  const char* emit =
+      "model M\n  Real x;\nequation\n  if time > 1 then\n    x = 1;\n  elseif time > 2 then\n    x = 2;\n  else\n    x = 3;\n  end if;\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(emit),
+               std::string("class M\n  Real x;\nequation\n  if time > 1.0 then\n    x = 1.0;\n"
+                           "  elseif time > 2.0 then\n    x = 2.0;\n  else\n    x = 3.0;\n  end if;\nend M;\n"));
+  const char* fold =
+      "model M\n  Real x;\nequation\n  if false then\n    x = 0;\n  elseif true then\n    x = 1;\n  else\n    x = 2;\n  end if;\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(fold), std::string("class M\n  Real x;\nequation\n  x = 1.0;\nend M;\n"));
+}
+
 YMC_TEST(flatten_noevent_fold_and_continuity_guard) {
   // noEvent(常量)脱壳折叠；Boolean 绑定连续表达式（noEvent(time>1)）是错误 → SKIP（NoEvent1）。期望 = omc 1.25.0（CevalNoEvent1）。
   YMC_CHECK_EQ(flatten_src("model M\n  constant Real r = noEvent(1.0 / 4.0);\nend M;\n"),

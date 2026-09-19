@@ -379,6 +379,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       不误伤合法 `Boolean b = x>1`）。→ easy-slice **184 PASS / 0 FAIL**（+1 CevalNoEvent1）；oracle=live 逐字节一致；
       全 scodeinst PASS 186→187、FAIL 69 不变（0 新增/0 丢失）；三编译器 10/10，ASan 0，+1 单测。
       子agent 另确认：tan/asin/exp/log/… 等标量内建早已在表内；String()/pure()/枚举构造器需另加基建，暂缓。
+- [x] **加宽㉜if 方程**（2026-09-19，子agent出卡）：常量条件求值折叠（真分支选中：无前置→内联体、有前置→成 else；假分支丢弃），
+      否则发射 flat if（FlatEqKind::If，flat_dump 已支持）。collect_if_body 快照法把分支体搬进独立方程序列（in_if_ 禁分支体 connect，
+      save/restore 支持嵌套）；cond_is_runtime 判运行时条件（time/Var/Discrete/残留调用）；只折 used 为空的纯字面量/迭代变量条件
+      （参数条件 omc 标 final、ymc if 路径不标 → SKIP）。守卫：非 Boolean 条件类型 → SKIP（IfEquationInvalidCond1）。
+      → easy-slice **191 PASS / 0 FAIL**（+7：IfEquation1/2/7、IfEquationEval1/2/3、NoEvent2 连带）；oracle=live 逐字节一致；
+      全 scodeinst PASS 187→194、FAIL 69 不变（0 新增/0 丢失）；三编译器 10/10，ASan 0，+1 单测。
+      诚实 SKIP：枚举/下标 cref 条件（ymc eval 未做）、参数条件、firstTick、复合数组体、if 在 when（IfEquationImpure1）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples
