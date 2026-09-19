@@ -295,8 +295,16 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       resolve_connector 把 connect 实参解析成 flat 路径+face+标量成员表。
       → easy-slice **127 PASS / 0 FAIL**（+3 Connect2/Connect5/ConnectDiffOrder1）；oracle=live 逐字节一致；
       全 scodeinst PASS 127→130、FAIL 70 不变（0 新增）；三编译器 10/10，ASan 0，+3 单测；Connect3 分歧记账本。
-      诚实 SKIP（各需另一特性）：多条 connect（连接集 union-find、元素序是 OMC 内部产物）、connect 在子模型（前缀化）、
-      数组连接器/成员、嵌套连接器 `c1.c2`/深层 `b.a.c`、parameter/constant 成员（连接生成 assert 相等）、stream、expandable。
+      诚实 SKIP（各需另一特性）：多条 connect（连接集 union-find、元素序是 OMC 内部产物，算法已记 open-questions）、
+      connect 在子模型（前缀化）、数组连接器/成员、嵌套连接器 `c1.c2`/深层 `b.a.c`、parameter/constant 成员（连接生成 assert 相等）、stream、expandable。
+- [x] **加宽⑲条件组件 `x if cond`**（2026-09-19）：cond 求值成常量 Bool（MLS §4.4.5）——true 保留（抹条件）、false 移除
+      组件（不产变量/不递归 + 记路径）；条件里的参数变结构 final（Condition3，声明处作用域求值兼容继承）；引用它的
+      connect 整条丢弃（Condition5，丢后若只剩一条即走单连接引擎）。守卫：方程/绑定引用已移除组件 → SKIP（omc 报错，
+      ConditionInvalidContext）、数值组件绑 String/Bool → SKIP（类型错，ConditionInvalidBinding1）、被移除名又被 emit（redeclare
+      一个 replaceable-conditional 成员）→ SKIP（RedeclareElementCondition1/2/3）。
+      → easy-slice **136 PASS / 0 FAIL**（+9：Condition1/2/3/4/5/10、ConditionInvalidBinding2、DimNegative2、PartialFunction2）；
+      oracle=live 逐字节一致；全 scodeinst PASS 130→139、FAIL 70→69（0 新增，反修一例）；三编译器 10/10，ASan 0，+4 单测。
+      诚实 SKIP：条件里数组组件（Condition7/8，复合数组）、嵌套条件连接器成员（Condition9）、redeclare+条件语义。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

@@ -390,6 +390,41 @@ YMC_TEST(flatten_constant_record_unsupported) {
   YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
 }
 
+YMC_TEST(flatten_conditional_component_true_false) {
+  // 条件组件：`if true` 保留（抹掉条件）、`if false` 移除。期望 = omc 1.25.0（Condition1/2）。
+  YMC_CHECK_EQ(flatten_src("model M\n  Real x if true;\n  Real y if false;\nend M;\n"),
+               std::string("class M\n  Real x;\nend M;\n"));
+}
+
+YMC_TEST(flatten_conditional_param_becomes_final) {
+  // `x if b`（b 参数）：b 求值决定去留，且 b 变结构 final parameter。期望 = omc 1.25.0（Condition3 结构）。
+  const char* src =
+      "model M\n  parameter Boolean b1 = true;\n  parameter Boolean b2 = false;\n"
+      "  Real x if b1;\n  Real y if b2;\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class M\n  final parameter Boolean b1 = true;\n"
+                           "  final parameter Boolean b2 = false;\n  Real x;\nend M;\n"));
+}
+
+YMC_TEST(flatten_conditional_connector_drops_connect) {
+  // `C c3 if false` 移除 + 引用它的 connect 整条丢弃 → 只剩 connect(c1,c2)。期望 = omc 1.25.0（Condition5）。
+  const char* src =
+      "connector C\n  Real e;\n  flow Real f;\nend C;\n"
+      "model M\n  C c1;\n  C c2;\n  C c3 if false;\n"
+      "equation\n  connect(c1, c2);\n  connect(c2, c3);\n  connect(c3, c1);\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class M\n  Real c1.e;\n  Real c1.f;\n  Real c2.e;\n  Real c2.f;\n"
+                           "equation\n  c1.e = c2.e;\n  -(c1.f + c2.f) = 0.0;\n  c1.f = 0.0;\n  c2.f = 0.0;\nend M;\n"));
+}
+
+YMC_TEST(flatten_reference_to_removed_component_unsupported) {
+  // 方程/绑定引用条件为假被移除的组件 → omc 报错，ymc 无诊断 → 干净 SKIP（ConditionInvalidContext4）。
+  bool uns = false;
+  std::string t = flatten_src("model M\n  Real x if false;\n  Real y = x;\nend M;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+}
+
 YMC_TEST(flatten_connect_both_outside) {
   // connect 两个顶层连接器：potential 相等 + flow 求和（both outside → -(a+b)）+ 各自边界 =0。期望 = omc 1.25.0（Connect2）。
   const char* src =

@@ -167,6 +167,11 @@ class Flattener {
       fe.loc = fv.loc;
       result_.model.equations.push_back(result_.model.add_eq(std::move(fe)));
     }
+    // 某变量名同时出现在 removed_（另一同名声明条件为假被移除）：redeclare 一个 replaceable-conditional 成员的
+    // 语义（保留原条件 / 禁止带条件 redeclare）v1 未做 → SKIP（RedeclareElementCondition1/2/3）。
+    if (!removed_.empty())
+      for (const FlatVariable& v : result_.model.variables)
+        if (removed_.count(path_key(v.name))) { set_unsupported("conditional component redeclared"); break; }
     // 重复变量名 → omc 会去重（R11 §3.4-3）；v1 未做，标 unsupported（driver 退 66）。
     for (std::size_t i = 0; i < result_.model.variables.size(); ++i)
       for (std::size_t j = i + 1; j < result_.model.variables.size(); ++j)
@@ -211,6 +216,12 @@ class Flattener {
         // 数组维度里的参数（`Real x[n]` → n）被求值成结构参数 → final（Dim1）。
         for (Id<Exp> d : fel.attr.dims) { tmp.clear(); eval_dim(d, tmp, fscope, &final_params); }
         for (Id<Exp> d : fel.type.dims) { tmp.clear(); eval_dim(d, tmp, fscope, &final_params); }
+        // 组件条件里的参数（`x if b` → b 是结构参数 → final，Condition3）；在组件声明处作用域求值（继承=基类）。
+        if (fel.condition.is_valid()) {
+          const NodeId ps = I_.nodes[cn].parent_scope;
+          const NodeId cs = (ps.is_valid() && !I_.nodes[ps].is_empty()) ? ps : inst_node;
+          eval_scode(fel.condition, scode_scope_of(cs), 0, /*allow_param=*/true, &final_params);
+        }
         // fixed 属性里的参数（ceval3）。
         const Id<SMod> fm = fel.mod;
         if (!fm.is_valid()) continue;
@@ -236,7 +247,22 @@ class Flattener {
       const Visibility vis = I_.nodes[cn].visibility;
       const SElement& cel = I_.scode.elems[I_.comps[cid].def];
       const bool has_dims = !cel.attr.dims.empty() || !cel.type.dims.empty();
-      if (cel.condition.is_valid()) set_unsupported("conditional component");
+      // 条件组件 `x if cond`：cond 须求值成常量 Bool（MLS §4.4.5）。false → 移除组件（不产变量/不递归）、
+      // 记路径供 connect 丢弃；true → 正常展开（条件抹掉）。求不出常量 Bool → SKIP。
+      if (cel.condition.is_valid()) {
+        // 在组件**声明处**作用域求值（继承成员 = 基类，条件里的兄弟参数在原类可见，Condition3）。
+        const NodeId ps = I_.nodes[cn].parent_scope;
+        const NodeId cscope = (ps.is_valid() && !I_.nodes[ps].is_empty()) ? ps : inst_node;
+        std::optional<CVal> cv = eval_scode(cel.condition, scode_scope_of(cscope), 0, /*allow_param=*/true, nullptr);
+        if (!cv || cv->k != CVal::K::Bool) { set_unsupported("conditional component condition"); continue; }
+        if (!cv->b) {
+          std::vector<Symbol> rn = prefix;
+          rn.push_back(cname);
+          removed_.insert(path_key(rn));
+          removed_nodes_.insert(cn.raw);
+          continue;
+        }
+      }
       // outer 组件：不产出变量，按名连到最近外层 inner，记重定向表供 cref 改写（R11 §5）。找不到 inner → SKIP。
       if (I_.comps[cid].attributes.is_outer) {
         // `inner outer` 组合前缀：既声明本层变量又连外层 inner（InnerOuter3），v1 只做纯 outer → SKIP。
@@ -407,6 +433,11 @@ class Flattener {
     }
     if (binding.is_valid()) {
       binding = simplify_expr(binding);   // 折叠常量子表达式（`1+2`→`3.0`）+ 已在 cref 内联的常量
+      // 数值组件绑定成 String/Bool 是类型错误（omc 报错，ConditionInvalidBinding1）——ymc 无绑定 typing → SKIP。
+      const TypeKind bk = result_.model.exprs[binding].ty.kind;
+      if ((cty.kind == TypeKind::Real || cty.kind == TypeKind::Integer) &&
+          (bk == TypeKind::String || bk == TypeKind::Boolean))
+        set_unsupported("binding type mismatch");
       if (cty.kind == TypeKind::Real) binding = to_real(binding);   // `= 2` → `= 2.0`
     }
     // 结构 final 参数：绑定求值成字面量（init_x = p1 or p2 → true）。
@@ -985,6 +1016,12 @@ class Flattener {
     Expr e;
     e.kind = ExprKind::Cref;
     NodeId local = c.parts.empty() ? Inst::empty_node() : find_local(enclosing, c.parts[0].name);
+    // 首段命中条件为假被移除的组件 → 在方程/绑定里引用它是错误（omc 报错，ConditionInvalidContext1/2/4）→ SKIP。
+    if (local.is_valid() && !I_.nodes[local].is_empty() && removed_nodes_.count(local.raw)) {
+      set_unsupported("reference to removed conditional component");
+      e.ty = Type::real();
+      return add(std::move(e));
+    }
     if (local.is_valid() && !I_.nodes[local].is_empty()) {
       // 多段 `a.x`：逐段深入复合组件解析到叶子，取**叶子**的类型/可变性（否则会用复合类型误加 Cast）。
       NodeId leaf = local, cur = local;
@@ -1778,12 +1815,29 @@ class Flattener {
     return bin_expr(BinOp::Sub, pos, negt);                                      // pos - neg
   }
 
+  // connect 实参是否引用了被移除（条件为假）的组件——按 cref 前缀逐段查 removed_。
+  bool references_removed(Id<Exp> ce) {
+    if (I_.absyn.exps[ce].kind != ExpKind::CrefExp) return false;
+    const Cref& c = I_.absyn.crefs[I_.absyn.exps[ce].cref];
+    std::vector<Symbol> p;
+    for (const CrefPart& part : c.parts) {
+      p.push_back(part.name);
+      if (removed_.count(path_key(p))) return true;
+    }
+    return false;
+  }
+
   void process_connects() {
     if (connects_.empty()) return;
+    // 引用了被移除组件的 connect 整条丢弃（条件组件 false，Condition5）；其余才算"活" connect。
+    std::vector<ConnectStmt> live;
     for (const ConnectStmt& cs : connects_)
+      if (!references_removed(cs.a) && !references_removed(cs.b)) live.push_back(cs);
+    if (live.empty()) return;
+    for (const ConnectStmt& cs : live)
       if (!cs.prefix.empty()) { set_unsupported("connect in submodel"); return; }   // 前缀化+重算 inside/outside 未做
-    if (connects_.size() > 1) { set_unsupported("multiple connect (needs connection sets)"); return; }
-    const ConnectStmt& cs = connects_[0];
+    if (live.size() > 1) { set_unsupported("multiple connect (needs connection sets)"); return; }
+    const ConnectStmt& cs = live[0];
     std::optional<ConnInfo> A = resolve_connector(cs.a, cs.enclosing);
     std::optional<ConnInfo> B = resolve_connector(cs.b, cs.enclosing);
     if (!A || !B) { set_unsupported("connect operand shape"); return; }
@@ -1824,6 +1878,8 @@ class Flattener {
   struct ConnectStmt { Id<Exp> a, b; NodeId enclosing; std::vector<Symbol> prefix; SourceLoc loc; };
   std::vector<ConnectStmt> connects_;            // 攒下的 connect()，run() 末尾展开
   std::unordered_set<std::string> connected_inside_;   // 已连接的 inside 连接器路径 key（其 flow 不再单列 =0）
+  std::unordered_set<std::string> removed_;             // 条件为假被移除的组件路径 key（引用它的 connect 整条删）
+  std::unordered_set<std::uint32_t> removed_nodes_;     // 被移除组件的节点 raw（方程/绑定里引用它 → omc 报错 → SKIP）
 };
 
 }  // namespace
