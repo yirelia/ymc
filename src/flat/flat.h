@@ -32,10 +32,10 @@ enum class FlatDirection : std::uint8_t { None, Input, Output };
 
 struct FlatVariable {
   std::vector<Symbol> name;              // 点分名（`b.x` → {b, x}）
-  std::vector<std::int64_t> subscripts;  // **末段**数组标量化下标（`b.x[1,2]` → {1,2}）；空 = 末段标量
+  std::vector<Id<Expr>> subscripts;      // **末段**数组标量化下标（`b.x[1,2]` → {1,2}）；子下标是类型化 Expr（IntLit/BoolLit/EnumLit，对标 NFSubscript）；空 = 末段标量
   // 复合数组标量化：非末段的逐段下标（`a[1].x` → 段 `a` 带 {1}）。与 name 平行、空=该段无下标；
   // 末段下标仍用上面的 subscripts。全为空（默认）时行为与旧模型一致。
-  std::vector<std::vector<std::int64_t>> name_subs;
+  std::vector<std::vector<Id<Expr>>> name_subs;
   Type ty;                               // 塌陷后的内建/枚举标量类型
   // 前缀（R13 §3.1 固定顺序：protected final par* const|param|discrete in|out 类型 名字）
   bool is_protected = false;

@@ -182,8 +182,8 @@ class Flattener {
     for (std::size_t i = 0; i < result_.model.variables.size(); ++i)
       for (std::size_t j = i + 1; j < result_.model.variables.size(); ++j)
         if (result_.model.variables[i].name == result_.model.variables[j].name &&
-            result_.model.variables[i].name_subs == result_.model.variables[j].name_subs &&
-            result_.model.variables[i].subscripts == result_.model.variables[j].subscripts) {
+            name_subs_eq(result_.model.variables[i].name_subs, result_.model.variables[j].name_subs) &&
+            subs_eq(result_.model.variables[i].subscripts, result_.model.variables[j].subscripts)) {
           set_unsupported("duplicate variable");
           i = result_.model.variables.size();
           break;
@@ -507,7 +507,7 @@ class Flattener {
     for (const FlatVariable& v : result_.model.variables) {
       if (!v.subscripts.empty() || v.name != nm) continue;
       bool clean = true;
-      for (const std::vector<std::int64_t>& s : v.name_subs) if (!s.empty()) { clean = false; break; }
+      for (const std::vector<Id<Expr>>& s : v.name_subs) if (!s.empty()) { clean = false; break; }
       if (clean) return &v;
     }
     return nullptr;
@@ -931,6 +931,43 @@ class Flattener {
     }
   }
 
+  // ---- FlatVariable 子下标（类型化 Expr）转换 + 结构比较（对标 NFSubscript：下标是表达式）----
+  // 数组标量化下标只可能是 IntLit/BoolLit/EnumLit；去重比较按值（Id 恒等不够，独立构造的 IntLit 1 Id 不同）。
+  std::vector<Id<Expr>> idx_to_exprs(const std::vector<std::int64_t>& idx) {
+    std::vector<Id<Expr>> out;
+    out.reserve(idx.size());
+    for (std::int64_t v : idx) out.push_back(lit_int(v));
+    return out;
+  }
+  std::vector<std::vector<Id<Expr>>> psubs_to_exprs(const PSubs& ps) {
+    std::vector<std::vector<Id<Expr>>> out;
+    out.reserve(ps.size());
+    for (const std::vector<std::int64_t>& seg : ps) out.push_back(idx_to_exprs(seg));
+    return out;
+  }
+  bool sub_expr_eq(Id<Expr> a, Id<Expr> b) {
+    if (a == b) return true;
+    const Expr& ea = result_.model.exprs[a];
+    const Expr& eb = result_.model.exprs[b];
+    if (ea.kind != eb.kind) return false;
+    switch (ea.kind) {
+      case ExprKind::IntLit: return ea.ival == eb.ival;
+      case ExprKind::BoolLit: return ea.bval == eb.bval;
+      case ExprKind::EnumLit: return ea.enum_path == eb.enum_path;
+      default: return false;
+    }
+  }
+  bool subs_eq(const std::vector<Id<Expr>>& a, const std::vector<Id<Expr>>& b) {
+    if (a.size() != b.size()) return false;
+    for (std::size_t k = 0; k < a.size(); ++k) if (!sub_expr_eq(a[k], b[k])) return false;
+    return true;
+  }
+  bool name_subs_eq(const std::vector<std::vector<Id<Expr>>>& a, const std::vector<std::vector<Id<Expr>>>& b) {
+    if (a.size() != b.size()) return false;
+    for (std::size_t k = 0; k < a.size(); ++k) if (!subs_eq(a[k], b[k])) return false;
+    return true;
+  }
+
   void emit_if(std::vector<FlatEqBranch> branches, std::vector<Id<FlatEquation>> else_body,
                SourceLoc loc, bool is_initial) {
     FlatEquation fe;
@@ -1022,7 +1059,7 @@ class Flattener {
     const bool is_flow = comp.attributes.connector == SConnectorType::Flow && in_conn;
     FlatVariable v;
     v.name = name;
-    v.name_subs = psubs;
+    v.name_subs = psubs_to_exprs(psubs);
     v.name_subs.push_back({});   // 叶段（标量）无逐段下标；与 name 平行
     v.ty = comp.ty;
     v.is_protected = is_protected;
@@ -1165,9 +1202,9 @@ class Flattener {
     for (bool more = true; more;) {
       FlatVariable v;
       v.name = name;
-      v.name_subs = psubs;
+      v.name_subs = psubs_to_exprs(psubs);
       v.name_subs.push_back({});   // 叶数组的下标走 v.subscripts（末段），逐段 name_subs 末段留空
-      v.subscripts = idx;
+      v.subscripts = idx_to_exprs(idx);
       v.ty = cty;
       v.is_protected = is_protected;
       v.is_final = is_final;
@@ -1934,7 +1971,7 @@ class Flattener {
       FlatVariable v;
       v.name = name;
       v.name.push_back(I_.nodes[fn].name);
-      v.name_subs = psubs;
+      v.name_subs = psubs_to_exprs(psubs);
       v.name_subs.resize(v.name.size());   // 逐段无下标
       v.ty = fty;
       v.is_protected = is_protected;

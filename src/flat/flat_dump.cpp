@@ -62,10 +62,10 @@ class FlatDumper {
     type_name(v.ty);
     out_ += ' ';
     // 逐段名 + 该段下标（复合数组 `a[1].x`）；末段后再补叶数组下标 subscripts（`b.x[1,2]`）。R13 §4.2：`,` 无空格。
-    auto emit_subs = [&](const std::vector<std::int64_t>& s) {
+    auto emit_subs = [&](const std::vector<Id<Expr>>& s) {
       if (s.empty()) return;
       out_ += '[';
-      for (std::size_t i = 0; i < s.size(); ++i) { if (i) out_ += ','; out_ += std::to_string(s[i]); }
+      for (std::size_t i = 0; i < s.size(); ++i) { if (i) out_ += ','; out_ += dump_expr(m_.exprs, in_, s[i]); }
       out_ += ']';
     };
     for (std::size_t i = 0; i < v.name.size(); ++i) {
