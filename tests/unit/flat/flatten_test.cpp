@@ -126,6 +126,16 @@ YMC_TEST(flatten_array_matrix_product_unsupported) {
   YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
 }
 
+// `:` 维从数组构造子绑定推断形状（含 array(…) ≡ {…}、多维）。期望值取自实跑 omc 1.25.0。
+YMC_TEST(flatten_colon_dim_from_array_constructor) {
+  YMC_CHECK_EQ(
+      flatten_src("model M\n  constant Real r[:] = array(1.0, 2.0, 3.0);\n"
+                  "  constant Real m[:,:] = {{1.0, 2.0}, {3.0, 4.0}};\nend M;\n"),
+      std::string("class M\n  constant Real r[1] = 1.0;\n  constant Real r[2] = 2.0;\n  constant Real r[3] = 3.0;\n"
+                  "  constant Real m[1,1] = 1.0;\n  constant Real m[1,2] = 2.0;\n  constant Real m[2,1] = 3.0;\n"
+                  "  constant Real m[2,2] = 4.0;\nend M;\n"));
+}
+
 YMC_TEST(flatten_builtin_attributes) {
   // 内建属性修饰：写序打乱 → 按类型属性表序产出；Real 属性 int→real 强转；Integer 不强转；
   // String 的 fixed、Real 的 unbounded 被丢弃；stateSelect 是枚举字面量（全路径）。期望值 = omc 1.25.0 实测。

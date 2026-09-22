@@ -406,6 +406,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       顺带修了标量 `/` 潜伏 bug（原产 `/*Real*/(i/j)` 整除后转型，与 omc 不符）。array_binary 放开 `/`：数组÷标量广播逐元素、
       数组÷数组（非点号）仍 SKIP。→ easy-slice 206 PASS/0 FAIL（+2：OperationDiv1、OperationDivEW1）；oracle=live 逐字节一致；
       全 scodeinst PASS 207→209、FAIL 69 不变；三编译器 10/10、ASan 0；+1 单测。矩阵/切片/数组 connect、非字面量维（×99）留待后续。
+- [x] **加宽㊱`:` 维从数组构造子推断（CevalArray 系）**（2026-09-22，用户定子桶，子agent两次 ECONNRESET 后自行落地）：
+      发现"非字面量维 ×99"非单一特性——eval_dim 已能折叠常量/参数/size/算术维；真正卡住的 `:` 维分四簇（数组常量绑定推断、类型维 Bool/enum、`:`+矩阵/reduction、omc 报错）。本桶做第一簇。
+      emit_array 重排——先备维表达式，绑定就绪后解析各维；`:`（ExpKind::Colon）维用 binding_dim_size 从绑定构造子形状逐层推断（矩形，行优先）。
+      is_array_ctor 认 `{…}`（ExpKind::Array）与 `array(…)`（Call，MLS §10.4.1.1 等价，元素同在 .args），接进绑定检查/摊分/形状匹配三处；
+      `array(e for i in r)` 是 ExpKind::Reduction → 不认（正确 SKIP）。守卫：顶层 input/output 数组带绑定 omc 丢方向+绑定（标量不丢，探针实测）
+      quirk 未复刻 → SKIP（修 TopLevelInputs2 回归）。→ easy-slice 209 PASS/0 FAIL（+3：CevalArray1、DimUnknown1、DimUnknown6）；
+      oracle=live 逐字节一致；全 scodeinst PASS 209→212、FAIL 69 不变；三编译器 10/10、ASan 0；+1 单测。
+      非纯 `:` 用例（常量数组元素折叠、array(…for…) reduction、复合记录数组、size/矩阵）仍 SKIP，各是独立后续特性。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

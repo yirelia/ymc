@@ -1080,18 +1080,17 @@ class Flattener {
     cur_psubs_ = psubs;   // 数组绑定/摊分里 cref 前缀改写用
     // 维度：组件维在前、类型维在后（R13 §3）。字面量 + 参数/常量/size()/算术求值。
     const ScodeScope dscope = scode_scope_of(enclosing);
-    std::vector<std::int64_t> dims;
-    for (Id<Exp> d : cel.attr.dims)
-      if (!eval_dim(d, dims, dscope)) { set_unsupported("non-literal array dimension"); return; }
-    for (Id<Exp> d : cel.type.dims)
-      if (!eval_dim(d, dims, dscope)) { set_unsupported("non-literal array dimension"); return; }
-    if (dims.empty()) { set_unsupported("array dimension"); return; }
+    // 维度表达式：组件维在前、类型维在后（R13 §3）。先收集，绑定就绪后再解析（`:` 维靠绑定形状推断）。
+    std::vector<Id<Exp>> dim_exps;
+    for (Id<Exp> d : cel.attr.dims) dim_exps.push_back(d);
+    for (Id<Exp> d : cel.type.dims) dim_exps.push_back(d);
+    if (dim_exps.empty()) { set_unsupported("array dimension"); return; }
     // 属性修饰（逐元素分配 / SPLIT_PROXY，R15 §4）v1 未做。
     if (cel.mod.is_valid() && !I_.scode.mods[cel.mod].subs.empty()) { set_unsupported("array attribute modifier"); return; }
     for (Id<SMod> m : mod_subs)
       if (!I_.scode.mods[m].subs.empty()) { set_unsupported("array attribute modifier"); return; }
     if (!I_.comps[cid].derived_mods.empty()) { set_unsupported("array derived-type modifier"); return; }
-    // 绑定：外来修饰优先，否则声明绑定。要求是数组字面量 `{…}`，否则 SKIP。
+    // 绑定：外来修饰优先，否则声明绑定。要求是数组构造子 `{…}` / `array(…)`，否则 SKIP。
     Id<Exp> braw;
     for (Id<SMod> m : mod_subs)
       if (I_.scode.mods[m].binding.is_valid()) { braw = I_.scode.mods[m].binding; break; }
@@ -1101,8 +1100,29 @@ class Flattener {
       const Binding& b = I_.comps[cid].binding;
       if (b.kind == BindingKind::Raw && b.raw_exp.is_valid()) { braw = b.raw_exp; bscope = enclosing; bprefix = prefix; }
     }
-    if (braw.is_valid() && I_.absyn.exps[braw].kind != ExpKind::Array) {
+    if (braw.is_valid() && !is_array_ctor(braw)) {
       set_unsupported("non-literal array binding"); return;
+    }
+    // 顶层 input/output 数组带绑定：omc 丢方向+绑定（标量不丢，探针实测），该 quirk 未复刻 → SKIP（TopLevelInputs2）。
+    if (braw.is_valid() && prefix.empty() &&
+        (I_.comps[cid].attributes.direction == SDirection::Input ||
+         I_.comps[cid].attributes.direction == SDirection::Output)) {
+      set_unsupported("top-level directional array with binding"); return;
+    }
+    // 解析各维成整数：字面量/参数/size()/算术走 eval_dim；`:` 维从绑定构造子形状推断（CevalArray*）。
+    std::vector<std::int64_t> dims;
+    for (std::size_t di = 0; di < dim_exps.size(); ++di) {
+      if (I_.absyn.exps[dim_exps[di]].kind == ExpKind::Colon) {
+        std::optional<std::int64_t> n = binding_dim_size(braw, di);
+        if (!n) { set_unsupported("non-literal array dimension"); return; }
+        dims.push_back(*n);
+      } else {
+        std::vector<std::int64_t> one;
+        if (!eval_dim(dim_exps[di], one, dscope) || one.size() != 1) {
+          set_unsupported("non-literal array dimension"); return;
+        }
+        dims.push_back(one[0]);
+      }
     }
 
     const Type cty = I_.comps[cid].ty;
@@ -1189,7 +1209,7 @@ class Flattener {
   Id<Exp> array_scalar_elem(Id<Exp> e, const std::vector<std::int64_t>& idx, std::size_t start) {
     if (start == idx.size()) return e;
     const ExpKind k = I_.absyn.exps[e].kind;
-    if (k == ExpKind::Array) {
+    if (is_array_ctor(e)) {   // `{…}` 或 `array(…)`
       const std::int64_t i = idx[start];
       const std::size_t n = I_.absyn.exps[e].args.size();
       if (i < 1 || static_cast<std::size_t>(i) > n) return {};
@@ -1222,7 +1242,7 @@ class Flattener {
     if (di < dims.size()) {
       // cref 数组元素（`{x, …}` 的 x）填一整段维度：静态形状无法只看 Absyn 校验，交给 inst/摊分（BindingArray8）。
       if (e.kind == ExpKind::CrefExp) return true;
-      if (e.kind != ExpKind::Array || static_cast<std::int64_t>(e.args.size()) != dims[di]) return false;
+      if (!is_array_ctor(b) || static_cast<std::int64_t>(e.args.size()) != dims[di]) return false;
       for (Id<Exp> a : e.args)
         if (!array_lit_matches(a, dims, di + 1, elem)) return false;
       return true;
@@ -1235,6 +1255,29 @@ class Flattener {
       case ExpKind::StringLit: return elem == TypeKind::String;
       default: return false;   // cref/调用等 v1 数组绑定不做
     }
+  }
+
+  // 数组构造子：`{…}`（ExpKind::Array）或 `array(…)`（MLS §10.4.1.1 等价，元素同在 .args）。
+  bool is_array_ctor(Id<Exp> e) {
+    const Exp& x = I_.absyn.exps[e];
+    if (x.kind == ExpKind::Array) return true;
+    if (x.kind == ExpKind::Call) {
+      const Cref& c = I_.absyn.crefs[x.cref];
+      return c.parts.size() == 1 && c.parts[0].subscripts.empty() && in_.str(c.parts[0].name) == "array";
+    }
+    return false;
+  }
+
+  // 绑定构造子在第 di 维的元素个数（外层下降 di 层取该层 arg 数，假定矩形）；供 `:` 维从绑定推断形状。
+  std::optional<std::int64_t> binding_dim_size(Id<Exp> b, std::size_t di) {
+    if (!b.is_valid()) return std::nullopt;
+    Id<Exp> cur = b;
+    for (std::size_t k = 0; k < di; ++k) {
+      if (!is_array_ctor(cur) || I_.absyn.exps[cur].args.empty()) return std::nullopt;
+      cur = I_.absyn.exps[cur].args[0];
+    }
+    if (!is_array_ctor(cur)) return std::nullopt;
+    return static_cast<std::int64_t>(I_.absyn.exps[cur].args.size());
   }
 
   // 数组维度求值（v1：只认字面量整数；参数/size/: 等 → false）。
