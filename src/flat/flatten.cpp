@@ -198,10 +198,7 @@ class Flattener {
                      bool protected_ctx, const ModCtx& ctx, const std::vector<InnerVar>& outer_inners) {
     // 已判 unsupported 就早停：模型必 SKIP，继续摊分（尤其大复合数组）只是白烧时间/内存（ArrayConnect3 cells[1000,100]）。
     if (result_.unsupported) return;
-    // 算法段 v1 未做（方程段的 Equals 已支持，见文末 collect_equations）。
     const SElement& def = I_.scode.elems[I_.nodes[inst_node].def];
-    if (!def.def.algorithms.empty() || !def.def.initial_algorithms.empty())
-      set_unsupported("algorithms");
     if (def.def.external.present) set_unsupported("external function");
     for (Id<SElement> eid : def.def.elements) {
       SElementKind k = I_.scode.elems[eid].kind;
@@ -443,6 +440,77 @@ class Flattener {
     // 段序：initial equation 先于 equation（R13 §2）；enclosing = 本实例，cref 前缀 = prefix。
     for (Id<SEquation> eid : def.def.initial_equations) collect_equation(eid, inst_node, prefix, psubs, /*initial=*/true);
     for (Id<SEquation> eid : def.def.equations) collect_equation(eid, inst_node, prefix, psubs, /*initial=*/false);
+    // 算法段：翻译成 flat 语句（子组件段已在上面递归先入 → 子先本类后，与方程同序 R11 §3.4-6）。
+    for (const SAlgorithm& alg : def.def.initial_algorithms) collect_algorithm(alg, inst_node, prefix, psubs, /*initial=*/true);
+    for (const SAlgorithm& alg : def.def.algorithms) collect_algorithm(alg, inst_node, prefix, psubs, /*initial=*/false);
+  }
+
+  // 翻译一个算法段 → FlatAlgorithm（v1：只做直线标量赋值，见 collect_statement）。段内任一语句未做 → 整模型 SKIP。
+  void collect_algorithm(const SAlgorithm& alg, NodeId enclosing, const std::vector<Symbol>& prefix,
+                         const PSubs& psubs, bool is_initial) {
+    if (result_.unsupported) return;
+    cur_psubs_ = psubs;   // cref 前缀改写（与 collect_equation 一致：本段引用带 `a[i]` 段下标）
+    FlatAlgorithm fa;
+    fa.is_initial = is_initial;
+    for (Id<SStatement> sid : alg.stmts) {
+      Id<FlatStatement> fs = collect_statement(sid, enclosing, prefix);
+      if (result_.unsupported) return;   // 有语句未做 → 放弃整模型（保 FAIL=0，不产半截算法段）
+      fa.stmts.push_back(fs);
+    }
+    if (fa.stmts.empty()) return;   // 空段不产关键字（dumper flat_dump.cpp:129 也跳空段）
+    if (is_initial) result_.model.initial_algorithms.push_back(std::move(fa));
+    else result_.model.algorithms.push_back(std::move(fa));
+  }
+
+  // 翻译一条语句（v1：只做标量赋值 `cref := expr`，目标须是已发射的连续变量；其余 kind/目标 → SKIP 保 FAIL=0）。
+  Id<FlatStatement> collect_statement(Id<SStatement> sid, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    const SStatement& st = I_.scode.stmts[sid];
+    if (st.kind != SStmtKind::Assign) { set_unsupported("algorithm statement"); return {}; }
+    // LHS 解析成 flat cref。常量目标已被 cref() 内联成字面量 → 非 Cref → 落到下面的目标校验 SKIP。
+    Id<Expr> lhs = simplify_expr(inst_exp(st.a, enclosing, prefix));
+    if (result_.unsupported) return {};
+    std::vector<Symbol> lname;
+    {
+      const Expr& le = result_.model.exprs[lhs];
+      if (le.kind != ExprKind::Cref) { set_unsupported("algorithm assignment target"); return {}; }
+      for (const ExprCrefPart& p : le.cref.parts) {
+        if (!p.subscripts.empty()) { set_unsupported("algorithm array-element assignment"); return {}; }  // `x[i]:=…` 属 for 层，暂缓
+        lname.push_back(p.name);
+      }
+    }
+    // 目标须是已发射的连续变量（Var）：给参数/常量/离散赋值是 omc 错误或需初值语义 → SKIP（AssignParameter1 等）。
+    const FlatVariable* lv = find_scalar_flat_var(lname);
+    if (!lv || lv->var_kind != FlatVarKind::Var) { set_unsupported("algorithm assignment to non-continuous variable"); return {}; }
+    const TypeKind ta = lv->ty.kind;   // 先取（下面 inst_exp/to_real 会往 arena add，勿跨调用持引用）
+    Id<Expr> rhs = simplify_expr(inst_exp(st.b, enclosing, prefix));
+    if (result_.unsupported) return {};
+    TypeKind tb;
+    {
+      const Expr& re = result_.model.exprs[rhs];
+      if (re.kind == ExprKind::Array || re.kind == ExprKind::Tuple) { set_unsupported("algorithm array/tuple rhs"); return {}; }
+      tb = re.ty.kind;
+    }
+    // 整型→实型强制（Comment1 `x:=1`→`x:=1.0`）；其余类型不符 → SKIP（StatementInvalidType1 `Real:=String`）。
+    if (ta == TypeKind::Real && tb == TypeKind::Integer) rhs = to_real(rhs);
+    else if (ta != tb) { set_unsupported("algorithm assignment type mismatch"); return {}; }
+    FlatStatement fs;
+    fs.kind = FlatStmtKind::Assign;
+    fs.a = lhs;
+    fs.b = rhs;
+    fs.loc = st.loc;
+    if (st.cmt.str.is_valid()) fs.comment = in_.intern(unescape_modelica_string(in_.str(st.cmt.str)));
+    return result_.model.add_stmt(std::move(fs));
+  }
+
+  // 在已发射变量里按点分名找标量变量（无末段下标、无逐段下标）。供算法赋值目标的可变性校验。
+  const FlatVariable* find_scalar_flat_var(const std::vector<Symbol>& nm) {
+    for (const FlatVariable& v : result_.model.variables) {
+      if (!v.subscripts.empty() || v.name != nm) continue;
+      bool clean = true;
+      for (const std::vector<std::int64_t>& s : v.name_subs) if (!s.empty()) { clean = false; break; }
+      if (clean) return &v;
+    }
+    return nullptr;
   }
 
   // 翻译一条方程（v1：Equals + 攒 connect 待 run() 展开；其余 kind 标 unsupported）。
@@ -852,6 +920,9 @@ class Flattener {
     v.binding = binding;
     v.attributes = std::move(attrs);
     v.loc = comp.loc;
+    // 组件声明注释（R13 §3.6）：`Real x "c";`。存原文（去转义），dumper 打印时再转义（与方程/语句注释同法）。
+    if (I_.scode.elems[comp.def].cmt.str.is_valid())
+      v.comment = in_.intern(unescape_modelica_string(in_.str(I_.scode.elems[comp.def].cmt.str)));
     result_.model.variables.push_back(std::move(v));
     // 未连接 flow → `name = 0.0`；`=0` 方程要排在本类方程之后（R13 §6），故先攒起来，run() 末尾统一追加。
     if (is_flow) flow_vars_.push_back({name, cty, comp.loc});

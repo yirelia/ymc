@@ -386,6 +386,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       → easy-slice **191 PASS / 0 FAIL**（+7：IfEquation1/2/7、IfEquationEval1/2/3、NoEvent2 连带）；oracle=live 逐字节一致；
       全 scodeinst PASS 187→194、FAIL 69 不变（0 新增/0 丢失）；三编译器 10/10，ASan 0，+1 单测。
       诚实 SKIP：枚举/下标 cref 条件（ymc eval 未做）、参数条件、firstTick、复合数组体、if 在 when（IfEquationImpure1）。
+- [x] **加宽㉝模型级算法段 CORE**（2026-09-22，并行子agent出卡）：删整类 SKIP("algorithms")，flatten_class 末尾照方程序收集算法段（子先本类后）。
+      collect_algorithm→collect_statement：v1 只做标量赋值 `cref := expr`——LHS 须解析成 Cref（常量已内联成字面量→非 Cref→SKIP）、无下标
+      （`x[i]:=` 属 for 层）、目标须已发射的连续变量 Var（给参/常/离散赋值是 omc 错误→SKIP）；RHS 数组/元组→SKIP；整型→实型强制（`x:=1`→`x:=1.0`）。
+      连带补组件声明注释（emit_variable 标量路径 `Real x "c";`，dumper 已支持）→ Comment1 过。其余语句 kind（for/if/when/while/assert/…）诚实 SKIP。
+      → easy-slice **195 PASS / 0 FAIL**（+4：Algorithm1/2/3、Comment1）；oracle=live 逐字节一致；全 scodeinst PASS 194→198、FAIL 69 不变（0 新增）；
+      三编译器 10/10，ASan 0，+2 单测。FOR 层（保留 for 循环 + 符号迭代/下标 + Range 机制）留待下一桶。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

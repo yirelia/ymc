@@ -91,6 +91,20 @@ YMC_TEST(flatten_connect_equation_still_unsupported) {
   YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
 }
 
+// 算法段：直线标量赋值 + 整型→实型强制 + 组件/语句注释（期望值取自实跑 omc 1.25.0）。
+YMC_TEST(flatten_algorithm_section_scalar_assign) {
+  YMC_CHECK_EQ(flatten_src("model UT\n  Real x \"cx\";\n  Integer n;\nalgorithm\n  x := 1 \"sc\";\n  n := 2;\nend UT;\n"),
+               std::string("class UT\n  Real x \"cx\";\n  Integer n;\nalgorithm\n  x := 1.0 \"sc\";\n  n := 2;\nend UT;\n"));
+}
+
+// 给参数赋值（非 initial algorithm）是 omc 错误 → 保守 SKIP（保 FAIL=0）。
+YMC_TEST(flatten_algorithm_assign_to_parameter_unsupported) {
+  bool uns = false;
+  std::string t = flatten_src("model M\n  parameter Real p = 0.0;\nalgorithm\n  p := 5.0;\nend M;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+}
+
 YMC_TEST(flatten_builtin_attributes) {
   // 内建属性修饰：写序打乱 → 按类型属性表序产出；Real 属性 int→real 强转；Integer 不强转；
   // String 的 fixed、Real 的 unbounded 被丢弃；stateSelect 是枚举字面量（全路径）。期望值 = omc 1.25.0 实测。
