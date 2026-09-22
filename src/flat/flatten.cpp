@@ -123,7 +123,13 @@ struct ModCtx {
   NodeId scope;
   std::vector<Symbol> vprefix;
   bool final_all = false;
+  SVariability var_floor = SVariability::Var;   // 复合组件下沉的变率下限（OMC variabilityMin，NFAttributes.mo:236）
 };
+
+// OMC Prefixes.variabilityMin（取更受约束者）：ymc 枚举 Var<Discrete<Param<Const 升序=更常量，故取序数较大者。
+inline SVariability var_min(SVariability a, SVariability b) {
+  return static_cast<std::uint8_t>(a) >= static_cast<std::uint8_t>(b) ? a : b;
+}
 
 // 单个属性/绑定的来源：一个修饰节点 + 它的解析作用域。按优先级排列（外层实例修饰在前）。
 struct ModSource {
@@ -388,9 +394,9 @@ class Flattener {
             }
           }
         }
-        // `constant/parameter R r`：变率前缀要下沉到每个成员，且常量记录字段引用 `r.x` 要求值（CevalRecord3/5）——
-        // 两者本桶都未做 → SKIP（否则字段丢 constant 前缀、引用不折叠）。
-        if (I_.comps[cid].attributes.variability != SVariability::Var)
+        // `constant/parameter R r`：变率前缀下沉到每个成员（Half A），常量记录字段引用 `r.x` 折叠（Half B）。
+        // 只对**纯数据记录**放行（排除 final 字段/数组字段/嵌套记录/extends 等会 FAIL 的形态，见 is_plain_data_record）。
+        if (I_.comps[cid].attributes.variability != SVariability::Var && !is_plain_data_record(ci, cdef))
           set_unsupported("variability on composite component");
         // 整体绑定 `A a = A(...)`（外来修饰或组件自身声明）。记录构造 `R r = R(4,5)` 翻成类修饰 `R r(x=4,y=5)`
         // 走既有修饰机制摊到字段（RecordBinding1）；其余整体绑定（记录构造以外的复合绑定，Clock6）仍 SKIP。
@@ -416,6 +422,7 @@ class Flattener {
           if (!I_.scode.mods[m].subs.empty()) { matched_field = true; break; }
         ModCtx child;
         child.final_all = comp_final;
+        child.var_floor = var_min(ctx.var_floor, I_.comps[cid].attributes.variability);   // 变率下沉（Half A）
         if (ctor_mod.is_valid()) {
           // 构造绑定与另有字段修饰叠加（`R r(z=9) = R(4,5)`）要合并两套 → 本桶未做 SKIP。
           if (own || matched_field) set_unsupported("record ctor + field modifier");
@@ -433,7 +440,7 @@ class Flattener {
         continue;
       }
       decl_scope_ = cn;   // 组件声明处的词法作用域（继承成员 = 基类作用域，供限定名在原作用域解析，const16）
-      emit_variable(cid, name, is_prot, prefix, psubs, inst_node, matched, ctx.scope, ctx.vprefix, comp_final, final_params);
+      emit_variable(cid, name, is_prot, prefix, psubs, inst_node, matched, ctx.scope, ctx.vprefix, comp_final, final_params, ctx.var_floor);
       decl_scope_ = Inst::empty_node();
     }
     // 本类方程（子组件方程已在上面递归时加入 → 符合 R11 §3.4-6"子组件先、本类后"）。
@@ -1039,7 +1046,8 @@ class Flattener {
                      const std::vector<Symbol>& prefix, const PSubs& psubs, NodeId enclosing,
                      const std::vector<Id<SMod>>& mod_subs, NodeId mod_scope,
                      const std::vector<Symbol>& mod_prefix, bool force_final,
-                     const std::unordered_set<std::uint32_t>& final_params) {
+                     const std::unordered_set<std::uint32_t>& final_params,
+                     SVariability var_floor = SVariability::Var) {
     cur_psubs_ = psubs;   // 绑定里 cref 前缀改写用（复合数组元素 `a[i].y = a[i].x`）
     // 先算绑定/属性（会往 model.exprs add），再取组件字段——不跨 add 持组件引用（arena 纪律）。
     const Type cty = I_.comps[cid].ty;   // 拷贝，跨 add 稳定
@@ -1117,7 +1125,7 @@ class Flattener {
     v.ty = comp.ty;
     v.is_protected = is_protected;
     v.is_final = comp.attributes.is_final || force_final || struct_final;
-    switch (comp.attributes.variability) {
+    switch (var_min(var_floor, comp.attributes.variability)) {   // 复合组件变率下沉（Half A）
       case SVariability::Var: v.var_kind = FlatVarKind::Var; break;
       case SVariability::Discrete: v.var_kind = FlatVarKind::Discrete; break;
       case SVariability::Param: v.var_kind = FlatVarKind::Parameter; break;
@@ -2280,17 +2288,25 @@ class Flattener {
         // 引用到 constant → omc 内联成值（R14 §3）。求值成功就直接返回字面量；求不出（非常量绑定 / 未支持算子 /
         // 跨作用域常量）→ SKIP。final parameter omc 1.25.0 **不**内联（保留 `y = x`），当普通 cref 处理。
         // 字段先拷贝（eval 会 arena add）。
-        const SVariability var = I_.comps[I_.nodes[leaf].comp].attributes.variability;
+        // 变率取**根**组件（`r1.x` 的 r1）：常量记录/数组的成员引用要按根的 constant 折叠，非叶字段自身变率（NFCeval evalCref 门）。
+        const SVariability var = I_.comps[I_.nodes[local].comp].attributes.variability;
         const Type lty = I_.comps[I_.nodes[leaf].comp].ty;
         if (var == SVariability::Const) {
-          // constant 数组的下标引用 `x[2]` → 绑定求值成数组值，再逐层按（常量）下标取标量（NFCeval subscriptBinding）。
-          const SElement& clc = I_.scode.elems[I_.comps[I_.nodes[leaf].comp].def];
-          const bool c_array = !clc.attr.dims.empty() || !clc.type.dims.empty();
-          Id<Expr> v = (c_array && !c.parts.back().subscripts.empty())
-                           ? eval_const_array_element(leaf, enclosing, c.parts.back().subscripts)
-                           : eval_const_value(leaf, enclosing);
-          if (v.is_valid()) return v;
-          set_unsupported("constant evaluation");
+          if (c.parts.size() > 1) {
+            // constant 记录成员 `r1.x` → 复用已发射叶子的字面量绑定（Half B，NFCeval recordElement）。
+            Id<Expr> v = eval_const_record_member(prefix, c);
+            if (v.is_valid()) return v;
+            set_unsupported("constant evaluation");
+          } else {
+            // constant 数组的下标引用 `x[2]` → 绑定求值成数组值，再逐层按（常量）下标取标量（NFCeval subscriptBinding）。
+            const SElement& clc = I_.scode.elems[I_.comps[I_.nodes[leaf].comp].def];
+            const bool c_array = !clc.attr.dims.empty() || !clc.type.dims.empty();
+            Id<Expr> v = (c_array && !c.parts.back().subscripts.empty())
+                             ? eval_const_array_element(leaf, enclosing, c.parts.back().subscripts)
+                             : eval_const_value(leaf, enclosing);
+            if (v.is_valid()) return v;
+            set_unsupported("constant evaluation");
+          }
         }
         e.ty = lty;
         // 数组叶引用：整体引用（数组运算/方程）v1 未做；下标引用需字面量且在界内（ymc 无验证 pass）。
@@ -2865,6 +2881,38 @@ class Flattener {
     ExprKind k = result_.model.exprs[id].kind;
     return k == ExprKind::IntLit || k == ExprKind::RealLit || k == ExprKind::BoolLit ||
            k == ExprKind::StringLit || k == ExprKind::EnumLit;
+  }
+
+  // 纯数据记录：Record 长类、成员全是标量 Var 非 final 非复合的 Component。放行 constant/parameter 复合组件的变率下沉，
+  // 排除会 FAIL 的形态（final 字段 RecordBinding6/7、数组字段、嵌套记录、extends/嵌套类/操作符构造子）。
+  bool is_plain_data_record(NodeId ci, Id<SElement> cdef) {
+    const SElement& cd = I_.scode.elems[cdef];
+    if (cd.restriction != SRestriction::Record || cd.def.kind != SClassDefKind::Parts) return false;
+    for (Id<SElement> e : cd.def.elements)
+      if (I_.scode.elems[e].kind != SElementKind::Component) return false;   // 无 extends/嵌套类/操作符构造子
+    for (NodeId fn : I_.trees[I_.node_class(ci).tree].components) {
+      const CompId fc = I_.nodes[fn].comp;
+      const SElement& f = I_.scode.elems[I_.comps[fc].def];
+      if (!f.attr.dims.empty() || !f.type.dims.empty()) return false;                 // 无数组字段
+      if (I_.comps[fc].attributes.variability != SVariability::Var) return false;     // 字段须 Var（排除 final constant 字段）
+      if (I_.comps[fc].attributes.is_final) return false;                             // 排除 final 字段
+      if (I_.comps[fc].ty.kind == TypeKind::Complex) return false;                    // 无嵌套记录
+    }
+    return true;
+  }
+
+  // constant 记录成员 `r1.x` 折叠（Half B，Option A）：复用已发射的叶子字面量（r1.x 在 r1 声明时已发射，带常量字面量绑定）。
+  // 依赖声明序（r1 先于引用者）；前向引用 / 带下标 / 非字面量 → invalid → 调用方 set_unsupported SKIP。
+  Id<Expr> eval_const_record_member(const std::vector<Symbol>& prefix, const Cref& c) {
+    std::vector<Symbol> full = prefix;
+    for (const CrefPart& p : c.parts) {
+      if (!p.subscripts.empty()) return {};   // 记录数组 / 数组字段暂缓
+      full.push_back(p.name);
+    }
+    const FlatVariable* lv = find_scalar_flat_var(full);
+    if (lv && lv->var_kind == FlatVarKind::Constant && lv->binding.is_valid() && is_literal(lv->binding))
+      return lv->binding;
+    return {};
   }
 
   // 求一个 constant 组件的值：取它的声明绑定 + 在它的声明作用域里实例化（同/跨作用域常量都会递归内联）+ 折叠。

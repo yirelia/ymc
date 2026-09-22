@@ -442,6 +442,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       范围结构保留（2:2 不塌、{1,2,3} 不转 1:5）、/*Real*/(i) 逐元素强制、a.x 前缀但 i 不前缀。
       → easy-slice 221 PASS/0 FAIL（+5：ForStatement1/2/3/Array/Prefix）；oracle=live 逐字节一致；全 scodeinst PASS 219→224、FAIL 69 不变；三编译器 10/10、ASan 0；+1 单测。
       隐式范围（`for i loop`，ImplicitRangeAlg1）留 increment 2；if/while/when/assert/terminate/reinit 语句全是 omc 错误或需正交特性 → 维持 SKIP。
+- [x] **加宽㊶复合组件变率下沉 + 常量记录成员折叠**（2026-09-22，并行子agent穷举出卡）：Half A + Half B 耦合（单做 A 会让 CevalRecord1/3/5 翻 FAIL）。
+      Half A：ModCtx.var_floor + var_min（OMC variabilityMin = ymc 枚举取序数大者）下沉到叶 emit_variable（var_kind 用有效变率）；
+      is_plain_data_record 只放行纯数据记录（成员全标量 Var 非 final 非数组非嵌套 Component）——排除会 FAIL 的 final 字段（RecordBinding6/7）等。
+      Half B：cref 变率门改用**根**组件（r1.x 的 r1，非叶字段自身）；记录成员引用 eval_const_record_member（Option A：复用已发射常量叶子的字面量，依赖声明序）。
+      → easy-slice 224 PASS/0 FAIL（+3：CevalRecord1/3/5）；oracle=live 逐字节一致；全 scodeinst PASS 224→227、FAIL 69 不变；
+      三编译器 10/10、ASan 0；+1 单测（1 桩 SKIP 改成 PASS 断言）。整体记录复制 r2=r1、参数成员折叠、记录数组、Evaluate/fixed 留后续（现 SKIP）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

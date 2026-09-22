@@ -160,6 +160,15 @@ YMC_TEST(flatten_constant_array_variable_index_unsupported) {
   YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
 }
 
+// 复合组件变率下沉 + 常量记录成员折叠：constant/parameter R 的字段继承变率；constant r.x 引用折成字面量。期望值取自实跑 omc 1.25.0。
+YMC_TEST(flatten_composite_variability_and_member_fold) {
+  YMC_CHECK_EQ(
+      flatten_src("model CR\n  record R\n    Real x;\n    Real y;\n  end R;\n  constant R r = R(3.0, 4.0);\n"
+                  "  Real a = r.x;\n  parameter R p = R(5.0, 6.0);\nend CR;\n"),
+      std::string("class CR\n  constant Real r.x = 3.0;\n  constant Real r.y = 4.0;\n  Real a = 3.0;\n"
+                  "  parameter Real p.x = 5.0;\n  parameter Real p.y = 6.0;\nend CR;\n"));
+}
+
 // for-语句：保留循环（不展开），符号迭代变量，数组元素赋值 + 整型→实型。期望值取自实跑 omc 1.25.0。
 YMC_TEST(flatten_for_statement_kept) {
   YMC_CHECK_EQ(
@@ -469,13 +478,11 @@ YMC_TEST(flatten_record_constructor_named_arg) {
                std::string("class M\n  Real r.x = 1.0;\n  Real r.y = 5.0;\nend M;\n"));
 }
 
-YMC_TEST(flatten_constant_record_unsupported) {
-  // `constant R r` 变率前缀要下沉成员 + 常量字段引用求值（CevalRecord3/5），本桶未做 → 干净 SKIP。
-  bool uns = false;
-  std::string t = flatten_src(
-      "record R\n  Real x;\nend R;\nmodel M\n  constant R r = R(1.0);\nend M;\n", &uns);
-  YMC_CHECK(uns);
-  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+YMC_TEST(flatten_constant_record_variability_propagates) {
+  // `constant R r = R(1.0)` → 字段继承 constant 变率（Half A）。期望值取自实跑 omc 1.25.0。
+  YMC_CHECK_EQ(
+      flatten_src("record R\n  Real x;\nend R;\nmodel M\n  constant R r = R(1.0);\nend M;\n"),
+      std::string("class M\n  constant Real r.x = 1.0;\nend M;\n"));
 }
 
 YMC_TEST(flatten_user_function_constant_fold) {
