@@ -401,6 +401,11 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       → easy-slice 204 PASS/0 FAIL（+9：OperationLogicalUnary1/Unary1/LogicalBinary1/Mul1/MulEW1/PowEW1/AddEW1/SubEW1、eq8）；
       oracle=live 逐字节一致；全 scodeinst PASS 198→207、FAIL 69 不变；三编译器 10/10、ASan 0；+3 单测（1 桩改成标量化断言）。
       Tier C（Div 操作数提实型）、矩阵/切片/数组 connect、数组-of-记录 留待后续。
+- [x] **加宽㉟数组方程 Tier C（`/` 恒实除）**（2026-09-22）：修正 Modelica `/` 语义——整型操作数也提实型
+      （`i/j` → `/*Real*/(i) / /*Real*/(j)`，MLS §10.6.1），标量 binary()、array_binary、scalarize 三处同改（op==Div → real）。
+      顺带修了标量 `/` 潜伏 bug（原产 `/*Real*/(i/j)` 整除后转型，与 omc 不符）。array_binary 放开 `/`：数组÷标量广播逐元素、
+      数组÷数组（非点号）仍 SKIP。→ easy-slice 206 PASS/0 FAIL（+2：OperationDiv1、OperationDivEW1）；oracle=live 逐字节一致；
+      全 scodeinst PASS 207→209、FAIL 69 不变；三编译器 10/10、ASan 0；+1 单测。矩阵/切片/数组 connect、非字面量维（×99）留待后续。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

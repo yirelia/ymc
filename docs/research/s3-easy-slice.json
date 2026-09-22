@@ -219,6 +219,8 @@
 "OperationPowEW1.mo",
 "OperationAddEW1.mo",
 "OperationSubEW1.mo",
+"OperationDiv1.mo",
+"OperationDivEW1.mo",
 "eq8.mo",
 "ParameterDer.mo",
 "PartialFunction2.mo",

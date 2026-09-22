@@ -720,7 +720,7 @@ class Flattener {
       }
       case ExprKind::Binary: {
         Id<Expr> sa = scalarize(x.a, idx), sb = scalarize(x.b, idx);
-        const bool real = result_.model.exprs[sa].ty.kind == TypeKind::Real ||
+        const bool real = x.bin == BinOp::Div || result_.model.exprs[sa].ty.kind == TypeKind::Real ||
                           result_.model.exprs[sb].ty.kind == TypeKind::Real;
         if (real) { sa = to_real(sa); sb = to_real(sb); }
         Expr r; r.kind = ExprKind::Binary; r.bin = x.bin; r.a = sa; r.b = sb;
@@ -757,9 +757,11 @@ class Flattener {
     // 非内建数值元素（记录数组 + 运算符重载 OperatorOverloadArrayOp*）→ 需重载算子展开，未做 → SKIP。
     if (!numeric(ea) || !numeric(eb)) { set_unsupported("non-numeric array operand"); return lit_int(0); }
     // 非逐元素 / 暂缓：矩阵乘（* 两侧皆数组）、矩阵幂（^ 含数组，OperationPow2/3）、除法（/ ./ 需操作数提实型，Tier C 暂缓）。
-    if (orig == Op::Div || orig == Op::EWDiv) { set_unsupported("array division"); return lit_int(0); }
     if (orig == Op::Pow) { set_unsupported("array matrix power"); return lit_int(0); }
-    if (orig == Op::Mul && aarr && barr) { set_unsupported("array matrix product"); return lit_int(0); }
+    if ((orig == Op::Mul || orig == Op::Div) && aarr && barr) {   // 矩阵乘 / 数组÷数组（非点号）非逐元素 → SKIP
+      set_unsupported("non-elementwise array operator");
+      return lit_int(0);
+    }
     std::vector<Dimension> ds;
     if (aarr && barr) {
       if (!same_dims(ta.dims, tb.dims)) { set_unsupported("array shape mismatch"); return lit_int(0); }
@@ -767,7 +769,7 @@ class Flattener {
     } else {
       ds = aarr ? ta.dims : tb.dims;
     }
-    const bool real = ea == TypeKind::Real || eb == TypeKind::Real;
+    const bool real = op == BinOp::Div || ea == TypeKind::Real || eb == TypeKind::Real;   // `/` `./` 恒实除
     Expr r;
     r.kind = ExprKind::Binary;
     r.bin = op;
@@ -2146,7 +2148,9 @@ class Flattener {
     Id<Expr> b = inst_exp(e.b, enclosing, prefix);
     if (result_.model.exprs[a].ty.is_array() || result_.model.exprs[b].ty.is_array())
       return array_binary(e.op, op, a, b);   // 数组：逐元素/广播，维度传播，逐元素标量化在 collect_array_equation
-    bool real = result_.model.exprs[a].ty.kind == TypeKind::Real || result_.model.exprs[b].ty.kind == TypeKind::Real;
+    // Modelica `/` 恒实除：整型操作数也提实型（`i/j` → `/*Real*/(i) / /*Real*/(j)`，MLS §10.6.1）。
+    bool real = op == BinOp::Div || result_.model.exprs[a].ty.kind == TypeKind::Real ||
+                result_.model.exprs[b].ty.kind == TypeKind::Real;
     if (real) {  // 整型操作数提升到实型：字面量直接折叠，非字面量插 Cast（R13 §4.3 / R14 §1）
       a = to_real(a);
       b = to_real(b);

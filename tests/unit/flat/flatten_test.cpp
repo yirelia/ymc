@@ -112,6 +112,12 @@ YMC_TEST(flatten_array_equation_scalarize) {
                            "equation\n  x[1] = -y[1];\n  x[2] = -y[2];\n  y[1] = s * x[1];\n  y[2] = s * x[2];\nend AE;\n"));
 }
 
+// Modelica `/` 恒实除：整型操作数提实型（MLS §10.6.1）。期望值取自实跑 omc 1.25.0。
+YMC_TEST(flatten_integer_division_is_real) {
+  YMC_CHECK_EQ(flatten_src("model M\n  Integer i;\n  Integer j;\n  Real r;\nequation\n  r = i / j;\nend M;\n"),
+               std::string("class M\n  Integer i;\n  Integer j;\n  Real r;\nequation\n  r = /*Real*/(i) / /*Real*/(j);\nend M;\n"));
+}
+
 // 矩阵乘（两侧皆数组的 `*`）非逐元素 → SKIP（保 FAIL=0）。
 YMC_TEST(flatten_array_matrix_product_unsupported) {
   bool uns = false;
