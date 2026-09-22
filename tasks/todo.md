@@ -428,6 +428,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       切片（inst_exp 拒 range）、常量数组 RHS（omc 内联，ymc 无）、标量 RHS 缺 each、shape 不符、Call/Range → 一律 SKIP。
       → easy-slice 213 PASS/0 FAIL（+1：bindings7）；oracle=live 逐字节一致；全 scodeinst PASS 215→216、FAIL 69 不变；三编译器 10/10、ASan 0；+1 单测（A1/A2/B1/B6）。
       （testsuite 纯非构造子数组绑定用例稀少，多为合成探针；数组 cast / 切片 / 常量数组绑定留后续。）
+- [x] **加宽㊴type-typed 维（x[Boolean]/x[E]）**（2026-09-22，用户定"参考OMC实现走"=Option B）：
+      先 refactor 377fc67——FlatVariable 子下标 int64→Id<Expr>（子下标=表达式，对标 NFSubscript；纯表示层，行为不变）。
+      再 emit_array 每维建 dim_labels：classify_type_dim 认 Boolean（→[false,true] BoolLit）、本地枚举 type E（find_enum_def→[E.lit…] EnumLit）、
+      builtin StateSelect（MLS §3.8.3 固定 5 值）；否则整数维 IntLit 1..n。末段下标从行主序 idx 取该维标签；dump 走 dump_expr。
+      连带修空数组潜伏 UB（某维=0 时旧 idx_to_exprs 越界；omc 整体丢弃空数组=独立特性 → SKIP EmptyArray*/含 0 维矩阵）。
+      → easy-slice 216 PASS/0 FAIL（+3：BooleanDim、enum3、enum8）；oracle=live 逐字节一致；全 scodeinst PASS 216→219、FAIL 69 不变；
+      三编译器 10/10、ASan 0；+1 单测。限定/别名枚举维、复合数组 type 维、type-维变量在方程被引用 留后续（现 SKIP）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

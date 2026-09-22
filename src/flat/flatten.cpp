@@ -1146,19 +1146,29 @@ class Flattener {
     }
     // 解析各维成整数：字面量/参数/size()/算术走 eval_dim；`:` 维从绑定构造子形状推断（CevalArray*）。
     std::vector<std::int64_t> dims;
+    std::vector<std::vector<Id<Expr>>> dim_labels;   // 每维下标标签：整数维 IntLit 1..n；类型维 false/true 或 E.lit
     for (std::size_t di = 0; di < dim_exps.size(); ++di) {
-      if (I_.absyn.exps[dim_exps[di]].kind == ExpKind::Colon) {
+      std::vector<Id<Expr>> labels;
+      if (auto tl = classify_type_dim(dim_exps[di], enclosing)) {
+        labels = std::move(*tl);   // 类型名维（Boolean / 枚举，NFDimension.fromExp）
+      } else if (result_.unsupported) {
+        return;
+      } else if (I_.absyn.exps[dim_exps[di]].kind == ExpKind::Colon) {
         std::optional<std::int64_t> n = binding_dim_size(braw, di);
         if (!n) { set_unsupported("non-literal array dimension"); return; }
-        dims.push_back(*n);
+        for (std::int64_t i = 1; i <= *n; ++i) labels.push_back(lit_int(i));
       } else {
         std::vector<std::int64_t> one;
         if (!eval_dim(dim_exps[di], one, dscope) || one.size() != 1) {
           set_unsupported("non-literal array dimension"); return;
         }
-        dims.push_back(one[0]);
+        for (std::int64_t i = 1; i <= one[0]; ++i) labels.push_back(lit_int(i));
       }
+      dims.push_back(static_cast<std::int64_t>(labels.size()));
+      dim_labels.push_back(std::move(labels));
     }
+    // 空数组（某维为 0）：omc 整体丢弃（无变量行）——本增量未做该语义 → SKIP（EmptyArray*/矩阵含 0 维）。
+    for (std::int64_t n : dims) if (n == 0) { set_unsupported("empty array"); return; }
 
     const Type cty = I_.comps[cid].ty;
     FlatVarKind vk = FlatVarKind::Var;
@@ -1204,7 +1214,12 @@ class Flattener {
       v.name = name;
       v.name_subs = psubs_to_exprs(psubs);
       v.name_subs.push_back({});   // 叶数组的下标走 v.subscripts（末段），逐段 name_subs 末段留空
-      v.subscripts = idx_to_exprs(idx);
+      {   // 末段下标：整数维取 IntLit，类型维取 false/true·E.lit（行主序 idx → 该维标签）
+        std::vector<Id<Expr>> subs;
+        subs.reserve(idx.size());
+        for (std::size_t k = 0; k < idx.size(); ++k) subs.push_back(dim_labels[k][idx[k] - 1]);
+        v.subscripts = std::move(subs);
+      }
       v.ty = cty;
       v.is_protected = is_protected;
       v.is_final = is_final;
@@ -1502,6 +1517,48 @@ class Flattener {
       }
     }
     return nullptr;
+  }
+
+  // 类型名维度（`x[Boolean]` / `x[E]`，对标 NFDimension.fromExp:111 + NFTypeCheck.checkDimensionType）：
+  // 返回该维的下标标签（Boolean→[false,true]；本地枚举→[E.lit…]，路径用书写名 E，与 omc 对本地类型打裸名一致）。
+  // 非类型名维（整数/参数/`:`）→ nullopt（调用方走 eval_dim）。限定/别名/builtin 枚举维暂缓：nullopt（→ eval_dim 失败 SKIP）。
+  std::optional<std::vector<Id<Expr>>> classify_type_dim(Id<Exp> d, NodeId enclosing) {
+    const Exp& e = I_.absyn.exps[d];
+    if (e.kind != ExpKind::CrefExp) return std::nullopt;
+    const Cref& c = I_.absyn.crefs[e.cref];
+    if (c.parts.size() != 1 || !c.parts[0].subscripts.empty()) return std::nullopt;   // 多段（Pk.E）/带下标暂缓
+    const Symbol nm = c.parts[0].name;
+    if (in_.str(nm) == "Boolean") {
+      std::vector<Id<Expr>> labels;
+      for (bool bv : {false, true}) {
+        Expr r;
+        r.kind = ExprKind::BoolLit;
+        r.bval = bv;
+        r.ty = Type::boolean();
+        labels.push_back(add(std::move(r)));
+      }
+      return labels;
+    }
+    // 枚举字面量：本地 `type E=enumeration(…)` 或 builtin StateSelect（MLS §3.8.3，固定 5 值）。
+    std::vector<Symbol> lits;
+    if (in_.str(nm) == "StateSelect") {
+      for (const char* s : {"never", "avoid", "default", "prefer", "always"}) lits.push_back(in_.intern(s));
+    } else if (const SClassDef* ed = find_enum_def(enclosing, nm)) {
+      for (const auto& it : ed->enum_items) lits.push_back(it.literal);
+    } else {
+      return std::nullopt;   // 不是类型名（普通整数维参数等）→ 走 eval_dim
+    }
+    std::vector<Id<Expr>> labels;
+    for (std::size_t i = 0; i < lits.size(); ++i) {
+      Expr r;
+      r.kind = ExprKind::EnumLit;
+      r.ty = Type::of(TypeKind::Enumeration);
+      r.enum_path.push_back(nm);        // 书写名（本地类型打裸名 E；builtin 打 StateSelect）
+      r.enum_path.push_back(lits[i]);
+      r.enum_index = static_cast<std::int64_t>(i) + 1;
+      labels.push_back(add(std::move(r)));
+    }
+    return labels;
   }
 
   // ---- package 限定常量：SCODE 作用域链解析 + 值语义常量求值 ----

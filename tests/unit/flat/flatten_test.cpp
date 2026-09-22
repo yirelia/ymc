@@ -160,6 +160,13 @@ YMC_TEST(flatten_constant_array_variable_index_unsupported) {
   YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
 }
 
+// 类型名维度：`x[Boolean]`→`x[false] x[true]`；`y[E]`→`y[E.a] …`（下标是 BoolLit/EnumLit）。期望值取自实跑 omc 1.25.0。
+YMC_TEST(flatten_type_typed_dimensions) {
+  YMC_CHECK_EQ(
+      flatten_src("model TD\n  type E = enumeration(a, b, c);\n  Real x[Boolean];\n  Real y[E];\nend TD;\n"),
+      std::string("class TD\n  Real x[false];\n  Real x[true];\n  Real y[E.a];\n  Real y[E.b];\n  Real y[E.c];\nend TD;\n"));
+}
+
 // `:` 维从数组构造子绑定推断形状（含 array(…) ≡ {…}、多维）。期望值取自实跑 omc 1.25.0。
 YMC_TEST(flatten_colon_dim_from_array_constructor) {
   YMC_CHECK_EQ(
