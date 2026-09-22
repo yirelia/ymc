@@ -1100,9 +1100,7 @@ class Flattener {
       const Binding& b = I_.comps[cid].binding;
       if (b.kind == BindingKind::Raw && b.raw_exp.is_valid()) { braw = b.raw_exp; bscope = enclosing; bprefix = prefix; }
     }
-    if (braw.is_valid() && !is_array_ctor(braw)) {
-      set_unsupported("non-literal array binding"); return;
-    }
+    const bool nlbind = braw.is_valid() && !is_array_ctor(braw);   // 非构造子绑定（= y / = 2*y / …），下面类型化摊分
     // 顶层 input/output 数组带绑定：omc 丢方向+绑定（标量不丢，探针实测），该 quirk 未复刻 → SKIP（TopLevelInputs2）。
     if (braw.is_valid() && prefix.empty() &&
         (I_.comps[cid].attributes.direction == SDirection::Input ||
@@ -1138,8 +1136,22 @@ class Flattener {
     const bool spread = braw.is_valid() && vk != FlatVarKind::Var;
     // 数组字面量绑定的形状/类型要与数组匹配（omc 会做类型检查并报错，如 BindingInvalidType3/5）——ymc 无验证 pass，
     // 只放行形状+叶类型都对上的字面量绑定，否则 SKIP。
-    if (braw.is_valid() && !array_lit_matches(braw, dims, 0, cty.kind)) {
+    if (braw.is_valid() && !nlbind && !array_lit_matches(braw, dims, 0, cty.kind)) {
       set_unsupported("array binding shape/type mismatch"); return;
+    }
+    // 非构造子绑定（数组值 `= y` / `= 2*y`）：类型化一次 + 形状/变率守卫（对标 NFFlatten:700 / NFScalarize）。
+    Id<Expr> rhsE;
+    std::vector<Dimension> xd;
+    if (nlbind) {
+      for (std::int64_t n : dims) { Dimension d; d.kind = DimKind::Integer; d.size = n; xd.push_back(d); }
+      rhsE = simplify_expr(inst_exp(braw, bscope, bprefix));
+      if (result_.unsupported) return;   // inst_exp 已拒绝切片/常量数组/限定名等
+      const Type rty = result_.model.exprs[rhsE].ty;
+      if (!rty.is_array() || !same_dims(rty.dims, xd)) { set_unsupported("non-literal array binding shape"); return; }
+      if (vk == FlatVarKind::Discrete) { set_unsupported("discrete array binding"); return; }   // omc 报错（需 when）
+      if (vk != FlatVarKind::Var && cond_is_runtime(rhsE)) {   // param/const 绑更高变率 = omc 报错（B3/C3）
+        set_unsupported("array binding higher variability"); return;
+      }
     }
     const bool is_final = I_.comps[cid].attributes.is_final || force_final;
     FlatDirection dir = FlatDirection::None;
@@ -1163,10 +1175,16 @@ class Flattener {
       v.direction = dir;
       v.loc = I_.comps[cid].loc;
       if (spread) {
-        // 该下标处的字面量元素（下降 Array 到标量）；命中 cref 数组等 → 本增量 SKIP。
-        Id<Exp> el = array_scalar_elem(braw, idx, 0);
-        if (!el.is_valid()) { set_unsupported("array binding element spread"); return; }
-        Id<Expr> eb = simplify_expr(inst_exp(el, bscope, bprefix));
+        Id<Expr> eb;
+        if (nlbind) {
+          eb = simplify_expr(scalarize(rhsE, idx));   // 逐元素：y[i] / 2.0*y[i]（B1/B2/B4/B5/B8）
+          if (result_.unsupported) return;
+        } else {
+          // 该下标处的字面量元素（下降 Array 到标量）；命中 cref 数组等 → 本增量 SKIP。
+          Id<Exp> el = array_scalar_elem(braw, idx, 0);
+          if (!el.is_valid()) { set_unsupported("array binding element spread"); return; }
+          eb = simplify_expr(inst_exp(el, bscope, bprefix));
+        }
         if (cty.kind == TypeKind::Real) eb = to_real(eb);
         // constant 元素必须求值成字面量（同标量 constant 规则，R14 §3）。
         if (vk == FlatVarKind::Constant) {
@@ -1188,9 +1206,41 @@ class Flattener {
       }
     }
 
-    // Var 数组绑定 → 单条数组方程 `name = {…}`（param/const 已在上面摊成逐元素绑定）。
+    // Var 数组绑定 → 单条数组方程（param/const 已在上面摊成逐元素绑定）。
+    // 构造子：`name = {…}`；非构造子：整取同型 cref → `name = y`（保持整取，NFScalarize ARRAY_EQUALITY 不标量化）；
+    // 逐元素算子 → 展开成 `{op(y[1]),…}`（NFExpandExp）；整取 Int→Real（数组 cast）/Call/Range → SKIP。
     if (braw.is_valid() && !spread) {
-      Id<Expr> rhs = coerce_deep(simplify_expr(inst_exp(braw, bscope, bprefix)), cty.kind);
+      Id<Expr> rhs;
+      if (nlbind) {
+        const Expr& re = result_.model.exprs[rhsE];
+        const ExprKind rk = re.kind;
+        const bool whole_cref = rk == ExprKind::Cref && (re.cref.parts.empty() || re.cref.parts.back().subscripts.empty());
+        const TypeKind relem = re.ty.element_type().kind;
+        if (whole_cref && relem == cty.kind) {
+          rhs = rhsE;   // x = y（同元素类型，A1/A5/A9/I1）
+        } else if (rk == ExprKind::Binary || rk == ExprKind::Unary ||
+                   rk == ExprKind::Logical || rk == ExprKind::LogicalNot) {
+          std::vector<Id<Expr>> elems;   // 逐元素展开 {op(y[1]), …}（A2/A3/A8/G3/G4）
+          std::vector<std::int64_t> eidx(dims.size(), 1);
+          for (bool more = true; more;) {
+            Id<Expr> se = simplify_expr(scalarize(rhsE, eidx));
+            if (result_.unsupported) return;
+            if (cty.kind == TypeKind::Real) se = to_real(se);
+            elems.push_back(se);
+            std::size_t k = dims.size();
+            while (k > 0) { --k; if (++eidx[k] <= dims[k]) break; eidx[k] = 1; if (k == 0) more = false; }
+          }
+          Expr arr;
+          arr.kind = ExprKind::Array;
+          arr.ty = Type::array_of(cty, xd);
+          arr.args = std::move(elems);
+          rhs = add(std::move(arr));
+        } else {
+          set_unsupported("non-literal array binding"); return;   // 整取 Int→Real(A6)、Call、Range → SKIP
+        }
+      } else {
+        rhs = coerce_deep(simplify_expr(inst_exp(braw, bscope, bprefix)), cty.kind);
+      }
       Expr lhs;
       lhs.kind = ExprKind::Cref;
       lhs.ty = cty;

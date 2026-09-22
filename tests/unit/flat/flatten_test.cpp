@@ -138,6 +138,20 @@ YMC_TEST(flatten_constant_array_element_fold) {
                   "  constant Integer k[3] = 9;\n  Real c = 8.0;\n  Integer d = 9;\nend CE;\n"));
 }
 
+// 非构造子数组绑定：Var 整取 `x=y` / 算子展开 `{2.0*y[i]}`；param 逐元素 `q[i]=p[i]` / `/*Real*/(ip[i])`。期望值取自实跑 omc 1.25.0。
+YMC_TEST(flatten_non_literal_array_binding) {
+  YMC_CHECK_EQ(
+      flatten_src("model NLB\n  Real y[3];\n  Real x[3] = y;\n  Real w[3] = 2*y;\n  parameter Real p[3] = {1,2,3};\n"
+                  "  parameter Real q[3] = p;\n  parameter Integer ip[3] = {1,2,3};\n  parameter Real r[3] = ip;\nend NLB;\n"),
+      std::string("class NLB\n  Real y[1];\n  Real y[2];\n  Real y[3];\n  Real x[1];\n  Real x[2];\n  Real x[3];\n"
+                  "  Real w[1];\n  Real w[2];\n  Real w[3];\n  parameter Real p[1] = 1.0;\n  parameter Real p[2] = 2.0;\n"
+                  "  parameter Real p[3] = 3.0;\n  parameter Real q[1] = p[1];\n  parameter Real q[2] = p[2];\n"
+                  "  parameter Real q[3] = p[3];\n  parameter Integer ip[1] = 1;\n  parameter Integer ip[2] = 2;\n"
+                  "  parameter Integer ip[3] = 3;\n  parameter Real r[1] = /*Real*/(ip[1]);\n"
+                  "  parameter Real r[2] = /*Real*/(ip[2]);\n  parameter Real r[3] = /*Real*/(ip[3]);\n"
+                  "equation\n  x = y;\n  w = {2.0 * y[1], 2.0 * y[2], 2.0 * y[3]};\nend NLB;\n"));
+}
+
 // 非常量下标（x[n]，n 是变量）→ omc 保留数组字面量下标，ymc 无此路径 → 保守 SKIP。
 YMC_TEST(flatten_constant_array_variable_index_unsupported) {
   bool uns = false;

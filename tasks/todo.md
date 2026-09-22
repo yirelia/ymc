@@ -421,6 +421,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       越界、切片/整取/部分下标留数组、构造子/函数/记录数组绑定 → 一律 invalid→SKIP。→ easy-slice 212 PASS/0 FAIL
       （+3：CevalArrayConstant1/3、SubscriptCevalIndex1）；oracle=live 逐字节一致；全 scodeinst PASS 212→215、FAIL 69 不变；
       三编译器 10/10、ASan 0；+2 单测（N-D 行主序/表达式内下标/整→实；非常量下标 SKIP）。end 下标、array(…for…) 构造子求值、记录数组元素留后续。
+- [x] **加宽㊳非构造子数组绑定**（2026-09-22，并行子agent穷举出卡）：emit_array 放开 `Real x[N] = <非{}构造子>`。
+      类型化绑定一次（inst_exp→数组 Expr），same_dims 形状守卫 + cond_is_runtime 变率守卫（param/const 绑更高变率=omc 报错→SKIP）、
+      discrete 数组绑定→SKIP。Var：整取同型 cref→`x = y`（NFScalarize ARRAY_EQUALITY 不标量化）、逐元素算子→展开 `{op(y[i])…}`（NFExpandExp）；
+      param/const：逐元素 scalarize（`q[i]=p[i]`、`/*Real*/(ip[i])`）。守卫（保 FAIL=0）：整取 Int→Real 数组 cast（A6，omc 出 `/*Real[3]*/(yi)`，ymc 无数组 cast）、
+      切片（inst_exp 拒 range）、常量数组 RHS（omc 内联，ymc 无）、标量 RHS 缺 each、shape 不符、Call/Range → 一律 SKIP。
+      → easy-slice 213 PASS/0 FAIL（+1：bindings7）；oracle=live 逐字节一致；全 scodeinst PASS 215→216、FAIL 69 不变；三编译器 10/10、ASan 0；+1 单测（A1/A2/B1/B6）。
+      （testsuite 纯非构造子数组绑定用例稀少，多为合成探针；数组 cast / 切片 / 常量数组绑定留后续。）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

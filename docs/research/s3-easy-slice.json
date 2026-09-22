@@ -228,6 +228,7 @@
 "CevalArrayConstant1.mo",
 "CevalArrayConstant3.mo",
 "SubscriptCevalIndex1.mo",
+"bindings7.mo",
 "ParameterDer.mo",
 "PartialFunction2.mo",
 "PartialType3.mo",
