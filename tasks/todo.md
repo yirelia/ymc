@@ -414,6 +414,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       quirk 未复刻 → SKIP（修 TopLevelInputs2 回归）。→ easy-slice 209 PASS/0 FAIL（+3：CevalArray1、DimUnknown1、DimUnknown6）；
       oracle=live 逐字节一致；全 scodeinst PASS 209→212、FAIL 69 不变；三编译器 10/10、ASan 0；+1 单测。
       非纯 `:` 用例（常量数组元素折叠、array(…for…) reduction、复合记录数组、size/矩阵）仍 SKIP，各是独立后续特性。
+- [x] **加宽㊲常量数组下标元素折叠**（2026-09-22，并行子agent出卡，穷举 1325 文件）：
+      cref() const 内联点加 eval_const_array_element——constant 数组绑定求值成 CVal::Array，逐层按（常量）下标取标量
+      （行主序，对标 NFCeval subscriptBinding/applySubscripts）。严格 gate SVariability::Const（参数数组 omc 保留符号 x[2]，已正确 PASS，不动）。
+      复用 eval_scode（绑定→数组、下标→整/loop_vars_）、coerce_cval、literal_of。守卫（保 FAIL=0）：非常量下标（x[n]→omc 留 {…}[n]）、
+      越界、切片/整取/部分下标留数组、构造子/函数/记录数组绑定 → 一律 invalid→SKIP。→ easy-slice 212 PASS/0 FAIL
+      （+3：CevalArrayConstant1/3、SubscriptCevalIndex1）；oracle=live 逐字节一致；全 scodeinst PASS 212→215、FAIL 69 不变；
+      三编译器 10/10、ASan 0；+2 单测（N-D 行主序/表达式内下标/整→实；非常量下标 SKIP）。end 下标、array(…for…) 构造子求值、记录数组元素留后续。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

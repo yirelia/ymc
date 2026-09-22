@@ -126,6 +126,26 @@ YMC_TEST(flatten_array_matrix_product_unsupported) {
   YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
 }
 
+// 常量数组下标元素折叠（N-D 行主序 + 表达式内下标 + 整型→实型）。期望值取自实跑 omc 1.25.0。
+YMC_TEST(flatten_constant_array_element_fold) {
+  YMC_CHECK_EQ(
+      flatten_src("model CE\n  constant Real m[2,3] = {{1,2,3},{4,5,6}};\n  Real a = m[2,3];\n"
+                  "  Real b = m[1,1] + m[2,1]*2;\n  constant Integer k[3] = {7,8,9};\n  Real c = k[2];\n"
+                  "  Integer d = k[3];\nend CE;\n"),
+      std::string("class CE\n  constant Real m[1,1] = 1.0;\n  constant Real m[1,2] = 2.0;\n  constant Real m[1,3] = 3.0;\n"
+                  "  constant Real m[2,1] = 4.0;\n  constant Real m[2,2] = 5.0;\n  constant Real m[2,3] = 6.0;\n"
+                  "  Real a = 6.0;\n  Real b = 9.0;\n  constant Integer k[1] = 7;\n  constant Integer k[2] = 8;\n"
+                  "  constant Integer k[3] = 9;\n  Real c = 8.0;\n  Integer d = 9;\nend CE;\n"));
+}
+
+// 非常量下标（x[n]，n 是变量）→ omc 保留数组字面量下标，ymc 无此路径 → 保守 SKIP。
+YMC_TEST(flatten_constant_array_variable_index_unsupported) {
+  bool uns = false;
+  std::string t = flatten_src("model M\n  constant Real x[3] = {1,2,3};\n  Integer n = 2;\n  Real y = x[n];\nend M;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+}
+
 // `:` 维从数组构造子绑定推断形状（含 array(…) ≡ {…}、多维）。期望值取自实跑 omc 1.25.0。
 YMC_TEST(flatten_colon_dim_from_array_constructor) {
   YMC_CHECK_EQ(

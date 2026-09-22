@@ -2063,7 +2063,12 @@ class Flattener {
         const SVariability var = I_.comps[I_.nodes[leaf].comp].attributes.variability;
         const Type lty = I_.comps[I_.nodes[leaf].comp].ty;
         if (var == SVariability::Const) {
-          Id<Expr> v = eval_const_value(leaf, enclosing);
+          // constant 数组的下标引用 `x[2]` → 绑定求值成数组值，再逐层按（常量）下标取标量（NFCeval subscriptBinding）。
+          const SElement& clc = I_.scode.elems[I_.comps[I_.nodes[leaf].comp].def];
+          const bool c_array = !clc.attr.dims.empty() || !clc.type.dims.empty();
+          Id<Expr> v = (c_array && !c.parts.back().subscripts.empty())
+                           ? eval_const_array_element(leaf, enclosing, c.parts.back().subscripts)
+                           : eval_const_value(leaf, enclosing);
           if (v.is_valid()) return v;
           set_unsupported("constant evaluation");
         }
@@ -2665,6 +2670,37 @@ class Flattener {
     Id<Expr> e = simplify_expr(inst_exp(raw, scope, {}));   // 常量值与前缀无关
     evaluating_.erase(key);
     return is_literal(e) ? e : Id<Expr>{};
+  }
+
+  // constant 数组的下标元素求值：绑定 → CVal::Array，逐层按（常量）下标取（行主序，NFCeval applySubscripts）。
+  // 任何失败（绑定非数组字面量 / 下标非常量 / 越界 / 部分下标留数组·记录）→ invalid，调用方 set_unsupported SKIP。
+  Id<Expr> eval_const_array_element(NodeId leaf, NodeId decl_scope, const std::vector<Id<Exp>>& subs) {
+    const CompId cid = I_.nodes[leaf].comp;
+    Id<Exp> raw;
+    NodeId scope;
+    const Binding& bnd = I_.comps[cid].binding;
+    if (bnd.kind == BindingKind::Raw && bnd.raw_exp.is_valid()) { raw = bnd.raw_exp; scope = bnd.scope; }
+    else {   // def-only：从 SCODE 取声明绑定，在声明作用域求值
+      const Id<SMod> m = I_.scode.elems[I_.comps[cid].def].mod;
+      if (m.is_valid()) raw = I_.scode.mods[m].binding;
+      scope = decl_scope;
+    }
+    if (!raw.is_valid()) return {};
+    std::optional<CVal> av = eval_scode(raw, scode_scope_of(scope), 0, /*allow_param=*/false);
+    if (!av || av->k != CVal::K::Array) return {};   // 绑定非数组字面量（构造子/函数/切片）→ SKIP
+    const CVal* cur = &*av;
+    for (Id<Exp> s : subs) {
+      std::optional<CVal> iv = eval_scode(s, scode_scope_of(decl_scope), 0, /*allow_param=*/false);
+      if (!iv || iv->k != CVal::K::Int) return {};    // 非常量下标（x[n]，n 是变量）→ SKIP
+      if (cur->k != CVal::K::Array || !cur->arr) return {};
+      const std::int64_t idx = iv->i;
+      if (idx < 1 || static_cast<std::size_t>(idx) > cur->arr->size()) return {};   // 越界 → SKIP（保守，omc 保留下标）
+      cur = &(*cur->arr)[idx - 1];
+    }
+    if (cur->k == CVal::K::Array || cur->k == CVal::K::Record) return {};   // 部分下标留数组/记录段 → SKIP
+    std::optional<CVal> cv = coerce_cval(*cur, I_.scode.elems[I_.comps[cid].def].type.path);
+    if (!cv || cv->k == CVal::K::Array || cv->k == CVal::K::Record) return {};
+    return literal_of(*cv);
   }
 
   // 跨作用域常量查找：沿词法 parent_scope 链找同名 constant 组件（从 SCODE 读可变性，def 组件 attributes 未填）。
