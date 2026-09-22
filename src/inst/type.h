@@ -10,6 +10,8 @@
 // Array/Complex/Clock/Tuple/Function 的 kind 先占位（enum 稳定），载荷与逻辑等到对应竖切片再长肉。
 #pragma once
 #include <cstdint>
+#include <memory>
+#include <utility>
 #include <vector>
 
 #include "base/arena.h"
@@ -65,15 +67,16 @@ struct Type {
   std::vector<Symbol> enum_path;
   std::vector<Symbol> enum_literals;
 
-  // Array（扁平）：元素类型的 kind + 其自身载荷放在 array_elem 里；dims 是各维。
-  //   不变量：array_elem->kind != Array（扁平）。v1 恒空。
-  std::vector<Dimension> dims;             // 非空 ⟺ kind == Array（或后续被 lift 的类型）
-  // array_elem 用 Id 化会更省；v1 无数组，先留一个可选的元素类型指针位（数组竖切片时再定）。
+  // Array（扁平）：元素类型放在 array_elem（boxed；shared_ptr 保 Type 可拷贝，元素不可变→共享安全）；dims 是各维。
+  //   不变量：kind == Array ⟺ !dims.empty() ⟺ array_elem != null；且 array_elem->kind != Array（扁平，见 array_of 合并）。
+  std::vector<Dimension> dims;
+  std::shared_ptr<Type> array_elem;        // Array 元素类型（标量时为空）
 
   // Complex：实例节点（inst 层的 INode）；用无类型 Id 避免本文件依赖 inode.h，接线时再定强类型别名。
   std::uint32_t complex_node = 0xFFFFFFFFu;
 
   [[nodiscard]] bool is_scalar() const noexcept { return dims.empty(); }
+  [[nodiscard]] bool is_array() const noexcept { return kind == TypeKind::Array; }
   [[nodiscard]] bool is_numeric() const noexcept {
     return kind == TypeKind::Integer || kind == TypeKind::Real;
   }
@@ -86,6 +89,21 @@ struct Type {
   static Type real() { return of(TypeKind::Real); }
   static Type string() { return of(TypeKind::String); }
   static Type unknown() { return of(TypeKind::Unknown); }
+
+  // 数组类型（对标 NFType.ARRAY + liftArrayLeft）：元素 elem + 维度 ds。elem 若已是数组则合并维度、保持扁平不变量。
+  static Type array_of(Type elem, std::vector<Dimension> ds) {
+    if (elem.kind == TypeKind::Array) {                       // 扁平：把元素的维接到后面（liftArrayLeft 语义）
+      ds.insert(ds.end(), elem.dims.begin(), elem.dims.end());
+      elem = elem.element_type();
+    }
+    Type t;
+    t.kind = TypeKind::Array;
+    t.array_elem = std::make_shared<Type>(std::move(elem));
+    t.dims = std::move(ds);
+    return t;
+  }
+  // 元素（标量）类型：数组返回 *array_elem，标量返回自身（对标 arrayElementType）。
+  [[nodiscard]] Type element_type() const { return (kind == TypeKind::Array && array_elem) ? *array_elem : *this; }
 };
 
 // 隐式类型提升是否允许 from→to（R14：只做内建数值 Integer→Real；同类型总允许）。

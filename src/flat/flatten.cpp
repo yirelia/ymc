@@ -638,26 +638,166 @@ class Flattener {
       set_unsupported("non-equality equation (reinit…)");
       return;
     }
-    Id<Expr> a = simplify_expr(inst_exp(eq.a, enclosing, prefix));
-    Id<Expr> b = simplify_expr(inst_exp(eq.b, enclosing, prefix));
-    // 用户数组方程 `x = {…}` 要逐元素定型/强转（数组 typing），v1 只做数组绑定 → SKIP。
+    Id<Expr> a = inst_exp(eq.a, enclosing, prefix);
+    Id<Expr> b = inst_exp(eq.b, enclosing, prefix);
+    if (result_.unsupported) return;
+    // 数组方程：两侧同形数组 → 行优先逐元素标量化（NFScalarize.scalarizeEquation）；否则走标量路。
+    if (result_.model.exprs[a].ty.is_array() || result_.model.exprs[b].ty.is_array()) {
+      collect_array_equation(a, b, eq.loc, eq.cmt, is_initial);
+      return;
+    }
+    a = simplify_expr(a);
+    b = simplify_expr(b);
+    // 用户数组字面量方程 `x = {…}`（标量 x）等，逐元素定型未做 → SKIP。
     if (result_.model.exprs[a].kind == ExprKind::Array || result_.model.exprs[b].kind == ExprKind::Array) {
       set_unsupported("array equation");
       return;
     }
-    // 等式两侧整型↔实型强制（R14）：eq1 的 `x = 2`（x:Real）→ `x = 2.0`。
-    TypeKind ta = result_.model.exprs[a].ty.kind, tb = result_.model.exprs[b].ty.kind;
+    emit_scalar_equality(a, b, eq.loc, eq.cmt, is_initial);
+  }
+
+  // 发射一条标量等式（含两侧整型↔实型强制，R14：eq1 `x = 2`→`x = 2.0`）。数组方程逐元素也调它。
+  void emit_scalar_equality(Id<Expr> a, Id<Expr> b, SourceLoc loc, const SComment& cmt, bool is_initial) {
+    const TypeKind ta = result_.model.exprs[a].ty.kind, tb = result_.model.exprs[b].ty.kind;
     if (ta == TypeKind::Real && tb == TypeKind::Integer) b = to_real(b);
     else if (ta == TypeKind::Integer && tb == TypeKind::Real) a = to_real(a);
     FlatEquation fe;
     fe.kind = FlatEqKind::Equality;
     fe.a = a;
     fe.b = b;
-    fe.loc = eq.loc;
-    if (eq.cmt.str.is_valid()) fe.comment = in_.intern(unescape_modelica_string(in_.str(eq.cmt.str)));
+    fe.loc = loc;
+    if (cmt.str.is_valid()) fe.comment = in_.intern(unescape_modelica_string(in_.str(cmt.str)));
     Id<FlatEquation> id = result_.model.add_eq(std::move(fe));
     if (is_initial) result_.model.initial_equations.push_back(id);
     else result_.model.equations.push_back(id);
+  }
+
+  static bool same_dims(const std::vector<Dimension>& x, const std::vector<Dimension>& y) {
+    if (x.size() != y.size()) return false;
+    for (std::size_t i = 0; i < x.size(); ++i)
+      if (x[i].kind != DimKind::Integer || y[i].kind != DimKind::Integer || x[i].size != y[i].size) return false;
+    return true;
+  }
+
+  // 数组方程 `lhs = rhs`（两侧同形数组）→ 行优先枚举 + 逐元素标量化 + 逐元素标量等式（对标 NFScalarize.scalarizeEquation）。
+  void collect_array_equation(Id<Expr> a, Id<Expr> b, SourceLoc loc, const SComment& cmt, bool is_initial) {
+    const Type aty = result_.model.exprs[a].ty, bty = result_.model.exprs[b].ty;   // 拷贝，跨 add 稳定
+    // 一侧数组一侧标量 = omc 类型错；形状不一致同理 → SKIP（保 FAIL=0）。
+    if (!aty.is_array() || !bty.is_array() || !same_dims(aty.dims, bty.dims)) {
+      set_unsupported("array equation shape mismatch");
+      return;
+    }
+    // 复合数组前缀（enclosing 带 `a[i]` 段下标）与叶数组标量化的组合本增量暂缓（eq2/eq3）→ SKIP。
+    for (const std::vector<std::int64_t>& s : cur_psubs_)
+      if (!s.empty()) { set_unsupported("array equation under array prefix"); return; }
+    std::vector<std::int64_t> dims;
+    for (const Dimension& d : aty.dims) dims.push_back(d.size);
+    std::vector<std::int64_t> idx(dims.size(), 1);
+    bool more = !dims.empty();
+    while (more) {
+      Id<Expr> ai = simplify_expr(scalarize(a, idx));
+      Id<Expr> bi = simplify_expr(scalarize(b, idx));
+      if (result_.unsupported) return;
+      emit_scalar_equality(ai, bi, loc, cmt, is_initial);
+      std::size_t k = dims.size();   // 行优先递增（最后一维最快）
+      while (k > 0) { --k; if (++idx[k] <= dims[k]) break; idx[k] = 1; if (k == 0) more = false; }
+    }
+  }
+
+  // 把类型化的数组表达式 e 在多下标 idx 处标量化成一个标量 Expr（标量子表达式=广播操作数/字面量，原样返回）。
+  Id<Expr> scalarize(Id<Expr> e, const std::vector<std::int64_t>& idx) {
+    const Expr x = result_.model.exprs[e];   // 值拷贝：后续 add realloc 不失效
+    if (x.ty.is_scalar()) return e;
+    switch (x.kind) {
+      case ExprKind::Cref: {
+        Expr c = x;
+        c.ty = x.ty.element_type();
+        std::vector<Id<Expr>> subs;
+        subs.reserve(idx.size());
+        for (std::int64_t v : idx) subs.push_back(lit_int(v));
+        c.cref.parts.back().subscripts = std::move(subs);   // 末段补下标（Phase 2 保证整体引用末段无下标）
+        return add(std::move(c));
+      }
+      case ExprKind::Binary: {
+        Id<Expr> sa = scalarize(x.a, idx), sb = scalarize(x.b, idx);
+        const bool real = result_.model.exprs[sa].ty.kind == TypeKind::Real ||
+                          result_.model.exprs[sb].ty.kind == TypeKind::Real;
+        if (real) { sa = to_real(sa); sb = to_real(sb); }
+        Expr r; r.kind = ExprKind::Binary; r.bin = x.bin; r.a = sa; r.b = sb;
+        r.ty = real ? Type::real() : Type::integer();
+        return add(std::move(r));
+      }
+      case ExprKind::Unary: {
+        Id<Expr> sa = scalarize(x.a, idx);
+        Expr r; r.kind = ExprKind::Unary; r.un = x.un; r.a = sa; r.ty = result_.model.exprs[sa].ty;
+        return add(std::move(r));
+      }
+      case ExprKind::LogicalNot: {
+        Id<Expr> sa = scalarize(x.a, idx);
+        Expr r; r.kind = ExprKind::LogicalNot; r.a = sa; r.ty = Type::boolean();
+        return add(std::move(r));
+      }
+      case ExprKind::Logical: {
+        Id<Expr> sa = scalarize(x.a, idx), sb = scalarize(x.b, idx);
+        Expr r; r.kind = ExprKind::Logical; r.log = x.log; r.a = sa; r.b = sb; r.ty = Type::boolean();
+        return add(std::move(r));
+      }
+      default:
+        set_unsupported("array expression scalarization");
+        return lit_int(0);
+    }
+  }
+
+  // 数组二元算术（逐元素/标量广播；结果维取自数组操作数）。矩阵乘/除/幂（非点号、两侧皆数组）非逐元素 → SKIP。
+  Id<Expr> array_binary(Op orig, BinOp op, Id<Expr> a, Id<Expr> b) {
+    const Type ta = result_.model.exprs[a].ty, tb = result_.model.exprs[b].ty;
+    const bool aarr = ta.is_array(), barr = tb.is_array();
+    const TypeKind ea = ta.element_type().kind, eb = tb.element_type().kind;
+    auto numeric = [](TypeKind k) { return k == TypeKind::Integer || k == TypeKind::Real; };
+    // 非内建数值元素（记录数组 + 运算符重载 OperatorOverloadArrayOp*）→ 需重载算子展开，未做 → SKIP。
+    if (!numeric(ea) || !numeric(eb)) { set_unsupported("non-numeric array operand"); return lit_int(0); }
+    // 非逐元素 / 暂缓：矩阵乘（* 两侧皆数组）、矩阵幂（^ 含数组，OperationPow2/3）、除法（/ ./ 需操作数提实型，Tier C 暂缓）。
+    if (orig == Op::Div || orig == Op::EWDiv) { set_unsupported("array division"); return lit_int(0); }
+    if (orig == Op::Pow) { set_unsupported("array matrix power"); return lit_int(0); }
+    if (orig == Op::Mul && aarr && barr) { set_unsupported("array matrix product"); return lit_int(0); }
+    std::vector<Dimension> ds;
+    if (aarr && barr) {
+      if (!same_dims(ta.dims, tb.dims)) { set_unsupported("array shape mismatch"); return lit_int(0); }
+      ds = ta.dims;
+    } else {
+      ds = aarr ? ta.dims : tb.dims;
+    }
+    const bool real = ea == TypeKind::Real || eb == TypeKind::Real;
+    Expr r;
+    r.kind = ExprKind::Binary;
+    r.bin = op;
+    r.a = a;
+    r.b = b;
+    r.ty = Type::array_of(real ? Type::real() : Type::integer(), std::move(ds));
+    return add(std::move(r));
+  }
+
+  // 数组逻辑（and/or 逐元素/广播，结果 Boolean 数组）。
+  Id<Expr> array_logical(LogOp lop, Id<Expr> a, Id<Expr> b) {
+    const Type ta = result_.model.exprs[a].ty, tb = result_.model.exprs[b].ty;
+    if (ta.element_type().kind != TypeKind::Boolean || tb.element_type().kind != TypeKind::Boolean) {
+      set_unsupported("non-boolean array logical");
+      return lit_int(0);
+    }
+    std::vector<Dimension> ds;
+    if (ta.is_array() && tb.is_array()) {
+      if (!same_dims(ta.dims, tb.dims)) { set_unsupported("array shape mismatch"); return lit_int(0); }
+      ds = ta.dims;
+    } else {
+      ds = ta.is_array() ? ta.dims : tb.dims;
+    }
+    Expr r;
+    r.kind = ExprKind::Logical;
+    r.log = lop;
+    r.a = a;
+    r.b = b;
+    r.ty = Type::array_of(Type::boolean(), std::move(ds));
+    return add(std::move(r));
   }
 
   // when 条件白名单（v1 只做标量 Boolean 的可判别形态）：关系（操作数非调用，排除 pre/noEvent）、Boolean 变量、initial()。
@@ -1891,7 +2031,20 @@ class Flattener {
         if (leaf_array) {
           const std::vector<Id<Exp>>& subs = c.parts.back().subscripts;
           if (subs.empty()) {
-            set_unsupported("whole-array reference");
+            // 整体数组引用 `x`（x: T[dims]）：提升成 ARRAY 类型（元素 lty），供上层逐元素标量化。维须字面量。
+            std::vector<std::int64_t> ldims;
+            bool alit = true;
+            const ScodeScope lscope = scode_scope_of(enclosing);
+            for (Id<Exp> d : lcel.attr.dims) if (!eval_dim(d, ldims, lscope)) alit = false;
+            for (Id<Exp> d : lcel.type.dims) if (!eval_dim(d, ldims, lscope)) alit = false;
+            if (!alit) {
+              set_unsupported("whole-array reference");
+            } else {
+              std::vector<Dimension> ads;
+              ads.reserve(ldims.size());
+              for (std::int64_t n : ldims) { Dimension dd; dd.kind = DimKind::Integer; dd.size = n; ads.push_back(dd); }
+              e.ty = Type::array_of(lty, std::move(ads));
+            }
           } else {
             std::vector<std::int64_t> ldims;
             bool lit = true;
@@ -1991,6 +2144,8 @@ class Flattener {
     }
     Id<Expr> a = inst_exp(e.a, enclosing, prefix);
     Id<Expr> b = inst_exp(e.b, enclosing, prefix);
+    if (result_.model.exprs[a].ty.is_array() || result_.model.exprs[b].ty.is_array())
+      return array_binary(e.op, op, a, b);   // 数组：逐元素/广播，维度传播，逐元素标量化在 collect_array_equation
     bool real = result_.model.exprs[a].ty.kind == TypeKind::Real || result_.model.exprs[b].ty.kind == TypeKind::Real;
     if (real) {  // 整型操作数提升到实型：字面量直接折叠，非字面量插 Cast（R13 §4.3 / R14 §1）
       a = to_real(a);
@@ -2008,15 +2163,18 @@ class Flattener {
   Id<Expr> rel_or_logic(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
     Id<Expr> a = inst_exp(e.a, enclosing, prefix);
     Id<Expr> b = inst_exp(e.b, enclosing, prefix);
+    const bool arr = result_.model.exprs[a].ty.is_array() || result_.model.exprs[b].ty.is_array();
     RelOp rop;
     LogOp lop;
     if (map_relop(e.op, rop)) {
+      if (arr) { set_unsupported("array relation"); return lit_int(0); }   // 元素级 Boolean 数组关系本增量暂缓
       bool real = result_.model.exprs[a].ty.kind == TypeKind::Real || result_.model.exprs[b].ty.kind == TypeKind::Real;
       if (real) { a = to_real(a); b = to_real(b); }
       Expr r; r.kind = ExprKind::Relation; r.rel = rop; r.a = a; r.b = b; r.ty = Type::boolean();
       return add(std::move(r));
     }
     if (map_logop(e.op, lop)) {
+      if (arr) return array_logical(lop, a, b);   // and/or 数组逐元素/广播
       // 常量逻辑由 simplify_expr 折叠（`false and false`→`false`）；非常量 `a and b` 保持符号，dump 照打。
       Expr r; r.kind = ExprKind::Logical; r.log = lop; r.a = a; r.b = b; r.ty = Type::boolean();
       return add(std::move(r));
@@ -2029,10 +2187,12 @@ class Flattener {
     if (e.op == Op::UPlus) return inst_exp(e.a, enclosing, prefix);   // +a → a（R13 §4.3）
     Id<Expr> a = inst_exp(e.a, enclosing, prefix);
     if (e.op == Op::Not) {
-      Expr r; r.kind = ExprKind::LogicalNot; r.a = a; r.ty = Type::boolean();
+      const Type tya = result_.model.exprs[a].ty;
+      Expr r; r.kind = ExprKind::LogicalNot; r.a = a;
+      r.ty = tya.is_array() ? Type::array_of(Type::boolean(), tya.dims) : Type::boolean();
       return add(std::move(r));
     }
-    // UMinus
+    // UMinus（数组元素级：结果类型 = 操作数类型，含数组维）
     Expr r; r.kind = ExprKind::Unary; r.un = UnOp::Minus; r.a = a; r.ty = result_.model.exprs[a].ty;
     return add(std::move(r));
   }

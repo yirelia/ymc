@@ -392,6 +392,15 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       连带补组件声明注释（emit_variable 标量路径 `Real x "c";`，dumper 已支持）→ Comment1 过。其余语句 kind（for/if/when/while/assert/…）诚实 SKIP。
       → easy-slice **195 PASS / 0 FAIL**（+4：Algorithm1/2/3、Comment1）；oracle=live 逐字节一致；全 scodeinst PASS 194→198、FAIL 69 不变（0 新增）；
       三编译器 10/10，ASan 0，+2 单测。FOR 层（保留 for 循环 + 符号迭代/下标 + Range 机制）留待下一桶。
+- [x] **加宽㉞数组竖切片（Type 地基 Option B + 逐元素数组方程 Tier A/B）**（2026-09-22，用户定 Option B，并行子agent出卡）：
+      Type 补 boxed `array_elem`（shared_ptr<Type>；不变量 kind==Array⟺!dims.empty()⟺array_elem!=null）+ array_of/element_type（对标 NFType.ARRAY/liftArrayLeft）。
+      cref 整体数组引用 `x` 提升成 ARRAY 类型（维须字面量）；binary/unary/rel_or_logic 传播维度（gate is_array()，标量路不变）；
+      scalarize(expr,idx) 逐下标标量化（cref 补末段下标、二元/一元/逻辑重建、Int→Real 逐元素）；collect_equation 两侧同形数组→行优先枚举+逐元素标量等式。
+      守卫（保 FAIL=0）：非数值元素（记录数组/运算符重载 OperatorOverloadArrayOp*）、矩阵乘（* 两侧数组）、矩阵幂（^ 含数组 OperationPow2/3）、
+      除法（/ ./ 操作数提实型 Tier C 暂缓 OperationDiv*）、数组关系、复合数组前缀（cur_psubs_ 非空 eq2/eq3）→ 一律 SKIP。
+      → easy-slice 204 PASS/0 FAIL（+9：OperationLogicalUnary1/Unary1/LogicalBinary1/Mul1/MulEW1/PowEW1/AddEW1/SubEW1、eq8）；
+      oracle=live 逐字节一致；全 scodeinst PASS 198→207、FAIL 69 不变；三编译器 10/10、ASan 0；+3 单测（1 桩改成标量化断言）。
+      Tier C（Div 操作数提实型）、矩阵/切片/数组 connect、数组-of-记录 留待后续。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

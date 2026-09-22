@@ -105,6 +105,21 @@ YMC_TEST(flatten_algorithm_assign_to_parameter_unsupported) {
   YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
 }
 
+// 数组方程逐元素标量化（整体引用 + 一元负 + 标量广播 *；行优先）。期望值取自实跑 omc 1.25.0。
+YMC_TEST(flatten_array_equation_scalarize) {
+  YMC_CHECK_EQ(flatten_src("model AE\n  Real x[2];\n  Real y[2];\n  Real s;\nequation\n  x = -y;\n  y = s * x;\nend AE;\n"),
+               std::string("class AE\n  Real x[1];\n  Real x[2];\n  Real y[1];\n  Real y[2];\n  Real s;\n"
+                           "equation\n  x[1] = -y[1];\n  x[2] = -y[2];\n  y[1] = s * x[1];\n  y[2] = s * x[2];\nend AE;\n"));
+}
+
+// 矩阵乘（两侧皆数组的 `*`）非逐元素 → SKIP（保 FAIL=0）。
+YMC_TEST(flatten_array_matrix_product_unsupported) {
+  bool uns = false;
+  std::string t = flatten_src("model M\n  Real a[2,2];\n  Real b[2,2];\n  Real c[2,2];\nequation\n  c = a * b;\nend M;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+}
+
 YMC_TEST(flatten_builtin_attributes) {
   // 内建属性修饰：写序打乱 → 按类型属性表序产出；Real 属性 int→real 强转；Integer 不强转；
   // String 的 fixed、Real 的 unbounded 被丢弃；stateSelect 是枚举字面量（全路径）。期望值 = omc 1.25.0 实测。
@@ -241,11 +256,12 @@ YMC_TEST(flatten_array_multidim_rowmajor) {
       std::string("class M\n  Real m[1,1];\n  Real m[1,2];\n  Real m[2,1];\n  Real m[2,2];\nend M;\n"));
 }
 
-YMC_TEST(flatten_whole_array_reference_unsupported) {
-  // 数组整体引用（数组运算/方程）v1 未做 → SKIP。
-  bool uns = false;
-  flatten_src("model M\n  Real x[3];\n  Real y[3];\nequation\n  y = x;\nend M;\n", &uns);
-  YMC_CHECK(uns);
+YMC_TEST(flatten_whole_array_equation_scalarizes) {
+  // 数组整体引用方程 `y = x` → 逐元素标量化（NFScalarize）。期望值取自实跑 omc 1.25.0。
+  YMC_CHECK_EQ(
+      flatten_src("model M\n  Real x[3];\n  Real y[3];\nequation\n  y = x;\nend M;\n"),
+      std::string("class M\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real y[1];\n  Real y[2];\n  Real y[3];\n"
+                  "equation\n  y[1] = x[1];\n  y[2] = x[2];\n  y[3] = x[3];\nend M;\n"));
 }
 
 YMC_TEST(flatten_const_fold_and_inline) {
