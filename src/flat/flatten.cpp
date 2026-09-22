@@ -465,21 +465,26 @@ class Flattener {
   // 翻译一条语句（v1：只做标量赋值 `cref := expr`，目标须是已发射的连续变量；其余 kind/目标 → SKIP 保 FAIL=0）。
   Id<FlatStatement> collect_statement(Id<SStatement> sid, NodeId enclosing, const std::vector<Symbol>& prefix) {
     const SStatement& st = I_.scode.stmts[sid];
+    if (st.kind == SStmtKind::For) return collect_for_statement(st, enclosing, prefix);
     if (st.kind != SStmtKind::Assign) { set_unsupported("algorithm statement"); return {}; }
     // LHS 解析成 flat cref。常量目标已被 cref() 内联成字面量 → 非 Cref → 落到下面的目标校验 SKIP。
     Id<Expr> lhs = simplify_expr(inst_exp(st.a, enclosing, prefix));
     if (result_.unsupported) return {};
     std::vector<Symbol> lname;
+    bool array_elem = false;
     {
       const Expr& le = result_.model.exprs[lhs];
       if (le.kind != ExprKind::Cref) { set_unsupported("algorithm assignment target"); return {}; }
-      for (const ExprCrefPart& p : le.cref.parts) {
-        if (!p.subscripts.empty()) { set_unsupported("algorithm array-element assignment"); return {}; }  // `x[i]:=…` 属 for 层，暂缓
-        lname.push_back(p.name);
+      for (std::size_t i = 0; i < le.cref.parts.size(); ++i) {
+        lname.push_back(le.cref.parts[i].name);
+        if (!le.cref.parts[i].subscripts.empty()) {
+          if (i + 1 != le.cref.parts.size()) { set_unsupported("algorithm array-element assignment"); return {}; }  // 非末段下标暂缓
+          array_elem = true;   // 末段带下标 = 数组元素赋值（for 体内 `x[i] :=`）
+        }
       }
     }
-    // 目标须是已发射的连续变量（Var）：给参数/常量/离散赋值是 omc 错误或需初值语义 → SKIP（AssignParameter1 等）。
-    const FlatVariable* lv = find_scalar_flat_var(lname);
+    // 目标须是已发射的连续变量（Var）：标量取 find_scalar_flat_var；数组元素取 find_array_flat_var（标量化成 x[1..n]）。
+    const FlatVariable* lv = array_elem ? find_array_flat_var(lname) : find_scalar_flat_var(lname);
     if (!lv || lv->var_kind != FlatVarKind::Var) { set_unsupported("algorithm assignment to non-continuous variable"); return {}; }
     const TypeKind ta = lv->ty.kind;   // 先取（下面 inst_exp/to_real 会往 arena add，勿跨调用持引用）
     Id<Expr> rhs = simplify_expr(inst_exp(st.b, enclosing, prefix));
@@ -510,6 +515,54 @@ class Flattener {
       for (const std::vector<Id<Expr>>& s : v.name_subs) if (!s.empty()) { clean = false; break; }
       if (clean) return &v;
     }
+    return nullptr;
+  }
+
+  // for-语句（KEPT loop，对标 NFFlatten.flattenStatement:2308——不展开）：范围类型化 + 迭代变量注册为符号 + 体翻译。
+  Id<FlatStatement> collect_for_statement(const SStatement& st, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    if (!st.a.is_valid()) { set_unsupported("implicit-range for statement"); return {}; }   // 隐式范围 `for i loop` 暂缓
+    Id<Expr> range = simplify_expr(inst_exp(st.a, enclosing, prefix));
+    if (result_.unsupported) return {};
+    TypeKind ek;   // 迭代变量类型 = 范围元素类型（数组范围取首元素类型；Range 的 ty 已是元素类型）
+    {
+      const Expr& re = result_.model.exprs[range];
+      ek = (re.kind == ExprKind::Array)
+               ? (re.args.empty() ? TypeKind::Integer : result_.model.exprs[re.args[0]].ty.kind)
+               : re.ty.kind;
+    }
+    const std::uint32_t id = st.index.id;   // 注册迭代变量（符号，不内联）；save/restore 支持嵌套
+    const bool had = stmt_iters_.count(id) > 0;
+    const TypeKind prev = had ? stmt_iters_[id] : TypeKind::Integer;
+    stmt_iters_[id] = (ek == TypeKind::Real) ? TypeKind::Real : TypeKind::Integer;
+    FlatStatement fs;
+    fs.kind = FlatStmtKind::For;
+    fs.index = st.index;
+    fs.a = range;
+    fs.loc = st.loc;
+    bool ok = true;
+    for (Id<SStatement> bid : st.body) {
+      Id<FlatStatement> bs = collect_statement(bid, enclosing, prefix);
+      if (result_.unsupported) { ok = false; break; }
+      fs.body.push_back(bs);
+    }
+    if (had) stmt_iters_[id] = prev; else stmt_iters_.erase(id);   // 恢复
+    if (!ok) return {};
+    return result_.model.add_stmt(std::move(fs));
+  }
+
+  // Absyn 下标 s 是否为当前 for-语句的符号迭代变量（单段无下标 cref、名在 stmt_iters_）。
+  bool is_stmt_iter_subscript(Id<Exp> s) {
+    if (stmt_iters_.empty()) return false;
+    const Exp& e = I_.absyn.exps[s];
+    if (e.kind != ExpKind::CrefExp) return false;
+    const Cref& c = I_.absyn.crefs[e.cref];
+    return c.parts.size() == 1 && c.parts[0].subscripts.empty() && stmt_iters_.count(c.parts[0].name.id) > 0;
+  }
+
+  // 在已发射变量里按点分名找标量化数组变量（name={x}、有末段下标 x[1..n]）。供 for 体 `x[i]:=` 目标校验。
+  const FlatVariable* find_array_flat_var(const std::vector<Symbol>& nm) {
+    for (const FlatVariable& v : result_.model.variables)
+      if (v.name == nm && !v.subscripts.empty()) return &v;
     return nullptr;
   }
 
@@ -2120,6 +2173,18 @@ class Flattener {
         r.args = std::move(els);
         return add(std::move(r));
       }
+      case ExpKind::Range: {   // a:b / a:step:b（Absyn 与 flat 同布局：a=起点, b=步长或终点, c=终点）
+        Expr r;
+        r.kind = ExprKind::Range;
+        r.a = inst_exp(e.a, enclosing, prefix);
+        r.b = inst_exp(e.b, enclosing, prefix);
+        if (e.c.is_valid()) r.c = inst_exp(e.c, enclosing, prefix);
+        auto ik = [&](Id<Expr> x) { return result_.model.exprs[x].ty.kind; };   // 迭代变量类型 = 范围元素类型
+        const bool allint = ik(r.a) == TypeKind::Integer && ik(r.b) == TypeKind::Integer &&
+                            (!r.c.is_valid() || ik(r.c) == TypeKind::Integer);
+        r.ty = allint ? Type::integer() : Type::real();
+        return add(std::move(r));
+      }
       default:
         set_unsupported("expression kind");
         return lit_int(0);   // 占位，driver 会因 unsupported 退 66
@@ -2155,6 +2220,17 @@ class Flattener {
   // cref：解析首段到 enclosing 的本地组件；命中 → 前缀改写 + 取其类型；否则（time 等内建）原样、类型 Real。
   Id<Expr> cref(Id<Cref> ac, NodeId enclosing, const std::vector<Symbol>& prefix) {
     const Cref& c = I_.absyn.crefs[ac];
+    // for-语句迭代变量（KEPT loop）：符号引用，元素类型，不内联/不加前缀（对标 flattenStatement 不替换迭代变量）。
+    if (!stmt_iters_.empty() && c.parts.size() == 1 && c.parts[0].subscripts.empty()) {
+      auto it = stmt_iters_.find(c.parts[0].name.id);
+      if (it != stmt_iters_.end()) {
+        Expr r;
+        r.kind = ExprKind::Cref;
+        r.ty = Type::of(it->second);
+        r.cref.parts.push_back({c.parts[0].name, {}});
+        return add(std::move(r));
+      }
+    }
     // for 方程迭代变量作为值：`… = i` → 内联成整数字面量（ForEquation1 的 RHS）。
     if (!loop_vars_.empty() && c.parts.size() == 1 && c.parts[0].subscripts.empty()) {
       auto it = loop_vars_.find(c.parts[0].name.id);
@@ -2249,6 +2325,7 @@ class Flattener {
               set_unsupported("array subscript");
             } else {
               for (std::size_t k = 0; k < subs.size(); ++k) {
+                if (is_stmt_iter_subscript(subs[k])) continue;   // for-语句符号迭代变量下标：omc 不静态越界检查
                 std::optional<std::int64_t> iv = subscript_int(subs[k]);
                 if (!iv || *iv < 1 || *iv > ldims[k]) {
                   set_unsupported("array subscript out of range");
@@ -3134,6 +3211,7 @@ class Flattener {
   std::unordered_map<std::uint32_t, CVal>* locals_ = nullptr;   // 用户函数解释期的局部环境（输入/局部/输出名→值）
   std::unordered_set<std::uint32_t>* input_names_ = nullptr;    // 当前函数的输入名（禁止对其赋值，AssignInput1）
   std::unordered_map<std::uint32_t, std::int64_t> loop_vars_;   // for 方程展开期的迭代变量→值（cref/下标解析）
+  std::unordered_map<std::uint32_t, TypeKind> stmt_iters_;      // for **语句**（KEPT loop）的迭代变量→元素类型（符号，不内联）
   bool in_if_ = false;   // 正在收集 if 分支体（connect 不能进分支体 → SKIP）
   struct FlowVar { std::vector<Symbol> name; Type ty; SourceLoc loc; };
   std::vector<FlowVar> flow_vars_;   // flow 变量（run() 末尾按 outside/未连接补 `=0` 方程）

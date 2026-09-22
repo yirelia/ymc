@@ -160,6 +160,14 @@ YMC_TEST(flatten_constant_array_variable_index_unsupported) {
   YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
 }
 
+// for-语句：保留循环（不展开），符号迭代变量，数组元素赋值 + 整型→实型。期望值取自实跑 omc 1.25.0。
+YMC_TEST(flatten_for_statement_kept) {
+  YMC_CHECK_EQ(
+      flatten_src("model FS\n  Real x[3];\nalgorithm\n  for i in 1:3 loop\n    x[i] := 2*i;\n  end for;\nend FS;\n"),
+      std::string("class FS\n  Real x[1];\n  Real x[2];\n  Real x[3];\n"
+                  "algorithm\n  for i in 1:3 loop\n    x[i] := /*Real*/(2 * i);\n  end for;\nend FS;\n"));
+}
+
 // 类型名维度：`x[Boolean]`→`x[false] x[true]`；`y[E]`→`y[E.a] …`（下标是 BoolLit/EnumLit）。期望值取自实跑 omc 1.25.0。
 YMC_TEST(flatten_type_typed_dimensions) {
   YMC_CHECK_EQ(

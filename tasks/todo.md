@@ -435,6 +435,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       连带修空数组潜伏 UB（某维=0 时旧 idx_to_exprs 越界；omc 整体丢弃空数组=独立特性 → SKIP EmptyArray*/含 0 维矩阵）。
       → easy-slice 216 PASS/0 FAIL（+3：BooleanDim、enum3、enum8）；oracle=live 逐字节一致；全 scodeinst PASS 216→219、FAIL 69 不变；
       三编译器 10/10、ASan 0；+1 单测。限定/别名枚举维、复合数组 type 维、type-维变量在方程被引用 留后续（现 SKIP）。
+- [x] **加宽㊵算法段 for 语句（KEPT loop，increment 1）**（2026-09-22，并行子agent穷举出卡）：承 algorithm CORE。
+      for-语句保留不展开（对标 NFFlatten.flattenStatement:2308，与 for-方程展开相反）。inst_exp 补 ExpKind::Range；
+      stmt_iters_ 注册符号迭代变量（元素类型，不内联/不加前缀，区别于 loop_vars_ 内联）；cref 符号迭代变量早返回 + 符号下标 x[i] 免越界检查；
+      collect_statement 认 SStmtKind::For（collect_for_statement：范围类型化 + 体翻译 + save/restore 嵌套）+ 数组元素赋值目标 x[i]（find_array_flat_var）。
+      范围结构保留（2:2 不塌、{1,2,3} 不转 1:5）、/*Real*/(i) 逐元素强制、a.x 前缀但 i 不前缀。
+      → easy-slice 221 PASS/0 FAIL（+5：ForStatement1/2/3/Array/Prefix）；oracle=live 逐字节一致；全 scodeinst PASS 219→224、FAIL 69 不变；三编译器 10/10、ASan 0；+1 单测。
+      隐式范围（`for i loop`，ImplicitRangeAlg1）留 increment 2；if/while/when/assert/terminate/reinit 语句全是 omc 错误或需正交特性 → 维持 SKIP。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples
