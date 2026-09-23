@@ -168,6 +168,15 @@ YMC_TEST(flatten_user_function_emitted) {
                   "class M\n  Real b = f(time);\nend M;\n"));
 }
 
+// 函数发射（increment 2）：protected 局部按依赖拓扑重排（t2 先于 t1）+ 算法体。期望值取自实跑 omc 1.25.0。
+YMC_TEST(flatten_user_function_locals_and_algorithm) {
+  YMC_CHECK_EQ(
+      flatten_src("function g\n  input Real x;\n  output Real y;\nprotected\n  Real t1 = t2;\n  Real t2 = 2*x;\n"
+                  "algorithm\n  y := t1 + 1;\nend g;\nmodel M\n  Real b = g(time);\nend M;\n"),
+      std::string("function g\n  input Real x;\n  output Real y;\n  protected Real t2 = 2.0 * x;\n  protected Real t1 = t2;\n"
+                  "algorithm\n  y := t1 + 1.0;\nend g;\n\nclass M\n  Real b = g(time);\nend M;\n"));
+}
+
 // 复合组件变率下沉 + 常量记录成员折叠：constant/parameter R 的字段继承变率；constant r.x 引用折成字面量。期望值取自实跑 omc 1.25.0。
 YMC_TEST(flatten_composite_variability_and_member_fold) {
   YMC_CHECK_EQ(

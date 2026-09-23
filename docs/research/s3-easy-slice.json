@@ -241,6 +241,7 @@
 "CevalRecord3.mo",
 "CevalRecord5.mo",
 "FunctionParamVariability.mo",
+"FunctionCompOrder1.mo",
 "ParameterDer.mo",
 "PartialFunction2.mo",
 "PartialType3.mo",

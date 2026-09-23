@@ -1856,6 +1856,73 @@ class Flattener {
 
   // 用户函数常量折叠（v1）：解析到 function 类，绑定实参（位置/命名/默认）到输入，解释函数体（输出绑定 + 直线赋值算法），
   // 返回**单**输出的常量值。任何超范围（多输出、外部函数、数组/记录、非直线控制流、非常量实参）→ nullopt（调用方 SKIP）。
+  // flat 表达式是否引用 names 里的某个名字（首段）——供函数局部依赖拓扑排序。
+  bool flat_exp_refs(Id<Expr> e, const std::unordered_set<std::uint32_t>& names) {
+    const Expr& x = result_.model.exprs[e];
+    switch (x.kind) {
+      case ExprKind::Cref: {
+        if (!x.cref.parts.empty() && names.count(x.cref.parts[0].name.id)) return true;
+        for (const ExprCrefPart& p : x.cref.parts) for (Id<Expr> s : p.subscripts) if (flat_exp_refs(s, names)) return true;
+        return false;
+      }
+      case ExprKind::Binary: case ExprKind::Relation: case ExprKind::Logical:
+        return flat_exp_refs(x.a, names) || flat_exp_refs(x.b, names);
+      case ExprKind::Unary: case ExprKind::LogicalNot: case ExprKind::Cast:
+        return flat_exp_refs(x.a, names);
+      case ExprKind::IfExp:
+        return flat_exp_refs(x.a, names) || flat_exp_refs(x.b, names) || flat_exp_refs(x.c, names);
+      case ExprKind::Call: case ExprKind::Array: case ExprKind::Tuple: case ExprKind::Range:
+        if (x.a.is_valid() && flat_exp_refs(x.a, names)) return true;
+        if (x.b.is_valid() && flat_exp_refs(x.b, names)) return true;
+        if (x.c.is_valid() && flat_exp_refs(x.c, names)) return true;
+        for (Id<Expr> arg : x.args) if (flat_exp_refs(arg, names)) return true;
+        return false;
+      default: return false;
+    }
+  }
+
+  // 算法段是否有把 out 当赋值 LHS 的语句（输出经算法赋值判定，否则未赋值→omc 告警→SKIP）。
+  bool algorithm_assigns(const SAlgorithm& alg, Symbol out) {
+    for (Id<SStatement> sid : alg.stmts) {
+      const SStatement& st = I_.scode.stmts[sid];
+      if (st.kind != SStmtKind::Assign) continue;
+      const Exp& lhs = I_.absyn.exps[st.a];
+      if (lhs.kind != ExpKind::CrefExp) continue;
+      const Cref& lc = I_.absyn.crefs[lhs.cref];
+      if (lc.parts.size() == 1 && lc.parts[0].name == out) return true;
+    }
+    return false;
+  }
+
+  // 函数体语句翻译（首批：标量赋值 `局部/输出 := expr`）。目标须是 func_params_ 里的名字。
+  Id<FlatStatement> collect_func_statement(Id<SStatement> sid, NodeId enclosing) {
+    const SStatement& st = I_.scode.stmts[sid];
+    if (st.kind != SStmtKind::Assign) { set_unsupported("function statement"); return {}; }
+    Id<Expr> lhs = simplify_expr(inst_exp(st.a, enclosing, {}));
+    if (result_.unsupported) return {};
+    TypeKind ta;
+    {
+      const Expr& le = result_.model.exprs[lhs];
+      if (le.kind != ExprKind::Cref || le.cref.parts.size() != 1 || !le.cref.parts[0].subscripts.empty()) {
+        set_unsupported("function assignment target"); return {};
+      }
+      auto it = func_params_.find(le.cref.parts[0].name.id);
+      if (it == func_params_.end()) { set_unsupported("function assignment target"); return {}; }
+      ta = it->second.kind;
+    }
+    Id<Expr> rhs = simplify_expr(inst_exp(st.b, enclosing, {}));
+    if (result_.unsupported) return {};
+    const TypeKind tb = result_.model.exprs[rhs].ty.kind;
+    if (ta == TypeKind::Real && tb == TypeKind::Integer) rhs = to_real(rhs);
+    else if (ta != tb) { set_unsupported("function assignment type mismatch"); return {}; }
+    FlatStatement fs;
+    fs.kind = FlatStmtKind::Assign;
+    fs.a = lhs;
+    fs.b = rhs;
+    fs.loc = st.loc;
+    return result_.model.add_stmt(std::move(fs));
+  }
+
   // 内建标量类型名 → TypeKind（函数形参/局部类型解析；非标量内建 → false）。
   bool builtin_scalar_type_kind(const std::vector<Symbol>& path, TypeKind& tk) {
     if (path.size() != 1) return false;
@@ -1873,59 +1940,101 @@ class Flattener {
     for (const FlatFunction& f : result_.model.functions) if (f.name == qname) return true;   // 去重
     const SElement& fel = I_.scode.elems[fe];
     if (fel.is_partial || fel.def.external.present || fel.purity == Purity::Impure ||
-        fel.cmt.annotation.is_valid()) return false;   // partial/external/impure/带注解 → 首批 SKIP
-    if (!fel.def.algorithms.empty() || !fel.def.equations.empty() ||
-        !fel.def.initial_algorithms.empty() || !fel.def.initial_equations.empty()) return false;   // 首批：无算法/方程段
-    if (emitting_funcs_.count(fe.raw)) return false;   // 递归（自/互调）→ 首批 SKIP
-    std::vector<Id<SElement>> ord;   // 声明序里的 in/out（首批无 protected 局部）
-    int nout = 0;
+        fel.cmt.annotation.is_valid()) return false;   // partial/external/impure/带注解 → SKIP
+    if (!fel.def.equations.empty() || !fel.def.initial_algorithms.empty() ||
+        !fel.def.initial_equations.empty() || fel.def.algorithms.size() > 1) return false;   // 无方程/初始段/多算法段
+    if (emitting_funcs_.count(fe.raw)) return false;   // 递归（自/互调）→ SKIP
+    std::vector<Id<SElement>> inputs, outputs, locals;   // in / out / protected 局部（声明序）
     for (Id<SElement> eid : fel.def.elements) {
       const SElement& c = I_.scode.elems[eid];
       if (c.kind != SElementKind::Component) return false;   // extends/嵌套类 → SKIP
-      if (c.attr.dir == SDirection::Output) {
-        ++nout;
-        const Id<SMod> m = c.mod;   // 无算法段：输出须由绑定定义，否则未赋值（omc 告警，FunctionUnitialized*）→ SKIP
-        if (!m.is_valid() || !I_.scode.mods[m].binding.is_valid()) return false;
-      } else if (c.attr.dir != SDirection::Input) {
-        return false;   // protected 局部 → 首批 SKIP
-      }
-      ord.push_back(eid);
+      if (c.attr.dir == SDirection::Input) inputs.push_back(eid);
+      else if (c.attr.dir == SDirection::Output) outputs.push_back(eid);
+      else if (c.prefixes.vis == SVisibility::Protected) locals.push_back(eid);
+      else return false;   // 公开非 io 变量 → 无效函数
     }
-    if (nout != 1) return false;   // 多输出（元组）/无输出 → SKIP
-    std::vector<TypeKind> kinds(ord.size());
-    for (std::size_t i = 0; i < ord.size(); ++i) {
-      const SElement& c = I_.scode.elems[ord[i]];
-      if (!c.attr.dims.empty() || !c.type.dims.empty() || !builtin_scalar_type_kind(c.type.path, kinds[i])) return false;
+    if (outputs.size() != 1) return false;   // 多输出（元组）/无输出 → SKIP
+    const bool has_alg = !fel.def.algorithms.empty();
+    { const Id<SMod> om = I_.scode.elems[outputs[0]].mod;   // 输出须被赋值：绑定 或 算法 LHS，否则 omc 告警 → SKIP
+      const bool ob = om.is_valid() && I_.scode.mods[om].binding.is_valid();
+      if (!ob && !(has_alg && algorithm_assigns(fel.def.algorithms[0], I_.scode.elems[outputs[0]].name))) return false;
     }
-    // 前置校验全过，开始发射（含可能递归的绑定 inst_exp）。func_params_ 每函数独立（clear+restore）。
-    auto saved = func_params_;
+    auto tk_of = [&](Id<SElement> eid, TypeKind& tk) {   // 标量内建类型
+      const SElement& c = I_.scode.elems[eid];
+      return c.attr.dims.empty() && c.type.dims.empty() && builtin_scalar_type_kind(c.type.path, tk);
+    };
+    auto saved = func_params_;   // func_params_ 每函数独立（clear+restore）
     func_params_.clear();
-    for (std::size_t i = 0; i < ord.size(); ++i) func_params_[I_.scode.elems[ord[i]].name.id] = Type::of(kinds[i]);
+    auto reg = [&](const std::vector<Id<SElement>>& v) {
+      for (Id<SElement> eid : v) { TypeKind tk; if (!tk_of(eid, tk)) return false; func_params_[I_.scode.elems[eid].name.id] = Type::of(tk); }
+      return true;
+    };
+    if (!reg(inputs) || !reg(outputs) || !reg(locals)) { func_params_ = saved; return false; }
     emitting_funcs_.insert(fe.raw);
-    FlatFunction ff;   // params：inputs 先、outputs 后（omc dump 序）
+    bool ok = true;
+    std::vector<Id<Expr>> lbind(locals.size());   // 局部绑定先类型化（供拓扑排序 + 发射）
+    for (std::size_t i = 0; i < locals.size() && ok; ++i) {
+      const Id<SMod> m = I_.scode.elems[locals[i]].mod;
+      if (m.is_valid() && I_.scode.mods[m].binding.is_valid()) {
+        lbind[i] = simplify_expr(inst_exp(I_.scode.mods[m].binding, enclosing, {}));
+        if (result_.unsupported) ok = false;
+        else { TypeKind tk; tk_of(locals[i], tk); if (tk == TypeKind::Real) lbind[i] = to_real(lbind[i]); }
+      }
+    }
+    std::vector<std::size_t> lorder;   // 局部拓扑序：引用的其它局部先出（x1=x2,x2=x → x2,x1）
+    if (ok) {
+      std::vector<bool> done(locals.size(), false);
+      for (std::size_t k = 0; k < locals.size() && ok; ++k) {
+        bool progress = false;
+        for (std::size_t i = 0; i < locals.size(); ++i) {
+          if (done[i]) continue;
+          bool ready = true;
+          if (lbind[i].is_valid())
+            for (std::size_t j = 0; j < locals.size(); ++j)
+              if (!done[j] && j != i && flat_exp_refs(lbind[i], {I_.scode.elems[locals[j]].name.id})) { ready = false; break; }
+          if (ready) { done[i] = true; lorder.push_back(i); progress = true; }
+        }
+        if (!progress) { ok = false; }   // 循环依赖 → SKIP
+      }
+    }
+    FlatFunction ff;
     ff.name = qname;
     if (fel.cmt.str.is_valid()) ff.comment = fel.cmt.str;
-    bool ok = true;
-    for (int pass = 0; pass < 2 && ok; ++pass) {
-      const SDirection want = pass == 0 ? SDirection::Input : SDirection::Output;
-      for (std::size_t i = 0; i < ord.size() && ok; ++i) {
-        const SElement& c = I_.scode.elems[ord[i]];
-        if (c.attr.dir != want) continue;
+    auto emit_io = [&](const std::vector<Id<SElement>>& v, FlatDirection dir) {   // in/out：变率剥离
+      for (Id<SElement> eid : v) {
+        if (!ok) return;
+        const SElement& c = I_.scode.elems[eid];
+        TypeKind tk; tk_of(eid, tk);
         FlatFuncParam p;
-        p.name = c.name;
-        p.ty = Type::of(kinds[i]);
-        p.direction = pass == 0 ? FlatDirection::Input : FlatDirection::Output;
-        p.var_kind = FlatVarKind::Var;   // in/out 剥离变率
+        p.name = c.name; p.ty = Type::of(tk); p.direction = dir; p.var_kind = FlatVarKind::Var;
         const Id<SMod> m = c.mod;
         if (m.is_valid() && I_.scode.mods[m].binding.is_valid()) {
           Id<Expr> b = simplify_expr(inst_exp(I_.scode.mods[m].binding, enclosing, {}));
-          if (result_.unsupported) { ok = false; break; }
-          if (kinds[i] == TypeKind::Real) b = to_real(b);
+          if (result_.unsupported) { ok = false; return; }
+          if (tk == TypeKind::Real) b = to_real(b);
           p.binding = b;
         }
         ff.params.push_back(std::move(p));
       }
-    }
+    };
+    if (ok) emit_io(inputs, FlatDirection::Input);
+    if (ok) emit_io(outputs, FlatDirection::Output);
+    if (ok)
+      for (std::size_t idx : lorder) {   // protected 局部（首批变率均按 Var 打，不加前缀）
+        const SElement& c = I_.scode.elems[locals[idx]];
+        TypeKind tk; tk_of(locals[idx], tk);
+        FlatFuncParam p;
+        p.name = c.name; p.ty = Type::of(tk); p.direction = FlatDirection::None; p.is_protected = true;
+        p.var_kind = FlatVarKind::Var;
+        p.binding = lbind[idx];
+        ff.params.push_back(std::move(p));
+      }
+    if (ok && has_alg)
+      for (Id<SStatement> sid : fel.def.algorithms[0].stmts) {
+        Id<FlatStatement> s = collect_func_statement(sid, enclosing);
+        if (result_.unsupported) { ok = false; break; }
+        ff.body.push_back(s);
+      }
     emitting_funcs_.erase(fe.raw);
     func_params_ = saved;
     if (!ok) return false;
@@ -1944,6 +2053,9 @@ class Flattener {
         I_.scode.elems[fe].restriction != SRestriction::Function ||
         I_.scode.elems[fe].def.kind != SClassDefKind::Parts)
       return {};
+    bool top_level = false;   // 首批：只发射顶层函数（裸名）；模型内嵌套函数需限定名 → SKIP
+    for (Id<SElement> eid : I_.scode.program) if (eid.raw == fe.raw) { top_level = true; break; }
+    if (!top_level) return {};
     std::size_t ninputs = 0;   // 首批：实参数须匹配输入数（不做省略默认展开，FuncMissingDefault1 等 → SKIP）
     for (Id<SElement> eid : I_.scode.elems[fe].def.elements)
       if (I_.scode.elems[eid].kind == SElementKind::Component &&
@@ -2524,6 +2636,8 @@ class Flattener {
       if (c.parts.size() > 1) set_unsupported("qualified/cross-scope reference");
       for (const CrefPart& p : c.parts)
         if (!p.subscripts.empty()) set_unsupported("subscript on non-array");   // `time[2]` → omc 报错
+      // 函数体里的未解析裸名（非形参/局部/常量）= time 或模型变量 → 函数不能引用（omc 报错，Time3）→ SKIP。
+      if (!func_params_.empty()) set_unsupported("function body references non-local");
       e.ty = Type::real();
     }
     for (const CrefPart& p : c.parts) {

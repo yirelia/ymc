@@ -457,6 +457,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       非标量形参、省略默认实参、命名实参、数组实参 → 一律 SKIP。
       → easy-slice 225 PASS/0 FAIL（+1：FunctionParamVariability）；oracle=live 逐字节一致；全 scodeinst PASS 227→228、FAIL 69 不变；三编译器 10/10、ASan 0；+1 单测。
       protected 局部 + 算法体 + 依赖重排（FunctionCompOrder1）、限定名嵌套函数、默认实参展开、数组/记录/多输出 留后续（现 SKIP）。
+- [x] **加宽㊸函数发射 increment 2（protected 局部 + 算法体 + 依赖重排）**（2026-09-23）：承 f3654ce。
+      emit_function 收 protected 局部（拓扑排序：绑定引用的局部先出，x1=x2,x2=x → x2,x1）+ 算法段（collect_func_statement：标量赋值，目标须 func_params_ 名）。
+      守卫（保 FAIL=0）：只发射顶层函数（I_.scode.program 成员；嵌套函数需限定名 → SKIP FuncInnerParam/FunctionUnitialized*）、
+      输出须赋值（绑定或算法 LHS）、函数体引用未解析裸名（time/模型变量 → omc 报错 Time3）→ SKIP。
+      → easy-slice 226 PASS/0 FAIL（+1：FunctionCompOrder1）；oracle=live 逐字节一致；全 scodeinst PASS 228→229、FAIL 69 不变；三编译器 10/10、ASan 0；+1 单测。
+      嵌套限定名、默认实参展开、数组/记录/多输出、if/for/while 函数体 留后续。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples
