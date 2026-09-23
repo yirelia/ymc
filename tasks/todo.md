@@ -448,6 +448,15 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       Half B：cref 变率门改用**根**组件（r1.x 的 r1，非叶字段自身）；记录成员引用 eval_const_record_member（Option A：复用已发射常量叶子的字面量，依赖声明序）。
       → easy-slice 224 PASS/0 FAIL（+3：CevalRecord1/3/5）；oracle=live 逐字节一致；全 scodeinst PASS 224→227、FAIL 69 不变；
       三编译器 10/10、ASan 0；+1 单测（1 桩 SKIP 改成 PASS 断言）。整体记录复制 r2=r1、参数成员折叠、记录数组、Evaluate/fixed 留后续（现 SKIP）。
+- [x] **加宽㊷函数发射地基（专用 FlatFunction，increment 1）**（2026-09-23，用户定"专用 FlatFunction"，并行子agent穷举出卡）：
+      发射被调用户函数 + 保留符号调用（对标 NFFlatten.collectFunctions / NFFlatModel.appendStream，函数块 class 之前）。
+      数据模型：flat.h 加 FlatFuncParam/FlatFunction + FlatModel.functions。dumper function_block（维在类型上、per-line protected、in/out 变率剥离）。
+      call() 折不成常量 → try_emit_user_call：解析函数 + emit_function（纯标量 in/out、绑定定义输出、无 protected 局部/算法段）+ 建符号 Call（限定名）。
+      func_params_ 令函数体 cref 符号解析成裸名；closure 经递归 inst_exp 自然收集。工具修复 flat_sweep.py:124 认 stdout 以 function 开头。
+      守卫（保 FAIL=0）：partial/external/impure/带注解、多输出（元组）、递归（emitting_funcs_）、输出无绑定（omc 告警 FunctionUnitialized*）、
+      非标量形参、省略默认实参、命名实参、数组实参 → 一律 SKIP。
+      → easy-slice 225 PASS/0 FAIL（+1：FunctionParamVariability）；oracle=live 逐字节一致；全 scodeinst PASS 227→228、FAIL 69 不变；三编译器 10/10、ASan 0；+1 单测。
+      protected 局部 + 算法体 + 依赖重排（FunctionCompOrder1）、限定名嵌套函数、默认实参展开、数组/记录/多输出 留后续（现 SKIP）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

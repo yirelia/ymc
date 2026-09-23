@@ -160,6 +160,14 @@ YMC_TEST(flatten_constant_array_variable_index_unsupported) {
   YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
 }
 
+// 函数发射（首批）：纯标量顶层函数 → class 之前发射 `function f…end f;`，调用保留符号 `f(time)`。期望值取自实跑 omc 1.25.0。
+YMC_TEST(flatten_user_function_emitted) {
+  YMC_CHECK_EQ(
+      flatten_src("function f\n  input Real x;\n  output Real y = 2*x;\nend f;\nmodel M\n  Real b = f(time);\nend M;\n"),
+      std::string("function f\n  input Real x;\n  output Real y = 2.0 * x;\nend f;\n\n"
+                  "class M\n  Real b = f(time);\nend M;\n"));
+}
+
 // 复合组件变率下沉 + 常量记录成员折叠：constant/parameter R 的字段继承变率；constant r.x 引用折成字面量。期望值取自实跑 omc 1.25.0。
 YMC_TEST(flatten_composite_variability_and_member_fold) {
   YMC_CHECK_EQ(

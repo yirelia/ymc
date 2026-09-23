@@ -1856,6 +1856,115 @@ class Flattener {
 
   // 用户函数常量折叠（v1）：解析到 function 类，绑定实参（位置/命名/默认）到输入，解释函数体（输出绑定 + 直线赋值算法），
   // 返回**单**输出的常量值。任何超范围（多输出、外部函数、数组/记录、非直线控制流、非常量实参）→ nullopt（调用方 SKIP）。
+  // 内建标量类型名 → TypeKind（函数形参/局部类型解析；非标量内建 → false）。
+  bool builtin_scalar_type_kind(const std::vector<Symbol>& path, TypeKind& tk) {
+    if (path.size() != 1) return false;
+    const std::string_view n = in_.str(path[0]);
+    if (n == "Real") { tk = TypeKind::Real; return true; }
+    if (n == "Integer") { tk = TypeKind::Integer; return true; }
+    if (n == "Boolean") { tk = TypeKind::Boolean; return true; }
+    if (n == "String") { tk = TypeKind::String; return true; }
+    return false;
+  }
+
+  // 发射用户函数为 FlatFunction（首批：纯标量 in/out 形参、绑定定义输出、无 protected 局部、无算法段）。
+  // 去重按限定名（已发射返回 true）。不可发射（数组/记录/多输出无所谓/局部/算法/external/impure/注解/非标量）→ false（调用方保 SKIP）。
+  bool emit_function(Id<SElement> fe, const std::vector<Symbol>& qname, NodeId enclosing) {
+    for (const FlatFunction& f : result_.model.functions) if (f.name == qname) return true;   // 去重
+    const SElement& fel = I_.scode.elems[fe];
+    if (fel.is_partial || fel.def.external.present || fel.purity == Purity::Impure ||
+        fel.cmt.annotation.is_valid()) return false;   // partial/external/impure/带注解 → 首批 SKIP
+    if (!fel.def.algorithms.empty() || !fel.def.equations.empty() ||
+        !fel.def.initial_algorithms.empty() || !fel.def.initial_equations.empty()) return false;   // 首批：无算法/方程段
+    if (emitting_funcs_.count(fe.raw)) return false;   // 递归（自/互调）→ 首批 SKIP
+    std::vector<Id<SElement>> ord;   // 声明序里的 in/out（首批无 protected 局部）
+    int nout = 0;
+    for (Id<SElement> eid : fel.def.elements) {
+      const SElement& c = I_.scode.elems[eid];
+      if (c.kind != SElementKind::Component) return false;   // extends/嵌套类 → SKIP
+      if (c.attr.dir == SDirection::Output) {
+        ++nout;
+        const Id<SMod> m = c.mod;   // 无算法段：输出须由绑定定义，否则未赋值（omc 告警，FunctionUnitialized*）→ SKIP
+        if (!m.is_valid() || !I_.scode.mods[m].binding.is_valid()) return false;
+      } else if (c.attr.dir != SDirection::Input) {
+        return false;   // protected 局部 → 首批 SKIP
+      }
+      ord.push_back(eid);
+    }
+    if (nout != 1) return false;   // 多输出（元组）/无输出 → SKIP
+    std::vector<TypeKind> kinds(ord.size());
+    for (std::size_t i = 0; i < ord.size(); ++i) {
+      const SElement& c = I_.scode.elems[ord[i]];
+      if (!c.attr.dims.empty() || !c.type.dims.empty() || !builtin_scalar_type_kind(c.type.path, kinds[i])) return false;
+    }
+    // 前置校验全过，开始发射（含可能递归的绑定 inst_exp）。func_params_ 每函数独立（clear+restore）。
+    auto saved = func_params_;
+    func_params_.clear();
+    for (std::size_t i = 0; i < ord.size(); ++i) func_params_[I_.scode.elems[ord[i]].name.id] = Type::of(kinds[i]);
+    emitting_funcs_.insert(fe.raw);
+    FlatFunction ff;   // params：inputs 先、outputs 后（omc dump 序）
+    ff.name = qname;
+    if (fel.cmt.str.is_valid()) ff.comment = fel.cmt.str;
+    bool ok = true;
+    for (int pass = 0; pass < 2 && ok; ++pass) {
+      const SDirection want = pass == 0 ? SDirection::Input : SDirection::Output;
+      for (std::size_t i = 0; i < ord.size() && ok; ++i) {
+        const SElement& c = I_.scode.elems[ord[i]];
+        if (c.attr.dir != want) continue;
+        FlatFuncParam p;
+        p.name = c.name;
+        p.ty = Type::of(kinds[i]);
+        p.direction = pass == 0 ? FlatDirection::Input : FlatDirection::Output;
+        p.var_kind = FlatVarKind::Var;   // in/out 剥离变率
+        const Id<SMod> m = c.mod;
+        if (m.is_valid() && I_.scode.mods[m].binding.is_valid()) {
+          Id<Expr> b = simplify_expr(inst_exp(I_.scode.mods[m].binding, enclosing, {}));
+          if (result_.unsupported) { ok = false; break; }
+          if (kinds[i] == TypeKind::Real) b = to_real(b);
+          p.binding = b;
+        }
+        ff.params.push_back(std::move(p));
+      }
+    }
+    emitting_funcs_.erase(fe.raw);
+    func_params_ = saved;
+    if (!ok) return false;
+    result_.model.functions.push_back(std::move(ff));
+    return true;
+  }
+
+  // 纯标量用户函数调用 → 发射函数 + 建符号 Call（限定名 + 实参）。不可发射/多段名/数组实参 → invalid（调用方 SKIP）。
+  Id<Expr> try_emit_user_call(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    const Cref& fn = I_.absyn.crefs[e.cref];
+    if (fn.parts.size() != 1 || !fn.parts[0].subscripts.empty()) return {};
+    for (Symbol n : e.arg_names) if (n.is_valid()) return {};   // 首批：不做命名实参
+    const ScodeScope sc = scode_scope_of(enclosing);
+    const Id<SElement> fe = find_scode_element(fn.parts[0].name, sc);
+    if (!fe.is_valid() || I_.scode.elems[fe].kind != SElementKind::Class ||
+        I_.scode.elems[fe].restriction != SRestriction::Function ||
+        I_.scode.elems[fe].def.kind != SClassDefKind::Parts)
+      return {};
+    std::size_t ninputs = 0;   // 首批：实参数须匹配输入数（不做省略默认展开，FuncMissingDefault1 等 → SKIP）
+    for (Id<SElement> eid : I_.scode.elems[fe].def.elements)
+      if (I_.scode.elems[eid].kind == SElementKind::Component &&
+          I_.scode.elems[eid].attr.dir == SDirection::Input) ++ninputs;
+    if (e.args.size() != ninputs) return {};
+    const std::vector<Symbol> qname = {fn.parts[0].name};   // 首批：顶层函数裸名
+    std::vector<Id<Expr>> args;   // 实参先定型（要求非数组；首批不做省略默认展开）
+    for (Id<Exp> a : e.args) {
+      Id<Expr> ae = inst_exp(a, enclosing, prefix);
+      if (result_.unsupported || result_.model.exprs[ae].ty.is_array()) return {};
+      args.push_back(ae);
+    }
+    if (!emit_function(fe, qname, enclosing)) return {};
+    Expr r;
+    r.kind = ExprKind::Call;
+    r.call_name = qname;
+    r.ty = Type::real();   // 输出类型（标量）；dump 不看
+    r.args = std::move(args);
+    return add(std::move(r));
+  }
+
   std::optional<CVal> eval_user_call(const Exp& call, const ScodeScope& scope, int depth) {
     if (depth > 100) return std::nullopt;
     const Cref& fn = I_.absyn.crefs[call.cref];
@@ -2239,6 +2348,17 @@ class Flattener {
         return add(std::move(r));
       }
     }
+    // 函数体发射期：形参/局部引用 → 符号裸名 cref（元素类型取自 func_params_）。
+    if (!func_params_.empty() && c.parts.size() == 1 && c.parts[0].subscripts.empty()) {
+      auto it = func_params_.find(c.parts[0].name.id);
+      if (it != func_params_.end()) {
+        Expr r;
+        r.kind = ExprKind::Cref;
+        r.ty = it->second;
+        r.cref.parts.push_back({c.parts[0].name, {}});
+        return add(std::move(r));
+      }
+    }
     // for 方程迭代变量作为值：`… = i` → 内联成整数字面量（ForEquation1 的 RHS）。
     if (!loop_vars_.empty() && c.parts.size() == 1 && c.parts[0].subscripts.empty()) {
       auto it = loop_vars_.find(c.parts[0].name.id);
@@ -2510,6 +2630,8 @@ class Flattener {
       const ScodeScope sc = scode_scope_of(enclosing);
       if (auto rv = eval_reduction(e, sc, 0)) return literal_of(*rv);   // sum/product/min/max(常量数组) → 字面量
       if (auto uv = eval_user_call(e, sc, 0)) return literal_of(*uv);
+      // 折不成常量：纯标量用户函数 → 发射函数定义 + 保留符号调用（首批，S3.e）。不可发射 → 落到下面 SKIP。
+      if (Id<Expr> uc = try_emit_user_call(e, enclosing, prefix); uc.is_valid()) return uc;
     }
     const std::string_view builtin_name = fn.parts.size() == 1 ? in_.str(fn.parts[0].name) : std::string_view{};
     const BuiltinFn* bf = nullptr;
@@ -3260,6 +3382,8 @@ class Flattener {
   std::unordered_set<std::uint32_t>* input_names_ = nullptr;    // 当前函数的输入名（禁止对其赋值，AssignInput1）
   std::unordered_map<std::uint32_t, std::int64_t> loop_vars_;   // for 方程展开期的迭代变量→值（cref/下标解析）
   std::unordered_map<std::uint32_t, TypeKind> stmt_iters_;      // for **语句**（KEPT loop）的迭代变量→元素类型（符号，不内联）
+  std::unordered_map<std::uint32_t, Type> func_params_;         // 函数体发射期：形参/局部名→类型（cref 符号解析成裸名）
+  std::unordered_set<std::uint32_t> emitting_funcs_;            // 正在发射的函数（检测递归/互调，首批 SKIP）
   bool in_if_ = false;   // 正在收集 if 分支体（connect 不能进分支体 → SKIP）
   struct FlowVar { std::vector<Symbol> name; Type ty; SourceLoc loc; };
   std::vector<FlowVar> flow_vars_;   // flow 变量（run() 末尾按 outside/未连接补 `=0` 方程）

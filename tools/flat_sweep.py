@@ -121,8 +121,8 @@ def main():
             o = run([args.omc, path])
             if o is None:
                 return ("omc-timeout", relpath)
-            if not o.startswith("class"):
-                return ("omc-error", relpath)   # 1.25.0 自己报错（反向分歧，见账本）
+            if not (o.startswith("class") or o.startswith("function")):
+                return ("omc-error", relpath)   # 1.25.0 自己报错（反向分歧，见账本）；函数发射用例 stdout 以 function 开头
             if y is None:
                 return ("ymc-fail", relpath)
             return ("ok" if y == o else "diff", relpath)

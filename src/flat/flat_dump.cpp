@@ -14,6 +14,11 @@ class FlatDumper {
 
   std::string run() {
     out_.clear();
+    // 被调用户函数在 class 之前发射（DAEDump appendStream：函数块各接空行、再 class）。
+    for (const FlatFunction& fn : m_.functions) {
+      function_block(fn);
+      out_ += '\n';
+    }
     // 头（R13 §2）：class <全名>[ "注释"]
     out_ += "class ";
     dotted(m_.name);
@@ -45,6 +50,44 @@ class FlatDumper {
     }
   }
   void expr(Id<Expr> e) { out_ += dump_expr(m_.exprs, in_, e); }
+
+  // ---- 函数块（DAEDump dumpFunction）：function <名> / 形参逐行（维在类型上）/ [algorithm 语句] / end <名>; ----
+  void function_block(const FlatFunction& fn) {
+    out_ += "function ";
+    dotted(fn.name);
+    if (fn.comment.is_valid()) {
+      out_ += " \"";
+      out_ += escape_modelica_string(in_.str(fn.comment), /*nl=*/false);
+      out_ += '"';
+    }
+    out_ += '\n';
+    for (const FlatFuncParam& p : fn.params) func_param(p);
+    if (!fn.body.empty()) {
+      out_ += "algorithm\n";
+      for (Id<FlatStatement> s : fn.body) statement(s, "  ");
+    }
+    out_ += "end ";
+    dotted(fn.name);
+    out_ += ";\n";
+  }
+
+  void func_param(const FlatFuncParam& p) {
+    out_ += "  ";
+    if (p.is_protected) out_ += "protected ";
+    switch (p.var_kind) {   // 局部保留 kind；in/out 已在发射期归一 Var（不打前缀）
+      case FlatVarKind::Discrete: out_ += "discrete "; break;
+      case FlatVarKind::Parameter: out_ += "parameter "; break;
+      case FlatVarKind::Constant: out_ += "constant "; break;
+      case FlatVarKind::Var: break;
+    }
+    if (p.direction == FlatDirection::Input) out_ += "input ";
+    else if (p.direction == FlatDirection::Output) out_ += "output ";
+    type_name(p.ty);   // 维在类型上（`Real[3] u`）——本增量标量，暂无 dims
+    out_ += ' ';
+    out_ += in_.str(p.name);
+    if (p.binding.is_valid()) { out_ += " = "; expr(p.binding); }
+    out_ += ";\n";
+  }
 
   // ---- 变量行（R13 §3.1 固定前缀顺序）----
   void variable(const FlatVariable& v) {

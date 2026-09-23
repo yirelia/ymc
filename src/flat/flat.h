@@ -96,6 +96,24 @@ struct FlatAlgorithm {
   std::vector<Id<FlatStatement>> stmts;
 };
 
+// ---- 压平函数（S3.e：发射被调用户函数；DAEDump 函数块）----
+// 形参/局部：维在**类型**上（与类体变量维在名上相反）；in/out 变率剥离成 Var（不打前缀），protected 局部保留 kind。
+struct FlatFuncParam {
+  Symbol name;
+  Type ty;                                       // 元素类型 + dims（维在类型上打印）
+  FlatDirection direction = FlatDirection::None;  // Input/Output；None = protected 局部
+  bool is_protected = false;
+  FlatVarKind var_kind = FlatVarKind::Var;        // 局部保留；in/out 归一 Var
+  Id<Expr> binding;                              // 默认值 / 输出定义 / 局部绑定；无则 invalid
+};
+struct FlatFunction {
+  std::vector<Symbol> name;                      // 限定名（点分：顶层裸名 f；嵌套 Model.f）
+  std::vector<FlatFuncParam> params;             // dump 序：inputs, outputs, protected 局部
+  std::vector<Id<FlatStatement>> body;           // algorithm 语句（空 = 无算法段）
+  bool is_external = false;
+  Symbol comment;
+};
+
 // ---- 压平模型 ----
 // 表达式/方程/语句都存在这里的 arena（Expr 复用 ExprArena；接线时可与 Inst 共享同一 ExprArena）。
 struct FlatModel {
@@ -106,6 +124,7 @@ struct FlatModel {
   std::vector<Id<FlatEquation>> equations;
   std::vector<FlatAlgorithm> initial_algorithms;
   std::vector<FlatAlgorithm> algorithms;
+  std::vector<FlatFunction> functions;   // 被模型调用的用户函数（按限定名字母序，class 之前发射）
 
   ExprArena exprs;
   Arena<FlatEquation> eqs;
