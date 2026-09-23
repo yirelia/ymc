@@ -166,12 +166,15 @@ class Flattener {
       const bool outside = fv.name.size() == 2;   // 顶层连接器：路径 = {连接器, 成员}
       if (!outside) {
         std::vector<Symbol> cpath(fv.name.begin(), fv.name.end() - 1);
-        if (connected_inside_.count(path_key(cpath))) continue;   // 已连接 inside → 不单列 =0
+        std::vector<std::vector<Id<Expr>>> csubs(fv.subs.begin(),
+                                                 fv.subs.end() - (fv.subs.empty() ? 0 : 1));
+        if (connected_inside_.count(conn_key(cpath, csubs))) continue;   // 已连接 inside → 不单列 =0
       }
       Expr lhs;
       lhs.kind = ExprKind::Cref;
       lhs.ty = fv.ty;
-      for (Symbol s : fv.name) lhs.cref.parts.push_back({s, {}});
+      for (std::size_t k = 0; k < fv.name.size(); ++k)
+        lhs.cref.parts.push_back({fv.name[k], k < fv.subs.size() ? fv.subs[k] : std::vector<Id<Expr>>{}});
       FlatEquation fe;
       fe.kind = FlatEqKind::Equality;
       fe.a = add(std::move(lhs));
@@ -313,9 +316,11 @@ class Flattener {
             set_unsupported("composite array (non-parts type)"); continue;
           }
           SRestriction r = I_.scode.elems[cdef].restriction;
-          if (r == SRestriction::Connector || r == SRestriction::ExpandableConnector) {
-            set_unsupported("connector array"); continue;   // 数组 connect（另一 sub-bucket）
+          if (r == SRestriction::ExpandableConnector) {
+            set_unsupported("expandable connector array"); continue;   // 成员靠连接推断，未做
           }
+          // 普通连接器数组 `C c[3]`：与其它复合数组同路——逐元素 `c[i]` 递归摊开成员（标量成员 → 变量，
+          // flow 成员 → flow_vars_ 带下标）。连接方程在 process_connects 按元素下标解析（ForConnect1）。
           if (I_.comps[cid].attributes.variability != SVariability::Var) { set_unsupported("variability on composite array"); continue; }
           if (I_.comps[cid].attributes.connector != SConnectorType::Potential) { set_unsupported("flow/stream on composite array"); continue; }
           if (I_.comps[cid].binding.kind == BindingKind::Raw && I_.comps[cid].binding.raw_exp.is_valid()) {
@@ -582,7 +587,9 @@ class Flattener {
       // connect 攒起来在 run() 末尾按连接集展开（potential 相等 + flow 求和）。initial 段里的 connect 罕见 → SKIP。
       if (is_initial) { set_unsupported("connect in initial equation"); return; }
       if (in_if_) { set_unsupported("connect in if equation"); return; }   // 分支体里的 connect 未做
-      connects_.push_back({eq.a, eq.b, enclosing, prefix, eq.loc});
+      // for 循环体里的 connect（`connect(c1[i],c2[i])`）：下标含迭代变量 i，但解析推迟到 run() 末尾时
+      // loop_vars_ 已清空 → 采集当前 loop_vars_ 快照，process_connects 解析该 connect 前还原（ForConnect1）。
+      connects_.push_back({eq.a, eq.b, enclosing, prefix, eq.loc, loop_vars_});
       return;
     }
     if (eq.kind == SEqKind::For) {
@@ -1120,8 +1127,9 @@ class Flattener {
     const bool is_flow = comp.attributes.connector == SConnectorType::Flow && in_conn;
     FlatVariable v;
     v.name = name;
-    v.name_subs = psubs_to_exprs(psubs);
-    v.name_subs.push_back({});   // 叶段（标量）无逐段下标；与 name 平行
+    std::vector<std::vector<Id<Expr>>> nsubs = psubs_to_exprs(psubs);
+    nsubs.push_back({});   // 叶段（标量）无逐段下标；与 name 平行
+    v.name_subs = nsubs;
     v.ty = comp.ty;
     v.is_protected = is_protected;
     v.is_final = comp.attributes.is_final || force_final || struct_final;
@@ -1165,7 +1173,8 @@ class Flattener {
       v.comment = in_.intern(unescape_modelica_string(in_.str(I_.scode.elems[comp.def].cmt.str)));
     result_.model.variables.push_back(std::move(v));
     // 未连接 flow → `name = 0.0`；`=0` 方程要排在本类方程之后（R13 §6），故先攒起来，run() 末尾统一追加。
-    if (is_flow) flow_vars_.push_back({name, cty, comp.loc});
+    // nsubs 带元素下标（连接器数组 `c[i].f`）；与 name 平行，标量连接器时全空 → 打印无下标（旧行为）。
+    if (is_flow) flow_vars_.push_back({name, nsubs, cty, comp.loc});
   }
 
   // 数组叶组件标量化（R13 §3/§4）：字面量维度 → 行主序逐元素变量行（无绑定/属性）；数组绑定 `= {…}` 变成
@@ -3339,17 +3348,44 @@ class Flattener {
     return k;
   }
   struct ConnMember { Symbol name; bool is_flow; Type ty; };
-  struct ConnInfo { std::vector<Symbol> path; bool outside; std::vector<ConnMember> members; };
+  struct ConnInfo {
+    std::vector<Symbol> path;                        // 连接器点分路径（`m.c` → {m,c}）
+    std::vector<std::vector<Id<Expr>>> subs;         // 与 path 平行的逐段下标（数组连接器 `c[i]`）；标量段空
+    bool outside;
+    std::vector<ConnMember> members;
+  };
+  // 连接器身份 key（含数组下标）：无下标时与 path_key 逐字节相同（标量连接器向后兼容）。
+  std::string conn_key(const std::vector<Symbol>& path, const std::vector<std::vector<Id<Expr>>>& subs) {
+    std::string k;
+    for (std::size_t i = 0; i < path.size(); ++i) {
+      k += std::to_string(path[i].id);
+      if (i < subs.size())
+        for (Id<Expr> s : subs[i]) {
+          const Expr& se = result_.model.exprs[s];
+          k.push_back('[');
+          if (se.kind == ExprKind::IntLit) k += std::to_string(se.ival);
+          else k += "#" + std::to_string(s.raw);   // 非整型下标（不入本桶目标）——Id 保唯一
+          k.push_back(']');
+        }
+      k.push_back('.');
+    }
+    return k;
+  }
+  std::string conn_key(const ConnInfo& c) { return conn_key(c.path, c.subs); }
 
-  // 把 connect 实参（cref）解析成连接器：flat 路径 + inside/outside（顶层连接器=outside）+ 标量成员表。
-  // 任何超范围形态（数组连接器/成员、嵌套连接器成员、stream、expandable、非连接器、下标）→ nullopt（调用方 SKIP）。
+  // 把 connect 实参（cref）解析成连接器：flat 路径 + 逐段下标 + inside/outside（顶层连接器=outside）+ 标量成员表。
+  // 数组连接器 `c[i]`：末段下标逐维选出标量元素（下标数==维数、都是常量整型）；整体数组连接 / 数组成员 / 嵌套
+  // 连接器成员 / stream / expandable / 非连接器 → nullopt（调用方 SKIP）。
   std::optional<ConnInfo> resolve_connector(Id<Exp> ce, NodeId enclosing) {
     if (I_.absyn.exps[ce].kind != ExpKind::CrefExp) return std::nullopt;
     const Cref& c = I_.absyn.crefs[I_.absyn.exps[ce].cref];
-    if (c.leading_dot || c.parts.empty() || !c.parts[0].subscripts.empty()) return std::nullopt;
+    if (c.leading_dot || c.parts.empty()) return std::nullopt;
     // 合法连接器引用形态（MLS §9.1 / omc）：`c`（顶层，outside）或 `m.c`（m 非连接器组件，inside）。
     // 深层 `b.a.c`（omc 直接报错）与嵌套 `c1.c2` v1 未做 → SKIP，保持 outside=(depth==1) 的判定成立。
     if (c.parts.size() > 2) return std::nullopt;
+    // 只有末段（连接器组件本身）允许下标；前置宿主段带下标（`m[j].c`）v1 未做 → SKIP。
+    for (std::size_t i = 0; i + 1 < c.parts.size(); ++i)
+      if (!c.parts[i].subscripts.empty()) return std::nullopt;
     NodeId cur = find_local(enclosing, c.parts[0].name);
     if (!cur.is_valid() || I_.nodes[cur].is_empty()) return std::nullopt;
     if (c.parts.size() == 2) {
@@ -3361,22 +3397,36 @@ class Flattener {
     }
     std::vector<Symbol> path{c.parts[0].name};
     for (std::size_t i = 1; i < c.parts.size(); ++i) {
-      if (!c.parts[i].subscripts.empty()) return std::nullopt;
       NodeId cls = I_.comps[I_.nodes[cur].comp].class_inst;
       NodeId nxt = cls.is_valid() ? find_local(cls, c.parts[i].name) : Inst::empty_node();
       if (!nxt.is_valid() || I_.nodes[nxt].is_empty()) return std::nullopt;
       cur = nxt;
       path.push_back(c.parts[i].name);
     }
-    // cur = 连接器组件；其类必须是连接器，且组件本身标量（非数组连接器）。
+    // cur = 连接器组件。逐段下标（与 path 平行，默认空）：数组连接器末段下标必须逐维选出标量元素。
     const SElement& curcel = I_.scode.elems[I_.comps[I_.nodes[cur].comp].def];
-    if (!curcel.attr.dims.empty() || !curcel.type.dims.empty()) return std::nullopt;
+    const std::size_t ndim = curcel.attr.dims.size() + curcel.type.dims.size();
+    const std::vector<Id<Exp>>& fsubs = c.parts.back().subscripts;
+    std::vector<std::vector<Id<Expr>>> subs(path.size());
+    if (ndim > 0) {
+      if (fsubs.size() != ndim) return std::nullopt;   // 整体数组连接 / 部分下标 → 本桶未做（Connect4）
+      std::vector<Id<Expr>> elem;
+      for (Id<Exp> s : fsubs) {
+        std::optional<std::int64_t> iv = subscript_int(s);
+        if (!iv) return std::nullopt;                  // 非常量下标 → SKIP
+        elem.push_back(lit_int(*iv));
+      }
+      subs.back() = std::move(elem);
+    } else if (!fsubs.empty()) {
+      return std::nullopt;                             // 标量连接器带下标（不该有）→ SKIP
+    }
     NodeId conn = I_.comps[I_.nodes[cur].comp].class_inst;
     if (!conn.is_valid() || I_.nodes[conn].is_empty()) return std::nullopt;
     Id<SElement> cdef = I_.nodes[conn].def;
     if (!cdef.is_valid() || I_.scode.elems[cdef].restriction != SRestriction::Connector) return std::nullopt;
     ConnInfo info;
     info.path = path;
+    info.subs = std::move(subs);
     info.outside = path.size() == 1;
     const std::vector<NodeId> members = I_.trees[I_.node_class(conn).tree].components;   // 拷贝（不跨 add）
     for (NodeId mn : members) {
@@ -3394,11 +3444,13 @@ class Flattener {
     return info;
   }
 
-  Id<Expr> member_cref(const std::vector<Symbol>& path, Symbol member, Type ty) {
+  Id<Expr> member_cref(const std::vector<Symbol>& path, const std::vector<std::vector<Id<Expr>>>& subs,
+                       Symbol member, Type ty) {
     Expr e;
     e.kind = ExprKind::Cref;
     e.ty = ty;
-    for (Symbol s : path) e.cref.parts.push_back({s, {}});
+    for (std::size_t i = 0; i < path.size(); ++i)
+      e.cref.parts.push_back({path[i], i < subs.size() ? subs[i] : std::vector<Id<Expr>>{}});
     e.cref.parts.push_back({member, {}});
     return add(std::move(e));
   }
@@ -3424,8 +3476,8 @@ class Flattener {
   // flow 求和左端（= 0）：inside 取正、outside 取负；both-inside 项序反转（B,A）、否则正序（A,B）——
   // 复刻 OMC DisjointSets seed 反序/merge 正序的可见效果（Connect2/Connect5/BothInside 实测）。
   Id<Expr> flow_sum(const ConnInfo& A, const ConnInfo& B, Symbol m, Type ty) {
-    Id<Expr> ca = member_cref(A.path, m, ty);
-    Id<Expr> cb = member_cref(B.path, m, ty);
+    Id<Expr> ca = member_cref(A.path, A.subs, m, ty);
+    Id<Expr> cb = member_cref(B.path, B.subs, m, ty);
     if (A.outside && B.outside) return neg_expr(bin_expr(BinOp::Add, ca, cb));   // -(A.f + B.f)
     if (!A.outside && !B.outside) return bin_expr(BinOp::Add, cb, ca);           // B.f + A.f（反序）
     Id<Expr> pos = A.outside ? cb : ca;                                          // inside 为正
@@ -3454,35 +3506,54 @@ class Flattener {
     if (live.empty()) return;
     for (const ConnectStmt& cs : live)
       if (!cs.prefix.empty()) { set_unsupported("connect in submodel"); return; }   // 前缀化+重算 inside/outside 未做
-    if (live.size() > 1) { set_unsupported("multiple connect (needs connection sets)"); return; }
-    const ConnectStmt& cs = live[0];
-    std::optional<ConnInfo> A = resolve_connector(cs.a, cs.enclosing);
-    std::optional<ConnInfo> B = resolve_connector(cs.b, cs.enclosing);
-    if (!A || !B) { set_unsupported("connect operand shape"); return; }
-    if (A->members.size() != B->members.size()) { set_unsupported("connector member mismatch"); return; }
-    // 遍历 A 的成员（声明序）：potential 攒相等、flow 攒求和；potential 全部在前、flow 在后（实测顺序）。
-    std::vector<Id<FlatEquation>> pots, flows;
-    for (const ConnMember& m : A->members) {
-      const ConnMember* bm = nullptr;
-      for (const ConnMember& x : B->members) if (x.name == m.name) { bm = &x; break; }
-      if (!bm || bm->is_flow != m.is_flow) { set_unsupported("connector member mismatch"); return; }
-      FlatEquation fe;
-      fe.kind = FlatEqKind::Equality;
-      fe.loc = cs.loc;
-      if (m.is_flow) {
-        fe.a = flow_sum(*A, *B, m.name, m.ty);
-        fe.b = lit_real(0.0);
-        flows.push_back(result_.model.add_eq(std::move(fe)));
-      } else {
-        fe.a = member_cref(A->path, m.name, m.ty);
-        fe.b = member_cref(B->path, m.name, m.ty);
-        pots.push_back(result_.model.add_eq(std::move(fe)));
-      }
+    // 逐条解析（for-connect 的下标 `c[i]` 靠采集时快照的 loop_vars_ 还原；解析后立即清空避免污染）。
+    struct Resolved { ConnInfo a, b; SourceLoc loc; };
+    std::vector<Resolved> rs;
+    for (const ConnectStmt& cs : live) {
+      loop_vars_ = cs.loopvars;
+      std::optional<ConnInfo> A = resolve_connector(cs.a, cs.enclosing);
+      std::optional<ConnInfo> B = resolve_connector(cs.b, cs.enclosing);
+      loop_vars_.clear();
+      if (!A || !B) { set_unsupported("connect operand shape"); return; }
+      if (A->members.size() != B->members.size()) { set_unsupported("connector member mismatch"); return; }
+      rs.push_back({std::move(*A), std::move(*B), cs.loc});
     }
-    for (Id<FlatEquation> id : pots) result_.model.equations.push_back(id);
-    for (Id<FlatEquation> id : flows) result_.model.equations.push_back(id);
-    if (!A->outside) connected_inside_.insert(path_key(A->path));
-    if (!B->outside) connected_inside_.insert(path_key(B->path));
+    // 多 connect：只支持"不相交"（每个连接器最多出现一次）。共享端点要连接集并查（传递相等 / flow 多项求和，
+    // Connect2/ConnectArrays1）——本桶未做 → SKIP。
+    if (rs.size() > 1) {
+      std::unordered_set<std::string> seen;
+      for (const Resolved& r : rs)
+        for (const ConnInfo* ci : {&r.a, &r.b})
+          if (!seen.insert(conn_key(*ci)).second) {
+            set_unsupported("multiple connect (shared endpoint needs connection sets)"); return;
+          }
+    }
+    // 逐 connect 发射：单 connect 内 potential 相等在前、flow 求和在后（实测序）；connect 之间按书写序交替
+    // （ForConnect1：`c1[i].e=c2[i].e; -(c1[i].f+c2[i].f)=0;` 逐 i 交替）。
+    for (const Resolved& r : rs) {
+      std::vector<Id<FlatEquation>> pots, flows;
+      for (const ConnMember& m : r.a.members) {
+        const ConnMember* bm = nullptr;
+        for (const ConnMember& x : r.b.members) if (x.name == m.name) { bm = &x; break; }
+        if (!bm || bm->is_flow != m.is_flow) { set_unsupported("connector member mismatch"); return; }
+        FlatEquation fe;
+        fe.kind = FlatEqKind::Equality;
+        fe.loc = r.loc;
+        if (m.is_flow) {
+          fe.a = flow_sum(r.a, r.b, m.name, m.ty);
+          fe.b = lit_real(0.0);
+          flows.push_back(result_.model.add_eq(std::move(fe)));
+        } else {
+          fe.a = member_cref(r.a.path, r.a.subs, m.name, m.ty);
+          fe.b = member_cref(r.b.path, r.b.subs, m.name, m.ty);
+          pots.push_back(result_.model.add_eq(std::move(fe)));
+        }
+      }
+      for (Id<FlatEquation> id : pots) result_.model.equations.push_back(id);
+      for (Id<FlatEquation> id : flows) result_.model.equations.push_back(id);
+      if (!r.a.outside) connected_inside_.insert(conn_key(r.a));
+      if (!r.b.outside) connected_inside_.insert(conn_key(r.b));
+    }
   }
 
   Inst& I_;
@@ -3499,9 +3570,12 @@ class Flattener {
   std::unordered_map<std::uint32_t, Type> func_params_;         // 函数体发射期：形参/局部名→类型（cref 符号解析成裸名）
   std::unordered_set<std::uint32_t> emitting_funcs_;            // 正在发射的函数（检测递归/互调，首批 SKIP）
   bool in_if_ = false;   // 正在收集 if 分支体（connect 不能进分支体 → SKIP）
-  struct FlowVar { std::vector<Symbol> name; Type ty; SourceLoc loc; };
+  struct FlowVar { std::vector<Symbol> name; std::vector<std::vector<Id<Expr>>> subs; Type ty; SourceLoc loc; };
   std::vector<FlowVar> flow_vars_;   // flow 变量（run() 末尾按 outside/未连接补 `=0` 方程）
-  struct ConnectStmt { Id<Exp> a, b; NodeId enclosing; std::vector<Symbol> prefix; SourceLoc loc; };
+  struct ConnectStmt {
+    Id<Exp> a, b; NodeId enclosing; std::vector<Symbol> prefix; SourceLoc loc;
+    std::unordered_map<std::uint32_t, std::int64_t> loopvars;   // 采集时的 for 迭代变量快照（连接器下标 `c[i]` 求值）
+  };
   std::vector<ConnectStmt> connects_;            // 攒下的 connect()，run() 末尾展开
   std::unordered_set<std::string> connected_inside_;   // 已连接的 inside 连接器路径 key（其 flow 不再单列 =0）
   std::unordered_set<std::string> removed_;             // 条件为假被移除的组件路径 key（引用它的 connect 整条删）

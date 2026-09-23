@@ -755,8 +755,30 @@ YMC_TEST(flatten_connect_inside_outside) {
                            "equation\n  a.c1.e = c2.e;\n  a.c1.f - c2.f = 0.0;\n  c2.f = 0.0;\nend M;\n"));
 }
 
-YMC_TEST(flatten_multiple_connect_unsupported) {
-  // 多条 connect 要连接集合并（union-find，元素序是 OMC 内部产物）→ v1 未做，干净 SKIP。
+YMC_TEST(flatten_for_connect_array_disjoint) {
+  // for 循环里逐元素 connect 数组连接器（`connect(c1[i], c2[i])`）：3 条互不相交 connect，逐 i 交替发射
+  // potential 相等 + flow 求和，再按声明序补 flow 边界 =0。期望 = omc 1.25.0 实跑（ForConnect1，逐字节）。
+  const char* src =
+      "connector C\n  Real e;\n  flow Real f;\nend C;\n"
+      "model ForConnect1\n  C c1[3], c2[3];\n"
+      "equation\n  for i in 1:3 loop\n    connect(c1[i], c2[i]);\n  end for;\nend ForConnect1;\n";
+  YMC_CHECK_EQ(
+      flatten_src(src),
+      std::string("class ForConnect1\n"
+                  "  Real c1[1].e;\n  Real c1[1].f;\n  Real c1[2].e;\n  Real c1[2].f;\n"
+                  "  Real c1[3].e;\n  Real c1[3].f;\n  Real c2[1].e;\n  Real c2[1].f;\n"
+                  "  Real c2[2].e;\n  Real c2[2].f;\n  Real c2[3].e;\n  Real c2[3].f;\n"
+                  "equation\n"
+                  "  c1[1].e = c2[1].e;\n  -(c1[1].f + c2[1].f) = 0.0;\n"
+                  "  c1[2].e = c2[2].e;\n  -(c1[2].f + c2[2].f) = 0.0;\n"
+                  "  c1[3].e = c2[3].e;\n  -(c1[3].f + c2[3].f) = 0.0;\n"
+                  "  c1[1].f = 0.0;\n  c1[2].f = 0.0;\n  c1[3].f = 0.0;\n"
+                  "  c2[1].f = 0.0;\n  c2[2].f = 0.0;\n  c2[3].f = 0.0;\nend ForConnect1;\n"));
+}
+
+YMC_TEST(flatten_multiple_connect_shared_endpoint_unsupported) {
+  // 相交的多条 connect（共享端点 c2 → 传递相等，要连接集并查）→ v1 未做，干净 SKIP。
+  // （不相交的多条 connect 已支持，见 flatten_for_connect_array_disjoint。）
   bool uns = false;
   std::string t = flatten_src(
       "connector C\n  Real e;\n  flow Real f;\nend C;\n"

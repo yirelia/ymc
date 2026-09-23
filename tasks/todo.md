@@ -463,6 +463,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       输出须赋值（绑定或算法 LHS）、函数体引用未解析裸名（time/模型变量 → omc 报错 Time3）→ SKIP。
       → easy-slice 226 PASS/0 FAIL（+1：FunctionCompOrder1）；oracle=live 逐字节一致；全 scodeinst PASS 228→229、FAIL 69 不变；三编译器 10/10、ASan 0；+1 单测。
       嵌套限定名、默认实参展开、数组/记录/多输出、if/for/while 函数体 留后续。
+- [x] **加宽㊹数组 connect（flatten.cpp，不相交多 connect + for-connect）**（2026-09-23，用户定"我推 array-connect（flatten.cpp）"）：
+      P0 连接器数组标量化：复合数组分支放行普通 Connector（只 SKIP expandable），逐元素 `c[i]` 递归摊成员（标量→变量、flow→flow_vars_ 带下标）。
+      P1 resolve_connector 收下标：末段数组连接器下标逐维选标量元素（下标数==维数、常量整型，subscript_int 求值）；ConnInfo/FlowVar/member_cref/conn_key 全部带逐段下标。
+      P2 for-connect：collect 时快照 loop_vars_ 存进 ConnectStmt，process_connects 解析该 connect 前还原（`c1[i]` 的 i 在 run() 末尾已清空）。
+      P3 不相交多 connect：conn_key（含下标）去重，任一连接器出现 >1 次 → SKIP（共享端点要连接集并查）；逐 connect 交替发射 pot 在前 flow 在后。
+      守卫（保 FAIL=0）：整体数组连接 `connect(c1,c2)`（Connect4）、数组成员、宿主段带下标 `m[j].c`、共享端点、非常量下标 → 一律 SKIP。
+      → easy-slice 227 PASS/0 FAIL（+1：ForConnect1）；oracle=live 逐字节一致；全 scodeinst PASS 229→230、FAIL 69 不变；三编译器 10/10、ASan 0；+1 单测（多 connect 桩改成共享端点 SKIP + 不相交 PASS 两个）。
+      整体数组连接（Connect4：连接器维 + 数组成员双重展开）、共享端点连接集并查（Connect2 传递/ConnectArrays1 切片）留后续（现 SKIP）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples
