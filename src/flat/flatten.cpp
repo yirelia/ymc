@@ -173,6 +173,7 @@ class Flattener {
     // 连接解析后才能求 inStream/actualStream 与 cardinality（evaluateConnectionOperators，NFFlatten.mo:2565-2576），
     // 随后按 SimplifyModel 折叠。
     evaluate_stream_ops();
+    apply_structural_params();   // 连接算子求值中结构化的参数：final + 属性折叠（NFEvalConstants 效果，受限）
     evaluate_cardinality();
     // 某变量名同时出现在 removed_（另一同名声明条件为假被移除）：redeclare 一个 replaceable-conditional 成员的
     // 语义（保留原条件 / 禁止带条件 redeclare）v1 未做 → SKIP（RedeclareElementCondition1/2/3）。
@@ -1039,6 +1040,42 @@ class Flattener {
       case ExprKind::IntLit: return ea.ival == eb.ival;
       case ExprKind::BoolLit: return ea.bval == eb.bval;
       case ExprKind::EnumLit: return ea.enum_path == eb.enum_path;
+      default: return false;
+    }
+  }
+  // Expression.isEqual（结构相等）：同 kind、同值 / 同运算、子式递归相等（simplifyIf 的"两支相等"用）。
+  bool expr_equal(Id<Expr> a, Id<Expr> b) {
+    if (a == b) return true;
+    if (!a.is_valid() || !b.is_valid()) return false;
+    const Expr& x = result_.model.exprs[a];
+    const Expr& y = result_.model.exprs[b];
+    if (x.kind != y.kind) return false;
+    auto list_eq = [&](const std::vector<Id<Expr>>& p, const std::vector<Id<Expr>>& q) {
+      if (p.size() != q.size()) return false;
+      for (std::size_t i = 0; i < p.size(); ++i) if (!expr_equal(p[i], q[i])) return false;
+      return true;
+    };
+    switch (x.kind) {
+      case ExprKind::IntLit: return x.ival == y.ival;
+      case ExprKind::RealLit: return x.rval == y.rval;
+      case ExprKind::BoolLit: return x.bval == y.bval;
+      case ExprKind::StringLit: return x.sval == y.sval;
+      case ExprKind::EnumLit: return x.enum_path == y.enum_path;
+      case ExprKind::Cref:
+        if (x.cref.parts.size() != y.cref.parts.size()) return false;
+        for (std::size_t i = 0; i < x.cref.parts.size(); ++i)
+          if (x.cref.parts[i].name != y.cref.parts[i].name || !list_eq(x.cref.parts[i].subscripts, y.cref.parts[i].subscripts))
+            return false;
+        return true;
+      case ExprKind::Binary: return x.bin == y.bin && expr_equal(x.a, y.a) && expr_equal(x.b, y.b);
+      case ExprKind::Relation: return x.rel == y.rel && expr_equal(x.a, y.a) && expr_equal(x.b, y.b);
+      case ExprKind::Logical: return x.log == y.log && expr_equal(x.a, y.a) && expr_equal(x.b, y.b);
+      case ExprKind::Unary: return x.un == y.un && expr_equal(x.a, y.a);
+      case ExprKind::LogicalNot:
+      case ExprKind::Cast: return expr_equal(x.a, y.a);
+      case ExprKind::IfExp: return expr_equal(x.a, y.a) && expr_equal(x.b, y.b) && expr_equal(x.c, y.c);
+      case ExprKind::Call: return x.call_name == y.call_name && list_eq(x.args, y.args);
+      case ExprKind::Array: return list_eq(x.args, y.args);
       default: return false;
     }
   }
@@ -3074,6 +3111,15 @@ class Flattener {
         const Expr& ec = result_.model.exprs[cc];
         if (ec.kind == ExprKind::BoolLit) return simplify_expr(ec.bval ? t0 : e0);
         Id<Expr> tt = simplify_expr(t0), ee = simplify_expr(e0);
+        // simplifyIf（NFSimplifyExp.mo:1330-1337）：两支相等 → 该支；两支是（不等的）布尔字面量 → cond / not cond
+        //（logicNegate：not 的 not 抵消，否则包一层 not，NFExpression.mo:5334-5344）。
+        if (expr_equal(tt, ee)) return tt;
+        if (result_.model.exprs[tt].kind == ExprKind::BoolLit && result_.model.exprs[ee].kind == ExprKind::BoolLit) {
+          if (result_.model.exprs[tt].bval) return cc;
+          if (result_.model.exprs[cc].kind == ExprKind::LogicalNot) return result_.model.exprs[cc].a;
+          Expr n; n.kind = ExprKind::LogicalNot; n.a = cc; n.ty = Type::boolean();
+          return add(std::move(n));
+        }
         Expr r; r.kind = ExprKind::IfExp; r.a = cc; r.b = tt; r.c = ee; r.ty = ty;
         return add(std::move(r));
       }
@@ -3936,29 +3982,50 @@ class Flattener {
     if (e.args.size() != 1 || !is_cref_exp(e.args[0])) return bad("stream operator argument");
     const Cref& c = I_.absyn.crefs[I_.absyn.exps[e.args[0]].cref];
     if (c.leading_dot || c.parts.size() < 2) return bad("stream operator argument");
+    // 逐段解析 + 下标求值（ComponentRef.evaluateSubscripts，NFConnectEquations.mo:994；连接器下标须参数变率，
+    // NFTyping.mo:3191-3200）：整数 / 迭代变量字面量；本地参数 `c[n]` → 取值并记为结构参数（打印 final，
+    // ActualStreamVariability2）；变量下标（omc 报错 *Variability1）等其余 → SKIP。每段须逐维选出标量元素。
+    std::vector<Symbol> path;
+    std::vector<std::vector<Id<Expr>>> subs;
     NodeId cur = find_local(enclosing, c.parts[0].name);
     NodeId decl = enclosing;
-    for (std::size_t i = 1; i < c.parts.size() && cur.is_valid() && !I_.nodes[cur].is_empty(); ++i) {
-      const NodeId cls = I_.comps[I_.nodes[cur].comp].class_inst;
-      decl = cls;
-      cur = (cls.is_valid() && !I_.nodes[cls].is_empty()) ? find_local(cls, c.parts[i].name) : Inst::empty_node();
+    for (std::size_t i = 0; i < c.parts.size(); ++i) {
+      if (i > 0) {
+        const NodeId cls = I_.comps[I_.nodes[cur].comp].class_inst;
+        decl = cls;
+        cur = (cls.is_valid() && !I_.nodes[cls].is_empty()) ? find_local(cls, c.parts[i].name) : Inst::empty_node();
+      }
+      if (!cur.is_valid() || I_.nodes[cur].is_empty() || !I_.nodes[cur].comp.is_valid()) return bad("stream operator argument");
+      const SElement& sel = I_.scode.elems[I_.comps[I_.nodes[cur].comp].def];
+      if (c.parts[i].subscripts.size() != sel.attr.dims.size() + sel.type.dims.size()) return bad("stream operator subscript");
+      std::vector<Id<Expr>> seg;
+      for (Id<Exp> sub : c.parts[i].subscripts) {
+        std::optional<std::int64_t> iv = subscript_int(sub);
+        if (!iv) iv = structural_subscript(sub, enclosing, prefix);
+        if (!iv) return bad("stream operator subscript");
+        seg.push_back(lit_int(*iv));
+      }
+      path.push_back(c.parts[i].name);
+      subs.push_back(std::move(seg));
     }
-    if (!cur.is_valid() || I_.nodes[cur].is_empty() || !I_.nodes[cur].comp.is_valid()) return bad("stream operator argument");
     if (I_.comps[I_.nodes[cur].comp].attributes.connector != SConnectorType::Stream) return bad("stream operator argument");
     const std::optional<Symbol> fname = single_flow_name(decl);
     if (!fname) return bad("stream connector");
-    const Id<Expr> s = inst_exp(e.args[0], enclosing, prefix);
-    if (result_.unsupported) return s;
-    Expr sv = result_.model.exprs[s];
-    if (sv.kind != ExprKind::Cref || sv.cref.parts.empty()) return bad("stream operator argument");
-    for (const ExprCrefPart& p : sv.cref.parts)
-      for (Id<Expr> sub : p.subscripts)
-        if (result_.model.exprs[sub].kind != ExprKind::IntLit) return bad("stream operator subscript");
-    sv.cref.parts.back().name = *fname;
-    sv.cref.parts.back().subscripts.clear();
-    sv.cref.resolved_node = 0xFFFFFFFFu;
-    sv.ty = Type::real();
-    const Id<Expr> f = add(std::move(sv));
+    if (!prefix.empty()) {   // 子模型内：与 connect 相同的前缀化（书写处前缀 + 复合数组元素下标）
+      std::vector<Symbol> p = prefix;
+      p.insert(p.end(), path.begin(), path.end());
+      std::vector<std::vector<Id<Expr>>> ps = psubs_to_exprs(cur_psubs_);
+      ps.resize(prefix.size());
+      ps.insert(ps.end(), subs.begin(), subs.end());
+      path = std::move(p);
+      subs = std::move(ps);
+    }
+    const Id<Expr> s = member_cref(path, subs, {}, {}, Type::real());
+    std::vector<Symbol> fpath = path;
+    fpath.back() = *fname;
+    std::vector<std::vector<Id<Expr>>> fsubs = subs;
+    fsubs.back().clear();
+    const Id<Expr> f = member_cref(fpath, fsubs, {}, {}, Type::real());
     uses_stream_ops_ = true;
     return call_expr(name == "inStream" ? "inStream" : "actualStream", {s, f}, Type::real());
   }
@@ -3969,26 +4036,172 @@ class Flattener {
     if (!subs.empty()) subs.back() = v.subscripts;
     return conn_key(v.name, subs);
   }
-  // 变量某属性的字面量值（lookupVarAttr :1128-）。属性存在但非字面量（参数表达式要结构化求值 → 增量 B）→ SKIP。
-  std::optional<double> var_attr(const std::string& vkey, const char* attr) {
-    if (var_index_.empty())
-      for (std::size_t i = 0; i < result_.model.variables.size(); ++i) var_index_.emplace(var_key(result_.model.variables[i]), i);
+  void ensure_var_index() {
+    if (!var_index_.empty()) return;
+    for (std::size_t i = 0; i < result_.model.variables.size(); ++i) var_index_.emplace(var_key(result_.model.variables[i]), i);
+  }
+  bool is_lit(Id<Expr> x) {
+    const ExprKind k = result_.model.exprs[x].kind;
+    return k == ExprKind::IntLit || k == ExprKind::RealLit || k == ExprKind::BoolLit || k == ExprKind::StringLit ||
+           k == ExprKind::EnumLit;
+  }
+  // 变量某属性（lookupVarAttr :1128-）：是否存在、原式、若是数值字面量则其值。
+  struct AttrVal { bool present = false; std::optional<double> lit; Id<Expr> expr; };
+  AttrVal var_attr_info(const std::string& vkey, const char* attr) {
+    ensure_var_index();
+    AttrVal r;
     auto it = var_index_.find(vkey);
-    if (it == var_index_.end()) return std::nullopt;
+    if (it == var_index_.end()) return r;
     const Symbol an = in_.intern(attr);
     for (const FlatVarAttr& a : result_.model.variables[it->second].attributes) {
       if (a.name != an) continue;
+      r.present = true;
+      r.expr = a.value;
       const Expr& ev = result_.model.exprs[a.value];
-      if (ev.kind == ExprKind::RealLit) return ev.rval;
-      if (ev.kind == ExprKind::IntLit) return static_cast<double>(ev.ival);
-      set_unsupported("stream flow attribute not literal");
-      return std::nullopt;
+      if (ev.kind == ExprKind::RealLit) r.lit = ev.rval;
+      else if (ev.kind == ExprKind::IntLit) r.lit = static_cast<double>(ev.ival);
+      return r;
     }
-    return std::nullopt;
+    return r;
+  }
+  // 非破坏性代入：cref（key 命中 vals）→ 对应字面量，其余节点按需复制。
+  Id<Expr> clone_subst(Id<Expr> id, const std::unordered_map<std::string, Id<Expr>>& vals) {
+    if (!id.is_valid()) return id;
+    Expr c = result_.model.exprs[id];
+    if (c.kind == ExprKind::Cref) {
+      auto it = vals.find(expr_cref_key(c.cref));
+      return it != vals.end() ? it->second : id;
+    }
+    bool changed = false;
+    for (Id<Expr>& k : c.args) { const Id<Expr> n = clone_subst(k, vals); changed = changed || !(n == k); k = n; }
+    for (Id<Expr>* k : {&c.a, &c.b, &c.c}) {
+      if (!k->is_valid()) continue;
+      const Id<Expr> n = clone_subst(*k, vals);
+      changed = changed || !(n == *k);
+      *k = n;
+    }
+    return changed ? add(std::move(c)) : id;
+  }
+  // 收集表达式里的参数/常量 cref 及其字面量绑定。遇到更高变率（变量 / time / 找不到）→ ok=false（不可结构化求值）；
+  // 参数绑定非字面量 → ymc 无法复刻 Ceval 递归 → SKIP；fixed=false 的参数不结构化（Structural.isExpressionNotFixed）。
+  void collect_param_crefs(Id<Expr> id, std::unordered_map<std::string, Id<Expr>>& vals,
+                           std::vector<std::string>& params, bool& ok) {
+    if (!id.is_valid() || !ok) return;
+    const Expr e = result_.model.exprs[id];
+    if (e.kind == ExprKind::Cref) {
+      const std::string k = expr_cref_key(e.cref);
+      auto it = var_index_.find(k);
+      if (it == var_index_.end()) { ok = false; return; }
+      const FlatVariable& v = result_.model.variables[it->second];
+      if (v.var_kind != FlatVarKind::Parameter && v.var_kind != FlatVarKind::Constant) { ok = false; return; }
+      if (!v.binding.is_valid() || !is_lit(v.binding)) { set_unsupported("structural parameter binding"); ok = false; return; }
+      const Symbol fixed = in_.intern("fixed");
+      for (const FlatVarAttr& a : v.attributes)
+        if (a.name == fixed && result_.model.exprs[a.value].kind == ExprKind::BoolLit && !result_.model.exprs[a.value].bval) {
+          ok = false; return;
+        }
+      vals.emplace(k, v.binding);
+      if (v.var_kind == FlatVarKind::Parameter) params.push_back(k);
+      return;
+    }
+    for (Id<Expr> k : e.args) collect_param_crefs(k, vals, params, ok);
+    collect_param_crefs(e.a, vals, params, ok);
+    collect_param_crefs(e.b, vals, params, ok);
+    collect_param_crefs(e.c, vals, params, ok);
+  }
+  // isNoFlow（:938-976）：属性字面量直接判；参数变率 → Structural.markExp（记为结构参数）+ Ceval 后判；
+  // 更高变率 → pred(非字面量) = 假。求值不改属性原式（折叠在 apply_structural_params 统一做，保 evaluateFlowDirection
+  // 看到的仍是未折叠原式，ActualStreamMinMax2）。
+  std::optional<double> noflow_attr(const std::string& vkey, const char* attr) {
+    const AttrVal av = var_attr_info(vkey, attr);
+    if (!av.present) return std::nullopt;
+    if (av.lit) return av.lit;
+    std::unordered_map<std::string, Id<Expr>> vals;
+    std::vector<std::string> params;
+    bool ok = true;
+    collect_param_crefs(av.expr, vals, params, ok);
+    if (!ok) return std::nullopt;
+    const Id<Expr> y = simplify_expr(clone_subst(av.expr, vals));
+    const Expr& ey = result_.model.exprs[y];
+    if (ey.kind != ExprKind::RealLit && ey.kind != ExprKind::IntLit) { set_unsupported("structural attribute evaluation"); return std::nullopt; }
+    for (const std::string& p : params) record_structural(p);
+    return ey.kind == ExprKind::RealLit ? ey.rval : static_cast<double>(ey.ival);
   }
   // isNoFlowInside / isNoFlowOutside（:918-936）：inside 的 flow min ≥ 0、outside 的 flow max ≤ 0 → 无流。
-  bool no_flow_inside(const SetNode& n) { const std::optional<double> v = var_attr(n.flow_key, "min"); return v && *v >= 0; }
-  bool no_flow_outside(const SetNode& n) { const std::optional<double> v = var_attr(n.flow_key, "max"); return v && *v <= 0; }
+  bool no_flow_inside(const SetNode& n) { const std::optional<double> v = noflow_attr(n.flow_key, "min"); return v && *v >= 0; }
+  bool no_flow_outside(const SetNode& n) { const std::optional<double> v = noflow_attr(n.flow_key, "max"); return v && *v <= 0; }
+  // 结构参数（被连接算子求值结构化，Structural.markExp）：打印 final；EvalConstants 效果只做"变量属性里引用它们"
+  // 一处（折成字面量），其余位置（绑定 / 方程 / 算法 / 折不成字面量）引用 → SKIP（全局代入未做）。
+  void record_structural(const std::string& k) {
+    if (std::find(structural_keys_.begin(), structural_keys_.end(), k) == structural_keys_.end()) structural_keys_.push_back(k);
+  }
+  bool refs_keys(Id<Expr> id, const std::unordered_map<std::string, Id<Expr>>& vals) {
+    if (!id.is_valid()) return false;
+    const Expr& e = result_.model.exprs[id];
+    if (e.kind == ExprKind::Cref) return vals.count(expr_cref_key(e.cref)) > 0;
+    for (Id<Expr> k : e.args) if (refs_keys(k, vals)) return true;
+    return refs_keys(e.a, vals) || refs_keys(e.b, vals) || refs_keys(e.c, vals);
+  }
+  bool eq_refs_keys(Id<FlatEquation> id, const std::unordered_map<std::string, Id<Expr>>& vals) {
+    const FlatEquation& fe = result_.model.eqs[id];
+    if (refs_keys(fe.a, vals) || refs_keys(fe.b, vals) || refs_keys(fe.c, vals)) return true;
+    for (const FlatEqBranch& br : fe.branches) {
+      if (refs_keys(br.cond, vals)) return true;
+      for (Id<FlatEquation> b : br.body) if (eq_refs_keys(b, vals)) return true;
+    }
+    for (Id<FlatEquation> b : fe.body) if (eq_refs_keys(b, vals)) return true;
+    for (Id<FlatEquation> b : fe.else_body) if (eq_refs_keys(b, vals)) return true;
+    return false;
+  }
+  void apply_structural_params() {
+    if (structural_keys_.empty() || result_.unsupported) return;
+    ensure_var_index();
+    std::unordered_map<std::string, Id<Expr>> vals;
+    for (const std::string& k : structural_keys_) {
+      auto it = var_index_.find(k);
+      if (it == var_index_.end()) { set_unsupported("structural parameter"); return; }
+      FlatVariable& v = result_.model.variables[it->second];
+      if (!v.binding.is_valid() || !is_lit(v.binding)) { set_unsupported("structural parameter binding"); return; }
+      v.is_final = true;
+      vals.emplace(k, v.binding);
+    }
+    for (FlatVariable& v : result_.model.variables) {
+      for (FlatVarAttr& a : v.attributes) {
+        if (!refs_keys(a.value, vals)) continue;
+        a.value = simplify_expr(clone_subst(a.value, vals));
+        if (!is_lit(a.value)) { set_unsupported("structural parameter in attribute"); return; }
+      }
+      if (v.binding.is_valid() && refs_keys(v.binding, vals)) { set_unsupported("structural parameter referenced"); return; }
+    }
+    for (const std::vector<Id<FlatEquation>>* eqs : {&result_.model.equations, &result_.model.initial_equations})
+      for (Id<FlatEquation> id : *eqs)
+        if (eq_refs_keys(id, vals)) { set_unsupported("structural parameter referenced"); return; }
+    if (!result_.model.algorithms.empty() || !result_.model.initial_algorithms.empty()) {
+      set_unsupported("structural parameter with algorithms");   // 算法段引用检查未做 → 保守 SKIP
+    }
+  }
+  // 下标是本地参数/常量 cref（`c[n]`）：取值（eval_scode）；参数记为结构参数（打印 final，ActualStreamVariability2）。
+  std::optional<std::int64_t> structural_subscript(Id<Exp> s, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    const Exp& ex = I_.absyn.exps[s];
+    if (ex.kind != ExpKind::CrefExp) return std::nullopt;
+    const Cref& c = I_.absyn.crefs[ex.cref];
+    if (c.leading_dot || c.parts.size() != 1 || !c.parts[0].subscripts.empty()) return std::nullopt;
+    const NodeId n = find_local(enclosing, c.parts[0].name);
+    if (!n.is_valid() || I_.nodes[n].is_empty() || !I_.nodes[n].comp.is_valid()) return std::nullopt;
+    const SVariability var = I_.comps[I_.nodes[n].comp].attributes.variability;
+    if (var != SVariability::Param && var != SVariability::Const) return std::nullopt;
+    std::optional<CVal> cv = eval_scode(s, scode_scope_of(enclosing), 0, /*allow_param=*/true, nullptr);
+    if (!cv || cv->k != CVal::K::Int) return std::nullopt;
+    if (var == SVariability::Param) {
+      std::vector<Symbol> p = prefix;
+      p.push_back(c.parts[0].name);
+      std::vector<std::vector<Id<Expr>>> ps = psubs_to_exprs(cur_psubs_);
+      ps.resize(prefix.size());
+      ps.push_back({});
+      record_structural(conn_key(p, ps));
+    }
+    return cv->i;
+  }
   // streamSumEquationExp（:499-551）：
   //   inStreamDiv((Σ_out max(f,eps)*inStream(s) + Σ_in max(-f,eps)*s) / (Σ_out max(f,eps) + Σ_in max(-f,eps)), fallback)；
   // sumMap 后项前插（:553-573）；eps = FLOW_THRESHOLD(1e-7) × flow 的 nominal（makePositiveMaxCall :673-711；
@@ -3996,9 +4209,11 @@ class Flattener {
   Id<Expr> stream_sum(const std::vector<std::size_t>& outs, const std::vector<std::size_t>& ins, Id<Expr> fallback, int depth) {
     if (outs.empty() && ins.empty()) return fallback;
     auto pmax = [&](Id<Expr> flow, const SetNode& n) {
-      double thr = 1e-7;
-      if (const std::optional<double> nom = var_attr(n.flow_key, "nominal")) thr *= *nom;
-      return call_expr("$OMC$PositiveMax", {flow, lit_real(thr)}, Type::real());
+      // 阈值 = FLOW_THRESHOLD × nominal 原式（makePositiveMaxCall :688-696；字面量由化简折成一个数）。
+      Id<Expr> thr = lit_real(1e-7);
+      const AttrVal nom = var_attr_info(n.flow_key, "nominal");
+      if (nom.present) thr = simplify_expr(bin_expr(BinOp::Mul, thr, nom.expr));
+      return call_expr("$OMC$PositiveMax", {flow, thr}, Type::real());
     };
     auto sum = [&](const std::vector<std::size_t>& v, auto term) {
       Id<Expr> acc = term(cs_nodes_[v[0]]);
@@ -4058,11 +4273,14 @@ class Flattener {
   Id<Expr> eval_actualstream(Id<Expr> s, Id<Expr> f) {
     const std::string sk = expr_cref_key(result_.model.exprs[s].cref);
     const std::string fk = expr_cref_key(result_.model.exprs[f].cref);
-    const std::optional<double> mn = var_attr(fk, "min"), mx = var_attr(fk, "max");
+    // 只认 Real 字面量（:1057-1075）；属性在但非字面量（参数表达式，尚未被 EvalConstants 折）→ 不定。
+    const AttrVal mn = var_attr_info(fk, "min"), mx = var_attr_info(fk, "max");
     int dir = 0;
-    if (mn && !mx) dir = *mn >= 0 ? 1 : 0;
-    else if (!mn && mx) dir = *mx <= 0 ? -1 : 0;
-    else if (mn && mx) dir = (*mn >= 0 && *mx >= *mn) ? 1 : (*mx <= 0 && *mn <= *mx) ? -1 : 0;
+    if ((mn.present && !mn.lit) || (mx.present && !mx.lit)) dir = 0;
+    else if (mn.present && !mx.present) dir = *mn.lit >= 0 ? 1 : 0;
+    else if (!mn.present && mx.present) dir = *mx.lit <= 0 ? -1 : 0;
+    else if (mn.present && mx.present)
+      dir = (*mn.lit >= 0 && *mx.lit >= *mn.lit) ? 1 : (*mx.lit <= 0 && *mn.lit <= *mx.lit) ? -1 : 0;
     if (dir == 1) return eval_instream(sk, s, 0);
     if (dir == -1) return s;
     const Id<Expr> in = eval_instream(sk, s, 0);
@@ -4351,6 +4569,7 @@ class Flattener {
   std::vector<std::size_t> cs_set_of_;
   bool uses_stream_ops_ = false;
   std::unordered_map<std::string, std::size_t> var_index_;   // 变量 key → model.variables 下标（flow 属性查询）
+  std::vector<std::string> structural_keys_;   // 连接算子求值中被结构化的参数（变量 key；Structural.markExp）
   bool card_allowed_ = false;   // 只在 if 方程 / assert 的条件表达式里为 true（其它上下文 omc 报错 → SKIP）
   struct ConnectStmt {
     Id<Exp> a, b; NodeId enclosing; std::vector<Symbol> prefix; SourceLoc loc;

@@ -99,6 +99,8 @@
 "ExtendConnector1.mo",
 "ActualStream.mo",
 "ActualStreamMinMax1.mo",
+"ActualStreamMinMax2.mo",
+"ActualStreamVariability2.mo",
 "InStreamUnconnected.mo",
 "InStreamTwoInside.mo",
 "InStreamTwoOutside.mo",

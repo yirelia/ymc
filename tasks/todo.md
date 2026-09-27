@@ -576,8 +576,18 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
             inStreamDiv 包裹）；eval_actualstream 按 evaluateFlowDirection。10 例首轮即逐字节；9 个 incorrect 全 SKIP。
             → easy-slice 249 PASS/0 FAIL（+10）；全 scodeinst PASS 242→252、FAIL 70 不变、SKIP 1013→1003；
             oracle=live 逐字节一致；三编译器 10/10、ASan 0；+5 单测。
-      - [ ] B：参数值属性/下标的结构化 final 副作用（isNoFlow 的 Structural.markExp）、inStream 归约展开、if 同分支化简
-            （ActualStreamMinMax2、ActualStreamVariability2、InStreamReduction1）。
+      - [x] B：参数值属性/下标的结构化 final 副作用（isNoFlow 的 Structural.markExp）、if 同分支化简
+            （ActualStreamMinMax2、ActualStreamVariability2）。**完成（2026-09-27）**：simplifyIf 三条规则全局移植
+            （NFSimplifyExp.mo:1311-1345：两支相等 → 该支；true/false → cond；false/true → not cond，logicNegate；
+            新增 expr_equal = Expression.isEqual）；isNoFlow 对参数值属性非破坏性求值并记结构参数（evaluateFlowDirection 仍见
+            未折叠原式 → 不定）；stream 算子实参改自走段解析，本地参数下标 `c[n]` 取值并记结构参数；apply_structural_params
+            统一 final + 属性折叠，结构参数在他处（绑定/方程/算法）被引用 → SKIP（全局 EvalConstants 未做）。
+            → easy-slice 251 PASS/0 FAIL（+2）；全 scodeinst PASS 252→254、FAIL 70 不变、SKIP 1003→1001（simplifyIf 全局化
+            未改动任何其它用例）；三编译器 10/10、ASan 0；+3 单测（含 IfSimp 探针）。
+      - [ ] InStreamReduction1：`sum(inStream(c[i].s) for i in 1:n)` 需归约符号展开（evaluateOperatorReductionExp →
+            ExpandExp.expandArrayConstructor，:750-791；sum 数组 → 加法链），属归约特性，另开。
+      - [ ] 潜在偏差（本桶探针发现）：属性里的 if 表达式整数分支 ymc 打 `/*Real*/(if c then 0 else -1)`，omc 逐分支
+            提升为 `if c then 0.0 else -1.0`（matchTypes 对 IF 分支逐支 cast）——当前无用例触发，属性 Real 化应改用逐分支 coerce。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

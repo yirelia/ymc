@@ -1176,6 +1176,50 @@ YMC_TEST(flatten_actualstream_flow_direction) {
                            "  actual_stream_s4 = if a.s4.f > 0.0 then a.s3.s else a.s4.s;\nend ActualStreamMinMax1;\n"));
 }
 
+YMC_TEST(flatten_actualstream_structural_min_attribute) {
+  // 参数值 min（`if cond then 0 else -1`）：evaluateFlowDirection 只认字面量 → 不定 → if 式；inStream 里 isNoFlow 对对方的
+  // min 做结构化求值（Structural.markExp，NFConnectEquations.mo:955-976）→ 0 ≥ 0 → 对方无流被剔 → inStream = 本身 →
+  // `if f > 0 then s else s` 化简成 s（simplifyIf :1330）；cond 打印 final、两处 min 折成 0.0（EvalConstants 效果）。
+  // 期望 = omc 1.25.0（ActualStreamMinMax2，文件与实跑一致）。
+  const std::string src = std::string(kStreamS) +
+      "model A\n  parameter Boolean cond = true;\n"
+      "  S s1(f(min = if cond then 0 else -1)), s2(f(min = if cond then 0 else 1));\nend A;\n"
+      "model ActualStreamMinMax2\n  A a;\n  Real actual_stream_s1;\n  Real actual_stream_s2;\nequation\n"
+      "  connect(a.s1, a.s2);\n  actual_stream_s1 = actualStream(a.s1.s);\n  actual_stream_s2 = actualStream(a.s2.s);\n"
+      "end ActualStreamMinMax2;\n";
+  YMC_CHECK_EQ(flatten_src(src.c_str()),
+               std::string("class ActualStreamMinMax2\n  final parameter Boolean a.cond = true;\n  Real a.s1.r;\n"
+                           "  Real a.s1.f(min = 0.0);\n  Real a.s1.s;\n  Real a.s2.r;\n  Real a.s2.f(min = 0.0);\n"
+                           "  Real a.s2.s;\n  Real actual_stream_s1;\n  Real actual_stream_s2;\nequation\n"
+                           "  a.s1.r = a.s2.r;\n  a.s2.f + a.s1.f = 0.0;\n  actual_stream_s1 = a.s1.s;\n"
+                           "  actual_stream_s2 = a.s2.s;\nend ActualStreamMinMax2;\n"));
+}
+
+YMC_TEST(flatten_actualstream_parameter_subscript) {
+  // 连接器下标 `c[n]`（参数）→ evaluateSubscripts 取值 c[1]，n 打印 final；未连接、方向不定 →
+  // `if c[1].f > 0 then c[1].s else c[1].s` → c[1].s。期望 = omc 1.25.0（ActualStreamVariability2）。
+  const char* src =
+      "connector C\n  Real r;\n  flow Real f;\n  stream Real s;\nend C;\n"
+      "model ActualStreamVariability2\n  C c[2];\n  parameter Integer n = 1;\n  Real as = actualStream(c[n].s);\n"
+      "end ActualStreamVariability2;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class ActualStreamVariability2\n  Real c[1].r;\n  Real c[1].f;\n  Real c[1].s;\n"
+                           "  Real c[2].r;\n  Real c[2].f;\n  Real c[2].s;\n  final parameter Integer n = 1;\n"
+                           "  Real as = c[1].s;\nequation\n  c[1].f = 0.0;\n  c[2].f = 0.0;\nend ActualStreamVariability2;\n"));
+}
+
+YMC_TEST(flatten_simplify_if_branch_rules) {
+  // simplifyIf（NFSimplifyExp.mo:1311-1345）：两支相等 → 该支；true/false → cond；false/true → not cond
+  //（logicNegate：not 的 not 抵消，NFExpression.mo:5334-5344）。期望 = omc 1.25.0 实跑（IfSimp 探针，2026-09-27）。
+  const char* src =
+      "model IfSimp\n  Real x;\n  Real y;\n  Boolean b1 = if x > 0 then true else false;\n"
+      "  Boolean b2 = if x > 0 then false else true;\n  Boolean b3 = if not (x > 1) then false else true;\n"
+      "  Real z = if x > 2 then y else y;\nequation\n  x = time;\n  y = 2 * time;\nend IfSimp;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class IfSimp\n  Real x;\n  Real y;\n  Boolean b1 = x > 0.0;\n  Boolean b2 = not x > 0.0;\n"
+                           "  Boolean b3 = x > 1.0;\n  Real z = y;\nequation\n  x = time;\n  y = 2.0 * time;\nend IfSimp;\n"));
+}
+
 YMC_TEST(flatten_instream_non_stream_operand_unsupported) {
   // inStream 的实参须是 stream 变量（omc 报错 InStreamNoStream1）→ 干净 SKIP。
   bool uns = false;
