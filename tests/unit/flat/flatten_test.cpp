@@ -1423,6 +1423,25 @@ YMC_TEST(flatten_constant_array_ceval_modifier_aware) {
                            "  constant Real a.z[2] = 4.0;\nend P54b;\n"));
 }
 
+YMC_TEST(flatten_constant_array_builtins) {
+  // transpose（换前两维，保 Integer）/ cross（Real）/ vector（摊平）/ linspace / diagonal（零取元素类型）/ scalar /
+  // der（常量 → 同形 Real 0）。期望 = omc 1.25.0（P54d 探针）。
+  const char* src =
+      "model P54d\n  constant Integer t[:, :] = transpose({{1, 2}, {3, 4}, {5, 6}});\n"
+      "  constant Real c[:] = cross({1, 0, 0}, {0, 1, 0});\n  constant Integer v[:] = vector({{1}, {2}});\n"
+      "  constant Real l[:] = linspace(0, 1, 3);\n  constant Integer g[:, :] = diagonal({7, 8});\n"
+      "  constant Real s = scalar({{2.5}});\n  constant Real d[:] = der({1, 2});\nend P54d;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class P54d\n  constant Integer t[1,1] = 1;\n  constant Integer t[1,2] = 3;\n"
+                           "  constant Integer t[1,3] = 5;\n  constant Integer t[2,1] = 2;\n  constant Integer t[2,2] = 4;\n"
+                           "  constant Integer t[2,3] = 6;\n  constant Real c[1] = 0.0;\n  constant Real c[2] = 0.0;\n"
+                           "  constant Real c[3] = 1.0;\n  constant Integer v[1] = 1;\n  constant Integer v[2] = 2;\n"
+                           "  constant Real l[1] = 0.0;\n  constant Real l[2] = 0.5;\n  constant Real l[3] = 1.0;\n"
+                           "  constant Integer g[1,1] = 7;\n  constant Integer g[1,2] = 0;\n  constant Integer g[2,1] = 0;\n"
+                           "  constant Integer g[2,2] = 8;\n  constant Real s = 2.5;\n  constant Real d[1] = 0.0;\n"
+                           "  constant Real d[2] = 0.0;\nend P54d;\n"));
+}
+
 YMC_TEST(flatten_constant_range_forms) {
   // evalRangeReal（:915-938）首尾按原值：1.0:0.3:2.0 共 floor(1/0.3 + 5e-15) + 1 = 4 个，末个是 stop 本身 2.0（非 1.9）；
   // Integer 负步长、Boolean 范围（P54c 探针）。

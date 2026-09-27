@@ -2181,15 +2181,25 @@ class Flattener {
     }
     return acc;
   }
-  // 矩阵转置（Expression.transposeArray）：m×p → p×m，空维经 eshape 保留。
+  // 转置（Expression.transposeArray）：交换前两维（m×p×… → p×m×…，维数 ≥ 2），空维经 eshape 保留。
   std::optional<CVal> cval_transpose(const CVal& m) {
     const std::vector<std::int64_t> s = cval_shape(m);
-    if (s.size() != 2) return std::nullopt;
-    if (s[1] == 0) return empty_arr({0, s[0]});
+    if (s.size() < 2) return std::nullopt;
+    const std::vector<std::int64_t> rest(s.begin() + 2, s.end());
+    if (s[1] == 0) {
+      std::vector<std::int64_t> es{0, s[0]};
+      es.insert(es.end(), rest.begin(), rest.end());
+      return empty_arr(std::move(es));
+    }
     std::vector<CVal> rows;
     for (std::int64_t j = 0; j < s[1]; ++j) {
+      if (s[0] == 0) {
+        std::vector<std::int64_t> es{0};
+        es.insert(es.end(), rest.begin(), rest.end());
+        rows.push_back(empty_arr(std::move(es)));
+        continue;
+      }
       std::vector<CVal> row;
-      if (s[0] == 0) { rows.push_back(empty_arr({0})); continue; }
       for (std::int64_t i = 0; i < s[0]; ++i) row.push_back((*(*m.arr)[static_cast<std::size_t>(i)].arr)[static_cast<std::size_t>(j)]);
       rows.push_back(CVal::Arr(std::move(row)));
     }
@@ -2344,14 +2354,21 @@ class Flattener {
     return els.empty() ? empty_arr({0}) : CVal::Arr(std::move(els));
   }
 
-  // 数组构造类内建（evalBuiltinZeros :3102 / Ones :2745 / Fill :2431 / Identity :2458）：zeros/ones 为 Integer 0/1，
-  // fill(v, n…) 复制 v，identity(n) 为 Integer 单位阵；维数实参须为非负整数常量。同名用户类遮蔽内建 → 不接（nullopt）。
+  // 数组类内建的常量求值。同名用户类遮蔽内建 → 不接（nullopt）；实参类型/个数不符 = omc 报错 → nullopt。
+  //   zeros/ones/fill/identity（evalBuiltinZeros :3102 / Ones :2745 / Fill :2431 / Identity :2458）：zeros/ones 为 Integer
+  //     0/1，fill(v, n…) 复制 v，identity(n) 为 Integer 单位阵；维数须为非负整数常量。
+  //   transpose（:3069-3088，维数 ≥ 2，换前两维）、vector（:3090-3100，全部标量元素摊成向量）、diagonal（:2340-2377，零取
+  //     元素类型）、scalar（:2846-2853，逐层取唯一元素）、der（:2333-2338，常量的导数 = 同形 Real 0）、skew（:2888-2913）。
+  //   cross / linspace 是 Modelica 层内建（NFModelicaBuiltin.mo:353-362 / :305-316），按其函数体求值：输入 Real（Int 提升），
+  //     cross = {x2·y3−x3·y2, x3·y1−x1·y3, x1·y2−x2·y1}，linspace = {x1 + (x2−x1)·(i−1)/(n−1) for i in 1:n}。
   std::optional<CVal> eval_array_builtin(const Exp& e, const ScodeScope& scope, int depth, bool allow_param,
                                          std::unordered_set<std::uint32_t>* used) {
     const Cref& fn = I_.absyn.crefs[e.cref];
     if (fn.parts.size() != 1 || !fn.parts[0].subscripts.empty()) return std::nullopt;
     const std::string_view nm = in_.str(fn.parts[0].name);
-    if (nm != "zeros" && nm != "ones" && nm != "fill" && nm != "identity") return std::nullopt;
+    static constexpr std::string_view kNames[] = {"zeros", "ones", "fill", "identity", "transpose", "vector", "diagonal",
+                                                  "scalar", "der", "skew", "cross", "linspace"};
+    if (std::find(std::begin(kNames), std::end(kNames), nm) == std::end(kNames)) return std::nullopt;
     for (Symbol an : e.arg_names) if (an.is_valid()) return std::nullopt;
     if (find_scode_element(fn.parts[0].name, scope).is_valid()) return std::nullopt;
     std::vector<CVal> args;
@@ -2360,6 +2377,82 @@ class Flattener {
       if (!v) return std::nullopt;
       args.push_back(std::move(*v));
     }
+    auto real_vec3 = [&](const CVal& v) -> std::optional<std::vector<double>> {   // Real[3] 输入（Int 提升）
+      if (!is_arr(v) || v.arr->size() != 3) return std::nullopt;
+      std::vector<double> r;
+      for (const CVal& x : *v.arr) {
+        if (x.k != CVal::K::Int && x.k != CVal::K::Real) return std::nullopt;
+        r.push_back(x.as_r());
+      }
+      return r;
+    };
+    if (nm == "transpose") return args.size() == 1 ? cval_transpose(args[0]) : std::nullopt;
+    if (nm == "vector") {
+      if (args.size() != 1) return std::nullopt;
+      if (!is_arr(args[0])) return CVal::Arr({args[0]});
+      std::vector<CVal> flat;
+      flatten_cval_array(args[0], flat);
+      return flat.empty() ? empty_arr({0}) : CVal::Arr(std::move(flat));
+    }
+    if (nm == "diagonal") {
+      if (args.size() != 1 || !is_arr(args[0]) || cval_shape(args[0]).size() != 1) return std::nullopt;
+      const std::vector<CVal>& d = *args[0].arr;
+      if (d.empty()) return args[0];
+      const CVal zero = d.front().k == CVal::K::Real ? CVal::R(0.0) : CVal::I(0);
+      std::vector<CVal> rows;
+      for (std::size_t i = 0; i < d.size(); ++i) {
+        std::vector<CVal> r(d.size(), zero);
+        r[i] = d[i];
+        rows.push_back(CVal::Arr(std::move(r)));
+      }
+      return CVal::Arr(std::move(rows));
+    }
+    if (nm == "scalar") {
+      if (args.size() != 1) return std::nullopt;
+      CVal cur = args[0];
+      while (is_arr(cur)) {
+        if (cur.arr->size() != 1) return std::nullopt;
+        CVal next = cur.arr->front();
+        cur = std::move(next);
+      }
+      return cur;
+    }
+    if (nm == "der") {
+      if (args.size() != 1) return std::nullopt;
+      return is_arr(args[0]) ? cval_fill(CVal::R(0.0), cval_shape(args[0])) : CVal::R(0.0);
+    }
+    if (nm == "skew") {
+      std::optional<std::vector<double>> x = args.size() == 1 ? real_vec3(args[0]) : std::nullopt;
+      if (!x) return std::nullopt;
+      const double x1 = (*x)[0], x2 = (*x)[1], x3 = (*x)[2];
+      return CVal::Arr({CVal::Arr({CVal::R(0.0), CVal::R(-x3), CVal::R(x2)}),
+                        CVal::Arr({CVal::R(x3), CVal::R(0.0), CVal::R(-x1)}),
+                        CVal::Arr({CVal::R(-x2), CVal::R(x1), CVal::R(0.0)})});
+    }
+    if (nm == "cross") {
+      std::optional<std::vector<double>> x = args.size() == 2 ? real_vec3(args[0]) : std::nullopt;
+      std::optional<std::vector<double>> y = args.size() == 2 ? real_vec3(args[1]) : std::nullopt;
+      if (!x || !y) return std::nullopt;
+      const std::vector<double>& a = *x;
+      const std::vector<double>& b = *y;
+      return CVal::Arr({CVal::R(a[1] * b[2] - a[2] * b[1]), CVal::R(a[2] * b[0] - a[0] * b[2]),
+                        CVal::R(a[0] * b[1] - a[1] * b[0])});
+    }
+    if (nm == "linspace") {
+      if (args.size() != 3 || args[2].k != CVal::K::Int) return std::nullopt;
+      if ((args[0].k != CVal::K::Int && args[0].k != CVal::K::Real) || (args[1].k != CVal::K::Int && args[1].k != CVal::K::Real))
+        return std::nullopt;
+      const double x1 = args[0].as_r(), x2 = args[1].as_r();
+      const std::int64_t n = args[2].i;
+      if (n < 0) return std::nullopt;
+      if (n == 0) return empty_arr({0});
+      if (n == 1) return std::nullopt;   // (i−1)/(n−1) 除零 → omc 报错
+      std::vector<CVal> v;
+      for (std::int64_t i = 1; i <= n; ++i)
+        v.push_back(CVal::R(x1 + (x2 - x1) * static_cast<double>(i - 1) / static_cast<double>(n - 1)));
+      return CVal::Arr(std::move(v));
+    }
+    // zeros / ones / fill / identity
     const std::size_t first_dim = nm == "fill" ? 1 : 0;
     if (args.size() < first_dim + 1 || (nm == "identity" && args.size() != 1)) return std::nullopt;
     std::vector<std::int64_t> dims;

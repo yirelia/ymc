@@ -661,8 +661,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
             1.25.0 逐字节，另白捡 CevalBinding3（数组元素的修饰分发）、CevalFuncArray1、Size4。
             → easy-slice 289 PASS/0 FAIL（+17）；全 scodeinst PASS 275→292、FAIL 72 不变、SKIP 978→961；oracle=live 不一致 0；
             三编译器 10/10、ASan 0（ASan 版 ymc 跑 148 个 Ceval/Range/Size 文件：0 报告、与 gcc 版输出一致）；+3 单测。
-      - [ ] B：transpose/cross/skew/vector/linspace/diagonal/scalar/der(常量) 等内建（CevalTranspose1/Cross1/Skew1/Vector1/
-            Linspace1/Diagonal1/Scalar1/Der2）。
+      - [x] B：transpose/cross/skew/vector/linspace/diagonal/scalar/der(常量) 等内建（CevalTranspose1/Cross1/Skew1/Vector1/
+            Linspace1/Diagonal1/Scalar1/Der2）。**完成（2026-09-28）**：NFCeval 专用求值器（transpose 换前两维、vector 摊平、
+            diagonal 零取元素类型、scalar 逐层取唯一元素、der → 同形 Real 0、skew）+ Modelica 层内建按函数体（cross、linspace，
+            NFModelicaBuiltin.mo:353-362 / :305-316）；cval_transpose 推广到维数 ≥ 2。8 例首轮即逐字节。
+            → easy-slice 297 PASS/0 FAIL（+8）；全 scodeinst PASS 292→300、FAIL 72 不变、SKIP 961→953；oracle=live 不一致 0；
+            +1 单测（P54d 探针）。
       - [ ] C：数组推导式 `{i-j for i in …}`（CevalArrayConstructor2）、返回数组的用户函数（CevalFuncArray*/FuncSubscript*）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
