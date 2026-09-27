@@ -516,6 +516,20 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       SKIP 1022→1018；三编译器 10/10、ASan 0；+2 单测（短类+切片、降序范围）。
       留后续：短类 flow 连接器在模型层（`connector F = flow Real; F f;` → emit_* 的 in_conn 判定会 SKIP "flow outside connector"）、
       参数下标 `c[p]`（subscript_int 只认整数/迭代变量）、记录成员、共享端点并查集。
+- [x] **加宽㊽方向保留规则 + 连接器里的记录成员（flow 下沉）**（2026-09-27）：承 e82bc45。
+      方向：`Variable.removeNonTopLevelDirection`（NFVariable.mo:466-493）——所有前缀组件都是连接器或 input 组件才保留
+      input/output（顶层变量、顶层连接器成员 `c.e`、顶层 input 组件成员），否则抹掉；ModCtx 加 keep_dir 沿复合递归下沉
+      （两处 flatten_class 递归点），emit_variable/emit_array 改用它，去掉 "connector direction" SKIP 守卫（Direction1）。
+      记录成员：连接器里 `R e` / `flow R f`——ModCtx 加 in_conn（连接器内部，含记录字段）与 flow_inherited（`flow R f` 字段
+      全部继承 flow，ConnectorType.merge，NFAttributes.mo:229-234），emit_* 的 in_conn 不再靠 enclosing_is_connector；
+      connector_leaves 收记录成员 → record_leaves 按字段**声明序**拆叶（splitImpl 记录分支 ClassTree.getComponents = 数组，
+      NFConnector.mo:354-360；YmcRecConn 探针 r2,r1——与连接器成员按名排序不同）。`flow C c`（conn9，omc 另有不平衡告警行）仍 SKIP。
+      **分歧账本 +2**：InvalidConnectorDirection3/4（同 1/2：方向不匹配错误只在旧前端查，1.25.0 接受），ymc 与 1.25.0
+      逐字节一致 → FAIL 基线 71→73。
+      → easy-slice 235 PASS/0 FAIL（+2：Direction1 由 SKIP 翻 PASS、ConnectComplex1 新入）；oracle=live 逐字节一致；
+      全 scodeinst PASS 236→238、SKIP 1018→1014；三编译器 10/10、ASan 0；+3 单测（方向规则、未连接 flow 记录、记录成员相连）。
+      留后续：记录字段自带 flow/stream 前缀、复合数组上的 flow 前缀、`flow C c` 子连接器（需告警文本）、cardinality
+      （CardinalityTable + if/assert 常量折叠）、expandable、stream。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

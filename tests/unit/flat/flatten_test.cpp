@@ -900,6 +900,47 @@ YMC_TEST(flatten_connect_descending_range_subscript) {
                            "  c2[1].f = 0.0;\n  c2[2].f = 0.0;\n  c2[3].f = 0.0;\nend M;\n"));
 }
 
+YMC_TEST(flatten_direction_kept_only_under_connector_or_input_prefix) {
+  // 方向保留规则（Variable.removeNonTopLevelDirection，NFVariable.mo:466-493）：顶层变量保留；前缀全是连接器/input 组件
+  // 才保留（顶层连接器成员 `c.e`）；经过普通模型 `a` 的一律抹掉（`a.x`、`a.c.e`）。期望 = omc 1.25.0（Direction1，实跑与文件一致）。
+  const char* src =
+      "model A\n  input Real x;\n  C c;\nend A;\n"
+      "connector C\n  input Real e;\nend C;\n"
+      "model Direction1\n  output Real x;\n  A a;\n  C c;\nend Direction1;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class Direction1\n  output Real x;\n  Real a.x;\n  Real a.c.e;\n  input Real c.e;\nend Direction1;\n"));
+}
+
+YMC_TEST(flatten_connect_record_members_flow_pushdown) {
+  // 连接器里的记录成员：字段按**声明序**拆叶（splitImpl 记录分支 ClassTree.getComponents，NFConnector.mo:354-360，
+  // 不像连接器成员那样按名排序）；`flow R f` 的字段全部继承 flow（ConnectorType.merge，NFAttributes.mo:229-234）。
+  // 未连接 → 每个字段 `= 0.0`。期望 = omc 1.25.0 实跑（RecConn 探针，2026-09-27，逐字节）。
+  const char* src =
+      "record R\n  Real r2;\n  Real r1;\nend R;\n"
+      "connector C\n  R e;\n  flow R f;\nend C;\n"
+      "model A\n  C c;\nend A;\n"
+      "model M\n  A m1;\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class M\n  Real m1.c.e.r2;\n  Real m1.c.e.r1;\n  Real m1.c.f.r2;\n  Real m1.c.f.r1;\n"
+                           "equation\n  m1.c.f.r2 = 0.0;\n  m1.c.f.r1 = 0.0;\nend M;\n"));
+}
+
+YMC_TEST(flatten_connect_record_members_connected) {
+  // 两个 inside 连接器的记录成员相连：potential 字段相等、flow 字段求和（both-inside 反序 B+A = 集合插入序），
+  // 已连接 → 不再单列 =0。期望 = omc 1.25.0（ConnectComplex1，实跑与文件一致）。
+  const char* src =
+      "record R\n  Real r1;\n  Real r2;\nend R;\n"
+      "connector C\n  R e;\n  flow R f;\nend C;\n"
+      "model M\n  C c;\nend M;\n"
+      "model ConnectComplex1\n  M m1, m2;\nequation\n  connect(m1.c, m2.c);\nend ConnectComplex1;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class ConnectComplex1\n"
+                           "  Real m1.c.e.r1;\n  Real m1.c.e.r2;\n  Real m1.c.f.r1;\n  Real m1.c.f.r2;\n"
+                           "  Real m2.c.e.r1;\n  Real m2.c.e.r2;\n  Real m2.c.f.r1;\n  Real m2.c.f.r2;\n"
+                           "equation\n  m1.c.e.r1 = m2.c.e.r1;\n  m1.c.e.r2 = m2.c.e.r2;\n"
+                           "  m2.c.f.r1 + m1.c.f.r1 = 0.0;\n  m2.c.f.r2 + m1.c.f.r2 = 0.0;\nend ConnectComplex1;\n"));
+}
+
 YMC_TEST(flatten_multiple_connect_shared_endpoint_unsupported) {
   // 相交的多条 connect（共享端点 c2 → 传递相等，要连接集并查）→ v1 未做，干净 SKIP。
   // （不相交的多条 connect 已支持，见 flatten_for_connect_array_disjoint。）

@@ -125,6 +125,13 @@ struct ModCtx {
   std::vector<Symbol> vprefix;
   bool final_all = false;
   SVariability var_floor = SVariability::Var;   // 复合组件下沉的变率下限（OMC variabilityMin，NFAttributes.mo:236）
+  // 方向保留：所有前缀组件都是连接器或 input 组件时才保留 input/output（Variable.removeNonTopLevelDirection，
+  // NFVariable.mo:466-493）；根为 true（顶层变量保留）。
+  bool keep_dir = true;
+  // 处在连接器内部（含连接器里的记录字段）：flow 成员在此生成 `=0` / 进连接集；连接器外的 flow 前缀 → SKIP。
+  bool in_conn = false;
+  // 连接器里 `flow R f` 记录成员：flow 前缀下沉到全部标量字段（ConnectorType.merge，NFAttributes.mo:229-234）。
+  bool flow_inherited = false;
 };
 
 // OMC Prefixes.variabilityMin（取更受约束者）：ymc 枚举 Var<Discrete<Param<Const 升序=更常量，故取序数较大者。
@@ -346,6 +353,10 @@ class Flattener {
             cps.push_back(aidx);   // 该复合数组段 `a` 带下标 [i…]
             ModCtx achild;
             achild.final_all = comp_final;
+            achild.keep_dir = ctx.keep_dir && (r == SRestriction::Connector ||
+                                               I_.comps[cid].attributes.direction == SDirection::Input);
+            achild.in_conn = ctx.in_conn || r == SRestriction::Connector;
+            achild.flow_inherited = ctx.flow_inherited;   // 复合数组上的 flow 前缀仍在上方守卫处 SKIP
             if (own_mod) {
               // 该元素的合成修饰：每个子修饰绑定按 aidx 下降取标量（`x={1,2,3}`→`x=vi`；each 保持原值）。
               Id<SMod> em = distribute_mod(cel.mod, aidx);
@@ -360,7 +371,7 @@ class Flattener {
           }
           continue;
         }
-        emit_array(cid, name, is_prot, prefix, psubs, inst_node, matched, ctx.scope, ctx.vprefix, comp_final, cel);
+        emit_array(cid, name, is_prot, prefix, psubs, inst_node, matched, ctx.scope, ctx.vprefix, comp_final, cel, ctx);
         continue;
       }
 
@@ -376,8 +387,11 @@ class Flattener {
         // expandable connector 要按连接推断成员，v1 未做 → SKIP。含 connect() 的模型在 collect_equation SKIP。
         SRestriction r = I_.scode.elems[cdef].restriction;
         if (r == SRestriction::ExpandableConnector) set_unsupported("expandable connector");
-        // `flow C c`：flow/stream 前缀加在连接器**组件**上 → 前缀下沉到每个标量成员（conn9），v1 未做 → SKIP。
-        if (I_.comps[cid].attributes.connector != SConnectorType::Potential)
+        // flow/stream 前缀加在复合**组件**上：连接器里的 `flow R f`（记录）→ 前缀下沉到全部标量字段（ConnectorType.merge，
+        // NFAttributes.mo:229-234；YmcRecConn 探针）；`flow C c`（连接器，conn9：omc 另有不平衡告警行）与 stream 仍 SKIP。
+        const bool flow_rec = ctx.in_conn && r == SRestriction::Record &&
+                              I_.comps[cid].attributes.connector == SConnectorType::Flow;
+        if (I_.comps[cid].attributes.connector != SConnectorType::Potential && !flow_rec)
           set_unsupported("flow/stream on composite component");
         // 记录常量折叠：`constant/parameter R r = f(…)`（函数返回记录）→ 直接发射字段（继承 r 变率 + 折叠值），
         // 绕开下面的"变率复合" SKIP（CevalFuncRecord1/2）。
@@ -425,6 +439,10 @@ class Flattener {
         ModCtx child;
         child.final_all = comp_final;
         child.var_floor = var_min(ctx.var_floor, I_.comps[cid].attributes.variability);   // 变率下沉（Half A）
+        child.keep_dir = ctx.keep_dir && (r == SRestriction::Connector ||
+                                          I_.comps[cid].attributes.direction == SDirection::Input);
+        child.in_conn = ctx.in_conn || r == SRestriction::Connector;
+        child.flow_inherited = ctx.flow_inherited || flow_rec;
         if (ctor_mod.is_valid()) {
           // 构造绑定与另有字段修饰叠加（`R r(z=9) = R(4,5)`）要合并两套 → 本桶未做 SKIP。
           if (own || matched_field) set_unsupported("record ctor + field modifier");
@@ -442,7 +460,7 @@ class Flattener {
         continue;
       }
       decl_scope_ = cn;   // 组件声明处的词法作用域（继承成员 = 基类作用域，供限定名在原作用域解析，const16）
-      emit_variable(cid, name, is_prot, prefix, psubs, inst_node, matched, ctx.scope, ctx.vprefix, comp_final, final_params, ctx.var_floor);
+      emit_variable(cid, name, is_prot, prefix, psubs, inst_node, matched, ctx.scope, ctx.vprefix, comp_final, final_params, ctx.var_floor, ctx);
       decl_scope_ = Inst::empty_node();
     }
     // 本类方程（子组件方程已在上面递归时加入 → 符合 R11 §3.4-6"子组件先、本类后"）。
@@ -1061,7 +1079,7 @@ class Flattener {
                      const std::vector<Id<SMod>>& mod_subs, NodeId mod_scope,
                      const std::vector<Symbol>& mod_prefix, bool force_final,
                      const std::unordered_set<std::uint32_t>& final_params,
-                     SVariability var_floor = SVariability::Var) {
+                     SVariability var_floor, const ModCtx& ctx) {
     cur_psubs_ = psubs;   // 绑定里 cref 前缀改写用（复合数组元素 `a[i].y = a[i].x`）
     // 先算绑定/属性（会往 model.exprs add），再取组件字段——不跨 add 持组件引用（arena 纪律）。
     const Type cty = I_.comps[cid].ty;   // 拷贝，跨 add 稳定
@@ -1125,13 +1143,12 @@ class Flattener {
     // stream 变量的连接方程（inStream/actualStream）v1 未做 → SKIP。flow 变量正常打印（flow 前缀不打，R13 §3.1），
     // 未连接的 flow → `name = 0.0`（R13 §6-2）在下方压平后落；含 connect() 的模型已在 collect_equation 整体 SKIP。
     if (comp.attributes.connector == SConnectorType::Stream) set_unsupported("stream connector");
-    const bool in_conn = enclosing_is_connector(enclosing);
-    // 连接器成员带方向（input/output）的 inside/outside 保留规则（顶层连接器保留、深层抹掉，R13 §3.1）v1 未做 → SKIP（Direction1）。
-    if (in_conn && comp.attributes.direction != SDirection::Bidir) set_unsupported("connector direction");
+    const bool in_conn = ctx.in_conn;   // 连接器内部（含连接器里的记录字段）
     // `flow` 在连接器里生成 `=0`；非连接器里的 flow 前缀 OMC 告警后当普通变量——ymc 不产告警文本，
     // 与期望的 Warning 行对不上 → SKIP（NonConnectorFlow1）。
     if (comp.attributes.connector == SConnectorType::Flow && !in_conn) set_unsupported("flow outside connector");
-    const bool is_flow = comp.attributes.connector == SConnectorType::Flow && in_conn;
+    // 连接器里 `flow R f` 的字段继承 flow（ConnectorType.merge，NFAttributes.mo:229-234）。
+    const bool is_flow = in_conn && (comp.attributes.connector == SConnectorType::Flow || ctx.flow_inherited);
     FlatVariable v;
     v.name = name;
     std::vector<std::vector<Id<Expr>>> nsubs = psubs_to_exprs(psubs);
@@ -1146,8 +1163,9 @@ class Flattener {
       case SVariability::Param: v.var_kind = FlatVarKind::Parameter; break;
       case SVariability::Const: v.var_kind = FlatVarKind::Constant; break;
     }
-    // 顶层 input/output 才打印方向（R13 §3.1；非顶层在 removeNonTopLevelDirections 抹掉，R11 §1 步骤 20）。
-    if (prefix.empty()) {
+    // 方向保留：所有前缀组件都是连接器或 input 组件（顶层变量、顶层连接器成员、顶层 input 组件成员）才打印
+    // input/output，否则抹掉（Variable.removeNonTopLevelDirection，NFVariable.mo:466-493；Direction1）。
+    if (ctx.keep_dir) {
       if (comp.attributes.direction == SDirection::Input) v.direction = FlatDirection::Input;
       else if (comp.attributes.direction == SDirection::Output) v.direction = FlatDirection::Output;
     }
@@ -1190,7 +1208,8 @@ class Flattener {
   void emit_array(CompId cid, const std::vector<Symbol>& name, bool is_protected,
                   const std::vector<Symbol>& prefix, const PSubs& psubs, NodeId enclosing,
                   const std::vector<Id<SMod>>& mod_subs, NodeId mod_scope,
-                  const std::vector<Symbol>& mod_prefix, bool force_final, const SElement& cel) {
+                  const std::vector<Symbol>& mod_prefix, bool force_final, const SElement& cel,
+                  const ModCtx& ctx) {
     cur_psubs_ = psubs;   // 数组绑定/摊分里 cref 前缀改写用
     // 维度：组件维在前、类型维在后（R13 §3）。字面量 + 参数/常量/size()/算术求值。
     const ScodeScope dscope = scode_scope_of(enclosing);
@@ -1251,10 +1270,9 @@ class Flattener {
     // 连接器里的数组成员（`flow Real f[2]`）：与 emit_variable 同一套守卫（stream / 成员方向 / 连接器外 flow），
     // flow 元素攒进 flow_vars_（未连接 → `f[k] = 0.0`，collectFlows 按变量声明序，NFConnections.mo:139-166）。
     if (I_.comps[cid].attributes.connector == SConnectorType::Stream) { set_unsupported("stream connector"); return; }
-    const bool in_conn = enclosing_is_connector(enclosing);
-    if (in_conn && I_.comps[cid].attributes.direction != SDirection::Bidir) { set_unsupported("connector direction"); return; }
+    const bool in_conn = ctx.in_conn;   // 连接器内部（含连接器里的记录字段）
     if (I_.comps[cid].attributes.connector == SConnectorType::Flow && !in_conn) { set_unsupported("flow outside connector"); return; }
-    const bool is_flow = I_.comps[cid].attributes.connector == SConnectorType::Flow && in_conn;
+    const bool is_flow = in_conn && (I_.comps[cid].attributes.connector == SConnectorType::Flow || ctx.flow_inherited);
     FlatVarKind vk = FlatVarKind::Var;
     switch (I_.comps[cid].attributes.variability) {
       case SVariability::Var: vk = FlatVarKind::Var; break;
@@ -1285,8 +1303,9 @@ class Flattener {
       }
     }
     const bool is_final = I_.comps[cid].attributes.is_final || force_final;
+    // 方向保留：所有前缀组件都是连接器或 input 组件（Variable.removeNonTopLevelDirection，NFVariable.mo:466-493）。
     FlatDirection dir = FlatDirection::None;
-    if (prefix.empty()) {
+    if (ctx.keep_dir) {
       if (I_.comps[cid].attributes.direction == SDirection::Input) dir = FlatDirection::Input;
       else if (I_.comps[cid].attributes.direction == SDirection::Output) dir = FlatDirection::Output;
     }
@@ -3440,20 +3459,60 @@ class Flattener {
     for (NodeId mn : pots) {
       const CompId mc = I_.nodes[mn].comp;
       if (I_.comps[mc].ty.kind != TypeKind::Complex) { if (!leaf(mn, false)) return false; continue; }
-      // 子连接器：类须是 connector；本身标量、Var。
+      // 复合成员：子连接器就地递归（splitImpl :342-348）；记录成员按字段声明序展开（:354-360）。本身须标量、Var。
       NodeId sub = I_.comps[mc].class_inst;
-      if (!sub.is_valid() || I_.nodes[sub].is_empty() || !I_.nodes[sub].def.is_valid() ||
-          I_.scode.elems[I_.nodes[sub].def].restriction != SRestriction::Connector) return false;
+      if (!sub.is_valid() || I_.nodes[sub].is_empty() || !I_.nodes[sub].def.is_valid()) return false;
+      const SRestriction sr = I_.scode.elems[I_.nodes[sub].def].restriction;
       const SElement& mcel = I_.scode.elems[I_.comps[mc].def];
       if (!mcel.attr.dims.empty() || !mcel.type.dims.empty()) return false;
       if (I_.comps[mc].attributes.variability != SVariability::Var) return false;
       std::vector<Symbol> p = mpath;
       p.push_back(I_.nodes[mn].name);
-      if (!connector_leaves(sub, p, out)) return false;
+      if (sr == SRestriction::Connector) { if (!connector_leaves(sub, p, out)) return false; }
+      else if (sr == SRestriction::Record) { if (!record_leaves(sub, p, false, out)) return false; }
+      else return false;
     }
     for (NodeId mn : flows) {
-      if (I_.comps[I_.nodes[mn].comp].ty.kind == TypeKind::Complex) return false;
-      if (!leaf(mn, true)) return false;
+      const CompId mc = I_.nodes[mn].comp;
+      if (I_.comps[mc].ty.kind != TypeKind::Complex) { if (!leaf(mn, true)) return false; continue; }
+      // `flow R f`：记录字段全部继承 flow（ConnectorType.merge，NFAttributes.mo:229-234）；`flow C c` 子连接器未做（conn9）。
+      NodeId sub = I_.comps[mc].class_inst;
+      if (!sub.is_valid() || I_.nodes[sub].is_empty() || !I_.nodes[sub].def.is_valid() ||
+          I_.scode.elems[I_.nodes[sub].def].restriction != SRestriction::Record) return false;
+      const SElement& mcel = I_.scode.elems[I_.comps[mc].def];
+      if (!mcel.attr.dims.empty() || !mcel.type.dims.empty()) return false;
+      if (I_.comps[mc].attributes.variability != SVariability::Var) return false;
+      std::vector<Symbol> p = mpath;
+      p.push_back(I_.nodes[mn].name);
+      if (!record_leaves(sub, p, true, out)) return false;
+    }
+    return true;
+  }
+  // 记录成员的字段叶（splitImpl 记录分支，NFConnector.mo:354-360：ClassTree.getComponents = 组件数组 = **声明序**，
+  // 不像连接器那样按名排序；YmcRecConn 探针 r2,r1）。is_flow 由记录成员的前缀决定并下沉到全部字段；嵌套记录递归。
+  bool record_leaves(NodeId rec, const std::vector<Symbol>& mpath, bool is_flow, std::vector<ConnMember>& out) {
+    const std::vector<NodeId> fnodes = I_.trees[I_.node_class(rec).tree].components;   // 拷贝（不跨 add）
+    const ScodeScope fscope = scode_scope_of(rec);
+    for (NodeId fn : fnodes) {
+      const CompId fc = I_.nodes[fn].comp;
+      const SElement& fcel = I_.scode.elems[I_.comps[fc].def];
+      if (I_.comps[fc].attributes.connector != SConnectorType::Potential) return false;   // 字段自带 flow/stream → 未做
+      if (I_.comps[fc].attributes.variability != SVariability::Var) return false;
+      std::vector<Symbol> p = mpath;
+      p.push_back(I_.nodes[fn].name);
+      if (I_.comps[fc].ty.kind == TypeKind::Complex) {
+        NodeId sub = I_.comps[fc].class_inst;
+        if (!sub.is_valid() || I_.nodes[sub].is_empty() || !I_.nodes[sub].def.is_valid() ||
+            I_.scode.elems[I_.nodes[sub].def].restriction != SRestriction::Record) return false;
+        if (!fcel.attr.dims.empty() || !fcel.type.dims.empty()) return false;
+        if (!record_leaves(sub, p, is_flow, out)) return false;
+        continue;
+      }
+      std::vector<std::int64_t> fdims;
+      for (Id<Exp> d : fcel.attr.dims) if (!eval_dim(d, fdims, fscope)) return false;
+      for (Id<Exp> d : fcel.type.dims) if (!eval_dim(d, fdims, fscope)) return false;
+      for (std::int64_t n : fdims) if (n <= 0) return false;
+      out.push_back({std::move(p), is_flow, I_.comps[fc].ty, std::move(fdims)});
     }
     return true;
   }

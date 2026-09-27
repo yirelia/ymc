@@ -46,6 +46,8 @@ ymc 以 **omc 1.25.0 实测**为准；这些用例从 `docs/research/s3-easy-sli
 | flattening/.../Connect3.mo | `class Connect3 … (-c1.f) + (-c2.f) = 0.0; …`（连接器别名 `class C2 = C` 成功） | **报错退出**：`c1 is not a valid connector`（短类别名当连接器，1.25.0 拒绝） | ymc 也 SKIP（`short class aliasing composite`），与 1.25.0 一致（都不产出）；文件+较新 OMC 才接受。故 Connect3 不进 easy-slice。 |
 | flattening/.../InvalidConnectorDirection1.mo（status: incorrect） | `Error: Cannot connect input component c1 to non-input component c2.` | **接受**：`class … input Real c1; Real c2; equation c1 = c2;`（+ stderr 告警连接器不平衡） | 该错误（`Error.CONNECT_PREFIX_MISMATCH`）只在**旧前端** `FrontEnd/InstSection.mo:4012` 抛，新前端无此检查（NFTyping.typeConnect/checkConnector :3110-3213 只查连接器形态/类型/下标变率）。ymc 与 1.25.0 逐字节一致；sweep 按文件记 FAIL，属账本内分歧（2026-09-27 起 FAIL 基线 69→71）。 |
 | flattening/.../InvalidConnectorDirection2.mo（status: incorrect） | `Error: Cannot connect input component c2 to non-input component c1.` | **接受**：`class … Real c1; input Real c2; equation c1 = c2;` | 同上。 |
+| flattening/.../InvalidConnectorDirection3.mo（status: incorrect） | `Error: Cannot connect input component c2.y to non-input component c1.y.` | **接受**：`input Real c1.x; Real c1.y; … input Real c2.y; … c1.x = c2.x; c1.y = c2.y; -(c1.f + c2.f) = 0.0; …` | 同上（旧前端 InstSection.mo:4012 才查方向匹配）。ymc 与 1.25.0 逐字节一致（顶层连接器成员保留方向 + 成员按名配对）；FAIL 基线 71→73。 |
+| flattening/.../InvalidConnectorDirection4.mo（status: incorrect） | `Error: Cannot connect input component c1.x to non-input component c2.x.` | **接受**（同上，成员声明序不同） | 同上。 |
 
 ## 已研究待实现：多条 connect 连接集（union-find）
 
