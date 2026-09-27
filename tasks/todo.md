@@ -588,6 +588,35 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
             ExpandExp.expandArrayConstructor，:750-791；sum 数组 → 加法链），属归约特性，另开。
       - [ ] 潜在偏差（本桶探针发现）：属性里的 if 表达式整数分支 ymc 打 `/*Real*/(if c then 0 else -1)`，omc 逐分支
             提升为 `if c then 0.0 else -1.0`（matchTypes 对 IF 分支逐支 cast）——当前无用例触发，属性 Real 化应改用逐分支 coerce。
+- [ ] **加宽(52)expandable 连接器**（2026-09-27 规划；用户定"上 expandable，依据 OMC 源码，然后自动往下执行"）：
+      源：NFExpandableConnectors.mo elaborate :71-122（sortConnections :126-171 → 独立 DisjointSets（全 OUTSIDE 面）：
+      expandable↔expandable + 嵌套同名 expandable 成员（:173-237）、未声明元素↔其父 expandable（:239-282）→ 每集并集
+      （按末段名去重）：已声明者 markComponentPresent（:334-355，连子孙），未声明者建虚变量（createVirtualVariables :431-455：
+      前插、复合类型按声明序递归、注释 "virtual variable in expandable connector"、AUGMENTED）→ 连接表重排 expandable/
+      undeclared/normal（:113-115）→ NFFlatten.mo:2464 删掉仍 potentially present 的变量 → collectFlows（虚 flow 另加 OUTSIDE，
+      NFConnections.mo:158-163）。NFAttributes.mo:412-416：expandable 直属成员标 POTENTIALLY_PRESENT、禁 flow/stream；
+      splitImpl2 :388 跳过未 present 成员；checkConnectorForm（NFTyping.mo:3215-3229）除首段外须全是连接器（pp 成员算）。
+      - [x] A：标量/复合虚元素、已声明 pp 成员、expandable↔expandable（含嵌套同名）、未连接 pp 删除、前插序、连接重排、
+            虚 flow 的 IN+OUT、连接器链 `c1.c2…` 面规则。目标：ExpandableConnector1/2/3/4/5/6/7/8/10/11/12/14、Complex1、Flow2、
+            Present1/2、expconn4（+ expconn1/2/3/5：文件无 Result（FAILREASON）、1.25.0 能出模型 → 对齐 1.25.0 记账本）。
+            守卫：flow 直属 expandable（Flow1）、两侧都未声明（NonDecl1/expconn6/7）、expandable↔非 expandable（Invalid…1）、
+            虚元素下再虚（NonDecl3）、类名实参（NonDecl4）、虚元素为数组 → SKIP。
+            **完成（2026-09-28）**：flatten 期按 ModCtx::pp_chain 记每个 pp 变量的节点链；resolve_connector 泛化为逐段走
+            （除首段外皆须连接器 = checkConnectorForm，面 = crefFace；端种类 Normal/Expandable/Declared/Virtual）；
+            elaborate_expandable 复刻 sortConnections → 独立 DisjointSets 关联图（嵌套同名 expandable 升序递归）→ 逐集增广
+            （exp_set = UnorderedSet 桶序，stringHashDjb2 按 **32 位 long**（Windows 1.25.0）+ 13 桶/rehash；markComponentPresent
+            按**节点**，数组元素共用）→ 虚变量按 complexComponents 声明序逐个前插 → 连接重排 [普通, 未声明, expandable] →
+            删未 present 变量、重建 flow 表（虚 flow 先 OUTSIDE 后 INSIDE 预插入）。探针（均与 1.25.0 逐字节）：YmcExpHash1/2
+            （桶序 / 32 位）、YmcExpRehash1（15 名 rehash）、YmcExpNode1（按节点标记）、YmcExpTwoSets1（根序编号）、
+            YmcExpElem1（数组元素作类型源）、YmcExpNestedVirt1、YmcExpDeclOther1、YmcConnChain1（`c1.c2` 链；omc 另有连接器
+            不平衡告警，ymc 无告警）。ExpandableConnector13（原列 B）无需数组，本增量即过；ExpandableConnector5 卡在旧的
+            "顶层方向数组带绑定"守卫（与 expandable 无关，另开）；ExpandableConnector9/14 属 B。
+            → easy-slice 267 PASS/0 FAIL（+16）；全 scodeinst PASS 254→270、FAIL 70→73（ExpandableConnector12 −1、expconn1/2/3/5
+            +4 入账本：文件无 Result、ymc 与 1.25.0 逐字节）、SKIP 1001→982；oracle=live 不一致 0；三编译器 10/10、ASan 0
+            （另以 ASan 版 ymc 跑 40 个 expandable 用例/探针：0 报告、输出与 gcc 版一致）；+8 单测。
+      - [ ] B：expandable 数组 / 嵌套数组成员（ExpandableConnector9/14）、数组型虚元素、pp 数组成员。
+      - [ ] ExpandableConnector5：`RealOutput y[2] = zeros(size(y, 1))` 顶层方向数组带绑定 → omc 保留 `output` 并把绑定
+            改成方程 `y = {0.0, 0.0}`；现守卫 "top-level directional array with binding"（TopLevelInputs2 形态不同）需细分。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

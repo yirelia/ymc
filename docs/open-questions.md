@@ -48,6 +48,16 @@ ymc 以 **omc 1.25.0 实测**为准；这些用例从 `docs/research/s3-easy-sli
 | flattening/.../InvalidConnectorDirection2.mo（status: incorrect） | `Error: Cannot connect input component c2 to non-input component c1.` | **接受**：`class … Real c1; input Real c2; equation c1 = c2;` | 同上。 |
 | flattening/.../InvalidConnectorDirection3.mo（status: incorrect） | `Error: Cannot connect input component c2.y to non-input component c1.y.` | **接受**：`input Real c1.x; Real c1.y; … input Real c2.y; … c1.x = c2.x; c1.y = c2.y; -(c1.f + c2.f) = 0.0; …` | 同上（旧前端 InstSection.mo:4012 才查方向匹配）。ymc 与 1.25.0 逐字节一致（顶层连接器成员保留方向 + 成员按名配对）；FAIL 基线 71→73。 |
 | flattening/.../InvalidConnectorDirection4.mo（status: incorrect） | `Error: Cannot connect input component c1.x to non-input component c2.x.` | **接受**（同上，成员声明序不同） | 同上。 |
+| flattening/.../expconn1.mo（status: correct，`FAILREASON: Expandable connectors not handled yet.`） | **无 `// Result:` 段**（空期望） | `class M` + 虚变量 `ec.c.f`/`ec.c.e`（按 C 的声明序逐个前插）+ `ec.c.e = c.e; ec.c.f = 0.0; -(ec.c.f + c.f) = 0.0; c.f = 0.0;` | 文件是旧前端时代的占位（新前端早已支持）。ymc 与 1.25.0 逐字节一致；sweep 按空期望记 FAIL，属账本内分歧（2026-09-28 起 FAIL 基线 70→73：ExpandableConnector12 −1、本 4 例 +4）。 |
+| flattening/.../expconn2.mo（同上） | 无 `// Result:` | `class M` + 已声明 `ec.c.e`/`ec.c.f`（连上即 present）+ `ec.c.e = c.e; -(ec.c.f + c.f) = 0.0; ec.c.f = 0.0; c.f = 0.0;` | 同上。 |
+| flattening/.../expconn3.mo（同上） | 无 `// Result:` | `Real ec.ri "virtual variable in expandable connector"; input Real ri; … ec.ri = ri;` | 同上。 |
+| flattening/.../expconn5.mo（同上） | 无 `// Result:` | `Real ec.ri; input Real ri; … ec.ri = ri;`（已声明 `Real ri` 连上即 present） | 同上。 |
+
+**平台相关的潜在分歧源（已查明，暂无用例触发）**：expandable 虚变量的次序取决于 `UnorderedSet` 的桶序，散列是
+`stringHashDjb2`（`SimulationRuntime/c/meta/meta_modelica_builtin.c:119-157`，在 C `long` 上累乘后 `labs`）。安装版 1.25.0
+是 Windows 构建（LLP64，long 32 位），testsuite 的 `// Result:` 多在 Linux（long 64 位）生成：成员名 ≥ 4 字符时两者可能
+给出不同的虚变量序（YmcExpHash2 探针：speed/torque/temp 实测 = 32 位序）。ymc 按 32 位（1.25.0 实测）；将来若有用例文件
+与实跑在虚变量序上分歧，按本条记账。
 
 ## 已研究待实现：多条 connect 连接集（union-find）
 

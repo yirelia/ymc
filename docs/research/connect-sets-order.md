@@ -56,3 +56,18 @@
    Cardinality2/3 的期望亦然；initial equation 段独立。
 3. 子模型内的 connect：面按**书写类**本地判定（`crefFace` 用 `firstNonScope`，NFComponentRef.mo:429-440，前缀段是 SCOPE 来源），
    发射路径加前缀。Cardinality2 里 Resistor 内 `connect(p, q)` → `-(R1.p.i + R1.q.i) = 0.0`（both outside）。
+
+## 2026-09-28 补充：expandable 连接器对上述序模型的三处改动（NFExpandableConnectors.elaborate :71-122）
+
+1. **连接表重排**（:113-115）：有 expandable / 未声明端时，表序变成 `[expandable…, 未声明…, 普通…]`（各组保持原表序 = 自然序之逆），
+   合并按表序 → 换算成 ymc 的"自然序"（合并序之逆）= **普通、未声明、expandable** 三组依次，各组内自然序。ExpandableConnector13
+   的 `m1.c.p1.v = m3.c.p1.v; m1.c.p1.v = m2.c.p1.v` 即 expandable 组在合并序最前、`connect(m1.c, m3.c)` 先并。
+2. **虚 flow 双面预插入**（collectFlows，NFConnections.mo:158-163）：增广出的虚 flow 变量先 cons INSIDE 再 cons OUTSIDE →
+   表里 OUTSIDE 在前 → ymc 反序遍历 flow 表时对虚 flow 先插 `#o` 再插 `#i`。虚变量前插在变量表最前，所以它们在预插入里**最后**
+   进节点表。ExpandableConnectorComplex1：`m.a.v = bus.a.v; bus.a.i = 0.0; m.a.i - bus.a.i = 0.0;`（INSIDE 面单元素集
+   夹在中间）、expconn1 同理。
+3. **E–E 连接的成员表 = 增广后类型**：makeConnectorType(isExpandable=false) 把全部成员（已声明 ∪ 本节点最后一次增广的虚成员）
+   放进 potentials、按名升序，splitImpl2 跳过仍 potentially present 的；虚成员按其类型来源端的叶表就地展开。E–E 端的面照常按
+   crefFace（`connect(m1.c, m2.c)` 在顶层 → INSIDE），与关联图里一律 OUTSIDE 无关。
+
+关联图本身（独立 DisjointSets）的集合编号 / 成员序与上面第 6 步同一套规则（YmcExpTwoSets1 探针验证根序编号）。

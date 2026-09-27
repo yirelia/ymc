@@ -132,6 +132,10 @@ struct ModCtx {
   bool in_conn = false;
   // 连接器里 `flow R f` 记录成员：flow 前缀下沉到全部标量字段（ConnectorType.merge，NFAttributes.mo:229-234）。
   bool flow_inherited = false;
+  // potentially present 链（expandable 连接器）：expandable 类的直属成员置 POTENTIALLY_PRESENT（NFAttributes.mo:411-417），
+  // 子孙经 ConnectorType.merge 按位或继承（:229/234），expandable 组件自身清掉（updateComponentConnectorType :493-494）。
+  // 存链上各组件节点 raw；叶变量 present ⟺ 链上任一节点被 markComponentPresent（NFExpandableConnectors.mo:334-355）。
+  std::vector<std::uint32_t> pp_chain;
 };
 
 // OMC Prefixes.variabilityMin（取更受约束者）：ymc 枚举 Var<Discrete<Param<Const 升序=更常量，故取序数较大者。
@@ -206,6 +210,8 @@ class Flattener {
       SElementKind k = I_.scode.elems[eid].kind;
       if (k == SElementKind::Import) set_unsupported("import");   // v1 未做 import 解析
     }
+    // 本类是 expandable 连接器：其直属成员 potentially present（checkDeclaredComponentAttributes，NFAttributes.mo:411-417）。
+    const bool exp_class = def.restriction == SRestriction::ExpandableConnector;
     ClassTreeId tree = I_.node_class(inst_node).tree;
     const std::vector<NodeId> comps = I_.trees[tree].components;  // 拷一份（下面会往 arena add）
     // 校验：外来修饰的每个子名都必须命中本类某个组件——否则是嵌套类修饰 `a(B(...))`（ClassMod1）或写错名，
@@ -256,6 +262,11 @@ class Flattener {
       const SElement& cel = I_.scode.elems[I_.comps[cid].def];
       const bool has_dims = !cel.attr.dims.empty() || !cel.type.dims.empty();
       if (conflicting_direction(cel, inst_node)) { set_unsupported("conflicting direction prefix"); continue; }
+      // expandable 直属成员禁 flow/stream 前缀（assertNotFlowStream，NFAttributes.mo:411-413；omc 报错，ExpandableConnectorFlow1）。
+      if (exp_class && cel.attr.ct != SConnectorType::Potential) { set_unsupported("flow/stream in expandable connector"); continue; }
+      // 本组件 potentially present（直属 expandable 或祖先 pp）时的链（含自身）；expandable 组件自身不 pp（见 ModCtx::pp_chain）。
+      std::vector<std::uint32_t> pp_self;
+      if (exp_class || !ctx.pp_chain.empty()) { pp_self = ctx.pp_chain; pp_self.push_back(cn.raw); }
       // 条件组件 `x if cond`：cond 须求值成常量 Bool（MLS §4.4.5）。false → 移除组件（不产变量/不递归）、
       // 记路径供 connect 丢弃；true → 正常展开（条件抹掉）。求不出常量 Bool → SKIP。
       if (cel.condition.is_valid()) {
@@ -347,6 +358,7 @@ class Flattener {
                                                I_.comps[cid].attributes.direction == SDirection::Input);
             achild.in_conn = ctx.in_conn || r == SRestriction::Connector;
             achild.flow_inherited = ctx.flow_inherited;   // 复合数组上的 flow 前缀仍在上方守卫处 SKIP
+            achild.pp_chain = pp_self;   // 数组各元素共用同一组件节点（present 标记按节点，YmcExpNode1 探针）
             if (own_mod) {
               // 该元素的合成修饰：每个子修饰绑定按 aidx 下降取标量（`x={1,2,3}`→`x=vi`；each 保持原值）。
               Id<SMod> em = distribute_mod(cel.mod, aidx);
@@ -361,7 +373,9 @@ class Flattener {
           }
           continue;
         }
+        cur_pp_chain_ = pp_self;
         emit_array(cid, name, is_prot, prefix, psubs, inst_node, matched, ctx.scope, ctx.vprefix, comp_final, cel, ctx);
+        cur_pp_chain_.clear();
         continue;
       }
 
@@ -374,9 +388,9 @@ class Flattener {
           continue;
         }
         // 普通连接器当复合组件摊开成员（c.e/c.f）；未连接 flow 变量的 `=0` 方程在 emit_variable 落。
-        // expandable connector 要按连接推断成员，v1 未做 → SKIP。含 connect() 的模型在 collect_equation SKIP。
+        // expandable 连接器同样摊开已声明成员（均 potentially present），连接后由 elaborate_expandable 增广/删除。
         SRestriction r = I_.scode.elems[cdef].restriction;
-        if (r == SRestriction::ExpandableConnector) set_unsupported("expandable connector");
+        const bool r_exp = r == SRestriction::ExpandableConnector;
         // flow/stream 前缀加在复合**组件**上：连接器里的 `flow R f`（记录）→ 前缀下沉到全部标量字段（ConnectorType.merge，
         // NFAttributes.mo:229-234；YmcRecConn 探针）；`flow C c`（连接器，conn9：omc 另有不平衡告警行）与 stream 仍 SKIP。
         const bool flow_rec = ctx.in_conn && r == SRestriction::Record &&
@@ -385,7 +399,7 @@ class Flattener {
           set_unsupported("flow/stream on composite component");
         // 记录常量折叠：`constant/parameter R r = f(…)`（函数返回记录）→ 直接发射字段（继承 r 变率 + 折叠值），
         // 绕开下面的"变率复合" SKIP（CevalFuncRecord1/2）。
-        if (r == SRestriction::Record) {
+        if (r == SRestriction::Record && pp_self.empty()) {   // expandable 里的记录折叠字段不带 pp 链 → 不走此路
           Id<Exp> wb;
           NodeId ws = inst_node;
           for (Id<SMod> m : matched)
@@ -429,10 +443,13 @@ class Flattener {
         ModCtx child;
         child.final_all = comp_final;
         child.var_floor = var_min(ctx.var_floor, I_.comps[cid].attributes.variability);   // 变率下沉（Half A）
-        child.keep_dir = ctx.keep_dir && (r == SRestriction::Connector ||
+        // expandable 组件也算连接器（InstNode.isConnector = CONNECTOR_MASK 含 EXPANDABLE，NFPrefixes.mo:59-60/167-175）：
+        // 其成员保留方向（expconn4 `input Real ec.ri`、ExpandableConnector7 `output Real ec1.ec.x`）。
+        child.keep_dir = ctx.keep_dir && (r == SRestriction::Connector || r_exp ||
                                           I_.comps[cid].attributes.direction == SDirection::Input);
-        child.in_conn = ctx.in_conn || r == SRestriction::Connector;
+        child.in_conn = ctx.in_conn || r == SRestriction::Connector || r_exp;
         child.flow_inherited = ctx.flow_inherited || flow_rec;
+        if (!r_exp) child.pp_chain = pp_self;   // expandable 组件的成员重起链（其直属成员由 exp_class 置 pp）
         if (ctor_mod.is_valid()) {
           // 构造绑定与另有字段修饰叠加（`R r(z=9) = R(4,5)`）要合并两套 → 本桶未做 SKIP。
           if (own || matched_field) set_unsupported("record ctor + field modifier");
@@ -450,7 +467,9 @@ class Flattener {
         continue;
       }
       decl_scope_ = cn;   // 组件声明处的词法作用域（继承成员 = 基类作用域，供限定名在原作用域解析，const16）
+      cur_pp_chain_ = pp_self;
       emit_variable(cid, name, is_prot, prefix, psubs, inst_node, matched, ctx.scope, ctx.vprefix, comp_final, final_params, ctx.var_floor, ctx);
+      cur_pp_chain_.clear();
       decl_scope_ = Inst::empty_node();
     }
     // 本类方程（子组件方程已在上面递归时加入 → 符合 R11 §3.4-6"子组件先、本类后"）。
@@ -1228,9 +1247,11 @@ class Flattener {
     if (I_.scode.elems[comp.def].cmt.str.is_valid())
       v.comment = in_.intern(unescape_modelica_string(in_.str(I_.scode.elems[comp.def].cmt.str)));
     result_.model.variables.push_back(std::move(v));
+    const std::size_t vidx = result_.model.variables.size() - 1;
+    if (!cur_pp_chain_.empty()) var_pp_.emplace(vidx, cur_pp_chain_);
     // 未连接 flow → `name = 0.0`；`=0` 方程要排在本类方程之后（R13 §6），故先攒起来，run() 末尾统一追加。
     // nsubs 带元素下标（连接器数组 `c[i].f`）；与 name 平行，标量连接器时全空 → 打印无下标（旧行为）。
-    if (is_flow) flow_vars_.push_back({name, nsubs, cty, comp.loc});
+    if (is_flow) flow_vars_.push_back({name, nsubs, cty, comp.loc, vidx, false});
   }
 
   // 数组叶组件标量化（R13 §3/§4）：字面量维度 → 行主序逐元素变量行（无绑定/属性）；数组绑定 `= {…}` 变成
@@ -1385,7 +1406,9 @@ class Flattener {
       std::vector<std::vector<Id<Expr>>> fsubs;
       if (is_flow) { fsubs = v.name_subs; fsubs.back() = v.subscripts; }
       result_.model.variables.push_back(std::move(v));
-      if (is_flow) flow_vars_.push_back({name, std::move(fsubs), cty, I_.comps[cid].loc});
+      const std::size_t vidx = result_.model.variables.size() - 1;
+      if (!cur_pp_chain_.empty()) var_pp_.emplace(vidx, cur_pp_chain_);
+      if (is_flow) flow_vars_.push_back({name, std::move(fsubs), cty, I_.comps[cid].loc, vidx, false});
       // 递增（最后一维最快）。
       std::size_t k = dims.size();
       while (k > 0) {
@@ -3470,12 +3493,20 @@ class Flattener {
     bool is_stream = false;
     std::vector<Symbol> flow_path;
   };
+  // connect 端的种类（sortConnections，NFExpandableConnectors.mo:126-171）：Expandable = expandable 连接器组件本身（cty
+  // EXPANDABLE）；Declared = 已声明的 potentially present 成员；Virtual = expandable 里未声明的名字（虚元素，NAME 节点）。
+  enum class EndKind : std::uint8_t { Normal, Expandable, Declared, Virtual };
   struct ConnInfo {
     std::vector<Symbol> path;                        // 连接器点分路径（`m.c` → {m,c}）
     std::vector<std::vector<Id<Expr>>> subs;         // 与 path 平行的逐段下标（数组连接器 `c[i]`）；标量段空
     bool outside;
-    std::vector<ConnMember> members;
+    std::vector<ConnMember> members;                 // Expandable / Virtual 端在 elaborate_expandable 里补
+    EndKind kind = EndKind::Normal;
+    NodeId node;              // 末段组件节点（Virtual 无）
+    NodeId parent;            // Declared / Virtual：父段组件节点（须是 expandable）
+    bool scalar_ref = true;   // 各段各维都由单个下标给出（虚元素取类型的另一端须是标量元素）
   };
+  struct Resolved { ConnInfo a, b; SourceLoc loc; };
   // 连接集节点（Util/DisjointSets.mo 的元素）= 标量叶 × 面。
   struct SetNode {
     Id<Expr> cref; bool outside; bool is_flow; Type ty; SourceLoc loc;
@@ -3633,67 +3664,123 @@ class Flattener {
     return k;
   }
 
+  // 复合组件的类实例节点；非复合 / 无效 → 无效 NodeId。
+  NodeId class_of(NodeId comp) {
+    const Component& cp = I_.comps[I_.nodes[comp].comp];
+    if (cp.ty.kind != TypeKind::Complex) return {};
+    const NodeId ci = cp.class_inst;
+    return (ci.is_valid() && !I_.nodes[ci].is_empty() && I_.nodes[ci].def.is_valid()) ? ci : NodeId{};
+  }
+  bool is_expandable_comp(NodeId comp) {
+    const NodeId cls = class_of(comp);
+    return cls.is_valid() && I_.scode.elems[I_.nodes[cls].def].restriction == SRestriction::ExpandableConnector;
+  }
+  // 短类连接器 `connector InReal = input Real`：class_inst 已塌到内建（inst.cpp 短类塌陷），故按声明类型名在声明类作用域
+  // 找元素：须是 restriction=connector 的短类（`type T = input Real` 不是连接器，omc 报错 ConnectNonConnector*）。
+  // 限定名 / 继承来的类型暂缓 → false。
+  bool short_class_connector(NodeId comp, NodeId decl) {
+    const SElement& cel = I_.scode.elems[I_.comps[I_.nodes[comp].comp].def];
+    if (cel.type.leading_dot || cel.type.path.size() != 1) return false;
+    const SElement* tel = find_class_elem(decl, cel.type.path[0]);
+    return tel && tel->restriction == SRestriction::Connector && tel->def.kind == SClassDefKind::Derived;
+  }
+  // InstNode.isConnector（NFInstNode.mo:507-516）：cty 含 CONNECTOR / EXPANDABLE / POTENTIALLY_PRESENT 任一位
+  // （NFPrefixes.mo:59-60/167-175）= connector / expandable 类组件、短类连接器、或 potentially present 成员。
+  bool is_connector_comp(NodeId comp, NodeId decl, bool pp) {
+    if (pp) return true;
+    if (I_.comps[I_.nodes[comp].comp].ty.kind == TypeKind::Complex) {
+      const NodeId cls = class_of(comp);
+      if (!cls.is_valid()) return false;
+      const SRestriction r = I_.scode.elems[I_.nodes[cls].def].restriction;
+      return r == SRestriction::Connector || r == SRestriction::ExpandableConnector;
+    }
+    return short_class_connector(comp, decl);
+  }
+
   // 把 connect 实参（cref）解析成连接器**元素列表**（对标 makeConnectors，NFConnections.mo:209-235）：
   // 每段下标按 ExpandExp.expandCref / Subscript.expandList 展开（整数、范围/切片、缺省维取全部），各段各维行主序
   // 求积（首段最外），每个元素：flat 路径 + 逐段下标 + inside/outside + 叶成员表（见 ConnMember；短类连接器
-  // `connector InReal = input Real` 本身即唯一标量叶）。stream、expandable、非连接器、非常量维/下标、越界 →
-  // nullopt（调用方 SKIP）。
+  // `connector InReal = input Real` 本身即唯一标量叶）+ 端种类（ConnInfo::kind）。Expandable / Virtual 端的成员表留空
+  // （增广后才定，elaborate_expandable）。stream 短类、非连接器、非常量维/下标、越界 → nullopt（调用方 SKIP）。
   std::optional<std::vector<ConnInfo>> resolve_connector(Id<Exp> ce, NodeId enclosing) {
     if (I_.absyn.exps[ce].kind != ExpKind::CrefExp) return std::nullopt;
     const Cref& c = I_.absyn.crefs[I_.absyn.exps[ce].cref];
     if (c.leading_dot || c.parts.empty()) return std::nullopt;
-    // 合法连接器引用形态（MLS §9.1 / omc）：`c`（顶层，outside）或 `m.c`（m 非连接器组件，inside）。
-    // 深层 `b.a.c`（omc 直接报错）与嵌套 `c1.c2` v1 未做 → SKIP，保持 outside=(depth==1) 的判定成立。
-    if (c.parts.size() > 2) return std::nullopt;
-    // 逐段解析，记每段的组件节点与声明类（该段维度表达式在声明类作用域求值）。
+    // 合法连接器引用形态（NFTyping.checkConnector/checkConnectorForm :3170-3231）：除首段外每段都须是连接器
+    // （`c1.c2…cn` 或 `m.c`；`b.a.c` 中 a 非连接器 → omc 报错 ConnectInvalidForm1），末段本身须是连接器。
+    // expandable 里未声明的末段名 = 虚元素（NAME 节点 isConnector 恒真）；虚元素再往下一层 omc 内部错误
+    //（ExpandableConnectorNonDecl3）→ SKIP。逐段记组件节点与声明类（该段维度表达式在声明类作用域求值）。
     struct Seg { NodeId comp; NodeId decl; };
     std::vector<Seg> segs;
     std::vector<Symbol> path;
     NodeId cur = find_local(enclosing, c.parts[0].name);
     if (!cur.is_valid() || I_.nodes[cur].is_empty()) return std::nullopt;
-    if (c.parts.size() == 2) {
-      NodeId fcls = I_.comps[I_.nodes[cur].comp].class_inst;
-      const bool first_is_conn = fcls.is_valid() && !I_.nodes[fcls].is_empty() &&
-                                 I_.nodes[fcls].def.is_valid() &&
-                                 I_.scode.elems[I_.nodes[fcls].def].restriction == SRestriction::Connector;
-      if (first_is_conn) return std::nullopt;   // `c1.c2` 嵌套连接（omc 视为 outside）v1 未做
-    }
     segs.push_back({cur, enclosing});
     path.push_back(c.parts[0].name);
+    // 面（crefFace，NFConnector.mo:312-326）：单段、或首段是连接器 → OUTSIDE；否则 INSIDE。
+    const bool first_conn = is_connector_comp(cur, enclosing, false);
+    if (c.parts.size() == 1 && !first_conn) return std::nullopt;   // 单段非连接器（ConnectNonConnector*）
+    const bool outside = c.parts.size() == 1 || first_conn;
+    bool pp = false;            // 当前段 potentially present（ModCtx::pp_chain 同一规则）
+    bool is_virtual = false;
     for (std::size_t i = 1; i < c.parts.size(); ++i) {
-      NodeId cls = I_.comps[I_.nodes[cur].comp].class_inst;
-      NodeId nxt = cls.is_valid() ? find_local(cls, c.parts[i].name) : Inst::empty_node();
-      if (!nxt.is_valid() || I_.nodes[nxt].is_empty()) return std::nullopt;
+      const NodeId cls = class_of(cur);
+      const bool cls_exp = is_expandable_comp(cur);
+      const NodeId nxt = cls.is_valid() ? find_local(cls, c.parts[i].name) : NodeId{};
+      if (!nxt.is_valid() || I_.nodes[nxt].is_empty()) {
+        if (!cls_exp || i + 1 != c.parts.size() || !c.parts[i].subscripts.empty()) return std::nullopt;
+        is_virtual = true;   // 虚元素（标量；带下标的虚数组元素属增量 B）
+        path.push_back(c.parts[i].name);
+        break;
+      }
+      pp = (cls_exp || pp) && !is_expandable_comp(nxt);
+      if (!is_connector_comp(nxt, cls, pp)) return std::nullopt;
       cur = nxt;
       segs.push_back({cur, cls});
       path.push_back(c.parts[i].name);
     }
-    // cur = 连接器组件。叶成员表（split 序：每层 potential 升序 → flow 升序，子连接器就地展开；见 connector_leaves）。
-    const CompId ccid = I_.nodes[cur].comp;
+    // expandable 数组（`EC ec[3]` 整体/逐元素连接、`ec[1].x`）属增量 B → SKIP。
+    for (const Seg& sg : segs)
+      if (is_expandable_comp(sg.comp)) {
+        const SElement& sel = I_.scode.elems[I_.comps[I_.nodes[sg.comp].comp].def];
+        if (!sel.attr.dims.empty() || !sel.type.dims.empty()) return std::nullopt;
+      }
+    // 端种类 + 叶成员表（split 序：每层 potential 升序 → flow 升序，子连接器就地展开；见 connector_leaves）。
+    EndKind kind = EndKind::Normal;
+    NodeId parent;
     std::vector<ConnMember> members;
-    if (I_.comps[ccid].ty.kind == TypeKind::Complex) {
-      NodeId conn = I_.comps[ccid].class_inst;
-      if (!conn.is_valid() || I_.nodes[conn].is_empty()) return std::nullopt;
-      Id<SElement> cdef = I_.nodes[conn].def;
-      if (!cdef.is_valid() || I_.scode.elems[cdef].restriction != SRestriction::Connector) return std::nullopt;
-      if (!connector_leaves(conn, {}, members)) return std::nullopt;
+    if (is_virtual) {
+      kind = EndKind::Virtual;   // cur = 父 expandable；成员 = 另一端的类型（makeVirtualConnector，增广时补）
+      parent = cur;
+    } else if (is_expandable_comp(cur)) {
+      kind = EndKind::Expandable;   // 成员 = 增广后的类型（updateExpandableConnector :490-500，增广时补）
     } else {
-      // 短类连接器 `connector InReal = input Real`：组件本身即唯一标量叶（splitImpl 非 COMPLEX 分支，NFConnector.mo:366）。
-      // class_inst 已塌到内建（inst.cpp 短类塌陷），故按声明类型名在声明类作用域找元素：须是 restriction=connector 的
-      // 短类（`type T = input Real` 不是连接器，omc 报错 ConnectNonConnector*）。限定名 / 继承来的类型暂缓 → SKIP。
-      const SElement& ccel = I_.scode.elems[I_.comps[ccid].def];
-      if (ccel.type.leading_dot || ccel.type.path.size() != 1) return std::nullopt;
-      const SElement* tel = find_class_elem(segs.back().decl, ccel.type.path[0]);
-      if (!tel || tel->restriction != SRestriction::Connector || tel->def.kind != SClassDefKind::Derived) return std::nullopt;
-      if (I_.comps[ccid].attributes.connector == SConnectorType::Stream) return std::nullopt;
-      if (I_.comps[ccid].attributes.variability != SVariability::Var) return std::nullopt;   // ConstantConnector* → SKIP
-      members.push_back({{}, I_.comps[ccid].attributes.connector == SConnectorType::Flow, I_.comps[ccid].ty, {}, false, {}});
+      const CompId ccid = I_.nodes[cur].comp;
+      if (pp) {
+        kind = EndKind::Declared;
+        parent = segs[segs.size() - 2].comp;   // pp 只能在第二段起成立
+        const SElement& sel = I_.scode.elems[I_.comps[ccid].def];
+        if (!sel.attr.dims.empty() || !sel.type.dims.empty()) return std::nullopt;   // pp 数组成员属增量 B
+      }
+      if (I_.comps[ccid].ty.kind == TypeKind::Complex) {
+        const NodeId conn = class_of(cur);
+        if (!conn.is_valid() || I_.scode.elems[I_.nodes[conn].def].restriction != SRestriction::Connector) return std::nullopt;
+        if (!connector_leaves(conn, {}, members)) return std::nullopt;
+      } else {
+        // 短类连接器（组件本身即唯一标量叶，splitImpl 非 COMPLEX 分支，NFConnector.mo:366），或 expandable 里声明的
+        // 内建标量成员（`Real x`，isConnector 靠 POTENTIALLY_PRESENT 位）。
+        if (!pp && !short_class_connector(cur, segs.back().decl)) return std::nullopt;
+        if (I_.comps[ccid].attributes.connector == SConnectorType::Stream) return std::nullopt;
+        if (I_.comps[ccid].attributes.variability != SVariability::Var) return std::nullopt;   // ConstantConnector* → SKIP
+        members.push_back({{}, I_.comps[ccid].attributes.connector == SConnectorType::Flow, I_.comps[ccid].ty, {}, false, {}});
+      }
     }
     // 元素列表（对标 ExpandExp.expandCref：每段下标按 Subscript.expandList 展开——给定下标：整数/迭代变量取值、
     // 范围/数组按其自身顺序（YmcSlice.Desc/Step 探针）、缺省的后续维取全部（NFSubscript.mo:1081-1103，YmcSlice.Partial）；
     // 各段各维行主序求积，首段最外（expandCref3/4，NFExpandExp.mo:208-255；ConnectArrays3 宿主段在先）。
     // 下标越界 = omc 报错 → SKIP；非常量下标（ConnectArraysInvalidSubscript1）→ SKIP。
     std::vector<std::vector<std::vector<std::int64_t>>> seg_lists(segs.size());   // [段][维] → 下标值列表
+    bool scalar_ref = true;   // 各维都由单个整数下标给出（无缺省维、无范围/切片）
     for (std::size_t si = 0; si < segs.size(); ++si) {
       const SElement& sel = I_.scode.elems[I_.comps[I_.nodes[segs[si].comp].comp].def];
       std::vector<std::int64_t> dims;
@@ -3709,8 +3796,11 @@ class Flattener {
           if (std::optional<std::int64_t> iv = subscript_int(ssubs[k])) vals.push_back(*iv);
           else if (std::optional<std::vector<std::int64_t>> rv = eval_range(ssubs[k], dscope, 0)) vals = std::move(*rv);
           else return std::nullopt;
+          const ExpKind sk = I_.absyn.exps[ssubs[k]].kind;
+          if (sk == ExpKind::Range || sk == ExpKind::Array || sk == ExpKind::Colon) scalar_ref = false;
         } else {
           for (std::int64_t v = 1; v <= dims[k]; ++v) vals.push_back(v);
+          scalar_ref = false;
         }
         for (std::int64_t v : vals) if (v < 1 || v > dims[k]) return std::nullopt;   // 越界 → SKIP
         seg_lists[si].push_back(std::move(vals));
@@ -3730,8 +3820,12 @@ class Flattener {
       for (std::size_t si = 0; si < segs.size(); ++si)
         for (std::size_t k = 0; k < seg_lists[si].size(); ++k, ++fi)
           info.subs[si].push_back(lit_int((*flat[fi])[static_cast<std::size_t>(pos[fi] - 1)]));
-      info.outside = path.size() == 1;
+      info.outside = outside;
       info.members = members;
+      info.kind = kind;
+      if (!is_virtual) info.node = cur;
+      info.parent = parent;
+      info.scalar_ref = scalar_ref;
       out.push_back(std::move(info));
     } while (next_index(pos, sizes));
     return out;
@@ -3781,6 +3875,341 @@ class Flattener {
     return false;
   }
 
+  // ---- DisjointSets（Util/DisjointSets.mo）：link <0 = 根（值 = −秩），>0 = 父下标+1 ----
+  static std::size_t ds_root(const std::vector<std::int64_t>& link, std::size_t i) {
+    while (link[i] > 0) i = static_cast<std::size_t>(link[i] - 1);
+    return i;
+  }
+  // union（:256-287）：秩存负数；注释与代码相反，按**代码**——rank1 > rank2 把 set2 挂到 set1 下。
+  static void ds_union(std::vector<std::int64_t>& link, std::size_t s1, std::size_t s2) {
+    if (s1 == s2) return;
+    const std::int64_t r1 = link[s1], r2 = link[s2];
+    if (r1 > r2) link[s2] = static_cast<std::int64_t>(s1) + 1;
+    else if (r1 < r2) link[s1] = static_cast<std::int64_t>(s2) + 1;
+    else { link[s1] -= 1; link[s2] = static_cast<std::int64_t>(s1) + 1; }
+  }
+
+  // ---- expandable 连接器（MLS §9.1.3；omc NFExpandableConnectors.elaborate :71-122 + NFFlatten.mo:2462-2468）----
+  // exp_set 是 UnorderedSet<Connector>（按末段名 stringHashDjb2 散列，:316/510-515），toList 次序 = 桶序（Util/UnorderedSet.mo
+  // add :112-126 / addKey :834-861 / rehash :539-563 / toList :254-264）。stringHashDjb2 = djb2 在 C `long` 上累乘后 labs
+  // （meta_modelica_builtin.c:119-157）；安装版 omc 1.25.0 是 Windows 构建，long 为 32 位（LLP64）→ 32 位回绕
+  // （YmcExpHash2 探针：speed/torque/temp 的实测序只与 32 位一致；YmcExpHash1：a/b/c 实测 b,c,a = 桶序而非插入序）。
+  static std::int64_t djb2_long32(std::string_view s) {
+    std::uint32_t h = 5381;
+    for (unsigned char ch : s) h = h * 33u + ch;
+    const std::int64_t v = static_cast<std::int32_t>(h);
+    return v < 0 ? -v : v;   // ponytail: labs(LONG_MIN) 在 C 里仍为负（UB），此处得 2^31；概率 2^-32，遇到再对齐
+  }
+  static std::size_t next_prime(std::size_t n) {   // Util.nextPrime（Util.mo:1225-1270）：≥ n 的最小素数（只试奇数）
+    if (n <= 2) return 2;
+    if (n % 2 == 0) ++n;
+    for (;; n += 2) {
+      bool prime = true;
+      for (std::size_t i = 3; i <= n / i; i += 2)
+        if (n % i == 0) { prime = false; break; }
+      if (prime) return n;
+    }
+  }
+  // createVirtualVariables（:431-455）的叶：复合类型按 Type.complexComponents（组件声明序）递归，标量叶逐个前插。
+  struct VLeaf { std::vector<Symbol> mpath; bool is_flow; SourceLoc loc; };
+  // v1 只做标量 Real 叶；数组 / stream / 非 Real 叶 → false（调用方 SKIP，数组属增量 B）。
+  // elem：comp 以标量元素被引用（`y[1]`，调用方已按 scalar_ref 保证），其自身维度不算数组叶。
+  bool virtual_leaves(NodeId comp, const std::vector<Symbol>& mpath, bool flow_in, std::vector<VLeaf>& out,
+                      bool elem = false) {
+    const CompId cc = I_.nodes[comp].comp;
+    const SElement& cel = I_.scode.elems[I_.comps[cc].def];
+    if (!elem && (!cel.attr.dims.empty() || !cel.type.dims.empty())) return false;
+    const SConnectorType ct = I_.comps[cc].attributes.connector;
+    if (ct == SConnectorType::Stream) return false;
+    const bool fl = flow_in || ct == SConnectorType::Flow;
+    const TypeKind tk = I_.comps[cc].ty.element_type().kind;   // 数组组件的 ty 是 Array（elem 引用取元素类型）
+    if (tk != TypeKind::Complex) {
+      if (tk != TypeKind::Real) return false;
+      out.push_back({mpath, fl, I_.comps[cc].loc});
+      return true;
+    }
+    const NodeId cls = class_of(comp);
+    if (!cls.is_valid()) return false;
+    for (NodeId mn : I_.trees[I_.node_class(cls).tree].components) {
+      if (I_.nodes[mn].kind != NodeKind::Component) continue;
+      std::vector<Symbol> p = mpath;
+      p.push_back(I_.nodes[mn].name);
+      if (!virtual_leaves(mn, p, fl, out)) return false;
+    }
+    return true;
+  }
+  // 增广后 expandable 连接器的叶成员（Connection.split 对增广类型：makeConnectorType(isExpandable=false) 全在 potentials、
+  // 按名升序，splitImpl2 跳过仍 potentially present 的成员，NFConnector.mo:383-392）。未增广过的（不在任何 expandable 集里的
+  // 嵌套 expandable）类型仍是 EXPANDABLE_CONNECTOR → splitImpl 记录分支，按组件声明序（:355-360）。
+  bool expandable_leaves(NodeId exp, const std::vector<Symbol>& mpath, std::vector<ConnMember>& out) {
+    const NodeId cls = class_of(exp);
+    if (!cls.is_valid()) return false;
+    std::vector<AugMember> mem;
+    if (auto it = aug_.find(exp.raw); it != aug_.end()) mem = it->second;
+    else
+      for (NodeId mn : I_.trees[I_.node_class(cls).tree].components)
+        if (I_.nodes[mn].kind == NodeKind::Component) mem.push_back({I_.nodes[mn].name, mn, {}});
+    for (const AugMember& m : mem) {
+      std::vector<Symbol> p = mpath;
+      p.push_back(m.name);
+      if (!m.decl.is_valid()) {   // 虚成员：类型来源端的叶表，挂到本成员路径下
+        for (ConnMember x : m.vmembers) {
+          x.path.insert(x.path.begin(), p.begin(), p.end());
+          if (x.is_stream) x.flow_path.insert(x.flow_path.begin(), p.begin(), p.end());
+          out.push_back(std::move(x));
+        }
+        continue;
+      }
+      const NodeId mn = m.decl;
+      const bool sub_exp = is_expandable_comp(mn);
+      if (!sub_exp && !marked_.count(mn.raw)) continue;   // 仍 potentially present → 不拆
+      const CompId mc = I_.nodes[mn].comp;
+      const SElement& mcel = I_.scode.elems[I_.comps[mc].def];
+      if (!mcel.attr.dims.empty() || !mcel.type.dims.empty()) return false;   // 数组成员属增量 B
+      if (I_.comps[mc].attributes.variability != SVariability::Var) return false;
+      if (sub_exp) { if (!expandable_leaves(mn, p, out)) return false; continue; }
+      if (I_.comps[mc].ty.kind == TypeKind::Complex) {
+        const NodeId sub = class_of(mn);
+        if (!sub.is_valid()) return false;
+        const SRestriction sr = I_.scode.elems[I_.nodes[sub].def].restriction;
+        if (sr == SRestriction::Connector) { if (!connector_leaves(sub, p, out)) return false; }
+        else if (sr == SRestriction::Record) { if (!record_leaves(sub, p, false, out)) return false; }
+        else return false;
+        continue;
+      }
+      if (I_.comps[mc].attributes.connector != SConnectorType::Potential) return false;
+      out.push_back({std::move(p), false, I_.comps[mc].ty, {}, false, {}});
+    }
+    return true;
+  }
+  // expandable 关联图的元素（ConnectionSets 节点，面一律 OUTSIDE：addConnectionToSets :272-282）。
+  struct XNode {
+    std::vector<Symbol> path; std::vector<std::vector<Id<Expr>>> subs;
+    bool expandable;          // cty EXPANDABLE：expandable 端、未声明端的父（:266 强标 EXPANDABLE）、嵌套 expandable
+    NodeId node;              // expandable：组件节点；Declared：pp 成员节点；Virtual：无效
+    const ConnInfo* end;      // 未声明端本身
+    const ConnInfo* partner;  // Virtual：另一端（makeVirtualConnector 取其类型，:284-307）
+  };
+  // elaborate（:71-122）：分类 → 关联图 → 逐集增广（已声明者 markComponentPresent、未声明者建虚变量）→ 补 expandable /
+  // 虚元素端的成员表 → 连接表重排 → 虚变量前插 + 删仍 potentially present 的变量（NFFlatten.mo:2464）+ 重建 flow 表。
+  void elaborate_expandable(std::vector<Resolved>& rs) {
+    // 1. 分类（sortConnections :126-171），各类内保持自然序（E/U 各前插两次、N 前插后反转）。
+    std::vector<std::size_t> E, U, N;
+    auto undeclared = [](EndKind k) { return k == EndKind::Declared || k == EndKind::Virtual; };
+    for (std::size_t i = 0; i < rs.size(); ++i) {
+      const bool ea = rs[i].a.kind == EndKind::Expandable, eb = rs[i].b.kind == EndKind::Expandable;
+      const bool ua = undeclared(rs[i].a.kind), ub = undeclared(rs[i].b.kind);
+      if (ea || eb) {
+        // EXPANDABLE_NON_EXPANDABLE_CONNECTION（InvalidExpandableConnector1）→ omc 报错
+        if (!(ea && eb)) { set_unsupported("expandable connected to non-expandable"); return; }
+        E.push_back(i);
+      } else if (ua || ub) {
+        // UNDECLARED_CONNECTION（ExpandableConnectorNonDecl1 / expconn6 / expconn7）→ omc 报错
+        if (ua && ub) { set_unsupported("undeclared connected to undeclared"); return; }
+        U.push_back(i);
+      } else {
+        N.push_back(i);
+      }
+    }
+    std::vector<FlatVariable> virt;   // 虚变量（创建序；每个都前插进变量表 → 最终序为其逆）
+    std::vector<bool> virt_flow;
+    if (!E.empty() || !U.empty()) {
+      // 2. 关联图（独立 DisjointSets，全 OUTSIDE）：先 expandable 连接（+ 同名嵌套 expandable，:173-237），再未声明端 ↔
+      //    其父 expandable（:239-282）；各按自然序插入。
+      std::vector<XNode> xs;
+      std::vector<std::int64_t> xlink;
+      std::unordered_map<std::string, std::size_t> xindex;
+      auto xfind = [&](XNode n) {
+        const std::string k = conn_key(n.path, n.subs);
+        if (auto it = xindex.find(k); it != xindex.end()) return it->second;
+        xs.push_back(std::move(n));
+        xlink.push_back(-1);
+        xindex.emplace(k, xs.size() - 1);
+        return xs.size() - 1;
+      };
+      auto xmerge = [&](XNode a, XNode b) {
+        const std::size_t i = xfind(std::move(a));
+        const std::size_t j = xfind(std::move(b));
+        ds_union(xlink, ds_root(xlink, i), ds_root(xlink, j));
+      };
+      auto by_name = [&](NodeId a, NodeId b) { return in_.str(I_.nodes[a].name) < in_.str(I_.nodes[b].name); };
+      auto nested = [&](NodeId n) {   // 类型里的嵌套 expandable 成员（makeConnectorType 的 exps，按名升序）
+        std::vector<NodeId> r;
+        if (const NodeId cls = class_of(n); cls.is_valid())
+          for (NodeId mn : I_.trees[I_.node_class(cls).tree].components)
+            if (I_.nodes[mn].kind == NodeKind::Component && is_expandable_comp(mn)) r.push_back(mn);
+        std::stable_sort(r.begin(), r.end(), by_name);
+        return r;
+      };
+      // getExpandableConnectorsInConnector 前插成降序、配对再前插回升序 → 同名嵌套对按名升序、逐对深度优先并入。
+      auto add_exp = [&](auto& self, XNode a, XNode b) -> void {
+        const NodeId na = a.node, nb = b.node;
+        const std::vector<Symbol> pa = a.path, pb = b.path;
+        const std::vector<std::vector<Id<Expr>>> sa = a.subs, sb = b.subs;
+        xmerge(std::move(a), std::move(b));
+        const std::vector<NodeId> la = nested(na), lb = nested(nb);
+        for (NodeId m1 : la)
+          for (NodeId m2 : lb) {
+            if (I_.nodes[m1].name != I_.nodes[m2].name) continue;
+            for (NodeId m : {m1, m2}) {
+              const SElement& sel = I_.scode.elems[I_.comps[I_.nodes[m].comp].def];
+              if (!sel.attr.dims.empty() || !sel.type.dims.empty()) { set_unsupported("nested expandable connector array"); return; }
+            }
+            XNode x1{pa, sa, true, m1, nullptr, nullptr}, x2{pb, sb, true, m2, nullptr, nullptr};
+            x1.path.push_back(I_.nodes[m1].name);
+            x1.subs.resize(x1.path.size());
+            x2.path.push_back(I_.nodes[m2].name);
+            x2.subs.resize(x2.path.size());
+            self(self, std::move(x1), std::move(x2));
+            if (result_.unsupported) return;
+            break;
+          }
+      };
+      for (std::size_t i : E) {
+        const ConnInfo& a = rs[i].a;
+        const ConnInfo& b = rs[i].b;
+        add_exp(add_exp, XNode{a.path, a.subs, true, a.node, nullptr, nullptr},
+                XNode{b.path, b.subs, true, b.node, nullptr, nullptr});
+        if (result_.unsupported) return;
+      }
+      for (std::size_t i : U) {
+        const bool a_und = undeclared(rs[i].a.kind);
+        const ConnInfo& c = a_und ? rs[i].a : rs[i].b;
+        const ConnInfo& other = a_und ? rs[i].b : rs[i].a;
+        // 父须是 expandable 组件（经 pp 连接器再下探的 `ec.c.e`：omc 把父强标 EXPANDABLE 硬增广，未做 → SKIP）。
+        if (!is_expandable_comp(c.parent)) { set_unsupported("undeclared connector parent not expandable"); return; }
+        // 虚元素取另一端的类型：须是标量元素引用（整体数组 / 切片 → 数组型虚元素，属增量 B）。
+        if (c.kind == EndKind::Virtual && !other.scalar_ref) { set_unsupported("array-typed virtual connector"); return; }
+        XNode pn{c.path, c.subs, true, c.parent, nullptr, nullptr};
+        pn.path.pop_back();
+        pn.subs.pop_back();
+        xmerge(XNode{c.path, c.subs, false, c.node, &c, c.kind == EndKind::Virtual ? &other : nullptr}, std::move(pn));
+      }
+      // 3. 提取（extractSets :295-342）：根按节点序编号，集合内元素 = 插入序。
+      std::vector<std::size_t> xset_of(xs.size(), 0);
+      std::vector<std::vector<std::size_t>> xsets;
+      for (std::size_t i = 0; i < xs.size(); ++i)
+        if (xlink[i] < 0) { xset_of[i] = xsets.size(); xsets.emplace_back(); }
+      for (std::size_t i = 0; i < xs.size(); ++i) xsets[xset_of[ds_root(xlink, i)]].push_back(i);
+      // 4. 逐集增广（elaborateExpandableSet :309-332 / augmentExpandableConnector :357-429）。
+      const Symbol vcomment = in_.intern("virtual variable in expandable connector");
+      auto bucket_of = [&](std::size_t q, std::size_t nb) {
+        return static_cast<std::size_t>(djb2_long32(in_.str(xs[q].path.back())) % static_cast<std::int64_t>(nb));
+      };
+      for (const std::vector<std::size_t>& set : xsets) {
+        std::vector<std::size_t> exp_conns;                   // expandable 成员，前插 → 逆序
+        std::vector<std::vector<std::size_t>> buckets(13);    // exp_set：按末段名去重（isNodeNameEqual），桶内表头在前
+        std::size_t esize = 0;
+        for (std::size_t k : set) {
+          if (xs[k].expandable) { exp_conns.insert(exp_conns.begin(), k); continue; }
+          if (xs[k].end->kind == EndKind::Declared) marked_.insert(xs[k].node.raw);   // markComponentPresent（:323）
+          bool dup = false;
+          for (std::size_t q : buckets[bucket_of(k, buckets.size())])
+            if (xs[q].path.back() == xs[k].path.back()) { dup = true; break; }
+          if (dup) continue;
+          if (esize > buckets.size()) {   // loadFactor > 1 → rehash 到 nextPrime(2·size)，按旧桶序逐个前插
+            std::vector<std::vector<std::size_t>> nbk(next_prime(esize * 2));
+            for (const std::vector<std::size_t>& b : buckets)
+              for (std::size_t q : b) {
+                std::vector<std::size_t>& dst = nbk[bucket_of(q, nbk.size())];
+                dst.insert(dst.begin(), q);
+              }
+            buckets = std::move(nbk);
+          }
+          std::vector<std::size_t>& dst = buckets[bucket_of(k, buckets.size())];
+          dst.insert(dst.begin(), k);
+          ++esize;
+        }
+        std::vector<std::size_t> lst;   // toList：逐桶逐元素前插
+        for (const std::vector<std::size_t>& b : buckets)
+          for (std::size_t q : b) lst.insert(lst.begin(), q);
+        for (std::size_t ek : exp_conns) {
+          const XNode& ec = xs[ek];
+          const NodeId cls = class_of(ec.node);
+          if (!cls.is_valid()) { set_unsupported("expandable connector class"); return; }
+          std::vector<AugMember> am;
+          for (NodeId mn : I_.trees[I_.node_class(cls).tree].components)
+            if (I_.nodes[mn].kind == NodeKind::Component) am.push_back({I_.nodes[mn].name, mn, {}});
+          for (std::size_t uk : lst) {
+            const XNode& u = xs[uk];
+            const Symbol nm = u.path.back();
+            const NodeId found = find_local(cls, nm);
+            if (found.is_valid() && !I_.nodes[found].is_empty()) { marked_.insert(found.raw); continue; }
+            // 虚成员：类型来源 = 虚元素端的另一端，或（别的 expandable 里）已声明的同名成员本身。
+            const ConnInfo& src = u.end->kind == EndKind::Virtual ? *u.partner : *u.end;
+            std::vector<VLeaf> leaves;
+            if (!src.node.is_valid() || !virtual_leaves(src.node, {}, false, leaves, /*elem=*/true)) {
+              set_unsupported("virtual connector type"); return;
+            }
+            am.push_back({nm, NodeId{}, src.members});
+            for (const VLeaf& lf : leaves) {
+              FlatVariable v;
+              v.name = ec.path;
+              v.name.push_back(nm);
+              v.name.insert(v.name.end(), lf.mpath.begin(), lf.mpath.end());
+              v.name_subs = ec.subs;
+              v.name_subs.resize(v.name.size());
+              v.ty = Type::real();
+              v.comment = vcomment;
+              v.loc = lf.loc;
+              virt.push_back(std::move(v));
+              virt_flow.push_back(lf.is_flow);
+            }
+          }
+          std::stable_sort(am.begin(), am.end(),
+                           [&](const AugMember& x, const AugMember& y) { return in_.str(x.name) < in_.str(y.name); });
+          // 节点被数组元素共用：componentApply 覆盖类型（:428），最后一次增广生效；各次名表不同时其它元素的拆分会引用
+          // 不存在的虚变量（omc 行为未验证）→ SKIP。
+          auto [it, fresh] = aug_.emplace(ec.node.raw, am);
+          if (!fresh) {
+            bool same = it->second.size() == am.size();
+            for (std::size_t q = 0; same && q < am.size(); ++q) same = it->second[q].name == am[q].name;
+            if (!same) { set_unsupported("expandable node augmented differently"); return; }
+            it->second = std::move(am);
+          }
+        }
+      }
+      // 5. 成员表：虚元素端 = 另一端的叶表（makeVirtualConnector 的类型）；expandable 端 = 增广后类型的叶表。
+      for (std::size_t i : U) {
+        if (rs[i].a.kind == EndKind::Virtual) rs[i].a.members = rs[i].b.members;
+        if (rs[i].b.kind == EndKind::Virtual) rs[i].b.members = rs[i].a.members;
+      }
+      for (std::size_t i : E)
+        for (ConnInfo* ci : {&rs[i].a, &rs[i].b})
+          if (!expandable_leaves(ci->node, {}, ci->members)) { set_unsupported("expandable connector member"); return; }
+      // 6. 连接表重排（:113-115）：表序 [expandable…, 未声明…, 普通…] → 自然序（合并按其逆）= 普通、未声明、expandable。
+      std::vector<Resolved> ordered;
+      ordered.reserve(rs.size());
+      for (const std::vector<std::size_t>* grp : {&N, &U, &E})
+        for (std::size_t i : *grp) ordered.push_back(std::move(rs[i]));
+      rs = std::move(ordered);
+    }
+    // 7. 变量表：虚变量逐个前插（最终序 = 创建序之逆），再删仍 potentially present 的变量（Variable.isPresent，
+    //    NFVariable.mo:300-303；NFFlatten.mo:2464）；flow 表按新变量表重建（collectFlows 在其后，NFFlatten.mo:2466-2468）。
+    if (virt.empty() && var_pp_.empty()) return;
+    constexpr std::size_t kGone = static_cast<std::size_t>(-1);
+    std::vector<FlatVariable>& vars = result_.model.variables;
+    std::vector<FlatVariable> nv;
+    std::vector<FlowVar> nf;
+    for (std::size_t k = virt.size(); k-- > 0;) {
+      if (virt_flow[k]) nf.push_back({virt[k].name, virt[k].name_subs, virt[k].ty, virt[k].loc, nv.size(), true});
+      nv.push_back(std::move(virt[k]));
+    }
+    std::vector<std::size_t> remap(vars.size(), kGone);
+    for (std::size_t i = 0; i < vars.size(); ++i) {
+      if (auto pit = var_pp_.find(i); pit != var_pp_.end() &&
+          std::none_of(pit->second.begin(), pit->second.end(), [&](std::uint32_t r) { return marked_.count(r) > 0; }))
+        continue;
+      remap[i] = nv.size();
+      nv.push_back(std::move(vars[i]));
+    }
+    for (FlowVar& f : flow_vars_)
+      if (remap[f.var_idx] != kGone) { f.var_idx = remap[f.var_idx]; nf.push_back(std::move(f)); }
+    vars = std::move(nv);
+    flow_vars_ = std::move(nf);
+    var_pp_.clear();
+  }
+
   // 连接集展开（对标 NFFlatten.resolveConnections :2433 → ConnectionSets.fromConnections + DisjointSets +
   // ConnectEquations.generateEquations；顺序规则与 14 个探针见 docs/research/connect-sets-order.md）。
   // 没有 connect 也要跑：全部 flow 变量作为 INSIDE 单元素集产出 `f = 0.0`。结果整体插到模型自身方程之前（NFFlatten.mo:2497）。
@@ -3794,7 +4223,6 @@ class Flattener {
     // （对标 makeConnections，NFConnections.mo:200-206；左右元素数不等 = omc 报错 → SKIP）。
     // 子模型内的 connect：面已按**书写类**本地判定（crefFace 用 firstNonScope，前缀段是 SCOPE 来源，
     // NFComponentRef.mo:429-440），这里再把书写处前缀（含复合数组元素下标）接到路径前面。
-    struct Resolved { ConnInfo a, b; SourceLoc loc; };
     std::vector<Resolved> rs;
     for (const ConnectStmt& cs : live) {
       loop_vars_ = cs.loopvars;
@@ -3815,7 +4243,6 @@ class Flattener {
         ci.subs = std::move(s);
       };
       for (std::size_t i = 0; i < A->size(); ++i) {
-        if ((*A)[i].members.size() != (*B)[i].members.size()) { set_unsupported("connector member mismatch"); return; }
         prefixed((*A)[i]);
         prefixed((*B)[i]);
         rs.push_back({std::move((*A)[i]), std::move((*B)[i]), cs.loc});
@@ -3827,6 +4254,11 @@ class Flattener {
       ++card_table_[conn_key(r.a.path, r.a.subs)];
       ++card_table_[conn_key(r.b.path, r.b.subs)];
     }
+    // expandable 连接器增广 + 删未连接的 potentially present 变量（NFFlatten.mo:2462-2464），在 collectFlows 之前。
+    elaborate_expandable(rs);
+    if (result_.unsupported) return;
+    for (const Resolved& r : rs)
+      if (r.a.members.size() != r.b.members.size()) { set_unsupported("connector member mismatch"); return; }
     // 标量叶配对（对标 Connection.split/scalarize 后的逐元素 CONNECTION），自然序：配对序 → 叶成员表序（每层 potential
     // 升序在前、flow 升序在后、子连接器就地展开，见 connector_leaves）→ 数组成员行主序（Connection.scalarize →
     // Connector.scalarize → scalarizeAll，NFConnection.mo:76-98）。任一侧成员为条件假被移除 → 整对丢弃（NFConnection.mo:68）。
@@ -3858,16 +4290,10 @@ class Flattener {
       return nodes.size() - 1;
     };
     auto root_of = [&](std::size_t i) { return cs_root(i); };
-    // DisjointSets.union（:256-287）：秩存负数；注释与代码相反，按**代码**——rank1 > rank2 把 set2 挂到 set1 下。
-    auto unite = [&](std::size_t s1, std::size_t s2) {
-      if (s1 == s2) return;
-      const std::int64_t r1 = link[s1], r2 = link[s2];
-      if (r1 > r2) link[s2] = static_cast<std::int64_t>(s1) + 1;
-      else if (r1 < r2) link[s1] = static_cast<std::int64_t>(s2) + 1;
-      else { link[s1] -= 1; link[s2] = static_cast<std::int64_t>(s1) + 1; }
-    };
+    auto unite = [&](std::size_t s1, std::size_t s2) { ds_union(link, s1, s2); };
     // 1. 先插全部 flow 叶（INSIDE 面）：collectFlows 按变量声明序 cons → 反序（NFConnections.mo:139-166；
-    //    ConnectionSets.fromConnections :78 先 fold flows）。
+    //    ConnectionSets.fromConnections :78 先 fold flows）。增广出的虚 flow 另加 OUTSIDE 面（:158-163，后 cons →
+    //    表里排在 INSIDE 前；ExpandableConnectorComplex1 / expconn1 的 `bus.a.i = 0.0` 次序据此）。
     for (auto it = flow_vars_.rbegin(); it != flow_vars_.rend(); ++it) {
       Expr lhs;
       lhs.kind = ExprKind::Cref;
@@ -3875,7 +4301,9 @@ class Flattener {
       for (std::size_t k = 0; k < it->name.size(); ++k)
         lhs.cref.parts.push_back({it->name[k], k < it->subs.size() ? it->subs[k] : std::vector<Id<Expr>>{}});
       const std::string nk = conn_key(it->name, it->subs);
-      find_node(nk + "#i", {add(std::move(lhs)), false, true, it->ty, it->loc, false, nk, {}, {}});
+      const Id<Expr> fc = add(std::move(lhs));
+      if (it->augmented) find_node(nk + "#o", {fc, true, true, it->ty, it->loc, false, nk, {}, {}});
+      find_node(nk + "#i", {fc, false, true, it->ty, it->loc, false, nk, {}, {}});
     }
     // 2. 合并（fromConnections :82 fold connections → merge）：合并序 = 语句反序 → 元素反序 → 叶反序 → 成员元素反序
     //    （collectConnections/makeConnections 的 cons + List.mapFlat 块内反转的净效果，List.mo:2308-2341）= 自然序整体反转；
@@ -3952,10 +4380,7 @@ class Flattener {
   }
 
   // ---- stream 连接器（MLS §15；omc NFConnectEquations.mo :423-1142）----
-  std::size_t cs_root(std::size_t i) const {
-    while (cs_link_[i] > 0) i = static_cast<std::size_t>(cs_link_[i] - 1);
-    return i;
-  }
+  std::size_t cs_root(std::size_t i) const { return ds_root(cs_link_, i); }
   Id<Expr> call_expr(const char* name, std::vector<Id<Expr>> args, Type ty) {
     Expr r;
     r.kind = ExprKind::Call;
@@ -4556,8 +4981,20 @@ class Flattener {
   std::unordered_map<std::uint32_t, Type> func_params_;         // 函数体发射期：形参/局部名→类型（cref 符号解析成裸名）
   std::unordered_set<std::uint32_t> emitting_funcs_;            // 正在发射的函数（检测递归/互调，首批 SKIP）
   bool in_if_ = false;   // 正在收集 if 分支体（connect 不能进分支体 → SKIP）
-  struct FlowVar { std::vector<Symbol> name; std::vector<std::vector<Id<Expr>>> subs; Type ty; SourceLoc loc; };
+  struct FlowVar {
+    std::vector<Symbol> name; std::vector<std::vector<Id<Expr>>> subs; Type ty; SourceLoc loc;
+    std::size_t var_idx;   // model.variables 下标（elaborate_expandable 删 pp 变量后按它重建本表）
+    bool augmented;        // 增广进 expandable 的虚 flow：另加 OUTSIDE 面（collectFlows，NFConnections.mo:158-163）
+  };
   std::vector<FlowVar> flow_vars_;   // flow 变量（run() 末尾按 outside/未连接补 `=0` 方程）
+  // expandable 连接器（elaborate_expandable）。
+  std::vector<std::uint32_t> cur_pp_chain_;   // 正在发射的叶组件的 pp 链（flatten_class 设、emit_* 读）
+  std::unordered_map<std::size_t, std::vector<std::uint32_t>> var_pp_;   // pp 变量下标 → pp 链
+  std::unordered_set<std::uint32_t> marked_;  // markComponentPresent 过的组件节点 raw
+  // 增广成员：decl 有效 = 已声明成员；否则虚成员，vmembers = 其类型的叶表（取自类型来源端，makeVirtualConnector）。
+  struct AugMember { Symbol name; NodeId decl; std::vector<ConnMember> vmembers; };
+  // expandable 组件节点 → 最后一次增广后的成员表（按名升序，makeConnectorType；节点被数组元素共用，:417-428）。
+  std::unordered_map<std::uint32_t, std::vector<AugMember>> aug_;
   // cardinality（NFCardinalityTable）：连接器元素 cref key → 在连接里出现的次数；调用先留符号，连接解析后替换并折叠。
   std::unordered_map<std::string, std::int64_t> card_table_;
   bool uses_cardinality_ = false;

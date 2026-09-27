@@ -1228,6 +1228,152 @@ YMC_TEST(flatten_instream_non_stream_operand_unsupported) {
   YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
 }
 
+// ---- expandable 连接器（NFExpandableConnectors.mo）；期望 = omc 1.25.0 实跑（文件 Result 与实跑一致者直接取用，2026-09-28）----
+
+static const char* kExpRO = "expandable connector EC\nend EC;\nconnector RealOutput = output Real;\n";
+
+YMC_TEST(flatten_expandable_virtual_scalar_two_connections) {
+  // 未声明的 bus.speed 连两次：虚变量（无方向、带注释）前插在最前；两条连接同集 → head = bus.speed。ExpandableConnector1。
+  const char* src =
+      "connector RealOutput = output Real;\nconnector RealInput = input Real;\n"
+      "expandable connector EngineBus\nend EngineBus;\n"
+      "block Sensor\n  RealOutput speed;\nend Sensor;\nblock Actuator\n  RealInput speed;\nend Actuator;\n"
+      "model ExpandableConnector1\n  EngineBus bus;\n  Sensor sensor;\n  Actuator actuator;\nequation\n"
+      "  connect(bus.speed, sensor.speed);\n  connect(bus.speed, actuator.speed);\nend ExpandableConnector1;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class ExpandableConnector1\n  Real bus.speed \"virtual variable in expandable connector\";\n"
+                           "  Real sensor.speed;\n  Real actuator.speed;\nequation\n  bus.speed = actuator.speed;\n"
+                           "  bus.speed = sensor.speed;\nend ExpandableConnector1;\n"));
+}
+
+YMC_TEST(flatten_expandable_virtual_complex_flow_both_faces) {
+  // 虚元素取另一端连接器类型：字段按声明序逐个前插（i 在 v 前）；虚 flow 另加 OUTSIDE 面预插入（collectFlows :158-163）
+  // → 未连的 INSIDE 面单独成集 `bus.a.i = 0.0`。ExpandableConnectorComplex1。
+  const char* src =
+      "expandable connector Bus\nend Bus;\n"
+      "connector PositivePin\n  Real v;\n  flow Real i;\nend PositivePin;\n"
+      "model M\n  parameter Real A = 1;\n  parameter Real w = 1;\n  PositivePin a;\nequation\n  a.v = A*sin(w*time);\nend M;\n"
+      "model ExpandableConnectorComplex1\n  Bus bus;\n  M m;\nequation\n  connect(m.a, bus.a);\n"
+      "end ExpandableConnectorComplex1;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class ExpandableConnectorComplex1\n"
+                           "  Real bus.a.i \"virtual variable in expandable connector\";\n"
+                           "  Real bus.a.v \"virtual variable in expandable connector\";\n"
+                           "  parameter Real m.A = 1.0;\n  parameter Real m.w = 1.0;\n  Real m.a.v;\n  Real m.a.i;\n"
+                           "equation\n  m.a.v = bus.a.v;\n  bus.a.i = 0.0;\n  m.a.i - bus.a.i = 0.0;\n"
+                           "  m.a.v = m.A * sin(m.w * time);\nend ExpandableConnectorComplex1;\n"));
+}
+
+YMC_TEST(flatten_expandable_virtual_order_hash_buckets) {
+  // exp_set 是按末段名 djb2 散列的 UnorderedSet，toList = 桶序（非插入序）：a/b/c → b, c, a（YmcExpHash1 探针）；
+  // Windows 版 1.25.0 的 long 是 32 位：speed/torque/temp → temp, speed, torque（64 位会是 torque, speed, temp；YmcExpHash2）。
+  const std::string h1 = std::string(kExpRO) +
+      "model YmcExpHash1\n  EC bus;\n  RealOutput s1, s2, s3;\nequation\n  connect(bus.a, s1);\n  connect(bus.b, s2);\n"
+      "  connect(bus.c, s3);\nend YmcExpHash1;\n";
+  const char* v = " \"virtual variable in expandable connector\";\n";
+  YMC_CHECK_EQ(flatten_src(h1.c_str()),
+               std::string("class YmcExpHash1\n  Real bus.b") + v + "  Real bus.c" + v + "  Real bus.a" + v +
+                   "  output Real s1;\n  output Real s2;\n  output Real s3;\nequation\n  bus.a = s1;\n  bus.b = s2;\n"
+                   "  bus.c = s3;\nend YmcExpHash1;\n");
+  const std::string h2 = std::string(kExpRO) +
+      "model YmcExpHash2\n  EC bus;\n  RealOutput s1, s2, s3;\nequation\n  connect(bus.speed, s1);\n"
+      "  connect(bus.torque, s2);\n  connect(bus.temp, s3);\nend YmcExpHash2;\n";
+  YMC_CHECK_EQ(flatten_src(h2.c_str()),
+               std::string("class YmcExpHash2\n  Real bus.temp") + v + "  Real bus.speed" + v + "  Real bus.torque" + v +
+                   "  output Real s1;\n  output Real s2;\n  output Real s3;\nequation\n  bus.speed = s1;\n"
+                   "  bus.torque = s2;\n  bus.temp = s3;\nend YmcExpHash2;\n");
+}
+
+YMC_TEST(flatten_expandable_exp_set_rehash) {
+  // 15 个未声明名进同一 exp_set：第 15 个入集前 size = 14 > 13 桶（loadFactor > 1）→ rehash 到 nextPrime(28) = 29 桶
+  // （旧桶序逐个前插，Util/UnorderedSet.mo:539-563 / 834-861）。期望 = omc 1.25.0（YmcExpRehash1 探针）。
+  std::string src = std::string(kExpRO) + "model YmcExpRehash1\n  EC bus;\n";
+  auto two = [](int i) { return std::string(i < 10 ? "0" : "") + std::to_string(i); };
+  for (int i = 1; i <= 15; ++i) src += "  RealOutput s" + two(i) + ";\n";
+  src += "equation\n";
+  for (int i = 1; i <= 15; ++i) src += "  connect(bus.n" + two(i) + ", s" + two(i) + ");\n";
+  src += "end YmcExpRehash1;\n";
+  std::string want = "class YmcExpRehash1\n";
+  for (int i : {1, 2, 3, 10, 4, 11, 5, 12, 6, 13, 7, 14, 8, 15, 9})
+    want += "  Real bus.n" + two(i) + " \"virtual variable in expandable connector\";\n";
+  for (int i = 1; i <= 15; ++i) want += "  output Real s" + two(i) + ";\n";
+  want += "equation\n";
+  for (int i = 1; i <= 15; ++i) want += "  bus.n" + two(i) + " = s" + two(i) + ";\n";
+  want += "end YmcExpRehash1;\n";
+  YMC_CHECK_EQ(flatten_src(src.c_str()), want);
+}
+
+YMC_TEST(flatten_expandable_sets_numbered_by_root) {
+  // 关联图的集合按根节点序编号（DisjointSets.union 按代码的秩规则，bus2 集的根被挂到后插的 bus2.z 下）→ bus1 集先增广，
+  // 其虚变量最后前插反而排在最后。YmcExpTwoSets1 探针。
+  const std::string src = std::string(kExpRO) +
+      "model YmcExpTwoSets1\n  EC bus1, bus2;\n  RealOutput s1, s2, s3;\nequation\n  connect(bus2.x, s1);\n"
+      "  connect(bus1.y, s2);\n  connect(bus2.z, s3);\nend YmcExpTwoSets1;\n";
+  const char* v = " \"virtual variable in expandable connector\";\n";
+  YMC_CHECK_EQ(flatten_src(src.c_str()),
+               std::string("class YmcExpTwoSets1\n  Real bus2.x") + v + "  Real bus2.z" + v + "  Real bus1.y" + v +
+                   "  output Real s1;\n  output Real s2;\n  output Real s3;\nequation\n  bus2.x = s1;\n  bus1.y = s2;\n"
+                   "  bus2.z = s3;\nend YmcExpTwoSets1;\n");
+}
+
+YMC_TEST(flatten_expandable_present_marking_per_node) {
+  // markComponentPresent 改的是组件节点，数组元素共用节点 → 只连了 a[1].ec.x，a[2].ec.x 也 present（YmcExpNode1 探针）；
+  // 未连的已声明成员被删（ExpandableConnectorPresent1 的 ec.y）。
+  const char* src =
+      "expandable connector EC\n  Real x;\nend EC;\nmodel A\n  EC ec;\nend A;\nconnector RealOutput = output Real;\n"
+      "model YmcExpNode1\n  A a[2];\n  RealOutput z;\nequation\n  connect(a[1].ec.x, z);\nend YmcExpNode1;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class YmcExpNode1\n  Real a[1].ec.x;\n  Real a[2].ec.x;\n  output Real z;\nequation\n"
+                           "  a[1].ec.x = z;\nend YmcExpNode1;\n"));
+  const char* src2 =
+      "expandable connector EC\n  Real x;\n  Real y;\nend EC;\nconnector RealInput = input Real;\n"
+      "model ExpandableConnectorPresent1\n  EC ec;\n  RealInput ri;\nequation\n  connect(ec.x, ri);\n"
+      "end ExpandableConnectorPresent1;\n";
+  YMC_CHECK_EQ(flatten_src(src2),
+               std::string("class ExpandableConnectorPresent1\n  Real ec.x;\n  input Real ri;\nequation\n  ec.x = ri;\n"
+                           "end ExpandableConnectorPresent1;\n"));
+}
+
+YMC_TEST(flatten_expandable_nested_and_declared_peer) {
+  // 嵌套 expandable 同名成员随外层连接并集（addNestedExpandableConnectorsToSets）；已声明成员保留方向（ExpandableConnector7）。
+  // 一侧已声明的 x 给另一侧当虚元素类型（YmcExpDeclOther1 探针）。
+  const char* src =
+      "connector RealOutput = output Real;\nexpandable connector EC\n  RealOutput x;\nend EC;\n"
+      "expandable connector EC2\n  EC ec;\nend EC2;\n"
+      "model ExpandableConnector7\n  RealOutput x;\n  EC2 ec1, ec2;\nequation\n  connect(ec1.ec.x, x);\n"
+      "  connect(ec1, ec2);\nend ExpandableConnector7;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class ExpandableConnector7\n  output Real x;\n  output Real ec1.ec.x;\n  output Real ec2.ec.x;\n"
+                           "equation\n  ec1.ec.x = ec2.ec.x;\n  ec1.ec.x = x;\nend ExpandableConnector7;\n"));
+  const char* src2 =
+      "expandable connector EC1\n  Real x;\nend EC1;\nexpandable connector EC2\nend EC2;\nconnector RealInput = input Real;\n"
+      "model YmcExpDeclOther1\n  EC1 ec1;\n  EC2 ec2;\n  RealInput ri;\nequation\n  connect(ec1, ec2);\n"
+      "  connect(ec1.x, ri);\nend YmcExpDeclOther1;\n";
+  YMC_CHECK_EQ(flatten_src(src2),
+               std::string("class YmcExpDeclOther1\n  Real ec2.x \"virtual variable in expandable connector\";\n"
+                           "  Real ec1.x;\n  input Real ri;\nequation\n  ec1.x = ec2.x;\n  ec1.x = ri;\n"
+                           "end YmcExpDeclOther1;\n"));
+}
+
+YMC_TEST(flatten_expandable_invalid_forms_unsupported) {
+  // omc 报错的形态 → 干净 SKIP：expandable 直属 flow（ExpandableConnectorFlow1）、两端都未声明（NonDecl1）、
+  // expandable 连非 expandable（InvalidExpandableConnector1）、虚元素再下探（NonDecl3）。
+  const char* cases[] = {
+      "expandable connector Bus\n  flow Real f;\nend Bus;\nmodel M\n  Bus bus;\nend M;\n",
+      "expandable connector EC\nend EC;\nmodel M\n  EC ec1, ec2;\nequation\n  connect(ec1.c, ec2.c);\nend M;\n",
+      "expandable connector EC\nend EC;\nconnector C\n  Real x;\nend C;\nmodel M\n  EC ec;\n  C c;\nequation\n"
+      "  connect(ec, c);\nend M;\n",
+      "connector RealInput = input Real;\nexpandable connector EC\nend EC;\nmodel M\n  RealInput ri;\n  EC ec;\n"
+      "equation\n  connect(ec.c.ri, ri);\nend M;\n",
+  };
+  for (const char* s : cases) {
+    bool uns = false;
+    const std::string t = flatten_src(s, &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+  }
+}
+
 YMC_TEST(flatten_connect_flow_sum_mixed_faces) {
   // 四元 flow 集 [inside, inside, outside, outside]（inside 预插入在前）：`b + a - c1 - c2`（取负折叠）；
   // potential 集 head = c1（合并序里最先插入）。期望 = omc（InInOutOut 探针）。
