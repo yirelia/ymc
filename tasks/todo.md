@@ -484,6 +484,22 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       → easy-slice 228 PASS/0 FAIL（+1：Connect4）；oracle=live 逐字节一致；全 scodeinst PASS 230→231、FAIL 69 不变、SKIP 1026→1025
       （守卫未翻转任何 PASS）；三编译器 10/10、ASan 0；+1 单测。共享端点连接集并查（Connect2 传递 / ConnectArrays1 切片）、
       部分下标/切片实参、inside 数组连接器的 connected_inside_ 仍按 conn_key（已含下标）留后续验证。
+- [x] **加宽㊻connect 成员序（潜在 bug）+ 嵌套连接器 + 条件成员**（2026-09-27，"依据 OMC 源码启动"）：承 a94b3ff。
+      先把连接集顺序从源码推全并用 12 探针逐字节验证，写成 docs/research/connect-sets-order.md（DisjointSets 插入序/union 秩规则/
+      extractSets 根序/generateEquations 前插/List.mapFlat 块内反转；共享端点做并查集时照此复刻）。数据：testsuite 目前**没有**
+      被共享端点卡住的用例，卡住的 5 个合法 connect 用例要的是嵌套连接器/条件成员/短类连接器+切片。
+      **潜在 bug（探针 YmcOrder.Flat 揭露）**：连接方程成员序不是声明序而是每组**按名升序**（makeConnectorType 遍历
+      ClassTree.enumerateComponents = 按名 LookupTree 折叠，NFTyping.mo:339-354 / NFClassTree.mo:1418-1444；cons/reverse 链净效果升序）；
+      既有 PASS 用例成员恰好按序声明所以没暴露。变量行与 flow 边界 =0 仍按声明序。
+      ymc：connector_leaves（对标 Connector.split → splitImpl 递归，NFConnector.mo:328-393）：每层 potential 升序（子连接器就地展开）→
+      flow 升序，ConnMember.path 多段；member_cref/flow_sum 收成员路径；配对按路径；条件为假成员（任一侧）整对丢弃
+      （Connection.split，NFConnection.mo:68，member_removed 逐段前缀查 removed_）；不相交判定降到**标量叶**（leaf_key）——
+      Condition6 三条 connect 共享连接器 c2 但叶不相交；connected_inside_ 改记已配对的 inside flow 叶（flow=0 发射处按叶精确查，
+      不再按连接器路径/前缀猜）。emit 序按叶表顺序直接发（不再全局 pot/flow 分桶——嵌套时是每层分组，ConnectDiffOrder2）。
+      → easy-slice 231 PASS/0 FAIL（+3：Condition6/Condition9/ConnectDiffOrder2）；oracle=live 逐字节一致；全 scodeinst PASS 231→234、
+      FAIL 69 不变、SKIP 1025→1022；三编译器 10/10、ASan 0；+4 单测（升序/嵌套/条件成员/全移除空类，全部 omc 1.25.0 实跑来源）。
+      留后续：短类连接器 `connector InReal = input Real` + 切片实参（ConnectArrays2/3）、记录成员（splitImpl :354-360）、
+      共享端点并查集（cardinality/stream 前置）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

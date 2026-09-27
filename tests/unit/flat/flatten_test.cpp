@@ -800,6 +800,72 @@ YMC_TEST(flatten_whole_array_connect_array_members) {
                   "end Connect4;\n"));
 }
 
+YMC_TEST(flatten_connect_members_sorted_by_name) {
+  // 连接方程里的成员序 = 每组按名**升序**（potential 组、flow 组各自），不是声明序：makeConnectorType 遍历
+  // ClassTree.enumerateComponents（按名 LookupTree 折叠，NFTyping.mo:339-354 / NFClassTree.mo:1418-1444）。
+  // 变量行与 flow 边界 =0 仍按声明序。期望 = omc 1.25.0 实跑 YmcOrder.Flat（2026-09-27，逐字节）。
+  const char* src =
+      "connector C\n  Real e2;\n  Real e1;\n  flow Real f2;\n  flow Real f1;\nend C;\n"
+      "model M\n  C a, b;\nequation\n  connect(a, b);\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class M\n  Real a.e2;\n  Real a.e1;\n  Real a.f2;\n  Real a.f1;\n"
+                           "  Real b.e2;\n  Real b.e1;\n  Real b.f2;\n  Real b.f1;\n"
+                           "equation\n  a.e1 = b.e1;\n  a.e2 = b.e2;\n"
+                           "  -(a.f1 + b.f1) = 0.0;\n  -(a.f2 + b.f2) = 0.0;\n"
+                           "  a.f2 = 0.0;\n  a.f1 = 0.0;\n  b.f2 = 0.0;\n  b.f1 = 0.0;\nend M;\n"));
+}
+
+YMC_TEST(flatten_connect_nested_connector) {
+  // 嵌套连接器 `N { C q; C p; }`：子连接器在 potential 位按名升序就地展开（splitImpl 递归，NFConnector.mo:342-348），
+  // 每层 potential 在前 flow 在后。期望 = omc 1.25.0 实跑 YmcOrder.Nested（2026-09-27，逐字节）。
+  const char* src =
+      "connector C\n  Real e2;\n  Real e1;\n  flow Real f2;\n  flow Real f1;\nend C;\n"
+      "connector N\n  C q;\n  C p;\nend N;\n"
+      "model M\n  N n1, n2;\nequation\n  connect(n1, n2);\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class M\n"
+                           "  Real n1.q.e2;\n  Real n1.q.e1;\n  Real n1.q.f2;\n  Real n1.q.f1;\n"
+                           "  Real n1.p.e2;\n  Real n1.p.e1;\n  Real n1.p.f2;\n  Real n1.p.f1;\n"
+                           "  Real n2.q.e2;\n  Real n2.q.e1;\n  Real n2.q.f2;\n  Real n2.q.f1;\n"
+                           "  Real n2.p.e2;\n  Real n2.p.e1;\n  Real n2.p.f2;\n  Real n2.p.f1;\n"
+                           "equation\n"
+                           "  n1.p.e1 = n2.p.e1;\n  n1.p.e2 = n2.p.e2;\n"
+                           "  -(n1.p.f1 + n2.p.f1) = 0.0;\n  -(n1.p.f2 + n2.p.f2) = 0.0;\n"
+                           "  n1.q.e1 = n2.q.e1;\n  n1.q.e2 = n2.q.e2;\n"
+                           "  -(n1.q.f1 + n2.q.f1) = 0.0;\n  -(n1.q.f2 + n2.q.f2) = 0.0;\n"
+                           "  n1.q.f2 = 0.0;\n  n1.q.f1 = 0.0;\n  n1.p.f2 = 0.0;\n  n1.p.f1 = 0.0;\n"
+                           "  n2.q.f2 = 0.0;\n  n2.q.f1 = 0.0;\n  n2.p.f2 = 0.0;\n  n2.p.f1 = 0.0;\nend M;\n"));
+}
+
+YMC_TEST(flatten_connect_nested_conditional_members) {
+  // 条件为假的子连接器成员：含它的配对整对丢弃（Connection.split，NFConnection.mo:68）；三条 connect 共享连接器 c2
+  // 但标量叶不相交 → 仍可不用并查集。期望 = omc 1.25.0（Condition6，2026-09-27 实跑与文件一致）。
+  const char* src =
+      "connector C1\n  Real e;\n  flow Real f;\nend C1;\n"
+      "connector C2\n  C1 c1;\n  C1 c2;\nend C2;\n"
+      "connector C3\n  C1 c1 if true;\n  C1 c2 if false;\nend C3;\n"
+      "connector C4\n  C1 c1 if false;\n  C1 c2 if true;\nend C4;\n"
+      "model Condition6\n  C2 c2;\n  C3 c3;\n  C4 c4;\n"
+      "equation\n  connect(c2, c3);\n  connect(c2, c4);\n  connect(c3, c4);\nend Condition6;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class Condition6\n"
+                           "  Real c2.c1.e;\n  Real c2.c1.f;\n  Real c2.c2.e;\n  Real c2.c2.f;\n"
+                           "  Real c3.c1.e;\n  Real c3.c1.f;\n  Real c4.c2.e;\n  Real c4.c2.f;\n"
+                           "equation\n"
+                           "  c2.c1.e = c3.c1.e;\n  -(c2.c1.f + c3.c1.f) = 0.0;\n"
+                           "  c2.c2.e = c4.c2.e;\n  -(c2.c2.f + c4.c2.f) = 0.0;\n"
+                           "  c2.c1.f = 0.0;\n  c2.c2.f = 0.0;\n  c3.c1.f = 0.0;\n  c4.c2.f = 0.0;\nend Condition6;\n"));
+}
+
+YMC_TEST(flatten_connect_all_members_removed_empty_class) {
+  // 连接器成员全部条件为假：无变量、无配对 → 空类（无 equation 段）。期望 = omc 1.25.0（Condition9）。
+  const char* src =
+      "connector C\n  Real x if false;\nend C;\n"
+      "connector C2\n  C c if false;\nend C2;\n"
+      "model Condition9\n  C2 c1;\n  C2 c2;\nequation\n  connect(c1, c2);\nend Condition9;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string("class Condition9\nend Condition9;\n"));
+}
+
 YMC_TEST(flatten_multiple_connect_shared_endpoint_unsupported) {
   // 相交的多条 connect（共享端点 c2 → 传递相等，要连接集并查）→ v1 未做，干净 SKIP。
   // （不相交的多条 connect 已支持，见 flatten_for_connect_array_disjoint。）

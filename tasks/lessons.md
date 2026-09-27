@@ -102,3 +102,7 @@
 ## 2026-09-18 — empty_node()=raw 0 也 is_valid()：判"找到没"必须用 !nodes[x].is_empty()，不是 id.is_valid()
 - 模式：跨作用域常量沿 parent_scope 链 find_local，未命中时 find_local 返回 `Inst::empty_node()`（= `NodeId::from_index(0)`，raw 0）。我用 `if (cc.is_valid())` 判是否命中——但 raw 0 的 `is_valid()` 返回 **true**（0 是合法下标，哨兵语义靠 arena 里的"空节点"体现，不是靠 id 无效）。于是空结果被当成命中，`eval_const_value(空节点, 未初始化 scope)` 一路 `comps[空].def` 越界 → `contains(id)` 断言崩。12 个用带 `time`/import 的用例全崩（它们的名字解析不到本地，触发跨作用域查找返回空）。
 - 规则：**本仓库 NodeId 的"无效/空"是 raw 0，且 `is_valid()` 对 raw 0 返回 true**。判一个节点 id 是否真的指向实体，一律照 callers 的既有写法 `x.is_valid() && !I_.nodes[x].is_empty()`（或至少 `!I_.nodes[x].is_empty()`），**不能只用 `id.is_valid()`**。find_local 之类"未命中返回 empty_node()"的函数，其返回值必须这样判。新写任何走 parent_scope/instance_parent 链、或接收 find_* 返回值的代码都按此审。
+
+## 2026-09-27 — 既有 PASS 集会遮住"顺序"类 bug：OMC 的排序/遍历规则要用"反序声明"探针专门戳
+- 模式：connect 成员序我一直按声明序发，slice 里所有连接器成员恰好按名序声明（e,f / e1,e2,f1,f2），门一直是绿的。做嵌套连接器时读 makeConnectorType → ClassTree.enumerateComponents 才发现 OMC 是按名 LookupTree 折叠（净效果升序），写了 `Real e2; Real e1;` 探针一跑立刻暴露：连接方程 e1 在前。这类 bug 的特点：输出顺序来自 OMC 某个数据结构的遍历序（树 / cons 链 / 插入序），语料没覆盖"声明序 ≠ 该序"的形态就永远不会 FAIL。
+- 规则：(1) 凡是 ymc 输出里存在"顺序"（成员、集合元素、方程序、变量序），必须去 OMC 源码找产生该序的**数据结构遍历**（LookupTree fold / cons+reverse 链 / UnorderedMap 插入序 / DisjointSets 根序），把链条推到底并记文件:行，不能拿"声明序"当默认。(2) 每条顺序规则至少一个**反序声明**探针（名字声明成与预期序相反）实跑 omc 逐字节验证再进单测；单元素/恰好有序的形态不算验证。(3) cons、`listReverse`、`List.mapFlat`（块内反转）、`listAppend(x, acc)` 前插——MetaModelica 这些习惯每个都翻一次序，推导时逐个数，最后用探针核对净效果（见 docs/research/connect-sets-order.md）。
