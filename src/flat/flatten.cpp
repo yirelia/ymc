@@ -1606,6 +1606,18 @@ class Flattener {
     }
     return nullptr;
   }
+  // 按简单名沿词法作用域链找类元素（任意 kind；走法同 find_enum_def）。继承/导入来的类不在链上 → nullptr（调用方 SKIP）。
+  const SElement* find_class_elem(NodeId scope, Symbol name) {
+    for (NodeId s = scope; s.is_valid() && !I_.nodes[s].is_empty(); s = I_.nodes[s].parent_scope) {
+      const Id<SElement> d = I_.nodes[s].def;
+      if (!d.is_valid()) continue;
+      for (Id<SElement> eid : I_.scode.elems[d].def.elements) {
+        const SElement& el = I_.scode.elems[eid];
+        if (el.kind == SElementKind::Class && el.name == name) return &el;
+      }
+    }
+    return nullptr;
+  }
 
   // 类型名维度（`x[Boolean]` / `x[E]`，对标 NFDimension.fromExp:111 + NFTypeCheck.checkDimensionType）：
   // 返回该维的下标标签（Boolean→[false,true]；本地枚举→[E.lit…]，路径用书写名 E，与 omc 对本地类型打裸名一致）。
@@ -3465,10 +3477,10 @@ class Flattener {
   }
 
   // 把 connect 实参（cref）解析成连接器**元素列表**（对标 makeConnectors，NFConnections.mo:209-235）：
-  // 标量 / 全下标 `c[i]` → 1 个元素；整体数组 `connect(c1, c2)` → 行主序全部元素（ExpandExp.expand +
-  // Connector.fromExp，NFConnector.mo:110-116）。每个元素：flat 路径 + 逐段下标 + inside/outside + 成员表
-  // （成员可为数组，见 ConnMember）。部分下标/切片、嵌套连接器成员、stream、expandable、非连接器、
-  // 非常量维/下标 → nullopt（调用方 SKIP）。
+  // 每段下标按 ExpandExp.expandCref / Subscript.expandList 展开（整数、范围/切片、缺省维取全部），各段各维行主序
+  // 求积（首段最外），每个元素：flat 路径 + 逐段下标 + inside/outside + 叶成员表（见 ConnMember；短类连接器
+  // `connector InReal = input Real` 本身即唯一标量叶）。stream、expandable、非连接器、非常量维/下标、越界 →
+  // nullopt（调用方 SKIP）。
   std::optional<std::vector<ConnInfo>> resolve_connector(Id<Exp> ce, NodeId enclosing) {
     if (I_.absyn.exps[ce].kind != ExpKind::CrefExp) return std::nullopt;
     const Cref& c = I_.absyn.crefs[I_.absyn.exps[ce].cref];
@@ -3476,9 +3488,10 @@ class Flattener {
     // 合法连接器引用形态（MLS §9.1 / omc）：`c`（顶层，outside）或 `m.c`（m 非连接器组件，inside）。
     // 深层 `b.a.c`（omc 直接报错）与嵌套 `c1.c2` v1 未做 → SKIP，保持 outside=(depth==1) 的判定成立。
     if (c.parts.size() > 2) return std::nullopt;
-    // 只有末段（连接器组件本身）允许下标；前置宿主段带下标（`m[j].c`）v1 未做 → SKIP。
-    for (std::size_t i = 0; i + 1 < c.parts.size(); ++i)
-      if (!c.parts[i].subscripts.empty()) return std::nullopt;
+    // 逐段解析，记每段的组件节点与声明类（该段维度表达式在声明类作用域求值）。
+    struct Seg { NodeId comp; NodeId decl; };
+    std::vector<Seg> segs;
+    std::vector<Symbol> path;
     NodeId cur = find_local(enclosing, c.parts[0].name);
     if (!cur.is_valid() || I_.nodes[cur].is_empty()) return std::nullopt;
     if (c.parts.size() == 2) {
@@ -3488,60 +3501,82 @@ class Flattener {
                                  I_.scode.elems[I_.nodes[fcls].def].restriction == SRestriction::Connector;
       if (first_is_conn) return std::nullopt;   // `c1.c2` 嵌套连接（omc 视为 outside）v1 未做
     }
-    std::vector<Symbol> path{c.parts[0].name};
-    NodeId decl_cls = enclosing;   // 连接器组件的声明类（其维度表达式在此作用域求值）
+    segs.push_back({cur, enclosing});
+    path.push_back(c.parts[0].name);
     for (std::size_t i = 1; i < c.parts.size(); ++i) {
       NodeId cls = I_.comps[I_.nodes[cur].comp].class_inst;
       NodeId nxt = cls.is_valid() ? find_local(cls, c.parts[i].name) : Inst::empty_node();
       if (!nxt.is_valid() || I_.nodes[nxt].is_empty()) return std::nullopt;
       cur = nxt;
-      decl_cls = cls;
+      segs.push_back({cur, cls});
       path.push_back(c.parts[i].name);
     }
-    // cur = 连接器组件；其类必须是连接器。
-    NodeId conn = I_.comps[I_.nodes[cur].comp].class_inst;
-    if (!conn.is_valid() || I_.nodes[conn].is_empty()) return std::nullopt;
-    Id<SElement> cdef = I_.nodes[conn].def;
-    if (!cdef.is_valid() || I_.scode.elems[cdef].restriction != SRestriction::Connector) return std::nullopt;
-    // 叶成员表（split 序：每层 potential 升序 → flow 升序，子连接器就地展开；见 connector_leaves）。
+    // cur = 连接器组件。叶成员表（split 序：每层 potential 升序 → flow 升序，子连接器就地展开；见 connector_leaves）。
+    const CompId ccid = I_.nodes[cur].comp;
     std::vector<ConnMember> members;
-    if (!connector_leaves(conn, {}, members)) return std::nullopt;
-    // 元素列表。subs 与 path 平行（默认空）；数组连接器的元素下标放末段。
-    const SElement& curcel = I_.scode.elems[I_.comps[I_.nodes[cur].comp].def];
-    const std::size_t ndim = curcel.attr.dims.size() + curcel.type.dims.size();
-    const std::vector<Id<Exp>>& fsubs = c.parts.back().subscripts;
+    if (I_.comps[ccid].ty.kind == TypeKind::Complex) {
+      NodeId conn = I_.comps[ccid].class_inst;
+      if (!conn.is_valid() || I_.nodes[conn].is_empty()) return std::nullopt;
+      Id<SElement> cdef = I_.nodes[conn].def;
+      if (!cdef.is_valid() || I_.scode.elems[cdef].restriction != SRestriction::Connector) return std::nullopt;
+      if (!connector_leaves(conn, {}, members)) return std::nullopt;
+    } else {
+      // 短类连接器 `connector InReal = input Real`：组件本身即唯一标量叶（splitImpl 非 COMPLEX 分支，NFConnector.mo:366）。
+      // class_inst 已塌到内建（inst.cpp 短类塌陷），故按声明类型名在声明类作用域找元素：须是 restriction=connector 的
+      // 短类（`type T = input Real` 不是连接器，omc 报错 ConnectNonConnector*）。限定名 / 继承来的类型暂缓 → SKIP。
+      const SElement& ccel = I_.scode.elems[I_.comps[ccid].def];
+      if (ccel.type.leading_dot || ccel.type.path.size() != 1) return std::nullopt;
+      const SElement* tel = find_class_elem(segs.back().decl, ccel.type.path[0]);
+      if (!tel || tel->restriction != SRestriction::Connector || tel->def.kind != SClassDefKind::Derived) return std::nullopt;
+      if (I_.comps[ccid].attributes.connector == SConnectorType::Stream) return std::nullopt;
+      if (I_.comps[ccid].attributes.variability != SVariability::Var) return std::nullopt;   // ConstantConnector* → SKIP
+      members.push_back({{}, I_.comps[ccid].attributes.connector == SConnectorType::Flow, I_.comps[ccid].ty, {}});
+    }
+    // 元素列表（对标 ExpandExp.expandCref：每段下标按 Subscript.expandList 展开——给定下标：整数/迭代变量取值、
+    // 范围/数组按其自身顺序（YmcSlice.Desc/Step 探针）、缺省的后续维取全部（NFSubscript.mo:1081-1103，YmcSlice.Partial）；
+    // 各段各维行主序求积，首段最外（expandCref3/4，NFExpandExp.mo:208-255；ConnectArrays3 宿主段在先）。
+    // 下标越界 = omc 报错 → SKIP；非常量下标（ConnectArraysInvalidSubscript1）→ SKIP。
+    std::vector<std::vector<std::vector<std::int64_t>>> seg_lists(segs.size());   // [段][维] → 下标值列表
+    for (std::size_t si = 0; si < segs.size(); ++si) {
+      const SElement& sel = I_.scode.elems[I_.comps[I_.nodes[segs[si].comp].comp].def];
+      std::vector<std::int64_t> dims;
+      const ScodeScope dscope = scode_scope_of(segs[si].decl);
+      for (Id<Exp> d : sel.attr.dims) if (!eval_dim(d, dims, dscope)) return std::nullopt;
+      for (Id<Exp> d : sel.type.dims) if (!eval_dim(d, dims, dscope)) return std::nullopt;
+      const std::vector<Id<Exp>>& ssubs = c.parts[si].subscripts;
+      if (ssubs.size() > dims.size()) return std::nullopt;   // 下标多于维数（标量带下标）→ SKIP
+      for (std::size_t k = 0; k < dims.size(); ++k) {
+        if (dims[k] <= 0) return std::nullopt;
+        std::vector<std::int64_t> vals;
+        if (k < ssubs.size()) {
+          if (std::optional<std::int64_t> iv = subscript_int(ssubs[k])) vals.push_back(*iv);
+          else if (std::optional<std::vector<std::int64_t>> rv = eval_range(ssubs[k], dscope, 0)) vals = std::move(*rv);
+          else return std::nullopt;
+        } else {
+          for (std::int64_t v = 1; v <= dims[k]; ++v) vals.push_back(v);
+        }
+        for (std::int64_t v : vals) if (v < 1 || v > dims[k]) return std::nullopt;   // 越界 → SKIP
+        seg_lists[si].push_back(std::move(vals));
+      }
+    }
+    // 行主序求积：把各段各维摊成一串"维"，pos 记每维在其取值列表里的位置（1 基，与 next_index 一致）。
+    std::vector<const std::vector<std::int64_t>*> flat;
+    for (const auto& sl : seg_lists) for (const auto& vals : sl) flat.push_back(&vals);
+    std::vector<std::int64_t> sizes, pos(flat.size(), 1);
+    for (const auto* v : flat) sizes.push_back(static_cast<std::int64_t>(v->size()));
     std::vector<ConnInfo> out;
-    auto make = [&](std::vector<Id<Expr>> elem) {
+    do {
       ConnInfo info;
       info.path = path;
-      info.subs = std::vector<std::vector<Id<Expr>>>(path.size());
-      info.subs.back() = std::move(elem);
+      info.subs.resize(path.size());
+      std::size_t fi = 0;
+      for (std::size_t si = 0; si < segs.size(); ++si)
+        for (std::size_t k = 0; k < seg_lists[si].size(); ++k, ++fi)
+          info.subs[si].push_back(lit_int((*flat[fi])[static_cast<std::size_t>(pos[fi] - 1)]));
       info.outside = path.size() == 1;
       info.members = members;
       out.push_back(std::move(info));
-    };
-    if (ndim == 0) {
-      if (!fsubs.empty()) return std::nullopt;         // 标量连接器带下标（不该有）→ SKIP
-      make({});
-    } else if (!fsubs.empty()) {
-      if (fsubs.size() != ndim) return std::nullopt;   // 部分下标 / 切片（ConnectArrays1）→ 本桶未做
-      std::vector<Id<Expr>> elem;
-      for (Id<Exp> s : fsubs) {
-        std::optional<std::int64_t> iv = subscript_int(s);
-        if (!iv) return std::nullopt;                  // 非常量下标 → SKIP
-        elem.push_back(lit_int(*iv));
-      }
-      make(std::move(elem));
-    } else {
-      // 整体数组连接：展开成全部元素，行主序（YmcConn2D 探针：c[1,1], c[1,2], c[2,1], c[2,2]）。
-      std::vector<std::int64_t> cdims;
-      const ScodeScope cscope = scode_scope_of(decl_cls);
-      for (Id<Exp> d : curcel.attr.dims) if (!eval_dim(d, cdims, cscope)) return std::nullopt;
-      for (Id<Exp> d : curcel.type.dims) if (!eval_dim(d, cdims, cscope)) return std::nullopt;
-      for (std::int64_t n : cdims) if (n <= 0) return std::nullopt;
-      std::vector<std::int64_t> idx(cdims.size(), 1);
-      do { make(idx_to_exprs(idx)); } while (next_index(idx, cdims));
-    }
+    } while (next_index(pos, sizes));
     return out;
   }
 

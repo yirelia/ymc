@@ -866,6 +866,40 @@ YMC_TEST(flatten_connect_all_members_removed_empty_class) {
   YMC_CHECK_EQ(flatten_src(src), std::string("class Condition9\nend Condition9;\n"));
 }
 
+YMC_TEST(flatten_connect_short_class_connector_slice) {
+  // 短类连接器 `connector InReal = input Real`：组件本身即唯一标量叶（splitImpl 非 COMPLEX 分支，NFConnector.mo:366）；
+  // 切片实参 `y[2:p+1]` 按 Subscript.expandList 展成 y[2],y[3],y[4] 与整体 x 的 x[1..3] 按位配对（makeConnections）。
+  // 无 flow → 只有 potential 相等。期望 = omc 1.25.0（ConnectArrays2，2026-09-27 实跑与文件一致）。
+  const char* src =
+      "model ConnectArrays2\n"
+      "  connector InReal = input Real;\n  connector OutReal = output Real;\n"
+      "  parameter Integer p = 3;\n  InReal x[p];\n  OutReal y[p+1];\n"
+      "equation\n  connect(x,y[2:p+1]);\nend ConnectArrays2;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class ConnectArrays2\n  final parameter Integer p = 3;\n"
+                           "  input Real x[1];\n  input Real x[2];\n  input Real x[3];\n"
+                           "  output Real y[1];\n  output Real y[2];\n  output Real y[3];\n  output Real y[4];\n"
+                           "equation\n  x[1] = y[2];\n  x[2] = y[3];\n  x[3] = y[4];\nend ConnectArrays2;\n"));
+}
+
+YMC_TEST(flatten_connect_descending_range_subscript) {
+  // 范围下标按其自身顺序展开（Subscript.expandSlice → ExpandExp.expand，NFSubscript.mo:1053-1079）：
+  // `c1[3:-1:1]` 与整体 c2 按位配对 → c1[3]~c2[1], c1[2]~c2[2], c1[1]~c2[3]。期望 = omc 1.25.0 实跑（YmcSlice.Desc）。
+  const char* src =
+      "connector C\n  Real e;\n  flow Real f;\nend C;\n"
+      "model M\n  C c1[3], c2[3];\nequation\n  connect(c1[3:-1:1], c2);\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class M\n"
+                           "  Real c1[1].e;\n  Real c1[1].f;\n  Real c1[2].e;\n  Real c1[2].f;\n  Real c1[3].e;\n  Real c1[3].f;\n"
+                           "  Real c2[1].e;\n  Real c2[1].f;\n  Real c2[2].e;\n  Real c2[2].f;\n  Real c2[3].e;\n  Real c2[3].f;\n"
+                           "equation\n"
+                           "  c1[3].e = c2[1].e;\n  -(c1[3].f + c2[1].f) = 0.0;\n"
+                           "  c1[2].e = c2[2].e;\n  -(c1[2].f + c2[2].f) = 0.0;\n"
+                           "  c1[1].e = c2[3].e;\n  -(c1[1].f + c2[3].f) = 0.0;\n"
+                           "  c1[1].f = 0.0;\n  c1[2].f = 0.0;\n  c1[3].f = 0.0;\n"
+                           "  c2[1].f = 0.0;\n  c2[2].f = 0.0;\n  c2[3].f = 0.0;\nend M;\n"));
+}
+
 YMC_TEST(flatten_multiple_connect_shared_endpoint_unsupported) {
   // 相交的多条 connect（共享端点 c2 → 传递相等，要连接集并查）→ v1 未做，干净 SKIP。
   // （不相交的多条 connect 已支持，见 flatten_for_connect_array_disjoint。）

@@ -500,6 +500,22 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       FAIL 69 不变、SKIP 1025→1022；三编译器 10/10、ASan 0；+4 单测（升序/嵌套/条件成员/全移除空类，全部 omc 1.25.0 实跑来源）。
       留后续：短类连接器 `connector InReal = input Real` + 切片实参（ConnectArrays2/3）、记录成员（splitImpl :354-360）、
       共享端点并查集（cardinality/stream 前置）。
+- [x] **加宽㊼短类连接器 + 任意段下标/切片实参**（2026-09-27）：承 adeda22。
+      短类连接器 `connector InReal = input Real`：组件本身即唯一标量叶（splitImpl 非 COMPLEX 分支，NFConnector.mo:366）；
+      class_inst 已塌到内建（inst.cpp:448），故按声明类型名在声明类作用域链找元素（find_class_elem，同 find_enum_def 走法），
+      须 restriction=connector 的 Derived 短类（`type T = input Real` 非连接器 → nullopt）。
+      元素展开改成 ExpandExp.expandCref 语义：每段（含宿主段 `b1[1:3].x[1:3]`）下标按 Subscript.expandList 展开——整数/迭代变量、
+      范围/数组按自身顺序（eval_range，含 a:step:b）、缺省后续维取全部（NFSubscript.mo:1081-1103）；各段各维行主序求积、首段最外
+      （expandCref3/4，NFExpandExp.mo:208-255）；越界/非常量下标 → SKIP（ConnectArraysInvalidSubscript1 保持 SKIP）。
+      探针实跑 1.25.0：YmcSlice.Partial（c1[1]→c1[1,1],c1[1,2]）/Desc（3:-1:1 按范围序配对）/Step（1:2:4）逐字节。
+      **分歧账本 +2**：InvalidConnectorDirection1/2（status incorrect，文件期望 `Cannot connect input component … to non-input …`）
+      ——该错误只在旧前端 InstSection.mo:4012 抛，1.25.0 接受并产出，ymc 与 1.25.0 逐字节一致 → 记入 docs/open-questions.md，
+      sweep 按文件记 FAIL：**全 scodeinst FAIL 基线 69→71（无真 FAIL；账本内 FinalParameter1/2/3、IfExpression17、
+      OperationRelational1 同样计在 FAIL 里）**。
+      → easy-slice 233 PASS/0 FAIL（+2：ConnectArrays2/ConnectArrays3）；oracle=live 逐字节一致；全 scodeinst PASS 234→236、
+      SKIP 1022→1018；三编译器 10/10、ASan 0；+2 单测（短类+切片、降序范围）。
+      留后续：短类 flow 连接器在模型层（`connector F = flow Real; F f;` → emit_* 的 in_conn 判定会 SKIP "flow outside connector"）、
+      参数下标 `c[p]`（subscript_int 只认整数/迭代变量）、记录成员、共享端点并查集。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples
