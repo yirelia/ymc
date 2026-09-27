@@ -170,7 +170,9 @@ class Flattener {
     //（NFFlatten.mo:2497）。顶层（outside）连接器的 flow 既进求和集（OUTSIDE 面）又留 INSIDE 单元素集 → 同时有
     // `-(c1.f + c2.f) = 0` 与 `c1.f = 0`（Connector.isEqual 含 face，NFConnector.mo:143-148）。
     process_connects();
-    // 连接解析后才能求 cardinality（evaluateConnectionOperators，NFFlatten.mo:2565-2576），随后按 SimplifyModel 折叠。
+    // 连接解析后才能求 inStream/actualStream 与 cardinality（evaluateConnectionOperators，NFFlatten.mo:2565-2576），
+    // 随后按 SimplifyModel 折叠。
+    evaluate_stream_ops();
     evaluate_cardinality();
     // 某变量名同时出现在 removed_（另一同名声明条件为假被移除）：redeclare 一个 replaceable-conditional 成员的
     // 语义（保留原条件 / 禁止带条件 redeclare）v1 未做 → SKIP（RedeclareElementCondition1/2/3）。
@@ -1131,9 +1133,10 @@ class Flattener {
         if (fn == "initial" || fn == "terminal") set_unsupported("binding variability");
       }
     }
-    // stream 变量的连接方程（inStream/actualStream）v1 未做 → SKIP。flow 变量正常打印（flow 前缀不打，R13 §3.1），
-    // 未连接的 flow → `name = 0.0`（R13 §6-2）在下方压平后落；含 connect() 的模型已在 collect_equation 整体 SKIP。
-    if (comp.attributes.connector == SConnectorType::Stream) set_unsupported("stream connector");
+    // stream 变量：须在连接器内部，且该连接器恰有一个 flow（associatedFlowCref，NFConnectEquations.mo:1106-1126；
+    // 否则 omc 报错 InvalidConnectorType3/4/6）。stream 前缀不打印（R13 §3.1）；连接方程 / inStream 在 process_connects 后求。
+    if (comp.attributes.connector == SConnectorType::Stream && !(ctx.in_conn && single_flow_name(enclosing)))
+      set_unsupported("stream connector");
     const bool in_conn = ctx.in_conn;   // 连接器内部（含连接器里的记录字段）
     // `flow` 在连接器里生成 `=0`；非连接器里的 flow 前缀 OMC 告警后当普通变量——ymc 不产告警文本，
     // 与期望的 Warning 行对不上 → SKIP（NonConnectorFlow1）。
@@ -2822,6 +2825,7 @@ class Flattener {
     }
     const std::string_view builtin_name = fn.parts.size() == 1 ? in_.str(fn.parts[0].name) : std::string_view{};
     if (builtin_name == "cardinality") return cardinality_call(e, enclosing, prefix);
+    if (builtin_name == "inStream" || builtin_name == "actualStream") return stream_op_call(e, enclosing, prefix, builtin_name);
     const BuiltinFn* bf = nullptr;
     bool supported = true;
     if (fn.parts.size() != 1) {
@@ -3414,12 +3418,25 @@ class Flattener {
   }
   // 连接器叶成员：path = 相对连接器的成员路径（嵌套连接器多段 `c1.e`）；ty = 元素类型；dims 空 = 标量成员，
   // 非空 = 数组成员（连接方程逐元素摊，Connection.scalarize）。
-  struct ConnMember { std::vector<Symbol> path; bool is_flow; Type ty; std::vector<std::int64_t> dims; };
+  // stream 叶：is_stream + flow_path（同连接器层唯一 flow 的相对路径，associatedFlowCref，NFConnectEquations.mo:1106-1126）。
+  struct ConnMember {
+    std::vector<Symbol> path; bool is_flow; Type ty; std::vector<std::int64_t> dims;
+    bool is_stream = false;
+    std::vector<Symbol> flow_path;
+  };
   struct ConnInfo {
     std::vector<Symbol> path;                        // 连接器点分路径（`m.c` → {m,c}）
     std::vector<std::vector<Id<Expr>>> subs;         // 与 path 平行的逐段下标（数组连接器 `c[i]`）；标量段空
     bool outside;
     std::vector<ConnMember> members;
+  };
+  // 连接集节点（Util/DisjointSets.mo 的元素）= 标量叶 × 面。
+  struct SetNode {
+    Id<Expr> cref; bool outside; bool is_flow; Type ty; SourceLoc loc;
+    bool is_stream;
+    std::string name_key;   // 叶 key（不含面）：removeStreamSetElement 按名比较（NFConnectEquations.mo:1088-1104）
+    Id<Expr> flow_cref;     // stream 叶：关联 flow 的 cref
+    std::string flow_key;   // stream 叶：关联 flow 变量的 key（查 min/max/nominal）
   };
   // 连接器身份 key（含数组下标）：无下标时与 path_key 逐字节相同（标量连接器向后兼容）。
   std::string conn_key(const std::vector<Symbol>& path, const std::vector<std::vector<Id<Expr>>>& subs) {
@@ -3447,15 +3464,15 @@ class Flattener {
   // stream / 记录成员（:354-360 未做）/ 子连接器数组 / `flow` 前缀子连接器（conn9）/ 非 Var 变率 / 非字面量维 → false（SKIP）。
   bool connector_leaves(NodeId conn, const std::vector<Symbol>& mpath, std::vector<ConnMember>& out) {
     const std::vector<NodeId> mnodes = I_.trees[I_.node_class(conn).tree].components;   // 拷贝（不跨 add）
-    std::vector<NodeId> pots, flows;
+    std::vector<NodeId> pots, flows, streams;   // makeConnectorType 三组（NFTyping.mo:339-354）
     for (NodeId mn : mnodes) {
       const SConnectorType ct = I_.comps[I_.nodes[mn].comp].attributes.connector;
-      if (ct == SConnectorType::Stream) return false;
-      (ct == SConnectorType::Flow ? flows : pots).push_back(mn);
+      (ct == SConnectorType::Stream ? streams : ct == SConnectorType::Flow ? flows : pots).push_back(mn);
     }
     auto by_name = [&](NodeId a, NodeId b) { return in_.str(I_.nodes[a].name) < in_.str(I_.nodes[b].name); };
     std::stable_sort(pots.begin(), pots.end(), by_name);
     std::stable_sort(flows.begin(), flows.end(), by_name);
+    std::stable_sort(streams.begin(), streams.end(), by_name);
     const ScodeScope mscope = scode_scope_of(conn);
     auto leaf = [&](NodeId mn, bool is_flow) -> bool {
       const CompId mc = I_.nodes[mn].comp;
@@ -3469,7 +3486,7 @@ class Flattener {
       for (std::int64_t n : mdims) if (n <= 0) return false;   // 空数组成员（omc 整体丢弃）未做 → SKIP
       std::vector<Symbol> p = mpath;
       p.push_back(I_.nodes[mn].name);
-      out.push_back({std::move(p), is_flow, I_.comps[mc].ty, std::move(mdims)});
+      out.push_back({std::move(p), is_flow, I_.comps[mc].ty, std::move(mdims), false, {}});
       return true;
     };
     for (NodeId mn : pots) {
@@ -3502,6 +3519,25 @@ class Flattener {
       p.push_back(I_.nodes[mn].name);
       if (!record_leaves(sub, p, true, out)) return false;
     }
+    // stream 成员（splitImpl :346：flows 之后，按名升序）：关联同层**唯一**标量 flow（associatedFlowCref :1106-1126；
+    // 否则 omc 报错 "must have exactly one flow variable"）。v1：标量 stream、不向外层连接器外溯。
+    if (!streams.empty()) {
+      if (flows.size() != 1) return false;
+      const CompId fc = I_.nodes[flows[0]].comp;
+      const SElement& fcel = I_.scode.elems[I_.comps[fc].def];
+      if (I_.comps[fc].ty.kind == TypeKind::Complex || !fcel.attr.dims.empty() || !fcel.type.dims.empty()) return false;
+      std::vector<Symbol> fpath = mpath;
+      fpath.push_back(I_.nodes[flows[0]].name);
+      for (NodeId mn : streams) {
+        const CompId mc = I_.nodes[mn].comp;
+        const SElement& mcel = I_.scode.elems[I_.comps[mc].def];
+        if (I_.comps[mc].ty.kind == TypeKind::Complex || !mcel.attr.dims.empty() || !mcel.type.dims.empty()) return false;
+        if (I_.comps[mc].attributes.variability != SVariability::Var) return false;
+        std::vector<Symbol> p = mpath;
+        p.push_back(I_.nodes[mn].name);
+        out.push_back({std::move(p), false, I_.comps[mc].ty, {}, true, fpath});
+      }
+    }
     return true;
   }
   // 记录成员的字段叶（splitImpl 记录分支，NFConnector.mo:354-360：ClassTree.getComponents = 组件数组 = **声明序**，
@@ -3528,7 +3564,7 @@ class Flattener {
       for (Id<Exp> d : fcel.attr.dims) if (!eval_dim(d, fdims, fscope)) return false;
       for (Id<Exp> d : fcel.type.dims) if (!eval_dim(d, fdims, fscope)) return false;
       for (std::int64_t n : fdims) if (n <= 0) return false;
-      out.push_back({std::move(p), is_flow, I_.comps[fc].ty, std::move(fdims)});
+      out.push_back({std::move(p), is_flow, I_.comps[fc].ty, std::move(fdims), false, {}});
     }
     return true;
   }
@@ -3605,7 +3641,7 @@ class Flattener {
       if (!tel || tel->restriction != SRestriction::Connector || tel->def.kind != SClassDefKind::Derived) return std::nullopt;
       if (I_.comps[ccid].attributes.connector == SConnectorType::Stream) return std::nullopt;
       if (I_.comps[ccid].attributes.variability != SVariability::Var) return std::nullopt;   // ConstantConnector* → SKIP
-      members.push_back({{}, I_.comps[ccid].attributes.connector == SConnectorType::Flow, I_.comps[ccid].ty, {}});
+      members.push_back({{}, I_.comps[ccid].attributes.connector == SConnectorType::Flow, I_.comps[ccid].ty, {}, false, {}});
     }
     // 元素列表（对标 ExpandExp.expandCref：每段下标按 Subscript.expandList 展开——给定下标：整数/迭代变量取值、
     // 范围/数组按其自身顺序（YmcSlice.Desc/Step 探针）、缺省的后续维取全部（NFSubscript.mo:1081-1103，YmcSlice.Partial）；
@@ -3754,17 +3790,19 @@ class Flattener {
       for (const ConnMember& m : r.a.members) {
         const ConnMember* bm = nullptr;
         for (const ConnMember& x : r.b.members) if (x.path == m.path) { bm = &x; break; }
-        if (!bm || bm->is_flow != m.is_flow || bm->dims != m.dims) { set_unsupported("connector member mismatch"); return; }
+        if (!bm || bm->is_flow != m.is_flow || bm->is_stream != m.is_stream || bm->dims != m.dims) {
+          set_unsupported("connector member mismatch"); return;
+        }
         if (member_removed(r.a.path, m.path) || member_removed(r.b.path, m.path)) continue;
         std::vector<std::int64_t> idx(m.dims.size(), 1);
         do { pairs.push_back({&r, &m, idx}); } while (next_index(idx, m.dims));
       }
 
     // ---- 并查集（Util/DisjointSets.mo）：节点 = 标量叶 × 面（Connector.isEqual 含 face，NFConnector.mo:143-148）----
-    struct SetNode { Id<Expr> cref; bool outside; bool is_flow; Type ty; SourceLoc loc; };
-    std::vector<SetNode> nodes;                              // 插入序（UnorderedMap 的 keys Vector，addEntry :861）
-    std::vector<std::int64_t> link;                          // <0 根（值 = −秩）；>0 父节点下标+1
-    std::unordered_map<std::string, std::size_t> index;      // 叶 key + 面 → 节点下标
+    // 存成成员（cs_*）：stream 算子 inStream/actualStream 要在方程生成后按集合求值。
+    std::vector<SetNode>& nodes = cs_nodes_;                 // 插入序（UnorderedMap 的 keys Vector，addEntry :861）
+    std::vector<std::int64_t>& link = cs_link_;              // <0 根（值 = −秩）；>0 父节点下标+1
+    std::unordered_map<std::string, std::size_t>& index = cs_index_;   // 叶 key + 面 → 节点下标
     auto find_node = [&](const std::string& key, SetNode n) -> std::size_t {   // DisjointSets.find：缺则新增（:207-230）
       auto it = index.find(key);
       if (it != index.end()) return it->second;
@@ -3773,10 +3811,7 @@ class Flattener {
       index.emplace(key, nodes.size() - 1);
       return nodes.size() - 1;
     };
-    auto root_of = [&](std::size_t i) {
-      while (link[i] > 0) i = static_cast<std::size_t>(link[i] - 1);
-      return i;
-    };
+    auto root_of = [&](std::size_t i) { return cs_root(i); };
     // DisjointSets.union（:256-287）：秩存负数；注释与代码相反，按**代码**——rank1 > rank2 把 set2 挂到 set1 下。
     auto unite = [&](std::size_t s1, std::size_t s2) {
       if (s1 == s2) return;
@@ -3793,7 +3828,8 @@ class Flattener {
       lhs.ty = it->ty;
       for (std::size_t k = 0; k < it->name.size(); ++k)
         lhs.cref.parts.push_back({it->name[k], k < it->subs.size() ? it->subs[k] : std::vector<Id<Expr>>{}});
-      find_node(conn_key(it->name, it->subs) + "#i", {add(std::move(lhs)), false, true, it->ty, it->loc});
+      const std::string nk = conn_key(it->name, it->subs);
+      find_node(nk + "#i", {add(std::move(lhs)), false, true, it->ty, it->loc, false, nk, {}, {}});
     }
     // 2. 合并（fromConnections :82 fold connections → merge）：合并序 = 语句反序 → 元素反序 → 叶反序 → 成员元素反序
     //    （collectConnections/makeConnections 的 cons + List.mapFlat 块内反转的净效果，List.mo:2308-2341）= 自然序整体反转；
@@ -3802,16 +3838,25 @@ class Flattener {
       const LeafPair& p = *it;
       const std::vector<Id<Expr>> msubs = idx_to_exprs(p.idx);
       auto endpoint = [&](const ConnInfo& c) -> std::size_t {
-        return find_node(leaf_key(c, *p.m, p.idx) + (c.outside ? "#o" : "#i"),
-                         {member_cref(c.path, c.subs, p.m->path, msubs, p.m->ty), c.outside, p.m->is_flow, p.m->ty, p.r->loc});
+        const std::string nk = leaf_key(c, *p.m, p.idx);
+        SetNode n{member_cref(c.path, c.subs, p.m->path, msubs, p.m->ty), c.outside, p.m->is_flow, p.m->ty, p.r->loc,
+                  false, nk, {}, {}};
+        if (p.m->is_stream) {   // 关联 flow：同一连接器元素的唯一 flow（associatedFlowCref :1106-1126）
+          n.is_stream = true;
+          n.flow_cref = member_cref(c.path, c.subs, p.m->flow_path, {}, Type::real());
+          n.flow_key = conn_key(c.path, c.subs);
+          for (Symbol s : p.m->flow_path) { n.flow_key += std::to_string(s.id); n.flow_key.push_back('.'); }
+        }
+        return find_node(nk + (c.outside ? "#o" : "#i"), std::move(n));
       };
       const std::size_t a = endpoint(p.r->a);
       const std::size_t b = endpoint(p.r->b);
       unite(root_of(a), root_of(b));
     }
     // 3. 提取（extractSets :295-342）：根按节点下标序编号；集合内元素 = 插入序。
-    std::vector<std::vector<std::size_t>> sets;
-    std::vector<std::size_t> set_of(nodes.size(), 0);
+    std::vector<std::vector<std::size_t>>& sets = cs_sets_;
+    std::vector<std::size_t>& set_of = cs_set_of_;
+    set_of.assign(nodes.size(), 0);
     for (std::size_t i = 0; i < nodes.size(); ++i)
       if (link[i] < 0) { set_of[i] = sets.size(); sets.emplace_back(); }
     for (std::size_t i = 0; i < nodes.size(); ++i) sets[set_of[root_of(i)]].push_back(i);
@@ -3820,6 +3865,7 @@ class Flattener {
     for (auto sit = sets.rbegin(); sit != sets.rend(); ++sit) {
       const std::vector<std::size_t>& s = *sit;
       const SetNode& head = nodes[s[0]];
+      if (head.is_stream) { emit_stream_set(s, conn_eqs); continue; }   // generateStreamEquations（:423-474）
       if (!head.is_flow) {   // potential：head = 其余（generatePotentialEquations :213-217）
         for (std::size_t k = 1; k < s.size(); ++k) {
           FlatEquation fe;
@@ -3857,6 +3903,298 @@ class Flattener {
     }
     // 5. 连接方程整体置于模型自身方程之前（NFFlatten.mo:2497 `listAppend(conn_eql, flatModel.equations)`；EqPlace 探针）。
     result_.model.equations.insert(result_.model.equations.begin(), conn_eqs.begin(), conn_eqs.end());
+  }
+
+  // ---- stream 连接器（MLS §15；omc NFConnectEquations.mo :423-1142）----
+  std::size_t cs_root(std::size_t i) const {
+    while (cs_link_[i] > 0) i = static_cast<std::size_t>(cs_link_[i] - 1);
+    return i;
+  }
+  Id<Expr> call_expr(const char* name, std::vector<Id<Expr>> args, Type ty) {
+    Expr r;
+    r.kind = ExprKind::Call;
+    r.call_name = {in_.intern(name)};
+    r.args = std::move(args);
+    r.ty = ty;
+    return add(std::move(r));
+  }
+  // 连接器类恰有一个 flow 成员 → 其名（stream 成员的关联 flow，associatedFlowCref :1106-1126）；否则 nullopt。
+  std::optional<Symbol> single_flow_name(NodeId cls) {
+    if (!cls.is_valid() || I_.nodes[cls].is_empty() || !I_.nodes[cls].def.is_valid()) return std::nullopt;
+    if (I_.scode.elems[I_.nodes[cls].def].restriction != SRestriction::Connector) return std::nullopt;
+    std::optional<Symbol> f;
+    int n = 0;
+    for (NodeId mn : I_.trees[I_.node_class(cls).tree].components)
+      if (I_.comps[I_.nodes[mn].comp].attributes.connector == SConnectorType::Flow) { ++n; f = I_.nodes[mn].name; }
+    return n == 1 ? f : std::nullopt;
+  }
+  // inStream / actualStream（MLS §15.2-15.3）：实参须是 stream 变量 cref（否则 omc 报错 InStreamNoStream1 /
+  // *NonCref1）、下标须为字面量（参数下标要结构化 final 副作用 → 增量 B；变量下标 omc 报错 *Variability1）。
+  // 连接集尚未建好 → 保持符号 Call（args = {stream cref, 关联 flow cref}），连接解析后按集合求值。
+  Id<Expr> stream_op_call(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix, std::string_view name) {
+    auto bad = [&](const char* why) { set_unsupported(why); return lit_real(0.0); };
+    if (e.args.size() != 1 || !is_cref_exp(e.args[0])) return bad("stream operator argument");
+    const Cref& c = I_.absyn.crefs[I_.absyn.exps[e.args[0]].cref];
+    if (c.leading_dot || c.parts.size() < 2) return bad("stream operator argument");
+    NodeId cur = find_local(enclosing, c.parts[0].name);
+    NodeId decl = enclosing;
+    for (std::size_t i = 1; i < c.parts.size() && cur.is_valid() && !I_.nodes[cur].is_empty(); ++i) {
+      const NodeId cls = I_.comps[I_.nodes[cur].comp].class_inst;
+      decl = cls;
+      cur = (cls.is_valid() && !I_.nodes[cls].is_empty()) ? find_local(cls, c.parts[i].name) : Inst::empty_node();
+    }
+    if (!cur.is_valid() || I_.nodes[cur].is_empty() || !I_.nodes[cur].comp.is_valid()) return bad("stream operator argument");
+    if (I_.comps[I_.nodes[cur].comp].attributes.connector != SConnectorType::Stream) return bad("stream operator argument");
+    const std::optional<Symbol> fname = single_flow_name(decl);
+    if (!fname) return bad("stream connector");
+    const Id<Expr> s = inst_exp(e.args[0], enclosing, prefix);
+    if (result_.unsupported) return s;
+    Expr sv = result_.model.exprs[s];
+    if (sv.kind != ExprKind::Cref || sv.cref.parts.empty()) return bad("stream operator argument");
+    for (const ExprCrefPart& p : sv.cref.parts)
+      for (Id<Expr> sub : p.subscripts)
+        if (result_.model.exprs[sub].kind != ExprKind::IntLit) return bad("stream operator subscript");
+    sv.cref.parts.back().name = *fname;
+    sv.cref.parts.back().subscripts.clear();
+    sv.cref.resolved_node = 0xFFFFFFFFu;
+    sv.ty = Type::real();
+    const Id<Expr> f = add(std::move(sv));
+    uses_stream_ops_ = true;
+    return call_expr(name == "inStream" ? "inStream" : "actualStream", {s, f}, Type::real());
+  }
+  // 变量身份 key（与 conn_key / leaf_key 同一编码；末段下标 = FlatVariable.subscripts）。
+  std::string var_key(const FlatVariable& v) {
+    std::vector<std::vector<Id<Expr>>> subs = v.name_subs;
+    subs.resize(v.name.size());
+    if (!subs.empty()) subs.back() = v.subscripts;
+    return conn_key(v.name, subs);
+  }
+  // 变量某属性的字面量值（lookupVarAttr :1128-）。属性存在但非字面量（参数表达式要结构化求值 → 增量 B）→ SKIP。
+  std::optional<double> var_attr(const std::string& vkey, const char* attr) {
+    if (var_index_.empty())
+      for (std::size_t i = 0; i < result_.model.variables.size(); ++i) var_index_.emplace(var_key(result_.model.variables[i]), i);
+    auto it = var_index_.find(vkey);
+    if (it == var_index_.end()) return std::nullopt;
+    const Symbol an = in_.intern(attr);
+    for (const FlatVarAttr& a : result_.model.variables[it->second].attributes) {
+      if (a.name != an) continue;
+      const Expr& ev = result_.model.exprs[a.value];
+      if (ev.kind == ExprKind::RealLit) return ev.rval;
+      if (ev.kind == ExprKind::IntLit) return static_cast<double>(ev.ival);
+      set_unsupported("stream flow attribute not literal");
+      return std::nullopt;
+    }
+    return std::nullopt;
+  }
+  // isNoFlowInside / isNoFlowOutside（:918-936）：inside 的 flow min ≥ 0、outside 的 flow max ≤ 0 → 无流。
+  bool no_flow_inside(const SetNode& n) { const std::optional<double> v = var_attr(n.flow_key, "min"); return v && *v >= 0; }
+  bool no_flow_outside(const SetNode& n) { const std::optional<double> v = var_attr(n.flow_key, "max"); return v && *v <= 0; }
+  // streamSumEquationExp（:499-551）：
+  //   inStreamDiv((Σ_out max(f,eps)*inStream(s) + Σ_in max(-f,eps)*s) / (Σ_out max(f,eps) + Σ_in max(-f,eps)), fallback)；
+  // sumMap 后项前插（:553-573）；eps = FLOW_THRESHOLD(1e-7) × flow 的 nominal（makePositiveMaxCall :673-711；
+  // InStreamNominalThreshold 实跑：1e-7 / 1e-10 / 1.9999999999999998e-4）。两边都空 → fallback。
+  Id<Expr> stream_sum(const std::vector<std::size_t>& outs, const std::vector<std::size_t>& ins, Id<Expr> fallback, int depth) {
+    if (outs.empty() && ins.empty()) return fallback;
+    auto pmax = [&](Id<Expr> flow, const SetNode& n) {
+      double thr = 1e-7;
+      if (const std::optional<double> nom = var_attr(n.flow_key, "nominal")) thr *= *nom;
+      return call_expr("$OMC$PositiveMax", {flow, lit_real(thr)}, Type::real());
+    };
+    auto sum = [&](const std::vector<std::size_t>& v, auto term) {
+      Id<Expr> acc = term(cs_nodes_[v[0]]);
+      for (std::size_t i = 1; i < v.size(); ++i) acc = bin_expr(BinOp::Add, term(cs_nodes_[v[i]]), acc);
+      return acc;
+    };
+    auto o1 = [&](const SetNode& n) {
+      const Id<Expr> m = pmax(n.flow_cref, n);
+      return bin_expr(BinOp::Mul, m, eval_instream(n.name_key, n.cref, depth + 1));
+    };
+    auto i1 = [&](const SetNode& n) { const Id<Expr> m = pmax(neg_expr(n.flow_cref), n); return bin_expr(BinOp::Mul, m, n.cref); };
+    auto o2 = [&](const SetNode& n) { return pmax(n.flow_cref, n); };
+    auto i2 = [&](const SetNode& n) { return pmax(neg_expr(n.flow_cref), n); };
+    Id<Expr> num, den;
+    if (outs.empty()) { num = sum(ins, i1); den = sum(ins, i2); }
+    else if (ins.empty()) { num = sum(outs, o1); den = sum(outs, o2); }
+    else {
+      const Id<Expr> no = sum(outs, o1), ni = sum(ins, i1);
+      num = bin_expr(BinOp::Add, no, ni);
+      const Id<Expr> dO = sum(outs, o2), dI = sum(ins, i2);
+      den = bin_expr(BinOp::Add, dO, dI);
+    }
+    return call_expr("$OMC$inStreamDiv", {bin_expr(BinOp::Div, num, den), fallback}, Type::real());
+  }
+  // evaluateInStream（:814-841）+ generateInStreamExp（:843-900）：按 **INSIDE 面**查所在集合（不在任何集合 → 本身）；
+  // isNoFlowMinMax 精简（查询者本身按名保留）；{本身} → 本身；两 inside → 对方；一内一外 → 对方的 inStream；
+  // 其余 → streamSumEquationExp（fallback = 本身）。
+  Id<Expr> eval_instream(const std::string& name_key, Id<Expr> cref, int depth) {
+    if (depth > 64) { set_unsupported("inStream recursion"); return cref; }
+    auto it = cs_index_.find(name_key + "#i");
+    if (it == cs_index_.end()) return cref;
+    const std::vector<std::size_t> set = cs_sets_[cs_set_of_[cs_root(it->second)]];
+    std::vector<std::size_t> red;
+    for (std::size_t k : set) {
+      const SetNode& n = cs_nodes_[k];
+      if (n.name_key == name_key) { red.push_back(k); continue; }
+      if (n.outside ? no_flow_outside(n) : no_flow_inside(n)) continue;
+      red.push_back(k);
+    }
+    if (result_.unsupported) return cref;
+    if (red.size() == 1 && !cs_nodes_[red[0]].outside) return cref;
+    if (red.size() == 2) {
+      const std::size_t o = cs_nodes_[red[0]].name_key == name_key ? red[1] : red[0];
+      const bool in0 = !cs_nodes_[red[0]].outside, in1 = !cs_nodes_[red[1]].outside;
+      if (in0 && in1) return cs_nodes_[o].cref;
+      if (in0 != in1) return eval_instream(cs_nodes_[o].name_key, cs_nodes_[o].cref, depth + 1);
+    }
+    std::vector<std::size_t> outs, ins;
+    for (std::size_t k : red) {
+      if (cs_nodes_[k].outside) outs.push_back(k);
+      else if (cs_nodes_[k].name_key != name_key) ins.push_back(k);
+    }
+    return stream_sum(outs, ins, cref, depth);
+  }
+  // evaluateActualStream（:978-1016）+ evaluateFlowDirection（:1044-1076）：由 flow 的字面量 min/max 定向——
+  // 正 → inStream(s)；负 → s；不定 → `if f > 0.0 then inStream(s) else s`。
+  Id<Expr> eval_actualstream(Id<Expr> s, Id<Expr> f) {
+    const std::string sk = expr_cref_key(result_.model.exprs[s].cref);
+    const std::string fk = expr_cref_key(result_.model.exprs[f].cref);
+    const std::optional<double> mn = var_attr(fk, "min"), mx = var_attr(fk, "max");
+    int dir = 0;
+    if (mn && !mx) dir = *mn >= 0 ? 1 : 0;
+    else if (!mn && mx) dir = *mx <= 0 ? -1 : 0;
+    else if (mn && mx) dir = (*mn >= 0 && *mx >= *mn) ? 1 : (*mx <= 0 && *mn <= *mx) ? -1 : 0;
+    if (dir == 1) return eval_instream(sk, s, 0);
+    if (dir == -1) return s;
+    const Id<Expr> in = eval_instream(sk, s, 0);
+    Expr cond;
+    cond.kind = ExprKind::Relation;
+    cond.rel = RelOp::Gt;
+    cond.a = f;
+    cond.b = lit_real(0.0);
+    cond.ty = Type::boolean();
+    const Id<Expr> ce = add(std::move(cond));
+    Expr r;
+    r.kind = ExprKind::IfExp;
+    r.a = ce;
+    r.b = in;
+    r.c = s;
+    r.ty = Type::real();
+    return add(std::move(r));
+  }
+  // generateStreamEquations（:423-474）+ streamEquationGeneral（:476-497）：inside 先去掉无流者；
+  // ({_},{}) / ({_,_},{}) → 无；({},{o1,o2}) → o1 = inStream(o2), o2 = inStream(o1)；({i},{o}) → i = o；
+  // 其余 → 每个 outside 一条 `o = inStreamDiv(…, 0)`（cons → 反序；带注释 " equation generated from stream connection"）。
+  void emit_stream_set(const std::vector<std::size_t>& s, std::vector<Id<FlatEquation>>& out) {
+    std::vector<std::size_t> outs, ins;
+    for (std::size_t k : s) {
+      if (cs_nodes_[k].outside) outs.push_back(k);
+      else if (!no_flow_inside(cs_nodes_[k])) ins.push_back(k);
+    }
+    const SourceLoc loc = cs_nodes_[s[0]].loc;
+    auto eq = [&](Id<Expr> a, Id<Expr> b, Symbol cmt) {
+      FlatEquation fe;
+      fe.kind = FlatEqKind::Equality;
+      fe.a = a;
+      fe.b = b;
+      fe.comment = cmt;
+      fe.loc = loc;
+      return result_.model.add_eq(std::move(fe));
+    };
+    if (outs.empty() && (ins.size() == 1 || ins.size() == 2)) return;
+    if (ins.empty() && outs.size() == 2) {
+      const std::string k0 = cs_nodes_[outs[0]].name_key, k1 = cs_nodes_[outs[1]].name_key;
+      const Id<Expr> c0 = cs_nodes_[outs[0]].cref, c1 = cs_nodes_[outs[1]].cref;
+      out.push_back(eq(c0, eval_instream(k1, c1, 0), Symbol{}));
+      out.push_back(eq(c1, eval_instream(k0, c0, 0), Symbol{}));
+      return;
+    }
+    if (ins.size() == 1 && outs.size() == 1) {
+      out.push_back(eq(cs_nodes_[ins[0]].cref, cs_nodes_[outs[0]].cref, Symbol{}));
+      return;
+    }
+    std::vector<std::size_t> red_out;
+    for (std::size_t k : outs) if (!no_flow_outside(cs_nodes_[k])) red_out.push_back(k);
+    const Symbol cmt = in_.intern(" equation generated from stream connection");
+    std::vector<Id<FlatEquation>> gen;
+    for (std::size_t e : outs) {
+      std::vector<std::size_t> others;
+      for (std::size_t k : red_out) if (cs_nodes_[k].name_key != cs_nodes_[e].name_key) others.push_back(k);
+      const Id<Expr> lhs = cs_nodes_[e].cref;
+      const Id<Expr> rhs = stream_sum(others, ins, lit_int(0), 0);
+      gen.push_back(eq(lhs, rhs, cmt));
+    }
+    out.insert(out.end(), gen.rbegin(), gen.rend());
+  }
+  bool is_stream_call(Id<Expr> id, const char* which) {
+    if (!id.is_valid()) return false;
+    const Expr& e = result_.model.exprs[id];
+    return e.kind == ExprKind::Call && e.call_name.size() == 1 && in_.str(e.call_name[0]) == which;
+  }
+  // 就地把 inStream/actualStream 调用改写成求值结果（evaluateOperators :130-191）；返回是否有替换。
+  bool subst_stream(Id<Expr> id) {
+    const Expr e = result_.model.exprs[id];   // 拷贝：求值会 add，不跨 add 持引用
+    if (e.kind == ExprKind::Call && e.args.size() == 2 && (is_stream_call(id, "inStream") || is_stream_call(id, "actualStream"))) {
+      const bool ins = is_stream_call(id, "inStream");
+      const Id<Expr> r = ins ? eval_instream(expr_cref_key(result_.model.exprs[e.args[0]].cref), e.args[0], 0)
+                             : eval_actualstream(e.args[0], e.args[1]);
+      const Expr rv = result_.model.exprs[r];
+      result_.model.exprs[id] = rv;
+      return true;
+    }
+    // `flow * actualStream(stream)` 要包 smooth(0, …)（evaluateActualStreamMul :1018-1042）——未做 → SKIP。
+    if (e.kind == ExprKind::Binary && e.bin == BinOp::Mul &&
+        (is_stream_call(e.a, "actualStream") || is_stream_call(e.b, "actualStream"))) {
+      set_unsupported("flow * actualStream (smooth wrap)");
+      return false;
+    }
+    bool changed = false;
+    for (Id<Expr> k : e.args) changed = subst_stream(k) || changed;
+    for (Id<Expr> k : {e.a, e.b, e.c}) if (k.is_valid()) changed = subst_stream(k) || changed;
+    return changed;
+  }
+  void subst_stream_eq(Id<FlatEquation> id) {
+    auto sub = [&](Id<Expr>& x) { if (x.is_valid() && subst_stream(x)) x = simplify_expr(x); };
+    FlatEquation& fe = result_.model.eqs[id];   // 本趟不新增方程节点，引用稳定
+    sub(fe.a);
+    sub(fe.b);
+    sub(fe.c);
+    for (FlatEqBranch& br : fe.branches) {
+      sub(br.cond);
+      for (Id<FlatEquation> b : br.body) subst_stream_eq(b);
+    }
+    for (Id<FlatEquation> b : fe.body) subst_stream_eq(b);
+    for (Id<FlatEquation> b : fe.else_body) subst_stream_eq(b);
+  }
+  bool expr_has_stream_op(Id<Expr> id) {
+    if (!id.is_valid()) return false;
+    if (is_stream_call(id, "inStream") || is_stream_call(id, "actualStream")) return true;
+    const Expr& e = result_.model.exprs[id];
+    for (Id<Expr> k : e.args) if (expr_has_stream_op(k)) return true;
+    return expr_has_stream_op(e.a) || expr_has_stream_op(e.b) || expr_has_stream_op(e.c);
+  }
+  bool stmt_has_stream_op(Id<FlatStatement> id) {
+    const FlatStatement& st = result_.model.stmts[id];
+    if (expr_has_stream_op(st.a) || expr_has_stream_op(st.b) || expr_has_stream_op(st.c)) return true;
+    for (const FlatStmtBranch& br : st.branches) {
+      if (expr_has_stream_op(br.cond)) return true;
+      for (Id<FlatStatement> b : br.body) if (stmt_has_stream_op(b)) return true;
+    }
+    for (Id<FlatStatement> b : st.body) if (stmt_has_stream_op(b)) return true;
+    for (Id<FlatStatement> b : st.else_body) if (stmt_has_stream_op(b)) return true;
+    return false;
+  }
+  // evaluateConnectionOperators（NFFlatten.mo:2565-2576）：绑定、方程、初始方程里的 stream 算子按集合求值；
+  // 算法段 omc 不求值（:2575 TODO）→ 残留调用 ymc 无法照印 → SKIP。
+  void evaluate_stream_ops() {
+    if (!uses_stream_ops_ || result_.unsupported) return;
+    for (FlatVariable& v : result_.model.variables)
+      if (v.binding.is_valid() && subst_stream(v.binding)) v.binding = simplify_expr(v.binding);
+    for (Id<FlatEquation> id : result_.model.equations) subst_stream_eq(id);
+    for (Id<FlatEquation> id : result_.model.initial_equations) subst_stream_eq(id);
+    for (const std::vector<FlatAlgorithm>* algs : {&result_.model.algorithms, &result_.model.initial_algorithms})
+      for (const FlatAlgorithm& a : *algs)
+        for (Id<FlatStatement> st : a.stmts)
+          if (stmt_has_stream_op(st)) { set_unsupported("stream operator in algorithm"); return; }
   }
 
   // ---- cardinality（MLS §3.7.2.3；omc NFCardinalityTable + NFConnectEquations.evaluateOperators :156-157）----
@@ -4005,6 +4343,14 @@ class Flattener {
   // cardinality（NFCardinalityTable）：连接器元素 cref key → 在连接里出现的次数；调用先留符号，连接解析后替换并折叠。
   std::unordered_map<std::string, std::int64_t> card_table_;
   bool uses_cardinality_ = false;
+  // 连接集（process_connects 建；stream 算子在方程生成后按集合求值）。节点 = 标量叶 × 面（SetNode 见 ConnInfo 旁）。
+  std::vector<SetNode> cs_nodes_;
+  std::vector<std::int64_t> cs_link_;
+  std::unordered_map<std::string, std::size_t> cs_index_;
+  std::vector<std::vector<std::size_t>> cs_sets_;
+  std::vector<std::size_t> cs_set_of_;
+  bool uses_stream_ops_ = false;
+  std::unordered_map<std::string, std::size_t> var_index_;   // 变量 key → model.variables 下标（flow 属性查询）
   bool card_allowed_ = false;   // 只在 if 方程 / assert 的条件表达式里为 true（其它上下文 omc 报错 → SKIP）
   struct ConnectStmt {
     Id<Exp> a, b; NodeId enclosing; std::vector<Symbol> prefix; SourceLoc loc;

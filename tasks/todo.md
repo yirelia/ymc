@@ -560,6 +560,24 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       → easy-slice 239 PASS/0 FAIL（+4：Cardinality1 由 SKIP 翻 PASS、Cardinality2/3/4 新入）；oracle=live 逐字节一致；
       全 scodeinst PASS 238→242、**FAIL 73→70**（conn8 先冒出后守住；ClassAttributes4/type4/type5 −3 真 FAIL）、SKIP 1014→1013；
       三编译器 10/10、ASan 0；+6 单测（cardinality ×5 含上下文守卫、方向冲突守卫 ×1）。
+- [ ] **加宽(51)stream 连接器**（2026-09-27 规划；用户定"上 stream 连接器，依据 OMC 源码"）：
+      源：NFConnectEquations.mo generateStreamEquations :423-474 / streamEquationGeneral :476-497 / streamSumEquationExp
+      :499-551（sumMap 前插）/ makePositiveMaxCall :673-711（阈值 = FLOW_THRESHOLD×nominal）/ makeInStreamDivCall :713-729 /
+      evaluateInStream :814-841 + generateInStreamExp :843-900（按 **INSIDE 面**查集合；isNoFlowMinMax 精简）/
+      evaluateActualStream :978-1016 + evaluateFlowDirection :1044-1076 / associatedFlowCref :1106-1126。
+      - [x] A：stream 叶（splitImpl :346，flows 之后按名升序，同层唯一 flow）进 DisjointSets 自成集合；stream 集方程；
+            inStream/actualStream 先留符号（args = stream cref + 关联 flow cref），连接解析后按集合求值（字面量 min/max/nominal）。
+            守卫：非 stream / 非 cref 实参、非字面量下标、连接器 flow 数 ≠ 1、flow*actualStream（smooth 包裹）、算法段里的
+            stream 算子 → SKIP。目标：InStreamUnconnected/TwoInside/TwoOutside/InsideOutside、ExtendConnector1、ActualStream、
+            ActualStreamMinMax1、ConnectStream1、InStreamNominalThreshold、InStreamPipeline（+10）。
+            **完成（2026-09-27）**：连接集节点表改为成员 cs_*（SetNode 带 is_stream / name_key / 关联 flow cref+key）；
+            emit_stream_set 按 generateStreamEquations/streamEquationGeneral；eval_instream 按 INSIDE 面查集合 + isNoFlowMinMax
+            精简（查询者本身按名保留）；stream_sum 复刻 streamSumEquationExp（sumMap 前插、PositiveMax 阈值 1e-7×nominal、
+            inStreamDiv 包裹）；eval_actualstream 按 evaluateFlowDirection。10 例首轮即逐字节；9 个 incorrect 全 SKIP。
+            → easy-slice 249 PASS/0 FAIL（+10）；全 scodeinst PASS 242→252、FAIL 70 不变、SKIP 1013→1003；
+            oracle=live 逐字节一致；三编译器 10/10、ASan 0；+5 单测。
+      - [ ] B：参数值属性/下标的结构化 final 副作用（isNoFlow 的 Structural.markExp）、inStream 归约展开、if 同分支化简
+            （ActualStreamMinMax2、ActualStreamVariability2、InStreamReduction1）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

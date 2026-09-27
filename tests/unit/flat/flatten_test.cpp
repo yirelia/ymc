@@ -1093,6 +1093,97 @@ YMC_TEST(flatten_conflicting_direction_prefix_unsupported) {
                std::string("class A\n  input Real ri;\nend A;\n"));
 }
 
+// ---- stream 连接器（NFConnectEquations.mo:423-1142）；期望 = omc 1.25.0（文件与实跑一致，2026-09-27）----
+
+static const char* kStreamS = "connector S\n  Real r;\n  flow Real f;\n  stream Real s;\nend S;\n";
+
+YMC_TEST(flatten_stream_two_inside_instream_is_other) {
+  // 两 inside 相连：stream 集不生成方程（generateStreamEquations :444）；inStream(a1.s.s) 按 INSIDE 面查到该集 → 对方
+  //（generateInStreamExp :870-876）。InStreamTwoInside。
+  const std::string src = std::string(kStreamS) +
+      "model A\n  S s;\n  Real instream_s;\nequation\n  instream_s = inStream(s.s);\nend A;\n"
+      "model InStreamTwoInside\n  A a1, a2;\n  Real instream_s_a1;\n  Real instream_s_a2;\nequation\n"
+      "  connect(a1.s, a2.s);\n  instream_s_a1 = inStream(a1.s.s);\n  instream_s_a2 = inStream(a2.s.s);\nend InStreamTwoInside;\n";
+  YMC_CHECK_EQ(flatten_src(src.c_str()),
+               std::string("class InStreamTwoInside\n  Real a1.s.r;\n  Real a1.s.f;\n  Real a1.s.s;\n  Real a1.instream_s;\n"
+                           "  Real a2.s.r;\n  Real a2.s.f;\n  Real a2.s.s;\n  Real a2.instream_s;\n  Real instream_s_a1;\n"
+                           "  Real instream_s_a2;\nequation\n  a1.s.r = a2.s.r;\n  a2.s.f + a1.s.f = 0.0;\n"
+                           "  a1.instream_s = a2.s.s;\n  a2.instream_s = a1.s.s;\n  instream_s_a1 = a2.s.s;\n"
+                           "  instream_s_a2 = a1.s.s;\nend InStreamTwoInside;\n"));
+}
+
+YMC_TEST(flatten_stream_inside_outside_face_lookup) {
+  // 一内一外：stream 集 `a.s.s = s.s`（:461-468），按根序排在 potential 与 flow 求和之间；子模型里的 inStream(s.s)
+  // 展平成 inStream(a.s.s)，按 INSIDE 面查到顶层集合 → 一内一外 → 对方 s.s 的 inStream → s.s 本身。InStreamInsideOutside。
+  const std::string src = std::string(kStreamS) +
+      "model A\n  S s;\n  Real instream_s;\nequation\n  instream_s = inStream(s.s);\nend A;\n"
+      "model InStreamInsideOutside\n  A a;\n  S s;\n  Real instream_s;\n  Real instream_s_a;\nequation\n"
+      "  connect(a.s, s);\n  instream_s = inStream(s.s);\n  instream_s_a = inStream(a.s.s);\nend InStreamInsideOutside;\n";
+  YMC_CHECK_EQ(flatten_src(src.c_str()),
+               std::string("class InStreamInsideOutside\n  Real a.s.r;\n  Real a.s.f;\n  Real a.s.s;\n  Real a.instream_s;\n"
+                           "  Real s.r;\n  Real s.f;\n  Real s.s;\n  Real instream_s;\n  Real instream_s_a;\n"
+                           "equation\n  a.s.r = s.r;\n  a.s.s = s.s;\n  a.s.f - s.f = 0.0;\n  s.f = 0.0;\n"
+                           "  a.instream_s = s.s;\n  instream_s = s.s;\n  instream_s_a = s.s;\nend InStreamInsideOutside;\n"));
+}
+
+YMC_TEST(flatten_stream_general_case_nominal_threshold) {
+  // 三个 outside：每个 outside 一条 `$OMC$inStreamDiv(Σ PositiveMax(f, eps)*s / Σ PositiveMax(f, eps), 0)`（cons 反序、
+  // sumMap 前插），eps = 1e-7 × nominal（1e-10 / 1.9999999999999998e-4），带注释。InStreamNominalThreshold。
+  const std::string src = std::string(kStreamS) +
+      "model A\n  S s1(f(nominal = 1e-3));\n  S s2(f(nominal = 2000));\n  S s3;\n"
+      "  Real instream_s1;\n  Real instream_s2;\n  Real instream_s3;\nequation\n  connect(s1, s2);\n  connect(s2, s3);\n"
+      "  instream_s1 = inStream(s1.s);\n  instream_s2 = inStream(s2.s);\nend A;\n"
+      "model InStreamNominalThreshold\n  A a;\n  Real instream_a_s1;\n  Real instream_a_s2;\nequation\n"
+      "  instream_a_s1 = inStream(a.s1.s);\n  instream_a_s2 = inStream(a.s2.s);\nend InStreamNominalThreshold;\n";
+  const char* gen = " \" equation generated from stream connection\";\n";
+  YMC_CHECK_EQ(
+      flatten_src(src.c_str()),
+      std::string("class InStreamNominalThreshold\n  Real a.s1.r;\n  Real a.s1.f(nominal = 0.001);\n  Real a.s1.s;\n"
+                  "  Real a.s2.r;\n  Real a.s2.f(nominal = 2000.0);\n  Real a.s2.s;\n  Real a.s3.r;\n  Real a.s3.f;\n"
+                  "  Real a.s3.s;\n  Real a.instream_s1;\n  Real a.instream_s2;\n  Real a.instream_s3;\n"
+                  "  Real instream_a_s1;\n  Real instream_a_s2;\nequation\n  a.s2.r = a.s3.r;\n  a.s2.r = a.s1.r;\n"
+                  "  -(a.s2.f + a.s3.f + a.s1.f) = 0.0;\n"
+                  "  a.s1.s = $OMC$inStreamDiv(($OMC$PositiveMax(a.s3.f, 1e-7) * a.s3.s + "
+                  "$OMC$PositiveMax(a.s2.f, 1.9999999999999998e-4) * a.s2.s) / ($OMC$PositiveMax(a.s3.f, 1e-7) + "
+                  "$OMC$PositiveMax(a.s2.f, 1.9999999999999998e-4)), 0)") + gen +
+          "  a.s3.s = $OMC$inStreamDiv(($OMC$PositiveMax(a.s1.f, 1e-10) * a.s1.s + "
+          "$OMC$PositiveMax(a.s2.f, 1.9999999999999998e-4) * a.s2.s) / ($OMC$PositiveMax(a.s1.f, 1e-10) + "
+          "$OMC$PositiveMax(a.s2.f, 1.9999999999999998e-4)), 0)" + gen +
+          "  a.s2.s = $OMC$inStreamDiv(($OMC$PositiveMax(a.s1.f, 1e-10) * a.s1.s + "
+          "$OMC$PositiveMax(a.s3.f, 1e-7) * a.s3.s) / ($OMC$PositiveMax(a.s1.f, 1e-10) + "
+          "$OMC$PositiveMax(a.s3.f, 1e-7)), 0)" + gen +
+          "  a.s1.f = 0.0;\n  a.s2.f = 0.0;\n  a.s3.f = 0.0;\n  a.instream_s1 = a.s1.s;\n  a.instream_s2 = a.s2.s;\n"
+          "  instream_a_s1 = a.s1.s;\n  instream_a_s2 = a.s2.s;\nend InStreamNominalThreshold;\n");
+}
+
+YMC_TEST(flatten_actualstream_flow_direction) {
+  // actualStream 按 flow 的字面量 min/max 定向（evaluateFlowDirection :1044-1076）：min=0 → inStream（对方）；max=0 → 本身；
+  // 不定 → `if f > 0.0 then inStream(s) else s`。ActualStreamMinMax1。
+  const std::string src = std::string(kStreamS) +
+      "model A\n  S s1(f(min = 0)), s2(f(max = 0));\n  S s3(f(min = -5)), s4(f(max = 3));\nend A;\n"
+      "model ActualStreamMinMax1\n  A a;\n  Real actual_stream_s1;\n  Real actual_stream_s2;\n"
+      "  Real actual_stream_s3;\n  Real actual_stream_s4;\nequation\n  connect(a.s1, a.s2);\n  connect(a.s3, a.s4);\n"
+      "  actual_stream_s1 = actualStream(a.s1.s);\n  actual_stream_s2 = actualStream(a.s2.s);\n"
+      "  actual_stream_s3 = actualStream(a.s3.s);\n  actual_stream_s4 = actualStream(a.s4.s);\nend ActualStreamMinMax1;\n";
+  YMC_CHECK_EQ(flatten_src(src.c_str()),
+               std::string("class ActualStreamMinMax1\n  Real a.s1.r;\n  Real a.s1.f(min = 0.0);\n  Real a.s1.s;\n"
+                           "  Real a.s2.r;\n  Real a.s2.f(max = 0.0);\n  Real a.s2.s;\n  Real a.s3.r;\n"
+                           "  Real a.s3.f(min = -5.0);\n  Real a.s3.s;\n  Real a.s4.r;\n  Real a.s4.f(max = 3.0);\n"
+                           "  Real a.s4.s;\n  Real actual_stream_s1;\n  Real actual_stream_s2;\n  Real actual_stream_s3;\n"
+                           "  Real actual_stream_s4;\nequation\n  a.s1.r = a.s2.r;\n  a.s3.r = a.s4.r;\n"
+                           "  a.s2.f + a.s1.f = 0.0;\n  a.s4.f + a.s3.f = 0.0;\n  actual_stream_s1 = a.s2.s;\n"
+                           "  actual_stream_s2 = a.s2.s;\n  actual_stream_s3 = if a.s3.f > 0.0 then a.s4.s else a.s3.s;\n"
+                           "  actual_stream_s4 = if a.s4.f > 0.0 then a.s3.s else a.s4.s;\nend ActualStreamMinMax1;\n"));
+}
+
+YMC_TEST(flatten_instream_non_stream_operand_unsupported) {
+  // inStream 的实参须是 stream 变量（omc 报错 InStreamNoStream1）→ 干净 SKIP。
+  bool uns = false;
+  std::string t = flatten_src((std::string(kStreamS) + "model M\n  S c;\n  Real as = inStream(c.f);\nend M;\n").c_str(), &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+}
+
 YMC_TEST(flatten_connect_flow_sum_mixed_faces) {
   // 四元 flow 集 [inside, inside, outside, outside]（inside 预插入在前）：`b + a - c1 - c2`（取负折叠）；
   // potential 集 head = c1（合并序里最先插入）。期望 = omc（InInOutOut 探针）。
