@@ -1442,6 +1442,21 @@ YMC_TEST(flatten_constant_array_builtins) {
                            "  constant Real d[2] = 0.0;\nend P54d;\n"));
 }
 
+YMC_TEST(flatten_constant_function_arrays_and_comprehension) {
+  // 用户函数值求值：输出维依赖输入（`output Real y[n]`，Undef 占位）、下标赋值、protected 局部带绑定、max(a, b)；
+  // 推导式最右迭代器为最外维（c[j][i]）；标量内建对数组实参向量化（sqrt）。期望 = omc 1.25.0（P54e 探针）。
+  const char* src =
+      "function f\n  input Integer n;\n  output Real y[n];\nprotected\n  Real s = 0.5;\nalgorithm\n  for i in 1:n loop\n"
+      "    y[i] := i * s;\n  end for;\n  y[1] := max(y[1], 2);\nend f;\n"
+      "model P54e\n  constant Real a[:] = f(3);\n  constant Integer c[:, :] = {i * 10 + j for i in 1:2, j in 1:3};\n"
+      "  constant Real d[:] = sqrt({4, 9});\nend P54e;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class P54e\n  constant Real a[1] = 2.0;\n  constant Real a[2] = 1.0;\n  constant Real a[3] = 1.5;\n"
+                           "  constant Integer c[1,1] = 11;\n  constant Integer c[1,2] = 21;\n  constant Integer c[2,1] = 12;\n"
+                           "  constant Integer c[2,2] = 22;\n  constant Integer c[3,1] = 13;\n  constant Integer c[3,2] = 23;\n"
+                           "  constant Real d[1] = 2.0;\n  constant Real d[2] = 3.0;\nend P54e;\n"));
+}
+
 YMC_TEST(flatten_constant_range_forms) {
   // evalRangeReal（:915-938）首尾按原值：1.0:0.3:2.0 共 floor(1/0.3 + 5e-15) + 1 = 4 个，末个是 stop 本身 2.0（非 1.9）；
   // Integer 负步长、Boolean 范围（P54c 探针）。

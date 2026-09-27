@@ -667,7 +667,15 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
             NFModelicaBuiltin.mo:353-362 / :305-316）；cval_transpose 推广到维数 ≥ 2。8 例首轮即逐字节。
             → easy-slice 297 PASS/0 FAIL（+8）；全 scodeinst PASS 292→300、FAIL 72 不变、SKIP 961→953；oracle=live 不一致 0；
             +1 单测（P54d 探针）。
-      - [ ] C：数组推导式 `{i-j for i in …}`（CevalArrayConstructor2）、返回数组的用户函数（CevalFuncArray*/FuncSubscript*）。
+      - [x] C：数组推导式 `{i-j for i in …}`（CevalArrayConstructor2）、返回数组的用户函数（CevalFuncArray*/FuncSubscript*）。
+            **完成（2026-09-28）**：推导式按 MLS §10.4.2.1（最右迭代器最外维，evalArrayConstructor2）；函数解释器补 Undef
+            占位（未赋值数组输出 / 局部，NFEvalFunction.buildBinding :342-365）、输出维依赖输入、protected 局部初始化、下标 / 切片
+            读写（写时复制）、数组逐元素强转；标量内建数学函数进值求值（复用 simplify_expr 的折叠 + 数组向量化）。
+            CevalFuncArray6 需 `annotation(Evaluate=true)` 参数求值（另一特性）→ 仍 SKIP。
+            → easy-slice 305 PASS/0 FAIL（+8，含白捡 CevalArrayConstructor1）；全 scodeinst PASS 300→308、FAIL 72 不变、
+            SKIP 953→945；oracle=live 不一致 0；+1 单测（P54e 探针）。
+      - [ ] 余项：`annotation(Evaluate=true)` 参数（CevalFuncArray6）；常量数组整取引用进类型化路径（CevalArrayConstant2
+            `{1.0, 2.0, 3.0}[n]`）；记录数组常量（CevalRecordArray*，卡在 "variability on composite array"）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples
