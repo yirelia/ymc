@@ -776,6 +776,30 @@ YMC_TEST(flatten_for_connect_array_disjoint) {
                   "  c2[1].f = 0.0;\n  c2[2].f = 0.0;\n  c2[3].f = 0.0;\nend ForConnect1;\n"));
 }
 
+YMC_TEST(flatten_whole_array_connect_array_members) {
+  // 整体数组连接 `connect(c1, c2)`（c1,c2: C[2]）+ 数组成员 e[2]/f[2]：实参展开成元素按位配对
+  // （makeConnections，NFConnections.mo:200-206），成员逐元素摊（Connection.scalarize）；顺序 = 连接器元素 →
+  // potential → flow → 成员元素；flow 边界 =0 按变量声明序。期望 = omc 1.25.0 实跑（Connect4，逐字节）。
+  const char* src =
+      "connector C\n  Real e[2];\n  flow Real f[2];\nend C;\n"
+      "model Connect4\n  C c1[2], c2[2];\nequation\n  connect(c1, c2);\nend Connect4;\n";
+  YMC_CHECK_EQ(
+      flatten_src(src),
+      std::string("class Connect4\n"
+                  "  Real c1[1].e[1];\n  Real c1[1].e[2];\n  Real c1[1].f[1];\n  Real c1[1].f[2];\n"
+                  "  Real c1[2].e[1];\n  Real c1[2].e[2];\n  Real c1[2].f[1];\n  Real c1[2].f[2];\n"
+                  "  Real c2[1].e[1];\n  Real c2[1].e[2];\n  Real c2[1].f[1];\n  Real c2[1].f[2];\n"
+                  "  Real c2[2].e[1];\n  Real c2[2].e[2];\n  Real c2[2].f[1];\n  Real c2[2].f[2];\n"
+                  "equation\n"
+                  "  c1[1].e[1] = c2[1].e[1];\n  c1[1].e[2] = c2[1].e[2];\n"
+                  "  -(c1[1].f[1] + c2[1].f[1]) = 0.0;\n  -(c1[1].f[2] + c2[1].f[2]) = 0.0;\n"
+                  "  c1[2].e[1] = c2[2].e[1];\n  c1[2].e[2] = c2[2].e[2];\n"
+                  "  -(c1[2].f[1] + c2[2].f[1]) = 0.0;\n  -(c1[2].f[2] + c2[2].f[2]) = 0.0;\n"
+                  "  c1[1].f[1] = 0.0;\n  c1[1].f[2] = 0.0;\n  c1[2].f[1] = 0.0;\n  c1[2].f[2] = 0.0;\n"
+                  "  c2[1].f[1] = 0.0;\n  c2[1].f[2] = 0.0;\n  c2[2].f[1] = 0.0;\n  c2[2].f[2] = 0.0;\n"
+                  "end Connect4;\n"));
+}
+
 YMC_TEST(flatten_multiple_connect_shared_endpoint_unsupported) {
   // 相交的多条 connect（共享端点 c2 → 传递相等，要连接集并查）→ v1 未做，干净 SKIP。
   // （不相交的多条 connect 已支持，见 flatten_for_connect_array_disjoint。）

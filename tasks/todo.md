@@ -471,6 +471,19 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       守卫（保 FAIL=0）：整体数组连接 `connect(c1,c2)`（Connect4）、数组成员、宿主段带下标 `m[j].c`、共享端点、非常量下标 → 一律 SKIP。
       → easy-slice 227 PASS/0 FAIL（+1：ForConnect1）；oracle=live 逐字节一致；全 scodeinst PASS 229→230、FAIL 69 不变；三编译器 10/10、ASan 0；+1 单测（多 connect 桩改成共享端点 SKIP + 不相交 PASS 两个）。
       整体数组连接（Connect4：连接器维 + 数组成员双重展开）、共享端点连接集并查（Connect2 传递/ConnectArrays1 切片）留后续（现 SKIP）。
+- [x] **加宽㊺数组 connect increment 2（整体数组连接 + 数组成员）**（2026-09-27，用户定"依据 OMC 源码启动"）：承 4bc9a43。
+      OMC 链（NFFlatten.mo:2433 resolveConnections）：collectConnections → makeConnectors（ExpandExp.expand + Connector.fromExp，
+      NFConnections.mo:209-235）把整体数组实参展成元素列表、makeConnections 左右**按位**配对（:200-206）→ Connections.split
+      （Connector.splitImpl 先 potential 后 flow、数组成员保留，NFConnector.mo:344-346/363）→ Connections.scalarize
+      （默认 keepSingleConnectedArrays=false → 数组成员全摊，:285-288；Connector.scalarize 行主序，:266-268）→ generateEquations。
+      三探针实跑 1.25.0 定序：3×2（元素→pot→flow→成员元素）、2-D 整体连接行主序 c[1,1],c[1,2],c[2,1],c[2,2]、元素连接+2-D 成员。
+      ymc：resolve_connector 改返元素列表（整体数组 → 行主序展开，decl_cls 作用域求维）；ConnMember 带 dims；member_cref/flow_sum
+      加成员元素下标；process_connects 按位配对（元素数不等 → SKIP）+ 成员 do/next_index 逐元素（dims 不等 → SKIP）。
+      emit_array 补连接器守卫（stream/方向/连接器外 flow，与 emit_variable 同）+ flow 元素攒 flow_vars_（末段下标放 subs 末槽）——
+      此前连接器里 `flow Real f[2]` 走 emit_array 根本不进 flow_vars_（无 `f[k]=0`），是本增量补的洞。
+      → easy-slice 228 PASS/0 FAIL（+1：Connect4）；oracle=live 逐字节一致；全 scodeinst PASS 230→231、FAIL 69 不变、SKIP 1026→1025
+      （守卫未翻转任何 PASS）；三编译器 10/10、ASan 0；+1 单测。共享端点连接集并查（Connect2 传递 / ConnectArrays1 切片）、
+      部分下标/切片实参、inside 数组连接器的 connected_inside_ 仍按 conn_key（已含下标）留后续验证。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples
