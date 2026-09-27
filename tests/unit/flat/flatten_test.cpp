@@ -941,15 +941,85 @@ YMC_TEST(flatten_connect_record_members_connected) {
                            "  m2.c.f.r1 + m1.c.f.r1 = 0.0;\n  m2.c.f.r2 + m1.c.f.r2 = 0.0;\nend ConnectComplex1;\n"));
 }
 
-YMC_TEST(flatten_multiple_connect_shared_endpoint_unsupported) {
-  // 相交的多条 connect（共享端点 c2 → 传递相等，要连接集并查）→ v1 未做，干净 SKIP。
-  // （不相交的多条 connect 已支持，见 flatten_for_connect_array_disjoint。）
-  bool uns = false;
-  std::string t = flatten_src(
+// ---- 连接集（DisjointSets）顺序：全部期望来自 omc 1.25.0 实跑（2026-09-27），规则见 docs/research/connect-sets-order.md ----
+
+YMC_TEST(flatten_connect_shared_endpoint_chain) {
+  // 共享端点 c2：potential 集 head = 集合首元素（插入序 c2 先于 c3、c1），flow 集三项求和全 outside → `-(…)`；
+  // 集合输出序 = 根节点下标反序（DisjointSets.union 秩规则 + extractSets）。期望 = omc（ChainOut 探针）。
+  const char* src =
       "connector C\n  Real e;\n  flow Real f;\nend C;\n"
-      "model M\n  C c1, c2, c3;\nequation\n  connect(c1, c2);\n  connect(c2, c3);\nend M;\n", &uns);
-  YMC_CHECK(uns);
-  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+      "model M\n  C c1, c2, c3;\nequation\n  connect(c1, c2);\n  connect(c2, c3);\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class M\n  Real c1.e;\n  Real c1.f;\n  Real c2.e;\n  Real c2.f;\n  Real c3.e;\n  Real c3.f;\n"
+                           "equation\n  c2.e = c3.e;\n  c2.e = c1.e;\n  -(c2.f + c3.f + c1.f) = 0.0;\n"
+                           "  c1.f = 0.0;\n  c2.f = 0.0;\n  c3.f = 0.0;\nend M;\n"));
+}
+
+YMC_TEST(flatten_connect_order_inside_outside_declared_first) {
+  // "不相交简化"的反例（OrderTrap 探针）：outside 端 p 先声明 → 其 INSIDE 单元素集 p.i 节点下标高于合并集的根
+  //（inside 端 a.c.i 预插入且为根）→ 反序输出时 `p.i = 0.0` 排在合并集方程之前。
+  const char* src =
+      "connector C\n  Real v;\n  flow Real i;\nend C;\n"
+      "model A\n  C c;\nend A;\n"
+      "model M\n  C p;\n  A a;\nequation\n  connect(a.c, p);\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class M\n  Real p.v;\n  Real p.i;\n  Real a.c.v;\n  Real a.c.i;\n"
+                           "equation\n  a.c.v = p.v;\n  p.i = 0.0;\n  a.c.i - p.i = 0.0;\nend M;\n"));
+}
+
+YMC_TEST(flatten_connect_equations_precede_model_equations) {
+  // 连接方程整体置于模型自身方程之前（NFFlatten.mo:2497 listAppend(conn_eql, flatModel.equations)；EqPlace 探针）。
+  const char* src =
+      "connector C\n  Real e;\n  flow Real f;\nend C;\n"
+      "model M\n  C c1, c2;\n  Real x;\nequation\n  x = 1;\n  connect(c1, c2);\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class M\n  Real c1.e;\n  Real c1.f;\n  Real c2.e;\n  Real c2.f;\n  Real x;\n"
+                           "equation\n  c1.e = c2.e;\n  -(c1.f + c2.f) = 0.0;\n  c1.f = 0.0;\n  c2.f = 0.0;\n  x = 1.0;\nend M;\n"));
+}
+
+YMC_TEST(flatten_connect_in_submodel_local_face) {
+  // 子模型内的 connect(p, q)：面按书写类本地判定（crefFace/firstNonScope，NFComponentRef.mo:429-440）→ 两端 outside
+  // `-(R1.p.f + R1.q.f)`；顶层 connect(R1.p, p) 里 R1.p 是 inside。集合序与 flow=0 交错同 SubConn 探针。
+  const char* src =
+      "connector C\n  Real e;\n  flow Real f;\nend C;\n"
+      "model Res\n  C p;\n  C q;\n  Integer n;\nequation\n  connect(p, q);\n  n = 1;\nend Res;\n"
+      "model M\n  C p;\n  Res R1, R2;\nequation\n  connect(R1.p, p);\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class M\n  Real p.e;\n  Real p.f;\n  Real R1.p.e;\n  Real R1.p.f;\n  Real R1.q.e;\n  Real R1.q.f;\n"
+                           "  Integer R1.n;\n  Real R2.p.e;\n  Real R2.p.f;\n  Real R2.q.e;\n  Real R2.q.f;\n  Integer R2.n;\n"
+                           "equation\n  R1.p.e = R1.q.e;\n  -(R1.p.f + R1.q.f) = 0.0;\n  R2.p.e = R2.q.e;\n  -(R2.p.f + R2.q.f) = 0.0;\n"
+                           "  R1.p.e = p.e;\n  p.f = 0.0;\n  R1.p.f - p.f = 0.0;\n  R1.q.f = 0.0;\n  R2.p.f = 0.0;\n  R2.q.f = 0.0;\n"
+                           "  R1.n = 1;\n  R2.n = 1;\nend M;\n"));
+}
+
+YMC_TEST(flatten_connect_in_submodel_array_element) {
+  // 复合数组元素内的 connect：书写处前缀带下标（ConnectStmt.psubs）→ `R[1].p.e = R[1].q.e`；顶层 connect(R[1].p, p)。
+  // p 声明在 R 之后 → p.f 的 INSIDE 单元素集节点下标最低 → `p.f = 0.0` 排在最后（ArrSub 探针）。
+  const char* src =
+      "connector C\n  Real e;\n  flow Real f;\nend C;\n"
+      "model Res\n  C p;\n  C q;\n  Integer n;\nequation\n  connect(p, q);\n  n = 1;\nend Res;\n"
+      "model M\n  Res R[2];\n  C p;\nequation\n  connect(R[1].p, p);\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class M\n  Real R[1].p.e;\n  Real R[1].p.f;\n  Real R[1].q.e;\n  Real R[1].q.f;\n  Integer R[1].n;\n"
+                           "  Real R[2].p.e;\n  Real R[2].p.f;\n  Real R[2].q.e;\n  Real R[2].q.f;\n  Integer R[2].n;\n"
+                           "  Real p.e;\n  Real p.f;\n"
+                           "equation\n  R[1].p.e = R[1].q.e;\n  -(R[1].p.f + R[1].q.f) = 0.0;\n"
+                           "  R[2].p.e = R[2].q.e;\n  -(R[2].p.f + R[2].q.f) = 0.0;\n  R[1].p.e = p.e;\n  R[1].p.f - p.f = 0.0;\n"
+                           "  R[1].q.f = 0.0;\n  R[2].p.f = 0.0;\n  R[2].q.f = 0.0;\n  p.f = 0.0;\n  R[1].n = 1;\n  R[2].n = 1;\nend M;\n"));
+}
+
+YMC_TEST(flatten_connect_flow_sum_mixed_faces) {
+  // 四元 flow 集 [inside, inside, outside, outside]（inside 预插入在前）：`b + a - c1 - c2`（取负折叠）；
+  // potential 集 head = c1（合并序里最先插入）。期望 = omc（InInOutOut 探针）。
+  const char* src =
+      "connector C\n  Real e;\n  flow Real f;\nend C;\n"
+      "model A\n  C c;\nend A;\n"
+      "model M\n  A a, b;\n  C c1, c2;\nequation\n  connect(a.c, c1);\n  connect(b.c, c2);\n  connect(c1, c2);\nend M;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class M\n  Real a.c.e;\n  Real a.c.f;\n  Real b.c.e;\n  Real b.c.f;\n"
+                           "  Real c1.e;\n  Real c1.f;\n  Real c2.e;\n  Real c2.f;\n"
+                           "equation\n  c1.e = c2.e;\n  c1.e = b.c.e;\n  c1.e = a.c.e;\n"
+                           "  b.c.f + a.c.f - c1.f - c2.f = 0.0;\n  c1.f = 0.0;\n  c2.f = 0.0;\nend M;\n"));
 }
 
 YMC_TEST(flatten_flow_outside_connector_unsupported) {
