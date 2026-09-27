@@ -1218,12 +1218,24 @@ class Flattener {
       if (comp.attributes.direction == SDirection::Input) v.direction = FlatDirection::Input;
       else if (comp.attributes.direction == SDirection::Output) v.direction = FlatDirection::Output;
     }
-    // 无绑定 parameter 若带 start：omc 把 start 当默认值补成绑定（`x(start=1.0) = 1.0`）并告警（fixed=true 初始化）。
-    // 这是参数默认值规则（evalConstants 邻域），本桶只做属性打印 → 标 unsupported（保 FAIL=0）。
+    // 无绑定的 parameter（NFFlatten.verifyBinding :812-875；非 relaxed 模式才查，:742-746，普通翻译即非 relaxed，
+    // NFInst.mo:167-168）。fixed 缺省 true：fixed 时有 start → omc 以 start 作默认绑定并告警（未做 → SKIP）；无 start →
+    // UNBOUND_PARAMETER_ERROR 报错（UnboundParameter1 / InvalidVariability1/2 / InvalidComplexConnectorType1/2）→ SKIP；
+    // fixed = false → 合法照印（YmcUnfixed1 探针）。fixed 非字面量（omc 先 tryEvalExp）未做 → SKIP。
+    // 注：源码 HEAD 另有 constant 无绑定报错（NO_CONSTANT_BINDING :844-848），1.25.0 实跑不报、照印 `constant Integer n;`
+    // （YmcUnbConst1 探针）→ 按 1.25.0 不查。
     if (v.var_kind == FlatVarKind::Parameter && !binding.is_valid()) {
-      const Symbol start = in_.intern("start");
-      for (const FlatVarAttr& a : attrs)
-        if (a.name == start) { set_unsupported("unbound parameter default from start"); break; }
+      const Symbol start = in_.intern("start"), fixed = in_.intern("fixed");
+      bool has_start = false, is_fixed = true, fixed_lit = true;
+      for (const FlatVarAttr& a : attrs) {
+        if (a.name == start) has_start = true;
+        if (a.name == fixed) {
+          const Expr& fx = result_.model.exprs[a.value];
+          if (fx.kind == ExprKind::BoolLit) is_fixed = fx.bval; else fixed_lit = false;
+        }
+      }
+      if (!fixed_lit) set_unsupported("unbound parameter with non-literal fixed");
+      else if (is_fixed) set_unsupported(has_start ? "unbound parameter default from start" : "unbound parameter");
     }
     // constant 组件的绑定 omc 一定求值成字面量（R14 §3）；绑定若还是表达式，说明要 evalConstants，v1 没做。
     if (v.var_kind == FlatVarKind::Constant && binding.is_valid()) {
@@ -1331,6 +1343,9 @@ class Flattener {
       case SVariability::Param: vk = FlatVarKind::Parameter; break;
       case SVariability::Const: vk = FlatVarKind::Constant; break;
     }
+    // 无绑定的 parameter 数组：verifyBinding（NFFlatten.mo:812-875）报错（数组无属性修饰可达此处 → fixed 缺省 true、无 start；
+    // YmcUnbArr1 探针）→ SKIP。
+    if (vk == FlatVarKind::Parameter && !braw.is_valid()) { set_unsupported("unbound parameter"); return; }
     // 参数/常量数组绑定 omc 摊到每元素（`x[1]=1.0`…），连续（Var）数组才变成数组方程（`x = {…}`，Subscript1）。
     // v1 摊分只做"字面量元素"（下降 Array 到标量）；元素含 cref 数组等 → 逐元素时命中会 SKIP。
     const bool spread = braw.is_valid() && vk != FlatVarKind::Var;
@@ -3553,9 +3568,9 @@ class Flattener {
     auto leaf = [&](NodeId mn, bool is_flow) -> bool {
       const CompId mc = I_.nodes[mn].comp;
       const SElement& mcel = I_.scode.elems[I_.comps[mc].def];
-      // parameter/constant 连接器成员：连接生成的是相等断言 assert(abs(a-b)<=0,…) 而非方程，且变率不匹配是错误
-      // （ConstantConnector3 / InvalidComplexConnectorType*）——v1 未做 → SKIP。
-      if (I_.comps[mc].attributes.variability != SVariability::Var) return false;
+      // parameter/constant potential 成员：连接生成相等断言（generatePotentialEquations :215-235，发射时按集首变率判）；
+      // 非连续的 flow 未做 → SKIP。
+      if (is_flow && I_.comps[mc].attributes.variability != SVariability::Var) return false;
       std::vector<std::int64_t> mdims;
       for (Id<Exp> d : mcel.attr.dims) if (!eval_dim(d, mdims, mscope)) return false;   // 非字面量维 → SKIP
       for (Id<Exp> d : mcel.type.dims) if (!eval_dim(d, mdims, mscope)) return false;
@@ -3764,8 +3779,10 @@ class Flattener {
         // 内建标量成员（`Real x`，isConnector 靠 POTENTIALLY_PRESENT 位）。
         if (!pp && !short_class_connector(cur, segs.back().decl)) return std::nullopt;
         if (I_.comps[ccid].attributes.connector == SConnectorType::Stream) return std::nullopt;
-        if (I_.comps[ccid].attributes.variability != SVariability::Var) return std::nullopt;   // ConstantConnector* → SKIP
-        members.push_back({{}, I_.comps[ccid].attributes.connector == SConnectorType::Flow, I_.comps[ccid].ty, {}, false, {}});
+        const bool fl = I_.comps[ccid].attributes.connector == SConnectorType::Flow;
+        // `connector C = parameter Real`：parameter/constant 短类连接器照常连，发射时出断言（ConstantConnector1/2）；flow 须连续。
+        if (fl && I_.comps[ccid].attributes.variability != SVariability::Var) return std::nullopt;
+        members.push_back({{}, fl, I_.comps[ccid].ty, {}, false, {}});
       }
     }
     // 元素列表（对标 ExpandExp.expandCref：每段下标按 Subscript.expandList 展开——给定下标：整数/迭代变量取值、
@@ -4327,8 +4344,14 @@ class Flattener {
       const std::vector<std::size_t>& s = *sit;
       const SetNode& head = nodes[s[0]];
       if (head.is_stream) { emit_stream_set(s, conn_eqs); continue; }   // generateStreamEquations（:423-474）
-      if (!head.is_flow) {   // potential：head = 其余（generatePotentialEquations :213-217）
+      if (!head.is_flow) {
+        // potential（generatePotentialEquations :202-236）：集首变率 > parameter → `head = 其余`；parameter / constant →
+        // 逐个相等断言（makeEqualityAssert，见 emit_equality_assert）。变率只看集首（YmcCCMix1 探针：parameter 集首连
+        // 连续变量也出断言）。
+        const FlatVariable* hv = set_var(head.name_key);
+        const bool as_assert = hv && (hv->var_kind == FlatVarKind::Parameter || hv->var_kind == FlatVarKind::Constant);
         for (std::size_t k = 1; k < s.size(); ++k) {
+          if (as_assert) { emit_equality_assert(head, nodes[s[k]], conn_eqs); continue; }
           FlatEquation fe;
           fe.kind = FlatEqKind::Equality;
           fe.loc = head.loc;
@@ -4364,6 +4387,45 @@ class Flattener {
     }
     // 5. 连接方程整体置于模型自身方程之前（NFFlatten.mo:2497 `listAppend(conn_eql, flatModel.equations)`；EqPlace 探针）。
     result_.model.equations.insert(result_.model.equations.begin(), conn_eqs.begin(), conn_eqs.end());
+  }
+
+  // 连接集节点对应的变量（name_key 与 var_key 同一编码）；找不到（如增广"最后一次生效"引用的未建虚变量）→ nullptr。
+  const FlatVariable* set_var(const std::string& key) {
+    ensure_var_index();
+    auto it = var_index_.find(key);
+    return it == var_index_.end() ? nullptr : &result_.model.variables[it->second];
+  }
+  // makeEqualityAssert（NFConnectEquations.mo:290-341）：Real → `abs(a - b) <= 0.0`（Modelica 禁 Real 的 ==），其它类型 →
+  // `a == b`；消息 EQ_ASSERT_STR（:82-83），默认 error 级。常量由 EvalConstants 折成值（代入字面量绑定再化简），
+  // `assert(true, …)` 被 SimplifyModel 删掉（YmcCCEq1 / YmcCCConst3 探针；ConstantConnector2 → `assert(false, …)`）。
+  // 连接已逐元素标量化（Connections.scalarize 默认全摊），故无数组 for 包裹。
+  void emit_equality_assert(const SetNode& x, const SetNode& y, std::vector<Id<FlatEquation>>& out) {
+    auto val = [&](const SetNode& n) {
+      const FlatVariable* v = set_var(n.name_key);
+      return (v && v->var_kind == FlatVarKind::Constant && v->binding.is_valid() && is_lit(v->binding)) ? v->binding : n.cref;
+    };
+    const Id<Expr> a = val(x), b = val(y);
+    Expr rel;
+    rel.kind = ExprKind::Relation;
+    rel.ty = Type::boolean();
+    if (x.ty.element_type().kind == TypeKind::Real) {
+      rel.rel = RelOp::Le;
+      rel.a = call_expr("abs", {bin_expr(BinOp::Sub, a, b)}, Type::real());
+      rel.b = lit_real(0.0);
+    } else {
+      rel.rel = RelOp::Eq;
+      rel.a = a;
+      rel.b = b;
+    }
+    const Id<Expr> cond = simplify_expr(add(std::move(rel)));
+    const Expr& ce = result_.model.exprs[cond];
+    if (ce.kind == ExprKind::BoolLit && ce.bval) return;
+    FlatEquation fe;
+    fe.kind = FlatEqKind::Assert;
+    fe.loc = x.loc;
+    fe.a = cond;
+    fe.b = lit_string(in_.intern("Connected constants/parameters must be equal"));
+    out.push_back(result_.model.add_eq(std::move(fe)));
   }
 
   // ---- stream 连接器（MLS §15；omc NFConnectEquations.mo :423-1142）----

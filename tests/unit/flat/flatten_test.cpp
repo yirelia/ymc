@@ -1394,6 +1394,55 @@ YMC_TEST(flatten_expandable_invalid_forms_unsupported) {
   }
 }
 
+// ---- parameter / constant 连接器（generatePotentialEquations :202-236 / makeEqualityAssert :290-341）；期望 = omc 1.25.0 ----
+
+YMC_TEST(flatten_parameter_connector_member_assert) {
+  // 集首为 parameter 的 potential 集 → `assert(abs(a - b) <= 0.0, …)`，按根序夹在普通方程与 flow 求和之间。ConstantConnector3。
+  const char* src =
+      "model ConstantConnector3\n  connector C\n    parameter Real x = 0;\n    Real e;\n    flow Real f;\n  end C;\n\n"
+      "  C c1, c2;\nequation\n  connect(c1, c2);\nend ConstantConnector3;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class ConstantConnector3\n  parameter Real c1.x = 0.0;\n  Real c1.e;\n  Real c1.f;\n"
+                           "  parameter Real c2.x = 0.0;\n  Real c2.e;\n  Real c2.f;\nequation\n  c1.e = c2.e;\n"
+                           "  assert(abs(c1.x - c2.x) <= 0.0, \"Connected constants/parameters must be equal\");\n"
+                           "  -(c1.f + c2.f) = 0.0;\n  c1.f = 0.0;\n  c2.f = 0.0;\nend ConstantConnector3;\n"));
+}
+
+YMC_TEST(flatten_parameter_connector_types_and_constant_fold) {
+  // 非 Real → `a == b`（YmcCCInt1 探针）；constant 代入值后化简：相等 → assert(true) 被删、不等 → `assert(false, …)`
+  //（YmcCCConst3 探针：集 [c1, c3, c2] → c1−c3 为真被删，只剩 c1−c2）。
+  const char* msg = ", \"Connected constants/parameters must be equal\");\n";
+  const char* src =
+      "model YmcCCInt1\n  connector CI = parameter Integer;\n  connector CB = parameter Boolean;\n  CI i1 = 1, i2 = 1;\n"
+      "  CB b1 = true, b2 = true;\nequation\n  connect(i1, i2);\n  connect(b1, b2);\nend YmcCCInt1;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class YmcCCInt1\n  parameter Integer i1 = 1;\n  parameter Integer i2 = 1;\n"
+                           "  parameter Boolean b1 = true;\n  parameter Boolean b2 = true;\nequation\n  assert(i1 == i2") +
+                   msg + "  assert(b1 == b2" + msg + "end YmcCCInt1;\n");
+  const char* src2 =
+      "model YmcCCConst3\n  connector C = constant Real;\n  C c1 = 1, c2 = 2, c3 = 1;\nequation\n  connect(c1, c2);\n"
+      "  connect(c1, c3);\nend YmcCCConst3;\n";
+  YMC_CHECK_EQ(flatten_src(src2),
+               std::string("class YmcCCConst3\n  constant Real c1 = 1.0;\n  constant Real c2 = 2.0;\n"
+                           "  constant Real c3 = 1.0;\nequation\n  assert(false") + msg + "end YmcCCConst3;\n");
+}
+
+YMC_TEST(flatten_unbound_fixed_parameter_unsupported) {
+  // verifyBinding（NFFlatten.mo:812-875）：无绑定、fixed（缺省）且无 start 的 parameter → omc 报错 UNBOUND_PARAMETER_ERROR
+  //（UnboundParameter1、YmcUnbArr1 探针）→ SKIP。fixed = false 合法照印（YmcUnfixed1）；constant 无绑定 1.25.0 不报错、照印
+  //（YmcUnbConst1；源码 HEAD 的 NO_CONSTANT_BINDING 晚于 1.25.0）。期望 = omc 1.25.0 实跑。
+  for (const char* s : {"model M\n  parameter Real x;\nend M;\n", "model M\n  parameter Real x[2];\nend M;\n"}) {
+    bool uns = false;
+    const std::string t = flatten_src(s, &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+  }
+  YMC_CHECK_EQ(flatten_src("model M\n  parameter Real x(fixed = false);\nend M;\n"),
+               std::string("class M\n  parameter Real x(fixed = false);\nend M;\n"));
+  YMC_CHECK_EQ(flatten_src("model M\n  constant Integer n;\nend M;\n"),
+               std::string("class M\n  constant Integer n;\nend M;\n"));
+}
+
 YMC_TEST(flatten_connect_flow_sum_mixed_faces) {
   // 四元 flow 集 [inside, inside, outside, outside]（inside 预插入在前）：`b + a - c1 - c2`（取负折叠）；
   // potential 集 head = c1（合并序里最先插入）。期望 = omc（InInOutOut 探针）。

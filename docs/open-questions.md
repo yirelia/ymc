@@ -59,6 +59,11 @@ ymc 以 **omc 1.25.0 实测**为准；这些用例从 `docs/research/s3-easy-sli
 给出不同的虚变量序（YmcExpHash2 探针：speed/torque/temp 实测 = 32 位序）。ymc 按 32 位（1.25.0 实测）；将来若有用例文件
 与实跑在虚变量序上分歧，按本条记账。
 
+**源码 HEAD 与 1.25.0 的已知差异（按 1.25.0）**：`NFFlatten.verifyBinding` 在源码（基线 `3ceb0c9d06`）里对无绑定的
+constant 报 `NO_CONSTANT_BINDING`（:844-848），安装版 1.25.0 实跑不报、照印 `constant Integer n;`（YmcUnbConst1 探针）；
+无绑定、fixed 且无 start 的 parameter 两者都报 `UNBOUND_PARAMETER_ERROR`（UnboundParameter1、YmcUnbArr1）。凡按源码实现的
+报错规则，先在 1.25.0 上实跑确认再落。
+
 ## 已研究待实现：多条 connect 连接集（union-find）
 
 **状态**：算法已从 OMC 新前端源码 + 实跑 omc 1.25.0 探针完整摸清，暂不实现——理由是当前 testsuite 里

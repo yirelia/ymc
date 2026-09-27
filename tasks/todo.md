@@ -625,6 +625,23 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
             虚元素类型含数组 / stream / 非 Real 叶、经 pp 连接器下探的未声明端（`ec.c.e`，父被强标 EXPANDABLE）。
       - [ ] ExpandableConnector5：`RealOutput y[2] = zeros(size(y, 1))` 顶层方向数组带绑定 → omc 保留 `output` 并把绑定
             改成方程 `y = {0.0, 0.0}`；现守卫 "top-level directional array with binding"（TopLevelInputs2 形态不同）需细分。
+- [ ] **加宽(53)connect 收尾：参数 / 常量连接器**（2026-09-28 规划；expandable 完成后按"自动往下执行"自选：connect 区
+      剩余的有效用例里唯一自洽的一块，其余卡在 inst 域 short-class aliasing / 数组元素引用 / 归约）：
+      源：NFConnectEquations.generatePotentialEquations :202-236（集首 `Connector.variability(c1) > PARAMETER` → 相等方程，
+      否则逐个 makeEqualityAssert :290-341：Real → `assert(abs(a - b) <= 0.0, "Connected constants/parameters must be equal")`，
+      其它类型 → `assert(a == b, …)`，数组 → for 包裹）；常量由 EvalConstants 折叠（ConstantConnector2 → `assert(false, …)`）。
+      - [x] 放开连接器叶的 parameter/constant 标量 potential 成员（connector_leaves / 短类连接器 `connector C = parameter Real`）；
+            集首变率 ≤ parameter → assert；常量绑定字面量代入后化简。目标：ConstantConnector1/2/3。
+            守卫：非 Var 的 flow/stream、数组成员（for 包裹）、集内变率混杂 → SKIP（探针定）。
+            **完成（2026-09-28）**：探针定下的语义——变率只看集首（YmcCCMix1：parameter 集首连连续变量也出断言，不 SKIP）；
+            非 Real 用 `==`（YmcCCInt1）；constant 代入字面量后化简，`assert(true, …)` 删（YmcCCEq1/YmcCCConst3）；连接已逐元素
+            标量化故无 for 包裹。集节点 name_key 与 var_key 同编码 → 发射时直接查变量变率/绑定（set_var），ConnMember 不加字段。
+            放开后暴露既有缺口：omc 对无绑定、fixed 且无 start 的 parameter 报 UNBOUND_PARAMETER_ERROR（NFFlatten.verifyBinding
+            :812-875），ymc 原先照印 → 在 emit_variable / emit_array 补上（→ SKIP），根治 UnboundParameter1（FAIL→SKIP）并挡住
+            InvalidComplexConnectorType1/2、InvalidVariability1/2。源码 HEAD 的 constant 无绑定报错 1.25.0 不报（YmcUnbConst1）→ 不查，
+            记 open-questions。
+            → easy-slice 272 PASS/0 FAIL（+3）；全 scodeinst PASS 272→275、**FAIL 73→72**、SKIP 980→978；oracle=live 不一致 0；
+            +3 单测。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples
