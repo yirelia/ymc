@@ -1394,6 +1394,48 @@ YMC_TEST(flatten_expandable_invalid_forms_unsupported) {
   }
 }
 
+// ---- 常量数组求值（NFCeval evalBinary*/evalRange*/evalBuiltinFill…）；期望 = omc 1.25.0 实跑（P54a/b/c 探针）----
+
+YMC_TEST(flatten_constant_array_ceval_ops) {
+  // `:` 维取值形状；逐元素 +、String `.+` 拼接、空数组整体不出（i6）、Real 范围、矩阵幂、向量·向量标量积。
+  const char* src =
+      "model P54a\n  constant Integer i2[:] = {1, 2, 3} + {3, 4, 5};\n  constant String s4[:] = \"1\" .+ {\"1\", \"2\", \"3\"};\n"
+      "  constant Integer i6[:] = zeros(0) - zeros(0);\n  constant Real y[:] = 3.0:0.5:5.0;\n"
+      "  constant Real m[2, 2] = {{1, 2}, {3, 4}};\n  constant Real p[:, :] = m ^ 2;\n"
+      "  constant Real d = {1, 2, 3} * {4, 5, 6};\nend P54a;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class P54a\n  constant Integer i2[1] = 4;\n  constant Integer i2[2] = 6;\n"
+                           "  constant Integer i2[3] = 8;\n  constant String s4[1] = \"11\";\n  constant String s4[2] = \"12\";\n"
+                           "  constant String s4[3] = \"13\";\n  constant Real y[1] = 3.0;\n  constant Real y[2] = 3.5;\n"
+                           "  constant Real y[3] = 4.0;\n  constant Real y[4] = 4.5;\n  constant Real y[5] = 5.0;\n"
+                           "  constant Real m[1,1] = 1.0;\n  constant Real m[1,2] = 2.0;\n  constant Real m[2,1] = 3.0;\n"
+                           "  constant Real m[2,2] = 4.0;\n  constant Real p[1,1] = 7.0;\n  constant Real p[1,2] = 10.0;\n"
+                           "  constant Real p[2,1] = 15.0;\n  constant Real p[2,2] = 22.0;\n  constant Real d = 32.0;\nend P54a;\n"));
+}
+
+YMC_TEST(flatten_constant_array_ceval_modifier_aware) {
+  // 常量引用取已发射常量的最终值（修饰 `a(x = 1.0)` 后）：z = {x, y} * 2 → {2.0, 4.0}（P54b 探针）。
+  const char* src =
+      "model A\n  constant Real x;\n  constant Real y = 2;\n  constant Real z[:] = {x, y} * 2;\nend A;\n"
+      "model P54b\n  A a(x = 1.0);\nend P54b;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class P54b\n  constant Real a.x = 1.0;\n  constant Real a.y = 2.0;\n  constant Real a.z[1] = 2.0;\n"
+                           "  constant Real a.z[2] = 4.0;\nend P54b;\n"));
+}
+
+YMC_TEST(flatten_constant_range_forms) {
+  // evalRangeReal（:915-938）首尾按原值：1.0:0.3:2.0 共 floor(1/0.3 + 5e-15) + 1 = 4 个，末个是 stop 本身 2.0（非 1.9）；
+  // Integer 负步长、Boolean 范围（P54c 探针）。
+  const char* src =
+      "model P54c\n  constant Real x[:] = 1.0:0.3:2.0;\n  constant Integer k[:] = 5:-2:1;\n  constant Boolean b[:] = false:true;\n"
+      "end P54c;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class P54c\n  constant Real x[1] = 1.0;\n  constant Real x[2] = 1.3;\n  constant Real x[3] = 1.6;\n"
+                           "  constant Real x[4] = 2.0;\n  constant Integer k[1] = 5;\n  constant Integer k[2] = 3;\n"
+                           "  constant Integer k[3] = 1;\n  constant Boolean b[1] = false;\n  constant Boolean b[2] = true;\n"
+                           "end P54c;\n"));
+}
+
 // ---- parameter / constant 连接器（generatePotentialEquations :202-236 / makeEqualityAssert :290-341）；期望 = omc 1.25.0 ----
 
 YMC_TEST(flatten_parameter_connector_member_assert) {

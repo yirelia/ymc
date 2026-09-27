@@ -1139,8 +1139,33 @@ class Flattener {
       Id<Exp> mraw;
       for (Id<SMod> m : mod_subs)
         if (I_.scode.mods[m].binding.is_valid()) { mraw = I_.scode.mods[m].binding; break; }
+      // constant 标量：先按值求值（NFCeval；cref 取已发射常量的最终值 → 修饰感知，CevalBinding2；含数组运算如标量积
+      // `{1, 2, 3} * {4, 5, 6}`，CevalVectorProduct1）。求不出（枚举 / 内建数学函数 / if 式…）→ 走下面的类型化路径。
+      const TypeKind ck = cty.kind;
+      if (var_min(var_floor, I_.comps[cid].attributes.variability) == SVariability::Const &&
+          (ck == TypeKind::Real || ck == TypeKind::Integer || ck == TypeKind::Boolean || ck == TypeKind::String)) {
+        Id<Exp> craw = mraw;
+        NodeId cscope = mod_scope;
+        const std::vector<Symbol>* cpfx = &mod_prefix;
+        if (!craw.is_valid() && I_.comps[cid].binding.kind == BindingKind::Raw && I_.comps[cid].binding.raw_exp.is_valid()) {
+          craw = I_.comps[cid].binding.raw_exp;
+          cscope = enclosing;
+          cpfx = &prefix;
+        }
+        if (craw.is_valid()) {
+          std::optional<CVal> cv;
+          {
+            CevalCtx guard(*this, *cpfx, psubs);
+            cv = eval_scode(craw, scode_scope_of(cscope), 0);
+          }
+          if (cv)
+            if (std::optional<CVal> ce = coerce_to_kind(*cv, ck)) binding = literal_of(*ce);
+        }
+      }
       // 枚举类型的绑定值 `E.one` / `P.E.one` 是枚举字面量（打全路径），不走会 SKIP 多段名的通用 cref 解析。
-      if (mraw.is_valid()) {
+      if (binding.is_valid()) {
+        // 已按值求得
+      } else if (mraw.is_valid()) {
         binding = (cty.kind == TypeKind::Enumeration && is_cref_exp(mraw)) ? enum_lit_value(mraw, mod_scope)
                                                                            : inst_exp(mraw, mod_scope, mod_prefix);
       } else {
@@ -1260,9 +1285,69 @@ class Flattener {
     result_.model.variables.push_back(std::move(v));
     const std::size_t vidx = result_.model.variables.size() - 1;
     if (!cur_pp_chain_.empty()) var_pp_.emplace(vidx, cur_pp_chain_);
+    record_const(result_.model.variables[vidx]);
     // 未连接 flow → `name = 0.0`；`=0` 方程要排在本类方程之后（R13 §6），故先攒起来，run() 末尾统一追加。
     // nsubs 带元素下标（连接器数组 `c[i].f`）；与 name 平行，标量连接器时全空 → 打印无下标（旧行为）。
     if (is_flow) flow_vars_.push_back({name, nsubs, cty, comp.loc, vidx, false});
+  }
+
+  // constant 数组按值发射（NFFlatten 对 constant 绑定 Ceval 后逐元素摊分）：绑定在书写处上下文求值（cref 先查已发射
+  // 常量的最终值，修饰感知），形状须与声明维相符（`:` 维取值的形状），元素按声明类型强转（Int→Real）。有维为 0 → omc
+  // 整体不出变量（CevalSub1 的 `i6[:] = zeros(0) - zeros(0)`）。成功发射返回 true；求不出 / 不符返回 false（调用方落回原路径）。
+  bool emit_const_array(CompId cid, const std::vector<Symbol>& name, bool is_protected, const PSubs& psubs, Id<Exp> braw,
+                        NodeId bscope, const std::vector<Symbol>& bprefix, const std::vector<Id<Exp>>& dim_exps,
+                        const ScodeScope& dscope, bool is_final, const ModCtx& ctx) {
+    std::optional<CVal> val;
+    {
+      CevalCtx guard(*this, bprefix, psubs);
+      val = eval_scode(braw, scode_scope_of(bscope), 0);
+    }
+    if (!val || !is_arr(*val)) return false;
+    const std::vector<std::int64_t> shape = cval_shape(*val);
+    if (shape.size() != dim_exps.size()) return false;
+    for (std::size_t k = 0; k < dim_exps.size(); ++k) {
+      if (I_.absyn.exps[dim_exps[k]].kind == ExpKind::Colon) continue;
+      std::vector<std::int64_t> one;
+      if (!eval_dim(dim_exps[k], one, dscope) || one.size() != 1 || one[0] != shape[k]) return false;
+    }
+    const Type cty = I_.comps[cid].ty;
+    std::vector<CVal> flat;
+    flatten_cval_array(*val, flat);
+    for (CVal& e : flat) {
+      std::optional<CVal> ce = coerce_to_kind(e, cty.element_type().kind);
+      if (!ce) return false;
+      e = std::move(*ce);
+    }
+    for (std::int64_t n : shape) if (n == 0) return true;   // 空数组：不出变量
+    FlatDirection dir = FlatDirection::None;
+    if (ctx.keep_dir) {
+      if (I_.comps[cid].attributes.direction == SDirection::Input) dir = FlatDirection::Input;
+      else if (I_.comps[cid].attributes.direction == SDirection::Output) dir = FlatDirection::Output;
+    }
+    std::vector<std::int64_t> idx(shape.size(), 1);
+    std::size_t fi = 0;
+    do {
+      FlatVariable v;
+      v.name = name;
+      v.name_subs = psubs_to_exprs(psubs);
+      v.name_subs.push_back({});
+      for (std::int64_t x : idx) v.subscripts.push_back(lit_int(x));
+      v.ty = cty;
+      v.is_protected = is_protected;
+      v.is_final = is_final;
+      v.var_kind = FlatVarKind::Constant;
+      v.direction = dir;
+      v.loc = I_.comps[cid].loc;
+      v.binding = literal_of(flat[fi++]);
+      result_.model.variables.push_back(std::move(v));
+      if (!cur_pp_chain_.empty()) var_pp_.emplace(result_.model.variables.size() - 1, cur_pp_chain_);
+      record_const(result_.model.variables.back());
+    } while (next_index(idx, shape));
+    PSubs bsubs = psubs;
+    bsubs.resize(name.size());
+    std::size_t pos = 0;
+    const_vals_[int_key(name, bsubs)] = cval_nest(flat, shape, 0, pos);
+    return true;
   }
 
   // 数组叶组件标量化（R13 §3/§4）：字面量维度 → 行主序逐元素变量行（无绑定/属性）；数组绑定 `= {…}` 变成
@@ -1302,6 +1387,14 @@ class Flattener {
         (I_.comps[cid].attributes.direction == SDirection::Input ||
          I_.comps[cid].attributes.direction == SDirection::Output)) {
       set_unsupported("top-level directional array with binding"); return;
+    }
+    // constant 数组的非构造子绑定（`{1,2,3} + {3,4,5}`、`m1 * v1`、`1.0:3.0`、`zeros(4, 3)`…）：按值求值（NFCeval）→
+    // 维取值的形状（`:` 维由此定）、逐元素字面量；求不出 → 落回下面的类型化路径（多半 SKIP）。
+    if (nlbind && I_.comps[cid].attributes.variability == SVariability::Const) {
+      if (emit_const_array(cid, name, is_protected, psubs, braw, bscope, bprefix, dim_exps, dscope,
+                           I_.comps[cid].attributes.is_final || force_final, ctx))
+        return;
+      if (result_.unsupported) return;
     }
     // 解析各维成整数：字面量/参数/size()/算术走 eval_dim；`:` 维从绑定构造子形状推断（CevalArray*）。
     std::vector<std::int64_t> dims;
@@ -1377,6 +1470,9 @@ class Flattener {
     }
 
     // 行主序枚举下标元组（1 基），逐元素产出变量行；param/const 数组把绑定摊到每元素。
+    // constant 元素的值另攒成整体数组记入 const_vals_（整取引用 `m1 * v1` 用）；有非 CVal 字面量（枚举）则不记。
+    std::vector<CVal> const_flat;
+    bool const_all = vk == FlatVarKind::Constant;
     std::vector<std::int64_t> idx(dims.size(), 1);
     for (bool more = true; more;) {
       FlatVariable v;
@@ -1423,6 +1519,11 @@ class Flattener {
       const std::size_t vidx = result_.model.variables.size() - 1;
       if (!cur_pp_chain_.empty()) var_pp_.emplace(vidx, cur_pp_chain_);
       if (is_flow) flow_vars_.push_back({name, std::move(fsubs), cty, I_.comps[cid].loc, vidx, false});
+      if (const_all) {
+        const FlatVariable& cvv = result_.model.variables[vidx];
+        std::optional<CVal> ev = cvv.binding.is_valid() ? cval_of(cvv.binding) : std::nullopt;
+        if (ev) { record_const(cvv); const_flat.push_back(std::move(*ev)); } else { const_all = false; }
+      }
       // 递增（最后一维最快）。
       std::size_t k = dims.size();
       while (k > 0) {
@@ -1433,6 +1534,12 @@ class Flattener {
       }
     }
 
+    if (const_all && !const_flat.empty()) {
+      PSubs bsubs = psubs;
+      bsubs.resize(name.size());   // 末段（叶）无下标 = 整体键
+      std::size_t pos = 0;
+      const_vals_[int_key(name, bsubs)] = cval_nest(const_flat, dims, 0, pos);
+    }
     // Var 数组绑定 → 单条数组方程（param/const 已在上面摊成逐元素绑定）。
     // 构造子：`name = {…}`；非构造子：整取同型 cref → `name = y`（保持整取，NFScalarize ARRAY_EQUALITY 不标量化）；
     // 逐元素算子 → 展开成 `{op(y[1]),…}`（NFExpandExp）；整取 Int→Real（数组 cast）/Call/Range → SKIP。
@@ -1783,6 +1890,7 @@ class Flattener {
     // Record：字段名→值（保序）。用 shared_ptr 保持 CVal 拷贝廉价；set_field 写时复制避免别名污染。
     std::shared_ptr<std::vector<std::pair<Symbol, CVal>>> rec;
     std::shared_ptr<std::vector<CVal>> arr;   // Array：元素（可嵌套）
+    std::vector<std::int64_t> eshape;         // 空数组的完整形状（`ones(0, 3)` → {0, 3}）；空 = {0}。非空数组不用
     static CVal I(std::int64_t v) { CVal c; c.k = K::Int; c.i = v; return c; }
     static CVal R(double v) { CVal c; c.k = K::Real; c.r = v; return c; }
     static CVal B(bool v) { CVal c; c.k = K::Bool; c.b = v; return c; }
@@ -1898,6 +2006,9 @@ class Flattener {
           auto it = loop_vars_.find(c.parts[0].name.id);
           if (it != loop_vars_.end()) return CVal::I(it->second);
         }
+        // 书写处实例前缀上已发射的常量（修饰后的最终值，const_vals_）优先：`A a(x = 1)` 里 `z = x + y` 的 x 取 1。
+        if (ceval_prefix_ && !c.leading_dot)
+          if (std::optional<CVal> kv = const_lookup_val(*ceval_prefix_, ceval_psubs_, c, scope, depth)) return kv;
         std::vector<Symbol> names;
         for (const CrefPart& p : c.parts) {
           if (!p.subscripts.empty()) return std::nullopt;
@@ -1909,7 +2020,11 @@ class Flattener {
         if (used && I_.scode.elems[comp].attr.var == SVariability::Param) used->insert(comp.raw);
         const Id<SMod> m = I_.scode.elems[comp].mod;
         if (!m.is_valid() || !I_.scode.mods[m].binding.is_valid()) return std::nullopt;
+        // 被引常量的声明绑定在其自身作用域求值：书写处前缀不再适用。
+        const std::vector<Symbol>* saved = ceval_prefix_;
+        ceval_prefix_ = nullptr;
         auto v = eval_scode(I_.scode.mods[m].binding, cscope, depth + 1, allow_param, used);
+        ceval_prefix_ = saved;
         if (v) v = coerce_cval(*v, I_.scode.elems[comp].type.path);   // 按声明类型强转（Real n=3 → 3.0）
         return v;
       }
@@ -1917,35 +2032,25 @@ class Flattener {
         auto v = eval_scode(e.a, scope, depth + 1, allow_param, used);
         if (!v) return std::nullopt;
         if (e.op == Op::UPlus) return v;
-        if (e.op == Op::UMinus) {
-          if (v->k == CVal::K::Int) return CVal::I(-v->i);
-          if (v->k == CVal::K::Real) return CVal::R(-v->r);
-        }
+        if (e.op == Op::UMinus) return cval_is_zero(*v) ? v : cval_negate(*v);   // evalUnaryOp :1548-1549
         if (e.op == Op::Not && v->k == CVal::K::Bool) return CVal::B(!v->b);
         return std::nullopt;
+      }
+      case ExpKind::Range: {   // a:b / a:step:b（Absyn：a=起点, b=步长或终点, c=终点）
+        auto a = eval_scode(e.a, scope, depth + 1, allow_param, used);
+        auto b = eval_scode(e.b, scope, depth + 1, allow_param, used);
+        if (!a || !b) return std::nullopt;
+        if (!e.c.is_valid()) return cval_range(*a, std::nullopt, *b);
+        auto z = eval_scode(e.c, scope, depth + 1, allow_param, used);
+        return z ? cval_range(*a, b, *z) : std::nullopt;
       }
       case ExpKind::Binary: {
         auto a = eval_scode(e.a, scope, depth + 1, allow_param, used);
         auto b = eval_scode(e.b, scope, depth + 1, allow_param, used);
         if (!a || !b) return std::nullopt;
         BinOp aop;
-        if (map_binop(e.op, aop)) {   // 算术
-          const bool both_int = a->k == CVal::K::Int && b->k == CVal::K::Int && aop != BinOp::Div && aop != BinOp::Pow;
-          if (both_int) switch (aop) {
-            case BinOp::Add: return CVal::I(a->i + b->i);
-            case BinOp::Sub: return CVal::I(a->i - b->i);
-            case BinOp::Mul: return CVal::I(a->i * b->i);
-            default: break;
-          }
-          const double x = a->as_r(), y = b->as_r();
-          switch (aop) {
-            case BinOp::Add: return CVal::R(x + y);
-            case BinOp::Sub: return CVal::R(x - y);
-            case BinOp::Mul: return CVal::R(x * y);
-            case BinOp::Div: return y != 0.0 ? std::optional<CVal>(CVal::R(x / y)) : std::nullopt;
-            case BinOp::Pow: return CVal::R(std::pow(x, y));
-          }
-        }
+        if (map_binop(e.op, aop)) return cval_binary(e.op, *a, *b);   // 算术（含数组，见 cval_binary）
+        if (is_arr(*a) || is_arr(*b)) return std::nullopt;             // 数组逻辑 / 关系未做
         LogOp lop;
         if (map_logop(e.op, lop) && a->k == CVal::K::Bool && b->k == CVal::K::Bool)   // 逻辑
           return CVal::B(lop == LogOp::And ? (a->b && b->b) : (a->b || b->b));
@@ -1968,6 +2073,7 @@ class Flattener {
         // size(arr, d)：解析数组组件 arr（任意可变性），求它第 d 维（DimSize1）。
         const Cref& fn = I_.absyn.crefs[e.cref];
         if (fn.parts.size() != 1 || in_.str(fn.parts[0].name) != "size" || e.args.size() != 2) {
+          if (auto av = eval_array_builtin(e, scope, depth, allow_param, used)) return av;   // zeros/ones/fill/identity
           if (auto rv = eval_reduction(e, scope, depth)) return rv;   // sum/product/min/max(常量数组)
           return eval_user_call(e, scope, depth);   // 非 size → 试用户函数常量折叠
         }
@@ -1993,6 +2099,287 @@ class Flattener {
       default:
         return std::nullopt;
     }
+  }
+
+  // ---- 数组值运算（NFCeval.evalBinary*/evalUnaryMinus/evalRange*/evalBuiltinFill…，行号见各函数）----
+  static bool is_arr(const CVal& v) { return v.k == CVal::K::Array; }
+  // 数组值的形状（矩形；空数组靠 eshape 记完整形状）。标量 → {}。
+  static std::vector<std::int64_t> cval_shape(const CVal& v) {
+    std::vector<std::int64_t> s;
+    for (const CVal* c = &v; c->k == CVal::K::Array; c = &c->arr->front()) {
+      if (!c->arr || c->arr->empty()) {
+        if (c->eshape.empty()) s.push_back(0);
+        else s.insert(s.end(), c->eshape.begin(), c->eshape.end());
+        break;
+      }
+      s.push_back(static_cast<std::int64_t>(c->arr->size()));
+    }
+    return s;
+  }
+  static CVal empty_arr(std::vector<std::int64_t> shape) {
+    CVal r = CVal::Arr({});
+    r.eshape = std::move(shape);
+    return r;
+  }
+  // fill(v, n1, n2, …)（Expression.fillArgs；zeros/ones = fill(0/1, …)，evalBuiltinZeros :3102 / Ones :2745 / Fill :2431）。
+  static CVal cval_fill(const CVal& v, const std::vector<std::int64_t>& dims, std::size_t k = 0) {
+    if (k == dims.size()) return v;
+    if (dims[k] == 0) return empty_arr(std::vector<std::int64_t>(dims.begin() + static_cast<std::ptrdiff_t>(k), dims.end()));
+    std::vector<CVal> els(static_cast<std::size_t>(dims[k]), cval_fill(v, dims, k + 1));
+    return CVal::Arr(std::move(els));
+  }
+  // 标量算术（evalBinaryAdd/Sub/Mul/Div/Pow 的标量分支）：Int∘Int 保 Int（除/幂除外，typing 已把 `/` `^` 操作数提实型）；
+  // String `+` 拼接（:1028-1029）；除零、负底非整指数（INVALID_NEGATIVE_POW :1281-1289）→ omc 报错 → nullopt。
+  std::optional<CVal> cval_scalar_arith(BinOp op, const CVal& a, const CVal& b) {
+    if (a.k == CVal::K::Str || b.k == CVal::K::Str) {
+      if (op != BinOp::Add || a.k != CVal::K::Str || b.k != CVal::K::Str) return std::nullopt;
+      return CVal::S(in_.intern(std::string(in_.str(a.s)) + std::string(in_.str(b.s))));
+    }
+    if ((a.k != CVal::K::Int && a.k != CVal::K::Real) || (b.k != CVal::K::Int && b.k != CVal::K::Real)) return std::nullopt;
+    if (a.k == CVal::K::Int && b.k == CVal::K::Int && op != BinOp::Div && op != BinOp::Pow) switch (op) {
+      case BinOp::Add: return CVal::I(a.i + b.i);
+      case BinOp::Sub: return CVal::I(a.i - b.i);
+      case BinOp::Mul: return CVal::I(a.i * b.i);
+      default: break;
+    }
+    const double x = a.as_r(), y = b.as_r();
+    switch (op) {
+      case BinOp::Add: return CVal::R(x + y);
+      case BinOp::Sub: return CVal::R(x - y);
+      case BinOp::Mul: return CVal::R(x * y);
+      case BinOp::Div: return y != 0.0 ? std::optional<CVal>(CVal::R(x / y)) : std::nullopt;
+      case BinOp::Pow: return (x < 0 && std::floor(y) != y) ? std::nullopt : std::optional<CVal>(CVal::R(std::pow(x, y)));
+    }
+    return std::nullopt;
+  }
+  // 逐元素（同形数组两两，或一侧标量广播：ARRAY/ARRAY 分支 + evalBinaryScalarArray/ArrayScalar :1309-1351）。
+  template <class F>
+  std::optional<CVal> cval_zip(const CVal& a, const CVal& b, F&& f) {
+    if (!is_arr(a) && !is_arr(b)) return f(a, b);
+    if (is_arr(a) && is_arr(b) && cval_shape(a) != cval_shape(b)) return std::nullopt;   // 形状不符 = omc 类型错
+    const CVal& lead = is_arr(a) ? a : b;
+    if (lead.arr->empty()) return empty_arr(cval_shape(lead));
+    std::vector<CVal> out;
+    out.reserve(lead.arr->size());
+    for (std::size_t i = 0; i < lead.arr->size(); ++i) {
+      std::optional<CVal> x = cval_zip(is_arr(a) ? (*a.arr)[i] : a, is_arr(b) ? (*b.arr)[i] : b, f);
+      if (!x) return std::nullopt;
+      out.push_back(std::move(*x));
+    }
+    return CVal::Arr(std::move(out));
+  }
+  // 标量积（evalBinaryScalarProduct :1405-1437）：从元素类型的零起逐项加积；空向量 → 0。
+  std::optional<CVal> cval_dot(const CVal& a, const CVal& b) {
+    if (!is_arr(a) || !is_arr(b) || a.arr->size() != b.arr->size()) return std::nullopt;
+    CVal acc = (!a.arr->empty() && a.arr->front().k == CVal::K::Real) ? CVal::R(0.0) : CVal::I(0);
+    for (std::size_t i = 0; i < a.arr->size(); ++i) {
+      std::optional<CVal> p = cval_scalar_arith(BinOp::Mul, (*a.arr)[i], (*b.arr)[i]);
+      if (!p) return std::nullopt;
+      std::optional<CVal> s = cval_scalar_arith(BinOp::Add, acc, *p);
+      if (!s) return std::nullopt;
+      acc = std::move(*s);
+    }
+    return acc;
+  }
+  // 矩阵转置（Expression.transposeArray）：m×p → p×m，空维经 eshape 保留。
+  std::optional<CVal> cval_transpose(const CVal& m) {
+    const std::vector<std::int64_t> s = cval_shape(m);
+    if (s.size() != 2) return std::nullopt;
+    if (s[1] == 0) return empty_arr({0, s[0]});
+    std::vector<CVal> rows;
+    for (std::int64_t j = 0; j < s[1]; ++j) {
+      std::vector<CVal> row;
+      if (s[0] == 0) { rows.push_back(empty_arr({0})); continue; }
+      for (std::int64_t i = 0; i < s[0]; ++i) row.push_back((*(*m.arr)[static_cast<std::size_t>(i)].arr)[static_cast<std::size_t>(j)]);
+      rows.push_back(CVal::Arr(std::move(row)));
+    }
+    return CVal::Arr(std::move(rows));
+  }
+  // `*` 两侧皆数组（TypeCheck 按维数选算子）：向量·向量 = 标量积；矩阵·向量 / 向量·矩阵（evalBinaryMulMatrixVector /
+  // MulVectorMatrix :1353-1403）；矩阵·矩阵（evalBinaryMatrixProduct :1439-1484：右阵转置后行对行作标量积，右阵无列 →
+  // n×0 零阵）。
+  std::optional<CVal> cval_matmul(const CVal& a, const CVal& b) {
+    const std::vector<std::int64_t> sa = cval_shape(a), sb = cval_shape(b);
+    if (sa.size() == 1 && sb.size() == 1) return cval_dot(a, b);
+    if (sa.size() == 2 && sb.size() == 1) {
+      if (sa[1] != sb[0]) return std::nullopt;
+      std::vector<CVal> out;
+      for (const CVal& row : *a.arr) {
+        std::optional<CVal> d = cval_dot(row, b);
+        if (!d) return std::nullopt;
+        out.push_back(std::move(*d));
+      }
+      return out.empty() ? empty_arr({0}) : CVal::Arr(std::move(out));
+    }
+    if (sa.size() == 1 && sb.size() == 2) {
+      if (sa[0] != sb[0]) return std::nullopt;
+      std::optional<CVal> bt = cval_transpose(b);
+      if (!bt) return std::nullopt;
+      if (bt->arr->empty()) return empty_arr({0});
+      std::vector<CVal> out;
+      for (const CVal& col : *bt->arr) {
+        std::optional<CVal> d = cval_dot(a, col);
+        if (!d) return std::nullopt;
+        out.push_back(std::move(*d));
+      }
+      return CVal::Arr(std::move(out));
+    }
+    if (sa.size() == 2 && sb.size() == 2) {
+      if (sa[1] != sb[0]) return std::nullopt;
+      std::optional<CVal> bt = cval_transpose(b);
+      if (!bt) return std::nullopt;
+      const std::int64_t n = sa[0], p = sb[1];
+      if (p == 0) return cval_fill(CVal::I(0), {n, 0});   // makeZero(n×0)
+      if (n == 0) return empty_arr({0, p});
+      std::vector<CVal> rows;
+      for (const CVal& row : *a.arr) {
+        std::vector<CVal> r;
+        for (const CVal& col : *bt->arr) {
+          std::optional<CVal> d = cval_dot(row, col);
+          if (!d) return std::nullopt;
+          r.push_back(std::move(*d));
+        }
+        rows.push_back(CVal::Arr(std::move(r)));
+      }
+      return CVal::Arr(std::move(rows));
+    }
+    return std::nullopt;
+  }
+  // 矩阵整数幂（evalBinaryPowMatrix :1486-1511 / PowMatrix2 :1513-1540）：^0 = Real 单位阵；^1 = 自身；偶数 = 半幂自乘；
+  // 奇数 = A·A^(n-1)。负指数 → nullopt。
+  std::optional<CVal> cval_matpow(const CVal& m, const CVal& e) {
+    const std::vector<std::int64_t> s = cval_shape(m);
+    if (e.k != CVal::K::Int || s.size() != 2 || s[0] != s[1] || e.i < 0) return std::nullopt;
+    if (e.i == 0) {
+      std::vector<CVal> rows;
+      for (std::int64_t i = 0; i < s[0]; ++i) {
+        std::vector<CVal> r;
+        for (std::int64_t j = 0; j < s[0]; ++j) r.push_back(CVal::R(i == j ? 1.0 : 0.0));
+        rows.push_back(CVal::Arr(std::move(r)));
+      }
+      return rows.empty() ? empty_arr({0, 0}) : CVal::Arr(std::move(rows));
+    }
+    auto pow2 = [&](auto& self, std::int64_t n) -> std::optional<CVal> {
+      if (n == 1) return m;
+      if (n == 2) return cval_matmul(m, m);
+      if (n % 2 == 0) {
+        std::optional<CVal> h = self(self, n / 2);
+        return h ? cval_matmul(*h, *h) : std::nullopt;
+      }
+      std::optional<CVal> h = self(self, n - 1);
+      return h ? cval_matmul(m, *h) : std::nullopt;
+    };
+    return pow2(pow2, e.i);
+  }
+  // 二元算术分派（evalBinaryOp_dispatch :971-1008，算子已由 TypeCheck 按操作数维数选定）：`+ -` 须同形（标量混数组只许
+  // `.+ .-`）；`*` 标量·数组广播、两侧皆数组走矩阵积；`/` 只许 数组/标量；`^` 标量或 方阵^整数；点号算子逐元素 / 广播。
+  std::optional<CVal> cval_binary(Op op, const CVal& a, const CVal& b) {
+    BinOp bop;
+    if (!map_binop(op, bop)) return std::nullopt;
+    const bool ew = op == Op::EWAdd || op == Op::EWSub || op == Op::EWMul || op == Op::EWDiv || op == Op::EWPow;
+    auto scal = [&](const CVal& x, const CVal& y) { return cval_scalar_arith(bop, x, y); };
+    const bool aa = is_arr(a), ba = is_arr(b);
+    if (!aa && !ba) return scal(a, b);
+    switch (bop) {
+      case BinOp::Add:
+      case BinOp::Sub:
+        if (!ew && aa != ba) return std::nullopt;
+        return cval_zip(a, b, scal);
+      case BinOp::Mul:
+        if (ew || !aa || !ba) return cval_zip(a, b, scal);
+        return cval_matmul(a, b);
+      case BinOp::Div:
+        if (!ew && !(aa && !ba)) return std::nullopt;
+        return cval_zip(a, b, scal);
+      case BinOp::Pow:
+        if (ew) return cval_zip(a, b, scal);
+        return (aa && !ba) ? cval_matpow(a, b) : std::nullopt;
+    }
+    return std::nullopt;
+  }
+  // 一元取负（evalUnaryOp :1542-1557 / evalUnaryMinus :1559-1580）：值为零（含全零数组）原样返回，否则逐元素取负。
+  static bool cval_is_zero(const CVal& v) {
+    if (v.k == CVal::K::Int) return v.i == 0;
+    if (v.k == CVal::K::Real) return v.r == 0.0;
+    if (v.k == CVal::K::Array) {
+      for (const CVal& e : *v.arr) if (!cval_is_zero(e)) return false;
+      return true;
+    }
+    return false;
+  }
+  static std::optional<CVal> cval_negate(const CVal& v) {
+    if (v.k == CVal::K::Int) return CVal::I(-v.i);
+    if (v.k == CVal::K::Real) return CVal::R(-v.r);
+    if (v.k != CVal::K::Array) return std::nullopt;
+    if (v.arr->empty()) return v;
+    std::vector<CVal> out;
+    for (const CVal& e : *v.arr) {
+      std::optional<CVal> n = cval_negate(e);
+      if (!n) return std::nullopt;
+      out.push_back(std::move(*n));
+    }
+    return CVal::Arr(std::move(out));
+  }
+  // 范围（evalRangeExp :841-913）：Integer（含步长，步长 0 → nullopt）/ Real（evalRangeReal :915-938：个数 =
+  // floor((stop-start)/step + 5e-15) + 1（Util.realRangeSize），首尾按原值、中间 start + i·step）/ Boolean。
+  std::optional<CVal> cval_range(const CVal& start, const std::optional<CVal>& step, const CVal& stop) {
+    auto num = [](const CVal& v) { return v.k == CVal::K::Int || v.k == CVal::K::Real; };
+    std::vector<CVal> els;
+    if (start.k == CVal::K::Bool && stop.k == CVal::K::Bool && !step) {
+      for (int b = start.b ? 1 : 0; b <= (stop.b ? 1 : 0); ++b) els.push_back(CVal::B(b == 1));
+    } else if (start.k == CVal::K::Int && stop.k == CVal::K::Int && (!step || step->k == CVal::K::Int)) {
+      const std::int64_t st = step ? step->i : 1;
+      if (st == 0) return std::nullopt;
+      for (std::int64_t i = start.i; st > 0 ? i <= stop.i : i >= stop.i; i += st) els.push_back(CVal::I(i));
+    } else if (num(start) && num(stop) && (!step || num(*step))) {
+      const double a = start.as_r(), s = step ? step->as_r() : 1.0, z = stop.as_r();
+      if (s == 0.0) return std::nullopt;
+      const std::int64_t n = std::max<std::int64_t>(static_cast<std::int64_t>(std::floor((z - a) / s + 5e-15)) + 1, 0);
+      if (n >= 1) els.push_back(CVal::R(a));
+      for (std::int64_t i = 1; i + 1 < n; ++i) els.push_back(CVal::R(a + static_cast<double>(i) * s));
+      if (n >= 2) els.push_back(CVal::R(z));
+    } else {
+      return std::nullopt;
+    }
+    return els.empty() ? empty_arr({0}) : CVal::Arr(std::move(els));
+  }
+
+  // 数组构造类内建（evalBuiltinZeros :3102 / Ones :2745 / Fill :2431 / Identity :2458）：zeros/ones 为 Integer 0/1，
+  // fill(v, n…) 复制 v，identity(n) 为 Integer 单位阵；维数实参须为非负整数常量。同名用户类遮蔽内建 → 不接（nullopt）。
+  std::optional<CVal> eval_array_builtin(const Exp& e, const ScodeScope& scope, int depth, bool allow_param,
+                                         std::unordered_set<std::uint32_t>* used) {
+    const Cref& fn = I_.absyn.crefs[e.cref];
+    if (fn.parts.size() != 1 || !fn.parts[0].subscripts.empty()) return std::nullopt;
+    const std::string_view nm = in_.str(fn.parts[0].name);
+    if (nm != "zeros" && nm != "ones" && nm != "fill" && nm != "identity") return std::nullopt;
+    for (Symbol an : e.arg_names) if (an.is_valid()) return std::nullopt;
+    if (find_scode_element(fn.parts[0].name, scope).is_valid()) return std::nullopt;
+    std::vector<CVal> args;
+    for (Id<Exp> a : e.args) {
+      std::optional<CVal> v = eval_scode(a, scope, depth + 1, allow_param, used);
+      if (!v) return std::nullopt;
+      args.push_back(std::move(*v));
+    }
+    const std::size_t first_dim = nm == "fill" ? 1 : 0;
+    if (args.size() < first_dim + 1 || (nm == "identity" && args.size() != 1)) return std::nullopt;
+    std::vector<std::int64_t> dims;
+    for (std::size_t k = first_dim; k < args.size(); ++k) {
+      if (args[k].k != CVal::K::Int || args[k].i < 0) return std::nullopt;
+      dims.push_back(args[k].i);
+    }
+    if (nm == "identity") {
+      const std::int64_t n = dims[0];
+      if (n == 0) return empty_arr({0, 0});
+      std::vector<CVal> rows;
+      for (std::int64_t i = 0; i < n; ++i) {
+        std::vector<CVal> r;
+        for (std::int64_t j = 0; j < n; ++j) r.push_back(CVal::I(i == j ? 1 : 0));
+        rows.push_back(CVal::Arr(std::move(r)));
+      }
+      return CVal::Arr(std::move(rows));
+    }
+    const CVal fillv = nm == "zeros" ? CVal::I(0) : nm == "ones" ? CVal::I(1) : args[0];
+    return cval_fill(fillv, dims);
   }
 
   // 按组件声明类型强转常量值：Int→Real 加宽 OK；Real→Integer 是收窄（omc 视为类型错，ceval5）→ nullopt（不产值）。
@@ -2281,9 +2668,13 @@ class Flattener {
     for (Id<SElement> ii : inputs) inset.insert(I_.scode.elems[ii].name.id);
     auto* saved = locals_;
     auto* saved_in = input_names_;
+    const std::vector<Symbol>* saved_pfx = ceval_prefix_;   // 函数体在函数作用域求值：调用处前缀不适用
     locals_ = &env;
     input_names_ = &inset;
-    auto fail = [&]() -> std::optional<CVal> { locals_ = saved; input_names_ = saved_in; return std::nullopt; };
+    ceval_prefix_ = nullptr;
+    auto fail = [&]() -> std::optional<CVal> {
+      locals_ = saved; input_names_ = saved_in; ceval_prefix_ = saved_pfx; return std::nullopt;
+    };
     // 缺省输入（声明序，可引用前面输入）。
     for (std::size_t i = 0; i < inputs.size(); ++i) {
       if (bound[i].is_valid()) continue;
@@ -2325,6 +2716,7 @@ class Flattener {
     if (it != env.end()) result = coerce_cval(it->second, oel.type.path);
     locals_ = saved;
     input_names_ = saved_in;
+    ceval_prefix_ = saved_pfx;
     return result;
   }
 
@@ -2469,6 +2861,7 @@ class Flattener {
       v.binding = literal_of(*cv);
       v.loc = floc;
       result_.model.variables.push_back(std::move(v));
+      record_const(result_.model.variables.back());
     }
     return true;
   }
@@ -2483,6 +2876,107 @@ class Flattener {
       case CVal::K::Array: break;    // 数组值不应到这里（标量上下文才调 literal_of）
     }
     return lit_int(0);
+  }
+
+  // ---- 已发射常量值表 const_vals_：修饰后的最终值（ymc 的修饰在 flatten 期才落到变量上），供两路求值的 cref 先查 ----
+  // key 与 var_key / conn_key 同编码：段 id + 各整数下标 `[v]` + '.'；数组常量另存整体（末段无下标）。
+  static std::string int_key(const std::vector<Symbol>& names, const PSubs& isubs) {
+    std::string k;
+    for (std::size_t i = 0; i < names.size(); ++i) {
+      k += std::to_string(names[i].id);
+      if (i < isubs.size())
+        for (std::int64_t v : isubs[i]) { k.push_back('['); k += std::to_string(v); k.push_back(']'); }
+      k.push_back('.');
+    }
+    return k;
+  }
+  std::optional<CVal> cval_of(Id<Expr> x) {
+    const Expr& e = result_.model.exprs[x];
+    switch (e.kind) {
+      case ExprKind::IntLit: return CVal::I(e.ival);
+      case ExprKind::RealLit: return CVal::R(e.rval);
+      case ExprKind::BoolLit: return CVal::B(e.bval);
+      case ExprKind::StringLit: return CVal::S(e.sval);
+      default: return std::nullopt;   // 枚举字面量等 CVal 无对应 → 不记
+    }
+  }
+  void record_const(const FlatVariable& v) {
+    if (v.var_kind != FlatVarKind::Constant || !v.binding.is_valid()) return;
+    if (std::optional<CVal> cv = cval_of(v.binding)) const_vals_[var_key(v)] = std::move(*cv);
+  }
+  // 行主序扁平值 + 形状 → 嵌套数组值。
+  static CVal cval_nest(const std::vector<CVal>& flat, const std::vector<std::int64_t>& dims, std::size_t k, std::size_t& pos) {
+    if (k == dims.size()) return flat[pos++];
+    if (dims[k] == 0) return empty_arr(std::vector<std::int64_t>(dims.begin() + static_cast<std::ptrdiff_t>(k), dims.end()));
+    std::vector<CVal> els;
+    for (std::int64_t i = 0; i < dims[k]; ++i) els.push_back(cval_nest(flat, dims, k + 1, pos));
+    return CVal::Arr(std::move(els));
+  }
+  // 值求值路（eval_scode）：书写处前缀（含逐段下标）+ cref 各段（常量整数下标）→ const_vals_ 里的值。
+  std::optional<CVal> const_lookup_val(const std::vector<Symbol>& prefix, const PSubs& psubs, const Cref& c,
+                                       const ScodeScope& scope, int depth) {
+    std::vector<Symbol> names = prefix;
+    PSubs isubs = psubs;
+    isubs.resize(prefix.size());
+    for (const CrefPart& p : c.parts) {
+      names.push_back(p.name);
+      std::vector<std::int64_t> is;
+      for (Id<Exp> s : p.subscripts) {
+        std::optional<CVal> sv = eval_scode(s, scope, depth + 1);
+        if (!sv || sv->k != CVal::K::Int) return std::nullopt;
+        is.push_back(sv->i);
+      }
+      isubs.push_back(std::move(is));
+    }
+    auto it = const_vals_.find(int_key(names, isubs));
+    if (it == const_vals_.end()) return std::nullopt;
+    return it->second;
+  }
+  // 类型化路（cref()）：同上，下标须字面量 / for 迭代变量；只接标量值。
+  Id<Expr> const_lookup_expr(const std::vector<Symbol>& prefix, const Cref& c) {
+    std::vector<Symbol> names = prefix;
+    PSubs isubs = cur_psubs_;
+    isubs.resize(prefix.size());
+    for (const CrefPart& p : c.parts) {
+      names.push_back(p.name);
+      std::vector<std::int64_t> is;
+      for (Id<Exp> s : p.subscripts) {
+        std::optional<std::int64_t> iv = subscript_int(s);
+        if (!iv) return {};
+        is.push_back(*iv);
+      }
+      isubs.push_back(std::move(is));
+    }
+    auto it = const_vals_.find(int_key(names, isubs));
+    if (it == const_vals_.end() || is_arr(it->second) || it->second.k == CVal::K::Record) return {};
+    return literal_of(it->second);
+  }
+  // 值求值的书写处上下文（RAII）：期间 eval_scode 的 cref 先按此前缀查 const_vals_。
+  struct CevalCtx {
+    Flattener& f;
+    const std::vector<Symbol>* saved_prefix;
+    PSubs saved_psubs;
+    CevalCtx(Flattener& fl, const std::vector<Symbol>& p, const PSubs& s)
+        : f(fl), saved_prefix(fl.ceval_prefix_), saved_psubs(fl.ceval_psubs_) {
+      f.ceval_prefix_ = &p;
+      f.ceval_psubs_ = s;
+      f.ceval_psubs_.resize(p.size());
+    }
+    ~CevalCtx() { f.ceval_prefix_ = saved_prefix; f.ceval_psubs_ = std::move(saved_psubs); }
+    CevalCtx(const CevalCtx&) = delete;
+    CevalCtx& operator=(const CevalCtx&) = delete;
+  };
+  // 按声明元素类型强转值（Int→Real 加宽；收窄 / 类型不符 → nullopt）。
+  static std::optional<CVal> coerce_to_kind(const CVal& v, TypeKind k) {
+    switch (k) {
+      case TypeKind::Real:
+        if (v.k == CVal::K::Int) return CVal::R(static_cast<double>(v.i));
+        return v.k == CVal::K::Real ? std::optional<CVal>(v) : std::nullopt;
+      case TypeKind::Integer: return v.k == CVal::K::Int ? std::optional<CVal>(v) : std::nullopt;
+      case TypeKind::Boolean: return v.k == CVal::K::Bool ? std::optional<CVal>(v) : std::nullopt;
+      case TypeKind::String: return v.k == CVal::K::Str ? std::optional<CVal>(v) : std::nullopt;
+      default: return std::nullopt;
+    }
   }
 
   // 摊平嵌套数组 CVal 成标量元素序列（规约用）。
@@ -2674,6 +3168,8 @@ class Flattener {
         const SVariability var = I_.comps[I_.nodes[local].comp].attributes.variability;
         const Type lty = I_.comps[I_.nodes[leaf].comp].ty;
         if (var == SVariability::Const) {
+          // 已发射常量的最终值（修饰后，const_vals_）优先：`A a(x = 1)` 里 `z = x + y`（CevalBinding2）。
+          if (Id<Expr> kv = const_lookup_expr(prefix, c); kv.is_valid()) return kv;
           if (c.parts.size() > 1) {
             // constant 记录成员 `r1.x` → 复用已发射叶子的字面量绑定（Half B，NFCeval recordElement）。
             Id<Expr> v = eval_const_record_member(prefix, c);
@@ -5044,6 +5540,10 @@ class Flattener {
   struct AugMember { Symbol name; NodeId decl; std::vector<ConnMember> vmembers; };
   // expandable 组件节点 → 最后一次增广后的成员表（按名升序，makeConnectorType；节点被数组元素共用，:417-428）。
   std::unordered_map<std::uint32_t, std::vector<AugMember>> aug_;
+  // 已发射常量的最终值（var_key 编码 → 值；数组另存整体），见 const_lookup_*。
+  std::unordered_map<std::string, CVal> const_vals_;
+  const std::vector<Symbol>* ceval_prefix_ = nullptr;   // 非空：eval_scode 的 cref 先在此前缀下查 const_vals_（CevalCtx 设）
+  PSubs ceval_psubs_;
   // cardinality（NFCardinalityTable）：连接器元素 cref key → 在连接里出现的次数；调用先留符号，连接解析后替换并折叠。
   std::unordered_map<std::string, std::int64_t> card_table_;
   bool uses_cardinality_ = false;

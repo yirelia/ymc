@@ -642,6 +642,28 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
             记 open-questions。
             → easy-slice 272 PASS/0 FAIL（+3）；全 scodeinst PASS 272→275、**FAIL 73→72**、SKIP 980→978；oracle=live 不一致 0；
             +3 单测。
+- [ ] **加宽(54)常量数组求值（Ceval 数组）**（2026-09-28 规划；按 SKIP 直方图自选：有效用例里 "non-literal array dimension"
+      50 例居首，其中约半数是 `constant T x[:] = <数组常量表达式>`）：
+      源：NFCeval.evalBinaryAdd/Sub/Mul/Div/Pow :1010-1307、ScalarArray/ArrayScalar :1309-1351、MulVectorMatrix /
+      MulMatrixVector / ScalarProduct / MatrixProduct :1353-1484、PowMatrix :1486-1540、evalUnaryMinus :1559-1580、
+      evalRange/evalRangeExp/evalRangeReal :815-938、evalBuiltinZeros/Ones/Fill/Identity（:3102/2745/2431/2458）。
+      常量值与修饰：ymc 的修饰在 flatten 期（ModCtx）才落到变量上 → 已发射常量的**最终值**才是修饰后的值（CevalBinding2
+      `A a(x = 1.0)` 里 `z = x + y` 现 SKIP 即因此）。
+      - [x] A：已发射常量值表 const_vals_（var_key → CVal，数组存整体 + 逐元素）；cref() 的 constant 分支与 eval_scode 的 cref
+            先查它（前缀 + 段下标，修饰感知）；eval_scode 加数组二元（逐元素 / 标量广播 / 向量·向量 / 矩阵·向量 / 向量·矩阵 /
+            矩阵·矩阵 / 矩阵幂）、数组取负、String `+`、范围（Integer / Real / Boolean）、zeros/ones/fill/identity；
+            emit_array 的 constant 绑定改走值求值（`:` 维取值形状、逐元素字面量、空数组整体不出）；标量 constant 绑定 inst_exp
+            折不成字面量时回退值求值。目标：CevalAdd1/Sub1/Mul1、RealRangeBinding1、CevalMatrixVectorMul1/VectorMatrixMul1/
+            MatrixPow1/MatrixProduct1/VectorProduct1、CevalZeros1/Ones1/Fill1/Identity1、CevalBinding2。
+            **完成（2026-09-28）**：CVal 加 eshape（空数组保全形状，`ones(0, 3)` 转置 / 矩阵积要用）；cval_binary 按 Absyn 算子
+            + 值维数分派（evalBinaryOp_dispatch）；范围复刻 evalRangeReal 的首尾原值（`1.0:0.3:2.0` → …, 1.6, 2.0，P54c 探针实证
+            omc 的这一怪癖）；constant 标量改为先值求值、失败再走类型化路径；函数体求值期关掉书写处前缀。全部 15 个目标首轮即与
+            1.25.0 逐字节，另白捡 CevalBinding3（数组元素的修饰分发）、CevalFuncArray1、Size4。
+            → easy-slice 289 PASS/0 FAIL（+17）；全 scodeinst PASS 275→292、FAIL 72 不变、SKIP 978→961；oracle=live 不一致 0；
+            三编译器 10/10、ASan 0（ASan 版 ymc 跑 148 个 Ceval/Range/Size 文件：0 报告、与 gcc 版输出一致）；+3 单测。
+      - [ ] B：transpose/cross/skew/vector/linspace/diagonal/scalar/der(常量) 等内建（CevalTranspose1/Cross1/Skew1/Vector1/
+            Linspace1/Diagonal1/Scalar1/Der2）。
+      - [ ] C：数组推导式 `{i-j for i in …}`（CevalArrayConstructor2）、返回数组的用户函数（CevalFuncArray*/FuncSubscript*）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples
