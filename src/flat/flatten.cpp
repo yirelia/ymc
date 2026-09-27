@@ -170,6 +170,8 @@ class Flattener {
     //（NFFlatten.mo:2497）。顶层（outside）连接器的 flow 既进求和集（OUTSIDE 面）又留 INSIDE 单元素集 → 同时有
     // `-(c1.f + c2.f) = 0` 与 `c1.f = 0`（Connector.isEqual 含 face，NFConnector.mo:143-148）。
     process_connects();
+    // 连接解析后才能求 cardinality（evaluateConnectionOperators，NFFlatten.mo:2565-2576），随后按 SimplifyModel 折叠。
+    evaluate_cardinality();
     // 某变量名同时出现在 removed_（另一同名声明条件为假被移除）：redeclare 一个 replaceable-conditional 成员的
     // 语义（保留原条件 / 禁止带条件 redeclare）v1 未做 → SKIP（RedeclareElementCondition1/2/3）。
     if (!removed_.empty())
@@ -250,6 +252,7 @@ class Flattener {
       const Visibility vis = I_.nodes[cn].visibility;
       const SElement& cel = I_.scode.elems[I_.comps[cid].def];
       const bool has_dims = !cel.attr.dims.empty() || !cel.type.dims.empty();
+      if (conflicting_direction(cel, inst_node)) { set_unsupported("conflicting direction prefix"); continue; }
       // 条件组件 `x if cond`：cond 须求值成常量 Bool（MLS §4.4.5）。false → 移除组件（不产变量/不递归）、
       // 记路径供 connect 丢弃；true → 正常展开（条件抹掉）。求不出常量 Bool → SKIP。
       if (cel.condition.is_valid()) {
@@ -612,7 +615,9 @@ class Flattener {
       // assert(cond, msg[, level])：默认 level = AssertionLevel.error 省略（R13 §6-6，flat_dump 决定）。
       FlatEquation fe;
       fe.kind = FlatEqKind::Assert;
+      card_allowed_ = true;   // 条件里允许 cardinality（CardinalityInvalidContext*：其它位置 omc 报错）
       fe.a = simplify_expr(inst_exp(eq.a, enclosing, prefix));
+      card_allowed_ = false;
       fe.b = simplify_expr(inst_exp(eq.b, enclosing, prefix));
       // 参数类型校验（omc 报错，AssertInvalid1/2/3）：cond=Boolean、msg=String、显式 level=枚举。
       if (result_.model.exprs[fe.a].ty.kind != TypeKind::Boolean) { set_unsupported("assert condition type"); return; }
@@ -667,7 +672,9 @@ class Flattener {
       // ymc 的 if 路径不标 final，故只折**纯字面量/迭代变量**条件（used 为空），参数条件 → SKIP。
       std::vector<FlatEqBranch> out_branches;
       for (const SEqBranch& br : eq.branches) {   // if + elseif（保序）
+        card_allowed_ = true;   // 条件里允许 cardinality（CardinalityInvalidContext*）
         Id<Expr> ce = simplify_expr(inst_exp(br.cond, enclosing, prefix));
+        card_allowed_ = false;
         if (result_.unsupported) return;
         if (result_.model.exprs[ce].ty.kind != TypeKind::Boolean) { set_unsupported("if condition type"); return; }
         std::unordered_set<std::uint32_t> used;
@@ -1609,7 +1616,8 @@ class Flattener {
     }
     return nullptr;
   }
-  // 按简单名沿词法作用域链找类元素（任意 kind；走法同 find_enum_def）。继承/导入来的类不在链上 → nullptr（调用方 SKIP）。
+  // 按简单名沿词法作用域链找类元素（任意 kind；走法同 find_enum_def），最后再查顶层 program（顶层声明的连接器短类，
+  // Cardinality3）。继承/导入来的类不在链上 → nullptr（调用方 SKIP）。
   const SElement* find_class_elem(NodeId scope, Symbol name) {
     for (NodeId s = scope; s.is_valid() && !I_.nodes[s].is_empty(); s = I_.nodes[s].parent_scope) {
       const Id<SElement> d = I_.nodes[s].def;
@@ -1619,7 +1627,30 @@ class Flattener {
         if (el.kind == SElementKind::Class && el.name == name) return &el;
       }
     }
+    for (Id<SElement> eid : I_.scode.program) {
+      const SElement& el = I_.scode.elems[eid];
+      if (el.kind == SElementKind::Class && el.name == name) return &el;
+    }
     return nullptr;
+  }
+  // 组件自身的方向前缀与短类链上的方向前缀冲突（`connector C = input Real; output C c3;`）：omc 报错
+  //（Prefixes.mergeDirection，NFPrefixes.mo:588-604；派生链 allowSame=true，NFAttributes.mo:274 → 相同可、不同报错；conn8）。
+  // 正确归宿是 inst.cpp 短类塌陷的属性合并（:436-438 只做"首个非默认者胜"）——用户接手时移过去；此处先按同规则 SKIP。
+  // 限定类型名 / 找不到类 → 不查（下一跳在组件声明作用域链上找，近似）。
+  bool conflicting_direction(const SElement& cel, NodeId scope) {
+    if (cel.type.leading_dot || cel.type.path.size() != 1) return false;
+    SDirection acc = cel.attr.dir;
+    const SElement* tel = find_class_elem(scope, cel.type.path[0]);
+    for (int guard = 0; tel && tel->def.kind == SClassDefKind::Derived && guard < 100; ++guard) {
+      const SDirection d = tel->def.derived_attr.dir;
+      if (d != SDirection::Bidir) {
+        if (acc == SDirection::Bidir) acc = d;
+        else if (acc != d) return true;
+      }
+      if (tel->def.derived_type.leading_dot || tel->def.derived_type.path.size() != 1) break;
+      tel = find_class_elem(scope, tel->def.derived_type.path[0]);
+    }
+    return false;
   }
 
   // 类型名维度（`x[Boolean]` / `x[E]`，对标 NFDimension.fromExp:111 + NFTypeCheck.checkDimensionType）：
@@ -2790,6 +2821,7 @@ class Flattener {
       if (Id<Expr> uc = try_emit_user_call(e, enclosing, prefix); uc.is_valid()) return uc;
     }
     const std::string_view builtin_name = fn.parts.size() == 1 ? in_.str(fn.parts[0].name) : std::string_view{};
+    if (builtin_name == "cardinality") return cardinality_call(e, enclosing, prefix);
     const BuiltinFn* bf = nullptr;
     bool supported = true;
     if (fn.parts.size() != 1) {
@@ -3707,6 +3739,12 @@ class Flattener {
         rs.push_back({std::move((*A)[i]), std::move((*B)[i]), cs.loc});
       }
     }
+    // cardinality 计数表（CardinalityTable.fromConnections，NFCardinalityTable.mo:54-92）：在 collectConnections 之后、
+    // split/scalarize 之前，按**连接器元素**（数组已展开、成员未拆）统计每个 cref 在连接里出现的次数；键 = 元素 cref 串。
+    for (const Resolved& r : rs) {
+      ++card_table_[conn_key(r.a.path, r.a.subs)];
+      ++card_table_[conn_key(r.b.path, r.b.subs)];
+    }
     // 标量叶配对（对标 Connection.split/scalarize 后的逐元素 CONNECTION），自然序：配对序 → 叶成员表序（每层 potential
     // 升序在前、flow 升序在后、子连接器就地展开，见 connector_leaves）→ 数组成员行主序（Connection.scalarize →
     // Connector.scalarize → scalarizeAll，NFConnection.mo:76-98）。任一侧成员为条件假被移除 → 整对丢弃（NFConnection.mo:68）。
@@ -3821,6 +3859,133 @@ class Flattener {
     result_.model.equations.insert(result_.model.equations.begin(), conn_eqs.begin(), conn_eqs.end());
   }
 
+  // ---- cardinality（MLS §3.7.2.3；omc NFCardinalityTable + NFConnectEquations.evaluateOperators :156-157）----
+  // 实参须是**标量连接器** cref（类名 / 数组连接器 → omc 报错，CardinalityInvalidArg1/2），且只能出现在 if 方程/assert 的
+  // 条件里（CardinalityInvalidContext1/2）。求值时连接尚未解析 → 保持符号调用，实参 = 前缀化后的连接器 cref（与 connect
+  // 同样的书写处前缀 + 复合数组元素下标）；process_connects 后按元素级出现次数替换成 Integer 字面量再折叠 if/assert。
+  Id<Expr> cardinality_call(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    if (!card_allowed_) { set_unsupported("cardinality outside if/assert condition"); return lit_int(0); }
+    if (e.args.size() != 1 || !is_cref_exp(e.args[0])) { set_unsupported("cardinality argument"); return lit_int(0); }
+    std::optional<std::vector<ConnInfo>> ci = resolve_connector(e.args[0], enclosing);
+    if (!ci || ci->size() != 1) { set_unsupported("cardinality argument"); return lit_int(0); }
+    ConnInfo c = std::move((*ci)[0]);
+    if (!prefix.empty()) {
+      std::vector<Symbol> p = prefix;
+      p.insert(p.end(), c.path.begin(), c.path.end());
+      std::vector<std::vector<Id<Expr>>> s = psubs_to_exprs(cur_psubs_);
+      s.resize(prefix.size());
+      s.insert(s.end(), c.subs.begin(), c.subs.end());
+      c.path = std::move(p);
+      c.subs = std::move(s);
+    }
+    Expr r;
+    r.kind = ExprKind::Call;
+    r.call_name = {I_.absyn.crefs[e.cref].parts[0].name};
+    r.ty = Type::integer();
+    r.args = {member_cref(c.path, c.subs, {}, {}, Type::real())};
+    uses_cardinality_ = true;
+    return add(std::move(r));
+  }
+  // 类型化 cref 的身份 key：与 conn_key(path, subs) 同一编码（段 id + 各下标 [整数] + '.'），供 cardinality 实参查表。
+  std::string expr_cref_key(const ExprCref& c) {
+    std::string k;
+    for (const ExprCrefPart& p : c.parts) {
+      k += std::to_string(p.name.id);
+      for (Id<Expr> s : p.subscripts) {
+        const Expr& se = result_.model.exprs[s];
+        k.push_back('[');
+        if (se.kind == ExprKind::IntLit) k += std::to_string(se.ival);
+        else k += "#" + std::to_string(s.raw);
+        k.push_back(']');
+      }
+      k.push_back('.');
+    }
+    return k;
+  }
+  // 就地把 cardinality(cref) 改写成 Integer 字面量（evaluateCardinality :94-103，未出现 → 0）；返回是否有替换。
+  bool subst_cardinality(Id<Expr> id) {
+    Expr& e = result_.model.exprs[id];
+    if (e.kind == ExprKind::Call && e.call_name.size() == 1 && in_.str(e.call_name[0]) == "cardinality" &&
+        e.args.size() == 1 && result_.model.exprs[e.args[0]].kind == ExprKind::Cref) {
+      auto it = card_table_.find(expr_cref_key(result_.model.exprs[e.args[0]].cref));
+      const std::int64_t n = it == card_table_.end() ? 0 : it->second;
+      e.kind = ExprKind::IntLit;
+      e.ival = n;
+      e.ty = Type::integer();
+      e.args.clear();
+      e.call_name.clear();
+      return true;
+    }
+    bool changed = false;
+    const std::vector<Id<Expr>> kids = e.args;
+    for (Id<Expr> k : kids) changed = subst_cardinality(k) || changed;
+    for (Id<Expr> k : {e.a, e.b, e.c}) if (k.is_valid()) changed = subst_cardinality(k) || changed;
+    return changed;
+  }
+  // 替换后按 NFSimplifyModel 折叠：assert 条件恒真 → 删（:215-219）；if 分支真 → 首个保留分支则内联体、否则成为 else 并
+  // 截断，假 → 丢弃，其余保留（simplifyIfEqBranches :510-573）。只重新化简发生过替换的表达式，其余输出保持不变。
+  void evaluate_cardinality() {
+    if (!uses_cardinality_) return;
+    for (FlatVariable& v : result_.model.variables)
+      if (v.binding.is_valid() && subst_cardinality(v.binding)) v.binding = simplify_expr(v.binding);
+    result_.model.equations = fold_card_eqs(result_.model.equations);
+    result_.model.initial_equations = fold_card_eqs(result_.model.initial_equations);
+  }
+  std::vector<Id<FlatEquation>> fold_card_eqs(const std::vector<Id<FlatEquation>>& eqs) {
+    std::vector<Id<FlatEquation>> out;
+    for (Id<FlatEquation> id : eqs) fold_card_eq(id, out);
+    return out;
+  }
+  void fold_card_eq(Id<FlatEquation> id, std::vector<Id<FlatEquation>>& out) {
+    auto subst = [&](Id<Expr>& x) { if (x.is_valid() && subst_cardinality(x)) x = simplify_expr(x); };
+    FlatEquation& fe = result_.model.eqs[id];   // 本趟不新增方程节点，引用稳定
+    switch (fe.kind) {
+      case FlatEqKind::Assert: {
+        subst(fe.a);
+        const Expr& c = result_.model.exprs[fe.a];
+        if (c.kind == ExprKind::BoolLit && c.bval) return;   // assert(true, …) → 删除
+        out.push_back(id);
+        return;
+      }
+      case FlatEqKind::If: {
+        std::vector<FlatEqBranch> kept;
+        for (FlatEqBranch& br : fe.branches) {
+          subst(br.cond);
+          std::vector<Id<FlatEquation>> body = fold_card_eqs(br.body);
+          const Expr& c = result_.model.exprs[br.cond];
+          if (c.kind == ExprKind::BoolLit) {
+            if (!c.bval) continue;                                                   // 假 → 丢弃
+            if (kept.empty()) { out.insert(out.end(), body.begin(), body.end()); return; }   // 真且无前置 → 内联体
+            fe.branches = std::move(kept);                                           // 真 → 成为 else，截断其余
+            fe.else_body = std::move(body);
+            out.push_back(id);
+            return;
+          }
+          kept.push_back({br.cond, std::move(body)});
+        }
+        std::vector<Id<FlatEquation>> els = fold_card_eqs(fe.else_body);
+        if (kept.empty()) { out.insert(out.end(), els.begin(), els.end()); return; }   // 分支全假 → 只剩 else 体
+        fe.branches = std::move(kept);
+        fe.else_body = std::move(els);
+        out.push_back(id);
+        return;
+      }
+      case FlatEqKind::When:
+        for (FlatEqBranch& br : fe.branches) { subst(br.cond); br.body = fold_card_eqs(br.body); }
+        out.push_back(id);
+        return;
+      case FlatEqKind::For:
+        subst(fe.a); subst(fe.b); subst(fe.c);
+        fe.body = fold_card_eqs(fe.body);
+        out.push_back(id);
+        return;
+      default:
+        subst(fe.a); subst(fe.b); subst(fe.c);
+        out.push_back(id);
+        return;
+    }
+  }
+
   Inst& I_;
   Interner& in_;
   FlattenResult result_;
@@ -3837,6 +4002,10 @@ class Flattener {
   bool in_if_ = false;   // 正在收集 if 分支体（connect 不能进分支体 → SKIP）
   struct FlowVar { std::vector<Symbol> name; std::vector<std::vector<Id<Expr>>> subs; Type ty; SourceLoc loc; };
   std::vector<FlowVar> flow_vars_;   // flow 变量（run() 末尾按 outside/未连接补 `=0` 方程）
+  // cardinality（NFCardinalityTable）：连接器元素 cref key → 在连接里出现的次数；调用先留符号，连接解析后替换并折叠。
+  std::unordered_map<std::string, std::int64_t> card_table_;
+  bool uses_cardinality_ = false;
+  bool card_allowed_ = false;   // 只在 if 方程 / assert 的条件表达式里为 true（其它上下文 omc 报错 → SKIP）
   struct ConnectStmt {
     Id<Exp> a, b; NodeId enclosing; std::vector<Symbol> prefix; SourceLoc loc;
     std::unordered_map<std::uint32_t, std::int64_t> loopvars;   // 采集时的 for 迭代变量快照（连接器下标 `c[i]` 求值）

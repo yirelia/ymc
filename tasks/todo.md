@@ -546,9 +546,20 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       → 16 个独立探针（12 集合序 + OrderTrap/EqPlace + SubConn/ArrSub）逐字节；easy-slice 235 PASS/0 FAIL **不变**、
         全 scodeinst 238/73/1014 **不变**（既有输出全部不动，只修潜在偏差）；oracle=live 逐字节一致；三编译器 10/10、
         ASan 0；单测 −1（共享端点 SKIP 桩）+6（链式共享端点、OrderTrap、EqPlace、子模型面、数组元素前缀、四元混合面求和）。
-      - [ ] S4 cardinality：CardinalityTable（连接器元素级计数，NFCardinalityTable.mo:54-92，键 = 元素 cref 串）；
-            `cardinality(x)` → IntLit（NFConnectEquations.mo:156-157）；含该调用的方程延后到连接解析后再折叠
-            （NFSimplifyModel.mo:215-219 assert(true) 删除、:510-538 if 真分支内联）；Cardinality1-4（+4）。
+- [x] **加宽㊿cardinality（㊾ 的 S4）+ 方向前缀冲突守卫**（2026-09-27）：承 990bf78。
+      cardinality：call() 拦截，实参经 resolve_connector 须恰好 1 个标量连接器元素（类名/数组 → SKIP，CardinalityInvalidArg1/2），
+      且只允许在 if 方程/assert 的条件里（card_allowed_，其余 SKIP，CardinalityInvalidContext1/2）；保持符号 Call（实参 =
+      前缀化连接器 cref）。process_connects 在 split 前按连接器元素建计数表（CardinalityTable.fromConnections，
+      NFCardinalityTable.mo:54-92）；随后 evaluate_cardinality 就地替换成 IntLit（evaluateCardinality :94-103，缺省 0），
+      只重化简被替换的表达式，再按 NFSimplifyModel 折叠：assert(true) 删（:215-219）、if 真分支首个则内联/否则成 else、
+      假分支丢弃（simplifyIfEqBranches :510-573）。find_class_elem 补查顶层 program（Cardinality3 顶层短类连接器）。
+      方向前缀冲突守卫：新暴露 conn8（`connector C = input Real; output C c3`）→ omc 报错 Prefixes.mergeDirection
+      （NFPrefixes.mo:588-604，派生链 allowSame）；conflicting_direction 沿短类链累积方向、不同即 SKIP。
+      顺带把 ClassAttributes4 / type4 / type5（status incorrect，1.25.0 实跑同样报错）从真 FAIL 变 SKIP。
+      正确归宿是 inst.cpp 短类塌陷的属性合并（:436-438）——留给用户接手时移入（任务卡：mergeDirection 语义 + 这四个用例）。
+      → easy-slice 239 PASS/0 FAIL（+4：Cardinality1 由 SKIP 翻 PASS、Cardinality2/3/4 新入）；oracle=live 逐字节一致；
+      全 scodeinst PASS 238→242、**FAIL 73→70**（conn8 先冒出后守住；ClassAttributes4/type4/type5 −3 真 FAIL）、SKIP 1014→1013；
+      三编译器 10/10、ASan 0；+6 单测（cardinality ×5 含上下文守卫、方向冲突守卫 ×1）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

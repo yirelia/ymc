@@ -1008,6 +1008,91 @@ YMC_TEST(flatten_connect_in_submodel_array_element) {
                            "  R[1].q.f = 0.0;\n  R[2].p.f = 0.0;\n  R[2].q.f = 0.0;\n  p.f = 0.0;\n  R[1].n = 1;\n  R[2].n = 1;\nend M;\n"));
 }
 
+// ---- cardinality（NFCardinalityTable / evaluateConnectionOperators / SimplifyModel）；期望 = omc 1.25.0（文件与实跑一致）----
+
+YMC_TEST(flatten_cardinality_assert_true_removed) {
+  // 未连接：cardinality(c) = 0（getOrDefault），`assert(0 == 0, …)` 折成 true 后删除（NFSimplifyModel.mo:215-219）。Cardinality1。
+  const char* src =
+      "model Cardinality1\n  connector C\n    Real e;\n    flow Real f;\n  end C;\n  C c;\n"
+      "equation\n  assert(cardinality(c) == 0, \"cardinality(c) should be 0\");\nend Cardinality1;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class Cardinality1\n  Real c.e;\n  Real c.f;\nequation\n  c.f = 0.0;\nend Cardinality1;\n"));
+}
+
+YMC_TEST(flatten_cardinality_if_fold_in_submodel) {
+  // 子模型内 `if cardinality(p) == 1 … elseif == 2 …`：计数按元素级连接（R1.p 在子模型内 connect(p,q) 与顶层
+  // connect(R1.p, p) 各出现一次 → 2；R2.p → 1），替换后按 simplifyIfEqBranches 折叠：假分支丢弃、真分支内联体。
+  // 顺序：连接集方程（含 `p.i = 0.0` 夹在合并集之前）在前，折叠出的 `R1.n_conn = 2; R2.n_conn = 1` 在后。Cardinality2。
+  const char* src =
+      "connector Pin\n  Real v;\n  flow Real i;\nend Pin;\n"
+      "model Resistor\n  Pin p;\n  Pin n;\n  Pin q;\n  Integer n_conn;\nequation\n  connect(p, q);\n"
+      "  if cardinality(p) == 1 then\n    n_conn = 1;\n  elseif cardinality(p) == 2 then\n    n_conn = 2;\n"
+      "  else\n    n_conn = 0;\n  end if;\nend Resistor;\n"
+      "model Cardinality2\n  Pin p;\n  Resistor R1, R2;\nequation\n  connect(R1.p, p);\nend Cardinality2;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class Cardinality2\n  Real p.v;\n  Real p.i;\n  Real R1.p.v;\n  Real R1.p.i;\n  Real R1.n.v;\n"
+                           "  Real R1.n.i;\n  Real R1.q.v;\n  Real R1.q.i;\n  Integer R1.n_conn;\n  Real R2.p.v;\n  Real R2.p.i;\n"
+                           "  Real R2.n.v;\n  Real R2.n.i;\n  Real R2.q.v;\n  Real R2.q.i;\n  Integer R2.n_conn;\n"
+                           "equation\n  R1.p.v = R1.q.v;\n  -(R1.p.i + R1.q.i) = 0.0;\n  R2.p.v = R2.q.v;\n  -(R2.p.i + R2.q.i) = 0.0;\n"
+                           "  R1.p.v = p.v;\n  p.i = 0.0;\n  R1.p.i - p.i = 0.0;\n  R1.n.i = 0.0;\n  R1.q.i = 0.0;\n  R2.p.i = 0.0;\n"
+                           "  R2.n.i = 0.0;\n  R2.q.i = 0.0;\n  R1.n_conn = 2;\n  R2.n_conn = 1;\nend Cardinality2;\n"));
+}
+
+YMC_TEST(flatten_cardinality_short_class_connectors_shared) {
+  // 顶层短类连接器 `connector BooleanInput = input Boolean`（find_class_elem 查顶层 program）；u 在两条 connect 里 → 2，
+  // and1.u1/u2 各 1 → 三条 assert 全删；共享端点 u 的 potential 集 head=u（`u = and1.u2; u = and1.u1`）。Cardinality3。
+  const char* src =
+      "connector BooleanInput = input Boolean;\nconnector BooleanOutput = output Boolean;\n"
+      "block And\n  BooleanInput u1;\n  BooleanInput u2;\n  BooleanOutput y;\nequation\n  y = u1 and u2;\nend And;\n"
+      "model Cardinality3\n  BooleanInput u;\n  And and1;\nequation\n"
+      "  assert(cardinality(u) == 2, \"cardinality(u) should be 2\");\n"
+      "  assert(cardinality(and1.u1) == 1, \"cardinality(and1.u1) should be 1\");\n"
+      "  assert(cardinality(and1.u2) == 1, \"cardinality(and1.u2) should be 1\");\n"
+      "  connect(u, and1.u1);\n  connect(u, and1.u2);\nend Cardinality3;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class Cardinality3\n  input Boolean u;\n  Boolean and1.u1;\n  Boolean and1.u2;\n  Boolean and1.y;\n"
+                           "equation\n  u = and1.u2;\n  u = and1.u1;\n  and1.y = and1.u1 and and1.u2;\nend Cardinality3;\n"));
+}
+
+YMC_TEST(flatten_cardinality_array_host_element) {
+  // `cardinality(a1[1].c)` 与整体宿主数组连接 connect(a1.c, a2.c)（宿主段缺省下标取全部）：a1[1].c 出现 1 次 → assert 删。
+  // 集合序：inside flow 预插入（根下标低）→ 两个 potential 集先于两个 flow 集。Cardinality4。
+  const char* src =
+      "connector C\n  Real e;\n  flow Real f;\nend C;\n"
+      "model A\n  C c;\nend A;\n"
+      "model Cardinality4\n  A a1[2], a2[2];\nequation\n"
+      "  assert(cardinality(a1[1].c) == 1, \"cardinality(a1[1].c) should be 1\");\n  connect(a1.c, a2.c);\nend Cardinality4;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class Cardinality4\n  Real a1[1].c.e;\n  Real a1[1].c.f;\n  Real a1[2].c.e;\n  Real a1[2].c.f;\n"
+                           "  Real a2[1].c.e;\n  Real a2[1].c.f;\n  Real a2[2].c.e;\n  Real a2[2].c.f;\n"
+                           "equation\n  a1[1].c.e = a2[1].c.e;\n  a1[2].c.e = a2[2].c.e;\n"
+                           "  a2[1].c.f + a1[1].c.f = 0.0;\n  a2[2].c.f + a1[2].c.f = 0.0;\nend Cardinality4;\n"));
+}
+
+YMC_TEST(flatten_cardinality_outside_condition_unsupported) {
+  // cardinality 只能出现在 if 方程/assert 的条件里（omc 报错 CardinalityInvalidContext1/2）→ 干净 SKIP。
+  bool uns = false;
+  std::string t = flatten_src(
+      "connector C\n  Real e;\n  flow Real f;\nend C;\n"
+      "model M\n  C c;\n  Integer n = cardinality(c);\nend M;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+}
+
+YMC_TEST(flatten_conflicting_direction_prefix_unsupported) {
+  // 短类链上方向前缀冲突：`type RealOutput = output RealInput`，RealInput = input Real → omc 1.25.0 报错
+  //（Prefixes.mergeDirection，NFPrefixes.mo:588-604；type4/ClassAttributes4/type5/conn8 实跑均报错）→ 干净 SKIP；
+  // 同向重复（allowSame=true，NFAttributes.mo:274）不算冲突。
+  bool uns = false;
+  std::string t = flatten_src(
+      "type RealInput = input Real;\ntype RealOutput = output RealInput;\n"
+      "model A\n  RealInput ri;\n  RealOutput ro;\nend A;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+  YMC_CHECK_EQ(flatten_src("type RealInput = input Real;\nmodel A\n  input RealInput ri;\nend A;\n"),
+               std::string("class A\n  input Real ri;\nend A;\n"));
+}
+
 YMC_TEST(flatten_connect_flow_sum_mixed_faces) {
   // 四元 flow 集 [inside, inside, outside, outside]（inside 预插入在前）：`b + a - c1 - c2`（取负折叠）；
   // potential 集 head = c1（合并序里最先插入）。期望 = omc（InInOutOut 探针）。
