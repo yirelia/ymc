@@ -43,3 +43,16 @@
   NFSimplifyExp.mo:1020/1054/1108-1110 一带的取负折叠。）
 - 顶层（outside）连接器的 flow 同时进求和集（OUTSIDE 面）与单元素集（INSIDE 面，`Connector.isEqual` 含 face，NFConnector.mo:143-148），
   故既有 `-(c1.f + c2.f) = 0` 又有 `c1.f = 0`；inside 连接器已连接则只在求和集。
+
+## 2026-09-27 补充：两个已确认的潜在偏差（探针，当前无 testsuite PASS 用例触发）
+
+1. **集合输出序 ≠ "连接方程在前、flow=0 在后"**。探针 OrderTrap（`C p; A a;`，A 含 `C c`，`connect(a.c, p)`）：
+   omc `a.c.v = p.v; p.i = 0.0; a.c.i - p.i = 0.0;`，ymc 把 `p.i = 0.0` 放最后。原因：inside 端 a.c.i 是预插入节点
+   （低下标）且成为合并集的根；outside 端 p 的 INSIDE 单元素集 p.i 因 p 声明在前、cons 反序而下标更高 → 集合号反序输出时
+   排在合并集之前。Cardinality2 期望里 `p.i = 0.0` 夹在连接方程之间同理。**结论：必须按上面流水线忠实实现 DisjointSets
+   的插入序/根序，"不相交简化"只是碰巧对。**
+2. **连接方程排在模型自身方程之前**（NFFlatten.mo:2497 `listAppend(conn_eql, flatModel.equations)`）。探针 EqPlace
+   （`x = 1; connect(c1, c2);`）：omc 先 4 条连接/flow 方程再 `x = 1.0`；ymc 相反（run() 末尾追加）。ConnectArrays1 /
+   Cardinality2/3 的期望亦然；initial equation 段独立。
+3. 子模型内的 connect：面按**书写类**本地判定（`crefFace` 用 `firstNonScope`，NFComponentRef.mo:429-440，前缀段是 SCOPE 来源），
+   发射路径加前缀。Cardinality2 里 Resistor 内 `connect(p, q)` → `-(R1.p.i + R1.q.i) = 0.0`（both outside）。

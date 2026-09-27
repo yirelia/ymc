@@ -530,6 +530,23 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       全 scodeinst PASS 236→238、SKIP 1018→1014；三编译器 10/10、ASan 0；+3 单测（方向规则、未连接 flow 记录、记录成员相连）。
       留后续：记录字段自带 flow/stream 前缀、复合数组上的 flow 前缀、`flow C c` 子连接器（需告警文本）、cardinality
       （CardinalityTable + if/assert 常量折叠）、expandable、stream。
+- [ ] **加宽㊾连接集忠实实现（DisjointSets 序）+ 连接方程前置 + 子模型内 connect + cardinality**（2026-09-27 规划，待确认）：
+      背景：两处已确认潜在偏差（docs/research/connect-sets-order.md 补充节）：(1) 集合输出序 = 最终根节点下标反序，
+      "不相交简化"在 inside↔outside 且 outside 先声明时出错（探针 OrderTrap）；(2) 连接方程须置于模型自身方程之前
+      （NFFlatten.mo:2497，探针 EqPlace）。Cardinality2 还需子模型内 connect（面按书写类本地算，firstNonScope，
+      NFComponentRef.mo:429-440；路径加前缀）。
+      - [ ] S1 连接方程前置：process_connects + flow=0 的方程插到 model.equations 头部（initial 段不动）；EqPlace 探针逐字节。
+      - [ ] S2 DisjointSets：节点表（插入序 + key→idx）、union 按 OMC 秩规则（Util/DisjointSets.mo:256-287）、extractSets 根序；
+            预插 flow 叶（flow_vars_ 反序、INSIDE 面）；合并序 = 语句反序 → 元素反序 → 叶反序 → 成员元素反序、lhs 先于 rhs；
+            输出 = 集合号反序；potential 集 head=其余、flow 集 makeFlowExp 求和（`in… - out…` / `-(out…)`）、
+            单元素 inside flow `= 0.0`。共享端点自然支持（去掉 leaf_key 去重 SKIP）。12+2 探针 + OrderTrap 逐字节；
+            现有 slice 全部 connect 用例输出不变。
+      - [ ] S3 子模型内 connect：ConnectStmt 已带 prefix（补 psubs）→ 面在书写类判定（本地路径长度==1 → outside），
+            发射路径 = prefix ++ 本地路径；探针（Cardinality2 的 Resistor 结构）逐字节。
+      - [ ] S4 cardinality：CardinalityTable（连接器元素级计数，NFCardinalityTable.mo:54-92，键 = 元素 cref 串）；
+            `cardinality(x)` → IntLit（NFConnectEquations.mo:156-157）；含该调用的方程延后到连接解析后再折叠
+            （NFSimplifyModel.mo:215-219 assert(true) 删除、:510-538 if 真分支内联）；Cardinality1-4（+4）。
+      门：slice FAIL 0 + oracle=live 一致；广语料无新增真 FAIL（基线 73，账本内）；三编译器 + ASan；每个探针一条单测。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples
