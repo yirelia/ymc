@@ -614,7 +614,15 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
             → easy-slice 267 PASS/0 FAIL（+16）；全 scodeinst PASS 254→270、FAIL 70→73（ExpandableConnector12 −1、expconn1/2/3/5
             +4 入账本：文件无 Result、ymc 与 1.25.0 逐字节）、SKIP 1001→982；oracle=live 不一致 0；三编译器 10/10、ASan 0
             （另以 ASan 版 ymc 跑 40 个 expandable 用例/探针：0 报告、输出与 gcc 版一致）；+8 单测。
-      - [ ] B：expandable 数组 / 嵌套数组成员（ExpandableConnector9/14）、数组型虚元素、pp 数组成员。
+      - [x] B：expandable 数组（ExpandableConnector9/14）。**完成（2026-09-28）**：放开复合数组 / 连接端的 expandable 数组
+            守卫（逐元素同标量 expandable，下标进虚变量名与关联图 key）；增广类型按节点"最后一次生效"（:428，数组元素共用节点），
+            去掉原先"各次名表不同 → SKIP"的保守守卫——omc 照样按最后一次拆 E–E，输出引用未建的虚变量（YmcExpArr3 探针
+            `ec[2].x = ec2[2].x`），ymc 逐字节复刻；YmcExpArr1/2（各元素虚成员不同）亦一致。
+            → easy-slice 269 PASS/0 FAIL（+2）；全 scodeinst PASS 270→272、FAIL 73 不变、SKIP 982→980；oracle=live 不一致 0；
+            +1 单测。
+      - [ ] 余项（未做，均 SKIP）：数组型虚元素（`connect(ec.x, y)` 整体数组 / 切片另一端，omc 保持未展开的数组连接）、
+            pp 数组成员作连接端、嵌套 expandable 数组的同名配对（addNestedExpandableConnectorsToSets 对数组型成员）、
+            虚元素类型含数组 / stream / 非 Real 叶、经 pp 连接器下探的未声明端（`ec.c.e`，父被强标 EXPANDABLE）。
       - [ ] ExpandableConnector5：`RealOutput y[2] = zeros(size(y, 1))` 顶层方向数组带绑定 → omc 保留 `output` 并把绑定
             改成方程 `y = {0.0, 0.0}`；现守卫 "top-level directional array with binding"（TopLevelInputs2 形态不同）需细分。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍

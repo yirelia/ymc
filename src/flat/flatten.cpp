@@ -321,9 +321,7 @@ class Flattener {
             set_unsupported("composite array (non-parts type)"); continue;
           }
           SRestriction r = I_.scode.elems[cdef].restriction;
-          if (r == SRestriction::ExpandableConnector) {
-            set_unsupported("expandable connector array"); continue;   // 成员靠连接推断，未做
-          }
+          const bool r_exp = r == SRestriction::ExpandableConnector;   // expandable 数组：逐元素同标量 expandable
           // 普通连接器数组 `C c[3]`：与其它复合数组同路——逐元素 `c[i]` 递归摊开成员（标量成员 → 变量，
           // flow 成员 → flow_vars_ 带下标）。连接方程在 process_connects 按元素下标解析（ForConnect1）。
           if (I_.comps[cid].attributes.variability != SVariability::Var) { set_unsupported("variability on composite array"); continue; }
@@ -354,11 +352,12 @@ class Flattener {
             cps.push_back(aidx);   // 该复合数组段 `a` 带下标 [i…]
             ModCtx achild;
             achild.final_all = comp_final;
-            achild.keep_dir = ctx.keep_dir && (r == SRestriction::Connector ||
+            achild.keep_dir = ctx.keep_dir && (r == SRestriction::Connector || r_exp ||
                                                I_.comps[cid].attributes.direction == SDirection::Input);
-            achild.in_conn = ctx.in_conn || r == SRestriction::Connector;
+            achild.in_conn = ctx.in_conn || r == SRestriction::Connector || r_exp;
             achild.flow_inherited = ctx.flow_inherited;   // 复合数组上的 flow 前缀仍在上方守卫处 SKIP
-            achild.pp_chain = pp_self;   // 数组各元素共用同一组件节点（present 标记按节点，YmcExpNode1 探针）
+            // 数组各元素共用同一组件节点（present 标记按节点，YmcExpNode1 探针）；expandable 组件的成员重起链。
+            if (!r_exp) achild.pp_chain = pp_self;
             if (own_mod) {
               // 该元素的合成修饰：每个子修饰绑定按 aidx 下降取标量（`x={1,2,3}`→`x=vi`；each 保持原值）。
               Id<SMod> em = distribute_mod(cel.mod, aidx);
@@ -3739,12 +3738,6 @@ class Flattener {
       segs.push_back({cur, cls});
       path.push_back(c.parts[i].name);
     }
-    // expandable 数组（`EC ec[3]` 整体/逐元素连接、`ec[1].x`）属增量 B → SKIP。
-    for (const Seg& sg : segs)
-      if (is_expandable_comp(sg.comp)) {
-        const SElement& sel = I_.scode.elems[I_.comps[I_.nodes[sg.comp].comp].def];
-        if (!sel.attr.dims.empty() || !sel.type.dims.empty()) return std::nullopt;
-      }
     // 端种类 + 叶成员表（split 序：每层 potential 升序 → flow 升序，子连接器就地展开；见 connector_leaves）。
     EndKind kind = EndKind::Normal;
     NodeId parent;
@@ -4158,15 +4151,9 @@ class Flattener {
           }
           std::stable_sort(am.begin(), am.end(),
                            [&](const AugMember& x, const AugMember& y) { return in_.str(x.name) < in_.str(y.name); });
-          // 节点被数组元素共用：componentApply 覆盖类型（:428），最后一次增广生效；各次名表不同时其它元素的拆分会引用
-          // 不存在的虚变量（omc 行为未验证）→ SKIP。
-          auto [it, fresh] = aug_.emplace(ec.node.raw, am);
-          if (!fresh) {
-            bool same = it->second.size() == am.size();
-            for (std::size_t q = 0; same && q < am.size(); ++q) same = it->second[q].name == am[q].name;
-            if (!same) { set_unsupported("expandable node augmented differently"); return; }
-            it->second = std::move(am);
-          }
+          // 节点被数组元素共用：componentApply 覆盖类型（:428），**最后一次增广生效**——别的元素的 E–E 拆分也按它，
+          // 可能引用不存在的虚变量，omc 照样输出（YmcExpArr3 探针：`ec[2].x = ec2[2].x`，ec[2].x 未声明也未建）。
+          aug_[ec.node.raw] = std::move(am);
         }
       }
       // 5. 成员表：虚元素端 = 另一端的叶表（makeVirtualConnector 的类型）；expandable 端 = 增广后类型的叶表。

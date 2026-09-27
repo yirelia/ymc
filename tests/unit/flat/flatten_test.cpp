@@ -1355,6 +1355,26 @@ YMC_TEST(flatten_expandable_nested_and_declared_peer) {
                            "end YmcExpDeclOther1;\n"));
 }
 
+YMC_TEST(flatten_expandable_array_elements) {
+  // expandable 数组逐元素各自增广：虚变量名带元素下标、各元素虚成员可不同（YmcExpArr2 探针）。
+  const char* v = " \"virtual variable in expandable connector\";\n";
+  const std::string a2 = std::string(kExpRO) +
+      "model YmcExpArr2\n  EC ec[2];\n  RealOutput y1, y2;\nequation\n  connect(ec[1].x, y1);\n  connect(ec[2].z, y2);\n"
+      "end YmcExpArr2;\n";
+  YMC_CHECK_EQ(flatten_src(a2.c_str()),
+               std::string("class YmcExpArr2\n  Real ec[2].z") + v + "  Real ec[1].x" + v +
+                   "  output Real y1;\n  output Real y2;\nequation\n  ec[1].x = y1;\n  ec[2].z = y2;\nend YmcExpArr2;\n");
+  // 组件节点被数组元素共用，增广类型"最后一次生效"（:428）：{ec[1], ec2[1], ec[1].x} 集的根后于 {ec[2], ec2[2]} → 最后增广 →
+  // ec[2]↔ec2[2] 的拆分也带 x，输出引用未建的 ec[2].x / ec2[2].x（omc 1.25.0 照样打印，YmcExpArr3 探针）。
+  const std::string a3 = std::string(kExpRO) +
+      "model YmcExpArr3\n  EC ec[2], ec2[2];\n  RealOutput y1;\nequation\n  connect(ec, ec2);\n  connect(ec[1].x, y1);\n"
+      "end YmcExpArr3;\n";
+  YMC_CHECK_EQ(flatten_src(a3.c_str()),
+               std::string("class YmcExpArr3\n  Real ec[1].x") + v + "  Real ec2[1].x" + v +
+                   "  output Real y1;\nequation\n  ec[1].x = ec2[1].x;\n  ec[1].x = y1;\n  ec[2].x = ec2[2].x;\n"
+                   "end YmcExpArr3;\n");
+}
+
 YMC_TEST(flatten_expandable_invalid_forms_unsupported) {
   // omc 报错的形态 → 干净 SKIP：expandable 直属 flow（ExpandableConnectorFlow1）、两端都未声明（NonDecl1）、
   // expandable 连非 expandable（InvalidExpandableConnector1）、虚元素再下探（NonDecl3）。
