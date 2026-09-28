@@ -427,5 +427,10 @@
 "FunctionSections5.mo",
 "Size1.mo",
 "TupleOperation1.mo",
-"TupleOperation2.mo"
+"TupleOperation2.mo",
+"FuncBuiltinScalar2.mo",
+"FuncUnknownDim2.mo",
+"FuncUnknownDim3.mo",
+"IfExpression11.mo",
+"ImplicitRangeExp3.mo"
 ]

@@ -717,9 +717,19 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
             · ASan 抓到一处 arena 悬垂引用（赋值目标类型按引用传进会 add 的 fn_exp）→ 改按值；gcc 未暴露。
             → easy-slice 335 PASS / 0 FAIL（+16）；全 scodeinst PASS 322→338、FAIL 73→72；oracle=live 不一致 0；
             gcc / msvc / msvc-asan 10/10、零警告；ASan 版 ymc 跑全部 1335 个文件 + 探针：仅 inst7 既有断言（已另开任务）；+4 单测。
-      - [ ] B-ii 函数体里的数组：`scalar` / `size(a)`、数组运算（向量积 `x * y`、if 表达式两支维不等）、`fill` / `ones` 带
-            形参维、切片下标、隐式 for 范围、输出维依赖实参（调用处求维）。目标：FuncBuiltinScalar2、ImplicitRangeExp3、
-            IfExpression11、FuncUnknownDim2/3、DimUnknown16、ImplicitTrailingSubscript1/2（按 1.25.0）。
+      - [x] B-ii 函数体里的数组 + 模型语境的数组调用。**完成（2026-09-28）**：
+            · 函数语境（符号形态、不标量化）：数组字面量按形状给类型；`*` 两侧皆数组 = 向量 / 矩阵积（checkBinaryOperationMul
+              :1019-1093，未知 / 表达式维与任何维相等）；逐元素运算同秩相容维；Integer 运算数按 matchExpressions 提实型。
+            · 内建：`scalar(a)` 展开数组字面量（typeScalarCall :1036-1085）；`fill` / `zeros` / `ones` 打成 fill（typeFillCall2，
+              Real 目标把强转推进填充值，NFCall.typeCast :1361-1367）；sum / product / min / max(数组) 符号保留。
+            · 模型语境：返回数组的调用只许是整个绑定 / 等式一侧（NFScalarize :343-346 整体保留 `x = f(n)`；嵌在运算里须逐元素
+              展开，未做 → SKIP——此前 `f(n) * {1, 1}` 会错出）；调用处输出维按 evaluateCallTypeDim 只代换输入，求不出留未知；
+              常量数组调用求值成字面量（FuncUnknownDim2）。
+            · YmcFnArr2 探针逐字节；数组推导式在函数里（omc 打 `array(e for i in r)`）未做。
+            → easy-slice 340 PASS / 0 FAIL（+5）；全 scodeinst PASS 338→343、FAIL 72→74（ImplicitTrailingSubscript1/2：ymc 与
+            1.25.0 逐字节、文件是较新 OMC 的补尾随 `:` 形态，账本早有预记，已改为"已按 1.25.0"）；oracle=live 不一致 0；
+            gcc / msvc / msvc-asan 10/10、零警告；ASan 版 ymc 跑 1341 个文件 + 探针 0 报告；+2 单测。
+            未做（另列）：DimUnknown16（结构参数要编译期调外部 C 函数 strlen）。
       - [ ] C 发射里的记录：记录构造函数块、记录形参 / 局部（FunctionCompOrder4、FunctionRecordArg1、RecordOrder1、
             OperatorOverloadConstructorDefault1）。
       - [ ] 另列（非本桶或须用户侧）：`$overload(F, G)` 的实参表在 SCode 里丢失（ymc 打印成 `function OV = $overload;`）→

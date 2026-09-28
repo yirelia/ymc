@@ -53,7 +53,7 @@ ymc 以 **omc 1.25.0 实测**为准；这些用例从 `docs/research/s3-easy-sli
 | flattening/.../expconn3.mo（同上） | 无 `// Result:` | `Real ec.ri "virtual variable in expandable connector"; input Real ri; … ec.ri = ri;` | 同上。 |
 | flattening/.../expconn5.mo（同上） | 无 `// Result:` | `Real ec.ri; input Real ri; … ec.ri = ri;`（已声明 `Real ri` 连上即 present） | 同上。 |
 | flattening/.../RecordBinding18.mo | `final parameter Real r.re = atan(1.0 / x);`（记录函数绑定保持符号） | stdout：`final parameter Real r.re = 0.7853981633974483;`（按 x = 1 折叠）+ stderr 内部错误 `NFFunction.Function.getBody2 got function with external section` | 较新 OMC 不折叠参数依赖的 final 记录绑定；1.25.0 折叠。ymc 与 1.25.0 的 stdout 逐字节一致（2026-09-28 起 FAIL 基线 72→73）。 |
-| flattening/.../ImplicitTrailingSubscript1/2.mo（未过，预记） | `newArray[i,:] := oldArray[i,:];`（补尾随 `:`） | `newArray[i] := oldArray[i];`（不补） | 规范化尾随下标是较新 OMC 的行为；ymc 做到时按 1.25.0。 |
+| flattening/.../ImplicitTrailingSubscript1/2.mo | `newArray[i,:] := oldArray[i,:];`（补尾随 `:`） | `newArray[i] := oldArray[i];`（不补） | 规范化尾随下标是较新 OMC 的行为。ymc 按 1.25.0，与其 stdout 逐字节一致（2026-09-28 加宽(55)-B-ii 起，FAIL 基线 72→74）。 |
 | flattening/.../CevalBinding10.mo（反向） | `final parameter Real Q = ext_fun(0.0);` + external 函数块 | **报错退出**：`Malformed URI` / `Failed to evaluate function: ext_fun`（`annotation(Evaluate=true)` 的外部函数） | ymc 保持 SKIP，与 1.25.0 一致（都不产出）。 |
 
 **平台相关的潜在分歧源（已查明，暂无用例触发）**：expandable 虚变量的次序取决于 `UnorderedSet` 的桶序，散列是

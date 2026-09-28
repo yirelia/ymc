@@ -1631,6 +1631,58 @@ YMC_TEST(flatten_function_emit_locals_prune_and_errors) {
   }
 }
 
+YMC_TEST(flatten_function_emit_array_bodies) {
+  // 函数体里的数组（B-ii）：zeros / ones 打成 fill、Real 目标把强转推进填充值（NFCall.typeCast）；向量积 `x * x`（标量）、
+  // `scalar({x[1]})` 展开、`sum(y)` 符号保留；多输出取首（YmcFnArr2 探针）。scalar(size(u)) → `size(u, 1)`
+  //（FuncBuiltinScalar2）。期望 = omc 1.25.0 实跑。
+  const char* s1 =
+      "function f\n  input Integer n;\n  input Real x[:];\n  output Real z;\n  output Real y[n];\nprotected\n"
+      "  Real w[size(x, 1)] = zeros(size(x, 1));\n  Integer m[n] = ones(n);\nalgorithm\n  y := fill(2.0, n) + fill(1, n);\n"
+      "  z := x * x + w * x + scalar({x[1]}) + sum(y);\nend f;\nmodel YmcFnArr2\n  Real a[3];\n  Real b = f(2, a);\n"
+      "end YmcFnArr2;\n";
+  YMC_CHECK_EQ(flatten_src(s1),
+               std::string("function f\n  input Integer n;\n  input Real[:] x;\n  output Real z;\n  output Real[n] y;\n"
+                           "  protected Real[size(x, 1)] w = fill(0.0, size(x, 1));\n  protected Integer[n] m = fill(1, n);\n"
+                           "algorithm\n  y := fill(2.0, n) + fill(1.0, n);\n  z := x * x + w * x + x[1] + sum(y);\nend f;\n\n"
+                           "class YmcFnArr2\n  Real a[1];\n  Real a[2];\n  Real a[3];\n  Real b = f(2, a)[1];\nend YmcFnArr2;\n"));
+  const char* s2 =
+      "model FuncBuiltinScalar2\n  function f\n    input Real u[:];\n    output Real y = n;\n  protected\n"
+      "    Integer n = scalar(size(u)) - 1;\n  end f;\n\n  Real x[1] = {1};\n  Real y = f(x);\nend FuncBuiltinScalar2;\n";
+  YMC_CHECK_EQ(flatten_src(s2),
+               std::string("function FuncBuiltinScalar2.f\n  input Real[:] u;\n  output Real y = /*Real*/(n);\n"
+                           "  protected Integer n = size(u, 1) - 1;\nend FuncBuiltinScalar2.f;\n\nclass FuncBuiltinScalar2\n"
+                           "  Real x[1];\n  Real y = FuncBuiltinScalar2.f(x);\nequation\n  x = {1.0};\nend FuncBuiltinScalar2;\n"));
+}
+
+YMC_TEST(flatten_function_emit_array_calls) {
+  // 模型语境的数组调用：整个绑定 → 数组等式整体保留（NFScalarize :343-346，IfExpression11）；调用处求不出的输出维留未知
+  //（evaluateCallTypeDim 只代换输入，FuncUnknownDim3 `Real[n] result`）；常量调用求值成字面量（FuncUnknownDim2）；
+  // 嵌在别的运算里的数组调用 → SKIP（YmcIf11a：须逐元素展开，未做）。期望 = omc 1.25.0 实跑。
+  const char* s1 =
+      "function f\n  input Integer n;\n  output Real x[2];\nalgorithm\n  x := if n <> 2 then {1.0, 2.0, 3.0} else {1.0, 2.0};\n"
+      "end f;\n\nmodel IfExpression11\n  Integer n;\n  Real x[2] = f(n);\nend IfExpression11;\n";
+  YMC_CHECK_EQ(flatten_src(s1),
+               std::string("function f\n  input Integer n;\n  output Real[2] x;\nalgorithm\n"
+                           "  x := if n <> 2 then {1.0, 2.0, 3.0} else {1.0, 2.0};\nend f;\n\nclass IfExpression11\n"
+                           "  Integer n;\n  Real x[1];\n  Real x[2];\nequation\n  x = f(n);\nend IfExpression11;\n"));
+  const char* s2 =
+      "function f\n  input Real[n] v;\n  output Real[n] result = fill(1.0, n);\nprotected\n  Integer n = size(v, 1);\nend f;\n\n"
+      "model FuncUnknownDim3\n  Real x[2] = f({time, 1});\nend FuncUnknownDim3;\n";
+  YMC_CHECK_EQ(flatten_src(s2),
+               std::string("function f\n  input Real[n] v;\n  output Real[n] result = fill(1.0, n);\n"
+                           "  protected Integer n = size(v, 1);\nend f;\n\nclass FuncUnknownDim3\n  Real x[1];\n  Real x[2];\n"
+                           "equation\n  x = f({time, 1.0});\nend FuncUnknownDim3;\n"));
+  const char* s3 =
+      "function f\n  input Integer n;\n  output Real x[:];\nalgorithm\n  x := ones(n);\nend f;\n\n"
+      "model FuncUnknownDim2\n  Real x[3] = f(3);\nend FuncUnknownDim2;\n";
+  YMC_CHECK_EQ(flatten_src(s3), std::string("class FuncUnknownDim2\n  Real x[1];\n  Real x[2];\n  Real x[3];\nequation\n"
+                                            "  x = {1.0, 1.0, 1.0};\nend FuncUnknownDim2;\n"));
+  bool uns = false;
+  flatten_src("function f\n  input Integer n;\n  output Real x[2];\nalgorithm\n  x := {1.0, 2.0};\nend f;\n"
+              "model M\n  Integer n;\n  Real y = f(n) * {1, 1};\nend M;\n", &uns);
+  YMC_CHECK(uns);
+}
+
 // ---- parameter / constant 连接器（generatePotentialEquations :202-236 / makeEqualityAssert :290-341）；期望 = omc 1.25.0 ----
 
 YMC_TEST(flatten_parameter_connector_member_assert) {
