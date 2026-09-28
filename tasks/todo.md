@@ -743,7 +743,8 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
             `c = C(1.0)`（operator record 默认构造）。目标：RecordOrder1、OperatorOverloadConstructorDefault1。
             记录绑定（`R r = R(…)` 在函数里）、记录数组 / 嵌套记录字段、记录输出的调用也在此项。
       - [ ] 另列（非本桶或须用户侧）：`$overload(F, G)` 的实参表在 SCode 里丢失（ymc 打印成 `function OV = $overload;`）→
-            解析 / SCode 属用户域，出任务卡；函数型实参（FunctionalArg*）、向量化（FuncVectorization*）、运算符重载、枚举转换
+            解析 / SCode 属用户域，任务卡 `docs/tasks/T-S3-03-overload-scode.md`（2026-09-28 出）；短类链方向前缀冲突下沉到
+            inst，任务卡 `docs/tasks/T-S3-04-derived-direction-merge.md`（同日出）；函数型实参（FunctionalArg*）、向量化（FuncVectorization*）、运算符重载、枚举转换
             函数、函数 derivative/inverse 注解、带告警的 FunctionUnitialized*。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
