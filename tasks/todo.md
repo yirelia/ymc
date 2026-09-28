@@ -697,11 +697,29 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
             结果 → 入账本。
             → easy-slice 319 PASS/0 FAIL（+14）；全 scodeinst PASS 308→322、FAIL 72→73（RecordBinding18 入账本）、SKIP 945→930；
             oracle=live 不一致 0；+3 单测。
-      - [ ] B 发射主干：函数按全名排序；模型内嵌函数打限定名（`M.f`）；默认实参填进调用（`f(a)` → `f(a, a)`）；数组形参
-            （维打在类型上 `Real[:] x`、`end` → `size(x, 1)`）；protected parameter / 数组局部；多输出函数在表达式里 `f(x)[1]`；
-            external 函数（`impure`、`external "C" y = f(x);`、隐式 size 实参）。目标：End3、FuncBuiltinScalar2、FuncDefaultArg2/6、
-            FuncUnknownDim3、FunctionCompOrder3、FunctionMultiOutput2/4、TupleOperation1/2、ImplicitRangeExp3、IfExpression11、
-            InnerOuter11、ExternalFunction*、FunctionSections5 等。
+      - [x] B-i 发射主干：函数按全名排序；压平名；默认实参填进调用；数组形参（维打在类型上）；protected parameter 局部；
+            多输出函数在表达式里 `f(x)[1]`；external 函数。
+            **完成（2026-09-28）**：
+            · 压平名（lookupFunction :323-350 + scopeList）：顶层 / 包 → 类路径（`P.g`、`P2.g2`）；调用实例链上某实例的类里
+              找到 → 根名 + 该层前缀（`R.a.h`、`R.b.a.h`、继承的 `R.a2.h`）；根类 → `R.f`。YmcFnName1/2/3 探针逐字节。
+            · 实参（fillArgs / fillDefaultSlot2 / evaluateSlotCref）：位置 + 命名入槽；缺省 = 输入绑定里引用别的输入处代换成实参
+              （`f(a)` → `f(a, 2.0 * a, 3)`）；别名修饰 `function g = f(r = x)` 的默认按模型语境（`g(1.0, x)`）；按形参类型
+              强转（`g(/*Real*/(n))`）。YmcFnEmit1 探针逐字节。
+            · 类型化路径只折常量实参的调用（参数实参不求值：YmcFnPar1 `g(p)` 保留，此前 ymc 错折成 2.0）。
+            · 函数体（NFInstContext.FUNCTION）：形参 / 局部 = 裸名 cref、包常量内联、局部常量保留（YmcFnEmit1）；语句
+              assign / if / for / while / return / break（循环外 break → SKIP，Break2）/ assert；局部拓扑序（sortLocals 的
+              FIFO Kahn）；用前未赋值 / 输出未赋值告警（checkUseBeforeAssign）→ SKIP；纯函数调 impure → 告警 → SKIP（ImpureCall1）。
+            · external：纯度按 makeAttributes :2626-2633（自带 external 段 = impure，继承来的不算）；显式调用照印、隐式调用按
+              makeDefaultExternalCall（名 = external 段所在类、数组后跟各维 size）。size(a, k)（typeSize：已知维 → 字面量）。
+            · collectFunctions：只留最终模型用到的函数（被结构参数求值掉的调用不留块，ceval4）。
+            · `annotation(Evaluate = true)` 参数未做 → SKIP（CevalBinding10 账本要求保持 SKIP；CevalRecord6 由错出 FAIL → SKIP）。
+            · 工具：flat_sweep 的 oracle-live 把 `impure function` 开头的 stdout 误判成 omc 报错 → 修正。
+            · ASan 抓到一处 arena 悬垂引用（赋值目标类型按引用传进会 add 的 fn_exp）→ 改按值；gcc 未暴露。
+            → easy-slice 335 PASS / 0 FAIL（+16）；全 scodeinst PASS 322→338、FAIL 73→72；oracle=live 不一致 0；
+            gcc / msvc / msvc-asan 10/10、零警告；ASan 版 ymc 跑全部 1335 个文件 + 探针：仅 inst7 既有断言（已另开任务）；+4 单测。
+      - [ ] B-ii 函数体里的数组：`scalar` / `size(a)`、数组运算（向量积 `x * y`、if 表达式两支维不等）、`fill` / `ones` 带
+            形参维、切片下标、隐式 for 范围、输出维依赖实参（调用处求维）。目标：FuncBuiltinScalar2、ImplicitRangeExp3、
+            IfExpression11、FuncUnknownDim2/3、DimUnknown16、ImplicitTrailingSubscript1/2（按 1.25.0）。
       - [ ] C 发射里的记录：记录构造函数块、记录形参 / 局部（FunctionCompOrder4、FunctionRecordArg1、RecordOrder1、
             OperatorOverloadConstructorDefault1）。
       - [ ] 另列（非本桶或须用户侧）：`$overload(F, G)` 的实参表在 SCode 里丢失（ymc 打印成 `function OV = $overload;`）→

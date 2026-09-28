@@ -100,17 +100,24 @@ struct FlatAlgorithm {
 // 形参/局部：维在**类型**上（与类体变量维在名上相反）；in/out 变率剥离成 Var（不打前缀），protected 局部保留 kind。
 struct FlatFuncParam {
   Symbol name;
-  Type ty;                                       // 元素类型 + dims（维在类型上打印）
+  Type ty;                                       // 元素类型 + dims（维在类型上打印：Integer 维打数、Unknown 打 `:`、Exp 打表达式）
   FlatDirection direction = FlatDirection::None;  // Input/Output；None = protected 局部
   bool is_protected = false;
   FlatVarKind var_kind = FlatVarKind::Var;        // 局部保留；in/out 归一 Var
   Id<Expr> binding;                              // 默认值 / 输出定义 / 局部绑定；无则 invalid
 };
 struct FlatFunction {
-  std::vector<Symbol> name;                      // 限定名（点分：顶层裸名 f；嵌套 Model.f）
-  std::vector<FlatFuncParam> params;             // dump 序：inputs, outputs, protected 局部
+  std::vector<Symbol> name;                      // 压平名（点分：顶层 f；包 P.f；模型内嵌按实例路径 M.a.f）
+  std::vector<FlatFuncParam> params;             // dump 序：inputs, outputs, protected 局部（拓扑序）
   std::vector<Id<FlatStatement>> body;           // algorithm 语句（空 = 无算法段）
+  bool is_impure = false;                        // 打 `impure function`（DAEDumpTpl dumpFunction :115）
+  // external 段（FUNCTION_EXT，DAEDumpTpl dumpExternalDecl :166-178）：体后空一行 +
+  // `  external "<lang>"[ <out> =][ <name>(<args>)];`
   bool is_external = false;
+  Symbol ext_lang;                               // 语言串（不含引号）
+  Symbol ext_name;                               // 外部调用名；invalid = 无调用
+  Id<Expr> ext_output;                           // 输出引用；invalid = 无
+  std::vector<Id<Expr>> ext_args;
   Symbol comment;
 };
 
@@ -124,7 +131,7 @@ struct FlatModel {
   std::vector<Id<FlatEquation>> equations;
   std::vector<FlatAlgorithm> initial_algorithms;
   std::vector<FlatAlgorithm> algorithms;
-  std::vector<FlatFunction> functions;   // 被模型调用的用户函数（按限定名字母序，class 之前发射）
+  std::vector<FlatFunction> functions;   // 被模型调用的用户函数（发射序；dump 时按压平名字节序排，class 之前打印）
 
   ExprArena exprs;
   Arena<FlatEquation> eqs;

@@ -1533,6 +1533,104 @@ YMC_TEST(flatten_function_fold_misc) {
                            "  constant Real a2.w = 9.0;\n  Real x = 4.0;\n  Real y = 9.0;\nend B;\n"));
 }
 
+// ---- 用户函数发射（加宽(55)-B：NFFunction.lookupFunction / fillArgs / sortLocals，DAEDumpTpl.dumpFunction）；期望 = omc 1.25.0 ----
+
+YMC_TEST(flatten_function_emit_names_and_order) {
+  // 压平名 = 找到处作用域链 + 调用名：实例类里的函数带实例路径（嵌套 `b.a`、继承 `a2`），根类里的带根名；函数块按全名
+  // 字节序排（DAEDump.sortFunctions）。YmcFnName2 探针。
+  const char* src =
+      "model A\n  function h\n    input Real x;\n    output Real y = x * x;\n  end h;\n  Real v = h(time);\nend A;\n"
+      "model A2\n  extends A;\nend A2;\nmodel B\n  A a;\nend B;\n"
+      "model YmcFnName2\n  function fr\n    input Real x;\n    output Real y = x + 3;\n  end fr;\n"
+      "  model C\n    Real w = fr(time);\n  end C;\n  B b;\n  C c;\n  A2 a2;\nend YmcFnName2;\n";
+  const char* h = "  input Real x;\n  output Real y = x * x;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("function YmcFnName2.a2.h\n") + h + "end YmcFnName2.a2.h;\n\nfunction YmcFnName2.b.a.h\n" + h +
+                   "end YmcFnName2.b.a.h;\n\nfunction YmcFnName2.fr\n  input Real x;\n  output Real y = x + 3.0;\n"
+                   "end YmcFnName2.fr;\n\nclass YmcFnName2\n  Real b.a.v = YmcFnName2.b.a.h(time);\n"
+                   "  Real c.w = YmcFnName2.fr(time);\n  Real a2.v = YmcFnName2.a2.h(time);\nend YmcFnName2;\n");
+}
+
+YMC_TEST(flatten_function_emit_arguments) {
+  // 缺省实参 = 输入绑定里引用别的输入处代换成实参（`f(a)` → `f(a, 2.0 * a, 3)`），命名实参入槽，Integer→Real 实参插 Cast，
+  // 参数实参不求值（`g(p)`）；函数体里包常量内联、局部常量保留引用、包内调用打类路径（YmcFnEmit1 / YmcFnPar1 探针）。
+  const char* src =
+      "package P\n  constant Real K = 4;\n  function a\n    input Real x;\n    output Real y;\n  protected\n"
+      "    constant Real c = 3;\n  algorithm\n    y := b(x) * c + K;\n  end a;\n  function b\n    input Real x;\n"
+      "    output Real y = x + 1;\n  end b;\nend P;\n"
+      "function f\n  input Real u1;\n  input Real u2 = 2 * u1;\n  input Integer k = 3;\n  output Real y;\nalgorithm\n"
+      "  y := u1 + u2 + k;\nend f;\nfunction g\n  input Real x;\n  output Real y = x;\nend g;\n"
+      "model YmcFnEmit1\n  parameter Real p = 2;\n  Integer n = 1;\n  Real a = time;\n  Real r1 = f(a);\n"
+      "  Real r2 = f(u2 = 3, u1 = a);\n  Real r3 = g(p);\n  Real r4 = g(n);\n  Real r5 = P.a(time);\n"
+      "  Real r6 = f(a, k = n);\nend YmcFnEmit1;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("function P.a\n  input Real x;\n  output Real y;\n  protected constant Real c = 3.0;\nalgorithm\n"
+                           "  y := P.b(x) * c + 4.0;\nend P.a;\n\nfunction P.b\n  input Real x;\n  output Real y = x + 1.0;\n"
+                           "end P.b;\n\nfunction f\n  input Real u1;\n  input Real u2 = 2.0 * u1;\n  input Integer k = 3;\n"
+                           "  output Real y;\nalgorithm\n  y := u1 + u2 + /*Real*/(k);\nend f;\n\nfunction g\n  input Real x;\n"
+                           "  output Real y = x;\nend g;\n\nclass YmcFnEmit1\n  parameter Real p = 2.0;\n  Integer n = 1;\n"
+                           "  Real a = time;\n  Real r1 = f(a, 2.0 * a, 3);\n  Real r2 = f(a, 3.0, 3);\n  Real r3 = g(p);\n"
+                           "  Real r4 = g(/*Real*/(n));\n  Real r5 = P.a(time);\n  Real r6 = f(a, 2.0 * a, n);\nend YmcFnEmit1;\n"));
+}
+
+YMC_TEST(flatten_function_emit_external_and_tuple) {
+  // external：未声明纯度 → impure、显式调用照印；`pure` + 隐式调用 → `y = fp(x)`（YmcFnExt1 探针）；数组实参后跟各维 size
+  //（ExternalFunctionImplicit3）。多输出函数在表达式里取首输出 `f(time)[1]`（TupleOperation1）。
+  const char* s1 =
+      "function fe\n  input Real x;\n  output Real y;\nexternal \"C\" y = ext(x);\nend fe;\n"
+      "pure function fp\n  input Real x;\n  output Real y;\nexternal \"C\";\nend fp;\n"
+      "model YmcFnExt1\n  Real a = fe(time);\n  Real b = fp(time);\nend YmcFnExt1;\n";
+  YMC_CHECK_EQ(flatten_src(s1),
+               std::string("impure function fe\n  input Real x;\n  output Real y;\n\n  external \"C\" y = ext(x);\nend fe;\n\n"
+                           "function fp\n  input Real x;\n  output Real y;\n\n  external \"C\" y = fp(x);\nend fp;\n\n"
+                           "class YmcFnExt1\n  Real a = fe(time);\n  Real b = fp(time);\nend YmcFnExt1;\n"));
+  const char* s2 =
+      "function f\n  input Real x[3];\n  input Real y[2, 4];\n  output Real z;\n  external;\nend f;\n"
+      "model ExternalFunctionImplicit3\n  Real x;\nalgorithm\n  x := f({1, 2, 3}, {{1, 2, 3, 4}, {5, 6, 7, 8}});\n"
+      "end ExternalFunctionImplicit3;\n";
+  YMC_CHECK_EQ(flatten_src(s2),
+               std::string("impure function f\n  input Real[3] x;\n  input Real[2, 4] y;\n  output Real z;\n\n"
+                           "  external \"C\" z = f(x, size(x, 1), y, size(y, 1), size(y, 2));\nend f;\n\n"
+                           "class ExternalFunctionImplicit3\n  Real x;\nalgorithm\n"
+                           "  x := f({1.0, 2.0, 3.0}, {{1.0, 2.0, 3.0, 4.0}, {5.0, 6.0, 7.0, 8.0}});\n"
+                           "end ExternalFunctionImplicit3;\n"));
+  const char* s3 =
+      "function f\n  input Real t;\n  output Real x = 1.0;\n  output Real y = 2.0;\nend f;\n"
+      "model TupleOperation1\n  Real x = -f(time);\nend TupleOperation1;\n";
+  YMC_CHECK_EQ(flatten_src(s3),
+               std::string("function f\n  input Real t;\n  output Real x = 1.0;\n  output Real y = 2.0;\nend f;\n\n"
+                           "class TupleOperation1\n  Real x = -f(time)[1];\nend TupleOperation1;\n"));
+}
+
+YMC_TEST(flatten_function_emit_locals_prune_and_errors) {
+  // 局部拓扑序（sortLocals）：`n` 先于 `z[n]`，常量绑定求值（FunctionCompOrder3）；被结构参数求值掉的调用不留函数块
+  //（collectFunctions 在求值后收，ceval4）；循环外 break（BREAK_OUTSIDE_LOOP，Break2）、输出未赋值告警
+  //（UNASSIGNED_FUNCTION_OUTPUT）、纯函数调 impure（ImpureCall1 告警）→ SKIP。期望 = 文件 Result 且与 1.25.0 实跑一致。
+  const char* s1 =
+      "function f\n  input Real x;\n  output Real y;\nprotected\n  Real z[n] = ones(3);\n  parameter Integer n = 3;\n"
+      "algorithm\n  y := z[1];\nend f;\nmodel FunctionCompOrder3\n  Real x = f(time);\nend FunctionCompOrder3;\n";
+  YMC_CHECK_EQ(flatten_src(s1),
+               std::string("function f\n  input Real x;\n  output Real y;\n  protected parameter Integer n = 3;\n"
+                           "  protected Real[n] z = {1.0, 1.0, 1.0};\nalgorithm\n  y := z[1];\nend f;\n\n"
+                           "class FunctionCompOrder3\n  Real x = f(time);\nend FunctionCompOrder3;\n"));
+  const char* s2 =
+      "model A\n  function f\n    input Integer i;\n    output Integer j=i+1;\n  end f;\n\n  parameter Integer n = 1;\n"
+      "  parameter Integer m = f(n)+n;\n  Real x[m] = {1.0, 1.0, 1.0};\nend A;\n";
+  YMC_CHECK_EQ(flatten_src(s2),
+               std::string("class A\n  final parameter Integer n = 1;\n  final parameter Integer m = 3;\n  Real x[1];\n"
+                           "  Real x[2];\n  Real x[3];\nequation\n  x = {1.0, 1.0, 1.0};\nend A;\n"));
+  for (const char* s : {
+           "function f\n  input Integer n;\n  output Integer res;\nalgorithm\n  res := n * n;\n  break;\nend f;\n"
+           "model M\n  Integer k = 2;\n  Real x1 = f(k);\nend M;\n",
+           "function f\n  input Real x;\n  output Real y;\nend f;\nmodel M\n  Real x1 = f(time);\nend M;\n",
+           "impure function f\n  input Real x;\n  output Real y = x;\nend f;\nfunction f2\n  input Real x;\n  output Real y;\n"
+           "algorithm\n  y := f(x);\nend f2;\nmodel M\n  Real x = f2(time);\nend M;\n"}) {
+    bool uns = false;
+    flatten_src(s, &uns);
+    YMC_CHECK(uns);
+  }
+}
+
 // ---- parameter / constant 连接器（generatePotentialEquations :202-236 / makeEqualityAssert :290-341）；期望 = omc 1.25.0 ----
 
 YMC_TEST(flatten_parameter_connector_member_assert) {

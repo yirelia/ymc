@@ -216,8 +216,23 @@ class ExprDumper {
         }
         out_ += ')';
         break;
+      case ExprKind::TupleElement: {
+        // TSUB（ExpressionDumpTpl :131-136）：`<exp>[<ix>]`，exp 非字面量/cref/调用/数组/元组/cast/size/归约时加括号
+        //（parenthesizeSubExp :194-210）。a = 元组表达式，ival = 1 基输出序号（TupleOperation1 `-f(time)[1]`）。
+        const ExprKind k = a_[e.a].kind;
+        const bool bare = k == ExprKind::IntLit || k == ExprKind::RealLit || k == ExprKind::StringLit ||
+                          k == ExprKind::BoolLit || k == ExprKind::EnumLit || k == ExprKind::Cref ||
+                          k == ExprKind::Call || k == ExprKind::Array || k == ExprKind::Tuple ||
+                          k == ExprKind::Cast || k == ExprKind::Size || k == ExprKind::Reduction;
+        if (!bare) out_ += '(';
+        exp(e.a);
+        if (!bare) out_ += ')';
+        out_ += '[';
+        out_ += std::to_string(e.ival);
+        out_ += ']';
+        break;
+      }
       case ExprKind::Subscript:
-      case ExprKind::TupleElement:
       case ExprKind::Reduction:
         // 数组/归约竖切片再实现；先占位为可辨识的形态，避免静默产出错文本。
         out_ += "/*UNIMPL_EXPR*/";

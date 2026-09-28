@@ -1,6 +1,8 @@
 // FlatModel 文本打印实现。版式逐条照 OMC Template/DAEDumpTpl.tpl（研究底稿 R13 §2/§3/§6）。
 #include "flat/flat_dump.h"
 
+#include <algorithm>         // stable_sort（函数块排序）
+
 #include "base/strings.h"    // escape_modelica_string
 #include "flat/expr_dump.h"
 
@@ -14,9 +16,17 @@ class FlatDumper {
 
   std::string run() {
     out_.clear();
-    // 被调用户函数在 class 之前发射（DAEDump appendStream：函数块各接空行、再 class）。
+    // 被调用户函数在 class 之前发射（DAEDump appendStream：函数块各接空行、再 class），按压平全名 stringCompare
+    // 字节序排（DAEDump.sortFunctions :151-169；YmcFnName1 探针：`P.g` < `YmcFnName1.a.h` < `Zf` < `af`）。
+    std::vector<std::pair<std::string, const FlatFunction*>> fns;
     for (const FlatFunction& fn : m_.functions) {
-      function_block(fn);
+      std::string key;
+      for (std::size_t i = 0; i < fn.name.size(); ++i) { if (i) key += '.'; key += in_.str(fn.name[i]); }
+      fns.push_back({std::move(key), &fn});
+    }
+    std::stable_sort(fns.begin(), fns.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    for (const auto& f : fns) {
+      function_block(*f.second);
       out_ += '\n';
     }
     // 头（R13 §2）：class <全名>[ "注释"]
@@ -53,6 +63,7 @@ class FlatDumper {
 
   // ---- 函数块（DAEDump dumpFunction）：function <名> / 形参逐行（维在类型上）/ [algorithm 语句] / end <名>; ----
   void function_block(const FlatFunction& fn) {
+    if (fn.is_impure) out_ += "impure ";
     out_ += "function ";
     dotted(fn.name);
     if (fn.comment.is_valid()) {
@@ -65,6 +76,22 @@ class FlatDumper {
     if (!fn.body.empty()) {
       out_ += "algorithm\n";
       for (Id<FlatStatement> s : fn.body) statement(s, "  ");
+    }
+    // FUNCTION_EXT：体后空一行，再 `  external "<lang>"[ <out> =][ <name>(<args>)];`（dumpExternalDecl；注解只在
+    // showAnnotations / showStructuralAnnotations 时打印，两者默认关，Flags.mo:1202）。
+    if (fn.is_external) {
+      out_ += "\n  external \"";
+      out_ += in_.str(fn.ext_lang);
+      out_ += '"';
+      if (fn.ext_output.is_valid()) { out_ += ' '; expr(fn.ext_output); out_ += " ="; }
+      if (fn.ext_name.is_valid()) {
+        out_ += ' ';
+        out_ += in_.str(fn.ext_name);
+        out_ += '(';
+        for (std::size_t i = 0; i < fn.ext_args.size(); ++i) { if (i) out_ += ", "; expr(fn.ext_args[i]); }
+        out_ += ')';
+      }
+      out_ += ";\n";
     }
     out_ += "end ";
     dotted(fn.name);
@@ -82,7 +109,20 @@ class FlatDumper {
     }
     if (p.direction == FlatDirection::Input) out_ += "input ";
     else if (p.direction == FlatDirection::Output) out_ += "output ";
-    type_name(p.ty);   // 维在类型上（`Real[3] u`）——本增量标量，暂无 dims
+    type_name(p.ty.element_type());
+    // 维在类型上（dumpVar printTypeDimension=true → dumpTypeDimensions，`, ` 分隔）：`Real[3] x`、`Real[:] x`、
+    // `Real[2, 4] y`、`Real[size(x, 1)] y`、`Real[n] z`（ExternalFunction* / ImplicitRangeExp3 / FunctionCompOrder3）。
+    if (!p.ty.dims.empty()) {
+      out_ += '[';
+      for (std::size_t i = 0; i < p.ty.dims.size(); ++i) {
+        if (i) out_ += ", ";
+        const Dimension& d = p.ty.dims[i];
+        if (d.kind == DimKind::Integer) out_ += std::to_string(d.size);
+        else if (d.kind == DimKind::Exp && d.exp.is_valid()) expr(d.exp);
+        else out_ += ':';
+      }
+      out_ += ']';
+    }
     out_ += ' ';
     out_ += in_.str(p.name);
     if (p.binding.is_valid()) { out_ += " = "; expr(p.binding); }

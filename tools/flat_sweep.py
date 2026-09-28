@@ -121,8 +121,10 @@ def main():
             o = run([args.omc, path])
             if o is None:
                 return ("omc-timeout", relpath)
-            if not (o.startswith("class") or o.startswith("function")):
-                return ("omc-error", relpath)   # 1.25.0 自己报错（反向分歧，见账本）；函数发射用例 stdout 以 function 开头
+            # 正常产出以 class / function / impure function 开头（函数块在 class 前，DAEDumpTpl dumpFunction :115 的 impure 前缀）；
+            # 其余 = 1.25.0 自己报错（反向分歧，见账本）
+            if not o.startswith(("class", "function", "impure function")):
+                return ("omc-error", relpath)
             if y is None:
                 return ("ymc-fail", relpath)
             return ("ok" if y == o else "diff", relpath)
