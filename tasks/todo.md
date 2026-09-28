@@ -676,6 +676,37 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
             SKIP 953→945；oracle=live 不一致 0；+1 单测（P54e 探针）。
       - [ ] 余项：`annotation(Evaluate=true)` 参数（CevalFuncArray6）；常量数组整取引用进类型化路径（CevalArrayConstant2
             `{1.0, 2.0, 3.0}[n]`）；记录数组常量（CevalRecordArray*，卡在 "variability on composite array"）。
+- [ ] **加宽(55)用户函数**（2026-09-28 规划；用户定"上用户函数，依据 OMC 源码"）：有效用例里 function 相关 SKIP 约 60 例
+      （"function: <名>" 中的用户函数 + qualified function call / tuple / named argument 等）。源：NFEvalFunction（求值：
+      createArgumentMap :250-295、buildBinding :342-365、buildRecordBinding :386-434）、NFFunction（签名 / 实参匹配 /
+      默认实参填充）、DAEDump.dumpFunctionList :2724-2745（按全名 stringCompare 排序、隐藏 builtin 等）+ DAEDumpTpl
+      dumpFunction :102-135（`impure `、`external "C" …;`、记录构造函数 "Automatically generated record constructor for R"）。
+      1.25.0 与文件分歧：ImplicitTrailingSubscript1/2（1.25.0 不补尾随 `:`）、CevalBinding10（1.25.0 报错）→ 以 1.25.0 为准。
+      - [x] A 折叠补全：函数解析（包限定名 `P.f`、短类别名 `function f = P.f` 链、函数体按**定义处**作用域）；函数 extends
+            （成员就地展开、同名去重、基类算法在前）；if 表达式求值（递归 fac）；记录（构造调用 `R(2)`、protected 记录局部
+            `R r(x = x)` + 字段默认值互引 `y = x`、记录输入缺省取字段默认）；多输出取首输出；隐式 for 范围（`for i loop`
+            由 `x[i]` 推 1:size(x, k)）；模型内嵌函数的函数体可见调用实例的常量（func1）；常量叶经模型实例引用内联（`a1.w`）。
+            目标：CevalFuncRecursive1、FunctionRecursive2、FuncExtends、FunctionExtends1、FuncDuplicateParams1、ExtendsShort2、
+            CevalFuncRecord7、FunctionRecordArg2、RecordBinding8、FuncDefaultArg4、FunctionMultiOutput3、ImplicitRangeAlg2、func1。
+            **完成（2026-09-28）**：resolve_fn（类路径逐段下降 + 别名链，函数体作用域 = 定义处）、collect_fn_sig（extends 就地
+            展开 / 同名去重 / 链上算法段至多一个，YmcFnExtOrder / YmcFnExtAlg 探针）、record_value（buildRecordBinding：给定 >
+            修饰 > 字段默认，函数变量缺值填 Undef）、输出与局部按依赖就绪反复初始化（createArgumentMap 的代换语义）、多输出取首、
+            隐式范围（deduceIterationRange）、if 表达式；typed 路 call() 只接标量折叠值（原先数组 / 记录值会被 literal_of 退成 0）。
+            13 个目标首轮逐字节，另白捡 TupleOperation3；中途 CevalFuncRecord2 因 `output R r` 无默认一度回退（缺值须填 EMPTY 而
+            非失败）已修。RecordBinding18 由 SKIP 变"FAIL"：ymc 与 1.25.0 stdout 逐字节（折叠成 0.785…），文件是较新 OMC 的符号
+            结果 → 入账本。
+            → easy-slice 319 PASS/0 FAIL（+14）；全 scodeinst PASS 308→322、FAIL 72→73（RecordBinding18 入账本）、SKIP 945→930；
+            oracle=live 不一致 0；+3 单测。
+      - [ ] B 发射主干：函数按全名排序；模型内嵌函数打限定名（`M.f`）；默认实参填进调用（`f(a)` → `f(a, a)`）；数组形参
+            （维打在类型上 `Real[:] x`、`end` → `size(x, 1)`）；protected parameter / 数组局部；多输出函数在表达式里 `f(x)[1]`；
+            external 函数（`impure`、`external "C" y = f(x);`、隐式 size 实参）。目标：End3、FuncBuiltinScalar2、FuncDefaultArg2/6、
+            FuncUnknownDim3、FunctionCompOrder3、FunctionMultiOutput2/4、TupleOperation1/2、ImplicitRangeExp3、IfExpression11、
+            InnerOuter11、ExternalFunction*、FunctionSections5 等。
+      - [ ] C 发射里的记录：记录构造函数块、记录形参 / 局部（FunctionCompOrder4、FunctionRecordArg1、RecordOrder1、
+            OperatorOverloadConstructorDefault1）。
+      - [ ] 另列（非本桶或须用户侧）：`$overload(F, G)` 的实参表在 SCode 里丢失（ymc 打印成 `function OV = $overload;`）→
+            解析 / SCode 属用户域，出任务卡；函数型实参（FunctionalArg*）、向量化（FuncVectorization*）、运算符重载、枚举转换
+            函数、函数 derivative/inverse 注解、带告警的 FunctionUnitialized*。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

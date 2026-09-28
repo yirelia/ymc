@@ -44,6 +44,15 @@ elseif(YMC_ASAN)
   add_link_options(-fsanitize=address)
 endif()
 
+# ---- 主线程栈保留 16 MB（Windows 默认 1 MB）----
+# 常量求值 / 函数解释是递归实现：无限递归的用户函数（CevalFuncRecursive2）靠深度上限停下，但 ASan 版栈帧膨胀，
+# 默认 1 MB 在触到上限前就溢出。Linux 默认 8 MB 栈，不用设。
+if(MSVC)
+  add_link_options(/STACK:16777216)
+elseif(WIN32)
+  add_link_options(-Wl,--stack,16777216)
+endif()
+
 # ---- 基础设施库 src/base ----
 # 现在 src/base 里还没有 .cpp（symbol.cpp 由你按任务卡 T-S0-01 创建）。
 # 有 .cpp 时编成静态库；没有时只是一个"头文件目录"接口。

@@ -1470,6 +1470,69 @@ YMC_TEST(flatten_constant_range_forms) {
                            "end P54c;\n"));
 }
 
+// ---- 用户函数常量折叠（NFEvalFunction / NFFunction）；期望 = omc 1.25.0（文件 Result 与实跑一致者、YmcFnExtOrder 探针）----
+
+YMC_TEST(flatten_function_fold_resolution_and_extends) {
+  // 包限定 + 短类别名 `function f = P.f`，函数体在定义处（P）解析 f2（ExtendsShort2）；extends 成员就地展开：
+  // F(a; extends Base(b); c) 的位置序 = a, b, c → 123（YmcFnExtOrder 探针）；递归 + if 表达式（CevalFuncRecursive1）。
+  const char* s1 =
+      "package P\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := f2(x);\n  end f;\n"
+      "  function f2\n    input Real x;\n    output Real y = x * 2;\n  end f2;\nend P;\n"
+      "model ExtendsShort2\n  function f = P.f;\n  Real x = f(2.0);\nend ExtendsShort2;\n";
+  YMC_CHECK_EQ(flatten_src(s1), std::string("class ExtendsShort2\n  Real x = 4.0;\nend ExtendsShort2;\n"));
+  const char* s2 =
+      "partial function Base\n  input Real b;\nend Base;\n"
+      "function F\n  input Real a;\n  extends Base;\n  input Real c;\n  output Real y = a * 100 + b * 10 + c;\nend F;\n"
+      "model YmcFnExtOrder\n  constant Real x = F(1, 2, 3);\nend YmcFnExtOrder;\n";
+  YMC_CHECK_EQ(flatten_src(s2), std::string("class YmcFnExtOrder\n  constant Real x = 123.0;\nend YmcFnExtOrder;\n"));
+  const char* s3 =
+      "function fac\n  input Integer n;\n  output Integer res;\nalgorithm\n  res := if n > 1 then n * fac(n - 1) else n;\n"
+      "end fac;\nmodel CevalFuncRecursive1\n  constant Real x = fac(6);\nend CevalFuncRecursive1;\n";
+  YMC_CHECK_EQ(flatten_src(s3), std::string("class CevalFuncRecursive1\n  constant Real x = 720.0;\nend CevalFuncRecursive1;\n"));
+}
+
+YMC_TEST(flatten_function_fold_records) {
+  // protected 记录局部 `R r(x = x)` + 字段默认互引 `y = x`（CevalFuncRecord7）；`output R r` 无默认 → EMPTY 占位后逐字段
+  // 赋值（CevalFuncRecord2）；记录构造实参 + 引用记录字段的输入默认（FuncDefaultArg4）。
+  const char* s1 =
+      "record R\n  Real x;\n  Real y = x;\nend R;\n"
+      "function f\n  input Real x;\n  output Real y;\nprotected\n  R r(x = x);\nalgorithm\n  y := r.y;\nend f;\n"
+      "model CevalFuncRecord7\n  constant Real x = f(1);\nend CevalFuncRecord7;\n";
+  YMC_CHECK_EQ(flatten_src(s1), std::string("class CevalFuncRecord7\n  constant Real x = 1.0;\nend CevalFuncRecord7;\n"));
+  const char* s2 =
+      "record R\n  Real x;\n  Real y;\nend R;\n"
+      "function f\n  input Real x;\n  input Real y;\n  output R r;\nalgorithm\n  r.x := x;\n  r.y := y;\nend f;\n"
+      "model CevalFuncRecord2\n  constant R r = f(1.0, 2.0);\nend CevalFuncRecord2;\n";
+  YMC_CHECK_EQ(flatten_src(s2),
+               std::string("class CevalFuncRecord2\n  constant Real r.x = 1.0;\n  constant Real r.y = 2.0;\nend CevalFuncRecord2;\n"));
+  const char* s3 =
+      "record R\n  Real x;\nend R;\n"
+      "function f\n  input R r;\n  input Real x = r.x;\n  output Real y = r.x * x;\nend f;\n"
+      "model FuncDefaultArg4\n  Real x = f(R(2));\nend FuncDefaultArg4;\n";
+  YMC_CHECK_EQ(flatten_src(s3), std::string("class FuncDefaultArg4\n  Real x = 4.0;\nend FuncDefaultArg4;\n"));
+}
+
+YMC_TEST(flatten_function_fold_misc) {
+  // 隐式 for 范围（ImplicitRangeAlg2）；多输出函数在表达式里取首输出（FunctionMultiOutput3）；模型内嵌函数读调用实例的
+  // 常量、常量叶经实例引用内联（func1）。
+  const char* s1 =
+      "function f\n  input Real x[:];\n  output Real sum = 0.0;\nalgorithm\n  for i loop\n    sum := sum + x[i];\n  end for;\n"
+      "end f;\nmodel ImplicitRangeAlg2\n  Real x = f({1, 2, 3});\nend ImplicitRangeAlg2;\n";
+  YMC_CHECK_EQ(flatten_src(s1), std::string("class ImplicitRangeAlg2\n  Real x = 6.0;\nend ImplicitRangeAlg2;\n"));
+  const char* s2 =
+      "function f\n  input Real x;\n  output Real y;\n  output Real z;\nalgorithm\n  y := x * 2;\n  z := x * 3;\nend f;\n"
+      "model FunctionMultiOutput3\n  Real x = f(3);\n  Real y;\nequation\n  y = f(4);\nend FunctionMultiOutput3;\n";
+  YMC_CHECK_EQ(flatten_src(s2),
+               std::string("class FunctionMultiOutput3\n  Real x = 6.0;\n  Real y;\nequation\n  y = 8.0;\nend FunctionMultiOutput3;\n"));
+  const char* s3 =
+      "model A\n  constant Real z;\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := x * z;\n  end f;\n"
+      "  constant Real w = f(z);\nend A;\n"
+      "model B\n  A a1(z = 2.0);\n  A a2(z = 3.0);\n  Real x = a1.w;\n  Real y = a2.w;\nend B;\n";
+  YMC_CHECK_EQ(flatten_src(s3),
+               std::string("class B\n  constant Real a1.z = 2.0;\n  constant Real a1.w = 4.0;\n  constant Real a2.z = 3.0;\n"
+                           "  constant Real a2.w = 9.0;\n  Real x = 4.0;\n  Real y = 9.0;\nend B;\n"));
+}
+
 // ---- parameter / constant 连接器（generatePotentialEquations :202-236 / makeEqualityAssert :290-341）；期望 = omc 1.25.0 ----
 
 YMC_TEST(flatten_parameter_connector_member_assert) {
