@@ -1683,6 +1683,29 @@ YMC_TEST(flatten_function_emit_array_calls) {
   YMC_CHECK(uns);
 }
 
+YMC_TEST(flatten_function_emit_records) {
+  // 记录类型的形参 / 局部（C-i）：按类型名打印，构造函数块随之发射（字段逐个 input、带默认，constant 字段也打 input，
+  // `output R res`，YmcRec2 探针）；记录局部的字段修饰不打印、只进排序依赖（`lx` 先于 `r`，FunctionCompOrder4）；
+  // 字段引用 `r.x`。期望 = omc 1.25.0 实跑。
+  const char* s1 =
+      "record R\n  Real x;\n  Real y = 2;\n  Integer n = 3;\n  parameter Real p = 4;\n  constant Real c = 5;\nend R;\n"
+      "function f\n  input R r;\n  output Real z = r.x + r.y;\nend f;\nmodel YmcRec2\n  R r;\n  Real z = f(r);\nend YmcRec2;\n";
+  YMC_CHECK_EQ(flatten_src(s1),
+               std::string("function R \"Automatically generated record constructor for R\"\n  input Real x;\n"
+                           "  input Real y = 2.0;\n  input Integer n = 3;\n  input Real p = 4.0;\n  input Real c = 5.0;\n"
+                           "  output R res;\nend R;\n\nfunction f\n  input R r;\n  output Real z = r.x + r.y;\nend f;\n\n"
+                           "class YmcRec2\n  Real r.x;\n  Real r.y = 2.0;\n  Integer r.n = 3;\n  parameter Real r.p = 4.0;\n"
+                           "  constant Real r.c = 5.0;\n  Real z = f(r);\nend YmcRec2;\n"));
+  const char* s2 =
+      "record R\n  Real x;\nend R;\n\nfunction f\n  input Real x;\n  output Real y;\nprotected\n  R r(x = lx);\n"
+      "  Real lx = x;\nalgorithm\n  y := r.x;\nend f;\n\nmodel FunctionCompOrder4\n  Real x = f(time);\nend FunctionCompOrder4;\n";
+  YMC_CHECK_EQ(flatten_src(s2),
+               std::string("function R \"Automatically generated record constructor for R\"\n  input Real x;\n  output R res;\n"
+                           "end R;\n\nfunction f\n  input Real x;\n  output Real y;\n  protected Real lx = x;\n  protected R r;\n"
+                           "algorithm\n  y := r.x;\nend f;\n\nclass FunctionCompOrder4\n  Real x = f(time);\n"
+                           "end FunctionCompOrder4;\n"));
+}
+
 // ---- parameter / constant 连接器（generatePotentialEquations :202-236 / makeEqualityAssert :290-341）；期望 = omc 1.25.0 ----
 
 YMC_TEST(flatten_parameter_connector_member_assert) {

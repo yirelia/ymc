@@ -432,5 +432,7 @@
 "FuncUnknownDim2.mo",
 "FuncUnknownDim3.mo",
 "IfExpression11.mo",
-"ImplicitRangeExp3.mo"
+"ImplicitRangeExp3.mo",
+"FunctionCompOrder4.mo",
+"FunctionRecordArg1.mo"
 ]

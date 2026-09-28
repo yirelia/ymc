@@ -109,7 +109,8 @@ class FlatDumper {
     }
     if (p.direction == FlatDirection::Input) out_ += "input ";
     else if (p.direction == FlatDirection::Output) out_ += "output ";
-    type_name(p.ty.element_type());
+    if (!p.type_path.empty()) dotted(p.type_path);   // 记录类型按名（FunctionRecordArg1 `input R r`）
+    else type_name(p.ty.element_type());
     // 维在类型上（dumpVar printTypeDimension=true → dumpTypeDimensions，`, ` 分隔）：`Real[3] x`、`Real[:] x`、
     // `Real[2, 4] y`、`Real[size(x, 1)] y`、`Real[n] z`（ExternalFunction* / ImplicitRangeExp3 / FunctionCompOrder3）。
     if (!p.ty.dims.empty()) {

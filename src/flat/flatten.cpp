@@ -250,6 +250,7 @@ class Flattener {
       const std::size_t i = work.back();
       work.pop_back();
       for (const FlatFuncParam& fp : fns[i].params) {
+        if (fp.record_def != Id<SElement>::kInvalid) mark_call(fp.type_path);   // collectTypeFuncs：记录构造函数
         walk_expr(fp.binding);
         for (const Dimension& d : fp.ty.dims) if (d.kind == DimKind::Exp) walk_expr(d.exp);
       }
@@ -2852,6 +2853,7 @@ class Flattener {
   }
 
   // 函数引用（resolve_fn）与签名（collect_fn_sig）——前置定义，供下面的发射段在声明里用。
+  struct FnRecord { Id<SElement> rec; ScodeScope rscope; };   // 函数里记录类型的形参 / 局部 → 其记录类（+ 作用域链）
   struct FnRef {
     Id<SElement> fe;
     ScodeScope fscope;
@@ -2908,12 +2910,14 @@ class Flattener {
     std::vector<std::pair<std::uint32_t, CVal>> citers;
     std::unordered_map<std::uint32_t, CVal>* locals;
     std::unordered_set<std::uint32_t>* in_names;
+    std::unordered_map<std::uint32_t, FnRecord> records;
     FnCtxGuard(Flattener& fl, const ScodeScope* sc, Id<SElement> h, bool imp)
         : f(fl), params(std::move(fl.func_params_)), inputs(std::move(fl.fn_inputs_)), scope(fl.fn_scope_),
           home(fl.fn_home_), impure(fl.fn_impure_), end(fl.fn_end_), loops_depth(fl.fn_loops_), decl(fl.decl_scope_),
           iters(std::move(fl.stmt_iters_)), loops(std::move(fl.loop_vars_)), cpfx(fl.ceval_prefix_),
-          cpsubs(std::move(fl.ceval_psubs_)), citers(std::move(fl.citers_)), locals(fl.locals_), in_names(fl.input_names_) {
-      f.func_params_.clear(); f.fn_inputs_.clear(); f.stmt_iters_.clear(); f.loop_vars_.clear();
+          cpsubs(std::move(fl.ceval_psubs_)), citers(std::move(fl.citers_)), locals(fl.locals_), in_names(fl.input_names_),
+          records(std::move(fl.fn_records_)) {
+      f.func_params_.clear(); f.fn_inputs_.clear(); f.stmt_iters_.clear(); f.loop_vars_.clear(); f.fn_records_.clear();
       f.ceval_psubs_.clear(); f.citers_.clear();
       f.fn_scope_ = sc; f.fn_home_ = h; f.fn_impure_ = imp; f.fn_end_ = Id<Expr>{}; f.fn_loops_ = 0;
       f.decl_scope_ = Inst::empty_node(); f.ceval_prefix_ = nullptr; f.locals_ = nullptr; f.input_names_ = nullptr;
@@ -2923,7 +2927,7 @@ class Flattener {
       f.fn_impure_ = impure; f.fn_end_ = end; f.fn_loops_ = loops_depth; f.decl_scope_ = decl;
       f.stmt_iters_ = std::move(iters);
       f.loop_vars_ = std::move(loops); f.ceval_prefix_ = cpfx; f.ceval_psubs_ = std::move(cpsubs);
-      f.citers_ = std::move(citers); f.locals_ = locals; f.input_names_ = in_names;
+      f.citers_ = std::move(citers); f.locals_ = locals; f.input_names_ = in_names; f.fn_records_ = std::move(records);
     }
     FnCtxGuard(const FnCtxGuard&) = delete;
     FnCtxGuard& operator=(const FnCtxGuard&) = delete;
@@ -3328,7 +3332,7 @@ class Flattener {
     for (const FlatFuncParam& p : ff.params) {
       if (p.direction == FlatDirection::Input) continue;
       if (p.direction == FlatDirection::Output) outputs.insert(p.name.id);
-      if (!p.ty.is_array() && !p.binding.is_valid()) un.push_back(p.name.id);
+      if (!p.ty.is_array() && p.type_path.empty() && !p.binding.is_valid()) un.push_back(p.name.id);   // 只追内建标量
     }
     bool warn = false;
     auto use = [&](Id<Expr> e, std::vector<std::uint32_t>& u) {
@@ -3339,7 +3343,7 @@ class Flattener {
     };
     auto assign = [&](Id<Expr> lhs, std::vector<std::uint32_t>& u) {
       const Expr& l = result_.model.exprs[lhs];
-      if (l.kind != ExprKind::Cref || l.cref.parts.empty()) return;
+      if (l.kind != ExprKind::Cref || l.cref.parts.size() != 1) return;   // 记录字段赋值不动（记录不在追踪表里）
       u.erase(std::remove(u.begin(), u.end(), l.cref.parts.back().name.id), u.end());
     };
     auto walk = [&](auto& self, const std::vector<Id<FlatStatement>>& body, std::vector<std::uint32_t>& u) -> void {
@@ -3546,6 +3550,108 @@ class Flattener {
     return true;
   }
 
+  // 记录类型的压平名：类路径（记录在顶层 → 名字本身；在包里 → 包路径 + 名，与函数同一套 lookup 规则）；定义在根类或
+  // 实例类里（实例路径未核实）→ nullopt。
+  std::optional<std::vector<Symbol>> rec_flat_name(const SElement& c, const ScodeScope& scope, Id<SElement>& rec,
+                                                   ScodeScope& rscope) {
+    ScodeScope ds;
+    rec = resolve_class_path(c.type.path, c.type.leading_dot, scope, ds);
+    if (!rec.is_valid() || I_.scode.elems[rec].kind != SElementKind::Class ||
+        I_.scode.elems[rec].restriction != SRestriction::Record || I_.scode.elems[rec].def.kind != SClassDefKind::Parts)
+      return std::nullopt;
+    const std::uint32_t root_def = I_.nodes[root_].def.raw;
+    for (Id<SElement> d : ds)
+      if (d.raw == root_def || (fn_home_.is_valid() && d.raw == fn_home_.raw)) return std::nullopt;
+    std::vector<Symbol> path;
+    for (auto it = ds.rbegin(); it != ds.rend(); ++it) path.push_back(I_.scode.elems[*it].name);
+    path.push_back(I_.scode.elems[rec].name);
+    rscope = ds;
+    rscope.insert(rscope.begin(), rec);
+    return path;
+  }
+  // 记录构造函数块（Record.instDefaultConstructor :140-184 + DAEDumpTpl RECORD_CONSTRUCTOR :124-133 / dumpRecordVar
+  // :203-221）：`function R "Automatically generated record constructor for R"`，字段逐个 `input <类型> <名>[ = 默认];`
+  //（1.25.0 连 constant 字段也打 input，YmcRec2 探针），末行 `output <末段名> res;`。字段默认在记录作用域按函数语境定型
+  //（引用别的字段 = 裸名）。字段只做内建标量、无属性修饰；记录 extends / 数组字段 / 嵌套记录 → nullopt（SKIP）。
+  std::optional<std::size_t> emit_record_ctor(Id<SElement> rec, const ScodeScope& rscope, const std::vector<Symbol>& path) {
+    for (std::size_t i = 0; i < result_.model.functions.size(); ++i)
+      if (result_.model.functions[i].name == path) return i;
+    FnCtxGuard guard(*this, &rscope, Id<SElement>{}, false);
+    std::vector<Id<SElement>> fields;
+    for (Id<SElement> fid : I_.scode.elems[rec].def.elements) {
+      const SElement& f = I_.scode.elems[fid];
+      if (f.kind == SElementKind::Extends) return std::nullopt;
+      if (f.kind != SElementKind::Component) continue;
+      TypeKind tk;
+      if (!builtin_scalar_type_kind(f.type.path, tk) || !f.attr.dims.empty() || !f.type.dims.empty()) return std::nullopt;
+      if (f.mod.is_valid() && !I_.scode.mods[f.mod].subs.empty()) return std::nullopt;
+      func_params_[f.name.id] = Type::of(tk);
+      fields.push_back(fid);
+    }
+    FlatFunction ff;
+    ff.name = path;
+    std::string cmt = "Automatically generated record constructor for ";
+    for (std::size_t i = 0; i < path.size(); ++i) { if (i) cmt += '.'; cmt += in_.str(path[i]); }
+    ff.comment = in_.intern(cmt);
+    for (Id<SElement> fid : fields) {
+      const SElement& f = I_.scode.elems[fid];
+      FlatFuncParam p;
+      p.name = f.name;
+      p.ty = func_params_[f.name.id];
+      p.direction = FlatDirection::Input;
+      if (f.mod.is_valid() && I_.scode.mods[f.mod].binding.is_valid()) {
+        p.binding = fn_exp(I_.scode.mods[f.mod].binding, p.ty);
+        if (result_.unsupported || !p.binding.is_valid()) return std::nullopt;
+      }
+      ff.params.push_back(std::move(p));
+    }
+    FlatFuncParam res;
+    res.name = in_.intern("res");
+    res.ty = Type::of(TypeKind::Complex);
+    res.direction = FlatDirection::Output;
+    res.type_path = {path.back()};   // dumpPathLastIndent：输出打末段名
+    ff.params.push_back(std::move(res));
+    result_.model.functions.push_back(std::move(ff));
+    return result_.model.functions.size() - 1;
+  }
+  // 函数里记录局部的字段引用 `r.x`（kFnLocal，类型 = 字段类型）。嵌套记录 / 带下标 / 非字段 → unsupported。
+  Id<Expr> fn_field_cref(const Cref& c) {
+    const auto rit = fn_records_.find(c.parts[0].name.id);
+    if (rit == fn_records_.end() || c.parts.size() != 2 || !c.parts[0].subscripts.empty() || !c.parts[1].subscripts.empty()) {
+      set_unsupported("function record field reference");
+      return lit_int(0);
+    }
+    for (Id<SElement> fid : I_.scode.elems[rit->second.rec].def.elements) {
+      const SElement& f = I_.scode.elems[fid];
+      TypeKind tk;
+      if (f.kind == SElementKind::Component && f.name == c.parts[1].name && builtin_scalar_type_kind(f.type.path, tk)) {
+        Expr r;
+        r.kind = ExprKind::Cref;
+        r.cref.resolved_node = kFnLocal;
+        r.ty = Type::of(tk);
+        r.cref.parts.push_back({c.parts[0].name, {}});
+        r.cref.parts.push_back({c.parts[1].name, {}});
+        return add(std::move(r));
+      }
+    }
+    set_unsupported("function record field reference");
+    return lit_int(0);
+  }
+  // 实参的记录类（SCode 类元素 raw）：模型记录组件的整体 cref → 其类实例的定义；函数里的记录局部 → fn_records_。
+  // 其余（构造调用、字段…）→ kInvalid。
+  std::uint32_t record_def_of(Id<Expr> id) {
+    const Expr& x = result_.model.exprs[id];
+    if (x.kind != ExprKind::Cref || x.ty.kind != TypeKind::Complex || x.cref.parts.empty()) return Id<SElement>::kInvalid;
+    if (x.cref.resolved_node == kFnLocal) {
+      const auto it = fn_records_.find(x.cref.parts[0].name.id);
+      return (x.cref.parts.size() == 1 && it != fn_records_.end()) ? it->second.rec.raw : Id<SElement>::kInvalid;
+    }
+    const NodeId cls = NodeId::from_index(x.ty.complex_node);
+    if (x.ty.complex_node == Id<INode>::kInvalid || !I_.nodes.contains(cls) || I_.nodes[cls].is_empty())
+      return Id<SElement>::kInvalid;
+    return I_.nodes[cls].def.raw;
+  }
+
   // 发射函数定义（去重按压平名；先登记形参表再翻译函数体 → 自递归调用能找到自己）。返回在 result_.model.functions 里的
   // 下标；不可发射 → nullopt（调用方 SKIP）。alias_defaults：别名修饰给的输入默认（已在别名定义处按模型语境定型，
   // FuncDefaultArg6 `function g = f(r = x)` → `input Real r = x`）。home：见 fn_flat_name。
@@ -3572,13 +3678,28 @@ class Flattener {
       if (!is_input) return std::nullopt;
     }
     // 形参类型：先按元素类型登记全部名字（维 / 绑定可互引），再按声明序算维（`Real z[n]`、`Real y[size(x, 1)]`）。
+    std::unordered_map<std::uint32_t, std::vector<Symbol>> rec_paths;   // 记录类型形参 / 局部 → 记录压平名
     for (Id<SElement> eid : all) {
       const SElement& c = I_.scode.elems[eid];
-      TypeKind tk;
-      if (!builtin_scalar_type_kind(c.type.path, tk)) return std::nullopt;   // 记录 / 枚举 / 派生类型形参未做
       if (c.attr.ct != SConnectorType::Potential || c.prefixes.io != SInnerOuter::None) return std::nullopt;
-      if (c.mod.is_valid() && !I_.scode.mods[c.mod].subs.empty()) return std::nullopt;   // 属性修饰（打印形态未核实）
-      func_params_[c.name.id] = Type::of(tk);
+      TypeKind tk;
+      if (builtin_scalar_type_kind(c.type.path, tk)) {
+        if (c.mod.is_valid() && !I_.scode.mods[c.mod].subs.empty()) return std::nullopt;   // 属性修饰（打印形态未核实）
+        func_params_[c.name.id] = Type::of(tk);
+        continue;
+      }
+      // 记录类型（FunctionRecordArg1 `input R r`、FunctionCompOrder4 `R r(x = lx)`）：按类型名打印，构造函数块随之发射
+      //（collectClassFunctions → collectTypeFuncs）；字段修饰不打印（只进依赖）；记录绑定 / 记录数组未做。枚举 / 派生
+      // 类型形参未做。
+      Id<SElement> rec;
+      ScodeScope rs;
+      std::optional<std::vector<Symbol>> rpath = rec_flat_name(c, fr.fscope, rec, rs);
+      if (!rpath || !c.attr.dims.empty() || !c.type.dims.empty()) return std::nullopt;
+      if (c.mod.is_valid() && I_.scode.mods[c.mod].binding.is_valid()) return std::nullopt;
+      if (!emit_record_ctor(rec, rs, *rpath) || result_.unsupported) return std::nullopt;
+      func_params_[c.name.id] = Type::of(TypeKind::Complex);
+      fn_records_[c.name.id] = FnRecord{rec, rs};
+      rec_paths[c.name.id] = std::move(*rpath);
     }
     for (Id<SElement> eid : sig.inputs) fn_inputs_.insert(I_.scode.elems[eid].name.id);
     for (Id<SElement> eid : all) {
@@ -3608,9 +3729,21 @@ class Flattener {
     }
     // 绑定：输入 = 别名默认（优先）或声明默认；输出 / 局部 = 声明绑定。
     std::unordered_map<std::uint32_t, Id<Expr>> binds;
+    std::unordered_map<std::uint32_t, std::unordered_set<std::uint32_t>> mod_refs;   // 记录局部的字段修饰引用（排序依赖）
     for (Id<SElement> eid : all) {
       const SElement& c = I_.scode.elems[eid];
       const Type ty = func_params_[c.name.id];
+      if (fn_records_.count(c.name.id) && c.mod.is_valid()) {
+        // 字段修饰 `R r(x = lx)`：定型只为收依赖（getLocalDependencies2：无绑定的记录看字段绑定），不打印。
+        for (const SSubMod& sm : I_.scode.mods[c.mod].subs) {
+          const SMod& fm = I_.scode.mods[sm.mod];
+          if (!fm.subs.empty()) return std::nullopt;
+          if (!fm.binding.is_valid()) continue;
+          const Id<Expr> fb = simplify_expr(inst_exp(fm.binding, Inst::empty_node(), {}));
+          if (result_.unsupported) return std::nullopt;
+          collect_fn_refs(fb, mod_refs[c.name.id]);
+        }
+      }
       Id<Expr> b;
       const auto ad = alias_defaults.find(c.name.id);
       if (ad != alias_defaults.end()) {
@@ -3632,7 +3765,7 @@ class Flattener {
       std::vector<std::vector<std::size_t>> deps(n);
       for (std::size_t i = 0; i < n; ++i) {
         const std::uint32_t nm = I_.scode.elems[sig.locals[i]].name.id;
-        std::unordered_set<std::uint32_t> refs;
+        std::unordered_set<std::uint32_t> refs = mod_refs[nm];
         collect_fn_refs(binds[nm], refs);
         for (const Dimension& d : func_params_[nm].dims) if (d.kind == DimKind::Exp) collect_fn_refs(d.exp, refs);
         for (std::uint32_t r : refs) {
@@ -3674,6 +3807,10 @@ class Flattener {
         else if (c.attr.var == SVariability::Discrete) p.var_kind = FlatVarKind::Discrete;
       }
       p.binding = binds[c.name.id];
+      if (const auto rp = rec_paths.find(c.name.id); rp != rec_paths.end()) {
+        p.type_path = rp->second;
+        p.record_def = fn_records_[c.name.id].rec.raw;
+      }
       ff.params.push_back(std::move(p));
     };
     for (Id<SElement> eid : sig.inputs) param(eid, FlatDirection::Input);
@@ -3793,11 +3930,14 @@ class Flattener {
     for (std::size_t i = 0; i < inputs.size(); ++i)
       if (!fill(i) || result_.unsupported) return {};
     for (std::size_t i = 0; i < inputs.size(); ++i) {
+      // 记录形参：实参须是同一记录类的整体引用（构造调用等其余形态未做）。
+      if (params[i].record_def != Id<SElement>::kInvalid && record_def_of(args[i]) != params[i].record_def) return {};
       const Id<Expr> a = coerce_to_param(args[i], params[i].ty);
       if (!a.is_valid()) return {};   // 实参类型 / 维不符（omc 报错）或向量化调用 → SKIP
       args[i] = simplify_expr(a);
     }
     Type rty = params[inputs.size()].ty;   // 首输出类型
+    if (rty.kind == TypeKind::Complex) return {};   // 记录值调用（记录等式 / 记录赋值）未做
     if (!fn_scope_ && rty.is_array()) {
       if (!whole) return {};   // 模型语境里嵌在别的运算中的数组调用：须逐元素展开，未做 → SKIP
       // 调用处求输出维（NFCall.evaluateCallTypeDim :3061-3088）：维表达式里的输入换成实参再求值；buildParameterTree
@@ -4618,9 +4758,10 @@ class Flattener {
     }
     // 函数体发射期：形参 / 局部 → kFnLocal 裸名 cref（可带下标，fn_local_cref）；其余名字 = 包常量内联或不可引用。
     if (fn_scope_) {
-      if (c.parts.size() == 1 && !c.leading_dot) {
+      if (!c.leading_dot) {
         auto it = func_params_.find(c.parts[0].name.id);
-        if (it != func_params_.end()) return fn_local_cref(c.parts[0], it->second);
+        if (it != func_params_.end())
+          return c.parts.size() == 1 ? fn_local_cref(c.parts[0], it->second) : fn_field_cref(c);
       }
       return fn_outer_cref(c);
     }
@@ -7082,6 +7223,7 @@ class Flattener {
   bool fn_impure_ = false;                                      // 当前函数是 impure（体内调 impure 函数不告警）
   Id<Expr> fn_end_;                                             // 函数体下标里 `end` 的值（所在维大小）
   int fn_loops_ = 0;                                            // 函数体 for / while 嵌套深度（break 只许在循环里）
+  std::unordered_map<std::uint32_t, FnRecord> fn_records_;      // 记录类型的形参 / 局部名 → 记录类（字段访问 `r.x`）
   NodeId root_;                                                 // 被压平的根类实例
   // 模型语境里返回数组的调用只许出现在整个绑定 / 等式一侧（NFScalarize.scalarizeEquation :343-346 把含数组调用的等式
   // 整体保留；嵌在别的运算里要逐元素展开，未做）。emit_array / collect_equation 在对应 inst_exp 前置位，

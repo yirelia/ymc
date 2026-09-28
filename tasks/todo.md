@@ -730,8 +730,18 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
             1.25.0 逐字节、文件是较新 OMC 的补尾随 `:` 形态，账本早有预记，已改为"已按 1.25.0"）；oracle=live 不一致 0；
             gcc / msvc / msvc-asan 10/10、零警告；ASan 版 ymc 跑 1341 个文件 + 探针 0 报告；+2 单测。
             未做（另列）：DimUnknown16（结构参数要编译期调外部 C 函数 strlen）。
-      - [ ] C 发射里的记录：记录构造函数块、记录形参 / 局部（FunctionCompOrder4、FunctionRecordArg1、RecordOrder1、
-            OperatorOverloadConstructorDefault1）。
+      - [x] C-i 函数里的记录。**完成（2026-09-28）**：记录类型的形参 / 局部按类型名打印（`input R r`），构造函数块随之发射
+            （Record.instDefaultConstructor + DAEDumpTpl RECORD_CONSTRUCTOR：字段逐个 `input <类型> <名>[ = 默认];`，1.25.0 连
+            constant 字段也打 input，`output <末段名> res;`，YmcRec2 探针）；collectFunctions 按可达函数的形参类型收构造函数；
+            记录局部的字段修饰不打印、只进排序依赖（FunctionCompOrder4 `lx` 先于 `r`）；函数体里 `r.x` 字段引用；调用处记录
+            实参须同一记录类的整体引用。
+            → easy-slice 342 PASS / 0 FAIL（+2）；全 scodeinst PASS 343→345、FAIL 74（不变，均入账本）；oracle=live 不一致 0；
+            gcc / msvc / msvc-asan 10/10、零警告；ASan 版 ymc 跑 1343 个文件 + 探针：仅 inst7 既有断言（中止路径里输入法 DLL
+            的报告，已另开任务）；+1 单测。
+      - [ ] C-ii 模型语境的记录等式 / 记录值调用：`r1 = R2(1.0, 2.0)` → `r1 = R1(2.0, 1.0)`（NFTypeCheck.matchComplexTypes
+            :1835-1935 按字段名重排 + typeCastRecord；R2 的构造函数为何仍被收集待追 EvalConstants / collectFunctions），
+            `c = C(1.0)`（operator record 默认构造）。目标：RecordOrder1、OperatorOverloadConstructorDefault1。
+            记录绑定（`R r = R(…)` 在函数里）、记录数组 / 嵌套记录字段、记录输出的调用也在此项。
       - [ ] 另列（非本桶或须用户侧）：`$overload(F, G)` 的实参表在 SCode 里丢失（ymc 打印成 `function OV = $overload;`）→
             解析 / SCode 属用户域，出任务卡；函数型实参（FunctionalArg*）、向量化（FuncVectorization*）、运算符重载、枚举转换
             函数、函数 derivative/inverse 注解、带告警的 FunctionUnitialized*。
