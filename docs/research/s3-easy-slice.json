@@ -509,5 +509,8 @@
 "CevalRecordArray1.mo",
 "CevalRecordArray3.mo",
 "CevalRecordArray5.mo",
-"const4.mo"
+"const4.mo",
+"EvaluateFalse1.mo",
+"IfConnect1.mo",
+"IfConnect2.mo"
 ]

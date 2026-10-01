@@ -2406,6 +2406,31 @@ YMC_TEST(flatten_composite_array_field_expansion) {
                            "  w = {a[2,1].x, a[2,2].x};\nend XR2;\n"));
 }
 
+YMC_TEST(flatten_if_equation_structural_condition) {
+  // if 方程的参数条件（此前各支都已折掉）= 结构条件：参数标 final、引用处代入值、按值选支（typeIfEquation NFTyping.mo:
+  // 3581-3590 + flattenIfEquation NFFlatten.mo:1975-2010）；前面有运行时分支的参数条件原样保留。条件参数非字面量绑定
+  //（omc 传递标记依赖求值次序）→ SKIP。期望 = omc 1.25.0 实跑 IF1 / IF2 / IF3（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model IF1\n  parameter Boolean b = true;\n  parameter Integer n = 2;\n  parameter Real p = 1.5;\n"
+                           "  parameter Real q = 3;\n  Real x, y, w, v;\n  Real u = if b then 1 else 2;\nequation\n  if b then\n"
+                           "    x = 1;\n  else\n    x = 2;\n  end if;\n  if n > 3 then\n    y = 1;\n  elseif n == 2 then\n    y = 2;\n"
+                           "  else\n    y = 3;\n  end if;\n  if p > 1 then\n    w = p;\n  else\n    w = 0;\n  end if;\n  if q < 1 then\n"
+                           "    v = 1;\n  end if;\nend IF1;\n"),
+               std::string("class IF1\n  final parameter Boolean b = true;\n  final parameter Integer n = 2;\n"
+                           "  final parameter Real p = 1.5;\n  final parameter Real q = 3.0;\n  Real x;\n  Real y;\n  Real w;\n"
+                           "  Real v;\n  Real u = 1.0;\nequation\n  x = 1.0;\n  y = 2.0;\n  w = 1.5;\nend IF1;\n"));
+  YMC_CHECK_EQ(flatten_src("model IF2\n  parameter Boolean b = true;\n  Real z;\nequation\n  if time > 1 then\n    z = 1;\n"
+                           "  elseif b then\n    z = 2;\n  else\n    z = 3;\n  end if;\nend IF2;\n"),
+               std::string("class IF2\n  parameter Boolean b = true;\n  Real z;\nequation\n  if time > 1.0 then\n    z = 1.0;\n"
+                           "  elseif b then\n    z = 2.0;\n  else\n    z = 3.0;\n  end if;\nend IF2;\n"));
+  bool uns = false;
+  const std::string out = flatten_src(
+      "model IF3\n  parameter Real c = 2;\n  parameter Boolean b = c > 1;\n  Real x;\nequation\n  if b then\n    x = 1;\n"
+      "  else\n    x = 2;\n  end if;\nend IF3;\n",
+      &uns);
+  YMC_CHECK(uns);   // omc：b final、c 不 final（b 的绑定已被 Ceval 缓存，不再传递标记）
+  YMC_CHECK_EQ(out, std::string("<unsupported:if condition folds via parameter>"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

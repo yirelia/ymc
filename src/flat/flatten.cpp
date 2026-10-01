@@ -1117,16 +1117,19 @@ class Flattener {
     return own == SDirection::Bidir ? ctx.dir_inh : own;
   }
   // 组件注解里有 `Evaluate = true`（字面量）。
-  bool evaluate_true(Id<SElement> def) {
-    if (!def.is_valid()) return false;
+  bool evaluate_true(Id<SElement> def) { return evaluate_annotation(def) == std::optional<bool>(true); }
+  // `annotation(Evaluate = true/false)` 的字面量值；没有 / 非字面量 → nullopt。
+  std::optional<bool> evaluate_annotation(Id<SElement> def) {
+    if (!def.is_valid()) return std::nullopt;
     const Id<SMod> ann = I_.scode.elems[def].cmt.annotation;
-    if (!ann.is_valid()) return false;
+    if (!ann.is_valid()) return std::nullopt;
     for (const SSubMod& sm : I_.scode.mods[ann].subs)
       if (in_.str(sm.ident) == "Evaluate") {
         const Id<Exp> b = I_.scode.mods[sm.mod].binding;
-        return b.is_valid() && I_.absyn.exps[b].kind == ExpKind::BoolLit && I_.absyn.exps[b].bval;
+        if (b.is_valid() && I_.absyn.exps[b].kind == ExpKind::BoolLit) return I_.absyn.exps[b].bval;
+        return std::nullopt;
       }
-    return false;
+    return std::nullopt;
   }
 
   // 在已发射变量里按点分名找标量变量（无末段下标、无逐段下标）。供算法赋值目标的可变性校验。
@@ -1534,8 +1537,10 @@ class Flattener {
       return;
     }
     if (eq.kind == SEqKind::If) {
-      // if 方程：常量条件求值折叠（选中真分支 / 丢弃假分支），否则发射 flat if。参数条件 omc 会把参数标 final——
-      // ymc 的 if 路径不标 final，故只折**纯字面量/迭代变量**条件（used 为空），参数条件 → SKIP。
+      // if 方程：常量条件求值折叠（选中真分支 / 丢弃假分支），否则发射 flat if。参数条件（此前各支都已折掉 = 全部
+      // ≤ parameter）是结构条件（typeIfEquation，NFTyping.mo:3581-3590）：条件里的参数标结构（final + 值代入，
+      // Structural.markExp）后求值选支（flattenIfEquation，NFFlatten.mo:1975-2010；IfConnect1/2）。前面有运行时分支、
+      // 参数带 Evaluate=false（NON_STRUCTURAL，omc 保留 if，EvaluateFalse1）、参数非字面量绑定（传递标记未做）→ SKIP。
       std::vector<FlatEqBranch> out_branches;
       for (const SEqBranch& br : eq.branches) {   // if + elseif（保序）
         card_allowed_ = true;   // 条件里允许 cardinality（CardinalityInvalidContext*）
@@ -1544,9 +1549,29 @@ class Flattener {
         if (result_.unsupported) return;
         if (result_.model.exprs[ce].ty.kind != TypeKind::Boolean) { set_unsupported("if condition type"); return; }
         std::unordered_set<std::uint32_t> used;
+        // 帧求值读到的参数会被记为结构参数（frame_value，连带其绑定里的参数 = markComponent 的传递标记）；非结构条件要撤销。
+        const std::vector<std::string> skeys = structural_keys_;
+        const std::unordered_set<std::string> sset = structural_set_;
         std::optional<CVal> cv = eval_scode(br.cond, scode_scope_of(enclosing), 0, /*allow_param=*/true, &used);
-        if (cv && cv->k == CVal::K::Bool) {
-          if (!used.empty()) { set_unsupported("if condition folds via parameter"); return; }
+        // 非结构的参数条件（前面有运行时分支 IF2 / Evaluate=false 的 EvaluateFalse1 / 参数 fixed=false）：omc 原样保留为
+        // 分支条件，不求值。
+        bool keep_param = false;
+        if (cv && cv->k == CVal::K::Bool && !used.empty()) {
+          bool structural = out_branches.empty();
+          for (std::uint32_t d : used)
+            if (evaluate_annotation(Id<SElement>::from_index(d)) == std::optional<bool>(false)) structural = false;
+          if (structural) {
+            const std::optional<bool> fx = cond_params_fixed(ce);
+            if (!fx) { set_unsupported("if condition folds via parameter"); return; }
+            structural = *fx;
+          }
+          if (!structural) {
+            keep_param = true;
+            structural_keys_ = skeys;
+            structural_set_ = sset;
+          }
+        }
+        if (cv && cv->k == CVal::K::Bool && !keep_param) {
           if (cv->b) {   // 字面量真：选中该分支，丢弃其余
             if (out_branches.empty()) {   // 无前置分支 → 直接内联体（无 if 外壳）
               for (Id<SEquation> beid : br.body) collect_equation(beid, enclosing, prefix, psubs, is_initial);
@@ -1559,7 +1584,7 @@ class Flattener {
           }
           continue;   // 字面量假 → 丢弃该分支
         }
-        if (!cond_is_runtime(ce)) { set_unsupported("if condition not evaluable"); return; }
+        if (!keep_param && !cond_is_runtime(ce)) { set_unsupported("if condition not evaluable"); return; }
         std::vector<Id<FlatEquation>> body_ids = collect_if_body(br.body, enclosing, prefix, psubs, is_initial);
         if (result_.unsupported) return;
         out_branches.push_back(FlatEqBranch{ce, std::move(body_ids)});
@@ -9447,6 +9472,39 @@ class Flattener {
   // 一处（折成字面量），其余位置（绑定 / 方程 / 算法 / 折不成字面量）引用 → SKIP（全局代入未做）。
   void record_structural(const std::string& k) {
     if (structural_set_.insert(k).second) structural_keys_.push_back(k);
+  }
+  // if 方程参数条件里的参数是否都 fixed（Structural.isExpressionNotFixed 的反面，NFTyping.mo:3581）：条件（已 inst + 化简）
+  // 里每个 cref 须是已发射的参数 / 常量；有参数 `fixed = false` → false（omc 不当结构条件，原样保留）。参数须是字面量绑定：
+  // markComponent 会连带标记绑定里的参数，但绑定若已被 Ceval 缓存成 CEVAL_BINDING 就不再传递（getExpOpt，NFBinding.mo:
+  // 268-278；IF3 探针 `b = c > 1` 时 c 不 final，维度里 `n = m` 时 m 却 final）——依赖 omc 求值次序，不猜 → 非字面量绑定、
+  // 找不到变量（数组 / 记录元素等未核实形态）→ nullopt（调用方 SKIP）。
+  std::optional<bool> cond_params_fixed(Id<Expr> ce) {
+    bool fixed_all = true, known = true;
+    const Symbol fixed = in_.intern("fixed");
+    auto walk = [&](auto& self, Id<Expr> id) -> void {
+      if (!id.is_valid() || !known) return;
+      const Expr e = result_.model.exprs[id];   // 拷贝
+      if (e.kind == ExprKind::Cref) {
+        const std::string k = expr_cref_key(e.cref);
+        const FlatVariable* v = nullptr;
+        // ponytail: 线性找（压平期 var_index_ 未建）；条件里的参数少，模型大时再给压平期建增量索引。
+        for (const FlatVariable& fv : result_.model.variables)
+          if (var_key(fv) == k) { v = &fv; break; }
+        if (!v || (v->var_kind != FlatVarKind::Parameter && v->var_kind != FlatVarKind::Constant)) { known = false; return; }
+        if (v->var_kind == FlatVarKind::Parameter && (!v->binding.is_valid() || !is_lit(v->binding))) { known = false; return; }
+        for (const FlatVarAttr& a : v->attributes)
+          if (a.name == fixed && result_.model.exprs[a.value].kind == ExprKind::BoolLit && !result_.model.exprs[a.value].bval)
+            fixed_all = false;
+        return;
+      }
+      for (Id<Expr> a : e.args) self(self, a);
+      self(self, e.a);
+      self(self, e.b);
+      self(self, e.c);
+    };
+    walk(walk, ce);
+    if (!known) return std::nullopt;
+    return fixed_all;
   }
   bool refs_keys(Id<Expr> id, const std::unordered_map<std::string, Id<Expr>>& vals) {
     if (!id.is_valid()) return false;

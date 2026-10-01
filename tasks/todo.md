@@ -886,6 +886,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           `a = {…}`、参数逐元素、`sum(r.y)`、数组方程标量化都与 omc 一致（XR1 / XR2 探针）。→ 全 scodeinst PASS 419→424
           （CevalBinding4、CevalRecordArray1/3/5、const4；FAIL 16 不变）、nf-live 413；+1 单测（167）。叶是数组 / 复合字段、
           更深的段带下标（EquationQualified1）留后续。
+    - [x] (58r) if 方程结构条件（2026-10-02）：参数条件且此前各支都已折掉 = 结构条件（typeIfEquation NFTyping.mo:3581-3590），
+          参数标 final、引用处代入、按值选支（flattenIfEquation NFFlatten.mo:1975-2010；帧求值本就记结构参数）；前面有运行时
+          分支 / Evaluate=false / fixed=false 的参数条件原样保留为分支条件（IF2、EvaluateFalse1）。条件参数须字面量绑定：
+          omc 的传递标记在绑定已被 Ceval 缓存（CEVAL_BINDING，getExpOpt 不返回）时中断，依赖求值次序（IF3 `b = c > 1` → c
+          不 final，而维度 `n = m` → m final）→ 不猜，SKIP。→ 全 scodeinst PASS 424→427（EvaluateFalse1、IfConnect1/2）、
+          nf-live 413→417（EquationIf1/2/3、IfEquation）；+1 单测（168）。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
