@@ -2059,6 +2059,24 @@ YMC_TEST(flatten_matrix_literal) {
   YMC_CHECK_EQ(flatten_src(src), std::string(want));
 }
 
+YMC_TEST(flatten_constant_and_structural_subscripts) {
+  // 下标求值：for 展开后的 `x[i - 1]`、常量 `x[N]`、`end` → 字面量；参数下标是结构参数（typeSubscripts 标
+  // Structural.markSubscript，NFTyping.mo:2122-2127）→ 参数打 final、下标代入值（含修饰 `a.k = 2`、依赖链 `d = c + 1`）。
+  // 期望 = omc 1.25.0 实跑 S1（2026-10-02）。
+  const char* src =
+      "model A\n  parameter Integer k = 1;\n  Real z[2];\nequation\n  z[k] = 3;\n  z[2] = 4;\nend A;\n"
+      "model S1\n  constant Integer N = 3;\n  parameter Integer c = 1;\n  parameter Integer d = c + 1;\n  Real r[3];\n"
+      "  Real x[N];\n  A a(k = 2);\nequation\n  r[c] = 1;\n  r[d] = 2;\n  r[end] = 3;\n  for i in 2:N loop\n"
+      "    x[i - 1] = x[i] + 1;\n  end for;\n  x[N] = 0;\nend S1;\n";
+  const char* want =
+      "class S1\n  constant Integer N = 3;\n  final parameter Integer c = 1;\n  final parameter Integer d = 2;\n"
+      "  Real r[1];\n  Real r[2];\n  Real r[3];\n  Real x[1];\n  Real x[2];\n  Real x[3];\n"
+      "  final parameter Integer a.k = 2;\n  Real a.z[1];\n  Real a.z[2];\n"
+      "equation\n  a.z[2] = 3.0;\n  a.z[2] = 4.0;\n  r[1] = 1.0;\n  r[2] = 2.0;\n  r[3] = 3.0;\n"
+      "  x[1] = x[2] + 1.0;\n  x[2] = x[3] + 1.0;\n  x[3] = 0.0;\nend S1;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string(want));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

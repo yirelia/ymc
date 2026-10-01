@@ -981,13 +981,45 @@ class Flattener {
     return result_.model.add_stmt(std::move(fs));
   }
 
-  // Absyn 下标 s 是否为当前 for-语句的符号迭代变量（单段无下标 cref、名在 stmt_iters_）。
+  // Absyn 下标 s 是否引用当前 for-语句的符号迭代变量（`i`、`i - 1`、`p[i]`）：循环保留时 omc 不展开、下标保持符号，
+  // 不做静态越界检查（AlgorithmFor1 `a[i - 1]`、NestedSubscriptFor `x[p[i]]`）。
   bool is_stmt_iter_subscript(Id<Exp> s) {
-    if (stmt_iters_.empty()) return false;
+    if (stmt_iters_.empty() || !s.is_valid()) return false;
     const Exp& e = I_.absyn.exps[s];
-    if (e.kind != ExpKind::CrefExp) return false;
-    const Cref& c = I_.absyn.crefs[e.cref];
-    return c.parts.size() == 1 && c.parts[0].subscripts.empty() && stmt_iters_.count(c.parts[0].name.id) > 0;
+    if (e.kind == ExpKind::CrefExp) {
+      const Cref& c = I_.absyn.crefs[e.cref];
+      if (!c.leading_dot && c.parts.size() == 1 && stmt_iters_.count(c.parts[0].name.id) > 0) return true;
+      for (const CrefPart& p : c.parts)
+        for (Id<Exp> x : p.subscripts)
+          if (is_stmt_iter_subscript(x)) return true;
+      return false;
+    }
+    if (is_stmt_iter_subscript(e.a) || is_stmt_iter_subscript(e.b) || is_stmt_iter_subscript(e.c)) return true;
+    for (Id<Exp> a : e.args)
+      if (is_stmt_iter_subscript(a)) return true;
+    return false;
+  }
+  // Absyn 表达式是否引用 enclosing 里的 parameter 组件（首段按本地组件解析；迭代变量 / 常量 / 外层名不算）。
+  bool absyn_refs_param(Id<Exp> s, NodeId enclosing) {
+    if (!s.is_valid()) return false;
+    const Exp& e = I_.absyn.exps[s];
+    if (e.kind == ExpKind::CrefExp) {
+      const Cref& c = I_.absyn.crefs[e.cref];
+      if (!c.leading_dot && !c.parts.empty() && !loop_vars_.count(c.parts[0].name.id) &&
+          !stmt_iters_.count(c.parts[0].name.id)) {
+        const NodeId n = find_local(enclosing, c.parts[0].name);
+        if (n.is_valid() && !I_.nodes[n].is_empty() && I_.comps[I_.nodes[n].comp].attributes.variability == SVariability::Param)
+          return true;
+      }
+      for (const CrefPart& p : c.parts)
+        for (Id<Exp> x : p.subscripts)
+          if (absyn_refs_param(x, enclosing)) return true;
+      return false;
+    }
+    if (absyn_refs_param(e.a, enclosing) || absyn_refs_param(e.b, enclosing) || absyn_refs_param(e.c, enclosing)) return true;
+    for (Id<Exp> a : e.args)
+      if (absyn_refs_param(a, enclosing)) return true;
+    return false;
   }
 
   // 在已发射变量里按点分名找标量化数组变量（name={x}、有末段下标 x[1..n]）。供 for 体 `x[i]:=` 目标校验。
@@ -5729,8 +5761,9 @@ class Flattener {
     return add(std::move(e));
   }
 
-  // 下标常量值：整型字面量，或 for 方程迭代变量的当前值（ForEquation1 的 `x[i]`）；否则 nullopt。
-  std::optional<std::int64_t> subscript_int(Id<Exp> s) {
+  // 下标常量值：整型字面量，或 for 方程迭代变量的当前值（ForEquation1 的 `x[i]`）；给了 scope 时再按常量表达式求值
+  //（展开后的 `a[i - 1]`、常量 `x[N]`；参数不求——omc 保留符号下标）。否则 nullopt。
+  std::optional<std::int64_t> subscript_int(Id<Exp> s, const ScodeScope* scope = nullptr) {
     const Exp& e = I_.absyn.exps[s];
     if (e.kind == ExpKind::IntLit) return e.ival;
     if (e.kind == ExpKind::CrefExp) {
@@ -5740,6 +5773,8 @@ class Flattener {
         if (it != loop_vars_.end()) return it->second;
       }
     }
+    if (scope && e.kind != ExpKind::Colon && e.kind != ExpKind::End)
+      if (std::optional<CVal> v = eval_scode(s, *scope, 0, /*allow_param=*/false); v && v->k == CVal::K::Int) return v->i;
     return std::nullopt;
   }
 
@@ -5773,6 +5808,7 @@ class Flattener {
     }
     Expr e;
     e.kind = ExprKind::Cref;
+    std::vector<std::optional<std::int64_t>> leaf_vals;   // 末段各下标的常量值（已求出的打印成字面量）
     NodeId local = c.parts.empty() ? Inst::empty_node() : find_local(enclosing, c.parts[0].name);
     // 命中条件为假被移除的组件 → 在方程/绑定里引用它是错误（omc 报错，ConditionInvalidContext1/2/4）→ SKIP。
     if (local.is_valid() && !I_.nodes[local].is_empty() && cref_removed(prefix, c)) {
@@ -5879,13 +5915,28 @@ class Flattener {
             if (!lit || subs.size() != ldims.size()) {
               set_unsupported("array subscript");
             } else {
+              leaf_vals.assign(subs.size(), std::nullopt);
               for (std::size_t k = 0; k < subs.size(); ++k) {
-                if (is_stmt_iter_subscript(subs[k])) continue;   // for-语句符号迭代变量下标：omc 不静态越界检查
-                std::optional<std::int64_t> iv = subscript_int(subs[k]);
+                // for-语句符号迭代变量下标：omc 不静态越界检查、保持符号；其中的参数会被标结构参数并代入数组值
+                //（NestedSubscriptFor `x[{1, 2, 3}[i]]`，下标字面量未做）→ SKIP。
+                if (is_stmt_iter_subscript(subs[k])) {
+                  if (absyn_refs_param(subs[k], enclosing)) { set_unsupported("parameter in symbolic subscript"); break; }
+                  continue;
+                }
+                // `end` = 该维大小；常量下标求值；参数变率的下标是结构参数（typeSubscripts 标 Structural.markSubscript，
+                // NFTyping.mo:2122-2127）→ 带参数求值（frame_value 记结构参数，post-pass 打 final）。都打印成字面量。
+                std::optional<std::int64_t> iv = I_.absyn.exps[subs[k]].kind == ExpKind::End
+                                                     ? std::optional<std::int64_t>(ldims[k])
+                                                     : subscript_int(subs[k], &lscope);
+                if (!iv && absyn_refs_param(subs[k], enclosing))
+                  if (std::optional<CVal> pv = eval_scode(subs[k], lscope, 0, /*allow_param=*/true, nullptr);
+                      pv && pv->k == CVal::K::Int)
+                    iv = pv->i;
                 if (!iv || *iv < 1 || *iv > ldims[k]) {
                   set_unsupported("array subscript out of range");
                   break;
                 }
+                leaf_vals[k] = *iv;
               }
             }
           }
@@ -5951,9 +6002,12 @@ class Flattener {
         if (!p.subscripts.empty()) set_unsupported("subscript on non-array");   // `time[2]` → omc 报错
       e.ty = Type::real();
     }
-    for (const CrefPart& p : c.parts) {
+    for (std::size_t pi = 0; pi < c.parts.size(); ++pi) {
+      const CrefPart& p = c.parts[pi];
       std::vector<Id<Expr>> subs;
-      for (Id<Exp> s : p.subscripts) subs.push_back(inst_exp(s, enclosing, prefix));
+      for (std::size_t k = 0; k < p.subscripts.size(); ++k)
+        subs.push_back(pi + 1 == c.parts.size() && k < leaf_vals.size() && leaf_vals[k] ? lit_int(*leaf_vals[k])
+                                                                                       : inst_exp(p.subscripts[k], enclosing, prefix));
       e.cref.parts.push_back({p.name, std::move(subs)});
     }
     return add(std::move(e));

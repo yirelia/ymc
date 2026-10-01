@@ -822,6 +822,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           数组方程的分派与形状检查改走 expr_shape（嵌套字面量 `m = {{x, 1}, {2, y}}` 此前因粗类型 SKIP）。
           → 全 scodeinst PASS 369→370、nf-live 311→322（FAIL 0）；+1 单测（151）。余下矩阵用例卡在 fill / transpose /
           symmetric / cat / diagonal 等内建、切片下标、函数向量化。
+    - [x] (58d) 下标求值（2026-10-02）：常量表达式下标（for 展开后的 `a[i - 1]`、常量 `x[N]`）与 `end` 求成字面量；参数
+          变率的下标按结构参数求值（typeSubscripts → Structural.markSubscript，NFTyping.mo:2122-2127：参数打 final、
+          下标代入值，修饰感知）；算法 for 里引用迭代变量的下标（`a[i - 1]`）保持符号、不静态越界检查，其中含参数的
+          （`x[p[i]]` → omc 打 `x[{1, 2, 3}[i]]`）→ SKIP。
+          → 全 scodeinst PASS 370→371、nf-live 322→332（FAIL 0）；+1 单测（152）。余下 "out of range" 主要是切片
+          （`x[2:3]`、`a[{1, 3}]`、`y[:, 1]`）与运行时变量下标（`r[c, n, c]` 的 n）。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
