@@ -2382,7 +2382,7 @@ YMC_TEST(flatten_record_array_whole_binding) {
       "    Real a = 4;\n  end S;\nend P2;\nmodel CI2\n  P1.S s = P2.S(a = time);\nend CI2;\n",
       &uns);
   YMC_CHECK(uns);   // omc：s.a = time、s.b = 3.0（按 P2.S 缺省构造再转型）；只比末段名会错出 s.b = 2.0
-  YMC_CHECK_EQ(out, std::string("<unsupported:composite/record binding>"));
+  YMC_CHECK_EQ(out, std::string("<unsupported:record constructor without instance>"));   // P2.S 无实例类节点
 }
 
 YMC_TEST(flatten_composite_array_field_expansion) {
@@ -2533,6 +2533,26 @@ YMC_TEST(flatten_implicit_range_partial_subscripts) {
                            "  Real y[1];\n  Real y[2];\n  Real y[3];\n  Real s = x[1,1] + x[1,2] + x[1,3];\nequation\n  y = x[2];\n"
                            "  x[1,1] = 1.0;\n  x[1,2] = 2.0;\n  x[1,3] = 3.0;\n  x[2,1] = time;\n  x[2,2] = 2.0 * time;\n"
                            "  x[2,3] = 3.0;\nend PS1;\n"));
+}
+
+YMC_TEST(flatten_record_ctor_calls_and_equation_bindings) {
+  // 记录构造调用打成构造函数调用、缺省补齐（RC1）；拆不开的记录绑定（运行时 if）挪成方程、字段无绑定；参数条件的 if 记录
+  // 绑定选支并标结构参数（RE1）。期望 = omc 1.25.0 实跑 RC1 / RE1（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("record R\n  Real x;\n  Real y = 2;\n  Integer n = 3;\nend R;\nmodel RC1\n  R v1;\n  R v2;\n  R v3;\n"
+                           "  parameter Real p = 5;\nequation\n  v1 = R(time, 2*time, 1);\n  v2 = R(x = time);\n  v3 = R(p, n = 4);\n"
+                           "end RC1;\n"),
+               std::string("function R \"Automatically generated record constructor for R\"\n  input Real x;\n  input Real y = 2.0;\n"
+                           "  input Integer n = 3;\n  output R res;\nend R;\n\nclass RC1\n  Real v1.x;\n  Real v1.y = 2.0;\n"
+                           "  Integer v1.n = 3;\n  Real v2.x;\n  Real v2.y = 2.0;\n  Integer v2.n = 3;\n  Real v3.x;\n  Real v3.y = 2.0;\n"
+                           "  Integer v3.n = 3;\n  parameter Real p = 5.0;\nequation\n  v1 = R(time, 2.0 * time, 1);\n"
+                           "  v2 = R(time, 2.0, 3);\n  v3 = R(p, 2.0, 4);\nend RC1;\n"));
+  YMC_CHECK_EQ(flatten_src("record P\n  Real a;\n  Real b = 1;\nend P;\nmodel RE1\n  P p1;\n"
+                           "  P p2 = if time > 1 then P(1, 2) else P(a = 3);\n  parameter Real k = 2;\n"
+                           "  parameter P p3 = if k > 3 then P(1, 2) else P(a = k);\nequation\n  p1 = P(time, 2 * time);\nend RE1;\n"),
+               std::string("function P \"Automatically generated record constructor for P\"\n  input Real a;\n  input Real b = 1.0;\n"
+                           "  output P res;\nend P;\n\nclass RE1\n  Real p1.a;\n  Real p1.b = 1.0;\n  Real p2.a;\n  Real p2.b;\n"
+                           "  final parameter Real k = 2.0;\n  parameter Real p3.a = 2.0;\n  parameter Real p3.b = 1.0;\nequation\n"
+                           "  p2 = if time > 1.0 then P(1.0, 2.0) else P(3.0, 1.0);\n  p1 = P(time, 2.0 * time);\nend RE1;\n"));
 }
 
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {

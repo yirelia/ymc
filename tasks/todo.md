@@ -925,6 +925,15 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           = 隐式尾随 `:`，引用类型接上余维、标量化补末尾下标，打印仍只带给出的下标（1.25.0）；求不出值但引用 fixed = false 参数的
           if 条件 = 非结构条件，原样保留（isExpressionNotFixed，IfEquation8）。→ 全 scodeinst PASS 436→441（IfEquation8、
           ImplicitRangeEq1/2/3、Size3）、nf-live 440→442（SubscriptsFill1、EquationFor6）；+1 单测（174）。
+    - [x] (58y) 记录构造调用 + 拆不开的记录绑定挪成方程（2026-10-02）：`R(a, b)` / `R(x = a)` 在表达式里打成对构造函数的
+          调用（缺省实参用字段声明值补齐、Integer → Real，RC1 探针 `R(x = time)` → `R(time, 2.0, 3)`；只做纯数据记录、记录类须有
+          实例节点，否则 SKIP）并登记构造函数块（ensure_record_ctor，与 collect_record_ctors 共用；返回记录的调用也收构造函数）；
+          拆不开的记录整体绑定（运行时 if、返回记录的函数调用）挪成方程 `r = …`（≤ parameter 进 initial equation），字段一律无
+          绑定、parameter 字段 fixed = false（NFFlatten.mo:994-1004 / :730-735，ModCtx::unbound_fields）；参数条件的 if 记录绑定
+          按 splitRecordCref 的 IF 分支选支 + 标结构参数（:1061-1074，RE1 探针 k final、`p3.a = 2.0`）。条件求不出（如依赖外部
+          函数，CevalBinding9）——omc 也求不出时保留 if 挪方程，但 ymc 分不清"omc 也求不出"与"ymc 求值器不够"→ SKIP。
+          → 全 scodeinst PASS 441（不变；多例 SKIP 原因前移到函数体记录 / 无实例记录）、nf-live 442→443（RecordConstructors）；
+          +1 单测（175）。下一步：函数体里的记录输出赋值 / 字段赋值（RF1/RF2 探针）。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、

@@ -141,6 +141,9 @@ struct ModCtx {
   // 外层组件合并后的方向（mergeComponentAttributes :212-250：子组件方向 = mergeDirection(外层, 自身)，外层无方向取自身、
   // 自身无方向取外层、两边都有 → INVALID_TYPE_PREFIX 报错；YmcDir1 探针 `input R ri` → `input Real ri.x`）。
   SDirection dir_inh = SDirection::Bidir;
+  // 外层记录的整体绑定拆不开、已挪成（初始）方程：本层字段一律无绑定（outerBinding = EMPTY_BINDING，NFFlatten.mo:1004），
+  // parameter 字段补 fixed = false（flattenSimpleComponent :730-735）；嵌套记录字段同样（其自身的整体绑定也丢）。
+  bool unbound_fields = false;
 };
 
 // OMC Prefixes.variabilityMin（取更受约束者）：ymc 枚举 Var<Discrete<Param<Const 升序=更常量，故取序数较大者。
@@ -874,10 +877,23 @@ class Flattener {
         if (!whole_raw.is_valid() && I_.comps[cid].binding.kind == BindingKind::Raw &&
             I_.comps[cid].binding.raw_exp.is_valid())
           whole_raw = I_.comps[cid].binding.raw_exp;
+        if (ctx.unbound_fields) whole_raw = {};   // 上层记录的整体绑定已挪成方程：本层（嵌套记录）的整体绑定一并丢
+        if (whole_raw.is_valid() && r == SRestriction::Record) {
+          cur_psubs_ = psubs;
+          whole_raw = fold_record_if(whole_raw, whole_scope, whole_vpfx);
+          if (result_.unsupported) continue;
+        }
         Id<SMod> ctor_mod;
         if (r == SRestriction::Record && whole_raw.is_valid())
           ctor_mod = build_record_ctor_mod(whole_raw, ci, cdef, whole_scope);
-        if (whole_raw.is_valid() && !ctor_mod.is_valid()) set_unsupported("composite/record binding");
+        // 拆不开的记录整体绑定（返回记录的函数调用等）：挪成（初始）方程 `r = f(x)`，字段无绑定（RF1 探针）。
+        bool moved_binding = false;
+        if (whole_raw.is_valid() && !ctor_mod.is_valid()) {
+          if (r == SRestriction::Record && record_binding_equation(cid, name, psubs, whole_raw, whole_scope, whole_vpfx, ctx))
+            moved_binding = true;
+          else if (!result_.unsupported)
+            set_unsupported("composite/record binding");
+        }
         // 组子层修饰上下文（R15 §3.3 优先级：外层实例修饰 > 组件自身声明修饰）。两者同时非空要合并两套作用域，
         // 本桶未做 → 标 unsupported（easy slice 不出现）。
         ModCtx child;
@@ -889,6 +905,7 @@ class Flattener {
         child.dir_inh = mdir;
         child.in_conn = ctx.in_conn || r == SRestriction::Connector || r_exp;
         child.flow_inherited = ctx.flow_inherited || flow_rec;
+        child.unbound_fields = ctx.unbound_fields || moved_binding;
         if (!r_exp) child.pp_chain = pp_self;   // expandable 组件的成员重起链（其直属成员由 exp_class 置 pp）
         if (ctor_mod.is_valid()) {
           // 整体绑定 + 字段修饰（RM1-RM4 探针）：字段绑定一律来自整体绑定（getRecordBindings 的 outerBinding 盖过字段修饰的
@@ -2339,6 +2356,7 @@ class Flattener {
                                                                             : inst_exp(raw, enclosing, prefix);
       }
     }
+    if (ctx.unbound_fields) binding = {};   // 外层记录整体绑定已挪成方程：字段无绑定（见 ModCtx::unbound_fields）
     if (binding.is_valid()) {
       binding = simplify_expr(binding);   // 折叠常量子表达式（`1+2`→`3.0`）+ 已在 cref 内联的常量
       // 数值组件绑定成 String/Bool 是类型错误（omc 报错，ConditionInvalidBinding1）——ymc 无绑定 typing → SKIP。
@@ -2391,6 +2409,14 @@ class Flattener {
     }
     for (Id<SMod> dm : I_.comps[cid].derived_mods) asrc.push_back({dm, enclosing, prefix});
     std::vector<FlatVarAttr> attrs = collect_attributes(cid, asrc);
+    // 外层记录整体绑定已挪成初始方程：parameter 字段 fixed = false（Binding.setAttr：有则替换、无则追加，NFBinding.mo:821-836）。
+    if (ctx.unbound_fields && var_min(var_floor, I_.comps[cid].attributes.variability) == SVariability::Param) {
+      const Symbol fixed = in_.intern("fixed");
+      bool replaced = false;
+      for (FlatVarAttr& a : attrs)
+        if (a.name == fixed) { a.value = lit_bool(false); replaced = true; }
+      if (!replaced) attrs.push_back({fixed, lit_bool(false)});
+    }
     const Component& comp = I_.comps[cid];
     // initial()/terminal() 是 discrete；绑定到 parameter 会被 OMC 拒绝（FuncBuiltinInitial2/Terminal2）。
     if (binding.is_valid() && comp.attributes.variability == SVariability::Param &&
@@ -2563,6 +2589,8 @@ class Flattener {
                   const std::vector<Symbol>& mod_prefix, bool force_final, const SElement& cel,
                   const ModCtx& ctx) {
     cur_psubs_ = psubs;   // 数组绑定/摊分里 cref 前缀改写用
+    // 外层记录整体绑定挪成方程后的数组字段（逐元素 fixed = false 等）未核实 → SKIP。
+    if (ctx.unbound_fields) { set_unsupported("array field of record with equation binding"); return; }
     // `annotation(Evaluate = true)` 的参数数组：同标量（emit_variable），omc 求值成 final 字面量，未做 → SKIP（CevalFuncArray6）。
     if (I_.comps[cid].attributes.variability == SVariability::Param && evaluate_true(I_.comps[cid].def)) {
       set_unsupported("Evaluate annotation");
@@ -5304,6 +5332,47 @@ class Flattener {
   // 模型里整记录引用（等式 `a = b`、绑定）的记录类型 → 收其构造函数（NFFlatten.collectExpFuncs CREF → collectTypeFuncs
   // :2690-2730，EquationComponent1-4 / RecordAssignment）。构造函数名 = 记录类的作用域路径（顶层 → 名；包里 → 包路径 + 名；
   // 根类里 → 根名 + 名）；记录定义在非根的实例类里（实例路径未核实）→ SKIP。
+  // 记录类（实例节点 rn）的构造函数：路径（顶层 → 名；包里 → 包路径 + 名；根类里 → 根名 + 名）+ 登记构造函数块（每个
+  // 路径一次）。记录定义在非根的实例类里（实例路径未核实）/ 构造函数块发射不了 → nullopt（已标 SKIP）。
+  std::optional<std::vector<Symbol>> ensure_record_ctor(NodeId rn) {
+    const Id<SElement> rdef = I_.nodes[rn].def;
+    const ScodeScope chain = scode_scope_of(rn);   // [R, 外层类, …]
+    std::vector<Symbol> path;
+    const std::uint32_t root_def = I_.nodes[root_].def.raw;
+    if (chain.size() >= 2 && chain[1].raw == root_def) {
+      path = result_.model.name;
+    } else {
+      for (std::size_t k = 1; k < chain.size(); ++k)
+        if (chain[k].raw == root_def || I_.scode.elems[chain[k]].restriction != SRestriction::Package) {
+          set_unsupported("record constructor naming");
+          return std::nullopt;
+        }
+      for (std::size_t k = chain.size(); k-- > 1;) path.push_back(I_.scode.elems[chain[k]].name);
+    }
+    path.push_back(I_.scode.elems[rdef].name);
+    if (!emit_record_ctor(rdef, chain, path) || result_.unsupported) { set_unsupported("record constructor"); return std::nullopt; }
+    if (std::find(model_record_ctors_.begin(), model_record_ctors_.end(), path) == model_record_ctors_.end())
+      model_record_ctors_.push_back(path);
+    return path;
+  }
+  // 记录类定义 rec 的某个实例类节点（记录调用 / 构造调用的 Complex 类型要一个节点作 complex_node）；没有 → invalid。
+  // ponytail: 线性扫实例节点 + 缓存；节点多时再在 inst 侧给类定义建索引。
+  NodeId record_class_node(Id<SElement> rec) {
+    if (auto it = rec_node_cache_.find(rec.raw); it != rec_node_cache_.end()) return it->second;
+    NodeId hit;
+    for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(I_.nodes.size()); ++i) {
+      const NodeId n = NodeId::from_index(i);
+      // 要已实例化的类（FlatTree：组件已定型）；作用域树里的部分实例化节点没有组件。
+      if (!I_.nodes[n].is_empty() && I_.nodes[n].kind == NodeKind::Class && I_.nodes[n].def == rec && I_.nodes[n].cls.is_valid() &&
+          I_.node_class(n).tree.is_valid() && I_.trees[I_.node_class(n).tree].state == TreeState::FlatTree) {
+        hit = n;
+        break;
+      }
+    }
+    rec_node_cache_[rec.raw] = hit;
+    return hit;
+  }
+
   void collect_record_ctors() {
     std::unordered_set<std::uint32_t> seen;
     auto visit_cref = [&](const Expr& x) {
@@ -5315,27 +5384,13 @@ class Flattener {
       const Id<SElement> rdef = I_.nodes[rn].def;
       if (!rdef.is_valid() || I_.scode.elems[rdef].restriction != SRestriction::Record) return;
       if (!seen.insert(rdef.raw).second) return;
-      const ScodeScope chain = scode_scope_of(rn);   // [R, 外层类, …]
-      std::vector<Symbol> path;
-      const std::uint32_t root_def = I_.nodes[root_].def.raw;
-      if (chain.size() >= 2 && chain[1].raw == root_def) {
-        path = result_.model.name;
-      } else {
-        for (std::size_t k = 1; k < chain.size(); ++k)
-          if (chain[k].raw == root_def || I_.scode.elems[chain[k]].restriction != SRestriction::Package) {
-            set_unsupported("record constructor naming");
-            return;
-          }
-        for (std::size_t k = chain.size(); k-- > 1;) path.push_back(I_.scode.elems[chain[k]].name);
-      }
-      path.push_back(I_.scode.elems[rdef].name);
-      if (!emit_record_ctor(rdef, chain, path) || result_.unsupported) { set_unsupported("record constructor"); return; }
-      model_record_ctors_.push_back(path);
+      ensure_record_ctor(rn);
     };
     auto expr = [&](auto& self, Id<Expr> id) -> void {
       if (!id.is_valid() || result_.unsupported) return;
       const Expr x = result_.model.exprs[id];   // 拷贝：emit_record_ctor 会往 exprs 添加
-      if (x.kind == ExprKind::Cref) visit_cref(x);
+      // 整记录引用与返回记录的调用（构造调用 / 用户函数）都收其记录类型的构造函数（collectExpFuncs CALL/CREF → collectTypeFuncs）。
+      if (x.kind == ExprKind::Cref || x.kind == ExprKind::Call) visit_cref(x);
       for (const ExprCrefPart& cp : x.cref.parts) for (Id<Expr> sub : cp.subscripts) self(self, sub);
       self(self, x.a);
       self(self, x.b);
@@ -7290,9 +7345,90 @@ class Flattener {
       // 折不成常量 → 发射函数定义 + 保留符号调用（加宽(55)-B）。不可发射 → 落到下面 SKIP。
       if (Id<Expr> uc = try_emit_user_call(e, enclosing, prefix, lex); uc.is_valid()) return uc;
       if (result_.unsupported) return lit_int(0);
+      if (Id<Expr> rc = record_ctor_call(e, enclosing, prefix, sc); rc.is_valid() || result_.unsupported) return rc;
       array_call_ok_ = false;   // 不是用户函数（内建）：其实参里的调用不在"整个绑定 / 等式一侧"位置
     }
     return builtin_call(e, enclosing, prefix, Symbol{});
+  }
+
+  // 记录构造调用 `R(a, b)` / `R(x = a)`（Record.instDefaultConstructor：输入 = 记录字段，声明序，缺省 = 字段声明绑定）：
+  // 打成对构造函数的调用，缺省实参补齐（RC1 探针 `R(x = time)` → `R(time, 2.0, 3)`、`R(p, n = 4)` → `R(p, 2.0, 4)`），
+  // Integer 实参进 Real 字段提 Real，并登记构造函数块。只做纯数据记录（字段全是内建标量、非 constant，无 extends / 数组 /
+  // 嵌套记录），缺省须求成常量；函数名不是记录类 → invalid（调用方照旧）；其余不符 → SKIP。
+  Id<Expr> record_ctor_call(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix, const ScodeScope& sc) {
+    const Cref fn = I_.absyn.crefs[e.cref];   // 拷贝
+    std::vector<Symbol> fpath;
+    for (const CrefPart& p : fn.parts) {
+      if (!p.subscripts.empty()) return {};
+      fpath.push_back(p.name);
+    }
+    ScodeScope ds;
+    const Id<SElement> rec = resolve_class_path(fpath, fn.leading_dot, sc, ds);
+    if (!rec.is_valid() || I_.scode.elems[rec].kind != SElementKind::Class || I_.scode.elems[rec].restriction != SRestriction::Record ||
+        I_.scode.elems[rec].def.kind != SClassDefKind::Parts)
+      return {};
+    const NodeId rn = record_class_node(rec);
+    if (!rn.is_valid()) { set_unsupported("record constructor without instance"); return lit_int(0); }
+    std::vector<Id<SElement>> fields;
+    std::vector<TypeKind> ftys;
+    for (Id<SElement> f : I_.scode.elems[rec].def.elements) {
+      const SElement& fe = I_.scode.elems[f];
+      if (fe.kind == SElementKind::Extends) { set_unsupported("record constructor of extended record"); return lit_int(0); }
+      if (fe.kind != SElementKind::Component) continue;
+      const NodeId fnode = find_local(rn, fe.name);
+      const TypeKind fk = (fnode.is_valid() && !I_.nodes[fnode].is_empty() && I_.nodes[fnode].comp.is_valid())
+                              ? I_.comps[I_.nodes[fnode].comp].ty.kind : TypeKind::Unknown;
+      if (!fe.attr.dims.empty() || !fe.type.dims.empty() || fe.attr.var == SVariability::Const ||
+          (fk != TypeKind::Real && fk != TypeKind::Integer && fk != TypeKind::Boolean && fk != TypeKind::String)) {
+        set_unsupported("record constructor field kind");
+        return lit_int(0);
+      }
+      fields.push_back(f);
+      ftys.push_back(fk);
+    }
+    std::vector<Id<Expr>> vals(fields.size());
+    const std::vector<Id<Exp>> args = e.args;   // 拷贝
+    std::size_t pos = 0;
+    for (std::size_t i = 0; i < args.size(); ++i) {
+      std::size_t idx = fields.size();
+      if (i < e.arg_names.size() && e.arg_names[i].is_valid()) {
+        for (std::size_t k = 0; k < fields.size(); ++k)
+          if (I_.scode.elems[fields[k]].name == e.arg_names[i]) { idx = k; break; }
+      } else {
+        idx = pos++;
+      }
+      if (idx >= fields.size() || vals[idx].is_valid()) { set_unsupported("record constructor arguments"); return lit_int(0); }
+      vals[idx] = simplify_expr(inst_exp(args[i], enclosing, prefix));
+      if (result_.unsupported) return lit_int(0);
+    }
+    const ScodeScope rscope = scode_scope_of(rn);   // 字段缺省在记录作用域求值
+    Expr r;
+    r.kind = ExprKind::Call;
+    for (std::size_t k = 0; k < fields.size(); ++k) {
+      Id<Expr> v = vals[k];
+      if (!v.is_valid()) {
+        const Id<SMod> fm = I_.scode.elems[fields[k]].mod;
+        const std::optional<CVal> dv = (fm.is_valid() && I_.scode.mods[fm].binding.is_valid())
+                                           ? eval_scode(I_.scode.mods[fm].binding, rscope, 0) : std::nullopt;
+        if (!dv || is_arr(*dv) || dv->k == CVal::K::Record || dv->k == CVal::K::Undef) {
+          set_unsupported("record constructor default");
+          return lit_int(0);
+        }
+        v = literal_of(*dv);
+      }
+      const Expr& ve = result_.model.exprs[v];
+      const TypeKind vk = ve.ty.kind;
+      const bool ok = expr_shape(v).empty() &&
+                      (ftys[k] == TypeKind::Real ? (vk == TypeKind::Real || vk == TypeKind::Integer) : vk == ftys[k]);
+      if (!ok) { set_unsupported("record constructor argument type"); return lit_int(0); }
+      r.args.push_back(ftys[k] == TypeKind::Real ? to_real(v) : v);
+    }
+    const std::optional<std::vector<Symbol>> path = ensure_record_ctor(rn);
+    if (!path) return lit_int(0);
+    r.call_name = *path;
+    r.ty.kind = TypeKind::Complex;
+    r.ty.complex_node = rn.raw;
+    return add(std::move(r));
   }
 
   // delay(expr, delayTime[, delayMax])（NFModelicaBuiltin.mo:1105-1119：两参形 delay2 早内联成 delay3(expr, d, d)，其 delayTime
@@ -8608,6 +8744,61 @@ class Flattener {
     outer.subs = std::move(subs);
     outer.loc = loc;
     return I_.scode.add_mod(std::move(outer));
+  }
+
+  // 记录整体绑定是 if 式且条件 ≤ parameter：splitRecordCref 的 IF 分支（NFFlatten.mo:1061-1074）——条件求值成功即标结构参数
+  // （帧求值读参数即记）、选支再拆（RE1 探针 `p3 = if k > 3 then P(1, 2) else P(a = k)` → k final、`p3.a = 2.0`）；条件引用运行时
+  // 变量 → 原样（随后挪成方程）。条件参数须字面量绑定 / fixed（传递标记依赖 omc 求值次序，同 if 方程，见 cond_params_fixed），
+  // 否则 / 求不出 → SKIP。返回选中的分支（可再嵌套）。
+  Id<Exp> fold_record_if(Id<Exp> raw, NodeId scope, const std::vector<Symbol>& vpfx) {
+    while (I_.absyn.exps[raw].kind == ExpKind::IfExp) {
+      const Exp ie = I_.absyn.exps[raw];   // 拷贝
+      const std::vector<std::string> skeys = structural_keys_;
+      const std::unordered_set<std::string> sset = structural_set_;
+      const Id<Expr> ce = simplify_expr(inst_exp(ie.a, scope, vpfx));
+      if (result_.unsupported) return raw;
+      if (cond_is_runtime(ce)) { structural_keys_ = skeys; structural_set_ = sset; return raw; }
+      const std::optional<CVal> cv = eval_scode(ie.a, scode_scope_of(scope), 0, /*allow_param=*/true, nullptr);
+      const std::optional<bool> fx = cond_params_fixed(ce);
+      if (!cv || cv->k != CVal::K::Bool || !fx || !*fx) {
+        structural_keys_ = skeys;
+        structural_set_ = sset;
+        set_unsupported("record binding if condition");
+        return raw;
+      }
+      raw = cv->b ? ie.b : ie.c;
+    }
+    return raw;
+  }
+
+  // 拆不开的记录整体绑定 → 方程 `name = 绑定`（flattenComplexComponent，NFFlatten.mo:994-1004：变率 ≤ parameter 进 initial
+  // equation）。绑定须定型成与组件同一记录类（或同名同序兼容）的标量记录式；constant（omc 要求能求值）/ 类型不符 → false。
+  bool record_binding_equation(CompId cid, const std::vector<Symbol>& name, const PSubs& psubs, Id<Exp> raw,
+                               NodeId bscope, const std::vector<Symbol>& bprefix, const ModCtx& ctx) {
+    const SVariability v = var_min(ctx.var_floor, I_.comps[cid].attributes.variability);
+    if (v == SVariability::Const) return false;
+    cur_psubs_ = psubs;
+    const Id<Expr> rhs = simplify_expr(inst_exp(raw, bscope, bprefix));
+    if (result_.unsupported) return false;
+    const Type cty = I_.comps[cid].ty;
+    if (result_.model.exprs[rhs].ty.kind != TypeKind::Complex || !expr_shape(rhs).empty() ||
+        record_match(result_.model.exprs[rhs].ty, cty) > RecMatch::Plug)
+      return false;
+    Expr lhs;
+    lhs.kind = ExprKind::Cref;
+    lhs.ty = cty;
+    const std::vector<std::vector<Id<Expr>>> ps = psubs_to_exprs(psubs);
+    for (std::size_t k = 0; k < name.size(); ++k)
+      lhs.cref.parts.push_back({name[k], k < ps.size() ? ps[k] : std::vector<Id<Expr>>{}});
+    FlatEquation fe;
+    fe.kind = FlatEqKind::Equality;
+    fe.a = add(std::move(lhs));
+    fe.b = rhs;
+    fe.loc = I_.comps[cid].loc;
+    const Id<FlatEquation> id = result_.model.add_eq(std::move(fe));
+    if (v == SVariability::Param) result_.model.initial_equations.push_back(id);
+    else result_.model.equations.push_back(id);
+    return true;
   }
 
   // 字段修饰去掉各子修饰的绑定（整体记录绑定下字段绑定由整体绑定给），留属性 / 嵌套修饰；去完为空 → invalid。
@@ -10474,6 +10665,7 @@ class Flattener {
   std::unordered_set<std::string> frame_busy_;                  // 求值中的参数 key（环检测）
   std::unordered_set<std::uint32_t> nofold_calls_;              // 不可常量折叠的内建调用（external "C" 的内建等价函数）
   std::vector<std::vector<Symbol>> model_record_ctors_;         // 模型表达式里整记录引用需要的构造函数（collect_record_ctors）
+  std::unordered_map<std::uint32_t, NodeId> rec_node_cache_;    // 记录类定义 → 某个实例类节点（record_class_node）
   std::unordered_set<std::uint32_t> product_bins_;              // 函数语境里的向量 / 矩阵积 Binary 节点（非逐元素）
   std::unordered_map<std::uint32_t, FnRecord> fn_records_;      // 记录类型的形参 / 局部名 → 记录类（字段访问 `r.x`）
   NodeId root_;                                                 // 被压平的根类实例
