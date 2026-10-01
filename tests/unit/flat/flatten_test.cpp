@@ -2166,6 +2166,23 @@ YMC_TEST(flatten_algorithm_control_statements) {
   YMC_CHECK_EQ(flatten_src(src), std::string(want));
 }
 
+YMC_TEST(flatten_when_condition_forms) {
+  // when 条件：sample(a, b)（实参转 Real）、Boolean 数组 cref 按元素展开成条件向量、条件向量字面量、change(x)。
+  // 期望 = omc 1.25.0 实跑 W1（2026-10-02）。
+  const char* src =
+      "model W1\n  parameter Real h = 0.1;\n  Real x(start = 5);\n  Real y;\n  Real z;\n  Real w;\n  Boolean b[2];\n"
+      "  Boolean c;\n  Integer k;\nequation\n  der(x) = -x;\n  b = {time > 1, time > 2};\n  c = time > 3;\n"
+      "  when sample(0, h) then\n    y = x;\n  end when;\n  when b then\n    z = x;\n  end when;\n"
+      "  when {c, time > 4} then\n    w = x;\n  end when;\n  when change(k) then\n    k = pre(k) + 1;\n  end when;\nend W1;\n";
+  const char* want =
+      "class W1\n  parameter Real h = 0.1;\n  Real x(start = 5.0);\n  Real y;\n  Real z;\n  Real w;\n  Boolean b[1];\n"
+      "  Boolean b[2];\n  Boolean c;\n  Integer k;\nequation\n  der(x) = -x;\n  b[1] = time > 1.0;\n  b[2] = time > 2.0;\n"
+      "  c = time > 3.0;\n  when sample(0.0, h) then\n    y = x;\n  end when;\n  when {b[1], b[2]} then\n    z = x;\n"
+      "  end when;\n  when {c, time > 4.0} then\n    w = x;\n  end when;\n  when change(k) then\n    k = pre(k) + 1;\n"
+      "  end when;\nend W1;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string(want));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

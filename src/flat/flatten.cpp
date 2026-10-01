@@ -1104,8 +1104,9 @@ class Flattener {
         fs.kind = FlatStmtKind::When;
         for (const SStmtBranch& br : st.branches) {
           FlatStmtBranch fb;
-          fb.cond = cond(br.cond);
+          fb.cond = simplify_expr(inst_exp(br.cond, enclosing, prefix));   // 条件向量的粗类型不过 cond() 的 Boolean 检查
           if (result_.unsupported) return {};
+          fb.cond = expand_when_cond(fb.cond);
           if (!when_cond_ok(fb.cond)) { set_unsupported("when condition form"); return {}; }
           ++alg_in_when_;
           const bool ok = body(br.body, fb.body);
@@ -1315,6 +1316,8 @@ class Flattener {
       std::vector<std::set<std::string>> solved;
       for (const SEqBranch& br : eq.branches) {
         Id<Expr> cond = simplify_expr(inst_exp(br.cond, enclosing, prefix));
+        if (result_.unsupported) return;
+        cond = expand_when_cond(cond);
         if (!when_cond_ok(cond)) { set_unsupported("when condition form"); return; }
         FlatEqBranch fb;
         fb.cond = cond;
@@ -1689,11 +1692,18 @@ class Flattener {
     return add(std::move(r));
   }
 
-  // when 条件白名单（v1 只做标量 Boolean 的可判别形态）：关系（操作数非调用，排除 pre/noEvent）、Boolean 变量、initial()。
-  // 数组条件、Clock、not initial()、pre(x)>… 等 → false（调用方 SKIP）。
+  // when 条件白名单：关系（操作数非调用，排除 pre/noEvent）、Boolean 标量变量、initial() / sample(a, b) / change(x) / edge(b)，
+  // 以及由这些组成的条件向量 `{c1, c2, …}`（W1 探针：`when {c, time > 4.0}`、`sample(0.0, h)`、`change(k)`）。Clock、
+  // not initial()（omc 告警）、pre(x) > … 等 → false（调用方 SKIP）。数组 cref 条件先经 expand_when_cond 展开。
   bool when_cond_ok(Id<Expr> c) {
     const Expr& e = result_.model.exprs[c];
-    if (e.ty.kind != TypeKind::Boolean) return false;
+    if (e.kind == ExprKind::Array) {
+      if (e.args.empty()) return false;
+      for (Id<Expr> x : e.args)
+        if (result_.model.exprs[x].kind == ExprKind::Array || !when_cond_ok(x)) return false;
+      return true;
+    }
+    if (e.ty.kind != TypeKind::Boolean || e.ty.is_array()) return false;
     switch (e.kind) {
       case ExprKind::Relation: {
         auto simple = [&](Id<Expr> x) {
@@ -1704,10 +1714,27 @@ class Flattener {
         return simple(e.a) && simple(e.b);
       }
       case ExprKind::Cref: return true;
-      case ExprKind::Call:
-        return e.call_name.size() == 1 && in_.str(e.call_name[0]) == "initial" && e.args.empty();
+      case ExprKind::Call: {
+        if (e.call_name.size() != 1) return false;
+        const std::string_view n = in_.str(e.call_name[0]);
+        return (n == "initial" && e.args.empty()) || (n == "sample" && e.args.size() == 2) ||
+               ((n == "change" || n == "edge") && e.args.size() == 1);
+      }
       default: return false;
     }
+  }
+  // Boolean 数组 cref 作 when 条件 → 按元素展开成条件向量（omc 打 `{b[1], b[2], b[3]}`，When2 / W1 探针）。其余原样。
+  Id<Expr> expand_when_cond(Id<Expr> c) {
+    const std::vector<std::int64_t> sh = expr_shape(c);
+    if (sh.size() != 1 || sh[0] < 1 || result_.model.exprs[c].kind != ExprKind::Cref) return c;
+    Dimension d;
+    d.kind = DimKind::Integer;
+    d.size = sh[0];
+    Expr arr;
+    arr.kind = ExprKind::Array;
+    arr.ty = Type::array_of(Type::boolean(), {d});
+    for (std::int64_t i = 1; i <= sh[0]; ++i) arr.args.push_back(scalarize(c, {i}));
+    return add(std::move(arr));
   }
 
   // 收集 when 分支体（标量方程 / reinit）；填 out + 该分支解的 LHS 变量名集合 solved。任何超范围体项 → set_unsupported+false。
