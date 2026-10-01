@@ -2571,6 +2571,16 @@ YMC_TEST(flatten_record_valued_functions) {
                std::string(ctor) + "  r.a := x;\n  r.b := 2.0 * x;\n" + cls);
 }
 
+YMC_TEST(flatten_record_final_fields_and_variability_floor) {
+  // 记录构造的输入 = 非 protected、非 final 字段（NFRecord.collectRecordParam）；final 字段保留自身绑定，引用兄弟字段时按
+  // 记录变率下沉后的变率判 / 求值（`constant R` 里的 `Real x` 是 constant）。期望 = omc 1.25.0 实跑 FC1（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("record R\n  Real x;\n  final constant Real y = x / 2.0;\n  Real z;\nend R;\nmodel FC1\n"
+                           "  constant R r = R(1.0, 3.0);\n  constant R q(x = 4.0, z = 5.0);\n  constant Real w = r.y + q.y;\nend FC1;\n"),
+               std::string("class FC1\n  constant Real r.x = 1.0;\n  final constant Real r.y = 0.5;\n  constant Real r.z = 3.0;\n"
+                           "  constant Real q.x = 4.0;\n  final constant Real q.y = 2.0;\n  constant Real q.z = 5.0;\n"
+                           "  constant Real w = 2.5;\nend FC1;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

@@ -526,5 +526,7 @@
 "ImplicitRangeEq1.mo",
 "ImplicitRangeEq2.mo",
 "ImplicitRangeEq3.mo",
-"Size3.mo"
+"Size3.mo",
+"RecordBinding6.mo",
+"RecordBinding7.mo"
 ]

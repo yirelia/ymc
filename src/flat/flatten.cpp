@@ -2147,7 +2147,9 @@ class Flattener {
   }
 
   // 表达式是否引用连续 / 离散变量或 time（属性绑定的变率检查）。
-  bool refs_runtime_var(Id<Expr> id) {
+  // floor_scope / floor：引用处所在实例（如 `constant R r` 的记录实例）的变率下限——引用本实例自己的字段时按
+  // variabilityMin 下沉后的变率判（RecordBinding7 `final constant Real y = x / 2.0` 的 x 声明是 Real，实际 constant）。
+  bool refs_runtime_var(Id<Expr> id, NodeId floor_scope = {}, SVariability floor = SVariability::Var) {
     if (!id.is_valid()) return false;
     const Expr& e = result_.model.exprs[id];
     if (e.kind == ExprKind::Cref) {
@@ -2158,14 +2160,19 @@ class Flattener {
       if (raw == kFnLocal) return false;
       const NodeId n = NodeId::from_index(raw);
       if (I_.nodes.contains(n) && !I_.nodes[n].is_empty() && I_.nodes[n].comp.is_valid()) {
-        const SVariability v = I_.comps[I_.nodes[n].comp].attributes.variability;
+        SVariability v = I_.comps[I_.nodes[n].comp].attributes.variability;
+        // 首段所指组件就是引用处实例的本地组件（flat cref 已带前缀，按节点自身名在该实例里找回同一节点判）。
+        if (floor != SVariability::Var && floor_scope.is_valid() && find_local(floor_scope, I_.nodes[n].name) == n)
+          v = var_min(floor, v);
         if (v == SVariability::Var || v == SVariability::Discrete) return true;
       }
-      for (const ExprCrefPart& cp : e.cref.parts) for (Id<Expr> sx : cp.subscripts) if (refs_runtime_var(sx)) return true;
+      for (const ExprCrefPart& cp : e.cref.parts)
+        for (Id<Expr> sx : cp.subscripts) if (refs_runtime_var(sx, floor_scope, floor)) return true;
       return false;
     }
-    for (Id<Expr> a : e.args) if (refs_runtime_var(a)) return true;
-    return refs_runtime_var(e.a) || refs_runtime_var(e.b) || refs_runtime_var(e.c);
+    for (Id<Expr> a : e.args) if (refs_runtime_var(a, floor_scope, floor)) return true;
+    return refs_runtime_var(e.a, floor_scope, floor) || refs_runtime_var(e.b, floor_scope, floor) ||
+           refs_runtime_var(e.c, floor_scope, floor);
   }
 
   // 是否引用 parameter 变量（同 refs_runtime_var 按 cref 首段所指组件的声明变率判）。
@@ -2388,7 +2395,7 @@ class Flattener {
       // `extends Resistor(R = 1.0 + 0.1*sin(time))`）。
       {
         const SVariability cv = var_min(var_floor, I_.comps[cid].attributes.variability);
-        if ((cv == SVariability::Param || cv == SVariability::Const) && refs_runtime_var(binding))
+        if ((cv == SVariability::Param || cv == SVariability::Const) && refs_runtime_var(binding, enclosing, var_floor))
           set_unsupported("binding of higher variability");
       }
       // 标量组件绑数组（BindingInvalidType2 `Real x = {1, 2, 3}`）→ omc 维度不符报错。
@@ -4509,7 +4516,9 @@ class Flattener {
     const NodeId ln = find_local(inst, c.parts[0].name);
     if (!ln.is_valid() || I_.nodes[ln].is_empty() || !I_.nodes[ln].comp.is_valid()) return r;
     const CompId cid = I_.nodes[ln].comp;
-    const SVariability var = I_.comps[cid].attributes.variability;
+    // 有效变率 = 声明变率按本帧实例的下限下沉（`constant R r` 里的 `Real x` 是 constant，variabilityMin；RecordBinding7）。
+    const ModCtx* fctx = frames_[static_cast<std::size_t>(fi)].ctx;
+    const SVariability var = var_min(fctx ? fctx->var_floor : SVariability::Var, I_.comps[cid].attributes.variability);
     const SElement& cel = I_.scode.elems[I_.comps[cid].def];
     const bool arr = !cel.attr.dims.empty() || !cel.type.dims.empty();
     const TypeKind tk = I_.comps[cid].ty.kind;
@@ -8721,16 +8730,22 @@ class Flattener {
     // 记录含 extends（继承字段的构造序/约束）本桶未验证 → SKIP（RecordExtends）。
     for (Id<SElement> eid : I_.scode.elems[cdef].def.elements)
       if (I_.scode.elems[eid].kind == SElementKind::Extends) return {};
-    const std::vector<NodeId>& fields = I_.trees[I_.node_class(ci).tree].components;
+    // 构造函数的输入 = 非 protected、非 final 的字段（声明序）；protected / final 字段是构造函数局部，保留自身绑定
+    //（NFRecord.collectRecordParam :260-283；RecordBinding6/7 `final constant Real y = 2.0` → `R(1.0, 3.0)` 给 x、z）。
+    std::vector<Symbol> inputs;
+    for (NodeId f : I_.trees[I_.node_class(ci).tree].components)
+      if (I_.nodes[f].visibility != Visibility::Protected && !I_.comps[I_.nodes[f].comp].attributes.is_final)
+        inputs.push_back(I_.nodes[f].name);
     std::vector<SSubMod> subs;
     std::size_t pos = 0;
     for (std::size_t i = 0; i < call.args.size(); ++i) {
       Symbol fld;
       if (i < call.arg_names.size() && call.arg_names[i].is_valid()) {
-        fld = call.arg_names[i];                       // 命名实参 R(x=..)
-      } else {                                          // 位置实参 → 第 pos 个字段（声明序）
-        if (pos >= fields.size()) return {};            // 实参多于字段 → 越界，交给上层 SKIP
-        fld = I_.nodes[fields[pos++]].name;
+        fld = call.arg_names[i];                       // 命名实参 R(x=..)：须是输入（命名到局部 = omc 报错）
+        if (std::find(inputs.begin(), inputs.end(), fld) == inputs.end()) return {};
+      } else {                                          // 位置实参 → 第 pos 个输入（声明序）
+        if (pos >= inputs.size()) return {};            // 实参多于输入 → 越界，交给上层 SKIP
+        fld = inputs[pos++];
       }
       SMod fm;
       fm.kind = SModKind::Mod;

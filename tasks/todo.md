@@ -939,6 +939,11 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           `r.a := x`。挪方程只在绑定有运行时 / 参数变率且非 final 时做：全常量（omc Ceval 求值）/ final parameter（omc 内联再求值，
           RecordBinding18 账本）→ 仍 SKIP。RF1 / RF2 探针逐字节一致。→ 全 scodeinst PASS 441（不变）、nf-live 443→445
           （ConstructParameters2、ComplexNumbers）；+1 单测（176）。
+    - [x] (59a) 记录的 final 字段 + 记录变率下沉进求值（2026-10-02）：记录构造的输入 = 非 protected、非 final 字段
+          （NFRecord.collectRecordParam :260-283；`R(1.0, 3.0)` 越过 `final constant Real y`）；记录实例里引用兄弟字段时按
+          variabilityMin 下沉后的变率判"高变率绑定"（refs_runtime_var 带 floor）与帧求值（frame_value 用帧 ctx 的 var_floor）——
+          `constant R r` 里声明为 `Real x` 的字段是 constant（RecordBinding7 `y = x / 2.0` → 0.5）。→ 全 scodeinst PASS 441→443
+          （RecordBinding6/7）、nf-live 445；+1 单测（177）。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、
