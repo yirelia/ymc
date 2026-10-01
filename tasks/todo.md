@@ -828,6 +828,15 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           （`x[p[i]]` → omc 打 `x[{1, 2, 3}[i]]`）→ SKIP。
           → 全 scodeinst PASS 370→371、nf-live 322→332（FAIL 0）；+1 单测（152）。余下 "out of range" 主要是切片
           （`x[2:3]`、`a[{1, 3}]`、`y[:, 1]`）与运行时变量下标（`r[c, n, c]` 的 n）。
+    - [x] (58e) 切片下标（2026-10-02）：`:` / `a:b` / `a:s:b` / `{i, j}`（含 `end`、结构参数边界）求出选中下标表，引用类型带
+          切片维；`:` 用 Wild 表示、下标位置打印成 `:`（Subscript.WHOLE）。连续数组绑定保持整体（`y = x[2:3]`、
+          `w = z[1,:]`），参数绑定 / 方程按切片映射标量化（SL2 探针）。
+          → 全 scodeinst PASS 371→374、nf-live 332→339（FAIL 0）；+1 单测（153）。
+    - [x] (58f) 模型语境的数组内建（2026-10-02）：fill / zeros / ones / identity / diagonal / transpose / vector 维已知时展开成
+          数组字面量（参数维按结构参数求值），sum / product 展开成元素运算链（B2 探针）；求值器补一参 `size(a)`（Scalar 的
+          `f(fill(1, 3))` 常量折叠成 3.0，此前被 fill 的 SKIP 遮住）。
+          → 全 scodeinst PASS 374→384、nf-live 339→349（FAIL 0）；+1 单测（154）。未做：`max(a)` / `min(a)` 数组实参的符号调用、
+          `linspace` 的 `array(… for i in …)` 形。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

@@ -999,6 +999,63 @@ class Flattener {
       if (is_stmt_iter_subscript(a)) return true;
     return false;
   }
+  // 切片下标（`:`、`a:b`、`a:s:b`、`{i, j}`）在大小为 dim 的维上选中的下标表（1 基、须在界内、非空）；边界 / 元素里的
+  // `end` = dim，其余按常量求值，含参数的按结构参数求值（同标量下标）。求不出 / 越界 → nullopt。
+  std::optional<std::vector<std::int64_t>> slice_indices(Id<Exp> s, std::int64_t dim, const ScodeScope& scope,
+                                                         NodeId enclosing) {
+    const Exp e = I_.absyn.exps[s];   // 拷贝：求值期间不持 absyn 引用
+    auto bound = [&](Id<Exp> b) -> std::optional<std::int64_t> {
+      if (I_.absyn.exps[b].kind == ExpKind::End) return dim;
+      if (std::optional<std::int64_t> v = subscript_int(b, &scope)) return v;
+      if (absyn_refs_param(b, enclosing))
+        if (std::optional<CVal> pv = eval_scode(b, scope, 0, /*allow_param=*/true, nullptr); pv && pv->k == CVal::K::Int)
+          return pv->i;
+      return std::nullopt;
+    };
+    std::vector<std::int64_t> out;
+    if (e.kind == ExpKind::Colon) {
+      for (std::int64_t i = 1; i <= dim; ++i) out.push_back(i);
+    } else if (e.kind == ExpKind::Range) {   // Absyn：a = 起点，b = 步长或终点，c = 终点（有步长时）
+      const std::optional<std::int64_t> a = bound(e.a), b = bound(e.b);
+      const std::optional<std::int64_t> c = e.c.is_valid() ? bound(e.c) : std::nullopt;
+      if (!a || !b || (e.c.is_valid() && !c)) return std::nullopt;
+      const std::int64_t step = e.c.is_valid() ? *b : 1, stop = e.c.is_valid() ? *c : *b;
+      if (step == 0) return std::nullopt;
+      for (std::int64_t i = *a; step > 0 ? i <= stop : i >= stop; i += step) out.push_back(i);
+    } else {
+      for (Id<Exp> x : e.args) {
+        const std::optional<std::int64_t> v = bound(x);
+        if (!v) return std::nullopt;
+        out.push_back(*v);
+      }
+    }
+    if (out.empty()) return std::nullopt;   // 空切片 = 零长数组，未做
+    for (std::int64_t i : out)
+      if (i < 1 || i > dim) return std::nullopt;
+    return out;
+  }
+  // 切片下标的打印形：`:` → Wild（下标位置打印成 `:`，对标 Subscript.WHOLE）；范围 → 求值后的 `a:b` / `a:s:b`；下标数组 →
+  // 整数字面量数组。标量化（scalarize）按同一形式把第 i 个元素映射回原下标。
+  Id<Expr> slice_subscript(ExpKind kind, const std::vector<std::int64_t>& sel, bool has_step) {
+    Expr r;
+    r.ty = Type::integer();
+    if (kind == ExpKind::Colon) {
+      r.kind = ExprKind::Wild;
+    } else if (kind == ExpKind::Range) {
+      r.kind = ExprKind::Range;
+      r.a = lit_int(sel.front());
+      if (has_step) {
+        r.b = lit_int(sel.size() > 1 ? sel[1] - sel[0] : 1);
+        r.c = lit_int(sel.back());
+      } else {
+        r.b = lit_int(sel.back());
+      }
+    } else {
+      r.kind = ExprKind::Array;
+      for (std::int64_t i : sel) r.args.push_back(lit_int(i));
+    }
+    return add(std::move(r));
+  }
   // Absyn 表达式是否引用 enclosing 里的 parameter 组件（首段按本地组件解析；迭代变量 / 常量 / 外层名不算）。
   bool absyn_refs_param(Id<Exp> s, NodeId enclosing) {
     if (!s.is_valid()) return false;
@@ -1287,9 +1344,33 @@ class Flattener {
         Expr c = x;
         c.ty = x.ty.element_type();
         std::vector<Id<Expr>> subs;
-        subs.reserve(idx.size());
-        for (std::int64_t v : idx) subs.push_back(lit_int(v));
-        c.cref.parts.back().subscripts = std::move(subs);   // 末段补下标（Phase 2 保证整体引用末段无下标）
+        const std::vector<Id<Expr>> orig = x.cref.parts.back().subscripts;
+        if (orig.empty()) {   // 整体引用：末段补下标
+          for (std::int64_t v : idx) subs.push_back(lit_int(v));
+        } else {
+          // 切片引用（slice_subscript 的三种形）：按出现序消费 idx——`:` → i、范围 → 起点 + (i - 1)·步长、下标数组 → 第 i
+          // 个；标量下标原样。
+          std::size_t used = 0;
+          for (Id<Expr> s : orig) {
+            const Expr se = result_.model.exprs[s];
+            const bool slice = se.kind == ExprKind::Wild || se.kind == ExprKind::Range || se.kind == ExprKind::Array;
+            if (!slice) { subs.push_back(s); continue; }
+            if (used >= idx.size()) { set_unsupported("slice scalarization"); return lit_int(0); }
+            const std::int64_t i = idx[used++];
+            if (se.kind == ExprKind::Wild) {
+              subs.push_back(lit_int(i));
+            } else if (se.kind == ExprKind::Range) {
+              const std::int64_t start = result_.model.exprs[se.a].ival;
+              const std::int64_t step = se.c.is_valid() ? result_.model.exprs[se.b].ival : 1;
+              subs.push_back(lit_int(start + (i - 1) * step));
+            } else {
+              if (i < 1 || static_cast<std::size_t>(i) > se.args.size()) { set_unsupported("slice scalarization"); return lit_int(0); }
+              subs.push_back(se.args[static_cast<std::size_t>(i) - 1]);
+            }
+          }
+          if (used != idx.size()) { set_unsupported("slice scalarization"); return lit_int(0); }
+        }
+        c.cref.parts.back().subscripts = std::move(subs);
         return add(std::move(c));
       }
       case ExprKind::Binary: {
@@ -2214,10 +2295,9 @@ class Flattener {
       if (nlbind) {
         const Expr& re = result_.model.exprs[rhsE];
         const ExprKind rk = re.kind;
-        const bool whole_cref = rk == ExprKind::Cref && (re.cref.parts.empty() || re.cref.parts.back().subscripts.empty());
         const TypeKind relem = re.ty.element_type().kind;
-        if (whole_cref && relem == cty.kind) {
-          rhs = rhsE;   // x = y（同元素类型，A1/A5/A9/I1）
+        if (rk == ExprKind::Cref && relem == cty.kind) {
+          rhs = rhsE;   // x = y、y = x[2:3]、w = z[1,:]（整取 / 切片同元素类型保持整体，A1/A5/A9/I1、SL1 探针）
         } else if ((rk == ExprKind::Call || rk == ExprKind::TupleElement) && relem == cty.kind) {
           rhs = rhsE;   // x = f(n)：含数组调用的等式整体保留（NFScalarize :343-346；IfExpression11 / FuncUnknownDim3）
         } else if (rk == ExprKind::Array) {
@@ -3014,6 +3094,39 @@ class Flattener {
         if (e.call_suffix.is_valid()) return std::nullopt;   // `f(i).y` 未做
         // size(arr, d)：解析数组组件 arr（任意可变性），求它第 d 维（DimSize1）。
         const Cref& fn = I_.absyn.crefs[e.cref];
+        // size(arr)：各维大小组成的 Integer 向量（evalBuiltinSize，NFCeval；Scalar 的 `scalar(size(rs))`）——函数局部按当前值
+        // 形状，组件按声明维求值。
+        if (fn.parts.size() == 1 && in_.str(fn.parts[0].name) == "size" && e.args.size() == 1 &&
+            !find_scode_element(fn.parts[0].name, scope).is_valid()) {
+          const Exp& ae = I_.absyn.exps[e.args[0]];
+          if (ae.kind != ExpKind::CrefExp) return std::nullopt;
+          const Cref& ac = I_.absyn.crefs[ae.cref];
+          std::vector<CVal> out;
+          if (locals_ && ac.parts.size() == 1 && ac.parts[0].subscripts.empty()) {
+            auto it = locals_->find(ac.parts[0].name.id);
+            if (it != locals_->end()) {
+              for (std::int64_t n : cval_shape(it->second)) out.push_back(CVal::I(n));
+              return out.empty() ? std::nullopt : std::optional<CVal>(CVal::Arr(std::move(out)));
+            }
+          }
+          std::vector<Symbol> anames;
+          for (const CrefPart& p : ac.parts) {
+            if (!p.subscripts.empty()) return std::nullopt;
+            anames.push_back(p.name);
+          }
+          Id<SElement> acomp;
+          ScodeScope ascope;
+          if (!resolve_qual_const(anames, ac.leading_dot, scope, acomp, ascope, /*allow_param=*/true, /*allow_any=*/true))
+            return std::nullopt;
+          std::vector<Id<Exp>> adims = I_.scode.elems[acomp].attr.dims;
+          for (Id<Exp> td : I_.scode.elems[acomp].type.dims) adims.push_back(td);
+          for (Id<Exp> d : adims) {
+            std::optional<CVal> dv = eval_scode(d, ascope, depth + 1, allow_param, used);
+            if (!dv || dv->k != CVal::K::Int) return std::nullopt;
+            out.push_back(*dv);
+          }
+          return out.empty() ? std::nullopt : std::optional<CVal>(CVal::Arr(std::move(out)));
+        }
         if (fn.parts.size() != 1 || in_.str(fn.parts[0].name) != "size" || e.args.size() != 2) {
           if (auto av = eval_array_builtin(e, scope, depth, allow_param, used)) return av;   // zeros/ones/fill/identity
           if (auto rv = eval_reduction(e, scope, depth)) return rv;   // sum/product/min/max(常量数组)
@@ -5808,7 +5921,7 @@ class Flattener {
     }
     Expr e;
     e.kind = ExprKind::Cref;
-    std::vector<std::optional<std::int64_t>> leaf_vals;   // 末段各下标的常量值（已求出的打印成字面量）
+    std::vector<Id<Expr>> leaf_subs;   // 末段各下标的定型结果（invalid = 照常 inst：符号下标）
     NodeId local = c.parts.empty() ? Inst::empty_node() : find_local(enclosing, c.parts[0].name);
     // 命中条件为假被移除的组件 → 在方程/绑定里引用它是错误（omc 报错，ConditionInvalidContext1/2/4）→ SKIP。
     if (local.is_valid() && !I_.nodes[local].is_empty() && cref_removed(prefix, c)) {
@@ -5915,7 +6028,8 @@ class Flattener {
             if (!lit || subs.size() != ldims.size()) {
               set_unsupported("array subscript");
             } else {
-              leaf_vals.assign(subs.size(), std::nullopt);
+              leaf_subs.assign(subs.size(), Id<Expr>{});
+              std::vector<Dimension> sdims;   // 切片下标留下的维（按出现序）→ 引用的数组类型
               for (std::size_t k = 0; k < subs.size(); ++k) {
                 // for-语句符号迭代变量下标：omc 不静态越界检查、保持符号；其中的参数会被标结构参数并代入数组值
                 //（NestedSubscriptFor `x[{1, 2, 3}[i]]`，下标字面量未做）→ SKIP。
@@ -5923,11 +6037,23 @@ class Flattener {
                   if (absyn_refs_param(subs[k], enclosing)) { set_unsupported("parameter in symbolic subscript"); break; }
                   continue;
                 }
+                // 切片 `:` / `a:b` / `{i, j}`（Subscript.WHOLE / SLICE）：求出选中的下标表，引用类型带这一维；标量化时按表
+                // 取元素（SL1 探针：`q = p[{1, 3}]` → `q[2] = p[3]`，`z[2, :] = x` → `z[2,1] = x[1]` …）。
+                const ExpKind sk = I_.absyn.exps[subs[k]].kind;
+                if (sk == ExpKind::Colon || sk == ExpKind::Range || (is_array_ctor(subs[k]) && !is_comprehension(subs[k]))) {
+                  const std::optional<std::vector<std::int64_t>> sel = slice_indices(subs[k], ldims[k], lscope, enclosing);
+                  if (!sel) { set_unsupported("array slice"); break; }
+                  leaf_subs[k] = slice_subscript(sk, *sel, I_.absyn.exps[subs[k]].c.is_valid());
+                  Dimension sd;
+                  sd.kind = DimKind::Integer;
+                  sd.size = static_cast<std::int64_t>(sel->size());
+                  sdims.push_back(sd);
+                  continue;
+                }
                 // `end` = 该维大小；常量下标求值；参数变率的下标是结构参数（typeSubscripts 标 Structural.markSubscript，
                 // NFTyping.mo:2122-2127）→ 带参数求值（frame_value 记结构参数，post-pass 打 final）。都打印成字面量。
-                std::optional<std::int64_t> iv = I_.absyn.exps[subs[k]].kind == ExpKind::End
-                                                     ? std::optional<std::int64_t>(ldims[k])
-                                                     : subscript_int(subs[k], &lscope);
+                std::optional<std::int64_t> iv = sk == ExpKind::End ? std::optional<std::int64_t>(ldims[k])
+                                                                    : subscript_int(subs[k], &lscope);
                 if (!iv && absyn_refs_param(subs[k], enclosing))
                   if (std::optional<CVal> pv = eval_scode(subs[k], lscope, 0, /*allow_param=*/true, nullptr);
                       pv && pv->k == CVal::K::Int)
@@ -5936,8 +6062,9 @@ class Flattener {
                   set_unsupported("array subscript out of range");
                   break;
                 }
-                leaf_vals[k] = *iv;
+                leaf_subs[k] = lit_int(*iv);
               }
+              if (!sdims.empty()) e.ty = Type::array_of(lty, std::move(sdims));
             }
           }
         }
@@ -6006,8 +6133,9 @@ class Flattener {
       const CrefPart& p = c.parts[pi];
       std::vector<Id<Expr>> subs;
       for (std::size_t k = 0; k < p.subscripts.size(); ++k)
-        subs.push_back(pi + 1 == c.parts.size() && k < leaf_vals.size() && leaf_vals[k] ? lit_int(*leaf_vals[k])
-                                                                                       : inst_exp(p.subscripts[k], enclosing, prefix));
+        subs.push_back(pi + 1 == c.parts.size() && k < leaf_subs.size() && leaf_subs[k].is_valid()
+                           ? leaf_subs[k]
+                           : inst_exp(p.subscripts[k], enclosing, prefix));
       e.cref.parts.push_back({p.name, std::move(subs)});
     }
     return add(std::move(e));
@@ -6171,6 +6299,122 @@ class Flattener {
     return builtin_call(e, enclosing, prefix, Symbol{});
   }
 
+  // 模型语境的数组内建：维已知时 omc 展开成数组字面量 / 运算链（ExpandExp + SimplifyExp；B1 探针：`fill(time, 3)` →
+  // `{time, time, time}`、`identity(2)` → `{{1, 0}, {0, 1}}`、`transpose([1, 2; 3, 4])` → `{{1, 3}, {2, 4}}`、`sum(a)` →
+  // `a[1] + a[2] + a[3]`）。fill / zeros / ones / identity / diagonal / transpose / vector → 嵌套数组字面量；sum / product →
+  // 元素的 + / * 链（行主序、左结合）。维实参按结构参数求值（`ones(n)` 把 n 打 final）。不在此列 → invalid（调用方照常）。
+  Id<Expr> model_array_builtin(const Exp& e, std::string_view name, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    const bool fill = name == "fill", zo = name == "zeros" || name == "ones";
+    if (!fill && !zo && name != "identity" && name != "diagonal" && name != "transpose" && name != "vector" &&
+        name != "sum" && name != "product")
+      return {};
+    for (Symbol n : e.arg_names)
+      if (n.is_valid()) { set_unsupported("named function argument"); return lit_int(0); }
+    const std::vector<Id<Exp>> args = e.args;   // 拷贝：inst 期间不持 absyn 引用
+    const std::size_t first_dim = fill ? 1 : 0;
+    if ((fill || zo) ? args.size() <= first_dim : args.size() != 1) { set_unsupported("function arity"); return lit_int(0); }
+    const ScodeScope scope = scode_scope_of(enclosing);
+    // 维 / 元素索引按行主序枚举，elem(idx) 给每个元素（已化简）；嵌套成数组字面量。
+    auto build = [&](const std::vector<std::int64_t>& dims, auto&& elem) -> Id<Expr> {
+      std::vector<std::int64_t> idx;
+      TypeKind kind = TypeKind::Unknown;
+      auto rec = [&](auto& self, std::size_t k) -> Id<Expr> {
+        if (k == dims.size()) {
+          const Id<Expr> x = simplify_expr(elem(idx));
+          if (kind == TypeKind::Unknown) kind = result_.model.exprs[x].ty.kind;
+          return x;
+        }
+        Expr arr;
+        arr.kind = ExprKind::Array;
+        std::vector<Dimension> rest;
+        for (std::size_t j = k; j < dims.size(); ++j) { Dimension d; d.kind = DimKind::Integer; d.size = dims[j]; rest.push_back(d); }
+        for (std::int64_t i = 1; i <= dims[k]; ++i) {
+          idx.push_back(i);
+          arr.args.push_back(self(self, k + 1));
+          idx.pop_back();
+        }
+        arr.ty = Type::array_of(Type::of(kind == TypeKind::Unknown ? TypeKind::Real : kind), std::move(rest));
+        return add(std::move(arr));
+      };
+      return rec(rec, 0);
+    };
+    if (fill || zo) {
+      std::vector<std::int64_t> dims;
+      for (std::size_t i = first_dim; i < args.size(); ++i) {
+        const std::optional<CVal> v = eval_scode(args[i], scope, 0, /*allow_param=*/true, nullptr);
+        if (!v || v->k != CVal::K::Int) { set_unsupported("non-constant fill dimension"); return lit_int(0); }
+        if (v->i < 1) { set_unsupported("empty array"); return lit_int(0); }
+        dims.push_back(v->i);
+      }
+      const Id<Expr> val = fill ? inst_exp(args[0], enclosing, prefix) : lit_int(name == "ones" ? 1 : 0);
+      if (result_.unsupported) return lit_int(0);
+      if (!expr_shape(val).empty()) { set_unsupported("fill of array value"); return lit_int(0); }
+      return build(dims, [&](const std::vector<std::int64_t>&) { return val; });
+    }
+    if (name == "identity") {
+      const std::optional<CVal> v = eval_scode(args[0], scope, 0, /*allow_param=*/true, nullptr);
+      if (!v || v->k != CVal::K::Int || v->i < 1) { set_unsupported("non-constant identity size"); return lit_int(0); }
+      return build({v->i, v->i}, [&](const std::vector<std::int64_t>& ix) { return lit_int(ix[0] == ix[1] ? 1 : 0); });
+    }
+    const Id<Expr> a = inst_exp(args[0], enclosing, prefix);
+    if (result_.unsupported) return lit_int(0);
+    const std::vector<std::int64_t> sh = expr_shape(a);
+    for (std::int64_t n : sh)
+      if (n < 1) { set_unsupported("array builtin of unknown / empty shape"); return lit_int(0); }
+    if (name == "diagonal") {
+      if (sh.size() != 1) { set_unsupported("diagonal of non-vector"); return lit_int(0); }
+      const bool real = expr_elem_kind(a) == TypeKind::Real;
+      return build({sh[0], sh[0]}, [&](const std::vector<std::int64_t>& ix) {
+        return ix[0] == ix[1] ? scalarize(a, {ix[0]}) : (real ? lit_real(0.0) : lit_int(0));
+      });
+    }
+    if (name == "transpose") {
+      if (sh.size() < 2) { set_unsupported("transpose of non-matrix"); return lit_int(0); }
+      std::vector<std::int64_t> td = sh;
+      std::swap(td[0], td[1]);
+      return build(td, [&](const std::vector<std::int64_t>& ix) {
+        std::vector<std::int64_t> src = ix;
+        std::swap(src[0], src[1]);
+        return scalarize(a, src);
+      });
+    }
+    // vector / sum / product：行主序逐元素。
+    std::vector<std::vector<std::int64_t>> all;
+    {
+      std::vector<std::int64_t> ix(sh.size(), 1);
+      if (sh.empty()) { set_unsupported("array builtin of scalar"); return lit_int(0); }
+      for (bool more = true; more;) {
+        all.push_back(ix);
+        std::size_t k = sh.size();
+        while (k > 0) { --k; if (++ix[k] <= sh[k]) break; ix[k] = 1; if (k == 0) more = false; }
+      }
+    }
+    if (name == "vector") {   // 至多一维 > 1（MLS §10.3.3），否则 omc 报错
+      int big = 0;
+      for (std::int64_t n : sh) big += n > 1 ? 1 : 0;
+      if (big > 1) { set_unsupported("vector of matrix"); return lit_int(0); }
+      return build({static_cast<std::int64_t>(all.size())},
+                   [&](const std::vector<std::int64_t>& ix) { return scalarize(a, all[static_cast<std::size_t>(ix[0]) - 1]); });
+    }
+    const BinOp op = name == "sum" ? BinOp::Add : BinOp::Mul;
+    const bool real = expr_elem_kind(a) == TypeKind::Real;
+    Id<Expr> acc;
+    for (const std::vector<std::int64_t>& ix : all) {
+      Id<Expr> x = simplify_expr(scalarize(a, ix));
+      if (result_.unsupported) return lit_int(0);
+      if (real) x = to_real(x);
+      if (!acc.is_valid()) { acc = x; continue; }
+      Expr b;
+      b.kind = ExprKind::Binary;
+      b.bin = op;
+      b.a = acc;
+      b.b = x;
+      b.ty = real ? Type::real() : Type::integer();
+      acc = add(std::move(b));
+    }
+    return simplify_expr(acc);
+  }
+
   // 内建函数调用。as_builtin 有效 = 内建等价的 external 函数（builtin_equiv），按该内建名处理（不论书写名是否限定）。
   Id<Expr> builtin_call(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix, Symbol as_builtin) {
     const Cref& fn = I_.absyn.crefs[e.cref];
@@ -6179,6 +6423,8 @@ class Flattener {
     if (builtin_name == "cardinality") return cardinality_call(e, enclosing, prefix);
     if (builtin_name == "size") return size_call(e, enclosing, prefix);
     if (builtin_name == "scalar") return scalar_call(e, enclosing, prefix);
+    if (!fn_scope_)
+      if (Id<Expr> r = model_array_builtin(e, builtin_name, enclosing, prefix); r.is_valid() || result_.unsupported) return r;
     if (fn_scope_ && (builtin_name == "fill" || builtin_name == "zeros" || builtin_name == "ones"))
       return fill_call(e, builtin_name);
     if (fn_scope_ && e.args.size() == 1 &&

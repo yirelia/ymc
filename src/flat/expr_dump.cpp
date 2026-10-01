@@ -130,7 +130,9 @@ class ExprDumper {
             out_ += '[';
             for (std::size_t k = 0; k < subs.size(); ++k) {
               if (k) out_ += ',';
-              exp(subs[k]);
+              // 下标位置的 Wild = 整维切片 `:`（Subscript.WHOLE；flatten 的 slice_subscript 产出）。
+              if (a_[subs[k]].kind == ExprKind::Wild) out_ += ':';
+              else exp(subs[k]);
             }
             out_ += ']';
           }

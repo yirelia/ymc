@@ -2077,6 +2077,49 @@ YMC_TEST(flatten_constant_and_structural_subscripts) {
   YMC_CHECK_EQ(flatten_src(src), std::string(want));
 }
 
+YMC_TEST(flatten_array_slices) {
+  // 切片下标 `:` / `a:b` / `{i, j}`（Subscript.WHOLE / SLICE）：连续数组绑定保持整体（`y = x[2:3]`、`w = z[1,:]`，下标间无
+  // 空格），参数绑定按切片映射摊到元素（`q[2] = p[3]`），方程逐元素标量化。期望 = omc 1.25.0 实跑 SL2（2026-10-02）。
+  const char* src =
+      "model SL2\n  Real x[3] = {1, 2, 3};\n  Real y[2] = x[2:3];\n  Real z[2,3];\n  Real w[3] = z[1, :];\n"
+      "  Real v[2] = z[:, 2];\n  Real u[2];\n  parameter Real p[3] = {1, 2, 3};\n  parameter Real q[2] = p[{1, 3}];\n"
+      "equation\n  z[1, :] = {1, 2, 3};\n  z[2, :] = x;\n  u[1:2] = x[2:3] .* 2;\nend SL2;\n";
+  const char* want =
+      "class SL2\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real y[1];\n  Real y[2];\n"
+      "  Real z[1,1];\n  Real z[1,2];\n  Real z[1,3];\n  Real z[2,1];\n  Real z[2,2];\n  Real z[2,3];\n"
+      "  Real w[1];\n  Real w[2];\n  Real w[3];\n  Real v[1];\n  Real v[2];\n  Real u[1];\n  Real u[2];\n"
+      "  parameter Real p[1] = 1.0;\n  parameter Real p[2] = 2.0;\n  parameter Real p[3] = 3.0;\n"
+      "  parameter Real q[1] = p[1];\n  parameter Real q[2] = p[3];\n"
+      "equation\n  x = {1.0, 2.0, 3.0};\n  y = x[2:3];\n  w = z[1,:];\n  v = z[:,2];\n"
+      "  z[1,1] = 1.0;\n  z[1,2] = 2.0;\n  z[1,3] = 3.0;\n  z[2,1] = x[1];\n  z[2,2] = x[2];\n  z[2,3] = x[3];\n"
+      "  u[1] = x[2] * 2.0;\n  u[2] = x[3] * 2.0;\nend SL2;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string(want));
+}
+
+YMC_TEST(flatten_model_array_builtins) {
+  // 模型语境的数组内建按 omc 展开（ExpandExp / SimplifyExp）：fill / zeros / ones / identity / diagonal / transpose / vector →
+  // 数组字面量（参数维 `ones(n)` 把 n 打 final），sum / product → 元素运算链，常量 min 折叠。
+  // 期望 = omc 1.25.0 实跑 B2（2026-10-02）。
+  const char* src =
+      "model B2\n  parameter Integer n = 3;\n  Real x[3] = fill(1.0, 3);\n  parameter Real p[3] = fill(2, 3);\n"
+      "  Real y[2,2] = zeros(2, 2);\n  Real z[n] = ones(n);\n  Real a[3];\n  Real s = sum(a);\n  Real t = sum(a[1:2]);\n"
+      "  Real pr = product(a);\n  Real mn = min({1, 2, 3});\n  Real m[2,2] = identity(2);\n"
+      "  Real tr[2,2] = transpose([1, 2; 3, 4]);\n  Real d[2,2] = diagonal({1, 2});\n  Real w[3] = fill(time, 3);\n"
+      "  Real sc = scalar({{5}});\n  Real v[2] = vector([1; 2]);\nequation\n  a = fill(time, 3);\nend B2;\n";
+  const char* want =
+      "class B2\n  final parameter Integer n = 3;\n  Real x[1];\n  Real x[2];\n  Real x[3];\n"
+      "  parameter Real p[1] = 2.0;\n  parameter Real p[2] = 2.0;\n  parameter Real p[3] = 2.0;\n"
+      "  Real y[1,1];\n  Real y[1,2];\n  Real y[2,1];\n  Real y[2,2];\n  Real z[1];\n  Real z[2];\n  Real z[3];\n"
+      "  Real a[1];\n  Real a[2];\n  Real a[3];\n  Real s = a[1] + a[2] + a[3];\n  Real t = a[1] + a[2];\n"
+      "  Real pr = a[1] * a[2] * a[3];\n  Real mn = 1.0;\n  Real m[1,1];\n  Real m[1,2];\n  Real m[2,1];\n  Real m[2,2];\n"
+      "  Real tr[1,1];\n  Real tr[1,2];\n  Real tr[2,1];\n  Real tr[2,2];\n  Real d[1,1];\n  Real d[1,2];\n  Real d[2,1];\n"
+      "  Real d[2,2];\n  Real w[1];\n  Real w[2];\n  Real w[3];\n  Real sc = 5.0;\n  Real v[1];\n  Real v[2];\n"
+      "equation\n  x = {1.0, 1.0, 1.0};\n  y = {{0.0, 0.0}, {0.0, 0.0}};\n  z = {1.0, 1.0, 1.0};\n"
+      "  m = {{1.0, 0.0}, {0.0, 1.0}};\n  tr = {{1.0, 3.0}, {2.0, 4.0}};\n  d = {{1.0, 0.0}, {0.0, 2.0}};\n"
+      "  w = {time, time, time};\n  v = {1.0, 2.0};\n  a[1] = time;\n  a[2] = time;\n  a[3] = time;\nend B2;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string(want));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);
