@@ -486,5 +486,9 @@
 "OperationVectorProduct1.mo",
 "When2.mo",
 "When3.mo",
-"WhenCondition2.mo"
+"WhenCondition2.mo",
+"ExternalFunctionImplicit2.mo",
+"FunctionMultiOutput1.mo",
+"FunctionMultiOutput5.mo",
+"Wild1.mo"
 ]

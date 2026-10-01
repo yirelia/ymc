@@ -881,10 +881,45 @@ class Flattener {
                         std::vector<Id<FlatStatement>>& out) {
     const SStatement& st = I_.scode.stmts[sid];   // SCode 只读（flatten 期不增），引用稳定
     if (st.kind == SStmtKind::If) return append_if_statement(st, enclosing, prefix, out);
+    if (st.kind == SStmtKind::Assign && is_tuple_target(st.a)) {   // `(a, b) := f(…)`：常量 → 逐元素赋值；否则元组赋值
+      std::vector<std::pair<Id<Expr>, Id<Expr>>> pairs;
+      if (!tuple_target(st.a, st.b, enclosing, prefix, pairs)) return false;
+      for (const auto& [l, r] : pairs) {
+        if (!tuple_assign_target_ok(l)) return false;
+        FlatStatement fs;
+        fs.kind = FlatStmtKind::Assign;
+        fs.a = l;
+        fs.b = r;
+        fs.loc = st.loc;
+        if (st.cmt.str.is_valid()) fs.comment = in_.intern(unescape_modelica_string(in_.str(st.cmt.str)));
+        out.push_back(result_.model.add_stmt(std::move(fs)));
+      }
+      return true;
+    }
     const Id<FlatStatement> s = collect_statement(sid, enclosing, prefix);
     if (result_.unsupported) return false;
     if (result_.model.stmts[s].kind == FlatStmtKind::For && result_.model.stmts[s].body.empty()) return true;
     out.push_back(s);
+    return true;
+  }
+  // 元组赋值的目标（标量 cref 或元组里的各非空位）须是可赋值变量：已发射的 Var（when 体内另可 discrete），同标量赋值规则。
+  bool tuple_assign_target_ok(Id<Expr> l) {
+    const Expr le = result_.model.exprs[l];   // 拷贝
+    if (le.kind == ExprKind::Tuple) {
+      for (Id<Expr> x : le.args)
+        if (result_.model.exprs[x].kind != ExprKind::Wild && !tuple_assign_target_ok(x)) return false;
+      return true;
+    }
+    std::vector<Symbol> nm;
+    for (const auto& p : le.cref.parts) {
+      if (!p.subscripts.empty()) { set_unsupported("tuple target"); return false; }
+      nm.push_back(p.name);
+    }
+    const FlatVariable* lv = find_scalar_flat_var(nm);
+    if (!lv || !(lv->var_kind == FlatVarKind::Var || (alg_in_when_ > 0 && lv->var_kind == FlatVarKind::Discrete))) {
+      set_unsupported("algorithm assignment to non-continuous variable");
+      return false;
+    }
     return true;
   }
   // if 语句（simplifyIfStmtBranches，NFSimplifyModel.mo:575-616；else 按条件 true 的末分支处理）：条件化简后为 false 的
@@ -1240,6 +1275,76 @@ class Flattener {
   }
 
   // 翻译一条方程（v1：Equals + 攒 connect 待 run() 展开；其余 kind 标 unsupported）。
+  // 元组目标 `(a, b, …)`：≥ 2 个元素的 Tuple（单元素 Tuple 只是括号；空位 = 空 Tuple 节点）。
+  bool is_tuple_target(Id<Exp> lhs) const {
+    return lhs.is_valid() && I_.absyn.exps[lhs].kind == ExpKind::Tuple && I_.absyn.exps[lhs].args.size() >= 2;
+  }
+  // 元组赋值 / 元组方程 `(a, , c) := f(…)`、`(a, b) = f(…)`（NFSimplifyModel.simplifyTupleElement :430-464）：实参全常量 →
+  // 用户函数求值后按元素拆成 (目标, 值) 对，空位跳过（T1 探针 `(p, q) = f(1.0)` → `p = 2.0; q = 3.0;`、`(, u) := f(2.0)` →
+  // `u := 6.0;`）；否则单对 (元组, 调用)，空位打 `_`（T2 探针 `(w, _, k) = f(time)`）。目标须是标量 cref，类型与对应输出
+  // 相容（常量值 Integer → Real 提升；符号形须同类型）。其余 → SKIP。
+  bool tuple_target(Id<Exp> ltuple, Id<Exp> rhs, NodeId enclosing, const std::vector<Symbol>& prefix,
+                    std::vector<std::pair<Id<Expr>, Id<Expr>>>& out) {
+    const std::vector<Id<Exp>> elems = I_.absyn.exps[ltuple].args;   // 拷贝
+    if (I_.absyn.exps[rhs].kind != ExpKind::Call) { set_unsupported("tuple assignment rhs"); return false; }
+    const std::size_t n = elems.size();
+    std::vector<Id<Expr>> lhs(n);
+    for (std::size_t i = 0; i < n; ++i) {
+      const Exp& x = I_.absyn.exps[elems[i]];
+      if (x.kind == ExpKind::Tuple && x.args.empty()) continue;   // 空位
+      lhs[i] = simplify_expr(inst_exp(elems[i], enclosing, prefix));
+      if (result_.unsupported) return false;
+      if (result_.model.exprs[lhs[i]].kind != ExprKind::Cref || !expr_shape(lhs[i]).empty()) {
+        set_unsupported("tuple target");
+        return false;
+      }
+    }
+    std::vector<CVal> outs;
+    const Exp call = I_.absyn.exps[rhs];   // 拷贝
+    if (eval_user_call(call, scode_scope_of(enclosing), 0, /*allow_param=*/false, &outs) && outs.size() >= n) {
+      for (std::size_t i = 0; i < n; ++i) {
+        if (!lhs[i].is_valid()) continue;
+        if (is_arr(outs[i]) || outs[i].k == CVal::K::Record) { set_unsupported("tuple element value"); return false; }
+        Id<Expr> v = literal_of(outs[i]);
+        const TypeKind lk = result_.model.exprs[lhs[i]].ty.kind, vk = result_.model.exprs[v].ty.kind;
+        if (lk == TypeKind::Real && vk == TypeKind::Integer) v = to_real(v);
+        else if (lk != vk) { set_unsupported("tuple element type mismatch"); return false; }
+        out.push_back({lhs[i], v});
+      }
+      return true;
+    }
+    Id<Expr> c = inst_exp(rhs, enclosing, prefix);   // 多输出调用在表达式里包成 TupleElement(调用, 1)
+    if (result_.unsupported) return false;
+    if (result_.model.exprs[c].kind == ExprKind::TupleElement) c = result_.model.exprs[c].a;
+    if (result_.model.exprs[c].kind != ExprKind::Call) { set_unsupported("tuple call"); return false; }
+    std::vector<TypeKind> okinds;   // 被调函数的输出元素类型（按声明序）
+    {
+      const std::vector<Symbol> cname = result_.model.exprs[c].call_name;
+      for (const FlatFunction& f : result_.model.functions)
+        if (f.name == cname) {
+          for (const FlatFuncParam& p : f.params)
+            if (p.direction == FlatDirection::Output) okinds.push_back(p.ty.is_array() ? TypeKind::Unknown : p.ty.kind);
+          break;
+        }
+    }
+    if (okinds.size() < n) { set_unsupported("tuple arity"); return false; }
+    Expr t;
+    t.kind = ExprKind::Tuple;
+    t.ty = Type::real();
+    for (std::size_t i = 0; i < n; ++i) {
+      if (!lhs[i].is_valid()) {
+        Expr w;
+        w.kind = ExprKind::Wild;
+        t.args.push_back(add(std::move(w)));
+        continue;
+      }
+      if (result_.model.exprs[lhs[i]].ty.kind != okinds[i]) { set_unsupported("tuple element type mismatch"); return false; }
+      t.args.push_back(lhs[i]);
+    }
+    out.push_back({add(std::move(t)), c});
+    return true;
+  }
+
   void collect_equation(Id<SEquation> eid, NodeId enclosing, const std::vector<Symbol>& prefix, const PSubs& psubs,
                         bool is_initial) {
     cur_psubs_ = psubs;   // cref 前缀改写用（本类方程里的引用带 `a[i]` 段下标）
@@ -1373,6 +1478,23 @@ class Flattener {
     }
     if (eq.kind != SEqKind::Equals) {
       set_unsupported("non-equality equation (reinit…)");
+      return;
+    }
+    if (is_tuple_target(eq.a)) {   // `(a, b) = f(…)`：常量 → 逐元素方程；否则保留元组方程
+      std::vector<std::pair<Id<Expr>, Id<Expr>>> pairs;
+      if (!tuple_target(eq.a, eq.b, enclosing, prefix, pairs)) return;
+      for (const auto& [l, r] : pairs) {
+        if (result_.model.exprs[l].kind != ExprKind::Tuple) { emit_scalar_equality(l, r, eq.loc, eq.cmt, is_initial); continue; }
+        FlatEquation fe;
+        fe.kind = FlatEqKind::Equality;
+        fe.a = l;
+        fe.b = r;
+        fe.loc = eq.loc;
+        if (eq.cmt.str.is_valid()) fe.comment = in_.intern(unescape_modelica_string(in_.str(eq.cmt.str)));
+        const Id<FlatEquation> id = result_.model.add_eq(std::move(fe));
+        if (is_initial) result_.model.initial_equations.push_back(id);
+        else result_.model.equations.push_back(id);
+      }
       return;
     }
     array_call_ok_ = I_.absyn.exps[eq.a].kind == ExpKind::Call;   // 等式一侧整个是调用（见 array_call_ok_）
@@ -5429,7 +5551,9 @@ class Flattener {
   // （`R(2)`，FuncDefaultArg4）。任何超范围 → nullopt（调用方 SKIP / 落回符号调用）。
   // allow_param：显式实参 / 别名修饰可取 parameter 的值（结构语境）；类型化表达式路径传 false——参数实参的调用变率是
   // parameter，omc 不求值（YmcFnPar1 探针：`g(p)` 保留）。
-  std::optional<CVal> eval_user_call(const Exp& call, const ScodeScope& scope, int depth, bool allow_param = true) {
+  // all_outputs 非空：另把全部输出（按声明序、各自按类型强转）填进去（元组赋值 / 元组方程 `(a, b) := f(…)` 用）。
+  std::optional<CVal> eval_user_call(const Exp& call, const ScodeScope& scope, int depth, bool allow_param = true,
+                                     std::vector<CVal>* all_outputs = nullptr) {
     if (depth > 100) return std::nullopt;
     // 实参在调用处求值（可用实例帧）；函数体 / 记录构造在定义处求值，实例帧不适用（函数不能引用模型参数）。
     struct FrameOff {
@@ -5600,11 +5724,21 @@ class Flattener {
       const Flow f = exec_body(sig.alg->stmts, fscope, depth + 1);
       if (f == Flow::Fail || f == Flow::Break) return fail();   // 顶层 break（不在循环内）是错误（Break2）→ SKIP
     }
-    // 读首个输出。
+    // 读首个输出（all_outputs：全部输出，任一读不到 → 失败）。
     const SElement& oel = I_.scode.elems[sig.outputs[0]];
     auto it = env.find(oel.name.id);
     std::optional<CVal> result;
     if (it != env.end()) result = coerce_cval(it->second, oel.type.path);
+    if (all_outputs && result) {
+      all_outputs->clear();
+      for (Id<SElement> o : sig.outputs) {
+        const SElement& oe = I_.scode.elems[o];
+        auto ot = env.find(oe.name.id);
+        std::optional<CVal> ov = ot != env.end() ? coerce_cval(ot->second, oe.type.path) : std::nullopt;
+        if (!ov || ov->k == CVal::K::Undef) { result.reset(); break; }
+        all_outputs->push_back(std::move(*ov));
+      }
+    }
     restore();
     return result;
   }

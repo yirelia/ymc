@@ -2183,6 +2183,26 @@ YMC_TEST(flatten_when_condition_forms) {
   YMC_CHECK_EQ(flatten_src(src), std::string(want));
 }
 
+YMC_TEST(flatten_tuple_targets) {
+  // 元组方程 / 元组赋值（NFSimplifyModel.simplifyTupleElement :430-464）：常量实参 → 求值后逐元素拆开（空位跳过）；否则保留
+  // 元组形、空位打 `_`；单元素括号 `(v)` 只是括号 → 取首输出 `f(time)[1]`。期望 = omc 1.25.0 实跑 T1 / T2（2026-10-02）。
+  const char* f1 = "function f\n  input Real x;\n  output Real a = x * 2;\n  output Real b = x * 3;\nend f;\n";
+  YMC_CHECK_EQ(flatten_src((std::string(f1) +
+                            "model T1\n  Real p, q, r, s, u, v;\nequation\n  (p, q) = f(1.0);\n  (r, s) = f(time);\n"
+                            "algorithm\n  (u, v) := f(time);\n  (, u) := f(2.0);\nend T1;\n").c_str()),
+               std::string("function f\n  input Real x;\n  output Real a = x * 2.0;\n  output Real b = x * 3.0;\nend f;\n\n"
+                           "class T1\n  Real p;\n  Real q;\n  Real r;\n  Real s;\n  Real u;\n  Real v;\nequation\n"
+                           "  p = 2.0;\n  q = 3.0;\n  (r, s) = f(time);\nalgorithm\n  (u, v) := f(time);\n  u := 6.0;\nend T1;\n"));
+  const char* f2 =
+      "function f\n  input Real x;\n  output Real a = x * 2;\n  output Real b = x * 3;\n  output Integer c = 1;\nend f;\n";
+  YMC_CHECK_EQ(flatten_src((std::string(f2) +
+                            "model T2\n  Real u, v, w;\n  Integer k;\nequation\n  (w, , k) = f(time);\nalgorithm\n"
+                            "  (, u) := f(time);\n  (v) := f(time);\nend T2;\n").c_str()),
+               std::string("function f\n  input Real x;\n  output Real a = x * 2.0;\n  output Real b = x * 3.0;\n"
+                           "  output Integer c = 1;\nend f;\n\nclass T2\n  Real u;\n  Real v;\n  Real w;\n  Integer k;\n"
+                           "equation\n  (w, _, k) = f(time);\nalgorithm\n  (_, u) := f(time);\n  v := f(time)[1];\nend T2;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

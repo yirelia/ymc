@@ -848,6 +848,9 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
     - [x] (58i) when 条件（2026-10-02）：sample(a, b) / change(x) / edge(b)、条件向量 `{c1, c2}`、Boolean 数组 cref 按元素展开
           成条件向量（`when b` → `when {b[1], b[2], b[3]}`，W1 探针）；方程与算法的 when 共用。not initial()（omc 告警）仍 SKIP。
           → 全 scodeinst PASS 391→394、nf-live 382→388（FAIL 0）；+1 单测（157）。
+    - [x] (58j) 元组方程 / 元组赋值（2026-10-02）：`(a, , c) := f(…)` / `(a, b) = f(…)` 实参全常量 → 用户函数求值后按
+          simplifyTupleElement 逐元素拆开（空位跳过）；否则保留元组形、空位打 `_`（T1 / T2 探针）。求值器可取全部输出。
+          → 全 scodeinst PASS 394→398、nf-live 388→397（FAIL 0）；+1 单测（158）。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
