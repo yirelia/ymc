@@ -2146,6 +2146,26 @@ YMC_TEST(flatten_parameter_comprehension_binding) {
   YMC_CHECK_EQ(flatten_src(src), std::string(want));
 }
 
+YMC_TEST(flatten_algorithm_control_statements) {
+  // 模型算法段的 if / while / break / when / assert（NFFlatten.flattenStatement 照搬结构）；if 的常量条件按
+  // simplifyIfStmtBranches（NFSimplifyModel.mo:575-616）化简：false 分支删、首个 true 分支去 if、后续 true 变 else；for 范围的
+  // 参数是结构参数（typeRange :2455-2460 → `1:3`、n 打 final）。期望 = omc 1.25.0 实跑 AS1（2026-10-02）。
+  const char* src =
+      "model AS1\n  Real r;\n  Real x;\n  parameter Real v[3] = {1, -2, 3};\n  parameter Integer n = 3;\n  Integer i;\n"
+      "algorithm\n  if false then\n    r := 1;\n  end if;\n  if true then\n    r := 1.5;\n  else\n    r := 2.1;\n  end if;\n"
+      "  if time > 0.5 then\n    r := 3;\n  elseif true then\n    r := 4;\n  else\n    r := 5;\n  end if;\n  x := 0;\n"
+      "  for k in 1:n loop\n    if v[k] > 0 then\n      x := x + v[k];\n    end if;\n  end for;\n  i := 0;\n"
+      "  while i < 3 loop\n    i := i + 1;\n    if i > 1 then\n      break;\n    end if;\n  end while;\n"
+      "  when x > 2 then\n    r := 0;\n  end when;\n  assert(x < 10, \"too big\");\nend AS1;\n";
+  const char* want =
+      "class AS1\n  Real r;\n  Real x;\n  parameter Real v[1] = 1.0;\n  parameter Real v[2] = -2.0;\n  parameter Real v[3] = 3.0;\n"
+      "  final parameter Integer n = 3;\n  Integer i;\nalgorithm\n  r := 1.5;\n  if time > 0.5 then\n    r := 3.0;\n  else\n"
+      "    r := 4.0;\n  end if;\n  x := 0.0;\n  for k in 1:3 loop\n    if v[k] > 0.0 then\n      x := x + v[k];\n    end if;\n"
+      "  end for;\n  i := 0;\n  while i < 3 loop\n    i := i + 1;\n    if i > 1 then\n      break;\n    end if;\n"
+      "  end while;\n  when x > 2.0 then\n    r := 0.0;\n  end when;\n  assert(x < 10.0, \"too big\");\nend AS1;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string(want));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

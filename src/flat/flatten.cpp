@@ -866,21 +866,76 @@ class Flattener {
     cur_psubs_ = psubs;   // cref 前缀改写（与 collect_equation 一致：本段引用带 `a[i]` 段下标）
     FlatAlgorithm fa;
     fa.is_initial = is_initial;
-    for (Id<SStatement> sid : alg.stmts) {
-      Id<FlatStatement> fs = collect_statement(sid, enclosing, prefix);
-      if (result_.unsupported) return;   // 有语句未做 → 放弃整模型（保 FAIL=0，不产半截算法段）
-      fa.stmts.push_back(fs);
-    }
+    alg_initial_ = is_initial;
+    for (Id<SStatement> sid : alg.stmts)
+      if (!append_statement(sid, enclosing, prefix, fa.stmts)) return;   // 有语句未做 → 放弃整模型（保 FAIL=0）
+    alg_initial_ = false;
     if (fa.stmts.empty()) return;   // 空段不产关键字（dumper flat_dump.cpp:129 也跳空段）
     if (is_initial) result_.model.initial_algorithms.push_back(std::move(fa));
     else result_.model.algorithms.push_back(std::move(fa));
+  }
+
+  // 追加一条算法语句的压平结果（0..n 条，NFSimplifyModel.simplifyStatement :304-382）：if 语句化简常量条件（可能整条消失
+  // 或只剩某分支体），体为空的 for 删去；其余语句一条。失败 → unsupported，返回 false。
+  bool append_statement(Id<SStatement> sid, NodeId enclosing, const std::vector<Symbol>& prefix,
+                        std::vector<Id<FlatStatement>>& out) {
+    const SStatement& st = I_.scode.stmts[sid];   // SCode 只读（flatten 期不增），引用稳定
+    if (st.kind == SStmtKind::If) return append_if_statement(st, enclosing, prefix, out);
+    const Id<FlatStatement> s = collect_statement(sid, enclosing, prefix);
+    if (result_.unsupported) return false;
+    if (result_.model.stmts[s].kind == FlatStmtKind::For && result_.model.stmts[s].body.empty()) return true;
+    out.push_back(s);
+    return true;
+  }
+  // if 语句（simplifyIfStmtBranches，NFSimplifyModel.mo:575-616；else 按条件 true 的末分支处理）：条件化简后为 false 的
+  // 分支删去；为 true 的分支若在最前 → 去掉 if、只留其体，否则成为 else 并丢弃其后分支；没有分支留下 → 整条消失
+  //（AlgorithmElseOpt）。被删分支的体照样翻译（未做的语句仍 SKIP）。
+  bool append_if_statement(const SStatement& st, NodeId enclosing, const std::vector<Symbol>& prefix,
+                           std::vector<Id<FlatStatement>>& out) {
+    FlatStatement fs;
+    fs.kind = FlatStmtKind::If;
+    fs.loc = st.loc;
+    if (st.cmt.str.is_valid()) fs.comment = in_.intern(unescape_modelica_string(in_.str(st.cmt.str)));
+    auto body = [&](const std::vector<Id<SStatement>>& in, std::vector<Id<FlatStatement>>& b) -> bool {
+      ++alg_depth_;
+      bool ok = true;
+      for (Id<SStatement> x : in)
+        if (!append_statement(x, enclosing, prefix, b)) { ok = false; break; }
+      --alg_depth_;
+      return ok;
+    };
+    bool closed = false;   // 遇到条件 true 的分支（其后全丢）
+    for (const SStmtBranch& br : st.branches) {
+      const Id<Expr> c = simplify_expr(inst_exp(br.cond, enclosing, prefix));
+      if (result_.unsupported) return false;
+      if (result_.model.exprs[c].ty.kind != TypeKind::Boolean) { set_unsupported("algorithm condition type"); return false; }
+      std::vector<Id<FlatStatement>> b;
+      if (!body(br.body, b)) return false;
+      const Expr& ce = result_.model.exprs[c];
+      if (ce.kind == ExprKind::BoolLit && !ce.bval) continue;
+      if (ce.kind == ExprKind::BoolLit && ce.bval) {
+        if (fs.branches.empty()) { out.insert(out.end(), b.begin(), b.end()); return true; }
+        fs.else_body = std::move(b);
+        closed = true;
+        break;
+      }
+      fs.branches.push_back({c, std::move(b)});
+    }
+    if (!closed) {   // 原 else = 条件 true 的末分支
+      std::vector<Id<FlatStatement>> b;
+      if (!body(st.else_body, b)) return false;
+      if (fs.branches.empty()) { out.insert(out.end(), b.begin(), b.end()); return true; }
+      fs.else_body = std::move(b);
+    }
+    out.push_back(result_.model.add_stmt(std::move(fs)));
+    return true;
   }
 
   // 翻译一条语句（v1：只做标量赋值 `cref := expr`，目标须是已发射的连续变量；其余 kind/目标 → SKIP 保 FAIL=0）。
   Id<FlatStatement> collect_statement(Id<SStatement> sid, NodeId enclosing, const std::vector<Symbol>& prefix) {
     const SStatement& st = I_.scode.stmts[sid];
     if (st.kind == SStmtKind::For) return collect_for_statement(st, enclosing, prefix);
-    if (st.kind != SStmtKind::Assign) { set_unsupported("algorithm statement"); return {}; }
+    if (st.kind != SStmtKind::Assign) return collect_control_statement(st, enclosing, prefix);
     // LHS 解析成 flat cref。常量目标已被 cref() 内联成字面量 → 非 Cref → 落到下面的目标校验 SKIP。
     Id<Expr> lhs = simplify_expr(inst_exp(st.a, enclosing, prefix));
     if (result_.unsupported) return {};
@@ -897,9 +952,13 @@ class Flattener {
         }
       }
     }
-    // 目标须是已发射的连续变量（Var）：标量取 find_scalar_flat_var；数组元素取 find_array_flat_var（标量化成 x[1..n]）。
+    // 目标须是已发射的变量（Var；when 语句体里另可是 discrete）：标量取 find_scalar_flat_var；数组元素取 find_array_flat_var
+    //（标量化成 x[1..n]）。参数 / 常量目标 → omc 报错 → SKIP。
     const FlatVariable* lv = array_elem ? find_array_flat_var(lname) : find_scalar_flat_var(lname);
-    if (!lv || lv->var_kind != FlatVarKind::Var) { set_unsupported("algorithm assignment to non-continuous variable"); return {}; }
+    if (!lv || !(lv->var_kind == FlatVarKind::Var || (alg_in_when_ > 0 && lv->var_kind == FlatVarKind::Discrete))) {
+      set_unsupported("algorithm assignment to non-continuous variable");
+      return {};
+    }
     const TypeKind ta = lv->ty.kind;   // 先取（下面 inst_exp/to_real 会往 arena add，勿跨调用持引用）
     Id<Expr> rhs = simplify_expr(inst_exp(st.b, enclosing, prefix));
     if (result_.unsupported) return {};
@@ -954,6 +1013,28 @@ class Flattener {
     if (!st.a.is_valid()) { set_unsupported("implicit-range for statement"); return {}; }   // 隐式范围 `for i loop` 暂缓
     Id<Expr> range = simplify_expr(inst_exp(st.a, enclosing, prefix));
     if (result_.unsupported) return {};
+    // 参数变率的范围是结构的（typeRange 对 ≤ PARAMETER 的范围调 Structural.markExp，NFTyping.mo:2455-2460）：参数打 final、
+    // 范围代入值（SumVectorForIf `for i in 1:n` → `1:5`）。
+    if (absyn_refs_param(st.a, enclosing)) {
+      const Exp re = I_.absyn.exps[st.a];   // 拷贝
+      const ScodeScope sc = scode_scope_of(enclosing);
+      auto ival = [&](Id<Exp> x) -> Id<Expr> {
+        std::optional<CVal> v = eval_scode(x, sc, 0, /*allow_param=*/true, nullptr);
+        return v && v->k == CVal::K::Int ? lit_int(v->i) : Id<Expr>{};
+      };
+      if (re.kind != ExpKind::Range) { set_unsupported("parameter for-statement range"); return {}; }
+      Expr r;
+      r.kind = ExprKind::Range;
+      r.ty = Type::integer();
+      r.a = ival(re.a);
+      r.b = ival(re.b);
+      if (re.c.is_valid()) r.c = ival(re.c);
+      if (!r.a.is_valid() || !r.b.is_valid() || (re.c.is_valid() && !r.c.is_valid())) {
+        set_unsupported("parameter for-statement range");
+        return {};
+      }
+      range = add(std::move(r));
+    }
     TypeKind ek;   // 迭代变量类型 = 范围元素类型（数组范围取首元素类型；Range 的 ty 已是元素类型）
     {
       const Expr& re = result_.model.exprs[range];
@@ -971,13 +1052,84 @@ class Flattener {
     fs.a = range;
     fs.loc = st.loc;
     bool ok = true;
-    for (Id<SStatement> bid : st.body) {
-      Id<FlatStatement> bs = collect_statement(bid, enclosing, prefix);
-      if (result_.unsupported) { ok = false; break; }
-      fs.body.push_back(bs);
-    }
+    ++alg_loops_;
+    ++alg_depth_;
+    for (Id<SStatement> bid : st.body)
+      if (!append_statement(bid, enclosing, prefix, fs.body)) { ok = false; break; }
+    --alg_depth_;
+    --alg_loops_;
     if (had) stmt_iters_[id] = prev; else stmt_iters_.erase(id);   // 恢复
     if (!ok) return {};
+    return result_.model.add_stmt(std::move(fs));
+  }
+
+  // 模型算法段的控制语句（NFFlatten.flattenStatement：结构照搬、只改写 cref；Algorithm1 / Break / WhenStatement1 /
+  // StaticAssertSuccess 探针）：if / while / when / break（须在循环里，BREAK_OUTSIDE_LOOP）/ assert。when 语句不许嵌套、
+  // 不许在 if / 循环里（MLS §11.2.7）、不许在 initial algorithm；reinit 在算法段 omc 报错（需 allowNonStandardModelica）；
+  // 其余（return / 调用语句 / terminate / 元组赋值）未做 → SKIP。
+  Id<FlatStatement> collect_control_statement(const SStatement& st, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    FlatStatement fs;
+    fs.loc = st.loc;
+    if (st.cmt.str.is_valid()) fs.comment = in_.intern(unescape_modelica_string(in_.str(st.cmt.str)));
+    auto cond = [&](Id<Exp> c) -> Id<Expr> {
+      const Id<Expr> x = simplify_expr(inst_exp(c, enclosing, prefix));
+      if (!result_.unsupported && result_.model.exprs[x].ty.kind != TypeKind::Boolean) set_unsupported("algorithm condition type");
+      return x;
+    };
+    auto body = [&](const std::vector<Id<SStatement>>& in, std::vector<Id<FlatStatement>>& out) -> bool {
+      ++alg_depth_;
+      bool ok = true;
+      for (Id<SStatement> b : in)
+        if (!append_statement(b, enclosing, prefix, out)) { ok = false; break; }
+      --alg_depth_;
+      return ok;
+    };
+    switch (st.kind) {   // if 由 append_if_statement 处理（化简常量条件）
+      case SStmtKind::While: {
+        fs.kind = FlatStmtKind::While;
+        fs.a = cond(st.a);
+        if (result_.unsupported) return {};
+        ++alg_loops_;
+        const bool ok = body(st.body, fs.body);
+        --alg_loops_;
+        if (!ok) return {};
+        break;
+      }
+      case SStmtKind::Break:
+        if (alg_loops_ == 0) { set_unsupported("break outside loop"); return {}; }
+        fs.kind = FlatStmtKind::Break;
+        break;
+      case SStmtKind::When:
+        if (alg_depth_ > 0 || alg_in_when_ > 0 || alg_initial_) { set_unsupported("when statement placement"); return {}; }
+        fs.kind = FlatStmtKind::When;
+        for (const SStmtBranch& br : st.branches) {
+          FlatStmtBranch fb;
+          fb.cond = cond(br.cond);
+          if (result_.unsupported) return {};
+          if (!when_cond_ok(fb.cond)) { set_unsupported("when condition form"); return {}; }
+          ++alg_in_when_;
+          const bool ok = body(br.body, fb.body);
+          --alg_in_when_;
+          if (!ok) return {};
+          fs.branches.push_back(std::move(fb));
+        }
+        break;
+      case SStmtKind::Assert:
+        fs.kind = FlatStmtKind::Assert;
+        fs.a = cond(st.a);
+        if (result_.unsupported) return {};
+        fs.b = simplify_expr(inst_exp(st.b, enclosing, prefix));
+        if (result_.unsupported) return {};
+        if (result_.model.exprs[fs.b].ty.kind != TypeKind::String) { set_unsupported("assert message type"); return {}; }
+        if (st.c.is_valid() && st.c.raw != I_.scode.assertion_level_error.raw) {   // 显式非默认 level
+          fs.c = simplify_expr(inst_exp(st.c, enclosing, prefix));
+          if (result_.model.exprs[fs.c].ty.kind != TypeKind::Enumeration) { set_unsupported("assert level type"); return {}; }
+        }
+        break;
+      default:
+        set_unsupported("algorithm statement");
+        return {};
+    }
     return result_.model.add_stmt(std::move(fs));
   }
 
@@ -9043,6 +9195,12 @@ class Flattener {
   std::unordered_map<std::uint32_t, CVal>* locals_ = nullptr;   // 用户函数解释期的局部环境（输入/局部/输出名→值）
   std::unordered_set<std::uint32_t>* input_names_ = nullptr;    // 当前函数的输入名（禁止对其赋值，AssignInput1）
   std::unordered_map<std::uint32_t, std::int64_t> loop_vars_;   // for 方程展开期的迭代变量→值（cref/下标解析）
+  // 模型算法段的语句上下文：循环深度（break 合法性）、控制结构嵌套深度 / when 体内（when 语句放置规则、discrete 赋值）、
+  // 是否 initial algorithm。
+  int alg_loops_ = 0;
+  int alg_depth_ = 0;
+  int alg_in_when_ = 0;
+  bool alg_initial_ = false;
   std::unordered_map<std::uint32_t, TypeKind> stmt_iters_;      // for **语句**（KEPT loop）的迭代变量→元素类型（符号，不内联）
   // 函数体发射语境（FnCtxGuard 设 / 恢复；fn_scope_ 非空 = 正在发射函数体）。
   std::unordered_map<std::uint32_t, Type> func_params_;         // 形参 / 局部名 → 类型（含维，cref 解析成 kFnLocal 裸名）
