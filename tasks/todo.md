@@ -869,6 +869,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           ≤ parameter 且求值为 0 → 只留 e（simplifyDelay，NFSimplifyExp.mo:577-595；判 0 的求值不标结构参数）；parameter 形参给了
           变量 → SKIP。→ 全 scodeinst PASS 408→409（FuncBuiltinDelay，open-questions 一条随之了结一半）、nf-live 406→411；
           +1 单测（162）。
+    - [x] (58o) 记录 cref 整体绑定 + 字段修饰合并（2026-10-02）：`R r2 = r1` 按 splitRecordCref（NFFlatten.mo:1027-1053）
+          拆成字段 cref 修饰 `r2(x = r1.x, …)`（源须是本作用域记录标量、含目标全部字段；常量源经字段常量折叠 = evalExp 效果）；
+          整体绑定 + 字段修饰：字段绑定一律取整体绑定（含构造缺省实参，RM2/RM4 探针），字段属性合并（同作用域并入，异作用域
+          SKIP）；顺带修掉记录常量折叠路丢字段属性（`R d(y(min = 0)) = R(4, 5)` 曾丢 min）。不同记录类的等式按
+          matchComplexTypes 分类：同名同序原样，要 typeCastRecord → SKIP（RecordOrder2 由此从 SKIP 掉成 FAIL 的口子堵上）。
+          if 式记录绑定（参数条件选支 + 标结构）留后续。→ 全 scodeinst PASS 409→412、nf-live 411→413（FAIL 0）；+2 单测（164）。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

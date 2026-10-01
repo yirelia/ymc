@@ -2295,6 +2295,56 @@ YMC_TEST(flatten_delay_builtin) {
                            "  Real y5 = delay(x, time / 10.0, 1.0);\nend D1;\n"));
 }
 
+YMC_TEST(flatten_record_cref_binding) {
+  // 记录 cref 整体绑定 → 逐字段 cref（splitRecordCref，NFFlatten.mo:1027-1053）；常量源折叠；嵌套记录 / 记录数组元素源。
+  // 整体绑定 + 字段修饰：字段绑定一律取整体绑定（含构造缺省实参），字段属性照常合并。期望 = omc 1.25.0 实跑 RB2 / RM1 / RM4
+  //（2026-10-02）。
+  const char* rb =
+      "record R\n  Real x;\n  Real y;\nend R;\nrecord R2\n  R r;\n  Real z;\nend R2;\n"
+      "model RB2\n  parameter R r1 = R(1, 2);\n  parameter R r2 = r1;\n  constant R c1 = R(3, 4);\n  R v1 = c1;\n"
+      "  R v3(x = time, y = 2*time);\n  R v4 = v3;\n  final parameter R r4 = r1;\n  parameter R2 q1(r = r1, z = 3);\n"
+      "  parameter R2 q2 = q1;\n  R ra[2](each x = 1, y = {2, 3});\n  R v6 = ra[2];\nend RB2;\n";
+  YMC_CHECK_EQ(flatten_src(rb),
+               std::string("class RB2\n  parameter Real r1.x = 1.0;\n  parameter Real r1.y = 2.0;\n"
+                           "  parameter Real r2.x = r1.x;\n  parameter Real r2.y = r1.y;\n  constant Real c1.x = 3.0;\n"
+                           "  constant Real c1.y = 4.0;\n  Real v1.x = 3.0;\n  Real v1.y = 4.0;\n  Real v3.x = time;\n"
+                           "  Real v3.y = 2.0 * time;\n  Real v4.x = v3.x;\n  Real v4.y = v3.y;\n"
+                           "  final parameter Real r4.x = r1.x;\n  final parameter Real r4.y = r1.y;\n"
+                           "  parameter Real q1.r.x = r1.x;\n  parameter Real q1.r.y = r1.y;\n  parameter Real q1.z = 3.0;\n"
+                           "  parameter Real q2.r.x = q1.r.x;\n  parameter Real q2.r.y = q1.r.y;\n  parameter Real q2.z = q1.z;\n"
+                           "  Real ra[1].x = 1.0;\n  Real ra[1].y = 2.0;\n  Real ra[2].x = 1.0;\n  Real ra[2].y = 3.0;\n"
+                           "  Real v6.x = ra[2].x;\n  Real v6.y = ra[2].y;\nend RB2;\n"));
+  const char* rec = "record R\n  Real x = 1;\n  Real y = 2;\nend R;\n";
+  YMC_CHECK_EQ(flatten_src((std::string(rec) +
+                            "model RM1\n  R a;\n  R b(x(start = 3)) = a;\n  R d(y(min = 0)) = R(4, 5);\n"
+                            "  R e(x(start = 3), y(fixed = true)) = R(y = 6, x = 7);\n  R c(x = 5) = a;\nend RM1;\n").c_str()),
+               std::string("class RM1\n  Real a.x = 1.0;\n  Real a.y = 2.0;\n  Real b.x(start = 3.0) = a.x;\n  Real b.y = a.y;\n"
+                           "  Real d.x = 4.0;\n  Real d.y(min = 0.0) = 5.0;\n  Real e.x(start = 3.0) = 7.0;\n"
+                           "  Real e.y(fixed = true) = 6.0;\n  Real c.x = a.x;\n  Real c.y = a.y;\nend RM1;\n"));
+  YMC_CHECK_EQ(flatten_src((std::string(rec) +
+                            "model RM4\n  R d(y = 3) = R(x = 4);\n  R e(y(start = 5)) = R(x = 4);\n  parameter Real p = 7;\n"
+                            "  R f(y = p) = R(x = 4);\nend RM4;\n").c_str()),
+               std::string("class RM4\n  Real d.x = 4.0;\n  Real d.y = 2.0;\n  Real e.x = 4.0;\n  Real e.y(start = 5.0) = 2.0;\n"
+                           "  parameter Real p = 7.0;\n  Real f.x = 4.0;\n  Real f.y = 2.0;\nend RM4;\n"));
+}
+
+YMC_TEST(flatten_record_equation_type_match) {
+  // 不同记录类的等式：同名同序 = PLUG_COMPATIBLE 原样（RO5）；字段错位要 typeCastRecord 成 `R1(r2.x, r2.y)`（RO4，
+  // 记录构造表达式未做）→ SKIP。期望 = omc 1.25.0 实跑 RO4 / RO5（2026-10-02，matchComplexTypes NFTypeCheck.mo:1835-2004）。
+  const char* recs = "record R1\n  Real x;\n  Real y;\nend R1;\nrecord R2\n  Real y;\n  Real x;\nend R2;\n"
+                     "record R3\n  Real x;\n  Real y;\nend R3;\n";
+  YMC_CHECK_EQ(flatten_src((std::string(recs) + "model RO5\n  R1 r1;\n  R3 r3 = r1;\n  R3 r4;\nequation\n  r1 = r4;\nend RO5;\n").c_str()),
+               std::string("function R1 \"Automatically generated record constructor for R1\"\n  input Real x;\n  input Real y;\n"
+                           "  output R1 res;\nend R1;\n\nfunction R3 \"Automatically generated record constructor for R3\"\n"
+                           "  input Real x;\n  input Real y;\n  output R3 res;\nend R3;\n\nclass RO5\n  Real r1.x;\n  Real r1.y;\n"
+                           "  Real r3.x = r1.x;\n  Real r3.y = r1.y;\n  Real r4.x;\n  Real r4.y;\nequation\n  r1 = r4;\nend RO5;\n"));
+  bool uns = false;
+  const std::string out =
+      flatten_src((std::string(recs) + "model RO4\n  R1 r1;\n  R2 r2;\nequation\n  r1 = r2;\nend RO4;\n").c_str(), &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(out, std::string("<unsupported:record equation type cast>"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

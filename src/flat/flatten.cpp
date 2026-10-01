@@ -779,9 +779,15 @@ class Flattener {
                               I_.comps[cid].attributes.connector == SConnectorType::Flow;
         if (I_.comps[cid].attributes.connector != SConnectorType::Potential && !flow_rec)
           set_unsupported("flow/stream on composite component");
+        // 组件自身声明 / 外来修饰里是否有字段修饰（`R r(x(start = 1)) = …`）。
+        const bool own = cel.mod.is_valid() && !I_.scode.mods[cel.mod].subs.empty();
+        bool matched_field = false;
+        for (Id<SMod> m : matched)
+          if (!I_.scode.mods[m].subs.empty()) { matched_field = true; break; }
         // 记录常量折叠：`constant/parameter R r = f(…)`（函数返回记录）→ 直接发射字段（继承 r 变率 + 折叠值），
-        // 绕开下面的"变率复合" SKIP（CevalFuncRecord1/2）。
-        if (r == SRestriction::Record && pp_self.empty()) {   // expandable 里的记录折叠字段不带 pp 链 → 不走此路
+        // 绕开下面的"变率复合" SKIP（CevalFuncRecord1/2）。带字段修饰时字段属性要合并（emit_record_fields 不看修饰，
+        // RM1 `R d(y(min = 0)) = R(4, 5)` 曾丢 min）→ 不走此路（构造调用走下面的合并路，其余 SKIP）。
+        if (r == SRestriction::Record && pp_self.empty() && !own && !matched_field) {   // expandable 里的记录折叠字段不带 pp 链 → 不走此路
           Id<Exp> wb;
           NodeId ws = inst_node;
           for (Id<SMod> m : matched)
@@ -816,14 +822,10 @@ class Flattener {
           whole_raw = I_.comps[cid].binding.raw_exp;
         Id<SMod> ctor_mod;
         if (r == SRestriction::Record && whole_raw.is_valid())
-          ctor_mod = build_record_ctor_mod(whole_raw, ci, cdef);
+          ctor_mod = build_record_ctor_mod(whole_raw, ci, cdef, whole_scope);
         if (whole_raw.is_valid() && !ctor_mod.is_valid()) set_unsupported("composite/record binding");
         // 组子层修饰上下文（R15 §3.3 优先级：外层实例修饰 > 组件自身声明修饰）。两者同时非空要合并两套作用域，
         // 本桶未做 → 标 unsupported（easy slice 不出现）。
-        const bool own = cel.mod.is_valid() && !I_.scode.mods[cel.mod].subs.empty();
-        bool matched_field = false;
-        for (Id<SMod> m : matched)
-          if (!I_.scode.mods[m].subs.empty()) { matched_field = true; break; }
         ModCtx child;
         child.final_all = comp_final;
         child.var_floor = var_min(ctx.var_floor, I_.comps[cid].attributes.variability);   // 变率下沉（Half A）
@@ -835,9 +837,22 @@ class Flattener {
         child.flow_inherited = ctx.flow_inherited || flow_rec;
         if (!r_exp) child.pp_chain = pp_self;   // expandable 组件的成员重起链（其直属成员由 exp_class 置 pp）
         if (ctor_mod.is_valid()) {
-          // 构造绑定与另有字段修饰叠加（`R r(z=9) = R(4,5)`）要合并两套 → 本桶未做 SKIP。
-          if (own || matched_field) set_unsupported("record ctor + field modifier");
-          else { child.mods = {ctor_mod}; child.scope = whole_scope; child.vprefix = whole_vpfx; }
+          // 整体绑定 + 字段修饰（RM1-RM4 探针）：字段绑定一律来自整体绑定（getRecordBindings 的 outerBinding 盖过字段修饰的
+          // 绑定，RM2 `R c(x = 5) = a` → `c.x = a.x`；构造缺省实参也盖，RM4 `R d(y = 3) = R(x = 4)` → `d.y = 2.0`），字段的
+          // 属性 / 嵌套修饰照常合并（RM1 `b.x(start = 3.0) = a.x`）。字段修饰去掉绑定后：空 → 丢；与整体绑定同作用域 → 并入；
+          // 异作用域（两套作用域并存）→ SKIP。
+          std::vector<Id<SMod>> mods = {ctor_mod};
+          auto take = [&](Id<SMod> m, NodeId sc, const std::vector<Symbol>& vp) {
+            bool ok = true;
+            const Id<SMod> f = strip_field_bindings(m, ok);
+            if (!ok) set_unsupported("record binding + final/each field binding");
+            else if (f.is_valid() && (sc != whole_scope || vp != whole_vpfx)) set_unsupported("record binding + field modifier scopes");
+            else if (f.is_valid()) mods.push_back(f);
+          };
+          if (own) take(cel.mod, inst_node, prefix);
+          for (Id<SMod> m : matched)
+            if (!I_.scode.mods[m].subs.empty()) take(m, ctx.scope, ctx.vprefix);
+          child.mods = std::move(mods); child.scope = whole_scope; child.vprefix = whole_vpfx;
         } else if (!matched.empty() && own) {
           set_unsupported("stacked modifier scopes");
         } else if (!matched.empty()) {
@@ -1559,6 +1574,14 @@ class Flattener {
     }
     if (ta == TypeKind::Real && tb == TypeKind::Integer) b = to_real(b);
     else if (ta == TypeKind::Integer && tb == TypeKind::Real) a = to_real(a);
+    // 两侧是不同记录类：右侧按左侧类型匹配（NFTyping.mo:3517 matchExpressions(e2, ty2, e1, ty1) → matchComplexTypes）。
+    // 同名同序同型 = PLUG_COMPATIBLE 原样（RO5 探针 `r1 = r4`）；字段顺序 / 类型要转 = typeCastRecord 成 `R1(r2.x, r2.y)`
+    //（RO4、RecordOrder2；记录构造表达式未做）→ SKIP；字段对不上 = omc 类型错 → SKIP。
+    if (ta == TypeKind::Complex && tb == TypeKind::Complex &&
+        record_match(result_.model.exprs[b].ty, result_.model.exprs[a].ty) > RecMatch::Plug) {
+      set_unsupported("record equation type cast");
+      return;
+    }
     FlatEquation fe;
     fe.kind = FlatEqKind::Equality;
     fe.a = a;
@@ -1568,6 +1591,42 @@ class Flattener {
     Id<FlatEquation> id = result_.model.add_eq(std::move(fe));
     if (is_initial) result_.model.initial_equations.push_back(id);
     else result_.model.equations.push_back(id);
+  }
+
+  // matchComplexTypes（NFTypeCheck.mo:1835-2004）的分类：actual 记录类与 expected 同类 → Same；字段数相同、expected 的每个
+  // 字段在 actual 里同位同名同型 → Plug（不转）；同名但错位 / 字段类型不同（要 typeCastRecord 或逐字段 cast）→ Cast；
+  // 字段数不同 / 缺名 → Incompatible。嵌套记录字段只认同一记录类（不同类按 Cast 保守处理）。
+  enum class RecMatch : std::uint8_t { Same, Plug, Cast, Incompatible };
+  RecMatch record_match(const Type& actual, const Type& expected) {
+    auto cls_of = [&](const Type& t) -> NodeId {
+      const std::uint32_t cn = t.element_type().complex_node;
+      if (cn == Id<INode>::kInvalid) return {};
+      const NodeId n = NodeId::from_index(cn);
+      return I_.nodes.contains(n) && !I_.nodes[n].is_empty() && I_.nodes[n].def.is_valid() ? n : NodeId{};
+    };
+    const NodeId an = cls_of(actual), en = cls_of(expected);
+    if (!an.is_valid() || !en.is_valid()) return RecMatch::Incompatible;
+    if (I_.nodes[an].def == I_.nodes[en].def) return RecMatch::Same;
+    const std::vector<NodeId>& ac = I_.trees[I_.node_class(an).tree].components;
+    const std::vector<NodeId>& ec = I_.trees[I_.node_class(en).tree].components;
+    if (ac.size() != ec.size()) return RecMatch::Incompatible;
+    RecMatch m = RecMatch::Plug;
+    for (std::size_t i = 0; i < ec.size(); ++i) {
+      const Symbol name = I_.nodes[ec[i]].name;
+      std::size_t idx = i;
+      if (I_.nodes[ac[i]].name != name) {
+        idx = ac.size();
+        for (std::size_t k = 0; k < ac.size(); ++k)
+          if (I_.nodes[ac[k]].name == name) { idx = k; break; }
+        if (idx == ac.size()) return RecMatch::Incompatible;
+        m = RecMatch::Cast;
+      }
+      const Type& at = I_.comps[I_.nodes[ac[idx]].comp].ty;
+      const Type& et = I_.comps[I_.nodes[ec[i]].comp].ty;
+      if (at.kind != et.kind || !same_dims(at.dims, et.dims)) { m = RecMatch::Cast; continue; }
+      if (at.kind == TypeKind::Complex && record_match(at, et) != RecMatch::Same) m = RecMatch::Cast;
+    }
+    return m;
   }
 
   // 同秩，且两边都是整数维处相等（未知 / 表达式维与任何维相容：函数形参 `:`、调用处求不出的输出维）。
@@ -7909,7 +7968,8 @@ class Flattener {
   // 记录构造整体绑定 `R r = R(a, b, x=c)` = 类修饰 `R r(字段=实参…)`：把构造实参按声明序（位置实参）
   // 或名字（命名实参）匹配到字段，合成一个类修饰 SMod（缺省实参不进 subs → 该字段保留声明默认，RecordBinding1）。
   // 返回 invalid = 不适用/未支持（非构造调用、名字对不上、记录有 extends…），调用方据此仍走整体绑定 SKIP。
-  Id<SMod> build_record_ctor_mod(Id<Exp> callraw, NodeId ci, Id<SElement> cdef) {
+  Id<SMod> build_record_ctor_mod(Id<Exp> callraw, NodeId ci, Id<SElement> cdef, NodeId scope) {
+    if (I_.absyn.exps[callraw].kind == ExpKind::CrefExp) return split_record_cref_mod(callraw, ci, scope);
     const Exp& call = I_.absyn.exps[callraw];
     if (call.kind != ExpKind::Call) return {};
     if (call.partial_fn || call.call_suffix.is_valid()) return {};
@@ -7942,6 +8002,74 @@ class Flattener {
     outer.subs = std::move(subs);
     outer.loc = call.loc;
     return I_.scode.add_mod(std::move(outer));
+  }
+
+  // 记录 cref 整体绑定 `R r2 = r1`：splitRecordCref（NFFlatten.mo:1027-1053）把 cref 拆成各字段 cref 的记录式
+  // `R(r1.x, r1.y)`，getRecordBindings（:877-918）再逐字段分发 = 类修饰 `r2(x = r1.x, y = r1.y)`。字段 = 目标记录类树的
+  // 全部组件（含继承，声明序）。常量源的求值（evalExp，:958-961）由字段绑定里的常量 cref 折叠得到（RB1 探针 v1 = c1）。
+  // 源须是本作用域可逐段找到的记录标量组件、且含目标的每个字段；否则（包常量 P.g、数组整体、缺字段）→ invalid → SKIP。
+  Id<SMod> split_record_cref_mod(Id<Exp> craw, NodeId ci, NodeId scope) {
+    const SourceLoc loc = I_.absyn.exps[craw].loc;
+    const Cref src = I_.absyn.crefs[I_.absyn.exps[craw].cref];   // 拷贝（下面往 absyn arena add）
+    auto local = [&](NodeId cls, Symbol name) {
+      const NodeId n = find_local(cls, name);
+      return n.is_valid() && !I_.nodes[n].is_empty() && I_.nodes[n].comp.is_valid() ? n : NodeId{};
+    };
+    if (src.leading_dot || src.parts.empty()) return {};
+    NodeId cls = scope;
+    for (const CrefPart& p : src.parts) {
+      const NodeId n = local(cls, p.name);
+      if (!n.is_valid()) return {};
+      const CompId cid = I_.nodes[n].comp;
+      const SElement& el = I_.scode.elems[I_.comps[cid].def];
+      if (I_.comps[cid].ty.kind != TypeKind::Complex || p.subscripts.size() != el.attr.dims.size() + el.type.dims.size())
+        return {};
+      cls = I_.comps[cid].class_inst;
+    }
+    if (!I_.nodes[cls].def.is_valid() || I_.scode.elems[I_.nodes[cls].def].restriction != SRestriction::Record) return {};
+    const std::vector<NodeId> fields = I_.trees[I_.node_class(ci).tree].components;
+    std::vector<SSubMod> subs;
+    for (NodeId f : fields) {
+      const Symbol fname = I_.nodes[f].name;
+      if (!local(cls, fname).is_valid()) return {};
+      Cref fc = src;
+      fc.parts.push_back({fname, {}});
+      Exp fe;
+      fe.kind = ExpKind::CrefExp;
+      fe.loc = loc;
+      fe.cref = I_.absyn.add_cref(std::move(fc));
+      SMod fm;
+      fm.kind = SModKind::Mod;
+      fm.binding = I_.absyn.add_exp(std::move(fe));
+      fm.loc = loc;
+      subs.push_back({fname, I_.scode.add_mod(std::move(fm))});
+    }
+    SMod outer;
+    outer.kind = SModKind::Mod;
+    outer.subs = std::move(subs);
+    outer.loc = loc;
+    return I_.scode.add_mod(std::move(outer));
+  }
+
+  // 字段修饰去掉各子修饰的绑定（整体记录绑定下字段绑定由整体绑定给），留属性 / 嵌套修饰；去完为空 → invalid。
+  // final / each 子修饰带绑定（盖掉后 final 是否留在字段上未核实）→ ok = false。
+  Id<SMod> strip_field_bindings(Id<SMod> m, bool& ok) {
+    const std::vector<SSubMod> subs = I_.scode.mods[m].subs;   // 拷贝（下面 add_mod 会 realloc mods arena）
+    std::vector<SSubMod> out;
+    for (const SSubMod& s : subs) {
+      SMod sm = I_.scode.mods[s.mod];
+      if (sm.binding.is_valid()) {
+        if (sm.is_final || sm.is_each || sm.kind != SModKind::Mod) { ok = false; return {}; }
+        sm.binding = {};
+      }
+      if (sm.subs.empty() && sm.kind == SModKind::Mod) continue;
+      out.push_back({s.ident, I_.scode.add_mod(std::move(sm))});
+    }
+    if (out.empty()) return {};
+    SMod n = I_.scode.mods[m];
+    n.binding = {};
+    n.subs = std::move(out);
+    return I_.scode.add_mod(std::move(n));
   }
 
   // 复合数组第 aidx 个元素的合成修饰（Modifier.propagate → propagateSubMod，NFModifier.mo:444-513）：每个非 each 子修饰的

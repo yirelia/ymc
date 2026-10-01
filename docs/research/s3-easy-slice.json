@@ -494,5 +494,8 @@
 "ImportUnqualified3.mo",
 "CevalRecordArray4.mo",
 "ConnectArrays1.mo",
-"SubscriptCevalIndexRange1.mo"
+"SubscriptCevalIndexRange1.mo",
+"CevalRecord2.mo",
+"CevalRecord4.mo",
+"RecordBinding4.mo"
 ]
