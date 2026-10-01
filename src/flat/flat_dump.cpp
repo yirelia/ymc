@@ -59,7 +59,14 @@ class FlatDumper {
       out_ += in_.str(parts[i]);
     }
   }
-  void expr(Id<Expr> e) { out_ += dump_expr(m_.exprs, in_, e); }
+  // 表达式文本里的换行（多行字符串字面量）后补当前行缩进：Susan 模板对插入文本的每个新行补所在块的缩进
+  //（YmcStr1 探针：变量 / 方程 2 格、if 体内 4 格）。
+  void expr(Id<Expr> e) {
+    std::string t = dump_expr(m_.exprs, in_, e);
+    for (std::size_t pos = t.find('\n'); pos != std::string::npos; pos = t.find('\n', pos + 1 + ind_.size()))
+      t.insert(pos + 1, ind_);
+    out_ += t;
+  }
 
   // ---- 函数块（DAEDump dumpFunction）：function <名> / 形参逐行（维在类型上）/ [algorithm 语句] / end <名>; ----
   void function_block(const FlatFunction& fn) {
@@ -99,6 +106,7 @@ class FlatDumper {
   }
 
   void func_param(const FlatFuncParam& p) {
+    ind_ = "  ";
     out_ += "  ";
     if (p.is_protected) out_ += "protected ";
     switch (p.var_kind) {   // 局部保留 kind；in/out 已在发射期归一 Var（不打前缀）
@@ -132,6 +140,7 @@ class FlatDumper {
 
   // ---- 变量行（R13 §3.1 固定前缀顺序）----
   void variable(const FlatVariable& v) {
+    ind_ = "  ";
     out_ += "  ";                                  // 无前缀变量缩进 2 格
     if (v.is_protected) out_ += "protected ";
     if (v.is_final) out_ += "final ";
@@ -235,12 +244,15 @@ class FlatDumper {
   }
 
   void equation(Id<FlatEquation> id, const std::string& indent) {
+    ind_ = indent;
     const FlatEquation& q = m_.eqs[id];
     std::string body = indent + "  ";
     out_ += indent;
     switch (q.kind) {
       case FlatEqKind::Equality:
-        expr(q.a);
+        // 左侧是 if 表达式时加括号（DAEDumpTpl.dumpEquation :705，LhsIf）。
+        if (m_.exprs[q.a].kind == ExprKind::IfExp) { out_ += '('; expr(q.a); out_ += ')'; }
+        else expr(q.a);
         out_ += " = ";
         expr(q.b);
         break;
@@ -273,6 +285,7 @@ class FlatDumper {
           expr(q.branches[i].cond);
           out_ += " then\n";
           for (Id<FlatEquation> b : q.branches[i].body) equation(b, body);
+          ind_ = indent;
         }
         if (!q.else_body.empty()) {
           out_ += indent + "else\n";
@@ -294,6 +307,7 @@ class FlatDumper {
           expr(q.branches[i].cond);
           out_ += " then\n";
           for (Id<FlatEquation> b : q.branches[i].body) equation(b, body);
+          ind_ = indent;
         }
         out_ += indent + "end when";
         break;
@@ -303,6 +317,7 @@ class FlatDumper {
   }
 
   void statement(Id<FlatStatement> id, const std::string& indent) {
+    ind_ = indent;
     const FlatStatement& s = m_.stmts[id];
     std::string body = indent + "  ";
     out_ += indent;
@@ -343,6 +358,7 @@ class FlatDumper {
           expr(s.branches[i].cond);
           out_ += " then\n";
           for (Id<FlatStatement> b : s.branches[i].body) statement(b, body);
+          ind_ = indent;
         }
         if (!s.else_body.empty()) {
           out_ += indent + "else\n";
@@ -371,6 +387,7 @@ class FlatDumper {
           expr(s.branches[i].cond);
           out_ += " then\n";
           for (Id<FlatStatement> b : s.branches[i].body) statement(b, body);
+          ind_ = indent;
         }
         out_ += indent + "end when";
         break;
@@ -382,6 +399,7 @@ class FlatDumper {
   const FlatModel& m_;
   const Interner& in_;
   std::string out_;
+  std::string ind_;   // 当前行缩进（expr 给多行字符串的续行补缩进）
 };
 
 }  // namespace

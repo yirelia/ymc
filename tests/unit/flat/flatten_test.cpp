@@ -1706,6 +1706,99 @@ YMC_TEST(flatten_function_emit_records) {
                            "end FunctionCompOrder4;\n"));
 }
 
+// ---- 加宽(56) 正确性：nf-live（旧前端用例去注解 vs 实跑 omc 1.25.0）揪出的静默错出；期望 = omc 1.25.0 实跑 ----
+
+YMC_TEST(flatten_structural_params_modifier_aware) {
+  // 条件组件的条件按修饰后的绑定求值，用到的参数（含修饰书写处的 b、c）成为结构参数：打 final、绑定代入值、引用处
+  // 代入（NFEvalConstants.evaluateExpTraverser，`Real y = if b then 1 else 2` → `1.0`）。YmcCond2 探针（此前 ymc 用声明
+  // 默认值 false 求条件，删掉了 foo.x 且打印错值）。
+  const char* src =
+      "block Foo\n  parameter Boolean enabled = false;\n  Real x = 1 if enabled;\nend Foo;\n"
+      "model YmcCond2\n  parameter Boolean b = true;\n  parameter Boolean c = not b;\n  Foo foo(enabled = b);\n"
+      "  Foo foo2(enabled = c);\n  Real y = if b then 1 else 2;\nend YmcCond2;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class YmcCond2\n  final parameter Boolean b = true;\n  final parameter Boolean c = false;\n"
+                           "  final parameter Boolean foo.enabled = true;\n  Real foo.x = 1.0;\n"
+                           "  final parameter Boolean foo2.enabled = false;\n  Real y = 1.0;\nend YmcCond2;\n"));
+  // 复合数组各元素的条件各自求值（`Foo[2] foo(enabled = {true, false})`），只删 foo[2].x 及连到它的 connect。
+  const char* src2 =
+      "connector InConn = input Real;\nconnector OutConn = output Real;\nblock Foo\n  parameter Boolean enabled = false;\n"
+      "  InConn x if enabled;\nend Foo;\nblock Src\n  OutConn x = time;\nend Src;\nmodel ConnectArrayCond2\n"
+      "  Foo[2] foo(enabled = {true, false});\n  Src src;\n  Src src1;\nequation\n  connect(src.x, foo[1].x);\n"
+      "  connect(src1.x, foo[2].x);\nend ConnectArrayCond2;\n";
+  YMC_CHECK_EQ(flatten_src(src2),
+               std::string("class ConnectArrayCond2\n  final parameter Boolean foo[1].enabled = true;\n  Real foo[1].x;\n"
+                           "  final parameter Boolean foo[2].enabled = false;\n  Real src.x = time;\n  Real src1.x = time;\n"
+                           "equation\n  src.x = foo[1].x;\nend ConnectArrayCond2;\n"));
+}
+
+YMC_TEST(flatten_direction_inheritance) {
+  // 字段方向 = mergeDirection(外层, 自身)；只在所有前缀组件都是连接器或 input 组件时保留（YmcDir1 探针）。
+  const char* src =
+      "record R\n  Real x;\n  Real xi;\nend R;\nconnector C\n  Real e;\n  flow Real f;\nend C;\n"
+      "model A\n  input R ra;\n  output C ca;\n  Real v;\nend A;\n"
+      "model YmcDir1\n  input R ri;\n  output R ro;\n  input C ci;\n  output C co;\n  A a;\n  parameter R rp(x = 1, xi = 2);\n"
+      "end YmcDir1;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class YmcDir1\n  input Real ri.x;\n  input Real ri.xi;\n  Real ro.x;\n  Real ro.xi;\n"
+                           "  input Real ci.e;\n  input Real ci.f;\n  output Real co.e;\n  output Real co.f;\n"
+                           "  Real a.ra.x;\n  Real a.ra.xi;\n  Real a.ca.e;\n  Real a.ca.f;\n  Real a.v;\n"
+                           "  parameter Real rp.x = 1.0;\n  parameter Real rp.xi = 2.0;\nequation\n  ci.f = 0.0;\n"
+                           "  co.f = 0.0;\n  a.ca.f = 0.0;\nend YmcDir1;\n"));
+}
+
+YMC_TEST(flatten_simplify_rules) {
+  // NFSimplifyExp：`(-a) + b` → `b - a`、`(-e1)/e2` → `e1/(-e2)`、`x - (-1)` → `x + 1.0`、`±1 * x`；`^` 两侧提实型；
+  // if 表达式的实型转换推进两支（Expression.typeCast）；字符串常量拼接；range 化简（YmcSimp1 探针）。
+  const char* src =
+      "model YmcSimp1\n  parameter Integer pi = 3;\n  Real x, a, d, x1, x2, x3, i, w;\n  String s;\n  Real z[5];\nequation\n"
+      "  der(x) = -x + a*(1-x*x);\n  d = (-a*x)/x;\n  x1 = x - (-1);\n  x2 = -1*x;\n  x3 = 1*x;\n  i = 3 * (2 ^ pi);\n"
+      "  w = if time > 1 then 1 else 2;\n  s = \"te\" + \"st\";\n  a = time;\nalgorithm\n  for k in 1:4+1 loop\n"
+      "    z[k] := k;\n  end for;\nend YmcSimp1;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class YmcSimp1\n  parameter Integer pi = 3;\n  Real x;\n  Real a;\n  Real d;\n  Real x1;\n"
+                           "  Real x2;\n  Real x3;\n  Real i;\n  Real w;\n  String s;\n  Real z[1];\n  Real z[2];\n  Real z[3];\n"
+                           "  Real z[4];\n  Real z[5];\nequation\n  der(x) = a * (1.0 - x * x) - x;\n  d = a * x / (-x);\n"
+                           "  x1 = x + 1.0;\n  x2 = -x;\n  x3 = x;\n  i = 3.0 * 2.0 ^ /*Real*/(pi);\n"
+                           "  w = if time > 1.0 then 1.0 else 2.0;\n  s = \"test\";\n  a = time;\nalgorithm\n"
+                           "  for k in 1:5 loop\n    z[k] := /*Real*/(k);\n  end for;\nend YmcSimp1;\n"));
+}
+
+YMC_TEST(flatten_record_ctor_and_external_builtin) {
+  // 等式里整记录引用 → 收记录构造函数（根类里的记录名带根名，EquationComponent1）；external "C" 的已知数学函数按内建
+  // 打印、不发射、不折叠（LogCall1 `mylog(100)` → `log(100.0)`）。
+  const char* s1 = "class EquationComponent1\n  record R\n    Real x,y;\n  end R;\n  R a,b;\nequation\n  a = b;\nend EquationComponent1;\n";
+  YMC_CHECK_EQ(flatten_src(s1),
+               std::string("function EquationComponent1.R \"Automatically generated record constructor for EquationComponent1.R\"\n"
+                           "  input Real x;\n  input Real y;\n  output R res;\nend EquationComponent1.R;\n\n"
+                           "class EquationComponent1\n  Real a.x;\n  Real a.y;\n  Real b.x;\n  Real b.y;\nequation\n  a = b;\n"
+                           "end EquationComponent1;\n"));
+  const char* s2 = "function mylog \"Natural logarithm\"\n  input Real x;\n  output Real y;\n  external \"C\" y=log(x);\nend mylog;\n"
+                   "model LogCall1\n  Real res;\nequation\n  res = mylog(100);\nend LogCall1;\n";
+  YMC_CHECK_EQ(flatten_src(s2), std::string("class LogCall1\n  Real res;\nequation\n  res = log(100.0);\nend LogCall1;\n"));
+}
+
+YMC_TEST(flatten_invalid_models_unsupported) {
+  // omc 1.25.0 报错的模型不得静默出结果（nf-live ACCEPTS-INVALID / scodeinst incorrect 用例的模式）：未做错误文案的一律 SKIP。
+  for (const char* s : {
+           "model A\n  Real x;\nend A;\nmodel M\n  A a(x = 1, x = 2);\nend M;\n",                         // 重复修饰
+           "model A\n  Real x = 10;\n  final Real y = 20;\nend A;\nmodel M\n  A a(y = 30);\nend M;\n",      // 改 final
+           "model T\nprotected\n  Integer x = 2;\nend T;\nmodel M\n  T t(x = 3);\nend M;\n",                // 改 protected
+           "model T\nprotected\n  Integer x = 2;\nend T;\nmodel M\n  T t;\nequation\n  t.x = 3;\nend M;\n", // 访问 protected
+           "model M\n  Real x(start = 2.0);\n  Real y = x.start;\nend M;\n",                              // 内建类型无子组件
+           "model M\n  discrete Real x;\nequation\n  x = sin(time);\nend M;\n",                           // discrete Real 不在 when
+           "package P\n  constant Real c = 1;\nend P;\n",                                                  // 根类是 package
+           "partial model A\n  Real x;\nend A;\nmodel M\n  A a;\nend M;\n",                                // partial 类型
+           "model M\n  Integer i = 4000 / 100;\nend M;\n",                                                 // Real 绑 Integer
+           "model M\n  Real x;\n  Real x;\nend M;\n",                                                     // 重复声明
+           "model M\n  type E = enumeration(one, start);\n  E e;\nend M;\n",                               // 枚举字面量撞属性
+           "model M\n  Real x = time;\n  Integer n = N;\nend M;\n"}) {                                   // 解析不到的名字
+    bool uns = false;
+    flatten_src(s, &uns);
+    YMC_CHECK(uns);
+  }
+}
+
 // ---- parameter / constant 连接器（generatePotentialEquations :202-236 / makeEqualityAssert :290-341）；期望 = omc 1.25.0 ----
 
 YMC_TEST(flatten_parameter_connector_member_assert) {

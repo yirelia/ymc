@@ -291,8 +291,17 @@ int main(int argc, char** argv) {
         while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
         if (!line.empty()) opt.paths.push_back(line);
       }
-    } else if (a[0] != '-') opt.paths.push_back(a);
-    else {
+    } else if (a[0] != '-' && a[0] != '+') opt.paths.push_back(a);
+    else if (std::strcmp(a, "-d=newInst") == 0) {
+      // omc 的新前端开关：ymc 只有新前端语义，无操作。
+    } else if (a[0] == '+' || std::strncmp(a, "-i=", 3) == 0 || std::strncmp(a, "-d=", 3) == 0 ||
+               std::strncmp(a, "-g=", 3) == 0 || std::strcmp(a, "--newBackend") == 0 ||
+               std::strcmp(a, "--unitChecking") == 0 || std::strncmp(a, "--allowNonStandardModelica=", 27) == 0) {
+      // testsuite `// cflags:` 透传来的 omc 选项（tests/omc/cflags_map.json）：ymc 未实现 → 按未实现契约退 66（SKIP），
+      // 不当用法错误（此前退 2 被记成 FAIL：EncapsulatingInst1 / Prefix3 的 `-i=`）。
+      std::fprintf(stdout, "ymc: not implemented: option %s\n", a);
+      return 66;
+    } else {
       std::fprintf(stderr, "Error: unknown option: %s\n", a);
       return 2;
     }

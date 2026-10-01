@@ -138,6 +138,9 @@ struct ModCtx {
   // 子孙经 ConnectorType.merge 按位或继承（:229/234），expandable 组件自身清掉（updateComponentConnectorType :493-494）。
   // 存链上各组件节点 raw；叶变量 present ⟺ 链上任一节点被 markComponentPresent（NFExpandableConnectors.mo:334-355）。
   std::vector<std::uint32_t> pp_chain;
+  // 外层组件合并后的方向（mergeComponentAttributes :212-250：子组件方向 = mergeDirection(外层, 自身)，外层无方向取自身、
+  // 自身无方向取外层、两边都有 → INVALID_TYPE_PREFIX 报错；YmcDir1 探针 `input R ri` → `input Real ri.x`）。
+  SDirection dir_inh = SDirection::Bidir;
 };
 
 // OMC Prefixes.variabilityMin（取更受约束者）：ymc 枚举 Var<Discrete<Param<Const 升序=更常量，故取序数较大者。
@@ -166,6 +169,20 @@ class Flattener {
     const SElement& el = I_.scode.elems[I_.nodes[root].def];
     result_.model.comment = el.cmt.str;
     if (el.def.kind != SClassDefKind::Parts) set_unsupported("short/derived/enum root class");
+    // 根类不可是 function / package（NFInst.checkInstanceRestriction :4186-4205，INST_INVALID_RESTRICTION）。
+    if (el.restriction == SRestriction::Package || el.restriction == SRestriction::Function ||
+        el.restriction == SRestriction::ExternalFunction || el.restriction == SRestriction::OperatorFunction)
+      set_unsupported("root class is package/function");
+    // 顶层作用域的类树：同名元素 → DOUBLE_DECLARATION_OF_ELEMENTS（NFClassTree.addLocalElementConflict :1653-1676）；
+    // 与 NF 顶层内建类型同名（Clock2 的 `model Clock`，NFModelicaBuiltin.mo）同样冲突。
+    if (has_duplicate_names(I_.scode.program)) set_unsupported("duplicate element declaration");
+    for (Id<SElement> e : I_.scode.program) {
+      const std::string_view n = in_.str(I_.scode.elems[e].name);
+      if (n == "Clock" || n == "StateSelect" || n == "Uncertainty" || n == "AssertionLevel" || n == "Connections")
+        set_unsupported("class name collides with builtin");
+    }
+    // 实例化 partial 根类（NFInst.checkPartialClass，PartialClass1）→ omc 报错。
+    if (el.is_partial) set_unsupported("partial root class");
     // __OpenModelica_commandLineOptions（-d=evaluateAllParameters / mergeComponents …）会重写整个
     // 展平结果，是 OMC 专属变换，v1 不做 → 标 unsupported（driver 退 66，记 SKIP 不是 FAIL）。
     if (el.cmt.annotation.is_valid())
@@ -185,8 +202,11 @@ class Flattener {
     // 某变量名同时出现在 removed_（另一同名声明条件为假被移除）：redeclare 一个 replaceable-conditional 成员的
     // 语义（保留原条件 / 禁止带条件 redeclare）v1 未做 → SKIP（RedeclareElementCondition1/2/3）。
     if (!removed_.empty())
-      for (const FlatVariable& v : result_.model.variables)
-        if (removed_.count(path_key(v.name))) { set_unsupported("conditional component redeclared"); break; }
+      for (const FlatVariable& v : result_.model.variables) {
+        std::vector<std::vector<Id<Expr>>> ns = v.name_subs;   // 组件路径（逐段下标，不含叶数组下标）
+        ns.resize(v.name.size());
+        if (removed_.count(conn_key(v.name, ns))) { set_unsupported("conditional component redeclared"); break; }
+      }
     // 重复变量名 → omc 会去重（R11 §3.4-3）；v1 未做，标 unsupported（driver 退 66）。
     for (std::size_t i = 0; i < result_.model.variables.size(); ++i)
       for (std::size_t j = i + 1; j < result_.model.variables.size(); ++j)
@@ -197,14 +217,255 @@ class Flattener {
           i = result_.model.variables.size();
           break;
         }
+    check_discrete_reals();
     prune_functions();
     return std::move(result_);
+  }
+
+  // NFVerifyModel.checkDiscreteReal :345-390：discrete Real 变量必须出现在某个 when 体（含其中嵌套 if / for）里等式或
+  // 赋值的左侧，否则 DISCRETE_REAL_UNDEFINED 报错（Discrete2 / DiscreteDeclRecord / DiscreteDeclType）。按去下标的路径比。
+  void check_discrete_reals() {
+    if (result_.unsupported) return;
+    bool any = false;
+    for (const FlatVariable& v : result_.model.variables)
+      if (v.var_kind == FlatVarKind::Discrete && v.ty.element_type().kind == TypeKind::Real) any = true;
+    if (!any) return;
+    std::unordered_set<std::string> defined;
+    auto lhs = [&](Id<Expr> e) {
+      if (!e.is_valid()) return;
+      const Expr& x = result_.model.exprs[e];
+      if (x.kind != ExprKind::Cref) return;
+      std::vector<Symbol> nm;
+      for (const ExprCrefPart& cp : x.cref.parts) nm.push_back(cp.name);
+      defined.insert(path_key(nm));
+    };
+    auto eqn = [&](auto& self, Id<FlatEquation> id, bool in_when) -> void {
+      const FlatEquation& q = result_.model.eqs[id];
+      if (q.kind == FlatEqKind::Equality && in_when) lhs(q.a);
+      const bool w = in_when || q.kind == FlatEqKind::When;
+      for (const FlatEqBranch& br : q.branches) for (Id<FlatEquation> b : br.body) self(self, b, w);
+      for (Id<FlatEquation> b : q.body) self(self, b, w);
+      for (Id<FlatEquation> b : q.else_body) self(self, b, w);
+    };
+    auto stmt = [&](auto& self, Id<FlatStatement> id, bool in_when) -> void {
+      const FlatStatement& st = result_.model.stmts[id];
+      if (st.kind == FlatStmtKind::Assign && in_when) lhs(st.a);
+      const bool w = in_when || st.kind == FlatStmtKind::When;
+      for (const FlatStmtBranch& br : st.branches) for (Id<FlatStatement> b : br.body) self(self, b, w);
+      for (Id<FlatStatement> b : st.body) self(self, b, w);
+      for (Id<FlatStatement> b : st.else_body) self(self, b, w);
+    };
+    for (Id<FlatEquation> id : result_.model.equations) eqn(eqn, id, false);
+    for (const FlatAlgorithm& a : result_.model.algorithms) for (Id<FlatStatement> id : a.stmts) stmt(stmt, id, false);
+    for (const FlatVariable& v : result_.model.variables)
+      if (v.var_kind == FlatVarKind::Discrete && v.ty.element_type().kind == TypeKind::Real && !defined.count(path_key(v.name))) {
+        set_unsupported("discrete Real not assigned in when");
+        return;
+      }
+  }
+
+  // 多个 extends 时，某个 extends 的名字（首段）恰是另一基类里的局部类名：继承后再查会找到那个类（NFInst.instExtends
+  // "Found other base class for extends X after instantiating extends"，InvalidInheritedExtends1/2）→ SKIP。
+  bool extends_shadowed(const SElement& def) {
+    std::vector<const SElement*> exts;
+    for (Id<SElement> e : def.def.elements)
+      if (I_.scode.elems[e].kind == SElementKind::Extends) exts.push_back(&I_.scode.elems[e]);
+    if (exts.size() < 2) return false;
+    for (const SElement* a : exts) {
+      if (a->base_path.empty()) continue;
+      for (const SElement* b : exts) {
+        if (a == b || b->base_path.empty()) continue;
+        ScodeScope ds;
+        const Id<SElement> bc = find_scode_element_at(b->base_path[0], {}, ds);
+        if (!bc.is_valid() || b->base_path.size() != 1 || I_.scode.elems[bc].kind != SElementKind::Class) continue;
+        for (Id<SElement> m : I_.scode.elems[bc].def.elements)
+          if (I_.scode.elems[m].kind == SElementKind::Class && I_.scode.elems[m].name == a->base_path[0]) return true;
+      }
+    }
+    return false;
+  }
+  bool bad_enum_type(const SElement& c, const ScodeScope& scope) {
+    if (c.type.path.size() != 1) return false;
+    ScodeScope ds;
+    Id<SElement> e = find_scode_element_at(c.type.path[0], c.type.leading_dot ? ScodeScope{} : scope, ds);
+    for (int guard = 0; e.is_valid() && guard < 20; ++guard) {
+      const SElement& el = I_.scode.elems[e];
+      if (el.kind != SElementKind::Class) return false;
+      if (el.def.kind == SClassDefKind::Enumeration) {
+        std::unordered_set<std::uint32_t> seen;
+        for (const SEnumItem& it : el.def.enum_items) {
+          const std::string_view n = in_.str(it.literal);
+          if (!seen.insert(it.literal.id).second || n == "quantity" || n == "min" || n == "max" || n == "start" || n == "fixed")
+            return true;
+        }
+        return false;
+      }
+      if (el.def.kind != SClassDefKind::Derived || el.def.derived_type.path.size() != 1) return false;
+      ScodeScope nds;
+      e = find_scode_element_at(el.def.derived_type.path[0], ds, nds);
+      ds = std::move(nds);
+    }
+    return false;
+  }
+  // extends 路径：中间段经过 partial 类（PartialLookup3）；或基类里有与 extends 名同名的局部类（继承后再查会找到它，
+  // ExtendInherited1 "Found other base class for extends A after instantiating extends"）→ SKIP。
+  bool bad_extends_path(const SElement& x, const ScodeScope& scope) {
+    if (x.base_path.empty()) return false;
+    ScodeScope ds;
+    Id<SElement> e = find_scode_element_at(x.base_path[0], x.base_leading_dot ? ScodeScope{} : scope, ds);
+    for (std::size_t k = 0; e.is_valid() && k + 1 < x.base_path.size(); ++k) {
+      const SElement& el = I_.scode.elems[e];
+      if (el.kind != SElementKind::Class) return false;
+      if (el.is_partial) return true;
+      Id<SElement> nxt;
+      for (Id<SElement> m : el.def.elements)
+        if (I_.scode.elems[m].name == x.base_path[k + 1] && I_.scode.elems[m].kind == SElementKind::Class) { nxt = m; break; }
+      e = nxt;
+    }
+    if (e.is_valid() && I_.scode.elems[e].kind == SElementKind::Class)
+      for (Id<SElement> m : I_.scode.elems[e].def.elements)
+        if (I_.scode.elems[m].kind == SElementKind::Class && I_.scode.elems[m].name == x.base_path[0]) return true;
+    return false;
+  }
+  // 组件类型路径的合法性：中间段经过 partial 类（PartialLookup1/2，"name lookup is not allowed in partial classes"）或含
+  // 非常量组件 / 方程的 package（PackageIllegal / DependsMutual：查找时实例化包 → NFRestriction.assertOnlyConstantComponents），
+  // 或类型本身是 partial 类（Partial1 "Component has partial type"）→ SKIP。scope = 组件声明处的作用域链。
+  bool bad_type_path(const SElement& c, const ScodeScope& scope) {
+    if (c.type.path.empty()) return false;
+    ScodeScope ds;
+    Id<SElement> e = find_scode_element_at(c.type.path[0], c.type.leading_dot ? ScodeScope{} : scope, ds);
+    if (!e.is_valid()) {   // SCODE 查找不到（encapsulated 边界，Encapsulated1）而又不是内建类型 → SKIP
+      const std::string_view n = in_.str(c.type.path[0]);
+      return !(c.type.path.size() == 1 && (n == "Real" || n == "Integer" || n == "Boolean" || n == "String" ||
+                                           n == "StateSelect" || n == "AssertionLevel" || n == "Clock"));
+    }
+    for (std::size_t k = 0; e.is_valid(); ++k) {
+      const SElement& el = I_.scode.elems[e];
+      if (el.kind != SElementKind::Class) return false;
+      const bool last = k + 1 == c.type.path.size();
+      if (el.is_partial && !c.prefixes.is_replaceable) return true;
+      if (last) {
+        // 组件类型是 package / function（inst6 在 1.25.0 能过但较新 OMC 报错——只对 package 判，function 型组件另有语义）、
+        // 无基类型的长 type 类（TypeMissingBaseType1）、未指定的枚举 `enumeration(:)`（EnumUnspecified1）→ SKIP。
+        if (el.restriction == SRestriction::Type && el.def.kind == SClassDefKind::Parts) {
+          bool has_ext = false;
+          for (Id<SElement> m : el.def.elements) if (I_.scode.elems[m].kind == SElementKind::Extends) has_ext = true;
+          if (!has_ext) return true;
+        }
+        if (el.def.kind == SClassDefKind::Enumeration && el.def.enum_unspecified) return true;
+        return false;
+      }
+      if (el.restriction == SRestriction::Package) {
+        if (!el.def.equations.empty() || !el.def.initial_equations.empty() || !el.def.algorithms.empty()) return true;
+        for (Id<SElement> m : el.def.elements)
+          if (I_.scode.elems[m].kind == SElementKind::Component && I_.scode.elems[m].attr.var != SVariability::Const) return true;
+      }
+      Id<SElement> nxt;
+      for (Id<SElement> m : el.def.elements)
+        if (I_.scode.elems[m].name == c.type.path[k + 1] && I_.scode.elems[m].kind == SElementKind::Class) { nxt = m; break; }
+      e = nxt;
+    }
+    return false;
+  }
+  // 一组元素里有同名的类 / 组件（NFClassTree.addLocalElementConflict）。
+  bool has_duplicate_names(const std::vector<Id<SElement>>& elems) {
+    std::unordered_set<std::uint32_t> names;
+    for (Id<SElement> e : elems) {
+      const SElement& el = I_.scode.elems[e];
+      if (el.kind != SElementKind::Class && el.kind != SElementKind::Component) continue;
+      if (!names.insert(el.name.id).second) return true;
+    }
+    return false;
+  }
+  // 同一修饰里同名子修饰：至多一个带绑定时合并（子修饰递归同查），两个都带绑定 → DUPLICATE_MODIFICATIONS
+  //（NFModifier.mergeLocal :715-756；DuplicateMod1/2/3/6、Modification8 `b(a.x = 1.0, a(x = 2.0))`、DuplicateBaseTypeMod）。
+  bool mod_has_duplicates(const std::vector<Id<SMod>>& group) {
+    std::vector<std::pair<std::uint32_t, std::vector<Id<SMod>>>> by_name;
+    for (Id<SMod> m : group) {
+      if (!m.is_valid()) continue;
+      for (const SSubMod& sm : I_.scode.mods[m].subs) {
+        auto it = std::find_if(by_name.begin(), by_name.end(), [&](const auto& g) { return g.first == sm.ident.id; });
+        if (it == by_name.end()) by_name.push_back({sm.ident.id, {sm.mod}});
+        else it->second.push_back(sm.mod);
+      }
+    }
+    for (const auto& g : by_name) {
+      int bindings = 0;
+      for (Id<SMod> m : g.second) if (m.is_valid() && I_.scode.mods[m].binding.is_valid()) ++bindings;
+      if (bindings > 1) return true;
+      if (g.second.size() > 1 ? mod_has_duplicates(g.second) : mod_has_duplicates({g.second[0]})) return true;
+    }
+    return false;
+  }
+  // 本类的结构性校验（与 OMC 报错对齐，命中即 SKIP）：局部同名元素、受限类的段 / 可见性（NFRestriction.checkClass
+  // :404-497）、记录 / 连接器成员前缀（NFAttributes.checkDeclaredComponentAttributes :402-429）、组件 / extends 修饰里的
+  // 重复修饰、元素级 redeclare（ymc 未做：Illegal redeclare 判定与替换语义）、组件类型名命中本类组件（Lookup8
+  // `Cytosol Cytosol`：类型查找先找到组件 → "Expected X to be a class"）。
+  void check_class_rules(const SElement& def, const ScodeScope& scope) {
+    if (has_duplicate_names(def.def.elements)) { set_unsupported("duplicate element declaration"); return; }
+    const SRestriction r = def.restriction;
+    const bool has_eq = !def.def.equations.empty() || !def.def.initial_equations.empty();
+    bool has_alg = false;
+    for (const SAlgorithm& a : def.def.algorithms) if (!a.stmts.empty()) has_alg = true;
+    for (const SAlgorithm& a : def.def.initial_algorithms) if (!a.stmts.empty()) has_alg = true;
+    bool has_prot = false;
+    for (Id<SElement> e : def.def.elements)
+      if (I_.scode.elems[e].prefixes.vis == SVisibility::Protected) has_prot = true;
+    const bool rec_like = r == SRestriction::Record || r == SRestriction::OperatorRecord || r == SRestriction::Type;
+    const bool conn = r == SRestriction::Connector || r == SRestriction::ExpandableConnector;
+    if ((rec_like || conn) && (has_prot || has_eq || has_alg)) { set_unsupported("restricted class sections"); return; }
+    if ((r == SRestriction::Package || r == SRestriction::Operator) && (has_eq || has_alg)) {
+      set_unsupported("restricted class sections"); return;
+    }
+    if (r == SRestriction::Type)   // 长类型定义只能 extends 内建类型（"Type X does not extend a basic type"，Type1）
+      for (Id<SElement> e : def.def.elements)
+        if (I_.scode.elems[e].kind == SElementKind::Component) { set_unsupported("type with components"); return; }
+    if (extends_shadowed(def)) { set_unsupported("extends of inherited class name"); return; }
+    for (Id<SElement> e : def.def.elements) {
+      const SElement& c = I_.scode.elems[e];
+      if (c.prefixes.is_redeclare && c.kind != SElementKind::Extends) { set_unsupported("element redeclare"); return; }
+      if (c.kind == SElementKind::Extends) {
+        if (c.mod.is_valid() && mod_has_duplicates({c.mod})) { set_unsupported("duplicate modification"); return; }
+        if (bad_extends_path(c, scope)) { set_unsupported("invalid extends lookup"); return; }
+        continue;
+      }
+      if (c.kind != SElementKind::Component) continue;
+      if (c.mod.is_valid() && mod_has_duplicates({c.mod})) { set_unsupported("duplicate modification"); return; }
+      // outer 元素不可带修饰（InnerOuterInvalidMod1-3：OUTER_ELEMENT_MOD）。
+      if (c.prefixes.io == SInnerOuter::Outer && c.mod.is_valid()) { set_unsupported("modifier on outer element"); return; }
+      // constrainedby（含 2.x 的 `extends A(...)` 写法）的修饰要施加到元素上（ConstrainingClass1 / redeclare5），未做 → SKIP。
+      if (c.prefixes.has_cc) { set_unsupported("constrainedby clause"); return; }
+      // constant 带 fixed = false（NonFixedConstant1："Constant must be fixed"）。
+      if (c.attr.var == SVariability::Const && c.mod.is_valid())
+        for (const SSubMod& sm : I_.scode.mods[c.mod].subs)
+          if (in_.str(sm.ident) == "fixed" && I_.scode.mods[sm.mod].binding.is_valid()) {
+            const Exp& fx = I_.absyn.exps[I_.scode.mods[sm.mod].binding];
+            if (fx.kind == ExpKind::BoolLit && !fx.bval) { set_unsupported("constant with fixed = false"); return; }
+          }
+      const bool io = c.prefixes.io != SInnerOuter::None;
+      if ((r == SRestriction::Record || r == SRestriction::OperatorRecord) &&
+          (c.attr.dir != SDirection::Bidir || io || c.attr.ct != SConnectorType::Potential)) {
+        set_unsupported("invalid component prefix in record"); return;
+      }
+      if (conn && io) { set_unsupported("inner/outer in connector"); return; }
+      if (bad_type_path(c, scope)) { set_unsupported("invalid component type lookup"); return; }
+      // 枚举类型的字面量重名，或与枚举类型属性（quantity/min/max/start/fixed）同名 → DOUBLE_DECLARATION（EnumDuplicateLiteral /
+      // EnumInvalidLiteral）。
+      if (bad_enum_type(c, scope)) { set_unsupported("invalid enumeration literal"); return; }
+      if (!c.type.leading_dot && !c.type.path.empty())
+        for (Id<SElement> o : def.def.elements)
+          if (I_.scode.elems[o].kind == SElementKind::Component && I_.scode.elems[o].name == c.type.path[0]) {
+            set_unsupported("type name refers to a component"); return;
+          }
+    }
   }
 
   // 只留最终模型用到的函数（NFFlatten.collectFunctions :418-429 在 EvalConstants 之后从变量 / 方程 / 算法收集调用，
   // flattenFunction 再递归收函数体里的调用）：类型化时发射、随后被求值掉的调用（结构参数 `m = f(n) + n` → 3，ceval4）
   // 不留函数块。
   void prune_functions() {
+    collect_record_ctors();
+    if (result_.unsupported) return;
     std::vector<FlatFunction>& fns = result_.model.functions;
     if (fns.empty()) return;
     std::vector<bool> keep(fns.size(), false);
@@ -213,6 +474,7 @@ class Flattener {
       for (std::size_t i = 0; i < fns.size(); ++i)
         if (!keep[i] && fns[i].name == name) { keep[i] = true; work.push_back(i); }
     };
+    for (const std::vector<Symbol>& rn : model_record_ctors_) mark_call(rn);
     auto expr = [&](auto& self, Id<Expr> id) -> void {
       if (!id.is_valid()) return;
       const Expr& x = result_.model.exprs[id];
@@ -269,8 +531,12 @@ class Flattener {
                      bool protected_ctx, const ModCtx& ctx, const std::vector<InnerVar>& outer_inners) {
     // 已判 unsupported 就早停：模型必 SKIP，继续摊分（尤其大复合数组）只是白烧时间/内存（ArrayConnect3 cells[1000,100]）。
     if (result_.unsupported) return;
+    // 实例帧：本类压平期间 eval_scode 的单段名按本实例的局部参数 / 常量（修饰感知）求值（见 frame_value）。
+    FramePush frame_push(*this, inst_node, prefix, psubs, ctx);
     const SElement& def = I_.scode.elems[I_.nodes[inst_node].def];
     if (def.def.external.present) set_unsupported("external function");
+    check_class_rules(def, scode_scope_of(inst_node));
+    if (result_.unsupported) return;
     for (Id<SElement> eid : def.def.elements) {
       SElementKind k = I_.scode.elems[eid].kind;
       if (k == SElementKind::Import) set_unsupported("import");   // v1 未做 import 解析
@@ -327,6 +593,11 @@ class Flattener {
       const SElement& cel = I_.scode.elems[I_.comps[cid].def];
       const bool has_dims = !cel.attr.dims.empty() || !cel.type.dims.empty();
       if (conflicting_direction(cel, inst_node)) { set_unsupported("conflicting direction prefix"); continue; }
+      const SDirection own_dir = I_.comps[cid].attributes.direction;
+      if (ctx.dir_inh != SDirection::Bidir && own_dir != SDirection::Bidir) {   // mergeDirection 冲突（NFPrefixes :588-604）
+        set_unsupported("conflicting direction prefix"); continue;
+      }
+      const SDirection mdir = merged_dir(own_dir, ctx);
       // expandable 直属成员禁 flow/stream 前缀（assertNotFlowStream，NFAttributes.mo:411-413；omc 报错，ExpandableConnectorFlow1）。
       if (exp_class && cel.attr.ct != SConnectorType::Potential) { set_unsupported("flow/stream in expandable connector"); continue; }
       // 本组件 potentially present（直属 expandable 或祖先 pp）时的链（含自身）；expandable 组件自身不 pp（见 ModCtx::pp_chain）。
@@ -341,15 +612,23 @@ class Flattener {
         std::optional<CVal> cv = eval_scode(cel.condition, scode_scope_of(cscope), 0, /*allow_param=*/true, nullptr);
         if (!cv || cv->k != CVal::K::Bool) { set_unsupported("conditional component condition"); continue; }
         if (!cv->b) {
+          // 键带逐段下标（复合数组各元素的条件各自求值，Condition8 / ConnectArrayCond2：b[2].a 被移除、b[1].a 保留）。
           std::vector<Symbol> rn = prefix;
           rn.push_back(cname);
-          removed_.insert(path_key(rn));
-          removed_nodes_.insert(cn.raw);
+          PSubs rs = psubs;
+          rs.resize(prefix.size());
+          rs.push_back({});
+          removed_.insert(int_key(rn, rs));
           continue;
         }
       }
       // outer 组件：不产出变量，按名连到最近外层 inner，记重定向表供 cref 改写（R11 §5）。找不到 inner → SKIP。
       if (I_.comps[cid].attributes.is_outer) {
+        // 外来修饰改 outer 元素（InnerOuterInvalidMod2/3：OUTER_ELEMENT_MOD）→ omc 报错 → SKIP。
+        for (Id<SMod> m : ctx.mods)
+          for (const SSubMod& sm : I_.scode.mods[m].subs)
+            if (sm.ident == cname) set_unsupported("modifier on outer element");
+        if (result_.unsupported) continue;
         // `inner outer` 组合前缀：既声明本层变量又连外层 inner（InnerOuter3），v1 只做纯 outer → SKIP。
         if (I_.comps[cid].attributes.is_inner) { set_unsupported("inner outer combined"); continue; }
         if (has_dims) { set_unsupported("outer array"); continue; }
@@ -375,6 +654,12 @@ class Flattener {
             if (sm.is_final) sub_final = true;
             matched.push_back(s.mod);
           }
+      // 外来修饰改 final 元素（NFModifier.checkFinalOverride :697-713，FinalMod1 / ModifyConstant6）、改 protected 元素
+      //（PROTECTED_MODIFICATION，ProtectedAccess / Protected1）→ omc 报错 → SKIP。
+      if (!matched.empty() && (I_.comps[cid].attributes.is_final || vis == Visibility::Protected)) {
+        set_unsupported(vis == Visibility::Protected ? "modification of protected element" : "final element override");
+        continue;
+      }
       const bool comp_final = ctx.final_all || sub_final || I_.comps[cid].attributes.is_final;
 
       // 数组组件：叶数组走 emit_array；复合数组 `A a[2]` 逐元素以 `a[i]` 前缀递归展开（2a 只做无修饰/无整体绑定）。
@@ -411,14 +696,15 @@ class Flattener {
           std::int64_t total = 1;
           for (std::int64_t d : adims) total *= (d > 0 ? d : 0);
           if (total > 1024) { set_unsupported("composite array too large"); continue; }
+          if (total == 0) continue;   // 零长度复合数组：没有元素（ZeroDimUnconnectedFlow1/2）
           std::vector<std::int64_t> aidx(adims.size(), 1);
           for (bool more = true; more;) {
             PSubs cps = psubs;
             cps.push_back(aidx);   // 该复合数组段 `a` 带下标 [i…]
             ModCtx achild;
             achild.final_all = comp_final;
-            achild.keep_dir = ctx.keep_dir && (r == SRestriction::Connector || r_exp ||
-                                               I_.comps[cid].attributes.direction == SDirection::Input);
+            achild.keep_dir = ctx.keep_dir && (r == SRestriction::Connector || r_exp || mdir == SDirection::Input);
+            achild.dir_inh = mdir;
             achild.in_conn = ctx.in_conn || r == SRestriction::Connector || r_exp;
             achild.flow_inherited = ctx.flow_inherited;   // 复合数组上的 flow 前缀仍在上方守卫处 SKIP
             // 数组各元素共用同一组件节点（present 标记按节点，YmcExpNode1 探针）；expandable 组件的成员重起链。
@@ -471,7 +757,9 @@ class Flattener {
           if (!wb.is_valid() && I_.comps[cid].binding.kind == BindingKind::Raw && I_.comps[cid].binding.raw_exp.is_valid())
             wb = I_.comps[cid].binding.raw_exp;
           if (wb.is_valid() && I_.absyn.exps[wb].kind == ExpKind::Call) {
-            std::optional<CVal> rv = eval_user_call(I_.absyn.exps[wb], scode_scope_of(ws), 0);
+            // 只折常量实参的调用：参数实参的记录函数绑定 omc 不求值（ConstructParameters2 → initial equation + fixed=false，
+            // 未做 → 落到下面 SKIP）。
+            std::optional<CVal> rv = eval_user_call(I_.absyn.exps[wb], scode_scope_of(ws), 0, /*allow_param=*/false);
             if (rv && rv->k == CVal::K::Record) {
               if (emit_record_fields(cid, name, prefix, psubs, ci, *rv, is_prot, comp_final)) continue;
               set_unsupported("record function fold field"); continue;
@@ -509,8 +797,8 @@ class Flattener {
         child.var_floor = var_min(ctx.var_floor, I_.comps[cid].attributes.variability);   // 变率下沉（Half A）
         // expandable 组件也算连接器（InstNode.isConnector = CONNECTOR_MASK 含 EXPANDABLE，NFPrefixes.mo:59-60/167-175）：
         // 其成员保留方向（expconn4 `input Real ec.ri`、ExpandableConnector7 `output Real ec1.ec.x`）。
-        child.keep_dir = ctx.keep_dir && (r == SRestriction::Connector || r_exp ||
-                                          I_.comps[cid].attributes.direction == SDirection::Input);
+        child.keep_dir = ctx.keep_dir && (r == SRestriction::Connector || r_exp || mdir == SDirection::Input);
+        child.dir_inh = mdir;
         child.in_conn = ctx.in_conn || r == SRestriction::Connector || r_exp;
         child.flow_inherited = ctx.flow_inherited || flow_rec;
         if (!r_exp) child.pp_chain = pp_self;   // expandable 组件的成员重起链（其直属成员由 exp_class 置 pp）
@@ -607,6 +895,10 @@ class Flattener {
     return result_.model.add_stmt(std::move(fs));
   }
 
+  // 组件合并后的方向（见 ModCtx::dir_inh；冲突已在 flatten_class 里判 SKIP）。
+  static SDirection merged_dir(SDirection own, const ModCtx& ctx) {
+    return own == SDirection::Bidir ? ctx.dir_inh : own;
+  }
   // 组件注解里有 `Evaluate = true`（字面量）。
   bool evaluate_true(Id<SElement> def) {
     if (!def.is_valid()) return false;
@@ -688,6 +980,9 @@ class Flattener {
       // connect 攒起来在 run() 末尾按连接集展开（potential 相等 + flow 求和）。initial 段里的 connect 罕见 → SKIP。
       if (is_initial) { set_unsupported("connect in initial equation"); return; }
       if (in_if_) { set_unsupported("connect in if equation"); return; }   // 分支体里的 connect 未做
+      // 带字符串注释的 connect：生成的连接方程带合并后的源注释（ElementSource.mergeSources，ConnectTheSameConnector 两条
+      // 方程都带 "bummer!"），合并规则未核实 → SKIP。
+      if (eq.cmt.str.is_valid()) { set_unsupported("connect with comment"); return; }
       // for 循环体里的 connect（`connect(c1[i],c2[i])`）：下标含迭代变量 i，但解析推迟到 run() 末尾时
       // loop_vars_ 已清空 → 采集当前 loop_vars_ 快照，process_connects 解析该 connect 前还原（ForConnect1）。
       connects_.push_back({eq.a, eq.b, enclosing, prefix, eq.loc, loop_vars_, psubs});
@@ -836,6 +1131,12 @@ class Flattener {
   // 发射一条标量等式（含两侧整型↔实型强制，R14：eq1 `x = 2`→`x = 2.0`）。数组方程逐元素也调它。
   void emit_scalar_equality(Id<Expr> a, Id<Expr> b, SourceLoc loc, const SComment& cmt, bool is_initial) {
     const TypeKind ta = result_.model.exprs[a].ty.kind, tb = result_.model.exprs[b].ty.kind;
+    // 两侧类型不相容（String = Real、Boolean = Real…，Function7）→ omc "Type mismatch in equation" → SKIP。
+    auto num = [](TypeKind k) { return k == TypeKind::Integer || k == TypeKind::Real; };
+    if (ta != tb && !(num(ta) && num(tb)) && ta != TypeKind::Unknown && tb != TypeKind::Unknown) {
+      set_unsupported("equation type mismatch");
+      return;
+    }
     if (ta == TypeKind::Real && tb == TypeKind::Integer) b = to_real(b);
     else if (ta == TypeKind::Integer && tb == TypeKind::Real) a = to_real(a);
     FlatEquation fe;
@@ -1011,6 +1312,7 @@ class Flattener {
         if (!a.is_valid() || !b.is_valid()) { set_unsupported("function array operand cast"); return lit_int(0); }
       }
       const Type relem = freal ? Type::real() : Type::integer();
+      bool product = false;   // 向量 / 矩阵积（非逐元素，ExpandExp 另有展开规则）
       auto eq = [](const Dimension& x, const Dimension& y) {
         return x.kind != DimKind::Integer || y.kind != DimKind::Integer || x.size == y.size;
       };
@@ -1025,6 +1327,7 @@ class Flattener {
         else if (d1.size() == 2 && d2.size() == 1) { ok = eq(d1[1], d2[0]); rd = {d1[0]}; }
         else if (d1.size() == 2 && d2.size() == 2) { ok = eq(d1[1], d2[0]); rd = {d1[0], d2[1]}; }
         if (!ok) { set_unsupported("array product shape"); return lit_int(0); }
+        product = true;
       } else if (orig == Op::Div && aarr && barr) {
         set_unsupported("non-elementwise array operator");
         return lit_int(0);
@@ -1041,7 +1344,9 @@ class Flattener {
       r.a = a;
       r.b = b;
       r.ty = scalar_res ? relem : Type::array_of(relem, std::move(rd));
-      return add(std::move(r));
+      const Id<Expr> rid = add(std::move(r));
+      if (product) product_bins_.insert(rid.raw);
+      return rid;
     }
     if ((orig == Op::Mul || orig == Op::Div) && aarr && barr) {   // 矩阵乘 / 数组÷数组（非点号）非逐元素 → SKIP
       set_unsupported("non-elementwise array operator");
@@ -1187,6 +1492,28 @@ class Flattener {
     return out;
   }
 
+  // 表达式是否引用连续 / 离散变量或 time（属性绑定的变率检查）。
+  bool refs_runtime_var(Id<Expr> id) {
+    if (!id.is_valid()) return false;
+    const Expr& e = result_.model.exprs[id];
+    if (e.kind == ExprKind::Cref) {
+      const std::uint32_t raw = e.cref.resolved_node;
+      if (raw == Id<INode>::kInvalid) {
+        return e.cref.parts.size() == 1 && in_.str(e.cref.parts[0].name) == "time";
+      }
+      if (raw == kFnLocal) return false;
+      const NodeId n = NodeId::from_index(raw);
+      if (I_.nodes.contains(n) && !I_.nodes[n].is_empty() && I_.nodes[n].comp.is_valid()) {
+        const SVariability v = I_.comps[I_.nodes[n].comp].attributes.variability;
+        if (v == SVariability::Var || v == SVariability::Discrete) return true;
+      }
+      for (const ExprCrefPart& cp : e.cref.parts) for (Id<Expr> sx : cp.subscripts) if (refs_runtime_var(sx)) return true;
+      return false;
+    }
+    for (Id<Expr> a : e.args) if (refs_runtime_var(a)) return true;
+    return refs_runtime_var(e.a) || refs_runtime_var(e.b) || refs_runtime_var(e.c);
+  }
+
   // 条件是否为运行时（可作为 flat if 保留）：引用 time（未解析）或连续/离散变量，或残留调用。参数/常量 → false（SKIP）。
   bool cond_is_runtime(Id<Expr> id) {
     const Expr& e = result_.model.exprs[id];
@@ -1327,7 +1654,11 @@ class Flattener {
     // 先算绑定/属性（会往 model.exprs add），再取组件字段——不跨 add 持组件引用（arena 纪律）。
     const Type cty = I_.comps[cid].ty;   // 拷贝，跨 add 稳定
     // 结构 final（ceval3）：本参数被某 fixed 用到 → final parameter + 绑定求值成字面量。
-    const bool struct_final = final_params.count(I_.comps[cid].def.raw) > 0;
+    PSubs vsubs = psubs;
+    vsubs.resize(prefix.size());
+    vsubs.push_back({});
+    const std::string vkey = int_key(name, vsubs);
+    const bool struct_final = final_params.count(I_.comps[cid].def.raw) > 0 || structural_set_.count(vkey) > 0;
     // 绑定：外来修饰优先（第一个带绑定的子修饰），否则组件自身声明绑定（R15 §3.4 外层实例修饰 > 声明默认）。
     Id<Expr> binding;
     {
@@ -1379,15 +1710,34 @@ class Flattener {
       if ((cty.kind == TypeKind::Real || cty.kind == TypeKind::Integer) &&
           (bk == TypeKind::String || bk == TypeKind::Boolean))
         set_unsupported("binding type mismatch");
+      // 标量组件绑数组（BindingInvalidType2 `Real x = {1, 2, 3}`）→ omc 维度不符报错。
+      if (!cty.is_array() && (result_.model.exprs[binding].ty.is_array() || result_.model.exprs[binding].kind == ExprKind::Array))
+        set_unsupported("binding type mismatch");
+      // Real 绑定给 Integer 变量：TypeCheck 不做 Real→Integer（IntDiv `4000 / 100`、IntPow、Real2Integer1）→ omc 报错。
+      if (cty.kind == TypeKind::Integer && bk == TypeKind::Real) set_unsupported("binding type mismatch");
+      // 枚举绑定须是本枚举类型的字面量（Enum12 `E1 e = E2.B` → omc "Type mismatch in binding"）：按字面量路径的类型段与
+      // 字面量名核对（类型别名写法会被保守 SKIP）。
+      if (cty.kind == TypeKind::Enumeration && result_.model.exprs[binding].kind == ExprKind::EnumLit) {
+        const std::vector<Symbol> ep = result_.model.exprs[binding].enum_path;
+        const bool lit_ok = ep.size() >= 2 && !cty.enum_path.empty() && ep[ep.size() - 2] == cty.enum_path.back() &&
+                            std::find(cty.enum_literals.begin(), cty.enum_literals.end(), ep.back()) != cty.enum_literals.end();
+        if (!lit_ok) set_unsupported("enumeration binding type mismatch");
+      }
       if (cty.kind == TypeKind::Real) binding = to_real(binding);   // `= 2` → `= 2.0`
     }
     // 结构 final 参数：绑定求值成字面量（init_x = p1 or p2 → true）。
     if (struct_final) {
-      const Id<Exp> raw = I_.comps[cid].binding.raw_exp;
-      if (raw.is_valid()) {
-        std::optional<CVal> cv = eval_scode(raw, scode_scope_of(enclosing), 0, /*allow_param=*/true, nullptr);
-        if (cv) { binding = literal_of(*cv); if (cty.kind == TypeKind::Real) binding = to_real(binding); }
+      // 值取修饰感知求值的结果（frame_value 记在 const_vals_）；没有则按本实例帧现求（有效绑定 = 外来修饰 > 声明）。
+      std::optional<CVal> cv;
+      if (auto it = const_vals_.find(vkey); it != const_vals_.end()) cv = it->second;
+      if (!cv) {
+        Cref self;
+        self.parts.push_back(CrefPart{name.back(), {}});
+        const FrameHit fh = frame_value(ceval_frame_, self, /*allow_param=*/true, 0, nullptr);
+        if (fh.kind == FrameHit::Value) cv = fh.v;
       }
+      if (cv) { binding = literal_of(*cv); if (cty.kind == TypeKind::Real) binding = to_real(binding); }
+      record_structural(vkey);
     }
     // 属性来源（优先级序 R15 §3.4）：外来子修饰 > 组件自身声明修饰 > 短类链派生修饰（外层派生在前）。
     std::vector<ModSource> asrc;
@@ -1435,8 +1785,9 @@ class Flattener {
     // 方向保留：所有前缀组件都是连接器或 input 组件（顶层变量、顶层连接器成员、顶层 input 组件成员）才打印
     // input/output，否则抹掉（Variable.removeNonTopLevelDirection，NFVariable.mo:466-493；Direction1）。
     if (ctx.keep_dir) {
-      if (comp.attributes.direction == SDirection::Input) v.direction = FlatDirection::Input;
-      else if (comp.attributes.direction == SDirection::Output) v.direction = FlatDirection::Output;
+      const SDirection d = merged_dir(comp.attributes.direction, ctx);
+      if (d == SDirection::Input) v.direction = FlatDirection::Input;
+      else if (d == SDirection::Output) v.direction = FlatDirection::Output;
     }
     // 无绑定的 parameter（NFFlatten.verifyBinding :812-875；非 relaxed 模式才查，:742-746，普通翻译即非 relaxed，
     // NFInst.mo:167-168）。fixed 缺省 true：fixed 时有 start → omc 以 start 作默认绑定并告警（未做 → SKIP）；无 start →
@@ -1516,8 +1867,9 @@ class Flattener {
     for (std::int64_t n : shape) if (n == 0) return true;   // 空数组：不出变量
     FlatDirection dir = FlatDirection::None;
     if (ctx.keep_dir) {
-      if (I_.comps[cid].attributes.direction == SDirection::Input) dir = FlatDirection::Input;
-      else if (I_.comps[cid].attributes.direction == SDirection::Output) dir = FlatDirection::Output;
+      const SDirection d = merged_dir(I_.comps[cid].attributes.direction, ctx);
+      if (d == SDirection::Input) dir = FlatDirection::Input;
+      else if (d == SDirection::Output) dir = FlatDirection::Output;
     }
     std::vector<std::int64_t> idx(shape.size(), 1);
     std::size_t fi = 0;
@@ -1582,9 +1934,7 @@ class Flattener {
                                I_.absyn.exps[I_.absyn.exps[braw].args[0]].kind == ExpKind::Reduction;
     const bool nlbind = braw.is_valid() && (!is_array_ctor(braw) || comprehension);
     // 顶层 input/output 数组带绑定：omc 丢方向+绑定（标量不丢，探针实测），该 quirk 未复刻 → SKIP（TopLevelInputs2）。
-    if (braw.is_valid() && prefix.empty() &&
-        (I_.comps[cid].attributes.direction == SDirection::Input ||
-         I_.comps[cid].attributes.direction == SDirection::Output)) {
+    if (braw.is_valid() && prefix.empty() && merged_dir(I_.comps[cid].attributes.direction, ctx) != SDirection::Bidir) {
       set_unsupported("top-level directional array with binding"); return;
     }
     // constant 数组的非构造子绑定（`{1,2,3} + {3,4,5}`、`m1 * v1`、`1.0:3.0`、`zeros(4, 3)`…）：按值求值（NFCeval）→
@@ -1671,8 +2021,9 @@ class Flattener {
     // 方向保留：所有前缀组件都是连接器或 input 组件（Variable.removeNonTopLevelDirection，NFVariable.mo:466-493）。
     FlatDirection dir = FlatDirection::None;
     if (ctx.keep_dir) {
-      if (I_.comps[cid].attributes.direction == SDirection::Input) dir = FlatDirection::Input;
-      else if (I_.comps[cid].attributes.direction == SDirection::Output) dir = FlatDirection::Output;
+      const SDirection d = merged_dir(I_.comps[cid].attributes.direction, ctx);
+      if (d == SDirection::Input) dir = FlatDirection::Input;
+      else if (d == SDirection::Output) dir = FlatDirection::Output;
     }
 
     // 行主序枚举下标元组（1 基），逐元素产出变量行；param/const 数组把绑定摊到每元素。
@@ -1940,6 +2291,21 @@ class Flattener {
           if (s.ident == an) { smid = s.mod; break; }
         if (!smid.is_valid()) continue;
         Id<Expr> v = attr_value(a.vk, I_.scode.mods[smid].binding, src.scope, src.vprefix);
+        {   // 属性值类型须与属性类型相容（BuiltinAttribute5 `start = "fish"`、BuiltinAttribute6 `quantity = 1`）。
+          Id<Expr> vin = v;   // 透过 attr_value 插的 Cast 看原值类型（`start = "fish"` 会被包成 /*Real*/("fish")）
+          while (result_.model.exprs[vin].kind == ExprKind::Cast) vin = result_.model.exprs[vin].a;
+          const TypeKind vk = result_.model.exprs[vin].ty.kind;
+          auto num = [](TypeKind k) { return k == TypeKind::Integer || k == TypeKind::Real; };
+          bool bad = false;
+          switch (a.vk) {
+            case AttrVK::Str: bad = vk != TypeKind::String; break;
+            case AttrVK::Real: bad = !num(vk) && vk != TypeKind::Unknown; break;
+            case AttrVK::Int: bad = vk != TypeKind::Integer && vk != TypeKind::Unknown; break;
+            case AttrVK::Bool: bad = vk != TypeKind::Boolean && vk != TypeKind::Unknown; break;
+            case AttrVK::StateSel: case AttrVK::EnumComp: break;
+          }
+          if (bad) { set_unsupported("attribute type mismatch"); return out; }
+        }
         // `fixed` 必是参数/常量 Boolean，omc 求值成字面量（并把参数标 final）：ceval3 的 `fixed = init_x`→`true`。
         // 折不成字面量时对 fixed 做结构参数求值；仍失败 → SKIP（参数依赖变量等）。
         if (an == in_.intern("fixed") && !is_literal(v)) {
@@ -1947,6 +2313,9 @@ class Flattener {
           if (cv) v = literal_of(*cv);
           else { set_unsupported("parameter evaluation in attribute"); return out; }
         }
+        // 内建属性都是参数变率（类型属性组件），绑定引用连续 / 离散变量 → omc HIGHER_VARIABILITY_BINDING（ScopeDeclaration2
+        // `Real a(min = a)`）→ SKIP。
+        if (refs_runtime_var(v)) { set_unsupported("attribute binding of higher variability"); return out; }
         out.push_back({an, v});
         break;
       }
@@ -1984,6 +2353,8 @@ class Flattener {
       if (!p.subscripts.empty()) { set_unsupported("subscripted enum value"); return lit_int(0); }
       r.enum_path.push_back(p.name);
     }
+    // 不带类型前缀的字面量名（`start = two`）按普通名字查找（Enum10 → omc "Variable two not found"）→ 未做，SKIP。
+    if (c.parts.size() < 2) { set_unsupported("unqualified enum literal"); return lit_int(0); }
     if (c.parts.size() >= 2) {
       const SClassDef* ed = find_enum_def(scope, c.parts[c.parts.size() - 2].name);
       if (ed) {
@@ -2141,6 +2512,7 @@ class Flattener {
     for (Id<SElement> cls : scope) {
       Id<SElement> f = scan(I_.scode.elems[cls].def.elements);
       if (f.is_valid()) return f;
+      if (I_.scode.elems[cls].is_encapsulated) return Id<SElement>{};   // encapsulated 边界（MLS §5.3.1）
     }
     return scan(I_.scode.program);   // 顶层
   }
@@ -2257,6 +2629,13 @@ class Flattener {
           auto it = loop_vars_.find(c.parts[0].name.id);
           if (it != loop_vars_.end()) return CVal::I(it->second);
         }
+        // 模型语境：本实例的局部参数 / 常量按修饰后的绑定求值（NF 的组件绑定 = 修饰合并后，Structural.markExp 把求值
+        // 用到的参数标为结构参数）。
+        if (ceval_frame_ >= 0 && !locals_ && !c.leading_dot) {
+          const FrameHit fh = frame_value(ceval_frame_, c, allow_param, depth, used);
+          if (fh.kind == FrameHit::Value) return fh.v;
+          if (fh.kind == FrameHit::Fail) return std::nullopt;
+        }
         // 书写处实例前缀上已发射的常量（修饰后的最终值，const_vals_）优先：`A a(x = 1)` 里 `z = x + y` 的 x 取 1。
         if (ceval_prefix_ && !c.leading_dot)
           if (std::optional<CVal> kv = const_lookup_val(*ceval_prefix_, ceval_psubs_, c, scope, depth)) return kv;
@@ -2271,11 +2650,14 @@ class Flattener {
         if (used && I_.scode.elems[comp].attr.var == SVariability::Param) used->insert(comp.raw);
         const Id<SMod> m = I_.scode.elems[comp].mod;
         if (!m.is_valid() || !I_.scode.mods[m].binding.is_valid()) return std::nullopt;
-        // 被引常量的声明绑定在其自身作用域求值：书写处前缀不再适用。
+        // 被引常量的声明绑定在其自身作用域求值：书写处前缀 / 实例帧不再适用。
         const std::vector<Symbol>* saved = ceval_prefix_;
+        const int saved_frame = ceval_frame_;
         ceval_prefix_ = nullptr;
+        ceval_frame_ = -1;
         auto v = eval_scode(I_.scode.mods[m].binding, cscope, depth + 1, allow_param, used);
         ceval_prefix_ = saved;
+        ceval_frame_ = saved_frame;
         if (v) v = coerce_cval(*v, I_.scode.elems[comp].type.path);   // 按声明类型强转（Real n=3 → 3.0）
         return v;
       }
@@ -2326,6 +2708,7 @@ class Flattener {
         return std::nullopt;
       }
       case ExpKind::Call: {
+        if (e.call_suffix.is_valid()) return std::nullopt;   // `f(i).y` 未做
         // size(arr, d)：解析数组组件 arr（任意可变性），求它第 d 维（DimSize1）。
         const Cref& fn = I_.absyn.crefs[e.cref];
         if (fn.parts.size() != 1 || in_.str(fn.parts[0].name) != "size" || e.args.size() != 2) {
@@ -2350,6 +2733,15 @@ class Flattener {
         const Exp& ae = I_.absyn.exps[e.args[0]];
         auto dv = eval_scode(e.args[1], scope, depth + 1, allow_param, used);
         if (ae.kind != ExpKind::CrefExp || !dv || dv->k != CVal::K::Int) return std::nullopt;
+        // 函数解释期的局部数组（输入 `A[:]` 取实参形状，PolynomialEvaluator1 `size(A, 1)`）：按当前值的形状。
+        if (locals_ && I_.absyn.crefs[ae.cref].parts.size() == 1 && I_.absyn.crefs[ae.cref].parts[0].subscripts.empty()) {
+          auto it = locals_->find(I_.absyn.crefs[ae.cref].parts[0].name.id);
+          if (it != locals_->end()) {
+            const std::vector<std::int64_t> sh = cval_shape(it->second);
+            if (dv->i < 1 || static_cast<std::size_t>(dv->i) > sh.size()) return std::nullopt;
+            return CVal::I(sh[static_cast<std::size_t>(dv->i) - 1]);
+          }
+        }
         std::vector<Symbol> anames;
         for (const CrefPart& p : I_.absyn.crefs[ae.cref].parts) {
           if (!p.subscripts.empty()) return std::nullopt;
@@ -2852,6 +3244,114 @@ class Flattener {
     return cval_of(r);
   }
 
+  // ---- 实例帧：修饰感知的参数 / 常量求值（结构参数）----
+  // NF 的组件绑定是修饰合并后的绑定（`Foo foo(enabled = b)` 里 foo.enabled 的绑定是 `b`），条件 / 维度 / fixed / for 范围等
+  // 编译期求值用到的参数经 Structural.markExp 变成结构参数（NFInst.updateImplicitVariability :3955-3992、NFFlatten
+  // :1068 / :2106），EvalConstants 再把它们的引用处一律代入值（NFEvalConstants.evaluateExpTraverser :196-230）。ymc 在压平
+  // DFS 里维护祖先帧：单段名命中本实例的局部参数 / 常量时，按"外来修饰绑定（在修饰书写处的帧求值）> 声明绑定"求值，
+  // 记入 const_vals_，参数记为结构参数（apply_structural_params 统一打 final、代入引用）。YmcCond1/2 探针。
+  struct FramePush {
+    Flattener& f;
+    int saved;
+    FramePush(Flattener& fl, NodeId inst, const std::vector<Symbol>& prefix, const PSubs& psubs, const ModCtx& ctx)
+        : f(fl), saved(fl.ceval_frame_) {
+      f.frames_.push_back(Frame{inst, prefix, psubs, &ctx});
+      f.ceval_frame_ = static_cast<int>(f.frames_.size()) - 1;
+    }
+    ~FramePush() { f.frames_.pop_back(); f.ceval_frame_ = saved; }
+    FramePush(const FramePush&) = delete;
+    FramePush& operator=(const FramePush&) = delete;
+  };
+  struct FrameHit {
+    enum Kind { NotLocal, Value, Fail } kind = NotLocal;
+    CVal v;
+  };
+  // 实例节点所在的帧（基类实例 = 其派生实例的帧：继承成员的绑定作用域是基类实例，instance_parent 指回派生实例）。
+  int frame_of(NodeId n) {
+    for (int guard = 0; guard < 64 && n.is_valid() && !I_.nodes[n].is_empty(); ++guard) {
+      for (int i = static_cast<int>(frames_.size()) - 1; i >= 0; --i)
+        if (frames_[static_cast<std::size_t>(i)].inst.raw == n.raw) return i;
+      n = I_.nodes[n].instance_parent;
+    }
+    return -1;
+  }
+  FrameHit frame_value(int fi, const Cref& c, bool allow_param, int depth,
+                       std::unordered_set<std::uint32_t>* used) {
+    FrameHit r;
+    if (fi < 0 || depth > 100) return r;
+    const NodeId inst = frames_[static_cast<std::size_t>(fi)].inst;
+    const NodeId ln = find_local(inst, c.parts[0].name);
+    if (!ln.is_valid() || I_.nodes[ln].is_empty() || !I_.nodes[ln].comp.is_valid()) return r;
+    const CompId cid = I_.nodes[ln].comp;
+    const SVariability var = I_.comps[cid].attributes.variability;
+    const SElement& cel = I_.scode.elems[I_.comps[cid].def];
+    const bool arr = !cel.attr.dims.empty() || !cel.type.dims.empty();
+    const TypeKind tk = I_.comps[cid].ty.kind;
+    const bool scalar_builtin = tk == TypeKind::Integer || tk == TypeKind::Real || tk == TypeKind::Boolean ||
+                                tk == TypeKind::String;
+    // 多段 / 带下标 / 数组 / 记录 / 枚举常量：交回原有路径（const_vals_ 按已发射值）；同形态的参数在编译期求值语境
+    // 未做 → Fail（不落到 SCode 声明默认值——那会忽略修饰）。
+    if (c.parts.size() != 1 || !c.parts[0].subscripts.empty() || arr || !scalar_builtin) {
+      if (var == SVariability::Param && allow_param) r.kind = FrameHit::Fail;
+      return r;
+    }
+    if (var == SVariability::Var || var == SVariability::Discrete) { r.kind = FrameHit::Fail; return r; }
+    if (var == SVariability::Param && !allow_param) { r.kind = FrameHit::Fail; return r; }
+    if (cel.condition.is_valid()) { r.kind = FrameHit::Fail; return r; }   // 引用条件组件（存在性未定，CyclicBindingConditional）
+    if (used && var == SVariability::Param) used->insert(I_.comps[cid].def.raw);
+    const Frame& F = frames_[static_cast<std::size_t>(fi)];
+    std::vector<Symbol> names = F.prefix;
+    names.push_back(c.parts[0].name);
+    PSubs isubs = F.psubs;
+    isubs.resize(F.prefix.size());
+    isubs.push_back({});
+    const std::string key = int_key(names, isubs);
+    auto mark = [&]() { if (var == SVariability::Param) record_structural(key); };
+    if (auto it = const_vals_.find(key); it != const_vals_.end()) {
+      mark();
+      r.kind = FrameHit::Value;
+      r.v = it->second;
+      return r;
+    }
+    if (frame_busy_.count(key)) { r.kind = FrameHit::Fail; return r; }
+    // 有效绑定：外来修饰（在修饰书写处的帧 / 作用域求值）> 声明绑定（继承成员 = 基类作用域）。
+    Id<Exp> raw;
+    NodeId scope_node;
+    int efi = fi;
+    for (Id<SMod> m : F.ctx->mods)
+      for (const SSubMod& sm : I_.scode.mods[m].subs)
+        if (!raw.is_valid() && sm.ident == c.parts[0].name && I_.scode.mods[sm.mod].binding.is_valid()) {
+          raw = I_.scode.mods[sm.mod].binding;
+          scope_node = F.ctx->scope;
+          efi = frame_of(F.ctx->scope);
+        }
+    if (!raw.is_valid()) {
+      const Binding& b = I_.comps[cid].binding;
+      if (b.kind == BindingKind::Raw && b.raw_exp.is_valid()) {
+        raw = b.raw_exp;
+        scope_node = b.scope.is_valid() && !I_.nodes[b.scope].is_empty() ? b.scope : inst;
+      }
+    }
+    if (!raw.is_valid() || efi < 0) { r.kind = FrameHit::Fail; return r; }   // 无绑定参数 / 修饰书写处不在帧栈上
+    frame_busy_.insert(key);
+    std::optional<CVal> v;
+    {
+      const int saved = ceval_frame_;
+      ceval_frame_ = efi;
+      CevalCtx guard(*this, frames_[static_cast<std::size_t>(efi)].prefix, frames_[static_cast<std::size_t>(efi)].psubs);
+      v = eval_scode(raw, scode_scope_of(scope_node), depth + 1, /*allow_param=*/true, used);
+      ceval_frame_ = saved;
+    }
+    frame_busy_.erase(key);
+    if (v) v = coerce_to_kind(*v, tk);
+    if (!v) { r.kind = FrameHit::Fail; return r; }
+    const_vals_[key] = *v;
+    mark();
+    r.kind = FrameHit::Value;
+    r.v = *v;
+    return r;
+  }
+
   // 函数引用（resolve_fn）与签名（collect_fn_sig）——前置定义，供下面的发射段在声明里用。
   struct FnRecord { Id<SElement> rec; ScodeScope rscope; };   // 函数里记录类型的形参 / 局部 → 其记录类（+ 作用域链）
   struct FnRef {
@@ -2868,6 +3368,46 @@ class Flattener {
     Id<SElement> ext_owner;                 // external 段所在类：隐式调用名 = 其类名（instExternalDecl :3227，FunctionSections5）
     bool external = false;
   };
+
+  // external 函数按内建处理（NFFunction.makeAttributes :2584-2593 → SCodeUtil.isBuiltinFunction :2525-2560）：
+  //   external "builtin"（调用名缺省 = 类名）；
+  //   external "C" 显式 `out = name(in1, …)`，name 属已知数学函数、out 是唯一输出、实参恰为输入按序；
+  //   external "C" 无调用名、类名属已知数学函数。
+  // 命中 → 调用打内建名（Function.nameConsiderBuiltin :766-778）、不发射函数（NFFunction.new :301 COLLECTED）。常量实参
+  // 只对 "builtin" 语言求值：external "C" 的仍算外部函数（Class.isExternalFunction :694-707 只把 "builtin" 除外），
+  // SimplifyExp.simplifyCall :182 对外部调用不求值（Function12 `f = Modelica.Math.atan2` → `atan2(...)`、LogCall1
+  // `mylog(100)` → `log(100.0)` 不折叠）。ext_c 回报是否 external "C"。
+  std::optional<std::string> builtin_equiv(const FnRef& fr, bool* ext_c = nullptr) {
+    const SElement& el = I_.scode.elems[fr.fe];
+    if (el.restriction != SRestriction::ExternalFunction || !el.def.external.present) return std::nullopt;
+    const SExternalDecl& ed = el.def.external;
+    const std::string_view lang = ed.lang.is_valid() ? in_.str(ed.lang) : std::string_view("C");
+    if (ext_c) *ext_c = lang != "builtin";
+    if (lang == "builtin") return std::string(in_.str(ed.func_name.is_valid() ? ed.func_name : el.name));
+    if (lang != "C") return std::nullopt;
+    static const char* const kKnown[] = {"sin", "cos", "tan", "asin", "acos", "atan", "atan2", "sinh", "cosh", "tanh",
+                                         "exp", "log", "log10", "sqrt"};
+    auto known = [&](Symbol n) {
+      for (const char* k : kKnown) if (in_.str(n) == k) return true;
+      return false;
+    };
+    if (!ed.func_name.is_valid()) return known(el.name) ? std::optional<std::string>(std::string(in_.str(el.name))) : std::nullopt;
+    if (!known(ed.func_name) || !ed.output.is_valid()) return std::nullopt;
+    FnSig sig;
+    std::unordered_set<std::uint32_t> seen;
+    if (!collect_fn_sig(fr.fe, fr.fscope, sig, seen, 0) || sig.outputs.size() != 1 || sig.inputs.size() != ed.args.size())
+      return std::nullopt;
+    auto ident = [&](Id<Exp> x, Symbol want) {
+      const Exp& ex = I_.absyn.exps[x];
+      if (ex.kind != ExpKind::CrefExp) return false;
+      const Cref& c = I_.absyn.crefs[ex.cref];
+      return !c.leading_dot && c.parts.size() == 1 && c.parts[0].subscripts.empty() && c.parts[0].name == want;
+    };
+    if (!ident(ed.output, I_.scode.elems[sig.outputs[0]].name)) return std::nullopt;
+    for (std::size_t i = 0; i < ed.args.size(); ++i)
+      if (!ident(ed.args[i], I_.scode.elems[sig.inputs[i]].name)) return std::nullopt;
+    return std::string(in_.str(ed.func_name));
+  }
 
   // ================= 用户函数发射（加宽(55)-B）=================
   // 依据：NFFunction.lookupFunction :323-350（压平名 = 找到处的作用域链 + 调用名）、fillArgs :1084-1141 / collectArgs
@@ -3550,6 +4090,69 @@ class Flattener {
     return true;
   }
 
+  // 模型里整记录引用（等式 `a = b`、绑定）的记录类型 → 收其构造函数（NFFlatten.collectExpFuncs CREF → collectTypeFuncs
+  // :2690-2730，EquationComponent1-4 / RecordAssignment）。构造函数名 = 记录类的作用域路径（顶层 → 名；包里 → 包路径 + 名；
+  // 根类里 → 根名 + 名）；记录定义在非根的实例类里（实例路径未核实）→ SKIP。
+  void collect_record_ctors() {
+    std::unordered_set<std::uint32_t> seen;
+    auto visit_cref = [&](const Expr& x) {
+      if (x.ty.element_type().kind != TypeKind::Complex) return;
+      const std::uint32_t cn = x.ty.element_type().complex_node;
+      if (cn == Id<INode>::kInvalid) return;
+      const NodeId rn = NodeId::from_index(cn);
+      if (!I_.nodes.contains(rn) || I_.nodes[rn].is_empty()) return;
+      const Id<SElement> rdef = I_.nodes[rn].def;
+      if (!rdef.is_valid() || I_.scode.elems[rdef].restriction != SRestriction::Record) return;
+      if (!seen.insert(rdef.raw).second) return;
+      const ScodeScope chain = scode_scope_of(rn);   // [R, 外层类, …]
+      std::vector<Symbol> path;
+      const std::uint32_t root_def = I_.nodes[root_].def.raw;
+      if (chain.size() >= 2 && chain[1].raw == root_def) {
+        path = result_.model.name;
+      } else {
+        for (std::size_t k = 1; k < chain.size(); ++k)
+          if (chain[k].raw == root_def || I_.scode.elems[chain[k]].restriction != SRestriction::Package) {
+            set_unsupported("record constructor naming");
+            return;
+          }
+        for (std::size_t k = chain.size(); k-- > 1;) path.push_back(I_.scode.elems[chain[k]].name);
+      }
+      path.push_back(I_.scode.elems[rdef].name);
+      if (!emit_record_ctor(rdef, chain, path) || result_.unsupported) { set_unsupported("record constructor"); return; }
+      model_record_ctors_.push_back(path);
+    };
+    auto expr = [&](auto& self, Id<Expr> id) -> void {
+      if (!id.is_valid() || result_.unsupported) return;
+      const Expr x = result_.model.exprs[id];   // 拷贝：emit_record_ctor 会往 exprs 添加
+      if (x.kind == ExprKind::Cref) visit_cref(x);
+      for (const ExprCrefPart& cp : x.cref.parts) for (Id<Expr> sub : cp.subscripts) self(self, sub);
+      self(self, x.a);
+      self(self, x.b);
+      self(self, x.c);
+      for (Id<Expr> a : x.args) self(self, a);
+    };
+    auto eqn = [&](auto& self, Id<FlatEquation> id) -> void {
+      const FlatEquation q = result_.model.eqs[id];
+      expr(expr, q.a); expr(expr, q.b); expr(expr, q.c);
+      for (const FlatEqBranch& br : q.branches) { expr(expr, br.cond); for (Id<FlatEquation> b : br.body) self(self, b); }
+      for (Id<FlatEquation> b : q.body) self(self, b);
+      for (Id<FlatEquation> b : q.else_body) self(self, b);
+    };
+    auto stmt = [&](auto& self, Id<FlatStatement> id) -> void {
+      const FlatStatement st = result_.model.stmts[id];
+      expr(expr, st.a); expr(expr, st.b); expr(expr, st.c);
+      for (const FlatStmtBranch& br : st.branches) { expr(expr, br.cond); for (Id<FlatStatement> b : br.body) self(self, b); }
+      for (Id<FlatStatement> b : st.body) self(self, b);
+      for (Id<FlatStatement> b : st.else_body) self(self, b);
+    };
+    for (std::size_t i = 0; i < result_.model.variables.size(); ++i) expr(expr, result_.model.variables[i].binding);
+    for (const std::vector<Id<FlatEquation>>* eqs : {&result_.model.equations, &result_.model.initial_equations})
+      for (std::size_t i = 0; i < eqs->size(); ++i) eqn(eqn, (*eqs)[i]);
+    for (const std::vector<FlatAlgorithm>* algs : {&result_.model.algorithms, &result_.model.initial_algorithms})
+      for (std::size_t a = 0; a < algs->size(); ++a)
+        for (std::size_t i = 0; i < (*algs)[a].stmts.size(); ++i) stmt(stmt, (*algs)[a].stmts[i]);
+  }
+
   // 记录类型的压平名：类路径（记录在顶层 → 名字本身；在包里 → 包路径 + 名，与函数同一套 lookup 规则）；定义在根类或
   // 实例类里（实例路径未核实）→ nullopt。
   std::optional<std::vector<Symbol>> rec_flat_name(const SElement& c, const ScodeScope& scope, Id<SElement>& rec,
@@ -3978,12 +4581,15 @@ class Flattener {
       const SElement& el = I_.scode.elems[e];
       return el.name == name && (el.kind == SElementKind::Class || el.kind == SElementKind::Component);
     };
-    for (std::size_t k = 0; k < scope.size(); ++k)
+    for (std::size_t k = 0; k < scope.size(); ++k) {
       for (Id<SElement> e : I_.scode.elems[scope[k]].def.elements)
         if (hit(e)) {
           def_scope.assign(scope.begin() + static_cast<std::ptrdiff_t>(k), scope.end());
           return e;
         }
+      // encapsulated 类：名字首段的查找止于本类（MLS §5.3.1；Encapsulated4 的 `fn` 在外层 → omc "not found"）。
+      if (I_.scode.elems[scope[k]].is_encapsulated) return {};
+    }
     for (Id<SElement> e : I_.scode.program)
       if (hit(e)) { def_scope.clear(); return e; }
     return {};
@@ -4063,6 +4669,8 @@ class Flattener {
         continue;
       }
       if (c.kind != SElementKind::Component) continue;     // 嵌套类（记录等）不入签名
+      // protected 的输入 / 输出：NFFunction.paramDirection "Invalid protected variable"（FunctionProtectedInput）。
+      if (c.prefixes.vis == SVisibility::Protected && c.attr.dir != SDirection::Bidir) return false;
       if (!seen.insert(c.name.id).second) continue;         // 同名去重
       sig.all.push_back(eid);
       if (c.attr.dir == SDirection::Input) sig.inputs.push_back(eid);
@@ -4199,6 +4807,14 @@ class Flattener {
   // parameter，omc 不求值（YmcFnPar1 探针：`g(p)` 保留）。
   std::optional<CVal> eval_user_call(const Exp& call, const ScodeScope& scope, int depth, bool allow_param = true) {
     if (depth > 100) return std::nullopt;
+    // 实参在调用处求值（可用实例帧）；函数体 / 记录构造在定义处求值，实例帧不适用（函数不能引用模型参数）。
+    struct FrameOff {
+      Flattener& f;
+      int saved;
+      bool off = false;
+      ~FrameOff() { if (off) f.ceval_frame_ = saved; }
+    } frame_off{*this, ceval_frame_};
+    auto frame_off_now = [&]() { frame_off.off = true; ceval_frame_ = -1; };
     const Cref& fn = I_.absyn.crefs[call.cref];
     // 记录构造 `R(2)` / `R(x = 2)`：实参按字段声明序 / 名字，缺省取字段默认。
     if (std::optional<FnRef> rr = resolve_fn(fn, scope, SRestriction::Record)) {
@@ -4214,10 +4830,23 @@ class Flattener {
         else if (pos < fields.size()) given.push_back({fields[pos++], *v});
         else return std::nullopt;
       }
+      frame_off_now();
       return record_value(rr->fe, rr->fscope, Id<SMod>{}, scope, given, depth + 1, /*allow_undef=*/false);
     }
     std::optional<FnRef> fr = resolve_fn(fn, scope);
     if (!fr) return std::nullopt;
+    bool ext_c = false;
+    if (std::optional<std::string> bn = builtin_equiv(*fr, &ext_c)) {   // 内建等价："builtin" 语言按内建求值，"C" 不求值
+      if (ext_c) return std::nullopt;
+      for (Symbol an : call.arg_names) if (an.is_valid()) return std::nullopt;
+      std::vector<CVal> bargs;
+      for (Id<Exp> a : call.args) {
+        std::optional<CVal> v = eval_scode(a, scope, depth + 1, allow_param);
+        if (!v) return std::nullopt;
+        bargs.push_back(std::move(*v));
+      }
+      return eval_scalar_builtin(*bn, bargs);
+    }
     const SElement& fel = I_.scode.elems[fr->fe];
     if (fel.purity == Purity::Impure) return std::nullopt;   // 不纯函数不能常量折叠（须发射，ImpureCall1）
     if (fel.cmt.annotation.is_valid()) return std::nullopt;  // 带函数注解（inverse/derivative…）→ 保守 SKIP（FunctionInverseInvalid1/2 告警）
@@ -4263,6 +4892,7 @@ class Flattener {
             env[s.ident.id] = *v;
           }
     // 切到函数局部环境；函数体按定义处作用域求值，调用处前缀只对模型内嵌函数保留（local_to_caller）。
+    frame_off_now();
     const ScodeScope& fscope = fr->fscope;
     std::unordered_set<std::uint32_t> inset;
     for (Id<SElement> ii : inputs) inset.insert(I_.scode.elems[ii].name.id);
@@ -4474,14 +5104,8 @@ class Flattener {
   bool emit_record_fields(CompId cid, const std::vector<Symbol>& name, const std::vector<Symbol>& prefix,
                           const PSubs& psubs, NodeId reci, const CVal& rv, bool is_protected, bool force_final) {
     (void)prefix;
-    FlatVarKind vk = FlatVarKind::Var;
-    switch (I_.comps[cid].attributes.variability) {
-      case SVariability::Var: vk = FlatVarKind::Var; break;
-      case SVariability::Discrete: vk = FlatVarKind::Discrete; break;
-      case SVariability::Param: vk = FlatVarKind::Parameter; break;
-      case SVariability::Const: vk = FlatVarKind::Constant; break;
-    }
-    const bool fin = I_.comps[cid].attributes.is_final || force_final;
+    const SVariability rec_var = I_.comps[cid].attributes.variability;
+    const bool rec_fin = I_.comps[cid].attributes.is_final || force_final;
     const std::vector<NodeId> fields = I_.trees[I_.node_class(reci).tree].components;   // 拷贝（不跨 add 持引用）
     for (NodeId fn : fields) {
       const CompId fc = I_.nodes[fn].comp;
@@ -4496,6 +5120,16 @@ class Flattener {
       if (!cv || cv->k == CVal::K::Record || cv->k == CVal::K::Undef || cv->k == CVal::K::Array) return false;
       const Type fty = I_.comps[fc].ty;
       const SourceLoc floc = I_.comps[fc].loc;
+      // 字段变率 = variabilityMin(记录, 字段自身)、final = 记录 or 字段（mergeComponentAttributes :236/:244；
+      // RecordVariability：`abcRec z` 的 parameter 字段 b、constant 字段 c 保留）。
+      FlatVarKind vk = FlatVarKind::Var;
+      switch (var_min(rec_var, I_.comps[fc].attributes.variability)) {
+        case SVariability::Var: vk = FlatVarKind::Var; break;
+        case SVariability::Discrete: vk = FlatVarKind::Discrete; break;
+        case SVariability::Param: vk = FlatVarKind::Parameter; break;
+        case SVariability::Const: vk = FlatVarKind::Constant; break;
+      }
+      const bool fin = rec_fin || I_.comps[fc].attributes.is_final;
       FlatVariable v;
       v.name = name;
       v.name.push_back(I_.nodes[fn].name);
@@ -4773,8 +5407,8 @@ class Flattener {
     Expr e;
     e.kind = ExprKind::Cref;
     NodeId local = c.parts.empty() ? Inst::empty_node() : find_local(enclosing, c.parts[0].name);
-    // 首段命中条件为假被移除的组件 → 在方程/绑定里引用它是错误（omc 报错，ConditionInvalidContext1/2/4）→ SKIP。
-    if (local.is_valid() && !I_.nodes[local].is_empty() && removed_nodes_.count(local.raw)) {
+    // 命中条件为假被移除的组件 → 在方程/绑定里引用它是错误（omc 报错，ConditionInvalidContext1/2/4）→ SKIP。
+    if (local.is_valid() && !I_.nodes[local].is_empty() && cref_removed(prefix, c)) {
       set_unsupported("reference to removed conditional component");
       e.ty = Type::real();
       return add(std::move(e));
@@ -4793,8 +5427,14 @@ class Flattener {
       bool ok = true;
       for (std::size_t i = 1; i < c.parts.size(); ++i) {
         NodeId cls = I_.comps[I_.nodes[cur].comp].class_inst;
-        NodeId nxt = cls.is_valid() ? find_local(cls, c.parts[i].name) : Inst::empty_node();
+        // 内建类型的组件没有子组件（`x.start` → omc "Variable start not found in scope x"，SimpleIntegrator3 / Type7/8；
+        // 内建类节点无类树，find_local 会越界）。
+        const bool has_tree = cls.is_valid() && !I_.nodes[cls].is_empty() && I_.nodes[cls].kind == NodeKind::Class &&
+                              I_.nodes[cls].cls.is_valid() && I_.node_class(cls).tree.is_valid();
+        NodeId nxt = has_tree ? find_local(cls, c.parts[i].name) : Inst::empty_node();
         if (!nxt.is_valid() || I_.nodes[nxt].is_empty()) { ok = false; break; }
+        // 从外面访问 protected 元素（ProtectedAccess2 `tm.x`）→ omc 报错（ILLEGAL_ACCESS_PROTECTED）。
+        if (I_.nodes[nxt].visibility == Visibility::Protected) { set_unsupported("access of protected element"); ok = false; break; }
         cur = nxt;
         leaf = nxt;
       }
@@ -4911,8 +5551,9 @@ class Flattener {
           for (const SEnumItem& it : ed->enum_items)
             if (it.literal == c.parts.back().name) return make_enum_lit(c, enclosing);
       }
-      // 多段名先试 **package 限定常量** `P.A.B.c`：SCODE 作用域链解析到 constant + 值语义求值 → 内联字面量。
-      if (c.parts.size() > 1) {
+      // 限定名 `P.A.B.c` 与单段名都再按 **SCODE 作用域链** 解析到 constant + 值语义求值 → 内联字面量（单段名：继承元素
+      // 的绑定在基类的词法作用域里找，Constant8 的 `N` 在 A.B 里）。
+      {
         std::vector<Symbol> names;
         bool ok = true;
         for (const CrefPart& p : c.parts) {
@@ -4931,9 +5572,10 @@ class Flattener {
           }
         }
       }
-      // 单段未解析（time 等内建）v1 当 Real 保留；多段解析不出（package 常量非字面量、redeclare、跨包 extends…）
-      // → omc 会内联成值，标 unsupported（driver 退 66）。
+      // 单段未解析：只有内建变量 `time` 合法（MLS §3.6.7）；其余（import 别名 Import6、外层非常量组件 Lookup3…）ymc 未做
+      // 或 omc 报错 → unsupported。多段解析不出（package 常量非字面量、redeclare、跨包 extends…）→ omc 会内联成值 → 同。
       if (c.parts.size() > 1) set_unsupported("qualified/cross-scope reference");
+      else if (in_.str(c.parts[0].name) != "time") set_unsupported("unresolved name");
       for (const CrefPart& p : c.parts)
         if (!p.subscripts.empty()) set_unsupported("subscript on non-array");   // `time[2]` → omc 报错
       e.ty = Type::real();
@@ -4948,7 +5590,9 @@ class Flattener {
 
   // 在 enclosing 实例的 FlatTree 组件里按名字找（v1：直接线性找，规模小）。
   NodeId find_local(NodeId enclosing, Symbol name) {
-    if (I_.nodes[enclosing].kind != NodeKind::Class) return Inst::empty_node();
+    if (I_.nodes[enclosing].kind != NodeKind::Class || !I_.nodes[enclosing].cls.is_valid() ||
+        !I_.node_class(enclosing).tree.is_valid())
+      return Inst::empty_node();
     ClassTreeId t = I_.node_class(enclosing).tree;
     for (NodeId cn : I_.trees[t].components)
       if (I_.nodes[cn].kind == NodeKind::Component && I_.nodes[cn].name == name) return cn;
@@ -4965,8 +5609,15 @@ class Flattener {
     Id<Expr> b = inst_exp(e.b, enclosing, prefix);
     if (op_type(a).is_array() || op_type(b).is_array())
       return array_binary(e.op, op, a, b);   // 数组：逐元素/广播，维度传播，逐元素标量化在 collect_array_equation
-    // Modelica `/` 恒实除：整型操作数也提实型（`i/j` → `/*Real*/(i) / /*Real*/(j)`，MLS §10.6.1）。
-    bool real = op == BinOp::Div || result_.model.exprs[a].ty.kind == TypeKind::Real ||
+    {   // 算术运算数须是数值（String `+` 由下面的字符串分支处理）：Boolean / 枚举 → omc 类型错（Terminal2）→ SKIP。
+      const TypeKind ka = result_.model.exprs[a].ty.kind, kb = result_.model.exprs[b].ty.kind;
+      const bool str_add = op == BinOp::Add && ka == TypeKind::String && kb == TypeKind::String;
+      auto num = [](TypeKind k) { return k == TypeKind::Integer || k == TypeKind::Real || k == TypeKind::Unknown; };
+      if (!str_add && (!num(ka) || !num(kb))) { set_unsupported("non-numeric arithmetic operand"); return lit_int(0); }
+    }
+    // Modelica `/` 恒实除：整型操作数也提实型（`i/j` → `/*Real*/(i) / /*Real*/(j)`，MLS §10.6.1）；`^` 两侧都按
+    // Real（NFTypeCheck.checkBinaryOperationPow :1170-1185，Pow `2 ^ pi` → `2.0 ^ /*Real*/(pi)`）。
+    bool real = op == BinOp::Div || op == BinOp::Pow || result_.model.exprs[a].ty.kind == TypeKind::Real ||
                 result_.model.exprs[b].ty.kind == TypeKind::Real;
     if (real) {  // 整型操作数提升到实型：字面量直接折叠，非字面量插 Cast（R13 §4.3 / R14 §1）
       a = to_real(a);
@@ -4990,6 +5641,9 @@ class Flattener {
     if (map_relop(e.op, rop)) {
       if (arr) { set_unsupported("array relation"); return lit_int(0); }   // 元素级 Boolean 数组关系本增量暂缓
       bool real = result_.model.exprs[a].ty.kind == TypeKind::Real || result_.model.exprs[b].ty.kind == TypeKind::Real;
+      // 函数外 Real 的 == / <>：omc 告警（"... on Real operands is deprecated in non-function contexts"，
+      // OperationRelational1），ymc 不产告警文本 → SKIP。
+      if (real && !fn_scope_ && (rop == RelOp::Eq || rop == RelOp::Ne)) { set_unsupported("Real equality relation (warning)"); return lit_int(0); }
       if (real) { a = to_real(a); b = to_real(b); }
       Expr r; r.kind = ExprKind::Relation; r.rel = rop; r.a = a; r.b = b; r.ty = Type::boolean();
       return add(std::move(r));
@@ -5036,6 +5690,8 @@ class Flattener {
 
   Id<Expr> call(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
     const Cref& fn = I_.absyn.crefs[e.cref];
+    // 调用结果的字段访问 `f(i).y`：1.25.0 自己报内部错误（DotOperator），ymc 未做 → SKIP（此前被静默当成 f(i)）。
+    if (e.call_suffix.is_valid()) { set_unsupported("field access on call result"); return lit_int(0); }
     // 用户函数常量折叠优先（支持命名/默认实参）：单名解析到 function 类且实参可求常量 → 折成字面量（CevalFunc1/FuncSimple）。
     {
       // 折叠结果须是标量（数组 / 记录值在此语境无字面量形式，literal_of 会退化成 0）→ 否则不接，落到下面。
@@ -5053,6 +5709,15 @@ class Flattener {
           lex = ps;
       }
       const ScodeScope sc = scode_scope_of(lex);
+      if (std::optional<FnRef> bfr = resolve_fn(fn, sc)) {
+        bool ext_c = false;
+        if (std::optional<std::string> bn = builtin_equiv(*bfr, &ext_c)) {
+          array_call_ok_ = false;
+          const Id<Expr> r = builtin_call(e, enclosing, prefix, in_.intern(*bn));
+          if (ext_c && result_.model.exprs[r].kind == ExprKind::Call) nofold_calls_.insert(r.raw);
+          return r;
+        }
+      }
       // 函数体里实参引用函数局部量（含局部常量）的调用不求值（YmcFnEmit1：局部常量在函数里保留引用）。
       const bool fold = !(fn_scope_ && exp_refs_fn_locals(e));
       if (fold && fn.parts.size() == 1)
@@ -5078,7 +5743,14 @@ class Flattener {
       if (result_.unsupported) return lit_int(0);
       array_call_ok_ = false;   // 不是用户函数（内建）：其实参里的调用不在"整个绑定 / 等式一侧"位置
     }
-    const std::string_view builtin_name = fn.parts.size() == 1 ? in_.str(fn.parts[0].name) : std::string_view{};
+    return builtin_call(e, enclosing, prefix, Symbol{});
+  }
+
+  // 内建函数调用。as_builtin 有效 = 内建等价的 external 函数（builtin_equiv），按该内建名处理（不论书写名是否限定）。
+  Id<Expr> builtin_call(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix, Symbol as_builtin) {
+    const Cref& fn = I_.absyn.crefs[e.cref];
+    const std::string_view builtin_name = as_builtin.is_valid() ? in_.str(as_builtin)
+                                        : fn.parts.size() == 1 ? in_.str(fn.parts[0].name) : std::string_view{};
     if (builtin_name == "cardinality") return cardinality_call(e, enclosing, prefix);
     if (builtin_name == "size") return size_call(e, enclosing, prefix);
     if (builtin_name == "scalar") return scalar_call(e, enclosing, prefix);
@@ -5090,7 +5762,7 @@ class Flattener {
     if (builtin_name == "inStream" || builtin_name == "actualStream") return stream_op_call(e, enclosing, prefix, builtin_name);
     const BuiltinFn* bf = nullptr;
     bool supported = true;
-    if (fn.parts.size() != 1) {
+    if (fn.parts.size() != 1 && !as_builtin.is_valid()) {
       set_unsupported("qualified function call");
       supported = false;
     }
@@ -5178,7 +5850,8 @@ class Flattener {
 
     Expr r;
     r.kind = ExprKind::Call;
-    for (const CrefPart& p : fn.parts) r.call_name.push_back(p.name);
+    if (as_builtin.is_valid()) r.call_name = {as_builtin};
+    else for (const CrefPart& p : fn.parts) r.call_name.push_back(p.name);
     r.args = std::move(args);
     if (!supported) {
       r.ty = Type::real();
@@ -5201,15 +5874,32 @@ class Flattener {
     return add(std::move(r));
   }
 
-  // 把表达式提升到 Real：字面量折叠（IntLit→RealLit），否则插 Cast。
+  // 把标量表达式提升到 Real（NFExpression.typeCast :1180-1270）：Integer 字面量 → Real 字面量；一元负号 / if 表达式 /
+  // Cast 把转换推进操作数 / 两支 / 内层（IfExpression2 `if time > 1 then 1 else 2` → `… then 1.0 else 2.0`）；其余包 CAST。
   Id<Expr> to_real(Id<Expr> e) {
-    const Expr& x = result_.model.exprs[e];
+    const Expr x = result_.model.exprs[e];   // 拷贝：下面会 add
     if (x.ty.kind == TypeKind::Real) return e;
-    if (x.kind == ExprKind::IntLit) return lit_real(static_cast<double>(x.ival));
-    // 折叠 `-<intlit>`（如属性 `min = -100` → `-100.0`）：omc 前端会把整型常量按目标实型求值成实字面量。
-    if (x.kind == ExprKind::Unary && x.un == UnOp::Minus) {
-      const Expr& inner = result_.model.exprs[x.a];
-      if (inner.kind == ExprKind::IntLit) { double v = -static_cast<double>(inner.ival); return lit_real(v); }
+    switch (x.kind) {
+      case ExprKind::IntLit: return lit_real(static_cast<double>(x.ival));
+      case ExprKind::Unary:
+        if (x.un == UnOp::Minus) {
+          const Expr& inner = result_.model.exprs[x.a];
+          if (inner.kind == ExprKind::IntLit) return lit_real(-static_cast<double>(inner.ival));
+          Expr u = x;
+          u.a = to_real(x.a);
+          u.ty = Type::real();
+          return add(std::move(u));
+        }
+        break;
+      case ExprKind::IfExp: {
+        Expr r = x;
+        r.b = to_real(x.b);
+        r.c = to_real(x.c);
+        r.ty = Type::real();
+        return add(std::move(r));
+      }
+      case ExprKind::Cast: return to_real(x.a);
+      default: break;
     }
     Expr c; c.kind = ExprKind::Cast; c.a = e; c.ty = Type::real();
     return add(std::move(c));
@@ -5223,6 +5913,168 @@ class Flattener {
   double as_real(Id<Expr> id) const {
     const Expr& e = result_.model.exprs[id];
     return e.kind == ExprKind::IntLit ? static_cast<double>(e.ival) : e.rval;
+  }
+
+  // ---- NFSimplifyExp 的二元 / 一元规则（simplifyBinaryAdd/Sub/Mul/Div/Pow :1005-1139，Expression.isNegated / negate
+  // NFExpression.mo:5308-5332）----
+  bool lit_is(Id<Expr> id, double v) const {
+    const Expr& e = result_.model.exprs[id];
+    return (e.kind == ExprKind::IntLit && static_cast<double>(e.ival) == v) || (e.kind == ExprKind::RealLit && e.rval == v);
+  }
+  bool lit_nonzero(Id<Expr> id) const {
+    const Expr& e = result_.model.exprs[id];
+    return (e.kind == ExprKind::IntLit && e.ival != 0) || (e.kind == ExprKind::RealLit && e.rval != 0.0);
+  }
+  bool is_negated(Id<Expr> id) const {
+    const Expr& e = result_.model.exprs[id];
+    switch (e.kind) {
+      case ExprKind::IntLit: return e.ival < 0;
+      case ExprKind::RealLit: return e.rval < 0;
+      case ExprKind::Cast: return is_negated(e.a);
+      case ExprKind::Unary: return true;
+      default: return false;
+    }
+  }
+  Id<Expr> negate_expr(Id<Expr> id) {
+    const Expr e = result_.model.exprs[id];
+    switch (e.kind) {
+      case ExprKind::IntLit: return lit_int(-e.ival);
+      case ExprKind::RealLit: return lit_real(-e.rval);
+      case ExprKind::Cast: { Expr c = e; c.a = negate_expr(e.a); return add(std::move(c)); }
+      case ExprKind::Unary: return e.a;
+      default: { Expr u; u.kind = ExprKind::Unary; u.un = UnOp::Minus; u.a = id; u.ty = e.ty; return add(std::move(u)); }
+    }
+  }
+  Id<Expr> make_bin(Id<Expr> a, BinOp op, Id<Expr> b, const Type& ty) {
+    Expr r; r.kind = ExprKind::Binary; r.bin = op; r.a = a; r.b = b; r.ty = ty;
+    return add(std::move(r));
+  }
+  Id<Expr> make_zero(const Type& ty) { return ty.kind == TypeKind::Integer ? lit_int(0) : lit_real(0.0); }
+  // ---- 函数体里已知维数组运算的展开（SimplifyExp.simplifyBinary :965-967 在 nfExpandOperations（缺省开，Flags.mo:508）
+  // 下调 ExpandExp.expand；ElementWiseMultiplication `positionvector * 2` → `{positionvector[1] * 2.0, …}`）----
+  // 能展开的：全整数维的 cref（逐元素下标）、数组字面量。其余（`:` / 表达式维、调用）→ invalid（整式不展开）。
+  Id<Expr> fn_expand(Id<Expr> id) {
+    const Expr x = result_.model.exprs[id];
+    if (x.kind == ExprKind::Array) return id;
+    if (x.kind != ExprKind::Cref || !x.ty.is_array()) return {};
+    std::vector<std::int64_t> dims;
+    for (const Dimension& d : x.ty.dims) {
+      if (d.kind != DimKind::Integer) return {};
+      dims.push_back(d.size);
+    }
+    const std::size_t base = x.cref.parts.back().subscripts.size();
+    auto build = [&](auto& self, std::size_t k, std::vector<std::int64_t>& idx) -> Id<Expr> {
+      if (k == dims.size()) {
+        Expr c = x;
+        c.ty = x.ty.element_type();
+        for (std::int64_t v : idx) c.cref.parts.back().subscripts.push_back(lit_int(v));
+        return add(std::move(c));
+      }
+      std::vector<Id<Expr>> els;
+      for (std::int64_t i = 1; i <= dims[k]; ++i) {
+        idx.push_back(i);
+        els.push_back(self(self, k + 1, idx));
+        idx.pop_back();
+      }
+      Expr arr;
+      arr.kind = ExprKind::Array;
+      arr.ty = Type::array_of(x.ty.element_type(),
+                              std::vector<Dimension>(x.ty.dims.begin() + static_cast<std::ptrdiff_t>(k), x.ty.dims.end()));
+      arr.args = std::move(els);
+      return add(std::move(arr));
+    };
+    (void)base;
+    std::vector<std::int64_t> idx;
+    return build(build, 0, idx);
+  }
+  // 展开数组二元运算（expandBinaryElementWise / ScalarArray / ArrayScalar :574-690）；不能展开 → invalid。
+  Id<Expr> fn_expand_binary(Id<Expr> a, BinOp op, Id<Expr> b, const Type& ty, bool product) {
+    const bool aarr = op_type(a).is_array(), barr = op_type(b).is_array();
+    if (product) {   // 向量 / 矩阵积：两侧都能展开时 ExpandExp 有专门公式（未做）→ SKIP；否则保持符号
+      if (fn_expand(a).is_valid() && fn_expand(b).is_valid()) set_unsupported("function array product expansion");
+      return {};
+    }
+    const Type et = ty.element_type();
+    if (aarr && barr) {
+      const Id<Expr> ea = fn_expand(a), eb = fn_expand(b);
+      if (!ea.is_valid() || !eb.is_valid()) return {};
+      const std::vector<Id<Expr>> xa = result_.model.exprs[ea].args, xb = result_.model.exprs[eb].args;
+      if (xa.size() != xb.size()) return {};
+      std::vector<Id<Expr>> els;
+      for (std::size_t i = 0; i < xa.size(); ++i) {
+        const bool sub_arr = op_type(xa[i]).is_array();
+        Id<Expr> el;
+        if (sub_arr) {
+          Type st = op_type(xa[i]);
+          st = Type::array_of(et, st.dims);
+          el = fn_expand_binary(xa[i], op, xb[i], st, false);
+          if (!el.is_valid()) return {};
+        } else {
+          el = simplify_binary_op(xa[i], op, xb[i], et);
+        }
+        els.push_back(el);
+      }
+      Expr arr; arr.kind = ExprKind::Array; arr.ty = ty; arr.args = std::move(els);
+      return add(std::move(arr));
+    }
+    const Id<Expr> arr_side = aarr ? a : b;
+    const Id<Expr> ex = fn_expand(arr_side);
+    if (!ex.is_valid()) return {};
+    auto map_el = [&](auto& self, Id<Expr> node) -> Id<Expr> {
+      const Expr n = result_.model.exprs[node];
+      if (n.kind != ExprKind::Array) return aarr ? simplify_binary_op(node, op, b, et) : simplify_binary_op(a, op, node, et);
+      std::vector<Id<Expr>> els;
+      for (Id<Expr> c : n.args) els.push_back(self(self, c));
+      Expr r = n;
+      r.ty = Type::array_of(et, n.ty.dims);
+      r.args = std::move(els);
+      return add(std::move(r));
+    };
+    return map_el(map_el, ex);
+  }
+
+  Id<Expr> simplify_binary_op(Id<Expr> a, BinOp op, Id<Expr> b, const Type ty) {
+    const bool scalar = !ty.is_array();
+    switch (op) {
+      case BinOp::Add:
+        if (lit_is(a, 0)) return b;
+        if (lit_is(b, 0)) return a;
+        if (is_negated(a)) {
+          if (is_negated(b)) return negate_expr(make_bin(negate_expr(a), BinOp::Add, negate_expr(b), ty));
+          return simplify_binary_op(b, BinOp::Sub, negate_expr(a), ty);
+        }
+        if (is_negated(b)) return simplify_binary_op(a, BinOp::Sub, negate_expr(b), ty);
+        return make_bin(a, op, b, ty);
+      case BinOp::Sub:
+        if (lit_is(a, 0)) return negate_expr(b);
+        if (lit_is(b, 0)) return a;
+        if (scalar && expr_equal(a, b)) return make_zero(ty);
+        if (is_negated(a)) {
+          if (is_negated(b)) return make_bin(negate_expr(b), BinOp::Sub, negate_expr(a), ty);
+          return negate_expr(simplify_binary_op(negate_expr(a), BinOp::Add, b, ty));
+        }
+        if (is_negated(b)) return simplify_binary_op(a, BinOp::Add, negate_expr(b), ty);
+        return make_bin(a, op, b, ty);
+      case BinOp::Mul:
+        if (lit_is(a, 0)) return a;
+        if (lit_is(a, 1)) return b;
+        if (lit_is(b, 0)) return b;
+        if (lit_is(b, 1)) return a;
+        return make_bin(a, op, b, ty);
+      case BinOp::Div:
+        if (lit_is(b, 1)) return a;
+        if (lit_is(b, -1)) return negate_expr(a);
+        if (lit_is(a, 0) && lit_nonzero(b)) return a;
+        // OMC 原样：match (isNegated(exp1), isNegated(exp1)) 两项都看分子，分子带负号时两边同时取负
+        //（SimplifyBinary `(-a*x)/x` → `a * x / (-x)`）。
+        if (is_negated(a)) return make_bin(negate_expr(a), op, negate_expr(b), ty);
+        return make_bin(a, op, b, ty);
+      case BinOp::Pow:
+        if (scalar && lit_is(b, 0)) return ty.kind == TypeKind::Integer ? lit_int(1) : lit_real(1.0);
+        if (lit_is(b, 1)) return a;
+        return make_bin(a, op, b, ty);
+    }
+    return make_bin(a, op, b, ty);
   }
 
   Id<Expr> simplify_expr(Id<Expr> id) {
@@ -5255,18 +6107,41 @@ class Flattener {
             case BinOp::Pow: return lit_real(std::pow(x, y));
           }
         }
-        Expr r; r.kind = ExprKind::Binary; r.bin = op; r.a = a; r.b = b; r.ty = ty;
-        return add(std::move(r));
+        // 字符串常量拼接（Ceval.evalBinaryAdd 的字符串分支，StringConcatenation）。
+        if (op == BinOp::Add && result_.model.exprs[a].kind == ExprKind::StringLit &&
+            result_.model.exprs[b].kind == ExprKind::StringLit) {
+          Expr r;
+          r.kind = ExprKind::StringLit;
+          r.ty = Type::string();
+          r.sval = in_.intern(std::string(in_.str(result_.model.exprs[a].sval)) +
+                              std::string(in_.str(result_.model.exprs[b].sval)));
+          return add(std::move(r));
+        }
+        if (fn_scope_ && ty.is_array()) {
+          const bool product = product_bins_.count(id.raw) > 0;
+          if (Id<Expr> ex = fn_expand_binary(a, op, b, ty, product); ex.is_valid()) return ex;
+          if (result_.unsupported) return id;
+          const Id<Expr> r = simplify_binary_op(a, op, b, ty);
+          if (product && result_.model.exprs[r].kind == ExprKind::Binary) product_bins_.insert(r.raw);
+          return r;
+        }
+        return simplify_binary_op(a, op, b, ty);
       }
       case ExprKind::Unary: {
         const Id<Expr> a0 = result_.model.exprs[id].a;
         const UnOp op = result_.model.exprs[id].un;
         const Type ty = result_.model.exprs[id].ty;
+        // simplifyUnary :1141-1175：`-(-e)` → e；字面量求值；否则 simplifyUnarySign（逐层翻转后 negate，CAST 往里推）。
+        if (op == UnOp::Minus && result_.model.exprs[a0].kind == ExprKind::Unary)
+          return simplify_expr(result_.model.exprs[a0].a);
         Id<Expr> a = simplify_expr(a0);
         const Expr& ea = result_.model.exprs[a];
         if (op == UnOp::Minus) {
           if (ea.kind == ExprKind::IntLit) return lit_int(-ea.ival);
           if (ea.kind == ExprKind::RealLit) return lit_real(-ea.rval);
+          bool neg = true;
+          while (result_.model.exprs[a].kind == ExprKind::Unary) { a = result_.model.exprs[a].a; neg = !neg; }
+          return neg ? negate_expr(a) : a;
         }
         Expr r; r.kind = ExprKind::Unary; r.un = op; r.a = a; r.ty = ty;
         return add(std::move(r));
@@ -5356,11 +6231,14 @@ class Flattener {
         args.reserve(args0.size());
         for (Id<Expr> a : args0) args.push_back(simplify_expr(a));
 
+        const bool nofold = nofold_calls_.count(id.raw) > 0;
         auto rebuild = [&]() {
           Expr r; r.kind = ExprKind::Call; r.call_name = call_name; r.args = args; r.ty = ty;
-          return add(std::move(r));
+          const Id<Expr> n = add(std::move(r));
+          if (nofold) nofold_calls_.insert(n.raw);
+          return n;
         };
-        if (call_name.size() != 1) return rebuild();
+        if (call_name.size() != 1 || nofold) return rebuild();
         const std::string_view name = in_.str(call_name[0]);
         const BuiltinFn* bf = lookup_builtin(name);
         if (!bf) return rebuild();
@@ -5456,6 +6334,14 @@ class Flattener {
           return lit_int(take_x ? result_.model.exprs[args[0]].ival : result_.model.exprs[args[1]].ival);
         }
         return rebuild();
+      }
+      case ExprKind::Range: {   // 起 / 步 / 止各自化简（ForLoopHideVariable `1:4 + 1` → `1:5`）
+        Expr r = result_.model.exprs[id];
+        const Id<Expr> a = simplify_expr(r.a), b = simplify_expr(r.b);
+        const Id<Expr> c = r.c.is_valid() ? simplify_expr(r.c) : r.c;
+        if (a == r.a && b == r.b && c == r.c) return id;
+        r.a = a; r.b = b; r.c = c;
+        return add(std::move(r));
       }
       default:
         return id;   // 叶（cref/time/…）、Array 等原样
@@ -5848,9 +6734,43 @@ class Flattener {
     return true;
   }
   // 连接器成员（含嵌套前缀）是否为条件为假被移除的组件：逐段前缀查 removed_（键不含下标，数组连接器各元素共享）。
-  bool member_removed(const std::vector<Symbol>& cpath, const std::vector<Symbol>& mpath) {
-    std::vector<Symbol> p = cpath;
-    for (Symbol s : mpath) { p.push_back(s); if (removed_.count(path_key(p))) return true; }
+  bool member_removed(const ConnInfo& c, const std::vector<Symbol>& mpath) {
+    if (removed_.empty()) return false;
+    std::string k;
+    for (std::size_t i = 0; i < c.path.size(); ++i) {
+      const std::string base = k + std::to_string(c.path[i].id);
+      if (removed_.count(base + '.')) return true;   // 整个（数组）组件被移除
+      k = conn_key({c.path.begin(), c.path.begin() + static_cast<std::ptrdiff_t>(i) + 1},
+                   {c.subs.begin(), c.subs.begin() + static_cast<std::ptrdiff_t>(std::min(i + 1, c.subs.size()))});
+      if (removed_.count(k)) return true;
+    }
+    for (Symbol s : mpath) {
+      k += std::to_string(s.id);
+      k.push_back('.');
+      if (removed_.count(k)) return true;
+    }
+    return false;
+  }
+  // 书写处前缀（cur_psubs_ 逐段下标）++ cref 逐段（字面量 / for 迭代变量下标）的各前缀是否被移除；某段下标求不出 →
+  // 只按无下标形态查（数组组件整体移除）。
+  bool cref_removed(const std::vector<Symbol>& prefix, const Cref& c) {
+    if (removed_.empty()) return false;
+    std::vector<Symbol> names = prefix;
+    PSubs isubs = cur_psubs_;
+    isubs.resize(prefix.size());
+    for (const CrefPart& part : c.parts) {
+      names.push_back(part.name);
+      isubs.push_back({});
+      if (removed_.count(int_key(names, isubs))) return true;
+      std::vector<std::int64_t> is;
+      for (Id<Exp> sx : part.subscripts) {
+        const std::optional<std::int64_t> v = subscript_int(sx);
+        if (!v) return false;
+        is.push_back(*v);
+      }
+      isubs.back() = std::move(is);
+      if (!part.subscripts.empty() && removed_.count(int_key(names, isubs))) return true;
+    }
     return false;
   }
   // 标量叶身份 key = 连接器路径（逐段下标）+ 成员路径 + 末段元素下标；编码与 conn_key(name, subs) 相同，
@@ -6062,15 +6982,18 @@ class Flattener {
   }
 
   // connect 实参是否引用了被移除（条件为假）的组件——按 书写处前缀 ++ cref 逐段前缀查 removed_（键是全路径）。
-  bool references_removed(Id<Exp> ce, const std::vector<Symbol>& prefix) {
+  struct ConnectStmt;   // 定义在类尾（攒下的 connect）
+  bool references_removed(const ConnectStmt& cs, Id<Exp> ce) {
     if (I_.absyn.exps[ce].kind != ExpKind::CrefExp) return false;
     const Cref& c = I_.absyn.crefs[I_.absyn.exps[ce].cref];
-    std::vector<Symbol> p = prefix;
-    for (const CrefPart& part : c.parts) {
-      p.push_back(part.name);
-      if (removed_.count(path_key(p))) return true;
-    }
-    return false;
+    const PSubs saved_psubs = cur_psubs_;
+    const auto saved_loops = loop_vars_;
+    cur_psubs_ = cs.psubs;
+    loop_vars_ = cs.loopvars;
+    const bool r = cref_removed(cs.prefix, c);
+    cur_psubs_ = saved_psubs;
+    loop_vars_ = saved_loops;
+    return r;
   }
 
   // ---- DisjointSets（Util/DisjointSets.mo）：link <0 = 根（值 = −秩），>0 = 父下标+1 ----
@@ -6409,7 +7332,7 @@ class Flattener {
     // 引用了被移除组件的 connect 整条丢弃（条件组件 false，Condition5）；其余才算"活" connect。
     std::vector<ConnectStmt> live;
     for (const ConnectStmt& cs : connects_)
-      if (!references_removed(cs.a, cs.prefix) && !references_removed(cs.b, cs.prefix)) live.push_back(cs);
+      if (!references_removed(cs, cs.a) && !references_removed(cs, cs.b)) live.push_back(cs);
     // 逐条解析（for-connect 的下标 `c[i]` 靠采集时快照的 loop_vars_ 还原；解析后立即清空避免污染）。
     // 每个实参解析成元素列表（整体数组连接已展开），左右按位配对成逐元素 connect
     // （对标 makeConnections，NFConnections.mo:200-206；左右元素数不等 = omc 报错 → SKIP）。
@@ -6463,7 +7386,7 @@ class Flattener {
         if (!bm || bm->is_flow != m.is_flow || bm->is_stream != m.is_stream || bm->dims != m.dims) {
           set_unsupported("connector member mismatch"); return;
         }
-        if (member_removed(r.a.path, m.path) || member_removed(r.b.path, m.path)) continue;
+        if (member_removed(r.a, m.path) || member_removed(r.b, m.path)) continue;
         std::vector<std::int64_t> idx(m.dims.size(), 1);
         do { pairs.push_back({&r, &m, idx}); } while (next_index(idx, m.dims));
       }
@@ -6732,7 +7655,15 @@ class Flattener {
     Expr c = result_.model.exprs[id];
     if (c.kind == ExprKind::Cref) {
       auto it = vals.find(expr_cref_key(c.cref));
-      return it != vals.end() ? it->second : id;
+      if (it != vals.end()) return it->second;
+      bool sub_changed = false;   // 下标里的结构参数（`z[n]` → `z[5]`）
+      for (ExprCrefPart& cp : c.cref.parts)
+        for (Id<Expr>& sx : cp.subscripts) {
+          const Id<Expr> n = clone_subst(sx, vals);
+          sub_changed = sub_changed || !(n == sx);
+          sx = n;
+        }
+      return sub_changed ? add(std::move(c)) : id;
     }
     bool changed = false;
     for (Id<Expr>& k : c.args) { const Id<Expr> n = clone_subst(k, vals); changed = changed || !(n == k); k = n; }
@@ -6795,12 +7726,17 @@ class Flattener {
   // 结构参数（被连接算子求值结构化，Structural.markExp）：打印 final；EvalConstants 效果只做"变量属性里引用它们"
   // 一处（折成字面量），其余位置（绑定 / 方程 / 算法 / 折不成字面量）引用 → SKIP（全局代入未做）。
   void record_structural(const std::string& k) {
-    if (std::find(structural_keys_.begin(), structural_keys_.end(), k) == structural_keys_.end()) structural_keys_.push_back(k);
+    if (structural_set_.insert(k).second) structural_keys_.push_back(k);
   }
   bool refs_keys(Id<Expr> id, const std::unordered_map<std::string, Id<Expr>>& vals) {
     if (!id.is_valid()) return false;
     const Expr& e = result_.model.exprs[id];
-    if (e.kind == ExprKind::Cref) return vals.count(expr_cref_key(e.cref)) > 0;
+    if (e.kind == ExprKind::Cref) {
+      if (vals.count(expr_cref_key(e.cref))) return true;
+      for (const ExprCrefPart& cp : e.cref.parts)
+        for (Id<Expr> sx : cp.subscripts) if (refs_keys(sx, vals)) return true;
+      return false;
+    }
     for (Id<Expr> k : e.args) if (refs_keys(k, vals)) return true;
     return refs_keys(e.a, vals) || refs_keys(e.b, vals) || refs_keys(e.c, vals);
   }
@@ -6821,26 +7757,58 @@ class Flattener {
     std::unordered_map<std::string, Id<Expr>> vals;
     for (const std::string& k : structural_keys_) {
       auto it = var_index_.find(k);
-      if (it == var_index_.end()) { set_unsupported("structural parameter"); return; }
-      FlatVariable& v = result_.model.variables[it->second];
-      if (!v.binding.is_valid() || !is_lit(v.binding)) { set_unsupported("structural parameter binding"); return; }
-      v.is_final = true;
-      vals.emplace(k, v.binding);
-    }
-    for (FlatVariable& v : result_.model.variables) {
-      for (FlatVarAttr& a : v.attributes) {
-        if (!refs_keys(a.value, vals)) continue;
-        a.value = simplify_expr(clone_subst(a.value, vals));
-        if (!is_lit(a.value)) { set_unsupported("structural parameter in attribute"); return; }
+      if (it == var_index_.end()) { set_unsupported("structural parameter"); return; }   // 未落成标量变量（数组 / 记录）
+      const std::size_t vi = it->second;
+      const TypeKind vk = result_.model.variables[vi].ty.kind;
+      Id<Expr> lit;
+      if (auto cv = const_vals_.find(k); cv != const_vals_.end()) {
+        if (std::optional<CVal> c = coerce_to_kind(cv->second, vk)) lit = literal_of(*c);
+      } else if (result_.model.variables[vi].binding.is_valid() && is_lit(result_.model.variables[vi].binding)) {
+        lit = result_.model.variables[vi].binding;
       }
-      if (v.binding.is_valid() && refs_keys(v.binding, vals)) { set_unsupported("structural parameter referenced"); return; }
+      if (!lit.is_valid()) { set_unsupported("structural parameter binding"); return; }
+      if (vk == TypeKind::Real) lit = to_real(lit);
+      FlatVariable& v = result_.model.variables[vi];
+      if (v.var_kind != FlatVarKind::Parameter && v.var_kind != FlatVarKind::Constant) { set_unsupported("structural parameter"); return; }
+      if (v.var_kind == FlatVarKind::Parameter) v.is_final = true;
+      v.binding = lit;
+      vals.emplace(k, lit);
     }
+    // EvalConstants：结构参数的引用处一律代入值（变量绑定 / 属性、方程、算法；函数体不涉及模型参数），代入后化简。
+    auto subst = [&](Id<Expr>& e) {
+      if (e.is_valid() && refs_keys(e, vals)) e = simplify_expr(clone_subst(e, vals));
+    };
+    for (std::size_t i = 0; i < result_.model.variables.size(); ++i) {
+      Id<Expr> b = result_.model.variables[i].binding;
+      subst(b);
+      result_.model.variables[i].binding = b;
+      for (std::size_t a = 0; a < result_.model.variables[i].attributes.size(); ++a) {
+        Id<Expr> av = result_.model.variables[i].attributes[a].value;
+        subst(av);
+        result_.model.variables[i].attributes[a].value = av;
+      }
+    }
+    auto eqn = [&](auto& self, Id<FlatEquation> id) -> void {
+      FlatEquation q = result_.model.eqs[id];   // 拷贝：subst 会往 exprs 添加（eqs 不变，但不跨调用持引用）
+      subst(q.a); subst(q.b); subst(q.c);
+      for (FlatEqBranch& br : q.branches) { subst(br.cond); for (Id<FlatEquation> b : br.body) self(self, b); }
+      for (Id<FlatEquation> b : q.body) self(self, b);
+      for (Id<FlatEquation> b : q.else_body) self(self, b);
+      result_.model.eqs[id] = std::move(q);
+    };
+    auto stmt = [&](auto& self, Id<FlatStatement> id) -> void {
+      FlatStatement st = result_.model.stmts[id];
+      subst(st.a); subst(st.b); subst(st.c);
+      for (FlatStmtBranch& br : st.branches) { subst(br.cond); for (Id<FlatStatement> b : br.body) self(self, b); }
+      for (Id<FlatStatement> b : st.body) self(self, b);
+      for (Id<FlatStatement> b : st.else_body) self(self, b);
+      result_.model.stmts[id] = std::move(st);
+    };
     for (const std::vector<Id<FlatEquation>>* eqs : {&result_.model.equations, &result_.model.initial_equations})
-      for (Id<FlatEquation> id : *eqs)
-        if (eq_refs_keys(id, vals)) { set_unsupported("structural parameter referenced"); return; }
-    if (!result_.model.algorithms.empty() || !result_.model.initial_algorithms.empty()) {
-      set_unsupported("structural parameter with algorithms");   // 算法段引用检查未做 → 保守 SKIP
-    }
+      for (Id<FlatEquation> id : *eqs) eqn(eqn, id);
+    for (const std::vector<FlatAlgorithm>* algs : {&result_.model.algorithms, &result_.model.initial_algorithms})
+      for (const FlatAlgorithm& alg : *algs)
+        for (Id<FlatStatement> id : alg.stmts) stmt(stmt, id);
   }
   // 下标是本地参数/常量 cref（`c[n]`）：取值（eval_scode）；参数记为结构参数（打印 final，ActualStreamVariability2）。
   std::optional<std::int64_t> structural_subscript(Id<Exp> s, NodeId enclosing, const std::vector<Symbol>& prefix) {
@@ -7223,6 +8191,19 @@ class Flattener {
   bool fn_impure_ = false;                                      // 当前函数是 impure（体内调 impure 函数不告警）
   Id<Expr> fn_end_;                                             // 函数体下标里 `end` 的值（所在维大小）
   int fn_loops_ = 0;                                            // 函数体 for / while 嵌套深度（break 只许在循环里）
+  // 实例帧栈（压平 DFS 的祖先链，见 FramePush）与当前求值帧（-1 = 不按实例帧解析）。
+  struct Frame {
+    NodeId inst;
+    std::vector<Symbol> prefix;
+    PSubs psubs;
+    const ModCtx* ctx;
+  };
+  std::vector<Frame> frames_;
+  int ceval_frame_ = -1;
+  std::unordered_set<std::string> frame_busy_;                  // 求值中的参数 key（环检测）
+  std::unordered_set<std::uint32_t> nofold_calls_;              // 不可常量折叠的内建调用（external "C" 的内建等价函数）
+  std::vector<std::vector<Symbol>> model_record_ctors_;         // 模型表达式里整记录引用需要的构造函数（collect_record_ctors）
+  std::unordered_set<std::uint32_t> product_bins_;              // 函数语境里的向量 / 矩阵积 Binary 节点（非逐元素）
   std::unordered_map<std::uint32_t, FnRecord> fn_records_;      // 记录类型的形参 / 局部名 → 记录类（字段访问 `r.x`）
   NodeId root_;                                                 // 被压平的根类实例
   // 模型语境里返回数组的调用只许出现在整个绑定 / 等式一侧（NFScalarize.scalarizeEquation :343-346 把含数组调用的等式
@@ -7260,7 +8241,8 @@ class Flattener {
   std::vector<std::size_t> cs_set_of_;
   bool uses_stream_ops_ = false;
   std::unordered_map<std::string, std::size_t> var_index_;   // 变量 key → model.variables 下标（flow 属性查询）
-  std::vector<std::string> structural_keys_;   // 连接算子求值中被结构化的参数（变量 key；Structural.markExp）
+  std::vector<std::string> structural_keys_;   // 结构参数（变量 key，标记序；Structural.markExp）：apply_structural_params 统一处理
+  std::unordered_set<std::string> structural_set_;
   bool card_allowed_ = false;   // 只在 if 方程 / assert 的条件表达式里为 true（其它上下文 omc 报错 → SKIP）
   struct ConnectStmt {
     Id<Exp> a, b; NodeId enclosing; std::vector<Symbol> prefix; SourceLoc loc;
@@ -7269,7 +8251,6 @@ class Flattener {
   };
   std::vector<ConnectStmt> connects_;            // 攒下的 connect()，run() 末尾展开
   std::unordered_set<std::string> removed_;             // 条件为假被移除的组件路径 key（引用它的 connect 整条删）
-  std::unordered_set<std::uint32_t> removed_nodes_;     // 被移除组件的节点 raw（方程/绑定里引用它 → omc 报错 → SKIP）
 };
 
 }  // namespace

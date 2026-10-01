@@ -746,6 +746,55 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
             解析 / SCode 属用户域，任务卡 `docs/tasks/T-S3-03-overload-scode.md`（2026-09-28 出）；短类链方向前缀冲突下沉到
             inst，任务卡 `docs/tasks/T-S3-04-derived-direction-merge.md`（同日出）；函数型实参（FunctionalArg*）、向量化（FuncVectorization*）、运算符重载、枚举转换
             函数、函数 derivative/inverse 注解、带告警的 FunctionUnitialized*。
+- [ ] **S3 往下走（2026-10-01，用户定"先把 S3 往下走"）**。先量后做：
+  - [x] 测量基建 `tools/nf_live_sweep.py`：flattening/modelica 里 1106 个纯 `-d=-newInst` 旧前端用例，去注解后
+        ymc 与实跑 omc 1.25.0（新前端）逐字节比 stdout（omc 的告警在 stderr，不进比较）。首测：PASS 259 / FAIL 30 /
+        ACCEPTS-INVALID 60（omc 报错、ymc 照常出结果）/ CRASH 6 / SKIP 751。→ 96 例 ymc 静默出错，比"未实现"更要紧。
+  - [ ] **(56) 正确性：nf-live 的 96 例**——逐个按根因修（修不了的改为 SKIP，绝不静默错出）。依据各条后注：
+    - 静默漏洞（影响面最大）：单段名解析不到（非 `time`）不再当内建保留（Constant8 `N`、Import6 `mu_0` 被原样打印）；
+      继承元素的绑定按声明处词法作用域找跨作用域常量（Constant8）；零长度复合数组不出元素（ZeroDimUnconnectedFlow1/2）；
+      组件数组的绑定修饰 `Foo[2] foo(enabled = {true, false})` 未分配却用了默认值（ConnectArrayCond2）。
+    - 结构参数（NFEvalConstants.evaluateExpTraverser :196-230：常量与结构参数的引用一律代入值）：`for i in 1:n`
+      （n 因作维度而结构化）→ `1:5`（SumForLoop）；range 表达式化简（ForLoopHideVariable `1:4 + 1` → `1:5`）。
+    - 方向 / 变率下沉：`input InputConnector ic` → `input Real ic.r`（InputDecl*/OutputDecl*）；记录字段自身
+      constant / parameter 比外层更严时保留（RecordVariability、RecordConstructors2）。
+    - 表达式化简（NFSimplifyExp）：`x - (-1)` → `x + 1.0`、`±1 * x`、`(-a) + b` → `b - a`（VanDerPol、SimplifyBinary）、
+      `(-e1) / e2` → `e1 / (-e2)`；`^` 两侧提实型（Pow）；字符串常量拼接（StringConcatenation）。
+    - 打印：等式左侧 if 表达式加括号（DAEDumpTpl.dumpEquation :705，LhsIf）；字符串里换行后补模板缩进（StringLiterals）。
+    - 函数：external "C" 的已知数学函数按内建处理（SCodeUtil.isBuiltinFunction :2525-2560，Function12 / LogCall1）；
+      函数体里已知维数组运算展开（ElementWiseMultiplication）；折叠里 size(局部数组)（PolynomialEvaluator1/3）。
+    - 记录：等式 / 绑定里出现整记录 cref → 收构造函数（collectExpFuncs CREF → collectTypeFuncs，EquationComponent1-4、
+      RecordAssignment）；参数记录绑定到参数实参的函数调用不折叠（ConstructParameters2 → initial equation + fixed=false）。
+    - 连接：带字符串注释的 connect（ConnectTheSameConnector，源合并规则未核实 → SKIP）。
+    - ACCEPTS-INVALID 60 例：按 omc 错误种类加校验（重复声明、重复修饰、受限类 connector/record 的段、根类为
+      package/function、protected 访问 / 修饰、非法 redeclare、final 覆盖、绑定类型不符、包里非常量变量……），
+      未做的一律 SKIP。CRASH：`x.start`（YMC_ASSERT，与 inst7 同根）。
+    - 门：nf-live 加入收尾清单（FAIL / ACCEPTS-INVALID / CRASH 只许减不许增，剩余入账本）。
+    - **完成（2026-10-01）**：
+      · 结构参数（新的实例帧机制 frame_value）：条件 / 维度 / fixed / for 范围等编译期求值按"外来修饰绑定 > 声明绑定"求值，
+        用到的参数记为结构参数，apply_structural_params 统一打 final、绑定代入值、所有引用处代入并化简（替代原先"结构参数
+        被引用 → SKIP"）。YmcCond1/2：`Foo foo(enabled = true)` 此前被当成默认 false 删掉了 foo.x。
+      · 条件移除按元素（键带逐段下标；connect / 引用检查同步），Condition8 / ConnectArrayCond2 转 PASS。
+      · 单段名：继承元素绑定按声明处词法作用域经 SCODE 找常量（Constant8）；其余解析不到（非 time）→ SKIP（Import6 等此前
+        原样打印名字）。零长度复合数组不出元素。方向按 mergeComponentAttributes 下传（YmcDir1）。记录字段变率取
+        variabilityMin、记录函数绑定只折常量实参（RecordVariability / RecordConstructors2；ConstructParameters2 改 SKIP）。
+      · NFSimplifyExp 二元 / 一元规则、`^` 提实型、Expression.typeCast 推进 if 两支 / 一元负号、字符串拼接、range 化简；
+        打印：等式左侧 if 加括号、多行字符串续行补缩进（YmcSimp1 / YmcStr1 探针）。
+      · 函数：external "C"/"builtin" 的已知数学函数按内建（"C" 不折叠）；函数体里已知维数组运算展开（ExpandExp）；折叠里
+        size(局部数组)；等式里整记录引用收构造函数。
+      · 校验（omc 报错 → SKIP，不再静默出结果）：重复声明 / 重复修饰、受限类的段与可见性、记录 / 连接器成员前缀、根类
+        package / function / partial、改 final / protected、访问 protected、元素级 redeclare、constrainedby、partial / package /
+        无基类 type / enumeration(:) 组件类型、encapsulated 查找边界、extends 被继承类遮蔽、discrete Real 不在 when、
+        属性绑定变率与类型、绑定 / 等式类型不符、非数值算术、函数 protected 输入输出、`f(i).y`、函数外 Real ==（告警）、
+        outer 元素带修饰、不带类型前缀的枚举字面量、内建类型组件的 `x.start`（原 YMC_ASSERT 崩溃）。driver：testsuite 透传
+        的 omc 选项（`-i=` 等）按未实现退 66。
+      → nf-live：PASS 259→289、FAIL 30→0、ACCEPTS-INVALID 60→1（ConnectArrayCond 入账本）、CRASH 6→0（3 例两边都拒绝）；
+        全 scodeinst：PASS 345→355、FAIL 74→16（余下均为账本内 1.25.0 分歧 / 错误文案）；easy-slice 449 例 355 PASS / 0 FAIL；
+        oracle=live 不一致 0；gcc / msvc / msvc-asan 10/10、零警告；ASan 版 ymc 跑 1382 个文件 + 探针 0 报告；+5 单测。
+  - [ ] (57) 错误输出：OMC 错误帧（`Error processing file` … `Execution failed!`）+ 最常见的错误文案与位置，把 incorrect 用例变成
+        可对拍（scodeinst 386 + nf-live 约 270）。
+  - [ ] (58+) 按 SKIP 族加宽：数组（150）→ redeclare / 类修饰（64）→ 记录 / 复合绑定（50）→ 查找 / import（49）→ 继承（38）→ …
+  - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples
