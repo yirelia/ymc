@@ -1916,6 +1916,95 @@ YMC_TEST(flatten_scalar_builtin_fold_and_symbolic) {
   YMC_CHECK_EQ(flatten_src(src), std::string(want));
 }
 
+YMC_TEST(flatten_array_attribute_split) {
+  // 数组组件的属性修饰按元素切分（Modifier.propagate → SPLIT_PROXY，NFModifier.mo:444-513；压平时换成元素下标，
+  // NFFlatten.mo:1625-1683）：字面量 / 矩阵逐元素下降，类型化数组值逐元素标量化（`2.0 * p[1]`、`p[1] + 1.0`），each 每元素
+  // 同值，复合数组修饰递归切到叶属性（`h2[i].x[j]`），无值的 `each start` 等于没写，`:` 维无绑定时取 start 的形状。
+  // 期望 = omc 1.25.0 实跑 YmcArrAttr1（2026-10-02）。
+  const char* src =
+      "model A\n  Real x[2](start = {1, 2});\nend A;\n"
+      "model YmcArrAttr1\n"
+      "  parameter Real p[3] = {1, 2, 3};\n"
+      "  parameter Integer ni[2] = {1, 2};\n"
+      "  Real a[3](start = 2*p);\n"
+      "  Real b[3](start = p + {1, 1, 1});\n"
+      "  Real c[2](min = -{1, 2});\n"
+      "  Real d[2,2](start = [1, 2; 3, 4]);\n"
+      "  Real h[3](min = {1, 2, 3}, max = {4, 5, 6}, each fixed = true);\n"
+      "  Real r[2](start = ni);\n"
+      "  A a1(x(start = {3, 4}));\n"
+      "  A g[2](each x(start = {6, 7}));\n"
+      "  A h2[2](x(start = {{1, 2}, {3, 4}}));\n"
+      "  Real w[2](each start);\n"
+      "  Real z[:](start = {1, 2});\n"
+      "  parameter Real pf[2](each fixed = false, start = {1, 2});\n"
+      "end YmcArrAttr1;\n";
+  const char* want =
+      "class YmcArrAttr1\n"
+      "  parameter Real p[1] = 1.0;\n  parameter Real p[2] = 2.0;\n  parameter Real p[3] = 3.0;\n"
+      "  parameter Integer ni[1] = 1;\n  parameter Integer ni[2] = 2;\n"
+      "  Real a[1](start = 2.0 * p[1]);\n  Real a[2](start = 2.0 * p[2]);\n  Real a[3](start = 2.0 * p[3]);\n"
+      "  Real b[1](start = p[1] + 1.0);\n  Real b[2](start = p[2] + 1.0);\n  Real b[3](start = p[3] + 1.0);\n"
+      "  Real c[1](min = -1.0);\n  Real c[2](min = -2.0);\n"
+      "  Real d[1,1](start = 1.0);\n  Real d[1,2](start = 2.0);\n  Real d[2,1](start = 3.0);\n  Real d[2,2](start = 4.0);\n"
+      "  Real h[1](min = 1.0, max = 4.0, fixed = true);\n  Real h[2](min = 2.0, max = 5.0, fixed = true);\n"
+      "  Real h[3](min = 3.0, max = 6.0, fixed = true);\n"
+      "  Real r[1](start = /*Real*/(ni[1]));\n  Real r[2](start = /*Real*/(ni[2]));\n"
+      "  Real a1.x[1](start = 3.0);\n  Real a1.x[2](start = 4.0);\n"
+      "  Real g[1].x[1](start = 6.0);\n  Real g[1].x[2](start = 7.0);\n"
+      "  Real g[2].x[1](start = 6.0);\n  Real g[2].x[2](start = 7.0);\n"
+      "  Real h2[1].x[1](start = 1.0);\n  Real h2[1].x[2](start = 2.0);\n"
+      "  Real h2[2].x[1](start = 3.0);\n  Real h2[2].x[2](start = 4.0);\n"
+      "  Real w[1];\n  Real w[2];\n"
+      "  Real z[1](start = 1.0);\n  Real z[2](start = 2.0);\n"
+      "  parameter Real pf[1](start = 1.0, fixed = false);\n  parameter Real pf[2](start = 2.0, fixed = false);\n"
+      "end YmcArrAttr1;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string(want));
+}
+
+YMC_TEST(flatten_array_attribute_split_rejects) {
+  // omc 报错的切分形态（BuiltinAttribute24 维不符、Each3 缺 each、标量组件给数组值、多余元素）、无绑定参数缺省取 start
+  //（omc 告警，UnboundParameter6）、以及 1.25.0 的两处求值分歧（分歧账本）：切分字面量叶类型混杂时 omc 逐元素各自类型化
+  //（`{1, 2.0}` → `start = 1`、`p = {1, 2, 3.0}` → `a[1].p = 1`，typeSubscriptedExp2 NFTyping.mo:1655-1688）；函数求值把 cref
+  // 实参的数组原地改写（`y := x; y[1] := 0` 改掉调用者的 constant，P8 探针）。都须干净 SKIP。
+  const char* cases[] = {
+      "model M\n  Real x[2,2](start = {3, 1});\nend M;\n",
+      "model M\n  Real x[3](start = 1);\nend M;\n",
+      "model M\n  Real y(start = {1, 2});\nend M;\n",
+      "model M\n  Real x[2](start = {1, 2, 3});\nend M;\n",
+      "model A\n  Real n[2];\nend A;\nmodel M\n  A a(each n(fixed = true));\nend M;\n",
+      "model M\n  parameter Real x[3](each start = 1.0);\nend M;\n",
+      "model M\n  Real g[2](start = {1, 2.0});\nend M;\n",
+      "model A\n  Real p;\nend A;\nmodel M\n  A a[3](p = {1, 2, 3.0});\nend M;\n",
+      "function f\n  input Real x[3];\n  output Real y[3];\nalgorithm\n  y := x;\n  y[1] := 0;\nend f;\n"
+      "model M\n  constant Real a[3] = {1, 2, 3};\n  Real b[3] = f(a);\nend M;\n",
+  };
+  for (const char* s : cases) {
+    bool uns = false;
+    const std::string t = flatten_src(s, &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+  }
+}
+
+YMC_TEST(flatten_array_literal_operand_elementwise) {
+  // 数组字面量作运算数按其形状定型（inst 给字面量的是粗类型，此前 `p + {1, 1, 1}` 被当数组 + 标量广播，打出
+  // `p[1] + {1, 1, 1}`）；多维逐元素展开按维嵌套（ArrayAddSub1）。期望 = omc 1.25.0 实跑 P6 / ArrayAddSub1（2026-10-02）。
+  const char* src =
+      "model P6\n  parameter Real p[3] = {1, 2, 3};\n  parameter Real q[3] = p + {1, 1, 1};\n  Real r[3] = p + {1, 1, 1};\n"
+      "  Real s[3];\nequation\n  s = p + {1, 1, 1};\nend P6;\n";
+  const char* want =
+      "class P6\n  parameter Real p[1] = 1.0;\n  parameter Real p[2] = 2.0;\n  parameter Real p[3] = 3.0;\n"
+      "  parameter Real q[1] = p[1] + 1.0;\n  parameter Real q[2] = p[2] + 1.0;\n  parameter Real q[3] = p[3] + 1.0;\n"
+      "  Real r[1];\n  Real r[2];\n  Real r[3];\n  Real s[1];\n  Real s[2];\n  Real s[3];\n"
+      "equation\n  r = {p[1] + 1.0, p[2] + 1.0, p[3] + 1.0};\n  s[1] = p[1] + 1.0;\n  s[2] = p[2] + 1.0;\n"
+      "  s[3] = p[3] + 1.0;\nend P6;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string(want));
+  YMC_CHECK_EQ(flatten_src("model AddSub1\n  Real Add3[2, 2] = {{1, 1}, {2, 2}} + {{1, 2}, {3, 4}};\nend AddSub1;\n"),
+               std::string("class AddSub1\n  Real Add3[1,1];\n  Real Add3[1,2];\n  Real Add3[2,1];\n  Real Add3[2,2];\n"
+                           "equation\n  Add3 = {{2.0, 3.0}, {5.0, 6.0}};\nend AddSub1;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

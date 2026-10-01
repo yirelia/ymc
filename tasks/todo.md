@@ -799,6 +799,16 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
         可对拍（scodeinst 386 + nf-live 约 270）。**2026-10-01 评估**：错误种类长尾（单种最多 7 例），且要逐元素复刻 OMC 的源码
         区间约定 → 性价比低于 correct 用例加宽，后排。
   - [ ] (58+) 按 SKIP 族加宽：数组（150）→ redeclare / 类修饰（64）→ 记录 / 复合绑定（50）→ 查找 / import（49）→ 继承（38）→ …
+    - [x] (58a) 数组属性修饰按元素切分（2026-10-02）：Modifier.propagate 的 SPLIT_PROXY 语义（非 each 子修饰逐元素取值、
+          each 整棵同值、复合数组修饰递归切到叶属性）；字面量 / 矩阵逐元素下降，类型化数组值逐元素标量化；`:` 维无绑定
+          取 start 的形状；无值 `each start` 当没写；维不符 / 缺 each / 标量组件给数组值 → SKIP。顺带修出 3 处既有静默错：
+          ① 模型语境里数组字面量作运算数被当标量（`p + {1, 1, 1}` 打成 `p[1] + {1, 1, 1}`）；② 多维逐元素展开打成平铺
+          （ArrayAddSub1）；③ 复合数组修饰的混型字面量（`p = {1, 2, 3.0}`，1.25.0 逐元素各自类型化 → `a[1].p = 1`）。
+          另两处 1.25.0 缺陷改 SKIP 并入账本（混型切分字面量；函数求值原地改写 cref 实参数组 FunctionBubblesort）；
+          向量化调用 `f({1, 2, 3})` 不再常量折叠（FuncVectorization3）。
+          → 全 scodeinst PASS 355→365（FAIL 16 不变、oracle=live 不一致 0）；nf-live PASS 289→302（FAIL 0、ACCEPTS-INVALID 1、
+          CRASH 0）；easy-slice 459 例 365 PASS / 0 FAIL；gcc / msvc / msvc-asan 10/10、零警告；+3 单测（148）。
+          未做（仍 SKIP）：派生类型修饰的 fill 维（origin ≠ parent）、`fill` / `zeros` / 范围 / 推导式作属性值、非字面量的枚举数组属性值。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
