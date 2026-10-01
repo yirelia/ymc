@@ -2581,6 +2581,19 @@ YMC_TEST(flatten_record_final_fields_and_variability_floor) {
                            "  constant Real w = 2.5;\nend FC1;\n"));
 }
 
+YMC_TEST(flatten_builtin_named_arguments) {
+  // homotopy / semiLinear 的命名实参按形参序重排；homotopy 实参提 Real。期望 = omc 1.25.0 实跑 NA2（2026-10-02）；smooth 的命名
+  // 实参 1.25.0 报错（NA1）→ SKIP。
+  YMC_CHECK_EQ(flatten_src("model NA2\n  Real x = time;\n  Real a = semiLinear(x, negativeSlope = 2, positiveSlope = 3);\n"
+                           "  Real c = homotopy(simplified = 1, actual = x);\nend NA2;\n"),
+               std::string("class NA2\n  Real x = time;\n  Real a = semiLinear(x, 3.0, 2.0);\n  Real c = homotopy(x, 1.0);\n"
+                           "end NA2;\n"));
+  bool uns = false;
+  const std::string out = flatten_src("model NA1\n  Real x = time;\n  Real b = smooth(expr = x * x, p = 1);\nend NA1;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(out, std::string("<unsupported:named function argument>"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

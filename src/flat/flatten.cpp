@@ -107,7 +107,9 @@ const BuiltinFn* lookup_builtin(std::string_view name) {
       {"sample", 2, false, BFArg::Real, BFRes::Boolean},
       {"smooth", 2, false, BFArg::Keep, BFRes::SameArg1},
       {"semiLinear", 3, false, BFArg::Real, BFRes::Real},
-      {"homotopy", 2, false, BFArg::Keep, BFRes::SameArg0},
+      // homotopy：`input Real actual; input Real simplified; output Real`（NFModelicaBuiltin.mo:295-298，无特殊定型）→ 实参提 Real
+      //（NA2 探针 `homotopy(simplified = 1, actual = x)` → `homotopy(x, 1.0)`）。
+      {"homotopy", 2, false, BFArg::Real, BFRes::Real},
       {"noEvent", 1, false, BFArg::Keep, BFRes::SameArg0},
   };
   for (const BuiltinFn& fn : fns)
@@ -7928,6 +7930,41 @@ class Flattener {
         (builtin_name == "sum" || builtin_name == "product" || builtin_name == "min" || builtin_name == "max"))
       if (Id<Expr> r = array_reduce_call(e, builtin_name); r.is_valid() || result_.unsupported) return r;
     if (builtin_name == "inStream" || builtin_name == "actualStream") return stream_op_call(e, enclosing, prefix, builtin_name);
+    // 命名实参的内建（形参名照 NFModelicaBuiltin.mo：homotopy :295-298、semiLinear :156-159）：按形参序重排成位置实参再走
+    // 下面（FuncBuiltinHomotopy `homotopy(actual = x, simplified = y)` → `homotopy(x, y)`，NA2 探针）。这些内建无缺省实参：
+    // 缺 / 重复 / 未知名 → omc 报错 → 落到下面的 "named function argument" SKIP。smooth 不在此列：1.25.0 对 `smooth(expr = …)`
+    // 报 "Function smooth has no input parameter named expr"（NA1 探针，特殊内建不按声明形参名配）。
+    {
+      static const std::pair<std::string_view, std::vector<std::string_view>> kNamed[] = {
+          {"homotopy", {"actual", "simplified"}},
+          {"semiLinear", {"x", "positiveSlope", "negativeSlope"}},
+      };
+      bool named = false;
+      for (Symbol n : e.arg_names) named = named || n.is_valid();
+      if (named)
+        for (const auto& [bname, pnames] : kNamed) {
+          if (bname != builtin_name || e.args.size() != pnames.size()) continue;
+          std::vector<Id<Exp>> ordered(pnames.size());
+          bool ok = true;
+          std::size_t pos = 0;
+          for (std::size_t i = 0; i < e.args.size() && ok; ++i) {
+            std::size_t k = pnames.size();
+            if (i < e.arg_names.size() && e.arg_names[i].is_valid()) {
+              for (std::size_t j = 0; j < pnames.size(); ++j)
+                if (in_.str(e.arg_names[i]) == pnames[j]) k = j;
+            } else {
+              k = pos++;
+            }
+            if (k >= pnames.size() || ordered[k].is_valid()) ok = false;
+            else ordered[k] = e.args[i];
+          }
+          if (!ok) break;
+          Exp pe = e;   // 位置化副本（栈上，不进 arena）
+          pe.args = std::move(ordered);
+          pe.arg_names.clear();
+          return builtin_call(pe, enclosing, prefix, as_builtin);
+        }
+    }
     const BuiltinFn* bf = nullptr;
     bool supported = true;
     if (fn.parts.size() != 1 && !as_builtin.is_valid()) {

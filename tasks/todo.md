@@ -944,6 +944,10 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           variabilityMin 下沉后的变率判"高变率绑定"（refs_runtime_var 带 floor）与帧求值（frame_value 用帧 ctx 的 var_floor）——
           `constant R r` 里声明为 `Real x` 的字段是 constant（RecordBinding7 `y = x / 2.0` → 0.5）。→ 全 scodeinst PASS 441→443
           （RecordBinding6/7）、nf-live 445；+1 单测（177）。
+    - [x] (59b) 内建的命名实参 + homotopy 实参提 Real（2026-10-02）：homotopy(actual, simplified) / semiLinear(x, positiveSlope,
+          negativeSlope) 的命名实参按 NFModelicaBuiltin.mo 形参序重排成位置实参（smooth 的命名实参 1.25.0 报错，不放行）；homotopy
+          按声明 `input Real … output Real` 实参提 Real（原表 Keep，`homotopy(x, 1)` 曾错印整数）。→ 全 scodeinst PASS 443→444
+          （FuncBuiltinHomotopy）、nf-live 445；+1 单测（178）。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、
