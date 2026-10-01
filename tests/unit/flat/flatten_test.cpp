@@ -2254,6 +2254,35 @@ YMC_TEST(flatten_parameter_constant_records) {
                            "  parameter Real q[2].v[2] = 3.0;\n  Real y = r[1].x + 5.0;\nend R2;\n"));
 }
 
+YMC_TEST(flatten_string_builtin) {
+  // String(x, …)（MLS §3.7.2）：实参按重载补齐缺省打印；全常量 → 求值成字符串（%g 有效数字、minimumLength 补空格、format、
+  // 枚举字面量名）；Real 结果带指数（1.25.0 是 Windows CRT 的三位指数）→ SKIP。期望 = omc 1.25.0 实跑 S1 / S3（2026-10-02）。
+  const char* src1 =
+      "model S1\n  Real x = time;\n  Integer n = 3;\n  Boolean b = true;\n  parameter Real p = 1.5;\n  String s1 = String(x);\n"
+      "  String s2 = String(n);\n  String s3 = String(b);\n  String s4 = String(p, significantDigits = 3);\n"
+      "  String s5 = String(n, minimumLength = 4, leftJustified = false);\n  String s6 = String(2.5);\n"
+      "  String s7 = String(x, format = \"6.2f\");\nend S1;\n";
+  YMC_CHECK_EQ(flatten_src(src1),
+               std::string("class S1\n  Real x = time;\n  Integer n = 3;\n  Boolean b = true;\n  parameter Real p = 1.5;\n"
+                           "  String s1 = String(x, 6, 0, true);\n  String s2 = String(n, 0, true);\n"
+                           "  String s3 = String(b, 0, true);\n  String s4 = String(p, 3, 0, true);\n"
+                           "  String s5 = String(n, 4, false);\n  String s6 = \"2.5\";\n  String s7 = String(x, \"6.2f\");\n"
+                           "end S1;\n"));
+  const char* src3 =
+      "type E = enumeration(one, two);\nmodel S3\n  String a = String(1/3);\n  String d = String(100.0);\n"
+      "  String e = String(3, minimumLength = 4);\n  String f = String(3, minimumLength = 4, leftJustified = false);\n"
+      "  String g = String(true, minimumLength = 6);\n  String h = String(2.5, significantDigits = 2);\n"
+      "  String i = String(2.5, format = \"6.2f\");\n  String j = String(E.two);\n  String k = String(-0.5);\nend S3;\n";
+  YMC_CHECK_EQ(flatten_src(src3),
+               std::string("class S3\n  String a = \"0.333333\";\n  String d = \"100\";\n  String e = \"3   \";\n"
+                           "  String f = \"   3\";\n  String g = \"true  \";\n  String h = \"2.5\";\n  String i = \"  2.50\";\n"
+                           "  String j = \"two\";\n  String k = \"-0.5\";\nend S3;\n"));
+  bool uns = false;
+  const std::string t = flatten_src("model M\n  String b = String(1e10);\nend M;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

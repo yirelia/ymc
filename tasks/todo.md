@@ -861,6 +861,10 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           （首段常量 / end / 结构参数下标、在界内；越界一律 SKIP——1.25.0 对标量末段不查界、对带下标末段报错，不一致）。
           → 全 scodeinst PASS 403→405、nf-live 400→401（FAIL 0）；单测 160（复合数组元素引用旧的 SKIP 断言改为对拍）。
           记录族余下多卡在记录绑定（构造 / 函数返回记录 / 记录数组绑定）、final 覆盖、Evaluate 注解。
+    - [x] (58m) String(x, …)（2026-10-02，MLS §3.7.2 四个重载）：实参按重载补齐缺省打印（`String(x, 6, 0, true)`、
+          `String(n, 0, true)`、`String(x, "6.2f")`）；全常量 → 求值成字符串（%g 有效数字、minimumLength / leftJustified 补空格、
+          format、枚举名）；Real 结果带指数 → SKIP（1.25.0 是 Windows CRT 三位指数，与工具链相关）。MSL 的 assert 文案常用。
+          → 全 scodeinst PASS 405→408、nf-live 401→406（FAIL 0）；+1 单测（161）。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

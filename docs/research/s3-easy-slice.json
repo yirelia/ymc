@@ -493,5 +493,6 @@
 "Wild1.mo",
 "ImportUnqualified3.mo",
 "CevalRecordArray4.mo",
-"ConnectArrays1.mo"
+"ConnectArrays1.mo",
+"SubscriptCevalIndexRange1.mo"
 ]

@@ -6772,6 +6772,108 @@ class Flattener {
     return builtin_call(e, enclosing, prefix, Symbol{});
   }
 
+  // String(x, …)（MLS §3.7.2 的四个重载：Real → String(r, significantDigits = 6, minimumLength = 0, leftJustified = true) 或
+  // String(r, format)；Integer / Boolean / 枚举 → String(x, minimumLength = 0, leftJustified = true)）：定型后实参按位置补齐缺省
+  // 打印（S1 探针 `String(x, 6, 0, true)`、`String(n, 0, true)`、`String(x, "6.2f")`）；实参全常量 → 求值成字符串字面量（S2 探针
+  // `String(1/3)` → "0.333333"、`String(3, minimumLength = 4)` → "3   "、`String(E.two)` → "two"）。Real 求值结果带指数时
+  // 1.25.0（Windows CRT）打三位指数 `1e+010`，与工具链相关 → SKIP。
+  Id<Expr> string_call(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    if (e.args.empty()) { set_unsupported("function arity"); return lit_int(0); }
+    const std::vector<Id<Exp>> args = e.args;   // 拷贝
+    const std::vector<Symbol> names = e.arg_names;
+    if (!names.empty() && names[0].is_valid()) { set_unsupported("String argument"); return lit_int(0); }
+    const Id<Expr> v = simplify_expr(inst_exp(args[0], enclosing, prefix));
+    if (result_.unsupported) return lit_int(0);
+    if (!expr_shape(v).empty()) { set_unsupported("String argument"); return lit_int(0); }
+    const TypeKind vk = result_.model.exprs[v].ty.kind;
+    const bool real = vk == TypeKind::Real;
+    if (!real && vk != TypeKind::Integer && vk != TypeKind::Boolean && vk != TypeKind::Enumeration) {
+      set_unsupported("String argument type");
+      return lit_int(0);
+    }
+    // 其余实参：位置（Real：significantDigits, minimumLength, leftJustified，第 2 个是 String → format；其余类型：
+    // minimumLength, leftJustified）+ 命名。
+    const Symbol s_sd = in_.intern("significantDigits"), s_ml = in_.intern("minimumLength"),
+                 s_lj = in_.intern("leftJustified"), s_fmt = in_.intern("format");
+    std::unordered_map<std::uint32_t, Id<Expr>> slot;
+    const std::vector<Symbol> order = real ? std::vector<Symbol>{s_sd, s_ml, s_lj} : std::vector<Symbol>{s_ml, s_lj};
+    for (std::size_t i = 1; i < args.size(); ++i) {
+      const Id<Expr> x = simplify_expr(inst_exp(args[i], enclosing, prefix));
+      if (result_.unsupported) return lit_int(0);
+      Symbol nm = i < names.size() ? names[i] : Symbol{};
+      if (!nm.is_valid()) {
+        if (real && i == 1 && result_.model.exprs[x].ty.kind == TypeKind::String) nm = s_fmt;
+        else if (i - 1 < order.size()) nm = order[i - 1];
+        else { set_unsupported("function arity"); return lit_int(0); }
+      }
+      if (slot.count(nm.id)) { set_unsupported("duplicate String argument"); return lit_int(0); }
+      slot[nm.id] = x;
+    }
+    const bool fmt = slot.count(s_fmt.id) > 0;
+    for (const auto& [k, x] : slot) {
+      const TypeKind xk = result_.model.exprs[x].ty.kind;
+      const bool ok = (k == s_fmt.id && real && xk == TypeKind::String && slot.size() == 1) ||
+                      (k == s_sd.id && real && !fmt && xk == TypeKind::Integer) ||
+                      (k == s_ml.id && !fmt && xk == TypeKind::Integer) || (k == s_lj.id && !fmt && xk == TypeKind::Boolean);
+      if (!ok) { set_unsupported("String argument"); return lit_int(0); }
+    }
+    std::vector<Id<Expr>> full{v};   // 补齐缺省
+    if (fmt) {
+      full.push_back(slot[s_fmt.id]);
+    } else {
+      if (real) full.push_back(slot.count(s_sd.id) ? slot[s_sd.id] : lit_int(6));
+      full.push_back(slot.count(s_ml.id) ? slot[s_ml.id] : lit_int(0));
+      full.push_back(slot.count(s_lj.id) ? slot[s_lj.id] : lit_bool(true));
+    }
+    bool all_lit = true;   // 常量折叠
+    for (Id<Expr> x : full) {
+      const ExprKind k = result_.model.exprs[x].kind;
+      all_lit = all_lit && (k == ExprKind::IntLit || k == ExprKind::RealLit || k == ExprKind::BoolLit ||
+                            k == ExprKind::StringLit || k == ExprKind::EnumLit);
+    }
+    if (all_lit) {
+      const Expr ve = result_.model.exprs[v];   // 拷贝
+      const double rv = ve.kind == ExprKind::IntLit ? static_cast<double>(ve.ival) : ve.rval;
+      std::string s;
+      if (fmt) {
+        const std::string f = "%" + std::string(in_.str(result_.model.exprs[full[1]].sval));
+        char buf[256];
+        std::snprintf(buf, sizeof buf, f.c_str(), rv);
+        s = buf;
+      } else if (real) {
+        char buf[64];
+        std::snprintf(buf, sizeof buf, "%.*g", static_cast<int>(result_.model.exprs[full[1]].ival), rv);
+        s = buf;
+      } else if (ve.kind == ExprKind::IntLit) {
+        s = std::to_string(ve.ival);
+      } else if (ve.kind == ExprKind::BoolLit) {
+        s = ve.bval ? "true" : "false";
+      } else {
+        s = std::string(in_.str(ve.enum_path.back()));
+      }
+      if ((real || fmt) && s.find_first_of("eE") != std::string::npos) { set_unsupported("String exponent format"); return lit_int(0); }
+      if (!fmt) {
+        const std::int64_t ml = result_.model.exprs[full[full.size() - 2]].ival;
+        const bool lj = result_.model.exprs[full.back()].bval;
+        if (ml > 0 && static_cast<std::int64_t>(s.size()) < ml) {
+          const std::string pad(static_cast<std::size_t>(ml) - s.size(), ' ');
+          s = lj ? s + pad : pad + s;
+        }
+      }
+      Expr r;
+      r.kind = ExprKind::StringLit;
+      r.ty = Type::string();
+      r.sval = in_.intern(s);
+      return add(std::move(r));
+    }
+    Expr r;
+    r.kind = ExprKind::Call;
+    r.call_name = {in_.intern("String")};
+    r.args = std::move(full);
+    r.ty = Type::string();
+    return add(std::move(r));
+  }
+
   // 模型语境的向量 / 矩阵积（形状规则 NFTypeCheck.checkBinaryOperationMul :1019-1093）：维已知时 omc 展开成积和（C1 探针：
   // `A * v` → `{A[1,1] * v[1] + A[1,2] * v[2], …}`、`v * v` → `v[1] * v[1] + v[2] * v[2]`），求和下标 k 升序、左结合。
   // 形状不符（omc 报错）/ 维未知 → SKIP。
@@ -7024,6 +7126,7 @@ class Flattener {
     if (builtin_name == "cardinality") return cardinality_call(e, enclosing, prefix);
     if (builtin_name == "size") return size_call(e, enclosing, prefix);
     if (builtin_name == "scalar") return scalar_call(e, enclosing, prefix);
+    if (builtin_name == "String") return string_call(e, enclosing, prefix);
     if (!fn_scope_)
       if (Id<Expr> r = model_array_builtin(e, builtin_name, enclosing, prefix); r.is_valid() || result_.unsupported) return r;
     if (fn_scope_ && (builtin_name == "fill" || builtin_name == "zeros" || builtin_name == "ones"))
