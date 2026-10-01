@@ -2431,6 +2431,21 @@ YMC_TEST(flatten_if_equation_structural_condition) {
   YMC_CHECK_EQ(out, std::string("<unsupported:if condition folds via parameter>"));
 }
 
+YMC_TEST(flatten_subscripted_and_runtime_subscripts) {
+  // `(e)[i]`：字面量数组 + 字面量下标折元素，运行时下标保留 ASUB `{1.0, 2.0, 3.0}[n]`（转型推进元素）；cref 的运行时整型
+  // 下标保留符号（`m[1,n]`、`x[n + 1]`）；数组元素逐个带声明注释。期望 = omc 1.25.0 实跑 SE3（2026-10-02，stdout）。
+  YMC_CHECK_EQ(flatten_src("model SE3\n  discrete Integer n(start = 1);\n  Real x[3] = {1, 2, 3} \"c x\";\n"
+                           "  parameter Real p[2] = {4, 5} \"c p\";\n  Real y = ({1, 2, 3})[n];\n  Real z = ({1, 2, 3})[2];\n"
+                           "  Real m[2, 3];\n  Real u = m[1, n];\n  Real v = x[n + 1];\nequation\n  m = {{1, 2, 3}, {4, 5, 6}};\n"
+                           "  when time > 1 then\n    n = 2;\n  end when;\nend SE3;\n"),
+               std::string("class SE3\n  discrete Integer n(start = 1);\n  Real x[1] \"c x\";\n  Real x[2] \"c x\";\n"
+                           "  Real x[3] \"c x\";\n  parameter Real p[1] = 4.0 \"c p\";\n  parameter Real p[2] = 5.0 \"c p\";\n"
+                           "  Real y = {1.0, 2.0, 3.0}[n];\n  Real z = 2.0;\n  Real m[1,1];\n  Real m[1,2];\n  Real m[1,3];\n"
+                           "  Real m[2,1];\n  Real m[2,2];\n  Real m[2,3];\n  Real u = m[1,n];\n  Real v = x[n + 1];\nequation\n"
+                           "  x = {1.0, 2.0, 3.0};\n  m[1,1] = 1.0;\n  m[1,2] = 2.0;\n  m[1,3] = 3.0;\n  m[2,1] = 4.0;\n"
+                           "  m[2,2] = 5.0;\n  m[2,3] = 6.0;\n  when time > 1.0 then\n    n = 2;\n  end when;\nend SE3;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

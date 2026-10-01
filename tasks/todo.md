@@ -892,6 +892,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           omc 的传递标记在绑定已被 Ceval 缓存（CEVAL_BINDING，getExpOpt 不返回）时中断，依赖求值次序（IF3 `b = c > 1` → c
           不 final，而维度 `n = m` → m final）→ 不猜，SKIP。→ 全 scodeinst PASS 424→427（EvaluateFalse1、IfConnect1/2）、
           nf-live 413→417（EquationIf1/2/3、IfEquation）；+1 单测（168）。
+    - [x] (58s) 取下标式 + 运行时下标 + 数组元素注释（2026-10-02）：`(e)[i]`（ExpKind::Subscript）——基是 cref → 下标并进 cref
+          （`(x)[n]` → `x[n]`），一维字面量数组 + 字面量下标 → 取元素，运行时下标 → ASUB `{1.0, 2.0, 3.0}[n]`（转型推进元素；
+          打印按 ExpressionDump ASUB :703-714，下标 "," 无空格）；cref 的运行时整型下标保留符号（`x[n]`、`m[1,n]`、
+          `x[n + 1]`，不做静态越界）；数组元素逐个带声明注释（WillowForest 曾被运行时下标遮住，放行后暴露）。→ 全 scodeinst
+          PASS 427→431（End5、Subscript6、SubscriptedExp1/3）、nf-live 417→420（Summation、SubscriptEval、WillowForest）；
+          +1 单测（169）。教训：探针别 `2>&1`（成功时 omc 告警在 stderr，门只比 stdout，见 lessons）。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

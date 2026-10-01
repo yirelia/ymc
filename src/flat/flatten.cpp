@@ -2701,6 +2701,8 @@ class Flattener {
       v.name = name;
       v.name_subs = psubs_to_exprs(psubs);
       v.name_subs.push_back({});   // 叶数组的下标走 v.subscripts（末段），逐段 name_subs 末段留空
+      // 组件声明注释逐元素照打（同标量，WillowForest：`parameter Real e[1] = 0.73 "Radiation efficiency fraction";`）。
+      if (cel.cmt.str.is_valid()) v.comment = in_.intern(unescape_modelica_string(in_.str(cel.cmt.str)));
       {   // 末段下标：整数维取 IntLit，类型维取 false/true·E.lit（行主序 idx → 该维标签）
         std::vector<Id<Expr>> subs;
         subs.reserve(idx.size());
@@ -6421,6 +6423,7 @@ class Flattener {
         return add(std::move(r));
       }
       case ExpKind::Matrix: return matrix_exp(e, enclosing, prefix);
+      case ExpKind::Subscript: return subscripted_exp(e, enclosing, prefix);
       case ExpKind::Range: {   // a:b / a:step:b（Absyn 与 flat 同布局：a=起点, b=步长或终点, c=终点）
         Expr r;
         r.kind = ExprKind::Range;
@@ -6672,6 +6675,16 @@ class Flattener {
                   if (std::optional<CVal> pv = eval_scode(subs[k], lscope, 0, /*allow_param=*/true, nullptr);
                       pv && pv->k == CVal::K::Int)
                     iv = pv->i;
+                // 运行时整型下标（引用离散 / 连续变量，`x[n]`、`m[1,n]`、`x[n + 1]`）：omc 保留符号下标、不做静态越界检查
+                //（VS1 探针）。
+                if (!iv) {
+                  const Id<Expr> se = simplify_expr(inst_exp(subs[k], enclosing, prefix));
+                  if (result_.unsupported) break;
+                  if (result_.model.exprs[se].ty.kind == TypeKind::Integer && cond_is_runtime(se)) {
+                    leaf_subs[k] = se;
+                    continue;
+                  }
+                }
                 if (!iv || *iv < 1 || *iv > ldims[k]) {
                   set_unsupported("array subscript out of range");
                   break;
@@ -7525,10 +7538,58 @@ class Flattener {
         return add(std::move(r));
       }
       case ExprKind::Cast: return to_real(x.a);
+      case ExprKind::Subscript:   // 字面量数组取下标 `{1, 2, 3}[n]`：转型推进数组元素（SubscriptedExp4 → `{1.0, 2.0, 3.0}[n]`）
+        if (result_.model.exprs[x.a].kind == ExprKind::Array) {
+          Expr r = x;
+          r.a = coerce_deep(x.a, TypeKind::Real);
+          r.ty = Type::real();
+          return add(std::move(r));
+        }
+        break;
       default: break;
     }
     Expr c; c.kind = ExprKind::Cast; c.a = e; c.ty = Type::real();
     return add(std::move(c));
+  }
+
+  // `(e)[i]`（ExpKind::Subscript：任意 primary 后的下标）：基是 cref（含括号分组）→ 下标并进 cref 末段（`(x)[n]` →
+  // `x[n]`）；基是一维数组字面量：字面量下标 → 取元素（`({1, 2, 3})[2]` → `2`，越界 SKIP），否则保留 ASUB
+  // `{1, 2, 3}[n]`（ExpressionDump ASUB :703-714 打印）。SubscriptedExp1/3/4。其它基（调用结果 `f(x)[1]`、运算式）、
+  // 切片 / 多个下标 → SKIP。
+  Id<Expr> subscripted_exp(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    Id<Exp> base = e.a;
+    while (I_.absyn.exps[base].kind == ExpKind::Tuple && I_.absyn.exps[base].args.size() == 1) base = I_.absyn.exps[base].args[0];
+    const std::vector<Id<Exp>> subs = e.args;   // 拷贝（下面往 absyn arena add）
+    for (Id<Exp> s : subs) {
+      const ExpKind sk = I_.absyn.exps[s].kind;
+      if (sk == ExpKind::Colon || sk == ExpKind::Range || is_array_ctor(s)) { set_unsupported("subscripted expression slice"); return lit_int(0); }
+    }
+    if (I_.absyn.exps[base].kind == ExpKind::CrefExp) {
+      Cref c = I_.absyn.crefs[I_.absyn.exps[base].cref];
+      if (c.parts.empty() || !c.parts.back().subscripts.empty()) { set_unsupported("subscripted expression"); return lit_int(0); }
+      c.parts.back().subscripts = subs;
+      return cref(I_.absyn.add_cref(std::move(c)), enclosing, prefix);
+    }
+    if (!is_array_ctor(base) || is_comprehension(base) || subs.size() != 1) { set_unsupported("subscripted expression"); return lit_int(0); }
+    const Id<Expr> b = inst_exp(base, enclosing, prefix);
+    const Id<Expr> s = simplify_expr(inst_exp(subs[0], enclosing, prefix));
+    if (result_.unsupported) return lit_int(0);
+    const Expr be = result_.model.exprs[b];   // 拷贝
+    if (be.kind != ExprKind::Array || be.args.empty() || !expr_shape(be.args[0]).empty()) {
+      set_unsupported("subscripted expression"); return lit_int(0);
+    }
+    const Expr se = result_.model.exprs[s];
+    if (se.kind == ExprKind::IntLit) {
+      if (se.ival < 1 || static_cast<std::size_t>(se.ival) > be.args.size()) { set_unsupported("array subscript out of range"); return lit_int(0); }
+      return be.args[static_cast<std::size_t>(se.ival) - 1];
+    }
+    if (se.ty.kind != TypeKind::Integer) { set_unsupported("subscripted expression"); return lit_int(0); }
+    Expr r;
+    r.kind = ExprKind::Subscript;
+    r.a = b;
+    r.args = {s};
+    r.ty = result_.model.exprs[be.args[0]].ty;   // 元素类型（数组字面量自身的 ty 是粗类型）
+    return add(std::move(r));
   }
 
   // ---- evalConstants：常量折叠 + 常量/final 参数内联（R14）----

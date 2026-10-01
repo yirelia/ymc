@@ -234,7 +234,24 @@ class ExprDumper {
         out_ += ']';
         break;
       }
-      case ExprKind::Subscript:
+      case ExprKind::Subscript: {
+        // ASUB（ExpressionDump.printExp2Str :703-714）：`<exp>[s1,s2]`，下标以 "," 无空格相连；exp 优先级非 0（expPriority
+        // :936-947：字面量 / cref / ASUB / cast / 调用 / 数组 / 矩阵为 0）时加括号。a = 被取下标式，args = 下标。
+        const ExprKind k = a_[e.a].kind;
+        const bool bare = k == ExprKind::IntLit || k == ExprKind::RealLit || k == ExprKind::StringLit ||
+                          k == ExprKind::BoolLit || k == ExprKind::EnumLit || k == ExprKind::Cref ||
+                          k == ExprKind::Subscript || k == ExprKind::Cast || k == ExprKind::Call || k == ExprKind::Array;
+        if (!bare) out_ += '(';
+        exp(e.a);
+        if (!bare) out_ += ')';
+        out_ += '[';
+        for (std::size_t i = 0; i < e.args.size(); ++i) {
+          if (i) out_ += ',';
+          exp(e.args[i]);
+        }
+        out_ += ']';
+        break;
+      }
       case ExprKind::Reduction:
         // 数组/归约竖切片再实现；先占位为可辨识的形态，避免静默产出错文本。
         out_ += "/*UNIMPL_EXPR*/";

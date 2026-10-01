@@ -512,5 +512,9 @@
 "const4.mo",
 "EvaluateFalse1.mo",
 "IfConnect1.mo",
-"IfConnect2.mo"
+"IfConnect2.mo",
+"End5.mo",
+"Subscript6.mo",
+"SubscriptedExp1.mo",
+"SubscriptedExp3.mo"
 ]

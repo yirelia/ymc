@@ -116,3 +116,10 @@
   怎样"。(2) 修掉一个"让路径提前 SKIP"的粗糙点后，下游从未跑过的代码会被首次执行——必须全量重扫（scodeinst + nf-live）再看
   新冒出的 FAIL，它们多半是早就写错、只是没被走到的分支。(3) 加宽时把每个新形态拆成"一行一个模型"逐行对拍（`tools/probe_lines.py`），
   比整模型 diff 更快定位哪一行错。
+
+## 2026-10-02 — 探 omc 时别把 stderr 并进来当 oracle：成功运行的告警走 stderr，门只比 stdout
+- 模式：探 WillowForest 时用 `omc X.mo > f 2>&1`，看到 "Components are deprecated in class." 告警行，以为 omc 的 flat 输出带告警、
+  ymc 必须对普通 `class` SKIP，加了守卫——nf-live 当场 PASS 417 → 312（一百多个本来逐字节一致的 `class` 用例被误伤）。查
+  nf_live_sweep / flat_sweep：两者都只比 **stdout**；omc 成功时告警打在 **stderr**（报错退出时才混进 stdout）。
+- 规则：(1) 做 oracle 对拍的探针一律 `omc X.mo 2>/dev/null`（或分开存 stdout / stderr），与门的比较口径一致；看告警再单独看
+  stderr。(2) 新加的"为告警而 SKIP"守卫，先在全量 nf-live 上看它误伤了多少原本 PASS 的用例——大批 PASS → SKIP 就是口径错了。
