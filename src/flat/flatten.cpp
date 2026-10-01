@@ -831,6 +831,28 @@ class Flattener {
     // 算法段：翻译成 flat 语句（子组件段已在上面递归先入 → 子先本类后，与方程同序 R11 §3.4-6）。
     for (const SAlgorithm& alg : def.def.initial_algorithms) collect_algorithm(alg, inst_node, prefix, psubs, /*initial=*/true);
     for (const SAlgorithm& alg : def.def.algorithms) collect_algorithm(alg, inst_node, prefix, psubs, /*initial=*/false);
+    collect_inherited_sections(inst_node, prefix, psubs);
+  }
+
+  // 继承来的方程 / 算法段（R11 §3.4-6、NFInst.instExpressions 用 Sections.join(new, accumulated) 头插：本类段在前，
+  // 各 extends 的段按 extends **逆序**在后，每个 extends 内再递归同规则；NFSections.mo:192-209）。名字在基类实例里解析
+  // （find_local / 词法作用域 = 基类），前缀与本实例相同。基类实例由 inst 按 extends 序记在实例类树的 exts 里（任务卡
+  // T-S3-05；未记录时为空 → 无操作）。
+  void collect_inherited_sections(NodeId inst, const std::vector<Symbol>& prefix, const PSubs& psubs) {
+    if (result_.unsupported) return;
+    const ClassTreeId t = I_.node_class(inst).tree;
+    if (!t.is_valid()) return;
+    const std::vector<NodeId> exts = I_.trees[t].exts;   // 拷贝（下面会往 arena add）
+    for (auto it = exts.rbegin(); it != exts.rend() && !result_.unsupported; ++it) {
+      const NodeId b = *it;
+      if (!b.is_valid() || I_.nodes[b].is_empty() || !I_.nodes[b].def.is_valid()) continue;
+      const SClassDef& bd = I_.scode.elems[I_.nodes[b].def].def;
+      for (Id<SEquation> eid : bd.initial_equations) collect_equation(eid, b, prefix, psubs, /*initial=*/true);
+      for (Id<SEquation> eid : bd.equations) collect_equation(eid, b, prefix, psubs, /*initial=*/false);
+      for (const SAlgorithm& alg : bd.initial_algorithms) collect_algorithm(alg, b, prefix, psubs, /*initial=*/true);
+      for (const SAlgorithm& alg : bd.algorithms) collect_algorithm(alg, b, prefix, psubs, /*initial=*/false);
+      collect_inherited_sections(b, prefix, psubs);
+    }
   }
 
   // 翻译一个算法段 → FlatAlgorithm（v1：只做直线标量赋值，见 collect_statement）。段内任一语句未做 → 整模型 SKIP。
@@ -1710,6 +1732,13 @@ class Flattener {
       if ((cty.kind == TypeKind::Real || cty.kind == TypeKind::Integer) &&
           (bk == TypeKind::String || bk == TypeKind::Boolean))
         set_unsupported("binding type mismatch");
+      // parameter / constant 绑定引用连续 / 离散变量或 time → omc HIGHER_VARIABILITY_BINDING（DisturbedResistance1
+      // `extends Resistor(R = 1.0 + 0.1*sin(time))`）。
+      {
+        const SVariability cv = var_min(var_floor, I_.comps[cid].attributes.variability);
+        if ((cv == SVariability::Param || cv == SVariability::Const) && refs_runtime_var(binding))
+          set_unsupported("binding of higher variability");
+      }
       // 标量组件绑数组（BindingInvalidType2 `Real x = {1, 2, 3}`）→ omc 维度不符报错。
       if (!cty.is_array() && (result_.model.exprs[binding].ty.is_array() || result_.model.exprs[binding].kind == ExprKind::Array))
         set_unsupported("binding type mismatch");

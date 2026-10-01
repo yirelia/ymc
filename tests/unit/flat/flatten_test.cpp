@@ -1792,7 +1792,8 @@ YMC_TEST(flatten_invalid_models_unsupported) {
            "model M\n  Integer i = 4000 / 100;\nend M;\n",                                                 // Real 绑 Integer
            "model M\n  Real x;\n  Real x;\nend M;\n",                                                     // 重复声明
            "model M\n  type E = enumeration(one, start);\n  E e;\nend M;\n",                               // 枚举字面量撞属性
-           "model M\n  Real x = time;\n  Integer n = N;\nend M;\n"}) {                                   // 解析不到的名字
+           "model M\n  Real x = time;\n  Integer n = N;\nend M;\n",                                     // 解析不到的名字
+           "model M\n  parameter Real R = 1.0 + 0.1*sin(time);\nend M;\n"}) {                             // 参数绑连续量
     bool uns = false;
     flatten_src(s, &uns);
     YMC_CHECK(uns);

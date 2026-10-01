@@ -791,8 +791,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       → nf-live：PASS 259→289、FAIL 30→0、ACCEPTS-INVALID 60→1（ConnectArrayCond 入账本）、CRASH 6→0（3 例两边都拒绝）；
         全 scodeinst：PASS 345→355、FAIL 74→16（余下均为账本内 1.25.0 分歧 / 错误文案）；easy-slice 449 例 355 PASS / 0 FAIL；
         oracle=live 不一致 0；gcc / msvc / msvc-asan 10/10、零警告；ASan 版 ymc 跑 1382 个文件 + 探针 0 报告；+5 单测。
+  - [x] (57a) 继承段：flatten 侧 `collect_inherited_sections`（本类段在前、extends 逆序递归，NFInst.instExpressions 的
+        Sections.join 头插）已就绪；inst 记录基类实例 + 去守卫属用户域 → 任务卡 `docs/tasks/T-S3-05-extends-sections.md`
+        （本地临时打 inst 两处实测：scodeinst +1、nf-live +4，未提交 inst.cpp）。顺带补参数 / 常量绑连续量的变率校验
+        （DisturbedResistance1）。门全绿（2026-10-01）。
   - [ ] (57) 错误输出：OMC 错误帧（`Error processing file` … `Execution failed!`）+ 最常见的错误文案与位置，把 incorrect 用例变成
-        可对拍（scodeinst 386 + nf-live 约 270）。
+        可对拍（scodeinst 386 + nf-live 约 270）。**2026-10-01 评估**：错误种类长尾（单种最多 7 例），且要逐元素复刻 OMC 的源码
+        区间约定 → 性价比低于 correct 用例加宽，后排。
   - [ ] (58+) 按 SKIP 族加宽：数组（150）→ redeclare / 类修饰（64）→ 记录 / 复合绑定（50）→ 查找 / import（49）→ 继承（38）→ …
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
