@@ -1725,14 +1725,14 @@ class Flattener {
       if (binding.is_valid()) {
         // 已按值求得
       } else if (mraw.is_valid()) {
-        binding = (cty.kind == TypeKind::Enumeration && is_cref_exp(mraw)) ? enum_lit_value(mraw, mod_scope)
+        binding = (cty.kind == TypeKind::Enumeration && is_cref_exp(mraw)) ? enum_lit_value(mraw, mod_scope, mod_prefix)
                                                                            : inst_exp(mraw, mod_scope, mod_prefix);
       } else {
         const Binding& b = I_.comps[cid].binding;
         const BindingKind bk = b.kind;
         const Id<Exp> raw = b.raw_exp;
         if (bk == BindingKind::Raw && raw.is_valid())
-          binding = (cty.kind == TypeKind::Enumeration && is_cref_exp(raw)) ? enum_lit_value(raw, enclosing)
+          binding = (cty.kind == TypeKind::Enumeration && is_cref_exp(raw)) ? enum_lit_value(raw, enclosing, prefix)
                                                                             : inst_exp(raw, enclosing, prefix);
       }
     }
@@ -1960,6 +1960,11 @@ class Flattener {
                   const std::vector<Symbol>& mod_prefix, bool force_final, const SElement& cel,
                   const ModCtx& ctx) {
     cur_psubs_ = psubs;   // 数组绑定/摊分里 cref 前缀改写用
+    // `annotation(Evaluate = true)` 的参数数组：同标量（emit_variable），omc 求值成 final 字面量，未做 → SKIP（CevalFuncArray6）。
+    if (I_.comps[cid].attributes.variability == SVariability::Param && evaluate_true(I_.comps[cid].def)) {
+      set_unsupported("Evaluate annotation");
+      return;
+    }
     // 维度：组件维在前、类型维在后（R13 §3）。字面量 + 参数/常量/size()/算术求值。
     const ScodeScope dscope = scode_scope_of(enclosing);
     // 维度表达式：组件维在前、类型维在后（R13 §3）。先收集，绑定就绪后再解析（`:` 维靠绑定形状推断）。
@@ -2000,18 +2005,35 @@ class Flattener {
         return;
       if (result_.unsupported) return;
     }
+    // 非构造子绑定的类型化值：`:` 维推断时提前求，下面的摊分 / 数组方程复用（只 inst 一次）。
+    Id<Expr> rhsE;
+    auto typed_rhs = [&]() -> Id<Expr> {
+      if (!rhsE.is_valid()) {
+        array_call_ok_ = I_.absyn.exps[braw].kind == ExpKind::Call;   // 整个绑定是调用（见 array_call_ok_）
+        rhsE = simplify_expr(inst_exp(braw, bscope, bprefix));
+        array_call_ok_ = false;
+      }
+      return rhsE;
+    };
     // 解析各维成整数：字面量/参数/size()/算术走 eval_dim；`:` 维从绑定构造子形状推断（CevalArray*）。
     std::vector<std::int64_t> dims;
     std::vector<std::vector<Id<Expr>>> dim_labels;   // 每维下标标签：整数维 IntLit 1..n；类型维 false/true 或 E.lit
     for (std::size_t di = 0; di < dim_exps.size(); ++di) {
       std::vector<Id<Expr>> labels;
-      if (auto tl = classify_type_dim(dim_exps[di], enclosing)) {
+      if (auto tl = classify_type_dim(dim_exps[di], enclosing, prefix)) {
         labels = std::move(*tl);   // 类型名维（Boolean / 枚举，NFDimension.fromExp）
       } else if (result_.unsupported) {
         return;
       } else if (I_.absyn.exps[dim_exps[di]].kind == ExpKind::Colon) {
         // 无绑定时改用 start 属性的值推断（NFTyping.typeDimension :705-711；DimUnknown7/10/11）。
         std::optional<std::int64_t> n = binding_dim_size(braw.is_valid() ? braw : start_value(asrc), di);
+        // 非字面量绑定：取类型化绑定的第 di 维（deduceDimensionFromExp，NFTyping.mo:781-826）；该维未知时 omc 再对绑定求值，
+        // 未做 → SKIP。
+        if (!n && nlbind) {
+          const std::vector<std::int64_t> sh = expr_shape(typed_rhs());
+          if (result_.unsupported) return;
+          if (sh.size() == dim_exps.size() && sh[di] >= 0) n = sh[di];
+        }
         if (!n) { set_unsupported("non-literal array dimension"); return; }
         for (std::int64_t i = 1; i <= *n; ++i) labels.push_back(lit_int(i));
       } else {
@@ -2052,21 +2074,19 @@ class Flattener {
       set_unsupported("array binding shape/type mismatch"); return;
     }
     // 非构造子绑定（数组值 `= y` / `= 2*y`）：类型化一次 + 形状/变率守卫（对标 NFFlatten:700 / NFScalarize）。
-    Id<Expr> rhsE;
     std::vector<Dimension> xd;
     if (nlbind) {
       for (std::int64_t n : dims) { Dimension d; d.kind = DimKind::Integer; d.size = n; xd.push_back(d); }
-      array_call_ok_ = I_.absyn.exps[braw].kind == ExpKind::Call;   // 整个绑定是调用（见 array_call_ok_）
-      rhsE = simplify_expr(inst_exp(braw, bscope, bprefix));
-      array_call_ok_ = false;
+      typed_rhs();
       if (result_.unsupported) return;   // inst_exp 已拒绝切片/常量数组/限定名等
-      const Type rty = result_.model.exprs[rhsE].ty;
-      // 数组调用的类型可带未知维（调用处求不出的输出维），与任何维相容；其余须同形。
+      // 数组调用的类型可带未知维（调用处求不出的输出维），与任何维相容；其余须同形（形状看穿字面量 / 一元的粗类型）。
       const ExprKind rk0 = result_.model.exprs[rhsE].kind;
       const bool arr_call = rk0 == ExprKind::Call || rk0 == ExprKind::TupleElement || rk0 == ExprKind::Array;
-      if (!rty.is_array() || (arr_call ? !compat_dims(rty.dims, xd) : !same_dims(rty.dims, xd))) {
-        set_unsupported("non-literal array binding shape"); return;
-      }
+      const std::vector<std::int64_t> rsh = expr_shape(rhsE);
+      bool shape_ok = rsh.size() == dims.size();
+      for (std::size_t k = 0; shape_ok && k < dims.size(); ++k)
+        if (rsh[k] != dims[k] && !(arr_call && rsh[k] < 0)) shape_ok = false;
+      if (!shape_ok) { set_unsupported("non-literal array binding shape"); return; }
       if (vk == FlatVarKind::Discrete) { set_unsupported("discrete array binding"); return; }   // omc 报错（需 when）
       if (vk != FlatVarKind::Var && cond_is_runtime(rhsE)) {   // param/const 绑更高变率 = omc 报错（B3/C3）
         set_unsupported("array binding higher variability"); return;
@@ -2530,7 +2550,7 @@ class Flattener {
   Id<Expr> attr_value(AttrVK vk, Id<Exp> val, NodeId enclosing, const std::vector<Symbol>& prefix) {
     switch (vk) {
       case AttrVK::StateSel:
-      case AttrVK::EnumComp: return enum_lit_value(val, enclosing);   // `StateSelect.never` / `E.two`
+      case AttrVK::EnumComp: return enum_lit_value(val, enclosing, prefix);   // `StateSelect.never` / `E.two`
       case AttrVK::Real: return to_real(simplify_expr(inst_exp(val, enclosing, prefix)));   // `min = -100` → `-100.0`
       case AttrVK::Str:
       case AttrVK::Int:
@@ -2539,54 +2559,94 @@ class Flattener {
     return inst_exp(val, enclosing, prefix);
   }
 
-  // 枚举属性值形如 `T.lit`（StateSelect.never、E.two）：直接按 cref 各段建 EnumLit，dump 打全路径（R13 §4.2）。
-  // 不走通用 cref 解析（它会把多段名当跨作用域引用标 unsupported）。
-  Id<Expr> enum_lit_value(Id<Exp> val, NodeId scope) {
+  // 枚举属性值形如 `T.lit`（StateSelect.never、E.two）：直接按 cref 各段建 EnumLit（R13 §4.2）。
+  // 不走通用 cref 解析（它会把多段名当跨作用域引用标 unsupported）。prefix = scope 实例的组件路径。
+  Id<Expr> enum_lit_value(Id<Exp> val, NodeId scope, const std::vector<Symbol>& prefix) {
     const Exp& e = I_.absyn.exps[val];
     if (e.kind != ExpKind::CrefExp) { set_unsupported("enum attribute value"); return lit_int(0); }
-    return make_enum_lit(I_.absyn.crefs[e.cref], scope);
+    return make_enum_lit(I_.absyn.crefs[e.cref], scope, prefix);
   }
 
-  // 从 cref `E.lit` / `P.E.lit` 建 EnumLit：enum_path 打全路径；若能把倒数第二段当枚举类名解析（同/外层作用域的
-  // SCODE 元素里找 enumeration 类），补 1 基序数（关系/Integer() 折叠用）；解析不到序数留 0（仍能正确 dump）。
-  Id<Expr> make_enum_lit(const Cref& c, NodeId scope) {
+  // 从 cref `E.lit` / `P.E.lit` 建 EnumLit：类型路径按 enum_type_path 规范化（`m.F.v`、`Pk.E.a`），补 1 基序数（关系 /
+  // Integer() 折叠用；内建枚举无定义 → 留 0，打印不受影响）。类型解析不到 / 字面量不在枚举里 → SKIP。
+  Id<Expr> make_enum_lit(const Cref& c, NodeId scope, const std::vector<Symbol>& prefix) {
+    for (const CrefPart& p : c.parts)
+      if (!p.subscripts.empty()) { set_unsupported("subscripted enum value"); return lit_int(0); }
+    // 不带类型前缀的字面量名（`start = two`）按普通名字查找（Enum10 → omc "Variable two not found"）→ 未做，SKIP。
+    if (c.parts.size() < 2) { set_unsupported("unqualified enum literal"); return lit_int(0); }
+    std::vector<Symbol> tparts;
+    for (std::size_t i = 0; i + 1 < c.parts.size(); ++i) tparts.push_back(c.parts[i].name);
+    const SClassDef* ed = nullptr;
+    const std::optional<std::vector<Symbol>> tp = enum_type_path(tparts, scope, prefix, ed);
+    if (!tp) { set_unsupported("enumeration type path"); return lit_int(0); }
     Expr r;
     r.kind = ExprKind::EnumLit;
     r.ty = Type::of(TypeKind::Enumeration);
-    for (const CrefPart& p : c.parts) {
-      if (!p.subscripts.empty()) { set_unsupported("subscripted enum value"); return lit_int(0); }
-      r.enum_path.push_back(p.name);
-    }
-    // 不带类型前缀的字面量名（`start = two`）按普通名字查找（Enum10 → omc "Variable two not found"）→ 未做，SKIP。
-    if (c.parts.size() < 2) { set_unsupported("unqualified enum literal"); return lit_int(0); }
-    if (c.parts.size() >= 2) {
-      const SClassDef* ed = find_enum_def(scope, c.parts[c.parts.size() - 2].name);
-      if (ed) {
-        const Symbol lit = c.parts.back().name;
-        for (std::size_t i = 0; i < ed->enum_items.size(); ++i)
-          if (ed->enum_items[i].literal == lit) { r.enum_index = static_cast<std::int64_t>(i) + 1; break; }
-      }
+    r.enum_path = *tp;
+    r.enum_path.push_back(c.parts.back().name);
+    if (ed) {
+      const Symbol lit = c.parts.back().name;
+      for (std::size_t i = 0; i < ed->enum_items.size(); ++i)
+        if (ed->enum_items[i].literal == lit) { r.enum_index = static_cast<std::int64_t>(i) + 1; break; }
+      if (r.enum_index == 0) { set_unsupported("unknown enumeration literal"); return lit_int(0); }
     }
     return add(std::move(r));
   }
 
-  // 沿词法 parent_scope 链，在各作用域类的 SCODE 元素里找名为 name 的 enumeration 类，返回其 SClassDef；否则 null。
-  // （实例的 FlatTree 只存 components 不存嵌套类，所以直接扫 SCODE 元素，不走实例树。）
-  const SClassDef* find_enum_def(NodeId scope, Symbol name) {
-    for (NodeId s = scope; s.is_valid() && !I_.nodes[s].is_empty(); s = I_.nodes[s].parent_scope) {
-      const Id<SElement> d = I_.nodes[s].def;
-      if (!d.is_valid()) continue;
-      for (Id<SElement> eid : I_.scode.elems[d].def.elements) {
-        const SElement& el = I_.scode.elems[eid];
-        if (el.kind == SElementKind::Class && el.name == name &&
-            el.def.kind == SClassDefKind::Enumeration)
-          return &el.def;
+  // 枚举类型的打印路径 = 枚举类的 InstNode.scopePath（makeEnumerationType，NFInst.mo:627-638；相对式 scopePath：根类不计、
+  // 组件里声明的类带组件实例路径、包按类名逐段，NFInstNode.mo:1311-1381）。P10 / Pk 探针：根类里的 `F` → `F.u`，组件 m
+  // 的类里的 `F` → `m.F.u`，包 Pk 里的 `E` → `Pk.E.a`，顶层 `E0` → `E0.a0`。type_parts = 书写的类型名各段；首段沿词法
+  // 作用域链找：当前实例类（scope）→ 前缀 prefix；根类 → 空；顶层 program → 空（顶层类路径即书写名）；内建枚举 → 书写名。
+  // 其余（更外层的非根实例、继承来的类、import 别名、短类别名）未核实 → nullopt。def 出参 = 枚举定义（内建为 null）。
+  std::optional<std::vector<Symbol>> enum_type_path(const std::vector<Symbol>& type_parts, NodeId scope,
+                                                    const std::vector<Symbol>& prefix, const SClassDef*& def) {
+    def = nullptr;
+    if (type_parts.empty()) return std::nullopt;
+    auto class_in = [&](const std::vector<Id<SElement>>& elems, Symbol name) -> const SElement* {
+      for (Id<SElement> eid : elems) {
+        const SElement& x = I_.scode.elems[eid];
+        if (x.kind == SElementKind::Class && x.name == name) return &x;
+      }
+      return nullptr;
+    };
+    const SElement* el = nullptr;
+    std::vector<Symbol> path;
+    if (fn_scope_ && (!scope.is_valid() || I_.nodes[scope].is_empty())) {
+      // 函数体：按函数定义处的 SCODE 作用域链（内→外）找；路径 = 根类以内、到声明它的类为止的各类名（外→内）。
+      const ScodeScope& sc = *fn_scope_;
+      const std::uint32_t root_def = I_.nodes[root_].def.raw;
+      for (std::size_t k = 0; k < sc.size(); ++k) {
+        if (!(el = class_in(I_.scode.elems[sc[k]].def.elements, type_parts[0]))) continue;
+        std::size_t r = sc.size();
+        for (std::size_t j = k; j < sc.size(); ++j)
+          if (sc[j].raw == root_def) { r = j; break; }
+        for (std::size_t j = r; j > k; --j) path.push_back(I_.scode.elems[sc[j - 1]].name);
+        break;
       }
     }
-    return nullptr;
+    for (NodeId s = scope; !el && s.is_valid() && !I_.nodes[s].is_empty(); s = I_.nodes[s].parent_scope) {
+      const Id<SElement> d = I_.nodes[s].def;
+      if (!d.is_valid() || !(el = class_in(I_.scode.elems[d].def.elements, type_parts[0]))) continue;
+      // 实例节点是定义节点的克隆、parent_scope 指词法外层的**定义**节点（inst.cpp instantiate），故根类按 def 认。
+      if (s.raw == scope.raw) path = prefix;
+      else if (I_.nodes[s].def.raw != I_.nodes[root_].def.raw) return std::nullopt;   // 更外层的非根类：路径未核实
+      break;
+    }
+    if (!el) el = class_in(I_.scode.program, type_parts[0]);
+    if (!el) {
+      const std::string_view n = in_.str(type_parts[0]);
+      if (type_parts.size() == 1 && (n == "StateSelect" || n == "AssertionLevel" || n == "Uncertainty")) return type_parts;
+      return std::nullopt;
+    }
+    for (std::size_t i = 1; i < type_parts.size(); ++i)
+      if (!(el = class_in(el->def.elements, type_parts[i]))) return std::nullopt;
+    if (el->def.kind != SClassDefKind::Enumeration) return std::nullopt;
+    def = &el->def;
+    path.insert(path.end(), type_parts.begin(), type_parts.end());
+    return path;
   }
-  // 按简单名沿词法作用域链找类元素（任意 kind；走法同 find_enum_def），最后再查顶层 program（顶层声明的连接器短类，
-  // Cardinality3）。继承/导入来的类不在链上 → nullptr（调用方 SKIP）。
+  // 按简单名沿词法作用域链找类元素（任意 kind），最后再查顶层 program（顶层声明的连接器短类，Cardinality3）。
+  // 继承/导入来的类不在链上 → nullptr（调用方 SKIP）。
   const SElement* find_class_elem(NodeId scope, Symbol name) {
     for (NodeId s = scope; s.is_valid() && !I_.nodes[s].is_empty(); s = I_.nodes[s].parent_scope) {
       const Id<SElement> d = I_.nodes[s].def;
@@ -2625,13 +2685,17 @@ class Flattener {
   // 类型名维度（`x[Boolean]` / `x[E]`，对标 NFDimension.fromExp:111 + NFTypeCheck.checkDimensionType）：
   // 返回该维的下标标签（Boolean→[false,true]；本地枚举→[E.lit…]，路径用书写名 E，与 omc 对本地类型打裸名一致）。
   // 非类型名维（整数/参数/`:`）→ nullopt（调用方走 eval_dim）。限定/别名/builtin 枚举维暂缓：nullopt（→ eval_dim 失败 SKIP）。
-  std::optional<std::vector<Id<Expr>>> classify_type_dim(Id<Exp> d, NodeId enclosing) {
+  std::optional<std::vector<Id<Expr>>> classify_type_dim(Id<Exp> d, NodeId enclosing, const std::vector<Symbol>& prefix) {
     const Exp& e = I_.absyn.exps[d];
     if (e.kind != ExpKind::CrefExp) return std::nullopt;
     const Cref& c = I_.absyn.crefs[e.cref];
-    if (c.parts.size() != 1 || !c.parts[0].subscripts.empty()) return std::nullopt;   // 多段（Pk.E）/带下标暂缓
-    const Symbol nm = c.parts[0].name;
-    if (in_.str(nm) == "Boolean") {
+    std::vector<Symbol> tparts;
+    for (const CrefPart& p : c.parts) {
+      if (!p.subscripts.empty()) return std::nullopt;
+      tparts.push_back(p.name);
+    }
+    const Symbol nm = tparts.back();
+    if (tparts.size() == 1 && in_.str(nm) == "Boolean") {
       std::vector<Id<Expr>> labels;
       for (bool bv : {false, true}) {
         Expr r;
@@ -2642,12 +2706,17 @@ class Flattener {
       }
       return labels;
     }
-    // 枚举字面量：本地 `type E=enumeration(…)` 或 builtin StateSelect（MLS §3.8.3，固定 5 值）。
+    // 枚举类型维：本地 / 包 / 顶层 `type E = enumeration(…)`（下标打规范化路径，enum_type_path），或 builtin StateSelect
+    //（MLS §3.8.3，固定 5 值）。
     std::vector<Symbol> lits;
-    if (in_.str(nm) == "StateSelect") {
+    std::vector<Symbol> tpath;
+    const SClassDef* ed = nullptr;
+    if (tparts.size() == 1 && in_.str(nm) == "StateSelect") {
       for (const char* s : {"never", "avoid", "default", "prefer", "always"}) lits.push_back(in_.intern(s));
-    } else if (const SClassDef* ed = find_enum_def(enclosing, nm)) {
+      tpath = tparts;
+    } else if (std::optional<std::vector<Symbol>> tp = enum_type_path(tparts, enclosing, prefix, ed); tp && ed) {
       for (const auto& it : ed->enum_items) lits.push_back(it.literal);
+      tpath = std::move(*tp);
     } else {
       return std::nullopt;   // 不是类型名（普通整数维参数等）→ 走 eval_dim
     }
@@ -2656,7 +2725,7 @@ class Flattener {
       Expr r;
       r.kind = ExprKind::EnumLit;
       r.ty = Type::of(TypeKind::Enumeration);
-      r.enum_path.push_back(nm);        // 书写名（本地类型打裸名 E；builtin 打 StateSelect）
+      r.enum_path = tpath;
       r.enum_path.push_back(lits[i]);
       r.enum_index = static_cast<std::int64_t>(i) + 1;
       labels.push_back(add(std::move(r)));
@@ -5777,11 +5846,15 @@ class Flattener {
       }
       // 多段名先试**枚举字面量** `E.lit`：倒数第二段是作用域里的 enumeration 类、末段是它的字面量 → 建 EnumLit
       //（带序数，供关系/Integer() 折叠；如 `E.one < E.two`）。
-      if (c.parts.size() >= 2 && c.parts.back().subscripts.empty()) {
-        const SClassDef* ed = find_enum_def(enclosing, c.parts[c.parts.size() - 2].name);
-        if (ed)
+      if (c.parts.size() >= 2) {
+        std::vector<Symbol> tparts;
+        bool plain = true;
+        for (const CrefPart& p : c.parts) plain = plain && p.subscripts.empty();
+        for (std::size_t i = 0; plain && i + 1 < c.parts.size(); ++i) tparts.push_back(c.parts[i].name);
+        const SClassDef* ed = nullptr;
+        if (plain && enum_type_path(tparts, enclosing, prefix, ed) && ed)
           for (const SEnumItem& it : ed->enum_items)
-            if (it.literal == c.parts.back().name) return make_enum_lit(c, enclosing);
+            if (it.literal == c.parts.back().name) return make_enum_lit(c, enclosing, prefix);
       }
       // 限定名 `P.A.B.c` 与单段名都再按 **SCODE 作用域链** 解析到 constant + 值语义求值 → 内联字面量（单段名：继承元素
       // 的绑定在基类的词法作用域里找，Constant8 的 `N` 在 A.B 里）。
@@ -6021,7 +6094,7 @@ class Flattener {
     for (Id<Exp> arg : e.args) {
       // 大写 Integer 只接枚举；先建 EnumLit，避免通用 cref 把 E.two 误记成跨作用域引用。
       Id<Expr> a = supported && builtin_name == "Integer" && is_cref_exp(arg)
-                       ? enum_lit_value(arg, enclosing)
+                       ? enum_lit_value(arg, enclosing, prefix)
                        : inst_exp(arg, enclosing, prefix);
       if (result_.model.exprs[a].kind == ExprKind::Array) {
         set_unsupported("array function argument");

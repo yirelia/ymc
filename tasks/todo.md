@@ -809,6 +809,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           → 全 scodeinst PASS 355→365（FAIL 16 不变、oracle=live 不一致 0）；nf-live PASS 289→302（FAIL 0、ACCEPTS-INVALID 1、
           CRASH 0）；easy-slice 459 例 365 PASS / 0 FAIL；gcc / msvc / msvc-asan 10/10、零警告；+3 单测（148）。
           未做（仍 SKIP）：派生类型修饰的 fill 维（origin ≠ parent）、`fill` / `zeros` / 范围 / 推导式作属性值、非字面量的枚举数组属性值。
+    - [x] (58b) 非字面量维（2026-10-02）：`:` 维取类型化绑定的维（deduceDimensionFromExp，NFTyping.mo:781-826；函数调用
+          输出维在调用处求出）；枚举类型维 / 枚举字面量打枚举类的 scopePath（makeEnumerationType NFInst.mo:627-638：根类里
+          → `E.a`、包里 → `P.E3.x`、组件 m 的类里 → `m.F.u`——此前一律打书写名，组件类里声明的枚举是静默错出），顶层 / 包 /
+          多段名枚举维可用；Evaluate 注解的参数数组同标量 SKIP（CevalFuncArray6）。
+          → 全 scodeinst PASS 365→369、nf-live 302→311（FAIL 0）；+2 单测（150）。
+          余下 "non-literal array dimension"（约 45）多要求值器能力：带下标的参数数组 `n[2]`、修饰感知的包 / 组件常量
+          （const1 `P.i` / `a.j`）、`max([n, m])`、记录参数 `c.n`、`size(E, 1)`、`b[end]`、Integer / Boolean 范围维、
+          数组逻辑运算的形状——后排。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

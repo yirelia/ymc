@@ -2005,6 +2005,37 @@ YMC_TEST(flatten_array_literal_operand_elementwise) {
                            "equation\n  Add3 = {{2.0, 3.0}, {5.0, 6.0}};\nend AddSub1;\n"));
 }
 
+YMC_TEST(flatten_enum_literal_scope_path) {
+  // 枚举字面量 / 枚举维下标打枚举类的 scopePath（makeEnumerationType，NFInst.mo:627-638；NFInstNode.scopePath :1311-1381）：
+  // 根类里声明 → `E.a`；顶层 → `E0.a0`；包里 → `P.E3.x`；组件 m 的类里声明 → `m.F.u`（此前打成 `F.u`，静默错）。
+  // 期望 = omc 1.25.0 实跑 P9 / P10（2026-10-02）。
+  const char* src9 =
+      "package P\n  type E3 = enumeration(x, y);\nend P;\ntype E0 = enumeration(a0, b0);\n"
+      "model P9\n  type E = enumeration(a, b);\n  Real x[E];\n  Real y[P.E3];\n  Real z[E0];\n"
+      "  Real w[E0](start = {1, 2});\n  parameter Real q[E0] = {3, 4};\nend P9;\n";
+  YMC_CHECK_EQ(flatten_src(src9),
+               std::string("class P9\n  Real x[E.a];\n  Real x[E.b];\n  Real y[P.E3.x];\n  Real y[P.E3.y];\n"
+                           "  Real z[E0.a0];\n  Real z[E0.b0];\n  Real w[E0.a0](start = 1.0);\n  Real w[E0.b0](start = 2.0);\n"
+                           "  parameter Real q[E0.a0] = 3.0;\n  parameter Real q[E0.b0] = 4.0;\nend P9;\n"));
+  const char* src10 =
+      "model A\n  type F = enumeration(u, v);\n  Real y[F];\n  F f = F.v;\n  parameter F g = F.u;\n"
+      "  Real z = if f == F.v then 1 else 2;\nend A;\nmodel P10\n  A m;\nend P10;\n";
+  YMC_CHECK_EQ(flatten_src(src10),
+               std::string("class P10\n  Real m.y[m.F.u];\n  Real m.y[m.F.v];\n  enumeration(u, v) m.f = m.F.v;\n"
+                           "  parameter enumeration(u, v) m.g = m.F.u;\n  Real m.z = if m.f == m.F.v then 1.0 else 2.0;\n"
+                           "end P10;\n"));
+}
+
+YMC_TEST(flatten_colon_dim_from_typed_binding) {
+  // `:` 维取类型化绑定的维（deduceDimensionFromExp，NFTyping.mo:781-826）：函数调用的输出维在调用处求出
+  //（RealAddEw `Real x[:] = f(3, {4, 5, 6})`）。期望 = omc 1.25.0 实跑 RealAddEw（nf-live，2026-10-02）。
+  const char* src =
+      "function f\n  input Real r1;\n  input Real r2[:];\n  output Real o[size(r2, 1)];\nalgorithm\n  o := r1 .+ r2;\nend f;\n"
+      "model RealAddEw\n  Real x[:] = f(3, {4, 5, 6});\nend RealAddEw;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string("class RealAddEw\n  Real x[1];\n  Real x[2];\n  Real x[3];\nequation\n"
+                                             "  x = {7.0, 8.0, 9.0};\nend RealAddEw;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);
