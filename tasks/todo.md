@@ -925,6 +925,10 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           = 隐式尾随 `:`，引用类型接上余维、标量化补末尾下标，打印仍只带给出的下标（1.25.0）；求不出值但引用 fixed = false 参数的
           if 条件 = 非结构条件，原样保留（isExpressionNotFixed，IfEquation8）。→ 全 scodeinst PASS 436→441（IfEquation8、
           ImplicitRangeEq1/2/3、Size3）、nf-live 440→442（SubscriptsFill1、EquationFor6）；+1 单测（174）。
+    - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
+          扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
+          传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、
+          25 预定义类、14 短类别名前缀、7 继承类查找…）记在卡里 → `docs/tasks/T-S3-07-extends-lookup-scope.md`。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
