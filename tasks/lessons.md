@@ -106,3 +106,13 @@
 ## 2026-09-27 — 既有 PASS 集会遮住"顺序"类 bug：OMC 的排序/遍历规则要用"反序声明"探针专门戳
 - 模式：connect 成员序我一直按声明序发，slice 里所有连接器成员恰好按名序声明（e,f / e1,e2,f1,f2），门一直是绿的。做嵌套连接器时读 makeConnectorType → ClassTree.enumerateComponents 才发现 OMC 是按名 LookupTree 折叠（净效果升序），写了 `Real e2; Real e1;` 探针一跑立刻暴露：连接方程 e1 在前。这类 bug 的特点：输出顺序来自 OMC 某个数据结构的遍历序（树 / cons 链 / 插入序），语料没覆盖"声明序 ≠ 该序"的形态就永远不会 FAIL。
 - 规则：(1) 凡是 ymc 输出里存在"顺序"（成员、集合元素、方程序、变量序），必须去 OMC 源码找产生该序的**数据结构遍历**（LookupTree fold / cons+reverse 链 / UnorderedMap 插入序 / DisjointSets 根序），把链条推到底并记文件:行，不能拿"声明序"当默认。(2) 每条顺序规则至少一个**反序声明**探针（名字声明成与预期序相反）实跑 omc 逐字节验证再进单测；单元素/恰好有序的形态不算验证。(3) cons、`listReverse`、`List.mapFlat`（块内反转）、`listAppend(x, acc)` 前插——MetaModelica 这些习惯每个都翻一次序，推导时逐个数，最后用探针核对净效果（见 docs/research/connect-sets-order.md）。
+
+## 2026-10-02 — inst_exp 给数组字面量的是粗类型（标量 Real）：凡判"是不是数组 / 什么形状"一律走 expr_shape，别看 ty
+- 模式：`inst_exp` 把 `{…}` 定成 `ty = Type::real()`（无维，"dump 不看"）。模型语境的 `op_type` / `scalarize` 直接看 `ty.is_scalar()`，于是
+  `p + {1, 1, 1}` 被当成"数组 + 标量广播"，逐元素打成 `p[1] + {1, 1, 1}`——绑定、方程都中，静默错出很久，因为语料里恰好没有
+  "cref 数组 ± 字面量数组"。直到做数组属性切分（`start = p + {1, 1, 1}`）逐行对拍才暴露；修完又顺带暴露多维展开打成平铺
+  （ArrayAddSub1）、向量化调用被误折（FuncVectorization3）——先前都被同一个粗类型 SKIP 遮着。
+- 规则：(1) 判数组 / 形状 / 秩用 `expr_shape`（看穿字面量、一元、if），不用 `Expr.ty`；新写处理类型化 Expr 的代码先问"字面量进来会
+  怎样"。(2) 修掉一个"让路径提前 SKIP"的粗糙点后，下游从未跑过的代码会被首次执行——必须全量重扫（scodeinst + nf-live）再看
+  新冒出的 FAIL，它们多半是早就写错、只是没被走到的分支。(3) 加宽时把每个新形态拆成"一行一个模型"逐行对拍（`tools/probe_lines.py`），
+  比整模型 diff 更快定位哪一行错。
