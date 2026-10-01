@@ -2555,6 +2555,22 @@ YMC_TEST(flatten_record_ctor_calls_and_equation_bindings) {
                            "  p2 = if time > 1.0 then P(1.0, 2.0) else P(3.0, 1.0);\n  p1 = P(time, 2.0 * time);\nend RE1;\n"));
 }
 
+YMC_TEST(flatten_record_valued_functions) {
+  // 返回记录的用户函数：函数体里整记录赋值 `r := R(…)`（RF1）/ 字段赋值 `r.a := x`（RF2）；模型里 `R r1 = f(time)` 挪成方程、
+  // `parameter R r2 = f(p)` 挪成初始方程 + 字段 fixed = false。期望 = omc 1.25.0 实跑 RF1 / RF2（2026-10-02）。
+  const char* head = "record R\n  Real a;\n  Real b;\nend R;\nfunction f\n  input Real x;\n  output R r;\nalgorithm\n";
+  const char* model = "end f;\nmodel M\n  R r1 = f(time);\n  parameter Real p = 2;\n  parameter R r2 = f(p);\n  Real y = r1.a;\nend M;\n";
+  const char* ctor = "function R \"Automatically generated record constructor for R\"\n  input Real a;\n  input Real b;\n"
+                     "  output R res;\nend R;\n\nfunction f\n  input Real x;\n  output R r;\nalgorithm\n";
+  const char* cls = "end f;\n\nclass M\n  Real r1.a;\n  Real r1.b;\n  parameter Real p = 2.0;\n  parameter Real r2.a(fixed = false);\n"
+                    "  parameter Real r2.b(fixed = false);\n  Real y = r1.a;\ninitial equation\n  r2 = f(p);\nequation\n"
+                    "  r1 = f(time);\nend M;\n";
+  YMC_CHECK_EQ(flatten_src((std::string(head) + "  r := R(x, 2*x);\n" + model).c_str()),
+               std::string(ctor) + "  r := R(x, 2.0 * x);\n" + cls);
+  YMC_CHECK_EQ(flatten_src((std::string(head) + "  r.a := x;\n  r.b := 2*x;\n" + model).c_str()),
+               std::string(ctor) + "  r.a := x;\n  r.b := 2.0 * x;\n" + cls);
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

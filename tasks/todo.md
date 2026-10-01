@@ -934,6 +934,11 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           函数，CevalBinding9）——omc 也求不出时保留 if 挪方程，但 ymc 分不清"omc 也求不出"与"ymc 求值器不够"→ SKIP。
           → 全 scodeinst PASS 441（不变；多例 SKIP 原因前移到函数体记录 / 无实例记录）、nf-live 442→443（RecordConstructors）；
           +1 单测（175）。下一步：函数体里的记录输出赋值 / 字段赋值（RF1/RF2 探针）。
+    - [x] (58z) 返回记录的函数（2026-10-02）：模型里的记录值调用放行（类型取输出记录类的实例节点；多输出 / 无实例 → SKIP），
+          record_def_of 认返回记录的调用；函数体允许整记录赋值 `r := R(…)`（核记录类相同）与记录输出 / 局部的字段赋值
+          `r.a := x`。挪方程只在绑定有运行时 / 参数变率且非 final 时做：全常量（omc Ceval 求值）/ final parameter（omc 内联再求值，
+          RecordBinding18 账本）→ 仍 SKIP。RF1 / RF2 探针逐字节一致。→ 全 scodeinst PASS 441（不变）、nf-live 443→445
+          （ConstructParameters2、ComplexNumbers）；+1 单测（176）。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、

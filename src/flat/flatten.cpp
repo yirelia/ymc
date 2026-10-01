@@ -889,7 +889,8 @@ class Flattener {
         // 拆不开的记录整体绑定（返回记录的函数调用等）：挪成（初始）方程 `r = f(x)`，字段无绑定（RF1 探针）。
         bool moved_binding = false;
         if (whole_raw.is_valid() && !ctor_mod.is_valid()) {
-          if (r == SRestriction::Record && record_binding_equation(cid, name, psubs, whole_raw, whole_scope, whole_vpfx, ctx))
+          if (r == SRestriction::Record &&
+              record_binding_equation(cid, name, psubs, whole_raw, whole_scope, whole_vpfx, ctx, comp_final))
             moved_binding = true;
           else if (!result_.unsupported)
             set_unsupported("composite/record binding");
@@ -2165,6 +2166,25 @@ class Flattener {
     }
     for (Id<Expr> a : e.args) if (refs_runtime_var(a)) return true;
     return refs_runtime_var(e.a) || refs_runtime_var(e.b) || refs_runtime_var(e.c);
+  }
+
+  // 是否引用 parameter 变量（同 refs_runtime_var 按 cref 首段所指组件的声明变率判）。
+  bool refs_param_var(Id<Expr> id) {
+    if (!id.is_valid()) return false;
+    const Expr& e = result_.model.exprs[id];
+    if (e.kind == ExprKind::Cref) {
+      const std::uint32_t raw = e.cref.resolved_node;
+      if (raw != Id<INode>::kInvalid && raw != kFnLocal) {
+        const NodeId n = NodeId::from_index(raw);
+        if (I_.nodes.contains(n) && !I_.nodes[n].is_empty() && I_.nodes[n].comp.is_valid() &&
+            I_.comps[I_.nodes[n].comp].attributes.variability == SVariability::Param)
+          return true;
+      }
+      for (const ExprCrefPart& cp : e.cref.parts) for (Id<Expr> sx : cp.subscripts) if (refs_param_var(sx)) return true;
+      return false;
+    }
+    for (Id<Expr> a : e.args) if (refs_param_var(a)) return true;
+    return refs_param_var(e.a) || refs_param_var(e.b) || refs_param_var(e.c);
   }
 
   // 条件是否为运行时（可作为 flat if 保留）：引用 time（未解析）或连续/离散变量，或残留调用。参数/常量 → false（SKIP）。
@@ -5178,9 +5198,17 @@ class Flattener {
     switch (st.kind) {
       case SStmtKind::Assign: {
         const Exp& le = I_.absyn.exps[st.a];
-        const bool target_ok = le.kind == ExpKind::CrefExp && I_.absyn.crefs[le.cref].parts.size() == 1 &&
-                               func_params_.count(I_.absyn.crefs[le.cref].parts[0].name.id) &&
-                               !fn_inputs_.count(I_.absyn.crefs[le.cref].parts[0].name.id);
+        // 目标：输出 / 局部（可带下标）；或记录输出 / 局部的字段 `r.a`（RF2 探针 `r.a := x`）。
+        bool target_ok = false;
+        if (le.kind == ExpKind::CrefExp) {
+          const Cref& tc = I_.absyn.crefs[le.cref];
+          const std::uint32_t head = tc.parts[0].name.id;
+          if (tc.parts.size() == 1)
+            target_ok = func_params_.count(head) && !fn_inputs_.count(head);
+          else if (tc.parts.size() == 2)
+            target_ok = fn_records_.count(head) && !fn_inputs_.count(head) && tc.parts[0].subscripts.empty() &&
+                        tc.parts[1].subscripts.empty();
+        }
         if (!target_ok) { set_unsupported("function assignment target"); return {}; }   // 元组 / 输入 / 非局部目标
         const Id<Expr> lhs = inst_exp(st.a, Inst::empty_node(), {});
         if (result_.unsupported) return {};
@@ -5188,6 +5216,12 @@ class Flattener {
         const Id<Expr> rhs = fn_exp(st.b, lty);
         if (result_.unsupported) return {};
         if (!rhs.is_valid()) { set_unsupported("function assignment type mismatch"); return {}; }
+        // 整记录赋值 `r := R(…)` / `r := r2`：右侧须是同一记录类（构造调用的实例类定义 / 记录局部）——coerce_to_param 只比
+        // TypeKind，这里补比记录类（RF1 探针）；查不出 / 不同类（要 typeCastRecord）→ SKIP。
+        if (lty.kind == TypeKind::Complex) {
+          const std::uint32_t ld = record_def_of(lhs);
+          if (ld == Id<SElement>::kInvalid || record_def_of(rhs) != ld) { set_unsupported("function record assignment type"); return {}; }
+        }
         fs.kind = FlatStmtKind::Assign;
         fs.a = lhs;
         fs.b = rhs;
@@ -5510,6 +5544,11 @@ class Flattener {
   // 其余（构造调用、字段…）→ kInvalid。
   std::uint32_t record_def_of(Id<Expr> id) {
     const Expr& x = result_.model.exprs[id];
+    // 返回记录的调用（构造调用 / 用户函数）：类型带输出记录类的实例节点 → 其定义。
+    if (x.kind == ExprKind::Call && x.ty.kind == TypeKind::Complex && x.ty.complex_node != Id<INode>::kInvalid) {
+      const NodeId cn = NodeId::from_index(x.ty.complex_node);
+      return I_.nodes.contains(cn) && !I_.nodes[cn].is_empty() ? I_.nodes[cn].def.raw : Id<SElement>::kInvalid;
+    }
     if (x.kind != ExprKind::Cref || x.ty.kind != TypeKind::Complex || x.cref.parts.empty()) return Id<SElement>::kInvalid;
     if (x.cref.resolved_node == kFnLocal) {
       const auto it = fn_records_.find(x.cref.parts[0].name.id);
@@ -5806,7 +5845,14 @@ class Flattener {
       args[i] = simplify_expr(a);
     }
     Type rty = params[inputs.size()].ty;   // 首输出类型
-    if (rty.kind == TypeKind::Complex) return {};   // 记录值调用（记录等式 / 记录赋值）未做
+    if (rty.kind == TypeKind::Complex) {
+      // 返回记录的调用（记录等式 `r = f(x)` / 记录赋值，RF1 探针）：类型取输出记录类的实例类节点（record_match /
+      // 构造函数登记要节点）；没有实例节点 / 多输出 → SKIP。
+      const std::uint32_t rd = params[inputs.size()].record_def;
+      const NodeId rn = rd == Id<SElement>::kInvalid ? NodeId{} : record_class_node(Id<SElement>::from_index(rd));
+      if (!rn.is_valid() || sig.outputs.size() > 1) return {};
+      rty.complex_node = rn.raw;
+    }
     if (!fn_scope_ && rty.is_array()) {
       if (!whole) return {};   // 模型语境里嵌在别的运算中的数组调用：须逐元素展开，未做 → SKIP
       // 调用处求输出维（NFCall.evaluateCallTypeDim :3061-3088）：维表达式里的输入换成实参再求值；buildParameterTree
@@ -8774,12 +8820,16 @@ class Flattener {
   // 拆不开的记录整体绑定 → 方程 `name = 绑定`（flattenComplexComponent，NFFlatten.mo:994-1004：变率 ≤ parameter 进 initial
   // equation）。绑定须定型成与组件同一记录类（或同名同序兼容）的标量记录式；constant（omc 要求能求值）/ 类型不符 → false。
   bool record_binding_equation(CompId cid, const std::vector<Symbol>& name, const PSubs& psubs, Id<Exp> raw,
-                               NodeId bscope, const std::vector<Symbol>& bprefix, const ModCtx& ctx) {
+                               NodeId bscope, const std::vector<Symbol>& bprefix, const ModCtx& ctx, bool is_final) {
     const SVariability v = var_min(ctx.var_floor, I_.comps[cid].attributes.variability);
     if (v == SVariability::Const) return false;
     cur_psubs_ = psubs;
     const Id<Expr> rhs = simplify_expr(inst_exp(raw, bscope, bprefix));
     if (result_.unsupported) return false;
+    // 绑定变率 ≤ 结构参数（全常量）→ omc Ceval 求值（NFFlatten.mo:958-961）；final parameter 且绑定是参数变率 → 先内联
+    // 再求值（:962-983，RecordBinding18 账本）。这两种 ymc 都不复刻（不挪方程）→ false。
+    const bool runtime = refs_runtime_var(rhs);
+    if (!runtime && (!refs_param_var(rhs) || is_final)) return false;
     const Type cty = I_.comps[cid].ty;
     if (result_.model.exprs[rhs].ty.kind != TypeKind::Complex || !expr_shape(rhs).empty() ||
         record_match(result_.model.exprs[rhs].ty, cty) > RecMatch::Plug)
