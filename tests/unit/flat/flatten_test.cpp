@@ -2446,6 +2446,27 @@ YMC_TEST(flatten_subscripted_and_runtime_subscripts) {
                            "  m[2,2] = 5.0;\n  m[2,3] = 6.0;\n  when time > 1.0 then\n    n = 2;\n  end when;\nend SE3;\n"));
 }
 
+YMC_TEST(flatten_constant_arrays_and_colon_refs) {
+  // 整体 constant 数组引用内联成数组字面量再折叠（绑定 / sum / 标量积 / 数组方程逐元素）；`:` 维数组被引用时取已发射元素的
+  // 形状（`(x)[n]`、`2 * x`）。期望 = omc 1.25.0 实跑 CE3 / CD1（2026-10-02，stdout）。
+  YMC_CHECK_EQ(flatten_src("model CE3\n  constant Integer a[3] = {4, 8, 12};\n  constant Real m[2, 2] = {{1, 2}, {3, 4}};\n"
+                           "  Real y[3] = a;\n  Real s = sum(a);\n  Real z[2, 2];\n  Real w[3];\n  Real v = a * {1, 2, 3};\n"
+                           "  parameter Real p[3] = a;\nequation\n  z = m;\n  w = 2 * a;\nend CE3;\n"),
+               std::string("class CE3\n  constant Integer a[1] = 4;\n  constant Integer a[2] = 8;\n  constant Integer a[3] = 12;\n"
+                           "  constant Real m[1,1] = 1.0;\n  constant Real m[1,2] = 2.0;\n  constant Real m[2,1] = 3.0;\n"
+                           "  constant Real m[2,2] = 4.0;\n  Real y[1];\n  Real y[2];\n  Real y[3];\n  Real s = 24.0;\n"
+                           "  Real z[1,1];\n  Real z[1,2];\n  Real z[2,1];\n  Real z[2,2];\n  Real w[1];\n  Real w[2];\n  Real w[3];\n"
+                           "  Real v = 56.0;\n  parameter Real p[1] = 4.0;\n  parameter Real p[2] = 8.0;\n  parameter Real p[3] = 12.0;\n"
+                           "equation\n  y = {4.0, 8.0, 12.0};\n  z[1,1] = 1.0;\n  z[1,2] = 2.0;\n  z[2,1] = 3.0;\n  z[2,2] = 4.0;\n"
+                           "  w[1] = 8.0;\n  w[2] = 16.0;\n  w[3] = 24.0;\nend CE3;\n"));
+  YMC_CHECK_EQ(flatten_src("model CD1\n  Real x[:] = {1, 2, 3};\n  discrete Integer n(start = 1);\n  Real z = (x)[n];\n"
+                           "  Real w[3] = 2 * x;\nequation\n  when time > 1 then\n    n = 2;\n  end when;\nend CD1;\n"),
+               std::string("class CD1\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  discrete Integer n(start = 1);\n  Real z = x[n];\n"
+                           "  Real w[1];\n  Real w[2];\n  Real w[3];\nequation\n  x = {1.0, 2.0, 3.0};\n"
+                           "  w = {2.0 * x[1], 2.0 * x[2], 2.0 * x[3]};\n  when time > 1.0 then\n    n = 2;\n  end when;\n"
+                           "end CD1;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

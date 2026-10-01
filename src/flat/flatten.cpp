@@ -6253,8 +6253,29 @@ class Flattener {
       isubs.push_back(std::move(is));
     }
     auto it = const_vals_.find(int_key(names, isubs));
-    if (it == const_vals_.end() || is_arr(it->second) || it->second.k == CVal::K::Record) return {};
+    if (it == const_vals_.end() || it->second.k == CVal::K::Record) return {};
+    // 整体 constant 数组引用 `x = a`、`a .+ b`、`sum(a)`：内联成数组字面量（NFEvalConstants 代入常量，CE3 探针：
+    // `y = {4.0, 8.0, 12.0}`、`s = 24.0`、方程逐元素折叠）。
+    if (is_arr(it->second)) return literal_any(it->second);
     return literal_of(it->second);
+  }
+  // 值 → 字面量；数组值 → 嵌套数组字面量（ty = 元素类型 + 各维，不用 inst_exp 的粗类型）。记录 / 未赋值 / 空数组 → invalid。
+  Id<Expr> literal_any(const CVal& v) {
+    if (v.k == CVal::K::Record || v.k == CVal::K::Undef) return {};
+    if (!is_arr(v)) return literal_of(v);
+    if (!v.arr || v.arr->empty()) return {};
+    Expr arr;
+    arr.kind = ExprKind::Array;
+    for (const CVal& e : *v.arr) {
+      const Id<Expr> x = literal_any(e);
+      if (!x.is_valid()) return {};
+      arr.args.push_back(x);
+    }
+    Dimension d;
+    d.kind = DimKind::Integer;
+    d.size = static_cast<std::int64_t>(arr.args.size());
+    arr.ty = Type::array_of(result_.model.exprs[arr.args[0]].ty, {d});   // array_of 把子数组的维接在后面
+    return add(std::move(arr));
   }
   // 值求值的书写处上下文（RAII）：期间 eval_scode 的 cref 先按此前缀查 const_vals_。
   struct CevalCtx {
@@ -6624,10 +6645,7 @@ class Flattener {
           if (subs.empty()) {
             // 整体数组引用 `x`（x: T[dims]）：提升成 ARRAY 类型（元素 lty），供上层逐元素标量化。维须字面量。
             std::vector<std::int64_t> ldims;
-            bool alit = true;
-            const ScodeScope lscope = scode_scope_of(enclosing);
-            for (Id<Exp> d : lcel.attr.dims) if (!eval_dim(d, ldims, lscope)) alit = false;
-            for (Id<Exp> d : lcel.type.dims) if (!eval_dim(d, ldims, lscope)) alit = false;
+            const bool alit = leaf_decl_dims(lcel, c, enclosing, prefix, ldims);
             if (!alit) {
               set_unsupported("whole-array reference");
             } else {
@@ -6638,10 +6656,8 @@ class Flattener {
             }
           } else {
             std::vector<std::int64_t> ldims;
-            bool lit = true;
             const ScodeScope lscope = scode_scope_of(enclosing);
-            for (Id<Exp> d : lcel.attr.dims) if (!eval_dim(d, ldims, lscope)) lit = false;
-            for (Id<Exp> d : lcel.type.dims) if (!eval_dim(d, ldims, lscope)) lit = false;
+            const bool lit = leaf_decl_dims(lcel, c, enclosing, prefix, ldims);
             if (!lit || subs.size() != ldims.size()) {
               set_unsupported("array subscript");
             } else {
@@ -6772,6 +6788,57 @@ class Flattener {
       e.cref.parts.push_back({p.name, std::move(subs)});
     }
     return add(std::move(e));
+  }
+
+  // 被引用数组叶的声明维：字面量 / 参数 / size() 走 eval_dim；`:` 维（由绑定推断，NFTyping.deduceDimensionFromExp）取已发射
+  // 元素变量的形状（emit_array 已按推出的维逐元素发射；Concatenation2 `[x, y]`、SubscriptedExp4 `(x)[n]`）——只做单段本地
+  // cref，且被引用者须先于引用处发射（前向引用 / 多段 → false，调用方 SKIP）。
+  bool leaf_decl_dims(const SElement& lcel, const Cref& c, NodeId enclosing, const std::vector<Symbol>& prefix,
+                      std::vector<std::int64_t>& out) {
+    const ScodeScope lscope = scode_scope_of(enclosing);
+    bool colon = false;
+    for (const std::vector<Id<Exp>>* ds : {&lcel.attr.dims, &lcel.type.dims})
+      for (Id<Exp> d : *ds) {
+        if (I_.absyn.exps[d].kind == ExpKind::Colon) { colon = true; out.push_back(-1); continue; }
+        if (!eval_dim(d, out, lscope)) return false;
+      }
+    if (!colon) return true;
+    if (c.parts.size() != 1) return false;
+    std::vector<Symbol> names = prefix;
+    names.push_back(c.parts[0].name);
+    PSubs ps = cur_psubs_;
+    ps.resize(prefix.size());
+    const std::optional<std::vector<std::int64_t>> sh = emitted_shape(names, ps);
+    if (!sh || sh->size() != out.size()) return false;
+    for (std::size_t k = 0; k < out.size(); ++k) {
+      if (out[k] >= 0 && out[k] != (*sh)[k]) return false;
+      out[k] = (*sh)[k];
+    }
+    return true;
+  }
+  // 已发射的数组变量 names（逐段下标 psubs）的形状：各元素末段字面量下标的逐维最大值，且元素数 = 各维之积。
+  // ponytail: 线性扫已发射变量；引用多、模型大时再建索引。
+  std::optional<std::vector<std::int64_t>> emitted_shape(const std::vector<Symbol>& names, const PSubs& psubs) {
+    std::vector<std::vector<Id<Expr>>> ns = psubs_to_exprs(psubs);
+    ns.push_back({});
+    std::vector<std::int64_t> dims;
+    std::int64_t count = 0;
+    for (const FlatVariable& v : result_.model.variables) {
+      if (v.name != names || v.subscripts.empty() || !name_subs_eq(v.name_subs, ns)) continue;
+      if (dims.empty()) dims.assign(v.subscripts.size(), 0);
+      if (v.subscripts.size() != dims.size()) return std::nullopt;
+      for (std::size_t k = 0; k < dims.size(); ++k) {
+        const Expr& s = result_.model.exprs[v.subscripts[k]];
+        if (s.kind != ExprKind::IntLit) return std::nullopt;
+        dims[k] = std::max(dims[k], s.ival);
+      }
+      ++count;
+    }
+    if (dims.empty()) return std::nullopt;
+    std::int64_t total = 1;
+    for (std::int64_t d : dims) total *= d;
+    if (total != count) return std::nullopt;
+    return dims;
   }
 
   // `r.x` 展开（见 cref）：首段 = 本地复合数组组件（维度可求）、次段 = 其类里的标量内建字段（非 protected）→ 嵌套数组

@@ -898,6 +898,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           `x[n + 1]`，不做静态越界）；数组元素逐个带声明注释（WillowForest 曾被运行时下标遮住，放行后暴露）。→ 全 scodeinst
           PASS 427→431（End5、Subscript6、SubscriptedExp1/3）、nf-live 417→420（Summation、SubscriptEval、WillowForest）；
           +1 单测（169）。教训：探针别 `2>&1`（成功时 omc 告警在 stderr，门只比 stdout，见 lessons）。
+    - [x] (58t) constant 数组整体内联 + `:` 维数组被引用（2026-10-02）：整体 constant 数组引用（`x = a`、`a .+ b`、`sum(a)`、
+          `a * {1, 2, 3}`）取已发射值内联成带真维类型的数组字面量再折叠（CE3 探针）；`:` 维数组（`Real x[:] = {…}`）被引用时
+          取已发射元素的形状（单段本地 cref、须先发射；SubscriptedExp4 `(x)[n]`、CD1 `2 * x`）。→ 全 scodeinst PASS 431→432、
+          nf-live 420→424（ArrayAddition / Division / Multiplication / Subtraction）；+1 单测（170）。另：无绑定参数取 start
+          当绑定（updateParameterBinding）已核实语义但 omc 同时告警、文件比对要告警行 → 仍 SKIP，告警输出需元素源码范围
+          （parser，用户域），记入 open-questions。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
