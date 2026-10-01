@@ -1139,7 +1139,7 @@ class Flattener {
     if (result_.unsupported) return;
     // 数组方程：含数组调用 → 整体保留（NFScalarize.scalarizeEquation :343-346，ImplicitTrailingSubscript1
     // `b = testFunc(a)`）；否则两侧同形数组 → 行优先逐元素标量化；否则走标量路。
-    if (result_.model.exprs[a].ty.is_array() || result_.model.exprs[b].ty.is_array()) {
+    if (!expr_shape(a).empty() || !expr_shape(b).empty()) {   // 形状看穿字面量的粗类型（`m = {{x, 1}, {2, y}}`）
       if (is_array_call(a) || is_array_call(b)) emit_array_call_equation(a, b, eq.loc, eq.cmt, is_initial);
       else collect_array_equation(a, b, eq.loc, eq.cmt, is_initial);
       return;
@@ -1218,17 +1218,15 @@ class Flattener {
 
   // 数组方程 `lhs = rhs`（两侧同形数组）→ 行优先枚举 + 逐元素标量化 + 逐元素标量等式（对标 NFScalarize.scalarizeEquation）。
   void collect_array_equation(Id<Expr> a, Id<Expr> b, SourceLoc loc, const SComment& cmt, bool is_initial) {
-    const Type aty = result_.model.exprs[a].ty, bty = result_.model.exprs[b].ty;   // 拷贝，跨 add 稳定
-    // 一侧数组一侧标量 = omc 类型错；形状不一致同理 → SKIP（保 FAIL=0）。
-    if (!aty.is_array() || !bty.is_array() || !same_dims(aty.dims, bty.dims)) {
+    // 一侧数组一侧标量 = omc 类型错；形状不一致 / 未知同理 → SKIP（保 FAIL=0）。形状看穿字面量的粗类型。
+    const std::vector<std::int64_t> dims = expr_shape(a);
+    if (dims.empty() || dims != expr_shape(b) || std::find(dims.begin(), dims.end(), -1) != dims.end()) {
       set_unsupported("array equation shape mismatch");
       return;
     }
     // 复合数组前缀（enclosing 带 `a[i]` 段下标）与叶数组标量化的组合本增量暂缓（eq2/eq3）→ SKIP。
     for (const std::vector<std::int64_t>& s : cur_psubs_)
       if (!s.empty()) { set_unsupported("array equation under array prefix"); return; }
-    std::vector<std::int64_t> dims;
-    for (const Dimension& d : aty.dims) dims.push_back(d.size);
     std::vector<std::int64_t> idx(dims.size(), 1);
     bool more = !dims.empty();
     while (more) {
@@ -5601,6 +5599,73 @@ class Flattener {
     return best;
   }
 
+  // 矩阵构造 `[a, b; c, d]`（typeMatrix / typeMatrixComma，NFTyping.mo:2294-2393）：每个元素提升到 2 维（标量 → 1×1、
+  // 向量 → n×1 列、矩阵不变），行内按第 2 维、行间按第 1 维拼接（makeCatExp，NFBuiltinCall.mo:227-343），元素转公共类型；
+  // 压平后展开成嵌套数组字面量（M1 探针：`[a, a]` → `{{a[1], a[1]}, {a[2], a[2]}}`、`[1, 2.5; x, 4]` → `{{1.0, 2.5}, {x, 4.0}}`）。
+  // 元素须能展开成已知形状的标量网格（字面量 / 已知维 cref 及其逐元素运算）；拼接维不符（omc 报错）/ 其余 → SKIP。
+  Id<Expr> matrix_exp(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    using Grid = std::vector<std::vector<Id<Expr>>>;   // 行 × 列的标量元素
+    const std::vector<Id<Exp>> rows = e.args;          // 拷贝：inst 期间不持 absyn 引用
+    Grid all;
+    for (Id<Exp> row : rows) {
+      const std::vector<Id<Exp>> els = I_.absyn.exps[row].args;
+      Grid block;
+      for (Id<Exp> el : els) {
+        const Id<Expr> x = inst_exp(el, enclosing, prefix);
+        if (result_.unsupported) return lit_int(0);
+        const std::vector<std::int64_t> sh = expr_shape(x);
+        Grid g;
+        if (sh.empty()) {
+          g = {{x}};
+        } else if (sh.size() == 1 && sh[0] > 0) {
+          for (std::int64_t i = 1; i <= sh[0]; ++i) g.push_back({scalarize(x, {i})});
+        } else if (sh.size() == 2 && sh[0] > 0 && sh[1] > 0) {
+          for (std::int64_t i = 1; i <= sh[0]; ++i) {
+            g.emplace_back();
+            for (std::int64_t j = 1; j <= sh[1]; ++j) g.back().push_back(scalarize(x, {i, j}));
+          }
+        } else {
+          set_unsupported("matrix element shape"); return lit_int(0);
+        }
+        if (result_.unsupported) return lit_int(0);
+        if (block.empty()) { block = std::move(g); continue; }
+        if (g.size() != block.size()) { set_unsupported("matrix concatenation dimensions"); return lit_int(0); }
+        for (std::size_t i = 0; i < g.size(); ++i) block[i].insert(block[i].end(), g[i].begin(), g[i].end());
+      }
+      if (!all.empty() && (block.empty() || block[0].size() != all[0].size())) {
+        set_unsupported("matrix concatenation dimensions"); return lit_int(0);
+      }
+      for (std::vector<Id<Expr>>& r : block) all.push_back(std::move(r));
+    }
+    if (all.empty() || all[0].empty()) { set_unsupported("empty matrix"); return lit_int(0); }
+    // 公共元素类型（matchExpressions：Integer 与 Real 取 Real；其余须相同）。
+    TypeKind common = TypeKind::Unknown;
+    for (const std::vector<Id<Expr>>& r : all)
+      for (Id<Expr> x : r) {
+        const TypeKind k = result_.model.exprs[x].ty.kind;
+        if (common == TypeKind::Unknown || (common == TypeKind::Integer && k == TypeKind::Real)) common = k;
+        else if (k != common && !(common == TypeKind::Real && k == TypeKind::Integer)) {
+          set_unsupported("matrix element type mismatch"); return lit_int(0);
+        }
+      }
+    const std::int64_t nr = static_cast<std::int64_t>(all.size()), nc = static_cast<std::int64_t>(all[0].size());
+    Dimension dr, dc;
+    dr.kind = dc.kind = DimKind::Integer;
+    dr.size = nr;
+    dc.size = nc;
+    Expr m;
+    m.kind = ExprKind::Array;
+    m.ty = Type::array_of(Type::of(common), {dr, dc});
+    for (std::vector<Id<Expr>>& r : all) {
+      Expr row;
+      row.kind = ExprKind::Array;
+      row.ty = Type::array_of(Type::of(common), {dc});
+      for (Id<Expr> x : r) row.args.push_back(common == TypeKind::Real ? to_real(x) : x);
+      m.args.push_back(add(std::move(row)));
+    }
+    return add(std::move(m));
+  }
+
   // ---- instExpressions：Absyn Exp → 类型化 Expr（在 model.exprs）----
   // 解析 cref（对 enclosing 的 FlatTree 组件），本地 cref 前缀改写；标量定型 + 整型→实型字面量折叠。
   Id<Expr> inst_exp(Id<Exp> ae, NodeId enclosing, const std::vector<Symbol>& prefix) {
@@ -5633,6 +5698,7 @@ class Flattener {
         r.args = std::move(els);
         return add(std::move(r));
       }
+      case ExpKind::Matrix: return matrix_exp(e, enclosing, prefix);
       case ExpKind::Range: {   // a:b / a:step:b（Absyn 与 flat 同布局：a=起点, b=步长或终点, c=终点）
         Expr r;
         r.kind = ExprKind::Range;

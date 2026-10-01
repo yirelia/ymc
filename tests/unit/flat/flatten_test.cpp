@@ -2036,6 +2036,29 @@ YMC_TEST(flatten_colon_dim_from_typed_binding) {
                                              "  x = {7.0, 8.0, 9.0};\nend RealAddEw;\n"));
 }
 
+YMC_TEST(flatten_matrix_literal) {
+  // 矩阵构造（typeMatrix / typeMatrixComma，NFTyping.mo:2294-2393 + makeCatExp）展开成嵌套数组：标量元素、向量元素按列拼接
+  //（`[a, a]`）、单行 / 单列、混型转 Real、Integer 保持；方程里的嵌套字面量逐元素标量化。期望 = omc 1.25.0 实跑 M1（2026-10-02）。
+  const char* src =
+      "model M1\n  Real x, y;\n  Real a[2];\n  Real m[2,2] = [1, 2; 3, 4];\n  parameter Real p[2,2] = [1, 2; 3, 4];\n"
+      "  Real m2[2,2] = [x, y; y, x];\n  Real v[1,3] = [1, 2, 3];\n  Real c[3,1] = [1; 2; 3];\n  Real m3[2,2] = [a, a];\n"
+      "  Real m4[2,2];\n  Real m5[2,2] = [1, 2.5; x, 4];\n  Integer k[2,2] = [1, 2; 3, 4];\nequation\n  m4 = [x, 1; 2, y];\nend M1;\n";
+  const char* want =
+      "class M1\n  Real x;\n  Real y;\n  Real a[1];\n  Real a[2];\n"
+      "  Real m[1,1];\n  Real m[1,2];\n  Real m[2,1];\n  Real m[2,2];\n"
+      "  parameter Real p[1,1] = 1.0;\n  parameter Real p[1,2] = 2.0;\n  parameter Real p[2,1] = 3.0;\n  parameter Real p[2,2] = 4.0;\n"
+      "  Real m2[1,1];\n  Real m2[1,2];\n  Real m2[2,1];\n  Real m2[2,2];\n"
+      "  Real v[1,1];\n  Real v[1,2];\n  Real v[1,3];\n  Real c[1,1];\n  Real c[2,1];\n  Real c[3,1];\n"
+      "  Real m3[1,1];\n  Real m3[1,2];\n  Real m3[2,1];\n  Real m3[2,2];\n"
+      "  Real m4[1,1];\n  Real m4[1,2];\n  Real m4[2,1];\n  Real m4[2,2];\n"
+      "  Real m5[1,1];\n  Real m5[1,2];\n  Real m5[2,1];\n  Real m5[2,2];\n"
+      "  Integer k[1,1];\n  Integer k[1,2];\n  Integer k[2,1];\n  Integer k[2,2];\n"
+      "equation\n  m = {{1.0, 2.0}, {3.0, 4.0}};\n  m2 = {{x, y}, {y, x}};\n  v = {{1.0, 2.0, 3.0}};\n"
+      "  c = {{1.0}, {2.0}, {3.0}};\n  m3 = {{a[1], a[1]}, {a[2], a[2]}};\n  m5 = {{1.0, 2.5}, {x, 4.0}};\n"
+      "  k = {{1, 2}, {3, 4}};\n  m4[1,1] = x;\n  m4[1,2] = 1.0;\n  m4[2,1] = 2.0;\n  m4[2,2] = y;\nend M1;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string(want));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

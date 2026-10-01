@@ -817,6 +817,11 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           余下 "non-literal array dimension"（约 45）多要求值器能力：带下标的参数数组 `n[2]`、修饰感知的包 / 组件常量
           （const1 `P.i` / `a.j`）、`max([n, m])`、记录参数 `c.n`、`size(E, 1)`、`b[end]`、Integer / Boolean 范围维、
           数组逻辑运算的形状——后排。
+    - [x] (58c) 矩阵构造 `[a, b; c, d]`（2026-10-02）：typeMatrix / typeMatrixComma + makeCatExp 的语义（元素提升到 2 维、
+          行内按列 / 行间按行拼接、转公共类型）直接展开成嵌套数组字面量（向量元素按列：`[a, a]` → `{{a[1], a[1]}, …}`）；
+          数组方程的分派与形状检查改走 expr_shape（嵌套字面量 `m = {{x, 1}, {2, y}}` 此前因粗类型 SKIP）。
+          → 全 scodeinst PASS 369→370、nf-live 311→322（FAIL 0）；+1 单测（151）。余下矩阵用例卡在 fill / transpose /
+          symmetric / cat / diagonal 等内建、切片下标、函数向量化。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
