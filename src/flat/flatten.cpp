@@ -1463,10 +1463,20 @@ class Flattener {
     }
     if (eq.kind == SEqKind::For) {
       // `for i in RANGE loop … end for`：常量范围 → 逐值展开体方程（loop_vars_ 供 cref 解析迭代变量与下标）。
-      if (!eq.a.is_valid() || !eq.index.is_valid()) { set_unsupported("for equation (implicit range)"); return; }
+      if (!eq.index.is_valid()) { set_unsupported("for equation (implicit range)"); return; }
       // 迭代变量遮蔽外层同名迭代变量：omc 会告警，ymc 不产告警文本 → 与期望的 Warning 行对不上 → SKIP（ForEquationShadow1）。
       if (loop_vars_.count(eq.index.id)) { set_unsupported("shadowed for iterator"); return; }
-      std::optional<std::vector<std::int64_t>> seq = eval_range(eq.a, scode_scope_of(enclosing), 0);
+      std::optional<std::vector<std::int64_t>> seq;
+      if (!eq.a.is_valid()) {
+        // 隐式范围 `for i loop`（deduceIterationRange，NFTyping.mo:3826-3936）：体里 i 作下标处的各 (数组, 维) 维长须相同，
+        // 范围 = 1:该长（ImplicitRangeEq1 `x[i] = i`）；一处都没有 / 长度不一 / 维不可求 → omc 报错或未做 → SKIP。
+        const std::optional<std::int64_t> n = implicit_range_size(eq.body, eq.index, enclosing);
+        if (!n) { set_unsupported("for equation (implicit range)"); return; }
+        seq.emplace();
+        for (std::int64_t v = 1; v <= *n; ++v) seq->push_back(v);
+      } else {
+        seq = eval_range(eq.a, scode_scope_of(enclosing), 0);
+      }
       if (!seq) { set_unsupported("for equation (non-constant range)"); return; }
       for (std::int64_t v : *seq) {
         auto prev = loop_vars_.find(eq.index.id);
@@ -1570,6 +1580,13 @@ class Flattener {
             structural_keys_ = skeys;
             structural_set_ = sset;
           }
+        }
+        // 求不出值、但引用了 fixed = false 的参数（无绑定、初始方程里定值）：isExpressionNotFixed → 非结构条件，omc 原样保留
+        //（IfEquation8 `if b == true then`）。
+        if ((!cv || cv->k != CVal::K::Bool) && !cond_is_runtime(ce) && cond_has_unfixed_param(ce)) {
+          keep_param = true;
+          structural_keys_ = skeys;
+          structural_set_ = sset;
         }
         if (cv && cv->k == CVal::K::Bool && !keep_param) {
           if (cv->b) {   // 字面量真：选中该分支，丢弃其余
@@ -1817,7 +1834,8 @@ class Flattener {
               subs.push_back(se.args[static_cast<std::size_t>(i) - 1]);
             }
           }
-          if (used != idx.size()) { set_unsupported("slice scalarization"); return lit_int(0); }
+          // 下标少于维数（`x[i]` 引 2 维 x = `x[i, :]`）：余下的 idx 补成末尾下标。
+          while (used < idx.size()) subs.push_back(lit_int(idx[used++]));
         }
         c.cref.parts.back().subscripts = std::move(subs);
         return add(std::move(c));
@@ -6858,7 +6876,9 @@ class Flattener {
             std::vector<std::int64_t> ldims;
             const ScodeScope lscope = scode_scope_of(enclosing);
             const bool lit = leaf_decl_dims(lcel, c, enclosing, prefix, ldims);
-            if (!lit || subs.size() != ldims.size()) {
+            // 下标可少于维数（隐式尾随 `:`，`x[i]` 引 2 维 x；1.25.0 打印仍只带给出的下标，ImplicitTrailingSubscript 账本），
+            // 余下的维接在引用类型后面，标量化时补末尾下标（ImplicitRangeEq3）。
+            if (!lit || subs.size() > ldims.size()) {
               set_unsupported("array subscript");
             } else {
               leaf_subs.assign(subs.size(), Id<Expr>{});
@@ -6906,6 +6926,12 @@ class Flattener {
                   break;
                 }
                 leaf_subs[k] = lit_int(*iv);
+              }
+              for (std::size_t k = subs.size(); k < ldims.size(); ++k) {   // 隐式尾随 `:` 的维
+                Dimension td;
+                td.kind = DimKind::Integer;
+                td.size = ldims[k];
+                sdims.push_back(td);
               }
               if (!sdims.empty()) e.ty = Type::array_of(lty, std::move(sdims));
             }
@@ -9845,6 +9871,94 @@ class Flattener {
   // 一处（折成字面量），其余位置（绑定 / 方程 / 算法 / 折不成字面量）引用 → SKIP（全局代入未做）。
   void record_structural(const std::string& k) {
     if (structural_set_.insert(k).second) structural_keys_.push_back(k);
+  }
+  // 隐式 for 范围的长度：体（含嵌套 if / for / when）里每处恰为迭代变量 it 的下标 → 该 cref 段所指组件的该维长（逐段沿
+  // 实例类树找，维须可求）；全部相同 → 该长，否则 / 一处都没有 → nullopt。
+  std::optional<std::int64_t> implicit_range_size(const std::vector<Id<SEquation>>& body, Symbol it, NodeId enclosing) {
+    std::optional<std::int64_t> n;
+    bool ok = true, any = false;
+    const ScodeScope sc = scode_scope_of(enclosing);
+    auto use = [&](const Cref& c, std::size_t pi, std::size_t k) {
+      NodeId cls = enclosing, node;
+      for (std::size_t j = 0; j <= pi; ++j) {
+        node = find_local(cls, c.parts[j].name);
+        if (!node.is_valid() || I_.nodes[node].is_empty() || !I_.nodes[node].comp.is_valid()) { ok = false; return; }
+        cls = I_.comps[I_.nodes[node].comp].class_inst;
+      }
+      const SElement& el = I_.scode.elems[I_.comps[I_.nodes[node].comp].def];
+      std::vector<std::int64_t> dims;
+      for (const std::vector<Id<Exp>>* ds : {&el.attr.dims, &el.type.dims})
+        for (Id<Exp> d : *ds) if (!eval_dim(d, dims, sc)) { ok = false; return; }
+      if (k >= dims.size()) { ok = false; return; }
+      any = true;
+      if (n && *n != dims[k]) ok = false;
+      n = dims[k];
+    };
+    auto exp = [&](auto& self, Id<Exp> e) -> void {
+      if (!e.is_valid() || !ok) return;
+      const Exp x = I_.absyn.exps[e];   // 拷贝
+      if (x.kind == ExpKind::CrefExp) {
+        const Cref c = I_.absyn.crefs[x.cref];
+        for (std::size_t pi = 0; pi < c.parts.size(); ++pi)
+          for (std::size_t k = 0; k < c.parts[pi].subscripts.size(); ++k) {
+            const Exp& s = I_.absyn.exps[c.parts[pi].subscripts[k]];
+            if (s.kind == ExpKind::CrefExp && I_.absyn.crefs[s.cref].parts.size() == 1 &&
+                I_.absyn.crefs[s.cref].parts[0].subscripts.empty() && I_.absyn.crefs[s.cref].parts[0].name == it)
+              use(c, pi, k);
+            else
+              self(self, c.parts[pi].subscripts[k]);
+          }
+        return;
+      }
+      if (x.kind == ExpKind::Reduction) { ok = false; return; }   // 推导式里的迭代变量遮蔽 / 再推导：未做
+      self(self, x.a);
+      self(self, x.b);
+      self(self, x.c);
+      for (Id<Exp> a : x.args) self(self, a);
+    };
+    auto eqn = [&](auto& self, Id<SEquation> id) -> void {
+      if (!ok) return;
+      const SEquation q = I_.scode.eqs[id];   // 拷贝
+      exp(exp, q.a);
+      exp(exp, q.b);
+      exp(exp, q.c);
+      for (const SEqBranch& br : q.branches) {
+        exp(exp, br.cond);
+        for (Id<SEquation> b : br.body) self(self, b);
+      }
+      for (Id<SEquation> b : q.body) self(self, b);
+      for (Id<SEquation> b : q.else_body) self(self, b);
+    };
+    for (Id<SEquation> b : body) eqn(eqn, b);
+    if (!ok || !any) return std::nullopt;
+    return n;
+  }
+  // 条件（已 inst + 化简）里有没有 `fixed = false` 的参数（字面量 false）；cref 找不到已发射变量 → false。
+  bool cond_has_unfixed_param(Id<Expr> ce) {
+    bool hit = false;
+    const Symbol fixed = in_.intern("fixed");
+    auto walk = [&](auto& self, Id<Expr> id) -> void {
+      if (!id.is_valid() || hit) return;
+      const Expr e = result_.model.exprs[id];   // 拷贝
+      if (e.kind == ExprKind::Cref) {
+        const std::string k = expr_cref_key(e.cref);
+        for (const FlatVariable& fv : result_.model.variables) {   // ponytail: 线性找（同 cond_params_fixed）
+          if (var_key(fv) != k) continue;
+          if (fv.var_kind == FlatVarKind::Parameter)
+            for (const FlatVarAttr& a : fv.attributes)
+              if (a.name == fixed && result_.model.exprs[a.value].kind == ExprKind::BoolLit && !result_.model.exprs[a.value].bval)
+                hit = true;
+          break;
+        }
+        return;
+      }
+      for (Id<Expr> a : e.args) self(self, a);
+      self(self, e.a);
+      self(self, e.b);
+      self(self, e.c);
+    };
+    walk(walk, ce);
+    return hit;
   }
   // if 方程参数条件里的参数是否都 fixed（Structural.isExpressionNotFixed 的反面，NFTyping.mo:3581）：条件（已 inst + 化简）
   // 里每个 cref 须是已发射的参数 / 常量；有参数 `fixed = false` → false（omc 不当结构条件，原样保留）。参数须是字面量绑定：

@@ -2516,6 +2516,25 @@ YMC_TEST(flatten_qualified_package_constant_paths) {
                            "  Real v3 = 14.0;\n  Real v4 = 5.0;\n  Real v5 = 3.0;\nequation\n  y = {1.0, 2.0};\nend QP1;\n"));
 }
 
+YMC_TEST(flatten_implicit_range_partial_subscripts) {
+  // 隐式 for 范围（deduceIterationRange：迭代变量作下标处的维长）；下标少于维数 = 隐式尾随 `:`（打印仍只带给出的下标，
+  // 1.25.0）；fixed = false 参数的 if 条件原样保留。期望 = omc 1.25.0 实跑 IR1 / PS1（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model IR1\n  Real x[3, 2];\n  Real y[3];\n  parameter Boolean b(fixed = false);\n  Real z;\n"
+                           "initial equation\n  b = true;\nequation\n  for i loop\n    x[i] = {y[i], 2 * y[i]};\n    y[i] = i;\n"
+                           "  end for;\n  if b then\n    z = 1;\n  else\n    z = 2;\n  end if;\nend IR1;\n"),
+               std::string("class IR1\n  Real x[1,1];\n  Real x[1,2];\n  Real x[2,1];\n  Real x[2,2];\n  Real x[3,1];\n  Real x[3,2];\n"
+                           "  Real y[1];\n  Real y[2];\n  Real y[3];\n  parameter Boolean b(fixed = false);\n  Real z;\n"
+                           "initial equation\n  b = true;\nequation\n  x[1,1] = y[1];\n  x[1,2] = 2.0 * y[1];\n  y[1] = 1.0;\n"
+                           "  x[2,1] = y[2];\n  x[2,2] = 2.0 * y[2];\n  y[2] = 2.0;\n  x[3,1] = y[3];\n  x[3,2] = 2.0 * y[3];\n"
+                           "  y[3] = 3.0;\n  if b then\n    z = 1.0;\n  else\n    z = 2.0;\n  end if;\nend IR1;\n"));
+  YMC_CHECK_EQ(flatten_src("model PS1\n  Real x[2, 3];\n  Real y[3] = x[2];\n  Real s = sum(x[1]);\nequation\n"
+                           "  x[1] = {1, 2, 3};\n  x[2] = {time, 2 * time, 3};\nend PS1;\n"),
+               std::string("class PS1\n  Real x[1,1];\n  Real x[1,2];\n  Real x[1,3];\n  Real x[2,1];\n  Real x[2,2];\n  Real x[2,3];\n"
+                           "  Real y[1];\n  Real y[2];\n  Real y[3];\n  Real s = x[1,1] + x[1,2] + x[1,3];\nequation\n  y = x[2];\n"
+                           "  x[1,1] = 1.0;\n  x[1,2] = 2.0;\n  x[1,3] = 3.0;\n  x[2,1] = time;\n  x[2,2] = 2.0 * time;\n"
+                           "  x[2,3] = 3.0;\nend PS1;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

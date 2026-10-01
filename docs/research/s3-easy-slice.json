@@ -521,5 +521,10 @@
 "DimUnknown17.mo",
 "CevalRecordArray2.mo",
 "PackageConstant3.mo",
-"PackageConstant4.mo"
+"PackageConstant4.mo",
+"IfEquation8.mo",
+"ImplicitRangeEq1.mo",
+"ImplicitRangeEq2.mo",
+"ImplicitRangeEq3.mo",
+"Size3.mo"
 ]

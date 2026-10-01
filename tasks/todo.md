@@ -920,6 +920,11 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           字段缺省构造（const_comp_value / record_value：each 原样、非 each 逐元素切分、嵌套构造修饰）；包常量数组整体引用
           内联成数组字面量（原先 literal_of 对数组值返回 0，幸被形状核对挡成 SKIP）。QP1 探针逐字节一致。→ 全 scodeinst PASS
           433→436（CevalRecordArray2、PackageConstant3/4）、nf-live 437→440（RecordConstant1/2/3）；+1 单测（173）。
+    - [x] (58x) 隐式 for 范围 + 隐式尾随 `:` + 非 fixed 参数条件（2026-10-02）：`for i loop` 的范围按 deduceIterationRange
+          （NFTyping.mo:3826-3936：体里 i 恰作下标处的各 (数组, 维) 维长须相同 → 1:n）；下标少于维数的数组引用（`x[i]` 引 2 维 x）
+          = 隐式尾随 `:`，引用类型接上余维、标量化补末尾下标，打印仍只带给出的下标（1.25.0）；求不出值但引用 fixed = false 参数的
+          if 条件 = 非结构条件，原样保留（isExpressionNotFixed，IfEquation8）。→ 全 scodeinst PASS 436→441（IfEquation8、
+          ImplicitRangeEq1/2/3、Size3）、nf-live 440→442（SubscriptsFill1、EquationFor6）；+1 单测（174）。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
