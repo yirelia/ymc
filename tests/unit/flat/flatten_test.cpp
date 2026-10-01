@@ -687,11 +687,14 @@ YMC_TEST(flatten_composite_array_modifier_distributes) {
   YMC_CHECK_EQ(flatten_src(src), std::string(want));
 }
 
-YMC_TEST(flatten_composite_array_element_ref_unsupported) {
-  // 表达式里显式下标引用复合数组元素 `a[3].x`（越界/无界校验未做）→ 保守 SKIP（ArrayBounds2）。
+YMC_TEST(flatten_composite_array_element_ref) {
+  // 表达式里显式下标引用复合数组元素 `a[1].x`：首段常量下标、在界内 → 照印（期望 = omc 1.25.0 实跑 CA1，2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model A\n  Real x;\nend A;\nmodel M\n  A a[2];\n  Real y = a[1].x;\nend M;\n"),
+               std::string("class M\n  Real a[1].x;\n  Real a[2].x;\n  Real y = a[1].x;\nend M;\n"));
+  // 越界 `a[3].x`：1.25.0 末段是标量时不查界（照印），末段带下标时报错（ArrayBounds2）——不一致，ymc 一律保守 SKIP。
   bool uns = false;
   std::string t = flatten_src(
-      "model A\n  Real x;\nend A;\nmodel M\n  A a[2];\n  Real y = a[1].x;\nend M;\n", &uns);
+      "model A\n  Real x;\nend A;\nmodel M\n  A a[2];\n  Real y = a[3].x;\nend M;\n", &uns);
   YMC_CHECK(uns);
   YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
 }
@@ -2217,6 +2220,38 @@ YMC_TEST(flatten_imports_in_expressions) {
       "class IM1\n  Real x = 9.42;\n  Real x2 = 2.7;\n  Real x3 = 3e8;\n  Real x4 = A.B.f(time);\n  parameter Real x5 = 4.0;\n"
       "end IM1;\n";
   YMC_CHECK_EQ(flatten_src(src), std::string(want));
+}
+
+YMC_TEST(flatten_parameter_constant_records) {
+  // parameter / constant 记录（及记录数组）的变率前缀按 variabilityMin 下沉到每个字段：继承字段、数组字段、嵌套记录、自带
+  // parameter 的字段、final 字段（final 保留）；constant 记录字段引用内联（`c.v[2]`、`c[2].x`）。
+  // 期望 = omc 1.25.0 实跑 R1 / R2（2026-10-02）。
+  const char* src1 =
+      "record Inner\n  Real a = 1;\n  Integer n = 2;\nend Inner;\nrecord Base\n  Real b = 3;\nend Base;\n"
+      "record R\n  extends Base;\n  Real x = 4;\n  Real v[2] = {5, 6};\n  Inner in1;\n  parameter Real p = 7;\n"
+      "  final Real f = 8;\nend R;\nmodel R1\n  parameter R r;\n  constant R c;\n  parameter R r2(x = 10, in1(a = 11));\n"
+      "  Real y = r.x + c.v[2] + r2.in1.a;\nend R1;\n";
+  YMC_CHECK_EQ(flatten_src(src1),
+               std::string("class R1\n  parameter Real r.b = 3.0;\n  parameter Real r.x = 4.0;\n  parameter Real r.v[1] = 5.0;\n"
+                           "  parameter Real r.v[2] = 6.0;\n  parameter Real r.in1.a = 1.0;\n  parameter Integer r.in1.n = 2;\n"
+                           "  parameter Real r.p = 7.0;\n  final parameter Real r.f = 8.0;\n  constant Real c.b = 3.0;\n"
+                           "  constant Real c.x = 4.0;\n  constant Real c.v[1] = 5.0;\n  constant Real c.v[2] = 6.0;\n"
+                           "  constant Real c.in1.a = 1.0;\n  constant Integer c.in1.n = 2;\n  constant Real c.p = 7.0;\n"
+                           "  final constant Real c.f = 8.0;\n  parameter Real r2.b = 3.0;\n  parameter Real r2.x = 10.0;\n"
+                           "  parameter Real r2.v[1] = 5.0;\n  parameter Real r2.v[2] = 6.0;\n  parameter Real r2.in1.a = 11.0;\n"
+                           "  parameter Integer r2.in1.n = 2;\n  parameter Real r2.p = 7.0;\n  final parameter Real r2.f = 8.0;\n"
+                           "  Real y = r.x + 6.0 + r2.in1.a;\nend R1;\n"));
+  const char* src2 =
+      "record R\n  Real x = 1;\n  Real v[2] = {2, 3};\nend R;\nmodel R2\n  parameter R r[2];\n  constant R c[2](x = {4, 5});\n"
+      "  parameter R q[2](each x = 6);\n  Real y = r[1].x + c[2].x;\nend R2;\n";
+  YMC_CHECK_EQ(flatten_src(src2),
+               std::string("class R2\n  parameter Real r[1].x = 1.0;\n  parameter Real r[1].v[1] = 2.0;\n"
+                           "  parameter Real r[1].v[2] = 3.0;\n  parameter Real r[2].x = 1.0;\n  parameter Real r[2].v[1] = 2.0;\n"
+                           "  parameter Real r[2].v[2] = 3.0;\n  constant Real c[1].x = 4.0;\n  constant Real c[1].v[1] = 2.0;\n"
+                           "  constant Real c[1].v[2] = 3.0;\n  constant Real c[2].x = 5.0;\n  constant Real c[2].v[1] = 2.0;\n"
+                           "  constant Real c[2].v[2] = 3.0;\n  parameter Real q[1].x = 6.0;\n  parameter Real q[1].v[1] = 2.0;\n"
+                           "  parameter Real q[1].v[2] = 3.0;\n  parameter Real q[2].x = 6.0;\n  parameter Real q[2].v[1] = 2.0;\n"
+                           "  parameter Real q[2].v[2] = 3.0;\n  Real y = r[1].x + 5.0;\nend R2;\n"));
 }
 
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {

@@ -856,6 +856,11 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           在目标包的作用域求值、函数按真实路径发射（`A.B.f`）。顺带：本地组件绑定里的名字按 enclosing 的词法链解析（此前
           只查顶层）。类型名 / 基类名经 import 属 inst → 任务卡 `docs/tasks/T-S3-06-imports.md`。
           → 全 scodeinst PASS 398→403、nf-live 397→400（FAIL 0）；+1 单测（159）。
+    - [x] (58l) parameter / constant 记录与记录数组（2026-10-02）：变率前缀按 variabilityMin 下沉到继承字段、数组字段（emit_array
+          此前不看下沉的 var_floor）、嵌套记录、自带 parameter / final 的字段（R1 / R2 探针）；记录数组元素引用 `r[1].x`
+          （首段常量 / end / 结构参数下标、在界内；越界一律 SKIP——1.25.0 对标量末段不查界、对带下标末段报错，不一致）。
+          → 全 scodeinst PASS 403→405、nf-live 400→401（FAIL 0）；单测 160（复合数组元素引用旧的 SKIP 断言改为对拍）。
+          记录族余下多卡在记录绑定（构造 / 函数返回记录 / 记录数组绑定）、final 覆盖、Evaluate 注解。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

@@ -491,5 +491,7 @@
 "FunctionMultiOutput1.mo",
 "FunctionMultiOutput5.mo",
 "Wild1.mo",
-"ImportUnqualified3.mo"
+"ImportUnqualified3.mo",
+"CevalRecordArray4.mo",
+"ConnectArrays1.mo"
 ]

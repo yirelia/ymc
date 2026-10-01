@@ -697,7 +697,11 @@ class Flattener {
           const bool r_exp = r == SRestriction::ExpandableConnector;   // expandable 数组：逐元素同标量 expandable
           // 普通连接器数组 `C c[3]`：与其它复合数组同路——逐元素 `c[i]` 递归摊开成员（标量成员 → 变量，
           // flow 成员 → flow_vars_ 带下标）。连接方程在 process_connects 按元素下标解析（ForConnect1）。
-          if (I_.comps[cid].attributes.variability != SVariability::Var) { set_unsupported("variability on composite array"); continue; }
+          // 记录数组的 parameter / constant 前缀同标量记录下沉到各元素的字段（variabilityMin）；其余复合数组带变率前缀未做。
+          if (I_.comps[cid].attributes.variability != SVariability::Var && !is_plain_data_record(ci, cdef)) {
+            set_unsupported("variability on composite array");
+            continue;
+          }
           if (I_.comps[cid].attributes.connector != SConnectorType::Potential) { set_unsupported("flow/stream on composite array"); continue; }
           if (I_.comps[cid].binding.kind == BindingKind::Raw && I_.comps[cid].binding.raw_exp.is_valid()) {
             set_unsupported("composite array whole binding"); continue;
@@ -730,6 +734,7 @@ class Flattener {
             cps.push_back(aidx);   // 该复合数组段 `a` 带下标 [i…]
             ModCtx achild;
             achild.final_all = comp_final;
+            achild.var_floor = var_min(ctx.var_floor, I_.comps[cid].attributes.variability);   // 变率下沉（记录数组）
             achild.keep_dir = ctx.keep_dir && (r == SRestriction::Connector || r_exp || mdir == SDirection::Input);
             achild.dir_inh = mdir;
             achild.in_conn = ctx.in_conn || r == SRestriction::Connector || r_exp;
@@ -2435,7 +2440,7 @@ class Flattener {
     }
     // constant 数组的非构造子绑定（`{1,2,3} + {3,4,5}`、`m1 * v1`、`1.0:3.0`、`zeros(4, 3)`…）：按值求值（NFCeval）→
     // 维取值的形状（`:` 维由此定）、逐元素字面量；求不出 → 落回下面的类型化路径（多半 SKIP）。
-    if (nlbind && I_.comps[cid].attributes.variability == SVariability::Const) {
+    if (nlbind && var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Const) {
       if (emit_const_array(cid, name, is_protected, psubs, braw, bscope, bprefix, dim_exps, dscope,
                            I_.comps[cid].attributes.is_final || force_final, ctx))
         return;
@@ -2500,7 +2505,7 @@ class Flattener {
     if (I_.comps[cid].attributes.connector == SConnectorType::Flow && !in_conn) { set_unsupported("flow outside connector"); return; }
     const bool is_flow = in_conn && (I_.comps[cid].attributes.connector == SConnectorType::Flow || ctx.flow_inherited);
     FlatVarKind vk = FlatVarKind::Var;
-    switch (I_.comps[cid].attributes.variability) {
+    switch (var_min(ctx.var_floor, I_.comps[cid].attributes.variability)) {   // 复合组件变率下沉（记录里的数组字段）
       case SVariability::Var: vk = FlatVarKind::Var; break;
       case SVariability::Discrete: vk = FlatVarKind::Discrete; break;
       case SVariability::Param: vk = FlatVarKind::Parameter; break;
@@ -6360,14 +6365,45 @@ class Flattener {
       e.ty = Type::real();
       return add(std::move(e));
     }
-    // 非末段带下标（复合数组元素引用 `a[3].x`）：ymc 未做复合数组下标越界/求值校验 → 保守 SKIP（ArrayBounds2 越界）。
-    if (local.is_valid() && !I_.nodes[local].is_empty())
-      for (std::size_t i = 0; i + 1 < c.parts.size(); ++i)
+    // 非末段带下标（复合数组元素引用 `a[3].x`）：只做首段（本地复合数组组件），下标须是常量 / end / 结构参数且在界内
+    //（同末段规则；越界 omc 报错，ArrayBounds2）→ 打印成字面量下标。更深的段带下标、或首段是数组却没下标（`r.x` 跨元素
+    // 取字段）→ SKIP。
+    std::vector<Id<Expr>> head_subs;   // 首段下标的定型结果（字面量）
+    if (local.is_valid() && !I_.nodes[local].is_empty() && c.parts.size() > 1) {
+      for (std::size_t i = 1; i + 1 < c.parts.size(); ++i)
         if (!c.parts[i].subscripts.empty()) {
           set_unsupported("composite array element reference");
           e.ty = Type::real();
           return add(std::move(e));
         }
+      if (I_.nodes[local].kind == NodeKind::Component) {
+        const SElement& hcel = I_.scode.elems[I_.comps[I_.nodes[local].comp].def];
+        const bool harr = !hcel.attr.dims.empty() || !hcel.type.dims.empty();
+        const std::vector<Id<Exp>>& hs = c.parts[0].subscripts;
+        bool ok = !harr ? hs.empty() : !hs.empty();
+        if (ok && harr) {
+          std::vector<std::int64_t> hd;
+          const ScodeScope hscope = scode_scope_of(enclosing);
+          for (Id<Exp> d : hcel.attr.dims) if (!eval_dim(d, hd, hscope)) ok = false;
+          for (Id<Exp> d : hcel.type.dims) if (!eval_dim(d, hd, hscope)) ok = false;
+          ok = ok && hd.size() == hs.size();
+          for (std::size_t k = 0; ok && k < hs.size(); ++k) {
+            std::optional<std::int64_t> iv = I_.absyn.exps[hs[k]].kind == ExpKind::End ? std::optional<std::int64_t>(hd[k])
+                                                                                       : subscript_int(hs[k], &hscope);
+            if (!iv && absyn_refs_param(hs[k], enclosing))
+              if (std::optional<CVal> pv = eval_scode(hs[k], hscope, 0, /*allow_param=*/true, nullptr); pv && pv->k == CVal::K::Int)
+                iv = pv->i;
+            if (!iv || *iv < 1 || *iv > hd[k]) ok = false;
+            else head_subs.push_back(lit_int(*iv));
+          }
+        }
+        if (!ok) {
+          set_unsupported("composite array element reference");
+          e.ty = Type::real();
+          return add(std::move(e));
+        }
+      }
+    }
     if (local.is_valid() && !I_.nodes[local].is_empty()) {
       // 多段 `a.x`：逐段深入复合组件解析到叶子，取**叶子**的类型/可变性（否则会用复合类型误加 Cast）。
       NodeId leaf = local, cur = local;
@@ -6567,10 +6603,12 @@ class Flattener {
     for (std::size_t pi = 0; pi < c.parts.size(); ++pi) {
       const CrefPart& p = c.parts[pi];
       std::vector<Id<Expr>> subs;
-      for (std::size_t k = 0; k < p.subscripts.size(); ++k)
+      for (std::size_t k = 0; k < p.subscripts.size(); ++k) {
+        if (pi == 0 && c.parts.size() > 1 && k < head_subs.size()) { subs.push_back(head_subs[k]); continue; }
         subs.push_back(pi + 1 == c.parts.size() && k < leaf_subs.size() && leaf_subs[k].is_valid()
                            ? leaf_subs[k]
                            : inst_exp(p.subscripts[k], enclosing, prefix));
+      }
       e.cref.parts.push_back({p.name, std::move(subs)});
     }
     return add(std::move(e));
@@ -7590,19 +7628,16 @@ class Flattener {
 
   // 纯数据记录：Record 长类、成员全是标量 Var 非 final 非复合的 Component。放行 constant/parameter 复合组件的变率下沉，
   // 排除会 FAIL 的形态（final 字段 RecordBinding6/7、数组字段、嵌套记录、extends/嵌套类/操作符构造子）。
+  // 变率前缀可下沉到字段的记录（R1 探针：`parameter R r` 的数组 / 嵌套记录 / 继承 / final / 自带 parameter 的字段都按
+  // variabilityMin 打前缀、final 保留）。operator record（含操作符 / 构造函数）未做 → false。
   bool is_plain_data_record(NodeId ci, Id<SElement> cdef) {
+    (void)ci;
     const SElement& cd = I_.scode.elems[cdef];
     if (cd.restriction != SRestriction::Record || cd.def.kind != SClassDefKind::Parts) return false;
-    for (Id<SElement> e : cd.def.elements)
-      if (I_.scode.elems[e].kind != SElementKind::Component) return false;   // 无 extends/嵌套类/操作符构造子
-    for (NodeId fn : I_.trees[I_.node_class(ci).tree].components) {
-      const CompId fc = I_.nodes[fn].comp;
-      const SElement& f = I_.scode.elems[I_.comps[fc].def];
-      if (!f.attr.dims.empty() || !f.type.dims.empty()) return false;                 // 无数组字段
-      if (I_.comps[fc].attributes.variability != SVariability::Var) return false;     // 字段须 Var（排除 final constant 字段）
-      if (I_.comps[fc].attributes.is_final) return false;                             // 排除 final 字段
-      if (I_.comps[fc].ty.kind == TypeKind::Complex) return false;                    // 无嵌套记录
-    }
+    for (Id<SElement> e : cd.def.elements)   // 嵌套的 operator / function（operator record）不在此列
+      if (I_.scode.elems[e].kind == SElementKind::Class &&
+          (I_.scode.elems[e].restriction == SRestriction::Operator || I_.scode.elems[e].restriction == SRestriction::Function))
+        return false;
     return true;
   }
 
