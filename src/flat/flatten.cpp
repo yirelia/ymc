@@ -3544,6 +3544,128 @@ class Flattener {
     return true;
   }
 
+  // 限定名常量路径的值（NFCeval.evalCref 沿路径取值）：`P.cr.r`、`P.cr[1].r1.r`、`.P.x[2]`。前几段按类下降，遇到的第一个
+  // 组件须是 constant（allow_param 时也接 parameter），取其值（const_comp_value），余下各段按下标 / 记录字段取（cval_path，
+  // 下标在书写处作用域求值）。resolve_qual_const 只接"中间段全是类、无下标"，本函数补其余形态（RecordConstant1-3、
+  // PackageConstant3/4）。不适用 → nullopt。
+  std::optional<CVal> eval_qual_path(const Cref& c, const ScodeScope& scope, int depth, bool allow_param,
+                                     std::unordered_set<std::uint32_t>* used) {
+    if (c.parts.empty() || depth > 100) return std::nullopt;
+    ScodeScope cur;
+    Id<SElement> el = find_scode_element_at(c.parts[0].name, c.leading_dot ? ScodeScope{} : scope, cur);
+    std::size_t k = 0;
+    while (el.is_valid() && I_.scode.elems[el].kind == SElementKind::Class) {
+      if (!c.parts[k].subscripts.empty() || ++k >= c.parts.size()) return std::nullopt;
+      cur.insert(cur.begin(), el);
+      Id<SElement> nxt;
+      for (Id<SElement> e : I_.scode.elems[el].def.elements) {
+        const SElement& ce = I_.scode.elems[e];
+        if (ce.name == c.parts[k].name && (ce.kind == SElementKind::Class || ce.kind == SElementKind::Component)) { nxt = e; break; }
+      }
+      el = nxt;
+    }
+    if (!el.is_valid() || I_.scode.elems[el].kind != SElementKind::Component) return std::nullopt;
+    const SVariability v = I_.scode.elems[el].attr.var;
+    if (v != SVariability::Const && !(allow_param && v == SVariability::Param)) return std::nullopt;
+    if (used && v == SVariability::Param) used->insert(el.raw);
+    const std::optional<CVal> root = const_comp_value(el, cur, depth);
+    if (!root) return std::nullopt;
+    Cref rest;
+    rest.parts.assign(c.parts.begin() + static_cast<std::ptrdiff_t>(k), c.parts.end());
+    return cval_path(*root, rest, scope, depth);
+  }
+  // 包 / 类里 constant 组件的值（被引常量的声明在其自身作用域求值：书写处前缀 / 实例帧不适用）：有绑定 → 求值并按声明
+  // 类型强转；无绑定的记录 / 记录数组 → 组件修饰 + 记录字段缺省逐字段构造（evalComponentBinding 对无绑定记录按字段绑定
+  // 组记录；非 each 的数组修饰逐元素取第 i 个，each 原样）。其余 → nullopt。
+  std::optional<CVal> const_comp_value(Id<SElement> el, const ScodeScope& cscope, int depth) {
+    const SElement ce = I_.scode.elems[el];   // 拷贝（求值可能扩 arena）
+    const std::vector<Symbol>* saved = ceval_prefix_;
+    const int saved_frame = ceval_frame_;
+    ceval_prefix_ = nullptr;
+    ceval_frame_ = -1;
+    std::optional<CVal> out;
+    if (ce.mod.is_valid() && I_.scode.mods[ce.mod].binding.is_valid()) {
+      out = eval_scode(I_.scode.mods[ce.mod].binding, cscope, depth + 1);
+      if (out) out = coerce_cval(*out, ce.type.path);
+    } else {
+      ScodeScope rds;
+      const Id<SElement> rec = resolve_class_path(ce.type.path, ce.type.leading_dot, cscope, rds);
+      if (rec.is_valid() && I_.scode.elems[rec].kind == SElementKind::Class &&
+          I_.scode.elems[rec].restriction == SRestriction::Record && I_.scode.elems[rec].def.kind == SClassDefKind::Parts) {
+        std::vector<SSubMod> subs;
+        if (ce.mod.is_valid()) subs = I_.scode.mods[ce.mod].subs;
+        std::vector<std::int64_t> dims;
+        bool dims_ok = true;
+        for (const std::vector<Id<Exp>>* ds : {&ce.attr.dims, &ce.type.dims})
+          for (Id<Exp> d : *ds) if (!eval_dim(d, dims, cscope)) dims_ok = false;
+        if (dims_ok && dims.empty()) {
+          out = record_value(rec, rds, subs, cscope, depth);
+        } else if (dims_ok && dims.size() == 1 && dims[0] >= 1) {
+          std::vector<CVal> els;
+          for (std::int64_t i = 1; i <= dims[0] && out.has_value() == false; ++i) {
+            std::vector<SSubMod> esubs;   // 该元素的修饰：each 原样，非 each 的绑定取第 i 个元素
+            bool ok = true;
+            for (const SSubMod& s : subs) {
+              SMod sm = I_.scode.mods[s.mod];
+              if (!sm.is_each && sm.binding.is_valid()) {
+                sm.binding = array_scalar_elem(sm.binding, {i}, 0);
+                if (!sm.binding.is_valid()) { ok = false; break; }
+              } else if (!sm.is_each && !sm.subs.empty()) {
+                ok = false; break;   // 非 each 的嵌套修饰逐元素切分未做
+              }
+              esubs.push_back({s.ident, I_.scode.add_mod(std::move(sm))});
+            }
+            std::optional<CVal> ev = ok ? record_value(rec, rds, esubs, cscope, depth) : std::nullopt;
+            if (!ev) break;
+            els.push_back(std::move(*ev));
+          }
+          if (static_cast<std::int64_t>(els.size()) == dims[0]) out = CVal::Arr(std::move(els));
+        }
+      }
+    }
+    ceval_prefix_ = saved;
+    ceval_frame_ = saved_frame;
+    return out;
+  }
+  // 记录值：逐字段——外来修饰（subs，在 mscope 求值）优先：带绑定取绑定、只带嵌套修饰的记录字段递归；否则字段声明绑定
+  // （在记录作用域求值）；否则记录字段按其缺省递归构造。字段数组 / extends / 求不出 → nullopt。rds = 记录类的定义作用域链。
+  std::optional<CVal> record_value(Id<SElement> rec, const ScodeScope& rds, const std::vector<SSubMod>& subs,
+                                   const ScodeScope& mscope, int depth) {
+    if (depth > 50) return std::nullopt;
+    ScodeScope fscope = rds;
+    fscope.insert(fscope.begin(), rec);
+    CVal r = CVal::Rec();
+    const std::vector<Id<SElement>> fields = I_.scode.elems[rec].def.elements;   // 拷贝
+    for (Id<SElement> f : fields) {
+      const SElement fe = I_.scode.elems[f];
+      if (fe.kind == SElementKind::Extends) return std::nullopt;
+      if (fe.kind != SElementKind::Component) continue;
+      if (!fe.attr.dims.empty() || !fe.type.dims.empty()) return std::nullopt;
+      const SSubMod* hit = nullptr;
+      for (const SSubMod& s : subs) if (s.ident == fe.name) { hit = &s; break; }
+      std::optional<CVal> fv;
+      if (hit && I_.scode.mods[hit->mod].binding.is_valid()) {
+        fv = eval_scode(I_.scode.mods[hit->mod].binding, mscope, depth + 1);
+      } else if (fe.mod.is_valid() && I_.scode.mods[fe.mod].binding.is_valid() && !hit) {
+        fv = eval_scode(I_.scode.mods[fe.mod].binding, fscope, depth + 1);
+      } else {
+        ScodeScope frds;
+        const Id<SElement> frec = resolve_class_path(fe.type.path, fe.type.leading_dot, fscope, frds);
+        if (!frec.is_valid() || I_.scode.elems[frec].kind != SElementKind::Class ||
+            I_.scode.elems[frec].restriction != SRestriction::Record || I_.scode.elems[frec].def.kind != SClassDefKind::Parts)
+          return std::nullopt;
+        std::vector<SSubMod> nsubs;
+        if (hit) nsubs = I_.scode.mods[hit->mod].subs;
+        fv = record_value(frec, frds, nsubs, hit ? mscope : fscope, depth + 1);
+      }
+      if (!fv) return std::nullopt;
+      fv = coerce_cval(*fv, fe.type.path);
+      if (!fv) return std::nullopt;
+      r.set_field(fe.name, std::move(*fv));
+    }
+    return r;
+  }
+
   // 在 SCODE 作用域链上求值常量表达式（字面量 / 限定常量引用 / 算术 / 逻辑 / 关系）。
   // allow_param：也内联 parameter（结构上下文如 `fixed=`）；used 非空时记下用到的 parameter 组件（→ 标 final）。
   std::optional<CVal> eval_scode(Id<Exp> exp, const ScodeScope& scope, int depth,
@@ -3628,16 +3750,21 @@ class Flattener {
         if (ceval_prefix_ && !c.leading_dot)
           if (std::optional<CVal> kv = const_lookup_val(*ceval_prefix_, ceval_psubs_, c, scope, depth)) return kv;
         std::vector<Symbol> names;
+        bool has_subs = false;
         for (const CrefPart& p : c.parts) {
-          if (!p.subscripts.empty()) return std::nullopt;
+          if (!p.subscripts.empty()) has_subs = true;
           names.push_back(p.name);
         }
+        // 带下标 / 中间段是记录常量（`P.cr.r`、`P.cr[1].x`）：沿路径取值（eval_qual_path）。
+        if (has_subs) return eval_qual_path(c, scope, depth, allow_param, used);
         Id<SElement> comp;
         ScodeScope cscope;
-        if (!resolve_qual_const(names, c.leading_dot, scope, comp, cscope, allow_param)) return std::nullopt;
+        if (!resolve_qual_const(names, c.leading_dot, scope, comp, cscope, allow_param))
+          return c.parts.size() > 1 ? eval_qual_path(c, scope, depth, allow_param, used) : std::nullopt;
         if (used && I_.scode.elems[comp].attr.var == SVariability::Param) used->insert(comp.raw);
         const Id<SMod> m = I_.scode.elems[comp].mod;
-        if (!m.is_valid() || !I_.scode.mods[m].binding.is_valid()) return std::nullopt;
+        // 无绑定：记录常量由修饰 + 字段缺省构造（PackageConstant4 `r2[1] = {r1}`，r1 只有 `(x = 1)`）；其余 → nullopt。
+        if (!m.is_valid() || !I_.scode.mods[m].binding.is_valid()) return const_comp_value(comp, cscope, depth);
         // 被引常量的声明绑定在其自身作用域求值：书写处前缀 / 实例帧不再适用。
         const std::vector<Symbol>* saved = ceval_prefix_;
         const int saved_frame = ceval_frame_;
@@ -6837,9 +6964,14 @@ class Flattener {
           const Id<SMod> m = I_.scode.elems[qcomp].mod;
           if (m.is_valid() && I_.scode.mods[m].binding.is_valid()) {
             std::optional<CVal> v = eval_scode(I_.scode.mods[m].binding, qscope, 0);
-            if (v) return literal_of(*v);
+            if (v)
+              if (const Id<Expr> lit = literal_any(*v); lit.is_valid()) return lit;   // 数组常量 → 数组字面量（PA1 `y = P.x`）
           }
         }
+        // 带下标 / 中间段是记录常量（`P.cr.r`、`P.cr[1].r1.r`、`.P.x[2]`）：沿路径取值（eval_qual_path，RecordConstant1-3）。
+        if (!ok || c.parts.size() > 1)
+          if (std::optional<CVal> v = eval_qual_path(c, scode_scope_of(qres), 0, /*allow_param=*/false, nullptr))
+            if (const Id<Expr> lit = literal_any(*v); lit.is_valid()) return lit;
       }
       // 单段未解析：只有内建变量 `time` 合法（MLS §3.6.7）；其余（import 别名 Import6、外层非常量组件 Lookup3…）ymc 未做
       // 或 omc 报错 → unsupported。多段解析不出（package 常量非字面量、redeclare、跨包 extends…）→ omc 会内联成值 → 同。

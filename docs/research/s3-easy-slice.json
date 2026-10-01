@@ -518,5 +518,8 @@
 "SubscriptedExp1.mo",
 "SubscriptedExp3.mo",
 "SubscriptedExp4.mo",
-"DimUnknown17.mo"
+"DimUnknown17.mo",
+"CevalRecordArray2.mo",
+"PackageConstant3.mo",
+"PackageConstant4.mo"
 ]

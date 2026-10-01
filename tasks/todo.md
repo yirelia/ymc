@@ -915,6 +915,11 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           类型供迭代变量用，形状由 expr_shape 另算）；Var 数组整体保留 `x = 1:5`（Real 数组起 / 步 / 止转 Real：`r = 1.0:3.0`），
           参数逐元素 = 起 + (i - 1)·步。→ 全 scodeinst PASS 432→433（DimUnknown17）、nf-live 431→437（Array1、ArrayRange、
           Range1/2、Operators、ConditionalComponent）；+1 单测（172）。
+    - [x] (58w) 限定名常量路径（2026-10-02）：`P.cr.r`、`P.cr[1].r1.r`、`P.x[2]` 沿路径取值（新 eval_qual_path：前几段按类
+          下降，首个组件须 constant，余段按下标 / 记录字段取，复用 cval_path）；无绑定的记录常量 / 记录常量数组由组件修饰 +
+          字段缺省构造（const_comp_value / record_value：each 原样、非 each 逐元素切分、嵌套构造修饰）；包常量数组整体引用
+          内联成数组字面量（原先 literal_of 对数组值返回 0，幸被形状核对挡成 SKIP）。QP1 探针逐字节一致。→ 全 scodeinst PASS
+          433→436（CevalRecordArray2、PackageConstant3/4）、nf-live 437→440（RecordConstant1/2/3）；+1 单测（173）。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

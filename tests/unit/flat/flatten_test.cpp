@@ -2502,6 +2502,20 @@ YMC_TEST(flatten_range_bindings) {
                            "equation\n  r = 1.0:3.0;\n  s = 1.0:2.0:8.0;\nend RG2;\n"));
 }
 
+YMC_TEST(flatten_qualified_package_constant_paths) {
+  // 限定名常量路径沿路径取值：包常量数组整体 / 下标、记录常量字段（修饰 / 构造修饰 / 字段缺省）、记录常量数组（each 原样、
+  // 非 each 逐元素切分、无修饰取字段缺省）。期望 = omc 1.25.0 实跑 QP1（2026-10-02）。
+  const char* src =
+      "package P\n  record R1\n    Real r = 5;\n  end R1;\n  record R2\n    R1 r1;\n    Real z = 3;\n  end R2;\n"
+      "  constant Real x[2] = {1, 2};\n  constant R1 a(r = 2.0);\n  constant R2 b(r1 = R1(r = 4.0));\n"
+      "  constant R2 c[2](each r1 = R1(r = 6.0), z = {7, 8});\n  constant R1 d[3];\nend P;\n"
+      "model QP1\n  Real y[2] = P.x;\n  Real u = P.x[2];\n  constant Real v1 = P.a.r;\n  Real v2 = P.b.r1.r;\n"
+      "  Real v3 = P.c[2].z + P.c[1].r1.r;\n  Real v4 = P.d[3].r;\n  Real v5 = P.b.z;\nend QP1;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class QP1\n  Real y[1];\n  Real y[2];\n  Real u = 2.0;\n  constant Real v1 = 2.0;\n  Real v2 = 4.0;\n"
+                           "  Real v3 = 14.0;\n  Real v4 = 5.0;\n  Real v5 = 3.0;\nequation\n  y = {1.0, 2.0};\nend QP1;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);
