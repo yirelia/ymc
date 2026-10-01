@@ -1782,6 +1782,12 @@ class Flattener {
       return scalarize(x.args[static_cast<std::size_t>(idx[0]) - 1], std::vector<std::int64_t>(idx.begin() + 1, idx.end()));
     }
     if (expr_shape(e).empty()) return e;   // 标量（广播操作数）；形状看穿字面量 / 一元的粗类型（`-{1, 2}`）
+    if (x.kind == ExprKind::Range) {   // 字面量范围的第 i 个元素 = 起 + (i - 1)·步（RG2 探针 `q = 1:3` → `q[2] = 2.0`）
+      const std::optional<RangeLit> l = range_lit(x);
+      if (!l || idx.size() != 1 || idx[0] < 1 || idx[0] > l->n) { set_unsupported("range scalarization"); return lit_int(0); }
+      const double v = l->start + static_cast<double>(idx[0] - 1) * l->step;
+      return l->integer ? lit_int(static_cast<std::int64_t>(v)) : lit_real(v);
+    }
     switch (x.kind) {
       case ExprKind::Cref: {
         Expr c = x;
@@ -2789,6 +2795,18 @@ class Flattener {
           rhs = rhsE;   // x = f(n)：含数组调用的等式整体保留（NFScalarize :343-346；IfExpression11 / FuncUnknownDim3）
         } else if (rk == ExprKind::Array) {
           rhs = coerce_deep(rhsE, cty.kind);   // 常量数组调用求值成的字面量（FuncUnknownDim2）
+        } else if (rk == ExprKind::Range && range_lit(re)) {
+          // 字面量范围整体保留（`x = 1:5`）；Real 数组的范围起 / 步 / 止都转 Real（RG2 探针 `r = 1.0:3.0`、`s = 1.0:2.0:8.0`）。
+          Expr r = re;
+          if (cty.kind == TypeKind::Real) {
+            r.a = to_real(r.a);
+            r.b = to_real(r.b);
+            if (r.c.is_valid()) r.c = to_real(r.c);
+            r.ty = Type::real();
+          } else if (relem != cty.kind) {
+            set_unsupported("non-literal array binding"); return;
+          }
+          rhs = add(std::move(r));
         } else if (rk == ExprKind::Binary || rk == ExprKind::Unary ||
                    rk == ExprKind::Logical || rk == ExprKind::LogicalNot) {
           std::vector<Id<Expr>> elems;   // 逐元素展开 {op(y[1]), …}（A2/A3/A8/G3/G4）
@@ -4541,8 +4559,38 @@ class Flattener {
 
   // 表达式形状：数组字面量逐层数元素；if 表达式两支维不等处为未知（函数里允许，IfExpression11）；其余取类型维（非整数维 =
   // -1）。标量 → {}。
+  // 字面量范围（起 / 步 / 止都是数值字面量）：元素数按 getRangeTypeInt（max(intDiv(stop - start, step) + 1, 0)）/
+  // getRangeTypeReal（Util.realRangeSize = floor((stop - start) / step + 5e-15) + 1，≥ 0），NFTypeCheck.mo:2758-2833；
+  // Util.mo:1324-1333。步长为 0 / 非字面量 → nullopt。第 i 个元素 = 起 + (i - 1)·步（NFRangeIterator）。
+  struct RangeLit { bool integer = true; double start = 0, step = 1, stop = 0; std::int64_t n = 0; };
+  std::optional<RangeLit> range_lit(const Expr& r) {
+    if (r.kind != ExprKind::Range) return std::nullopt;
+    auto num = [&](Id<Expr> x, double& v, bool& is_int) {
+      const Expr& e = result_.model.exprs[x];
+      if (e.kind == ExprKind::IntLit) { v = static_cast<double>(e.ival); return true; }
+      if (e.kind == ExprKind::RealLit) { v = e.rval; is_int = false; return true; }
+      return false;
+    };
+    RangeLit l;
+    const Id<Expr> stop_id = r.c.is_valid() ? r.c : r.b;
+    if (!num(r.a, l.start, l.integer) || !num(stop_id, l.stop, l.integer)) return std::nullopt;
+    if (r.c.is_valid() && !num(r.b, l.step, l.integer)) return std::nullopt;
+    if (l.step == 0) return std::nullopt;
+    if (l.integer) {
+      const auto s = static_cast<std::int64_t>(l.start), t = static_cast<std::int64_t>(l.stop), st = static_cast<std::int64_t>(l.step);
+      l.n = std::max<std::int64_t>((t - s) / st + 1, 0);   // intDiv 向零截断
+    } else {
+      l.n = std::max<std::int64_t>(static_cast<std::int64_t>(std::floor((l.stop - l.start) / l.step + 5e-15)) + 1, 0);
+    }
+    return l;
+  }
+
   std::vector<std::int64_t> expr_shape(Id<Expr> id) {
     const Expr& e = result_.model.exprs[id];
+    if (e.kind == ExprKind::Range) {   // Range 的 ty 是元素类型（迭代变量用），形状另算
+      const std::optional<RangeLit> l = range_lit(e);
+      return {l ? l->n : -1};
+    }
     if (e.kind == ExprKind::Array) {
       std::vector<std::int64_t> s{static_cast<std::int64_t>(e.args.size())};
       if (!e.args.empty()) {

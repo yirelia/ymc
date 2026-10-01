@@ -2486,6 +2486,22 @@ YMC_TEST(flatten_cat_and_expression_leaf_bindings) {
   YMC_CHECK_EQ(out, std::string("<unsupported:array binding shape/type mismatch>"));
 }
 
+YMC_TEST(flatten_range_bindings) {
+  // 字面量范围绑定：长度按 getRangeTypeInt / Real（NFTypeCheck.mo:2758-2833）；Var 数组整体保留 `x = 1:5`（Real 数组起 / 步 /
+  // 止转 Real），参数逐元素 = 起 + (i - 1)·步。期望 = omc 1.25.0 实跑 RG1 / RG2（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model RG1\n  Integer x[5] = 1:5;\n  Real r[3] = 0.5:0.5:1.5;\n  parameter Integer p[3] = 2:4;\n"
+                           "  Real v[4] = 1.0 : 2 : 8;\n  Integer w[3] = 3 : -1 : 1;\nend RG1;\n"),
+               std::string("class RG1\n  Integer x[1];\n  Integer x[2];\n  Integer x[3];\n  Integer x[4];\n  Integer x[5];\n"
+                           "  Real r[1];\n  Real r[2];\n  Real r[3];\n  parameter Integer p[1] = 2;\n  parameter Integer p[2] = 3;\n"
+                           "  parameter Integer p[3] = 4;\n  Real v[1];\n  Real v[2];\n  Real v[3];\n  Real v[4];\n  Integer w[1];\n"
+                           "  Integer w[2];\n  Integer w[3];\nequation\n  x = 1:5;\n  r = 0.5:0.5:1.5;\n  v = 1.0:2.0:8.0;\n"
+                           "  w = 3:-1:1;\nend RG1;\n"));
+  YMC_CHECK_EQ(flatten_src("model RG2\n  Real r[3] = 1:3;\n  Real s[4] = 1.0:2:8;\n  parameter Real q[3] = 1:3;\nend RG2;\n"),
+               std::string("class RG2\n  Real r[1];\n  Real r[2];\n  Real r[3];\n  Real s[1];\n  Real s[2];\n  Real s[3];\n"
+                           "  Real s[4];\n  parameter Real q[1] = 1.0;\n  parameter Real q[2] = 2.0;\n  parameter Real q[3] = 3.0;\n"
+                           "equation\n  r = 1.0:3.0;\n  s = 1.0:2.0:8.0;\nend RG2;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

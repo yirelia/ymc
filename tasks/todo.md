@@ -910,6 +910,11 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           → 全 scodeinst PASS 432（Subscript5 由 SKIP 转为账本内分歧：文件补尾随 `:`，1.25.0 不补，FAIL 基线 16→17）、nf-live
           424→431（AppendElement、Concat3、ConcatArr1/2/4、MatrixMulVector、BoolArrayTest）；+1 单测（171）。linspace（omc 打成
           `array(… for i in 1:n)` 推导式）留后续。
+    - [x] (58v) 字面量范围绑定（2026-10-02）：起 / 步 / 止都是数值字面量的范围有形状（getRangeTypeInt `max(intDiv(stop - start,
+          step) + 1, 0)` / getRangeTypeReal `realRangeSize`，NFTypeCheck.mo:2758-2833、Util.mo:1324-1333；Range 的 ty 仍是元素
+          类型供迭代变量用，形状由 expr_shape 另算）；Var 数组整体保留 `x = 1:5`（Real 数组起 / 步 / 止转 Real：`r = 1.0:3.0`），
+          参数逐元素 = 起 + (i - 1)·步。→ 全 scodeinst PASS 432→433（DimUnknown17）、nf-live 431→437（Array1、ArrayRange、
+          Range1/2、Operators、ConditionalComponent）；+1 单测（172）。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
