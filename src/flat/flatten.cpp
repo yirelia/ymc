@@ -1492,7 +1492,8 @@ class Flattener {
       if (product) product_bins_.insert(rid.raw);
       return rid;
     }
-    if ((orig == Op::Mul || orig == Op::Div) && aarr && barr) {   // 矩阵乘 / 数组÷数组（非点号）非逐元素 → SKIP
+    if (orig == Op::Mul && aarr && barr) return model_array_product(a, b);   // 向量 / 矩阵积：展开成积和
+    if (orig == Op::Div && aarr && barr) {   // 数组÷数组（非点号）非逐元素 → SKIP
       set_unsupported("non-elementwise array operator");
       return lit_int(0);
     }
@@ -2140,7 +2141,14 @@ class Flattener {
         std::optional<std::int64_t> n = binding_dim_size(braw.is_valid() ? braw : start_value(asrc), di);
         // 非字面量绑定：取类型化绑定的第 di 维（deduceDimensionFromExp，NFTyping.mo:781-826）；该维未知时 omc 再对绑定求值，
         // 未做 → SKIP。
-        if (!n && nlbind) {
+        // 推导式 `{e for i in r}`（单迭代变量）：该维 = 范围长度。
+        if (!n && comprehension && dim_exps.size() == 1) {
+          const Exp& red = I_.absyn.exps[I_.absyn.exps[braw].args[0]];
+          if (red.iters.size() == 1)
+            if (std::optional<std::vector<std::int64_t>> seq = eval_range(red.iters[0].range, scode_scope_of(bscope), 0))
+              n = static_cast<std::int64_t>(seq->size());
+        }
+        if (!n && nlbind && !comprehension) {
           const std::vector<std::int64_t> sh = expr_shape(typed_rhs());
           if (result_.unsupported) return;
           if (sh.size() == dim_exps.size() && sh[di] >= 0) n = sh[di];
@@ -2184,9 +2192,13 @@ class Flattener {
     if (braw.is_valid() && !nlbind && !array_lit_matches(braw, dims, 0, cty.kind)) {
       set_unsupported("array binding shape/type mismatch"); return;
     }
+    // 参数 / 常量数组的推导式绑定 `{e for i in r}`：omc 逐元素取 `{…}[i]` 后代入迭代变量化简（applyIndexSubscriptArrayConstructor
+    // + replaceIterator，NFExpression.mo:1932-1952；C1 探针 `p = {i^2 for i in 1:n}` → `p[2] = 4.0`）。下面逐元素做；连续数组
+    // 的推导式绑定 omc 保留 `array(… for …)`（未做，走 typed 路 SKIP）。
+    const bool comp_spread = comprehension && spread;
     // 非构造子绑定（数组值 `= y` / `= 2*y`）：类型化一次 + 形状/变率守卫（对标 NFFlatten:700 / NFScalarize）。
     std::vector<Dimension> xd;
-    if (nlbind) {
+    if (nlbind && !comp_spread) {
       for (std::int64_t n : dims) { Dimension d; d.kind = DimKind::Integer; d.size = n; xd.push_back(d); }
       typed_rhs();
       if (result_.unsupported) return;   // inst_exp 已拒绝切片/常量数组/限定名等
@@ -2240,7 +2252,11 @@ class Flattener {
       if (vk == FlatVarKind::Parameter && !braw.is_valid() && !unbound_param_ok(v.attributes)) return;
       if (spread) {
         Id<Expr> eb;
-        if (nlbind) {
+        if (comp_spread) {
+          eb = comprehension_elem(braw, idx, bscope, bprefix);
+          if (result_.unsupported) return;
+          if (vk == FlatVarKind::Discrete || refs_runtime_var(eb)) { set_unsupported("array binding higher variability"); return; }
+        } else if (nlbind) {
           eb = simplify_expr(scalarize(rhsE, idx));   // 逐元素：y[i] / 2.0*y[i]（B1/B2/B4/B5/B8）
           if (result_.unsupported) return;
         } else {
@@ -6299,6 +6315,132 @@ class Flattener {
     return builtin_call(e, enclosing, prefix, Symbol{});
   }
 
+  // 模型语境的向量 / 矩阵积（形状规则 NFTypeCheck.checkBinaryOperationMul :1019-1093）：维已知时 omc 展开成积和（C1 探针：
+  // `A * v` → `{A[1,1] * v[1] + A[1,2] * v[2], …}`、`v * v` → `v[1] * v[1] + v[2] * v[2]`），求和下标 k 升序、左结合。
+  // 形状不符（omc 报错）/ 维未知 → SKIP。
+  Id<Expr> model_array_product(Id<Expr> a, Id<Expr> b) {
+    const std::vector<std::int64_t> sa = expr_shape(a), sb = expr_shape(b);
+    for (std::int64_t n : sa) if (n < 1) { set_unsupported("array product shape"); return lit_int(0); }
+    for (std::int64_t n : sb) if (n < 1) { set_unsupported("array product shape"); return lit_int(0); }
+    const bool real = expr_elem_kind(a) == TypeKind::Real || expr_elem_kind(b) == TypeKind::Real;
+    auto bin = [&](BinOp op, Id<Expr> x, Id<Expr> y) {
+      Expr r;
+      r.kind = ExprKind::Binary;
+      r.bin = op;
+      r.a = x;
+      r.b = y;
+      r.ty = real ? Type::real() : Type::integer();
+      return add(std::move(r));
+    };
+    // Σ_k a[ia(k)] * b[ib(k)]，k = 1..n
+    auto dot = [&](std::int64_t n, auto&& ia, auto&& ib) -> Id<Expr> {
+      Id<Expr> acc;
+      for (std::int64_t k = 1; k <= n; ++k) {
+        Id<Expr> x = scalarize(a, ia(k)), y = scalarize(b, ib(k));
+        if (real) { x = to_real(x); y = to_real(y); }
+        const Id<Expr> t = bin(BinOp::Mul, x, y);
+        acc = acc.is_valid() ? bin(BinOp::Add, acc, t) : t;
+      }
+      return simplify_expr(acc);
+    };
+    auto vec = [&](std::vector<Id<Expr>> els, std::vector<Dimension> dims) {
+      Expr r;
+      r.kind = ExprKind::Array;
+      r.ty = Type::array_of(real ? Type::real() : Type::integer(), std::move(dims));
+      r.args = std::move(els);
+      return add(std::move(r));
+    };
+    auto dim = [](std::int64_t n) { Dimension d; d.kind = DimKind::Integer; d.size = n; return d; };
+    using Ix = std::vector<std::int64_t>;
+    if (sa.size() == 1 && sb.size() == 1 && sa[0] == sb[0])   // 向量 · 向量 → 标量
+      return dot(sa[0], [](std::int64_t k) { return Ix{k}; }, [](std::int64_t k) { return Ix{k}; });
+    if (sa.size() == 2 && sb.size() == 1 && sa[1] == sb[0]) {   // 矩阵 · 向量 → 向量
+      std::vector<Id<Expr>> els;
+      for (std::int64_t i = 1; i <= sa[0]; ++i)
+        els.push_back(dot(sa[1], [i](std::int64_t k) { return Ix{i, k}; }, [](std::int64_t k) { return Ix{k}; }));
+      return vec(std::move(els), {dim(sa[0])});
+    }
+    if (sa.size() == 1 && sb.size() == 2 && sa[0] == sb[0]) {   // 向量 · 矩阵 → 向量
+      std::vector<Id<Expr>> els;
+      for (std::int64_t j = 1; j <= sb[1]; ++j)
+        els.push_back(dot(sa[0], [](std::int64_t k) { return Ix{k}; }, [j](std::int64_t k) { return Ix{k, j}; }));
+      return vec(std::move(els), {dim(sb[1])});
+    }
+    if (sa.size() == 2 && sb.size() == 2 && sa[1] == sb[0]) {   // 矩阵 · 矩阵 → 矩阵
+      std::vector<Id<Expr>> rows;
+      for (std::int64_t i = 1; i <= sa[0]; ++i) {
+        std::vector<Id<Expr>> els;
+        for (std::int64_t j = 1; j <= sb[1]; ++j)
+          els.push_back(dot(sa[1], [i](std::int64_t k) { return Ix{i, k}; }, [j](std::int64_t k) { return Ix{k, j}; }));
+        rows.push_back(vec(std::move(els), {dim(sb[1])}));
+      }
+      return vec(std::move(rows), {dim(sa[0]), dim(sb[1])});
+    }
+    set_unsupported("array product shape");
+    return lit_int(0);
+  }
+
+  // 推导式绑定 `{e for i in r}` 在 1 维元素 idx 处的值：迭代变量取 r 的第 idx 个值代入 e 并化简（replaceIterator）。
+  // 多迭代变量 / 多维 / 范围求不出 / e 是数组 → SKIP。
+  Id<Expr> comprehension_elem(Id<Exp> braw, const std::vector<std::int64_t>& idx, NodeId scope,
+                              const std::vector<Symbol>& prefix) {
+    const Exp red = I_.absyn.exps[I_.absyn.exps[braw].args[0]];   // 拷贝
+    if (red.iters.size() != 1 || idx.size() != 1 || !red.iters[0].range.is_valid()) {
+      set_unsupported("comprehension shape");
+      return lit_int(0);
+    }
+    const ForIndex it = red.iters[0];
+    if (loop_vars_.count(it.name.id) || stmt_iters_.count(it.name.id)) {
+      set_unsupported("shadowed comprehension iterator");
+      return lit_int(0);
+    }
+    const std::optional<std::vector<std::int64_t>> seq = eval_range(it.range, scode_scope_of(scope), 0);
+    if (!seq || idx[0] < 1 || static_cast<std::size_t>(idx[0]) > seq->size()) {
+      set_unsupported("comprehension range");
+      return lit_int(0);
+    }
+    loop_vars_[it.name.id] = (*seq)[static_cast<std::size_t>(idx[0]) - 1];
+    const Id<Expr> x = simplify_expr(inst_exp(red.a, scope, prefix));
+    loop_vars_.erase(it.name.id);
+    if (!result_.unsupported && !expr_shape(x).empty()) set_unsupported("array-valued comprehension body");
+    return x;
+  }
+
+  // sum / product(e for i in r)（单迭代变量、常量范围；常量整式已由 eval_reduction 折叠）：逐值代入 e 后连成 + / * 链
+  //（C1 探针：`sum(y[i] for i in 1:3)` → `y[1] + y[2] + y[3]`）。多迭代变量 / 范围求不出 / e 是数组 → SKIP。
+  Id<Expr> reduction_chain(Id<Exp> rid, BinOp op, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    const Exp red = I_.absyn.exps[rid];   // 拷贝
+    if (red.iters.size() != 1 || !red.iters[0].range.is_valid()) { set_unsupported("reduction iterators"); return lit_int(0); }
+    const ForIndex it = red.iters[0];
+    if (loop_vars_.count(it.name.id) || stmt_iters_.count(it.name.id)) { set_unsupported("shadowed reduction iterator"); return lit_int(0); }
+    const std::optional<std::vector<std::int64_t>> seq = eval_range(it.range, scode_scope_of(enclosing), 0);
+    if (!seq || seq->empty()) { set_unsupported("reduction range"); return lit_int(0); }
+    std::vector<Id<Expr>> xs;
+    bool real = false;
+    for (std::int64_t v : *seq) {
+      loop_vars_[it.name.id] = v;
+      const Id<Expr> x = simplify_expr(inst_exp(red.a, enclosing, prefix));
+      loop_vars_.erase(it.name.id);
+      if (result_.unsupported) return lit_int(0);
+      if (!expr_shape(x).empty()) { set_unsupported("array-valued reduction body"); return lit_int(0); }
+      real = real || result_.model.exprs[x].ty.kind == TypeKind::Real;
+      xs.push_back(x);
+    }
+    Id<Expr> acc;
+    for (Id<Expr> x : xs) {
+      if (real) x = to_real(x);
+      if (!acc.is_valid()) { acc = x; continue; }
+      Expr b;
+      b.kind = ExprKind::Binary;
+      b.bin = op;
+      b.a = acc;
+      b.b = x;
+      b.ty = real ? Type::real() : Type::integer();
+      acc = add(std::move(b));
+    }
+    return simplify_expr(acc);
+  }
+
   // 模型语境的数组内建：维已知时 omc 展开成数组字面量 / 运算链（ExpandExp + SimplifyExp；B1 探针：`fill(time, 3)` →
   // `{time, time, time}`、`identity(2)` → `{{1, 0}, {0, 1}}`、`transpose([1, 2; 3, 4])` → `{{1, 3}, {2, 4}}`、`sum(a)` →
   // `a[1] + a[2] + a[3]`）。fill / zeros / ones / identity / diagonal / transpose / vector → 嵌套数组字面量；sum / product →
@@ -6356,6 +6498,8 @@ class Flattener {
       if (!v || v->k != CVal::K::Int || v->i < 1) { set_unsupported("non-constant identity size"); return lit_int(0); }
       return build({v->i, v->i}, [&](const std::vector<std::int64_t>& ix) { return lit_int(ix[0] == ix[1] ? 1 : 0); });
     }
+    if ((name == "sum" || name == "product") && I_.absyn.exps[args[0]].kind == ExpKind::Reduction)
+      return reduction_chain(args[0], name == "sum" ? BinOp::Add : BinOp::Mul, enclosing, prefix);
     const Id<Expr> a = inst_exp(args[0], enclosing, prefix);
     if (result_.unsupported) return lit_int(0);
     const std::vector<std::int64_t> sh = expr_shape(a);

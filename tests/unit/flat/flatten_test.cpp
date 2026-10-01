@@ -118,12 +118,22 @@ YMC_TEST(flatten_integer_division_is_real) {
                std::string("class M\n  Integer i;\n  Integer j;\n  Real r;\nequation\n  r = /*Real*/(i) / /*Real*/(j);\nend M;\n"));
 }
 
-// 矩阵乘（两侧皆数组的 `*`）非逐元素 → SKIP（保 FAIL=0）。
-YMC_TEST(flatten_array_matrix_product_unsupported) {
-  bool uns = false;
-  std::string t = flatten_src("model M\n  Real a[2,2];\n  Real b[2,2];\n  Real c[2,2];\nequation\n  c = a * b;\nend M;\n", &uns);
-  YMC_CHECK(uns);
-  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+// 矩阵乘（两侧皆数组的 `*`，NFTypeCheck.checkBinaryOperationMul）：维已知时展开成积和、方程逐元素标量化；矩阵 · 向量、
+// 向量 · 向量、Σ 归约同理（C3 探针）。期望 = omc 1.25.0 实跑（2026-10-02）。
+YMC_TEST(flatten_array_matrix_product) {
+  YMC_CHECK_EQ(flatten_src("model M\n  Real a[2,2];\n  Real b[2,2];\n  Real c[2,2];\nequation\n  c = a * b;\nend M;\n"),
+               std::string("class M\n  Real a[1,1];\n  Real a[1,2];\n  Real a[2,1];\n  Real a[2,2];\n"
+                           "  Real b[1,1];\n  Real b[1,2];\n  Real b[2,1];\n  Real b[2,2];\n"
+                           "  Real c[1,1];\n  Real c[1,2];\n  Real c[2,1];\n  Real c[2,2];\nequation\n"
+                           "  c[1,1] = a[1,1] * b[1,1] + a[1,2] * b[2,1];\n  c[1,2] = a[1,1] * b[1,2] + a[1,2] * b[2,2];\n"
+                           "  c[2,1] = a[2,1] * b[1,1] + a[2,2] * b[2,1];\n  c[2,2] = a[2,1] * b[1,2] + a[2,2] * b[2,2];\n"
+                           "end M;\n"));
+  YMC_CHECK_EQ(flatten_src("model M\n  Real y[3];\n  Real v[2];\n  Real A[2,2];\n  Real s = sum(y[i] for i in 1:3);\n"
+                           "  Real w[2] = A * v;\n  Real d = v * v;\nend M;\n"),
+               std::string("class M\n  Real y[1];\n  Real y[2];\n  Real y[3];\n  Real v[1];\n  Real v[2];\n"
+                           "  Real A[1,1];\n  Real A[1,2];\n  Real A[2,1];\n  Real A[2,2];\n  Real s = y[1] + y[2] + y[3];\n"
+                           "  Real w[1];\n  Real w[2];\n  Real d = v[1] * v[1] + v[2] * v[2];\nequation\n"
+                           "  w = {A[1,1] * v[1] + A[1,2] * v[2], A[2,1] * v[1] + A[2,2] * v[2]};\nend M;\n"));
 }
 
 // 常量数组下标元素折叠（N-D 行主序 + 表达式内下标 + 整型→实型）。期望值取自实跑 omc 1.25.0。
@@ -2117,6 +2127,22 @@ YMC_TEST(flatten_model_array_builtins) {
       "equation\n  x = {1.0, 1.0, 1.0};\n  y = {{0.0, 0.0}, {0.0, 0.0}};\n  z = {1.0, 1.0, 1.0};\n"
       "  m = {{1.0, 0.0}, {0.0, 1.0}};\n  tr = {{1.0, 3.0}, {2.0, 4.0}};\n  d = {{1.0, 0.0}, {0.0, 2.0}};\n"
       "  w = {time, time, time};\n  v = {1.0, 2.0};\n  a[1] = time;\n  a[2] = time;\n  a[3] = time;\nend B2;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string(want));
+}
+
+YMC_TEST(flatten_parameter_comprehension_binding) {
+  // 参数 / 常量数组的推导式绑定逐元素代入迭代变量（applyIndexSubscriptArrayConstructor + replaceIterator）：`:` 维取范围
+  // 长度，`p0 * 1` 化简成 `p0`。期望 = omc 1.25.0 实跑 C4（2026-10-02）。
+  const char* src =
+      "model C4\n  parameter Integer n = 3;\n  parameter Real p[n] = {i^2 for i in 1:n};\n"
+      "  parameter Real q[:] = {2 * i for i in 1:4};\n  parameter Real p0 = 2;\n  parameter Real r[3] = {p0 * i for i in 1:3};\n"
+      "  constant Integer c[3] = {i + 1 for i in 1:3};\nend C4;\n";
+  const char* want =
+      "class C4\n  final parameter Integer n = 3;\n  parameter Real p[1] = 1.0;\n  parameter Real p[2] = 4.0;\n"
+      "  parameter Real p[3] = 9.0;\n  parameter Real q[1] = 2.0;\n  parameter Real q[2] = 4.0;\n  parameter Real q[3] = 6.0;\n"
+      "  parameter Real q[4] = 8.0;\n  parameter Real p0 = 2.0;\n  parameter Real r[1] = p0;\n  parameter Real r[2] = p0 * 2.0;\n"
+      "  parameter Real r[3] = p0 * 3.0;\n  constant Integer c[1] = 2;\n  constant Integer c[2] = 3;\n  constant Integer c[3] = 4;\n"
+      "end C4;\n";
   YMC_CHECK_EQ(flatten_src(src), std::string(want));
 }
 

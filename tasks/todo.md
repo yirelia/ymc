@@ -837,6 +837,10 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           `f(fill(1, 3))` 常量折叠成 3.0，此前被 fill 的 SKIP 遮住）。
           → 全 scodeinst PASS 374→384、nf-live 339→349（FAIL 0）；+1 单测（154）。未做：`max(a)` / `min(a)` 数组实参的符号调用、
           `linspace` 的 `array(… for i in …)` 形。
+    - [x] (58g) 向量 / 矩阵积与归约（2026-10-02）：模型语境 `*` 两侧皆数组按 checkBinaryOperationMul 的四种形状展开成积和
+          （k 升序、左结合，C3 探针）；`sum / product(e for i in r)` 逐值代入连成运算链；参数 / 常量数组的推导式绑定逐元素
+          代入迭代变量（`:` 维取范围长度，C4 探针）。连续数组的推导式绑定（omc 保留 `array(… for …)`）仍 SKIP。
+          → 全 scodeinst PASS 384→391、nf-live 349→368（FAIL 0）；+1 单测（155，矩阵积旧的 SKIP 断言改为对拍输出）。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

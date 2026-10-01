@@ -476,5 +476,12 @@
 "OperationSub1.mo",
 "ceval2.mo",
 "const7.mo",
-"dim13.mo"
+"dim13.mo",
+"ArrayEquation1.mo",
+"InStreamReduction1.mo",
+"OperationMatrixProduct1.mo",
+"OperationMatrixProduct2.mo",
+"OperationMatrixVectorProduct1.mo",
+"OperationVectorMatrixProduct1.mo",
+"OperationVectorProduct1.mo"
 ]
