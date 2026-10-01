@@ -537,9 +537,32 @@ class Flattener {
     if (def.def.external.present) set_unsupported("external function");
     check_class_rules(def, scode_scope_of(inst_node));
     if (result_.unsupported) return;
+    // import（表达式里的名字经 find_scode_element_at → import_lookup 解析；类型名 / 基类名的 import 在 inst，任务卡
+    // T-S3-06）：`.*` 的包在 initImports 时立即解析，找不到 → omc 报错（R12 §5 探针 p19a）→ SKIP；import 名被本地元素遮蔽：
+    // 1.25.0 静默、testsuite 期望 LOOKUP_SHADOWING 告警（ImportShadowing1 在 FAILINGTESTFILES）→ SKIP 不入分歧。
     for (Id<SElement> eid : def.def.elements) {
-      SElementKind k = I_.scode.elems[eid].kind;
-      if (k == SElementKind::Import) set_unsupported("import");   // v1 未做 import 解析
+      const SElement& im = I_.scode.elems[eid];
+      if (im.kind != SElementKind::Import) continue;
+      if (im.imp.wildcard) {
+        ScodeScope ds;
+        const Id<SElement> pkg = resolve_top_path(im.imp.path, ds);
+        if (!pkg.is_valid() || I_.scode.elems[pkg].kind != SElementKind::Class) { set_unsupported("unresolved import"); break; }
+        continue;
+      }
+      std::vector<Symbol> names;
+      if (!im.imp.multi.empty()) {
+        for (std::size_t k = 0; k < im.imp.multi.size(); ++k)
+          names.push_back(k < im.imp.multi_alias.size() && im.imp.multi_alias[k].is_valid() ? im.imp.multi_alias[k]
+                                                                                              : im.imp.multi[k]);
+      } else {
+        names.push_back(im.imp.alias.is_valid() ? im.imp.alias : (im.imp.path.empty() ? Symbol{} : im.imp.path.back()));
+      }
+      for (Id<SElement> o : def.def.elements) {
+        const SElement& oe = I_.scode.elems[o];
+        if ((oe.kind == SElementKind::Class || oe.kind == SElementKind::Component) &&
+            std::find(names.begin(), names.end(), oe.name) != names.end())
+          set_unsupported("import shadowed by local element");
+      }
     }
     // 本类是 expandable 连接器：其直属成员 potentially present（checkDeclaredComponentAttributes，NFAttributes.mo:411-417）。
     const bool exp_class = def.restriction == SRestriction::ExpandableConnector;
@@ -3200,21 +3223,94 @@ class Flattener {
     return s;
   }
 
-  // 在作用域链（内→外）+ 顶层 program 里找名为 name 的类或组件元素（内层优先 → 支持遮蔽）。
+  // 在作用域链（内→外）+ 顶层 program 里找名为 name 的类或组件元素（内层优先 → 支持遮蔽）；每层本地元素之后查该层的
+  // import（import_lookup）。
   Id<SElement> find_scode_element(Symbol name, const ScodeScope& scope) {
-    auto scan = [&](const std::vector<Id<SElement>>& elems) -> Id<SElement> {
-      for (Id<SElement> e : elems) {
-        const SElement& el = I_.scode.elems[e];
-        if (el.name == name && (el.kind == SElementKind::Class || el.kind == SElementKind::Component)) return e;
+    ScodeScope unused;
+    return find_scode_element_at(name, scope, unused);
+  }
+
+  // 顶层类路径 `A.B.c`（import 目标永远从顶层查，NFLookup.lookupImport :276-287）：首段在 program 里找类，其后逐段下降（中间段
+  // 须是类，末段可是类或组件）。def_scope = 末段的定义作用域链（内→外）。找不到 → invalid。
+  Id<SElement> resolve_top_path(const std::vector<Symbol>& path, ScodeScope& def_scope) {
+    def_scope.clear();
+    if (path.empty()) return {};
+    Id<SElement> e;
+    for (Id<SElement> x : I_.scode.program)
+      if (I_.scode.elems[x].name == path[0] && I_.scode.elems[x].kind == SElementKind::Class) { e = x; break; }
+    for (std::size_t k = 1; k < path.size() && e.is_valid(); ++k) {
+      if (I_.scode.elems[e].kind != SElementKind::Class) return {};
+      Id<SElement> nxt;
+      for (Id<SElement> c : I_.scode.elems[e].def.elements) {
+        const SElement& ce = I_.scode.elems[c];
+        if (ce.name == path[k] && (ce.kind == SElementKind::Class || ce.kind == SElementKind::Component)) { nxt = c; break; }
       }
-      return Id<SElement>{};
-    };
-    for (Id<SElement> cls : scope) {
-      Id<SElement> f = scan(I_.scode.elems[cls].def.elements);
-      if (f.is_valid()) return f;
-      if (I_.scode.elems[cls].is_encapsulated) return Id<SElement>{};   // encapsulated 边界（MLS §5.3.1）
+      if (!nxt.is_valid()) return {};
+      def_scope.insert(def_scope.begin(), e);
+      e = nxt;
     }
-    return scan(I_.scode.program);   // 顶层
+    return e;
+  }
+  // 类 cls 自己的 import 按名 name 解析（MLS §13.2；NFImport / NFClassTree，R12 §5）：限定 / 重命名 / 组导入优先于 `.*`
+  //（addImportConflict，NFClassTree.mo:1757-1800）；同一档里两个同名项 = 冲突，用到才报错 → SKIP；名字命中但目标解析不到
+  //（含内建函数别名 `import sinx = sin`）→ omc LOOKUP_IMPORT_ERROR / 未做 → SKIP。def_scope = 目标的定义作用域链。
+  // import 不被继承（只看 cls 自己的元素）。
+  Id<SElement> import_lookup(Symbol name, Id<SElement> cls, ScodeScope& def_scope) {
+    Id<SElement> found;
+    ScodeScope fds;
+    // 同一档里第二个同名项即冲突——不论目标是否相同、解析得到与否（addImportConflict 的 (UNRESOLVED, UNRESOLVED) /
+    // (RESOLVED, RESOLVED)，NFClassTree.mo:1757-1800；用到才报错）。
+    int matches = 0;
+    bool unresolved = false;
+    auto take = [&](Id<SElement> t, ScodeScope ds) {
+      found = t;
+      fds = std::move(ds);
+    };
+    for (Id<SElement> eid : I_.scode.elems[cls].def.elements) {   // 限定 / 重命名 / 组导入
+      const SElement& el = I_.scode.elems[eid];
+      if (el.kind != SElementKind::Import || el.imp.wildcard) continue;
+      std::vector<std::vector<Symbol>> targets;
+      if (!el.imp.multi.empty()) {
+        for (std::size_t k = 0; k < el.imp.multi.size(); ++k) {
+          const bool aliased = k < el.imp.multi_alias.size() && el.imp.multi_alias[k].is_valid();
+          if ((aliased ? el.imp.multi_alias[k] : el.imp.multi[k]) != name) continue;
+          std::vector<Symbol> p = el.imp.path;
+          p.push_back(el.imp.multi[k]);
+          targets.push_back(std::move(p));
+        }
+      } else if (el.imp.alias.is_valid() ? el.imp.alias == name : (!el.imp.path.empty() && el.imp.path.back() == name)) {
+        targets.push_back(el.imp.path);
+      }
+      for (const std::vector<Symbol>& p : targets) {
+        ++matches;
+        ScodeScope ds;
+        const Id<SElement> t = resolve_top_path(p, ds);
+        if (t.is_valid()) take(t, std::move(ds));
+        else unresolved = true;
+      }
+    }
+    if (matches == 0) {
+      for (Id<SElement> eid : I_.scode.elems[cls].def.elements) {   // `.*`：包里的全部类与组件（不滤 protected，R12 p40）
+        const SElement& el = I_.scode.elems[eid];
+        if (el.kind != SElementKind::Import || !el.imp.wildcard) continue;
+        ScodeScope ds;
+        const Id<SElement> pkg = resolve_top_path(el.imp.path, ds);
+        if (!pkg.is_valid() || I_.scode.elems[pkg].kind != SElementKind::Class) continue;   // flatten_class 已拒
+        for (Id<SElement> c : I_.scode.elems[pkg].def.elements) {
+          const SElement& ce = I_.scode.elems[c];
+          if (ce.name != name || (ce.kind != SElementKind::Class && ce.kind != SElementKind::Component)) continue;
+          ScodeScope cds = ds;
+          cds.insert(cds.begin(), pkg);
+          ++matches;
+          take(c, std::move(cds));
+          break;
+        }
+      }
+    }
+    if (matches >= 2) { set_unsupported("conflicting imports"); return {}; }
+    if (unresolved) { set_unsupported("unresolved import"); return {}; }
+    if (found.is_valid()) def_scope = std::move(fds);
+    return found;
   }
 
   // 单段类型名解析到记录类（restriction Record）；否则 invalid。限定记录类型暂不做。
@@ -3232,8 +3328,9 @@ class Flattener {
                           Id<SElement>& out_comp, ScodeScope& out_scope, bool allow_param = false,
                           bool allow_any = false) {
     if (parts.empty()) return false;
-    ScodeScope cur = leading_dot ? ScodeScope{} : scope;
-    Id<SElement> el = find_scode_element(parts[0], cur);
+    // 首段命中处的定义作用域链（经 import 命中 = 目标包的链）：被引常量的绑定在其声明处的词法作用域里求值。
+    ScodeScope cur;
+    Id<SElement> el = find_scode_element_at(parts[0], leading_dot ? ScodeScope{} : scope, cur);
     if (!el.is_valid()) return false;
     for (std::size_t idx = 1; idx < parts.size(); ++idx) {
       if (I_.scode.elems[el].kind != SElementKind::Class) return false;   // 中间段必须是类
@@ -4234,7 +4331,9 @@ class Flattener {
     for (const CrefPart& p : fn.parts) parts.push_back(p.name);
     if (parts.empty()) return std::nullopt;
     ScodeScope ds;
-    if (!find_scode_element_at(parts[0], fn.leading_dot ? ScodeScope{} : scope, ds).is_valid()) return std::nullopt;
+    const Id<SElement> first = find_scode_element_at(parts[0], fn.leading_dot ? ScodeScope{} : scope, ds);
+    if (!first.is_valid()) return std::nullopt;
+    parts[0] = I_.scode.elems[first].name;   // 重命名 import `import g = P.f` 的 g → 真名 f
     if (ds.empty()) return parts;
     auto qualified = [&](std::vector<Symbol> head) {
       head.insert(head.end(), parts.begin(), parts.end());
@@ -5333,6 +5432,9 @@ class Flattener {
           def_scope.assign(scope.begin() + static_cast<std::ptrdiff_t>(k), scope.end());
           return e;
         }
+      // 本层的 import（本地元素之后、外层之前：同处一张 LookupTree，本地优先，R12 §2.1）。
+      if (const Id<SElement> im = import_lookup(name, scope[k], def_scope); im.is_valid()) return im;
+      if (result_.unsupported) return {};
       // encapsulated 类：名字首段的查找止于本类（MLS §5.3.1；Encapsulated4 的 `fn` 在外层 → omc "not found"）。
       if (I_.scode.elems[scope[k]].is_encapsulated) return {};
     }
@@ -6438,8 +6540,12 @@ class Flattener {
           if (!p.subscripts.empty()) { ok = false; break; }
           names.push_back(p.name);
         }
-        // 限定名在**声明处**作用域解析（继承成员 = 基类，const16 的 `P.P.i` 要在 P.M 里解析而非派生类）。
-        const NodeId qres = decl_scope_.is_valid() && !I_.nodes[decl_scope_].is_empty() ? decl_scope_ : enclosing;
+        // 限定名在**声明处**作用域解析（继承成员 = 基类，const16 的 `P.P.i` 要在 P.M 里解析而非派生类）。本地组件节点的
+        // parent_scope 为空（inst 只给继承成员记基类实例）→ 声明处即 enclosing。
+        const bool inherited_decl = decl_scope_.is_valid() && !I_.nodes[decl_scope_].is_empty() &&
+                                    I_.nodes[decl_scope_].parent_scope.is_valid() &&
+                                    !I_.nodes[I_.nodes[decl_scope_].parent_scope].is_empty();
+        const NodeId qres = inherited_decl ? decl_scope_ : enclosing;
         Id<SElement> qcomp;
         ScodeScope qscope;
         if (ok && resolve_qual_const(names, c.leading_dot, scode_scope_of(qres), qcomp, qscope)) {

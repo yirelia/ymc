@@ -490,5 +490,6 @@
 "ExternalFunctionImplicit2.mo",
 "FunctionMultiOutput1.mo",
 "FunctionMultiOutput5.mo",
-"Wild1.mo"
+"Wild1.mo",
+"ImportUnqualified3.mo"
 ]

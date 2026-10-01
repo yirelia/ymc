@@ -851,6 +851,11 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
     - [x] (58j) 元组方程 / 元组赋值（2026-10-02）：`(a, , c) := f(…)` / `(a, b) = f(…)` 实参全常量 → 用户函数求值后按
           simplifyTupleElement 逐元素拆开（空位跳过）；否则保留元组形、空位打 `_`（T1 / T2 探针）。求值器可取全部输出。
           → 全 scodeinst PASS 394→398、nf-live 388→397（FAIL 0）；+1 单测（158）。
+    - [x] (58k) import（表达式侧，2026-10-02）：flatten 的 SCODE 名字解析（find_scode_element_at）在每层本地元素之后查该层
+          import（限定 / 重命名 / 组导入优先于 `.*`，同档两项 = 冲突用到即 SKIP，目标从顶层解析，不被继承）；经 import 的常量
+          在目标包的作用域求值、函数按真实路径发射（`A.B.f`）。顺带：本地组件绑定里的名字按 enclosing 的词法链解析（此前
+          只查顶层）。类型名 / 基类名经 import 属 inst → 任务卡 `docs/tasks/T-S3-06-imports.md`。
+          → 全 scodeinst PASS 398→403、nf-live 397→400（FAIL 0）；+1 单测（159）。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

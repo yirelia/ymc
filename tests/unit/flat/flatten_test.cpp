@@ -2203,6 +2203,22 @@ YMC_TEST(flatten_tuple_targets) {
                            "equation\n  (w, _, k) = f(time);\nalgorithm\n  (_, u) := f(time);\n  v := f(time)[1];\nend T2;\n"));
 }
 
+YMC_TEST(flatten_imports_in_expressions) {
+  // 表达式里经 import 的名字（MLS §13.2；NFImport / R12 §5）：限定 / 重命名 / `.*` 的常量内联，经 `.*` 的函数按真实路径
+  // 发射（`A.B.f`），未被用到的同名冲突 import 不报错。期望 = omc 1.25.0 实跑 IM1（2026-10-02）。
+  const char* src =
+      "package A\n  constant Real PI = 3.14;\n  constant Real e = 2.7;\n  package B\n    constant Real c = 3.0e8;\n"
+      "    function f\n      input Real x;\n      output Real y;\n    algorithm\n      y := 2 * x;\n    end f;\n  end B;\n"
+      "  model M\n    Real z;\n  end M;\n  model N\n    Real z;\n  end N;\nend A;\n"
+      "model IM1\n  import A.PI;\n  import my_e = A.e;\n  import A.B.*;\n  import Q = A.M;\n  import Q = A.N;\n"
+      "  Real x = 3 * PI;\n  Real x2 = my_e;\n  Real x3 = c;\n  Real x4 = f(time);\n  parameter Real x5 = f(2);\nend IM1;\n";
+  const char* want =
+      "function A.B.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend A.B.f;\n\n"
+      "class IM1\n  Real x = 9.42;\n  Real x2 = 2.7;\n  Real x3 = 3e8;\n  Real x4 = A.B.f(time);\n  parameter Real x5 = 4.0;\n"
+      "end IM1;\n";
+  YMC_CHECK_EQ(flatten_src(src), std::string(want));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);
