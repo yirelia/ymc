@@ -703,28 +703,70 @@ class Flattener {
             continue;
           }
           if (I_.comps[cid].attributes.connector != SConnectorType::Potential) { set_unsupported("flow/stream on composite array"); continue; }
-          if (I_.comps[cid].binding.kind == BindingKind::Raw && I_.comps[cid].binding.raw_exp.is_valid()) {
-            set_unsupported("composite array whole binding"); continue;
-          }
-          // 数组修饰分发（phase 2b）：只处理组件自身声明修饰 cel.mod（`a[3](x={…})`）；外来 matched/派生修饰的数组
-          // 分发留后续 → SKIP。
-          bool ext_mod = false;
+          // 整体绑定（外来修饰优先，否则组件自身声明）：记录数组 `R ra[2] = {r1, R(3, 4)}` / `= rs` 逐元素取第 i 个元素
+          //（flattenArray → getRecordBindings 的 nthRecordElement，NFFlatten.mo:1016-1021、:902-905；splitRecordCref 先把
+          // 数组 cref 展开成元素 cref，:1038-1059），元素再按标量记录绑定拆字段（build_record_ctor_mod）。非记录 → SKIP。
+          Id<Exp> wraw;
+          NodeId wscope = inst_node;
+          std::vector<Symbol> wvpfx = prefix;
           for (Id<SMod> m : matched)
-            if (!I_.scode.mods[m].subs.empty() || I_.scode.mods[m].binding.is_valid()) ext_mod = true;
-          if (ext_mod || !I_.comps[cid].derived_mods.empty()) { set_unsupported("composite array external modifier"); continue; }
+            if (I_.scode.mods[m].binding.is_valid()) { wraw = I_.scode.mods[m].binding; wscope = ctx.scope; wvpfx = ctx.vprefix; break; }
+          if (!wraw.is_valid() && I_.comps[cid].binding.kind == BindingKind::Raw && I_.comps[cid].binding.raw_exp.is_valid())
+            wraw = I_.comps[cid].binding.raw_exp;
+          if (wraw.is_valid() && r != SRestriction::Record) { set_unsupported("composite array whole binding"); continue; }
+          // 数组修饰分发（Modifier.propagate，NFModifier.mo:444-513）：组件自身声明修饰 cel.mod（`a[3](x={…})`，作用域 = 本
+          // 实例）或外来修饰（`b(a(x={…}))`，作用域 = 修饰所在实例，BindingArray3/6）逐元素切分。派生修饰 / 两套同时有
+          //（异作用域）→ SKIP。有整体绑定时字段修饰先去掉绑定（字段绑定由整体绑定给，同标量记录，RM 探针），剩下的属性须与
+          // 整体绑定同作用域。
+          std::vector<Id<SMod>> ext_mods;
+          for (Id<SMod> m : matched)
+            if (!I_.scode.mods[m].subs.empty()) ext_mods.push_back(m);
+          if (!I_.comps[cid].derived_mods.empty()) { set_unsupported("composite array external modifier"); continue; }
           const bool own_mod = cel.mod.is_valid() && !I_.scode.mods[cel.mod].subs.empty();
+          if (own_mod && !ext_mods.empty()) { set_unsupported("composite array stacked modifier scopes"); continue; }
+          std::vector<Id<SMod>> dmods = own_mod ? std::vector<Id<SMod>>{cel.mod} : ext_mods;
+          const NodeId dscope = own_mod ? inst_node : ctx.scope;
+          const std::vector<Symbol> dvpfx = own_mod ? prefix : ctx.vprefix;
+          if (wraw.is_valid()) {
+            std::vector<Id<SMod>> kept;
+            for (Id<SMod> m : dmods) {
+              bool ok = true;
+              const Id<SMod> f = strip_field_bindings(m, ok);
+              if (!ok) set_unsupported("record binding + final/each field binding");
+              else if (f.is_valid() && (dscope != wscope || dvpfx != wvpfx)) set_unsupported("record binding + field modifier scopes");
+              else if (f.is_valid()) kept.push_back(f);
+            }
+            if (result_.unsupported) continue;
+            dmods = std::move(kept);
+          }
           std::vector<std::int64_t> adims;
           const ScodeScope adscope = scode_scope_of(inst_node);
           bool okdim = true;
-          for (Id<Exp> d : cel.attr.dims) if (!eval_dim(d, adims, adscope)) okdim = false;
-          for (Id<Exp> d : cel.type.dims) if (!eval_dim(d, adims, adscope)) okdim = false;
+          {
+            // `:` 维按整体绑定字面量的形状推（deduceDimensionFromExp，NFTyping.mo:781-826；RecordBinding5 `R1 t[:] = {r1}`）。
+            std::optional<std::vector<std::int64_t>> bd;
+            if (wraw.is_valid()) bd = lit_dims(wraw);
+            std::size_t k = 0;
+            for (const std::vector<Id<Exp>>* ds : {&cel.attr.dims, &cel.type.dims})
+              for (Id<Exp> d : *ds) {
+                if (I_.absyn.exps[d].kind == ExpKind::Colon) {
+                  if (bd && k < bd->size()) adims.push_back((*bd)[k]); else okdim = false;
+                } else if (!eval_dim(d, adims, adscope)) {
+                  okdim = false;
+                }
+                ++k;
+              }
+          }
           if (!okdim || adims.empty()) { set_unsupported("non-literal array dimension"); continue; }
           // 元素数上限：大复合数组 omc 常不标量化（-nfScalarize），ymc 摊分会爆量 → 超阈值 SKIP。
           std::int64_t total = 1;
           for (std::int64_t d : adims) total *= (d > 0 ? d : 0);
           if (total > 1024) { set_unsupported("composite array too large"); continue; }
           if (total == 0) continue;   // 零长度复合数组：没有元素（ZeroDimUnconnectedFlow1/2）
-          if (own_mod && !split_mod_ok(cel.mod, ci, TypeKind::Unknown, adims, inst_node, prefix)) {
+          bool shape_ok = true;
+          for (Id<SMod> m : dmods)
+            if (!split_mod_ok(m, ci, TypeKind::Unknown, adims, dscope, dvpfx)) shape_ok = false;
+          if (!shape_ok) {
             if (!result_.unsupported) set_unsupported("composite array modifier shape/type");
             continue;
           }
@@ -741,13 +783,25 @@ class Flattener {
             achild.flow_inherited = ctx.flow_inherited;   // 复合数组上的 flow 前缀仍在上方守卫处 SKIP
             // 数组各元素共用同一组件节点（present 标记按节点，YmcExpNode1 探针）；expandable 组件的成员重起链。
             if (!r_exp) achild.pp_chain = pp_self;
-            if (own_mod) {
+            if (wraw.is_valid()) {
+              // 该元素的整体绑定 = 绑定式的第 aidx 个元素（字面量下降 / 数组 cref 补下标），再拆成字段修饰（排首位：字段绑定取它）。
+              const Id<Exp> er = array_scalar_elem(wraw, aidx, 0);
+              const Id<SMod> cm = er.is_valid() ? build_record_ctor_mod(er, ci, cdef, wscope) : Id<SMod>{};
+              if (!cm.is_valid()) { set_unsupported("composite array whole binding"); break; }
+              achild.mods.push_back(cm);
+              achild.scope = wscope;
+              achild.vprefix = wvpfx;
+            }
+            if (!dmods.empty()) {
               // 该元素的合成修饰：每个子修饰绑定按 aidx 下降取标量（`x={1,2,3}`→`x=vi`；each 保持原值）。
-              Id<SMod> em = distribute_mod(cel.mod, aidx);
-              if (!em.is_valid()) { set_unsupported("composite array modifier distribution"); break; }
-              achild.mods = {em};
-              achild.scope = inst_node;
-              achild.vprefix = prefix;
+              for (Id<SMod> m : dmods) {
+                const Id<SMod> em = distribute_mod(m, aidx);
+                if (!em.is_valid()) { set_unsupported("composite array modifier distribution"); break; }
+                achild.mods.push_back(em);
+              }
+              if (result_.unsupported) break;
+              achild.scope = dscope;
+              achild.vprefix = dvpfx;
             }
             flatten_class(ci, name, cps, is_prot, achild, inners);
             std::size_t k = adims.size();
@@ -2738,7 +2792,10 @@ class Flattener {
       Expr lhs;
       lhs.kind = ExprKind::Cref;
       lhs.ty = cty;
-      for (Symbol s : name) lhs.cref.parts.push_back({s, {}});
+      // 左侧带逐段下标（复合数组元素 `a[1].x = {…}`，CA1 探针；曾丢下标错出 `a.x = …`）。
+      const std::vector<std::vector<Id<Expr>>> lsubs = psubs_to_exprs(psubs);
+      for (std::size_t k = 0; k < name.size(); ++k)
+        lhs.cref.parts.push_back({name[k], k < lsubs.size() ? lsubs[k] : std::vector<Id<Expr>>{}});
       FlatEquation fe;
       fe.kind = FlatEqKind::Equality;
       fe.a = add(std::move(lhs));
@@ -7973,10 +8030,17 @@ class Flattener {
     const Exp& call = I_.absyn.exps[callraw];
     if (call.kind != ExpKind::Call) return {};
     if (call.partial_fn || call.call_suffix.is_valid()) return {};
-    // 构造函数名末段必须 == 记录类名（否则是返回记录的用户函数等 → SKIP）。
+    // 构造函数须解析到组件类型的同一记录类（返回记录的用户函数 → SKIP；同名异包记录 `Heating.Stage(…)` 绑给
+    // `Cooling.Stage`：omc 按 Heating 的字段序 / 缺省构造后 typeCastRecord，RecordOrder3——只比末段名会错用目标类的缺省 → SKIP）。
     const Cref& fn = I_.absyn.crefs[call.cref];
-    if (fn.parts.empty() || !fn.parts.back().subscripts.empty()) return {};
-    if (fn.parts.back().name != I_.scode.elems[cdef].name) return {};
+    if (fn.parts.empty()) return {};
+    std::vector<Symbol> fpath;
+    for (const CrefPart& p : fn.parts) {
+      if (!p.subscripts.empty()) return {};
+      fpath.push_back(p.name);
+    }
+    ScodeScope fds;
+    if (resolve_class_path(fpath, fn.leading_dot, scode_scope_of(scope), fds) != cdef) return {};
     // 记录含 extends（继承字段的构造序/约束）本桶未验证 → SKIP（RecordExtends）。
     for (Id<SElement> eid : I_.scode.elems[cdef].def.elements)
       if (I_.scode.elems[eid].kind == SElementKind::Extends) return {};

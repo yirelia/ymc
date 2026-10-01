@@ -2345,6 +2345,46 @@ YMC_TEST(flatten_record_equation_type_match) {
   YMC_CHECK_EQ(out, std::string("<unsupported:record equation type cast>"));
 }
 
+YMC_TEST(flatten_composite_array_modifiers) {
+  // 复合数组的外来修饰逐元素切分（Modifier.propagate，NFModifier.mo:444-513）；复合数组元素里 Var 数组绑定移成方程时左侧带
+  // 逐段下标（曾错出 `a.x = …`）。期望 = omc 1.25.0 实跑 EM1 / CA1（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model A\n  Real x;\n  Real y = 1;\nend A;\nmodel B\n  A a[2];\nend B;\n"
+                           "model EM1\n  B b[2](a.x = {{1, 2}, {3, 4}}, a(each y = 5));\n  B c(a(x = {6, 7}));\nend EM1;\n"),
+               std::string("class EM1\n  Real b[1].a[1].x = 1.0;\n  Real b[1].a[1].y = 5.0;\n  Real b[1].a[2].x = 2.0;\n"
+                           "  Real b[1].a[2].y = 5.0;\n  Real b[2].a[1].x = 3.0;\n  Real b[2].a[1].y = 5.0;\n"
+                           "  Real b[2].a[2].x = 4.0;\n  Real b[2].a[2].y = 5.0;\n  Real c.a[1].x = 6.0;\n  Real c.a[1].y = 1.0;\n"
+                           "  Real c.a[2].x = 7.0;\n  Real c.a[2].y = 1.0;\nend EM1;\n"));
+  YMC_CHECK_EQ(flatten_src("model A\n  Real x[2];\nend A;\nmodel CA1\n  A a[2](x = {{1, 2}, {3, 4}});\nend CA1;\n"),
+               std::string("class CA1\n  Real a[1].x[1];\n  Real a[1].x[2];\n  Real a[2].x[1];\n  Real a[2].x[2];\nequation\n"
+                           "  a[1].x = {1.0, 2.0};\n  a[2].x = {3.0, 4.0};\nend CA1;\n"));
+}
+
+YMC_TEST(flatten_record_array_whole_binding) {
+  // 记录数组整体绑定逐元素取第 i 个元素再拆字段（nthRecordElement + splitRecordCref，NFFlatten.mo:902-905 / :1038-1059）；
+  // `:` 维按绑定字面量推；字段属性修饰合并。构造函数须解析到同一记录类（同名异包 → SKIP）。期望 = omc 1.25.0 实跑
+  // CW1 / CI2（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("record R\n  Real x;\n  Real y = 9;\nend R;\n"
+                           "model CW1\n  parameter R r1 = R(1, 2);\n  parameter R rs[2] = {R(3, 4), r1};\n  parameter R rt[2] = rs;\n"
+                           "  parameter R ru[:] = {r1, R(5), rs[1]};\n  R rv[2](each x(start = 1)) = {r1, r1};\n"
+                           "  R rw[2](x = {7, 8}) = rs;\nend CW1;\n"),
+               std::string("class CW1\n  parameter Real r1.x = 1.0;\n  parameter Real r1.y = 2.0;\n  parameter Real rs[1].x = 3.0;\n"
+                           "  parameter Real rs[1].y = 4.0;\n  parameter Real rs[2].x = r1.x;\n  parameter Real rs[2].y = r1.y;\n"
+                           "  parameter Real rt[1].x = rs[1].x;\n  parameter Real rt[1].y = rs[1].y;\n"
+                           "  parameter Real rt[2].x = rs[2].x;\n  parameter Real rt[2].y = rs[2].y;\n"
+                           "  parameter Real ru[1].x = r1.x;\n  parameter Real ru[1].y = r1.y;\n  parameter Real ru[2].x = 5.0;\n"
+                           "  parameter Real ru[2].y = 9.0;\n  parameter Real ru[3].x = rs[1].x;\n  parameter Real ru[3].y = rs[1].y;\n"
+                           "  Real rv[1].x(start = 1.0) = r1.x;\n  Real rv[1].y = r1.y;\n  Real rv[2].x(start = 1.0) = r1.x;\n"
+                           "  Real rv[2].y = r1.y;\n  Real rw[1].x = rs[1].x;\n  Real rw[1].y = rs[1].y;\n  Real rw[2].x = rs[2].x;\n"
+                           "  Real rw[2].y = rs[2].y;\nend CW1;\n"));
+  bool uns = false;
+  const std::string out = flatten_src(
+      "package P1\n  record S\n    Real a = 1;\n    Real b = 2;\n  end S;\nend P1;\npackage P2\n  record S\n    Real b = 3;\n"
+      "    Real a = 4;\n  end S;\nend P2;\nmodel CI2\n  P1.S s = P2.S(a = time);\nend CI2;\n",
+      &uns);
+  YMC_CHECK(uns);   // omc：s.a = time、s.b = 3.0（按 P2.S 缺省构造再转型）；只比末段名会错出 s.b = 2.0
+  YMC_CHECK_EQ(out, std::string("<unsupported:composite/record binding>"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

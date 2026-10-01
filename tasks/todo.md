@@ -875,6 +875,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           SKIP）；顺带修掉记录常量折叠路丢字段属性（`R d(y(min = 0)) = R(4, 5)` 曾丢 min）。不同记录类的等式按
           matchComplexTypes 分类：同名同序原样，要 typeCastRecord → SKIP（RecordOrder2 由此从 SKIP 掉成 FAIL 的口子堵上）。
           if 式记录绑定（参数条件选支 + 标结构）留后续。→ 全 scodeinst PASS 409→412、nf-live 411→413（FAIL 0）；+2 单测（164）。
+    - [x] (58p) 复合数组外来修饰 + 记录数组整体绑定（2026-10-02）：外来修饰（`b(a(x={…}))`）同自身修饰逐元素切分（作用域 =
+          修饰所在实例）；记录数组整体绑定 `R ra[2] = {r1, R(3, 4)}` / `= rs` 逐元素取第 i 个（字面量下降 / 数组 cref 补下标）
+          再按标量记录绑定拆字段，`:` 维按绑定字面量推，字段属性合并。顺带修两处静默错：复合数组元素里 Var 数组绑定移成
+          方程时左侧丢逐段下标（`a.x = …` → `a[1].x = …`，CA1 探针）；记录构造只比末段名（同名异包 `P2.S(…)` 绑给 `P1.S`
+          会错用目标类缺省，CI2 探针）→ 改为解析到同一记录类。→ 全 scodeinst PASS 412→419（FAIL 16 不变）、nf-live 413；
+          +2 单测（166）。记录数组跨元素取字段 `r.x`（CevalRecordArray1/5）留后续。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

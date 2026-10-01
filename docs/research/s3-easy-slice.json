@@ -497,5 +497,12 @@
 "SubscriptCevalIndexRange1.mo",
 "CevalRecord2.mo",
 "CevalRecord4.mo",
-"RecordBinding4.mo"
+"RecordBinding4.mo",
+"BindingArray3.mo",
+"BindingArray4.mo",
+"BindingArray6.mo",
+"CevalFuncRecord6.mo",
+"DimUnknown3.mo",
+"RecordBinding2.mo",
+"Ticket5249.mo"
 ]
