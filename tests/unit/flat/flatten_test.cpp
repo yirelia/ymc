@@ -2622,6 +2622,17 @@ YMC_TEST(flatten_array_comprehensions) {
                            "equation\n  when time > 1.0 then\n    i = 2;\n  end when;\nend BT1;\n"));
 }
 
+YMC_TEST(flatten_linspace_inlined_as_comprehension) {
+  // linspace 早内联成 `array(x1 + (x2-x1)*(i-1)/(n-1) for i in 1:n)` 再化简；参数数组逐元素求值。期望 = omc 1.25.0 实跑 LS1
+  //（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model LS1\n  parameter Integer n = 3;\n  Real l[4] = linspace(0, 1, 4);\n"
+                           "  parameter Real q[3] = linspace(1, 2, 3);\n  Real v[n] = linspace(-1, time, n);\nequation\nend LS1;\n"),
+               std::string("class LS1\n  final parameter Integer n = 3;\n  Real l[1];\n  Real l[2];\n  Real l[3];\n  Real l[4];\n"
+                           "  parameter Real q[1] = 1.0;\n  parameter Real q[2] = 1.5;\n  parameter Real q[3] = 2.0;\n  Real v[1];\n"
+                           "  Real v[2];\n  Real v[3];\nequation\n  l = array(/*Real*/(i - 1) / 3.0 for i in 1:4);\n"
+                           "  v = array((time + 1.0) * /*Real*/(i - 1) / 2.0 - 1.0 for i in 1:3);\nend LS1;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

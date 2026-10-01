@@ -7816,6 +7816,64 @@ class Flattener {
     return e;
   }
 
+  // linspace(x1, x2, n)：内建、__OpenModelica_EarlyInline（NFModelicaBuiltin.mo:305-316，体 `v := {x1 + (x2-x1)*(i-1)/(n-1)
+  // for i in 1:n}`）——内联成推导式再化简（CT1 探针：`linspace(0, 1, 4)` → `array(/*Real*/(i - 1) / 3.0 for i in 1:4)`、
+  // `linspace(0, time, 3)` → `array(time * /*Real*/(i - 1) / 2.0 for i in 1:3)`；参数数组逐元素求值 `q[2] = 1.5`）。n 须求成
+  // ≥ 2 的常量（结构参数）；命名实参 / 非数值标量实参 / 迭代变量名 i 被外层占用 → SKIP。
+  Id<Expr> linspace_call(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    for (Symbol nm : e.arg_names)
+      if (nm.is_valid()) { set_unsupported("named function argument"); return lit_int(0); }
+    if (e.args.size() != 3) { set_unsupported("function arity"); return lit_int(0); }
+    const std::vector<Id<Exp>> args = e.args;   // 拷贝
+    const Symbol it = in_.intern("i");
+    if (loop_vars_.count(it.id) || stmt_iters_.count(it.id)) { set_unsupported("shadowed comprehension iterator"); return lit_int(0); }
+    Id<Expr> x[2];
+    for (int k = 0; k < 2; ++k) {
+      x[k] = simplify_expr(inst_exp(args[k], enclosing, prefix));
+      if (result_.unsupported) return lit_int(0);
+      const TypeKind tk = result_.model.exprs[x[k]].ty.kind;
+      if ((tk != TypeKind::Real && tk != TypeKind::Integer) || !expr_shape(x[k]).empty()) {
+        set_unsupported("non-numeric function argument");
+        return lit_int(0);
+      }
+      x[k] = to_real(x[k]);
+    }
+    const std::optional<CVal> nv = eval_scode(args[2], scode_scope_of(enclosing), 0, /*allow_param=*/true, nullptr);
+    if (!nv || nv->k != CVal::K::Int || nv->i < 2) { set_unsupported("linspace size"); return lit_int(0); }
+    auto bin = [&](Id<Expr> a, BinOp op, Id<Expr> b, const Type& ty) {
+      Expr r;
+      r.kind = ExprKind::Binary;
+      r.bin = op;
+      r.a = a;
+      r.b = b;
+      r.ty = ty;
+      return add(std::move(r));
+    };
+    Expr ic;
+    ic.kind = ExprKind::Cref;
+    ic.ty = Type::integer();
+    ic.cref.parts.push_back({it, {}});
+    const Id<Expr> im1 = to_real(bin(add(std::move(ic)), BinOp::Sub, lit_int(1), Type::integer()));   // /*Real*/(i - 1)
+    const Id<Expr> step = bin(bin(bin(x[1], BinOp::Sub, x[0], Type::real()), BinOp::Mul, im1, Type::real()), BinOp::Div,
+                              lit_real(static_cast<double>(nv->i - 1)), Type::real());
+    const Id<Expr> body = simplify_expr(bin(x[0], BinOp::Add, step, Type::real()));
+    Expr rg;
+    rg.kind = ExprKind::Range;
+    rg.ty = Type::integer();
+    rg.a = lit_int(1);
+    rg.b = lit_int(nv->i);
+    Dimension d;
+    d.kind = DimKind::Integer;
+    d.size = nv->i;
+    Expr r;
+    r.kind = ExprKind::Reduction;
+    r.call_name = {in_.intern("array"), it};
+    r.a = body;
+    r.b = add(std::move(rg));
+    r.ty = Type::array_of(Type::real(), {d});
+    return add(std::move(r));
+  }
+
   // sum / product(e for i in r)（单迭代变量、常量范围；常量整式已由 eval_reduction 折叠）：逐值代入 e 后连成 + / * 链
   //（C1 探针：`sum(y[i] for i in 1:3)` → `y[1] + y[2] + y[3]`）。多迭代变量 / 范围求不出 / e 是数组 → SKIP。
   Id<Expr> reduction_chain(Id<Exp> rid, BinOp op, NodeId enclosing, const std::vector<Symbol>& prefix) {
@@ -8019,6 +8077,7 @@ class Flattener {
     if (builtin_name == "scalar") return scalar_call(e, enclosing, prefix);
     if (builtin_name == "String") return string_call(e, enclosing, prefix);
     if (builtin_name == "delay" && !fn_scope_) return delay_call(e, enclosing, prefix);
+    if (builtin_name == "linspace" && !fn_scope_) return linspace_call(e, enclosing, prefix);
     if (!fn_scope_)
       if (Id<Expr> r = model_array_builtin(e, builtin_name, enclosing, prefix); r.is_valid() || result_.unsupported) return r;
     if (fn_scope_ && (builtin_name == "fill" || builtin_name == "zeros" || builtin_name == "ones"))

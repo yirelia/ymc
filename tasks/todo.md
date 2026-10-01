@@ -954,6 +954,10 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           元素对 Real 整体转型 `/*Real[2, 3]*/(…)`（expr_dump 新增 Reduction 打印与带维数组转型；simplify 不再把数组转型降成标量
           转型）；sum 等逐元素用时代入迭代变量（scalarize）。smooth 的标量 Integer expr 插 `/*Real*/`（原 SKIP）。AC2 / AC3 / BT1
           探针逐字节一致。→ 全 scodeinst PASS 444→445（DimUnknown9）、nf-live 445；+1 单测（179）。
+    - [x] (59d) linspace 早内联成推导式（2026-10-02）：照 NFModelicaBuiltin.mo:305-316 的 EarlyInline 体 `{x1 + (x2-x1)*(i-1)/(n-1)
+          for i in 1:n}` 建 Reduction 再化简（CT1 / LS1 探针逐字节一致，含 `-1 + …` 化成 `… - 1.0`）；n 须求成 ≥ 2 的结构常量，
+          否则 / 命名实参 / 迭代变量名 i 被外层占用 → SKIP。函数体里的 linspace（Vectorizable7，n 为输入）仍 SKIP。→ 全 scodeinst
+          PASS 445→446（FuncBuiltinLinspace）、nf-live 445→449（Linspace1/2、ConstructFunc、InitialReduction）；+1 单测（180）。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、
