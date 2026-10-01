@@ -2467,6 +2467,25 @@ YMC_TEST(flatten_constant_arrays_and_colon_refs) {
                            "end CD1;\n"));
 }
 
+YMC_TEST(flatten_cat_and_expression_leaf_bindings) {
+  // cat(k, …) 展开成数组字面量；数组字面量绑定的表达式叶（`{time, 2, 3}`、参数 `{k, 3}`）定型后核类型。期望 = omc 1.25.0
+  // 实跑 CT3（2026-10-02）；Boolean 叶进 Real 数组 omc 报 "Array types mismatch"（BL1）→ SKIP。
+  YMC_CHECK_EQ(flatten_src("model CT3\n  Real x[3] = {time, 2, 3};\n  Real b[5] = cat(1, x, {7, 8});\n  parameter Real k = 2;\n"
+                           "  parameter Real p[2] = {k, 3};\n  Real m[2, 3] = cat(2, {{1}, {2}}, {{3, 4}, {5, 6}});\n"
+                           "  Integer i[4] = cat(1, {1, 2}, {3, 4});\nend CT3;\n"),
+               std::string("class CT3\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real b[1];\n  Real b[2];\n  Real b[3];\n  Real b[4];\n"
+                           "  Real b[5];\n  parameter Real k = 2.0;\n  parameter Real p[1] = k;\n  parameter Real p[2] = 3.0;\n"
+                           "  Real m[1,1];\n  Real m[1,2];\n  Real m[1,3];\n  Real m[2,1];\n  Real m[2,2];\n  Real m[2,3];\n"
+                           "  Integer i[1];\n  Integer i[2];\n  Integer i[3];\n  Integer i[4];\nequation\n  x = {time, 2.0, 3.0};\n"
+                           "  b = {x[1], x[2], x[3], 7.0, 8.0};\n  m = {{1.0, 3.0, 4.0}, {2.0, 5.0, 6.0}};\n  i = {1, 2, 3, 4};\n"
+                           "end CT3;\n"));
+  bool uns = false;
+  const std::string out =
+      flatten_src("model BL1\n  Boolean b = time > 1;\n  Real x[2] = {time, b};\nend BL1;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(out, std::string("<unsupported:array binding shape/type mismatch>"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

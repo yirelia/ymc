@@ -2733,6 +2733,8 @@ class Flattener {
           Id<Exp> el = array_scalar_elem(braw, idx, 0);
           if (!el.is_valid()) { set_unsupported("array binding element spread"); return; }
           eb = simplify_expr(inst_exp(el, bscope, bprefix));
+          if (result_.unsupported) return;
+          if (!leaf_type_ok(eb, cty.kind)) { set_unsupported("array binding shape/type mismatch"); return; }
         }
         if (cty.kind == TypeKind::Real) eb = to_real(eb);
         // constant 元素必须求值成字面量（同标量 constant 规则，R14 §3）。
@@ -2814,7 +2816,10 @@ class Flattener {
           set_unsupported("non-literal array binding"); return;   // 整取 Int→Real(A6)、Call、Range → SKIP
         }
       } else {
-        rhs = coerce_deep(simplify_expr(inst_exp(braw, bscope, bprefix)), cty.kind);
+        rhs = simplify_expr(inst_exp(braw, bscope, bprefix));
+        if (result_.unsupported) return;
+        if (!array_leaves_ok(rhs, dims.size(), cty.kind)) { set_unsupported("array binding shape/type mismatch"); return; }
+        rhs = coerce_deep(rhs, cty.kind);
       }
       Expr lhs;
       lhs.kind = ExprKind::Cref;
@@ -2883,8 +2888,28 @@ class Flattener {
       case ExpKind::RealLit: return elem == TypeKind::Real;
       case ExpKind::BoolLit: return elem == TypeKind::Boolean;
       case ExpKind::StringLit: return elem == TypeKind::String;
-      default: return false;   // cref/调用等 v1 数组绑定不做
+      // 表达式叶（`{time, 2, 3}`、`{x[1], f(y)}`）：Absyn 看不出类型，定型后由 leaf_type_ok / array_leaves_ok 再核。
+      case ExpKind::CrefExp: case ExpKind::Binary: case ExpKind::Call: case ExpKind::IfExp: case ExpKind::Subscript:
+      case ExpKind::Tuple:
+        return true;
+      default: return false;
     }
+  }
+  // 数组绑定叶（已定型）与元素类型相容：Real ← Integer / Real；其余同类（Integer / Boolean / String / 枚举）；叶是数组 →
+  // false（类型不符 omc 报错 → 调用方 SKIP）。
+  bool leaf_type_ok(Id<Expr> x, TypeKind elem) {
+    if (!expr_shape(x).empty()) return false;
+    const TypeKind k = result_.model.exprs[x].ty.kind;
+    return elem == TypeKind::Real ? (k == TypeKind::Real || k == TypeKind::Integer) : k == elem;
+  }
+  // 定型后的数组字面量绑定逐叶核类型（深 depth 层的叶）；某层不是数组字面量（cref 数组填整段维，BindingArray8）→ 不在此核。
+  bool array_leaves_ok(Id<Expr> x, std::size_t depth, TypeKind elem) {
+    if (depth == 0) return leaf_type_ok(x, elem);
+    if (result_.model.exprs[x].kind != ExprKind::Array) return true;
+    const std::vector<Id<Expr>> args = result_.model.exprs[x].args;   // 拷贝（expr_shape 可能往 arena 加）
+    for (Id<Expr> a : args)
+      if (!array_leaves_ok(a, depth - 1, elem)) return false;
+    return true;
   }
 
   // 数组构造子：`{…}`（ExpKind::Array）或 `array(…)`（MLS §10.4.1.1 等价，元素同在 .args）。
@@ -7337,13 +7362,14 @@ class Flattener {
   Id<Expr> model_array_builtin(const Exp& e, std::string_view name, NodeId enclosing, const std::vector<Symbol>& prefix) {
     const bool fill = name == "fill", zo = name == "zeros" || name == "ones";
     if (!fill && !zo && name != "identity" && name != "diagonal" && name != "transpose" && name != "vector" &&
-        name != "sum" && name != "product")
+        name != "sum" && name != "product" && name != "cat")
       return {};
     for (Symbol n : e.arg_names)
       if (n.is_valid()) { set_unsupported("named function argument"); return lit_int(0); }
     const std::vector<Id<Exp>> args = e.args;   // 拷贝：inst 期间不持 absyn 引用
     const std::size_t first_dim = fill ? 1 : 0;
-    if ((fill || zo) ? args.size() <= first_dim : args.size() != 1) { set_unsupported("function arity"); return lit_int(0); }
+    const bool arity_ok = name == "cat" ? args.size() >= 2 : (fill || zo) ? args.size() > first_dim : args.size() == 1;
+    if (!arity_ok) { set_unsupported("function arity"); return lit_int(0); }
     const ScodeScope scope = scode_scope_of(enclosing);
     // 维 / 元素索引按行主序枚举，elem(idx) 给每个元素（已化简）；嵌套成数组字面量。
     auto build = [&](const std::vector<std::int64_t>& dims, auto&& elem) -> Id<Expr> {
@@ -7381,6 +7407,45 @@ class Flattener {
       if (result_.unsupported) return lit_int(0);
       if (!expr_shape(val).empty()) { set_unsupported("fill of array value"); return lit_int(0); }
       return build(dims, [&](const std::vector<std::int64_t>&) { return val; });
+    }
+    if (name == "cat") {
+      // cat(k, A1, A2, …)（MLS §10.4.2）：维已知时展开成数组字面量（CT1 探针：`cat(1, x, {7, 8})` → `{x[1], x[2], x[3], 7.0, 8.0}`、
+      // `cat(2, {{1}, {2}}, {{3, 4}, {5, 6}})` → `{{1.0, 3.0, 4.0}, {2.0, 5.0, 6.0}}`）。k 须常量整数 1..秩；各实参同秩、除第
+      // k 维外同形（否则 omc 报错 → SKIP）；有 Real 实参则元素提 Real。
+      const std::optional<CVal> kv = eval_scode(args[0], scope, 0, /*allow_param=*/true, nullptr);
+      if (!kv || kv->k != CVal::K::Int) { set_unsupported("non-constant cat dimension"); return lit_int(0); }
+      std::vector<Id<Expr>> parts;
+      std::vector<std::vector<std::int64_t>> shapes;
+      bool real = false;
+      for (std::size_t i = 1; i < args.size(); ++i) {
+        const Id<Expr> p = inst_exp(args[i], enclosing, prefix);
+        if (result_.unsupported) return lit_int(0);
+        const std::vector<std::int64_t> sh = expr_shape(p);
+        if (sh.empty()) { set_unsupported("cat of scalar"); return lit_int(0); }
+        for (std::int64_t n : sh)
+          if (n < 1) { set_unsupported("array builtin of unknown / empty shape"); return lit_int(0); }
+        real = real || expr_elem_kind(p) == TypeKind::Real;
+        parts.push_back(p);
+        shapes.push_back(sh);
+      }
+      const std::size_t rank = shapes[0].size();
+      if (kv->i < 1 || static_cast<std::size_t>(kv->i) > rank) { set_unsupported("cat dimension out of range"); return lit_int(0); }
+      const std::size_t kd = static_cast<std::size_t>(kv->i) - 1;
+      std::vector<std::int64_t> dims = shapes[0];
+      dims[kd] = 0;
+      for (const std::vector<std::int64_t>& sh : shapes) {
+        if (sh.size() != rank) { set_unsupported("cat shape mismatch"); return lit_int(0); }
+        for (std::size_t j = 0; j < rank; ++j)
+          if (j != kd && sh[j] != shapes[0][j]) { set_unsupported("cat shape mismatch"); return lit_int(0); }
+        dims[kd] += sh[kd];
+      }
+      return build(dims, [&](const std::vector<std::int64_t>& ix) {
+        std::vector<std::int64_t> src = ix;
+        std::size_t pi = 0;
+        while (src[kd] > shapes[pi][kd]) { src[kd] -= shapes[pi][kd]; ++pi; }
+        const Id<Expr> x = scalarize(parts[pi], src);
+        return real ? to_real(x) : x;
+      });
     }
     if (name == "identity") {
       const std::optional<CVal> v = eval_scode(args[0], scope, 0, /*allow_param=*/true, nullptr);

@@ -904,6 +904,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           nf-live 420→424（ArrayAddition / Division / Multiplication / Subtraction）；+1 单测（170）。另：无绑定参数取 start
           当绑定（updateParameterBinding）已核实语义但 omc 同时告警、文件比对要告警行 → 仍 SKIP，告警输出需元素源码范围
           （parser，用户域），记入 open-questions。
+    - [x] (58u) cat + 数组字面量绑定的表达式叶（2026-10-02）：`cat(k, A1, …)` 维已知时展开成数组字面量（k 常量、同秩、除
+          第 k 维外同形，有 Real 实参提 Real；CT1/CT3 探针）；数组字面量绑定的叶允许 cref / 调用 / 运算等表达式（`{time, 2, 3}`、
+          `{k, 3}`），定型后逐叶核类型（Real ← Integer/Real，其余同类；不符 = omc "Array types mismatch" → SKIP，BL1）。
+          → 全 scodeinst PASS 432（Subscript5 由 SKIP 转为账本内分歧：文件补尾随 `:`，1.25.0 不补，FAIL 基线 16→17）、nf-live
+          424→431（AppendElement、Concat3、ConcatArr1/2/4、MatrixMulVector、BoolArrayTest）；+1 单测（171）。linspace（omc 打成
+          `array(… for i in 1:n)` 推导式）留后续。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
