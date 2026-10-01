@@ -958,6 +958,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           for i in 1:n}` 建 Reduction 再化简（CT1 / LS1 探针逐字节一致，含 `-1 + …` 化成 `… - 1.0`）；n 须求成 ≥ 2 的结构常量，
           否则 / 命名实参 / 迭代变量名 i 被外层占用 → SKIP。函数体里的 linspace（Vectorizable7，n 为输入）仍 SKIP。→ 全 scodeinst
           PASS 445→446（FuncBuiltinLinspace）、nf-live 445→449（Linspace1/2、ConstructFunc、InitialReduction）；+1 单测（180）。
+    - [x] (59e) 空数组（2026-10-02）：维为 0 的变量不出行（形状记进 empty_shapes_，供 `:` 维引用 / size()）；类型为空数组的方程 /
+          赋值整条删去（NFSimplifyModel.mo:254 / :413），被删式子里新登记了函数 → SKIP（omc 函数收自化简后的模型）；空数组变量的
+          引用换成缺省值 `{}` / `{{}, {}}`，下标引用成 `{}[m - 1]`（NFInstUtil.replaceEmptyArraysExp :164-205）；fill / zeros /
+          ones 的 0 维产带全维类型的空字面量；空内维的向量 / 矩阵积 = 0（NFExpandExp.makeScalarProduct :796-799）；空 sum /
+          product = 0 / 1（NFSimplifyExp.mo:464-465）；der 作用在连续 Real 空数组上透传（方程随后删去）。带属性修饰 / 字面量绑定
+          / 记录数组 / pre 等未核实 → SKIP。E1–E15 探针：9 例一致、其余 SKIP（omc 报错的 4 例全 SKIP）。→ 全 scodeinst PASS
+          446→451（EmptyArray1/2、FuncBuiltinSum/Product、OperationMatrixProduct3）、nf-live 449→464；+1 单测（181）。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、

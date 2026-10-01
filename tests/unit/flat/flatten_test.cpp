@@ -2633,6 +2633,26 @@ YMC_TEST(flatten_linspace_inlined_as_comprehension) {
                            "  v = array((time + 1.0) * /*Real*/(i - 1) / 2.0 - 1.0 for i in 1:3);\nend LS1;\n"));
 }
 
+YMC_TEST(flatten_empty_arrays) {
+  // 维为 0 的变量不出行、空数组方程 / 赋值整条删去、引用换成 `{}`（下标引用 `{}[m - 1]`）、空内维的积 = 0、空 sum = 0。期望 =
+  // omc 1.25.0 实跑 E1 / E2 / E12 与 EmptyArray2 原文（2026-10-02）；pre 的连续实参 omc 报错（E13）→ SKIP。
+  YMC_CHECK_EQ(flatten_src("model E1\n  Real x[0];\n  Real y = sum(x);\n  Real z = x * x;\nend E1;\n"),
+               std::string("class E1\n  Real y = 0.0;\n  Real z = 0.0;\nend E1;\n"));
+  YMC_CHECK_EQ(flatten_src("model E2\n  Real x[0];\n  Real y[0] = x;\n  Real A[3, 0];\n  Real c[3] = A * x;\n  Real w[2, 0];\n"
+                           "  Real v[2, 0];\nequation\n  w = v;\nend E2;\n"),
+               std::string("class E2\n  Real c[1];\n  Real c[2];\n  Real c[3];\nequation\n  c = {0.0, 0.0, 0.0};\nend E2;\n"));
+  YMC_CHECK_EQ(flatten_src("model E12\n  Real x[0];\n  Real y = time;\nalgorithm\n  x := fill(y, 0);\n  y := 2;\nend E12;\n"),
+               std::string("class E12\n  Real y = time;\nalgorithm\n  y := 2.0;\nend E12;\n"));
+  YMC_CHECK_EQ(flatten_src("model EmptyArray2\n  Real x[0];\n  Real y = time;\n  Real z;\nalgorithm\n  for m in 1:1 loop\n"
+                           "    z := if m == 1 then y else x[m - 1];\n  end for;\nend EmptyArray2;\n"),
+               std::string("class EmptyArray2\n  Real y = time;\n  Real z;\nalgorithm\n  for m in 1:1 loop\n"
+                           "    z := if m == 1 then y else {}[m - 1];\n  end for;\nend EmptyArray2;\n"));
+  bool uns = false;
+  const std::string out = flatten_src("model E13\n  Real x[0];\n  Real y[0];\nequation\n  der(x) = y;\n  x = pre(y);\nend E13;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(out, std::string("<unsupported:array function argument>"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

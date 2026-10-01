@@ -530,5 +530,10 @@
 "RecordBinding6.mo",
 "RecordBinding7.mo",
 "DimUnknown9.mo",
-"FuncBuiltinLinspace.mo"
+"FuncBuiltinLinspace.mo",
+"EmptyArray1.mo",
+"EmptyArray2.mo",
+"FuncBuiltinProduct.mo",
+"FuncBuiltinSum.mo",
+"OperationMatrixProduct3.mo"
 ]
