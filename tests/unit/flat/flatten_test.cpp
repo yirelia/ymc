@@ -2385,6 +2385,27 @@ YMC_TEST(flatten_record_array_whole_binding) {
   YMC_CHECK_EQ(out, std::string("<unsupported:composite/record binding>"));
 }
 
+YMC_TEST(flatten_composite_array_field_expansion) {
+  // 复合数组跨元素取字段 `r.x` / 前几维带下标 `a[1].x`：ExpandExp 展开成元素数组 `{r[1].x, r[2].x}`；参数下标成结构参数
+  //（final）。期望 = omc 1.25.0 实跑 XR1 / XR2（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("record R\n  Real x;\n  Real y;\nend R;\nmodel XR1\n  R r[2](x = {1, 2}, y = {3, 4});\n  Real a[2] = r.x;\n"
+                           "  parameter R p[2](x = {1, 2}, y = {3, 4});\n  parameter Real b[2] = p.x;\n  Real c = sum(r.y);\n"
+                           "  Real d[2];\nequation\n  d = r.y;\nend XR1;\n"),
+               std::string("class XR1\n  Real r[1].x = 1.0;\n  Real r[1].y = 3.0;\n  Real r[2].x = 2.0;\n  Real r[2].y = 4.0;\n"
+                           "  Real a[1];\n  Real a[2];\n  parameter Real p[1].x = 1.0;\n  parameter Real p[1].y = 3.0;\n"
+                           "  parameter Real p[2].x = 2.0;\n  parameter Real p[2].y = 4.0;\n  parameter Real b[1] = p[1].x;\n"
+                           "  parameter Real b[2] = p[2].x;\n  Real c = r[1].y + r[2].y;\n  Real d[1];\n  Real d[2];\nequation\n"
+                           "  a = {r[1].x, r[2].x};\n  d[1] = r[1].y;\n  d[2] = r[2].y;\nend XR1;\n"));
+  YMC_CHECK_EQ(flatten_src("model A\n  Real x;\nend A;\nmodel XR2\n  A a[3, 2](x = {{1, 2}, {3, 4}, {5, 6}});\n  Real y[2] = a[1].x;\n"
+                           "  Real z[3, 2] = a.x;\n  parameter Integer k = 2;\n  Real w[2] = a[k].x;\nend XR2;\n"),
+               std::string("class XR2\n  Real a[1,1].x = 1.0;\n  Real a[1,2].x = 2.0;\n  Real a[2,1].x = 3.0;\n  Real a[2,2].x = 4.0;\n"
+                           "  Real a[3,1].x = 5.0;\n  Real a[3,2].x = 6.0;\n  Real y[1];\n  Real y[2];\n  Real z[1,1];\n  Real z[1,2];\n"
+                           "  Real z[2,1];\n  Real z[2,2];\n  Real z[3,1];\n  Real z[3,2];\n  final parameter Integer k = 2;\n"
+                           "  Real w[1];\n  Real w[2];\nequation\n  y = {a[1,1].x, a[1,2].x};\n"
+                           "  z = {{a[1,1].x, a[1,2].x}, {a[2,1].x, a[2,2].x}, {a[3,1].x, a[3,2].x}};\n"
+                           "  w = {a[2,1].x, a[2,2].x};\nend XR2;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

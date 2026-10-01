@@ -504,5 +504,10 @@
 "CevalFuncRecord6.mo",
 "DimUnknown3.mo",
 "RecordBinding2.mo",
-"Ticket5249.mo"
+"Ticket5249.mo",
+"CevalBinding4.mo",
+"CevalRecordArray1.mo",
+"CevalRecordArray3.mo",
+"CevalRecordArray5.mo",
+"const4.mo"
 ]

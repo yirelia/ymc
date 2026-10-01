@@ -881,6 +881,11 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           方程时左侧丢逐段下标（`a.x = …` → `a[1].x = …`，CA1 探针）；记录构造只比末段名（同名异包 `P2.S(…)` 绑给 `P1.S`
           会错用目标类缺省，CI2 探针）→ 改为解析到同一记录类。→ 全 scodeinst PASS 412→419（FAIL 16 不变）、nf-live 413；
           +2 单测（166）。记录数组跨元素取字段 `r.x`（CevalRecordArray1/5）留后续。
+    - [x] (58q) 复合数组跨元素取字段（2026-10-02）：`r.x` / 前几维带标量下标的 `a[1].x`（x 为标量内建字段）按 ExpandExp
+          展开成元素数组 `{r[1].x, r[2].x}`（元素经 cref() 解析：越界 / 结构参数下标 final / 常量折叠复用），下游 Var 绑定
+          `a = {…}`、参数逐元素、`sum(r.y)`、数组方程标量化都与 omc 一致（XR1 / XR2 探针）。→ 全 scodeinst PASS 419→424
+          （CevalBinding4、CevalRecordArray1/3/5、const4；FAIL 16 不变）、nf-live 413；+1 单测（167）。叶是数组 / 复合字段、
+          更深的段带下标（EquationQualified1）留后续。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

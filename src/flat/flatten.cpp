@@ -6481,6 +6481,12 @@ class Flattener {
       e.ty = Type::real();
       return add(std::move(e));
     }
+    // 首段是复合数组却没下标的跨元素取字段 `r.x`（x 为标量内建字段）：ExpandExp 展开成元素数组 `{r[1].x, r[2].x}`
+    //（XR1 探针：Var 绑定 `a = {r[1].x, r[2].x}`、参数逐元素 `b[1] = p[1].x`、`sum(r.y)` → `r[1].y + r[2].y`；常量记录数组
+    // 的元素再折成值，CevalRecordArray3/5）。叶是数组 / 复合、更深的段 → 下面照旧 SKIP。
+    if (local.is_valid() && !I_.nodes[local].is_empty() && I_.nodes[local].kind == NodeKind::Component &&
+        c.parts.size() == 2 && c.parts[1].subscripts.empty())
+      if (std::optional<Id<Expr>> ex = expand_field_over_array(ac, local, enclosing, prefix)) return *ex;
     // 非末段带下标（复合数组元素引用 `a[3].x`）：只做首段（本地复合数组组件），下标须是常量 / end / 结构参数且在界内
     //（同末段规则；越界 omc 报错，ArrayBounds2）→ 打印成字面量下标。更深的段带下标、或首段是数组却没下标（`r.x` 跨元素
     // 取字段）→ SKIP。
@@ -6728,6 +6734,71 @@ class Flattener {
       e.cref.parts.push_back({p.name, std::move(subs)});
     }
     return add(std::move(e));
+  }
+
+  // `r.x` 展开（见 cref）：首段 = 本地复合数组组件（维度可求）、次段 = 其类里的标量内建字段（非 protected）→ 嵌套数组
+  // `{r[1].x, …}`，元素经 cref() 解析（首段补字面量下标，复用越界 / 结构参数 / 前缀 / 常量折叠）。首段可带前几维的标量
+  // 下标（`a[1].x` = `a[1, :].x` → `{a[1,1].x, a[1,2].x}`，`a[k].x` 的 k 成结构参数，XR2 探针），只展开余下的维。
+  // 不适用（无余维、切片下标…）→ nullopt（调用方照旧）。
+  std::optional<Id<Expr>> expand_field_over_array(Id<Cref> ac, NodeId local, NodeId enclosing,
+                                                  const std::vector<Symbol>& prefix) {
+    const CompId hc = I_.nodes[local].comp;
+    if (I_.comps[hc].ty.kind != TypeKind::Complex) return std::nullopt;
+    const SElement& hcel = I_.scode.elems[I_.comps[hc].def];
+    if (hcel.attr.dims.empty() && hcel.type.dims.empty()) return std::nullopt;
+    std::vector<std::int64_t> hd;
+    const ScodeScope hscope = scode_scope_of(enclosing);
+    for (Id<Exp> d : hcel.attr.dims) if (!eval_dim(d, hd, hscope)) return std::nullopt;
+    for (Id<Exp> d : hcel.type.dims) if (!eval_dim(d, hd, hscope)) return std::nullopt;
+    for (std::int64_t n : hd) if (n < 1) return std::nullopt;
+    const NodeId cls = I_.comps[hc].class_inst;
+    if (!cls.is_valid() || I_.nodes[cls].is_empty() || I_.nodes[cls].kind != NodeKind::Class || !I_.nodes[cls].cls.is_valid() ||
+        !I_.node_class(cls).tree.is_valid())
+      return std::nullopt;
+    const Cref c = I_.absyn.crefs[ac];   // 拷贝（下面往 absyn arena add）
+    const std::size_t ns = c.parts[0].subscripts.size();   // 已给的前几维下标（须是标量下标）
+    if (ns >= hd.size()) return std::nullopt;
+    for (Id<Exp> s : c.parts[0].subscripts) {
+      const ExpKind sk = I_.absyn.exps[s].kind;
+      if (sk == ExpKind::Colon || sk == ExpKind::Range || is_array_ctor(s)) return std::nullopt;
+    }
+    const NodeId f = find_local(cls, c.parts[1].name);
+    if (!f.is_valid() || I_.nodes[f].is_empty() || I_.nodes[f].visibility == Visibility::Protected) return std::nullopt;
+    const SElement& fel = I_.scode.elems[I_.comps[I_.nodes[f].comp].def];
+    const Type fty = I_.comps[I_.nodes[f].comp].ty;
+    if (!fel.attr.dims.empty() || !fel.type.dims.empty() || fty.is_array() || fty.kind == TypeKind::Complex ||
+        fty.kind == TypeKind::Unknown)
+      return std::nullopt;
+    std::vector<std::int64_t> idx(hd.size(), 1);
+    auto build = [&](auto& self, std::size_t k) -> Id<Expr> {
+      if (k == hd.size()) {
+        Cref ec = c;   // 首段：已给下标原样在前，余维补字面量
+        for (std::size_t j = ns; j < idx.size(); ++j) {
+          const std::int64_t i = idx[j];
+          Exp lit;
+          lit.kind = ExpKind::IntLit;
+          lit.ival = i;
+          ec.parts[0].subscripts.push_back(I_.absyn.add_exp(std::move(lit)));
+        }
+        return cref(I_.absyn.add_cref(std::move(ec)), enclosing, prefix);
+      }
+      Expr arr;
+      arr.kind = ExprKind::Array;
+      std::vector<Dimension> ds;
+      for (std::size_t j = k; j < hd.size(); ++j) {
+        Dimension d;
+        d.kind = DimKind::Integer;
+        d.size = hd[j];
+        ds.push_back(d);
+      }
+      arr.ty = Type::array_of(fty, std::move(ds));
+      for (std::int64_t i = 1; i <= hd[k]; ++i) {
+        idx[k] = i;
+        arr.args.push_back(self(self, k + 1));
+      }
+      return add(std::move(arr));
+    };
+    return build(build, ns);
   }
 
   // 在 enclosing 实例的 FlatTree 组件里按名字找（v1：直接线性找，规模小）。
