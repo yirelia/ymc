@@ -28,7 +28,7 @@
 | — | R4：$cse/$DER 默认可见性、name 数组下标逐字节、CSV 换行 \r\n？ | 实跑 dump 一份 .mat 探针 | resultio 精度 |
 | — | `integer(Real)` 在 NFCeval.mo:2476 调 `realInt`，但 omc 1.25.0 实跑 `integer(-9.9)=-10`（floor） | 查 1.25.0 `realInt` 运行时实现及负数约定；当前按 oracle 实测 floor | S3 标量内建常量折叠 |
 | — | `Integer(E.two)` 需枚举字面量 1 基序数；当前 Expr::EnumLit 只有路径、无 ordinal | 枚举 typing 桶给 EnumLit 补 ordinal 后实现 NFCeval.mo:2481-2487 | S3 枚举求值；当前 SKIP `enum ordinal` |
-| — | 任务卡把 `delay`/`noEvent` 列为恒符号，但 testsuite `FuncBuiltinDelay.mo` 会补第三参并化简零延迟，`CevalNoEvent1.mo` 会去包装 | 后续按两个测试文件补专用规范化语义；当前继续诚实 SKIP，避免把既有 SKIP 变真 FAIL | S3 内建函数加宽 |
+| ~~—~~ | ~~任务卡把 `noEvent` / `delay` 列为恒符号~~ **已解决**：noEvent 字面量实参脱壳、符号实参保留（CevalNoEvent1；2026-10-02 N1 探针复核 `noEvent(3.0)`→`3.0`、`noEvent(p)`/`noEvent(p * 2.0)` 保留，ymc 逐字节一致）；delay 2026-10-02 加宽(58n) 按 delay2 早内联 + simplifyDelay 补第三参 / 化简零延迟（FuncBuiltinDelay PASS） | — | — |
 
 ## Oracle 分歧账本（testsuite `// Result:` vs 安装版 omc 1.25.0）
 

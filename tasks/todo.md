@@ -865,6 +865,10 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           `String(n, 0, true)`、`String(x, "6.2f")`）；全常量 → 求值成字符串（%g 有效数字、minimumLength / leftJustified 补空格、
           format、枚举名）；Real 结果带指数 → SKIP（1.25.0 是 Windows CRT 三位指数，与工具链相关）。MSL 的 assert 文案常用。
           → 全 scodeinst PASS 405→408、nf-live 401→406（FAIL 0）；+1 单测（161）。
+    - [x] (58n) delay（2026-10-02）：两参形按 delay2 早内联成 `delay(e, d, d)`（NFModelicaBuiltin.mo:1105-1119），delayTime
+          ≤ parameter 且求值为 0 → 只留 e（simplifyDelay，NFSimplifyExp.mo:577-595；判 0 的求值不标结构参数）；parameter 形参给了
+          变量 → SKIP。→ 全 scodeinst PASS 408→409（FuncBuiltinDelay，open-questions 一条随之了结一半）、nf-live 406→411；
+          +1 单测（162）。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

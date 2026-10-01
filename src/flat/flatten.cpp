@@ -6772,6 +6772,44 @@ class Flattener {
     return builtin_call(e, enclosing, prefix, Symbol{});
   }
 
+  // delay(expr, delayTime[, delayMax])（NFModelicaBuiltin.mo:1105-1119：两参形 delay2 早内联成 delay3(expr, d, d)，其 delayTime
+  // 是 parameter input；delay3 的 delayMax 是 parameter input；simplifyDelay NFSimplifyExp.mo:577-595：delayTime ≤ parameter 且
+  // tryEvalExp 为 0 → 只留 expr）。D1 探针：`delay(x, 0.1)` → `delay(x, 0.1, 0.1)`、`delay(x, 0)` → `x`。tryEvalExp 不标结构
+  // 参数 → 判 0 时的求值撤销结构记录。parameter 形参给了变量 → omc 报错 → SKIP。
+  Id<Expr> delay_call(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    for (Symbol n : e.arg_names)
+      if (n.is_valid()) { set_unsupported("named function argument"); return lit_int(0); }
+    if (e.args.size() != 2 && e.args.size() != 3) { set_unsupported("function arity"); return lit_int(0); }
+    const std::vector<Id<Exp>> args = e.args;   // 拷贝
+    std::vector<Id<Expr>> a;
+    for (Id<Exp> x : args) {
+      a.push_back(simplify_expr(inst_exp(x, enclosing, prefix)));
+      if (result_.unsupported) return lit_int(0);
+      const TypeKind k = result_.model.exprs[a.back()].ty.kind;
+      if ((k != TypeKind::Real && k != TypeKind::Integer) || !expr_shape(a.back()).empty()) {
+        set_unsupported("delay argument type");
+        return lit_int(0);
+      }
+      a.back() = to_real(a.back());
+    }
+    if (refs_runtime_var(a[1]) && a.size() == 2) { set_unsupported("delay time variability"); return lit_int(0); }
+    if (a.size() == 3 && refs_runtime_var(a[2])) { set_unsupported("delay max variability"); return lit_int(0); }
+    if (!refs_runtime_var(a[1])) {
+      const std::vector<std::string> keys = structural_keys_;   // 撤销求值引起的结构参数记录（tryEvalExp 不标）
+      const std::unordered_set<std::string> set = structural_set_;
+      const std::optional<CVal> dv = eval_scode(args[1], scode_scope_of(enclosing), 0, /*allow_param=*/true, nullptr);
+      structural_keys_ = keys;
+      structural_set_ = set;
+      if (dv && (dv->k == CVal::K::Int || dv->k == CVal::K::Real) && dv->as_r() == 0.0) return a[0];
+    }
+    Expr r;
+    r.kind = ExprKind::Call;
+    r.call_name = {in_.intern("delay")};
+    r.args = {a[0], a[1], a.size() == 3 ? a[2] : a[1]};
+    r.ty = Type::real();
+    return add(std::move(r));
+  }
+
   // String(x, …)（MLS §3.7.2 的四个重载：Real → String(r, significantDigits = 6, minimumLength = 0, leftJustified = true) 或
   // String(r, format)；Integer / Boolean / 枚举 → String(x, minimumLength = 0, leftJustified = true)）：定型后实参按位置补齐缺省
   // 打印（S1 探针 `String(x, 6, 0, true)`、`String(n, 0, true)`、`String(x, "6.2f")`）；实参全常量 → 求值成字符串字面量（S2 探针
@@ -7127,6 +7165,7 @@ class Flattener {
     if (builtin_name == "size") return size_call(e, enclosing, prefix);
     if (builtin_name == "scalar") return scalar_call(e, enclosing, prefix);
     if (builtin_name == "String") return string_call(e, enclosing, prefix);
+    if (builtin_name == "delay" && !fn_scope_) return delay_call(e, enclosing, prefix);
     if (!fn_scope_)
       if (Id<Expr> r = model_array_builtin(e, builtin_name, enclosing, prefix); r.is_valid() || result_.unsupported) return r;
     if (fn_scope_ && (builtin_name == "fill" || builtin_name == "zeros" || builtin_name == "ones"))

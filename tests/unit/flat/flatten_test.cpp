@@ -2283,6 +2283,18 @@ YMC_TEST(flatten_string_builtin) {
   YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
 }
 
+YMC_TEST(flatten_delay_builtin) {
+  // delay（NFModelicaBuiltin delay2 → delay3(expr, d, d)；simplifyDelay：delayTime ≤ parameter 且为 0 → expr）。
+  // 期望 = omc 1.25.0 实跑 D1（2026-10-02）。
+  const char* src =
+      "model D1\n  parameter Real T = 0.5;\n  Real x = sin(time);\n  Real y1 = delay(x, 0.1);\n  Real y2 = delay(x, T);\n"
+      "  Real y3 = delay(x, T, 1.0);\n  Real y4 = delay(x, 0);\n  Real y5 = delay(x, time / 10, 1.0);\nend D1;\n";
+  YMC_CHECK_EQ(flatten_src(src),
+               std::string("class D1\n  parameter Real T = 0.5;\n  Real x = sin(time);\n  Real y1 = delay(x, 0.1, 0.1);\n"
+                           "  Real y2 = delay(x, T, T);\n  Real y3 = delay(x, T, 1.0);\n  Real y4 = x;\n"
+                           "  Real y5 = delay(x, time / 10.0, 1.0);\nend D1;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);
