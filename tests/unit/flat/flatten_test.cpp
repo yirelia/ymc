@@ -2594,6 +2594,34 @@ YMC_TEST(flatten_builtin_named_arguments) {
   YMC_CHECK_EQ(out, std::string("<unsupported:named function argument>"));
 }
 
+YMC_TEST(flatten_array_comprehensions) {
+  // 推导式保留成 `array(e for i in r)`（最右迭代变量在外层、参数范围求值、Integer 元素对 Real 整体转型 `/*Real[2, 3]*/`）；
+  // 等式里整体保留、sum 里逐元素代入；smooth 的 Integer 实参插转型。期望 = omc 1.25.0 实跑 AC2 / AC3 / BT1（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model AC2\n  parameter Integer n = 3;\n  Real x[n] = {i for i in 1:n};\n  Real y[3] = {i * 2.0 for i in 1:3};\n"
+                           "  Real z[3] = {time * i for i in 1:3};\n  Real w[2, 3] = {{i * j for j in 1:3} for i in 1:2};\n"
+                           "  Real v[3] = {sin(i * time) for i in 1:3};\n  Real u[2, 3] = {i * j for j in 1:3, i in 1:2};\nend AC2;\n"),
+               std::string("class AC2\n  final parameter Integer n = 3;\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real y[1];\n  Real y[2];\n"
+                           "  Real y[3];\n  Real z[1];\n  Real z[2];\n  Real z[3];\n  Real w[1,1];\n  Real w[1,2];\n  Real w[1,3];\n"
+                           "  Real w[2,1];\n  Real w[2,2];\n  Real w[2,3];\n  Real v[1];\n  Real v[2];\n  Real v[3];\n  Real u[1,1];\n"
+                           "  Real u[1,2];\n  Real u[1,3];\n  Real u[2,1];\n  Real u[2,2];\n  Real u[2,3];\nequation\n"
+                           "  x = /*Real[3]*/(array(i for i in 1:3));\n  y = array(/*Real*/(i) * 2.0 for i in 1:3);\n"
+                           "  z = array(time * /*Real*/(i) for i in 1:3);\n"
+                           "  w = /*Real[2, 3]*/(array(array(i * j for j in 1:3) for i in 1:2));\n"
+                           "  v = array(sin(/*Real*/(i) * time) for i in 1:3);\n"
+                           "  u = /*Real[2, 3]*/(array(array(i * j for j in 1:3) for i in 1:2));\nend AC2;\n"));
+  YMC_CHECK_EQ(flatten_src("model AC3\n  Real x[3];\n  Real y[3];\n  Real s;\nequation\n  x = {i * time for i in 1:3};\n"
+                           "  y = {i for i in 1:3};\n  s = sum({x[i] * i for i in 1:3});\nend AC3;\n"),
+               std::string("class AC3\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real y[1];\n  Real y[2];\n  Real y[3];\n  Real s;\n"
+                           "equation\n  x = array(/*Real*/(i) * time for i in 1:3);\n  y = /*Real[3]*/(array(i for i in 1:3));\n"
+                           "  s = x[1] + x[2] * 2.0 + x[3] * 3.0;\nend AC3;\n"));
+  YMC_CHECK_EQ(flatten_src("model BT1\n  discrete Integer i(start = 1);\n  Real a = smooth(0, i);\n  Integer b = sign(i);\n"
+                           "  Real c = smooth(1, time);\n  Real d = max(i, time);\nequation\n  when time > 1 then\n    i = 2;\n"
+                           "  end when;\nend BT1;\n"),
+               std::string("class BT1\n  discrete Integer i(start = 1);\n  Real a = smooth(0, /*Real*/(i));\n"
+                           "  Integer b = sign(/*Real*/(i));\n  Real c = smooth(1, time);\n  Real d = max(/*Real*/(i), time);\n"
+                           "equation\n  when time > 1.0 then\n    i = 2;\n  end when;\nend BT1;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

@@ -170,8 +170,17 @@ class ExprDumper {
         exp(e.c);   // elseif 是嵌进 c 的另一个 IfExp，会自然打成 "else if …"（R13 §4.1）
         break;
       case ExprKind::Cast:
+        // 数组转型带维：`/*Real[2, 3]*/(…)`（Type.toString 的数组形，AC2 探针）。
         out_ += "/*";
-        out_ += cast_type_name(e.ty.kind);
+        out_ += cast_type_name(e.ty.element_type().kind);
+        if (e.ty.is_array()) {
+          out_ += '[';
+          for (std::size_t i = 0; i < e.ty.dims.size(); ++i) {
+            if (i) out_ += ", ";
+            out_ += e.ty.dims[i].kind == DimKind::Integer ? std::to_string(e.ty.dims[i].size) : std::string(":");
+          }
+          out_ += ']';
+        }
         out_ += "*/(";
         exp(e.a);
         out_ += ')';
@@ -253,8 +262,17 @@ class ExprDumper {
         break;
       }
       case ExprKind::Reduction:
-        // 数组/归约竖切片再实现；先占位为可辨识的形态，避免静默产出错文本。
-        out_ += "/*UNIMPL_EXPR*/";
+        // 推导式 `array(<体> for <迭代变量> in <范围>)`（AC2 探针；嵌套 = 外层体里再一个 Reduction）。字段约定：call_name =
+        // {归约函数名, 迭代变量名}、a = 体、b = 范围（flatten 的 comprehension_expr）。约定不符 → 占位。
+        if (e.call_name.size() != 2) { out_ += "/*UNIMPL_EXPR*/"; break; }
+        out_ += in_.str(e.call_name[0]);
+        out_ += '(';
+        exp(e.a);
+        out_ += " for ";
+        out_ += in_.str(e.call_name[1]);
+        out_ += " in ";
+        exp(e.b);
+        out_ += ')';
         break;
     }
   }

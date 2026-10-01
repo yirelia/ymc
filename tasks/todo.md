@@ -948,6 +948,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           negativeSlope) 的命名实参按 NFModelicaBuiltin.mo 形参序重排成位置实参（smooth 的命名实参 1.25.0 报错，不放行）；homotopy
           按声明 `input Real … output Real` 实参提 Real（原表 Keep，`homotopy(x, 1)` 曾错印整数）。→ 全 scodeinst PASS 443→444
           （FuncBuiltinHomotopy）、nf-live 445；+1 单测（178）。
+    - [x] (59c) 推导式表达式 `array(e for i in r)` + smooth 的 Integer 实参转型（2026-10-02）：模型语境的 `{e for i in r, …}`
+          不再 SKIP——保留成 Reduction（字段约定 call_name = {array, 迭代变量}、a = 体、b = 范围，不改 inst 的 expr.h），最右迭代变量
+          在外层、迭代变量在体里作符号引用、参数范围按结构参数求值打字面量；Var 绑定 / 等式整体保留（同数组构造调用），Integer
+          元素对 Real 整体转型 `/*Real[2, 3]*/(…)`（expr_dump 新增 Reduction 打印与带维数组转型；simplify 不再把数组转型降成标量
+          转型）；sum 等逐元素用时代入迭代变量（scalarize）。smooth 的标量 Integer expr 插 `/*Real*/`（原 SKIP）。AC2 / AC3 / BT1
+          探针逐字节一致。→ 全 scodeinst PASS 444→445（DimUnknown9）、nf-live 445；+1 单测（179）。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、

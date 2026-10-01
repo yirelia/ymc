@@ -1760,12 +1760,31 @@ class Flattener {
   }
 
   // 返回数组的调用（或其元组元素）——Expression.hasArrayCall 的顶层形（嵌在运算里的数组调用在 try_emit_user_call 已拒）。
+  // 整个 Integer 数组表达式转 Real 数组：Cast（ty = Real + 原维），打印 `/*Real[n]*/(…)`。
+  Id<Expr> array_real_cast(Id<Expr> x) {
+    Expr c;
+    c.kind = ExprKind::Cast;
+    c.a = x;
+    c.ty = Type::array_of(Type::real(), result_.model.exprs[x].ty.dims);
+    return add(std::move(c));
+  }
   bool is_array_call(Id<Expr> id) {
     const Expr& x = result_.model.exprs[id];
-    return (x.kind == ExprKind::Call || x.kind == ExprKind::TupleElement) && x.ty.is_array();
+    // 推导式 `array(e for i in r)` 同数组构造调用：等式整体保留（AC3 探针 `x = array(/*Real*/(i) * time for i in 1:3)`）；
+    // 整体转型包着的也算（`/*Real[3]*/(array(…))`）。
+    if (x.kind == ExprKind::Cast && x.ty.is_array()) return is_array_call(x.a);
+    return (x.kind == ExprKind::Call || x.kind == ExprKind::TupleElement || x.kind == ExprKind::Reduction) && x.ty.is_array();
   }
   // 含数组调用的等式整体发射 `lhs = rhs`：同秩、已知维相等、元素类型相同（Integer↔Real 要整体强转，未做 → SKIP）。
   void emit_array_call_equation(Id<Expr> a, Id<Expr> b, SourceLoc loc, const SComment& cmt, bool is_initial) {
+    // Integer 推导式对 Real 一侧：整体转型 `/*Real[3]*/(array(i for i in 1:3))`（AC3 探针；其它数组调用的整体转型未核实）。
+    auto real_side = [&](Id<Expr>& x, Id<Expr> other) {
+      if (result_.model.exprs[x].kind == ExprKind::Reduction && result_.model.exprs[x].ty.element_type().kind == TypeKind::Integer &&
+          result_.model.exprs[other].ty.element_type().kind == TypeKind::Real)
+        x = array_real_cast(x);
+    };
+    real_side(a, b);
+    real_side(b, a);
     const Type aty = result_.model.exprs[a].ty, bty = result_.model.exprs[b].ty;
     if (!aty.is_array() || !bty.is_array() || !compat_dims(aty.dims, bty.dims) ||
         aty.element_type().kind != bty.element_type().kind) {
@@ -1819,6 +1838,19 @@ class Flattener {
       return scalarize(x.args[static_cast<std::size_t>(idx[0]) - 1], std::vector<std::int64_t>(idx.begin() + 1, idx.end()));
     }
     if (expr_shape(e).empty()) return e;   // 标量（广播操作数）；形状看穿字面量 / 一元的粗类型（`-{1, 2}`）
+    if (x.kind == ExprKind::Reduction && x.call_name.size() == 2) {
+      // 推导式的第 idx[0] 个元素：迭代变量代入范围的该值后化简，余下下标交给体（嵌套推导式）。AC3 探针
+      // `sum({x[i] * i for i in 1:3})` → `x[1] + x[2] * 2.0 + x[3] * 3.0`。
+      const std::optional<RangeLit> l = range_lit(result_.model.exprs[x.b]);
+      if (!l || !l->integer || idx.empty() || idx[0] < 1 || idx[0] > l->n) { set_unsupported("comprehension scalarization"); return lit_int(0); }
+      Expr ic;
+      ic.kind = ExprKind::Cref;
+      ic.cref.parts.push_back({x.call_name[1], {}});
+      const std::unordered_map<std::string, Id<Expr>> vals{
+          {expr_cref_key(ic.cref), lit_int(static_cast<std::int64_t>(l->start + static_cast<double>(idx[0] - 1) * l->step))}};
+      const Id<Expr> el = simplify_expr(clone_subst(x.a, vals));
+      return scalarize(el, std::vector<std::int64_t>(idx.begin() + 1, idx.end()));
+    }
     if (x.kind == ExprKind::Range) {   // 字面量范围的第 i 个元素 = 起 + (i - 1)·步（RG2 探针 `q = 1:3` → `q[2] = 2.0`）
       const std::optional<RangeLit> l = range_lit(x);
       if (!l || idx.size() != 1 || idx[0] < 1 || idx[0] > l->n) { set_unsupported("range scalarization"); return lit_int(0); }
@@ -2868,6 +2900,11 @@ class Flattener {
           rhs = rhsE;   // x = y、y = x[2:3]、w = z[1,:]（整取 / 切片同元素类型保持整体，A1/A5/A9/I1、SL1 探针）
         } else if ((rk == ExprKind::Call || rk == ExprKind::TupleElement) && relem == cty.kind) {
           rhs = rhsE;   // x = f(n)：含数组调用的等式整体保留（NFScalarize :343-346；IfExpression11 / FuncUnknownDim3）
+        } else if (rk == ExprKind::Reduction) {
+          // 推导式绑定保留 `array(e for i in r)`；Integer 元素对 Real 数组整体转型（AC2 探针 `x = /*Real[3]*/(array(i for …))`）。
+          if (relem == cty.kind) rhs = rhsE;
+          else if (relem == TypeKind::Integer && cty.kind == TypeKind::Real) rhs = array_real_cast(rhsE);
+          else { set_unsupported("comprehension binding type"); return; }
         } else if (rk == ExprKind::Array) {
           rhs = coerce_deep(rhsE, cty.kind);   // 常量数组调用求值成的字面量（FuncUnknownDim2）
         } else if (rk == ExprKind::Range && range_lit(re)) {
@@ -6765,6 +6802,9 @@ class Flattener {
         set_unsupported("tuple");
         return lit_int(0);
       case ExpKind::Array: {
+        // 推导式 `{e for i in r}`（模型语境）→ Reduction `array(e for i in r)`（comprehension_expr）。
+        if (!fn_scope_ && e.args.size() == 1 && I_.absyn.exps[e.args[0]].kind == ExpKind::Reduction)
+          return comprehension_expr(e.args[0], enclosing, prefix);
         Expr r;
         r.kind = ExprKind::Array;
         r.ty = Type::real();   // 元素类型粗略；dump 不看，强转在 emit_array/coerce_deep 里做
@@ -7719,6 +7759,63 @@ class Flattener {
     return x;
   }
 
+  // 推导式表达式 `{e for i in r, j in s}`：omc 保留成 `array(e for i in r)`，最右的迭代变量在最外层（嵌套
+  // `array(array(e for j in s) for i in r)` 的反序：`{e for j in 1:3, i in 1:2}` → `array(array(e for j in 1:3) for i in 1:2)`，
+  // AC2 / AC3 探针）。迭代变量在体里作符号引用（stmt_iters_，Integer）；范围须求成整数等差序列（参数范围按结构参数求值，
+  // 打成字面量 `1:3`、参数标 final，typeRange :2455-2460）。返回 Reduction（call_name = {array, 迭代变量}、a = 体、b = 范围、
+  // ty = 体类型 + 各层长度）；不适用 → 标 SKIP、返回占位。
+  Id<Expr> comprehension_expr(Id<Exp> red_id, NodeId scope, const std::vector<Symbol>& prefix) {
+    const Exp red = I_.absyn.exps[red_id];   // 拷贝（`{…}` 里那个 Reduction）
+    if (red.iters.empty()) { set_unsupported("comprehension shape"); return lit_int(0); }
+    std::vector<Id<Expr>> ranges;
+    std::vector<std::int64_t> lens;
+    for (const ForIndex& it : red.iters) {
+      if (!it.range.is_valid()) { set_unsupported("comprehension implicit range"); return lit_int(0); }
+      if (loop_vars_.count(it.name.id) || stmt_iters_.count(it.name.id)) { set_unsupported("shadowed comprehension iterator"); return lit_int(0); }
+      const std::optional<std::vector<std::int64_t>> seq = eval_range(it.range, scode_scope_of(scope), 0);
+      if (!seq || seq->empty()) { set_unsupported("comprehension range"); return lit_int(0); }
+      const std::int64_t step = seq->size() > 1 ? (*seq)[1] - (*seq)[0] : 1;
+      for (std::size_t k = 1; k < seq->size(); ++k)
+        if ((*seq)[k] - (*seq)[k - 1] != step) { set_unsupported("comprehension range"); return lit_int(0); }
+      Expr r;
+      r.kind = ExprKind::Range;
+      r.ty = Type::integer();
+      r.a = lit_int(seq->front());
+      if (I_.absyn.exps[it.range].c.is_valid()) {   // 原式带步长 → `a:s:b`
+        r.b = lit_int(step);
+        r.c = lit_int(seq->back());
+      } else {
+        r.b = lit_int(seq->back());
+      }
+      ranges.push_back(add(std::move(r)));
+      lens.push_back(static_cast<std::int64_t>(seq->size()));
+    }
+    for (const ForIndex& it : red.iters) stmt_iters_[it.name.id] = TypeKind::Integer;
+    const Id<Expr> body = simplify_expr(inst_exp(red.a, scope, prefix));
+    for (const ForIndex& it : red.iters) stmt_iters_.erase(it.name.id);
+    if (result_.unsupported) return lit_int(0);
+    // 体是数组：只认嵌套推导式（`{{i * j for j in 1:3} for i in 1:2}` → `array(array(… for j in 1:3) for i in 1:2)`，AC2）；
+    // 数组字面量等其它数组体的打印形态未核实 → SKIP。
+    if (!expr_shape(body).empty() && result_.model.exprs[body].kind != ExprKind::Reduction) {
+      set_unsupported("array-valued comprehension body");
+      return lit_int(0);
+    }
+    Id<Expr> e = body;
+    for (std::size_t k = 0; k < red.iters.size(); ++k) {   // 左起第一个迭代变量最内层
+      Dimension d;
+      d.kind = DimKind::Integer;
+      d.size = lens[k];
+      Expr r;
+      r.kind = ExprKind::Reduction;
+      r.call_name = {in_.intern("array"), red.iters[k].name};
+      r.a = e;
+      r.b = ranges[k];
+      r.ty = Type::array_of(result_.model.exprs[e].ty, {d});
+      e = add(std::move(r));
+    }
+    return e;
+  }
+
   // sum / product(e for i in r)（单迭代变量、常量范围；常量整式已由 eval_reduction 折叠）：逐值代入 e 后连成 + / * 链
   //（C1 探针：`sum(y[i] for i in 1:3)` → `y[1] + y[2] + y[3]`）。多迭代变量 / 范围求不出 / e 是数组 → SKIP。
   Id<Expr> reduction_chain(Id<Exp> rid, BinOp op, NodeId enclosing, const std::vector<Symbol>& prefix) {
@@ -8014,6 +8111,9 @@ class Flattener {
       }
     }
     if (supported && builtin_name == "smooth") {
+      // expr 是 Real（RealArrayOrRecord，NFModelicaBuiltin.mo:442-445）：标量 Integer 实参插转型（BT1 探针 `smooth(0, i)` →
+      // `smooth(0, /*Real*/(i))`）；数组 Integer 实参的转型形态未核实 → 下面照旧 SKIP。
+      if (result_.model.exprs[args[1]].ty.kind == TypeKind::Integer && expr_shape(args[1]).empty()) args[1] = to_real(args[1]);
       const TypeKind order_ty = result_.model.exprs[args[0]].ty.kind;
       const TypeKind value_ty = result_.model.exprs[args[1]].ty.kind;
       bool parameter_order = result_.model.exprs[args[0]].kind == ExprKind::IntLit;
@@ -8449,11 +8549,12 @@ class Flattener {
       }
       case ExprKind::Cast: {
         const Id<Expr> a0 = result_.model.exprs[id].a;
+        const Type cty = result_.model.exprs[id].ty;   // 保留原转型类型（数组转型 `/*Real[3]*/`，AC3）
         Id<Expr> a = simplify_expr(a0);
         const Expr& ea = result_.model.exprs[a];
         if (ea.kind == ExprKind::IntLit) return lit_real(static_cast<double>(ea.ival));
         if (ea.kind == ExprKind::RealLit) return a;
-        Expr r; r.kind = ExprKind::Cast; r.a = a; r.ty = Type::real();
+        Expr r; r.kind = ExprKind::Cast; r.a = a; r.ty = cty.is_array() ? cty : Type::real();
         return add(std::move(r));
       }
       case ExprKind::IfExp: {
