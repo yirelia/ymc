@@ -22,6 +22,7 @@ python tools/flat_sweep.py --oracle-live                                        
 python tools/nf_live_sweep.py                                                            # 旧前端语料 vs 实跑 omc
 python tools/nf_live_sweep.py --all --dir <testsuite>                                    # 门：整个 testsuite 的 .mo（3946 个）vs 实跑 omc
 python tools/nf_live_sweep.py --all --dir <testsuite> --skip-oracle                      # 排桶：SKIP 原因按 omc 能否压平分开计（真余量）
+#   函数调用没接住的 SKIP 带子原因：`function: f [record constructor]`（flatten 的 fn_fail，driver 打在方括号里）
 python tools/probe_recheck.py                                                            # 探针回归（tests/probes，见其 README）
 python tools/probe_lines.py probe.mo                                                     # 把一个探针模型逐行拆开对拍
 ```

@@ -19,6 +19,7 @@ struct FlattenResult {
   FlatModel model;
   bool unsupported = false;          // 碰到 v1 未实现的构造（方程/数组/…）
   std::string unsupported_reason;    // 供 driver 打 `ymc: not implemented: <reason>`
+  std::string unsupported_detail;    // 可选的细目（用户函数调用卡在哪一步），driver 接在后面打 ` [<detail>]`
 };
 
 // 压平一个已实例化的根节点（instantiate_root 的返回值）。

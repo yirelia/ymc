@@ -3976,6 +3976,42 @@ YMC_TEST(flatten_function_array_slices) {
   YMC_CHECK(uns);
 }
 
+YMC_TEST(flatten_state_machine_operators) {
+  // 状态机算子（MLS §17.1）：1.25.0 的新前端原样留调用——状态实参是类实例的引用（带实例前缀），transition 的缺省实参补齐
+  // 成 7 个位置实参（形参表 NFModelicaBuiltin.mo:582-611 v1.25.0），activeState / ticksInState / timeInState 是普通的
+  // Boolean / Integer / Real 调用。期望 = omc 1.25.0 实跑 SMT1（2026-10-03）。
+  YMC_CHECK_EQ(flatten_src("model SMT1\n  block St\n    output Real d;\n  end St;\n  model W\n    St w1;\n    St w2;\n"
+                           "    Boolean wc = time > 1;\n  equation\n    initialState(w1);\n"
+                           "    transition(w1, w2, wc, priority = 2, immediate = false);\n  end W;\n  St s1;\n  St s2;\n"
+                           "  St sa[2];\n  W w;\n  Boolean c = time > 1;\n  Integer i(start = 0);\n"
+                           "  Boolean a = activeState(s1) and not activeState(w.w2);\n  Integer t = ticksInState();\n"
+                           "  Real tt = timeInState() * 2;\n  Real y;\nequation\n  initialState(s1);\n"
+                           "  transition(s1, s2, c and i > 2);\n"
+                           "  transition(s2, s1, time > 3, reset = false, synchronize = true);\n"
+                           "  transition(from = sa[1], to = sa[2], condition = c);\n  when activeState(s2) then\n    y = time;\n"
+                           "  end when;\nalgorithm\n  i := ticksInState();\nend SMT1;\n"),
+               std::string("class SMT1\n  Real s1.d;\n  Real s2.d;\n  Real sa[1].d;\n  Real sa[2].d;\n  Real w.w1.d;\n"
+                           "  Real w.w2.d;\n  Boolean w.wc = time > 1.0;\n  Boolean c = time > 1.0;\n  Integer i(start = 0);\n"
+                           "  Boolean a = activeState(s1) and not activeState(w.w2);\n  Integer t = ticksInState();\n"
+                           "  Real tt = timeInState() * 2.0;\n  Real y;\nequation\n  initialState(w.w1);\n"
+                           "  transition(w.w1, w.w2, w.wc, false, true, false, 2);\n  initialState(s1);\n"
+                           "  transition(s1, s2, c and i > 2, true, true, false, 1);\n"
+                           "  transition(s2, s1, time > 3.0, true, false, true, 1);\n"
+                           "  transition(sa[1], sa[2], c, true, true, false, 1);\n  when activeState(s2) then\n    y = time;\n"
+                           "  end when;\nalgorithm\n  i := ticksInState();\nend SMT1;\n"));
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           // initialState / transition 没有返回值，当表达式用是 omc 的类型错（SMS1）。
+           {"model SMS1\n  block St\n  end St;\n  St s1;\n  Real y = initialState(s1);\nend SMS1;\n",
+            "state machine operator used as expression"},
+           // 状态实参须是类实例；内建类型的变量 omc 报错（SMS2）。
+           {"model SMS2\n  Boolean c = time > 1;\nequation\n  initialState(c);\nend SMS2;\n", "state machine operand"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

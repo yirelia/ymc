@@ -1,0 +1,782 @@
+//// set: sm-m2 — 状态机算子：状态实参的种类（记录 / 连接器 / 实例数组 / 嵌套实例）、具名实参、类型错、当表达式用
+//// model: M20
+model M20
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  record R Real x; end R; R r;
+equation
+  initialState(r);
+end M20;
+//// model: M21
+model M21
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  connector C Real p; flow Real f; end C; C cc;
+equation
+  initialState(cc);
+end M21;
+//// model: M22
+model M22
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  model W St w1; St w2; end W; W w;
+equation
+  initialState(w.w1); transition(w.w1, w.w2, c);
+end M22;
+//// model: M23
+model M23
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  model W St w1; St w2; end W; W w; Boolean a = activeState(w.w1);
+end M23;
+//// model: M24
+model M24
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  model W St w1; St w2; end W; W w[2];
+equation
+  initialState(w[1].w1); transition(w[1].w1, w[2].w2, c);
+end M24;
+//// model: M25
+model M25
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  model W St w1; end W; W w;
+equation
+  initialState(w);
+end M25;
+//// model: M26
+model M26
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  model W St w1[2]; equation initialState(w1[1]); transition(w1[1], w1[2], time > 1); end W; W w[2];
+end M26;
+//// model: M27
+model M27
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  St sa[2, 2];
+equation
+  initialState(sa[1, 2]); transition(sa[1, 2], sa[2, 1], c);
+end M27;
+//// model: M28
+model M28
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  St sa[2];
+equation
+  initialState(sa[3]);
+end M28;
+//// model: M29
+model M29
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  St sa[2]; parameter Integer k = 1;
+equation
+  initialState(sa[k]);
+end M29;
+//// model: BASE
+model BASE
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+end BASE;
+//// model: M210
+model M210
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  St sa[2];
+equation
+  for k in 1:2 loop transition(sa[k], sa[3 - k], i > k); end for; initialState(sa[1]);
+end M210;
+//// model: M211
+model M211
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  St sa[2]; Boolean a[2];
+equation
+  for k in 1:2 loop a[k] = activeState(sa[k]); end for;
+end M211;
+//// model: M212
+model M212
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+equation
+  initialState(s1); transition(s1, s1, c);
+end M212;
+//// model: M213
+model M213
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+equation
+  initialState(s1); transition(s1, s2, c, priority = 1 + 1);
+end M213;
+//// model: M214
+model M214
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+equation
+  initialState(s1); transition(s1, s2, c, immediate = not true);
+end M214;
+//// model: M215
+model M215
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+equation
+  initialState(s1); transition(s1, s2, 1 > 0);
+end M215;
+//// model: M216
+model M216
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+equation
+  initialState(s1); transition(s1, s2, c or false);
+end M216;
+//// model: M217
+model M217
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+equation
+  initialState(s1); transition(s1, s2, condition = c);
+end M217;
+//// model: M218
+model M218
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+equation
+  initialState(s1); transition(from = s1, to = s2, condition = c);
+end M218;
+//// model: M219
+model M219
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+equation
+  initialState(s1); transition(to = s2, from = s1, condition = c, priority = 3);
+end M219;
+//// model: M220
+model M220
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+equation
+  initialState(s1); transition(s1, s2, c, immediate = false, immediate = true);
+end M220;
+//// model: M221
+model M221
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+equation
+  initialState(s1); transition(s1, s2, c, foo = 1);
+end M221;
+//// model: M222
+model M222
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+equation
+  initialState(s1); transition(s1, s2, c, true, true, false, 1, 2);
+end M222;
+//// model: M223
+model M223
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+equation
+  initialState(s1); transition(s1, s2, c, 1);
+end M223;
+//// model: M224
+model M224
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+equation
+  initialState(s1); transition(s1, s2, c, true, true, false, true);
+end M224;
+//// model: M225
+model M225
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+equation
+  initialState(s1); transition(s1, s2, c, priority = 1.5);
+end M225;
+//// model: M226
+model M226
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+equation
+  initialState(state = s1);
+end M226;
+//// model: M227
+model M227
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+equation
+  initialState(s1); initialState(s2);
+end M227;
+//// model: M228
+model M228
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+equation
+  transition(s1, s2, c);
+end M228;
+//// model: M229
+model M229
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  Real y = if activeState(s1) then timeInState() else ticksInState();
+end M229;
+//// model: M230
+model M230
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  Real y;
+equation
+  when ticksInState() > 3 then y = timeInState(); end when;
+end M230;
+//// model: M231
+model M231
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  Boolean a = activeState(s1) == activeState(s2);
+end M231;
+//// model: M232
+model M232
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  Boolean a[2] = {activeState(s1), activeState(s2)};
+end M232;
+//// model: M233
+model M233
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  Integer t = ticksInState() + ticksInState();
+end M233;
+//// model: M234
+model M234
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  Real t = timeInState() + 0;
+end M234;
+//// model: M235
+model M235
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  Real t = 2 * timeInState() - time;
+end M235;
+//// model: M236
+model M236
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  function f input Real x; output Real y; algorithm y := x + timeInState(); end f; Real y = f(time);
+end M236;
+//// model: M237
+model M237
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  function f input Real x; output Boolean y; algorithm y := ticksInState() > 2; end f; Boolean y = f(time);
+end M237;
+//// model: M238
+model M238
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  Real y = initialState(s1);
+end M238;
+//// model: M239
+model M239
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  Boolean a = transition(s1, s2, c);
+end M239;
+//// model: M240
+model M240
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  Real y = activeState(s1);
+end M240;
+//// model: M241
+model M241
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  Integer t = timeInState();
+end M241;
+//// model: M242
+model M242
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  Real t = ticksInState();
+end M242;
+//// model: M243
+model M243
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  St s3 if c2; parameter Boolean c2 = true;
+equation
+  initialState(s3);
+end M243;
+//// model: M244
+model M244
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  St s3 if c2; parameter Boolean c2 = false;
+equation
+  initialState(s3);
+end M244;
+//// model: M245
+model M245
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  inner St s3;
+equation
+  initialState(s3);
+end M245;
+//// model: M246
+model M246
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+equation
+  initialState(s1) "start state";
+end M246;
+//// model: M247
+model M247
+  block St
+    output Real d;
+  end St;
+  model Em
+  end Em;
+  St s1;
+  St s2;
+  Em e1;
+  Em e2;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+equation
+  initialState(s1); transition(s1, s2, c) "go";
+end M247;

@@ -1227,6 +1227,20 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           第 2 维（omc 报错）。
           → 全 scodeinst PASS 488→494（FuncBuiltinSize、Size2、const8、loop3、OperationUnary2、OperationLogicalUnary2）、
           整个 testsuite PASS 1269→1277；+2 单测（221）、改 2 个旧单测（原先断言 SKIP 的写法现在做了）；探针 4296→4629。
+    - [x] (60a) 状态机算子 + 函数调用 SKIP 的子原因（2026-10-03）：
+          **排桶工具**：用户函数调用没接住时（`function: f` / `qualified function call` / `named function argument` 这三个笼统
+          原因共 60 多例）把卡在哪一步记成子原因，driver 打在 `[…]` 里（`function: f [record constructor]`），
+          `nf_live_sweep --skip-oracle` 按它分组；主原因与单测不变。分出来最大的一组是状态机算子（12 例，原因写的是
+          `function: initialState` 等）。
+          **状态机算子**（MLS §17.1）：1.25.0 的新前端原样留调用——`initialState(s)`、`transition(from, to, condition,
+          immediate = true, reset = true, synchronize = false, priority = 1)`（缺省实参补齐成 7 个位置实参、具名实参按名
+          入槽）、`activeState(s)` → Boolean、`ticksInState()` → Integer、`timeInState()` → Real。状态实参是类实例的引用
+          （沿实例树解析、带前缀打印 `w.w1`、实例数组取元素 `sa[1]`）；内建类型的变量 omc 报错。initialState / transition
+          只能单独成句（方程、算法、if / when / for 体里都行）。
+          未做 → SKIP：实例数组整体作状态（omc 打 `array(initialState(sa[$i1]) …)`）、记录实例作状态（omc 连带发射构造
+          函数）、下标是参数的状态（结构参数）。
+          → 整个 testsuite PASS 1277→1293（statemachines 下 15 例 + interactive_api_calls）；+1 单测（222）；探针
+          4629→4738。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、

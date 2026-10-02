@@ -145,6 +145,10 @@ omc 不同；源码里直接换行的多行注释是对的）——要彻底对�
 interval is [1,1]"；作用在切片上的向量化内建把切片的范围取下标（`abs(w[1:2])` → `array(abs(w[(1:2)[$i1]]) for $i1 in
 1:2)`，维未知时迭代范围是 `1:size(q[k,:], 1)`）；函数体里维已知的 `transpose(g)` 展开成字面量（未做）。
 
+状态机算子的两处 1.25.0 行为（SM 探针 m1 / m2，2026-10-03；ymc 不复刻，命中即 SKIP）：实例数组整体作状态实参时按向量化
+调用打成语句位置的 `array(initialState(sa[$i1]) for $i1 in 1:2);`；状态实参的形参类型是类型参数 `__Block`，记录 / 连接器
+实例也收（记录实例还会连带发射它的构造函数）。
+
 Integer 的极值（待用户定，2026-10-02）：`max` / `min` 作用在空的 Integer 数组 / 空范围上取 `∓System.intMaxLit`（Expression.makeMinValue / makeMaxValue，v1.25.0 NFExpression.mo:4908-4934），这个值随 omc 构建的整数位宽而变——本机安装版 1.25.0（Windows）打 `1073741823`，testsuite 文件（64 位 Linux 生成）是 `4611686018427387903`。跟实跑的 omc 就要把 30 位的值写进 ymc，跟文件又过不了 oracle=live 门；ymc 目前两边都不跟，遇到即 SKIP（`Integer extreme of empty min/max (platform-dependent in omc)`）。受影响：scodeinst 的 CevalReduction1、FuncBuiltinMax / Max2 / Min / Min2、FuncBuiltinReduction 六例（其余内容已与 1.25.0 一致，只差这一个值）。Real（`±8.777798510069901e304`）、Boolean、枚举的极值与平台无关，已做。
 
 ## 已研究待实现：多条 connect 连接集（union-find）

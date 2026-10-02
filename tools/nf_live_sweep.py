@@ -90,7 +90,7 @@ def check(path, tmp, args):
     ycode, yout, yerr = run([rt.YMC, dst], os.path.dirname(dst), args.timeout)
     if ycode == rt.YMC_NOT_IMPL_EXIT:
         m = _NOT_IMPL.search(yerr + yout)
-        rec.update(verdict="SKIP", reason=(m.group(1).strip()[:60] if m else "unspecified"))
+        rec.update(verdict="SKIP", reason=(m.group(1).strip()[:110] if m else "unspecified"))
         if args.skip_oracle:
             ocode, oout, _ = run([args.omc, dst], os.path.dirname(dst), args.omc_timeout)
             rec["omc_ok"] = ocode is not None and oout.startswith(("class", "function", "impure function"))

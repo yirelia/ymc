@@ -6608,12 +6608,13 @@ class Flattener {
     for (std::size_t i = 0; i < result_.model.functions.size(); ++i)
       if (result_.model.functions[i].name == qname) return i;
     const SElement& fel = I_.scode.elems[fr.fe];
-    if (fel.is_partial || fn_annotation_blocks(fel.cmt.annotation)) return std::nullopt;   // 调 partial 函数 = 错误
+    if (fel.is_partial || fn_annotation_blocks(fel.cmt.annotation))   // 调 partial 函数 = 错误
+      return fn_fail<std::optional<std::size_t>>("partial function or unsupported class annotation");
     // 类注解 / external 段注解里的 derivative / inverse：形态须在已做范围内，被引用的函数在本函数发射完后连带发射（见末尾）。
     std::vector<Id<Cref>> ann_refs;
     if (!fn_ref_annotations(fel.cmt.annotation, sig, ann_refs) ||
         (sig.ext && !fn_ref_annotations(sig.ext->annotation, sig, ann_refs)))
-      return std::nullopt;
+      return fn_fail<std::optional<std::size_t>>("derivative / inverse annotation form");
     // 纯度（makeAttributes :2626-2633）：显式 pure / impure 照写；未声明时自带 external 段的函数 impure，继承来的 external
     // 段不算（FunctionSections5 `function f extends base_f` 打 `function f`）；外部调用名为 ModelicaError → pure。
     const bool modelica_error = fel.def.external.present && fel.def.external.func_name.is_valid() &&
@@ -6627,16 +6628,18 @@ class Flattener {
     for (const auto& ad : alias_defaults) {   // 别名修饰只接输入（修饰输出 / 局部的形态未做）
       bool is_input = false;
       for (Id<SElement> eid : sig.inputs) is_input = is_input || I_.scode.elems[eid].name.id == ad.first;
-      if (!is_input) return std::nullopt;
+      if (!is_input) return fn_fail<std::optional<std::size_t>>("alias modifier on non-input");
     }
     // 形参类型：先按元素类型登记全部名字（维 / 绑定可互引），再按声明序算维（`Real z[n]`、`Real y[size(x, 1)]`）。
     std::unordered_map<std::uint32_t, std::vector<Symbol>> rec_paths;   // 记录类型形参 / 局部 → 记录压平名
     for (Id<SElement> eid : all) {
       const SElement& c = I_.scode.elems[eid];
-      if (c.attr.ct != SConnectorType::Potential || c.prefixes.io != SInnerOuter::None) return std::nullopt;
+      if (c.attr.ct != SConnectorType::Potential || c.prefixes.io != SInnerOuter::None)
+        return fn_fail<std::optional<std::size_t>>("flow / stream / inner / outer function variable");
       TypeKind tk;
       if (builtin_scalar_type_kind(c.type.path, tk)) {
-        if (c.mod.is_valid() && !I_.scode.mods[c.mod].subs.empty()) return std::nullopt;   // 属性修饰（打印形态未核实）
+        if (c.mod.is_valid() && !I_.scode.mods[c.mod].subs.empty())   // 属性修饰（打印形态未核实）
+          return fn_fail<std::optional<std::size_t>>("attribute modifier on function variable");
         func_params_[c.name.id] = Type::of(tk);
         continue;
       }
@@ -6646,9 +6649,12 @@ class Flattener {
       Id<SElement> rec;
       ScodeScope rs;
       std::optional<std::vector<Symbol>> rpath = rec_flat_name(c, fr.fscope, rec, rs);
-      if (!rpath || !c.attr.dims.empty() || !c.type.dims.empty()) return std::nullopt;
-      if (c.mod.is_valid() && I_.scode.mods[c.mod].binding.is_valid()) return std::nullopt;
-      if (!emit_record_ctor(rec, rs, *rpath) || result_.unsupported) return std::nullopt;
+      if (!rpath) return fn_fail<std::optional<std::size_t>>("function variable type (enumeration / derived / unresolved)");
+      if (!c.attr.dims.empty() || !c.type.dims.empty()) return fn_fail<std::optional<std::size_t>>("record array in function");
+      if (c.mod.is_valid() && I_.scode.mods[c.mod].binding.is_valid())
+        return fn_fail<std::optional<std::size_t>>("record binding in function");
+      if (!emit_record_ctor(rec, rs, *rpath) || result_.unsupported)
+        return fn_fail<std::optional<std::size_t>>("record constructor");
       func_params_[c.name.id] = Type::of(TypeKind::Complex);
       fn_records_[c.name.id] = FnRecord{rec, rs};
       rec_paths[c.name.id] = std::move(*rpath);
@@ -6666,7 +6672,7 @@ class Flattener {
           dim.kind = DimKind::Unknown;
         } else {
           const Id<Expr> de = fn_exp(d, Type::integer());
-          if (result_.unsupported || !de.is_valid()) return std::nullopt;
+          if (result_.unsupported || !de.is_valid()) return fn_fail<std::optional<std::size_t>>("function variable dimension");
           if (result_.model.exprs[de].kind == ExprKind::IntLit) {
             dim.kind = DimKind::Integer;
             dim.size = result_.model.exprs[de].ival;
@@ -6689,7 +6695,7 @@ class Flattener {
         // 字段修饰 `R r(x = lx)`：定型只为收依赖（getLocalDependencies2：无绑定的记录看字段绑定），不打印。
         for (const SSubMod& sm : I_.scode.mods[c.mod].subs) {
           const SMod& fm = I_.scode.mods[sm.mod];
-          if (!fm.subs.empty()) return std::nullopt;
+          if (!fm.subs.empty()) return fn_fail<std::optional<std::size_t>>("nested record field modifier in function");
           if (!fm.binding.is_valid()) continue;
           const Id<Expr> fb = simplify_expr(inst_exp(fm.binding, Inst::empty_node(), {}));
           if (result_.unsupported) return std::nullopt;
@@ -6700,10 +6706,11 @@ class Flattener {
       const auto ad = alias_defaults.find(c.name.id);
       if (ad != alias_defaults.end()) {
         b = coerce_to_param(ad->second, ty);
-        if (!b.is_valid()) return std::nullopt;
+        if (!b.is_valid()) return fn_fail<std::optional<std::size_t>>("alias default type");
       } else if (c.mod.is_valid() && I_.scode.mods[c.mod].binding.is_valid()) {
         b = fn_exp(I_.scode.mods[c.mod].binding, ty);
-        if (result_.unsupported || !b.is_valid()) return std::nullopt;   // 绑定类型不符（omc 报错）
+        if (result_.unsupported || !b.is_valid())   // 绑定类型不符（omc 报错）
+          return fn_fail<std::optional<std::size_t>>("function variable binding");
       }
       binds[c.name.id] = b;
     }
@@ -6739,7 +6746,7 @@ class Flattener {
         }
         rest = std::move(keep);
       }
-      if (!rest.empty()) return std::nullopt;
+      if (!rest.empty()) return fn_fail<std::optional<std::size_t>>("cyclic local bindings");
     }
     FlatFunction ff;
     ff.name = qname;
@@ -6783,7 +6790,7 @@ class Flattener {
     result_.model.functions[fi].has_algorithm = sig.alg != nullptr;
     if (sig.ext) {
       FlatFunction ext_part;   // 先填到临时对象（下面的 inst_exp 不会发射函数，但不跨调用持 functions 引用）
-      if (!fn_external(sig, ext_part)) return std::nullopt;
+      if (!fn_external(sig, ext_part)) return fn_fail<std::optional<std::size_t>>("external declaration form");
       FlatFunction& f = result_.model.functions[fi];
       f.is_external = true;
       f.ext_lang = ext_part.ext_lang;
@@ -6796,7 +6803,7 @@ class Flattener {
     }
     for (Id<Cref> rc : ann_refs) {
       const std::optional<std::size_t> li = emit_referenced_function(I_.absyn.crefs[rc]);
-      if (!li) return std::nullopt;
+      if (!li) return fn_fail<std::optional<std::size_t>>("function referenced by derivative / inverse annotation");
       const std::vector<Symbol> lname = result_.model.functions[*li].name;   // 拷贝：下一句取 functions[fi] 的引用
       result_.model.functions[fi].linked.push_back(lname);
     }
@@ -6975,25 +6982,28 @@ class Flattener {
     noret_call_ = false;   // 只管最外层这一个调用，实参里的调用照常
     const Cref& fn = I_.absyn.crefs[e.cref];
     const ScodeScope sc = scode_scope_of(lex);
+    fn_why_ = nullptr;
     const std::optional<FnRef> fr = resolve_fn(fn, sc);
-    if (!fr) return {};
+    if (!fr) return {};   // 不是用户函数（内建 / 查不到）：无子原因
     FnSig sig;
     std::unordered_set<std::uint32_t> seen;
-    if (!collect_fn_sig(fr->fe, fr->fscope, sig, seen, 0) || (sig.outputs.empty() && !noret)) return {};
-    for (Id<Exp> a : e.args) if (I_.absyn.exps[a].kind == ExpKind::Reduction) return {};   // 归约实参 / 向量化未做
+    if (!collect_fn_sig(fr->fe, fr->fscope, sig, seen, 0)) return fn_fail<Id<Expr>>("invalid or unsupported function signature");
+    if (sig.outputs.empty() && !noret) return fn_fail<Id<Expr>>("function without output used as expression");
+    for (Id<Exp> a : e.args)   // 归约实参 / 向量化未做
+      if (I_.absyn.exps[a].kind == ExpKind::Reduction) return fn_fail<Id<Expr>>("reduction as function argument");
     Id<SElement> home;
     const std::optional<std::vector<Symbol>> qname = fn_flat_name(fn, sc, lex, prefix, home);
-    if (!qname) return {};
+    if (!qname) return fn_fail<Id<Expr>>("flattened function name");
     // 别名修饰（`function g = f(r = x)`）在别名定义处求值：只做单层别名、定义在调用实例自身类里、模型语境。
     std::unordered_map<std::uint32_t, Id<Expr>> alias_defaults;
     if (!fr->alias_mods.empty()) {
       ScodeScope ads;
       if (fn_scope_ || fr->alias_mods.size() != 1 || fn.parts.size() != 1 || sc.empty() ||
           !find_scode_element_at(fn.parts[0].name, sc, ads).is_valid() || ads.empty() || ads[0].raw != sc[0].raw)
-        return {};
+        return fn_fail<Id<Expr>>("function alias with modifiers");
       for (const SSubMod& s : I_.scode.mods[fr->alias_mods[0]].subs) {
         const SMod& sm = I_.scode.mods[s.mod];
-        if (!sm.binding.is_valid() || !sm.subs.empty()) return {};
+        if (!sm.binding.is_valid() || !sm.subs.empty()) return fn_fail<Id<Expr>>("function alias with modifiers");
         const Id<Expr> x = simplify_expr(inst_exp(sm.binding, enclosing, prefix));
         if (result_.unsupported) return {};
         alias_defaults[s.ident.id] = x;
@@ -7007,10 +7017,10 @@ class Flattener {
       if (i < e.arg_names.size() && e.arg_names[i].is_valid()) {
         std::size_t j = 0;
         while (j < inputs.size() && I_.scode.elems[inputs[j]].name != e.arg_names[i]) ++j;
-        if (j >= inputs.size() || raw[j].is_valid()) return {};
+        if (j >= inputs.size() || raw[j].is_valid()) return fn_fail<Id<Expr>>("named argument does not match an input");
         raw[j] = e.args[i];
       } else {
-        if (pos >= inputs.size()) return {};
+        if (pos >= inputs.size()) return fn_fail<Id<Expr>>("too many arguments");
         raw[pos++] = e.args[i];
       }
     }
@@ -7021,7 +7031,7 @@ class Flattener {
         if (result_.unsupported) return {};
       }
     const std::optional<std::size_t> fi = emit_function(*fr, sig, *qname, alias_defaults, home);
-    if (!fi || result_.unsupported) return {};
+    if (!fi || result_.unsupported) return fn_fail<Id<Expr>>("function body");
     const std::vector<FlatFuncParam> params = result_.model.functions[*fi].params;   // 拷贝（下面会往 arena add）
     if (fn_scope_ && result_.model.functions[*fi].is_impure && !fn_impure_) {
       set_unsupported("pure function calls impure function (warning)");
@@ -7047,7 +7057,7 @@ class Flattener {
       return true;
     };
     for (std::size_t i = 0; i < inputs.size(); ++i)
-      if (!fill(i) || result_.unsupported) return {};
+      if (!fill(i) || result_.unsupported) return fn_fail<Id<Expr>>("missing argument / default value");
     // 向量化（模型语境）：实参秩 > 形参秩，多出的前导维 = 向量化维，各向量化实参须相同（T20 `F(w, x)` 维不同 → omc 内部错）、
     // 已知且 ≥ 1。实参换成取了 `[$i1, …]` 的形态后照常按形参强转（`/*Real*/(k[$i1])`）。多输出函数的向量化未核实 → SKIP。
     std::vector<std::int64_t> vd;
@@ -7059,27 +7069,28 @@ class Flattener {
         const std::size_t pr = params[i].ty.dims.size();
         if (ash.size() <= pr) continue;
         const std::vector<std::int64_t> lead(ash.begin(), ash.end() - static_cast<std::ptrdiff_t>(pr));
-        for (std::int64_t n : lead) if (n < 1) return {};
-        if (!vd.empty() && vd != lead) return {};
+        for (std::int64_t n : lead) if (n < 1) return fn_fail<Id<Expr>>("vectorization over unknown / empty dimension");
+        if (!vd.empty() && vd != lead) return fn_fail<Id<Expr>>("vectorization dimension mismatch");
         vd = lead;
         vec.push_back(i);
       }
       if (!vd.empty()) {
         // 语句位置的向量化调用 omc 打 `array(f(x[$i1]) for $i1 in 1:3);`（N1 探针），未做。
-        if (sig.outputs.size() > 1 || noret) return {};
+        if (sig.outputs.size() > 1 || noret) return fn_fail<Id<Expr>>("vectorized multi-output / statement call");
         std::vector<Id<Expr>> iters;
         for (std::size_t k = 1; k <= vd.size(); ++k) iters.push_back(vect_iter(k));
         for (std::size_t i : vec) {
           args[i] = vectorize_arg(args[i], iters, written_array_literal(raw[i]));
-          if (!args[i].is_valid()) return {};
+          if (!args[i].is_valid()) return fn_fail<Id<Expr>>("vectorized argument form");
         }
       }
     }
     for (std::size_t i = 0; i < inputs.size(); ++i) {
       // 记录形参：实参须是同一记录类的整体引用（构造调用等其余形态未做）。
-      if (params[i].record_def != Id<SElement>::kInvalid && record_def_of(args[i]) != params[i].record_def) return {};
+      if (params[i].record_def != Id<SElement>::kInvalid && record_def_of(args[i]) != params[i].record_def)
+        return fn_fail<Id<Expr>>("record argument form");
       const Id<Expr> a = coerce_to_param(args[i], params[i].ty);
-      if (!a.is_valid()) return {};   // 实参类型 / 维不符（omc 报错）→ SKIP
+      if (!a.is_valid()) return fn_fail<Id<Expr>>("argument type / shape");   // 实参类型 / 维不符（omc 报错）→ SKIP
       args[i] = simplify_expr(a);
       // 数组实参里的算术式（维已知）：omc 的化简按元素展开成字面量（GA 探针 `g(2 * x)` → `g({2.0 * x[1], 2.0 * x[2],
       // 2.0 * x[3]})`、`gm(m + m)`，函数体里已知维的局部同样）；整体 / 切片引用、if、字面量、推导式原样。`vector(x)` /
@@ -7104,19 +7115,19 @@ class Flattener {
       }
     }
     Type rty = sig.outputs.empty() ? Type{} : params[inputs.size()].ty;   // 首输出类型（无输出的语句调用：Unknown）
-    if (!vd.empty() && rty.kind == TypeKind::Complex) return {};   // 返回记录的向量化调用未核实
+    if (!vd.empty() && rty.kind == TypeKind::Complex) return fn_fail<Id<Expr>>("vectorized record result");   // 未核实
     if (rty.kind == TypeKind::Complex) {
       // 返回记录的调用（记录等式 `r = f(x)` / 记录赋值，RF1 探针）：类型取输出记录类的实例类节点（record_match /
       // 构造函数登记要节点）；没有实例节点 / 多输出 → SKIP。
       const std::uint32_t rd = params[inputs.size()].record_def;
       const NodeId rn = rd == Id<SElement>::kInvalid ? NodeId{} : record_class_node(Id<SElement>::from_index(rd));
-      if (!rn.is_valid() || sig.outputs.size() > 1) return {};
+      if (!rn.is_valid() || sig.outputs.size() > 1) return fn_fail<Id<Expr>>("record result");
       rty.complex_node = rn.raw;
     }
     if (!fn_scope_ && rty.is_array()) {
       // 模型语境里嵌在别的运算中的数组调用：须逐元素展开，未做 → SKIP。向量化调用的体不受此限（T9 `m = array(H(x[$i1]) for
       // $i1 in 1:3)`），它所在的位置由推导式的消费方把关（scalarize 的 red_scalarize_ok_）。
-      if (!whole && vd.empty()) return {};
+      if (!whole && vd.empty()) return fn_fail<Id<Expr>>("array-valued call inside an expression");
       // 调用处求输出维（NFCall.evaluateCallTypeDim :3061-3088）：维表达式里的输入换成实参再求值；buildParameterTree
       // 只放输入（局部不代换，:3104 TODO）→ 求不出的维留未知（与任何维相容，FuncUnknownDim3 `Real[n] result`）。
       for (Dimension& d : rty.dims) {
@@ -8920,9 +8931,11 @@ class Flattener {
         }
       }
     noret_call_ = true;
+    sm_stmt_ = true;         // initialState / transition 只能作语句（见 state_machine_call）
     array_call_ok_ = true;   // 语句位置 = 整个式子，返回数组的函数也行（OperationSubEW2 `f(r1, r2);`）
     Id<Expr> c = inst_exp(ce, enclosing, prefix);
     noret_call_ = false;
+    sm_stmt_ = false;
     array_call_ok_ = false;
     if (result_.unsupported) return {};
     c = simplify_expr(c);
@@ -8934,6 +8947,7 @@ class Flattener {
   }
 
   Id<Expr> call(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    fn_why_ = nullptr;   // 子原因按调用清零（见 fn_fail）
     const Cref& fn = I_.absyn.crefs[e.cref];
     // 调用结果的字段访问 `f(i).y`：1.25.0 自己报内部错误（DotOperator），ymc 未做 → SKIP（此前被静默当成 f(i)）。
     if (e.call_suffix.is_valid()) { set_unsupported("field access on call result"); return lit_int(0); }
@@ -10380,6 +10394,129 @@ class Flattener {
   // Structural.markExp :2172-2173 / :2191-2192 / :2210 / :2228；u 可以是钟）、interval([u]) → Real、firstTick([u]) → Boolean。
   // 数组实参只收整体引用 / 字面量 / 数组调用（其余数组式 omc 先展开成字面量 `hold({2.0 * z[1], 2.0 * z[2]})`，未做 → SKIP）。
   // 不是这些算子、或是经典的 sample(start, interval) → invalid（调用方照常）。
+  // 状态机算子（MLS §17.1）：1.25.0 的新前端原样留调用（状态机不在前端展开），状态实参是模型 / 块实例的引用（带实例
+  // 前缀打印），transition 的缺省实参补齐成 7 个位置实参（SM 探针 m1：`transition(s1, s2, c)` →
+  // `transition(s1, s2, c, true, true, false, 1)`、`initialState(w.w1)`、`activeState(s1)`、`ticksInState()` /
+  // `timeInState()`）。状态实参须是标量的类实例（变量 / 字段 / 找不到 → omc 报错；实例数组整体 omc 打成
+  // `array(initialState(sa[$i1]) for $i1 in 1:2)`，不复刻）。
+  bool sm_stmt_ = false;   // 正在定型的是一条无返回值调用语句 / 方程的最外层调用（noret_call 置，第一个状态机算子取走）
+  Id<Expr> state_machine_call(const Exp& e, std::string_view name, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    const bool stmt = sm_stmt_;
+    sm_stmt_ = false;
+    // initialState / transition 没有返回值，只能单独成句；当表达式用是 omc 的类型错（SM 探针 m2 `Real y = initialState(s1)`）。
+    if (!stmt && (name == "initialState" || name == "transition")) {
+      set_unsupported("state machine operator used as expression");
+      return lit_int(0);
+    }
+    const std::vector<Id<Exp>> raw = e.args;            // 拷贝（下面定型会往 arena 加）
+    const std::vector<Symbol> names = e.arg_names;
+    auto named = [&](std::size_t i) { return i < names.size() && names[i].is_valid(); };
+    auto mk = [&](std::vector<Id<Expr>> args, Type ty) {
+      Expr r;
+      r.kind = ExprKind::Call;
+      r.call_name = {in_.intern(name)};
+      r.args = std::move(args);
+      r.ty = std::move(ty);
+      return add(std::move(r));
+    };
+    auto state = [&](Id<Exp> a) -> Id<Expr> {
+      if (I_.absyn.exps[a].kind != ExpKind::CrefExp) { set_unsupported("state machine operand"); return lit_int(0); }
+      const Id<Expr> x = state_ref(I_.absyn.crefs[I_.absyn.exps[a].cref], enclosing, prefix);
+      if (!x.is_valid() && !result_.unsupported) set_unsupported("state machine operand");
+      return x.is_valid() ? x : lit_int(0);
+    };
+    if (name == "ticksInState" || name == "timeInState") {
+      if (!raw.empty()) { set_unsupported("function arity"); return lit_int(0); }
+      return mk({}, name == "ticksInState" ? Type::integer() : Type::real());
+    }
+    if (name == "activeState" || name == "initialState") {
+      // 形参名都是 state（NFModelicaBuiltin：`initialState(state = s1)` omc 接受，m2）。
+      if (raw.size() != 1 || (named(0) && in_.str(names[0]) != "state")) { set_unsupported("function arity"); return lit_int(0); }
+      const Id<Expr> st = state(raw[0]);
+      if (result_.unsupported) return lit_int(0);
+      return mk({st}, name == "activeState" ? Type::boolean() : Type{});
+    }
+    // transition(from, to, condition, immediate = true, reset = true, synchronize = false, priority = 1)
+    static constexpr std::string_view kSlots[] = {"from", "to", "condition", "immediate", "reset", "synchronize", "priority"};
+    std::vector<Id<Exp>> slot(7);
+    std::size_t pos = 0;
+    for (std::size_t i = 0; i < raw.size(); ++i) {
+      std::size_t k = 7;
+      if (named(i)) {
+        for (std::size_t j = 0; j < 7; ++j)
+          if (in_.str(names[i]) == kSlots[j]) k = j;
+      } else {
+        k = pos++;
+      }
+      if (k >= 7 || slot[k].is_valid()) { set_unsupported("function arity"); return lit_int(0); }
+      slot[k] = raw[i];
+    }
+    if (!slot[0].is_valid() || !slot[1].is_valid() || !slot[2].is_valid()) { set_unsupported("function arity"); return lit_int(0); }
+    std::vector<Id<Expr>> args{state(slot[0]), state(slot[1])};
+    if (result_.unsupported) return lit_int(0);
+    const Id<Expr> defaults[] = {Id<Expr>{}, Id<Expr>{}, Id<Expr>{}, lit_bool(true), lit_bool(true), lit_bool(false), lit_int(1)};
+    for (std::size_t k = 2; k < 7; ++k) {
+      Id<Expr> x = defaults[k];
+      if (slot[k].is_valid()) {
+        x = simplify_expr(inst_exp(slot[k], enclosing, prefix));
+        if (result_.unsupported) return lit_int(0);
+        const Type xt = result_.model.exprs[x].ty;
+        if (xt.is_array() || xt.kind != (k == 6 ? TypeKind::Integer : TypeKind::Boolean)) {
+          set_unsupported("state machine operand");   // 类型不符：omc 报错
+          return lit_int(0);
+        }
+      }
+      args.push_back(x);
+    }
+    return mk(std::move(args), Type{});
+  }
+  // 状态实参：书写的 cref 沿实例树逐段找组件（首段是 enclosing 的本地组件，各段可带字面量下标取实例数组的元素），末段须是
+  // 类实例（形参类型是类型参数 `__Block`，NFModelicaBuiltin.mo:582-611 v1.25.0：模型 / 块 / 记录 / 连接器的实例 omc 都收，
+  // 内建类型的变量报错）且没有剩余的维。找不到 / 不是 → invalid。
+  Id<Expr> state_ref(const Cref& c, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    if (c.leading_dot || c.parts.empty()) return {};
+    Expr r;
+    r.kind = ExprKind::Cref;
+    r.ty = Type::of(TypeKind::Complex);
+    for (std::size_t i = 0; i < prefix.size(); ++i) {
+      std::vector<Id<Expr>> ps;
+      if (i < cur_psubs_.size())
+        for (std::int64_t v : cur_psubs_[i]) ps.push_back(lit_int(v));
+      r.cref.parts.push_back({prefix[i], std::move(ps)});
+    }
+    NodeId scope = enclosing;
+    const ScodeScope sscope = scode_scope_of(enclosing);
+    for (std::size_t i = 0; i < c.parts.size(); ++i) {
+      const NodeId n = find_local(scope, c.parts[i].name);
+      if (!n.is_valid() || I_.nodes[n].is_empty() || !I_.nodes[n].comp.is_valid()) return {};
+      const CompId cid = I_.nodes[n].comp;
+      if (I_.comps[cid].ty.kind != TypeKind::Complex) return {};
+      const SElement& cel = I_.scode.elems[I_.comps[cid].def];
+      // 实例数组：下标须把各维取尽、且是整数常量。
+      std::vector<std::int64_t> dims;
+      for (Id<Exp> d : cel.attr.dims) if (!eval_dim(d, dims, sscope)) return {};
+      for (Id<Exp> d : cel.type.dims) if (!eval_dim(d, dims, sscope)) return {};
+      if (c.parts[i].subscripts.size() != dims.size()) return {};
+      std::vector<Id<Expr>> subs;
+      for (std::size_t k = 0; k < dims.size(); ++k) {
+        const std::optional<std::int64_t> v = subscript_int(c.parts[i].subscripts[k], &sscope);
+        if (!v || *v < 1 || *v > dims[k]) return {};
+        subs.push_back(lit_int(*v));
+      }
+      r.cref.parts.push_back({c.parts[i].name, std::move(subs)});
+      scope = I_.comps[cid].class_inst;
+      if (!scope.is_valid() || I_.nodes[scope].is_empty() || I_.nodes[scope].kind != NodeKind::Class) return {};
+      if (i + 1 == c.parts.size()) {
+        // 记录实例也收，但 omc 会连带发射它的构造函数（m2 `initialState(r)`），未做 → invalid（调用方 SKIP）。
+        const Id<SElement> def = I_.nodes[scope].def;
+        if (def.is_valid() && (I_.scode.elems[def].restriction == SRestriction::Record ||
+                               I_.scode.elems[def].restriction == SRestriction::OperatorRecord))
+          return {};
+        r.cref.resolved_node = n.raw;
+      }
+    }
+    return add(std::move(r));
+  }
   Id<Expr> sync_call(const Exp& e, std::string_view name, NodeId enclosing, const std::vector<Symbol>& prefix, bool top) {
     if (name == "Clock") return clock_ctor(e, enclosing, prefix);
     struct Op {
@@ -10530,6 +10667,10 @@ class Flattener {
     if (builtin_name == "scalar") return scalar_call(e, enclosing, prefix);
     if (builtin_name == "String") return string_call(e, enclosing, prefix);
     if (builtin_name == "delay" && !fn_scope_) return delay_call(e, enclosing, prefix);
+    // 状态机算子：ticksInState / timeInState 没有实参，函数体里也能用（m2）；带状态实参的只在模型语境。
+    if (builtin_name == "ticksInState" || builtin_name == "timeInState" ||
+        (!fn_scope_ && (builtin_name == "initialState" || builtin_name == "transition" || builtin_name == "activeState")))
+      return state_machine_call(e, builtin_name, enclosing, prefix);
     if (builtin_name == "linspace" && !fn_scope_) return linspace_call(e, enclosing, prefix);
     if (!fn_scope_)
       if (Id<Expr> r = model_array_builtin(e, builtin_name, enclosing, prefix); r.is_valid() || result_.unsupported) return r;
@@ -10577,12 +10718,12 @@ class Flattener {
     const BuiltinFn* bf = nullptr;
     bool supported = true;
     if (fn.parts.size() != 1 && !as_builtin.is_valid()) {
-      set_unsupported("qualified function call");
+      set_unsupported_call("qualified function call");
       supported = false;
     }
     for (Symbol name : e.arg_names)
       if (name.is_valid()) {
-        set_unsupported("named function argument");
+        set_unsupported_call("named function argument");
         supported = false;
         break;
     }
@@ -10590,7 +10731,7 @@ class Flattener {
       bf = lookup_builtin(builtin_name);
       if (!bf) {
         const std::string why = "function: " + std::string(builtin_name);
-        set_unsupported(why.c_str());
+        set_unsupported_call(why.c_str());
         supported = false;
       } else if (bf->arity >= 0 && static_cast<std::size_t>(bf->arity) != e.args.size()) {
         set_unsupported("function arity");
@@ -11728,6 +11869,18 @@ class Flattener {
 
   void set_unsupported(const char* why) {
     if (!result_.unsupported) { result_.unsupported = true; result_.unsupported_reason = why; }
+  }
+  // 用户函数调用没接住（落到"function: f" / "qualified function call" / "named function argument"）时的子原因：只进
+  // FlattenResult::unsupported_detail（driver 打在 `[…]` 里，供 nf_live_sweep 排桶），主原因不变。一次调用里先到的为准。
+  const char* fn_why_ = nullptr;
+  template <class R>
+  R fn_fail(const char* why) {
+    if (!fn_why_) fn_why_ = why;
+    return R{};
+  }
+  void set_unsupported_call(const char* why) {
+    if (!result_.unsupported && fn_why_) result_.unsupported_detail = fn_why_;
+    set_unsupported(why);
   }
 
   // 记录构造整体绑定 `R r = R(a, b, x=c)` = 类修饰 `R r(字段=实参…)`：把构造实参按声明序（位置实参）

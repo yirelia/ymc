@@ -1,0 +1,48 @@
+//// set: sm-ut — 状态机算子（单测原文）
+//// model: SMS1
+model SMS1
+  block St
+  end St;
+  St s1;
+  Real y = initialState(s1);
+end SMS1;
+//// model: SMS2
+model SMS2
+  Boolean c = time > 1;
+equation
+  initialState(c);
+end SMS2;
+//// model: SMT1
+model SMT1
+  block St
+    output Real d;
+  end St;
+  model W
+    St w1;
+    St w2;
+    Boolean wc = time > 1;
+  equation
+    initialState(w1);
+    transition(w1, w2, wc, priority = 2, immediate = false);
+  end W;
+  St s1;
+  St s2;
+  St sa[2];
+  W w;
+  Boolean c = time > 1;
+  Integer i(start = 0);
+  Boolean a = activeState(s1) and not activeState(w.w2);
+  Integer t = ticksInState();
+  Real tt = timeInState() * 2;
+  Real y;
+equation
+  initialState(s1);
+  transition(s1, s2, c and i > 2);
+  transition(s2, s1, time > 3, reset = false, synchronize = true);
+  transition(from = sa[1], to = sa[2], condition = c);
+  when activeState(s2) then
+    y = time;
+  end when;
+algorithm
+  i := ticksInState();
+end SMT1;

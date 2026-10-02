@@ -159,3 +159,6 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `fs-t3` | 68 | 函数体：Integer 数组进 Real 的转型、fill / zeros / ones 的展开、各种积 |
 | `fs-t4` | 17 | 函数体里的数组 if 表达式：分支转型、逐元素展开 |
 | `fs-ut` | 5 | size 与函数体切片（单测原文） |
+| `sm-m1` | 57 | 状态机算子：initialState / transition / activeState / ticksInState / timeInState 的各种实参与位置 |
+| `sm-m2` | 49 | 状态机算子：状态实参的种类（记录 / 连接器 / 实例数组 / 嵌套实例）、具名实参、类型错、当表达式用 |
+| `sm-ut` | 3 | 状态机算子（单测原文） |
