@@ -1,0 +1,625 @@
+//// set: es-e8 — edge / change / semiLinear / smooth 在 when、for、函数体、向量化里的各种形态
+//// model: E80
+model E80
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean bb = a > 0; Real y;
+equation
+  when edge(bb) then y = a; end when;
+end E80;
+//// model: E81
+model E81
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean bb[2] = {a > 0, b > 0}; Boolean e = edge(bb[1]);
+end E81;
+//// model: E82
+model E82
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean bb[2] = {a > 0, b > 0}; Boolean e[2] = edge(bb);
+end E82;
+//// model: E83
+model E83
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean bb[2] = {a > 0, b > 0}; Boolean e[2];
+equation
+  for i in 1:2 loop e[i] = edge(bb[i]); end for;
+end E83;
+//// model: E84
+model E84
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  record R Boolean f; end R; R r(f = a > 0); Boolean e = edge(r.f);
+end E84;
+//// model: E85
+model E85
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean bb = a > 0; Boolean e = edge((bb));
+end E85;
+//// model: E86
+model E86
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean bb = a > 0; Boolean e = edge(pre(bb));
+end E86;
+//// model: E87
+model E87
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean bb = a > 0; Boolean e = not edge(bb);
+end E87;
+//// model: E88
+model E88
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean bb = a > 0; Boolean e = edge(bb) or edge(bb);
+end E88;
+//// model: E89
+model E89
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean bb = a > 0; Boolean e; algorithm e := edge(bb);
+end E89;
+//// model: BASE
+model BASE
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+end BASE;
+//// model: E810
+model E810
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean bb = a > 0; Boolean e; algorithm e := edge(a > 0);
+end E810;
+//// model: E811
+model E811
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean bb = a > 0; Real y; algorithm when edge(bb) then y := a; end when;
+end E811;
+//// model: E812
+model E812
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean bb = a > 0; Real y;
+equation
+  when {edge(bb), a > 1} then y = a; end when;
+end E812;
+//// model: E813
+model E813
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer n = integer(a); Boolean e = edge(n > 0);
+end E813;
+//// model: E814
+model E814
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean e = edge(initial());
+end E814;
+//// model: E815
+model E815
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean bb = a > 0; Boolean e = change(bb);
+end E815;
+//// model: E816
+model E816
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean e = change(a > 0);
+end E816;
+//// model: E817
+model E817
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer n = integer(a); Boolean e = change(n);
+end E817;
+//// model: E818
+model E818
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean e = change(a);
+end E818;
+//// model: E819
+model E819
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y;
+equation
+  for i in 1:2 loop y = semiLinear(a, i, i); end for;
+end E819;
+//// model: E820
+model E820
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2];
+equation
+  for i in 1:2 loop y[i] = semiLinear(a, i, i); end for;
+end E820;
+//// model: E821
+model E821
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2];
+equation
+  for i in 1:2 loop y[i] = semiLinear(a, b * i, b * i); end for;
+end E821;
+//// model: E822
+model E822
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2] = semiLinear({a, b}, {c, c}, {c, c});
+end E822;
+//// model: E823
+model E823
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2] = semiLinear({a, b}, c, c);
+end E823;
+//// model: E824
+model E824
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2] = {semiLinear(a, b, b), semiLinear(0, a, b)};
+end E824;
+//// model: E825
+model E825
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(a, b, b) * semiLinear(a, c, c);
+end E825;
+//// model: E826
+model E826
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(a, 1, 1) * 2;
+end E826;
+//// model: E827
+model E827
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(a, 1, 1) + 0;
+end E827;
+//// model: E828
+model E828
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(a, b, b) ^ 2;
+end E828;
+//// model: E829
+model E829
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = -semiLinear(a, b, b);
+end E829;
+//// model: E830
+model E830
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(-a, b, b);
+end E830;
+//// model: E831
+model E831
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(a, -b, -b);
+end E831;
+//// model: E832
+model E832
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(a + b, b + c, b + c);
+end E832;
+//// model: E833
+model E833
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(a, b + c, c + b);
+end E833;
+//// model: E834
+model E834
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(a, 2, 2.0);
+end E834;
+//// model: E835
+model E835
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(2, 3, 3);
+end E835;
+//// model: E836
+model E836
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(a, 0, 0.0);
+end E836;
+//// model: E837
+model E837
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(0, a, a);
+end E837;
+//// model: E838
+model E838
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(a, 0, b);
+end E838;
+//// model: E839
+model E839
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(1 - 1, a, b);
+end E839;
+//// model: E840
+model E840
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(0 * a, b, c);
+end E840;
+//// model: E841
+model E841
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(semiLinear(a, b, b), c, c);
+end E841;
+//// model: E842
+model E842
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(a, semiLinear(b, c, c), b * c);
+end E842;
+//// model: E843
+model E843
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y; algorithm y := semiLinear(a, b, b);
+end E843;
+//// model: E844
+model E844
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y; algorithm y := semiLinear(a, 1, 1);
+end E844;
+//// model: E845
+model E845
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y; algorithm y := semiLinear(0, a, b);
+end E845;
+//// model: E846
+model E846
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y; algorithm y := smooth(0, 2);
+end E846;
+//// model: E847
+model E847
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  function f input Real x; output Real y; algorithm y := semiLinear(x, 2, 2); end f; Real y = f(a);
+end E847;
+//// model: E848
+model E848
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  function f input Real x; output Real y; algorithm y := semiLinear(x, x, x); end f; Real y = f(a);
+end E848;
+//// model: E849
+model E849
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  function f input Real x; output Real y; algorithm y := semiLinear(0, x, x); end f; Real y = f(a);
+end E849;
+//// model: E850
+model E850
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  function f input Real x; output Real y; algorithm y := smooth(0, 2) * x; end f; Real y = f(a);
+end E850;
+//// model: E851
+model E851
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  function f input Real x; output Real y; algorithm y := smooth(0, x); end f; Real y = f(a);
+end E851;
+//// model: E852
+model E852
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  function f input Real x; output Real y; algorithm y := semiLinear(x, 2, 2); end f; Real y = f(3);
+end E852;
+//// model: E853
+model E853
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2] = smooth(0, {1, 2});
+end E853;
+//// model: E854
+model E854
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2] = smooth(0, {a, b});
+end E854;
+//// model: E855
+model E855
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = smooth(0, 2) + smooth(1, a);
+end E855;
+//// model: E856
+model E856
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y;
+equation
+  when a > 0 then y = smooth(0, 2); end when;
+end E856;
+//// model: E857
+model E857
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y;
+equation
+  when a > 0 then y = semiLinear(a, b, b); end when;
+end E857;
+//// model: E858
+model E858
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = if a > 0 then semiLinear(a, b, b) else smooth(0, 1);
+end E858;
+//// model: E859
+model E859
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = noEvent(semiLinear(a, b, b));
+end E859;
+//// model: E860
+model E860
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = der(semiLinear(a, 2, 2));
+end E860;
+//// model: E861
+model E861
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y(start = smooth(0, 2)) = a;
+end E861;
+//// model: E862
+model E862
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Real p = smooth(0, 2);
+end E862;
+//// model: E863
+model E863
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Real p = semiLinear(1, 2, 2);
+end E863;
+//// model: E864
+model E864
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Real p = 3; parameter Real q = semiLinear(p, 2, 2);
+end E864;
+//// model: E865
+model E865
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Real p = 3; parameter Real q = semiLinear(p, p, p);
+end E865;
+//// model: E866
+model E866
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Real k = semiLinear(1, 2, 2); Real y = k * a;
+end E866;
+//// model: E867
+model E867
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Real k = smooth(0, 2); Real y = k * a;
+end E867;
+//// model: E868
+model E868
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Real k = semiLinear(1, 2, 3); Real y = k * a;
+end E868;
+//// model: E869
+model E869
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[2] = {a, b}; Real y[2] = semiLinear(x, c, c);
+end E869;
+//// model: E870
+model E870
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[2] = {a, b}; Real y[2] = semiLinear(x, x, x);
+end E870;
+//// model: E871
+model E871
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[2] = {a, b}; Real y[2] = semiLinear(x, 0, 0);
+end E871;
+//// model: E872
+model E872
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[2] = {a, b}; Real y[2] = semiLinear(x, 1, 2);
+end E872;
+//// model: E873
+model E873
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[2] = {a, b}; Real y[2] = semiLinear(x, x, 2 * x);
+end E873;
+//// model: E874
+model E874
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[2] = {a, b}; Real y[2] = semiLinear(0, x, x);
+end E874;
+//// model: E875
+model E875
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[2] = {a, b}; Real y[2] = semiLinear(0, x, 2 * x);
+end E875;
+//// model: E876
+model E876
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[2] = {a, b}; Real y[2] = semiLinear(zeros(2), x, 2 * x);
+end E876;
+//// model: E877
+model E877
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[2] = {a, b}; Real y[2] = semiLinear(a, x, 2 * x);
+end E877;
+//// model: E878
+model E878
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[2] = {a, b}; Real m[2] = {b, c}; Real y[2] = semiLinear(x, m, m);
+end E878;
+//// model: E879
+model E879
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[2] = {a, b}; Real m[2] = {b, c}; Real y[2] = semiLinear(x, m, x);
+end E879;
+//// model: E880
+model E880
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[2] = {a, b}; Real m[2] = {b, c}; Real y[2] = semiLinear(0, m, x);
+end E880;
+//// model: E881
+model E881
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[2] = {a, b}; Real y[2] = semiLinear({0, 0}, x, 2);
+end E881;
+//// model: E882
+model E882
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[2] = {a, b}; Real y[2] = semiLinear({a, b}, 1, 2);
+end E882;
+//// model: E883
+model E883
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[2] = {a, b}; Real y[2] = semiLinear(2 * x, 1, 2);
+end E883;
+//// model: E884
+model E884
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[2] = {a, b}; Real y[2] = semiLinear(x - x, 1, 2);
+end E884;
+//// model: E885
+model E885
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[2] = {a, b}; Real y[2] = semiLinear(x, 2, 2.0);
+end E885;

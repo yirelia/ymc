@@ -1,0 +1,11 @@
+//// set: uaf — 合成 Absyn 节点时 arena 不扩容（400 个元素的记录数组字段展开；修复前 ASan 报 use-after-free）
+//// model: U1
+model U1
+  record R
+    Real x;
+  end R;
+  R r[400];
+  Real y[400] = r.x + r.x;
+equation
+  r.x = fill(time, 400);
+end U1;

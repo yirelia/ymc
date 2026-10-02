@@ -1,0 +1,266 @@
+//// set: es-e4 — array(…) 与 String(…)、字符串拼接
+//// model: E40
+model E40
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3] = array(1, 2, 3);
+end E40;
+//// model: E41
+model E41
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3] = array(a, b, c);
+end E41;
+//// model: E42
+model E42
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2, 2] = array({a, b}, {c, a});
+end E42;
+//// model: E43
+model E43
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer n[2] = array(1, 2);
+end E43;
+//// model: E44
+model E44
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[1] = array(a);
+end E44;
+//// model: E45
+model E45
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(1) + String(1.5) + String(true);
+end E45;
+//// model: E46
+model E46
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(1);
+end E46;
+//// model: E47
+model E47
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(1.5);
+end E47;
+//// model: E48
+model E48
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(true);
+end E48;
+//// model: E49
+model E49
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(a);
+end E49;
+//// model: BASE
+model BASE
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+end BASE;
+//// model: E410
+model E410
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = "x" + String(a);
+end E410;
+//// model: E411
+model E411
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(1) + "x";
+end E411;
+//// model: E412
+model E412
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = "a" + "b" + "c";
+end E412;
+//// model: E413
+model E413
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(2 * 3);
+end E413;
+//// model: E414
+model E414
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(1.0);
+end E414;
+//// model: E415
+model E415
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(1e10);
+end E415;
+//// model: E416
+model E416
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(1.5e-7);
+end E416;
+//// model: E417
+model E417
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(123456789.123);
+end E417;
+//// model: E418
+model E418
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(-0.0);
+end E418;
+//// model: E419
+model E419
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(1 / 3);
+end E419;
+//// model: E420
+model E420
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(E.two); type E = enumeration(one, two);
+end E420;
+//// model: E421
+model E421
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(1.23456789, significantDigits = 3);
+end E421;
+//// model: E422
+model E422
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(12, minimumLength = 5);
+end E422;
+//// model: E423
+model E423
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(12, minimumLength = 5, leftJustified = false);
+end E423;
+//// model: E424
+model E424
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(1.5, format = "8.3f");
+end E424;
+//// model: E425
+model E425
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(true, minimumLength = 6);
+end E425;
+//// model: E426
+model E426
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(integer(a));
+end E426;
+//// model: E427
+model E427
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Integer n = 3; String s = String(n);
+end E427;
+//// model: E428
+model E428
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Integer n = 3; String s = String(n);
+end E428;
+//// model: E429
+model E429
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter String p = "x"; String s = p + "y";
+end E429;
+//// model: E430
+model E430
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant String p = "x"; String s = p + "y";
+end E430;
+//// model: E431
+model E431
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k = "a" < "b";
+end E431;
+//// model: E432
+model E432
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k = "a" == "a";
+end E432;
+//// model: E433
+model E433
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k = "ab" <> "ac";
+end E433;
+//// model: E434
+model E434
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k = "b" >= "a";
+end E434;
+//// model: E435
+model E435
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = if a > 0 then "p" else "n";
+end E435;
+//// model: E436
+model E436
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = if true then "p" else "n";
+end E436;

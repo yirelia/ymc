@@ -1,0 +1,581 @@
+//// set: es-e2 — 实参全是字面量的内建：求值 / 原样保留
+//// model: E20
+model E20
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k = a > a;
+end E20;
+//// model: E21
+model E21
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k = a == a;
+end E21;
+//// model: E22
+model E22
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k = a < b and true;
+end E22;
+//// model: E23
+model E23
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k = 1 < 2 and a < b;
+end E23;
+//// model: E24
+model E24
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k = a < b or 1 > 2;
+end E24;
+//// model: E25
+model E25
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k = not 1 < 2;
+end E25;
+//// model: E26
+model E26
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k = not (a < b or true);
+end E26;
+//// model: E27
+model E27
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k = true <> false;
+end E27;
+//// model: E28
+model E28
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k = true == false or a > b;
+end E28;
+//// model: E29
+model E29
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = smooth(0, 2);
+end E29;
+//// model: BASE
+model BASE
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+end BASE;
+//// model: E210
+model E210
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = smooth(1, a);
+end E210;
+//// model: E211
+model E211
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = smooth(0, 2 * 3);
+end E211;
+//// model: E212
+model E212
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = noEvent(2 + 3);
+end E212;
+//// model: E213
+model E213
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = pre(1.5) + a;
+end E213;
+//// model: E214
+model E214
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = der(2.5) + a;
+end E214;
+//// model: E215
+model E215
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = abs(-2.5);
+end E215;
+//// model: E216
+model E216
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = acos(0.5) + asin(0.5) + atan(1) + atan2(1, 1);
+end E216;
+//// model: E217
+model E217
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = ceil(1.2) + floor(1.8);
+end E217;
+//// model: E218
+model E218
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = cosh(0) + sinh(0) + tanh(0) + tan(0);
+end E218;
+//// model: E219
+model E219
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = div(7.5, 2) + mod(7.5, 2) + rem(7.5, 2);
+end E219;
+//// model: E220
+model E220
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = exp(1) + log(2) + log10(100);
+end E220;
+//// model: E221
+model E221
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = sign(-2.5) + sqrt(2);
+end E221;
+//// model: E222
+model E222
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = max(1.5, 2) + min(1.5, 2);
+end E222;
+//// model: E223
+model E223
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = sum({1, 2, 3}) + product({1.5, 2});
+end E223;
+//// model: E224
+model E224
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = sum({a, 1, 2});
+end E224;
+//// model: E225
+model E225
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = product({a, 2});
+end E225;
+//// model: E226
+model E226
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = scalar({{1.5}});
+end E226;
+//// model: E227
+model E227
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = scalar({a});
+end E227;
+//// model: E228
+model E228
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3] = vector({{1}, {2}, {3}});
+end E228;
+//// model: E229
+model E229
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2, 2] = identity(2);
+end E229;
+//// model: E230
+model E230
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2, 2] = diagonal({1, 2});
+end E230;
+//// model: E231
+model E231
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2, 2] = transpose({{1, 2}, {3, 4}});
+end E231;
+//// model: E232
+model E232
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2, 2] = symmetric({{1, 2}, {3, 4}});
+end E232;
+//// model: E233
+model E233
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3, 3] = skew({1, 2, 3});
+end E233;
+//// model: E234
+model E234
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[1, 2] = matrix({1, 2});
+end E234;
+//// model: E235
+model E235
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3] = cat(1, {1}, {2, 3});
+end E235;
+//// model: E236
+model E236
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2] = fill(1.5, 2);
+end E236;
+//// model: E237
+model E237
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2] = ones(2) + zeros(2);
+end E237;
+//// model: E238
+model E238
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3] = array(1, 2, 3);
+end E238;
+//// model: E239
+model E239
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3] = cross({1, 0, 0}, {0, 1, 0});
+end E239;
+//// model: E240
+model E240
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2, 2] = outerProduct({1, 2}, {3, 4});
+end E240;
+//// model: E241
+model E241
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3] = linspace(0, 1, 3);
+end E241;
+//// model: E242
+model E242
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(1) + String(1.5) + String(true);
+end E242;
+//// model: E243
+model E243
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(a);
+end E243;
+//// model: E244
+model E244
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = "a" + "b";
+end E244;
+//// model: E245
+model E245
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer k = integer(2.5) + integer(-2.5);
+end E245;
+//// model: E246
+model E246
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer k = Integer(E.two); type E = enumeration(one, two);
+end E246;
+//// model: E247
+model E247
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = delay(1.5, 1);
+end E247;
+//// model: E248
+model E248
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = delay(a, 1);
+end E248;
+//// model: E249
+model E249
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = homotopy(1.5, 2.5);
+end E249;
+//// model: E250
+model E250
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = homotopy(a, b);
+end E250;
+//// model: E251
+model E251
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(1, 2, 3);
+end E251;
+//// model: E252
+model E252
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(a, 2, 3);
+end E252;
+//// model: E253
+model E253
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(0, a, b);
+end E253;
+//// model: E254
+model E254
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k = edge(true);
+end E254;
+//// model: E255
+model E255
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k = change(true);
+end E255;
+//// model: E256
+model E256
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k = initial();
+end E256;
+//// model: E257
+model E257
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k = terminal();
+end E257;
+//// model: E258
+model E258
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k = sample(0, 1);
+end E258;
+//// model: E259
+model E259
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = cos(1 + 1);
+end E259;
+//// model: E260
+model E260
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = sin(2 * 3.5) * a;
+end E260;
+//// model: E261
+model E261
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = abs(sin(0) - 1);
+end E261;
+//// model: E262
+model E262
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = max(abs(-1), sqrt(4));
+end E262;
+//// model: E263
+model E263
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = integer(sqrt(16)) + a;
+end E263;
+//// model: E264
+model E264
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = if abs(-1) > 0 then a else b;
+end E264;
+//// model: E265
+model E265
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = if sin(0) > 0 then a else b;
+end E265;
+//// model: E266
+model E266
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = exp(log(2));
+end E266;
+//// model: E267
+model E267
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 2 ^ log10(100);
+end E267;
+//// model: E268
+model E268
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = sqrt(-1 + 2);
+end E268;
+//// model: E269
+model E269
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = log(exp(1));
+end E269;
+//// model: E270
+model E270
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = tanh(1) + atan2(0, 1) + acos(1);
+end E270;
+//// model: E271
+model E271
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = mod(-7, 3) + rem(-7, 3) + div(-7, 3);
+end E271;
+//// model: E272
+model E272
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = mod(7, -3) + rem(7, -3) + div(7, -3);
+end E272;
+//// model: E273
+model E273
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = mod(-7.5, 3) + rem(-7.5, 3) + div(-7.5, 3);
+end E273;
+//// model: E274
+model E274
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = ceil(-1.5) + floor(-1.5) + integer(-1.5);
+end E274;
+//// model: E275
+model E275
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = sign(0) + sign(0.0) + abs(0);
+end E275;
+//// model: E276
+model E276
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = max(1, 2.5) + min(1, 2.5);
+end E276;
+//// model: E277
+model E277
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = max({1, 5, 3}) + min({4, 2, 6});
+end E277;
+//// model: E278
+model E278
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = max(max(1, 2), 3);
+end E278;
+//// model: E279
+model E279
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = sum(fill(2, 3)) + product(ones(3));
+end E279;
+//// model: E280
+model E280
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = sum({{1, 2}, {3, 4}});
+end E280;
+//// model: E281
+model E281
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = sum(identity(2));
+end E281;

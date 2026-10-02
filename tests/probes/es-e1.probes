@@ -1,0 +1,875 @@
+//// set: es-e1 — 标量化简规则表：恒等元、取负、常量折叠、if、关系与逻辑
+//// model: E10
+model E10
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a + 0;
+end E10;
+//// model: E11
+model E11
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 0 + a;
+end E11;
+//// model: E12
+model E12
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a - 0;
+end E12;
+//// model: E13
+model E13
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 0 - a;
+end E13;
+//// model: E14
+model E14
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a * 1;
+end E14;
+//// model: E15
+model E15
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 1 * a;
+end E15;
+//// model: E16
+model E16
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a * 0;
+end E16;
+//// model: E17
+model E17
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 0 * a;
+end E17;
+//// model: E18
+model E18
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a / 1;
+end E18;
+//// model: E19
+model E19
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 0 / a;
+end E19;
+//// model: BASE
+model BASE
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+end BASE;
+//// model: E110
+model E110
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a ^ 1;
+end E110;
+//// model: E111
+model E111
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a ^ 0;
+end E111;
+//// model: E112
+model E112
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 0 ^ a;
+end E112;
+//// model: E113
+model E113
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 1 ^ a;
+end E113;
+//// model: E114
+model E114
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a - a;
+end E114;
+//// model: E115
+model E115
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a / a;
+end E115;
+//// model: E116
+model E116
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a + a;
+end E116;
+//// model: E117
+model E117
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a * a;
+end E117;
+//// model: E118
+model E118
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = -(-a);
+end E118;
+//// model: E119
+model E119
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a + (-b);
+end E119;
+//// model: E120
+model E120
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a - (-b);
+end E120;
+//// model: E121
+model E121
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = (-a) + b;
+end E121;
+//// model: E122
+model E122
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = (-a) - b;
+end E122;
+//// model: E123
+model E123
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = (-a) * b;
+end E123;
+//// model: E124
+model E124
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a * (-b);
+end E124;
+//// model: E125
+model E125
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = (-a) * (-b);
+end E125;
+//// model: E126
+model E126
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = (-a) / b;
+end E126;
+//// model: E127
+model E127
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a / (-b);
+end E127;
+//// model: E128
+model E128
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = (-a) / (-b);
+end E128;
+//// model: E129
+model E129
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = -(a - b);
+end E129;
+//// model: E130
+model E130
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = -(a * b);
+end E130;
+//// model: E131
+model E131
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = -(a / b);
+end E131;
+//// model: E132
+model E132
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a * (-1);
+end E132;
+//// model: E133
+model E133
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = (-1) * a;
+end E133;
+//// model: E134
+model E134
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a / (-1);
+end E134;
+//// model: E135
+model E135
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 2 * 3 * a;
+end E135;
+//// model: E136
+model E136
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a * 2 * 3;
+end E136;
+//// model: E137
+model E137
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 2 * a * 3;
+end E137;
+//// model: E138
+model E138
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 2 + a + 3;
+end E138;
+//// model: E139
+model E139
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a + 2 + 3;
+end E139;
+//// model: E140
+model E140
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 2 + 3 + a;
+end E140;
+//// model: E141
+model E141
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 2 * (3 * a);
+end E141;
+//// model: E142
+model E142
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = (a * 2) * 3;
+end E142;
+//// model: E143
+model E143
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 2 + (3 + a);
+end E143;
+//// model: E144
+model E144
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 1 / 2 * a;
+end E144;
+//// model: E145
+model E145
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a / 2 / 4;
+end E145;
+//// model: E146
+model E146
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a * 2 / 4;
+end E146;
+//// model: E147
+model E147
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 6 / 3 * a;
+end E147;
+//// model: E148
+model E148
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a - 2 - 3;
+end E148;
+//// model: E149
+model E149
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a - (2 - 3);
+end E149;
+//// model: E150
+model E150
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = (a + 1) - 1;
+end E150;
+//// model: E151
+model E151
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = (a - 1) + 1;
+end E151;
+//// model: E152
+model E152
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a * 0 + b;
+end E152;
+//// model: E153
+model E153
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = (a - a) * b;
+end E153;
+//// model: E154
+model E154
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a + b - a;
+end E154;
+//// model: E155
+model E155
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a * b / a;
+end E155;
+//// model: E156
+model E156
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 2 * a + 3 * a;
+end E156;
+//// model: E157
+model E157
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a ^ 2 * a;
+end E157;
+//// model: E158
+model E158
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a ^ 2 ^ 1;
+end E158;
+//// model: E159
+model E159
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = (a ^ 2) ^ 3;
+end E159;
+//// model: E160
+model E160
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a ^ (1 + 1);
+end E160;
+//// model: E161
+model E161
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a ^ 0.5 ^ 2;
+end E161;
+//// model: E162
+model E162
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = (a * b) ^ 1;
+end E162;
+//// model: E163
+model E163
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 2 ^ 3;
+end E163;
+//// model: E164
+model E164
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 2 ^ 0.5;
+end E164;
+//// model: E165
+model E165
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 2.0 ^ 3;
+end E165;
+//// model: E166
+model E166
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 4 ^ 0.5;
+end E166;
+//// model: E167
+model E167
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 1 / 3;
+end E167;
+//// model: E168
+model E168
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 2 / 2;
+end E168;
+//// model: E169
+model E169
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 7 / 2;
+end E169;
+//// model: E170
+model E170
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 1e10 * 1e10;
+end E170;
+//// model: E171
+model E171
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 0.1 + 0.2;
+end E171;
+//// model: E172
+model E172
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 3 - 5;
+end E172;
+//// model: E173
+model E173
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = -3 * -1 + a;
+end E173;
+//// model: E174
+model E174
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = if true then a else b;
+end E174;
+//// model: E175
+model E175
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = if false then a else b;
+end E175;
+//// model: E176
+model E176
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = if a > b then a else a;
+end E176;
+//// model: E177
+model E177
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = if a > b then 1 else 1;
+end E177;
+//// model: E178
+model E178
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = if 1 > 2 then a else b;
+end E178;
+//// model: E179
+model E179
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = if a > 0 then (if true then a else b) else b;
+end E179;
+//// model: E180
+model E180
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = if a > 0 then a elseif false then b else 2;
+end E180;
+//// model: E181
+model E181
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = if a > 0 then a elseif true then b else 2;
+end E181;
+//// model: E182
+model E182
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = if not true then a else b;
+end E182;
+//// model: E183
+model E183
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean c = a > a;
+end E183;
+//// model: E184
+model E184
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean c = a == a;
+end E184;
+//// model: E185
+model E185
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean c = a < b and true;
+end E185;
+//// model: E186
+model E186
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean c = 1 < 2 and a < b;
+end E186;
+//// model: E187
+model E187
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean c = a < b or 1 > 2;
+end E187;
+//// model: E188
+model E188
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean c = not 1 < 2;
+end E188;
+//// model: E189
+model E189
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean c = not (a < b or true);
+end E189;
+//// model: E190
+model E190
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean c = 2 > 1 == true;
+end E190;
+//// model: E191
+model E191
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean c = true <> false;
+end E191;
+//// model: E192
+model E192
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer k = 7 + 2 * 3;
+end E192;
+//// model: E193
+model E193
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer k = div(7, 2) + mod(7, 2) + rem(7, 2);
+end E193;
+//// model: E194
+model E194
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer k = integer(2.7) + integer(-2.7);
+end E194;
+//// model: E195
+model E195
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer k = abs(-3) + sign(-2) + max(1, 2) + min(1, 2);
+end E195;
+//// model: E196
+model E196
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer k = integer(a) + 0;
+end E196;
+//// model: E197
+model E197
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer k = integer(a) * 1;
+end E197;
+//// model: E198
+model E198
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer k = 0 * integer(a);
+end E198;
+//// model: E199
+model E199
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer k = integer(a) - integer(a);
+end E199;
+//// model: E1100
+model E1100
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = abs(-1.5) + sqrt(4) + sin(0) + cos(0) + exp(0) + log(1);
+end E1100;
+//// model: E1101
+model E1101
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = abs(a) + abs(-a);
+end E1101;
+//// model: E1102
+model E1102
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = sqrt(a ^ 2);
+end E1102;
+//// model: E1103
+model E1103
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = sin(a) ^ 2 + cos(a) ^ 2;
+end E1103;
+//// model: E1104
+model E1104
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = exp(log(a));
+end E1104;
+//// model: E1105
+model E1105
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = noEvent(a) + noEvent(1);
+end E1105;
+//// model: E1106
+model E1106
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = smooth(1, a) + smooth(0, 2);
+end E1106;
+//// model: E1107
+model E1107
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = max(a, a) + min(a, b);
+end E1107;
+//// model: E1108
+model E1108
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = max(1, a) + min(a, 2.5);
+end E1108;
+//// model: E1109
+model E1109
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = der(a) + der(1) + der(2 * a);
+end E1109;
+//// model: E1110
+model E1110
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a + 1.0 * b + 0.0 * a;
+end E1110;
+//// model: E1111
+model E1111
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = (a + b) * 1 - 0 * (a - b);
+end E1111;
+//// model: E1112
+model E1112
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = (a + b) / 1.0 + (a - b) ^ 1.0;
+end E1112;
+//// model: E1113
+model E1113
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a ^ 2.0;
+end E1113;
+//// model: E1114
+model E1114
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a ^ (-1);
+end E1114;
+//// model: E1115
+model E1115
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a ^ (-2);
+end E1115;
+//// model: E1116
+model E1116
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a ^ 0.5;
+end E1116;
+//// model: E1117
+model E1117
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a * a ^ (-1);
+end E1117;
+//// model: E1118
+model E1118
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 1 / a ^ 2;
+end E1118;
+//// model: E1119
+model E1119
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 1 / (1 / a);
+end E1119;
+//// model: E1120
+model E1120
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a / (b / c);
+end E1120;
+//// model: E1121
+model E1121
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = (a / b) / c;
+end E1121;
+//// model: E1122
+model E1122
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = (a / b) * c;
+end E1122;
+//// model: E1123
+model E1123
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = a / b * b;
+end E1123;

@@ -1,0 +1,84 @@
+//// set: es-e7 — 模型算法段里的整数组赋值（未做，SKIP 基线）
+//// model: E70
+model E70
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; algorithm y := {a, b};
+end E70;
+//// model: E71
+model E71
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; algorithm y := {1, 2};
+end E71;
+//// model: E72
+model E72
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; algorithm y := array(a, b);
+end E72;
+//// model: E73
+model E73
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; algorithm y := 2 * {a, b};
+end E73;
+//// model: E74
+model E74
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; Real z[2] = {a, b}; algorithm y := z;
+end E74;
+//// model: E75
+model E75
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; algorithm y[1] := a; y[2] := b;
+end E75;
+//// model: E76
+model E76
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; algorithm for i in 1:2 loop y[i] := a * i; end for;
+end E76;
+//// model: E77
+model E77
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; algorithm y := fill(a, 2);
+end E77;
+//// model: E78
+model E78
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2, 2]; algorithm y := {{a, b}, {c, a}};
+end E78;
+//// model: E79
+model E79
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer n[2]; algorithm n := {1, 2};
+end E79;
+//// model: BASE
+model BASE
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+end BASE;
+//// model: E710
+model E710
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k[2]; algorithm k := {true, a > 0};
+end E710;

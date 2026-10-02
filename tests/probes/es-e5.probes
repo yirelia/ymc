@@ -1,0 +1,474 @@
+//// set: es-e5 — array(…) 调用写法：绑定、等式、求值、归约、运算；字符串拼接链
+//// model: E50
+model E50
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3] = array(1, 2, 3);
+end E50;
+//// model: E51
+model E51
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3] = array(a, b, c);
+end E51;
+//// model: E52
+model E52
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3] = array(a, 1, 2.5);
+end E52;
+//// model: E53
+model E53
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2, 2] = array({a, b}, {c, a});
+end E53;
+//// model: E54
+model E54
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2, 2] = array(array(a, b), array(c, a));
+end E54;
+//// model: E55
+model E55
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2, 2] = {array(a, b), array(c, a)};
+end E55;
+//// model: E56
+model E56
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer n[2] = array(1, 2);
+end E56;
+//// model: E57
+model E57
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[1] = array(a);
+end E57;
+//// model: E58
+model E58
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[1, 2] = array({a, b});
+end E58;
+//// model: E59
+model E59
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Real p[2] = array(1, 2);
+end E59;
+//// model: BASE
+model BASE
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+end BASE;
+//// model: E510
+model E510
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Real p[2] = array(1, 2); Real y = p[1] + a;
+end E510;
+//// model: E511
+model E511
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Real k[2] = array(1, 2); Real y = k[2] + a;
+end E511;
+//// model: E512
+model E512
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Integer k[2] = array(2, 3); Real y[k[1]] = array(a, b);
+end E512;
+//// model: E513
+model E513
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Integer n = size(array(1, 2, 3), 1); Real y[n] = fill(a, n);
+end E513;
+//// model: E514
+model E514
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = sum(array(a, b, c));
+end E514;
+//// model: E515
+model E515
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = sum(array(1, 2, 3));
+end E515;
+//// model: E516
+model E516
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = max(array(a, b));
+end E516;
+//// model: E517
+model E517
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = product(array(a, 2));
+end E517;
+//// model: E518
+model E518
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3] = array(a, b, c) + array(1, 2, 3);
+end E518;
+//// model: E519
+model E519
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3] = 2 * array(a, b, c);
+end E519;
+//// model: E520
+model E520
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3] = -array(a, b, c);
+end E520;
+//// model: E521
+model E521
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = array(a, b, c) * array(1, 2, 3);
+end E521;
+//// model: E522
+model E522
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3];
+equation
+  y = array(a, b, c);
+end E522;
+//// model: E523
+model E523
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3];
+equation
+  array(a, b, c) = y;
+end E523;
+//// model: E524
+model E524
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2];
+equation
+  for i in array(1, 2) loop y[i] = a * i; end for;
+end E524;
+//// model: E525
+model E525
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2];
+equation
+  for i in 1:2 loop y[i] = sum(array(a, i)); end for;
+end E525;
+//// model: E526
+model E526
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2] = if a > 0 then array(a, b) else array(b, a);
+end E526;
+//// model: E527
+model E527
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2] = array(if a > 0 then a else b, c);
+end E527;
+//// model: E528
+model E528
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k[2] = array(true, a > 0);
+end E528;
+//// model: E529
+model E529
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s[2] = array("x", "y");
+end E529;
+//// model: E530
+model E530
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2] = array(1, 2) .* array(a, b);
+end E530;
+//// model: E531
+model E531
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2] = array(i * a for i in 1:2);
+end E531;
+//// model: E532
+model E532
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2, 2] = array(i * j * a for i in 1:2, j in 1:2);
+end E532;
+//// model: E533
+model E533
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3] = cat(1, array(a), array(b, c));
+end E533;
+//// model: E534
+model E534
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[0] = array();
+end E534;
+//// model: E535
+model E535
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2] = array(a, {b});
+end E535;
+//// model: E536
+model E536
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = (array(a, b, c))[2];
+end E536;
+//// model: E537
+model E537
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2] = array(a, b, c)[1:2];
+end E537;
+//// model: E538
+model E538
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2];
+equation
+  when a > 0 then y = array(a, b); end when;
+end E538;
+//// model: E539
+model E539
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3];
+equation
+  y = array(1, 2, 3) * a;
+end E539;
+//// model: E540
+model E540
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2] = array(der(a), time);
+end E540;
+//// model: E541
+model E541
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer n[3] = array(1, 2, 3); Real y = n[2] * a;
+end E541;
+//// model: E542
+model E542
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2] = array(a, 1);
+end E542;
+//// model: E543
+model E543
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2] = array(1, a);
+end E543;
+//// model: E544
+model E544
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2](start = array(1, 2)) = array(a, b);
+end E544;
+//// model: E545
+model E545
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2](each start = 1) = array(a, b);
+end E545;
+//// model: E546
+model E546
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = "a" + "b" + "c";
+end E546;
+//// model: E547
+model E547
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(1) + String(1.5) + String(true);
+end E547;
+//// model: E548
+model E548
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = "a" + ("b" + "c");
+end E548;
+//// model: E549
+model E549
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = "a" + String(a) + "c";
+end E549;
+//// model: E550
+model E550
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = String(a) + "b" + "c";
+end E550;
+//// model: E551
+model E551
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = "a" + "b" + String(a);
+end E551;
+//// model: E552
+model E552
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter String p = "x"; String s = p + "a" + "b";
+end E552;
+//// model: E553
+model E553
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter String p = "x"; String s = "a" + "b" + p;
+end E553;
+//// model: E554
+model E554
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter String p = "x"; String s = "a" + p + "b";
+end E554;
+//// model: E555
+model E555
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant String p = "x"; String s = "a" + p + "b";
+end E555;
+//// model: E556
+model E556
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = "a" + "b" + "c" + "d";
+end E556;
+//// model: E557
+model E557
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k = "a" + "b" == "ab";
+end E557;
+//// model: E558
+model E558
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String t = "q"; String s = t + t + t;
+end E558;
+//// model: E559
+model E559
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = if a > 0 then "a" + "b" else "c";
+end E559;
+//// model: E560
+model E560
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s[2] = {"a" + "b", "c"};
+end E560;
+//// model: E561
+model E561
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = "a" + 1;
+end E561;
+//// model: E562
+model E562
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = "a" - "b";
+end E562;
+//// model: E563
+model E563
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = "a" * "b";
+end E563;
+//// model: E564
+model E564
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s = 2 + "b";
+end E564;

@@ -121,3 +121,14 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `fa-f4` | 40 | 函数体里的数组运算：Integer 数组的整体转型 |
 | `fb-ut` | 4 | 括号规则、函数体数组运算（单测原文） |
 | `pp` | 2 | 表达式打印的括号规则：算符两两组合 |
+| `es-e1` | 125 | 标量化简规则表：恒等元、取负、常量折叠、if、关系与逻辑 |
+| `es-e2` | 83 | 实参全是字面量的内建：求值 / 原样保留 |
+| `es-e3` | 52 | semiLinear / smooth / noEvent / edge / homotopy / delay / der 的化简 |
+| `es-e4` | 38 | array(…) 与 String(…)、字符串拼接 |
+| `es-e5` | 66 | array(…) 调用写法：绑定、等式、求值、归约、运算；字符串拼接链 |
+| `es-e6` | 26 | array(…) 与 {…} 的对照：函数体、算法段、size / max / for 范围 |
+| `es-e7` | 12 | 模型算法段里的整数组赋值（未做，SKIP 基线） |
+| `es-e8` | 87 | edge / change / semiLinear / smooth 在 when、for、函数体、向量化里的各种形态 |
+| `es-e9` | 91 | pre / change / edge 的常量与结构参数实参；min / max / fill / cat / transpose 的化简 |
+| `es-ut` | 4 | smooth / semiLinear / edge、array(…) 与字符串拼接（单测原文） |
+| `uaf` | 1 | 合成 Absyn 节点时 arena 不扩容（400 个元素的记录数组字段展开；修复前 ASan 报 use-after-free） |

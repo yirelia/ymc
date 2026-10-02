@@ -1,0 +1,647 @@
+//// set: es-e9 — pre / change / edge 的常量与结构参数实参；min / max / fill / cat / transpose 的化简
+//// model: E90
+model E90
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k = pre(true);
+end E90;
+//// model: E91
+model E91
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k = pre(false) or a > 0;
+end E91;
+//// model: E92
+model E92
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer n = pre(3);
+end E92;
+//// model: E93
+model E93
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean bb = a > 0; Boolean k = pre(bb);
+end E93;
+//// model: E94
+model E94
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean bb = a > 0; Boolean k = pre(not bb);
+end E94;
+//// model: E95
+model E95
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Boolean pb = true; Boolean k = pre(pb);
+end E95;
+//// model: E96
+model E96
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Boolean cb = true; Boolean k = pre(cb);
+end E96;
+//// model: E97
+model E97
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Integer ci = 3; Integer n = pre(ci);
+end E97;
+//// model: E98
+model E98
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Integer pi = 3; Integer n = pre(pi);
+end E98;
+//// model: E99
+model E99
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k = change(true);
+end E99;
+//// model: BASE
+model BASE
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+end BASE;
+//// model: E910
+model E910
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Boolean cb = true; Boolean k = change(cb);
+end E910;
+//// model: E911
+model E911
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Boolean pb = true; Boolean k = change(pb);
+end E911;
+//// model: E912
+model E912
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Boolean cb = true; Boolean k = edge(cb);
+end E912;
+//// model: E913
+model E913
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = homotopy(a, 2);
+end E913;
+//// model: E914
+model E914
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = homotopy(2, a);
+end E914;
+//// model: E915
+model E915
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = homotopy(2, 3);
+end E915;
+//// model: E916
+model E916
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = homotopy(a * 1, a + 0);
+end E916;
+//// model: E917
+model E917
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = homotopy(a, b) + homotopy(b, a);
+end E917;
+//// model: E918
+model E918
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = delay(a, 0);
+end E918;
+//// model: E919
+model E919
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = delay(2, 1);
+end E919;
+//// model: E920
+model E920
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = delay(a, 1, 2);
+end E920;
+//// model: E921
+model E921
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = delay(a, b, 2);
+end E921;
+//// model: E922
+model E922
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = delay(a + 0, 1 * 2);
+end E922;
+//// model: E923
+model E923
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = der(a + b);
+end E923;
+//// model: E924
+model E924
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = der(a - b);
+end E924;
+//// model: E925
+model E925
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = der(a * 2);
+end E925;
+//// model: E926
+model E926
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = der(2);
+end E926;
+//// model: E927
+model E927
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = der(a) + der(b);
+end E927;
+//// model: E928
+model E928
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = max(a, a);
+end E928;
+//// model: E929
+model E929
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = max(2, 3);
+end E929;
+//// model: E930
+model E930
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = max(a, 2 + 3);
+end E930;
+//// model: E931
+model E931
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = min(1.5, 2) + max(a, b);
+end E931;
+//// model: E932
+model E932
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = max(max(a, b), c);
+end E932;
+//// model: E933
+model E933
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = max({a});
+end E933;
+//// model: E934
+model E934
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = max({a, b});
+end E934;
+//// model: E935
+model E935
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = min({1, a});
+end E935;
+//// model: E936
+model E936
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = max(fill(a, 2));
+end E936;
+//// model: E937
+model E937
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = sum(fill(a, 3));
+end E937;
+//// model: E938
+model E938
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = product(fill(a, 2));
+end E938;
+//// model: E939
+model E939
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = sum(zeros(3)) + a;
+end E939;
+//// model: E940
+model E940
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = sum(ones(3)) + a;
+end E940;
+//// model: E941
+model E941
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2, 2] = transpose({{a, b}, {c, a}});
+end E941;
+//// model: E942
+model E942
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2, 2] = transpose(transpose({{a, b}, {c, a}}));
+end E942;
+//// model: E943
+model E943
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2] = vector({{a}, {b}});
+end E943;
+//// model: E944
+model E944
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3] = cat(1, {a}, {b, c});
+end E944;
+//// model: E945
+model E945
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3] = cat(1, {a, b}, {c});
+end E945;
+//// model: E946
+model E946
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2, 2] = cat(1, {{a, b}}, {{c, a}});
+end E946;
+//// model: E947
+model E947
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2, 2] = cat(2, {{a}, {b}}, {{c}, {a}});
+end E947;
+//// model: E948
+model E948
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2] = fill(a, 2);
+end E948;
+//// model: E949
+model E949
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2, 2] = fill(a, 2, 2);
+end E949;
+//// model: E950
+model E950
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2] = zeros(2) + {a, b};
+end E950;
+//// model: E951
+model E951
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2] = ones(2) * a;
+end E951;
+//// model: E952
+model E952
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Real cr = 1.5; Real y = pre(cr) + a;
+end E952;
+//// model: E953
+model E953
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Real cr = 1.5; Real y;
+equation
+  when a > 0 then y = pre(cr); end when;
+end E953;
+//// model: E954
+model E954
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Boolean cb = true; Real y;
+equation
+  when a > 0 then y = if pre(cb) then 1 else 2; end when;
+end E954;
+//// model: E955
+model E955
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  type E = enumeration(one, two); constant E ce = E.two; E k = pre(ce);
+end E955;
+//// model: E956
+model E956
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Integer ck[2] = {3, 4}; Integer n = pre(ck[1]);
+end E956;
+//// model: E957
+model E957
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Integer ck[2] = {3, 4}; Integer n[2] = pre(ck);
+end E957;
+//// model: E958
+model E958
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Integer n = 2; Real x[n] = fill(a, n); Integer m = pre(n);
+end E958;
+//// model: E959
+model E959
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Integer n = 2; Real x[n] = fill(a, n); Boolean m = change(n);
+end E959;
+//// model: E960
+model E960
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Boolean cb = true; Boolean k = pre((cb));
+end E960;
+//// model: E961
+model E961
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Boolean cb = true; Boolean k = pre(cb) and a > 0;
+end E961;
+//// model: E962
+model E962
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Boolean cb = true; Boolean k = not pre(cb);
+end E962;
+//// model: E963
+model E963
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Integer ci = 3; Boolean k = change(ci);
+end E963;
+//// model: E964
+model E964
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Real cr = 1.5; Boolean k = change(cr);
+end E964;
+//// model: E965
+model E965
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Boolean cb = true; Boolean k; algorithm k := pre(cb);
+end E965;
+//// model: E966
+model E966
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Boolean cb = true; Boolean k; algorithm k := change(cb);
+end E966;
+//// model: E967
+model E967
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Boolean cb = true; Boolean k; algorithm k := edge(cb);
+end E967;
+//// model: E968
+model E968
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Boolean cb = true; Real y;
+equation
+  when change(cb) then y = a; end when;
+end E968;
+//// model: E969
+model E969
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Boolean cb = true; Real y;
+equation
+  when pre(cb) then y = a; end when;
+end E969;
+//// model: E970
+model E970
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Boolean cb = true; Real y;
+equation
+  when edge(cb) then y = a; end when;
+end E970;
+//// model: E971
+model E971
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  final parameter Boolean fb = true; Boolean k = pre(fb);
+end E971;
+//// model: E972
+model E972
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Boolean pb = true annotation(Evaluate = true); Boolean k = pre(pb);
+end E972;
+//// model: E973
+model E973
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Integer n = 2; Real x[n] = fill(a, n); Boolean k = edge(n > 1);
+end E973;
+//// model: E974
+model E974
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Boolean pb = true annotation(Evaluate = true); Boolean k = edge(pb);
+end E974;
+//// model: E975
+model E975
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Boolean pb = true annotation(Evaluate = true); Boolean k = change(pb);
+end E975;
+//// model: E976
+model E976
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Real pr = 2 annotation(Evaluate = true); Real y = smooth(0, pr);
+end E976;
+//// model: E977
+model E977
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Real pr = 2 annotation(Evaluate = true); Real y = noEvent(pr);
+end E977;
+//// model: E978
+model E978
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Real pr = 2 annotation(Evaluate = true); Real y = semiLinear(a, pr, pr);
+end E978;
+//// model: E979
+model E979
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Real pr = 0 annotation(Evaluate = true); Real y = semiLinear(pr, a, b);
+end E979;
+//// model: E980
+model E980
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Real pr = 2 annotation(Evaluate = true); Real y = semiLinear(pr, pr, pr);
+end E980;
+//// model: E981
+model E981
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Real pr = 2 annotation(Evaluate = true); Real y = semiLinear(a, pr, 2);
+end E981;
+//// model: E982
+model E982
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Real pr = 2 annotation(Evaluate = true); Real y = der(pr) + a;
+end E982;
+//// model: E983
+model E983
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Real pr = 2 annotation(Evaluate = true); Real y = delay(pr, 1) + a;
+end E983;
+//// model: E984
+model E984
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Real pr = 2 annotation(Evaluate = true); Real y = homotopy(pr, pr) + a;
+end E984;
+//// model: E985
+model E985
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Integer n = 2; Real x[n] = fill(a, n); Real y = smooth(0, n);
+end E985;
+//// model: E986
+model E986
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Integer n = 2; Real x[n] = fill(a, n); Real y = semiLinear(a, n, n);
+end E986;
+//// model: E987
+model E987
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Integer n = 2; Real x[n] = fill(a, n); Real y = semiLinear(a, n, 2);
+end E987;
+//// model: E988
+model E988
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Integer n = 2; Real x[n] = fill(a, n); Real y = semiLinear(n, n, n);
+end E988;
+//// model: E989
+model E989
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Integer n = 0; Real x[n + 1] = fill(a, n + 1); Real y = semiLinear(n, a, b);
+end E989;

@@ -1,0 +1,56 @@
+//// set: es-ut — smooth / semiLinear / edge、array(…) 与字符串拼接（单测原文）
+//// model: ESS1
+model ESS1
+  Real a = time;
+  Boolean e = edge(a > 0);
+end ESS1;
+//// model: ESS2
+model ESS2
+  Real c = time;
+  Real x[2] = {time, 1};
+  Real y[2] = semiLinear(x, c, c);
+end ESS2;
+//// model: EST1
+model EST1
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Real p = 2;
+  Boolean bb = a > 0;
+  Boolean e1 = edge(bb);
+  Boolean e2 = edge((bb));
+  Real y1 = smooth(0, 2);
+  Real y2 = smooth(2, 2 * 3 + 1) + smooth(1, a);
+  Real y3 = smooth(0, p);
+  Real y4 = semiLinear(a, b, b);
+  Real y5 = semiLinear(a, 1, 1);
+  Real y6 = semiLinear(a, 0, 0);
+  Real y7 = semiLinear(0.0, a, b);
+  Real y8 = semiLinear(0, 2, 3);
+  Real y9 = semiLinear(a, 2, 3);
+  Real y10 = 2 * semiLinear(a, b, b);
+  Real y11 = semiLinear(a + b, c, c) + 1;
+  Real y12 = semiLinear(a, p, p);
+  Real y13 = semiLinear(a, 2, 2.0);
+  Real x[2] = {a, b};
+  Real z[2] = semiLinear(x, 1, 2);
+end EST1;
+//// model: EST2
+model EST2
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y1[3] = array(a, 1, 2.5);
+  Real y2[2, 2] = array(array(a, b), {c, a});
+  Integer n[2] = array(1, 2);
+  constant Integer k[2] = array(2, 3);
+  Real y3[k[1]] = array(a, b);
+  Real y4 = sum(array(a, b, c));
+  Real y5[2] = 2 * array(a, b);
+  Real y6 = (array(a, b, c))[2];
+  String s1 = "a" + "b" + "c";
+  String s2 = String(1) + String(1.5) + String(true);
+  String s3 = "a" + String(a) + "c";
+  parameter String ps = "x";
+  String s4 = "a" + ps + "b";
+end EST2;

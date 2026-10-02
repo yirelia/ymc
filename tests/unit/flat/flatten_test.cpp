@@ -3651,6 +3651,81 @@ YMC_TEST(flatten_function_array_operators) {
   }
 }
 
+YMC_TEST(flatten_smooth_semilinear_edge_simplification) {
+  // smooth(p, 字面量) → 该字面量（Ceval.evalBuiltinCall 的 smooth 支，NFCeval.mo:1942 v1.25.0）；semiLinear（simplifySemiLinear，
+  // NFSimplifyExp.mo:283-303）：x 为零或两个斜率都为零 → 0.0，斜率相同 → `x * m1`（造出来的积不再化简：`a * 1.0`），实参全是
+  // 字面量时走 Ceval、求值失败 → 原样；edge 的实参须是变量（括号不算）。期望 = omc 1.25.0 实跑 EST1（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model EST1\n  Real a = time;\n  Real b = 2 * time;\n  Real c = 3 * time;\n  parameter Real p = 2;\n"
+                           "  Boolean bb = a > 0;\n  Boolean e1 = edge(bb);\n  Boolean e2 = edge((bb));\n"
+                           "  Real y1 = smooth(0, 2);\n  Real y2 = smooth(2, 2 * 3 + 1) + smooth(1, a);\n"
+                           "  Real y3 = smooth(0, p);\n  Real y4 = semiLinear(a, b, b);\n  Real y5 = semiLinear(a, 1, 1);\n"
+                           "  Real y6 = semiLinear(a, 0, 0);\n  Real y7 = semiLinear(0.0, a, b);\n"
+                           "  Real y8 = semiLinear(0, 2, 3);\n  Real y9 = semiLinear(a, 2, 3);\n"
+                           "  Real y10 = 2 * semiLinear(a, b, b);\n  Real y11 = semiLinear(a + b, c, c) + 1;\n"
+                           "  Real y12 = semiLinear(a, p, p);\n  Real y13 = semiLinear(a, 2, 2.0);\n  Real x[2] = {a, b};\n"
+                           "  Real z[2] = semiLinear(x, 1, 2);\nend EST1;\n"),
+               std::string("class EST1\n  Real a = time;\n  Real b = 2.0 * time;\n  Real c = 3.0 * time;\n"
+                           "  parameter Real p = 2.0;\n  Boolean bb = a > 0.0;\n  Boolean e1 = edge(bb);\n"
+                           "  Boolean e2 = edge(bb);\n  Real y1 = 2.0;\n  Real y2 = 7.0 + smooth(1, a);\n"
+                           "  Real y3 = smooth(0, p);\n  Real y4 = a * b;\n  Real y5 = a * 1.0;\n  Real y6 = 0.0;\n"
+                           "  Real y7 = 0.0;\n  Real y8 = semiLinear(0.0, 2.0, 3.0);\n  Real y9 = semiLinear(a, 2.0, 3.0);\n"
+                           "  Real y10 = 2.0 * a * b;\n  Real y11 = (a + b) * c + 1.0;\n  Real y12 = a * p;\n"
+                           "  Real y13 = a * 2.0;\n  Real x[1];\n  Real x[2];\n  Real z[1];\n  Real z[2];\nequation\n"
+                           "  x = {a, b};\n  z = array(semiLinear(x[$i1], 1.0, 2.0) for $i1 in 1:2);\nend EST1;\n"));
+  // edge(式子)：omc 报 "First argument to edge … must be a variable"（ESS1）；向量化的 semiLinear 斜率相同时 omc 还化成
+  // `array(x[$i1] * c for $i1 in 1:2)`（ESS2，未做）。
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           {"model ESS1\n  Real a = time;\n  Boolean e = edge(a > 0);\nend ESS1;\n", "edge argument must be a variable"},
+           {"model ESS2\n  Real c = time;\n  Real x[2] = {time, 1};\n  Real y[2] = semiLinear(x, c, c);\nend ESS2;\n",
+            "vectorized semiLinear simplification"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
+YMC_TEST(flatten_array_call_and_string_concatenation) {
+  // `array(a, b, …)` 是数组构造子的调用写法，同 `{a, b, …}`（MLS §10.4.1；编译期求值与实例化两条路都认）；String + String
+  // 的结果是 String，三段以上的拼接照常折叠（此前左操作数被当成 Integer → SKIP）。期望 = omc 1.25.0 实跑 EST2（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model EST2\n  Real a = time;\n  Real b = 2 * time;\n  Real c = 3 * time;\n"
+                           "  Real y1[3] = array(a, 1, 2.5);\n  Real y2[2, 2] = array(array(a, b), {c, a});\n"
+                           "  Integer n[2] = array(1, 2);\n  constant Integer k[2] = array(2, 3);\n"
+                           "  Real y3[k[1]] = array(a, b);\n  Real y4 = sum(array(a, b, c));\n  Real y5[2] = 2 * array(a, b);\n"
+                           "  Real y6 = (array(a, b, c))[2];\n  String s1 = \"a\" + \"b\" + \"c\";\n"
+                           "  String s2 = String(1) + String(1.5) + String(true);\n  String s3 = \"a\" + String(a) + \"c\";\n"
+                           "  parameter String ps = \"x\";\n  String s4 = \"a\" + ps + \"b\";\nend EST2;\n"),
+               std::string("class EST2\n  Real a = time;\n  Real b = 2.0 * time;\n  Real c = 3.0 * time;\n  Real y1[1];\n"
+                           "  Real y1[2];\n  Real y1[3];\n  Real y2[1,1];\n  Real y2[1,2];\n  Real y2[2,1];\n  Real y2[2,2];\n"
+                           "  Integer n[1];\n  Integer n[2];\n  constant Integer k[1] = 2;\n  constant Integer k[2] = 3;\n"
+                           "  Real y3[1];\n  Real y3[2];\n  Real y4 = a + b + c;\n  Real y5[1];\n  Real y5[2];\n  Real y6 = b;\n"
+                           "  String s1 = \"abc\";\n  String s2 = \"11.5true\";\n"
+                           "  String s3 = \"a\" + String(a, 6, 0, true) + \"c\";\n  parameter String ps = \"x\";\n"
+                           "  String s4 = \"a\" + ps + \"b\";\nequation\n  y1 = {a, 1.0, 2.5};\n  y2 = {{a, b}, {c, a}};\n"
+                           "  n = {1, 2};\n  y3 = {a, b};\n  y5 = {2.0 * a, 2.0 * b};\nend EST2;\n"));
+}
+
+YMC_TEST(flatten_synthesized_nodes_keep_arena_references) {
+  // flatten 途中往 Inst 的 absyn arena 合成节点（`r.x` 展开成 `{r[1].x, …}`：每个元素一个补了字面量下标的 cref）。arena 一扩容，
+  // 上层栈帧持有的 `const Exp&` 就悬垂——修复前这个模型在 ASan 下报 binary() heap-use-after-free。现在构造 Flattener 时
+  // 预留、合成只在预留内进行（synth_exp / synth_cref / synth_mod）。期望 = omc 1.25.0 实跑 U1（n = 400，逐字节一致，
+  // 2026-10-02；tests/probes/uaf.probes 里是同一份原文），这里按同一形状拼出来。
+  const int n = 400;
+  const std::string N = std::to_string(n);
+  const std::string src = "model U1\n  record R\n    Real x;\n  end R;\n  R r[" + N + "];\n  Real y[" + N +
+                          "] = r.x + r.x;\nequation\n  r.x = fill(time, " + N + ");\nend U1;\n";
+  auto rx = [](int i) { return "r[" + std::to_string(i) + "].x"; };
+  std::string want = "class U1\n";
+  for (int i = 1; i <= n; ++i) want += "  Real " + rx(i) + ";\n";
+  for (int i = 1; i <= n; ++i) want += "  Real y[" + std::to_string(i) + "];\n";
+  want += "equation\n  y = {";
+  for (int i = 1; i <= n; ++i) want += (i > 1 ? ", " : "") + rx(i) + " + " + rx(i);
+  want += "};\n";
+  for (int i = 1; i <= n; ++i) want += "  " + rx(i) + " = time;\n";
+  want += "end U1;\n";
+  YMC_CHECK_EQ(flatten_src(src.c_str()), want);
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

@@ -1165,10 +1165,27 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           未做 → SKIP：已知维的向量积展成积和、已知维的 Integer 数组逐元素转型、数组自己减自己（omc 报错）。
           探针 FA f1–f4、PP：0 FAIL。→ 全 scodeinst PASS 484→485（OperationSubEW2）、整个 testsuite PASS 1238→1239；
           +2 单测（210）。
+    - [x] (59w) 内建调用的化简规则 + arena 悬垂引用修复（2026-10-02）：
+          **内存安全（修潜伏错）**：flatten 途中往 Inst 的 absyn / scode arena 合成节点（补字面量下标的 cref、拆出的字段
+          修饰），而 inst_exp 一路按引用拿着 `const Exp&`——arena 一扩容就悬垂。`R r[400]; Real y[400] = r.x + r.x;` 在
+          ASan 下 binary() heap-use-after-free（此前两套语料 + 探针都没撞上：要正好在合成时用完 vector 的余量）。
+          现在构造 Flattener 时给三个 arena 各预留 65536 个位置，合成只走 synth_exp / synth_cref / synth_mod，预留用完 →
+          SKIP `too many synthesized nodes`（上限写在 ponytail 注释里；要去掉得把 Arena 换成不搬家的容器，base/ 归用户）。
+          **化简规则**（ES 探针 e1–e9 共 571 行，按 simplifyBuiltinCall / evalBuiltinCall 的规则表铺）：`smooth(p, 字面量)` →
+          字面量、`pre(字面量)` → 字面量（含常量引用、代入后的结构参数）；semiLinear：x 为零或两斜率为零 → 0.0，斜率
+          相同 → `x * m1`（积不再化简：`a * 1.0`），实参全字面量 → 原样（Ceval 没有这一支）；edge 的实参须是变量
+          （`edge(a > 0)` 此前放行）；向量化的 semiLinear 会触发化简的形态 → SKIP。
+          **写法**：`array(a, b, …)` = `{a, b, …}`（求值与实例化两条路）；String + String 的结果类型是 String（三段以上的
+          拼接此前 SKIP）。
+          解析器放行了 omc 的语法错 `{…}[i]` / `f(x)[i]`（下标只能跟在括号式后面）→ 任务卡 T-S3-08（用户）。
+          → 整个 testsuite PASS 1239→1241（gc2980、StringTest）；+3 单测（213）；探针 2837→3422。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、
           25 预定义类、14 短类别名前缀、7 继承类查找…）记在卡里 → `docs/tasks/T-S3-07-extends-lookup-scope.md`。
+    - [ ] 任务卡 T-S3-08（用户，parser）：表达式后的下标只能跟在括号式后面——`{a, b}[2]`、`array(a, b)[1]`、`f(x)[1]`
+          在 omc 1.25.0 是语法错（Modelica.g:1800 只有 `LPAR … RPAR array_subscripts?` 这一支），ymc 解析器 5 处多调了
+          parse_postfix → `docs/tasks/T-S3-08-subscript-after-paren-only.md`。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

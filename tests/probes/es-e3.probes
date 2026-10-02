@@ -1,0 +1,364 @@
+//// set: es-e3 — semiLinear / smooth / noEvent / edge / homotopy / delay / der 的化简
+//// model: E30
+model E30
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(a, 2, 2);
+end E30;
+//// model: E31
+model E31
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(a, b, b);
+end E31;
+//// model: E32
+model E32
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(a, 0, 0);
+end E32;
+//// model: E33
+model E33
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(0.0, a, b);
+end E33;
+//// model: E34
+model E34
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(0, 2, 3);
+end E34;
+//// model: E35
+model E35
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(a, b, c);
+end E35;
+//// model: E36
+model E36
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(a, 2, 3);
+end E36;
+//// model: E37
+model E37
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(a - a, b, c);
+end E37;
+//// model: E38
+model E38
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(a, b + 0, b);
+end E38;
+//// model: E39
+model E39
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(a, 2 * b, b * 2);
+end E39;
+//// model: BASE
+model BASE
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+end BASE;
+//// model: E310
+model E310
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(a, 1, 1);
+end E310;
+//// model: E311
+model E311
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(2, b, b);
+end E311;
+//// model: E312
+model E312
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = semiLinear(a + b, c, c) + 1;
+end E312;
+//// model: E313
+model E313
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = 2 * semiLinear(a, b, b);
+end E313;
+//// model: E314
+model E314
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Real p = 0; Real y = semiLinear(p, a, b);
+end E314;
+//// model: E315
+model E315
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Real p = 2; Real y = semiLinear(a, p, p);
+end E315;
+//// model: E316
+model E316
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = smooth(0, 2);
+end E316;
+//// model: E317
+model E317
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = smooth(2, 2 * 3 + 1);
+end E317;
+//// model: E318
+model E318
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = smooth(0, -1.5);
+end E318;
+//// model: E319
+model E319
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = smooth(0, a) + smooth(1, 2 * a);
+end E319;
+//// model: E320
+model E320
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Real p = 2; Real y = smooth(0, p);
+end E320;
+//// model: E321
+model E321
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Real k = 2; Real y = smooth(0, k);
+end E321;
+//// model: E322
+model E322
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = smooth(0, if a > 0 then 1 else 2);
+end E322;
+//// model: E323
+model E323
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = noEvent(-1.5) + noEvent(a);
+end E323;
+//// model: E324
+model E324
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Real k = 2; Real y = noEvent(k);
+end E324;
+//// model: E325
+model E325
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Real p = 2; Real y = noEvent(p);
+end E325;
+//// model: E326
+model E326
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean e = edge(true);
+end E326;
+//// model: E327
+model E327
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean e = edge(a > 0);
+end E327;
+//// model: E328
+model E328
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean bb = a > 0; Boolean e = edge(bb);
+end E328;
+//// model: E329
+model E329
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean bb = a > 0; Boolean e = edge(not bb);
+end E329;
+//// model: E330
+model E330
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean bb = a > 0; Boolean e = edge(bb) and change(bb);
+end E330;
+//// model: E331
+model E331
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean bb = a > 0; Boolean e = edge(bb and bb);
+end E331;
+//// model: E332
+model E332
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Boolean pb = true; Boolean e = edge(pb);
+end E332;
+//// model: E333
+model E333
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Boolean cb = true; Boolean e = edge(cb);
+end E333;
+//// model: E334
+model E334
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = homotopy(a, a);
+end E334;
+//// model: E335
+model E335
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = homotopy(1.5, 1.5);
+end E335;
+//// model: E336
+model E336
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = homotopy(a + 0, b * 1);
+end E336;
+//// model: E337
+model E337
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = delay(a, 0);
+end E337;
+//// model: E338
+model E338
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = delay(a, 0.5, 1);
+end E338;
+//// model: E339
+model E339
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = delay(2 * a, 1);
+end E339;
+//// model: E340
+model E340
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = der(a * b);
+end E340;
+//// model: E341
+model E341
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = der(a + 1);
+end E341;
+//// model: E342
+model E342
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = der(2 * a) + der(a / 2);
+end E342;
+//// model: E343
+model E343
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = der(-a);
+end E343;
+//// model: E344
+model E344
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = der(a) * 2;
+end E344;
+//// model: E345
+model E345
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = der(sin(a));
+end E345;
+//// model: E346
+model E346
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = der(a ^ 2);
+end E346;
+//// model: E347
+model E347
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Real p = 2; Real y = der(p) + a;
+end E347;
+//// model: E348
+model E348
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  constant Real k = 2; Real y = der(k) + a;
+end E348;
+//// model: E349
+model E349
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = der(time);
+end E349;
+//// model: E350
+model E350
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = der(time * 2);
+end E350;

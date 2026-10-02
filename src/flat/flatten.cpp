@@ -163,7 +163,12 @@ struct ModSource {
 
 class Flattener {
  public:
-  Flattener(Inst& inst, Interner& in) : I_(inst), in_(in) {}
+  Flattener(Inst& inst, Interner& in) : I_(inst), in_(in) {
+    // 合成节点的预留（见 synth）：上限在这里算——成员按声明序初始化，I_ 声明在类尾，默认成员初始化式里还用不了。
+    I_.absyn.exps.reserve(exp_limit_ = I_.absyn.exps.size() + kSynthCap);
+    I_.absyn.crefs.reserve(cref_limit_ = I_.absyn.crefs.size() + kSynthCap);
+    I_.scode.mods.reserve(mod_limit_ = I_.scode.mods.size() + kSynthCap);
+  }
 
   using ScodeScope = std::vector<Id<SElement>>;   // SCODE 作用域链：类 SElement，内→外（前置声明，供 eval_dim 等用）
   using PSubs = std::vector<std::vector<std::int64_t>>;   // 与 prefix 平行的逐段下标（复合数组 `a[1].x`；空段=无下标）
@@ -3426,13 +3431,13 @@ class Flattener {
         Exp lit;
         lit.kind = ExpKind::IntLit;
         lit.ival = idx[j];
-        subs.push_back(I_.absyn.add_exp(std::move(lit)));
+        subs.push_back(synth_exp(std::move(lit)));
       }
       nc.parts.back().subscripts = std::move(subs);
       Exp ce;
       ce.kind = ExpKind::CrefExp;
-      ce.cref = I_.absyn.add_cref(std::move(nc));
-      return I_.absyn.add_exp(std::move(ce));
+      ce.cref = synth_cref(std::move(nc));
+      return synth_exp(std::move(ce));
     }
     return {};   // 剩余下标落在标量表达式 → 本增量 SKIP
   }
@@ -4170,7 +4175,7 @@ class Flattener {
               } else if (!sm.is_each && !sm.subs.empty()) {
                 ok = false; break;   // 非 each 的嵌套修饰逐元素切分未做
               }
-              esubs.push_back({s.ident, I_.scode.add_mod(std::move(sm))});
+              esubs.push_back({s.ident, synth_mod(std::move(sm))});
             }
             std::optional<CVal> ev = ok ? record_value(rec, rds, esubs, cscope, depth) : std::nullopt;
             if (!ev) break;
@@ -4243,7 +4248,8 @@ class Flattener {
                                       std::unordered_set<std::uint32_t>* used) {
     if (depth > 100) return std::nullopt;
     const Exp& e = I_.absyn.exps[exp];
-    switch (e.kind) {
+    // `array(…)` 是数组构造子的调用写法（MLS §10.4.1；元素 / 推导式同在 .args）：按 `{…}` 求值。
+    switch (is_array_ctor(exp) ? ExpKind::Array : e.kind) {
       case ExpKind::IntLit: return CVal::I(e.ival);
       case ExpKind::RealLit: return CVal::R(e.rval);
       case ExpKind::BoolLit: return CVal::B(e.bval);
@@ -7731,7 +7737,7 @@ class Flattener {
   Id<Expr> inst_exp(Id<Exp> ae, NodeId enclosing, const std::vector<Symbol>& prefix) {
     const FrameAt frame_at(*this, enclosing);   // 式子里的编译期求值（下标 / 范围 / 维实参）按书写处实例的帧
     const Exp& e = I_.absyn.exps[ae];
-    switch (e.kind) {
+    switch (is_array_ctor(ae) ? ExpKind::Array : e.kind) {   // `array(…)` = `{…}`（MLS §10.4.1；FuncMap1 的推导式、ES 探针 e5）
       case ExpKind::IntLit: return lit_int(e.ival);
       case ExpKind::RealLit: return lit_real(e.rval);
       case ExpKind::BoolLit: return lit_bool(e.bval);
@@ -8287,9 +8293,9 @@ class Flattener {
           Exp lit;
           lit.kind = ExpKind::IntLit;
           lit.ival = i;
-          ec.parts[0].subscripts.push_back(I_.absyn.add_exp(std::move(lit)));
+          ec.parts[0].subscripts.push_back(synth_exp(std::move(lit)));
         }
-        return cref(I_.absyn.add_cref(std::move(ec)), enclosing, prefix);
+        return cref(synth_cref(std::move(ec)), enclosing, prefix);
       }
       Expr arr;
       arr.kind = ExprKind::Array;
@@ -8331,9 +8337,11 @@ class Flattener {
     Id<Expr> b = inst_exp(e.b, enclosing, prefix);
     if (op_type(a).is_array() || op_type(b).is_array())
       return array_binary(e.op, op, a, b);   // 数组：逐元素/广播，维度传播，逐元素标量化在 collect_array_equation
-    {   // 算术运算数须是数值（String `+` 由下面的字符串分支处理）：Boolean / 枚举 → omc 类型错（Terminal2）→ SKIP。
-      const TypeKind ka = result_.model.exprs[a].ty.kind, kb = result_.model.exprs[b].ty.kind;
-      const bool str_add = op == BinOp::Add && ka == TypeKind::String && kb == TypeKind::String;
+    // 算术运算数须是数值，或 String + String（拼接，结果是 String：`"a" + "b" + "c"` 的左操作数）；Boolean / 枚举 → omc
+    // 类型错（Terminal2）→ SKIP。
+    const TypeKind ka = result_.model.exprs[a].ty.kind, kb = result_.model.exprs[b].ty.kind;
+    const bool str_add = op == BinOp::Add && ka == TypeKind::String && kb == TypeKind::String;
+    {
       auto num = [](TypeKind k) { return k == TypeKind::Integer || k == TypeKind::Real || k == TypeKind::Unknown; };
       if (!str_add && (!num(ka) || !num(kb))) { set_unsupported("non-numeric arithmetic operand"); return lit_int(0); }
     }
@@ -8350,7 +8358,7 @@ class Flattener {
     r.bin = op;
     r.a = a;
     r.b = b;
-    r.ty = real ? Type::real() : Type::integer();
+    r.ty = str_add ? Type::string() : real ? Type::real() : Type::integer();
     return add(std::move(r));
   }
 
@@ -10134,9 +10142,6 @@ class Flattener {
     if (builtin_name == "String") return string_call(e, enclosing, prefix);
     if (builtin_name == "delay" && !fn_scope_) return delay_call(e, enclosing, prefix);
     if (builtin_name == "linspace" && !fn_scope_) return linspace_call(e, enclosing, prefix);
-    // `array(e for i in r)`：推导式的调用写法，同 `{e for i in r}`（FuncMap1 `c = array(F(b[i], b[i]) for i in 1:size(b, 1))`）。
-    if (builtin_name == "array" && !fn_scope_ && e.args.size() == 1 && I_.absyn.exps[e.args[0]].kind == ExpKind::Reduction)
-      return comprehension_expr(e.args[0], enclosing, prefix);
     if (!fn_scope_)
       if (Id<Expr> r = model_array_builtin(e, builtin_name, enclosing, prefix); r.is_valid() || result_.unsupported) return r;
     if (fn_scope_ && (builtin_name == "fill" || builtin_name == "zeros" || builtin_name == "ones"))
@@ -10246,6 +10251,17 @@ class Flattener {
           vd = sh;
         }
         if (!vd.empty()) {
+          // 向量化的 semiLinear 里 omc 照样做 simplifySemiLinear，还连带把下标式化掉（`semiLinear({a, b}, c, c)` →
+          // `array({a, b}[$i1] * c for …)`、`semiLinear(0, x, 2 * x)` → `array(0.0 for …)`，ES 探针 e8）——未做 → SKIP。
+          // 按向量化之前的实参判：x 是字面量 / 数组字面量（可能为零），或两个斜率相同（数值字面量此时还没转型，按值比：
+          // `semiLinear(x, 2, 2.0)`）。
+          if (builtin_name == "semiLinear" && args.size() == 3 &&
+              (is_literal(args[0]) || result_.model.exprs[args[0]].kind == ExprKind::Array || expr_equal(args[1], args[2]) ||
+               (is_num_lit(result_.model.exprs[args[1]]) && lit_is(args[2], as_real(args[1]))))) {
+            set_unsupported("vectorized semiLinear simplification");
+            supported = false;
+            same = false;
+          }
           std::vector<Id<Expr>> iters;
           for (std::size_t k = 1; k <= vd.size(); ++k) iters.push_back(vect_iter(k));
           for (std::size_t i = 0; same && i < args.size(); ++i) {
@@ -10269,9 +10285,23 @@ class Flattener {
     // pre / change：实参须是变量（cref），且在 when 之外不能是连续变量（NFBuiltinCall.typePreChangeCall :578-588；P1 / P5 / P7
     // 探针 omc 报 "must be a discrete expression" / "must be a variable"）。when 方程 / when 语句体里 1.25.0 接受连续实参
     //（P4 / P8 探针）。
+    // edge 的实参须是变量引用（NFBuiltinCall.typeEdgeCall :681-685 v1.25.0，ES 探针 `edge(true)`、`edge(not bb)` omc 报
+    // "First argument to edge … must be a variable"）；按书写形态判（常量引用会被内联成字面量）。
+    auto written_cref = [&](Id<Exp> x) {   // 括号不算（`edge((bb))` omc 接受）
+      while (I_.absyn.exps[x].kind == ExpKind::Tuple && I_.absyn.exps[x].args.size() == 1) x = I_.absyn.exps[x].args[0];
+      return I_.absyn.exps[x].kind == ExpKind::CrefExp;
+    };
+    if (supported && !fn_scope_ && builtin_name == "edge" && e.args.size() == 1 && !written_cref(e.args[0])) {
+      set_unsupported("edge argument must be a variable");
+      supported = false;
+    }
     if (supported && !fn_scope_ && args.size() == 1 && (builtin_name == "pre" || builtin_name == "change")) {
       const Expr& ax = result_.model.exprs[args[0]];
-      if (ax.kind != ExprKind::Cref) {
+      if (is_literal(args[0]) && written_cref(e.args[0])) {
+        // 常量引用（已内联成字面量）：pre(c) 求值成该常量（Ceval 的 pre 支取实参，NFCeval.mo:1933 v1.25.0）；change 没有求值
+        // 支 → 留调用、实参是内联后的字面量（`change(true)`，ES 探针 e9）。
+        if (builtin_name == "pre") return args[0];
+      } else if (ax.kind != ExprKind::Cref) {
         set_unsupported("pre/change argument must be a variable");
         supported = false;
       } else if (alg_in_when_ == 0 && eq_in_when_ == 0 && cref_is_continuous(ax, prefix.size())) {
@@ -10463,7 +10493,7 @@ class Flattener {
       Cref c = I_.absyn.crefs[I_.absyn.exps[base].cref];
       if (c.parts.empty() || !c.parts.back().subscripts.empty()) { set_unsupported("subscripted expression"); return lit_int(0); }
       c.parts.back().subscripts = subs;
-      return cref(I_.absyn.add_cref(std::move(c)), enclosing, prefix);
+      return cref(synth_cref(std::move(c)), enclosing, prefix);
     }
     if (!is_array_ctor(base) || is_comprehension(base) || subs.size() != 1) { set_unsupported("subscripted expression"); return lit_int(0); }
     const Id<Expr> b = inst_exp(base, enclosing, prefix);
@@ -10982,6 +11012,24 @@ class Flattener {
         }
         // noEvent(const) → 脱壳折叠成字面量；符号参数保留 `noEvent(...)`（CevalNoEvent1）。
         if (name == "noEvent" && args.size() == 1) return is_literal(args[0]) ? args[0] : rebuild();
+        // smooth(p, 字面量) → 该字面量（实参全是字面量的内建调用被求值，Ceval.evalBuiltinCall 的 smooth 支取第二个实参，
+        // NFCeval.mo:1942 v1.25.0；ES 探针 `smooth(0, 2)` → `2.0`）。
+        if (name == "smooth" && args.size() == 2) return is_literal(args[1]) ? args[1] : rebuild();
+        // pre(字面量) → 该字面量（同上，Ceval 的 pre 支取实参 :1933）：实参是代入后的结构参数（ES 探针 e9 `pre(n)` → `2`）。
+        if (name == "pre" && args.size() == 1 && is_literal(args[0])) return args[0];
+        // semiLinear(x, m1, m2)（simplifySemiLinear，NFSimplifyExp.mo:283-303 v1.25.0）：x 为零或两个斜率都为零 → 0；两个斜率
+        // 相同 → `x * m1`，造出来的积不再化简（ES 探针 `semiLinear(a, 1, 1)` → `a * 1.0`）；否则原样。实参全是字面量时走的是
+        // Ceval（simplifyCall :187-196），而 evalBuiltinCall 里没有 semiLinear、求值失败 → 原样（`semiLinear(0.0, 2.0, 3.0)`）。
+        if (name == "semiLinear" && args.size() == 3) {
+          if (is_literal(args[0]) && is_literal(args[1]) && is_literal(args[2])) return rebuild();
+          if (lit_is(args[0], 0) || (lit_is(args[1], 0) && lit_is(args[2], 0))) return lit_real(0.0);
+          if (expr_equal(args[1], args[2])) {
+            const Id<Expr> m = make_bin(args[0], BinOp::Mul, args[1], Type::real());
+            nofold_bins_.insert(m.raw);
+            return m;
+          }
+          return rebuild();
+        }
         if (!bf->foldable) return rebuild();
         if (name == "Integer") {
           const Expr& ea = result_.model.exprs[args[0]];
@@ -11206,6 +11254,25 @@ class Flattener {
   }
 
   Id<Expr> add(Expr e) { return result_.model.exprs.add(std::move(e)); }
+  // flatten 途中会往 Inst 的 absyn / scode arena 里合成节点（补字面量下标的 cref、拆出来的字段修饰…），而上层栈帧一路
+  // 持有 `const Exp&` / `const Cref&` / `const SMod&`——arena 一扩容这些引用就悬垂（base/arena.h 文件头的纪律；ASan 实证：
+  // `R r[400]; Real y[400] = r.x + r.x;` 在 binary() 里 heap-use-after-free）。
+  // ponytail: 构造时给三个 arena 各预留 kSynthCap 个位置，合成只在预留内进行（不扩容 = 引用不失效），用完 → SKIP；
+  // 要去掉这个上限得把 Arena 换成不搬家的容器（base/arena.h 归用户）。
+  static constexpr std::size_t kSynthCap = std::size_t{1} << 16;
+  std::size_t exp_limit_ = 0, cref_limit_ = 0, mod_limit_ = 0;   // 构造函数里定
+  template <class T>
+  Id<T> synth(Arena<T>& a, std::size_t limit, T v) {
+    if (a.size() < limit) return a.add(std::move(v));
+    set_unsupported("too many synthesized nodes");
+    // 占位：本 arena 里最后一个合成出来的节点（预留用完 = 它存在）。不能随手给第 0 号——那可能正是触发这次合成的式子
+    //（`r.x`），调用方接着解析它就又来合成，无穷递归（U4 探针栈溢出）；合成出来的节点都是已补全下标的，不会再触发。
+    return Id<T>::from_index(static_cast<std::uint32_t>(limit - 1));
+  }
+  Id<Exp> synth_exp(Exp e) { return synth(I_.absyn.exps, exp_limit_, std::move(e)); }
+  Id<Cref> synth_cref(Cref c) { return synth(I_.absyn.crefs, cref_limit_, std::move(c)); }
+  Id<SMod> synth_mod(SMod m) { return synth(I_.scode.mods, mod_limit_, std::move(m)); }
+
   void set_unsupported(const char* why) {
     if (!result_.unsupported) { result_.unsupported = true; result_.unsupported_reason = why; }
   }
@@ -11254,7 +11321,7 @@ class Flattener {
       fm.kind = SModKind::Mod;
       fm.binding = call.args[i];
       fm.loc = call.loc;
-      const Id<SMod> fid = I_.scode.add_mod(std::move(fm));
+      const Id<SMod> fid = synth_mod(std::move(fm));
       derived_mods_.insert(fid.raw);   // 记录构造绑定拆出的字段：不参与结构参数的别名连带
       subs.push_back({fld, fid});
     }
@@ -11293,7 +11360,7 @@ class Flattener {
     outer.kind = SModKind::Mod;
     outer.subs = std::move(subs);
     outer.loc = call.loc;
-    return I_.scode.add_mod(std::move(outer));
+    return synth_mod(std::move(outer));
   }
 
   // 记录 cref 整体绑定 `R r2 = r1`：splitRecordCref（NFFlatten.mo:1027-1053）把 cref 拆成各字段 cref 的记录式
@@ -11329,12 +11396,12 @@ class Flattener {
       Exp fe;
       fe.kind = ExpKind::CrefExp;
       fe.loc = loc;
-      fe.cref = I_.absyn.add_cref(std::move(fc));
+      fe.cref = synth_cref(std::move(fc));
       SMod fm;
       fm.kind = SModKind::Mod;
-      fm.binding = I_.absyn.add_exp(std::move(fe));
+      fm.binding = synth_exp(std::move(fe));
       fm.loc = loc;
-      const Id<SMod> fid = I_.scode.add_mod(std::move(fm));
+      const Id<SMod> fid = synth_mod(std::move(fm));
       derived_mods_.insert(fid.raw);   // 记录引用绑定拆出的字段：不参与结构参数的别名连带
       subs.push_back({fname, fid});
     }
@@ -11342,7 +11409,7 @@ class Flattener {
     outer.kind = SModKind::Mod;
     outer.subs = std::move(subs);
     outer.loc = loc;
-    return I_.scode.add_mod(std::move(outer));
+    return synth_mod(std::move(outer));
   }
 
   // 记录整体绑定是 if 式且条件 ≤ parameter：splitRecordCref 的 IF 分支（NFFlatten.mo:1061-1074）——条件求值成功即标结构参数
@@ -11416,13 +11483,13 @@ class Flattener {
         sm.binding = {};
       }
       if (sm.subs.empty() && sm.kind == SModKind::Mod) continue;
-      out.push_back({s.ident, I_.scode.add_mod(std::move(sm))});
+      out.push_back({s.ident, synth_mod(std::move(sm))});
     }
     if (out.empty()) return {};
     SMod n = I_.scode.mods[m];
     n.binding = {};
     n.subs = std::move(out);
-    return I_.scode.add_mod(std::move(n));
+    return synth_mod(std::move(n));
   }
 
   // 复合数组第 aidx 个元素的合成修饰（Modifier.propagate → propagateSubMod，NFModifier.mo:444-513）：每个非 each 子修饰的
@@ -11441,7 +11508,7 @@ class Flattener {
     outer.kind = SModKind::Mod;
     outer.subs = std::move(out);
     outer.loc = mloc;
-    return I_.scode.add_mod(std::move(outer));
+    return synth_mod(std::move(outer));
   }
   Id<SMod> split_submod(Id<SMod> sm, const std::vector<std::int64_t>& aidx) {
     SMod n = I_.scode.mods[sm];   // 拷贝
@@ -11458,7 +11525,7 @@ class Flattener {
       if (!d.is_valid()) return {};
       n.subs.push_back({s.ident, d});
     }
-    return I_.scode.add_mod(std::move(n));
+    return synth_mod(std::move(n));
   }
   // 复合数组修饰切分前的整体检查（各将被下降的非 each 字面量绑定）：前 N 维须恰是数组维（多 / 少 = omc 维度不符报错）；
   // 数值目标的叶类型须一致（split_leaves_uniform）。子修饰名在 cls（类实例）的组件里查；cls 无效 = 内建类型 bkind 的属性。

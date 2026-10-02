@@ -1,0 +1,184 @@
+//// set: es-e6 — array(…) 与 {…} 的对照：函数体、算法段、size / max / for 范围
+//// model: E60
+model E60
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  parameter Integer n = size({1, 2, 3}, 1); Real y[n] = fill(a, n);
+end E60;
+//// model: E61
+model E61
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = max({a, b});
+end E61;
+//// model: E62
+model E62
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = min({a, b, c});
+end E62;
+//// model: E63
+model E63
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = max({a, 2});
+end E63;
+//// model: E64
+model E64
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = max({1, 2});
+end E64;
+//// model: E65
+model E65
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2];
+equation
+  for i in {1, 2} loop y[i] = a * i; end for;
+end E65;
+//// model: E66
+model E66
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2] = {i * a for i in 1:2};
+end E66;
+//// model: E67
+model E67
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2, 2] = {i * j * a for i in 1:2, j in 1:2};
+end E67;
+//// model: E68
+model E68
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = ({a, b, c})[2];
+end E68;
+//// model: E69
+model E69
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = sum({a, b, c}[1:2]);
+end E69;
+//// model: BASE
+model BASE
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+end BASE;
+//// model: E610
+model E610
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  function f input Real x; output Real y[2]; algorithm y := array(x, 2 * x); end f; Real y[2] = f(a);
+end E610;
+//// model: E611
+model E611
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  function f input Real x; output Real y; algorithm y := sum(array(x, 2 * x)); end f; Real y = f(a);
+end E611;
+//// model: E612
+model E612
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  function f input Real x; output Real y[2]; protected Integer n[2] = array(1, 2); algorithm y := array(x, 2) .* n; end f; Real y[2] = f(a);
+end E612;
+//// model: E613
+model E613
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  function f input Real x; output Real y; algorithm y := sum(array(1, 2, 3)) * x; end f; Real y = f(a);
+end E613;
+//// model: E614
+model E614
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  function f input Real x; output Real y; algorithm y := sum(array(1, 2, 3)) * x; end f; Real y = f(2);
+end E614;
+//// model: E615
+model E615
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  function f input Real x[:]; output Real y; algorithm y := sum(x); end f; Real y = f(array(a, b));
+end E615;
+//// model: E616
+model E616
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  function f input Real x[:]; output Real y; algorithm y := sum(x); end f; Real y = f(array(1, 2));
+end E616;
+//// model: E617
+model E617
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  function f input Real x; output Real y[2]; algorithm y := array(x * i for i in 1:2); end f; Real y[2] = f(a);
+end E617;
+//// model: E618
+model E618
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  function f input Real x; output Real y[2]; algorithm y := {x * i for i in 1:2}; end f; Real y[2] = f(a);
+end E618;
+//// model: E619
+model E619
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; algorithm y := array(a, b);
+end E619;
+//// model: E620
+model E620
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; algorithm y := array(1, 2);
+end E620;
+//// model: E621
+model E621
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y; algorithm y := sum(array(a, b));
+end E621;
+//// model: E622
+model E622
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y; algorithm for i in array(1, 2) loop y := y + i; end for;
+end E622;
+//// model: E623
+model E623
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y; algorithm for i in {1, 2} loop y := y + i; end for;
+end E623;
+//// model: E624
+model E624
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = f(a)[1]; function f input Real x; output Real y[2]; algorithm y := {x, x}; end f;
+end E624;
