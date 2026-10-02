@@ -169,6 +169,7 @@ class Flattener {
 
   FlattenResult run(NodeId root) {
     root_ = root;
+    synth_mod_floor_ = I_.scode.mods.size();
     // 全名（R13 §2）：v1 根类是顶层类，全名 = 类名。
     result_.model.name = {I_.nodes[root].name};
     const SElement& el = I_.scode.elems[I_.nodes[root].def];
@@ -2517,10 +2518,11 @@ class Flattener {
                      const std::unordered_set<std::uint32_t>& final_params,
                      SVariability var_floor, const ModCtx& ctx) {
     cur_psubs_ = psubs;   // 绑定里 cref 前缀改写用（复合数组元素 `a[i].y = a[i].x`）
-    // `annotation(Evaluate = true)` 的参数：omc 当结构参数求值（final + 绑定折叠；外部函数求值失败即报错，CevalBinding10
-    // 账本）——未做 → SKIP（此前 CevalRecord6 因此错出非 final 结果）。
-    if (I_.comps[cid].attributes.variability == SVariability::Param && evaluate_true(I_.comps[cid].def))
-      set_unsupported("Evaluate annotation");
+    // `annotation(Evaluate = true)` 的参数：omc 当结构参数（EV0–EV14 探针：`final parameter Real p = 2.0`、绑定求值成字面量、
+    // 绑定里用到的参数连带 final、引用处代入并化简 `Real x = 2.0 * time`）——走下面 struct_final 的既有通路。求不出值（外部函数
+    // 求值失败 omc 报错，CevalBinding10 账本；无绑定只有 start 的 omc 取 start 并告警，EV2）、带 fixed 属性（fixed = false 时
+    // omc 忽略 Evaluate，EV3）→ SKIP。
+    const bool eval_true = I_.comps[cid].attributes.variability == SVariability::Param && evaluate_true(I_.comps[cid].def);
     // 先算绑定/属性（会往 model.exprs add），再取组件字段——不跨 add 持组件引用（arena 纪律）。
     const Type cty = I_.comps[cid].ty;   // 拷贝，跨 add 稳定
     // 结构 final（ceval3）：本参数被某 fixed 用到 → final parameter + 绑定求值成字面量。
@@ -2528,7 +2530,25 @@ class Flattener {
     vsubs.resize(prefix.size());
     vsubs.push_back({});
     const std::string vkey = int_key(name, vsubs);
-    const bool struct_final = final_params.count(I_.comps[cid].def.raw) > 0 || structural_set_.count(vkey) > 0;
+    const bool struct_other = final_params.count(I_.comps[cid].def.raw) > 0 || structural_set_.count(vkey) > 0;
+    bool struct_final = struct_other || eval_true;
+    {   // 绑定在源码里的形态（结构参数的别名连带用，见 apply_structural_params）：裸 cref（含括号）才是候选。
+      Id<Exp> braw0;
+      int origin = 0;   // 0 书写的（声明绑定 / 实例修饰）、1 记录表达式绑定拆出的字段修饰、2 其它合成修饰（组件数组的修饰分发）
+      for (Id<SMod> m : mod_subs)
+        if (I_.scode.mods[m].binding.is_valid()) {
+          braw0 = I_.scode.mods[m].binding;
+          origin = m.raw < synth_mod_floor_ ? 0 : derived_mods_.count(m.raw) ? 1 : 2;
+          break;
+        }
+      if (!braw0.is_valid() && I_.comps[cid].binding.kind == BindingKind::Raw) braw0 = I_.comps[cid].binding.raw_exp;
+      while (braw0.is_valid() && I_.absyn.exps[braw0].kind == ExpKind::Tuple && I_.absyn.exps[braw0].args.size() == 1)
+        braw0 = I_.absyn.exps[braw0].args[0];
+      if (braw0.is_valid() && I_.absyn.exps[braw0].kind == ExpKind::CrefExp) {
+        if (origin == 0) alias_keys_.insert(vkey);
+        else if (origin == 2) alias_unknown_keys_.insert(vkey);
+      }
+    }
     // 绑定：外来修饰优先（第一个带绑定的子修饰），否则组件自身声明绑定（R15 §3.4 外层实例修饰 > 声明默认）。
     Id<Expr> binding;
     {
@@ -2607,15 +2627,29 @@ class Flattener {
     if (struct_final) {
       // 值取修饰感知求值的结果（frame_value 记在 const_vals_）；没有则按本实例帧现求（有效绑定 = 外来修饰 > 声明）。
       std::optional<CVal> cv;
+      const std::vector<std::string> skeys = structural_keys_;
+      const std::unordered_set<std::string> sset = structural_set_;
+      std::unordered_set<std::uint32_t> used;
       if (auto it = const_vals_.find(vkey); it != const_vals_.end()) cv = it->second;
       if (!cv) {
         Cref self;
         self.parts.push_back(CrefPart{name.back(), {}});
-        const FrameHit fh = frame_value(ceval_frame_, self, /*allow_param=*/true, 0, nullptr);
+        const FrameHit fh = frame_value(ceval_frame_, self, /*allow_param=*/true, 0, &used);
         if (fh.kind == FrameHit::Value) cv = fh.v;
       }
-      if (cv) { binding = literal_of(*cv); if (cty.kind == TypeKind::Real) binding = to_real(binding); }
-      record_structural(vkey);
+      // 只因 Evaluate = true 才结构化、但绑定用到 Evaluate = false 的参数：omc 不把它当结构参数（EV8 探针 `q = 3
+      // annotation(Evaluate = false); p = q annotation(Evaluate = true)` → `parameter Real p = q`）→ 撤销求值带来的标记。
+      if (eval_true && !struct_other)
+        for (std::uint32_t d : used)
+          if (evaluate_annotation(Id<SElement>::from_index(d)) == std::optional<bool>(false)) struct_final = false;
+      if (!struct_final) {
+        structural_keys_ = skeys;
+        structural_set_ = sset;
+      } else {
+        if (cv) { binding = literal_of(*cv); if (cty.kind == TypeKind::Real) binding = to_real(binding); }
+        else if (eval_true) set_unsupported("Evaluate annotation");
+        record_structural(vkey);
+      }
     }
     // 属性来源（优先级序 R15 §3.4）：外来子修饰 > 组件自身声明修饰 > 短类链派生修饰（外层派生在前）。
     std::vector<ModSource> asrc;
@@ -2626,6 +2660,9 @@ class Flattener {
     }
     for (Id<SMod> dm : I_.comps[cid].derived_mods) asrc.push_back({dm, enclosing, prefix});
     std::vector<FlatVarAttr> attrs = collect_attributes(cid, asrc);
+    if (eval_true && struct_final)   // fixed = false 时 omc 忽略 Evaluate（EV3 探针）；带 fixed 属性的组合未逐一核实 → SKIP
+      for (const FlatVarAttr& a : attrs)
+        if (in_.str(a.name) == "fixed") set_unsupported("Evaluate annotation");
     // 外层记录整体绑定已挪成初始方程：parameter 字段 fixed = false（Binding.setAttr：有则替换、无则追加，NFBinding.mo:821-836）。
     if (ctx.unbound_fields && var_min(var_floor, I_.comps[cid].attributes.variability) == SVariability::Param) {
       const Symbol fixed = in_.intern("fixed");
@@ -2832,8 +2869,13 @@ class Flattener {
     if (cel.mod.is_valid()) asrc.push_back({cel.mod, enclosing, prefix});
     // 绑定：外来修饰优先，否则声明绑定。要求是数组构造子 `{…}` / `array(…)`，否则 SKIP。
     Id<Exp> braw;
+    bool braw_written = true;   // 绑定是源码里书写的（非 flatten 合成的修饰）：结构参数的别名连带用
     for (Id<SMod> m : mod_subs)
-      if (I_.scode.mods[m].binding.is_valid()) { braw = I_.scode.mods[m].binding; break; }
+      if (I_.scode.mods[m].binding.is_valid()) {
+        braw = I_.scode.mods[m].binding;
+        braw_written = m.raw < synth_mod_floor_;
+        break;
+      }
     NodeId bscope = mod_scope;
     std::vector<Symbol> bprefix = mod_prefix;
     if (!braw.is_valid()) {
@@ -2986,6 +3028,15 @@ class Flattener {
     // constant 元素的值另攒成整体数组记入 const_vals_（整取引用 `m1 * v1` 用）；有非 CVal 字面量（枚举）则不记。
     std::vector<CVal> const_flat;
     bool const_all = vk == FlatVarKind::Constant;
+    // 参数数组的绑定在源码里是裸 cref（`parameter Boolean[3] b = surBou.isFloor`）：各元素是结构参数别名连带的候选，且整个数组
+    // 一起连带（CevalRecordArray10：目标元素都是结构参数 → 三个元素都 final）；见 apply_structural_params。
+    bool alias_arr = false;
+    if (spread && vk == FlatVarKind::Parameter && braw_written) {
+      Id<Exp> b0 = braw;
+      while (I_.absyn.exps[b0].kind == ExpKind::Tuple && I_.absyn.exps[b0].args.size() == 1) b0 = I_.absyn.exps[b0].args[0];
+      alias_arr = I_.absyn.exps[b0].kind == ExpKind::CrefExp;
+    }
+    if (alias_arr) alias_groups_.emplace_back();
     std::vector<std::int64_t> idx(dims.size(), 1);
     for (bool more = true; more;) {
       FlatVariable v;
@@ -3045,6 +3096,11 @@ class Flattener {
       if (is_flow) { fsubs = v.name_subs; fsubs.back() = v.subscripts; }
       result_.model.variables.push_back(std::move(v));
       const std::size_t vidx = result_.model.variables.size() - 1;
+      if (alias_arr) {
+        const std::string ek = var_key(result_.model.variables[vidx]);
+        alias_keys_.insert(ek);
+        alias_groups_.back().push_back(ek);
+      }
       if (!cur_pp_chain_.empty()) var_pp_.emplace(vidx, cur_pp_chain_);
       if (is_flow) flow_vars_.push_back({name, std::move(fsubs), cty, I_.comps[cid].loc, vidx, false});
       if (const_all) {
@@ -9512,6 +9568,21 @@ class Flattener {
         Expr r; r.kind = ExprKind::Cast; r.a = a; r.ty = cty.is_array() ? cty : Type::real();
         return add(std::move(r));
       }
+      case ExprKind::Array: {
+        // 数组字面量逐元素化简（结构参数代入后 `{/*Real*/(3), …}` → `{3.0, …}`，EV14 探针 `Real x[n] = fill(n, n)`）。
+        const std::vector<Id<Expr>> args0 = result_.model.exprs[id].args;
+        std::vector<Id<Expr>> args;
+        bool changed = false;
+        for (Id<Expr> a : args0) {
+          const Id<Expr> s = simplify_expr(a);
+          changed = changed || !(s == a);
+          args.push_back(s);
+        }
+        if (!changed) return id;
+        Expr r = result_.model.exprs[id];
+        r.args = std::move(args);
+        return add(std::move(r));
+      }
       case ExprKind::Subscript: {
         // 数组字面量取整数字面量下标 → 该元素（向量化调用的迭代变量被代入后 `{1.0, 2.0, time}[1]` → `1.0`；V4c 探针
         // `sum(sin({1, 2, time}))` → `0.8414709848078965 + 0.9092974268256817 + sin(time)`）。越界留给调用方（omc 报错）。
@@ -9860,7 +9931,9 @@ class Flattener {
       fm.kind = SModKind::Mod;
       fm.binding = call.args[i];
       fm.loc = call.loc;
-      subs.push_back({fld, I_.scode.add_mod(std::move(fm))});
+      const Id<SMod> fid = I_.scode.add_mod(std::move(fm));
+      derived_mods_.insert(fid.raw);   // 记录构造绑定拆出的字段：不参与结构参数的别名连带
+      subs.push_back({fld, fid});
     }
     SMod outer;
     outer.kind = SModKind::Mod;
@@ -9907,7 +9980,9 @@ class Flattener {
       fm.kind = SModKind::Mod;
       fm.binding = I_.absyn.add_exp(std::move(fe));
       fm.loc = loc;
-      subs.push_back({fname, I_.scode.add_mod(std::move(fm))});
+      const Id<SMod> fid = I_.scode.add_mod(std::move(fm));
+      derived_mods_.insert(fid.raw);   // 记录引用绑定拆出的字段：不参与结构参数的别名连带
+      subs.push_back({fname, fid});
     }
     SMod outer;
     outer.kind = SModKind::Mod;
@@ -11406,6 +11481,36 @@ class Flattener {
       v.binding = lit;
       vals.emplace(k, lit);
     }
+    // 绑定恰是某个结构参数的引用的标量 parameter 连带成为结构参数（1.25.0 实测，EV 探针 m2–m4：`parameter Integer m = n`、
+    // n 作数组维 → `final parameter Integer m = 2`、`x = m * time` → `2.0 * time`；传递、与声明序无关、书写的实例修饰同样
+    // `M m(g = p)` / `R r1(x = p)`）。只认源码里就是裸 cref 的绑定（alias_keys_）：表达式绑定（`-p`、`p + 0`、`2 * p`）、类型
+    // 不同的别名（`Real s = n`）、记录表达式绑定拆出的字段（`r1 = R(x = p)` / `r2 = r1`）、数组字面量的元素不连带，只是下面
+    // 代入后被求值。组件数组的修饰分发合成出的裸 cref 绑定连带与否未核实 → SKIP。
+    for (bool changed = true; changed;) {
+      changed = false;
+      for (FlatVariable& v : result_.model.variables) {
+        if (v.var_kind != FlatVarKind::Parameter || !v.binding.is_valid()) continue;
+        const Expr& b = result_.model.exprs[v.binding];
+        if (b.kind != ExprKind::Cref) continue;
+        const auto it = vals.find(expr_cref_key(b.cref));
+        if (it == vals.end()) continue;
+        const std::string vk = var_key(v);
+        if (vals.count(vk)) continue;
+        if (alias_unknown_keys_.count(vk)) { set_unsupported("structural alias through distributed modifier"); return; }
+        if (!alias_keys_.count(vk) || result_.model.exprs[it->second].ty.kind != v.ty.kind) continue;
+        const Id<Expr> lit = it->second;
+        vals.emplace(vk, lit);
+        v.is_final = true;
+        v.binding = lit;
+        changed = true;
+      }
+    }
+    // 数组别名整体连带：omc 的结构标记是变量级的；只有部分元素的目标是结构参数时形态未核实 → SKIP。
+    for (const std::vector<std::string>& g : alias_groups_) {
+      std::size_t hit = 0;
+      for (const std::string& ek : g) hit += vals.count(ek);
+      if (hit != 0 && hit != g.size()) { set_unsupported("structural alias on part of array"); return; }
+    }
     // EvalConstants：结构参数的引用处一律代入值（变量绑定 / 属性、方程、算法；函数体不涉及模型参数），代入后化简。
     auto subst = [&](Id<Expr>& e) {
       if (e.is_valid() && refs_keys(e, vals)) e = simplify_expr(clone_subst(e, vals));
@@ -11881,6 +11986,13 @@ class Flattener {
   std::unordered_map<std::uint32_t, std::vector<AugMember>> aug_;
   // 已发射常量的最终值（var_key 编码 → 值；数组另存整体），见 const_lookup_*。
   std::unordered_map<std::string, CVal> const_vals_;
+  // 结构参数的别名连带（apply_structural_params）：绑定在源码里就是裸 cref 的标量参数（alias_keys_，变量 key）；裸 cref 但来自
+  // 组件数组修饰分发的（alias_unknown_keys_，连带与否未核实）。derived_mods_ = 记录表达式绑定拆出的字段修饰；
+  // synth_mod_floor_ = flatten 开始时 SCode 修饰的个数（其后新增的都是合成的）。
+  std::unordered_set<std::string> alias_keys_, alias_unknown_keys_;
+  std::vector<std::vector<std::string>> alias_groups_;   // 参数数组的裸 cref 绑定：同一数组的各元素 key（整体连带）
+  std::unordered_set<std::uint32_t> derived_mods_;
+  std::size_t synth_mod_floor_ = 0;
   // 空数组（某维为 0，不出变量行）的形状，int_key(全名, 逐段下标) → 维；`:` 维的引用 / size() 靠它（emitted_shape 的回退）。
   std::unordered_map<std::string, std::vector<std::int64_t>> empty_shapes_;
   const std::vector<Symbol>* ceval_prefix_ = nullptr;   // 非空：eval_scode 的 cref 先在此前缀下查 const_vals_（CevalCtx 设）

@@ -2925,6 +2925,41 @@ YMC_TEST(flatten_if_expression_structural_branch_selection) {
   }
 }
 
+YMC_TEST(flatten_evaluate_annotation_and_structural_alias) {
+  // annotation(Evaluate = true) 的标量参数 = 结构参数（final、求值成字面量、绑定里用到的参数连带 final、引用处代入并化简）；
+  // 绑定在源码里就是结构参数裸引用的参数连带成为结构参数（声明绑定 / 实例修饰，传递），表达式绑定 / 类型不同的别名 / 记录
+  // 表达式拆出的字段只是被求值。期望 = omc 1.25.0 实跑 EVT1 / EVT2（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model EVT1\n  record R\n    parameter Real x = 1;\n    parameter Real w = x;\n  end R;\n  model M\n"
+                           "    parameter Real g = 1 annotation(Evaluate = true);\n    parameter Real h = 1;\n"
+                           "    Real y = (g + h) * time;\n  end M;\n  parameter Real p = 2 annotation(Evaluate = true);\n"
+                           "  parameter Real a = 1;\n  parameter Real b = 2 * a annotation(Evaluate = true);\n"
+                           "  parameter Real q = p;\n  parameter Real r = q;\n  parameter Real s = -p;\n"
+                           "  parameter Integer n = 2;\n  parameter Integer m = n;\n  parameter Real t = n;\n"
+                           "  parameter R r1(x = p);\n  parameter R r2 = r1;\n  M m1(g = 3, h = p);\n  Real z[n];\n"
+                           "  Real x = (p + b + r + s + m + t + r2.x) * time;\nend EVT1;\n"),
+               std::string("class EVT1\n  final parameter Real p = 2.0;\n  final parameter Real a = 1.0;\n"
+                           "  final parameter Real b = 2.0;\n  final parameter Real q = 2.0;\n  final parameter Real r = 2.0;\n"
+                           "  parameter Real s = -2.0;\n  final parameter Integer n = 2;\n  final parameter Integer m = 2;\n"
+                           "  parameter Real t = 2.0;\n  final parameter Real r1.x = 2.0;\n  final parameter Real r1.w = 2.0;\n"
+                           "  parameter Real r2.x = 2.0;\n  parameter Real r2.w = 2.0;\n  final parameter Real m1.g = 3.0;\n"
+                           "  final parameter Real m1.h = 2.0;\n  Real m1.y = 5.0 * time;\n  Real z[1];\n  Real z[2];\n"
+                           "  Real x = (6.0 + s + 2.0 + t + r2.x) * time;\nend EVT1;\n"));
+  // 绑定依赖 Evaluate = false 的参数：omc 不把它当结构参数。
+  YMC_CHECK_EQ(flatten_src("model EVT2\n  parameter Real q = 3 annotation(Evaluate = false);\n"
+                           "  parameter Real p = q annotation(Evaluate = true);\n  Real x = p * time;\nend EVT2;\n"),
+               std::string("class EVT2\n  parameter Real q = 3.0;\n  parameter Real p = q;\n  Real x = p * time;\nend EVT2;\n"));
+  // 未做的形态 → SKIP（EV 探针）：无绑定只有 start（omc 取 start 并告警）、fixed = false（omc 忽略 Evaluate）、数组参数。
+  for (const char* src : {"model E2\n  parameter Real p(start = 1) annotation(Evaluate = true);\n  Real x = p * time;\nend E2;\n",
+                          "model E3\n  parameter Real p(fixed = false) annotation(Evaluate = true);\n  Real x = p * time;\n"
+                          "initial equation\n  p = 3;\nend E3;\n",
+                          "model E7\n  parameter Real x[3] = {1, 2, 3} annotation(Evaluate = true);\n  Real y = x[2] * time;\nend E7;\n"}) {
+    bool uns = false;
+    const std::string out = flatten_src(src, &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, std::string("<unsupported:Evaluate annotation>"));
+  }
+}
+
 YMC_TEST(flatten_pre_change_argument_rules) {
   // pre / change 的实参须是变量，when 之外不能是连续变量（NFBuiltinCall.typePreChangeCall :578-588；P1 / P5 / P7 探针 omc 报错）；
   // when 方程体里的连续实参 1.25.0 接受（P4 探针，期望 = 实跑输出，2026-10-02）。

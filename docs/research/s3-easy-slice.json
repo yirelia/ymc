@@ -547,5 +547,6 @@
 "OperationLogicalBinary2.mo",
 "IfExpression4.mo",
 "IfExpression8.mo",
-"IfExpression14.mo"
+"IfExpression14.mo",
+"CevalRecordArray10.mo"
 ]

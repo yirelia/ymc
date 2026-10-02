@@ -1019,6 +1019,18 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           Real 转型）或是 Integer 算术式（IfExpression12 `x = {6, 6}`）、组件数组元素里（IfExpression6 内部错）、标量对数组（类型错）。
           探针 V4z 36 行：13 PASS / 14 SKIP / 9 BOTH-REJECT / 0 FAIL。→ 全 scodeinst PASS 460→463（IfExpression4 / 8 / 14）、
           nf-live 476（不变）；+1 单测（191）。
+    - [x] (59k) Evaluate = true 的标量参数 + 结构参数的别名连带（2026-10-02）：
+          **Evaluate = true**：标量参数当结构参数——final、绑定按本实例帧求值成字面量（修饰感知）、绑定里用到的参数连带 final、
+          引用处代入并化简（`Real x = 2.0 * time`）；绑定依赖 Evaluate = false 的参数时 omc 不结构化（撤销标记）。求不出值 / 无
+          绑定只有 start / 带 fixed 属性 / 数组参数 → SKIP。
+          **别名连带**（修潜伏错，与 Evaluate 无关也会触发）：绑定在源码里就是某结构参数裸引用的参数连带成为结构参数
+          （`parameter Integer n = 2; parameter Integer m = n; Real y[n]; Real x = m * time` → omc `final parameter Integer m = 2`、
+          `x = 2.0 * time`；此前 ymc 出非 final 的 m）。传递、与声明序无关、实例修饰同样；参数数组的裸引用绑定整体连带
+          （CevalRecordArray10）。表达式绑定 / 类型不同的别名 / 记录表达式拆出的字段（derived_mods_）/ 数组字面量元素不连带，
+          只是被求值；组件数组修饰分发合成的裸引用、数组只部分连带 → SKIP。
+          **simplify_expr 进数组字面量逐元素化简**（结构参数代入后 `{/*Real*/(3), …}` → `{3.0, …}`）。
+          探针 EV m1–m5 71 个模型：63 PASS / 7 SKIP / 1 BOTH-REJECT / 0 FAIL。→ 全 scodeinst PASS 463→464
+          （CevalRecordArray10）、nf-live 476（不变）；+1 单测（192）。数组参数的 Evaluate（整体引用代入 + 依赖标记）留待后续。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、
