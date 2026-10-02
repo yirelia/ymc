@@ -4171,6 +4171,128 @@ YMC_TEST(flatten_comprehension_bindings_multi_iterator) {
   YMC_CHECK_EQ(out, std::string("<unsupported:array binding shape/type mismatch>"));
 }
 
+YMC_TEST(flatten_type_dimension_array_references) {
+  // 类型维（枚举 / Boolean）数组的引用：元素下标打标签 `y[E.two]`、`b[true]`，整体引用 / 数组运算 / 切片 `y[E.two:E.three]`、
+  // `y[{E.three, E.one}]`、`y[end]` 同整数维（压平期按序数走，收尾 relabel_type_dims 换回标签）；constant 的元素取值。
+  // 期望 = omc 1.25.0 实跑 ENT1（2026-10-03）。
+  YMC_CHECK_EQ(flatten_src("model ENT1\n  type E = enumeration(one, two, three);\n  Real a = time;\n  Real y[E] = {a, 1, 2};\n"
+                           "  Real b[Boolean] = {a, 1};\n  Real m[E, 2] = {{a, 1}, {2, 3}, {4, 5}};\n"
+                           "  parameter Real p[E] = {1, 2, 3};\n  constant Real c[E] = {1, 2, 3};\n"
+                           "  Real z1 = y[E.two] + b[true] + p[E.two] + c[E.three];\n  Real z2[E] = 2 * y;\n"
+                           "  Real z3 = sum(y) + y[end];\n  Real z4[2] = y[E.two:E.three];\n"
+                           "  Real z5[2] = y[{E.three, E.one}];\n  Real z6[2] = m[E.two, :];\n  Real w[E];\n  Real v[3];\n"
+                           "equation\n  w = y;\n  v = m[:, 2];\nend ENT1;\n"),
+               std::string("class ENT1\n  Real a = time;\n  Real y[E.one];\n  Real y[E.two];\n  Real y[E.three];\n"
+                           "  Real b[false];\n  Real b[true];\n  Real m[E.one,1];\n  Real m[E.one,2];\n  Real m[E.two,1];\n"
+                           "  Real m[E.two,2];\n  Real m[E.three,1];\n  Real m[E.three,2];\n  parameter Real p[E.one] = 1.0;\n"
+                           "  parameter Real p[E.two] = 2.0;\n  parameter Real p[E.three] = 3.0;\n"
+                           "  constant Real c[E.one] = 1.0;\n  constant Real c[E.two] = 2.0;\n"
+                           "  constant Real c[E.three] = 3.0;\n  Real z1 = y[E.two] + b[true] + p[E.two] + 3.0;\n"
+                           "  Real z2[E.one];\n  Real z2[E.two];\n  Real z2[E.three];\n"
+                           "  Real z3 = y[E.one] + y[E.two] + y[E.three] + y[E.three];\n  Real z4[1];\n  Real z4[2];\n"
+                           "  Real z5[1];\n  Real z5[2];\n  Real z6[1];\n  Real z6[2];\n  Real w[E.one];\n  Real w[E.two];\n"
+                           "  Real w[E.three];\n  Real v[1];\n  Real v[2];\n  Real v[3];\nequation\n  y = {a, 1.0, 2.0};\n"
+                           "  b = {a, 1.0};\n  m = {{a, 1.0}, {2.0, 3.0}, {4.0, 5.0}};\n"
+                           "  z2 = {2.0 * y[E.one], 2.0 * y[E.two], 2.0 * y[E.three]};\n  z4 = y[E.two:E.three];\n"
+                           "  z5 = y[{E.three, E.one}];\n  z6 = m[E.two,:];\n  w[E.one] = y[E.one];\n  w[E.two] = y[E.two];\n"
+                           "  w[E.three] = y[E.three];\n  v[1] = m[E.one,2];\n  v[2] = m[E.two,2];\n  v[3] = m[E.three,2];\n"
+                           "end ENT1;\n"));
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           // 整数下标进枚举维：omc 类型错（ENS1）。
+           {"model ENS1\n  type E = enumeration(one, two, three);\n  Real y[E] = {time, 1, 2};\n"
+            "  Real z = y[2];\nend ENS1;\n", "type-dimension subscript"},
+           // `:` 维由带类型维的绑定定（omc：z 也成 `z[E.one]`…），未做（ENS3）。
+           {"model ENS3\n  type E = enumeration(one, two, three);\n  Real y[E] = {time, 1, 2};\n"
+            "  Real z[:] = y;\nend ENS3;\n", "colon dimension from type-dimension binding"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
+YMC_TEST(flatten_for_equations_over_type_ranges) {
+  // for 方程在枚举 / Boolean 上迭代：类型名 `for i in E`、标签范围 `E.one:E.two`、标签数组、类型维上的隐式范围；迭代变量
+  // 的值是标签（`x[i] = i` → `x[E.one] = E.one`），比较 / Integer(i) 照常折叠。期望 = omc 1.25.0 实跑 ENT2（2026-10-03）。
+  YMC_CHECK_EQ(flatten_src("model ENT2\n  type E = enumeration(one, two, three);\n  Real a = time;\n  Real y[E];\n"
+                           "  Real b[Boolean];\n  E x[E];\n  Integer n[E];\n  Real m[2, E];\n  Real q[E];\n  Real r[E];\n"
+                           "equation\n  for i in E loop\n    y[i] = if i == E.two then a else Integer(i);\n    x[i] = i;\n"
+                           "  end for;\n  for i in Boolean loop\n    b[i] = if i then a else 0;\n  end for;\n"
+                           "  for i in E.one:E.two loop\n    n[i] = Integer(i);\n  end for;\n  n[E.three] = 0;\n"
+                           "  for i in 1:2, j in E loop\n    m[i, j] = a * i;\n  end for;\n  for i loop\n    q[i] = a;\n"
+                           "  end for;\n  for i in {E.three, E.one} loop\n    r[i] = a;\n  end for;\n  r[E.two] = 0;\n"
+                           "end ENT2;\n"),
+               std::string("class ENT2\n  Real a = time;\n  Real y[E.one];\n  Real y[E.two];\n  Real y[E.three];\n"
+                           "  Real b[false];\n  Real b[true];\n  enumeration(one, two, three) x[E.one];\n"
+                           "  enumeration(one, two, three) x[E.two];\n  enumeration(one, two, three) x[E.three];\n"
+                           "  Integer n[E.one];\n  Integer n[E.two];\n  Integer n[E.three];\n  Real m[1,E.one];\n"
+                           "  Real m[1,E.two];\n  Real m[1,E.three];\n  Real m[2,E.one];\n  Real m[2,E.two];\n"
+                           "  Real m[2,E.three];\n  Real q[E.one];\n  Real q[E.two];\n  Real q[E.three];\n  Real r[E.one];\n"
+                           "  Real r[E.two];\n  Real r[E.three];\nequation\n  y[E.one] = 1.0;\n  x[E.one] = E.one;\n"
+                           "  y[E.two] = a;\n  x[E.two] = E.two;\n  y[E.three] = 3.0;\n  x[E.three] = E.three;\n"
+                           "  b[false] = 0.0;\n  b[true] = a;\n  n[E.one] = 1;\n  n[E.two] = 2;\n  n[E.three] = 0;\n"
+                           "  m[1,E.one] = a;\n  m[1,E.two] = a;\n  m[1,E.three] = a;\n  m[2,E.one] = a * 2.0;\n"
+                           "  m[2,E.two] = a * 2.0;\n  m[2,E.three] = a * 2.0;\n  q[E.one] = a;\n  q[E.two] = a;\n"
+                           "  q[E.three] = a;\n  r[E.three] = a;\n  r[E.one] = a;\n  r[E.two] = 0.0;\nend ENT2;\n"));
+}
+
+YMC_TEST(flatten_for_statements_over_type_ranges) {
+  // for 语句在枚举 / Boolean 上迭代（保留循环）：类型名打成标签数组 `for i in {E.one, E.two, E.three} loop`、范围照写、
+  // 隐式范围是首末标签；体里类型维上的符号下标 `y[i]`、`b[not i]`、`k[Integer(i)]`；范围为空的 for 语句整条删去
+  //（simplifyStatement，NFSimplifyModel.mo:312-333 v1.25.0，整数范围 `3:1` 同）。期望 = omc 1.25.0 实跑 ENT3（2026-10-03）。
+  YMC_CHECK_EQ(flatten_src("model ENT3\n  type E = enumeration(one, two, three);\n  Real a = time;\n  Real y[E] = {a, 1, 2};\n"
+                           "  Real b[Boolean] = {a, 1};\n  Real z[E];\n  Real s;\n  Real t;\n  Real k[3];\nalgorithm\n"
+                           "  s := 0;\n  for i in E loop\n    z[i] := y[i] * 2;\n    k[Integer(i)] := y[i];\n  end for;\n"
+                           "  for i in E.two:E.three loop\n    s := s + y[i];\n  end for;\n  for i loop\n    s := s + z[i];\n"
+                           "  end for;\n  t := 0;\n  for i in Boolean loop\n    t := t + b[i] + b[not i];\n  end for;\n"
+                           "  for i in E.three:E.one loop\n    t := t + 1;\n  end for;\n  for i in 3:1 loop\n    t := t + 1;\n"
+                           "  end for;\nend ENT3;\n"),
+               std::string("class ENT3\n  Real a = time;\n  Real y[E.one];\n  Real y[E.two];\n  Real y[E.three];\n"
+                           "  Real b[false];\n  Real b[true];\n  Real z[E.one];\n  Real z[E.two];\n  Real z[E.three];\n"
+                           "  Real s;\n  Real t;\n  Real k[1];\n  Real k[2];\n  Real k[3];\nequation\n  y = {a, 1.0, 2.0};\n"
+                           "  b = {a, 1.0};\nalgorithm\n  s := 0.0;\n  for i in {E.one, E.two, E.three} loop\n"
+                           "    z[i] := y[i] * 2.0;\n    k[Integer(i)] := y[i];\n  end for;\n  for i in E.two:E.three loop\n"
+                           "    s := s + y[i];\n  end for;\n  for i in E.one:E.three loop\n    s := s + z[i];\n  end for;\n"
+                           "  t := 0.0;\n  for i in {false, true} loop\n    t := t + b[i] + b[not i];\n  end for;\nend ENT3;\n"));
+  // 枚举迭代变量作整数维数组的下标：omc 类型错（ENS2）。
+  bool uns = false;
+  const std::string out = flatten_src("model ENS2\n  type E = enumeration(one, two, three);\n  Real y[3] = {time, 1, 2};\n  Real z;\n"
+                                           "algorithm\n  z := 0;\n  for i in E loop\n    z := z + y[i];\n  end for;\nend ENS2;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(out, std::string("<unsupported:subscript type>"));
+}
+
+YMC_TEST(flatten_reductions_and_comprehensions_over_type_ranges) {
+  // 归约 / 推导式在枚举 / Boolean 上迭代：sum 展开成 `y[E.one] + …`、max / min 保留 `for i in {E.one, E.two, E.three}` /
+  // `E.one:E.two`；推导式绑定的 `:` 维——范围写类型名的是类型维（`z2[E.one]`…），标签范围是整数维。
+  // 期望 = omc 1.25.0 实跑 ENT4（2026-10-03）。
+  YMC_CHECK_EQ(flatten_src("model ENT4\n  type E = enumeration(one, two, three);\n  Real a = time;\n  Real y[E] = {a, 1, 2};\n"
+                           "  Real b[Boolean] = {a, 1};\n  parameter Real p[E] = {1, 2, 3};\n  constant Real c[E] = {1, 2, 3};\n"
+                           "  Real s1 = sum(y[i] for i in E) + sum(y[i] * Integer(i) for i in E.two:E.three);\n"
+                           "  Real s2 = max(y[i] for i in E) + min(y[i] for i in E.one:E.two) + max(y[i] for i);\n"
+                           "  Real s3 = sum(c[i] for i in E) * a + sum(b[i] for i in Boolean);\n"
+                           "  Real z1[3] = {y[i] * 2 for i in E};\n  Real z2[:] = {y[i] * 2 for i in E};\n"
+                           "  Real z3[:] = {y[i] for i in E.one:E.two};\n  Real z4[:] = {b[i] for i in Boolean};\n"
+                           "  parameter Real q[:] = {p[i] * 2 for i in E};\n  E x[3] = {i for i in E};\nend ENT4;\n"),
+               std::string("class ENT4\n  Real a = time;\n  Real y[E.one];\n  Real y[E.two];\n  Real y[E.three];\n"
+                           "  Real b[false];\n  Real b[true];\n  parameter Real p[E.one] = 1.0;\n"
+                           "  parameter Real p[E.two] = 2.0;\n  parameter Real p[E.three] = 3.0;\n"
+                           "  constant Real c[E.one] = 1.0;\n  constant Real c[E.two] = 2.0;\n"
+                           "  constant Real c[E.three] = 3.0;\n"
+                           "  Real s1 = y[E.one] + y[E.two] + y[E.three] + y[E.two] * 2.0 + y[E.three] * 3.0;\n"
+                           "  Real s2 = max(y[i] for i in {E.one, E.two, E.three}) + min(y[i] for i in E.one:E.two) + max(y[i] for i in E.one:E.three);\n"
+                           "  Real s3 = 6.0 * a + b[false] + b[true];\n  Real z1[1];\n  Real z1[2];\n  Real z1[3];\n"
+                           "  Real z2[E.one];\n  Real z2[E.two];\n  Real z2[E.three];\n  Real z3[1];\n  Real z3[2];\n"
+                           "  Real z4[false];\n  Real z4[true];\n  parameter Real q[E.one] = p[E.one] * 2.0;\n"
+                           "  parameter Real q[E.two] = p[E.two] * 2.0;\n  parameter Real q[E.three] = p[E.three] * 2.0;\n"
+                           "  enumeration(one, two, three) x[1];\n  enumeration(one, two, three) x[2];\n"
+                           "  enumeration(one, two, three) x[3];\nequation\n  y = {a, 1.0, 2.0};\n  b = {a, 1.0};\n"
+                           "  z1 = array(y[i] * 2.0 for i in {E.one, E.two, E.three});\n"
+                           "  z2 = array(y[i] * 2.0 for i in {E.one, E.two, E.three});\n"
+                           "  z3 = array(y[i] for i in E.one:E.two);\n  z4 = array(b[i] for i in {false, true});\n"
+                           "  x = array(i for i in {E.one, E.two, E.three});\nend ENT4;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

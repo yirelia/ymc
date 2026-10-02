@@ -165,6 +165,16 @@ interval is [1,1]"；作用在切片上的向量化内建把切片的范围取�
   `for i in false:true loop`，显式写类型名的打成数组 `for i in {E.one, E.two, E.three} loop` / `{false, true}`；保留的
   归约同（`max(y[i] for i in E.one:E.three)`）。ymc 的迭代变量只能取整数，未做。
 
+类型维（枚举 / Boolean）数组的几处 1.25.0 行为（EN 探针 t1–t5，2026-10-03）：
+- `:` 维从绑定推出来时带着绑定那一维的**类型**（deduceDimensionFromExp）：`Real z[:] = y`（y: Real[E]）→ `z[E.one]`…、
+  `Real z[:] = {… for i in E}` / `for i in Boolean` → 类型维；而标签**范围** `{… for i in E.one:E.three}`、`false:true`、
+  隐式范围、标签数组给的是整数维 `z[1]`…（范围表达式的类型是 `E[3]`，维是 INTEGER）。于是 `constant Real d[:] = c;
+  … d[2]` 是类型错（整数下标进枚举维）。ymc 做了推导式里类型名范围这一种，其余引用带类型维数组的 `:` 绑定 SKIP。
+- for 语句的范围：类型名打成标签数组（`for i in {E.one, E.two, E.three} loop`、`{false, true}`），标签范围照写，隐式范围
+  是首末标签；范围的类型是空数组（`E.three:E.one`、`3:1`）或体为空的 for 语句整条删去（simplifyStatement，
+  NFSimplifyModel.mo:312-333；函数体同样经它化简）。
+- 整个范围的标签切片 `y[E.one:E.three]`、`y[false:true]` 打成 `y[:]`（同整数的 `1:dim`）；下标数组不收。
+
 Integer 的极值（待用户定，2026-10-02）：`max` / `min` 作用在空的 Integer 数组 / 空范围上取 `∓System.intMaxLit`（Expression.makeMinValue / makeMaxValue，v1.25.0 NFExpression.mo:4908-4934），这个值随 omc 构建的整数位宽而变——本机安装版 1.25.0（Windows）打 `1073741823`，testsuite 文件（64 位 Linux 生成）是 `4611686018427387903`。跟实跑的 omc 就要把 30 位的值写进 ymc，跟文件又过不了 oracle=live 门；ymc 目前两边都不跟，遇到即 SKIP（`Integer extreme of empty min/max (platform-dependent in omc)`）。受影响：scodeinst 的 CevalReduction1、FuncBuiltinMax / Max2 / Min / Min2、FuncBuiltinReduction 六例（其余内容已与 1.25.0 一致，只差这一个值）。Real（`±8.777798510069901e304`）、Boolean、枚举的极值与平台无关，已做。
 
 ## 已研究待实现：多条 connect 连接集（union-find）

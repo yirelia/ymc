@@ -579,5 +579,10 @@
 "ImplicitRangeExp1.mo",
 "ImplicitRangeExp2.mo",
 "SubscriptReduction1.mo",
-"const1.mo"
+"const1.mo",
+"End1.mo",
+"ForEquationEnum1.mo",
+"ForEquationEnum2.mo",
+"ImplicitRangeType1.mo",
+"ImplicitRangeType2.mo"
 ]

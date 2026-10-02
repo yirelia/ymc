@@ -1,0 +1,130 @@
+//// set: en-ut — 类型维数组与枚举 / Boolean 上的迭代（单测原文）
+//// model: ENS1
+model ENS1
+  type E = enumeration(one, two, three);
+  Real y[E] = {time, 1, 2};
+  Real z = y[2];
+end ENS1;
+//// model: ENS2
+model ENS2
+  type E = enumeration(one, two, three);
+  Real y[3] = {time, 1, 2};
+  Real z;
+algorithm
+  z := 0;
+  for i in E loop
+    z := z + y[i];
+  end for;
+end ENS2;
+//// model: ENS3
+model ENS3
+  type E = enumeration(one, two, three);
+  Real y[E] = {time, 1, 2};
+  Real z[:] = y;
+end ENS3;
+//// model: ENT1
+model ENT1
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2};
+  Real b[Boolean] = {a, 1};
+  Real m[E, 2] = {{a, 1}, {2, 3}, {4, 5}};
+  parameter Real p[E] = {1, 2, 3};
+  constant Real c[E] = {1, 2, 3};
+  Real z1 = y[E.two] + b[true] + p[E.two] + c[E.three];
+  Real z2[E] = 2 * y;
+  Real z3 = sum(y) + y[end];
+  Real z4[2] = y[E.two:E.three];
+  Real z5[2] = y[{E.three, E.one}];
+  Real z6[2] = m[E.two, :];
+  Real w[E];
+  Real v[3];
+equation
+  w = y;
+  v = m[:, 2];
+end ENT1;
+//// model: ENT2
+model ENT2
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E];
+  Real b[Boolean];
+  E x[E];
+  Integer n[E];
+  Real m[2, E];
+  Real q[E];
+  Real r[E];
+equation
+  for i in E loop
+    y[i] = if i == E.two then a else Integer(i);
+    x[i] = i;
+  end for;
+  for i in Boolean loop
+    b[i] = if i then a else 0;
+  end for;
+  for i in E.one:E.two loop
+    n[i] = Integer(i);
+  end for;
+  n[E.three] = 0;
+  for i in 1:2, j in E loop
+    m[i, j] = a * i;
+  end for;
+  for i loop
+    q[i] = a;
+  end for;
+  for i in {E.three, E.one} loop
+    r[i] = a;
+  end for;
+  r[E.two] = 0;
+end ENT2;
+//// model: ENT3
+model ENT3
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2};
+  Real b[Boolean] = {a, 1};
+  Real z[E];
+  Real s;
+  Real t;
+  Real k[3];
+algorithm
+  s := 0;
+  for i in E loop
+    z[i] := y[i] * 2;
+    k[Integer(i)] := y[i];
+  end for;
+  for i in E.two:E.three loop
+    s := s + y[i];
+  end for;
+  for i loop
+    s := s + z[i];
+  end for;
+  t := 0;
+  for i in Boolean loop
+    t := t + b[i] + b[not i];
+  end for;
+  for i in E.three:E.one loop
+    t := t + 1;
+  end for;
+  for i in 3:1 loop
+    t := t + 1;
+  end for;
+end ENT3;
+//// model: ENT4
+model ENT4
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2};
+  Real b[Boolean] = {a, 1};
+  parameter Real p[E] = {1, 2, 3};
+  constant Real c[E] = {1, 2, 3};
+  Real s1 = sum(y[i] for i in E) + sum(y[i] * Integer(i) for i in E.two:E.three);
+  Real s2 = max(y[i] for i in E) + min(y[i] for i in E.one:E.two) + max(y[i] for i);
+  Real s3 = sum(c[i] for i in E) * a + sum(b[i] for i in Boolean);
+  Real z1[3] = {y[i] * 2 for i in E};
+  Real z2[:] = {y[i] * 2 for i in E};
+  Real z3[:] = {y[i] for i in E.one:E.two};
+  Real z4[:] = {b[i] for i in Boolean};
+  parameter Real q[:] = {p[i] * 2 for i in E};
+  E x[3] = {i for i in E};
+end ENT4;

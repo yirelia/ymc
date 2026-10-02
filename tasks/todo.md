@@ -1273,6 +1273,31 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           绑定定（ArraySizeFromFunc `parameter Real x[:] = f(n)`）、when 方程体里的 for。
           → scodeinst 494→501 PASS（CevalRecord6、DimSize5、ImplicitRangeAlg1、ImplicitRangeExp1 / 2、SubscriptReduction1、
           const1 入 slice）；整个 testsuite PASS 1293→1308；+4 单测（226）；探针 4738→5159。
+    - [x] (60c) 类型维（枚举 / Boolean）数组的引用 + 在枚举 / Boolean 上迭代（2026-10-03）：
+          此前 `Real y[E]`、`y[Boolean]` 只能声明：任何引用（`y[E.one]`、整体 `y`、`sum(y)`）与任何类型范围上的 for / 归约都
+          SKIP（60b 排桶时记下的"枚举 / Boolean 维上的迭代"）。
+          **表示法**：类型维数组的元素下标在压平期一律按序数（IntLit：false 1、true 2，枚举字面量 = 序号）走——标量化、
+          切片、展开这些下标的生成点都不用知道维的种类；key 编码（conn_key / expr_cref_key / emitted_shape）同样按序数；
+          收尾 relabel_type_dims 按已发射变量的标签把全部 Cref 节点里落在类型维上的整数下标（含切片的界、下标数组的
+          元素）换回标签。书写的标签下标在 cref 定型时核对类型（Boolean 维收 Boolean、枚举维收同一枚举）并转成序数；
+          整数下标进类型维 / 标签进整数维 → omc 类型错，拒绝。
+          **引用**：`y[E.two]`、`b[true]`、`y[end]`、切片 `y[E.one:E.two]` / `y[{E.three, E.one}]`、整体引用与数组运算 /
+          数组方程 / 语句、constant 元素取值、子实例与记录字段里的类型维数组、Boolean 维上的运行时下标 `b[a > 1]`。
+          **迭代**（iter_values / label_iter_values）：范围是类型名（`for i in E`、`for b in Boolean`）、标签范围
+          （`E.one:E.three`、`false:true`）、标签数组；迭代变量的值是标签（loop_labels_，序数仍在 loop_vars_）。
+          for 方程展开成 `y[E.one] = …`、`x[i] = i` → `x[E.one] = E.one`；for 语句保留（类型名打成 `{E.one, E.two, E.three}`，
+          范围照写）；归约 sum / product 展开、max / min 保留；推导式保留 `array(y[i] for i in {…})`、参数 / 常量逐元素。
+          类型维上的隐式范围 = 首末标签 `E.one:E.three`（Dimension.lowerBoundExp / endExp）。体里类型维上的符号下标须是
+          同类型的迭代变量（Boolean 维收任何 Boolean 式）。
+          **`:` 维的类型**：推导式里写类型名的范围定出来的是类型维（`Real z[:] = {… for i in E}` → `z[E.one]`…），标签范围
+          给整数维；引用带类型维数组的绑定（`Real z[:] = y`）omc 也给类型维，未做 → SKIP。
+          **潜伏错**：范围为空的 for 语句没删（`for i in 3:1 loop … end for;` 照打，omc 整条删去，simplifyStatement
+          NFSimplifyModel.mo:312-333；整数范围同样错，函数体里也是）。
+          未做 → SKIP：`:` 维由带类型维的绑定定、constant 类型维数组的切片 / end / 作维、枚举**变量**作下标、类型维的
+          复合数组（`R r[E]`，EnumArrayMod1）、函数形参的类型维（`input Real u[E]`）、连接器里的类型维成员、StateSelect 维、
+          空的标签推导式。
+          → scodeinst 501→506 PASS（End1、ForEquationEnum1 / 2、ImplicitRangeType1 / 2 入 slice）；整个 testsuite PASS
+          1308→1325；+4 单测（230）；探针 5159→5357。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、

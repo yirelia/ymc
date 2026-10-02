@@ -1,0 +1,225 @@
+//// set: en-t1 — 类型维（枚举 / Boolean）数组：元素 / 整体引用、数组方程；for 方程在类型名 / 标签范围 / 标签数组上迭代
+//// model: T10
+model T10
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E];
+equation
+  y[E.one] = a; y[E.two] = 1; y[E.three] = 2;
+end T10;
+//// model: T11
+model T11
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[Boolean];
+equation
+  y[false] = a; y[true] = 1;
+end T11;
+//// model: T12
+model T12
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2};
+end T12;
+//// model: T13
+model T13
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2}; Real z = y[E.two] + 1;
+end T13;
+//// model: T14
+model T14
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[Boolean] = {a, 1}; Real z = y[true] + 1;
+end T14;
+//// model: T15
+model T15
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2}; Real z[E] = y;
+end T15;
+//// model: T16
+model T16
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2}; Real z[3] = y;
+end T16;
+//// model: T17
+model T17
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2}; Real z = sum(y);
+end T17;
+//// model: T18
+model T18
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2}; Real z[E] = 2 * y;
+end T18;
+//// model: T19
+model T19
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2}; Real z[E];
+equation
+  z = y;
+end T19;
+//// model: T110
+model T110
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E];
+equation
+  y = {a, 1, 2};
+end T110;
+//// model: T111
+model T111
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E];
+equation
+  for i in E loop y[i] = a; end for;
+end T111;
+//// model: T112
+model T112
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E];
+equation
+  for i in E.one:E.three loop y[i] = a; end for;
+end T112;
+//// model: T113
+model T113
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E];
+equation
+  for i in E.two:E.three loop y[i] = a; end for; y[E.one] = 0;
+end T113;
+//// model: T114
+model T114
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[Boolean];
+equation
+  for i in Boolean loop y[i] = a; end for;
+end T114;
+//// model: T115
+model T115
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[Boolean];
+equation
+  for i in false:true loop y[i] = a; end for;
+end T115;
+//// model: T116
+model T116
+  type E = enumeration(one, two, three);
+  Real a = time;
+  E x[E];
+equation
+  for i in E loop x[i] = i; end for;
+end T116;
+//// model: T117
+model T117
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Integer n[E];
+equation
+  for i in E loop n[i] = Integer(i); end for;
+end T117;
+//// model: T118
+model T118
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[3];
+equation
+  for i in E loop y[Integer(i)] = a; end for;
+end T118;
+//// model: T119
+model T119
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E];
+equation
+  for i in E loop y[i] = if i == E.two then a else 0; end for;
+end T119;
+//// model: T120
+model T120
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E];
+equation
+  for i in E loop y[i] = if i < E.three then a else 0; end for;
+end T120;
+//// model: T121
+model T121
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Boolean b[Boolean];
+equation
+  for i in Boolean loop b[i] = not i; end for;
+end T121;
+//// model: T122
+model T122
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E];
+equation
+  for i in {E.one, E.three} loop y[i] = a; end for; y[E.two] = 0;
+end T122;
+//// model: T123
+model T123
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[2, E];
+equation
+  for i in 1:2, j in E loop y[i, j] = a * i; end for;
+end T123;
+//// model: T124
+model T124
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E, 2];
+equation
+  for i in E, j in 1:2 loop y[i, j] = a * j; end for;
+end T124;
+//// model: T125
+model T125
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2}; Real z = sum(y[i] for i in E);
+end T125;
+//// model: T126
+model T126
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2}; Real z = max(y[i] for i in E);
+end T126;
+//// model: T127
+model T127
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2}; Real z[3] = {y[i] for i in E};
+end T127;
+//// model: T128
+model T128
+  type E = enumeration(one, two, three);
+  Real a = time;
+  String s[E];
+equation
+  for i in E loop s[i] = String(i); end for;
+end T128;
+//// model: T129
+model T129
+  type E = enumeration(one, two, three);
+  Real a = time;
+  parameter Real p[E] = {1, 2, 3}; Real y = p[E.two] * a;
+end T129;
+//// model: T130
+model T130
+  type E = enumeration(one, two, three);
+  Real a = time;
+  constant Real c[E] = {1, 2, 3}; Real y = c[E.two] * a;
+end T130;

@@ -1,0 +1,199 @@
+//// set: en-t3 — 空的标签范围、`:` 维由带类型维的绑定定、类型维的切片 / end、size / ndims
+//// model: T30
+model T30
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real z; algorithm z := 0; for i in 3:1 loop z := z + 1; end for;
+end T30;
+//// model: T31
+model T31
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real z; algorithm z := 0; for i in E.three:E.one loop z := z + 1; end for;
+end T31;
+//// model: T32
+model T32
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real z; algorithm z := 0; for i in true:false loop z := z + 1; end for;
+end T32;
+//// model: T33
+model T33
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real z; algorithm z := 0; for i in E.two:E.two loop z := z + Integer(i); end for;
+end T33;
+//// model: T34
+model T34
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real z; algorithm z := 0; for i in 2:2 loop z := z + i; end for;
+end T34;
+//// model: T35
+model T35
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real z;
+equation
+  z = sum(Integer(i) for i in E.three:E.one);
+end T35;
+//// model: T36
+model T36
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real z;
+equation
+  z = max(Integer(i) for i in E.three:E.one);
+end T36;
+//// model: T37
+model T37
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2}; Real z;
+equation
+  z = max(y[i] for i in E.three:E.one);
+end T37;
+//// model: T38
+model T38
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2}; Real z[0] = {y[i] for i in E.three:E.one};
+end T38;
+//// model: T39
+model T39
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2}; Real z[:] = {y[i] for i in E.three:E.one};
+end T39;
+//// model: T310
+model T310
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2}; Real z[:] = y;
+end T310;
+//// model: T311
+model T311
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2}; Real z[:] = 2 * y;
+end T311;
+//// model: T312
+model T312
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2}; Real z[:] = y[{E.one, E.two}];
+end T312;
+//// model: T313
+model T313
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2}; Real z[:] = y[E.one:E.two];
+end T313;
+//// model: T314
+model T314
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2}; Real z[2] = y[E.one:E.two];
+end T314;
+//// model: T315
+model T315
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2}; Real z[2] = y[{E.three, E.one}];
+end T315;
+//// model: T316
+model T316
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2}; Real z[3] = y[:];
+end T316;
+//// model: T317
+model T317
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2}; Real z = y[end];
+end T317;
+//// model: T318
+model T318
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E, 2] = {{a, 1}, {2, 3}, {4, 5}}; Real z[2] = y[E.two, :];
+end T318;
+//// model: T319
+model T319
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E, 2] = {{a, 1}, {2, 3}, {4, 5}}; Real z[3] = y[:, 2];
+end T319;
+//// model: T320
+model T320
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E, 2] = {{a, 1}, {2, 3}, {4, 5}}; Real z[:, :] = {y[i, j] * 2 for i in E, j in 1:2};
+end T320;
+//// model: T321
+model T321
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E, 2] = {{a, 1}, {2, 3}, {4, 5}}; Real z[:, :] = {y[i, j] * 2 for j in 1:2, i in E};
+end T321;
+//// model: T322
+model T322
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[Boolean] = {a, 1}; Real z[:] = {y[i] * 2 for i in Boolean};
+end T322;
+//// model: T323
+model T323
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[Boolean] = {a, 1}; Real z[:] = {y[i] * 2 for i in false:true};
+end T323;
+//// model: T324
+model T324
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real z[:] = {Integer(i) * a for i in E.one:E.two};
+end T324;
+//// model: T325
+model T325
+  type E = enumeration(one, two, three);
+  Real a = time;
+  parameter Real p[:] = {Integer(i) for i in E};
+end T325;
+//// model: T326
+model T326
+  type E = enumeration(one, two, three);
+  Real a = time;
+  parameter Real p[E] = {1, 2, 3}; parameter Real q[:] = {p[i] * 2 for i in E};
+end T326;
+//// model: T327
+model T327
+  type E = enumeration(one, two, three);
+  Real a = time;
+  parameter Real p[E] = {1, 2, 3}; parameter Real q[:] = p;
+end T327;
+//// model: T328
+model T328
+  type E = enumeration(one, two, three);
+  Real a = time;
+  constant Real c[E] = {1, 2, 3}; constant Real d[:] = c; Real y = d[2] * a;
+end T328;
+//// model: T329
+model T329
+  type E = enumeration(one, two, three);
+  Real a = time;
+  constant Real c[E] = {1, 2, 3}; constant Real d[:] = {c[i] * 2 for i in E}; Real y = d[E.two] * a;
+end T329;
+//// model: T330
+model T330
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2}; Real z = size(y, 1) * a; Integer n = ndims(y);
+end T330;
+//// model: T331
+model T331
+  type E = enumeration(one, two, three);
+  Real a = time;
+  Real y[E] = {a, 1, 2}; Real z[size(y, 1)];
+end T331;

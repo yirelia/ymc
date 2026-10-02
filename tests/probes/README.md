@@ -176,3 +176,9 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `nd-c3` | 27 | 多迭代推导式绑定：三重、参数范围、嵌套、依赖范围、空范围、String、修饰里 |
 | `nd-p1` | 16 | protected 元素经实例路径的访问；`Evaluate = false` 的参数在各编译期语境 |
 | `nd-v1` | 20 | ndims / 单实参 size 的变率（参数）：constant 绑定报错，Evaluate = true |
+| `en-t1` | 31 | 类型维（枚举 / Boolean）数组：元素 / 整体引用、数组方程；for 方程在类型名 / 标签范围 / 标签数组上迭代 |
+| `en-t2` | 42 | for 语句、归约、推导式在枚举 / Boolean 上迭代：保留形态、类型不符的下标、Integer(i)、参数 / 常量数组 |
+| `en-t3` | 32 | 空的标签范围、`:` 维由带类型维的绑定定、类型维的切片 / end、size / ndims |
+| `en-t4` | 33 | 类型维的切片 `y[E.one:E.two]`、`y[{E.three, E.one}]`、`y[end]`：绑定 / 等式 / 语句 / 多维 / 类型不符 |
+| `en-t5` | 53 | 类型维数组在别的语境：der / when / reinit / if、数组运算、函数实参、子实例 / 记录字段、属性、Boolean 运行时下标 |
+| `en-ut` | 7 | 类型维数组与枚举 / Boolean 上的迭代（单测原文） |
