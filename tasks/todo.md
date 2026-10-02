@@ -1387,6 +1387,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           cardinality 实参带参数下标（omc 恒得 0）、expandable 里声明的数组成员（增量 B）。
           → scodeinst 512→513 PASS（InStreamArray 入 slice）；整个 testsuite PASS 1338→1343（Connect7 / 8、EquationFor4、
             expandable/07）；+1 单测（237）；探针 6343→6465。
+    - [x] (60h) 函数体下标里的 `end` 取书写的维（2026-10-03）：
+          **潜伏错**（探针铺出来的，60g 及以前都在）：函数体下标里的 `end` 一律打成 `size(数组, k)`；omc 取的是类型里的维——
+          书写成表达式的维照写（`output Real y[size(x, 1)]` 的 `y[3:end] := …` → `y[3:size(x, 1)]`，`z[size(x, 1) + 1]` 的
+          `z[end]` → `z[size(x, 1) + 1]`，`w[n]` 的 `w[end]` → `w[n]`），只有 `:` 维才是 `size(x, k)`。改由 fn_end_value 取
+          fn_dim_exps_ 里的书写维（60b 为隐式范围记下的那张表）。
+          顺带铺了模型里的切片（sl-s1）：运行时界的切片（`x[n:n + 1] := …`、`y := x[n:n + 1]`、`sum(x[1:n])`）、空切片
+          （`ra[3:1]`）、`end` 算式的 `:` 维参数切片仍 SKIP（`array slice`，语料 3 例），留给后面的桶。
+          → 语料无变化；+1 单测（238）；探针 6465→6513。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、

@@ -6454,6 +6454,17 @@ class Flattener {
     s.ty = Type::integer();
     return add(std::move(s));
   }
+  // 函数体下标里 `end` 的值（所在维大小）：整数维 → 字面量；书写成表达式的维（`y[size(x, 1)]`、`y[n]`）→ 该表达式（omc 的
+  // end 取类型里的维：SL 探针 s2 `y[3:end] := …` → `y[3:size(x, 1)]`，此前打成 `size(y, 1)`）；`:` 维 → `size(y, k)`。
+  Id<Expr> fn_end_value(Id<Expr> arr, const Type ty, std::size_t k, Symbol name) {
+    if (ty.dims[k].kind == DimKind::Exp)
+      if (const auto de = fn_dim_exps_.find(name.id); de != fn_dim_exps_.end() && k < de->second.size()) {
+        const Id<Exp> raw = de->second[k];
+        const Id<Expr> d = simplify_expr(inst_exp(raw, Inst::empty_node(), {}));
+        if (!result_.unsupported) return d;
+      }
+    return dim_size_expr(arr, ty, k);
+  }
   // 函数形参 / 局部的 cref（kFnLocal 裸名）。标量下标去一维；下标里的 `end` = 所在维大小（End3 `x[end]` → `x[size(x, 1)]`，
   // 已知维 → 字面量）。切片下标照写、留下一维（FS 探针 t1）：`:` 留原维；范围 `a:b` / `a:s:b` 的界都是字面量 → 已知大小，
   // 否则未知（`u[1:k]`、`u[1:size(u, 1)]`）；恰是 `1:该维大小` 的打成 `:`（`w[1:3]`、`w[1:end]` → `w[:]`，同模型里的
@@ -6483,7 +6494,7 @@ class Flattener {
         continue;
       }
       const Id<Expr> saved = fn_end_;
-      fn_end_ = dim_size_expr(wid, ty, k);
+      fn_end_ = fn_end_value(wid, ty, k, part.name);
       const Id<Expr> s = simplify_expr(inst_exp(part.subscripts[k], Inst::empty_node(), {}));
       fn_end_ = saved;
       if (result_.unsupported) return lit_int(0);

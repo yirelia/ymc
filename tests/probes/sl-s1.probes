@@ -1,0 +1,131 @@
+//// set: sl-s1 — 模型里的数组切片：空切片、运行时界的切片（语句目标 / 右侧 / sum）、`end` 算式、for 语句里的切片
+//// model: S10
+model S10
+  Real tt = time;
+  Real ra[10] = {i for i in 1:10}; Real rs4[:] = ra[3:1];
+end S10;
+//// model: S11
+model S11
+  Real tt = time;
+  Real ra[5] = {1, 2, 3, 4, 5}; Real rs[:] = ra[end:-2:1];
+end S11;
+//// model: S12
+model S12
+  Real tt = time;
+  Real y[5]; Integer n; algorithm n := 2; y[1:n] := fill(2, n);
+end S12;
+//// model: S13
+model S13
+  Real tt = time;
+  Real vals[1, 3]; algorithm vals[end, :] := ones(3);
+end S13;
+//// model: S14
+model S14
+  Real tt = time;
+  Real vals[1, 3]; algorithm vals[end, 1:2:end] := {0, 0};
+end S14;
+//// model: S15
+model S15
+  Real tt = time;
+  Integer a[3] = {1, 2, 3}; Real b[3] = {1.1, 2.1, 3.1}; Real c[2]; Integer n = 2; algorithm c := b[a[1:n]];
+end S15;
+//// model: S16
+model S16
+  Real tt = time;
+  parameter Real ABCD[5, 5] = ones(5, 5); parameter Real A[:, :] = ABCD[1:end - 1, 1:end - 1];
+end S16;
+//// model: S17
+model S17
+  Real tt = time;
+  Real x[4]; algorithm x[2:3] := {1, 2};
+end S17;
+//// model: S18
+model S18
+  Real tt = time;
+  Real x[4]; algorithm x[{1, 3}] := {1, 2};
+end S18;
+//// model: S19
+model S19
+  Real tt = time;
+  Real x[4]; algorithm x[:] := {1, 2, 3, 4};
+end S19;
+//// model: S110
+model S110
+  Real tt = time;
+  Real x[2, 2]; algorithm x[1, :] := {1, 2};
+end S110;
+//// model: S111
+model S111
+  Real tt = time;
+  Real x[2, 2]; algorithm x[:, 1] := {1, 2};
+end S111;
+//// model: S112
+model S112
+  Real tt = time;
+  Real x[4];
+equation
+  x[1:2] = {1, 2}; x[3:4] = {3, 4};
+end S112;
+//// model: S113
+model S113
+  Real tt = time;
+  Real x[4];
+equation
+  x[2:3] = {tt, tt}; x[{1, 4}] = {1, 2};
+end S113;
+//// model: S114
+model S114
+  Real tt = time;
+  Real x[4]; Integer n = 2;
+equation
+  x[1:2] = {tt, 1}; x[3:4] = {n, n};
+end S114;
+//// model: S115
+model S115
+  Real tt = time;
+  Real x[4]; Integer n = 2; algorithm x[n:n + 1] := {1, 2};
+end S115;
+//// model: S116
+model S116
+  Real tt = time;
+  Real x[4]; algorithm for i in 1:2 loop x[2 * i - 1:2 * i] := {i, i}; end for;
+end S116;
+//// model: S117
+model S117
+  Real tt = time;
+  Real x[4]; algorithm x[1:2] := x[3:4];
+end S117;
+//// model: S118
+model S118
+  Real tt = time;
+  Real x[4] = {1, 2, 3, 4}; Real y[2]; algorithm y := x[2:3];
+end S118;
+//// model: S119
+model S119
+  Real tt = time;
+  Real x[4] = {1, 2, 3, 4}; Real y[2]; Integer n = 2; algorithm y := x[n:n + 1];
+end S119;
+//// model: S120
+model S120
+  Real tt = time;
+  Real x[4] = {1, 2, 3, 4}; Real y[2]; Integer n = 2;
+equation
+  y = x[n:n + 1];
+end S120;
+//// model: S121
+model S121
+  Real tt = time;
+  Real x[4] = {1, 2, 3, 4}; Real y[2]; Integer n = 2;
+equation
+  y = x[{n, 1}];
+end S121;
+//// model: S122
+model S122
+  Real tt = time;
+  Real x[4] = {1, 2, 3, 4}; Real y = sum(x[2:3]);
+end S122;
+//// model: S123
+model S123
+  Real tt = time;
+  Real x[4] = {1, 2, 3, 4}; Integer n = 2; Real y = sum(x[1:n]);
+end S123;

@@ -1,0 +1,22 @@
+//// set: sl-ut — 函数体 `end` 取书写的维（单测原文）
+//// model: SLT1
+model SLT1
+  function f
+    input Real x[:];
+    input Integer n;
+    output Real y[size(x, 1)];
+  protected
+    Real z[size(x, 1) + 1];
+    Real w[n];
+  algorithm
+    y := x;
+    y[3:end] := x[3:end];
+    y[n:end] := zeros(size(x, 1) - n + 1);
+    z[1:end - 1] := x;
+    z[end] := 1;
+    w := x[1:n];
+    w[end] := z[end];
+    y[1] := sum(w);
+  end f;
+  Real y[3] = f({time, 2, 3}, 2);
+end SLT1;

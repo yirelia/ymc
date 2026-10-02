@@ -1,0 +1,56 @@
+//// set: sl-s3 — 函数体下标里 `end` 取书写的维：`size(x, 1)`、`n`、`2 * n`、`size(x, 1) + 1`、二维、嵌套在调用里
+//// model: S30
+model S30
+  Real tt = time;
+  function f input Real x[:]; output Real y[size(x, 1)]; algorithm y := x; y[end] := 0; end f; Real y[3] = f({tt, 2, 3});
+end S30;
+//// model: S31
+model S31
+  Real tt = time;
+  function f input Real x[:]; input Integer n; output Real y[n]; algorithm y := x[1:n]; y[end] := 0; end f; Real y[2] = f({tt, 2, 3}, 2);
+end S31;
+//// model: S32
+model S32
+  Real tt = time;
+  function f input Real x[:]; input Integer n; output Real y[2 * n]; algorithm y := cat(1, x[1:n], x[1:n]); y[end - 1:end] := {0, 0}; end f; Real y[2] = f({tt, 2, 3}, 1);
+end S32;
+//// model: S33
+model S33
+  Real tt = time;
+  function f input Real x[:]; output Real y[size(x, 1) - 1]; algorithm y := x[2:end]; y[end] := x[end]; end f; Real y[2] = f({tt, 2, 3});
+end S33;
+//// model: S34
+model S34
+  Real tt = time;
+  function f input Real x[:]; output Real y; protected Real z[size(x, 1) + 1]; algorithm z[1:end - 1] := x; z[end] := 1; y := sum(z); end f; Real y = f({tt, 2, 3});
+end S34;
+//// model: S35
+model S35
+  Real tt = time;
+  function f input Real x[:]; output Real y; protected Real z[3]; algorithm z := x; y := z[end]; end f; Real y = f({tt, 2, 3});
+end S35;
+//// model: S36
+model S36
+  Real tt = time;
+  function f input Real x[:, :]; output Real y[size(x, 2)]; algorithm y := x[end, :]; end f; Real y[2] = f({{tt, 2}, {3, 4}});
+end S36;
+//// model: S37
+model S37
+  Real tt = time;
+  function f input Real x[:, :]; output Real y[size(x, 1), size(x, 2)]; algorithm y := x; y[end, end] := 0; y[1, end] := 1; end f; Real y[2, 2] = f({{tt, 2}, {3, 4}});
+end S37;
+//// model: S38
+model S38
+  Real tt = time;
+  function f input Real x[:]; output Real y; algorithm y := x[min(end, 2)]; end f; Real y = f({tt, 2, 3});
+end S38;
+//// model: S39
+model S39
+  Real tt = time;
+  function f input Real x[:]; input Integer n; output Real y[n + 1]; algorithm y := cat(1, {0}, x[1:n]); y[end] := y[end] + 1; end f; Real y[3] = f({tt, 2, 3}, 2);
+end S39;
+//// model: S310
+model S310
+  Real tt = time;
+  function f input Real x[:]; output Real y[:]; algorithm y := x; y[end] := 0; end f; Real y[3] = f({tt, 2, 3});
+end S310;

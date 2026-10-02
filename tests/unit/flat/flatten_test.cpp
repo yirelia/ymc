@@ -4689,6 +4689,23 @@ YMC_TEST(flatten_connect_subscript_expressions) {
   }
 }
 
+YMC_TEST(flatten_function_end_from_written_dims) {
+  // 函数体下标里的 `end` 取类型里的维：书写成表达式的维照写（`y[size(x, 1)]` 的 `y[3:end]` → `y[3:size(x, 1)]`、
+  // `z[size(x, 1) + 1]` 的 `z[end]` → `z[size(x, 1) + 1]`、`w[n]` 的 `w[end]` → `w[n]`；此前一律打成 `size(y, 1)`），
+  // `:` 维才是 `size(x, 1)`。期望 = omc 1.25.0 实跑 SLT1（2026-10-03）。
+  YMC_CHECK_EQ(flatten_src("model SLT1\n  function f\n    input Real x[:];\n    input Integer n;\n"
+                           "    output Real y[size(x, 1)];\n  protected\n    Real z[size(x, 1) + 1];\n    Real w[n];\n"
+                           "  algorithm\n    y := x;\n    y[3:end] := x[3:end];\n    y[n:end] := zeros(size(x, 1) - n + 1);\n"
+                           "    z[1:end - 1] := x;\n    z[end] := 1;\n    w := x[1:n];\n    w[end] := z[end];\n"
+                           "    y[1] := sum(w);\n  end f;\n  Real y[3] = f({time, 2, 3}, 2);\nend SLT1;\n"),
+               std::string("function SLT1.f\n  input Real[:] x;\n  input Integer n;\n  output Real[size(x, 1)] y;\n"
+                           "  protected Real[size(x, 1) + 1] z;\n  protected Real[n] w;\nalgorithm\n  y := x;\n"
+                           "  y[3:size(x, 1)] := x[3:size(x, 1)];\n  y[n:size(x, 1)] := fill(0.0, size(x, 1) - n + 1);\n"
+                           "  z[1:size(x, 1) + 1 - 1] := x;\n  z[size(x, 1) + 1] := 1.0;\n  w := x[1:n];\n"
+                           "  w[n] := z[size(x, 1) + 1];\n  y[1] := sum(w);\nend SLT1.f;\n\nclass SLT1\n  Real y[1];\n"
+                           "  Real y[2];\n  Real y[3];\nequation\n  y = SLT1.f({time, 2.0, 3.0}, 2);\nend SLT1;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);
