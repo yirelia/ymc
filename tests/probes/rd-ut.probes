@@ -1,0 +1,69 @@
+//// set: rd-ut — 归约式与 min / max（单测原文）
+//// model: RDS1
+model RDS1
+  Integer y = max(zeros(0));
+end RDS1;
+//// model: RDS2
+model RDS2
+  Real x[3] = {time, 1, 2};
+  Real y = max(vector(x));
+end RDS2;
+//// model: RDS3
+record R
+  parameter Real a;
+  parameter Real b = 2 * a;
+end R;
+model RDS3
+  parameter Real p = 4;
+  parameter R t = R(a = p);
+end RDS3;
+//// model: RDS4
+model RDS4
+  Real y = sum(i for i in 1.0:3.0);
+end RDS4;
+//// model: RDT1
+model RDT1
+  parameter Integer n = 3;
+  parameter Integer m = n;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Real s1 = sum(x[i] * x[j] for i in 1:2, j in 1:3);
+  Real s2 = sum(i * 0.5 for i in 1:n);
+  parameter Integer m2 = n;
+  Real s3 = sum(x[i] for i in 1:integer(time));
+  Real s4 = sum(a * b for a in 1:integer(time), b in 1:4);
+  Real s5 = sum(v * v for v in x);
+  Real s6 = sum(i * t for i in 1:0);
+  Real m1 = max(x[i] for i in 1:n);
+  Real m3 = max(x[i] * x[j] for i in 1:2, j in 1:3);
+  Real m4 = max(t * v for v in {1.5, 2.5});
+  Real m5 = max(x[i] for i in 2:2);
+  Real m6 = min(r * 2 for r in {1.0, 2, 3, 4});
+  Real m7 = max(x[i] for i in 1:0);
+  Integer m8 = max(i for i in 1:n);
+  Boolean b1 = min(x[i] > 0 for i in 1:3);
+  Boolean b2 = max(b for b in true:false);
+end RDT1;
+//// model: RDT2
+model RDT2
+  type E = enumeration(one, two, three);
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real t = time;
+  Real a1 = max(x);
+  Real a2 = max(x[1:2]) + min({t, 1});
+  Real a3 = max(2 * x);
+  Real a4 = max({t});
+  Real a5 = min(fill(1.5, 0));
+  Real a6 = max({{1, 2}, {3, 4}});
+  Integer i1 = max(k);
+  Boolean b1 = max(bb);
+  Boolean b2 = min(bb[1], false);
+  Boolean b3 = max(true, false);
+  Boolean b4 = min(not bb);
+  E e1 = max(ee);
+  E e2 = min(ee[1], E.two);
+  E e3 = max(E.one, E.three);
+end RDT2;

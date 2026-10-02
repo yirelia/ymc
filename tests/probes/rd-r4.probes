@@ -1,0 +1,521 @@
+//// set: rd-r4 — min / max：数组实参的形态
+//// model: D0
+model D0
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max({{t}});
+end D0;
+//// model: D1
+model D1
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max({{t}, {1}});
+end D1;
+//// model: D2
+model D2
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max(x[2:2]);
+end D2;
+//// model: D3
+model D3
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max(x[{2}]);
+end D3;
+//// model: D4
+model D4
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Integer y = max({k[3]});
+end D4;
+//// model: D5
+model D5
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Boolean y = max({bb[1]});
+end D5;
+//// model: D6
+model D6
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  E y = max({ee[2]});
+end D6;
+//// model: D7
+model D7
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max({1.5});
+end D7;
+//// model: D8
+model D8
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max({{1.5}});
+end D8;
+//// model: D9
+model D9
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  parameter Real q[3] = {1, 2, 3}; Real y = max(q);
+end D9;
+//// model: D10
+model D10
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  parameter Real q[3] = {1, 2, 3}; Real y = max(q) + min(q[1:2]);
+end D10;
+//// model: D11
+model D11
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  constant Real c[3] = {1, 2, 3}; Real y = max(c);
+end D11;
+//// model: D12
+model D12
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  constant Real c[3] = {1, 2, 3}; Real y = max(c[1:2]);
+end D12;
+//// model: D13
+model D13
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max(x .* x);
+end D13;
+//// model: D14
+model D14
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max(-x);
+end D14;
+//// model: D15
+model D15
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max(abs(x));
+end D15;
+//// model: D16
+model D16
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max(x + {1, 2, 3});
+end D16;
+//// model: D17
+model D17
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max({x[1], x[2]} * 2);
+end D17;
+//// model: D18
+model D18
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Integer y = max(k .* k);
+end D18;
+//// model: D19
+model D19
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Integer y = max(k + {1, 2, 3});
+end D19;
+//// model: D20
+model D20
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Boolean y = max({bb[1] and bb[2], false});
+end D20;
+//// model: D21
+model D21
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Boolean y = min(not bb);
+end D21;
+//// model: D22
+model D22
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max(x[1:2]) + max(x[2:3]);
+end D22;
+//// model: D23
+model D23
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max(x[k[1:2]]);
+end D23;
+//// model: D24
+model D24
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real m[2, 2] = {{t, 1}, {2, 3}}; Real y = max(m);
+end D24;
+//// model: D25
+model D25
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real m[2, 2] = {{t, 1}, {2, 3}}; Real y = max(m[1, :]);
+end D25;
+//// model: D26
+model D26
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real m[2, 2] = {{t, 1}, {2, 3}}; Real y = max(m[:, 1]) + min(m);
+end D26;
+//// model: D27
+model D27
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real m[2, 2] = {{t, 1}, {2, 3}}; Real y = max(2 * m);
+end D27;
+//// model: D28
+model D28
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max(cat(1, x, {t}));
+end D28;
+//// model: D29
+model D29
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max({x[i] for i in 1:2});
+end D29;
+//// model: D30
+model D30
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max(array(2 * x[i] for i in 1:2));
+end D30;
+//// model: D31
+model D31
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max(linspace(0, 1, 3));
+end D31;
+//// model: D32
+model D32
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max(fill(1.5, 2));
+end D32;
+//// model: D33
+model D33
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max(zeros(2));
+end D33;
+//// model: D34
+model D34
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Integer y = max(ones(2));
+end D34;
+//// model: D35
+model D35
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max(x) * min({1, 2});
+end D35;
+//// model: D36
+model D36
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y;
+equation
+  y = max(x) + min(k);
+end D36;
+//// model: D37
+model D37
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y; algorithm y := max(x);
+equation
+  t = t;
+end D37;
+//// model: D38
+model D38
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max(max(x), min(x));
+end D38;
+//// model: D39
+model D39
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max(vector(x));
+end D39;
+//// model: D40
+model D40
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max(transpose({x}));
+end D40;
+//// model: D41
+model D41
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = min(diagonal(x));
+end D41;
+//// model: D42
+model D42
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max(size(x));
+end D42;
+//// model: D43
+model D43
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Integer y = max(size(x));
+end D43;
+//// model: D44
+model D44
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max({x, x});
+end D44;
+//// model: D45
+model D45
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+  Real y = max(if t > 1 then x else 2 * x);
+end D45;
+//// model: BASE
+model BASE
+  type E = enumeration(one, two, three);
+  parameter Integer n = 3;
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Integer k[3] = {1, 2, integer(time)};
+  Boolean bb[2] = {time > 1, true};
+  E ee[2] = {E.one, E.three};
+end BASE;

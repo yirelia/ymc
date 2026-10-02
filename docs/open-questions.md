@@ -95,6 +95,8 @@ Boolean 数组与数组 if 的几处 1.25.0 特殊行为（V4u / V4w 探针；ym
 + 方程里 `for i in 1:n` → 只有 n final。同批探针见 1.25.0 的一处怪相（ymc 不复刻，命中即 SKIP）：界不是字面量的切片的
 `size` 原样留下、里面的参数也不代入（`Integer s = size(x[1:n], 1)`，连 constant 的 `x[1:c]` 也是；`size(x[1:n]) * {1}` → `n`）。
 
+Integer 的极值（待用户定，2026-10-02）：`max` / `min` 作用在空的 Integer 数组 / 空范围上取 `∓System.intMaxLit`（Expression.makeMinValue / makeMaxValue，v1.25.0 NFExpression.mo:4908-4934），这个值随 omc 构建的整数位宽而变——本机安装版 1.25.0（Windows）打 `1073741823`，testsuite 文件（64 位 Linux 生成）是 `4611686018427387903`。跟实跑的 omc 就要把 30 位的值写进 ymc，跟文件又过不了 oracle=live 门；ymc 目前两边都不跟，遇到即 SKIP（`Integer extreme of empty min/max (platform-dependent in omc)`）。受影响：scodeinst 的 CevalReduction1、FuncBuiltinMax / Max2 / Min / Min2、FuncBuiltinReduction 六例（其余内容已与 1.25.0 一致，只差这一个值）。Real（`±8.777798510069901e304`）、Boolean、枚举的极值与平台无关，已做。
+
 ## 已研究待实现：多条 connect 连接集（union-find）
 
 **状态**：算法已从 OMC 新前端源码 + 实跑 omc 1.25.0 探针完整摸清，暂不实现——理由是当前 testsuite 里

@@ -801,7 +801,8 @@ class Flattener {
             if (wraw.is_valid()) {
               // 该元素的整体绑定 = 绑定式的第 aidx 个元素（字面量下降 / 数组 cref 补下标），再拆成字段修饰（排首位：字段绑定取它）。
               const Id<Exp> er = array_scalar_elem(wraw, aidx, 0);
-              const Id<SMod> cm = er.is_valid() ? build_record_ctor_mod(er, ci, cdef, wscope) : Id<SMod>{};
+              const bool rec_const = var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Const;
+              const Id<SMod> cm = er.is_valid() ? build_record_ctor_mod(er, ci, cdef, wscope, rec_const) : Id<SMod>{};
               if (!cm.is_valid()) { set_unsupported("composite array whole binding"); break; }
               achild.mods.push_back(cm);
               achild.scope = wscope;
@@ -897,7 +898,8 @@ class Flattener {
         }
         Id<SMod> ctor_mod;
         if (r == SRestriction::Record && whole_raw.is_valid())
-          ctor_mod = build_record_ctor_mod(whole_raw, ci, cdef, whole_scope);
+          ctor_mod = build_record_ctor_mod(whole_raw, ci, cdef, whole_scope,
+                                           var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Const);
         // 拆不开的记录整体绑定（返回记录的函数调用等）：挪成（初始）方程 `r = f(x)`，字段无绑定（RF1 探针）。
         bool moved_binding = false;
         if (whole_raw.is_valid() && !ctor_mod.is_valid()) {
@@ -8132,6 +8134,22 @@ class Flattener {
     };
     return rec(0);
   }
+  // 整体保留的数组式（数组 if 的分支、min / max 的数组实参）规整成 omc 的打印形态：整体 / 切片引用、if、推导式原样（元素类型
+  // 须已是 ek），字面量逐叶转成 ek（混合字面量 `{time, 1, 2}` 的元素类型已是 Real，Integer 叶仍要转成 `1.0`），算术式（二元 /
+  // 一元）逐元素展开成字面量 `{2.0 * x[1], …}`。其余形态未核实 → invalid（调用方 SKIP）。
+  Id<Expr> kept_array_form(Id<Expr> x, const std::vector<std::int64_t>& sh, TypeKind ek) {
+    const ExprKind xk = result_.model.exprs[x].kind;
+    const TypeKind xe = expr_elem_kind(x);
+    switch (xk) {
+      case ExprKind::Array: return ek == TypeKind::Real || xe != ek ? coerce_deep(x, ek) : x;
+      case ExprKind::Cref:
+      case ExprKind::IfExp:
+      case ExprKind::Reduction: return xe == ek ? x : Id<Expr>{};
+      case ExprKind::Binary:
+      case ExprKind::Unary: return expand_array_literal(x, sh, ek);
+      default: return {};
+    }
+  }
   // 数组 if 表达式（模型语境；V4r 探针）：两支同形（维已知）、元素同为 Boolean 或同为数值（有 Real 则全提 Real），条件是标量
   // Boolean。绑定里整体保留，各支规整成 omc 的打印形态——整体 / 切片引用原样、字面量按元素类型转、算术式逐元素展开成字面量
   //（`i3 = if time > 1.0 then x else {2.0 * x[1], 2.0 * x[2], 2.0 * x[3]}`）、嵌套 if / 向量化调用原样；显式等式、参数摊分、sum
@@ -8165,21 +8183,7 @@ class Flattener {
       ek = TypeKind::Real;
     }
     if (!num(ek) && ek != TypeKind::Boolean) { set_unsupported("if-expression branch type"); return lit_int(0); }
-    auto branch = [&](Id<Expr> x) -> Id<Expr> {
-      const ExprKind xk = result_.model.exprs[x].kind;
-      const TypeKind xe = expr_elem_kind(x);
-      switch (xk) {
-        // 字面量：Real 时逐叶转（混合字面量 `{time, 1, 2}` 的元素类型已是 Real，Integer 叶仍要转成 `1.0`）。
-        case ExprKind::Array: return ek == TypeKind::Real || xe != ek ? coerce_deep(x, ek) : x;
-        case ExprKind::Cref:
-        case ExprKind::IfExp:
-        case ExprKind::Reduction: return xe == ek ? x : Id<Expr>{};
-        case ExprKind::Binary:
-        case ExprKind::Unary: return expand_array_literal(x, st, ek);
-        default: return {};
-      }
-    };
-    const Id<Expr> tb = branch(t), fb = branch(f);
+    const Id<Expr> tb = kept_array_form(t, st, ek), fb = kept_array_form(f, st, ek);
     if (result_.unsupported) return lit_int(0);
     if (!tb.is_valid() || !fb.is_valid()) { set_unsupported("if-expression array branch"); return lit_int(0); }
     std::vector<Dimension> dims;
@@ -8269,6 +8273,11 @@ class Flattener {
     const Cref& fn = I_.absyn.crefs[e.cref];
     // 调用结果的字段访问 `f(i).y`：1.25.0 自己报内部错误（DotOperator），ymc 未做 → SKIP（此前被静默当成 f(i)）。
     if (e.call_suffix.is_valid()) { set_unsupported("field access on call result"); return lit_int(0); }
+    // 模型语境里直接写的归约式 `sum / product / min / max(e for i in r, …)`。
+    if (!fn_scope_ && e.args.size() == 1 && fn.parts.size() == 1 && I_.absyn.exps[e.args[0]].kind == ExpKind::Reduction) {
+      const std::string_view rn = in_.str(fn.parts[0].name);
+      if (rn == "sum" || rn == "product" || rn == "min" || rn == "max") return reduction_call(e, rn, enclosing, prefix);
+    }
     // 用户函数常量折叠优先（支持命名/默认实参）：单名解析到 function 类且实参可求常量 → 折成字面量（CevalFunc1/FuncSimple）。
     {
       // 折叠结果须是标量（数组 / 记录值在此语境无字面量形式，literal_of 会退化成 0）→ 否则不接，落到下面。
@@ -8297,10 +8306,9 @@ class Flattener {
       }
       // 函数体里实参引用函数局部量（含局部常量）的调用不求值（YmcFnEmit1：局部常量在函数里保留引用）。
       const bool fold = !(fn_scope_ && exp_refs_fn_locals(e));
-      // sum/product/min/max(常量数组) 整体求值：函数语境，或直接写的归约式 `sum(e for i in r)`。模型语境的数组实参先定型再定
+      // 函数语境的 sum / product / min / max(常量数组) 整体求值。模型语境的归约式走上面的 reduction_call，数组实参先定型再定
       // 去留（字面量数组才求值，数组构造子 / 混合字面量展开成不化简的元素链，见 model_reduce_builtin）。
-      const bool direct = fn_scope_ || e.args.size() != 1 || I_.absyn.exps[e.args[0]].kind == ExpKind::Reduction;
-      if (fold && direct && fn.parts.size() == 1)
+      if (fold && fn_scope_ && fn.parts.size() == 1)
         if (auto rv = eval_reduction(e, sc, 0); rv && scalar(*rv)) return literal_of(*rv);
       // 用户函数（含限定名 `P.f`、短类别名）常量折叠：只折常量实参（参数实参的调用变率是 parameter，不求值）。
       if (fold)
@@ -8757,39 +8765,303 @@ class Flattener {
     return add(std::move(r));
   }
 
-  // sum / product(e for i in r)（单迭代变量、常量范围；常量整式已由 eval_reduction 折叠）：逐值代入 e 后连成 + / * 链
-  //（C1 探针：`sum(y[i] for i in 1:3)` → `y[1] + y[2] + y[3]`）。多迭代变量 / 范围求不出 / e 是数组 → SKIP。
-  Id<Expr> reduction_chain(Id<Exp> rid, BinOp op, NodeId enclosing, const std::vector<Symbol>& prefix) {
-    const Exp red = I_.absyn.exps[rid];   // 拷贝
-    if (red.iters.size() != 1 || !red.iters[0].range.is_valid()) { set_unsupported("reduction iterators"); return lit_int(0); }
-    const ForIndex it = red.iters[0];
-    if (loop_vars_.count(it.name.id) || stmt_iters_.count(it.name.id)) { set_unsupported("shadowed reduction iterator"); return lit_int(0); }
-    const std::optional<std::vector<std::int64_t>> seq = eval_range(it.range, scode_scope_of(enclosing), 0);
-    if (!seq || seq->empty()) { set_unsupported("reduction range"); return lit_int(0); }
-    std::vector<Id<Expr>> xs;
-    bool real = false;
-    for (std::int64_t v : *seq) {
-      loop_vars_[it.name.id] = v;
-      const Id<Expr> x = simplify_expr(inst_exp(red.a, enclosing, prefix));
-      loop_vars_.erase(it.name.id);
+  // ---- 归约式 sum / product / min / max(e for i in r, …)（模型语境）。规则读自 v1.25.0：定型 NFCall.typeReduction
+  // :2544-2599（范围按 typeIterator 定型，参数范围由 typeRange 标结构；变率 = 各范围与体的最大者）、化简
+  // NFSimplifyExp.simplifyReduction :652-705；形态经 RD 探针 r2 / r3 核实：
+  //   S1 单迭代变量且范围长度已知：0 → 缺省值（reduction_default）；1 → 体代入那个元素（`max(x[i] for i in 2:2)` → `x[2]`）；
+  //   S2 整个归约的变率 ≤ 结构参数（不引用变量，引用的参数在定型此式之前就已是结构参数）→ 求值成字面量；
+  //   S3 sum / product 且各范围都能展开 → 逐个取值代入体、各自化简后连成 + / * 链（最后写的迭代变量在最外层：
+  //      `sum(x[i] * x[j] for i in 1:2, j in 1:3)` → `x[1] * x[1] + x[2] * x[1] + x[1] * x[2] + …`）；
+  //   S4 其余保留归约式，多个迭代变量打成嵌套（先写的在最内层：`max(max(x[i] * x[j] for i in 1:2) for j in 1:3)`），范围
+  //      打成求值后的字面量范围 / 原样的数组（`1:3`、`{1, 3}`、`x[1:2]`、`1:integer(time)`）。
+  // 迭代变量的类型 = 范围元素类型（Integer / Real / Boolean；枚举未做）。----
+  struct RedIter {
+    Symbol name;
+    TypeKind kind = TypeKind::Integer;
+    Id<Expr> range;                 // 保留形态里打印的范围式
+    bool known = false;             // 元素已知（可展开）
+    std::vector<Id<Expr>> elems;    // 已知时的各元素
+  };
+  // 表达式引用了定型它之前还不是结构参数的参数（omc 里变率是 PARAMETER 而非 STRUCTURAL_PARAMETER）。多段 / 带下标的参数引用
+  // 保守当普通参数。
+  bool absyn_refs_plain_param(Id<Exp> s, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    if (!s.is_valid()) return false;
+    const Exp& e = I_.absyn.exps[s];
+    if (e.kind == ExpKind::CrefExp) {
+      const Cref& c = I_.absyn.crefs[e.cref];
+      if (!c.leading_dot && !c.parts.empty() && !loop_vars_.count(c.parts[0].name.id) && !stmt_iters_.count(c.parts[0].name.id)) {
+        const NodeId n = find_local(enclosing, c.parts[0].name);
+        if (n.is_valid() && !I_.nodes[n].is_empty() && I_.comps[I_.nodes[n].comp].attributes.variability == SVariability::Param) {
+          if (c.parts.size() != 1 || !c.parts[0].subscripts.empty()) return true;
+          std::vector<Symbol> p = prefix;
+          p.push_back(c.parts[0].name);
+          std::vector<std::vector<Id<Expr>>> ps = psubs_to_exprs(cur_psubs_);
+          ps.resize(prefix.size());
+          ps.push_back({});
+          if (!structural_set_.count(conn_key(p, ps))) return true;
+        }
+      }
+      for (const CrefPart& part : c.parts)
+        for (Id<Exp> x : part.subscripts)
+          if (absyn_refs_plain_param(x, enclosing, prefix)) return true;
+      return false;
+    }
+    if (absyn_refs_plain_param(e.a, enclosing, prefix) || absyn_refs_plain_param(e.b, enclosing, prefix) ||
+        absyn_refs_plain_param(e.c, enclosing, prefix))
+      return true;
+    for (Id<Exp> a : e.args) if (absyn_refs_plain_param(a, enclosing, prefix)) return true;
+    for (const ForIndex& it : e.iters) if (absyn_refs_plain_param(it.range, enclosing, prefix)) return true;
+    return false;
+  }
+  // 缺省值（Call.reductionDefaultValue :2626-2648 + Expression.makeMaxValue / makeMinValue，NFExpression.mo:4908-4934，
+  // v1.25.0）：sum 0、product 1、min → 类型最大值、max → 类型最小值。Real = ±8.777798510069901e304（System.realMaxLit）、
+  // Boolean = true / false、枚举 = 末 / 首字面量。Integer 的极值是 System.intMaxLit，随 omc 构建的整数位宽而变（本机 1.25.0
+  // 打 1073741823，testsuite 文件里是 4611686018427387903）→ 不跟，SKIP（账本）。
+  Id<Expr> reduction_default(std::string_view name, const Type& ty) {
+    const TypeKind k = ty.kind;
+    if (name == "sum" || name == "product") {
+      const std::int64_t unit = name == "sum" ? 0 : 1;
+      if (k == TypeKind::Real) return lit_real(static_cast<double>(unit));
+      if (k == TypeKind::Integer) return lit_int(unit);
+      set_unsupported("non-numeric array operand");
+      return lit_int(0);
+    }
+    const bool hi = name == "min";   // min 的缺省 = 最大值
+    if (k == TypeKind::Real) return lit_real(hi ? 8.777798510069901e304 : -8.777798510069901e304);
+    if (k == TypeKind::Boolean) return lit_bool(hi);
+    if (k == TypeKind::Enumeration && !ty.enum_literals.empty() && !ty.enum_path.empty()) {
+      Expr r;
+      r.kind = ExprKind::EnumLit;
+      r.ty = Type::of(TypeKind::Enumeration);
+      r.enum_path = ty.enum_path;
+      r.enum_path.push_back(hi ? ty.enum_literals.back() : ty.enum_literals.front());
+      r.enum_index = hi ? static_cast<std::int64_t>(ty.enum_literals.size()) : 1;
+      return add(std::move(r));
+    }
+    set_unsupported(k == TypeKind::Integer ? "Integer extreme of empty min/max (platform-dependent in omc)"
+                                           : "empty min/max of this type");
+    return lit_int(0);
+  }
+  // 字面量的 min / max（数值按值、Boolean false < true、枚举按序数）；平手留先出现者。els 须非空且全是同类字面量。
+  Id<Expr> fold_min_max(const std::vector<Id<Expr>>& els, bool is_min) {
+    auto rank = [&](Id<Expr> x) -> double {
+      const Expr& e = result_.model.exprs[x];
+      return e.kind == ExprKind::BoolLit ? (e.bval ? 1.0 : 0.0)
+           : e.kind == ExprKind::EnumLit ? static_cast<double>(e.enum_index)
+           : as_real(x);
+    };
+    Id<Expr> best = els[0];
+    for (Id<Expr> x : els)
+      if (is_min ? rank(x) < rank(best) : rank(x) > rank(best)) best = x;
+    return best;
+  }
+  bool is_minmax_literal(Id<Expr> x) const {
+    const Expr& e = result_.model.exprs[x];
+    return e.kind == ExprKind::IntLit || e.kind == ExprKind::RealLit || e.kind == ExprKind::BoolLit ||
+           (e.kind == ExprKind::EnumLit && e.enum_index > 0);
+  }
+  // 一个迭代范围的定型。失败 → set_unsupported 并返回 false。
+  bool red_iter_range(const ForIndex& it, NodeId enclosing, const std::vector<Symbol>& prefix, RedIter& r) {
+    r.name = it.name;
+    if (!it.range.is_valid()) { set_unsupported("comprehension implicit range"); return false; }
+    const Exp rx = I_.absyn.exps[it.range];   // 拷贝
+    if (rx.kind == ExpKind::Range) {
+      const ScodeScope sc = scode_scope_of(enclosing);
+      // 整数范围、界可求（含参数 → 标结构，typeRange :2414-2418）：字面量范围 + 元素表。
+      if (const std::optional<std::vector<std::int64_t>> seq = eval_range(it.range, sc, 0)) {
+        auto bound = [&](Id<Exp> b) {
+          const std::optional<CVal> v = eval_scode(b, sc, 0, /*allow_param=*/true, nullptr);
+          return lit_int(v && v->k == CVal::K::Int ? v->i : 0);
+        };
+        Expr rg;
+        rg.kind = ExprKind::Range;
+        rg.ty = Type::integer();
+        rg.a = bound(rx.a);
+        rg.b = bound(rx.b);
+        if (rx.c.is_valid()) rg.c = bound(rx.c);
+        r.range = add(std::move(rg));
+        r.known = true;
+        for (std::int64_t v : *seq) r.elems.push_back(lit_int(v));
+        return true;
+      }
+      if (result_.unsupported) return false;
+      Expr t = result_.model.exprs[inst_exp(it.range, enclosing, prefix)];   // 拷贝
+      if (result_.unsupported) return false;
+      t.a = simplify_expr(t.a);
+      t.b = simplify_expr(t.b);
+      if (t.c.is_valid()) t.c = simplify_expr(t.c);
+      r.kind = t.ty.kind;
+      // 运行时范围：界引用变量，或引用外层保留着的符号迭代变量（`max(sum(x[i] for i in 1:j) for j in 1:2)` 里的 `1:j`）。
+      const bool runtime = refs_runtime_var(t.a) || refs_runtime_var(t.b) || (t.c.is_valid() && refs_runtime_var(t.c)) ||
+                           is_stmt_iter_subscript(it.range);
+      if (r.kind == TypeKind::Boolean && !t.c.is_valid() && result_.model.exprs[t.a].kind == ExprKind::BoolLit &&
+          result_.model.exprs[t.b].kind == ExprKind::BoolLit) {
+        // Boolean 字面量范围：false < true。
+        const bool lo = result_.model.exprs[t.a].bval, hi = result_.model.exprs[t.b].bval;
+        r.known = true;
+        for (int v = lo ? 1 : 0; v <= (hi ? 1 : 0); ++v) r.elems.push_back(lit_bool(v != 0));
+      } else if (r.kind != TypeKind::Integer || !runtime) {
+        // Real 范围（omc 也展开 / 求值，元素个数的取整规则未核实）、求不出的参数范围 → SKIP。
+        set_unsupported("reduction range");
+        return false;
+      }
+      r.range = add(std::move(t));
+      return true;
+    }
+    // 数组：一维，元素 Integer / Real / Boolean；长度已知 → 元素表。
+    const Id<Expr> a = simplify_expr(inst_exp(it.range, enclosing, prefix));
+    if (result_.unsupported) return false;
+    const std::vector<std::int64_t> sh = expr_shape(a);
+    r.kind = expr_elem_kind(a);
+    if (sh.size() != 1 || (r.kind != TypeKind::Integer && r.kind != TypeKind::Real && r.kind != TypeKind::Boolean)) {
+      set_unsupported("reduction range");
+      return false;
+    }
+    r.range = a;
+    if (sh[0] >= 0) {
+      r.known = true;
+      for (std::int64_t i = 1; i <= sh[0]; ++i) {
+        r.elems.push_back(simplify_expr(scalarize(a, {i})));
+        if (result_.unsupported) return false;
+      }
+    }
+    return true;
+  }
+  Id<Expr> reduction_call(const Exp& e, std::string_view name, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    const Exp red = I_.absyn.exps[e.args[0]];   // 拷贝
+    const bool is_sum = name == "sum", is_prod = name == "product", is_min = name == "min";
+    if (red.iters.empty()) { set_unsupported("reduction iterators"); return lit_int(0); }
+    for (const ForIndex& it : red.iters)
+      if (loop_vars_.count(it.name.id) || stmt_iters_.count(it.name.id)) { set_unsupported("shadowed reduction iterator"); return lit_int(0); }
+    // 变率（S2 用）：在求范围（会标结构参数）之前看。
+    bool plain_param = absyn_refs_plain_param(red.a, enclosing, prefix);
+    for (const ForIndex& it : red.iters) plain_param = plain_param || absyn_refs_plain_param(it.range, enclosing, prefix);
+    std::vector<RedIter> its(red.iters.size());
+    bool all_known = true;
+    for (std::size_t j = 0; j < red.iters.size(); ++j) {
+      if (!red_iter_range(red.iters[j], enclosing, prefix, its[j])) return lit_int(0);
+      all_known = all_known && its[j].known;
+    }
+    // 体在给定取值下的实例：整数字面量取值走 loop_vars_（体里的下标、常量数组元素照常解析），其余先按符号定型再代入。
+    // cur[j] = 第 j 个迭代变量取第几个元素；npos = 保持符号（保留形态用）。
+    const std::size_t npos = static_cast<std::size_t>(-1);
+    auto instance = [&](const std::vector<std::size_t>& cur) -> Id<Expr> {
+      std::unordered_map<std::string, Id<Expr>> sub;
+      for (std::size_t j = 0; j < its.size(); ++j) {
+        const std::uint32_t id = its[j].name.id;
+        const Id<Expr> el = cur[j] == npos ? Id<Expr>{} : its[j].elems[cur[j]];
+        if (el.is_valid() && result_.model.exprs[el].kind == ExprKind::IntLit) {
+          loop_vars_[id] = result_.model.exprs[el].ival;
+        } else {
+          stmt_iters_[id] = its[j].kind;
+          if (el.is_valid()) {
+            ExprCref ic;
+            ic.parts.push_back({its[j].name, {}});
+            sub.emplace(expr_cref_key(ic), el);
+          }
+        }
+      }
+      Id<Expr> x = simplify_expr(inst_exp(red.a, enclosing, prefix));
+      for (const RedIter& ri : its) { loop_vars_.erase(ri.name.id); stmt_iters_.erase(ri.name.id); }
       if (result_.unsupported) return lit_int(0);
-      if (!expr_shape(x).empty()) { set_unsupported("array-valued reduction body"); return lit_int(0); }
-      real = real || result_.model.exprs[x].ty.kind == TypeKind::Real;
-      xs.push_back(x);
+      if (!sub.empty()) x = simplify_expr(clone_subst(x, sub));
+      if (!result_.unsupported && !expr_shape(x).empty()) set_unsupported("array-valued reduction body");
+      return x;
+    };
+    // 全部取值的体实例（最后写的迭代变量在最外层）。
+    auto expand = [&](std::vector<Id<Expr>>& out) {
+      std::vector<std::size_t> cur(its.size(), 0);
+      auto rec = [&](auto& self, std::size_t j) -> void {
+        if (result_.unsupported) return;
+        for (std::size_t i = 0; i < its[j].elems.size(); ++i) {
+          cur[j] = i;
+          if (j == 0) out.push_back(instance(cur));
+          else self(self, j - 1);
+          if (result_.unsupported) return;
+        }
+      };
+      rec(rec, its.size() - 1);
+    };
+    auto symbolic = [&]() { return instance(std::vector<std::size_t>(its.size(), npos)); };
+    // S1：单迭代变量、长度 0 / 1。
+    if (its.size() == 1 && its[0].known && its[0].elems.size() <= 1) {
+      if (its[0].elems.size() == 1) return instance({0});
+      const Id<Expr> body = symbolic();
+      if (result_.unsupported) return lit_int(0);
+      return reduction_default(name, result_.model.exprs[body].ty);
     }
-    Id<Expr> acc;
-    for (Id<Expr> x : xs) {
-      if (real) x = to_real(x);
-      if (!acc.is_valid()) { acc = x; continue; }
-      Expr b;
-      b.kind = ExprKind::Binary;
-      b.bin = op;
-      b.a = acc;
-      b.b = x;
-      b.ty = real ? Type::real() : Type::integer();
-      acc = add(std::move(b));
+    if ((is_sum || is_prod) && all_known) {   // S3（S2 的 sum / product 展开后自然折成字面量）
+      std::vector<Id<Expr>> els;
+      expand(els);
+      if (result_.unsupported) return lit_int(0);
+      if (els.empty()) {
+        const Id<Expr> body = symbolic();
+        if (result_.unsupported) return lit_int(0);
+        return reduction_default(name, result_.model.exprs[body].ty);
+      }
+      bool real = false;
+      for (Id<Expr> x : els) {
+        const TypeKind k = result_.model.exprs[x].ty.kind;
+        if (k != TypeKind::Real && k != TypeKind::Integer) { set_unsupported("non-numeric array operand"); return lit_int(0); }
+        real = real || k == TypeKind::Real;
+      }
+      Id<Expr> acc;
+      for (Id<Expr> x : els) {
+        if (real) x = to_real(x);
+        if (!acc.is_valid()) { acc = x; continue; }
+        Expr b;
+        b.kind = ExprKind::Binary;
+        b.bin = is_sum ? BinOp::Add : BinOp::Mul;
+        b.a = acc;
+        b.b = x;
+        b.ty = real ? Type::real() : Type::integer();
+        acc = add(std::move(b));
+      }
+      return simplify_expr(acc);
     }
-    return simplify_expr(acc);
+    // S2：min / max 求值。先按取值展开（体里的常量数组元素 `c[i]`、嵌套归约照常解析），各实例全是字面量即求值。
+    bool range_runtime = false;
+    for (const RedIter& ri : its) range_runtime = range_runtime || refs_runtime_var(ri.range);
+    const bool maybe_const = !is_sum && !is_prod && all_known && !plain_param && !range_runtime;
+    bool empty = false;
+    if (maybe_const) {
+      std::vector<Id<Expr>> els;
+      expand(els);
+      if (result_.unsupported) return lit_int(0);
+      bool lit = !els.empty();
+      for (Id<Expr> x : els) lit = lit && is_minmax_literal(x);
+      if (lit) return fold_min_max(els, is_min);
+      empty = els.empty();
+    }
+    const Id<Expr> body = symbolic();
+    if (result_.unsupported) return lit_int(0);
+    const Type bty = result_.model.exprs[body].ty;
+    if (maybe_const && empty) return reduction_default(name, bty);
+    if (maybe_const && !refs_runtime_var(body)) {   // 变率是常量、却没能求值（体里有 ymc 折不动的常量式）
+      set_unsupported("constant reduction not evaluable");
+      return lit_int(0);
+    }
+    if (bty.kind != TypeKind::Real && bty.kind != TypeKind::Integer && bty.kind != TypeKind::Boolean &&
+        bty.kind != TypeKind::Enumeration) {
+      set_unsupported("reduction body type");
+      return lit_int(0);
+    }
+    if ((is_sum || is_prod) && bty.kind != TypeKind::Real && bty.kind != TypeKind::Integer) {
+      set_unsupported("non-numeric array operand");
+      return lit_int(0);
+    }
+    Id<Expr> out = body;   // S4：保留（先写的迭代变量在最内层）
+    for (const RedIter& ri : its) {
+      if (ri.known && ri.elems.empty()) { set_unsupported("reduction over empty range"); return lit_int(0); }
+      Expr r;
+      r.kind = ExprKind::Reduction;
+      r.call_name = {in_.intern(name), ri.name};
+      r.a = out;
+      r.b = ri.range;
+      r.ty = bty;
+      out = add(std::move(r));
+    }
+    return out;
   }
 
   // 模型语境的向量 / 矩阵内建（AB1 探针 + FuncBuiltinCross/Skew/OuterProduct/Symmetric/Matrix/Ndims）：
@@ -8925,12 +9197,62 @@ class Flattener {
   // - 否则 sum / product 展开成元素链（simplifySumProduct :445-481）：各元素各自化简，**链本身不再化简**——`1.0 + 2.0 + time`、
   //   `x[1] + 0.0 + x[2]`、`(-x[1]) + (-x[2]) + (-x[3])`、`sum({i for i in 1:3})` → `1 + 2 + 3`（Real 绑定整体转型
   //   `/*Real*/(1 + 2 + 3)`）。链上的 Binary 记进 nofold_bins_（simplify_expr 原样留）。空数组 = 0 / 1（:464-465）。
-  // - 否则 min / max：单层数组构造子实参改写成归约式（simplifyMinMax :332-355 → simplifyReducedArrayConstructor：
+  // - min / max：单层数组构造子实参改写成归约式（simplifyMinMax :332-355 → simplifyReducedArrayConstructor：
   //   `max({i for i in 1:3})` → `max(i for i in 1:3)`、`max(linspace(0, 1, 3))` → `max(/*Real*/(i - 1) / 2.0 for i in 1:3)`）；
-  //   数组变量 / 混合字面量 / 空数组等其余形态未做 → invalid（调用方照旧 SKIP）。
-  // 返回 invalid = 不归这里管（实参个数不对 / 命名实参 / 直接归约式 / 标量实参 / min-max 的其余形态）。
+  //   其余数组实参见 min_max_array。
+  // 返回 invalid = 不归这里管（实参个数不对 / 命名实参 / 直接归约式 / 标量实参）。
+  // min / max(数组)（typeMinMaxCall + simplifyMinMax，v1.25.0 NFBuiltinCall.mo typeMinMaxCall、NFSimplifyExp.mo:305-330；
+  // RD 探针 r1 / r4）：元素类型 Real / Integer / Boolean / 枚举；空数组 → 类型极值（reduction_default）；恰一个元素的一维数组
+  // → 那个元素（Type.isSingleElementArray）；叶全是字面量 → 求值；否则留调用，实参规整成整体保留的形态（kept_array_form：
+  // `max(x)`、`max(x[1:2])`、`max({t, 1.0})`、`max({2.0 * x[1], …})`）。实参是数组构造子 / 向量化调用的照旧（上面的归约式
+  // 改写）；实参是其余内建调用（`vector(x)`、`diagonal(x)` omc 留调用不展开）等未核实形态 → SKIP。返回 invalid = 交回调用方
+  //（数组构造子）。
+  Id<Expr> min_max_array(Id<Expr> a, Id<Exp> raw, const std::vector<std::int64_t>& sh, TypeKind ek, std::string_view name) {
+    if (ek != TypeKind::Real && ek != TypeKind::Integer && ek != TypeKind::Boolean && ek != TypeKind::Enumeration) {
+      set_unsupported("min/max array argument form");
+      return lit_int(0);
+    }
+    const Type aty = result_.model.exprs[a].ty.element_type();
+    const Type ety = aty.kind == ek ? aty : Type::of(ek);
+    if (std::find(sh.begin(), sh.end(), 0) != sh.end()) return reduction_default(name, ety);
+    if (contains_array_call(a)) return {};
+    if (sh.size() == 1 && sh[0] == 1) return simplify_expr(scalarize(a, {1}));
+    // 实参整个是调用：omc 在这里只化简不标量化——fill / zeros / ones / cat / transpose 被化简展开（`max(fill(t, 2))` →
+    // `max({t, t})`），`vector(x)` / `diagonal(x)` 等留调用（RD 探针 r4）。其余调用的去留未核实：只在结果各叶全是字面量时
+    // 收（求值结果一样），否则 SKIP。
+    const ExprKind ak = result_.model.exprs[a].kind;
+    bool verified_call = true;
+    if (const Exp& rx = I_.absyn.exps[raw]; rx.kind == ExpKind::Call) {
+      const Cref& rc = I_.absyn.crefs[rx.cref];
+      const std::string_view rn = rc.parts.size() == 1 ? in_.str(rc.parts[0].name) : std::string_view{};
+      verified_call = ak == ExprKind::Array &&
+                      (rn == "fill" || rn == "zeros" || rn == "ones" || rn == "cat" || rn == "transpose" || rn == "size");
+    }
+    Id<Expr> arg = ak == ExprKind::LogicalNot && result_.model.exprs[result_.model.exprs[a].a].kind == ExprKind::Cref
+                       ? a : kept_array_form(a, sh, ek);   // `min(not bb)` 原样
+    if (result_.unsupported) return lit_int(0);
+    if (!arg.is_valid()) { set_unsupported("min/max array argument form"); return lit_int(0); }
+    // 字面量数组（各叶都是字面量）→ 求值。
+    std::vector<Id<Expr>> leaves;
+    bool lit = true;
+    auto walk = [&](auto& self, Id<Expr> x) -> void {
+      const Expr& xe = result_.model.exprs[x];
+      if (xe.kind == ExprKind::Array) { for (Id<Expr> c : std::vector<Id<Expr>>(xe.args)) self(self, c); return; }
+      lit = lit && is_minmax_literal(x) && expr_shape(x).empty();
+      leaves.push_back(x);
+    };
+    walk(walk, arg);
+    if (lit && !leaves.empty()) return fold_min_max(leaves, name == "min");
+    if (!verified_call) { set_unsupported("min/max array argument form"); return lit_int(0); }
+    Expr r;
+    r.kind = ExprKind::Call;
+    r.call_name = {in_.intern(name)};
+    r.args = {arg};
+    r.ty = ety;
+    return add(std::move(r));
+  }
   Id<Expr> model_reduce_builtin(const Exp& e, std::string_view name, NodeId enclosing, const std::vector<Symbol>& prefix) {
-    const bool is_sum = name == "sum", is_prod = name == "product", is_min = name == "min";
+    const bool is_sum = name == "sum", is_prod = name == "product";
     if (e.args.size() != 1 || I_.absyn.exps[e.args[0]].kind == ExpKind::Reduction) return {};
     for (Symbol n : e.arg_names) if (n.is_valid()) return {};
     const Id<Exp> raw = e.args[0];
@@ -8943,12 +9265,13 @@ class Flattener {
     for (std::int64_t n : sh) if (n < 0) { set_unsupported("array builtin of unknown / empty shape"); return lit_int(0); }
     const TypeKind ek = expr_elem_kind(a);
     const bool real = ek == TypeKind::Real;
-    if (!real && ek != TypeKind::Integer) {
-      if (is_sum || is_prod) { set_unsupported("non-numeric array operand"); return lit_int(0); }
-      return {};
+    if (!is_sum && !is_prod) {
+      if (Id<Expr> r = min_max_array(a, raw, sh, ek, name); r.is_valid() || result_.unsupported) return r;
+    } else if (!real && ek != TypeKind::Integer) {
+      set_unsupported("non-numeric array operand");
+      return lit_int(0);
     }
     if (std::find(sh.begin(), sh.end(), 0) != sh.end()) {
-      if (!is_sum && !is_prod) return {};
       const std::int64_t unit = is_sum ? 0 : 1;
       return real ? lit_real(static_cast<double>(unit)) : lit_int(unit);
     }
@@ -8978,13 +9301,6 @@ class Flattener {
     }
     bool all_lit = true;
     for (Id<Expr> x : els) all_lit = all_lit && is_num_lit(result_.model.exprs[x]);
-    if (!is_sum && !is_prod) {
-      if (!all_lit) return {};
-      Id<Expr> best = els[0];   // 平手留先出现者（同 eval_reduction）
-      for (Id<Expr> x : els)
-        if (is_min ? as_real(x) < as_real(best) : as_real(x) > as_real(best)) best = x;
-      return best;
-    }
     Id<Expr> acc = els[0];
     std::vector<Id<Expr>> chain;
     for (std::size_t i = 1; i < els.size(); ++i) {
@@ -9115,8 +9431,6 @@ class Flattener {
       if (!v || v->k != CVal::K::Int || v->i < 1) { set_unsupported("non-constant identity size"); return lit_int(0); }
       return build({v->i, v->i}, [&](const std::vector<std::int64_t>& ix) { return lit_int(ix[0] == ix[1] ? 1 : 0); });
     }
-    if ((name == "sum" || name == "product") && I_.absyn.exps[args[0]].kind == ExpKind::Reduction)
-      return reduction_chain(args[0], name == "sum" ? BinOp::Add : BinOp::Mul, enclosing, prefix);
     // sum / product 的数组实参已在 model_reduce_builtin 处理；到这里只剩标量实参（omc 报类型错）。
     if (name == "sum" || name == "product") { set_unsupported("array builtin of scalar"); return lit_int(0); }
     const Id<Expr> a = inst_exp(args[0], enclosing, prefix);
@@ -9563,6 +9877,29 @@ class Flattener {
         }
       }
     }
+    // min / max 的两个标量实参还可以同是 Boolean / 同一枚举（typeMinMaxCall，v1.25.0 NFBuiltinCall.mo）：两个都是字面量 → 求值
+    //（false < true、枚举按序数），否则留调用（RD 探针 r1：`max(bb[1], bb[2])`、`min(ee[1], E.two)`）。
+    if (supported && args.size() == 2 && (builtin_name == "min" || builtin_name == "max")) {
+      const Expr x0 = result_.model.exprs[args[0]], x1 = result_.model.exprs[args[1]];   // 拷贝
+      const TypeKind k0 = x0.ty.kind;
+      if (k0 == x1.ty.kind && (k0 == TypeKind::Boolean || k0 == TypeKind::Enumeration)) {
+        const bool lits = is_minmax_literal(args[0]) && is_minmax_literal(args[1]);
+        // 两个枚举字面量须同一类型（类型路径 = enum_path 去掉末段的字面量名）；引用与字面量之间的类型核对未做。
+        if (lits && k0 == TypeKind::Enumeration &&
+            std::vector<Symbol>(x0.enum_path.begin(), x0.enum_path.end() - 1) !=
+                std::vector<Symbol>(x1.enum_path.begin(), x1.enum_path.end() - 1)) {
+          set_unsupported("min/max of different enumerations");
+          return lit_int(0);
+        }
+        if (lits) return fold_min_max({args[0], args[1]}, builtin_name == "min");
+        Expr r;
+        r.kind = ExprKind::Call;
+        r.call_name = {in_.intern(builtin_name)};
+        r.args = args;
+        r.ty = x0.ty.enum_path.empty() ? x1.ty : x0.ty;
+        return add(std::move(r));
+      }
+    }
     if (supported) {
       for (Id<Expr> a : args) {
         const TypeKind k = result_.model.exprs[a].ty.kind;
@@ -9651,7 +9988,9 @@ class Flattener {
   // Cast 把转换推进操作数 / 两支 / 内层（IfExpression2 `if time > 1 then 1 else 2` → `… then 1.0 else 2.0`）；其余包 CAST。
   Id<Expr> to_real(Id<Expr> e) {
     const Expr x = result_.model.exprs[e];   // 拷贝：下面会 add
-    if (x.ty.kind == TypeKind::Real) return e;
+    // 已是 Real（含 Real 数组的整体引用 / 运算：`{x, x}` 里的 x 不需要转，此前被包成 `/*Real*/(x)`）。数组字面量的类型是粗
+    // 类型，叶仍可能是 Integer，交给 coerce_deep 逐叶转。
+    if (x.ty.kind == TypeKind::Real || (x.kind != ExprKind::Array && x.ty.element_type().kind == TypeKind::Real)) return e;
     switch (x.kind) {
       case ExprKind::IntLit: return lit_real(static_cast<double>(x.ival));
       case ExprKind::Unary:
@@ -10370,7 +10709,8 @@ class Flattener {
   // 记录构造整体绑定 `R r = R(a, b, x=c)` = 类修饰 `R r(字段=实参…)`：把构造实参按声明序（位置实参）
   // 或名字（命名实参）匹配到字段，合成一个类修饰 SMod（缺省实参不进 subs → 该字段保留声明默认，RecordBinding1）。
   // 返回 invalid = 不适用/未支持（非构造调用、名字对不上、记录有 extends…），调用方据此仍走整体绑定 SKIP。
-  Id<SMod> build_record_ctor_mod(Id<Exp> callraw, NodeId ci, Id<SElement> cdef, NodeId scope) {
+  // rec_const：记录组件（下沉后）是 constant——字段引用会折成字面量，与代入实参等价。
+  Id<SMod> build_record_ctor_mod(Id<Exp> callraw, NodeId ci, Id<SElement> cdef, NodeId scope, bool rec_const) {
     if (I_.absyn.exps[callraw].kind == ExpKind::CrefExp) return split_record_cref_mod(callraw, ci, scope);
     const Exp& call = I_.absyn.exps[callraw];
     if (call.kind != ExpKind::Call) return {};
@@ -10413,6 +10753,37 @@ class Flattener {
       const Id<SMod> fid = I_.scode.add_mod(std::move(fm));
       derived_mods_.insert(fid.raw);   // 记录构造绑定拆出的字段：不参与结构参数的别名连带
       subs.push_back({fld, fid});
+    }
+    // 没给实参的字段（有缺省的输入、protected / final 的局部量）取声明绑定。绑定里引用别的字段时，omc 代入的是那个字段的
+    // **实参式**（构造函数的输入），不是记录组件的字段（RC 探针：`R t = R(a = p)`、`b = 2 * a` → `t.b = 2.0 * p`、final 的
+    // `y = a / 2` → `t.y = p / 2.0`，都不是 `… t.a …`；实参全是常量的参数记录整体求值走了调用方的 eval_user_call，不到
+    // 这里）。代入未做 → SKIP；constant 记录不受影响（字段引用折成字面量，RecordBinding6 / 7）。
+    auto refs_field = [&](auto& self, Id<Exp> x) -> bool {
+      if (!x.is_valid()) return false;
+      const Exp& xe = I_.absyn.exps[x];
+      if (xe.kind == ExpKind::CrefExp) {
+        const Cref& c = I_.absyn.crefs[xe.cref];
+        if (!c.leading_dot && !c.parts.empty())
+          if (const NodeId n = find_local(ci, c.parts[0].name); n.is_valid() && !I_.nodes[n].is_empty() && I_.nodes[n].comp.is_valid())
+            return true;
+        for (const CrefPart& p : c.parts)
+          for (Id<Exp> sx : p.subscripts) if (self(self, sx)) return true;
+        return false;
+      }
+      if (self(self, xe.a) || self(self, xe.b) || self(self, xe.c)) return true;
+      for (Id<Exp> a : xe.args) if (self(self, a)) return true;
+      for (const ForIndex& it : xe.iters) if (self(self, it.range)) return true;
+      return false;
+    };
+    for (NodeId f : I_.trees[I_.node_class(ci).tree].components) {
+      if (rec_const) break;
+      bool given = false;
+      for (const SSubMod& sm : subs) given = given || sm.ident == I_.nodes[f].name;
+      const Binding& fb = I_.comps[I_.nodes[f].comp].binding;
+      if (!given && fb.kind == BindingKind::Raw && refs_field(refs_field, fb.raw_exp)) {
+        set_unsupported("record constructor default depends on other fields");
+        return {};
+      }
     }
     SMod outer;
     outer.kind = SModKind::Mod;

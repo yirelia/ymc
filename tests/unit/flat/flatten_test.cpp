@@ -3204,6 +3204,75 @@ YMC_TEST(flatten_synchronous_operators) {
   }
 }
 
+YMC_TEST(flatten_reductions) {
+  // 归约式（simplifyReduction，v1.25.0 NFSimplifyExp.mo:652-705）：sum / product 能展开就展开（最后写的迭代变量在最外层）、
+  // 范围求不出则保留（多个迭代变量打成嵌套）；min / max 保留成归约式，范围打成求值后的字面量；单迭代变量长度 1 → 体代入、
+  // 长度 0 → 缺省值；变率 ≤ 结构参数的求值（m8：n 在 s2 的绑定里已被标结构）。范围里的参数是定型期标的：m 不 final、m2
+  // final。期望 = omc 1.25.0 实跑 RDT1（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model RDT1\n  parameter Integer n = 3;\n  parameter Integer m = n;\n  Real x[3] = {time, 1, 2};\n"
+                           "  Real t = time;\n  Real s1 = sum(x[i] * x[j] for i in 1:2, j in 1:3);\n"
+                           "  Real s2 = sum(i * 0.5 for i in 1:n);\n  parameter Integer m2 = n;\n"
+                           "  Real s3 = sum(x[i] for i in 1:integer(time));\n"
+                           "  Real s4 = sum(a * b for a in 1:integer(time), b in 1:4);\n  Real s5 = sum(v * v for v in x);\n"
+                           "  Real s6 = sum(i * t for i in 1:0);\n  Real m1 = max(x[i] for i in 1:n);\n"
+                           "  Real m3 = max(x[i] * x[j] for i in 1:2, j in 1:3);\n  Real m4 = max(t * v for v in {1.5, 2.5});\n"
+                           "  Real m5 = max(x[i] for i in 2:2);\n  Real m6 = min(r * 2 for r in {1.0, 2, 3, 4});\n"
+                           "  Real m7 = max(x[i] for i in 1:0);\n  Integer m8 = max(i for i in 1:n);\n"
+                           "  Boolean b1 = min(x[i] > 0 for i in 1:3);\n  Boolean b2 = max(b for b in true:false);\nend RDT1;\n"),
+               std::string("class RDT1\n  final parameter Integer n = 3;\n  parameter Integer m = 3;\n  Real x[1];\n"
+                           "  Real x[2];\n  Real x[3];\n  Real t = time;\n"
+                           "  Real s1 = x[1] * x[1] + x[2] * x[1] + x[1] * x[2] + x[2] * x[2] + x[1] * x[3] + x[2] * x[3];\n"
+                           "  Real s2 = 3.0;\n  final parameter Integer m2 = 3;\n"
+                           "  Real s3 = sum(x[i] for i in 1:integer(time));\n"
+                           "  Real s4 = /*Real*/(sum(sum(a * b for a in 1:integer(time)) for b in 1:4));\n"
+                           "  Real s5 = x[1] * x[1] + x[2] * x[2] + x[3] * x[3];\n  Real s6 = 0.0;\n"
+                           "  Real m1 = max(x[i] for i in 1:3);\n  Real m3 = max(max(x[i] * x[j] for i in 1:2) for j in 1:3);\n"
+                           "  Real m4 = max(t * v for v in {1.5, 2.5});\n  Real m5 = x[2];\n  Real m6 = 2.0;\n"
+                           "  Real m7 = -8.777798510069901e304;\n  Integer m8 = 3;\n"
+                           "  Boolean b1 = min(x[i] > 0.0 for i in 1:3);\n  Boolean b2 = false;\nequation\n"
+                           "  x = {time, 1.0, 2.0};\nend RDT1;\n"));
+}
+
+YMC_TEST(flatten_min_max_forms) {
+  // min / max 的数组实参（整体 / 切片引用原样、算术式展开成字面量、恰一个元素取元素、字面量求值、空数组取类型极值）与
+  // Boolean / 枚举的两个标量实参。期望 = omc 1.25.0 实跑 RDT2（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model RDT2\n  type E = enumeration(one, two, three);\n  Real x[3] = {time, 1, 2};\n"
+                           "  Integer k[3] = {1, 2, integer(time)};\n  Boolean bb[2] = {time > 1, true};\n"
+                           "  E ee[2] = {E.one, E.three};\n  Real t = time;\n  Real a1 = max(x);\n"
+                           "  Real a2 = max(x[1:2]) + min({t, 1});\n  Real a3 = max(2 * x);\n  Real a4 = max({t});\n"
+                           "  Real a5 = min(fill(1.5, 0));\n  Real a6 = max({{1, 2}, {3, 4}});\n  Integer i1 = max(k);\n"
+                           "  Boolean b1 = max(bb);\n  Boolean b2 = min(bb[1], false);\n  Boolean b3 = max(true, false);\n"
+                           "  Boolean b4 = min(not bb);\n  E e1 = max(ee);\n  E e2 = min(ee[1], E.two);\n"
+                           "  E e3 = max(E.one, E.three);\nend RDT2;\n"),
+               std::string("class RDT2\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Integer k[1];\n  Integer k[2];\n"
+                           "  Integer k[3];\n  Boolean bb[1];\n  Boolean bb[2];\n  enumeration(one, two, three) ee[1];\n"
+                           "  enumeration(one, two, three) ee[2];\n  Real t = time;\n  Real a1 = max(x);\n"
+                           "  Real a2 = max(x[1:2]) + min({t, 1.0});\n  Real a3 = max({2.0 * x[1], 2.0 * x[2], 2.0 * x[3]});\n"
+                           "  Real a4 = t;\n  Real a5 = 8.777798510069901e304;\n  Real a6 = 4.0;\n  Integer i1 = max(k);\n"
+                           "  Boolean b1 = max(bb);\n  Boolean b2 = min(bb[1], false);\n  Boolean b3 = true;\n"
+                           "  Boolean b4 = min(not bb);\n  enumeration(one, two, three) e1 = max(ee);\n"
+                           "  enumeration(one, two, three) e2 = min(ee[1], E.two);\n"
+                           "  enumeration(one, two, three) e3 = E.three;\nequation\n  x = {time, 1.0, 2.0};\n"
+                           "  k = {1, 2, integer(time)};\n  bb = {time > 1.0, true};\n  ee = {E.one, E.three};\nend RDT2;\n"));
+  // 未做 / 不跟 → SKIP：Integer 的极值随 omc 构建的整数位宽而变（本机 1.25.0 打 -1073741823，RDS1）；`vector(x)` 这类 omc
+  // 留调用不展开的实参（RDS2）；记录构造绑定里依赖别的字段的缺省（omc 代入实参式 `t.b = 2.0 * p`，RDS3）；Real 范围（RDS4）。
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           {"model RDS1\n  Integer y = max(zeros(0));\nend RDS1;\n",
+            "Integer extreme of empty min/max (platform-dependent in omc)"},
+           {"model RDS2\n  Real x[3] = {time, 1, 2};\n  Real y = max(vector(x));\nend RDS2;\n",
+            "min/max array argument form"},
+           {"record R\n  parameter Real a;\n  parameter Real b = 2 * a;\nend R;\nmodel RDS3\n"
+            "  parameter Real p = 4;\n  parameter R t = R(a = p);\nend RDS3;\n",
+            "record constructor default depends on other fields"},
+           {"model RDS4\n  Real y = sum(i for i in 1.0:3.0);\nend RDS4;\n",
+            "reduction range"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

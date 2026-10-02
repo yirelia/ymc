@@ -1,0 +1,70 @@
+//// set: rc — 记录构造绑定里依赖别的字段的缺省
+//// model: RC1
+record R
+  parameter Real a;
+  parameter Real b = 2 * a;
+end R;
+model RC1
+  parameter R r = R(a = 3);
+end RC1;
+//// model: RC2
+record R
+  parameter Real[:, 3] A;
+  parameter Real x = A[1, 1] + 1;
+end R;
+model RC2
+  parameter R r = R(A = [0, 1, 2]);
+end RC2;
+//// model: RC3
+record R
+  parameter Real[2] A;
+  parameter Real x = max(A);
+  parameter Real y = sum(A);
+end R;
+model RC3
+  parameter R r = R(A = {1, 2});
+end RC3;
+//// model: RC4
+record R
+  parameter Real[2] A;
+  parameter Real x = max(A);
+end R;
+model RC4
+  parameter R r(A = {1, 2});
+end RC4;
+//// model: RC5
+record R
+  parameter Real a;
+  parameter Real b = 2 * a;
+end R;
+model RC5
+  parameter R r(a = 3);
+  parameter R s = R(a = 3);
+  parameter Real p = 4;
+  parameter R t = R(a = p);
+end RC5;
+//// model: RC6
+record R
+  parameter Real a;
+  final parameter Real y = a / 2;
+  parameter Real b = 2;
+protected
+  parameter Real z = a + 1;
+end R;
+model RC6
+  parameter Real p = 4;
+  parameter R t = R(a = p);
+  parameter R u = R(a = 1);
+end RC6;
+//// model: RC7
+record R
+  parameter Real a;
+  final parameter Real y = a / 2;
+  parameter Real b = 2;
+end R;
+model RC7
+  parameter Real p = 4;
+  parameter R t = R(a = p);
+  parameter R u = R(a = 1);
+  parameter R v = R(a = 1, b = p);
+end RC7;

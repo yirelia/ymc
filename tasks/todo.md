@@ -1069,6 +1069,21 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           Previous1 / SubSample1 / SuperSample1、IfEquation6、IfEquationImpure1、WhenClocked1、WhenClockedTupleCall1；
           FuncBuiltinPrevious2 / 3 与 1.25.0 一致但文件是 `$i0` → 账本，FAIL 基线 23→25）、nf-live 484→491（synchronous/ 下
           BackSample / Hold / NoClock / Previous / ShiftSample / SubSample / WhenClocks）；+1 单测（197）。
+    - [x] (59o) 归约式 + min / max 的各种形态（2026-10-02）：
+          **归约式** `sum / product / min / max(e for i in r, …)` 按 v1.25.0 的 simplifyReduction 重做（替掉只会单迭代变量整数
+          范围的 reduction_chain）：单迭代变量长度 0 → 缺省值、长度 1 → 体代入；变率 ≤ 结构参数的求值；sum / product 各范围能
+          展开就展开成链（最后写的迭代变量在最外层），否则保留；min / max 保留成归约式（多迭代变量打成嵌套、范围打成字面量
+          范围 / 原样数组 `1:3`、`{1, 3}`、`x[1:2]`、`1:integer(time)`）。迭代变量类型 = 范围元素类型（Integer / Real /
+          Boolean），范围可以是数组字面量 / 数组变量。**min / max(数组)**：整体 / 切片引用原样、算术式展开成字面量、恰一个
+          元素取元素、字面量求值、空数组取类型极值（Real ±8.777798510069901e304、Boolean、枚举）。**min / max(a, b)** 支持
+          Boolean / 枚举。Integer 极值随 omc 构建的整数位宽而变（本机 1073741823、文件 4611686018427387903）→ SKIP，记入
+          open-questions 待定（挡住 CevalReduction1、FuncBuiltinMax / Min / Max2 / Min2、FuncBuiltinReduction 六例）。Real
+          范围、枚举迭代变量、`vector(x)` 这类 omc 留调用的实参 → SKIP。
+          **顺带修潜伏错**：记录构造绑定 `R t = R(a = p)` 里没给实参的字段，绑定引用别的字段时 omc 代入实参式
+          （`t.b = 2.0 * p`、final 的 `t.y = p / 2.0`），ymc 此前出 `2.0 * t.a` → SKIP（constant 记录不受影响）；`to_real` 把
+          Real 数组引用包成 `/*Real*/(x)`（`{x, x}` 的元素）→ 不再包。
+          探针 RD r1–r5 255 行：228 PASS / 20 SKIP / 7 BOTH-REJECT / 0 FAIL。→ 全 scodeinst PASS 475→477（CevalMax1、
+          CevalMin1）、nf-live 491→494（MaxArray、NonConstantReduction、Reductions）；+2 单测（199）。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、
