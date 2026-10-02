@@ -1,0 +1,97 @@
+//// set: ba-q — 杂项
+//// model: Q0
+model Q0
+  parameter Integer n = 2;
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean g1[2] = b and b2;
+end Q0;
+//// model: Q1
+model Q1
+  parameter Integer n = 2;
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean g2[2] = b or b2;
+end Q1;
+//// model: Q10
+model Q10
+  parameter Integer n = 2;
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  parameter Boolean h2[2] = not {true, false};
+end Q10;
+//// model: Q11
+model Q11
+  parameter Integer n = 2;
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean h3 = b[1] and b2[2];
+end Q11;
+//// model: Q2
+model Q2
+  parameter Integer n = 2;
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean g3[2] = b and not b2;
+end Q2;
+//// model: Q3
+model Q3
+  parameter Integer n = 2;
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean g4[2] = {b[1], b2[2]} and b;
+end Q3;
+//// model: Q4
+model Q4
+  parameter Integer n = 2;
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean g5[2] = (b and b2) or b;
+end Q4;
+//// model: Q5
+model Q5
+  parameter Integer n = 2;
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean g6[2] = b;
+end Q5;
+//// model: Q6
+model Q6
+  parameter Integer n = 2;
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean g7[2] = {x[1] > 1, x[2] > 2} and b;
+end Q6;
+//// model: Q7
+model Q7
+  parameter Integer n = 2;
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean g8[2] = {true, false} and {true, true};
+end Q7;
+//// model: Q8
+model Q8
+  parameter Integer n = 2;
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean g9[2] = {true, false} or b;
+end Q8;
+//// model: Q9
+model Q9
+  parameter Integer n = 2;
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  parameter Boolean h1[2] = {true, false} and {true, true};
+end Q9;

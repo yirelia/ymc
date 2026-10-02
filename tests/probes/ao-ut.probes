@@ -1,0 +1,98 @@
+//// set: ao-ut — 结构标记（单测原文）
+//// model: AOS1
+model AOS1
+  parameter Integer n = 2;
+  Real x[3] = {time, 1, 2};
+  Integer s = size(x[1:n], 1);
+end AOS1;
+//// model: AOS2
+model AOS2
+  Real x = if time > 0 then 1 else "a";
+end AOS2;
+//// model: AOT1
+model AOT1
+  parameter Integer m = k;
+  parameter Integer k = n;
+  parameter Integer n = 2;
+  Real y[n];
+  Real x = m * time;
+end AOT1;
+//// model: AOT2
+model AOT2
+  parameter Integer i0 = 1;
+  parameter Integer i = i0;
+  parameter Integer j = i;
+  parameter Integer j0 = i0;
+  Real c[2] = {time, 2};
+  Real v = c[i];
+  parameter Integer l = i;
+  parameter Integer l0 = i0;
+  Real w = (j + j0 + l + l0) * time;
+end AOT2;
+//// model: AOT3
+model AOT3
+  Real c[2] = {time, 2};
+  Real v = c[i];
+  parameter Integer i = i0;
+  parameter Integer i0 = 1;
+  parameter Integer j = i0;
+  Real w = j * time;
+end AOT3;
+//// model: AOT4
+model AOT4
+  parameter Integer k = 2;
+  parameter Integer n = k;
+  parameter Integer m = n;
+  parameter Boolean pt = true;
+  parameter Boolean pd = pt;
+  Real x[2];
+  Real a1[2] = if pt then {1, 2} else {3, 4, 5};
+  parameter Boolean pe = pt;
+  Real w = if pd and pe then m * time else 1;
+equation
+  for i in 1:n loop
+    x[i] = time;
+  end for;
+end AOT4;
+//// model: AOT5
+model AOT5
+  parameter Integer n = 2;
+  parameter Integer m = n;
+  parameter Integer p = 2;
+  parameter Integer q = p;
+  parameter Boolean b = true;
+  parameter Boolean c = b;
+  Real x[2] = {i * time for i in 1:n};
+  Real y[3] = {time, 1, 2};
+  Real s[:] = y[1:p];
+  Real z(fixed = b, start = 1);
+  Real w = if c then (m + q) * time else 1;
+equation
+  der(z) = 1;
+end AOT5;
+//// model: AOT6
+model AOT6
+  model M
+    parameter Integer i = 2;
+    parameter Boolean b = false;
+    Real v;
+    Real x(start = 1);
+  equation
+    der(x) = 1;
+  end M;
+  parameter Integer i = 1;
+  parameter Boolean b = true;
+  Real c[2] = {time, 2};
+  M m(v = c[i], x(fixed = b));
+end AOT6;
+//// model: AOT7
+model AOT7
+  parameter Real k = 5;
+  Real x;
+equation
+  if time > k then
+    x = 1;
+  else
+    x = 2;
+  end if;
+end AOT7;

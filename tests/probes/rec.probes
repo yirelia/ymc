@@ -1,0 +1,1329 @@
+//// set: rec — 记录：构造 / 绑定 / 字段 / 变率下沉
+//// model: AB1
+model AB1
+  Real x[3] = {time, 2*time, 3};
+  Real y[3] = {1, time, 2};
+  Real c[3] = cross(x, y);
+  Real s[3,3] = skew(x);
+  Real o[2,3] = outerProduct({time, 1}, y);
+  Real m[2,2] = symmetric({{time, 1}, {2, 3}});
+  Integer n = ndims(o);
+  Real mm[3,1] = matrix(x);
+equation
+  c = cross(y, {1, 2, 3});
+end AB1;
+//// model: AB2
+model AB2
+  Real x[3] = {time, 2*time, 3};
+  Real y[3] = {1, time, 2};
+  Real c[3] = cross(x, y);
+  Real s[3,3] = skew(x);
+  Integer n = ndims(s);
+  Real mm[3,1] = matrix(x);
+  Real d[3];
+equation
+  d = cross(y, {1, 2, 3});
+end AB2;
+//// model: AC1
+model AC1
+  Real x[2] "c x";
+  parameter Real p[2] = {1, 2} "c p";
+  Real y[2] = {time, 2} "c y";
+end AC1;
+//// model: AC2
+model AC2
+  parameter Integer n = 3;
+  Real x[n] = {i for i in 1:n};
+  Real y[3] = {i * 2.0 for i in 1:3};
+  Real z[3] = {time * i for i in 1:3};
+  Real w[2, 3] = {{i * j for j in 1:3} for i in 1:2};
+  Real v[3] = {sin(i * time) for i in 1:3};
+  Real u[2, 3] = {i * j for j in 1:3, i in 1:2};
+end AC2;
+//// model: AC3
+model AC3
+  Real x[3];
+  Real y[3];
+  Real s;
+equation
+  x = {i * time for i in 1:3};
+  y = {i for i in 1:3};
+  s = sum({x[i] * i for i in 1:3});
+end AC3;
+//// model: BL1
+model BL1
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Boolean a2[:] = not b;
+  Boolean a3[:] = b and b2;
+  Boolean a5[:] = {false, false, true, true} or {true, false, true, false};
+  Boolean a6[:] = false:true;
+  Boolean c1[:] = true:false;
+  Boolean g3[2] = b and not b2;
+  Boolean g5[2] = (b and b2) or b;
+  Boolean g9[2] = {true, false} or b;
+  parameter Boolean pc[2] = not pb;
+  parameter Boolean pd[2] = pb and {true, true};
+  Boolean v[2];
+  Boolean w[2];
+equation
+  v = {true, false} or b;
+  w = false:true;
+end BL1;
+//// model: BT1
+model BT1
+  discrete Integer i(start = 1);
+  Real a = smooth(0, i);
+  Integer b = sign(i);
+  Real c = smooth(1, time);
+  Real d = max(i, time);
+equation
+  when time > 1 then
+    i = 2;
+  end when;
+end BT1;
+//// model: C1
+class C1
+  Real x = time;
+end C1;
+//// model: C2
+class C2
+  Real x;
+equation
+  x = time;
+end C2;
+//// model: C3
+class C3
+  Real x[2];
+equation
+  x = {1, 2};
+end C3;
+//// model: CA1
+model A
+  Real x[2];
+end A;
+model CA1
+  A a[2](x = {{1, 2}, {3, 4}});
+end CA1;
+//// model: CA2
+model A
+  Real x;
+end A;
+model M
+  A a[2];
+  Real y = a[3].x;
+end M;
+//// model: CD1
+model CD1
+  Real x[:] = {1, 2, 3};
+  discrete Integer n(start = 1);
+  Real z = (x)[n];
+  Real w[3] = 2 * x;
+equation
+  when time > 1 then
+    n = 2;
+  end when;
+end CD1;
+//// model: CE1
+model CE1
+  constant Integer intArray1[3] = {4, 8, 12};
+  constant Integer intArray2[3] = {2, 4, 6};
+  Integer intArray[3];
+  Integer sub[3];
+equation
+  intArray = intArray1 .+ intArray2;
+  sub = intArray1 - intArray2;
+end CE1;
+//// model: CE2
+model CE2
+  constant Integer a[3] = {4, 8, 12};
+  Integer x[3];
+equation
+  x = a;
+end CE2;
+//// model: CE3
+model CE3
+  constant Integer a[3] = {4, 8, 12};
+  constant Real m[2, 2] = {{1, 2}, {3, 4}};
+  Real y[3] = a;
+  Real s = sum(a);
+  Real z[2, 2];
+  Real w[3];
+  Real v = a * {1, 2, 3};
+  parameter Real p[3] = a;
+equation
+  z = m;
+  w = 2 * a;
+end CE3;
+//// model: CI1
+package P1
+  record S
+    Real a = 1;
+    Real b = 2;
+  end S;
+end P1;
+package P2
+  record S
+    Real b = 3;
+    Real a = 4;
+  end S;
+end P2;
+model CI1
+  P1.S s = P2.S(a = 5);
+end CI1;
+//// model: CI2
+package P1
+  record S
+    Real a = 1;
+    Real b = 2;
+  end S;
+end P1;
+package P2
+  record S
+    Real b = 3;
+    Real a = 4;
+  end S;
+end P2;
+model CI2
+  P1.S s = P2.S(a = time);
+end CI2;
+//// model: CT1
+model CT1
+  Real x[3] = {time, 2, 3};
+  Real a[5] = cat(1, {1, 2}, {3, 4, 5});
+  Real b[5] = cat(1, x, {7, 8});
+  parameter Real p[4] = cat(1, {1, 2}, {3, 4});
+  Real m[2, 3] = cat(2, {{1}, {2}}, {{3, 4}, {5, 6}});
+  Real l[4] = linspace(0, 1, 4);
+  parameter Real q[3] = linspace(1, 2, 3);
+  Real v[3] = linspace(0, time, 3);
+end CT1;
+//// model: CT2
+model CT2
+  Real x[3];
+  Real a[5] = cat(1, {1, 2}, {3, 4, 5});
+  Real b[5] = cat(1, x, {7, 8});
+  parameter Real p[4] = cat(1, {1, 2}, {3, 4});
+  Real m[2, 3] = cat(2, {{1}, {2}}, {{3, 4}, {5, 6}});
+  Integer i[4] = cat(1, {1, 2}, {3, 4});
+equation
+  x = {time, 2, 3};
+end CT2;
+//// model: CT3
+model CT3
+  Real x[3] = {time, 2, 3};
+  Real b[5] = cat(1, x, {7, 8});
+  parameter Real k = 2;
+  parameter Real p[2] = {k, 3};
+  Real m[2, 3] = cat(2, {{1}, {2}}, {{3, 4}, {5, 6}});
+  Integer i[4] = cat(1, {1, 2}, {3, 4});
+end CT3;
+//// model: CW1
+record R
+  Real x;
+  Real y = 9;
+end R;
+model CW1
+  parameter R r1 = R(1, 2);
+  parameter R rs[2] = {R(3, 4), r1};
+  parameter R rt[2] = rs;
+  parameter R ru[:] = {r1, R(5), rs[1]};
+  R rv[2](each x(start = 1)) = {r1, r1};
+  R rw[2](x = {7, 8}) = rs;
+end CW1;
+//// model: D1
+model D1
+  parameter Real T = 0.5;
+  Real x = sin(time);
+  Real y1 = delay(x, 0.1);
+  Real y2 = delay(x, T);
+  Real y3 = delay(x, T, 1.0);
+  Real y4 = delay(x, 0);
+  Real y5 = delay(x, time / 10, 1.0);
+end D1;
+//// model: DP1
+model DP1
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real y[3];
+  Real z[3];
+  Real k1[3] = der(x);
+  Real k2[3] = 2 * der(x);
+  Boolean v[2];
+  Boolean w[2];
+  Boolean d7[2] = edge(b);
+  Boolean d9[2] = change(b);
+equation
+  der(y) = -A * y + x;
+  z = der(x) + x;
+  v = pre(b) and b2;
+  w = pre(b);
+end DP1;
+//// model: EM1
+model A
+  Real x;
+  Real y = 1;
+end A;
+model B
+  A a[2];
+end B;
+model EM1
+  B b[2](a.x = {{1, 2}, {3, 4}}, a(each y = 5));
+  B c(a(x = {6, 7}));
+end EM1;
+//// model: EV1
+model EV1
+  parameter Real p = 2 annotation(Evaluate = true);
+  parameter Real q = p * 3;
+  Real x = p * time;
+  parameter Integer n = 3 annotation(Evaluate = true);
+  Real y[n] = fill(time, n);
+  parameter Real r = q + 1 annotation(Evaluate = true);
+  parameter Real s(start = 4) annotation(Evaluate = true);
+  parameter Real t = s + 1;
+  parameter Real u = 5 annotation(Evaluate = false);
+equation
+  if p > 1 then
+    x = y[1];
+  end if;
+end EV1;
+//// model: EVT1
+model EVT1
+  record R
+    parameter Real x = 1;
+    parameter Real w = x;
+  end R;
+  model M
+    parameter Real g = 1 annotation(Evaluate = true);
+    parameter Real h = 1;
+    Real y = (g + h) * time;
+  end M;
+  parameter Real p = 2 annotation(Evaluate = true);
+  parameter Real a = 1;
+  parameter Real b = 2 * a annotation(Evaluate = true);
+  parameter Real q = p;
+  parameter Real r = q;
+  parameter Real s = -p;
+  parameter Integer n = 2;
+  parameter Integer m = n;
+  parameter Real t = n;
+  parameter R r1(x = p);
+  parameter R r2 = r1;
+  M m1(g = 3, h = p);
+  Real z[n];
+  Real x = (p + b + r + s + m + t + r2.x) * time;
+end EVT1;
+//// model: EVT2
+model EVT2
+  parameter Real q = 3 annotation(Evaluate = false);
+  parameter Real p = q annotation(Evaluate = true);
+  Real x = p * time;
+end EVT2;
+//// model: FC1
+record R
+  Real x;
+  final constant Real y = x / 2.0;
+  Real z;
+end R;
+model FC1
+  constant R r = R(1.0, 3.0);
+  constant R q(x = 4.0, z = 5.0);
+  constant Real w = r.y + q.y;
+end FC1;
+//// model: FS1
+function f1
+  input Real a[3];
+  input Integer b[2, 2];
+  input Real c[:];
+  output Real s;
+  output Integer t;
+  output Real u;
+  output Real p;
+algorithm
+  s := sum(a);
+  t := product(b);
+  u := sum(c);
+  p := product(a) + max(a) + min(c);
+end f1;
+model FS1
+  Real x;
+  Integer y;
+  Real z;
+  Real w;
+equation
+  (x, y, z, w) = f1({time, 1, 2}, {{1, 2}, {3, 4}}, {time, time});
+end FS1;
+//// model: FS2
+function f2
+  input Real a[3];
+  input Real b[3];
+  output Real s;
+algorithm
+  s := sum(a .* b);
+end f2;
+model FS2
+  Real x = f2({time, 1, 2}, {1, 2, 3});
+end FS2;
+//// model: FS3
+function f3
+  input Real a[3];
+  output Real s;
+protected
+  Real l[2] = {1, 2};
+  Real e[0];
+algorithm
+  s := sum(l) + sum(a[1:2]) + sum(e);
+end f3;
+model FS3
+  Real x = f3({time, 1, 2});
+end FS3;
+//// model: IF1
+model IF1
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean i1[2] = if time > 1 then b else b2;
+  Real i3[:] = if time > 1 then x else 2 * x;
+  Real i6[3] = if time > 1 then x else if time > 2 then 2 * x else {1, 2, 3};
+  Real i7[3] = (if time > 1 then x else 2 * x) + x;
+  Real i8[3] = if b[1] then sin(x) else x;
+  Real i9 = sum(if time > 1 then x else 2 * x);
+  Real j2[2] = if time > 1 then {1, 2} else {3, 4};
+  Real r9[3] = if time > 1 then q else {time, 1, 2};
+  Real r3[3] = if true then x else 2 * x;
+  Real r4[2] = if false then {1, 2} elseif false then {1} else {3, 4};
+  parameter Real q5[3] = if n == 2 then q else 2 * q;
+  Real y[3];
+equation
+  der(y) = if time > 1 then x else -y;
+end IF1;
+//// model: IF2
+model IF2
+  parameter Boolean b = true;
+  Real z;
+equation
+  if time > 1 then
+    z = 1;
+  elseif b then
+    z = 2;
+  else
+    z = 3;
+  end if;
+end IF2;
+//// model: IF3
+model A
+  parameter Boolean on = true;
+  Real x;
+equation
+  if on then
+    x = 1;
+  else
+    x = 2;
+  end if;
+end A;
+model IF3
+  parameter Real c = 2;
+  parameter Boolean b = c > 1;
+  Real x;
+  A a1(on = false);
+  A a2[2](on = {true, b});
+  Real y = if b then c else 0;
+equation
+  if b then
+    x = 1;
+  else
+    x = 2;
+  end if;
+end IF3;
+//// model: IF3r
+model IF3
+  parameter Real c = 2;
+  parameter Boolean b = c > 1;
+  Real x;
+equation
+  if b then
+    x = 1;
+  else
+    x = 2;
+  end if;
+end IF3;
+//// model: IR1
+model IR1
+  Real x[3, 2];
+  Real y[3];
+  parameter Boolean b(fixed = false);
+  Real z;
+initial equation
+  b = true;
+equation
+  for i loop
+    x[i] = {y[i], 2 * y[i]};
+    y[i] = i;
+  end for;
+  if b then
+    z = 1;
+  else
+    z = 2;
+  end if;
+end IR1;
+//// model: LB1
+model LB1
+  Boolean b1[:] = {false, false, true, true} or {true, false, true, false};
+  Boolean b2[4] = {false, false, true, true} and {true, false, true, false};
+  Boolean c[3];
+  Boolean e[:] = edge(c);
+  Boolean n[:] = not c;
+equation
+  c = {time > 1, time > 2, time > 3};
+end LB1;
+//// model: LB2
+model LB2
+  Boolean b1[:] = {false, false, true, true} or {true, false, true, false};
+  Boolean b2[4] = {false, false, true, true} and {true, false, true, false};
+  Boolean c[3];
+  Boolean n[:] = not c;
+  Boolean m[3] = not c;
+equation
+  c = {time > 1, time > 2, time > 3};
+end LB2;
+//// model: LS1
+model LS1
+  parameter Integer n = 3;
+  Real l[4] = linspace(0, 1, 4);
+  parameter Real q[3] = linspace(1, 2, 3);
+  Real v[n] = linspace(-1, time, n);
+equation
+end LS1;
+//// model: N1
+model N1
+  parameter Real p = 2;
+  Real x = time;
+  Real a = noEvent(x);
+  Real b = noEvent(p);
+  Real c = noEvent(3.0);
+  Real e = noEvent(if x > 1 then x else -x);
+  Real f = noEvent(abs(x));
+  Real g = noEvent(x + p);
+  parameter Real q = noEvent(p * 2);
+end N1;
+//// model: NA1
+model NA1
+  Real x = time;
+  Real a = semiLinear(x, negativeSlope = 2, positiveSlope = 3);
+  Real b = smooth(expr = x * x, p = 1);
+  Real c = homotopy(simplified = 1, actual = x);
+end NA1;
+//// model: NA2
+model NA2
+  Real x = time;
+  Real a = semiLinear(x, negativeSlope = 2, positiveSlope = 3);
+  Real c = homotopy(simplified = 1, actual = x);
+end NA2;
+//// model: NA3
+model NA3
+  Real x = time;
+  Real b = smooth(p = 1, x * x);
+end NA3;
+//// model: NInline1
+// name: Inline1
+// keywords: inline, function
+// status: correct
+//
+// Test case for inline annotations
+//
+
+function simpleInline
+  input Integer inInt;
+  output Integer outInt;
+  annotation(Inline = true);
+algorithm
+  outInt := (inInt + 2 + 3 - inInt) * inInt;
+end simpleInline;
+
+model Inline1
+  Integer x;
+  Integer y;
+equation
+  x = 2;
+  y = (2 + simpleInline(x)) * (simpleInline(x + 8) / 2);
+  
+end Inline1;
+
+//// model: NInline2
+// name: Inline2
+// keywords: inline, function
+// status: correct
+//
+// Test case for inline annotations
+//
+
+function simpleInline
+  input Integer inInt;
+  output Integer outInt;
+  annotation(Inline = true);
+algorithm
+  outInt := inInt + simpleInline2(inInt + 10);
+end simpleInline;
+
+function simpleInline2
+  input Integer inInt2;
+  output Integer outInt2;
+  annotation(Inline = true);
+algorithm
+  outInt2 := inInt2 * 3;
+end simpleInline2;
+
+model Inline2
+  Integer x;
+  Integer y;
+equation
+  x = 2;
+  y = (2 + simpleInline(x)) * (simpleInline(x + 8) / 2);
+  
+end Inline2;
+
+//// model: NInline4
+// name: Inline4
+// keywords: function, inline
+// status: correct
+//
+// Tests inline functions passed to inline functions as arguments
+//
+
+function inlineTwoArgs
+  input Integer inInt1;
+  input Integer inInt2;
+  output Integer outInt;
+  annotation(Inline = true);
+algorithm
+  outInt := (inInt1 + inInt2) * (inInt1 - inInt2);
+end inlineTwoArgs;
+
+function simpleInline
+  input Integer inInt;
+  output Integer outInt;
+  annotation(Inline = true);
+algorithm
+  outInt := inInt + 2;
+end simpleInline;
+
+model Inline4
+  Integer x,y,z;
+equation
+  x = 4;
+  y = x + 4;
+  z = inlineTwoArgs(x, inlineTwoArgs(x, simpleInline(y)));
+  
+end Inline4;
+
+//// model: NInline5
+// name: Inline5
+// keywords: inline, function
+// status: correct
+//
+// Test case for inline annotations
+//
+
+model Inline5
+
+function simpleInline
+  input Integer inInt;
+  output Integer outInt;
+  annotation(Inline = true);
+algorithm
+  outInt := (inInt + 2 + 3 - inInt) * inInt;
+end simpleInline;
+
+  Integer x;
+  Integer y;
+equation
+  x = 2;
+  y = (2 + simpleInline(x)) * (simpleInline(x + 8) / 2);
+  
+end Inline5;
+
+//// model: NInline6
+// name: Inline6
+// keywords: inline, function
+// status: correct
+//
+// Test case for inline annotations
+//
+
+function simpleInline
+  input Integer[:] inInt;
+  output Integer outInt;
+  annotation(Inline = true);
+algorithm
+  outInt := inInt[1];
+end simpleInline;
+
+model Inline6
+  Integer[1] x;
+  Integer y;
+equation
+  x[1] = 2;
+  y = simpleInline(x);
+  
+end Inline6;
+
+//// model: PA1
+package P
+  constant Real x[2] = {1, 2};
+end P;
+model PA1
+  Real y[2] = P.x;
+  Real z = P.x[2];
+end PA1;
+//// model: PS1
+model PS1
+  Real x[2, 3];
+  Real y[3] = x[2];
+  Real s = sum(x[1]);
+equation
+  x[1] = {1, 2, 3};
+  x[2] = {time, 2 * time, 3};
+end PS1;
+//// model: QP1
+package P
+  record R1
+    Real r = 5;
+  end R1;
+  record R2
+    R1 r1;
+    Real z = 3;
+  end R2;
+  constant Real x[2] = {1, 2};
+  constant R1 a(r = 2.0);
+  constant R2 b(r1 = R1(r = 4.0));
+  constant R2 c[2](each r1 = R1(r = 6.0), z = {7, 8});
+  constant R1 d[3];
+end P;
+model QP1
+  Real y[2] = P.x;
+  Real u = P.x[2];
+  constant Real v1 = P.a.r;
+  Real v2 = P.b.r1.r;
+  Real v3 = P.c[2].z + P.c[1].r1.r;
+  Real v4 = P.d[3].r;
+  Real v5 = P.b.z;
+end QP1;
+//// model: R1
+model R1
+  Real x[3];
+  Real y[3] = -{i * time for i in 1:3};
+  Real z[3];
+equation
+  x = 2 * {i * time for i in 1:3};
+  z = {i * time for i in 1:3} + x;
+end R1;
+//// model: R2
+model R2
+  parameter Real q[3] = 2 * linspace(1, 2, 3);
+  parameter Real r[3] = -{i for i in 1:3};
+  parameter Real p[3] = {i * 1.5 for i in 1:3} + q;
+  Real s = {i * time for i in 1:3} * {1, 2, 3};
+  Real t = sum(2 * {i * time for i in 1:2});
+end R2;
+//// model: R2t
+model R2
+  parameter Real q[3] = 2 * linspace(1, 2, 3);
+  parameter Real r[3] = -{i for i in 1:3};
+  parameter Real p[3] = {i * 1.5 for i in 1:3} + q;
+  Real t = sum(2 * {i * time for i in 1:2});
+end R2;
+//// model: RB1
+record R
+  Real x;
+  Real y;
+end R;
+model RB1
+  parameter R r1 = R(1, 2);
+  parameter R r2 = r1;
+  constant R c1 = R(3, 4);
+  R v1 = c1;
+  R v2 = r1;
+  R v3;
+  R v4 = v3;
+  parameter Boolean b = true;
+  parameter R r3 = if b then r1 else R(5, 6);
+  R v5(x(start = 1)) = v3;
+  final parameter R r4 = r1;
+  parameter R r5 = R(r1.x, 7);
+equation
+  v3 = R(time, 2*time);
+end RB1;
+//// model: RB2
+record R
+  Real x;
+  Real y;
+end R;
+record R2
+  R r;
+  Real z;
+end R2;
+model RB2
+  parameter R r1 = R(1, 2);
+  parameter R r2 = r1;
+  constant R c1 = R(3, 4);
+  R v1 = c1;
+  R v2 = r1;
+  R v3(x = time, y = 2*time);
+  R v4 = v3;
+  final parameter R r4 = r1;
+  parameter R r5 = R(r1.x, 7);
+  constant R c2 = c1;
+  parameter R2 q1(r = r1, z = 3);
+  parameter R2 q2 = q1;
+  R ra[2](each x = 1, y = {2, 3});
+  R v6 = ra[2];
+end RB2;
+//// model: RB3
+record R
+  Real x;
+  Real y;
+end R;
+model RB3
+  R v3;
+  R v4;
+equation
+  v3 = R(time, 2*time);
+  v4 = v3;
+end RB3;
+//// model: RB7a
+record R
+  Real x;
+  final constant Real y = x / 2.0;
+  Real z;
+end R;
+model RB7a
+  constant R r = R(1.0, 3.0);
+end RB7a;
+//// model: RB7b
+record R
+  Real x;
+  final constant Real y = x / 2.0;
+  Real z;
+end R;
+model RB7b
+  constant R r(x = 1.0, z = 3.0);
+end RB7b;
+//// model: RC1
+record R
+  Real x;
+  Real y = 2;
+  Integer n = 3;
+end R;
+model RC1
+  R v1;
+  R v2;
+  R v3;
+  parameter Real p = 5;
+equation
+  v1 = R(time, 2*time, 1);
+  v2 = R(x = time);
+  v3 = R(p, n = 4);
+end RC1;
+//// model: RE1
+record P
+  Real a;
+  Real b = 1;
+end P;
+model RE1
+  P p1;
+  P p2 = if time > 1 then P(1, 2) else P(a = 3);
+  parameter Real k = 2;
+  parameter P p3 = if k > 3 then P(1, 2) else P(a = k);
+equation
+  p1 = P(time, 2 * time);
+end RE1;
+//// model: RF1
+record R
+  Real a;
+  Real b;
+end R;
+function f
+  input Real x;
+  output R r;
+algorithm
+  r := R(x, 2*x);
+end f;
+model RF1
+  R r1 = f(time);
+  parameter Real p = 2;
+  parameter R r2 = f(p);
+  Real y = r1.a;
+end RF1;
+//// model: RF2
+record R
+  Real a;
+  Real b;
+end R;
+function f
+  input Real x;
+  output R r;
+algorithm
+  r.a := x;
+  r.b := 2*x;
+end f;
+model RF2
+  R r1 = f(time);
+  parameter Real p = 2;
+  parameter R r2 = f(p);
+  Real y = r1.a;
+end RF2;
+//// model: RG1
+model RG1
+  Integer x[5] = 1:5;
+  Real r[3] = 0.5:0.5:1.5;
+  parameter Integer p[3] = 2:4;
+  Real v[4] = 1.0 : 2 : 8;
+  Integer w[3] = 3 : -1 : 1;
+end RG1;
+//// model: RG2
+model RG2
+  Real r[3] = 1:3;
+  Real s[4] = 1.0:2:8;
+  parameter Real q[3] = 1:3;
+end RG2;
+//// model: RM1
+record R
+  Real x = 1;
+  Real y = 2;
+end R;
+model RM1
+  R a;
+  R b(x(start = 3)) = a;
+  R d(y(min = 0)) = R(4, 5);
+  R e(x(start = 3), y(fixed = true)) = R(y = 6, x = 7);
+end RM1;
+//// model: RM2
+record R
+  Real x = 1;
+  Real y = 2;
+end R;
+model RM2
+  R a;
+  R c(x = 5) = a;
+end RM2;
+//// model: RM3
+record R
+  Real x = 1;
+  Real y = 2;
+end R;
+model M
+  R r;
+end M;
+model RM3
+  R a;
+  M m(r = a, r(x(start = 9)));
+  M m2(r(y(start = 8)) = a);
+end RM3;
+//// model: RM4
+record R
+  Real x = 1;
+  Real y = 2;
+end R;
+model RM4
+  R d(y = 3) = R(x = 4);
+  R e(y(start = 5)) = R(x = 4);
+  parameter Real p = 7;
+  R f(y = p) = R(x = 4);
+end RM4;
+//// model: RO3
+record R1
+  Real x;
+  Real y;
+end R1;
+record R2
+  Real y;
+  Real x;
+end R2;
+record R3
+  Real x;
+  Real y;
+end R3;
+model RO3
+  R1 r1;
+  R2 r2 = r1;
+end RO3;
+model RO4
+  R1 r1;
+  R2 r2;
+equation
+  r1 = r2;
+end RO4;
+model RO5
+  R1 r1;
+  R3 r3 = r1;
+  R3 r4;
+equation
+  r1 = r4;
+end RO5;
+//// model: RO3_
+record R1
+  Real x;
+  Real y;
+end R1;
+record R2
+  Real y;
+  Real x;
+end R2;
+record R3
+  Real x;
+  Real y;
+end R3;
+model RO3_
+  R1 r1;
+  R2 r2 = r1;
+end RO3_;
+//// model: RO4_
+record R1
+  Real x;
+  Real y;
+end R1;
+record R2
+  Real y;
+  Real x;
+end R2;
+record R3
+  Real x;
+  Real y;
+end R3;
+model RO4_
+  R1 r1;
+  R2 r2;
+equation
+  r1 = r2;
+end RO4_;
+//// model: RO5_
+record R1
+  Real x;
+  Real y;
+end R1;
+record R2
+  Real y;
+  Real x;
+end R2;
+record R3
+  Real x;
+  Real y;
+end R3;
+model RO5_
+  R1 r1;
+  R3 r3 = r1;
+  R3 r4;
+equation
+  r1 = r4;
+end RO5_;
+//// model: S1
+model S1
+  Real x = time;
+  Integer n = 3;
+  Boolean b = true;
+  parameter Real p = 1.5;
+  String s1 = String(x);
+  String s2 = String(n);
+  String s3 = String(b);
+  String s4 = String(p, significantDigits = 3);
+  String s5 = String(n, minimumLength = 4, leftJustified = false);
+  String s6 = String(2.5);
+  String s7 = String(x, format = "6.2f");
+end S1;
+//// model: S2
+type E = enumeration(one, two);
+model S2
+  String a = String(1/3);
+  String b = String(1e10);
+  String c = String(1e-7);
+  String d = String(100.0);
+  String e = String(3, minimumLength = 4);
+  String f = String(3, minimumLength = 4, leftJustified = false);
+  String g = String(true, minimumLength = 6);
+  String h = String(2.5, significantDigits = 2);
+  String i = String(2.5, format = "6.2f");
+  String j = String(E.two);
+  String k = String(-0.5);
+  String l = String(123456789.0);
+end S2;
+//// model: S3
+type E = enumeration(one, two);
+model S3
+  String a = String(1/3);
+  String d = String(100.0);
+  String e = String(3, minimumLength = 4);
+  String f = String(3, minimumLength = 4, leftJustified = false);
+  String g = String(true, minimumLength = 6);
+  String h = String(2.5, significantDigits = 2);
+  String i = String(2.5, format = "6.2f");
+  String j = String(E.two);
+  String k = String(-0.5);
+end S3;
+//// model: SE1
+model SE1
+  Integer n;
+  Real y = ({1, 2 ,3})[n];
+end SE1;
+//// model: SE2
+model SE2
+  Real x[:] = {1, 2, 3};
+  Integer n;
+  Real z = (x)[n];
+end SE2;
+//// model: SE3
+model SE3
+  discrete Integer n(start = 1);
+  Real x[3] = {1, 2, 3} "c x";
+  parameter Real p[2] = {4, 5} "c p";
+  Real y = ({1, 2, 3})[n];
+  Real z = ({1, 2, 3})[2];
+  Real m[2, 3];
+  Real u = m[1, n];
+  Real v = x[n + 1];
+equation
+  m = {{1, 2, 3}, {4, 5, 6}};
+  when time > 1 then
+    n = 2;
+  end when;
+end SE3;
+//// model: SEL1
+model SEL1
+  parameter Integer n = 2;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  Real x[3] = {time, 1, 2};
+  Real a1[2] = if pt then {1, 2} else {3, 4, 5};
+  Real a4[:] = if n == 2 then x else {1, 2};
+  Real b5[:, :] = if n == 2 then ones(n, 3) else ones(n, n);
+  Real y[3];
+equation
+  y = if pf then {1, 2} else x;
+end SEL1;
+//// model: SR1
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+model SR1
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real s1 = sum({1, 2, time});
+  Real s3 = product({2, 3, time});
+  Real s4 = sum({i for i in 1:3});
+  Real s5 = sum({i * 1.0 for i in 1:3});
+  Real s7 = sum({F(1, 2), F(2, 2)});
+  parameter Real s12 = sum({1, 2, q[1]});
+  Integer s13 = sum({1, 2, 3});
+  Real s15 = sum({x[1], 0, x[2]});
+  Real s20 = sum({1, 2} .* {3, 4});
+  Real s27 = sum(linspace(0, 1, 3));
+  Real m2 = max({i for i in 1:3});
+  Real m5 = max(linspace(0, 1, 3));
+  Real m6 = max(sin({1, 2, 3}));
+  Real m9 = max({F(1, 2), F(2, 2)});
+  Real m20 = sum(-x);
+  Real bt = sum(sin({1, 2, 3}));
+  Real bj[3] = sin({1, 2, 3});
+end SR1;
+//// model: T
+model T
+  Real w[2, 3] = {{i * j for j in 1:3} for i in 1:2};
+end T;
+//// model: TM1
+model TM1
+  parameter Integer m = 2;
+  parameter Integer n = m;
+  Real x[n];
+  Real y = m;
+end TM1;
+//// model: T_RM1
+record R
+  Real x = 1;
+  Real y = 2;
+end R;
+model RM1
+  R a;
+  R b(x(start = 3)) = a;
+  R d(y(min = 0)) = R(4, 5);
+  R e(x(start = 3), y(fixed = true)) = R(y = 6, x = 7);
+  R c(x = 5) = a;
+end RM1;
+//// model: T_RO5
+record R1
+  Real x;
+  Real y;
+end R1;
+record R2
+  Real y;
+  Real x;
+end R2;
+record R3
+  Real x;
+  Real y;
+end R3;
+model RO5
+  R1 r1;
+  R3 r3 = r1;
+  R3 r4;
+equation
+  r1 = r4;
+end RO5;
+//// model: UP1
+model UP1
+  parameter Real p(start = 2);
+  Real x = p;
+  parameter Integer n(start = 3, fixed = true);
+  parameter Real q;
+end UP1;
+//// model: UP2
+model UP2
+  parameter Real p(start = 2);
+  Real x = p;
+end UP2;
+//// model: UP3
+model UP3
+  parameter Real p[2](start = {1, 2});
+  parameter Real q[2](each start = 3);
+  parameter Real r(start = 4, fixed = true);
+  parameter Real s(start = 5, fixed = false);
+  parameter Real k = 6;
+  parameter Real t(start = k);
+end UP3;
+//// model: UP4
+type T = Real(start = 1);
+model UP4
+  parameter T p;
+end UP4;
+//// model: V1
+model V1
+  Real a[3] = {time, 1, 2};
+  Real b[3];
+  Real c[3] = sin(a);
+  Real d[2,3];
+  Real e[2,3];
+equation
+  b = sin(a);
+  d = {{time, 1, 2}, {3, 4, 5}};
+  e = cos(d) + sin(d);
+end V1;
+//// model: V2
+model V2
+  function F
+    input Real a;
+    input Real b;
+    output Real c = a + b;
+  end F;
+  Real b[3] = {time, 1, 2};
+  Real c[3];
+  Real d[3];
+  Real g[3] = F(b, 2);
+equation
+  c = F(1, b);
+  d = {F(b[i], i) for i in 1:3};
+end V2;
+//// model: V3
+model V3
+  parameter Real q[3] = {1, 2, 3};
+  parameter Real p[3] = sin(q);
+  Real x[3] = {time, 1, 2};
+  Real s = sum(sin(x));
+  Real w[2,3] = {{time, 1, 2}, {3, 4, 5}};
+  Real v[2,3] = cos(w);
+  Integer k[3] = {1, 2, 3};
+  Real u[3] = sin(k);
+  Real m[3] = sin({1, 2, time});
+  Real n[3] = abs(x);
+  Real d[3] = der(x);
+  Real e[3] = exp(2 * x);
+  Real f[3] = sin(x[1:3]);
+  Real g[2] = sin(x[2:3]);
+  Real h[3] = sin(w[1, :]);
+end V3;
+//// model: VS1
+model VS1
+  Real x[3] = {1, 2, 3};
+  discrete Integer n(start = 1);
+  Real y = x[n];
+  Real z;
+  Real m[2, 3];
+  Real u = m[1, n];
+  Real v = x[n + 1];
+equation
+  z = x[n] + 1;
+  m = {{1, 2, 3}, {4, 5, 6}};
+  when time > 1 then
+    n = 2;
+  end when;
+end VS1;
+//// model: VT1
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+model VT1
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real a[3] = F(x, 2);
+  Real c = sum(F(x, 1));
+  parameter Real d[3] = F(q, 1);
+  Real e = G(F(x, 1));
+  Real g[3] = F({1, 2, time}, 2);
+  Real n[2, 3] = F(w, 1);
+  Real p[3] = F(k, 1);
+  Real v[3] = F(w[1, :], 1);
+  Real ac[3] = atan2(x, x);
+  Real ah[3] = abs(k);
+  Real aj[3] = sin(q);
+  Real t[3](start = {i for i in 1:3});
+  Real u[3];
+equation
+  u = array(F(x[i], i) for i in 1:3);
+end VT1;
+//// model: XR1
+record R
+  Real x;
+  Real y;
+end R;
+model XR1
+  R r[2](x = {1, 2}, y = {3, 4});
+  Real a[2] = r.x;
+  parameter R p[2](x = {1, 2}, y = {3, 4});
+  parameter Real b[2] = p.x;
+  Real c = sum(r.y);
+  Real d[2];
+equation
+  d = r.y;
+end XR1;
+//// model: XR2
+model A
+  Real x;
+end A;
+model XR2
+  A a[3, 2](x = {{1, 2}, {3, 4}, {5, 6}});
+  Real y[2] = a[1].x;
+  Real z[3, 2] = a.x;
+  parameter Integer k = 2;
+  Real w[2] = a[k].x;
+end XR2;
+//// model: XR3
+model A
+  Real x;
+end A;
+model XR3
+  A a[3, 2](x = {{1, 2}, {3, 4}, {5, 6}});
+  parameter Integer k = 2;
+  Real v = a[k, 1].x;
+end XR3;

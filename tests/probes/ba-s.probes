@@ -1,0 +1,253 @@
+//// set: ba-s — Boolean 数组表达式
+//// model: S0
+model S0
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  der(y) = x;
+end S0;
+//// model: S1
+model S1
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  der(y) = {1, 2, 3};
+end S1;
+//// model: S10
+model S10
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  y = 2 * der(x);
+end S10;
+//// model: S11
+model S11
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real k1[3] = der(x);
+end S11;
+//// model: S12
+model S12
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real k2[3] = der(x) + x;
+end S12;
+//// model: S13
+model S13
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real k3[3] = 2 * der(x);
+end S13;
+//// model: S14
+model S14
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean k4[2] = pre(b) and b2;
+end S14;
+//// model: S15
+model S15
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  y = noEvent(x);
+end S15;
+//// model: S16
+model S16
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  y = smooth(1, x);
+end S16;
+//// model: S17
+model S17
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  y = homotopy(x, x);
+end S17;
+//// model: S18
+model S18
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  y = x;
+end S18;
+//// model: S19
+model S19
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  v = change(b);
+end S19;
+//// model: S2
+model S2
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  y = der(x);
+end S2;
+//// model: S20
+model S20
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  der(y[1:2]) = x[1:2];
+end S20;
+//// model: S21
+model S21
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  y[1:2] = der(x[2:3]);
+end S21;
+//// model: S3
+model S3
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  der(y) = 2 * x;
+end S3;
+//// model: S4
+model S4
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  y = pre(x);
+end S4;
+//// model: S5
+model S5
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  v = pre(b) and b2;
+end S5;
+//// model: S6
+model S6
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  v = {pre(b[1]), b2[2]};
+end S6;
+//// model: S7
+model S7
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  der(y) = -y;
+end S7;
+//// model: S8
+model S8
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  y = der(x) + x;
+end S8;
+//// model: S9
+model S9
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  der(y) = sin(x);
+end S9;

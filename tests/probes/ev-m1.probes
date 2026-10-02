@@ -1,0 +1,98 @@
+//// set: ev-m1 — Evaluate 注解
+//// model: EV0
+model EV0
+  parameter Real p = 2 annotation(Evaluate = true);
+  Real x = p * time;
+end EV0;
+//// model: EV1
+model EV1
+  parameter Real a = 1;
+  parameter Real b = 2 * a annotation(Evaluate = true);
+  Real x = a * time + b;
+end EV1;
+//// model: EV10
+model EV10
+  parameter Real p = 2 annotation(Evaluate = true);
+  parameter Real q(start = p) = 3;
+  Real x(start = p) = time;
+end EV10;
+//// model: EV11
+model EV11
+  constant Real c = 2 annotation(Evaluate = true);
+  Real x = c * time annotation(Evaluate = true);
+end EV11;
+//// model: EV12
+model EV12
+  parameter Real p = 2 annotation(Evaluate = true);
+  Real x;
+equation
+  if p > 1 then
+    x = time;
+  else
+    x = 2 * time;
+  end if;
+end EV12;
+//// model: EV13
+model EV13
+  parameter Real p = time annotation(Evaluate = true);
+end EV13;
+//// model: EV14
+model EV14
+  record R
+    parameter Real k = 1 annotation(Evaluate = true);
+    Real v;
+  end R;
+  R r(v = time);
+  Real x = r.k * r.v;
+end EV14;
+//// model: EV2
+model EV2
+  parameter Real p(start = 1) annotation(Evaluate = true);
+  Real x = p * time;
+end EV2;
+//// model: EV3
+model EV3
+  parameter Real p(fixed = false) annotation(Evaluate = true);
+  Real x = p * time;
+initial equation
+  p = 3;
+end EV3;
+//// model: EV4
+model EV4
+  final parameter Real p = 2 annotation(Evaluate = true);
+  Real x = p * time;
+end EV4;
+//// model: EV5
+model EV5
+  parameter Real p = 2 annotation(Evaluate = false);
+  Real x = p * time;
+end EV5;
+//// model: EV6
+model EV6
+  parameter Integer n = 2 annotation(Evaluate = true);
+  parameter Boolean b = true annotation(Evaluate = true);
+  parameter String s = "a" annotation(Evaluate = true);
+  Real x = if b then n * time else 0;
+end EV6;
+//// model: EV7
+model EV7
+  parameter Real x[3] = {1, 2, 3} annotation(Evaluate = true);
+  Real y = x[2] * time;
+  Real z[3] = x;
+end EV7;
+//// model: EV8
+model EV8
+  model M
+    parameter Real p = 1 annotation(Evaluate = true);
+    Real x = p * time;
+  end M;
+  M m(p = 3);
+  M m2;
+end EV8;
+//// model: EV9
+model EV9
+  parameter Real a = 1;
+  parameter Real p = a + 1 annotation(Evaluate = true);
+  parameter Real q = p * 2;
+  Real x = q * time;
+end EV9;

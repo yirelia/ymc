@@ -1,0 +1,186 @@
+//// set: ao-a2 — 结构标记：实例化期 / 定型期 / 方程段
+//// model: AO0
+model AO0
+  parameter Boolean b = true;
+  parameter Boolean c = b;
+  Real x(fixed = b, start = 1);
+  parameter Boolean d = b;
+equation
+  der(x) = 1;
+end AO0;
+//// model: AO1
+model AO1
+  connector C
+    Real e;
+    flow Real f;
+  end C;
+  parameter Integer i = 1;
+  parameter Integer j = i;
+  C c[2];
+  C d;
+  parameter Integer k = i;
+equation
+  connect(c[i], d);
+end AO1;
+//// model: AO10
+model AO10
+  model B
+    parameter Integer j = i;
+    parameter Integer i = 1;
+  end B;
+  Real c[2] = {time, 2};
+  Real v = c[i];
+  extends B;
+  Real w = j * time;
+end AO10;
+//// model: AO11
+model AO11
+  model B
+    parameter Integer i = 1;
+    Real c[2] = {time, 2};
+    Real v = c[i];
+  end B;
+  parameter Integer j = i;
+  extends B;
+  Real w = j * time;
+end AO11;
+//// model: AO12
+model AO12
+  parameter Integer i0 = 1;
+  parameter Integer i = i0;
+  parameter Integer j = i;
+  parameter Integer j0 = i0;
+  Real c[2] = {time, 2};
+  Real v = c[i];
+  parameter Integer l = i;
+  parameter Integer l0 = i0;
+  Real w = (j + j0 + l + l0) * time;
+end AO12;
+//// model: AO13
+model AO13
+  parameter Integer n = 2;
+  parameter Integer m = n;
+  Real x[3] = {time, 1, 2};
+  Real s[:] = x[1:n];
+  parameter Integer k = n;
+  Real w = (m + k) * time;
+end AO13;
+//// model: AO14
+model AO14
+  parameter Integer n = 2;
+  parameter Integer m = n;
+  Real x[2] = {time, 1};
+  Real s = sum(i * x[i] for i in 1:n);
+  Real t = sum({i * time for i in 1:n});
+  parameter Integer k = n;
+  Real w = (m + k) * time;
+end AO14;
+//// model: AO15
+model AO15
+  parameter Integer n = 2;
+  parameter Integer m = n;
+  Real t = sum({i * time for i in 1:n});
+  parameter Integer k = n;
+  Real w = (m + k) * time;
+end AO15;
+//// model: AO16
+model AO16
+  parameter Integer n = 2;
+  parameter Integer m = n;
+  Real x[2] = {time, 1};
+  Real s = if n == 2 then x[1] else x[2];
+  parameter Integer k = n;
+  Real w = (m + k) * time;
+end AO16;
+//// model: AO17
+model AO17
+  parameter Boolean b = true;
+  parameter Boolean c = b;
+  Real x[2] = {time, 1};
+  parameter Boolean d = b;
+  Real w = if c and d then time else 1;
+equation
+  if b then
+    x[1] = x[2];
+  end if;
+end AO17;
+//// model: AO2
+model AO2
+  parameter Integer n = 2;
+  parameter Integer m = n;
+  Real x[2] = {i * time for i in 1:n};
+  parameter Integer k = n;
+  Real w = (m + k) * time;
+end AO2;
+//// model: AO3
+model AO3
+  parameter Real q[2] = {1, 2};
+  parameter Integer n = 2;
+  parameter Integer m = n;
+  Real s(start = q[n]) = time;
+  parameter Integer k = n;
+  Real w = (m + k) * time;
+end AO3;
+//// model: AO4
+model AO4
+  model M
+    parameter Integer i = 1;
+    Real c[2] = {time, 2};
+    Real v = c[i];
+  end M;
+  parameter Integer p = 1;
+  parameter Integer a = p;
+  M m(i = p);
+  parameter Integer b = p;
+  Real w = (a + b) * time;
+end AO4;
+//// model: AO5
+model AO5
+  parameter Integer n = 2;
+  parameter Integer m = n;
+  Real x[2];
+  parameter Integer k = n;
+  Real w = (m + k) * time;
+equation
+  for i in 1:n loop
+    x[i] = time;
+  end for;
+end AO5;
+//// model: AO6
+model AO6
+  parameter Real a = 1;
+  parameter Real c = a;
+  parameter Real b = a annotation(Evaluate = true);
+  parameter Real d = a;
+  Real w = (c + d) * time;
+end AO6;
+//// model: AO7
+model AO7
+  parameter Integer n = 2;
+  parameter Integer m = n;
+  Real x[2] = fill(time, n);
+  parameter Integer k = n;
+  Real w = (m + k) * time;
+end AO7;
+//// model: AO8
+model AO8
+  model M
+    parameter Integer g = 1;
+  end M;
+  parameter Integer n = 2;
+  Real y[n];
+  M m(g = n);
+  parameter Integer h = m.g;
+  Real w = h * time;
+end AO8;
+//// model: AO9
+model AO9
+  model M
+    parameter Integer g = 1;
+  end M;
+  parameter Integer h = m.g;
+  M m(g = n);
+  parameter Integer n = 2;
+  Real y[n];
+  Real w = h * time;
+end AO9;

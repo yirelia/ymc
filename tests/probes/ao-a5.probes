@@ -1,0 +1,188 @@
+//// set: ao-a5 — 结构标记：子组件 / 属性 / when
+//// model: AO0
+model AO0
+  model M
+    parameter Integer n = 1;
+    Real y[n];
+  end M;
+  parameter Integer p = 2;
+  parameter Integer a = p;
+  M m(n = p);
+  parameter Integer b = p;
+  Real w = (a + b) * time;
+end AO0;
+//// model: AO1
+model AO1
+  model M
+    parameter Integer i = 1;
+    parameter Integer j = i;
+    Real c[2] = {time, 2};
+    Real v = c[i];
+    parameter Integer k = i;
+    Real w = (j + k) * time;
+  end M;
+  parameter Integer p = 1;
+  M m(i = p);
+end AO1;
+//// model: AO10
+model AO10
+  parameter Integer n = 2;
+  parameter Integer m = n;
+  Real x[2, 2] = {{time, 1}, {2, 3}};
+  Real s[2] = x[n, :];
+  parameter Integer k = n;
+  Real w = (m + k) * time;
+end AO10;
+//// model: AO11
+model AO11
+  parameter Integer n = 2;
+  parameter Integer m = n;
+  Real x[2](each start = n) = {time, 1};
+  parameter Integer k = n;
+  Real w = (m + k) * time;
+end AO11;
+//// model: AO12
+model AO12
+  parameter Real p = 2;
+  parameter Real a = p;
+  Real x(start = p) = time;
+  parameter Real b = p;
+  Real w = (a + b) * time;
+end AO12;
+//// model: AO13
+model AO13
+  parameter Integer n = 2;
+  parameter Integer m = n;
+  Real x[2] = {time, 1};
+  Real s;
+  parameter Integer k = n;
+  Real w = (m + k) * time;
+initial equation
+  s = x[n];
+equation
+  der(s) = 1;
+end AO13;
+//// model: AO14
+model AO14
+  parameter Integer n = 2;
+  parameter Integer m = n;
+  Real x[2] = {time, 1};
+  discrete Real s(start = 0);
+  parameter Integer k = n;
+  Real w = (m + k) * time;
+equation
+  when time > 1 then
+    s = x[n];
+  end when;
+end AO14;
+//// model: AO15
+model AO15
+  parameter Integer n = 2;
+  final parameter Integer m = n;
+  Real x[2] = {time, 1};
+  Real s = x[n];
+  final parameter Integer k = n;
+  Real w = (m + k) * time;
+end AO15;
+//// model: AO16
+model AO16
+  constant Integer c = 2;
+  parameter Integer n = c;
+  parameter Integer m = n;
+  Real x[2] = {time, 1};
+  Real s = x[n];
+  parameter Integer k = n;
+  Real w = (m + k) * time;
+end AO16;
+//// model: AO17
+model AO17
+  parameter Integer n = 2;
+  parameter Integer m(start = 1) = n;
+  Real x[2] = {time, 1};
+  Real s = x[m];
+  Real w = n * time;
+end AO17;
+//// model: AO2
+model AO2
+  record R
+    parameter Integer n = 2;
+  end R;
+  R r;
+  Real x[3] = {time, 1, 2};
+  parameter Integer a0 = r.n;
+  Real s = x[r.n];
+  parameter Integer a = r.n;
+  Real w = (a0 + a) * time;
+end AO2;
+//// model: AO3
+model AO3
+  parameter Integer q[2] = {1, 2};
+  Real x[3] = {time, 1, 2};
+  parameter Integer a0 = q[1];
+  Real s = x[q[1]];
+  parameter Integer a = q[1];
+  Real w = (a0 + a) * time;
+end AO3;
+//// model: AO4
+model AO4
+  parameter Boolean a = true;
+  parameter Boolean b = a;
+  parameter Boolean c = a;
+  Real x = 1 if b;
+  Real y = if c then time else 1;
+end AO4;
+//// model: AO5
+model AO5
+  model M
+    parameter Integer n = 1;
+    Real y[n];
+  end M;
+  parameter Integer p = 1;
+  parameter Integer a = p;
+  M m(n = p + 1);
+  Real w = a * time;
+end AO5;
+//// model: AO6
+model AO6
+  model M
+    Real x(start = 1);
+  equation
+    der(x) = 1;
+  end M;
+  parameter Boolean b = true;
+  parameter Boolean c = b;
+  M m(x(fixed = b));
+  parameter Boolean d = b;
+  Real w = if c and d then time else 1;
+end AO6;
+//// model: AO7
+model AO7
+  function f
+    input Real u;
+    output Real y = 2 * u;
+  end f;
+  parameter Integer n = 2;
+  parameter Integer m = n;
+  Real x[2] = {time, 1};
+  Real s = f(x[n]);
+  parameter Integer k = n;
+  Real w = (m + k) * time;
+end AO7;
+//// model: AO8
+model AO8
+  parameter Integer n = 2;
+  parameter Integer m = n;
+  Real x[2] = {time, 1};
+  Real s = if time > 1 then x[n] else x[1];
+  parameter Integer k = n;
+  Real w = (m + k) * time;
+end AO8;
+//// model: AO9
+model AO9
+  parameter Integer n = 1;
+  parameter Integer m = n;
+  Real x[2] = {time, 1};
+  Real s = x[n + 1];
+  parameter Integer k = n;
+  Real w = (m + k) * time;
+end AO9;

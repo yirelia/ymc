@@ -1,0 +1,190 @@
+//// set: v4-g — 同上（分组 g）
+//// model: G0
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model G0
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real bj[3] = sin({1, 2, 3});
+end G0;
+//// model: G1
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model G1
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real bk[3] = F({1, 2, 3}, 2);
+end G1;
+//// model: G2
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model G2
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  parameter Real bp[3] = F({1, 2, 3}, 2);
+end G2;
+//// model: G3
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model G3
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  parameter Real bq[3] = sin({1, 2, 3});
+end G3;
+//// model: G4
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model G4
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  constant Real br[3] = F({1, 2, 3}, 2);
+end G4;
+//// model: G5
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model G5
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real bs = sum(F({1, 2, 3}, 2));
+end G5;
+//// model: G6
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model G6
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real bt = sum(sin({1, 2, 3}));
+end G6;
+//// model: G7
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model G7
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real bu = G(F({1, 2, 3}, 2));
+end G7;
+//// model: G8
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model G8
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real bv[3](start = F({1, 2, 3}, 2));
+end G8;

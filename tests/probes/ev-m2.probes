@@ -1,0 +1,168 @@
+//// set: ev-m2 — 结构参数的别名连带
+//// model: EV0
+model EV0
+  parameter Real p = 2 annotation(Evaluate = true);
+  parameter Real q = p;
+  Real x = q;
+end EV0;
+//// model: EV1
+model EV1
+  parameter Integer n = 2 annotation(Evaluate = true);
+  Real y[n];
+equation
+  y = fill(time, n);
+end EV1;
+//// model: EV10
+model EV10
+  model B
+    parameter Real p = 1 annotation(Evaluate = true);
+  end B;
+  model M
+    extends B(p = 5);
+    Real x = p * time;
+  end M;
+  M m;
+end EV10;
+//// model: EV11
+model EV11
+  parameter Boolean b = false annotation(Evaluate = true);
+  Real x[if b then 2 else 3];
+equation
+  x = fill(time, 3);
+end EV11;
+//// model: EV12
+model EV12
+  parameter Real p = 2 annotation(Evaluate = true);
+  Real x;
+algorithm
+  x := p * time;
+end EV12;
+//// model: EV13
+model EV13
+  parameter Real p = 2 annotation(Evaluate = true);
+  Real x(start = p, fixed = true);
+equation
+  der(x) = -p * x;
+end EV13;
+//// model: EV14
+model EV14
+  parameter Integer n = 3 annotation(Evaluate = true);
+  Real x[n] = fill(n, n);
+end EV14;
+//// model: EV15
+model EV15
+  parameter Real p = 2 annotation(Evaluate = true);
+  parameter Real q = if p > 1 then 1 else 2;
+end EV15;
+//// model: EV16
+model EV16
+  parameter Real p = 2 annotation(Evaluate = true);
+  Real x;
+initial equation
+  x = p;
+equation
+  der(x) = 1;
+end EV16;
+//// model: EV17
+model EV17
+  protected parameter Real p = 2 annotation(Evaluate = true);
+  public Real x = p * time;
+end EV17;
+//// model: EV18
+model EV18
+  parameter Real a = 1;
+  parameter Real b = a annotation(Evaluate = true);
+  parameter Real c = a + 1;
+  Real x = c * time;
+end EV18;
+//// model: EV19
+model EV19
+  parameter Real a = 1 annotation(Evaluate = true);
+  parameter Real b = a + 1 annotation(Evaluate = true);
+  Real x = (a + b) * time;
+end EV19;
+//// model: EV2
+model EV2
+  model M
+    parameter Real p = 1 annotation(Evaluate = true);
+    Real x = p * time;
+  end M;
+  M m[2](p = {3, 4});
+end EV2;
+//// model: EV20
+model EV20
+  parameter Real p = 2 annotation(Evaluate = true);
+  Real x = time;
+equation
+  assert(x < p, "msg");
+end EV20;
+//// model: EV21
+model EV21
+  connector C
+    Real e;
+    flow Real f;
+  end C;
+  parameter Real p = 2 annotation(Evaluate = true);
+  C c;
+equation
+  c.e = p * time;
+end EV21;
+//// model: EV22
+model EV22
+  parameter Real p(min = 0, max = 10, unit = "m") = 2 annotation(Evaluate = true);
+  Real x = p * time;
+end EV22;
+//// model: EV23
+model EV23
+  parameter Real p = 2 "the gain" annotation(Evaluate = true);
+  Real x = p * time;
+end EV23;
+//// model: EV3
+model EV3
+  function f
+    input Real a;
+    output Real b = 2 * a;
+  end f;
+  parameter Real p = f(1) annotation(Evaluate = true);
+  Real x = p * time;
+end EV3;
+//// model: EV4
+model EV4
+  parameter Real q(fixed = false);
+  parameter Real p = 2 * q annotation(Evaluate = true);
+  Real x = p * time;
+initial equation
+  q = 1;
+end EV4;
+//// model: EV5
+model EV5
+  parameter Real p = sin(1) annotation(Evaluate = true);
+  Real x = p * time;
+end EV5;
+//// model: EV6
+model EV6
+  model M
+    parameter Real p = 1 annotation(Evaluate = true);
+    Real x = p * time;
+  end M;
+  M m(final p = 3);
+end EV6;
+//// model: EV7
+model EV7
+  parameter Real p = 2 annotation(Evaluate = true, Dialog(group = "x"));
+  Real x = p * time;
+end EV7;
+//// model: EV8
+model EV8
+  parameter Real q = 3 annotation(Evaluate = false);
+  parameter Real p = q annotation(Evaluate = true);
+  Real x = p * time;
+end EV8;
+//// model: EV9
+model EV9
+  record R
+    parameter Real k = 1 annotation(Evaluate = true);
+  end R;
+  parameter R r;
+  Real x = r.k * time;
+end EV9;

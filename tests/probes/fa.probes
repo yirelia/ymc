@@ -1,0 +1,538 @@
+//// set: fa — 函数注解、derivative / inverse、空 algorithm 段
+//// model: EA1
+function g
+  input Real x;
+  output Real y = x;
+algorithm
+end g;
+model EA1
+  Real a = g(time);
+end EA1;
+//// model: EA2
+function g
+  input Real x;
+  output Real y = x;
+algorithm
+  annotation(Inline = true);
+end g;
+model EA2
+  Real a = g(time);
+end EA2;
+//// model: EA3
+function g
+  input Real x;
+  output Real y = x;
+algorithm
+  y := 2 * x;
+algorithm
+end g;
+model EA3
+  Real a = g(time);
+end EA3;
+//// model: FA0
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+  annotation(Inline = true);
+end f;
+model FA
+  Real a = f(time);
+  Real b = f(1);
+end FA;
+//// model: FA1
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+  annotation(Inline = false);
+end f;
+model FA
+  Real a = f(time);
+  Real b = f(1);
+end FA;
+//// model: FA10
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+  annotation(Inline = true, smoothOrder = 1);
+end f;
+model FA
+  Real a = f(time);
+  Real b = f(1);
+end FA;
+//// model: FA11
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+  annotation(preferredView = "text");
+end f;
+model FA
+  Real a = f(time);
+  Real b = f(1);
+end FA;
+//// model: FA12
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+  annotation(obsolete = "do not use");
+end f;
+model FA
+  Real a = f(time);
+  Real b = f(1);
+end FA;
+//// model: FA13
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+  annotation(__Dymola_InlineAfterIndexReduction = true);
+end f;
+model FA
+  Real a = f(time);
+  Real b = f(1);
+end FA;
+//// model: FA14
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+  annotation(absoluteValue = true);
+end f;
+model FA
+  Real a = f(time);
+  Real b = f(1);
+end FA;
+//// model: FA15
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+  annotation(version = "1.0");
+end f;
+model FA
+  Real a = f(time);
+  Real b = f(1);
+end FA;
+//// model: FA16
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+  annotation(derivative = f);
+end f;
+model FA
+  Real a = f(time);
+  Real b = f(1);
+end FA;
+//// model: FA17
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+  annotation(inverse(x = f(y)));
+end f;
+model FA
+  Real a = f(time);
+  Real b = f(1);
+end FA;
+//// model: FA18
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+  annotation(__OpenModelica_FunctionPtr = true);
+end f;
+model FA
+  Real a = f(time);
+  Real b = f(1);
+end FA;
+//// model: FA19
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+  annotation(Inline = true, derivative = f);
+end f;
+model FA
+  Real a = f(time);
+  Real b = f(1);
+end FA;
+//// model: FA2
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+  annotation(LateInline = true);
+end f;
+model FA
+  Real a = f(time);
+  Real b = f(1);
+end FA;
+//// model: FA3
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+  annotation(InlineAfterIndexReduction = true);
+end f;
+model FA
+  Real a = f(time);
+  Real b = f(1);
+end FA;
+//// model: FA4
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+  annotation(smoothOrder = 2);
+end f;
+model FA
+  Real a = f(time);
+  Real b = f(1);
+end FA;
+//// model: FA5
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+  annotation(Documentation(info = "<html>doc</html>"));
+end f;
+model FA
+  Real a = f(time);
+  Real b = f(1);
+end FA;
+//// model: FA6
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+  annotation(Icon(graphics = {Rectangle(extent = {{-100, -100}, {100, 100}})}));
+end f;
+model FA
+  Real a = f(time);
+  Real b = f(1);
+end FA;
+//// model: FA7
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+  annotation(GenerateEvents = true);
+end f;
+model FA
+  Real a = f(time);
+  Real b = f(1);
+end FA;
+//// model: FA8
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+  annotation(__OpenModelica_EarlyInline = true);
+end f;
+model FA
+  Real a = f(time);
+  Real b = f(1);
+end FA;
+//// model: FA9
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+  annotation(__OpenModelica_Impure = true);
+end f;
+model FA
+  Real a = f(time);
+  Real b = f(1);
+end FA;
+//// model: FA_base
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end f;
+model FA
+  Real a = f(time);
+  Real b = f(1);
+end FA;
+//// model: FD0
+function f1
+  input Real x;
+  output Real z = 2 * x;
+  annotation(derivative = f2);
+end f1;
+function f2
+  input Real x;
+  input Real der_x;
+  output Real z = 2 * der_x;
+end f2;
+model FD0
+  Real a = f1(1);
+  Real b = f1(time);
+end FD0;
+//// model: FD1
+function f1
+  input Real x;
+  output Real z = 2 * x;
+  annotation(derivative = f2);
+end f1;
+function f2
+  input Real x;
+  input Real der_x;
+  output Real z = 2 * der_x;
+end f2;
+model FD1
+  Real a = f1(1);
+end FD1;
+//// model: FD10
+function f1
+  input Real x;
+  output Real z;
+  external "C" z = foo(x) annotation(derivative = f2, Library = "foo");
+end f1;
+function f2
+  input Real x;
+  input Real der_x;
+  output Real z = 2 * der_x;
+end f2;
+model FD10
+  Real b = f1(time);
+end FD10;
+//// model: FD2
+function f1
+  input Real x;
+  output Real z = 2 * x;
+  annotation(derivative = nosuch);
+end f1;
+model FD2
+  Real b = f1(time);
+end FD2;
+//// model: FD3
+function f1
+  input Real x;
+  output Real z = 2 * x;
+  annotation(derivative = f2);
+end f1;
+function f2
+  input Real x;
+  input Real der_x;
+  output Real z = 2 * der_x;
+  annotation(derivative = f3);
+end f2;
+function f3
+  input Real x;
+  input Real der_x;
+  input Real der_der_x;
+  output Real z = 2 * der_der_x;
+end f3;
+model FD3
+  Real b = f1(time);
+end FD3;
+//// model: FD4
+package P
+  function f1
+    input Real x;
+    output Real z = 2 * x;
+    annotation(derivative = f2);
+  end f1;
+  function f2
+    input Real x;
+    input Real der_x;
+    output Real z = 2 * der_x;
+  end f2;
+end P;
+model FD4
+  Real b = P.f1(time);
+end FD4;
+//// model: FD5
+function f1
+  input Real x;
+  output Real z = 2 * x;
+  annotation(derivative = f2, derivative(order = 2) = f3);
+end f1;
+function f2
+  input Real x;
+  input Real der_x;
+  output Real z = 2 * der_x;
+end f2;
+function f3
+  input Real x;
+  input Real der_x;
+  input Real der_der_x;
+  output Real z = 2 * der_der_x;
+end f3;
+model FD5
+  Real b = f1(time);
+end FD5;
+//// model: FD6
+function f
+  input Real x;
+  input Real y;
+  output Real z = x * y;
+  annotation(inverse(y = g(x, sin(z))));
+end f;
+function g
+  input Real x;
+  input Real z;
+  output Real y = z / x;
+end g;
+model FD6
+  Real b = f(time, 2);
+end FD6;
+//// model: FD6b
+function f
+  input Real x;
+  input Real y;
+  output Real z = x * y;
+  annotation(inverse(y = g(x, sin(z))));
+end f;
+function g
+  input Real x;
+  input Real z;
+  output Real y = z / x;
+end g;
+model FD6b
+  Real b = f(time, 2);
+end FD6b;
+//// model: FD7
+function f1
+  input Real x;
+  output Real z = 2 * x;
+  annotation(derivative = f1);
+end f1;
+model FD7
+  Real b = f1(time);
+end FD7;
+//// model: FD8
+function g
+  input Real x;
+  output Real y = h(x);
+end g;
+function h
+  input Real x;
+  output Real z = 2 * x;
+  annotation(derivative = dh, Inline = true);
+end h;
+function dh
+  input Real x;
+  input Real der_x;
+  output Real z = 2 * der_x;
+end dh;
+model FD8
+  Real b = g(time);
+end FD8;
+//// model: FD9
+model FD9
+  function f1
+    input Real x;
+    output Real z = 2 * x;
+    annotation(derivative = f2);
+  end f1;
+  function f2
+    input Real x;
+    input Real der_x;
+    output Real z = 2 * der_x;
+  end f2;
+  Real b = f1(time);
+end FD9;
+//// model: FE0
+function f
+  input Real r;
+  output Real o[0];
+end f;
+model FE0
+  Real r[0];
+algorithm
+  r := f(time);
+end FE0;
+//// model: FE1
+function f
+  input Real r;
+  output Real o[0];
+end f;
+model FE1
+  Real r[0] = f(time);
+  Real s[0];
+equation
+  s = f(2 * time);
+end FE1;
+//// model: FE2
+function g
+  input Real x;
+  output Real y[2] = {x, x};
+end g;
+function h
+  input Real x;
+  output Real y[3] = {x, x, x};
+end h;
+model FE2
+  parameter Boolean pt = true;
+  Real a[2] = if pt then g(time) else h(time);
+end FE2;
+//// model: FE3
+function g
+  input Real x;
+  output Real y = 2 * x;
+end g;
+model FE3
+  parameter Integer n = 2;
+  parameter Real m = g(n) + n;
+  Real z[n];
+end FE3;
+//// model: FE4
+function g
+  input Real x;
+  output Real y = 2 * x;
+end g;
+model FE4
+  parameter Integer n = 2;
+  Real z[n];
+  Real w = g(n * time);
+  Real v = g(n + 1) * time;
+end FE4;
+//// model: FE5
+record R
+  Real a;
+  Integer b;
+end R;
+model FE5
+  parameter Integer n = 2;
+  Real z[n];
+  R r = R(time, n);
+end FE5;
+//// model: FE6
+function g
+  input Real x;
+  output Real y;
+  external "C" y = sin(x);
+end g;
+model FE6
+  parameter Integer n = 2;
+  Real z[n];
+  Real w = g(n);
+end FE6;

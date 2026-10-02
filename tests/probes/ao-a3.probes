@@ -1,0 +1,120 @@
+//// set: ao-a3 — 结构标记：依赖连带
+//// model: AO0
+model AO0
+  parameter Integer k = 2;
+  parameter Integer n = k;
+  Real x[2];
+equation
+  for i in 1:n loop
+    x[i] = time;
+  end for;
+end AO0;
+//// model: AO1
+model AO1
+  Real c[2] = {time, 2};
+  Real v = c[i];
+  parameter Integer i = i0;
+  parameter Integer i0 = 1;
+  parameter Integer j = i0;
+  Real w = j * time;
+end AO1;
+//// model: AO10
+model AO10
+  parameter Integer k = 2;
+  parameter Integer n = k;
+  Real x[2] = {i * time for i in 1:n};
+end AO10;
+//// model: AO11
+model AO11
+  parameter Integer k = 2;
+  parameter Integer n = k + 0;
+  parameter Real q[2] = {1, 2};
+  Real s(start = q[n]) = time;
+end AO11;
+//// model: AO12
+model AO12
+  parameter Integer k = 1;
+  parameter Integer n = k + 1;
+  Real x[2];
+  Real y[2] = {time, 2};
+equation
+  x = y[1:n];
+end AO12;
+//// model: AO13
+model AO13
+  parameter Integer k = 1;
+  parameter Integer n = k + 1;
+  Real x[2];
+algorithm
+  for i in 1:n loop
+    x[i] := time;
+  end for;
+end AO13;
+//// model: AO14
+model AO14
+  parameter Integer k = 1;
+  parameter Integer n = k + 1;
+  parameter Integer p = n;
+  Real x[2];
+  Real y[2] = {time, 2};
+algorithm
+  x[n] := time;
+  x[1] := y[k];
+end AO14;
+//// model: AO2
+model AO2
+  parameter Integer k = 2;
+  parameter Integer n = k;
+  Real x[3] = {time, 1, 2};
+  Real s[2] = x[1:n];
+end AO2;
+//// model: AO3
+model AO3
+  parameter Integer k = 2;
+  parameter Integer n = k;
+  Real x[2] = fill(time, n);
+end AO3;
+//// model: AO4
+model AO4
+  parameter Integer k = 2;
+  parameter Integer n = k + 0;
+  Real x[2] = {time, 1};
+  Real s = x[n];
+end AO4;
+//// model: AO5
+model AO5
+  Real x[2] = {time, 1};
+  Real s = x[n];
+  parameter Integer n = k + 0;
+  parameter Integer k = 2;
+end AO5;
+//// model: AO6
+model AO6
+  parameter Integer k = 2;
+  parameter Integer n = k;
+  Real x[2];
+equation
+  x[n] = time;
+  x[1] = 1;
+end AO6;
+//// model: AO7
+model AO7
+  parameter Integer k = 1;
+  parameter Integer n = k + 1;
+  Real x[2] = {time, 1};
+  Real s = sum(x[i] for i in 1:n);
+end AO7;
+//// model: AO8
+model AO8
+  parameter Boolean a = true;
+  parameter Boolean b = a;
+  parameter Boolean c = not a;
+  Real x[2] = if b then {1, 2} else {3, 4, 5};
+  Real y = if c then 1 else time;
+end AO8;
+//// model: AO9
+model AO9
+  parameter Integer k = 2;
+  parameter Integer n = k;
+  Real x[:] = fill(time, n);
+end AO9;

@@ -1,0 +1,379 @@
+//// set: ba-t — Boolean 数组表达式（续）
+//// model: BASE
+model BASE
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+end BASE;
+//// model: T0
+model T0
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  der(m) = {{1, 2}, {3, 4}};
+end T0;
+//// model: T1
+model T1
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  der(m) = {{time, 2}, {3, 4}} * m;
+end T1;
+//// model: T10
+model T10
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  der(y) = fill(time, 3);
+end T10;
+//// model: T11
+model T11
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  der(y) = der(x);
+end T11;
+//// model: T12
+model T12
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  der(y) + y = x;
+end T12;
+//// model: T13
+model T13
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  der(y) = der(2 * x);
+end T13;
+//// model: T14
+model T14
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  y = der(k);
+end T14;
+//// model: T15
+model T15
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  der(y) = if time > 1 then x else -x;
+end T15;
+//// model: T16
+model T16
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  der(y) = {x[1], time, 2};
+end T16;
+//// model: T17
+model T17
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  y = {der(x[1]), der(x[2]), time};
+end T17;
+//// model: T18
+model T18
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  der(m[1, :]) = {1, 2};
+end T18;
+//// model: T19
+model T19
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  der(m[:, 1]) = m[:, 2];
+end T19;
+//// model: T2
+model T2
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  der(y) = A * y;
+end T2;
+//// model: T20
+model T20
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  m = {der(x[1:2]), x[2:3]};
+end T20;
+//// model: T21
+model T21
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  y = der(x[{3, 1, 2}]);
+end T21;
+//// model: T22
+model T22
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real m[2, 2];
+  Real s3[3] = der(x) - x;
+end T22;
+//// model: T23
+model T23
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real m[2, 2];
+  Real s4[3] = -der(x);
+end T23;
+//// model: T24
+model T24
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real m[2, 2];
+  Real s5[3] = A * der(x);
+end T24;
+//// model: T25
+model T25
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real m[2, 2];
+  Real s6[2, 2] = der(m);
+end T25;
+//// model: T26
+model T26
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real m[2, 2];
+  Real s7 = der(x[1]) + sum(der(m));
+end T26;
+//// model: T27
+model T27
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  y = cross(der(x), x);
+end T27;
+//// model: T28
+model T28
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  der(y) = cross(x, y);
+end T28;
+//// model: T29
+model T29
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  y = pre(k);
+end T29;
+//// model: T3
+model T3
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  der(y) = -A * y + x;
+end T3;
+//// model: T30
+model T30
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real m[2, 2];
+  Integer s8[3] = pre(k);
+end T30;
+//// model: T31
+model T31
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  der(y) = k;
+end T31;
+//// model: T4
+model T4
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  y = A * der(x);
+end T4;
+//// model: T5
+model T5
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real m[2, 2];
+  Real s1 = sum(der(x));
+end T5;
+//// model: T6
+model T6
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real m[2, 2];
+  Real s2 = der(x) * x;
+end T6;
+//// model: T7
+model T7
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  y = -der(x);
+end T7;
+//// model: T8
+model T8
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  y = der(x) .* x;
+end T8;
+//// model: T9
+model T9
+  parameter Integer n = 2;
+  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};
+  Boolean b[2] = {time > 1, true};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real y[3];
+  Real m[2, 2];
+equation
+  der(y) = zeros(3);
+end T9;

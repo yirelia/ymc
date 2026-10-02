@@ -1,0 +1,289 @@
+//// set: fn55 — 用户函数发射
+//// model: YmcFnArr1
+function f
+  input Integer n;
+  input Real x[:];
+  output Real z;
+  output Real y[n];
+protected
+  Real w[size(x, 1)] = zeros(size(x, 1));
+  Integer m[n] = ones(n);
+algorithm
+  y := fill(2.0, n) + {1.0 for i in 1:n};
+  z := x * x + w * x + scalar({x[1]}) + sum(y);
+end f;
+model YmcFnArr1
+  Real a[3];
+  Real b = f(2, a);
+end YmcFnArr1;
+//// model: YmcFnArr2
+function f
+  input Integer n;
+  input Real x[:];
+  output Real z;
+  output Real y[n];
+protected
+  Real w[size(x, 1)] = zeros(size(x, 1));
+  Integer m[n] = ones(n);
+algorithm
+  y := fill(2.0, n) + fill(1, n);
+  z := x * x + w * x + scalar({x[1]}) + sum(y);
+end f;
+model YmcFnArr2
+  Real a[3];
+  Real b = f(2, a);
+end YmcFnArr2;
+//// model: YmcFnEmit1
+package P
+  constant Real K = 4;
+  function a
+    input Real x;
+    output Real y;
+  protected
+    constant Real c = 3;
+  algorithm
+    y := b(x) * c + K;
+  end a;
+  function b
+    input Real x;
+    output Real y = x + 1;
+  end b;
+end P;
+function f
+  input Real u1;
+  input Real u2 = 2 * u1;
+  input Integer k = 3;
+  output Real y;
+algorithm
+  y := u1 + u2 + k;
+end f;
+function g
+  input Real x;
+  output Real y = x;
+end g;
+model YmcFnEmit1
+  parameter Real p = 2;
+  Integer n = 1;
+  Real a = time;
+  Real r1 = f(a);
+  Real r2 = f(u2 = 3, u1 = a);
+  Real r3 = g(p);
+  Real r4 = g(n);
+  Real r5 = P.a(time);
+  Real r6 = f(a, k = n);
+end YmcFnEmit1;
+//// model: YmcFnExt1
+function fe
+  input Real x;
+  output Real y;
+external "C" y = ext(x);
+end fe;
+pure function fp
+  input Real x;
+  output Real y;
+external "C";
+end fp;
+model YmcFnExt1
+  Real a = fe(time);
+  Real b = fp(time);
+end YmcFnExt1;
+//// model: YmcFnExtAlg
+partial function Base
+  input Real x;
+  output Real y;
+algorithm
+  y := 1;
+end Base;
+function F
+  extends Base;
+algorithm
+  y := y * 10 + x;
+end F;
+model YmcFnExtAlg
+  constant Real r = F(5);
+end YmcFnExtAlg;
+//// model: YmcFnExtOrder
+partial function Base
+  input Real b;
+end Base;
+function F
+  input Real a;
+  extends Base;
+  input Real c;
+  output Real y = a * 100 + b * 10 + c;
+end F;
+model YmcFnExtOrder
+  constant Real x = F(1, 2, 3);
+end YmcFnExtOrder;
+//// model: YmcFnName1
+package P
+  function g
+    input Real x;
+    output Real y = 2 * x;
+  end g;
+end P;
+function Zf
+  input Real x;
+  output Real y = x + 1;
+end Zf;
+function af
+  input Real x;
+  output Real y = x - 1;
+end af;
+model A
+  function h
+    input Real x;
+    output Real y = x * x;
+  end h;
+  Real v = h(time);
+end A;
+model YmcFnName1
+  A a;
+  Real u1 = P.g(time);
+  Real u2 = Zf(time);
+  Real u3 = af(time);
+end YmcFnName1;
+//// model: YmcFnName2
+model A
+  function h
+    input Real x;
+    output Real y = x * x;
+  end h;
+  Real v = h(time);
+end A;
+model A2
+  extends A;
+end A2;
+model B
+  A a;
+end B;
+model YmcFnName2
+  function fr
+    input Real x;
+    output Real y = x + 3;
+  end fr;
+  model C
+    Real w = fr(time);
+  end C;
+  B b;
+  C c;
+  A2 a2;
+end YmcFnName2;
+//// model: YmcFnName2a
+model A
+  function h
+    input Real x;
+    output Real y = x * x;
+  end h;
+  Real v = h(time);
+end A;
+model B
+  A a;
+end B;
+model YmcFnName2a
+  B b;
+end YmcFnName2a;
+//// model: YmcFnName2b
+model A
+  function h
+    input Real x;
+    output Real y = x * x;
+  end h;
+  Real v = h(time);
+end A;
+model A2
+  extends A;
+end A2;
+model YmcFnName2b
+  A2 a2;
+end YmcFnName2b;
+//// model: YmcFnName3
+package P2
+  function g2
+    input Real x;
+    output Real y = x + 5;
+  end g2;
+  model D
+    Real d = g2(time);
+  end D;
+  model M
+    function h2
+      input Real x;
+      output Real y = x * 7;
+    end h2;
+    D dd;
+    Real m = h2(time);
+  end M;
+end P2;
+//// model: YmcFnPar1
+function g
+  input Real x;
+  output Real y = x;
+end g;
+model YmcFnPar1
+  parameter Real p = 2;
+  Real r3 = g(p);
+  parameter Real q = g(p);
+end YmcFnPar1;
+//// model: YmcIf11a
+function f
+  input Integer n;
+  output Real x[2];
+algorithm
+  x := {1.0, 2.0};
+end f;
+model YmcIf11a
+  Integer n;
+  Real y = f(n)*{1, 1};
+end YmcIf11a;
+//// model: YmcIf11b
+function f
+  input Integer n;
+  output Real x;
+algorithm
+  x := if n <> 2 then 1.0 else 2.0;
+end f;
+model YmcIf11b
+  Integer n;
+  Real y = f(n);
+end YmcIf11b;
+//// model: YmcLitMul
+model YmcLitMul
+  Real x[2] = {time, 2*time};
+  Real y[2];
+equation
+  y = x + {1, 2};
+end YmcLitMul;
+//// model: YmcLitMul2
+model YmcLitMul2
+  Real x[2];
+  Real y[2];
+equation
+  x = {time, 2*time};
+  y = x + {1, 2};
+end YmcLitMul2;
+//// model: YmcRec1
+record R
+  Real x;
+  Real y = 2;
+end R;
+model YmcRec1
+  R r;
+  Real z = r.x;
+end YmcRec1;
+//// model: YmcRec2
+record R
+  Real x;
+  Real y = 2;
+  Integer n = 3;
+  parameter Real p = 4;
+  constant Real c = 5;
+end R;
+function f
+  input R r;
+  output Real z = r.x + r.y;
+end f;
+model YmcRec2
+  R r;
+  Real z = f(r);
+end YmcRec2;

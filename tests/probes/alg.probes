@@ -1,0 +1,100 @@
+//// set: alg — 算法段
+//// model: AS1
+model AS1
+  Real r;
+  Real x;
+  parameter Real v[3] = {1, -2, 3};
+  parameter Integer n = 3;
+  Integer i;
+algorithm
+  if false then
+    r := 1;
+  end if;
+  if true then
+    r := 1.5;
+  else
+    r := 2.1;
+  end if;
+  if time > 0.5 then
+    r := 3;
+  elseif true then
+    r := 4;
+  else
+    r := 5;
+  end if;
+  x := 0;
+  for k in 1:n loop
+    if v[k] > 0 then
+      x := x + v[k];
+    end if;
+  end for;
+  i := 0;
+  while i < 3 loop
+    i := i + 1;
+    if i > 1 then
+      break;
+    end if;
+  end while;
+  when x > 2 then
+    r := 0;
+  end when;
+  assert(x < 10, "too big");
+end AS1;
+//// model: T1
+function f
+  input Real x;
+  output Real a = x * 2;
+  output Real b = x * 3;
+end f;
+model T1
+  Real p, q, r, s, u, v;
+equation
+  (p, q) = f(1.0);
+  (r, s) = f(time);
+algorithm
+  (u, v) := f(time);
+  (, u) := f(2.0);
+end T1;
+//// model: T2
+function f
+  input Real x;
+  output Real a = x * 2;
+  output Real b = x * 3;
+  output Integer c = 1;
+end f;
+model T2
+  Real u, v, w;
+  Integer k;
+equation
+  (w, , k) = f(time);
+algorithm
+  (, u) := f(time);
+  (v) := f(time);
+end T2;
+//// model: W1
+model W1
+  parameter Real h = 0.1;
+  Real x(start = 5);
+  Real y;
+  Real z;
+  Real w;
+  Boolean b[2];
+  Boolean c;
+  Integer k;
+equation
+  der(x) = -x;
+  b = {time > 1, time > 2};
+  c = time > 3;
+  when sample(0, h) then
+    y = x;
+  end when;
+  when b then
+    z = x;
+  end when;
+  when {c, time > 4} then
+    w = x;
+  end when;
+  when change(k) then
+    k = pre(k) + 1;
+  end when;
+end W1;

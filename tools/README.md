@@ -14,6 +14,16 @@ python tests/omc/run.py --print-cflags-histogram --dir <testsuite根>
 - `omc_diff.py`：omc-diff 复刻（token 级）。`--tool` 切 ymc/omc；`--omc` 切 installed/workspace（工作区版带超时）。
 - `cflags_map.json`：cflags→ymc 映射/skip 原因码。`stages.json`：阶段→语料→对比类型。
 
+## S3 压平门
+
+```
+python tools/flat_sweep.py --cases-from docs/research/s3-easy-slice.json --oracle-live   # 门：FAIL 0、oracle=live 不一致 0
+python tools/flat_sweep.py --oracle-live                                                 # 全 scodeinst（横切改动）
+python tools/nf_live_sweep.py                                                            # 旧前端语料 vs 实跑 omc
+python tools/probe_recheck.py                                                            # 探针回归（tests/probes，见其 README）
+python tools/probe_lines.py probe.mo                                                     # 把一个探针模型逐行拆开对拍
+```
+
 ## 比对器
 
 ```

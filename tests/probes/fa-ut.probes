@@ -1,0 +1,149 @@
+//// set: fa-ut — 同上（单测原文）
+//// model: FAS1
+function f
+  input Real x;
+  output Real y = 2 * x;
+  annotation(__OpenModelica_EarlyInline = true);
+end f;
+model FAS1
+  Real a = f(time);
+end FAS1;
+//// model: FAS2
+function f1
+  input Real x;
+  output Real z = 2 * x;
+  annotation(derivative(order = 2) = f2);
+end f1;
+function f2
+  input Real x;
+  input Real der_x;
+  input Real der_der_x;
+  output Real z = 2 * der_der_x;
+end f2;
+model FAS2
+  Real b = f1(time);
+end FAS2;
+//// model: FAS3
+function f1
+  input Real x;
+  output Real z = 2 * x;
+  annotation(derivative = nosuch);
+end f1;
+model FAS3
+  Real b = f1(time);
+end FAS3;
+//// model: FAS4
+function g
+  input Real x;
+  output Real y = 2 * x;
+end g;
+model FAS4
+  parameter Integer n = 2;
+  parameter Real m = g(n) + n;
+  Real z[n];
+end FAS4;
+//// model: FAT1
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+  annotation(Inline = true, smoothOrder = 1, Documentation(info = "<html>doc</html>"));
+end f;
+function g
+  input Real x;
+  output Real y = x;
+algorithm
+end g;
+model FAT1
+  Real a = f(time);
+  Real b = f(1);
+  Real c = g(time);
+end FAT1;
+//// model: FAT2
+function f1
+  input Real x;
+  output Real z = 2 * x;
+  annotation(derivative = f2);
+end f1;
+function f2
+  input Real x;
+  input Real der_x;
+  output Real z = 2 * der_x;
+  annotation(derivative = f3);
+end f2;
+function f3
+  input Real x;
+  input Real der_x;
+  input Real der_der_x;
+  output Real z = 2 * der_der_x;
+end f3;
+function e1
+  input Real x;
+  output Real z;
+  external "C" z = foo(x) annotation(derivative = e2, Library = "foo");
+end e1;
+function e2
+  input Real x;
+  input Real der_x;
+  output Real z = 2 * der_x;
+end e2;
+function h
+  input Real x;
+  input Real y;
+  output Real z = x * y;
+  annotation(inverse(y = hi(x, z)));
+end h;
+function hi
+  input Real x;
+  input Real z;
+  output Real y = z / x;
+end hi;
+function unused
+  input Real x;
+  output Real z = x;
+  annotation(derivative = f3);
+end unused;
+model FAT2
+  Real a = f1(1);
+  Real b = f1(time);
+  Real c = e1(time);
+  Real d = h(time, 2);
+end FAT2;
+//// model: FAT3
+function f
+  input Real r;
+  output Real o[0];
+end f;
+function k
+  input Real r;
+  output Real o;
+algorithm
+  o := r;
+end k;
+model FAT3
+  Real r[0] = f(time);
+  Real s[0];
+  Real t[0];
+  Real u = k(1);
+equation
+  s = f(2 * time);
+algorithm
+  t := f(time);
+end FAT3;
+//// model: FAT4
+record R
+  Real a;
+  Integer b;
+end R;
+function g
+  input Real x;
+  output Real y;
+  external "C" y = sin(x);
+end g;
+model FAT4
+  parameter Integer n = 2;
+  Real z[n];
+  R r = R(time, n);
+  Real w = g(n);
+end FAT4;

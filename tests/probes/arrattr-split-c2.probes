@@ -1,0 +1,49 @@
+//// set: arrattr-split-c2 — 切分（续）
+//// model: S0
+model S0
+  parameter Integer n = 3;
+  parameter Real p[n] = {i^2 for i in 1:n};
+  Real y[3];
+end S0;
+//// model: S1
+model S1
+  parameter Integer n = 3;
+  parameter Real p[n] = {i^2 for i in 1:n};
+  Real s = sum(y[i] for i in 1:3);
+end S1;
+//// model: S2
+model S2
+  parameter Integer n = 3;
+  parameter Real p[n] = {i^2 for i in 1:n};
+  Real s2 = sum(i for i in 1:3);
+end S2;
+//// model: S3
+model S3
+  parameter Integer n = 3;
+  parameter Real p[n] = {i^2 for i in 1:n};
+  Real A[2,2];
+end S3;
+//// model: S4
+model S4
+  parameter Integer n = 3;
+  parameter Real p[n] = {i^2 for i in 1:n};
+  Real v[2];
+end S4;
+//// model: S5
+model S5
+  parameter Integer n = 3;
+  parameter Real p[n] = {i^2 for i in 1:n};
+  Real w[2] = A * v;
+end S5;
+//// model: S6
+model S6
+  parameter Integer n = 3;
+  parameter Real p[n] = {i^2 for i in 1:n};
+  Real dot = v * v;
+end S6;
+//// model: S7
+model S7
+  parameter Integer n = 3;
+  parameter Real p[n] = {i^2 for i in 1:n};
+  y = {time, 2 * time, 3 * time};
+end S7;

@@ -1,0 +1,290 @@
+//// set: ba-r — 数组上的 der / pre
+//// model: BASE
+model BASE
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+end BASE;
+//// model: R0
+model R0
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean g1[2] = b and b2;
+end R0;
+//// model: R1
+model R1
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  parameter Boolean pc[2] = not pb;
+end R1;
+//// model: R10
+model R10
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean d9[2] = change(b);
+end R10;
+//// model: R11
+model R11
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean d7[2] = edge(b);
+end R11;
+//// model: R12
+model R12
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  v = edge(b);
+end R12;
+//// model: R13
+model R13
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  v = pre(b);
+end R13;
+//// model: R14
+model R14
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean i1[2] = if time > 1 then b else b2;
+end R14;
+//// model: R15
+model R15
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real i2[3] = if time > 1 then x else {1, 2, 3};
+end R15;
+//// model: R16
+model R16
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real i3[3] = if time > 1 then x else 2 * x;
+end R16;
+//// model: R17
+model R17
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  y = if time > 1 then x else 2 * x;
+end R17;
+//// model: R18
+model R18
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  y = if time > 1 then x else {1, 2, 3};
+end R18;
+//// model: R19
+model R19
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real i4[3] = if n == 2 then x else 2 * x;
+end R19;
+//// model: R2
+model R2
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  parameter Boolean pd[2] = pb and {true, true};
+end R2;
+//// model: R20
+model R20
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  parameter Real i5[2] = if n == 2 then {1, 2} else {3, 4};
+end R20;
+//// model: R21
+model R21
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real i6[3] = if time > 1 then x else if time > 2 then 2 * x else {1, 2, 3};
+end R21;
+//// model: R22
+model R22
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real i7[3] = (if time > 1 then x else 2 * x) + x;
+end R22;
+//// model: R23
+model R23
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real i8[3] = if b[1] then sin(x) else x;
+end R23;
+//// model: R24
+model R24
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real i9 = sum(if time > 1 then x else 2 * x);
+end R24;
+//// model: R25
+model R25
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer j1[2] = if time > 1 then {1, 2} else {3, 4};
+end R25;
+//// model: R26
+model R26
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real j2[2] = if time > 1 then {1, 2} else {3, 4};
+end R26;
+//// model: R27
+model R27
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  y = if time > 1 then {time, 2, 3} else x;
+end R27;
+//// model: R3
+model R3
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean g2[2] = pb or b;
+end R3;
+//// model: R4
+model R4
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  v = b and b2;
+end R4;
+//// model: R5
+model R5
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  v = not b;
+end R5;
+//// model: R6
+model R6
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  v = {true, false} or b;
+end R6;
+//// model: R7
+model R7
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  v = false:true;
+end R7;
+//// model: R8
+model R8
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean r1[2] = false:true;
+end R8;
+//// model: R9
+model R9
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean d8[2] = pre(b);
+end R9;

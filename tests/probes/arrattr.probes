@@ -1,0 +1,706 @@
+//// set: arrattr — 数组组件的属性修饰
+//// model: AddSub1
+model AddSub1
+  Real Add3[2, 2] = {{1, 1}, {2, 2}} + {{1, 2}, {3, 4}};
+end AddSub1;
+//// model: B1
+model B1
+  parameter Integer n = 3;
+  Real x[3] = fill(1.0, 3);
+  parameter Real p[3] = fill(2, 3);
+  Real y[2,2] = zeros(2, 2);
+  Real z[n] = ones(n);
+  Real a[3];
+  Real s = sum(a);
+  Real t = sum(a[1:2]);
+  Real pr = product(a);
+  Real mx = max(a);
+  Real mn = min({1, 2, 3});
+  Real m[2,2] = identity(2);
+  Real tr[2,2] = transpose([1, 2; 3, 4]);
+  Real l[3] = linspace(0, 1, 3);
+  Real d[2,2] = diagonal({1, 2});
+  Real w[3] = fill(time, 3);
+  Real sc = scalar({{5}});
+  Real v[2] = vector([1; 2]);
+equation
+  a = fill(time, 3);
+end B1;
+//// model: B2
+model B2
+  parameter Integer n = 3;
+  Real x[3] = fill(1.0, 3);
+  parameter Real p[3] = fill(2, 3);
+  Real y[2,2] = zeros(2, 2);
+  Real z[n] = ones(n);
+  Real a[3];
+  Real s = sum(a);
+  Real t = sum(a[1:2]);
+  Real pr = product(a);
+  Real mn = min({1, 2, 3});
+  Real m[2,2] = identity(2);
+  Real tr[2,2] = transpose([1, 2; 3, 4]);
+  Real d[2,2] = diagonal({1, 2});
+  Real w[3] = fill(time, 3);
+  Real sc = scalar({{5}});
+  Real v[2] = vector([1; 2]);
+equation
+  a = fill(time, 3);
+end B2;
+//// model: C1
+model C1
+  parameter Integer n = 3;
+  Real x[3] = {i for i in 1:3};
+  Real y[3];
+  Real z[3] = {y[i] * 2 for i in 1:3};
+  parameter Real p[n] = {i^2 for i in 1:n};
+  Real s = sum(y[i] for i in 1:3);
+  Real s2 = sum(i for i in 1:3);
+  Real A[2,2];
+  Real v[2];
+  Real w[2] = A * v;
+  Real dot = v * v;
+equation
+  y = {time, 2 * time, 3 * time};
+end C1;
+//// model: C2
+model C2
+  Real y[3];
+  Real s = sum(y[i] for i in 1:3);
+  Real s2 = sum(i for i in 1:3);
+  Real A[2,2];
+  Real v[2];
+  Real w[2] = A * v;
+  Real dot = v * v;
+  parameter Integer n = 3;
+  parameter Real p[n] = {i^2 for i in 1:n};
+equation
+  y = {time, 2 * time, 3 * time};
+end C2;
+//// model: C3
+model C3
+  Real y[3];
+  Real s = sum(y[i] for i in 1:3);
+  Real s2 = sum(i for i in 1:3);
+  Real s3 = product(y[i] + 1 for i in 1:2);
+  Real A[2,2];
+  Real B[2,2];
+  Real v[2];
+  Real w[2] = A * v;
+  Real u[2] = v * A;
+  Real C[2,2] = A * B;
+  Real dot = v * v;
+  Real e[2];
+equation
+  y = {time, 2 * time, 3 * time};
+  e = A * v + v;
+end C3;
+//// model: C4
+model C4
+  parameter Integer n = 3;
+  parameter Real p[n] = {i^2 for i in 1:n};
+  parameter Real q[:] = {2 * i for i in 1:4};
+  parameter Real p0 = 2;
+  parameter Real r[3] = {p0 * i for i in 1:3};
+  constant Integer c[3] = {i + 1 for i in 1:3};
+end C4;
+//// model: MP
+model M
+  Real a[2,2];
+  Real b[2,2];
+  Real c[2,2];
+equation
+  c = a * b;
+end M;
+//// model: MP2
+model M
+  Real y[3];
+  Real v[2];
+  Real A[2,2];
+  Real s = sum(y[i] for i in 1:3);
+  Real w[2] = A * v;
+  Real d = v * v;
+end M;
+//// model: P1
+model P1
+  parameter Real p[3] = {1, 2, 3};
+  Real a[3](start = 2*p);
+  Real b[3](start = p + {1, 1, 1});
+  Real c[3](start = -p);
+  Real d[2,2](start = [1, 2; 3, 4]);
+  Real e[3](start = fill(1, 3));
+  Real f[3](start = {p[1], 2, 3});
+  Real g[2](start = {sin(1), 2});
+  Real h[3](min = {1, 2, 3}, max = {4, 5, 6}, each fixed = true);
+  Real i[3](start = 1:3);
+  Real j[3](start = zeros(3));
+  Real k[2](start = {i * 2 for i in 1:2});
+end P1;
+//// model: P10
+model A
+  type F = enumeration(u, v);
+  Real y[F];
+  F f = F.v;
+  parameter F g = F.u;
+  Real z = if f == F.v then 1 else 2;
+end A;
+model P10
+  A m;
+end P10;
+//// model: P11
+package Q
+  type G = enumeration(g1, g2);
+  function h
+    input G g;
+    output Integer i;
+  algorithm
+    i := if g == G.g1 then 1 else 2;
+  end h;
+end Q;
+model P11
+  type E = enumeration(a, b, c);
+  model A
+    Real y[E];
+    E e = E.b;
+  end A;
+  function f
+    input E x;
+    output Boolean b;
+  algorithm
+    b := x == E.c;
+  end f;
+  A a;
+  Boolean t = f(a.e);
+  Integer n = Integer(E.c);
+  Integer m = Q.h(Q.G.g2);
+  Q.G gg = Q.G.g1;
+  Real s(stateSelect = StateSelect.prefer);
+end P11;
+//// model: P12
+package Q
+  type G = enumeration(g1, g2);
+  function h
+    input G g;
+    output Integer i;
+  algorithm
+    i := if g == G.g1 then 1 else 2;
+  end h;
+end Q;
+model P12
+  type E = enumeration(a, b, c);
+  model A
+    Real y[E];
+    E e = E.b;
+  end A;
+  A a;
+  Integer n = Integer(E.c);
+  Q.G gg = Q.G.g1;
+  Real s(stateSelect = StateSelect.prefer);
+end P12;
+//// model: P2
+model P2
+  Real x(start = sin(1));
+  Real g[2](start = {sin(1), 2});
+  Real g2[2](start = {sin(1.0), 2});
+  Real g3[2](start = {sin(1.0), 2.0});
+  Real g4[2](start = {1, 2.0});
+  Real g5[2](start = {1 + 1, 2.0});
+  parameter Real q = 3;
+  Real g6[2](start = {q, 2});
+  Real g7[2](start = {abs(-1), 2.0});
+  Real g8[2] = {sin(1), 2};
+  parameter Real g9[2] = {sin(1), 2};
+end P2;
+//// model: P3
+model A
+  Real p;
+  Real x[2];
+end A;
+model P3
+  A a[3](p = {1, 2, 3.0});
+  A b[3](p = {1, 2.0, 3});
+  A c[2](x.start = {{1, 2}, {3, 4.0}});
+  A d[2](x.start = {{1, 2.0}, {3, 4}});
+  A f[2](x(each start = 1));
+end P3;
+//// model: P4
+model A
+  Real p;
+  Real x[2];
+end A;
+model P4
+  A a[3](p = {1, 2, 3.0});
+  A b[3](p = {1, 2.0, 3});
+  parameter Real q = 1;
+  A c[2](p = {q, 2});
+  A d[2](p = {sin(1), 2});
+  A e[2](p = {1, q});
+end P4;
+//// model: P5
+model A
+  Real p;
+end A;
+model P5
+  Real x = abs(-1);
+  Real g[2](start = {abs(-1), 2});
+  Real h[2](start = {integer(1.5), 2});
+  A a[2](p = {abs(-1), 2});
+  Real w[2](each start);
+  Real v(final start);
+  Real u[2](start = {-1, 2});
+  parameter Integer n = 2;
+  Real t[2](start = {n, 3});
+end P5;
+//// model: P6
+model P6
+  parameter Real p[3] = {1, 2, 3};
+  parameter Real q[3] = p + {1, 1, 1};
+  Real r[3] = p + {1, 1, 1};
+  Real s[3];
+equation
+  s = p + {1, 1, 1};
+end P6;
+//// model: P7
+type E = enumeration(a, b);
+connector C
+  flow Real f[2](each nominal = 2);
+  Real e[2](start = {1, 2});
+end C;
+model A
+  Real x[2](start = {1, 2});
+end A;
+model P7
+  parameter Integer ni[2] = {1, 2};
+  A a1(x(start = {3, 4}));
+  A a2(x(each start = 5));
+  A g[2](each x(start = {6, 7}));
+  A h[2](x(start = {{1, 2}, {3, 4}}));
+  parameter Real p[2](each min = 0) = {1, 2};
+  Real y[2](fixed = {true, false}, start = {1, 2});
+  Integer n[2](start = {1, 2}, min = {0, 0});
+  Boolean b[2](start = {true, false});
+  String s[2](start = {"a", "b"});
+  Real z[2](each stateSelect = StateSelect.prefer);
+  Real z2[2](stateSelect = {StateSelect.prefer, StateSelect.never});
+  Real u[2](each unit = "m");
+  Real u2[2](unit = {"m", "s"});
+  E e[2](start = {E.a, E.b});
+  Real m[2,2](each start = 1);
+  C c;
+  Real r[2](start = ni);
+  Real x2[2](start = {1, 2}) = {3, 4};
+  parameter Real pf[2](each fixed = false, start = {1, 2});
+  Real w[2](min = -{1, 2});
+  Real v[2](nominal = {1, 2} * 2);
+  Real v2[2](nominal = 2 * {1, 2} .+ 1);
+end P7;
+//// model: P8
+function f
+  input Real x[3];
+  output Real y[3];
+algorithm
+  y := x;
+  y[1] := 0;
+end f;
+function g
+  input Real a[3];
+  output Real r;
+protected
+  Real b[3];
+algorithm
+  b := f(a);
+  r := a[1];
+end g;
+model P8
+  constant Real a[3] = {1, 2, 3};
+  Real b[3] = f(a);
+  constant Real c[3] = {4, 5, 6};
+  Real r = g(c);
+  Real d[3] = f({7, 8, 9});
+end P8;
+//// model: P9
+package P
+  type E3 = enumeration(x, y);
+end P;
+type E0 = enumeration(a0, b0);
+model P9
+  type E = enumeration(a, b);
+  Real x[E];
+  Real y[P.E3];
+  Real z[E0];
+  Real w[E0](start = {1, 2});
+  parameter Real q[E0] = {3, 4};
+end P9;
+//// model: Pk
+package Pk
+  type E = enumeration(a, b);
+  model M
+    type F = enumeration(u, v);
+    Real x[E];
+    Real y[F];
+    E e = E.a;
+  end M;
+  model N
+    M m;
+  end N;
+end Pk;
+//// model: S0
+type E = enumeration(a, b);
+connector C
+  flow Real f[2](each nominal = 2);
+  Real e[2](start = {1, 2});
+end C;
+model A
+  Real x[2](start = {1, 2});
+end A;
+model S0
+  parameter Integer ni[2] = {1, 2};
+  parameter Real p[2](each min = 0) = {1, 2};
+  parameter Real pf[2](each fixed = false, start = {1, 2});
+  A a1(x(start = {3, 4}));
+end S0;
+//// model: S1
+model A
+  parameter Integer k = 1;
+  Real z[2];
+equation
+  z[k] = 3;
+  z[2] = 4;
+end A;
+model S1
+  constant Integer N = 3;
+  parameter Integer c = 1;
+  parameter Integer d = c + 1;
+  Real r[3];
+  Real x[N];
+  A a(k = 2);
+equation
+  r[c] = 1;
+  r[d] = 2;
+  r[end] = 3;
+  for i in 2:N loop
+    x[i - 1] = x[i] + 1;
+  end for;
+  x[N] = 0;
+end S1;
+//// model: S10
+type E = enumeration(a, b);
+connector C
+  flow Real f[2](each nominal = 2);
+  Real e[2](start = {1, 2});
+end C;
+model A
+  Real x[2](start = {1, 2});
+end A;
+model S10
+  parameter Integer ni[2] = {1, 2};
+  parameter Real p[2](each min = 0) = {1, 2};
+  parameter Real pf[2](each fixed = false, start = {1, 2});
+  Real u[2](each unit = "m");
+end S10;
+//// model: S11
+type E = enumeration(a, b);
+connector C
+  flow Real f[2](each nominal = 2);
+  Real e[2](start = {1, 2});
+end C;
+model A
+  Real x[2](start = {1, 2});
+end A;
+model S11
+  parameter Integer ni[2] = {1, 2};
+  parameter Real p[2](each min = 0) = {1, 2};
+  parameter Real pf[2](each fixed = false, start = {1, 2});
+  Real u2[2](unit = {"m", "s"});
+end S11;
+//// model: S12
+type E = enumeration(a, b);
+connector C
+  flow Real f[2](each nominal = 2);
+  Real e[2](start = {1, 2});
+end C;
+model A
+  Real x[2](start = {1, 2});
+end A;
+model S12
+  parameter Integer ni[2] = {1, 2};
+  parameter Real p[2](each min = 0) = {1, 2};
+  parameter Real pf[2](each fixed = false, start = {1, 2});
+  E e[2](start = {E.a, E.b});
+end S12;
+//// model: S13
+type E = enumeration(a, b);
+connector C
+  flow Real f[2](each nominal = 2);
+  Real e[2](start = {1, 2});
+end C;
+model A
+  Real x[2](start = {1, 2});
+end A;
+model S13
+  parameter Integer ni[2] = {1, 2};
+  parameter Real p[2](each min = 0) = {1, 2};
+  parameter Real pf[2](each fixed = false, start = {1, 2});
+  Real m[2,2](each start = 1);
+end S13;
+//// model: S14
+type E = enumeration(a, b);
+connector C
+  flow Real f[2](each nominal = 2);
+  Real e[2](start = {1, 2});
+end C;
+model A
+  Real x[2](start = {1, 2});
+end A;
+model S14
+  parameter Integer ni[2] = {1, 2};
+  parameter Real p[2](each min = 0) = {1, 2};
+  parameter Real pf[2](each fixed = false, start = {1, 2});
+  C c;
+end S14;
+//// model: S15
+type E = enumeration(a, b);
+connector C
+  flow Real f[2](each nominal = 2);
+  Real e[2](start = {1, 2});
+end C;
+model A
+  Real x[2](start = {1, 2});
+end A;
+model S15
+  parameter Integer ni[2] = {1, 2};
+  parameter Real p[2](each min = 0) = {1, 2};
+  parameter Real pf[2](each fixed = false, start = {1, 2});
+  Real r[2](start = ni);
+end S15;
+//// model: S16
+type E = enumeration(a, b);
+connector C
+  flow Real f[2](each nominal = 2);
+  Real e[2](start = {1, 2});
+end C;
+model A
+  Real x[2](start = {1, 2});
+end A;
+model S16
+  parameter Integer ni[2] = {1, 2};
+  parameter Real p[2](each min = 0) = {1, 2};
+  parameter Real pf[2](each fixed = false, start = {1, 2});
+  Real x2[2](start = {1, 2}) = {3, 4};
+end S16;
+//// model: S17
+type E = enumeration(a, b);
+connector C
+  flow Real f[2](each nominal = 2);
+  Real e[2](start = {1, 2});
+end C;
+model A
+  Real x[2](start = {1, 2});
+end A;
+model S17
+  parameter Integer ni[2] = {1, 2};
+  parameter Real p[2](each min = 0) = {1, 2};
+  parameter Real pf[2](each fixed = false, start = {1, 2});
+  Real w[2](min = -{1, 2});
+end S17;
+//// model: S18
+type E = enumeration(a, b);
+connector C
+  flow Real f[2](each nominal = 2);
+  Real e[2](start = {1, 2});
+end C;
+model A
+  Real x[2](start = {1, 2});
+end A;
+model S18
+  parameter Integer ni[2] = {1, 2};
+  parameter Real p[2](each min = 0) = {1, 2};
+  parameter Real pf[2](each fixed = false, start = {1, 2});
+  Real v[2](nominal = {1, 2} * 2);
+end S18;
+//// model: S19
+type E = enumeration(a, b);
+connector C
+  flow Real f[2](each nominal = 2);
+  Real e[2](start = {1, 2});
+end C;
+model A
+  Real x[2](start = {1, 2});
+end A;
+model S19
+  parameter Integer ni[2] = {1, 2};
+  parameter Real p[2](each min = 0) = {1, 2};
+  parameter Real pf[2](each fixed = false, start = {1, 2});
+  Real v2[2](nominal = 2 * {1, 2} .+ 1);
+end S19;
+//// model: S2
+type E = enumeration(a, b);
+connector C
+  flow Real f[2](each nominal = 2);
+  Real e[2](start = {1, 2});
+end C;
+model A
+  Real x[2](start = {1, 2});
+end A;
+model S2
+  parameter Integer ni[2] = {1, 2};
+  parameter Real p[2](each min = 0) = {1, 2};
+  parameter Real pf[2](each fixed = false, start = {1, 2});
+  A g[2](each x(start = {6, 7}));
+end S2;
+//// model: S3
+type E = enumeration(a, b);
+connector C
+  flow Real f[2](each nominal = 2);
+  Real e[2](start = {1, 2});
+end C;
+model A
+  Real x[2](start = {1, 2});
+end A;
+model S3
+  parameter Integer ni[2] = {1, 2};
+  parameter Real p[2](each min = 0) = {1, 2};
+  parameter Real pf[2](each fixed = false, start = {1, 2});
+  A h[2](x(start = {{1, 2}, {3, 4}}));
+end S3;
+//// model: S4
+type E = enumeration(a, b);
+connector C
+  flow Real f[2](each nominal = 2);
+  Real e[2](start = {1, 2});
+end C;
+model A
+  Real x[2](start = {1, 2});
+end A;
+model S4
+  parameter Integer ni[2] = {1, 2};
+  parameter Real p[2](each min = 0) = {1, 2};
+  parameter Real pf[2](each fixed = false, start = {1, 2});
+  Real y[2](fixed = {true, false}, start = {1, 2});
+end S4;
+//// model: S5
+type E = enumeration(a, b);
+connector C
+  flow Real f[2](each nominal = 2);
+  Real e[2](start = {1, 2});
+end C;
+model A
+  Real x[2](start = {1, 2});
+end A;
+model S5
+  parameter Integer ni[2] = {1, 2};
+  parameter Real p[2](each min = 0) = {1, 2};
+  parameter Real pf[2](each fixed = false, start = {1, 2});
+  Integer n[2](start = {1, 2}, min = {0, 0});
+end S5;
+//// model: S6
+type E = enumeration(a, b);
+connector C
+  flow Real f[2](each nominal = 2);
+  Real e[2](start = {1, 2});
+end C;
+model A
+  Real x[2](start = {1, 2});
+end A;
+model S6
+  parameter Integer ni[2] = {1, 2};
+  parameter Real p[2](each min = 0) = {1, 2};
+  parameter Real pf[2](each fixed = false, start = {1, 2});
+  Boolean b[2](start = {true, false});
+end S6;
+//// model: S7
+type E = enumeration(a, b);
+connector C
+  flow Real f[2](each nominal = 2);
+  Real e[2](start = {1, 2});
+end C;
+model A
+  Real x[2](start = {1, 2});
+end A;
+model S7
+  parameter Integer ni[2] = {1, 2};
+  parameter Real p[2](each min = 0) = {1, 2};
+  parameter Real pf[2](each fixed = false, start = {1, 2});
+  String s[2](start = {"a", "b"});
+end S7;
+//// model: S8
+type E = enumeration(a, b);
+connector C
+  flow Real f[2](each nominal = 2);
+  Real e[2](start = {1, 2});
+end C;
+model A
+  Real x[2](start = {1, 2});
+end A;
+model S8
+  parameter Integer ni[2] = {1, 2};
+  parameter Real p[2](each min = 0) = {1, 2};
+  parameter Real pf[2](each fixed = false, start = {1, 2});
+  Real z[2](each stateSelect = StateSelect.prefer);
+end S8;
+//// model: S9
+type E = enumeration(a, b);
+connector C
+  flow Real f[2](each nominal = 2);
+  Real e[2](start = {1, 2});
+end C;
+model A
+  Real x[2](start = {1, 2});
+end A;
+model S9
+  parameter Integer ni[2] = {1, 2};
+  parameter Real p[2](each min = 0) = {1, 2};
+  parameter Real pf[2](each fixed = false, start = {1, 2});
+  Real z2[2](stateSelect = {StateSelect.prefer, StateSelect.never});
+end S9;
+//// model: SL1
+model SL1
+  Real x[3] = {1, 2, 3};
+  Real y[2] = x[2:3];
+  Real z[2,3];
+  Real w[3] = z[1, :];
+  Real v[2] = z[:, 2];
+  Real u[2];
+  parameter Real p[3] = {1, 2, 3};
+  parameter Real q[2] = p[{1, 3}];
+  Real s = sum(x[1:2]);
+equation
+  z[1, :] = {1, 2, 3};
+  z[2, :] = x;
+  u[1:2] = x[2:3] .* 2;
+end SL1;
+//// model: SL2
+model SL2
+  Real x[3] = {1, 2, 3};
+  Real y[2] = x[2:3];
+  Real z[2,3];
+  Real w[3] = z[1, :];
+  Real v[2] = z[:, 2];
+  Real u[2];
+  parameter Real p[3] = {1, 2, 3};
+  parameter Real q[2] = p[{1, 3}];
+equation
+  z[1, :] = {1, 2, 3};
+  z[2, :] = x;
+  u[1:2] = x[2:3] .* 2;
+end SL2;
+//// model: YmcArrAttr1
+model A
+  Real x[2](start = {1, 2});
+end A;
+model YmcArrAttr1
+  parameter Real p[3] = {1, 2, 3};
+  parameter Integer ni[2] = {1, 2};
+  Real a[3](start = 2*p);
+  Real b[3](start = p + {1, 1, 1});
+  Real c[2](min = -{1, 2});
+  Real d[2,2](start = [1, 2; 3, 4]);
+  Real h[3](min = {1, 2, 3}, max = {4, 5, 6}, each fixed = true);
+  Real r[2](start = ni);
+  A a1(x(start = {3, 4}));
+  A g[2](each x(start = {6, 7}));
+  A h2[2](x(start = {{1, 2}, {3, 4}}));
+  Real w[2](each start);
+  Real z[:](start = {1, 2});
+  parameter Real pf[2](each fixed = false, start = {1, 2});
+end YmcArrAttr1;

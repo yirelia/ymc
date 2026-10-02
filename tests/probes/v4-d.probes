@@ -1,0 +1,631 @@
+//// set: v4-d — 同上（分组 d）
+//// model: D0
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D0
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s1 = sum({1, 2, time});
+end D0;
+//// model: D1
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D1
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s2 = sum({1, 2, 3} + {time, 0, 0});
+end D1;
+//// model: D10
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D10
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s11 = sum({1.0, 2.0} * 2);
+end D10;
+//// model: D11
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D11
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  parameter Real s12 = sum({1, 2, q[1]});
+end D11;
+//// model: D12
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D12
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Integer s13 = sum({1, 2, 3});
+end D12;
+//// model: D13
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D13
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s14 = sum(zeros(3));
+end D13;
+//// model: D14
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D14
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s15 = sum({x[1], 0, x[2]});
+end D14;
+//// model: D15
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D15
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s16 = sum({1, 2, 3});
+end D15;
+//// model: D16
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D16
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s17 = product({1.5, 2, 3});
+end D16;
+//// model: D17
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D17
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s18 = sum({{1, 2}, {3, time}});
+end D17;
+//// model: D18
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D18
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s19 = sum(x) + sum({1, 2});
+end D18;
+//// model: D19
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D19
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s20 = sum({1, 2} .* {3, 4});
+end D19;
+//// model: D2
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D2
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s3 = product({2, 3, time});
+end D2;
+//// model: D20
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D20
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s21 = sum(ones(2) * time);
+end D20;
+//// model: D21
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D21
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s22 = sum({time, 0});
+end D21;
+//// model: D22
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D22
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s23 = product({time, 1});
+end D22;
+//// model: D23
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D23
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s24 = sum({0, time});
+end D23;
+//// model: D24
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D24
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s25 = sum(sin({1, 2, 3}));
+end D24;
+//// model: D25
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D25
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s26 = sum({sin(1), sin(2)});
+end D25;
+//// model: D26
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D26
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s27 = sum(linspace(0, 1, 3));
+end D26;
+//// model: D27
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D27
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s28 = sum(cat(1, {1, 2}, {time}));
+end D27;
+//// model: D28
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D28
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s29 = sum(k);
+end D28;
+//// model: D29
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D29
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s30 = sum(w);
+end D29;
+//// model: D3
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D3
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s4 = sum({i for i in 1:3});
+end D3;
+//// model: D4
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D4
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s5 = sum({i * 1.0 for i in 1:3});
+end D4;
+//// model: D5
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D5
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s6 = sum(fill(2.0, 3));
+end D5;
+//// model: D6
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D6
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s7 = sum({F(1, 2), F(2, 2)});
+end D6;
+//// model: D7
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D7
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s8 = sum(q);
+end D7;
+//// model: D8
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D8
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s9 = sum(i for i in 1:3);
+end D8;
+//// model: D9
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model D9
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s10 = sum(i * time for i in 1:3);
+end D9;

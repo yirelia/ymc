@@ -1,0 +1,76 @@
+//// set: ao-a4 — size(切片)
+//// model: AO0
+model AO0
+  parameter Integer n = 2;
+  Real x[3] = {time, 1, 2};
+  Integer s = size(x[1:n], 1);
+end AO0;
+//// model: AO1
+model AO1
+  Real x[3] = {time, 1, 2};
+  Integer s = size(x[1:2], 1);
+end AO1;
+//// model: AO10
+model AO10
+  parameter Integer n = 2;
+  Real x[3] = {time, 1, 2};
+  Integer s = ndims(x[1:n]);
+end AO10;
+//// model: AO11
+model AO11
+  parameter Integer n = 2;
+  constant Integer c = 2;
+  Real x[3] = {time, 1, 2};
+  Integer s = size(x[1:c], 1);
+end AO11;
+//// model: AO2
+model AO2
+  parameter Integer n = 2;
+  Real y[n];
+  Real x[3] = {time, 1, 2};
+  Integer s = size(x[1:n], 1);
+end AO2;
+//// model: AO3
+model AO3
+  parameter Integer n = 2;
+  Real x[3] = {time, 1, 2};
+  Integer s = size(x[1:n]) * {1};
+end AO3;
+//// model: AO4
+model AO4
+  parameter Integer n = 2;
+  Real x[3] = {time, 1, 2};
+  Real s = sum(x[1:n]);
+end AO4;
+//// model: AO5
+model AO5
+  parameter Integer n = 2;
+  Real x[3] = {time, 1, 2};
+  Integer s = size(x, 1) + n;
+end AO5;
+//// model: AO6
+model AO6
+  parameter Integer n = 2;
+  Real x[3] = {time, 1, 2};
+  Integer s = size(fill(1.0, n), 1);
+end AO6;
+//// model: AO7
+model AO7
+  parameter Integer n = 2;
+  Real x[3] = {time, 1, 2};
+  Integer s = size({x[i] for i in 1:n}, 1);
+end AO7;
+//// model: AO8
+model AO8
+  parameter Integer n = 2;
+  Real x[3] = {time, 1, 2};
+  Integer s;
+equation
+  s = size(x[1:n], 1);
+end AO8;
+//// model: AO9
+model AO9
+  parameter Integer n = 2;
+  Real x[3, 2] = {{time, 1}, {2, 3}, {4, 5}};
+  Integer s = size(x[1:n, :], 2);
+end AO9;

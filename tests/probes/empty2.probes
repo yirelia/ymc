@@ -1,0 +1,109 @@
+//// set: empty2 — 空数组（续）
+//// model: E1
+model E1
+  Real x[0];
+  Real y = sum(x);
+  Real z = x * x;
+end E1;
+//// model: E10
+model E10
+  Real x[0];
+  Real y[3] = cat(1, x, {1, 2, 3});
+end E10;
+//// model: E11
+model E11
+  parameter Real p[0];
+  parameter Real q[0] = p;
+  Real x[0](each start = 1);
+end E11;
+//// model: E12
+model E12
+  Real x[0];
+  Real y = time;
+algorithm
+  x := fill(y, 0);
+  y := 2;
+end E12;
+//// model: E13
+model E13
+  Real x[0];
+  Real y[0];
+equation
+  der(x) = y;
+  x = pre(y);
+end E13;
+//// model: E14
+model E14
+  input Real u[0];
+  output Real y[0];
+equation
+  y = 2 * u;
+end E14;
+//// model: E15
+model E15
+  Real x[0];
+  Real s = size(x, 1);
+  Integer n = size(x, 1);
+end E15;
+//// model: E2
+model E2
+  Real x[0];
+  Real y[0] = x;
+  Real A[3, 0];
+  Real c[3] = A * x;
+  Real w[2, 0];
+  Real v[2, 0];
+equation
+  w = v;
+end E2;
+//// model: E3
+model E3
+  parameter Integer n = 0;
+  Real x[n];
+equation
+  for i in 1:n loop
+    x[i] = 1;
+  end for;
+end E3;
+//// model: E4
+model E4
+  Real x[0] = fill(true, 0);
+end E4;
+//// model: E5
+model E5
+  Real x[0];
+equation
+  x = {1};
+end E5;
+//// model: E6
+model E6
+  connector C
+    Real e[0];
+    flow Real f[0];
+  end C;
+  C c1, c2;
+equation
+  connect(c1, c2);
+end E6;
+//// model: E7
+model E7
+  Integer i[0] = zeros(0);
+  Boolean b[0];
+  Real r[0] = ones(0);
+end E7;
+//// model: E8
+model E8
+  record R
+    Real x[0];
+    Real y;
+  end R;
+  R r(y = 1);
+end E8;
+//// model: E9
+model E9
+  model M
+    Real x = time;
+  end M;
+  M m[0];
+  Real y = time;
+end E9;

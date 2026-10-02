@@ -1,0 +1,486 @@
+//// set: ba-z — 数组 if 按结构参数选支
+//// model: BASE
+model BASE
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real y[3];
+end BASE;
+//// model: Z0
+model Z0
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real a1[2] = if pt then {1, 2} else {3, 4, 5};
+end Z0;
+//// model: Z1
+model Z1
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real a2[3] = if pt then {1, 2} else {3, 4, 5};
+end Z1;
+//// model: Z10
+model Z10
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real b2x[:] = if n == 3 then {1} else fill(n, 2);
+end Z10;
+//// model: Z11
+model Z11
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer b3[:] = if n == 3 then {1} else 2 .* fill(n, 2);
+end Z11;
+//// model: Z12
+model Z12
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real b4[:] = if n == 3 then {1} else -fill(n, 2);
+end Z12;
+//// model: Z13
+model Z13
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real b5[:, :] = if n == 2 then ones(n, 3) else ones(n, n);
+end Z13;
+//// model: Z14
+model Z14
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real b6[2] = if pd then {1, 2} else {3, 4, 5};
+end Z14;
+//// model: Z15
+model Z15
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real b7[2] = if time > 1 then {1, 2} else {3, 4, 5};
+end Z15;
+//// model: Z16
+model Z16
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real b8[2] = if n2 == 4 then {1, 2} else {3, 4, 5};
+end Z16;
+//// model: Z17
+model Z17
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real b9[2] = if pt then {1, 2} else 3;
+end Z17;
+//// model: Z18
+model Z18
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real c1 = if pt then 1 else {3, 4};
+end Z18;
+//// model: Z19
+model Z19
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real y[3];
+equation
+  y[1:2] = if pt then {1, 2} else {3, 4, 5};
+end Z19;
+//// model: Z2
+model Z2
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real a3[:] = if pt then {1, 2} else {3, 4, 5};
+end Z2;
+//// model: Z20
+model Z20
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real y[3];
+equation
+  y = if pf then {1, 2} else x;
+end Z20;
+//// model: Z21
+model Z21
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  parameter Real c2[2] = if pt then {1, 2} else {3, 4, 5};
+end Z21;
+//// model: Z22
+model Z22
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real c3[2] = if pe then {1, 2} else {3, 4, 5};
+end Z22;
+//// model: Z23
+model Z23
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real c4[2] = if pt then {1, 2} else {{3, 4}};
+end Z23;
+//// model: Z24
+model Z24
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real c5[:] = if pt then {q[1], 2} else {1};
+end Z24;
+//// model: Z25
+model Z25
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real c6[:] = if pt then q else {1};
+end Z25;
+//// model: Z26
+model Z26
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real c7[:] = if pt then {time, n} else {1};
+end Z26;
+//// model: Z27
+model Z27
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real c8[:] = if pt then x[1:2] else x;
+end Z27;
+//// model: Z28
+model Z28
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Boolean c9[:] = if pt then {true} else {true, false};
+end Z28;
+//// model: Z29
+model Z29
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real d1[:] = if pt then (if pf then {1} else {2, 3}) else {4};
+end Z29;
+//// model: Z3
+model Z3
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real a4[:] = if n == 2 then x else {1, 2};
+end Z3;
+//// model: Z30
+model Z30
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real d2[2] = if pt then {1, 2} else if pf then {3} else {4, 5, 6};
+end Z30;
+//// model: Z31
+model Z31
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real d3[2] = noEvent(if pt then {1, 2} else {3, 4, 5});
+end Z31;
+//// model: Z32
+model Z32
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real d4[2] = 2 * (if pt then {1, 2} else {3, 4, 5});
+end Z32;
+//// model: Z33
+model Z33
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real d5 = sum(if pt then {1, 2} else {3, 4, 5});
+end Z33;
+//// model: Z34
+model Z34
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real d6[:] = if pt then {1, 2} else zeros(3);
+end Z34;
+//// model: Z35
+model Z35
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real d7[2](start = if pt then {1, 2} else {3, 4, 5});
+end Z35;
+//// model: Z4
+model Z4
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real a5[:] = if n == 3 then x else {1.5, 2};
+end Z4;
+//// model: Z5
+model Z5
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real a6[:] = if pt and n == 2 then {time} else x;
+end Z5;
+//// model: Z6
+model Z6
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real a7[2] = if pu then {1, 2} else {3, 4, 5};
+end Z6;
+//// model: Z7
+model Z7
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real a8[2] = if pf then {1, 2, 3} else {time, 4};
+end Z7;
+//// model: Z8
+model Z8
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real a9[:] = if n == 3 then {1} else 2 .* fill(n, 2);
+end Z8;
+//// model: Z9
+model Z9
+  parameter Integer n = 2;
+  parameter Integer n2 = 2 * n;
+  parameter Boolean pt = true;
+  parameter Boolean pf = false;
+  parameter Boolean pu(fixed = false);
+  parameter Boolean pd = pt;
+  parameter Boolean pe = true annotation(Evaluate = false);
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Real b1[:] = if n == 3 then {1} else 2.0 .* fill(n, 2);
+end Z9;

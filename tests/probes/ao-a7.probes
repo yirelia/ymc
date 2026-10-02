@@ -1,0 +1,77 @@
+//// set: ao-a7 — 求值帧（续）
+//// model: AO0
+model AO0
+  package P
+    constant Integer n = 3;
+    constant Integer arr[3] = {n, 2 * n, 3 * n};
+  end P;
+  constant Integer n = 100;
+  Real x = P.arr[2] * time;
+end AO0;
+//// model: AO1
+model AO1
+  model M
+    constant Integer c = 5;
+    constant Integer d = 1;
+    Real x = d * time;
+  end M;
+  constant Integer c = 2;
+  M m(d = c);
+end AO1;
+//// model: AO2
+model AO2
+  model M
+    parameter Integer c = 5;
+    parameter Integer d = 1;
+    Real y[d];
+  end M;
+  parameter Integer c = 2;
+  M m(d = c);
+end AO2;
+//// model: AO3
+model AO3
+  model M
+    parameter Integer c = 5;
+    Real y[2](each start = 1);
+  end M;
+  parameter Integer c = 2;
+  parameter Real q[2] = {3, 4};
+  M m(y(start = {q[c], 1}));
+end AO3;
+//// model: AO4
+model AO4
+  model M
+    parameter Integer n = 3;
+    Real y[:] = {1, 2};
+  end M;
+  parameter Integer n = 2;
+  M m(y = fill(time, n));
+end AO4;
+//// model: AO5
+model AO5
+  model M
+    parameter Boolean b = false;
+    Real x;
+  end M;
+  parameter Boolean b = true;
+  M m(x = if b then time else 1);
+end AO5;
+//// model: AO6
+model AO6
+  model M
+    parameter Integer n = 3;
+    Real s;
+  end M;
+  parameter Integer n = 2;
+  Real x[2] = {time, 1};
+  M m(s = sum(x[i] for i in 1:n));
+end AO6;
+//// model: AO7
+model AO7
+  model M
+    parameter Integer n = 1;
+    Real s[2];
+  end M;
+  parameter Integer n = 2;
+  M m(s = {i * time for i in 1:n});
+end AO7;

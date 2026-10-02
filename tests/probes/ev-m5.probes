@@ -1,0 +1,46 @@
+//// set: ev-m5 — 别名连带（数组）
+//// model: EV0
+model EV0
+  parameter Integer n = 2 annotation(Evaluate = true);
+  parameter Integer k[2] = {n, 3};
+  parameter Integer m[2] = k;
+  Real x = m[1] * time;
+end EV0;
+//// model: EV1
+model EV1
+  parameter Integer k[2] = {2, 3};
+  parameter Integer m[2] = k;
+  Real y[k[1]];
+  Real x = m[2] * time;
+end EV1;
+//// model: EV2
+model EV2
+  parameter Integer k[2] = {2, 3} annotation(Evaluate = true);
+  parameter Integer m[2] = k;
+  Real x = m[2] * time;
+end EV2;
+//// model: EV3
+model EV3
+  parameter Real p = 2 annotation(Evaluate = true);
+  parameter Real a[2] = {p, p};
+  parameter Real b[2] = a;
+  Real x = b[1] * time;
+end EV3;
+//// model: EV4
+model EV4
+  model M
+    parameter Real g = 1;
+    Real x = g * time;
+  end M;
+  parameter Real p = 2 annotation(Evaluate = true);
+  M m[2](each g = p);
+end EV4;
+//// model: EV5
+model EV5
+  model M
+    parameter Real g = 1;
+    Real x = g * time;
+  end M;
+  parameter Real p[2] = {2, 3} annotation(Evaluate = true);
+  M m[2](g = p);
+end EV5;

@@ -1,0 +1,325 @@
+//// set: ba-p2 — pre / change（续）
+//// model: P20
+model P20
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean a1[:] = {false, true};
+end P20;
+//// model: P21
+model P21
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean a2[:] = not b;
+end P21;
+//// model: P210
+model P210
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean c2[:] = false:false;
+end P210;
+//// model: P211
+model P211
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real c3[:] = x;
+end P211;
+//// model: P212
+model P212
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real c4[:] = 2 * x;
+end P212;
+//// model: P213
+model P213
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real c5[:] = x[2:3];
+end P213;
+//// model: P214
+model P214
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real c6[:] = {i * time for i in 1:n};
+end P214;
+//// model: P215
+model P215
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real c7[:] = sin(x);
+end P215;
+//// model: P216
+model P216
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real c8[size(x, 1)] = x;
+end P216;
+//// model: P217
+model P217
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real c9[:] = if time > 1 then x else 2 * x;
+end P217;
+//// model: P218
+model P218
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real d1[:] = if n == 2 then {1, 2} else {3};
+end P218;
+//// model: P219
+model P219
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real d2[:, :] = if n == 3 then ones(n, 2) else ones(n, n);
+end P219;
+//// model: P22
+model P22
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean a3[:] = b and b2;
+end P22;
+//// model: P220
+model P220
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real d3[max(n, 3)];
+end P220;
+//// model: P221
+model P221
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real d4[max({n, 3})];
+end P221;
+//// model: P222
+model P222
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer d5[:] = 3:5;
+end P222;
+//// model: P223
+model P223
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real d6[d5[end]];
+end P223;
+//// model: P224
+model P224
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean d7[:] = edge(b);
+end P224;
+//// model: P225
+model P225
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean d8[:] = {x[i] > 1 for i in 1:3};
+end P225;
+//// model: P226
+model P226
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  String d9[:] = {String(i) for i in 1:3};
+end P226;
+//// model: P227
+model P227
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real e1[:] = cat(1, x, x);
+end P227;
+//// model: P228
+model P228
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real e2[:] = linspace(0, 1, n + 1);
+end P228;
+//// model: P229
+model P229
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real e3[:] = fill(time, n);
+end P229;
+//// model: P23
+model P23
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean a4[:] = b or b2;
+end P23;
+//// model: P230
+model P230
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer e4[:] = {i for i in 1:n};
+end P230;
+//// model: P231
+model P231
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real e5[:, :] = {{time, 1}, {2, 3}};
+end P231;
+//// model: P232
+model P232
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real e6[:, 2] = {{time, 1}, {2, 3}};
+end P232;
+//// model: P233
+model P233
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real e7[:] = -x;
+end P233;
+//// model: P234
+model P234
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real e8[:] = x .* x;
+end P234;
+//// model: P235
+model P235
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real e9[:] = x + {1, 2, 3};
+end P235;
+//// model: P24
+model P24
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean a5[:] = {false, false, true, true} or {true, false, true, false};
+end P24;
+//// model: P25
+model P25
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean a6[:] = false:true;
+end P25;
+//// model: P26
+model P26
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean a7[2] = b and {true, true};
+end P26;
+//// model: P27
+model P27
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean a8[2] = not {true, false};
+end P27;
+//// model: P28
+model P28
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean a9[2] = not b;
+end P28;
+//// model: P29
+model P29
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean c1[:] = true:false;
+end P29;

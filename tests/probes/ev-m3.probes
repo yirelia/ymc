@@ -1,0 +1,110 @@
+//// set: ev-m3 — 别名连带（续）
+//// model: EV0
+model EV0
+  parameter Real p = 2 annotation(Evaluate = true);
+  parameter Real q = -p;
+  Real x = q;
+end EV0;
+//// model: EV1
+model EV1
+  parameter Real p = 2 annotation(Evaluate = true);
+  parameter Real q = p + 0;
+  Real x = q;
+end EV1;
+//// model: EV10
+model EV10
+  parameter Real p = 2 annotation(Evaluate = true);
+  parameter Integer k = 3;
+  parameter Real q = p;
+  parameter Real s = k;
+  Real x = q + s;
+end EV10;
+//// model: EV11
+model EV11
+  model M
+    parameter Real g = 1;
+    Real x = g * time;
+  end M;
+  parameter Real p = 2 annotation(Evaluate = true);
+  M m(g = p);
+end EV11;
+//// model: EV12
+model EV12
+  model M
+    parameter Real g = 1;
+    Real x = g * time;
+  end M;
+  parameter Real p = 2 annotation(Evaluate = true);
+  M m(g = 2 * p);
+end EV12;
+//// model: EV13
+model EV13
+  parameter Real p = 2 annotation(Evaluate = true);
+  Real x(start = p) = time;
+  parameter Real q(start = p) = 1;
+end EV13;
+//// model: EV14
+model EV14
+  parameter Real p = 2 annotation(Evaluate = true);
+  constant Real c = 3;
+  parameter Real q = c;
+  Real x = q * time;
+end EV14;
+//// model: EV15
+model EV15
+  parameter Real p = 2 annotation(Evaluate = true);
+  parameter Real q = if p > 1 then p else 0;
+  Real x = q * time;
+end EV15;
+//// model: EV2
+model EV2
+  parameter Real p = 2 annotation(Evaluate = true);
+  parameter Real q = (p);
+  Real x = q * time;
+end EV2;
+//// model: EV3
+model EV3
+  parameter Integer n = 2 annotation(Evaluate = true);
+  parameter Integer m = n;
+  Real y[m];
+end EV3;
+//// model: EV4
+model EV4
+  parameter Real p = 2 annotation(Evaluate = true);
+  parameter Real q = p;
+  parameter Real r = q;
+  Real x = r * time;
+end EV4;
+//// model: EV5
+model EV5
+  parameter Real q = p;
+  parameter Real p = 2 annotation(Evaluate = true);
+  Real x = q * time;
+end EV5;
+//// model: EV6
+model EV6
+  parameter Integer n = 2;
+  parameter Integer m = n;
+  Real y[n];
+  Real x = m * time;
+end EV6;
+//// model: EV7
+model EV7
+  parameter Integer n = 2;
+  parameter Integer m = n;
+  Real y[m];
+  Real x = n * time;
+end EV7;
+//// model: EV8
+model EV8
+  parameter Real p = 2 annotation(Evaluate = true);
+  parameter Real q = p * 1;
+  Real x = q;
+end EV8;
+//// model: EV9
+model EV9
+  parameter Real p = 2 annotation(Evaluate = true);
+  parameter Real q = 2 * p;
+  parameter Real r = q;
+  Real x = r;
+end EV9;

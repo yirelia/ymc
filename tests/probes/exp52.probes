@@ -1,0 +1,182 @@
+//// set: exp52 — 表达式
+//// model: YmcConnChain1
+connector Inner
+  Real e;
+  flow Real f;
+end Inner;
+connector Outer
+  Inner c2;
+  Real g;
+end Outer;
+model A
+  Inner d;
+end A;
+model YmcConnChain1
+  Outer c1;
+  A a;
+  Inner d;
+equation
+  connect(c1.c2, d);
+  connect(c1.c2, a.d);
+end YmcConnChain1;
+//// model: YmcExpArr1
+expandable connector EC
+end EC;
+connector RealOutput = output Real;
+model YmcExpArr1
+  EC ec[2];
+  RealOutput y1, y2;
+equation
+  connect(ec[1].x, y1);
+  connect(ec[2].x, y2);
+end YmcExpArr1;
+//// model: YmcExpArr2
+expandable connector EC
+end EC;
+connector RealOutput = output Real;
+model YmcExpArr2
+  EC ec[2];
+  RealOutput y1, y2;
+equation
+  connect(ec[1].x, y1);
+  connect(ec[2].z, y2);
+end YmcExpArr2;
+//// model: YmcExpArr3
+expandable connector EC
+end EC;
+connector RealOutput = output Real;
+model YmcExpArr3
+  EC ec[2], ec2[2];
+  RealOutput y1;
+equation
+  connect(ec, ec2);
+  connect(ec[1].x, y1);
+end YmcExpArr3;
+//// model: YmcExpDeclOther1
+expandable connector EC1
+  Real x;
+end EC1;
+expandable connector EC2
+end EC2;
+connector RealInput = input Real;
+model YmcExpDeclOther1
+  EC1 ec1;
+  EC2 ec2;
+  RealInput ri;
+equation
+  connect(ec1, ec2);
+  connect(ec1.x, ri);
+end YmcExpDeclOther1;
+//// model: YmcExpElem1
+expandable connector EC
+end EC;
+connector RealOutput = output Real;
+model YmcExpElem1
+  RealOutput y[2];
+  EC ec;
+equation
+  connect(ec.y, y[2]);
+  y[1] = time;
+end YmcExpElem1;
+//// model: YmcExpHash1
+expandable connector EC
+end EC;
+connector RealOutput = output Real;
+model YmcExpHash1
+  EC bus;
+  RealOutput s1, s2, s3;
+equation
+  connect(bus.a, s1);
+  connect(bus.b, s2);
+  connect(bus.c, s3);
+end YmcExpHash1;
+//// model: YmcExpHash2
+expandable connector EC
+end EC;
+connector RealOutput = output Real;
+model YmcExpHash2
+  EC bus;
+  RealOutput s1, s2, s3;
+equation
+  connect(bus.speed, s1);
+  connect(bus.torque, s2);
+  connect(bus.temp, s3);
+end YmcExpHash2;
+//// model: YmcExpNestedVirt1
+expandable connector EC
+end EC;
+expandable connector EC2
+  EC ec;
+end EC2;
+connector RealOutput = output Real;
+model YmcExpNestedVirt1
+  RealOutput x;
+  EC2 ec1, ec2;
+equation
+  connect(ec1.ec.x, x);
+  connect(ec1, ec2);
+end YmcExpNestedVirt1;
+//// model: YmcExpNode1
+expandable connector EC
+  Real x;
+end EC;
+model A
+  EC ec;
+end A;
+connector RealOutput = output Real;
+model YmcExpNode1
+  A a[2];
+  RealOutput z;
+equation
+  connect(a[1].ec.x, z);
+end YmcExpNode1;
+//// model: YmcExpRehash1
+expandable connector EC
+end EC;
+connector RealOutput = output Real;
+model YmcExpRehash1
+  EC bus;
+  RealOutput s01;
+  RealOutput s02;
+  RealOutput s03;
+  RealOutput s04;
+  RealOutput s05;
+  RealOutput s06;
+  RealOutput s07;
+  RealOutput s08;
+  RealOutput s09;
+  RealOutput s10;
+  RealOutput s11;
+  RealOutput s12;
+  RealOutput s13;
+  RealOutput s14;
+  RealOutput s15;
+equation
+  connect(bus.n01, s01);
+  connect(bus.n02, s02);
+  connect(bus.n03, s03);
+  connect(bus.n04, s04);
+  connect(bus.n05, s05);
+  connect(bus.n06, s06);
+  connect(bus.n07, s07);
+  connect(bus.n08, s08);
+  connect(bus.n09, s09);
+  connect(bus.n10, s10);
+  connect(bus.n11, s11);
+  connect(bus.n12, s12);
+  connect(bus.n13, s13);
+  connect(bus.n14, s14);
+  connect(bus.n15, s15);
+end YmcExpRehash1;
+//// model: YmcExpTwoSets1
+expandable connector EC
+end EC;
+connector RealOutput = output Real;
+model YmcExpTwoSets1
+  EC bus1, bus2;
+  RealOutput s1, s2, s3;
+equation
+  connect(bus2.x, s1);
+  connect(bus1.y, s2);
+  connect(bus2.z, s3);
+end YmcExpTwoSets1;

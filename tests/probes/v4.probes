@@ -1,0 +1,837 @@
+//// set: v4 — 向量化调用、sum / product / min / max
+//// model: P1
+model P1
+  Real x = time;
+  Real y = pre(x);
+end P1;
+//// model: P10
+model P10
+  record R
+    Real a;
+  end R;
+  parameter R r(a = 1);
+  model M
+    Real u = time;
+    discrete Real d;
+    parameter Real p = 2;
+  equation
+    when time > 1 then
+      d = 1;
+    end when;
+  end M;
+  M m;
+  Real y1 = pre(r.a);
+  Real y2 = pre(m.d);
+  Real y3 = pre(m.p);
+end P10;
+//// model: P11
+model P11
+  model M
+    Real u = time;
+  end M;
+  M m;
+  Real y = pre(m.u);
+end P11;
+//// model: P12
+model P12
+  Real x = time;
+  Real y = pre(time);
+end P12;
+//// model: P13
+model P13
+  Boolean b = time > 1;
+  Boolean c = pre(b);
+  Boolean d = edge(b);
+  Boolean e = change(b);
+  Integer i = integer(time);
+  Integer j = pre(i);
+end P13;
+//// model: P2
+model P2
+  Real x[3] = {time, 1, 2};
+  Real y[3];
+equation
+  y = pre(x);
+end P2;
+//// model: P3
+model P3
+  discrete Real x[3];
+  Real y[3] = pre(x);
+equation
+  when time > 1 then
+    x = {1, 2, 3};
+  end when;
+end P3;
+//// model: P4
+model P4
+  Real x = time;
+  discrete Real y;
+equation
+  when time > 1 then
+    y = pre(x);
+  end when;
+end P4;
+//// model: P5
+model P5
+  Real x = time;
+  Boolean b = change(x);
+end P5;
+//// model: P6
+model P6
+  parameter Real p = 1;
+  Real y = pre(p);
+  discrete Real d;
+  Real z = pre(d);
+  Integer i;
+  Integer j = pre(i);
+equation
+  when time > 1 then
+    d = 2;
+    i = 3;
+  end when;
+end P6;
+//// model: P7
+model P7
+  Real x = time;
+  Real y = pre(x + 1);
+end P7;
+//// model: P8
+model P8
+  Real x = time;
+  Real y;
+algorithm
+  when time > 1 then
+    y := pre(x);
+  end when;
+end P8;
+//// model: P9
+model P9
+  Real x = time;
+  discrete Real y;
+equation
+  when change(x) then
+    y = 1;
+  end when;
+end P9;
+//// model: Q1
+model Q1
+  Real x[3] = {time, 1, 2};
+  Boolean v[3] = x .> x;
+end Q1;
+//// model: Q2
+model Q2
+  Real x[3] = {time, 1, 2};
+  Boolean v[3] = x > x;
+end Q2;
+//// model: Q3
+model Q3
+  Real x[3] = {time, 1, 2};
+  Boolean v[3];
+equation
+  v = x > {1, 2, 3};
+end Q3;
+//// model: T0
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T0
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real a1[3] = cos(x);
+end T0;
+//// model: T1
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T1
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real a2[3] = tan(x);
+end T1;
+//// model: T10
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T10
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real b2[3] = log10(x);
+end T10;
+//// model: T11
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T11
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real b3[3] = sign(x);
+end T11;
+//// model: T12
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T12
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real b4[3] = floor(x);
+end T12;
+//// model: T13
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T13
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real b5[3] = ceil(x);
+end T13;
+//// model: T14
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T14
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real b6[3] = rem(x, 2);
+end T14;
+//// model: T15
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T15
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real b7[3] = div(x, 2);
+end T15;
+//// model: T16
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T16
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Integer b8[3] = div(k, 2);
+end T16;
+//// model: T17
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T17
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Integer b9[3] = mod(k, 2);
+end T17;
+//// model: T18
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T18
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real c1[3] = der(x);
+end T18;
+//// model: T19
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T19
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real c2[3] = pre(x);
+end T19;
+//// model: T2
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T2
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real a3[3] = asin(x);
+end T2;
+//// model: T20
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T20
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real c3[3] = smooth(1, x);
+end T20;
+//// model: T21
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T21
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real c4[3] = max(x, 1);
+end T21;
+//// model: T22
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T22
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real c5[3] = homotopy(x, x);
+end T22;
+//// model: T23
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T23
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real c6[3] = der(sin(x));
+end T23;
+//// model: T24
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T24
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real c7[3] = noEvent(x);
+end T24;
+//// model: T25
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T25
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real c8[3] = String(x);
+end T25;
+//// model: T26
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T26
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real c9[3] = sin(k);
+end T26;
+//// model: T27
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T27
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Integer d1[3] = sign(k);
+end T27;
+//// model: T28
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T28
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real d2 = F(x, 1);
+end T28;
+//// model: T29
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T29
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real d3[3] = sin(x[1]);
+end T29;
+//// model: T3
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T3
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real a4[3] = acos(x);
+end T3;
+//// model: T30
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T30
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real d4[2, 3] = sin(w);
+end T30;
+//// model: T31
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T31
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real d5[3] = semiLinear(x, 1, 2);
+end T31;
+//// model: T32
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T32
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real d6[3] = F(x);
+end T32;
+//// model: T4
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T4
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real a5[3] = atan(x);
+end T4;
+//// model: T5
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T5
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real a6[3] = sinh(x);
+end T5;
+//// model: T6
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T6
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real a7[3] = cosh(x);
+end T6;
+//// model: T7
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T7
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real a8[3] = tanh(x);
+end T7;
+//// model: T8
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T8
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real a9[3] = exp(x);
+end T8;
+//// model: T9
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+function G
+  input Real a[3];
+  output Real c = a[1];
+end G;
+function H
+  input Real a;
+  output Real c[2] = {a, a};
+end H;
+model T9
+  parameter Real q[3] = {1, 2, 3};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real b1[3] = log(x);
+end T9;
+//// model: W1
+function f
+  input Real x;
+  output Real y = x;
+end f;
+model W1
+  Real x[3];
+  Real y[3];
+equation
+  x = f({1, 2, 3});
+  y = sin({1, 2, 3});
+end W1;

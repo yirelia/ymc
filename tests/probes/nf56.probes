@@ -1,0 +1,134 @@
+//// set: nf56 — nf-live 语料带出的杂项
+//// model: YmcCond1
+block Foo
+  parameter Boolean enabled = false;
+  Real x = 1 if enabled;
+end Foo;
+model YmcCond1
+  Foo foo(enabled = true);
+  Foo foo2;
+end YmcCond1;
+//// model: YmcCond2
+block Foo
+  parameter Boolean enabled = false;
+  Real x = 1 if enabled;
+end Foo;
+model YmcCond2
+  parameter Boolean b = true;
+  parameter Boolean c = not b;
+  Foo foo(enabled = b);
+  Foo foo2(enabled = c);
+  Real y = if b then 1 else 2;
+end YmcCond2;
+//// model: YmcDir1
+record R
+  Real x;
+  Real xi;
+end R;
+connector C
+  Real e;
+  flow Real f;
+end C;
+model A
+  input R ra;
+  output C ca;
+  Real v;
+end A;
+model YmcDir1
+  input R ri;
+  output R ro;
+  input C ci;
+  output C co;
+  A a;
+  parameter R rp(x = 1, xi = 2);
+end YmcDir1;
+//// model: YmcSimp1
+model YmcSimp1
+  parameter Integer pi = 3;
+  Real x, a, d, x1, x2, x3, i, w;
+  String s;
+  Real z[5];
+equation
+  der(x) = -x + a*(1-x*x);
+  d = (-a*x)/x;
+  x1 = x - (-1);
+  x2 = -1*x;
+  x3 = 1*x;
+  i = 3 * (2 ^ pi);
+  w = if time > 1 then 1 else 2;
+  s = "te" + "st";
+  a = time;
+algorithm
+  for k in 1:4+1 loop
+    z[k] := k;
+  end for;
+end YmcSimp1;
+//// model: YmcStr1
+function f
+  input String s = "a
+b";
+  output String t;
+algorithm
+  t := s + "c
+d";
+  if s == "x
+y" then
+    t := "p
+q";
+  end if;
+end f;
+model YmcStr1
+  String s1 = "x
+y";
+  String s2;
+  String s3;
+  Real z;
+equation
+  s2 = "u
+v";
+  if z > 0 then
+    s3 = "m
+n";
+  else
+    s3 = "w";
+  end if;
+  z = time;
+  assert(z < 10, "too
+big");
+algorithm
+  if z > 1 then
+    s3 := "k
+l";
+  end if;
+end YmcStr1;
+//// model: YmcStr2
+model YmcStr2
+  String s1 = "x
+y";
+  String s2;
+  String s3;
+  Real z;
+equation
+  s2 = "u
+v";
+  if z > 0 then
+    s3 = "m
+n";
+  else
+    s3 = "w";
+  end if;
+  z = time;
+  assert(z < 10, "too
+big");
+algorithm
+  if z > 1 then
+    s3 := "k
+l";
+  end if;
+end YmcStr2;
+//// model: YmcVar1
+model M
+  parameter Real R = time;
+  parameter Real k = 2;
+  Real x = k;
+end M;

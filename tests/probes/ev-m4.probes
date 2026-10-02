@@ -1,0 +1,87 @@
+//// set: ev-m4 — 别名连带（修饰 / 记录）
+//// model: EV0
+model EV0
+  record R
+    parameter Real x = 1;
+  end R;
+  parameter Real p = 2 annotation(Evaluate = true);
+  parameter R r1(x = p);
+  parameter R r2 = r1;
+  Real y = r2.x * time;
+end EV0;
+//// model: EV1
+model EV1
+  record R
+    parameter Real x = 1;
+  end R;
+  parameter Real p = 2 annotation(Evaluate = true);
+  parameter R r1 = R(x = p);
+  Real y = r1.x * time;
+end EV1;
+//// model: EV2
+model EV2
+  record R
+    parameter Real x = 1;
+  end R;
+  parameter Real p = 2 annotation(Evaluate = true);
+  parameter R r1 = R(p);
+  Real y = r1.x * time;
+end EV2;
+//// model: EV3
+model EV3
+  record R
+    Real x;
+    Real y;
+  end R;
+  parameter Real k = 2;
+  parameter R p3 = if k > 3 then R(1, 2) else R(x = k, y = 1);
+  Real z = p3.x * time;
+end EV3;
+//// model: EV4
+model EV4
+  record R
+    parameter Real x = 1;
+    parameter Real w = x;
+  end R;
+  parameter Real p = 2 annotation(Evaluate = true);
+  parameter R r1(x = p);
+  Real y = r1.w * time;
+end EV4;
+//// model: EV5
+model EV5
+  model M
+    parameter Real g = 1;
+    parameter Real h = g;
+    Real x = h * time;
+  end M;
+  parameter Real p = 2 annotation(Evaluate = true);
+  M m(g = p);
+end EV5;
+//// model: EV6
+model EV6
+  parameter Integer n = 2;
+  parameter Real s = n;
+  Real y[n];
+  Real x = s * time;
+end EV6;
+//// model: EV7
+model EV7
+  parameter Real p = 2 annotation(Evaluate = true);
+  parameter Real q(start = 5) = p;
+  Real x = q * time;
+end EV7;
+//// model: EV8
+model EV8
+  parameter Real p = 2 annotation(Evaluate = true);
+  final parameter Real q = p;
+  Real x = q * time;
+end EV8;
+//// model: EV9
+model EV9
+  parameter Real p[2] = {1, 2};
+  parameter Real q = p[1];
+  parameter Integer n = 2;
+  parameter Integer m[2] = {n, n};
+  Real y[n];
+  Real x = m[1] * time + q;
+end EV9;

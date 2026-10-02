@@ -1,0 +1,55 @@
+//// set: cc53 — 杂项
+//// model: YmcCCConst3
+model YmcCCConst3
+  connector C = constant Real;
+  C c1 = 1, c2 = 2, c3 = 1;
+equation
+  connect(c1, c2);
+  connect(c1, c3);
+end YmcCCConst3;
+//// model: YmcCCEq1
+model YmcCCEq1
+  connector C = constant Real;
+  C c1 = 1, c2 = 1;
+equation
+  connect(c1, c2);
+end YmcCCEq1;
+//// model: YmcCCInt1
+model YmcCCInt1
+  connector CI = parameter Integer;
+  connector CB = parameter Boolean;
+  CI i1 = 1, i2 = 1;
+  CB b1 = true, b2 = true;
+equation
+  connect(i1, i2);
+  connect(b1, b2);
+end YmcCCInt1;
+//// model: YmcCCMix1
+model YmcCCMix1
+  connector CP = parameter Real;
+  connector CR = Real;
+  CP p = 1;
+  CR r;
+equation
+  connect(p, r);
+end YmcCCMix1;
+//// model: YmcCCThree1
+model YmcCCThree1
+  connector C = parameter Real;
+  C c1 = 0, c2 = 0, c3 = 0;
+equation
+  connect(c1, c2);
+  connect(c2, c3);
+end YmcCCThree1;
+//// model: YmcUnbArr1
+model M
+  parameter Real x[2];
+end M;
+//// model: YmcUnbConst1
+model M
+  constant Integer n;
+end M;
+//// model: YmcUnfixed1
+model M
+  parameter Real x(fixed = false);
+end M;

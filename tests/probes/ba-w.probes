@@ -1,0 +1,542 @@
+//// set: ba-w — 数组 if 表达式
+//// model: AT1
+model AT1
+  parameter Integer n = 2;
+  Real r2(start = if n == 2 then 1 else 4);
+  Real r3[2](start = {1, 2});
+  Real r4[2](each start = if n == 2 then 1 else 4);
+end AT1;
+//// model: BASE
+model BASE
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Boolean v[2];
+  Real y[3];
+end BASE;
+//// model: W0
+model W0
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real p1[3] = if time > 1 then x else k;
+end W0;
+//// model: W1
+model W1
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real p2[3] = if time > 1 then {1, 2, 3} else k;
+end W1;
+//// model: W10
+model W10
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real q2[3] = 2 * (if time > 1 then x else {1, 2, 3});
+end W10;
+//// model: W11
+model W11
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real q3 = (if time > 1 then x else 2 * x) * x;
+end W11;
+//// model: W12
+model W12
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real q4[3] = if n == 2 then x else {1, 2, 3};
+end W12;
+//// model: W13
+model W13
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  parameter Real q5[3] = if n == 2 then q else 2 * q;
+end W13;
+//// model: W14
+model W14
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real q6[3] = if time > 1 then x else der(x);
+end W14;
+//// model: W15
+model W15
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real q7[3] = if time > 1 then x else {1, 2};
+end W15;
+//// model: W16
+model W16
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real q8[3] = if time > 1 then x else 1;
+end W16;
+//// model: W17
+model W17
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real q9 = if time > 1 then x[1] else sum(x);
+end W17;
+//// model: W18
+model W18
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real r1[3] = if x[1] > 1 then x else x .* x;
+end W18;
+//// model: W19
+model W19
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Boolean v[2];
+  Real y[3];
+equation
+  y = if time > 1 then x else -x;
+end W19;
+//// model: W2
+model W2
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real p3[:] = if time > 1 then x else 2 * x;
+end W2;
+//// model: W20
+model W20
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Boolean v[2];
+  Real y[3];
+equation
+  y = if b[1] then 2 * x else x + x;
+end W20;
+//// model: W21
+model W21
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Boolean v[2];
+  Real y[3];
+equation
+  der(y) = if time > 1 then x else -y;
+end W21;
+//// model: W22
+model W22
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Boolean v[2];
+  Real y[3];
+equation
+  y = (if time > 1 then x else 2 * x) + x;
+end W22;
+//// model: W23
+model W23
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Boolean v[2];
+  Real y[3];
+equation
+  y = if time > 1 then sin(x) else x;
+end W23;
+//// model: W24
+model W24
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Boolean v[2];
+  Real y[3];
+equation
+  v = if time > 1 then b else b2;
+end W24;
+//// model: W25
+model W25
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Boolean v[2];
+  Real y[3];
+equation
+  v = if time > 1 then b and b2 else b;
+end W25;
+//// model: W26
+model W26
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real r2[3](start = if n == 2 then {1, 2, 3} else {4, 5, 6});
+end W26;
+//// model: W27
+model W27
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real r3[3] = if true then x else 2 * x;
+end W27;
+//// model: W28
+model W28
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real r4[3] = if n == 2 then {1, 2, 3} else {4, 5, 6};
+end W28;
+//// model: W29
+model W29
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Integer r5[3] = if time > 1 then k else {1, 2, 3};
+end W29;
+//// model: W3
+model W3
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real p4[2] = if time > 1 then x[1:2] else x[2:3];
+end W3;
+//// model: W30
+model W30
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real r6[3] = noEvent(if time > 1 then x else 2 * x);
+end W30;
+//// model: W31
+model W31
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real r7[3] = if time > 1 then x else if time > 2 then {1, 2, 3} else 2 * x;
+end W31;
+//// model: W32
+model W32
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real r8[3] = if time > 1 then x else q;
+end W32;
+//// model: W33
+model W33
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real r9[3] = if time > 1 then q else {time, 1, 2};
+end W33;
+//// model: W34
+model W34
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s1[2] = if time > 1 then w[1, 1:2] else w[2, 2:3];
+end W34;
+//// model: W35
+model W35
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s2[3] = if time > 1 then w[1] else w[2];
+end W35;
+//// model: W36
+model W36
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real s3[3] = if time > 1 then x else if n == 2 then q else x;
+end W36;
+//// model: W37
+model W37
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Boolean v[2];
+  Real y[3];
+equation
+  y = if time > 1 then x else q;
+end W37;
+//// model: W38
+model W38
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Boolean v[2];
+  Real y[3];
+equation
+  y[1:2] = if time > 1 then x[1:2] else {1, 2};
+end W38;
+//// model: W39
+model W39
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t1[3](each start = if n == 2 then 1 else 4);
+end W39;
+//// model: W4
+model W4
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Boolean p5[2] = if time > 1 then b and b2 else not b;
+end W4;
+//// model: W40
+model W40
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t2[3](start = if n == 2 then q else {4, 5, 6});
+end W40;
+//// model: W41
+model W41
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t3[2] = if time > 1 then {time, 1} else {2, time};
+end W41;
+//// model: W42
+model W42
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t4[2, 2] = if time > 1 then {{time, 1}, {2, 3}} else {{1, 2}, {3, time}};
+end W42;
+//// model: W43
+model W43
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t5[3] = if time > 1 then {x[1], 1, 2} else x;
+end W43;
+//// model: W44
+model W44
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Integer t6[2] = if time > 1 then {k[1], 1} else {2, k[2]};
+end W44;
+//// model: W5
+model W5
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real p6[3] = if time > 1 then -x else x;
+end W5;
+//// model: W6
+model W6
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real p7[3] = if time > 1 then x else zeros(3);
+end W6;
+//// model: W7
+model W7
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real p8[3] = if time > 1 then x else fill(time, 3);
+end W7;
+//// model: W8
+model W8
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real p9[2, 3] = if time > 1 then w else 2 * w;
+end W8;
+//// model: W9
+model W9
+  parameter Integer n = 2;
+  parameter Real q[3] = {1, 2, 3};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Integer k[3] = {1, 2, 3};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real q1[3] = if b[1] then x else if b[2] then {1, 2, 3} else -x;
+end W9;

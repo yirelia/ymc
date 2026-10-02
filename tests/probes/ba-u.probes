@@ -1,0 +1,511 @@
+//// set: ba-u — Boolean 数组 / 关系
+//// model: U0
+model U0
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean a1[:] = {false, true};
+end U0;
+//// model: U1
+model U1
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean a2[:] = not b;
+end U1;
+//// model: U10
+model U10
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean c2[:] = false:false;
+end U10;
+//// model: U11
+model U11
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean g3[2] = b and not b2;
+end U11;
+//// model: U12
+model U12
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean g4[2] = {b[1], b2[2]} and b;
+end U12;
+//// model: U13
+model U13
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean g5[2] = (b and b2) or b;
+end U13;
+//// model: U14
+model U14
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean g5b[2] = b and (b2 or b);
+end U14;
+//// model: U15
+model U15
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean g7[2] = {x[1] > 1, x[2] > 2} and b;
+end U15;
+//// model: U16
+model U16
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean g9[2] = {true, false} or b;
+end U16;
+//// model: U17
+model U17
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  parameter Boolean h1[2] = {true, false} and {true, true};
+end U17;
+//// model: U18
+model U18
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  parameter Boolean h2[2] = not {true, false};
+end U18;
+//// model: U19
+model U19
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  parameter Boolean pc[2] = not pb;
+end U19;
+//// model: U2
+model U2
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean a3[:] = b and b2;
+end U2;
+//// model: U20
+model U20
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  parameter Boolean pd[2] = pb and {true, true};
+end U20;
+//// model: U21
+model U21
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean g2[2] = pb or b;
+end U21;
+//// model: U22
+model U22
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  v = {true, false} or b;
+end U22;
+//// model: U23
+model U23
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  v = false:true;
+end U23;
+//// model: U24
+model U24
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean r1[2] = false:true;
+end U24;
+//// model: U25
+model U25
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean k4[2] = pre(b) and b2;
+end U25;
+//// model: U26
+model U26
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  v = b and (time > 1);
+end U26;
+//// model: U27
+model U27
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean k5[2] = b and (time > 1);
+end U27;
+//// model: U28
+model U28
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  v = not (b and b2);
+end U28;
+//// model: U29
+model U29
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean k6[2] = not (b and b2);
+end U29;
+//// model: U3
+model U3
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean a4[:] = b or b2;
+end U3;
+//// model: U30
+model U30
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Real k7[2] = false:true;
+end U30;
+//// model: U31
+model U31
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean k8[2] = 1:2;
+end U31;
+//// model: U32
+model U32
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean k9[3] = b and b2;
+end U32;
+//// model: U33
+model U33
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean l1[2, 2] = {b, b2} and {b2, b};
+end U33;
+//// model: U34
+model U34
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  v = b or pre(b2);
+end U34;
+//// model: U35
+model U35
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean l2[2] = if time > 1 then b else b2;
+end U35;
+//// model: U36
+model U36
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean l3 = b[1] and b2[2] or not b[2];
+end U36;
+//// model: U37
+model U37
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean l4[2](start = not pb);
+end U37;
+//// model: U38
+model U38
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean l5[2] = {not b[1], b[2] and b2[1]};
+end U38;
+//// model: U39
+model U39
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean m1 = {1, 2} < {2, 3};
+end U39;
+//// model: U4
+model U4
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean a5[:] = {false, false, true, true} or {true, false, true, false};
+end U4;
+//// model: U40
+model U40
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  v = {1, 2} < {2, 3};
+end U40;
+//// model: U41
+model U41
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean m2[2] = {x[1] > 1, false} or {true, x[2] < 1};
+end U41;
+//// model: U42
+model U42
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean m3[2] = not {b[1], true};
+end U42;
+//// model: U43
+model U43
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean m4[2, 2] = {b, b2} or {b2, b};
+end U43;
+//// model: U44
+model U44
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  v = not {b[1], true};
+end U44;
+//// model: U45
+model U45
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  v = not {true, false};
+end U45;
+//// model: U46
+model U46
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  v = {true, false} and {true, true};
+end U46;
+//// model: U47
+model U47
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  v = {b[1], true} and b;
+end U47;
+//// model: U48
+model U48
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean v[2];
+  Real y[3];
+equation
+  v = b and {b2[1], false};
+end U48;
+//// model: U49
+model U49
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  parameter Boolean h3[2] = {pb[1], true} and pb;
+end U49;
+//// model: U5
+model U5
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean a6[:] = false:true;
+end U5;
+//// model: U50
+model U50
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  parameter Boolean h4[2] = not {pb[1], true};
+end U50;
+//// model: U51
+model U51
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean m5[2] = b and not {b[1], true};
+end U51;
+//// model: U52
+model U52
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean m6[2] = not {true, false} or b;
+end U52;
+//// model: U6
+model U6
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean a7[2] = b and {true, true};
+end U6;
+//// model: U7
+model U7
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean a8[2] = not {true, false};
+end U7;
+//// model: U8
+model U8
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean a9[2] = not b;
+end U8;
+//// model: U9
+model U9
+  parameter Integer n = 2;
+  parameter Boolean pb[2] = {true, false};
+  Boolean b[2] = {time > 1, true};
+  Boolean b2[2] = {true, time > 2};
+  Real x[3] = {time, 1, 2};
+  Boolean c1[:] = true:false;
+end U9;

@@ -1,0 +1,1595 @@
+//// set: misc — 各桶零散探针（早期，按文件名看主题）
+//// model: AE
+model AE
+  Real x[2];
+  Real y[2];
+  Real s;
+equation
+  x = -y;
+  y = s * x;
+end AE;
+//// model: BothInside
+connector C
+  Real e;
+  flow Real f;
+end C;
+model A
+  C c;
+end A;
+model BothInside
+  A a1, a2;
+equation
+  connect(a1.c, a2.c);
+end BothInside;
+//// model: CA2vars
+model CA2vars
+  connector InReal = input Real;
+  connector OutReal = output Real;
+  parameter Integer p = 3;
+  InReal x[p];
+  OutReal y[p+1];
+end CA2vars;
+//// model: CR
+model CR
+  record R
+    Real x;
+    Real y;
+  end R;
+  constant R r = R(3.0, 4.0);
+  Real a = r.x;
+  parameter R p = R(5.0, 6.0);
+end CR;
+//// model: CRU
+record R
+  Real x;
+end R;
+model M
+  constant R r = R(1.0);
+end M;
+//// model: CausalScalar
+model CausalScalar
+  connector InReal = input Real;
+  connector OutReal = output Real;
+  InReal x;
+  OutReal y;
+equation
+  connect(x, y);
+end CausalScalar;
+//// model: DINT
+model DINT
+  Real x = time;
+  Integer i = integer(x);
+  Boolean b = x > 0.5;
+end DINT;
+//// model: DINT2
+model DINT2
+  discrete Integer i = 1;
+end DINT2;
+//// model: DV
+model M
+  Integer i;
+  Integer j;
+  Real r;
+equation
+  r = i / j;
+end M;
+//// model: Desc
+connector C
+  Real e;
+  flow Real f;
+end C;
+model M
+  C c1[3], c2[3];
+equation
+  connect(c1[3:-1:1], c2);
+end M;
+//// model: DisjointTwo
+connector C
+  Real e;
+  flow Real f;
+end C;
+model DisjointTwo
+  C a1, a2, b1, b2;
+equation
+  connect(a1, a2);
+  connect(b1, b2);
+end DisjointTwo;
+//// model: E1
+model E1
+  type Reals = Real[3];
+  Reals x;
+end E1;
+//// model: E10
+model A
+  Real p;
+  Real q;
+end A;
+model E10
+  model B = A[2,3];
+  B b;
+end E10;
+//// model: E11
+model A
+  Real p;
+end A;
+model E11
+  model B = A[3];
+  B b[2];
+end E11;
+//// model: E12
+model E12
+  type R = Real[3];
+  R x = {1,2,3};
+end E12;
+//// model: E13
+record A
+  Real p;
+end A;
+model E13
+  type B = A[2];
+  B b;
+end E13;
+//// model: E2
+model E2
+  type Reals = Real[3];
+  Reals[4] x;
+end E2;
+//// model: E3
+model E3
+  type Reals = Real[3];
+  Reals[4] x[2];
+end E3;
+//// model: E4
+model E4
+  type Mat = Real[2,3];
+  Mat x;
+end E4;
+//// model: E5
+model E5
+  type Mat = Real[2,3];
+  Mat x[4];
+end E5;
+//// model: E6
+model E6
+  type Ints = Integer[2];
+  Ints x;
+end E6;
+//// model: E7
+model E7
+  type Bools = Boolean[2];
+  Bools x;
+end E7;
+//// model: E8
+model E8
+  type E = enumeration(a, b, c);
+  type R = Real[E];
+  R x;
+end E8;
+//// model: E9
+model E9
+  type R = Real[Boolean];
+  R x;
+end E9;
+//// model: E_enumcolon
+model E_enumcolon
+  type E = enumeration(:);
+  Real x[E];
+end E_enumcolon;
+//// model: E_int
+model E_int
+  Real x[Integer];
+end E_int;
+//// model: E_real
+model E_real
+  Real x[Real];
+end E_real;
+//// model: E_string
+model E_string
+  Real x[String];
+end E_string;
+//// model: EqPlace
+connector C
+  Real e;
+  flow Real f;
+end C;
+model M
+  C c1, c2;
+  Real x;
+equation
+  x = 1;
+  connect(c1, c2);
+end M;
+//// model: FN
+function f
+  input Real x;
+  output Real y = 2*x;
+end f;
+model M
+  Real b = f(time);
+end M;
+//// model: FS
+model FS
+  Real x[3];
+algorithm
+  for i in 1:3 loop
+    x[i] := 2*i;
+  end for;
+end FS;
+//// model: Flat
+connector C
+  Real e2;
+  Real e1;
+  flow Real f2;
+  flow Real f1;
+end C;
+model M
+  C a, b;
+equation
+  connect(a, b);
+end M;
+//// model: GN
+function g
+  input Real x;
+  output Real y;
+protected
+  Real t1 = t2;
+  Real t2 = 2*x;
+algorithm
+  y := t1 + 1;
+end g;
+model M
+  Real b = g(time);
+end M;
+//// model: IFBR
+model IFBR
+  Real x, y;
+equation
+  if time > 1 then
+    x = 1;
+    y = 2;
+  else
+    x = 3;
+  end if;
+end IFBR;
+//// model: I_bind
+model I_bind
+  Real x[2] = {1.0, 2.0};
+end I_bind;
+//// model: I_bind_param
+model I_bind_param
+  parameter Real x[2] = {1.0, 2.0};
+end I_bind_param;
+//// model: IfSimp
+model IfSimp
+  Real x;
+  Real y;
+  Boolean b1 = if x > 0 then true else false;
+  Boolean b2 = if x > 0 then false else true;
+  Boolean b3 = if not (x > 1) then false else true;
+  Real z = if x > 2 then y else y;
+equation
+  x = time;
+  y = 2 * time;
+end IfSimp;
+//// model: MM2vars
+connector S
+  Real r;
+  flow Real f;
+  stream Real s;
+end S;
+model A
+  parameter Boolean cond = true;
+  S s1(f(min = if cond then 0 else -1)), s2(f(min = if cond then 0 else 1));
+end A;
+model M
+  A a;
+end M;
+//// model: M_ic
+model A_ic
+  Real a;
+end A_ic;
+model M_ic
+  A_ic b[2];
+end M_ic;
+//// model: Mix
+connector C
+  Real e2;
+  Real e1;
+  flow Real f2;
+  flow Real f1;
+end C;
+connector N2
+  flow Real z;
+  Real a;
+  C b;
+  Real c;
+end N2;
+model M
+  N2 n1, n2;
+equation
+  connect(n1, n2);
+end M;
+//// model: NLB
+model NLB
+  Real y[3];
+  Real x[3] = y;
+  Real w[3] = 2*y;
+  parameter Real p[3] = {1,2,3};
+  parameter Real q[3] = p;
+  parameter Integer ip[3] = {1,2,3};
+  parameter Real r[3] = ip;
+end NLB;
+//// model: Nested
+connector C
+  Real e2;
+  Real e1;
+  flow Real f2;
+  flow Real f1;
+end C;
+connector N
+  C q;
+  C p;
+end N;
+model M
+  N n1, n2;
+equation
+  connect(n1, n2);
+end M;
+//// model: OrderTrap
+connector C
+  Real v;
+  flow Real i;
+end C;
+model A
+  C c;
+end A;
+model M
+  C p;
+  A a;
+equation
+  connect(a.c, p);
+end M;
+//// model: P1
+model P1
+  Real x = "a" + 1;
+end P1;
+//// model: P1_wholecopy
+record R
+  Real x = 1.0;
+  Real y = 2.0;
+end R;
+model P1_wholecopy
+  R r1 = R(4.0, 5.0);
+  R r2 = r1;
+end P1_wholecopy;
+//// model: P2
+model P2
+  Real x = if time > 0 then 1 else "a";
+end P2;
+//// model: P2_varmember
+record R
+  Real x = 1.0;
+  Real y = 2.0;
+end R;
+model P2_varmember
+  R r = R(4.0, 5.0);
+  Real a = r.x;
+end P2_varmember;
+//// model: P3
+model P3
+  Real x;
+equation
+  1 = "a";
+end P3;
+//// model: P3_parammember
+record R
+  Real x = 1.0;
+  Real y = 2.0;
+end R;
+model P3_parammember
+  parameter R r = R(4.0, 5.0);
+  parameter Real p = r.x;
+end P3_parammember;
+//// model: P4
+model P4
+  Real x = sin("a");
+end P4;
+//// model: P4_consteq
+record R
+  Real x = 1.0;
+  Real y = 2.0;
+end R;
+model P4_consteq
+  constant R r1;
+  Real a;
+equation
+  a = r1.x;
+end P4_consteq;
+//// model: P5
+model P5
+  Real x;
+equation
+  if 1 then x = 1; end if;
+end P5;
+//// model: P5_barevar
+record R
+  Real x = 1.0;
+  Real y = 2.0;
+  Real z = 3.0;
+end R;
+model P5_barevar
+  R r;
+end P5_barevar;
+//// model: P6
+model P6
+  Real x = true + 1;
+end P6;
+//// model: P_2b
+model P_2b
+  Real x[2, Boolean];
+end P_2b;
+//// model: P_2e
+model P_2e
+  type E = enumeration(a, b, c);
+  Real x[2, E];
+end P_2e;
+//// model: P_3d
+model P_3d
+  type E = enumeration(a, b);
+  Real x[E, Boolean, 2];
+end P_3d;
+//// model: P_ArrSub
+connector C
+  Real e;
+  flow Real f;
+end C;
+model A
+  C c;
+end A;
+model Res
+  C p;
+  C q;
+  Integer n;
+equation
+  connect(p, q);
+  n = 1;
+end Res;
+model M
+  Res R[2];
+  C p;
+equation
+  connect(R[1].p, p);
+end M;
+//// model: P_ChainIn
+connector C
+  Real e;
+  flow Real f;
+end C;
+model A
+  C c;
+end A;
+model M
+  A a, b, d;
+equation
+  connect(a.c, b.c);
+  connect(b.c, d.c);
+end M;
+//// model: P_ChainOut
+connector C
+  Real e;
+  flow Real f;
+end C;
+model A
+  C c;
+end A;
+model M
+  C c1, c2, c3;
+equation
+  connect(c1, c2);
+  connect(c2, c3);
+end M;
+//// model: P_ChainOutRev
+connector C
+  Real e;
+  flow Real f;
+end C;
+model A
+  C c;
+end A;
+model M
+  C c1, c2, c3;
+equation
+  connect(c2, c3);
+  connect(c1, c2);
+end M;
+//// model: P_InFwdOperands
+connector C
+  Real e;
+  flow Real f;
+end C;
+model A
+  C c;
+end A;
+model M
+  A a, b;
+equation
+  connect(a.c, b.c);
+end M;
+//// model: P_InInOutOut
+connector C
+  Real e;
+  flow Real f;
+end C;
+model A
+  C c;
+end A;
+model M
+  A a, b;
+  C c1, c2;
+equation
+  connect(a.c, c1);
+  connect(b.c, c2);
+  connect(c1, c2);
+end M;
+//// model: P_InOut
+connector C
+  Real e;
+  flow Real f;
+end C;
+model A
+  C c;
+end A;
+model M
+  A a;
+  C c1;
+equation
+  connect(c1, a.c);
+end M;
+//// model: P_InOutOut
+connector C
+  Real e;
+  flow Real f;
+end C;
+model A
+  C c;
+end A;
+model M
+  A a;
+  C c1, c2;
+equation
+  connect(a.c, c1);
+  connect(c1, c2);
+end M;
+//// model: P_InRevOperands
+connector C
+  Real e;
+  flow Real f;
+end C;
+model A
+  C c;
+end A;
+model M
+  A a, b;
+equation
+  connect(b.c, a.c);
+end M;
+//// model: P_Mixed
+connector C
+  Real e;
+  flow Real f;
+end C;
+model A
+  C c;
+end A;
+model M
+  A a, b;
+  C c1;
+equation
+  connect(a.c, c1);
+  connect(c1, b.c);
+end M;
+//// model: P_OutInIn
+connector C
+  Real e;
+  flow Real f;
+end C;
+model A
+  C c;
+end A;
+model M
+  A a, b;
+  C c1;
+equation
+  connect(c1, a.c);
+  connect(a.c, b.c);
+end M;
+//// model: P_Star4
+connector C
+  Real e;
+  flow Real f;
+end C;
+model A
+  C c;
+end A;
+model M
+  C c1, c2, c3, c4;
+equation
+  connect(c3, c1);
+  connect(c2, c1);
+  connect(c1, c4);
+end M;
+//// model: P_StarOut
+connector C
+  Real e;
+  flow Real f;
+end C;
+model A
+  C c;
+end A;
+model M
+  C c1, c2, c3;
+equation
+  connect(c1, c2);
+  connect(c1, c3);
+end M;
+//// model: P_SubConn
+connector C
+  Real e;
+  flow Real f;
+end C;
+model A
+  C c;
+end A;
+model Res
+  C p;
+  C q;
+  Integer n;
+equation
+  connect(p, q);
+  n = 1;
+end Res;
+model M
+  C p;
+  Res R1, R2;
+equation
+  connect(R1.p, p);
+end M;
+//// model: P_alias
+model P_alias
+  type E = enumeration(a, b);
+  type TE = E;
+  Real x[TE];
+end P_alias;
+//// model: P_b2
+model P_b2
+  Real x[Boolean, 2];
+end P_b2;
+//// model: P_bb
+model P_bb
+  Real x[Boolean, Boolean];
+end P_bb;
+//// model: P_be
+model P_be
+  type E = enumeration(a, b);
+  Real x[Boolean, E];
+end P_be;
+//// model: P_bind_b
+model P_bind_b
+  Real x[Boolean] = {1.0, 2.0};
+end P_bind_b;
+//// model: P_bind_e
+model P_bind_e
+  type E = enumeration(a, b, c);
+  Real x[E] = {1.0, 2.0, 3.0};
+end P_bind_e;
+//// model: P_bool_in_bind
+model P_bool_in_bind
+  Real x[Boolean];
+  Real y;
+equation
+  y = x[true];
+  x[false] = 0.0;
+  x[true] = 1.0;
+end P_bool_in_bind;
+//// model: P_comp_b
+model A_comp
+  Real a;
+end A_comp;
+model P_comp_b
+  A_comp b[Boolean];
+end P_comp_b;
+//// model: P_der
+model P_der
+  Real x[Boolean];
+equation
+  der(x[true]) = x[false];
+  x[false] = 1.0;
+end P_der;
+//// model: P_e2
+model P_e2
+  type E = enumeration(a, b, c);
+  Real x[E, 2];
+end P_e2;
+//// model: P_eb
+model P_eb
+  type E = enumeration(a, b);
+  Real x[E, Boolean];
+end P_eb;
+//// model: P_ee
+model P_ee
+  type E = enumeration(a, b);
+  type F = enumeration(p, q, r);
+  Real w[E, F];
+end P_ee;
+//// model: P_enum1
+model P_enum1
+  type E = enumeration(a, b, c);
+  Real x[E];
+end P_enum1;
+//// model: P_enum1lit
+model P_enum1lit
+  type E = enumeration(only);
+  Real x[E];
+end P_enum1lit;
+//// model: P_enum_pkg
+package Pk
+  type E = enumeration(a, b, c);
+end Pk;
+model P_enum_pkg
+  Real x[Pk.E];
+end P_enum_pkg;
+//// model: P_enum_val
+model P_enum_val
+  type E = enumeration(a, b, c);
+  E y[E];
+end P_enum_val;
+//// model: P_for_enum
+model P_for_enum
+  type E = enumeration(a, b, c);
+  Real x[E];
+equation
+  for i in E loop
+    x[i] = 1.0;
+  end for;
+end P_for_enum;
+//// model: P_model_b
+model A_mb
+  Real a;
+end A_mb;
+model P_model_b
+  model B = A_mb[Boolean];
+  B b;
+end P_model_b;
+//// model: P_nested
+package Outer
+  package Inner
+    type E = enumeration(a, b);
+  end Inner;
+end Outer;
+model P_nested
+  Real x[Outer.Inner.E];
+end P_nested;
+//// model: P_param_b
+model P_param_b
+  parameter Real x[Boolean] = {1.0, 2.0};
+end P_param_b;
+//// model: P_ref_cross
+model P_ref_cross
+  Real x[Boolean];
+equation
+  x[true] = x[false] + 1.0;
+end P_ref_cross;
+//// model: P_ref_enum
+model P_ref_enum
+  type E = enumeration(a, b);
+  Real x[E];
+equation
+  x[E.a] = 1.0;
+  x[E.b] = 2.0;
+end P_ref_enum;
+//// model: P_ref_eq
+model P_ref_eq
+  Real x[Boolean];
+equation
+  x[false] = 1.0;
+  x[true] = 2.0;
+end P_ref_eq;
+//// model: P_ref_whole
+model P_ref_whole
+  Real x[Boolean];
+  Real y[Boolean];
+equation
+  y = x;
+end P_ref_whole;
+//// model: P_start_b
+model P_start_b
+  Real x[Boolean](start = {1.0, 2.0});
+end P_start_b;
+//// model: P_subtype
+model P_subtype
+  type E = enumeration(a, b, c);
+  type R = Real;
+  R x[E];
+end P_subtype;
+//// model: P_sum
+model P_sum
+  Real x[Boolean];
+  Real s;
+equation
+  s = sum(x);
+  x[false] = 1.0;
+  x[true] = 2.0;
+end P_sum;
+//// model: P_typedef_b
+model P_typedef_b
+  type Reals = Real[Boolean];
+  Reals x;
+end P_typedef_b;
+//// model: P_typedef_b2
+model P_typedef_b2
+  type Reals = Real[Boolean];
+  Reals x[2];
+end P_typedef_b2;
+//// model: Partial
+connector C
+  Real e;
+  flow Real f;
+end C;
+model M
+  C c1[2,2], c2[2,2];
+equation
+  connect(c1[1], c2[2]);
+end M;
+//// model: ProbeArr
+model ProbeArr
+  Real x[3];
+equation
+  x[1] = 1.0;
+  x[2] = 2.0;
+  x[3] = 3.0;
+end ProbeArr;
+//// model: ProbeCast
+model ProbeCast
+  Real y;
+  constant Integer k = 3;
+equation
+  y = k;
+end ProbeCast;
+//// model: ProbeCbrt
+model ProbeCbrt
+  constant Real a = cbrt(8.0);
+  constant Real b = cbrt(-8.0);
+  constant Real c = cbrt(2.0);
+  constant Real d = cbrt(0.0);
+end ProbeCbrt;
+//// model: ProbeDiscreteCond
+model ProbeDiscreteCond
+  discrete Boolean b;
+  Real x;
+equation
+  if b then
+    x = 1;
+  else
+    x = 2;
+  end if;
+end ProbeDiscreteCond;
+//// model: ProbeIfConst
+model ProbeIfConst
+  Real x;
+  constant Boolean b = true;
+algorithm
+  if b then
+    x := 1.0;
+  else
+    x := 2.0;
+  end if;
+end ProbeIfConst;
+//// model: ProbeIfRT
+model ProbeIfRT
+  Real x;
+algorithm
+  if time > 1.0 then
+    x := 1.0;
+  else
+    x := 2.0;
+  end if;
+end ProbeIfRT;
+//// model: ProbeNE
+model ProbeNE
+  Real x = noEvent(time);
+  Boolean b = noEvent(time > 0.5);
+  constant Real c = noEvent(2.0 + 3.0);
+  constant Integer i = noEvent(integer(3.7));
+  Real z = smooth(0, time);
+end ProbeNE;
+//// model: ProbeNE2
+model ProbeNE2
+  Real x = noEvent(time);
+  constant Real c = noEvent(2.0 + 3.0);
+  constant Integer i = noEvent(integer(3.7));
+  constant Boolean cb = noEvent(1 > 0);
+end ProbeNE2;
+//// model: ProbeNoEvent
+model ProbeNoEvent
+  Real x = noEvent(time);
+  Real y = noEvent(time > 0.5);
+  constant Real c = noEvent(2.0 + 3.0);
+  constant Real d = noEvent(sin(1.0));
+end ProbeNoEvent;
+//// model: ProbeParamCond
+model ProbeParamCond
+  parameter Boolean p = false;
+  Real x;
+equation
+  if p then
+    x = 1;
+  else
+    x = 2;
+  end if;
+end ProbeParamCond;
+//// model: ProbeParamRel
+model ProbeParamRel
+  parameter Real k = 5;
+  Real x;
+equation
+  if k > 0 then
+    x = 1;
+  else
+    x = 2;
+  end if;
+end ProbeParamRel;
+//// model: ProbePure
+function g
+  input Real x;
+  output Real y = x;
+end g;
+
+model ProbePure
+  Real x = pure(g(time));
+  constant Real c = pure(1.0 + 2.0);
+end ProbePure;
+//// model: ProbePure2
+function g
+  input Real x;
+  output Real y = x;
+end g;
+
+model ProbePure2
+  Real x = pure(g(time));
+  constant Real c = pure(g(2.0));
+end ProbePure2;
+//// model: ProbeStr
+model ProbeStr
+  constant String a = String(2.0);
+  constant String b = String(1.0 / 3.0);
+  constant String c = String(100000.0);
+  constant String d = String(1234567.0);
+  constant String e = String(0.0001);
+  constant String f = String(0.00001);
+  constant String g = String(1e6);
+  constant String h = String(-234.54);
+  constant String i = String(1.5);
+  constant String j = String(123.456789);
+  constant String k = String(-42);
+  constant String l = String(0);
+  constant String m = String(2.0e-10);
+  constant String n = String(3.14159265358979);
+end ProbeStr;
+//// model: ProbeTimeParam
+model ProbeTimeParam
+  parameter Real k = 5;
+  Real x;
+equation
+  if time > k then
+    x = 1;
+  else
+    x = 2;
+  end if;
+end ProbeTimeParam;
+//// model: ProbeWhile
+model ProbeWhile
+  Real x;
+algorithm
+  x := 0.0;
+  while x < 3.0 loop
+    x := x + 1.0;
+  end while;
+end ProbeWhile;
+//// model: RecConn
+record R
+  Real r2;
+  Real r1;
+end R;
+connector C
+  R e;
+  flow R f;
+end C;
+model A
+  C c;
+end A;
+model M
+  A m1;
+end M;
+//// model: Sc2
+model Sc2
+  function f
+    input Real[:] rs;
+    output Integer i;
+  algorithm
+    i := scalar(size(rs));
+  end f;
+  function g
+    input Real[:] rs;
+    output Integer i;
+  algorithm
+    i := size(rs, 1);
+  end g;
+  Real r5 = f({1, 1, 1});
+  Real r6 = g({1, 1, 1});
+end Sc2;
+//// model: ScalarArrElem
+connector C
+  Real e;
+  flow Real f;
+end C;
+model ScalarArrElem
+  C c1[2], c2[2];
+equation
+  connect(c1[1], c2[1]);
+  connect(c1[2], c2[2]);
+end ScalarArrElem;
+//// model: Step
+connector C
+  Real e;
+  flow Real f;
+end C;
+model M
+  C c1[4], c2[2];
+equation
+  connect(c1[1:2:4], c2);
+end M;
+//// model: T
+model T
+  Real x[3] = {1,2,3};
+equation
+  der(x) = -x;
+end T;
+//// model: T2
+model T
+  Real x[3] = {1.0, 2.0, 3.0};
+end T;
+//// model: TD
+model TD
+  type E = enumeration(a, b, c);
+  Real x[Boolean];
+  Real y[E];
+end TD;
+//// model: TI
+model TI
+  input Real a;
+  input Real b = 2.0;
+end TI;
+//// model: ThreeWay
+connector C
+  Real e;
+  flow Real f;
+end C;
+model ThreeWay
+  C c1, c2, c3;
+equation
+  connect(c1, c2);
+  connect(c2, c3);
+end ThreeWay;
+//// model: UT
+model UT
+  Real x "cx";
+  Integer n;
+algorithm
+  x := 1 "sc";
+  n := 2;
+end UT;
+//// model: WA
+model M
+  Real x[3];
+  Real y[3];
+equation
+  y = x;
+end M;
+//// model: YmcConn2D
+connector C
+  Real e;
+  flow Real f;
+end C;
+
+model YmcConn2D
+  C c1[2,2], c2[2,2];
+equation
+  connect(c1, c2);
+end YmcConn2D;
+//// model: YmcConnArrProbe
+connector C
+  Real e[2];
+  flow Real f[2];
+end C;
+
+model YmcConnArrProbe
+  C c1[3], c2[3];
+equation
+  connect(c1, c2);
+end YmcConnArrProbe;
+//// model: YmcConnElemArrMem
+connector C
+  Real e[2,2];
+  flow Real f[2];
+end C;
+
+model YmcConnElemArrMem
+  C c1[2], c2[2];
+equation
+  connect(c1[2], c2[1]);
+end YmcConnElemArrMem;
+//// model: YmcMix
+package YmcMix
+  connector C
+    Real e2;
+    Real e1;
+    flow Real f2;
+    flow Real f1;
+  end C;
+  connector N2
+    flow Real z;
+    Real a;
+    C b;
+    Real c;
+  end N2;
+  model M
+    N2 n1, n2;
+  equation
+    connect(n1, n2);
+  end M;
+end YmcMix;
+//// model: YmcOrder
+package YmcOrder
+  connector C
+    Real e2;
+    Real e1;
+    flow Real f2;
+    flow Real f1;
+  end C;
+  connector N
+    C q;
+    C p;
+  end N;
+  model Flat
+    C a, b;
+  equation
+    connect(a, b);
+  end Flat;
+  model Nested
+    N n1, n2;
+  equation
+    connect(n1, n2);
+  end Nested;
+end YmcOrder;
+//// model: YmcRecConn
+package YmcRecConn
+  record R
+    Real r2;
+    Real r1;
+  end R;
+  connector C
+    R e;
+    flow R f;
+  end C;
+  model M
+    C c;
+  end M;
+  model Unconnected
+    M m1;
+  end Unconnected;
+  model Connected
+    M m1, m2;
+  equation
+    connect(m1.c, m2.c);
+  end Connected;
+end YmcRecConn;
+//// model: YmcSets
+package YmcSets
+  connector C
+    Real e;
+    flow Real f;
+  end C;
+  model A
+    C c;
+  end A;
+  model ChainOut
+    C c1, c2, c3;
+  equation
+    connect(c1, c2);
+    connect(c2, c3);
+  end ChainOut;
+  model StarOut
+    C c1, c2, c3;
+  equation
+    connect(c1, c2);
+    connect(c1, c3);
+  end StarOut;
+  model ChainIn
+    A a, b, d;
+  equation
+    connect(a.c, b.c);
+    connect(b.c, d.c);
+  end ChainIn;
+  model Mixed
+    A a, b;
+    C c1;
+  equation
+    connect(a.c, c1);
+    connect(c1, b.c);
+  end Mixed;
+  model ChainOutRev
+    C c1, c2, c3;
+  equation
+    connect(c2, c3);
+    connect(c1, c2);
+  end ChainOutRev;
+  model InRevOperands
+    A a, b;
+  equation
+    connect(b.c, a.c);
+  end InRevOperands;
+  model InFwdOperands
+    A a, b;
+  equation
+    connect(a.c, b.c);
+  end InFwdOperands;
+  model Star4
+    C c1, c2, c3, c4;
+  equation
+    connect(c3, c1);
+    connect(c2, c1);
+    connect(c1, c4);
+  end Star4;
+end YmcSets;
+//// model: YmcSigns
+package YmcSigns
+  connector C
+    Real e;
+    flow Real f;
+  end C;
+  model A
+    C c;
+  end A;
+  model InOutOut
+    A a; C c1, c2;
+  equation
+    connect(a.c, c1);
+    connect(c1, c2);
+  end InOutOut;
+  model InInOutOut
+    A a, b; C c1, c2;
+  equation
+    connect(a.c, c1);
+    connect(b.c, c2);
+    connect(c1, c2);
+  end InInOutOut;
+  model OutInIn
+    A a, b; C c1;
+  equation
+    connect(c1, a.c);
+    connect(a.c, b.c);
+  end OutInIn;
+  model InOut
+    A a; C c1;
+  equation
+    connect(c1, a.c);
+  end InOut;
+end YmcSigns;
+//// model: YmcSlice
+package YmcSlice
+  connector C
+    Real e;
+    flow Real f;
+  end C;
+  model Partial
+    C c1[2,2], c2[2,2];
+  equation
+    connect(c1[1], c2[2]);
+  end Partial;
+  model Desc
+    C c1[3], c2[3];
+  equation
+    connect(c1[3:-1:1], c2);
+  end Desc;
+  model Step
+    C c1[4], c2[2];
+  equation
+    connect(c1[1:2:4], c2);
+  end Step;
+end YmcSlice;
+//// model: arr
+model M
+  Real x[3];
+  Real m[2,2];
+end M;
+//// model: arr2
+model B
+  Real x[2] = {1, 2};
+  Real s;
+end B;
+model M
+  B b;
+  Real y[2] = {3, 4};
+end M;
+//// model: attr
+model AttrProbe
+  Real r(start = 10, min = -100, max = 100, nominal = 1, unit = "kg", fixed = true, unbounded = true, quantity = "m", displayUnit = "mm");
+  Integer i(min = -100, max = 100, start = 10, fixed = true, quantity = "c");
+  Boolean b(start = false, fixed = true, quantity = "flag");
+  String s(start = "hi", fixed = true, quantity = "name");
+  Real p(stateSelect = StateSelect.prefer);
+end AttrProbe;
+//// model: b_A1
+model T
+  Real y[3]; Real x[3] = y;
+end T;
+//// model: b_A2
+model T
+  Real y[3]; Real x[3] = 2*y;
+end T;
+//// model: b_B1
+model T
+  parameter Real y[3]={1,2,3}; parameter Real x[3]=y;
+end T;
+//// model: b_B6
+model T
+  parameter Integer y[3]={1,2,3}; parameter Real x[3]=y;
+end T;
+//// model: cDim
+model D
+  parameter Real widthDirection[3] = {0, 1, 0};
+end D;
+model C
+  D d(widthDirection = {0, 1, 0});
+end C;
+model cDim
+  C c;
+end cDim;
+//// model: cS
+model cS
+  Real x[3] = {1,2,3};
+  Real y = x[2];
+end cS;
+//// model: cSize
+model A
+  Real x[4];
+end A;
+model cSize
+  Real x[n];
+  A a;
+  parameter Integer n = size(a.x, 1);
+end cSize;
+//// model: ca
+model M
+  constant Real r[:] = array(1.0, 2.0, 3.0);
+  constant Real m[:,:] = {{1.0, 2.0}, {3.0, 4.0}};
+end M;
+//// model: cax
+model A
+  Real x;
+  Real z = x;
+end A;
+model M
+  A a[2];
+end M;
+//// model: cca
+connector C
+  Real e;
+  flow Real f;
+end C;
+model M
+  C c[2];
+end M;
+//// model: ce
+model CE
+  constant Real m[2,3] = {{1,2,3},{4,5,6}};
+  Real a = m[2,3];
+  Real b = m[1,1] + m[2,1]*2;
+  constant Integer k[3] = {7,8,9};
+  Real c = k[2];
+  Integer d = k[3];
+end CE;
+//// model: coB
+model A
+  Real a;
+end A;
+model coB
+  model B = A;
+  B b;
+end coB;
+//// model: dim
+model M
+  parameter Integer n = 3;
+  Real x[n];
+  Real y[size(x, 1)];
+end M;
+//// model: em
+model A
+  Real x;
+end A;
+model B
+  extends A(x(unit = "kg"));
+end B;
+model C
+  extends B(x(start = 1));
+end C;
+//// model: eqm
+model M
+  Real x;
+equation
+  x = 1;
+end M;
+//// model: fold
+model M
+  Real a = 1 + 2;
+  Real b = 2.0 * 3.0;
+  parameter Real p = 4 - 1;
+  Real x;
+  Real c = x + (1 + 2);
+equation
+  x = 3 * 4;
+end M;
+//// model: for1
+function f
+  input Integer n;
+  output Integer res;
+algorithm
+  res := 0;
+  for i in 1:3 loop
+    res := res + i;
+  end for;
+end f;
+model M
+  constant Integer a = f(10);
+end M;
+//// model: for2
+function f
+  input Integer n;
+  output Integer res = 0;
+algorithm
+  for i in 1:n loop
+    res := res + i;
+  end for;
+end f;
+model M
+  constant Integer a = f(3);
+end M;
+//// model: m9
+model A
+  type MyReal = Real;
+  MyReal x;
+end A;
+model B
+  extends A(MyReal(start = 2.0));
+end B;
+//// model: mm
+model MOuter
+  Real z;
+end MOuter;
+model AInner
+  Real x;
+  MOuter m;
+end AInner;
+model MM
+  parameter Real p = 1.0;
+  final AInner a(x = 2.0, m(z = p));
+end MM;
+//// model: nest
+package P
+  package Q
+    constant Integer n = 3;
+  end Q;
+  constant Integer m = Q.n + 1;
+end P;
+model M
+  Integer a = P.Q.n;
+  Real b = P.m;
+end M;
+//// model: pB
+model pB
+  Real x[3](each start = 1);
+end pB;
+//// model: pa
+model pA
+  Real x[3](start = {1.0, 2.0, 3.0});
+end pA;
+//// model: pc
+model pC
+  Real x[3](start = {1,2,3});
+  Real y = x[2];
+end pC;
+//// model: pe
+model M
+  parameter Real a = 1.0;
+  parameter Real b = a + 1.0;
+  Real x(start = a);
+  Real y = b;
+  Real z(fixed = c);
+  parameter Boolean c = true;
+equation
+  der(x) = -1;
+  der(y) = 0;
+end M;
+//// model: pf
+model M
+  Real x;
+  Real y = x + (1 + 2);
+end M;
+//// model: pr
+model P
+  Real a, b, c;
+equation
+  a = (-a)^2.0;
+  a = a*(-b);
+  a = -(a*b);
+  a = a*(-2.0);
+  a = a*(-1);
+  a = a/(b*c);
+  a = (a + b)*c;
+end P;
+//// model: probe_r6
+model ProbeR6
+  Real x(start = 1), y, z;
+equation
+  der(x) = -x + y;
+  y = 2*z + x;
+  z = 1 - 0.5*y;
+end ProbeR6;
+//// model: probe_r6_arr
+model ProbeR6Arr
+  parameter Real k = 2;
+  Real v[2](each start = 0);
+  Real w = k * v[1];
+equation
+  der(v) = -k * v + {1, 2};
+end ProbeR6Arr;
+//// model: probe_r6_nl
+model ProbeR6NL
+  Real x(start = 1), y, z;
+equation
+  der(x) = -x + y;
+  y = sin(z) + x;
+  z = y*y - 3;
+end ProbeR6NL;
+//// model: px
+model M
+  parameter Real x[3] = {1,2,3};
+  Real z = x[2];
+end M;
+//// model: s_A6
+model T
+  Integer yi[3]; Real x[3] = yi;
+end T;
+//// model: s_B3
+model T
+  Real y[3]; parameter Real x[3] = y;
+end T;
+//// model: s_F1
+model T
+  Real y[4]; Real x[3] = y;
+end T;
+//// model: s_F2
+model T
+  Real y; Real x[3] = y;
+end T;
+//// model: xe
+package P
+  model Base
+    Real x = 1.0;
+    Real y;
+  end Base;
+end P;
+model M
+  extends P.Base;
+  Real z = x;
+end M;

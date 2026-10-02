@@ -1,0 +1,69 @@
+//// set: ce54 — 常量求值
+//// model: A1
+model A1
+  constant Integer i2[3] = {1, 2, 3} + {3, 4, 5};
+end A1;
+//// model: A2
+model A2
+  constant Integer i2[:] = {1, 2, 3} + {3, 4, 5};
+end A2;
+//// model: A3
+model A3
+  constant Integer i2[:] = {1, 2, 3};
+end A3;
+//// model: A4
+model A4
+  constant Real x[:] = 1.0:3.0;
+end A4;
+//// model: P54a
+model P54a
+  constant Integer i2[:] = {1, 2, 3} + {3, 4, 5};
+  constant String s4[:] = "1" .+ {"1", "2", "3"};
+  constant Integer i6[:] = zeros(0) - zeros(0);
+  constant Real y[:] = 3.0:0.5:5.0;
+  constant Real m[2, 2] = {{1, 2}, {3, 4}};
+  constant Real p[:, :] = m ^ 2;
+  constant Real d = {1, 2, 3} * {4, 5, 6};
+end P54a;
+//// model: P54b
+model A
+  constant Real x;
+  constant Real y = 2;
+  constant Real z[:] = {x, y} * 2;
+end A;
+model P54b
+  A a(x = 1.0);
+end P54b;
+//// model: P54c
+model P54c
+  constant Real x[:] = 1.0:0.3:2.0;
+  constant Integer k[:] = 5:-2:1;
+  constant Boolean b[:] = false:true;
+end P54c;
+//// model: P54d
+model P54d
+  constant Integer t[:, :] = transpose({{1, 2}, {3, 4}, {5, 6}});
+  constant Real c[:] = cross({1, 0, 0}, {0, 1, 0});
+  constant Integer v[:] = vector({{1}, {2}});
+  constant Real l[:] = linspace(0, 1, 3);
+  constant Integer g[:, :] = diagonal({7, 8});
+  constant Real s = scalar({{2.5}});
+  constant Real d[:] = der({1, 2});
+end P54d;
+//// model: P54e
+function f
+  input Integer n;
+  output Real y[n];
+protected
+  Real s = 0.5;
+algorithm
+  for i in 1:n loop
+    y[i] := i * s;
+  end for;
+  y[1] := max(y[1], 2);
+end f;
+model P54e
+  constant Real a[:] = f(3);
+  constant Integer c[:, :] = {i * 10 + j for i in 1:2, j in 1:3};
+  constant Real d[:] = sqrt({4, 9});
+end P54e;

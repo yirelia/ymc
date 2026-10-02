@@ -1,0 +1,82 @@
+//// set: ao-a6 — 外层写的修饰表达式的求值帧
+//// model: AO0
+model AO0
+  model M
+    Real v;
+  end M;
+  parameter Integer i = 1;
+  Real c[2] = {time, 2};
+  M m(v = c[i]);
+end AO0;
+//// model: AO1
+model AO1
+  model M
+    parameter Integer i = 2;
+    Real v;
+  end M;
+  parameter Integer i = 1;
+  Real c[2] = {time, 2};
+  M m(v = c[i]);
+end AO1;
+//// model: AO2
+model AO2
+  model M
+    Real x = time;
+  end M;
+  parameter Real q[2] = {1, 2};
+  parameter Integer n = 2;
+  M m(x(start = q[n]));
+end AO2;
+//// model: AO3
+model AO3
+  model M
+    Real y[2];
+  end M;
+  parameter Integer n = 2;
+  M m(y = fill(time, n));
+end AO3;
+//// model: AO4
+model AO4
+  model M
+    parameter Integer n = 3;
+    Real y[2];
+  end M;
+  parameter Integer n = 2;
+  M m(y = fill(time, n));
+end AO4;
+//// model: AO5
+model AO5
+  model M
+    parameter Boolean b = false;
+    Real x(start = 1);
+  equation
+    der(x) = 1;
+  end M;
+  parameter Boolean b = true;
+  M m(x(fixed = b));
+end AO5;
+//// model: AO6
+model AO6
+  model M
+    parameter Integer i = 2;
+    Real v;
+  end M;
+  model N
+    parameter Integer i = 1;
+    Real c[2] = {time, 2};
+    M m(v = c[i]);
+  end N;
+  N n1(i = 2);
+end AO6;
+//// model: AO7
+model AO7
+  model M
+    parameter Integer k = 1;
+    Real v[2] = {time, 1};
+    Real s = v[k];
+  end M;
+  parameter Integer i = 2;
+  M m(k = i);
+  M m2(k = i);
+  parameter Integer j = i;
+end AO7;
