@@ -1325,6 +1325,11 @@ class Flattener {
           if (result_.model.exprs[fs.c].ty.kind != TypeKind::Enumeration) { set_unsupported("assert level type"); return {}; }
         }
         break;
+      case SStmtKind::NoRetCall:
+        fs.kind = FlatStmtKind::NoRetCall;
+        fs.a = noret_call(st.a, enclosing, prefix);
+        if (!fs.a.is_valid()) return {};   // 删去的语句（调用方按 invalid 处理）/ unsupported
+        break;
       default:
         set_unsupported("algorithm statement");
         return {};
@@ -1731,6 +1736,19 @@ class Flattener {
       emit_if(std::move(out_branches), std::move(else_ids), eq.loc, is_initial);
       return;
     }
+    if (eq.kind == SEqKind::NoRetCall) {
+      const Id<Expr> c = noret_call(eq.a, enclosing, prefix);
+      if (!c.is_valid()) return;   // 删去 / unsupported
+      FlatEquation fe;
+      fe.kind = FlatEqKind::NoRetCall;
+      fe.a = c;
+      fe.loc = eq.loc;
+      if (eq.cmt.str.is_valid()) fe.comment = in_.intern(unescape_modelica_string(in_.str(eq.cmt.str)));
+      const Id<FlatEquation> id = result_.model.add_eq(std::move(fe));
+      if (is_initial) result_.model.initial_equations.push_back(id);
+      else result_.model.equations.push_back(id);
+      return;
+    }
     if (eq.kind != SEqKind::Equals) {
       set_unsupported("non-equality equation (reinit…)");
       return;
@@ -2134,6 +2152,30 @@ class Flattener {
     // :1019-1093，未知 / 表达式维与任何维相等，Dimension.isEqual :294-307；ImplicitRangeExp3 `x * y` → Real）；逐元素运算
     // 同秩相容维。
     if (fn_scope_) {
+      // 1.25.0 在函数体里对数组运算的打印形态（FA 探针 f1），ymc 目前只对上其中几种，其余先挡住 → SKIP：
+      //   点号算符：`u .* u` / `u ./ u` / `u .^ 2.0` / `a ./ u` 留点号，`u .+ a`、`a .- u` 留点号，`a .+ u` → `u .+ a`，
+      //   `u .- a` → `u .+ (-a)`；只有 数组 .+ 数组（→ `+`）、数组 .* 标量（→ `*`）、数组 ./ 标量（→ `/`）与现有打印一致。
+      //   标量 * 数组（维未知）：omc 换成 `数组 * 标量`（`2 * u` → `u * 2.0`）。
+      //   同一个数组自己减自己（`u - u`）：omc 报错。
+      const bool ew = orig == Op::EWAdd || orig == Op::EWSub || orig == Op::EWMul || orig == Op::EWDiv || orig == Op::EWPow;
+      auto unknown_dims = [](const Type& t) {
+        for (const Dimension& d : t.dims) if (d.kind != DimKind::Integer) return true;
+        return false;
+      };
+      if (ew && !((orig == Op::EWAdd && aarr && barr) || ((orig == Op::EWMul || orig == Op::EWDiv) && aarr && !barr))) {
+        set_unsupported("elementwise array operator in function body");
+        return lit_int(0);
+      }
+      if (orig == Op::Mul && !aarr && barr && unknown_dims(tb)) {
+        set_unsupported("scalar * array in function body (omc swaps the operands)");
+        return lit_int(0);
+      }
+      if ((orig == Op::Sub || orig == Op::EWSub) && aarr && barr && result_.model.exprs[a].kind == ExprKind::Cref &&
+          result_.model.exprs[b].kind == ExprKind::Cref &&
+          expr_cref_key(result_.model.exprs[a].cref) == expr_cref_key(result_.model.exprs[b].cref)) {
+        set_unsupported("array minus itself in function body");
+        return lit_int(0);
+      }
       const bool freal = op == BinOp::Div || ea == TypeKind::Real || eb == TypeKind::Real;
       if (freal) {
         a = fn_real_operand(a);
@@ -2371,6 +2413,16 @@ class Flattener {
         fe.b = val;
         fe.loc = b.loc;
         out.push_back(result_.model.add_eq(std::move(fe)));   // reinit 不计入 solved（When7 靠此判失配）
+      } else if (b.kind == SEqKind::NoRetCall) {
+        const Id<Expr> c = noret_call(b.a, enclosing, prefix);
+        if (result_.unsupported) return false;
+        if (c.is_valid()) {   // invalid = 求值掉了，整条删去（when 本身留着，N2 探针）
+          FlatEquation fe;
+          fe.kind = FlatEqKind::NoRetCall;
+          fe.a = c;
+          fe.loc = b.loc;
+          out.push_back(result_.model.add_eq(std::move(fe)));
+        }
       } else {
         set_unsupported("unsupported when-body equation");     // 嵌套 when / if / for / connect → SKIP
         return false;
@@ -4878,8 +4930,13 @@ class Flattener {
       return CVal::Arr(std::move(out));
     }
     const std::string_view tn = in_.str(type_path[0]);
+    if (v.k == CVal::K::Undef) return v;
     if (tn == "Real" && v.k == CVal::K::Int) return CVal::R(static_cast<double>(v.i));
-    if (tn == "Integer" && v.k == CVal::K::Real) return std::nullopt;   // 收窄 → 类型错
+    // 内建类型配不上的值是类型错（Real→Integer 收窄、String 给 Real 形参 …；N2 探针 `f("a")`，f 的输入是 Real → omc 报错）。
+    if (tn == "Real") return v.k == CVal::K::Real ? std::optional<CVal>(v) : std::nullopt;
+    if (tn == "Integer") return v.k == CVal::K::Int ? std::optional<CVal>(v) : std::nullopt;
+    if (tn == "Boolean") return v.k == CVal::K::Bool ? std::optional<CVal>(v) : std::nullopt;
+    if (tn == "String") return v.k == CVal::K::Str ? std::optional<CVal>(v) : std::nullopt;
     return v;
   }
   // 下标值：整数 → {i}；`:` → 1..n；范围 / 整数数组 → 其元素。越界 / 非整数 → nullopt。
@@ -5863,7 +5920,7 @@ class Flattener {
       for (Id<SStatement> b : in) {
         const Id<FlatStatement> s = collect_fn_stmt(b);
         if (result_.unsupported) return false;
-        out.push_back(s);
+        if (s.is_valid()) out.push_back(s);   // invalid = 删去的语句（实参全是常量的无返回值调用）
       }
       return true;
     };
@@ -5954,6 +6011,11 @@ class Flattener {
         if (result_.unsupported) return {};
         fs.b = fn_exp(st.b, Type::string());
         if (!fs.b.is_valid()) { set_unsupported("function assert message type"); return {}; }
+        break;
+      case SStmtKind::NoRetCall:
+        fs.kind = FlatStmtKind::NoRetCall;
+        fs.a = noret_call(st.a, Inst::empty_node(), {});
+        if (!fs.a.is_valid()) return {};   // 删去的语句 / unsupported
         break;
       default:
         set_unsupported("function statement");
@@ -6414,7 +6476,7 @@ class Flattener {
       for (Id<SStatement> sid : sig.alg->stmts) {
         const Id<FlatStatement> s = collect_fn_stmt(sid);
         if (result_.unsupported) return std::nullopt;
-        body.push_back(s);
+        if (s.is_valid()) body.push_back(s);
       }
     result_.model.functions[fi].body = std::move(body);
     result_.model.functions[fi].has_algorithm = sig.alg != nullptr;
@@ -6602,19 +6664,21 @@ class Flattener {
   // lex：函数名的词法起点（通常 = enclosing；直接继承成员 = 基类实例，见 call()）。实参仍在 enclosing 定型。
   Id<Expr> try_emit_user_call(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix, NodeId lex) {
     const bool whole = array_call_ok_;   // 本调用是否整个绑定 / 等式一侧（见 array_call_ok_）
+    const bool noret = noret_call_;      // 本调用是一条无返回值调用语句（见 noret_call）：可以没有输出、不取首输出
     struct FlagReset {
       bool& f;
       bool v;
       ~FlagReset() { f = v; }
     } flag_reset{array_call_ok_, whole};
     array_call_ok_ = false;
+    noret_call_ = false;   // 只管最外层这一个调用，实参里的调用照常
     const Cref& fn = I_.absyn.crefs[e.cref];
     const ScodeScope sc = scode_scope_of(lex);
     const std::optional<FnRef> fr = resolve_fn(fn, sc);
     if (!fr) return {};
     FnSig sig;
     std::unordered_set<std::uint32_t> seen;
-    if (!collect_fn_sig(fr->fe, fr->fscope, sig, seen, 0) || sig.outputs.empty()) return {};
+    if (!collect_fn_sig(fr->fe, fr->fscope, sig, seen, 0) || (sig.outputs.empty() && !noret)) return {};
     for (Id<Exp> a : e.args) if (I_.absyn.exps[a].kind == ExpKind::Reduction) return {};   // 归约实参 / 向量化未做
     Id<SElement> home;
     const std::optional<std::vector<Symbol>> qname = fn_flat_name(fn, sc, lex, prefix, home);
@@ -6700,7 +6764,8 @@ class Flattener {
         vec.push_back(i);
       }
       if (!vd.empty()) {
-        if (sig.outputs.size() > 1) return {};
+        // 语句位置的向量化调用 omc 打 `array(f(x[$i1]) for $i1 in 1:3);`（N1 探针），未做。
+        if (sig.outputs.size() > 1 || noret) return {};
         std::vector<Id<Expr>> iters;
         for (std::size_t k = 1; k <= vd.size(); ++k) iters.push_back(vect_iter(k));
         for (std::size_t i : vec) {
@@ -6715,8 +6780,29 @@ class Flattener {
       const Id<Expr> a = coerce_to_param(args[i], params[i].ty);
       if (!a.is_valid()) return {};   // 实参类型 / 维不符（omc 报错）→ SKIP
       args[i] = simplify_expr(a);
+      // 数组实参里的算术式（维已知）：omc 的化简按元素展开成字面量（GA 探针 `g(2 * x)` → `g({2.0 * x[1], 2.0 * x[2],
+      // 2.0 * x[3]})`、`gm(m + m)`，函数体里已知维的局部同样）；整体 / 切片引用、if、字面量、推导式原样。`vector(x)` /
+      // `diagonal(x)` 作实参 omc 留成调用（ymc 的内建展开成了字面量）→ 未做，SKIP。
+      const ExprKind ak = result_.model.exprs[args[i]].kind;
+      if (ak == ExprKind::Binary || ak == ExprKind::Unary) {
+        const std::vector<std::int64_t> ash = expr_shape(args[i]);
+        if (!ash.empty() && std::find(ash.begin(), ash.end(), -1) == ash.end()) {
+          const Id<Expr> kf = kept_array_form(args[i], ash, expr_elem_kind(args[i]));
+          if (result_.unsupported) return {};
+          if (!kf.is_valid()) { set_unsupported("array expression as function argument"); return {}; }
+          args[i] = kf;
+        }
+      }
+      if (raw[i].is_valid() && I_.absyn.exps[raw[i]].kind == ExpKind::Call) {
+        const Cref& rc = I_.absyn.crefs[I_.absyn.exps[raw[i]].cref];
+        const std::string_view rn = rc.parts.size() == 1 ? in_.str(rc.parts[0].name) : std::string_view{};
+        if ((rn == "vector" || rn == "diagonal") && result_.model.exprs[args[i]].kind == ExprKind::Array) {
+          set_unsupported("array builtin kept as call by omc");
+          return {};
+        }
+      }
     }
-    Type rty = params[inputs.size()].ty;   // 首输出类型
+    Type rty = sig.outputs.empty() ? Type{} : params[inputs.size()].ty;   // 首输出类型（无输出的语句调用：Unknown）
     if (!vd.empty() && rty.kind == TypeKind::Complex) return {};   // 返回记录的向量化调用未核实
     if (rty.kind == TypeKind::Complex) {
       // 返回记录的调用（记录等式 `r = f(x)` / 记录赋值，RF1 探针）：类型取输出记录类的实例类节点（record_match /
@@ -6750,7 +6836,7 @@ class Flattener {
     r.args = std::move(args);
     r.ty = rty;
     Id<Expr> call = add(std::move(r));
-    if (sig.outputs.size() > 1) {
+    if (sig.outputs.size() > 1 && !noret) {   // 语句调用不取首输出（N1 探针：两个输出的 `f(t);` 原样）
       Expr t;
       t.kind = ExprKind::TupleElement;
       t.a = call;
@@ -6861,6 +6947,9 @@ class Flattener {
       if (c.kind != SElementKind::Component) continue;     // 嵌套类（记录等）不入签名
       // protected 的输入 / 输出：NFFunction.paramDirection "Invalid protected variable"（FunctionProtectedInput）。
       if (c.prefixes.vis == SVisibility::Protected && c.attr.dir != SDirection::Bidir) return false;
+      // 函数变量带 flow / stream 前缀：omc 告警 "Prefix 'stream' used outside connector declaration"（FunctionStreamPrefix），
+      // ymc 不产告警 → 不做（调用方 SKIP）。
+      if (c.attr.ct != SConnectorType::Potential) return false;
       if (!seen.insert(c.name.id).second) continue;         // 同名去重
       sig.all.push_back(eid);
       if (c.attr.dir == SDirection::Input) sig.inputs.push_back(eid);
@@ -6996,8 +7085,9 @@ class Flattener {
   // allow_param：显式实参 / 别名修饰可取 parameter 的值（结构语境）；类型化表达式路径传 false——参数实参的调用变率是
   // parameter，omc 不求值（YmcFnPar1 探针：`g(p)` 保留）。
   // all_outputs 非空：另把全部输出（按声明序、各自按类型强转）填进去（元组赋值 / 元组方程 `(a, b) := f(…)` 用）。
+  // noret：调用是一条无返回值调用语句——没有输出的函数也把体求值一遍（体里的 assert 会让求值失败），成功返回占位值。
   std::optional<CVal> eval_user_call(const Exp& call, const ScodeScope& scope, int depth, bool allow_param = true,
-                                     std::vector<CVal>* all_outputs = nullptr) {
+                                     std::vector<CVal>* all_outputs = nullptr, bool noret = false) {
     if (depth > 100) return std::nullopt;
     // 实参在调用处求值（可用实例帧）；函数体 / 记录构造在定义处求值，实例帧不适用（函数不能引用模型参数）。
     struct FrameOff {
@@ -7049,7 +7139,7 @@ class Flattener {
     if (fn_annotation_blocks(fel.cmt.annotation)) return std::nullopt;
     FnSig sig;
     std::unordered_set<std::uint32_t> seen;
-    if (!collect_fn_sig(fr->fe, fr->fscope, sig, seen, 0) || sig.external || sig.outputs.empty()) return std::nullopt;
+    if (!collect_fn_sig(fr->fe, fr->fscope, sig, seen, 0) || sig.external || (sig.outputs.empty() && !noret)) return std::nullopt;
     // derivative / inverse 注解形态不在已做范围内（omc 的告警 / 报错，FunctionInverseInvalid1/2）→ 不求值（发射一侧同样拒）。
     if (std::vector<Id<Cref>> refs; !fn_ref_annotations(fel.cmt.annotation, sig, refs)) return std::nullopt;
     const std::vector<Id<SElement>>& inputs = sig.inputs;
@@ -7170,6 +7260,7 @@ class Flattener {
       const Flow f = exec_body(sig.alg->stmts, fscope, depth + 1);
       if (f == Flow::Fail || f == Flow::Break) return fail();   // 顶层 break（不在循环内）是错误（Break2）→ SKIP
     }
+    if (sig.outputs.empty()) { restore(); return CVal::I(0); }   // noret：没有输出可读
     // 读首个输出（all_outputs：全部输出，任一读不到 → 失败）。
     const SElement& oel = I_.scode.elems[sig.outputs[0]];
     auto it = env.find(oel.name.id);
@@ -7314,7 +7405,21 @@ class Flattener {
       }
       case SStmtKind::Return: return Flow::Return;
       case SStmtKind::Break: return Flow::Break;
-      default: return Flow::Fail;   // when/assert/terminate/reinit/noretcall → 未做
+      case SStmtKind::Assert: {
+        // 条件为真 → 继续。为假：error 级别 → 求值失败（omc 留下调用，C1 探针 `g(-2.0)`）；warning 级别 omc 告警后继续
+        //（CevalFuncAssert1 的 Result 里带那行告警），ymc 不产告警 → 同样按求值失败（调用方 SKIP）。
+        const std::optional<CVal> c = eval_scode(st.a, fscope, depth + 1, true);
+        if (!c || c->k != CVal::K::Bool) return Flow::Fail;
+        if (c->b) return Flow::Normal;
+        return Flow::Fail;
+      }
+      case SStmtKind::NoRetCall: {
+        // 被调函数求值一遍（值丢弃，没有输出的也行）；内建 / 求不出 → Fail。
+        const Exp& ce = I_.absyn.exps[st.a];
+        if (ce.kind != ExpKind::Call) return Flow::Fail;
+        return eval_user_call(ce, fscope, depth + 1, true, nullptr, /*noret=*/true) ? Flow::Normal : Flow::Fail;
+      }
+      default: return Flow::Fail;   // when / terminate / reinit → 未做
     }
   }
 
@@ -8457,6 +8562,46 @@ class Flattener {
     }
     Expr r; r.kind = ExprKind::IfExp; r.a = c; r.b = t; r.c = f; r.ty = result_.model.exprs[t].ty;
     return add(std::move(r));
+  }
+
+  // 无返回值的调用 `f(args);`——方程 / 模型算法语句 / 函数体语句（NORETCALL）。化简后还是调用才留下
+  //（NFSimplifyModel.simplifyEquation :220-228、simplifyStatement :369-377，v1.25.0）：实参全是常量的纯函数调用被求值掉、
+  // 整条消失（N1 / N2 探针：`f(1.0);` 不出行、函数也不发射，`sin(1.0);` 同）；impure / external 的不求值、照留
+  //（`f(1.0);` 原样）；带输出的函数也能当语句调（不取首输出）。返回 invalid 且未标 unsupported = 整条删去。
+  Id<Expr> noret_call(Id<Exp> ce, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    const Exp e = I_.absyn.exps[ce];   // 拷贝
+    if (e.kind != ExpKind::Call) { set_unsupported("non-call statement"); return {}; }
+    // 实参全是常量（函数体里：不引用形参 / 局部）？
+    const ScodeScope sc = fn_scope_ ? *fn_scope_ : scode_scope_of(enclosing);
+    bool all_const = !(fn_scope_ && exp_refs_fn_locals(e));
+    for (Id<Exp> a : e.args)
+      all_const = all_const && eval_scode(a, sc, 0, /*allow_param=*/false, nullptr).has_value();
+    if (result_.unsupported) return {};
+    if (all_const)
+      if (const std::optional<FnRef> fr = resolve_fn(I_.absyn.crefs[e.cref], sc)) {
+        FnSig sig;
+        std::unordered_set<std::uint32_t> seen;
+        const bool impure = I_.scode.elems[fr->fe].purity == Purity::Impure;
+        if (!builtin_equiv(*fr) && collect_fn_sig(fr->fe, fr->fscope, sig, seen, 0) && !impure && !sig.external) {
+          // 纯的用户函数：omc 把调用求值掉（整条删去）；求值失败（体里的 assert 不成立，N2 探针 `f(-1.0)`）时调用照留——
+          // ymc 求不出时分不清是哪种 → SKIP。
+          if (eval_user_call(e, sc, 0, /*allow_param=*/false, nullptr, /*noret=*/true)) return {};
+          if (!result_.unsupported) set_unsupported("constant no-return call");
+          return {};
+        }
+      }
+    noret_call_ = true;
+    array_call_ok_ = true;   // 语句位置 = 整个式子，返回数组的函数也行（OperationSubEW2 `f(r1, r2);`）
+    Id<Expr> c = inst_exp(ce, enclosing, prefix);
+    noret_call_ = false;
+    array_call_ok_ = false;
+    if (result_.unsupported) return {};
+    c = simplify_expr(c);
+    const ExprKind k = result_.model.exprs[c].kind;
+    if (k == ExprKind::Call) return c;
+    // 求值成了字面量（带输出的纯函数 / 内建的常量调用）→ 整条删去；别的形态（向量化的推导式 …）未做。
+    if (!is_lit(c) && k != ExprKind::Array) set_unsupported("no-return call form");
+    return {};
   }
 
   Id<Expr> call(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
@@ -10567,7 +10712,9 @@ class Flattener {
                               std::string(in_.str(result_.model.exprs[b].sval)));
           return add(std::move(r));
         }
-        if (fn_scope_ && ty.is_array()) {
+        // 标量积（向量 * 向量，结果是标量）也走这里：两侧都能展开时 omc 展成积和（FA 探针 f1 `s := w * w` →
+        // `w[1] * w[1] + …`），未做 → fn_expand_binary 里 SKIP。
+        if (fn_scope_ && (ty.is_array() || product_bins_.count(id.raw) > 0)) {
           const bool product = product_bins_.count(id.raw) > 0;
           if (Id<Expr> ex = fn_expand_binary(a, op, b, ty, product); ex.is_valid()) return ex;
           if (result_.unsupported) return id;
@@ -10585,6 +10732,21 @@ class Flattener {
         if (op == UnOp::Minus && result_.model.exprs[a0].kind == ExprKind::Unary)
           return simplify_expr(result_.model.exprs[a0].a);
         Id<Expr> a = simplify_expr(a0);
+        // 函数体里已知维的数组取负：逐元素展开（FA 探针 f1 `v3 := -w` → `{-w[1], -w[2], -w[3]}`；同二元运算的展开）。
+        if (fn_scope_ && op == UnOp::Minus && ty.is_array())
+          if (const Id<Expr> ex = fn_expand(a); ex.is_valid()) {
+            auto neg = [&](auto& self, Id<Expr> node) -> Id<Expr> {
+              const Expr n = result_.model.exprs[node];   // 拷贝
+              if (n.kind != ExprKind::Array) {
+                Expr u; u.kind = ExprKind::Unary; u.un = UnOp::Minus; u.a = node; u.ty = n.ty;
+                return simplify_expr(add(std::move(u)));
+              }
+              Expr r = n;
+              for (Id<Expr>& c : r.args) c = self(self, c);
+              return add(std::move(r));
+            };
+            return neg(neg, ex);
+          }
         const Expr& ea = result_.model.exprs[a];
         if (op == UnOp::Minus) {
           if (ea.kind == ExprKind::IntLit) return lit_int(-ea.ival);
@@ -10725,7 +10887,9 @@ class Flattener {
         // NF_EVAL_CONST_ARG_FUNCS；FD3 探针 `parameter Real m = g(n) + n`、n 是数组维 → `m = 6.0`，g 不再打印）。ymc 的函数
         // 求值走 Absyn（eval_user_call），代入后的类型化调用没有求值入口 → SKIP。external / impure 不求值；记录构造求值后
         // 打印不变。
-        if (subst_calls_.count(id.raw)) {
+        // 不是代入出来的同理：call() 先试求值、求不出才发射，留下来的全字面量调用就是 ymc 的解释器没求出来（体里有没做的
+        // 语句 …），omc 那边要么求值成字面量、要么求值失败照留（C1 探针 `g(2)` → `2.0`、`g(-2)` 留调用）→ SKIP。
+        {
           auto lit = [&](auto& self, Id<Expr> a) -> bool {
             const Expr& x = result_.model.exprs[a];
             if (x.kind != ExprKind::Array) return is_literal(a);
@@ -10737,7 +10901,8 @@ class Flattener {
           if (all)
             for (const FlatFunction& f : result_.model.functions)
               if (f.name == call_name && !f.is_record_ctor && !f.is_external && !f.is_impure)
-                set_unsupported("constant user call after structural substitution");
+                set_unsupported(subst_calls_.count(id.raw) ? "constant user call after structural substitution"
+                                                           : "constant user call not evaluated");
         }
 
         const bool nofold = nofold_calls_.count(id.raw) > 0;
@@ -13205,6 +13370,7 @@ class Flattener {
   std::unordered_map<std::uint32_t, NodeId> rec_node_cache_;    // 记录类定义 → 某个实例类节点（record_class_node）
   std::unordered_set<std::uint32_t> product_bins_;              // 函数语境里的向量 / 矩阵积 Binary 节点（非逐元素）
   std::unordered_set<std::uint32_t> scalarized_logicals_;       // scalarize 逐元素建的 and / or 节点（simplify 不做吸收律）
+  bool noret_call_ = false;                                     // 正在定型一条无返回值调用语句的最外层调用（见 noret_call）
   std::unordered_set<std::uint32_t> nofold_bins_;               // sum / product 展开出的元素链的 Binary 节点（simplify 原样留）
   std::unordered_map<std::uint32_t, FnRecord> fn_records_;      // 记录类型的形参 / 局部名 → 记录类（字段访问 `r.x`）
   NodeId root_;                                                 // 被压平的根类实例

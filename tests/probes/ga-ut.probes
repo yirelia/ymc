@@ -1,0 +1,111 @@
+//// set: ga-ut — 无返回值调用、数组实参展开（单测原文）
+//// model: GAS1
+function g
+  input Real u[3];
+  output Real v;
+algorithm
+  v := u[1];
+end g;
+model GAS1
+  Real x[3] = {time, 1, 2};
+  Real y = g(vector(x));
+end GAS1;
+//// model: GAS2
+function g
+  input Real u;
+  output Real v;
+algorithm
+  v := u;
+  while v < 200000 loop
+    v := v + 1;
+  end while;
+end g;
+model GAS2
+  Real y = g(1);
+end GAS2;
+//// model: GAT1
+function g
+  input Real u[3];
+  output Real v;
+algorithm
+  v := u[1];
+end g;
+function gm
+  input Real u[:, :];
+  output Real v;
+algorithm
+  v := u[1, 1];
+end gm;
+model GAT1
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real p[3] = {1, 2, 3};
+  Real y1 = g(2 * x);
+  Real y2 = g(x + x) + g(-x);
+  Real y3 = g(x[1:3]);
+  Real y4 = g({1, 2, 3} * t);
+  Real y5 = gm(2 * m);
+  Real y6 = g(2 * p);
+  Real y7 = g(if t > 1 then x else 2 * x);
+  Real y8;
+equation
+  y8 = g(x / 2);
+end GAT1;
+//// model: NRS1
+function f
+  input Real u;
+algorithm
+  assert(u > 0, "neg");
+end f;
+model NRS1
+equation
+  f(-1.0);
+end NRS1;
+//// model: NRT1
+function f
+  input Real u;
+  input Real w = 2;
+end f;
+function g
+  input Real u;
+  output Real v;
+algorithm
+  f(u);
+  f(1.0);
+  v := u;
+end g;
+function ga
+  input Real u;
+  output Real v;
+algorithm
+  assert(u > 0, "neg");
+  f(u);
+  v := 2 * u;
+end ga;
+model NRT1
+  Real t = time;
+  Real x[2] = {time, 1};
+  Real y = g(t);
+  Real z = ga(2);
+  discrete Real d;
+equation
+  f(t);
+  f(1.0);
+  f(t, w = 3);
+  for i in 1:2 loop
+    f(x[i]);
+  end for;
+  if t > 1 then
+    f(2 * t);
+  end if;
+  when t > 1 then
+    d = 1;
+    f(t);
+  end when;
+initial equation
+  f(t);
+algorithm
+  f(t) "comment";
+  f(3.0);
+end NRT1;

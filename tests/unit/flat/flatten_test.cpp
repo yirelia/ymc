@@ -3518,6 +3518,74 @@ YMC_TEST(flatten_subnormal_real_literals) {
                            "  parameter Real p(min = 1e-320) = 2e-322;\nend RLT1;\n"));
 }
 
+YMC_TEST(flatten_no_return_calls) {
+  // 无返回值的调用 `f(args);`：方程（含 for / if / when 体、initial equation）、模型算法语句、函数体语句都留成调用，缺省实参
+  // 补齐、注释保留；实参全是常量的纯函数调用被求值掉、整条消失（`f(1.0);`、`f(3.0);`，NFSimplifyModel 的 NORETCALL 支）。
+  // 函数解释器认 assert 与调用语句：`ga(2)` 折成 4.0、ga 不发射。期望 = omc 1.25.0 实跑 NRT1（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("function f\n  input Real u;\n  input Real w = 2;\nend f;\nfunction g\n  input Real u;\n"
+                           "  output Real v;\nalgorithm\n  f(u);\n  f(1.0);\n  v := u;\nend g;\nfunction ga\n  input Real u;\n"
+                           "  output Real v;\nalgorithm\n  assert(u > 0, \"neg\");\n  f(u);\n  v := 2 * u;\nend ga;\n"
+                           "model NRT1\n  Real t = time;\n  Real x[2] = {time, 1};\n  Real y = g(t);\n  Real z = ga(2);\n"
+                           "  discrete Real d;\nequation\n  f(t);\n  f(1.0);\n  f(t, w = 3);\n  for i in 1:2 loop\n"
+                           "    f(x[i]);\n  end for;\n  if t > 1 then\n    f(2 * t);\n  end if;\n  when t > 1 then\n    d = 1;\n"
+                           "    f(t);\n  end when;\ninitial equation\n  f(t);\nalgorithm\n  f(t) \"comment\";\n  f(3.0);\n"
+                           "end NRT1;\n"),
+               std::string("function f\n  input Real u;\n  input Real w = 2.0;\nend f;\n\nfunction g\n  input Real u;\n"
+                           "  output Real v;\nalgorithm\n  f(u, 2.0);\n  v := u;\nend g;\n\nclass NRT1\n  Real t = time;\n"
+                           "  Real x[1];\n  Real x[2];\n  Real y = g(t);\n  Real z = 4.0;\n  discrete Real d;\n"
+                           "initial equation\n  f(t, 2.0);\nequation\n  x = {time, 1.0};\n  f(t, 2.0);\n  f(t, 3.0);\n"
+                           "  f(x[1], 2.0);\n  f(x[2], 2.0);\n  if t > 1.0 then\n    f(2.0 * t, 2.0);\n  end if;\n"
+                           "  when t > 1.0 then\n    d = 1.0;\n    f(t, 2.0);\n  end when;\nalgorithm\n"
+                           "  f(t, 2.0) \"comment\";\nend NRT1;\n"));
+  // 常量实参的纯函数调用求值失败（体里的 assert 不成立）时 omc 把调用留下（NRS1 `f(-1.0);`）——ymc 分不清是自己求不出还是
+  // omc 也求不出 → SKIP。
+  bool uns = false;
+  const std::string out = flatten_src("function f\n  input Real u;\nalgorithm\n  assert(u > 0, \"neg\");\nend f;\nmodel NRS1\n"
+                                      "equation\n  f(-1.0);\nend NRS1;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(out, std::string("<unsupported:constant no-return call>"));
+}
+
+YMC_TEST(flatten_array_expression_call_arguments) {
+  // 数组实参里的算术式（维已知）：omc 的化简按元素展开成字面量（`g(2 * x)` → `g({2.0 * x[1], …})`，矩阵、参数数组、等式
+  // 右侧同样）；整体 / 切片引用、if 原样（整段切片打成 `x[:]`）。ymc 此前照写 `g(2 * x)`。期望 = omc 1.25.0 实跑 GAT1
+  //（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("function g\n  input Real u[3];\n  output Real v;\nalgorithm\n  v := u[1];\nend g;\nfunction gm\n"
+                           "  input Real u[:, :];\n  output Real v;\nalgorithm\n  v := u[1, 1];\nend gm;\nmodel GAT1\n"
+                           "  Real x[3] = {time, 1, 2};\n  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};\n  Real t = time;\n"
+                           "  parameter Real p[3] = {1, 2, 3};\n  Real y1 = g(2 * x);\n  Real y2 = g(x + x) + g(-x);\n"
+                           "  Real y3 = g(x[1:3]);\n  Real y4 = g({1, 2, 3} * t);\n  Real y5 = gm(2 * m);\n"
+                           "  Real y6 = g(2 * p);\n  Real y7 = g(if t > 1 then x else 2 * x);\n  Real y8;\nequation\n"
+                           "  y8 = g(x / 2);\nend GAT1;\n"),
+               std::string("function g\n  input Real[3] u;\n  output Real v;\nalgorithm\n  v := u[1];\nend g;\n\nfunction gm\n"
+                           "  input Real[:, :] u;\n  output Real v;\nalgorithm\n  v := u[1,1];\nend gm;\n\nclass GAT1\n"
+                           "  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real m[1,1];\n  Real m[1,2];\n  Real m[1,3];\n"
+                           "  Real m[2,1];\n  Real m[2,2];\n  Real m[2,3];\n  Real t = time;\n  parameter Real p[1] = 1.0;\n"
+                           "  parameter Real p[2] = 2.0;\n  parameter Real p[3] = 3.0;\n"
+                           "  Real y1 = g({2.0 * x[1], 2.0 * x[2], 2.0 * x[3]});\n"
+                           "  Real y2 = g({x[1] + x[1], x[2] + x[2], x[3] + x[3]}) + g({-x[1], -x[2], -x[3]});\n"
+                           "  Real y3 = g(x[:]);\n  Real y4 = g({t, 2.0 * t, 3.0 * t});\n"
+                           "  Real y5 = gm({{2.0 * m[1,1], 2.0 * m[1,2], 2.0 * m[1,3]}, {2.0 * m[2,1], 2.0 * m[2,2], 2.0 * m[2,3]}});\n"
+                           "  Real y6 = g({2.0 * p[1], 2.0 * p[2], 2.0 * p[3]});\n"
+                           "  Real y7 = g(if t > 1.0 then x else {2.0 * x[1], 2.0 * x[2], 2.0 * x[3]});\n  Real y8;\nequation\n"
+                           "  x = {time, 1.0, 2.0};\n  m = {{time, 1.0, 2.0}, {3.0, 4.0, 5.0}};\n"
+                           "  y8 = g({x[1] / 2.0, x[2] / 2.0, x[3] / 2.0});\nend GAT1;\n"));
+  // `vector(x)` 作实参 omc 留成调用（GAS1 `g(vector(x))`）；实参全是字面量的纯函数调用 ymc 的解释器没求出来（循环超
+  // 上限，GAS2）——omc 那边要么求值、要么求值失败照留，分不清 → SKIP。
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           {"function g\n  input Real u[3];\n  output Real v;\nalgorithm\n  v := u[1];\nend g;\nmodel GAS1\n"
+            "  Real x[3] = {time, 1, 2};\n  Real y = g(vector(x));\nend GAS1;\n",
+            "array builtin kept as call by omc"},
+           {"function g\n  input Real u;\n  output Real v;\nalgorithm\n  v := u;\n  while v < 200000 loop\n"
+            "    v := v + 1;\n  end while;\nend g;\nmodel GAS2\n  Real y = g(1);\nend GAS2;\n",
+            "constant user call not evaluated"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

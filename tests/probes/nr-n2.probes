@@ -1,0 +1,329 @@
+//// set: nr-n2 — 无返回值的调用：常量实参、impure / external、非法形态
+//// model: N20
+model N20
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  impure function f input Real u; end f;
+equation
+  f(1.0);
+end N20;
+//// model: N21
+model N21
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  impure function f input Real u; output Real v = u; end f;
+equation
+  f(1.0);
+end N21;
+//// model: N22
+model N22
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; external "C" ff(u); end f;
+equation
+  f(1.0);
+end N22;
+//// model: N23
+model N23
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; end f; function g input Real u; algorithm f(1.0); f(u); end g;
+equation
+  g(t);
+end N23;
+//// model: N24
+model N24
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; end f; function g input Real u; output Real v; algorithm f(1.0); v := u; end g; Real y = g(t);
+end N24;
+//// model: N25
+model N25
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; end f; function g input Real u; output Real v; algorithm f(1.0); v := u; end g; Real y = g(2);
+end N25;
+//// model: N26
+model N26
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; end f; Real y = t; algorithm f(1.0);
+end N26;
+//// model: N27
+model N27
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; end f; Real y = t; algorithm f(1.0); y := 2;
+end N27;
+//// model: N28
+model N28
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; end f; Real y; algorithm y := 2; f(1.0); f(t);
+end N28;
+//// model: N29
+model N29
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; end f;
+equation
+  f(1.0); f(t);
+end N29;
+//// model: BASE
+model BASE
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+end BASE;
+//// model: N210
+model N210
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; end f; parameter Real p = 1; Real z[integer(p)];
+equation
+  f(p);
+end N210;
+//// model: N211
+model N211
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; end f; constant Real c = 1;
+equation
+  f(c + t);
+end N211;
+//// model: N212
+model N212
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; algorithm assert(u > 0, "neg"); end f;
+equation
+  f(-1.0);
+end N212;
+//// model: N213
+model N213
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; algorithm assert(u > 0, "neg"); end f;
+equation
+  f(t);
+end N213;
+//// model: N214
+model N214
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; output Real v = u; end f;
+equation
+  f(t) + 1;
+end N214;
+//// model: N215
+model N215
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+equation
+  sin(1.0);
+end N215;
+//// model: N216
+model N216
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+equation
+  abs(t);
+end N216;
+//// model: N217
+model N217
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+equation
+  der(t);
+end N217;
+//// model: N218
+model N218
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+equation
+  pre(t);
+end N218;
+//// model: N219
+model N219
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+equation
+  time;
+end N219;
+//// model: N220
+model N220
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+equation
+  t;
+end N220;
+//// model: N221
+model N221
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; end f;
+equation
+  when t > 1 then f(1.0); end when;
+end N221;
+//// model: N222
+model N222
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; end f;
+equation
+  if t > 1 then f(1.0); end if;
+end N222;
+//// model: N223
+model N223
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; end f;
+equation
+  if t > 1 then f(1.0); else f(t); end if;
+end N223;
+//// model: N224
+model N224
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; end f;
+equation
+  for i in 1:2 loop f(i); end for;
+end N224;
+//// model: N225
+model N225
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; end f;
+equation
+  for i in 1:2 loop f(i * t); end for;
+end N225;
+//// model: N226
+model N226
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; input Real w; end f;
+equation
+  f(t);
+end N226;
+//// model: N227
+model N227
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; end f;
+equation
+  f(t, t);
+end N227;
+//// model: N228
+model N228
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; end f;
+equation
+  f("a");
+end N228;
+//// model: N229
+model N229
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Integer n; end f;
+equation
+  f(t);
+end N229;
+//// model: N230
+model N230
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; end f;
+equation
+  f(integer(t));
+end N230;
+//// model: N231
+model N231
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u[2]; end f;
+equation
+  f(x);
+end N231;
+//// model: N232
+model N232
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; end f; function g = f;
+equation
+  g(t);
+end N232;
+//// model: N233
+model N233
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; end f; Real y = t; algorithm f(t); f(2 * t); y := 1;
+end N233;
+//// model: N234
+model N234
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; end f; discrete Real y;
+equation
+  when t > 1 then y = 1; f(t); end when;
+end N234;
+//// model: N235
+model N235
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  partial function pf input Real u; end pf; function f extends pf; end f;
+equation
+  f(t);
+end N235;
+//// model: N236
+model N236
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; output Real v; algorithm v := u; return; end f; Real y = f(t);
+end N236;
+//// model: N237
+model N237
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; algorithm return; end f;
+equation
+  f(t);
+end N237;

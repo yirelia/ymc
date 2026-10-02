@@ -1,0 +1,71 @@
+//// set: ga-misc — 函数实参 / 函数体数组运算的零散探针
+//// model: Y1
+function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+model Y1
+  Real x[3] = {time, 1, 2};
+  Real y = g(2 * x);
+  Real z;
+equation
+  z = g(x + x);
+end Y1;
+//// model: Z1
+function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+function h
+  input Real u[:];
+  input Real w[3];
+  output Real v[size(u, 1)];
+  output Real s;
+algorithm
+  v := 2 * u;
+  v := u * 2;
+  v := 2 * u + u;
+  v := -u;
+  s := g2(2 * u);
+  s := g2(u * 2);
+  s := g2(u + u);
+  s := g2(-u);
+  s := g2(2 * w);
+  s := g2(w + w);
+  s := g2(u);
+  s := g2(2 * u + u);
+  s := sum(2 * u);
+  s := g2(u .* u);
+  s := g2(u / 2);
+end h;
+model Z1
+  Real x[3] = {time, 1, 2};
+  Real y[3];
+  Real s;
+equation
+  (y, s) = h(x, x);
+end Z1;
+//// model: Z2
+function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+function h
+  input Real u[:];
+  input Real w[3];
+  output Real v[size(u, 1)];
+  protected Real s;
+algorithm
+  v := 2 * u;
+  v := u * 2;
+  v := 2 * u + u;
+  v := -u;
+  s := g2(2 * u);
+  s := g2(u * 2);
+  s := g2(u + u);
+  s := g2(-u);
+  s := g2(2 * w);
+  s := g2(w + w);
+  s := g2(u);
+  s := g2(2 * u + u);
+  s := sum(2 * u);
+  s := g2(u .* u);
+  s := g2(u / 2);
+end h;
+model Z2
+  Real x[3] = {time, 1, 2};
+  Real y[3];
+equation
+  y = h(x, x);
+end Z2;

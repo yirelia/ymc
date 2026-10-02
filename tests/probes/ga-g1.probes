@@ -1,0 +1,556 @@
+//// set: ga-g1 — 数组算术式作函数实参
+//// model: G10
+model G10
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g(2 * x);
+end G10;
+//// model: G11
+model G11
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g(x + x);
+end G11;
+//// model: G12
+model G12
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g(-x);
+end G12;
+//// model: G13
+model G13
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g(x);
+end G13;
+//// model: G14
+model G14
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g(x[1:3]);
+end G14;
+//// model: G15
+model G15
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g({t, 1, 2});
+end G15;
+//// model: G16
+model G16
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g({1, 2, 3});
+end G16;
+//// model: G17
+model G17
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g(x .* x);
+end G17;
+//// model: G18
+model G18
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g(x / 2);
+end G18;
+//// model: G19
+model G19
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g(x - {1, 2, 3});
+end G19;
+//// model: BASE
+model BASE
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+end BASE;
+//// model: G110
+model G110
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g(if t > 1 then x else 2 * x);
+end G110;
+//// model: G111
+model G111
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g(cat(1, x[1:2], {t}));
+end G111;
+//// model: G112
+model G112
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g(fill(t, 3));
+end G112;
+//// model: G113
+model G113
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g({x[i] * 2 for i in 1:3});
+end G113;
+//// model: G114
+model G114
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g(m[1, :]);
+end G114;
+//// model: G115
+model G115
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g(2 * m[1, :]);
+end G115;
+//// model: G116
+model G116
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g2(2 * x);
+end G116;
+//// model: G117
+model G117
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g2(x + x);
+end G117;
+//// model: G118
+model G118
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g3(2 * m);
+end G118;
+//// model: G119
+model G119
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g3(m);
+end G119;
+//// model: G120
+model G120
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y;
+equation
+  y = g(2 * x);
+end G120;
+//// model: G121
+model G121
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y; algorithm y := g(2 * x);
+end G121;
+//// model: G122
+model G122
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  discrete Real y;
+equation
+  when t > 1 then y = g(2 * x); end when;
+end G122;
+//// model: G123
+model G123
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  function h input Real u[3]; output Real v; algorithm v := g(2 * u); end h; Real y = h(x);
+end G123;
+//// model: G124
+model G124
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g(2 * x) + g(x);
+end G124;
+//// model: G125
+model G125
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = sin(g(2 * x));
+end G125;
+//// model: G126
+model G126
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y[3] = k(2 * x);
+end G126;
+//// model: G127
+model G127
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y[3] = k(x);
+end G127;
+//// model: G128
+model G128
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y[3] = 2 * k(x);
+end G128;
+//// model: G129
+model G129
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y[3] = k(2 * x) + x;
+end G129;
+//// model: G130
+model G130
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Integer ii[3] = {1, 2, integer(t)}; Real y = g(ii);
+end G130;
+//// model: G131
+model G131
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Integer ii[3] = {1, 2, integer(t)}; Real y = g(2 * ii);
+end G131;
+//// model: G132
+model G132
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  parameter Real p[3] = {1, 2, 3}; Real y = g(2 * p);
+end G132;
+//// model: G133
+model G133
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  parameter Real p[3] = {1, 2, 3}; Real y = g(p);
+end G133;
+//// model: G134
+model G134
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  parameter Real p[3] = {1, 2, 3}; parameter Real y = g(2 * p);
+end G134;
+//// model: G135
+model G135
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g(2 * x) * t;
+end G135;
+//// model: G136
+model G136
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = sum(k(2 * x));
+end G136;
+//// model: G137
+model G137
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = max(k(2 * x));
+end G137;
+//// model: G138
+model G138
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g(k(2 * x));
+end G138;
+//// model: G139
+model G139
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g(der(x));
+end G139;
+//// model: G140
+model G140
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g(2 * der(x));
+end G140;
+//// model: G141
+model G141
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g(transpose(m)[1:3, 1]);
+end G141;
+//// model: G142
+model G142
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g(m * {1, 2, 3} * {1, 1, 1});
+end G142;
+//// model: G143
+model G143
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g(vector(x));
+end G143;
+//// model: G144
+model G144
+  function g input Real u[3]; output Real v; algorithm v := u[1]; end g;
+  function g2 input Real u[:]; output Real v; algorithm v := u[1]; end g2;
+  function g3 input Real u[2, 3]; output Real v; algorithm v := u[1, 1]; end g3;
+  function k input Real u[3]; output Real v[3]; algorithm v := 2 * u; end k;
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function gm input Real u[:, :]; output Real v; algorithm v := u[1, 1]; end gm;
+  Real y = g(x * 2 + {t, t, t});
+end G144;

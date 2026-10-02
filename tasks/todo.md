@@ -1134,6 +1134,24 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           `4.94065645841247e-324` → expr_dump 对次正规数从 1 位起逐位试。(2) `within P;`（P 非空）的文件单独压平：omc 报
           "Failed to insert class M within P"，ymc 此前无视 within 照常压平 → 驱动里拒绝（退出码 1）。
           探针 drv-misc 4 个；+1 单测（206）。
+    - [x] (59u) 无返回值的调用 + 数组算术式实参的展开 + 函数解释器的 assert / 调用语句（2026-10-02）：
+          **无返回值的调用** `f(args);`：方程（含 for / if / when 体、initial equation）、模型算法语句、函数体语句都留成
+          调用（缺省 / 命名实参补齐、注释保留、带输出的函数也能当语句调）；实参全是常量的纯函数调用被 omc 求值掉、整条
+          消失（NFSimplifyModel 的 NORETCALL 支），impure / external 的照留。语句位置的向量化调用
+          （`array(f(x[$i1]) for $i1 in 1:3);`）未做 → SKIP。
+          **数组算术式作函数实参**（修潜伏错，侧探撞出）：维已知时 omc 的化简按元素展开成字面量——`g(2 * x)` →
+          `g({2.0 * x[1], 2.0 * x[2], 2.0 * x[3]})`，矩阵、参数数组、等式 / 语句 / when 体里同样；ymc 此前照写 `g(2 * x)`。
+          `vector(x)` / `diagonal(x)` 作实参 omc 留成调用 → SKIP。
+          **函数解释器**：认 assert（条件成立继续；不成立 → 求值失败）与调用语句（被调函数求值一遍，没有输出的也行）→
+          `Real y = g(2)`（g 的体里有 assert / `f(u);`）折成字面量。实参全是字面量的纯函数调用若 ymc 没求出来而留了下来
+          （omc 要么求值、要么求值失败照留，分不清）→ 一律 SKIP（此前只对结构参数代入出来的调用判）。常量值按形参的内建
+          类型强转改成严格匹配（String 给 Real 形参 = 类型错）。
+          **函数体里的数组运算**（FA 探针 f1 铺出 31 个潜伏 FAIL，下一桶逐条实现，这桶先挡住 → SKIP）：点号算符留点号
+          （`u .* u`、`u .+ a`、`a .- u` …）、`标量 * 数组` 换成 `数组 * 标量`、数组自己减自己 omc 报错、已知维的标量积
+          展成积和；已知维的取负按元素展开已做。会让 omc 出告警的写法照旧 SKIP（函数变量带 stream 前缀、求值时触发的
+          warning 级 assert）。
+          探针 NR n1 / n2 / c1、GA g1 / g2 / misc / ut、FA f1：0 FAIL。→ 全 scodeinst PASS 482→484（FuncUnknownDim1、
+          FunctionNoOutput1）、整个 testsuite PASS 1234→1238；+2 单测（208）。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、
