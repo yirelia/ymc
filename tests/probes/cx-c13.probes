@@ -1,0 +1,251 @@
+//// set: cx-c13 — 外层迭代变量的变率（范围是常量 / 参数 / 运行时量）与归约的展开 / 保留
+//// model: C130
+model C130
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y[2]; algorithm for i in 1:n loop y[1] := sum(i * j for j in 1:3); end for;
+end C130;
+//// model: C131
+model C131
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y[2]; algorithm for i in 1:p loop y[i] := sum(i * j for j in 1:3); end for;
+end C131;
+//// model: C132
+model C132
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y = max(sum(i * j for j in 1:3) * tt for i in 1:2);
+end C132;
+//// model: C133
+model C133
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y = max(max(i * j for j in 1:3) * tt for i in 1:2);
+end C133;
+//// model: C134
+model C134
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y = max(sum(i * j for j in 1:3) * tt for i in 1:n);
+end C134;
+//// model: C135
+model C135
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y[2] = {max(i * j for j in 1:3) * tt for i in 1:2};
+end C135;
+//// model: C136
+model C136
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y[2] = {sum(x[j] * i for j in 1:3) * tt for i in 1:2};
+end C136;
+//// model: C137
+model C137
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y[2] = {sum(x[j] for j in 1:i) * tt for i in 1:2};
+end C137;
+//// model: C138
+model C138
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y[2, 2] = {{sum(i * j * l for l in 1:2) * tt for i in 1:2} for j in 1:2};
+end C138;
+//// model: C139
+model C139
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y; algorithm for i in 1:2 loop for j in 1:n loop y := y + sum(i * l for l in 1:3) + sum(j * l for l in 1:3) + sum(i * j * l for l in 1:3); end for; end for;
+end C139;
+//// model: C1310
+model C1310
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y; algorithm y := 0; for i in 1:2 loop y := y + sum(sum(i * j * l for l in 1:2) for j in 1:2); end for;
+end C1310;
+//// model: C1311
+model C1311
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y; algorithm for i in 1:2 loop y := sum(i * j for j in 1:3) * tt; end for;
+end C1311;
+//// model: C1312
+model C1312
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y; algorithm for i in 1:2 loop if sum(i * j for j in 1:3) > 4 then y := 1; end if; end for;
+end C1312;
+//// model: C1313
+model C1313
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Integer z; algorithm for i in 1:2 loop z := sum(i * j for j in 1:3); end for;
+end C1313;
+//// model: C1314
+model C1314
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y; algorithm for i in {1, 3} loop y := sum(x[j] * i for j in 1:3); end for;
+end C1314;
+//// model: C1315
+model C1315
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y; algorithm for i in 1.0:2.0 loop y := sum(i * j for j in 1:3); end for;
+end C1315;
+//// model: C1316
+model C1316
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Boolean b; algorithm for i in 1:2 loop b := max(i > j for j in 1:3); end for;
+end C1316;
+//// model: C1317
+model C1317
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y; algorithm for i in 1:2 loop y := sum(tt for j in 1:i); end for;
+end C1317;
+//// model: C1318
+model C1318
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y; algorithm for i in 1:2 loop y := sum(j for j in 1:i); end for;
+end C1318;
+//// model: C1319
+model C1319
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y; algorithm for i in 1:2 loop y := sum(i * j for j in {1, 2, 3}); end for;
+end C1319;
+//// model: C1320
+model C1320
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y; algorithm for i in 1:2 loop y := sum(i * j for j in k); end for;
+end C1320;
+//// model: C1321
+model C1321
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y; algorithm for i in 1:2 loop y := sum(k[j] for j in 1:3) * i; end for;
+end C1321;
+//// model: C1322
+model C1322
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y; algorithm for i in 1:2 loop y := sum({i, i * 2, i * 3}); end for;
+end C1322;
+//// model: C1323
+model C1323
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y; algorithm for i in 1:2 loop y := sum(fill(i, 3)); end for;
+end C1323;
+//// model: C1324
+model C1324
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y; algorithm for i in 1:2 loop y := max(i, 3) + min(i * 2, 1); end for;
+end C1324;

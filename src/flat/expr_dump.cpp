@@ -269,18 +269,20 @@ class ExprDumper {
         break;
       }
       case ExprKind::Subscript: {
-        // ASUB（ExpressionDump.printExp2Str :703-714）：`<exp>[s1,s2]`，下标以 "," 无空格相连；exp 优先级非 0（expPriority
-        // :936-947：字面量 / cref / ASUB / cast / 调用 / 数组 / 矩阵为 0）时加括号。a = 被取下标式，args = 下标。
+        // ASUB（ExpressionDumpTpl.tpl:89-95 v1.25.0）：`<exp>[s1, s2]`，下标以 ", " 相连（CX 探针 c2：
+        // `{{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}}[n, 1]`）；exp 加括号的规则同 TSUB（parenthesizeSubExp :159-176）。
+        // a = 被取下标式，args = 下标。
         const ExprKind k = a_[e.a].kind;
         const bool bare = k == ExprKind::IntLit || k == ExprKind::RealLit || k == ExprKind::StringLit ||
                           k == ExprKind::BoolLit || k == ExprKind::EnumLit || k == ExprKind::Cref ||
-                          k == ExprKind::Subscript || k == ExprKind::Cast || k == ExprKind::Call || k == ExprKind::Array;
+                          k == ExprKind::Call || k == ExprKind::Array || k == ExprKind::Tuple ||
+                          k == ExprKind::Cast || k == ExprKind::Size || k == ExprKind::Reduction;
         if (!bare) out_ += '(';
         exp(e.a);
         if (!bare) out_ += ')';
         out_ += '[';
         for (std::size_t i = 0; i < e.args.size(); ++i) {
-          if (i) out_ += ',';
+          if (i) out_ += ", ";
           exp(e.args[i]);
         }
         out_ += ']';

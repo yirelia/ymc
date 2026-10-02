@@ -199,6 +199,18 @@ interval is [1,1]"；作用在切片上的向量化内建把切片的范围取�
   `initial equation r = R(2.0);`（绑定变率是 parameter → 挪成初始方程，再被 EvalConstants 求值）。ymc 未做，SKIP
   （`record binding via structural parameter`）。
 
+constant 数组下标引用的几处 1.25.0 行为（CX 探针 c1–c13，2026-10-03）：
+- 越界的字面量下标不报错：`constant Real x[3]; Real y = x[7];` 打出 `Real y = {1.0, 2.0, 3.0}[7];`，`x[3:4]` 打出
+  `{3.0, {1.0, 2.0, 3.0}[4]}`（applyIndexExpArray："that's someone else's problem"）。ymc 不跟，SKIP。
+- 符号下标后面跟 `:`（`m[n, :]`）报内部错 `NFSubscript.toDAEExp failed on unknown subscript ':'`；求不出的范围下标留成
+  `{…}[n:n + 1]`，放进等式又是内部错（`NFScalarize.scalarizeEquation could not expand rhs`）；基是"各元素相等"的数组时
+  连切片下标一起丢掉、秩就错了（`constant Real u[3] = fill(1.5, 3); Real y[2] = u[n:n + 1];` → `y = 1.5;`）。ymc 这几种 SKIP。
+- 求不出值的参数作下标（`parameter Integer q(fixed = false); … x[q]`）：照样标成结构参数，打出 `final parameter Integer
+  q(fixed = false);`，下标仍是 `{…}[q]`。ymc 不跟，SKIP（`parameter in symbolic subscript`）。
+- 归约的变率 ≤ 结构参数、却求不出值（体里有 for 语句 / 数组构造子的迭代变量）：整个归约原样留着，不像含变量的那样展开
+  ——`for i in 1:2 loop y[i] := sum(i * j for j in 1:3)` → `/*Real*/(sum(i * j for j in 1:3))`，而 `for i in 1:p`（p 是此前
+  还不是结构参数的参数）/ `for i in 1:n` 里同一个式子展开成 `i + i * 2 + i * 3`。ymc 照此（var_iters_）。
+
 Integer 的极值（待用户定，2026-10-02）：`max` / `min` 作用在空的 Integer 数组 / 空范围上取 `∓System.intMaxLit`（Expression.makeMinValue / makeMaxValue，v1.25.0 NFExpression.mo:4908-4934），这个值随 omc 构建的整数位宽而变——本机安装版 1.25.0（Windows）打 `1073741823`，testsuite 文件（64 位 Linux 生成）是 `4611686018427387903`。跟实跑的 omc 就要把 30 位的值写进 ymc，跟文件又过不了 oracle=live 门；ymc 目前两边都不跟，遇到即 SKIP（`Integer extreme of empty min/max (platform-dependent in omc)`）。受影响：scodeinst 的 CevalReduction1、FuncBuiltinMax / Max2 / Min / Min2、FuncBuiltinReduction 六例（其余内容已与 1.25.0 一致，只差这一个值）。Real（`±8.777798510069901e304`）、Boolean、枚举的极值与平台无关，已做。
 
 ## 已研究待实现：多条 connect 连接集（union-find）

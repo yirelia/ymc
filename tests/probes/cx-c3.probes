@@ -1,0 +1,281 @@
+//// set: cx-c3 — 别的常量来源：包常量、子实例里的、记录字段、类型维、枚举 / Boolean / String 元素、越界、空数组、函数体
+//// model: C30
+model C30
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  package P constant Real c[3] = {1, 2, 3}; end P; Real y[2] = P.c[2:3];
+end C30;
+//// model: C31
+model C31
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  package P constant Real c[3] = {1, 2, 3}; end P; Real y = P.c[n];
+end C31;
+//// model: C32
+model C32
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  package P constant Real c[3] = {1, 2, 3}; end P; Real y[3] = P.c;
+end C32;
+//// model: C33
+model C33
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  package P constant Real c[3] = {1, 2, 3}; end P; Real y = P.c[p];
+end C33;
+//// model: C34
+model C34
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  package P constant Real c[2, 2] = {{1, 2}, {3, 4}}; end P; Real y[2] = P.c[:, 2];
+end C34;
+//// model: C35
+model C35
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  package P constant Real c[2, 2] = {{1, 2}, {3, 4}}; end P; Real y = P.c[1, n];
+end C35;
+//// model: C36
+model C36
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  model A constant Real c[3] = {1, 2, 3}; end A; A a; Real y[2] = a.c[2:3];
+end C36;
+//// model: C37
+model C37
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  model A constant Real c[3] = {1, 2, 3}; end A; A a; Real y = a.c[n];
+end C37;
+//// model: C38
+model C38
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  model A constant Real c[3] = {1, 2, 3}; end A; A a; Real y = a.c[p];
+end C38;
+//// model: C39
+model C39
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  model A constant Real c[3] = {1, 2, 3}; end A; A a[2]; Real y = a[2].c[n];
+end C39;
+//// model: C310
+model C310
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  model A constant Real c[3] = {1, 2, 3}; end A; A a[2]; Real y[2] = a[2].c[2:3];
+end C310;
+//// model: C311
+model C311
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  model A constant Real c[3] = {1, 2, 3}; Real y[2] = c[2:3]; Real z = c[n]; Integer n = 1; end A; A a;
+end C311;
+//// model: C312
+model C312
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  model A constant Real c[3] = {1, 2, 3}; Real y[2] = c[2:3]; end A; A a(c = {4, 5, 6});
+end C312;
+//// model: C313
+model C313
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  model A constant Real c[3] = {1, 2, 3}; Real z = c[j]; Integer j = 1; end A; A a[2](c = {{4, 5, 6}, {7, 8, 9}});
+end C313;
+//// model: C314
+model C314
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  record R Real v[3]; end R; constant R r(v = {1, 2, 3}); Real y[2] = r.v[2:3];
+end C314;
+//// model: C315
+model C315
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  record R Real v[3]; end R; constant R r(v = {1, 2, 3}); Real y = r.v[n];
+end C315;
+//// model: C316
+model C316
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  record R Real v[3]; end R; constant R r = R({1, 2, 3}); Real y = r.v[n];
+end C316;
+//// model: C317
+model C317
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  record R Real a; end R; constant R r[2] = {R(1), R(2)}; Real y = r[n].a;
+end C317;
+//// model: C318
+model C318
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  type E = enumeration(a, b, c); constant Real c[E] = {1, 2, 3}; Real y[2] = c[E.a:E.b];
+end C318;
+//// model: C319
+model C319
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  type E = enumeration(a, b, c); constant Real c[E] = {1, 2, 3}; E e = if tt > 1 then E.a else E.b; Real y = c[e];
+end C319;
+//// model: C320
+model C320
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Boolean bb[3] = {true, false, true}; Boolean y = bb[n];
+end C320;
+//// model: C321
+model C321
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Boolean bb[3] = {true, false, true}; Boolean y[2] = bb[2:3];
+end C321;
+//// model: C322
+model C322
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant String ss[2] = {"a", "b"}; String y = ss[n];
+end C322;
+//// model: C323
+model C323
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Integer kk[3] = {3, 1, 2}; Integer y[2] = kk[2:3];
+end C323;
+//// model: C324
+model C324
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  type E = enumeration(a, b, c); constant E ee[3] = {E.c, E.a, E.b}; E y = ee[n];
+end C324;
+//// model: C325
+model C325
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  type E = enumeration(a, b, c); constant E ee[3] = {E.c, E.a, E.b}; E y[2] = ee[2:3];
+end C325;
+//// model: C326
+model C326
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  package P constant Real c[3] = {1, 2, 3}; end P; function f input Integer i; output Real y; algorithm y := P.c[i]; end f; Real y = f(n);
+end C326;
+//// model: C327
+model C327
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  package P constant Real c[3] = {1, 2, 3}; end P; function f input Integer i; output Real y[2]; algorithm y := P.c[i:i + 1]; end f; Real y[2] = f(n);
+end C327;
+//// model: C328
+model C328
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  package P constant Real c[3] = {1, 2, 3}; end P; function f input Integer i; output Real y[2]; algorithm y := P.c[2:3] * i; end f; Real y[2] = f(n);
+end C328;
+//// model: C329
+model C329
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = {1, 2, 3}; constant Real z[3] = 2 * x; Real y = z[n];
+end C329;
+//// model: C330
+model C330
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = {1, 2, 3}; constant Real z[2] = x[2:3]; Real y = z[n];
+end C330;
+//// model: C331
+model C331
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[:] = {1, 2, 3}; Real y = x[n];
+end C331;
+//// model: C332
+model C332
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[:] = fill(1.5, 3); Real y = x[n];
+end C332;
+//// model: C333
+model C333
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = {1, 2, 3}; Real y = x[7];
+end C333;
+//// model: C334
+model C334
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = {1, 2, 3}; Real y = x[0];
+end C334;
+//// model: C335
+model C335
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = {1, 2, 3}; Real y[2] = x[3:4];
+end C335;
+//// model: C336
+model C336
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[0] = fill(1.0, 0); Real y = x[n];
+end C336;
+//// model: C337
+model C337
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  final parameter Real x[3] = {1, 2, 3}; Real y = x[n];
+end C337;
+//// model: C338
+model C338
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  parameter Real x[3] = {1, 2, 3}; Real y = x[n];
+end C338;
+//// model: C339
+model C339
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  parameter Real x[3] = {1, 2, 3} annotation(Evaluate = true); Real y = x[n];
+end C339;

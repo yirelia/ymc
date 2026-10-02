@@ -1,0 +1,375 @@
+//// set: cx-c9 — end / 负步长 / 三维 / 修饰里的切片 / 大数组 / protected / fixed = false 与 Evaluate = false 的参数下标
+//// model: C90
+model C90
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y = x[p + n];
+end C90;
+//// model: C91
+model C91
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y = x[n + p - p];
+end C91;
+//// model: C92
+model C92
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y = x[end - n];
+end C92;
+//// model: C93
+model C93
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y = x[end];
+end C93;
+//// model: C94
+model C94
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y[2] = x[end:-1:end - 1];
+end C94;
+//// model: C95
+model C95
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y[5] = x[5:-1:1];
+end C95;
+//// model: C96
+model C96
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y[3] = x[{1, 1, 2}];
+end C96;
+//// model: C97
+model C97
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y[2] = x[{p, p}];
+end C97;
+//// model: C98
+model C98
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y[2, 2] = m[{2, 1}, {3, 1}];
+end C98;
+//// model: C99
+model C99
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y = m[end, end];
+end C99;
+//// model: C910
+model C910
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y = m[end, n];
+end C910;
+//// model: C911
+model C911
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y = m[n, end];
+end C911;
+//// model: C912
+model C912
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  constant Real t3[2, 2, 2] = {{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}; Real y = t3[n, 1, 2];
+end C912;
+//// model: C913
+model C913
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  constant Real t3[2, 2, 2] = {{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}; Real y = t3[1, n, 2];
+end C913;
+//// model: C914
+model C914
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  constant Real t3[2, 2, 2] = {{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}; Real y = t3[1, 2, n];
+end C914;
+//// model: C915
+model C915
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  constant Real t3[2, 2, 2] = {{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}; Real y[2] = t3[:, n, 1];
+end C915;
+//// model: C916
+model C916
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  constant Real t3[2, 2, 2] = {{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}; Real y[2, 2] = t3[:, :, n];
+end C916;
+//// model: C917
+model C917
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  constant Real t3[2, 2, 2] = {{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}; Real y[2] = t3[1, :, n];
+end C917;
+//// model: C918
+model C918
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  constant Real t3[2, 2, 2] = {{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}; Real y[2, 2] = t3[:, 1, :];
+end C918;
+//// model: C919
+model C919
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  constant Real t3[2, 2, 2] = {{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}; Real y[2, 2] = t3[2];
+end C919;
+//// model: C920
+model C920
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  constant Real t3[2, 2, 2] = {{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}; Real y[2] = t3[2, 1];
+end C920;
+//// model: C921
+model C921
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  model A parameter Real k = 1; end A; A a[3](k = x[1:3]);
+end C921;
+//// model: C922
+model C922
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  model A parameter Real k = 1; end A; A a[3](k = 2 * x[{3, 1, 2}]);
+end C922;
+//// model: C923
+model C923
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  model A parameter Real k = 1; Real z = k * time; end A; A a[2](k = m[:, 2]);
+end C923;
+//// model: C924
+model C924
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  model A Real k = 1; end A; A a[2](k = m[:, n]);
+end C924;
+//// model: C925
+model C925
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  constant Real big[400] = {i * 1.0 for i in 1:400}; Real y = big[n] + sum(big[2:399]); Real z[400] = big[:] * tt;
+end C925;
+//// model: C926
+model C926
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  constant Real big[20, 20] = fill(1.5, 20, 20); Real y = big[n, n]; Real z[20] = big[:, n]; Real w[20, 20] = big * tt;
+end C926;
+//// model: C927
+model C927
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  protected constant Real pc[3] = {1, 2, 3}; public Real y = pc[n]; Real z[2] = pc[2:3];
+end C927;
+//// model: C928
+model C928
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  final constant Real fc[3] = {1, 2, 3}; Real y = fc[n];
+end C928;
+//// model: C929
+model C929
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  constant Real x1[1] = {7}; Real y = x1[n];
+end C929;
+//// model: C930
+model C930
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  constant Real x1[1] = {7}; Real y[1] = x1[{n}];
+end C930;
+//// model: C931
+model C931
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  constant Real x1[1, 1] = {{7}}; Real y = x1[n, n];
+end C931;
+//// model: C932
+model C932
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y = x[n] + x[p]; Real z[p];
+end C932;
+//// model: C933
+model C933
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  discrete Integer d(start = 1); Real y = x[d];
+equation
+  when sample(0, 1) then d = pre(d) + 1; end when;
+end C933;
+//// model: C934
+model C934
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Integer d(start = 1); Real y = x[pre(d)];
+equation
+  when sample(0, 1) then d = pre(d) + 1; end when;
+end C934;
+//// model: C935
+model C935
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer q(fixed = false); Real y = x[q]; initial equation q = 2;
+end C935;
+//// model: C936
+model C936
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer q = 2 annotation(Evaluate = false); Real y = x[q];
+end C936;

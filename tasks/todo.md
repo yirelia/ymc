@@ -1344,6 +1344,32 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           自带事务地取参数值，typeRange NFTyping.mo:2352-2416 / typeFillCall2 NFBuiltinCall.mo:935-1001）。
           → scodeinst 507→508 PASS（IfExpression16 入 slice）；整个 testsuite PASS 1330→1331；+2 单测（233）；
             探针 5506→5898。
+    - [x] (60f) constant 数组的切片 / 符号下标引用 + 书写绑定上的变率检查 + 常量归约的保留（2026-10-03）：
+          此前 constant 数组只收"下标全是整数字面量"（`x[2]`）与整取（`x`）；切片、参数下标、运行时下标一律 SKIP
+          （`constant evaluation`，语料 6 例），子实例里的（`a.c[n]`、`a.c[2:3]`）更是落到变量路上、打成对常量的引用（FAIL）。
+          **引用换成值、下标应用上去**（const_array_ref / apply_const_subs，omc 的 Ceval.evalCref(evalSubscripts = false) +
+          Expression.applySubscripts，NFExpression.mo:1242-1478）：求得出的下标（常量；参数按结构参数求值、打 final）取元素，
+          `:` 对每个元素应用其余下标，展开的切片对每个下标各做一遍，运行时下标连同其后的留成 `{…}[n, 1]`——
+          `x[2:3]` → `{2.0, 3.0}`、`m[:, 2]` → `{2.0, 5.0}`、`x[n]` → `{1.0, …}[n]`、`m[1, n]` → `{1.0, 2.0, 3.0}[n]`、
+          `m[:, n]` → `{{…}[n], {…}[n]}`、`x[{n, 1}]` → `{{…}[n], 1.0}`。来源：本地常量、子实例里的、记录字段、包常量。
+          **化简**（simplify 的 Subscript 支，simplifySubscriptedExp NFSimplifyExp.mo:1346-1379）："各元素相等"的字面量数组取
+          符号下标 → 该元素（fill / ones 绑定的常量 `u[n]` → `1.5`，书写的 `({1.5, 1.5})[n]` 同）；打头的字面量下标部分应用。
+          Integer 常量数组进 Real 语境：转型留在外面 `/*Real*/({3, 1, 2}[n])`（const_subscripts_ 标记）。
+          **dump**：多下标的 ASUB 以 ", " 相连（ExpressionDumpTpl.tpl:89-95；此前照 ExpressionDump 写成 ","，没有探针走到过）。
+          **潜伏错**（60e 及以前都在）：
+          · parameter / constant 的绑定、内建属性值引用变量，而化简把它消掉（`0 * tt`、`tt - tt`、`if true then 1 else tt`、
+            `false and tt > 1`）：omc 看化简前的绑定，报变率错；ymc 看化简后的 → 放行。改在书写的式子上查（binding_refs：
+            实例继承的变率下限 scope_floor、size / ndims 首参除外），60e 的 constant-引用-parameter 检查并进同一个函数。
+          · 变率 ≤ 结构参数的归约，体里有外层保留着的常量变率迭代变量（for 语句 / 数组构造子）：omc 求不出值就把归约原样
+            留着（`/*Real*/(sum(i * j for j in 1:3))`），ymc 照 S3 展开了（FAIL）；min / max 则 SKIP → 现在都保留
+            （var_iters_：迭代变量的变率 = 其范围定型时的变率）。
+          · `x[n] - x[n]` 不折 0（expr_equal 不认 Subscript）。
+          未做 → SKIP：没取尽各维的符号下标（`m[n]` → 数组值的 `{{…}, {…}}[n]`）、留着的切片（`x[n:n + 1]`）、符号下标后跟
+          切片、越界的字面量下标（omc 照打 `{…}[7]`）、求不出值的参数下标（fixed = false：omc 打 final 而下标仍是符号）、
+          记录数组的符号下标（`r[n].a`）、包里记录常量的数组字段、类型维上的运行时下标、函数体里的包常量。
+          → scodeinst 508→512 PASS（CevalArrayConstant2、SubscriptCevalSlice1/2、SubscriptCevalWhole1 入 slice）；整个
+            testsuite PASS 1331→1338（另 MatrixRowIndexing、VectorizeConstCref2D、SubScript3）；+3 单测（236）；
+            探针 5898→6343。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、

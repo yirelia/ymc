@@ -586,5 +586,9 @@
 "ImplicitRangeType1.mo",
 "ImplicitRangeType2.mo",
 "EquationQualified1.mo",
-"IfExpression16.mo"
+"IfExpression16.mo",
+"CevalArrayConstant2.mo",
+"SubscriptCevalSlice1.mo",
+"SubscriptCevalSlice2.mo",
+"SubscriptCevalWhole1.mo"
 ]

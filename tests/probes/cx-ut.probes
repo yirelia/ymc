@@ -1,0 +1,141 @@
+//// set: cx-ut — constant 数组的下标引用 / 书写绑定上的变率检查 / 常量归约（单测原文）
+//// model: CXS1
+model CXS1
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y[3] = m[n];
+end CXS1;
+//// model: CXS2
+model CXS2
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y[2] = x[n:n + 1];
+end CXS2;
+//// model: CXS3
+model CXS3
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y = x[7];
+end CXS3;
+//// model: CXS4
+model CXS4
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Real q = 0 * tt;
+end CXS4;
+//// model: CXS5
+model CXS5
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y(start = tt - tt) = tt;
+end CXS5;
+//// model: CXS6
+model CXS6
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Real q[2] = {tt * 0, 1};
+end CXS6;
+//// model: CXS7
+model CXS7
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer q(fixed = false);
+  Real y = x[q];
+initial equation
+  q = 2;
+end CXS7;
+//// model: CXS8
+model CXS8
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y[3] = m[n, :];
+end CXS8;
+//// model: CXT1
+model CXT1
+  package P
+    constant Real c[3] = {1, 2, 3};
+  end P;
+  model A
+    constant Real c[3] = {1, 2, 3};
+  end A;
+  record R
+    Real v[3];
+  end R;
+  constant Real x[5] = {1, 2, 3, 4, 5};
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  constant Integer k[3] = {3, 1, 2};
+  constant Real u[3] = fill(1.5, 3);
+  constant R r(v = {1, 2, 3});
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  A a;
+  Real y1[2] = x[2:3];
+  Real y2[3] = x[{5, 1, 3}];
+  Real y3[2] = m[:, 2];
+  Real y4[2] = x[end - 1:end] * time;
+  Real y5 = x[n];
+  Real y6 = m[1, n] + m[n, 1];
+  Real y7[2] = m[:, n];
+  Real y8[2] = x[{n, 1}];
+  Real y9 = x[p];
+  Real y10 = k[n];
+  Real y11 = x[k[n]];
+  Real y12 = u[n];
+  Real y13 = a.c[n] + r.v[n] + P.c[n];
+  Real y14[2] = a.c[2:3];
+  Real s;
+algorithm
+  s := 0;
+  for i in 1:3 loop
+    s := s + x[i] + m[1, i];
+  end for;
+end CXT1;
+//// model: CXT2
+model CXT2
+  record R
+    Real x;
+    final constant Real y = x / 2.0;
+  end R;
+  constant R r = R(1.0);
+  Real v[2, 3];
+  parameter Integer n = ndims(v);
+  parameter Integer m = size(v, 2);
+  Real tt = time;
+  Real w = ({1.5, 1.5, 1.5})[integer(tt) + 1];
+end CXT2;
+//// model: CXT3
+model CXT3
+  constant Real x[3] = {1, 2, 3};
+  parameter Integer p = 2;
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  Real y[2];
+  Real z[2] = {sum(i * j for j in 1:3) * tt for i in 1:2};
+  Real w;
+algorithm
+  for i in 1:2 loop
+    y[i] := sum(i * j for j in 1:3) + sum(x[j] * i for j in 1:3) + sum(i * j * tt for j in 1:3) + max(i * j for j in 1:3);
+  end for;
+  for i in 1:p loop
+    w := sum(i * j for j in 1:3);
+  end for;
+  for i in 1:n loop
+    w := w + sum(i * j for j in 1:3);
+  end for;
+end CXT3;

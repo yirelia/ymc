@@ -162,12 +162,12 @@ YMC_TEST(flatten_non_literal_array_binding) {
                   "equation\n  x = y;\n  w = {2.0 * y[1], 2.0 * y[2], 2.0 * y[3]};\nend NLB;\n"));
 }
 
-// 非常量下标（x[n]，n 是变量）→ omc 保留数组字面量下标，ymc 无此路径 → 保守 SKIP。
-YMC_TEST(flatten_constant_array_variable_index_unsupported) {
-  bool uns = false;
-  std::string t = flatten_src("model M\n  constant Real x[3] = {1,2,3};\n  Integer n = 2;\n  Real y = x[n];\nend M;\n", &uns);
-  YMC_CHECK(uns);
-  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+// 非常量下标（x[n]，n 是变量）→ omc 把常量换成值、下标留成符号（60f 起做了，见 flatten_constant_array_subscripts）。
+// 期望 = omc 1.25.0 实跑（2026-10-03）。
+YMC_TEST(flatten_constant_array_variable_index) {
+  YMC_CHECK_EQ(flatten_src("model M\n  constant Real x[3] = {1,2,3};\n  Integer n = 2;\n  Real y = x[n];\nend M;\n"),
+               std::string("class M\n  constant Real x[1] = 1.0;\n  constant Real x[2] = 2.0;\n  constant Real x[3] = 3.0;\n"
+                           "  Integer n = 2;\n  Real y = {1.0, 2.0, 3.0}[n];\nend M;\n"));
 }
 
 // 函数发射（首批）：纯标量顶层函数 → class 之前发射 `function f…end f;`，调用保留符号 `f(time)`。期望值取自实跑 omc 1.25.0。
@@ -4523,6 +4523,124 @@ YMC_TEST(flatten_constant_binding_variability) {
     YMC_CHECK(uns);
     YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
   }
+}
+
+YMC_TEST(flatten_constant_array_subscripts) {
+  // constant 数组带下标的引用：omc 把引用换成值、下标不求值地应用上去（Expression.applySubscripts）——求得出的下标（常量、
+  // 参数——结构参数、打 final）取元素，切片 / `:` 逐元素应用，运行时下标连同其后的留成 `{…}[n, 1]`；之后"各元素相等"的
+  // 字面量数组取符号下标化成该元素（simplifySubscriptedExp：`u[n]` → `1.5`）。Integer 常量数组进 Real 语境时转型留在外面
+  //（`/*Real*/({3, 1, 2}[n])`）。来源：本地常量、子实例里的（`a.c[n]`，此前打成对常量的引用）、记录字段、包常量。
+  // 期望 = omc 1.25.0 实跑 CXT1（2026-10-03）。
+  YMC_CHECK_EQ(flatten_src("model CXT1\n  package P\n    constant Real c[3] = {1, 2, 3};\n  end P;\n  model A\n"
+                           "    constant Real c[3] = {1, 2, 3};\n  end A;\n  record R\n    Real v[3];\n  end R;\n"
+                           "  constant Real x[5] = {1, 2, 3, 4, 5};\n  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};\n"
+                           "  constant Integer k[3] = {3, 1, 2};\n  constant Real u[3] = fill(1.5, 3);\n"
+                           "  constant R r(v = {1, 2, 3});\n  parameter Integer p = 2;\n  Integer n = integer(time) + 1;\n"
+                           "  A a;\n  Real y1[2] = x[2:3];\n  Real y2[3] = x[{5, 1, 3}];\n  Real y3[2] = m[:, 2];\n"
+                           "  Real y4[2] = x[end - 1:end] * time;\n  Real y5 = x[n];\n  Real y6 = m[1, n] + m[n, 1];\n"
+                           "  Real y7[2] = m[:, n];\n  Real y8[2] = x[{n, 1}];\n  Real y9 = x[p];\n  Real y10 = k[n];\n"
+                           "  Real y11 = x[k[n]];\n  Real y12 = u[n];\n  Real y13 = a.c[n] + r.v[n] + P.c[n];\n"
+                           "  Real y14[2] = a.c[2:3];\n  Real s;\nalgorithm\n  s := 0;\n  for i in 1:3 loop\n"
+                           "    s := s + x[i] + m[1, i];\n  end for;\nend CXT1;\n"),
+               std::string("class CXT1\n  constant Real x[1] = 1.0;\n  constant Real x[2] = 2.0;\n  constant Real x[3] = 3.0;\n"
+                           "  constant Real x[4] = 4.0;\n  constant Real x[5] = 5.0;\n  constant Real m[1,1] = 1.0;\n"
+                           "  constant Real m[1,2] = 2.0;\n  constant Real m[1,3] = 3.0;\n  constant Real m[2,1] = 4.0;\n"
+                           "  constant Real m[2,2] = 5.0;\n  constant Real m[2,3] = 6.0;\n  constant Integer k[1] = 3;\n"
+                           "  constant Integer k[2] = 1;\n  constant Integer k[3] = 2;\n  constant Real u[1] = 1.5;\n"
+                           "  constant Real u[2] = 1.5;\n  constant Real u[3] = 1.5;\n  constant Real r.v[1] = 1.0;\n"
+                           "  constant Real r.v[2] = 2.0;\n  constant Real r.v[3] = 3.0;\n  final parameter Integer p = 2;\n"
+                           "  Integer n = integer(time) + 1;\n  constant Real a.c[1] = 1.0;\n  constant Real a.c[2] = 2.0;\n"
+                           "  constant Real a.c[3] = 3.0;\n  Real y1[1];\n  Real y1[2];\n  Real y2[1];\n  Real y2[2];\n"
+                           "  Real y2[3];\n  Real y3[1];\n  Real y3[2];\n  Real y4[1];\n  Real y4[2];\n"
+                           "  Real y5 = {1.0, 2.0, 3.0, 4.0, 5.0}[n];\n"
+                           "  Real y6 = {1.0, 2.0, 3.0}[n] + {{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}}[n, 1];\n  Real y7[1];\n"
+                           "  Real y7[2];\n  Real y8[1];\n  Real y8[2];\n  Real y9 = 2.0;\n"
+                           "  Real y10 = /*Real*/({3, 1, 2}[n]);\n  Real y11 = {1.0, 2.0, 3.0, 4.0, 5.0}[{3, 1, 2}[n]];\n"
+                           "  Real y12 = 1.5;\n  Real y13 = {1.0, 2.0, 3.0}[n] + {1.0, 2.0, 3.0}[n] + {1.0, 2.0, 3.0}[n];\n"
+                           "  Real y14[1];\n  Real y14[2];\n  Real s;\nequation\n  y1 = {2.0, 3.0};\n  y2 = {5.0, 1.0, 3.0};\n"
+                           "  y3 = {2.0, 5.0};\n  y4 = {4.0 * time, 5.0 * time};\n"
+                           "  y7 = {{1.0, 2.0, 3.0}[n], {4.0, 5.0, 6.0}[n]};\n  y8 = {{1.0, 2.0, 3.0, 4.0, 5.0}[n], 1.0};\n"
+                           "  y14 = {2.0, 3.0};\nalgorithm\n  s := 0.0;\n  for i in 1:3 loop\n"
+                           "    s := s + {1.0, 2.0, 3.0, 4.0, 5.0}[i] + {1.0, 2.0, 3.0}[i];\n  end for;\nend CXT1;\n"));
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           // 没取尽各维的符号下标（`m[n]` → 数组值的 `{{…}, {…}}[n]`）：下游还不认（CXS1）。
+           {"model CXS1\n  constant Real x[5] = {1, 2, 3, 4, 5};\n"
+            "  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};\n  Integer n = integer(time) + 1;\n"
+            "  Real tt = time;\n  Real y[3] = m[n];\nend CXS1;\n", "array-valued subscripted constant"},
+           // 求不出的范围下标：omc 留成 `{…}[n:n + 1]`，未做（CXS2）。
+           {"model CXS2\n  constant Real x[5] = {1, 2, 3, 4, 5};\n"
+            "  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};\n  Integer n = integer(time) + 1;\n"
+            "  Real tt = time;\n  Real y[2] = x[n:n + 1];\nend CXS2;\n", "constant array subscript"},
+           // 越界的字面量下标：omc 不查、照打 `{1.0, …}[7]`，不跟（CXS3）。
+           {"model CXS3\n  constant Real x[5] = {1, 2, 3, 4, 5};\n"
+            "  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};\n  Integer n = integer(time) + 1;\n"
+            "  Real tt = time;\n  Real y = x[7];\nend CXS3;\n", "array subscript out of range"},
+           // fixed = false 的参数作下标：omc 把它标成结构参数（打 final）而下标仍是符号，不跟（CXS7）。
+           {"model CXS7\n  constant Real x[5] = {1, 2, 3, 4, 5};\n"
+            "  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};\n  Integer n = integer(time) + 1;\n"
+            "  Real tt = time;\n  parameter Integer q(fixed = false);\n  Real y = x[q];\ninitial equation\n"
+            "  q = 2;\nend CXS7;\n", "parameter in symbolic subscript"},
+           // 符号下标后面跟 `:`：omc 内部错（NFSubscript.toDAEExp failed on unknown subscript ':'），CXS8。
+           {"model CXS8\n  constant Real x[5] = {1, 2, 3, 4, 5};\n"
+            "  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};\n  Integer n = integer(time) + 1;\n"
+            "  Real tt = time;\n  Real y[3] = m[n, :];\nend CXS8;\n", "slice after symbolic subscript on constant array"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
+YMC_TEST(flatten_binding_variability_on_written_expression) {
+  // 变率检查做在书写的绑定上，例外照 omc：constant 记录里无前缀的字段也是 constant（`final constant Real y = x / 2.0`）、
+  // ndims(v) / size(v, k) 与 v 的变率无关；书写的 `({1.5, 1.5, 1.5})[k]` 同样按"各元素相等"化成元素。
+  // 期望 = omc 1.25.0 实跑 CXT2（2026-10-03）。
+  YMC_CHECK_EQ(flatten_src("model CXT2\n  record R\n    Real x;\n    final constant Real y = x / 2.0;\n  end R;\n"
+                           "  constant R r = R(1.0);\n  Real v[2, 3];\n  parameter Integer n = ndims(v);\n"
+                           "  parameter Integer m = size(v, 2);\n  Real tt = time;\n"
+                           "  Real w = ({1.5, 1.5, 1.5})[integer(tt) + 1];\nend CXT2;\n"),
+               std::string("class CXT2\n  constant Real r.x = 1.0;\n  final constant Real r.y = 0.5;\n  Real v[1,1];\n"
+                           "  Real v[1,2];\n  Real v[1,3];\n  Real v[2,1];\n  Real v[2,2];\n  Real v[2,3];\n"
+                           "  parameter Integer n = 2;\n  parameter Integer m = 3;\n  Real tt = time;\n  Real w = 1.5;\n"
+                           "end CXT2;\n"));
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           // parameter 的绑定 / 属性值引用变量，而化简会把它消掉（`0 * tt`、`tt - tt`）：omc 看的是化简前的绑定，报"绑定变率
+           // 高于组件"（checkComponentBindingVariability，NFTyping.mo:1121-1160 v1.25.0）。CXS4 标量、CXS5 属性、CXS6 数组。
+           {"model CXS4\n  constant Real x[5] = {1, 2, 3, 4, 5};\n"
+            "  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};\n  Integer n = integer(time) + 1;\n"
+            "  Real tt = time;\n  parameter Real q = 0 * tt;\nend CXS4;\n", "binding of higher variability"},
+           {"model CXS5\n  constant Real x[5] = {1, 2, 3, 4, 5};\n"
+            "  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};\n  Integer n = integer(time) + 1;\n"
+            "  Real tt = time;\n  Real y(start = tt - tt) = tt;\nend CXS5;\n", "attribute binding of higher variability"},
+           {"model CXS6\n  constant Real x[5] = {1, 2, 3, 4, 5};\n"
+            "  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};\n  Integer n = integer(time) + 1;\n"
+            "  Real tt = time;\n  parameter Real q[2] = {tt * 0, 1};\nend CXS6;\n", "array binding higher variability"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
+YMC_TEST(flatten_constant_reductions_with_outer_iterators) {
+  // 变率 ≤ 结构参数的归约 omc 走"求值"一支；体里有外层保留着的常量变率迭代变量（for 语句 / 数组构造子，范围是常量）时
+  // 求不出值，整个归约原样留着（`/*Real*/(sum(i * j for j in 1:3))`、`max(i * j for j in 1:3)`）；体里另有变量的
+  //（`sum(i * j * tt …)`）、迭代变量的范围带普通参数 / 运行时量的（`for i in 1:p`、`for i in 1:n`）照常展开。
+  // 期望 = omc 1.25.0 实跑 CXT3（2026-10-03）。
+  YMC_CHECK_EQ(flatten_src("model CXT3\n  constant Real x[3] = {1, 2, 3};\n  parameter Integer p = 2;\n"
+                           "  Integer n = integer(time) + 1;\n  Real tt = time;\n  Real y[2];\n"
+                           "  Real z[2] = {sum(i * j for j in 1:3) * tt for i in 1:2};\n  Real w;\nalgorithm\n"
+                           "  for i in 1:2 loop\n"
+                           "    y[i] := sum(i * j for j in 1:3) + sum(x[j] * i for j in 1:3) + sum(i * j * tt for j in 1:3) + max(i * j for j in 1:3);\n"
+                           "  end for;\n  for i in 1:p loop\n    w := sum(i * j for j in 1:3);\n  end for;\n"
+                           "  for i in 1:n loop\n    w := w + sum(i * j for j in 1:3);\n  end for;\nend CXT3;\n"),
+               std::string("class CXT3\n  constant Real x[1] = 1.0;\n  constant Real x[2] = 2.0;\n  constant Real x[3] = 3.0;\n"
+                           "  final parameter Integer p = 2;\n  Integer n = integer(time) + 1;\n  Real tt = time;\n"
+                           "  Real y[1];\n  Real y[2];\n  Real z[1];\n  Real z[2];\n  Real w;\nequation\n"
+                           "  z = array(/*Real*/(sum(i * j for j in 1:3)) * tt for i in 1:2);\nalgorithm\n  for i in 1:2 loop\n"
+                           "    y[i] := /*Real*/(sum(i * j for j in 1:3)) + sum({1.0, 2.0, 3.0}[j] * /*Real*/(i) for j in 1:3) + /*Real*/(i) * tt + /*Real*/(i * 2) * tt + /*Real*/(i * 3) * tt + /*Real*/(max(i * j for j in 1:3));\n"
+                           "  end for;\n  for i in 1:2 loop\n    w := /*Real*/(i + i * 2 + i * 3);\n  end for;\n"
+                           "  for i in 1:n loop\n    w := w + /*Real*/(i + i * 2 + i * 3);\n  end for;\nend CXT3;\n"));
 }
 
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {

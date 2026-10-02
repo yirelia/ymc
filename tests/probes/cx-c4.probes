@@ -1,0 +1,253 @@
+//// set: cx-c4 — 常量绑定的形态（fill / ones 的各元素相等、推导式、linspace、运算、别名、修饰）配运行时下标
+//// model: C40
+model C40
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = fill(1.5, 3); Real y = x[n];
+end C40;
+//// model: C41
+model C41
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = {i * 1.5 for i in 1:3}; Real y = x[n];
+end C41;
+//// model: C42
+model C42
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = ones(3); Real y = x[n];
+end C42;
+//// model: C43
+model C43
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = zeros(3); Real y = x[n];
+end C43;
+//// model: C44
+model C44
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = linspace(1, 2, 3); Real y = x[n];
+end C44;
+//// model: C45
+model C45
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = cat(1, {1, 2}, {3}); Real y = x[n];
+end C45;
+//// model: C46
+model C46
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Integer x[3] = 1:3; Integer y = x[n];
+end C46;
+//// model: C47
+model C47
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = 1.0:3.0; Real y = x[n];
+end C47;
+//// model: C48
+model C48
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = if true then {1, 2, 3} else {4, 5, 6}; Real y = x[n];
+end C48;
+//// model: C49
+model C49
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[2, 2] = transpose({{1, 2}, {3, 4}}); Real y = x[n, 1];
+end C49;
+//// model: C410
+model C410
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[2, 2] = identity(2); Real y = x[n, 1];
+end C410;
+//// model: C411
+model C411
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[2, 2] = fill(1.5, 2, 2); Real y = x[n, 1];
+end C411;
+//// model: C412
+model C412
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[2, 2] = fill(1.5, 2, 2); Real y = x[1, n];
+end C412;
+//// model: C413
+model C413
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[2, 2] = fill(1.5, 2, 2); Real y[2] = x[n];
+end C413;
+//// model: C414
+model C414
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[2, 2] = fill(1.5, 2, 2); Real y[2] = x[:, n];
+end C414;
+//// model: C415
+model C415
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = {1, 2, 3} * 2; Real y = x[n];
+end C415;
+//// model: C416
+model C416
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = -{1, 2, 3}; Real y = x[n];
+end C416;
+//// model: C417
+model C417
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = {1, 2, 3} + {1, 1, 1}; Real y = x[n];
+end C417;
+//// model: C418
+model C418
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real z[3] = {1, 2, 3}; constant Real x[3] = z; Real y = x[n];
+end C418;
+//// model: C419
+model C419
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real z[4] = {1, 2, 3, 4}; constant Real x[3] = z[2:4]; Real y = x[n];
+end C419;
+//// model: C420
+model C420
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = array(1, 2, 3); Real y = x[n];
+end C420;
+//// model: C421
+model C421
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = {1, 2, 3}; Real y = x[n];
+end C421;
+//// model: C422
+model C422
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = vector({{1}, {2}, {3}}); Real y = x[n];
+end C422;
+//// model: C423
+model C423
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = fill(1.5, 3); Real y[2] = x[2:3];
+end C423;
+//// model: C424
+model C424
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = fill(1.5, 3); Real y = x[p];
+end C424;
+//// model: C425
+model C425
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = fill(1.5, 3); Real y[3] = x;
+end C425;
+//// model: C426
+model C426
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = {i * 1.5 for i in 1:3}; Real y[2] = x[2:3];
+end C426;
+//// model: C427
+model C427
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = {i * 1.5 for i in 1:3}; Real y = x[p];
+end C427;
+//// model: C428
+model C428
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Integer x[3] = 1:3; Integer y[2] = x[2:3];
+end C428;
+//// model: C429
+model C429
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3](each start = 1) = {1, 2, 3}; Real y = x[n];
+end C429;
+//// model: C430
+model C430
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  model A constant Real c[3] = fill(1.5, 3); end A; A a; Real y = a.c[n];
+end C430;
+//// model: C431
+model C431
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  model A constant Real c[3] = fill(1.5, 3); end A; A a(c = {1, 2, 3}); Real y = a.c[n];
+end C431;
+//// model: C432
+model C432
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  model A constant Real c[3] = {1, 2, 3}; end A; A a(c = fill(1.5, 3)); Real y = a.c[n];
+end C432;
+//// model: C433
+model C433
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  function f output Real y[3]; algorithm y := {1, 2, 3}; end f; constant Real x[3] = f(); Real y = x[n];
+end C433;
+//// model: C434
+model C434
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = sin({1, 2, 3}); Real y = x[n];
+end C434;
+//// model: C435
+model C435
+  Integer n = integer(time) + 1;
+  Real tt = time;
+  parameter Integer p = 2;
+  constant Real x[3] = {sin(1), 2, 3}; Real y = x[n];
+end C435;
