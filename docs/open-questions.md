@@ -149,6 +149,22 @@ interval is [1,1]"；作用在切片上的向量化内建把切片的范围取�
 调用打成语句位置的 `array(initialState(sa[$i1]) for $i1 in 1:2);`；状态实参的形参类型是类型参数 `__Block`，记录 / 连接器
 实例也收（记录实例还会连带发射它的构造函数）。
 
+隐式迭代范围与编译期求值的几处 1.25.0 行为（IR / ND 探针，2026-10-03）：
+- 隐式范围的维相等判定比的是**定型后、未化简**的维（Dimension.isEqualKnownSize，NFDimension.mo:311-338）：函数里
+  `Real w[k]; Real w2[k + 0]` 一起作 `for i loop` 的下标 → INCOMPATIBLE_IMPLICIT_RANGES；两个 `:` 维的不同数组也报错
+  （只有"同一个数组的同一维"、"维恰写成 size(另一个数组, 维号)"、"两个表达式维结构相同"、"两个整数维相等"算相等）。
+  ymc 按书写的维表达式比（括号、Real 字面量的拼写不同也算不等 → SKIP，比 omc 严）。
+- `annotation(Evaluate = false)` 的参数是 NON_STRUCTURAL_PARAMETER（updateImplicitVariability，NFInst.mo:3906-3912）：
+  Ceval 不求它。作维 → 数组不标量化、打成 `Real[p] z;`；作下标 / 归约范围 → 原样留 `y[p]`、`sum(y[i] for i in 1:p)`；
+  作 for 方程范围 / 条件组件的条件 / fixed / fill 的维 → 报错。ymc 不求值，这些形态一律 SKIP（不标量化的数组未做）。
+- `ndims(…)` 与单实参的 `size(…)` 总是参数变率（typeNdimsCall，NFBuiltinCall.mo:487-514；typeSize 的无维号支），哪怕
+  实参是字面量：`constant Integer n = ndims(1.5)` 报"binding of higher variability"；带维号的 `size(x, 1)` 是常量变率，
+  可以绑给 constant。`parameter Integer n = ndims(x) annotation(Evaluate = true)`（x 连续）不成结构参数（isBindingNotFixed
+  的 CALL 支看到非参数量），打 `parameter Integer n = 2`（不 final）——ymc 对 Evaluate = true + ndims / size(a) 一律 SKIP。
+- 枚举 / Boolean 维上的迭代：for 方程展开成 `y[E.one] = …`；for 语句的隐式范围打 `for i in E.one:E.three loop` /
+  `for i in false:true loop`，显式写类型名的打成数组 `for i in {E.one, E.two, E.three} loop` / `{false, true}`；保留的
+  归约同（`max(y[i] for i in E.one:E.three)`）。ymc 的迭代变量只能取整数，未做。
+
 Integer 的极值（待用户定，2026-10-02）：`max` / `min` 作用在空的 Integer 数组 / 空范围上取 `∓System.intMaxLit`（Expression.makeMinValue / makeMaxValue，v1.25.0 NFExpression.mo:4908-4934），这个值随 omc 构建的整数位宽而变——本机安装版 1.25.0（Windows）打 `1073741823`，testsuite 文件（64 位 Linux 生成）是 `4611686018427387903`。跟实跑的 omc 就要把 30 位的值写进 ymc，跟文件又过不了 oracle=live 门；ymc 目前两边都不跟，遇到即 SKIP（`Integer extreme of empty min/max (platform-dependent in omc)`）。受影响：scodeinst 的 CevalReduction1、FuncBuiltinMax / Max2 / Min / Min2、FuncBuiltinReduction 六例（其余内容已与 1.25.0 一致，只差这一个值）。Real（`±8.777798510069901e304`）、Boolean、枚举的极值与平台无关，已做。
 
 ## 已研究待实现：多条 connect 连接集（union-find）

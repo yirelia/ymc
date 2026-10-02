@@ -1,0 +1,136 @@
+//// set: nd-c3 — 多迭代推导式绑定：三重、参数范围、嵌套、依赖范围、空范围、String、修饰里
+//// model: C30
+model C30
+  Real a = time;
+  parameter Integer t[:, :, :] = {i + j + k for i in 1:2, j in 1:3, k in 1:2};
+end C30;
+//// model: C31
+model C31
+  Real a = time;
+  parameter Integer t[2, 3, 2] = {i + j + k for i in 1:2, j in 1:3, k in 1:2};
+end C31;
+//// model: C32
+model C32
+  Real a = time;
+  constant Integer t[:, :, :] = {i + j + k for i in 1:2, j in 1:3, k in 1:2};
+end C32;
+//// model: C33
+model C33
+  Real a = time;
+  parameter Real q[2, 3] = {i * 1.5 for i in 1:3, j in 1:2};
+end C33;
+//// model: C34
+model C34
+  Real a = time;
+  parameter Integer n = 2; parameter Integer s[n, 3] = {i * j for i in 1:3, j in 1:n};
+end C34;
+//// model: C35
+model C35
+  Real a = time;
+  parameter Integer n = 2; parameter Integer s[:, :] = {i * j * n for i in 1:3, j in 1:2};
+end C35;
+//// model: C36
+model C36
+  Real a = time;
+  parameter Integer s[2, 3] = {{i + j for i in 1:3} for j in 1:2};
+end C36;
+//// model: C37
+model C37
+  Real a = time;
+  parameter Integer s[:, :] = {{i + j for i in 1:3} for j in 1:2};
+end C37;
+//// model: C38
+model C38
+  Real a = time;
+  parameter Integer s[:, :] = {i + j for i in 1:j, j in 1:2};
+end C38;
+//// model: C39
+model C39
+  Real a = time;
+  parameter Real s[:] = {x * 2 for x in {1.0, 2.5}};
+end C39;
+//// model: C310
+model C310
+  Real a = time;
+  parameter Integer s[:] = {i for i in {3, 1, 2}};
+end C310;
+//// model: C311
+model C311
+  Real a = time;
+  parameter Boolean s[:] = {i > 1 for i in 1:3};
+end C311;
+//// model: C312
+model C312
+  Real a = time;
+  parameter Integer s[:, :] = {i + i for i in 1:3, i in 1:2};
+end C312;
+//// model: C313
+model C313
+  Real a = time;
+  Real s[:, :] = {i * j * a for i in 1:3, j in 1:2};
+end C313;
+//// model: C314
+model C314
+  Real a = time;
+  Real s[2, 3, 2] = {i * j * k * a for i in 1:2, j in 1:3, k in 1:2};
+end C314;
+//// model: C315
+model C315
+  Real a = time;
+  Real s[:, :, :] = {i * j * k * a for i in 1:2, j in 1:3, k in 1:2};
+end C315;
+//// model: C316
+model C316
+  Real a = time;
+  model A parameter Real p[2, 2]; end A; A q(p = {i + j for i in 1:2, j in 1:2});
+end C316;
+//// model: C317
+model C317
+  Real a = time;
+  model A parameter Real p[:, :]; end A; A q(p = {i + j for i in 1:2, j in 1:3});
+end C317;
+//// model: C318
+model C318
+  Real a = time;
+  constant Real c[3] = {1, 2, 3}; constant Real d[:] = {c[i] * 2 for i}; Real y = d[2] * a;
+end C318;
+//// model: C319
+model C319
+  Real a = time;
+  constant Real c[3] = {1, 2, 3}; constant Real d[:, :] = {c[i] * c[j] for i, j}; Real y = d[2, 3] * a;
+end C319;
+//// model: C320
+model C320
+  Real a = time;
+  parameter Real p[3] = {1, 2, 3}; parameter Real q[:, :] = {p[i] * j for i, j in 1:2};
+end C320;
+//// model: C321
+model C321
+  Real a = time;
+  parameter Integer s[0] = {i for i in 1:0};
+end C321;
+//// model: C322
+model C322
+  Real a = time;
+  parameter Integer s[:] = {i for i in 1:0};
+end C322;
+//// model: C323
+model C323
+  Real a = time;
+  parameter Integer s[:, :] = {i + j for i in 1:0, j in 1:2};
+end C323;
+//// model: C324
+model C324
+  Real a = time;
+  parameter String s[2, 2] = {String(i) + String(j) for i in 1:2, j in 1:2};
+end C324;
+//// model: C325
+model C325
+  Real a = time;
+  parameter Integer s[:] = {i for i in 1:2:5};
+end C325;
+//// model: C326
+model C326
+  Real a = time;
+  parameter Integer s[:, :] = {i * j for i in 1:2:5, j in {2, 4}};
+end C326;

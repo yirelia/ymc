@@ -1,0 +1,214 @@
+//// set: ir-ut — 隐式迭代范围、符号下标、经实例路径的维、多迭代推导式（单测原文）
+//// model: CBS1
+model CBS1
+  parameter Integer s[2] = {i for i in 1:3};
+end CBS1;
+//// model: CBT1
+model CBT1
+  parameter Integer n = 2;
+  parameter Integer s[:, :] = {i + j for i in 1:3, j in 1:n};
+  parameter Integer t[2, 3, 2] = {i + j + k for i in 1:2, j in 1:3, k in 1:2};
+  parameter String u[:, :] = {String(i + j) for i in 1:3, j in 1:2};
+  parameter Real p[3] = {1, 2, 3};
+  parameter Real q[:, :] = {p[i] * p[j] for i, j};
+  constant Integer M[2, 2] = [1, 2; 3, 4];
+  Real w[M[2, 1]];
+end CBT1;
+//// model: IRS1
+model IRS1
+  Real y[3];
+  Real z[2];
+algorithm
+  for i loop
+    y[i] := z[i];
+  end for;
+end IRS1;
+//// model: IRS2
+model IRS2
+  Real y[3];
+algorithm
+  for i loop
+    y[i + 1] := 1;
+  end for;
+end IRS2;
+//// model: IRS3
+model IRS3
+  function f
+    input Real u[:];
+    input Real w[:];
+    output Real s;
+  algorithm
+    s := 0;
+    for i loop
+      s := s + u[i] * w[i];
+    end for;
+  end f;
+  Real x[3] = {time, 1, 2};
+  Real y = f(x, x);
+end IRS3;
+//// model: IRS4
+model IRS4
+  function f
+    input Real u[:];
+    input Integer k;
+    output Real s;
+  protected
+    Real w[k];
+    Real w2[k + 0];
+  algorithm
+    s := 0;
+    for i loop
+      w[i] := 1;
+      w2[i] := w[i];
+      s := s + w2[i];
+    end for;
+  end f;
+  Real x[3] = {time, 1, 2};
+  Real y = f(x, 2);
+end IRS4;
+//// model: IRT1
+model IRT1
+  model A
+    parameter Integer n;
+    Real y[n];
+    Real s = sum(y[i] for i);
+  equation
+    for i loop
+      y[i] = i * time;
+    end for;
+  end A;
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[3];
+  Real y2[2, 3];
+  Real z[2];
+  Real s = sum(x[i] for i) + max(x[i] for i);
+  Real t = sum(m[i, j] for i, j);
+  Real c[3] = {x[i] * 2 for i};
+  Real d[:] = {x[i] for i};
+  A a1(n = 2);
+  A a2(n = 3);
+equation
+  for i loop
+    z[i] = sum(m[i, j] for j);
+  end for;
+algorithm
+  for i loop
+    y[i] := x[i] * i;
+  end for;
+  for i, j loop
+    y2[i, j] := m[i, j];
+  end for;
+end IRT1;
+//// model: IRT2
+model IRT2
+  function f
+    input Real u[:];
+    input Integer k;
+    output Real v[size(u, 1)];
+  protected
+    Real s;
+    Real w[k];
+    Real z[2 * k, size(u, 1)];
+  algorithm
+    s := 0;
+    for i loop
+      v[i] := u[i] * 2;
+      for i loop
+        w[i] := 1;
+      end for;
+    end for;
+    for i, j loop
+      z[i, j] := u[j];
+      s := s + z[i, j];
+    end for;
+  end f;
+  function g
+    input Real u[3];
+    input Real w[3];
+    output Real s;
+  algorithm
+    s := 0;
+    for i loop
+      s := s + u[i] * w[i];
+    end for;
+  end g;
+  Real x[3] = {time, 1, 2};
+  Real y[3] = f(x, 2);
+  Real r = g(x, y);
+end IRT2;
+//// model: NDS1
+model NDS1
+  model F
+  protected
+    constant Integer p = 2;
+  end F;
+  F f;
+  Real z[2];
+equation
+  for i in 1:f.p loop
+    z[i] = i;
+  end for;
+end NDS1;
+//// model: NDS2
+model NDS2
+  parameter Integer p = 2 annotation(Evaluate = false);
+  Real z[p];
+end NDS2;
+//// model: NDS3
+model NDS3
+  Real x[2, 3];
+  constant Integer n = ndims(x);
+end NDS3;
+//// model: NDT1
+model NDT1
+  model A
+    constant Integer j = 3;
+    parameter Integer p = 2;
+    Real v[2] = {time, 1};
+  end A;
+  model G
+    parameter Integer n;
+  end G;
+  record R
+    parameter Integer n = 2;
+  end R;
+  A a(j = 4);
+  A b;
+  G g[2](each n = 2);
+  parameter R r(n = 3);
+  parameter Integer n = 2;
+  parameter Integer m = 4;
+  Real x[2, 3];
+  Real z1[a.j];
+  Real z2[b.p + 1];
+  Real z3[size(a.v, 1)];
+  Real z4[g[2].n];
+  Real z5[r.n];
+  Real z6[max([n, m])];
+  Real z7[ndims(x)];
+  Real q = b.p * time;
+equation
+  for i in 1:a.j loop
+    z1[i] = i * time;
+  end for;
+end NDT1;
+//// model: SST1
+model SST1
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[3];
+  Real s = max(x[1 * i] + x[i - 0] for i in 1:3);
+  Real c[3] = {x[i + 0] for i in 1:3};
+algorithm
+  for i in 1:3 loop
+    y[i + 0] := x[i * 1] + x[i + (2 - 2)] + x[i + 1 - 1];
+  end for;
+  for i in 1:2 loop
+    for j in 1:3 loop
+      y[j] := m[i + 0, j * 1];
+    end for;
+  end for;
+end SST1;

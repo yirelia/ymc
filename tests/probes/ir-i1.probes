@@ -1,0 +1,288 @@
+//// set: ir-i1 — 隐式迭代范围：for 语句 / for 方程 / 归约 / 推导式的基本形态，维长不等与没有用处的报错
+//// model: I10
+model I10
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[3]; algorithm for i loop y[i] := i; end for;
+end I10;
+//// model: I11
+model I11
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[3]; algorithm for i loop y[i] := x[i]; end for;
+end I11;
+//// model: I12
+model I12
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[3]; algorithm for i loop y[i] := x[i] * i + a; end for;
+end I12;
+//// model: I13
+model I13
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[3];
+equation
+  for i loop y[i] = x[i]; end for;
+end I13;
+//// model: I14
+model I14
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[3];
+equation
+  for i loop y[i] = i * a; end for;
+end I14;
+//// model: I15
+model I15
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[2, 3];
+equation
+  for i, j loop y[i, j] = m[i, j] * i; end for;
+end I15;
+//// model: I16
+model I16
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[2, 3]; algorithm for i, j loop y[i, j] := m[i, j]; end for;
+end I16;
+//// model: I17
+model I17
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[2, 3]; algorithm for i, j in {2, 3} loop y[i, j] := i + j; end for;
+end I17;
+//// model: I18
+model I18
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[2, 3]; algorithm for i in 1:2, j loop y[i, j] := i + j; end for;
+end I18;
+//// model: I19
+model I19
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[3]; algorithm for i loop y[i] := m[1, i]; end for;
+end I19;
+//// model: I110
+model I110
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[2]; algorithm for i loop y[i] := m[i, 1]; end for;
+end I110;
+//// model: I111
+model I111
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[2];
+equation
+  for i loop y[i] = sum(m[i, j] for j); end for;
+end I111;
+//// model: I112
+model I112
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y = sum(x[i] for i);
+end I112;
+//// model: I113
+model I113
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y = sum(x[i] * i for i);
+end I113;
+//// model: I114
+model I114
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y = product(x[i] for i);
+end I114;
+//// model: I115
+model I115
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y = max(x[i] for i);
+end I115;
+//// model: I116
+model I116
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[3] = {x[i] for i};
+end I116;
+//// model: I117
+model I117
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[3] = {x[i] * 2 for i};
+end I117;
+//// model: I118
+model I118
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[:] = {x[i] for i};
+end I118;
+//// model: I119
+model I119
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[2, 3] = {m[i, j] for j, i};
+end I119;
+//// model: I120
+model I120
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[3, 2] = {m[i, j] for i, j};
+end I120;
+//// model: I121
+model I121
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y = sum(m[i, j] for i, j);
+end I121;
+//// model: I122
+model I122
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y = sum(sum(m[i, j] for j) for i);
+end I122;
+//// model: I123
+model I123
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[3]; algorithm for i loop y[i] := 1; end for; for i loop y[i] := y[i] + x[i]; end for;
+end I123;
+//// model: I124
+model I124
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[3]; algorithm for i loop for j loop y[i] := m[j, i]; end for; end for;
+end I124;
+//// model: I125
+model I125
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[3]; Real z[2]; algorithm for i loop y[i] := z[i]; end for;
+end I125;
+//// model: I126
+model I126
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[3]; algorithm for i loop y[1] := i; end for;
+end I126;
+//// model: I127
+model I127
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[3]; algorithm for i loop y[i + 1] := 1; end for;
+end I127;
+//// model: I128
+model I128
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[3]; algorithm for i loop y[i] := x[i + 0]; end for;
+end I128;
+//// model: I129
+model I129
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[3];
+equation
+  for i loop y[i] = x[4 - i]; end for;
+end I129;
+//// model: I130
+model I130
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[3];
+equation
+  for i loop x[i] + y[i] = 0; end for;
+end I130;
+//// model: I131
+model I131
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  record R Real v; end R; R r[3];
+equation
+  for i loop r[i].v = x[i]; end for;
+end I131;
+//// model: I132
+model I132
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[3]; algorithm for i loop if i > 1 then y[i] := x[i - 1]; else y[i] := 0; end if; end for;
+end I132;
+//// model: I133
+model I133
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[3]; algorithm for i loop y[i] := x[i]; end for; when a > 1 then y[1] := 0; end when;
+end I133;
+//// model: I134
+model I134
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; output Real v[size(u, 1)]; algorithm for i loop v[i] := u[i] * 2; end for; end f; Real y[3] = f(x);
+end I134;
+//// model: I135
+model I135
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[3]; output Real v[3]; algorithm for i loop v[i] := u[i] * 2; end for; end f; Real y[3] = f(x);
+end I135;
+//// model: I136
+model I136
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; output Real s; algorithm s := sum(u[i] for i); end f; Real y = f(x);
+end I136;
+//// model: I137
+model I137
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; output Real s; algorithm s := 0; for i loop s := s + u[i]; end for; end f; Real y = f(x);
+end I137;
+//// model: I138
+model I138
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:, :]; output Real s; algorithm s := 0; for i, j loop s := s + u[i, j]; end for; end f; Real y = f(m);
+end I138;

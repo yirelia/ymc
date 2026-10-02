@@ -4012,6 +4012,165 @@ YMC_TEST(flatten_state_machine_operators) {
   }
 }
 
+YMC_TEST(flatten_implicit_iteration_ranges) {
+  // 隐式迭代范围 `for i loop` / `sum(x[i] for i)` / `{x[i] for i}`（deduceIterationRange，NFTyping.mo:3735-3881 v1.25.0）：
+  // 范围 = `1:末`，末取自体里迭代变量恰作下标的首个用处——模型里是字面量（语句打 `for i in 1:3 loop`、方程展开、保留的
+  // 归约 / 推导式打 `for i in 1:3`，同一个类的各实例各推各的），函数里 `:` 维是 `size(u, 1)`、表达式维是维表达式
+  //（`Real w[k]` → `1:k`）；内层同名迭代变量的用处不算外层的。期望 = omc 1.25.0 实跑 IRT1 / IRT2（2026-10-03）。
+  YMC_CHECK_EQ(flatten_src("model IRT1\n  model A\n    parameter Integer n;\n    Real y[n];\n    Real s = sum(y[i] for i);\n"
+                           "  equation\n    for i loop\n      y[i] = i * time;\n    end for;\n  end A;\n  Real a = time;\n"
+                           "  Real x[3] = {a, 2 * a, 3 * a};\n  Real m[2, 3] = {{a, a, a}, {a, a, a}};\n  Real y[3];\n"
+                           "  Real y2[2, 3];\n  Real z[2];\n  Real s = sum(x[i] for i) + max(x[i] for i);\n"
+                           "  Real t = sum(m[i, j] for i, j);\n  Real c[3] = {x[i] * 2 for i};\n  Real d[:] = {x[i] for i};\n"
+                           "  A a1(n = 2);\n  A a2(n = 3);\nequation\n  for i loop\n    z[i] = sum(m[i, j] for j);\n  end for;\n"
+                           "algorithm\n  for i loop\n    y[i] := x[i] * i;\n  end for;\n  for i, j loop\n"
+                           "    y2[i, j] := m[i, j];\n  end for;\nend IRT1;\n"),
+               std::string("class IRT1\n  Real a = time;\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real m[1,1];\n"
+                           "  Real m[1,2];\n  Real m[1,3];\n  Real m[2,1];\n  Real m[2,2];\n  Real m[2,3];\n  Real y[1];\n"
+                           "  Real y[2];\n  Real y[3];\n  Real y2[1,1];\n  Real y2[1,2];\n  Real y2[1,3];\n  Real y2[2,1];\n"
+                           "  Real y2[2,2];\n  Real y2[2,3];\n  Real z[1];\n  Real z[2];\n"
+                           "  Real s = x[1] + x[2] + x[3] + max(x[i] for i in 1:3);\n"
+                           "  Real t = m[1,1] + m[2,1] + m[1,2] + m[2,2] + m[1,3] + m[2,3];\n  Real c[1];\n  Real c[2];\n"
+                           "  Real c[3];\n  Real d[1];\n  Real d[2];\n  Real d[3];\n  final parameter Integer a1.n = 2;\n"
+                           "  Real a1.y[1];\n  Real a1.y[2];\n  Real a1.s = a1.y[1] + a1.y[2];\n"
+                           "  final parameter Integer a2.n = 3;\n  Real a2.y[1];\n  Real a2.y[2];\n  Real a2.y[3];\n"
+                           "  Real a2.s = a2.y[1] + a2.y[2] + a2.y[3];\nequation\n  x = {a, 2.0 * a, 3.0 * a};\n"
+                           "  m = {{a, a, a}, {a, a, a}};\n  c = array(x[i] * 2.0 for i in 1:3);\n"
+                           "  d = array(x[i] for i in 1:3);\n  a1.y[1] = time;\n  a1.y[2] = 2.0 * time;\n  a2.y[1] = time;\n"
+                           "  a2.y[2] = 2.0 * time;\n  a2.y[3] = 3.0 * time;\n  z[1] = m[1,1] + m[1,2] + m[1,3];\n"
+                           "  z[2] = m[2,1] + m[2,2] + m[2,3];\nalgorithm\n  for i in 1:3 loop\n"
+                           "    y[i] := x[i] * /*Real*/(i);\n  end for;\n  for i in 1:2 loop\n    for j in 1:3 loop\n"
+                           "      y2[i,j] := m[i,j];\n    end for;\n  end for;\nend IRT1;\n"));
+  YMC_CHECK_EQ(flatten_src("model IRT2\n  function f\n    input Real u[:];\n    input Integer k;\n"
+                           "    output Real v[size(u, 1)];\n  protected\n    Real s;\n    Real w[k];\n"
+                           "    Real z[2 * k, size(u, 1)];\n  algorithm\n    s := 0;\n    for i loop\n      v[i] := u[i] * 2;\n"
+                           "      for i loop\n        w[i] := 1;\n      end for;\n    end for;\n    for i, j loop\n"
+                           "      z[i, j] := u[j];\n      s := s + z[i, j];\n    end for;\n  end f;\n  function g\n"
+                           "    input Real u[3];\n    input Real w[3];\n    output Real s;\n  algorithm\n    s := 0;\n"
+                           "    for i loop\n      s := s + u[i] * w[i];\n    end for;\n  end g;\n  Real x[3] = {time, 1, 2};\n"
+                           "  Real y[3] = f(x, 2);\n  Real r = g(x, y);\nend IRT2;\n"),
+               std::string("function IRT2.f\n  input Real[:] u;\n  input Integer k;\n  output Real[size(u, 1)] v;\n"
+                           "  protected Real s;\n  protected Real[k] w;\n  protected Real[2 * k, size(u, 1)] z;\nalgorithm\n"
+                           "  s := 0.0;\n  for i in 1:size(u, 1) loop\n    v[i] := u[i] * 2.0;\n    for i in 1:k loop\n"
+                           "      w[i] := 1.0;\n    end for;\n  end for;\n  for i in 1:2 * k loop\n"
+                           "    for j in 1:size(u, 1) loop\n      z[i,j] := u[j];\n      s := s + z[i,j];\n    end for;\n"
+                           "  end for;\nend IRT2.f;\n\nfunction IRT2.g\n  input Real[3] u;\n  input Real[3] w;\n"
+                           "  output Real s;\nalgorithm\n  s := 0.0;\n  for i in 1:3 loop\n    s := s + u[i] * w[i];\n"
+                           "  end for;\nend IRT2.g;\n\nclass IRT2\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real y[1];\n"
+                           "  Real y[2];\n  Real y[3];\n  Real r = IRT2.g(x, y);\nequation\n  x = {time, 1.0, 2.0};\n"
+                           "  y = IRT2.f(x, 2);\nend IRT2;\n"));
+  for (const std::string& src : std::vector<std::string>{
+           // 各用处的维长不等（IRS1）/ 没有恰作下标的用处（IRS2）：omc 报错。
+           "model IRS1\n  Real y[3];\n  Real z[2];\nalgorithm\n  for i loop\n    y[i] := z[i];\n  end for;\n"
+           "end IRS1;\n",
+           "model IRS2\n  Real y[3];\nalgorithm\n  for i loop\n    y[i + 1] := 1;\n  end for;\nend IRS2;\n",
+           // 函数里两个 `:` 维的数组（IRS3）、写法不同的表达式维 `k` 对 `k + 0`（IRS4，omc 比的是未化简的维）：omc 报错。
+           "model IRS3\n  function f\n    input Real u[:];\n    input Real w[:];\n    output Real s;\n"
+           "  algorithm\n    s := 0;\n    for i loop\n      s := s + u[i] * w[i];\n    end for;\n  end f;\n"
+           "  Real x[3] = {time, 1, 2};\n  Real y = f(x, x);\nend IRS3;\n",
+           "model IRS4\n  function f\n    input Real u[:];\n    input Integer k;\n    output Real s;\n"
+           "  protected\n    Real w[k];\n    Real w2[k + 0];\n  algorithm\n    s := 0;\n    for i loop\n"
+           "      w[i] := 1;\n      w2[i] := w[i];\n      s := s + w2[i];\n    end for;\n  end f;\n"
+           "  Real x[3] = {time, 1, 2};\n  Real y = f(x, 2);\nend IRS4;\n"}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, std::string("<unsupported:implicit-range for statement>"));
+  }
+}
+
+YMC_TEST(flatten_symbolic_subscript_simplification) {
+  // 留成符号的下标（for 语句 / 保留着的归约、推导式的迭代变量）照常化简：`x[i + 0]`、`x[1 * i]`、`x[i + (2 - 2)]` → `x[i]`，
+  // `x[i + 1 - 1]` 不动。期望 = omc 1.25.0 实跑 SST1（2026-10-03）。
+  YMC_CHECK_EQ(flatten_src("model SST1\n  Real a = time;\n  Real x[3] = {a, 2 * a, 3 * a};\n"
+                           "  Real m[2, 3] = {{a, a, a}, {a, a, a}};\n  Real y[3];\n"
+                           "  Real s = max(x[1 * i] + x[i - 0] for i in 1:3);\n  Real c[3] = {x[i + 0] for i in 1:3};\n"
+                           "algorithm\n  for i in 1:3 loop\n    y[i + 0] := x[i * 1] + x[i + (2 - 2)] + x[i + 1 - 1];\n"
+                           "  end for;\n  for i in 1:2 loop\n    for j in 1:3 loop\n      y[j] := m[i + 0, j * 1];\n"
+                           "    end for;\n  end for;\nend SST1;\n"),
+               std::string("class SST1\n  Real a = time;\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real m[1,1];\n"
+                           "  Real m[1,2];\n  Real m[1,3];\n  Real m[2,1];\n  Real m[2,2];\n  Real m[2,3];\n  Real y[1];\n"
+                           "  Real y[2];\n  Real y[3];\n  Real s = max(x[i] + x[i] for i in 1:3);\n  Real c[1];\n  Real c[2];\n"
+                           "  Real c[3];\nequation\n  x = {a, 2.0 * a, 3.0 * a};\n  m = {{a, a, a}, {a, a, a}};\n"
+                           "  c = array(x[i] for i in 1:3);\nalgorithm\n  for i in 1:3 loop\n"
+                           "    y[i] := x[i] + x[i] + x[i + 1 - 1];\n  end for;\n  for i in 1:2 loop\n    for j in 1:3 loop\n"
+                           "      y[j] := m[i,j];\n    end for;\n  end for;\nend SST1;\n"));
+}
+
+YMC_TEST(flatten_dimension_evaluation_through_instances) {
+  // 维 / for 范围里经实例路径引用的常量与字面量绑定的参数（`a.j`、`b.p`、`g[2].n`、`r.n`：参数随之成结构参数，数组实例的
+  // 各元素一起 final）、子实例数组的 size、ndims、矩阵字面量 `max([n, m])`。期望 = omc 1.25.0 实跑 NDT1（2026-10-03）。
+  YMC_CHECK_EQ(flatten_src("model NDT1\n  model A\n    constant Integer j = 3;\n    parameter Integer p = 2;\n"
+                           "    Real v[2] = {time, 1};\n  end A;\n  model G\n    parameter Integer n;\n  end G;\n  record R\n"
+                           "    parameter Integer n = 2;\n  end R;\n  A a(j = 4);\n  A b;\n  G g[2](each n = 2);\n"
+                           "  parameter R r(n = 3);\n  parameter Integer n = 2;\n  parameter Integer m = 4;\n  Real x[2, 3];\n"
+                           "  Real z1[a.j];\n  Real z2[b.p + 1];\n  Real z3[size(a.v, 1)];\n  Real z4[g[2].n];\n"
+                           "  Real z5[r.n];\n  Real z6[max([n, m])];\n  Real z7[ndims(x)];\n  Real q = b.p * time;\nequation\n"
+                           "  for i in 1:a.j loop\n    z1[i] = i * time;\n  end for;\nend NDT1;\n"),
+               std::string("class NDT1\n  constant Integer a.j = 4;\n  parameter Integer a.p = 2;\n  Real a.v[1];\n"
+                           "  Real a.v[2];\n  constant Integer b.j = 3;\n  final parameter Integer b.p = 2;\n  Real b.v[1];\n"
+                           "  Real b.v[2];\n  final parameter Integer g[1].n = 2;\n  final parameter Integer g[2].n = 2;\n"
+                           "  final parameter Integer r.n = 3;\n  final parameter Integer n = 2;\n"
+                           "  final parameter Integer m = 4;\n  Real x[1,1];\n  Real x[1,2];\n  Real x[1,3];\n  Real x[2,1];\n"
+                           "  Real x[2,2];\n  Real x[2,3];\n  Real z1[1];\n  Real z1[2];\n  Real z1[3];\n  Real z1[4];\n"
+                           "  Real z2[1];\n  Real z2[2];\n  Real z2[3];\n  Real z3[1];\n  Real z3[2];\n  Real z4[1];\n"
+                           "  Real z4[2];\n  Real z5[1];\n  Real z5[2];\n  Real z5[3];\n  Real z6[1];\n  Real z6[2];\n"
+                           "  Real z6[3];\n  Real z6[4];\n  Real z7[1];\n  Real z7[2];\n  Real q = 2.0 * time;\nequation\n"
+                           "  a.v = {time, 1.0};\n  b.v = {time, 1.0};\n  z1[1] = time;\n  z1[2] = 2.0 * time;\n"
+                           "  z1[3] = 3.0 * time;\n  z1[4] = 4.0 * time;\nend NDT1;\n"));
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           // 经实例路径访问 protected 元素：omc 报错（NDS1）。
+           {"model NDS1\n  model F\n  protected\n    constant Integer p = 2;\n  end F;\n  F f;\n  Real z[2];\n"
+            "equation\n  for i in 1:f.p loop\n    z[i] = i;\n  end for;\nend NDS1;\n",
+            "for equation (non-constant range)"},
+           // Evaluate = false 的参数是 NON_STRUCTURAL_PARAMETER（NFInst.mo:3906-3912 v1.25.0）：omc 不求值、维留成
+           // `Real[p] z`（不标量化），ymc 未做（NDS2）。
+           {"model NDS2\n  parameter Integer p = 2 annotation(Evaluate = false);\n  Real z[p];\nend NDS2;\n", "non-literal array dimension"},
+           // ndims(…) 总是参数变率（typeNdimsCall，NFBuiltinCall.mo:487-514）：绑给 constant 是 omc 的类型错（NDS3）。
+           {"model NDS3\n  Real x[2, 3];\n  constant Integer n = ndims(x);\nend NDS3;\n", "ndims / size(a) in constant binding"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
+YMC_TEST(flatten_comprehension_bindings_multi_iterator) {
+  // 多迭代变量的推导式绑定 `{e for i in r1, j in r2}`：最右的迭代变量是最外维（MLS §10.4.2.1），`:` 维取各范围的长度，
+  // 参数 / 常量逐元素代入；矩阵字面量常量 `[1, 2; 3, 4]` 的元素作维。期望 = omc 1.25.0 实跑 CBT1（2026-10-03）。
+  YMC_CHECK_EQ(flatten_src("model CBT1\n  parameter Integer n = 2;\n"
+                           "  parameter Integer s[:, :] = {i + j for i in 1:3, j in 1:n};\n"
+                           "  parameter Integer t[2, 3, 2] = {i + j + k for i in 1:2, j in 1:3, k in 1:2};\n"
+                           "  parameter String u[:, :] = {String(i + j) for i in 1:3, j in 1:2};\n"
+                           "  parameter Real p[3] = {1, 2, 3};\n  parameter Real q[:, :] = {p[i] * p[j] for i, j};\n"
+                           "  constant Integer M[2, 2] = [1, 2; 3, 4];\n  Real w[M[2, 1]];\nend CBT1;\n"),
+               std::string("class CBT1\n  final parameter Integer n = 2;\n  parameter Integer s[1,1] = 2;\n"
+                           "  parameter Integer s[1,2] = 3;\n  parameter Integer s[1,3] = 4;\n  parameter Integer s[2,1] = 3;\n"
+                           "  parameter Integer s[2,2] = 4;\n  parameter Integer s[2,3] = 5;\n"
+                           "  parameter Integer t[1,1,1] = 3;\n  parameter Integer t[1,1,2] = 4;\n"
+                           "  parameter Integer t[1,2,1] = 4;\n  parameter Integer t[1,2,2] = 5;\n"
+                           "  parameter Integer t[1,3,1] = 5;\n  parameter Integer t[1,3,2] = 6;\n"
+                           "  parameter Integer t[2,1,1] = 4;\n  parameter Integer t[2,1,2] = 5;\n"
+                           "  parameter Integer t[2,2,1] = 5;\n  parameter Integer t[2,2,2] = 6;\n"
+                           "  parameter Integer t[2,3,1] = 6;\n  parameter Integer t[2,3,2] = 7;\n"
+                           "  parameter String u[1,1] = \"2\";\n  parameter String u[1,2] = \"3\";\n"
+                           "  parameter String u[1,3] = \"4\";\n  parameter String u[2,1] = \"3\";\n"
+                           "  parameter String u[2,2] = \"4\";\n  parameter String u[2,3] = \"5\";\n"
+                           "  parameter Real p[1] = 1.0;\n  parameter Real p[2] = 2.0;\n  parameter Real p[3] = 3.0;\n"
+                           "  parameter Real q[1,1] = p[1] * p[1];\n  parameter Real q[1,2] = p[2] * p[1];\n"
+                           "  parameter Real q[1,3] = p[3] * p[1];\n  parameter Real q[2,1] = p[1] * p[2];\n"
+                           "  parameter Real q[2,2] = p[2] * p[2];\n  parameter Real q[2,3] = p[3] * p[2];\n"
+                           "  parameter Real q[3,1] = p[1] * p[3];\n  parameter Real q[3,2] = p[2] * p[3];\n"
+                           "  parameter Real q[3,3] = p[3] * p[3];\n  constant Integer M[1,1] = 1;\n"
+                           "  constant Integer M[1,2] = 2;\n  constant Integer M[2,1] = 3;\n  constant Integer M[2,2] = 4;\n"
+                           "  Real w[1];\n  Real w[2];\n  Real w[3];\nend CBT1;\n"));
+  // 推导式的形状与声明维不符：omc 类型错（CBS1；此前只取前几个元素放行）。
+  bool uns = false;
+  const std::string out = flatten_src("model CBS1\n  parameter Integer s[2] = {i for i in 1:3};\nend CBS1;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(out, std::string("<unsupported:array binding shape/type mismatch>"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

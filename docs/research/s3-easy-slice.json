@@ -572,5 +572,12 @@
 "OperationLogicalUnary2.mo",
 "OperationUnary2.mo",
 "const8.mo",
-"loop3.mo"
+"loop3.mo",
+"CevalRecord6.mo",
+"DimSize5.mo",
+"ImplicitRangeAlg1.mo",
+"ImplicitRangeExp1.mo",
+"ImplicitRangeExp2.mo",
+"SubscriptReduction1.mo",
+"const1.mo"
 ]

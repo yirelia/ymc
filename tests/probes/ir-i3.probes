@@ -1,0 +1,288 @@
+//// set: ir-i3 — 隐式迭代范围（函数体）：`:` 维 / size 维 / 表达式维 / 整数维的相等判定与取末，嵌套同名迭代变量
+//// model: I30
+model I30
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; output Real v[size(u, 1)]; algorithm for i loop v[i] := u[i]; end for; end f; Real y[3] = f(x);
+end I30;
+//// model: I31
+model I31
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; output Real v[size(u, 1)]; algorithm for i loop v[i] := 0; end for; for i loop v[i] := v[i] + u[i]; end for; end f; Real y[3] = f(x);
+end I31;
+//// model: I32
+model I32
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; output Real v[size(u, 1)]; protected Real t; algorithm for i loop t := u[i]; v[i] := t; end for; end f; Real y[3] = f(x);
+end I32;
+//// model: I33
+model I33
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Real w[:]; output Real s; algorithm s := 0; for i loop s := s + u[i] * w[i]; end for; end f; Real y = f(x, x);
+end I33;
+//// model: I34
+model I34
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Real w[size(u, 1)]; output Real s; algorithm s := 0; for i loop s := s + u[i] * w[i]; end for; end f; Real y = f(x, x);
+end I34;
+//// model: I35
+model I35
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Real w[size(u, 1)]; output Real s; algorithm s := 0; for i loop s := s + w[i] * u[i]; end for; end f; Real y = f(x, x);
+end I35;
+//// model: I36
+model I36
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; output Real s; protected Real v[size(u, 1)]; Real w[size(u, 1)]; algorithm s := 0; for i loop v[i] := u[i]; w[i] := v[i]; s := s + w[i]; end for; end f; Real y = f(x);
+end I36;
+//// model: I37
+model I37
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; output Real s; protected Real v[size(u, 1)]; Real w[size(u, 1)]; algorithm s := 0; for i loop v[i] := 1; w[i] := v[i]; s := s + w[i]; end for; end f; Real y = f(x);
+end I37;
+//// model: I38
+model I38
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[3]; input Real w[:]; output Real s; algorithm s := 0; for i loop s := s + u[i] * w[i]; end for; end f; Real y = f(x, x);
+end I38;
+//// model: I39
+model I39
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[3]; input Real w[3]; output Real s; algorithm s := 0; for i loop s := s + u[i] * w[i]; end for; end f; Real y = f(x, x);
+end I39;
+//// model: I310
+model I310
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[3]; input Real w[2]; output Real s; algorithm s := 0; for i loop s := s + u[i] * w[i]; end for; end f; Real y = f(x, {1, 2});
+end I310;
+//// model: I311
+model I311
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Integer k; output Real s; protected Real w[k]; algorithm s := 0; for i loop w[i] := 1; s := s + w[i]; end for; end f; Real y = f(x, 2);
+end I311;
+//// model: I312
+model I312
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Integer k; output Real s; protected Real w[k]; Real w2[k]; algorithm s := 0; for i loop w[i] := 1; w2[i] := w[i]; s := s + w2[i]; end for; end f; Real y = f(x, 2);
+end I312;
+//// model: I313
+model I313
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Integer k; output Real s; protected Real w[k]; Real w2[k + 0]; algorithm s := 0; for i loop w[i] := 1; w2[i] := w[i]; s := s + w2[i]; end for; end f; Real y = f(x, 2);
+end I313;
+//// model: I314
+model I314
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Integer k; output Real s; protected Real w[k + 0]; algorithm s := 0; for i loop w[i] := 1; s := s + w[i]; end for; end f; Real y = f(x, 2);
+end I314;
+//// model: I315
+model I315
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Integer k; output Real s; protected Real w[2 * k - k]; Real w2[k]; algorithm s := 0; for i loop w[i] := 1; w2[i] := w[i]; s := s + w2[i]; end for; end f; Real y = f(x, 2);
+end I315;
+//// model: I316
+model I316
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Integer k; output Real s; protected Real w[k]; Real w3[3]; algorithm s := 0; for i loop w[i] := 1; w3[i] := w[i]; s := s + w3[i]; end for; end f; Real y = f(x, 3);
+end I316;
+//// model: I317
+model I317
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Integer k; output Real s; protected Real w[size(u, 1) + 1]; algorithm s := 0; for i loop w[i] := 1; s := s + w[i]; end for; end f; Real y = f(x, 2);
+end I317;
+//// model: I318
+model I318
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Integer k; output Real s; protected Real z[2 * k, size(u, 1)]; algorithm s := 0; for i, j loop z[i, j] := 1; s := s + z[i, j]; end for; end f; Real y = f(x, 2);
+end I318;
+//// model: I319
+model I319
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:, :]; output Real s; algorithm s := 0; for i loop s := s + u[i, i]; end for; end f; Real y = f(m);
+end I319;
+//// model: I320
+model I320
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[3, 3]; output Real s; algorithm s := 0; for i loop s := s + u[i, i]; end for; end f; Real y = f({x, x, x});
+end I320;
+//// model: I321
+model I321
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Integer n; output Real s; protected Real w[n, n]; algorithm s := 0; for i loop w[i, i] := 1; s := s + w[i, i]; end for; end f; Real y = f(2);
+end I321;
+//// model: I322
+model I322
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:, :]; output Real s; algorithm s := 0; for i loop for j loop s := s + u[i, j]; end for; end for; end f; Real y = f(m);
+end I322;
+//// model: I323
+model I323
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:, :]; output Real s; algorithm s := 0; for j, i loop s := s + u[i, j]; end for; end f; Real y = f(m);
+end I323;
+//// model: I324
+model I324
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; output Real s; algorithm s := 0; for i loop if u[i] > 0 then s := s + 1; end if; end for; end f; Real y = f(x);
+end I324;
+//// model: I325
+model I325
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; output Real s; protected Integer k; algorithm s := 0; k := 0; while k < 2 loop for i loop s := s + u[i]; end for; k := k + 1; end while; end f; Real y = f(x);
+end I325;
+//// model: I326
+model I326
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; output Real s; algorithm s := 0; for i loop s := s + i; end for; end f; Real y = f(x);
+end I326;
+//// model: I327
+model I327
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; output Real s; algorithm s := 0; for i loop s := s + u[i + 1]; end for; end f; Real y = f(x);
+end I327;
+//// model: I328
+model I328
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Integer idx[:]; output Real s; algorithm s := 0; for i loop s := s + u[idx[i]]; end for; end f; Real y = f(x, {1, 2});
+end I328;
+//// model: I329
+model I329
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Integer idx[:]; output Real s; algorithm s := 0; for i loop s := s + u[idx[i]] + u[i]; end for; end f; Real y = f(x, {1, 2, 3});
+end I329;
+//// model: I330
+model I330
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  record R Real w[2]; end R; function f input R r; output Real s; algorithm s := 0; for i loop s := s + r.w[i]; end for; end f; Real y = f(R({a, a}));
+end I330;
+//// model: I331
+model I331
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  constant Integer N = 3; function f input Real u[N]; output Real s; algorithm s := 0; for i loop s := s + u[i]; end for; end f; Real y = f(x);
+end I331;
+//// model: I332
+model I332
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; output Real s; protected Real v[size(u, 1)] = u; algorithm s := 0; for i loop s := s + v[i]; end for; end f; Real y = f(x);
+end I332;
+//// model: I333
+model I333
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; output Real s; protected Real v[:] = u; algorithm s := 0; for i loop s := s + v[i]; end for; end f; Real y = f(x);
+end I333;
+//// model: I334
+model I334
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; output Real v[size(u, 1)]; algorithm for i loop v[i] := u[i]; for i loop v[i] := 2 * v[i]; end for; end for; end f; Real y[3] = f(x);
+end I334;
+//// model: I335
+model I335
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; output Real v[:]; algorithm v := u; for i loop v[i] := 2 * u[i]; end for; end f; Real y[3] = f(x);
+end I335;
+//// model: I336
+model I336
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; output Real v[:]; algorithm v := u; for i loop v[i] := 2 * v[i]; end for; end f; Real y[3] = f(x);
+end I336;
+//// model: I337
+model I337
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; output Real v[size(u, 1)]; algorithm for i loop v[i] := u[size(u, 1) - i + 1]; end for; end f; Real y[3] = f(x);
+end I337;
+//// model: I338
+model I338
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; output Real v[size(u, 1)]; algorithm for i loop v[size(u, 1) - i + 1] := u[i]; end for; end f; Real y[3] = f(x);
+end I338;
+//// model: I339
+model I339
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; output Real s; algorithm s := sum(u[i] for i in 1:size(u, 1)); end f; Real y = f(x);
+end I339;
+//// model: I340
+model I340
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := {u[i] * 2 for i}; end f; Real y[3] = f(x);
+end I340;

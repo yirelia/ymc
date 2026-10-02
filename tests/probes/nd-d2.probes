@@ -1,0 +1,393 @@
+//// set: nd-d2 — 实例路径的值在别的编译期语境：下标、条件组件、if 方程、属性、归约范围、fill、整组结构标记、protected、Evaluate
+//// model: D20
+model D20
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real y[4] = {time, 1, 2, 3}; Real z = y[a.j];
+end D20;
+//// model: D21
+model D21
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real y[4] = {time, 1, 2, 3}; Real z = y[a.p];
+end D21;
+//// model: D22
+model D22
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z if a.j > 3;
+end D22;
+//// model: D23
+model D23
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z if a.p > 1;
+end D23;
+//// model: D24
+model D24
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z;
+equation
+  if a.j > 3 then z = 1; else z = time; end if;
+end D24;
+//// model: D25
+model D25
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z;
+equation
+  if a.p > 1 then z = 1; else z = time; end if;
+end D25;
+//// model: D26
+model D26
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z(start = a.j) = time;
+end D26;
+//// model: D27
+model D27
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z(start = a.p) = time;
+end D27;
+//// model: D28
+model D28
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z(fixed = a.p > 1, start = 0);
+equation
+  der(z) = 1;
+end D28;
+//// model: D29
+model D29
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real y[3] = {time, 1, 2}; Real z = sum(y[i] for i in 1:a.p);
+end D29;
+//// model: D210
+model D210
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real y[3] = {time, 1, 2}; Real z = sum(y[i] for i in 1:a.j - 1);
+end D210;
+//// model: D211
+model D211
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z[2] = fill(time, a.p);
+end D211;
+//// model: D212
+model D212
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z[:] = fill(time, a.p);
+end D212;
+//// model: D213
+model D213
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  parameter Integer k = a.p + 1; Real z[k];
+end D213;
+//// model: D214
+model D214
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  parameter Integer k = a.p; Real y[3] = {time, 1, 2}; Real z = y[k];
+end D214;
+//// model: D215
+model D215
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  A c(p = a.p); Real z[c.p];
+end D215;
+//// model: D216
+model D216
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  A c(p = 5); Real z[c.p + a.p];
+end D216;
+//// model: D217
+model D217
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  parameter Integer n = 3; A c(p = n); Real z[c.p];
+end D217;
+//// model: D218
+model D218
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z[d.p]; A d;
+end D218;
+//// model: D219
+model D219
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z[d.j]; A d;
+end D219;
+//// model: D220
+model D220
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  record R parameter Integer n = 2; parameter Real t[2] = {1, 2}; end R; parameter R r; Real z[size(r.t, 1)]; Real w[r.n];
+end D220;
+//// model: D221
+model D221
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  record R parameter Integer n = 2; end R; parameter R r[2](n = {1, 3}); Real z[r[2].n];
+end D221;
+//// model: D222
+model D222
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model C A q(p = 7); end C; C c; Real z[c.q.p]; Real w[c.q.j];
+end D222;
+//// model: D223
+model D223
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model F parameter Integer p(fixed = false) = 2; end F; F f; Real z[f.p];
+end D223;
+//// model: D224
+model D224
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  parameter Integer p(fixed = false) = 2; Real z[p];
+end D224;
+//// model: D225
+model D225
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model F parameter Integer p = 2 annotation(Evaluate = false); end F; F f; Real z[f.p];
+end D225;
+//// model: D226
+model D226
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  parameter Integer p = 2 annotation(Evaluate = false); Real z[p];
+end D226;
+//// model: D227
+model D227
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model F protected parameter Integer p = 2; end F; F f; Real z[f.p];
+end D227;
+//// model: D228
+model D228
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model F protected constant Integer p = 2; end F; F f; Real z[f.p];
+end D228;
+//// model: D229
+model D229
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model F protected constant Integer p = 2; end F; F f; Real z = f.p * time;
+end D229;
+//// model: D230
+model D230
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model F protected parameter Integer p = 2; end F; F f; Real z = f.p * time;
+end D230;
+//// model: D231
+model D231
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model F parameter Real p = 2; end F; F f; Real z[f.p];
+end D231;
+//// model: D232
+model D232
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z[a.p]; Real q = a.p * time;
+end D232;
+//// model: D233
+model D233
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real q = a.p * time; Real z[a.p];
+end D233;
+//// model: D234
+model D234
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model G parameter Integer k[2] = {2, 3}; end G; G g; Real z[g.k[2]];
+end D234;
+//// model: D235
+model D235
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model G constant Integer k[2] = {2, 3}; end G; G g; Real z[g.k[2]];
+end D235;
+//// model: D236
+model D236
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model G constant Integer k[2] = {2, 3}; end G; G g; Real z[sum(g.k)];
+end D236;
+//// model: D237
+model D237
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model G parameter Integer k[2] = {2, 3}; end G; G g; Real z[size(g.k, 1)];
+end D237;
+//// model: D238
+model D238
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model G parameter Integer n = 2; parameter Real k[n] = {2, 3}; end G; G g(n = 3, k = {1, 2, 3}); Real z[size(g.k, 1)];
+end D238;
+//// model: D239
+model D239
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model G Real k[:] = {time, 2, 3}; end G; G g; Real z[size(g.k, 1)];
+end D239;
+//// model: D240
+model D240
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model G parameter Integer n = 2; final parameter Integer m = 2 * n; end G; G g(n = 3); Real z[g.m];
+end D240;
+//// model: D241
+model D241
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model G parameter Integer n = 2; end G; G g(n = 2 + 1); Real z[g.n];
+end D241;
+//// model: D242
+model D242
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model G parameter Integer n; end G; G g(n = 2); Real z[g.n];
+end D242;
+//// model: D243
+model D243
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model G parameter Integer n; end G; G g[2](n = {2, 3}); Real z[g[1].n + g[2].n];
+end D243;
+//// model: D244
+model D244
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model G parameter Integer n; end G; G g[2](each n = 2); Real z[g[2].n];
+end D244;
+//// model: D245
+model D245
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model G parameter Boolean on = true; end G; G g; Real z if g.on;
+end D245;
+//// model: D246
+model D246
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model G parameter Boolean on = true; end G; G g(on = false); Real z if g.on; Real w = time;
+end D246;
+//// model: D247
+model D247
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model G parameter Boolean on = true; end G; G g; Real z;
+equation
+  if g.on then z = 1; else z = time; end if;
+end D247;

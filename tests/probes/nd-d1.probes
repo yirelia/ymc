@@ -1,0 +1,337 @@
+//// set: nd-d1 — 维里的子实例常量 / 参数 `a.j`、`a.p`、`c[2].j`、记录参数字段、子实例数组的 size、ndims、矩阵字面量
+//// model: D10
+model D10
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z[a.j];
+end D10;
+//// model: D11
+model D11
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z[b.j];
+end D11;
+//// model: D12
+model D12
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z[A.j];
+end D12;
+//// model: D13
+model D13
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z[P.i];
+end D13;
+//// model: D14
+model D14
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real q = a.j;
+end D14;
+//// model: D15
+model D15
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  constant Integer k = a.j; Real z[k];
+end D15;
+//// model: D16
+model D16
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  parameter Integer k = a.j; Real z[k];
+end D16;
+//// model: D17
+model D17
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z[a.p];
+end D17;
+//// model: D18
+model D18
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z[b.p + 1];
+end D18;
+//// model: D19
+model D19
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  parameter Integer k = a.p; Real z[k];
+end D19;
+//// model: D110
+model D110
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z[size(a.v, 1)];
+end D110;
+//// model: D111
+model D111
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z[a.j + b.j];
+end D111;
+//// model: D112
+model D112
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z[2] = {a.j, b.j};
+end D112;
+//// model: D113
+model D113
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z[a.j] = fill(time, a.j);
+end D113;
+//// model: D114
+model D114
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z[a.j];
+equation
+  for i in 1:a.j loop z[i] = i; end for;
+end D114;
+//// model: D115
+model D115
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z[4];
+equation
+  for i in 1:a.j loop z[i] = i; end for;
+end D115;
+//// model: D116
+model D116
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z[4];
+equation
+  for i in 1:a.p loop z[i] = i; end for; for i in 3:4 loop z[i] = 0; end for;
+end D116;
+//// model: D117
+model D117
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z[2];
+equation
+  for i in 1:a.p loop z[i] = a.p * time; end for;
+end D117;
+//// model: D118
+model D118
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z = if a.j > 3 then 1 else time;
+end D118;
+//// model: D119
+model D119
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z = if a.p > 1 then 1 else time;
+end D119;
+//// model: D120
+model D120
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  A c[a.j]; Real z = c[1].v[1];
+end D120;
+//// model: D121
+model D121
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  A c[2](each j = 1); Real z[c[1].j];
+end D121;
+//// model: D122
+model D122
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  A c[2](j = {1, 3}); Real z[c[2].j];
+end D122;
+//// model: D123
+model D123
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model B Real x[a.j]; end B; B bb;
+end D123;
+//// model: D124
+model D124
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model B Real x[b.p]; end B; B bb;
+end D124;
+//// model: D125
+model D125
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model B constant Integer n = 2; Real x[n]; end B; B bb; Real z[bb.n];
+end D125;
+//// model: D126
+model D126
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model B parameter Integer n = 2; Real x[n]; end B; B bb(n = 3); Real z[bb.n];
+end D126;
+//// model: D127
+model D127
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  model B parameter Integer n = 2; Real x[n]; end B; B bb(n = 3); Real z[size(bb.x, 1)];
+end D127;
+//// model: D128
+model D128
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  record R parameter Integer n = 2; end R; parameter R r; Real z[r.n];
+end D128;
+//// model: D129
+model D129
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  record R parameter Integer n = 2; end R; parameter R r(n = 3); Real z[r.n];
+end D129;
+//// model: D130
+model D130
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  record R parameter Integer n = 2; end R; constant R r(n = 3); Real z[r.n];
+end D130;
+//// model: D131
+model D131
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  record R parameter Integer n = 2; end R; parameter R r = R(n = 3); Real z[r.n];
+end D131;
+//// model: D132
+model D132
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  P pp(i = 9); Real z[pp.i];
+end D132;
+//// model: D133
+model D133
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z[ndims(a.v)]; Real w[ndims(z) + 1];
+end D133;
+//// model: D134
+model D134
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real[3] aa[2]; Real[ndims(aa)] bb;
+end D134;
+//// model: D135
+model D135
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  Real z[max([a.j, 2])];
+end D135;
+//// model: D136
+model D136
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  parameter Integer n = 2; parameter Integer m = 4; Real y[max([n, m])];
+end D136;
+//// model: D137
+model D137
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  parameter Integer n = 2; parameter Integer m = 4; Real y[max([n, m; 5, 1])];
+end D137;
+//// model: D138
+model D138
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  parameter Integer n = 2; parameter Integer m = 4; Real y[size([n, m; 5, 1], 1)]; Real w[size([n, m; 5, 1], 2) + 1];
+end D138;
+//// model: D139
+model D139
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  constant Integer M[2, 2] = [1, 2; 3, 4]; Real y[M[2, 1]];
+end D139;
+//// model: D140
+model D140
+  model A constant Integer j = 3; parameter Integer p = 2; Real v[2] = {time, 1}; end A;
+  package P constant Integer i = 2; end P;
+  A a(j = 4);
+  A b;
+  constant Integer M[:, :] = [1, 2; 3, 4]; Real y[size(M, 1)]; Real w[sum(M)];
+end D140;

@@ -1,0 +1,180 @@
+//// set: ir-e1 — 枚举 / Boolean 维上的迭代（隐式与显式范围）：1.25.0 的打印形态（ymc 未做，全 SKIP）
+//// model: E10
+model E10
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  type E = enumeration(one, two, three); Real y[E];
+equation
+  for i loop y[i] = a; end for;
+end E10;
+//// model: E11
+model E11
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  type E = enumeration(one, two, three); Real y[E];
+equation
+  for i in E loop y[i] = a; end for;
+end E11;
+//// model: E12
+model E12
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  type E = enumeration(one, two, three); Real y[E];
+equation
+  for i in E.one:E.three loop y[i] = a; end for;
+end E12;
+//// model: E13
+model E13
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[Boolean];
+equation
+  for i loop y[i] = a; end for;
+end E13;
+//// model: E14
+model E14
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[Boolean];
+equation
+  for i in Boolean loop y[i] = a; end for;
+end E14;
+//// model: E15
+model E15
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[Boolean];
+equation
+  for i in false:true loop y[i] = a; end for;
+end E15;
+//// model: E16
+model E16
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  type E = enumeration(one, two, three); Real y[E]; algorithm for i loop y[i] := a; end for;
+end E16;
+//// model: E17
+model E17
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  type E = enumeration(one, two, three); Real y[E]; algorithm for i in E loop y[i] := a; end for;
+end E17;
+//// model: E18
+model E18
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  type E = enumeration(one, two, three); Real y[E]; algorithm for i in E.one:E.three loop y[i] := a; end for;
+end E18;
+//// model: E19
+model E19
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[Boolean]; algorithm for i loop y[i] := a; end for;
+end E19;
+//// model: E110
+model E110
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[Boolean]; algorithm for i in Boolean loop y[i] := a; end for;
+end E110;
+//// model: E111
+model E111
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[Boolean]; algorithm for i in false:true loop y[i] := a; end for;
+end E111;
+//// model: E112
+model E112
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  type E = enumeration(one, two, three); Real y[E] = {a, a, a}; Real s = sum(y[i] for i);
+end E112;
+//// model: E113
+model E113
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  type E = enumeration(one, two, three); Real y[E] = {a, a, a}; Real s = sum(y[i] for i in E);
+end E113;
+//// model: E114
+model E114
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  type E = enumeration(one, two, three); Real y[E] = {a, a, a}; Real s = max(y[i] for i);
+end E114;
+//// model: E115
+model E115
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  type E = enumeration(one, two, three); Real y[E] = {a, a, a}; Real s = max(y[i] for i in E);
+end E115;
+//// model: E116
+model E116
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  type E = enumeration(one, two, three); Real y[E] = {a, a, a}; Real z[3] = {y[i] for i};
+end E116;
+//// model: E117
+model E117
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  type E = enumeration(one, two, three); Real y[E] = {a, a, a}; Real z[3] = {y[i] for i in E};
+end E117;
+//// model: E118
+model E118
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[Boolean] = {a, a}; Real s = sum(y[i] for i);
+end E118;
+//// model: E119
+model E119
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  Real y[Boolean] = {a, a}; Real s = max(y[i] for i in Boolean);
+end E119;
+//// model: E120
+model E120
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  type E = enumeration(one, two, three); Real y[E, 2];
+equation
+  for i, j loop y[i, j] = a * j; end for;
+end E120;
+//// model: E121
+model E121
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  type E = enumeration(one, two, three); Real y[E]; Real z[3];
+equation
+  for i loop y[i] = a; end for; algorithm for i loop z[i] := y[i]; end for;
+end E121;
+//// model: E122
+model E122
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  type E = enumeration(one, two, three); Real y[E]; Real z[3];
+equation
+  for i loop y[i] = a; end for; algorithm for i loop z[Integer(i)] := y[i]; end for;
+end E122;

@@ -1,0 +1,31 @@
+//// set: nd-c2 — 推导式绑定的形状与声明维不符（omc 类型错）
+//// model: C20
+model C20
+  Real a = time;
+  parameter Integer s[2] = {i for i in 1:3};
+end C20;
+//// model: C21
+model C21
+  Real a = time;
+  parameter Integer s[3] = {i for i in 1:2};
+end C21;
+//// model: C22
+model C22
+  Real a = time;
+  constant Integer s[2] = {i for i in 1:3};
+end C22;
+//// model: C23
+model C23
+  Real a = time;
+  Real s[2] = {i * a for i in 1:3};
+end C23;
+//// model: C24
+model C24
+  Real a = time;
+  parameter Integer s[3, 2] = {i + j for i in 1:3, j in 1:2};
+end C24;
+//// model: C25
+model C25
+  Real a = time;
+  parameter Integer s[2, 2] = {i + j for i in 1:3, j in 1:2};
+end C25;

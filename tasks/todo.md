@@ -1241,6 +1241,38 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           函数）、下标是参数的状态（结构参数）。
           → 整个 testsuite PASS 1277→1293（statemachines 下 15 例 + interactive_api_calls）；+1 单测（222）；探针
           4629→4738。
+    - [x] (60b) 隐式迭代范围 + 数组维的求值缺口（2026-10-03）：
+          **隐式迭代范围**（deduceIterationRange，NFTyping.mo:3735-3881 v1.25.0）：`for i loop …`（语句 / 方程）、
+          `sum(x[i] for i)`、`{x[i] for i}`。按 omc 的次序收集体里迭代变量**恰**作下标的各处（iter_uses：赋值先左后右、
+          for 先体后范围、表达式后序、cref 末段在前），相邻两处的维须相等，范围 = `1:末`、末取自最先收集到的那处：模型里
+          各维已是整数 → `1:n`（语句打 `for i in 1:3 loop`，方程照常展开，保留的归约 / 推导式打 `for i in 1:3`）；函数体里
+          `:` 维 → `1:size(u, 1)`、表达式维 → 维表达式（`Real w[k]` → `1:k`）、`size(u, 1)` 维与 u 本身算相等。合成的范围
+          挂在 Reduction / for 的**拷贝**上（同一个类的不同实例推出的范围可以不同，arena 里的不改）。内层同名迭代变量的
+          用处不算外层的。此前只有 for 方程一处、且体里有归约就 SKIP。
+          **潜伏错**：留成符号的下标没化简（`for i in 1:3 loop y[i] := x[i + 0]` 打成 `x[i + 0]`，omc 是 `x[i]`；归约 /
+          推导式里同）——显式范围也错，语料没碰到，隐式范围的探针带出来的。
+          **维的求值缺口**：① 经实例路径引用的值——子实例的常量、**字面量绑定**的参数（`Real z[a.j]`、`a.p`、`c[2].j`、
+          记录参数的字段 `r.n`）：按当前帧前缀查已发射变量的值；参数随之成结构参数，标记是组件级的（数组实例 / 参数数组
+          的各元素一起 final）。子实例数组的 `size(a.v, 1)` 取已发射的形状（实例修饰改过的维也对）。② `ndims(a)`。③ 矩阵
+          字面量 `[a, b; c, d]`（标量 / 向量 / 矩阵元素的拼接，`Real y[max([n, m])]`、`constant Integer M[2, 2] = [1, 2; 3, 4]`）。
+          ④ 多迭代变量的推导式绑定（`parameter Integer s[:, :] = {i + j for i in 1:3, j in 1:2}`）：`:` 维取各范围长度、
+          逐元素代入。
+          **变率沿多段名下沉**：`a.p`（类实例里的参数）此前按首段 `a` 判成连续量——`parameter Integer k = a.p` 被当成
+          更高变率的绑定（SKIP）、`y[a.p]` 的下标当运行时变量原样留着（**错**，omc 是 `y[2]` + `a.p` final）。五个判定
+          （refs_runtime_var / refs_param_var / cond_is_runtime / absyn_refs_param / absyn_refs_plain_param）共用
+          cref_path_var / absyn_cref_var。
+          **探针带出的既有错**（都不在语料里）：`annotation(Evaluate = false)` 的参数被照常求值（omc 是
+          NON_STRUCTURAL_PARAMETER：维留成 `Real[p] z`、下标留 `y[p]`，for 范围 / 条件组件 / fixed 报错）→ 现在不求值，
+          命中即 SKIP / 拒绝；经实例路径读 protected 常量被放行（`constant Integer k = f.p`、`1:f.p`、`y[f.p]`）→ 拒绝；
+          `constant Integer n = ndims(x)`、`constant Integer m[2] = size(x)` 被放行（omc：ndims / 单实参 size 总是参数
+          变率，绑给 constant 报错）→ 拒绝；推导式绑定比声明维长（`parameter Integer s[2] = {i for i in 1:3}`）被放行 →
+          拒绝。
+          未做 → SKIP：枚举 / Boolean 维上的迭代（显式范围 `for i in E loop` 也没做，ImplicitRangeType1 / 2）、函数体里的
+          归约 / 推导式（ForIterator1）、嵌套类经词法作用域引用外层实例的常量（PackageConstant6 `model B Real x[a.n]; end B`）、
+          非字面量绑定的子实例参数（`A c(p = n); Real z[c.p]`）、前向引用的实例（`Real z[d.p]; A d;`）、`:` 维由函数调用
+          绑定定（ArraySizeFromFunc `parameter Real x[:] = f(n)`）、when 方程体里的 for。
+          → scodeinst 494→501 PASS（CevalRecord6、DimSize5、ImplicitRangeAlg1、ImplicitRangeExp1 / 2、SubscriptReduction1、
+          const1 入 slice）；整个 testsuite PASS 1293→1308；+4 单测（226）；探针 4738→5159。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、

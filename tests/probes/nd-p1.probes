@@ -1,0 +1,89 @@
+//// set: nd-p1 — protected 元素经实例路径的访问；`Evaluate = false` 的参数在各编译期语境
+//// model: P10
+model P10
+  Real a = time;
+  model F protected constant Integer p = 2; end F; F f; constant Integer k = f.p;
+end P10;
+//// model: P11
+model P11
+  Real a = time;
+  model F protected constant Integer p = 2; end F; F f; parameter Integer k = f.p;
+end P11;
+//// model: P12
+model P12
+  Real a = time;
+  model F protected constant Integer p = 2; end F; F f; Real z[2];
+equation
+  for i in 1:f.p loop z[i] = i; end for;
+end P12;
+//// model: P13
+model P13
+  Real a = time;
+  model F protected constant Integer p = 2; end F; F f; Real z(start = f.p) = time;
+end P13;
+//// model: P14
+model P14
+  Real a = time;
+  model F protected constant Integer p = 2; end F; F f; Real y[2] = {time, 1}; Real z = y[f.p];
+end P14;
+//// model: P15
+model P15
+  Real a = time;
+  model F protected parameter Integer p = 2; end F; F f; Real y[2] = {time, 1}; Real z = y[f.p];
+end P15;
+//// model: P16
+model P16
+  Real a = time;
+  parameter Integer p = 2 annotation(Evaluate = false); Real y[2] = {time, 1}; Real z = y[p];
+end P16;
+//// model: P17
+model P17
+  Real a = time;
+  parameter Integer p = 2 annotation(Evaluate = false); Real z if p > 1;
+end P17;
+//// model: P18
+model P18
+  Real a = time;
+  parameter Integer p = 2 annotation(Evaluate = false); Real z;
+equation
+  if p > 1 then z = 1; else z = time; end if;
+end P18;
+//// model: P19
+model P19
+  Real a = time;
+  parameter Integer p = 2 annotation(Evaluate = false); Real z[2];
+equation
+  for i in 1:p loop z[i] = i; end for;
+end P19;
+//// model: P110
+model P110
+  Real a = time;
+  parameter Integer p = 2 annotation(Evaluate = false); Real z(fixed = p > 1, start = 0);
+equation
+  der(z) = 1;
+end P110;
+//// model: P111
+model P111
+  Real a = time;
+  parameter Integer p = 2 annotation(Evaluate = false); Real y[3] = {time, 1, 2}; Real z = sum(y[i] for i in 1:p);
+end P111;
+//// model: P112
+model P112
+  Real a = time;
+  parameter Integer p = 2 annotation(Evaluate = false); Real z[2] = fill(time, p);
+end P112;
+//// model: P113
+model P113
+  Real a = time;
+  parameter Integer p = 2 annotation(Evaluate = false); parameter Integer k = p; Real z[k];
+end P113;
+//// model: P114
+model P114
+  Real a = time;
+  parameter Integer p = 2 annotation(Evaluate = true); Real z = p * time;
+end P114;
+//// model: P115
+model P115
+  Real a = time;
+  final parameter Integer p = 2 annotation(Evaluate = false); Real z[p];
+end P115;

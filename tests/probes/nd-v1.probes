@@ -1,0 +1,101 @@
+//// set: nd-v1 — ndims / 单实参 size 的变率（参数）：constant 绑定报错，Evaluate = true
+//// model: V10
+model V10
+  Real a = time;
+  Real x[2, 3]; constant Integer m = size(x, 1);
+end V10;
+//// model: V11
+model V11
+  Real a = time;
+  Real x[2, 3]; constant Integer n = ndims(x);
+end V11;
+//// model: V12
+model V12
+  Real a = time;
+  Real x[2, 3]; constant Integer m[2] = size(x);
+end V12;
+//// model: V13
+model V13
+  Real a = time;
+  parameter Integer k = 2; Real x[k, 3]; constant Integer m = size(x, 1);
+end V13;
+//// model: V14
+model V14
+  Real a = time;
+  parameter Integer k = 2; Real x[k, 3]; constant Integer m = size(x, 2);
+end V14;
+//// model: V15
+model V15
+  Real a = time;
+  parameter Integer k = 2; Real x[k, 3]; constant Integer n = ndims(x);
+end V15;
+//// model: V16
+model V16
+  Real a = time;
+  constant Integer k = 2; Real x[k, 3]; constant Integer m = size(x, 1);
+end V16;
+//// model: V17
+model V17
+  Real a = time;
+  constant Real x[2, 3] = {{1, 2, 3}, {4, 5, 6}}; constant Integer n = ndims(x);
+end V17;
+//// model: V18
+model V18
+  Real a = time;
+  constant Real x[2, 3] = {{1, 2, 3}, {4, 5, 6}}; constant Integer m = size(x, 1);
+end V18;
+//// model: V19
+model V19
+  Real a = time;
+  parameter Real x[2, 3] = {{1, 2, 3}, {4, 5, 6}}; constant Integer n = ndims(x);
+end V19;
+//// model: V110
+model V110
+  Real a = time;
+  parameter Real x[2, 3] = {{1, 2, 3}, {4, 5, 6}}; constant Integer m = size(x, 1);
+end V110;
+//// model: V111
+model V111
+  Real a = time;
+  parameter Real x[:, :] = {{1, 2, 3}, {4, 5, 6}}; constant Integer m = size(x, 1);
+end V111;
+//// model: V112
+model V112
+  Real a = time;
+  Real x[:] = {a, a}; constant Integer m = size(x, 1);
+end V112;
+//// model: V113
+model V113
+  Real a = time;
+  Real x[2, 3]; constant Integer n = ndims(x) + 1;
+end V113;
+//// model: V114
+model V114
+  Real a = time;
+  Real x[2, 3]; constant Integer n = ndims({1, 2});
+end V114;
+//// model: V115
+model V115
+  Real a = time;
+  Real x[2, 3]; constant Integer n = ndims(a);
+end V115;
+//// model: V116
+model V116
+  Real a = time;
+  constant Integer n = ndims(1.5);
+end V116;
+//// model: V117
+model V117
+  Real a = time;
+  Real x[2, 3]; parameter Integer n = ndims(x) annotation(Evaluate = true);
+end V117;
+//// model: V118
+model V118
+  Real a = time;
+  Real x[2, 3]; Integer n = ndims(x) + size(x, 1);
+end V118;
+//// model: V119
+model V119
+  Real a = time;
+  Real x[2, 3]; Real y[size(x, 1)]; Real w[ndims(x)];
+end V119;

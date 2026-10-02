@@ -1273,13 +1273,20 @@ class Flattener {
 
   // for-语句（KEPT loop，对标 NFFlatten.flattenStatement:2308——不展开）：范围类型化 + 迭代变量注册为符号 + 体翻译。
   Id<FlatStatement> collect_for_statement(const SStatement& st, NodeId enclosing, const std::vector<Symbol>& prefix) {
-    if (!st.a.is_valid()) { set_unsupported("implicit-range for statement"); return {}; }   // 隐式范围 `for i loop` 暂缓
-    Id<Expr> range = simplify_expr(inst_exp(st.a, enclosing, prefix));
+    Id<Exp> ra = st.a;
+    if (!ra.is_valid()) {
+      // 隐式范围 `for i loop`（见 implicit_range）：打成 `for i in 1:3 loop`（IR 探针、ImplicitRangeAlg1、AlgorithmFor5）。
+      IterUses u;
+      iter_uses(st.body, st.index, u);
+      ra = implicit_range(u, enclosing, prefix);
+      if (!ra.is_valid()) { set_unsupported("implicit-range for statement"); return {}; }
+    }
+    Id<Expr> range = simplify_expr(inst_exp(ra, enclosing, prefix));
     if (result_.unsupported) return {};
     // 参数变率的范围是结构的（typeRange 对 ≤ PARAMETER 的范围调 Structural.markExp，NFTyping.mo:2455-2460）：参数打 final、
     // 范围代入值（SumVectorForIf `for i in 1:n` → `1:5`）。
-    if (absyn_refs_param(st.a, enclosing)) {
-      const Exp re = I_.absyn.exps[st.a];   // 拷贝
+    if (absyn_refs_param(ra, enclosing)) {
+      const Exp re = I_.absyn.exps[ra];   // 拷贝
       const ScodeScope sc = scode_scope_of(enclosing);
       auto ival = [&](Id<Exp> x) -> Id<Expr> {
         std::optional<CVal> v = eval_scode(x, sc, 0, /*allow_param=*/true, nullptr);
@@ -1507,11 +1514,8 @@ class Flattener {
     if (e.kind == ExpKind::CrefExp) {
       const Cref& c = I_.absyn.crefs[e.cref];
       if (!c.leading_dot && !c.parts.empty() && !loop_vars_.count(c.parts[0].name.id) &&
-          !stmt_iters_.count(c.parts[0].name.id)) {
-        const NodeId n = find_local(enclosing, c.parts[0].name);
-        if (n.is_valid() && !I_.nodes[n].is_empty() && I_.comps[I_.nodes[n].comp].attributes.variability == SVariability::Param)
-          return true;
-      }
+          !stmt_iters_.count(c.parts[0].name.id) && absyn_cref_var(c, enclosing) == std::optional<SVariability>(SVariability::Param))
+        return true;
       for (const CrefPart& p : c.parts)
         for (Id<Exp> x : p.subscripts)
           if (absyn_refs_param(x, enclosing)) return true;
@@ -1652,17 +1656,16 @@ class Flattener {
       if (!eq.index.is_valid()) { set_unsupported("for equation (implicit range)"); return; }
       // 迭代变量遮蔽外层同名迭代变量：omc 会告警，ymc 不产告警文本 → 与期望的 Warning 行对不上 → SKIP（ForEquationShadow1）。
       if (loop_vars_.count(eq.index.id)) { set_unsupported("shadowed for iterator"); return; }
-      std::optional<std::vector<std::int64_t>> seq;
-      if (!eq.a.is_valid()) {
-        // 隐式范围 `for i loop`（deduceIterationRange，NFTyping.mo:3826-3936）：体里 i 作下标处的各 (数组, 维) 维长须相同，
-        // 范围 = 1:该长（ImplicitRangeEq1 `x[i] = i`）；一处都没有 / 长度不一 / 维不可求 → omc 报错或未做 → SKIP。
-        const std::optional<std::int64_t> n = implicit_range_size(eq.body, eq.index, enclosing);
-        if (!n) { set_unsupported("for equation (implicit range)"); return; }
-        seq.emplace();
-        for (std::int64_t v = 1; v <= *n; ++v) seq->push_back(v);
-      } else {
-        seq = eval_range(eq.a, scode_scope_of(enclosing), 0);
+      Id<Exp> range = eq.a;
+      if (!range.is_valid()) {
+        // 隐式范围 `for i loop`（见 implicit_range）：体里 i 作下标处的各 (数组, 维) 维长须相同，范围 = 1:该长
+        //（ImplicitRangeEq1 `x[i] = i`）；一处都没有 / 长度不一 → omc 报错，维不可求 → 未做 → SKIP。
+        IterUses u;
+        iter_uses(eq.body, eq.index, u);
+        range = implicit_range(u, enclosing, prefix);
+        if (!range.is_valid()) { set_unsupported("for equation (implicit range)"); return; }
       }
+      const std::optional<std::vector<std::int64_t>> seq = eval_range(range, scode_scope_of(enclosing), 0);
       if (!seq) { set_unsupported("for equation (non-constant range)"); return; }
       for (std::int64_t v : *seq) {
         auto prev = loop_vars_.find(eq.index.id);
@@ -1783,6 +1786,14 @@ class Flattener {
             struct_restore(snap);
           }
         }
+        // Evaluate = false 的参数不求值（frame_value 直接失败，但记进了 used）：非结构条件，原样保留（EvaluateFalse1）。
+        if (!cv)
+          for (std::uint32_t d : used)
+            if (evaluate_annotation(Id<SElement>::from_index(d)) == std::optional<bool>(false)) {
+              keep_param = true;
+              struct_restore(snap);
+              break;
+            }
         // 求不出值、但引用了 fixed = false 的参数（无绑定、初始方程里定值）：isExpressionNotFixed → 非结构条件，omc 原样保留
         //（IfEquation8 `if b == true then`）。
         if ((!cv || cv->k != CVal::K::Bool) && !cond_is_runtime(ce) && cond_has_unfixed_param(ce)) {
@@ -2585,6 +2596,53 @@ class Flattener {
   // 表达式是否引用连续 / 离散变量或 time（属性绑定的变率检查）。
   // floor_scope / floor：引用处所在实例（如 `constant R r` 的记录实例）的变率下限——引用本实例自己的字段时按
   // variabilityMin 下沉后的变率判（RecordBinding7 `final constant Real y = x / 2.0` 的 x 声明是 Real，实际 constant）。
+  // 类实例节点（组件的 class_inst 可下钻）。
+  bool is_class_inst(NodeId cls) {
+    return cls.is_valid() && !I_.nodes[cls].is_empty() && I_.nodes[cls].kind == NodeKind::Class && I_.nodes[cls].cls.is_valid() &&
+           I_.node_class(cls).tree.is_valid();
+  }
+  bool is_comp_node(NodeId n) {
+    return n.is_valid() && I_.nodes.contains(n) && !I_.nodes[n].is_empty() && I_.nodes[n].comp.is_valid();
+  }
+  // 类型化 cref 的有效变率：首个本地段（resolved_node = n，变率 v0）沿后续各段下沉（var_min：类实例 `a` 自身是 Var、它的参数
+  // `a.p` 是参数；`parameter R r` 的 `r.x` 是参数——同 cref_is_continuous）。n 在 parts 里的位置（前缀长度）这里不知道：从右
+  // 往左找同名、且后续各段都走得通的那一段；走不通 → 保守按首段（v0）。ND 探针 d1 / d2：`parameter Integer k = a.p` 此前判成
+  // 更高变率的绑定、`y[a.p]` 的下标被当成运行时变量原样留着。
+  SVariability cref_path_var(const ExprCref& cref, NodeId n, SVariability v0) {
+    for (std::size_t i0 = cref.parts.size(); i0-- > 0;) {
+      if (cref.parts[i0].name != I_.nodes[n].name) continue;
+      SVariability w = v0;
+      NodeId cur = n;
+      bool ok = true;
+      for (std::size_t i = i0 + 1; ok && i < cref.parts.size(); ++i) {
+        const NodeId cls = I_.comps[I_.nodes[cur].comp].class_inst;
+        ok = is_class_inst(cls);
+        if (!ok) break;
+        cur = find_local(cls, cref.parts[i].name);
+        ok = is_comp_node(cur);
+        if (ok) w = var_min(w, I_.comps[I_.nodes[cur].comp].attributes.variability);
+      }
+      if (ok) return w;
+    }
+    return v0;
+  }
+  // 书写的 cref 所指组件的有效变率：首段是 enclosing 的本地组件，沿后续各段下沉；首段不是本地组件 → nullopt，后续段走不通
+  // → 走到哪算哪。
+  std::optional<SVariability> absyn_cref_var(const Cref& c, NodeId enclosing) {
+    if (c.leading_dot || c.parts.empty()) return std::nullopt;
+    NodeId cur = find_local(enclosing, c.parts[0].name);
+    if (!is_comp_node(cur)) return std::nullopt;
+    SVariability v = I_.comps[I_.nodes[cur].comp].attributes.variability;
+    for (std::size_t i = 1; i < c.parts.size(); ++i) {
+      const NodeId cls = I_.comps[I_.nodes[cur].comp].class_inst;
+      if (!is_class_inst(cls)) break;
+      const NodeId nx = find_local(cls, c.parts[i].name);
+      if (!is_comp_node(nx)) break;
+      cur = nx;
+      v = var_min(v, I_.comps[I_.nodes[cur].comp].attributes.variability);
+    }
+    return v;
+  }
   bool refs_runtime_var(Id<Expr> id, NodeId floor_scope = {}, SVariability floor = SVariability::Var) {
     if (!id.is_valid()) return false;
     const Expr& e = result_.model.exprs[id];
@@ -2600,6 +2658,7 @@ class Flattener {
         // 首段所指组件就是引用处实例的本地组件（flat cref 已带前缀，按节点自身名在该实例里找回同一节点判）。
         if (floor != SVariability::Var && floor_scope.is_valid() && find_local(floor_scope, I_.nodes[n].name) == n)
           v = var_min(floor, v);
+        v = cref_path_var(e.cref, n, v);
         if (v == SVariability::Var || v == SVariability::Discrete) return true;
       }
       for (const ExprCrefPart& cp : e.cref.parts)
@@ -2643,7 +2702,7 @@ class Flattener {
       if (raw != Id<INode>::kInvalid && raw != kFnLocal) {
         const NodeId n = NodeId::from_index(raw);
         if (I_.nodes.contains(n) && !I_.nodes[n].is_empty() && I_.nodes[n].comp.is_valid() &&
-            I_.comps[I_.nodes[n].comp].attributes.variability == SVariability::Param)
+            cref_path_var(e.cref, n, I_.comps[I_.nodes[n].comp].attributes.variability) == SVariability::Param)
           return true;
       }
       for (const ExprCrefPart& cp : e.cref.parts) for (Id<Expr> sx : cp.subscripts) if (refs_param_var(sx)) return true;
@@ -2662,7 +2721,7 @@ class Flattener {
         if (raw == Id<INode>::kInvalid) return true;   // time / 内建 → 运行时
         const NodeId n = NodeId::from_index(raw);
         if (I_.nodes.contains(n) && !I_.nodes[n].is_empty() && I_.nodes[n].comp.is_valid()) {
-          const SVariability v = I_.comps[I_.nodes[n].comp].attributes.variability;
+          const SVariability v = cref_path_var(e.cref, n, I_.comps[I_.nodes[n].comp].attributes.variability);
           return v == SVariability::Var || v == SVariability::Discrete;
         }
         return true;
@@ -2819,6 +2878,16 @@ class Flattener {
         bscope0 = enclosing;
       }
       mark_ctor_ranges(braw0, bscope0);
+      // ndims(…) / 单实参 size(…) 是参数变率（见 absyn_param_size_call）：绑给 constant 是更高变率的绑定，omc 报错（ND 探针
+      // v1：`constant Integer n = ndims(x)`，此前折成字面量放行）；Evaluate = true 的参数绑它时，实参里的非参数量让它不成
+      // 结构参数（isBindingNotFixed 的 CALL 支，NFStructural.mo:210-219：`parameter Integer n = ndims(x) annotation(Evaluate
+      // = true)` 不 final），未细分 → SKIP。
+      if (absyn_param_size_call(braw0)) {
+        if (var_min(var_floor, I_.comps[cid].attributes.variability) == SVariability::Const)
+          set_unsupported("ndims / size(a) in constant binding");
+        else if (eval_true)
+          set_unsupported("Evaluate annotation");
+      }
       while (braw0.is_valid() && I_.absyn.exps[braw0].kind == ExpKind::Tuple && I_.absyn.exps[braw0].args.size() == 1)
         braw0 = I_.absyn.exps[braw0].args[0];
       if (braw0.is_valid() && I_.absyn.exps[braw0].kind == ExpKind::CrefExp) {
@@ -3174,6 +3243,11 @@ class Flattener {
       if (b.kind == BindingKind::Raw && b.raw_exp.is_valid()) { braw = b.raw_exp; bscope = enclosing; bprefix = prefix; }
     }
     mark_ctor_ranges(braw, bscope);
+    // constant 数组绑 ndims(…) / 单实参 size(…)：更高变率的绑定，omc 报错（同标量，见 emit_variable）。
+    if (absyn_param_size_call(braw) && var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Const) {
+      set_unsupported("ndims / size(a) in constant binding");
+      return;
+    }
     // 非构造子绑定（= y / = 2*y / …，含推导式 `{e for i in …}`），下面按值（constant）或类型化摊分。
     const bool comprehension = braw.is_valid() && I_.absyn.exps[braw].kind == ExpKind::Array &&
                                I_.absyn.exps[braw].args.size() == 1 &&
@@ -3226,15 +3300,11 @@ class Flattener {
         std::optional<std::int64_t> n = binding_dim_size(braw.is_valid() ? braw : start_value(asrc), di);
         // 非字面量绑定：取类型化绑定的第 di 维（deduceDimensionFromExp，NFTyping.mo:781-826）；该维未知时 omc 再对绑定求值，
         // 未做 → SKIP。
-        // 推导式 `{e for i in r}`（单迭代变量）：该维 = 范围长度。
-        if (!n && comprehension && dim_exps.size() == 1) {
-          const Exp& red = I_.absyn.exps[I_.absyn.exps[braw].args[0]];
-          if (red.iters.size() == 1) {
-            const FrameAt frame_at(*this, bscope);
-            if (std::optional<std::vector<std::int64_t>> seq = eval_range(red.iters[0].range, scode_scope_of(bscope), 0))
-              n = static_cast<std::int64_t>(seq->size());
-          }
-        }
+        // 推导式 `{e for i in r, …}`：各维 = 对应范围的长度（comprehension_shape；迭代变量个数须等于维数）。
+        if (!n && comprehension)
+          if (const std::optional<std::vector<std::int64_t>> csh = comprehension_shape(braw, bscope, bprefix);
+              csh && csh->size() == dim_exps.size())
+            n = (*csh)[di];
         if (!n && nlbind && !comprehension) {
           const std::vector<std::int64_t> sh = expr_shape(typed_rhs());
           if (result_.unsupported) return;
@@ -3304,6 +3374,13 @@ class Flattener {
     // + replaceIterator，NFExpression.mo:1932-1952；C1 探针 `p = {i^2 for i in 1:n}` → `p[2] = 4.0`）。下面逐元素做；连续数组
     // 的推导式绑定 omc 保留 `array(… for …)`（未做，走 typed 路 SKIP）。
     const bool comp_spread = comprehension && spread;
+    if (comp_spread) {
+      // 推导式的形状须与声明维一致（omc 类型错；ND 探针 c2：`parameter Integer s[2] = {i for i in 1:3}` 此前放行）。
+      const std::optional<std::vector<std::int64_t>> csh = comprehension_shape(braw, bscope, bprefix);
+      if (result_.unsupported) return;
+      if (!csh) { set_unsupported("comprehension range"); return; }
+      if (*csh != dims) { set_unsupported("array binding shape/type mismatch"); return; }
+    }
     // 非构造子绑定（数组值 `= y` / `= 2*y`）：类型化一次 + 形状/变率守卫（对标 NFFlatten:700 / NFScalarize）。
     if (nlbind && !comp_spread) {
       typed_rhs();
@@ -3412,6 +3489,7 @@ class Flattener {
       }
       if (!cur_pp_chain_.empty()) var_pp_.emplace(vidx, cur_pp_chain_);
       if (is_flow) flow_vars_.push_back({name, std::move(fsubs), cty, I_.comps[cid].loc, vidx, false});
+      if (vk == FlatVarKind::Parameter) record_const(result_.model.variables[vidx]);
       if (const_all) {
         const FlatVariable& cvv = result_.model.variables[vidx];
         std::optional<CVal> ev = cvv.binding.is_valid() ? cval_of(cvv.binding) : std::nullopt;
@@ -4469,6 +4547,51 @@ class Flattener {
         }
         return CVal::Arr(std::move(els));
       }
+      case ExpKind::Matrix: {
+        // 矩阵构造 `[a, b; c, d]` 的值（同 matrix_exp：元素提升到 2 维——标量 1×1、向量 n×1、矩阵不变，行内按列、行间按行
+        // 拼接；Integer 与 Real 混排取 Real）。ND 探针 d1：`Real y[max([n, m])]`、`constant Integer M[2, 2] = [1, 2; 3, 4]`。
+        std::vector<std::vector<CVal>> all;   // 行 × 列
+        for (Id<Exp> rid : e.args) {
+          std::vector<std::vector<CVal>> block;
+          for (Id<Exp> a : I_.absyn.exps[rid].args) {
+            std::optional<CVal> v = eval_scode(a, scope, depth + 1, allow_param, used);
+            if (!v) return std::nullopt;
+            const std::vector<std::int64_t> sh = cval_shape(*v);
+            std::vector<std::vector<CVal>> g;
+            if (sh.empty()) {
+              g.push_back({*v});
+            } else if (sh.size() == 1 && sh[0] > 0) {
+              for (const CVal& x : *v->arr) g.push_back({x});
+            } else if (sh.size() == 2 && sh[0] > 0 && sh[1] > 0) {
+              for (const CVal& r : *v->arr) g.push_back(*r.arr);
+            } else {
+              return std::nullopt;
+            }
+            if (block.empty()) { block = std::move(g); continue; }
+            if (g.size() != block.size()) return std::nullopt;
+            for (std::size_t i = 0; i < g.size(); ++i) block[i].insert(block[i].end(), g[i].begin(), g[i].end());
+          }
+          if (block.empty() || (!all.empty() && block[0].size() != all[0].size())) return std::nullopt;
+          for (std::vector<CVal>& r : block) all.push_back(std::move(r));
+        }
+        if (all.empty()) return std::nullopt;
+        bool any_real = false;
+        const CVal::K k0 = all[0][0].k;
+        for (const std::vector<CVal>& r : all)
+          for (const CVal& x : r) {
+            const bool num = x.k == CVal::K::Int || x.k == CVal::K::Real;
+            if (!(num && (k0 == CVal::K::Int || k0 == CVal::K::Real)) && (x.k != k0 || (k0 != CVal::K::Bool && k0 != CVal::K::Str)))
+              return std::nullopt;
+            any_real = any_real || x.k == CVal::K::Real;
+          }
+        std::vector<CVal> rows;
+        for (std::vector<CVal>& r : all) {
+          if (any_real)
+            for (CVal& x : r) if (x.k == CVal::K::Int) x = CVal::R(static_cast<double>(x.i));
+          rows.push_back(CVal::Arr(std::move(r)));
+        }
+        return CVal::Arr(std::move(rows));
+      }
       case ExpKind::CrefExp: {
         const Cref& c = I_.absyn.crefs[e.cref];
         // 数组推导式的迭代变量（内层优先）。
@@ -4500,6 +4623,22 @@ class Flattener {
         // 模型语境：本实例的局部参数 / 常量按修饰后的绑定求值（NF 的组件绑定 = 修饰合并后，Structural.markExp 把求值
         // 用到的参数标为结构参数）。
         if (ceval_frame_ >= 0 && !locals_ && !c.leading_dot) {
+          // 多段名：子实例 / 记录参数里已发射的常量、字面量绑定的参数（`Real z[a.j]`、`a.p`、`r.n`、`c[2].j`，ND 探针 d1；
+          // 参数随之成结构参数）。frame_value 不接多段名（参数 → Fail），所以先查；没有显式的书写处上下文（维 / for 范围
+          // 的求值）时按当前帧的前缀。
+          if (c.parts.size() > 1) {
+            const Frame& F = frames_[static_cast<std::size_t>(ceval_frame_)];
+            bool prot = false;
+            const NodeId leaf = inst_path_leaf(F.inst, c, prot);
+            if (leaf.is_valid()) {
+              // 首段之后有 protected 段：omc 报错（访问受保护元素；ND 探针 p1：`constant Integer k = f.p`、`1:f.p`、`y[f.p]`
+              // 此前都按已发射的值放行）。Evaluate = false 的参数不求（见 frame_value）。
+              if (prot || evaluate_annotation(I_.comps[I_.nodes[leaf].comp].def) == std::optional<bool>(false)) return std::nullopt;
+              if (std::optional<CVal> kv = const_lookup_val(ceval_prefix_ ? *ceval_prefix_ : F.prefix,
+                                                            ceval_prefix_ ? ceval_psubs_ : F.psubs, c, scope, depth, allow_param))
+                return kv;
+            }
+          }
           const FrameHit fh = frame_value(ceval_frame_, c, allow_param, depth, used, &scope);
           if (fh.kind == FrameHit::Value) return fh.v;
           if (fh.kind == FrameHit::Fail) return std::nullopt;
@@ -4586,18 +4725,29 @@ class Flattener {
         const Cref& fn = I_.absyn.crefs[e.cref];
         // size(arr)：各维大小组成的 Integer 向量（evalBuiltinSize，NFCeval；Scalar 的 `scalar(size(rs))`）——函数局部按当前值
         // 形状，组件按声明维求值。
-        if (fn.parts.size() == 1 && in_.str(fn.parts[0].name) == "size" && e.args.size() == 1 &&
+        // ndims(arr)：声明的维数（不求各维的值；TestNDims `Real[ndims(a)] b`）。
+        const bool is_ndims = fn.parts.size() == 1 && in_.str(fn.parts[0].name) == "ndims";
+        if (fn.parts.size() == 1 && (is_ndims || in_.str(fn.parts[0].name) == "size") && e.args.size() == 1 &&
             !find_scode_element(fn.parts[0].name, scope).is_valid()) {
           const Exp& ae = I_.absyn.exps[e.args[0]];
           if (ae.kind != ExpKind::CrefExp) return std::nullopt;
           const Cref& ac = I_.absyn.crefs[ae.cref];
           std::vector<CVal> out;
+          auto done = [&]() -> std::optional<CVal> {
+            if (is_ndims) return CVal::I(static_cast<std::int64_t>(out.size()));
+            return out.empty() ? std::nullopt : std::optional<CVal>(CVal::Arr(std::move(out)));
+          };
           if (locals_ && ac.parts.size() == 1 && ac.parts[0].subscripts.empty()) {
             auto it = locals_->find(ac.parts[0].name.id);
             if (it != locals_->end()) {
               for (std::int64_t n : cval_shape(it->second)) out.push_back(CVal::I(n));
-              return out.empty() ? std::nullopt : std::optional<CVal>(CVal::Arr(std::move(out)));
+              return done();
             }
+          }
+          if (const std::optional<std::vector<std::int64_t>> sh = sub_instance_shape(ac)) {
+            if (sh->empty()) return std::nullopt;
+            for (std::int64_t n : *sh) out.push_back(CVal::I(n));
+            return done();
           }
           std::vector<Symbol> anames;
           for (const CrefPart& p : ac.parts) {
@@ -4612,6 +4762,7 @@ class Flattener {
           }
           std::vector<Id<Exp>> adims = I_.scode.elems[acomp].attr.dims;
           for (Id<Exp> td : I_.scode.elems[acomp].type.dims) adims.push_back(td);
+          if (is_ndims) return CVal::I(static_cast<std::int64_t>(adims.size()));
           for (std::size_t k = 0; k < adims.size(); ++k) {
             std::optional<CVal> dv = colon_dim_size(anames, acomp, adims, k);
             if (!dv) dv = eval_scode(adims[k], ascope, depth + 1, allow_param, used);
@@ -4655,6 +4806,10 @@ class Flattener {
             if (dv->i < 1 || static_cast<std::size_t>(dv->i) > sh.size()) return std::nullopt;
             return CVal::I(sh[static_cast<std::size_t>(dv->i) - 1]);
           }
+        }
+        if (const std::optional<std::vector<std::int64_t>> sh = sub_instance_shape(I_.absyn.crefs[ae.cref])) {
+          if (dv->i < 1 || static_cast<std::size_t>(dv->i) > sh->size()) return std::nullopt;
+          return CVal::I((*sh)[static_cast<std::size_t>(dv->i) - 1]);
         }
         std::vector<Symbol> anames;
         for (const CrefPart& p : I_.absyn.crefs[ae.cref].parts) {
@@ -4707,6 +4862,41 @@ class Flattener {
     return CVal::I((*sh)[k]);
   }
 
+  // 多段名沿实例树逐段找组件（首段是 inst 的本地组件，下标不看）：走通 → 末段的组件节点，任一段找不到 → invalid。
+  // prot = 首段之后有 protected 的段。
+  NodeId inst_path_leaf(NodeId inst, const Cref& c, bool& prot) {
+    NodeId cur = find_local(inst, c.parts[0].name);
+    if (!is_comp_node(cur)) return {};
+    for (std::size_t i = 1; i < c.parts.size(); ++i) {
+      const NodeId cls = I_.comps[I_.nodes[cur].comp].class_inst;
+      if (!is_class_inst(cls)) return {};
+      cur = find_local(cls, c.parts[i].name);
+      if (!is_comp_node(cur)) return {};
+      prot = prot || I_.nodes[cur].visibility == Visibility::Protected;
+    }
+    return cur;
+  }
+  // size() / ndims() 的实参是当前求值帧里子实例的数组（`a.v`、`bb.x`：首段是本地的类实例组件）：它的维受实例修饰影响
+  //（`B bb(n = 3)` 的 `Real x[n]`），按 SCode 声明求会漏掉修饰 → 取已发射元素的形状（被引用的数组须先于引用处发射；
+  // 没发射 / 带下标 → 空形状，调用方求不出 → SKIP）。不是这种情形 → nullopt。
+  std::optional<std::vector<std::int64_t>> sub_instance_shape(const Cref& ac) {
+    if (ac.parts.size() < 2 || ac.leading_dot || ceval_frame_ < 0 || locals_) return std::nullopt;
+    const Frame& F = frames_[static_cast<std::size_t>(ceval_frame_)];
+    const NodeId ln = find_local(F.inst, ac.parts[0].name);
+    if (!ln.is_valid() || I_.nodes[ln].is_empty() || !I_.nodes[ln].comp.is_valid() ||
+        I_.comps[I_.nodes[ln].comp].ty.kind != TypeKind::Complex)
+      return std::nullopt;
+    std::vector<Symbol> names = F.prefix;
+    PSubs ps = F.psubs;
+    ps.resize(F.prefix.size());
+    for (std::size_t i = 0; i < ac.parts.size(); ++i) {
+      if (!ac.parts[i].subscripts.empty()) return std::vector<std::int64_t>{};
+      names.push_back(ac.parts[i].name);
+      if (i + 1 < ac.parts.size()) ps.push_back({});
+    }
+    const std::optional<std::vector<std::int64_t>> sh = emitted_shape(names, ps);
+    return sh ? *sh : std::vector<std::int64_t>{};
+  }
   // size() 的实参按 SCode 作用域链查不到（继承来的组件声明在基类里，而维是在派生实例的作用域里求的，DM 探针 X4
   // `model A … Real y[size(c, 1)]; end A; model X4 extends A; end X4;`）：按当前求值帧的实例找本地组件。它的维照旧在当前
   // 作用域里求——维里的本地名走帧查找，基类词法作用域里才看得见的名字求不出（nullopt → SKIP）。
@@ -5272,6 +5462,14 @@ class Flattener {
     const ModCtx* fctx = frames_[static_cast<std::size_t>(fi)].ctx;
     const SVariability var = var_min(fctx ? fctx->var_floor : SVariability::Var, I_.comps[cid].attributes.variability);
     const SElement& cel = I_.scode.elems[I_.comps[cid].def];
+    // `Evaluate = false` 的参数是 NON_STRUCTURAL_PARAMETER（updateImplicitVariability，NFInst.mo:3906-3912 v1.25.0），Ceval
+    // 不求它（evalCref 的守卫，NFCeval.mo:311-314）：维留成 `Real[p] z`、下标留 `y[p]`，for 方程范围 / 条件组件 / fixed
+    // 报错（ND 探针 p1；此前照常求值 → `Real z[1]; Real z[2]` 与 `final parameter`）。
+    if (var == SVariability::Param && evaluate_annotation(I_.comps[cid].def) == std::optional<bool>(false)) {
+      if (used) used->insert(I_.comps[cid].def.raw);   // 调用方据此认出"非结构参数"（if 方程原样保留条件）
+      r.kind = FrameHit::Fail;
+      return r;
+    }
     const bool arr = !cel.attr.dims.empty() || !cel.type.dims.empty();
     const TypeKind tk = I_.comps[cid].ty.kind;
     const bool scalar_builtin = tk == TypeKind::Integer || tk == TypeKind::Real || tk == TypeKind::Boolean ||
@@ -5519,13 +5717,15 @@ class Flattener {
     std::unordered_map<std::uint32_t, CVal>* locals;
     std::unordered_set<std::uint32_t>* in_names;
     std::unordered_map<std::uint32_t, FnRecord> records;
+    std::unordered_map<std::uint32_t, std::vector<Id<Exp>>> dim_exps;
     FnCtxGuard(Flattener& fl, const ScodeScope* sc, Id<SElement> h, bool imp)
         : f(fl), params(std::move(fl.func_params_)), inputs(std::move(fl.fn_inputs_)), scope(fl.fn_scope_),
           home(fl.fn_home_), impure(fl.fn_impure_), end(fl.fn_end_), loops_depth(fl.fn_loops_), decl(fl.decl_scope_),
           iters(std::move(fl.stmt_iters_)), loops(std::move(fl.loop_vars_)), cpfx(fl.ceval_prefix_),
           cpsubs(std::move(fl.ceval_psubs_)), citers(std::move(fl.citers_)), locals(fl.locals_), in_names(fl.input_names_),
-          records(std::move(fl.fn_records_)) {
+          records(std::move(fl.fn_records_)), dim_exps(std::move(fl.fn_dim_exps_)) {
       f.func_params_.clear(); f.fn_inputs_.clear(); f.stmt_iters_.clear(); f.loop_vars_.clear(); f.fn_records_.clear();
+      f.fn_dim_exps_.clear();
       f.ceval_psubs_.clear(); f.citers_.clear();
       f.fn_scope_ = sc; f.fn_home_ = h; f.fn_impure_ = imp; f.fn_end_ = Id<Expr>{}; f.fn_loops_ = 0;
       f.decl_scope_ = Inst::empty_node(); f.ceval_prefix_ = nullptr; f.locals_ = nullptr; f.input_names_ = nullptr;
@@ -5536,6 +5736,7 @@ class Flattener {
       f.stmt_iters_ = std::move(iters);
       f.loop_vars_ = std::move(loops); f.ceval_prefix_ = cpfx; f.ceval_psubs_ = std::move(cpsubs);
       f.citers_ = std::move(citers); f.locals_ = locals; f.input_names_ = in_names; f.fn_records_ = std::move(records);
+      f.fn_dim_exps_ = std::move(dim_exps);
     }
     FnCtxGuard(const FnCtxGuard&) = delete;
     FnCtxGuard& operator=(const FnCtxGuard&) = delete;
@@ -6266,8 +6467,15 @@ class Flattener {
         if (!body(st.else_body, fs.else_body)) return {};
         break;
       case SStmtKind::For: {
-        if (!st.a.is_valid()) { set_unsupported("implicit-range for statement"); return {}; }
-        const Id<Expr> range = simplify_expr(inst_exp(st.a, Inst::empty_node(), {}));
+        Id<Exp> ra = st.a;
+        if (!ra.is_valid()) {
+          // 隐式范围（见 implicit_range）：`for i in 1:size(u, 1) loop`（`:` 维）、`1:3`、`1:k`（表达式维）。
+          IterUses u;
+          iter_uses(st.body, st.index, u);
+          ra = implicit_range(u, Inst::empty_node(), {});
+          if (!ra.is_valid()) { set_unsupported("implicit-range for statement"); return {}; }
+        }
+        const Id<Expr> range = simplify_expr(inst_exp(ra, Inst::empty_node(), {}));
         if (result_.unsupported) return {};
         const std::uint32_t id = st.index.id;   // 迭代变量（符号，嵌套可遮蔽）
         const bool had = stmt_iters_.count(id) > 0;
@@ -6684,6 +6892,7 @@ class Flattener {
         ds.push_back(dim);
       }
       func_params_[c.name.id] = Type::array_of(func_params_[c.name.id], std::move(ds));
+      fn_dim_exps_[c.name.id] = std::move(dexps);
     }
     // 绑定：输入 = 别名默认（优先）或声明默认；输出 / 局部 = 声明绑定。
     std::unordered_map<std::uint32_t, Id<Expr>> binds;
@@ -7823,8 +8032,15 @@ class Flattener {
     }
   }
   void record_const(const FlatVariable& v) {
-    if (v.var_kind != FlatVarKind::Constant || !v.binding.is_valid()) return;
-    if (std::optional<CVal> cv = cval_of(v.binding)) const_vals_[var_key(v)] = std::move(*cv);
+    if (v.var_kind == FlatVarKind::Parameter) ++param_groups_[int_key(v.name, {})].count;
+    if (!v.binding.is_valid() || (v.var_kind != FlatVarKind::Constant && v.var_kind != FlatVarKind::Parameter)) return;
+    std::optional<CVal> cv = cval_of(v.binding);
+    if (!cv) return;
+    if (v.var_kind == FlatVarKind::Constant) { const_vals_[var_key(v)] = std::move(*cv); return; }
+    // 参数只记字面量绑定的（见 const_lookup_val），另按名字链（不带下标）分组：同一组件的各元素。
+    std::string key = var_key(v);
+    param_groups_[int_key(v.name, {})].keys.push_back(key);
+    param_lits_[std::move(key)] = std::move(*cv);
   }
   // 行主序扁平值 + 形状 → 嵌套数组值。
   static CVal cval_nest(const std::vector<CVal>& flat, const std::vector<std::int64_t>& dims, std::size_t k, std::size_t& pos) {
@@ -7836,7 +8052,7 @@ class Flattener {
   }
   // 值求值路（eval_scode）：书写处前缀（含逐段下标）+ cref 各段（常量整数下标）→ const_vals_ 里的值。
   std::optional<CVal> const_lookup_val(const std::vector<Symbol>& prefix, const PSubs& psubs, const Cref& c,
-                                       const ScodeScope& scope, int depth) {
+                                       const ScodeScope& scope, int depth, bool allow_param = false) {
     std::vector<Symbol> names = prefix;
     PSubs isubs = psubs;
     isubs.resize(prefix.size());
@@ -7850,9 +8066,23 @@ class Flattener {
       }
       isubs.push_back(std::move(is));
     }
-    auto it = const_vals_.find(int_key(names, isubs));
-    if (it == const_vals_.end()) return std::nullopt;
-    return it->second;
+    const std::string key = int_key(names, isubs);
+    auto it = const_vals_.find(key);
+    if (it != const_vals_.end()) return it->second;
+    // 已发射的字面量绑定参数（子实例 / 记录参数的字段 `a.p`、`r.n`；本实例的单段参数走 frame_value）：编译期求值用到它
+    // → 结构参数（同 frame_value 的标记规则：dep_mark_ 时才标）。
+    if (!allow_param || c.parts.size() < 2) return std::nullopt;
+    const auto pl = param_lits_.find(key);
+    if (pl == param_lits_.end()) return std::nullopt;
+    // 标记是组件级的：数组实例 / 参数数组的各元素一起成为结构参数（ND 探针 d2：`G g[2](each n = 2); Real z[g[2].n]` →
+    // g[1].n、g[2].n 都 final；同 frame_value 对本地参数数组的做法）。有元素不是字面量绑定 → 整组标不了，未做。
+    const ParamGroup& g = param_groups_[int_key(names, {})];
+    if (g.keys.size() != g.count) return std::nullopt;
+    for (const std::string& k : g.keys) {
+      if (dep_mark_) record_structural(k);
+      const_vals_[k] = param_lits_[k];
+    }
+    return param_lits_[key];
   }
   // 类型化路（cref()）：同上，下标须字面量 / for 迭代变量；只接标量值。
   Id<Expr> const_lookup_expr(const std::vector<Symbol>& prefix, const Cref& c) {
@@ -8476,9 +8706,11 @@ class Flattener {
       std::vector<Id<Expr>> subs;
       for (std::size_t k = 0; k < p.subscripts.size(); ++k) {
         if (pi == 0 && c.parts.size() > 1 && k < head_subs.size()) { subs.push_back(head_subs[k]); continue; }
+        // 留成符号的下标（for 语句 / 保留着的归约的迭代变量）照常化简（IR 探针 s1：`x[i + 0]`、`x[1 * i]`、`x[i + (2 - 2)]`
+        // → `x[i]`；此前原样留着）。
         subs.push_back(pi + 1 == c.parts.size() && k < leaf_subs.size() && leaf_subs[k].is_valid()
                            ? leaf_subs[k]
-                           : inst_exp(p.subscripts[k], enclosing, prefix));
+                           : simplify_expr(inst_exp(p.subscripts[k], enclosing, prefix)));
         // Real 下标是类型错（AP p9 探针：Real 迭代变量 `sum(x[i] for i in {m, 2.5})`，omc 报错）。
         if (const Type& st = result_.model.exprs[subs.back()].ty; st.kind == TypeKind::Real && !st.is_array())
           set_unsupported("Real subscript");
@@ -9304,29 +9536,48 @@ class Flattener {
     return lit_int(0);
   }
 
-  // 推导式绑定 `{e for i in r}` 在 1 维元素 idx 处的值：迭代变量取 r 的第 idx 个值代入 e 并化简（replaceIterator）。
-  // 多迭代变量 / 多维 / 范围求不出 / e 是数组 → SKIP。
+  // 推导式绑定 `{e for i1 in r1, …, iN in rN}`（标量体）的形状：最右的迭代变量是最外维（MLS §10.4.2.1；ND 探针 c1
+  // `{i + j for i in 1:3, j in 1:2}` 是 [2, 3]），各维 = 对应范围的长度。范围求不出 → nullopt。
+  std::optional<std::vector<std::int64_t>> comprehension_shape(Id<Exp> braw, NodeId scope, const std::vector<Symbol>& prefix) {
+    Exp red = I_.absyn.exps[I_.absyn.exps[braw].args[0]];   // 拷贝
+    if (red.iters.empty() || !fill_implicit_ranges(red, scope, prefix)) return std::nullopt;
+    const FrameAt frame_at(*this, scope);
+    std::vector<std::int64_t> sh;
+    for (std::size_t k = red.iters.size(); k-- > 0;) {
+      const std::optional<std::vector<std::int64_t>> seq = eval_range(red.iters[k].range, scode_scope_of(scope), 0);
+      if (!seq) return std::nullopt;
+      sh.push_back(static_cast<std::int64_t>(seq->size()));
+    }
+    return sh;
+  }
+  // 推导式绑定在元素 idx 处的值：各迭代变量取其范围的对应值代入 e 并化简（replaceIterator）；第 k 个迭代变量（书写序）
+  // 对第 N-1-k 维。维数与迭代变量个数不符 / 范围求不出 / e 是数组 → SKIP。
   Id<Expr> comprehension_elem(Id<Exp> braw, const std::vector<std::int64_t>& idx, NodeId scope,
                               const std::vector<Symbol>& prefix) {
-    const Exp red = I_.absyn.exps[I_.absyn.exps[braw].args[0]];   // 拷贝
-    if (red.iters.size() != 1 || idx.size() != 1 || !red.iters[0].range.is_valid()) {
+    Exp red = I_.absyn.exps[I_.absyn.exps[braw].args[0]];   // 拷贝
+    const std::size_t n = red.iters.size();
+    if (n == 0 || idx.size() != n || !fill_implicit_ranges(red, scope, prefix)) {
       set_unsupported("comprehension shape");
       return lit_int(0);
     }
-    const ForIndex it = red.iters[0];
-    if (loop_vars_.count(it.name.id) || stmt_iters_.count(it.name.id)) {
-      set_unsupported("shadowed comprehension iterator");
-      return lit_int(0);
+    std::vector<std::int64_t> vals(n);
+    for (std::size_t k = 0; k < n; ++k) {
+      const ForIndex& it = red.iters[k];
+      bool dup = loop_vars_.count(it.name.id) || stmt_iters_.count(it.name.id);
+      for (std::size_t j = 0; j < k; ++j) dup = dup || red.iters[j].name == it.name;
+      if (dup) { set_unsupported("shadowed comprehension iterator"); return lit_int(0); }
+      if (absyn_refs_iter(it.range, loop_vars_)) { set_unsupported("comprehension range depends on iterator"); return lit_int(0); }
+      const std::optional<std::vector<std::int64_t>> seq = eval_range(it.range, scode_scope_of(scope), 0);
+      const std::int64_t ix = idx[n - 1 - k];
+      if (!seq || ix < 1 || static_cast<std::size_t>(ix) > seq->size()) {
+        set_unsupported("comprehension range");
+        return lit_int(0);
+      }
+      vals[k] = (*seq)[static_cast<std::size_t>(ix) - 1];
     }
-    if (absyn_refs_iter(it.range, loop_vars_)) { set_unsupported("comprehension range depends on iterator"); return lit_int(0); }
-    const std::optional<std::vector<std::int64_t>> seq = eval_range(it.range, scode_scope_of(scope), 0);
-    if (!seq || idx[0] < 1 || static_cast<std::size_t>(idx[0]) > seq->size()) {
-      set_unsupported("comprehension range");
-      return lit_int(0);
-    }
-    loop_vars_[it.name.id] = (*seq)[static_cast<std::size_t>(idx[0]) - 1];
+    for (std::size_t k = 0; k < n; ++k) loop_vars_[red.iters[k].name.id] = vals[k];
     const Id<Expr> x = simplify_expr(inst_exp(red.a, scope, prefix));
-    loop_vars_.erase(it.name.id);
+    for (std::size_t k = 0; k < n; ++k) loop_vars_.erase(red.iters[k].name.id);
     if (!result_.unsupported && !expr_shape(x).empty()) set_unsupported("array-valued comprehension body");
     return x;
   }
@@ -9337,13 +9588,13 @@ class Flattener {
   // 打成字面量 `1:3`、参数标 final，typeRange :2455-2460）。返回 Reduction（call_name = {array, 迭代变量}、a = 体、b = 范围、
   // ty = 体类型 + 各层长度）；不适用 → 标 SKIP、返回占位。
   Id<Expr> comprehension_expr(Id<Exp> red_id, NodeId scope, const std::vector<Symbol>& prefix) {
-    const Exp red = I_.absyn.exps[red_id];   // 拷贝（`{…}` 里那个 Reduction）
+    Exp red = I_.absyn.exps[red_id];   // 拷贝（`{…}` 里那个 Reduction）
     if (red.iters.empty()) { set_unsupported("comprehension shape"); return lit_int(0); }
+    if (!fill_implicit_ranges(red, scope, prefix)) { set_unsupported("comprehension implicit range"); return lit_int(0); }
     std::vector<Id<Expr>> ranges;
     std::vector<std::int64_t> lens;
     std::vector<std::int64_t> seq0;   // 首个迭代变量取的值（单迭代构造子的展开用）
     for (const ForIndex& it : red.iters) {
-      if (!it.range.is_valid()) { set_unsupported("comprehension implicit range"); return lit_int(0); }
       if (loop_vars_.count(it.name.id) || stmt_iters_.count(it.name.id)) { set_unsupported("shadowed comprehension iterator"); return lit_int(0); }
       // 范围引用 for 方程的迭代变量：1.25.0 定型期求值失败、报内部错（`evalBinaryAdd failed to evaluate 'i + 2'`，FF10 / FF12）。
       if (absyn_refs_iter(it.range, loop_vars_)) { set_unsupported("comprehension range depends on iterator"); return lit_int(0); }
@@ -9530,8 +9781,7 @@ class Flattener {
     if (e.kind == ExpKind::CrefExp) {
       const Cref& c = I_.absyn.crefs[e.cref];
       if (!c.leading_dot && !c.parts.empty() && !loop_vars_.count(c.parts[0].name.id) && !stmt_iters_.count(c.parts[0].name.id)) {
-        const NodeId n = find_local(enclosing, c.parts[0].name);
-        if (n.is_valid() && !I_.nodes[n].is_empty() && I_.comps[I_.nodes[n].comp].attributes.variability == SVariability::Param) {
+        if (absyn_cref_var(c, enclosing) == std::optional<SVariability>(SVariability::Param)) {
           if (c.parts.size() != 1 || !c.parts[0].subscripts.empty()) return true;
           std::vector<Symbol> p = prefix;
           p.push_back(c.parts[0].name);
@@ -9713,9 +9963,10 @@ class Flattener {
     return has_call(e.a) || has_call(e.b) || has_call(e.c);
   }
   Id<Expr> reduction_call(const Exp& e, std::string_view name, NodeId enclosing, const std::vector<Symbol>& prefix) {
-    const Exp red = I_.absyn.exps[e.args[0]];   // 拷贝
+    Exp red = I_.absyn.exps[e.args[0]];   // 拷贝
     const bool is_sum = name == "sum", is_prod = name == "product", is_min = name == "min";
     if (red.iters.empty()) { set_unsupported("reduction iterators"); return lit_int(0); }
+    if (!fill_implicit_ranges(red, enclosing, prefix)) { set_unsupported("comprehension implicit range"); return lit_int(0); }
     for (const ForIndex& it : red.iters)
       if (loop_vars_.count(it.name.id) || stmt_iters_.count(it.name.id)) { set_unsupported("shadowed reduction iterator"); return lit_int(0); }
     // 变率（S2 用）：在求范围（会标结构参数）之前看。
@@ -13400,66 +13651,263 @@ class Flattener {
     structural_set_ = std::move(s.set);
     deps_time_ = std::move(s.deps);
   }
-  // 隐式 for 范围的长度：体（含嵌套 if / for / when）里每处恰为迭代变量 it 的下标 → 该 cref 段所指组件的该维长（逐段沿
-  // 实例类树找，维须可求）；全部相同 → 该长，否则 / 一处都没有 → nullopt。
-  std::optional<std::int64_t> implicit_range_size(const std::vector<Id<SEquation>>& body, Symbol it, NodeId enclosing) {
-    std::optional<std::int64_t> n;
-    bool ok = true, any = false;
-    const ScodeScope sc = scode_scope_of(enclosing);
-    auto use = [&](const Cref& c, std::size_t pi, std::size_t k) {
-      NodeId cls = enclosing, node;
-      for (std::size_t j = 0; j <= pi; ++j) {
-        node = find_local(cls, c.parts[j].name);
-        if (!node.is_valid() || I_.nodes[node].is_empty() || !I_.nodes[node].comp.is_valid()) { ok = false; return; }
-        cls = I_.comps[I_.nodes[node].comp].class_inst;
+  // 隐式迭代范围（`for i loop …`、`sum(x[i] for i)`、`{x[i] for i}`）——deduceIterationRange（NFTyping.mo:3735-3881 v1.25.0）。
+  // iter_uses 收集体里迭代变量 it **恰**作下标的各处 (cref, 段, 第几个下标)，次序同 omc：语句 / 方程按 Statement.foldExp /
+  // Equation.foldExp（NFStatement.mo:727-800、NFEquation.mo:897-990：赋值先左后右，for 先体后范围，if / when 逐支先条件
+  // 后体），表达式按 Expression.fold（NFExpression.mo:3274-3381：后序、子式自左向右），一个 cref 先各段下标里的子式
+  //（ComponentRef.foldExp NFComponentRef.mo:2083-2103，末段在前）再它自己的各处（collectIteratorCrefs2 :3814-3847，末段在前）。
+  struct IterUse {
+    Cref c;                  // Absyn cref 的拷贝
+    std::size_t part, sub;   // 第 part 段的第 sub 个下标
+  };
+  struct IterUses {
+    std::vector<IterUse> v;
+    bool ok = true;          // false = 碰到未核实的形态（同名迭代变量遮蔽）→ 不推
+  };
+  // 书写式里有 `ndims(…)` 或单实参的 `size(…)`：这两种调用在 omc 里总是参数变率（typeNdimsCall，NFBuiltinCall.mo:487-514；
+  // typeSize 的无维号支返回 Variability.PARAMETER，NFTyping.mo，v1.25.0）——哪怕实参是字面量。不看是否被同名用户函数遮蔽。
+  bool absyn_param_size_call(Id<Exp> id) const {
+    if (!id.is_valid()) return false;
+    const Exp& e = I_.absyn.exps[id];
+    if (e.kind == ExpKind::Call && e.args.size() == 1) {
+      const Cref& fn = I_.absyn.crefs[e.cref];
+      if (!fn.leading_dot && fn.parts.size() == 1 && (in_.str(fn.parts[0].name) == "ndims" || in_.str(fn.parts[0].name) == "size"))
+        return true;
+    }
+    if (e.kind == ExpKind::CrefExp)
+      for (const CrefPart& cp : I_.absyn.crefs[e.cref].parts)
+        for (Id<Exp> sx : cp.subscripts) if (absyn_param_size_call(sx)) return true;
+    for (Id<Exp> a : e.args) if (absyn_param_size_call(a)) return true;
+    for (const ForIndex& it : e.iters) if (absyn_param_size_call(it.range)) return true;
+    return absyn_param_size_call(e.a) || absyn_param_size_call(e.b) || absyn_param_size_call(e.c);
+  }
+  // 两个书写表达式结构相同（同 kind、同字面量 / 运算符 / 名字，子式递归相同）。括号（1 元 Tuple）不看穿、Real 字面量按拼写比。
+  bool absyn_equal(Id<Exp> a, Id<Exp> b) const {
+    if (a == b) return true;
+    if (!a.is_valid() || !b.is_valid()) return false;
+    const Exp& x = I_.absyn.exps[a];
+    const Exp& y = I_.absyn.exps[b];
+    if (x.kind != y.kind || x.ival != y.ival || x.bval != y.bval || x.sval != y.sval || x.op != y.op ||
+        x.partial_fn != y.partial_fn || x.args.size() != y.args.size() || x.arg_names != y.arg_names ||
+        x.iters.size() != y.iters.size() || x.cref.is_valid() != y.cref.is_valid() ||
+        x.call_suffix.is_valid() || y.call_suffix.is_valid())
+      return false;
+    if (x.cref.is_valid()) {
+      const Cref& p = I_.absyn.crefs[x.cref];
+      const Cref& q = I_.absyn.crefs[y.cref];
+      if (p.leading_dot != q.leading_dot || p.parts.size() != q.parts.size()) return false;
+      for (std::size_t i = 0; i < p.parts.size(); ++i) {
+        if (p.parts[i].name != q.parts[i].name || p.parts[i].subscripts.size() != q.parts[i].subscripts.size()) return false;
+        for (std::size_t k = 0; k < p.parts[i].subscripts.size(); ++k)
+          if (!absyn_equal(p.parts[i].subscripts[k], q.parts[i].subscripts[k])) return false;
       }
-      const SElement& el = I_.scode.elems[I_.comps[I_.nodes[node].comp].def];
-      std::vector<std::int64_t> dims;
-      for (const std::vector<Id<Exp>>* ds : {&el.attr.dims, &el.type.dims})
-        for (Id<Exp> d : *ds) if (!eval_dim(d, dims, sc)) { ok = false; return; }
-      if (k >= dims.size()) { ok = false; return; }
-      any = true;
-      if (n && *n != dims[k]) ok = false;
-      n = dims[k];
-    };
-    auto exp = [&](auto& self, Id<Exp> e) -> void {
-      if (!e.is_valid() || !ok) return;
-      const Exp x = I_.absyn.exps[e];   // 拷贝
-      if (x.kind == ExpKind::CrefExp) {
-        const Cref c = I_.absyn.crefs[x.cref];
-        for (std::size_t pi = 0; pi < c.parts.size(); ++pi)
-          for (std::size_t k = 0; k < c.parts[pi].subscripts.size(); ++k) {
-            const Exp& s = I_.absyn.exps[c.parts[pi].subscripts[k]];
-            if (s.kind == ExpKind::CrefExp && I_.absyn.crefs[s.cref].parts.size() == 1 &&
-                I_.absyn.crefs[s.cref].parts[0].subscripts.empty() && I_.absyn.crefs[s.cref].parts[0].name == it)
-              use(c, pi, k);
-            else
-              self(self, c.parts[pi].subscripts[k]);
-          }
-        return;
+    }
+    for (std::size_t i = 0; i < x.args.size(); ++i) if (!absyn_equal(x.args[i], y.args[i])) return false;
+    for (std::size_t i = 0; i < x.iters.size(); ++i)
+      if (x.iters[i].name != y.iters[i].name || !absyn_equal(x.iters[i].range, y.iters[i].range)) return false;
+    return absyn_equal(x.a, y.a) && absyn_equal(x.b, y.b) && absyn_equal(x.c, y.c);
+  }
+  bool is_plain_iter(Id<Exp> s, Symbol it) const {
+    const Exp& x = I_.absyn.exps[s];
+    if (x.kind != ExpKind::CrefExp) return false;
+    const Cref& c = I_.absyn.crefs[x.cref];
+    return !c.leading_dot && c.parts.size() == 1 && c.parts[0].subscripts.empty() && c.parts[0].name == it;
+  }
+  void iter_uses(Id<Exp> e, Symbol it, IterUses& u) {
+    if (!e.is_valid() || !u.ok) return;
+    const Exp x = I_.absyn.exps[e];   // 拷贝
+    if (x.kind == ExpKind::CrefExp) {
+      const Cref c = I_.absyn.crefs[x.cref];
+      for (std::size_t pi = c.parts.size(); pi-- > 0;)
+        for (Id<Exp> sx : c.parts[pi].subscripts) if (!is_plain_iter(sx, it)) iter_uses(sx, it, u);
+      for (std::size_t pi = c.parts.size(); pi-- > 0;)
+        for (std::size_t k = 0; k < c.parts[pi].subscripts.size(); ++k)
+          if (is_plain_iter(c.parts[pi].subscripts[k], it)) u.v.push_back({c, pi, k});
+      return;
+    }
+    if (x.kind == ExpKind::Reduction) {
+      // 嵌套的归约 / 推导式：体在前、各迭代范围在后（Call.foldExp，NFCall.mo:1622-1697）。它自己的同名迭代变量遮蔽外层
+      //（里面的不是我们的迭代变量）→ 未核实，不推。
+      for (const ForIndex& f : x.iters) if (f.name == it) { u.ok = false; return; }
+      iter_uses(x.a, it, u);
+      for (const ForIndex& f : x.iters) iter_uses(f.range, it, u);
+      return;
+    }
+    iter_uses(x.a, it, u);
+    iter_uses(x.b, it, u);
+    iter_uses(x.c, it, u);
+    for (Id<Exp> a : x.args) iter_uses(a, it, u);
+  }
+  void iter_uses(const std::vector<Id<SStatement>>& body, Symbol it, IterUses& u) {
+    for (Id<SStatement> id : body) {
+      if (!u.ok) return;
+      const SStatement st = I_.scode.stmts[id];   // 拷贝
+      if (st.kind == SStmtKind::For) {
+        // 内层同名迭代变量遮蔽：体里的 i 是内层的（另一个节点，Subscript.equalsIterator 按节点比，NFSubscript.mo:281-297），
+        // 不算；只有它的范围还在外层作用域里（IR 探针 i3：`for i loop v[i] := u[i]; for i loop … end for; end for`）。
+        if (st.index != it) iter_uses(st.body, it, u);
+        iter_uses(st.a, it, u);
+        continue;
       }
-      if (x.kind == ExpKind::Reduction) { ok = false; return; }   // 推导式里的迭代变量遮蔽 / 再推导：未做
-      self(self, x.a);
-      self(self, x.b);
-      self(self, x.c);
-      for (Id<Exp> a : x.args) self(self, a);
-    };
-    auto eqn = [&](auto& self, Id<SEquation> id) -> void {
-      if (!ok) return;
+      iter_uses(st.a, it, u);
+      iter_uses(st.b, it, u);
+      iter_uses(st.c, it, u);
+      for (const SStmtBranch& br : st.branches) {
+        iter_uses(br.cond, it, u);
+        iter_uses(br.body, it, u);
+      }
+      iter_uses(st.body, it, u);        // while 的体
+      iter_uses(st.else_body, it, u);
+    }
+  }
+  void iter_uses(const std::vector<Id<SEquation>>& body, Symbol it, IterUses& u) {
+    for (Id<SEquation> id : body) {
+      if (!u.ok) return;
       const SEquation q = I_.scode.eqs[id];   // 拷贝
-      exp(exp, q.a);
-      exp(exp, q.b);
-      exp(exp, q.c);
-      for (const SEqBranch& br : q.branches) {
-        exp(exp, br.cond);
-        for (Id<SEquation> b : br.body) self(self, b);
+      if (q.kind == SEqKind::For) {
+        if (q.index != it) iter_uses(q.body, it, u);   // 同名遮蔽：同语句
+        iter_uses(q.a, it, u);
+        continue;
       }
-      for (Id<SEquation> b : q.body) self(self, b);
-      for (Id<SEquation> b : q.else_body) self(self, b);
+      iter_uses(q.a, it, u);
+      iter_uses(q.b, it, u);
+      iter_uses(q.c, it, u);
+      for (const SEqBranch& br : q.branches) {
+        iter_uses(br.cond, it, u);
+        iter_uses(br.body, it, u);
+      }
+      iter_uses(q.else_body, it, u);
+    }
+  }
+  // 模型里一处用处的维长：逐段沿实例类树找组件，求它的声明维（单段本地引用的 `:` 维取已发射的形状，leaf_decl_dims）。
+  // 求不出（找不到组件 / 维不是整数：类型名维 `Real x[Boolean]` 等）→ nullopt。
+  std::optional<std::int64_t> iter_use_size(const IterUse& x, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    if (x.c.leading_dot) return std::nullopt;
+    NodeId owner = enclosing, cls = enclosing, node;
+    for (std::size_t j = 0; j <= x.part; ++j) {
+      owner = cls;
+      node = find_local(cls, x.c.parts[j].name);
+      if (!node.is_valid() || I_.nodes[node].is_empty() || !I_.nodes[node].comp.is_valid()) return std::nullopt;
+      cls = I_.comps[I_.nodes[node].comp].class_inst;
+      if (j < x.part && (!cls.is_valid() || I_.nodes[cls].is_empty())) return std::nullopt;
+    }
+    const SElement& el = I_.scode.elems[I_.comps[I_.nodes[node].comp].def];
+    std::vector<std::int64_t> dims;
+    if (x.c.parts.size() == 1) {
+      if (!leaf_decl_dims(el, x.c, enclosing, prefix, dims)) return std::nullopt;
+    } else {
+      const ScodeScope sc = scode_scope_of(owner);
+      for (const std::vector<Id<Exp>>* ds : {&el.attr.dims, &el.type.dims})
+        for (Id<Exp> d : *ds) if (!eval_dim(d, dims, sc)) return std::nullopt;
+    }
+    if (x.sub >= dims.size() || dims[x.sub] < 0) return std::nullopt;
+    return dims[x.sub];
+  }
+  // 由收集到的用处推范围：相邻两处的维须相等（deduceIterationRange2 → Dimension.isEqualKnownSize，NFDimension.mo:311-338），
+  // 范围 = `1:末`，末取自**最先**收集到的那处（用处是往表头加的，List.reduce 留下表尾）：整数维 → 字面量；函数里的 `:`
+  // 维 → `size(该数组, 维号)`；函数里的表达式维 → 该维表达式（Dimension.endExp :483-509；IR 探针 `Real w[k]` → `for i in 1:k`、
+  // `output Real v[size(u, 1)]` → `1:size(u, 1)`）。返回合成的 Absyn 范围；一处都没有 / 维不等（omc 报错）、未做 → invalid。
+  Id<Exp> implicit_range(const IterUses& u, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    if (!u.ok || u.v.empty()) return {};
+    auto int_lit = [&](std::int64_t n) {
+      Exp x;
+      x.kind = ExpKind::IntLit;
+      x.ival = n;
+      return synth_exp(std::move(x));
     };
-    for (Id<SEquation> b : body) eqn(eqn, b);
-    if (!ok || !any) return std::nullopt;
-    return n;
+    auto one_to = [&](Id<Exp> stop) {
+      Exp r;
+      r.kind = ExpKind::Range;
+      r.a = int_lit(1);
+      r.b = stop;
+      return synth_exp(std::move(r));
+    };
+    if (!fn_scope_) {
+      // 模型里各维都已求成整数：全部相等 → `1:n`。
+      std::optional<std::int64_t> n;
+      for (const IterUse& x : u.v) {
+        const std::optional<std::int64_t> m = iter_use_size(x, enclosing, prefix);
+        if (!m || (n && *n != *m)) return {};
+        n = m;
+      }
+      return one_to(int_lit(*n));
+    }
+    // 函数体里：只认单段的形参 / 局部量引用（记录字段数组未做）。维的种类按**书写**的维分（omc 比的是定型后、未化简的
+    // 维）：`:` → 未知；不引用函数局部量的 → 整数（已求值）；其余 → 表达式维。化简后才成整数 / 才相等的（`Real w2[k + 0]`
+    // 对 `Real w[k]`，IR 探针 i3：omc 报错）不算相等。
+    enum class DK : std::uint8_t { Unknown, Integer, Exp };
+    struct D {
+      Symbol name;
+      std::size_t k;
+      DK kind;
+      std::int64_t size;
+      Id<Exp> raw;   // 该维的书写表达式
+    };
+    std::vector<D> ds;
+    for (const IterUse& x : u.v) {
+      if (x.c.leading_dot || x.c.parts.size() != 1 || stmt_iters_.count(x.c.parts[0].name.id)) return {};
+      const auto p = func_params_.find(x.c.parts[0].name.id);
+      const auto de = fn_dim_exps_.find(x.c.parts[0].name.id);
+      if (p == func_params_.end() || de == fn_dim_exps_.end() || x.sub >= p->second.dims.size() ||
+          de->second.size() != p->second.dims.size())
+        return {};
+      const Dimension& d = p->second.dims[x.sub];
+      const Id<Exp> raw = de->second[x.sub];
+      D r{x.c.parts[0].name, x.sub, DK::Unknown, 0, raw};
+      if (d.kind == DimKind::Integer && !exp_refs_fn_locals(raw)) { r.kind = DK::Integer; r.size = d.size; }
+      else if (d.kind == DimKind::Exp && exp_refs_fn_locals(raw)) r.kind = DK::Exp;
+      else if (d.kind != DimKind::Unknown) return {};   // 化简后才成整数的表达式维等：未核实
+      ds.push_back(r);
+    }
+    auto size_of = [&](const D& d, const D& o) {   // d 的维恰写成 `size(o, 维号)`（Dimension.isSizeOf :340-356）
+      if (d.kind != DK::Exp) return false;
+      const Exp& sx = I_.absyn.exps[d.raw];
+      if (sx.kind != ExpKind::Call || sx.args.size() != 2) return false;
+      for (Symbol n : sx.arg_names) if (n.is_valid()) return false;
+      const Cref& fc = I_.absyn.crefs[sx.cref];
+      if (fc.leading_dot || fc.parts.size() != 1 || in_.str(fc.parts[0].name) != "size") return false;
+      const Exp& k = I_.absyn.exps[sx.args[1]];
+      return is_plain_iter(sx.args[0], o.name) && k.kind == ExpKind::IntLit && k.ival == static_cast<std::int64_t>(o.k) + 1;
+    };
+    for (std::size_t j = 1; j < ds.size(); ++j) {
+      const D& p = ds[j];
+      const D& q = ds[j - 1];
+      if (p.name == q.name && p.k == q.k) continue;       // 同一个数组的同一维：不比
+      if (size_of(p, q) || size_of(q, p)) continue;
+      if (p.kind == DK::Exp && q.kind == DK::Exp && absyn_equal(p.raw, q.raw)) continue;
+      if (p.kind == DK::Integer && q.kind == DK::Integer && p.size == q.size) continue;
+      return {};   // 未知维 / 长度不等 → INCOMPATIBLE_IMPLICIT_RANGES；整数维对表达式维 → Dimension.size 失败
+    }
+    const D& f = ds.front();
+    if (f.kind == DK::Integer) return one_to(int_lit(f.size));
+    if (f.kind == DK::Exp) return one_to(f.raw);
+    Cref arr;
+    arr.parts.push_back({f.name, {}});
+    Exp ae;
+    ae.kind = ExpKind::CrefExp;
+    ae.cref = synth_cref(std::move(arr));
+    Cref fn;
+    fn.parts.push_back({in_.intern("size"), {}});
+    Exp call;
+    call.kind = ExpKind::Call;
+    call.cref = synth_cref(std::move(fn));
+    call.args = {synth_exp(std::move(ae)), int_lit(static_cast<std::int64_t>(f.k) + 1)};
+    call.arg_names.assign(2, Symbol{});
+    return one_to(synth_exp(std::move(call)));
+  }
+  // 归约 / 推导式（Reduction 节点的**拷贝**——同一个 Absyn 节点在不同实例里推出的范围可以不同，不能改 arena 里的）里没写
+  // 范围的迭代变量补上推出的范围（typeReduction / typeArrayConstructor 对整个调用收集：体在前、各迭代范围在后，
+  // NFCall.mo:2500-2506、:2570-2575）。推不出 → false。
+  bool fill_implicit_ranges(Exp& red, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    for (ForIndex& it : red.iters) {
+      if (it.range.is_valid()) continue;
+      IterUses u;
+      iter_uses(red.a, it.name, u);
+      for (const ForIndex& o : red.iters) if (o.name != it.name) iter_uses(o.range, it.name, u);
+      it.range = implicit_range(u, enclosing, prefix);
+      if (!it.range.is_valid()) return false;
+    }
+    return true;
   }
   // 条件（已 inst + 化简）里有没有 `fixed = false` 的参数（字面量 false）；cref 找不到已发射变量 → false。
   bool cond_has_unfixed_param(Id<Expr> ce) {
@@ -14066,6 +14514,7 @@ class Flattener {
   // 函数体发射语境（FnCtxGuard 设 / 恢复；fn_scope_ 非空 = 正在发射函数体）。
   std::unordered_map<std::uint32_t, Type> func_params_;         // 形参 / 局部名 → 类型（含维，cref 解析成 kFnLocal 裸名）
   std::unordered_set<std::uint32_t> fn_inputs_;                 // 输入名（不可作赋值目标）
+  std::unordered_map<std::uint32_t, std::vector<Id<Exp>>> fn_dim_exps_;   // 形参 / 局部名 → 各维的书写表达式（隐式范围用）
   const ScodeScope* fn_scope_ = nullptr;                        // 函数体名字解析作用域（函数定义处）
   Id<SElement> fn_home_;                                        // 当前函数压平名所出自的实例类（fn_flat_name）
   bool fn_impure_ = false;                                      // 当前函数是 impure（体内调 impure 函数不告警）
@@ -14155,6 +14604,12 @@ class Flattener {
   int bind_clock_ = 0;                                    // 已开始定型绑定的变量数（标量 / 数组各算一拍）
   bool dep_mark_ = true;                                  // frame_value：当前求值层的参数是否打结构标记
   std::unordered_set<std::string> typed_keys_;            // 绑定已定型（已发射）的参数（数组记整体 key）
+  std::unordered_map<std::string, CVal> param_lits_;      // 已发射的字面量绑定参数（标量叶）key → 值（record_const）
+  struct ParamGroup {
+    std::size_t count = 0;            // 已发射的参数元素个数（含非字面量绑定的）
+    std::vector<std::string> keys;    // 其中字面量绑定的各元素 key
+  };
+  std::unordered_map<std::string, ParamGroup> param_groups_;   // 名字链（不带下标）→ 该组件的各元素
   std::unordered_map<std::string, int> deps_time_;        // 参数 → 其依赖已按哪个时刻连带过（值有缓存时判是否要补走）
   MarkTxn* txn_ = nullptr;                                // 当前最内层的求值事务（栈上对象，见 eval_scode）
   bool card_allowed_ = false;   // 只在 if 方程 / assert 的条件表达式里为 true（其它上下文 omc 报错 → SKIP）

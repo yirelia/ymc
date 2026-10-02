@@ -1,0 +1,166 @@
+//// set: nd-d3 — 求值器里的矩阵字面量（拼接、混排类型）与 ndims
+//// model: D30
+model D30
+  Real a = time;
+  constant Real M[2, 2] = [1, 2; 3, 4]; Real y = M[1, 2] * a;
+end D30;
+//// model: D31
+model D31
+  Real a = time;
+  constant Real M[:, :] = [1, 2.5; 3, 4]; Real y = M[1, 2] * a;
+end D31;
+//// model: D32
+model D32
+  Real a = time;
+  constant Integer v[2] = {1, 2}; constant Integer M[2, 2] = [v, v]; Real y[M[2, 2]];
+end D32;
+//// model: D33
+model D33
+  Real a = time;
+  constant Integer v[2] = {1, 2}; constant Integer M[:, :] = [v; v]; Real y[size(M, 1)]; Real w[size(M, 2)];
+end D33;
+//// model: D34
+model D34
+  Real a = time;
+  constant Integer M[:, :] = [1, 2; 3, 4]; constant Integer N[:, :] = [M, M]; Real y[size(N, 2)];
+end D34;
+//// model: D35
+model D35
+  Real a = time;
+  constant Integer M[:, :] = [1, 2; 3, 4]; constant Integer N[:, :] = [M; M]; Real y[size(N, 1)]; Real w[N[3, 2]];
+end D35;
+//// model: D36
+model D36
+  Real a = time;
+  constant Integer M[:, :] = [1, 2; 3, 4]; constant Integer N[:, :] = [M, {5, 6}]; Real y[N[2, 3]];
+end D36;
+//// model: D37
+model D37
+  Real a = time;
+  parameter Integer M[2, 2] = [1, 2; 3, 4]; Real y[M[1, 2]];
+end D37;
+//// model: D38
+model D38
+  Real a = time;
+  parameter Integer M[2, 2] = [1, 2; 3, 4]; Real y = M[1, 2] * a;
+end D38;
+//// model: D39
+model D39
+  Real a = time;
+  Real y[size([1, 2, 3], 2)];
+end D39;
+//// model: D310
+model D310
+  Real a = time;
+  Real y[sum([1, 2; 3, 4])];
+end D310;
+//// model: D311
+model D311
+  Real a = time;
+  Real y[min([4, 2])];
+end D311;
+//// model: D312
+model D312
+  Real a = time;
+  Real y[integer(max([1.5, 2.5]))];
+end D312;
+//// model: D313
+model D313
+  Real a = time;
+  constant Boolean B[1, 2] = [true, false]; Real y = if B[1, 1] then 1 else a;
+end D313;
+//// model: D314
+model D314
+  Real a = time;
+  constant String S[1, 2] = ["a", "b"]; String t = S[1, 2];
+end D314;
+//// model: D315
+model D315
+  Real a = time;
+  Real y[ndims([1, 2; 3, 4])];
+end D315;
+//// model: D316
+model D316
+  Real a = time;
+  Real x[2, 3]; constant Integer n = ndims(x); Real y[n];
+end D316;
+//// model: D317
+model D317
+  Real a = time;
+  Real x[2, 3]; parameter Integer n = ndims(x); Real y[n];
+end D317;
+//// model: D318
+model D318
+  Real a = time;
+  Real x[2, 3]; Real y[ndims(x) + ndims(a)];
+end D318;
+//// model: D319
+model D319
+  Real a = time;
+  Real x[2, 3]; Integer n = ndims(x);
+end D319;
+//// model: D320
+model D320
+  Real a = time;
+  Real x[2, 3]; Real y = ndims(x) * a;
+end D320;
+//// model: D321
+model D321
+  Real a = time;
+  Real x[2, 3]; Real y[ndims(x[1, :])];
+end D321;
+//// model: D322
+model D322
+  Real a = time;
+  constant Integer c[3] = {1, 2, 3}; Real y[ndims(c)]; Real w[ndims(c[1])+1];
+end D322;
+//// model: D323
+model D323
+  Real a = time;
+  Real y[max([1, 2; 3, 4]) - 1]; Real w[min([5, 6; 3, 4])];
+end D323;
+//// model: D324
+model D324
+  Real a = time;
+  constant Integer M[2, 2] = [1, 2; 3]; Real y[2];
+end D324;
+//// model: D325
+model D325
+  Real a = time;
+  constant Integer M[2, 3] = [1, 2; 3, 4]; Real y[2];
+end D325;
+//// model: D326
+model D326
+  Real a = time;
+  constant Real M[2, 2] = [1, 2; 3, 4] * 2; Real y = M[2, 2] * a;
+end D326;
+//// model: D327
+model D327
+  Real a = time;
+  constant Real M[2, 2] = [1, 2; 3, 4] + [1, 1; 1, 1]; Real y = M[2, 2] * a;
+end D327;
+//// model: D328
+model D328
+  Real a = time;
+  constant Real M[2, 2] = transpose([1, 2; 3, 4]); Real y = M[2, 1] * a;
+end D328;
+//// model: D329
+model D329
+  Real a = time;
+  constant Real M[2, 2] = [1, 2; 3, 4]; constant Real d = M[1, 1] * M[2, 2] - M[1, 2] * M[2, 1]; Real y = d * a;
+end D329;
+//// model: D330
+model D330
+  Real a = time;
+  constant Integer M[1, 1] = [5]; Real y[M[1, 1]];
+end D330;
+//// model: D331
+model D331
+  Real a = time;
+  constant Integer M[:, :] = [{1, 2}]; Real y[size(M, 1)]; Real w[size(M, 2)];
+end D331;
+//// model: D332
+model D332
+  Real a = time;
+  constant Integer M[:, :] = [{1, 2}, {3, 4}]; Real y[size(M, 1)]; Real w[size(M, 2) + M[2, 2]];
+end D332;
