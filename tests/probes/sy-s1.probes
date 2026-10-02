@@ -1,0 +1,414 @@
+//// set: sy-s1 — 同步算子：Clock 构造与钟控 when
+//// model: C0
+model C0
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock() then y = previous(y) + 1; end when;
+end C0;
+//// model: C1
+model C1
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(0.1) then y = previous(y) + 1; end when;
+end C1;
+//// model: C2
+model C2
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(2) then y = previous(y) + 1; end when;
+end C2;
+//// model: C3
+model C3
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(2, 10) then y = previous(y) + 1; end when;
+end C3;
+//// model: C4
+model C4
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(n) then y = previous(y) + 1; end when;
+end C4;
+//// model: C5
+model C5
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(n, n) then y = previous(y) + 1; end when;
+end C5;
+//// model: C6
+model C6
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(p) then y = previous(y) + 1; end when;
+end C6;
+//// model: C7
+model C7
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(2 * p) then y = previous(y) + 1; end when;
+end C7;
+//// model: C8
+model C8
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(time > 0.5) then y = previous(y) + 1; end when;
+end C8;
+//// model: C9
+model C9
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(time > 0.5, 0.1) then y = previous(y) + 1; end when;
+end C9;
+//// model: C10
+model C10
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(b) then y = previous(y) + 1; end when;
+end C10;
+//// model: C11
+model C11
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(b, p) then y = previous(y) + 1; end when;
+end C11;
+//// model: C12
+model C12
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(Clock(0.1), "ImplicitEuler") then y = previous(y) + 1; end when;
+end C12;
+//// model: C13
+model C13
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(intervalCounter = 2, resolution = 3) then y = previous(y) + 1; end when;
+end C13;
+//// model: C14
+model C14
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(interval = 0.1) then y = previous(y) + 1; end when;
+end C14;
+//// model: C15
+model C15
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(condition = time > 1) then y = previous(y) + 1; end when;
+end C15;
+//// model: C16
+model C16
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(1, 0) then y = previous(y) + 1; end when;
+end C16;
+//// model: C17
+model C17
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(1.5, 2) then y = previous(y) + 1; end when;
+end C17;
+//// model: C18
+model C18
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(x) then y = previous(y) + 1; end when;
+end C18;
+//// model: C19
+model C19
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(1/3) then y = previous(y) + 1; end when;
+end C19;
+//// model: C20
+model C20
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(1, 2, 3) then y = previous(y) + 1; end when;
+end C20;
+//// model: C21
+model C21
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y; Real w;
+equation
+  when Clock(0.1) then y + w = 0; y - w = 1; end when;
+end C21;
+//// model: C22
+model C22
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(0.1) then y = sample(x); end when;
+end C22;
+//// model: C23
+model C23
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(0.1) then y = sample(x) + previous(y); end when;
+end C23;
+//// model: C24
+model C24
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(0.1) then if b then y = 1; else y = 2; end if; end when;
+end C24;
+//// model: C25
+model C25
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(0.1) then y = time; elsewhen Clock(0.2) then y = 2; end when;
+end C25;
+//// model: C26
+model C26
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(0.1) then y = der(x); end when;
+end C26;
+//// model: C27
+model C27
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2];
+equation
+  when Clock(0.1) then y = previous(y) + z; end when;
+end C27;
+//// model: C28
+model C28
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when {Clock(0.1), time > 1} then y = 1; end when;
+end C28;
+//// model: C29
+model C29
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  discrete Real y;
+equation
+  when Clock(0.1) then y = previous(y) + 1; end when;
+end C29;
+//// model: C30
+model C30
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y(start = 1);
+equation
+  when Clock(0.1) then y = 2 * previous(y); end when;
+end C30;
+//// model: BASE
+model BASE
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+end BASE;

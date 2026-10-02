@@ -1,0 +1,824 @@
+//// set: sy-s2 — 同步算子：sample / hold / noClock / previous
+//// model: D0
+model D0
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x);
+end D0;
+//// model: D1
+model D1
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(0.1));
+end D1;
+//// model: D2
+model D2
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock());
+end D2;
+//// model: D3
+model D3
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(time);
+end D3;
+//// model: D4
+model D4
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(1.0);
+end D4;
+//// model: D5
+model D5
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(1);
+end D5;
+//// model: D6
+model D6
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(2 * x + 1);
+end D6;
+//// model: D7
+model D7
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2] = sample(z);
+end D7;
+//// model: D8
+model D8
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2] = sample(z, Clock(2));
+end D8;
+//// model: D9
+model D9
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Boolean y = sample(b);
+end D9;
+//// model: D10
+model D10
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Boolean y = sample(pb);
+end D10;
+//// model: D11
+model D11
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Integer y = sample(n);
+end D11;
+//// model: D12
+model D12
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(p);
+end D12;
+//// model: D13
+model D13
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Boolean y = sample(0, 1);
+end D13;
+//// model: D14
+model D14
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Boolean y = sample(0.5, p);
+end D14;
+//// model: D15
+model D15
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Boolean y = sample(n, n);
+end D15;
+//// model: D16
+model D16
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(u = x);
+end D16;
+//// model: D17
+model D17
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, c = Clock(0.1));
+end D17;
+//// model: D18
+model D18
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Boolean y = sample(0, interval = 0.5);
+end D18;
+//// model: D19
+model D19
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, 0.1);
+end D19;
+//// model: D20
+model D20
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x) + sample(x, Clock(0.2));
+end D20;
+//// model: D21
+model D21
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  y = sample(x);
+end D21;
+//// model: D22
+model D22
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2];
+equation
+  y = sample(z);
+end D22;
+//// model: D23
+model D23
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  y = 2 * sample(x, Clock(1, 10));
+end D23;
+//// model: D24
+model D24
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = hold(x);
+end D24;
+//// model: D25
+model D25
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = hold(3);
+end D25;
+//// model: D26
+model D26
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = hold(3.5);
+end D26;
+//// model: D27
+model D27
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = hold(x) * 2;
+end D27;
+//// model: D28
+model D28
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = hold(2 * x);
+end D28;
+//// model: D29
+model D29
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2] = hold(z);
+end D29;
+//// model: D30
+model D30
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2] = hold(2 * z);
+end D30;
+//// model: D31
+model D31
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Integer y = hold(k);
+end D31;
+//// model: D32
+model D32
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = hold(k);
+end D32;
+//// model: D33
+model D33
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Boolean y = hold(b);
+end D33;
+//// model: D34
+model D34
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = hold(p);
+end D34;
+//// model: D35
+model D35
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = hold(n);
+end D35;
+//// model: D36
+model D36
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  y = hold(x);
+end D36;
+//// model: D37
+model D37
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2];
+equation
+  y = hold(z);
+end D37;
+//// model: D38
+model D38
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2];
+equation
+  y = 2 * hold(z);
+end D38;
+//// model: D39
+model D39
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = hold(x, x);
+end D39;
+//// model: D40
+model D40
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = hold(u = x);
+end D40;
+//// model: D41
+model D41
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = noClock(x);
+end D41;
+//// model: D42
+model D42
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = noClock(3);
+end D42;
+//// model: D43
+model D43
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2] = noClock(z);
+end D43;
+//// model: D44
+model D44
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Integer y = noClock(k);
+end D44;
+//// model: D45
+model D45
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  y = noClock(x) + 1;
+end D45;
+//// model: D46
+model D46
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2];
+equation
+  y = noClock(z);
+end D46;
+//// model: D47
+model D47
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = hold(sample(x));
+end D47;
+//// model: D48
+model D48
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(hold(x), Clock(0.1));
+end D48;
+//// model: D49
+model D49
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = previous(x);
+end D49;
+//// model: D50
+model D50
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  y = previous(y);
+end D50;
+//// model: D51
+model D51
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  y = previous(y) + previous(x);
+end D51;
+//// model: D52
+model D52
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2];
+equation
+  y = previous(y);
+end D52;
+//// model: D53
+model D53
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2];
+equation
+  y = previous(z);
+end D53;
+//// model: D54
+model D54
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2];
+equation
+  y[1] = previous(y[1]); y[2] = previous(y[2]);
+end D54;
+//// model: D55
+model D55
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  y = previous(z[1]);
+end D55;
+//// model: D56
+model D56
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  y = previous(2 * x);
+end D56;
+//// model: D57
+model D57
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  y = previous(p);
+end D57;
+//// model: D58
+model D58
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  y = previous(time);
+end D58;
+//// model: D59
+model D59
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Integer y;
+equation
+  y = previous(y) + 1;
+end D59;
+//// model: D60
+model D60
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Integer y;
+equation
+  y = previous(k);
+end D60;
+//// model: D61
+model D61
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Boolean y;
+equation
+  y = not previous(y);
+end D61;
+//// model: D62
+model D62
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  y = previous(k);
+end D62;
+//// model: D63
+model D63
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  y = -previous(y);
+end D63;
+//// model: D64
+model D64
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  y = previous(y, y);
+end D64;
+//// model: D65
+model D65
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  y = previous(u = y);
+end D65;
+//// model: D66
+model D66
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y(start = 1);
+equation
+  y = if previous(y) > 2 then 0 else previous(y) + 1;
+end D66;
+//// model: D67
+model D67
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2];
+equation
+  y = 2 * previous(y);
+end D67;
+//// model: D68
+model D68
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2, 2];
+equation
+  y = previous(y);
+end D68;
+//// model: BASE
+model BASE
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+end BASE;

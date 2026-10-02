@@ -1,0 +1,767 @@
+//// set: sy-s3 — 同步算子：backSample / shiftSample / subSample / superSample / interval / firstTick
+//// model: E0
+model E0
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = backSample(x, 2);
+end E0;
+//// model: E1
+model E1
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = backSample(x, 2, 4);
+end E1;
+//// model: E2
+model E2
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = backSample(1.0, 2, 4);
+end E2;
+//// model: E3
+model E3
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = backSample(x, n);
+end E3;
+//// model: E4
+model E4
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = backSample(x, n, n);
+end E4;
+//// model: E5
+model E5
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = backSample(x, 2 * n);
+end E5;
+//// model: E6
+model E6
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2] = backSample(z, 3);
+end E6;
+//// model: E7
+model E7
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Boolean y = backSample(b, 3);
+end E7;
+//// model: E8
+model E8
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = backSample(3, 2);
+end E8;
+//// model: E9
+model E9
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = backSample(x);
+end E9;
+//// model: E10
+model E10
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = backSample(x, 2.0);
+end E10;
+//// model: E11
+model E11
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = backSample(x, k);
+end E11;
+//// model: E12
+model E12
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = backSample(x, -1);
+end E12;
+//// model: E13
+model E13
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = backSample(x, 2, 0);
+end E13;
+//// model: E14
+model E14
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = backSample(x, backCounter = 2);
+end E14;
+//// model: E15
+model E15
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = backSample(u = x, backCounter = 2, resolution = 3);
+end E15;
+//// model: E16
+model E16
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = shiftSample(x, 2);
+end E16;
+//// model: E17
+model E17
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = shiftSample(x, 2, 4);
+end E17;
+//// model: E18
+model E18
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = shiftSample(x, n);
+end E18;
+//// model: E19
+model E19
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2] = shiftSample(z, 3);
+end E19;
+//// model: E20
+model E20
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = shiftSample(x, shiftCounter = n, resolution = 4);
+end E20;
+//// model: E21
+model E21
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  y = shiftSample(x, 1, 2) + backSample(x, 1, 2);
+end E21;
+//// model: E22
+model E22
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2];
+equation
+  y = shiftSample(z, n);
+end E22;
+//// model: E23
+model E23
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y; parameter Integer m = n;
+equation
+  y = shiftSample(x, n);
+end E23;
+//// model: E24
+model E24
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  parameter Integer m = n; Real y = shiftSample(x, n); parameter Integer m2 = n;
+end E24;
+//// model: E25
+model E25
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = subSample(x);
+end E25;
+//// model: E26
+model E26
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = subSample(x, 2);
+end E26;
+//// model: E27
+model E27
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = subSample(x, n);
+end E27;
+//// model: E28
+model E28
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = subSample(x, factor = 3);
+end E28;
+//// model: E29
+model E29
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = subSample(2.1);
+end E29;
+//// model: E30
+model E30
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = subSample(3, 2);
+end E30;
+//// model: E31
+model E31
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2] = subSample(z, 2);
+end E31;
+//// model: E32
+model E32
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Integer y = subSample(k, 2);
+end E32;
+//// model: E33
+model E33
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Boolean y = subSample(b);
+end E33;
+//// model: E34
+model E34
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = subSample(x, 2.0);
+end E34;
+//// model: E35
+model E35
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = subSample(x, k);
+end E35;
+//// model: E36
+model E36
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = subSample(x, -1);
+end E36;
+//// model: E37
+model E37
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = superSample(x);
+end E37;
+//// model: E38
+model E38
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = superSample(x, 2);
+end E38;
+//// model: E39
+model E39
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = superSample(x, n + 1);
+end E39;
+//// model: E40
+model E40
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2] = superSample(z, 2);
+end E40;
+//// model: E41
+model E41
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2] = superSample({1, 2});
+end E41;
+//// model: E42
+model E42
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  y = superSample(subSample(x, 2), 2);
+end E42;
+//// model: E43
+model E43
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2];
+equation
+  y = superSample(z, 2);
+end E43;
+//// model: E44
+model E44
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when subSample(Clock(0.1), 2) then y = 1; end when;
+end E44;
+//// model: E45
+model E45
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when superSample(Clock(0.1), n) then y = 1; end when;
+end E45;
+//// model: E46
+model E46
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when subSample(Clock(0.1)) then y = 1; end when;
+end E46;
+//// model: E47
+model E47
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when shiftSample(Clock(0.1), 1, 2) then y = 1; end when;
+end E47;
+//// model: E48
+model E48
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when backSample(Clock(0.1), 1) then y = 1; end when;
+end E48;
+//// model: E49
+model E49
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, subSample(Clock(0.1), 2));
+end E49;
+//// model: E50
+model E50
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = interval();
+end E50;
+//// model: E51
+model E51
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = interval(x);
+end E51;
+//// model: E52
+model E52
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = interval(z);
+end E52;
+//// model: E53
+model E53
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = interval(k);
+end E53;
+//// model: E54
+model E54
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = 2 * interval(x) + 1;
+end E54;
+//// model: E55
+model E55
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  y = previous(y) + interval();
+end E55;
+//// model: E56
+model E56
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  y = previous(y) + interval(y);
+end E56;
+//// model: E57
+model E57
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Boolean y = firstTick();
+end E57;
+//// model: E58
+model E58
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Boolean y = firstTick(x);
+end E58;
+//// model: E59
+model E59
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Boolean y = firstTick(z);
+end E59;
+//// model: E60
+model E60
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  y = if firstTick() then 0 else previous(y) + 1;
+end E60;
+//// model: E61
+model E61
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  if firstTick() then y = 0; else y = previous(y) + 1; end if;
+end E61;
+//// model: E62
+model E62
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  if firstTick(x) then y = 0; else y = 1; end if;
+end E62;
+//// model: E63
+model E63
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = interval(u = x);
+end E63;
+//// model: E64
+model E64
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = interval(x, x);
+end E64;
+//// model: E65
+model E65
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Boolean y = firstTick(u = x);
+end E65;
+//// model: BASE
+model BASE
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+end BASE;

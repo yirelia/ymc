@@ -1619,6 +1619,18 @@ class Flattener {
       for (const SEqBranch& br : eq.branches) {
         Id<Expr> cond = simplify_expr(inst_exp(br.cond, enclosing, prefix));
         if (result_.unsupported) return;
+        // 钟控 when（条件是钟，MLS §16.6）：体是任意方程（WhenClocked1 `x + y = 0.0`、嵌套 if、元组方程），同 if 分支体照常
+        // 收；带 elsewhen 是 omc 报错（SY 探针 s1）。
+        if (result_.model.exprs[cond].ty.kind == TypeKind::Clock) {
+          if (eq.branches.size() != 1) { set_unsupported("clocked when with elsewhen"); return; }
+          FlatEqBranch fb;
+          fb.cond = cond;
+          fb.body = collect_if_body(br.body, enclosing, prefix, psubs, /*is_initial=*/false);
+          if (result_.unsupported) return;
+          fe.branches.push_back(std::move(fb));
+          result_.model.equations.push_back(result_.model.add_eq(std::move(fe)));
+          return;
+        }
         cond = expand_when_cond(cond);
         if (!when_cond_ok(cond)) { set_unsupported("when condition form"); return; }
         FlatEqBranch fb;
@@ -8310,7 +8322,11 @@ class Flattener {
       if (Id<Expr> uc = try_emit_user_call(e, enclosing, prefix, lex); uc.is_valid()) return uc;
       if (result_.unsupported) return lit_int(0);
       if (Id<Expr> rc = record_ctor_call(e, enclosing, prefix, sc); rc.is_valid() || result_.unsupported) return rc;
+      const bool top = array_call_ok_;   // 本调用是不是整个绑定 / 等式一侧（同步算子返回数组时要看）
       array_call_ok_ = false;   // 不是用户函数（内建）：其实参里的调用不在"整个绑定 / 等式一侧"位置
+      if (const Cref& fc = I_.absyn.crefs[e.cref]; !fn_scope_ && fc.parts.size() == 1 && !fc.leading_dot)
+        if (Id<Expr> r = sync_call(e, in_.str(fc.parts[0].name), enclosing, prefix, top); r.is_valid() || result_.unsupported)
+          return r;
     }
     return builtin_call(e, enclosing, prefix, Symbol{});
   }
@@ -9142,6 +9158,233 @@ class Flattener {
     if (big > 1) { set_unsupported("vector of matrix"); return lit_int(0); }
     return build({static_cast<std::int64_t>(all.size())},
                  [&](const std::vector<std::int64_t>& ix) { return scalarize(a, all[static_cast<std::size_t>(ix[0]) - 1]); });
+  }
+
+  // ---- 同步语言元素（MLS §16）：只做定型与打印，钟的推断 / 分区是后端的事。形态 = 1.25.0 实测（SY 探针 s1–s4）；声明见
+  // v1.25.0 NFModelicaBuiltin.mo:530-580 / :872-963 / :1035-1099，定型见 NFBuiltinCall.mo:1875-2017 / :2158-2230。----
+  bool is_clock_ctor(const Expr& x) const {
+    return x.kind == ExprKind::Call && x.ty.kind == TypeKind::Clock && x.call_name.size() == 1 &&
+           in_.str(x.call_name[0]) == "Clock";
+  }
+  // 命名实参按形参名排成位置实参（缺的留 invalid）；重复 / 未知名 / 位置实参过多 → false。
+  bool order_args(const Exp& e, const std::vector<std::string_view>& params, std::vector<Id<Exp>>& out) {
+    out.assign(params.size(), Id<Exp>{});
+    std::size_t pos = 0;
+    for (std::size_t i = 0; i < e.args.size(); ++i) {
+      std::size_t k = params.size();
+      if (i < e.arg_names.size() && e.arg_names[i].is_valid()) {
+        for (std::size_t j = 0; j < params.size(); ++j)
+          if (in_.str(e.arg_names[i]) == params[j]) k = j;
+      } else {
+        k = pos++;
+      }
+      if (k >= params.size() || out[k].is_valid()) return false;
+      out[k] = e.args[i];
+    }
+    return true;
+  }
+  // Clock 构造（typeClockCall :1875-1922）：`Clock()`；一个实参按类型选重载——Real → `Clock(e)`、Integer → 补 resolution
+  // `Clock(e, 1)`、Boolean → 补 startInterval `Clock(e, 0.0)`；两个实参时第二个求值成字面量（Ceval.evalExp，不标结构）：
+  // Integer 首参配 ≥ 1 的 Integer、Boolean 首参配 Real、钟首参配 String（solver 钟）。CLKCONST 的首参 omc 既不化简也不代入
+  // 结构参数（`Clock(1.0 + 2.0)`、`Clock(n, 1)` 原样）：只收"化简前后同形"的首参，代入见 clone_subst。
+  Id<Expr> clock_ctor(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    std::vector<Id<Exp>> args;
+    {
+      bool named = false;
+      for (Symbol n : e.arg_names) named = named || n.is_valid();
+      if (!named) {
+        args = e.args;
+      } else {
+        // 四个带参重载的形参名：(intervalCounter, resolution) / (interval) / (condition, startInterval) / (c, solverMethod)；
+        // 名字只定位置，重载仍按首参类型选（名字与重载不配的写法 omc 报错，这里落到下面的类型判定里 SKIP）。
+        args.assign(2, Id<Exp>{});
+        std::size_t pos = 0;
+        bool ok = true;
+        for (std::size_t i = 0; i < e.args.size() && ok; ++i) {
+          const bool nm = i < e.arg_names.size() && e.arg_names[i].is_valid();
+          const std::string_view an = nm ? in_.str(e.arg_names[i]) : std::string_view{};
+          const std::size_t k = !nm ? pos++
+                              : (an == "intervalCounter" || an == "interval" || an == "condition" || an == "c") ? 0
+                              : (an == "resolution" || an == "startInterval" || an == "solverMethod") ? 1 : 2;
+          if (k > 1 || args[k].is_valid()) ok = false;
+          else args[k] = e.args[i];
+        }
+        if (!ok || !args[0].is_valid()) { set_unsupported("named function argument"); return lit_int(0); }
+        if (!args[1].is_valid()) args.pop_back();
+      }
+    }
+    Expr r;
+    r.kind = ExprKind::Call;
+    r.call_name = {in_.intern("Clock")};
+    r.ty = Type::of(TypeKind::Clock);
+    if (args.empty()) return add(std::move(r));
+    if (args.size() > 2) { set_unsupported("function arity"); return lit_int(0); }
+    const Id<Expr> a = inst_exp(args[0], enclosing, prefix);
+    if (result_.unsupported) return lit_int(0);
+    if (!expr_shape(a).empty()) { set_unsupported("Clock constructor argument"); return lit_int(0); }
+    const TypeKind ak = result_.model.exprs[a].ty.kind;
+    if (!is_clock_ctor(result_.model.exprs[a]) && !expr_equal(a, simplify_expr(a))) {
+      set_unsupported("Clock argument not in simplified form");
+      return lit_int(0);
+    }
+    r.args.push_back(a);
+    if (args.size() == 1) {
+      if (ak == TypeKind::Integer) r.args.push_back(lit_int(1));
+      else if (ak == TypeKind::Boolean) r.args.push_back(lit_real(0.0));
+      else if (ak != TypeKind::Real) { set_unsupported("Clock constructor argument"); return lit_int(0); }
+      return add(std::move(r));
+    }
+    std::optional<CVal> bv;
+    {
+      const StructSnap snap = struct_snap();   // 只求值、不标结构（`Clock(n, n)` → `Clock(n, 2)`，n 不 final）
+      bv = eval_scode(args[1], scode_scope_of(enclosing), 0, /*allow_param=*/true, nullptr);
+      struct_restore(snap);
+    }
+    if (!bv) { set_unsupported("Clock constructor argument"); return lit_int(0); }
+    if (ak == TypeKind::Integer && bv->k == CVal::K::Int && bv->i >= 1) r.args.push_back(lit_int(bv->i));
+    else if (ak == TypeKind::Boolean && (bv->k == CVal::K::Int || bv->k == CVal::K::Real)) r.args.push_back(lit_real(bv->as_r()));
+    else if (ak == TypeKind::Clock && bv->k == CVal::K::Str) r.args.push_back(literal_of(*bv));
+    else { set_unsupported("Clock constructor argument"); return lit_int(0); }
+    return add(std::move(r));
+  }
+  // 其余同步算子：sample(u[, c])（clocked 重载，结果类型同 u；缺 c → `Clock()`）、hold / noClock(u)（类型同 u）、previous(u)
+  //（u 须是组件引用；数组按元素向量化 `array(previous(x[$i1]) for $i1 in 1:n)`）、backSample / shiftSample(u, 计数[,
+  // resolution = 1])、subSample / superSample(u[, factor = 0])（计数类实参须是参数变率的 Integer，按结构参数求值成字面量，
+  // Structural.markExp :2172-2173 / :2191-2192 / :2210 / :2228；u 可以是钟）、interval([u]) → Real、firstTick([u]) → Boolean。
+  // 数组实参只收整体引用 / 字面量 / 数组调用（其余数组式 omc 先展开成字面量 `hold({2.0 * z[1], 2.0 * z[2]})`，未做 → SKIP）。
+  // 不是这些算子、或是经典的 sample(start, interval) → invalid（调用方照常）。
+  Id<Expr> sync_call(const Exp& e, std::string_view name, NodeId enclosing, const std::vector<Symbol>& prefix, bool top) {
+    if (name == "Clock") return clock_ctor(e, enclosing, prefix);
+    struct Op {
+      std::string_view name;
+      std::vector<std::string_view> params;
+      std::size_t required;   // 必给的前几个形参
+    };
+    static const Op kOps[] = {
+        {"hold", {"u"}, 1},          {"noClock", {"u"}, 1},   {"previous", {"u"}, 1},
+        {"backSample", {"u", "backCounter", "resolution"}, 2}, {"shiftSample", {"u", "shiftCounter", "resolution"}, 2},
+        {"subSample", {"u", "factor"}, 1},                     {"superSample", {"u", "factor"}, 1},
+        {"interval", {"u"}, 0},      {"firstTick", {"u"}, 0}, {"sample", {"u", "c"}, 1},
+    };
+    const Op* op = nullptr;
+    for (const Op& o : kOps) if (o.name == name) op = &o;
+    if (!op) return {};
+    if (name == "sample") {
+      // 经典形 sample(start, interval)：第二个实参不是钟（typeSampleCall :1953-1985）。钟只可能是这些调用（Clock 类型的组件
+      // inst 还不认）。
+      Id<Exp> second;
+      for (std::size_t i = 0; i < e.args.size(); ++i) {
+        const bool nm = i < e.arg_names.size() && e.arg_names[i].is_valid();
+        if (nm && in_.str(e.arg_names[i]) == "interval") return {};
+        // 首参只能按位置给（typeSampleCall 的各 case 都以位置实参开头；`sample(u = x)` 是 omc 报错，SY 探针 s2）。
+        if (nm && in_.str(e.arg_names[i]) == "u") { set_unsupported("named function argument"); return lit_int(0); }
+        if ((nm && in_.str(e.arg_names[i]) == "c") || (!nm && i == 1)) second = e.args[i];
+      }
+      if (second.is_valid()) {
+        const Exp& sx = I_.absyn.exps[second];
+        bool clock = false;
+        if (sx.kind == ExpKind::Call) {
+          const Cref& sc = I_.absyn.crefs[sx.cref];
+          const std::string_view sn = sc.parts.size() == 1 ? in_.str(sc.parts[0].name) : std::string_view{};
+          clock = sn == "Clock" || sn == "subSample" || sn == "superSample" || sn == "shiftSample" || sn == "backSample";
+        }
+        if (!clock) return {};
+      }
+    }
+    std::vector<Id<Exp>> args;
+    if (!order_args(e, op->params, args)) { set_unsupported("function arity"); return lit_int(0); }
+    for (std::size_t i = 0; i < op->required; ++i)
+      if (!args[i].is_valid()) { set_unsupported("function arity"); return lit_int(0); }
+    auto mk = [&](std::vector<Id<Expr>> cargs, Type ty) {
+      // 返回数组的调用只在整个绑定 / 等式一侧收（等式整体保留）；嵌在运算里时 omc 连运算一起整体打（`hold(z) * 2.0`），未做。
+      if (ty.is_array() && !top) { set_unsupported("array-valued clocked operator inside expression"); return lit_int(0); }
+      Expr r;
+      r.kind = ExprKind::Call;
+      r.call_name = {in_.intern(name)};
+      r.args = std::move(cargs);
+      r.ty = std::move(ty);
+      return add(std::move(r));
+    };
+    // 首参 u（可缺）：定型 + 化简；结果类型 = u 的类型（数组按看穿字面量后的形状）。
+    Id<Expr> u;
+    Type uty;
+    if (args[0].is_valid()) {
+      if (name == "previous" && I_.absyn.exps[args[0]].kind != ExpKind::CrefExp) {   // omc：实参须是组件引用
+        set_unsupported("previous of non-component expression");
+        return lit_int(0);
+      }
+      u = simplify_expr(inst_exp(args[0], enclosing, prefix));
+      if (result_.unsupported) return lit_int(0);
+      const Expr& ux = result_.model.exprs[u];
+      uty = ux.ty;
+      const std::vector<std::int64_t> sh = expr_shape(u);
+      if (!sh.empty()) {
+        if (ux.kind != ExprKind::Cref && ux.kind != ExprKind::Array && ux.kind != ExprKind::Call && ux.kind != ExprKind::Reduction) {
+          set_unsupported("array expression argument of clocked operator");
+          return lit_int(0);
+        }
+        std::vector<Dimension> ds;
+        for (std::int64_t n : sh) {
+          if (n < 1) { set_unsupported("array expression argument of clocked operator"); return lit_int(0); }
+          Dimension d;
+          d.kind = DimKind::Integer;
+          d.size = n;
+          ds.push_back(d);
+        }
+        uty = Type::array_of(Type::of(expr_elem_kind(u)), std::move(ds));
+      }
+    }
+    if (name == "interval") return mk(u.is_valid() ? std::vector<Id<Expr>>{u} : std::vector<Id<Expr>>{}, Type::real());
+    if (name == "firstTick") return mk(u.is_valid() ? std::vector<Id<Expr>>{u} : std::vector<Id<Expr>>{}, Type::boolean());
+    if (name == "hold" || name == "noClock") return mk({u}, uty);
+    if (name == "previous") {
+      if (result_.model.exprs[u].kind != ExprKind::Cref) { set_unsupported("previous of non-component expression"); return lit_int(0); }
+      const std::vector<std::int64_t> vd = expr_shape(u);
+      if (vd.empty()) return mk({u}, uty);
+      std::vector<Id<Expr>> iters;
+      for (std::size_t k = 1; k <= vd.size(); ++k) iters.push_back(vect_iter(k));
+      const Id<Expr> el = vectorize_arg(u, iters, false);
+      if (!el.is_valid()) { set_unsupported("vectorized call argument form"); return lit_int(0); }
+      return wrap_vectorized(mk({el}, result_.model.exprs[el].ty), vd);
+    }
+    if (name == "sample") {
+      Id<Expr> c;
+      if (args[1].is_valid()) {
+        c = inst_exp(args[1], enclosing, prefix);
+        if (result_.unsupported) return lit_int(0);
+        if (result_.model.exprs[c].ty.kind != TypeKind::Clock) { set_unsupported("sample clock argument"); return lit_int(0); }
+      } else {
+        Expr ic;
+        ic.kind = ExprKind::Call;
+        ic.call_name = {in_.intern("Clock")};
+        ic.ty = Type::of(TypeKind::Clock);
+        c = add(std::move(ic));
+      }
+      return mk({u, c}, uty);
+    }
+    // 计数类实参：Integer、≤ parameter → 字面量。
+    auto counter = [&](Id<Exp> raw, std::int64_t dflt) -> Id<Expr> {
+      if (!raw.is_valid()) return lit_int(dflt);
+      const Id<Expr> t = simplify_expr(inst_exp(raw, enclosing, prefix));
+      if (result_.unsupported) return lit_int(0);
+      if (result_.model.exprs[t].ty.kind != TypeKind::Integer || !expr_shape(t).empty() || refs_runtime_var(t)) {
+        set_unsupported("clocked operator counter argument");   // omc：类型 / 变率不符报错
+        return lit_int(0);
+      }
+      if (result_.model.exprs[t].kind == ExprKind::IntLit) return t;
+      const std::optional<CVal> v = eval_scode(raw, scode_scope_of(enclosing), 0, /*allow_param=*/true, nullptr);
+      if (!v || v->k != CVal::K::Int) { set_unsupported("clocked operator counter argument"); return lit_int(0); }
+      return lit_int(v->i);
+    };
+    std::vector<Id<Expr>> cargs{u};
+    if (name == "backSample" || name == "shiftSample") {
+      cargs.push_back(counter(args[1], 0));
+      cargs.push_back(counter(args[2], 1));
+    } else {   // subSample / superSample
+      cargs.push_back(counter(args[1], 0));
+    }
+    if (result_.unsupported) return lit_int(0);
+    return mk(std::move(cargs), uty);
   }
 
   // 内建函数调用。as_builtin 有效 = 内建等价的 external 函数（builtin_equiv），按该内建名处理（不论书写名是否限定）。
@@ -11485,6 +11728,8 @@ class Flattener {
         }
       return sub_changed ? add(std::move(c)) : id;
     }
+    // Clock 构造的实参不代入（omc 的 EvalConstants 不进 CLKCONST：n 是结构参数时仍打 `Clock(n, 1)`，SY 探针 s4）。
+    if (is_clock_ctor(c)) return id;
     bool changed = false;
     for (Id<Expr>& k : c.args) { const Id<Expr> n = clone_subst(k, vals); changed = changed || !(n == k); k = n; }
     for (Id<Expr>* k : {&c.a, &c.b, &c.c}) {

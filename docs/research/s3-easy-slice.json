@@ -551,5 +551,11 @@
 "CevalRecordArray10.mo",
 "FunctionDerivative1.mo",
 "FunctionInverse1.mo",
-"FunctionInverse2.mo"
+"FunctionInverse2.mo",
+"FuncBuiltinHold1.mo",
+"FuncBuiltinPrevious1.mo",
+"IfEquation6.mo",
+"IfEquationImpure1.mo",
+"WhenClocked1.mo",
+"WhenClockedTupleCall1.mo"
 ]

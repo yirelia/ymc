@@ -1057,6 +1057,18 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           标 final）。**if 表达式两支类型不相容** → SKIP（此前放行 `if c then 1 else "a"`）。`size(界非字面量的切片)` 1.25.0
           原样留下 → SKIP。探针 AO a1–a7 共 100 个模型：82 PASS / 18 SKIP / 0 FAIL；全部旧探针目录（约 1100 个模型）重跑 0 FAIL。
           → 全 scodeinst PASS 467、nf-live 484（均不变，无判定变化）；+2 单测（196）。
+    - [x] (59n) 同步算子（MLS §16）的定型与打印（2026-10-02）：
+          **Clock 构造**：`Clock()`；一个实参按类型选重载（Real 原样、Integer 补 `, 1`、Boolean 补 `, 0.0`）；两个实参时第二个
+          求值成字面量（不标结构）；首参 omc 既不化简也不代入结构参数（`Clock(n, 1)`、`Clock(1.0 + 2.0)` 原样）→ 只收化简前后
+          同形的首参，clone_subst 不进 Clock。**sample(u[, 钟])** → 补 `Clock()`，类型同 u（经典的 sample(start, interval)
+          照旧）。**hold / noClock**（类型同 u）、**previous**（实参须是组件引用，数组按元素向量化）、**backSample /
+          shiftSample / subSample / superSample**（计数类实参按结构参数求值成字面量，缺省 resolution = 1 / factor = 0，首参可以
+          是钟）、**interval / firstTick**。命名实参按形参名重排。**钟控 when**：条件是钟时体按任意方程收（if / 元组 / 非赋值
+          形等式），带 elsewhen → SKIP。返回数组的算子嵌在运算里、非引用的数组实参、Clock 类型的组件（inst 不认）→ SKIP。
+          探针 SY s1–s5 254 行：206 PASS / 22 SKIP / 26 BOTH-REJECT / 0 FAIL。→ 全 scodeinst PASS 467→475（FuncBuiltinHold1 /
+          Previous1 / SubSample1 / SuperSample1、IfEquation6、IfEquationImpure1、WhenClocked1、WhenClockedTupleCall1；
+          FuncBuiltinPrevious2 / 3 与 1.25.0 一致但文件是 `$i0` → 账本，FAIL 基线 23→25）、nf-live 484→491（synchronous/ 下
+          BackSample / Hold / NoClock / Previous / ShiftSample / SubSample / WhenClocks）；+1 单测（197）。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、

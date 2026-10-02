@@ -70,3 +70,9 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `v4-f` | 20 | 同上（分组 f） |
 | `v4-g` | 9 | 同上（分组 g） |
 | `v4` | 50 | 向量化调用、sum / product / min / max |
+| `sy-s1` | 32 | 同步算子：Clock 构造与钟控 when |
+| `sy-s2` | 70 | 同步算子：sample / hold / noClock / previous |
+| `sy-s3` | 67 | 同步算子：backSample / shiftSample / subSample / superSample / interval / firstTick |
+| `sy-s4` | 47 | 同步算子：Clock 实参形态、结构参数代入、钟控 when 的体 |
+| `sy-s5` | 43 | 同步算子：其它语境 |
+| `sy-ut` | 6 | 同步算子（单测原文） |

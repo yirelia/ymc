@@ -1,0 +1,503 @@
+//// set: sy-s5 — 同步算子：其它语境
+//// model: G0
+model G0
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y; algorithm y := hold(x);
+equation
+  x = x;
+end G0;
+//// model: G1
+model G1
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y; algorithm y := sample(x);
+equation
+  x = x;
+end G1;
+//// model: G2
+model G2
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y; algorithm y := previous(y) + 1;
+equation
+  x = x;
+end G2;
+//// model: G3
+model G3
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y; algorithm y := subSample(x, n);
+equation
+  x = x;
+end G3;
+//// model: G4
+model G4
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = if b then hold(x) else sample(x);
+end G4;
+//// model: G5
+model G5
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2] = {hold(x), sample(x)};
+end G5;
+//// model: G6
+model G6
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sum({hold(x), previous(x)});
+end G6;
+//// model: G7
+model G7
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = max(hold(x), noClock(x));
+end G7;
+//// model: G8
+model G8
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sin(hold(x)) + abs(previous(x));
+end G8;
+//// model: G9
+model G9
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2] = if b then hold(z) else z;
+end G9;
+//// model: G10
+model G10
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = hold(z[n]);
+end G10;
+//// model: G11
+model G11
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = hold(z) * z;
+end G11;
+//// model: G12
+model G12
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2] = hold(z) + z;
+end G12;
+//// model: G13
+model G13
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2] = -hold(z);
+end G13;
+//// model: G14
+model G14
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2];
+equation
+  y = hold(z) + noClock(z);
+end G14;
+//// model: G15
+model G15
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2];
+equation
+  hold(z) = y;
+end G15;
+//// model: G16
+model G16
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2];
+equation
+  y = if b then hold(z) else noClock(z);
+end G16;
+//// model: G17
+model G17
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y; Real w;
+equation
+  when Clock(0.1) then y = previous(y) + 1; w = hold(y); end when;
+end G17;
+//// model: G18
+model G18
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(n * p) then y = n * previous(y); end when;
+end G18;
+//// model: G19
+model G19
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(0.1) then y = previous(y) + n; end when; when Clock(n) then y = 1; end when;
+end G19;
+//// model: G20
+model G20
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  if b then y = hold(x); else y = sample(x, Clock(0.5)); end if;
+end G20;
+//// model: G21
+model G21
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2];
+equation
+  for i in 1:2 loop y[i] = hold(z[i]) + previous(y[i]); end for;
+end G21;
+//// model: G22
+model G22
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2];
+equation
+  for i in 1:n loop y[i] = backSample(z[i], i); end for;
+end G22;
+//// model: G23
+model G23
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  y = hold(x); assert(firstTick() or y > 0, "m");
+end G23;
+//// model: G24
+model G24
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = delay(hold(x), 0.1);
+end G24;
+//// model: G25
+model G25
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = pre(hold(x));
+end G25;
+//// model: G26
+model G26
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = der(hold(x));
+end G26;
+//// model: G27
+model G27
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y(start = hold(p)) = time;
+end G27;
+//// model: G28
+model G28
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  parameter Real q = hold(p); Real y = q;
+end G28;
+//// model: G29
+model G29
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  parameter Real q = sample(p); Real y = q;
+end G29;
+//// model: G30
+model G30
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  constant Real q = hold(1.0); Real y = q;
+end G30;
+//// model: G31
+model G31
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = noEvent(hold(x));
+end G31;
+//// model: G32
+model G32
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Boolean y = initial() or firstTick();
+end G32;
+//// model: G33
+model G33
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Boolean y = sample(0, 1) and firstTick();
+end G33;
+//// model: G34
+model G34
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = interval() * interval(x) / interval(Clock(0.1));
+end G34;
+//// model: G35
+model G35
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Boolean y = firstTick(Clock(0.1));
+end G35;
+//// model: G36
+model G36
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = transition(x);
+end G36;
+//// model: G37
+model G37
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Boolean y = activeState(x);
+end G37;
+//// model: G38
+model G38
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = hold(hold(x));
+end G38;
+//// model: G39
+model G39
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = previous(previous(x));
+end G39;
+//// model: G40
+model G40
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  y = shiftSample(backSample(x, 1), 1);
+end G40;
+//// model: G41
+model G41
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = superSample(subSample(sample(x, Clock(1, 10)), 2), 2);
+end G41;
+//// model: BASE
+model BASE
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+end BASE;

@@ -1,0 +1,73 @@
+//// set: sy-ut — 同步算子（单测原文）
+//// model: SYS1
+model SYS1
+  Real x = time;
+  Real y = sample(x, Clock(1 / 3));
+end SYS1;
+//// model: SYS2
+model SYS2
+  Real z[2] = {time, 1};
+  Real y[2] = 2 * hold(z);
+end SYS2;
+//// model: SYS3
+model SYS3
+  Real x = time;
+  Real y;
+equation
+  y = previous(2 * x);
+end SYS3;
+//// model: SYS4
+model SYS4
+  Real y;
+equation
+  when Clock(0.1) then
+    y = 1;
+  elsewhen Clock(0.2) then
+    y = 2;
+  end when;
+end SYS4;
+//// model: SYT1
+model SYT1
+  parameter Integer n = 2;
+  parameter Integer m = n;
+  parameter Real p = 0.5;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k = integer(time);
+  Boolean b = time > 0.5;
+  Real y1 = sample(x);
+  Real y2 = sample(x, Clock(2 * p));
+  Real y3 = sample(1);
+  Boolean c1 = sample(0, 1);
+  Real y4 = hold(k);
+  Real y5[2] = noClock(z);
+  Real y6 = backSample(x, n);
+  parameter Integer m2 = n;
+  Real y7 = shiftSample(x, shiftCounter = 1, resolution = 4);
+  Real y8 = subSample(x) + superSample(x, 3);
+  Real y9 = interval() + interval(x);
+  Boolean c2 = firstTick();
+  Real y10 = sample(x, Clock(n)) + sample(x, Clock(b)) + sample(x, Clock(Clock(1, 10), "ImplicitEuler"));
+  Real y11 = sample(x, subSample(Clock(b, p), 2));
+end SYT1;
+//// model: SYT2
+model SYT2
+  Real x = time;
+  Real y(start = 1);
+  Real w;
+  Real v[2];
+  Real u1;
+  Real u2;
+equation
+  when Clock(0.1) then
+    y = 2 * previous(y);
+    if firstTick() then
+      w = 0;
+    else
+      w = previous(w) + interval();
+    end if;
+    u1 + u2 = sample(x);
+    u1 - u2 = 0;
+  end when;
+  v = previous(v);
+end SYT2;

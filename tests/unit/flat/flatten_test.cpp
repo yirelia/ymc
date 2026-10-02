@@ -3150,6 +3150,60 @@ YMC_TEST(flatten_evaluation_frame_and_failed_marks) {
   }
 }
 
+YMC_TEST(flatten_synchronous_operators) {
+  // 同步算子（MLS §16）的定型与打印：sample(u) 补 `Clock()`、Clock 构造按首参类型补缺省（Integer → resolution 1、Boolean →
+  // startInterval 0.0）且首参不代入 / 不化简、第二实参求值成字面量；计数类实参（backSample 的 n）按结构参数求值——n 在 y6 的
+  // 绑定里才标，所以 m 不 final、m2 final；Integer 结果进 Real 语境整体转型。期望 = omc 1.25.0 实跑 SYT1（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model SYT1\n  parameter Integer n = 2;\n  parameter Integer m = n;\n  parameter Real p = 0.5;\n"
+                           "  Real x = time;\n  Real z[2] = {time, 1};\n  Integer k = integer(time);\n"
+                           "  Boolean b = time > 0.5;\n  Real y1 = sample(x);\n  Real y2 = sample(x, Clock(2 * p));\n"
+                           "  Real y3 = sample(1);\n  Boolean c1 = sample(0, 1);\n  Real y4 = hold(k);\n"
+                           "  Real y5[2] = noClock(z);\n  Real y6 = backSample(x, n);\n  parameter Integer m2 = n;\n"
+                           "  Real y7 = shiftSample(x, shiftCounter = 1, resolution = 4);\n"
+                           "  Real y8 = subSample(x) + superSample(x, 3);\n  Real y9 = interval() + interval(x);\n"
+                           "  Boolean c2 = firstTick();\n"
+                           "  Real y10 = sample(x, Clock(n)) + sample(x, Clock(b)) + sample(x, Clock(Clock(1, 10), \"ImplicitEuler\"));\n"
+                           "  Real y11 = sample(x, subSample(Clock(b, p), 2));\nend SYT1;\n"),
+               std::string("class SYT1\n  final parameter Integer n = 2;\n  parameter Integer m = 2;\n"
+                           "  parameter Real p = 0.5;\n  Real x = time;\n  Real z[1];\n  Real z[2];\n"
+                           "  Integer k = integer(time);\n  Boolean b = time > 0.5;\n  Real y1 = sample(x, Clock());\n"
+                           "  Real y2 = sample(x, Clock(2.0 * p));\n  Real y3 = /*Real*/(sample(1, Clock()));\n"
+                           "  Boolean c1 = sample(0.0, 1.0);\n  Real y4 = /*Real*/(hold(k));\n  Real y5[1];\n  Real y5[2];\n"
+                           "  Real y6 = backSample(x, 2, 1);\n  final parameter Integer m2 = 2;\n"
+                           "  Real y7 = shiftSample(x, 1, 4);\n  Real y8 = subSample(x, 0) + superSample(x, 3);\n"
+                           "  Real y9 = interval() + interval(x);\n  Boolean c2 = firstTick();\n"
+                           "  Real y10 = sample(x, Clock(n, 1)) + sample(x, Clock(b, 0.0)) + sample(x, Clock(Clock(1, 10), \"ImplicitEuler\"));\n"
+                           "  Real y11 = sample(x, subSample(Clock(b, 0.5), 2));\nequation\n  z = {time, 1.0};\n"
+                           "  y5 = noClock(z);\nend SYT1;\n"));
+  // 钟控 when：体是任意方程（含 if 方程、非赋值形的等式）；previous 的数组实参按元素向量化。期望 = omc 1.25.0 实跑 SYT2。
+  YMC_CHECK_EQ(flatten_src("model SYT2\n  Real x = time;\n  Real y(start = 1);\n  Real w;\n  Real v[2];\n  Real u1;\n"
+                           "  Real u2;\nequation\n  when Clock(0.1) then\n    y = 2 * previous(y);\n    if firstTick() then\n"
+                           "      w = 0;\n    else\n      w = previous(w) + interval();\n    end if;\n    u1 + u2 = sample(x);\n"
+                           "    u1 - u2 = 0;\n  end when;\n  v = previous(v);\nend SYT2;\n"),
+               std::string("class SYT2\n  Real x = time;\n  Real y(start = 1.0);\n  Real w;\n  Real v[1];\n  Real v[2];\n"
+                           "  Real u1;\n  Real u2;\nequation\n  when Clock(0.1) then\n    y = 2.0 * previous(y);\n"
+                           "    if firstTick() then\n      w = 0.0;\n    else\n      w = previous(w) + interval();\n"
+                           "    end if;\n    u1 + u2 = sample(x, Clock());\n    u1 - u2 = 0.0;\n  end when;\n"
+                           "  v = array(previous(v[$i1]) for $i1 in 1:2);\nend SYT2;\n"));
+  // 未做 / omc 报错 → SKIP：Clock 首参可化简（omc 原样打 `Clock(1.0 / 3.0)`，SYS1）、返回数组的算子嵌在运算里（omc 整体打
+  // `hold(z) * 2.0`，SYS2）、previous 的实参不是组件引用（omc 报错，SYS3）、钟控 when 带 elsewhen（omc 报错，SYS4）。
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           {"model SYS1\n  Real x = time;\n  Real y = sample(x, Clock(1 / 3));\nend SYS1;\n",
+            "Clock argument not in simplified form"},
+           {"model SYS2\n  Real z[2] = {time, 1};\n  Real y[2] = 2 * hold(z);\nend SYS2;\n",
+            "array-valued clocked operator inside expression"},
+           {"model SYS3\n  Real x = time;\n  Real y;\nequation\n  y = previous(2 * x);\nend SYS3;\n",
+            "previous of non-component expression"},
+           {"model SYS4\n  Real y;\nequation\n  when Clock(0.1) then\n    y = 1;\n  elsewhen Clock(0.2) then\n"
+            "    y = 2;\n  end when;\nend SYS4;\n",
+            "clocked when with elsewhen"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

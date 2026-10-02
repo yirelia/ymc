@@ -1,0 +1,535 @@
+//// set: sy-s4 — 同步算子：Clock 实参形态、结构参数代入、钟控 when 的体
+//// model: F0
+model F0
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real q[n]; Real y;
+equation
+  when Clock(n) then y = 1; end when;
+end F0;
+//// model: F1
+model F1
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real q[n]; Real y = sample(x, Clock(n, 2));
+end F1;
+//// model: F2
+model F2
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real q[n]; Real y = sample(x, Clock(2, n));
+end F2;
+//// model: F3
+model F3
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  parameter Real pp = 0.5 annotation(Evaluate = true); Real y = sample(x, Clock(pp));
+end F3;
+//// model: F4
+model F4
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  parameter Real pp = 0.5 annotation(Evaluate = true); Real y = sample(x, Clock(b, pp));
+end F4;
+//// model: F5
+model F5
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real q[n]; Real y = hold(q[n]);
+end F5;
+//// model: F6
+model F6
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real q[n]; Real y = backSample(x, n);
+end F6;
+//// model: F7
+model F7
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(1.0 + 2.0));
+end F7;
+//// model: F8
+model F8
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(2 + 1));
+end F8;
+//// model: F9
+model F9
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(-0.5));
+end F9;
+//// model: F10
+model F10
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(true));
+end F10;
+//// model: F11
+model F11
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(not b));
+end F11;
+//// model: F12
+model F12
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(b and time > 1));
+end F12;
+//// model: F13
+model F13
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(if b then 0.1 else 0.2));
+end F13;
+//// model: F14
+model F14
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(2 * n));
+end F14;
+//// model: F15
+model F15
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(n + 1, 2 * n));
+end F15;
+//// model: F16
+model F16
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(k));
+end F16;
+//// model: F17
+model F17
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(k, k));
+end F17;
+//// model: F18
+model F18
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(b, 1));
+end F18;
+//// model: F19
+model F19
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(b, n));
+end F19;
+//// model: F20
+model F20
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(b, x));
+end F20;
+//// model: F21
+model F21
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(0.1, 0.2));
+end F21;
+//// model: F22
+model F22
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(Clock(0.1)));
+end F22;
+//// model: F23
+model F23
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(Clock(), "Rosenbrock1"));
+end F23;
+//// model: F24
+model F24
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(Clock(2, 3), "A" + "B"));
+end F24;
+//// model: F25
+model F25
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(z[1]));
+end F25;
+//// model: F26
+model F26
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(z));
+end F26;
+//// model: F27
+model F27
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(p / 2));
+end F27;
+//// model: F28
+model F28
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(p * 1));
+end F28;
+//// model: F29
+model F29
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(0.1 * 1));
+end F29;
+//// model: F30
+model F30
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(sin(1.0)));
+end F30;
+//// model: F31
+model F31
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x, Clock(abs(p)));
+end F31;
+//// model: F32
+model F32
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(x + 0, Clock(0.1));
+end F32;
+//// model: F33
+model F33
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = sample(1 + 2);
+end F33;
+//// model: F34
+model F34
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = hold(1.0 + 2.0);
+end F34;
+//// model: F35
+model F35
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = hold(x + 0);
+end F35;
+//// model: F36
+model F36
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y = subSample(1 + 1, 1 + 1);
+end F36;
+//// model: F37
+model F37
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Clock c = Clock(0.1);
+end F37;
+//// model: F38
+model F38
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(0.1) then y = 1; end when; when Clock(0.2) then y = 2; end when;
+end F38;
+//// model: F39
+model F39
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y; Real w;
+equation
+  when Clock(0.1) then y = 1; w = y + interval(); end when;
+end F39;
+//// model: F40
+model F40
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(0.1) then y = hold(x); end when;
+end F40;
+//// model: F41
+model F41
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y; algorithm when Clock(0.1) then y := 1; end when;
+equation
+  x = x;
+end F41;
+//// model: F42
+model F42
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(0.1) then reinit(y, 1); end when;
+end F42;
+//// model: F43
+model F43
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(0.1) then assert(y > 0, "m"); y = 1; end when;
+end F43;
+//// model: F44
+model F44
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y;
+equation
+  when Clock(0.1) then for i in 1:2 loop y = i; end for; end when;
+end F44;
+//// model: F45
+model F45
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+  Real y[2];
+equation
+  when Clock(0.1) then for i in 1:2 loop y[i] = i * previous(y[i]); end for; end when;
+end F45;
+//// model: BASE
+model BASE
+  parameter Integer n = 2;
+  parameter Real p = 0.5;
+  parameter Boolean pb = true;
+  Real x = time;
+  Real z[2] = {time, 1};
+  Integer k;
+  Boolean b = time > 0.5;
+end BASE;
