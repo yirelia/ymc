@@ -81,6 +81,10 @@ constant 报 `NO_CONSTANT_BINDING`（:844-848），安装版 1.25.0 实跑不报
 FuncVectorization* 账本行）。同一批探针另见 1.25.0 的两处怪相（ymc 不复刻，命中即 SKIP）：向量化的 `rem(x, 2)` 打成
 `OpenModelica.Internal.realRem(x[$i1], 2.0)`；向量化维不一致的 `F(w, x)`（w: [2,3]、x: [3]）是内部错
 `NFComponentRef.mergeSubscripts failed`。
+Boolean 数组与数组 if 的几处 1.25.0 特殊行为（V4u / V4w 探针；ymc 不复刻，命中即 SKIP）：两个混合数组字面量的 and / or 在首维
+逐元素合并并化简（`{x[1] > 1, false} or {true, x[2] < 1}` → `{true, x[2] < 1.0}`），而字面量与变量的不化简（`true or b[1]`）；
+混合字面量的 not 逐元素后留 `not true`；数组 if 表达式作属性值（`Real r[3](start = if n == 2 then {1, 2, 3} else {4, 5, 6})`）
+是内部错 `NFScalarize.scalarizeVariable failed`。
 
 ## 已研究待实现：多条 connect 连接集（union-find）
 

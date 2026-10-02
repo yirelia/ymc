@@ -1006,6 +1006,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           放行数组 der 后暴露）。探针 4 组 132 行：102 PASS / 0 FAIL / 0 ACCEPTS-INVALID。→ 全 scodeinst PASS 458→460
           （FuncBuiltinEdge2、OperationLogicalBinary2）、nf-live 472→475（ArrayAddition2、ArrayRemoveIndex1、BooleanRanges）；
           +2 单测（189）。数组 if 表达式（`i3 = if c then x else {…}` 整体 / 等式逐元素）留待下一桶。
+    - [x] (59i) 数组 if 表达式（2026-10-02）：两支同形、元素同为 Boolean 或数值（有 Real 则全提 Real）。绑定整体保留、各支规整成
+          omc 的打印形态（引用原样、字面量逐叶转、算术式逐元素展开成字面量、嵌套 if / 向量化调用原样：`i3 = if time > 1.0 then x
+          else {2.0 * x[1], …}`）；显式等式 / 参数摊分 / sum 里逐元素（`der(y[1]) = if time > 1.0 then x[1] else -y[1]`）；`:` 维由
+          分支形状推断；条件折成字面量时直接取一支（IfExpression10）。两支形状不同（结构参数条件求值）、Integer 引用配 Real、
+          逻辑式分支、含数组调用的等式 → SKIP；数组 if 作属性值是 1.25.0 内部错 → SKIP。探针 V4w 45 行：35 PASS / 6 SKIP /
+          4 BOTH-REJECT / 0 FAIL。→ 全 scodeinst PASS 460（不变）、nf-live 475→476（ConditionalArrayExpression2）；+1 单测（190）。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、

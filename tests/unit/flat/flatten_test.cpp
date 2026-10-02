@@ -2845,6 +2845,56 @@ YMC_TEST(flatten_boolean_array_expressions) {
   }
 }
 
+YMC_TEST(flatten_array_if_expressions) {
+  // 数组 if 表达式：绑定整体保留、各支规整（算术式展开成字面量、字面量逐叶转 Real、向量化调用原样），显式等式 / 参数摊分 /
+  // sum 里逐元素；条件折成字面量时直接取一支（另一支形状不同也无妨）。期望 = omc 1.25.0 实跑 IF1（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model IF1\n  parameter Integer n = 2;\n  parameter Real q[3] = {1, 2, 3};\n"
+                           "  Boolean b[2] = {time > 1, true};\n  Boolean b2[2] = {true, time > 2};\n"
+                           "  Real x[3] = {time, 1, 2};\n  Boolean i1[2] = if time > 1 then b else b2;\n"
+                           "  Real i3[:] = if time > 1 then x else 2 * x;\n"
+                           "  Real i6[3] = if time > 1 then x else if time > 2 then 2 * x else {1, 2, 3};\n"
+                           "  Real i7[3] = (if time > 1 then x else 2 * x) + x;\n  Real i8[3] = if b[1] then sin(x) else x;\n"
+                           "  Real i9 = sum(if time > 1 then x else 2 * x);\n"
+                           "  Real j2[2] = if time > 1 then {1, 2} else {3, 4};\n"
+                           "  Real r9[3] = if time > 1 then q else {time, 1, 2};\n  Real r3[3] = if true then x else 2 * x;\n"
+                           "  Real r4[2] = if false then {1, 2} elseif false then {1} else {3, 4};\n"
+                           "  parameter Real q5[3] = if n == 2 then q else 2 * q;\n  Real y[3];\nequation\n"
+                           "  der(y) = if time > 1 then x else -y;\nend IF1;\n"),
+               std::string("class IF1\n  parameter Integer n = 2;\n  parameter Real q[1] = 1.0;\n  parameter Real q[2] = 2.0;\n"
+                           "  parameter Real q[3] = 3.0;\n  Boolean b[1];\n  Boolean b[2];\n  Boolean b2[1];\n  Boolean b2[2];\n"
+                           "  Real x[1];\n  Real x[2];\n  Real x[3];\n  Boolean i1[1];\n  Boolean i1[2];\n  Real i3[1];\n"
+                           "  Real i3[2];\n  Real i3[3];\n  Real i6[1];\n  Real i6[2];\n  Real i6[3];\n  Real i7[1];\n"
+                           "  Real i7[2];\n  Real i7[3];\n  Real i8[1];\n  Real i8[2];\n  Real i8[3];\n"
+                           "  Real i9 = (if time > 1.0 then x[1] else 2.0 * x[1]) + (if time > 1.0 then x[2] else 2.0 * x[2]) + (if time > 1.0 then x[3] else 2.0 * x[3]);\n"
+                           "  Real j2[1];\n  Real j2[2];\n  Real r9[1];\n  Real r9[2];\n  Real r9[3];\n  Real r3[1];\n"
+                           "  Real r3[2];\n  Real r3[3];\n  Real r4[1];\n  Real r4[2];\n"
+                           "  parameter Real q5[1] = if n == 2 then q[1] else 2.0 * q[1];\n"
+                           "  parameter Real q5[2] = if n == 2 then q[2] else 2.0 * q[2];\n"
+                           "  parameter Real q5[3] = if n == 2 then q[3] else 2.0 * q[3];\n  Real y[1];\n  Real y[2];\n"
+                           "  Real y[3];\nequation\n  b = {time > 1.0, true};\n  b2 = {true, time > 2.0};\n"
+                           "  x = {time, 1.0, 2.0};\n  i1 = if time > 1.0 then b else b2;\n"
+                           "  i3 = if time > 1.0 then x else {2.0 * x[1], 2.0 * x[2], 2.0 * x[3]};\n"
+                           "  i6 = if time > 1.0 then x else if time > 2.0 then {2.0 * x[1], 2.0 * x[2], 2.0 * x[3]} else {1.0, 2.0, 3.0};\n"
+                           "  i7 = {(if time > 1.0 then x[1] else 2.0 * x[1]) + x[1], (if time > 1.0 then x[2] else 2.0 * x[2]) + x[2], (if time > 1.0 then x[3] else 2.0 * x[3]) + x[3]};\n"
+                           "  i8 = if b[1] then array(sin(x[$i1]) for $i1 in 1:3) else x;\n"
+                           "  j2 = if time > 1.0 then {1.0, 2.0} else {3.0, 4.0};\n"
+                           "  r9 = if time > 1.0 then q else {time, 1.0, 2.0};\n  r3 = x;\n  r4 = {3.0, 4.0};\n"
+                           "  der(y[1]) = if time > 1.0 then x[1] else -y[1];\n"
+                           "  der(y[2]) = if time > 1.0 then x[2] else -y[2];\n"
+                           "  der(y[3]) = if time > 1.0 then x[3] else -y[3];\nend IF1;\n"));
+  // omc 报错 / 内部错 / 未做的形态 → SKIP（V4w 探针）。
+  const char* pre = "model M\n  parameter Integer n = 2;\n  Real x[3] = {time, 1, 2};\n  Integer k[3] = {1, 2, 3};\n";
+  for (const auto& [line, why] : std::vector<std::pair<std::string, std::string>>{
+           {"  Real q7[3] = if time > 1 then x else {1, 2};\n", "if-expression branch shape"},               // omc：类型错
+           {"  Real r2[3](start = if n == 2 then {1, 2, 3} else {4, 5, 6});\n", "if-expression array attribute"},   // omc：内部错
+           {"  Real p1[3] = if time > 1 then x else k;\n", "if-expression array branch"}}) {                 // Integer 引用配 Real：未做
+    bool uns = false;
+    const std::string out = flatten_src((std::string(pre) + line + "end M;\n").c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
 YMC_TEST(flatten_pre_change_argument_rules) {
   // pre / change 的实参须是变量，when 之外不能是连续变量（NFBuiltinCall.typePreChangeCall :578-588；P1 / P5 / P7 探针 omc 报错）；
   // when 方程体里的连续实参 1.25.0 接受（P4 探针，期望 = 实跑输出，2026-10-02）。
