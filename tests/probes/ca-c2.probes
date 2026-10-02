@@ -1,0 +1,313 @@
+//// set: ca-c2 — 复合数组引用在语句里的形态（array(a[$i1].x …) 未做）、符号下标 `a[i].x`、运行时下标 `a[n].x`
+//// model: C20
+model C20
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  algorithm y := a.x; s := 0;
+end C20;
+//// model: C21
+model C21
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  algorithm y := 2 * a.x; s := 0;
+end C21;
+//// model: C22
+model C22
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  algorithm y := a.x + a.x; s := 0;
+end C22;
+//// model: C23
+model C23
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  algorithm y := {a[1].x, a[2].x, a[3].x}; s := 0;
+end C23;
+//// model: C24
+model C24
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  algorithm y := -a.x; s := 0;
+end C24;
+//// model: C25
+model C25
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  algorithm y := if tt > 1 then a.x else {0, 0, 0}; s := 0;
+end C25;
+//// model: C26
+model C26
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  algorithm y := a.x .* a.k; s := 0;
+end C26;
+//// model: C27
+model C27
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  algorithm y := a.v[1]; s := 0;
+end C27;
+//// model: C28
+model C28
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  algorithm y[1:2] := a[2:3].x; y[3] := 0; s := 0;
+end C28;
+//// model: C29
+model C29
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  algorithm y := {1, 2, 3}; s := a.x * a.x;
+end C29;
+//// model: C210
+model C210
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  algorithm y := {1, 2, 3}; s := sum(a.x) + max(a.x);
+end C210;
+//// model: C211
+model C211
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  algorithm y := {1, 2, 3}; s := f(a.x);
+end C211;
+//// model: C212
+model C212
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  algorithm y := {1, 2, 3}; s := f(2 * a.x);
+end C212;
+//// model: C213
+model C213
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  algorithm y := {1, 2, 3}; s := 0; for i in 1:3 loop s := s + a[i].x; end for;
+end C213;
+//// model: C214
+model C214
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  algorithm y := {1, 2, 3}; s := 0; for i in 1:3 loop s := s + a[i].v[1] + a[i].v[2]; end for;
+end C214;
+//// model: C215
+model C215
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  algorithm y := {1, 2, 3}; s := 0; for i in 1:3 loop s := s + sum(a[i].v); end for;
+end C215;
+//// model: C216
+model C216
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  algorithm y := {1, 2, 3}; s := 0; for i in 1:3 loop y[i] := a[i].x * a[i].k; end for;
+end C216;
+//// model: C217
+model C217
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  algorithm y := {1, 2, 3}; s := 0; for i in 1:2 loop s := s + a[i + 1].x; end for;
+end C217;
+//// model: C218
+model C218
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  algorithm y := {1, 2, 3}; s := 0; for i loop s := s + a[i].x; end for;
+end C218;
+//// model: C219
+model C219
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  algorithm y := {1, 2, 3}; s := sum(a[i].x for i in 1:3);
+end C219;
+//// model: C220
+model C220
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  algorithm y := {1, 2, 3}; s := max(a[i].x for i in 1:3);
+end C220;
+//// model: C221
+model C221
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  Real z[3] = {a[i].x * 2 for i in 1:3}; algorithm y := {1, 2, 3}; s := 0;
+end C221;
+//// model: C222
+model C222
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  Real z = sum(a[i].x for i in 1:3); algorithm y := {1, 2, 3}; s := 0;
+end C222;
+//// model: C223
+model C223
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  Real z = max(a[i].x for i in 1:3); algorithm y := {1, 2, 3}; s := 0;
+end C223;
+//// model: C224
+model C224
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  Real z = max(a[i].v[2] for i in 1:3); algorithm y := {1, 2, 3}; s := 0;
+end C224;
+//// model: C225
+model C225
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  Integer n = integer(tt); Real z = a[n].x; algorithm y := {1, 2, 3}; s := 0;
+end C225;
+//// model: C226
+model C226
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  Integer n = integer(tt); Real z = a[n].v[1] + a[n + 1].k; algorithm y := {1, 2, 3}; s := 0;
+end C226;
+//// model: C227
+model C227
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  Integer n = integer(tt); Real z[2] = a[n].v; algorithm y := {1, 2, 3}; s := 0;
+end C227;
+//// model: C228
+model C228
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+equation
+  s = 0; for i in 1:3 loop y[i] = a[i].x; end for;
+end C228;
+//// model: C229
+model C229
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+equation
+  s = 0; y = {a[i].x for i in 1:3};
+end C229;
+//// model: C230
+model C230
+  model A Real x = time; parameter Real k = 1; Real v[2] = {time, 1}; end A;
+  function f input Real u[:]; output Real s; algorithm s := sum(u); end f;
+  Real tt = time;
+  A a[3];
+  Real y[3];
+  Real s;
+  algorithm y := a.x; s := 0; when tt > 1 then y := a.k; end when;
+end C230;

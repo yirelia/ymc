@@ -175,6 +175,15 @@ interval is [1,1]"；作用在切片上的向量化内建把切片的范围取�
   NFSimplifyModel.mo:312-333；函数体同样经它化简）。
 - 整个范围的标签切片 `y[E.one:E.three]`、`y[false:true]` 打成 `y[:]`（同整数的 `1:dim`）；下标数组不收。
 
+复合数组元素引用的几处 1.25.0 行为（CA 探针 c1–c4，2026-10-03）：
+- 语句不标量化，"复合数组取字段"在语句里留成带迭代变量的数组构造 `y := array(a[$i1].x for $i1 in 1:3);`（切片
+  `for $i1 in 2:3`，数组字段 `array(a[$i1].v for …)`），作函数实参 / if 分支 / max 的实参时同；被逐元素运算吃掉的才展开
+  成字面量（`y := {2.0 * a[1].x, …}`）。向量化的内建调用同理：`Real y[3] = sin(a.x)` → `array(sin(a[$i1].x) for $i1 in
+  1:3)`。ymc 这几种形态 SKIP。
+- 复合数组段的字面量下标不做越界检查：`A a[3]; Real y = a[4].x;` 照打 `Real y = a[4].x;`（引用一个不存在的变量）。
+  ymc 不跟，SKIP。
+- `der(a.k)`（参数字段）折成 `{0.0, 0.0, 0.0}`；`pre(a.x)`（连续量）报错。
+
 Integer 的极值（待用户定，2026-10-02）：`max` / `min` 作用在空的 Integer 数组 / 空范围上取 `∓System.intMaxLit`（Expression.makeMinValue / makeMaxValue，v1.25.0 NFExpression.mo:4908-4934），这个值随 omc 构建的整数位宽而变——本机安装版 1.25.0（Windows）打 `1073741823`，testsuite 文件（64 位 Linux 生成）是 `4611686018427387903`。跟实跑的 omc 就要把 30 位的值写进 ymc，跟文件又过不了 oracle=live 门；ymc 目前两边都不跟，遇到即 SKIP（`Integer extreme of empty min/max (platform-dependent in omc)`）。受影响：scodeinst 的 CevalReduction1、FuncBuiltinMax / Max2 / Min / Min2、FuncBuiltinReduction 六例（其余内容已与 1.25.0 一致，只差这一个值）。Real（`±8.777798510069901e304`）、Boolean、枚举的极值与平台无关，已做。
 
 ## 已研究待实现：多条 connect 连接集（union-find）

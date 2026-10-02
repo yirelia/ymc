@@ -1,0 +1,393 @@
+//// set: ca-c3 — 复合数组引用在等式左侧、if / when / assert、修饰、参数维、子实例里的复合数组、记录数组
+//// model: C30
+model C30
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3];
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C30;
+//// model: C31
+model C31
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3];
+equation
+  a[:].x = {tt, 1, 2}; a[:].v[:] = {{tt, 1}, {2, 3}, {4, 5}};
+end C31;
+//// model: C32
+model C32
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3];
+equation
+  a[1:2].x = {tt, 1}; a[3].x = 2; a[:].v[1] = {tt, 1, 2}; a[:].v[2] = {0, 0, 0};
+end C32;
+//// model: C33
+model C33
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3];
+equation
+  a.x = fill(tt, 3); a.v = fill(tt, 3, 2);
+end C33;
+//// model: C34
+model C34
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3];
+equation
+  a.x = zeros(3); a.v = {{tt, 1}, {2, 3}, {4, 5}} * 2;
+end C34;
+//// model: C35
+model C35
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3];
+equation
+  der(a.x) = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C35;
+//// model: C36
+model C36
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; A c[3];
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}}; c.x = a.x; c.v = a.v;
+end C36;
+//// model: C37
+model C37
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; A c[3];
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}}; c.x = 2 * a.x; c.v = a.v + a.v;
+end C37;
+//// model: C38
+model C38
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[2, 2];
+equation
+  a.x = {{tt, 1}, {2, 3}}; a.v = {{{tt, 1}, {2, 3}}, {{4, 5}, {6, 7}}};
+end C38;
+//// model: C39
+model C39
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[2, 2];
+equation
+  a[1].x = {tt, 1}; a[2, :].x = {2, 3}; a[:, 1].v = {{tt, 1}, {2, 3}}; a[:, 2].v[1] = {4, 5}; a[:, 2].v[2] = {6, 7};
+end C39;
+//// model: C310
+model C310
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  B b[2];
+equation
+  b.q.x = {{tt, 1}, {2, 3}}; b.q.v = {{{tt, 1}, {2, 3}}, {{4, 5}, {6, 7}}}; b.w = {0, 0};
+end C310;
+//// model: C311
+model C311
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  B b[2];
+equation
+  b[1].q.x = {tt, 1}; b[2].q[1].x = 2; b[2].q[2].x = 3; b.q[1].v = {{tt, 1}, {2, 3}}; b.q[2].v = {{tt, 1}, {2, 3}}; b.w = {0, 0};
+end C311;
+//// model: C312
+model C312
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  B b;
+equation
+  b.q.x = {tt, 1}; b.q.v = {{tt, 1}, {2, 3}}; b.w = 0;
+end C312;
+//// model: C313
+model C313
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  R r[2];
+equation
+  r.s = {tt, 1}; r.t = {{tt, 1}, {2, 3}};
+end C313;
+//// model: C314
+model C314
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  R r[2];
+equation
+  r[1].s = tt; r[2].s = 1; r[:].t[1] = {tt, 2}; r[:].t[2] = {1, 3};
+end C314;
+//// model: C315
+model C315
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3];
+equation
+  for i in 1:3 loop a[i].x = tt * i; a[i].v = {tt, i}; end for;
+end C315;
+//// model: C316
+model C316
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3];
+equation
+  for i in 1:3 loop a[i].x = tt * i; for j in 1:2 loop a[i].v[j] = i + j; end for; end for;
+end C316;
+//// model: C317
+model C317
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; initial equation a.x = {0, 0, 0}; equation der(a.x) = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C317;
+//// model: C318
+model C318
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3];
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}}; assert(sum(a.x) > 0, "neg");
+end C318;
+//// model: C319
+model C319
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3];
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}}; when sum(a.x) > 1 then reinit(a[1].x, 0); end when;
+end C319;
+//// model: C320
+model C320
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3];
+equation
+  if tt > 1 then a.x = {tt, 1, 2}; else a.x = {0, 0, 0}; end if; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C320;
+//// model: C321
+model C321
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; Real y[3] = if tt > 1 then a.x else a.v[1];
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C321;
+//// model: C322
+model C322
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; Real y = a.x * a.x + a.v[1] * a.v[2];
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C322;
+//// model: C323
+model C323
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; Real y[3] = sin(a.x);
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C323;
+//// model: C324
+model C324
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; Real y[2] = a.v * {1, 2};
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C324;
+//// model: C325
+model C325
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; Real y[2, 3] = transpose(a.v);
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C325;
+//// model: C326
+model C326
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; Real y[3] = der(a.x);
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C326;
+//// model: C327
+model C327
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; Real y = sum(a.x .* a.k);
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C327;
+//// model: C328
+model C328
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3](k = {1, 2, 3}); Real y = sum(a.k) * tt;
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C328;
+//// model: C329
+model C329
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3](each k = 2); parameter Real p[3] = a.k; Real y = sum(p) * tt;
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C329;
+//// model: C330
+model C330
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; parameter Real p = sum(a.k); parameter Real q[3] = 2 * a.k;
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C330;
+//// model: C331
+model C331
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; parameter Integer n = 2; Real y = a[n].x + sum(a[1:n].x);
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C331;
+//// model: C332
+model C332
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  parameter Integer n = 3; A a[n]; Real y = sum(a.x);
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C332;
+//// model: C333
+model C333
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  parameter Integer n = 3; A a[n]; Real y = sum(a.x);
+equation
+  for i in 1:n loop a[i].x = tt; a[i].v = {tt, i}; end for;
+end C333;
+//// model: C334
+model C334
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  model C parameter Integer n = 2; A q[n]; end C; C c(n = 3); Real y = sum(c.q.x);
+equation
+  for i in 1:3 loop c.q[i].x = tt; c.q[i].v = {tt, i}; end for;
+end C334;
+//// model: C335
+model C335
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  model C A q[2]; end C; C c[2]; Real y = sum(c.q.x) + sum(c[1].q.v) + c[2].q[1].v[2];
+equation
+  for i in 1:2, j in 1:2 loop c[i].q[j].x = tt; c[i].q[j].v = {tt, i}; end for;
+end C335;
+//// model: C336
+model C336
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[0]; Real y = sum(a.x) + tt;
+end C336;
+//// model: C337
+model C337
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[1]; Real y = sum(a.x); Real z[1] = a.x;
+equation
+  a.x = {tt}; a.v = {{tt, 1}};
+end C337;
+//// model: C338
+model C338
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  constant R cr[2] = {R(1, {2, 3}), R(4, {5, 6})}; Real y = sum(cr.s) * tt; Real z = cr[2].t[1] * tt;
+end C338;
+//// model: C339
+model C339
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  parameter R pr[2] = {R(1, {2, 3}), R(4, {5, 6})}; Real y = sum(pr.s) * tt; Real z[2] = pr.t[2];
+end C339;

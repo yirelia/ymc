@@ -1111,12 +1111,49 @@ class Flattener {
     const Id<FlatStatement> s = collect_statement(sid, enclosing, prefix);
     if (result_.unsupported) return false;
     if (!s.is_valid()) return true;   // 删去的语句（空数组赋值）
+    // 语句里留着的"复合数组取字段"的展开数组：语句不标量化，omc 打成 `y := array(a[$i1].x for $i1 in 1:3);`（CA 探针 c1；
+    // 此前打成 `{a[1].x, a[2].x, a[3].x}`）——未做 → SKIP。被 sum 之类吃掉的（`y := sum(a.x)`）不受影响。
+    if (stmt_has_xfield(s)) { set_unsupported("composite array field in algorithm"); return false; }
     if (result_.model.stmts[s].kind == FlatStmtKind::For && result_.model.stmts[s].body.empty()) return true;
     // 范围的类型是空数组的 for 语句整条删去（simplifyStatement 的 FOR 支：Dimension.isZero，NFSimplifyModel.mo:315-333
     // v1.25.0；EN 探针 t3：`for i in 3:1 loop`、`for i in E.three:E.one loop`；此前照打）。
     if (result_.model.stmts[s].kind == FlatStmtKind::For && range_known_empty(result_.model.stmts[s].a)) return true;
     out.push_back(s);
     return true;
+  }
+  // 数组字面量的元素全是"复合数组取字段"展开出来的元素 cref（可隔一层转型 / 嵌套）：原样留着的展开数组。逐元素运算过的
+  //（`2 * a.x` → `{2.0 * a[1].x, …}`）元素不再是那些 cref，不算。
+  bool is_xfield_array(Id<Expr> id) {
+    const Expr& e = result_.model.exprs[id];
+    if (e.kind != ExprKind::Array || e.args.empty()) return false;
+    for (Id<Expr> a : e.args) {
+      const Expr& x = result_.model.exprs[a];
+      const bool elem = xfield_elems_.count(a.raw) || (x.kind == ExprKind::Cast && x.a.is_valid() && xfield_elems_.count(x.a.raw));
+      if (!elem && !is_xfield_array(a)) return false;
+    }
+    return true;
+  }
+  bool expr_has_xfield(Id<Expr> id) {
+    if (!id.is_valid()) return false;
+    if (is_xfield_array(id)) return true;
+    const Expr& e = result_.model.exprs[id];
+    for (Id<Expr> a : e.args) if (expr_has_xfield(a)) return true;
+    if (e.kind == ExprKind::Cref)
+      for (const ExprCrefPart& cp : e.cref.parts)
+        for (Id<Expr> sx : cp.subscripts) if (expr_has_xfield(sx)) return true;
+    return expr_has_xfield(e.a) || expr_has_xfield(e.b) || expr_has_xfield(e.c);
+  }
+  bool stmt_has_xfield(Id<FlatStatement> sid) {
+    if (xfield_elems_.empty()) return false;
+    const FlatStatement& st = result_.model.stmts[sid];
+    if (expr_has_xfield(st.a) || expr_has_xfield(st.b) || expr_has_xfield(st.c)) return true;
+    for (const FlatStmtBranch& br : st.branches) {
+      if (expr_has_xfield(br.cond)) return true;
+      for (Id<FlatStatement> b : br.body) if (stmt_has_xfield(b)) return true;
+    }
+    for (Id<FlatStatement> b : st.body) if (stmt_has_xfield(b)) return true;
+    for (Id<FlatStatement> b : st.else_body) if (stmt_has_xfield(b)) return true;
+    return false;
   }
   // for 范围已知是空的：字面量范围（整数 / Real / Boolean / 枚举，含步长）取不到值，或空的数组字面量。
   bool range_known_empty(Id<Expr> range) {
@@ -8719,17 +8756,70 @@ class Flattener {
     if (local.is_valid() && !I_.nodes[local].is_empty() && I_.nodes[local].kind == NodeKind::Component &&
         c.parts.size() == 2 && c.parts[1].subscripts.empty())
       if (std::optional<Id<Expr>> ex = expand_field_over_array(ac, local, enclosing, prefix)) return *ex;
+    // 一般形态的复合数组元素引用（中间段的洞 / 切片、数组字段、多层）：见 expand_composite_path。
+    if (local.is_valid() && !I_.nodes[local].is_empty() && I_.nodes[local].kind == NodeKind::Component && c.parts.size() >= 2) {
+      if (std::optional<Id<Expr>> ex = expand_composite_path(ac, enclosing, prefix)) return *ex;
+      if (result_.unsupported) {
+        e.ty = Type::real();
+        return add(std::move(e));
+      }
+    }
     // 非末段带下标（复合数组元素引用 `a[3].x`）：只做首段（本地复合数组组件），下标须是常量 / end / 结构参数且在界内
     //（同末段规则；越界 omc 报错，ArrayBounds2）→ 打印成字面量下标。更深的段带下标、或首段是数组却没下标（`r.x` 跨元素
     // 取字段）→ SKIP。
-    std::vector<Id<Expr>> head_subs;   // 首段下标的定型结果（字面量）
+    std::vector<Id<Expr>> head_subs;   // 首段下标的定型结果（字面量 / 符号式）
+    std::vector<std::vector<Id<Expr>>> mid_subs(c.parts.size());   // 中间段（非首非末）的下标：字面量 / 符号式
+    // 复合数组段的一个标量下标：界内的常量 / end / 迭代变量 / 结构参数 → 字面量；保留着的迭代变量（for 语句 / 保留的归约、
+    // 推导式）与运行时整型量（`a[n].x`）→ 原样留成符号下标，omc 不做越界检查（CA 探针 c2：`for i in 1:3 loop s := s +
+    // a[i].x`、`max(a[i].x for i in 1:3)`、`Real z = a[n].x`）。其余 → invalid（调用方 SKIP）。
+    auto comp_sub = [&](Id<Exp> sx, std::int64_t dim, const ScodeScope& sc) -> Id<Expr> {
+      std::optional<std::int64_t> iv = I_.absyn.exps[sx].kind == ExpKind::End ? std::optional<std::int64_t>(dim)
+                                                                              : subscript_int(sx, &sc);
+      const bool sym = !iv && is_stmt_iter_subscript(sx);
+      if (!iv && !sym && absyn_refs_param(sx, enclosing))
+        if (std::optional<CVal> pv = eval_scode(sx, sc, 0, /*allow_param=*/true, nullptr); pv && pv->k == CVal::K::Int)
+          iv = pv->i;
+      if (iv) return *iv >= 1 && *iv <= dim ? lit_int(*iv) : Id<Expr>{};
+      const ExpKind sk = I_.absyn.exps[sx].kind;
+      if (sk == ExpKind::Colon || sk == ExpKind::Range || is_array_ctor(sx)) return {};
+      if (absyn_refs_param(sx, enclosing)) return {};   // 符号下标里的参数：omc 标结构参数并代入，未做（同末段）
+      const Id<Expr> se = simplify_expr(inst_exp(sx, enclosing, prefix));
+      if (result_.unsupported) return {};
+      const Type& st = result_.model.exprs[se].ty;
+      if (st.kind != TypeKind::Integer || st.is_array()) return {};
+      if (!sym && !cond_is_runtime(se)) return {};
+      return se;
+    };
     if (local.is_valid() && !I_.nodes[local].is_empty() && c.parts.size() > 1) {
-      for (std::size_t i = 1; i + 1 < c.parts.size(); ++i)
-        if (!c.parts[i].subscripts.empty()) {
-          set_unsupported("composite array element reference");
-          e.ty = Type::real();
-          return add(std::move(e));
+      // 中间段带下标（`b[1].q[2].x`、`b.q[2].x`，CA 探针 c1）：该段须是字面量整数维的复合数组、下标取尽各维、都是界内的
+      // 常量（子实例里的参数维受实例修饰影响，这里求不准 → SKIP；洞 / 切片已由 expand_composite_path 展开）。
+      {
+        NodeId mc = I_.nodes[local].comp.is_valid() ? I_.comps[I_.nodes[local].comp].class_inst : NodeId{};
+        const ScodeScope mscope = scode_scope_of(enclosing);
+        for (std::size_t i = 1; i + 1 < c.parts.size(); ++i) {
+          const NodeId mn = is_class_inst(mc) ? find_local(mc, c.parts[i].name) : NodeId{};
+          if (!is_comp_node(mn)) break;   // 找不到：下面照常报
+          const SElement& mel = I_.scode.elems[I_.comps[I_.nodes[mn].comp].def];
+          std::vector<std::int64_t> md;
+          bool mok = true;
+          for (const std::vector<Id<Exp>>* ds : {&mel.attr.dims, &mel.type.dims})
+            for (Id<Exp> d : *ds) {
+              if (I_.absyn.exps[d].kind == ExpKind::IntLit) md.push_back(I_.absyn.exps[d].ival); else mok = false;
+            }
+          const std::vector<Id<Exp>>& ms = c.parts[i].subscripts;
+          mok = mok && ms.size() == md.size();
+          for (std::size_t k = 0; mok && k < ms.size(); ++k) {
+            const Id<Expr> sub = comp_sub(ms[k], md[k], mscope);
+            if (!sub.is_valid()) mok = false; else mid_subs[i].push_back(sub);
+          }
+          if (!mok) {
+            set_unsupported("composite array element reference");
+            e.ty = Type::real();
+            return add(std::move(e));
+          }
+          mc = I_.comps[I_.nodes[mn].comp].class_inst;
         }
+      }
       if (I_.nodes[local].kind == NodeKind::Component) {
         const SElement& hcel = I_.scode.elems[I_.comps[I_.nodes[local].comp].def];
         const bool harr = !hcel.attr.dims.empty() || !hcel.type.dims.empty();
@@ -8742,13 +8832,8 @@ class Flattener {
           for (Id<Exp> d : hcel.type.dims) if (!eval_dim(d, hd, hscope)) ok = false;
           ok = ok && hd.size() == hs.size();
           for (std::size_t k = 0; ok && k < hs.size(); ++k) {
-            std::optional<std::int64_t> iv = I_.absyn.exps[hs[k]].kind == ExpKind::End ? std::optional<std::int64_t>(hd[k])
-                                                                                       : subscript_int(hs[k], &hscope);
-            if (!iv && absyn_refs_param(hs[k], enclosing))
-              if (std::optional<CVal> pv = eval_scode(hs[k], hscope, 0, /*allow_param=*/true, nullptr); pv && pv->k == CVal::K::Int)
-                iv = pv->i;
-            if (!iv || *iv < 1 || *iv > hd[k]) ok = false;
-            else head_subs.push_back(lit_int(*iv));
+            const Id<Expr> sub = comp_sub(hs[k], hd[k], hscope);
+            if (!sub.is_valid()) ok = false; else head_subs.push_back(sub);
           }
         }
         if (!ok) {
@@ -9103,6 +9188,7 @@ class Flattener {
       std::vector<Id<Expr>> subs;
       for (std::size_t k = 0; k < p.subscripts.size(); ++k) {
         if (pi == 0 && c.parts.size() > 1 && k < head_subs.size()) { subs.push_back(head_subs[k]); continue; }
+        if (pi > 0 && pi + 1 < c.parts.size() && k < mid_subs[pi].size()) { subs.push_back(mid_subs[pi][k]); continue; }
         // 留成符号的下标（for 语句 / 保留着的归约的迭代变量）照常化简（IR 探针 s1：`x[i + 0]`、`x[1 * i]`、`x[i + (2 - 2)]`
         // → `x[i]`；此前原样留着）。
         const bool typed_sub = pi + 1 == c.parts.size() && k < leaf_subs.size() && leaf_subs[k].is_valid();
@@ -9280,7 +9366,9 @@ class Flattener {
           lit.ival = i;
           ec.parts[0].subscripts.push_back(synth_exp(std::move(lit)));
         }
-        return cref(synth_cref(std::move(ec)), enclosing, prefix);
+        const Id<Expr> el = cref(synth_cref(std::move(ec)), enclosing, prefix);
+        xfield_elems_.insert(el.raw);
+        return el;
       }
       Expr arr;
       arr.kind = ExprKind::Array;
@@ -9299,6 +9387,130 @@ class Flattener {
       return add(std::move(arr));
     };
     return build(build, ns);
+  }
+
+  // 复合数组的元素引用（`a[:].x`、`a[1:2].v[1]`、`a.v`、`b.q[2].x`、`a[:, 2].x`）：非末段的复合数组段有"洞"（没给下标 /
+  // 下标少于维数 / 切片）时，omc 的 ExpandExp 把整条引用展开成全标量元素的嵌套数组——各段的洞按段序、维序逐层展开，
+  // 末段是数组的也一并展开到标量（CA 探针 c1：`a.v` → `{{a[1].v[1], a[1].v[2]}, …}`、`a[:, 2].x` → `{a[1,2].x, a[2,2].x}`、
+  // `b.q[2].x` → `{b[1].q[2].x, b[2].q[2].x}`）；元素经 cref() 照常解析。没有洞 → nullopt（照常解析）；未做的形态置
+  // unsupported 并返回 nullopt。
+  // 各段的维：首段在 enclosing 的作用域里求（参数维随帧）；更深的段只收字面量整数维（子实例里的参数维受实例修饰影响，
+  // 这里求不准）。标量下标须是界内的常量 / end / 迭代变量 / 结构参数（越界的 omc 不查、照打一个不存在的变量，不跟）。
+  std::optional<Id<Expr>> expand_composite_path(Id<Cref> ac, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    const Cref c = I_.absyn.crefs[ac];   // 拷贝（下面往 absyn arena 合成节点）
+    if (c.leading_dot || c.parts.size() < 2) return std::nullopt;
+    struct Part {
+      std::vector<std::vector<std::int64_t>> sel;   // 各维选中的下标表
+      std::vector<bool> hole;                       // 该维是洞（展开成一层数组）；否 → sel 恰一个值
+    };
+    auto unsupported = [&]() -> std::optional<Id<Expr>> {
+      set_unsupported("composite array element reference");
+      return std::nullopt;
+    };
+    std::vector<Part> ps(c.parts.size());
+    const ScodeScope scope = scode_scope_of(enclosing);
+    NodeId cls = enclosing;
+    bool any_hole = false;
+    for (std::size_t i = 0; i < c.parts.size(); ++i) {
+      const bool last = i + 1 == c.parts.size();
+      const NodeId n = find_local(cls, c.parts[i].name);
+      if (!is_comp_node(n) || (i > 0 && I_.nodes[n].visibility == Visibility::Protected)) return std::nullopt;
+      if (last && !any_hole) return std::nullopt;   // 各复合段都取到了元素：照常解析（末段的切片另有处理）
+      const SElement& el = I_.scode.elems[I_.comps[I_.nodes[n].comp].def];
+      std::vector<std::int64_t> dims;
+      for (const std::vector<Id<Exp>>* ds : {&el.attr.dims, &el.type.dims})
+        for (Id<Exp> d : *ds) {
+          if (i == 0) {
+            if (!eval_dim(d, dims, scope)) return std::nullopt;
+          } else if (I_.absyn.exps[d].kind == ExpKind::IntLit) {
+            dims.push_back(I_.absyn.exps[d].ival);
+          } else {
+            // 更深的段是参数维 / `:` 维：有洞要展开时求不准 → 未做；没洞的留给照常解析去报。
+            if (any_hole || !c.parts[i].subscripts.empty() || !last) return unsupported();
+            return std::nullopt;
+          }
+        }
+      const std::vector<Id<Exp>>& subs = c.parts[i].subscripts;
+      if (subs.size() > dims.size()) return std::nullopt;   // 下标多于维数：omc 报错，照常解析去拒
+      Part& p = ps[i];
+      for (std::size_t k = 0; k < dims.size(); ++k) {
+        std::vector<std::int64_t> sel;
+        bool hole = true;
+        const ExpKind sk = k < subs.size() ? I_.absyn.exps[subs[k]].kind : ExpKind::Colon;   // 缺的尾部下标 = `:`
+        if (sk == ExpKind::Colon) {
+          for (std::int64_t v = 1; v <= dims[k]; ++v) sel.push_back(v);
+        } else if (sk == ExpKind::Range || (is_array_ctor(subs[k]) && !is_comprehension(subs[k]))) {
+          const std::optional<std::vector<std::int64_t>> sl = slice_indices(subs[k], dims[k], scope, enclosing);
+          if (!sl) return last && !any_hole ? std::nullopt : unsupported();
+          sel = *sl;
+        } else {
+          std::optional<std::int64_t> iv = sk == ExpKind::End ? std::optional<std::int64_t>(dims[k]) : subscript_int(subs[k], &scope);
+          if (!iv && absyn_refs_param(subs[k], enclosing))
+            if (std::optional<CVal> pv = eval_scode(subs[k], scope, 0, /*allow_param=*/true, nullptr); pv && pv->k == CVal::K::Int)
+              iv = pv->i;
+          // 求不出的（运行时下标 `a[i].x`）/ 越界的：有洞时未做；没洞的留给照常解析。
+          if (!iv || *iv < 1 || *iv > dims[k]) return any_hole ? unsupported() : std::nullopt;
+          sel.push_back(*iv);
+          hole = false;
+        }
+        if (sel.empty()) return unsupported();   // 空的洞（零长度的复合数组）：未做
+        if (hole && !last) any_hole = true;
+        p.sel.push_back(std::move(sel));
+        p.hole.push_back(hole);
+      }
+      if (last) break;
+      if (I_.comps[I_.nodes[n].comp].ty.kind != TypeKind::Complex) return std::nullopt;
+      cls = I_.comps[I_.nodes[n].comp].class_inst;
+      if (!is_class_inst(cls)) return std::nullopt;
+    }
+    if (!any_hole) return std::nullopt;
+    std::int64_t total = 1;
+    for (const Part& p : ps)
+      for (const std::vector<std::int64_t>& sl : p.sel) {
+        total *= static_cast<std::int64_t>(sl.size());
+        if (total > 1024) { set_unsupported("composite array too large"); return std::nullopt; }
+      }
+    // 逐层展开：(段, 维) 按序；洞 → 一层数组，标量 → 定值。走到底合成全标量下标的 cref。
+    std::vector<std::vector<std::int64_t>> pick(ps.size());
+    for (std::size_t i = 0; i < ps.size(); ++i) pick[i].assign(ps[i].sel.size(), 0);
+    auto build = [&](auto& self, std::size_t i, std::size_t k) -> Id<Expr> {
+      if (result_.unsupported) return lit_int(0);
+      if (i == ps.size()) {
+        Cref ec = c;
+        for (std::size_t j = 0; j < ps.size(); ++j) {
+          ec.parts[j].subscripts.clear();
+          for (std::int64_t v : pick[j]) {
+            Exp lit;
+            lit.kind = ExpKind::IntLit;
+            lit.ival = v;
+            ec.parts[j].subscripts.push_back(synth_exp(std::move(lit)));
+          }
+        }
+        const Id<Expr> el = cref(synth_cref(std::move(ec)), enclosing, prefix);
+        xfield_elems_.insert(el.raw);
+        return el;
+      }
+      if (k == ps[i].sel.size()) return self(self, i + 1, 0);
+      if (!ps[i].hole[k]) {
+        pick[i][k] = ps[i].sel[k][0];
+        return self(self, i, k + 1);
+      }
+      Expr arr;
+      arr.kind = ExprKind::Array;
+      for (std::int64_t v : ps[i].sel[k]) {
+        pick[i][k] = v;
+        arr.args.push_back(self(self, i, k + 1));
+        if (result_.unsupported) return lit_int(0);
+      }
+      Dimension d;
+      d.kind = DimKind::Integer;
+      d.size = static_cast<std::int64_t>(arr.args.size());
+      arr.ty = Type::array_of(result_.model.exprs[arr.args[0]].ty, {d});   // array_of 把子数组的维接在后面
+      return add(std::move(arr));
+    };
+    const Id<Expr> r = build(build, 0, 0);
+    if (result_.unsupported) return std::nullopt;
+    return r;
   }
 
   // 在 enclosing 实例的 FlatTree 组件里按名字找（v1：直接线性找，规模小）。
@@ -11600,8 +11812,10 @@ class Flattener {
         }
       }
     }
+    // der 作用在"复合数组取字段"的展开数组上（`der(a.x)`）：见下面 der 的数组实参。
+    const bool der_xfield = supported && !fn_scope_ && builtin_name == "der" && args.size() == 1 && is_xfield_array(args[0]);
     for (Id<Expr> a : args)
-      if (result_.model.exprs[a].kind == ExprKind::Array) {
+      if (result_.model.exprs[a].kind == ExprKind::Array && !der_xfield) {
         set_unsupported("array function argument");
         supported = false;
       }
@@ -11638,6 +11852,17 @@ class Flattener {
       if (const std::vector<std::int64_t> sh = expr_shape(args[0]); !sh.empty()) {
         const Expr ax = result_.model.exprs[args[0]];   // 拷贝
         bool ok = ax.kind == ExprKind::Cref && ax.ty.is_array() && ax.ty.element_type().kind == TypeKind::Real;
+        // 复合数组取字段的展开数组（CA 探针 c3：绑定里整体保留 `y = der({a[1].x, a[2].x, a[3].x})`，等式里随等式逐元素
+        // `der(a[1].x) = …`）。
+        // 元素须都是变量（参数字段的 `der(a.k)` omc 折成 `{0.0, 0.0, 0.0}`，未做）。
+        auto all_vars = [&](auto& self, Id<Expr> x) -> bool {
+          const Expr& xe = result_.model.exprs[x];
+          if (xe.kind != ExprKind::Array) return xe.kind == ExprKind::Cref && refs_runtime_var(x);
+          for (Id<Expr> el : xe.args) if (!self(self, el)) return false;
+          return true;
+        };
+        const bool xf = der_xfield && expr_elem_kind(args[0]) == TypeKind::Real && all_vars(all_vars, args[0]);
+        ok = ok || xf;
         for (std::int64_t n : sh) ok = ok && n >= 1;
         if (!ok) {
           set_unsupported("der of array expression");
@@ -11648,6 +11873,16 @@ class Flattener {
           r.call_name = {in_.intern("der")};
           r.args = {args[0]};
           r.ty = ax.ty;
+          if (xf) {
+            std::vector<Dimension> ds;
+            for (std::int64_t n : sh) {
+              Dimension d;
+              d.kind = DimKind::Integer;
+              d.size = n;
+              ds.push_back(d);
+            }
+            r.ty = Type::array_of(Type::real(), std::move(ds));
+          }
           return add(std::move(r));
         }
       }
@@ -15091,6 +15326,7 @@ class Flattener {
   // 函数体发射语境（FnCtxGuard 设 / 恢复；fn_scope_ 非空 = 正在发射函数体）。
   std::unordered_map<std::uint32_t, Type> func_params_;         // 形参 / 局部名 → 类型（含维，cref 解析成 kFnLocal 裸名）
   std::unordered_set<std::uint32_t> fn_inputs_;                 // 输入名（不可作赋值目标）
+  std::unordered_set<std::uint32_t> xfield_elems_;              // "复合数组取字段"展开出来的各元素 cref（语句里原样留着的要拒）
   std::unordered_map<std::uint32_t, Id<Expr>> loop_labels_;     // Boolean / 枚举范围上的 for 方程迭代变量 → 当前取值的标签
                                                                 //（loop_vars_ 里存它的序数）
   std::unordered_map<std::uint32_t, std::vector<Id<Exp>>> fn_dim_exps_;   // 形参 / 局部名 → 各维的书写表达式（隐式范围用）

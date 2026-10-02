@@ -1,0 +1,149 @@
+//// set: ca-c4 — der / pre / abs / noEvent 作用在复合数组取字段上
+//// model: C40
+model C40
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3];
+equation
+  der(a.x) = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C40;
+//// model: C41
+model C41
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3];
+equation
+  der(a.x) = -a.x; der(a.v) = {{tt, 1}, {2, 3}, {4, 5}};
+end C41;
+//// model: C42
+model C42
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; Real y[3] = der(a.x);
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C42;
+//// model: C43
+model C43
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; Real y[3, 2] = der(a.v);
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C43;
+//// model: C44
+model C44
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; Real y[3] = 2 * der(a.x);
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C44;
+//// model: C45
+model C45
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; Real y = sum(der(a.x));
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C45;
+//// model: C46
+model C46
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; Real y[2] = der(a[1:2].x);
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C46;
+//// model: C47
+model C47
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; Real y[3];
+equation
+  y = der(a.x); a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C47;
+//// model: C48
+model C48
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; Real y[3];
+equation
+  y + der(a.x) = {0, 0, 0}; a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C48;
+//// model: C49
+model C49
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; initial equation a.x = {0, 0, 0}; equation der(a.x) = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C49;
+//// model: C410
+model C410
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; Real y[3] = der(a.k);
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C410;
+//// model: C411
+model C411
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  B b[2];
+equation
+  der(b.q.x) = {{tt, 1}, {2, 3}}; b.q.v = {{{tt, 1}, {2, 3}}, {{4, 5}, {6, 7}}}; der(b.w) = {0, 0};
+end C411;
+//// model: C412
+model C412
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; Real y[3] = pre(a.x);
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C412;
+//// model: C413
+model C413
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; Real y[3] = abs(a.x);
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C413;
+//// model: C414
+model C414
+  model A Real x; parameter Real k = 1; Real v[2]; end A;
+  model B A q[2]; Real w; end B;
+  record R Real s; Real t[2]; end R;
+  Real tt = time;
+  A a[3]; Real y[3] = noEvent(a.x);
+equation
+  a.x = {tt, 1, 2}; a.v = {{tt, 1}, {2, 3}, {4, 5}};
+end C414;

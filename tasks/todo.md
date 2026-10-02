@@ -1298,6 +1298,26 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           空的标签推导式。
           → scodeinst 501→506 PASS（End1、ForEquationEnum1 / 2、ImplicitRangeType1 / 2 入 slice）；整个 testsuite PASS
           1308→1325；+4 单测（230）；探针 5159→5357。
+    - [x] (60d) 复合数组的元素引用：洞 / 切片 / 数组字段 / 多层 / 符号下标（2026-10-03）：
+          此前只有两种形态：首段带取尽各维的字面量下标（`a[3].x`）、两段式的"复合数组取标量字段"（`r.x`）；中间段带下标、
+          切片 `a[:].x` / `a[1:2].x`、数组字段 `a.v`、多层 `b.q.x` 都 SKIP（`composite array element reference`，语料 9 例）。
+          **展开**（expand_composite_path，omc 的 ExpandExp）：非末段的复合数组段有洞（没给下标 / 下标少于维数 / 切片）时，
+          整条引用展开成全标量元素的嵌套数组——各段的洞按段序、维序逐层，末段是数组的也一并展开到标量（`a.v` →
+          `{{a[1].v[1], a[1].v[2]}, …}`、`a[:, 2].x`、`b.q[2].x` → `{b[1].q[2].x, b[2].q[2].x}`）；元素合成全字面量下标的
+          cref 交回 cref() 照常解析。首段的维在 enclosing 的作用域里求；更深的段只收字面量整数维（子实例里的参数维受实例
+          修饰影响，求不准 → SKIP）。
+          **中间段的标量下标**：`b[1].q[2].x`、`b.q[2].x`（此前只许首段带下标）。
+          **符号下标**：复合数组段上保留着的迭代变量（for 语句 / 保留的归约、推导式）与运行时整型量原样留着——
+          `for i in 1:3 loop s := s + a[i].x`、`max(a[i].x for i in 1:3)`、`Real z = a[n].x`（omc 不做越界检查）。
+          **der**：`der(a.x)` 在绑定里整体保留 `der({a[1].x, a[2].x, a[3].x})`、等式里随等式逐元素。
+          **潜伏错**：语句里原样留着的"复合数组取字段"（`y := a.x`）打成了数组字面量，omc 是
+          `y := array(a[$i1].x for $i1 in 1:3)`（语句不标量化）——现在 SKIP（按展开出来的元素 cref 认；逐元素运算过的、
+          被 sum 吃掉的照常）。
+          未做 → SKIP：语句里的 `array(a[$i1].x …)` 形态、向量化调用的实参（`sin(a.x)` → `array(sin(a[$i1].x) …)`）、
+          子实例里参数维的复合数组（`C c(n = 3)` 的 `c.q.x`）、零长度的复合数组、越界的字面量下标（omc 照打
+          `a[4].x`，不跟）、参数字段的 der（omc 折成 0）、`size(a.x, 1)`。
+          → scodeinst 506→507 PASS（EquationQualified1 入 slice）；整个 testsuite PASS 1325→1330（ArrayReduce2、MatrixEquation、
+          QualifiedSlicing、LookupArray）；+1 单测（231）；探针 5357→5506。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、

@@ -1,0 +1,83 @@
+//// set: ca-ut — 复合数组的元素引用（单测原文）
+//// model: CAS1
+model CAS1
+  model A
+    Real x = time;
+  end A;
+  A a[3];
+  Real y[3];
+algorithm
+  y := a.x;
+end CAS1;
+//// model: CAS2
+model CAS2
+  model A
+    Real x = time;
+  end A;
+  A a[3];
+  Real y = a[4].x;
+end CAS2;
+//// model: CAT1
+model CAT1
+  model A
+    Real x;
+    parameter Real k = 1;
+    Real v[2];
+  end A;
+  model B
+    A q[2];
+    Real w = time;
+  end B;
+  record R
+    Real s;
+    Real t[2];
+  end R;
+  Real tt = time;
+  A a[3];
+  B b[2];
+  parameter R p[2](s = {1, 2}, t = {{1, 2}, {3, 4}});
+  Real y1 = sum(a[:].x) + sum(a[1:2].k) + sum(a.v);
+  Real y2[3] = a.x;
+  Real y3[3, 2] = a.v;
+  Real y4[3] = a[:].v[2];
+  Real y5[2] = a[{3, 1}].x;
+  Real y6[2, 2] = b.q.x;
+  Real y7[2] = b.q[2].x;
+  Real y8 = b[1].q[2].x + b[2].q[1].v[2];
+  Real y9[2] = b[2].q[1].v;
+  Real y10[3] = 2 * der(a.x);
+  parameter Real q[2] = p.s;
+  parameter Real u[2, 2] = p.t;
+equation
+  der(a.x) = {tt, 1, 2};
+  a[:].v[1] = {tt, 1, 2};
+  a.v[2] = 2 * a.x;
+  b.q.x = {{tt, 1}, {2, 3}};
+  b[1].q.v = {{tt, 1}, {2, 3}};
+  b[2].q[:].v = {{4, 5}, {6, 7}};
+end CAT1;
+//// model: CAT2
+model CAT2
+  model A
+    Real x = time;
+    parameter Real k = 1;
+    Real v[2] = {time, 1};
+  end A;
+  A a[3];
+  Integer n = integer(time);
+  Real s;
+  Real y[3];
+  Real z1 = a[n].x + a[n + 1].v[2];
+  Real z2[2] = a[n].v;
+  Real z3 = max(a[i].x for i in 1:3) + sum(a[i].v[1] for i in 1:3);
+  Real z4[3] = {a[i].x * 2 for i in 1:3};
+algorithm
+  s := sum(a.x) + a.x * a.k;
+  y := 2 * a.x;
+  for i in 1:3 loop
+    y[i] := y[i] + a[i].x * a[i].k + sum(a[i].v);
+  end for;
+  for i in 1:2 loop
+    s := s + a[i + 1].v[1];
+  end for;
+end CAT2;

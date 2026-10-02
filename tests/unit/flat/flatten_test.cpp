@@ -4293,6 +4293,87 @@ YMC_TEST(flatten_reductions_and_comprehensions_over_type_ranges) {
                            "  x = array(i for i in {E.one, E.two, E.three});\nend ENT4;\n"));
 }
 
+YMC_TEST(flatten_composite_array_element_references) {
+  // 复合数组的元素引用：非末段有洞（没给下标 / 下标少于维数 / 切片）→ 整条引用展开成全标量元素的嵌套数组（各段的洞按
+  // 段序、维序逐层，末段数组一并展开到标量）：`a.v` → `{{a[1].v[1], a[1].v[2]}, …}`、`a[{3, 1}].x`、`b.q[2].x` →
+  // `{b[1].q[2].x, b[2].q[2].x}`；各段都取到元素的照常解析（`b[2].q[1].v` 整体）。等式里随等式逐元素、sum 展开、
+  // `der(a.x)` 在绑定里整体保留。期望 = omc 1.25.0 实跑 CAT1（2026-10-03）。
+  YMC_CHECK_EQ(flatten_src("model CAT1\n  model A\n    Real x;\n    parameter Real k = 1;\n    Real v[2];\n  end A;\n  model B\n"
+                           "    A q[2];\n    Real w = time;\n  end B;\n  record R\n    Real s;\n    Real t[2];\n  end R;\n"
+                           "  Real tt = time;\n  A a[3];\n  B b[2];\n  parameter R p[2](s = {1, 2}, t = {{1, 2}, {3, 4}});\n"
+                           "  Real y1 = sum(a[:].x) + sum(a[1:2].k) + sum(a.v);\n  Real y2[3] = a.x;\n  Real y3[3, 2] = a.v;\n"
+                           "  Real y4[3] = a[:].v[2];\n  Real y5[2] = a[{3, 1}].x;\n  Real y6[2, 2] = b.q.x;\n"
+                           "  Real y7[2] = b.q[2].x;\n  Real y8 = b[1].q[2].x + b[2].q[1].v[2];\n  Real y9[2] = b[2].q[1].v;\n"
+                           "  Real y10[3] = 2 * der(a.x);\n  parameter Real q[2] = p.s;\n  parameter Real u[2, 2] = p.t;\n"
+                           "equation\n  der(a.x) = {tt, 1, 2};\n  a[:].v[1] = {tt, 1, 2};\n  a.v[2] = 2 * a.x;\n"
+                           "  b.q.x = {{tt, 1}, {2, 3}};\n  b[1].q.v = {{tt, 1}, {2, 3}};\n  b[2].q[:].v = {{4, 5}, {6, 7}};\n"
+                           "end CAT1;\n"),
+               std::string("class CAT1\n  Real tt = time;\n  Real a[1].x;\n  parameter Real a[1].k = 1.0;\n  Real a[1].v[1];\n"
+                           "  Real a[1].v[2];\n  Real a[2].x;\n  parameter Real a[2].k = 1.0;\n  Real a[2].v[1];\n"
+                           "  Real a[2].v[2];\n  Real a[3].x;\n  parameter Real a[3].k = 1.0;\n  Real a[3].v[1];\n"
+                           "  Real a[3].v[2];\n  Real b[1].q[1].x;\n  parameter Real b[1].q[1].k = 1.0;\n"
+                           "  Real b[1].q[1].v[1];\n  Real b[1].q[1].v[2];\n  Real b[1].q[2].x;\n"
+                           "  parameter Real b[1].q[2].k = 1.0;\n  Real b[1].q[2].v[1];\n  Real b[1].q[2].v[2];\n"
+                           "  Real b[1].w = time;\n  Real b[2].q[1].x;\n  parameter Real b[2].q[1].k = 1.0;\n"
+                           "  Real b[2].q[1].v[1];\n  Real b[2].q[1].v[2];\n  Real b[2].q[2].x;\n"
+                           "  parameter Real b[2].q[2].k = 1.0;\n  Real b[2].q[2].v[1];\n  Real b[2].q[2].v[2];\n"
+                           "  Real b[2].w = time;\n  parameter Real p[1].s = 1.0;\n  parameter Real p[1].t[1] = 1.0;\n"
+                           "  parameter Real p[1].t[2] = 2.0;\n  parameter Real p[2].s = 2.0;\n"
+                           "  parameter Real p[2].t[1] = 3.0;\n  parameter Real p[2].t[2] = 4.0;\n"
+                           "  Real y1 = a[1].x + a[2].x + a[3].x + a[1].k + a[2].k + a[1].v[1] + a[1].v[2] + a[2].v[1] + a[2].v[2] + a[3].v[1] + a[3].v[2];\n"
+                           "  Real y2[1];\n  Real y2[2];\n  Real y2[3];\n  Real y3[1,1];\n  Real y3[1,2];\n  Real y3[2,1];\n"
+                           "  Real y3[2,2];\n  Real y3[3,1];\n  Real y3[3,2];\n  Real y4[1];\n  Real y4[2];\n  Real y4[3];\n"
+                           "  Real y5[1];\n  Real y5[2];\n  Real y6[1,1];\n  Real y6[1,2];\n  Real y6[2,1];\n  Real y6[2,2];\n"
+                           "  Real y7[1];\n  Real y7[2];\n  Real y8 = b[1].q[2].x + b[2].q[1].v[2];\n  Real y9[1];\n"
+                           "  Real y9[2];\n  Real y10[1];\n  Real y10[2];\n  Real y10[3];\n  parameter Real q[1] = p[1].s;\n"
+                           "  parameter Real q[2] = p[2].s;\n  parameter Real u[1,1] = p[1].t[1];\n"
+                           "  parameter Real u[1,2] = p[1].t[2];\n  parameter Real u[2,1] = p[2].t[1];\n"
+                           "  parameter Real u[2,2] = p[2].t[2];\nequation\n  y2 = {a[1].x, a[2].x, a[3].x};\n"
+                           "  y3 = {{a[1].v[1], a[1].v[2]}, {a[2].v[1], a[2].v[2]}, {a[3].v[1], a[3].v[2]}};\n"
+                           "  y4 = {a[1].v[2], a[2].v[2], a[3].v[2]};\n  y5 = {a[3].x, a[1].x};\n"
+                           "  y6 = {{b[1].q[1].x, b[1].q[2].x}, {b[2].q[1].x, b[2].q[2].x}};\n"
+                           "  y7 = {b[1].q[2].x, b[2].q[2].x};\n  y9 = b[2].q[1].v;\n"
+                           "  y10 = {2.0 * der(a[1].x), 2.0 * der(a[2].x), 2.0 * der(a[3].x)};\n  der(a[1].x) = tt;\n"
+                           "  der(a[2].x) = 1.0;\n  der(a[3].x) = 2.0;\n  a[1].v[1] = tt;\n  a[2].v[1] = 1.0;\n"
+                           "  a[3].v[1] = 2.0;\n  a[1].v[2] = 2.0 * a[1].x;\n  a[2].v[2] = 2.0 * a[2].x;\n"
+                           "  a[3].v[2] = 2.0 * a[3].x;\n  b[1].q[1].x = tt;\n  b[1].q[2].x = 1.0;\n  b[2].q[1].x = 2.0;\n"
+                           "  b[2].q[2].x = 3.0;\n  b[1].q[1].v[1] = tt;\n  b[1].q[1].v[2] = 1.0;\n  b[1].q[2].v[1] = 2.0;\n"
+                           "  b[1].q[2].v[2] = 3.0;\n  b[2].q[1].v[1] = 4.0;\n  b[2].q[1].v[2] = 5.0;\n  b[2].q[2].v[1] = 6.0;\n"
+                           "  b[2].q[2].v[2] = 7.0;\nend CAT1;\n"));
+  // 复合数组段上的符号下标（保留着的迭代变量、运行时整型量）原样留着：`a[i].x`、`a[n + 1].v[2]`、
+  // `max(a[i].x for i in 1:3)`；语句里被逐元素运算 / sum 吃掉的展开照常。期望 = omc 1.25.0 实跑 CAT2（2026-10-03）。
+  YMC_CHECK_EQ(flatten_src("model CAT2\n  model A\n    Real x = time;\n    parameter Real k = 1;\n    Real v[2] = {time, 1};\n"
+                           "  end A;\n  A a[3];\n  Integer n = integer(time);\n  Real s;\n  Real y[3];\n"
+                           "  Real z1 = a[n].x + a[n + 1].v[2];\n  Real z2[2] = a[n].v;\n"
+                           "  Real z3 = max(a[i].x for i in 1:3) + sum(a[i].v[1] for i in 1:3);\n"
+                           "  Real z4[3] = {a[i].x * 2 for i in 1:3};\nalgorithm\n  s := sum(a.x) + a.x * a.k;\n"
+                           "  y := 2 * a.x;\n  for i in 1:3 loop\n    y[i] := y[i] + a[i].x * a[i].k + sum(a[i].v);\n"
+                           "  end for;\n  for i in 1:2 loop\n    s := s + a[i + 1].v[1];\n  end for;\nend CAT2;\n"),
+               std::string("class CAT2\n  Real a[1].x = time;\n  parameter Real a[1].k = 1.0;\n  Real a[1].v[1];\n"
+                           "  Real a[1].v[2];\n  Real a[2].x = time;\n  parameter Real a[2].k = 1.0;\n  Real a[2].v[1];\n"
+                           "  Real a[2].v[2];\n  Real a[3].x = time;\n  parameter Real a[3].k = 1.0;\n  Real a[3].v[1];\n"
+                           "  Real a[3].v[2];\n  Integer n = integer(time);\n  Real s;\n  Real y[1];\n  Real y[2];\n"
+                           "  Real y[3];\n  Real z1 = a[n].x + a[n + 1].v[2];\n  Real z2[1];\n  Real z2[2];\n"
+                           "  Real z3 = max(a[i].x for i in 1:3) + a[1].v[1] + a[2].v[1] + a[3].v[1];\n  Real z4[1];\n"
+                           "  Real z4[2];\n  Real z4[3];\nequation\n  a[1].v = {time, 1.0};\n  a[2].v = {time, 1.0};\n"
+                           "  a[3].v = {time, 1.0};\n  z2 = a[n].v;\n  z4 = array(a[i].x * 2.0 for i in 1:3);\nalgorithm\n"
+                           "  s := a[1].x + a[2].x + a[3].x + a[1].x * a[1].k + a[2].x * a[2].k + a[3].x * a[3].k;\n"
+                           "  y := {2.0 * a[1].x, 2.0 * a[2].x, 2.0 * a[3].x};\n  for i in 1:3 loop\n"
+                           "    y[i] := y[i] + a[i].x * a[i].k + a[i].v[1] + a[i].v[2];\n  end for;\n  for i in 1:2 loop\n"
+                           "    s := s + a[i + 1].v[1];\n  end for;\nend CAT2;\n"));
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           // 语句里原样留着的展开数组：omc 打成 `y := array(a[$i1].x for $i1 in 1:3);`，未做（CAS1）。
+           {"model CAS1\n  model A\n    Real x = time;\n  end A;\n  A a[3];\n  Real y[3];\nalgorithm\n"
+            "  y := a.x;\nend CAS1;\n", "composite array field in algorithm"},
+           // 越界的复合数组下标：omc 不查、照打一个不存在的变量 `a[4].x`，不跟（CAS2）。
+           {"model CAS2\n  model A\n    Real x = time;\n  end A;\n  A a[3];\n  Real y = a[4].x;\nend CAS2;\n", "composite array element reference"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);
