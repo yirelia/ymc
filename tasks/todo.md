@@ -1126,6 +1126,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           折成 NaN；constant 绑定里要求值 → omc 报错（RealPow2），0 的负数次幂同样报错。(3) extends 的基类名路径上有
           replaceable 的类（InvalidReplaceableExtends3 / 4，omc 报错、ymc 此前放行）→ flatten 里先挡住（归 inst，T-S3-07）。
           探针 DM s6 / s7 / ut2：0 FAIL；+1 单测（205）。
+    - [x] (59t) 整个 testsuite 当对拍语料 + 驱动 / 打印的两处潜伏错（2026-10-02）：
+          `python tools/nf_live_sweep.py --all --dir <testsuite>`：3946 个 .mo（flattening 2506 + simulation 379 +
+          openmodelica 793 + 其余），一分钟跑完，PASS 1234 / FAIL 0 / ACCEPTS-INVALID 3（账本）/ CRASH 0 —— 取代 59s 的两条
+          分目录扫描，进每桶收尾的门。openmodelica 目录第一次跑出 1 FAIL + 16 ACCEPTS-INVALID：
+          (1) 次正规 Real 字面量（parser/RealLiterals1）：omc 的 Ryu 打最短往返串 `5e-324`，ymc 从 15 位有效数字起试、打成
+          `4.94065645841247e-324` → expr_dump 对次正规数从 1 位起逐位试。(2) `within P;`（P 非空）的文件单独压平：omc 报
+          "Failed to insert class M within P"，ymc 此前无视 within 照常压平 → 驱动里拒绝（退出码 1）。
+          探针 drv-misc 4 个；+1 单测（206）。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、

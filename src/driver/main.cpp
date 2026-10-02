@@ -199,6 +199,15 @@ int run_one(const Options& opt, const std::string& path) {
   }
   if (std::strcmp(opt.mode, "dump-after=flat") == 0) {
     if (diags.has_errors()) return 1;   // 解析出错先退（不进实例化）
+    // `within P;`（P 非空）的文件只能插进已装载的包 P（MLS §13.4.3）；单文件压平时没有别的类可插 → omc 报
+    // "Failed to insert class M within P"（testsuite openmodelica/interactive-API/ReadOnlyPkg/M.mo）。
+    if (absyn.has_within && !absyn.within_path.empty() && !absyn.top.empty()) {
+      std::string within;
+      for (ymc::Symbol part : absyn.within_path) within += (within.empty() ? "" : ".") + std::string(interner.str(part));
+      std::fprintf(stderr, "Error: Failed to insert class %s within %s;\n",
+                   std::string(interner.str(absyn.classes[absyn.top.front()].name)).c_str(), within.c_str());
+      return 1;
+    }
     return dump_flat_pipeline(absyn, diags, interner);
   }
   std::string text = ymc::unparse(absyn);

@@ -1,0 +1,33 @@
+//// set: drv-misc — 次正规 Real 字面量的打印、`within` 子句（单文件压平）
+//// model: W1
+within ReadOnlyPkg;
+
+model W1
+  Real x = time;
+end W1;
+//// model: W2
+within ;
+
+model W2
+  Real x = time;
+end W2;
+//// model: W3
+within A.B;
+model W3
+  Real x = time;
+end W3;
+//// model: RLT1
+model RLT1
+  Real a1 = 1e-310;
+  Real a2 = 1.5e-323;
+  Real a3 = 1e-320;
+  Real a4 = 2.2250738585072014e-308;
+  Real a5 = 2.225073858507201e-308;
+  Real a6 = 1.2345678901234e-315;
+  Real a7 = -9.8813129168249e-324;
+  Real a8 = 4.9406564584124654e-324;
+  Real a9 = 1.7976931348623157e308;
+  Real a10 = 3e-309;
+  Real a11 = 1.23e-312 * time;
+  parameter Real p(min = 1e-320) = 2e-322;
+end RLT1;

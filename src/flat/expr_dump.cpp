@@ -2,12 +2,28 @@
 //（Expression.mo:10757-10946，研究底稿 R13 §4.2 的优先级表 + 结合性规则）。
 #include "flat/expr_dump.h"
 
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+
 #include "absyn/unparse.h"   // real_literal_text
 #include "base/strings.h"    // escape_modelica_string
 
 namespace ymc {
 
 namespace {
+
+// Real 字面量。次正规数的精度不足 15 位有效数字，最短往返串比 real_literal_text 试的 15 位更短——omc 的 Ryu 把最小的次正规
+// 数打成 `5e-324`（testsuite openmodelica/parser/RealLiterals1）→ 从 1 位有效数字起逐位试到能往返。
+std::string real_lit(double v) {
+  if (std::fpclassify(v) != FP_SUBNORMAL) return real_literal_text(v);
+  char buf[40];
+  for (int prec = 0; prec <= 16; ++prec) {
+    std::snprintf(buf, sizeof buf, "%.*e", prec, v);
+    if (std::strtod(buf, nullptr) == v) break;
+  }
+  return buf;
+}
 
 class ExprDumper {
  public:
@@ -113,7 +129,7 @@ class ExprDumper {
     const Expr& e = a_[id];
     switch (e.kind) {
       case ExprKind::IntLit: out_ += std::to_string(e.ival); break;
-      case ExprKind::RealLit: out_ += real_literal_text(e.rval); break;
+      case ExprKind::RealLit: out_ += real_lit(e.rval); break;
       case ExprKind::BoolLit: out_ += e.bval ? "true" : "false"; break;
       case ExprKind::StringLit:
         out_ += '"';

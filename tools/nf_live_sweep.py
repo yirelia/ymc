@@ -143,7 +143,8 @@ def main():
           " ".join(f"{k} {tot[k]}" for k in ("PASS", "FAIL", "ACCEPTS-INVALID", "SKIP", "BOTH-REJECT", "CRASH", "OMC-TIMEOUT")) + " ==")
     by_dir = collections.defaultdict(collections.Counter)
     for r in records:
-        by_dir[r["path"].split("/")[2]][r["verdict"]] += 1
+        parts = r["path"].split("/")   # flattening/modelica/<目录>/X.mo → <目录>；层数不够的取文件所在目录
+        by_dir[parts[2] if len(parts) > 3 else parts[-2] if len(parts) > 1 else "."][r["verdict"]] += 1
     print(f"{'dir':24s} {'PASS':>5s} {'FAIL':>5s} {'ACC-INV':>7s} {'SKIP':>5s} {'CRASH':>5s}")
     for d, c in sorted(by_dir.items(), key=lambda kv: -sum(kv[1].values())):
         print(f"{d:24s} {c['PASS']:5d} {c['FAIL']:5d} {c['ACCEPTS-INVALID']:7d} {c['SKIP']:5d} {c['CRASH']:5d}")

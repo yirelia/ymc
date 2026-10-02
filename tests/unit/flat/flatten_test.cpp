@@ -3502,6 +3502,22 @@ YMC_TEST(flatten_mixed_range_types_and_invalid_pow) {
   }
 }
 
+YMC_TEST(flatten_subnormal_real_literals) {
+  // 次正规数的精度不足 15 位有效数字，最短往返串更短：omc（Ryu）把最小的次正规数打成 `5e-324`，`1.2345678901234e-315` 打成
+  // `1.23456789e-315`；正规数照旧（最小正规数 17 位）。期望 = omc 1.25.0 实跑 RLT1（2026-10-02；出自 testsuite
+  // openmodelica/parser/RealLiterals1）。
+  YMC_CHECK_EQ(flatten_src("model RLT1\n  Real a1 = 1e-310;\n  Real a2 = 1.5e-323;\n  Real a3 = 1e-320;\n"
+                           "  Real a4 = 2.2250738585072014e-308;\n  Real a5 = 2.225073858507201e-308;\n"
+                           "  Real a6 = 1.2345678901234e-315;\n  Real a7 = -9.8813129168249e-324;\n"
+                           "  Real a8 = 4.9406564584124654e-324;\n  Real a9 = 1.7976931348623157e308;\n  Real a10 = 3e-309;\n"
+                           "  Real a11 = 1.23e-312 * time;\n  parameter Real p(min = 1e-320) = 2e-322;\nend RLT1;\n"),
+               std::string("class RLT1\n  Real a1 = 1e-310;\n  Real a2 = 1.5e-323;\n  Real a3 = 1e-320;\n"
+                           "  Real a4 = 2.2250738585072014e-308;\n  Real a5 = 2.225073858507201e-308;\n"
+                           "  Real a6 = 1.23456789e-315;\n  Real a7 = -1e-323;\n  Real a8 = 5e-324;\n"
+                           "  Real a9 = 1.7976931348623157e308;\n  Real a10 = 3e-309;\n  Real a11 = 1.23e-312 * time;\n"
+                           "  parameter Real p(min = 1e-320) = 2e-322;\nend RLT1;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);
