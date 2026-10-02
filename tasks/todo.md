@@ -1084,6 +1084,24 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           Real 数组引用包成 `/*Real*/(x)`（`{x, x}` 的元素）→ 不再包。
           探针 RD r1–r5 255 行：228 PASS / 20 SKIP / 7 BOTH-REJECT / 0 FAIL。→ 全 scodeinst PASS 475→477（CevalMax1、
           CevalMin1）、nf-live 491→494（MaxArray、NonConstantReduction、Reductions）；+2 单测（199）。
+    - [x] (59q) 参数数组的结构求值 + 吸收律 + 收尾折叠 + 归约范围求值（2026-10-02）：
+          **参数数组**（内建类型）在结构语境（下标、维、条件组件的条件、if 条件、for 范围 …）被引用：求整个数组的值再取下标，
+          标记是组件级的——所有元素一起 final（`parameter Integer idx[2] = {2, 1}; Real y = x[idx[1]]` → idx[1]、idx[2] 都
+          final）。结构参数数组的整体 / 切片引用（omc 代入整个数组的值）未做 → SKIP。
+          **吸收律**（simplifyLogicBinaryAnd / Or，NFSimplifyExp.mo:1178-1242 v1.25.0）：`true or e` → true、`false or e` → e、
+          `true and e` → e、`false and e` → false（两序）；标量化出来的 and / or 不再化简（omc 先化简后标量化：
+          `v[1] = true or b[1]`）。
+          **收尾折叠**（原来只在 cardinality 代入后跑，现在总跑，方程 + 语句）：方程 assert 条件恒真 → 删（语句的保留）；结构
+          参数代入后成字面量的 if 条件选支；体为空的末尾分支删去、if 方程全空整条删去；空 for 语句 / 空算法段删去。
+          **归约范围**（修 59o 的潜伏错——当时的探针只铺了"元素是引用 / 字面量"的范围）：sum / product 展开前 omc 对范围做
+          Ceval.evalExp（foldReduction2，NFExpression.mo:5885 v1.25.0）——参数式取值代入、不打结构标记（`sum(x[i] for i in
+          k)` → `x[1] + x[2]`、k 不 final），变量 / 迭代变量的裸引用原样，元素是含变量的运算式 / 转型时求值失败 → 整个保留；
+          保留形态的范围 = 化简后的范围（字面量逐叶转型 `{/*Real*/(m), 2.5}`、算术式逐元素展开 `{2.0 * x[1], …}`）。
+          **不跟 / 未做 → SKIP**（账本）：omc 标量化删掉"其后还有非空分支"的空 if 分支（改了条件语义）；范围元素里含变量的
+          调用（`der(t)` 求成 0 等怪相）；fill 的维 / 归约范围 / 推导式范围里有迭代变量（omc 定型期不求值、不标记，
+          FuncBuiltinFill3 同因）；Real 下标（omc 报错）。
+          探针 AP p1–p11 + ff + ee + ut 338 个：273 PASS / 55 SKIP / 10 BOTH-REJECT / 0 FAIL。→ 全 scodeinst PASS 477→480
+          （IfEquation5、IfEquationEval4、dim19）、nf-live 494 不变；+3 单测（202）。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、

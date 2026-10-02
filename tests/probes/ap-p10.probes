@@ -1,0 +1,119 @@
+//// set: ap-p10 — 归约范围引用外层迭代变量
+//// model: BASE
+model BASE
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+end BASE;
+//// model: Q100
+model Q100
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = max(sum(x[i] for i in {j, 2}) for j in 1:2);
+end Q100;
+//// model: Q101
+model Q101
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = max(sum(x[i] for i in {j + 1, 2}) for j in 1:2);
+end Q101;
+//// model: Q102
+model Q102
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = sum(sum(x[i] for i in {j, 2}) for j in 1:2);
+end Q102;
+//// model: Q103
+model Q103
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = sum(sum(x[i] for i in {j + 1, 2}) for j in 1:2);
+end Q103;
+//// model: Q104
+model Q104
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y; algorithm y := 0; for j in 1:2 loop y := y + sum(x[i] for i in {j, 2}); end for;
+end Q104;
+//// model: Q105
+model Q105
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y; algorithm y := 0; for j in 1:2 loop y := y + sum(x[i] for i in {j + 1, 2}); end for;
+end Q105;
+//// model: Q106
+model Q106
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y; algorithm y := 0; for j in 1:2 loop y := y + sum(x[i] * t for i in j:2); end for;
+end Q106;
+//// model: Q107
+model Q107
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y; algorithm y := 0; for j in 1:2 loop y := y + max(x[i] for i in {j, 2}); end for;
+end Q107;
+//// model: Q108
+model Q108
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y; algorithm y := 0; for j in 1:2 loop y := y + sum(v * t for v in {j, 2}); end for;
+end Q108;
+//// model: Q109
+model Q109
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = max(sum(v * t for v in {j, 2}) for j in 1:2);
+end Q109;
+//// model: Q1010
+model Q1010
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = max(max(v * t for v in {j, 2}) for j in 1:2);
+end Q1010;
+//// model: Q1011
+model Q1011
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = max(max(v * t for v in {j, 2.5}) for j in 1:2);
+end Q1011;
+//// model: Q1012
+model Q1012
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = max(sum(v * t for v in {j, 2.5}) for j in 1:2);
+end Q1012;
+//// model: Q1013
+model Q1013
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = max(sum(v * t for v in {j * t, 2.5}) for j in 1:2);
+end Q1013;
+//// model: Q1014
+model Q1014
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = max(max(v * t for v in {j * t, 2.5}) for j in 1:2);
+end Q1014;
+//// model: Q1015
+model Q1015
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = sum(max(v * t for v in {j * t, 2.5}) for j in 1:2);
+end Q1015;

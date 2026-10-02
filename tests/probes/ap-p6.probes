@@ -1,0 +1,282 @@
+//// set: ap-p6 — sum / product 的范围是参数数组
+//// model: Q60
+model Q60
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[1] = {2}; Real y = sum(x[i] for i in k);
+end Q60;
+//// model: Q61
+model Q61
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[1] = {2}; Real y = max(x[i] for i in k);
+end Q61;
+//// model: Q62
+model Q62
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[1] = {2}; Real y = product(x[i] for i in k);
+end Q62;
+//// model: Q63
+model Q63
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer n = 2; Real y = sum(x[i] for i in {n});
+end Q63;
+//// model: Q64
+model Q64
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer n = 2; Real y = max(x[i] for i in {n});
+end Q64;
+//// model: Q65
+model Q65
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Real q[1] = {2}; Real y = sum(v * t for v in q);
+end Q65;
+//// model: Q66
+model Q66
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y = product(x[i] for i in k);
+end Q66;
+//// model: Q67
+model Q67
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y = sum(x[i] * x[j] for i in k, j in 1:2);
+end Q67;
+//// model: Q68
+model Q68
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y = sum(x[i] * x[j] for i in k, j in k);
+end Q68;
+//// model: Q69
+model Q69
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; parameter Integer m[2] = k; Real y = sum(x[i] for i in m);
+end Q69;
+//// model: BASE
+model BASE
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+end BASE;
+//// model: Q610
+model Q610
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y = sum(x[i] for i in fill(k[2], 2));
+end Q610;
+//// model: Q611
+model Q611
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer n = 2; Real y = sum(x[i] for i in fill(n, 2));
+end Q611;
+//// model: Q612
+model Q612
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2]; Real y = sum(x[i] for i in k);
+end Q612;
+//// model: Q613
+model Q613
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2](each fixed = false) = {1, 2}; Real y = sum(x[i] for i in k);
+end Q613;
+//// model: Q614
+model Q614
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y; algorithm y := sum(x[i] for i in k);
+end Q614;
+//// model: Q615
+model Q615
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y;
+equation
+  y = sum(x[i] for i in k);
+end Q615;
+//// model: Q616
+model Q616
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Real q[2] = {1, 2}; Real y = sum(v for v in q);
+end Q616;
+//// model: Q617
+model Q617
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Real q[2] = {1, 2}; parameter Real y = sum(v for v in q);
+end Q617;
+//// model: Q618
+model Q618
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Real q[2] = {1, 2}; Real y = sum(q[i] for i in 1:2);
+end Q618;
+//// model: Q619
+model Q619
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Real q[2] = {1, 2}; Real y = sum(q[i] * t for i in 1:2);
+end Q619;
+//// model: Q620
+model Q620
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Real q[2] = {1, 2}; Real y = sum(v * t for v in q[1:2]);
+end Q620;
+//// model: Q621
+model Q621
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Real q[2] = {1, 2}; Real y = sum(v * t for v in 2 * q);
+end Q621;
+//// model: Q622
+model Q622
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Real q[2] = {1, 2}; Real y = sum(v * t for v in {q[1], t});
+end Q622;
+//// model: Q623
+model Q623
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Real q[2] = {1, 2}; Real y = sum(v * t for v in {q[1] + t, 2});
+end Q623;
+//// model: Q624
+model Q624
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Real q[2] = {1, 2}; Real y = sum(v * w for v in q, w in x);
+end Q624;
+//// model: Q625
+model Q625
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Real q[2] = {1, 2}; Real y = sum(v * w for v in x, w in q);
+end Q625;
+//// model: Q626
+model Q626
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pk[2] = {true, false}; Real y = sum(if b then t else 1 for b in pk);
+end Q626;
+//// model: Q627
+model Q627
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real z[k[2]]; Real y = sum(x[i] for i in k);
+end Q627;
+//// model: Q628
+model Q628
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real z[k[2]]; Real y = max(x[i] for i in k);
+end Q628;
+//// model: Q629
+model Q629
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y = sum(x[i] for i in k) + x[k[1]];
+end Q629;
+//// model: Q630
+model Q630
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y = x[k[1]] + sum(x[i] for i in k);
+end Q630;
+//// model: Q631
+model Q631
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  constant Integer k[2] = {1, 2}; Real y = sum(x[i] for i in k);
+end Q631;
+//// model: Q632
+model Q632
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  constant Integer k[2] = {1, 2}; Real y = max(x[i] for i in k);
+end Q632;
+//// model: Q633
+model Q633
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer n = 2; Real y = sum(x[i] for i in {n, n + 1});
+end Q633;
+//// model: Q634
+model Q634
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer n = 2; Real y = sum(x[i] for i in {n, n + 1}) + x[n];
+end Q634;
+//// model: Q635
+model Q635
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer n = 2; Real y = sum(i * t for i in {n, n + 1});
+end Q635;
+//// model: Q636
+model Q636
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Real p = 2; Real y = sum(v * t for v in {p, 2 * p});
+end Q636;
+//// model: Q637
+model Q637
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Real p = 2; Real y = product(v * t for v in {p, 2 * p});
+end Q637;
+//// model: Q638
+model Q638
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Real p = 2; Real y = max(v * t for v in {p, 2 * p});
+end Q638;

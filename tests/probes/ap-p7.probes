@@ -1,0 +1,191 @@
+//// set: ap-p7 — 体为空的 if 分支
+//// model: Q70
+model Q70
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  if bb[1] then else assert(bb[2], "n"); end if;
+end Q70;
+//// model: Q71
+model Q71
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  if bb[1] then assert(bb[2], "m"); else assert(bb[2], "n"); end if;
+end Q71;
+//// model: Q72
+model Q72
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  if bb[1] then assert(bb[2], "m"); else assert(true, "n"); end if;
+end Q72;
+//// model: Q73
+model Q73
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  if bb[1] then assert(bb[2], "m"); else end if;
+end Q73;
+//// model: Q74
+model Q74
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  if bb[1] then assert(bb[2], "m"); end if;
+end Q74;
+//// model: Q75
+model Q75
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  if bb[1] then assert(true, "m"); elseif bb[2] then assert(t > 0, "n"); end if;
+end Q75;
+//// model: Q76
+model Q76
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  if bb[1] then assert(t > 0, "m"); elseif bb[2] then assert(true, "n"); end if;
+end Q76;
+//// model: Q77
+model Q77
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  if bb[1] then assert(t > 0, "m"); elseif bb[2] then assert(true, "n"); else assert(t > 1, "o"); end if;
+end Q77;
+//// model: Q78
+model Q78
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  if bb[1] then elseif bb[2] then assert(t > 0, "n"); end if;
+end Q78;
+//// model: Q79
+model Q79
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  if bb[1] then elseif bb[2] then else assert(t > 0, "n"); end if;
+end Q79;
+//// model: BASE
+model BASE
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+end BASE;
+//// model: Q710
+model Q710
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y;
+equation
+  if bb[1] then assert(true, "m"); y = 1; else y = 2; end if;
+end Q710;
+//// model: Q711
+model Q711
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  if bb[1] then assert(true, "m"); assert(t > 0, "n"); else assert(bb[2], "n"); end if;
+end Q711;
+//// model: Q712
+model Q712
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t; algorithm if bb[1] then assert(true, "m"); else assert(bb[2], "n"); end if;
+end Q712;
+//// model: Q713
+model Q713
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t; algorithm if bb[1] then else assert(bb[2], "n"); end if;
+end Q713;
+//// model: Q714
+model Q714
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t; algorithm if bb[1] then assert(bb[2], "m"); else end if;
+end Q714;
+//// model: Q715
+model Q715
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t; algorithm if bb[1] then elseif bb[2] then else assert(t > 0, "n"); end if;
+end Q715;
+//// model: Q716
+model Q716
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t; algorithm if bb[1] then elseif bb[2] then end if;
+end Q716;
+//// model: Q717
+model Q717
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t; algorithm if bb[1] then end if;
+end Q717;
+//// model: Q718
+model Q718
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  if bb[1] then end if;
+end Q718;
+//// model: Q719
+model Q719
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  if bb[1] then elseif bb[2] then end if;
+end Q719;
+//// model: Q720
+model Q720
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t; initial equation if bb[1] then else assert(bb[2], "n"); end if;
+end Q720;
+//// model: Q721
+model Q721
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  for i in 1:2 loop if bb[i] then else assert(t > i, "n"); end if; end for;
+end Q721;

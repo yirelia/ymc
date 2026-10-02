@@ -1,0 +1,230 @@
+//// set: ap-p4 — and / or 的吸收律
+//// model: Q40
+model Q40
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean y = true or bb[1];
+end Q40;
+//// model: Q41
+model Q41
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean y = bb[1] or true;
+end Q41;
+//// model: Q42
+model Q42
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean y = false or bb[1];
+end Q42;
+//// model: Q43
+model Q43
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean y = bb[1] or false;
+end Q43;
+//// model: Q44
+model Q44
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean y = true and bb[1];
+end Q44;
+//// model: Q45
+model Q45
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean y = bb[1] and true;
+end Q45;
+//// model: Q46
+model Q46
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean y = false and bb[1];
+end Q46;
+//// model: Q47
+model Q47
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean y = bb[1] and false;
+end Q47;
+//// model: Q48
+model Q48
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean y = (t > 0 or true) and bb[1];
+end Q48;
+//// model: Q49
+model Q49
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean y = not (bb[1] and false);
+end Q49;
+//// model: BASE
+model BASE
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+end BASE;
+//// model: Q410
+model Q410
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean y = bb[1] and (1 > 0);
+end Q410;
+//// model: Q411
+model Q411
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean y = if bb[1] or true then bb[2] else false;
+end Q411;
+//// model: Q412
+model Q412
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = if bb[1] and false then 1 else t;
+end Q412;
+//// model: Q413
+model Q413
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Boolean y = pb or bb[1];
+end Q413;
+//// model: Q414
+model Q414
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Boolean y = pb or bb[1];
+end Q414;
+//// model: Q415
+model Q415
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Boolean y = bb[1] and pb;
+end Q415;
+//// model: Q416
+model Q416
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Boolean y = bb[1] and not pb;
+end Q416;
+//// model: Q417
+model Q417
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Real y = if bb[1] or pb then t else 1;
+end Q417;
+//// model: Q418
+model Q418
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Real y;
+equation
+  when bb[1] and pb then y = 1; end when;
+end Q418;
+//// model: Q419
+model Q419
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Real y;
+equation
+  if bb[1] and pb then y = 1; else y = 2; end if;
+end Q419;
+//// model: Q420
+model Q420
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Real y;
+equation
+  if bb[1] or pb then y = 1; else y = 2; end if;
+end Q420;
+//// model: Q421
+model Q421
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean y[2] = {true, false} or bb;
+end Q421;
+//// model: Q422
+model Q422
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean y[2] = bb and {true, true};
+end Q422;
+//// model: Q423
+model Q423
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean y[2] = {true, false} or {bb[1], bb[2]};
+end Q423;
+//// model: Q424
+model Q424
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean y[2] = {bb[1], true} and {true, bb[2]};
+end Q424;
+//// model: Q425
+model Q425
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean y = not not bb[1];
+end Q425;
+//// model: Q426
+model Q426
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean y = not (true and not bb[1]);
+end Q426;
+//// model: Q427
+model Q427
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean y = not not not bb[1];
+end Q427;
+//// model: Q428
+model Q428
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean y = not (not bb[1] or false);
+end Q428;
+//// model: Q429
+model Q429
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Boolean y[2] = {pb, false} or bb;
+end Q429;
+//// model: Q430
+model Q430
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Boolean y[2] = bb and fill(pb, 2);
+end Q430;

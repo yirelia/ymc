@@ -3273,6 +3273,122 @@ YMC_TEST(flatten_min_max_forms) {
   }
 }
 
+YMC_TEST(flatten_structural_array_parameters) {
+  // 内建类型的参数数组在结构语境里被引用（下标、维、条件组件的条件、if 方程的条件）：整个数组求值，标记是组件级的——所有
+  // 元素一起 final（idx / n / b / k / m），绑定里的依赖不连带（k0），没进结构语境的不动（u）。期望 = omc 1.25.0 实跑 APT1
+  //（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model APT1\n  parameter Integer idx[2] = {2, 1};\n  parameter Integer n[2] = {2, 3};\n"
+                           "  parameter Boolean b[2] = {true, false};\n  parameter Integer k0 = 2;\n"
+                           "  parameter Integer k[2] = {1, k0};\n  parameter Integer m[2, 2] = {{1, 2}, {3, 1}};\n"
+                           "  parameter Integer u[2] = {1, 2};\n  Real x[3] = {time, 1, 2};\n  Real z[n[1]];\n"
+                           "  Real y = x[idx[1]] + x[k[2]] + x[m[2, 1]] + u[1];\n  Real w if b[1];\n  Real v;\nequation\n"
+                           "  z = {time, 1};\n  w = 1;\n  if b[2] then\n    v = 1;\n  else\n    v = 2;\n  end if;\nend APT1;\n"),
+               std::string("class APT1\n  final parameter Integer idx[1] = 2;\n  final parameter Integer idx[2] = 1;\n"
+                           "  final parameter Integer n[1] = 2;\n  final parameter Integer n[2] = 3;\n"
+                           "  final parameter Boolean b[1] = true;\n  final parameter Boolean b[2] = false;\n"
+                           "  parameter Integer k0 = 2;\n  final parameter Integer k[1] = 1;\n"
+                           "  final parameter Integer k[2] = 2;\n  final parameter Integer m[1,1] = 1;\n"
+                           "  final parameter Integer m[1,2] = 2;\n  final parameter Integer m[2,1] = 3;\n"
+                           "  final parameter Integer m[2,2] = 1;\n  parameter Integer u[1] = 1;\n"
+                           "  parameter Integer u[2] = 2;\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real z[1];\n"
+                           "  Real z[2];\n  Real y = x[2] + x[2] + x[3] + /*Real*/(u[1]);\n  Real w;\n  Real v;\nequation\n"
+                           "  x = {time, 1.0, 2.0};\n  z[1] = time;\n  z[2] = 1.0;\n  w = 1.0;\n  v = 2.0;\nend APT1;\n"));
+  // 结构参数数组的整体 / 切片引用：omc 代入整个数组的值（`y = {1, 2}`，APS2），ymc 只按元素代入 → SKIP。
+  bool uns = false;
+  const std::string out = flatten_src("model APS2\n  parameter Integer k[2] = {1, 2};\n  Real z[k[2]];\n"
+                                      "  Integer y[2] = k;\nend APS2;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(out, std::string("<unsupported:whole reference to structural parameter array>"));
+}
+
+YMC_TEST(flatten_boolean_absorption_and_model_folding) {
+  // and / or 的吸收律（simplifyLogicBinaryAnd / Or，NFSimplifyExp.mo:1178-1242 v1.25.0），标量化出来的不再化简
+  //（`v[1] = true or bb[1]`）；方程 assert 条件恒真 → 删（NFSimplifyModel.mo:211-215），语句的保留；结构参数代入后成字面量
+  // 的 if 条件选支（方程 / 语句）；体被删空的末尾分支删去。期望 = omc 1.25.0 实跑 APT2（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model APT2\n  parameter Boolean pb = true;\n  parameter Integer n = 2;\n  Real z[n];\n"
+                           "  Real g if pb;\n  Boolean bb[2] = {time > 1, true};\n  Boolean y1 = true or bb[1];\n"
+                           "  Boolean y2 = bb[1] or false;\n  Boolean y3 = bb[1] and pb;\n"
+                           "  Boolean y4 = not (bb[1] and false);\n  Boolean v[2];\n  Real r;\n  Real s;\nequation\n"
+                           "  z = {time, 1};\n  g = 1;\n  v = {true, false} or bb;\n  assert(n > 0, \"m\");\n"
+                           "  assert(time > 0 and n > 0, \"m2\");\n  if bb[1] and pb then\n    r = 1;\n  else\n    r = 2;\n"
+                           "  end if;\n  if bb[1] or pb then\n    assert(true, \"m3\");\n  end if;\n  if bb[1] then\n"
+                           "    assert(time > 0, \"m4\");\n  elseif bb[2] then\n    assert(true, \"m5\");\n  end if;\n"
+                           "algorithm\n  if bb[2] and not pb then\n    s := 1;\n  elseif bb[1] then\n    s := 3;\n  else\n"
+                           "    s := 2;\n  end if;\n  assert(true, \"m6\");\nend APT2;\n"),
+               std::string("class APT2\n  final parameter Boolean pb = true;\n  final parameter Integer n = 2;\n  Real z[1];\n"
+                           "  Real z[2];\n  Real g;\n  Boolean bb[1];\n  Boolean bb[2];\n  Boolean y1 = true;\n"
+                           "  Boolean y2 = bb[1];\n  Boolean y3 = bb[1];\n  Boolean y4 = true;\n  Boolean v[1];\n"
+                           "  Boolean v[2];\n  Real r;\n  Real s;\nequation\n  bb = {time > 1.0, true};\n  z[1] = time;\n"
+                           "  z[2] = 1.0;\n  g = 1.0;\n  v[1] = true or bb[1];\n  v[2] = false or bb[2];\n"
+                           "  assert(time > 0.0, \"m2\");\n  if bb[1] then\n    r = 1.0;\n  else\n    r = 2.0;\n  end if;\n"
+                           "  if bb[1] then\n    assert(time > 0.0, \"m4\");\n  end if;\nalgorithm\n  if bb[1] then\n"
+                           "    s := 3.0;\n  else\n    s := 2.0;\n  end if;\n  assert(true, \"m6\");\nend APT2;\n"));
+  // omc 的标量化把体为空的分支全删掉（scalarizeIfEquation / scalarizeIfStatement，NFScalarize.mo:372-399、461-488 v1.25.0），
+  // 其后还有非空分支时条件的语义就变了（APS1：`if b then else assert(…)` 整条消失）——omc 的错，不跟；if 语句全空时 omc 删掉
+  // 语句却留下空的 `algorithm`（APS8）——未做。
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           {"model APS1\n  Real y = time;\n  Boolean b = time > 1;\nequation\n  if b then\n  else\n"
+            "    assert(y > 0, \"n\");\n  end if;\nend APS1;\n",
+            "empty if branch before a non-empty one (omc drops it)"},
+           {"model APS8\n  Real y = time;\n  Boolean b = time > 1;\nalgorithm\n  if b then\n  end if;\nend APS8;\n",
+            "if statement with only empty branches"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
+YMC_TEST(flatten_reduction_range_evaluation) {
+  // sum / product 展开前 omc 对各范围做 Ceval.evalExp（foldReduction2，NFExpression.mo:5885 v1.25.0）：参数取值代入、不打结构
+  // 标记（y1 / y2 / y4 / y10，k、q 不 final），变量 / 迭代变量的裸引用原样（y9 / y11）；元素是含变量的运算式或转型时求值
+  // 失败 → 整个保留，范围打成化简后的形态（y5 / y6 / y8）。min / max 不展开（y3 / y7）。期望 = omc 1.25.0 实跑 APT3
+  //（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model APT3\n  parameter Integer k[2] = {1, 2};\n  parameter Real q[2] = {1, 2};\n"
+                           "  Integer m = integer(time);\n  Real x[3] = {time, 1, 2};\n  Real t = time;\n"
+                           "  Real y1 = sum(x[i] for i in k);\n  Real y2 = sum(v * t for v in q);\n"
+                           "  Real y3 = max(x[i] for i in k);\n  Real y4 = sum(v * t for v in {q[1] * 2, t});\n"
+                           "  Real y5 = sum(v * t for v in {2 * t, 3});\n  Real y6 = sum(v * t for v in 2 * x);\n"
+                           "  Real y7 = max(v * t for v in {m, 2.5});\n"
+                           "  Real y8 = sum(v * w for v in {t, 2}, w in {2 * t, 3});\n  Real y9 = sum(x[i] for i in {m, 2});\n"
+                           "  Real y10 = product(v * t for v in {q[1], 2 * q[2]});\n"
+                           "  Real y11 = max(sum(x[i] for i in {j, 2}) for j in 1:2);\nend APT3;\n"),
+               std::string("class APT3\n  parameter Integer k[1] = 1;\n  parameter Integer k[2] = 2;\n"
+                           "  parameter Real q[1] = 1.0;\n  parameter Real q[2] = 2.0;\n  Integer m = integer(time);\n"
+                           "  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real t = time;\n  Real y1 = x[1] + x[2];\n"
+                           "  Real y2 = t + 2.0 * t;\n  Real y3 = max(x[i] for i in k);\n  Real y4 = 2.0 * t + t * t;\n"
+                           "  Real y5 = sum(v * t for v in {2.0 * t, 3.0});\n"
+                           "  Real y6 = sum(v * t for v in {2.0 * x[1], 2.0 * x[2], 2.0 * x[3]});\n"
+                           "  Real y7 = max(v * t for v in {/*Real*/(m), 2.5});\n"
+                           "  Real y8 = sum(sum(v * w for v in {t, 2.0}) for w in {2.0 * t, 3.0});\n  Real y9 = x[m] + x[2];\n"
+                           "  Real y10 = t * 4.0 * t;\n  Real y11 = max(x[j] + x[2] for j in 1:2);\nequation\n"
+                           "  x = {time, 1.0, 2.0};\nend APT3;\n"));
+  // 不跟 / 未做 → SKIP：含变量的调用元素（omc 对 `der(t)` 求出 0、`noEvent(t)` / `pre(y)` 取实参，APS3 的 `sin(t)` 是保留）；
+  // Real 迭代变量作下标（omc 报错，APS4）；fill 的维 / 归约的范围 / 推导式的范围里有迭代变量——omc 定型时循环还没展开，不求值
+  // 也不标结构参数（APS5 `x[:,1:1] = fill(0.0, 3, n + 1 - 1)`、APS6 `sum(x[j] for j in i:n)`，n 都不 final），推导式的直接报
+  // 内部错（APS7）。
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           {"model APS3\n  Real t = time;\n  Real y = sum(v * t for v in {sin(t), 2});\nend APS3;\n",
+            "reduction range element with call"},
+           {"model APS4\n  Real x[3] = {time, 1, 2};\n  Integer m = integer(time);\n"
+            "  Real y = sum(x[i] for i in {m, 2.5});\nend APS4;\n",
+            "Real subscript"},
+           {"model APS5\n  parameter Integer n = 1;\n  Real x[3, 3];\nequation\n  for i in 1:3 loop\n"
+            "    x[:, i:i] = zeros(3, n + i - i);\n  end for;\nend APS5;\n",
+            "fill dimension depends on iterator"},
+           {"model APS6\n  parameter Integer n = 3;\n  Real x[3] = {time, 1, 2};\n"
+            "  Real s = max(sum(x[j] for j in i:n) for i in 1:2);\nend APS6;\n",
+            "reduction range depends on iterator"},
+           {"model APS7\n  Real x[3];\nequation\n  for i in 1:1 loop\n    x = {time * j for j in 1:i + 2};\n  end for;\n"
+            "end APS7;\n",
+            "comprehension range depends on iterator"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

@@ -1,0 +1,299 @@
+//// set: ap-p5 — 代入后成字面量的 if 条件（方程 / 语句）、assert(true) 的各语境
+//// model: Q50
+model Q50
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Real y; algorithm if bb[1] or pb then y := 1; else y := 2; end if;
+end Q50;
+//// model: Q51
+model Q51
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Real y; algorithm if bb[1] and pb then y := 1; else y := 2; end if;
+end Q51;
+//// model: Q52
+model Q52
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Real y; algorithm if bb[1] and not pb then y := 1; else y := 2; end if;
+end Q52;
+//// model: Q53
+model Q53
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Real y; algorithm if bb[1] and not pb then y := 1; elseif bb[2] then y := 3; else y := 2; end if;
+end Q53;
+//// model: Q54
+model Q54
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Real y; algorithm if bb[2] then y := 3; elseif bb[1] or pb then y := 1; else y := 2; end if;
+end Q54;
+//// model: Q55
+model Q55
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Real y; algorithm y := 0; if bb[1] and not pb then y := 1; end if;
+end Q55;
+//// model: Q56
+model Q56
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Real y; algorithm y := 0; while bb[1] and not pb loop y := 1; end while;
+end Q56;
+//// model: Q57
+model Q57
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; discrete Real y; algorithm when bb[1] and pb then y := 1; end when;
+end Q57;
+//// model: Q58
+model Q58
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Real y; algorithm y := 0; assert(bb[1] or pb, "m");
+end Q58;
+//// model: Q59
+model Q59
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Real y = t;
+equation
+  if bb[1] and not pb then assert(bb[2], "m"); end if;
+end Q59;
+//// model: BASE
+model BASE
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+end BASE;
+//// model: Q510
+model Q510
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Real y;
+equation
+  if bb[1] and not pb then y = 1; elseif bb[2] then y = 3; else y = 2; end if;
+end Q510;
+//// model: Q511
+model Q511
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Real y;
+equation
+  if bb[2] then y = 3; elseif bb[1] or pb then y = 1; else y = 2; end if;
+end Q511;
+//// model: Q512
+model Q512
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Real y;
+equation
+  if bb[2] then y = 3; elseif bb[1] and not pb then y = 1; else y = 2; end if;
+end Q512;
+//// model: Q513
+model Q513
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Real y;
+equation
+  when bb[1] then if bb[2] or pb then y = 1; else y = 2; end if; end when;
+end Q513;
+//// model: Q514
+model Q514
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Real y = t;
+equation
+  assert(bb[1] or pb, "m");
+end Q514;
+//// model: Q515
+model Q515
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Real y = t; initial equation assert(bb[1] or pb, "m");
+end Q515;
+//// model: Q516
+model Q516
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Real y = t;
+equation
+  when bb[1] then assert(bb[2] or pb, "m"); end when;
+end Q516;
+//// model: Q517
+model Q517
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Real y = if bb[1] and not pb then 1 else t;
+end Q517;
+//// model: Q518
+model Q518
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Real y = if bb[1] then (if pb then 1 else 2) else t;
+end Q518;
+//// model: Q519
+model Q519
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean pb = true; Real z if pb; Real y = noEvent(if bb[1] or pb then 1 else t);
+end Q519;
+//// model: Q520
+model Q520
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  assert(true, "m");
+end Q520;
+//// model: Q521
+model Q521
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  assert(1 > 0, "m");
+end Q521;
+//// model: Q522
+model Q522
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  assert(false, "m");
+end Q522;
+//// model: Q523
+model Q523
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  for i in 1:2 loop assert(i > 0, "m"); end for;
+end Q523;
+//// model: Q524
+model Q524
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  for i in 1:2 loop assert(i > 1, "m"); end for;
+end Q524;
+//// model: Q525
+model Q525
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  if bb[1] then assert(true, "m"); end if;
+end Q525;
+//// model: Q526
+model Q526
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  if bb[1] then assert(true, "m"); else assert(bb[2], "n"); end if;
+end Q526;
+//// model: Q527
+model Q527
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  when bb[1] then assert(true, "m"); end when;
+end Q527;
+//// model: Q528
+model Q528
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y;
+equation
+  when bb[1] then assert(true, "m"); y = 1; end when;
+end Q528;
+//// model: Q529
+model Q529
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t; algorithm assert(true, "m");
+end Q529;
+//// model: Q530
+model Q530
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y; algorithm y := 1; assert(true, "m");
+end Q530;
+//// model: Q531
+model Q531
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t; initial equation assert(true, "m");
+end Q531;
+//// model: Q532
+model Q532
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  assert(true, "m", AssertionLevel.warning);
+end Q532;
+//// model: Q533
+model Q533
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Real p = 1; Real y = t;
+equation
+  assert(p > 0, "m");
+end Q533;
+//// model: Q534
+model Q534
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer n = 2; Real w[n]; Real y = t;
+equation
+  w = {t, t}; assert(n > 0, "m");
+end Q534;
+//// model: Q535
+model Q535
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  constant Integer n = 2; Real y = t;
+equation
+  assert(n > 0, "m");
+end Q535;

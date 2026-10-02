@@ -1,0 +1,81 @@
+//// set: ap-ee — 段的内容被删空
+//// model: EE1
+model EE1
+  Real y = time;
+  Boolean b = time > 1;
+equation
+  if b then
+  end if;
+end EE1;
+//// model: EE2
+model EE2
+  Real y = time;
+equation
+  assert(true, "m");
+end EE2;
+//// model: EE3
+model EE3
+  Real y = time;
+  Boolean b = time > 1;
+equation
+  if b then
+    assert(true, "m");
+  end if;
+end EE3;
+//// model: EE4
+model EE4
+  Real y = time;
+initial equation
+  assert(true, "m");
+end EE4;
+//// model: EE5
+model EE5
+  Real y = time;
+  parameter Boolean pb = false;
+  Real z if not pb;
+algorithm
+  if pb then
+    y := 1;
+  end if;
+end EE5;
+//// model: EE6
+model EE6
+  Real y = time;
+  parameter Boolean pb = false;
+  Real z if not pb;
+equation
+  if pb then
+    y = 1;
+  end if;
+end EE6;
+//// model: EE7
+model EE7
+  Real y = time;
+equation
+  if false then
+    y = 1;
+  end if;
+end EE7;
+//// model: EE8
+model EE8
+  Real y = time;
+equation
+  for i in 1:0 loop
+    y = 1;
+  end for;
+end EE8;
+//// model: EE9
+model EE9
+  Real y = time;
+  Real x[0];
+equation
+  x = fill(1.0, 0);
+end EE9;
+//// model: EE10
+model EE10
+  Real y = time;
+initial equation
+  if false then
+    y = 1;
+  end if;
+end EE10;

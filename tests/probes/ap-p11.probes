@@ -1,0 +1,105 @@
+//// set: ap-p11 — 归约范围里的转型 / 参数算术
+//// model: BASE
+model BASE
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+end BASE;
+//// model: Q110
+model Q110
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Integer m = integer(t); Real y = sum(v * t for v in {m, 2.5});
+end Q110;
+//// model: Q111
+model Q111
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Integer m = integer(t); Real y = sum(v * t for v in {m, 2});
+end Q111;
+//// model: Q112
+model Q112
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Integer m = integer(t); Real y = max(v * t for v in {m, 2.5});
+end Q112;
+//// model: Q113
+model Q113
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Integer m = integer(t); Real y = sum(v * t for v in {m, t});
+end Q113;
+//// model: Q114
+model Q114
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Integer m = integer(t); Integer mm[2] = {m, m}; Real y = sum(v * t for v in mm);
+end Q114;
+//// model: Q115
+model Q115
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Integer m = integer(t); Integer mm[2] = {m, m}; Real y = sum(v * t for v in mm + {1, 2});
+end Q115;
+//// model: Q116
+model Q116
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y = sum(v * t for v in {k[1], 2.5});
+end Q116;
+//// model: Q117
+model Q117
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y = sum(v * t for v in {k[1], t});
+end Q117;
+//// model: Q118
+model Q118
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y = max(v * t for v in {k[1], 2.5});
+end Q118;
+//// model: Q119
+model Q119
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y = max(v * t for v in k);
+end Q119;
+//// model: Q1110
+model Q1110
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y = max(v * t for v in 2 * k);
+end Q1110;
+//// model: Q1111
+model Q1111
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Real q[2] = {1, 2}; Real y = max(v * t for v in 2 * q);
+end Q1111;
+//// model: Q1112
+model Q1112
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Real q[2] = {1, 2}; Real y = max(v * t for v in q + x[1:2]);
+end Q1112;
+//// model: Q1113
+model Q1113
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Real q[2] = {1, 2}; Real y = sum(v * t for v in q + x[1:2]);
+end Q1113;

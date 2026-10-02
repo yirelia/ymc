@@ -1,0 +1,142 @@
+//// set: ap-p3 — 方程 assert 条件恒真
+//// model: Q30
+model Q30
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  assert(2 > 1, "m");
+end Q30;
+//// model: Q31
+model Q31
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  assert(true, "m");
+end Q31;
+//// model: Q32
+model Q32
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = t;
+equation
+  assert(false, "m");
+end Q32;
+//// model: Q33
+model Q33
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer n = 2; Real z[n]; Real y = t;
+equation
+  assert(n > 0, "m");
+end Q33;
+//// model: Q34
+model Q34
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer n = 2; Real z[n]; Real y = t;
+equation
+  assert(n > 5, "m");
+end Q34;
+//// model: Q35
+model Q35
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer n = 2; Real y = t;
+equation
+  assert(n > 0, "m");
+end Q35;
+//// model: Q36
+model Q36
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  constant Integer c = 2; Real y = t;
+equation
+  assert(c > 0, "m");
+end Q36;
+//// model: Q37
+model Q37
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer n = 2; Real z[n]; Real y; algorithm assert(n > 0, "m"); y := t;
+equation
+  t = t;
+end Q37;
+//// model: Q38
+model Q38
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y; algorithm assert(true, "m"); y := t;
+equation
+  t = t;
+end Q38;
+//// model: Q39
+model Q39
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer n = 2; Real z[n]; Real y = t;
+equation
+  if n > 1 then assert(n > 0, "m"); end if;
+end Q39;
+//// model: BASE
+model BASE
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+end BASE;
+//// model: Q310
+model Q310
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer n = 2; Real z[n]; Real y = t; initial equation assert(n > 0, "m");
+equation
+  t = t;
+end Q310;
+//// model: Q311
+model Q311
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer n = 2; Real z[n]; Real y = t;
+equation
+  when t > 1 then assert(n > 0, "m"); end when;
+end Q311;
+//// model: Q312
+model Q312
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer n = 2; Real z[n]; Real y = t;
+equation
+  assert(n > 0, "m", AssertionLevel.warning);
+end Q312;
+//// model: Q313
+model Q313
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer n = 2; Real z[n]; Real y = t;
+equation
+  assert(t > 0 or n > 0, "m");
+end Q313;
+//// model: Q314
+model Q314
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer n = 2; Real z[n]; Real y = t;
+equation
+  assert(t > 0 and n > 0, "m");
+end Q314;

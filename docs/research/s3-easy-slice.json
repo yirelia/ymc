@@ -557,5 +557,8 @@
 "IfEquation6.mo",
 "IfEquationImpure1.mo",
 "WhenClocked1.mo",
-"WhenClockedTupleCall1.mo"
+"WhenClockedTupleCall1.mo",
+"IfEquation5.mo",
+"IfEquationEval4.mo",
+"dim19.mo"
 ]

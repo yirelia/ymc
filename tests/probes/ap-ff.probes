@@ -1,0 +1,199 @@
+//// set: ap-ff — fill 的维 / 范围里有 for 迭代变量
+//// model: FF1
+model FF1
+  parameter Integer a[:, :] = {{1}, {2}, {3}};
+  Real x[3, 3];
+equation
+  x[:, 1:1] = zeros(3, a[1, 1] + 0);
+  x[:, 2:3] = zeros(3, a[2, 1] + 0);
+end FF1;
+//// model: FF2
+model FF2
+  parameter Integer n = 1;
+  Real x[3, 3];
+equation
+  for i in 1:3 loop
+    x[:, i:i] = zeros(3, n + i - i);
+  end for;
+end FF2;
+//// model: FF3
+model FF3
+  parameter Integer b[3] = {1, 2, 3};
+  Real x[3, 3];
+equation
+  for i in 1:3 loop
+    x[:, 1:i] = zeros(3, b[i]);
+  end for;
+end FF3;
+//// model: FF4
+model FF4
+  parameter Integer n = 1;
+  Real x[3, 3];
+equation
+  for i in 1:3 loop
+    x[:, i:i] = zeros(3, n);
+  end for;
+end FF4;
+//// model: FF5
+model FF5
+  Real x[3, 3];
+equation
+  for i in 1:3 loop
+    x[:, i:i] = zeros(3, i - i + 1);
+  end for;
+end FF5;
+//// model: FF6
+model FF6
+  constant Integer c[3] = {1, 1, 1};
+  Real x[3, 3];
+equation
+  for i in 1:3 loop
+    x[:, i:i] = zeros(3, c[i]);
+  end for;
+end FF6;
+//// model: FF7
+model FF7
+  parameter Integer n = 1;
+  Real x[3, 3];
+  Real y[3];
+equation
+  for i in 1:3 loop
+    x[:, i:i] = zeros(3, n + i - i);
+  end for;
+  y = fill(1.0, n + 2);
+end FF7;
+//// model: FF8
+model FF8
+  parameter Integer n = 1;
+  Real x[3, 3];
+algorithm
+  for i in 1:3 loop
+    x[:, i:i] := zeros(3, n + i - i);
+  end for;
+end FF8;
+//// model: FF9
+model FF9
+  parameter Integer n = 3;
+  Real x[3];
+equation
+  for i in 1:1 loop
+    x = fill(time, n + i - i);
+  end for;
+end FF9;
+//// model: FF10
+model FF10
+  parameter Integer n = 3;
+  Real x[3];
+equation
+  for i in 1:1 loop
+    x = {time * j for j in 1:n + i - i};
+  end for;
+end FF10;
+//// model: FF11
+model FF11
+  parameter Integer n = 3;
+  Real x[3];
+equation
+  for i in 1:1 loop
+    x[1:n + i - i] = {time, 1, 2};
+  end for;
+end FF11;
+//// model: FF12
+model FF12
+  Real x[3];
+equation
+  for i in 1:1 loop
+    x = {time * j for j in 1:i + 2};
+  end for;
+end FF12;
+//// model: FF13
+model FF13
+  parameter Integer n = 3;
+  Real x[3];
+  Real s;
+equation
+  x = {time, 1, 2};
+  for i in 1:1 loop
+    s = sum(x[j] for j in 1:n + i - i);
+  end for;
+end FF13;
+//// model: FF14
+model FF14
+  parameter Integer n = 3;
+  Real x[3];
+  Real s;
+equation
+  x = {time, 1, 2};
+  for i in 1:1 loop
+    s = max(x[j] for j in 1:n + i - i);
+  end for;
+end FF14;
+//// model: FF15
+model FF15
+  parameter Integer n = 3;
+  Real x[3];
+  Real s[1];
+equation
+  x = {time, 1, 2};
+  for i in 1:1 loop
+    s[i] = sum(x[1:n + i - i]);
+  end for;
+end FF15;
+//// model: FF16
+model FF16
+  parameter Integer n = 3;
+  Real x[3];
+  Real s;
+equation
+  x = {time, 1, 2};
+  s = sum(sum(x[j] for j in 1:n + i - i) for i in 1:2);
+end FF16;
+//// model: FF17
+model FF17
+  Real x[3];
+  Real s;
+equation
+  x = {time, 1, 2};
+  for i in 1:1 loop
+    s = sum(x[j] for j in 1:i + 2);
+  end for;
+end FF17;
+//// model: FF18
+model FF18
+  parameter Integer n = 2;
+  Real x[3, 3];
+equation
+  for i in 1:3 loop
+    for j in 1:n + i - i loop
+      x[i, j] = time;
+    end for;
+    x[i, 3] = 1;
+  end for;
+end FF18;
+//// model: FF19
+model FF19
+  parameter Integer n = 1;
+  Real x[3, 3];
+equation
+  for i in 1:3 loop
+    x[:, i] = fill(time, size(x, i));
+  end for;
+end FF19;
+//// model: FF20
+model FF20
+  parameter Integer n = 3;
+  Real x[3];
+  Real s;
+equation
+  x = {time, 1, 2};
+  s = sum(max(x[j] for j in i:n) for i in 1:2);
+end FF20;
+//// model: FF21
+model FF21
+  parameter Integer n = 3;
+  Real x[3];
+  Real s;
+equation
+  x = {time, 1, 2};
+  s = max(sum(x[j] for j in i:n) for i in 1:2);
+end FF21;

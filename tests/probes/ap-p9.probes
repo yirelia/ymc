@@ -1,0 +1,210 @@
+//// set: ap-p9 — 归约范围的保留形态
+//// model: Q90
+model Q90
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = max(v * t for v in 2 * x);
+end Q90;
+//// model: Q91
+model Q91
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = max(v * t for v in x + x);
+end Q91;
+//// model: Q92
+model Q92
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = max(v * t for v in -x);
+end Q92;
+//// model: Q93
+model Q93
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = max(v * t for v in {t, 3});
+end Q93;
+//// model: Q94
+model Q94
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = max(v * t for v in {time, 3});
+end Q94;
+//// model: Q95
+model Q95
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = sum(v * t for v in {time, 3});
+end Q95;
+//// model: Q96
+model Q96
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = sum(v * t for v in {time});
+end Q96;
+//// model: Q97
+model Q97
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = max(i * t for i in {integer(t), 3});
+end Q97;
+//// model: Q98
+model Q98
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = sum(v * t for v in {2 * t, 3}) + sum(v for v in {t, 3});
+end Q98;
+//// model: Q99
+model Q99
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = sum(v * t for v in x[1:2] * 2);
+end Q99;
+//// model: BASE
+model BASE
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+end BASE;
+//// model: Q910
+model Q910
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = sum(v * t for v in {x[1] + 1, x[2]});
+end Q910;
+//// model: Q911
+model Q911
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Integer m = integer(t); Real y = sum(x[i] for i in {m, 2});
+end Q911;
+//// model: Q912
+model Q912
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Integer m = integer(t); Real y = sum(x[i] for i in {m + 1, 2});
+end Q912;
+//// model: Q913
+model Q913
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Integer m = integer(t); Real y = product(x[i] for i in {m + 1, 2});
+end Q913;
+//// model: Q914
+model Q914
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Integer m = integer(t); Real y = sum(x[i] for i in {m, 2.5});
+end Q914;
+//// model: Q915
+model Q915
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = sum(v * t for v in {t, 2 * t});
+end Q915;
+//// model: Q916
+model Q916
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = sum(v * t for v in {(t), 2});
+end Q916;
+//// model: Q917
+model Q917
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = sum(v * t for v in {x[1], t} * 2);
+end Q917;
+//// model: Q918
+model Q918
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = sum(v * t for v in 2 * {1, 2});
+end Q918;
+//// model: Q919
+model Q919
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = sum(v * t for v in {1, 2} * t);
+end Q919;
+//// model: Q920
+model Q920
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = sum(v * t for v in t * {1, 2});
+end Q920;
+//// model: Q921
+model Q921
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = sum(v * t for v in x[2:3] - {1, 2});
+end Q921;
+//// model: Q922
+model Q922
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = sum(v * w for v in {t, 2}, w in {2 * t, 3});
+end Q922;
+//// model: Q923
+model Q923
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = sum(v * w for v in {2 * t, 3}, w in {t, 2});
+end Q923;
+//// model: Q924
+model Q924
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Real y = sum(v * w for v in {t + 1}, w in {2 * t, 3});
+end Q924;
+//// model: Q925
+model Q925
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean c = t > 1; Real y = sum(if b then t else 1 for b in {c, true});
+end Q925;
+//// model: Q926
+model Q926
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean c = t > 1; Real y = sum(if b then t else 1 for b in {not c, true});
+end Q926;
+//// model: Q927
+model Q927
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean c = t > 1; Real y = sum(if b then t else 1 for b in {c and true, true});
+end Q927;
+//// model: Q928
+model Q928
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  Boolean c = t > 1; Real y = sum(if b then t else 1 for b in {t > 2, true});
+end Q928;

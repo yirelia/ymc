@@ -1,0 +1,215 @@
+//// set: ap-p1 — 参数数组进结构语境：下标 / 维 / 条件
+//// model: Q10
+model Q10
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean p[2] = {false, true}; Real y[2];
+equation
+  y[1] = 1; for i in 1:2 loop if p[i] then y[i] = 2; end if; end for;
+end Q10;
+//// model: Q11
+model Q11
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer idx[2] = {2, 1}; Real y = x[idx[1]];
+end Q11;
+//// model: Q12
+model Q12
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer idx[2] = {2, 1}; Real y;
+equation
+  y = x[idx[2]];
+end Q12;
+//// model: Q13
+model Q13
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer n[2] = {2, 3}; Real z[n[1]];
+end Q13;
+//// model: Q14
+model Q14
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer n[2] = {2, 3}; Real z[n[1], n[2]];
+end Q14;
+//// model: Q15
+model Q15
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Real q[2] = {1, 2}; Real y = if q[1] > 0 then t else 1;
+end Q15;
+//// model: Q16
+model Q16
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean b[2] = {true, false}; Real y;
+equation
+  if b[1] then y = 1; else y = 2; end if;
+end Q16;
+//// model: Q17
+model Q17
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean b[2] = {true, false}; Real y;
+equation
+  if b[2] then y = 1; else y = 2; end if;
+end Q17;
+//// model: Q18
+model Q18
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y[2];
+equation
+  for i in 1:k[2] loop y[i] = i; end for;
+end Q18;
+//// model: Q19
+model Q19
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y = sum(x[i] for i in 1:k[2]);
+end Q19;
+//// model: BASE
+model BASE
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+end BASE;
+//// model: Q110
+model Q110
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y = sum(x[i] for i in k);
+end Q110;
+//// model: Q111
+model Q111
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y = x[k[1]] + x[k[2]];
+end Q111;
+//// model: Q112
+model Q112
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; parameter Integer m = k[1]; Real y = x[k[1]]; parameter Integer m2 = k[2];
+end Q112;
+//// model: Q113
+model Q113
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k0 = 2; parameter Integer k[2] = {1, k0}; Real y = x[k[2]];
+end Q113;
+//// model: Q114
+model Q114
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k0 = 2; parameter Integer k[2] = {1, k0}; Real z[k[2]];
+end Q114;
+//// model: Q115
+model Q115
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2, 2] = {{1, 2}, {3, 1}}; Real y = x[k[2, 1]];
+end Q115;
+//// model: Q116
+model Q116
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y = x[k[1] + 1];
+end Q116;
+//// model: Q117
+model Q117
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y[2] = x[k];
+end Q117;
+//// model: Q118
+model Q118
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y = x[sum(k)];
+end Q118;
+//// model: Q119
+model Q119
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y = x[max(k)];
+end Q119;
+//// model: Q120
+model Q120
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y = x[size(k, 1)];
+end Q120;
+//// model: Q121
+model Q121
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y = fill(t, k[2])[1];
+end Q121;
+//// model: Q122
+model Q122
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2}; Real y[:] = fill(t, k[2]);
+end Q122;
+//// model: Q123
+model Q123
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2](each fixed = true) = {1, 2}; Real y = x[k[1]];
+end Q123;
+//// model: Q124
+model Q124
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Integer k[2] = {1, 2} annotation(Evaluate = true); Real y = k[1] * t;
+end Q124;
+//// model: Q125
+model Q125
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Real q[2] = {1, 2} annotation(Evaluate = true); Real y = q[1] * t + sum(q);
+end Q125;
+//// model: Q126
+model Q126
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean b[2] = {true, false}; Real y if b[1]; Real w if b[2];
+end Q126;
+//// model: Q127
+model Q127
+  Real x[3] = {time, 1, 2};
+  Real t = time;
+  Boolean bb[2] = {time > 1, true};
+  parameter Boolean b[2] = {true, false}; Real y(fixed = b[1], start = 1);
+equation
+  der(y) = 1;
+end Q127;
