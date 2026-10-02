@@ -2695,6 +2695,130 @@ YMC_TEST(flatten_comprehension_inside_array_expression_unsupported) {
                            "  Real t = 2.0 * time + 2.0 * 2.0 * time;\nend R2;\n"));
 }
 
+YMC_TEST(flatten_vectorized_calls) {
+  // 向量化调用：`array(F(x[$i1], …) for $i1 in 1:n)`（迭代变量名每个调用从 $i1 起、多维嵌套末维在内），实参形态 = 整体 / 带
+  // 下标 / `:` 切片的 cref 与书写的字面量；sum 的实参与参数数组摊分逐元素代入；作数组形参的实参原样；Integer 结果对 Real 数组
+  // 整体转型；推导式的 `array(…)` 调用写法；属性的推导式值逐元素摊分。期望 = omc 1.25.0 实跑 VT1（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("function F\n  input Real a;\n  input Real b;\n  output Real c = a + b;\nend F;\nfunction G\n"
+                           "  input Real a[3];\n  output Real c = a[1];\nend G;\nmodel VT1\n  parameter Real q[3] = {1, 2, 3};\n"
+                           "  Real x[3] = {time, 1, 2};\n  Integer k[3] = {1, 2, 3};\n"
+                           "  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};\n  Real a[3] = F(x, 2);\n  Real c = sum(F(x, 1));\n"
+                           "  parameter Real d[3] = F(q, 1);\n  Real e = G(F(x, 1));\n  Real g[3] = F({1, 2, time}, 2);\n"
+                           "  Real n[2, 3] = F(w, 1);\n  Real p[3] = F(k, 1);\n  Real v[3] = F(w[1, :], 1);\n"
+                           "  Real ac[3] = atan2(x, x);\n  Real ah[3] = abs(k);\n  Real aj[3] = sin(q);\n"
+                           "  Real t[3](start = {i for i in 1:3});\n  Real u[3];\nequation\n"
+                           "  u = array(F(x[i], i) for i in 1:3);\nend VT1;\n"),
+               std::string("function F\n  input Real a;\n  input Real b;\n  output Real c = a + b;\nend F;\n\nfunction G\n"
+                           "  input Real[3] a;\n  output Real c = a[1];\nend G;\n\nclass VT1\n  parameter Real q[1] = 1.0;\n"
+                           "  parameter Real q[2] = 2.0;\n  parameter Real q[3] = 3.0;\n  Real x[1];\n  Real x[2];\n"
+                           "  Real x[3];\n  Integer k[1];\n  Integer k[2];\n  Integer k[3];\n  Real w[1,1];\n  Real w[1,2];\n"
+                           "  Real w[1,3];\n  Real w[2,1];\n  Real w[2,2];\n  Real w[2,3];\n  Real a[1];\n  Real a[2];\n"
+                           "  Real a[3];\n  Real c = F(x[1], 1.0) + F(x[2], 1.0) + F(x[3], 1.0);\n"
+                           "  parameter Real d[1] = F(q[1], 1.0);\n  parameter Real d[2] = F(q[2], 1.0);\n"
+                           "  parameter Real d[3] = F(q[3], 1.0);\n  Real e = G(array(F(x[$i1], 1.0) for $i1 in 1:3));\n"
+                           "  Real g[1];\n  Real g[2];\n  Real g[3];\n  Real n[1,1];\n  Real n[1,2];\n  Real n[1,3];\n"
+                           "  Real n[2,1];\n  Real n[2,2];\n  Real n[2,3];\n  Real p[1];\n  Real p[2];\n  Real p[3];\n"
+                           "  Real v[1];\n  Real v[2];\n  Real v[3];\n  Real ac[1];\n  Real ac[2];\n  Real ac[3];\n"
+                           "  Real ah[1];\n  Real ah[2];\n  Real ah[3];\n  Real aj[1];\n  Real aj[2];\n  Real aj[3];\n"
+                           "  Real t[1](start = 1.0);\n  Real t[2](start = 2.0);\n  Real t[3](start = 3.0);\n  Real u[1];\n"
+                           "  Real u[2];\n  Real u[3];\nequation\n  x = {time, 1.0, 2.0};\n  k = {1, 2, 3};\n"
+                           "  w = {{time, 1.0, 2.0}, {3.0, 4.0, 5.0}};\n  a = array(F(x[$i1], 2.0) for $i1 in 1:3);\n"
+                           "  g = array(F({1.0, 2.0, time}[$i1], 2.0) for $i1 in 1:3);\n"
+                           "  n = array(array(F(w[$i1,$i2], 1.0) for $i2 in 1:3) for $i1 in 1:2);\n"
+                           "  p = array(F(/*Real*/(k[$i1]), 1.0) for $i1 in 1:3);\n"
+                           "  v = array(F(w[1,$i1], 1.0) for $i1 in 1:3);\n  ac = array(atan2(x[$i1], x[$i1]) for $i1 in 1:3);\n"
+                           "  ah = /*Real[3]*/(array(abs(k[$i1]) for $i1 in 1:3));\n  aj = array(sin(q[$i1]) for $i1 in 1:3);\n"
+                           "  u = array(F(x[i], /*Real*/(i)) for i in 1:3);\nend VT1;\n"));
+  // 未做 / 非法的形态必须 SKIP（V4 探针）：嵌在数组运算里（omc `array(…) * 2.0`）、范围切片实参（omc `x[(2:3)[$i1]]`）、向量化
+  // 维不一致（omc 内部错）、rem（1.25.0 打成 OpenModelica.Internal.realRem）。
+  const char* pre = "function F\n  input Real a;\n  input Real b;\n  output Real c = a + b;\nend F;\nmodel M\n"
+                    "  Real x[3] = {time, 1, 2};\n  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};\n";
+  for (const auto& [line, why] : std::vector<std::pair<std::string, std::string>>{
+           {"  Real l[3] = 2 * F(x, 1);\n", "comprehension inside array expression"},
+           {"  Real y[2] = F(x[2:3], 1);\n", "function: F"},
+           {"  Real aa[2, 3] = F(w, x);\n", "function: F"},
+           {"  Real b6[3] = rem(x, 2);\n", "non-numeric function argument"}}) {
+    bool uns = false;
+    const std::string out = flatten_src((std::string(pre) + line + "end M;\n").c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
+YMC_TEST(flatten_sum_product_min_max_of_arrays) {
+  // 模型语境的 sum / product / min / max(数组)：实参化简后是字面量数组 → 一个字面量；否则 sum / product 展开成元素链、链
+  // 本身不再化简（`1.0 + 2.0 + time`、`x[1] + 0.0 + x[2]`、`(-x[1]) + …`、Integer 链整体转型）；min / max 的数组构造子实参改写成
+  // 归约式；常量实参的向量化调用整体保留、展开时逐元素求值。期望 = omc 1.25.0 实跑 SR1（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("function F\n  input Real a;\n  input Real b;\n  output Real c = a + b;\nend F;\nmodel SR1\n"
+                           "  parameter Real q[3] = {1, 2, 3};\n  Real x[3] = {time, 1, 2};\n  Real s1 = sum({1, 2, time});\n"
+                           "  Real s3 = product({2, 3, time});\n  Real s4 = sum({i for i in 1:3});\n"
+                           "  Real s5 = sum({i * 1.0 for i in 1:3});\n  Real s7 = sum({F(1, 2), F(2, 2)});\n"
+                           "  parameter Real s12 = sum({1, 2, q[1]});\n  Integer s13 = sum({1, 2, 3});\n"
+                           "  Real s15 = sum({x[1], 0, x[2]});\n  Real s20 = sum({1, 2} .* {3, 4});\n"
+                           "  Real s27 = sum(linspace(0, 1, 3));\n  Real m2 = max({i for i in 1:3});\n"
+                           "  Real m5 = max(linspace(0, 1, 3));\n  Real m6 = max(sin({1, 2, 3}));\n"
+                           "  Real m9 = max({F(1, 2), F(2, 2)});\n  Real m20 = sum(-x);\n  Real bt = sum(sin({1, 2, 3}));\n"
+                           "  Real bj[3] = sin({1, 2, 3});\nend SR1;\n"),
+               std::string("class SR1\n  parameter Real q[1] = 1.0;\n  parameter Real q[2] = 2.0;\n"
+                           "  parameter Real q[3] = 3.0;\n  Real x[1];\n  Real x[2];\n  Real x[3];\n"
+                           "  Real s1 = 1.0 + 2.0 + time;\n  Real s3 = 2.0 * 3.0 * time;\n  Real s4 = /*Real*/(1 + 2 + 3);\n"
+                           "  Real s5 = 1.0 + 2.0 + 3.0;\n  Real s7 = 7.0;\n  parameter Real s12 = 1.0 + 2.0 + q[1];\n"
+                           "  Integer s13 = 6;\n  Real s15 = x[1] + 0.0 + x[2];\n  Real s20 = 11.0;\n"
+                           "  Real s27 = 0.0 + 0.5 + 1.0;\n  Real m2 = /*Real*/(max(i for i in 1:3));\n"
+                           "  Real m5 = max(/*Real*/(i - 1) / 2.0 for i in 1:3);\n"
+                           "  Real m6 = max(sin({1.0, 2.0, 3.0}[$i1]) for $i1 in 1:3);\n  Real m9 = 4.0;\n"
+                           "  Real m20 = (-x[1]) + (-x[2]) + (-x[3]);\n"
+                           "  Real bt = 0.8414709848078965 + 0.9092974268256817 + 0.1411200080598672;\n  Real bj[1];\n"
+                           "  Real bj[2];\n  Real bj[3];\nequation\n  x = {time, 1.0, 2.0};\n"
+                           "  bj = array(sin({1.0, 2.0, 3.0}[$i1]) for $i1 in 1:3);\nend SR1;\n"));
+  // 展开时成常量的用户函数调用 omc 会求值（`parameter Real bp[3] = F({1, 2, 3}, 2)` → `bp[1] = 3.0`，V4g 探针），未做 → SKIP。
+  bool uns = false;
+  const std::string out = flatten_src("function F\n  input Real a;\n  input Real b;\n  output Real c = a + b;\nend F;\nmodel BP\n"
+                                      "  parameter Real bp[3] = F({1, 2, 3}, 2);\nend BP;\n",
+                                      &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(out, std::string("<unsupported:constant call after comprehension substitution>"));
+}
+
+YMC_TEST(flatten_pre_change_argument_rules) {
+  // pre / change 的实参须是变量，when 之外不能是连续变量（NFBuiltinCall.typePreChangeCall :578-588；P1 / P5 / P7 探针 omc 报错）；
+  // when 方程体里的连续实参 1.25.0 接受（P4 探针，期望 = 实跑输出，2026-10-02）。
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           {"model P1\n  Real x = time;\n  Real y = pre(x);\nend P1;\n", "pre/change of continuous variable"},
+           {"model P5\n  Real x = time;\n  Boolean b = change(x);\nend P5;\n", "pre/change of continuous variable"},
+           {"model P7\n  Real x = time;\n  Real y = pre(x + 1);\nend P7;\n", "pre/change argument must be a variable"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+  YMC_CHECK_EQ(flatten_src("model P4\n  Real x = time;\n  discrete Real y;\nequation\n  when time > 1 then\n    y = pre(x);\n"
+                           "  end when;\nend P4;\n"),
+               std::string("class P4\n  Real x = time;\n  discrete Real y;\nequation\n  when time > 1.0 then\n    y = pre(x);\n"
+                           "  end when;\nend P4;\n"));
+}
+
+YMC_TEST(flatten_function_sum_product_expansion) {
+  // 函数体里 sum / product 的实参维全已知 → 展开成元素链；维未知保留调用；min / max 不展开。期望 = omc 1.25.0 实跑 FS1
+  //（2026-10-02）。可展开但不是整体局部数组的实参（omc `sum(a .* b)` → `a[1] * b[1] + …`，FS2 探针）未做 → SKIP。
+  YMC_CHECK_EQ(flatten_src("function f1\n  input Real a[3];\n  input Integer b[2, 2];\n  input Real c[:];\n  output Real s;\n"
+                           "  output Integer t;\n  output Real u;\n  output Real p;\nalgorithm\n  s := sum(a);\n"
+                           "  t := product(b);\n  u := sum(c);\n  p := product(a) + max(a) + min(c);\nend f1;\nmodel FS1\n"
+                           "  Real x;\n  Integer y;\n  Real z;\n  Real w;\nequation\n"
+                           "  (x, y, z, w) = f1({time, 1, 2}, {{1, 2}, {3, 4}}, {time, time});\nend FS1;\n"),
+               std::string("function f1\n  input Real[3] a;\n  input Integer[2, 2] b;\n  input Real[:] c;\n  output Real s;\n"
+                           "  output Integer t;\n  output Real u;\n  output Real p;\nalgorithm\n  s := a[1] + a[2] + a[3];\n"
+                           "  t := b[1,1] * b[1,2] * b[2,1] * b[2,2];\n  u := sum(c);\n"
+                           "  p := a[1] * a[2] * a[3] + max(a) + min(c);\nend f1;\n\nclass FS1\n  Real x;\n  Integer y;\n"
+                           "  Real z;\n  Real w;\nequation\n"
+                           "  (x, y, z, w) = f1({time, 1.0, 2.0}, {{1, 2}, {3, 4}}, {time, time});\nend FS1;\n"));
+  bool uns = false;
+  const std::string out = flatten_src("function f2\n  input Real a[3];\n  input Real b[3];\n  output Real s;\nalgorithm\n"
+                                      "  s := sum(a .* b);\nend f2;\nmodel FS2\n  Real x = f2({time, 1, 2}, {1, 2, 3});\nend FS2;\n",
+                                      &uns);
+  YMC_CHECK(uns);
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

@@ -59,6 +59,8 @@ ymc 以 **omc 1.25.0 实测**为准；这些用例从 `docs/research/s3-easy-sli
 | flattening/.../RecordBinding18.mo | `final parameter Real r.re = atan(1.0 / x);`（记录函数绑定保持符号） | stdout：`final parameter Real r.re = 0.7853981633974483;`（按 x = 1 折叠）+ stderr 内部错误 `NFFunction.Function.getBody2 got function with external section` | 较新 OMC 不折叠参数依赖的 final 记录绑定；1.25.0 折叠。2026-09-28 ymc 曾与 1.25.0 stdout 逐字节一致；2026-10-01 起记录函数绑定只折常量实参（参数实参的折叠是 ConstructParameters2 的错出来源），本例改为 SKIP（1.25.0 对 final 参数记录的折叠条件未复刻）。 |
 | flattening/.../ImplicitTrailingSubscript1/2.mo | `newArray[i,:] := oldArray[i,:];`（补尾随 `:`） | `newArray[i] := oldArray[i];`（不补） | 规范化尾随下标是较新 OMC 的行为。ymc 按 1.25.0，与其 stdout 逐字节一致（2026-09-28 加宽(55)-B-ii 起，FAIL 基线 72→74）。 |
 | flattening/.../Subscript5.mo | 函数体 `z := x[1,:] * y[2,:];`（补尾随 `:`） | `z := x[1] * y[2];`（不补） | 同 ImplicitTrailingSubscript1/2。2026-10-02 加宽(58u) 放行数组绑定的表达式叶（`{{time, 1, 2}, …}`）后不再 SKIP，ymc 与 1.25.0 stdout 逐字节一致，记入账本（FAIL 基线 16→17）。 |
+| flattening/.../FuncVectorization1.mo、FuncVectorization3.mo、FuncVectorizationBuiltin.mo、FuncVectorizationCastConflict1.mo、FuncVectorizationMap1.mo | 向量化调用的迭代变量按全局计数命名：`c = array(F(1, b[$i0]) for $i0 in 1:3);` 下一个调用 `$i1`… | 每个调用从 `$i1` 起按维序号：两个等式都是 `array(F(…, b[$i1]) for $i1 in 1:3)`，多维 `$i1,$i2,$i3` | 文件由较新 OMC 生成（vectorizeCall 改用 newUniqueIterator，见下"源码 HEAD 与 1.25.0 的已知差异"）。ymc 按 1.25.0，五例 stdout 逐字节一致（2026-10-02 加宽(59g) 起不再 SKIP，FAIL 基线 17→23）。 |
+| flattening/.../FuncVectorization2.mo | `g = array(array(F(b[$i0,$i1,:], 1) for $i1 in 1:3) for $i0 in 1:2);`（全局计数 + 补尾随 `:`） | `g = array(array(F(b[$i1,$i2], 1) for $i2 in 1:3) for $i1 in 1:2);` | 同上，另叠加 ImplicitTrailingSubscript1/2 的尾随下标分歧。ymc 与 1.25.0 逐字节一致（函数体 `o := b + a[1] + a[2] + a[3] + a[4]` 两边相同）。 |
 | flattening/.../DimUnknown17.mo（反向） | `Real y[:] = f(x)` 推出 3 维 + `y = f(x)[1];`（多输出函数首输出，输出维 `size(v, 1)`） | **报错退出**：`Dimension 1 of 'y' could not be deduced from the component's binding equation 'f(x)'.` | 罕见反向：1.25.0 推不出多输出调用的维，较新 OMC 能推。ymc 与文件 / 较新 OMC 一致（2026-10-02 加宽(58v) 起 PASS），按 InnerOuter13 先例记账，oracle=live 落"omc 自身报错"桶。 |
 | flattening/.../CevalBinding10.mo（反向） | `final parameter Real Q = ext_fun(0.0);` + external 函数块 | **报错退出**：`Malformed URI` / `Failed to evaluate function: ext_fun`（`annotation(Evaluate=true)` 的外部函数） | ymc 保持 SKIP，与 1.25.0 一致（都不产出）。 |
 | 切分修饰的混型字面量（探针，2026-10-02；单测 flatten_array_attribute_split_rejects） | — | `Real g[2](start = {1, 2.0})` → `g[1](start = 1)`（Real 属性打 Integer 字面量）；`A a[3](p = {1, 2, 3.0})` → `a[1].p = 1`；`{sin(1), 2}` → `/*Real*/(0.8414709848078965)` | 1.25.0 缺陷：切分（SPLIT_INDEX）的字面量数组逐元素**各自**类型化、数组类型取末元素的类型，不统一强转（`typeSubscriptedExp2`，NFTyping.mo:1655-1688；末元素 Integer 时整体 typeCast，调用一律包 CAST，NFCall.typeCast :1344-1389）。ymc 不复刻：叶类型混杂即 SKIP（`mixed-type split modifier literal` / `composite array modifier shape/type`）；叶类型一致时与 1.25.0 逐字节一致。 |
@@ -74,6 +76,11 @@ ymc 以 **omc 1.25.0 实测**为准；这些用例从 `docs/research/s3-easy-sli
 constant 报 `NO_CONSTANT_BINDING`（:844-848），安装版 1.25.0 实跑不报、照印 `constant Integer n;`（YmcUnbConst1 探针）；
 无绑定、fixed 且无 start 的 parameter 两者都报 `UNBOUND_PARAMETER_ERROR`（UnboundParameter1、YmcUnbArr1）。凡按源码实现的
 报错规则，先在 1.25.0 上实跑确认再落。
+向量化调用的迭代变量名：源码 `NFCall.vectorizeCall`（:2938）用 `InstNode.newUniqueIterator`（全局 tick，`$i0`、`$i1`… 跨调用
+累加，NFInstNode.mo:339-345），1.25.0 实跑是每个调用按维序号 `$i1…$ik`（`newIndexedIterator` 的形态；V4 探针 T0–T29、
+FuncVectorization* 账本行）。同一批探针另见 1.25.0 的两处怪相（ymc 不复刻，命中即 SKIP）：向量化的 `rem(x, 2)` 打成
+`OpenModelica.Internal.realRem(x[$i1], 2.0)`；向量化维不一致的 `F(w, x)`（w: [2,3]、x: [3]）是内部错
+`NFComponentRef.mergeSubscripts failed`。
 
 ## 已研究待实现：多条 connect 连接集（union-find）
 

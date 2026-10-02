@@ -975,6 +975,24 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           展开，omc 是整体保留 + 数组算符打印（hasArrayCall = contains，NFExpression.mo:5440-5471；R1 / R2 探针）→ scalarize 的
           Reduction 支改成只在核实过的调用点展开（sum / product 实参、参数数组摊分），其余 SKIP。语料无该形态（两套扫描判定不变）；
           +1 单测（183）。数组算符的整体打印（`array(…) * 2.0` 等）留待后续。
+    - [x] (59g) 向量化调用 + 一批探针撞出的潜伏错（2026-10-02）：
+          **向量化**（NFCall.vectorizeCall :2908-2964）：用户函数 / 23 个初等内建（sin…atan2、mod、div、abs、sign、integer、
+          homotopy、semiLinear…）的实参比形参多出前导维 → `array(F(x[$i1], …) for $i1 in 1:n)`，迭代变量按维序号每调用从 `$i1`
+          起（1.25.0 实测；源码 HEAD 是全局计数）；实参形态 = 整体 / 带下标 / `:` 切片的 cref 与书写的字面量 `{…}[$i1]`；
+          整体保留、sum 实参 / 参数摊分 / 属性摊分逐元素代入、作数组形参的实参原样。范围切片 / 运算式 / 嵌套向量化实参、维不
+          一致、rem、嵌在数组运算里 → SKIP。`array(e for i in r)` 调用写法 = 推导式。
+          **sum / product / min / max(数组) 重做**（V4d / V4e 探针 56 行，此前 22 行错出）：实参化简后是字面量数组才求值成一个
+          字面量；否则 sum / product 出元素链且**链不再化简**（`1.0 + 2.0 + time`、`x[1] + 0.0 + x[2]`、`(-x[1]) + …`、
+          `/*Real*/(1 + 2 + 3)`；nofold_bins_），min / max 的数组构造子实参改写成归约式 `max(e for i in r)`。call() 里的
+          eval_reduction 整体求值只留给函数语境与直接写的归约式。
+          **pre / change**：实参须是变量、when 之外不能是连续变量（NFBuiltinCall.typePreChangeCall :578-588；此前 P1 / P5 / P7
+          三种 ACCEPTS-INVALID）。**函数体的 sum / product**：维全已知的整体局部数组展开成元素链（FuncVectorization2 的
+          `o := b + a[1] + … + a[4]`），其余可展开形态 SKIP（此前错印 `sum(a .* b)`）。**字面量取字面量下标**化简成元素。
+          **属性的推导式值**逐元素摊分（S16）。展开后成常量的用户函数调用 omc 会求值，未做 → SKIP。
+          探针 7 组 206 行：151 PASS / 47 SKIP / 8 BOTH-REJECT / 0 FAIL / 0 ACCEPTS-INVALID。→ 全 scodeinst PASS 457→458
+          （FuncMap1），另 6 例与 1.25.0 逐字节一致但文件 Result 是较新 OMC 的 `$i0` 命名（FuncVectorization1/2/3、
+          FuncVectorizationBuiltin / CastConflict1 / Map1，记入分歧账本，FAIL 基线 17→23）；nf-live 470→472（Vectorizable5、
+          ArrayReduce）；+4 单测（187）。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、
