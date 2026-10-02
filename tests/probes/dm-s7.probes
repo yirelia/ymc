@@ -1,0 +1,294 @@
+//// set: dm-s7 — 求不出的常量运算：负底数的非整数幂、0 的负数次幂、定义域外的内建
+//// model: S70
+model S70
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  constant Real y = (-1.0)^0.5;
+end S70;
+//// model: S71
+model S71
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = (-1.0)^0.5;
+end S71;
+//// model: S72
+model S72
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real y = (-1.0)^0.5;
+end S72;
+//// model: S73
+model S73
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = (-1.0)^0.5 * t;
+end S73;
+//// model: S74
+model S74
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = (-8.0)^(1/3);
+end S74;
+//// model: S75
+model S75
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = (-2.0)^2;
+end S75;
+//// model: S76
+model S76
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = (-2.0)^2.0;
+end S76;
+//// model: S77
+model S77
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = (-2)^2;
+end S77;
+//// model: S78
+model S78
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = (-2)^3;
+end S78;
+//// model: S79
+model S79
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = (-2.0)^(-1);
+end S79;
+//// model: BASE
+model BASE
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+end BASE;
+//// model: S710
+model S710
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = (-2.0)^(-1.0);
+end S710;
+//// model: S711
+model S711
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = (-2.0)^0;
+end S711;
+//// model: S712
+model S712
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = 0.0^(-1);
+end S712;
+//// model: S713
+model S713
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = 0^0;
+end S713;
+//// model: S714
+model S714
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = 0.0^0.5;
+end S714;
+//// model: S715
+model S715
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = 0.0^0;
+end S715;
+//// model: S716
+model S716
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = 2^0.5;
+end S716;
+//// model: S717
+model S717
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = 2^(-1);
+end S717;
+//// model: S718
+model S718
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = (-1)^0.5;
+end S718;
+//// model: S719
+model S719
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real p = -1; Real y = p^0.5;
+end S719;
+//// model: S720
+model S720
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real p = -1; parameter Real y = p^0.5;
+end S720;
+//// model: S721
+model S721
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  constant Real c = -1; Real y = c^0.5;
+end S721;
+//// model: S722
+model S722
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  constant Real c = -1; constant Real y = c^0.5;
+end S722;
+//// model: S723
+model S723
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  constant Real c = -1; constant Real y = c^2;
+end S723;
+//// model: S724
+model S724
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = t^0.5;
+end S724;
+//// model: S725
+model S725
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = (-t)^0.5;
+end S725;
+//// model: S726
+model S726
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = (-1.0)^t;
+end S726;
+//// model: S727
+model S727
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; output Real v; algorithm v := (-1.0)^0.5 * u; end f; Real y = f(t);
+end S727;
+//// model: S728
+model S728
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; output Real v; algorithm v := (-1.0)^0.5 * u; end f; constant Real y = f(1);
+end S728;
+//// model: S729
+model S729
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u; output Real v; algorithm v := u^0.5; end f; constant Real y = f(-1);
+end S729;
+//// model: S730
+model S730
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[2] = {-1.0, 4.0} .^ 0.5;
+end S730;
+//// model: S731
+model S731
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  constant Real y[2] = {-1.0, 4.0} .^ 0.5;
+end S731;
+//// model: S732
+model S732
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = if t > 1 then (-1.0)^0.5 else 1;
+end S732;
+//// model: S733
+model S733
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = sqrt(-1.0);
+end S733;
+//// model: S734
+model S734
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  constant Real y = sqrt(-1.0);
+end S734;
+//// model: S735
+model S735
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = log(-1.0);
+end S735;
+//// model: S736
+model S736
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  constant Real y = log(0.0);
+end S736;
+//// model: S737
+model S737
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = asin(2.0);
+end S737;
+//// model: S738
+model S738
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = 1.0 / 0.0;
+end S738;
+//// model: S739
+model S739
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  constant Real y = 1 / 0;
+end S739;
+//// model: S740
+model S740
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = mod(1.0, 0.0);
+end S740;

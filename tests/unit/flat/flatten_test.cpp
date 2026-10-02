@@ -3463,6 +3463,45 @@ YMC_TEST(flatten_whole_range_slices_and_when_arrays) {
   }
 }
 
+YMC_TEST(flatten_mixed_range_types_and_invalid_pow) {
+  // 数值范围的配型（typeRange，NFTyping.mo:2371-2412 v1.25.0）：起点-终点先配（Integer 的一方转 Real：`1.0:n`、
+  // `/*Real*/(k + 1):n`）；有步长时再拿起点的原类型与步长配、范围类型取这一步的结果——起点、步长都是 Integer 而终点是 Real
+  // 时起点已转成 Real、范围类型却是 Integer（`for i in 1.0:2:n`，体里 `/*Real*/(i)`）。期望 = omc 1.25.0 实跑 RGT1
+  //（2026-10-02；出自 testsuite simulation/modelica 的 Algorithm.mo）。
+  YMC_CHECK_EQ(flatten_src("function f\n  input Integer k;\n  input Real n;\n  output Real y;\nalgorithm\n  y := 1;\n"
+                           "  for i in 1:n loop\n    y := y * i;\n  end for;\n  for i in 1:2:n loop\n    y := y * i;\n"
+                           "  end for;\n  for i in k + 1:n loop\n    y := y + i;\n  end for;\n  for i in 1:0.5:2 loop\n"
+                           "    y := y + i;\n  end for;\nend f;\nmodel RGT1\n  Real t = time;\n  Real y = f(1, t);\n  Real z;\n"
+                           "algorithm\n  z := 0;\n  for i in 1:t loop\n    z := z + i;\n  end for;\nend RGT1;\n"),
+               std::string("function f\n  input Integer k;\n  input Real n;\n  output Real y;\nalgorithm\n  y := 1.0;\n"
+                           "  for i in 1.0:n loop\n    y := y * i;\n  end for;\n  for i in 1.0:2:n loop\n"
+                           "    y := y * /*Real*/(i);\n  end for;\n  for i in /*Real*/(k + 1):n loop\n    y := y + i;\n"
+                           "  end for;\n  for i in 1.0:0.5:2.0 loop\n    y := y + i;\n  end for;\nend f;\n\nclass RGT1\n"
+                           "  Real t = time;\n  Real y = f(1, t);\n  Real z;\nalgorithm\n  z := 0.0;\n  for i in 1.0:t loop\n"
+                           "    z := z + i;\n  end for;\nend RGT1;\n"));
+  // 负底数配非整数指数：化简不求值、原样留下（Ceval.evalBinaryPow，NFCeval.mo:1095-1111 v1.25.0），ymc 此前折成 NaN。
+  // 期望 = omc 1.25.0 实跑 PWT1。
+  YMC_CHECK_EQ(flatten_src("model PWT1\n  constant Real c = -1;\n  Real t = time;\n  Real y1 = (-1.0)^0.5 * t;\n"
+                           "  Real y2 = (-8.0)^(1/3);\n  Real y3 = (-2.0)^2;\n  Real y4 = c^0.5;\n"
+                           "  Real y5[2] = {-1.0, 4.0} .^ 0.5;\n  parameter Real p = (-1)^0.5;\nend PWT1;\n"),
+               std::string("class PWT1\n  constant Real c = -1.0;\n  Real t = time;\n  Real y1 = (-1.0) ^ 0.5 * t;\n"
+                           "  Real y2 = (-8.0) ^ 0.3333333333333333;\n  Real y3 = 4.0;\n  Real y4 = (-1.0) ^ 0.5;\n"
+                           "  Real y5[1];\n  Real y5[2];\n  parameter Real p = (-1.0) ^ 0.5;\nequation\n"
+                           "  y5 = {(-1.0) ^ 0.5, 2.0};\nend PWT1;\n"));
+  // omc 报错的：constant 绑定里的负底数非整数幂（要求值，INVALID_NEGATIVE_POW，PWS1 / testsuite RealPow2）、0 的负数次幂
+  //（PWS2）、extends 的基类名路径上有 replaceable 的类（RPS1 / InvalidReplaceableExtends3）。
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           {"model PWS1\n  constant Real y = (-1.0)^0.5;\nend PWS1;\n", "constant evaluation"},
+           {"model PWS2\n  Real y = 0.0^(-1);\nend PWS2;\n", "division by zero in constant"},
+           {"model A\n  replaceable model B\n    Real x;\n  end B;\nend A;\nmodel RPS1\n  extends A.B;\nend RPS1;\n",
+            "invalid extends lookup"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

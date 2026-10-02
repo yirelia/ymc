@@ -188,3 +188,13 @@
   在 for 方程、for 语句、嵌套归约里各放一遍——迭代变量会改变 omc 求值的时机（定型期循环还没展开）。(3) 读 omc 源码要读到
   被调函数里面：`simplifyReduction2` 本身看不出求值，求值藏在它调的 `foldReduction2` 里。(4) 新加化简规则先看它和"先化简
   后标量化"的次序是否相容：标量化产生的节点要打标记，后续 simplify / clone 都得带着走。
+
+## 2026-10-02 — 换一个语料目录就又撞出错：对拍语料要尽量铺开，而不是只守着两套
+- 模式：59r 收尾后顺手把 testsuite 的 simulation/modelica（那里的 .mo 由 .mos 驱动仿真，没有 `// Result:`）交给 ymc 与
+  实跑 omc 对拍，379 个模型里 1 个 FAIL（Integer / Real 混合的 for 范围，omc 打 `1.0:n`）；把 flattening/modelica 里**没有
+  注解**的 137 个也跑一遍，又出 3 个 ACCEPTS-INVALID（负底数的非整数幂折成了 NaN、extends 经 replaceable 类被放行）。这些
+  写法 scodeinst 和 nf-live 两套语料里都没有，探针也没想到去铺。
+- 规则：(1) 任何装着 Modelica 模型的目录都是实跑 oracle 的语料——`tools/nf_live_sweep.py --all --dir <目录>`；新拿到一个
+  目录先扫一遍，FAIL / ACCEPTS-INVALID 清零后把它加进门。(2) "数值上不合法的常量运算"（负底数幂、除零、定义域外的内建）
+  是单独一类：omc 的化简遇到求不出的就原样留下、只在必须求值的地方（constant 绑定）报错，ymc 的折叠要逐个算子对齐，
+  不能让 C++ 的 `std::pow` / 除法自己算出 NaN / inf 打出来。

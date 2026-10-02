@@ -1,0 +1,59 @@
+//// set: dm-ut2 — 范围配型、非法幂、extends 经 replaceable 类（单测原文）
+//// model: PWS1
+model PWS1
+  constant Real y = (-1.0)^0.5;
+end PWS1;
+//// model: PWS2
+model PWS2
+  Real y = 0.0^(-1);
+end PWS2;
+//// model: PWT1
+model PWT1
+  constant Real c = -1;
+  Real t = time;
+  Real y1 = (-1.0)^0.5 * t;
+  Real y2 = (-8.0)^(1/3);
+  Real y3 = (-2.0)^2;
+  Real y4 = c^0.5;
+  Real y5[2] = {-1.0, 4.0} .^ 0.5;
+  parameter Real p = (-1)^0.5;
+end PWT1;
+//// model: RGT1
+function f
+  input Integer k;
+  input Real n;
+  output Real y;
+algorithm
+  y := 1;
+  for i in 1:n loop
+    y := y * i;
+  end for;
+  for i in 1:2:n loop
+    y := y * i;
+  end for;
+  for i in k + 1:n loop
+    y := y + i;
+  end for;
+  for i in 1:0.5:2 loop
+    y := y + i;
+  end for;
+end f;
+model RGT1
+  Real t = time;
+  Real y = f(1, t);
+  Real z;
+algorithm
+  z := 0;
+  for i in 1:t loop
+    z := z + i;
+  end for;
+end RGT1;
+//// model: RPS1
+model A
+  replaceable model B
+    Real x;
+  end B;
+end A;
+model RPS1
+  extends A.B;
+end RPS1;

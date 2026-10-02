@@ -104,3 +104,6 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `dm-s5` | 34 | when 方程体里的数组等式 |
 | `dm-misc` | 20 | 维 / 切片的零散探针（D / E / X） |
 | `dm-ut` | 6 | 维里的 size、整段切片、when 体数组等式（单测原文） |
+| `dm-s6` | 28 | Integer / Real 混合的范围（for 语句、函数体） |
+| `dm-s7` | 42 | 求不出的常量运算：负底数的非整数幂、0 的负数次幂、定义域外的内建 |
+| `dm-ut2` | 5 | 范围配型、非法幂、extends 经 replaceable 类（单测原文） |

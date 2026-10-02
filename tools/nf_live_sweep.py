@@ -16,9 +16,14 @@ flattening/modelica 下约 1100 个 .mo 用注解 `annotation(__OpenModelica_com
   CRASH           ymc 断言 / 其它非零退出 / 超时，或 ymc 报错而 omc 能过
   OMC-TIMEOUT     omc 超时（不计）
 
+`--all` 再把**没有**命令行选项注解的 .mo 也收进来（原样跑）——任何一个装着模型的目录都能当对拍语料，比如
+simulation/modelica（那里的 .mo 由 .mos 驱动仿真，文件本身没有 `// Result:`）。`omc X.mo` 压平的是文件里最后一个类，
+ymc 同此；要靠别的库（MSL）的模型两边都拒绝，记 SKIP / BOTH-REJECT。
+
 用法：
   python tools/nf_live_sweep.py                         # 默认 flattening/modelica 全部
   python tools/nf_live_sweep.py --dir <目录> --json out.json --show 20
+  python tools/nf_live_sweep.py --all --dir <testsuite>/simulation/modelica
 """
 import argparse
 import collections
@@ -43,10 +48,12 @@ _ANY_OPTS = re.compile(r'__OpenModelica_commandLineOptions\s*=\s*"([^"]*)"')
 _NOT_IMPL = re.compile(r"not implemented:\s*(.+)")
 
 
-def strip_annotation(text):
-    """去掉 `-d=-newInst` 注解；文件里有其它命令行选项注解 → None（不取）。"""
+def strip_annotation(text, take_plain=False):
+    """去掉 `-d=-newInst` 注解；文件里有其它命令行选项注解 → None（不取）。没有注解的：take_plain 时原样取，否则不取。"""
     opts = _ANY_OPTS.findall(text)
-    if not opts or any(o != "-d=-newInst" for o in opts):
+    if not opts:
+        return text if take_plain and "__OpenModelica_commandLineOptions" not in text else None
+    if any(o != "-d=-newInst" for o in opts):
         return None
     out = []
     for line in text.split("\n"):
@@ -69,9 +76,9 @@ def check(path, tmp, args):
     with open(path, encoding="utf-8", errors="replace") as f:
         text = f.read()
     rec = {"path": rel, "status": rt.parse_directives(text).get("status", "correct").strip().lower()}
-    stripped = strip_annotation(text)
+    stripped = strip_annotation(text, args.all)
     if stripped is None:
-        return None   # 不是纯 -d=-newInst 的旧前端用例
+        return None   # 不是纯 -d=-newInst 的旧前端用例（--all 时：带其它命令行选项的）
     dst = os.path.join(tmp, rel)
     os.makedirs(os.path.dirname(dst), exist_ok=True)
     with open(dst, "w", encoding="utf-8", newline="\n") as f:
@@ -117,6 +124,7 @@ def main():
     ap.add_argument("--omc-timeout", type=int, default=60)
     ap.add_argument("--show", type=int, default=20)
     ap.add_argument("--json")
+    ap.add_argument("--all", action="store_true", help="也取没有命令行选项注解的 .mo（原样跑）")
     args = ap.parse_args()
     if args.ymc:
         rt.YMC = os.path.abspath(args.ymc)
@@ -130,7 +138,8 @@ def main():
         shutil.rmtree(tmp, ignore_errors=True)
 
     tot = collections.Counter(r["verdict"] for r in records)
-    print(f"== nf-live: {len(records)} 个旧前端用例（去 -d=-newInst）| " +
+    what = "个模型（--all：无注解的原样 + 去 -d=-newInst 的）" if args.all else "个旧前端用例（去 -d=-newInst）"
+    print(f"== nf-live: {len(records)} {what}| " +
           " ".join(f"{k} {tot[k]}" for k in ("PASS", "FAIL", "ACCEPTS-INVALID", "SKIP", "BOTH-REJECT", "CRASH", "OMC-TIMEOUT")) + " ==")
     by_dir = collections.defaultdict(collections.Counter)
     for r in records:

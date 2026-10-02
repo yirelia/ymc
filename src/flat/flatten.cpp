@@ -315,11 +315,14 @@ class Flattener {
     return false;
   }
   // extends 路径：中间段经过 partial 类（PartialLookup3）；或基类里有与 extends 名同名的局部类（继承后再查会找到它，
-  // ExtendInherited1 "Found other base class for extends A after instantiating extends"）→ SKIP。
+  // ExtendInherited1 "Found other base class for extends A after instantiating extends"）；或路径上有 replaceable 的类
+  //（基类名须传递地非 replaceable，MLS §7.1.4；1.25.0 报 "Class 'B' in 'extends A.<B>' is replaceable …"，
+  // InvalidReplaceableExtends3 / 4——归 inst 的查找，任务卡 T-S3-07，这里先挡住）→ SKIP。
   bool bad_extends_path(const SElement& x, const ScodeScope& scope) {
     if (x.base_path.empty()) return false;
     ScodeScope ds;
     Id<SElement> e = find_scode_element_at(x.base_path[0], x.base_leading_dot ? ScodeScope{} : scope, ds);
+    if (e.is_valid() && I_.scode.elems[e].kind == SElementKind::Class && I_.scode.elems[e].prefixes.is_replaceable) return true;
     for (std::size_t k = 0; e.is_valid() && k + 1 < x.base_path.size(); ++k) {
       const SElement& el = I_.scode.elems[e];
       if (el.kind != SElementKind::Class) return false;
@@ -328,6 +331,7 @@ class Flattener {
       for (Id<SElement> m : el.def.elements)
         if (I_.scode.elems[m].name == x.base_path[k + 1] && I_.scode.elems[m].kind == SElementKind::Class) { nxt = m; break; }
       e = nxt;
+      if (e.is_valid() && I_.scode.elems[e].prefixes.is_replaceable) return true;
     }
     if (e.is_valid() && I_.scode.elems[e].kind == SElementKind::Class)
       for (Id<SElement> m : I_.scode.elems[e].def.elements)
@@ -7669,10 +7673,26 @@ class Flattener {
         r.b = inst_exp(e.b, enclosing, prefix);
         if (e.c.is_valid()) r.c = inst_exp(e.c, enclosing, prefix);
         auto ik = [&](Id<Expr> x) { return result_.model.exprs[x].ty.kind; };   // 迭代变量类型 = 范围元素类型
-        const bool allint = ik(r.a) == TypeKind::Integer && ik(r.b) == TypeKind::Integer &&
-                            (!r.c.is_valid() || ik(r.c) == TypeKind::Integer);
-        const bool allbool = !r.c.is_valid() && ik(r.a) == TypeKind::Boolean && ik(r.b) == TypeKind::Boolean;
-        r.ty = allbool ? Type::boolean() : allint ? Type::integer() : Type::real();
+        auto num = [](TypeKind k) { return k == TypeKind::Integer || k == TypeKind::Real; };
+        const bool has_step = r.c.is_valid();
+        Id<Expr>& stop = has_step ? r.c : r.b;
+        const TypeKind ks = ik(r.a);   // 起点的**原**类型
+        if (num(ks) && num(ik(stop)) && (!has_step || num(ik(r.b)))) {
+          // 数值范围的配型（typeRange，NFTyping.mo:2371-2412 v1.25.0）：起点-终点先配（Integer 的一方转 Real）；有步长时再拿起点
+          // 的原类型与步长配、范围类型取这一步的结果，终点转到范围类型。于是起点、步长都是 Integer 而终点是 Real 时，起点已
+          // 转成 Real、范围类型却是 Integer：`for i in 1.0:2:n`，迭代变量按 Integer 用（`y * /*Real*/(i)`）——照 omc 的输出做
+          //（DM 探针 s6；来自 simulation/modelica 的 Algorithm.mo）。
+          bool real = ks == TypeKind::Real || ik(stop) == TypeKind::Real;
+          if (real) { r.a = to_real(r.a); stop = to_real(stop); }
+          if (has_step) {
+            real = ks == TypeKind::Real || ik(r.b) == TypeKind::Real;
+            if (real) { r.a = to_real(r.a); r.b = to_real(r.b); stop = to_real(stop); }
+          }
+          r.ty = real ? Type::real() : Type::integer();
+          return add(std::move(r));
+        }
+        const bool allbool = !has_step && ks == TypeKind::Boolean && ik(r.b) == TypeKind::Boolean;
+        r.ty = allbool ? Type::boolean() : Type::real();
         return add(std::move(r));
       }
       default:
@@ -10529,7 +10549,12 @@ class Flattener {
             case BinOp::Sub: return lit_real(x - y);
             case BinOp::Mul: return lit_real(x * y);
             case BinOp::Div: if (y != 0.0) return lit_real(x / y); break;
-            case BinOp::Pow: return lit_real(std::pow(x, y));
+            case BinOp::Pow:
+              // 负底数配非整数指数：omc 的化简不求值、原样留下（Ceval.evalBinaryPow，NFCeval.mo:1095-1111 v1.25.0；DM 探针 s7
+              // `Real y = (-1.0)^0.5` → `(-1.0) ^ 0.5`）；0 的负数次幂 omc 报错。
+              if (x < 0 && std::floor(y) != y) break;
+              if (x == 0 && y < 0) { set_unsupported("division by zero in constant"); return id; }
+              return lit_real(std::pow(x, y));
           }
         }
         // 字符串常量拼接（Ceval.evalBinaryAdd 的字符串分支，StringConcatenation）。

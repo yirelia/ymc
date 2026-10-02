@@ -1115,6 +1115,17 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           把 `y = x` 整条留在 when 体里。含数组调用的等式未核实 → SKIP。
           探针 DM s1–s5 + misc + ut：见 tests/probes/dm-*.probes，0 FAIL。→ 全 scodeinst PASS 480→482（DimUnknown8、
           RecordBinding3）、nf-live 494→499（PolynomialEvaluatorA / B、QualifiedEnd、Modification12 / 13）；+2 单测（204）。
+    - [x] (59s) 新对拍语料（simulation/modelica、flattening/modelica 无注解的）撞出的潜伏错（2026-10-02）：
+          **工具**：`tools/nf_live_sweep.py --all` 把没有命令行选项注解的 .mo 也收进来（原样跑）→ 任何装着模型的目录都能当
+          实跑 omc 的对拍语料。simulation/modelica 379 个模型：PASS 151 / FAIL 0 / ACCEPTS-INVALID 0；flattening/modelica
+          全部 2506 个：PASS 1017 / FAIL 0 / ACCEPTS-INVALID 3（全在账本：ConnectArrayCond、DimUnknown17、InnerOuter13）。
+          两条都进每桶收尾的门（FAIL / ACCEPTS-INVALID / CRASH 只许降）。
+          **修**：(1) Integer / Real 混合的范围（Algorithm.mo `for i in 1:n`，n 是 Real）——omc 的 typeRange 把 Integer 的一方
+          转成 Real（`1.0:n`、`/*Real*/(k + 1):n`）；有步长时范围类型取"起点原类型 × 步长"的结果，于是 `1:2:n` 打成
+          `1.0:2:n`、迭代变量按 Integer 用。(2) 负底数配非整数指数的幂：omc 化简不求值、原样留下 `(-1.0) ^ 0.5`，ymc 此前
+          折成 NaN；constant 绑定里要求值 → omc 报错（RealPow2），0 的负数次幂同样报错。(3) extends 的基类名路径上有
+          replaceable 的类（InvalidReplaceableExtends3 / 4，omc 报错、ymc 此前放行）→ flatten 里先挡住（归 inst，T-S3-07）。
+          探针 DM s6 / s7 / ut2：0 FAIL；+1 单测（205）。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、
