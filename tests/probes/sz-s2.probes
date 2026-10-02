@@ -1,0 +1,432 @@
+//// set: sz-s2 — size / ndims：非常量维号、for / when / if 里、函数体里的 size(u) 与 ndims
+//// model: S20
+model S20
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k[2];
+equation
+  for i in 1:2 loop k[i] = size(m, i); end for;
+end S20;
+//// model: S21
+model S21
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k[2]; algorithm for i in 1:2 loop k[i] := size(m, i); end for;
+end S21;
+//// model: S22
+model S22
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer d = 1; Integer k;
+equation
+  k = size(m, d);
+end S22;
+//// model: S23
+model S23
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer d = 1; Integer k; algorithm k := size(m, d);
+end S23;
+//// model: S24
+model S24
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  parameter Integer d = 1; Integer k = size(2 * m, d);
+end S24;
+//// model: S25
+model S25
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  parameter Integer d = 1; Integer k = size(m[1], d);
+end S25;
+//// model: S26
+model S26
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  parameter Integer d = 1; Integer k = size(m, d + 1);
+end S26;
+//// model: S27
+model S27
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  parameter Integer d = 1; Integer k = size(m, d) + size(m, 2);
+end S27;
+//// model: S28
+model S28
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  parameter Integer d = 3; Integer k = size(m, d);
+end S28;
+//// model: S29
+model S29
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  parameter Integer d = 1; Real y[size(m, d)] = fill(a, 2);
+end S29;
+//// model: BASE
+model BASE
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+end BASE;
+//// model: S210
+model S210
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Real d = 1; Integer k = size(m, d);
+end S210;
+//// model: S211
+model S211
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(m, 1.0);
+end S211;
+//// model: S212
+model S212
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Real y = if size(x, 1) > 2 then a else b;
+end S212;
+//// model: S213
+model S213
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Real y;
+equation
+  if size(x, 1) > 2 then y = a; else y = b; end if;
+end S213;
+//// model: S214
+model S214
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Real y;
+equation
+  when size(x, 1) > 2 then y = a; end when;
+end S214;
+//// model: S215
+model S215
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Real y = sum(size(m));
+end S215;
+//// model: S216
+model S216
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Real y = sum(size(m)) * a;
+end S216;
+//// model: S217
+model S217
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Real y = product(size(m));
+end S217;
+//// model: S218
+model S218
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Real y = max(size(m));
+end S218;
+//// model: S219
+model S219
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k[2] = size(m) + {1, 1};
+end S219;
+//// model: S220
+model S220
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k[2] = 2 * size(m);
+end S220;
+//// model: S221
+model S221
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(size(m), 1);
+end S221;
+//// model: S222
+model S222
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(m)[1];
+end S222;
+//// model: S223
+model S223
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = (size(m))[2];
+end S223;
+//// model: S224
+model S224
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Real y[2] = size(m);
+end S224;
+//// model: S225
+model S225
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Real y[2] = size(m) * a;
+end S225;
+//// model: S226
+model S226
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[:, :]; output Integer n; algorithm n := size(u, 1) * size(u, 2); end f; Integer k = f(m);
+end S226;
+//// model: S227
+model S227
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[:, :]; output Integer n; algorithm n := sum(size(u)); end f; Integer k = f(m);
+end S227;
+//// model: S228
+model S228
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[:, :]; output Integer n; algorithm n := scalar(size(u[1])); end f; Integer k = f(m);
+end S228;
+//// model: S229
+model S229
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[:, :]; input Integer d; output Integer n; algorithm n := size(u, d); end f; Integer k = f(m, 1);
+end S229;
+//// model: S230
+model S230
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[:]; output Real v[size(u, 1)]; algorithm v := zeros(size(u, 1)); end f; Real y[3] = f(x);
+end S230;
+//// model: S231
+model S231
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[:]; output Integer n[1]; protected Real w[3]; algorithm n := size(w); end f; Integer k[1] = f(x);
+end S231;
+//// model: S232
+model S232
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[:]; output Integer n; protected Real w[3]; algorithm n := size(w, 1) + size(u, 1); end f; Integer k = f(x);
+end S232;
+//// model: S233
+model S233
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[:]; output Integer n; algorithm n := size({u, u}, 1); end f; Integer k = f(x);
+end S233;
+//// model: S234
+model S234
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[:]; output Integer n; algorithm n := size({u, u}, 2); end f; Integer k = f(x);
+end S234;
+//// model: S235
+model S235
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[:]; output Integer n; algorithm n := size(u .* u, 1); end f; Integer k = f(x);
+end S235;
+//// model: S236
+model S236
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[:]; output Integer n; algorithm n := size(u * 1, 1); end f; Integer k = f(x);
+end S236;
+//// model: S237
+model S237
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[:]; output Integer n; algorithm n := size(-u, 1); end f; Integer k = f(x);
+end S237;
+//// model: S238
+model S238
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[:]; output Integer n; algorithm n := size(u[1:2], 1); end f; Integer k = f(x);
+end S238;
+//// model: S239
+model S239
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[:, :]; output Integer n; algorithm n := ndims(u) + ndims(u[1]); end f; Integer k = f(m);
+end S239;
+//// model: S240
+model S240
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[:, :]; output Integer n[2]; algorithm n := size(u) + {1, 1}; end f; Integer k[2] = f(m);
+end S240;
+//// model: S241
+model S241
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[:, :]; output Integer n[2]; algorithm n := size(2 * u); end f; Integer k[2] = f(m);
+end S241;
+//// model: S242
+model S242
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[:, :]; output Real n[2]; algorithm n := size(u); end f; Real y[2] = f(m);
+end S242;
+//// model: S243
+model S243
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[:, 3]; output Integer n[2]; algorithm n := size(u); end f; Integer k[2] = f(m);
+end S243;
+//// model: S244
+model S244
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[2, 3]; output Integer n[2]; algorithm n := size(u); end f; Integer k[2] = f(m);
+end S244;
+//// model: S245
+model S245
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[:]; output Integer n; algorithm for i in 1:size(u, 1) loop n := n + size(u, 1); end for; end f; Integer k = f(x);
+end S245;
+//// model: S246
+model S246
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = ndims(x[1]);
+end S246;
+//// model: S247
+model S247
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = ndims(m[1]);
+end S247;
+//// model: S248
+model S248
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = ndims(m[:, 1]);
+end S248;
+//// model: S249
+model S249
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = ndims(fill(a, 2, 3, 4));
+end S249;
+//// model: S250
+model S250
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = ndims({{a}});
+end S250;
+//// model: S251
+model S251
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = ndims(1:3);
+end S251;

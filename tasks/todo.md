@@ -1212,6 +1212,21 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           未做 → SKIP：类注释里的引号 / 反斜杠（omc 二次转义）、when 体里的 if 方程、Integer 的 reinit、非字面量的 level。
           → 全 scodeinst PASS 485→488（Assert3、Reinit2、When8）、整个 testsuite PASS 1247→1269；+4 单测（219）；
           探针 3739→4296。
+    - [x] (59z) size 的实参形态 + 函数体里的数组切片（2026-10-02）：
+          **size / ndims**：实参的形状看穿数组字面量 / 范围的粗类型（`size({1, 2, 3}, 1)` → 3，此前字面量被当成"不是数组"）；
+          维号不是常量时原样留调用（`size(m, d)`，参数不标结构）；求值路按构造子的嵌套层数（`Real y[size({1, 2, 3}, 1)]`）；
+          函数体里 `size(2 * u, 1)` 的实参照常定形（→ `size(u * 2.0, 1)`）、维未知时 `size(u)` 整个留着（被运算 / sum /
+          scalar 用到再按维展开）、`ndims(u)`。
+          **函数体里的切片**（此前 `function array slice` 一律 SKIP；MSL 的函数里到处都是）：下标照写、留下一维——`:` 留
+          原维，界是字面量的范围大小已知（`w[2:end]` → `w[2:3]`，恰是整段的打成 `w[:]`），否则未知（`u[1:k]`、
+          `u[1:size(u, 1)]`）；下标向量 `w[{1, 3}]`、`u[idx]`；左侧切片 `v[1:2] := …`。已知大小的随运算按元素展开，未知的
+          按算符定形。连带做了：已知大小的向量 / 矩阵积展成积和（59v 留下的 SKIP）、`sum` / `product` 的实参能展开就展开、
+          `fill` 的展开、Integer 数组进 Real（赋值位置整体转型 `/*Real[2]*/(n2)`，作运算数逐个转）、数组 if 的分支转型与
+          逐元素展开、混合字面量里的 Integer 叶转型（`{x, 2} .* n` → `2.0 * …`）。
+          未做 → SKIP：切片上的向量化内建（omc 打 `abs(w[(1:2)[$i1]])`）、函数体里的 transpose、内层维未知的字面量取
+          第 2 维（omc 报错）。
+          → 全 scodeinst PASS 488→494（FuncBuiltinSize、Size2、const8、loop3、OperationUnary2、OperationLogicalUnary2）、
+          整个 testsuite PASS 1269→1277；+2 单测（221）、改 2 个旧单测（原先断言 SKIP 的写法现在做了）；探针 4296→4629。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、

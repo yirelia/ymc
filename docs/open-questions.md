@@ -140,6 +140,11 @@ when 方程 / 语句解出的变量被当作离散的，它的声明绑定若是
 存的是解过转义的文本、还原不出原文：含引号 / 反斜杠的类注释 SKIP，写成 `\n` / `\t` 转义的换行 / 制表符则会按字面打出（与
 omc 不同；源码里直接换行的多行注释是对的）——要彻底对上得让 SCode 的类注释保留原文（absyn_to_scode.cpp:633，用户域）。
 
+函数体切片与 size 的几处 1.25.0 行为（SZ / FS 探针，2026-10-02；ymc 不复刻的命中即 SKIP）：数组字面量的内层维未知时
+（`{u, u}`，u: Real[:]）只认它的第 1 维，`size({u, u}, 2)` 报 "Invalid index 2 in call to size of {u, u}, valid index
+interval is [1,1]"；作用在切片上的向量化内建把切片的范围取下标（`abs(w[1:2])` → `array(abs(w[(1:2)[$i1]]) for $i1 in
+1:2)`，维未知时迭代范围是 `1:size(q[k,:], 1)`）；函数体里维已知的 `transpose(g)` 展开成字面量（未做）。
+
 Integer 的极值（待用户定，2026-10-02）：`max` / `min` 作用在空的 Integer 数组 / 空范围上取 `∓System.intMaxLit`（Expression.makeMinValue / makeMaxValue，v1.25.0 NFExpression.mo:4908-4934），这个值随 omc 构建的整数位宽而变——本机安装版 1.25.0（Windows）打 `1073741823`，testsuite 文件（64 位 Linux 生成）是 `4611686018427387903`。跟实跑的 omc 就要把 30 位的值写进 ymc，跟文件又过不了 oracle=live 门；ymc 目前两边都不跟，遇到即 SKIP（`Integer extreme of empty min/max (platform-dependent in omc)`）。受影响：scodeinst 的 CevalReduction1、FuncBuiltinMax / Max2 / Min / Min2、FuncBuiltinReduction 六例（其余内容已与 1.25.0 一致，只差这一个值）。Real（`±8.777798510069901e304`）、Boolean、枚举的极值与平台无关，已做。
 
 ## 已研究待实现：多条 connect 连接集（union-find）

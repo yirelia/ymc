@@ -2980,7 +2980,7 @@ YMC_TEST(flatten_pre_change_argument_rules) {
 
 YMC_TEST(flatten_function_sum_product_expansion) {
   // 函数体里 sum / product 的实参维全已知 → 展开成元素链；维未知保留调用；min / max 不展开。期望 = omc 1.25.0 实跑 FS1
-  //（2026-10-02）。可展开但不是整体局部数组的实参（omc `sum(a .* b)` → `a[1] * b[1] + …`，FS2 探针）未做 → SKIP。
+  //（2026-10-02）。可展开但不是整体局部数组的实参（`sum(a .* b)` → `a[1] * b[1] + …`）见下面的 FS2。
   YMC_CHECK_EQ(flatten_src("function f1\n  input Real a[3];\n  input Integer b[2, 2];\n  input Real c[:];\n  output Real s;\n"
                            "  output Integer t;\n  output Real u;\n  output Real p;\nalgorithm\n  s := sum(a);\n"
                            "  t := product(b);\n  u := sum(c);\n  p := product(a) + max(a) + min(c);\nend f1;\nmodel FS1\n"
@@ -2992,11 +2992,12 @@ YMC_TEST(flatten_function_sum_product_expansion) {
                            "  p := a[1] * a[2] * a[3] + max(a) + min(c);\nend f1;\n\nclass FS1\n  Real x;\n  Integer y;\n"
                            "  Real z;\n  Real w;\nequation\n"
                            "  (x, y, z, w) = f1({time, 1.0, 2.0}, {{1, 2}, {3, 4}}, {time, time});\nend FS1;\n"));
-  bool uns = false;
-  const std::string out = flatten_src("function f2\n  input Real a[3];\n  input Real b[3];\n  output Real s;\nalgorithm\n"
-                                      "  s := sum(a .* b);\nend f2;\nmodel FS2\n  Real x = f2({time, 1, 2}, {1, 2, 3});\nend FS2;\n",
-                                      &uns);
-  YMC_CHECK(uns);
+  // 实参是化简时已按元素展开的算术式（59z 起做了）。期望 = omc 1.25.0 实跑 FS2（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("function f2\n  input Real a[3];\n  input Real b[3];\n  output Real s;\nalgorithm\n"
+                           "  s := sum(a .* b);\nend f2;\nmodel FS2\n  Real x = f2({time, 1, 2}, {1, 2, 3});\nend FS2;\n"),
+               std::string("function f2\n  input Real[3] a;\n  input Real[3] b;\n  output Real s;\nalgorithm\n"
+                           "  s := a[1] * b[1] + a[2] * b[2] + a[3] * b[3];\nend f2;\n\nclass FS2\n"
+                           "  Real x = f2({time, 1.0, 2.0}, {1.0, 2.0, 3.0});\nend FS2;\n"));
 }
 
 YMC_TEST(flatten_function_annotations) {
@@ -3635,20 +3636,23 @@ YMC_TEST(flatten_function_array_operators) {
                            "  v := {2.0 * w[1], 2.0 * w[2], 2.0 * w[3]} .* u;\n  s := sum(u .* u * 2.0);\n  s := u * (u .* u);\n"
                            "  o := s;\nend h;\n\nclass FAT1\n  Real x[1];\n  Real x[2];\n  Real x[3];\n"
                            "  Real y = h(x, x, time, {1, 2, 3}, 2);\nequation\n  x = {time, 1.0, 2.0};\nend FAT1;\n"));
-  // 标量与数组之间不带点号的 + / -（omc 报类型错，FAS1）；已知维的向量积 omc 展成积和（`w[1] * w[1] + …`，FAS2，未做）。
+  // 标量与数组之间不带点号的 + / -（omc 报类型错，FAS1）。
   for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
            {"function h\n  input Real u[:];\n  input Real a;\n  output Real v[size(u, 1)];\nalgorithm\n"
             "  v := u + a;\nend h;\nmodel FAS1\n  Real x[3] = {time, 1, 2};\n  Real y[3] = h(x, time);\n"
             "end FAS1;\n",
-            "array and scalar operands without elementwise operator"},
-           {"function h\n  input Real w[3];\n  output Real s;\nalgorithm\n  s := w * w;\nend h;\nmodel FAS2\n"
-            "  Real x[3] = {time, 1, 2};\n  Real y = h(x);\nend FAS2;\n",
-            "function array product expansion"}}) {
+            "array and scalar operands without elementwise operator"}}) {
     bool uns = false;
     const std::string out = flatten_src(src.c_str(), &uns);
     YMC_CHECK(uns);
     YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
   }
+  // 已知维的向量积展成积和（同模型语境；59v 时未做、SKIP）。期望 = omc 1.25.0 实跑 FAS2（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("function h\n  input Real w[3];\n  output Real s;\nalgorithm\n  s := w * w;\nend h;\nmodel FAS2\n"
+                           "  Real x[3] = {time, 1, 2};\n  Real y = h(x);\nend FAS2;\n"),
+               std::string("function h\n  input Real[3] w;\n  output Real s;\nalgorithm\n"
+                           "  s := w[1] * w[1] + w[2] * w[2] + w[3] * w[3];\nend h;\n\nclass FAS2\n  Real x[1];\n"
+                           "  Real x[2];\n  Real x[3];\n  Real y = h(x);\nequation\n  x = {time, 1.0, 2.0};\nend FAS2;\n"));
 }
 
 YMC_TEST(flatten_smooth_semilinear_edge_simplification) {
@@ -3906,6 +3910,70 @@ YMC_TEST(flatten_comments_in_functions_and_escapes) {
     YMC_CHECK(uns);
     YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
   }
+}
+
+YMC_TEST(flatten_size_of_array_expressions) {
+  // size / ndims 的实参是数组式：形状看穿数组字面量 / 范围（`size({1, 2, 3}, 1)` → 3，此前字面量被当成"不是数组"）；维号
+  // 不是常量时 omc 原样留调用、参数不标结构（`size(m, d)`）；求值路（维、constant）按构造子的嵌套层数。
+  // 期望 = omc 1.25.0 实跑 SZT1（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model SZT1\n  Real a = time;\n  Real x[3] = {a, 2 * a, 3 * a};\n"
+                           "  Real m[2, 3] = {{a, a, a}, {a, a, a}};\n  parameter Integer d = 1;\n"
+                           "  Integer k1 = size({1, 2, 3}, 1);\n  Integer k2 = size({{1, 2}, {3, 4}, {5, 6}}, 2);\n"
+                           "  Integer k3 = size(1:5, 1);\n  Integer k4 = size(m, d);\n  Integer k5 = size(m, d) + size(m, 2);\n"
+                           "  Integer k6[1] = size({1, 2, 3});\n  Integer k7 = ndims(m);\n"
+                           "  constant Integer c = size({1, 2}, 1);\n  Real y[size({1, 2, 3}, 1)] = fill(a, 3);\nend SZT1;\n"),
+               std::string("class SZT1\n  Real a = time;\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real m[1,1];\n"
+                           "  Real m[1,2];\n  Real m[1,3];\n  Real m[2,1];\n  Real m[2,2];\n  Real m[2,3];\n"
+                           "  parameter Integer d = 1;\n  Integer k1 = 3;\n  Integer k2 = 2;\n  Integer k3 = 5;\n"
+                           "  Integer k4 = size(m, d);\n  Integer k5 = size(m, d) + 3;\n  Integer k6[1];\n  Integer k7 = 2;\n"
+                           "  constant Integer c = 2;\n  Real y[1];\n  Real y[2];\n  Real y[3];\nequation\n"
+                           "  x = {a, 2.0 * a, 3.0 * a};\n  m = {{a, a, a}, {a, a, a}};\n  k6 = {3};\n  y = {a, a, a};\n"
+                           "end SZT1;\n"));
+}
+
+YMC_TEST(flatten_function_array_slices) {
+  // 函数体里的数组切片（FS 探针 t1–t4）：下标照写、留下一维——`:` 留原维，界是字面量的范围大小已知（`w[2:end]` →
+  // `w[2:3]`、恰是整段的打成 `w[:]`），否则未知（`u[1:size(u, 1)]`）；下标向量 `w[{1, 3}]`、`u[idx]`。已知大小的按元素
+  // 展开（取负、乘、sum、向量 / 矩阵积、数组 if），未知的按算符定形。Integer 数组进 Real：赋值位置整体转型
+  // `/*Real[2]*/(n2)`，作运算数随展开逐个转。`size(q)` 整个留着，被运算 / sum 用到时按维展开。
+  // 期望 = omc 1.25.0 实跑 FST1（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("function f\n  input Real u[:];\n  input Real w[3];\n  input Real q[:, :];\n  input Real g[2, 3];\n"
+                           "  input Integer k;\n  input Integer n2[2];\n  input Integer idx[:];\n  output Real o;\nprotected\n"
+                           "  Real v[size(u, 1)];\n  Real v3[3];\n  Real v2[2];\n  Integer n[2];\n  Integer r;\nalgorithm\n"
+                           "  v := u[:];\n  v2 := u[1:2];\n  v2 := w[2:end];\n  v3 := w[1:end];\n  v3 := w[end:-1:1];\n"
+                           "  v2 := w[{1, 3}];\n  v := u[idx];\n  v3 := q[k, :];\n  v2 := g[:, k];\n  v3 := -g[2, :];\n"
+                           "  v3 := 2 * q[1, :];\n  v := u[1:end];\n  v[1:2] := {1, 2};\n  v3[2:end] := w[1:2];\n  v2 := n2;\n"
+                           "  v2 := n2 * 2.5;\n  v2 := if k > 0 then n2 else w[1:2];\n"
+                           "  v2 := 2 * (if k > 0 then n2 else w[1:2]);\n  v3 := fill(1, 3) + w;\n  v2 := g * w;\n"
+                           "  o := sum(u[1:2]) + sum(q[1, :]) + sum(2 * w[1:2]) + w[1:2] * n2;\n  n := size(q);\n"
+                           "  n := size(q) + {1, 1};\n  r := size(2 * u, 1) + ndims(q) + sum(size(q));\n  o := o + r + sum(n);\n"
+                           "end f;\n\nmodel FST1\n  Real x[3] = {time, 1, 2};\n  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};\n"
+                           "  Real y = f(x, x, m, m, 1, {1, 2}, {1, 2, 3});\nend FST1;\n"),
+               std::string("function f\n  input Real[:] u;\n  input Real[3] w;\n  input Real[:, :] q;\n  input Real[2, 3] g;\n"
+                           "  input Integer k;\n  input Integer[2] n2;\n  input Integer[:] idx;\n  output Real o;\n"
+                           "  protected Real[size(u, 1)] v;\n  protected Real[3] v3;\n  protected Real[2] v2;\n"
+                           "  protected Integer[2] n;\n  protected Integer r;\nalgorithm\n  v := u[:];\n  v2 := u[1:2];\n"
+                           "  v2 := w[2:3];\n  v3 := w[:];\n  v3 := w[3:-1:1];\n  v2 := w[{1, 3}];\n  v := u[idx];\n"
+                           "  v3 := q[k,:];\n  v2 := g[:,k];\n  v3 := {-g[2,1], -g[2,2], -g[2,3]};\n  v3 := q[1,:] * 2.0;\n"
+                           "  v := u[1:size(u, 1)];\n  v[1:2] := {1.0, 2.0};\n  v3[2:3] := w[1:2];\n  v2 := /*Real[2]*/(n2);\n"
+                           "  v2 := {/*Real*/(n2[1]) * 2.5, /*Real*/(n2[2]) * 2.5};\n"
+                           "  v2 := if k > 0 then /*Real[2]*/(n2) else w[1:2];\n"
+                           "  v2 := {2.0 * (if k > 0 then /*Real*/(n2[1]) else w[1]), 2.0 * (if k > 0 then /*Real*/(n2[2]) else w[2])};\n"
+                           "  v3 := {1.0 + w[1], 1.0 + w[2], 1.0 + w[3]};\n"
+                           "  v2 := {g[1,1] * w[1] + g[1,2] * w[2] + g[1,3] * w[3], g[2,1] * w[1] + g[2,2] * w[2] + g[2,3] * w[3]};\n"
+                           "  o := u[1] + u[2] + sum(q[1,:]) + 2.0 * w[1] + 2.0 * w[2] + w[1] * /*Real*/(n2[1]) + w[2] * /*Real*/(n2[2]);\n"
+                           "  n := size(q);\n  n := {size(q, 1) + 1, size(q, 2) + 1};\n"
+                           "  r := size(u * 2.0, 1) + 2 + size(q, 1) + size(q, 2);\n"
+                           "  o := o + /*Real*/(r) + /*Real*/(n[1] + n[2]);\nend f;\n\nclass FST1\n  Real x[1];\n  Real x[2];\n"
+                           "  Real x[3];\n  Real m[1,1];\n  Real m[1,2];\n  Real m[1,3];\n  Real m[2,1];\n  Real m[2,2];\n"
+                           "  Real m[2,3];\n  Real y = f(x, x, m, m, 1, {1, 2}, {1, 2, 3});\nequation\n  x = {time, 1.0, 2.0};\n"
+                           "  m = {{time, 1.0, 2.0}, {3.0, 4.0, 5.0}};\nend FST1;\n"));
+  // 数组字面量的内层维未知时 omc 只认第 1 维（"Invalid index 2 in call to size of {u, u}"，FSS1）。
+  bool uns = false;
+  YMC_CHECK_EQ(flatten_src("function f\n  input Real u[:];\n  output Integer n;\nalgorithm\n  n := size({u, u}, 2);\nend f;\n\n"
+                           "model FSS1\n  Real x[3] = {time, 1, 2};\n  Integer k = f(x);\nend FSS1;\n", &uns),
+               std::string("<unsupported:size of array literal with unknown inner dimension>"));
+  YMC_CHECK(uns);
 }
 
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {

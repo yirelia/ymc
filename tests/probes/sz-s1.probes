@@ -1,0 +1,476 @@
+//// set: sz-s1 — size / ndims 的实参形态：字面量、算术式、切片、内建；维号的形态；维与常量里的 size
+//// model: S10
+model S10
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size({1, 2, 3}, 1);
+end S10;
+//// model: S11
+model S11
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size({a, b}, 1);
+end S11;
+//// model: S12
+model S12
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size({{1, 2}, {3, 4}, {5, 6}}, 1);
+end S12;
+//// model: S13
+model S13
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size({{1, 2}, {3, 4}, {5, 6}}, 2);
+end S13;
+//// model: S14
+model S14
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size([1, 2; 3, 4], 2);
+end S14;
+//// model: S15
+model S15
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(2 * x, 1);
+end S15;
+//// model: S16
+model S16
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(x + x, 1);
+end S16;
+//// model: S17
+model S17
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(-x, 1);
+end S17;
+//// model: S18
+model S18
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(x[1:2], 1);
+end S18;
+//// model: S19
+model S19
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(m[1], 1);
+end S19;
+//// model: BASE
+model BASE
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+end BASE;
+//// model: S110
+model S110
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(m[:, 1], 1);
+end S110;
+//// model: S111
+model S111
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(m[1, :], 1);
+end S111;
+//// model: S112
+model S112
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(m, 1) + size(m, 2);
+end S112;
+//// model: S113
+model S113
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(m * x, 1);
+end S113;
+//// model: S114
+model S114
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(transpose(m), 1);
+end S114;
+//// model: S115
+model S115
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(fill(a, 4), 1);
+end S115;
+//// model: S116
+model S116
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(zeros(2, 5), 2);
+end S116;
+//// model: S117
+model S117
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(ones(3), 1);
+end S117;
+//// model: S118
+model S118
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(identity(4), 2);
+end S118;
+//// model: S119
+model S119
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size({i * a for i in 1:4}, 1);
+end S119;
+//// model: S120
+model S120
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(if a > 0 then x else 2 * x, 1);
+end S120;
+//// model: S121
+model S121
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(cat(1, x, x), 1);
+end S121;
+//// model: S122
+model S122
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(1:5, 1);
+end S122;
+//// model: S123
+model S123
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(sin(x), 1);
+end S123;
+//// model: S124
+model S124
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(der(x), 1);
+end S124;
+//// model: S125
+model S125
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(x, 1 + 0);
+end S125;
+//// model: S126
+model S126
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  parameter Integer d = 1; Integer k = size(m, d);
+end S126;
+//// model: S127
+model S127
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  constant Integer d = 2; Integer k = size(m, d);
+end S127;
+//// model: S128
+model S128
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer d = 1; Integer k = size(m, d);
+end S128;
+//// model: S129
+model S129
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k[2] = size(m);
+end S129;
+//// model: S130
+model S130
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k[1] = size({1, 2, 3});
+end S130;
+//// model: S131
+model S131
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k[1] = size(2 * x);
+end S131;
+//// model: S132
+model S132
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k[2] = size({{1, 2}, {3, 4}, {5, 6}});
+end S132;
+//// model: S133
+model S133
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k[2] = size(transpose(m));
+end S133;
+//// model: S134
+model S134
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k[1] = size(x[1:2]);
+end S134;
+//// model: S135
+model S135
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k[0] = size(a);
+end S135;
+//// model: S136
+model S136
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(a, 1);
+end S136;
+//// model: S137
+model S137
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(x, 2);
+end S137;
+//// model: S138
+model S138
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = size(x, 0);
+end S138;
+//// model: S139
+model S139
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = ndims(x);
+end S139;
+//// model: S140
+model S140
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = ndims(m);
+end S140;
+//// model: S141
+model S141
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = ndims(a);
+end S141;
+//// model: S142
+model S142
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = ndims({1, 2, 3});
+end S142;
+//// model: S143
+model S143
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Integer k = ndims(2 * m);
+end S143;
+//// model: S144
+model S144
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Real y[size({1, 2, 3}, 1)] = fill(a, 3);
+end S144;
+//// model: S145
+model S145
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Real y[size(2 * x, 1)] = 2 * x;
+end S145;
+//// model: S146
+model S146
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Real y[ndims(m)] = {a, b};
+end S146;
+//// model: S147
+model S147
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  parameter Integer n = size({1, 2, 3}, 1); Real y[n] = fill(a, n);
+end S147;
+//// model: S148
+model S148
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  parameter Real p[:] = {1, 2, 3}; parameter Integer n = size(p, 1); Real y[n] = fill(a, n);
+end S148;
+//// model: S149
+model S149
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  parameter Real p[:] = {1, 2, 3}; Integer k = size(2 * p, 1);
+end S149;
+//// model: S150
+model S150
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  constant Integer c = size({1, 2}, 1); Real y = c * a;
+end S150;
+//// model: S151
+model S151
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Real y;
+equation
+  y = size(x, 1) * a;
+end S151;
+//// model: S152
+model S152
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Real y;
+equation
+  y = size(2 * x, 1) * a;
+end S152;
+//// model: S153
+model S153
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  Real y; algorithm y := size({1, 2, 3}, 1) * a;
+end S153;
+//// model: S154
+model S154
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[:]; output Integer n; algorithm n := size(2 * u, 1); end f; Integer k = f(x);
+end S154;
+//// model: S155
+model S155
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[:]; output Integer n; algorithm n := size({1, 2, 3}, 1); end f; Integer k = f(x);
+end S155;
+//// model: S156
+model S156
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[:]; output Integer n; algorithm n := ndims(u); end f; Integer k = f(x);
+end S156;
+//// model: S157
+model S157
+  Real a = time;
+  Real b = 2 * time;
+  Real x[3] = {a, b, a};
+  Real m[2, 3] = {{a, b, a}, {b, a, b}};
+  function f input Real u[:, :]; output Integer n[2]; algorithm n := size(u); end f; Integer k[2] = f(m);
+end S157;

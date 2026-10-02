@@ -567,5 +567,10 @@
 "FunctionNoOutput1.mo",
 "OperationSubEW2.mo",
 "Reinit2.mo",
-"When8.mo"
+"When8.mo",
+"FuncBuiltinSize.mo",
+"OperationLogicalUnary2.mo",
+"OperationUnary2.mo",
+"const8.mo",
+"loop3.mo"
 ]

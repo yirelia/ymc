@@ -1,0 +1,119 @@
+//// set: fs-t4 — 函数体里的数组 if 表达式：分支转型、逐元素展开
+//// model: T40
+model T40
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Real w[3]; input Real q[:, :]; input Real g[2, 3]; input Integer k; input Integer n[:]; input Integer n2[2]; input Real g2[3, 2]; output Real o; protected Real v[size(u, 1)]; Real v3[3]; Real v2[2]; Real s; Real gg[2, 3]; Real g22[2, 2]; Real g33[3, 3]; Integer nn[2]; Boolean bb[2]; algorithm s := 1; v := u; v3 := w; v2 := {1, 2}; v2 := if k > 0 then w[1:2] else n2; o := s; end f; Real y = f(x, x, m, m, 1, {1, 2, 3}, {1, 2}, {{1, 2}, {3, 4}, {5, 6}});
+end T40;
+//// model: T41
+model T41
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Real w[3]; input Real q[:, :]; input Real g[2, 3]; input Integer k; input Integer n[:]; input Integer n2[2]; input Real g2[3, 2]; output Real o; protected Real v[size(u, 1)]; Real v3[3]; Real v2[2]; Real s; Real gg[2, 3]; Real g22[2, 2]; Real g33[3, 3]; Integer nn[2]; Boolean bb[2]; algorithm s := 1; v := u; v3 := w; v2 := {1, 2}; v2 := if k > 0 then {1, 2} else w[1:2]; o := s; end f; Real y = f(x, x, m, m, 1, {1, 2, 3}, {1, 2}, {{1, 2}, {3, 4}, {5, 6}});
+end T41;
+//// model: T42
+model T42
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Real w[3]; input Real q[:, :]; input Real g[2, 3]; input Integer k; input Integer n[:]; input Integer n2[2]; input Real g2[3, 2]; output Real o; protected Real v[size(u, 1)]; Real v3[3]; Real v2[2]; Real s; Real gg[2, 3]; Real g22[2, 2]; Real g33[3, 3]; Integer nn[2]; Boolean bb[2]; algorithm s := 1; v := u; v3 := w; v2 := {1, 2}; v2 := if k > 0 then {1, 2} else {3, 4}; o := s; end f; Real y = f(x, x, m, m, 1, {1, 2, 3}, {1, 2}, {{1, 2}, {3, 4}, {5, 6}});
+end T42;
+//// model: T43
+model T43
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Real w[3]; input Real q[:, :]; input Real g[2, 3]; input Integer k; input Integer n[:]; input Integer n2[2]; input Real g2[3, 2]; output Real o; protected Real v[size(u, 1)]; Real v3[3]; Real v2[2]; Real s; Real gg[2, 3]; Real g22[2, 2]; Real g33[3, 3]; Integer nn[2]; Boolean bb[2]; algorithm s := 1; v := u; v3 := w; v2 := {1, 2}; v2 := if k > 0 then n2 else 2 * n2; o := s; end f; Real y = f(x, x, m, m, 1, {1, 2, 3}, {1, 2}, {{1, 2}, {3, 4}, {5, 6}});
+end T43;
+//// model: T44
+model T44
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Real w[3]; input Real q[:, :]; input Real g[2, 3]; input Integer k; input Integer n[:]; input Integer n2[2]; input Real g2[3, 2]; output Real o; protected Real v[size(u, 1)]; Real v3[3]; Real v2[2]; Real s; Real gg[2, 3]; Real g22[2, 2]; Real g33[3, 3]; Integer nn[2]; Boolean bb[2]; algorithm s := 1; v := u; v3 := w; v2 := {1, 2}; v2 := if k > 0 then w[1:2] else 2 * w[2:3]; o := s; end f; Real y = f(x, x, m, m, 1, {1, 2, 3}, {1, 2}, {{1, 2}, {3, 4}, {5, 6}});
+end T44;
+//// model: T45
+model T45
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Real w[3]; input Real q[:, :]; input Real g[2, 3]; input Integer k; input Integer n[:]; input Integer n2[2]; input Real g2[3, 2]; output Real o; protected Real v[size(u, 1)]; Real v3[3]; Real v2[2]; Real s; Real gg[2, 3]; Real g22[2, 2]; Real g33[3, 3]; Integer nn[2]; Boolean bb[2]; algorithm s := 1; v := u; v3 := w; v2 := {1, 2}; v := if k > 0 then u else 2 * u; o := s; end f; Real y = f(x, x, m, m, 1, {1, 2, 3}, {1, 2}, {{1, 2}, {3, 4}, {5, 6}});
+end T45;
+//// model: T46
+model T46
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Real w[3]; input Real q[:, :]; input Real g[2, 3]; input Integer k; input Integer n[:]; input Integer n2[2]; input Real g2[3, 2]; output Real o; protected Real v[size(u, 1)]; Real v3[3]; Real v2[2]; Real s; Real gg[2, 3]; Real g22[2, 2]; Real g33[3, 3]; Integer nn[2]; Boolean bb[2]; algorithm s := 1; v := u; v3 := w; v2 := {1, 2}; v := if k > 0 then n else u; o := s; end f; Real y = f(x, x, m, m, 1, {1, 2, 3}, {1, 2}, {{1, 2}, {3, 4}, {5, 6}});
+end T46;
+//// model: T47
+model T47
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Real w[3]; input Real q[:, :]; input Real g[2, 3]; input Integer k; input Integer n[:]; input Integer n2[2]; input Real g2[3, 2]; output Real o; protected Real v[size(u, 1)]; Real v3[3]; Real v2[2]; Real s; Real gg[2, 3]; Real g22[2, 2]; Real g33[3, 3]; Integer nn[2]; Boolean bb[2]; algorithm s := 1; v := u; v3 := w; v2 := {1, 2}; v := if k > 0 then u else n; o := s; end f; Real y = f(x, x, m, m, 1, {1, 2, 3}, {1, 2}, {{1, 2}, {3, 4}, {5, 6}});
+end T47;
+//// model: T48
+model T48
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Real w[3]; input Real q[:, :]; input Real g[2, 3]; input Integer k; input Integer n[:]; input Integer n2[2]; input Real g2[3, 2]; output Real o; protected Real v[size(u, 1)]; Real v3[3]; Real v2[2]; Real s; Real gg[2, 3]; Real g22[2, 2]; Real g33[3, 3]; Integer nn[2]; Boolean bb[2]; algorithm s := 1; v := u; v3 := w; v2 := {1, 2}; s := if k > 0 then k else s; o := s; end f; Real y = f(x, x, m, m, 1, {1, 2, 3}, {1, 2}, {{1, 2}, {3, 4}, {5, 6}});
+end T48;
+//// model: T49
+model T49
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Real w[3]; input Real q[:, :]; input Real g[2, 3]; input Integer k; input Integer n[:]; input Integer n2[2]; input Real g2[3, 2]; output Real o; protected Real v[size(u, 1)]; Real v3[3]; Real v2[2]; Real s; Real gg[2, 3]; Real g22[2, 2]; Real g33[3, 3]; Integer nn[2]; Boolean bb[2]; algorithm s := 1; v := u; v3 := w; v2 := {1, 2}; s := if k > 0 then 1 else 2.5; o := s; end f; Real y = f(x, x, m, m, 1, {1, 2, 3}, {1, 2}, {{1, 2}, {3, 4}, {5, 6}});
+end T49;
+//// model: BASE
+model BASE
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+end BASE;
+//// model: T410
+model T410
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Real w[3]; input Real q[:, :]; input Real g[2, 3]; input Integer k; input Integer n[:]; input Integer n2[2]; input Real g2[3, 2]; output Real o; protected Real v[size(u, 1)]; Real v3[3]; Real v2[2]; Real s; Real gg[2, 3]; Real g22[2, 2]; Real g33[3, 3]; Integer nn[2]; Boolean bb[2]; algorithm s := 1; v := u; v3 := w; v2 := {1, 2}; v2 := 2 * (if k > 0 then n2 else w[1:2]); o := s; end f; Real y = f(x, x, m, m, 1, {1, 2, 3}, {1, 2}, {{1, 2}, {3, 4}, {5, 6}});
+end T410;
+//// model: T411
+model T411
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Real w[3]; input Real q[:, :]; input Real g[2, 3]; input Integer k; input Integer n[:]; input Integer n2[2]; input Real g2[3, 2]; output Real o; protected Real v[size(u, 1)]; Real v3[3]; Real v2[2]; Real s; Real gg[2, 3]; Real g22[2, 2]; Real g33[3, 3]; Integer nn[2]; Boolean bb[2]; algorithm s := 1; v := u; v3 := w; v2 := {1, 2}; v2 := (if k > 0 then n2 else w[1:2]) + v2; o := s; end f; Real y = f(x, x, m, m, 1, {1, 2, 3}, {1, 2}, {{1, 2}, {3, 4}, {5, 6}});
+end T411;
+//// model: T412
+model T412
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Real w[3]; input Real q[:, :]; input Real g[2, 3]; input Integer k; input Integer n[:]; input Integer n2[2]; input Real g2[3, 2]; output Real o; protected Real v[size(u, 1)]; Real v3[3]; Real v2[2]; Real s; Real gg[2, 3]; Real g22[2, 2]; Real g33[3, 3]; Integer nn[2]; Boolean bb[2]; algorithm s := 1; v := u; v3 := w; v2 := {1, 2}; s := sum(if k > 0 then n2 else w[1:2]); o := s; end f; Real y = f(x, x, m, m, 1, {1, 2, 3}, {1, 2}, {{1, 2}, {3, 4}, {5, 6}});
+end T412;
+//// model: T413
+model T413
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Real w[3]; input Real q[:, :]; input Real g[2, 3]; input Integer k; input Integer n[:]; input Integer n2[2]; input Real g2[3, 2]; output Real o; protected Real v[size(u, 1)]; Real v3[3]; Real v2[2]; Real s; Real gg[2, 3]; Real g22[2, 2]; Real g33[3, 3]; Integer nn[2]; Boolean bb[2]; algorithm s := 1; v := u; v3 := w; v2 := {1, 2}; nn := if k > 0 then n2 else {3, 4}; o := s; end f; Real y = f(x, x, m, m, 1, {1, 2, 3}, {1, 2}, {{1, 2}, {3, 4}, {5, 6}});
+end T413;
+//// model: T414
+model T414
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Real w[3]; input Real q[:, :]; input Real g[2, 3]; input Integer k; input Integer n[:]; input Integer n2[2]; input Real g2[3, 2]; output Real o; protected Real v[size(u, 1)]; Real v3[3]; Real v2[2]; Real s; Real gg[2, 3]; Real g22[2, 2]; Real g33[3, 3]; Integer nn[2]; Boolean bb[2]; algorithm s := 1; v := u; v3 := w; v2 := {1, 2}; nn := if k > 0 then n2 else 2 * n2; o := s; end f; Real y = f(x, x, m, m, 1, {1, 2, 3}, {1, 2}, {{1, 2}, {3, 4}, {5, 6}});
+end T414;
+//// model: T415
+model T415
+  Real a = time;
+  Real x[3] = {a, 2 * a, 3 * a};
+  Real m[2, 3] = {{a, a, a}, {a, a, a}};
+  function f input Real u[:]; input Real w[3]; input Real q[:, :]; input Real g[2, 3]; input Integer k; input Integer n[:]; input Integer n2[2]; input Real g2[3, 2]; output Real o; protected Real v[size(u, 1)]; Real v3[3]; Real v2[2]; Real s; Real gg[2, 3]; Real g22[2, 2]; Real g33[3, 3]; Integer nn[2]; Boolean bb[2]; algorithm s := 1; v := u; v3 := w; v2 := {1, 2}; bb := if k > 0 then {true, false} else {false, true}; o := s; end f; Real y = f(x, x, m, m, 1, {1, 2, 3}, {1, 2}, {{1, 2}, {3, 4}, {5, 6}});
+end T415;
