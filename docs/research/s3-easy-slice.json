@@ -548,5 +548,8 @@
 "IfExpression4.mo",
 "IfExpression8.mo",
 "IfExpression14.mo",
-"CevalRecordArray10.mo"
+"CevalRecordArray10.mo",
+"FunctionDerivative1.mo",
+"FunctionInverse1.mo",
+"FunctionInverse2.mo"
 ]

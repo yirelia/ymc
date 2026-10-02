@@ -80,7 +80,7 @@ class FlatDumper {
     }
     out_ += '\n';
     for (const FlatFuncParam& p : fn.params) func_param(p);
-    if (!fn.body.empty()) {
+    if (fn.has_algorithm || !fn.body.empty()) {   // 空的 algorithm 段也打关键字行（EA1 探针）
       out_ += "algorithm\n";
       for (Id<FlatStatement> s : fn.body) statement(s, "  ");
     }

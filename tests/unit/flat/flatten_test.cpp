@@ -2777,7 +2777,7 @@ YMC_TEST(flatten_sum_product_min_max_of_arrays) {
                                       "  parameter Real bp[3] = F({1, 2, 3}, 2);\nend BP;\n",
                                       &uns);
   YMC_CHECK(uns);
-  YMC_CHECK_EQ(out, std::string("<unsupported:constant call after comprehension substitution>"));
+  YMC_CHECK_EQ(out, std::string("<unsupported:constant user call after structural substitution>"));
 }
 
 YMC_TEST(flatten_der_pre_on_arrays) {
@@ -2997,6 +2997,80 @@ YMC_TEST(flatten_function_sum_product_expansion) {
                                       "  s := sum(a .* b);\nend f2;\nmodel FS2\n  Real x = f2({time, 1, 2}, {1, 2, 3});\nend FS2;\n",
                                       &uns);
   YMC_CHECK(uns);
+}
+
+YMC_TEST(flatten_function_annotations) {
+  // 对压平文本无影响的函数注解放行（Inline / smoothOrder / Documentation …，FA 探针 16 种与无注解时逐字节相同）；空 algorithm
+  // 段照打一行 `algorithm`。期望 = omc 1.25.0 实跑 FAT1（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("function f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2 * x;\n"
+                           "  annotation(Inline = true, smoothOrder = 1, Documentation(info = \"<html>doc</html>\"));\nend f;\n"
+                           "function g\n  input Real x;\n  output Real y = x;\nalgorithm\nend g;\nmodel FAT1\n"
+                           "  Real a = f(time);\n  Real b = f(1);\n  Real c = g(time);\nend FAT1;\n"),
+               std::string("function f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend f;\n\nfunction g\n"
+                           "  input Real x;\n  output Real y = x;\nalgorithm\nend g;\n\nclass FAT1\n  Real a = f(time);\n"
+                           "  Real b = 2.0;\n  Real c = g(time);\nend FAT1;\n"));
+  // derivative / inverse 引用的函数连带发射（NFFlatten.flattenFunction :2987-2995）：传递（f1 → f2 → f3）、external 段的注解
+  // 同样（e1 → e2）、inverse 的调用里的函数（h → hi）；没被调用的 unused 不打。期望 = omc 1.25.0 实跑 FAT2（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("function f1\n  input Real x;\n  output Real z = 2 * x;\n  annotation(derivative = f2);\nend f1;\n"
+                           "function f2\n  input Real x;\n  input Real der_x;\n  output Real z = 2 * der_x;\n"
+                           "  annotation(derivative = f3);\nend f2;\nfunction f3\n  input Real x;\n  input Real der_x;\n"
+                           "  input Real der_der_x;\n  output Real z = 2 * der_der_x;\nend f3;\nfunction e1\n  input Real x;\n"
+                           "  output Real z;\n  external \"C\" z = foo(x) annotation(derivative = e2, Library = \"foo\");\n"
+                           "end e1;\nfunction e2\n  input Real x;\n  input Real der_x;\n  output Real z = 2 * der_x;\nend e2;\n"
+                           "function h\n  input Real x;\n  input Real y;\n  output Real z = x * y;\n"
+                           "  annotation(inverse(y = hi(x, z)));\nend h;\nfunction hi\n  input Real x;\n  input Real z;\n"
+                           "  output Real y = z / x;\nend hi;\nfunction unused\n  input Real x;\n  output Real z = x;\n"
+                           "  annotation(derivative = f3);\nend unused;\nmodel FAT2\n  Real a = f1(1);\n  Real b = f1(time);\n"
+                           "  Real c = e1(time);\n  Real d = h(time, 2);\nend FAT2;\n"),
+               std::string("impure function e1\n  input Real x;\n  output Real z;\n\n  external \"C\" z = foo(x);\nend e1;\n\n"
+                           "function e2\n  input Real x;\n  input Real der_x;\n  output Real z = 2.0 * der_x;\nend e2;\n\n"
+                           "function f1\n  input Real x;\n  output Real z = 2.0 * x;\nend f1;\n\nfunction f2\n  input Real x;\n"
+                           "  input Real der_x;\n  output Real z = 2.0 * der_x;\nend f2;\n\nfunction f3\n  input Real x;\n"
+                           "  input Real der_x;\n  input Real der_der_x;\n  output Real z = 2.0 * der_der_x;\nend f3;\n\n"
+                           "function h\n  input Real x;\n  input Real y;\n  output Real z = x * y;\nend h;\n\nfunction hi\n"
+                           "  input Real x;\n  input Real z;\n  output Real y = z / x;\nend hi;\n\nclass FAT2\n  Real a = 2.0;\n"
+                           "  Real b = f1(time);\n  Real c = e1(time);\n  Real d = h(time, 2.0);\nend FAT2;\n"));
+  // 未做 / omc 报错 → SKIP：__OpenModelica_EarlyInline（omc 把调用内联成 `2.0 * time`，FAS1）、derivative(order = 2)（FAS2）、
+  // derivative 指向不存在的函数（omc 报错，FAS3）。
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           {"function f\n  input Real x;\n  output Real y = 2 * x;\n  annotation(__OpenModelica_EarlyInline = true);\nend f;\n"
+            "model FAS1\n  Real a = f(time);\nend FAS1;\n",
+            "function: f"},
+           {"function f1\n  input Real x;\n  output Real z = 2 * x;\n  annotation(derivative(order = 2) = f2);\nend f1;\n"
+            "function f2\n  input Real x;\n  input Real der_x;\n  input Real der_der_x;\n  output Real z = 2 * der_der_x;\nend f2;\n"
+            "model FAS2\n  Real b = f1(time);\nend FAS2;\n",
+            "function: f1"},
+           {"function f1\n  input Real x;\n  output Real z = 2 * x;\n  annotation(derivative = nosuch);\nend f1;\n"
+            "model FAS3\n  Real b = f1(time);\nend FAS3;\n",
+            "function: f1"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
+YMC_TEST(flatten_unreferenced_functions_and_substituted_calls) {
+  // 被删掉的空数组绑定 / 方程 / 赋值里的调用不留函数块、折成常量的调用同样（omc 的函数收自化简后的模型，
+  // NFFlatten.collectFunctions :418-429）。期望 = omc 1.25.0 实跑 FAT3（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("function f\n  input Real r;\n  output Real o[0];\nend f;\nfunction k\n  input Real r;\n"
+                           "  output Real o;\nalgorithm\n  o := r;\nend k;\nmodel FAT3\n  Real r[0] = f(time);\n  Real s[0];\n"
+                           "  Real t[0];\n  Real u = k(1);\nequation\n  s = f(2 * time);\nalgorithm\n  t := f(time);\n"
+                           "end FAT3;\n"),
+               std::string("class FAT3\n  Real u = 1.0;\nend FAT3;\n"));
+  // 结构参数代入到调用实参：记录构造照旧，external "C" 的内建等价调用不求值（`sin(2.0)`）。期望 = omc 1.25.0 实跑 FAT4。
+  YMC_CHECK_EQ(flatten_src("record R\n  Real a;\n  Integer b;\nend R;\nfunction g\n  input Real x;\n  output Real y;\n"
+                           "  external \"C\" y = sin(x);\nend g;\nmodel FAT4\n  parameter Integer n = 2;\n  Real z[n];\n"
+                           "  R r = R(time, n);\n  Real w = g(n);\nend FAT4;\n"),
+               std::string("class FAT4\n  final parameter Integer n = 2;\n  Real z[1];\n  Real z[2];\n  Real r.a = time;\n"
+                           "  Integer r.b = 2;\n  Real w = sin(2.0);\nend FAT4;\n"));
+  // 代入后实参全成字面量的用户函数调用 omc 会求值（NFSimplifyExp.simplifyCall :206；FAS4 探针 `m = 6.0`、g 不打印），未做 → SKIP。
+  bool uns = false;
+  const std::string out = flatten_src("function g\n  input Real x;\n  output Real y = 2 * x;\nend g;\nmodel FAS4\n"
+                                      "  parameter Integer n = 2;\n  parameter Real m = g(n) + n;\n  Real z[n];\nend FAS4;\n",
+                                      &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(out, std::string("<unsupported:constant user call after structural substitution>"));
 }
 
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {

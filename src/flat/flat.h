@@ -111,8 +111,11 @@ struct FlatFuncParam {
 struct FlatFunction {
   std::vector<Symbol> name;                      // 压平名（点分：顶层 f；包 P.f；模型内嵌按实例路径 M.a.f）
   std::vector<FlatFuncParam> params;             // dump 序：inputs, outputs, protected 局部（拓扑序）
-  std::vector<Id<FlatStatement>> body;           // algorithm 语句（空 = 无算法段）
+  std::vector<Id<FlatStatement>> body;           // algorithm 语句
+  bool has_algorithm = false;                    // 源码有 algorithm 段（空段 omc 也打一行 `algorithm`，EA1 探针）
+  std::vector<std::vector<Symbol>> linked;       // derivative / inverse 注解连带的函数（压平名）：本函数留则它们也留
   bool is_impure = false;                        // 打 `impure function`（DAEDumpTpl dumpFunction :115）
+  bool is_record_ctor = false;                   // 自动生成的记录构造函数（不打印这个标记；区分"可被 omc 求值的用户函数"用）
   // external 段（FUNCTION_EXT，DAEDumpTpl dumpExternalDecl :166-178）：体后空一行 +
   // `  external "<lang>"[ <out> =][ <name>(<args>)];`
   bool is_external = false;

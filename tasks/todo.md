@@ -1031,6 +1031,20 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           **simplify_expr 进数组字面量逐元素化简**（结构参数代入后 `{/*Real*/(3), …}` → `{3.0, …}`）。
           探针 EV m1–m5 71 个模型：63 PASS / 7 SKIP / 1 BOTH-REJECT / 0 FAIL。→ 全 scodeinst PASS 463→464
           （CevalRecordArray10）、nf-live 476（不变）；+1 单测（192）。数组参数的 Evaluate（整体引用代入 + 依赖标记）留待后续。
+    - [x] (59l) 函数注解 + 未引用函数统一由 prune_functions 收走（2026-10-02）：
+          **无影响的注解放行**：Inline / LateInline / InlineAfterIndexReduction / smoothOrder / Documentation / Icon / GenerateEvents /
+          preferredView / obsolete / 厂商注解 / `__OpenModelica_Impure`（FA 探针 16 种与无注解逐字节相同）；其余 `__OpenModelica_*`
+          （EarlyInline 把调用内联掉）仍 SKIP。**derivative / inverse**：被引用的函数连带发射（NFFlatten.flattenFunction
+          :2987-2995；FlatFunction::linked，本函数留则它们也留，传递；external 段注解同样）；只做 `derivative = name` 与
+          `inverse(input = call(简单实参))`，带选项（order / noDerivative / zeroDerivative）、指向不存在的函数 → SKIP。
+          **空 algorithm 段**照打一行 `algorithm`（FlatFunction::has_algorithm）。**删掉四处"登记过函数就 SKIP"的守卫**（空数组
+          绑定 / 方程 / 赋值、未选中的 if 分支）：omc 的函数收自化简后的模型（collectFunctions :418-429），prune_functions 已按
+          可达性收。**顺带修潜伏错**：结构参数代入后实参全成字面量的用户函数调用 omc 会求值（simplifyCall :206，`m = g(n) + n`
+          → `6.0`），ymc 无求值入口 → SKIP；克隆时丢了"不折叠"标记（external "C" 的 `g(n)` → omc `sin(2.0)`）→ 标记跟着走。
+          探针 FA 20 + FD 11 + FE 7 + EA 2。→ 全 scodeinst PASS 464→467（FunctionDerivative1、FunctionInverse1/2）、nf-live
+          476→484（Inline1–6、ArrayAssignEmpty、ExternalFunctionAnno）；+2 单测（194）。
+          **重跑旧探针集发现 59k 的回归**（ba/z 8 例 FAIL）：别名连带不是与声明序无关——`parameter Boolean pd = pt` 在 pt 被
+          if 表达式条件（定型期）标结构**之前**定型 → omc 不 final。下一桶（59m）修。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、
