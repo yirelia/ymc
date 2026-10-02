@@ -3726,6 +3726,67 @@ YMC_TEST(flatten_synthesized_nodes_keep_arena_references) {
   YMC_CHECK_EQ(flatten_src(src.c_str()), want);
 }
 
+YMC_TEST(flatten_whole_array_assignment_statements) {
+  // 模型算法段的整数组 / 切片赋值：语句不拆（scalarizeStatement 只下到 for / if / when / while 的体里，NFScalarize.mo:443-462
+  // v1.25.0），右侧规整成整体保留的形态（whole_array_value，与 Var 数组的绑定方程同一张表）：整取 / 切片引用、if、向量化
+  // 调用、Boolean 的 not 原样；算术式逐元素展开（`z * 1` 先展开再逐元素化简 → `{z[1], z[2]}`）；字面量逐叶转型、里面的数组值
+  // 元素各自规整；Integer 引用进 Real 目标整体转型 `/*Real[2]*/(m)`；`.^` 两侧都提 Real；带步长的切片照写。
+  // 期望 = omc 1.25.0 实跑 WAT1（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model WAT1\n  Real a = time;\n  Real b = 2 * time;\n  Real z[2] = {a, b};\n"
+                           "  Integer m[2] = {1, 2};\n  Boolean j[2] = {a > 0, b > 0};\n  Real y1[2];\n  Real y2[2];\n"
+                           "  Real y3[2, 2];\n  Real y4[3];\n  Real s;\n  Integer n[2];\n  Integer c[2];\n  Boolean k[2];\n"
+                           "algorithm\n  y1 := {a, 1};\n  y1 := 2 * z;\n  y1 := z * 1;\n  y1 := if a > 0 then z else {1, 2};\n"
+                           "  y1 := m;\n  y1 := m .^ 2;\n  y1 := sin(z);\n  y2 := z;\n  y2 := z[2:-1:1];\n  y3 := {z, 2 * z};\n"
+                           "  y3 := fill(1, 2, 2);\n  y3[1] := z;\n  y3[:, 2] := m;\n  y4 := 1:3;\n  y4[1:2:3] := {a, b};\n"
+                           "  s := z * z;\n  n := 2 * m;\n  k := not j;\n  for i in 1:2 loop\n    y1 := z * i;\n  end for;\n"
+                           "  when a > 1 then\n    c := pre(c) + {1, 1};\n  end when;\nend WAT1;\n"),
+               std::string("class WAT1\n  Real a = time;\n  Real b = 2.0 * time;\n  Real z[1];\n  Real z[2];\n  Integer m[1];\n"
+                           "  Integer m[2];\n  Boolean j[1];\n  Boolean j[2];\n  Real y1[1];\n  Real y1[2];\n  Real y2[1];\n"
+                           "  Real y2[2];\n  Real y3[1,1];\n  Real y3[1,2];\n  Real y3[2,1];\n  Real y3[2,2];\n  Real y4[1];\n"
+                           "  Real y4[2];\n  Real y4[3];\n  Real s;\n  Integer n[1];\n  Integer n[2];\n  Integer c[1];\n"
+                           "  Integer c[2];\n  Boolean k[1];\n  Boolean k[2];\nequation\n  z = {a, b};\n  m = {1, 2};\n"
+                           "  j = {a > 0.0, b > 0.0};\nalgorithm\n  y1 := {a, 1.0};\n  y1 := {2.0 * z[1], 2.0 * z[2]};\n"
+                           "  y1 := {z[1], z[2]};\n  y1 := if a > 0.0 then z else {1.0, 2.0};\n  y1 := /*Real[2]*/(m);\n"
+                           "  y1 := {/*Real*/(m[1]) ^ 2.0, /*Real*/(m[2]) ^ 2.0};\n  y1 := array(sin(z[$i1]) for $i1 in 1:2);\n"
+                           "  y2 := z;\n  y2 := z[2:-1:1];\n  y3 := {z, {2.0 * z[1], 2.0 * z[2]}};\n"
+                           "  y3 := {{1.0, 1.0}, {1.0, 1.0}};\n  y3[1] := z;\n  y3[:,2] := /*Real[2]*/(m);\n  y4 := 1.0:3.0;\n"
+                           "  y4[1:2:3] := {a, b};\n  s := z[1] * z[1] + z[2] * z[2];\n  n := {2 * m[1], 2 * m[2]};\n"
+                           "  k := not j;\n  for i in 1:2 loop\n    y1 := {z[1] * /*Real*/(i), z[2] * /*Real*/(i)};\n"
+                           "  end for;\n  when a > 1.0 then\n    c := {pre(c[1]) + 1, pre(c[2]) + 1};\n  end when;\nend WAT1;\n"));
+  // 形状不符 omc 报类型错（WAS2）。
+  bool uns = false;
+  YMC_CHECK_EQ(flatten_src("model WAS2\n  Real y[2];\nalgorithm\n  y := {time, 1, 2};\nend WAS2;\n", &uns),
+               std::string("<unsupported:algorithm assignment type mismatch>"));
+  YMC_CHECK(uns);
+}
+
+YMC_TEST(flatten_whole_array_binding_forms) {
+  // 绑定里整体保留的数组值（与上面的赋值共用 whole_array_value；此前的潜伏错）：数组运算不在数组层做恒等化简——先展开再
+  // 逐元素化简（`z * 1` → `{z[1], z[2]}`、`0 * z` → `{0.0, 0.0}`，此前折成 `z` / 标量 0）；Integer 整取进 Real 数组整体转型
+  //（含字面量里的元素、if 的分支）；`.^` 的结果恒为 Real（`sum(m .^ 2)` 不再多套一层转型）；带步长的切片照写的步长 / 终点
+  // 打印（`w[1:2:4]`，此前按选中的下标重算成 `1:2:3`）。期望 = omc 1.25.0 实跑 WAT2（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model WAT2\n  Real a = time;\n  Real z[2] = {a, 2 * a};\n  Integer m[2] = {1, 2};\n"
+                           "  Real w[4] = {a, a, a, a};\n  Real b1[2] = z * 1;\n  Real b2[2] = 0 * z;\n  Real b3[2] = m;\n"
+                           "  Real b4[2] = m .^ 2;\n  Real b5[2, 2] = {m, {a, a}};\n"
+                           "  Real b6[2] = if a > 0 then m else {3, 4};\n  Real b7[2] = w[1:2:4];\n  Real b8 = sum(m .^ 2);\n"
+                           "end WAT2;\n"),
+               std::string("class WAT2\n  Real a = time;\n  Real z[1];\n  Real z[2];\n  Integer m[1];\n  Integer m[2];\n"
+                           "  Real w[1];\n  Real w[2];\n  Real w[3];\n  Real w[4];\n  Real b1[1];\n  Real b1[2];\n"
+                           "  Real b2[1];\n  Real b2[2];\n  Real b3[1];\n  Real b3[2];\n  Real b4[1];\n  Real b4[2];\n"
+                           "  Real b5[1,1];\n  Real b5[1,2];\n  Real b5[2,1];\n  Real b5[2,2];\n  Real b6[1];\n  Real b6[2];\n"
+                           "  Real b7[1];\n  Real b7[2];\n  Real b8 = /*Real*/(m[1]) ^ 2.0 + /*Real*/(m[2]) ^ 2.0;\nequation\n"
+                           "  z = {a, 2.0 * a};\n  m = {1, 2};\n  w = {a, a, a, a};\n  b1 = {z[1], z[2]};\n  b2 = {0.0, 0.0};\n"
+                           "  b3 = /*Real[2]*/(m);\n  b4 = {/*Real*/(m[1]) ^ 2.0, /*Real*/(m[2]) ^ 2.0};\n"
+                           "  b5 = {/*Real[2]*/(m), {a, a}};\n  b6 = if a > 0.0 then /*Real[2]*/(m) else {3.0, 4.0};\n"
+                           "  b7 = w[1:2:4];\nend WAT2;\n"));
+  // 数组 if 的分支是 Boolean 数组的 not / and / or 且等式被逐元素标量化时，omc 打 `(not j)[1]`（WAS1）——不复刻。
+  bool uns = false;
+  YMC_CHECK_EQ(flatten_src("model WAS1\n  Boolean j[2] = {time > 0, time > 1};\n  Boolean k[2];\nequation\n"
+                           "  k = if time > 2 then j else not j;\nend WAS1;\n", &uns),
+               std::string("<unsupported:Boolean array operation in scalarized if branch>"));
+  YMC_CHECK(uns);
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

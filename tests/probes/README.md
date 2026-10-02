@@ -132,3 +132,9 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `es-e9` | 91 | pre / change / edge 的常量与结构参数实参；min / max / fill / cat / transpose 的化简 |
 | `es-ut` | 4 | smooth / semiLinear / edge、array(…) 与字符串拼接（单测原文） |
 | `uaf` | 1 | 合成 Absyn 节点时 arena 不扩容（400 个元素的记录数组字段展开；修复前 ASan 报 use-after-free） |
+| `wa-w1` | 63 | 模型算法段的整数组赋值：右侧的各种形态（字面量、整取、算术、内建、if、切片、类型） |
+| `wa-w2` | 78 | 整数组赋值：Integer → Real、嵌套语句、类型错、左侧切片、记录字段、函数调用 |
+| `wa-w3` | 40 | 数组运算的恒等化简次序（先展开后化简）：绑定与赋值；字面量里的数组值元素 |
+| `wa-w4` | 24 | 带步长的切片：步长 / 终点照写 |
+| `wa-w5` | 108 | 整数组赋值：元素类型、Boolean 运算、for / when / if 里的左侧形态、常量与参数；`.^` 的类型 |
+| `wa-ut` | 4 | 整数组赋值与数组绑定的整体保留形态（单测原文） |

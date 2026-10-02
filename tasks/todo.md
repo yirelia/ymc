@@ -1179,6 +1179,20 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           拼接此前 SKIP）。
           解析器放行了 omc 的语法错 `{…}[i]` / `f(x)[i]`（下标只能跟在括号式后面）→ 任务卡 T-S3-08（用户）。
           → 整个 testsuite PASS 1239→1241（gc2980、StringTest）；+3 单测（213）；探针 2837→3422。
+    - [x] (59x) 模型算法段的整数组赋值 + 数组值的整体保留形态（2026-10-02）：
+          **整数组 / 切片赋值** `y := <数组式>`、`y[1:2] := z`、`y[1, :] := z`（此前一律 SKIP `algorithm assignment to
+          non-continuous variable`）：语句不拆（scalarizeStatement 只下到 for / if / when / while 的体里），右侧规整成整体保留的
+          形态——把 Var 数组绑定方程的那张规则表抽成 whole_array_value 两边共用：整取 / 切片引用、if、向量化调用、数组调用、
+          Boolean 的 and / or / not 原样；算术式逐元素展开；字面量逐叶转型、里面的数组值元素各自规整；范围 `1.0:3.0`。
+          **共用之后撞出绑定路径的 4 类潜伏错**（WA 探针 w1–w5 共 308 行）：① 数组运算在数组层做了恒等化简（`Real y[2] =
+          z * 1` 打成 `y = z`，omc 先展开再逐元素化简 → `{z[1], z[2]}`；`0 * z` 折成标量 0）；② `.^` 的结果类型留成 Integer
+          （`m .^ 2` 打成 `/*Real*/(m[1] ^ 2)`，应为 `/*Real*/(m[1]) ^ 2.0`；`sum(m .^ 2)` 多套一层转型）；③ Real 数组字面量里
+          的 Integer 数组元素打成标量转型 `/*Real*/(m)`（应为 `/*Real[2]*/(m)`）；④ 带步长的切片按选中的下标重算终点
+          （`w[1:2:4]` 打成 `w[1:2:3]`）。另补：Integer 整取 / 切片进 Real 数组整体转型（绑定、赋值、if 分支）。
+          未做 → SKIP：数组 if 被逐元素标量化且分支是 Boolean 运算（omc 打 `(not j)[1]`）、左侧切片含迭代变量 / 越界、
+          字符串数组拼接、数组调用嵌在算术式里。
+          → 整个 testsuite PASS 1241→1247（JoinThreeVectors2、ArrayIndex ×2、ArraySlice、AlgorithmArrayEqn、Bug1872）；
+          +2 单测（215）；探针 3422→3739（新收的 317 个在上一提交的二进制上：FAIL 27、ACCEPTS-INVALID 1）。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、

@@ -1148,29 +1148,52 @@ class Flattener {
         lname.push_back(le.cref.parts[i].name);
         if (!le.cref.parts[i].subscripts.empty()) {
           if (i + 1 != le.cref.parts.size()) { set_unsupported("algorithm array-element assignment"); return {}; }  // 非末段下标暂缓
-          array_elem = true;   // 末段带下标 = 数组元素赋值（for 体内 `x[i] :=`）
+          array_elem = true;   // 末段带下标 = 数组元素 / 切片赋值（for 体内 `x[i] :=`、`y[1:2] :=`）
         }
       }
     }
-    // 目标须是已发射的变量（Var；when 语句体里另可是 discrete）：标量取 find_scalar_flat_var；数组元素取 find_array_flat_var
-    //（标量化成 x[1..n]）。参数 / 常量目标 → omc 报错 → SKIP。
-    const FlatVariable* lv = array_elem ? find_array_flat_var(lname) : find_scalar_flat_var(lname);
+    // 整数组赋值 `y := <数组式>`（目标是整体引用、各维已知）：语句不拆，右侧规整成整体保留的形态（whole_array_value；
+    // WA 探针 w1：`y := {2.0 * z[1], 2.0 * z[2]}`、`y := z`、`y := if a > 0.0 then z else {1.0, 2.0}`、`y := 1.0:3.0`）。
+    // 目标是切片（`y[1:2] := z`、`y[1, :] := z`、`y[1] := z` 取矩阵的一行）同理，左侧照写。
+    const std::vector<std::int64_t> ls = expr_shape(lhs);
+    const bool whole = !ls.empty();
+    // 目标须是已发射的变量（Var；when 语句体里另可是 discrete）：标量取 find_scalar_flat_var；数组（元素 / 整体）取
+    // find_array_flat_var（标量化成 x[1..n]）。参数 / 常量目标 → omc 报错 → SKIP。
+    const FlatVariable* lv = array_elem || whole ? find_array_flat_var(lname) : find_scalar_flat_var(lname);
     if (!lv || !(lv->var_kind == FlatVarKind::Var || (alg_in_when_ > 0 && lv->var_kind == FlatVarKind::Discrete))) {
       set_unsupported("algorithm assignment to non-continuous variable");
       return {};
     }
-    const TypeKind ta = lv->ty.kind;   // 先取（下面 inst_exp/to_real 会往 arena add，勿跨调用持引用）
+    const Type lty = lv->ty;   // 先取（下面 inst_exp/to_real 会往 arena add，勿跨调用持引用）
+    const TypeKind ta = lty.kind;
+    array_call_ok_ = whole && I_.absyn.exps[st.b].kind == ExpKind::Call;   // 右侧整个是数组调用（`x := f(a, b)`）
+    if_top_ = whole && I_.absyn.exps[st.b].kind == ExpKind::IfExp;
     Id<Expr> rhs = simplify_expr(inst_exp(st.b, enclosing, prefix));
+    array_call_ok_ = false;
+    if_top_ = false;
     if (result_.unsupported) return {};
-    TypeKind tb;
-    {
-      const Expr& re = result_.model.exprs[rhs];
-      if (re.kind == ExprKind::Array || re.kind == ExprKind::Tuple) { set_unsupported("algorithm array/tuple rhs"); return {}; }
-      tb = re.ty.kind;
+    if (whole) {
+      // 同形（数组调用的输出维可以未知）、元素同类或 Integer → Real；字面量逐叶核对类型（同数组绑定）。
+      const ExprKind rk = result_.model.exprs[rhs].kind;
+      const bool arr_call = rk == ExprKind::Call || rk == ExprKind::TupleElement;
+      const std::vector<std::int64_t> rs = expr_shape(rhs);
+      bool ok = rs.size() == ls.size() && elem_kinds_compat(ta, expr_elem_kind(rhs)) &&
+                (rk != ExprKind::Array || array_leaves_ok(rhs, ls.size(), ta));
+      for (std::size_t k = 0; ok && k < ls.size(); ++k) ok = ls[k] >= 1 && (rs[k] == ls[k] || (arr_call && rs[k] < 0));
+      if (!ok) { set_unsupported("algorithm assignment type mismatch"); return {}; }
+      rhs = whole_array_value(rhs, ls, lty);
+      if (!rhs.is_valid()) return {};
+    } else {
+      TypeKind tb;
+      {
+        const Expr& re = result_.model.exprs[rhs];
+        if (re.kind == ExprKind::Array || re.kind == ExprKind::Tuple) { set_unsupported("algorithm array/tuple rhs"); return {}; }
+        tb = re.ty.kind;
+      }
+      // 整型→实型强制（Comment1 `x:=1`→`x:=1.0`）；其余类型不符 → SKIP（StatementInvalidType1 `Real:=String`）。
+      if (ta == TypeKind::Real && tb == TypeKind::Integer) rhs = to_real(rhs);
+      else if (ta != tb) { set_unsupported("algorithm assignment type mismatch"); return {}; }
     }
-    // 整型→实型强制（Comment1 `x:=1`→`x:=1.0`）；其余类型不符 → SKIP（StatementInvalidType1 `Real:=String`）。
-    if (ta == TypeKind::Real && tb == TypeKind::Integer) rhs = to_real(rhs);
-    else if (ta != tb) { set_unsupported("algorithm assignment type mismatch"); return {}; }
     FlatStatement fs;
     fs.kind = FlatStmtKind::Assign;
     fs.a = lhs;
@@ -1367,8 +1390,9 @@ class Flattener {
   }
   // 切片下标（`:`、`a:b`、`a:s:b`、`{i, j}`）在大小为 dim 的维上选中的下标表（1 基、须在界内、非空）；边界 / 元素里的
   // `end` = dim，其余按常量求值，含参数的按结构参数求值（同标量下标）。求不出 / 越界 → nullopt。
+  // written：带步长的范围按书写求出的 {步长, 终点}（打印照写，终点不一定取得到：`w[1:2:4]`）。
   std::optional<std::vector<std::int64_t>> slice_indices(Id<Exp> s, std::int64_t dim, const ScodeScope& scope,
-                                                         NodeId enclosing) {
+                                                         NodeId enclosing, std::pair<std::int64_t, std::int64_t>* written = nullptr) {
     const Exp e = I_.absyn.exps[s];   // 拷贝：求值期间不持 absyn 引用
     auto bound = [&](Id<Exp> b) -> std::optional<std::int64_t> {
       if (I_.absyn.exps[b].kind == ExpKind::End) return dim;
@@ -1387,6 +1411,7 @@ class Flattener {
       if (!a || !b || (e.c.is_valid() && !c)) return std::nullopt;
       const std::int64_t step = e.c.is_valid() ? *b : 1, stop = e.c.is_valid() ? *c : *b;
       if (step == 0) return std::nullopt;
+      if (written) *written = {step, stop};
       for (std::int64_t i = *a; step > 0 ? i <= stop : i >= stop; i += step) out.push_back(i);
     } else {
       for (Id<Exp> x : e.args) {
@@ -1408,7 +1433,7 @@ class Flattener {
   // `Real m[2, 3]` 的 `m[1:2]` 拿 3 去比、原样留下（s1 探针）；反过来部分切片恰好等于末尾维的大小时 omc 把它打成 `:`
   //（`Real m2[3, 2]` 的 `m2[1:2]` → `m2[:]`，改了含义）——omc 的错，不跟 → SKIP。
   Id<Expr> slice_subscript(ExpKind kind, const std::vector<std::int64_t>& sel, bool has_step, std::int64_t dim,
-                           std::int64_t cmp_dim) {
+                           std::int64_t cmp_dim, std::pair<std::int64_t, std::int64_t> written) {
     Expr r;
     r.ty = Type::integer();
     const bool whole = kind == ExpKind::Range && cmp_dim >= 1 && static_cast<std::int64_t>(sel.size()) == cmp_dim &&
@@ -1419,9 +1444,9 @@ class Flattener {
     } else if (kind == ExpKind::Range) {
       r.kind = ExprKind::Range;
       r.a = lit_int(sel.front());
-      if (has_step) {
-        r.b = lit_int(sel.size() > 1 ? sel[1] - sel[0] : 1);
-        r.c = lit_int(sel.back());
+      if (has_step) {   // 步长、终点照写（ArraySlice `w3 = w[1:2:4]`；此前按选中的下标重算成 `1:2:3`）
+        r.b = lit_int(written.first);
+        r.c = lit_int(written.second);
       } else {
         r.b = lit_int(sel.back());
       }
@@ -2051,7 +2076,9 @@ class Flattener {
       }
       case ExprKind::Binary: {
         Id<Expr> sa = scalarize(x.a, idx), sb = scalarize(x.b, idx);
-        const bool real = x.bin == BinOp::Div || result_.model.exprs[sa].ty.kind == TypeKind::Real ||
+        // `/`、`^` 的结果恒为 Real、两侧都提 Real（同标量 binary()；WA 探针 w5 `y := m .^ 2` →
+        // `{/*Real*/(m[1]) ^ 2.0, …}`，此前幂漏了、打成 `/*Real*/(m[1] ^ 2)`）。
+        const bool real = x.bin == BinOp::Div || x.bin == BinOp::Pow || result_.model.exprs[sa].ty.kind == TypeKind::Real ||
                           result_.model.exprs[sb].ty.kind == TypeKind::Real;
         if (real) { sa = to_real(sa); sb = to_real(sb); }
         Expr r; r.kind = ExprKind::Binary; r.bin = x.bin; r.a = sa; r.b = sb;
@@ -2084,6 +2111,12 @@ class Flattener {
       case ExprKind::IfExp: {
         // 数组 if（array_if_exp 建的）：两支取该元素、条件不变（`y[1] = if time > 1.0 then x[1] else 2.0 * x[1]`，V4r 探针）。
         if (!x.ty.is_array()) { set_unsupported("array expression scalarization"); return lit_int(0); }
+        // 分支是 Boolean 数组的 and / or / not：omc 取元素时不往里推下标，打成 `(not j)[1]`（WA 探针 w5），不复刻 → SKIP。
+        for (Id<Expr> br : {x.b, x.c})
+          if (const ExprKind bk = result_.model.exprs[br].kind; bk == ExprKind::Logical || bk == ExprKind::LogicalNot) {
+            set_unsupported("Boolean array operation in scalarized if branch");
+            return lit_int(0);
+          }
         Id<Expr> sb = scalarize(x.b, idx), sc = scalarize(x.c, idx);
         if (x.ty.element_type().kind == TypeKind::Real) { sb = to_real(sb); sc = to_real(sc); }
         Expr r;
@@ -2229,7 +2262,8 @@ class Flattener {
     } else {
       ds = aarr ? ta.dims : tb.dims;
     }
-    const bool real = op == BinOp::Div || ea == TypeKind::Real || eb == TypeKind::Real;   // `/` `./` 恒实除
+    // `/` `./` 恒实除，`.^` 的结果也恒为 Real（w5 `sum(m .^ 2)`：此前数组类型留成 Integer，外面多套一层转型）。
+    const bool real = op == BinOp::Div || op == BinOp::Pow || ea == TypeKind::Real || eb == TypeKind::Real;
     Expr r;
     r.kind = ExprKind::Binary;
     r.bin = op;
@@ -3171,9 +3205,7 @@ class Flattener {
     // 的推导式绑定 omc 保留 `array(… for …)`（未做，走 typed 路 SKIP）。
     const bool comp_spread = comprehension && spread;
     // 非构造子绑定（数组值 `= y` / `= 2*y`）：类型化一次 + 形状/变率守卫（对标 NFFlatten:700 / NFScalarize）。
-    std::vector<Dimension> xd;
     if (nlbind && !comp_spread) {
-      for (std::int64_t n : dims) { Dimension d; d.kind = DimKind::Integer; d.size = n; xd.push_back(d); }
       typed_rhs();
       if (result_.unsupported) return;   // inst_exp 已拒绝切片/常量数组/限定名等
       // 数组调用的类型可带未知维（调用处求不出的输出维），与任何维相容；其余须同形（形状看穿字面量 / 一元的粗类型）。
@@ -3307,90 +3339,14 @@ class Flattener {
     if (braw.is_valid() && !spread) {
       Id<Expr> rhs;
       if (nlbind) {
-        const Expr& re = result_.model.exprs[rhsE];
-        const ExprKind rk = re.kind;
-        const TypeKind relem = re.ty.element_type().kind;
-        if (rk == ExprKind::Cref && relem == cty.kind) {
-          rhs = rhsE;   // x = y、y = x[2:3]、w = z[1,:]（整取 / 切片同元素类型保持整体，A1/A5/A9/I1、SL1 探针）
-        } else if ((rk == ExprKind::Call || rk == ExprKind::TupleElement) && relem == cty.kind) {
-          rhs = rhsE;   // x = f(n)：含数组调用的等式整体保留（NFScalarize :343-346；IfExpression11 / FuncUnknownDim3）
-        } else if (rk == ExprKind::Reduction) {
-          // 推导式绑定保留 `array(e for i in r)`；Integer 元素对 Real 数组整体转型（AC2 探针 `x = /*Real[3]*/(array(i for …))`）。
-          if (relem == cty.kind) rhs = rhsE;
-          else if (relem == TypeKind::Integer && cty.kind == TypeKind::Real) rhs = array_real_cast(rhsE);
-          else { set_unsupported("comprehension binding type"); return; }
-        } else if (rk == ExprKind::Array) {
-          rhs = coerce_deep(rhsE, cty.kind);   // 常量数组调用求值成的字面量（FuncUnknownDim2）
-        } else if (rk == ExprKind::Range && range_lit(re)) {
-          // 字面量范围整体保留（`x = 1:5`）；Real 数组的范围起 / 步 / 止都转 Real（RG2 探针 `r = 1.0:3.0`、`s = 1.0:2.0:8.0`）。
-          Expr r = re;
-          if (relem == TypeKind::Boolean && cty.kind != TypeKind::Boolean) {
-            set_unsupported("non-literal array binding"); return;   // Boolean 范围绑给非 Boolean 数组：omc 类型错
-          } else if (cty.kind == TypeKind::Real) {
-            r.a = to_real(r.a);
-            r.b = to_real(r.b);
-            if (r.c.is_valid()) r.c = to_real(r.c);
-            r.ty = Type::real();
-          } else if (relem != cty.kind) {
-            set_unsupported("non-literal array binding"); return;
-          }
-          rhs = add(std::move(r));
-        } else if (rk == ExprKind::IfExp && re.ty.is_array()) {
-          // 数组 if 绑定整体保留（V4r 探针 `i2 = if time > 1.0 then x else {1.0, 2.0, 3.0}`）；Integer 元素配 Real 数组：字面量支
-          // 逐叶转（`j2 = if time > 1.0 then {1.0, 2.0} else {3.0, 4.0}`），其余支的整体转型形态未核实 → SKIP。
-          if (relem == cty.kind) {
-            rhs = rhsE;
-          } else if (relem == TypeKind::Integer && cty.kind == TypeKind::Real) {
-            std::function<Id<Expr>(Id<Expr>)> conv = [&](Id<Expr> x) -> Id<Expr> {
-              const Expr xe = result_.model.exprs[x];   // 拷贝
-              if (xe.kind == ExprKind::Array) return coerce_deep(x, TypeKind::Real);
-              if (xe.kind != ExprKind::IfExp) return {};
-              Expr r = xe;
-              r.b = conv(xe.b);
-              r.c = conv(xe.c);
-              if (!r.b.is_valid() || !r.c.is_valid()) return {};
-              r.ty = Type::array_of(Type::real(), xe.ty.dims);
-              return add(std::move(r));
-            };
-            rhs = conv(rhsE);
-            if (!rhs.is_valid()) { set_unsupported("if-expression binding type"); return; }
-          } else {
-            set_unsupported("if-expression binding type"); return;
-          }
-        } else if ((rk == ExprKind::Logical || rk == ExprKind::LogicalNot) && relem == cty.kind) {
-          // Boolean 数组的 and / or / not：omc 不展开，整体保留（V4u 探针 `g1 = b and b2`、`g3 = b and not b2`、
-          // `g9 = {true, false} or b`、`m3 = not {b[1], true}`）。全字面量的已在定型时折成字面量数组（走上面的 Array 支）。
-          rhs = rhsE;
-        } else if (rk == ExprKind::Binary || rk == ExprKind::Unary) {
-          std::vector<Id<Expr>> elems;   // 逐元素展开 {op(y[1]), …}（A2/A3/A8/G3/G4）
-          std::vector<std::int64_t> eidx(dims.size(), 1);
-          for (bool more = true; more;) {
-            Id<Expr> se = simplify_expr(scalarize(rhsE, eidx));
-            if (result_.unsupported) return;
-            if (cty.kind == TypeKind::Real) se = to_real(se);
-            elems.push_back(se);
-            std::size_t k = dims.size();
-            while (k > 0) { --k; if (++eidx[k] <= dims[k]) break; eidx[k] = 1; if (k == 0) more = false; }
-          }
-          // 行主序平铺 → 按维嵌套（多维 `{{2.0, 3.0}, {5.0, 6.0}}`，ArrayAddSub1）。
-          std::size_t pos = 0;
-          auto nest = [&](auto& self, std::size_t k) -> Id<Expr> {
-            if (k == dims.size()) return elems[pos++];
-            Expr arr;
-            arr.kind = ExprKind::Array;
-            arr.ty = Type::array_of(cty, std::vector<Dimension>(xd.begin() + static_cast<std::ptrdiff_t>(k), xd.end()));
-            for (std::int64_t i = 0; i < dims[k]; ++i) arr.args.push_back(self(self, k + 1));
-            return add(std::move(arr));
-          };
-          rhs = nest(nest, 0);
-        } else {
-          set_unsupported("non-literal array binding"); return;   // 整取 Int→Real(A6)、Call、Range → SKIP
-        }
+        rhs = whole_array_value(rhsE, dims, cty);
+        if (!rhs.is_valid()) return;
       } else {
         rhs = simplify_expr(inst_exp(braw, bscope, bprefix));
         if (result_.unsupported) return;
         if (!array_leaves_ok(rhs, dims.size(), cty.kind)) { set_unsupported("array binding shape/type mismatch"); return; }
-        rhs = coerce_deep(rhs, cty.kind);
+        rhs = whole_array_value(rhs, dims, cty);   // 字面量里的数组值元素各自规整（`{m, m}` → `{/*Real[2]*/(m), …}`，w5）
+        if (!rhs.is_valid()) return;
       }
       Expr lhs;
       lhs.kind = ExprKind::Cref;
@@ -3406,6 +3362,110 @@ class Flattener {
       fe.loc = I_.comps[cid].loc;
       result_.model.equations.push_back(result_.model.add_eq(std::move(fe)));
     }
+  }
+
+  // 整体保留的数组值规整成 omc 的打印形态（NFSimplifyExp 化简 + NFExpandExp 展开后的样子）——Var 数组的绑定方程 `x = …`
+  // 与模型算法段的整数组赋值 `x := …` 共用（赋值语句不标量化：scalarizeStatement 只下到 for / if / when / while 的体里，
+  // NFScalarize.mo:443-462 v1.25.0）。rhsE = 已定型、化简过的右侧，dims = 目标各维，cty = 目标元素类型。
+  // 不能保留 / 未核实的形态 → set_unsupported、返回 invalid。
+  Id<Expr> whole_array_value(Id<Expr> rhsE, const std::vector<std::int64_t>& dims, const Type cty) {
+    Id<Expr> rhs;
+    std::vector<Dimension> xd;
+    for (std::int64_t n : dims) { Dimension d; d.kind = DimKind::Integer; d.size = n; xd.push_back(d); }
+    const Expr re = result_.model.exprs[rhsE];   // 拷贝（下面会往 arena 加）
+    const ExprKind rk = re.kind;
+    const TypeKind relem = re.ty.element_type().kind;
+    if (rk == ExprKind::Cref && relem == cty.kind) {
+      rhs = rhsE;   // x = y、y = x[2:3]、w = z[1,:]（整取 / 切片同元素类型保持整体，A1/A5/A9/I1、SL1 探针）
+    } else if (rk == ExprKind::Cref && relem == TypeKind::Integer && cty.kind == TypeKind::Real) {
+      rhs = array_real_cast(rhsE);   // Integer 整取 / 切片进 Real 数组：整体转型 `/*Real[2]*/(n)`、`/*Real[2]*/(n[1:2])`（WA 探针 w2）
+    } else if ((rk == ExprKind::Call || rk == ExprKind::TupleElement) && relem == cty.kind) {
+      rhs = rhsE;   // x = f(n)：含数组调用的等式整体保留（NFScalarize :343-346；IfExpression11 / FuncUnknownDim3）
+    } else if (rk == ExprKind::Reduction) {
+      // 推导式绑定保留 `array(e for i in r)`；Integer 元素对 Real 数组整体转型（AC2 探针 `x = /*Real[3]*/(array(i for …))`）。
+      if (relem == cty.kind) rhs = rhsE;
+      else if (relem == TypeKind::Integer && cty.kind == TypeKind::Real) rhs = array_real_cast(rhsE);
+      else { set_unsupported("comprehension binding type"); return {}; }
+    } else if (rk == ExprKind::Array) {
+      // 字面量：数组值的元素各自规整（WA 探针 w3 `y = {z, 2 * z}` → `{z, {2.0 * z[1], 2.0 * z[2]}}`：整取留着、算术式
+      // 展开），再逐叶转型（常量数组调用求值成的字面量，FuncUnknownDim2）。
+      Expr lit = re;
+      if (dims.size() > 1) {
+        const std::vector<std::int64_t> sub(dims.begin() + 1, dims.end());
+        for (Id<Expr>& el : lit.args)
+          if (result_.model.exprs[el].kind != ExprKind::Array || sub.size() > 1) {
+            el = whole_array_value(el, sub, cty);
+            if (!el.is_valid()) return {};
+          }
+      }
+      rhs = coerce_deep(add(std::move(lit)), cty.kind);
+    } else if (rk == ExprKind::Range && range_lit(re)) {
+      // 字面量范围整体保留（`x = 1:5`）；Real 数组的范围起 / 步 / 止都转 Real（RG2 探针 `r = 1.0:3.0`、`s = 1.0:2.0:8.0`）。
+      Expr r = re;
+      if (relem == TypeKind::Boolean && cty.kind != TypeKind::Boolean) {
+        set_unsupported("non-literal array binding"); return {};   // Boolean 范围绑给非 Boolean 数组：omc 类型错
+      } else if (cty.kind == TypeKind::Real) {
+        r.a = to_real(r.a);
+        r.b = to_real(r.b);
+        if (r.c.is_valid()) r.c = to_real(r.c);
+        r.ty = Type::real();
+      } else if (relem != cty.kind) {
+        set_unsupported("non-literal array binding"); return {};
+      }
+      rhs = add(std::move(r));
+    } else if (rk == ExprKind::IfExp && re.ty.is_array()) {
+      // 数组 if 绑定整体保留（V4r 探针 `i2 = if time > 1.0 then x else {1.0, 2.0, 3.0}`）；Integer 元素配 Real 数组：字面量支
+      // 逐叶转（`j2 = if time > 1.0 then {1.0, 2.0} else {3.0, 4.0}`），其余支的整体转型形态未核实 → SKIP。
+      if (relem == cty.kind) {
+        rhs = rhsE;
+      } else if (relem == TypeKind::Integer && cty.kind == TypeKind::Real) {
+        std::function<Id<Expr>(Id<Expr>)> conv = [&](Id<Expr> x) -> Id<Expr> {
+          const Expr xe = result_.model.exprs[x];   // 拷贝
+          if (xe.kind == ExprKind::Array) return coerce_deep(x, TypeKind::Real);
+          if (xe.kind == ExprKind::Cref) return array_real_cast(x);   // `if a > 0.0 then /*Real[2]*/(n) else {3.0, 4.0}`（w2）
+          if (xe.kind != ExprKind::IfExp) return {};
+          Expr r = xe;
+          r.b = conv(xe.b);
+          r.c = conv(xe.c);
+          if (!r.b.is_valid() || !r.c.is_valid()) return {};
+          r.ty = Type::array_of(Type::real(), xe.ty.dims);
+          return add(std::move(r));
+        };
+        rhs = conv(rhsE);
+        if (!rhs.is_valid()) { set_unsupported("if-expression binding type"); return {}; }
+      } else {
+        set_unsupported("if-expression binding type"); return {};
+      }
+    } else if ((rk == ExprKind::Logical || rk == ExprKind::LogicalNot) && relem == cty.kind) {
+      // Boolean 数组的 and / or / not：omc 不展开，整体保留（V4u 探针 `g1 = b and b2`、`g3 = b and not b2`、
+      // `g9 = {true, false} or b`、`m3 = not {b[1], true}`）。全字面量的已在定型时折成字面量数组（走上面的 Array 支）。
+      rhs = rhsE;
+    } else if (rk == ExprKind::Binary || rk == ExprKind::Unary) {
+      std::vector<Id<Expr>> elems;   // 逐元素展开 {op(y[1]), …}（A2/A3/A8/G3/G4）
+      std::vector<std::int64_t> eidx(dims.size(), 1);
+      for (bool more = true; more;) {
+        Id<Expr> se = simplify_expr(scalarize(rhsE, eidx));
+        if (result_.unsupported) return {};
+        if (cty.kind == TypeKind::Real) se = to_real(se);
+        elems.push_back(se);
+        std::size_t k = dims.size();
+        while (k > 0) { --k; if (++eidx[k] <= dims[k]) break; eidx[k] = 1; if (k == 0) more = false; }
+      }
+      // 行主序平铺 → 按维嵌套（多维 `{{2.0, 3.0}, {5.0, 6.0}}`，ArrayAddSub1）。
+      std::size_t pos = 0;
+      auto nest = [&](auto& self, std::size_t k) -> Id<Expr> {
+        if (k == dims.size()) return elems[pos++];
+        Expr arr;
+        arr.kind = ExprKind::Array;
+        arr.ty = Type::array_of(cty, std::vector<Dimension>(xd.begin() + static_cast<std::ptrdiff_t>(k), xd.end()));
+        for (std::int64_t i = 0; i < dims[k]; ++i) arr.args.push_back(self(self, k + 1));
+        return add(std::move(arr));
+      };
+      rhs = nest(nest, 0);
+    } else {
+      set_unsupported("non-literal array binding"); return {};   // 整取 Int→Real(A6)、Call、Range → SKIP
+    }
+    return rhs;
   }
 
   // 数组字面量绑定在多下标 idx 处的标量元素（Absyn）：逐维下降 Array（1 基）。命中非 Array 但仍有剩余下标
@@ -8033,10 +8093,11 @@ class Flattener {
                 // 取元素（SL1 探针：`q = p[{1, 3}]` → `q[2] = p[3]`，`z[2, :] = x` → `z[2,1] = x[1]` …）。
                 const ExpKind sk = I_.absyn.exps[subs[k]].kind;
                 if (sk == ExpKind::Colon || sk == ExpKind::Range || (is_array_ctor(subs[k]) && !is_comprehension(subs[k]))) {
-                  const std::optional<std::vector<std::int64_t>> sel = slice_indices(subs[k], ldims[k], lscope, enclosing);
+                  std::pair<std::int64_t, std::int64_t> written{1, 0};
+                  const std::optional<std::vector<std::int64_t>> sel = slice_indices(subs[k], ldims[k], lscope, enclosing, &written);
                   if (!sel) { set_unsupported("array slice"); break; }
                   leaf_subs[k] = slice_subscript(sk, *sel, I_.absyn.exps[subs[k]].c.is_valid(), ldims[k],
-                                                 ldims[ldims.size() - subs.size() + k]);
+                                                 ldims[ldims.size() - subs.size() + k], written);
                   Dimension sd;
                   sd.kind = DimKind::Integer;
                   sd.size = static_cast<std::int64_t>(sel->size());
@@ -8440,6 +8501,8 @@ class Flattener {
       case ExprKind::Array: return ek == TypeKind::Real || xe != ek ? coerce_deep(x, ek) : x;
       case ExprKind::Cref:
       case ExprKind::IfExp:
+      case ExprKind::Logical:      // Boolean 数组的 and / or / not 不展开（`if a > 0.0 then j else not j`，WA 探针 w5）
+      case ExprKind::LogicalNot:
       case ExprKind::Reduction: return xe == ek ? x : Id<Expr>{};
       case ExprKind::Binary:
       case ExprKind::Unary: return expand_array_literal(x, sh, ek);
@@ -10792,6 +10855,9 @@ class Flattener {
           if (result_.model.ew_binaries.count(id.raw)) result_.model.ew_binaries.insert(r.raw);
           return r;
         }
+        // 模型语境的数组运算不在数组层做恒等化简：omc 先按元素展开、再逐元素化简（WA 探针 w3：`y = z * 1` →
+        // `y = {z[1], z[2]}`、`y = 0 * z` → `{0.0, 0.0}`；此前折成 `y = z` / 标量 0）。
+        if (ty.is_array()) return a == a0 && b == b0 ? id : make_bin(a, op, b, ty);
         return simplify_binary_op(a, op, b, ty);
       }
       case ExprKind::Unary: {

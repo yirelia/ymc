@@ -125,6 +125,12 @@ if 语句全空时语句被删、所在算法段留下一个空的 `algorithm`�
 SEMICOLON`；下标只能跟在括号式后面，Modelica.g:1800），ymc 的解析器收下了 → ACCEPTS-INVALID。flatten 分辨不出来（解析器
 对 `(e)[i]` 也不包 Tuple），所以这三个探针没有收进 tests/probes，等解析器改完再收。
 
+整数组赋值与数组 if 的几处 1.25.0 行为（WA 探针 w2 / w5，2026-10-02；ymc 不复刻，命中即 SKIP）：数组 if 所在的等式被
+逐元素标量化时，Boolean 运算的分支不往里推下标，打成 `k[1] = if c then j[1] else (not j)[1]`；整体保留的位置（绑定方程、
+赋值语句的两侧）切片不做静态越界检查（`y = w[3:4]`、`y[0:1] := {a, b}`、`y[{1, 5}] := …` 照打，只有被逐元素标量化的等式
+才报 `Subscript '4' for dimension 1 (size = 3) of w is out of bounds`）；数组调用嵌在算术式里时整个式子不展开
+（`y := array(sin(z[$i1]) for $i1 in 1:2) + z`）。
+
 Integer 的极值（待用户定，2026-10-02）：`max` / `min` 作用在空的 Integer 数组 / 空范围上取 `∓System.intMaxLit`（Expression.makeMinValue / makeMaxValue，v1.25.0 NFExpression.mo:4908-4934），这个值随 omc 构建的整数位宽而变——本机安装版 1.25.0（Windows）打 `1073741823`，testsuite 文件（64 位 Linux 生成）是 `4611686018427387903`。跟实跑的 omc 就要把 30 位的值写进 ymc，跟文件又过不了 oracle=live 门；ymc 目前两边都不跟，遇到即 SKIP（`Integer extreme of empty min/max (platform-dependent in omc)`）。受影响：scodeinst 的 CevalReduction1、FuncBuiltinMax / Max2 / Min / Min2、FuncBuiltinReduction 六例（其余内容已与 1.25.0 一致，只差这一个值）。Real（`±8.777798510069901e304`）、Boolean、枚举的极值与平台无关，已做。
 
 ## 已研究待实现：多条 connect 连接集（union-find）

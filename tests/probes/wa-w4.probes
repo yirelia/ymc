@@ -1,0 +1,194 @@
+//// set: wa-w4 — 带步长的切片：步长 / 终点照写
+//// model: W40
+model W40
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+  Real y[2] = w[1:2:4];
+end W40;
+//// model: W41
+model W41
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+  Real y[1] = w[1:5:4];
+end W41;
+//// model: W42
+model W42
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+  Real y[4] = w[4:-1:1];
+end W42;
+//// model: W43
+model W43
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+  Real y[2] = w[4:-2:1];
+end W43;
+//// model: W44
+model W44
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+  Real y[4] = w[1:1:4];
+end W44;
+//// model: W45
+model W45
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+  Real y[2] = w[2:1:3];
+end W45;
+//// model: W46
+model W46
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+  Real y[2] = w[1:3:4];
+end W46;
+//// model: W47
+model W47
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+  Real y[2] = w[1:2:3];
+end W47;
+//// model: W48
+model W48
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+  Real y[2] = w[2:2:end];
+end W48;
+//// model: W49
+model W49
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+  Real y[2] = w[1:2:end];
+end W49;
+//// model: BASE
+model BASE
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+end BASE;
+//// model: W410
+model W410
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+  Real y[2] = w[end:-2:1];
+end W410;
+//// model: W411
+model W411
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+  parameter Integer n = 4; Real y[2] = w[1:2:n];
+end W411;
+//// model: W412
+model W412
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+  parameter Integer s = 2; Real y[2] = w[1:s:4];
+end W412;
+//// model: W413
+model W413
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+  Real y[2];
+equation
+  y = w[1:2:4];
+end W413;
+//// model: W414
+model W414
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+  Real y[2]; algorithm y := w[1:2:4];
+end W414;
+//// model: W415
+model W415
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+  Real y[4]; algorithm y[1:2:4] := {a, b};
+end W415;
+//// model: W416
+model W416
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+  Real y[4]; algorithm y[1:2:3] := {a, b};
+end W416;
+//// model: W417
+model W417
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+  Real y[4]; algorithm y[4:-2:1] := {a, b};
+end W417;
+//// model: W418
+model W418
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+  Real y = sum(w[1:2:4]);
+end W418;
+//// model: W419
+model W419
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+  Real y[2] = 2 * w[1:2:4];
+end W419;
+//// model: W420
+model W420
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+  Real m[4, 4] = fill(a, 4, 4); Real y[2, 2] = m[1:2:4, 2:2:4];
+end W420;
+//// model: W421
+model W421
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+  Real m[4, 4] = fill(a, 4, 4); Real y[2] = m[1:2:4, 1];
+end W421;
+//// model: W422
+model W422
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real w[4] = {a, b, c, a};
+  Real m[4, 4] = fill(a, 4, 4); Real y[2, 4] = m[1:2:4];
+end W422;

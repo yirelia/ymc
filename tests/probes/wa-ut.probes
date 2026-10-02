@@ -1,0 +1,70 @@
+//// set: wa-ut — 整数组赋值与数组绑定的整体保留形态（单测原文）
+//// model: WAS1
+model WAS1
+  Boolean j[2] = {time > 0, time > 1};
+  Boolean k[2];
+equation
+  k = if time > 2 then j else not j;
+end WAS1;
+//// model: WAS2
+model WAS2
+  Real y[2];
+algorithm
+  y := {time, 1, 2};
+end WAS2;
+//// model: WAT1
+model WAT1
+  Real a = time;
+  Real b = 2 * time;
+  Real z[2] = {a, b};
+  Integer m[2] = {1, 2};
+  Boolean j[2] = {a > 0, b > 0};
+  Real y1[2];
+  Real y2[2];
+  Real y3[2, 2];
+  Real y4[3];
+  Real s;
+  Integer n[2];
+  Integer c[2];
+  Boolean k[2];
+algorithm
+  y1 := {a, 1};
+  y1 := 2 * z;
+  y1 := z * 1;
+  y1 := if a > 0 then z else {1, 2};
+  y1 := m;
+  y1 := m .^ 2;
+  y1 := sin(z);
+  y2 := z;
+  y2 := z[2:-1:1];
+  y3 := {z, 2 * z};
+  y3 := fill(1, 2, 2);
+  y3[1] := z;
+  y3[:, 2] := m;
+  y4 := 1:3;
+  y4[1:2:3] := {a, b};
+  s := z * z;
+  n := 2 * m;
+  k := not j;
+  for i in 1:2 loop
+    y1 := z * i;
+  end for;
+  when a > 1 then
+    c := pre(c) + {1, 1};
+  end when;
+end WAT1;
+//// model: WAT2
+model WAT2
+  Real a = time;
+  Real z[2] = {a, 2 * a};
+  Integer m[2] = {1, 2};
+  Real w[4] = {a, a, a, a};
+  Real b1[2] = z * 1;
+  Real b2[2] = 0 * z;
+  Real b3[2] = m;
+  Real b4[2] = m .^ 2;
+  Real b5[2, 2] = {m, {a, a}};
+  Real b6[2] = if a > 0 then m else {3, 4};
+  Real b7[2] = w[1:2:4];
+  Real b8 = sum(m .^ 2);
+end WAT2;

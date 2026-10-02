@@ -1,0 +1,774 @@
+//// set: wa-w5 — 整数组赋值：元素类型、Boolean 运算、for / when / if 里的左侧形态、常量与参数；`.^` 的类型
+//// model: W50
+model W50
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Integer n[2]; algorithm n := 2 * m;
+end W50;
+//// model: W51
+model W51
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Integer n[2]; algorithm n := -m;
+end W51;
+//// model: W52
+model W52
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Integer n[2]; algorithm n := m + {1, 2};
+end W52;
+//// model: W53
+model W53
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Integer n[2]; algorithm n := m;
+end W53;
+//// model: W54
+model W54
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Integer n[2]; algorithm n := m .* m;
+end W54;
+//// model: W55
+model W55
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Integer n[2]; algorithm n := if a > 0 then m else -m;
+end W55;
+//// model: W56
+model W56
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y[2]; algorithm y := m / 2;
+end W56;
+//// model: W57
+model W57
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y[2]; algorithm y := m .^ 2;
+end W57;
+//// model: W58
+model W58
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y[2]; algorithm y := {m[1], a};
+end W58;
+//// model: W59
+model W59
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y[2]; algorithm y := {m[1], m[2]};
+end W59;
+//// model: BASE
+model BASE
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+end BASE;
+//// model: W510
+model W510
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y[2, 2]; algorithm y := {m, m};
+end W510;
+//// model: W511
+model W511
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y[2, 2]; algorithm y := {m, {a, b}};
+end W511;
+//// model: W512
+model W512
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y[2, 2]; algorithm y := {m, 2 * m};
+end W512;
+//// model: W513
+model W513
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y[2] = {m[1], a};
+end W513;
+//// model: W514
+model W514
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y[2, 2] = {m, m};
+end W514;
+//// model: W515
+model W515
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y[2, 2] = {m, {a, b}};
+end W515;
+//// model: W516
+model W516
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y[2] = if a > 0 then m else {3, 4};
+end W516;
+//// model: W517
+model W517
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y[2] = if a > 0 then m else 2 * m;
+end W517;
+//// model: W518
+model W518
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y[2] = if a > 0 then m else m;
+end W518;
+//// model: W519
+model W519
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean j[2] = {a > 0, b > 0}; Boolean k[2]; algorithm k := j or {true, false};
+end W519;
+//// model: W520
+model W520
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean j[2] = {a > 0, b > 0}; Boolean k[2]; algorithm k := not {j[1], true};
+end W520;
+//// model: W521
+model W521
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean j[2] = {a > 0, b > 0}; Boolean k[2]; algorithm k := {j[1] and j[2], true};
+end W521;
+//// model: W522
+model W522
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean j[2] = {a > 0, b > 0}; Boolean k[2]; algorithm k := j and not j;
+end W522;
+//// model: W523
+model W523
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean j[2] = {a > 0, b > 0}; Boolean k[2]; algorithm k := if a > 0 then j else not j;
+end W523;
+//// model: W524
+model W524
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k[2]; Real z[2] = {a, b}; algorithm k := z > {1, 2};
+end W524;
+//// model: W525
+model W525
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k[2]; algorithm k := {a > 1, b > 2};
+end W525;
+//// model: W526
+model W526
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s[2]; algorithm s := {"a", String(a)};
+end W526;
+//// model: W527
+model W527
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s[2]; String t[2] = {"x", "y"}; algorithm s := t;
+end W527;
+//// model: W528
+model W528
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s[2]; String t[2] = {"x", "y"}; algorithm s := t + t;
+end W528;
+//// model: W529
+model W529
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  type E = enumeration(one, two); E e[2]; algorithm e := {E.one, E.two};
+end W529;
+//// model: W530
+model W530
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  type E = enumeration(one, two); E e[2]; E f[2] = {E.one, E.two}; algorithm e := f;
+end W530;
+//// model: W531
+model W531
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; initial algorithm y := {1, 2}; algorithm y := {a, b};
+end W531;
+//// model: W532
+model W532
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; Real x[2]; algorithm y := {a, b}; algorithm x := y;
+end W532;
+//// model: W533
+model W533
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2, 2]; Real z[2] = {a, b}; algorithm for i in 1:2 loop y[i, :] := z; end for;
+end W533;
+//// model: W534
+model W534
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2, 2]; Real z[2] = {a, b}; algorithm for i in 1:2 loop y[:, i] := z * i; end for;
+end W534;
+//// model: W535
+model W535
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2, 2]; Real z[2] = {a, b}; algorithm for i in 1:2 loop y[i] := z; end for;
+end W535;
+//// model: W536
+model W536
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3]; algorithm for i in 1:2 loop y[i:i + 1] := {a, b}; end for;
+end W536;
+//// model: W537
+model W537
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3]; parameter Integer n = 2; algorithm y[1:n] := {a, b};
+end W537;
+//// model: W538
+model W538
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3]; parameter Integer n = 2; algorithm y[n:3] := {a, b};
+end W538;
+//// model: W539
+model W539
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3]; algorithm y[1:2] := y[2:3];
+end W539;
+//// model: W540
+model W540
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3]; algorithm y[1:2] := {a, b, c};
+end W540;
+//// model: W541
+model W541
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3]; algorithm y[1:2] := a;
+end W541;
+//// model: W542
+model W542
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3]; algorithm y[0:1] := {a, b};
+end W542;
+//// model: W543
+model W543
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3]; algorithm y[3:4] := {a, b};
+end W543;
+//// model: W544
+model W544
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3]; algorithm y[{1, 2}] := {a, b};
+end W544;
+//// model: W545
+model W545
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3]; algorithm y[{1, 5}] := {a, b};
+end W545;
+//// model: W546
+model W546
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3]; algorithm (y) := {a, b, c};
+end W546;
+//// model: W547
+model W547
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  record R Real v[3]; end R; R r; algorithm r.v[1:2] := {a, b};
+end W547;
+//// model: W548
+model W548
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  record R Real v[2]; Real w; end R; R r; algorithm r.v := {a, b}; r.w := c;
+end W548;
+//// model: W549
+model W549
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; Real z[2] = {a, b}; algorithm when a > 0 then y := pre(z); end when;
+end W549;
+//// model: W550
+model W550
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer n[2]; algorithm when a > 0 then n := pre(n); end when;
+end W550;
+//// model: W551
+model W551
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer n[2]; Integer m[2] = {1, 2}; algorithm when a > 0 then n := m; elsewhen b > 0 then n := -m; end when;
+end W551;
+//// model: W552
+model W552
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; algorithm when a > 0 then y := {a, b}; end when;
+end W552;
+//// model: W553
+model W553
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; Real z[2] = {a, b}; algorithm if a > 0 then y := z; elseif b > 0 then y := -z; else y := {0, 0}; end if;
+end W553;
+//// model: W554
+model W554
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; Real z[2] = {a, b}; algorithm while b > 0 loop y := y + z; end while;
+end W554;
+//// model: W555
+model W555
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; Real z[2] = {a, b}; algorithm y := z; for i in 1:2 loop y := y * i; end for;
+end W555;
+//// model: W556
+model W556
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[0]; algorithm y := fill(a, 0);
+end W556;
+//// model: W557
+model W557
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2, 0]; algorithm y := fill(a, 2, 0);
+end W557;
+//// model: W558
+model W558
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[1]; algorithm y := {a};
+end W558;
+//// model: W559
+model W559
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[1, 1]; algorithm y := {{a}};
+end W559;
+//// model: W560
+model W560
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[1]; Real z[1] = {a}; algorithm y := 2 * z;
+end W560;
+//// model: W561
+model W561
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; Real z[2] = {a, b}; algorithm y := 2 * z "c1";
+end W561;
+//// model: W562
+model W562
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; input Real u[2]; algorithm y := u;
+end W562;
+//// model: W563
+model W563
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; algorithm y := time * {1, 2};
+end W563;
+//// model: W564
+model W564
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; algorithm y := {time, time} + {1, 2};
+end W564;
+//// model: W565
+model W565
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; algorithm y := {1, 2} + {3, 4};
+end W565;
+//// model: W566
+model W566
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; algorithm y := 2 * {1, 2};
+end W566;
+//// model: W567
+model W567
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; algorithm y := -{1, 2};
+end W567;
+//// model: W568
+model W568
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; parameter Real p[2] = {1, 2}; algorithm y := p;
+end W568;
+//// model: W569
+model W569
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; parameter Real p[2] = {1, 2}; algorithm y := 2 * p;
+end W569;
+//// model: W570
+model W570
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; constant Real k[2] = {1, 2}; algorithm y := k;
+end W570;
+//// model: W571
+model W571
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; constant Real k[2] = {1, 2}; algorithm y := 2 * k;
+end W571;
+//// model: W572
+model W572
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; constant Real k[2] = {1, 2}; algorithm y := k + {a, b};
+end W572;
+//// model: W573
+model W573
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2]; parameter Integer q[2] = {1, 2}; algorithm y := q;
+end W573;
+//// model: W574
+model W574
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y[2] = m .^ 2;
+end W574;
+//// model: W575
+model W575
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y[2];
+equation
+  y = m .^ 2;
+end W575;
+//// model: W576
+model W576
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y[2] = 2 .^ m;
+end W576;
+//// model: W577
+model W577
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y[2] = m .^ m;
+end W577;
+//// model: W578
+model W578
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y[2] = m ./ m;
+end W578;
+//// model: W579
+model W579
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Integer n[2] = m .* m;
+end W579;
+//// model: W580
+model W580
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y = sum(m .^ 2);
+end W580;
+//// model: W581
+model W581
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real z[2] = {a, b}; Real y[2] = z .^ 2;
+end W581;
+//// model: W582
+model W582
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real z[2] = {a, b}; Real y[2] = z .^ z;
+end W582;
+//// model: W583
+model W583
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real z[2] = {a, b}; Integer m[2] = {1, 2}; Real y[2] = z .^ m;
+end W583;
+//// model: W584
+model W584
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean j[2] = {a > 0, b > 0}; Boolean k[2] = if a > 0 then j else not j;
+end W584;
+//// model: W585
+model W585
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean j[2] = {a > 0, b > 0}; Boolean k[2] = if a > 0 then j and j else j or j;
+end W585;
+//// model: W586
+model W586
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean j[2] = {a > 0, b > 0}; Boolean k[2];
+equation
+  k = if a > 0 then j else not j;
+end W586;
+//// model: W587
+model W587
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real z[2] = {a, b}; Real y[2, 2] = {z, 2 * z};
+end W587;
+//// model: W588
+model W588
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real z[2] = {a, b}; Real y[2, 2] = {2 * z, -z};
+end W588;
+//// model: W589
+model W589
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real z[2] = {a, b}; Real y[2, 2] = {z + z, {1, 2}};
+end W589;
+//// model: W590
+model W590
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real z[2] = {a, b}; Real y[2, 2, 1] = {{{a}, {b}}, {{c}, {a}}};
+end W590;
+//// model: W591
+model W591
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real z[2] = {a, b}; Real y[2, 2];
+equation
+  y = {z, 2 * z};
+end W591;
+//// model: W592
+model W592
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real z[2] = {a, b}; parameter Real p[2, 2] = {{1, 2}, {3, 4}}; Real y[2, 2] = {z, p[1]};
+end W592;
+//// model: W593
+model W593
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean j[2] = {a > 0, b > 0}; Boolean k[2];
+equation
+  k = if a > 0 then not j else j;
+end W593;
+//// model: W594
+model W594
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean j[2] = {a > 0, b > 0}; Boolean k[2];
+equation
+  k = if a > 0 then j and j else j;
+end W594;
+//// model: W595
+model W595
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean j[2] = {a > 0, b > 0}; Boolean k[2];
+equation
+  k = if a > 0 then j else {true, false};
+end W595;
+//// model: W596
+model W596
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean j[2] = {a > 0, b > 0}; Boolean k[2];
+equation
+  k = not j;
+end W596;
+//// model: W597
+model W597
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean j[2] = {a > 0, b > 0}; Boolean k[2];
+equation
+  k = j and not j;
+end W597;
+//// model: W598
+model W598
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean j[2] = {a > 0, b > 0}; Boolean k = (if a > 0 then j else not j)[1];
+end W598;
+//// model: W599
+model W599
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y = sum(m ./ m);
+end W599;
+//// model: W5100
+model W5100
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y = sum(2 .^ m);
+end W5100;
+//// model: W5101
+model W5101
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y[2] = 2 * (m .^ 2);
+end W5101;
+//// model: W5102
+model W5102
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y[2] = (m .^ 2) + m;
+end W5102;
+//// model: W5103
+model W5103
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y = max(m .^ 2);
+end W5103;
+//// model: W5104
+model W5104
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y = product(m .^ 2);
+end W5104;
+//// model: W5105
+model W5105
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Integer n[2] = integer(m .^ 2);
+end W5105;
+//// model: W5106
+model W5106
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer m[2] = {1, 2}; Real y[2];
+equation
+  y = if a > 0 then m .^ 2 else m;
+end W5106;
