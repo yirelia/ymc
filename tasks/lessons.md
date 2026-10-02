@@ -123,3 +123,16 @@
   nf_live_sweep / flat_sweep：两者都只比 **stdout**；omc 成功时告警打在 **stderr**（报错退出时才混进 stdout）。
 - 规则：(1) 做 oracle 对拍的探针一律 `omc X.mo 2>/dev/null`（或分开存 stdout / stderr），与门的比较口径一致；看告警再单独看
   stderr。(2) 新加的"为告警而 SKIP"守卫，先在全量 nf-live 上看它误伤了多少原本 PASS 的用例——大批 PASS → SKIP 就是口径错了。
+
+## 2026-10-02 — 新表达式形态要探"嵌在运算里"的位置；门跑着时不许动源码 / 重建
+- 模式 1：59c 引入推导式 Reduction 时只探了"整个绑定 / 等式一侧"和 `sum(…)` 实参两种位置就提交了。共享的 `scalarize` 给
+  Reduction 加了代入展开，于是 `x = 2 * {…}`、`y = -{…}`、`s = {…} * {1, 2, 3}` 都被逐元素展开——omc 对含数组调用的式子是
+  **整体保留**并按数组算符打印（`Expression.hasArrayCall` 用的是 `contains`，任意深度）。语料里没有这种用例，门全绿，三个
+  提交之后做向量化调研时才撞见（R1 / R2 探针）。
+- 规则 1：给共享 helper（scalarize / simplify / expr_shape …）加一个新 kind 的分支前，列出它的**所有调用点**，每类位置各探
+  一个模型（顶层、嵌在二元 / 一元运算里、作内建实参、作点积操作数、参数摊分）。没探过的位置默认拒绝：在 helper 里用"核实过
+  的调用点才置位"的开关（`red_scalarize_ok_`）收口，而不是默认放行。
+- 模式 2：59f 的门还在跑（切片扫描用 gcc-debug 的 ymc、随后 MSVC 两套重建），我就改了 flatten.cpp 并重建 gcc-debug——那次
+  门验的已不是暂存的那份代码，结果作废、整门重跑。
+- 规则 2：门启动后，到输出里出现 `BUILDS-DONE` 之前，**不编辑 src/、不跑任何 cmake --build**（探针只用已有二进制 + omc）。
+  想到要改的东西先记下来，等 BUILDS-DONE 再动；动之前先 `cat` 一眼门的输出确认。

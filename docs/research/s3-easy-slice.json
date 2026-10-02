@@ -535,5 +535,11 @@
 "EmptyArray2.mo",
 "FuncBuiltinProduct.mo",
 "FuncBuiltinSum.mo",
-"OperationMatrixProduct3.mo"
+"OperationMatrixProduct3.mo",
+"FuncBuiltinCross.mo",
+"FuncBuiltinMatrix.mo",
+"FuncBuiltinNdims.mo",
+"FuncBuiltinOuterProduct.mo",
+"FuncBuiltinSkew.mo",
+"FuncBuiltinSymmetric.mo"
 ]

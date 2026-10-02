@@ -965,6 +965,16 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           product = 0 / 1（NFSimplifyExp.mo:464-465）；der 作用在连续 Real 空数组上透传（方程随后删去）。带属性修饰 / 字面量绑定
           / 记录数组 / pre 等未核实 → SKIP。E1–E15 探针：9 例一致、其余 SKIP（omc 报错的 4 例全 SKIP）。→ 全 scodeinst PASS
           446→451（EmptyArray1/2、FuncBuiltinSum/Product、OperationMatrixProduct3）、nf-live 449→464；+1 单测（181）。
+    - [x] (59f) 向量 / 矩阵内建 cross / skew / outerProduct / symmetric / matrix / ndims（2026-10-02）：cross / skew 按
+          NFModelicaBuiltin.mo:353-372 的 EarlyInline 体展开再化简（符号实参照式保留，AB2 探针）；outerProduct（1.25.0 对符号实参留
+          `promote(…, 2)` 形）与 symmetric（非常量留调用）只做全字面量实参；matrix 标量 / 向量 / 矩阵 / 余维为 1 的字面量；ndims →
+          秩。非字面量 Integer 实参、形状不对（omc 报错）→ SKIP。→ 全 scodeinst PASS 451→457（FuncBuiltinCross / Matrix /
+          Ndims / OuterProduct / Skew / Symmetric）、nf-live 464→470（ArrayAlgebraFunc、DimSize、Matrix、Matrix2、Skew、
+          Symmetric）；+1 单测（182）。
+          **同批修 59c 的潜伏错**：推导式嵌在数组运算里（`x = 2 * {…}`、`y = -{…}`、点积 `{…} * {1, 2, 3}`）曾被 scalarize 逐元素
+          展开，omc 是整体保留 + 数组算符打印（hasArrayCall = contains，NFExpression.mo:5440-5471；R1 / R2 探针）→ scalarize 的
+          Reduction 支改成只在核实过的调用点展开（sum / product 实参、参数数组摊分），其余 SKIP。语料无该形态（两套扫描判定不变）；
+          +1 单测（183）。数组算符的整体打印（`array(…) * 2.0` 等）留待后续。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、

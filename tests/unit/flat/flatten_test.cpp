@@ -2653,6 +2653,48 @@ YMC_TEST(flatten_empty_arrays) {
   YMC_CHECK_EQ(out, std::string("<unsupported:array function argument>"));
 }
 
+YMC_TEST(flatten_vector_matrix_builtins) {
+  // cross / skew 按 EarlyInline 体展开（符号实参照式保留、方程里逐元素化简）、ndims → 秩、matrix(v) → {{v1}, …}。期望 = omc
+  // 1.25.0 实跑 AB2（2026-10-02）；非方阵 symmetric（omc 报类型错，FuncBuiltinSymmetric2）→ SKIP。
+  YMC_CHECK_EQ(flatten_src("model AB2\n  Real x[3] = {time, 2*time, 3};\n  Real y[3] = {1, time, 2};\n  Real c[3] = cross(x, y);\n"
+                           "  Real s[3,3] = skew(x);\n  Integer n = ndims(s);\n  Real mm[3,1] = matrix(x);\n  Real d[3];\nequation\n"
+                           "  d = cross(y, {1, 2, 3});\nend AB2;\n"),
+               std::string("class AB2\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real y[1];\n  Real y[2];\n  Real y[3];\n  Real c[1];\n"
+                           "  Real c[2];\n  Real c[3];\n  Real s[1,1];\n  Real s[1,2];\n  Real s[1,3];\n  Real s[2,1];\n  Real s[2,2];\n"
+                           "  Real s[2,3];\n  Real s[3,1];\n  Real s[3,2];\n  Real s[3,3];\n  Integer n = 2;\n  Real mm[1,1];\n"
+                           "  Real mm[2,1];\n  Real mm[3,1];\n  Real d[1];\n  Real d[2];\n  Real d[3];\nequation\n"
+                           "  x = {time, 2.0 * time, 3.0};\n  y = {1.0, time, 2.0};\n"
+                           "  c = {x[2] * y[3] - x[3] * y[2], x[3] * y[1] - x[1] * y[3], x[1] * y[2] - x[2] * y[1]};\n"
+                           "  s = {{0.0, -x[3], x[2]}, {x[3], 0.0, -x[1]}, {-x[2], x[1], 0.0}};\n"
+                           "  mm = {{x[1]}, {x[2]}, {x[3]}};\n  d[1] = y[2] * 3.0 - y[3] * 2.0;\n  d[2] = y[3] - y[1] * 3.0;\n"
+                           "  d[3] = y[1] * 2.0 - y[2];\nend AB2;\n"));
+  bool uns = false;
+  const std::string out =
+      flatten_src("model S2\n  Real x[:, :] = symmetric({{11, 12, 13}, {21, 22, 23}, {31, 32, 33}, {41, 42, 43}});\nend S2;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(out, std::string("<unsupported:symmetric argument shape>"));
+}
+
+YMC_TEST(flatten_comprehension_inside_array_expression_unsupported) {
+  // 推导式嵌在数组运算里：omc 1.25.0 整体保留并按数组算符打印（R1 探针 `x = array(/*Real*/(i) * time for i in 1:3) * 2.0`、
+  // `y = -array(…)`；R2 探针 `s = array(…) * {1.0, 2.0, 3.0}`），ymc 未做 → 必须 SKIP，不能逐元素展开。参数数组的逐元素摊分
+  // 与 sum 的实参照旧展开（期望 = R2 探针，2026-10-02）。
+  for (const char* src : {"model R1a\n  Real x[3];\nequation\n  x = 2 * {i * time for i in 1:3};\nend R1a;\n",
+                          "model R1b\n  Real y[3] = -{i * time for i in 1:3};\nend R1b;\n",
+                          "model R2s\n  Real s = {i * time for i in 1:3} * {1, 2, 3};\nend R2s;\n"}) {
+    bool uns = false;
+    const std::string out = flatten_src(src, &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, std::string("<unsupported:comprehension inside array expression>"));
+  }
+  YMC_CHECK_EQ(flatten_src("model R2\n  parameter Real q[3] = 2 * linspace(1, 2, 3);\n  parameter Real r[3] = -{i for i in 1:3};\n"
+                           "  parameter Real p[3] = {i * 1.5 for i in 1:3} + q;\n  Real t = sum(2 * {i * time for i in 1:2});\nend R2;\n"),
+               std::string("class R2\n  parameter Real q[1] = 2.0;\n  parameter Real q[2] = 3.0;\n  parameter Real q[3] = 4.0;\n"
+                           "  parameter Real r[1] = -1.0;\n  parameter Real r[2] = -2.0;\n  parameter Real r[3] = -3.0;\n"
+                           "  parameter Real p[1] = 1.5 + q[1];\n  parameter Real p[2] = 3.0 + q[2];\n  parameter Real p[3] = 4.5 + q[3];\n"
+                           "  Real t = 2.0 * time + 2.0 * 2.0 * time;\nend R2;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

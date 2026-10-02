@@ -1889,6 +1889,10 @@ class Flattener {
     if (x.kind == ExprKind::Reduction && x.call_name.size() == 2) {
       // 推导式的第 idx[0] 个元素：迭代变量代入范围的该值后化简，余下下标交给体（嵌套推导式）。AC3 探针
       // `sum({x[i] * i for i in 1:3})` → `x[1] + x[2] * 2.0 + x[3] * 3.0`。
+      // 只在核实过的位置展开（red_scalarize_ok_：sum / product 的实参、参数数组绑定的逐元素摊分）。其余位置 omc 把含数组调用
+      // 的式子整体保留并按数组算符打印（Expression.hasArrayCall = contains，NFExpression.mo:5440-5471；R1 / R2 探针
+      // `x = array(…) * 2.0`、`y = -array(…)`、`s = array(…) * {1.0, 2.0, 3.0}`），未做 → SKIP。
+      if (!red_scalarize_ok_) { set_unsupported("comprehension inside array expression"); return lit_int(0); }
       const std::optional<RangeLit> l = range_lit(result_.model.exprs[x.b]);
       if (!l || !l->integer || idx.empty() || idx[0] < 1 || idx[0] > l->n) { set_unsupported("comprehension scalarization"); return lit_int(0); }
       Expr ic;
@@ -2907,7 +2911,10 @@ class Flattener {
           if (result_.unsupported) return;
           if (vk == FlatVarKind::Discrete || refs_runtime_var(eb)) { set_unsupported("array binding higher variability"); return; }
         } else if (nlbind) {
-          eb = simplify_expr(scalarize(rhsE, idx));   // 逐元素：y[i] / 2.0*y[i]（B1/B2/B4/B5/B8）
+          // 逐元素：y[i] / 2.0*y[i]（B1/B2/B4/B5/B8）；含推导式的也逐元素代入（R2 探针 `q = 2 * linspace(1, 2, 3)` →
+          // `q[2] = 3.0`、`p = {i * 1.5 for i in 1:3} + q` → `p[1] = 1.5 + q[1]`）。
+          const RedScalarize rs(red_scalarize_ok_);
+          eb = simplify_expr(scalarize(rhsE, idx));
           if (result_.unsupported) return;
         } else {
           // 该下标处的字面量元素（下降 Array 到标量）；命中 cref 数组等 → 本增量 SKIP。
@@ -8036,11 +8043,140 @@ class Flattener {
     return simplify_expr(acc);
   }
 
+  // 模型语境的向量 / 矩阵内建（AB1 探针 + FuncBuiltinCross/Skew/OuterProduct/Symmetric/Matrix/Ndims）：
+  // - cross / skew：__OpenModelica_EarlyInline 的 Modelica 体（NFModelicaBuiltin.mo:353-372）按实参展开再化简——符号实参照式
+  //   保留（`c = {x[2] * y[3] - x[3] * y[2], …}`、`s = {{0.0, -x[3], x[2]}, …}`），字面量折叠（`{-3.0, 6.0, -3.0}`）。
+  // - outerProduct（:342-351，体 `matrix(v1) * transpose(matrix(v2))`）：1.25.0 对符号实参留 `promote(…, 2)` 形，只做全字面量
+  //   实参（折成积矩阵）。symmetric（external builtin）：非常量 omc 留调用，只做全字面量方阵（b[i,j] = i ≤ j ? a[i,j] : a[j,i]）。
+  // - matrix：标量 → {{s}}、向量 → {{v1}, …}、矩阵原样、更高秩须余维为 1（否则 omc 报错 FuncBuiltinMatrixWrongType1；只做
+  //   字面量）。ndims → 秩的整数字面量。
+  // Integer 实参：cross / skew 的形参是 Real[3]，非字面量 Integer 数组的转型形态未核实 → SKIP。形状不对 = omc 类型错 → SKIP。
+  Id<Expr> model_matrix_builtin(const Exp& e, std::string_view name, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    for (Symbol n : e.arg_names)
+      if (n.is_valid()) { set_unsupported("named function argument"); return lit_int(0); }
+    const std::size_t arity = name == "cross" || name == "outerProduct" ? 2 : 1;
+    if (e.args.size() != arity) { set_unsupported("function arity"); return lit_int(0); }
+    std::vector<Id<Expr>> args;
+    for (Id<Exp> a : std::vector<Id<Exp>>(e.args)) {   // 拷贝：inst 期间不持 absyn 引用
+      args.push_back(simplify_expr(inst_exp(a, enclosing, prefix)));
+      if (result_.unsupported) return lit_int(0);
+    }
+    if (name == "ndims") return lit_int(static_cast<std::int64_t>(expr_shape(args[0]).size()));
+    auto all_lit = [&](auto& self, Id<Expr> x) -> bool {   // 数组字面量、叶全是数值字面量
+      const Expr& xe = result_.model.exprs[x];
+      if (xe.kind == ExprKind::IntLit || xe.kind == ExprKind::RealLit) return true;
+      if (xe.kind != ExprKind::Array || xe.args.empty()) return false;
+      for (Id<Expr> c : xe.args) if (!self(self, c)) return false;
+      return true;
+    };
+    for (Id<Expr> a : args) {
+      const TypeKind k = expr_elem_kind(a);
+      if (k != TypeKind::Real && (k != TypeKind::Integer || !all_lit(all_lit, a))) {
+        set_unsupported("non-numeric function argument");
+        return lit_int(0);
+      }
+    }
+    auto dim = [](std::int64_t n) { Dimension d; d.kind = DimKind::Integer; d.size = n; return d; };
+    auto arr = [&](std::vector<Id<Expr>> els, TypeKind k, std::vector<Dimension> dims) {
+      Expr r;
+      r.kind = ExprKind::Array;
+      r.args = std::move(els);
+      r.ty = Type::array_of(Type::of(k), std::move(dims));
+      return add(std::move(r));
+    };
+    auto el = [&](Id<Expr> a, std::vector<std::int64_t> idx) { return simplify_expr(scalarize(a, idx)); };
+    auto rel = [&](Id<Expr> a, std::int64_t i) { return to_real(el(a, {i})); };   // Real 形参的第 i 个元素
+    auto bin = [&](Id<Expr> l, BinOp op, Id<Expr> r) {
+      Expr b;
+      b.kind = ExprKind::Binary;
+      b.bin = op;
+      b.a = l;
+      b.b = r;
+      b.ty = Type::real();
+      return add(std::move(b));
+    };
+    auto neg = [&](Id<Expr> x) {
+      Expr u;
+      u.kind = ExprKind::Unary;
+      u.un = UnOp::Minus;
+      u.a = x;
+      u.ty = Type::real();
+      return add(std::move(u));
+    };
+    const std::vector<std::int64_t> s0 = expr_shape(args[0]);
+    if (name == "cross" || name == "skew") {
+      for (Id<Expr> a : args)
+        if (expr_shape(a) != std::vector<std::int64_t>{3}) { set_unsupported("cross/skew argument shape"); return lit_int(0); }
+      const Id<Expr> x1 = rel(args[0], 1), x2 = rel(args[0], 2), x3 = rel(args[0], 3);
+      if (result_.unsupported) return lit_int(0);
+      if (name == "skew") {
+        auto row = [&](Id<Expr> a, Id<Expr> b, Id<Expr> c) {
+          return arr({simplify_expr(a), simplify_expr(b), simplify_expr(c)}, TypeKind::Real, {dim(3)});
+        };
+        return arr({row(lit_real(0.0), neg(x3), x2), row(x3, lit_real(0.0), neg(x1)), row(neg(x2), x1, lit_real(0.0))},
+                   TypeKind::Real, {dim(3), dim(3)});
+      }
+      const Id<Expr> y1 = rel(args[1], 1), y2 = rel(args[1], 2), y3 = rel(args[1], 3);
+      if (result_.unsupported) return lit_int(0);
+      auto term = [&](Id<Expr> a, Id<Expr> b, Id<Expr> c, Id<Expr> d) {
+        return simplify_expr(bin(bin(a, BinOp::Mul, b), BinOp::Sub, bin(c, BinOp::Mul, d)));
+      };
+      return arr({term(x2, y3, x3, y2), term(x3, y1, x1, y3), term(x1, y2, x2, y1)}, TypeKind::Real, {dim(3)});
+    }
+    if (name == "outerProduct") {
+      const std::vector<std::int64_t> s1 = expr_shape(args[1]);
+      if (s0.size() != 1 || s1.size() != 1 || s0[0] < 1 || s1[0] < 1) { set_unsupported("outerProduct argument shape"); return lit_int(0); }
+      if (!all_lit(all_lit, args[0]) || !all_lit(all_lit, args[1])) { set_unsupported("outerProduct of non-literal"); return lit_int(0); }
+      std::vector<Id<Expr>> rows;
+      for (std::int64_t i = 1; i <= s0[0]; ++i) {
+        std::vector<Id<Expr>> row;
+        for (std::int64_t j = 1; j <= s1[0]; ++j) row.push_back(simplify_expr(bin(rel(args[0], i), BinOp::Mul, rel(args[1], j))));
+        rows.push_back(arr(std::move(row), TypeKind::Real, {dim(s1[0])}));
+      }
+      return arr(std::move(rows), TypeKind::Real, {dim(s0[0]), dim(s1[0])});
+    }
+    const TypeKind ek = expr_elem_kind(args[0]);
+    if (name == "symmetric") {
+      if (s0.size() != 2 || s0[0] != s0[1] || s0[0] < 1) { set_unsupported("symmetric argument shape"); return lit_int(0); }
+      if (!all_lit(all_lit, args[0])) { set_unsupported("symmetric of non-literal"); return lit_int(0); }
+      std::vector<Id<Expr>> rows;
+      for (std::int64_t i = 1; i <= s0[0]; ++i) {
+        std::vector<Id<Expr>> row;
+        for (std::int64_t j = 1; j <= s0[0]; ++j) row.push_back(i <= j ? el(args[0], {i, j}) : el(args[0], {j, i}));
+        rows.push_back(arr(std::move(row), ek, {dim(s0[0])}));
+      }
+      return arr(std::move(rows), ek, {dim(s0[0]), dim(s0[0])});
+    }
+    // matrix
+    for (std::int64_t n : s0) if (n < 1) { set_unsupported("matrix argument shape"); return lit_int(0); }
+    if (s0.empty()) return arr({arr({args[0]}, ek, {dim(1)})}, ek, {dim(1), dim(1)});
+    if (s0.size() == 2) return args[0];
+    if (s0.size() > 2 && !all_lit(all_lit, args[0])) { set_unsupported("matrix of non-literal"); return lit_int(0); }
+    for (std::size_t k = 2; k < s0.size(); ++k)
+      if (s0[k] != 1) { set_unsupported("matrix argument shape"); return lit_int(0); }
+    const std::int64_t cols = s0.size() == 1 ? 1 : s0[1];
+    std::vector<Id<Expr>> rows;
+    for (std::int64_t i = 1; i <= s0[0]; ++i) {
+      std::vector<Id<Expr>> row;
+      for (std::int64_t j = 1; j <= cols; ++j) {
+        std::vector<std::int64_t> idx{i};
+        if (s0.size() > 1) idx.push_back(j);
+        while (idx.size() < s0.size()) idx.push_back(1);
+        row.push_back(el(args[0], idx));
+      }
+      rows.push_back(arr(std::move(row), ek, {dim(cols)}));
+    }
+    return arr(std::move(rows), ek, {dim(s0[0]), dim(cols)});
+  }
+
   // 模型语境的数组内建：维已知时 omc 展开成数组字面量 / 运算链（ExpandExp + SimplifyExp；B1 探针：`fill(time, 3)` →
   // `{time, time, time}`、`identity(2)` → `{{1, 0}, {0, 1}}`、`transpose([1, 2; 3, 4])` → `{{1, 3}, {2, 4}}`、`sum(a)` →
   // `a[1] + a[2] + a[3]`）。fill / zeros / ones / identity / diagonal / transpose / vector → 嵌套数组字面量；sum / product →
   // 元素的 + / * 链（行主序、左结合）。维实参按结构参数求值（`ones(n)` 把 n 打 final）。不在此列 → invalid（调用方照常）。
   Id<Expr> model_array_builtin(const Exp& e, std::string_view name, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    if (name == "cross" || name == "skew" || name == "outerProduct" || name == "symmetric" || name == "matrix" ||
+        name == "ndims")
+      return model_matrix_builtin(e, name, enclosing, prefix);
     const bool fill = name == "fill", zo = name == "zeros" || name == "ones";
     if (!fill && !zo && name != "identity" && name != "diagonal" && name != "transpose" && name != "vector" &&
         name != "sum" && name != "product" && name != "cat")
@@ -8186,6 +8322,8 @@ class Flattener {
     const BinOp op = name == "sum" ? BinOp::Add : BinOp::Mul;
     const bool real = expr_elem_kind(a) == TypeKind::Real;
     Id<Expr> acc;
+    // sum / product 的实参里的推导式逐元素代入（AC3 / R2 探针 `sum(2 * {i * time for i in 1:2})` → `2.0 * time + 2.0 * 2.0 * time`）。
+    const RedScalarize rs(red_scalarize_ok_);
     for (const std::vector<std::int64_t>& ix : all) {
       Id<Expr> x = simplify_expr(scalarize(a, ix));
       if (result_.unsupported) return lit_int(0);
@@ -11082,6 +11220,16 @@ class Flattener {
   // 整体保留；嵌在别的运算里要逐元素展开，未做）。emit_array / collect_equation 在对应 inst_exp 前置位，
   // try_emit_user_call 进入即清（实参里的嵌套调用不继承）。
   bool array_call_ok_ = false;
+  // scalarize 可否代入展开推导式（见 scalarize 的 Reduction 支）：只在核实过的调用点由 RedScalarize 置位。
+  bool red_scalarize_ok_ = false;
+  struct RedScalarize {
+    bool& f;
+    bool old;
+    explicit RedScalarize(bool& flag) : f(flag), old(flag) { f = true; }
+    ~RedScalarize() { f = old; }
+    RedScalarize(const RedScalarize&) = delete;
+    RedScalarize& operator=(const RedScalarize&) = delete;
+  };
   bool in_if_ = false;   // 正在收集 if 分支体（connect 不能进分支体 → SKIP）
   struct FlowVar {
     std::vector<Symbol> name; std::vector<std::vector<Id<Expr>>> subs; Type ty; SourceLoc loc;
