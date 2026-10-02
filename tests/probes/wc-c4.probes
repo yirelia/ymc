@@ -1,0 +1,943 @@
+//// set: wc-c4 — when 条件：terminal、用户函数、noEvent、枚举 / 字符串关系、条件向量的元素、类型错
+//// model: C40
+model C40
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when not terminal() then y = a; end when;
+end C40;
+//// model: C41
+model C41
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when terminal() or p then y = a; end when;
+end C41;
+//// model: C42
+model C42
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when {terminal(), p} then y = a; end when;
+end C42;
+//// model: C43
+model C43
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when terminal() and initial() then y = a; end when;
+end C43;
+//// model: C44
+model C44
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when {initial()} then y = a; end when;
+end C44;
+//// model: C45
+model C45
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when {initial(), terminal()} then y = a; end when;
+end C45;
+//// model: C46
+model C46
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when initial() and p then y = a; end when;
+end C46;
+//// model: C47
+model C47
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when sample(0, 1) or initial() then y = a; end when;
+end C47;
+//// model: C48
+model C48
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when {sample(0, 1), initial()} then y = a; end when;
+end C48;
+//// model: C49
+model C49
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when fr(a) > 0 then y = a; end when;
+end C49;
+//// model: BASE
+model BASE
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+end BASE;
+//// model: C410
+model C410
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when fb(a) then y = a; end when;
+end C410;
+//// model: C411
+model C411
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when fb(pr) then y = a; end when;
+end C411;
+//// model: C412
+model C412
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when fbd(p) then y = a; end when;
+end C412;
+//// model: C413
+model C413
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when not fb(a) then y = a; end when;
+end C413;
+//// model: C414
+model C414
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when {fb(a), p} then y = a; end when;
+end C414;
+//// model: C415
+model C415
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when noEvent(p) then y = a; end when;
+end C415;
+//// model: C416
+model C416
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when noEvent(a > 1) or p then y = a; end when;
+end C416;
+//// model: C417
+model C417
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when noEvent(a > 1 and p) then y = a; end when;
+end C417;
+//// model: C418
+model C418
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when smooth(0, a) > 1 then y = a; end when;
+end C418;
+//// model: C419
+model C419
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when v[1] and v[2] then y = a; end when;
+end C419;
+//// model: C420
+model C420
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when {v[1] and p, v[2]} then y = a; end when;
+end C420;
+//// model: C421
+model C421
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when (a > 1) == p then y = a; end when;
+end C421;
+//// model: C422
+model C422
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when (a > 1) <> (b > 1) then y = a; end when;
+end C422;
+//// model: C423
+model C423
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when e == E.one then y = a; end when;
+end C423;
+//// model: C424
+model C424
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when e <> E.one or p then y = a; end when;
+end C424;
+//// model: C425
+model C425
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when s == "x" then y = a; end when;
+end C425;
+//// model: C426
+model C426
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when {{p, q}} then y = a; end when;
+end C426;
+//// model: C427
+model C427
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when {p, {q}} then y = a; end when;
+end C427;
+//// model: C428
+model C428
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when a then y = a; end when;
+end C428;
+//// model: C429
+model C429
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when k then y = a; end when;
+end C429;
+//// model: C430
+model C430
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when 1 > 0 then y = a; end when;
+end C430;
+//// model: C431
+model C431
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when 1 > 2 then y = a; end when;
+end C431;
+//// model: C432
+model C432
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when pr > 0 then y = a; end when;
+end C432;
+//// model: C433
+model C433
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when pr > 0 and p then y = a; end when;
+end C433;
+//// model: C434
+model C434
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when pb == true then y = a; end when;
+end C434;
+//// model: C435
+model C435
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when not pb then y = a; end when;
+end C435;
+//// model: C436
+model C436
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when k > 0 and k < 5 then y = a; end when;
+end C436;
+//// model: C437
+model C437
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when mod(k, 2) == 0 then y = a; end when;
+end C437;
+//// model: C438
+model C438
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when integer(a) > 2 then y = a; end when;
+end C438;
+//// model: C439
+model C439
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when abs(k) > 1 then y = a; end when;
+end C439;
+//// model: C440
+model C440
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when sign(a) > 0 then y = a; end when;
+end C440;
+//// model: C441
+model C441
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when a > 1 and initial() then y = a; end when;
+end C441;
+//// model: C442
+model C442
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when if initial() then p else q then y = a; end when;
+end C442;
+//// model: C443
+model C443
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when change(k) or change(p) then y = a; end when;
+end C443;
+//// model: C444
+model C444
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when edge(v[1]) then y = a; end when;
+end C444;
+//// model: C445
+model C445
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when change(v[1]) and p then y = a; end when;
+end C445;
+//// model: C446
+model C446
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when {edge(p), change(k), a > 1} then y = a; end when;
+end C446;
+//// model: C447
+model C447
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when pre(p) or pre(q) then y = a; end when;
+end C447;
+//// model: C448
+model C448
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when pre(v[1]) then y = a; end when;
+end C448;
+//// model: C449
+model C449
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when delay(a, 1) > 1 then y = a; end when;
+end C449;
+//// model: C450
+model C450
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when time > pr then y = a; end when;
+end C450;
+//// model: C451
+model C451
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when time > a then y = a; end when;
+end C451;
+//// model: C452
+model C452
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when sample(pr, pr) then y = a; end when;
+end C452;
+//// model: C453
+model C453
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when sample(0, 1) and sample(0, 2) then y = a; end when;
+end C453;
+//// model: C454
+model C454
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when not sample(0, 1) then y = a; end when;
+end C454;
+//// model: C455
+model C455
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when homotopy(a, b) > 1 then y = a; end when;
+end C455;
+//// model: C456
+model C456
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when semiLinear(a, 1, 2) > 0 then y = a; end when;
+end C456;
+//// model: C457
+model C457
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when a > 1 and b > 2 and c > 3 then y = a; end when;
+end C457;
+//// model: C458
+model C458
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when a > 1 or b > 2 or c > 3 then y = a; end when;
+end C458;
+//// model: C459
+model C459
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when not (p and q) then y = a; end when;
+end C459;
+//// model: C460
+model C460
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when not (p or q) and not q then y = a; end when;
+end C460;
+//// model: C461
+model C461
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  function fr input Real x; output Real y; algorithm y := 2 * x; end fr; function fb input Real x; output Boolean y; algorithm y := x > 1; end fb; function fbd input Boolean x; output Boolean y; algorithm y := not x; end fbd; type E = enumeration(one, two); E e = if p then E.one else E.two; String s = if p then "x" else "y"; Real y;
+equation
+  when (p or q) and (p or not q) then y = a; end when;
+end C461;

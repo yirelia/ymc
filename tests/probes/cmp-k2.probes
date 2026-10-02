@@ -1,0 +1,339 @@
+//// set: cmp-k2 — 数组构造子：数组字面量范围、带步长的范围、多迭代变量、嵌套、各种体
+//// model: K20
+model K20
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; Real y[3] = {x[i] for i in {1, 3, 4}};
+end K20;
+//// model: K21
+model K21
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; Real y[2] = {x[i] for i in {3, 1}};
+end K21;
+//// model: K22
+model K22
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; Real y[2] = {x[i] * 2 for i in {2, 2}};
+end K22;
+//// model: K23
+model K23
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; Real y[1] = {x[i] for i in {4}};
+end K23;
+//// model: K24
+model K24
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; Real y[2];
+equation
+  y = {x[i] for i in {1, 3}};
+end K24;
+//// model: K25
+model K25
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; Real y = sum(x[i] for i in {1, 3});
+end K25;
+//// model: K26
+model K26
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; Real y = sum({x[i] for i in {1, 3}});
+end K26;
+//// model: K27
+model K27
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; Real y = max(x[i] for i in {1, 3});
+end K27;
+//// model: K28
+model K28
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; Real y[2]; algorithm y := {x[i] for i in {1, 3}};
+end K28;
+//// model: K29
+model K29
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; parameter Integer ix[2] = {1, 3}; Real y[2] = {x[i] for i in ix};
+end K29;
+//// model: BASE
+model BASE
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+end BASE;
+//// model: K210
+model K210
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; constant Integer ix[2] = {1, 3}; Real y[2] = {x[i] for i in ix};
+end K210;
+//// model: K211
+model K211
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; Real y[2] = {x[i] for i in array(1, 3)};
+end K211;
+//// model: K212
+model K212
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; Real y[2] = {x[i] for i in 1:2:4};
+end K212;
+//// model: K213
+model K213
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; Real y[2] = {x[i] for i in 1:2:3};
+end K213;
+//// model: K214
+model K214
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; Real y[1] = {x[i] for i in 1:5:4};
+end K214;
+//// model: K215
+model K215
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; Real y[2] = {x[i] for i in 4:-2:1};
+end K215;
+//// model: K216
+model K216
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; Real y[2, 2] = {x[i] * x[j] for i in {1, 3}, j in 1:2};
+end K216;
+//// model: K217
+model K217
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; Real y[2, 1] = {x[i] * x[j] for i in {1}, j in 1:2};
+end K217;
+//// model: K218
+model K218
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; Real y[1, 1] = {{x[i] * x[j] for j in 1:1} for i in 2:2};
+end K218;
+//// model: K219
+model K219
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; Real y[2, 1] = {{x[i] * x[j] for j in 1:1} for i in 1:2};
+end K219;
+//// model: K220
+model K220
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; Real y[1, 2] = {{x[i] * x[j] for j in 1:2} for i in 1:1};
+end K220;
+//// model: K221
+model K221
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; Real y[4];
+equation
+  for k in 1:2 loop y[2 * k - 1:2 * k] = {x[i] for i in 1:2}; end for;
+end K221;
+//// model: K222
+model K222
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; Real y[2];
+equation
+  for k in 1:2 loop y[k:k] = {x[i] * k for i in 1:1}; end for;
+end K222;
+//// model: K223
+model K223
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; Real y[1];
+equation
+  when a > 1 then y = {x[i] for i in 2:2}; end when;
+end K223;
+//// model: K224
+model K224
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real x[4] = {a, b, c, a}; Real y[1];
+equation
+  if p then y = {x[i] for i in 2:2}; else y = {0}; end if; Boolean p = a > 1;
+end K224;
+//// model: K225
+model K225
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[1] = {time * i for i in 1:1};
+end K225;
+//// model: K226
+model K226
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[1] = {sin(a) * i for i in 1:1};
+end K226;
+//// model: K227
+model K227
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[1] = {if i > 0 then a else b for i in 1:1};
+end K227;
+//// model: K228
+model K228
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[1] = {a ^ i for i in 2:2};
+end K228;
+//// model: K229
+model K229
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[1] = {i for i in 1:1};
+end K229;
+//// model: K230
+model K230
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer n[1] = {i for i in 5:5};
+end K230;
+//// model: K231
+model K231
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Integer n[1] = {i * 2 + 1 for i in 5:5};
+end K231;
+//// model: K232
+model K232
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean k[1] = {i > 0 for i in 1:1};
+end K232;
+//// model: K233
+model K233
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  String s[1] = {String(i) for i in 7:7};
+end K233;
+//// model: K234
+model K234
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[1] = {sum(a * j for j in 1:i) for i in 2:2};
+end K234;
+//// model: K235
+model K235
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[1] = {sum(a * j for j in 1:1) for i in 1:2};
+end K235;
+//// model: K236
+model K236
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = sum(sum(a * j * i for j in 1:1) for i in 1:1);
+end K236;
+//// model: K237
+model K237
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = product(a + i for i in 3:3);
+end K237;
+//// model: K238
+model K238
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = max(a * i for i in 3:3);
+end K238;
+//// model: K239
+model K239
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y = min(a * i for i in 3:3);
+end K239;
+//// model: K240
+model K240
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3] = {({1, 2, 3})[i] for i in 1:3} * a;
+end K240;
+//// model: K241
+model K241
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[2] = {({a, b, c})[i] for i in {1, 3}};
+end K241;
+//// model: K242
+model K242
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Real y[3] = {({a, b, c})[4 - i] for i in 1:3};
+end K242;
+//// model: K243
+model K243
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  function f input Real x; output Real y[1]; algorithm y := {x * i for i in 1:1}; end f; Real y[1] = f(a);
+end K243;
+//// model: K244
+model K244
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  function f input Real x; output Real y; algorithm y := sum(x * i for i in 2:2); end f; Real y = f(a);
+end K244;
+//// model: K245
+model K245
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  function f input Real x; output Real y; algorithm y := sum(x * i for i in 1:1); end f; Real y = f(2);
+end K245;

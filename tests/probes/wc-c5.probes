@@ -1,0 +1,688 @@
+//// set: wc-c5 — when 体：terminate / assert、数组与切片的 reinit、切片与元素作左侧、for 里的 when、解出变量的绑定
+//// model: C50
+model C50
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  when a > 1 then terminate("stop"); end when;
+end C50;
+//// model: C51
+model C51
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  terminate("stop");
+end C51;
+//// model: C52
+model C52
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  if a > 1 then terminate("stop"); end if;
+end C52;
+//// model: C53
+model C53
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  algorithm when a > 1 then terminate("stop"); end when;
+end C53;
+//// model: C54
+model C54
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  algorithm terminate("stop");
+end C54;
+//// model: C55
+model C55
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  algorithm if a > 1 then terminate("stop"); end if;
+end C55;
+//// model: C56
+model C56
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  when a > 1 then terminate("stop " + String(a)); end when;
+end C56;
+//// model: C57
+model C57
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  when a > 1 then assert(b > 0, "msg"); end when;
+end C57;
+//// model: C58
+model C58
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  when a > 1 then assert(b > 0, "msg", AssertionLevel.warning); end when;
+end C58;
+//// model: C59
+model C59
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real y;
+equation
+  when a > 1 then y = a; terminate("stop"); end when;
+end C59;
+//// model: BASE
+model BASE
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+end BASE;
+//// model: C510
+model C510
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real y;
+equation
+  when a > 1 then terminate("stop"); y = a; end when;
+end C510;
+//// model: C511
+model C511
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real y;
+equation
+  when a > 1 then y = a; elsewhen b > 5 then y = b; terminate("stop"); end when;
+end C511;
+//// model: C512
+model C512
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[3](each start = 1);
+equation
+  der(x) = {-x[1], x[2], 1}; when a > 1 then reinit(x, zeros(3)); end when;
+end C512;
+//// model: C513
+model C513
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[3](each start = 1);
+equation
+  der(x) = {-x[1], x[2], 1}; when a > 1 then reinit(x, {1, 2, 3}); end when;
+end C513;
+//// model: C514
+model C514
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[3](each start = 1);
+equation
+  der(x) = {-x[1], x[2], 1}; when a > 1 then reinit(x, 2 * x); end when;
+end C514;
+//// model: C515
+model C515
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[3](each start = 1);
+equation
+  der(x) = {-x[1], x[2], 1}; when a > 1 then reinit(x[1], 0); end when;
+end C515;
+//// model: C516
+model C516
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[3](each start = 1);
+equation
+  der(x) = {-x[1], x[2], 1}; when a > 1 then reinit(x[1:2], {0, 0}); end when;
+end C516;
+//// model: C517
+model C517
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[2, 2](each start = 1);
+equation
+  der(x) = -x; when a > 1 then reinit(x, zeros(2, 2)); end when;
+end C517;
+//// model: C518
+model C518
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x(start = 1);
+equation
+  der(x) = -x; when a > 1 then reinit(x, 0); end when;
+end C518;
+//// model: C519
+model C519
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x(start = 1);
+equation
+  der(x) = -x; when a > 1 then reinit(x, pre(x) / 2); end when;
+end C519;
+//// model: C520
+model C520
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x(start = 1);
+equation
+  der(x) = -x; when {a > 1, b > 3} then reinit(x, 1); end when;
+end C520;
+//// model: C521
+model C521
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x(start = 1); Real y;
+equation
+  der(x) = -x; when a > 1 then reinit(x, 1); y = a; end when;
+end C521;
+//// model: C522
+model C522
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x(start = 1); algorithm when a > 1 then reinit(x, 1); end when; equation der(x) = -x;
+end C522;
+//// model: C523
+model C523
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[3]; Real y; Real z[3];
+equation
+  when time > 0 then x = {1, 2, 3}; y = 2; z = {4, 5, 6}; elsewhen time > 1 then x[1:2] = {3, 2}; x[3] = 5; z = {9, 8, 7}; y = 4; end when;
+end C523;
+//// model: C524
+model C524
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[3];
+equation
+  when a > 1 then x[1:2] = {3, 2}; x[3] = 5; end when;
+end C524;
+//// model: C525
+model C525
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[3];
+equation
+  when a > 1 then x = {a, b, c}; end when;
+end C525;
+//// model: C526
+model C526
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[3];
+equation
+  for i in 1:3 loop when a > i then x[i] = a; end when; end for;
+end C526;
+//// model: C527
+model C527
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean e[3]; Integer v;
+equation
+  for i in 1:3 loop when a > i then e[i] = true; end when; end for; when e then v = pre(v) + 1; end when;
+end C527;
+//// model: C528
+model C528
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real y;
+equation
+  if p then when a > 1 then y = a; end when; end if;
+end C528;
+//// model: C529
+model C529
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real y;
+equation
+  when a > 1 then if p then y = a; else y = b; end if; end when;
+end C529;
+//// model: C530
+model C530
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real y;
+equation
+  when a > 1 then when b > 1 then y = a; end when; end when;
+end C530;
+//// model: C531
+model C531
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real y; Real z;
+equation
+  when a > 1 then y = a; z = b; end when;
+end C531;
+//// model: C532
+model C532
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real y; Real z;
+equation
+  when a > 1 then (y, z) = f(a); end when; function f input Real x; output Real y; output Real z; algorithm y := x; z := 2 * x; end f;
+end C532;
+//// model: C533
+model C533
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real y;
+equation
+  when a > 1 then y = pre(y) + 1; end when;
+end C533;
+//// model: C534
+model C534
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Integer n;
+equation
+  when a > 1 then n = pre(n) + 1; end when;
+end C534;
+//// model: C535
+model C535
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real y;
+equation
+  when a > 1 then y = if p then a else b; end when;
+end C535;
+//// model: C536
+model C536
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real y;
+equation
+  when a > 1 then y + 1 = a; end when;
+end C536;
+//// model: C537
+model C537
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real y;
+equation
+  when a > 1 then a = y; end when;
+end C537;
+//// model: C538
+model C538
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real y = 1;
+equation
+  when a > 1 then y = a; end when;
+end C538;
+//// model: C539
+model C539
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  parameter Real pr = 1; Real y = pr;
+equation
+  when a > 1 then y = a; end when;
+end C539;
+//// model: C540
+model C540
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real y = if p then 1 else 2;
+equation
+  when a > 1 then y = a; end when;
+end C540;
+//// model: C541
+model C541
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real y(start = 1);
+equation
+  when a > 1 then y = a; end when;
+end C541;
+//// model: C542
+model C542
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real y = time; algorithm when a > 1 then y := 2; end when;
+end C542;
+//// model: C543
+model C543
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real y[2] = {a, b};
+equation
+  when a > 1 then y = {1, 2}; end when;
+end C543;
+//// model: C544
+model C544
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real y[2] = {1, 2};
+equation
+  when a > 1 then y = {a, b}; end when;
+end C544;
+//// model: C545
+model C545
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real y[2] = {a, b};
+equation
+  when a > 1 then y[1] = 1; end when;
+end C545;
+//// model: C546
+model C546
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  when a > 1 then assert(true, "m"); end when;
+end C546;
+//// model: C547
+model C547
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  when a > 1 then assert(false, "m"); end when;
+end C547;
+//// model: C548
+model C548
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  when a > 1 then terminate("a" + "b"); end when;
+end C548;
+//// model: C549
+model C549
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  algorithm when a > 1 then assert(b > 0, "m"); end when;
+end C549;
+//// model: C550
+model C550
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  algorithm when a > 1 then terminate("x"); elsewhen b > 5 then terminate("y"); end when;
+end C550;
+//// model: C551
+model C551
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  initial algorithm terminate("x");
+end C551;
+//// model: C552
+model C552
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  initial equation terminate("x");
+end C552;
+//// model: C553
+model C553
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  when a > 1 then terminate(1); end when;
+end C553;
+//// model: C554
+model C554
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  algorithm terminate(1);
+end C554;
+//// model: C555
+model C555
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x(start = 1);
+equation
+  der(x) = -x; when a > 1 then reinit(x, {1}); end when;
+end C555;
+//// model: C556
+model C556
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[2](each start = 1);
+equation
+  der(x) = -x; when a > 1 then reinit(x, 1); end when;
+end C556;
+//// model: C557
+model C557
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[2](each start = 1);
+equation
+  der(x) = -x; when a > 1 then reinit(x, {1, 2, 3}); end when;
+end C557;
+//// model: C558
+model C558
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[2](each start = 1);
+equation
+  der(x) = -x; when a > 1 then reinit(x, {1, 2}); end when;
+end C558;
+//// model: C559
+model C559
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[2](each start = 1); Integer n[2] = {1, 2};
+equation
+  der(x) = -x; when a > 1 then reinit(x, n); end when;
+end C559;
+//// model: C560
+model C560
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[2](each start = 1);
+equation
+  der(x) = -x; when a > 1 then reinit(x, pre(x)); end when;
+end C560;
+//// model: C561
+model C561
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[2](each start = 1);
+equation
+  der(x) = -x; when a > 1 then reinit(x, -x); end when;
+end C561;
+//// model: C562
+model C562
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[2](each start = 1);
+equation
+  der(x) = -x; when a > 1 then reinit(x, if p then x else 2 * x); end when;
+end C562;
+//// model: C563
+model C563
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[2](each start = 1);
+equation
+  der(x) = -x; when a > 1 then reinit(x, fill(a, 2)); end when;
+end C563;
+//// model: C564
+model C564
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Integer k(start = 1);
+equation
+  when a > 1 then reinit(k, 2); end when;
+end C564;
+//// model: C565
+model C565
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  discrete Real d(start = 1);
+equation
+  when a > 1 then reinit(d, 2); end when;
+end C565;
+//// model: C566
+model C566
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  parameter Real pp = 1;
+equation
+  when a > 1 then reinit(pp, 2); end when;
+end C566;
+//// model: C567
+model C567
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[2](each start = 1);
+equation
+  der(x) = -x; for i in 1:2 loop when a > i then reinit(x[i], 0); end when; end for;
+end C567;
+//// model: C568
+model C568
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[3];
+equation
+  for i in 1:3 loop when a > i then x[i] = a * i; elsewhen b > i then x[i] = b; end when; end for;
+end C568;
+//// model: C569
+model C569
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[2, 2];
+equation
+  when a > 1 then x[1, :] = {a, b}; x[2, :] = {b, a}; end when;
+end C569;
+//// model: C570
+model C570
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[2, 2];
+equation
+  when a > 1 then x[1, 1] = a; x[1, 2] = b; x[2] = {b, a}; end when;
+end C570;

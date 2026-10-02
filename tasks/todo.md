@@ -1193,6 +1193,25 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           字符串数组拼接、数组调用嵌在算术式里。
           → 整个 testsuite PASS 1241→1247（JoinThreeVectors2、ArrayIndex ×2、ArraySlice、AlgorithmArrayEqn、Bug1872）；
           +2 单测（215）；探针 3422→3739（新收的 317 个在上一提交的二进制上：FAIL 27、ACCEPTS-INVALID 1）。
+    - [x] (59y) when 的条件与体、assert / terminate、数组构造子的化简、注释（2026-10-02）：
+          先给 `tools/nf_live_sweep.py` 加了 `--skip-oracle`：SKIP 的用例也跑 omc，按"omc 能压平 / omc 也拒绝"分开计——
+          1891 个 SKIP 里只有 912 个是真余量，排桶按它来（flat 侧最大的几项：限定名引用 19、非字面量维 17、限定名 / 具名
+          实参的函数调用各 13、when 条件 13、整取引用 12）。本桶做 when：
+          **when 条件**：白名单换成"任意标量 Boolean 式 / 条件向量，照化简后的式子打"（WC 探针 c1–c4）；只挡 initial() 不作
+          整个条件（omc 告警）与 noEvent 包 Boolean 式（omc 报"不是离散时间表达式"）。
+          **when 体**：assert / terminate；整个数组 / 元素 / 切片的 reinit（值走 whole_array_value）；数组元素、切片作左侧，
+          各分支解出的变量按**元素**比（WhenVariableMismatch2）；算法段的 terminate 语句。when 解出 / 赋值的变量若声明绑定
+          引用了变量或 time → omc 报"离散变量绑了连续的值"，此前放行。
+          **assert / terminate**：方程里的消息 omc 不化简（`"a" + "b"`、`String(1 + 2, 0, true)` 原样），语句里的化简——此前
+          一律化简；显式 level 字面量 `AssertionLevel.warning / error`（方程、语句、函数体）；函数体里的 assert 此前因为把
+          缺省 level 当成"显式 level"而整个被挡（8 例）。
+          **放开之后撞出的潜伏错**：① 函数形参 / 局部的字符串注释整个丢了、别名函数拿了被别名函数的注释；② 注释解了
+          两遍转义（`"a \\n b"` 打出真的换行）、多行注释的续行缩进没补；③ 单迭代数组构造子：范围只有一个元素时 omc 展开
+          成 `{体}`、体是"数组字面量取迭代下标"时按范围取元素、`for i in {1, 3}` 打成了 `1:3`、带步长的范围重算了终点；
+          ④ 引号里带非 ASCII 字符的标识符 omc 词法器不收（flatten 先挡，根治在 lexer → 任务卡 T-S3-09）。
+          未做 → SKIP：类注释里的引号 / 反斜杠（omc 二次转义）、when 体里的 if 方程、Integer 的 reinit、非字面量的 level。
+          → 全 scodeinst PASS 485→488（Assert3、Reinit2、When8）、整个 testsuite PASS 1247→1269；+4 单测（219）；
+          探针 3739→4296。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、
@@ -1200,6 +1219,9 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
     - [ ] 任务卡 T-S3-08（用户，parser）：表达式后的下标只能跟在括号式后面——`{a, b}[2]`、`array(a, b)[1]`、`f(x)[1]`
           在 omc 1.25.0 是语法错（Modelica.g:1800 只有 `LPAR … RPAR array_subscripts?` 这一支），ymc 解析器 5 处多调了
           parse_postfix → `docs/tasks/T-S3-08-subscript-after-paren-only.md`。
+    - [ ] 任务卡 T-S3-09（用户，lexer）：带引号标识符的字符集按 OMC 词法收紧——`'höhe'` 这类引号里带非 ASCII 字符的
+          标识符 omc 报词法错（BaseModelica_Lexer.g:430-436 的 QIDENT / QCHAR 只有 ASCII），ymc 的 lex_qident 任何字节都收
+          → `docs/tasks/T-S3-09-qident-charset.md`。flatten 里有一道临时挡板（`non-ASCII identifier`）。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

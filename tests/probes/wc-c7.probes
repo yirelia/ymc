@@ -1,0 +1,510 @@
+//// set: wc-c7 — assert 的消息与 level：结构参数、String 的实参、AssertionLevel 字面量与表达式、函数体
+//// model: C70
+model C70
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  parameter Integer n = 2; Real x[n] = fill(a, n);
+equation
+  assert(b > 0, "n=" + String(n));
+end C70;
+//// model: C71
+model C71
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  parameter Integer n = 2;
+equation
+  assert(b > 0, "n=" + String(n));
+end C71;
+//// model: C72
+model C72
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  constant Integer n = 2;
+equation
+  assert(b > 0, "n=" + String(n));
+end C72;
+//// model: C73
+model C73
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(b > 0, "v=" + String(1.5));
+end C73;
+//// model: C74
+model C74
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(b > 0, "v=" + String(1.5, significantDigits = 3));
+end C74;
+//// model: C75
+model C75
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(b > 0, "v=" + String(a, significantDigits = 3));
+end C75;
+//// model: C76
+model C76
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(b > 0, "v=" + String(a * 1 + 0));
+end C76;
+//// model: C77
+model C77
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(b > 0, "v=" + String(2 * 3));
+end C77;
+//// model: C78
+model C78
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(b > 0, if p then "a" else "b");
+end C78;
+//// model: C79
+model C79
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(b > 0, "a" + (if p then "x" else "y"));
+end C79;
+//// model: BASE
+model BASE
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+end BASE;
+//// model: C710
+model C710
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(b > 0, "a" + "b" + "c");
+end C710;
+//// model: C711
+model C711
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(b > 0, ("a" + "b"));
+end C711;
+//// model: C712
+model C712
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(b > 0, "a\nb" + "\tc");
+end C712;
+//// model: C713
+model C713
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(b > 0, "");
+end C713;
+//// model: C714
+model C714
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(b > 0, "v=" + String(p));
+end C714;
+//// model: C715
+model C715
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(b > 0, "v=" + String(true));
+end C715;
+//// model: C716
+model C716
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  type E = enumeration(one, two);
+equation
+  assert(b > 0, "v=" + String(E.one));
+end C716;
+//// model: C717
+model C717
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[2] = {a, b};
+equation
+  for i in 1:2 loop assert(x[i] > 0, "x" + String(i)); end for;
+end C717;
+//// model: C718
+model C718
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[2] = {a, b};
+equation
+  for i in 1:2 loop assert(x[i] > i - 1, "x" + String(i * 2) + "!"); end for;
+end C718;
+//// model: C719
+model C719
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Real x[2] = {a, b};
+equation
+  for i in 1:2 loop terminate("t" + String(i)); end for;
+end C719;
+//// model: C720
+model C720
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(false, "m", AssertionLevel.warning);
+end C720;
+//// model: C721
+model C721
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(true, "m", AssertionLevel.warning);
+end C721;
+//// model: C722
+model C722
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(false, "m");
+end C722;
+//// model: C723
+model C723
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(b > 0, "m", level = AssertionLevel.warning);
+end C723;
+//// model: C724
+model C724
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(b > 0, "m", level = AssertionLevel.error);
+end C724;
+//// model: C725
+model C725
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(b > 0, "m", .AssertionLevel.warning);
+end C725;
+//// model: C726
+model C726
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  parameter AssertionLevel lvl = AssertionLevel.warning;
+equation
+  assert(b > 0, "m", lvl);
+end C726;
+//// model: C727
+model C727
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  constant AssertionLevel lvl = AssertionLevel.warning;
+equation
+  assert(b > 0, "m", lvl);
+end C727;
+//// model: C728
+model C728
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(b > 0, "m", if p then AssertionLevel.warning else AssertionLevel.error);
+end C728;
+//// model: C729
+model C729
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  function f input Real x; output Real y; algorithm assert(x > 0, "m", AssertionLevel.warning); y := x; end f; Real y = f(a);
+end C729;
+//// model: C730
+model C730
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  function f input Real x; output Real y; algorithm assert(x > 0, "m", AssertionLevel.error); y := x; end f; Real y = f(a);
+end C730;
+//// model: C731
+model C731
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  function f input Real x; output Real y; algorithm assert(x > 0, "m" + String(x)); y := x; end f; Real y = f(a);
+end C731;
+//// model: C732
+model C732
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  function f input Real x; output Real y; algorithm assert(x > 0, "a" + "b" + String(1)); y := x; end f; Real y = f(a);
+end C732;
+//// model: C733
+model C733
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  function f input Real x; output Real y; algorithm assert(x > 0, "m"); y := x; end f; Real y = f(2);
+end C733;
+//// model: C734
+model C734
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  function f input Real x; output Real y; algorithm assert(x > 0, "m", AssertionLevel.warning); y := x; end f; Real y = f(2);
+end C734;
+//// model: C735
+model C735
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  function f input Real x; output Real y; algorithm assert(x > 0, "m", AssertionLevel.warning); y := x; end f; Real y = f(-2);
+end C735;
+//// model: C736
+model C736
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  function f input Real x; output Real y; algorithm if x < 0 then assert(false, "neg"); end if; y := x; end f; Real y = f(a);
+end C736;
+//// model: C737
+model C737
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  function f input Real x; output Real y; algorithm for i in 1:2 loop assert(x > i, "m" + String(i)); end for; y := x; end f; Real y = f(a);
+end C737;
+//// model: C738
+model C738
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  algorithm assert(b > 0, "m", AssertionLevel.warning);
+end C738;
+//// model: C739
+model C739
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  algorithm assert(b > 0, "a" + String(1) + "c", AssertionLevel.warning);
+end C739;
+//// model: C740
+model C740
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  algorithm assert(false, "m");
+end C740;
+//// model: C741
+model C741
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  algorithm assert(true, "m");
+end C741;
+//// model: C742
+model C742
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  algorithm assert(1 > 2, "m", AssertionLevel.warning);
+end C742;
+//// model: C743
+model C743
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  initial algorithm assert(b > 0, "a" + "b");
+end C743;
+//// model: C744
+model C744
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean k = AssertionLevel.warning == AssertionLevel.error;
+end C744;
+//// model: C745
+model C745
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean k = AssertionLevel.warning < AssertionLevel.error;
+end C745;
+//// model: C746
+model C746
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Integer k = Integer(AssertionLevel.error);
+end C746;
+//// model: C747
+model C747
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  String k = String(AssertionLevel.warning);
+end C747;
+//// model: C748
+model C748
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  AssertionLevel l = AssertionLevel.warning;
+end C748;
+//// model: C749
+model C749
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  algorithm assert(b > 0, "m", if p then AssertionLevel.warning else AssertionLevel.error);
+end C749;
+//// model: C750
+model C750
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  parameter Boolean pb = true;
+equation
+  assert(b > 0, "m", if pb then AssertionLevel.warning else AssertionLevel.error);
+end C750;
+//// model: C751
+model C751
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(b > 0, "m", if true then AssertionLevel.warning else AssertionLevel.error);
+end C751;
+//// model: C752
+model C752
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(b > 0, "m", 1);
+end C752;
+//// model: C753
+model C753
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(b > 0, 1);
+end C753;
+//// model: C754
+model C754
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  assert(1, "m");
+end C754;
+//// model: C755
+model C755
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  terminate(1);
+end C755;
+//// model: C756
+model C756
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+equation
+  terminate("a", "b");
+end C756;

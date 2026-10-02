@@ -1,0 +1,152 @@
+//// set: wc-ut — when 条件与体、assert / terminate、数组构造子、注释（单测原文）
+//// model: ACT1
+model ACT1
+  Real a = time;
+  Real x[4] = {a, 2 * a, 3 * a, 4 * a};
+  Real c1[1] = {i * a for i in 2:2};
+  Real c2[2] = {i * a for i in 1:2};
+  Real c3[2] = {x[i] for i in {1, 3}};
+  Real c4[2] = {x[i] for i in 1:2:4};
+  Real c5[3] = {({a, 1, 2})[i] for i in 1:3};
+  Real c6[2, 1] = {i * j * a for i in 1:1, j in 1:2};
+  Real c7 = sum(x[i] for i in 3:3);
+  Real e1[1];
+  Real e2[2];
+  Real s1[1];
+equation
+  e1 = {x[i] for i in 4:4};
+  e2 = {x[i] * 2 for i in {4, 1}};
+algorithm
+  s1 := {x[i] for i in 2:2};
+end ACT1;
+//// model: FCT1
+model FCT1
+  function g "g comment"
+    input Real x "say \"hi\"";
+    output Real y "esc \\n kept";
+  algorithm
+    y := 2 * x "two\nlines";
+  end g;
+  function f = g "alias comment";
+  function h = g;
+  Real a = time "var\ncomment";
+  Real b = f(a) + h(a);
+equation
+  a = a "eq\ncomment";
+end FCT1;
+//// model: WCS1
+model WCS1
+  Real y;
+equation
+  when not initial() then
+    y = time;
+  end when;
+end WCS1;
+//// model: WCS2
+model WCS2
+  Real a = time;
+  Real y;
+equation
+  when y > 1 then
+    a = y;
+  end when;
+end WCS2;
+//// model: WCS3
+model WCS3
+  Real x[2];
+equation
+  when time > 0 then
+    x[1] = 0;
+  elsewhen time > 1 then
+    x[2] = 0;
+  end when;
+end WCS3;
+//// model: WCS4
+model WCS4 "say \"hi\""
+  Real y = time;
+end WCS4;
+//// model: WCS5
+model WCS5
+  Real 'höhe' = time;
+end WCS5;
+//// model: WCT1
+model WCT1
+  Real a = time;
+  Real b = 2 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Real x[3](each start = 1);
+  Real y1;
+  Real y2;
+  Real y3;
+  Real y4;
+  Real y5;
+  Real z[3];
+  Real w;
+equation
+  der(x) = {-x[1], x[2], 1};
+  when p and not q then
+    y1 = a;
+  elsewhen sin(a) > 0 or k > pre(k) then
+    y1 = b;
+  end when;
+  when {initial(), a > 1 and b > 2} then
+    y2 = a;
+  end when;
+  when terminal() then
+    y3 = a;
+  end when;
+  when not p then
+    y4 = a;
+    terminate("stop " + String(a));
+    assert(b > 1 - 1, "a" + "b");
+  end when;
+  when a > 1 then
+    reinit(x, 2 * x);
+    reinit(x[1], 0);
+    reinit(x[2:3], {1, 2});
+  end when;
+  when a > 2 then
+    z[1:2] = {a, b};
+    z[3] = 5;
+  elsewhen b > 5 then
+    z = {1, 2, 3};
+  end when;
+  when if p then q else not q then
+    y5 = pre(y5) + 1;
+  end when;
+algorithm
+  when change(k) or edge(p) then
+    w := a;
+  elsewhen noEvent(a) > 3 then
+    terminate("alg");
+  end when;
+end WCT1;
+//// model: WCT2
+model WCT2
+  function f
+    input Real x "the x";
+    output Real y "the y";
+  protected
+    Real t = 2 "local";
+  algorithm
+    assert(x > 0, "neg" + "ative");
+    assert(x < 9, "big", AssertionLevel.warning);
+    y := x * t;
+  end f;
+  Real a = time;
+  Real b = f(a);
+  constant String cs = "q";
+equation
+  assert(a > 1 - 1, "x" + String(1 + 2) + cs);
+  assert(b > 0, "lvl", AssertionLevel.warning);
+  assert(b > 0, "err", AssertionLevel.error);
+  terminate("a" + "b");
+  if a > 5 then
+    terminate("x" + String(a));
+  end if;
+algorithm
+  assert(b > 0, "a" + "b", AssertionLevel.warning);
+  terminate("a" + "b");
+end WCT2;

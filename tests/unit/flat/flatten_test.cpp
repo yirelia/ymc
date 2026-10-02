@@ -3787,6 +3787,127 @@ YMC_TEST(flatten_whole_array_binding_forms) {
   YMC_CHECK(uns);
 }
 
+YMC_TEST(flatten_when_conditions_and_bodies) {
+  // when 条件：任意标量 Boolean 式或条件向量，照化简后的式子打印（WC 探针 c1–c4；此前只收白名单里的几种形态）。
+  // when 体：assert / terminate、整个数组 / 元素 / 切片的 reinit（不拆，值规整成整体保留的形态）、数组元素与切片作左侧
+  //（各分支解出的变量按元素比）；算法段里的 terminate 语句。期望 = omc 1.25.0 实跑 WCT1（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model WCT1\n  Real a = time;\n  Real b = 2 * time;\n  Boolean p = a > 1;\n  Boolean q = b > 1;\n"
+                           "  Integer k = integer(a);\n  Real x[3](each start = 1);\n  Real y1;\n  Real y2;\n  Real y3;\n"
+                           "  Real y4;\n  Real y5;\n  Real z[3];\n  Real w;\nequation\n  der(x) = {-x[1], x[2], 1};\n"
+                           "  when p and not q then\n    y1 = a;\n  elsewhen sin(a) > 0 or k > pre(k) then\n    y1 = b;\n"
+                           "  end when;\n  when {initial(), a > 1 and b > 2} then\n    y2 = a;\n  end when;\n"
+                           "  when terminal() then\n    y3 = a;\n  end when;\n  when not p then\n    y4 = a;\n"
+                           "    terminate(\"stop \" + String(a));\n    assert(b > 1 - 1, \"a\" + \"b\");\n  end when;\n"
+                           "  when a > 1 then\n    reinit(x, 2 * x);\n    reinit(x[1], 0);\n    reinit(x[2:3], {1, 2});\n"
+                           "  end when;\n  when a > 2 then\n    z[1:2] = {a, b};\n    z[3] = 5;\n  elsewhen b > 5 then\n"
+                           "    z = {1, 2, 3};\n  end when;\n  when if p then q else not q then\n    y5 = pre(y5) + 1;\n"
+                           "  end when;\nalgorithm\n  when change(k) or edge(p) then\n    w := a;\n"
+                           "  elsewhen noEvent(a) > 3 then\n    terminate(\"alg\");\n  end when;\nend WCT1;\n"),
+               std::string("class WCT1\n  Real a = time;\n  Real b = 2.0 * time;\n  Boolean p = a > 1.0;\n"
+                           "  Boolean q = b > 1.0;\n  Integer k = integer(a);\n  Real x[1](start = 1.0);\n"
+                           "  Real x[2](start = 1.0);\n  Real x[3](start = 1.0);\n  Real y1;\n  Real y2;\n  Real y3;\n"
+                           "  Real y4;\n  Real y5;\n  Real z[1];\n  Real z[2];\n  Real z[3];\n  Real w;\nequation\n"
+                           "  der(x[1]) = -x[1];\n  der(x[2]) = x[2];\n  der(x[3]) = 1.0;\n  when p and not q then\n"
+                           "    y1 = a;\n  elsewhen sin(a) > 0.0 or k > pre(k) then\n    y1 = b;\n  end when;\n"
+                           "  when {initial(), a > 1.0 and b > 2.0} then\n    y2 = a;\n  end when;\n  when terminal() then\n"
+                           "    y3 = a;\n  end when;\n  when not p then\n    y4 = a;\n"
+                           "    terminate(\"stop \" + String(a, 6, 0, true));\n    assert(b > 0.0, \"a\" + \"b\");\n"
+                           "  end when;\n  when a > 1.0 then\n    reinit(x, {2.0 * x[1], 2.0 * x[2], 2.0 * x[3]});\n"
+                           "    reinit(x[1], 0.0);\n    reinit(x[2:3], {1.0, 2.0});\n  end when;\n  when a > 2.0 then\n"
+                           "    z[1] = a;\n    z[2] = b;\n    z[3] = 5.0;\n  elsewhen b > 5.0 then\n    z[1] = 1.0;\n"
+                           "    z[2] = 2.0;\n    z[3] = 3.0;\n  end when;\n  when if p then q else not q then\n"
+                           "    y5 = pre(y5) + 1.0;\n  end when;\nalgorithm\n  when change(k) or edge(p) then\n    w := a;\n"
+                           "  elsewhen noEvent(a) > 3.0 then\n    terminate(\"alg\");\n  end when;\nend WCT1;\n"));
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           // initial() 不是整个条件 / 条件向量的直接元素：omc 告警（ymc 不产告警）。
+           {"model WCS1\n  Real y;\nequation\n  when not initial() then\n    y = time;\n  end when;\nend WCS1;\n", "when condition form"},
+           // when 解出的变量是离散的，声明绑定却是连续的：omc 报 "Component a of variability discrete has binding 'time' …"。
+           {"model WCS2\n  Real a = time;\n  Real y;\nequation\n  when y > 1 then\n    a = y;\n  end when;\n"
+            "end WCS2;\n",
+            "when-solved variable with non-constant binding"},
+           // 各分支解出的变量按元素比：x[1] 与 x[2] 不是同一组（WhenVariableMismatch2）。
+           {"model WCS3\n  Real x[2];\nequation\n  when time > 0 then\n    x[1] = 0;\n  elsewhen time > 1 then\n"
+            "    x[2] = 0;\n  end when;\nend WCS3;\n",
+            "when branch solved-variable mismatch"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
+YMC_TEST(flatten_assert_terminate_messages_and_levels) {
+  // 方程里 assert / terminate 的消息 omc 不化简（simplifyEquation 只化简 assert 的条件，NFSimplifyModel.mo:211-215 v1.25.0）：
+  // `"a" + "b"`、`String(1 + 2, 0, true)` 原样、常量引用照样内联；语句里的照常化简（"ab"）。显式 level 字面量
+  // `AssertionLevel.warning` 照打、`.error` 省略；函数体里的 assert（含形参 / 局部的注释）照发射。
+  // 期望 = omc 1.25.0 实跑 WCT2（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model WCT2\n  function f\n    input Real x \"the x\";\n    output Real y \"the y\";\n  protected\n"
+                           "    Real t = 2 \"local\";\n  algorithm\n    assert(x > 0, \"neg\" + \"ative\");\n"
+                           "    assert(x < 9, \"big\", AssertionLevel.warning);\n    y := x * t;\n  end f;\n  Real a = time;\n"
+                           "  Real b = f(a);\n  constant String cs = \"q\";\nequation\n"
+                           "  assert(a > 1 - 1, \"x\" + String(1 + 2) + cs);\n"
+                           "  assert(b > 0, \"lvl\", AssertionLevel.warning);\n  assert(b > 0, \"err\", AssertionLevel.error);\n"
+                           "  terminate(\"a\" + \"b\");\n  if a > 5 then\n    terminate(\"x\" + String(a));\n  end if;\n"
+                           "algorithm\n  assert(b > 0, \"a\" + \"b\", AssertionLevel.warning);\n  terminate(\"a\" + \"b\");\n"
+                           "end WCT2;\n"),
+               std::string("function WCT2.f\n  input Real x \"the x\";\n  output Real y \"the y\";\n"
+                           "  protected Real t = 2.0 \"local\";\nalgorithm\n  assert(x > 0.0, \"negative\");\n"
+                           "  assert(x < 9.0, \"big\", AssertionLevel.warning);\n  y := x * t;\nend WCT2.f;\n\nclass WCT2\n"
+                           "  Real a = time;\n  Real b = WCT2.f(a);\n  constant String cs = \"q\";\nequation\n"
+                           "  assert(a > 0.0, \"x\" + String(1 + 2, 0, true) + \"q\");\n"
+                           "  assert(b > 0.0, \"lvl\", AssertionLevel.warning);\n  assert(b > 0.0, \"err\");\n"
+                           "  terminate(\"a\" + \"b\");\n  if a > 5.0 then\n    terminate(\"x\" + String(a, 6, 0, true));\n"
+                           "  end if;\nalgorithm\n  assert(b > 0.0, \"ab\", AssertionLevel.warning);\n  terminate(\"ab\");\n"
+                           "end WCT2;\n"));
+}
+
+YMC_TEST(flatten_array_constructor_simplification) {
+  // 单迭代的数组构造子（simplifyArrayConstructor，NFSimplifyExp.mo:583-637 v1.25.0）：范围只有一个元素 → 展开成 `{体}`
+  //（等式里随之逐元素）；体恰是"数组字面量取迭代变量作下标" → 按范围取元素；范围写成数组字面量 / 带步长的照写
+  //（此前 `{1, 3}` 打成 `1:3`、`1:2:4` 打成 `1:2:3`）。多个迭代变量的不展开。期望 = omc 1.25.0 实跑 ACT1（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model ACT1\n  Real a = time;\n  Real x[4] = {a, 2 * a, 3 * a, 4 * a};\n"
+                           "  Real c1[1] = {i * a for i in 2:2};\n  Real c2[2] = {i * a for i in 1:2};\n"
+                           "  Real c3[2] = {x[i] for i in {1, 3}};\n  Real c4[2] = {x[i] for i in 1:2:4};\n"
+                           "  Real c5[3] = {({a, 1, 2})[i] for i in 1:3};\n"
+                           "  Real c6[2, 1] = {i * j * a for i in 1:1, j in 1:2};\n  Real c7 = sum(x[i] for i in 3:3);\n"
+                           "  Real e1[1];\n  Real e2[2];\n  Real s1[1];\nequation\n  e1 = {x[i] for i in 4:4};\n"
+                           "  e2 = {x[i] * 2 for i in {4, 1}};\nalgorithm\n  s1 := {x[i] for i in 2:2};\nend ACT1;\n"),
+               std::string("class ACT1\n  Real a = time;\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real x[4];\n"
+                           "  Real c1[1];\n  Real c2[1];\n  Real c2[2];\n  Real c3[1];\n  Real c3[2];\n  Real c4[1];\n"
+                           "  Real c4[2];\n  Real c5[1];\n  Real c5[2];\n  Real c5[3];\n  Real c6[1,1];\n  Real c6[2,1];\n"
+                           "  Real c7 = x[3];\n  Real e1[1];\n  Real e2[1];\n  Real e2[2];\n  Real s1[1];\nequation\n"
+                           "  x = {a, 2.0 * a, 3.0 * a, 4.0 * a};\n  c1 = {2.0 * a};\n"
+                           "  c2 = array(/*Real*/(i) * a for i in 1:2);\n  c3 = array(x[i] for i in {1, 3});\n"
+                           "  c4 = array(x[i] for i in 1:2:4);\n  c5 = {a, 1.0, 2.0};\n"
+                           "  c6 = array(array(/*Real*/(i * j) * a for i in 1:1) for j in 1:2);\n  e1[1] = x[4];\n"
+                           "  e2 = array(x[i] * 2.0 for i in {4, 1});\nalgorithm\n  s1 := {x[2]};\nend ACT1;\n"));
+}
+
+YMC_TEST(flatten_comments_in_functions_and_escapes) {
+  // 函数形参 / 局部的字符串注释照打（此前丢了）；别名函数 `function f = g "c"` 用别名自己的注释、没写就没有；注释只解一遍
+  // 转义（SCode 里已解过，flatten 此前又解了一遍：`"esc \\n kept"` 打出真的换行）；注释里的换行后补续行缩进——变量
+  // 声明 1 格、方程 / 语句跟所在块。期望 = omc 1.25.0 实跑 FCT1（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model FCT1\n  function g \"g comment\"\n    input Real x \"say \\\"hi\\\"\";\n"
+                           "    output Real y \"esc \\\\n kept\";\n  algorithm\n    y := 2 * x \"two\\nlines\";\n  end g;\n"
+                           "  function f = g \"alias comment\";\n  function h = g;\n  Real a = time \"var\\ncomment\";\n"
+                           "  Real b = f(a) + h(a);\nequation\n  a = a \"eq\\ncomment\";\nend FCT1;\n"),
+               std::string("function FCT1.f \"alias comment\"\n  input Real x \"say \\\"hi\\\"\";\n"
+                           "  output Real y \"esc \\\\n kept\";\nalgorithm\n  y := 2.0 * x \"two\n  lines\";\nend FCT1.f;\n\n"
+                           "function FCT1.h\n  input Real x \"say \\\"hi\\\"\";\n  output Real y \"esc \\\\n kept\";\n"
+                           "algorithm\n  y := 2.0 * x \"two\n  lines\";\nend FCT1.h;\n\nclass FCT1\n  Real a = time \"var\n"
+                           " comment\";\n  Real b = FCT1.f(a) + FCT1.h(a);\nequation\n  a = a \"eq\n  comment\";\nend FCT1;\n"));
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           // 类注释里的转义 omc 再转义一遍（`"say \\\"hi\\\""`），不复刻。
+           {"model WCS4 \"say \\\"hi\\\"\"\n  Real y = time;\nend WCS4;\n", "class comment with escapes"},
+           // 标识符里的非 ASCII 字符：omc 的词法器报错（ymc 的词法器放行，任务卡 T-S3-09）。
+           {"model WCS5\n  Real 'h\xc3\xb6" "he' = time;\nend WCS5;\n", "non-ASCII identifier"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

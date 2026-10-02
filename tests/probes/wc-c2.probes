@@ -1,0 +1,845 @@
+//// set: wc-c2 — when 语句的条件形态（同 c1 的条件）
+//// model: C20
+model C20
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when a > 1 then y := a; end when;
+end C20;
+//// model: C21
+model C21
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when p then y := a; end when;
+end C21;
+//// model: C22
+model C22
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when not p then y := a; end when;
+end C22;
+//// model: C23
+model C23
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when p and q then y := a; end when;
+end C23;
+//// model: C24
+model C24
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when p or q then y := a; end when;
+end C24;
+//// model: C25
+model C25
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when p and not q then y := a; end when;
+end C25;
+//// model: C26
+model C26
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when a > 1 and b > 2 then y := a; end when;
+end C26;
+//// model: C27
+model C27
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when a > 1 or b > 2 then y := a; end when;
+end C27;
+//// model: C28
+model C28
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when not a > 1 then y := a; end when;
+end C28;
+//// model: C29
+model C29
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when sin(a) > 0 then y := a; end when;
+end C29;
+//// model: BASE
+model BASE
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+end BASE;
+//// model: C210
+model C210
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when abs(a) > 1 then y := a; end when;
+end C210;
+//// model: C211
+model C211
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when a > sin(b) then y := a; end when;
+end C211;
+//// model: C212
+model C212
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when max(a, b) > 1 then y := a; end when;
+end C212;
+//// model: C213
+model C213
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when initial() then y := a; end when;
+end C213;
+//// model: C214
+model C214
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when terminal() then y := a; end when;
+end C214;
+//// model: C215
+model C215
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when not initial() then y := a; end when;
+end C215;
+//// model: C216
+model C216
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when initial() or a > 1 then y := a; end when;
+end C216;
+//// model: C217
+model C217
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when {initial(), a > 1} then y := a; end when;
+end C217;
+//// model: C218
+model C218
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when sample(0, 1) then y := a; end when;
+end C218;
+//// model: C219
+model C219
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when sample(0, pr) then y := a; end when;
+end C219;
+//// model: C220
+model C220
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when sample(0, 1) and p then y := a; end when;
+end C220;
+//// model: C221
+model C221
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when change(p) then y := a; end when;
+end C221;
+//// model: C222
+model C222
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when change(k) then y := a; end when;
+end C222;
+//// model: C223
+model C223
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when edge(p) then y := a; end when;
+end C223;
+//// model: C224
+model C224
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when pre(p) then y := a; end when;
+end C224;
+//// model: C225
+model C225
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when not pre(p) then y := a; end when;
+end C225;
+//// model: C226
+model C226
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when p and not pre(p) then y := a; end when;
+end C226;
+//// model: C227
+model C227
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when edge(p) or edge(q) then y := a; end when;
+end C227;
+//// model: C228
+model C228
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when pre(k) > 0 then y := a; end when;
+end C228;
+//// model: C229
+model C229
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when k > pre(k) then y := a; end when;
+end C229;
+//// model: C230
+model C230
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when k <> pre(k) then y := a; end when;
+end C230;
+//// model: C231
+model C231
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when k == 2 then y := a; end when;
+end C231;
+//// model: C232
+model C232
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when k >= 1 then y := a; end when;
+end C232;
+//// model: C233
+model C233
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when noEvent(a > 1) then y := a; end when;
+end C233;
+//// model: C234
+model C234
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when noEvent(a) > 1 then y := a; end when;
+end C234;
+//// model: C235
+model C235
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when true then y := a; end when;
+end C235;
+//// model: C236
+model C236
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when false then y := a; end when;
+end C236;
+//// model: C237
+model C237
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when pb then y := a; end when;
+end C237;
+//// model: C238
+model C238
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when pb and p then y := a; end when;
+end C238;
+//// model: C239
+model C239
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when time > 1 then y := a; end when;
+end C239;
+//// model: C240
+model C240
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when time >= 1 and time < 2 then y := a; end when;
+end C240;
+//// model: C241
+model C241
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when {p, q} then y := a; end when;
+end C241;
+//// model: C242
+model C242
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when {a > 1, p} then y := a; end when;
+end C242;
+//// model: C243
+model C243
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when {p} then y := a; end when;
+end C243;
+//// model: C244
+model C244
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when {a > 1, b > 2, c > 3} then y := a; end when;
+end C244;
+//// model: C245
+model C245
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when v then y := a; end when;
+end C245;
+//// model: C246
+model C246
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when {v[1], q} then y := a; end when;
+end C246;
+//// model: C247
+model C247
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when v[1] then y := a; end when;
+end C247;
+//// model: C248
+model C248
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when if p then q else not q then y := a; end when;
+end C248;
+//// model: C249
+model C249
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when a > b then y := a; end when;
+end C249;
+//// model: C250
+model C250
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when a + b > c * 2 then y := a; end when;
+end C250;
+//// model: C251
+model C251
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when -a < 0 then y := a; end when;
+end C251;
+//// model: C252
+model C252
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when a ^ 2 > 4 then y := a; end when;
+end C252;
+//// model: C253
+model C253
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when a / 2 > 1 then y := a; end when;
+end C253;
+//// model: C254
+model C254
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when der(a) > 0 then y := a; end when;
+end C254;
+//// model: C255
+model C255
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when a > pr then y := a; end when;
+end C255;
+//// model: C256
+model C256
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when a > 1.5 then y := a; end when;
+end C256;
+//// model: C257
+model C257
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when 1 < a then y := a; end when;
+end C257;
+//// model: C258
+model C258
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when a >= 0 and (b < 1 or c > 2) then y := a; end when;
+end C258;
+//// model: C259
+model C259
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when {p and q, not p} then y := a; end when;
+end C259;
+//// model: C260
+model C260
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when {sample(0, 1), p} then y := a; end when;
+end C260;
+//// model: C261
+model C261
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when {change(p), edge(q)} then y := a; end when;
+end C261;
+//// model: C262
+model C262
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when p == q then y := a; end when;
+end C262;
+//// model: C263
+model C263
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y; algorithm when p <> q then y := a; end when;
+end C263;

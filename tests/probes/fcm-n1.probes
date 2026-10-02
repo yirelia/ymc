@@ -1,0 +1,43 @@
+//// set: fcm-n1 — 多行注释的续行缩进（变量 1 格、方程 / 语句跟所在块）；函数与类注释
+//// model: CQ
+model CQ "model \"q\" comment"
+  Real y = time;
+end CQ;
+//// model: N1
+model N1
+  function f
+    input Real x "p1\nx\ny";
+    output Real y = x "o1\nz";
+  protected
+    Real t = 1 "t1\nw";
+  algorithm
+    y := x "s1\nv";
+    if x > 0 then
+      y := 2 * x "s2\nu";
+    end if;
+  end f;
+  Real a = time "v1\nb\nc";
+  parameter String s = "str\nlit" "v2\nd";
+  Real y = f(a) "v3\ne";
+  Real z[2] = {a, a} "v4\nf";
+equation
+  a = a "e1\ng";
+  if a > 0 then
+    a = a "e2\nh";
+  end if;
+end N1;
+//// model: FC1
+model FC1
+  function f "fn comment"
+    input Real x "the x";
+    input Real w = 1 "with default";
+    output Real y "the y";
+  protected
+    Real z = 2 "local";
+    constant Real k = 3 "konst";
+  algorithm
+    y := x * z * w "stmt comment";
+  end f;
+  Real a = time "model var";
+  Real y = f(a) "binding";
+end FC1;

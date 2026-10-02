@@ -24,6 +24,10 @@ ymc 同此；要靠别的库（MSL）的模型两边都拒绝，记 SKIP / BOTH-
   python tools/nf_live_sweep.py                         # 默认 flattening/modelica 全部
   python tools/nf_live_sweep.py --dir <目录> --json out.json --show 20
   python tools/nf_live_sweep.py --all --dir <testsuite>/simulation/modelica
+  python tools/nf_live_sweep.py --all --dir <testsuite> --skip-oracle   # 排桶用：SKIP 的用例里 omc 能压平的有多少
+
+`--skip-oracle`：ymc 声明未实现的用例也交给 omc 跑一遍，SKIP 原因按"omc 能压平 / omc 也拒绝"分开计——前者才是加宽的
+真实余量，后者做出来也只是 BOTH-REJECT。平时的门不带它（SKIP 不跑 omc，快一半）。
 """
 import argparse
 import collections
@@ -87,6 +91,9 @@ def check(path, tmp, args):
     if ycode == rt.YMC_NOT_IMPL_EXIT:
         m = _NOT_IMPL.search(yerr + yout)
         rec.update(verdict="SKIP", reason=(m.group(1).strip()[:60] if m else "unspecified"))
+        if args.skip_oracle:
+            ocode, oout, _ = run([args.omc, dst], os.path.dirname(dst), args.omc_timeout)
+            rec["omc_ok"] = ocode is not None and oout.startswith(("class", "function", "impure function"))
         return rec
     ocode, oout, _ = run([args.omc, dst], os.path.dirname(dst), args.omc_timeout)
     omc_ok = ocode is not None and oout.startswith(("class", "function", "impure function"))
@@ -125,6 +132,7 @@ def main():
     ap.add_argument("--show", type=int, default=20)
     ap.add_argument("--json")
     ap.add_argument("--all", action="store_true", help="也取没有命令行选项注解的 .mo（原样跑）")
+    ap.add_argument("--skip-oracle", action="store_true", help="SKIP 的用例也跑 omc：按 omc 能否压平分开计（排桶用）")
     args = ap.parse_args()
     if args.ymc:
         rt.YMC = os.path.abspath(args.ymc)
@@ -149,7 +157,13 @@ def main():
     for d, c in sorted(by_dir.items(), key=lambda kv: -sum(kv[1].values())):
         print(f"{d:24s} {c['PASS']:5d} {c['FAIL']:5d} {c['ACCEPTS-INVALID']:7d} {c['SKIP']:5d} {c['CRASH']:5d}")
     skips = collections.Counter(r["reason"] for r in records if r["verdict"] == "SKIP")
-    if skips:
+    if skips and args.skip_oracle:
+        ok = collections.Counter(r["reason"] for r in records if r["verdict"] == "SKIP" and r.get("omc_ok"))
+        print(f"\nSKIP 原因（omc 能压平的 / 全部；合计 {sum(ok.values())} / {sum(skips.values())}）：")
+        for k, v in sorted(skips.items(), key=lambda kv: (-ok[kv[0]], -kv[1])):
+            if ok[k]:
+                print(f"  {ok[k]:4d} / {v:4d}  {k}")
+    elif skips:
         print("\nSKIP 原因：" + "；".join(f"{k} ×{v}" for k, v in skips.most_common(15)))
     bad = [r for r in records if r["verdict"] in ("FAIL", "ACCEPTS-INVALID", "CRASH")]
     for r in bad[: args.show]:

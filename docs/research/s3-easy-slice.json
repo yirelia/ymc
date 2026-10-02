@@ -565,5 +565,7 @@
 "RecordBinding3.mo",
 "FuncUnknownDim1.mo",
 "FunctionNoOutput1.mo",
-"OperationSubEW2.mo"
+"OperationSubEW2.mo",
+"Reinit2.mo",
+"When8.mo"
 ]

@@ -131,6 +131,15 @@ SEMICOLON`；下标只能跟在括号式后面，Modelica.g:1800），ymc 的解
 才报 `Subscript '4' for dimension 1 (size = 3) of w is out of bounds`）；数组调用嵌在算术式里时整个式子不展开
 （`y := array(sin(z[$i1]) for $i1 in 1:2) + z`）。
 
+when / assert / 注释的几处 1.25.0 行为（WC / FC 探针，2026-10-02；ymc 不复刻的命中即 SKIP）：`initial()` 不是整个 when 条件
+（或条件向量的直接元素）时告警 "initial() may only be used as a when condition"，但照样出结果——ymc 不产告警 → SKIP；
+when 方程 / 语句解出的变量被当作离散的，它的声明绑定若是连续的就报错 "Component a of variability discrete has binding
+'time' of higher variability continuous"（ymc 只挡"绑定引用了变量或 time"，离散绑定也一并 SKIP）；assert 的 level 是
+参数表达式时被当结构表达式求值（条件里的参数打 final），ymc 只收字面量；**类**（模型 / 函数）的字符串注释打印时把源码
+原文再转义一遍（`"say \"hi\""` → `"say \\\"hi\\\""`、`"a\nb"` → `"a\\nb"`），变量 / 方程 / 语句的注释只转义一遍——ymc 的 SCode
+存的是解过转义的文本、还原不出原文：含引号 / 反斜杠的类注释 SKIP，写成 `\n` / `\t` 转义的换行 / 制表符则会按字面打出（与
+omc 不同；源码里直接换行的多行注释是对的）——要彻底对上得让 SCode 的类注释保留原文（absyn_to_scode.cpp:633，用户域）。
+
 Integer 的极值（待用户定，2026-10-02）：`max` / `min` 作用在空的 Integer 数组 / 空范围上取 `∓System.intMaxLit`（Expression.makeMinValue / makeMaxValue，v1.25.0 NFExpression.mo:4908-4934），这个值随 omc 构建的整数位宽而变——本机安装版 1.25.0（Windows）打 `1073741823`，testsuite 文件（64 位 Linux 生成）是 `4611686018427387903`。跟实跑的 omc 就要把 30 位的值写进 ymc，跟文件又过不了 oracle=live 门；ymc 目前两边都不跟，遇到即 SKIP（`Integer extreme of empty min/max (platform-dependent in omc)`）。受影响：scodeinst 的 CevalReduction1、FuncBuiltinMax / Max2 / Min / Min2、FuncBuiltinReduction 六例（其余内容已与 1.25.0 一致，只差这一个值）。Real（`±8.777798510069901e304`）、Boolean、枚举的极值与平台无关，已做。
 
 ## 已研究待实现：多条 connect 连接集（union-find）

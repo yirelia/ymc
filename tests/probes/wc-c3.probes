@@ -1,0 +1,613 @@
+//// set: wc-c3 — elsewhen 分支的条件形态
+//// model: C30
+model C30
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen a > 1 then y = b; end when;
+end C30;
+//// model: C31
+model C31
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen p then y = b; end when;
+end C31;
+//// model: C32
+model C32
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen not p then y = b; end when;
+end C32;
+//// model: C33
+model C33
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen p and q then y = b; end when;
+end C33;
+//// model: C34
+model C34
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen p or q then y = b; end when;
+end C34;
+//// model: C35
+model C35
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen p and not q then y = b; end when;
+end C35;
+//// model: C36
+model C36
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen a > 1 and b > 2 then y = b; end when;
+end C36;
+//// model: C37
+model C37
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen a > 1 or b > 2 then y = b; end when;
+end C37;
+//// model: C38
+model C38
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen not a > 1 then y = b; end when;
+end C38;
+//// model: C39
+model C39
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen sin(a) > 0 then y = b; end when;
+end C39;
+//// model: BASE
+model BASE
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+end BASE;
+//// model: C310
+model C310
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen abs(a) > 1 then y = b; end when;
+end C310;
+//// model: C311
+model C311
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen a > sin(b) then y = b; end when;
+end C311;
+//// model: C312
+model C312
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen max(a, b) > 1 then y = b; end when;
+end C312;
+//// model: C313
+model C313
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen initial() then y = b; end when;
+end C313;
+//// model: C314
+model C314
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen terminal() then y = b; end when;
+end C314;
+//// model: C315
+model C315
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen not initial() then y = b; end when;
+end C315;
+//// model: C316
+model C316
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen initial() or a > 1 then y = b; end when;
+end C316;
+//// model: C317
+model C317
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen {initial(), a > 1} then y = b; end when;
+end C317;
+//// model: C318
+model C318
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen sample(0, 1) then y = b; end when;
+end C318;
+//// model: C319
+model C319
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen sample(0, pr) then y = b; end when;
+end C319;
+//// model: C320
+model C320
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen sample(0, 1) and p then y = b; end when;
+end C320;
+//// model: C321
+model C321
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen change(p) then y = b; end when;
+end C321;
+//// model: C322
+model C322
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen change(k) then y = b; end when;
+end C322;
+//// model: C323
+model C323
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen edge(p) then y = b; end when;
+end C323;
+//// model: C324
+model C324
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen pre(p) then y = b; end when;
+end C324;
+//// model: C325
+model C325
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen not pre(p) then y = b; end when;
+end C325;
+//// model: C326
+model C326
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen p and not pre(p) then y = b; end when;
+end C326;
+//// model: C327
+model C327
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen edge(p) or edge(q) then y = b; end when;
+end C327;
+//// model: C328
+model C328
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen pre(k) > 0 then y = b; end when;
+end C328;
+//// model: C329
+model C329
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen k > pre(k) then y = b; end when;
+end C329;
+//// model: C330
+model C330
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen k <> pre(k) then y = b; end when;
+end C330;
+//// model: C331
+model C331
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen k == 2 then y = b; end when;
+end C331;
+//// model: C332
+model C332
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen k >= 1 then y = b; end when;
+end C332;
+//// model: C333
+model C333
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen noEvent(a > 1) then y = b; end when;
+end C333;
+//// model: C334
+model C334
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen noEvent(a) > 1 then y = b; end when;
+end C334;
+//// model: C335
+model C335
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen true then y = b; end when;
+end C335;
+//// model: C336
+model C336
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen false then y = b; end when;
+end C336;
+//// model: C337
+model C337
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen pb then y = b; end when;
+end C337;
+//// model: C338
+model C338
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen pb and p then y = b; end when;
+end C338;
+//// model: C339
+model C339
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = a > 1;
+  Boolean q = b > 1;
+  Integer k = integer(a);
+  Boolean v[2] = {a > 2, b > 2};
+  parameter Boolean pb = true;
+  parameter Real pr = 1;
+  Real y;
+equation
+  when c > 5 then y = a; elsewhen time > 1 then y = b; end when;
+end C339;

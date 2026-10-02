@@ -1,0 +1,110 @@
+//// set: fcm-f2 — 类注释的转义、别名 / 继承函数的注释
+//// model: F20
+model F20
+  Real a = time;
+  Real b = 2 * time;
+  function f "back\slash" input Real x; output Real y; algorithm y := x; end f; Real y = f(a);
+end F20;
+//// model: F21
+model F21
+  Real a = time;
+  Real b = 2 * time;
+  function f "q \"x\" \ y" input Real x; output Real y; algorithm y := x; end f; Real y = f(a);
+end F21;
+//// model: F22
+model F22
+  Real a = time;
+  Real b = 2 * time;
+  function f "plain" input Real x; output Real y; algorithm y := x; end f; Real y = f(a);
+end F22;
+//// model: F23
+model F23
+  Real a = time;
+  Real b = 2 * time;
+  function f "a 'q' b" input Real x; output Real y; algorithm y := x; end f; Real y = f(a);
+end F23;
+//// model: F24
+model F24
+  Real a = time;
+  Real b = 2 * time;
+  function g "g comment" input Real x; output Real y; algorithm y := 2 * x; end g; function f = g; Real y = f(a);
+end F24;
+//// model: F25
+model F25
+  Real a = time;
+  Real b = 2 * time;
+  function g "g comment" input Real x; output Real y; algorithm y := 2 * x; end g; function f = g "f comment"; Real y = f(a);
+end F25;
+//// model: F26
+model F26
+  Real a = time;
+  Real b = 2 * time;
+  function g "g comment" input Real x; output Real y; algorithm y := 2 * x; end g; function f extends g; end f; Real y = f(a);
+end F26;
+//// model: F27
+model F27
+  Real a = time;
+  Real b = 2 * time;
+  function g "g comment" input Real x; output Real y; algorithm y := 2 * x; end g; function f "f comment" extends g; end f; Real y = f(a);
+end F27;
+//// model: F28
+model F28
+  Real a = time;
+  Real b = 2 * time;
+  function g "g comment" input Real x; input Real k = 1; output Real y; algorithm y := k * x; end g; function f = g(k = 2) "f mod comment"; Real y = f(a);
+end F28;
+//// model: F29
+model F29
+  Real a = time;
+  Real b = 2 * time;
+  function g "g comment" input Real x; output Real y; algorithm y := 2 * x; end g; function h = g "h comment"; function f = h; Real y = f(a);
+end F29;
+//// model: BASE
+model BASE
+  Real a = time;
+  Real b = 2 * time;
+end BASE;
+//// model: F210
+model F210
+  Real a = time;
+  Real b = 2 * time;
+  function f "ext fn" input Real x; output Real y; external "C" y = sin(x); end f; Real y = f(a);
+end F210;
+//// model: F211
+model F211
+  Real a = time;
+  Real b = 2 * time;
+  record R "rec \"q\" comment" Real p; end R; R r = R(a); Real y = r.p;
+end F211;
+//// model: F212
+model F212
+  Real a = time;
+  Real b = 2 * time;
+  record R "rec comment" Real p "field"; end R; function f input Real x; output R r; algorithm r := R(x); end f; R r = f(a);
+end F212;
+//// model: F213
+model F213
+  Real a = time;
+  Real b = 2 * time;
+  Real y = a "var \"q\" comment";
+end F213;
+//// model: F214
+model F214
+  Real a = time;
+  Real b = 2 * time;
+  Real y = a "var back\slash";
+end F214;
+//// model: F215
+model F215
+  Real a = time;
+  Real b = 2 * time;
+  Real y;
+equation
+  y = a "eq \"q\" comment";
+end F215;
+//// model: F216
+model F216
+  Real a = time;
+  Real b = 2 * time;
+  Real y; algorithm y := a "stmt \"q\" comment";
+end F216;

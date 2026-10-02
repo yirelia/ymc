@@ -135,6 +135,7 @@ class FlatDumper {
     out_ += ' ';
     out_ += in_.str(p.name);
     if (p.binding.is_valid()) { out_ += " = "; expr(p.binding); }
+    comment(p.comment, " ");
     out_ += ";\n";
   }
 
@@ -172,11 +173,7 @@ class FlatDumper {
       out_ += " = ";
       expr(v.binding);
     }
-    if (v.comment.is_valid()) {
-      out_ += " \"";
-      out_ += escape_modelica_string(in_.str(v.comment), /*nl=*/false);
-      out_ += '"';
-    }
+    comment(v.comment, " ");
     out_ += ";\n";
   }
 
@@ -236,10 +233,15 @@ class FlatDumper {
            in_.str(p.back()) == "error";
   }
 
-  void comment(Symbol c) {
+  // 注释里的换行后补续行缩进 ind（Susan 模板对多行文本补所在块的缩进，同 expr 的多行字符串）：方程 / 语句的注释跟所在块
+  //（2 格、if 体内 4 格），变量声明（含函数形参 / 局部）的注释只缩 1 格（NLC 探针 N1）。
+  void comment(Symbol c, std::string_view ind) {
     if (!c.is_valid()) return;
     out_ += " \"";
-    out_ += escape_modelica_string(in_.str(c), /*nl=*/false);
+    std::string t = escape_modelica_string(in_.str(c), /*nl=*/false);
+    for (std::size_t pos = t.find('\n'); pos != std::string::npos; pos = t.find('\n', pos + 1 + ind.size()))
+      t.insert(pos + 1, ind);
+    out_ += t;
     out_ += '"';
   }
 
@@ -312,7 +314,7 @@ class FlatDumper {
         out_ += indent + "end when";
         break;
     }
-    comment(q.comment);
+    comment(q.comment, ind_);
     out_ += ";\n";
   }
 
@@ -392,7 +394,7 @@ class FlatDumper {
         out_ += indent + "end when";
         break;
     }
-    comment(s.comment);
+    comment(s.comment, ind_);
     out_ += ";\n";
   }
 

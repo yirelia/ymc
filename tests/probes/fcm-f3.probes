@@ -1,0 +1,162 @@
+//// set: fcm-f3 — 变量 / 方程 / 语句注释与字符串字面量里的转义序列
+//// model: F30
+model F30
+  Real a = time;
+  Real b = 2 * time;
+  Real y = a "v1 back\\slash";
+end F30;
+//// model: F31
+model F31
+  Real a = time;
+  Real b = 2 * time;
+  Real y = a "v2 line\nbreak";
+end F31;
+//// model: F32
+model F32
+  Real a = time;
+  Real b = 2 * time;
+  Real y = a "v3 tab\there";
+end F32;
+//// model: F33
+model F33
+  Real a = time;
+  Real b = 2 * time;
+  Real y = a "v4 esc \\n kept";
+end F33;
+//// model: F34
+model F34
+  Real a = time;
+  Real b = 2 * time;
+  Real y = a "v5 \\\\ two";
+end F34;
+//// model: F35
+model F35
+  Real a = time;
+  Real b = 2 * time;
+  Real y = a "v6 q \"x\"";
+end F35;
+//// model: F36
+model F36
+  Real a = time;
+  Real b = 2 * time;
+  Real y = a "v7 \\\"";
+end F36;
+//// model: F37
+model F37
+  Real a = time;
+  Real b = 2 * time;
+  Real y = a "v8 bell\a";
+end F37;
+//// model: F38
+model F38
+  Real a = time;
+  Real b = 2 * time;
+  Real y = a "v9 '\''";
+end F38;
+//// model: F39
+model F39
+  Real a = time;
+  Real b = 2 * time;
+  Real y = a "v10 \?";
+end F39;
+//// model: BASE
+model BASE
+  Real a = time;
+  Real b = 2 * time;
+end BASE;
+//// model: F310
+model F310
+  Real a = time;
+  Real b = 2 * time;
+  Real y;
+equation
+  y = a "e1 line\nbreak";
+end F310;
+//// model: F311
+model F311
+  Real a = time;
+  Real b = 2 * time;
+  Real y;
+equation
+  y = a "e2 esc \\n kept";
+end F311;
+//// model: F312
+model F312
+  Real a = time;
+  Real b = 2 * time;
+  Real y;
+equation
+  y = a "e3 back\\slash";
+end F312;
+//// model: F313
+model F313
+  Real a = time;
+  Real b = 2 * time;
+  Real y; algorithm y := a "s1 line\nbreak";
+end F313;
+//// model: F314
+model F314
+  Real a = time;
+  Real b = 2 * time;
+  Real y; algorithm y := a "s2 esc \\n kept";
+end F314;
+//// model: F315
+model F315
+  Real a = time;
+  Real b = 2 * time;
+  Real y; algorithm y := a "s3 back\\slash";
+end F315;
+//// model: F316
+model F316
+  Real a = time;
+  Real b = 2 * time;
+  function f input Real x "p1 line\nbreak"; output Real y "p2 esc \\n kept"; algorithm y := x "fs esc \\n kept"; end f; Real y = f(a);
+end F316;
+//// model: F317
+model F317
+  Real a = time;
+  Real b = 2 * time;
+  parameter String s = "str line\nbreak"; Real y = a;
+end F317;
+//// model: F318
+model F318
+  Real a = time;
+  Real b = 2 * time;
+  parameter String s = "str esc \\n kept"; Real y = a;
+end F318;
+//// model: F319
+model F319
+  Real a = time;
+  Real b = 2 * time;
+  parameter String s = "str q \"x\" \\"; Real y = a;
+end F319;
+//// model: F320
+model F320
+  Real a = time;
+  Real b = 2 * time;
+  Real y = a;
+equation
+  assert(y > 0, "m line\nbreak");
+end F320;
+//// model: F321
+model F321
+  Real a = time;
+  Real b = 2 * time;
+  Real y = a;
+equation
+  assert(y > 0, "m esc \\n kept");
+end F321;
+//// model: F322
+model F322
+  Real a = time;
+  Real b = 2 * time;
+  Real y = a;
+equation
+  assert(y > 0, "m" + " q \"x\"");
+end F322;
+//// model: F323
+model F323
+  Real a = time;
+  Real b = 2 * time;
+  String s = "a\tb" + "c\\d";
+end F323;
