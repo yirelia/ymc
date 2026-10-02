@@ -1045,6 +1045,18 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           476→484（Inline1–6、ArrayAssignEmpty、ExternalFunctionAnno）；+2 单测（194）。
           **重跑旧探针集发现 59k 的回归**（ba/z 8 例 FAIL）：别名连带不是与声明序无关——`parameter Boolean pd = pt` 在 pt 被
           if 表达式条件（定型期）标结构**之前**定型 → omc 不 final。下一桶（59m）修。
+    - [x] (59m) 结构标记按 1.25.0 的三个阶段重做 + 三个潜伏错（2026-10-02）：
+          **标记带时刻**（MarkPhase，源码按 v1.25.0 标签）：Early = 实例化期（维 / Evaluate / 条件 / fixed / 绑定里数组构造子的
+          迭代范围）与 `:` 维数组的绑定；Binding = 绑定 / 属性定型期（按声明序，参数下标、参数范围、fill 维实参）；Late =
+          方程 / 算法段与压平期（for 范围、if 表达式选支、if 方程条件）。**依赖连带**只进"尚未定型"的绑定（markComponent 的
+          `Binding.untypedExp`）：Early 一路连带、Binding 看该参数发射了没有、Late 不连带（此前一律连带：`n = k; for i in 1:n`
+          把 k 也打成 final）。**别名连带**在别名自己的绑定定型时判（checkComponentBindingVariability）：目标须在那之前已是
+          结构参数（修 59k："与声明序无关"是错的，`m = k; k = n; Real y[n]` 的 m 不 final）。
+          **求值帧跟书写处实例走**（FrameAt）：外层写的修饰表达式 `M m(v = c[i], x(fixed = b))` 此前按 m 里的同名参数取值
+          （`m.v = c[2]`、`fixed = false`）。**求值事务**：顶层带参数求值失败时撤销途中的结构标记（`if time > k` 的 k 此前被
+          标 final）。**if 表达式两支类型不相容** → SKIP（此前放行 `if c then 1 else "a"`）。`size(界非字面量的切片)` 1.25.0
+          原样留下 → SKIP。探针 AO a1–a7 共 100 个模型：82 PASS / 18 SKIP / 0 FAIL；全部旧探针目录（约 1100 个模型）重跑 0 FAIL。
+          → 全 scodeinst PASS 467、nf-live 484（均不变，无判定变化）；+2 单测（196）。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、

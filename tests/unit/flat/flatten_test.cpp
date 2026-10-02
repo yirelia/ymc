@@ -3073,6 +3073,83 @@ YMC_TEST(flatten_unreferenced_functions_and_substituted_calls) {
   YMC_CHECK_EQ(out, std::string("<unsupported:constant user call after structural substitution>"));
 }
 
+YMC_TEST(flatten_structural_mark_phases) {
+  // 结构标记分阶段（v1.25.0 NFStructural.markComponent :311-326 只连带"绑定尚未定型"的参数的依赖；别名连带在别名自己的
+  // 绑定定型时判，NFTyping.checkComponentBindingVariability :1150-1159）。期望 = omc 1.25.0 实跑 AOT1–AOT5（2026-10-02）。
+  // 别名的别名要目标先定型：m = k 定型时 k 还不是结构参数 → m 只是被求值，不 final。
+  YMC_CHECK_EQ(flatten_src("model AOT1\n  parameter Integer m = k;\n  parameter Integer k = n;\n  parameter Integer n = 2;\n"
+                           "  Real y[n];\n  Real x = m * time;\nend AOT1;\n"),
+               std::string("class AOT1\n  parameter Integer m = 2;\n  final parameter Integer k = 2;\n"
+                           "  final parameter Integer n = 2;\n  Real y[1];\n  Real y[2];\n  Real x = /*Real*/(m) * time;\n"
+                           "end AOT1;\n"));
+  // 绑定定型期的标记（参数下标 `c[i]`）：i 已定型 → 它的依赖 i0 不连带；声明在 v 之前的别名 j 不连带、之后的 l 连带。
+  YMC_CHECK_EQ(flatten_src("model AOT2\n  parameter Integer i0 = 1;\n  parameter Integer i = i0;\n  parameter Integer j = i;\n"
+                           "  parameter Integer j0 = i0;\n  Real c[2] = {time, 2};\n  Real v = c[i];\n"
+                           "  parameter Integer l = i;\n  parameter Integer l0 = i0;\n  Real w = (j + j0 + l + l0) * time;\n"
+                           "end AOT2;\n"),
+               std::string("class AOT2\n  parameter Integer i0 = 1;\n  final parameter Integer i = 1;\n"
+                           "  parameter Integer j = 1;\n  parameter Integer j0 = i0;\n  Real c[1];\n  Real c[2];\n"
+                           "  Real v = c[1];\n  final parameter Integer l = 1;\n  parameter Integer l0 = i0;\n"
+                           "  Real w = /*Real*/(j + j0 + 1 + l0) * time;\nequation\n  c = {time, 2.0};\nend AOT2;\n"));
+  // 同样的下标，但 i 声明在 v 之后（标记时绑定未定型）→ 依赖 i0 连带，i0 的别名 j 也连带。
+  YMC_CHECK_EQ(flatten_src("model AOT3\n  Real c[2] = {time, 2};\n  Real v = c[i];\n  parameter Integer i = i0;\n"
+                           "  parameter Integer i0 = 1;\n  parameter Integer j = i0;\n  Real w = j * time;\nend AOT3;\n"),
+               std::string("class AOT3\n  Real c[1];\n  Real c[2];\n  Real v = c[1];\n  final parameter Integer i = 1;\n"
+                           "  final parameter Integer i0 = 1;\n  final parameter Integer j = 1;\n  Real w = time;\nequation\n"
+                           "  c = {time, 2.0};\nend AOT3;\n"));
+  // 方程段（for 范围）与压平期（if 表达式选支）的标记：不连带依赖（k），也不连带别名（m / pd / pe，哪怕声明在后）。
+  YMC_CHECK_EQ(flatten_src("model AOT4\n  parameter Integer k = 2;\n  parameter Integer n = k;\n  parameter Integer m = n;\n"
+                           "  parameter Boolean pt = true;\n  parameter Boolean pd = pt;\n  Real x[2];\n"
+                           "  Real a1[2] = if pt then {1, 2} else {3, 4, 5};\n  parameter Boolean pe = pt;\n"
+                           "  Real w = if pd and pe then m * time else 1;\nequation\n  for i in 1:n loop\n    x[i] = time;\n"
+                           "  end for;\nend AOT4;\n"),
+               std::string("class AOT4\n  parameter Integer k = 2;\n  final parameter Integer n = 2;\n"
+                           "  parameter Integer m = 2;\n  final parameter Boolean pt = true;\n  parameter Boolean pd = true;\n"
+                           "  Real x[1];\n  Real x[2];\n  Real a1[1];\n  Real a1[2];\n  parameter Boolean pe = true;\n"
+                           "  Real w = if pd and pe then /*Real*/(m) * time else 1.0;\nequation\n  a1 = {1.0, 2.0};\n"
+                           "  x[1] = time;\n  x[2] = time;\nend AOT4;\n"));
+  // 实例化期 / 组件定型期的标记（绑定里数组构造子的迭代范围、`:` 维数组的绑定、fixed 属性）：别名一律连带。
+  YMC_CHECK_EQ(flatten_src("model AOT5\n  parameter Integer n = 2;\n  parameter Integer m = n;\n  parameter Integer p = 2;\n"
+                           "  parameter Integer q = p;\n  parameter Boolean b = true;\n  parameter Boolean c = b;\n"
+                           "  Real x[2] = {i * time for i in 1:n};\n  Real y[3] = {time, 1, 2};\n  Real s[:] = y[1:p];\n"
+                           "  Real z(fixed = b, start = 1);\n  Real w = if c then (m + q) * time else 1;\nequation\n"
+                           "  der(z) = 1;\nend AOT5;\n"),
+               std::string("class AOT5\n  final parameter Integer n = 2;\n  final parameter Integer m = 2;\n"
+                           "  final parameter Integer p = 2;\n  final parameter Integer q = 2;\n"
+                           "  final parameter Boolean b = true;\n  final parameter Boolean c = true;\n  Real x[1];\n"
+                           "  Real x[2];\n  Real y[1];\n  Real y[2];\n  Real y[3];\n  Real s[1];\n  Real s[2];\n"
+                           "  Real z(start = 1.0, fixed = true);\n  Real w = 4.0 * time;\nequation\n"
+                           "  x = array(/*Real*/(i) * time for i in 1:2);\n  y = {time, 1.0, 2.0};\n  s = y[1:2];\n"
+                           "  der(z) = 1.0;\nend AOT5;\n"));
+}
+
+YMC_TEST(flatten_evaluation_frame_and_failed_marks) {
+  // 外层写的修饰表达式里的参数按**书写处**实例求值与标记，不是被修饰实例里的同名参数（此前 `m.v = c[2]`、`fixed = false`、
+  // m.i 被标 final）。期望 = omc 1.25.0 实跑 AOT6（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model AOT6\n  model M\n    parameter Integer i = 2;\n    parameter Boolean b = false;\n    Real v;\n"
+                           "    Real x(start = 1);\n  equation\n    der(x) = 1;\n  end M;\n  parameter Integer i = 1;\n"
+                           "  parameter Boolean b = true;\n  Real c[2] = {time, 2};\n  M m(v = c[i], x(fixed = b));\nend AOT6;\n"),
+               std::string("class AOT6\n  final parameter Integer i = 1;\n  final parameter Boolean b = true;\n  Real c[1];\n"
+                           "  Real c[2];\n  parameter Integer m.i = 2;\n  parameter Boolean m.b = false;\n  Real m.v = c[1];\n"
+                           "  Real m.x(start = 1.0, fixed = true);\nequation\n  c = {time, 2.0};\n  der(m.x) = 1.0;\nend AOT6;\n"));
+  // 求不出值的求值不留结构标记：if 方程的运行时条件 `time > k` 里的 k 仍是普通参数。期望 = omc 1.25.0 实跑 AOT7。
+  YMC_CHECK_EQ(flatten_src("model AOT7\n  parameter Real k = 5;\n  Real x;\nequation\n  if time > k then\n    x = 1;\n  else\n"
+                           "    x = 2;\n  end if;\nend AOT7;\n"),
+               std::string("class AOT7\n  parameter Real k = 5.0;\n  Real x;\nequation\n  if time > k then\n    x = 1.0;\n"
+                           "  else\n    x = 2.0;\n  end if;\nend AOT7;\n"));
+  // 1.25.0 对界非字面量的切片的 size 原样留下（`Integer s = size(x[1:n], 1)`，AOS1）→ SKIP；if 两支类型不相容是 omc 类型错
+  //（AOS2）→ SKIP。
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           {"model AOS1\n  parameter Integer n = 2;\n  Real x[3] = {time, 1, 2};\n  Integer s = size(x[1:n], 1);\nend AOS1;\n",
+            "size of non-literal slice"},
+           {"model AOS2\n  Real x = if time > 0 then 1 else \"a\";\nend AOS2;\n", "if-expression branch type mismatch"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

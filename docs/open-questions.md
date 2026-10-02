@@ -88,6 +88,11 @@ Boolean 数组与数组 if 的几处 1.25.0 特殊行为（V4u / V4w 探针；ym
 逐元素合并并化简（`{x[1] > 1, false} or {true, x[2] < 1}` → `{true, x[2] < 1.0}`），而字面量与变量的不化简（`true or b[1]`）；
 混合字面量的 not 逐元素后留 `not true`；数组 if 表达式作属性值（`Real r[3](start = if n == 2 then {1, 2, 3} else {4, 5, 6})`）
 是内部错 `NFScalarize.scalarizeVariable failed`。
+结构参数的标记阶段（AO 探针 a1–a7，2026-10-02）：1.25.0 与工作区源码在依赖连带上不同——v1.25.0 的 `Structural.markComponent`
+只进 `Binding.untypedExp`（绑定尚未定型才连带依赖，NFStructural.mo:322-325，`git show v1.25.0:…`），HEAD 改成了
+`Binding.getExpOpt`（一路连带，NFStructural.mo:326-329）。ymc 按 1.25.0 实测：`parameter Integer k = 2; parameter Integer n = k;`
++ 方程里 `for i in 1:n` → 只有 n final。同批探针见 1.25.0 的一处怪相（ymc 不复刻，命中即 SKIP）：界不是字面量的切片的
+`size` 原样留下、里面的参数也不代入（`Integer s = size(x[1:n], 1)`，连 constant 的 `x[1:c]` 也是；`size(x[1:n]) * {1}` → `n`）。
 
 ## 已研究待实现：多条 connect 连接集（union-find）
 
