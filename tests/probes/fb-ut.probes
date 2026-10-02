@@ -1,0 +1,94 @@
+//// set: fb-ut — 括号规则、函数体数组运算（单测原文）
+//// model: FAS1
+function h
+  input Real u[:];
+  input Real a;
+  output Real v[size(u, 1)];
+algorithm
+  v := u + a;
+end h;
+model FAS1
+  Real x[3] = {time, 1, 2};
+  Real y[3] = h(x, time);
+end FAS1;
+//// model: FAS2
+function h
+  input Real w[3];
+  output Real s;
+algorithm
+  s := w * w;
+end h;
+model FAS2
+  Real x[3] = {time, 1, 2};
+  Real y = h(x);
+end FAS2;
+//// model: FAT1
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+algorithm
+  v := 2 * u;
+  v := a .* u .* u;
+  v := u ./ a;
+  v := a ./ u;
+  v := u .^ 2;
+  v := a .+ u;
+  v := u .- a;
+  v := u .- 2;
+  v := k .- u;
+  v := -(2 * u);
+  v := u * 1;
+  v := u .* (u .* u);
+  v := n * 2.5;
+  v := n * 2;
+  v3 := a .- w;
+  v3 := -w;
+  v3 := (2 * w) .* w;
+  v := (2 * w) .* u;
+  s := sum(u .* (2 * u));
+  s := u * (u .* u);
+  o := s;
+end h;
+model FAT1
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {1, 2, 3}, 2);
+end FAT1;
+//// model: PPT1
+model PPT1
+  Real a = time;
+  Real b = 2 * time;
+  Real c = 3 * time;
+  Boolean p = time > 1;
+  Boolean q = time > 2;
+  Boolean r1 = a < b + c;
+  Boolean r2 = a + b < c - a;
+  Boolean r3 = (a < b) == (b < c);
+  Boolean r4 = a * b < c * (a + b);
+  Boolean r5 = not (not p);
+  Boolean r6 = not (p and q);
+  Boolean r7 = p and (q or p);
+  Boolean r8 = a < (if p then b else c);
+  Real y1 = a - (b - c);
+  Real y2 = a - (b + c);
+  Real y3 = a + (b - c);
+  Real y4 = a / (b * c);
+  Real y5 = a * (b / c);
+  Real y6 = a / (b / c);
+  Real y7 = a ^ (b ^ c);
+  Real y8 = (a ^ b) ^ c;
+  Real y9 = -(a + b);
+  Real y10 = a * (-b);
+  Real y11 = a - (-b);
+  Real y12 = (-a) ^ b;
+  Real y13 = a * (b * c);
+  Real y14 = c + (if p then a else b);
+  Real y15 = a - (b - (c - a));
+end PPT1;

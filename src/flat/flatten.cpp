@@ -2122,7 +2122,7 @@ class Flattener {
     return Type::array_of(Type::of(ek), std::move(ds));
   }
   // 函数语境里把 Integer 运算数提到 Real（matchExpressions）：标量插 Cast / 折字面量、数组字面量逐叶转、fill 调用转填充值
-  //（NFCall.typeCast :1361-1367）；其余 Integer 数组（`/*Real[n]*/(x)`）未做 → invalid。
+  //（NFCall.typeCast :1361-1367）、维未知的数组整体转型；维已知的 Integer 数组未做 → invalid。
   Id<Expr> fn_real_operand(Id<Expr> x) {
     const Type t = op_type(x);
     if (t.element_type().kind == TypeKind::Real) return x;
@@ -2136,6 +2136,10 @@ class Flattener {
       c.ty = Type::array_of(Type::real(), xe.ty.dims);
       return add(std::move(c));
     }
+    // 维未知的 Integer 数组：整体转型（FA 探针 f2 `n * 2.5` → `/*Real[:]*/(n) * 2.5`）。维已知的要按元素展开再逐个转
+    //（`{/*Real*/(n3[1]) * 2.5, …}`），未做。
+    for (const Dimension& d : t.dims)
+      if (d.kind != DimKind::Integer) return array_real_cast(x);
     return {};
   }
 
@@ -2152,22 +2156,10 @@ class Flattener {
     // :1019-1093，未知 / 表达式维与任何维相等，Dimension.isEqual :294-307；ImplicitRangeExp3 `x * y` → Real）；逐元素运算
     // 同秩相容维。
     if (fn_scope_) {
-      // 1.25.0 在函数体里对数组运算的打印形态（FA 探针 f1），ymc 目前只对上其中几种，其余先挡住 → SKIP：
-      //   点号算符：`u .* u` / `u ./ u` / `u .^ 2.0` / `a ./ u` 留点号，`u .+ a`、`a .- u` 留点号，`a .+ u` → `u .+ a`，
-      //   `u .- a` → `u .+ (-a)`；只有 数组 .+ 数组（→ `+`）、数组 .* 标量（→ `*`）、数组 ./ 标量（→ `/`）与现有打印一致。
-      //   标量 * 数组（维未知）：omc 换成 `数组 * 标量`（`2 * u` → `u * 2.0`）。
-      //   同一个数组自己减自己（`u - u`）：omc 报错。
-      const bool ew = orig == Op::EWAdd || orig == Op::EWSub || orig == Op::EWMul || orig == Op::EWDiv || orig == Op::EWPow;
-      auto unknown_dims = [](const Type& t) {
-        for (const Dimension& d : t.dims) if (d.kind != DimKind::Integer) return true;
-        return false;
-      };
-      if (ew && !((orig == Op::EWAdd && aarr && barr) || ((orig == Op::EWMul || orig == Op::EWDiv) && aarr && !barr))) {
-        set_unsupported("elementwise array operator in function body");
-        return lit_int(0);
-      }
-      if (orig == Op::Mul && !aarr && barr && unknown_dims(tb)) {
-        set_unsupported("scalar * array in function body (omc swaps the operands)");
+      // 标量与数组之间不带点号的 + / -、标量 / 数组：omc 报类型错（FA 探针 f3 `u + a`、`a / u`）。同一个数组自己减自己
+      //（`u - u`，维未知）：omc 报错。
+      if (((orig == Op::Add || orig == Op::Sub) && aarr != barr) || (orig == Op::Div && !aarr && barr)) {
+        set_unsupported("array and scalar operands without elementwise operator");
         return lit_int(0);
       }
       if ((orig == Op::Sub || orig == Op::EWSub) && aarr && barr && result_.model.exprs[a].kind == ExprKind::Cref &&
@@ -2176,7 +2168,7 @@ class Flattener {
         set_unsupported("array minus itself in function body");
         return lit_int(0);
       }
-      const bool freal = op == BinOp::Div || ea == TypeKind::Real || eb == TypeKind::Real;
+      const bool freal = op == BinOp::Div || op == BinOp::Pow || ea == TypeKind::Real || eb == TypeKind::Real;
       if (freal) {
         a = fn_real_operand(a);
         b = fn_real_operand(b);
@@ -2216,7 +2208,8 @@ class Flattener {
       r.b = b;
       r.ty = scalar_res ? relem : Type::array_of(relem, std::move(rd));
       const Id<Expr> rid = add(std::move(r));
-      if (product) product_bins_.insert(rid.raw);
+      if (product) result_.model.product_binaries.insert(rid.raw);
+      else fn_array_ops_[rid.raw] = orig;   // 打印形态（点号 / 操作数换位）留到化简时定：能按元素展开的不用换（fn_array_form）
       return rid;
     }
     if (orig == Op::Mul && aarr && barr) return model_array_product(a, b);   // 向量 / 矩阵积：展开成积和
@@ -10622,6 +10615,45 @@ class Flattener {
     return map_el(map_el, ex);
   }
 
+  // 函数体里没能按元素展开（维未知）的数组二元运算的打印形态（FA 探针 f1–f3；对应的 DAE 算符类别见
+  // FlatModel::ew_binaries）：
+  //   `*` / `.*`  标量挪到右边、不带点（`2 * u`、`a .* u` → `u * a`）；数组 .* 数组带点。
+  //   `/` / `./`  数组 / 标量不带点；标量 ./ 数组、数组 ./ 数组带点。
+  //   `.^`        都带点。
+  //   `.+`        数组在左、带点（`a .+ u` → `u .+ a`）；数组 + 数组不带点。
+  //   `.-`        数组 .- 标量 → `u .+ (-a)`（没有 SUB_ARRAY_SCALAR 这个算符，`u .- 2` → `u .+ -2.0`）；标量 .- 数组带点；
+  //               数组 - 数组不带点。
+  Id<Expr> fn_array_form(Id<Expr> a, Op orig, BinOp op, Id<Expr> b, const Type& ty) {
+    const bool aarr = op_type(a).is_array(), barr = op_type(b).is_array();
+    auto dot = [&](Id<Expr> x, BinOp o, Id<Expr> y) {
+      const Id<Expr> r = make_bin(x, o, y, ty);
+      result_.model.ew_binaries.insert(r.raw);
+      return r;
+    };
+    switch (orig) {
+      case Op::Mul:
+      case Op::EWMul:
+        if (aarr && barr) return dot(a, BinOp::Mul, b);   // `.*`（不带点的 数组 * 数组 是积，不到这里）
+        return aarr ? make_bin(a, BinOp::Mul, b, ty) : make_bin(b, BinOp::Mul, a, ty);
+      case Op::Div:
+      case Op::EWDiv:
+        return aarr && !barr ? make_bin(a, BinOp::Div, b, ty) : dot(a, BinOp::Div, b);
+      case Op::EWPow:
+        return dot(a, BinOp::Pow, b);
+      case Op::Add:
+      case Op::EWAdd:
+        if (aarr && barr) return make_bin(a, BinOp::Add, b, ty);
+        return aarr ? dot(a, BinOp::Add, b) : dot(b, BinOp::Add, a);
+      case Op::Sub:
+      case Op::EWSub:
+        if (aarr && barr) return make_bin(a, BinOp::Sub, b, ty);
+        if (aarr) return dot(a, BinOp::Add, negate_expr(b));
+        return dot(a, BinOp::Sub, b);
+      default:
+        return make_bin(a, op, b, ty);
+    }
+  }
+
   Id<Expr> simplify_binary_op(Id<Expr> a, BinOp op, Id<Expr> b, const Type ty) {
     const bool scalar = !ty.is_array();
     switch (op) {
@@ -10714,12 +10746,20 @@ class Flattener {
         }
         // 标量积（向量 * 向量，结果是标量）也走这里：两侧都能展开时 omc 展成积和（FA 探针 f1 `s := w * w` →
         // `w[1] * w[1] + …`），未做 → fn_expand_binary 里 SKIP。
-        if (fn_scope_ && (ty.is_array() || product_bins_.count(id.raw) > 0)) {
-          const bool product = product_bins_.count(id.raw) > 0;
+        if (fn_scope_ && (ty.is_array() || result_.model.product_binaries.count(id.raw) > 0)) {
+          const bool product = result_.model.product_binaries.count(id.raw) > 0;
           if (Id<Expr> ex = fn_expand_binary(a, op, b, ty, product); ex.is_valid()) return ex;
           if (result_.unsupported) return id;
-          const Id<Expr> r = simplify_binary_op(a, op, b, ty);
-          if (product && result_.model.exprs[r].kind == ExprKind::Binary) product_bins_.insert(r.raw);
+          if (product) {
+            const Id<Expr> r = simplify_binary_op(a, op, b, ty);
+            if (result_.model.exprs[r].kind == ExprKind::Binary) result_.model.product_binaries.insert(r.raw);
+            return r;
+          }
+          // 没能按元素展开（维未知）的数组运算：按书写的算符定打印形态；已定形的只换子式。都不做恒等化简
+          //（FA 探针 f3：`u * 1` → `u * 1.0`、`u .+ 0` → `u .+ 0.0`、`u / 1` → `u / 1.0`）。
+          if (const auto oit = fn_array_ops_.find(id.raw); oit != fn_array_ops_.end()) return fn_array_form(a, oit->second, op, b, ty);
+          const Id<Expr> r = make_bin(a, op, b, ty);
+          if (result_.model.ew_binaries.count(id.raw)) result_.model.ew_binaries.insert(r.raw);
           return r;
         }
         return simplify_binary_op(a, op, b, ty);
@@ -10808,6 +10848,10 @@ class Flattener {
       case ExprKind::LogicalNot: {
         const Id<Expr> a0 = result_.model.exprs[id].a;
         const Type ty = result_.model.exprs[id].ty;
+        // `not (not e)` → e（simplifyLogicUnary，NFSimplifyExp.mo:1244-1266 v1.25.0）：只认书写出来的双重否定——里层化简后
+        // 才成 `not e` 的不收（AP p4 探针 `not (true and not bb[1])` → `not (not bb[1])`；PP 探针 `not (not p)` → `p`）。
+        if (!ty.is_array() && result_.model.exprs[a0].kind == ExprKind::LogicalNot)
+          return simplify_expr(result_.model.exprs[a0].a);
         Id<Expr> a = simplify_expr(a0);
         const Expr& ea = result_.model.exprs[a];
         if (ea.kind == ExprKind::BoolLit) return lit_bool(!ea.bval);
@@ -13368,7 +13412,7 @@ class Flattener {
   std::unordered_set<std::uint32_t> subst_calls_;               // 实参被结构参数代入改过的调用（clone_subst 登记）
   std::vector<std::vector<Symbol>> model_record_ctors_;         // 模型表达式里整记录引用需要的构造函数（collect_record_ctors）
   std::unordered_map<std::uint32_t, NodeId> rec_node_cache_;    // 记录类定义 → 某个实例类节点（record_class_node）
-  std::unordered_set<std::uint32_t> product_bins_;              // 函数语境里的向量 / 矩阵积 Binary 节点（非逐元素）
+  std::unordered_map<std::uint32_t, Op> fn_array_ops_;          // 函数语境的数组二元运算节点 → 书写的算符（fn_array_form）
   std::unordered_set<std::uint32_t> scalarized_logicals_;       // scalarize 逐元素建的 and / or 节点（simplify 不做吸收律）
   bool noret_call_ = false;                                     // 正在定型一条无返回值调用语句的最外层调用（见 noret_call）
   std::unordered_set<std::uint32_t> nofold_bins_;               // sum / product 展开出的元素链的 Binary 节点（simplify 原样留）

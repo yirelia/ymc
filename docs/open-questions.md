@@ -111,6 +111,10 @@ if 语句全空时语句被删、所在算法段留下一个空的 `algorithm`�
 `Real m2[3, 2]` 的 `m2[1:2]`（前两行）被打成 `m2[:]`，含义变了。反向的不改含义、照做：`Real m[2, 3]` 的 `m[1:2]` 明明是
 整段却原样留下。
 
+函数体里的数组运算的两处 1.25.0 怪相（FA 探针 f1 / f3，2026-10-02；ymc 不复刻，命中即 SKIP）：维未知的数组自己减自己
+（`v := u - u`、`ni := n - n`）是内部错（化简想把 x - x 折成 0，却不知道该多大）；语句位置的向量化调用打成
+`array(f(x[$i1]) for $i1 in 1:3);`。
+
 Integer 的极值（待用户定，2026-10-02）：`max` / `min` 作用在空的 Integer 数组 / 空范围上取 `∓System.intMaxLit`（Expression.makeMinValue / makeMaxValue，v1.25.0 NFExpression.mo:4908-4934），这个值随 omc 构建的整数位宽而变——本机安装版 1.25.0（Windows）打 `1073741823`，testsuite 文件（64 位 Linux 生成）是 `4611686018427387903`。跟实跑的 omc 就要把 30 位的值写进 ymc，跟文件又过不了 oracle=live 门；ymc 目前两边都不跟，遇到即 SKIP（`Integer extreme of empty min/max (platform-dependent in omc)`）。受影响：scodeinst 的 CevalReduction1、FuncBuiltinMax / Max2 / Min / Min2、FuncBuiltinReduction 六例（其余内容已与 1.25.0 一致，只差这一个值）。Real（`±8.777798510069901e304`）、Boolean、枚举的极值与平台无关，已做。
 
 ## 已研究待实现：多条 connect 连接集（union-find）

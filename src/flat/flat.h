@@ -8,6 +8,7 @@
 #pragma once
 #include <cstdint>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "base/arena.h"
@@ -141,6 +142,10 @@ struct FlatModel {
   ExprArena exprs;
   Arena<FlatEquation> eqs;
   Arena<FlatStatement> stmts;
+  // 函数体里没被展开的数组二元运算节点（Expr 的 raw id）按 DAE 算符类别分两类，打印时点号 / 括号规则不同（ExprDumper）：
+  std::unordered_set<std::uint32_t> ew_binaries;        // 打点号的：MUL_ARR `.*`、DIV_ARR / DIV_SCALAR_ARRAY `./`、POW_* `.^`、
+                                                        // ADD_ARRAY_SCALAR `.+`、SUB_SCALAR_ARRAY `.-`
+  std::unordered_set<std::uint32_t> product_binaries;   // 向量 / 矩阵积（MUL_SCALAR_PRODUCT / MUL_MATRIX_PRODUCT，不可结合）
 
   Id<FlatEquation> add_eq(FlatEquation e) { return eqs.add(std::move(e)); }
   Id<FlatStatement> add_stmt(FlatStatement s) { return stmts.add(std::move(s)); }

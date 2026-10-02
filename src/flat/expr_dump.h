@@ -5,7 +5,9 @@
 // 运算符间距：`+ -` 两侧空格、`* / ^` 无空格、一元负紧贴、`not` 后一空格；CAST 打 `/*Real*/(exp)`；
 // Real 复用 `real_literal_text`（S2 已按 ryu_to_hr 实现）。
 #pragma once
+#include <cstdint>
 #include <string>
+#include <unordered_set>
 
 #include "base/arena.h"
 #include "base/symbol.h"
@@ -14,6 +16,9 @@
 namespace ymc {
 
 // 打印一个类型化表达式（顶层上下文，不加外围括号）。interner 用于取名字/字符串内容。
-[[nodiscard]] std::string dump_expr(const ExprArena& a, const Interner& in, Id<Expr> e);
+// ew / product：打点号的数组二元运算节点、向量 / 矩阵积节点（见 FlatModel::ew_binaries / product_binaries；可空）。
+[[nodiscard]] std::string dump_expr(const ExprArena& a, const Interner& in, Id<Expr> e,
+                                    const std::unordered_set<std::uint32_t>* ew = nullptr,
+                                    const std::unordered_set<std::uint32_t>* product = nullptr);
 
 }  // namespace ymc

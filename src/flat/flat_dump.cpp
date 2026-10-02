@@ -62,7 +62,7 @@ class FlatDumper {
   // 表达式文本里的换行（多行字符串字面量）后补当前行缩进：Susan 模板对插入文本的每个新行补所在块的缩进
   //（YmcStr1 探针：变量 / 方程 2 格、if 体内 4 格）。
   void expr(Id<Expr> e) {
-    std::string t = dump_expr(m_.exprs, in_, e);
+    std::string t = dump_expr(m_.exprs, in_, e, &m_.ew_binaries, &m_.product_binaries);
     for (std::size_t pos = t.find('\n'); pos != std::string::npos; pos = t.find('\n', pos + 1 + ind_.size()))
       t.insert(pos + 1, ind_);
     out_ += t;

@@ -3586,6 +3586,71 @@ YMC_TEST(flatten_array_expression_call_arguments) {
   }
 }
 
+YMC_TEST(flatten_expression_parenthesization) {
+  // 括号规则（Expression.shouldParenthesize :10751-10786 v1.25.0）：优先级相等时右操作数看**它自己**可不可结合——
+  // `a < b + c` 不加括号（此前按外层算符判、打成 `a < (b + c)`），`a - (b - c)`、`a / (b / c)`、`a ^ (b ^ c)` 加；
+  // 书写出来的双重否定 `not (not p)` → `p`（simplifyLogicUnary）。期望 = omc 1.25.0 实跑 PPT1（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model PPT1\n  Real a = time;\n  Real b = 2 * time;\n  Real c = 3 * time;\n  Boolean p = time > 1;\n"
+                           "  Boolean q = time > 2;\n  Boolean r1 = a < b + c;\n  Boolean r2 = a + b < c - a;\n"
+                           "  Boolean r3 = (a < b) == (b < c);\n  Boolean r4 = a * b < c * (a + b);\n"
+                           "  Boolean r5 = not (not p);\n  Boolean r6 = not (p and q);\n  Boolean r7 = p and (q or p);\n"
+                           "  Boolean r8 = a < (if p then b else c);\n  Real y1 = a - (b - c);\n  Real y2 = a - (b + c);\n"
+                           "  Real y3 = a + (b - c);\n  Real y4 = a / (b * c);\n  Real y5 = a * (b / c);\n"
+                           "  Real y6 = a / (b / c);\n  Real y7 = a ^ (b ^ c);\n  Real y8 = (a ^ b) ^ c;\n"
+                           "  Real y9 = -(a + b);\n  Real y10 = a * (-b);\n  Real y11 = a - (-b);\n  Real y12 = (-a) ^ b;\n"
+                           "  Real y13 = a * (b * c);\n  Real y14 = c + (if p then a else b);\n  Real y15 = a - (b - (c - a));\n"
+                           "end PPT1;\n"),
+               std::string("class PPT1\n  Real a = time;\n  Real b = 2.0 * time;\n  Real c = 3.0 * time;\n"
+                           "  Boolean p = time > 1.0;\n  Boolean q = time > 2.0;\n  Boolean r1 = a < b + c;\n"
+                           "  Boolean r2 = a + b < c - a;\n  Boolean r3 = a < b == (b < c);\n"
+                           "  Boolean r4 = a * b < c * (a + b);\n  Boolean r5 = p;\n  Boolean r6 = not (p and q);\n"
+                           "  Boolean r7 = p and (q or p);\n  Boolean r8 = a < (if p then b else c);\n  Real y1 = a - (b - c);\n"
+                           "  Real y2 = a - (b + c);\n  Real y3 = a + b - c;\n  Real y4 = a / (b * c);\n  Real y5 = a * b / c;\n"
+                           "  Real y6 = a / (b / c);\n  Real y7 = a ^ (b ^ c);\n  Real y8 = (a ^ b) ^ c;\n"
+                           "  Real y9 = -(a + b);\n  Real y10 = a * (-b);\n  Real y11 = a + b;\n  Real y12 = (-a) ^ b;\n"
+                           "  Real y13 = a * b * c;\n  Real y14 = c + (if p then a else b);\n  Real y15 = a - (b - (c - a));\n"
+                           "end PPT1;\n"));
+}
+
+YMC_TEST(flatten_function_array_operators) {
+  // 函数体里的数组运算。维未知、没能按元素展开的按 DAE 算符类别定形：标量挪到右边（`2 * u` → `u * 2.0`、`a .* u` →
+  // `u * a`）、数组 .* / ./ 数组与 .^ 留点号、`a .+ u` → `u .+ a`、`u .- a` → `u .+ (-a)`、标量 .- 数组留点号、不做恒等
+  // 化简（`u * 1.0`）、Integer 数组整体转型 `/*Real[:]*/(n)`；不可结合的 `.*` 作右操作数加括号。维已知的按元素展开
+  //（`a .- w`、`-w`、`(2 * w) .* w`）。期望 = omc 1.25.0 实跑 FAT1（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("function h\n  input Real u[:];\n  input Real w[3];\n  input Real a;\n  input Integer n[:];\n"
+                           "  input Integer k;\n  output Real o;\nprotected\n  Real v[size(u, 1)];\n  Real v3[3];\n  Real s;\n"
+                           "algorithm\n  v := 2 * u;\n  v := a .* u .* u;\n  v := u ./ a;\n  v := a ./ u;\n  v := u .^ 2;\n"
+                           "  v := a .+ u;\n  v := u .- a;\n  v := u .- 2;\n  v := k .- u;\n  v := -(2 * u);\n  v := u * 1;\n"
+                           "  v := u .* (u .* u);\n  v := n * 2.5;\n  v := n * 2;\n  v3 := a .- w;\n  v3 := -w;\n"
+                           "  v3 := (2 * w) .* w;\n  v := (2 * w) .* u;\n  s := sum(u .* (2 * u));\n  s := u * (u .* u);\n"
+                           "  o := s;\nend h;\nmodel FAT1\n  Real x[3] = {time, 1, 2};\n"
+                           "  Real y = h(x, x, time, {1, 2, 3}, 2);\nend FAT1;\n"),
+               std::string("function h\n  input Real[:] u;\n  input Real[3] w;\n  input Real a;\n  input Integer[:] n;\n"
+                           "  input Integer k;\n  output Real o;\n  protected Real[size(u, 1)] v;\n  protected Real[3] v3;\n"
+                           "  protected Real s;\nalgorithm\n  v := u * 2.0;\n  v := u * a .* u;\n  v := u / a;\n  v := a ./ u;\n"
+                           "  v := u .^ 2.0;\n  v := u .+ a;\n  v := u .+ (-a);\n  v := u .+ -2.0;\n  v := /*Real*/(k) .- u;\n"
+                           "  v := -u * 2.0;\n  v := u * 1.0;\n  v := u .* (u .* u);\n  v := /*Real[:]*/(n) * 2.5;\n"
+                           "  v := /*Real[:]*/(n * 2);\n  v3 := {a - w[1], a - w[2], a - w[3]};\n"
+                           "  v3 := {-w[1], -w[2], -w[3]};\n  v3 := {2.0 * w[1] * w[1], 2.0 * w[2] * w[2], 2.0 * w[3] * w[3]};\n"
+                           "  v := {2.0 * w[1], 2.0 * w[2], 2.0 * w[3]} .* u;\n  s := sum(u .* u * 2.0);\n  s := u * (u .* u);\n"
+                           "  o := s;\nend h;\n\nclass FAT1\n  Real x[1];\n  Real x[2];\n  Real x[3];\n"
+                           "  Real y = h(x, x, time, {1, 2, 3}, 2);\nequation\n  x = {time, 1.0, 2.0};\nend FAT1;\n"));
+  // 标量与数组之间不带点号的 + / -（omc 报类型错，FAS1）；已知维的向量积 omc 展成积和（`w[1] * w[1] + …`，FAS2，未做）。
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           {"function h\n  input Real u[:];\n  input Real a;\n  output Real v[size(u, 1)];\nalgorithm\n"
+            "  v := u + a;\nend h;\nmodel FAS1\n  Real x[3] = {time, 1, 2};\n  Real y[3] = h(x, time);\n"
+            "end FAS1;\n",
+            "array and scalar operands without elementwise operator"},
+           {"function h\n  input Real w[3];\n  output Real s;\nalgorithm\n  s := w * w;\nend h;\nmodel FAS2\n"
+            "  Real x[3] = {time, 1, 2};\n  Real y = h(x);\nend FAS2;\n",
+            "function array product expansion"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

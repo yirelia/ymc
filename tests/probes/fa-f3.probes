@@ -1,0 +1,1276 @@
+//// set: fa-f3 — 函数体里的数组运算：取负改写、类型错、恒等元、控制流里的语句
+//// model: F30
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := u .- 2;
+  o := 0;
+end h;
+model F30
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F30;
+//// model: F31
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := u .- (a + 1);
+  o := 0;
+end h;
+model F31
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F31;
+//// model: F32
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := u .- (-a);
+  o := 0;
+end h;
+model F32
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F32;
+//// model: F33
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := u .- a * 2;
+  o := 0;
+end h;
+model F33
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F33;
+//// model: F34
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := u .+ (-a);
+  o := 0;
+end h;
+model F34
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F34;
+//// model: F35
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := u .+ 2;
+  o := 0;
+end h;
+model F35
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F35;
+//// model: F36
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := 2 .+ u;
+  o := 0;
+end h;
+model F36
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F36;
+//// model: F37
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := u + a;
+  o := 0;
+end h;
+model F37
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F37;
+//// model: F38
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := u - a;
+  o := 0;
+end h;
+model F38
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F38;
+//// model: F39
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := a + u;
+  o := 0;
+end h;
+model F39
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F39;
+//// model: F310
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := a / u;
+  o := 0;
+end h;
+model F310
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F310;
+//// model: F311
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := u ^ 2;
+  o := 0;
+end h;
+model F311
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F311;
+//// model: F312
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := u .* 1;
+  o := 0;
+end h;
+model F312
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F312;
+//// model: F313
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := 1 * u;
+  o := 0;
+end h;
+model F313
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F313;
+//// model: F314
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := u * 1;
+  o := 0;
+end h;
+model F314
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F314;
+//// model: F315
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := 0 * u;
+  o := 0;
+end h;
+model F315
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F315;
+//// model: F316
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := u .+ 0;
+  o := 0;
+end h;
+model F316
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F316;
+//// model: F317
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := u / 1;
+  o := 0;
+end h;
+model F317
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F317;
+//// model: F318
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := u .^ 1;
+  o := 0;
+end h;
+model F318
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F318;
+//// model: F319
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := u .^ 0;
+  o := 0;
+end h;
+model F319
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F319;
+//// model: F320
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := u .* u .* u;
+  o := 0;
+end h;
+model F320
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F320;
+//// model: F321
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := u .* (u .* u);
+  o := 0;
+end h;
+model F321
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F321;
+//// model: F322
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := (u .+ a) .* u;
+  o := 0;
+end h;
+model F322
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F322;
+//// model: F323
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := (u + u) .* u;
+  o := 0;
+end h;
+model F323
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F323;
+//// model: F324
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := u .* (u + u);
+  o := 0;
+end h;
+model F324
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F324;
+//// model: F325
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := (u .* u) * a;
+  o := 0;
+end h;
+model F325
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F325;
+//// model: F326
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := a * (u .* u);
+  o := 0;
+end h;
+model F326
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F326;
+//// model: F327
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := (2 * w) .* u;
+  o := 0;
+end h;
+model F327
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F327;
+//// model: F328
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := u .* (2 * w);
+  o := 0;
+end h;
+model F328
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F328;
+//// model: F329
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v3 := (2 * w) .* w;
+  o := 0;
+end h;
+model F329
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F329;
+//// model: F330
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v3 := w .* (w + w);
+  o := 0;
+end h;
+model F330
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F330;
+//// model: F331
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v3 := a * (w + w);
+  o := 0;
+end h;
+model F331
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F331;
+//// model: F332
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v3 := (w + w) * a;
+  o := 0;
+end h;
+model F332
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F332;
+//// model: F333
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v3 := a .+ (w .* w);
+  o := 0;
+end h;
+model F333
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F333;
+//// model: F334
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := if a > 0 then 2 * u else u .* u;
+  o := 0;
+end h;
+model F334
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F334;
+//// model: F335
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := u .* (if a > 0 then u else 2 * u);
+  o := 0;
+end h;
+model F335
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F335;
+//// model: F336
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  s := sum(u .* (2 * u));
+  o := 0;
+end h;
+model F336
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F336;
+//// model: F337
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  s := u * (u .* u);
+  o := 0;
+end h;
+model F337
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F337;
+//// model: F338
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  s := (u .* u) * u;
+  o := 0;
+end h;
+model F338
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F338;
+//// model: F339
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := M * (u .* u);
+  o := 0;
+end h;
+model F339
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F339;
+//// model: F340
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := u ./ (a + 1);
+  o := 0;
+end h;
+model F340
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F340;
+//// model: F341
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := (a + 1) ./ u;
+  o := 0;
+end h;
+model F341
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F341;
+//// model: F342
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := u .^ (a + 1);
+  o := 0;
+end h;
+model F342
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F342;
+//// model: F343
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := 2 * u .^ 2;
+  o := 0;
+end h;
+model F343
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F343;
+//// model: F344
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := -u .^ 2;
+  o := 0;
+end h;
+model F344
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F344;
+//// model: F345
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := (-u) .^ 2;
+  o := 0;
+end h;
+model F345
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F345;
+//// model: F346
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := -(u .+ a);
+  o := 0;
+end h;
+model F346
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F346;
+//// model: F347
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  v := u .* -u;
+  o := 0;
+end h;
+model F347
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F347;
+//// model: F348
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  while s < 1 loop v := 2 * u; s := s + 1; end while;
+  o := 0;
+end h;
+model F348
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F348;
+//// model: F349
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  for i in 1:2 loop v := 2 * u; end for;
+  o := 0;
+end h;
+model F349
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F349;
+//// model: F350
+function h
+  input Real u[:];
+  input Real w[3];
+  input Real a;
+  input Real M[:, :];
+  input Integer n[:];
+  input Integer k;
+  output Real o;
+protected
+  Real v[size(u, 1)];
+  Real v3[3];
+  Real s;
+  Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
+algorithm
+  if a > 0 then v := 2 * u; else v := u .* u; end if;
+  o := 0;
+end h;
+model F350
+  Real x[3] = {time, 1, 2};
+  Real y = h(x, x, time, {x, x}, {1, 2, 3}, 2);
+end F350;

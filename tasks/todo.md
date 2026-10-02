@@ -1152,6 +1152,19 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           warning 级 assert）。
           探针 NR n1 / n2 / c1、GA g1 / g2 / misc / ut、FA f1：0 FAIL。→ 全 scodeinst PASS 482→484（FuncUnknownDim1、
           FunctionNoOutput1）、整个 testsuite PASS 1234→1238；+2 单测（208）。
+    - [x] (59v) 函数体里的数组运算 + 表达式括号规则（2026-10-02）：
+          **括号规则**（修潜伏错）：优先级相等时右操作数看**它自己**可不可结合（Expression.shouldParenthesize :10751-10786
+          v1.25.0），ymc 此前按外层算符判——`a < b + c` 被打成 `a < (b + c)`（关系式右边是加法这么基本的写法，语料与
+          探针里竟然一个都没有）。不可结合的逐元素数组积 `.*`、向量 / 矩阵积作右操作数加括号（`u * (u .* u)`）。书写出来
+          的双重否定 `not (not p)` → `p`（simplifyLogicUnary）。
+          **函数体里的数组运算**（59u 先挡住的 31 + 个潜伏 FAIL 逐条实现）：维未知、没能按元素展开的按 DAE 算符类别定
+          形——标量挪到右边（`2 * u` → `u * 2.0`、`a .* u` → `u * a`）、数组 .* / ./ 数组与 .^ 留点号、`a .+ u` → `u .+ a`、
+          `u .- a` → `u .+ (-a)`（`u .- 2` → `u .+ -2.0`）、标量 .- / ./ 数组留点号、不做恒等化简（`u * 1.0`、`u .+ 0.0`）、
+          Integer 数组整体转型 `/*Real[:]*/(n)`。维已知的照旧按元素展开（`a .- w`、`w .^ 2`、`-w`）。标量与数组之间不带
+          点号的 + / -、标量 / 数组是类型错（此前放行）。FlatModel 记下打点号 / 不可结合的二元运算节点，dump 时查。
+          未做 → SKIP：已知维的向量积展成积和、已知维的 Integer 数组逐元素转型、数组自己减自己（omc 报错）。
+          探针 FA f1–f4、PP：0 FAIL。→ 全 scodeinst PASS 484→485（OperationSubEW2）、整个 testsuite PASS 1238→1239；
+          +2 单测（210）。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、

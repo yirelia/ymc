@@ -13,6 +13,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := 2 * u;
   o := 0;
@@ -35,6 +38,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := u * 2;
   o := 0;
@@ -57,6 +63,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := a * u;
   o := 0;
@@ -79,6 +88,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := u * a;
   o := 0;
@@ -101,6 +113,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := u / 2;
   o := 0;
@@ -123,6 +138,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := u / a;
   o := 0;
@@ -145,6 +163,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := u + u;
   o := 0;
@@ -167,6 +188,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := u - u;
   o := 0;
@@ -189,6 +213,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := -u;
   o := 0;
@@ -211,6 +238,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := u .* u;
   o := 0;
@@ -233,6 +263,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := u ./ u;
   o := 0;
@@ -255,6 +288,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := u .^ 2;
   o := 0;
@@ -277,6 +313,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := 2 .^ u;
   o := 0;
@@ -299,6 +338,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := u .+ a;
   o := 0;
@@ -321,6 +363,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := a .+ u;
   o := 0;
@@ -343,6 +388,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := u .- a;
   o := 0;
@@ -365,6 +413,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := a .- u;
   o := 0;
@@ -387,6 +438,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := a ./ u;
   o := 0;
@@ -409,6 +463,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := u ./ a;
   o := 0;
@@ -431,6 +488,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := u .* a;
   o := 0;
@@ -453,6 +513,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := a .* u;
   o := 0;
@@ -475,6 +538,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := u .+ u;
   o := 0;
@@ -497,6 +563,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := u .- u;
   o := 0;
@@ -519,6 +588,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v3 := 2 * w;
   o := 0;
@@ -541,6 +613,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v3 := w * 2;
   o := 0;
@@ -563,6 +638,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v3 := w + w;
   o := 0;
@@ -585,6 +663,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v3 := -w;
   o := 0;
@@ -607,6 +688,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v3 := w .* w;
   o := 0;
@@ -629,6 +713,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v3 := w / 2;
   o := 0;
@@ -651,6 +738,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v3 := a * w;
   o := 0;
@@ -673,6 +763,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v3 := w .+ a;
   o := 0;
@@ -695,6 +788,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   s := u * u;
   o := 0;
@@ -717,6 +813,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   s := w * w;
   o := 0;
@@ -739,6 +838,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   vm := M * M;
   o := 0;
@@ -761,6 +863,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := M * u;
   o := 0;
@@ -783,6 +888,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := u * M;
   o := 0;
@@ -805,6 +913,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := n * 2;
   o := 0;
@@ -827,6 +938,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := n + u;
   o := 0;
@@ -849,6 +963,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := n;
   o := 0;
@@ -871,6 +988,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := (u + u) * 2;
   o := 0;
@@ -893,6 +1013,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := 2 * (u + u);
   o := 0;
@@ -915,6 +1038,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := -(2 * u);
   o := 0;
@@ -937,6 +1063,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := u * 2 * a;
   o := 0;
@@ -959,6 +1088,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := a * 2 * u;
   o := 0;
@@ -981,6 +1113,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := 2 * a * u;
   o := 0;
@@ -1003,6 +1138,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := k * u;
   o := 0;
@@ -1025,6 +1163,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := u * k;
   o := 0;
@@ -1047,6 +1188,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := u + 2 * u;
   o := 0;
@@ -1069,6 +1213,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := u - 2 * u;
   o := 0;
@@ -1091,6 +1238,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := 2 * u - u;
   o := 0;
@@ -1113,6 +1263,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := 2 * u + 3 * u;
   o := 0;
@@ -1135,6 +1288,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   s := sum(2 * u);
   o := 0;
@@ -1157,6 +1313,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   s := sum(u .* u);
   o := 0;
@@ -1179,6 +1338,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   s := max(2 * u);
   o := 0;
@@ -1201,6 +1363,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   s := u[1] * 2;
   o := 0;
@@ -1223,6 +1388,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v3 := {a, a, a} * 2;
   o := 0;
@@ -1245,6 +1413,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v3 := 2 * {a, a, a};
   o := 0;
@@ -1267,6 +1438,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := 2 * u .* u;
   o := 0;
@@ -1289,6 +1463,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := u .* u * 2;
   o := 0;
@@ -1311,6 +1488,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   v := u .* (2 * u);
   o := 0;
@@ -1333,6 +1513,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   vm := 2 * M;
   o := 0;
@@ -1355,6 +1538,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   vm := M * 2;
   o := 0;
@@ -1377,6 +1563,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   vm := M + M;
   o := 0;
@@ -1399,6 +1588,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   vm := M .* M;
   o := 0;
@@ -1421,6 +1613,9 @@ protected
   Real v3[3];
   Real s;
   Real vm[size(M, 1), size(M, 2)];
+  Integer ni[size(n, 1)];
+  Integer n3[3];
+  Real v2[size(u, 1)];
 algorithm
   vm := transpose(M) * 2;
   o := 0;

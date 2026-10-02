@@ -27,7 +27,9 @@ std::string real_lit(double v) {
 
 class ExprDumper {
  public:
-  ExprDumper(const ExprArena& a, const Interner& in) : a_(a), in_(in) {}
+  ExprDumper(const ExprArena& a, const Interner& in, const std::unordered_set<std::uint32_t>* ew,
+             const std::unordered_set<std::uint32_t>* product)
+      : a_(a), in_(in), ew_(ew), product_(product) {}
 
   std::string run(Id<Expr> e) {
     out_.clear();
@@ -61,38 +63,45 @@ class ExprDumper {
   }
   // 幂运算不可结合（相等优先级时左操作数要加括号）。
   static bool is_pow(const Expr& e) { return e.kind == ExprKind::Binary && e.bin == BinOp::Pow; }
-  // 可结合运算（相等优先级时右操作数不加括号）：标量 + * 与逻辑 and/or（R13 §4.2）。
-  static bool is_associative(const Expr& op) {
-    if (op.kind == ExprKind::Logical) return true;
-    return op.kind == ExprKind::Binary && (op.bin == BinOp::Add || op.bin == BinOp::Mul);
+  bool in_set(const std::unordered_set<std::uint32_t>* s, Id<Expr> id) const { return s && s->count(id.raw) > 0; }
+  // 可结合运算（Expression.isAssociativeOp :10803-10816 v1.25.0）：ADD / MUL / ADD_ARR / MUL_ARRAY_SCALAR / ADD_ARRAY_SCALAR
+  // 与逻辑 and / or。逐元素的数组积 MUL_ARR（`.*`）、向量 / 矩阵积不可结合。
+  bool is_associative(Id<Expr> id) const {
+    const Expr& e = a_[id];
+    if (e.kind == ExprKind::Logical) return true;
+    if (e.kind != ExprKind::Binary) return false;
+    if (e.bin == BinOp::Add) return true;
+    return e.bin == BinOp::Mul && !in_set(ew_, id) && !in_set(product_, id);
   }
 
-  // 是否给操作数加括号（R13 §4.2）。operand = 子表达式，op = 外层运算，lhs = 子在左侧。
-  bool should_paren(const Expr& operand, const Expr& op, bool lhs) const {
+  // 是否给操作数加括号（Expression.shouldParenthesize :10751-10786 v1.25.0）。operand = 子表达式，op = 外层运算，
+  // lhs = 子在左侧。优先级相等时：左侧只有幂加括号；右侧看**操作数自己**可不可结合（`a < b + c` 不加，`a - (b - c)`、
+  // `u * (u .* u)` 加）——此前按外层算符判，把 `a < b + c` 打成了 `a < (b + c)`（PP 探针）。
+  bool should_paren(Id<Expr> child, const Expr& op, bool lhs) const {
+    const Expr& operand = a_[child];
     if (operand.kind == ExprKind::Unary) return true;   // 一元负操作数一律括号
     int po = priority(operand, lhs);
     int pe = priority(op, lhs);
     if (po > pe) return true;
-    if (po == pe) return lhs ? is_pow(operand) : !is_associative(op);
+    if (po == pe) return lhs ? is_pow(operand) : !is_associative(child);
     return false;
   }
 
   void operand(Id<Expr> child, const Expr& op, bool lhs) {
-    const Expr& c = a_[child];
-    bool paren = should_paren(c, op, lhs);
+    bool paren = should_paren(child, op, lhs);
     if (paren) out_ += '(';
     exp(child);
     if (paren) out_ += ')';
   }
 
-  static const char* binop(BinOp b) {
+  static const char* binop(BinOp b, bool dot) {
     switch (b) {
-      // OMC ExpressionDump.mo:112-116 binopSymbol1：全部二元算符两侧带空格。
-      case BinOp::Add: return " + ";
-      case BinOp::Sub: return " - ";
-      case BinOp::Mul: return " * ";
-      case BinOp::Div: return " / ";
-      case BinOp::Pow: return " ^ ";
+      // OMC ExpressionDump.mo:112-116 binopSymbol1：全部二元算符两侧带空格；逐元素的数组算符带点号。
+      case BinOp::Add: return dot ? " .+ " : " + ";
+      case BinOp::Sub: return dot ? " .- " : " - ";
+      case BinOp::Mul: return dot ? " .* " : " * ";
+      case BinOp::Div: return dot ? " ./ " : " / ";
+      case BinOp::Pow: return dot ? " .^ " : " ^ ";
     }
     return "?";
   }
@@ -156,7 +165,7 @@ class ExprDumper {
         break;
       case ExprKind::Binary:
         operand(e.a, e, true);
-        out_ += binop(e.bin);
+        out_ += binop(e.bin, in_set(ew_, id));
         operand(e.b, e, false);
         break;
       case ExprKind::Unary:
@@ -295,13 +304,16 @@ class ExprDumper {
 
   const ExprArena& a_;
   const Interner& in_;
+  const std::unordered_set<std::uint32_t>* ew_;        // 打点号的数组二元运算节点（可空）
+  const std::unordered_set<std::uint32_t>* product_;   // 向量 / 矩阵积节点（可空）
   std::string out_;
 };
 
 }  // namespace
 
-std::string dump_expr(const ExprArena& a, const Interner& in, Id<Expr> e) {
-  return ExprDumper(a, in).run(e);
+std::string dump_expr(const ExprArena& a, const Interner& in, Id<Expr> e, const std::unordered_set<std::uint32_t>* ew,
+                      const std::unordered_set<std::uint32_t>* product) {
+  return ExprDumper(a, in, ew, product).run(e);
 }
 
 }  // namespace ymc
