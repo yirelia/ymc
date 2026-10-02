@@ -1817,7 +1817,15 @@ class Flattener {
     // 推导式 `array(e for i in r)` 同数组构造调用：等式整体保留（AC3 探针 `x = array(/*Real*/(i) * time for i in 1:3)`）；
     // 整体转型包着的也算（`/*Real[3]*/(array(…))`）。
     if (x.kind == ExprKind::Cast && x.ty.is_array()) return is_array_call(x.a);
+    if (non_vectorizeable_call(x)) return false;
     return (x.kind == ExprKind::Call || x.kind == ExprKind::TupleElement || x.kind == ExprKind::Reduction) && x.ty.is_array();
+  }
+  // der / pre / previous：Call.isVectorizeable 为 false（NFCall.mo:1300-1318）——它们的数组调用不让等式整体保留，所在等式
+  // 照常逐元素标量化（`der(y) = x` → `der(y[1]) = x[1]`、`v = pre(b)` → `v[1] = pre(b[1])`，V4s 探针）。
+  bool non_vectorizeable_call(const Expr& x) {
+    if (x.kind != ExprKind::Call || x.call_name.size() != 1) return false;
+    const std::string_view n = in_.str(x.call_name[0]);
+    return n == "der" || n == "pre" || n == "previous";
   }
   // 含数组调用的等式整体发射 `lhs = rhs`：同秩、已知维相等、元素类型相同（Integer↔Real 要整体强转，未做 → SKIP）。
   void emit_array_call_equation(Id<Expr> a, Id<Expr> b, SourceLoc loc, const SComment& cmt, bool is_initial) {
@@ -1894,7 +1902,10 @@ class Flattener {
       // `x = array(…) * 2.0`、`y = -array(…)`、`s = array(…) * {1.0, 2.0, 3.0}`），未做 → SKIP。
       if (!red_scalarize_ok_) { set_unsupported("comprehension inside array expression"); return lit_int(0); }
       const std::optional<RangeLit> l = range_lit(result_.model.exprs[x.b]);
-      if (!l || !l->integer || idx.empty() || idx[0] < 1 || idx[0] > l->n) { set_unsupported("comprehension scalarization"); return lit_int(0); }
+      if (!l || !l->integer || l->boolean || idx.empty() || idx[0] < 1 || idx[0] > l->n) {
+        set_unsupported("comprehension scalarization");
+        return lit_int(0);
+      }
       Expr ic;
       ic.kind = ExprKind::Cref;
       ic.cref.parts.push_back({x.call_name[1], {}});
@@ -1910,6 +1921,7 @@ class Flattener {
       const std::optional<RangeLit> l = range_lit(x);
       if (!l || idx.size() != 1 || idx[0] < 1 || idx[0] > l->n) { set_unsupported("range scalarization"); return lit_int(0); }
       const double v = l->start + static_cast<double>(idx[0] - 1) * l->step;
+      if (l->boolean) return lit_bool(v != 0);   // `v = false:true` → `v[1] = false; v[2] = true`（V4r 探针）
       return l->integer ? lit_int(static_cast<std::int64_t>(v)) : lit_real(v);
     }
     switch (x.kind) {
@@ -1963,6 +1975,12 @@ class Flattener {
       }
       case ExprKind::LogicalNot: {
         Id<Expr> sa = scalarize(x.a, idx);
+        // 混合数组字面量的字面量叶：omc 逐元素出 `not true`、不化简（V4u 探针 `v = not {b[1], true}` → `v[2] = not true`、
+        // `h4[2] = not true`），ymc 的 simplify 会折成 `false`，未做 → SKIP。
+        if (result_.model.exprs[x.a].kind == ExprKind::Array && result_.model.exprs[sa].kind == ExprKind::BoolLit) {
+          set_unsupported("not of literal element in mixed array literal");
+          return lit_int(0);
+        }
         Expr r; r.kind = ExprKind::LogicalNot; r.a = sa; r.ty = Type::boolean();
         return add(std::move(r));
       }
@@ -1971,6 +1989,17 @@ class Flattener {
         Expr r; r.kind = ExprKind::Logical; r.log = x.log; r.a = sa; r.b = sb; r.ty = Type::boolean();
         return add(std::move(r));
       }
+      case ExprKind::Call:
+        // der / pre 的数组调用逐元素（ExpressionIterator 把实参取到元素：`der(y)` → `der(y[i])`、`pre(b)` → `pre(b[i])`）。
+        // 其余数组调用不逐元素（等式整体保留，上游已分流）。
+        if (non_vectorizeable_call(x) && x.args.size() == 1) {
+          Expr c = x;
+          c.args[0] = scalarize(x.args[0], idx);
+          c.ty = x.ty.element_type();
+          return add(std::move(c));
+        }
+        set_unsupported("array expression scalarization");
+        return lit_int(0);
       default:
         set_unsupported("array expression scalarization");
         return lit_int(0);
@@ -2089,19 +2118,45 @@ class Flattener {
   }
 
   // 数组逻辑（and/or 逐元素/广播，结果 Boolean 数组）。
+  // 叶全是 Boolean 字面量的数组字面量。
+  bool all_bool_literal(Id<Expr> id) {
+    const Expr& x = result_.model.exprs[id];
+    if (x.kind == ExprKind::BoolLit) return true;
+    if (x.kind != ExprKind::Array || x.args.empty()) return false;
+    for (Id<Expr> a : x.args) if (!all_bool_literal(a)) return false;
+    return true;
+  }
+  // 全字面量 Boolean 数组上的 not / and / or 逐元素求值成字面量数组（omc 对字面量数组整体求值：V4u 探针
+  // `a8 = {false, true}`、`a5 = {true, false, true, true}`、`m6 = {false, true} or b` 的内层）。b 无效 = not。
+  Id<Expr> fold_bool_arrays(const LogOp* op, Id<Expr> a, Id<Expr> b) {
+    const Expr xa = result_.model.exprs[a];   // 拷贝
+    if (xa.kind == ExprKind::BoolLit) {
+      if (!op) return lit_bool(!xa.bval);
+      const bool y = result_.model.exprs[b].bval;
+      return lit_bool(*op == LogOp::And ? (xa.bval && y) : (xa.bval || y));
+    }
+    Expr r = xa;
+    for (std::size_t i = 0; i < xa.args.size(); ++i)
+      r.args[i] = fold_bool_arrays(op, xa.args[i], op ? result_.model.exprs[b].args[i] : Id<Expr>{});
+    return add(std::move(r));
+  }
+
   Id<Expr> array_logical(LogOp lop, Id<Expr> a, Id<Expr> b) {
-    const Type ta = result_.model.exprs[a].ty, tb = result_.model.exprs[b].ty;
+    const Type ta = op_type(a), tb = op_type(b);   // 数组字面量按形状 / 叶类型取类型（`{true, false} or b`）
     if (ta.element_type().kind != TypeKind::Boolean || tb.element_type().kind != TypeKind::Boolean) {
       set_unsupported("non-boolean array logical");
       return lit_int(0);
     }
-    std::vector<Dimension> ds;
-    if (ta.is_array() && tb.is_array()) {
-      if (!same_dims(ta.dims, tb.dims)) { set_unsupported("array shape mismatch"); return lit_int(0); }
-      ds = ta.dims;
-    } else {
-      ds = ta.is_array() ? ta.dims : tb.dims;
+    // 两侧须是同形数组：标量与数组的 and / or omc 报类型错（V4u 探针 `v = b and (time > 1)`）。
+    if (!ta.is_array() || !tb.is_array() || !same_dims(ta.dims, tb.dims)) { set_unsupported("array shape mismatch"); return lit_int(0); }
+    // 两侧都是数组字面量：全字面量 → 求值；否则 omc 在首维逐元素合并并化简（`{b, b2} and {b2, b}` → `{b and b2, b2 and b}`、
+    // `{x[1] > 1, false} or {true, x[2] < 1}` → `{true, x[2] < 1.0}`），未做 → SKIP。
+    if (result_.model.exprs[a].kind == ExprKind::Array && result_.model.exprs[b].kind == ExprKind::Array) {
+      if (all_bool_literal(a) && all_bool_literal(b)) return fold_bool_arrays(&lop, a, b);
+      set_unsupported("array logical of two array literals");
+      return lit_int(0);
     }
+    std::vector<Dimension> ds = ta.dims;
     Expr r;
     r.kind = ExprKind::Logical;
     r.log = lop;
@@ -3018,7 +3073,9 @@ class Flattener {
         } else if (rk == ExprKind::Range && range_lit(re)) {
           // 字面量范围整体保留（`x = 1:5`）；Real 数组的范围起 / 步 / 止都转 Real（RG2 探针 `r = 1.0:3.0`、`s = 1.0:2.0:8.0`）。
           Expr r = re;
-          if (cty.kind == TypeKind::Real) {
+          if (relem == TypeKind::Boolean && cty.kind != TypeKind::Boolean) {
+            set_unsupported("non-literal array binding"); return;   // Boolean 范围绑给非 Boolean 数组：omc 类型错
+          } else if (cty.kind == TypeKind::Real) {
             r.a = to_real(r.a);
             r.b = to_real(r.b);
             if (r.c.is_valid()) r.c = to_real(r.c);
@@ -3027,8 +3084,11 @@ class Flattener {
             set_unsupported("non-literal array binding"); return;
           }
           rhs = add(std::move(r));
-        } else if (rk == ExprKind::Binary || rk == ExprKind::Unary ||
-                   rk == ExprKind::Logical || rk == ExprKind::LogicalNot) {
+        } else if ((rk == ExprKind::Logical || rk == ExprKind::LogicalNot) && relem == cty.kind) {
+          // Boolean 数组的 and / or / not：omc 不展开，整体保留（V4u 探针 `g1 = b and b2`、`g3 = b and not b2`、
+          // `g9 = {true, false} or b`、`m3 = not {b[1], true}`）。全字面量的已在定型时折成字面量数组（走上面的 Array 支）。
+          rhs = rhsE;
+        } else if (rk == ExprKind::Binary || rk == ExprKind::Unary) {
           std::vector<Id<Expr>> elems;   // 逐元素展开 {op(y[1]), …}（A2/A3/A8/G3/G4）
           std::vector<std::int64_t> eidx(dims.size(), 1);
           for (bool more = true; more;) {
@@ -4913,9 +4973,19 @@ class Flattener {
   // 字面量范围（起 / 步 / 止都是数值字面量）：元素数按 getRangeTypeInt（max(intDiv(stop - start, step) + 1, 0)）/
   // getRangeTypeReal（Util.realRangeSize = floor((stop - start) / step + 5e-15) + 1，≥ 0），NFTypeCheck.mo:2758-2833；
   // Util.mo:1324-1333。步长为 0 / 非字面量 → nullopt。第 i 个元素 = 起 + (i - 1)·步（NFRangeIterator）。
-  struct RangeLit { bool integer = true; double start = 0, step = 1, stop = 0; std::int64_t n = 0; };
+  struct RangeLit { bool integer = true; bool boolean = false; double start = 0, step = 1, stop = 0; std::int64_t n = 0; };
   std::optional<RangeLit> range_lit(const Expr& r) {
     if (r.kind != ExprKind::Range) return std::nullopt;
+    // Boolean 范围 `false:true`（无步长；false < true，NFTypeCheck.getRangeTypeBool :2864-2908；V4p 探针 `a6 = false:true`、
+    // `true:false` 为空）。
+    if (!r.c.is_valid() && result_.model.exprs[r.a].kind == ExprKind::BoolLit && result_.model.exprs[r.b].kind == ExprKind::BoolLit) {
+      RangeLit l;
+      l.boolean = true;
+      l.start = result_.model.exprs[r.a].bval ? 1 : 0;
+      l.stop = result_.model.exprs[r.b].bval ? 1 : 0;
+      l.n = std::max<std::int64_t>(static_cast<std::int64_t>(l.stop - l.start) + 1, 0);
+      return l;
+    }
     auto num = [&](Id<Expr> x, double& v, bool& is_int) {
       const Expr& e = result_.model.exprs[x];
       if (e.kind == ExprKind::IntLit) { v = static_cast<double>(e.ival); return true; }
@@ -5772,6 +5842,11 @@ class Flattener {
       if (result_.model.functions[i].name == qname) return i;
     const SElement& fel = I_.scode.elems[fr.fe];
     if (fel.is_partial || fel.cmt.annotation.is_valid()) return std::nullopt;   // 调 partial 函数 = 错误；函数注解保守 SKIP
+    // external 段注解里的 derivative / inverse：omc 连带压平导数函数与反函数调用里的函数（NFFlatten.mo:2987-2995；
+    // ExternalFunctionAnno 的 `external b = myfoo(a) annotation(derivative = df1, …)` 多出 `df1`），未做 → SKIP。
+    if (sig.ext && sig.ext->annotation.is_valid())
+      for (const SSubMod& sm : I_.scode.mods[sig.ext->annotation].subs)
+        if (const std::string_view an = in_.str(sm.ident); an == "derivative" || an == "inverse") return std::nullopt;
     // 纯度（makeAttributes :2626-2633）：显式 pure / impure 照写；未声明时自带 external 段的函数 impure，继承来的 external
     // 段不算（FunctionSections5 `function f extends base_f` 打 `function f`）；外部调用名为 ModelicaError → pure。
     const bool modelica_error = fel.def.external.present && fel.def.external.func_name.is_valid() &&
@@ -7101,7 +7176,8 @@ class Flattener {
         auto ik = [&](Id<Expr> x) { return result_.model.exprs[x].ty.kind; };   // 迭代变量类型 = 范围元素类型
         const bool allint = ik(r.a) == TypeKind::Integer && ik(r.b) == TypeKind::Integer &&
                             (!r.c.is_valid() || ik(r.c) == TypeKind::Integer);
-        r.ty = allint ? Type::integer() : Type::real();
+        const bool allbool = !r.c.is_valid() && ik(r.a) == TypeKind::Boolean && ik(r.b) == TypeKind::Boolean;
+        r.ty = allbool ? Type::boolean() : allint ? Type::integer() : Type::real();
         return add(std::move(r));
       }
       default:
@@ -7664,7 +7740,8 @@ class Flattener {
   Id<Expr> rel_or_logic(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
     Id<Expr> a = inst_exp(e.a, enclosing, prefix);
     Id<Expr> b = inst_exp(e.b, enclosing, prefix);
-    const bool arr = result_.model.exprs[a].ty.is_array() || result_.model.exprs[b].ty.is_array();
+    // 形状看穿数组字面量的粗类型（`{true, false} or b`、`{1, 2} < {2, 3}`）。
+    const bool arr = !result_.unsupported && (!expr_shape(a).empty() || !expr_shape(b).empty());
     RelOp rop;
     LogOp lop;
     if (map_relop(e.op, rop)) {
@@ -7691,7 +7768,8 @@ class Flattener {
     if (e.op == Op::UPlus) return inst_exp(e.a, enclosing, prefix);   // +a → a（R13 §4.3）
     Id<Expr> a = inst_exp(e.a, enclosing, prefix);
     if (e.op == Op::Not) {
-      const Type tya = result_.model.exprs[a].ty;
+      const Type tya = op_type(a);   // 数组字面量按形状取类型（`not {true, false}`）
+      if (result_.model.exprs[a].kind == ExprKind::Array && all_bool_literal(a)) return fold_bool_arrays(nullptr, a, {});
       Expr r; r.kind = ExprKind::LogicalNot; r.a = a;
       r.ty = tya.is_array() ? Type::array_of(Type::boolean(), tya.dims) : Type::boolean();
       return add(std::move(r));
@@ -8455,7 +8533,9 @@ class Flattener {
   bool contains_array_call(Id<Expr> id) {
     if (!id.is_valid()) return false;
     const Expr& x = result_.model.exprs[id];
-    if ((x.kind == ExprKind::Call || x.kind == ExprKind::TupleElement || x.kind == ExprKind::Reduction) && x.ty.is_array()) return true;
+    if ((x.kind == ExprKind::Call || x.kind == ExprKind::TupleElement || x.kind == ExprKind::Reduction) && x.ty.is_array() &&
+        !non_vectorizeable_call(x))
+      return true;
     for (Id<Expr> a : x.args) if (contains_array_call(a)) return true;
     return contains_array_call(x.a) || contains_array_call(x.b) || contains_array_call(x.c);
   }
@@ -8719,7 +8799,8 @@ class Flattener {
     if (supported && !fn_scope_) {
       static const std::unordered_set<std::string_view> kVectorizable = {
           "sin",  "cos",  "tan", "asin", "acos",  "atan", "atan2", "sinh",    "cosh",  "tanh", "exp",      "log",
-          "log10", "sqrt", "abs", "sign", "integer", "floor", "ceil",  "mod",     "div",   "homotopy", "semiLinear"};
+          "log10", "sqrt", "abs", "sign", "integer", "floor", "ceil",  "mod",     "div",   "homotopy", "semiLinear",
+          "edge"};   // edge(b) → `array(edge(b[$i1]) for $i1 in 1:2)`（V4r 探针；change(b) 则不向量化，见下）
       if (kVectorizable.count(builtin_name)) {
         bool same = true;
         for (Id<Expr> a : args) {
@@ -8761,6 +8842,26 @@ class Flattener {
       } else if (alg_in_when_ == 0 && eq_in_when_ == 0 && cref_is_continuous(ax, prefix.size())) {
         set_unsupported("pre/change of continuous variable");
         supported = false;
+      }
+    }
+    // der 的数组实参（整体 / 切片引用的 Real 数组）：不向量化，调用保持实参的数组类型——绑定里整体保留 `k1 = der(x)`，等式里
+    // 随等式逐元素 `der(y[1]) = x[1]`（non_vectorizeable_call；V4s 探针）。Integer 数组、非 cref 实参的形态未核实 → SKIP。
+    if (supported && !fn_scope_ && builtin_name == "der" && args.size() == 1) {
+      if (const std::vector<std::int64_t> sh = expr_shape(args[0]); !sh.empty()) {
+        const Expr ax = result_.model.exprs[args[0]];   // 拷贝
+        bool ok = ax.kind == ExprKind::Cref && ax.ty.is_array() && ax.ty.element_type().kind == TypeKind::Real;
+        for (std::int64_t n : sh) ok = ok && n >= 1;
+        if (!ok) {
+          set_unsupported("der of array expression");
+          supported = false;
+        } else {
+          Expr r;
+          r.kind = ExprKind::Call;
+          r.call_name = {in_.intern("der")};
+          r.args = {args[0]};
+          r.ty = ax.ty;
+          return add(std::move(r));
+        }
       }
     }
     if (supported) {
@@ -8839,6 +8940,9 @@ class Flattener {
           break;
         }
       }
+      // change 的数组实参不向量化，调用整体保留、结果是同维的 Boolean 数组（V4r 探针 `d9 = change(b)`、`v = change(b)`）。
+      if (builtin_name == "change" && r.args.size() == 1 && result_.model.exprs[r.args[0]].ty.is_array())
+        r.ty = Type::array_of(Type::boolean(), result_.model.exprs[r.args[0]].ty.dims);
     }
     const Id<Expr> call = add(std::move(r));
     return supported && !vd.empty() ? wrap_vectorized(call, vd) : call;
@@ -9197,20 +9301,22 @@ class Flattener {
       case ExprKind::Logical: {
         const Id<Expr> a0 = result_.model.exprs[id].a, b0 = result_.model.exprs[id].b;
         const LogOp op = result_.model.exprs[id].log;
+        const Type ty = result_.model.exprs[id].ty;   // 保留原类型（Boolean 数组的逐元素 and / or）
         Id<Expr> a = simplify_expr(a0), b = simplify_expr(b0);
         const Expr& ea = result_.model.exprs[a];
         const Expr& eb = result_.model.exprs[b];
         if (ea.kind == ExprKind::BoolLit && eb.kind == ExprKind::BoolLit)
           return lit_bool(op == LogOp::And ? (ea.bval && eb.bval) : (ea.bval || eb.bval));
-        Expr r; r.kind = ExprKind::Logical; r.log = op; r.a = a; r.b = b; r.ty = Type::boolean();
+        Expr r; r.kind = ExprKind::Logical; r.log = op; r.a = a; r.b = b; r.ty = ty.is_array() ? ty : Type::boolean();
         return add(std::move(r));
       }
       case ExprKind::LogicalNot: {
         const Id<Expr> a0 = result_.model.exprs[id].a;
+        const Type ty = result_.model.exprs[id].ty;
         Id<Expr> a = simplify_expr(a0);
         const Expr& ea = result_.model.exprs[a];
         if (ea.kind == ExprKind::BoolLit) return lit_bool(!ea.bval);
-        Expr r; r.kind = ExprKind::LogicalNot; r.a = a; r.ty = Type::boolean();
+        Expr r; r.kind = ExprKind::LogicalNot; r.a = a; r.ty = ty.is_array() ? ty : Type::boolean();
         return add(std::move(r));
       }
       case ExprKind::Cast: {

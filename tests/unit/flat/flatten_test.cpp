@@ -2780,6 +2780,71 @@ YMC_TEST(flatten_sum_product_min_max_of_arrays) {
   YMC_CHECK_EQ(out, std::string("<unsupported:constant call after comprehension substitution>"));
 }
 
+YMC_TEST(flatten_der_pre_on_arrays) {
+  // der / pre 的数组实参不向量化（Call.isVectorizeable 为 false）：显式等式逐元素标量化（`der(y[1]) = …`、`v[1] = pre(b[1]) and
+  // b2[1]`），绑定整体保留（`k1 = der(x)`）、算术绑定逐元素展开；edge 向量化、change 整体保留。期望 = omc 1.25.0 实跑 DP1
+  //（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model DP1\n  parameter Real A[3, 3] = {{1, 0, 0}, {0, 2, 0}, {0, 0, 3}};\n"
+                           "  Boolean b[2] = {time > 1, true};\n  Boolean b2[2] = {true, time > 2};\n"
+                           "  Real x[3] = {time, 1, 2};\n  Real y[3];\n  Real z[3];\n  Real k1[3] = der(x);\n"
+                           "  Real k2[3] = 2 * der(x);\n  Boolean v[2];\n  Boolean w[2];\n  Boolean d7[2] = edge(b);\n"
+                           "  Boolean d9[2] = change(b);\nequation\n  der(y) = -A * y + x;\n  z = der(x) + x;\n"
+                           "  v = pre(b) and b2;\n  w = pre(b);\nend DP1;\n"),
+               std::string("class DP1\n  parameter Real A[1,1] = 1.0;\n  parameter Real A[1,2] = 0.0;\n"
+                           "  parameter Real A[1,3] = 0.0;\n  parameter Real A[2,1] = 0.0;\n  parameter Real A[2,2] = 2.0;\n"
+                           "  parameter Real A[2,3] = 0.0;\n  parameter Real A[3,1] = 0.0;\n  parameter Real A[3,2] = 0.0;\n"
+                           "  parameter Real A[3,3] = 3.0;\n  Boolean b[1];\n  Boolean b[2];\n  Boolean b2[1];\n"
+                           "  Boolean b2[2];\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real y[1];\n  Real y[2];\n"
+                           "  Real y[3];\n  Real z[1];\n  Real z[2];\n  Real z[3];\n  Real k1[1];\n  Real k1[2];\n"
+                           "  Real k1[3];\n  Real k2[1];\n  Real k2[2];\n  Real k2[3];\n  Boolean v[1];\n  Boolean v[2];\n"
+                           "  Boolean w[1];\n  Boolean w[2];\n  Boolean d7[1];\n  Boolean d7[2];\n  Boolean d9[1];\n"
+                           "  Boolean d9[2];\nequation\n  b = {time > 1.0, true};\n  b2 = {true, time > 2.0};\n"
+                           "  x = {time, 1.0, 2.0};\n  k1 = der(x);\n"
+                           "  k2 = {2.0 * der(x[1]), 2.0 * der(x[2]), 2.0 * der(x[3])};\n"
+                           "  d7 = array(edge(b[$i1]) for $i1 in 1:2);\n  d9 = change(b);\n"
+                           "  der(y[1]) = x[1] - (A[1,1] * y[1] + A[1,2] * y[2] + A[1,3] * y[3]);\n"
+                           "  der(y[2]) = x[2] - (A[2,1] * y[1] + A[2,2] * y[2] + A[2,3] * y[3]);\n"
+                           "  der(y[3]) = x[3] - (A[3,1] * y[1] + A[3,2] * y[2] + A[3,3] * y[3]);\n  z[1] = der(x[1]) + x[1];\n"
+                           "  z[2] = der(x[2]) + x[2];\n  z[3] = der(x[3]) + x[3];\n  v[1] = pre(b[1]) and b2[1];\n"
+                           "  v[2] = pre(b[2]) and b2[2];\n  w[1] = pre(b[1]);\n  w[2] = pre(b[2]);\nend DP1;\n"));
+}
+
+YMC_TEST(flatten_boolean_array_expressions) {
+  // Boolean 数组的 and / or / not：绑定整体保留（`g3 = b and not b2`），全字面量折成字面量数组，参数数组逐元素摊分、显式等式
+  // 逐元素（都不化简 `true or b[1]`）；Boolean 范围整体保留、空范围不出变量；`:` 维由这些绑定推断。期望 = omc 1.25.0 实跑 BL1
+  //（2026-10-02）。omc 特殊处理 / 报错的形态 → SKIP（V4u 探针）。
+  YMC_CHECK_EQ(flatten_src("model BL1\n  parameter Boolean pb[2] = {true, false};\n  Boolean b[2] = {time > 1, true};\n"
+                           "  Boolean b2[2] = {true, time > 2};\n  Boolean a2[:] = not b;\n  Boolean a3[:] = b and b2;\n"
+                           "  Boolean a5[:] = {false, false, true, true} or {true, false, true, false};\n"
+                           "  Boolean a6[:] = false:true;\n  Boolean c1[:] = true:false;\n  Boolean g3[2] = b and not b2;\n"
+                           "  Boolean g5[2] = (b and b2) or b;\n  Boolean g9[2] = {true, false} or b;\n"
+                           "  parameter Boolean pc[2] = not pb;\n  parameter Boolean pd[2] = pb and {true, true};\n"
+                           "  Boolean v[2];\n  Boolean w[2];\nequation\n  v = {true, false} or b;\n  w = false:true;\nend BL1;\n"),
+               std::string("class BL1\n  parameter Boolean pb[1] = true;\n  parameter Boolean pb[2] = false;\n  Boolean b[1];\n"
+                           "  Boolean b[2];\n  Boolean b2[1];\n  Boolean b2[2];\n  Boolean a2[1];\n  Boolean a2[2];\n"
+                           "  Boolean a3[1];\n  Boolean a3[2];\n  Boolean a5[1];\n  Boolean a5[2];\n  Boolean a5[3];\n"
+                           "  Boolean a5[4];\n  Boolean a6[1];\n  Boolean a6[2];\n  Boolean g3[1];\n  Boolean g3[2];\n"
+                           "  Boolean g5[1];\n  Boolean g5[2];\n  Boolean g9[1];\n  Boolean g9[2];\n"
+                           "  parameter Boolean pc[1] = not pb[1];\n  parameter Boolean pc[2] = not pb[2];\n"
+                           "  parameter Boolean pd[1] = pb[1] and true;\n  parameter Boolean pd[2] = pb[2] and true;\n"
+                           "  Boolean v[1];\n  Boolean v[2];\n  Boolean w[1];\n  Boolean w[2];\nequation\n"
+                           "  b = {time > 1.0, true};\n  b2 = {true, time > 2.0};\n  a2 = not b;\n  a3 = b and b2;\n"
+                           "  a5 = {true, false, true, true};\n  a6 = false:true;\n  g3 = b and not b2;\n  g5 = b and b2 or b;\n"
+                           "  g9 = {true, false} or b;\n  v[1] = true or b[1];\n  v[2] = false or b[2];\n  w[1] = false;\n"
+                           "  w[2] = true;\nend BL1;\n"));
+  const char* pre = "model M\n  Boolean b[2] = {time > 1, true};\n  Boolean b2[2] = {true, time > 2};\n  Boolean v[2];\n";
+  for (const auto& [tail, why] : std::vector<std::pair<std::string, std::string>>{
+           {"equation\n  v = b and (time > 1);\n", "array shape mismatch"},                       // omc：类型错
+           {"  Boolean l1[2, 2] = {b, b2} and {b2, b};\n", "array logical of two array literals"},   // omc：`{b and b2, b2 and b}`
+           {"equation\n  v = not {b[1], true};\n", "not of literal element in mixed array literal"},   // omc：`v[2] = not true`
+           {"  Boolean m1 = {1, 2} < {2, 3};\n", "array relation"}}) {                              // omc：类型错
+    bool uns = false;
+    const std::string out = flatten_src((std::string(pre) + tail + "end M;\n").c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
 YMC_TEST(flatten_pre_change_argument_rules) {
   // pre / change 的实参须是变量，when 之外不能是连续变量（NFBuiltinCall.typePreChangeCall :578-588；P1 / P5 / P7 探针 omc 报错）；
   // when 方程体里的连续实参 1.25.0 接受（P4 探针，期望 = 实跑输出，2026-10-02）。

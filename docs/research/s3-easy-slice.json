@@ -542,5 +542,7 @@
 "FuncBuiltinOuterProduct.mo",
 "FuncBuiltinSkew.mo",
 "FuncBuiltinSymmetric.mo",
-"FuncMap1.mo"
+"FuncMap1.mo",
+"FuncBuiltinEdge2.mo",
+"OperationLogicalBinary2.mo"
 ]

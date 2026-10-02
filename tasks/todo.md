@@ -993,6 +993,19 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           （FuncMap1），另 6 例与 1.25.0 逐字节一致但文件 Result 是较新 OMC 的 `$i0` 命名（FuncVectorization1/2/3、
           FuncVectorizationBuiltin / CastConflict1 / Map1，记入分歧账本，FAIL 基线 17→23）；nf-live 470→472（Vectorizable5、
           ArrayReduce）；+4 单测（187）。
+    - [x] (59h) 数组上的 der / pre + Boolean 数组表达式（2026-10-02）：
+          **der / pre**（Call.isVectorizeable :1300-1318 对 der / pre / previous 为 false）：数组实参不向量化；显式等式逐元素
+          标量化（`der(y) = -A * y + x` → `der(y[1]) = x[1] - (A[1,1] * y[1] + …)`、`v = pre(b) and b2` → `v[1] = pre(b[1]) and
+          b2[1]`），绑定整体保留 `k1 = der(x)`、算术绑定逐元素展开 `{2.0 * der(x[1]), …}`；另一侧有向量化调用时整体保留。此前数组
+          der 一律 SKIP，`v = pre(b)` 错成整体保留。edge 向量化、change 整体保留（Boolean 数组类型）。非 cref / Integer 数组的 der → SKIP。
+          **Boolean 数组的 and / or / not**：绑定整体保留（`g3 = b and not b2`）、全字面量在定型时折成字面量数组、参数数组与显式
+          等式逐元素（不化简 `true or b[1]`）；simplify 不再丢数组类型；形状按字面量看穿。标量与数组的 and / or、数组关系
+          `{1, 2} < {2, 3}`（omc 类型错，此前 ACCEPTS-INVALID / 错当标量关系）→ SKIP；两个混合字面量、混合字面量的 not 的字面量叶
+          （omc 的特殊化简 / 不化简）→ SKIP。**Boolean 范围** `false:true` 整体保留、空范围不出变量。
+          **external 段注解的 derivative / inverse** → SKIP（omc 连带压平导数函数，NFFlatten.mo:2987-2995；ExternalFunctionAnno
+          放行数组 der 后暴露）。探针 4 组 132 行：102 PASS / 0 FAIL / 0 ACCEPTS-INVALID。→ 全 scodeinst PASS 458→460
+          （FuncBuiltinEdge2、OperationLogicalBinary2）、nf-live 472→475（ArrayAddition2、ArrayRemoveIndex1、BooleanRanges）；
+          +2 单测（189）。数组 if 表达式（`i3 = if c then x else {…}` 整体 / 等式逐元素）留待下一桶。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、
