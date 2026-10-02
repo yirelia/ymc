@@ -1686,10 +1686,13 @@ class Flattener {
     }
     const std::size_t nfn = result_.model.functions.size();
     array_call_ok_ = I_.absyn.exps[eq.a].kind == ExpKind::Call;   // 等式一侧整个是调用（见 array_call_ok_）
+    if_top_ = I_.absyn.exps[eq.a].kind == ExpKind::IfExp;         // 等式一侧整个是 if 表达式（见 if_top_）
     Id<Expr> a = inst_exp(eq.a, enclosing, prefix);
     array_call_ok_ = I_.absyn.exps[eq.b].kind == ExpKind::Call;
+    if_top_ = I_.absyn.exps[eq.b].kind == ExpKind::IfExp;
     Id<Expr> b = inst_exp(eq.b, enclosing, prefix);
     array_call_ok_ = false;
+    if_top_ = false;
     if (result_.unsupported) return;
     // 空数组方程（某维为 0）：整条删去（NFSimplifyModel.simplifyEqualityEquation :254；EmptyArray1 `x = ones(size(x, 1))`、
     // ABCDsystem `der(x) = A*x + B*u`）。两侧须同形同类（否则 omc 类型错）；被删式子里新登记的函数 omc 不打，未做 → SKIP。
@@ -2859,8 +2862,10 @@ class Flattener {
     auto typed_rhs = [&]() -> Id<Expr> {
       if (!rhsE.is_valid()) {
         array_call_ok_ = I_.absyn.exps[braw].kind == ExpKind::Call;   // 整个绑定是调用（见 array_call_ok_）
+        if_top_ = I_.absyn.exps[braw].kind == ExpKind::IfExp;         // 整个绑定是 if 表达式（见 if_top_）
         rhsE = simplify_expr(inst_exp(braw, bscope, bprefix));
         array_call_ok_ = false;
+        if_top_ = false;
       }
       return rhsE;
     };
@@ -7848,12 +7853,22 @@ class Flattener {
   //（`i3 = if time > 1.0 then x else {2.0 * x[1], 2.0 * x[2], 2.0 * x[3]}`）、嵌套 if / 向量化调用原样；显式等式、参数摊分、sum
   // 里逐元素取（scalarize 的 IfExp 支：`y[1] = if time > 1.0 then x[1] else 2.0 * x[1]`）。两支形状不同（omc 对结构参数条件求值
   // 后取一支，IfExpression8 / 12）、Integer 引用配 Real、其余分支形态未做 → SKIP。
-  Id<Expr> array_if_exp(Id<Expr> c, Id<Expr> t, Id<Expr> f) {
+  // craw / enclosing / nfn：条件的 Absyn、所在实例、定型两支之前的函数数（两支不相容时按结构参数求值选支，见 select_if_branch）；
+  // top：本 if 是整个绑定 / 等式一侧——只有这个位置 1.25.0 才选支（V4z 探针：`2 * (if pt then {1, 2} else {3, 4, 5})` 是类型错，
+  // 嵌在另一个 if 的分支里的不相容 if 被原样留下 `d1 = if pf then {1.0} else {2.0, 3.0}`）。
+  Id<Expr> array_if_exp(Id<Expr> c, Id<Expr> t, Id<Expr> f, Id<Exp> craw, NodeId enclosing, std::size_t nfn, bool top) {
     const std::vector<std::int64_t> st = expr_shape(t), sf = expr_shape(f);
     if (result_.unsupported) return lit_int(0);
     bool ok = !st.empty() && st == sf;
     for (std::int64_t n : st) ok = ok && n >= 1;
-    if (!ok) { set_unsupported("if-expression branch shape"); return lit_int(0); }
+    if (!ok) {
+      // 只有"都是数组、同秩、维不同"才按条件求值选支；标量对数组、秩不同是 omc 类型错（V4z 探针 `if pt then {1, 2} else 3`）。
+      bool dims_only = !st.empty() && st.size() == sf.size();
+      for (std::int64_t n : st) dims_only = dims_only && n >= 1;
+      for (std::int64_t n : sf) dims_only = dims_only && n >= 1;
+      if (!dims_only || !top) { set_unsupported("if-expression branch shape"); return lit_int(0); }
+      return select_if_branch(craw, c, t, f, enclosing, nfn);
+    }
     if (!expr_shape(c).empty() || result_.model.exprs[c].ty.kind != TypeKind::Boolean) {
       set_unsupported("if-expression condition type");
       return lit_int(0);
@@ -7899,7 +7914,48 @@ class Flattener {
     return add(std::move(r));
   }
 
+  // 数组 if 的两支形状不相容：条件可按结构参数求值时取选中的那一支，条件里的参数标结构（1.25.0 实测 IfExpression4 / 8 / 14：
+  // `final parameter Boolean b = true` + `x = {1.0, 2.0}`；运行时条件 = 类型错，IfExpression5）。条件参数须字面量绑定 / fixed
+  //（传递标记依赖 omc 的求值次序，同 if 方程的 cond_params_fixed）、无 Evaluate = false。未选中的那支已定型过：它若新登记了
+  // 函数，omc 不会打该函数 → SKIP。选中的支是 Integer 算术式时 1.25.0 丢了对 Real 的整体转型（IfExpression12 `x = {6, 6}`），
+  // 不复刻 → SKIP。
+  Id<Expr> select_if_branch(Id<Exp> craw, Id<Expr> c, Id<Expr> t, Id<Expr> f, NodeId enclosing, std::size_t nfn) {
+    const std::vector<std::string> skeys = structural_keys_;
+    const std::unordered_set<std::string> sset = structural_set_;
+    std::unordered_set<std::uint32_t> used;
+    const std::optional<CVal> cv = eval_scode(craw, scode_scope_of(enclosing), 0, /*allow_param=*/true, &used);
+    bool ok = cv && cv->k == CVal::K::Bool && result_.model.functions.size() == nfn;
+    for (std::uint32_t d : used)
+      if (evaluate_annotation(Id<SElement>::from_index(d)) == std::optional<bool>(false)) ok = false;
+    // 组件数组元素里（`M m[2](b = {true, false})`）：1.25.0 是内部错 "NFSubscript.toDAEExp failed on unknown subscript"
+    //（IfExpression6），不复刻、也不出结果。
+    for (const std::vector<std::int64_t>& s : cur_psubs_) ok = ok && s.empty();
+    if (ok && !used.empty()) {
+      const std::optional<bool> fx = cond_params_fixed(simplify_expr(c));
+      ok = fx && *fx;
+    }
+    if (!ok) {
+      structural_keys_ = skeys;
+      structural_set_ = sset;
+      set_unsupported("if-expression branch shape");
+      return lit_int(0);
+    }
+    const Id<Expr> sel = cv->b ? t : f;
+    const ExprKind sk = result_.model.exprs[sel].kind;
+    if ((sk == ExprKind::Binary || sk == ExprKind::Unary) && expr_elem_kind(sel) == TypeKind::Integer) {
+      set_unsupported("if-expression selected branch cast");
+      return lit_int(0);
+    }
+    // 选中的支里还引用参数（`fill(n, 2)` 的元素 n）：omc 连同结构参数一起求值，形态有怪相（V4z 探针 `Real b2x[:] = if n == 3
+    // then {1} else fill(n, 2)` → `b2x = {2, 2}`、`2.0 .* fill(n, 2)` → `{4.0, 4.0}`），未做 → SKIP。
+    if (refs_param_var(sel)) { set_unsupported("if-expression selected branch references parameter"); return lit_int(0); }
+    return sel;
+  }
+
   Id<Expr> if_exp(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    const std::size_t nfn = result_.model.functions.size();
+    const bool top = if_top_;   // 本 if 是整个绑定 / 等式一侧（见 if_top_）；条件与两支里的 if 都不是
+    if_top_ = false;
     Id<Expr> c = inst_exp(e.a, enclosing, prefix);
     Id<Expr> t = inst_exp(e.b, enclosing, prefix);
     Id<Expr> f = inst_exp(e.c, enclosing, prefix);
@@ -7908,7 +7964,7 @@ class Flattener {
       // else {3, 4}` → `x = {3.0, 4.0}`）。
       if (const Id<Expr> cs = simplify_expr(c); result_.model.exprs[cs].kind == ExprKind::BoolLit)
         return result_.model.exprs[cs].bval ? t : f;
-      return array_if_exp(c, t, f);
+      return array_if_exp(c, t, f, e.a, enclosing, nfn, top);
     }
     // 分支类型统一（MLS §10.6.4）：一支 Real 一支 Integer → 两支都提到 Real
     //（`if c then der(x) else 0` → `else 0.0`，IfExpression17/InnerOuter3）。
@@ -11795,6 +11851,9 @@ class Flattener {
   // 整体保留；嵌在别的运算里要逐元素展开，未做）。emit_array / collect_equation 在对应 inst_exp 前置位，
   // try_emit_user_call 进入即清（实参里的嵌套调用不继承）。
   bool array_call_ok_ = false;
+  // 下一个被定型的 if 表达式是整个绑定 / 等式一侧（两支不相容时允许按结构参数求值选支，见 array_if_exp）。emit_array /
+  // collect_equation 在对应 inst_exp 前按 Absyn 置位，if_exp 进入即清。
+  bool if_top_ = false;
   // scalarize 可否代入展开推导式（见 scalarize 的 Reduction 支）：只在核实过的调用点由 RedScalarize 置位。
   bool red_scalarize_ok_ = false;
   struct RedScalarize {

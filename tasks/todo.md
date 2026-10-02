@@ -1012,6 +1012,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           分支形状推断；条件折成字面量时直接取一支（IfExpression10）。两支形状不同（结构参数条件求值）、Integer 引用配 Real、
           逻辑式分支、含数组调用的等式 → SKIP；数组 if 作属性值是 1.25.0 内部错 → SKIP。探针 V4w 45 行：35 PASS / 6 SKIP /
           4 BOTH-REJECT / 0 FAIL。→ 全 scodeinst PASS 460（不变）、nf-live 475→476（ConditionalArrayExpression2）；+1 单测（190）。
+    - [x] (59j) 数组 if 两支维不同时按结构参数求值选支（2026-10-02）：if 是整个绑定 / 等式一侧（if_top_）、两支都是同秩数组、
+          条件可求值（参数字面量绑定 / fixed、无 Evaluate = false）→ 取选中的那一支，条件里的参数标结构（`final parameter Boolean
+          b = true` + `x = {1.0, 2.0}`；1.25.0 实测，源码 HEAD 的 typeIfExpression 对不相容分支直接报错）。1.25.0 的怪相一律 SKIP：
+          嵌在运算里（类型错）、嵌在另一个 if 的分支里（原样留下不相容的 if）、选中的支引用参数（`fill(n, 2)` → `{2, 2}` 丢
+          Real 转型）或是 Integer 算术式（IfExpression12 `x = {6, 6}`）、组件数组元素里（IfExpression6 内部错）、标量对数组（类型错）。
+          探针 V4z 36 行：13 PASS / 14 SKIP / 9 BOTH-REJECT / 0 FAIL。→ 全 scodeinst PASS 460→463（IfExpression4 / 8 / 14）、
+          nf-live 476（不变）；+1 单测（191）。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、

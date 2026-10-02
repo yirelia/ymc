@@ -2895,6 +2895,36 @@ YMC_TEST(flatten_array_if_expressions) {
   }
 }
 
+YMC_TEST(flatten_if_expression_structural_branch_selection) {
+  // 数组 if 两支维不同：if 是整个绑定 / 等式一侧、条件可按结构参数求值时取选中的那一支，条件里的参数打 final。期望 = omc
+  // 1.25.0 实跑 SEL1（2026-10-02）。其余位置 / 形态 → SKIP（V4z 探针：嵌在运算里 omc 类型错、嵌在另一个 if 里 omc 原样留下、
+  // 选中的支引用参数时 omc 的求值有怪相、运行时条件 omc 类型错）。
+  YMC_CHECK_EQ(flatten_src("model SEL1\n  parameter Integer n = 2;\n  parameter Boolean pt = true;\n"
+                           "  parameter Boolean pf = false;\n  Real x[3] = {time, 1, 2};\n"
+                           "  Real a1[2] = if pt then {1, 2} else {3, 4, 5};\n  Real a4[:] = if n == 2 then x else {1, 2};\n"
+                           "  Real b5[:, :] = if n == 2 then ones(n, 3) else ones(n, n);\n  Real y[3];\nequation\n"
+                           "  y = if pf then {1, 2} else x;\nend SEL1;\n"),
+               std::string("class SEL1\n  final parameter Integer n = 2;\n  final parameter Boolean pt = true;\n"
+                           "  final parameter Boolean pf = false;\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real a1[1];\n"
+                           "  Real a1[2];\n  Real a4[1];\n  Real a4[2];\n  Real a4[3];\n  Real b5[1,1];\n  Real b5[1,2];\n"
+                           "  Real b5[1,3];\n  Real b5[2,1];\n  Real b5[2,2];\n  Real b5[2,3];\n  Real y[1];\n  Real y[2];\n"
+                           "  Real y[3];\nequation\n  x = {time, 1.0, 2.0};\n  a1 = {1.0, 2.0};\n  a4 = x;\n"
+                           "  b5 = {{1.0, 1.0, 1.0}, {1.0, 1.0, 1.0}};\n  y[1] = x[1];\n  y[2] = x[2];\n  y[3] = x[3];\n"
+                           "end SEL1;\n"));
+  const char* pre = "model M\n  parameter Integer n = 2;\n  parameter Boolean pt = true;\n  parameter Boolean pf = false;\n";
+  for (const auto& [line, why] : std::vector<std::pair<std::string, std::string>>{
+           {"  Real d4[2] = 2 * (if pt then {1, 2} else {3, 4, 5});\n", "if-expression branch shape"},
+           {"  Real d1[:] = if pt then (if pf then {1} else {2, 3}) else {4};\n", "if-expression branch shape"},
+           {"  Real b2[:] = if n == 3 then {1} else fill(n, 2);\n", "if-expression selected branch references parameter"},
+           {"  Real b7[2] = if time > 1 then {1, 2} else {3, 4, 5};\n", "if-expression branch shape"},
+           {"  Real b9[2] = if pt then {1, 2} else 3;\n", "if-expression branch shape"}}) {
+    bool uns = false;
+    const std::string out = flatten_src((std::string(pre) + line + "end M;\n").c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
 YMC_TEST(flatten_pre_change_argument_rules) {
   // pre / change 的实参须是变量，when 之外不能是连续变量（NFBuiltinCall.typePreChangeCall :578-588；P1 / P5 / P7 探针 omc 报错）；
   // when 方程体里的连续实参 1.25.0 接受（P4 探针，期望 = 实跑输出，2026-10-02）。

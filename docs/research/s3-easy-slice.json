@@ -544,5 +544,8 @@
 "FuncBuiltinSymmetric.mo",
 "FuncMap1.mo",
 "FuncBuiltinEdge2.mo",
-"OperationLogicalBinary2.mo"
+"OperationLogicalBinary2.mo",
+"IfExpression4.mo",
+"IfExpression8.mo",
+"IfExpression14.mo"
 ]
