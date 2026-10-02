@@ -1,0 +1,129 @@
+//// set: md-m11 — constant 绑定里只在结构位置出现的 parameter（下标、范围、fill 个数、归约；size 的例外）
+//// model: M110
+model M110
+  parameter Integer n = 2; constant Real c[3] = {1, 2, 3}; constant Real q = c[n];
+end M110;
+//// model: M111
+model M111
+  parameter Integer n = 2; constant Real c[3] = {1, 2, 3}; constant Real q[2] = c[n:n + 1];
+end M111;
+//// model: M112
+model M112
+  parameter Integer n = 2; constant Real c[3] = {1, 2, 3}; constant Real q[2] = c[1:n];
+end M112;
+//// model: M113
+model M113
+  parameter Integer n = 2; constant Real c[3] = {1, 2, 3}; constant Real q[2] = c[{1, n}];
+end M113;
+//// model: M114
+model M114
+  parameter Integer n = 2; Real x[n]; constant Integer q = n;
+end M114;
+//// model: M115
+model M115
+  parameter Integer n = 2; Real x[n]; constant Real q = n * 1.5;
+end M115;
+//// model: M116
+model M116
+  parameter Integer n = 2; constant Integer q = sum(i for i in 1:n);
+end M116;
+//// model: M117
+model M117
+  parameter Integer n = 2; constant Integer q = sum(fill(1, n));
+end M117;
+//// model: M118
+model M118
+  parameter Integer n = 2; constant Integer q = sum(1:n);
+end M118;
+//// model: M119
+model M119
+  parameter Integer n = 2; constant Integer q = if n > 1 then 1 else 2;
+end M119;
+//// model: M1110
+model M1110
+  parameter Boolean b = true; constant Integer q = if b then 1 else 2;
+end M1110;
+//// model: M1111
+model M1111
+  parameter Integer n = 2; constant Real q[2] = if n > 1 then {1, 2} else {3, 4};
+end M1111;
+//// model: M1112
+model M1112
+  parameter Real x[3] = {1, 2, 3}; constant Real q[3] = fill(1.5, size(x, 1));
+end M1112;
+//// model: M1113
+model M1113
+  parameter Real x[3] = {1, 2, 3}; constant Integer q = size(x, 1);
+end M1113;
+//// model: M1114
+model M1114
+  parameter Integer n = 3; parameter Real x[n] = {1, 2, 3}; constant Integer q = size(x, 1);
+end M1114;
+//// model: M1115
+model M1115
+  parameter Integer n = 3; parameter Real x[n] = {1, 2, 3}; constant Real q[3] = fill(1.5, size(x, 1));
+end M1115;
+//// model: M1116
+model M1116
+  parameter Integer n = 2; constant Real q[2] = {1.5 for i in 1:n};
+end M1116;
+//// model: M1117
+model M1117
+  parameter Integer n = 2; constant String s = String(n);
+end M1117;
+//// model: M1118
+model M1118
+  parameter Integer n = 2; constant Integer q = max(n, 1);
+end M1118;
+//// model: M1119
+model M1119
+  parameter Integer n = 2; constant Integer q = size(ones(n, 3), 2);
+end M1119;
+//// model: M1120
+model M1120
+  parameter Integer n = 2; constant Integer q = size(ones(n, 3), 1);
+end M1120;
+//// model: M1121
+model M1121
+  parameter Integer n = 2; constant Real q[2] = ones(2) * n;
+end M1121;
+//// model: M1122
+model M1122
+  parameter Integer n = 2; constant Real q[2, 2] = diagonal(fill(1, n));
+end M1122;
+//// model: M1123
+model M1123
+  parameter Integer n = 2; constant Real q[2] = cat(1, {1}, fill(1, n - 1));
+end M1123;
+//// model: M1124
+model M1124
+  parameter Integer n = 2; constant Real q[2] = vector(fill(1, n, 1));
+end M1124;
+//// model: M1125
+model M1125
+  parameter Integer n = 2; constant Real q[2, 2] = transpose(fill(1, n, n));
+end M1125;
+//// model: M1126
+model M1126
+  parameter Integer n = 2; constant Real q[n] = array(1.5 for i in 1:n);
+end M1126;
+//// model: M1127
+model M1127
+  parameter Integer n = 2; constant Boolean q[n] = fill(true, n);
+end M1127;
+//// model: M1128
+model M1128
+  parameter Integer n = 2; constant Integer q = product(fill(2, n));
+end M1128;
+//// model: M1129
+model M1129
+  parameter Integer n = 2; constant Integer q = min(fill(2, n));
+end M1129;
+//// model: M1130
+model M1130
+  parameter Integer n = 2; constant Real q = sum(ones(n));
+end M1130;
+//// model: M1131
+model M1131
+  parameter Integer n = 2; constant Real q = ones(n) * ones(n);
+end M1131;

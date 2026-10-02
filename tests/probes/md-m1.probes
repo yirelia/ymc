@@ -1,0 +1,441 @@
+//// set: md-m1 — 组件数组上的数组值修饰：绑定的各种形态（cref / 运算 / fill / 切片 / 推导式 / if / 用户函数 / 属性 / 多维 / 嵌套一层）
+//// model: M10
+model M10
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](k = p);
+end M10;
+//// model: M11
+model M11
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](k = 2 * p);
+end M11;
+//// model: M12
+model M12
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](k = p + p);
+end M12;
+//// model: M13
+model M13
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](k = -p);
+end M13;
+//// model: M14
+model M14
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](k = fill(2, 3));
+end M14;
+//// model: M15
+model M15
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](k = ones(3));
+end M15;
+//// model: M16
+model M16
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](k = p[1:3]);
+end M16;
+//// model: M17
+model M17
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](k = p[{3, 1, 2}]);
+end M17;
+//// model: M18
+model M18
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](each k = p[1]);
+end M18;
+//// model: M19
+model M19
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](k = {p[1], 2, 3});
+end M19;
+//// model: M110
+model M110
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](k = {1, 2, 3});
+end M110;
+//// model: M111
+model M111
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[2, 2](k = {{1, 2}, {3, 4}});
+end M111;
+//// model: M112
+model M112
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[2, 2](k = {p[1:2], p[2:3]});
+end M112;
+//// model: M113
+model M113
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[2, 2](k = fill(p[2], 2, 2));
+end M113;
+//// model: M114
+model M114
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](x(start = p));
+end M114;
+//// model: M115
+model M115
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](x(start = {1, 2, 3}));
+end M115;
+//// model: M116
+model M116
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](k = linspace(1, 2, 3));
+end M116;
+//// model: M117
+model M117
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](k = {i * 2 for i in 1:3});
+end M117;
+//// model: M118
+model M118
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](k = {p[i] * 2 for i in 1:3});
+end M118;
+//// model: M119
+model M119
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](k = if c then p else 2 * p);
+end M119;
+//// model: M120
+model M120
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](k = f(p));
+end M120;
+//// model: M121
+model M121
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](k = sin(p));
+end M121;
+//// model: M122
+model M122
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](x = {tt, 1, 2});
+end M122;
+//// model: M123
+model M123
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](x = p * tt);
+end M123;
+//// model: M124
+model M124
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](v = {{tt, 1}, {2, 3}, {4, 5}});
+end M124;
+//// model: M125
+model M125
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](v = fill(tt, 3, 2));
+end M125;
+//// model: M126
+model M126
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](each v = {tt, 1});
+end M126;
+//// model: M127
+model M127
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](v = fill({tt, 1}, 3));
+end M127;
+//// model: M128
+model M128
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  B b[2](q(k = {{1, 2}, {3, 4}}));
+end M128;
+//// model: M129
+model M129
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  B b[2](q(each k = 5), w = {1, 2});
+end M129;
+//// model: M130
+model M130
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  B b[2](w = p[1:2]);
+end M130;
+//// model: M131
+model M131
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  B b[2](each q(k = {1, 2}));
+end M131;
+//// model: M132
+model M132
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  B b[2](q(k = fill(p[1:2], 2)));
+end M132;
+//// model: M133
+model M133
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  parameter Real pp[2, 3] = {{1, 2, 3}, {4, 5, 6}}; A a[3](k = pp[1, :]);
+end M133;
+//// model: M134
+model M134
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  parameter Real pp[2, 3] = {{1, 2, 3}, {4, 5, 6}}; A a[2, 3](k = pp);
+end M134;
+//// model: M135
+model M135
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  parameter Real pp[2, 3] = {{1, 2, 3}, {4, 5, 6}}; A a[3](k = pp[:, 1] * 2);
+end M135;
+//// model: M136
+model M136
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  parameter Integer n = 3; A a[n](k = p);
+end M136;
+//// model: M137
+model M137
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  parameter Integer n = 3; A a[n](k = fill(2, n));
+end M137;
+//// model: M138
+model M138
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  parameter Integer n = 3; A a[n](k = 1:n);
+end M138;
+//// model: M139
+model M139
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](k = 1:3);
+end M139;
+//// model: M140
+model M140
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](k = 1.5:3.5);
+end M140;
+//// model: M141
+model M141
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](k = p[1:2]);
+end M141;
+//// model: M142
+model M142
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](k = p[1]);
+end M142;
+//// model: M143
+model M143
+  model A parameter Real k = 1; Real x = k * time; Real v[2] = {time, k}; end A;
+  model B A q[2]; parameter Real w = 1; end B;
+  function f input Real u[:]; output Real s[size(u, 1)]; algorithm s := 2 * u; end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a[3](k = {1, 2});
+end M143;

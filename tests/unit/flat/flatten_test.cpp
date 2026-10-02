@@ -4374,6 +4374,157 @@ YMC_TEST(flatten_composite_array_element_references) {
   }
 }
 
+YMC_TEST(flatten_array_modifiers_on_component_arrays) {
+  // 组件数组上的数组值修饰（Modifier.propagate 逐元素分发）：绑定不是字面量数组时（`2 * p`、`fill(…)`、切片、if 式、
+  // 用户函数、推导式、linspace）逐元素取 `(E)[i]`，E 整体定型后取该元素并化简——`a1[2].k = 2.0 * p[2]`、
+  // `a3[1].k = p[3]`、`a5[1].k = MDT1.f(p)[1]`、`a6[1].k = p[3]`；Integer 与 Real 混排的字面量在末元素是 Integer 时
+  // 照常转型；数组字段的修饰（`v = fill(tt, 3, 2)`）只取前几维；嵌套一层的（`B b[2](w = p[1:2])`）同理。书写的
+  // `(2 * p)[2]` 走同一条路。期望 = omc 1.25.0 实跑 MDT1（2026-10-03）。
+  YMC_CHECK_EQ(flatten_src("model MDT1\n  model A\n    parameter Real k = 1;\n    Real x = k * time;\n"
+                           "    Real v[2] = {time, k};\n  end A;\n  model B\n    A q[2];\n    parameter Real w = 1;\n  end B;\n"
+                           "  function f\n    input Real u[:];\n    output Real s[size(u, 1)];\n  algorithm\n    s := 2 * u;\n"
+                           "  end f;\n  parameter Real p[3] = {1, 2, 3};\n  parameter Boolean c = true;\n  Real tt = time;\n"
+                           "  A a1[3](k = 2 * p);\n  A a2[3](k = fill(2, 3), x(start = p));\n  A a3[3](k = p[{3, 1, 2}]);\n"
+                           "  A a4[3](k = if c then p else 2 * p);\n  A a5[3](k = f(p));\n"
+                           "  A a6[3](k = {p[4 - i] for i in 1:3});\n  A a7[3](k = linspace(1, 2, 3), x = p * tt);\n"
+                           "  A a8[3](k = {p[1], 2, 3});\n  A a9[2, 2](k = fill(p[2], 2, 2));\n  A a10[3](v = fill(tt, 3, 2));\n"
+                           "  B b[2](w = p[1:2]);\n  Real y1 = (2 * p)[2] * tt;\n  Real y2 = sum({a1[4 - i].x for i in 1:3});\n"
+                           "end MDT1;\n"),
+               std::string("function MDT1.f\n  input Real[:] u;\n  output Real[size(u, 1)] s;\nalgorithm\n  s := u * 2.0;\n"
+                           "end MDT1.f;\n\nclass MDT1\n  parameter Real p[1] = 1.0;\n  parameter Real p[2] = 2.0;\n"
+                           "  parameter Real p[3] = 3.0;\n  parameter Boolean c = true;\n  Real tt = time;\n"
+                           "  parameter Real a1[1].k = 2.0 * p[1];\n  Real a1[1].x = a1[1].k * time;\n  Real a1[1].v[1];\n"
+                           "  Real a1[1].v[2];\n  parameter Real a1[2].k = 2.0 * p[2];\n  Real a1[2].x = a1[2].k * time;\n"
+                           "  Real a1[2].v[1];\n  Real a1[2].v[2];\n  parameter Real a1[3].k = 2.0 * p[3];\n"
+                           "  Real a1[3].x = a1[3].k * time;\n  Real a1[3].v[1];\n  Real a1[3].v[2];\n"
+                           "  parameter Real a2[1].k = 2.0;\n  Real a2[1].x(start = p[1]) = a2[1].k * time;\n"
+                           "  Real a2[1].v[1];\n  Real a2[1].v[2];\n  parameter Real a2[2].k = 2.0;\n"
+                           "  Real a2[2].x(start = p[2]) = a2[2].k * time;\n  Real a2[2].v[1];\n  Real a2[2].v[2];\n"
+                           "  parameter Real a2[3].k = 2.0;\n  Real a2[3].x(start = p[3]) = a2[3].k * time;\n"
+                           "  Real a2[3].v[1];\n  Real a2[3].v[2];\n  parameter Real a3[1].k = p[3];\n"
+                           "  Real a3[1].x = a3[1].k * time;\n  Real a3[1].v[1];\n  Real a3[1].v[2];\n"
+                           "  parameter Real a3[2].k = p[1];\n  Real a3[2].x = a3[2].k * time;\n  Real a3[2].v[1];\n"
+                           "  Real a3[2].v[2];\n  parameter Real a3[3].k = p[2];\n  Real a3[3].x = a3[3].k * time;\n"
+                           "  Real a3[3].v[1];\n  Real a3[3].v[2];\n  parameter Real a4[1].k = if c then p[1] else 2.0 * p[1];\n"
+                           "  Real a4[1].x = a4[1].k * time;\n  Real a4[1].v[1];\n  Real a4[1].v[2];\n"
+                           "  parameter Real a4[2].k = if c then p[2] else 2.0 * p[2];\n  Real a4[2].x = a4[2].k * time;\n"
+                           "  Real a4[2].v[1];\n  Real a4[2].v[2];\n  parameter Real a4[3].k = if c then p[3] else 2.0 * p[3];\n"
+                           "  Real a4[3].x = a4[3].k * time;\n  Real a4[3].v[1];\n  Real a4[3].v[2];\n"
+                           "  parameter Real a5[1].k = MDT1.f(p)[1];\n  Real a5[1].x = a5[1].k * time;\n  Real a5[1].v[1];\n"
+                           "  Real a5[1].v[2];\n  parameter Real a5[2].k = MDT1.f(p)[2];\n  Real a5[2].x = a5[2].k * time;\n"
+                           "  Real a5[2].v[1];\n  Real a5[2].v[2];\n  parameter Real a5[3].k = MDT1.f(p)[3];\n"
+                           "  Real a5[3].x = a5[3].k * time;\n  Real a5[3].v[1];\n  Real a5[3].v[2];\n"
+                           "  parameter Real a6[1].k = p[3];\n  Real a6[1].x = a6[1].k * time;\n  Real a6[1].v[1];\n"
+                           "  Real a6[1].v[2];\n  parameter Real a6[2].k = p[2];\n  Real a6[2].x = a6[2].k * time;\n"
+                           "  Real a6[2].v[1];\n  Real a6[2].v[2];\n  parameter Real a6[3].k = p[1];\n"
+                           "  Real a6[3].x = a6[3].k * time;\n  Real a6[3].v[1];\n  Real a6[3].v[2];\n"
+                           "  parameter Real a7[1].k = 1.0;\n  Real a7[1].x = p[1] * tt;\n  Real a7[1].v[1];\n"
+                           "  Real a7[1].v[2];\n  parameter Real a7[2].k = 1.5;\n  Real a7[2].x = p[2] * tt;\n"
+                           "  Real a7[2].v[1];\n  Real a7[2].v[2];\n  parameter Real a7[3].k = 2.0;\n"
+                           "  Real a7[3].x = p[3] * tt;\n  Real a7[3].v[1];\n  Real a7[3].v[2];\n"
+                           "  parameter Real a8[1].k = p[1];\n  Real a8[1].x = a8[1].k * time;\n  Real a8[1].v[1];\n"
+                           "  Real a8[1].v[2];\n  parameter Real a8[2].k = 2.0;\n  Real a8[2].x = a8[2].k * time;\n"
+                           "  Real a8[2].v[1];\n  Real a8[2].v[2];\n  parameter Real a8[3].k = 3.0;\n"
+                           "  Real a8[3].x = a8[3].k * time;\n  Real a8[3].v[1];\n  Real a8[3].v[2];\n"
+                           "  parameter Real a9[1,1].k = p[2];\n  Real a9[1,1].x = a9[1,1].k * time;\n  Real a9[1,1].v[1];\n"
+                           "  Real a9[1,1].v[2];\n  parameter Real a9[1,2].k = p[2];\n  Real a9[1,2].x = a9[1,2].k * time;\n"
+                           "  Real a9[1,2].v[1];\n  Real a9[1,2].v[2];\n  parameter Real a9[2,1].k = p[2];\n"
+                           "  Real a9[2,1].x = a9[2,1].k * time;\n  Real a9[2,1].v[1];\n  Real a9[2,1].v[2];\n"
+                           "  parameter Real a9[2,2].k = p[2];\n  Real a9[2,2].x = a9[2,2].k * time;\n  Real a9[2,2].v[1];\n"
+                           "  Real a9[2,2].v[2];\n  parameter Real a10[1].k = 1.0;\n  Real a10[1].x = a10[1].k * time;\n"
+                           "  Real a10[1].v[1];\n  Real a10[1].v[2];\n  parameter Real a10[2].k = 1.0;\n"
+                           "  Real a10[2].x = a10[2].k * time;\n  Real a10[2].v[1];\n  Real a10[2].v[2];\n"
+                           "  parameter Real a10[3].k = 1.0;\n  Real a10[3].x = a10[3].k * time;\n  Real a10[3].v[1];\n"
+                           "  Real a10[3].v[2];\n  parameter Real b[1].q[1].k = 1.0;\n  Real b[1].q[1].x = b[1].q[1].k * time;\n"
+                           "  Real b[1].q[1].v[1];\n  Real b[1].q[1].v[2];\n  parameter Real b[1].q[2].k = 1.0;\n"
+                           "  Real b[1].q[2].x = b[1].q[2].k * time;\n  Real b[1].q[2].v[1];\n  Real b[1].q[2].v[2];\n"
+                           "  parameter Real b[1].w = p[1];\n  parameter Real b[2].q[1].k = 1.0;\n"
+                           "  Real b[2].q[1].x = b[2].q[1].k * time;\n  Real b[2].q[1].v[1];\n  Real b[2].q[1].v[2];\n"
+                           "  parameter Real b[2].q[2].k = 1.0;\n  Real b[2].q[2].x = b[2].q[2].k * time;\n"
+                           "  Real b[2].q[2].v[1];\n  Real b[2].q[2].v[2];\n  parameter Real b[2].w = p[2];\n"
+                           "  Real y1 = 2.0 * p[2] * tt;\n  Real y2 = a1[3].x + a1[2].x + a1[1].x;\nequation\n"
+                           "  a1[1].v = {time, a1[1].k};\n  a1[2].v = {time, a1[2].k};\n  a1[3].v = {time, a1[3].k};\n"
+                           "  a2[1].v = {time, a2[1].k};\n  a2[2].v = {time, a2[2].k};\n  a2[3].v = {time, a2[3].k};\n"
+                           "  a3[1].v = {time, a3[1].k};\n  a3[2].v = {time, a3[2].k};\n  a3[3].v = {time, a3[3].k};\n"
+                           "  a4[1].v = {time, a4[1].k};\n  a4[2].v = {time, a4[2].k};\n  a4[3].v = {time, a4[3].k};\n"
+                           "  a5[1].v = {time, a5[1].k};\n  a5[2].v = {time, a5[2].k};\n  a5[3].v = {time, a5[3].k};\n"
+                           "  a6[1].v = {time, a6[1].k};\n  a6[2].v = {time, a6[2].k};\n  a6[3].v = {time, a6[3].k};\n"
+                           "  a7[1].v = {time, a7[1].k};\n  a7[2].v = {time, a7[2].k};\n  a7[3].v = {time, a7[3].k};\n"
+                           "  a8[1].v = {time, a8[1].k};\n  a8[2].v = {time, a8[2].k};\n  a8[3].v = {time, a8[3].k};\n"
+                           "  a9[1,1].v = {time, a9[1,1].k};\n  a9[1,2].v = {time, a9[1,2].k};\n"
+                           "  a9[2,1].v = {time, a9[2,1].k};\n  a9[2,2].v = {time, a9[2,2].k};\n  a10[1].v = {tt, tt};\n"
+                           "  a10[2].v = {tt, tt};\n  a10[3].v = {tt, tt};\n  b[1].q[1].v = {time, b[1].q[1].k};\n"
+                           "  b[1].q[2].v = {time, b[1].q[2].k};\n  b[2].q[1].v = {time, b[2].q[1].k};\n"
+                           "  b[2].q[2].v = {time, b[2].q[2].k};\nend MDT1;\n"));
+  // 逐元素的参数作维：各元素同维的带绑定数组、参差的参数数组（绑定逐元素摊分）都正常。期望 = omc 1.25.0 实跑 MDT3。
+  YMC_CHECK_EQ(flatten_src("model MDT3\n  model X\n    parameter Integer n = 2;\n    Real x[n] = fill(time, n);\n"
+                           "    parameter Real q[n] = fill(1.5, n);\n  end X;\n  model Y\n    parameter Integer n = 2;\n"
+                           "    parameter Real q[n] = fill(1.5, n);\n    Real s = sum(q) * time;\n  end Y;\n"
+                           "  X a[2](n = {3, 3});\n  X b[2](each n = 1);\n  Y c[2](n = {1, 3});\nend MDT3;\n"),
+               std::string("class MDT3\n  final parameter Integer a[1].n = 3;\n  Real a[1].x[1];\n  Real a[1].x[2];\n"
+                           "  Real a[1].x[3];\n  parameter Real a[1].q[1] = 1.5;\n  parameter Real a[1].q[2] = 1.5;\n"
+                           "  parameter Real a[1].q[3] = 1.5;\n  final parameter Integer a[2].n = 3;\n  Real a[2].x[1];\n"
+                           "  Real a[2].x[2];\n  Real a[2].x[3];\n  parameter Real a[2].q[1] = 1.5;\n"
+                           "  parameter Real a[2].q[2] = 1.5;\n  parameter Real a[2].q[3] = 1.5;\n"
+                           "  final parameter Integer b[1].n = 1;\n  Real b[1].x[1];\n  parameter Real b[1].q[1] = 1.5;\n"
+                           "  final parameter Integer b[2].n = 1;\n  Real b[2].x[1];\n  parameter Real b[2].q[1] = 1.5;\n"
+                           "  final parameter Integer c[1].n = 1;\n  parameter Real c[1].q[1] = 1.5;\n"
+                           "  Real c[1].s = c[1].q[1] * time;\n  final parameter Integer c[2].n = 3;\n"
+                           "  parameter Real c[2].q[1] = 1.5;\n  parameter Real c[2].q[2] = 1.5;\n"
+                           "  parameter Real c[2].q[3] = 1.5;\n  Real c[2].s = (c[2].q[1] + c[2].q[2] + c[2].q[3]) * time;\n"
+                           "equation\n  a[1].x = {time, time, time};\n  a[2].x = {time, time, time};\n  b[1].x = {time};\n"
+                           "  b[2].x = {time};\nend MDT3;\n"));
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           // 混排字面量的末元素是 Real：omc 前面的 Integer 元素不转型（`parameter Real a[1].k = 1;`），不跟（MDS1）。
+           {"model MDS1\n  model A\n    parameter Real k = 1;\n  end A;\n  A a[3](k = {1, 2, 3.0});\nend MDS1;\n", "composite array modifier shape/type"},
+           // 切片长度与数组维不等：1.25.0 放行并打出 `a[3].k = p[3]`，不跟（MDS2）。
+           {"model MDS2\n  model A\n    parameter Real k = 1;\n  end A;\n  parameter Real p[3] = {1, 2, 3};\n"
+            "  A a[3](k = p[1:2]);\nend MDS2;\n", "composite array modifier shape/type"},
+           // 书写的 `(推导式)[k]`：omc 代入后不再化简（`/*Real*/(2) * time`）；且解析器分不清 `{…}[k]`（omc 语法错）
+           // 与带括号的写法（任务卡 T-S3-08）→ 基是构造子 / 调用 / 矩阵的书写下标不收（MDS3）。
+           {"model MDS3\n  Real a = ({i * time for i in 1:3})[2];\nend MDS3;\n", "subscripted expression"},
+           // 参差的带绑定非参数数组：omc 内部错（NFSubscript.toDAEExp failed on unknown subscript），不复刻（MDS4）。
+           {"model MDS4\n  model X\n    parameter Integer n = 2;\n    Real x[n] = fill(time, n);\n  end X;\n"
+            "  X xs[2](n = {1, 3});\nend MDS4;\n", "ragged component array binding"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
+YMC_TEST(flatten_constant_binding_variability) {
+  // 归约实参里的参数不取值：`f(sum(p))` 留成 `f(p[1] + p[2])`、`f(max(p))` 原样（此前 eval_reduction 把 allow_param 写死
+  // 成 true，整个调用被折成字面量、p 连带 final）；下标位置上的参数是结构参数（`f(c[n])` → 4.0、n final）；已知维的
+  // size(a, k) 是 constant 变率，可以绑给 constant。期望 = omc 1.25.0 实跑 MDT2（2026-10-03）。
+  YMC_CHECK_EQ(flatten_src("model MDT2\n  function f\n    input Real u;\n    output Real y;\n  algorithm\n    y := 2 * u;\n"
+                           "  end f;\n  record R\n    Real x;\n  end R;\n  constant Real c[3] = {1, 2, 3};\n"
+                           "  parameter Integer n = 2;\n  parameter Real p[2] = {1, 2};\n  parameter Real q1 = f(sum(p));\n"
+                           "  parameter Real q2 = f(max(p));\n  parameter R r = R(product(p));\n"
+                           "  Real y = f(sum(c)) * time + f(c[n]);\n  constant Integer k1 = size(p, 1);\n"
+                           "  constant Integer k2 = size(ones(n, 3), 1);\n  constant Real k3[2] = fill(1.5, size(p, 1));\n"
+                           "end MDT2;\n"),
+               std::string("function MDT2.f\n  input Real u;\n  output Real y;\nalgorithm\n  y := 2.0 * u;\nend MDT2.f;\n\n"
+                           "class MDT2\n  constant Real c[1] = 1.0;\n  constant Real c[2] = 2.0;\n  constant Real c[3] = 3.0;\n"
+                           "  final parameter Integer n = 2;\n  parameter Real p[1] = 1.0;\n  parameter Real p[2] = 2.0;\n"
+                           "  parameter Real q1 = MDT2.f(p[1] + p[2]);\n  parameter Real q2 = MDT2.f(max(p));\n"
+                           "  parameter Real r.x = p[1] * p[2];\n  Real y = 12.0 * time + 4.0;\n  constant Integer k1 = 2;\n"
+                           "  constant Integer k2 = 2;\n  constant Real k3[1] = 1.5;\n  constant Real k3[2] = 1.5;\nend MDT2;\n"));
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           // constant 的绑定引用 parameter（只出现在下标 / 范围 / fill 个数这类结构位置也算）：绑定变率高于组件，omc 报错
+           //（checkComponentBindingVariability，NFTyping.mo:1121-1160 v1.25.0）。MDS5 标量、MDS6 数组、MDS7 记录。
+           {"model MDS5\n  parameter Integer n = 2;\n  constant Real c[3] = {1, 2, 3};\n"
+            "  constant Real q = c[n];\nend MDS5;\n", "binding of higher variability"},
+           {"model MDS6\n  parameter Integer n = 2;\n  constant Real q[n] = fill(1.5, n);\nend MDS6;\n", "array binding higher variability"},
+           {"model MDS7\n  record R\n    Real x;\n  end R;\n  constant Real c[3] = {1, 2, 3};\n"
+            "  parameter Integer n = 2;\n  constant R r = R(c[n]);\nend MDS7;\n", "record binding via structural parameter"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

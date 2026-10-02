@@ -1,0 +1,120 @@
+//// set: md-ut — 组件数组上的数组值修饰 / 参差守卫 / constant 绑定变率（单测原文）
+//// model: MDS1
+model MDS1
+  model A
+    parameter Real k = 1;
+  end A;
+  A a[3](k = {1, 2, 3.0});
+end MDS1;
+//// model: MDS2
+model MDS2
+  model A
+    parameter Real k = 1;
+  end A;
+  parameter Real p[3] = {1, 2, 3};
+  A a[3](k = p[1:2]);
+end MDS2;
+//// model: MDS3
+model MDS3
+  Real a = ({i * time for i in 1:3})[2];
+end MDS3;
+//// model: MDS4
+model MDS4
+  model X
+    parameter Integer n = 2;
+    Real x[n] = fill(time, n);
+  end X;
+  X xs[2](n = {1, 3});
+end MDS4;
+//// model: MDS5
+model MDS5
+  parameter Integer n = 2;
+  constant Real c[3] = {1, 2, 3};
+  constant Real q = c[n];
+end MDS5;
+//// model: MDS6
+model MDS6
+  parameter Integer n = 2;
+  constant Real q[n] = fill(1.5, n);
+end MDS6;
+//// model: MDS7
+model MDS7
+  record R
+    Real x;
+  end R;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  constant R r = R(c[n]);
+end MDS7;
+//// model: MDT1
+model MDT1
+  model A
+    parameter Real k = 1;
+    Real x = k * time;
+    Real v[2] = {time, k};
+  end A;
+  model B
+    A q[2];
+    parameter Real w = 1;
+  end B;
+  function f
+    input Real u[:];
+    output Real s[size(u, 1)];
+  algorithm
+    s := 2 * u;
+  end f;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Boolean c = true;
+  Real tt = time;
+  A a1[3](k = 2 * p);
+  A a2[3](k = fill(2, 3), x(start = p));
+  A a3[3](k = p[{3, 1, 2}]);
+  A a4[3](k = if c then p else 2 * p);
+  A a5[3](k = f(p));
+  A a6[3](k = {p[4 - i] for i in 1:3});
+  A a7[3](k = linspace(1, 2, 3), x = p * tt);
+  A a8[3](k = {p[1], 2, 3});
+  A a9[2, 2](k = fill(p[2], 2, 2));
+  A a10[3](v = fill(tt, 3, 2));
+  B b[2](w = p[1:2]);
+  Real y1 = (2 * p)[2] * tt;
+  Real y2 = sum({a1[4 - i].x for i in 1:3});
+end MDT1;
+//// model: MDT2
+model MDT2
+  function f
+    input Real u;
+    output Real y;
+  algorithm
+    y := 2 * u;
+  end f;
+  record R
+    Real x;
+  end R;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  parameter Real q1 = f(sum(p));
+  parameter Real q2 = f(max(p));
+  parameter R r = R(product(p));
+  Real y = f(sum(c)) * time + f(c[n]);
+  constant Integer k1 = size(p, 1);
+  constant Integer k2 = size(ones(n, 3), 1);
+  constant Real k3[2] = fill(1.5, size(p, 1));
+end MDT2;
+//// model: MDT3
+model MDT3
+  model X
+    parameter Integer n = 2;
+    Real x[n] = fill(time, n);
+    parameter Real q[n] = fill(1.5, n);
+  end X;
+  model Y
+    parameter Integer n = 2;
+    parameter Real q[n] = fill(1.5, n);
+    Real s = sum(q) * time;
+  end Y;
+  X a[2](n = {3, 3});
+  X b[2](each n = 1);
+  Y c[2](n = {1, 3});
+end MDT3;

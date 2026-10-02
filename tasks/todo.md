@@ -1318,6 +1318,32 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           `a[4].x`，不跟）、参数字段的 der（omc 折成 0）、`size(a.x, 1)`。
           → scodeinst 506→507 PASS（EquationQualified1 入 slice）；整个 testsuite PASS 1325→1330（ArrayReduce2、MatrixEquation、
           QualifiedSlicing、LookupArray）；+1 单测（231）；探针 5357→5506。
+    - [x] (60e) 组件数组上的数组值修饰 + 探针铺出来的四处潜伏错（2026-10-03）：
+          此前复合数组的修饰只按**字面量**数组逐元素下降（`A a[3](k = {1, 2, 3})`），绑定是别的式子（`k = p`、`2 * p`、
+          `fill(…)`、切片、推导式、if 式、用户函数）一律 SKIP（`composite array modifier distribution`）。
+          **分发**：array_scalar_elem 的 general 档给落在一般式上的剩余下标合成 `(E)[i, j]`（Absyn Subscript，记入
+          split_subscripts_）；subscripted_exp 的一般基把 E 整体定型后取该元素并化简（`(2 * p)[1]` → `2.0 * p[1]`、
+          `(p[{3, 1, 2}])[1]` → `p[3]`、`(fill(2, 3))[1]` → `2.0`，推导式 / linspace 代入后化简），数组值的用户函数留成
+          `f(p)[1]`；只取前几维的（数组字段 `v = fill(tt, 3, 2)`）下降数组字面量。split_mod_ok 对非字面量绑定按定型后的
+          形状核对。字面量里 Integer / Real 混排：数组类型取切分那一层**末**元素的——末元素 Integer 时照常转型（收），
+          末元素 Real（前面的 Integer 不转型）/ Real 元素带调用（多打一层 `/*Real*/`）不复刻。
+          **书写的 `(E)[i]`** 走同一条路；基是调用 / 构造子 / 矩阵的不收（解析器分不清 `f(x)[1]` 与 `(f(x))[1]`，前者是
+          omc 的语法错，任务卡 T-S3-08）。求值器补了 Subscript 的取值（分发下来的值作结构量用）。
+          **潜伏错**（60d 及以前都在）：
+          · 参差的组件数组：`X xs[2](n = {1, 3})`、X 里 `Real x[n] = fill(time, n)`——omc 内部错，ymc 放行 → SKIP
+            （`ragged component array binding`；同维 / 无绑定 / 参数数组 / 参差的复合子数组照常）。
+          · constant 的绑定只在结构位置引用参数（`c[n]`、`sum(1:n)`、`q[n] = fill(1.5, n)`、`R(c[n])`）：omc 报"绑定变率
+            高于组件"（checkComponentBindingVariability），ymc 经结构求值把参数吃成字面量后放行 → 改在**书写的**绑定上查
+            （absyn_refs_param：已知维的 `size(a, k)` 首参除外，归约迭代变量遮蔽同名参数）。
+          · `eval_reduction` 把 allow_param 写死成 true：`parameter Real q = f(sum(p))` 被折成字面量、p 连带 final
+            （FAIL），omc 留 `f(p[1] + p[2])` → 照调用方的传。
+          · 推导式取元素后下标不化简（`sum({x[4 - i] for i in 1:3})` 打出 `x[4 - 1]`）→ clone_subst 的 fold_subs。
+          未做 → SKIP：末元素 Real 的混排字面量、嵌在运算里的推导式（omc 留 `(array(…) .* p)[1]`）、书写的
+          `(推导式)[k]`、长度不等的切片修饰（1.25.0 放行）、记录函数绑定里只在结构位置出现的参数（omc 挪成初始方程）、
+          归约实参里范围 / fill 个数上的参数（`f(sum(1:n))`：此前靠上面那个漏洞碰巧对，现在 SKIP；要收得让这些结构位置
+          自带事务地取参数值，typeRange NFTyping.mo:2352-2416 / typeFillCall2 NFBuiltinCall.mo:935-1001）。
+          → scodeinst 507→508 PASS（IfExpression16 入 slice）；整个 testsuite PASS 1330→1331；+2 单测（233）；
+            探针 5506→5898。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、

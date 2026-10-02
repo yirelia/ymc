@@ -1,0 +1,77 @@
+//// set: md-m10 — constant 数组的绑定引用 parameter（fill / ones / 推导式 / `:` 维；size 的例外）
+//// model: M100
+model M100
+  parameter Integer n = 2; constant Real q[n] = fill(1.5, n);
+end M100;
+//// model: M101
+model M101
+  parameter Integer n = 2; constant Real q[2] = fill(1.5, n);
+end M101;
+//// model: M102
+model M102
+  parameter Integer n = 2; constant Real q[2] = fill(1.5 * n, 2);
+end M102;
+//// model: M103
+model M103
+  parameter Integer n = 2; constant Real q[n] = {1.5, 2.5};
+end M103;
+//// model: M104
+model M104
+  parameter Integer n = 2; constant Real q[n] = ones(n);
+end M104;
+//// model: M105
+model M105
+  parameter Integer n = 2; constant Real q[:] = fill(1.5, n);
+end M105;
+//// model: M106
+model M106
+  parameter Integer n = 2; constant Real q[n] = {1.5 * i for i in 1:n};
+end M106;
+//// model: M107
+model M107
+  parameter Integer n = 2; constant Integer q[n] = 1:n;
+end M107;
+//// model: M108
+model M108
+  parameter Integer n = 2; constant Real q = n * 1.5;
+end M108;
+//// model: M109
+model M109
+  parameter Integer n = 2; constant Real q[2] = {n, 1};
+end M109;
+//// model: M1010
+model M1010
+  parameter Integer n = 2; constant Real q[n] = zeros(n);
+end M1010;
+//// model: M1011
+model M1011
+  parameter Integer n = 2; constant Real q[n, n] = identity(n);
+end M1011;
+//// model: M1012
+model M1012
+  parameter Integer n = 2; constant Real q[n] = linspace(0, 1, n);
+end M1012;
+//// model: M1013
+model M1013
+  constant Integer n = 2; constant Real q[n] = fill(1.5, n);
+end M1013;
+//// model: M1014
+model M1014
+  final parameter Integer n = 2; constant Real q[n] = fill(1.5, n);
+end M1014;
+//// model: M1015
+model M1015
+  parameter Integer n = 2; constant Integer m = size(fill(1.5, n), 1);
+end M1015;
+//// model: M1016
+model M1016
+  parameter Integer n = 2; constant Real q[n] = fill(1.5, size(q, 1));
+end M1016;
+//// model: M1017
+model M1017
+  parameter Integer n = 2; parameter Real q[n] = fill(1.5, n);
+end M1017;
+//// model: M1018
+model M1018
+  parameter Integer n = 2; constant Real q[n] = fill(1.5, 2);
+end M1018;

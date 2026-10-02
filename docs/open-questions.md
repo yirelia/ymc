@@ -67,7 +67,7 @@ ymc 以 **omc 1.25.0 实测**为准；这些用例从 `docs/research/s3-easy-sli
 | flattening/.../IfExpression12.mo | `x = {6, 6};`（Real 数组打出 Integer 字面量） | 同文件：`x = {6, 6};` | 1.25.0 与文件一致，但这是缺陷——选中的 Integer 算术支 `2 .* fill(n, 2)` 求值后丢了对 Real 的整体转型（同族：`fill(n, 2)` → `{2, 2}`，V4z 探针）。ymc 不复刻，SKIP（`if-expression selected branch cast` / `… references parameter`）。 |
 | flattening/.../DimUnknown17.mo（反向） | `Real y[:] = f(x)` 推出 3 维 + `y = f(x)[1];`（多输出函数首输出，输出维 `size(v, 1)`） | **报错退出**：`Dimension 1 of 'y' could not be deduced from the component's binding equation 'f(x)'.` | 罕见反向：1.25.0 推不出多输出调用的维，较新 OMC 能推。ymc 与文件 / 较新 OMC 一致（2026-10-02 加宽(58v) 起 PASS），按 InnerOuter13 先例记账，oracle=live 落"omc 自身报错"桶。 |
 | flattening/.../CevalBinding10.mo（反向） | `final parameter Real Q = ext_fun(0.0);` + external 函数块 | **报错退出**：`Malformed URI` / `Failed to evaluate function: ext_fun`（`annotation(Evaluate=true)` 的外部函数） | ymc 保持 SKIP，与 1.25.0 一致（都不产出）。 |
-| 切分修饰的混型字面量（探针，2026-10-02；单测 flatten_array_attribute_split_rejects） | — | `Real g[2](start = {1, 2.0})` → `g[1](start = 1)`（Real 属性打 Integer 字面量）；`A a[3](p = {1, 2, 3.0})` → `a[1].p = 1`；`{sin(1), 2}` → `/*Real*/(0.8414709848078965)` | 1.25.0 缺陷：切分（SPLIT_INDEX）的字面量数组逐元素**各自**类型化、数组类型取末元素的类型，不统一强转（`typeSubscriptedExp2`，NFTyping.mo:1655-1688；末元素 Integer 时整体 typeCast，调用一律包 CAST，NFCall.typeCast :1344-1389）。ymc 不复刻：叶类型混杂即 SKIP（`mixed-type split modifier literal` / `composite array modifier shape/type`）；叶类型一致时与 1.25.0 逐字节一致。 |
+| 切分修饰的混型字面量（探针，2026-10-02；单测 flatten_array_attribute_split_rejects） | — | `Real g[2](start = {1, 2.0})` → `g[1](start = 1)`（Real 属性打 Integer 字面量）；`A a[3](p = {1, 2, 3.0})` → `a[1].p = 1`；`{sin(1), 2}` → `/*Real*/(0.8414709848078965)` | 1.25.0 缺陷：切分（SPLIT_INDEX）的字面量数组逐元素**各自**类型化、数组类型取末元素的类型，不统一强转（`typeSubscriptedExp2`，NFTyping.mo:1655-1688；末元素 Integer 时整体 typeCast，调用一律包 CAST，NFCall.typeCast :1344-1389）。ymc 不复刻：末元素是 Real 的混排、Real 元素带调用的 SKIP（`mixed-type split modifier literal` / `composite array modifier shape/type`）；叶类型一致、或混排而末元素是 Integer（omc 整体 typeCast，与统一强转同，60e 起收）时与 1.25.0 逐字节一致。 |
 | algorithms-functions/FunctionBubblesort.mo（nf-live）、P8 探针（2026-10-02） | — | `constant Real a[8] = {0,9,3,…}; b = bubblesort(a);` → 打印出的 **constant a 被排好序**；`y := x; y[1] := 0` 的函数对 cref 实参求值后调用者的 constant 也变了 | 1.25.0 缺陷：函数求值把 cref 实参的数组对象原样交给输入，`y := x` 共享存储，下标赋值原地改写调用者的值。ymc 写时复制（语义正确），但输出与 1.25.0 不一致 → 下标写入命中 cref 实参的共享存储即 SKIP（`omc aliases input array in function evaluation`），不复刻。 |
 
 **平台相关的潜在分歧源（已查明，暂无用例触发）**：expandable 虚变量的次序取决于 `UnorderedSet` 的桶序，散列是
@@ -183,6 +183,21 @@ interval is [1,1]"；作用在切片上的向量化内建把切片的范围取�
 - 复合数组段的字面量下标不做越界检查：`A a[3]; Real y = a[4].x;` 照打 `Real y = a[4].x;`（引用一个不存在的变量）。
   ymc 不跟，SKIP。
 - `der(a.k)`（参数字段）折成 `{0.0, 0.0, 0.0}`；`pre(a.x)`（连续量）报错。
+
+组件数组上数组值修饰的几处 1.25.0 行为（MD 探针 m1–m9、m13，2026-10-03）：
+- 长度与数组维不等的切片绑定不报错：`A a[3](k = p[1:2])` 打出 `a[3].k = p[3]`（长度不等的字面量 / 整个 cref 报错）。
+  ymc 一律按形状核对，不等即 SKIP。
+- 书写的 `(推导式)[k]` 代入迭代变量后不再化简：`({i * 2 for i in 1:3})[2]` → `/*Real*/(2 * 2)`、`({p[4 - i] for i in
+  1:3})[1]` → `p[4 - 1]`；修饰分发出来的同一个式子照常化简（`a[2].k = 4.0`）。嵌在运算里的推导式不取元素：
+  `A a[3](k = {i for i in 1:3} .* p)` → `a[1].k = (/*Real[3]*/(array(i for i in 1:3)) .* p)[1]`。ymc 这几种 SKIP。
+- 参差的组件数组：`model X parameter Integer n = 2; Real x[n] = fill(time, n); end X; X xs[2](n = {1, 3});` 报内部错
+  `NFSubscript.toDAEExp failed on unknown subscript '<xs, 1>'`——带绑定的非参数数组，绑定挪成数组方程时用的是未展平的
+  类型（flattenSimpleComponent，NFFlatten.mo:705-715，v1.25.0）。各元素同维、无绑定（方程逐元素写）、参数数组、参差的
+  复合子数组 `Y y[n]`、for 范围 / 下标 / 条件组件里用 n 都正常。ymc 对报错的那种 SKIP（`ragged component array binding`）。
+- 用户函数的数组值修饰留成带下标的调用：`A a[3](k = f(p))` → `a[1].k = f(p)[1]`（每个元素各调一次）。ymc 照此。
+- 记录的函数绑定里参数只出现在结构位置：`parameter R r = g(c[n])` → `parameter Real r.x(fixed = false);` +
+  `initial equation r = R(2.0);`（绑定变率是 parameter → 挪成初始方程，再被 EvalConstants 求值）。ymc 未做，SKIP
+  （`record binding via structural parameter`）。
 
 Integer 的极值（待用户定，2026-10-02）：`max` / `min` 作用在空的 Integer 数组 / 空范围上取 `∓System.intMaxLit`（Expression.makeMinValue / makeMaxValue，v1.25.0 NFExpression.mo:4908-4934），这个值随 omc 构建的整数位宽而变——本机安装版 1.25.0（Windows）打 `1073741823`，testsuite 文件（64 位 Linux 生成）是 `4611686018427387903`。跟实跑的 omc 就要把 30 位的值写进 ymc，跟文件又过不了 oracle=live 门；ymc 目前两边都不跟，遇到即 SKIP（`Integer extreme of empty min/max (platform-dependent in omc)`）。受影响：scodeinst 的 CevalReduction1、FuncBuiltinMax / Max2 / Min / Min2、FuncBuiltinReduction 六例（其余内容已与 1.25.0 一致，只差这一个值）。Real（`±8.777798510069901e304`）、Boolean、枚举的极值与平台无关，已做。
 

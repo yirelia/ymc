@@ -1,0 +1,261 @@
+//// set: md-m13 — 归约实参里的参数值（`f(sum(p))` 不求值）、下标 / 范围里的结构参数、记录的函数 / 构造绑定
+//// model: M130
+model M130
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  Real y = f(c[n]) * time;
+end M130;
+//// model: M131
+model M131
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  Real y = f(sum(1:n)) * time;
+end M131;
+//// model: M132
+model M132
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  parameter Real q = f(sum(fill(1.0, n)));
+end M132;
+//// model: M133
+model M133
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  Real y = f(sum(p)) * time;
+end M133;
+//// model: M134
+model M134
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  parameter Real q = f(sum(p));
+end M134;
+//// model: M135
+model M135
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  parameter Real q = f(max(p));
+end M135;
+//// model: M136
+model M136
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  parameter Real q = f(product(p));
+end M136;
+//// model: M137
+model M137
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  parameter Real q = f(min(p));
+end M137;
+//// model: M138
+model M138
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  parameter R r = R(sum(p));
+end M138;
+//// model: M139
+model M139
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  parameter R r = g(sum(p));
+end M139;
+//// model: M1310
+model M1310
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  constant R r = g(sum(p));
+end M1310;
+//// model: M1311
+model M1311
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  constant R r = R(c[n]);
+end M1311;
+//// model: M1312
+model M1312
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  parameter R r = g(c[n]);
+end M1312;
+//// model: M1313
+model M1313
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  parameter Real q = f(c[n]);
+end M1313;
+//// model: M1314
+model M1314
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  constant Real q = f(c[2]);
+end M1314;
+//// model: M1315
+model M1315
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  constant Real q = f(sum(c));
+end M1315;
+//// model: M1316
+model M1316
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  Real y = f(sum(c)) * time;
+end M1316;
+//// model: M1317
+model M1317
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  parameter R r = g(sum(c));
+end M1317;
+//// model: M1318
+model M1318
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  constant R r = g(sum(c));
+end M1318;
+//// model: M1319
+model M1319
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  constant R r = R(sum(c));
+end M1319;
+//// model: M1320
+model M1320
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  Real y = f(c[n]) * time; Real z[n];
+end M1320;
+//// model: M1321
+model M1321
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  parameter Real q = f(sum(1:n));
+end M1321;
+//// model: M1322
+model M1322
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  Real y = sum(p) * time;
+end M1322;
+//// model: M1323
+model M1323
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  parameter Real q = sum(p);
+end M1323;
+//// model: M1324
+model M1324
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  parameter Real q = sum(1:n);
+end M1324;
+//// model: M1325
+model M1325
+  function f input Real u; output Real y; algorithm y := 2 * u; end f;
+  record R Real x; end R;
+  function g input Real u; output R r; algorithm r := R(u); end g;
+  constant Real c[3] = {1, 2, 3};
+  parameter Integer n = 2;
+  parameter Real p[2] = {1, 2};
+  parameter Real q = c[n];
+end M1325;
