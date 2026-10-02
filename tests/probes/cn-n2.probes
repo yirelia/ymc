@@ -1,0 +1,37 @@
+//// set: cn-n2 — connect 涉及的数组维取决于实例修饰的参数（`A a(M = 3)` 里的 `C p[M]`）
+//// model: N20
+model N20
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A parameter Integer M = 2; C p[M], q[M]; equation connect(p, q); end A; A a(M = 3);
+end N20;
+//// model: N21
+model N21
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A parameter Integer M = 2; C p[M], q[M]; equation connect(p, q); end A; A a1(M = 3), a2(M = 1);
+end N21;
+//// model: N22
+model N22
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A parameter Integer M = 2; C p[3], q; equation connect(p[M], q); end A; A a1(M = 3), a2(M = 1);
+end N22;
+//// model: N23
+model N23
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A parameter Integer M = 2; C p[3], q; equation connect(p[M], q); end A; A a[2](M = {3, 1});
+end N23;
+//// model: N24
+model N24
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A parameter Integer M = 2; C p[M]; equation for i in 1:M - 1 loop connect(p[i], p[i + 1]); end for; end A; A a1(M = 3), a2(M = 4);
+end N24;
+//// model: N25
+model N25
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A constant Integer M = 2; C p[3], q; equation connect(p[M], q); end A; A a1(M = 3), a2;
+end N25;

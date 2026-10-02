@@ -1370,6 +1370,23 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           → scodeinst 508→512 PASS（CevalArrayConstant2、SubscriptCevalSlice1/2、SubscriptCevalWhole1 入 slice）；整个
             testsuite PASS 1331→1338（另 MatrixRowIndexing、VectorizeConstCref2D、SubScript3）；+3 单测（236）；
             探针 5898→6343。
+    - [x] (60g) connect 实参的表达式下标 + 按实例的连接器数组形状（2026-10-03）：
+          此前 connect 实参的下标只收整数字面量 / for 迭代变量本身 / 字面量范围；`p[i + 1]`、`p[N]`、`p[N - 1]`、`p[end]`、
+          `p[2:end]`、`p[:]`、`p[:, 1]` 一律 SKIP（`connect operand shape`，语料 5 例，链式连接 `for i in 1:N - 1 loop
+          connect(p[i], p[i + 1])` 就在其中）。
+          **下标求值**（eval_subscript，与 60f 的常量数组下标共用）：常量 / 迭代变量的算式直接求，含参数的按结构参数求值
+          （N 打 final），`end` = 该维大小，范围 / 下标数组逐个；connect 的下标在实例化期就标结构（updateImplicitVariabilityEq
+          的 CONNECT 支，NFInst.mo:3982-3986）→ Early（`connect(c[i], d)` 让声明在前、在后的别名都 final）。
+          **采集处解析**：实参此前推迟到 run() 末尾才展开，那时实例帧已不在——**潜伏错**：维里的参数按声明的缺省值求
+          （`A a(M = 3)` 里的 `C p[M]; connect(p, q)` 只连了 2 对，60f 及以前都是 FAIL）。现在在 collect_equation 里解析，
+          各段的维取发射时记下的实际形状（array_shapes_ / note_array_shape：复合数组、叶数组都记），`S s(nPorts = 2)` 的
+          `s.ports[end]` 这类深段也对。
+          零长度的整取（`C p[0], q[0]; connect(p, q)`）→ 空列表、不产生方程。
+          未做 / 不跟 → SKIP：越界的下标（omc 照打不存在的 `p[4].e = q.e`）、往零长度数组里取元素（omc 打 `{}[1] = a.e`）、
+          求不出值的参数下标（fixed = false：omc 打 final、下标留成符号）、经父路径整取参差实例的连接器数组（omc 内部错）、
+          cardinality 实参带参数下标（omc 恒得 0）、expandable 里声明的数组成员（增量 B）。
+          → scodeinst 512→513 PASS（InStreamArray 入 slice）；整个 testsuite PASS 1338→1343（Connect7 / 8、EquationFor4、
+            expandable/07）；+1 单测（237）；探针 6343→6465。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、

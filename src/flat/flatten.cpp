@@ -855,6 +855,7 @@ class Flattener {
               }
           }
           if (!okdim || adims.empty()) { set_unsupported("non-literal array dimension"); continue; }
+          note_array_shape(name, psubs, adims);
           // 元素数上限：大复合数组 omc 常不标量化（-nfScalarize），ymc 摊分会爆量 → 超阈值 SKIP。
           std::int64_t total = 1;
           for (std::int64_t d : adims) total *= (d > 0 ? d : 0);
@@ -1833,7 +1834,17 @@ class Flattener {
       if (!loop_labels_.empty()) { set_unsupported("connect in type-range for equation"); return; }
       // for 循环体里的 connect（`connect(c1[i],c2[i])`）：下标含迭代变量 i，但解析推迟到 run() 末尾时
       // loop_vars_ 已清空 → 采集当前 loop_vars_ 快照，process_connects 解析该 connect 前还原（ForConnect1）。
-      connects_.push_back({eq.a, eq.b, enclosing, prefix, eq.loc, loop_vars_, psubs});
+      // 实参在这里解析成元素列表（下标里的参数 / 迭代变量、各段的实际形状都按本实例取，见 resolve_connector）；解析不了的
+      // 留空，process_connects 对仍然"活"的 connect 才报 SKIP。
+      ConnectStmt cs{eq.a, eq.b, enclosing, prefix, eq.loc, loop_vars_, psubs, {}, {}};
+      {
+        // connect 实参的下标在实例化期就标结构（updateImplicitVariabilityEq 的 CONNECT 支，NFInst.mo:3982-3986 v1.25.0）
+        // → Early（AO 探针 a2 的 AO1：`connect(c[i], d)` 让声明在前、在后的别名 `j = i`、`k = i` 都 final）。
+        const PhaseScope early(*this, MarkPhase::Early);
+        cs.ea = resolve_connector(eq.a, enclosing, prefix, psubs);
+        cs.eb = resolve_connector(eq.b, enclosing, prefix, psubs);
+      }
+      connects_.push_back(std::move(cs));
       return;
     }
     if (eq.kind == SEqKind::For) {
@@ -3558,6 +3569,7 @@ class Flattener {
     }
     std::vector<std::int64_t> dims;
     for (const std::vector<Id<Expr>>& l : dim_labels) dims.push_back(static_cast<std::int64_t>(l.size()));
+    note_array_shape(name, psubs, dims);
     // 组件数组里带绑定的非参数数组、各元素的维却不同（`X xs[2](n = {1, 3})`，X 里 `Real x[n] = fill(time, n)`）：omc 把绑定
     // 挪成数组方程时用的是还没展平的类型（flattenSimpleComponent，NFFlatten.mo:705-715 v1.25.0；flattenType 在其后 :730），
     // 参差的维留着拆分下标 `<xs, 1>`（makeDimension 对"各元素不全相等"的维不取值，NFTyping.mo:885-897）→ 内部错
@@ -8600,6 +8612,15 @@ class Flattener {
     Id<Expr> e;                    // Index：下标（IntLit = 已知，否则留成符号）
     std::vector<Id<Expr>> elems;   // Expanded：展开的切片的各下标（同上）
   };
+  // 下标式在大小为 dim 的维上的取值：`end` = dim；常量式（含 for 方程迭代变量的当前值）直接求，含参数的按结构参数求值
+  //（typeSubscripts 的 Structural.markSubscript，NFTyping.mo:2122-2127）。整数 → Int，范围 / 下标数组 → Array。求不出 → nullopt。
+  std::optional<CVal> eval_subscript(Id<Exp> sx, std::int64_t dim, const ScodeScope& scope, NodeId enclosing) {
+    const std::optional<std::int64_t> saved_end = eval_end_;
+    eval_end_ = dim;
+    std::optional<CVal> v = eval_scode(sx, scope, 0, absyn_refs_param(sx, enclosing), nullptr);
+    eval_end_ = saved_end;
+    return v;
+  }
   // 书写的各下标 → CSub。shape = 整体值的各维。求得出值的（常量；含参数的按结构参数求值，同变量数组的下标——typeSubscripts
   // 标 Structural.markSubscript，NFTyping.mo:2122-2127）成字面量；其余定型后留成符号（运行时整型量、保留着的迭代变量）。
   // 越界的字面量 omc 照样留成 `{…}[7]`（applyIndexExpArray "that's someone else's problem"），不跟。失败 → unsupported。
@@ -8614,12 +8635,7 @@ class Flattener {
         continue;
       }
       std::optional<CVal> v;
-      if (!is_stmt_iter_subscript(subs[k])) {
-        const std::optional<std::int64_t> saved_end = eval_end_;
-        eval_end_ = shape[k];   // 下标里的 `end` = 所在维的大小
-        v = eval_scode(subs[k], lscope, 0, absyn_refs_param(subs[k], enclosing), nullptr);
-        eval_end_ = saved_end;
-      }
+      if (!is_stmt_iter_subscript(subs[k])) v = eval_subscript(subs[k], shape[k], lscope, enclosing);
       std::vector<Id<Expr>> ix;
       bool scalar = true;
       if (v && v->k == CVal::K::Int) {
@@ -13932,7 +13948,10 @@ class Flattener {
   // 求积（首段最外），每个元素：flat 路径 + 逐段下标 + inside/outside + 叶成员表（见 ConnMember；短类连接器
   // `connector InReal = input Real` 本身即唯一标量叶）+ 端种类（ConnInfo::kind）。Expandable / Virtual 端的成员表留空
   // （增广后才定，elaborate_expandable）。stream 短类、非连接器、非常量维/下标、越界 → nullopt（调用方 SKIP）。
-  std::optional<std::vector<ConnInfo>> resolve_connector(Id<Exp> ce, NodeId enclosing) {
+  // prefix / psubs = 书写处的前缀与其逐段下标（查 array_shapes_ 用；返回的路径仍是相对 enclosing 的）。须在采集处调用：
+  // 下标里的参数、for 迭代变量按书写处的实例取值。
+  std::optional<std::vector<ConnInfo>> resolve_connector(Id<Exp> ce, NodeId enclosing, const std::vector<Symbol>& prefix,
+                                                         const PSubs& psubs) {
     if (I_.absyn.exps[ce].kind != ExpKind::CrefExp) return std::nullopt;
     const Cref& c = I_.absyn.crefs[I_.absyn.exps[ce].cref];
     if (c.leading_dot || c.parts.empty()) return std::nullopt;
@@ -14005,32 +14024,79 @@ class Flattener {
     // 范围/数组按其自身顺序（YmcSlice.Desc/Step 探针）、缺省的后续维取全部（NFSubscript.mo:1081-1103，YmcSlice.Partial）；
     // 各段各维行主序求积，首段最外（expandCref3/4，NFExpandExp.mo:208-255；ConnectArrays3 宿主段在先）。
     // 下标越界 = omc 报错 → SKIP；非常量下标（ConnectArraysInvalidSubscript1）→ SKIP。
+    // 下标是表达式（CN 探针 n1：`p[i + 1]`、`p[N]`、`p[N - 1]`、`p[end]`、`p[2:end]`、`p[:]`）：常量 / 迭代变量的算式直接
+    // 求，含参数的按结构参数求值（omc 把 N 打成 final），`end` = 该维大小——见 eval_subscript。
+    // 各段的维取发射时记下的实际形状（array_shapes_）：维里的参数是按该实例的修饰取的值（`A a(M = 3)` 里的 `C p[M]`，
+    // 此前在声明类作用域按缺省值求，少连了元素——CN 探针 n2）；没有记录的（未发射）才按声明求。后面各段的形状按前面
+    // 各段的首个元素取（非参差）。
     std::vector<std::vector<std::vector<std::int64_t>>> seg_lists(segs.size());   // [段][维] → 下标值列表
     bool scalar_ref = true;   // 各维都由单个整数下标给出（无缺省维、无范围/切片）
+    const ScodeScope wscope = scode_scope_of(enclosing);   // 下标写在 connect 所在的类里
+    std::vector<Symbol> knames = prefix;
+    PSubs ksubs = psubs;
+    ksubs.resize(prefix.size());
     for (std::size_t si = 0; si < segs.size(); ++si) {
       const SElement& sel = I_.scode.elems[I_.comps[I_.nodes[segs[si].comp].comp].def];
       std::vector<std::int64_t> dims;
-      const ScodeScope dscope = scode_scope_of(segs[si].decl);
-      for (Id<Exp> d : sel.attr.dims) if (!eval_dim(d, dims, dscope)) return std::nullopt;
-      for (Id<Exp> d : sel.type.dims) if (!eval_dim(d, dims, dscope)) return std::nullopt;
-      const std::vector<Id<Exp>>& ssubs = c.parts[si].subscripts;
+      knames.push_back(path[si]);
+      if (!sel.attr.dims.empty() || !sel.type.dims.empty()) {
+        if (const auto it = array_shapes_.find(int_key(knames, ksubs)); it != array_shapes_.end()) {
+          dims = it->second;
+        } else {
+          const ScodeScope dscope = scode_scope_of(segs[si].decl);
+          for (Id<Exp> d : sel.attr.dims) if (!eval_dim(d, dims, dscope)) return std::nullopt;
+          for (Id<Exp> d : sel.type.dims) if (!eval_dim(d, dims, dscope)) return std::nullopt;
+        }
+      }
+      const std::vector<Id<Exp>> ssubs = c.parts[si].subscripts;   // 拷贝：求值期间不持 absyn 引用
       if (ssubs.size() > dims.size()) return std::nullopt;   // 下标多于维数（标量带下标）→ SKIP
+      // 经父路径引用、各实例维不同（参差）的连接器数组，带洞（没给全下标 / 切片）：omc 内部错
+      // `NFConnections.makeConnectors failed to expand connector`（CN 探针 n4：`A a[2](M = {2, 3})`、`connect(a[1].p, …)`；
+      // 下标给全的 `a[1].p[2]`、类里自己引用的 `connect(p, q)` 正常）→ 不复刻。
+      if (si > 0)
+        if (const auto nd = name_dims_.find(int_key(knames, {})); nd != name_dims_.end() && !nd->second) {
+          bool hole = ssubs.size() < dims.size();
+          for (Id<Exp> sx : ssubs) {
+            const ExpKind sk = I_.absyn.exps[sx].kind;
+            hole = hole || sk == ExpKind::Colon || sk == ExpKind::Range || sk == ExpKind::Array;
+          }
+          if (hole) return std::nullopt;
+        }
+      std::vector<std::int64_t> first;
       for (std::size_t k = 0; k < dims.size(); ++k) {
-        if (dims[k] <= 0) return std::nullopt;
+        if (dims[k] < 0) return std::nullopt;
+        // 零长度的维整取（没给下标 / `:`）：元素列表为空，connect 不产生方程（CN 探针 n4：`C p[0], q[0]; connect(p, q)`）；
+        // 带下标取元素的 omc 打出 `{}[1] = a.e`，不跟。
+        if (dims[k] == 0) {
+          if (k < ssubs.size() && I_.absyn.exps[ssubs[k]].kind != ExpKind::Colon) return std::nullopt;
+          return std::vector<ConnInfo>{};
+        }
         std::vector<std::int64_t> vals;
-        if (k < ssubs.size()) {
-          if (std::optional<std::int64_t> iv = subscript_int(ssubs[k])) vals.push_back(*iv);
-          else if (std::optional<std::vector<std::int64_t>> rv = eval_range(ssubs[k], dscope, 0)) vals = std::move(*rv);
-          else return std::nullopt;
+        if (k < ssubs.size() && I_.absyn.exps[ssubs[k]].kind != ExpKind::Colon) {
+          const std::optional<CVal> sv = eval_subscript(ssubs[k], dims[k], wscope, enclosing);
+          if (!sv) return std::nullopt;
+          if (sv->k == CVal::K::Int) {
+            vals.push_back(sv->i);
+          } else if (is_arr(*sv) && sv->arr) {
+            for (const CVal& x : *sv->arr) {
+              if (x.k != CVal::K::Int) return std::nullopt;
+              vals.push_back(x.i);
+            }
+          } else {
+            return std::nullopt;
+          }
           const ExpKind sk = I_.absyn.exps[ssubs[k]].kind;
-          if (sk == ExpKind::Range || sk == ExpKind::Array || sk == ExpKind::Colon) scalar_ref = false;
+          if (sk == ExpKind::Range || sk == ExpKind::Array || is_arr(*sv)) scalar_ref = false;
         } else {
           for (std::int64_t v = 1; v <= dims[k]; ++v) vals.push_back(v);
           scalar_ref = false;
         }
+        if (vals.empty()) return std::nullopt;   // 空切片未核实
         for (std::int64_t v : vals) if (v < 1 || v > dims[k]) return std::nullopt;   // 越界 → SKIP
+        first.push_back(vals.front());
         seg_lists[si].push_back(std::move(vals));
       }
+      ksubs.push_back(std::move(first));
     }
     // 行主序求积：把各段各维摊成一串"维"，pos 记每维在其取值列表里的位置（1 基，与 next_index 一致）。
     std::vector<const std::vector<std::int64_t>*> flat;
@@ -14441,17 +14507,14 @@ class Flattener {
     std::vector<ConnectStmt> live;
     for (const ConnectStmt& cs : connects_)
       if (!references_removed(cs, cs.a) && !references_removed(cs, cs.b)) live.push_back(cs);
-    // 逐条解析（for-connect 的下标 `c[i]` 靠采集时快照的 loop_vars_ 还原；解析后立即清空避免污染）。
-    // 每个实参解析成元素列表（整体数组连接已展开），左右按位配对成逐元素 connect
+    // 每个实参在采集处已解析成元素列表（整体数组连接已展开），左右按位配对成逐元素 connect
     // （对标 makeConnections，NFConnections.mo:200-206；左右元素数不等 = omc 报错 → SKIP）。
     // 子模型内的 connect：面已按**书写类**本地判定（crefFace 用 firstNonScope，前缀段是 SCOPE 来源，
     // NFComponentRef.mo:429-440），这里再把书写处前缀（含复合数组元素下标）接到路径前面。
     std::vector<Resolved> rs;
-    for (const ConnectStmt& cs : live) {
-      loop_vars_ = cs.loopvars;
-      std::optional<std::vector<ConnInfo>> A = resolve_connector(cs.a, cs.enclosing);
-      std::optional<std::vector<ConnInfo>> B = resolve_connector(cs.b, cs.enclosing);
-      loop_vars_.clear();
+    for (ConnectStmt& cs : live) {
+      std::optional<std::vector<ConnInfo>>& A = cs.ea;
+      std::optional<std::vector<ConnInfo>>& B = cs.eb;
       if (!A || !B) { set_unsupported("connect operand shape"); return; }
       if (A->size() != B->size()) { set_unsupported("connector array size mismatch"); return; }
       const std::vector<std::vector<Id<Expr>>> pre_subs = psubs_to_exprs(cs.psubs);
@@ -15635,7 +15698,12 @@ class Flattener {
   Id<Expr> cardinality_call(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
     if (!card_allowed_) { set_unsupported("cardinality outside if/assert condition"); return lit_int(0); }
     if (e.args.size() != 1 || !is_cref_exp(e.args[0])) { set_unsupported("cardinality argument"); return lit_int(0); }
-    std::optional<std::vector<ConnInfo>> ci = resolve_connector(e.args[0], enclosing);
+    // 下标须是字面量 / for 迭代变量：omc 的计数表按 cref 的字面形态查，`cardinality(p[N])`（N 是参数）查不到 `p[3]`、
+    // 恒得 0（CN 探针 n4），不复刻。
+    for (const CrefPart& cp : I_.absyn.crefs[I_.absyn.exps[e.args[0]].cref].parts)
+      for (Id<Exp> sx : cp.subscripts)
+        if (!subscript_int(sx)) { set_unsupported("cardinality argument"); return lit_int(0); }
+    std::optional<std::vector<ConnInfo>> ci = resolve_connector(e.args[0], enclosing, prefix, cur_psubs_);
     if (!ci || ci->size() != 1) { set_unsupported("cardinality argument"); return lit_int(0); }
     ConnInfo c = std::move((*ci)[0]);
     if (!prefix.empty()) {
@@ -15873,6 +15941,16 @@ class Flattener {
   std::size_t synth_mod_floor_ = 0;
   // 空数组（某维为 0，不出变量行）的形状，int_key(全名, 逐段下标) → 维；`:` 维的引用 / size() 靠它（emitted_shape 的回退）。
   std::unordered_map<std::string, std::vector<std::int64_t>> empty_shapes_;
+  // 已发射的数组组件（叶 / 复合）的实际各维：int_key(全名, 前缀各段下标) → 维。维里的参数是按该实例的修饰取的值
+  //（`A a(M = 3)` 里的 `C p[M]`），connect 实参展开元素时用（resolve_connector）。
+  std::unordered_map<std::string, std::vector<std::int64_t>> array_shapes_;
+  // 同一声明的数组组件各实例的维：int_key(全名, 无下标) → 维；nullopt = 各实例不同（参差，`A a[2](M = {2, 3})` 里的 `C p[M]`）。
+  std::unordered_map<std::string, std::optional<std::vector<std::int64_t>>> name_dims_;
+  void note_array_shape(const std::vector<Symbol>& name, const PSubs& psubs, const std::vector<std::int64_t>& dims) {
+    array_shapes_[int_key(name, psubs)] = dims;
+    const auto [it, fresh] = name_dims_.emplace(int_key(name, {}), dims);
+    if (!fresh && it->second != std::optional<std::vector<std::int64_t>>(dims)) it->second.reset();
+  }
   // 带绑定的非参数数组：int_key(全名, 无下标) → 首个元素的维（参差守卫，见 emit_array）。
   std::unordered_map<std::string, std::vector<std::int64_t>> bound_dims_;
   const std::vector<Symbol>* ceval_prefix_ = nullptr;   // 非空：eval_scode 的 cref 先在此前缀下查 const_vals_（CevalCtx 设）
@@ -15906,8 +15984,9 @@ class Flattener {
   bool card_allowed_ = false;   // 只在 if 方程 / assert 的条件表达式里为 true（其它上下文 omc 报错 → SKIP）
   struct ConnectStmt {
     Id<Exp> a, b; NodeId enclosing; std::vector<Symbol> prefix; SourceLoc loc;
-    std::unordered_map<std::uint32_t, std::int64_t> loopvars;   // 采集时的 for 迭代变量快照（连接器下标 `c[i]` 求值）
+    std::unordered_map<std::uint32_t, std::int64_t> loopvars;   // 采集时的 for 迭代变量快照（判"引用了被移除的组件"用）
     PSubs psubs;                                                 // 书写处前缀的逐段下标（子模型数组元素 `a[i]` 内的 connect）
+    std::optional<std::vector<ConnInfo>> ea, eb;                 // 两个实参在采集处解析出的元素列表（解析不了 = 空）
   };
   std::vector<ConnectStmt> connects_;            // 攒下的 connect()，run() 末尾展开
   std::unordered_set<std::string> removed_;             // 条件为假被移除的组件路径 key（引用它的 connect 整条删）

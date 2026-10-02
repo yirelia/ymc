@@ -1,0 +1,317 @@
+//// set: cn-n3 — 深段的维取决于子实例参数（`ports[nPorts]`）、更多下标形态、越界 / 运行时 / Real / fixed = false 下标、短类连接器数组
+//// model: N30
+model N30
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model S parameter Integer nPorts = 0; C ports[nPorts]; end S; S s(nPorts = 2); C a, b;
+equation
+  connect(s.ports[1], a); connect(s.ports[2], b);
+end N30;
+//// model: N31
+model N31
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model S parameter Integer nPorts = 0; C ports[nPorts]; end S; S s(nPorts = 2); C q[2];
+equation
+  connect(s.ports, q);
+end N31;
+//// model: N32
+model N32
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model S parameter Integer nPorts = 0; C ports[nPorts]; end S; S s(nPorts = 2); C a;
+equation
+  connect(s.ports[end], a);
+end N32;
+//// model: N33
+model N33
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model S parameter Integer nPorts = 0; C ports[nPorts]; end S; S s1(nPorts = 1), s2(nPorts = 2);
+equation
+  connect(s1.ports[1], s2.ports[2]);
+end N33;
+//// model: N34
+model N34
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model S parameter Integer nPorts = 0; C ports[nPorts]; end S; S s[2](nPorts = {1, 2});
+equation
+  connect(s[1].ports[1], s[2].ports[2]);
+end N34;
+//// model: N35
+model N35
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model S parameter Integer nPorts = 0; C ports[nPorts]; end S; S s[2](each nPorts = 2);
+equation
+  for i in 1:2 loop connect(s[1].ports[i], s[2].ports[i]); end for;
+end N35;
+//// model: N36
+model N36
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model S parameter Integer nPorts = 0; C ports[nPorts]; end S; S s[2](each nPorts = 2);
+equation
+  connect(s[1].ports, s[2].ports);
+end N36;
+//// model: N37
+model N37
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model S parameter Integer nPorts = 0; C ports[nPorts]; end S; S s[2](each nPorts = 2); C q[2, 2];
+equation
+  connect(s.ports, q);
+end N37;
+//// model: N38
+model N38
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model S parameter Integer nPorts = 0; C ports[nPorts]; end S; S s(nPorts = 2);
+equation
+  connect(s.ports[1], s.ports[3]);
+end N38;
+//// model: N39
+model N39
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model S parameter Integer nPorts = 0; C ports[nPorts]; end S; S s; C a;
+equation
+  connect(s.ports[1], a);
+end N39;
+//// model: N310
+model N310
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model S parameter Integer nPorts = 0; C ports[nPorts]; end S; S s; C q[0];
+equation
+  connect(s.ports, q);
+end N310;
+//// model: N311
+model N311
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model S parameter Integer nPorts = 2; C ports[nPorts]; end S; model T S s(nPorts = 3); C a; equation connect(s.ports[3], a); end T; T t;
+end N311;
+//// model: N312
+model N312
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model S parameter Integer nPorts = 2; C ports[nPorts]; end S; model T parameter Integer k = 3; S s(nPorts = k); C a; equation connect(s.ports[k], a); end T; T t1, t2(k = 4);
+end N312;
+//// model: N313
+model N313
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[4], q;
+equation
+  connect(p[N + 1], q);
+end N313;
+//// model: N314
+model N314
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[4], q;
+equation
+  connect(p[2 * N - 2], q);
+end N314;
+//// model: N315
+model N315
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[4], q; constant Integer K = 2;
+equation
+  connect(p[K], q);
+end N315;
+//// model: N316
+model N316
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[4], q[2];
+equation
+  connect(p[{N, 1}], q);
+end N316;
+//// model: N317
+model N317
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[4], q[2];
+equation
+  connect(p[N:N + 1], q);
+end N317;
+//// model: N318
+model N318
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[4], q[2];
+equation
+  connect(p[1:2:N], q);
+end N318;
+//// model: N319
+model N319
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[4], q[3];
+equation
+  connect(p[N - 1:end], q);
+end N319;
+//// model: N320
+model N320
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[4], q[4];
+equation
+  connect(p[end:-1:1], q);
+end N320;
+//// model: N321
+model N321
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[2, 3], q[3];
+equation
+  connect(p[end, :], q);
+end N321;
+//// model: N322
+model N322
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[2, 3], q[2];
+equation
+  connect(p[:, N], q);
+end N322;
+//// model: N323
+model N323
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[2, 3], q;
+equation
+  connect(p[end, end], q);
+end N323;
+//// model: N324
+model N324
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  Integer n = 1; C p[3], q;
+equation
+  connect(p[n], q);
+end N324;
+//// model: N325
+model N325
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[3], q;
+equation
+  connect(p[N + 1], q);
+end N325;
+//// model: N326
+model N326
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[3], q;
+equation
+  connect(p[0], q);
+end N326;
+//// model: N327
+model N327
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[3], q[2];
+equation
+  connect(p, q);
+end N327;
+//// model: N328
+model N328
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[3], q;
+equation
+  connect(p[1.5], q);
+end N328;
+//// model: N329
+model N329
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  parameter Integer z(fixed = false); C p[3], q;
+equation
+  connect(p[z], q); initial equation z = 1;
+end N329;
+//// model: N330
+model N330
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  parameter Integer z = 2 annotation(Evaluate = false); C p[3], q;
+equation
+  connect(p[z], q);
+end N330;
+//// model: N331
+model N331
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[3], q; parameter Real r = 2;
+equation
+  connect(p[integer(r)], q);
+end N331;
+//// model: N332
+model N332
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[4];
+equation
+  for i in 1:N loop connect(p[i], p[i + 1]); end for;
+end N332;
+//// model: N333
+model N333
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[4];
+equation
+  for i in 2:N loop connect(p[i - 1], p[i]); end for;
+end N333;
+//// model: N334
+model N334
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[4];
+equation
+  for i in 1:2 loop for j in 1:2 loop connect(p[i], p[j + 2]); end for; end for;
+end N334;
+//// model: N335
+model N335
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[2, 2];
+equation
+  for i in 1:2 loop connect(p[i, 1], p[3 - i, 2]); end for;
+end N335;
+//// model: N336
+model N336
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[4];
+equation
+  for i in 1:3 loop if i < N then connect(p[i], p[i + 1]); end if; end for;
+end N336;
+//// model: N337
+model N337
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[4]; parameter Boolean b = true;
+equation
+  if b then connect(p[1], p[N]); else connect(p[2], p[N]); end if;
+end N337;
+//// model: N338
+model N338
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  connector RI = input Real; connector RO = output Real; RI u[3]; RO y[3];
+equation
+  for i in 1:2 loop connect(u[i], y[i + 1]); end for;
+end N338;
+//// model: N339
+model N339
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  connector CV Real e[2]; flow Real f[2]; end CV; CV p[3];
+equation
+  connect(p[1], p[N]);
+end N339;

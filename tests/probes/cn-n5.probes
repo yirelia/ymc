@@ -1,0 +1,93 @@
+//// set: cn-n5 — connect 下标里的参数与结构别名（实例化期标记：声明在前 / 在后的别名都 final）
+//// model: N50
+model N50
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  parameter Integer i = 1; parameter Integer j = i; C c[2], d; parameter Integer k = i;
+equation
+  connect(c[i + 1], d);
+end N50;
+//// model: N51
+model N51
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  parameter Integer i = 1; parameter Integer j = i; C c[3], d; parameter Integer k = i;
+equation
+  for m in 1:2 loop connect(c[m + i], d); end for;
+end N51;
+//// model: N52
+model N52
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  parameter Integer i = 1; parameter Integer j = i; C c[3], d[2]; parameter Integer k = i;
+equation
+  connect(c[i:i + 1], d);
+end N52;
+//// model: N53
+model N53
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  parameter Integer i = 1; parameter Integer j = i; C c[2], d;
+equation
+  connect(c[j], d);
+end N53;
+//// model: N54
+model N54
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  parameter Integer i = 1; parameter Integer j = i; parameter Integer l = j; C c[2], d;
+equation
+  connect(c[l], d);
+end N54;
+//// model: N55
+model N55
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A parameter Integer i = 1; parameter Integer j = i; C c[2], d; equation connect(c[i], d); end A; A a;
+end N55;
+//// model: N56
+model N56
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A parameter Integer i = 1; C c[2], d; equation connect(c[i], d); end A; parameter Integer t = 2; A a(i = t); parameter Integer u = t;
+end N56;
+//// model: N57
+model N57
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  parameter Integer i = 1; parameter Real r = i * 2.0; C c[2], d;
+equation
+  connect(c[i], d);
+end N57;
+//// model: N58
+model N58
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  parameter Integer i = 1; Real y = i * time; C c[2], d;
+equation
+  connect(c[i], d);
+end N58;
+//// model: N59
+model N59
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  parameter Integer i = 1; parameter Integer j = i; C c[2], d;
+equation
+  if true then connect(c[i], d); end if;
+end N59;
+//// model: N510
+model N510
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  parameter Integer i = 1; parameter Integer j = i; C c[2], d;
+equation
+  for m in 1:i loop connect(c[m], d); end for;
+end N510;
+//// model: N511
+model N511
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  parameter Integer i = 1; parameter Integer j = i; C c[2, 2], d;
+equation
+  connect(c[i, j], d);
+end N511;

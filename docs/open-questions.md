@@ -211,6 +211,15 @@ constant 数组下标引用的几处 1.25.0 行为（CX 探针 c1–c13，2026-1
   ——`for i in 1:2 loop y[i] := sum(i * j for j in 1:3)` → `/*Real*/(sum(i * j for j in 1:3))`，而 `for i in 1:p`（p 是此前
   还不是结构参数的参数）/ `for i in 1:n` 里同一个式子展开成 `i + i * 2 + i * 3`。ymc 照此（var_iters_）。
 
+connect 实参下标的几处 1.25.0 行为（CN 探针 n1–n5，2026-10-03）：
+- 越界不报错：`C p[3], q; connect(p[N + 1], q)`（N = 3）打出 `p[4].e = q.e;`、`connect(p[0], q)` 打出 `p[0].e = q.e;`、
+  `S s(nPorts = 2); connect(s.ports[1], s.ports[3])` 同样；往零长度数组里取元素打出 `{}[1] = a.e;`。ymc 不跟，SKIP。
+- 求不出值的参数作下标（`parameter Integer z(fixed = false); connect(p[z], q)`）：照样标成结构参数（`final parameter
+  Integer z(fixed = false);`），方程里下标留成 `p[z].e`。ymc 不跟，SKIP。
+- `cardinality(p[N])`（N 是参数）恒得 0：计数表按连接器 cref 的字面形态建、查（`p[3]` ≠ `p[N]`）。ymc 不跟，SKIP。
+- 经父路径整取（没给全下标 / 切片）各实例维不同的连接器数组：`A a[2](M = {2, 3}); connect(a[1].p, q)` → 内部错
+  `NFConnections.makeConnectors failed to expand connector`；下标给全的 `a[1].p[2]`、A 里自己写的 `connect(p, q)` 正常。
+
 Integer 的极值（待用户定，2026-10-02）：`max` / `min` 作用在空的 Integer 数组 / 空范围上取 `∓System.intMaxLit`（Expression.makeMinValue / makeMaxValue，v1.25.0 NFExpression.mo:4908-4934），这个值随 omc 构建的整数位宽而变——本机安装版 1.25.0（Windows）打 `1073741823`，testsuite 文件（64 位 Linux 生成）是 `4611686018427387903`。跟实跑的 omc 就要把 30 位的值写进 ymc，跟文件又过不了 oracle=live 门；ymc 目前两边都不跟，遇到即 SKIP（`Integer extreme of empty min/max (platform-dependent in omc)`）。受影响：scodeinst 的 CevalReduction1、FuncBuiltinMax / Max2 / Min / Min2、FuncBuiltinReduction 六例（其余内容已与 1.25.0 一致，只差这一个值）。Real（`±8.777798510069901e304`）、Boolean、枚举的极值与平台无关，已做。
 
 ## 已研究待实现：多条 connect 连接集（union-find）

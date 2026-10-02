@@ -4643,6 +4643,52 @@ YMC_TEST(flatten_constant_reductions_with_outer_iterators) {
                            "  for i in 1:n loop\n    w := w + /*Real*/(i + i * 2 + i * 3);\n  end for;\nend CXT3;\n"));
 }
 
+YMC_TEST(flatten_connect_subscript_expressions) {
+  // connect 实参在采集处解析成元素：下标是表达式（`p[i + 1]`、`p[N + 1]`、`p[end - 1:end]`、`s.ports[end]`）——常量 / 迭代
+  // 变量的算式直接求，含参数的按结构参数求值（N final），`end` = 该维大小；各段的维取发射时记下的实际形状（`A a(M = 3)`
+  // 里的 `C p[M]`、`S s(nPorts = 2)` 的 `ports[nPorts]`，此前按声明的缺省值求、少连了元素）；零长度的整取不产生方程。
+  // 期望 = omc 1.25.0 实跑 CNT1（2026-10-03）。
+  YMC_CHECK_EQ(flatten_src("model CNT1\n  connector C\n    Real e;\n    flow Real f;\n  end C;\n  model S\n"
+                           "    parameter Integer nPorts = 0;\n    C ports[nPorts];\n  end S;\n  model A\n"
+                           "    parameter Integer M = 2;\n    C p[M], q[M];\n  equation\n    connect(p, q);\n  end A;\n"
+                           "  parameter Integer N = 3;\n  C p[4];\n  C q[2];\n  C r;\n  S s(nPorts = 2);\n  A a(M = 3);\n"
+                           "  C z1[0], z2[0];\nequation\n  for i in 1:N - 1 loop\n    connect(p[i], p[i + 1]);\n  end for;\n"
+                           "  connect(p[N + 1], r);\n  connect(p[end - 1:end], q);\n  connect(s.ports[end], r);\n"
+                           "  connect(z1, z2);\nend CNT1;\n"),
+               std::string("class CNT1\n  final parameter Integer N = 3;\n  Real p[1].e;\n  Real p[1].f;\n  Real p[2].e;\n"
+                           "  Real p[2].f;\n  Real p[3].e;\n  Real p[3].f;\n  Real p[4].e;\n  Real p[4].f;\n  Real q[1].e;\n"
+                           "  Real q[1].f;\n  Real q[2].e;\n  Real q[2].f;\n  Real r.e;\n  Real r.f;\n"
+                           "  final parameter Integer s.nPorts = 2;\n  Real s.ports[1].e;\n  Real s.ports[1].f;\n"
+                           "  Real s.ports[2].e;\n  Real s.ports[2].f;\n  final parameter Integer a.M = 3;\n  Real a.p[1].e;\n"
+                           "  Real a.p[1].f;\n  Real a.p[2].e;\n  Real a.p[2].f;\n  Real a.p[3].e;\n  Real a.p[3].f;\n"
+                           "  Real a.q[1].e;\n  Real a.q[1].f;\n  Real a.q[2].e;\n  Real a.q[2].f;\n  Real a.q[3].e;\n"
+                           "  Real a.q[3].f;\nequation\n  a.p[1].e = a.q[1].e;\n  -(a.p[1].f + a.q[1].f) = 0.0;\n"
+                           "  a.p[2].e = a.q[2].e;\n  -(a.p[2].f + a.q[2].f) = 0.0;\n  a.p[3].e = a.q[3].e;\n"
+                           "  -(a.p[3].f + a.q[3].f) = 0.0;\n  p[3].e = q[1].e;\n  p[3].e = p[2].e;\n  p[3].e = p[1].e;\n"
+                           "  -(p[3].f + q[1].f + p[2].f + p[1].f) = 0.0;\n  s.ports[2].e = r.e;\n  s.ports[2].e = p[4].e;\n"
+                           "  s.ports[2].e = q[2].e;\n  s.ports[2].f - r.f - p[4].f - q[2].f = 0.0;\n  p[1].f = 0.0;\n"
+                           "  p[2].f = 0.0;\n  p[3].f = 0.0;\n  p[4].f = 0.0;\n  q[1].f = 0.0;\n  q[2].f = 0.0;\n  r.f = 0.0;\n"
+                           "  s.ports[1].f = 0.0;\n  a.p[1].f = 0.0;\n  a.p[2].f = 0.0;\n  a.p[3].f = 0.0;\n  a.q[1].f = 0.0;\n"
+                           "  a.q[2].f = 0.0;\n  a.q[3].f = 0.0;\nend CNT1;\n"));
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           // 越界的下标：omc 不查，照打一个不存在的 `p[5].e = r.e`，不跟（CNS1）。
+           {"model CNS1\n  connector C\n    Real e;\n    flow Real f;\n  end C;\n  parameter Integer N = 3;\n"
+            "  C p[4], r;\nequation\n  connect(p[N + 2], r);\nend CNS1;\n", "connect operand shape"},
+           // cardinality 的实参带参数下标：omc 的计数表按 cref 字面形态查，`cardinality(p[N])` 恒得 0，不复刻（CNS2）。
+           {"model CNS2\n  connector C\n    Real e;\n    flow Real f;\n  end C;\n  parameter Integer N = 3;\n"
+            "  C p[3];\n  Real y;\nequation\n  if cardinality(p[N]) == 0 then\n    y = 0;\n  else\n    y = 1;\n"
+            "  end if;\n  connect(p[1], p[N]);\nend CNS2;\n", "cardinality argument"},
+           // 经父路径整取各实例维不同的连接器数组：omc 内部错（makeConnectors failed to expand connector），CNS3。
+           {"model CNS3\n  connector C\n    Real e;\n    flow Real f;\n  end C;\n  model A\n"
+            "    parameter Integer M = 2;\n    C p[M];\n  end A;\n  A a[2](M = {2, 3});\n  C q[2];\nequation\n"
+            "  connect(a[1].p, q);\nend CNS3;\n", "connect operand shape"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

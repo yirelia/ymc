@@ -1,0 +1,225 @@
+//// set: cn-n4 — 子模型里 / 继承 / 条件组件 / expandable / cardinality / stream 里的下标；参差实例（`a[2](M = {2, 3})`）；零长度
+//// model: N40
+model N40
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A C p[3]; parameter Integer k = 2; equation connect(p[k], p[k + 1]); end A; A a;
+end N40;
+//// model: N41
+model N41
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A C p[3]; parameter Integer k = 2; equation connect(p[k], p[k + 1]); end A; A a[2](k = {1, 2});
+end N41;
+//// model: N42
+model N42
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A C p[3]; parameter Integer k = 2; equation for i in 1:k loop connect(p[i], p[i + 1]); end for; end A; A a(k = 1), b;
+end N42;
+//// model: N43
+model N43
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A C p[3]; parameter Integer k = 2; equation connect(p[k], p[end]); end A; model B extends A(k = 1); end B; B b;
+end N43;
+//// model: N44
+model N44
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A C p[3]; end A; model B extends A; parameter Integer k = 2; equation connect(p[k], p[1]); end B; B b;
+end N44;
+//// model: N45
+model N45
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A C p[3]; end A; A a; C q;
+equation
+  connect(a.p[N], q);
+end N45;
+//// model: N46
+model N46
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A C p[3]; end A; A a[2];
+equation
+  for i in 1:2 loop connect(a[i].p[i], a[3 - i].p[i + 1]); end for;
+end N46;
+//// model: N47
+model N47
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A C p[3]; end A; A a[N];
+equation
+  for i in 1:N - 1 loop connect(a[i].p[N], a[i + 1].p[1]); end for;
+end N47;
+//// model: N48
+model N48
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A C c; end A; A a[4];
+equation
+  connect(a[1:2].c, a[3:end].c);
+end N48;
+//// model: N49
+model N49
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A C c; end A; A a[4];
+equation
+  connect(a[{1, N}].c, a[{2, 4}].c);
+end N49;
+//// model: N410
+model N410
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[3]; C q if N > 5;
+equation
+  connect(p[N], q);
+end N410;
+//// model: N411
+model N411
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[3]; C q if N > 2;
+equation
+  connect(p[N], q);
+end N411;
+//// model: N412
+model N412
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[3] if N > 5; C q;
+equation
+  connect(p[N], q);
+end N412;
+//// model: N413
+model N413
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  expandable connector EC end EC; connector RI = input Real; EC ec; RI u[3];
+equation
+  connect(ec.x, u[N]);
+end N413;
+//// model: N414
+model N414
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  expandable connector EC Real x[3]; end EC; EC ec; connector RO = output Real; RO y;
+equation
+  connect(ec.x[N], y);
+end N414;
+//// model: N415
+model N415
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[3]; Real y;
+equation
+  if cardinality(p[N]) == 0 then y = 0; else y = 1; end if; connect(p[1], p[N]);
+end N415;
+//// model: N416
+model N416
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[3];
+equation
+  connect(p[1], p[N]); assert(cardinality(p[N]) == 1, "msg");
+end N416;
+//// model: N417
+model N417
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  connector S Real e; flow Real f; stream Real h; end S; S p[3];
+equation
+  connect(p[1], p[N]);
+end N417;
+//// model: N418
+model N418
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A C p[2]; equation connect(p[1], p[end]); end A; A a[2];
+end N418;
+//// model: N419
+model N419
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A parameter Integer M = 2; C p[M]; equation for i in 1:M - 1 loop connect(p[i], p[i + 1]); end for; end A; A a[2](M = {2, 3});
+end N419;
+//// model: N420
+model N420
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A parameter Integer M = 2; C p[M], q[M]; equation connect(p, q); end A; A a[2](M = {2, 3});
+end N420;
+//// model: N421
+model N421
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A parameter Integer M = 2; C p[M]; end A; A a[2](M = {2, 3});
+equation
+  connect(a[1].p[2], a[2].p[3]);
+end N421;
+//// model: N422
+model N422
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A parameter Integer M = 2; C p[M]; end A; A a[2](M = {2, 3});
+equation
+  connect(a[1].p, a[2].p[1:2]);
+end N422;
+//// model: N423
+model N423
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A parameter Integer M = 2; C p[M]; end A; A a[2](M = {2, 3});
+equation
+  connect(a.p[1], a.p[2]);
+end N423;
+//// model: N424
+model N424
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A parameter Integer M = 2; C p[M]; end A; A a[2](each M = 3); C q[2, 3];
+equation
+  connect(a.p, q);
+end N424;
+//// model: N425
+model N425
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A parameter Integer M = 2; C p[M]; end A; A a[2](M = {2, 3}); C q[2, 2];
+equation
+  connect(a.p, q);
+end N425;
+//// model: N426
+model N426
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  model A parameter Integer M = 2; C p[M]; end A; A a[2](M = {2, 3}); C q[5];
+equation
+  connect(a[1].p, q[1:2]); connect(a[2].p, q[3:5]);
+end N426;
+//// model: N427
+model N427
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[0], q[0];
+equation
+  connect(p, q);
+end N427;
+//// model: N428
+model N428
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  C p[0], q[0]; C r;
+equation
+  connect(p, q);
+end N428;
+//// model: N429
+model N429
+  connector C Real e; flow Real f; end C;
+  parameter Integer N = 3;
+  parameter Integer Z = 0; C p[Z], q[Z];
+equation
+  connect(p, q); for i in 1:Z loop connect(p[i], q[i]); end for;
+end N429;

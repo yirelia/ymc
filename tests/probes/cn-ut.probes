@@ -1,0 +1,76 @@
+//// set: cn-ut — connect 实参的表达式下标（单测原文）
+//// model: CNS1
+model CNS1
+  connector C
+    Real e;
+    flow Real f;
+  end C;
+  parameter Integer N = 3;
+  C p[4], r;
+equation
+  connect(p[N + 2], r);
+end CNS1;
+//// model: CNS2
+model CNS2
+  connector C
+    Real e;
+    flow Real f;
+  end C;
+  parameter Integer N = 3;
+  C p[3];
+  Real y;
+equation
+  if cardinality(p[N]) == 0 then
+    y = 0;
+  else
+    y = 1;
+  end if;
+  connect(p[1], p[N]);
+end CNS2;
+//// model: CNS3
+model CNS3
+  connector C
+    Real e;
+    flow Real f;
+  end C;
+  model A
+    parameter Integer M = 2;
+    C p[M];
+  end A;
+  A a[2](M = {2, 3});
+  C q[2];
+equation
+  connect(a[1].p, q);
+end CNS3;
+//// model: CNT1
+model CNT1
+  connector C
+    Real e;
+    flow Real f;
+  end C;
+  model S
+    parameter Integer nPorts = 0;
+    C ports[nPorts];
+  end S;
+  model A
+    parameter Integer M = 2;
+    C p[M], q[M];
+  equation
+    connect(p, q);
+  end A;
+  parameter Integer N = 3;
+  C p[4];
+  C q[2];
+  C r;
+  S s(nPorts = 2);
+  A a(M = 3);
+  C z1[0], z2[0];
+equation
+  for i in 1:N - 1 loop
+    connect(p[i], p[i + 1]);
+  end for;
+  connect(p[N + 1], r);
+  connect(p[end - 1:end], q);
+  connect(s.ports[end], r);
+  connect(z1, z2);
+end CNT1;

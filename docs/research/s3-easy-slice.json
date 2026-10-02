@@ -590,5 +590,6 @@
 "CevalArrayConstant2.mo",
 "SubscriptCevalSlice1.mo",
 "SubscriptCevalSlice2.mo",
-"SubscriptCevalWhole1.mo"
+"SubscriptCevalWhole1.mo",
+"InStreamArray.mo"
 ]
