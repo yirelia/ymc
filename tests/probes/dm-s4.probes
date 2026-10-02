@@ -1,0 +1,231 @@
+//// set: dm-s4 — `:` 维由修饰给、继承来的组件、组件数组
+//// model: S40
+model S40
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Real c[:]; Real y[size(c, 1)]; end A; A a(c = {1, 2, 3});
+end S40;
+//// model: S41
+model S41
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Real c[:]; parameter Integer n = size(c, 1) - 1; Real y[n + 1]; end A; A a(c = {1, 2, 3});
+end S41;
+//// model: S42
+model S42
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Real c[:] = {1}; Real y[size(c, 1)]; end A; A a(c = {1, 2, 3}); A b;
+end S42;
+//// model: S43
+model S43
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Real c[:]; Real y[size(c, 1)]; end A; parameter Real p[:] = {1, 2}; A a(c = p);
+end S43;
+//// model: S44
+model S44
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Real c[:]; Real y[size(c, 1)]; end A; parameter Real p[2] = {1, 2}; A a(c = p);
+end S44;
+//// model: S45
+model S45
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Real c[:]; Real y[size(c, 1)]; end A; A a(c = x);
+end S45;
+//// model: S46
+model S46
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A Real c[:]; Real y[size(c, 1)]; end A; A a(c = x);
+end S46;
+//// model: S47
+model S47
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A Real c[:]; Real y[size(c, 1)]; end A; A a(c = {t, 1});
+end S47;
+//// model: S48
+model S48
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A Real c[:]; Real y[size(c, 1)]; end A; A a[2](each c = {1, 2, 3});
+end S48;
+//// model: S49
+model S49
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A Real c[:]; Real y[size(c, 1)]; end A; A a[2](c = {{1, 2, 3}, {4, 5, 6}});
+end S49;
+//// model: BASE
+model BASE
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+end BASE;
+//// model: S410
+model S410
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Real c[:]; Real y[size(c, 1)]; end A; model B parameter Real d[:] = {1, 2}; A a(c = d); end B; B b(d = {1, 2, 3});
+end S410;
+//// model: S411
+model S411
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Real c[:]; Real y[size(c, 1)]; end A; model B extends A(c = {1, 2}); end B; B b;
+end S411;
+//// model: S412
+model S412
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Real c[:]; Real y[size(c, 1)]; end A; model B extends A; end B; B b(c = {1, 2});
+end S412;
+//// model: S413
+model S413
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Real c[:]; parameter Integer n = size(c, 1); Real y[n]; equation for i in 1:n loop y[i] = c[i] * time; end for; end A; A a(c = {1, 2, 3});
+end S413;
+//// model: S414
+model S414
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Real c[:]; Real y[size(c, 1)] = c * time; end A; A a(c = {1, 2, 3});
+end S414;
+//// model: S415
+model S415
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Real c[:]; Real y = sum(c) * time; end A; A a(c = {1, 2, 3});
+end S415;
+//// model: S416
+model S416
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Real c[:]; Real y = c[end] * time; end A; A a(c = {1, 2, 3});
+end S416;
+//// model: S417
+model S417
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Integer c[:]; Real y[c[end]]; end A; A a(c = {1, 2, 3});
+end S417;
+//// model: S418
+model S418
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Real c[:, :]; Real y[size(c, 1), size(c, 2)]; end A; A a(c = {{1, 2, 3}, {4, 5, 6}});
+end S418;
+//// model: S419
+model S419
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Real c[:, :]; Real y[size(c, 2)]; end A; A a(c = [1, 2, 3; 4, 5, 6]);
+end S419;
+//// model: S420
+model S420
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Real A1[:, size(A1, 1)]; parameter Real B1[size(A1, 1), :]; Real xs[size(A1, 1)]; Real u[size(B1, 2)]; end A; A a(A1 = {{1, 0}, {0, 1}}, B1 = {{1}, {1}});
+end S420;
+//// model: S421
+model S421
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Real A1[:, size(A1, 1)] = {{1}}; parameter Real B1[size(A1, 1), :] = {{1}}; Real xs[size(A1, 1)]; Real u[size(B1, 2)]; end A; A a(A1 = {{1, 0}, {0, 1}}, B1 = {{1}, {1}});
+end S421;
+//// model: S422
+model S422
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  record R Real v[:]; Real w[size(v, 1)]; end R; R r = R({1, 2}, {3, 4});
+end S422;
+//// model: S423
+model S423
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  record R parameter Real v[:] = {1, 2, 3}; end R; parameter R r; Real y[size(r.v, 1)];
+end S423;
+//// model: S424
+model S424
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  record R parameter Real v[:] = {1, 2, 3}; end R; parameter R r(v = {1, 2}); Real y[size(r.v, 1)];
+end S424;
+//// model: S425
+model S425
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A input Integer f1[:]; output Real res[size(f1, 1)]; algorithm for i in 1:size(f1, 1) loop res[i] := f1[i]; end for; end A; parameter Integer p[:] = {1, 1, 1}; A a(f1 = p);
+end S425;
+//// model: S426
+model S426
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Real c[:]; Real y[size(c, 1)]; end A; A a(c = fill(1.0, 3));
+end S426;
+//// model: S427
+model S427
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Real c[:]; Real y[size(c, 1)]; end A; parameter Integer k = 3; A a(c = fill(1.0, k));
+end S427;
+//// model: S428
+model S428
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Real c[:]; Real y[size(c, 1)]; end A; A a(c = 1.0:3.0);
+end S428;
+//// model: S429
+model S429
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Real c[:] = fill(0.0, 0); Real y[size(c, 1)]; end A; A a;
+end S429;
+//// model: S430
+model S430
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Real c[:]; Real y[size(c, 1)]; end A; A a(c = fill(0.0, 0));
+end S430;
+//// model: S431
+model S431
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A parameter Real c[:]; Real y[size(c, 1) + 1]; end A; A a(c = fill(0.0, 0));
+end S431;

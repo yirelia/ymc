@@ -3389,6 +3389,80 @@ YMC_TEST(flatten_reduction_range_evaluation) {
   }
 }
 
+YMC_TEST(flatten_dims_from_size_of_colon_arrays) {
+  // 维里的 size(a, k)，a 的第 k 维写的是 `:`（由绑定推断）：取 a 已发射的形状；size 只看类型，不把 a 标成结构参数（a / A / B
+  // 都不 final，n 作了维才 final）。本数组的别的维可以引用自己的 `:` 维（`A[:, size(A, 1)]`）。下标里的 `end`（`b[end]`，
+  // b 成结构参数）、类型名的 size（`size(E, 1)`、`size(Boolean, 1)`）。期望 = omc 1.25.0 实跑 DMT1（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model DMT1\n  type E = enumeration(one, two, three);\n  parameter Real a[:] = {1, 1};\n"
+                           "  parameter Real A[:, size(A, 1)] = {{1, 0}, {0, 1}};\n"
+                           "  parameter Real B[size(A, 1), :] = {{1}, {1}};\n  parameter Integer b[:] = {3, 2};\n"
+                           "  parameter Integer n = size(a, 1) - 1;\n  Real x[size(a, 1)];\n  Real xn[n + 1];\n"
+                           "  Real u[size(B, 2)];\n  Real c[b[end]];\n  Integer ints[size(E, 1)];\n"
+                           "  Integer nb = size(Boolean, 1);\nend DMT1;\n"),
+               std::string("class DMT1\n  parameter Real a[1] = 1.0;\n  parameter Real a[2] = 1.0;\n"
+                           "  parameter Real A[1,1] = 1.0;\n  parameter Real A[1,2] = 0.0;\n  parameter Real A[2,1] = 0.0;\n"
+                           "  parameter Real A[2,2] = 1.0;\n  parameter Real B[1,1] = 1.0;\n  parameter Real B[2,1] = 1.0;\n"
+                           "  final parameter Integer b[1] = 3;\n  final parameter Integer b[2] = 2;\n"
+                           "  final parameter Integer n = 1;\n  Real x[1];\n  Real x[2];\n  Real xn[1];\n  Real xn[2];\n"
+                           "  Real u[1];\n  Real c[1];\n  Real c[2];\n  Integer ints[1];\n  Integer ints[2];\n"
+                           "  Integer ints[3];\n  Integer nb = 2;\nend DMT1;\n"));
+  // `:` 维由外面的修饰给（PolynomialEvaluator 的写法），组件是继承来的（声明在基类里，按求值帧的实例找），组件数组的 each
+  // 修饰。期望 = omc 1.25.0 实跑 DMT2。
+  YMC_CHECK_EQ(flatten_src("model PolyBase\n  parameter Real c[:];\n  Real y[size(c, 1)];\nend PolyBase;\nmodel Poly\n"
+                           "  extends PolyBase;\n  parameter Integer n = size(c, 1) - 1;\n  Real xp[n + 1];\nend Poly;\n"
+                           "model DMT2\n  Poly p(c = {1, 2, 3});\n  Poly q[2](each c = {1, 2});\nend DMT2;\n"),
+               std::string("class DMT2\n  parameter Real p.c[1] = 1.0;\n  parameter Real p.c[2] = 2.0;\n"
+                           "  parameter Real p.c[3] = 3.0;\n  Real p.y[1];\n  Real p.y[2];\n  Real p.y[3];\n"
+                           "  final parameter Integer p.n = 2;\n  Real p.xp[1];\n  Real p.xp[2];\n  Real p.xp[3];\n"
+                           "  parameter Real q[1].c[1] = 1.0;\n  parameter Real q[1].c[2] = 2.0;\n  Real q[1].y[1];\n"
+                           "  Real q[1].y[2];\n  final parameter Integer q[1].n = 1;\n  Real q[1].xp[1];\n  Real q[1].xp[2];\n"
+                           "  parameter Real q[2].c[1] = 1.0;\n  parameter Real q[2].c[2] = 2.0;\n  Real q[2].y[1];\n"
+                           "  Real q[2].y[2];\n  final parameter Integer q[2].n = 1;\n  Real q[2].xp[1];\n  Real q[2].xp[2];\n"
+                           "end DMT2;\n"));
+  // 被引用的数组声明在引用处之后（要靠绑定的类型推，未做）→ SKIP。
+  bool uns = false;
+  const std::string out = flatten_src("model DMS3\n  Real y[size(a, 1)];\n  parameter Real a[:] = {1, 1};\nend DMS3;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(out, std::string("<unsupported:non-literal array dimension>"));
+}
+
+YMC_TEST(flatten_whole_range_slices_and_when_arrays) {
+  // 恰好是 `1:dim`（无步长 / 步长 1）的范围切片等价于 `:`（Subscript.simplifySlice，NFSubscript.mo:893-913 v1.25.0）：
+  // y1 / y2 / y5 / y7；部分范围、下标数组原样（y3 / y4）；下标数少于维数时 omc 拿末尾的维去比（simplifyList 的 List.lastN），
+  // `m[1:2]` 对 3 不相等、原样（y6）。when 方程体里的数组等式逐元素标量化（scalarizeWhenEquation，NFScalarize.mo:401-424）。
+  // 期望 = omc 1.25.0 实跑 DMT3（2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model DMT3\n  Real x[3] = {time, 1, 2};\n  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};\n"
+                           "  Real y1[3] = x[1:3];\n  Real y2[3] = x[1:end];\n  Real y3[2] = x[2:3];\n"
+                           "  Real y4[3] = x[{1, 2, 3}];\n  Real y5[2, 3] = m[1:2, 1:3];\n  Real y6[2, 3] = m[1:2];\n"
+                           "  Real y7 = max(x[1:3]);\n  discrete Real d[3];\n  discrete Real e[2];\nequation\n"
+                           "  when time > 1 then\n    d = pre(d) + x[1:3];\n    e = {time, 2};\n  end when;\nend DMT3;\n"),
+               std::string("class DMT3\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real m[1,1];\n  Real m[1,2];\n"
+                           "  Real m[1,3];\n  Real m[2,1];\n  Real m[2,2];\n  Real m[2,3];\n  Real y1[1];\n  Real y1[2];\n"
+                           "  Real y1[3];\n  Real y2[1];\n  Real y2[2];\n  Real y2[3];\n  Real y3[1];\n  Real y3[2];\n"
+                           "  Real y4[1];\n  Real y4[2];\n  Real y4[3];\n  Real y5[1,1];\n  Real y5[1,2];\n  Real y5[1,3];\n"
+                           "  Real y5[2,1];\n  Real y5[2,2];\n  Real y5[2,3];\n  Real y6[1,1];\n  Real y6[1,2];\n"
+                           "  Real y6[1,3];\n  Real y6[2,1];\n  Real y6[2,2];\n  Real y6[2,3];\n  Real y7 = max(x[:]);\n"
+                           "  discrete Real d[1];\n  discrete Real d[2];\n  discrete Real d[3];\n  discrete Real e[1];\n"
+                           "  discrete Real e[2];\nequation\n  x = {time, 1.0, 2.0};\n"
+                           "  m = {{time, 1.0, 2.0}, {3.0, 4.0, 5.0}};\n  y1 = x[:];\n  y2 = x[:];\n  y3 = x[2:3];\n"
+                           "  y4 = x[{1, 2, 3}];\n  y5 = m[:,:];\n  y6 = m[1:2];\n  when time > 1.0 then\n"
+                           "    d[1] = pre(d[1]) + x[1];\n    d[2] = pre(d[2]) + x[2];\n    d[3] = pre(d[3]) + x[3];\n"
+                           "    e[1] = time;\n    e[2] = 2.0;\n  end when;\nend DMT3;\n"));
+  // 不跟 / 未做 → SKIP：下标数少于维数的部分切片恰好等于末尾维的大小，omc 把它打成 `:`（DMS1 `y = m2[:]`，含义变了）；when
+  // 体里含数组调用的等式整体保留（DMS2 `y = array(x[i] * /*Real*/(i) for i in 1:3)`）。
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           {"model DMS1\n  Real m2[3, 2] = {{time, 1}, {2, 3}, {4, 5}};\n  Real y[2, 2] = m2[1:2];\nend DMS1;\n",
+            "partial slice printed as whole by omc"},
+           {"model DMS2\n  Real x[3] = {time, 1, 2};\n  discrete Real y[3];\nequation\n  when time > 1 then\n"
+            "    y = {x[i] * i for i in 1:3};\n  end when;\nend DMS2;\n",
+            "array call in when body"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

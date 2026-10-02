@@ -1102,6 +1102,19 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           FuncBuiltinFill3 同因）；Real 下标（omc 报错）。
           探针 AP p1–p11 + ff + ee + ut 338 个：273 PASS / 55 SKIP / 10 BOTH-REJECT / 0 FAIL。→ 全 scodeinst PASS 477→480
           （IfEquation5、IfEquationEval4、dim19）、nf-live 494 不变；+3 单测（202）。
+    - [x] (59r) 维里的 size / end、整段范围切片、when 体里的数组等式（2026-10-02）：
+          **维**：`size(a, k)`，a 的第 k 维写的是 `:`（由绑定推断）→ 取 a 已发射的形状（a 须先于引用处发射）；size 只看类型，
+          不把 a 标成结构参数。本数组的别的维可引用自己的 `:` 维（`parameter Real A[:, size(A, 1)]`，StateSpace 的写法：
+          先定 `:` 维再定其余）。继承来的组件（声明在基类里）按求值帧的实例找。下标里的 `end`（`Real c[b[end]]`）。类型名的
+          size（`size(E, 1)`、`size(Boolean, 1)`、`Real e[E]` 的 `size(e, 1)`）。
+          **整段范围切片**（修潜伏错）：恰好是 `1:dim`（无步长 / 步长 1）的范围等价于 `:`（Subscript.simplifySlice，
+          NFSubscript.mo:893-913 v1.25.0）——`y = x[1:3]` omc 打 `y = x[:]`，ymc 此前照写。下标数少于维数时 omc 拿末尾的维去
+          比（simplifyList 的 List.lastN）：`m[1:2]`（m 是 [2, 3]）原样留下，照做；反过来部分切片恰等于末尾维时 omc 打成 `:`
+          （改了含义）→ 不跟，SKIP（账本）。
+          **when 方程体里的数组等式**（修潜伏错）：omc 逐元素标量化（scalarizeWhenEquation，NFScalarize.mo:401-424），ymc 此前
+          把 `y = x` 整条留在 when 体里。含数组调用的等式未核实 → SKIP。
+          探针 DM s1–s5 + misc + ut：见 tests/probes/dm-*.probes，0 FAIL。→ 全 scodeinst PASS 480→482（DimUnknown8、
+          RecordBinding3）、nf-live 494→499（PolynomialEvaluatorA / B、QualifiedEnd、Modification12 / 13）；+2 单测（204）。
     - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、

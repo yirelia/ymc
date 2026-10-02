@@ -1,0 +1,184 @@
+//// set: dm-s2 — when / if 体里的切片、下标数少于维数的切片
+//// model: S20
+model S20
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y = x; end when;
+end S20;
+//// model: S21
+model S21
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y = x[1:3]; end when;
+end S21;
+//// model: S22
+model S22
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[2];
+equation
+  when t > 1 then y = x[2:3]; end when;
+end S22;
+//// model: S23
+model S23
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[2];
+equation
+  when t > 1 then y = x[{1, 3}]; end when;
+end S23;
+//// model: S24
+model S24
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y = 2 * x; end when;
+end S24;
+//// model: S25
+model S25
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y = x[:]; end when;
+end S25;
+//// model: S26
+model S26
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y[1:3] = x; end when;
+end S26;
+//// model: S27
+model S27
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y = m[1, :]; end when;
+end S27;
+//// model: S28
+model S28
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[2];
+equation
+  when t > 1 then y = m[:, 1]; end when;
+end S28;
+//// model: S29
+model S29
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y = pre(y) + x[1:3]; end when;
+end S29;
+//// model: BASE
+model BASE
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+end BASE;
+//// model: S210
+model S210
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[3];
+equation
+  if t > 1 then y = x[1:3]; else y = x[:]; end if;
+end S210;
+//// model: S211
+model S211
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[2];
+equation
+  if t > 1 then y = x[2:3]; else y = x[1:2]; end if;
+end S211;
+//// model: S212
+model S212
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[2, 2];
+equation
+  y = m[:, 2:3];
+end S212;
+//// model: S213
+model S213
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[2, 3];
+equation
+  y = m[1:2];
+end S213;
+//// model: S214
+model S214
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[2, 3];
+equation
+  y = m[1:2, 1:3];
+end S214;
+//// model: S215
+model S215
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real m2[3, 2] = {{t, 1}, {2, 3}, {4, 5}}; Real y[2, 2] = m2[1:2];
+end S215;
+//// model: S216
+model S216
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real m2[3, 2] = {{t, 1}, {2, 3}, {4, 5}}; Real y[3, 2] = m2[1:3];
+end S216;
+//// model: S217
+model S217
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real m3[3, 3] = {{t, 1, 2}, {2, 3, 4}, {4, 5, 6}}; Real y[3, 3] = m3[1:3];
+end S217;
+//// model: S218
+model S218
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real m3[3, 3] = {{t, 1, 2}, {2, 3, 4}, {4, 5, 6}}; Real y[2, 3] = m3[1:2];
+end S218;
+//// model: S219
+model S219
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real m2[3, 2] = {{t, 1}, {2, 3}, {4, 5}}; Real y[2] = m2[1];
+end S219;
+//// model: S220
+model S220
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real m2[3, 2] = {{t, 1}, {2, 3}, {4, 5}}; Real y = max(m2[1:2]);
+end S220;

@@ -1,0 +1,68 @@
+//// set: dm-ut — 维里的 size、整段切片、when 体数组等式（单测原文）
+//// model: DMS1
+model DMS1
+  Real m2[3, 2] = {{time, 1}, {2, 3}, {4, 5}};
+  Real y[2, 2] = m2[1:2];
+end DMS1;
+//// model: DMS2
+model DMS2
+  Real x[3] = {time, 1, 2};
+  discrete Real y[3];
+equation
+  when time > 1 then
+    y = {x[i] * i for i in 1:3};
+  end when;
+end DMS2;
+//// model: DMS3
+model DMS3
+  Real y[size(a, 1)];
+  parameter Real a[:] = {1, 1};
+end DMS3;
+//// model: DMT1
+model DMT1
+  type E = enumeration(one, two, three);
+  parameter Real a[:] = {1, 1};
+  parameter Real A[:, size(A, 1)] = {{1, 0}, {0, 1}};
+  parameter Real B[size(A, 1), :] = {{1}, {1}};
+  parameter Integer b[:] = {3, 2};
+  parameter Integer n = size(a, 1) - 1;
+  Real x[size(a, 1)];
+  Real xn[n + 1];
+  Real u[size(B, 2)];
+  Real c[b[end]];
+  Integer ints[size(E, 1)];
+  Integer nb = size(Boolean, 1);
+end DMT1;
+//// model: DMT2
+model PolyBase
+  parameter Real c[:];
+  Real y[size(c, 1)];
+end PolyBase;
+model Poly
+  extends PolyBase;
+  parameter Integer n = size(c, 1) - 1;
+  Real xp[n + 1];
+end Poly;
+model DMT2
+  Poly p(c = {1, 2, 3});
+  Poly q[2](each c = {1, 2});
+end DMT2;
+//// model: DMT3
+model DMT3
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real y1[3] = x[1:3];
+  Real y2[3] = x[1:end];
+  Real y3[2] = x[2:3];
+  Real y4[3] = x[{1, 2, 3}];
+  Real y5[2, 3] = m[1:2, 1:3];
+  Real y6[2, 3] = m[1:2];
+  Real y7 = max(x[1:3]);
+  discrete Real d[3];
+  discrete Real e[2];
+equation
+  when time > 1 then
+    d = pre(d) + x[1:3];
+    e = {time, 2};
+  end when;
+end DMT3;

@@ -1,0 +1,365 @@
+//// set: dm-s1 — 整段范围切片 `x[1:3]` → `x[:]`：各种形态与语境
+//// model: S10
+model S10
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[3] = x[1:3];
+end S10;
+//// model: S11
+model S11
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[3] = x[1:1:3];
+end S11;
+//// model: S12
+model S12
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[3] = x[{1, 2, 3}];
+end S12;
+//// model: S13
+model S13
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[3] = x[3:-1:1];
+end S13;
+//// model: S14
+model S14
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[2] = x[1:2];
+end S14;
+//// model: S15
+model S15
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[2] = x[2:3];
+end S15;
+//// model: S16
+model S16
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[3] = x[1:end];
+end S16;
+//// model: S17
+model S17
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[3] = x[:];
+end S17;
+//// model: S18
+model S18
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Integer n = 3; Real y[3] = x[1:n];
+end S18;
+//// model: S19
+model S19
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  constant Integer c = 3; Real y[3] = x[1:c];
+end S19;
+//// model: BASE
+model BASE
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+end BASE;
+//// model: S110
+model S110
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Integer n = 1; Real y[3] = x[n:3];
+end S110;
+//// model: S111
+model S111
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[2] = m[1:2, 1];
+end S111;
+//// model: S112
+model S112
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[2, 3] = m[1:2, 1:3];
+end S112;
+//// model: S113
+model S113
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[3] = m[1, 1:3];
+end S113;
+//// model: S114
+model S114
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[2, 3] = m[1:2, :];
+end S114;
+//// model: S115
+model S115
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[2, 3] = m[:, 1:3];
+end S115;
+//// model: S116
+model S116
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[2, 2] = m[1:2, 2:3];
+end S116;
+//// model: S117
+model S117
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[2, 3] = m[1:end, 1:end];
+end S117;
+//// model: S118
+model S118
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[2, 3] = m[1:2];
+end S118;
+//// model: S119
+model S119
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = sum(x[1:3]);
+end S119;
+//// model: S120
+model S120
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = max(x[1:3]);
+end S120;
+//// model: S121
+model S121
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = max(x[1:2]) + min(x[1:end]);
+end S121;
+//// model: S122
+model S122
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = sum(v for v in x[1:3]);
+end S122;
+//// model: S123
+model S123
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = max(v for v in x[1:3]);
+end S123;
+//// model: S124
+model S124
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = max(v * t for v in x[1:end]);
+end S124;
+//// model: S125
+model S125
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[3];
+equation
+  y = x[1:3];
+end S125;
+//// model: S126
+model S126
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[3];
+equation
+  y[1:3] = x;
+end S126;
+//// model: S127
+model S127
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[3];
+equation
+  y[1:3] = x[1:3];
+end S127;
+//// model: S128
+model S128
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[3]; algorithm y := x[1:3];
+end S128;
+//// model: S129
+model S129
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[3]; algorithm y[1:3] := x;
+end S129;
+//// model: S130
+model S130
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[3]; algorithm y[1:2] := x[2:3]; y[3] := 0;
+end S130;
+//// model: S131
+model S131
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[3] = if t > 1 then x[1:3] else 2 * x[1:3];
+end S131;
+//// model: S132
+model S132
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[3] = if t > 1 then x[1:3] else x;
+end S132;
+//// model: S133
+model S133
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[3] = 2 * x[1:3];
+end S133;
+//// model: S134
+model S134
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[3] = x[1:3] + x;
+end S134;
+//// model: S135
+model S135
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[3] = -x[1:3];
+end S135;
+//// model: S136
+model S136
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y = x[1:3] * x[1:3];
+end S136;
+//// model: S137
+model S137
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real q[1] = {t}; Real y[1] = q[1:1];
+end S137;
+//// model: S138
+model S138
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real q[1] = {t}; Real y = sum(q[1:1]);
+end S138;
+//// model: S139
+model S139
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real b[Boolean] = {t, 1}; Real y[2] = b[false:true];
+end S139;
+//// model: S140
+model S140
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  type E = enumeration(one, two, three); Real e[E] = {t, 1, 2}; Real y[3] = e[E.one:E.three];
+end S140;
+//// model: S141
+model S141
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  type E = enumeration(one, two, three); Real e[E] = {t, 1, 2}; Real y[2] = e[E.one:E.two];
+end S141;
+//// model: S142
+model S142
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[3](start = x[1:3]);
+end S142;
+//// model: S143
+model S143
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[3] = der(x[1:3]);
+end S143;
+//// model: S144
+model S144
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Boolean bb[3] = {t > 1, true, false}; Boolean y[3] = not bb[1:3];
+end S144;
+//// model: S145
+model S145
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Boolean bb[3] = {t > 1, true, false}; Boolean y[3] = bb[1:3] and bb;
+end S145;
+//// model: S146
+model S146
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[3] = cat(1, x[1:3]);
+end S146;
+//// model: S147
+model S147
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[6] = cat(1, x[1:3], x[1:end]);
+end S147;
+//// model: S148
+model S148
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[3] = fill(1.0, 3) + x[1:3];
+end S148;
+//// model: S149
+model S149
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y = x[1:3]; end when;
+end S149;

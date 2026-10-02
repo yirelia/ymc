@@ -1,0 +1,300 @@
+//// set: dm-s5 — when 方程体里的数组等式
+//// model: S50
+model S50
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y = x; end when;
+end S50;
+//// model: S51
+model S51
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y = {1, 2, 3}; end when;
+end S51;
+//// model: S52
+model S52
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y = {t, 2, 3}; end when;
+end S52;
+//// model: S53
+model S53
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y = 2 * x; elsewhen t > 2 then y = x; end when;
+end S53;
+//// model: S54
+model S54
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y = pre(y) + {1, 1, 1}; end when;
+end S54;
+//// model: S55
+model S55
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y = pre(y) + x; end when;
+end S55;
+//// model: S56
+model S56
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y[1:2] = x[2:3]; y[3] = 0; end when;
+end S56;
+//// model: S57
+model S57
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[2, 3];
+equation
+  when t > 1 then y = m; end when;
+end S57;
+//// model: S58
+model S58
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[2, 3];
+equation
+  when t > 1 then y = 2 * m; end when;
+end S58;
+//// model: S59
+model S59
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y = m[1, :]; end when;
+end S59;
+//// model: BASE
+model BASE
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+end BASE;
+//// model: S510
+model S510
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Integer k[2];
+equation
+  when t > 1 then k = {1, 2}; end when;
+end S510;
+//// model: S511
+model S511
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Integer k[2];
+equation
+  when t > 1 then k = pre(k) + {1, 1}; end when;
+end S511;
+//// model: S512
+model S512
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Boolean b[2];
+equation
+  when t > 1 then b = {true, false}; end when;
+end S512;
+//// model: S513
+model S513
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Boolean b[2];
+equation
+  when t > 1 then b = not pre(b); end when;
+end S513;
+//// model: S514
+model S514
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y = fill(t, 3); end when;
+end S514;
+//// model: S515
+model S515
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y = zeros(3); end when;
+end S515;
+//// model: S516
+model S516
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y = x .* x; end when;
+end S516;
+//// model: S517
+model S517
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y = if t > 2 then x else 2 * x; end when;
+end S517;
+//// model: S518
+model S518
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y = {x[i] * i for i in 1:3}; end when;
+end S518;
+//// model: S519
+model S519
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y = cat(1, x[1:2], {t}); end when;
+end S519;
+//// model: S520
+model S520
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3]; discrete Real z;
+equation
+  when t > 1 then y = x; z = sum(x); end when;
+end S520;
+//// model: S521
+model S521
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when {t > 1, t > 2} then y = x; end when;
+end S521;
+//// model: S522
+model S522
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when initial() then y = x; end when;
+end S522;
+//// model: S523
+model S523
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then x = y; end when;
+end S523;
+//// model: S524
+model S524
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then 2 * y = x; end when;
+end S524;
+//// model: S525
+model S525
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y = x; elsewhen t > 2 then y[1] = 0; y[2] = 0; y[3] = 0; end when;
+end S525;
+//// model: S526
+model S526
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A discrete Real y[3]; Real u[3] = {time, 1, 2}; equation when time > 1 then y = u; end when; end A; A a;
+end S526;
+//// model: S527
+model S527
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  model A discrete Real y[3]; Real u[3] = {time, 1, 2}; equation when time > 1 then y = u; end when; end A; A a[2];
+end S527;
+//// model: S528
+model S528
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  function f input Real u[3]; output Real v[3]; algorithm v := 2 * u; end f; discrete Real y[3];
+equation
+  when t > 1 then y = f(x); end when;
+end S528;
+//// model: S529
+model S529
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y = der(x); end when;
+end S529;
+//// model: S530
+model S530
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3];
+equation
+  when t > 1 then y = -x; end when;
+end S530;
+//// model: S531
+model S531
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[3](start = {1, 2, 3});
+equation
+  when t > 1 then y = pre(y); end when;
+end S531;
+//// model: S532
+model S532
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  discrete Real y[0]; Real z[0];
+equation
+  when t > 1 then y = z; end when;
+end S532;

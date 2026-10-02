@@ -1,0 +1,371 @@
+//// set: dm-s3 — 维里的 size(`:` 数组) / end / 类型名的 size
+//// model: S30
+model S30
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real a[:] = {1, 1}; Real y[size(a, 1) - 1];
+end S30;
+//// model: S31
+model S31
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real a[:] = {1, 1}; Real y[size(a, 1)];
+end S31;
+//// model: S32
+model S32
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real a[:] = {1, 1}; parameter Integer n = size(a, 1) - 1; Real y[n + 1];
+end S32;
+//// model: S33
+model S33
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real a[:] = {1, 1}; parameter Integer n = size(a, 1); Real y = n * t;
+end S33;
+//// model: S34
+model S34
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real a[:] = {1, 1}; Integer n = size(a, 1);
+end S34;
+//// model: S35
+model S35
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real a[:] = {1, 1}; Real y = size(a, 1) * t;
+end S35;
+//// model: S36
+model S36
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real a[:, :] = {{1, 2, 3}, {4, 5, 6}}; Real y[size(a, 1), size(a, 2)];
+end S36;
+//// model: S37
+model S37
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real a[:, :] = {{1, 2, 3}, {4, 5, 6}}; Real y[size(a, 2)];
+end S37;
+//// model: S38
+model S38
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real a[:, 3] = {{1, 2, 3}, {4, 5, 6}}; Real y[size(a, 1) + size(a, 2)];
+end S38;
+//// model: S39
+model S39
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real a[:, :] = {{1, 2, 3}, {4, 5, 6}}; Integer s[2] = size(a);
+end S39;
+//// model: BASE
+model BASE
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+end BASE;
+//// model: S310
+model S310
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real a[:, :] = {{1, 2, 3}, {4, 5, 6}}; Real y[sum(size(a))];
+end S310;
+//// model: S311
+model S311
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real a[:] = {t, 1}; Real y[size(a, 1)];
+end S311;
+//// model: S312
+model S312
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real a[:] = {t, 1}; Real y[size(a, 1)] = a;
+end S312;
+//// model: S313
+model S313
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[size(a, 1)]; parameter Real a[:] = {1, 1};
+end S313;
+//// model: S314
+model S314
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[size(a, 1)]; Real a[:] = {t, 1};
+end S314;
+//// model: S315
+model S315
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real a[:] = fill(1.0, 2); Real y[size(a, 1)];
+end S315;
+//// model: S316
+model S316
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Integer k = 2; parameter Real a[:] = fill(1.0, k); Real y[size(a, 1)];
+end S316;
+//// model: S317
+model S317
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Integer k = 2; parameter Real a[k] = fill(1.0, k); Real y[size(a, 1)];
+end S317;
+//// model: S318
+model S318
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real a[:] = 1.0:3.0; Real y[size(a, 1)];
+end S318;
+//// model: S319
+model S319
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Integer a[:] = 1:3; Real y[size(a, 1)];
+end S319;
+//// model: S320
+model S320
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real a[:] = {i for i in 1:3}; Real y[size(a, 1)];
+end S320;
+//// model: S321
+model S321
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real a[:] = cat(1, {1, 2}, {3}); Real y[size(a, 1)];
+end S321;
+//// model: S322
+model S322
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real a[:] = x; Real y[size(a, 1)];
+end S322;
+//// model: S323
+model S323
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real b[:] = {1, 2, 3}; parameter Real a[:] = b; Real y[size(a, 1)];
+end S323;
+//// model: S324
+model S324
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real b[:] = {1, 2, 3}; parameter Real a[:] = 2 * b; Real y[size(a, 1)];
+end S324;
+//// model: S325
+model S325
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real b[:] = {1, 2, 3}; parameter Real a[size(b, 1)] = b; Real y[size(a, 1)];
+end S325;
+//// model: S326
+model S326
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real a[:, size(a, 1)] = {{1, 0}, {0, 1}}; Real y[size(a, 1)];
+end S326;
+//// model: S327
+model S327
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real a[:, size(a, 1)] = {{1, 0}, {0, 1}}; parameter Real b[size(a, 1), :] = {{1}, {1}}; Real y[size(b, 2)];
+end S327;
+//// model: S328
+model S328
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real a[:, size(a, 1)] = {{1, 0}, {0, 1}}; parameter Real b[size(a, 1), :] = {{1}, {1}}; parameter Real c[:, size(a, 1)] = {{1, 1}}; parameter Real d[size(c, 1), size(b, 2)] = zeros(size(c, 1), size(b, 2));
+end S328;
+//// model: S329
+model S329
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real a[size(a, 2), :] = {{1, 0}, {0, 1}}; Real y[size(a, 1)];
+end S329;
+//// model: S330
+model S330
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real a[size(a, 1)] = {1, 2};
+end S330;
+//// model: S331
+model S331
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Real a[:, size(a, 1)] = {{1, 0, 2}, {0, 1, 2}};
+end S331;
+//// model: S332
+model S332
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Integer b[:] = {3, 2}; Real y[b[end]];
+end S332;
+//// model: S333
+model S333
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Integer b[:] = {3, 2}; Real y[b[end - 1]];
+end S333;
+//// model: S334
+model S334
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Integer b[:] = {3, 2}; Real y[b[1]];
+end S334;
+//// model: S335
+model S335
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Integer b[2] = {3, 2}; Real y[b[end]];
+end S335;
+//// model: S336
+model S336
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Integer b[:] = {3, 2}; Real y = x[b[end]];
+end S336;
+//// model: S337
+model S337
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Integer b[:] = {3, 2}; Real y = x[b[end]] + x[end] + m[end, end];
+end S337;
+//// model: S338
+model S338
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Integer b[:, :] = {{3, 2}, {1, 2}}; Real y[b[end, end]];
+end S338;
+//// model: S339
+model S339
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Integer b[:] = {3, 2}; parameter Integer c[:] = {1, 2}; Real y[b[c[end]]];
+end S339;
+//// model: S340
+model S340
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  constant Integer b[:] = {3, 2}; Real y[b[end]];
+end S340;
+//// model: S341
+model S341
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  parameter Integer b[:] = {3, 2}; Real y[size(b, 1)] = x[b[1:end]];
+end S341;
+//// model: S342
+model S342
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  type E = enumeration(one, two, three); Integer y[size(E, 1)];
+end S342;
+//// model: S343
+model S343
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  type E = enumeration(one, two, three); Integer n = size(E, 1);
+end S343;
+//// model: S344
+model S344
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  type E = enumeration(one, two, three); type E2 = E; Integer y[size(E2, 1)];
+end S344;
+//// model: S345
+model S345
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  type E = enumeration(one, two, three); Integer y[size(E, 2)];
+end S345;
+//// model: S346
+model S346
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  type E = enumeration(one, two, three); Real e[E] = {t, 1, 2}; Real y[size(e, 1)];
+end S346;
+//// model: S347
+model S347
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Integer y[size(Boolean, 1)];
+end S347;
+//// model: S348
+model S348
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real b[Boolean] = {t, 1}; Real y[size(b, 1)];
+end S348;
+//// model: S349
+model S349
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[size(x, 1)] = x; Real z[size(m, 2), size(m, 1)];
+end S349;
+//// model: S350
+model S350
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Real y[size(x)];
+end S350;
+//// model: S351
+model S351
+  Real x[3] = {time, 1, 2};
+  Real m[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real t = time;
+  Integer s[1] = size(x); Integer s2[2] = size(m);
+end S351;
