@@ -226,3 +226,7 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `sl-s2` | 12 | 函数体里运行时界的切片与 `end`（输入 `:` 维、输出 / 局部的表达式维） |
 | `sl-s3` | 11 | 函数体下标里 `end` 取书写的维：`size(x, 1)`、`n`、`2 * n`、`size(x, 1) + 1`、二维、嵌套在调用里 |
 | `sl-ut` | 1 | 函数体 `end` 取书写的维（单测原文） |
+| `ih-e1` | 26 | 继承来的方程 / 算法段：多重 / 多层继承、extends 修饰、初始段、when、connect、组件数组、protected |
+| `im-i1` | 43 | 类型名 / 基类名经 import：限定 / 重命名 / 组导入 / `.*`、冲突、遮蔽、不被继承、对嵌套类可见、encapsulated |
+| `im-x1` | 15 | extends 的基类名从扩展类自身查：本地嵌套类、路径前缀、replaceable 基类、自引用、继承来的类 |
+| `im-ut` | 3 | import / extends 查找 / 继承段（单测原文） |

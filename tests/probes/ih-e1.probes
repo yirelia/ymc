@@ -1,0 +1,131 @@
+//// set: ih-e1 — 继承来的方程 / 算法段：多重 / 多层继承、extends 修饰、初始段、when、connect、组件数组、protected
+//// model: IH10
+model IH10
+  Real tt = time;
+  model B Real x; equation x = time; end B; model A extends B; end A; A a;
+end IH10;
+//// model: IH11
+model IH11
+  Real tt = time;
+  model B Real x; equation x = time; end B; model A extends B; Real y; equation y = x; end A; A a;
+end IH11;
+//// model: IH12
+model IH12
+  Real tt = time;
+  model B1 Real x; equation x = 1; end B1; model B2 Real y; equation y = 2; end B2; model A extends B1; extends B2; Real z; equation z = x + y; end A; A a;
+end IH12;
+//// model: IH13
+model IH13
+  Real tt = time;
+  model B1 Real x; equation x = 1; end B1; model B2 Real y; equation y = 2; end B2; model A extends B2; Real z; extends B1; equation z = x + y; end A; A a;
+end IH13;
+//// model: IH14
+model IH14
+  Real tt = time;
+  model C Real w; equation w = 3; end C; model B extends C; Real x; equation x = w; end B; model A extends B; Real z; equation z = x; end A; A a;
+end IH14;
+//// model: IH15
+model IH15
+  Real tt = time;
+  model B parameter Real k = 1; Real x; equation x = k * time; end B; model A extends B(k = 2); end A; A a;
+end IH15;
+//// model: IH16
+model IH16
+  Real tt = time;
+  model B parameter Integer n = 2; Real x[n]; equation for i in 1:n loop x[i] = i * time; end for; end B; model A extends B(n = 3); end A; A a;
+end IH16;
+//// model: IH17
+model IH17
+  Real tt = time;
+  model B Real x; initial equation x = 1; equation der(x) = -x; end B; model A extends B; end A; A a;
+end IH17;
+//// model: IH18
+model IH18
+  Real tt = time;
+  model B Real x; algorithm x := time; end B; model A extends B; Real y; algorithm y := 2 * x; end A; A a;
+end IH18;
+//// model: IH19
+model IH19
+  Real tt = time;
+  model B Real x; initial algorithm x := 1; equation der(x) = -x; end B; model A extends B; end A; A a;
+end IH19;
+//// model: IH110
+model IH110
+  Real tt = time;
+  model B Real x(start = 0); Boolean b = x > 0.5; equation der(x) = 1; when b then reinit(x, 0); end when; end B; model A extends B; end A; A a;
+end IH110;
+//// model: IH111
+model IH111
+  Real tt = time;
+  connector C Real e; flow Real f; end C; model B C p, n; equation p.f + n.f = 0; end B; model A extends B; equation connect(p, n); end A; A a;
+end IH111;
+//// model: IH112
+model IH112
+  Real tt = time;
+  connector C Real e; flow Real f; end C; model B C p, n; equation connect(p, n); end B; model A extends B; end A; A a;
+end IH112;
+//// model: IH113
+model IH113
+  Real tt = time;
+  model B Real x; equation x = time; end B; model A extends B; end A; A a[2];
+end IH113;
+//// model: IH114
+model IH114
+  Real tt = time;
+  model B Real x; equation x = time; end B; model A protected extends B; end A; A a;
+end IH114;
+//// model: IH115
+model IH115
+  Real tt = time;
+  model B Real x; equation assert(x > -1, "neg"); x = time; end B; model A extends B; end A; A a;
+end IH115;
+//// model: IH116
+model IH116
+  Real tt = time;
+  model B parameter Real k = 1; Real x; equation if k > 0 then x = 1; else x = 2; end if; end B; model A extends B(k = -1); end A; A a;
+end IH116;
+//// model: IH117
+model IH117
+  Real tt = time;
+  model B Real x; equation x = time; end B; model A extends B; equation x = 2; end A; A a;
+end IH117;
+//// model: IH118
+model IH118
+  Real tt = time;
+  model B constant Integer n = 2; Real x[n]; equation x = fill(time, n); end B; model A extends B; end A; A a;
+end IH118;
+//// model: IH119
+model IH119
+  Real tt = time;
+  model B Real x; equation x = f(time); end B; function f input Real u; output Real y; algorithm y := u; end f; model A extends B; end A; A a;
+end IH119;
+//// model: IH120
+model IH120
+  Real tt = time;
+  model B Real x; Real y = 2 * x; equation x = time; end B; model A extends B(x(start = 1)); end A; A a;
+end IH120;
+//// model: IH121
+model IH121
+  Real tt = time;
+  model B Real x; equation x = time; end B; model A extends B; end A; model D extends A; Real z; equation z = x; end D; D d;
+end IH121;
+//// model: IH122
+model IH122
+  Real tt = time;
+  model B Real x; equation x = time; end B; model A extends B; end A; model D A a1; A a2; equation a1.x = a2.x; end D; D d;
+end IH122;
+//// model: IH123
+model IH123
+  Real tt = time;
+  model B Real x[2]; equation x = {time, 2}; end B; model A extends B; end A; A a;
+end IH123;
+//// model: IH124
+model IH124
+  Real tt = time;
+  model B parameter Integer n = 2; Real x[n]; equation x = fill(time, n); end B; model A extends B(n = 3); end A; A a;
+end IH124;
+//// model: IH125
+model IH125
+  Real tt = time;
+  model B Real x; equation x = tt2; end B; model A extends B; Real tt2 = time; end A; A a;
+end IH125;

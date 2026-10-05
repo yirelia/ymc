@@ -1,5 +1,6 @@
 # 任务卡 T-S3-06：import——类型名 / 基类名经 import 查找（inst 侧）
 
+**状态**：已完成（2026-10-05，加宽(61a)；用户暂不手写核心，由 Claude 实现并按本卡验收）
 **执行者**：用户（手写核心：`src/inst/inst.cpp`、`src/inst/inode.h`）
 **验收者**：Claude
 **归属阶段**：S3（flatten 侧已就绪，见 §2）

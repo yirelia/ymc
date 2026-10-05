@@ -1395,7 +1395,24 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           顺带铺了模型里的切片（sl-s1）：运行时界的切片（`x[n:n + 1] := …`、`y := x[n:n + 1]`、`sum(x[1:n])`）、空切片
           （`ra[3:1]`）、`end` 算式的 `:` 维参数切片仍 SKIP（`array slice`，语料 3 例），留给后面的桶。
           → 语料无变化；+1 单测（238）；探针 6465→6513。
-    - [ ] 任务卡 T-S3-07（用户，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
+    - [x] (61a) inst：继承段 + extends 基类名查找 + import（任务卡 T-S3-05 / 06 / 07，2026-10-05）：
+          用户暂不手写核心（"目前我不手写核心"），inst 侧的卡改由 Claude 实现。
+          **T-S3-05**：inst_class 把基类实例按 extends 序记进实例类树的 exts、去掉 `extends with equations/algorithms` 守卫——
+          flatten 的 collect_inherited_sections 早已就绪（段序：本类在前、各 extends 逆序在后，NFInst.mo:2511-2514 /
+          NFSections.mo:192-209）。
+          **T-S3-07**：extends 的基类名从扩展类**自身**查（NFInst.mo:775-776 `scope := InstNode.parent(ext)`，extends 节点的
+          parent 是扩展类本身）——看得见本类的嵌套类（`package Modelica … extends Icons.Library`）；同时补"基类名各段须
+          传递地非 replaceable"（checkReplaceableBaseClass，NFInst.mo:842-883）。
+          **T-S3-06**：lookup_simple_class 每层在本地类之后查这一层的 import（import_class：限定 / 重命名 / 组导入优先于
+          `.*`，同档两个同名项 = 冲突、用到才报错，目标从顶层查，import 不被继承——与 flatten 的 import_lookup 同一套规则）；
+          顺带补上 encapsulated 查找边界（NFLookup.mo:465-470：本层找不到只剩内建类，Encapsulated3 由此不再被放过）。
+          新探针 87 个（继承段 26 / import 43 / extends 查找 15 / 单测原文 3），无 FAIL / ACCEPTS-INVALID；60h 上其中
+          1 例是 FAIL（本类嵌套的 D 与顶层 D 同名：extends 从外层查、错取了顶层的 D）。
+          → scodeinst 513→520 PASS（ExtendSections、ExtendImport1、ImportNamed1/2、ImportQualified1、ImportUnqualified1/4
+            入 slice）；整个 testsuite PASS 1343→1369（FAIL 0，ACCEPTS-INVALID 3 不变）；+1 单测（239）；探针 6513→6600。
+          仍缺（下一批）：短类别名到长类（`model T = M`，short class aliasing composite，语料 36 例）、继承来的类不进查找表
+          （`extends B; … extends D`，D 来自 B）、`extends` 短类、import 来的枚举类型（flatten 的 enumeration type path）。
+    - [x] 任务卡 T-S3-07（Claude 实现于 (61a)，inst）：extends 基类名从扩展类**自身**查（inst.cpp:215 / :286 现从 parent_scope 起查，漏掉
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、
           25 预定义类、14 短类别名前缀、7 继承类查找…）记在卡里 → `docs/tasks/T-S3-07-extends-lookup-scope.md`。

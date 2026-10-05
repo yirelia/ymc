@@ -1,0 +1,396 @@
+//// set: im-i1 — 类型名 / 基类名经 import：限定 / 重命名 / 组导入 / `.*`、冲突、遮蔽、不被继承、对嵌套类可见、encapsulated
+//// model: I10
+package P
+model M Real x = time; end M;
+type T = Real(unit = "m");
+constant Real c = 2;
+end P;
+model I10
+import P.M;
+M m;
+end I10;
+//// model: I11
+package P
+model M Real x = time; end M;
+end P;
+model I11
+import Q = P.M;
+Q m;
+end I11;
+//// model: I12
+package P
+model M Real x = time; end M;
+model N Real y = 1; end N;
+end P;
+model I12
+import P.{M, N};
+M m;
+N n;
+end I12;
+//// model: I13
+package P
+model M Real x = time; end M;
+model N Real y = 1; end N;
+end P;
+model I13
+import P.{M, K = N};
+M m;
+K k;
+end I13;
+//// model: I14
+package P
+model M Real x = time; end M;
+end P;
+model I14
+import P.*;
+M m;
+end I14;
+//// model: I15
+package P
+type T = Real(unit = "m");
+end P;
+model I15
+import P.T;
+T t = time;
+end I15;
+//// model: I16
+package P
+model M Real x = time; end M;
+end P;
+model I16
+import P.M;
+model N extends M; end N;
+N n;
+end I16;
+//// model: I17
+package P
+model M Real x = time; end M;
+end P;
+model I17
+import P.M;
+extends M;
+end I17;
+//// model: I18
+package P
+model M Real x = time; end M;
+end P;
+model I18
+import P.*;
+extends M;
+end I18;
+//// model: I19
+package P
+package Q
+model M Real x = time; end M;
+end Q;
+end P;
+model I19
+import P.Q;
+Q.M m;
+end I19;
+//// model: I110
+package P
+package Q
+model M Real x = time; end M;
+end Q;
+end P;
+model I110
+import S = P.Q;
+S.M m;
+end I110;
+//// model: I111
+package P
+model M Real x = time; end M;
+end P;
+model I111
+package P
+model M Real x = 2; end M;
+end P;
+import P.M;
+M m;
+end I111;
+//// model: I112
+package P
+model M Real x = time; end M;
+end P;
+model I112
+model M Real x = 3; end M;
+import P.M;
+M m;
+end I112;
+//// model: I113
+package P
+model M Real x = time; end M;
+end P;
+package R
+model M Real x = 2; end M;
+end R;
+model I113
+import P.*;
+import R.*;
+M m;
+end I113;
+//// model: I114
+package P
+model M Real x = time; end M;
+end P;
+package R
+model M Real x = 2; end M;
+end R;
+model I114
+import P.*;
+import R.M;
+M m;
+end I114;
+//// model: I115
+package P
+model M Real x = time; end M;
+end P;
+model I115
+import P.M;
+import P.M;
+M m;
+end I115;
+//// model: I116
+package P
+model M Real x = time; end M;
+end P;
+model I116
+import P.M;
+import P.M;
+Real y = 1;
+end I116;
+//// model: I117
+package P
+model M Real x = time; end M;
+end P;
+model I117
+import P.X;
+Real y = 1;
+end I117;
+//// model: I118
+package P
+model M Real x = time; end M;
+end P;
+model I118
+import P.X;
+X y;
+end I118;
+//// model: I119
+package P
+model M Real x = time; end M;
+end P;
+model I119
+import Q.*;
+Real y = 1;
+end I119;
+//// model: I120
+package P
+constant Real c = 2;
+end P;
+model I120
+import P.c;
+c y;
+end I120;
+//// model: I121
+package P
+model M Real x = time; end M;
+end P;
+model B
+import P.M;
+end B;
+model I121
+extends B;
+M m;
+end I121;
+//// model: I122
+package P
+model M Real x = time; end M;
+end P;
+model I122
+import P.M;
+model Inner
+M m;
+end Inner;
+Inner i;
+end I122;
+//// model: I123
+package P
+model M Real x = time; end M;
+end P;
+package L
+import P.M;
+model Inner
+M m;
+end Inner;
+end L;
+model I123
+L.Inner i;
+end I123;
+//// model: I124
+package P
+model M Real x = time; end M;
+end P;
+model I124
+import P.M;
+model T = M;
+T t;
+end I124;
+//// model: I125
+package P
+type T = Real(unit = "m");
+end P;
+model I125
+import P.T;
+type U = T(min = 0);
+U u = time;
+end I125;
+//// model: I126
+package P
+model M parameter Real k = 1; Real x = k * time; end M;
+end P;
+model I126
+import P.M;
+M m(k = 2);
+end I126;
+//// model: I127
+package P
+model M parameter Real k = 1; Real x = k * time; end M;
+end P;
+model I127
+import P.M;
+M m[2](k = {1, 2});
+end I127;
+//// model: I128
+package P
+connector C Real e; flow Real f; end C;
+end P;
+model I128
+import P.C;
+C a, b;
+equation
+connect(a, b);
+end I128;
+//// model: I129
+package P
+record R Real a; Real b; end R;
+end P;
+model I129
+import P.R;
+R r(a = 1, b = 2);
+end I129;
+//// model: I130
+package P
+record R Real a; Real b; end R;
+end P;
+model I130
+import P.R;
+R r = R(1, 2);
+end I130;
+//// model: I131
+package P
+function f input Real u; output Real y; algorithm y := 2 * u; end f;
+end P;
+model I131
+import P.f;
+Real y = f(time);
+end I131;
+//// model: I132
+package P
+type E = enumeration(a, b);
+end P;
+model I132
+import P.E;
+E e = E.a;
+end I132;
+//// model: I133
+package P
+type E = enumeration(a, b);
+end P;
+model I133
+import P.*;
+E e = E.b;
+end I133;
+//// model: I134
+package P
+model M Real x = time; end M;
+end P;
+encapsulated model I134
+import P.M;
+M m;
+end I134;
+//// model: I135
+package P
+model M Real x = time; end M;
+end P;
+encapsulated model I135
+M m;
+end I135;
+//// model: I136
+package P
+model M Real x = time; end M;
+end P;
+model I136
+encapsulated model Inner
+import P.M;
+M m;
+end Inner;
+Inner i;
+end I136;
+//// model: I137
+package P
+model M Real x = time; end M;
+end P;
+model I137
+encapsulated model Inner
+P.M m;
+end Inner;
+Inner i;
+end I137;
+//// model: I138
+package P
+model M Real x = time; end M;
+end P;
+model I138
+import P.M;
+protected M m;
+end I138;
+//// model: I139
+package P
+model M Real x = time; end M;
+model W extends M; end W;
+end P;
+model I139
+import P.W;
+W w;
+end I139;
+//// model: I140
+package P
+model M Real x = time; end M;
+end P;
+model I140
+import P.M;
+M m1, m2;
+equation
+m1.x = m2.x;
+end I140;
+//// model: I141
+package P
+package Q
+model M Real x = time; end M;
+end Q;
+end P;
+model I141
+import P.Q.*;
+M m;
+end I141;
+//// model: I142
+package P
+package Q
+model M Real x = time; end M;
+end Q;
+end P;
+model I142
+import P.*;
+Q.M m;
+end I142;

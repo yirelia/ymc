@@ -85,27 +85,101 @@ NodeId Instantiator::lookup_simple_class(Symbol name, NodeId scope) {
   // 内建名先短路，不看作用域（R11 §4.3、R12 §2.1）。
   for (int i = 0; i < 4; ++i)
     if (I_.nodes[builtin_[i]].name == name) return builtin_[i];
-  // 沿词法外层链逐层查（R12 §2）。
+  // 沿词法外层链逐层查（R12 §2）。每层先看本地类，再看这一层的 import（本地元素 > import，NFClassTree.mo:1654
+  // addLocalElementConflict；import 名对本类里嵌套的类可见——它就是本类表里的一项，向外层走自然碰到）。
   NodeId cur = scope;
   while (cur.is_valid() && !I_.nodes[cur].is_empty()) {
-    const INode& n = I_.nodes[cur];
-    if (n.kind == NodeKind::Class && n.cls.is_valid()) {
-      const Class& c = I_.classes[n.cls];
-      if (c.tree.is_valid()) {
-        const ClassTree& t = I_.trees[c.tree];
+    if (I_.nodes[cur].kind == NodeKind::Class && I_.nodes[cur].cls.is_valid()) {
+      const ClassTreeId tid = I_.classes[I_.nodes[cur].cls].tree;
+      if (tid.is_valid()) {
+        const ClassTree& t = I_.trees[tid];
         auto it = t.lookup.find(name);
-        if (it != t.lookup.end() && it->second.kind == LEntry::Kind::Class)
-          return t.classes[it->second.index];
+        if (it != t.lookup.end() && it->second.kind == LEntry::Kind::Class) return t.classes[it->second.index];
       }
+      const NodeId im = import_class(name, cur);   // 可能 partial_inst / expand 别的包 → arena add，上面的引用不再用
+      if (im.is_valid() && !I_.nodes[im].is_empty()) return im;
+      if (unsupported_) return Inst::empty_node();   // 冲突 / 解析不到的 import：不再往外层找（omc 在这里报错）
+      // encapsulated 类是查找的边界：本层（本地 + import）找不到，就只剩内建类（开头已短路），不再往外层走
+      //（MLS §5.3.1；NFLookup.lookupSimpleName 的 isEncapsulated 支 → topScope + require_builtin，NFLookup.mo:465-470
+      // v1.25.0）。packages/Encapsulated3 的 `extends B.C` 在 encapsulated 的 C2 里查不到 B → omc 报错。
+      const Id<SElement> cd = I_.nodes[cur].def;
+      if (cd.is_valid() && I_.scode.elems[cd].kind == SElementKind::Class && I_.scode.elems[cd].is_encapsulated)
+        return Inst::empty_node();
     }
     cur = I_.nodes[cur].parent_scope;
   }
   return Inst::empty_node();
 }
 
-NodeId Instantiator::lookup_class_name(const std::vector<Symbol>& path, NodeId scope) {
+// 类节点 cls 自己的 import 按名找类（MLS §13.2；NFClassTree / NFLookup.lookupImport :276，R12 §5；flatten 的 import_lookup 是
+// 同一套规则在 SCode 上的实现，表达式里的名字走那边）：
+//   - 限定 `import A.B.C;` / 重命名 `import X = A.B;` / 组导入 `import A.{c, e = d}` 优先于非限定 `import A.*;`
+//     （addImportConflict，NFClassTree.mo:1757-1800）；同一档里两个同名项 = 冲突（即使目标相同），用到才报错；
+//   - 目标永远从顶层查（`import P.M` 的 P 即使本类有同名局部包也不算）；
+//   - import 不被继承：只看 cls 自己的 SCode 元素。
+// 返回找到的类节点；没有这个名字的 import → empty；冲突 / 目标解析不到 / 目标不是类 → mark_unsupported 并返回 empty
+//（omc 报错的情形，ymc 不产错误文案）。任务卡 T-S3-06。
+NodeId Instantiator::import_class(Symbol name, NodeId cls) {
+  const Id<SElement> d = I_.nodes[cls].def;
+  if (!d.is_valid() || I_.scode.elems[d].kind != SElementKind::Class) return Inst::empty_node();
+  const std::vector<Id<SElement>> elems = I_.scode.elems[d].def.elements;   // 拷贝（下面的查找会扩 inst 的 arena）
+  std::vector<std::vector<Symbol>> targets;   // 限定 / 重命名 / 组导入里叫 name 的各项的目标路径
+  bool has_wild = false;
+  for (Id<SElement> eid : elems) {
+    const SElement& el = I_.scode.elems[eid];
+    if (el.kind != SElementKind::Import) continue;
+    if (el.imp.wildcard) { has_wild = true; continue; }
+    if (!el.imp.multi.empty()) {
+      for (std::size_t k = 0; k < el.imp.multi.size(); ++k) {
+        const bool aliased = k < el.imp.multi_alias.size() && el.imp.multi_alias[k].is_valid();
+        if ((aliased ? el.imp.multi_alias[k] : el.imp.multi[k]) != name) continue;
+        std::vector<Symbol> path = el.imp.path;
+        path.push_back(el.imp.multi[k]);
+        targets.push_back(std::move(path));
+      }
+    } else if (el.imp.alias.is_valid() ? el.imp.alias == name : (!el.imp.path.empty() && el.imp.path.back() == name)) {
+      targets.push_back(el.imp.path);
+    }
+  }
+  if (targets.size() >= 2) { mark_unsupported("conflicting imports"); return Inst::empty_node(); }
+  if (targets.size() == 1) {
+    const NodeId t = lookup_class_name(targets[0], I_.top);
+    if (!t.is_valid() || I_.nodes[t].is_empty()) { mark_unsupported("unresolved import"); return Inst::empty_node(); }
+    return t;
+  }
+  if (!has_wild) return Inst::empty_node();
+  // `.*`：包里的每个类（和组件）以原名可见（不滤 protected）；两个包都提供同名元素 = 冲突。包本身找不到时 omc 在建表期
+  // 就报错（initImports），那一条由 flatten_class 的检查拦下，这里只跳过。
+  NodeId found = Inst::empty_node();
+  int matches = 0;
+  for (Id<SElement> eid : elems) {
+    const SElement& el = I_.scode.elems[eid];
+    if (el.kind != SElementKind::Import || !el.imp.wildcard) continue;
+    const std::vector<Symbol> ppath = el.imp.path;   // 拷贝：下面会扩 arena（SCode 本身不动，保险起见）
+    const NodeId pkg = lookup_class_name(ppath, I_.top);
+    if (!pkg.is_valid() || I_.nodes[pkg].is_empty() || !I_.nodes[pkg].def.is_valid()) continue;
+    if (I_.node_class(pkg).state == ClassState::NotInstantiated) partial_inst(pkg);
+    if (I_.node_class(pkg).state == ClassState::PartialClass) expand(pkg);
+    const ClassTreeId pt = I_.node_class(pkg).tree;
+    if (!pt.is_valid()) continue;
+    const ClassTree& t = I_.trees[pt];
+    const auto it = t.lookup.find(name);
+    if (it == t.lookup.end()) continue;
+    ++matches;
+    found = it->second.kind == LEntry::Kind::Class ? t.classes[it->second.index] : Inst::empty_node();
+  }
+  if (matches >= 2) { mark_unsupported("conflicting imports"); return Inst::empty_node(); }
+  if (matches == 1 && (!found.is_valid() || I_.nodes[found].is_empty())) {   // 类型名查到的是组件（常量）→ omc 报错
+    mark_unsupported("import names a component, not a class");
+    return Inst::empty_node();
+  }
+  return found;
+}
+
+NodeId Instantiator::lookup_class_name(const std::vector<Symbol>& path, NodeId scope, std::vector<NodeId>* path_nodes) {
   if (path.empty()) return Inst::empty_node();
   NodeId cur = lookup_simple_class(path[0], scope);
+  if (path_nodes && cur.is_valid() && !I_.nodes[cur].is_empty()) path_nodes->push_back(cur);
   for (std::size_t i = 1; i < path.size() && cur.is_valid() && !I_.nodes[cur].is_empty(); ++i) {
     // 复合名后续段：进入该类内部查（需先 expand 出树）。
     if (I_.node_class(cur).state == ClassState::NotInstantiated ||
@@ -122,6 +196,7 @@ NodeId Instantiator::lookup_class_name(const std::vector<Symbol>& path, NodeId s
         next = t.classes[it->second.index];
     }
     cur = next;
+    if (path_nodes && cur.is_valid() && !I_.nodes[cur].is_empty()) path_nodes->push_back(cur);
   }
   return (cur.is_valid() && !I_.nodes[cur].is_empty()) ? cur : Inst::empty_node();
 }
@@ -212,11 +287,21 @@ void Instantiator::expand(NodeId cls) {
     const SElement& ee = I_.scode.elems[I_.nodes[ext].def];
     // extends 带整体绑定 `extends A = expr` 不合法/未做；子修饰 `extends A(x=1)` 在 inst_class 合并（见下）。
     if (ee.mod.is_valid() && I_.scode.mods[ee.mod].binding.is_valid()) mark_unsupported("extends whole binding");
-    NodeId base = lookup_class_name(ee.base_path, I_.nodes[cls].parent_scope);
+    // 基类名从**扩展类自身**开始查（MLS §7.1：在扩展类的部分展平形态里查；extends 节点的 parent 是扩展类本身，
+    // NFClassTree.mo:202 newExtends(e, parent)、NFInst.mo:775-776 `scope := InstNode.parent(ext)`，v1.25.0）——看得见它
+    // 自己的嵌套类（`package Modelica … extends Icons.Library;`），看不见继承来的元素（此时只登记了本地类）。任务卡 T-S3-07。
+    std::vector<NodeId> base_nodes;
+    NodeId base = lookup_class_name(ee.base_path, cls, &base_nodes);
     if (!base.is_valid() || I_.nodes[base].is_empty()) {
       // v1 的最小 lookup 没做 import/内建枚举——基类查不到先当 v1 gap 标 unsupported（driver 退 66），不硬报错。
       mark_unsupported("unresolved base class");
       continue;
+    }
+    // 基类名的各段须传递地非 replaceable（MLS §7.1.4；checkReplaceableBaseClass，NFInst.mo:778 / :842-883）：
+    // `replaceable model M … extends M;` → omc 报 "the base class name must be transitively non-replaceable"。
+    for (NodeId bn : base_nodes) {
+      const Id<SElement> bd = I_.nodes[bn].def;
+      if (bd.is_valid() && I_.scode.elems[bd].prefixes.is_replaceable) mark_unsupported("replaceable base class");
     }
     if (I_.node_class(base).state == ClassState::NotInstantiated) partial_inst(base);
     expand(base);
@@ -283,7 +368,7 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node) {
       std::uint32_t ext_i = I_.nodes[cn].ext_index;
       NodeId ext = I_.trees[def_tree_id].exts[ext_i];
       const SElement& ee = I_.scode.elems[I_.nodes[ext].def];
-      NodeId base_def = lookup_class_name(ee.base_path, I_.nodes[def_node].parent_scope);
+      NodeId base_def = lookup_class_name(ee.base_path, def_node);   // 同 expand：从扩展类自身查（T-S3-07）
       if (!base_def.is_valid() || I_.nodes[base_def].is_empty()) continue;  // expand 已报错
       // extends 内建类型（extends Real 之类）v1 还没做，标 unsupported 并跳过（避免实例化无类体的内建节点）。
       bool base_builtin = false;
@@ -296,13 +381,13 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node) {
         mark_unsupported("extends short/enum/derived class");
         continue;
       }
-      // 基类带方程/算法 → 压平时要按 R11 §3.4-6 的"extends 逆序"合并，flatten 里没做基类方程收集，标 unsupported。
-      const SClassDef& bd = I_.scode.elems[bdef].def;
-      if (!bd.equations.empty() || !bd.initial_equations.empty() || !bd.algorithms.empty() ||
-          !bd.initial_algorithms.empty())
-        mark_unsupported("extends with equations/algorithms");
       const Id<SMod> ext_mod = ee.mod;   // extends 修饰（在 base_def lookup 之后取，避免跨 add 持 SElement 引用）
       NodeId base_inst = instantiate(base_def, inst_node);
+      // 基类实例按 extends 出现序记进本实例的类树：基类的方程 / 算法段由 flatten 的 collect_inherited_sections 收
+      //（段序 = 本类在前、各 extends 按**逆序**在后，NFInst.instExpressions + Sections.join 头插，NFInst.mo:2511-2514 /
+      // NFSections.mo:192-209；名字在基类实例里解析，前缀与本实例相同）。只记实例化后的基类节点（FlatTree），不记 Ref /
+      // 定义节点；多层继承由递归的 instantiate → inst_class 各自记好。任务卡 T-S3-05。
+      flat.exts.push_back(base_inst);
       bool prot = I_.nodes[ext].visibility == Visibility::Protected;
       ClassTreeId btree = I_.node_class(base_inst).tree;
       const std::vector<NodeId> base_comps = I_.trees[btree].components;   // 拷一份

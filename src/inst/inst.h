@@ -42,8 +42,11 @@ class Instantiator {
   void apply_extends_modifier(NodeId bc, Id<SMod> mod, NodeId scope);
 
   // ---- 查找（最小版，只够 v1：内建类型 + 本类/嵌套类 + 顶层）----
-  NodeId lookup_class_name(const std::vector<Symbol>& path, NodeId scope);
+  // path_nodes 非空：顺路记下路径各段解析到的类节点（基类名的 replaceable 检查用）。
+  NodeId lookup_class_name(const std::vector<Symbol>& path, NodeId scope, std::vector<NodeId>* path_nodes = nullptr);
   NodeId lookup_simple_class(Symbol name, NodeId scope);
+  // 类节点 cls 自己的 import 里叫 name 的类（见 inst.cpp 的规则说明）；没有 → empty。
+  NodeId import_class(Symbol name, NodeId cls);
 
   // ---- 内建 ----
   void make_builtin_types();

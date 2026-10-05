@@ -1,0 +1,110 @@
+//// set: im-x1 — extends 的基类名从扩展类自身查：本地嵌套类、路径前缀、replaceable 基类、自引用、继承来的类
+//// model: X10
+model X10
+model D Real x = time; end D;
+extends D;
+end X10;
+//// model: X11
+package P
+model D Real x = time; end D;
+model C
+extends D;
+end C;
+end P;
+model X11
+P.C c;
+end X11;
+//// model: X12
+package P
+package Icons
+model Lib end Lib;
+end Icons;
+model C
+extends Icons.Lib;
+Real x = time;
+end C;
+end P;
+model X12
+P.C c;
+end X12;
+//// model: X13
+model D Real x = 1; end D;
+model X13
+model D Real x = time; end D;
+extends D;
+end X13;
+//// model: X14
+model X14
+model A
+model D Real y = 2; end D;
+end A;
+extends A.D;
+end X14;
+//// model: X15
+model B
+model D Real x = time; end D;
+end B;
+model X15
+extends B;
+model E
+extends D;
+end E;
+E e;
+end X15;
+//// model: X16
+model X16
+replaceable model M Real x = time; end M;
+extends M;
+end X16;
+//// model: X17
+model A
+replaceable model M Real x = time; end M;
+end A;
+model X17
+extends A.M;
+end X17;
+//// model: X18
+model X18
+extends X18;
+end X18;
+//// model: X19
+model X19
+model C
+model D Real x = time; end D;
+extends D;
+end C;
+C c;
+end X19;
+//// model: X110
+package P
+model D Real x = time; end D;
+end P;
+model X110
+extends P.D;
+end X110;
+//// model: X111
+package P
+model D Real x = time; end D;
+end P;
+model X111
+extends .P.D;
+end X111;
+//// model: X112
+model X112
+package P
+model D Real x = time; end D;
+end P;
+extends P.D(x(start = 1));
+end X112;
+//// model: X113
+model D Real x = time; end D;
+model X113
+protected
+extends D;
+end X113;
+//// model: X114
+model D Real x = time; end D;
+model X114
+model D2 = D;
+extends D2;
+end X114;

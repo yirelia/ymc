@@ -3495,7 +3495,7 @@ YMC_TEST(flatten_mixed_range_types_and_invalid_pow) {
            {"model PWS1\n  constant Real y = (-1.0)^0.5;\nend PWS1;\n", "constant evaluation"},
            {"model PWS2\n  Real y = 0.0^(-1);\nend PWS2;\n", "division by zero in constant"},
            {"model A\n  replaceable model B\n    Real x;\n  end B;\nend A;\nmodel RPS1\n  extends A.B;\nend RPS1;\n",
-            "invalid extends lookup"}}) {
+            "replaceable base class"}}) {   // inst 先拦下：基类名各段须传递地非 replaceable（T-S3-07）
     bool uns = false;
     const std::string out = flatten_src(src.c_str(), &uns);
     YMC_CHECK(uns);
@@ -4704,6 +4704,31 @@ YMC_TEST(flatten_function_end_from_written_dims) {
                            "  z[1:size(x, 1) + 1 - 1] := x;\n  z[size(x, 1) + 1] := 1.0;\n  w := x[1:n];\n"
                            "  w[n] := z[size(x, 1) + 1];\n  y[1] := sum(w);\nend SLT1.f;\n\nclass SLT1\n  Real y[1];\n"
                            "  Real y[2];\n  Real y[3];\nequation\n  y = SLT1.f({time, 2.0, 3.0}, 2);\nend SLT1;\n"));
+}
+
+YMC_TEST(inst_imports_extends_scope_and_inherited_sections) {
+  // inst 侧三张卡（T-S3-05 / 06 / 07）一起端到端：类型名经 import 查（限定 `import P.M`、重命名 `import S = P.Q` 后的
+  // `S.N`）；extends 的基类名从扩展类自身查（本类的嵌套类 `Base`）；继承来的方程段按"本类在前、各 extends 逆序在后"
+  // 收（`n.y = …` 在前、继承自 NB 的 `n.z = …` 在后，根类自己继承的 `b = …` 排在子组件之后）。
+  // 期望 = omc 1.25.0 实跑 IMT1（2026-10-05）。
+  YMC_CHECK_EQ(flatten_src("package P\n  model M\n    Real x = time;\n  end M;\n  package Q\n    model NB\n      Real z;\n"
+                           "    equation\n      z = 3 * time;\n    end NB;\n    model N\n      extends NB;\n"
+                           "      parameter Real k = 1;\n      Real y;\n    equation\n      y = k * time;\n    end N;\n"
+                           "  end Q;\nend P;\n\nmodel IMT1\n  import P.M;\n  import S = P.Q;\n  model Base\n    Real b;\n"
+                           "  equation\n    b = 2 * time;\n  end Base;\n  extends Base;\n  M m;\n  S.N n(k = 2);\nend IMT1;\n"),
+               std::string("class IMT1\n  Real b;\n  Real m.x = time;\n  Real n.z;\n  parameter Real n.k = 2.0;\n  Real n.y;\n"
+                           "equation\n  n.y = n.k * time;\n  n.z = 3.0 * time;\n  b = 2.0 * time;\nend IMT1;\n"));
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           // 两个 `.*` 都提供 M：用到即冲突（addImportConflict，NFClassTree.mo:1757-1800），omc 报错（IMS1）。
+           {"package P\n  model M\n    Real x = time;\n  end M;\nend P;\n\npackage R\n  model M\n"
+            "    Real x = 2;\n  end M;\nend R;\n\nmodel IMS1\n  import P.*;\n  import R.*;\n  M m;\nend IMS1;\n", "conflicting imports"},
+           // 基类名的各段须传递地非 replaceable（checkReplaceableBaseClass，NFInst.mo:842-883），omc 报错（IMS2）。
+           {"model IMS2\n  replaceable model M\n    Real x = time;\n  end M;\n  extends M;\nend IMS2;\n", "replaceable base class"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
 }
 
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {

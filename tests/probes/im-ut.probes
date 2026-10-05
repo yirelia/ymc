@@ -1,0 +1,59 @@
+//// set: im-ut — import / extends 查找 / 继承段（单测原文）
+//// model: IMS1
+package P
+  model M
+    Real x = time;
+  end M;
+end P;
+
+package R
+  model M
+    Real x = 2;
+  end M;
+end R;
+
+model IMS1
+  import P.*;
+  import R.*;
+  M m;
+end IMS1;
+//// model: IMS2
+model IMS2
+  replaceable model M
+    Real x = time;
+  end M;
+  extends M;
+end IMS2;
+//// model: IMT1
+package P
+  model M
+    Real x = time;
+  end M;
+  package Q
+    model NB
+      Real z;
+    equation
+      z = 3 * time;
+    end NB;
+    model N
+      extends NB;
+      parameter Real k = 1;
+      Real y;
+    equation
+      y = k * time;
+    end N;
+  end Q;
+end P;
+
+model IMT1
+  import P.M;
+  import S = P.Q;
+  model Base
+    Real b;
+  equation
+    b = 2 * time;
+  end Base;
+  extends Base;
+  M m;
+  S.N n(k = 2);
+end IMT1;
