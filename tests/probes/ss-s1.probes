@@ -1,0 +1,162 @@
+//// set: ss-s1 — 内建枚举 StateSelect / AssertionLevel 当组件类型、stateSelect 里的参数（声明 / 嵌套修饰 / extends 修饰 / if 式 / each）、MSL 的 Inertia / Mass
+//// model: S10
+model S10
+parameter StateSelect s = StateSelect.prefer;
+Real x(stateSelect = s) = time;
+end S10;
+//// model: S11
+model S11
+constant StateSelect s = StateSelect.always;
+Real x(stateSelect = s) = time;
+end S11;
+//// model: S12
+model S12
+parameter StateSelect s = StateSelect.prefer;
+end S12;
+//// model: S13
+model S13
+parameter StateSelect s;
+end S13;
+//// model: S14
+model S14
+parameter Boolean p = true;
+Real x(stateSelect = if p then StateSelect.always else StateSelect.avoid) = time;
+end S14;
+//// model: S15
+model S15
+model A
+parameter StateSelect s = StateSelect.default;
+Real x(stateSelect = s) = time;
+end A;
+A a(s = StateSelect.never);
+end S15;
+//// model: S16
+model S16
+model A
+Real x = time;
+end A;
+parameter StateSelect s = StateSelect.prefer;
+A a(x(stateSelect = s));
+end S16;
+//// model: S17
+model S17
+model A
+Real x = time;
+end A;
+parameter StateSelect s = StateSelect.prefer;
+extends A(x(stateSelect = s));
+end S17;
+//// model: S18
+model S18
+model A
+Real x = time;
+end A;
+model B
+parameter StateSelect s = StateSelect.prefer;
+extends A(x(stateSelect = s));
+end B;
+B b;
+end S18;
+//// model: S19
+model S19
+model A
+Real x = time;
+end A;
+model B
+parameter StateSelect s = StateSelect.prefer;
+extends A(x(stateSelect = s));
+end B;
+model C
+extends B;
+end C;
+C c;
+end S19;
+//// model: S110
+model S110
+parameter StateSelect s = StateSelect.avoid;
+Real x[2](each stateSelect = s) = {time, time};
+end S110;
+//// model: S111
+model S111
+parameter AssertionLevel l = AssertionLevel.warning;
+end S111;
+//// model: S112
+model S112
+constant AssertionLevel l = AssertionLevel.error;
+end S112;
+//// model: S113
+encapsulated model S113
+parameter StateSelect s = StateSelect.default;
+Real x(stateSelect = s) = time;
+end S113;
+//// model: S114
+model S114
+parameter StateSelect s = StateSelect.foo;
+end S114;
+//// model: S115
+model S115
+type StateSelect = enumeration(a, b);
+parameter StateSelect s = StateSelect.a;
+end S115;
+//// model: S116
+model S116
+parameter StateSelect s = StateSelect.prefer;
+parameter Boolean b = s == StateSelect.never;
+end S116;
+//// model: S117
+model S117
+parameter StateSelect s = StateSelect.prefer;
+parameter Integer i = Integer(s);
+end S117;
+//// model: S118
+model S118
+parameter StateSelect s = StateSelect.prefer;
+Real x(stateSelect = s) = time;
+Real y(stateSelect = s) = 2 * time;
+end S118;
+//// model: S119
+model S119
+Real x(stateSelect = s) = time;
+parameter StateSelect s = StateSelect.prefer;
+end S119;
+//// model: S120
+model S120
+parameter StateSelect s1 = StateSelect.prefer;
+parameter StateSelect s2 = s1;
+Real x(stateSelect = s2) = time;
+end S120;
+//// model: S121
+model S121
+parameter StateSelect s = StateSelect.prefer annotation(Evaluate = true);
+end S121;
+//// model: S122
+model S122
+parameter StateSelect s(start = StateSelect.never) = StateSelect.prefer;
+end S122;
+//// model: S123
+model S123
+StateSelect s = StateSelect.prefer;
+end S123;
+//// model: S124
+model S124
+parameter StateSelect s = StateSelect.prefer;
+Real x(stateSelect = s, start = 1, fixed = true);
+equation
+der(x) = 1;
+end S124;
+//// model: S125
+model S125
+parameter Modelica.Mechanics.Rotational.Components.Inertia J(J = 2);
+end S125;
+//// model: S126
+model S126
+Modelica.Mechanics.Rotational.Components.Inertia J(J = 2, phi(fixed = true), w(fixed = true));
+end S126;
+//// model: S127
+model S127
+Modelica.Mechanics.Translational.Components.Mass m(m = 2);
+end S127;
+//// model: S128
+model S128
+Modelica.Mechanics.Rotational.Components.Inertia J(J = 2, stateSelect = StateSelect.always);
+end S128;

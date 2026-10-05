@@ -664,6 +664,20 @@ class Flattener {
       const PhaseScope early(*this, MarkPhase::Early);   // 维 / 条件 / fixed：实例化期的标记（见 MarkPhase）
       const ScodeScope fscope = scode_scope_of(inst_node);
       const Symbol fixed_sym = in_.intern("fixed");
+      const Symbol state_sym = in_.intern("stateSelect");
+      // stateSelect 属性里的参数（NFInst.mo:3941-3949：TYPE_ATTRIBUTE 的 fixed / stateSelect 绑定 Structural.markExp）——本组件
+      // 的、嵌套修饰里子组件的（`Inertia J(phi(stateSelect = s))`）、本类 extends 修饰里的：值都写在本类里，按本类作用域求。
+      // 扫过的修饰记进 state_scanned_：plan_attributes 只认这些来源里的参数引用（别处的参数没打上 final → SKIP）。
+      auto scan_state = [&](auto& self, Id<SMod> m) -> void {
+        for (const SSubMod& s : I_.scode.mods[m].subs) {
+          const Id<Exp> sv = I_.scode.mods[s.mod].binding;
+          if (s.ident == state_sym && sv.is_valid() && !is_qualified_cref(I_.absyn.exps[sv], I_.absyn)) {
+            eval_scode(sv, fscope, 0, /*allow_param=*/true, &final_params);
+            state_scanned_.insert(m.raw);
+          }
+          self(self, s.mod);
+        }
+      };
       std::vector<std::int64_t> tmp;
       for (NodeId cn : comps) {
         const Id<SElement> fd = I_.comps[I_.nodes[cn].comp].def;
@@ -686,7 +700,13 @@ class Flattener {
             if (fv.is_valid() && I_.absyn.exps[fv].kind != ExpKind::BoolLit)
               eval_scode(fv, fscope, 0, /*allow_param=*/true, &final_params);
           }
+        scan_state(scan_state, fm);
       }
+      // 本类 extends 子句里的修饰（`extends PartialRigid(s(stateSelect = stateSelect))`，Translational.Components.Mass）：
+      // 值同样写在本类里。
+      for (Id<SElement> eid : def.def.elements)
+        if (I_.scode.elems[eid].kind == SElementKind::Extends && I_.scode.elems[eid].mod.is_valid())
+          scan_state(scan_state, I_.scode.elems[eid].mod);
     }
     // inner 作用域（R11 §5）：外层可见 inner + 本层 inner，供本层及子层的 outer 按名连接。
     std::vector<InnerVar> inners = outer_inners;
@@ -1804,6 +1824,7 @@ class Flattener {
     return f;
   }
   SVariability refs_floor_ = SVariability::Var;   // absyn_refs_param 里 cref 变率的下限（binding_refs 设）
+  std::unordered_set<std::uint32_t> state_scanned_;   // 预扫过 stateSelect 参数的修饰（SMod raw，见 flatten_class）
   std::vector<std::uint32_t> refs_shadow_;   // absyn_refs_param 递归途中的归约迭代变量名（栈）
 
   // 组件绑定里数组构造子（`{e for i in r}` / `array(e for i in r)`，嵌在哪一层都算）的迭代范围在实例化期就标结构
@@ -4237,6 +4258,13 @@ class Flattener {
       }
       if (!smid.is_valid()) continue;
       const SMod sm = I_.scode.mods[smid];   // 拷贝（下面 inst 可能扩 arena）
+      // stateSelect 的值引用参数时，参数的 final 只在 flatten_class 的预扫里打（组件声明、嵌套修饰、本类 extends 修饰）；来源
+      // 没被扫过的（更深一层基类的 extends 修饰、类型链修饰、合成的修饰）打出来的参数会少个 final → SKIP。
+      if (a.vk == AttrVK::StateSel && !is_qualified_cref(I_.absyn.exps[sm.binding], I_.absyn) &&
+          !state_scanned_.count(src->mod.raw)) {
+        set_unsupported("stateSelect parameter not pre-scanned");
+        return out;
+      }
       const bool each = sm.is_each || src->each_all;
       if (!dims.empty() && each_unbound && !each) { set_unsupported("each without value over attribute"); return out; }
       AttrPlan p{&a, an, AttrPlan::Mode::Whole, sm.binding, src->scope, src->vprefix, {}};
@@ -4424,7 +4452,9 @@ class Flattener {
 
   Id<Expr> attr_value(AttrVK vk, Id<Exp> val, NodeId enclosing, const std::vector<Symbol>& prefix) {
     switch (vk) {
-      case AttrVK::StateSel:
+      case AttrVK::StateSel:   // 字面量直接建；参数 / if 式按结构参数求值（state_select_value）
+        if (!is_qualified_cref(I_.absyn.exps[val], I_.absyn)) return state_select_value(val, enclosing, prefix);
+        return enum_lit_value(val, enclosing, prefix);
       case AttrVK::EnumComp: return enum_lit_value(val, enclosing, prefix);   // `StateSelect.never` / `E.two`
       case AttrVK::Real: return to_real(simplify_expr(inst_exp(val, enclosing, prefix)));   // `min = -100` → `-100.0`
       case AttrVK::Str:
@@ -4432,6 +4462,34 @@ class Flattener {
       case AttrVK::Bool: return simplify_expr(inst_exp(val, enclosing, prefix));
     }
     return inst_exp(val, enclosing, prefix);
+  }
+
+  // 内建枚举（StateSelect / AssertionLevel，inst 在顶层合成的枚举类，见 Instantiator::make_top_node）的定义；不是 → nullptr。
+  const SClassDef* builtin_enum_def(Symbol type_name) {
+    const ClassTree& t = I_.trees[I_.node_class(I_.top).tree];
+    auto it = t.lookup.find(type_name);
+    if (it == t.lookup.end() || it->second.kind != LEntry::Kind::Class) return nullptr;
+    const NodeId n = t.classes[it->second.index];
+    if (I_.nodes[n].node_type.kind != NodeTypeKind::BuiltinClass || !I_.nodes[n].def.is_valid()) return nullptr;
+    const SElement& el = I_.scode.elems[I_.nodes[n].def];
+    return el.def.kind == SClassDefKind::Enumeration ? &el.def : nullptr;
+  }
+  // `stateSelect = s` / `= if p then StateSelect.always else StateSelect.avoid`：omc 把 stateSelect 属性里用到的参数当结构
+  // 参数（NFInst.updateImplicitVariabilityComp 的 TYPE_ATTRIBUTE 支，NFInst.mo:3941-3949 v1.25.0 → Structural.markExp），
+  // 定型后求值成字面量（StateSelect2：`x(stateSelect = StateSelect.default)`，s 打 final）。参数的 final 由 flatten_class 的
+  // 预扫打（组件声明里的修饰，含嵌套的 `a(x(stateSelect = s))`）；值在这里按实例帧求。
+  Id<Expr> state_select_value(Id<Exp> val, NodeId scope, const std::vector<Symbol>& prefix) {
+    std::optional<CVal> cv;
+    {
+      const FrameAt frame_at(*this, scope);
+      CevalCtx guard(*this, prefix, cur_psubs_);
+      cv = eval_scode(val, scode_scope_of(scope), 0, /*allow_param=*/true);
+    }
+    if (!cv || cv->k != CVal::K::Enum) { set_unsupported("stateSelect value"); return lit_int(0); }
+    return literal_of(*cv);
+  }
+  static bool is_qualified_cref(const Exp& e, const Absyn& a) {
+    return e.kind == ExpKind::CrefExp && a.crefs[e.cref].parts.size() >= 2;
   }
 
   // 枚举属性值形如 `T.lit`（StateSelect.never、E.two）：直接按 cref 各段建 EnumLit（R13 §4.2）。
@@ -4474,6 +4532,7 @@ class Flattener {
     r.ty = Type::of(TypeKind::Enumeration);
     r.enum_path = *tp;
     r.enum_path.push_back(c.parts.back().name);
+    if (!ed && tparts.size() == 1) ed = builtin_enum_def(tparts[0]);   // 内建枚举：同样补序数、核字面量
     if (ed) {
       const Symbol lit = c.parts.back().name;
       for (std::size_t i = 0; i < ed->enum_items.size(); ++i)
@@ -4783,7 +4842,8 @@ class Flattener {
   // package 常量往往没被实例化（没走 inst 树），所以直接在 SCODE 上按名解析 + 递归求值，不经 inst_exp/cref。
   struct CVal {
     // Undef：函数里未赋值的数组输出 / 局部元素（NFEvalFunction.buildBinding :342-365 用 EMPTY 占位）；读到即求值失败。
-    enum class K { Int, Real, Bool, Str, Record, Array, Undef } k = K::Int;
+    // Enum：内建枚举的字面量（i = 1 基序数，epath = 打印路径 `StateSelect.default`）；用户定义的枚举不求值（见 builtin_enum_value）。
+    enum class K { Int, Real, Bool, Str, Record, Array, Undef, Enum } k = K::Int;
     std::int64_t i = 0;
     double r = 0.0;
     bool b = false;
@@ -4792,6 +4852,7 @@ class Flattener {
     std::shared_ptr<std::vector<std::pair<Symbol, CVal>>> rec;
     std::shared_ptr<std::vector<CVal>> arr;   // Array：元素（可嵌套）
     std::vector<std::int64_t> eshape;         // 空数组的完整形状（`ones(0, 3)` → {0, 3}）；空 = {0}。非空数组不用
+    std::vector<Symbol> epath;                // Enum：字面量的打印路径（类型名各段 + 字面量名）
     static CVal I(std::int64_t v) { CVal c; c.k = K::Int; c.i = v; return c; }
     static CVal R(double v) { CVal c; c.k = K::Real; c.r = v; return c; }
     static CVal B(bool v) { CVal c; c.k = K::Bool; c.b = v; return c; }
@@ -4806,6 +4867,24 @@ class Flattener {
       rec->push_back({name, std::move(v)});
     }
   };
+
+  // 内建枚举的字面量 `StateSelect.default` / `AssertionLevel.warning` 的值：1 基序数 + 打印路径（内建类型在顶层，路径即书写名）。
+  // 用户定义的枚举不在此列——打印路径要按声明处规范化（enum_type_path），求值器里没有实例作用域，仍求不出。
+  std::optional<CVal> builtin_enum_value(const Cref& c) {
+    if (c.leading_dot || c.parts.size() != 2 || !c.parts[0].subscripts.empty() || !c.parts[1].subscripts.empty())
+      return std::nullopt;
+    const SClassDef* ed = builtin_enum_def(c.parts[0].name);
+    if (!ed) return std::nullopt;
+    for (std::size_t i = 0; i < ed->enum_items.size(); ++i)
+      if (ed->enum_items[i].literal == c.parts[1].name) {
+        CVal v;
+        v.k = CVal::K::Enum;
+        v.i = static_cast<std::int64_t>(i) + 1;
+        v.epath = {c.parts[0].name, c.parts[1].name};
+        return v;
+      }
+    return std::nullopt;
+  }
 
   // enclosing 实例的词法作用域链 → 类 SElement 列表（内→外，<top>/无 def 跳过）。函数体发射期（enclosing 为空节点）：
   // 名字按函数定义处作用域解析（fn_scope_）。
@@ -5222,6 +5301,7 @@ class Flattener {
             return CVal::I(it->second);
           }
         }
+        if (std::optional<CVal> bv = builtin_enum_value(c)) return bv;
         // 模型语境：本实例的局部参数 / 常量按修饰后的绑定求值（NF 的组件绑定 = 修饰合并后，Structural.markExp 把求值
         // 用到的参数标为结构参数）。
         if (ceval_frame_ >= 0 && !locals_ && !c.leading_dot) {
@@ -6074,8 +6154,10 @@ class Flattener {
     }
     const bool arr = !cel.attr.dims.empty() || !cel.type.dims.empty();
     const TypeKind tk = I_.comps[cid].ty.kind;
+    // 枚举参数也走这里：求得出值的只有内建枚举（`parameter StateSelect s = StateSelect.default`，builtin_enum_value）；用户
+    // 枚举的绑定求不出 → Fail，同此前。
     const bool scalar_builtin = tk == TypeKind::Integer || tk == TypeKind::Real || tk == TypeKind::Boolean ||
-                                tk == TypeKind::String;
+                                tk == TypeKind::String || tk == TypeKind::Enumeration;
     // 内建类型的参数数组（整体 `k` / 带下标 `k[i]`、`k[1:2]`）：求整个数组的值再取下标；标记是组件级的——所有元素一起成为
     // 结构参数（AP 探针：`parameter Integer idx[2] = {2, 1}; Real y = x[idx[1]]` → idx[1]、idx[2] 都 final）。
     const bool arr_param = arr && scalar_builtin && var == SVariability::Param && allow_param && c.parts.size() == 1 &&
@@ -8630,6 +8712,14 @@ class Flattener {
       case CVal::K::Record: break;   // 记录值不应到这里（emit_record_fields 已按字段拆开）
       case CVal::K::Array: break;    // 数组值不应到这里（标量上下文才调 literal_of）
       case CVal::K::Undef: break;    // 未赋值占位不应到这里（coerce_to_kind 已拒）
+      case CVal::K::Enum: {
+        Expr e;
+        e.kind = ExprKind::EnumLit;
+        e.ty = Type::of(TypeKind::Enumeration);
+        e.enum_path = v.epath;
+        e.enum_index = v.i;
+        return add(std::move(e));
+      }
     }
     return lit_int(0);
   }
@@ -8961,6 +9051,7 @@ class Flattener {
       case TypeKind::Integer: return v.k == CVal::K::Int ? std::optional<CVal>(v) : std::nullopt;
       case TypeKind::Boolean: return v.k == CVal::K::Bool ? std::optional<CVal>(v) : std::nullopt;
       case TypeKind::String: return v.k == CVal::K::Str ? std::optional<CVal>(v) : std::nullopt;
+      case TypeKind::Enumeration: return v.k == CVal::K::Enum ? std::optional<CVal>(v) : std::nullopt;
       default: return std::nullopt;
     }
   }
@@ -14046,13 +14137,24 @@ class Flattener {
     const NodeId cls = class_of(comp);
     return cls.is_valid() && I_.scode.elems[I_.nodes[cls].def].restriction == SRestriction::ExpandableConnector;
   }
-  // 短类连接器 `connector InReal = input Real`：class_inst 已塌到内建（inst.cpp 短类塌陷），故按声明类型名在声明类作用域
-  // 找元素：须是 restriction=connector 的短类（`type T = input Real` 不是连接器，omc 报错 ConnectNonConnector*）。
-  // 限定名 / 继承来的类型暂缓 → false。
+  // 短类连接器 `connector InReal = input Real`：class_inst 已塌到内建（inst.cpp 短类塌陷），故按声明类型名在**声明处**作用域
+  // 找元素：须是 restriction=connector 的短类（`type T = input Real` 不是连接器，omc 报错 ConnectNonConnector*）。继承来的
+  // 组件在基类里声明（inst 把它的 parent_scope 记成基类实例，本地组件的为空）；限定名（MSL 的 `Interfaces.RealOutput`）首段
+  // 按作用域找、其后逐段下降为局部类（CN 探针 c：`Blocks.Sources.Sine` 的 y 接 `Math.Gain` 的 u，此前当非连接器 SKIP）。
   bool short_class_connector(NodeId comp, NodeId decl) {
     const SElement& cel = I_.scode.elems[I_.comps[I_.nodes[comp].comp].def];
-    if (cel.type.leading_dot || cel.type.path.size() != 1) return false;
-    const SElement* tel = find_class_elem(decl, cel.type.path[0]);
+    if (cel.type.leading_dot || cel.type.path.empty()) return false;
+    const NodeId lex = I_.nodes[comp].parent_scope;
+    const SElement* tel = find_class_elem(lex.is_valid() && !I_.nodes[lex].is_empty() ? lex : decl, cel.type.path[0]);
+    for (std::size_t k = 1; tel && k < cel.type.path.size(); ++k) {
+      const SElement* nxt = nullptr;
+      for (Id<SElement> m : tel->def.elements)
+        if (I_.scode.elems[m].kind == SElementKind::Class && I_.scode.elems[m].name == cel.type.path[k]) {
+          nxt = &I_.scode.elems[m];
+          break;
+        }
+      tel = nxt;
+    }
     return tel && tel->restriction == SRestriction::Connector && tel->def.kind == SClassDefKind::Derived;
   }
   // InstNode.isConnector（NFInstNode.mo:507-516）：cty 含 CONNECTOR / EXPANDABLE / POTENTIALLY_PRESENT 任一位

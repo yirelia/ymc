@@ -1,0 +1,103 @@
+//// set: lc-b — MSL 的 Rotational / Blocks 部件互连（定位 connect operand shape 用的最小模型）
+//// model: C1
+model C1
+  Modelica.Mechanics.Rotational.Components.Inertia J1(J = 1), J2(J = 2);
+equation
+  connect(J1.flange_b, J2.flange_a);
+end C1;
+//// model: C2
+model C2
+  Modelica.Mechanics.Rotational.Components.IdealGear g(ratio = 2);
+end C2;
+//// model: C3
+model C3
+  Modelica.Mechanics.Rotational.Components.Fixed f;
+end C3;
+//// model: C4
+model C4
+  Modelica.Mechanics.Rotational.Sources.Torque t;
+end C4;
+//// model: C5
+model C5
+  Modelica.Blocks.Sources.Sine sine(f = 1);
+  Modelica.Blocks.Math.Gain g(k = 2);
+equation
+  connect(sine.y, g.u);
+end C5;
+//// model: C6
+connector RI = input Real;
+connector RO = output Real;
+block Src
+  RO y = time;
+end Src;
+block Snk
+  RI u;
+end Snk;
+model C6
+  Src s;
+  Snk k;
+equation
+  connect(s.y, k.u);
+end C6;
+//// model: C7
+package P
+  connector RI = input Real;
+  connector RO = output Real;
+  partial block SO
+    RO y;
+  end SO;
+  partial block SI
+    RI u;
+  end SI;
+end P;
+block Src
+  extends P.SO;
+equation
+  y = time;
+end Src;
+block Snk
+  extends P.SI;
+end Snk;
+model C7
+  Src s;
+  Snk k;
+equation
+  connect(s.y, k.u);
+end C7;
+//// model: C8
+package P
+  connector RI = input Real;
+  connector RO = output Real;
+end P;
+block Src
+  P.RO y = time;
+end Src;
+block Snk
+  P.RI u;
+end Snk;
+model C8
+  Src s;
+  Snk k;
+equation
+  connect(s.y, k.u);
+end C8;
+//// model: C9
+connector RI = input Real;
+connector RO = output Real;
+partial block SO
+  RO y;
+end SO;
+block Src
+  extends SO;
+equation
+  y = time;
+end Src;
+block Snk
+  RI u;
+end Snk;
+model C9
+  Src s;
+  Snk k;
+equation
+  connect(s.y, k.u);
+end C9;

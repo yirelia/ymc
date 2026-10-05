@@ -17,6 +17,19 @@ const char* builtin_name(int i) {
   return "";
 }
 Visibility vis_of(SVisibility v) { return v == SVisibility::Protected ? Visibility::Protected : Visibility::Public; }
+
+// 内建枚举类型及其字面量（NFModelicaBuiltin.mo v1.25.0：StateSelect :32-37、AssertionLevel :80；omc 的压平结果打
+// `enumeration(never, avoid, default, prefer, always)` / `enumeration(warning, error)`）。
+// ponytail: Uncertainty（`uncertain` 属性用）没收，用到再加。
+struct BuiltinEnum {
+  const char* name;
+  std::vector<const char*> literals;
+};
+const std::vector<BuiltinEnum>& builtin_enum_table() {
+  static const std::vector<BuiltinEnum> t = {{"StateSelect", {"never", "avoid", "default", "prefer", "always"}},
+                                             {"AssertionLevel", {"warning", "error"}}};
+  return t;
+}
 }  // namespace
 
 // -------------------------------------------------------------- 内建
@@ -73,6 +86,30 @@ void Instantiator::make_top_node() {
     tt.classes.push_back(cnid);
     tt.lookup[el.name] = LEntry{LEntry::Kind::Class, idx};
   }
+  // 内建枚举类型：omc 的顶层作用域里有 NFModelicaBuiltin.mo 声明的 `type StateSelect = enumeration(…)` 等（带
+  // __OpenModelica_builtin 注解）。合成 SCode 枚举类挂进顶层查找表，`parameter StateSelect s` 才查得到（MSL 示例里 112 个
+  // 卡在这里）。用户自己定义了同名顶层类的不覆盖（flatten 按 "class name collides with builtin" SKIP）。
+  for (const BuiltinEnum& be : builtin_enum_table()) {
+    const Symbol ts = I_.interner.intern(be.name);
+    if (tt.lookup.count(ts)) continue;
+    SElement e;
+    e.kind = SElementKind::Class;
+    e.name = ts;
+    e.restriction = SRestriction::Type;
+    e.def.kind = SClassDefKind::Enumeration;
+    for (const char* l : be.literals) e.def.enum_items.push_back(SEnumItem{I_.interner.intern(l), {}});
+    Class c;  // NotInstantiated
+    INode cn;
+    cn.kind = NodeKind::Class;
+    cn.name = ts;
+    cn.def = I_.scode.elems.add(std::move(e));
+    cn.node_type = InstNodeType::of(NodeTypeKind::BuiltinClass);
+    cn.cls = I_.classes.add(std::move(c));
+    const NodeId cnid = I_.nodes.add(std::move(cn));
+    tt.lookup[ts] = LEntry{LEntry::Kind::Class, static_cast<std::uint32_t>(tt.classes.size())};
+    tt.classes.push_back(cnid);
+    builtin_enums_.push_back(cnid);
+  }
   Class topc;
   topc.state = ClassState::ExpandedClass;
   topc.restriction = SRestriction::Package;
@@ -112,8 +149,11 @@ NodeId Instantiator::lookup_simple_class(Symbol name, NodeId scope) {
       //（MLS §5.3.1；NFLookup.lookupSimpleName 的 isEncapsulated 支 → topScope + require_builtin，NFLookup.mo:465-470
       // v1.25.0）。packages/Encapsulated3 的 `extends B.C` 在 encapsulated 的 C2 里查不到 B → omc 报错。
       const Id<SElement> cd = I_.nodes[cur].def;
-      if (cd.is_valid() && I_.scode.elems[cd].kind == SElementKind::Class && I_.scode.elems[cd].is_encapsulated)
+      if (cd.is_valid() && I_.scode.elems[cd].kind == SElementKind::Class && I_.scode.elems[cd].is_encapsulated) {
+        for (NodeId b : builtin_enums_)   // 顶层的内建类照样看得见（require_builtin 支，NFLookup.mo:465-470）
+          if (I_.nodes[b].name == name) return b;
         return Inst::empty_node();
+      }
     }
     cur = I_.nodes[cur].parent_scope;
   }

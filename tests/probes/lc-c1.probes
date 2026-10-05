@@ -1,0 +1,151 @@
+//// set: lc-c1 — 短类连接器：继承来的组件、限定类型名（包里的 / MSL Blocks.Interfaces 的 Real / Boolean / Integer 输入输出）
+//// model: C10
+package P
+connector RI = input Real;
+connector RO = output Real;
+partial block SO
+RO y;
+end SO;
+partial block SI
+RI u;
+end SI;
+end P;
+block Src
+extends P.SO;
+equation
+y = time;
+end Src;
+block Snk
+extends P.SI;
+end Snk;
+model C10
+Src s;
+Snk k;
+equation
+connect(s.y, k.u);
+end C10;
+//// model: C11
+package P
+connector RI = input Real;
+connector RO = output Real;
+end P;
+block Src
+P.RO y = time;
+end Src;
+block Snk
+P.RI u;
+end Snk;
+model C11
+Src s;
+Snk k;
+equation
+connect(s.y, k.u);
+end C11;
+//// model: C12
+package P
+package Q
+connector RI = input Real;
+end Q;
+end P;
+block Snk
+P.Q.RI u;
+end Snk;
+model C12
+Snk k;
+equation
+k.u = time;
+end C12;
+//// model: C13
+package P
+type T = input Real;
+end P;
+block Snk
+P.T u;
+end Snk;
+model C13
+Snk k1, k2;
+equation
+connect(k1.u, k2.u);
+end C13;
+//// model: C14
+package P
+connector RI = input Real;
+end P;
+block Snk
+P.RI u[2];
+end Snk;
+model C14
+Snk k1, k2;
+equation
+connect(k1.u, k2.u);
+end C14;
+//// model: C15
+model C15
+Modelica.Blocks.Sources.Sine sine(f = 1);
+Modelica.Blocks.Math.Gain g(k = 2);
+equation
+connect(sine.y, g.u);
+end C15;
+//// model: C16
+model C16
+Modelica.Blocks.Sources.Constant c(k = 3);
+Modelica.Blocks.Math.Add add;
+equation
+connect(c.y, add.u1);
+connect(c.y, add.u2);
+end C16;
+//// model: C17
+model C17
+Modelica.Blocks.Interfaces.RealInput u;
+Modelica.Blocks.Interfaces.RealOutput y;
+equation
+connect(u, y);
+end C17;
+//// model: C18
+model C18
+Modelica.Blocks.Interfaces.RealOutput y = time;
+Modelica.Blocks.Math.Gain g(k = 2);
+equation
+connect(y, g.u);
+end C18;
+//// model: C19
+model C19
+Modelica.Blocks.Sources.Step step(height = 2, startTime = 1);
+Modelica.Blocks.Continuous.Integrator integ;
+equation
+connect(step.y, integ.u);
+end C19;
+//// model: C110
+model C110
+Modelica.Mechanics.Rotational.Components.Inertia J1(J = 1), J2(J = 2);
+Modelica.Mechanics.Rotational.Sources.Torque t;
+Modelica.Blocks.Sources.Constant c(k = 1);
+equation
+connect(c.y, t.tau);
+connect(t.flange, J1.flange_a);
+connect(J1.flange_b, J2.flange_a);
+end C110;
+//// model: C111
+model C111
+Modelica.Electrical.Analog.Basic.Resistor R(R = 10);
+Modelica.Electrical.Analog.Basic.Ground G;
+Modelica.Electrical.Analog.Sources.ConstantVoltage V(V = 1);
+equation
+connect(V.p, R.p);
+connect(R.n, V.n);
+connect(V.n, G.p);
+end C111;
+//// model: C112
+model C112
+Modelica.Blocks.Interfaces.BooleanInput b;
+Modelica.Blocks.Interfaces.BooleanOutput o;
+equation
+connect(b, o);
+end C112;
+//// model: C113
+model C113
+Modelica.Blocks.Interfaces.IntegerOutput o = 3;
+Modelica.Blocks.Interfaces.IntegerInput i;
+equation
+connect(o, i);
+end C113;

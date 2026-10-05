@@ -1508,6 +1508,20 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           StateSelect 当组件类型 112、extends redeclare 111、Clock 64、Medium 前缀 34、extends 内建类型 28…。门里加一条
           `python tools/msl_sweep.py`：FAIL / ACCEPTS-INVALID / CRASH 须为 0。
           下一步：内建枚举 StateSelect / AssertionLevel 当组件类型（+ `stateSelect = <参数>` 的结构求值，NFInst.mo:3942）。
+    - [x] (61g) inst + flat：内建枚举 StateSelect / AssertionLevel + stateSelect 里的结构参数 + 库里的短类连接器（2026-10-06）：
+          **内建枚举**：omc 顶层有 NFModelicaBuiltin.mo 声明的 `type StateSelect = enumeration(never, avoid, default, prefer,
+          always)`、`type AssertionLevel = enumeration(warning, error)`；inst 在顶层合成这两个枚举类（用户自定义同名的不覆盖，
+          encapsulated 边界外照样可见）。flatten 的求值器认内建枚举的字面量（CVal::Enum：序数 + 打印路径），枚举参数走
+          frame_value。**stateSelect 里的参数是结构参数**（NFInst.mo:3941-3949，TYPE_ATTRIBUTE 的 fixed / stateSelect 绑定
+          Structural.markExp）：flatten_class 预扫组件声明（含嵌套修饰）与本类 extends 修饰里的 stateSelect，参数打 final、属性
+          打求值后的字面量；预扫没覆盖的来源（更深的基类 extends、类型链修饰）SKIP。
+          **库里的短类连接器**：`connector RealOutput = output Real` 在包里、组件继承来时（MSL 的 Blocks.Interfaces.SO 的 y），
+          此前按"非连接器"判、connect 记 `connect operand shape` SKIP——改为在组件的声明处作用域找类型、限定名逐段下降。
+          仍缺：枚举参数的比较 / Integer()、`s2 = s1` 这类参数别名、数组 stateSelect（StateSelect3）、assert 的 level 参数（Assert4）。
+          新探针 55 个（ss-s1 29 / lc-c1 14 / lc-b 9 / 单测原文 3）：无 FAIL / ACCEPTS-INVALID；旧探针 wc-c7 +3 PASS。
+          → scodeinst 524→526 PASS（StateSelect2、StateSelectVariability1，原在 slice 里，SKIP → PASS）；整个 testsuite PASS 1417→1423（FAIL 0，
+            ACCEPTS-INVALID 3 不变）；**MSL 示例 PASS 4→32**（Rotational 10、Translational 11、Electrical 5、Blocks 5，FAIL 0；报告
+            docs/research/msl-examples-report.md）；+1 单测（242）；探针 6856→6911。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

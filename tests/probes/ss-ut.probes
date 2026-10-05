@@ -1,0 +1,40 @@
+//// set: ss-ut — 内建枚举 + 库里的连接器（单测原文）
+//// model: SSS1
+model A
+  Real x = time;
+end A;
+model B
+  parameter StateSelect s = StateSelect.prefer;
+  extends A(x(stateSelect = s));
+end B;
+model C
+  extends B;
+end C;
+model SSS1
+  C c;
+end SSS1;
+//// model: SSS2
+model SSS2
+  parameter StateSelect s = StateSelect.foo;
+end SSS2;
+//// model: SST1
+package P
+  connector RI = input Real;
+  connector RO = output Real;
+  partial block SO
+    RO y;
+  end SO;
+end P;
+block Src
+  extends P.SO;
+equation
+  y = time;
+end Src;
+model SST1
+  parameter StateSelect s = StateSelect.prefer;
+  Real x(stateSelect = s) = time;
+  Src src;
+  P.RI u;
+equation
+  connect(src.y, u);
+end SST1;

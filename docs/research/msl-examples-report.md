@@ -48,3 +48,25 @@ SKIP 的首因（每个模型只记第一个撞上的未实现特性；`[…]` �
 | qualified function call / qualified/cross-scope reference | 37 | 跨包的函数调用 / 常量引用的剩余形态 |
 | unresolved base class [ExternalObject] | 14 | 外部对象（`Modelica.Utilities.Streams` 的表格文件等） |
 | 其余 | 65 | Evaluate 注解、记录构造、枚举类型路径、connect 形状… |
+
+## 2026-10-06 加宽 61g 之后：PASS 4 → 32
+
+内建枚举 StateSelect 当组件类型 + stateSelect 里的结构参数（Rotational / Translational 的 Inertia、Mass、Spring…），以及
+库里的短类连接器（Blocks.Interfaces.RealInput / RealOutput 继承来、限定名）能 connect 之后：
+
+| 判定 | 个数 |
+|---|---|
+| PASS | 32 |
+| FAIL / ACCEPTS-INVALID / CRASH | 0 |
+| SKIP | 482 |
+
+| 包 | 模型数 | PASS |
+|---|---|---|
+| Modelica.Mechanics | 73 | 21（Rotational 10、Translational 11） |
+| Modelica.Electrical | 194 | 5 |
+| Modelica.Blocks | 28 | 5 |
+| Modelica.Utilities | 3 | 1 |
+| 其余（Clocked、Magnetic、Fluid、Media、Thermal、StateGraph、Math、ComplexBlocks） | 216 | 0 |
+
+SKIP 首因（前 10）：extends redeclare 113、Clock 72、extends 修饰改复合组件（`extends X(flange(…))` 之类）71、extends
+内建类型 28、短类受限类型不一致 24、复合 outer 22、Medium 前缀 30、限定名引用 18、ExternalObject 16、Evaluate 注解 13。

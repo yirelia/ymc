@@ -4780,6 +4780,31 @@ YMC_TEST(flatten_final_attributes_and_array_derived_types) {
   }
 }
 
+YMC_TEST(flatten_builtin_enums_and_library_connectors) {
+  // 内建枚举 StateSelect 当组件类型（顶层合成的枚举类），`stateSelect = s` 里的 s 是结构参数：打 final、属性打求值后的字面量；
+  // 包里的短类连接器（`P.RI`）与继承来的连接器（`extends P.SO` 的 y）可以 connect。期望 = omc 1.25.0 实跑 SST1（2026-10-06）。
+  YMC_CHECK_EQ(flatten_src("package P\n  connector RI = input Real;\n  connector RO = output Real;\n  partial block SO\n"
+                           "    RO y;\n  end SO;\nend P;\nblock Src\n  extends P.SO;\nequation\n  y = time;\nend Src;\n"
+                           "model SST1\n  parameter StateSelect s = StateSelect.prefer;\n  Real x(stateSelect = s) = time;\n"
+                           "  Src src;\n  P.RI u;\nequation\n  connect(src.y, u);\nend SST1;\n"),
+               std::string("class SST1\n"
+                           "  final parameter enumeration(never, avoid, default, prefer, always) s = StateSelect.prefer;\n"
+                           "  Real x(stateSelect = StateSelect.prefer) = time;\n  Real src.y;\n  input Real u;\nequation\n"
+                           "  src.y = u;\n  src.y = time;\nend SST1;\n"));
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           // 更深一层基类 extends 修饰里的 stateSelect 参数：预扫没扫到（omc 能过，参数打 final），保守 SKIP（SSS1）。
+           {"model A\n  Real x = time;\nend A;\nmodel B\n  parameter StateSelect s = StateSelect.prefer;\n"
+            "  extends A(x(stateSelect = s));\nend B;\nmodel C\n  extends B;\nend C;\nmodel SSS1\n  C c;\n"
+            "end SSS1;\n", "stateSelect parameter not pre-scanned"},
+           // 不存在的字面量：omc "Variable StateSelect.foo not found"（SSS2）。
+           {"model SSS2\n  parameter StateSelect s = StateSelect.foo;\nend SSS2;\n", "unknown enumeration literal"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

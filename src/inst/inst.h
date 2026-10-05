@@ -64,6 +64,7 @@ class Instantiator {
   Inst& I_;
   Diagnostics& diags_;
   NodeId builtin_[4];   // Real/Integer/Boolean/String（按 TypeKind 序）
+  std::vector<NodeId> builtin_enums_;   // 顶层合成的内建枚举类（StateSelect / AssertionLevel），见 make_top_node
   bool unsupported_ = false;
   std::string unsupported_reason_;
   std::string unsupported_detail_;

@@ -243,3 +243,7 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `fq-f2` | 25 | 数组组件的类型链修饰（每元素同值）+ MSL 的 SI 类型（Position[3]、Angle、Temperature、NonSI…） |
 | `fq-t` | 10 | extends 属性修饰的优先级、隐式装库按文件的 uses 注解选版本、继承来的连接器分量序 |
 | `fq-ut` | 3 | final 属性 / 数组派生类型 / extends 属性修饰（单测原文） |
+| `ss-s1` | 29 | 内建枚举 StateSelect / AssertionLevel 当组件类型、stateSelect 里的参数（声明 / 嵌套修饰 / extends 修饰 / if 式 / each）、MSL 的 Inertia / Mass |
+| `lc-c1` | 14 | 短类连接器：继承来的组件、限定类型名（包里的 / MSL Blocks.Interfaces 的 Real / Boolean / Integer 输入输出） |
+| `lc-b` | 9 | MSL 的 Rotational / Blocks 部件互连（定位 connect operand shape 用的最小模型） |
+| `ss-ut` | 3 | 内建枚举 + 库里的连接器（单测原文） |
