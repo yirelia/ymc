@@ -1,0 +1,35 @@
+//// set: rx-m — 重声明的最小模型（含 MSL 的 SineVoltage）
+//// model: R1
+model A
+  parameter Real p = 1;
+end A;
+model B
+  extends A;
+  parameter Real q = 2;
+end B;
+model M
+  parameter Real o = 5;
+  replaceable A a(p = o);
+end M;
+model R1
+  extends M(redeclare B a(q = 3));
+end R1;
+//// model: R2
+model A
+  parameter Real p = 1;
+end A;
+model B
+  extends A;
+  parameter Real q = 2;
+end B;
+model M
+  parameter Real o = 5;
+  replaceable A a(p = o) constrainedby A(p = 7);
+end M;
+model R2
+  extends M(redeclare B a(q = 3));
+end R2;
+//// model: R3
+model R3
+  Modelica.Electrical.Analog.Sources.SineVoltage V(V = 2, f = 50);
+end R3;

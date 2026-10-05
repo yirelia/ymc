@@ -953,8 +953,19 @@ class Flattener {
           set_unsupported("flow/stream on composite component");
         if (r == SRestriction::Record && record_defaults_use_time(ci, I_.comps[cid].derived_mods))
           set_unsupported("time in record field default");
-        // 组件自身声明 / 外来修饰里是否有字段修饰（`R r(x(start = 1)) = …`）。
-        const bool own = cel.mod.is_valid() && !I_.scode.mods[cel.mod].subs.empty();
+        // 组件自身声明 / 外来修饰里是否有字段修饰（`R r(x(start = 1)) = …`）。被 extends 修饰重声明过的组件：重声明自己的修饰
+        // 在前、约束修饰（原声明的修饰，Instantiator::redeclare_component）在后，同作用域（写 extends 的类）。
+        std::vector<Id<SMod>> own_mods;
+        if (cel.mod.is_valid() && !I_.scode.mods[cel.mod].subs.empty()) own_mods.push_back(cel.mod);
+        if (const Id<SMod> cc = I_.comps[cid].cc_mod; cc.is_valid() && !I_.scode.mods[cc].subs.empty()) {
+          // 约束修饰里 final 的元素又被重声明的修饰改了 → omc 报错（merge 时内层 final，checkFinalOverride）。
+          for (const SSubMod& cs : I_.scode.mods[cc].subs)
+            if (I_.scode.mods[cs.mod].is_final && cel.mod.is_valid())
+              for (const SSubMod& os : I_.scode.mods[cel.mod].subs)
+                if (os.ident == cs.ident) set_unsupported("final element override");
+          own_mods.push_back(cc);
+        }
+        const bool own = !own_mods.empty();
         bool matched_field = false;
         for (Id<SMod> m : matched)
           if (!I_.scode.mods[m].subs.empty()) { matched_field = true; break; }
@@ -1055,7 +1066,7 @@ class Flattener {
         } else if (!matched.empty()) {
           child.mods = matched; child.scope = ctx.scope; child.vprefix = ctx.vprefix;
         } else if (own) {
-          child.mods = {cel.mod}; child.scope = inst_node; child.vprefix = prefix;
+          child.mods = own_mods; child.scope = inst_node; child.vprefix = prefix;
         }
         // 短类链上的修饰（`model B = A(k = 2); B b;`，MLS §4.5.1：短类定义 = 基类 + 修饰）：优先级最低（外来的、组件
         // 自己的在前，链上外层的短类在前），排在最后。值在短类定义处解析：定义在组件所在的类里 → 与组件自己的修饰同一
@@ -3332,6 +3343,7 @@ class Flattener {
       const Id<SMod> dm = I_.scode.elems[I_.comps[cid].def].mod;
       if (dm.is_valid()) asrc.push_back({dm, enclosing, prefix});
     }
+    if (const Id<SMod> cc = I_.comps[cid].cc_mod; cc.is_valid()) asrc.push_back({cc, enclosing, prefix});   // 重声明的约束修饰
     for (Id<SMod> dm : I_.comps[cid].derived_mods) asrc.push_back({dm, enclosing, prefix});
     std::vector<FlatVarAttr> attrs = collect_attributes(cid, asrc);
     if (eval_true && struct_final)   // fixed = false 时 omc 忽略 Evaluate（EV3 探针）；带 fixed 属性的组合未逐一核实 → SKIP
@@ -3372,7 +3384,7 @@ class Flattener {
     v.name_subs = nsubs;
     v.ty = comp.ty;
     v.is_protected = is_protected;
-    v.is_final = comp.attributes.is_final || force_final || struct_final;
+    v.is_final = ((comp.attributes.is_final || force_final) && !attr_final_dropped(cid, ctx)) || struct_final;
     switch (var_min(var_floor, comp.attributes.variability)) {   // 复合组件变率下沉（Half A）
       case SVariability::Var: v.var_kind = FlatVarKind::Var; break;
       case SVariability::Discrete: v.var_kind = FlatVarKind::Discrete; break;
@@ -3411,8 +3423,11 @@ class Flattener {
     v.attributes = std::move(attrs);
     v.loc = comp.loc;
     // 组件声明注释（R13 §3.6）：`Real x "c";`。存原文（去转义），dumper 打印时再转义（与方程/语句注释同法）。
-    if (I_.scode.elems[comp.def].cmt.str.is_valid())
-      v.comment = I_.scode.elems[comp.def].cmt.str;
+    // 被重声明过的组件用原声明的注释（redeclareComponent :2215 `cmt := orig_comp.comment`，RD 探针 r1 的 `"orig"`）。
+    const Id<SElement> cdef = comp.orig_def.is_valid() ? comp.orig_def : comp.def;
+    if (comp.comment_from_type) v.comment = comp.type_comment;   // 类型带 absoluteValue = false（见 inst_component）
+    else if (I_.scode.elems[cdef].cmt.str.is_valid())
+      v.comment = I_.scode.elems[cdef].cmt.str;
     result_.model.variables.push_back(std::move(v));
     const std::size_t vidx = result_.model.variables.size() - 1;
     if (!cur_pp_chain_.empty()) var_pp_.emplace(vidx, cur_pp_chain_);
@@ -3555,6 +3570,7 @@ class Flattener {
     for (Id<SMod> m : mod_subs) asrc.push_back({m, mod_scope, mod_prefix});
     for (Id<SMod> em : I_.comps[cid].extends_mods) asrc.push_back({em, enclosing, prefix});
     if (cel.mod.is_valid()) asrc.push_back({cel.mod, enclosing, prefix});
+    if (const Id<SMod> cc = I_.comps[cid].cc_mod; cc.is_valid()) asrc.push_back({cc, enclosing, prefix});   // 重声明的约束修饰
     for (Id<SMod> dm : I_.comps[cid].derived_mods) asrc.push_back({dm, enclosing, prefix, /*each_all=*/true});
     // 绑定：外来修饰优先，否则声明绑定。要求是数组构造子 `{…}` / `array(…)`，否则 SKIP。
     Id<Exp> braw;
@@ -3775,7 +3791,7 @@ class Flattener {
         set_unsupported("array binding higher variability"); return;
       }
     }
-    const bool is_final = I_.comps[cid].attributes.is_final || force_final;
+    const bool is_final = (I_.comps[cid].attributes.is_final || force_final) && !attr_final_dropped(cid, ctx);
     // 方向保留：所有前缀组件都是连接器或 input 组件（Variable.removeNonTopLevelDirection，NFVariable.mo:466-493）。
     FlatDirection dir = FlatDirection::None;
     if (ctx.keep_dir) {
@@ -3804,7 +3820,8 @@ class Flattener {
       v.name_subs = psubs_to_exprs(psubs);
       v.name_subs.push_back({});   // 叶数组的下标走 v.subscripts（末段），逐段 name_subs 末段留空
       // 组件声明注释逐元素照打（同标量，WillowForest：`parameter Real e[1] = 0.73 "Radiation efficiency fraction";`）。
-      if (cel.cmt.str.is_valid()) v.comment = cel.cmt.str;
+      if (I_.comps[cid].comment_from_type) v.comment = I_.comps[cid].type_comment;   // 见 inst_component
+      else if (cel.cmt.str.is_valid()) v.comment = cel.cmt.str;
       {   // 末段下标：整数维取 IntLit，类型维取 false/true·E.lit（行主序 idx → 该维标签）
         std::vector<Id<Expr>> subs;
         subs.reserve(idx.size());
@@ -4464,6 +4481,15 @@ class Flattener {
     return inst_exp(val, enclosing, prefix);
   }
 
+  // omc 1.25.0 在这种组件上把修饰 / 前缀给的 final 丢掉、不打印：类型经过短类，而短类链上有前缀 / 是连接器短类，或组件在
+  // 连接器里（连接器类型位非 0）。来源：实例化类型时 instClass 的 EXPANDED_DERIVED 支用 Attributes.mergeDerivedAttributes
+  //（NFAttributes.mo:248-273 v1.25.0）合并类与组件的属性——两边都不是缺省时新建的属性取**类**的 final（短类的总是 false）。
+  // FD 探针：连接器里 `TT T`（`type TT = Real(final unit = "K")`）的 `hp(final T = t)` → `Real hp.T(…) = t`；同样的修饰
+  // 在模型里、或类型是内建 Real → `final Real …`。MSL 的 HeatPort_a 的 T / Q_flow（Electrical.Analog.Examples.HeatingRectifier）。
+  bool attr_final_dropped(CompId cid, const ModCtx& ctx) {
+    const Component& c = I_.comps[cid];
+    return c.derived_type && (c.derived_attrs || ctx.in_conn || c.attributes.connector != SConnectorType::Potential);
+  }
   // 内建枚举（StateSelect / AssertionLevel，inst 在顶层合成的枚举类，见 Instantiator::make_top_node）的定义；不是 → nullptr。
   const SClassDef* builtin_enum_def(Symbol type_name) {
     const ClassTree& t = I_.trees[I_.node_class(I_.top).tree];
@@ -10164,6 +10190,10 @@ class Flattener {
 
   Id<Expr> unary(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
     if (e.op == Op::UPlus) return inst_exp(e.a, enclosing, prefix);   // +a → a（R13 §4.3）
+    // 书写的负实数字面量 `-0.0` / `-2.5` 直接成负字面量（omc 打 `x = -0.0`）；别的取负（括号里的、代入参数后的、化简出的）
+    // 留给 simplify_expr，零取负得正零（Ceval.evalUnaryOp，NFSimplifyExp.simplifyUnaryOp :1140-1150 v1.25.0；Z 探针：
+    // `-(0.0) * time`、`-p`（p = 0 结构参数）omc 都打 `0.0`；MSL 的 NPN `iS = -Ccs * der(vcs)`，Ccs = 0 → `iS = 0.0`）。
+    if (e.op == Op::UMinus && I_.absyn.exps[e.a].kind == ExpKind::RealLit) return lit_real(-I_.absyn.exps[e.a].rval);
     Id<Expr> a = inst_exp(e.a, enclosing, prefix);
     if (e.op == Op::Not) {
       const Type tya = op_type(a);   // 数组字面量按形状取类型（`not {true, false}`）
@@ -13094,7 +13124,7 @@ class Flattener {
         const Expr& ea = result_.model.exprs[a];
         if (op == UnOp::Minus) {
           if (ea.kind == ExprKind::IntLit) return lit_int(-ea.ival);
-          if (ea.kind == ExprKind::RealLit) return lit_real(-ea.rval);
+          if (ea.kind == ExprKind::RealLit) return lit_real(ea.rval == 0.0 ? 0.0 : -ea.rval);   // 零取负得正零（见 unary）
           bool neg = true;
           while (result_.model.exprs[a].kind == ExprKind::Unary) { a = result_.model.exprs[a].a; neg = !neg; }
           return neg ? negate_expr(a) : a;

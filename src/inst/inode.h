@@ -195,6 +195,17 @@ struct Component {
   std::vector<Id<SMod>> derived_mods;        // 短类链上的属性修饰（`type V=Real(unit=…)`），外层派生在前（优先级高）
   std::vector<NodeId> derived_scopes;        // 与 derived_mods 平行：各短类定义所在的类（修饰值在那里解析）
   std::vector<Id<SMod>> extends_mods;        // extends 修饰里改本组件属性的子修饰（`extends A(x(start = 2))`），外层在前
+  // 被 extends 修饰重声明过（`extends M(redeclare B a(q = 3))`）：def 换成重声明元素，orig_def = 原声明（注释取它的），
+  // cc_mod = 约束修饰（无 constrainedby 时就是原声明的修饰），flatten 排在 def 自己的修饰之后。
+  Id<SElement> orig_def;
+  Id<SMod> cc_mod;
+  // 类型经过短类（`SI.Temperature T`）/ 短类链上有前缀或是连接器短类（`connector RealInput = input Real`）：flatten 据此
+  // 判 omc 会不会把组件的 final 丢掉（见 flatten 的 attr_final_dropped）。
+  bool derived_type = false;
+  bool derived_attrs = false;
+  // 声明类型带 `annotation(absoluteValue = false)`：omc 把组件注释换成类型定义的注释（见 inst_component），flatten 用 type_comment。
+  bool comment_from_type = false;
+  Symbol type_comment;
   Binding binding;
   Id<Expr> condition;                        // 条件组件 `if cond`（v1 占位，条件组件不在 v1）
   CompAttributes attributes;

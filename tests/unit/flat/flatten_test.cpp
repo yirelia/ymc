@@ -4805,6 +4805,33 @@ YMC_TEST(flatten_builtin_enums_and_library_connectors) {
   }
 }
 
+YMC_TEST(inst_extends_redeclare_and_dropped_final) {
+  // extends 修饰里的组件重声明：新类型 + 重声明自己的修饰 + 原声明的修饰当约束修饰（a.p = o 来自 `replaceable A a(p = o)`），
+  // 叶组件的绑定取重声明的、注释取原声明的；连接器里经短类定型的成员，final 修饰给的 final 不打印（omc 的
+  // mergeDerivedAttributes）。期望 = omc 1.25.0 实跑 RDT1（2026-10-06）。
+  YMC_CHECK_EQ(flatten_src("model A\n  parameter Real p = 1;\nend A;\nmodel B\n  extends A;\n  parameter Real q = 2;\nend B;\n"
+                           "model M\n  parameter Real o = 5;\n  replaceable A a(p = o);\n  replaceable Real x = 1 \"orig\";\n"
+                           "end M;\ntype TT = Real(final unit = \"K\");\nconnector C\n  TT T;\n  flow Real Q;\nend C;\n"
+                           "model RDT1\n  extends M(redeclare B a(q = 3), redeclare Real x = 2 \"new\");\n"
+                           "  C c(final T = time);\nend RDT1;\n"),
+               std::string("class RDT1\n  parameter Real o = 5.0;\n  parameter Real a.p = o;\n  parameter Real a.q = 3.0;\n"
+                           "  Real x = 2.0 \"orig\";\n  Real c.T(unit = \"K\") = time;\n  Real c.Q;\nequation\n  c.Q = 0.0;\n"
+                           "end RDT1;\n"));
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           // 原声明不是 replaceable 而类型不同：omc "Redeclaration with a new type requires 'a' to be replaceable"（RDS1）。
+           {"model A\n  parameter Real p = 1;\nend A;\nmodel B\n  extends A;\n  parameter Real q = 2;\nend B;\n"
+            "model M\n  A a;\nend M;\nmodel RDS1\n  extends M(redeclare B a);\nend RDS1;\n", "redeclare of non-replaceable component"},
+           // constrainedby（约束修饰取 cc 的）v1 未做（RDS2，omc 能过：a.p = 7.0）。
+           {"model A\n  parameter Real p = 1;\nend A;\nmodel B\n  extends A;\n  parameter Real q = 2;\nend B;\n"
+            "model M\n  replaceable A a constrainedby A(p = 7);\nend M;\nmodel RDS2\n"
+            "  extends M(redeclare B a);\nend RDS2;\n", "redeclare form"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

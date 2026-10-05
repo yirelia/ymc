@@ -70,3 +70,9 @@ SKIP 的首因（每个模型只记第一个撞上的未实现特性；`[…]` �
 
 SKIP 首因（前 10）：extends redeclare 113、Clock 72、extends 修饰改复合组件（`extends X(flange(…))` 之类）71、extends
 内建类型 28、短类受限类型不一致 24、复合 outer 22、Medium 前缀 30、限定名引用 18、ExternalObject 16、Evaluate 注解 13。
+
+## 2026-10-06 加宽 61h 之后：PASS 32 → 49
+
+extends 修饰里的组件重声明（Electrical.Analog.Sources 一族的 `redeclare Modelica.Blocks.Sources.Sine signalSource(…)`）、
+连接器里经短类定型的成员不打 final、类型带 absoluteValue = false 时组件注释换成类型的、零取负得正零之后：Electrical 5 → 22
+（Analog 的整流、加热、晶体管门电路…），其余不变；FAIL / ACCEPTS-INVALID / CRASH 0。

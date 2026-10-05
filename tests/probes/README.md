@@ -247,3 +247,8 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `lc-c1` | 14 | 短类连接器：继承来的组件、限定类型名（包里的 / MSL Blocks.Interfaces 的 Real / Boolean / Integer 输入输出） |
 | `lc-b` | 9 | MSL 的 Rotational / Blocks 部件互连（定位 connect operand shape 用的最小模型） |
 | `ss-ut` | 3 | 内建枚举 + 库里的连接器（单测原文） |
+| `rx-r1` | 25 | extends 修饰里的组件重声明：约束修饰（原声明的修饰）、叶 / 复合、绑定与注释的来源、非 replaceable、constrainedby、数组、多层 |
+| `rx-f` | 24 | final 修饰在连接器里经短类定型的成员上被丢掉（mergeDerivedAttributes）及保留 final 的对照；零取负的符号 |
+| `rx-m` | 3 | 重声明的最小模型（含 MSL 的 SineVoltage） |
+| `rx-a` | 6 | 类型带 absoluteValue = false 时组件注释换成类型的；重声明的类型名先撞上组件 |
+| `rx-ut` | 3 | extends 重声明 + 丢 final（单测原文） |

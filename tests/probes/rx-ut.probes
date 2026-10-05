@@ -1,0 +1,51 @@
+//// set: rx-ut — extends 重声明 + 丢 final（单测原文）
+//// model: RDS1
+model A
+  parameter Real p = 1;
+end A;
+model B
+  extends A;
+  parameter Real q = 2;
+end B;
+model M
+  A a;
+end M;
+model RDS1
+  extends M(redeclare B a);
+end RDS1;
+//// model: RDS2
+model A
+  parameter Real p = 1;
+end A;
+model B
+  extends A;
+  parameter Real q = 2;
+end B;
+model M
+  replaceable A a constrainedby A(p = 7);
+end M;
+model RDS2
+  extends M(redeclare B a);
+end RDS2;
+//// model: RDT1
+model A
+  parameter Real p = 1;
+end A;
+model B
+  extends A;
+  parameter Real q = 2;
+end B;
+model M
+  parameter Real o = 5;
+  replaceable A a(p = o);
+  replaceable Real x = 1 "orig";
+end M;
+type TT = Real(final unit = "K");
+connector C
+  TT T;
+  flow Real Q;
+end C;
+model RDT1
+  extends M(redeclare B a(q = 3), redeclare Real x = 2 "new");
+  C c(final T = time);
+end RDT1;

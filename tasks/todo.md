@@ -1522,6 +1522,26 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           → scodeinst 524→526 PASS（StateSelect2、StateSelectVariability1，原在 slice 里，SKIP → PASS）；整个 testsuite PASS 1417→1423（FAIL 0，
             ACCEPTS-INVALID 3 不变）；**MSL 示例 PASS 4→32**（Rotational 10、Translational 11、Electrical 5、Blocks 5，FAIL 0；报告
             docs/research/msl-examples-report.md）；+1 单测（242）；探针 6856→6911。
+    - [x] (61h) inst + flat：extends 修饰里的组件重声明 + 连接器里经短类定型的成员不打 final（2026-10-06）：
+          **组件重声明**（`extends VoltageSource(redeclare Modelica.Blocks.Sources.Sine signalSource(final amplitude = V, …))`，
+          MSL 的 Electrical.Analog.Sources 一族）：inst 的 apply_extends_modifier 遇 Redecl 子修饰 → redeclare_component：组件
+          换成重声明元素（类型名在写 extends 的类里查），原声明的修饰当约束修饰（无 constrainedby 时就是它，SCodeUtil.
+          getConstrainingMod :5273-5286）排在重声明自己的修饰之后；绑定重声明的 > 原声明的，注释用原声明的
+          （NFInst.redeclareComponent :2153-2232）；原声明非 replaceable 而类型不同 → SKIP（omc 报错）。约束修饰按写 extends 的
+          类的作用域解析（近似：它引用的多是基类参数，继承下来名字一样）。constrainedby、条件、数组维、变率 / 方向前缀、
+          多层重声明 → SKIP。
+          **丢 final**：重声明放开后 HeatingRectifier 露出——omc 实例化短类型时 mergeDerivedAttributes（NFAttributes.mo:
+          248-273）在"类与组件属性都不是缺省"时新建的属性取类的 final（恒 false）：连接器里（或 flow / stream、或短类链有前缀 /
+          是连接器短类）经短类定型的组件，修饰 / 前缀给的 final 不打印（MSL HeatPort_a 的 T / Q_flow）。inst 记组件类型
+          是否经过短类、短类链有没有前缀，flatten 据此判。
+          **注释换成类型的**：声明类型是带 `annotation(absoluteValue = false)` 的 type（MSL 的 SI.TemperatureDifference）时，omc
+          把组件注释换成类型定义的注释（instComponentDef :1990-1996，issue 12533 的修补；类型多半没描述串 → 注释没了，
+          ThermalConductor 的 dT）。**零取负得正零**：书写的 `-0.0` 是负字面量，别的取负（代入参数后、括号里、化简出的）按
+          Ceval.evalUnaryOp 零得正零（MSL NPN 的 `iS = -Ccs * der(vcs)`、Ccs = 0 → `iS = 0.0`）。**重声明的类型名先撞上组件**
+          （`redeclare B B`）omc 报错 → SKIP（others/ComponentNamesRedecl 此前被放过）。
+          新探针 61 个（rx-r1 25 / rx-f 24 / rx-m 3 / rx-a 6 / 单测原文 3）：无 FAIL / ACCEPTS-INVALID；旧探针 sy-s4 +1 PASS。
+          → scodeinst 526→531 PASS（Final6、Final7、RedeclareMod2、inst1、mod13 入 slice）；整个 testsuite PASS 1423→1436（FAIL 0，
+            ACCEPTS-INVALID 3 不变）；**MSL 示例 PASS 32→49**（Electrical 5→22），FAIL 0；+1 单测（243）；探针 6911→6972。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

@@ -487,6 +487,10 @@ void Instantiator::apply_extends_modifier(NodeId bc, Id<SMod> mod, NodeId scope)
   for (const SSubMod& s : I_.scode.mods[mod].subs) {
     if (s.ident != name) continue;
     const SMod& sm = I_.scode.mods[s.mod];
+    if (sm.kind == SModKind::Redecl && sm.element.is_valid()) {
+      redeclare_component(bc, sm.element, scope);
+      continue;
+    }
     if (sm.kind != SModKind::Mod) { mark_unsupported("extends redeclare/break modifier"); return; }
     Component& comp = I_.comps[cid];
     if (comp.ty.kind == TypeKind::Complex && !sm.subs.empty()) {
@@ -503,6 +507,73 @@ void Instantiator::apply_extends_modifier(NodeId bc, Id<SMod> mod, NodeId scope)
     // 实例修饰），flatten 排在声明修饰之前（EX 探针 EX1：A 里 `Real x(start = 1)`，omc 取 2.0）。多层继承时外层的 extends
     // 后施加（基类实例先建好），插到前面 = 外层在前。此前混进 derived_mods（类型链修饰，排在声明修饰之后），优先级反了。
     if (!sm.subs.empty()) comp.extends_mods.insert(comp.extends_mods.begin(), s.mod);
+  }
+}
+
+// extends 修饰里的组件重声明 `extends M(redeclare B a(q = 3))`（MLS §7.3；NFInst.instComponent 的 REDECLARE 支与
+// redeclareComponent，NFInst.mo:1894-1904 / :2153-2232 v1.25.0）：
+//   - 新组件 = 重声明元素（类型、修饰、前缀），类型名在写 extends 的类里查，修饰也在那里解析；
+//   - 约束修饰并进来、优先级低于重声明自己的修饰：无 constrainedby 时就是原声明的修饰（getConstrainingMod，
+//     SCodeUtil.mo:5273-5286；RD 探针 r1：`replaceable A a(p = o)` + `redeclare B a(q = 3)` → a.p = o、a.q = 3）；
+//   - 绑定：重声明的 > 原声明的（:2203-2206）；注释用原声明的（:2215 `cmt := orig_comp.comment`）；
+//   - 原声明不是 replaceable 而类型不同 → omc 报错 REDECLARE_NON_REPLACEABLE（:2193-2199）。
+// 约束修饰按写 extends 的类的作用域解析（omc 在原声明所在的基类里解析）：它引用的多是基类的参数，继承下来名字、前缀都一样。
+// ponytail: 基类所在包里的常量 / 类型这类只在基类词法作用域可见的名字会解析不到（→ SKIP），要精确得让修饰带各自的作用域。
+void Instantiator::redeclare_component(NodeId bc, Id<SElement> rel, NodeId scope) {
+  const CompId cid = I_.nodes[bc].comp;
+  const Id<SElement> od = I_.comps[cid].def;
+  const SElement& o = I_.scode.elems[od];
+  const SElement& r = I_.scode.elems[rel];
+  if (r.kind != SElementKind::Component) { mark_unsupported("class redeclare in extends modifier"); return; }
+  // v1 未做的形态 → SKIP：constrainedby（约束修饰取 cc 的）、条件组件、数组维（重声明不带维时沿用原声明的）、变率 / 方向 /
+  // 流前缀（属性合并）、外层又重声明过的 / 带过 extends 属性修饰的（修饰合并的层次）。
+  const auto plain_attr = [](const SElement& e) {
+    return e.attr.dims.empty() && e.type.dims.empty() && e.attr.var == SVariability::Var &&
+           e.attr.dir == SDirection::Bidir && e.attr.ct == SConnectorType::Potential && !e.condition.is_valid();
+  };
+  if (o.prefixes.has_cc || !plain_attr(o) || !plain_attr(r) || I_.comps[cid].orig_def.is_valid() ||
+      !I_.comps[cid].extends_mods.empty() || o.prefixes.io != SInnerOuter::None || r.prefixes.io != SInnerOuter::None) {
+    mark_unsupported("redeclare form");
+    return;
+  }
+  // 重声明元素的类型名首段先撞上组件（被重声明的组件同名 `redeclare B B`、本类 / 基类的组件）：omc 的查找先找到组件 →
+  // "Found a component with same name when looking for type B"（others/ComponentNamesRedecl）→ SKIP。
+  if (!r.type.leading_dot && !r.type.path.empty()) {
+    const Symbol tn = r.type.path[0];
+    bool hits = tn == I_.nodes[bc].name;
+    const NodeId base_inst = I_.nodes[bc].parent_scope;
+    if (base_inst.is_valid() && !I_.nodes[base_inst].is_empty() && I_.node_class(base_inst).tree.is_valid())
+      for (NodeId c : I_.trees[I_.node_class(base_inst).tree].components) hits = hits || I_.nodes[c].name == tn;
+    if (I_.node_class(scope).tree.is_valid()) {
+      const ClassTree& st = I_.trees[I_.node_class(scope).tree];
+      auto it = st.lookup.find(tn);
+      hits = hits || (it != st.lookup.end() && it->second.kind == LEntry::Kind::Component);
+    }
+    if (hits) { mark_unsupported("type name resolves to a component"); return; }
+  }
+  if (!o.prefixes.is_replaceable) {
+    const NodeId ot = lookup_class_name(o.type.path, I_.nodes[bc].parent_scope);
+    const NodeId nt = lookup_class_name(I_.scode.elems[rel].type.path, scope);
+    if (ot != nt) { mark_unsupported("redeclare of non-replaceable component"); return; }
+  }
+  const Id<SMod> omod = I_.scode.elems[od].mod;
+  const bool r_bound = I_.scode.elems[rel].mod.is_valid() && I_.scode.mods[I_.scode.elems[rel].mod].binding.is_valid();
+  {
+    Component& comp = I_.comps[cid];   // lookup 之后重新取引用（arena 纪律）
+    comp.orig_def = od;
+    comp.cc_mod = omod;
+    comp.def = rel;
+    comp.derived_mods.clear();
+    comp.derived_scopes.clear();
+    comp.binding = Binding{};
+    comp.state = CompState::CompDef;
+  }
+  inst_component(bc, scope);
+  if (!r_bound && omod.is_valid() && I_.scode.mods[omod].binding.is_valid()) {   // 重声明没写绑定：取原声明的
+    Component& comp = I_.comps[cid];
+    comp.binding.kind = BindingKind::Raw;
+    comp.binding.raw_exp = I_.scode.mods[omod].binding;
+    comp.binding.scope = I_.nodes[bc].parent_scope;   // 原声明所在的基类实例
   }
 }
 
@@ -549,6 +620,24 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
     I_.comps[cid].kind = CompKind::Invalid;
     return;
   }
+  // 声明类型是带 `annotation(absoluteValue = false)` 的 type（MSL 的 SI.TemperatureDifference）：omc 把组件的注释换成类型
+  // 定义的注释（instComponentDef :1990-1996 v1.25.0，issue 12533 的修补）——类型定义大多没有描述串，组件的注释就没了（MSL
+  // ThermalConductor 的 `dT "port_a.T - port_b.T"` 打成 `Real TC1.dT(…)`，HeatingRectifier 等）。只看声明的那个类型，不顺链。
+  if (const Id<SElement> te = I_.nodes[ty_node].def; te.is_valid() && I_.scode.elems[te].kind == SElementKind::Class &&
+                                                    I_.scode.elems[te].restriction == SRestriction::Type) {
+    const Id<SMod> ann = I_.scode.elems[te].cmt.annotation;
+    bool abs_false = false;
+    if (ann.is_valid())
+      for (const SSubMod& s : I_.scode.mods[ann].subs)
+        if (I_.interner.str(s.ident) == "absoluteValue" && I_.scode.mods[s.mod].binding.is_valid()) {
+          const Exp& b = I_.absyn.exps[I_.scode.mods[s.mod].binding];
+          abs_false = b.kind == ExpKind::BoolLit && !b.bval;
+        }
+    if (abs_false) {
+      I_.comps[cid].comment_from_type = true;
+      I_.comps[cid].type_comment = I_.scode.elems[te].cmt.str;
+    }
+  }
 
   // 短类塌陷（R15 EXPANDED_DERIVED）：`type V = Base(mods)` 顺链解析到内建/枚举底，累积属性修饰
   // （外层派生在前 = 优先级高）。lookup_class_name 会 arena add，循环里不缓存 INode 引用（只用 Id）。
@@ -557,6 +646,7 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
   // 短类的前缀属性（`type InputReal = input Real`、`type C = constant …`）累积到组件上：
   // 组件自身 > 靠近用处的派生 > 更远派生（loop 外→内，first-non-default 胜）。
   bool alias_partial = false;            // 链上有 partial 的短类
+  bool derived_type = false, derived_attrs = false;   // 见 Component::derived_type
   std::string unresolved_base;           // 链上查不到的基类名（报 SKIP 子原因）
   std::vector<SRestriction> alias_res;   // 链上各短类的受限类型（与链底长类比，见下）
   SVariability mvar = el.attr.var;
@@ -575,6 +665,14 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
     // inner / outer 的短类定义（`outer model M = A;`，InnerOuterClass1 / Missing5 / InvalidMod4 / InvalidType2）：类的
     // inner / outer 配对 v1 未做 → SKIP。
     if (I_.scode.elems[ce].prefixes.io != SInnerOuter::None) mark_unsupported("inner/outer class");
+    derived_type = true;
+    {
+      const SRestriction cr = I_.scode.elems[ce].restriction;
+      const SAttributes& da = I_.scode.elems[ce].def.derived_attr;
+      if (cr == SRestriction::Connector || cr == SRestriction::ExpandableConnector || da.var != SVariability::Var ||
+          da.dir != SDirection::Bidir || da.ct != SConnectorType::Potential)
+        derived_attrs = true;
+    }
     if (I_.scode.elems[ce].is_partial) alias_partial = true;
     alias_res.push_back(I_.scode.elems[ce].restriction);
     // 派生类型带维度（`type V = Real[3]`，维度在 derived_attr.dims）→ 组件维要拼上类型维（TypeDim1/Subscript4），
@@ -640,6 +738,8 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
   comp.ty = ty;
   comp.derived_mods = std::move(derived_mods);
   comp.derived_scopes = std::move(derived_scopes);
+  comp.derived_type = derived_type;
+  comp.derived_attrs = derived_attrs;
   comp.attributes.variability = mvar;   // 含短类前缀（constant/input/…）累积
   comp.attributes.direction = mdir;
   comp.attributes.connector = mct;

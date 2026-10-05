@@ -1,0 +1,41 @@
+//// set: rx-a — 类型带 absoluteValue = false 时组件注释换成类型的；重声明的类型名先撞上组件
+//// model: A1
+type TD = Real(final unit = "K") annotation(absoluteValue = false);
+model A1
+  TD dT = time "comment";
+end A1;
+//// model: A2
+type TD = Real(unit = "K") "type descr" annotation(absoluteValue = false);
+model A2
+  TD dT = time "comment";
+end A2;
+//// model: A3
+type TD = Real(unit = "K") annotation(absoluteValue = true);
+model A3
+  TD dT = time "comment";
+end A3;
+//// model: A4
+type TD = Real(unit = "K") annotation(absoluteValue = false);
+type TD2 = TD;
+model A4
+  TD2 dT = time "comment";
+end A4;
+//// model: A5
+class A
+  Real x;
+end A;
+class B
+  Real x;
+  Real y;
+end B;
+model Legal
+  replaceable A B;
+end Legal;
+model A5
+  extends Legal(redeclare B B);
+end A5;
+//// model: A6
+type TD = Real(unit = "K") annotation(absoluteValue = false);
+model A6
+  TD dT[2] = {time, time} "comment";
+end A6;

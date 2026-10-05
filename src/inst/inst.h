@@ -44,6 +44,8 @@ class Instantiator {
   void inst_component(NodeId comp_node, NodeId enclosing);  // 解析组件类型（叶/复合）
   // extends 修饰 `extends A(x = 1)`：把 mod 按名合并到继承来的组件 bc 上（绑定覆盖 + 属性 + final）。
   void apply_extends_modifier(NodeId bc, Id<SMod> mod, NodeId scope);
+  // extends 修饰里的组件重声明（见 inst.cpp 的说明）。scope = 写 extends 的类的实例。
+  void redeclare_component(NodeId bc, Id<SElement> rel, NodeId scope);
 
   // ---- 查找（最小版，只够 v1：内建类型 + 本类/嵌套类 + 顶层）----
   // path_nodes 非空：顺路记下路径各段解析到的类节点（基类名的 replaceable 检查用）。

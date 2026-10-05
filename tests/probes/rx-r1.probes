@@ -1,0 +1,346 @@
+//// set: rx-r1 — extends 修饰里的组件重声明：约束修饰（原声明的修饰）、叶 / 复合、绑定与注释的来源、非 replaceable、constrainedby、数组、多层
+//// model: R10
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+parameter Real o = 5;
+replaceable A a(p = o);
+end M;
+model R10
+extends M(redeclare B a(q = 3));
+end R10;
+//// model: R11
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+parameter Real o = 5;
+replaceable A a(p = o) constrainedby A(p = 7);
+end M;
+model R11
+extends M(redeclare B a(q = 3));
+end R11;
+//// model: R12
+model M
+replaceable Real x = 1;
+end M;
+model R12
+extends M(redeclare Real x = 2);
+end R12;
+//// model: R13
+model M
+replaceable Real x(start = 1) = time;
+end M;
+model R13
+extends M(redeclare Real x(min = 0));
+end R13;
+//// model: R14
+model A
+parameter Real p = 1;
+end A;
+model M
+A a;
+end M;
+model R14
+extends M(redeclare A a(p = 2));
+end R14;
+//// model: R15
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+A a;
+end M;
+model R15
+extends M(redeclare B a);
+end R15;
+//// model: R16
+model M
+replaceable Real x = 1;
+end M;
+model R16
+extends M(redeclare Real x);
+end R16;
+//// model: R17
+model M
+replaceable Real x = 1 "orig";
+end M;
+model R17
+extends M(redeclare Real x = 2 "new");
+end R17;
+//// model: R18
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a;
+end M;
+model R18
+extends M(redeclare B a(final q = 3));
+end R18;
+//// model: R19
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+parameter Real o = 5;
+replaceable A a(final p = o);
+end M;
+model R19
+parameter Real r = 4;
+extends M(redeclare B a(q = r));
+end R19;
+//// model: R110
+model A
+parameter Real p = 1;
+end A;
+model C
+parameter Real z = 1;
+end C;
+model M
+parameter Real o = 5;
+replaceable A a(p = o);
+end M;
+model R110
+extends M(redeclare C a);
+end R110;
+//// model: R111
+model A
+parameter Real p = 1;
+end A;
+model C
+parameter Real z = 1;
+end C;
+model M
+replaceable A a;
+end M;
+model R111
+extends M(redeclare C a);
+end R111;
+//// model: R112
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a[2];
+end M;
+model R112
+extends M(redeclare B a);
+end R112;
+//// model: R113
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a;
+end M;
+model M2
+extends M;
+end M2;
+model R113
+extends M2(redeclare B a);
+end R113;
+//// model: R114
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model C
+extends B;
+parameter Real s = 3;
+end C;
+model M
+replaceable A a;
+end M;
+model R
+extends M(redeclare B a);
+end R;
+model R114
+extends R(redeclare C a);
+end R114;
+//// model: R115
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a;
+end M;
+model R
+extends M(redeclare B a(q = 3));
+end R;
+model R115
+R r(a(q = 5));
+end R115;
+//// model: R116
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+Real x = q * time;
+end B;
+model M
+replaceable A a;
+end M;
+model R116
+extends M(redeclare B a);
+end R116;
+//// model: R117
+model A
+Real x;
+end A;
+model B
+extends A;
+equation
+x = time;
+end B;
+model M
+replaceable A a;
+equation
+end M;
+model R117
+extends M(redeclare B a);
+end R117;
+//// model: R118
+connector C
+Real e;
+flow Real f;
+end C;
+model A
+C c;
+end A;
+model B
+extends A;
+equation
+c.e = time;
+end B;
+model M
+replaceable A a1;
+A a2;
+equation
+connect(a1.c, a2.c);
+end M;
+model R118
+extends M(redeclare B a1);
+end R118;
+//// model: R119
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a;
+end M;
+model R119
+extends M(redeclare replaceable B a);
+end R119;
+//// model: R120
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+protected replaceable A a;
+end M;
+model R120
+extends M(redeclare B a);
+end R120;
+//// model: R121
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a if true;
+end M;
+model R121
+extends M(redeclare B a);
+end R121;
+//// model: R122
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable parameter A a;
+end M;
+model R122
+extends M(redeclare B a);
+end R122;
+//// model: R123
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a;
+end M;
+model R123
+extends M(redeclare parameter B a);
+end R123;
+//// model: R124
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a;
+end M;
+model R124
+extends M(redeclare B a, a(p = 9));
+end R124;

@@ -1,0 +1,250 @@
+//// set: rx-f — final 修饰在连接器里经短类定型的成员上被丢掉（mergeDerivedAttributes）及保留 final 的对照；零取负的符号
+//// model: F1
+model A
+  Real x;
+end A;
+model F1
+  A a(final x = time);
+end F1;
+//// model: F2
+model A
+  Real x;
+end A;
+model F2
+  parameter Boolean b = true;
+  A a(final x = time) if b;
+end F2;
+//// model: F3
+connector C
+  Real T;
+  flow Real Q;
+end C;
+model F3
+  parameter Boolean b = true;
+  Real t = time;
+  C c(final T = t, final Q = 1) if b;
+end F3;
+//// model: F4
+connector C
+  Real T;
+  flow Real Q;
+end C;
+model F4
+  Real t = time;
+  C c(final T = t, final Q = 1);
+end F4;
+//// model: F5
+connector HP
+  Real T;
+  flow Real Q;
+end HP;
+connector HPa
+  extends HP;
+end HPa;
+model F5
+  Real t = time;
+  HPa c(final T = t, final Q = 1);
+end F5;
+//// model: F6
+connector HP
+  Real T;
+  flow Real Q;
+end HP;
+model D
+  Real t = time;
+  HP c(final T = t, final Q = 1);
+end D;
+model F6
+  D d1, d2;
+equation
+  connect(d1.c, d2.c);
+end F6;
+//// model: F7
+connector HP
+  Real T;
+  flow Real Q;
+end HP;
+model D
+  Real t = time;
+  HP c(final T = t);
+end D;
+model F7
+  D d1;
+  HP h;
+equation
+  connect(d1.c, h);
+end F7;
+//// model: F8
+model F8
+  Modelica.Electrical.Analog.Semiconductors.Diode d(useHeatPort = true);
+end F8;
+//// model: F9
+model F9
+  Modelica.Electrical.Analog.Basic.Resistor r(useHeatPort = true);
+end F9;
+//// model: Z1
+model Z1
+  Real x = -0.0;
+  Real y = -(0.0) * time;
+  parameter Real p = 0 annotation(Evaluate = true);
+  Real z = -p * time;
+  Real w = -p;
+  Real v = 2 - (-0.0);
+end Z1;
+//// model: Z2
+model Z2
+  Real a = -0.0 * time;
+  Real b = time * (-0.0);
+  Real c = 0.0 * time;
+  Real d = 0 * time;
+  Real e = -0.0 * 2;
+  Real f = -(0.0 * time);
+  Real g = -0.0 + time;
+  Real h = time - 0.0;
+  Real i = 0.0 / time;
+  Real j = -0.0 / time;
+end Z2;
+//// model: F10
+partial connector HP
+  Real T;
+  flow Real Q;
+end HP;
+connector HPa
+  extends HP;
+end HPa;
+partial model CHP
+  parameter Boolean use = false;
+  HPa hp(final T = t, final Q = -l) if use;
+  Real l;
+  Real t;
+end CHP;
+model D
+  extends CHP;
+equation
+  l = 1;
+  t = time;
+end D;
+model F10
+  D d(use = true);
+end F10;
+//// model: F11
+connector HP
+  Real T;
+  flow Real Q;
+end HP;
+model CHP
+  parameter Boolean use = false;
+  HP hp(final T = t, final Q = -l) if use;
+  Real l = 1;
+  Real t = time;
+end CHP;
+model F11
+  CHP d(use = true);
+end F11;
+//// model: F12
+connector HP
+  Real T;
+  flow Real Q;
+end HP;
+model CHP
+  parameter Boolean use = true;
+  HP hp(final T = t, final Q = -l) if use;
+  Real l = 1;
+  Real t = time;
+end CHP;
+model F12
+  CHP d;
+end F12;
+//// model: F13
+type TT = Real(final quantity = "T", final unit = "K", min = 0.0, start = 288.15);
+connector HP
+  TT T;
+  flow Real Q;
+end HP;
+model F13
+  Real t = time;
+  HP hp(final T = t, final Q = 1);
+end F13;
+//// model: F14
+type TT = Real(final quantity = "T", final unit = "K");
+model F14
+  Real t = time;
+  TT x(final start = 1) = t;
+  TT y = t;
+  final TT z = t;
+end F14;
+//// model: F15
+model A
+  Real x;
+end A;
+type TT = Real(unit = "K");
+model B
+  TT x;
+end B;
+model F15
+  A a(final x = time);
+  B b(final x = time);
+end F15;
+//// model: F16
+type T = input Real;
+model A
+  T x;
+end A;
+model F16
+  A a(final x = time);
+end F16;
+//// model: F17
+type P = parameter Real;
+model A
+  P p = 1;
+end A;
+model F17
+  A a(final p = 2);
+end F17;
+//// model: F18
+connector RI = input Real;
+model A
+  RI u;
+end A;
+model F18
+  A a(final u = time);
+end F18;
+//// model: F19
+type T2 = Real;
+connector C
+  T2 e;
+  flow Real f;
+end C;
+model F19
+  C c(final e = time);
+end F19;
+//// model: F20
+type TT = Real(final unit = "K");
+connector C
+  TT e;
+  flow Real f;
+end C;
+model F20
+  final C c(e = time);
+end F20;
+//// model: F21
+type TT = Real(final unit = "K");
+connector C
+  final TT e = 1;
+  flow Real f;
+end C;
+model F21
+  C c;
+end F21;
+//// model: F22
+type TT = Real(unit = "K");
+record R
+  TT e;
+end R;
+connector C
+  R r;
+  flow Real f;
+end C;
+model F22
+  C c(r(final e = time));
+end F22;
