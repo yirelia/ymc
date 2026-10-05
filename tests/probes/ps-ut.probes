@@ -1,0 +1,43 @@
+//// set: ps-ut — 下标 / Q-IDENT 的报错位置（单测原文）
+//// model: E1
+model E1
+  Real y = {1, 2}[2];
+end E1;
+//// model: E2
+model E2
+  function f input Real u; output Real y[2]; algorithm y := {u, u}; end f;
+  Real y = f(1)[1];
+end E2;
+//// model: E3
+model E3
+  Real y = [1, 2; 3, 4][1, 2];
+end E3;
+//// model: E4
+model E4
+  Real y = (1, 2)[1];
+end E4;
+//// model: E5
+model E5
+  Real y = ({{1, 2}})[1][2];
+end E5;
+//// model: M5
+model M5
+  Real 'a b!#' = 1 "höhe"; // höhe
+  Real 'a\qb' = 2;
+end M5;
+//// model: Q1
+model Q1
+  Real 'höhe' = 1;
+end Q1;
+//// model: Q2
+model Q2
+  Real '' = 1;
+end Q2;
+//// model: Q3
+model Q3
+  Real 'a`b' = 1;
+end Q3;
+//// model: Q4
+model Q4
+  Real 'a	b' = 1;
+end Q4;

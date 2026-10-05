@@ -1,0 +1,59 @@
+//// set: ps-l1 — 带引号标识符的字符集：非 ASCII、空、反引号、转义（含 omc 只告警的非法转义）、ASCII 标点
+//// model: L10
+model L10
+Real 'höhe' = time;
+end L10;
+//// model: L11
+model L11
+Real 'a b!#' = time "höhe"; // höhe
+end L11;
+//// model: L12
+model L12
+Real '' = time;
+end L12;
+//// model: L13
+model L13
+Real 'a\nb' = time;
+end L13;
+//// model: L14
+model L14
+Real 'a\qb' = time;
+end L14;
+//// model: L15
+model L15
+Real 'a\'b' = time;
+end L15;
+//// model: L16
+model L16
+Real 'a"b' = time;
+end L16;
+//// model: L17
+model L17
+Real 'x$%&()*+,-./:;<>=?@[]^{}|~' = time;
+end L17;
+//// model: L18
+model L18
+Real 'a`b' = time;
+end L18;
+//// model: L19
+model L19
+Real 'é' = time;
+end L19;
+//// model: L110
+model L110
+Real '_1' = time;
+Real y = '_1' * 2;
+end L110;
+//// model: L111
+model L111
+Real 'x' = time;
+Real x = 2;
+end L111;
+//// model: L112
+model L112
+Real 'a\b' = time;
+end L112;
+//// model: L113
+model L113
+Real 'a\?b' = time;
+end L113;

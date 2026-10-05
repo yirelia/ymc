@@ -1169,7 +1169,7 @@ Id<Exp> Parser::parse_primary() {
       if (at(TokenKind::RParen)) {  // 空元组 ()
         advance();
         Exp e{}; e.kind = ExpKind::Tuple; e.loc = loc;
-        return parse_postfix(mk(std::move(e)));
+        return reject_tuple_subscript(mk(std::move(e)), loc);
       }
       // 元组元素：空位（, 或 ) 之前没有表达式）用空 Tuple 节点占位，如 (, x) := f()
       auto element = [&]() -> Id<Exp> {
@@ -1184,7 +1184,7 @@ Id<Exp> Parser::parse_primary() {
         Exp e{}; e.kind = ExpKind::Tuple; e.loc = loc; e.args.push_back(first);
         while (match(TokenKind::Comma)) e.args.push_back(element());
         expect(TokenKind::RParen, "元组应以 ')' 结束");
-        return parse_postfix(mk(std::move(e)));
+        return reject_tuple_subscript(mk(std::move(e)), loc);
       }
       expect(TokenKind::RParen, "括号表达式应以 ')' 结束");
       // (e)[subs] → Subscript(e)（OMC SUBSCRIPTED_EXP，Modelica.g:1851）；否则括号入树为单元素元组
@@ -1203,7 +1203,8 @@ Id<Exp> Parser::parse_primary() {
         parse_function_args(e.args, names);
       }
       expect(TokenKind::RBrace, "数组构造应以 '}' 结束");
-      return parse_postfix(mk(std::move(e)));
+      // `{a, b}[2]` 是语法错（下标只能跟在括号式后面，见 parse_postfix）：`[` 留给外层，在那里报缺分号。
+      return mk(std::move(e));
     }
     case TokenKind::LBracket: {
       advance();
@@ -1219,7 +1220,7 @@ Id<Exp> Parser::parse_primary() {
         }
       }
       expect(TokenKind::RBracket, "矩阵应以 ']' 结束");
-      return parse_postfix(mk(std::move(m)));
+      return mk(std::move(m));   // `[1, 2; 3, 4][1, 2]` 同上，语法错
     }
     case TokenKind::Ident:
     case TokenKind::Dot:
@@ -1254,20 +1255,32 @@ Id<Exp> Parser::parse_cref_or_call() {
       advance();  // .
       e.call_suffix = parse_cref();
     }
-    return parse_postfix(mk(std::move(e)));
+    return mk(std::move(e));   // `f(x)[1]` 同上，语法错（`f(i).y[1]` 的下标属于 call_suffix 的 cref，照收）
   }
   Exp e{}; e.kind = ExpKind::CrefExp; e.loc = loc; e.cref = cref;
   return mk(std::move(e));  // cref 自己的下标已在 parse_cref 里
 }
 
-// primary 后面的下标链：({1,2,3})[2]、f(x)[1]、[1,2;3,4][1,2]
+// 括号式后面的下标 `({1, 2, 3})[2]`、`(f(x))[1]`：OMC 语法里只有 `LPAR output_expression_list RPAR array_subscripts?` 这一支
+// 带下标（Modelica.g:1800-1806 v1.25.0）——数组构造 / 矩阵 / 函数调用 / 下标式后面都不能再跟 `[`（`{a, b}[2]`、`f(x)[1]`、
+// `(e)[1][2]` 都是语法错，omc 在那个 `[` 处报 "Missing token: SEMICOLON"；PS 探针 p1）。所以只吃一段，`[` 留给外层报错。
 Id<Exp> Parser::parse_postfix(Id<Exp> base) {
-  while (at(TokenKind::LBracket)) {
+  if (at(TokenKind::LBracket)) {
     Exp s{}; s.kind = ExpKind::Subscript; s.loc = peek().loc; s.a = base;
     s.args = parse_array_subscripts();
     base = mk(std::move(s));
   }
   return base;
+}
+
+// 元组 `(a, b)[1]` / `()[1]`：omc 报 "Tuple expression can not be subscripted."，位置从 '(' 起（Modelica.g:1802-1806）。
+// 下标照常吃掉，免得外层再报一条缺分号。
+Id<Exp> Parser::reject_tuple_subscript(Id<Exp> tup, SourceLoc lparen) {
+  if (at(TokenKind::LBracket)) {
+    diags_.error(lparen, "Tuple expression can not be subscripted.");
+    (void)parse_array_subscripts();
+  }
+  return tup;
 }
 
 Id<Cref> Parser::parse_cref() {

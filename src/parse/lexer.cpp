@@ -17,6 +17,11 @@ bool is_ident_cont(char c) {
   return is_ident_start(c) || (c >= '0' && c <= '9');
 }
 bool is_digit(char c) { return c >= '0' && c <= '9'; }
+// Q-CHAR（MLS 3.6 §2.3.1；BaseModelica_Lexer.g:434-436 v1.25.0）：字母、数字、下划线 + 这串 ASCII 标点 + 空格 + 双引号。
+// 非 ASCII 字节、制表符、换行、反引号都不在内（`'höhe'`、`'a`b'` omc 在词法阶段就报错，PS 探针 l1）。
+bool is_qchar(char c) {
+  return is_ident_cont(c) || std::string_view("!#%&()*+,-./:;<>=?@[]^{}|~ \"").find(c) != std::string_view::npos;
+}
 
 const std::unordered_map<std::string_view, TokenKind>& keyword_table() {
   static const std::unordered_map<std::string_view, TokenKind> kw = {
@@ -140,9 +145,23 @@ Token Lexer::lex_ident(std::size_t start, std::uint32_t sl, std::uint32_t sc) {
 
 Token Lexer::lex_qident(std::size_t start, std::uint32_t sl, std::uint32_t sc) {
   advance();  // 开头的 '
+  // `''`：Q-IDENT 至少一个字符（BaseModelica_Lexer.g:430-431）。omc 报在第二个引号处（PS 探针 Q2 `2:9`）。
+  if (peek() == '\'') diags_.error(SourceLoc{file_, line_, col_, 1}, "empty quoted identifier");
+  bool bad = false;   // 一个词素只报一条（一个汉字是 3 个字节）
   while (!at_end() && peek() != '\'') {
-    if (peek() == '\\') advance();  // 转义：跳过反斜杠，下面再吃一个
-    if (!at_end()) advance();
+    if (peek() == '\\') {   // 转义：反斜杠连同下一个字符一起吃。`\q` 这类非法转义 omc 只告警、照收（PS 探针 L14）。
+      advance();
+      if (!at_end()) advance();
+      continue;
+    }
+    // 不在 Q-CHAR 里的字符 → 词法错，照旧吃到收尾的引号（错误恢复）。omc 报在坏字符的下一列（吃掉它之后才失败：
+    // `'a`b'` 报 2:11，坏字符在 2:10；`'höhe'` 的 ö 首字节在 2:10，也报 2:11，PS 探针 Q1 / Q3）。
+    const bool ok = is_qchar(peek());
+    advance();
+    if (!ok && !bad) {
+      diags_.error(SourceLoc{file_, line_, col_, 1}, "invalid character in quoted identifier");
+      bad = true;
+    }
   }
   if (peek() == '\'') {
     advance();

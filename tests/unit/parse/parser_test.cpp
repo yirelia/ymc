@@ -362,4 +362,37 @@ YMC_TEST(error_positions_match_omc) {
   YMC_CHECK(first_error("model M\n  Real x;\nend M;\n") == P(0, 0));
 }
 
+// 任务卡 T-S3-08：下标只能跟在括号式后面（Modelica.g:1800-1806 v1.25.0 只有 `LPAR … RPAR array_subscripts?` 这一支带
+// 下标，且只一段）。位置 = omc 1.25.0 实跑（PS 探针 ut，2026-10-05）。
+YMC_TEST(subscript_only_after_parenthesized_expression) {
+  using P = std::pair<unsigned, unsigned>;
+  std::string msg;
+  // `{…}[i]`、`f(x)[i]`、`[…][i]`、`(e)[i][j]` 的第二段：omc 在那个 `[` 处报 "Missing token: SEMICOLON"
+  //（E1 2:18、E2 3:16、E3 2:24、E5 2:25）。
+  YMC_CHECK(first_error("model E1\n  Real y = {1, 2}[2];\nend E1;\n") == P(2, 18));
+  YMC_CHECK(first_error("model E2\n  function f input Real u; output Real y[2]; algorithm y := {u, u}; end f;\n"
+                        "  Real y = f(1)[1];\nend E2;\n") == P(3, 16));
+  YMC_CHECK(first_error("model E3\n  Real y = [1, 2; 3, 4][1, 2];\nend E3;\n") == P(2, 24));
+  YMC_CHECK(first_error("model E5\n  Real y = ({{1, 2}})[1][2];\nend E5;\n") == P(2, 25));
+  // 元组后跟下标：omc 报 "Tuple expression can not be subscripted."，从 '(' 起（E4 2:12）。
+  YMC_CHECK(first_error("model E4\n  Real y = (1, 2)[1];\nend E4;\n", &msg) == P(2, 12));
+  YMC_CHECK(msg.find("Tuple expression can not be subscripted") != std::string::npos);
+  // 括号式后的一段下标合法；`f(i).y[1]` 的下标属于 cref，照收。
+  YMC_CHECK(first_error("model M\n  Real y = ({1, 2})[2];\n  Real z = (fill(1, 2))[1];\n  Real w = f(1).y[1];\nend M;\n") ==
+            P(0, 0));
+}
+
+// 任务卡 T-S3-09：带引号标识符的字符集（Q-CHAR，BaseModelica_Lexer.g:430-436 v1.25.0；MLS 3.6 §2.3.1 只有 ASCII）。
+// 位置 = omc 1.25.0 实跑（PS 探针 ut，2026-10-05）：坏字符报在它的下一列，`''` 报在第二个引号。
+YMC_TEST(lexer_quoted_identifier_charset) {
+  using P = std::pair<unsigned, unsigned>;
+  YMC_CHECK(first_error("model Q1\n  Real 'h\xc3\xb6" "he' = 1;\nend Q1;\n") == P(2, 11));   // 非 ASCII
+  YMC_CHECK(first_error("model Q2\n  Real '' = 1;\nend Q2;\n") == P(2, 9));                 // 空
+  YMC_CHECK(first_error("model Q3\n  Real 'a`b' = 1;\nend Q3;\n") == P(2, 11));             // 反引号
+  YMC_CHECK(first_error("model Q4\n  Real 'a\tb' = 1;\nend Q4;\n") == P(2, 11));            // 制表符
+  // 合法：空格和 ASCII 标点；非法转义 `\q` omc 只告警、照收（M5）；字符串、注释里可以有非 ASCII。
+  YMC_CHECK(first_error("model M5\n  Real 'a b!#' = 1 \"h\xc3\xb6" "he\"; // h\xc3\xb6" "he\n  Real 'a\\qb' = 2;\nend M5;\n") ==
+            P(0, 0));
+}
+
 YMC_TEST_MAIN

@@ -202,18 +202,6 @@ class Flattener {
         if (s.ident == in_.intern("__OpenModelica_commandLineOptions"))
           set_unsupported("__OpenModelica_commandLineOptions annotation");
     flatten_class(root, {}, {}, /*protected_ctx=*/false, ModCtx{}, {});
-    // 标识符里的非 ASCII 字符：MLS §2.3.1 的 Q-CHAR 只有 ASCII，omc 的词法器报错（`'跳ねるボール'`：japaneselanguage/
-    // JBouncingBall；LX 探针 `Real 'höhe'`）。ymc 的词法器放行了（lexer 归用户，任务卡 T-S3-09）→ 这里先挡根类名与变量名。
-    {
-      auto non_ascii = [&](Symbol sy) {
-        for (unsigned char ch : in_.str(sy)) if (ch >= 0x80) return true;
-        return false;
-      };
-      bool bad = non_ascii(el.name);
-      for (const FlatVariable& v : result_.model.variables)
-        for (Symbol sy : v.name) bad = bad || non_ascii(sy);
-      if (bad) set_unsupported("non-ASCII identifier");
-    }
     // 连接集展开（DisjointSets 序：potential 相等、flow 求和、未连接 flow `=0`），整体插到模型自身方程之前
     //（NFFlatten.mo:2497）。顶层（outside）连接器的 flow 既进求和集（OUTSIDE 面）又留 INSIDE 单元素集 → 同时有
     // `-(c1.f + c2.f) = 0` 与 `c1.f = 0`（Connector.isEqual 含 face，NFConnector.mo:143-148）。
@@ -12549,14 +12537,8 @@ class Flattener {
       //（omc 的 typeSubscriptedExp + 化简；MD 探针 m1：`(2 * p)[1]` → `2.0 * p[1]`、`(fill(2, 3))[1]` → `2`、`(p[{3, 1,
       // 2}])[1]` → `p[3]`、`(if c then p else 2 * p)[1]`）。复合数组上的数组值修饰按元素分发时合成的就是这种式子。下标
       // 取尽各维 → 标量化取元素；只取了前几维的（数组字段的修饰）只做到基定型成数组字面量的情形。
-      // 书写的下标须跟在括号后面：`f(x)[1]`、`fill(t, 2)[1]`、`size(m)[1]` 是 omc 的语法错（SZ / AP / ES 探针），而 ymc 的
-      // 解析器把它与 `(f(x))[1]` 解析成同一个节点（parse_postfix，任务卡 T-S3-08）——分不清 → 基是调用 / 构造子 / 矩阵的
-      // 书写下标一律不收；运算式、if 式、范围、带下标的引用只可能来自带括号的写法。
-      if (!split && (I_.absyn.exps[base].kind == ExpKind::Call || I_.absyn.exps[base].kind == ExpKind::Matrix ||
-                     I_.absyn.exps[base].kind == ExpKind::Array)) {
-        set_unsupported("subscripted expression");
-        return lit_int(0);
-      }
+      // 书写的下标只可能来自带括号的写法（`(f(x))[1]`、`([1, 2; 3, 4])[1, 2]`；`f(x)[1]` 这类在解析器就是语法错，见
+      // Parser::parse_postfix），与合成的同路处理。
       std::vector<std::int64_t> idx;
       for (Id<Exp> sx : subs) {
         if (I_.absyn.exps[sx].kind != ExpKind::IntLit) { set_unsupported("subscripted expression"); return lit_int(0); }

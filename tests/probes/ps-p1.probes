@@ -1,0 +1,127 @@
+//// set: ps-p1 — 下标只能跟在括号式后面：构造子 / 矩阵 / 调用 / 元组 / 两段下标，绑定 / 算法 / if 式里，及合法的括号写法
+//// model: P10
+model P10
+Real a = time;
+Real y = {a, 1, 2}[2];
+end P10;
+//// model: P11
+model P11
+Real a = time;
+Real y = array(a, 1)[1];
+end P11;
+//// model: P12
+model P12
+Real a = time;
+Real y = ({a, 1, 2})[2];
+end P12;
+//// model: P13
+model P13
+Real a = time;
+Real y = (array(a, 1))[1];
+end P13;
+//// model: P14
+model P14
+Real y = [1, 2; 3, 4][1, 2];
+end P14;
+//// model: P15
+model P15
+Real y = ([1, 2; 3, 4])[1, 2];
+end P15;
+//// model: P16
+model P16
+Real y = ([1, 2; 3, 4])[2, 1];
+end P16;
+//// model: P17
+model P17
+Real y = fill(time, 2)[1];
+end P17;
+//// model: P18
+model P18
+Real y = (fill(time, 2))[1];
+end P18;
+//// model: P19
+model P19
+Real y = (fill(2, 3))[1];
+end P19;
+//// model: P110
+model P110
+Real x[3] = {1, 2, 3} * time;
+Real y = (2 * x)[2];
+end P110;
+//// model: P111
+model P111
+Real x[3] = {1, 2, 3} * time;
+Real y = (x)[2];
+end P111;
+//// model: P112
+model P112
+Real a = time;
+Real y = (a, 1)[1];
+end P112;
+//// model: P113
+model P113
+Real a = time;
+Real y = ()[1];
+end P113;
+//// model: P114
+model P114
+Real a = time;
+Real y = ({a, 1, 2})[2][1];
+end P114;
+//// model: P115
+model P115
+parameter Integer n = 3;
+Real y = (ones(n))[2];
+end P115;
+//// model: P116
+model P116
+Real y = (size(fill(1, 2, 3)))[2];
+end P116;
+//// model: P117
+model P117
+Real y = size(fill(1, 2, 3))[2];
+end P117;
+//// model: P118
+model P118
+Real x[2];
+equation
+x = {time, 2 * time};
+end P118;
+//// model: P119
+model P119
+function f input Real u; output Real y[2]; algorithm y := {u, 2 * u}; end f;
+Real y = (f(time))[2];
+end P119;
+//// model: P120
+model P120
+function f input Real u; output Real y[2]; algorithm y := {u, 2 * u}; end f;
+Real y = f(time)[2];
+end P120;
+//// model: P121
+model P121
+Real a = time;
+Real y;
+algorithm
+y := {a, 2}[1];
+end P121;
+//// model: P122
+model P122
+Real a = time;
+Real y;
+algorithm
+y := ({a, 2})[1];
+end P122;
+//// model: P123
+model P123
+Real a = time;
+Real y;
+equation
+y = if a > 0.5 then {a, 1}[1] else 0;
+end P123;
+//// model: P124
+model P124
+Real a = time;
+Real y;
+equation
+y = if a > 0.5 then ({a, 1})[1] else 0;
+end P124;

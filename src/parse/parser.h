@@ -87,7 +87,8 @@ class Parser {
   Id<Exp> parse_factor();                          // ^
   Id<Exp> parse_primary();
   Id<Exp> parse_cref_or_call();
-  Id<Exp> parse_postfix(Id<Exp> base);             // primary 后的 [subs] 链
+  Id<Exp> parse_postfix(Id<Exp> base);             // 括号式 (e) 后的 [subs]（只此一处合法）
+  Id<Exp> reject_tuple_subscript(Id<Exp> tup, SourceLoc lparen);   // 元组后跟下标 → 报错
   Id<Exp> parse_modification_expression();         // expression | break
   Id<Cref> parse_cref();
   std::vector<Id<Exp>> parse_array_subscripts();   // 从 '[' 开始

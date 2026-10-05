@@ -3902,9 +3902,8 @@ YMC_TEST(flatten_comments_in_functions_and_escapes) {
                            " comment\";\n  Real b = FCT1.f(a) + FCT1.h(a);\nequation\n  a = a \"eq\n  comment\";\nend FCT1;\n"));
   for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
            // 类注释里的转义 omc 再转义一遍（`"say \\\"hi\\\""`），不复刻。
-           {"model WCS4 \"say \\\"hi\\\"\"\n  Real y = time;\nend WCS4;\n", "class comment with escapes"},
-           // 标识符里的非 ASCII 字符：omc 的词法器报错（ymc 的词法器放行，任务卡 T-S3-09）。
-           {"model WCS5\n  Real 'h\xc3\xb6" "he' = time;\nend WCS5;\n", "non-ASCII identifier"}}) {
+           // （标识符里的非 ASCII 字符现由词法器拒绝，见 parser_test 的 lexer_quoted_identifier_charset。）
+           {"model WCS4 \"say \\\"hi\\\"\"\n  Real y = time;\nend WCS4;\n", "class comment with escapes"}}) {
     bool uns = false;
     const std::string out = flatten_src(src.c_str(), &uns);
     YMC_CHECK(uns);
@@ -4480,9 +4479,8 @@ YMC_TEST(flatten_array_modifiers_on_component_arrays) {
            // 切片长度与数组维不等：1.25.0 放行并打出 `a[3].k = p[3]`，不跟（MDS2）。
            {"model MDS2\n  model A\n    parameter Real k = 1;\n  end A;\n  parameter Real p[3] = {1, 2, 3};\n"
             "  A a[3](k = p[1:2]);\nend MDS2;\n", "composite array modifier shape/type"},
-           // 书写的 `(推导式)[k]`：omc 代入后不再化简（`/*Real*/(2) * time`）；且解析器分不清 `{…}[k]`（omc 语法错）
-           // 与带括号的写法（任务卡 T-S3-08）→ 基是构造子 / 调用 / 矩阵的书写下标不收（MDS3）。
-           {"model MDS3\n  Real a = ({i * time for i in 1:3})[2];\nend MDS3;\n", "subscripted expression"},
+           // 书写的 `(推导式)[k]`：omc 代入后不再化简（`/*Real*/(2) * time`，MD 探针 m4），不复刻（MDS3）。
+           {"model MDS3\n  Real a = ({i * time for i in 1:3})[2];\nend MDS3;\n", "subscripted comprehension"},
            // 参差的带绑定非参数数组：omc 内部错（NFSubscript.toDAEExp failed on unknown subscript），不复刻（MDS4）。
            {"model MDS4\n  model X\n    parameter Integer n = 2;\n    Real x[n] = fill(time, n);\n  end X;\n"
             "  X xs[2](n = {1, 3});\nend MDS4;\n", "ragged component array binding"}}) {

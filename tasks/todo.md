@@ -1443,10 +1443,27 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           不一致 9（多是 `connector RealInput = input MyReal`，MyReal 是 extends Real 的长 type 类，归 extends builtin type
           那簇）、inner/outer 类 6、partial 5（4 例 omc 报错；RedeclareClass2 的 partial 类被 redeclare 换掉，归 redeclare）、
           短类修饰作用域 5（短类定义在外层模型里）、类修饰 / redeclare 若干。
-    - [ ] 任务卡 T-S3-08（用户，parser）：表达式后的下标只能跟在括号式后面——`{a, b}[2]`、`array(a, b)[1]`、`f(x)[1]`
+    - [x] (61c) parser + lexer：任务卡 T-S3-08 / T-S3-09（2026-10-05，用户暂不手写核心，Claude 实现）：
+          **T-S3-08**：表达式后的下标只能跟在括号式后面（Modelica.g:1800-1806 只有 `LPAR … RPAR array_subscripts?` 一支，且
+          只一段）——数组构造 / 矩阵 / 函数调用后不再调 parse_postfix，`[` 留给外层报缺分号（位置与 omc 的 "Missing token:
+          SEMICOLON" 相同）；parse_postfix 由 while 改 if（`(e)[1][2]` 也是语法错）；元组后跟下标报 "Tuple expression can
+          not be subscripted."（从 '(' 起）。此前 `{a, 1}[1]`、`array(a, 1)[1]` 在绑定 / 算法 / if 式里被静默收下
+          （ACCEPTS-INVALID 4 例，PS 探针 p1）。flatten 那道"基是调用 / 构造子 / 矩阵的书写下标不收"的挡板随之撤掉：
+          `(fill(2, 3))[1]`、`([1, 2; 3, 4])[2, 1]`、`(ones(n))[2]`、`(size(…))[2]`、`(f(time))[2]` 都与 1.25.0 一致。
+          **T-S3-09**：Q-IDENT 按 QCHAR 收紧（BaseModelica_Lexer.g:430-436）：非 ASCII、反引号、制表符 → 词法错，报在坏
+          字符的下一列（与 omc 同）；`''` → 报在第二个引号。**卡里第 2 步写错了**：非法转义 `'a\qb'` omc 1.25.0 只告警
+          （"Lexer treating \ as \\"）照收，不是错误（PS 探针 L14）——实现照 omc，卡上已注明。flatten 的
+          `non-ASCII identifier` 挡板撤掉。
+          新探针 49 个（ps-p1 25 / ps-l1 14 / 单测原文 10）：在 61b 上 ACCEPTS-INVALID 10、SKIP 7，现 PASS 25 / BOTH-REJECT 24，
+          无 FAIL / ACCEPTS-INVALID / SKIP；旧探针 md-m4 +5、sz-s2 +1 PASS（撤掉的挡板）。
+          → scodeinst PASS 523 不变，FAIL 25→26：SubscriptedExp2（status incorrect，两边都在解析期拒绝、文案相同，差在 omc 的
+            错误外框，记入分歧账本，同 ConnectAlgorithm）；整个 testsuite PASS 1378 不变（FAIL 0，ACCEPTS-INVALID 3 不变；
+            SubscriptedExp2、JBouncingBall SKIP → BOTH-REJECT）；parse sweep 只这两例 OK → ERR，语法错位置一致率 23/23；
+            +2 单测（parser_test 13→15）；探针 6714→6763。
+    - [x] 任务卡 T-S3-08（Claude 实现于 (61c)，parser）：表达式后的下标只能跟在括号式后面——`{a, b}[2]`、`array(a, b)[1]`、`f(x)[1]`
           在 omc 1.25.0 是语法错（Modelica.g:1800 只有 `LPAR … RPAR array_subscripts?` 这一支），ymc 解析器 5 处多调了
           parse_postfix → `docs/tasks/T-S3-08-subscript-after-paren-only.md`。
-    - [ ] 任务卡 T-S3-09（用户，lexer）：带引号标识符的字符集按 OMC 词法收紧——`'höhe'` 这类引号里带非 ASCII 字符的
+    - [x] 任务卡 T-S3-09（Claude 实现于 (61c)，lexer）：带引号标识符的字符集按 OMC 词法收紧——`'höhe'` 这类引号里带非 ASCII 字符的
           标识符 omc 报词法错（BaseModelica_Lexer.g:430-436 的 QIDENT / QCHAR 只有 ASCII），ymc 的 lex_qident 任何字节都收
           → `docs/tasks/T-S3-09-qident-charset.md`。flatten 里有一道临时挡板（`non-ASCII identifier`）。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
