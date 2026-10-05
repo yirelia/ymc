@@ -109,6 +109,7 @@ struct FlatFuncParam {
   std::vector<Symbol> type_path;                 // 记录类型：按类型名打印（`input R r`）；空 = 内建类型（ty）
   std::uint32_t record_def = 0xFFFFFFFFu;        // 记录类型的 SCode 类元素（Id<SElement>.raw），调用处实参匹配用；不打印
   Symbol comment;                                // 字符串注释（`input Real x "the x";`，dumpVar 照打）
+  std::vector<FlatVarAttr> attributes;           // 属性（`input Real v(unit = "V")`，dumpVar 照打，名字后、绑定前；final 不打）
 };
 struct FlatFunction {
   std::vector<Symbol> name;                      // 压平名（点分：顶层 f；包 P.f；模型内嵌按实例路径 M.a.f）

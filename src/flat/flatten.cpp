@@ -2130,7 +2130,12 @@ class Flattener {
           }
           continue;   // 字面量假 → 丢弃该分支
         }
-        if (!keep_param && !cond_is_runtime(ce)) { set_unsupported("if condition not evaluable"); return; }
+        if (!keep_param && !cond_is_runtime(ce)) {
+          set_unsupported("if condition not evaluable");
+          for (Symbol p : prefix) result_.unsupported_detail += std::string(in_.str(p)) + ".";   // 子原因：哪个实例里
+          for (std::uint32_t d : used) result_.unsupported_detail += " " + std::string(in_.str(I_.scode.elems[Id<SElement>::from_index(d)].name));
+          return;
+        }
         std::vector<Id<FlatEquation>> body_ids = collect_if_body(br.body, enclosing, prefix, psubs, is_initial);
         if (result_.unsupported) return;
         out_branches.push_back(FlatEqBranch{ce, std::move(body_ids)});
@@ -6413,6 +6418,128 @@ class Flattener {
     return false;
   }
 
+  // 函数变量的类型是短类链（`type V = Real(unit = "V")`、`SI.Voltage`）：沿链走到内建标量类型，收各层的类型修饰（外层
+  // 在前，各带短类定义处的作用域，值在那里求）。链上带维 / 前缀 / 绑定、不是 type、走到枚举 / 记录 / 解析不了 → false。
+  bool fn_derived_scalar(const SElement& c, const ScodeScope& scope, TypeKind& tk,
+                         std::vector<std::pair<Id<SMod>, ScodeScope>>& chain) {
+    std::vector<Symbol> path = c.type.path;
+    bool lead = c.type.leading_dot;
+    ScodeScope sc = scope;
+    for (int guard = 0; guard < 32; ++guard) {
+      if (!lead && builtin_scalar_type_kind(path, tk)) return true;
+      ScodeScope ds;
+      const Id<SElement> e = resolve_class_path(path, lead, sc, ds);
+      if (!e.is_valid()) return false;
+      const SElement& el = I_.scode.elems[e];
+      if (el.kind != SElementKind::Class || el.restriction != SRestriction::Type || el.def.kind != SClassDefKind::Derived)
+        return false;
+      const SAttributes& da = el.def.derived_attr;
+      if (!da.dims.empty() || !el.def.derived_type.dims.empty() || da.var != SVariability::Var ||
+          da.dir != SDirection::Bidir || da.ct != SConnectorType::Potential)
+        return false;
+      if (const Id<SMod> dm = el.def.derived_mod; dm.is_valid()) {
+        if (I_.scode.mods[dm].binding.is_valid()) return false;
+        if (!I_.scode.mods[dm].subs.empty()) chain.push_back({dm, ds});
+      }
+      path = el.def.derived_type.path;
+      lead = el.def.derived_type.leading_dot;
+      sc = ds;
+    }
+    return false;
+  }
+  // 标量值按整数维铺成嵌套数组字面量（`{"V", "V"}`、`{{…}, {…}}`）；mk 每次造一个新的元素节点。
+  template <class Mk>
+  Id<Expr> fill_literal(const Mk& mk, const std::vector<Dimension>& ds, std::size_t k) {
+    if (k == ds.size()) return mk();
+    Expr arr;
+    arr.kind = ExprKind::Array;
+    for (std::int64_t i = 0; i < ds[k].size; ++i) arr.args.push_back(fill_literal(mk, ds, k + 1));
+    const Type et = arr.args.empty() ? Type::unknown() : result_.model.exprs[arr.args[0]].ty;
+    arr.ty = Type::array_of(et.element_type(), std::vector<Dimension>(ds.begin() + static_cast<std::ptrdiff_t>(k), ds.end()));
+    return add(std::move(arr));
+  }
+  // 函数变量的属性（DAEDumpTpl dumpVar：`input Real v(unit = "V", min = 0.0)`，FV 探针 f1-f3）：声明修饰的属性子修饰（函数
+  // 语境定型，可引用别的形参 `start = a`）在前、短类链的类型修饰在后（外层在前）；按内建类型的属性表顺序，同名取先到的；
+  // final 不打（f23 / f15）。数组变量：类型修饰的值按维铺开（整数维 → 嵌套数组字面量 `{"V", "V"}`；其余 →
+  // `fill("V", n)` / `fill("V", size(v, 1))`，维取类型里的书写式 / size，f20 / f30 / f32）；声明修饰带 each 的照原样标量
+  //（f21），不带 each 的须是数组值（f39）。属性名不对（omc 报错 f38）、值求不出 / 类型不符 → false。
+  bool fn_var_attributes(const SElement& c, const Type ty, const std::vector<std::pair<Id<SMod>, ScodeScope>>& chain,
+                         std::vector<FlatVarAttr>& out) {
+    const TypeKind tk = ty.element_type().kind;
+    const std::vector<AttrSpec>& table = attr_table(tk);
+    auto spec_of = [&](Symbol n) -> const AttrSpec* {
+      for (const AttrSpec& a : table) if (n == in_.intern(a.name)) return &a;
+      return nullptr;
+    };
+    auto vk_type = [&](AttrVK vk) -> std::optional<Type> {
+      switch (vk) {
+        case AttrVK::Str: return Type::string();
+        case AttrVK::Real: return Type::real();
+        case AttrVK::Int: return Type::integer();
+        case AttrVK::Bool: return Type::boolean();
+        default: return std::nullopt;   // stateSelect / 枚举界：未核实
+      }
+    };
+    const Id<SMod> own = c.mod;
+    if (own.is_valid())
+      for (const SSubMod& s : I_.scode.mods[own].subs)
+        if (!spec_of(s.ident)) return false;
+    for (const AttrSpec& a : table) {
+      const Symbol an = in_.intern(a.name);
+      Id<Expr> v;
+      bool seen = false;
+      if (own.is_valid())
+        for (const SSubMod& s : I_.scode.mods[own].subs) {
+          if (s.ident != an || seen) continue;
+          seen = true;
+          const SMod sm = I_.scode.mods[s.mod];   // 拷贝（下面往 exprs add）
+          const std::optional<Type> st = vk_type(a.vk);
+          if (!st || sm.kind != SModKind::Mod || !sm.subs.empty() || !sm.binding.is_valid()) return false;
+          const Type target = (ty.is_array() && !sm.is_each) ? Type::array_of(*st, ty.dims) : *st;
+          v = fn_exp(sm.binding, target);
+          if (result_.unsupported || !v.is_valid()) return false;
+        }
+      for (std::size_t k = 0; k < chain.size() && !seen; ++k)
+        for (const SSubMod& s : I_.scode.mods[chain[k].first].subs) {
+          if (s.ident != an || seen) continue;
+          seen = true;
+          const SMod sm = I_.scode.mods[s.mod];
+          const std::optional<Type> st = vk_type(a.vk);
+          if (!st || sm.kind != SModKind::Mod || sm.is_each || !sm.subs.empty() || !sm.binding.is_valid()) return false;
+          const std::optional<CVal> cv = eval_scode(sm.binding, chain[k].second, 0, /*allow_param=*/false);
+          const std::optional<CVal> ce = cv ? coerce_to_kind(*cv, st->kind) : std::nullopt;
+          if (!ce) return false;
+          auto mk = [&]() { return cval_expr(*ce, st->kind); };
+          if (!ty.is_array()) {
+            v = mk();
+          } else {
+            bool all_int = true;
+            for (const Dimension& d : ty.dims) all_int = all_int && d.kind == DimKind::Integer;
+            if (all_int) {
+              v = fill_literal(mk, ty.dims, 0);
+            } else {
+              Expr self;
+              self.kind = ExprKind::Cref;
+              self.cref.resolved_node = kFnLocal;
+              self.ty = ty;
+              self.cref.parts.push_back({c.name, {}});
+              const Id<Expr> sid = add(std::move(self));
+              Expr f;
+              f.kind = ExprKind::Call;
+              f.call_name = {in_.intern("fill")};
+              f.args.push_back(mk());
+              for (std::size_t d = 0; d < ty.dims.size(); ++d) f.args.push_back(fn_end_value(sid, ty, d, c.name));
+              if (result_.unsupported) return false;
+              f.ty = Type::array_of(*st, ty.dims);
+              v = add(std::move(f));
+            }
+          }
+        }
+      if (seen) out.push_back({an, v});
+    }
+    return true;
+  }
+
   // 函数体发射语境（InstContext FUNCTION）：进入时存下并清空模型语境的状态（迭代变量、声明作用域、常量前缀、推导式迭代
   // 变量、解释器环境），退出时恢复。fn_scope_ 非空 = 正在发射函数体。
   struct FnCtxGuard {
@@ -7574,15 +7701,16 @@ class Flattener {
     }
     // 形参类型：先按元素类型登记全部名字（维 / 绑定可互引），再按声明序算维（`Real z[n]`、`Real y[size(x, 1)]`）。
     std::unordered_map<std::uint32_t, std::vector<Symbol>> rec_paths;   // 记录类型形参 / 局部 → 记录压平名
+    std::unordered_map<std::uint32_t, std::vector<std::pair<Id<SMod>, ScodeScope>>> type_mods;   // 短类链的类型修饰
     for (Id<SElement> eid : all) {
       const SElement& c = I_.scode.elems[eid];
       if (c.attr.ct != SConnectorType::Potential || c.prefixes.io != SInnerOuter::None)
         return fn_fail<std::optional<std::size_t>>("flow / stream / inner / outer function variable");
       TypeKind tk;
-      if (builtin_scalar_type_kind(c.type.path, tk)) {
-        if (c.mod.is_valid() && !I_.scode.mods[c.mod].subs.empty())   // 属性修饰（打印形态未核实）
-          return fn_fail<std::optional<std::size_t>>("attribute modifier on function variable");
+      std::vector<std::pair<Id<SMod>, ScodeScope>> chain;
+      if (builtin_scalar_type_kind(c.type.path, tk) || fn_derived_scalar(c, fr.fscope, tk, chain)) {
         func_params_[c.name.id] = Type::of(tk);
+        type_mods[c.name.id] = std::move(chain);
         continue;
       }
       // 记录类型（FunctionRecordArg1 `input R r`、FunctionCompOrder4 `R r(x = lx)`）：按类型名打印，构造函数块随之发射
@@ -7627,6 +7755,15 @@ class Flattener {
       }
       func_params_[c.name.id] = Type::array_of(func_params_[c.name.id], std::move(ds));
       fn_dim_exps_[c.name.id] = std::move(dexps);
+    }
+    // 属性（见 fn_var_attributes）：维定好之后算（数组的铺开要用维）。
+    std::unordered_map<std::uint32_t, std::vector<FlatVarAttr>> attrs;
+    for (Id<SElement> eid : all) {
+      const SElement& c = I_.scode.elems[eid];
+      const auto tm = type_mods.find(c.name.id);
+      if (tm == type_mods.end()) continue;   // 记录类型
+      if (!fn_var_attributes(c, func_params_[c.name.id], tm->second, attrs[c.name.id]))
+        return fn_fail<std::optional<std::size_t>>("attribute modifier on function variable");
     }
     // 绑定：输入 = 别名默认（优先）或声明默认；输出 / 局部 = 声明绑定。
     std::unordered_map<std::uint32_t, Id<Expr>> binds;
@@ -7710,6 +7847,7 @@ class Flattener {
         else if (c.attr.var == SVariability::Discrete) p.var_kind = FlatVarKind::Discrete;
       }
       p.binding = binds[c.name.id];
+      p.attributes = attrs[c.name.id];
       if (c.cmt.str.is_valid()) p.comment = c.cmt.str;   // FC 探针
       if (const auto rp = rec_paths.find(c.name.id); rp != rec_paths.end()) {
         p.type_path = rp->second;
@@ -9264,9 +9402,15 @@ class Flattener {
         r.ty = allbool ? Type::boolean() : Type::real();
         return add(std::move(r));
       }
-      default:
+      default: {
         set_unsupported("expression kind");
+        static constexpr const char* kNames[] = {"IntLit", "RealLit", "BoolLit", "StringLit", "CrefExp", "Binary", "Unary",
+                                                 "Call", "Array", "Matrix", "Tuple", "Range", "IfExp", "Reduction", "Colon",
+                                                 "End"};
+        const auto k = static_cast<std::size_t>(e.kind);
+        if (result_.unsupported_detail.empty() && k < std::size(kNames)) result_.unsupported_detail = kNames[k];   // 子原因
         return lit_int(0);   // 占位，driver 会因 unsupported 退 66
+      }
     }
   }
 

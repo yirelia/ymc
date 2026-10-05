@@ -1,0 +1,37 @@
+//// set: fv-ut — 函数变量属性（单测原文）
+//// model: FVS1
+function f
+  input Real v(foo = 1);
+  output Real y;
+algorithm
+  y := 2 * v;
+end f;
+model FVS1
+  Real x = f(time);
+end FVS1;
+//// model: FVT1
+package SI
+  type Voltage = Real(final quantity = "ElectricPotential", final unit = "V");
+end SI;
+type W = SI.Voltage(displayUnit = "kV", min = 0);
+function f
+  input Integer n;
+  input W v[n](each start = 1);
+  input SI.Voltage u[:];
+  input Real a(nominal = 2) = 3;
+  output SI.Voltage y[2];
+protected
+  SI.Voltage t = 2 * a;
+algorithm
+  y := {sum(v), sum(u) + t};
+end f;
+function g
+  input Real a;
+  output Real z(start = a);
+algorithm
+  z := 2 * a;
+end g;
+model FVT1
+  Real y[2] = f(2, {time, 1}, {time});
+  Real z = g(time);
+end FVT1;

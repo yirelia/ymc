@@ -1,0 +1,110 @@
+//// set: fv-f3 — 函数变量属性：表达式维的 fill、二维未知维、多层短类 + 声明修饰、属性名不对（omc 报错）、数组值属性
+//// model: F30
+type V = Real(unit = "V");
+function f
+input Integer n;
+input V v[n];
+output Real y;
+algorithm
+y := sum(v);
+end f;
+model F30
+Real x = f(2, {time, 1});
+end F30;
+//// model: F31
+type V = Real(unit = "V");
+function f
+input V v[:, :];
+output Real y;
+algorithm
+y := sum(v);
+end f;
+model F31
+Real x = f({{time, 1}});
+end F31;
+//// model: F32
+type V = Real(unit = "V");
+function f
+input Real x[:];
+output V y[size(x, 1)];
+algorithm
+y := x;
+end f;
+model F32
+Real z[2] = f({time, 1});
+end F32;
+//// model: F33
+type V = Real;
+function f
+input V v;
+output Real y;
+algorithm
+y := 2 * v;
+end f;
+model F33
+Real x = f(time);
+end F33;
+//// model: F34
+type N = Integer(min = 1, max = 10);
+function f
+input N n;
+output Real y;
+algorithm
+y := 2 * n;
+end f;
+model F34
+parameter Integer k = 3;
+Real x = f(k) * time;
+end F34;
+//// model: F35
+type V = Real(unit = "V", start = 1);
+function f
+input V v;
+output Real y;
+algorithm
+y := 2 * v;
+end f;
+model F35
+Real x = f(time);
+end F35;
+//// model: F36
+type V = Real(unit = "V");
+function f
+input Real a;
+output V y = 2 * a;
+end f;
+model F36
+Real x = f(time);
+end F36;
+//// model: F37
+type V = Real(unit = "V");
+type W = V(displayUnit = "kV");
+function f
+input W v(min = 0);
+output Real y;
+algorithm
+y := 2 * v;
+end f;
+model F37
+Real x = f(time);
+end F37;
+//// model: F38
+function f
+input Real v(foo = 1);
+output Real y;
+algorithm
+y := 2 * v;
+end f;
+model F38
+Real x = f(time);
+end F38;
+//// model: F39
+function f
+input Real v[2](unit = {"V", "A"});
+output Real y;
+algorithm
+y := sum(v);
+end f;
+model F39
+Real x = f({time, 1});
+end F39;

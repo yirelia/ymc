@@ -85,3 +85,10 @@ on composite"的 103 个（Machines / PowerConverters / FundamentalWave / QuasiS
 条件、维、前缀，78 个），同桶补齐后再往下露出：if 方程条件求不出（28，电机的 useThermalPort 一类）、函数变量类型（15）、短类
 受限类型不符（11）、组件修饰里的重声明（8）、ExternalObject（6）等——这一层暂无整模型通过。SKIP 前几类：Clock 72、Evaluate 注解
 50、函数变量类型 47、短类受限类型不符 37、ExternalObject 30、if 条件求不出 28、extends 内建类型 28。
+
+## 2026-10-06 加宽 61j 之后：PASS 54 → 61
+
+函数变量的类型是短类链（`input SI.Voltage v`）/ 带属性修饰之后：Blocks.Examples.Noise.Densities、Electrical.Analog 的
+AmplifierWithOpAmpDetailed、Mechanics 的两个 EddyCurrentBrake 与三个 LossyGearDemo 通过；FAIL / ACCEPTS-INVALID / CRASH 0。原
+"函数变量类型"一类露出的下一层主要是函数体里的数组推导式（`{(k - 1)*2*pi/m for k in 1:m}`，Polyphase.Functions.
+symmetricOrientation 等，"expression kind [Reduction]" 34 个）。

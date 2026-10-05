@@ -134,6 +134,7 @@ class FlatDumper {
     }
     out_ += ' ';
     out_ += in_.str(p.name);
+    attributes(p.attributes);
     if (p.binding.is_valid()) { out_ += " = "; expr(p.binding); }
     comment(p.comment, " ");
     out_ += ";\n";

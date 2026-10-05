@@ -1570,6 +1570,16 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           slice 602→608 例 PASS 531→538（+RedeclareMod3-6、UnboundParameter7、redeclare6）；scodeinst PASS 531→538 / FAIL
           27→28（+PropagateRedeclareMod1：与 1.25.0 一致、文件是新版行为，入账）；整个 testsuite 实跑 PASS 1436→1452 / FAIL 0；
           MSL 示例 49→54；探针 6972→7144（ec-* 5 集 92 个、rf-* 6 集 80 个）；单测 243→245。
+    - [x] (61j) flat：函数变量的类型是短类链 / 带属性修饰（2026-10-06）：emit_function 此前只接内建类型名、且不许属性修饰
+          （"function variable type (enumeration / derived / unresolved)" MSL 47 个、"attribute modifier on function variable"）。
+          现沿短类链（type 受限、无维 / 前缀 / 绑定）走到内建标量，收各层类型修饰；属性按内建类型的属性表顺序打在名字后、
+          绑定前（DAEDumpTpl dumpVar）：声明修饰的属性子修饰在前（函数语境定型，可引用别的形参 `start = a`）、类型链的在后（在
+          短类定义处求值），final 不打。数组变量的类型修饰按维铺开：整数维 → 数组字面量 `{"V", "V"}`，表达式维 / `:` 维 →
+          `fill("V", n)` / `fill("V", size(v, 1))`；带 each 的声明修饰照原样标量。属性名不对（omc 报错）→ SKIP。枚举类型形参未做。
+          另：if 方程条件求不出时 SKIP 子原因带上实例前缀（MSL 电机 `frictionParameters.PRef` 一类，下一桶）。
+          scodeinst 不变（538 / FAIL 28 在账）；整个 testsuite 实跑 PASS 1452→1454（Buildings 的
+          DewPointTemperatureDerivativeCheck_amb、msl22 的 LossyGear1）/ FAIL 0；MSL 示例 54→61（Noise.Densities、
+          AmplifierWithOpAmpDetailed、两个 EddyCurrentBrake、三个 LossyGearDemo）；探针 7144→7180（fv-* 4 集 36 个）；单测 245→246。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

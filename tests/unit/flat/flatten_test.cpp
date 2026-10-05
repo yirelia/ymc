@@ -4907,6 +4907,34 @@ YMC_TEST(inst_redeclare_forms_and_parent_evaluate) {
   }
 }
 
+YMC_TEST(flatten_function_variable_attributes) {
+  // 函数变量的类型是短类链 / 带属性修饰：属性按内建类型的属性表顺序打（声明修饰的在前、类型链的在后，final 不打）；数组变量
+  // 的类型修饰按维铺开（整数维 → 数组字面量，`n` 维 → `fill("V", n)`，`:` 维 → `fill("V", size(u, 1))`），带 each 的声明
+  // 修饰照原样标量；属性值可引用别的形参（`start = a`）。期望 = omc 1.25.0 实跑 FVT1（2026-10-06）。
+  YMC_CHECK_EQ(flatten_src("package SI\n  type Voltage = Real(final quantity = \"ElectricPotential\", final unit = \"V\");\n"
+                           "end SI;\ntype W = SI.Voltage(displayUnit = \"kV\", min = 0);\nfunction f\n  input Integer n;\n"
+                           "  input W v[n](each start = 1);\n  input SI.Voltage u[:];\n  input Real a(nominal = 2) = 3;\n"
+                           "  output SI.Voltage y[2];\nprotected\n  SI.Voltage t = 2 * a;\nalgorithm\n"
+                           "  y := {sum(v), sum(u) + t};\nend f;\nfunction g\n  input Real a;\n  output Real z(start = a);\n"
+                           "algorithm\n  z := 2 * a;\nend g;\nmodel FVT1\n  Real y[2] = f(2, {time, 1}, {time});\n"
+                           "  Real z = g(time);\nend FVT1;\n"),
+               std::string("function f\n  input Integer n;\n"
+                           "  input Real[n] v(quantity = fill(\"ElectricPotential\", n), unit = fill(\"V\", n), displayUnit = fill(\"kV\", n), min = fill(0.0, n), start = 1.0);\n"
+                           "  input Real[:] u(quantity = fill(\"ElectricPotential\", size(u, 1)), unit = fill(\"V\", size(u, 1)));\n"
+                           "  input Real a(nominal = 2.0) = 3.0;\n"
+                           "  output Real[2] y(quantity = {\"ElectricPotential\", \"ElectricPotential\"}, unit = {\"V\", \"V\"});\n"
+                           "  protected Real t(quantity = \"ElectricPotential\", unit = \"V\") = 2.0 * a;\nalgorithm\n"
+                           "  y := {sum(v), sum(u) + t};\nend f;\n\nfunction g\n  input Real a;\n  output Real z(start = a);\n"
+                           "algorithm\n  z := 2.0 * a;\nend g;\n\nclass FVT1\n  Real y[1];\n  Real y[2];\n  Real z = g(time);\n"
+                           "equation\n  y = f(2, {time, 1.0}, {time}, 3.0);\nend FVT1;\n"));
+  // 属性名不对：omc "Modified element foo not found in class Real"（FVS1）。
+  bool uns = false;
+  YMC_CHECK_EQ(flatten_src("function f\n  input Real v(foo = 1);\n  output Real y;\nalgorithm\n  y := 2 * v;\nend f;\n"
+                           "model FVS1\n  Real x = f(time);\nend FVS1;\n", &uns),
+               "<unsupported:function: f>");
+  YMC_CHECK(uns);
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

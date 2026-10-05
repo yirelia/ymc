@@ -1,0 +1,134 @@
+//// set: fv-f2 — 函数变量属性：数组铺开（已知维 / 未知维 / 二维）、each、引用别的形参、输出 start、局部绑定、Boolean / String 短类
+//// model: F20
+type V = Real(unit = "V");
+function f
+input V v[:];
+output Real y;
+algorithm
+y := sum(v);
+end f;
+model F20
+Real x = f({time, 1});
+end F20;
+//// model: F21
+type V = Real(unit = "V");
+function f
+input Real v[2](each unit = "V");
+output Real y;
+algorithm
+y := sum(v);
+end f;
+model F21
+Real x = f({time, 1});
+end F21;
+//// model: F22
+function f
+input Real a;
+output Real y(start = a);
+algorithm
+y := 2 * a;
+end f;
+model F22
+Real x = f(time);
+end F22;
+//// model: F23
+function f
+input Real a(final min = 0);
+output Real y;
+algorithm
+y := 2 * a;
+end f;
+model F23
+Real x = f(time);
+end F23;
+//// model: F24
+type V = Real(unit = "V");
+function f
+input Real a;
+output Real y;
+protected
+V t = 2 * a;
+algorithm
+y := t;
+end f;
+model F24
+Real x = f(time);
+end F24;
+//// model: F25
+type V = Real(final unit = "V", displayUnit = "kV");
+function f
+input V a;
+output Real y;
+algorithm
+y := a;
+end f;
+model F25
+Real x = f(time);
+end F25;
+//// model: F26
+type V = Real(unit = "V");
+function f
+input V v[2, 2];
+output Real y;
+algorithm
+y := sum(v);
+end f;
+model F26
+Real x = f({{time, 1}, {2, 3}});
+end F26;
+//// model: F27
+function f
+input Real a(nominal = 2);
+output Real y(min = -1, max = 1);
+algorithm
+y := sin(a);
+end f;
+model F27
+Real x = f(time);
+end F27;
+//// model: F28
+type V = Real(unit = "V");
+function f
+input Real a;
+output V y[2];
+algorithm
+y := {a, a};
+end f;
+model F28
+Real x[2] = f(time);
+end F28;
+//// model: F29
+type B = Boolean;
+function f
+input B b;
+output Real y;
+algorithm
+y := if b then 1 else 0;
+end f;
+model F29
+Boolean c = time > 1;
+Real x = f(c);
+end F29;
+//// model: F210
+type S = String;
+function f
+input S s;
+output Real y;
+algorithm
+y := 1;
+end f;
+model F210
+Real x = f("a");
+end F210;
+//// model: F211
+type V = Real(unit = "V");
+function f
+input V v;
+input Integer n;
+output Real y;
+algorithm
+y := n * v;
+end f;
+model F211
+Real x = f(time, 2);
+end F211;

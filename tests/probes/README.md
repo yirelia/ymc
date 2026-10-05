@@ -263,3 +263,7 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `rf-ev` | 12 | 外层组件的 Evaluate = true 传给子树里的参数（parentEval） |
 | `rf-rb` | 6 | 记录整体绑定拆出的字段绑定不是修饰层：final 字段不触发 final 冲突 |
 | `rf-ut` | 4 | 重声明形态 + parentEval + 前缀冲突 / 重复修饰（单测原文） |
+| `fv-f1` | 12 | 函数变量的类型是短类链 / 带属性修饰：属性的打印顺序、final 不打、局部、Integer 短类、枚举形参（未做） |
+| `fv-f2` | 12 | 函数变量属性：数组铺开（已知维 / 未知维 / 二维）、each、引用别的形参、输出 start、局部绑定、Boolean / String 短类 |
+| `fv-f3` | 10 | 函数变量属性：表达式维的 fill、二维未知维、多层短类 + 声明修饰、属性名不对（omc 报错）、数组值属性 |
+| `fv-ut` | 2 | 函数变量属性（单测原文） |

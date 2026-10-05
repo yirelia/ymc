@@ -1,0 +1,137 @@
+//// set: fv-f1 — 函数变量的类型是短类链 / 带属性修饰：属性的打印顺序、final 不打、局部、Integer 短类、枚举形参（未做）
+//// model: F10
+type V = Real(unit = "V");
+function f
+input V v;
+output Real y;
+algorithm
+y := 2 * v;
+end f;
+model F10
+Real x = f(time);
+end F10;
+//// model: F11
+type V = Real(unit = "V", quantity = "Voltage", min = -10);
+function f
+input V v;
+output V y;
+algorithm
+y := 2 * v;
+end f;
+model F11
+Real x = f(time);
+end F11;
+//// model: F12
+function f
+input Real v(min = 0);
+output Real y(unit = "W");
+algorithm
+y := 2 * v;
+end f;
+model F12
+Real x = f(time);
+end F12;
+//// model: F13
+type V = Real(unit = "V");
+function f
+input V v[2];
+output Real y;
+algorithm
+y := v[1] + v[2];
+end f;
+model F13
+Real x = f({time, 1});
+end F13;
+//// model: F14
+type V = Real(unit = "V");
+function f
+input Real v;
+output Real y;
+protected
+V t;
+algorithm
+t := v;
+y := 2 * t;
+end f;
+model F14
+Real x = f(time);
+end F14;
+//// model: F15
+package SI
+type Voltage = Real(final quantity = "ElectricPotential", final unit = "V");
+end SI;
+function f
+input SI.Voltage v;
+output SI.Voltage y;
+algorithm
+y := 2 * v;
+end f;
+model F15
+Real x = f(time);
+end F15;
+//// model: F16
+type V = Real(unit = "V");
+type V2 = V(min = 0);
+function f
+input V2 v;
+output Real y;
+algorithm
+y := 2 * v;
+end f;
+model F16
+Real x = f(time);
+end F16;
+//// model: F17
+type I = Integer(min = 0);
+function f
+input I n;
+output Real y;
+algorithm
+y := 2 * n;
+end f;
+model F17
+Real x = f(3);
+end F17;
+//// model: F18
+type V = Real(unit = "V");
+function f
+input V v = 3;
+output Real y;
+algorithm
+y := 2 * v;
+end f;
+model F18
+Real x = f();
+end F18;
+//// model: F19
+function f
+input Real v(start = 1, fixed = true);
+output Real y;
+algorithm
+y := 2 * v;
+end f;
+model F19
+Real x = f(time);
+end F19;
+//// model: F110
+type E = enumeration(a, b);
+function f
+input E e;
+output Real y;
+algorithm
+y := if e == E.a then 1 else 2;
+end f;
+model F110
+Real x = f(E.b);
+end F110;
+//// model: F111
+type V = Real(unit = "V");
+function f
+input V v(min = 0);
+output Real y;
+algorithm
+y := 2 * v;
+end f;
+model F111
+Real x = f(time);
+end F111;
