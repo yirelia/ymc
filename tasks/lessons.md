@@ -294,3 +294,14 @@
   如 array_shapes_），收尾只做与实例无关的组合。(2) 新开一条推迟处理的路，探针矩阵加一列"同一个类的两个实例取不同
   修饰"（`A a1(M = 3), a2(M = 1)`、`A a[2](M = {2, 3})`）。(3) 结构标记的时机要对照 omc 是在实例化期（updateImplicit
   VariabilityEq、markExpSize）还是定型期标的——放错阶段，结构别名的连带就错（这次 AO1 先 FAIL 了一次）。
+
+## 2026-10-05 — 放开一条 SKIP 之前，先看它挡着的 omc 报错用例（第三次"放开 SKIP 露出后面的错"）
+- 模式：短类别名到长类此前整条 SKIP（"short class aliasing composite"），顺带挡住了 partial / 受限类型 / inner-outer /
+  重复修饰 / 记录折叠路这些检查——61b 第一版放开后，flat_sweep 冒出 6 个 FAIL，nf-live `--all` 冒出 3 个 FAIL + 8 个
+  ACCEPTS-INVALID。其中 5 个在放开前就看得到：60g 的 `--skip-oracle` 全景里，这个 SKIP 原因下 omc_ok = False 的用例。按
+  "同一特性换容器"铺的邻近探针又照出三处与短类无关的旧错（记录缺省值里的 time、replaceable 的 partial 类型、折叠记录
+  丢字段注释）。
+- 规则：(1) 放开一个 SKIP 原因之前，先从 `nf_live_sweep.py --all --skip-oracle` 的结果里列出该原因下 omc 报错的用例，
+  逐个写清"放开后由哪条检查接住"，没有检查接的先补检查——这一步比事后看回归便宜。(2) 间接层（短类、别名、import）只带
+  名字和修饰：放开时把链底长类在直接写法下会被查的性质（partial、受限类型、inner/outer、前缀、修饰合法性）在间接层上
+  逐条重查。(3) 邻近探针按"同一特性换容器"铺：继承来的 / 嵌套实例里的 / 记录 / 连接器 / 包里定义的 / 数组。

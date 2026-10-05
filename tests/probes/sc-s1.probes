@@ -1,0 +1,178 @@
+//// set: sc-s1 — 短类别名到长类：修饰 / 多层别名 / 连接器 / 记录 / 包里定义 / final / 数组维 / type 别名
+//// model: S10
+model A Real x = time; end A;
+model S10
+model B = A;
+B b;
+end S10;
+//// model: S11
+model A parameter Real k = 1; Real x = k * time; end A;
+model S11
+model B = A(k = 2);
+B b;
+end S11;
+//// model: S12
+model A parameter Real k = 1; Real x = k * time; end A;
+model S12
+model B = A(k = 2);
+B b(k = 3);
+end S12;
+//// model: S13
+model A parameter Real k = 1; Real x = k * time; end A;
+model S13
+parameter Real q = 5;
+model B = A(k = q);
+B b;
+end S13;
+//// model: S14
+model A parameter Real k = 1; Real x = k * time; end A;
+model S14
+model B = A(k = 2);
+model C = B(k = 3);
+C c;
+end S14;
+//// model: S15
+model A parameter Real k = 1; Real x = k * time; end A;
+model S15
+model B = A(k = 2);
+B b[2];
+end S15;
+//// model: S16
+model A Real x; equation x = time; end A;
+model S16
+model B = A;
+B b;
+end S16;
+//// model: S17
+package P
+constant Integer n = 2;
+model M Integer x = n; end M;
+end P;
+model S17
+model M = P.M;
+M m;
+end S17;
+//// model: S18
+connector C Real e; flow Real f; end C;
+model S18
+connector D = C;
+D a, b;
+equation
+connect(a, b);
+end S18;
+//// model: S19
+record R Real a; Real b; end R;
+model S19
+record S = R(a = 1);
+S s(b = 2);
+end S19;
+//// model: S110
+record R Real a = 1; Real b = 2; end R;
+model S110
+record S = R;
+S s = S(3, 4);
+end S110;
+//// model: S111
+model A Real x = time; end A;
+model S111
+model B = A;
+model C = B;
+C c;
+end S111;
+//// model: S112
+model A Real x[2] = {time, 1}; end A;
+model S112
+model B = A;
+B b;
+end S112;
+//// model: S113
+model A Real x(start = 1) = time; end A;
+model S113
+model B = A(x(start = 2));
+B b;
+end S113;
+//// model: S114
+model A Real x = time; end A;
+model S114
+model B = A "comment";
+B b;
+end S114;
+//// model: S115
+model A protected Real x = 1.0; end A;
+model B = A(x = 2.0);
+model S115
+B b;
+end S115;
+//// model: S116
+model A Real x = time; end A;
+model S116
+model B = A;
+B b1, b2;
+end S116;
+//// model: S117
+model A parameter Real k = 1; Real x = k * time; end A;
+model S117
+model B = A(final k = 2);
+B b;
+end S117;
+//// model: S118
+model A parameter Real k = 1; Real x = k * time; end A;
+model S118
+model B = A(final k = 2);
+B b(k = 3);
+end S118;
+//// model: S119
+model A parameter Real k = 1; Real x = k * time; end A;
+model S119
+model B = A[2](k = {1, 2});
+B b;
+end S119;
+//// model: S120
+model A parameter Real k = 1; Real x = k * time; end A;
+package P
+model B = A(k = 7);
+end P;
+model S120
+P.B b;
+end S120;
+//// model: S121
+model A parameter Real k = 1; Real x = k * time; end A;
+package P
+constant Real c = 4;
+model B = A(k = c);
+end P;
+model S121
+P.B b;
+end S121;
+//// model: S122
+model A parameter Real k = 1; Real x = k * time; end A;
+model S122
+model B = A(k = 2);
+parameter Integer n = 2;
+B b[n](each k = 3);
+end S122;
+//// model: S123
+model A Real x = time; end A;
+model S123
+model B = A;
+protected B b;
+end S123;
+//// model: S124
+model A Real x = time; equation assert(x >= 0, "neg"); end A;
+model S124
+model B = A;
+B b;
+end S124;
+//// model: S125
+model A Real x; equation x = time; end A;
+model Base extends A; end Base;
+model S125
+model B = Base;
+B b;
+end S125;
+//// model: S126
+model A parameter Real k = 1; Real x = k * time; end A;
+model S126
+type B = A(k = 2);
+B b;
+end S126;

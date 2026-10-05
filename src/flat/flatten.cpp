@@ -432,7 +432,9 @@ class Flattener {
       const SElement& el = I_.scode.elems[e];
       if (el.kind != SElementKind::Class) return false;
       const bool last = k + 1 == c.type.path.size();
-      if (el.is_partial && !c.prefixes.is_replaceable) return true;
+      // 类型本身 partial：replaceable 的组件也报错（SC 探针 t P1：`replaceable A a;`，A partial → 1.25.0 "Component 'a' has
+      // partial type 'A'"；被外层 redeclare 换掉的情形 ymc 另因 redeclare 修饰 SKIP）。
+      if (el.is_partial && (last || !c.prefixes.is_replaceable)) return true;
       if (last) {
         // 组件类型是 package / function（inst6 在 1.25.0 能过但较新 OMC 报错——只对 package 判，function 型组件另有语义）、
         // 无基类型的长 type 类（TypeMissingBaseType1）、未指定的枚举 `enumeration(:)`（EnumUnspecified1）→ SKIP。
@@ -800,6 +802,10 @@ class Flattener {
             continue;
           }
           if (I_.comps[cid].attributes.connector != SConnectorType::Potential) { set_unsupported("flow/stream on composite array"); continue; }
+          if (r == SRestriction::Record && record_defaults_use_time(ci, I_.comps[cid].derived_mods)) {
+            set_unsupported("time in record field default");
+            continue;
+          }
           // 整体绑定（外来修饰优先，否则组件自身声明）：记录数组 `R ra[2] = {r1, R(3, 4)}` / `= rs` 逐元素取第 i 个元素
           //（flattenArray → getRecordBindings 的 nthRecordElement，NFFlatten.mo:1016-1021、:902-905；splitRecordCref 先把
           // 数组 cref 展开成元素 cref，:1038-1059），元素再按标量记录绑定拆字段（build_record_ctor_mod）。非记录 → SKIP。
@@ -932,6 +938,8 @@ class Flattener {
                               I_.comps[cid].attributes.connector == SConnectorType::Flow;
         if (I_.comps[cid].attributes.connector != SConnectorType::Potential && !flow_rec)
           set_unsupported("flow/stream on composite component");
+        if (r == SRestriction::Record && record_defaults_use_time(ci, I_.comps[cid].derived_mods))
+          set_unsupported("time in record field default");
         // 组件自身声明 / 外来修饰里是否有字段修饰（`R r(x(start = 1)) = …`）。
         const bool own = cel.mod.is_valid() && !I_.scode.mods[cel.mod].subs.empty();
         bool matched_field = false;
@@ -940,7 +948,10 @@ class Flattener {
         // 记录常量折叠：`constant/parameter R r = f(…)`（函数返回记录）→ 直接发射字段（继承 r 变率 + 折叠值），
         // 绕开下面的"变率复合" SKIP（CevalFuncRecord1/2）。带字段修饰时字段属性要合并（emit_record_fields 不看修饰，
         // RM1 `R d(y(min = 0)) = R(4, 5)` 曾丢 min）→ 不走此路（构造调用走下面的合并路，其余 SKIP）。
-        if (r == SRestriction::Record && pp_self.empty() && !own && !matched_field) {   // expandable 里的记录折叠字段不带 pp 链 → 不走此路
+        // 短类修饰（`record S = R(a(start = 1))`、`R(redeclare MyReal x)`）同理不走此路（RedeclareRecordComponent1：折叠
+        // 丢了 redeclare 带来的 quantity）。
+        if (r == SRestriction::Record && pp_self.empty() && !own && !matched_field &&
+            I_.comps[cid].derived_mods.empty()) {   // expandable 里的记录折叠字段不带 pp 链 → 不走此路
           Id<Exp> wb;
           NodeId ws = inst_node;
           for (Id<SMod> m : matched)
@@ -1032,6 +1043,60 @@ class Flattener {
           child.mods = matched; child.scope = ctx.scope; child.vprefix = ctx.vprefix;
         } else if (own) {
           child.mods = {cel.mod}; child.scope = inst_node; child.vprefix = prefix;
+        }
+        // 短类链上的修饰（`model B = A(k = 2); B b;`，MLS §4.5.1：短类定义 = 基类 + 修饰）：优先级最低（外来的、组件
+        // 自己的在前，链上外层的短类在前），排在最后。值在短类定义处解析：定义在组件所在的类里 → 与组件自己的修饰同一
+        // 作用域；定义在包里 → 包作用域（只引常量）；别处（外层模型里的短类等）未做 → SKIP。
+        if (!result_.unsupported && !I_.comps[cid].derived_mods.empty()) {
+          const std::vector<Id<SMod>> dmods = I_.comps[cid].derived_mods;    // 拷贝
+          const std::vector<NodeId> dscopes = I_.comps[cid].derived_scopes;
+          NodeId lex = I_.nodes[cn].parent_scope;   // 组件的词法作用域：继承来的组件 = 基类实例，本地组件 = 本实例
+          if (!lex.is_valid() || I_.nodes[lex].is_empty()) lex = inst_node;
+          for (std::size_t k = 0; k < dmods.size() && !result_.unsupported; ++k) {
+            const NodeId d = k < dscopes.size() ? dscopes[k] : NodeId{};
+            NodeId sc;
+            std::vector<Symbol> vp;
+            if (d.is_valid() && !I_.nodes[d].is_empty() && I_.nodes[d].def.is_valid() && I_.nodes[d].def == I_.nodes[lex].def) {
+              sc = lex;
+              vp = prefix;
+            } else if (d.is_valid() && !I_.nodes[d].is_empty() && I_.nodes[d].def.is_valid() &&
+                       I_.scode.elems[I_.nodes[d].def].restriction == SRestriction::Package) {
+              sc = d;
+            } else {
+              set_unsupported("short class modifier scope");
+              break;
+            }
+            // 同一短类修饰里重复改一个元素（`model A2 = A(x = 1.0, x = 2.0)`，DuplicateMod7）→ omc 报错。
+            if (mod_has_duplicates({dmods[k]})) { set_unsupported("duplicate modification"); break; }
+            Id<SMod> dm = dmods[k];
+            if (ctor_mod.is_valid()) {
+              // 整体绑定给出全部字段的绑定（同上面的 take：getRecordBindings 的 outerBinding 盖过字段修饰）。构造函数是链底
+              // 长类的（build_record_ctor_mod 要求解析到 cdef），缺省值也是它的：`record S = R(a = 5); S s = R(b = 4);` →
+              // s.a = 1.0（R 的缺省，SC 探针 t T7）。短类修饰只留属性。
+              bool ok = true;
+              dm = strip_field_bindings(dm, ok);
+              if (!ok) { set_unsupported("record binding + final/each field binding"); break; }
+              if (!dm.is_valid()) continue;
+            }
+            if (child.mods.empty()) {
+              child.scope = sc;
+              child.vprefix = vp;
+            } else if (child.scope != sc || child.vprefix != vp) {
+              set_unsupported("stacked modifier scopes");
+              break;
+            }
+            // 短类修饰里 final 的元素又被更外层的修饰改了（`model B = A(final k = 2); B b(k = 3);`）→ omc 报错
+            //（NFModifier.checkFinalOverride，同组件 final 的那条规则）。
+            for (const SSubMod& sm : I_.scode.mods[dmods[k]].subs) {
+              if (!I_.scode.mods[sm.mod].is_final) continue;
+              for (Id<SMod> outer : child.mods)
+                for (const SSubMod& om : I_.scode.mods[outer].subs)
+                  if (om.ident == sm.ident) set_unsupported("final element override");
+            }
+            if (result_.unsupported) break;
+            child.mods.push_back(dm);
+          }
+          if (result_.unsupported) continue;
         }
         PSubs cps = psubs;
         cps.push_back({});   // 标量复合段无下标
@@ -1686,6 +1751,43 @@ class Flattener {
       hit = absyn_refs_param(e.args[i], enclosing, skip_size, runtime);
     refs_shadow_.resize(refs_shadow_.size() - e.iters.size());
     return hit;
+  }
+  // 记录类当组件类型用时，omc 实例化它的缺省构造函数（instExpressions 的 EXPANDED_DERIVED 支 / instComplexType →
+  // instRecordConstructor，NFInst.mo:2537-2539 / 2606-2609 v1.25.0），字段缺省值在函数上下文里定型：出现 time 就报
+  // "time is not allowed in a function"（NFTyping.typeCref，NFTyping.mo:1977-1985）。缺省值 = 字段声明绑定、记录类及其
+  // 基类里的 extends 修饰、短类修饰（SC 探针 t：`record R Real a = time; end R; R r;`、`record S = R(a = time); S s;`、
+  // `record R extends R0(a = time); end R;` omc 都报错；组件上的修饰 `R r(a = time)` 不进构造函数，照常过）。
+  // ponytail: 只认 time（der / pre 等函数里不许的也该算，语料未见）；字段名就叫 time 的遮蔽不管。
+  bool absyn_mentions_time(Id<Exp> x) {
+    if (!x.is_valid()) return false;
+    const Exp& e = I_.absyn.exps[x];
+    if (e.kind == ExpKind::CrefExp) {
+      const Cref& c = I_.absyn.crefs[e.cref];
+      if (!c.leading_dot && c.parts.size() == 1 && in_.str(c.parts[0].name) == "time") return true;
+      for (const CrefPart& p : c.parts)
+        for (Id<Exp> s : p.subscripts) if (absyn_mentions_time(s)) return true;
+      return false;
+    }
+    if (absyn_mentions_time(e.a) || absyn_mentions_time(e.b) || absyn_mentions_time(e.c)) return true;
+    for (Id<Exp> a : e.args) if (absyn_mentions_time(a)) return true;
+    for (const ForIndex& it : e.iters) if (absyn_mentions_time(it.range)) return true;
+    return false;
+  }
+  bool mod_mentions_time(Id<SMod> m) {
+    if (!m.is_valid()) return false;
+    if (absyn_mentions_time(I_.scode.mods[m].binding)) return true;
+    for (const SSubMod& s : I_.scode.mods[m].subs) if (mod_mentions_time(s.mod)) return true;
+    return false;
+  }
+  bool record_defaults_use_time(NodeId cls, const std::vector<Id<SMod>>& alias_mods) {
+    for (Id<SMod> m : alias_mods) if (mod_mentions_time(m)) return true;
+    for (Id<SElement> eid : I_.scode.elems[I_.nodes[cls].def].def.elements) {
+      const SElement& el = I_.scode.elems[eid];
+      if ((el.kind == SElementKind::Component || el.kind == SElementKind::Extends) && mod_mentions_time(el.mod)) return true;
+    }
+    for (NodeId b : I_.trees[I_.node_class(cls).tree].exts)
+      if (record_defaults_use_time(b, {})) return true;
+    return false;
   }
   // 绑定 / 内建属性值的变率检查：书写的式子（在实例 scope 里）是否引用 parameter（runtime = false），或连续 / 离散变量、
   // time（runtime = true）。检查做在**书写的**式子上（checkComponentBindingVariability 看的是定型后、化简前的绑定，
@@ -8127,6 +8229,9 @@ class Flattener {
     const Cref& fn = I_.absyn.crefs[call.cref];
     // 记录构造 `R(2)` / `R(x = 2)`：实参按字段声明序 / 名字，缺省取字段默认。
     if (std::optional<FnRef> rr = resolve_fn(fn, scope, SRestriction::Record)) {
+      // 经带修饰的短类别名调的构造（`record S = R(a = 5)` 的 `S(b = 4)`）：别名修饰是构造的缺省值（omc s.a = 5.0，SC 探针 t
+      // T6），record_value 只按长类的字段缺省 → 不求值（交给调用方的其它路 / SKIP）。
+      if (!rr->alias_mods.empty()) return std::nullopt;
       std::vector<Symbol> fields;
       for (Id<SElement> fid : I_.scode.elems[rr->fe].def.elements)
         if (I_.scode.elems[fid].kind == SElementKind::Component) fields.push_back(I_.scode.elems[fid].name);
@@ -8495,6 +8600,8 @@ class Flattener {
       v.var_kind = vk;
       v.binding = literal_of(*cv);
       v.loc = floc;
+      // 字段的声明注释照打（records/Derived1 `constant Real res.T = 1.0 "temperature"`，同 emit_variable）。
+      v.comment = I_.scode.elems[I_.comps[fc].def].cmt.str;
       result_.model.variables.push_back(std::move(v));
       record_const(result_.model.variables.back());
     }

@@ -232,6 +232,12 @@ void Instantiator::partial_inst(NodeId cls) {
         comp.state = CompState::CompDef;
         comp.def = eid;
         comp.loc = e.loc;
+        // 声明的前缀先放上：包里的常量等永不实例化的组件（CompDef）也有对的变率——短类定义在包里时，其修饰值在包作用域
+        // 解析，引用的包常量要按 constant 看（`package P constant Real c = 4; model B = A(k = c); end P;`）。
+        // inst_component 会再叠上短类链的前缀（`type C = constant Real`）重算。
+        comp.attributes.variability = e.attr.var;
+        comp.attributes.direction = e.attr.dir;
+        comp.attributes.connector = e.attr.ct;
         INode cn;
         cn.kind = NodeKind::Component;
         cn.name = e.name;
@@ -496,8 +502,11 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
   // 短类塌陷（R15 EXPANDED_DERIVED）：`type V = Base(mods)` 顺链解析到内建/枚举底，累积属性修饰
   // （外层派生在前 = 优先级高）。lookup_class_name 会 arena add，循环里不缓存 INode 引用（只用 Id）。
   std::vector<Id<SMod>> derived_mods;
+  std::vector<NodeId> derived_scopes;   // 各短类定义所在的类（= 短类节点的词法外层）
   // 短类的前缀属性（`type InputReal = input Real`、`type C = constant …`）累积到组件上：
   // 组件自身 > 靠近用处的派生 > 更远派生（loop 外→内，first-non-default 胜）。
+  bool alias_partial = false;            // 链上有 partial 的短类
+  std::vector<SRestriction> alias_res;   // 链上各短类的受限类型（与链底长类比，见下）
   SVariability mvar = el.attr.var;
   SDirection mdir = el.attr.dir;
   SConnectorType mct = el.attr.ct;
@@ -511,12 +520,20 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
     if (!ce.is_valid()) break;
     if (I_.scode.elems[ce].def.kind != SClassDefKind::Derived) break;   // Enumeration/Parts/… 到底
     const SClassDef& cd = I_.scode.elems[ce].def;
+    // inner / outer 的短类定义（`outer model M = A;`，InnerOuterClass1 / Missing5 / InvalidMod4 / InvalidType2）：类的
+    // inner / outer 配对 v1 未做 → SKIP。
+    if (I_.scode.elems[ce].prefixes.io != SInnerOuter::None) mark_unsupported("inner/outer class");
+    if (I_.scode.elems[ce].is_partial) alias_partial = true;
+    alias_res.push_back(I_.scode.elems[ce].restriction);
     // 派生类型带维度（`type V = Real[3]`，维度在 derived_attr.dims）→ 组件维要拼上类型维（TypeDim1/Subscript4），
     // v1 未做 → SKIP。
     if (!cd.derived_attr.dims.empty()) mark_unsupported("derived-type array dimension");
     if (cd.derived_mod.is_valid()) {
       const SMod& dm = I_.scode.mods[cd.derived_mod];
-      if (!dm.subs.empty() || dm.binding.is_valid()) derived_mods.push_back(cd.derived_mod);
+      if (!dm.subs.empty() || dm.binding.is_valid()) {
+        derived_mods.push_back(cd.derived_mod);
+        derived_scopes.push_back(I_.nodes[base].parent_scope);
+      }
     }
     if (mvar == SVariability::Var && cd.derived_attr.var != SVariability::Var) mvar = cd.derived_attr.var;
     if (mdir == SDirection::Bidir && cd.derived_attr.dir != SDirection::Bidir) mdir = cd.derived_attr.dir;
@@ -546,8 +563,18 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
       I_.comps[cid].kind = CompKind::Invalid;
       return;
     }
-    // 短类别名到长类（`model M = P.M`）会牵出常量内联等（ExtendsShort1 里 `x = n` → omc 内联成 2），v1 未做 → SKIP。
-    if (base != ty_node) mark_unsupported("short class aliasing composite");
+    // 短类别名到长类（`model B = A(k = 2); B b;`，MLS §4.5.1：短类定义 = 基类 + 修饰）：实例化的是链底的长类，链上的
+    // 修饰记在 derived_mods / derived_scopes，flatten 按最低优先级并进组件的修饰（见 flatten_class 的复合组件分支）。
+    // 短类只带名字和修饰，链底长类的性质要在这里补查：
+    // - partial：`partial model A …; model B = A; B b;` → omc "Component 'b' has partial type 'B'"（PartialType2；
+    //   packages/Import1 / 3 / 4 的 `model E = B.C(x = 6)`）。replaceable 组件也一样（SC 探针 s3）。
+    // - 受限类型不一致：组件的种类按短类的受限类型算——`class C2 = C`（C 是连接器）的 C2 不是连接器，Connect3 的
+    //   connect 在 1.25.0 报 "c1 is not a valid connector"；`type B = A(k = 2)`（A 是 model）1.25.0 把 b 整个丢掉（SC 探针
+    //   s1）。未做 → SKIP。
+    const SElement& be = I_.scode.elems[I_.nodes[base].def];
+    if (!alias_res.empty() && (be.is_partial || alias_partial)) mark_unsupported("partial type");   // 直接写的类型归 bad_type_path
+    for (SRestriction ar : alias_res)
+      if (ar != be.restriction) mark_unsupported("short class restriction mismatch");
     class_inst = instantiate(base, comp_node);   // ← arena add：此后不得用先前取的组件引用
     ty.kind = TypeKind::Complex;
     ty.complex_node = class_inst.raw;
@@ -559,6 +586,7 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
   comp.class_inst = class_inst;
   comp.ty = ty;
   comp.derived_mods = std::move(derived_mods);
+  comp.derived_scopes = std::move(derived_scopes);
   comp.attributes.variability = mvar;   // 含短类前缀（constant/input/…）累积
   comp.attributes.direction = mdir;
   comp.attributes.connector = mct;

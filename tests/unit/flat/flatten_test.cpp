@@ -4731,6 +4731,34 @@ YMC_TEST(inst_imports_extends_scope_and_inherited_sections) {
   }
 }
 
+YMC_TEST(inst_short_class_aliasing_composite) {
+  // 短类别名到长类（MLS §4.5.1：`model B = A(k = 2)` = 基类 + 修饰）：实例化链底的长类，链上的修饰按最低优先级并进组件
+  // 的修饰（组件自己的 `b2(k = 7)` 盖过短类的 `k = 2`；外层短类 `C = B(k = 3)` 盖过内层），值在短类定义处解析（包里的
+  // 短类引包常量 `2 * c`）；记录整体绑定 `S s2 = R(b = time)` 用 R 的构造缺省（s2.a = 1.0，不是 S 的 5.0）。
+  // 期望 = omc 1.25.0 实跑 SCT1（2026-10-05）。
+  YMC_CHECK_EQ(flatten_src("model A\n  parameter Real k = 1;\n  Real x = k * time;\nend A;\nrecord R\n  Real a = 1 \"first\";\n"
+                           "  Real b = 2;\nend R;\npackage P\n  constant Real c = 4;\n  model B = A(k = 2 * c);\nend P;\n"
+                           "model SCT1\n  model B = A(k = 2);\n  model C = B(k = 3);\n  record S = R(a = 5);\n  B b1;\n"
+                           "  B b2(k = 7);\n  C c;\n  P.B pb;\n  S s1;\n  S s2 = R(b = time);\nend SCT1;\n"),
+               std::string("class SCT1\n  parameter Real b1.k = 2.0;\n  Real b1.x = b1.k * time;\n  parameter Real b2.k = 7.0;\n"
+                           "  Real b2.x = b2.k * time;\n  parameter Real c.k = 3.0;\n  Real c.x = c.k * time;\n"
+                           "  parameter Real pb.k = 8.0;\n  Real pb.x = pb.k * time;\n  Real s1.a = 5.0 \"first\";\n"
+                           "  Real s1.b = 2.0;\n  Real s2.a = 1.0 \"first\";\n  Real s2.b = time;\nend SCT1;\n"));
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           // 链底长类 partial：omc "Component 'b' has partial type 'B'"（SCS1）。
+           {"partial model A\n  Real x = time;\nend A;\nmodel SCS1\n  model B = A;\n  B b;\nend SCS1;\n", "partial type"},
+           // `class C2 = C`（C 是连接器）：组件种类按短类的受限类型，C2 不是连接器 → omc "c1 is not a valid connector"（SCS2）。
+           {"connector C\n  Real e;\n  flow Real f;\nend C;\nmodel SCS2\n  class C2 = C;\n  C2 c1, c2;\n"
+            "equation\n  connect(c1, c2);\nend SCS2;\n", "short class restriction mismatch"},
+           // 记录字段缺省值进构造函数、在函数上下文里定型 → omc "time is not allowed in a function"（SCS3）。
+           {"record R\n  Real a = time;\nend R;\nmodel SCS3\n  R r;\nend SCS3;\n", "time in record field default"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

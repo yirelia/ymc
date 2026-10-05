@@ -1,0 +1,51 @@
+//// set: sc-ut — 短类别名到长类（单测原文）
+//// model: SCS1
+partial model A
+  Real x = time;
+end A;
+model SCS1
+  model B = A;
+  B b;
+end SCS1;
+//// model: SCS2
+connector C
+  Real e;
+  flow Real f;
+end C;
+model SCS2
+  class C2 = C;
+  C2 c1, c2;
+equation
+  connect(c1, c2);
+end SCS2;
+//// model: SCS3
+record R
+  Real a = time;
+end R;
+model SCS3
+  R r;
+end SCS3;
+//// model: SCT1
+model A
+  parameter Real k = 1;
+  Real x = k * time;
+end A;
+record R
+  Real a = 1 "first";
+  Real b = 2;
+end R;
+package P
+  constant Real c = 4;
+  model B = A(k = 2 * c);
+end P;
+model SCT1
+  model B = A(k = 2);
+  model C = B(k = 3);
+  record S = R(a = 5);
+  B b1;
+  B b2(k = 7);
+  C c;
+  P.B pb;
+  S s1;
+  S s2 = R(b = time);
+end SCT1;

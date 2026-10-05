@@ -1416,6 +1416,33 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           扩展类自己的嵌套类；NFInst.mo:780-781 `scope := InstNode.parent(ext)`，extends 节点的 parent 是扩展类本身）+ 基类须
           传递地非 replaceable 检查。`unresolved base class / component type` 147 例逐例归因（72 例首因是本 bug，22 import、
           25 预定义类、14 短类别名前缀、7 继承类查找…）记在卡里 → `docs/tasks/T-S3-07-extends-lookup-scope.md`。
+    - [x] (61b) inst + flat：短类别名到长类（2026-10-05，用户暂不手写核心，Claude 实现）：
+          `model B = A(k = 2); B b;`（MLS §4.5.1：短类定义 = 基类 + 修饰）不再 SKIP——inst 实例化链底的长类，链上各短类的
+          修饰连同其定义所在的类记进组件（derived_mods / derived_scopes）；flatten 的复合组件分支把它们按最低优先级并进
+          组件的修饰（外来的、组件自己的在前，外层短类在前），值在短类定义处解析（定义在组件所在的类 → 同组件自己的修饰；
+          定义在包里 → 包作用域；别处 → SKIP）。随之补上被这条 SKIP 挡住的检查：
+          ① 链底长类的性质：partial（PartialType2、packages/Import1/3/4 的 `model E = B.C(x = 6)`）、受限类型不一致
+          （`class C2 = C`，Connect3 "c1 is not a valid connector"；`type B = A(…)` 1.25.0 整个丢掉 b）、inner/outer 的
+          短类定义（InnerOuterClass1 等）→ SKIP；
+          ② 短类修饰里的重复修饰（DuplicateMod7）、final 元素又被外层改（"final element override"）→ SKIP；
+          ③ 记录整体绑定：短类修饰只留属性（构造是链底长类的，`record S = R(a = 5); S s = R(b = 4)` → s.a = 1.0）；
+          折叠路（emit_record_fields 不看修饰）遇短类修饰不走（RedeclareRecordComponent1 丢了 redeclare 带来的 quantity）；
+          经带修饰的别名调构造（`S(b = 4)`）不求值（别名修饰是构造缺省值，omc s.a = 5.0）。
+          顺带修了探针揪出的三处旧错（与短类无关）：
+          ④ 记录字段缺省值里的 time：omc 把记录类的缺省构造在函数上下文里定型（instRecordConstructor，NFInst.mo:2537-2539 /
+          2606-2609；NFTyping.typeCref :1977-1985）→ "time is not allowed in a function"，ymc 此前照收 → SKIP；
+          ⑤ replaceable 组件的类型本身是 partial：1.25.0 照样报错（bad_type_path 此前放过）；
+          ⑥ 折叠出的常量 / 参数记录字段漏了声明注释（records/Derived1 `res.T = 1.0 "temperature"`）。
+          另：没实例化过的组件（包常量等 CompDef）建出来就带声明的变率 / 方向 / 连接器前缀（包里的短类修饰引包常量时
+          此前被当成变量 → 误报 "binding of higher variability"）。
+          新探针 114 个（sc-s1 27 / sc-s2 40 / sc-s3 32 / sc-t 11 / 单测原文 4）：PASS 64、SKIP 25、BOTH-REJECT 25，无 FAIL /
+          ACCEPTS-INVALID。
+          → scodeinst 520→523 PASS（ExtendsShort3、RecordExtends1 入 slice；ExtendsShort1 原在 slice 里，SKIP → PASS）；
+            整个 testsuite PASS 1369→1378（FAIL 0，ACCEPTS-INVALID 3 不变）；+1 单测（240）；探针 6600→6714。
+          仍缺（下一批）：整个 testsuite 里原 "short class aliasing composite" 的 56 例，9 例 PASS，其余各归其因——受限类型
+          不一致 9（多是 `connector RealInput = input MyReal`，MyReal 是 extends Real 的长 type 类，归 extends builtin type
+          那簇）、inner/outer 类 6、partial 5（4 例 omc 报错；RedeclareClass2 的 partial 类被 redeclare 换掉，归 redeclare）、
+          短类修饰作用域 5（短类定义在外层模型里）、类修饰 / redeclare 若干。
     - [ ] 任务卡 T-S3-08（用户，parser）：表达式后的下标只能跟在括号式后面——`{a, b}[2]`、`array(a, b)[1]`、`f(x)[1]`
           在 omc 1.25.0 是语法错（Modelica.g:1800 只有 `LPAR … RPAR array_subscripts?` 这一支），ymc 解析器 5 处多调了
           parse_postfix → `docs/tasks/T-S3-08-subscript-after-paren-only.md`。

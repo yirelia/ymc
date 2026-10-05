@@ -1,0 +1,189 @@
+//// set: sc-s3 — 短类别名到长类：记录缺省构造里的 time、整体绑定 + 短类修饰、partial / 受限类型 / inner-outer / 重复修饰
+//// model: S30
+record R Real a = time; end R;
+model S30
+R r;
+end S30;
+//// model: S31
+record R Real a; end R;
+model S31
+R r(a = time);
+end S31;
+//// model: S32
+record R Real a; Real b; end R;
+model S32
+record S = R(a = time);
+S s(b = 1);
+end S32;
+//// model: S33
+record R0 Real a; end R0;
+record R extends R0(a = time); end R;
+model S33
+R r;
+end S33;
+//// model: S34
+record R Real a = 2 * time; end R;
+model S34
+R r[2];
+end S34;
+//// model: S35
+record R Real a = time; end R;
+record Q R r; end Q;
+model S35
+Q q;
+end S35;
+//// model: S36
+record R Real a; end R;
+record Q R r(a = time); end Q;
+model S36
+Q q;
+end S36;
+//// model: S37
+record R Real a = sin(time); end R;
+model S37
+R r(a = 1);
+end S37;
+//// model: S38
+record R Real a; end R;
+model S38
+R r = R(time);
+end S38;
+//// model: S39
+record R parameter Real p = 1; Real a = p; end R;
+model S39
+R r;
+end S39;
+//// model: S310
+record R Real a = 1; Real b = 2; end R;
+model S310
+record S = R(a = 5);
+S s = S(b = 4);
+end S310;
+//// model: S311
+record R Real a = 1; Real b = 2; end R;
+model S311
+record S = R(a = 5);
+S s = R(b = 4);
+end S311;
+//// model: S312
+record R Real a = 1; Real b = 2; end R;
+model S312
+record S = R(a = 5);
+S s = R(b = time);
+end S312;
+//// model: S313
+record R Real a = 1; Real b = 2; end R;
+model S313
+record S = R(a(start = 3));
+S s = R(b = time);
+end S313;
+//// model: S314
+record R Real a = 1; Real b = 2; end R;
+model S314
+record S = R(a(start = 3));
+S s = R(4, 5);
+end S314;
+//// model: S315
+record R Real a = 1; Real b = 2; end R;
+model S315
+record S = R(a = 5);
+S s = R(b = 4);
+parameter S t = R(7, 8);
+end S315;
+//// model: S316
+record R Real a = 1; Real b = 2; end R;
+model S316
+record S = R(a = 5);
+parameter S s0;
+S s = s0;
+end S316;
+//// model: S317
+record R Real a = 1; Real b = 2; end R;
+model S317
+record S = R(a = 5);
+R r = S(b = 4);
+end S317;
+//// model: S318
+record R Real a = 1; Real b = 2; end R;
+model S318
+record S = R;
+R r = S(b = 4);
+end S318;
+//// model: S319
+record R Real a = 1; Real b = 2; end R;
+model S319
+record S = R(final a = 5);
+S s = R(b = 4);
+end S319;
+//// model: S320
+record R Real a = 1; Real b = 2; end R;
+model S320
+record S = R(final a = 5);
+S s = R(a = 6, b = 4);
+end S320;
+//// model: S321
+partial model A Real x = time; end A;
+model S321
+model B = A;
+B b;
+end S321;
+//// model: S322
+partial model A Real x = time; end A;
+model S322
+model B = A;
+replaceable B b;
+end S322;
+//// model: S323
+model A Real x = time; end A;
+model S323
+partial model B = A;
+B b;
+end S323;
+//// model: S324
+connector C Real e; flow Real f; end C;
+model S324
+class C2 = C;
+C2 c1;
+end S324;
+//// model: S325
+model A Real x = time; end A;
+model S325
+block B = A;
+B b;
+end S325;
+//// model: S326
+model A Real x = time; end A;
+model S326
+class B = A;
+B b;
+end S326;
+//// model: S327
+block A output Real y = time; end A;
+model S327
+block B = A;
+B b;
+end S327;
+//// model: S328
+record R Real a = 1; end R;
+model S328
+class S = R;
+S s;
+end S328;
+//// model: S329
+model A Real x = time; end A;
+model S329
+model B = A(x = 1, x = 2);
+B b;
+end S329;
+//// model: S330
+model A Real x = time; Real y; end A;
+model S330
+model B = A(x = 1, y = 2);
+B b;
+end S330;
+//// model: S331
+model A Real x = time; end A;
+model S331
+inner model M = A;
+M m;
+end S331;

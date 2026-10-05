@@ -1,0 +1,294 @@
+//// set: sc-s2 — 短类别名到长类：继承来的、嵌套实例里的、记录 / 连接器 / 前缀、包里的多层别名、修饰值的作用域、final 交互
+//// model: S20
+model A parameter Real k = 1; Real x = k * time; end A;
+model Base
+model B = A(k = 2);
+B b;
+end Base;
+model S20
+extends Base;
+end S20;
+//// model: S21
+model A parameter Real k = 1; Real x = k * time; end A;
+model Base
+parameter Real q = 3;
+model B = A(k = q);
+B b;
+end Base;
+model S21
+extends Base(q = 4);
+end S21;
+//// model: S22
+model A parameter Real k = 1; Real x = k * time; end A;
+model Base
+model B = A(k = 2);
+B b;
+end Base;
+model S22
+extends Base(b(k = 5));
+end S22;
+//// model: S23
+model A parameter Real k = 1; Real x = k * time; end A;
+model M
+parameter Real q = 3;
+model B = A(k = q);
+B b;
+end M;
+model S23
+M m(q = 6);
+end S23;
+//// model: S24
+model A parameter Real k = 1; Real x = k * time; end A;
+model M
+model B = A(k = 2);
+B b;
+end M;
+model S24
+M m(b(k = 7));
+end S24;
+//// model: S25
+model A parameter Real k = 1; Real x = k * time; end A;
+model M
+model B = A(k = 2);
+B b;
+end M;
+model S25
+M m1, m2(b(k = 8));
+end S25;
+//// model: S26
+record R Real a; Real b; end R;
+model S26
+record S = R(a = 1, b = 2);
+S s;
+end S26;
+//// model: S27
+record R Real a = 1; Real b = 2; end R;
+model S27
+record S = R(a = 5);
+parameter S s;
+end S27;
+//// model: S28
+record R Real a = 1; Real b = 2; end R;
+model S28
+record S = R(a = 5);
+constant S s;
+Real y = s.a;
+end S28;
+//// model: S29
+record R Real a; Real b; end R;
+model S29
+record S = R;
+S s = R(1, 2);
+end S29;
+//// model: S210
+record R Real a; end R;
+model S210
+record S = R(a = time);
+S s;
+end S210;
+//// model: S211
+connector C Real e; flow Real f; end C;
+model S211
+connector D = C(e(start = 1));
+D a, b;
+equation
+connect(a, b);
+end S211;
+//// model: S212
+connector C Real e; flow Real f; end C;
+model S212
+connector D = C;
+D a;
+C b;
+equation
+connect(a, b);
+end S212;
+//// model: S213
+connector C Real e; flow Real f; end C;
+model M
+connector D = C;
+D p;
+end M;
+model S213
+M m1, m2;
+equation
+connect(m1.p, m2.p);
+end S213;
+//// model: S214
+connector C Real e; flow Real f; end C;
+connector D = input C;
+model S214
+D d;
+end S214;
+//// model: S215
+connector C Real e; end C;
+connector D = C;
+model S215
+D d;
+equation
+d.e = time;
+end S215;
+//// model: S216
+model A parameter Real k = 1; Real x = k * time; end A;
+model S216
+model B = A;
+parameter B b;
+end S216;
+//// model: S217
+model A Real k = 1; end A;
+model S217
+model B = A;
+constant B b;
+end S217;
+//// model: S218
+record R Real a = 1; end R;
+model S218
+record S = parameter R;
+S s;
+end S218;
+//// model: S219
+model A parameter Real k = 1; Real x = k * time; end A;
+package P
+constant Real c = 4;
+model B = A(k = 2 * c);
+end P;
+model S219
+P.B b(k = 9);
+end S219;
+//// model: S220
+model A parameter Real k = 1; Real x = k * time; end A;
+package P
+model B = A(k = 2);
+model C = B(k = 3);
+end P;
+model S220
+P.C c;
+end S220;
+//// model: S221
+model A parameter Real k = 1; Real x = k * time; end A;
+package P
+model B = A(k = 2);
+end P;
+model S221
+model C = P.B(k = 3);
+C c;
+end S221;
+//// model: S222
+package P
+constant Integer n = 2;
+model A parameter Real k[n] = fill(1, n); end A;
+model B = A(k = {3, 4});
+end P;
+model S222
+P.B b;
+end S222;
+//// model: S223
+model A parameter Real k = 1; Real x = k * time; end A;
+model S223
+parameter Real p = 2;
+Real y = time;
+model B = A(k = p);
+B b;
+end S223;
+//// model: S224
+model A parameter Real k = 1; Real x = k * time; end A;
+model S224
+Real y = time;
+model B = A(k = y);
+B b;
+end S224;
+//// model: S225
+model A parameter Real k = 1; Real x = k * time; end A;
+model S225
+model B = A(x(start = k));
+B b;
+end S225;
+//// model: S226
+model A parameter Real k = 1; Real x; equation x = k * time; end A;
+model S226
+model B = A(x(fixed = true, start = 3));
+B b(k = 2);
+end S226;
+//// model: S227
+model A parameter Real k = 1; Real x = k * time; end A;
+model S227
+model B = A(k = 2);
+final B b(k = 3);
+end S227;
+//// model: S228
+model A parameter Real k = 1; Real x = k * time; end A;
+model S228
+model B = A(final k = 2);
+model C = B(k = 3);
+C c;
+end S228;
+//// model: S229
+model A parameter Real k = 1; Real x = k * time; end A;
+model S229
+model B = A(final k = 2);
+model C = B;
+C c;
+end S229;
+//// model: S230
+model A parameter Real k = 1; Real x = k * time; end A;
+model Base
+B b;
+model B = A(final k = 2);
+end Base;
+model S230
+extends Base(b(k = 4));
+end S230;
+//// model: S231
+model A parameter Real k = 1; Real x; equation if k > 1 then x = time; else x = 2 * time; end if; end A;
+model S231
+model B = A(k = 2);
+B b;
+end S231;
+//// model: S232
+model A parameter Integer n = 1; Real x[n]; equation for i in 1:n loop x[i] = i * time; end for; end A;
+model S232
+model B = A(n = 3);
+B b;
+end S232;
+//// model: S233
+model A parameter Integer n = 1; Real x[n] = fill(time, n); end A;
+model S233
+model B = A(n = 2);
+B b;
+end S233;
+//// model: S234
+model A0 parameter Real k = 1; end A0;
+model A extends A0; Real x = k * time; end A;
+model S234
+model B = A(k = 2);
+B b;
+end S234;
+//// model: S235
+model A0 parameter Real k = 1; end A0;
+model A extends A0(k = 5); Real x = k * time; end A;
+model S235
+model B = A;
+B b;
+end S235;
+//// model: S236
+model A0 parameter Real k = 1; end A0;
+model A extends A0(k = 5); Real x = k * time; end A;
+model S236
+model B = A(k = 6);
+B b;
+end S236;
+//// model: S237
+model A parameter Real k = 1; Real x = k * time; end A;
+model B = A(k = 2);
+model S237
+extends B;
+end S237;
+//// model: S238
+model A protected parameter Real k = 1; public Real x = k * time; end A;
+model S238
+model B = A(k = 2);
+B b;
+end S238;
+//// model: S239
+model A parameter Real k = 1; Real x = k * time; end A;
+model S239 = A(k = 3);

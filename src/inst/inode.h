@@ -193,6 +193,7 @@ struct Component {
   NodeId class_inst;                         // 组件的类型实例（PartiallyInstantiated 时 = EMPTY）
   Type ty;
   std::vector<Id<SMod>> derived_mods;        // 短类链上的属性修饰（`type V=Real(unit=…)`），外层派生在前（优先级高）
+  std::vector<NodeId> derived_scopes;        // 与 derived_mods 平行：各短类定义所在的类（修饰值在那里解析）
   Binding binding;
   Id<Expr> condition;                        // 条件组件 `if cond`（v1 占位，条件组件不在 v1）
   CompAttributes attributes;

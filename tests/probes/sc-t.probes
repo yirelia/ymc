@@ -1,0 +1,70 @@
+//// set: sc-t — 记录构造缺省值里的 time、经短类别名调构造、replaceable 的 partial 类型、折叠记录字段的注释
+//// model: P1
+partial model A Real x = time; end A;
+model P1
+replaceable A a;
+end P1;
+//// model: T1
+record R Real a = time; end R;
+model T1
+R r;
+end T1;
+//// model: T2
+record R Real a; end R;
+model T2
+R r(a = time);
+end T2;
+//// model: T3
+record R Real a; Real b; end R;
+model T3
+record S = R(a = time);
+S s(b = 1);
+end T3;
+//// model: T4
+record R Real a; end R;
+package P
+record S = R(a = 1);
+end P;
+model T4
+P.S s;
+end T4;
+//// model: T5
+record R0 Real a; end R0;
+record R extends R0(a = time); end R;
+model T5
+R r;
+end T5;
+//// model: T6
+record R Real a = 1; Real b = 2; end R;
+model T6
+record S = R(a = 5);
+S s = S(b = 4);
+end T6;
+//// model: T7
+record R Real a = 1; Real b = 2; end R;
+model T7
+record S = R(a = 5);
+S s = R(b = 4);
+end T7;
+//// model: T8
+record R Real a = 1; Real b = 2; end R;
+model T8
+record S = R(a = 5);
+parameter S s0;
+S s = s0;
+end T8;
+//// model: T9
+record R Real a = 1; Real b = 2; end R;
+model T9
+record S = R(a = 5);
+S s(b = 7) = S();
+end T9;
+//// model: T10
+record R
+  Real a "first";
+  Real b;
+end R;
+model T10
+  constant R r = R(1, 2);
+  parameter R p = R(b = 3, a = 4);
+end T10;

@@ -592,5 +592,7 @@
 "SubscriptCevalSlice2.mo",
 "SubscriptCevalWhole1.mo",
 "InStreamArray.mo",
-"ExtendSections.mo"
+"ExtendSections.mo",
+"ExtendsShort3.mo",
+"RecordExtends1.mo"
 ]

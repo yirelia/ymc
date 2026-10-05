@@ -230,3 +230,8 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `im-i1` | 43 | 类型名 / 基类名经 import：限定 / 重命名 / 组导入 / `.*`、冲突、遮蔽、不被继承、对嵌套类可见、encapsulated |
 | `im-x1` | 15 | extends 的基类名从扩展类自身查：本地嵌套类、路径前缀、replaceable 基类、自引用、继承来的类 |
 | `im-ut` | 3 | import / extends 查找 / 继承段（单测原文） |
+| `sc-s1` | 27 | 短类别名到长类：修饰 / 多层别名 / 连接器 / 记录 / 包里定义 / final / 数组维 / type 别名 |
+| `sc-s2` | 40 | 短类别名到长类：继承来的、嵌套实例里的、记录 / 连接器 / 前缀、包里的多层别名、修饰值的作用域、final 交互 |
+| `sc-s3` | 32 | 短类别名到长类：记录缺省构造里的 time、整体绑定 + 短类修饰、partial / 受限类型 / inner-outer / 重复修饰 |
+| `sc-t` | 11 | 记录构造缺省值里的 time、经短类别名调构造、replaceable 的 partial 类型、折叠记录字段的注释 |
+| `sc-ut` | 4 | 短类别名到长类（单测原文） |
