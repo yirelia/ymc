@@ -43,6 +43,15 @@ NodeId Instantiator::builtin_node(TypeKind k) const {
   return Inst::empty_node();
 }
 
+std::string Instantiator::path_str(const std::vector<Symbol>& path) const {
+  std::string s;
+  for (Symbol p : path) {
+    if (!s.empty()) s += '.';
+    s += I_.interner.str(p);
+  }
+  return s;
+}
+
 // -------------------------------------------------------------- <top>
 void Instantiator::make_top_node() {
   make_builtin_types();
@@ -300,7 +309,7 @@ void Instantiator::expand(NodeId cls) {
     NodeId base = lookup_class_name(ee.base_path, cls, &base_nodes);
     if (!base.is_valid() || I_.nodes[base].is_empty()) {
       // v1 的最小 lookup 没做 import/内建枚举——基类查不到先当 v1 gap 标 unsupported（driver 退 66），不硬报错。
-      mark_unsupported("unresolved base class");
+      mark_unsupported("unresolved base class", path_str(ee.base_path));
       continue;
     }
     // 基类名的各段须传递地非 replaceable（MLS §7.1.4；checkReplaceableBaseClass，NFInst.mo:778 / :842-883）：
@@ -494,7 +503,7 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
   if (!ty_node.is_valid() || I_.nodes[ty_node].is_empty()) {
     // v1 的查找是最小版（没做内建枚举 StateSelect/AssertionLevel、import、复合名全解析）——查不到组件类型
     // 时先当 v1 gap 标 unsupported（driver 退 66 记 SKIP），不当硬错误。真正的类型错误等 lookup 完整后再报。
-    mark_unsupported("unresolved component type");
+    mark_unsupported("unresolved component type", path_str(el.type.path));
     I_.comps[cid].kind = CompKind::Invalid;
     return;
   }

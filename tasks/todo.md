@@ -1466,6 +1466,23 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
     - [x] 任务卡 T-S3-09（Claude 实现于 (61c)，lexer）：带引号标识符的字符集按 OMC 词法收紧——`'höhe'` 这类引号里带非 ASCII 字符的
           标识符 omc 报词法错（BaseModelica_Lexer.g:430-436 的 QIDENT / QCHAR 只有 ASCII），ymc 的 lex_qident 任何字节都收
           → `docs/tasks/T-S3-09-qident-charset.md`。flatten 里有一道临时挡板（`non-ASCII identifier`）。
+    - [x] (61d) driver：隐式装库 + inst 的 SKIP 子原因（2026-10-05）：
+          **隐式装库**：omc 的 NFLookup.lookupSimpleName 查到顶层都没有的简单名 → loadLibrary(name) 按名从 MODELICAPATH 装默认
+          版本（连带 uses 依赖）再查（NFLookup.mo:473-481 / :1162-1223）——`omc X.mo` 里直接用 `Modelica.Electrical…` 的 testsuite
+          用例就是这样拿到 MSL 的。ymc 的实例化途中不能往 arena 里加东西，改在实例化之前：收集文件里各名字的首段（类型名、
+          extends / import / constrainedby 路径、短类基类、表达式里的引用与调用），不是本文件顶层类、而 MODELICAPATH 上有同名
+          库的先装上（S2 的 Loader）；根类改成装库前取的"文件里最后一个顶层类"。多装的库只多出顶层类，不改变内层查得到的名字。
+          **子原因**：inst 的 `unresolved component type / base class` 带上查不到的名字（driver 打在 `[…]` 里）——据此把这 219 例
+          归了因：MSL 未装 117（本桶解决装库，其后的首因多是 `final` 属性修饰 `attribute modifier`、extends redeclare）、
+          ExternalObject 29、Clock 14、StateSelect / AssertionLevel 6、其余本地查找缺口（继承来的类、短类前缀…）。
+          新探针 25 个（al-a1）：PASS 22 / SKIP 1（`Modelica.Units.SI.Voltage` 的 final 属性）/ BOTH-REJECT 2。
+          → scodeinst 不变（523 / FAIL 26）；整个 testsuite PASS 1378→1389（FAIL 0，ACCEPTS-INVALID 3 不变：Modelica.Math /
+            Constants 的函数与常量、MathematicalAspects 的 6 例、ClockedSource）；探针 6763→6788。
+          **门的 ASan 扫描改用优化版**：Debug 版 ASan 装一次 MSL（2508 个文件、14 MB 源码）要 120 s（gcc-debug 3.8 s、msvc-debug
+          14.6 s），语料扫描里隐式装库的用例全超时。新增构建 / 测试预设 `msvc-asan-rel`（同一构建目录的 RelWithDebInfo 配置，
+          13.6 s；试过迭代器调试级别 1，129 s，不用）：ASan 语料扫描用它，单测两个配置都跑（Debug 版带完整迭代器检查）。
+          下一步：属性修饰上的 `final`（MSL 的 SI 类型 `type Voltage = Real(final quantity = …, final unit = "V")`，把一大批 MSL
+          用例挡在 `attribute modifier`）。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

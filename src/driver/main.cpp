@@ -15,6 +15,7 @@
 //       与 OMC getClassNames(P, recursive=true, qualified=true, showProtected=true) 同序。
 //   ymc --dump-after=scode [--class=Q.N] (<file.mo> | --load-model=P ...)
 //       Absyn → SCode 后按 OMC list(X, exportKind=SCode) 的格式打印；--class 只打印该类（全限定名）。
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -125,9 +126,78 @@ int dump_scode(ymc::Absyn& absyn, const std::string& dump_class) {
   return 0;
 }
 
+// omc 的隐式装库（NFLookup.lookupSimpleName：简单名一路查到顶层都没有 → loadLibrary(name) 按名从 MODELICAPATH 装默认
+// 版本（连带 uses 依赖）、并进顶层再查一次，NFLookup.mo:473-481 / :1162-1223 v1.25.0）。`omc X.mo` 里直接用
+// `Modelica.Electrical…` 的 testsuite 用例就是这样拿到 MSL 的（stderr："Automatically loaded package Modelica 4.0.0 due to
+// usage."）。ymc 的实例化途中不能往 arena 里加东西（持有的引用会悬垂），改在实例化之前做：收集文件里各名字的首段
+//（类型名、extends / import / constrainedby 路径、短类的基类、表达式里的引用与调用名），不是本文件顶层类、而 MODELICAPATH
+// 上有同名库的，先装上。多装的库只多出顶层类，不改变在内层就查得到的名字（查找由内向外，顶层最后）。
+// ponytail: 注解里的名字也算进去（`Line(…)` 之类查不到库，无害）；要精确到"查找真的走到了顶层"得在 inst 里装库。
+std::vector<ymc::Symbol> referenced_heads(const ymc::Absyn& a) {
+  std::vector<ymc::Symbol> out;
+  auto add = [&](ymc::Symbol s) {
+    if (s.is_valid() && std::find(out.begin(), out.end(), s) == out.end()) out.push_back(s);
+  };
+  for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(a.crefs.size()); ++i) {
+    const ymc::Cref& c = a.crefs[ymc::Id<ymc::Cref>::from_index(i)];
+    if (!c.parts.empty()) add(c.parts[0].name);
+  }
+  for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(a.elems.size()); ++i) {
+    const ymc::Element& e = a.elems[ymc::Id<ymc::Element>::from_index(i)];
+    if (e.kind == ymc::ElementKind::Component && !e.comp.type_path.empty()) add(e.comp.type_path[0]);
+    if (e.kind == ymc::ElementKind::Extends && !e.ext.path.empty()) add(e.ext.path[0]);
+    if (e.kind == ymc::ElementKind::Import && !e.imp.path.empty()) add(e.imp.path[0]);
+    if (e.has_constrainedby && !e.cb_path.empty()) add(e.cb_path[0]);
+  }
+  for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(a.classes.size()); ++i) {
+    const ymc::ClassDef& c = a.classes[ymc::Id<ymc::ClassDef>::from_index(i)];
+    if (c.is_short && !c.short_type.empty()) add(c.short_type[0]);
+  }
+  return out;
+}
+
+void autoload_libraries(ymc::Absyn& absyn, ymc::Interner& interner, const Options& opt) {
+  std::vector<ymc::Symbol> defined;
+  for (ymc::Id<ymc::ClassDef> c : absyn.top) defined.push_back(absyn.classes[c].name);
+  ymc::LoaderOptions lopt;
+  lopt.roots = opt.modelica_path.empty() ? ymc::Loader::default_roots()
+                                         : ymc::Loader::split_modelica_path(opt.modelica_path);
+  lopt.pure_impure_keywords = opt.std_version >= 3.3;
+  // 各根下现有的库名（MLS §18.8.3 的四种存储形式 `X.mo` / `X 版本.mo` / `X/` / `X 版本/`，取空格前、去 .mo）：
+  // 文件里的名字首段大多是变量名，先按目录筛一遍，免得每个名字都去扫一遍根目录。
+  std::vector<std::string> libs;
+  for (const std::filesystem::path& r : lopt.roots) {
+    std::error_code ec;
+    for (const std::filesystem::directory_entry& d : std::filesystem::directory_iterator(r, ec)) {
+      std::string s = d.path().filename().string();
+      if (d.is_regular_file(ec)) {
+        if (s.size() < 3 || s.compare(s.size() - 3, 3, ".mo") != 0) continue;
+        s.resize(s.size() - 3);
+      }
+      s = s.substr(0, s.find(' '));
+      if (!s.empty()) libs.push_back(std::move(s));
+    }
+  }
+  for (ymc::Symbol name : referenced_heads(absyn)) {
+    if (std::find(defined.begin(), defined.end(), name) != defined.end()) continue;
+    const std::string_view n = interner.str(name);
+    if (std::find(libs.begin(), libs.end(), n) == libs.end()) continue;
+    // 装不上（没有这个库）omc 回滚掉装库的报错（ErrorExt.rollBack），这里用一次性的诊断表丢弃。
+    ymc::Diagnostics ldiags;
+    ymc::Loader loader(absyn, ldiags, lopt);
+    if (!loader.load_library(n).is_valid()) continue;
+    for (const ymc::LoadedLibrary& l : loader.loaded()) {
+      std::fprintf(stderr, "Notification: Automatically loaded package %s %s.\n", l.name.c_str(),
+                   l.has_version ? l.version.raw.c_str() : "(default)");
+      defined.push_back(interner.intern(l.name));
+    }
+  }
+}
+
 // S3：实例化 + 压平 + dump（默认 `ymc X.mo`，对齐 `omc X.mo`：压平文件里最后一个顶层类）。
 // v1 未实现的构造 → 退出码 66 + `ymc: not implemented: <原因>`（运行器据此记 SKIP）。
-int dump_flat_pipeline(ymc::Absyn& absyn, ymc::Diagnostics& diags, ymc::Interner& interner) {
+// root_name：文件里最后一个顶层类（同 omc）——隐式装上的库排在它后面，不能再取 program 的末项。
+int dump_flat_pipeline(ymc::Absyn& absyn, ymc::Diagnostics& diags, ymc::Interner& interner, ymc::Symbol root_name) {
   ymc::SCode scode(absyn);
   ymc::translate_program(scode, absyn.top);
   if (scode.program.empty()) {
@@ -137,11 +207,14 @@ int dump_flat_pipeline(ymc::Absyn& absyn, ymc::Diagnostics& diags, ymc::Interner
   ymc::Inst inst(interner, absyn, scode);
   ymc::Instantiator instr(inst, diags);
   instr.make_top_node();
-  ymc::Symbol root_name = scode.elems[scode.program.back()].name;   // 最后一个顶层类（同 omc）
   ymc::NodeId root = instr.instantiate_root(root_name);
   // v1 未实现的构造先于错误判断（内建枚举/extends 内建等在实例化阶段就标 unsupported）。
   if (instr.unsupported()) {
-    std::fprintf(stderr, "ymc: not implemented: %s\n", instr.unsupported_reason().c_str());
+    if (instr.unsupported_detail().empty())
+      std::fprintf(stderr, "ymc: not implemented: %s\n", instr.unsupported_reason().c_str());
+    else
+      std::fprintf(stderr, "ymc: not implemented: %s [%s]\n", instr.unsupported_reason().c_str(),
+                   instr.unsupported_detail().c_str());
     return 66;
   }
   diags.print(stderr, "");
@@ -209,7 +282,13 @@ int run_one(const Options& opt, const std::string& path) {
                    std::string(interner.str(absyn.classes[absyn.top.front()].name)).c_str(), within.c_str());
       return 1;
     }
-    return dump_flat_pipeline(absyn, diags, interner);
+    if (absyn.top.empty()) {
+      std::fprintf(stderr, "ymc: no class to instantiate\n");
+      return 1;
+    }
+    const ymc::Symbol root_name = absyn.classes[absyn.top.back()].name;   // 装库之前取：文件里最后一个顶层类
+    autoload_libraries(absyn, interner, opt);
+    return dump_flat_pipeline(absyn, diags, interner, root_name);
   }
   std::string text = ymc::unparse(absyn);
   std::fputs(text.c_str(), stdout);

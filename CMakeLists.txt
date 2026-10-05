@@ -39,6 +39,10 @@ option(YMC_ASAN "Build with AddressSanitizer" OFF)
 if(YMC_ASAN AND MSVC)
   add_compile_options(/fsanitize=address)
   add_link_options(/INCREMENTAL:NO)       # ASan 元数据与增量链接不兼容（LNK4300）
+  # 构建预设 msvc-asan-rel（同一构建目录的 RelWithDebInfo 配置）给语料扫描用：Debug 版 ASan 装一次 MSL（2508 个文件、
+  # 14 MB 源码）要 2 分钟，扫描里隐式装库的用例会超时；优化版 ~13 s。
+  # ponytail: 优化版没有 STL 的迭代器检查（size 与 capacity 之间的越界 ASan 抓不到）；试过迭代器调试级别 1，装 MSL 慢到
+  # 129 s，不用。单测仍跑 Debug 版 ASan（msvc-asan，带完整迭代器检查）。
 elseif(YMC_ASAN)
   add_compile_options(-fsanitize=address)  # TDM-GCC 10 在 Windows 上不支持 ASan；留给以后的 clang 预设
   add_link_options(-fsanitize=address)

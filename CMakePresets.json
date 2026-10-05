@@ -45,12 +45,14 @@
     { "name": "gcc-debug",   "configurePreset": "gcc-debug" },
     { "name": "gcc-release", "configurePreset": "gcc-release" },
     { "name": "msvc-debug",  "configurePreset": "msvc",      "configuration": "Debug" },
-    { "name": "msvc-asan",   "configurePreset": "msvc-asan", "configuration": "Debug" }
+    { "name": "msvc-asan",   "configurePreset": "msvc-asan", "configuration": "Debug" },
+    { "name": "msvc-asan-rel", "configurePreset": "msvc-asan", "configuration": "RelWithDebInfo" }
   ],
   "testPresets": [
     { "name": "gcc-debug",   "configurePreset": "gcc-debug",   "output": { "outputOnFailure": true } },
     { "name": "gcc-release", "configurePreset": "gcc-release", "output": { "outputOnFailure": true } },
     { "name": "msvc-debug",  "configurePreset": "msvc",        "configuration": "Debug", "output": { "outputOnFailure": true } },
-    { "name": "msvc-asan",   "configurePreset": "msvc-asan",   "configuration": "Debug", "output": { "outputOnFailure": true } }
+    { "name": "msvc-asan",   "configurePreset": "msvc-asan",   "configuration": "Debug", "output": { "outputOnFailure": true } },
+    { "name": "msvc-asan-rel", "configurePreset": "msvc-asan", "configuration": "RelWithDebInfo", "output": { "outputOnFailure": true } }
   ]
 }

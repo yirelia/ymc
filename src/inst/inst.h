@@ -30,6 +30,8 @@ class Instantiator {
   // driver 据此退 66（记 SKIP，不是 FAIL）。与 flatten 的 unsupported 合并判断。
   [[nodiscard]] bool unsupported() const noexcept { return unsupported_; }
   [[nodiscard]] const std::string& unsupported_reason() const noexcept { return unsupported_reason_; }
+  // 子原因（查不到的类名等），driver 打在 `[…]` 里，供 nf_live_sweep 排桶；主原因不变。
+  [[nodiscard]] const std::string& unsupported_detail() const noexcept { return unsupported_detail_; }
 
  private:
   // ---- 三趟 ----
@@ -52,15 +54,17 @@ class Instantiator {
   void make_builtin_types();
   NodeId builtin_node(TypeKind k) const;
 
-  void mark_unsupported(const char* why) {
-    if (!unsupported_) { unsupported_ = true; unsupported_reason_ = why; }
+  void mark_unsupported(const char* why, std::string detail = {}) {
+    if (!unsupported_) { unsupported_ = true; unsupported_reason_ = why; unsupported_detail_ = std::move(detail); }
   }
+  std::string path_str(const std::vector<Symbol>& path) const;   // `A.B.C`（报 SKIP 子原因用）
 
   Inst& I_;
   Diagnostics& diags_;
   NodeId builtin_[4];   // Real/Integer/Boolean/String（按 TypeKind 序）
   bool unsupported_ = false;
   std::string unsupported_reason_;
+  std::string unsupported_detail_;
   int depth_ = 0;   // instantiate 递归深度（防无限递归栈溢出）
 };
 

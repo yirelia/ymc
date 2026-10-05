@@ -238,3 +238,4 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `ps-p1` | 25 | 下标只能跟在括号式后面：构造子 / 矩阵 / 调用 / 元组 / 两段下标，绑定 / 算法 / if 式里，及合法的括号写法 |
 | `ps-l1` | 14 | 带引号标识符的字符集：非 ASCII、空、反引号、转义（含 omc 只告警的非法转义）、ASCII 标点 |
 | `ps-ut` | 10 | 下标 / Q-IDENT 的报错位置（单测原文） |
+| `al-a1` | 25 | 隐式装库：表达式 / 函数调用 / import / extends / 类型里的 Modelica.…、ModelicaServices，同名本地元素、查不到的库名 |

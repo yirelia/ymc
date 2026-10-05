@@ -1,0 +1,118 @@
+//// set: al-a1 — 隐式装库：表达式 / 函数调用 / import / extends / 类型里的 Modelica.…、ModelicaServices，同名本地元素、查不到的库名
+//// model: A10
+model A10
+Real x = Modelica.Constants.pi * time;
+end A10;
+//// model: A11
+model A11
+Real y = Modelica.Math.sin(time);
+end A11;
+//// model: A12
+model A12
+import Modelica.Constants.pi;
+Real x = pi * time;
+end A12;
+//// model: A13
+model A13
+import Modelica.Math.*;
+Real y = cos(time);
+end A13;
+//// model: A14
+model A14
+import C = Modelica.Constants;
+Real x = C.e * time;
+end A14;
+//// model: A15
+model A15
+extends Modelica.Icons.Example;
+Real x = time;
+end A15;
+//// model: A16
+model A16
+constant Real c = Modelica.Constants.g_n;
+Real x = c * time;
+end A16;
+//// model: A17
+model A17
+Real x = Modelica.Constants.eps;
+end A17;
+//// model: A18
+model A18
+parameter Real p = Modelica.Constants.small;
+end A18;
+//// model: A19
+model A19
+Real Modelica = time;
+Real x = Modelica;
+end A19;
+//// model: A110
+model A110
+Real x = ModelicaServices.Machine.eps;
+end A110;
+//// model: A111
+model A111
+Real x = Modelica.Math.Vectors.length({1, 2}) * time;
+end A111;
+//// model: A112
+model A112
+Real x = Modelica.Math.Vectors.norm({3, 4});
+end A112;
+//// model: A113
+model A113
+Modelica.Units.SI.Voltage v = time;
+end A113;
+//// model: A114
+model A114
+Modelica.Blocks.Interfaces.RealInput u;
+end A114;
+//// model: A115
+model A115
+Real x;
+equation
+x = Modelica.Math.exp(time);
+end A115;
+//// model: A116
+model A116
+Real x;
+algorithm
+x := Modelica.Math.log(1 + time);
+end A116;
+//// model: A117
+model A117
+Real x = Modelica.Math.atan2(time, 1);
+end A117;
+//// model: A118
+model A118
+Real x = Modelica.Math.Nonexisting.f(time);
+end A118;
+//// model: A119
+model A119
+Real x = Modelicaa.Constants.pi;
+end A119;
+//// model: A120
+model A120
+Real x = Modelica.Constants.T_zero;
+end A120;
+//// model: A121
+model A121
+Real x(start = Modelica.Constants.pi) = time;
+end A121;
+//// model: A122
+model A122
+parameter Integer n = integer(Modelica.Constants.pi);
+Real x[n] = fill(time, n);
+end A122;
+//// model: A123
+package P
+constant Real k = Modelica.Constants.pi;
+end P;
+model A123
+Real x = P.k * time;
+end A123;
+//// model: A124
+model A
+Real x = Modelica.Constants.pi;
+end A;
+model A124
+A a;
+end A124;
