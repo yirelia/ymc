@@ -1,0 +1,86 @@
+//// set: fq-t — extends 属性修饰的优先级、隐式装库按文件的 uses 注解选版本、继承来的连接器分量序
+//// model: A1
+model A1
+  type V = Real(unit = "V");
+  V v[2] = {time, time};
+end A1;
+//// model: A2
+model A2
+  type V = Real(final unit = "V", start = 1);
+  V v[2](start = {2, 3}) = {time, time};
+end A2;
+//// model: A3
+model A3
+  Modelica.Units.SI.Position r[3] = {time, 2*time, 3};
+end A3;
+//// model: EX1
+model A
+  Real x(start = 1.0) = time;
+end A;
+model EX1
+  extends A(x(start = 2.0));
+end EX1;
+//// model: EX2
+model A
+  Real x(unit = "m") = time;
+end A;
+model EX2
+  extends A(x(start = 2.0));
+end EX2;
+//// model: OR1
+connector Pin
+  Real v;
+  flow Real i;
+end Pin;
+partial model TwoPin
+  Real v;
+  Pin p;
+  Pin n;
+end TwoPin;
+partial model OnePort
+  extends TwoPin;
+  Real i;
+end OnePort;
+model C
+  extends OnePort;
+end C;
+model OR1
+  C c;
+end OR1;
+//// model: OR2
+model R
+  Real a;
+  Real b;
+end R;
+model B0
+  Real v;
+  R r;
+  Real w;
+end B0;
+model OR2
+  extends B0;
+  Real i;
+end OR2;
+//// model: OR3
+model OR3
+  Real v;
+  Modelica.Electrical.Analog.Interfaces.PositivePin p;
+  Real i;
+end OR3;
+//// model: OR4
+connector Pin
+  Real v;
+  flow Real i;
+end Pin;
+connector PositivePin
+  extends Pin;
+end PositivePin;
+model OR4
+  Real v;
+  PositivePin p;
+  Real i;
+end OR4;
+//// model: OR5
+model OR5
+  Modelica.Electrical.Analog.Sources.ConstantVoltage s(V = 2);
+end OR5;

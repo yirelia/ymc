@@ -194,6 +194,7 @@ struct Component {
   Type ty;
   std::vector<Id<SMod>> derived_mods;        // 短类链上的属性修饰（`type V=Real(unit=…)`），外层派生在前（优先级高）
   std::vector<NodeId> derived_scopes;        // 与 derived_mods 平行：各短类定义所在的类（修饰值在那里解析）
+  std::vector<Id<SMod>> extends_mods;        // extends 修饰里改本组件属性的子修饰（`extends A(x(start = 2))`），外层在前
   Binding binding;
   Id<Expr> condition;                        // 条件组件 `if cond`（v1 占位，条件组件不在 v1）
   CompAttributes attributes;

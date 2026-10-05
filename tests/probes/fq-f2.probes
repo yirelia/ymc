@@ -1,0 +1,140 @@
+//// set: fq-f2 — 数组组件的类型链修饰（每元素同值）+ MSL 的 SI 类型（Position[3]、Angle、Temperature、NonSI…）
+//// model: F20
+model F20
+type V = Real(unit = "V");
+V v[2] = {time, time};
+end F20;
+//// model: F21
+model F21
+type V = Real(final unit = "V", start = 1);
+V v[2](start = {2, 3}) = {time, time};
+end F21;
+//// model: F22
+model F22
+Modelica.Units.SI.Position r[3] = {time, 2 * time, 3};
+end F22;
+//// model: F23
+model F23
+type V = Real(unit = "V");
+V v[2, 2] = {{time, 1}, {2, time}};
+end F23;
+//// model: F24
+model F24
+type V = Real(unit = "V", min = 0);
+V v[2](each min = 1) = {time, time};
+end F24;
+//// model: F25
+model F25
+type V = Real(unit = "V");
+type W = V(min = 0);
+W w[2] = {time, time};
+end F25;
+//// model: F26
+model F26
+type V = Real(start = 1);
+parameter Integer n = 3;
+V v[n] = fill(time, n);
+end F26;
+//// model: F27
+model F27
+type V = Real(unit = "V");
+V v[0];
+end F27;
+//// model: F28
+model F28
+type V = Real(unit = "V");
+model A
+V v[2] = {time, time};
+end A;
+A a[2];
+end F28;
+//// model: F29
+model F29
+type V = Real(unit = "V");
+record R
+V v[2];
+end R;
+R r(v = {1, 2});
+end F29;
+//// model: F210
+model F210
+type V = Real(start = 1);
+V v[2](each fixed = true);
+equation
+der(v) = {1, 2};
+end F210;
+//// model: F211
+model F211
+type V = Real(start = 1);
+V v[2](start = {3, 4}, each fixed = true);
+equation
+der(v) = {1, 2};
+end F211;
+//// model: F212
+model F212
+type V = Real(final start = 1);
+V v[2](start = {3, 4});
+equation
+der(v) = {1, 2};
+end F212;
+//// model: F213
+model F213
+Modelica.Units.SI.Angle phi[2](each displayUnit = "deg") = {time, time};
+end F213;
+//// model: F214
+model F214
+Modelica.Units.SI.Voltage v[2](displayUnit = {"kV", "mV"}) = {time, time};
+end F214;
+//// model: F215
+model F215
+Modelica.Units.SI.Voltage v(nominal = 1000) = time;
+end F215;
+//// model: F216
+model F216
+Modelica.Units.SI.Temperature T = 300 + time;
+end F216;
+//// model: F217
+model F217
+Modelica.Units.SI.Temperature T(start = 300, fixed = true);
+equation
+der(T) = 1;
+end F217;
+//// model: F218
+model F218
+parameter Modelica.Units.SI.Resistance R = 10;
+Modelica.Units.SI.Current i = time / R;
+end F218;
+//// model: F219
+model F219
+Modelica.Units.SI.Mass m = 1;
+Modelica.Units.SI.Velocity v;
+equation
+m * der(v) = 1;
+end F219;
+//// model: F220
+model F220
+Modelica.Units.NonSI.AngularVelocity_rpm w = 60 * time;
+end F220;
+//// model: F221
+model F221
+type E = enumeration(a, b);
+type F = E(final start = E.b);
+F f[2];
+end F221;
+//// model: F222
+model F222
+type I = Integer(min = 1);
+I i[2] = {1, 2};
+end F222;
+//// model: F223
+model F223
+type B = Boolean(start = true);
+B b[2];
+equation
+b = {time > 1, time > 2};
+end F223;
+//// model: F224
+model F224
+type S = String(start = "x");
+S s[2] = {"a", "b"};
+end F224;

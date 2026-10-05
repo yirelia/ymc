@@ -1483,6 +1483,22 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           13.6 s；试过迭代器调试级别 1，129 s，不用）：ASan 语料扫描用它，单测两个配置都跑（Debug 版带完整迭代器检查）。
           下一步：属性修饰上的 `final`（MSL 的 SI 类型 `type Voltage = Real(final quantity = …, final unit = "V")`，把一大批 MSL
           用例挡在 `attribute modifier`）。
+    - [x] (61e) flat + inst + driver：属性修饰上的 final、数组组件的类型链修饰、extends 属性修饰的优先级、按 uses 注解装库（2026-10-05）：
+          **final 属性**：MSL 的 SI 类型 `type Voltage = Real(final quantity = …, final unit = "V")` 此前一律 `attribute modifier`
+          SKIP。值照常取、final 不打印；更外层的修饰再碰这个属性（同值、无值也算）→ omc "Trying to override final element"
+          （修饰由内向外 merge，内层 final 即 checkFinalOverride，NFModifier.mo:399-405 / :691-709）→ SKIP。
+          **数组组件的类型链修饰**：`type V = Real(unit = "V"); V v[2]` 此前 `array derived-type modifier` SKIP；omc 给类型修饰补上
+          组件的维（fill，expandProxySubscripts，NFFlatten.mo:1616-1643）= 每元素同值，外层按元素切分的值照样盖过它。
+          **extends 属性修饰的优先级（旧错）**：`extends A(x(start = 2.0))` 此前混进类型链修饰（排在组件声明修饰之后），A 里
+          `Real x(start = 1.0)` 时输出 1.0（omc 2.0，静默错，FA 探针 t EX1）——单列 extends_mods，排在声明修饰之前。
+          **按 uses 注解装库**：`omc X.mo` 读文件时就按顶层类的 `uses(Modelica(version = "3.2.1"))` 装库（装上声明兼容的 3.2.3），
+          默认版本装 4.0.0 时 resolveLoops/Circuit3x 的分量序不同（3.2.3 的 OnePort 是 v, i, p, n）。driver 先按 uses 注解装、
+          再按用到的名字装默认版本；Notification 文案、顺序与 omc 相同（stderr）。
+          新探针 68 个（fq-f1 30 / fq-f2 25 / fq-t 10 / 单测原文 3）：无 FAIL / ACCEPTS-INVALID。
+          → scodeinst 523→524 PASS（BuiltinAttribute11 入 slice）；FAIL 26→27：LookupLibrary1（文件由带 MSL 4.1.0 的较新 OMC 生成，
+            Notification 写 4.1.0；ymc 与 1.25.0 + MSL 4.0.0 一致，记入分歧账本）；整个 testsuite PASS 1389→1417（FAIL 0，
+            ACCEPTS-INVALID 3 不变；MSL 电路的 resolveLoops / tearing 用例、arrays/ArrayDim1/2、packages1 …）；+1 单测（241）；
+            探针 6788→6856。
   - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

@@ -159,6 +159,7 @@ struct ModSource {
   Id<SMod> mod;
   NodeId scope;
   std::vector<Symbol> vprefix;
+  bool each_all = false;   // 短类链派生修饰：数组组件的每个元素取同一个值（见 emit_array）
 };
 
 class Flattener {
@@ -3297,9 +3298,11 @@ class Flattener {
         record_structural(vkey);
       }
     }
-    // 属性来源（优先级序 R15 §3.4）：外来子修饰 > 组件自身声明修饰 > 短类链派生修饰（外层派生在前）。
+    // 属性来源（优先级序 R15 §3.4）：外来子修饰 > extends 修饰（外层在前）> 组件自身声明修饰 > 短类链派生修饰（外层
+    // 派生在前）。
     std::vector<ModSource> asrc;
     for (Id<SMod> m : mod_subs) asrc.push_back({m, mod_scope, mod_prefix});
+    for (Id<SMod> em : I_.comps[cid].extends_mods) asrc.push_back({em, enclosing, prefix});
     {
       const Id<SMod> dm = I_.scode.elems[I_.comps[cid].def].mod;
       if (dm.is_valid()) asrc.push_back({dm, enclosing, prefix});
@@ -3519,12 +3522,15 @@ class Flattener {
     for (Id<Exp> d : cel.attr.dims) dim_exps.push_back(d);
     for (Id<Exp> d : cel.type.dims) dim_exps.push_back(d);
     if (dim_exps.empty()) { set_unsupported("array dimension"); return; }
-    // 属性来源（优先级序同 emit_variable）：外来子修饰 > 组件自身声明修饰。短类链派生修饰（类修饰 origin ≠ parent 时要补
-    // fill 维，expandProxySubscripts :1616-1643）未做 → SKIP。
-    if (!I_.comps[cid].derived_mods.empty()) { set_unsupported("array derived-type modifier"); return; }
+    // 属性来源（优先级序同 emit_variable）：外来子修饰 > 组件自身声明修饰 > 短类链派生修饰。派生修饰是元素类型上的修饰，
+    // omc 给它补上组件的维（fill，expandProxySubscripts，NFFlatten.mo:1616-1643 v1.25.0）——每个元素取同一个值，等于
+    // each（FA 探针 t：`type V = Real(unit = "V"); V v[2]` → `v[1](unit = "V")`、`v[2](unit = "V")`；外层的 `start = {2, 3}`
+    // 照样按元素切分盖过类型上的 `start = 1`）。
     std::vector<ModSource> asrc;
     for (Id<SMod> m : mod_subs) asrc.push_back({m, mod_scope, mod_prefix});
+    for (Id<SMod> em : I_.comps[cid].extends_mods) asrc.push_back({em, enclosing, prefix});
     if (cel.mod.is_valid()) asrc.push_back({cel.mod, enclosing, prefix});
+    for (Id<SMod> dm : I_.comps[cid].derived_mods) asrc.push_back({dm, enclosing, prefix, /*each_all=*/true});
     // 绑定：外来修饰优先，否则声明绑定。要求是数组构造子 `{…}` / `array(…)`，否则 SKIP。
     Id<Exp> braw;
     bool braw_written = true;   // 绑定是源码里书写的（非 flatten 合成的修饰）：结构参数的别名连带用
@@ -4188,16 +4194,30 @@ class Flattener {
     };
     // 校验各来源的属性子。无值无子修饰的 `each start` / `final start` 等于没写（typeTypeAttribute 换成 NOMOD，
     // NFTyping.mo:1281-1286；BuiltinAttribute20）。
-    for (const ModSource& src : sources)
+    // 属性修饰带 final（MSL 的 SI 类型 `type Voltage = Real(final quantity = …, final unit = "V")`）：值照常取，final 不打印
+    //（FA 探针 f1：`Modelica.Units.SI.Voltage v(displayUnit = "kV")` → `Real v(quantity = "ElectricPotential", unit = "V",
+    // displayUnit = "kV")`）。更外层（sources 里排在前面）的修饰再碰这个属性——同值、无值也算——omc 报 "Trying to override
+    // final element"（修饰由内向外逐层 merge，内层是 final 就 checkFinalOverride 报错，NFModifier.mo:399-405 / :691-709
+    // v1.25.0；FA 探针 f1 的 `V v(unit = "V")`）→ SKIP。
+    std::vector<Symbol> outer_names;   // 已看过的（更外层）来源修饰过的属性名
+    for (const ModSource& src : sources) {
+      const std::size_t n_outer = outer_names.size();
       for (const SSubMod& s : I_.scode.mods[src.mod].subs) {
         const SMod& sm = I_.scode.mods[s.mod];
+        if (sm.is_final && std::find(outer_names.begin(), outer_names.begin() + static_cast<std::ptrdiff_t>(n_outer),
+                                     s.ident) != outer_names.begin() + static_cast<std::ptrdiff_t>(n_outer)) {
+          set_unsupported("final element override");
+          return out;
+        }
+        outer_names.push_back(s.ident);
         if (sm.kind == SModKind::Mod && sm.subs.empty() && !sm.binding.is_valid()) continue;
-        bool simple = sm.kind == SModKind::Mod && !sm.is_final && sm.subs.empty();
+        bool simple = sm.kind == SModKind::Mod && sm.subs.empty();
         bool named = droppable(s.ident);
         for (const AttrSpec& a : table)
           if (s.ident == in_.intern(a.name)) named = true;
         if (!simple || !named) { set_unsupported("attribute modifier"); return out; }
       }
+    }
     for (const AttrSpec& a : table) {
       const Symbol an = in_.intern(a.name);
       const ModSource* src = nullptr;
@@ -4213,10 +4233,11 @@ class Flattener {
       }
       if (!smid.is_valid()) continue;
       const SMod sm = I_.scode.mods[smid];   // 拷贝（下面 inst 可能扩 arena）
-      if (!dims.empty() && each_unbound && !sm.is_each) { set_unsupported("each without value over attribute"); return out; }
+      const bool each = sm.is_each || src->each_all;
+      if (!dims.empty() && each_unbound && !each) { set_unsupported("each without value over attribute"); return out; }
       AttrPlan p{&a, an, AttrPlan::Mode::Whole, sm.binding, src->scope, src->vprefix, {}};
       const bool matrix = I_.absyn.exps[sm.binding].kind == ExpKind::Matrix;
-      if (dims.empty() || sm.is_each) {
+      if (dims.empty() || each) {
         Id<Expr> v = attr_value(a.vk, sm.binding, src->scope, src->vprefix);
         if (!finish_attr(a, an, v, sm.binding, src->scope)) return out;
         p.value = v;

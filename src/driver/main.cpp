@@ -178,19 +178,52 @@ void autoload_libraries(ymc::Absyn& absyn, ymc::Interner& interner, const Option
       if (!s.empty()) libs.push_back(std::move(s));
     }
   }
-  for (ymc::Symbol name : referenced_heads(absyn)) {
-    if (std::find(defined.begin(), defined.end(), name) != defined.end()) continue;
-    const std::string_view n = interner.str(name);
-    if (std::find(libs.begin(), libs.end(), n) == libs.end()) continue;
-    // 装不上（没有这个库）omc 回滚掉装库的报错（ErrorExt.rollBack），这里用一次性的诊断表丢弃。
-    ymc::Diagnostics ldiags;
-    ymc::Loader loader(absyn, ldiags, lopt);
-    if (!loader.load_library(n).is_valid()) continue;
-    for (const ymc::LoadedLibrary& l : loader.loaded()) {
-      std::fprintf(stderr, "Notification: Automatically loaded package %s %s.\n", l.name.c_str(),
-                   l.has_version ? l.version.raw.c_str() : "(default)");
-      defined.push_back(interner.intern(l.name));
+  // 装不上（没有这个库）omc 回滚掉装库的报错（ErrorExt.rollBack），这里的诊断表整个丢弃。
+  ymc::Diagnostics ldiags;
+  ymc::Loader loader(absyn, ldiags, lopt);
+  std::size_t shown = 0;   // loader.loaded() 里已报过通知的库数
+  // 新装上的库报通知（stderr，同 omc 的文案）：requested = 本次点名的库；uses = 本次因谁的 uses 注解而装（空 = 因用到）。
+  // omc 的顺序：因 uses 装的先报点名的库、再报它的依赖；因用到装的先报依赖、最后报点名的库。
+  auto notify = [&](std::string_view requested, std::string_view uses) {
+    const std::vector<ymc::LoadedLibrary>& ls = loader.loaded();
+    std::vector<std::string> lines;
+    std::string main_line;
+    for (std::size_t i = shown; i < ls.size(); ++i) {
+      std::string ver = ymc::library_meta(absyn, ls[i].cls).version;
+      if (ver.empty()) ver = "(default)";
+      const bool is_main = ls[i].name == requested;
+      std::string line = "Notification: Automatically loaded package " + ls[i].name + " " + ver + " due to " +
+                         (is_main ? (uses.empty() ? std::string("usage") : "uses annotation from " + std::string(uses))
+                                  : "uses annotation from " + std::string(requested)) + ".";
+      if (is_main) main_line = std::move(line); else lines.push_back(std::move(line));
+      defined.push_back(interner.intern(ls[i].name));
     }
+    shown = ls.size();
+    if (!main_line.empty()) {
+      if (uses.empty()) lines.push_back(std::move(main_line)); else lines.insert(lines.begin(), std::move(main_line));
+    }
+    for (const std::string& l : lines) std::fprintf(stderr, "%s\n", l.c_str());
+  };
+  auto available = [&](std::string_view n) { return std::find(libs.begin(), libs.end(), n) != libs.end(); };
+  auto is_defined = [&](std::string_view n) {
+    return std::any_of(defined.begin(), defined.end(), [&](ymc::Symbol s) { return interner.str(s) == n; });
+  };
+  // (1) 文件顶层类的 uses 注解：装它要的版本（omc 读文件时就装，"… due to uses annotation from Circuit3x."；
+  //     simulation/modelica/resolveLoops/Circuit3x 要 Modelica 3.2.1 → omc 装上声明兼容的 3.2.3，OnePort 的分量序与
+  //     4.0.0 不同，照默认版本装就错序）。
+  const std::vector<ymc::Id<ymc::ClassDef>> user_top = absyn.top;   // 拷贝：装库会往 absyn.top 里加
+  for (ymc::Id<ymc::ClassDef> c : user_top) {
+    const std::string cname(interner.str(absyn.classes[c].name));
+    for (const auto& [lib, ver] : ymc::library_meta(absyn, c).uses) {
+      if (is_defined(lib) || !available(lib)) continue;
+      if (loader.load_library(lib, ver).is_valid()) notify(lib, cname);
+    }
+  }
+  // (2) 用到的名字：装默认版本（NFLookup.loadLibrary）。
+  for (ymc::Symbol name : referenced_heads(absyn)) {
+    const std::string_view n = interner.str(name);
+    if (is_defined(n) || !available(n)) continue;
+    if (loader.load_library(n).is_valid()) notify(n, "");
   }
 }
 

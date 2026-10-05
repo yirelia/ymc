@@ -4757,6 +4757,29 @@ YMC_TEST(inst_short_class_aliasing_composite) {
   }
 }
 
+YMC_TEST(flatten_final_attributes_and_array_derived_types) {
+  // 属性修饰上的 final（MSL 的 SI 类型 `type Voltage = Real(final quantity = …, final unit = "V")`）：值照常取、final 不打印；
+  // 数组组件的类型链修饰每个元素同值（omc 的 fill）、被外层按元素切分的 `start = {2, 3}` 盖过；extends 里的属性修饰比组件
+  // 声明的修饰外一层（`extends A(x(start = 2.0))` 盖过 A 里的 `start = 1.0`）。期望 = omc 1.25.0 实跑 FAT1（2026-10-05）。
+  YMC_CHECK_EQ(flatten_src("model A\n  Real x(start = 1.0) = time;\nend A;\nmodel FAT1\n"
+                           "  type V = Real(final unit = \"V\", start = 1);\n  V v[2](start = {2, 3}) = {time, time};\n"
+                           "  V w(displayUnit = \"kV\") = time;\n  extends A(x(start = 2.0));\nend FAT1;\n"),
+               std::string("class FAT1\n  Real v[1](unit = \"V\", start = 2.0);\n  Real v[2](unit = \"V\", start = 3.0);\n"
+                           "  Real w(unit = \"V\", displayUnit = \"kV\", start = 1.0) = time;\n  Real x(start = 2.0) = time;\n"
+                           "equation\n  v = {time, time};\nend FAT1;\n"));
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           // 外层再改 final 的属性：omc "Trying to override final element unit"（FAS1，类型里的 final）。
+           {"model FAS1\n  type V = Real(final unit = \"V\");\n  V u(unit = \"A\") = time;\nend FAS1;\n", "final element override"},
+           // extends 修饰改基类里 final 的属性：同上（FAS2，scodeinst/BuiltinAttribute8 同形）。
+           {"model A\n  Real x(final start = 1.0) = time;\nend A;\nmodel FAS2\n  extends A(x(start = 2.0));\n"
+            "end FAS2;\n", "final element override"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

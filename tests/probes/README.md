@@ -239,3 +239,7 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `ps-l1` | 14 | 带引号标识符的字符集：非 ASCII、空、反引号、转义（含 omc 只告警的非法转义）、ASCII 标点 |
 | `ps-ut` | 10 | 下标 / Q-IDENT 的报错位置（单测原文） |
 | `al-a1` | 25 | 隐式装库：表达式 / 函数调用 / import / extends / 类型里的 Modelica.…、ModelicaServices，同名本地元素、查不到的库名 |
+| `fq-f1` | 30 | 属性修饰上的 final：类型里 / 组件声明里 / each、外层（实例 / extends / 短类 / 记录字段）再改 final 属性、MSL 的 SI 类型 |
+| `fq-f2` | 25 | 数组组件的类型链修饰（每元素同值）+ MSL 的 SI 类型（Position[3]、Angle、Temperature、NonSI…） |
+| `fq-t` | 10 | extends 属性修饰的优先级、隐式装库按文件的 uses 注解选版本、继承来的连接器分量序 |
+| `fq-ut` | 3 | final 属性 / 数组派生类型 / extends 属性修饰（单测原文） |

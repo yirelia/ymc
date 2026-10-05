@@ -1,0 +1,23 @@
+//// set: fq-ut — final 属性 / 数组派生类型 / extends 属性修饰（单测原文）
+//// model: FAS1
+model FAS1
+  type V = Real(final unit = "V");
+  V u(unit = "A") = time;
+end FAS1;
+//// model: FAS2
+model A
+  Real x(final start = 1.0) = time;
+end A;
+model FAS2
+  extends A(x(start = 2.0));
+end FAS2;
+//// model: FAT1
+model A
+  Real x(start = 1.0) = time;
+end A;
+model FAT1
+  type V = Real(final unit = "V", start = 1);
+  V v[2](start = {2, 3}) = {time, time};
+  V w(displayUnit = "kV") = time;
+  extends A(x(start = 2.0));
+end FAT1;

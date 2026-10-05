@@ -1,0 +1,185 @@
+//// set: fq-f1 — 属性修饰上的 final：类型里 / 组件声明里 / each、外层（实例 / extends / 短类 / 记录字段）再改 final 属性、MSL 的 SI 类型
+//// model: F10
+model F10
+type V = Real(final unit = "V");
+V v = time;
+end F10;
+//// model: F11
+model F11
+type V = Real(final unit = "V");
+V v(unit = "A") = time;
+end F11;
+//// model: F12
+model F12
+type V = Real(final unit = "V");
+V v(unit = "V") = time;
+end F12;
+//// model: F13
+model F13
+type V = Real(final unit = "V");
+V v(start = 1) = time;
+end F13;
+//// model: F14
+model F14
+Real x(final start = 1) = time;
+end F14;
+//// model: F15
+model F15
+model A
+Real x(final start = 1);
+equation
+x = time;
+end A;
+A a(x(start = 2));
+end F15;
+//// model: F16
+model F16
+model A
+Real x(final start = 1);
+equation
+x = time;
+end A;
+A a;
+end F16;
+//// model: F17
+model F17
+type V = Real(final unit = "V");
+type W = V(unit = "A");
+W w = time;
+end F17;
+//// model: F18
+model F18
+type V = Real(final unit = "V");
+type W = V(final quantity = "Q");
+W w = time;
+end F18;
+//// model: F19
+model F19
+Modelica.Units.SI.Voltage v = time;
+end F19;
+//// model: F110
+model F110
+Modelica.Units.SI.Voltage v(displayUnit = "kV") = time;
+end F110;
+//// model: F111
+model F111
+Modelica.Units.SI.Voltage v(unit = "kV") = time;
+end F111;
+//// model: F112
+model F112
+Real x[2](each final start = 1) = {time, time};
+end F112;
+//// model: F113
+model F113
+parameter Real p(final min = 0) = 1;
+end F113;
+//// model: F114
+model F114
+type V = Real(final unit = "V", min = 0);
+V v(min = -1) = time;
+end F114;
+//// model: F115
+model F115
+type V = Real(final unit = "V");
+V v[2] = {time, time};
+end F115;
+//// model: F116
+model F116
+type V = Real(final unit = "V");
+V v[2](each unit = "A") = {time, time};
+end F116;
+//// model: F117
+model F117
+type V = Real(final unit = "V");
+model A
+V v = time;
+end A;
+A a(v(unit = "A"));
+end F117;
+//// model: F118
+model F118
+type V = Real(final unit = "V");
+model A
+V v = time;
+end A;
+A a(v(start = 3));
+end F118;
+//// model: F119
+model F119
+type V = Real(final unit = "V");
+model A
+V v = time;
+end A;
+model B = A(v(unit = "A"));
+B b;
+end F119;
+//// model: F120
+model F120
+type V = Real(final unit = "V");
+model A
+V v = time;
+end A;
+model B
+extends A(v(unit = "A"));
+end B;
+B b;
+end F120;
+//// model: F121
+model F121
+type V = Real(final unit = "V");
+model A
+V v = time;
+end A;
+model B
+extends A(v(start = 4));
+end B;
+B b;
+end F121;
+//// model: F122
+model F122
+type V = Real(final unit = "V");
+record R
+V v;
+end R;
+R r(v = 1);
+end F122;
+//// model: F123
+model F123
+type V = Real(final unit = "V");
+record R
+V v;
+end R;
+R r(v(unit = "A") = 1);
+end F123;
+//// model: F124
+model F124
+type E = enumeration(a, b);
+type F = E(final start = E.b);
+F f;
+end F124;
+//// model: F125
+model F125
+type I = Integer(final min = 1);
+I i = 2;
+end F125;
+//// model: F126
+model F126
+type B = Boolean(final start = true);
+B b;
+equation
+b = time > 1;
+end F126;
+//// model: F127
+model F127
+type S = String(final start = "x");
+S s = "y";
+end F127;
+//// model: F128
+model F128
+Real x(start = 1, final fixed = true) = time;
+end F128;
+//// model: F129
+model F129
+type V = Real(final unit = "V");
+V v(final unit = "A") = time;
+end F129;

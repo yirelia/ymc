@@ -459,8 +459,10 @@ void Instantiator::apply_extends_modifier(NodeId bc, Id<SMod> mod, NodeId scope)
       comp.binding.scope = scope;
     }
     if (sm.is_final) comp.attributes.is_final = true;
-    if (!sm.subs.empty())   // 属性修饰（extends D(x(unit="kg"))）——最高优先（靠近派生），插到前面
-      comp.derived_mods.insert(comp.derived_mods.begin(), s.mod);
+    // 属性修饰（`extends A(x(start = 2))`）：比组件自己声明的修饰外一层（修饰由内向外 merge：声明 → 各层 extends →
+    // 实例修饰），flatten 排在声明修饰之前（EX 探针 EX1：A 里 `Real x(start = 1)`，omc 取 2.0）。多层继承时外层的 extends
+    // 后施加（基类实例先建好），插到前面 = 外层在前。此前混进 derived_mods（类型链修饰，排在声明修饰之后），优先级反了。
+    if (!sm.subs.empty()) comp.extends_mods.insert(comp.extends_mods.begin(), s.mod);
   }
 }
 

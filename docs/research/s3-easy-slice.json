@@ -594,5 +594,6 @@
 "InStreamArray.mo",
 "ExtendSections.mo",
 "ExtendsShort3.mo",
-"RecordExtends1.mo"
+"RecordExtends1.mo",
+"BuiltinAttribute11.mo"
 ]
