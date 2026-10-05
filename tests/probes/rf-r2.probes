@@ -1,0 +1,231 @@
+//// set: rf-r2 — 重声明形态补充：未重声明时的 constrainedby、多层带内层 constrainedby、输出 / 流前缀、维 + 绑定、each、条件连接器
+//// model: R20
+model A
+parameter Real p = 1;
+end A;
+model M
+replaceable A a(p = 4) constrainedby A(p = 7);
+end M;
+model R20
+extends M;
+end R20;
+//// model: R21
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model C
+extends B;
+parameter Real r = 3;
+end C;
+model M
+replaceable A a;
+end M;
+model N
+extends M(redeclare B a(q = 4));
+end N;
+model R21
+extends N(redeclare C a(r = 5));
+end R21;
+//// model: R22
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model C
+extends B;
+parameter Real r = 3;
+end C;
+model M
+replaceable A a;
+end M;
+model N
+extends M(redeclare replaceable B a(q = 4) constrainedby B(q = 6));
+end N;
+model R22
+extends N(redeclare C a(r = 5));
+end R22;
+//// model: R23
+model M
+replaceable output Real y;
+equation
+y = time;
+end M;
+model R23
+extends M(redeclare Real y);
+end R23;
+//// model: R24
+model M
+Real w = time;
+replaceable output Real y = 2 * w;
+end M;
+model R24
+extends M(redeclare Real y);
+end R24;
+//// model: R25
+connector P
+replaceable flow Real f;
+Real e;
+end P;
+connector P2
+extends P(redeclare Real f);
+end P2;
+model R25
+P2 p;
+end R25;
+//// model: R26
+model M
+replaceable Real x[2] = {1, 2};
+end M;
+model R26
+extends M(redeclare Real x = {3, 4});
+end R26;
+//// model: R27
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a[2];
+end M;
+model R27
+extends M(redeclare B a(each q = 3));
+end R27;
+//// model: R28
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a[2];
+end M;
+model R28
+extends M(redeclare B a(q = {3, 4}));
+end R28;
+//// model: R29
+record PB
+Real x;
+end PB;
+record PB2
+extends PB;
+Real z;
+end PB2;
+model M
+Real w = time;
+replaceable output PB pb(final x = w);
+end M;
+model R29
+extends M(redeclare final PB2 pb(final z = 0));
+end R29;
+//// model: R210
+connector HP
+Real T;
+flow Real Q;
+end HP;
+connector HP2
+extends HP;
+end HP2;
+model M
+parameter Boolean u = false;
+replaceable HP hp if u;
+HP h;
+equation
+connect(hp, h);
+end M;
+model R210
+extends M(redeclare HP2 hp);
+end R210;
+//// model: R211
+connector HP
+Real T;
+flow Real Q;
+end HP;
+connector HP2
+extends HP;
+end HP2;
+model M
+parameter Boolean u = true;
+replaceable HP hp if u;
+HP h;
+equation
+connect(hp, h);
+end M;
+model R211
+extends M(redeclare HP2 hp);
+end R211;
+//// model: R212
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a constrainedby A(p = 6);
+end M;
+model R212
+extends M(redeclare B a(q = 8));
+end R212;
+//// model: R213
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+parameter Real k = 4;
+replaceable A a constrainedby A(p = k);
+end M;
+model R213
+extends M(k = 9, redeclare B a);
+end R213;
+//// model: R214
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable parameter A a;
+end M;
+model R214
+extends M(redeclare B a);
+end R214;
+//// model: R215
+model M
+replaceable parameter Real x = 1;
+end M;
+model R215
+extends M(redeclare Real x(min = 0));
+end R215;
+//// model: R216
+model M
+replaceable Real x(start = 1) = time;
+end M;
+model R216
+extends M(redeclare Real x(min = 0));
+end R216;
+//// model: R217
+model M
+replaceable Real x(start = 1) = time constrainedby Real(max = 5);
+end M;
+model R217
+extends M(redeclare Real x(min = 0));
+end R217;

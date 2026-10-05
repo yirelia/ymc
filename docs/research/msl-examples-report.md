@@ -76,3 +76,12 @@ SKIP 首因（前 10）：extends redeclare 113、Clock 72、extends 修饰改�
 extends 修饰里的组件重声明（Electrical.Analog.Sources 一族的 `redeclare Modelica.Blocks.Sources.Sine signalSource(…)`）、
 连接器里经短类定型的成员不打 final、类型带 absoluteValue = false 时组件注释换成类型的、零取负得正零之后：Electrical 5 → 22
 （Analog 的整流、加热、晶体管门电路…），其余不变；FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-06 加宽 61i 之后：PASS 49 → 54
+
+修饰各层带自己的作用域（外层实例修饰叠组件声明修饰、extends 修饰改继承来的复合组件）之后：Electrical.Analog 的 CauerLowPassSC、
+DifferenceAmplifier、IdealTriacCircuit、NandGate、SimpleTriacCircuit 通过；FAIL / ACCEPTS-INVALID / CRASH 0。原"extends modifier
+on composite"的 103 个（Machines / PowerConverters / FundamentalWave / QuasiStatic）露出的下一层是重声明形态（constrainedby、
+条件、维、前缀，78 个），同桶补齐后再往下露出：if 方程条件求不出（28，电机的 useThermalPort 一类）、函数变量类型（15）、短类
+受限类型不符（11）、组件修饰里的重声明（8）、ExternalObject（6）等——这一层暂无整模型通过。SKIP 前几类：Clock 72、Evaluate 注解
+50、函数变量类型 47、短类受限类型不符 37、ExternalObject 30、if 条件求不出 28、extends 内建类型 28。

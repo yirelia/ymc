@@ -118,16 +118,25 @@ const BuiltinFn* lookup_builtin(std::string_view name) {
   return nullptr;
 }
 
-// 修饰传播上下文（R15 §3.3：没有全局修饰环境，每层 instClassDef 只把 mod 按名拆成子修饰传给下一层）。
-// flatten 的 DFS 本身就是这个逐层下降，这里把"适用于本层各子元素的修饰"顺着 DFS 带下去。
-//   mods    ：本层子元素可能命中的修饰节点（其 subs 按子元素名匹配；多个 = 重名/多来源并集，如 mod4 的两个 a(...)）。
+// 单个属性/绑定的来源：一个修饰节点 + 它的解析作用域。按优先级排列（外层实例修饰在前）。
 //   scope   ：修饰里表达式 cref 的解析作用域（= 修饰书写处的实例；R15 §1 binding 自带作用域）。
 //   vprefix ：修饰里表达式解析后要加的前缀（= 书写处的前缀）。
-//   final_all：上层 final 传播（`final A a(...)` → a 整棵子树 final）。
-struct ModCtx {
-  std::vector<Id<SMod>> mods;
+struct ModSource {
+  Id<SMod> mod;
   NodeId scope;
   std::vector<Symbol> vprefix;
+  bool each_all = false;   // 短类链派生修饰：数组组件的每个元素取同一个值（见 emit_array）
+};
+
+// 修饰传播上下文（R15 §3.3：没有全局修饰环境，每层 instClassDef 只把 mod 按名拆成子修饰传给下一层）。
+// flatten 的 DFS 本身就是这个逐层下降，这里把"适用于本层各子元素的修饰"顺着 DFS 带下去。
+//   mods    ：本层子元素可能命中的修饰（其 subs 按子元素名匹配），按优先级排、外层在前，各带自己的作用域——外层实例修饰
+//             在修饰书写处、extends 修饰与组件自身声明修饰在组件所在的类、短类链修饰在短类定义处。omc 把这几层由外向内
+//             逐层合并（NFModifier.merge，NFModifier.mo:386-438 v1.25.0），绑定取最外层的；同层重名（mod4 的两个 a(...)）
+//             也各占一项。
+//   final_all：上层 final 传播（`final A a(...)` → a 整棵子树 final）。
+struct ModCtx {
+  std::vector<ModSource> mods;
   bool final_all = false;
   SVariability var_floor = SVariability::Var;   // 复合组件下沉的变率下限（OMC variabilityMin，NFAttributes.mo:236）
   // 方向保留：所有前缀组件都是连接器或 input 组件时才保留 input/output（Variable.removeNonTopLevelDirection，
@@ -147,20 +156,15 @@ struct ModCtx {
   // 外层记录的整体绑定拆不开、已挪成（初始）方程：本层字段一律无绑定（outerBinding = EMPTY_BINDING，NFFlatten.mo:1004），
   // parameter 字段补 fixed = false（flattenSimpleComponent :730-735）；嵌套记录字段同样（其自身的整体绑定也丢）。
   bool unbound_fields = false;
+  // 外层某个组件带 `annotation(Evaluate = true)`：子树里的参数同样当结构参数（updateImplicitVariability 往下传的
+  // parentEval，NFInst.mo:3934-3936；Structural.isStructuralComponent 的 `compEval or parentEval`，NFStructural.mo:67）。
+  bool eval_parent = false;
 };
 
 // OMC Prefixes.variabilityMin（取更受约束者）：ymc 枚举 Var<Discrete<Param<Const 升序=更常量，故取序数较大者。
 inline SVariability var_min(SVariability a, SVariability b) {
   return static_cast<std::uint8_t>(a) >= static_cast<std::uint8_t>(b) ? a : b;
 }
-
-// 单个属性/绑定的来源：一个修饰节点 + 它的解析作用域。按优先级排列（外层实例修饰在前）。
-struct ModSource {
-  Id<SMod> mod;
-  NodeId scope;
-  std::vector<Symbol> vprefix;
-  bool each_all = false;   // 短类链派生修饰：数组组件的每个元素取同一个值（见 emit_array）
-};
 
 class Flattener {
  public:
@@ -760,8 +764,8 @@ class Flattener {
       // outer 组件：不产出变量，按名连到最近外层 inner，记重定向表供 cref 改写（R11 §5）。找不到 inner → SKIP。
       if (I_.comps[cid].attributes.is_outer) {
         // 外来修饰改 outer 元素（InnerOuterInvalidMod2/3：OUTER_ELEMENT_MOD）→ omc 报错 → SKIP。
-        for (Id<SMod> m : ctx.mods)
-          for (const SSubMod& sm : I_.scode.mods[m].subs)
+        for (const ModSource& m : ctx.mods)
+          for (const SSubMod& sm : I_.scode.mods[m.mod].subs)
             if (sm.ident == cname) set_unsupported("modifier on outer element");
         if (result_.unsupported) continue;
         // `inner outer` 组合前缀：既声明本层变量又连外层 inner（InnerOuter3），v1 只做纯 outer → SKIP。
@@ -778,21 +782,39 @@ class Flattener {
       std::vector<Symbol> name = prefix;
       name.push_back(cname);
 
-      // 从外来修饰里取命中本组件名的子修饰（重名并集：mod4 的两个 a(...)）；判 final、判不支持形态。
-      std::vector<Id<SMod>> matched;
+      // 从外来修饰里取命中本组件名的子修饰（各带来源的作用域；重名并集：mod4 的两个 a(...)）；判 final、判不支持形态。
+      // 内层修饰把本元素标了 final、外层又改它（`C c(final x = 3)` 外再 `c(x = 2)`，E 探针 e13 / e121）→ omc 合并时报错
+      //（NFModifier.merge 的 checkFinalOverride，NFModifier.mo:399 / :691-709 v1.25.0）。记录整体绑定拆出的字段绑定
+      //（derived_mods_）不是修饰层——omc 的 getRecordBindings 在压平时才分发——改 final 字段不报错（RB 探针 rb0 / rb1：
+      // `parameter R r2 = r1`、R 里 `final parameter Real b` → `final parameter Real r2.b = r1.b`；MSL 电机的 frictionParameters）。
+      // ponytail: 同一层里拆成两个子修饰的（`a(c(x(start = 1)), c(final x = 3))`，omc 走 mergeLocal 不报错）也按两层判 → 多 SKIP。
+      std::vector<ModSource> matched;
       bool sub_final = false;
-      for (Id<SMod> m : ctx.mods)
-        for (const SSubMod& s : I_.scode.mods[m].subs)
+      bool mod_hit = false;   // 有真修饰命中本元素（不算记录整体绑定拆出的）
+      auto final_override = [&](const char* why) {
+        if (result_.unsupported) return;
+        set_unsupported(why);
+        for (Symbol p : prefix) result_.unsupported_detail += std::string(in_.str(p)) + ".";
+        result_.unsupported_detail += in_.str(cname);   // 子原因：哪个元素（排桶用）
+      };
+      for (const ModSource& m : ctx.mods) {
+        const bool outer_hit = mod_hit;   // 更外的层已经改了本元素
+        for (const SSubMod& s : I_.scode.mods[m.mod].subs)
           if (s.ident == cname) {
             const SMod& sm = I_.scode.mods[s.mod];
             if (sm.kind != SModKind::Mod) set_unsupported("redeclare/break modifier");
-            if (sm.is_final) sub_final = true;
-            matched.push_back(s.mod);
+            if (sm.is_final) {
+              sub_final = true;
+              if (outer_hit) final_override("final element override");
+            }
+            matched.push_back({s.mod, m.scope, m.vprefix, m.each_all});
+            mod_hit = mod_hit || !derived_mods_.count(s.mod.raw);
           }
+      }
       // 外来修饰改 final 元素（NFModifier.checkFinalOverride :697-713，FinalMod1 / ModifyConstant6）、改 protected 元素
       //（PROTECTED_MODIFICATION，ProtectedAccess / Protected1）→ omc 报错 → SKIP。
-      if (!matched.empty() && (I_.comps[cid].attributes.is_final || vis == Visibility::Protected)) {
-        set_unsupported(vis == Visibility::Protected ? "modification of protected element" : "final element override");
+      if (mod_hit && (I_.comps[cid].attributes.is_final || vis == Visibility::Protected)) {
+        final_override(vis == Visibility::Protected ? "modification of protected element" : "final element override");
         continue;
       }
       const bool comp_final = ctx.final_all || sub_final || I_.comps[cid].attributes.is_final;
@@ -825,32 +847,30 @@ class Flattener {
           Id<Exp> wraw;
           NodeId wscope = inst_node;
           std::vector<Symbol> wvpfx = prefix;
-          for (Id<SMod> m : matched)
-            if (I_.scode.mods[m].binding.is_valid()) { wraw = I_.scode.mods[m].binding; wscope = ctx.scope; wvpfx = ctx.vprefix; break; }
+          for (const ModSource& m : matched)
+            if (I_.scode.mods[m.mod].binding.is_valid()) { wraw = I_.scode.mods[m.mod].binding; wscope = m.scope; wvpfx = m.vprefix; break; }
           if (!wraw.is_valid() && I_.comps[cid].binding.kind == BindingKind::Raw && I_.comps[cid].binding.raw_exp.is_valid())
             wraw = I_.comps[cid].binding.raw_exp;
           if (wraw.is_valid() && r != SRestriction::Record) { set_unsupported("composite array whole binding"); continue; }
-          // 数组修饰分发（Modifier.propagate，NFModifier.mo:444-513）：组件自身声明修饰 cel.mod（`a[3](x={…})`，作用域 = 本
-          // 实例）或外来修饰（`b(a(x={…}))`，作用域 = 修饰所在实例，BindingArray3/6）逐元素切分。派生修饰 / 两套同时有
-          //（异作用域）→ SKIP。有整体绑定时字段修饰先去掉绑定（字段绑定由整体绑定给，同标量记录，RM 探针），剩下的属性须与
-          // 整体绑定同作用域。
-          std::vector<Id<SMod>> ext_mods;
-          for (Id<SMod> m : matched)
-            if (!I_.scode.mods[m].subs.empty()) ext_mods.push_back(m);
+          // 数组修饰分发（Modifier.propagate，NFModifier.mo:444-513）：外来修饰（`b(a(x={…}))`，作用域 = 修饰所在实例，
+          // BindingArray3/6）、extends 修饰（`extends A(c(x = {…}))`）、组件自身声明修饰 cel.mod（`a[3](x={…})`）、重声明的约束
+          // 修饰按优先级逐元素切分，各带自己的作用域（后三者 = 本实例，E 探针 e25-e27、R 探针 r119）。派生修饰 → SKIP。有整体
+          // 绑定时字段修饰先去掉绑定（字段绑定由整体绑定给，同标量记录，RM 探针）。
+          std::vector<ModSource> dmods;
+          for (const ModSource& m : matched)
+            if (!I_.scode.mods[m.mod].subs.empty()) dmods.push_back(m);
+          for (Id<SMod> em : I_.comps[cid].extends_mods) dmods.push_back({em, inst_node, prefix});
+          if (cel.mod.is_valid() && !I_.scode.mods[cel.mod].subs.empty()) dmods.push_back({cel.mod, inst_node, prefix});
+          for (Id<SMod> cc : I_.comps[cid].cc_mods)
+            if (!I_.scode.mods[cc].subs.empty()) dmods.push_back({cc, inst_node, prefix});
           if (!I_.comps[cid].derived_mods.empty()) { set_unsupported("composite array external modifier"); continue; }
-          const bool own_mod = cel.mod.is_valid() && !I_.scode.mods[cel.mod].subs.empty();
-          if (own_mod && !ext_mods.empty()) { set_unsupported("composite array stacked modifier scopes"); continue; }
-          std::vector<Id<SMod>> dmods = own_mod ? std::vector<Id<SMod>>{cel.mod} : ext_mods;
-          const NodeId dscope = own_mod ? inst_node : ctx.scope;
-          const std::vector<Symbol> dvpfx = own_mod ? prefix : ctx.vprefix;
           if (wraw.is_valid()) {
-            std::vector<Id<SMod>> kept;
-            for (Id<SMod> m : dmods) {
+            std::vector<ModSource> kept;
+            for (const ModSource& m : dmods) {
               bool ok = true;
-              const Id<SMod> f = strip_field_bindings(m, ok);
+              const Id<SMod> f = strip_field_bindings(m.mod, ok);
               if (!ok) set_unsupported("record binding + final/each field binding");
-              else if (f.is_valid() && (dscope != wscope || dvpfx != wvpfx)) set_unsupported("record binding + field modifier scopes");
-              else if (f.is_valid()) kept.push_back(f);
+              else if (f.is_valid()) kept.push_back({f, m.scope, m.vprefix});
             }
             if (result_.unsupported) continue;
             dmods = std::move(kept);
@@ -881,8 +901,8 @@ class Flattener {
           if (total > 1024) { set_unsupported("composite array too large"); continue; }
           if (total == 0) continue;   // 零长度复合数组：没有元素（ZeroDimUnconnectedFlow1/2）
           bool shape_ok = true;
-          for (Id<SMod> m : dmods)
-            if (!split_mod_ok(m, ci, TypeKind::Unknown, adims, dscope, dvpfx)) shape_ok = false;
+          for (const ModSource& m : dmods)
+            if (!split_mod_ok(m.mod, ci, TypeKind::Unknown, adims, m.scope, m.vprefix)) shape_ok = false;
           if (!shape_ok) {
             if (!result_.unsupported) set_unsupported("composite array modifier shape/type");
             continue;
@@ -898,6 +918,7 @@ class Flattener {
             achild.dir_inh = mdir;
             achild.in_conn = ctx.in_conn || r == SRestriction::Connector || r_exp;
             achild.flow_inherited = ctx.flow_inherited;   // 复合数组上的 flow 前缀仍在上方守卫处 SKIP
+            achild.eval_parent = ctx.eval_parent || evaluate_true(I_.comps[cid].def);
             // 数组各元素共用同一组件节点（present 标记按节点，YmcExpNode1 探针）；expandable 组件的成员重起链。
             if (!r_exp) achild.pp_chain = pp_self;
             if (wraw.is_valid()) {
@@ -906,21 +927,15 @@ class Flattener {
               const bool rec_const = var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Const;
               const Id<SMod> cm = er.is_valid() ? build_record_ctor_mod(er, ci, cdef, wscope, rec_const) : Id<SMod>{};
               if (!cm.is_valid()) { set_unsupported("composite array whole binding"); break; }
-              achild.mods.push_back(cm);
-              achild.scope = wscope;
-              achild.vprefix = wvpfx;
+              achild.mods.push_back({cm, wscope, wvpfx});
             }
-            if (!dmods.empty()) {
-              // 该元素的合成修饰：每个子修饰绑定按 aidx 下降取标量（`x={1,2,3}`→`x=vi`；each 保持原值）。
-              for (Id<SMod> m : dmods) {
-                const Id<SMod> em = distribute_mod(m, aidx);
-                if (!em.is_valid()) { set_unsupported("composite array modifier distribution"); break; }
-                achild.mods.push_back(em);
-              }
-              if (result_.unsupported) break;
-              achild.scope = dscope;
-              achild.vprefix = dvpfx;
+            // 该元素的合成修饰：每个子修饰绑定按 aidx 下降取标量（`x={1,2,3}`→`x=vi`；each 保持原值）。
+            for (const ModSource& m : dmods) {
+              const Id<SMod> em = distribute_mod(m.mod, aidx);
+              if (!em.is_valid()) { set_unsupported("composite array modifier distribution"); break; }
+              achild.mods.push_back({em, m.scope, m.vprefix});
             }
+            if (result_.unsupported) break;
             flatten_class(ci, name, cps, is_prot, achild, inners);
             std::size_t k = adims.size();
             while (k > 0) { --k; if (++aidx[k] <= adims[k]) break; aidx[k] = 1; if (k == 0) more = false; }
@@ -928,7 +943,7 @@ class Flattener {
           continue;
         }
         cur_pp_chain_ = pp_self;
-        emit_array(cid, name, is_prot, prefix, psubs, inst_node, matched, ctx.scope, ctx.vprefix, comp_final, cel, ctx);
+        emit_array(cid, name, is_prot, prefix, psubs, inst_node, matched, comp_final, cel, ctx);
         cur_pp_chain_.clear();
         continue;
       }
@@ -953,22 +968,18 @@ class Flattener {
           set_unsupported("flow/stream on composite component");
         if (r == SRestriction::Record && record_defaults_use_time(ci, I_.comps[cid].derived_mods))
           set_unsupported("time in record field default");
-        // 组件自身声明 / 外来修饰里是否有字段修饰（`R r(x(start = 1)) = …`）。被 extends 修饰重声明过的组件：重声明自己的修饰
-        // 在前、约束修饰（原声明的修饰，Instantiator::redeclare_component）在后，同作用域（写 extends 的类）。
+        // 组件自己这一侧的修饰层（外层在前，都在本实例解析）：extends 修饰（`extends A(c(x = 2))`，外层的 extends 在前，
+        // Instantiator::apply_extends_modifier；E 探针 e10-e121）> 组件声明修饰（`R r(x(start = 1)) = …`）> 约束修饰（被 extends
+        // 修饰重声明过的组件：原声明的修饰，Instantiator::redeclare_component）。内层的 final 被外层改 → 子层的 matched 判。
         std::vector<Id<SMod>> own_mods;
+        for (Id<SMod> em : I_.comps[cid].extends_mods) own_mods.push_back(em);
         if (cel.mod.is_valid() && !I_.scode.mods[cel.mod].subs.empty()) own_mods.push_back(cel.mod);
-        if (const Id<SMod> cc = I_.comps[cid].cc_mod; cc.is_valid() && !I_.scode.mods[cc].subs.empty()) {
-          // 约束修饰里 final 的元素又被重声明的修饰改了 → omc 报错（merge 时内层 final，checkFinalOverride）。
-          for (const SSubMod& cs : I_.scode.mods[cc].subs)
-            if (I_.scode.mods[cs.mod].is_final && cel.mod.is_valid())
-              for (const SSubMod& os : I_.scode.mods[cel.mod].subs)
-                if (os.ident == cs.ident) set_unsupported("final element override");
-          own_mods.push_back(cc);
-        }
+        for (Id<SMod> cc : I_.comps[cid].cc_mods)
+          if (!I_.scode.mods[cc].subs.empty()) own_mods.push_back(cc);
         const bool own = !own_mods.empty();
         bool matched_field = false;
-        for (Id<SMod> m : matched)
-          if (!I_.scode.mods[m].subs.empty()) { matched_field = true; break; }
+        for (const ModSource& m : matched)
+          if (!I_.scode.mods[m.mod].subs.empty()) { matched_field = true; break; }
         // 记录常量折叠：`constant/parameter R r = f(…)`（函数返回记录）→ 直接发射字段（继承 r 变率 + 折叠值），
         // 绕开下面的"变率复合" SKIP（CevalFuncRecord1/2）。带字段修饰时字段属性要合并（emit_record_fields 不看修饰，
         // RM1 `R d(y(min = 0)) = R(4, 5)` 曾丢 min）→ 不走此路（构造调用走下面的合并路，其余 SKIP）。
@@ -978,8 +989,8 @@ class Flattener {
             I_.comps[cid].derived_mods.empty()) {   // expandable 里的记录折叠字段不带 pp 链 → 不走此路
           Id<Exp> wb;
           NodeId ws = inst_node;
-          for (Id<SMod> m : matched)
-            if (I_.scode.mods[m].binding.is_valid()) { wb = I_.scode.mods[m].binding; ws = ctx.scope; break; }
+          for (const ModSource& m : matched)
+            if (I_.scode.mods[m.mod].binding.is_valid()) { wb = I_.scode.mods[m.mod].binding; ws = m.scope; break; }
           if (!wb.is_valid() && I_.comps[cid].binding.kind == BindingKind::Raw && I_.comps[cid].binding.raw_exp.is_valid())
             wb = I_.comps[cid].binding.raw_exp;
           if (wb.is_valid() && I_.absyn.exps[wb].kind == ExpKind::Call) {
@@ -1005,9 +1016,9 @@ class Flattener {
         Id<Exp> whole_raw;
         NodeId whole_scope = inst_node;
         std::vector<Symbol> whole_vpfx = prefix;
-        for (Id<SMod> m : matched)
-          if (I_.scode.mods[m].binding.is_valid()) {
-            whole_raw = I_.scode.mods[m].binding; whole_scope = ctx.scope; whole_vpfx = ctx.vprefix; break;
+        for (const ModSource& m : matched)
+          if (I_.scode.mods[m.mod].binding.is_valid()) {
+            whole_raw = I_.scode.mods[m.mod].binding; whole_scope = m.scope; whole_vpfx = m.vprefix; break;
           }
         if (!whole_raw.is_valid() && I_.comps[cid].binding.kind == BindingKind::Raw &&
             I_.comps[cid].binding.raw_exp.is_valid())
@@ -1031,8 +1042,7 @@ class Flattener {
           else if (!result_.unsupported)
             set_unsupported("composite/record binding");
         }
-        // 组子层修饰上下文（R15 §3.3 优先级：外层实例修饰 > 组件自身声明修饰）。两者同时非空要合并两套作用域，
-        // 本桶未做 → 标 unsupported（easy slice 不出现）。
+        // 组子层修饰上下文（R15 §3.3 优先级：外层实例修饰 > 组件自己这一侧的修饰 > 短类链修饰），各层带自己的作用域。
         ModCtx child;
         child.final_all = comp_final;
         child.var_floor = var_min(ctx.var_floor, I_.comps[cid].attributes.variability);   // 变率下沉（Half A）
@@ -1043,34 +1053,30 @@ class Flattener {
         child.in_conn = ctx.in_conn || r == SRestriction::Connector || r_exp;
         child.flow_inherited = ctx.flow_inherited || flow_rec;
         child.unbound_fields = ctx.unbound_fields || moved_binding;
+        child.eval_parent = ctx.eval_parent || evaluate_true(I_.comps[cid].def);   // EV 探针 ev1：`A a annotation(Evaluate = true)`
         if (!r_exp) child.pp_chain = pp_self;   // expandable 组件的成员重起链（其直属成员由 exp_class 置 pp）
         if (ctor_mod.is_valid()) {
           // 整体绑定 + 字段修饰（RM1-RM4 探针）：字段绑定一律来自整体绑定（getRecordBindings 的 outerBinding 盖过字段修饰的
           // 绑定，RM2 `R c(x = 5) = a` → `c.x = a.x`；构造缺省实参也盖，RM4 `R d(y = 3) = R(x = 4)` → `d.y = 2.0`），字段的
-          // 属性 / 嵌套修饰照常合并（RM1 `b.x(start = 3.0) = a.x`）。字段修饰去掉绑定后：空 → 丢；与整体绑定同作用域 → 并入；
-          // 异作用域（两套作用域并存）→ SKIP。
-          std::vector<Id<SMod>> mods = {ctor_mod};
+          // 属性 / 嵌套修饰照常合并（RM1 `b.x(start = 3.0) = a.x`）。字段修饰去掉绑定后：空 → 丢；否则按优先级并入（外层实例
+          // 修饰在前），各带自己的作用域（E 探针 e210-e212）。
+          child.mods = {{ctor_mod, whole_scope, whole_vpfx}};
           auto take = [&](Id<SMod> m, NodeId sc, const std::vector<Symbol>& vp) {
             bool ok = true;
             const Id<SMod> f = strip_field_bindings(m, ok);
             if (!ok) set_unsupported("record binding + final/each field binding");
-            else if (f.is_valid() && (sc != whole_scope || vp != whole_vpfx)) set_unsupported("record binding + field modifier scopes");
-            else if (f.is_valid()) mods.push_back(f);
+            else if (f.is_valid()) child.mods.push_back({f, sc, vp});
           };
-          if (own) take(cel.mod, inst_node, prefix);
-          for (Id<SMod> m : matched)
-            if (!I_.scode.mods[m].subs.empty()) take(m, ctx.scope, ctx.vprefix);
-          child.mods = std::move(mods); child.scope = whole_scope; child.vprefix = whole_vpfx;
-        } else if (!matched.empty() && own) {
-          set_unsupported("stacked modifier scopes");
-        } else if (!matched.empty()) {
-          child.mods = matched; child.scope = ctx.scope; child.vprefix = ctx.vprefix;
-        } else if (own) {
-          child.mods = own_mods; child.scope = inst_node; child.vprefix = prefix;
+          for (const ModSource& m : matched)
+            if (!I_.scode.mods[m.mod].subs.empty()) take(m.mod, m.scope, m.vprefix);
+          for (Id<SMod> m : own_mods) take(m, inst_node, prefix);
+        } else {
+          child.mods = matched;
+          for (Id<SMod> m : own_mods) child.mods.push_back({m, inst_node, prefix});
         }
         // 短类链上的修饰（`model B = A(k = 2); B b;`，MLS §4.5.1：短类定义 = 基类 + 修饰）：优先级最低（外来的、组件
         // 自己的在前，链上外层的短类在前），排在最后。值在短类定义处解析：定义在组件所在的类里 → 与组件自己的修饰同一
-        // 作用域；定义在包里 → 包作用域（只引常量）；别处（外层模型里的短类等）未做 → SKIP。
+        // 作用域；定义在包里 / 顶层 → 包 / 全局作用域（只引常量）；别处（外层模型里的短类等）未做 → SKIP。
         if (!result_.unsupported && !I_.comps[cid].derived_mods.empty()) {
           const std::vector<Id<SMod>> dmods = I_.comps[cid].derived_mods;    // 拷贝
           const std::vector<NodeId> dscopes = I_.comps[cid].derived_scopes;
@@ -1085,6 +1091,8 @@ class Flattener {
               vp = prefix;
             } else if (d.is_valid() && !I_.nodes[d].is_empty() && I_.nodes[d].def.is_valid() &&
                        I_.scode.elems[I_.nodes[d].def].restriction == SRestriction::Package) {
+              sc = d;
+            } else if (d == I_.top) {   // 顶层短类 `model C2 = C(x = 4);`（E 探针 e214 / e316 / e317）
               sc = d;
             } else {
               set_unsupported("short class modifier scope");
@@ -1102,23 +1110,8 @@ class Flattener {
               if (!ok) { set_unsupported("record binding + final/each field binding"); break; }
               if (!dm.is_valid()) continue;
             }
-            if (child.mods.empty()) {
-              child.scope = sc;
-              child.vprefix = vp;
-            } else if (child.scope != sc || child.vprefix != vp) {
-              set_unsupported("stacked modifier scopes");
-              break;
-            }
-            // 短类修饰里 final 的元素又被更外层的修饰改了（`model B = A(final k = 2); B b(k = 3);`）→ omc 报错
-            //（NFModifier.checkFinalOverride，同组件 final 的那条规则）。
-            for (const SSubMod& sm : I_.scode.mods[dmods[k]].subs) {
-              if (!I_.scode.mods[sm.mod].is_final) continue;
-              for (Id<SMod> outer : child.mods)
-                for (const SSubMod& om : I_.scode.mods[outer].subs)
-                  if (om.ident == sm.ident) set_unsupported("final element override");
-            }
-            if (result_.unsupported) break;
-            child.mods.push_back(dm);
+            // 短类修饰里 final 的元素又被更外层的修饰改了（`model B = A(final k = 2); B b(k = 3);`）→ 子层的 matched 判。
+            child.mods.push_back({dm, sc, vp});
           }
           if (result_.unsupported) continue;
         }
@@ -1129,7 +1122,7 @@ class Flattener {
       }
       decl_scope_ = cn;   // 组件声明处的词法作用域（继承成员 = 基类作用域，供限定名在原作用域解析，const16）
       cur_pp_chain_ = pp_self;
-      emit_variable(cid, name, is_prot, prefix, psubs, inst_node, matched, ctx.scope, ctx.vprefix, comp_final, final_params, ctx.var_floor, ctx);
+      emit_variable(cid, name, is_prot, prefix, psubs, inst_node, matched, comp_final, final_params, ctx.var_floor, ctx);
       cur_pp_chain_.clear();
       decl_scope_ = Inst::empty_node();
     }
@@ -3161,22 +3154,33 @@ class Flattener {
     else result_.model.equations.push_back(id);
   }
 
-  // mod_subs：命中本叶组件名的外来子修饰（优先级序），其 .binding 覆盖声明绑定、.subs 覆盖声明属性；
-  // mod_scope/mod_prefix：这些修饰值的解析作用域（书写处）。force_final：上层 final 传播。
+  // 外来子修饰里第一个带绑定的（优先级最高的绑定）；没有 → nullptr。
+  const ModSource* first_bound(const std::vector<ModSource>& mods) const {
+    for (const ModSource& m : mods)
+      if (I_.scode.mods[m.mod].binding.is_valid()) return &m;
+    return nullptr;
+  }
+  // mod_subs：命中本叶组件名的外来子修饰（优先级序，各带解析作用域 = 书写处），第一个带绑定的覆盖声明绑定、.subs 覆盖
+  // 声明属性。force_final：上层 final 传播。
   void emit_variable(CompId cid, const std::vector<Symbol>& name, bool is_protected,
                      const std::vector<Symbol>& prefix, const PSubs& psubs, NodeId enclosing,
-                     const std::vector<Id<SMod>>& mod_subs, NodeId mod_scope,
-                     const std::vector<Symbol>& mod_prefix, bool force_final,
+                     const std::vector<ModSource>& mod_subs, bool force_final,
                      const std::unordered_set<std::uint32_t>& final_params,
                      SVariability var_floor, const ModCtx& ctx) {
     cur_psubs_ = psubs;   // 绑定里 cref 前缀改写用（复合数组元素 `a[i].y = a[i].x`）
+    const ModSource* const mb = first_bound(mod_subs);
+    const NodeId mod_scope = mb ? mb->scope : NodeId{};
+    const std::vector<Symbol> mod_prefix = mb ? mb->vprefix : std::vector<Symbol>{};
     const PhaseScope bind_phase(*this, MarkPhase::Binding);
     ++bind_clock_;        // 本变量的绑定 / 属性定型序号（见 MarkPhase）
     // `annotation(Evaluate = true)` 的参数：omc 当结构参数（EV0–EV14 探针：`final parameter Real p = 2.0`、绑定求值成字面量、
     // 绑定里用到的参数连带 final、引用处代入并化简 `Real x = 2.0 * time`）——走下面 struct_final 的既有通路。求不出值（外部函数
     // 求值失败 omc 报错，CevalBinding10 账本；无绑定只有 start 的 omc 取 start 并告警，EV2）、带 fixed 属性（fixed = false 时
     // omc 忽略 Evaluate，EV3）→ SKIP。
-    const bool eval_true = I_.comps[cid].attributes.variability == SVariability::Param && evaluate_true(I_.comps[cid].def);
+    // 外层组件的 Evaluate = true 同样算（ctx.eval_parent），本参数自己写了 Evaluate = false 的除外；变率看下沉后的（记录字段）。
+    const std::optional<bool> own_eval = evaluate_annotation(I_.comps[cid].def);
+    const bool eval_true = var_min(var_floor, I_.comps[cid].attributes.variability) == SVariability::Param &&
+                           (own_eval == std::optional<bool>(true) || (ctx.eval_parent && own_eval != std::optional<bool>(false)));
     // 先算绑定/属性（会往 model.exprs add），再取组件字段——不跨 add 持组件引用（arena 纪律）。
     const Type cty = I_.comps[cid].ty;   // 拷贝，跨 add 稳定
     // 结构 final（ceval3）：本参数被某 fixed 用到 → final parameter + 绑定求值成字面量。
@@ -3192,12 +3196,10 @@ class Flattener {
       Id<Exp> braw0;
       NodeId bscope0 = mod_scope;
       int origin = 0;   // 0 书写的（声明绑定 / 实例修饰）、1 记录表达式绑定拆出的字段修饰、2 其它合成修饰（组件数组的修饰分发）
-      for (Id<SMod> m : mod_subs)
-        if (I_.scode.mods[m].binding.is_valid()) {
-          braw0 = I_.scode.mods[m].binding;
-          origin = m.raw < synth_mod_floor_ ? 0 : derived_mods_.count(m.raw) ? 1 : 2;
-          break;
-        }
+      if (mb) {
+        braw0 = I_.scode.mods[mb->mod].binding;
+        origin = mb->mod.raw < synth_mod_floor_ ? 0 : derived_mods_.count(mb->mod.raw) ? 1 : 2;
+      }
       if (!braw0.is_valid() && I_.comps[cid].binding.kind == BindingKind::Raw) {
         braw0 = I_.comps[cid].binding.raw_exp;
         bscope0 = enclosing;
@@ -3233,9 +3235,7 @@ class Flattener {
     // 绑定：外来修饰优先（第一个带绑定的子修饰），否则组件自身声明绑定（R15 §3.4 外层实例修饰 > 声明默认）。
     Id<Expr> binding;
     {
-      Id<Exp> mraw;
-      for (Id<SMod> m : mod_subs)
-        if (I_.scode.mods[m].binding.is_valid()) { mraw = I_.scode.mods[m].binding; break; }
+      const Id<Exp> mraw = mb ? I_.scode.mods[mb->mod].binding : Id<Exp>{};
       // constant 标量：先按值求值（NFCeval；cref 取已发射常量的最终值 → 修饰感知，CevalBinding2；含数组运算如标量积
       // `{1, 2, 3} * {4, 5, 6}`，CevalVectorProduct1）。求不出（枚举 / 内建数学函数 / if 式…）→ 走下面的类型化路径。
       const TypeKind ck = cty.kind;
@@ -3336,14 +3336,13 @@ class Flattener {
     }
     // 属性来源（优先级序 R15 §3.4）：外来子修饰 > extends 修饰（外层在前）> 组件自身声明修饰 > 短类链派生修饰（外层
     // 派生在前）。
-    std::vector<ModSource> asrc;
-    for (Id<SMod> m : mod_subs) asrc.push_back({m, mod_scope, mod_prefix});
+    std::vector<ModSource> asrc = mod_subs;
     for (Id<SMod> em : I_.comps[cid].extends_mods) asrc.push_back({em, enclosing, prefix});
     {
       const Id<SMod> dm = I_.scode.elems[I_.comps[cid].def].mod;
       if (dm.is_valid()) asrc.push_back({dm, enclosing, prefix});
     }
-    if (const Id<SMod> cc = I_.comps[cid].cc_mod; cc.is_valid()) asrc.push_back({cc, enclosing, prefix});   // 重声明的约束修饰
+    for (Id<SMod> cc : I_.comps[cid].cc_mods) asrc.push_back({cc, enclosing, prefix});   // 重声明的约束修饰
     for (Id<SMod> dm : I_.comps[cid].derived_mods) asrc.push_back({dm, enclosing, prefix});
     std::vector<FlatVarAttr> attrs = collect_attributes(cid, asrc);
     if (eval_true && struct_final)   // fixed = false 时 omc 忽略 Evaluate（EV3 探针）；带 fixed 属性的组合未逐一核实 → SKIP
@@ -3532,8 +3531,7 @@ class Flattener {
   // 非数组字面量的数组绑定。
   void emit_array(CompId cid, const std::vector<Symbol>& name, bool is_protected,
                   const std::vector<Symbol>& prefix, const PSubs& psubs, NodeId enclosing,
-                  const std::vector<Id<SMod>>& mod_subs, NodeId mod_scope,
-                  const std::vector<Symbol>& mod_prefix, bool force_final, const SElement& cel,
+                  const std::vector<ModSource>& mod_subs, bool force_final, const SElement& cel,
                   const ModCtx& ctx) {
     cur_psubs_ = psubs;   // 数组绑定/摊分里 cref 前缀改写用
     // 本数组的绑定 / 属性定型序号（见 MarkPhase）。带 `:` 维的数组，绑定在组件定型期就为推断维而定型（NFTyping.typeDimension
@@ -3551,7 +3549,9 @@ class Flattener {
     // 外层记录整体绑定挪成方程后的数组字段（逐元素 fixed = false 等）未核实 → SKIP。
     if (ctx.unbound_fields) { set_unsupported("array field of record with equation binding"); return; }
     // `annotation(Evaluate = true)` 的参数数组：同标量（emit_variable），omc 求值成 final 字面量，未做 → SKIP（CevalFuncArray6）。
-    if (I_.comps[cid].attributes.variability == SVariability::Param && evaluate_true(I_.comps[cid].def)) {
+    if (var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Param &&
+        (evaluate_true(I_.comps[cid].def) ||
+         (ctx.eval_parent && evaluate_annotation(I_.comps[cid].def) != std::optional<bool>(false)))) {
       set_unsupported("Evaluate annotation");
       return;
     }
@@ -3566,23 +3566,22 @@ class Flattener {
     // omc 给它补上组件的维（fill，expandProxySubscripts，NFFlatten.mo:1616-1643 v1.25.0）——每个元素取同一个值，等于
     // each（FA 探针 t：`type V = Real(unit = "V"); V v[2]` → `v[1](unit = "V")`、`v[2](unit = "V")`；外层的 `start = {2, 3}`
     // 照样按元素切分盖过类型上的 `start = 1`）。
-    std::vector<ModSource> asrc;
-    for (Id<SMod> m : mod_subs) asrc.push_back({m, mod_scope, mod_prefix});
+    std::vector<ModSource> asrc = mod_subs;
     for (Id<SMod> em : I_.comps[cid].extends_mods) asrc.push_back({em, enclosing, prefix});
     if (cel.mod.is_valid()) asrc.push_back({cel.mod, enclosing, prefix});
-    if (const Id<SMod> cc = I_.comps[cid].cc_mod; cc.is_valid()) asrc.push_back({cc, enclosing, prefix});   // 重声明的约束修饰
+    for (Id<SMod> cc : I_.comps[cid].cc_mods) asrc.push_back({cc, enclosing, prefix});   // 重声明的约束修饰
     for (Id<SMod> dm : I_.comps[cid].derived_mods) asrc.push_back({dm, enclosing, prefix, /*each_all=*/true});
     // 绑定：外来修饰优先，否则声明绑定。要求是数组构造子 `{…}` / `array(…)`，否则 SKIP。
     Id<Exp> braw;
     bool braw_written = true;   // 绑定是源码里书写的（非 flatten 合成的修饰）：结构参数的别名连带用
-    for (Id<SMod> m : mod_subs)
-      if (I_.scode.mods[m].binding.is_valid()) {
-        braw = I_.scode.mods[m].binding;
-        braw_written = m.raw < synth_mod_floor_;
-        break;
-      }
-    NodeId bscope = mod_scope;
-    std::vector<Symbol> bprefix = mod_prefix;
+    NodeId bscope;
+    std::vector<Symbol> bprefix;
+    if (const ModSource* mb = first_bound(mod_subs)) {
+      braw = I_.scode.mods[mb->mod].binding;
+      braw_written = mb->mod.raw < synth_mod_floor_;
+      bscope = mb->scope;
+      bprefix = mb->vprefix;
+    }
     if (!braw.is_valid()) {
       const Binding& b = I_.comps[cid].binding;
       if (b.kind == BindingKind::Raw && b.raw_exp.is_valid()) { braw = b.raw_exp; bscope = enclosing; bprefix = prefix; }
@@ -4190,8 +4189,8 @@ class Flattener {
 
   // 校验外来修饰的每个子名都命中本类某组件——否则是嵌套类修饰 `a(B(...))`（ClassMod1）或写错名 → unsupported。
   void check_modifier_names(const std::vector<NodeId>& comps, const ModCtx& ctx) {
-    for (Id<SMod> m : ctx.mods)
-      for (const SSubMod& s : I_.scode.mods[m].subs) {
+    for (const ModSource& m : ctx.mods)
+      for (const SSubMod& s : I_.scode.mods[m.mod].subs) {
         bool found = false;
         for (NodeId cn : comps)
           if (I_.nodes[cn].kind == NodeKind::Component && I_.nodes[cn].name == s.ident) { found = true; break; }
@@ -4249,6 +4248,7 @@ class Flattener {
         if (sm.is_final && std::find(outer_names.begin(), outer_names.begin() + static_cast<std::ptrdiff_t>(n_outer),
                                      s.ident) != outer_names.begin() + static_cast<std::ptrdiff_t>(n_outer)) {
           set_unsupported("final element override");
+          result_.unsupported_detail = std::string("attribute ") + std::string(in_.str(s.ident));
           return out;
         }
         outer_names.push_back(s.ident);
@@ -6263,12 +6263,12 @@ class Flattener {
     Id<Exp> raw;
     NodeId scope_node;
     int efi = fi;
-    for (Id<SMod> m : F.ctx->mods)
-      for (const SSubMod& sm : I_.scode.mods[m].subs)
+    for (const ModSource& m : F.ctx->mods)
+      for (const SSubMod& sm : I_.scode.mods[m.mod].subs)
         if (!raw.is_valid() && sm.ident == c.parts[0].name && I_.scode.mods[sm.mod].binding.is_valid()) {
           raw = I_.scode.mods[sm.mod].binding;
-          scope_node = F.ctx->scope;
-          efi = frame_of(F.ctx->scope);
+          scope_node = m.scope;
+          efi = frame_of(m.scope);
         }
     if (!raw.is_valid()) {
       const Binding& b = I_.comps[cid].binding;
@@ -6277,7 +6277,11 @@ class Flattener {
         scope_node = b.scope.is_valid() && !I_.nodes[b.scope].is_empty() ? b.scope : inst;
       }
     }
-    if (!raw.is_valid() || efi < 0) return fail();   // 无绑定参数 / 修饰书写处不在帧栈上
+    // 修饰书写处不在帧栈上：包 / 顶层短类的修饰（`model C2 = C(n = 2);`，只引常量，E 探针 e44）不按实例帧求值；别的 → 失败。
+    const bool global_mod = efi < 0 && scope_node.is_valid() && !I_.nodes[scope_node].is_empty() &&
+                            (scope_node == I_.top || (I_.nodes[scope_node].def.is_valid() &&
+                                                      I_.scode.elems[I_.nodes[scope_node].def].restriction == SRestriction::Package));
+    if (!raw.is_valid() || (efi < 0 && !global_mod)) return fail();   // 无绑定参数 / 修饰书写处不在帧栈上
     frame_busy_.insert(key);
     std::optional<CVal> v;
     {
@@ -6285,7 +6289,9 @@ class Flattener {
       const bool saved_dep = dep_mark_;
       ceval_frame_ = efi;
       dep_mark_ = deps;
-      CevalCtx guard(*this, frames_[static_cast<std::size_t>(efi)].prefix, frames_[static_cast<std::size_t>(efi)].psubs);
+      const Frame* ef = efi >= 0 ? &frames_[static_cast<std::size_t>(efi)] : nullptr;
+      const std::vector<Symbol> no_prefix;   // CevalCtx 存的是指针：不能传临时量
+      CevalCtx guard(*this, ef ? ef->prefix : no_prefix, ef ? ef->psubs : PSubs{});
       v = eval_scode(raw, scode_scope_of(scope_node), depth + 1, /*allow_param=*/true, used);
       ceval_frame_ = saved;
       dep_mark_ = saved_dep;

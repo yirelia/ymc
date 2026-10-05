@@ -1,0 +1,243 @@
+//// set: ec-e1 — extends 修饰改继承来的复合组件：与声明修饰叠加、final、多层继承、实例修饰再叠、数组 each、记录、protected
+//// model: E10
+model C
+parameter Real x = 1;
+Real y = x * time;
+end C;
+model A
+C c;
+end A;
+model E10
+extends A(c(x = 2));
+end E10;
+//// model: E11
+model C
+parameter Real x = 1;
+end C;
+model A
+C c(x = 3);
+end A;
+model E11
+extends A(c(x = 2));
+end E11;
+//// model: E12
+model C
+parameter Real x = 1;
+parameter Real z = 5;
+end C;
+model A
+C c(z = 6);
+end A;
+model E12
+extends A(c(x = 2));
+end E12;
+//// model: E13
+model C
+parameter Real x = 1;
+end C;
+model A
+C c(final x = 3);
+end A;
+model E13
+extends A(c(x = 2));
+end E13;
+//// model: E14
+model C
+parameter Real x = 1;
+end C;
+model A
+C c;
+end A;
+model E14
+extends A(c(final x = 2));
+end E14;
+//// model: E15
+model C
+parameter Real x = 1;
+end C;
+model A
+C c;
+end A;
+model B
+extends A(c(x = 2));
+end B;
+model E15
+extends B(c(x = 4));
+end E15;
+//// model: E16
+model C
+parameter Real x = 1;
+end C;
+model A
+C c;
+end A;
+model B
+extends A(c(x = 2));
+end B;
+model E16
+B b(c(x = 5));
+end E16;
+//// model: E17
+model C
+parameter Real x = 1;
+end C;
+model A
+C c;
+end A;
+model B
+extends A(c(x = 2));
+end B;
+model E17
+B b;
+end E17;
+//// model: E18
+model C
+Real x(start = 1);
+equation
+x = time;
+end C;
+model A
+C c;
+end A;
+model E18
+extends A(c(x(start = 2)));
+end E18;
+//// model: E19
+model D
+parameter Real k = 1;
+end D;
+model C
+D d;
+end C;
+model A
+C c;
+end A;
+model E19
+extends A(c(d(k = 7)));
+end E19;
+//// model: E110
+model C
+parameter Real x = 1;
+end C;
+model A
+C c[2];
+end A;
+model E110
+extends A(c(each x = 2));
+end E110;
+//// model: E111
+model C
+parameter Real x = 1;
+end C;
+model A
+C c;
+end A;
+model E111
+parameter Real p = 9;
+extends A(c(x = p));
+end E111;
+//// model: E112
+model C
+parameter Real x = 1;
+end C;
+model A
+parameter Real q = 3;
+C c(x = q);
+end A;
+model E112
+extends A(c(x = 2 * q));
+end E112;
+//// model: E113
+connector P
+Real e;
+flow Real f;
+end P;
+model A
+P p(e(start = 1));
+end A;
+model E113
+extends A(p(e(start = 2)));
+end E113;
+//// model: E114
+record R
+Real a = 1;
+Real b = 2;
+end R;
+model A
+R r;
+end A;
+model E114
+extends A(r(a = 5));
+end E114;
+//// model: E115
+record R
+Real a = 1;
+Real b = 2;
+end R;
+model A
+R r;
+end A;
+model E115
+extends A(r = R(3, 4));
+end E115;
+//// model: E116
+model C
+parameter Real x = 1;
+end C;
+model A
+C c;
+end A;
+model E116
+extends A(c(x = 2), c(x = 3));
+end E116;
+//// model: E117
+model C
+parameter Real x = 1;
+end C;
+model A
+protected
+C c;
+end A;
+model E117
+extends A(c(x = 2));
+end E117;
+//// model: E118
+model C
+parameter Real x = 1;
+end C;
+model A
+final C c;
+end A;
+model E118
+extends A(c(x = 2));
+end E118;
+//// model: E119
+model C
+parameter Real x = 1;
+end C;
+model A
+C c;
+end A;
+model E119
+extends A(c(y = 2));
+end E119;
+//// model: E120
+model C
+parameter Real x = 1;
+end C;
+model A
+C c(final x = 3);
+end A;
+model E120
+A a(c(x = 2));
+end E120;
+//// model: E121
+model D
+parameter Real k = 1;
+end D;
+model C
+D d(final k = 2);
+end C;
+model E121
+C c(d(k = 3));
+end E121;

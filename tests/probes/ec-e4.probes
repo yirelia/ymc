@@ -1,0 +1,197 @@
+//// set: ec-e4 — 顶层 / 包里短类的修饰在全局 / 包作用域解析（含结构参数）
+//// model: E40
+model C
+parameter Real x = 1;
+end C;
+model C2 = C(x = 4);
+model E40
+C2 c;
+end E40;
+//// model: E41
+package P
+constant Real k = 7;
+end P;
+model C
+parameter Real x = 1;
+end C;
+model C2 = C(x = P.k);
+model E41
+C2 c;
+end E41;
+//// model: E42
+package P
+constant Real k = 7;
+end P;
+model C
+parameter Real x = 1;
+end C;
+model C2 = C(x = 2 * P.k);
+model E42
+C2 c;
+end E42;
+//// model: E43
+model C
+parameter Real x = 1;
+parameter Real z = 1;
+end C;
+model C2 = C(x = 4);
+model E43
+C2 c[2];
+end E43;
+//// model: E44
+model C
+parameter Integer n = 1;
+Real v[n];
+equation
+v = fill(time, n);
+end C;
+model C2 = C(n = 2);
+model E44
+C2 c;
+end E44;
+//// model: E45
+record R
+Real a = 1;
+Real b = 2;
+end R;
+record R2 = R(a = 5);
+model E45
+R2 r;
+end E45;
+//// model: E46
+record R
+Real a = 1;
+Real b = 2;
+end R;
+record R2 = R(a(start = 5));
+model E46
+R2 r = R(3, 4);
+end E46;
+//// model: E47
+model C
+parameter Real x = 1;
+end C;
+model C2 = C(x = 4);
+model C3 = C2(x = 5);
+model E47
+C3 c;
+end E47;
+//// model: E48
+model C
+parameter Real x = 1;
+end C;
+model C2 = C(final x = 4);
+model E48
+C2 c;
+end E48;
+//// model: E49
+model C
+parameter Real x = 1;
+end C;
+model C2 = C(x = 4);
+model A
+C2 c;
+end A;
+model E49
+A a;
+end E49;
+//// model: E410
+model C
+parameter Real x = 1;
+end C;
+model C2 = C(x = time);
+model E410
+C2 c;
+end E410;
+//// model: E411
+model C
+Real x;
+equation
+x = time;
+end C;
+model C2 = C(x(start = 3));
+model E411
+C2 c;
+end E411;
+//// model: E412
+connector P
+Real e;
+flow Real f;
+end P;
+connector P2 = P(e(nominal = 3));
+model E412
+P2 p;
+end E412;
+//// model: E413
+model C
+parameter Real x = 1;
+end C;
+model C2 = C(x = k);
+model E413
+parameter Real k = 3;
+C2 c;
+end E413;
+//// model: E414
+model C
+parameter Integer n = 1;
+Real v[n];
+equation
+v = fill(time, n);
+end C;
+package P
+model C2 = C(n = 2);
+end P;
+model E414
+P.C2 c;
+end E414;
+//// model: E415
+model C
+parameter Integer n = 1;
+Real v[n];
+equation
+v = fill(time, n);
+end C;
+package P
+constant Integer m = 3;
+model C2 = C(n = m);
+end P;
+model E415
+P.C2 c;
+end E415;
+//// model: E416
+package Q
+constant Integer m = 2;
+end Q;
+model C
+parameter Integer n = 1;
+Real v[n];
+equation
+v = fill(time, n);
+end C;
+model C2 = C(n = Q.m + 1);
+model E416
+C2 c;
+end E416;
+//// model: E417
+model C
+parameter Integer n = 1;
+Real v[n];
+equation
+v = fill(time, n);
+end C;
+model C2 = C(n = 2);
+model A
+C2 c(n = 3);
+end A;
+model E417
+A a;
+end E417;
+//// model: E418
+model C
+parameter Integer n = 1;
+parameter Real x = n;
+end C;
+model C2 = C(n = 2);
+model E418
+C2 c;
+end E418;

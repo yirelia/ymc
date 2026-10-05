@@ -1,0 +1,228 @@
+//// set: rf-r3 — 重声明形态：作复合组件的类型、外层实例修饰再叠、final 冲突、多层带维、protected、Evaluate 注解随原声明
+//// model: R30
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a;
+end M;
+model M2
+extends M(redeclare B a(q = 3));
+end M2;
+model R30
+M2 m;
+end R30;
+//// model: R31
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model C
+extends B;
+parameter Real r = 3;
+end C;
+model M
+replaceable A a;
+end M;
+model N
+extends M(redeclare C a);
+end N;
+model R31
+N n(a(r = 7));
+end R31;
+//// model: R32
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a(final p = 2);
+end M;
+model R32
+extends M(redeclare B a(p = 3));
+end R32;
+//// model: R33
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model C
+extends B;
+parameter Real r = 3;
+end C;
+model M
+replaceable A a[2];
+end M;
+model N
+extends M(redeclare replaceable B a[3]);
+end N;
+model R33
+extends N(redeclare C a);
+end R33;
+//// model: R34
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+protected
+replaceable A a;
+end M;
+model R34
+extends M(redeclare B a(q = 3));
+end R34;
+//// model: R35
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a;
+end M;
+model R35
+protected
+extends M(redeclare B a(q = 3));
+end R35;
+//// model: R36
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a;
+end M;
+model N
+extends M(redeclare B a);
+end N;
+model R36
+extends N(a(q = 5));
+end R36;
+//// model: R37
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a "doc a" annotation(Evaluate = true);
+end M;
+model R37
+extends M(redeclare B a);
+end R37;
+//// model: R38
+model M
+replaceable parameter Real x = 1 annotation(Evaluate = true);
+Real y[2];
+equation
+y = fill(x, 2);
+end M;
+model R38
+extends M(redeclare parameter Real x = 3);
+end R38;
+//// model: R39
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+parameter Integer n = 3;
+replaceable A a[n];
+end M;
+model R39
+extends M(n = 2, redeclare B a(q = {5, 6}));
+end R39;
+//// model: R310
+connector P
+Real e;
+flow Real f;
+end P;
+connector P2
+extends P;
+Real g;
+end P2;
+model M
+replaceable P p;
+P k;
+equation
+connect(p, k);
+end M;
+model R310
+extends M(redeclare P2 p);
+equation
+p.g = time;
+end R310;
+//// model: R311
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a constrainedby A(p = 2) "cc doc";
+end M;
+model R311
+extends M(redeclare B a(q = 3) "new doc");
+end R311;
+//// model: R312
+model M
+replaceable Real x(start = 1) constrainedby Real(start = 5);
+equation
+x = time;
+end M;
+model R312
+extends M(redeclare Real x);
+end R312;
+//// model: R313
+model M
+replaceable discrete Real x;
+equation
+when sample(0, 1) then
+x = time;
+end when;
+end M;
+model R313
+extends M(redeclare Real x(start = 2));
+end R313;
+//// model: R314
+model M
+replaceable flow Real f;
+end M;
+model R314
+extends M(redeclare stream Real f);
+end R314;
+//// model: R315
+model M
+replaceable Real x = 1;
+end M;
+model R315
+extends M(redeclare parameter Real x);
+end R315;

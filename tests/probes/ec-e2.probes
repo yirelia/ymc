@@ -1,0 +1,321 @@
+//// set: ec-e2 — extends / 实例修饰叠到复合组件：改 final 元素（叶也算）、`final c(…)`、各层作用域、复合数组切分、整体绑定 + 属性、短类
+//// model: E20
+model A
+final parameter Real x = 1;
+end A;
+model E20
+extends A(x = 2);
+end E20;
+//// model: E21
+model A
+parameter Real x = 1;
+end A;
+model B
+extends A(final x = 2);
+end B;
+model E21
+extends B(x = 3);
+end E21;
+//// model: E22
+model C
+parameter Real x = 1;
+Real y = time;
+end C;
+model A
+C c;
+end A;
+model E22
+extends A(final c(x = 2));
+end E22;
+//// model: E23
+model C
+parameter Real x = 1;
+parameter Real z = 1;
+end C;
+model A
+C c(x = 3);
+end A;
+model E23
+A a(c(z = 2));
+end E23;
+//// model: E24
+model C
+parameter Real x = 1;
+parameter Real z = 1;
+end C;
+model A
+parameter Real q = 4;
+C c(x = q);
+end A;
+model E24
+parameter Real q = 5;
+A a(c(z = q));
+end E24;
+//// model: E25
+model C
+parameter Real x = 1;
+end C;
+model A
+C c[2];
+end A;
+model E25
+extends A(c(x = {1, 2}));
+end E25;
+//// model: E26
+model C
+parameter Real x = 1;
+parameter Real z = 1;
+end C;
+model A
+C c[2](z = {3, 4});
+end A;
+model E26
+A a(c(x = {1, 2}));
+end E26;
+//// model: E27
+model C
+parameter Real x = 1;
+parameter Real z = 1;
+end C;
+model A
+C c[2](z = {3, 4});
+end A;
+model E27
+extends A(c(x = {1, 2}));
+end E27;
+//// model: E28
+model C
+parameter Real x = 1;
+end C;
+model A
+C c;
+end A;
+model B
+parameter Real p = 1;
+extends A(c(x = p));
+end B;
+model E28
+extends B(p = 7);
+end E28;
+//// model: E29
+model C
+parameter Real x = 1;
+end C;
+model A
+C c;
+end A;
+model E29
+protected
+extends A(c(x = 2));
+end E29;
+//// model: E210
+record R
+Real a = 1;
+Real b = 2;
+end R;
+model A
+R r(a(start = 0)) = R(3, 4);
+end A;
+model E210
+A m(r(b(start = 5)));
+end E210;
+//// model: E211
+record R
+Real a = 1;
+Real b = 2;
+end R;
+model A
+R r(a(start = 0));
+end A;
+model E211
+extends A(r = R(3, 4));
+end E211;
+//// model: E212
+record R
+Real a = 1;
+Real b = 2;
+end R;
+model A
+R r = R(3, 4);
+end A;
+model E212
+extends A(r(a(start = 7)));
+end E212;
+//// model: E213
+model C
+parameter Real x = 1;
+end C;
+model A
+C c[2];
+end A;
+model E213
+extends A(c(x = {1, 2}), c(each x = 3));
+end E213;
+//// model: E214
+model C
+parameter Real x = 1;
+end C;
+model C2 = C(x = 5);
+model A
+C2 c;
+end A;
+model E214
+extends A(c(x = 2));
+end E214;
+//// model: E215
+model C
+parameter Real x = 1;
+parameter Real z = 1;
+end C;
+model C2 = C(x = 5);
+model A
+C2 c(z = 3);
+end A;
+model E215
+A a(c(x = 2));
+end E215;
+//// model: E216
+model C
+parameter Real x = 1;
+end C;
+model C2 = C(final x = 5);
+model A
+C2 c;
+end A;
+model E216
+extends A(c(x = 2));
+end E216;
+//// model: E217
+model C
+parameter Real x = 1;
+end C;
+model A
+C c;
+end A;
+model B
+A a;
+end B;
+model E217
+extends B(a(c(x = 3)));
+end E217;
+//// model: E218
+model C
+parameter Real x = 1;
+end C;
+model A
+C c;
+end A;
+model B
+extends A(c(x = 2));
+end B;
+model D
+B b;
+end D;
+model E218
+D d(b(c(x = 9)));
+end E218;
+//// model: E219
+connector P
+Real e;
+flow Real f;
+end P;
+model A
+P p;
+equation
+p.e = time;
+end A;
+model E219
+extends A(p(e(nominal = 2)));
+end E219;
+//// model: E220
+package P
+constant Real k = 3;
+model C
+parameter Real x = 1;
+parameter Real z = 1;
+end C;
+model A
+C c(x = k);
+end A;
+end P;
+model E220
+extends P.A(c(z = 2));
+end E220;
+//// model: E221
+model C
+parameter Real x = 1;
+end C;
+model A
+C c;
+end A;
+model E221
+parameter Boolean b = true;
+extends A(c(x = if b then 1 else 2));
+end E221;
+//// model: E222
+model C
+parameter Integer n = 1;
+Real v[n];
+equation
+v = fill(time, n);
+end C;
+model A
+C c;
+end A;
+model E222
+extends A(c(n = 3));
+end E222;
+//// model: E223
+model C
+parameter Real x = 1;
+protected
+parameter Real h = 2;
+end C;
+model A
+C c;
+end A;
+model E223
+extends A(c(h = 3));
+end E223;
+//// model: E224
+model C
+parameter Real x = 1;
+end C;
+model A
+C c(x(start = 2));
+end A;
+model E224
+extends A(c(x = 4));
+end E224;
+//// model: E225
+model C
+parameter Real x(start = 1) = 1;
+end C;
+model A
+C c(x(final start = 2));
+end A;
+model E225
+extends A(c(x(start = 3)));
+end E225;
+//// model: E226
+model C
+Real x;
+equation
+x = time;
+end C;
+model A
+C c(x(start = 2));
+end A;
+model E226
+A a(c(x(min = -1)));
+end E226;
+//// model: E227
+model C
+parameter Real x = 1;
+end C;
+model A
+C c;
+end A;
+model E227
+extends A(c(x(min = 0) = 3));
+end E227;

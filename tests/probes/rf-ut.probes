@@ -1,0 +1,65 @@
+//// set: rf-ut — 重声明形态 + parentEval + 前缀冲突 / 重复修饰（单测原文）
+//// model: EVT1
+model A
+  parameter Real p = 1;
+  parameter Real q = 2 annotation(Evaluate = false);
+  Real y = p * q * time;
+end A;
+model B
+  A a;
+  parameter Integer n = 2;
+  Real v[n] = fill(time, n);
+end B;
+model EVT1
+  B b annotation(Evaluate = true);
+  A c;
+end EVT1;
+//// model: RFS1
+model M
+  replaceable input Real u;
+end M;
+model RFS1
+  extends M(redeclare output Real u);
+end RFS1;
+//// model: RFS2
+model A
+  parameter Real p = 1;
+end A;
+model B
+  extends A;
+  parameter Real q = 2;
+end B;
+model M
+  replaceable A a;
+end M;
+model RFS2
+  extends M(redeclare B a, a(p = 9));
+end RFS2;
+//// model: RFT1
+model A
+  parameter Real p = 1;
+end A;
+model B
+  extends A;
+  parameter Real q = 2;
+end B;
+model C
+  extends B;
+  parameter Real r = 3;
+end C;
+model M
+  parameter Boolean b = false;
+  parameter Real k = 4;
+  replaceable A a1(p = 9) constrainedby A(p = k);
+  replaceable A a2[2](each p = 5);
+  replaceable A a3 if b;
+  replaceable parameter Real x = 1 "orig";
+  replaceable A a4;
+end M;
+model N
+  extends M(redeclare replaceable B a4(q = 7) constrainedby B(q = 6));
+end N;
+model RFT1
+  extends N(k = 8, redeclare B a1(q = 3), redeclare B a2(each q = 4), redeclare B a3,
+    redeclare Real x = 2 "new", redeclare C a4(r = 5));
+end RFT1;

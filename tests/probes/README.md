@@ -252,3 +252,14 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `rx-m` | 3 | 重声明的最小模型（含 MSL 的 SineVoltage） |
 | `rx-a` | 6 | 类型带 absoluteValue = false 时组件注释换成类型的；重声明的类型名先撞上组件 |
 | `rx-ut` | 3 | extends 重声明 + 丢 final（单测原文） |
+| `ec-e1` | 22 | extends 修饰改继承来的复合组件：与声明修饰叠加、final、多层继承、实例修饰再叠、数组 each、记录、protected |
+| `ec-e2` | 28 | extends / 实例修饰叠到复合组件：改 final 元素（叶也算）、`final c(…)`、各层作用域、复合数组切分、整体绑定 + 属性、短类 |
+| `ec-e3` | 20 | 多层修饰各带作用域：三层实例修饰、结构参数、条件组件、嵌套记录、each、内层 final 被外层改 |
+| `ec-e4` | 19 | 顶层 / 包里短类的修饰在全局 / 包作用域解析（含结构参数） |
+| `ec-ut` | 3 | 修饰各层带作用域 + 改 final 元素（单测原文） |
+| `rf-r1` | 24 | extends 修饰里的重声明形态：constrainedby、条件、维、前缀合并与冲突、final、多层、先被 extends 修饰改过 |
+| `rf-r2` | 18 | 重声明形态补充：未重声明时的 constrainedby、多层带内层 constrainedby、输出 / 流前缀、维 + 绑定、each、条件连接器 |
+| `rf-r3` | 16 | 重声明形态：作复合组件的类型、外层实例修饰再叠、final 冲突、多层带维、protected、Evaluate 注解随原声明 |
+| `rf-ev` | 12 | 外层组件的 Evaluate = true 传给子树里的参数（parentEval） |
+| `rf-rb` | 6 | 记录整体绑定拆出的字段绑定不是修饰层：final 字段不触发 final 冲突 |
+| `rf-ut` | 4 | 重声明形态 + parentEval + 前缀冲突 / 重复修饰（单测原文） |

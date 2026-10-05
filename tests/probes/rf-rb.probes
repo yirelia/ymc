@@ -1,0 +1,62 @@
+//// set: rf-rb — 记录整体绑定拆出的字段绑定不是修饰层：final 字段不触发 final 冲突
+//// model: RB0
+record R
+parameter Real a = 1;
+final parameter Real b = 2 * a;
+end R;
+model RB0
+parameter R r1(a = 3);
+parameter R r2 = r1;
+end RB0;
+//// model: RB1
+record R
+parameter Real a = 1;
+final parameter Real b = 2 * a;
+end R;
+model A
+parameter R r;
+end A;
+model RB1
+parameter R r1(a = 3);
+A x(r = r1);
+end RB1;
+//// model: RB2
+record R
+parameter Real a = 1;
+final parameter Real b = 2 * a;
+end R;
+model RB2
+parameter R r2 = R(a = 5);
+end RB2;
+//// model: RB3
+record R
+Real a = 1;
+final Real b = 2;
+end R;
+model RB3
+R r1;
+R r2 = r1;
+end RB3;
+//// model: RB4
+record R
+parameter Real a = 1;
+final parameter Real b = 2 * a;
+end R;
+model A
+parameter R r(b = 4);
+end A;
+model RB4
+A x;
+end RB4;
+//// model: RB5
+record R
+parameter Real a = 1;
+parameter Real b = 2 * a;
+end R;
+model A
+parameter R r(final b = 4);
+end A;
+model RB5
+parameter R q;
+A x(r = q);
+end RB5;

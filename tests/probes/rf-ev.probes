@@ -1,0 +1,109 @@
+//// set: rf-ev — 外层组件的 Evaluate = true 传给子树里的参数（parentEval）
+//// model: EV0
+model A
+parameter Real p = 1;
+Real y = p * time;
+end A;
+model EV0
+A a annotation(Evaluate = true);
+end EV0;
+//// model: EV1
+model A
+parameter Real p = 1;
+Real y = p * time;
+end A;
+model B
+A a;
+parameter Real k = 3;
+end B;
+model EV1
+B b annotation(Evaluate = true);
+end EV1;
+//// model: EV2
+model A
+parameter Real p = 1 annotation(Evaluate = false);
+parameter Real q = 2;
+Real y = p * q * time;
+end A;
+model EV2
+A a annotation(Evaluate = true);
+end EV2;
+//// model: EV3
+model A
+parameter Real p;
+Real y = time;
+end A;
+model EV3
+A a(p = 2) annotation(Evaluate = true);
+end EV3;
+//// model: EV4
+record R
+Real x = 1;
+Real z = 2;
+end R;
+model EV4
+parameter R r annotation(Evaluate = true);
+Real y = r.x * time;
+end EV4;
+//// model: EV5
+model A
+parameter Real p = 1;
+Real y = p * time;
+end A;
+model EV5
+A a[2] annotation(Evaluate = true);
+end EV5;
+//// model: EV6
+model A
+parameter Real p = 1;
+parameter Real q = 2 * p;
+Real y = q * time;
+end A;
+model EV6
+A a annotation(Evaluate = true);
+end EV6;
+//// model: EV7
+model A
+parameter Integer n = 2;
+Real v[n];
+equation
+v = fill(time, n);
+end A;
+model EV7
+A a annotation(Evaluate = true);
+end EV7;
+//// model: EV8
+model A
+parameter Real p = 1;
+Real y = p * time;
+end A;
+model EV8
+parameter Real k = 4;
+A a(p = k) annotation(Evaluate = true);
+end EV8;
+//// model: EV9
+model A
+parameter Real p = 1;
+Real y = p * time;
+end A;
+model EV9
+A a annotation(Evaluate = false);
+end EV9;
+//// model: EV10
+model A
+parameter Real p = 1;
+parameter Boolean b = true;
+Real y = if b then p * time else 0;
+end A;
+model EV10
+A a annotation(Evaluate = true);
+end EV10;
+//// model: EV11
+model A
+parameter Real p(fixed = false);
+initial equation
+p = 1;
+end A;
+model EV11
+A a annotation(Evaluate = true);
+end EV11;

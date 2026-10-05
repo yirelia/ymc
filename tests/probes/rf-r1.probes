@@ -1,0 +1,324 @@
+//// set: rf-r1 — extends 修饰里的重声明形态：constrainedby、条件、维、前缀合并与冲突、final、多层、先被 extends 修饰改过
+//// model: R10
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+parameter Real o = 5;
+replaceable A a(p = o) constrainedby A(p = 7);
+end M;
+model R10
+extends M(redeclare B a(q = 3));
+end R10;
+//// model: R11
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a constrainedby A;
+end M;
+model R11
+extends M(redeclare B a(q = 3));
+end R11;
+//// model: R12
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a(p = 4) constrainedby A;
+end M;
+model R12
+extends M(redeclare B a(q = 3));
+end R12;
+//// model: R13
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+parameter Boolean b = true;
+replaceable A a if b;
+end M;
+model R13
+extends M(redeclare B a(q = 3));
+end R13;
+//// model: R14
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+parameter Boolean b = false;
+replaceable A a if b;
+end M;
+model R14
+extends M(redeclare B a(q = 3));
+end R14;
+//// model: R15
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a[2];
+end M;
+model R15
+extends M(redeclare B a(q = 3));
+end R15;
+//// model: R16
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a[2];
+end M;
+model R16
+extends M(redeclare B a[3](each q = 3));
+end R16;
+//// model: R17
+model M
+replaceable parameter Real x = 1;
+end M;
+model R17
+extends M(redeclare Real x = 2);
+end R17;
+//// model: R18
+model M
+replaceable input Real u;
+end M;
+model R18
+extends M(redeclare Real u);
+end R18;
+//// model: R19
+model M
+replaceable parameter Real x = 1;
+end M;
+model R19
+extends M(redeclare constant Real x = 2);
+end R19;
+//// model: R110
+model M
+replaceable parameter Real x = 1;
+end M;
+model R110
+extends M(redeclare discrete Real x = 2);
+end R110;
+//// model: R111
+model M
+replaceable input Real u;
+end M;
+model R111
+extends M(redeclare output Real u);
+end R111;
+//// model: R112
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+parameter Boolean b = true;
+replaceable A a;
+end M;
+model R112
+extends M(redeclare B a(q = 3) if b);
+end R112;
+//// model: R113
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a;
+end M;
+model R113
+extends M(redeclare final B a(q = 3));
+end R113;
+//// model: R114
+model A
+parameter Real p = 1;
+Real y;
+end A;
+model B
+extends A;
+parameter Real z = 2;
+equation
+y = z * time;
+end B;
+model M
+Real w = time;
+replaceable output A a(final p = w);
+end M;
+model R114
+extends M(redeclare final B a(final z = 0));
+end R114;
+//// model: R115
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model C
+extends B;
+parameter Real r = 3;
+end C;
+model M
+replaceable A a;
+end M;
+model N
+extends M(redeclare replaceable B a(q = 4));
+end N;
+model R115
+extends N(redeclare C a(r = 5));
+end R115;
+//// model: R116
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a;
+end M;
+model R116
+extends M(a(p = 2), redeclare B a);
+end R116;
+//// model: R117
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a(p = 9);
+end M;
+model N
+extends M(a(p = 2));
+end N;
+model R117
+extends N(redeclare B a(q = 4));
+end R117;
+//// model: R118
+connector P
+Real e;
+flow Real f;
+end P;
+connector P2
+extends P;
+Real g;
+end P2;
+model M
+replaceable P p;
+end M;
+model R118
+extends M(redeclare P2 p);
+equation
+p.g = time;
+p.e = 1;
+end R118;
+//// model: R119
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+parameter Integer n = 2;
+replaceable A a[n](each p = 3);
+end M;
+model R119
+extends M(redeclare B a(each q = 4));
+end R119;
+//// model: R120
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a constrainedby A(p = 6);
+end M;
+model R120
+extends M(redeclare B a(p = 8));
+end R120;
+//// model: R121
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a constrainedby A(final p = 6);
+end M;
+model R121
+extends M(redeclare B a(p = 8));
+end R121;
+//// model: R122
+model A
+parameter Real p = 1;
+end A;
+model B
+parameter Real q = 2;
+end B;
+model M
+replaceable A a constrainedby A;
+end M;
+model R122
+extends M(redeclare B a);
+end R122;
+//// model: R123
+model A
+parameter Real p = 1;
+end A;
+model B
+extends A;
+parameter Real q = 2;
+end B;
+model M
+replaceable A a "orig" annotation(Dialog);
+end M;
+model R123
+extends M(redeclare B a "new");
+end R123;

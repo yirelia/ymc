@@ -4817,14 +4817,89 @@ YMC_TEST(inst_extends_redeclare_and_dropped_final) {
                std::string("class RDT1\n  parameter Real o = 5.0;\n  parameter Real a.p = o;\n  parameter Real a.q = 3.0;\n"
                            "  Real x = 2.0 \"orig\";\n  Real c.T(unit = \"K\") = time;\n  Real c.Q;\nequation\n  c.Q = 0.0;\n"
                            "end RDT1;\n"));
+  // constrainedby：约束修饰取 constrainedby 的修饰（61i 放开；期望 = omc 1.25.0 实跑 RDS2）。
+  YMC_CHECK_EQ(flatten_src("model A\n  parameter Real p = 1;\nend A;\nmodel B\n  extends A;\n  parameter Real q = 2;\nend B;\n"
+                           "model M\n  replaceable A a constrainedby A(p = 7);\nend M;\nmodel RDS2\n"
+                           "  extends M(redeclare B a);\nend RDS2;\n"),
+               std::string("class RDS2\n  parameter Real a.p = 7.0;\n  parameter Real a.q = 2.0;\nend RDS2;\n"));
   for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
            // 原声明不是 replaceable 而类型不同：omc "Redeclaration with a new type requires 'a' to be replaceable"（RDS1）。
            {"model A\n  parameter Real p = 1;\nend A;\nmodel B\n  extends A;\n  parameter Real q = 2;\nend B;\n"
-            "model M\n  A a;\nend M;\nmodel RDS1\n  extends M(redeclare B a);\nend RDS1;\n", "redeclare of non-replaceable component"},
-           // constrainedby（约束修饰取 cc 的）v1 未做（RDS2，omc 能过：a.p = 7.0）。
+            "model M\n  A a;\nend M;\nmodel RDS1\n  extends M(redeclare B a);\nend RDS1;\n", "redeclare of non-replaceable component"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
+YMC_TEST(flatten_modifier_layers_with_own_scopes) {
+  // 修饰各层带自己的作用域：extends 修饰改继承来的复合组件（b.c.z = 2.0 来自 B 的 `extends A(c(z = 2))`，叠在 A 里 `C c(x = q)`
+  // 之上；数组 d 的 `x = {5, 6}` 逐元素切分）、实例修饰再叠一层（b.c.y 的 start = p 在根里解析，b.c.x = b.q 在 b 里解析；
+  // `d(each z = 8)` 盖过声明的 `z = {3, 4}`）、整体绑定的记录叠属性修饰（b.r.a(start = 7.0) = 3.0）、`final c(…)` 让整棵子树
+  // final。期望 = omc 1.25.0 实跑 ECT1（2026-10-06）。
+  YMC_CHECK_EQ(flatten_src("model C\n  parameter Real x = 1;\n  parameter Real z = 1;\n  Real y = x * time;\nend C;\nrecord R\n"
+                           "  Real a = 1;\n  Real b = 2;\nend R;\nmodel A\n  parameter Real q = 4;\n  C c(x = q);\n"
+                           "  C d[2](z = {3, 4});\n  R r = R(3, 4);\nend A;\nmodel B\n"
+                           "  extends A(c(z = 2), d(x = {5, 6}), r(a(start = 7)));\nend B;\nmodel ECT1\n"
+                           "  parameter Real p = 5;\n  B b(c(y(start = p)), d(each z = 8));\n  extends A(final c(z = 3));\n"
+                           "end ECT1;\n"),
+               std::string("class ECT1\n  parameter Real p = 5.0;\n  parameter Real b.q = 4.0;\n  parameter Real b.c.x = b.q;\n"
+                           "  parameter Real b.c.z = 2.0;\n  Real b.c.y(start = p) = b.c.x * time;\n"
+                           "  parameter Real b.d[1].x = 5.0;\n  parameter Real b.d[1].z = 8.0;\n"
+                           "  Real b.d[1].y = b.d[1].x * time;\n  parameter Real b.d[2].x = 6.0;\n"
+                           "  parameter Real b.d[2].z = 8.0;\n  Real b.d[2].y = b.d[2].x * time;\n"
+                           "  Real b.r.a(start = 7.0) = 3.0;\n  Real b.r.b = 4.0;\n  parameter Real q = 4.0;\n"
+                           "  final parameter Real c.x = q;\n  final parameter Real c.z = 3.0;\n  final Real c.y = c.x * time;\n"
+                           "  parameter Real d[1].x = 1.0;\n  parameter Real d[1].z = 3.0;\n  Real d[1].y = d[1].x * time;\n"
+                           "  parameter Real d[2].x = 1.0;\n  parameter Real d[2].z = 4.0;\n  Real d[2].y = d[2].x * time;\n"
+                           "  Real r.a = 3.0;\n  Real r.b = 4.0;\nend ECT1;\n"));
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           // extends 修饰改 final 元素：omc "Trying to override final element x"（ECS1，此前被放过）。
+           {"model A\n  final parameter Real x = 1;\nend A;\nmodel ECS1\n  extends A(x = 2);\nend ECS1;\n", "final element override"},
+           // 内层修饰 `C c(final x = 3)` 被外层实例修饰改：同上（ECS2）。
+           {"model C\n  parameter Real x = 1;\nend C;\nmodel A\n  C c(final x = 3);\nend A;\nmodel ECS2\n"
+            "  A a(c(x = 2));\nend ECS2;\n", "final element override"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
+YMC_TEST(inst_redeclare_forms_and_parent_evaluate) {
+  // extends 修饰里的重声明形态：原声明的 constrainedby 修饰当约束修饰、原声明自己的修饰不用（a1.p = k，不是 9）；维从原声明
+  // 补（a2）；条件从原声明来（a3 被去掉，b 成结构参数）；变率前缀从原声明补、注释用原声明的（x）；多层重声明整个替掉内层的、
+  // 内层的 constrainedby 修饰留下（a4.q = 6.0）。期望 = omc 1.25.0 实跑 RFT1（2026-10-06）。
+  YMC_CHECK_EQ(flatten_src("model A\n  parameter Real p = 1;\nend A;\nmodel B\n  extends A;\n  parameter Real q = 2;\nend B;\n"
+                           "model C\n  extends B;\n  parameter Real r = 3;\nend C;\nmodel M\n  parameter Boolean b = false;\n"
+                           "  parameter Real k = 4;\n  replaceable A a1(p = 9) constrainedby A(p = k);\n"
+                           "  replaceable A a2[2](each p = 5);\n  replaceable A a3 if b;\n"
+                           "  replaceable parameter Real x = 1 \"orig\";\n  replaceable A a4;\nend M;\nmodel N\n"
+                           "  extends M(redeclare replaceable B a4(q = 7) constrainedby B(q = 6));\nend N;\nmodel RFT1\n"
+                           "  extends N(k = 8, redeclare B a1(q = 3), redeclare B a2(each q = 4), redeclare B a3,\n"
+                           "    redeclare Real x = 2 \"new\", redeclare C a4(r = 5));\nend RFT1;\n"),
+               std::string("class RFT1\n  final parameter Boolean b = false;\n  parameter Real k = 8.0;\n"
+                           "  parameter Real a1.p = k;\n  parameter Real a1.q = 3.0;\n  parameter Real a2[1].p = 5.0;\n"
+                           "  parameter Real a2[1].q = 4.0;\n  parameter Real a2[2].p = 5.0;\n  parameter Real a2[2].q = 4.0;\n"
+                           "  parameter Real x = 2.0 \"orig\";\n  parameter Real a4.p = 1.0;\n  parameter Real a4.q = 6.0;\n"
+                           "  parameter Real a4.r = 5.0;\nend RFT1;\n"));
+  // 外层组件的 Evaluate = true 传给子树里的参数（自己写了 Evaluate = false 的除外）。期望 = omc 1.25.0 实跑 EVT1。
+  YMC_CHECK_EQ(flatten_src("model A\n  parameter Real p = 1;\n  parameter Real q = 2 annotation(Evaluate = false);\n"
+                           "  Real y = p * q * time;\nend A;\nmodel B\n  A a;\n  parameter Integer n = 2;\n"
+                           "  Real v[n] = fill(time, n);\nend B;\nmodel EVT1\n  B b annotation(Evaluate = true);\n  A c;\n"
+                           "end EVT1;\n"),
+               std::string("class EVT1\n  final parameter Real b.a.p = 1.0;\n  parameter Real b.a.q = 2.0;\n"
+                           "  Real b.a.y = b.a.q * time;\n  final parameter Integer b.n = 2;\n  Real b.v[1];\n  Real b.v[2];\n"
+                           "  parameter Real c.p = 1.0;\n  parameter Real c.q = 2.0;\n  Real c.y = c.p * c.q * time;\nequation\n"
+                           "  b.v = {time, time};\nend EVT1;\n"));
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           // 重声明的方向与原声明的冲突：omc "Invalid redeclaration 'output u', original element is declared 'input'"（RFS1）。
+           {"model M\n  replaceable input Real u;\nend M;\nmodel RFS1\n  extends M(redeclare output Real u);\n"
+            "end RFS1;\n", "redeclare prefix mismatch"},
+           // 同一 extends 修饰里重声明 + 普通修饰同一元素：omc "Duplicate modification of element a on extends M"（RFS2）。
            {"model A\n  parameter Real p = 1;\nend A;\nmodel B\n  extends A;\n  parameter Real q = 2;\nend B;\n"
-            "model M\n  replaceable A a constrainedby A(p = 7);\nend M;\nmodel RDS2\n"
-            "  extends M(redeclare B a);\nend RDS2;\n", "redeclare form"}}) {
+            "model M\n  replaceable A a;\nend M;\nmodel RFS2\n  extends M(redeclare B a, a(p = 9));\nend RFS2;\n", "duplicate modification"}}) {
     bool uns = false;
     const std::string out = flatten_src(src.c_str(), &uns);
     YMC_CHECK(uns);

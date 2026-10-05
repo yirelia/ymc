@@ -1,0 +1,244 @@
+//// set: ec-e3 — 多层修饰各带作用域：三层实例修饰、结构参数、条件组件、嵌套记录、each、内层 final 被外层改
+//// model: E30
+model C
+parameter Real x = 1;
+parameter Real z = 1;
+Real y = x + z;
+end C;
+model B
+C c(z = 3);
+end B;
+model D
+B b(c(x = 2));
+end D;
+model E30
+D d(b(c(y(start = 4))));
+end E30;
+//// model: E31
+model C
+parameter Integer n = 1;
+parameter Integer m = 1;
+Real v[n + m];
+equation
+v = fill(time, n + m);
+end C;
+model A
+C c(n = 2);
+end A;
+model E31
+A a(c(m = 3));
+end E31;
+//// model: E32
+model C
+parameter Integer n = 1;
+parameter Integer m = 1;
+Real v[n + m];
+equation
+v = fill(time, n + m);
+end C;
+model A
+parameter Integer j = 2;
+C c(n = j);
+end A;
+model E32
+parameter Integer k = 3;
+A a(c(m = k));
+end E32;
+//// model: E33
+model C
+parameter Boolean b = true;
+Real x = time if b;
+Real w = 1;
+end C;
+model A
+C c(w = 2);
+end A;
+model E33
+A a(c(b = false));
+end E33;
+//// model: E34
+record S
+Real u = 1;
+end S;
+record R
+S s;
+Real a = 2;
+end R;
+model A
+R r(s(u = 5));
+end A;
+model E34
+A m(r(a = 7, s(u(start = 1))));
+end E34;
+//// model: E35
+model C
+parameter Real x = 1;
+parameter Real z = 1;
+end C;
+model A
+C c[2](z = {1, 2});
+end A;
+model E35
+A a(c(each x = 9));
+end E35;
+//// model: E36
+model C
+parameter Real x = 1;
+parameter Real z = 1;
+end C;
+model A
+parameter Real q = 2;
+C c[2](each z = q);
+end A;
+model E36
+parameter Real q = 3;
+A a(c(x = {q, 2 * q}));
+end E36;
+//// model: E37
+model C
+parameter Real x = 1;
+end C;
+model A
+C c(x = 3);
+end A;
+model E37
+A a(c(x = 2));
+end E37;
+//// model: E38
+model C
+parameter Real x = 1;
+parameter Real z = 1;
+end C;
+model A
+parameter Real q = 4;
+C c(x = q);
+end A;
+model E38
+parameter Real q = 5;
+A a(q = 6, c(z = q));
+end E38;
+//// model: E39
+model C
+Real x;
+equation
+x = time;
+end C;
+model A
+C c(x(start = 1, fixed = true));
+end A;
+model E39
+A a(c(x(start = 2)));
+end E39;
+//// model: E310
+model C
+Real x;
+equation
+x = time;
+end C;
+model A
+C c(x(final start = 1));
+end A;
+model E310
+A a(c(x(min = 0)));
+end E310;
+//// model: E311
+model C
+parameter Real x = 1;
+end C;
+model A
+C c(final x = 3);
+end A;
+model E311
+A a(c(x(min = 0)));
+end E311;
+//// model: E312
+model C
+parameter Real x = 1;
+end C;
+model A
+final C c(x = 3);
+end A;
+model E312
+A a;
+end E312;
+//// model: E313
+model C
+parameter Real x = 1;
+parameter Real z = 1;
+end C;
+model A
+C c(z = 3);
+end A;
+model E313
+A a(final c(x = 2));
+end E313;
+//// model: E314
+connector P
+Real e;
+flow Real f;
+end P;
+model A
+P p(e(start = 1));
+end A;
+model E314
+A a(p(e(nominal = 2)));
+A b;
+equation
+connect(a.p, b.p);
+end E314;
+//// model: E315
+model C
+constant Real k = 1;
+parameter Real x = k;
+end C;
+model A
+C c(k = 2);
+end A;
+model E315
+A a(c(x = 3));
+end E315;
+//// model: E316
+model C
+parameter Real x = 1;
+end C;
+model C2 = C(x = 4);
+model A
+C2 c;
+end A;
+model E316
+A a(c(x = 2));
+end E316;
+//// model: E317
+model C
+parameter Real x = 1;
+parameter Real z = 1;
+end C;
+model A
+C c(z = 3);
+end A;
+model B = A(c(x = 5));
+model E317
+B b(c(z = 6));
+end E317;
+//// model: E318
+model C
+parameter Real x = 1;
+parameter Real z = 1;
+end C;
+model A
+C c(z = 3);
+end A;
+model B = A(c(final x = 5));
+model E318
+B b(c(x = 6));
+end E318;
+//// model: E319
+model C
+parameter Real x = 1;
+end C;
+model A
+C c;
+end A;
+model E319
+A a(c(x = 2), c(x(min = 0)));
+end E319;

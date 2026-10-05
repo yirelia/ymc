@@ -1542,6 +1542,34 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           新探针 61 个（rx-r1 25 / rx-f 24 / rx-m 3 / rx-a 6 / 单测原文 3）：无 FAIL / ACCEPTS-INVALID；旧探针 sy-s4 +1 PASS。
           → scodeinst 526→531 PASS（Final6、Final7、RedeclareMod2、inst1、mod13 入 slice）；整个 testsuite PASS 1423→1436（FAIL 0，
             ACCEPTS-INVALID 3 不变）；**MSL 示例 PASS 32→49**（Electrical 5→22），FAIL 0；+1 单测（243）；探针 6911→6972。
+    - [x] (61i) flat + inst：修饰各层带自己的作用域（extends 修饰改继承来的复合组件、实例修饰叠组件声明修饰）+ 重声明形态 +
+          外层组件的 Evaluate 往下传（2026-10-06）：
+          flatten 的修饰上下文 ModCtx 原先整组修饰只有一个作用域，外层实例修饰与组件自己的修饰（声明修饰 / extends 修饰）同时
+          出现就 SKIP（"stacked modifier scopes"、"extends modifier on composite"，MSL 里后者 103 个）。现每条修饰（ModSource）
+          带自己的作用域与前缀，按 omc 由外向内合并的层序排：外层实例修饰 > extends 修饰（外层 extends 在前）> 组件声明修饰 >
+          约束修饰 > 短类链修饰（NFModifier.merge，NFModifier.mo:386-438 v1.25.0）；叶的绑定取第一个带绑定的那层、在它的作用域
+          求值，复合数组按层逐元素切分，整体绑定的记录叠字段属性修饰也不再要求同作用域；实例帧求值（frame_value）按各层自己
+          的作用域找帧。**改 final 元素**：内层修饰把元素标了 final、外层又改它 → SKIP（checkFinalOverride :399 / :691-709）——
+          在子层的 matched 里统一判（替掉短类修饰 / 约束修饰各自的特判）；extends 修饰改声明带 final 的叶组件此前被放过
+          （ACCEPTS-INVALID，E 探针 e20 / e21），inst 的 apply_extends_modifier 补判。**顶层短类的修饰**（`model C2 = C(x = 4);`）
+          在全局作用域解析（同包里的短类）；包 / 顶层短类修饰给的结构参数不在实例帧栈上，按常量求值（`model C2 = C(n = 2); C2 c;`
+          的 `Real v[n]`）。
+          **重声明形态**（同桶，MSL 的 Machines / PowerConverters 一族卡在这里 78 个）：redeclare_component 按原声明补齐——维
+          （重声明不带维 → 原声明的）、条件（总用原声明的；重声明自己带条件 omc 报错）、变率 / 方向 / 流前缀（没写 → 原声明的，写了
+          不同的 omc 报错，变率只许往常量方向降；Attributes.mergeRedeclaredComponentAttributes，NFAttributes.mo:275-347）、注释与
+          注解（原声明的）——合成一个元素当组件定义（make_top_node 给 SCode 元素表预留容量：实例化中途各层持着 SElement 引用，
+          不能搬家；按 (原声明, 重声明元素) 缓存）。约束修饰改成多层：重声明元素自己的 constrainedby 修饰（没有时取被替掉的内层
+          重声明的）> 原声明的约束修饰（有 constrainedby 取它的、原声明自己的修饰不用；NFInst.getConstrainingMod :2064-2083）。
+          外层再重声明一次整个替掉内层的、原声明仍是最初那个。先被内层 extends 修饰改过再重声明（omc 丢掉那些修饰）→ SKIP。
+          **同层重复修饰**：`extends M(redeclare B a, a(p = 9))` omc 报 DUPLICATE_MODIFICATIONS（mergeLocal 只合并两个普通修饰），
+          复合组件的 extends 修饰放开后被放过（探针 rx-r1 R124）→ 补判。**外层组件的 Evaluate = true**：子树里的参数同样当结构
+          参数（updateImplicitVariability 往下传 parentEval，NFInst.mo:3934-3936；Structural.isStructuralComponent :67）——此前
+          `A a annotation(Evaluate = true)` 里的参数没打 final、引用没代入（FAIL，语料没覆盖，EV 探针 9 个）。**记录整体绑定
+          拆出的字段绑定**不算修饰层（omc 的 getRecordBindings 压平时才分发）：`parameter R r2 = r1` 落到 R 的 final 字段不报
+          final 冲突（此前 SKIP，MSL 电机的 frictionParameters 卡在这里）。
+          slice 602→608 例 PASS 531→538（+RedeclareMod3-6、UnboundParameter7、redeclare6）；scodeinst PASS 531→538 / FAIL
+          27→28（+PropagateRedeclareMod1：与 1.25.0 一致、文件是新版行为，入账）；整个 testsuite 实跑 PASS 1436→1452 / FAIL 0；
+          MSL 示例 49→54；探针 6972→7144（ec-* 5 集 92 个、rf-* 6 集 80 个）；单测 243→245。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

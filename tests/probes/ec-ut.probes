@@ -1,0 +1,42 @@
+//// set: ec-ut — 修饰各层带作用域 + 改 final 元素（单测原文）
+//// model: ECS1
+model A
+  final parameter Real x = 1;
+end A;
+model ECS1
+  extends A(x = 2);
+end ECS1;
+//// model: ECS2
+model C
+  parameter Real x = 1;
+end C;
+model A
+  C c(final x = 3);
+end A;
+model ECS2
+  A a(c(x = 2));
+end ECS2;
+//// model: ECT1
+model C
+  parameter Real x = 1;
+  parameter Real z = 1;
+  Real y = x * time;
+end C;
+record R
+  Real a = 1;
+  Real b = 2;
+end R;
+model A
+  parameter Real q = 4;
+  C c(x = q);
+  C d[2](z = {3, 4});
+  R r = R(3, 4);
+end A;
+model B
+  extends A(c(z = 2), d(x = {5, 6}), r(a(start = 7)));
+end B;
+model ECT1
+  parameter Real p = 5;
+  B b(c(y(start = p)), d(each z = 8));
+  extends A(final c(z = 3));
+end ECT1;

@@ -8,7 +8,10 @@
 // 复合组件（组件类型是用户类）。**尚未做**：修饰合并、绑定/维度实例化、短类、内建属性、inner/outer、
 // redeclare、数组——按落地顺序在后续子步补，每步配探针对拍。
 #pragma once
+#include <cstddef>
+#include <cstdint>
 #include <string>
+#include <unordered_map>
 
 #include "base/diag.h"
 #include "inst/inode.h"
@@ -71,6 +74,9 @@ class Instantiator {
   std::string unsupported_reason_;
   std::string unsupported_detail_;
   int depth_ = 0;   // instantiate 递归深度（防无限递归栈溢出）
+  // redeclare_component 合成的组件元素：(原声明 << 32 | 重声明元素) → 合成元素；elems 的预留上限（见 make_top_node）。
+  std::unordered_map<std::uint64_t, Id<SElement>> redecl_elems_;
+  std::size_t synth_cap_ = 0;
 };
 
 }  // namespace ymc
