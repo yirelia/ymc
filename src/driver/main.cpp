@@ -230,7 +230,8 @@ void autoload_libraries(ymc::Absyn& absyn, ymc::Interner& interner, const Option
 // S3：实例化 + 压平 + dump（默认 `ymc X.mo`，对齐 `omc X.mo`：压平文件里最后一个顶层类）。
 // v1 未实现的构造 → 退出码 66 + `ymc: not implemented: <原因>`（运行器据此记 SKIP）。
 // root_name：文件里最后一个顶层类（同 omc）——隐式装上的库排在它后面，不能再取 program 的末项。
-int dump_flat_pipeline(ymc::Absyn& absyn, ymc::Diagnostics& diags, ymc::Interner& interner, ymc::Symbol root_name) {
+int dump_flat_pipeline(ymc::Absyn& absyn, ymc::Diagnostics& diags, ymc::Interner& interner,
+                       const std::vector<ymc::Symbol>& root_path) {
   ymc::SCode scode(absyn);
   ymc::translate_program(scode, absyn.top);
   if (scode.program.empty()) {
@@ -240,7 +241,7 @@ int dump_flat_pipeline(ymc::Absyn& absyn, ymc::Diagnostics& diags, ymc::Interner
   ymc::Inst inst(interner, absyn, scode);
   ymc::Instantiator instr(inst, diags);
   instr.make_top_node();
-  ymc::NodeId root = instr.instantiate_root(root_name);
+  ymc::NodeId root = instr.instantiate_root_path(root_path);
   // v1 未实现的构造先于错误判断（内建枚举/extends 内建等在实例化阶段就标 unsupported）。
   if (instr.unsupported()) {
     if (instr.unsupported_detail().empty())
@@ -321,7 +322,7 @@ int run_one(const Options& opt, const std::string& path) {
     }
     const ymc::Symbol root_name = absyn.classes[absyn.top.back()].name;   // 装库之前取：文件里最后一个顶层类
     autoload_libraries(absyn, interner, opt);
-    return dump_flat_pipeline(absyn, diags, interner, root_name);
+    return dump_flat_pipeline(absyn, diags, interner, {root_name});
   }
   std::string text = ymc::unparse(absyn);
   std::fputs(text.c_str(), stdout);
@@ -347,6 +348,19 @@ int run_load_model(const Options& opt) {
   if (std::strcmp(opt.mode, "dump-after=scode") == 0) {
     int rc = dump_scode(absyn, opt.dump_class);
     return rc != 0 ? rc : (diags.has_errors() ? 1 : 0);
+  }
+  // S3 3g：从库里按全限定名压平一个类（`ymc --load-model=Modelica --class=Modelica.Blocks.Examples.PID_Controller`，
+  // 对齐 `omc -i=<类> <库>/package.mo`）。MSL 示例模型的通过率报告见 tools/msl_sweep.py。
+  if (std::strcmp(opt.mode, "dump-after=flat") == 0 && !opt.dump_class.empty()) {
+    if (diags.has_errors()) return 1;
+    std::vector<ymc::Symbol> path;
+    for (std::size_t b = 0; b <= opt.dump_class.size();) {
+      std::size_t e = opt.dump_class.find('.', b);
+      if (e == std::string::npos) e = opt.dump_class.size();
+      path.push_back(interner.intern(std::string_view(opt.dump_class).substr(b, e - b)));
+      b = e + 1;
+    }
+    return dump_flat_pipeline(absyn, diags, interner, path);
   }
   if (opt.dump_class_names) {
     // OMC getClassNames() 的顶层顺序是"装载顺序的逆序"（每装一个库就前插；探针 2026-09-16：

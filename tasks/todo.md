@@ -1499,7 +1499,16 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
             Notification 写 4.1.0；ymc 与 1.25.0 + MSL 4.0.0 一致，记入分歧账本）；整个 testsuite PASS 1389→1417（FAIL 0，
             ACCEPTS-INVALID 3 不变；MSL 电路的 resolveLoops / tearing 用例、arrays/ArrayDim1/2、packages1 …）；+1 单测（241）；
             探针 6788→6856。
-  - [ ] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。
+    - [x] (61f) 3g 第一步：从库里按全名压平 + MSL 示例模型通过率报告（2026-10-06）：
+          `ymc --load-model=Modelica --class=<全名>` 压平库里的类（对齐 `omc -i=<类> <库>/package.mo`）：inst 加
+          instantiate_root_path（从顶层逐段查），flatten 的根类全名沿词法外层拼到 <top>（`class Modelica.Blocks.Examples…`）。
+          `tools/msl_sweep.py`：MSL 4.0.0 带 experiment 注解、非 partial 的 514 个模型（清单 docs/research/msl-examples.json，由
+          omc 生成）逐个与实跑 omc 逐字节比，omc 结果缓存在 build/msl-oracle/。inst 的 `unresolved derived base` 也带上查不到
+          的名字。第一版：PASS 4 / FAIL 0 / ACCEPTS-INVALID 0 / SKIP 510（报告 docs/research/msl-examples-report.md）——首因
+          StateSelect 当组件类型 112、extends redeclare 111、Clock 64、Medium 前缀 34、extends 内建类型 28…。门里加一条
+          `python tools/msl_sweep.py`：FAIL / ACCEPTS-INVALID / CRASH 须为 0。
+          下一步：内建枚举 StateSelect / AssertionLevel 当组件类型（+ `stateSelect = <参数>` 的结构求值，NFInst.mo:3942）。
+  - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples

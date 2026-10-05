@@ -177,8 +177,12 @@ class Flattener {
   FlattenResult run(NodeId root) {
     root_ = root;
     synth_mod_floor_ = I_.scode.mods.size();
-    // 全名（R13 §2）：v1 根类是顶层类，全名 = 类名。
+    // 全名（R13 §2）：根类的全限定名——顶层类就是类名，库里的示例模型是 `Modelica.Blocks.Examples.PID_Controller`
+    //（omc -i=… 打 `class Modelica.Blocks.Examples.PID_Controller "…"`）。沿词法外层往上拼到 <top>。
     result_.model.name = {I_.nodes[root].name};
+    for (NodeId p = I_.nodes[root].parent_scope; p.is_valid() && !I_.nodes[p].is_empty() && p != I_.top;
+         p = I_.nodes[p].parent_scope)
+      result_.model.name.insert(result_.model.name.begin(), I_.nodes[p].name);
     const SElement& el = I_.scode.elems[I_.nodes[root].def];
     result_.model.comment = class_comment(el.cmt.str);
     if (el.def.kind != SClassDefKind::Parts) set_unsupported("short/derived/enum root class");

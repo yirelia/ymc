@@ -517,6 +517,7 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
   // 短类的前缀属性（`type InputReal = input Real`、`type C = constant …`）累积到组件上：
   // 组件自身 > 靠近用处的派生 > 更远派生（loop 外→内，first-non-default 胜）。
   bool alias_partial = false;            // 链上有 partial 的短类
+  std::string unresolved_base;           // 链上查不到的基类名（报 SKIP 子原因）
   std::vector<SRestriction> alias_res;   // 链上各短类的受限类型（与链底长类比，见下）
   SVariability mvar = el.attr.var;
   SDirection mdir = el.attr.dir;
@@ -550,6 +551,7 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
     if (mdir == SDirection::Bidir && cd.derived_attr.dir != SDirection::Bidir) mdir = cd.derived_attr.dir;
     if (mct == SConnectorType::Potential && cd.derived_attr.ct != SConnectorType::Potential) mct = cd.derived_attr.ct;
     NodeId nxt = lookup_class_name(cd.derived_type.path, I_.nodes[base].parent_scope);
+    if (!nxt.is_valid() || I_.nodes[nxt].is_empty()) unresolved_base = path_str(cd.derived_type.path);
     base = (nxt.is_valid() && !I_.nodes[nxt].is_empty()) ? nxt : Inst::empty_node();
   }
 
@@ -570,7 +572,7 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
   }
   if (!leaf) {
     if (!base.is_valid() || I_.nodes[base].is_empty()) {   // 派生链解析失败
-      mark_unsupported("unresolved derived base");
+      mark_unsupported("unresolved derived base", unresolved_base);
       I_.comps[cid].kind = CompKind::Invalid;
       return;
     }
@@ -615,6 +617,16 @@ NodeId Instantiator::instantiate_root(Symbol name) {
   NodeId def_node = lookup_simple_class(name, I_.top);
   if (!def_node.is_valid() || I_.nodes[def_node].is_empty()) {
     diags_.error(SourceLoc{}, "Class " + std::string(I_.interner.str(name)) + " not found in scope <top>.");
+    return Inst::empty_node();
+  }
+  return instantiate(def_node, Inst::empty_node());
+}
+
+NodeId Instantiator::instantiate_root_path(const std::vector<Symbol>& path) {
+  if (path.size() == 1) return instantiate_root(path[0]);
+  const NodeId def_node = lookup_class_name(path, I_.top);
+  if (!def_node.is_valid() || I_.nodes[def_node].is_empty()) {
+    diags_.error(SourceLoc{}, "Class " + path_str(path) + " not found in scope <top>.");
     return Inst::empty_node();
   }
   return instantiate(def_node, Inst::empty_node());

@@ -25,6 +25,8 @@ class Instantiator {
   // 实例化一个顶层类（按名字），返回其实例节点（root）；找不到/不可实例化返回 invalid 并报错。
   // 对标 lookupRootClass + instantiateRootClass。
   NodeId instantiate_root(Symbol name);
+  // 按全限定名实例化根类（`Modelica.Blocks.Examples.PID_Controller`，库里的示例模型）：从顶层逐段查。
+  NodeId instantiate_root_path(const std::vector<Symbol>& path);
 
   // v1 还没做的构造（内建枚举/时钟类型、extends 内建类型…）在实例化阶段就撞上时标记，
   // driver 据此退 66（记 SKIP，不是 FAIL）。与 flatten 的 unsupported 合并判断。
