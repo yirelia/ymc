@@ -1746,6 +1746,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           "不固定"顺带认外部函数调用（if 条件的参数绑到查表函数 → 条件照留，EO 探针 e30-e33）。外部对象数组未做（ExternalObject6
           SKIP）；MSL 的查表模型往下露出到类注释转义 / size() 矩阵等。
           门：slice 625→632 例 PASS 567 / FAIL 0 / oracle=live 不一致 0；scodeinst 560→567 / 29（在账）；testsuite 实跑 PASS 1503→1513 / FAIL 0 / ACC 3 / CRASH 0；MSL 示例 PASS 104（不变，30 个 SKIP 原因往下挪）；探针 7779→7823（xo 共 44 个）；单测 268→270。
+    - [x] (61x) inst：继承来的同名元素去重（2026-10-07）：
+          多重继承 / 本地声明与继承元素同名，此前两个都发射、压平末尾 SKIP "duplicate variable"（MSL PowerConverters 的
+          整流 / H 桥示例 18 个、testsuite 19 个）。inst_class 在 extends 修饰并入之后照 omc 去重：留先出现的（书写位置靠前），
+          其余须与它相同（Component.isIdentical：两个都是内建类型才比类型，长类型当相同；绑定按书写式子比，最外层整数与实数
+          字面量按数值比——AbsynUtil.expEqual；维、变率、属性、注释、条件、方向都不比），不相同、或组件与本地 / 继承来的嵌套类
+          同名 → omc 报 DUPLICATE_ELEMENTS_NOT_IDENTICAL → SKIP。exp_equal 挪进 absyn_util 供 inst / flatten 共用。
+          scodeinst 的 DuplicateElements7 / 8 / Cond1 文件 Result 与 1.25.0 不符（空 / 旧前端），进分歧账本。
+          门：slice 632→631 例（DuplicateElements8 进账本剔除）PASS 573 / FAIL 0 / oracle=live 不一致 0；scodeinst 567→573 / 29→32（新增 3 个进分歧账本）；testsuite 实跑 PASS 1513→1527 / FAIL 0 / ACC 3 / CRASH 0；MSL 示例 PASS 104→122；探针 7823→7845（du 共 22 个）；单测 270→272。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

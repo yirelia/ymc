@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "absyn/absyn.h"
+#include "absyn/absyn_util.h"
 #include "base/crt_math.h"  // 编译期求值的超越函数走 UCRT（与 omc 1.25.0 逐位一致，见 crt_math.h）
 #include "base/strings.h"   // unescape_modelica_string（字符串字面量；注释在 SCode 里已解过转义，直接用）
 
@@ -16819,32 +16820,7 @@ class Flattener {
     for (const ForIndex& it : e.iters) if (absyn_param_size_call(it.range)) return true;
     return absyn_param_size_call(e.a) || absyn_param_size_call(e.b) || absyn_param_size_call(e.c);
   }
-  // 两个书写表达式结构相同（同 kind、同字面量 / 运算符 / 名字，子式递归相同）。括号（1 元 Tuple）不看穿、Real 字面量按拼写比。
-  bool absyn_equal(Id<Exp> a, Id<Exp> b) const {
-    if (a == b) return true;
-    if (!a.is_valid() || !b.is_valid()) return false;
-    const Exp& x = I_.absyn.exps[a];
-    const Exp& y = I_.absyn.exps[b];
-    if (x.kind != y.kind || x.ival != y.ival || x.bval != y.bval || x.sval != y.sval || x.op != y.op ||
-        x.partial_fn != y.partial_fn || x.args.size() != y.args.size() || x.arg_names != y.arg_names ||
-        x.iters.size() != y.iters.size() || x.cref.is_valid() != y.cref.is_valid() ||
-        x.call_suffix.is_valid() || y.call_suffix.is_valid())
-      return false;
-    if (x.cref.is_valid()) {
-      const Cref& p = I_.absyn.crefs[x.cref];
-      const Cref& q = I_.absyn.crefs[y.cref];
-      if (p.leading_dot != q.leading_dot || p.parts.size() != q.parts.size()) return false;
-      for (std::size_t i = 0; i < p.parts.size(); ++i) {
-        if (p.parts[i].name != q.parts[i].name || p.parts[i].subscripts.size() != q.parts[i].subscripts.size()) return false;
-        for (std::size_t k = 0; k < p.parts[i].subscripts.size(); ++k)
-          if (!absyn_equal(p.parts[i].subscripts[k], q.parts[i].subscripts[k])) return false;
-      }
-    }
-    for (std::size_t i = 0; i < x.args.size(); ++i) if (!absyn_equal(x.args[i], y.args[i])) return false;
-    for (std::size_t i = 0; i < x.iters.size(); ++i)
-      if (x.iters[i].name != y.iters[i].name || !absyn_equal(x.iters[i].range, y.iters[i].range)) return false;
-    return absyn_equal(x.a, y.a) && absyn_equal(x.b, y.b) && absyn_equal(x.c, y.c);
-  }
+  bool absyn_equal(Id<Exp> a, Id<Exp> b) const { return exp_equal(I_.absyn, a, b); }
   bool is_plain_iter(Id<Exp> s, Symbol it) const {
     const Exp& x = I_.absyn.exps[s];
     if (x.kind != ExpKind::CrefExp) return false;

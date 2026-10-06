@@ -1,0 +1,240 @@
+//// set: du-d1 — 继承来的同名元素：绑定不同 / 整数与实数字面量相等、类型不同、变率 / 属性 / 维 / 注释 / 条件 / 方向 / 可见性不比、本地在前、实例修饰、记录类型不同、组件与类同名、连接器、extends 修饰改成相同 / 不同
+//// model: D10
+model A
+Real x = 1;
+end A;
+model B
+Real x = 2;
+end B;
+model D10
+extends A;
+extends B;
+end D10;
+//// model: D11
+model A
+Real x = 1;
+end A;
+model B
+Real x = 1.0;
+end B;
+model D11
+extends A;
+extends B;
+end D11;
+//// model: D12
+model A
+Real x;
+end A;
+model B
+Integer x;
+end B;
+model D12
+extends A;
+extends B;
+end D12;
+//// model: D13
+model A
+parameter Real x = 1;
+end A;
+model B
+Real x = 1;
+end B;
+model D13
+extends A;
+extends B;
+end D13;
+//// model: D14
+model A
+Real x(start = 1);
+end A;
+model B
+Real x(start = 2);
+end B;
+model D14
+extends A;
+extends B;
+end D14;
+//// model: D15
+model A
+Real x[2];
+end A;
+model B
+Real x[3];
+end B;
+model D15
+extends A;
+extends B;
+end D15;
+//// model: D16
+model A
+Real x = 1;
+end A;
+model D16
+Real x = 1;
+extends A;
+end D16;
+//// model: D17
+model A
+Real x = 1;
+Real y = x;
+end A;
+model B
+extends A;
+Real x = 1;
+end B;
+model D17
+B b(x = 3);
+end D17;
+//// model: D18
+model A
+Real x "first";
+end A;
+model B
+Real x "second";
+end B;
+model D18
+extends A;
+extends B;
+end D18;
+//// model: D19
+model A
+Real x if false;
+end A;
+model B
+Real x;
+end B;
+model D19
+extends A;
+extends B;
+Real y = 1;
+end D19;
+//// model: D110
+record R1
+Real a = 1;
+end R1;
+record R2
+Real b = 2;
+end R2;
+model A
+R1 r;
+end A;
+model B
+R2 r;
+end B;
+model D110
+extends A;
+extends B;
+end D110;
+//// model: D111
+model A
+Real x;
+end A;
+model B
+model x
+end x;
+end B;
+model D111
+extends A;
+extends B;
+end D111;
+//// model: D112
+connector C
+Real v;
+flow Real i;
+end C;
+model A
+C c;
+end A;
+model B
+C c;
+end B;
+model D112
+extends A;
+extends B;
+equation
+c.v = 1;
+end D112;
+//// model: D113
+model A
+Real x = 1;
+end A;
+model B
+Real x = 2;
+end B;
+model D113
+extends A;
+extends B(x = 1);
+end D113;
+//// model: D114
+model A
+Real x = 1;
+end A;
+model B
+Real x = 2;
+end B;
+model D114
+extends A(x = 2);
+extends B;
+end D114;
+//// model: D115
+model A
+parameter Real p = 1;
+Real x = p;
+end A;
+model B
+parameter Real p = 1;
+Real x = p;
+end B;
+model D115
+extends A;
+extends B;
+end D115;
+//// model: D116
+model A
+Real x = 1;
+equation
+end A;
+model B
+Real x = 1;
+Real z;
+equation
+z = x;
+end B;
+model D116
+extends A;
+extends B;
+end D116;
+//// model: D117
+model A
+input Real x = 1;
+end A;
+model B
+output Real x = 1;
+end B;
+model D117
+extends A;
+extends B;
+end D117;
+//// model: D118
+model A
+Real x = 1;
+end A;
+model D118
+extends A;
+Real x = 1;
+Real x2 = x;
+protected
+Real z = 2;
+end D118;
+//// model: D119
+model A
+Real x = 1;
+end A;
+model B
+protected
+Real x = 1;
+end B;
+model D119
+extends A;
+extends B;
+end D119;

@@ -50,4 +50,30 @@ std::string qualified_name(const Absyn& a, const std::vector<Symbol>& path) {
   return s;
 }
 
+bool exp_equal(const Absyn& ab, Id<Exp> a, Id<Exp> b) {
+  if (a == b) return true;
+  if (!a.is_valid() || !b.is_valid()) return false;
+  const Exp& x = ab.exps[a];
+  const Exp& y = ab.exps[b];
+  if (x.kind != y.kind || x.ival != y.ival || x.bval != y.bval || x.sval != y.sval || x.op != y.op ||
+      x.partial_fn != y.partial_fn || x.args.size() != y.args.size() || x.arg_names != y.arg_names ||
+      x.iters.size() != y.iters.size() || x.cref.is_valid() != y.cref.is_valid() ||
+      x.call_suffix.is_valid() || y.call_suffix.is_valid())
+    return false;
+  if (x.cref.is_valid()) {
+    const Cref& p = ab.crefs[x.cref];
+    const Cref& q = ab.crefs[y.cref];
+    if (p.leading_dot != q.leading_dot || p.parts.size() != q.parts.size()) return false;
+    for (std::size_t i = 0; i < p.parts.size(); ++i) {
+      if (p.parts[i].name != q.parts[i].name || p.parts[i].subscripts.size() != q.parts[i].subscripts.size()) return false;
+      for (std::size_t k = 0; k < p.parts[i].subscripts.size(); ++k)
+        if (!exp_equal(ab, p.parts[i].subscripts[k], q.parts[i].subscripts[k])) return false;
+    }
+  }
+  for (std::size_t i = 0; i < x.args.size(); ++i) if (!exp_equal(ab, x.args[i], y.args[i])) return false;
+  for (std::size_t i = 0; i < x.iters.size(); ++i)
+    if (x.iters[i].name != y.iters[i].name || !exp_equal(ab, x.iters[i].range, y.iters[i].range)) return false;
+  return exp_equal(ab, x.a, y.a) && exp_equal(ab, x.b, y.b) && exp_equal(ab, x.c, y.c);
+}
+
 }  // namespace ymc

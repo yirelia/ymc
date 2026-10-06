@@ -166,3 +166,9 @@ Evaluate 参数链都短，链上没有 Evaluate = false / fixed 属性）。FAI
 外部对象（`extends ExternalObject`）接上之后，30 个"unresolved base class [ExternalObject]"的示例都往下露出：size() 矩阵构造进
 结构绑定 8、记录构造无实例 6、if 式选中的支引用参数 5、类注释带转义 2、unresolved derived base 2、矩阵元素形状 2、redeclare
 修饰 2、条件组件 / 整体数组引用 / 继承记录的构造各 1。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-07 加宽 61x 之后：PASS 104 → 122
+
+继承来的同名元素照 omc 去重（留先出现的，其余须相同）之后，PowerConverters 的 18 个示例（RectifierBridge2mPulse 6、
+RectifierCenterTap2mPulse 5、RectifierCenterTapmPulse 5、HBridge 2）转 PASS——它们的多相整流器同时继承了两个都声明 `m` /
+`fire_p` 的接口类。FAIL / ACCEPTS-INVALID / CRASH 0。

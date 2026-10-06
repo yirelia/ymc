@@ -1,0 +1,26 @@
+//// set: du-ut — 继承来的同名元素去重 / 不相同报错（单测原文）
+//// model: DU1
+model A
+  Real x = 1;
+  Real z = x;
+end A;
+model B
+  Real x = 1.0;
+  Real w = 2 * x;
+end B;
+model DU1
+  extends A;
+  extends B;
+  Real y = x;
+end DU1;
+//// model: DU2
+model A
+  Real x = 1;
+end A;
+model B
+  Real x = 2;
+end B;
+model DU2
+  extends A;
+  extends B;
+end DU2;

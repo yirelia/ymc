@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "base/diag.h"
 #include "inst/inode.h"
@@ -43,6 +44,9 @@ class Instantiator {
   void partial_inst(NodeId cls);                 // 建 ClassTree（本地类/组件/extends 占位）
   void expand(NodeId cls);                        // 解析 extends、递归 expand 基类
   void check_ext_object(NodeId cls);              // 外部对象类的元素校验（见 inst.cpp）
+  void dedup_components(std::vector<NodeId>& comps, NodeId def_node);   // 继承来的同名组件去重（见 inst.cpp）
+  bool binding_exp_equal(Id<Exp> a, Id<Exp> b) const;
+  void collect_class_names(NodeId def_node, std::unordered_set<std::uint32_t>& out, int depth);
   NodeId instantiate(NodeId def_node, NodeId parent);  // 克隆 def 节点 + instClass 填实例树
   void inst_class(NodeId inst_node, NodeId def_node);  // 建 FlatTree：递归组件 + extends 就地展开
   void inst_component(NodeId comp_node, NodeId enclosing);  // 解析组件类型（叶/复合）

@@ -25,4 +25,8 @@ InsertResult insert_class(Absyn& a, Id<ClassDef> parent, Id<ClassDef> cls, bool 
 // "A.B.C" 形式的名字（调试/诊断用）。
 [[nodiscard]] std::string qualified_name(const Absyn& a, const std::vector<Symbol>& path);
 
+// 两个书写表达式结构相同（同 kind、同字面量 / 运算符 / 名字，子式递归相同；对标 AbsynUtil.expEqual）。括号（1 元 Tuple）
+// 不看穿、Real 字面量按拼写比。
+[[nodiscard]] bool exp_equal(const Absyn& a, Id<Exp> x, Id<Exp> y);
+
 }  // namespace ymc

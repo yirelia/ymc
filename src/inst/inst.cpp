@@ -1,6 +1,8 @@
 // 实例化 pass 实现（S3 第一里程碑）。锚点见 inst.h 头注与各处 R11 引用。
 #include "inst/inst.h"
 
+#include "absyn/absyn_util.h"
+
 namespace ymc {
 
 namespace {
@@ -335,6 +337,69 @@ void Instantiator::partial_inst(NodeId cls) {
   c.tree = I_.trees.add(std::move(tree));
 }
 
+// 同名组件（多重继承、本地声明与继承元素同名）：留先出现的（书写位置靠前），其余须与它相同，否则 omc 报
+// DUPLICATE_ELEMENTS_NOT_IDENTICAL → SKIP（addInheritedElementConflict / replaceDuplicates / checkDuplicates，
+// NFClassTree.mo:2068-2157 / :726-743 / :1334-1380 v1.25.0）。"相同"照 Component.isIdentical（NFComponent.mo:727-752）：
+// 两个都是内建类型才比类型（Class.isIdentical 对长类只比前缀、实例化后恒真，NFClass.mo:475-498），绑定按书写式子比（RAW
+// 绑定的 AbsynUtil.expEqual，NFBinding.mo:504-517；extends 修饰已并进绑定）；维、变率、属性、条件都不比。
+void Instantiator::dedup_components(std::vector<NodeId>& comps, NodeId def_node) {
+  // 组件与（本地或继承来的）嵌套类同名：类对组件恒"不相同"（InstNode.checkIdentical，NFInstNode.mo:1659-1683）→ omc 报错。
+  std::unordered_set<std::uint32_t> class_names;
+  collect_class_names(def_node, class_names, 0);
+  for (NodeId c : comps)
+    if (class_names.count(I_.nodes[c].name.id)) {
+      mark_unsupported("duplicate elements not identical", std::string(I_.interner.str(I_.nodes[c].name)));
+      return;
+    }
+  std::vector<NodeId> kept;
+  std::unordered_map<std::uint32_t, NodeId> first;   // 名字 → 留下的那个
+  for (NodeId c : comps) {
+    const auto [it, fresh] = first.emplace(I_.nodes[c].name.id, c);
+    if (fresh) {
+      kept.push_back(c);
+      continue;
+    }
+    if (it->second == c) continue;
+    const Component& a = I_.comps[I_.nodes[it->second].comp];
+    const Component& b = I_.comps[I_.nodes[c].comp];
+    const Type ta = a.ty.is_array() ? *a.ty.array_elem : a.ty, tb = b.ty.is_array() ? *b.ty.array_elem : b.ty;
+    auto builtin = [](const Type& t) { return t.kind != TypeKind::Complex && t.kind != TypeKind::Unknown; };
+    bool same = !(builtin(ta) && builtin(tb)) || (ta.kind == tb.kind && ta.enum_path == tb.enum_path);
+    const bool ra = a.binding.kind == BindingKind::Raw && a.binding.raw_exp.is_valid();
+    const bool rb = b.binding.kind == BindingKind::Raw && b.binding.raw_exp.is_valid();
+    same = same && ra == rb && (!ra || binding_exp_equal(a.binding.raw_exp, b.binding.raw_exp));
+    if (!same) {
+      mark_unsupported("duplicate elements not identical", std::string(I_.interner.str(I_.nodes[c].name)));
+      return;
+    }
+  }
+  comps = std::move(kept);
+}
+
+// AbsynUtil.expEqual（AbsynUtil.mo:2922-2938 v1.25.0）：最外层一个整数、一个实数字面量按数值比（`x = 1` 与 `x = 1.0` 相同，
+// DU 探针 d11），其余逐结构比。
+bool Instantiator::binding_exp_equal(Id<Exp> a, Id<Exp> b) const {
+  const Exp& x = I_.absyn.exps[a];
+  const Exp& y = I_.absyn.exps[b];
+  if (x.kind == ExpKind::IntLit && y.kind == ExpKind::RealLit) return static_cast<double>(x.ival) == y.rval;
+  if (x.kind == ExpKind::RealLit && y.kind == ExpKind::IntLit) return x.rval == static_cast<double>(y.ival);
+  return exp_equal(I_.absyn, a, b);
+}
+
+// 类的元素里（本地 + 顺 extends 继承来的）嵌套类的名字。
+void Instantiator::collect_class_names(NodeId def_node, std::unordered_set<std::uint32_t>& out, int depth) {
+  if (depth > 50 || !def_node.is_valid() || I_.nodes[def_node].is_empty() || !I_.nodes[def_node].cls.is_valid()) return;
+  const ClassTreeId tid = I_.node_class(def_node).tree;
+  if (!tid.is_valid()) return;
+  for (NodeId k : I_.trees[tid].classes) out.insert(I_.nodes[k].name.id);
+  const std::vector<NodeId> exts = I_.trees[tid].exts;   // 拷贝（lookup 会 arena add）
+  for (NodeId ext : exts) {
+    const std::vector<Symbol> bp = I_.scode.elems[I_.nodes[ext].def].base_path;
+    const NodeId b = lookup_class_name(bp, def_node);
+    if (b.is_valid() && !I_.nodes[b].is_empty()) collect_class_names(b, out, depth + 1);
+  }
+}
+
 // 外部对象类的合法形态（makeExternalObjectType，NFInst.mo:918-990 v1.25.0）：不能有组件；除 ExternalObject 外的 extends
 // 只能是空类（图标包）；嵌套类恰是两个非 replaceable 的函数 constructor / destructor。不合法 omc 报错 → SKIP。
 void Instantiator::check_ext_object(NodeId cls) {
@@ -514,6 +579,7 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node) {
       flat.components.push_back(icomp);
     }
   }
+  dedup_components(flat.components, def_node);
   Class& ic = I_.classes[I_.nodes[inst_node].cls];
   ic.tree = I_.trees.add(std::move(flat));
   ic.state = ClassState::InstancedClass;

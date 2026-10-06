@@ -5352,6 +5352,23 @@ YMC_TEST(flatten_external_object_invalid_element_unsupported) {
   YMC_CHECK_EQ(out, std::string("<unsupported:external object element>"));
 }
 
+YMC_TEST(flatten_identical_inherited_elements_kept_once) {
+  // 两个基类都有 x：相同（内建类型同、绑定 `1` 与 `1.0` 按数值相等）→ 只留先出现的那个，位置在它的 extends 处。期望 = omc
+  // 1.25.0 实跑（2026-10-07，下同）。
+  YMC_CHECK_EQ(flatten_src("model A\n  Real x = 1;\n  Real z = x;\nend A;\nmodel B\n  Real x = 1.0;\n  Real w = 2 * x;\n"
+                           "end B;\nmodel DU1\n  extends A;\n  extends B;\n  Real y = x;\nend DU1;\n"),
+               std::string("class DU1\n  Real x = 1.0;\n  Real z = x;\n  Real w = 2.0 * x;\n  Real y = x;\nend DU1;\n"));
+}
+
+YMC_TEST(flatten_nonidentical_inherited_elements_unsupported) {
+  // 绑定不同（`x = 1` 与 `x = 2`）：omc 报 "Duplicate elements (due to inherited elements) not identical"。
+  bool uns = false;
+  const std::string out = flatten_src("model A\n  Real x = 1;\nend A;\nmodel B\n  Real x = 2;\nend B;\nmodel DU2\n  extends A;\n"
+                                      "  extends B;\nend DU2;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(out, std::string("<unsupported:duplicate elements not identical>"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);
