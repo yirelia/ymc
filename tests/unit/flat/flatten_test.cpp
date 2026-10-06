@@ -3064,13 +3064,12 @@ YMC_TEST(flatten_unreferenced_functions_and_substituted_calls) {
                            "  R r = R(time, n);\n  Real w = g(n);\nend FAT4;\n"),
                std::string("class FAT4\n  final parameter Integer n = 2;\n  Real z[1];\n  Real z[2];\n  Real r.a = time;\n"
                            "  Integer r.b = 2;\n  Real w = sin(2.0);\nend FAT4;\n"));
-  // 代入后实参全成字面量的用户函数调用 omc 会求值（NFSimplifyExp.simplifyCall :206；FAS4 探针 `m = 6.0`、g 不打印），未做 → SKIP。
-  bool uns = false;
-  const std::string out = flatten_src("function g\n  input Real x;\n  output Real y = 2 * x;\nend g;\nmodel FAS4\n"
-                                      "  parameter Integer n = 2;\n  parameter Real m = g(n) + n;\n  Real z[n];\nend FAS4;\n",
-                                      &uns);
-  YMC_CHECK(uns);
-  YMC_CHECK_EQ(out, std::string("<unsupported:constant user call after structural substitution>"));
+  // 结构参数代入后实参全成字面量的用户函数调用 omc 会求值（NFSimplifyExp.simplifyCall :206）：`m = 6.0`、g 不再打印。期望 =
+  // omc 1.25.0 实跑 FAS4（2026-10-06）。
+  YMC_CHECK_EQ(flatten_src("function g\n  input Real x;\n  output Real y = 2 * x;\nend g;\nmodel FAS4\n"
+                           "  parameter Integer n = 2;\n  parameter Real m = g(n) + n;\n  Real z[n];\nend FAS4;\n"),
+               std::string("class FAS4\n  final parameter Integer n = 2;\n  parameter Real m = 6.0;\n  Real z[1];\n  Real z[2];\n"
+                           "end FAS4;\n"));
 }
 
 YMC_TEST(flatten_structural_mark_phases) {
@@ -5162,6 +5161,40 @@ YMC_TEST(flatten_comprehension_with_array_elements) {
                            "  s.vs[1] = s.TM[1,1] * s.v[1] + s.TM[1,2] * s.v[2] + s.TM[1,3] * s.v[3];\n"
                            "  s.vs[2] = s.TM[2,1] * s.v[1] + s.TM[2,2] * s.v[2] + s.TM[2,3] * s.v[3];\n  s.v[1] = time;\n"
                            "  s.v[2] = 2.0 * time;\n  s.v[3] = 3.0 * time;\nend CMP1;\n"));
+}
+
+YMC_TEST(flatten_parameter_bound_to_user_function_call) {
+  // 参数绑到用户函数调用、实参是结构参数（MSL ToSpacePhasor `phi[m] = symmetricOrientation(m)`）：压平末尾代入结构参数后实参全成
+  // 字面量，按定义求值成字面量（数组逐元素 `so(m)[k]`、标量 `g(m)`），函数不再打印；`2/m*{cos(phi), sin(phi)}` 只折掉 2/m。
+  // 期望 = omc 1.25.0 实跑（2026-10-06）。
+  YMC_CHECK_EQ(flatten_src("function so\n  input Integer m;\n  output Real o[m];\nalgorithm\n"
+                           "  o := {(k - 1)*2*3.14159/m for k in 1:m};\nend so;\nfunction g\n  input Integer m;\n"
+                           "  output Real y;\nalgorithm\n  y := 2*m + 0.5;\nend g;\nblock TSP\n"
+                           "  parameter Integer m = 3 annotation(Evaluate = true);\n  parameter Real p = g(m);\n"
+                           "  Real u[m] = {time, 2*time, 3*time};\n  Real y[2];\nprotected\n  parameter Real phi[m] = so(m);\n"
+                           "  parameter Real TM[2, m] = 2/m*{+cos(+phi), +sin(+phi)};\n"
+                           "  parameter Real IT[m, 2] = {{+cos(-phi[k]), -sin(-phi[k])} for k in 1:m};\nequation\n  y = TM*u;\n"
+                           "end TSP;\nmodel FB1\n  TSP t;\nend FB1;\n"),
+               std::string("class FB1\n  final parameter Integer t.m = 3;\n  parameter Real t.p = 6.5;\n  Real t.u[1];\n"
+                           "  Real t.u[2];\n  Real t.u[3];\n  Real t.y[1];\n  Real t.y[2];\n"
+                           "  protected parameter Real t.phi[1] = 0.0;\n"
+                           "  protected parameter Real t.phi[2] = 2.094393333333333;\n"
+                           "  protected parameter Real t.phi[3] = 4.188786666666666;\n"
+                           "  protected parameter Real t.TM[1,1] = 0.6666666666666666 * cos(t.phi[1]);\n"
+                           "  protected parameter Real t.TM[1,2] = 0.6666666666666666 * cos(t.phi[2]);\n"
+                           "  protected parameter Real t.TM[1,3] = 0.6666666666666666 * cos(t.phi[3]);\n"
+                           "  protected parameter Real t.TM[2,1] = 0.6666666666666666 * sin(t.phi[1]);\n"
+                           "  protected parameter Real t.TM[2,2] = 0.6666666666666666 * sin(t.phi[2]);\n"
+                           "  protected parameter Real t.TM[2,3] = 0.6666666666666666 * sin(t.phi[3]);\n"
+                           "  protected parameter Real t.IT[1,1] = cos(-t.phi[1]);\n"
+                           "  protected parameter Real t.IT[1,2] = -sin(-t.phi[1]);\n"
+                           "  protected parameter Real t.IT[2,1] = cos(-t.phi[2]);\n"
+                           "  protected parameter Real t.IT[2,2] = -sin(-t.phi[2]);\n"
+                           "  protected parameter Real t.IT[3,1] = cos(-t.phi[3]);\n"
+                           "  protected parameter Real t.IT[3,2] = -sin(-t.phi[3]);\nequation\n"
+                           "  t.u = {time, 2.0 * time, 3.0 * time};\n"
+                           "  t.y[1] = t.TM[1,1] * t.u[1] + t.TM[1,2] * t.u[2] + t.TM[1,3] * t.u[3];\n"
+                           "  t.y[2] = t.TM[2,1] * t.u[1] + t.TM[2,2] * t.u[2] + t.TM[2,3] * t.u[3];\nend FB1;\n"));
 }
 
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {

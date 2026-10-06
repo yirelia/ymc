@@ -1677,6 +1677,17 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           slice 625 例不变（PASS 560 / FAIL 0）；scodeinst PASS 560 / FAIL 29（不变，均在账）；整个 testsuite 实跑 PASS 1501 / FAIL 0
           （不变）；MSL 示例 100（不变：电机一族往下露出参数数组绑函数调用、条件组件）；探针 7462→7477（ce-* 3 集 15 个）；单测
           256→258。
+    - [x] (61r) flat：参数绑到结构实参的用户函数调用 → 求值（2026-10-06）：MSL ToSpacePhasor 的 `parameter SI.Angle phi[m]
+          = symmetricOrientation(m)`（m 是 Evaluate 的结构参数）此前 SKIP "array binding higher variability"（参数数组的运行时
+          判定把一切调用当运行时）。改：binding_runtime 只认引用变量 / time、不纯函数、不折叠的内建；整调用绑定、实参都会成字面量的
+          （字面量 / 已是结构参数）逐元素取 `f(…)[k]`，压平末尾结构参数代入后按定义求值——eval_flat_call 按压平名找回发射时的
+          定义、把字面量实参合成成 Absyn 字面量交给解释器（eval_user_call 加 known 入口），simplify_expr 的 Subscript 支先化简
+          基。标量 `p = g(m)`（此前 SKIP "constant user call after structural substitution"）同样。只求结构参数代入出来的：
+          向量化调用的迭代变量代入出来的（`bp[3] = F({1, 2, 3}, 2)`）omc 求值却照打 F 的定义，仍 SKIP。实参不会成字面量的整调用
+          绑定 omc 不标量化（`parameter Real[3] phi = sv(x)`），SKIP。电机再往下：表达式里的数组值调用（qualified function call）。
+          slice 625 例不变（PASS 560 / FAIL 0）；scodeinst PASS 560 / FAIL 29（不变，均在账）；整个 testsuite 实跑 PASS 1501 / FAIL 0
+          （不变）；MSL 示例 100（不变：电机一族往下露出表达式里的数组值调用）；探针 7477→7493（pf-* 4 集 16 个；旧探针 3 个由
+          SKIP 转 PASS）；单测 258→259。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

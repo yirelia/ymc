@@ -1,0 +1,29 @@
+//// set: pf-ut — 参数绑到结构实参的用户函数调用（单测原文）
+//// model: FB1
+function so
+  input Integer m;
+  output Real o[m];
+algorithm
+  o := {(k - 1)*2*3.14159/m for k in 1:m};
+end so;
+function g
+  input Integer m;
+  output Real y;
+algorithm
+  y := 2*m + 0.5;
+end g;
+block TSP
+  parameter Integer m = 3 annotation(Evaluate = true);
+  parameter Real p = g(m);
+  Real u[m] = {time, 2*time, 3*time};
+  Real y[2];
+protected
+  parameter Real phi[m] = so(m);
+  parameter Real TM[2, m] = 2/m*{+cos(+phi), +sin(+phi)};
+  parameter Real IT[m, 2] = {{+cos(-phi[k]), -sin(-phi[k])} for k in 1:m};
+equation
+  y = TM*u;
+end TSP;
+model FB1
+  TSP t;
+end FB1;

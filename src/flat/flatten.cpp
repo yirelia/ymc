@@ -3093,6 +3093,53 @@ class Flattener {
   }
 
   // 条件是否为运行时（可作为 flat if 保留）：引用 time（未解析）或连续/离散变量，或残留调用。参数/常量 → false（SKIP）。
+  // 纯用户函数（发射过、非记录构造、非外部、非不纯）的调用。
+  bool user_call(Id<Expr> id) {
+    const Expr& e = result_.model.exprs[id];
+    if (e.kind != ExprKind::Call) return false;
+    for (const FlatFunction& f : result_.model.functions)
+      if (f.name == e.call_name) return !f.is_record_ctor && !f.is_external && !f.is_impure;
+    return false;
+  }
+  // 调用的实参是否都会成字面量：字面量（及其数组）/ 已是结构参数的引用（压平末尾代入值）。
+  bool call_args_fold(Id<Expr> id) {
+    auto ok = [&](auto& self, Id<Expr> a) -> bool {
+      const Expr& x = result_.model.exprs[a];
+      if (is_literal(a)) return true;
+      if (x.kind == ExprKind::Array) {
+        for (Id<Expr> el : x.args)
+          if (!self(self, el)) return false;
+        return true;
+      }
+      return x.kind == ExprKind::Cref && structural_set_.count(expr_cref_key(x.cref)) > 0;
+    };
+    for (Id<Expr> a : result_.model.exprs[id].args)
+      if (!ok(ok, a)) return false;
+    return true;
+  }
+  // 参数 / 常量数组绑定的式子里有没有运行时成分：引用变量 / time（refs_runtime_var），或调用不纯的用户函数 / 不折叠的内建
+  //（der、pre、sample…）。纯用户函数的调用本身随实参的变率（MSL ToSpacePhasor `phi[m] = symmetricOrientation(m)`，FB 探针
+  // f10-f13 / f24：omc 求值成字面量）；cond_is_runtime 把一切调用都当运行时，只适合 if 条件。
+  bool binding_runtime(Id<Expr> id) {
+    if (refs_runtime_var(id)) return true;
+    bool hit = false;
+    auto walk = [&](auto& self, Id<Expr> x) -> void {
+      if (hit || !x.is_valid()) return;
+      const Expr& e = result_.model.exprs[x];
+      if (e.kind == ExprKind::Call) {
+        if (e.call_name.size() == 1)
+          if (const BuiltinFn* bf = lookup_builtin(in_.str(e.call_name[0])); bf && !bf->foldable) hit = true;
+        for (const FlatFunction& f : result_.model.functions)
+          if (f.name == e.call_name && f.is_impure) hit = true;
+      }
+      for (Id<Expr> a : e.args) self(self, a);
+      self(self, e.a);
+      self(self, e.b);
+      self(self, e.c);
+    };
+    walk(walk, id);
+    return hit;
+  }
   bool cond_is_runtime(Id<Expr> id) {
     const Expr& e = result_.model.exprs[id];
     switch (e.kind) {
@@ -3912,7 +3959,7 @@ class Flattener {
         if (rsh[k] != dims[k] && !(arr_call && rsh[k] < 0)) shape_ok = false;
       if (!shape_ok) { set_unsupported("non-literal array binding shape"); return; }
       if (vk == FlatVarKind::Discrete) { set_unsupported("discrete array binding"); return; }   // omc 报错（需 when）
-      if (vk != FlatVarKind::Var && cond_is_runtime(rhsE)) {   // param/const 绑更高变率 = omc 报错（B3/C3）
+      if (vk != FlatVarKind::Var && binding_runtime(rhsE)) {   // param/const 绑更高变率 = omc 报错（B3/C3）
         set_unsupported("array binding higher variability"); return;
       }
     }
@@ -3972,6 +4019,19 @@ class Flattener {
           eb = comprehension_elem(braw, idx, bscope, bprefix);
           if (result_.unsupported) return;
           if (vk == FlatVarKind::Discrete || refs_runtime_var(eb)) { set_unsupported("array binding higher variability"); return; }
+        } else if (nlbind && user_call(rhsE)) {
+          // 整个绑定是一个用户函数调用（MSL ToSpacePhasor `phi[m] = symmetricOrientation(m)`）：实参都会成字面量（字面量 / 已是
+          // 结构参数）的，omc 求值成各元素的字面量（FB 探针 f10 / f24 / f33）→ 逐元素取 `f(…)[k]`，压平末尾代入结构参数后求值
+          // （simplify_expr 的 Call / Subscript 支）。实参不会成字面量的 omc 不标量化、打 `parameter Real[3] phi = sv(x)`（f30），
+          // 未做 → SKIP。
+          if (!call_args_fold(rhsE)) { set_unsupported("parameter array bound to function call"); return; }
+          Expr sx;
+          sx.kind = ExprKind::Subscript;
+          sx.a = rhsE;
+          for (std::int64_t k : idx) sx.args.push_back(lit_int(k));
+          sx.ty = cty.element_type();
+          eb = simplify_expr(add(std::move(sx)));
+          if (result_.unsupported) return;
         } else if (nlbind) {
           // 逐元素：y[i] / 2.0*y[i]（B1/B2/B4/B5/B8）；含推导式的也逐元素代入（R2 探针 `q = 2 * linspace(1, 2, 3)` →
           // `q[2] = 3.0`、`p = {i * 1.5 for i in 1:3} + q` → `p[1] = 1.5 + q[1]`）。
@@ -8373,6 +8433,7 @@ class Flattener {
     for (std::size_t i : lorder) param(sig.locals[i], FlatDirection::None);
     const std::size_t fi = result_.model.functions.size();
     result_.model.functions.push_back(std::move(ff));   // 先登记（体里的自递归调用按名找到它）
+    fn_refs_.emplace(path_key(qname), fr);              // 代入后实参全成字面量时按名求值（eval_flat_call）
     std::vector<Id<FlatStatement>> body;
     if (sig.alg)
       for (Id<SStatement> sid : sig.alg->stmts) {
@@ -8993,8 +9054,10 @@ class Flattener {
   // parameter，omc 不求值（YmcFnPar1 探针：`g(p)` 保留）。
   // all_outputs 非空：另把全部输出（按声明序、各自按类型强转）填进去（元组赋值 / 元组方程 `(a, b) := f(…)` 用）。
   // noret：调用是一条无返回值调用语句——没有输出的函数也把体求值一遍（体里的 assert 会让求值失败），成功返回占位值。
+  // known：已解析的函数（eval_flat_call：类型化调用按压平名找到的定义；call.cref 不用，实参须是字面量）。
   std::optional<CVal> eval_user_call(const Exp& call, const ScodeScope& scope, int depth, bool allow_param = true,
-                                     std::vector<CVal>* all_outputs = nullptr, bool noret = false) {
+                                     std::vector<CVal>* all_outputs = nullptr, bool noret = false,
+                                     const FnRef* known = nullptr) {
     if (depth > 100) return std::nullopt;
     // 实参在调用处求值（可用实例帧）；函数体 / 记录构造在定义处求值，实例帧不适用（函数不能引用模型参数）。
     struct FrameOff {
@@ -9004,9 +9067,9 @@ class Flattener {
       ~FrameOff() { if (off) f.ceval_frame_ = saved; }
     } frame_off{*this, ceval_frame_};
     auto frame_off_now = [&]() { frame_off.off = true; ceval_frame_ = -1; };
-    const Cref& fn = I_.absyn.crefs[call.cref];
+    const Cref* fn = known ? nullptr : &I_.absyn.crefs[call.cref];
     // 记录构造 `R(2)` / `R(x = 2)`：实参按字段声明序 / 名字，缺省取字段默认。
-    if (std::optional<FnRef> rr = resolve_fn(fn, scope, SRestriction::Record)) {
+    if (std::optional<FnRef> rr = known ? std::nullopt : resolve_fn(*fn, scope, SRestriction::Record)) {
       // 经带修饰的短类别名调的构造（`record S = R(a = 5)` 的 `S(b = 4)`）：别名修饰是构造的缺省值（omc s.a = 5.0，SC 探针 t
       // T6），record_value 只按长类的字段缺省 → 不求值（交给调用方的其它路 / SKIP）。
       if (!rr->alias_mods.empty()) return std::nullopt;
@@ -9025,7 +9088,7 @@ class Flattener {
       frame_off_now();
       return record_value(rr->fe, rr->fscope, Id<SMod>{}, scope, given, depth + 1, /*allow_undef=*/false);
     }
-    std::optional<FnRef> fr = resolve_fn(fn, scope);
+    std::optional<FnRef> fr = known ? std::optional<FnRef>(*known) : resolve_fn(*fn, scope);
     if (!fr) return std::nullopt;
     bool ext_c = false;
     if (std::optional<std::string> bn = builtin_equiv(*fr, &ext_c)) {   // 内建等价："builtin" 语言按内建求值，"C" 不求值
@@ -9190,6 +9253,40 @@ class Flattener {
     return result;
   }
 
+  // 类型化的用户函数调用、实参全是字面量（结构参数代入后的 `g(3)`）：按压平名找回发射时的定义，把字面量实参合成成 Absyn
+  // 字面量交给解释器（eval_user_call 的 known 入口）。只接 Integer / Real / Boolean 及其数组的实参；求不出 → nullopt。
+  std::optional<CVal> eval_flat_call(const std::vector<Symbol>& call_name, const std::vector<Id<Expr>>& args) {
+    const auto it = fn_refs_.find(path_key(call_name));
+    if (it == fn_refs_.end()) return std::nullopt;
+    const FnRef fr = it->second;   // 拷贝（求值可能发射别的函数、改动 fn_refs_）
+    auto absyn_lit = [&](auto& self, Id<Expr> a) -> Id<Exp> {
+      const Expr x = result_.model.exprs[a];   // 拷贝（synth 不动 exprs，但不跨调用持引用）
+      Exp e;
+      switch (x.kind) {
+        case ExprKind::IntLit: e.kind = ExpKind::IntLit; e.ival = x.ival; break;
+        case ExprKind::RealLit: e.kind = ExpKind::RealLit; e.rval = x.rval; break;
+        case ExprKind::BoolLit: e.kind = ExpKind::BoolLit; e.bval = x.bval; break;
+        case ExprKind::Array:
+          e.kind = ExpKind::Array;
+          for (Id<Expr> el : x.args) {
+            const Id<Exp> s = self(self, el);
+            if (!s.is_valid()) return {};
+            e.args.push_back(s);
+          }
+          break;
+        default: return {};
+      }
+      return synth_exp(std::move(e));
+    };
+    Exp call;
+    call.kind = ExpKind::Call;
+    for (Id<Expr> a : args) {
+      const Id<Exp> s = absyn_lit(absyn_lit, a);
+      if (!s.is_valid() || result_.unsupported) return std::nullopt;
+      call.args.push_back(s);
+    }
+    return eval_user_call(call, fr.fscope, 0, /*allow_param=*/false, nullptr, false, &fr);
+  }
   // 函数里无绑定的数组变量初值：各维在函数局部环境里求整数（可依赖输入），元素为 Undef 占位（NFEvalFunction.buildBinding
   // :342-365 用 EMPTY 填）。非数组 / 维求不出（含 `:`）→ nullopt。
   std::optional<CVal> undef_array(const SElement& c, const ScodeScope& fscope, int depth) {
@@ -14109,7 +14206,8 @@ class Flattener {
         // 数组字面量取整数字面量下标 → 该元素（向量化调用的迭代变量被代入后 `{1.0, 2.0, time}[1]` → `1.0`；V4c 探针
         // `sum(sin({1, 2, time}))` → `0.8414709848078965 + 0.9092974268256817 + sin(time)`）。越界留给调用方（omc 报错）。
         const Expr x = result_.model.exprs[id];   // 拷贝
-        Id<Expr> base = x.a;
+        // 基先化简：结构参数代入后的 `f(3)[2]`，调用求值成数组字面量后才取得到元素（FB 探针 f33）。
+        Id<Expr> base = simplify_expr(x.a);
         std::size_t used = 0;
         // simplifySubscriptedExp（NFSimplifyExp.mo:1346-1379 v1.25.0）：下标不全是字面量时，基是"各元素都相等"的非空数组
         // → 丢掉首个下标、取首元素，直到不成立（fill / ones 绑定的常量数组 `x[n]` → `1.5`，CX 探针 c4 / c5）。omc 丢的
@@ -14138,7 +14236,7 @@ class Flattener {
           ++used;
         }
         if (used == x.args.size()) return simplify_expr(base);
-        if (used == 0) return id;
+        if (used == 0 && base.raw == x.a.raw) return id;
         Expr r = x;
         r.a = base;
         r.args.assign(x.args.begin() + static_cast<std::ptrdiff_t>(used), x.args.end());
@@ -14189,11 +14287,19 @@ class Flattener {
           };
           bool all = true;
           for (Id<Expr> a : args) all = all && lit(lit, a);
+          bool user = false;
           if (all)
             for (const FlatFunction& f : result_.model.functions)
-              if (f.name == call_name && !f.is_record_ctor && !f.is_external && !f.is_impure)
-                set_unsupported(subst_calls_.count(id.raw) ? "constant user call after structural substitution"
-                                                           : "constant user call not evaluated");
+              if (f.name == call_name && !f.is_record_ctor && !f.is_external && !f.is_impure) user = true;
+          // 结构参数代入出来的：现在按定义求值（FAS4 / FB 探针 f22 `p = g(m)`、m 是结构参数 → `p = 6.5`、g 不再打印；f10 数组
+          // 输出逐元素）。向量化调用的迭代变量代入出来的（`bp[3] = F({1, 2, 3}, 2)` → `F(1, 2)`）omc 同样求值、却照打 F 的定义
+          //（函数收集在求值之前，V4g 探针）→ 仍 SKIP。
+          if (user && struct_subst_calls_.count(id.raw))
+            if (const std::optional<CVal> v = eval_flat_call(call_name, args); v && v->k != CVal::K::Record)
+              if (const Id<Expr> l = literal_any(*v); l.is_valid() && !result_.unsupported) return l;
+          if (user)
+            set_unsupported(subst_calls_.count(id.raw) ? "constant user call after structural substitution"
+                                                       : "constant user call not evaluated");
         }
 
         const bool nofold = nofold_calls_.count(id.raw) > 0;
@@ -16035,6 +16141,7 @@ class Flattener {
     const bool is_call = c.kind == ExprKind::Call;
     const Id<Expr> n = add(std::move(c));
     if (is_call) subst_calls_.insert(n.raw);   // 实参被代入过的调用：化简时判"实参全成字面量的用户函数"（见 simplify_expr）
+    if (is_call && struct_subst_) struct_subst_calls_.insert(n.raw);
     // "不折叠"标记跟着克隆走（FE6 探针：external "C" 的 `g(n)`、n 是结构参数 → omc `sin(2.0)`，不求值）。
     if (is_call && nofold_calls_.count(id.raw)) nofold_calls_.insert(n.raw);
     if (scalarized_logicals_.count(id.raw)) scalarized_logicals_.insert(n.raw);
@@ -16728,7 +16835,11 @@ class Flattener {
     auto subst = [&](Id<Expr>& e) {
       if (e.is_valid() && !structural_arrays.empty() && whole_ref(whole_ref, e))
         set_unsupported("whole reference to structural parameter array");
-      if (e.is_valid() && refs_keys(e, vals)) e = simplify_expr(clone_subst(e, vals));
+      if (e.is_valid() && refs_keys(e, vals)) {
+        struct_subst_ = true;   // 这次克隆出的调用是结构参数代入出来的（见 simplify_expr 的 Call 支）
+        e = simplify_expr(clone_subst(e, vals));
+        struct_subst_ = false;
+      }
     };
     for (std::size_t i = 0; i < result_.model.variables.size(); ++i) {
       Id<Expr> b = result_.model.variables[i].binding;
@@ -17195,6 +17306,8 @@ class Flattener {
   std::unordered_set<std::string> frame_busy_;                  // 求值中的参数 key（环检测）
   std::unordered_set<std::uint32_t> nofold_calls_;              // 不可常量折叠的内建调用（external "C" 的内建等价函数）
   std::unordered_set<std::uint32_t> subst_calls_;               // 实参被结构参数代入改过的调用（clone_subst 登记）
+  std::unordered_set<std::uint32_t> struct_subst_calls_;        // 其中压平末尾结构参数代入（apply_structural_params）克隆出的
+  bool struct_subst_ = false;                                   // 正在做那次代入
   std::vector<std::vector<Symbol>> model_record_ctors_;         // 模型表达式里整记录引用需要的构造函数（collect_record_ctors）
   std::unordered_map<std::uint32_t, NodeId> rec_node_cache_;    // 记录类定义 → 某个实例类节点（record_class_node）
   std::unordered_map<std::uint32_t, Op> fn_array_ops_;          // 函数语境的数组二元运算节点 → 书写的算符（fn_array_form）
@@ -17245,7 +17358,9 @@ class Flattener {
   std::vector<std::vector<std::string>> alias_groups_;   // 参数数组的裸 cref 绑定：同一数组的各元素 key（整体连带）
   std::unordered_set<std::uint32_t> derived_mods_;
   std::unordered_set<std::uint32_t> derived_cref_mods_;
-  std::vector<std::string> pending_pre_;   // when 外 pre / change 的声明为连续的实参（组件路径，check_pre_args）   // 其中记录引用整体绑定拆出的（split_record_cref_mod）
+  std::vector<std::string> pending_pre_;
+  // 发射过的用户函数：压平名（path_key）→ 定义（eval_flat_call）。
+  std::unordered_map<std::string, FnRef> fn_refs_;   // when 外 pre / change 的声明为连续的实参（组件路径，check_pre_args）   // 其中记录引用整体绑定拆出的（split_record_cref_mod）
   std::size_t synth_mod_floor_ = 0;
   // 空数组（某维为 0，不出变量行）的形状，int_key(全名, 逐段下标) → 维；`:` 维的引用 / size() 靠它（emitted_shape 的回退）。
   std::unordered_map<std::string, std::vector<std::int64_t>> empty_shapes_;

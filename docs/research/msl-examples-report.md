@@ -129,3 +129,9 @@ duplicate variable 2（HBridge）、矩阵构造套 size 的结构绑定 1（PID
 超越函数折叠改走 UCRT（gcc 构建此前与 omc 末位常差一个 ulp）+ 元素是数组的推导式（SpacePhasor 的变换矩阵）之后，电机一族
 再往下：参数数组绑到常量实参的函数调用（`phi[m] = symmetricOrientation(m)`，omc 求值成字面量；"array binding higher
 variability"）、条件组件的条件。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-06 加宽 61r 之后：PASS 100（不变）
+
+参数绑到结构实参的用户函数调用求值（ToSpacePhasor 的 `phi[m] = symmetricOrientation(m)`、结构参数代入后的 `g(m)`）之后，
+电机一族再往下是表达式里的数组值调用（"qualified function call [array-valued call inside an expression]"，MSL 全库此类
+三十余个，下一桶）与条件组件的条件。FAIL / ACCEPTS-INVALID / CRASH 0。

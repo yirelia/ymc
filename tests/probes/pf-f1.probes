@@ -1,0 +1,52 @@
+//// set: pf-f1 — 参数数组绑到结构实参的用户函数调用（Evaluate / 维带来的结构参数、再参与矩阵 / 推导式）
+//// model: F10
+function so
+input Integer m;
+output Real o[m];
+algorithm
+o := {(k - 1)*2*3.14159/m for k in 1:m};
+end so;
+model F10
+parameter Integer m = 3 annotation(Evaluate = true);
+parameter Real phi[m] = so(m);
+end F10;
+//// model: F11
+function so
+input Integer m;
+output Real o[m];
+algorithm
+o := {(k - 1)*2*3.14159/m for k in 1:m};
+end so;
+model F11
+parameter Integer m = 3;
+parameter Real phi[m] = so(m);
+end F11;
+//// model: F12
+function so
+input Integer m;
+output Real o[m];
+algorithm
+o := {(k - 1)*2*3.14159/m for k in 1:m};
+end so;
+model F12
+parameter Integer m = 3 annotation(Evaluate = true);
+parameter Real phi[m] = so(m);
+parameter Real T[2, m] = 2/m*{+cos(+phi), +sin(+phi)};
+Real u[m] = {time, 2*time, 3*time};
+Real y[2];
+equation
+y = T*u;
+end F12;
+//// model: F13
+function so
+input Integer m;
+output Real o[m];
+algorithm
+o := {(k - 1)*2*3.14159/m for k in 1:m};
+end so;
+model F13
+parameter Integer m = 3 annotation(Evaluate = true);
+protected
+parameter Real phi[m] = so(m);
+parameter Real IT[m, 2] = {{+cos(-phi[k]), -sin(-phi[k])} for k in 1:m};
+end F13;

@@ -1,0 +1,48 @@
+//// set: pf-f3 — 实参不是结构参数的整调用绑定（omc 不标量化，SKIP）/ 表达式里（SKIP）/ Evaluate / 维带来的结构参数
+//// model: F30
+function sv
+input Real x;
+output Real o[3];
+algorithm
+o := {x, 2*x, 3*x};
+end sv;
+model F30
+parameter Real x = 2;
+parameter Real phi[3] = sv(x);
+end F30;
+//// model: F31
+function sv
+input Real x;
+output Real o[3];
+algorithm
+o := {x, 2*x, 3*x};
+end sv;
+model F31
+parameter Real x = 2;
+parameter Real phi[3] = 2 * sv(x);
+end F31;
+//// model: F32
+function sv
+input Real x;
+output Real o[3];
+algorithm
+o := {x, 2*x, 3*x};
+end sv;
+model F32
+parameter Real x = 2 annotation(Evaluate = true);
+parameter Real phi[3] = sv(x);
+end F32;
+//// model: F33
+function so
+input Integer m;
+output Real o[m];
+algorithm
+o := {(k - 1)*2*3.14159/m for k in 1:m};
+end so;
+model F33
+parameter Integer m = 3;
+parameter Real phi[m] = so(m);
+Real y[m];
+equation
+y = phi;
+end F33;

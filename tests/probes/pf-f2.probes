@@ -1,0 +1,77 @@
+//// set: pf-f2 — 参数绑用户函数调用：字面量 / 非结构 / 结构实参，标量与数组，表达式里的数组调用（SKIP），变量数组
+//// model: F20
+function g
+input Integer m;
+output Real y;
+algorithm
+y := 2*m + 0.5;
+end g;
+model F20
+parameter Real p = g(3);
+end F20;
+//// model: F21
+function g
+input Integer m;
+output Real y;
+algorithm
+y := 2*m + 0.5;
+end g;
+model F21
+parameter Integer m = 3;
+parameter Real p = g(m);
+end F21;
+//// model: F22
+function g
+input Integer m;
+output Real y;
+algorithm
+y := 2*m + 0.5;
+end g;
+model F22
+parameter Integer m = 3 annotation(Evaluate = true);
+parameter Real p = g(m);
+end F22;
+//// model: F23
+function so
+input Integer m;
+output Real o[m];
+algorithm
+o := {(k - 1)*2*3.14159/m for k in 1:m};
+end so;
+model F23
+parameter Real phi[3] = so(3);
+end F23;
+//// model: F24
+function so
+input Integer m;
+output Real o[m];
+algorithm
+o := {(k - 1)*2*3.14159/m for k in 1:m};
+end so;
+model F24
+parameter Integer m = 3;
+parameter Real phi[3] = so(m);
+end F24;
+//// model: F25
+function so
+input Integer m;
+output Real o[m];
+algorithm
+o := {(k - 1)*2*3.14159/m for k in 1:m};
+end so;
+model F25
+parameter Integer m = 3;
+parameter Real x = 1;
+parameter Real phi[m] = x * so(m);
+end F25;
+//// model: F26
+function so
+input Integer m;
+output Real o[m];
+algorithm
+o := {(k - 1)*2*3.14159/m for k in 1:m};
+end so;
+model F26
+parameter Integer m = 3;
+Real phi[m] = so(m);
+end F26;
