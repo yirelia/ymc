@@ -1,0 +1,38 @@
+//// set: vo-ut — Evaluate 的访问序 / 深度 / fixed 属性（单测原文）
+//// model: ED1
+model ED1
+  parameter Real p = a annotation(Evaluate = true);
+  parameter Real a = b;
+  parameter Real b = c;
+  parameter Real c = d;
+  parameter Real d = 1;
+  Real y = p;
+end ED1;
+//// model: ED2
+model ED2
+  parameter Real p = a annotation(Evaluate = true);
+  parameter Real a = b;
+  parameter Real b = c;
+  parameter Real c = 1;
+  Real y = p;
+end ED2;
+//// model: EF1
+model EF1
+  parameter Real q(fixed = true) = 3;
+  parameter Real p = q annotation(Evaluate = true);
+  Real y = p;
+end EF1;
+//// model: EO1
+model EO1
+  parameter Integer n = k annotation(Evaluate = true);
+  parameter Integer k = j;
+  parameter Integer j = 2 annotation(Evaluate = false);
+  Real y = k;
+end EO1;
+//// model: EO2
+model EO2
+  parameter Integer j = 2 annotation(Evaluate = false);
+  parameter Integer n = k annotation(Evaluate = true);
+  parameter Integer k = j;
+  Real y = k;
+end EO2;

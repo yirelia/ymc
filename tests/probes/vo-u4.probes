@@ -1,0 +1,134 @@
+//// set: vo-u4 — 同上：不纯函数、纯函数实参、size(x, 1)、两支之一走满四层、维连带后的 Evaluate、子实例修饰链、fixed = true
+//// model: U40
+impure function f
+input Real x;
+output Real y;
+algorithm
+y := 2 * x;
+end f;
+model U40
+parameter Real p = f(1) annotation(Evaluate = true);
+Real y = p;
+end U40;
+//// model: U41
+function f
+input Real x;
+output Real y;
+algorithm
+y := 2 * x;
+end f;
+model U41
+parameter Real p = f(q) annotation(Evaluate = true);
+parameter Real q = 1;
+Real y = p;
+end U41;
+//// model: U42
+function f
+input Real x;
+output Real y;
+algorithm
+y := 2 * x;
+end f;
+model U42
+parameter Real q = 1 annotation(Evaluate = false);
+parameter Real p = f(q) annotation(Evaluate = true);
+Real y = p;
+end U42;
+//// model: U43
+model U43
+parameter Real x[3] = {1, 2, 3};
+parameter Integer p = size(x, 1) annotation(Evaluate = true);
+Real y = p;
+end U43;
+//// model: U44
+model U44
+Real x[3] = {time, 2, 3};
+parameter Integer p = size(x, 1) annotation(Evaluate = true);
+Real y = p;
+end U44;
+//// model: U45
+model U45
+parameter Real p = a + b annotation(Evaluate = true);
+parameter Real a = c;
+parameter Real b = 2;
+parameter Real c = d;
+parameter Real d = e;
+parameter Real e = 1;
+Real y = p;
+end U45;
+//// model: U46
+model U46
+parameter Real p = a + b annotation(Evaluate = true);
+parameter Real a = c;
+parameter Real b = 2;
+parameter Real c = d;
+parameter Real d = 1;
+Real y = p;
+end U46;
+//// model: U47
+model U47
+parameter Integer n = 3;
+parameter Real p = n annotation(Evaluate = true);
+Real x[n];
+Real y = p;
+end U47;
+//// model: U48
+model U48
+Real x[n];
+parameter Integer n = m;
+parameter Integer m = k;
+parameter Integer k = j;
+parameter Integer j = i;
+parameter Integer i = 2;
+parameter Real p = n annotation(Evaluate = true);
+Real y = p;
+end U48;
+//// model: U49
+model A
+parameter Real q = 1;
+parameter Real p = q annotation(Evaluate = true);
+end A;
+model U49
+A a(q = b);
+parameter Real b = c;
+parameter Real c = d;
+parameter Real d = 1;
+Real y = a.p;
+end U49;
+//// model: U410
+model A
+parameter Real q = 1;
+parameter Real p = q annotation(Evaluate = true);
+end A;
+model U410
+A a(q = b);
+parameter Real b = c;
+parameter Real c = 1;
+Real y = a.p;
+end U410;
+//// model: U411
+model U411
+parameter Real p = if b then 1 else 2 annotation(Evaluate = true);
+parameter Boolean b = c;
+parameter Boolean c(fixed = false);
+initial equation
+c = true;
+end U411;
+//// model: U412
+model U412
+parameter Real q(fixed = true) = 3;
+parameter Real p = q annotation(Evaluate = true);
+Real y = p;
+end U412;
+//// model: U413
+model U413
+parameter Real p = q annotation(Evaluate = true);
+final parameter Real q = 2 annotation(Evaluate = false);
+Real y = p + q;
+end U413;
+//// model: U414
+model U414
+final parameter Real q = 2 annotation(Evaluate = false);
+parameter Real p = q annotation(Evaluate = true);
+Real y = p + q;
+end U414;

@@ -5291,6 +5291,35 @@ YMC_TEST(flatten_inherited_declaration_cannot_see_derived_element) {
   YMC_CHECK_EQ(out, std::string("<unsupported:unresolved name>"));
 }
 
+YMC_TEST(flatten_evaluate_structural_decision_follows_visit_order) {
+  // Evaluate = true 的结构判定在 omc 按声明序访问组件时做：声明在后的 Evaluate = false 还没降级（仍是 PARAMETER）→ 照样
+  // 结构求值、连带 final；声明在前的已降成非结构 → 不求值。期望 = omc 1.25.0 实跑（2026-10-07，下同）。
+  YMC_CHECK_EQ(flatten_src("model EO1\n  parameter Integer n = k annotation(Evaluate = true);\n  parameter Integer k = j;\n"
+                           "  parameter Integer j = 2 annotation(Evaluate = false);\n  Real y = k;\nend EO1;\n"),
+               std::string("class EO1\n  final parameter Integer n = 2;\n  final parameter Integer k = 2;\n"
+                           "  final parameter Integer j = 2;\n  Real y = 2.0;\nend EO1;\n"));
+  YMC_CHECK_EQ(flatten_src("model EO2\n  parameter Integer j = 2 annotation(Evaluate = false);\n"
+                           "  parameter Integer n = k annotation(Evaluate = true);\n  parameter Integer k = j;\n  Real y = k;\n"
+                           "end EO2;\n"),
+               std::string("class EO2\n  parameter Integer j = 2;\n  parameter Integer n = k;\n  parameter Integer k = j;\n"
+                           "  Real y = /*Real*/(k);\nend EO2;\n"));
+}
+
+YMC_TEST(flatten_evaluate_structural_decision_depth_and_fixed) {
+  // isBindingNotFixed 的 maxDepth = 4：三层别名链求值，四层当不固定；带 fixed 属性（哪怕 `fixed = true`）的参数也不固定。
+  YMC_CHECK_EQ(flatten_src("model ED1\n  parameter Real p = a annotation(Evaluate = true);\n  parameter Real a = b;\n"
+                           "  parameter Real b = c;\n  parameter Real c = d;\n  parameter Real d = 1;\n  Real y = p;\nend ED1;\n"),
+               std::string("class ED1\n  parameter Real p = a;\n  parameter Real a = b;\n  parameter Real b = c;\n"
+                           "  parameter Real c = d;\n  parameter Real d = 1.0;\n  Real y = p;\nend ED1;\n"));
+  YMC_CHECK_EQ(flatten_src("model ED2\n  parameter Real p = a annotation(Evaluate = true);\n  parameter Real a = b;\n"
+                           "  parameter Real b = c;\n  parameter Real c = 1;\n  Real y = p;\nend ED2;\n"),
+               std::string("class ED2\n  final parameter Real p = 1.0;\n  final parameter Real a = 1.0;\n"
+                           "  final parameter Real b = 1.0;\n  final parameter Real c = 1.0;\n  Real y = 1.0;\nend ED2;\n"));
+  YMC_CHECK_EQ(flatten_src("model EF1\n  parameter Real q(fixed = true) = 3;\n  parameter Real p = q annotation(Evaluate = true);\n"
+                           "  Real y = p;\nend EF1;\n"),
+               std::string("class EF1\n  parameter Real q(fixed = true) = 3.0;\n  parameter Real p = q;\n  Real y = p;\nend EF1;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

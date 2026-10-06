@@ -1,0 +1,177 @@
+//// set: vo-u2 — 同上：maxDepth = 4（三层求值、四层不求，常量 / 先访问的 Evaluate 截断）、fixed = false、无绑定 / start、数组、函数、子实例修饰、外层 Evaluate
+//// model: U20
+model U20
+parameter Real p = a annotation(Evaluate = true);
+parameter Real a = b;
+parameter Real b = c;
+parameter Real c = 1;
+Real y = p;
+end U20;
+//// model: U21
+model U21
+parameter Real p = a annotation(Evaluate = true);
+parameter Real a = b;
+parameter Real b = c;
+parameter Real c = d;
+parameter Real d = 1;
+Real y = p;
+end U21;
+//// model: U22
+model U22
+parameter Real d = 1;
+parameter Real c = d;
+parameter Real b = c;
+parameter Real a = b;
+parameter Real p = a annotation(Evaluate = true);
+Real y = p;
+end U22;
+//// model: U23
+model U23
+parameter Real p = a annotation(Evaluate = true);
+parameter Real a = b;
+parameter Real b = c;
+parameter Real c = d;
+constant Real d = 1;
+Real y = p;
+end U23;
+//// model: U24
+model U24
+parameter Real p = a annotation(Evaluate = true);
+parameter Real a = b;
+parameter Real b = c;
+parameter Real c = d;
+parameter Real d = 1 annotation(Evaluate = true);
+Real y = p;
+end U24;
+//// model: U25
+model U25
+parameter Real d = 1 annotation(Evaluate = true);
+parameter Real p = a annotation(Evaluate = true);
+parameter Real a = b;
+parameter Real b = c;
+parameter Real c = d;
+Real y = p;
+end U25;
+//// model: U26
+model U26
+Real x[n];
+parameter Integer n = a;
+parameter Integer p = a annotation(Evaluate = true);
+parameter Integer a = b;
+parameter Integer b = c;
+parameter Integer c = d;
+parameter Integer d = 1;
+Real y = p;
+end U26;
+//// model: U27
+model U27
+parameter Real p = a + b annotation(Evaluate = true);
+parameter Real a = 1;
+parameter Real b(fixed = false) = 2;
+Real y = p;
+end U27;
+//// model: U28
+model U28
+parameter Real b(fixed = false) = 2;
+parameter Real p = a + b annotation(Evaluate = true);
+parameter Real a = 1;
+Real y = p;
+end U28;
+//// model: U29
+model U29
+parameter Real p = a annotation(Evaluate = true);
+parameter Real a = b;
+parameter Real b(fixed = false) = 2;
+Real y = p;
+end U29;
+//// model: U210
+model U210
+parameter Real p(fixed = false) = 2 annotation(Evaluate = true);
+Real y = p;
+end U210;
+//// model: U211
+model U211
+parameter Real p annotation(Evaluate = true);
+Real y = p;
+end U211;
+//// model: U212
+model U212
+parameter Real p(start = 3) annotation(Evaluate = true);
+Real y = p;
+end U212;
+//// model: U213
+model U213
+parameter Real p = q annotation(Evaluate = true);
+parameter Real q(start = 3);
+Real y = p;
+end U213;
+//// model: U214
+model U214
+Real v = time;
+parameter Real p = v annotation(Evaluate = true);
+Real y = p;
+end U214;
+//// model: U215
+model U215
+parameter Real p = sin(q) annotation(Evaluate = true);
+parameter Real q = 1 annotation(Evaluate = false);
+Real y = p;
+end U215;
+//// model: U216
+model U216
+parameter Real q = 1 annotation(Evaluate = false);
+parameter Real p = sin(q) annotation(Evaluate = true);
+Real y = p;
+end U216;
+//// model: U217
+model U217
+parameter Real q[2] = {1, 2} annotation(Evaluate = false);
+parameter Real p = q[1] annotation(Evaluate = true);
+Real y = p;
+end U217;
+//// model: U218
+model U218
+parameter Real p = q[1] annotation(Evaluate = true);
+parameter Real q[2] = {1, 2} annotation(Evaluate = false);
+Real y = p;
+end U218;
+//// model: U219
+model A
+parameter Real q = 1;
+parameter Real p = q annotation(Evaluate = true);
+end A;
+model U219
+A a(q = r);
+parameter Real r = 2 annotation(Evaluate = false);
+Real y = a.p;
+end U219;
+//// model: U220
+model A
+parameter Real q = 1;
+parameter Real p = q annotation(Evaluate = true);
+end A;
+model U220
+parameter Real r = 2 annotation(Evaluate = false);
+A a(q = r);
+Real y = a.p;
+end U220;
+//// model: U221
+model A
+parameter Real q = 1;
+parameter Real p = q;
+end A;
+model U221
+A a(q = r) annotation(Evaluate = true);
+parameter Real r = 2 annotation(Evaluate = false);
+Real y = a.p;
+end U221;
+//// model: U222
+model A
+parameter Real q = 1;
+parameter Real p = q;
+end A;
+model U222
+parameter Real r = 2 annotation(Evaluate = false);
+A a(q = r) annotation(Evaluate = true);
+Real y = a.p;
+end U222;

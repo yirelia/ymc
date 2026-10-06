@@ -1724,6 +1724,17 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           （lex_view）。原来给"限定名 / 函数名按声明处"打的两处补丁（decl_scope_）随之删去。LX 探针 54 个，旧错 10 个 FAIL +
           2 个 ACCEPTS-INVALID。
           门：slice 625 例 PASS 560 / FAIL 0 / oracle=live 不一致 0；scodeinst 560 / 29（不变）；testsuite 实跑 PASS 1502→1503（extends/ExtendsModWithImport）/ FAIL 0 / ACC 3 / CRASH 0；MSL 示例 PASS 104（不变）；探针 7610→7668（lx 共 58 个，旧探针 1 个 SKIP→PASS）；单测 264→266。
+    - [x] (61v) flat：Evaluate = true 的结构判定照 omc 的访问序、深度与 fixed 属性（2026-10-07）：
+          omc 在 updateImplicitVariability 按声明序访问组件时判 Evaluate 参数能不能当结构参数（Structural.isStructuralComponent
+          → isBindingNotFixed(binding, maxDepth = 4)）：那一刻声明在前的 Evaluate = false 已降成 NON_STRUCTURAL（不固定），声明在后
+          的还是 PARAMETER（顺它的绑定走，被连带后就不再降级）；实例化期已标成结构参数的固定；带任何 fixed 属性的（哪怕
+          `fixed = true`，属性绑定还没定型）不固定；顺绑定走满 4 层当不固定。此前 ymc 只看"求值用到的参数里有没有 Evaluate = false"
+          （与次序、深度、fixed 都无关）。现在发射 Evaluate 参数时先在结构折叠之前的绑定上做这个判定（visit_nf_：key_not_fixed /
+          rec_not_fixed 的访问序语义，向前引用用第一遍末尾收的 carry_.visit / rec_visit），不固定就照常打印；求值器也只拒"访问时
+          已降级"的 Evaluate = false 参数（还没访问的、先被连带的照常求，类入口预扫维时按声明序认访问），降级的不参与别名连带。
+          VO 探针 111 个，旧错 40 个 FAIL。留下：记录组件自己的 Evaluate（`parameter R r = s annotation(Evaluate = true)`：omc 把
+          整个绑定求值、字段打字面量但不 final，scratchpad ef61u/pending61w 的 R20 / R23，旧错）。
+          门：slice 625 例 PASS 560 / FAIL 0 / oracle=live 不一致 0；scodeinst 560 / 29（不变）；testsuite 实跑 PASS 1503 / FAIL 0 / ACC 3 / CRASH 0（不变）；MSL 示例 PASS 104（不变）；探针 7668→7779（vo 共 111 个，旧探针 1 个 SKIP→PASS）；单测 266→268。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

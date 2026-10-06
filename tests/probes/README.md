@@ -337,3 +337,12 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `lx-v3` | 20 | 同上：多层 extends 修饰（start / 绑定 / 嵌套）、函数、枚举、记录构造、数组常量、条件、组件实例 / 子模型、each start、维、连接器、constant |
 | `lx-v4` | 16 | 同上：重声明、实例修饰、短类修饰、记录字段修饰、组件类型、中间类参数、fixed、派生类在后声明、数组维被引用、protected |
 | `lx-ut` | 4 | 继承来的声明在基类作用域查名（单测原文） |
+| `vo-u1` | 20 | Evaluate 的结构判定按访问序：Evaluate = false 在前 / 在后、链上、维、子实例、if 式、等式段 |
+| `vo-u2` | 23 | 同上：maxDepth = 4（三层求值、四层不求，常量 / 先访问的 Evaluate 截断）、fixed = false、无绑定 / start、数组、函数、子实例修饰、外层 Evaluate |
+| `vo-u3` | 18 | 同上：extends 的访问序、记录字段（修饰 / 整体绑定 / fixed）、记录自己的 Evaluate = false、子实例、if 式、size 越维 |
+| `vo-u4` | 15 | 同上：不纯函数、纯函数实参、size(x, 1)、两支之一走满四层、维连带后的 Evaluate、子实例修饰链、fixed = true |
+| `vo-r1` | 14 | 记录整体绑定链上的 Evaluate：引用链三层求值 / 四层不求、构造实参、字段修饰链、无绑定记录 |
+| `vo-r2` | 7 | 外层组件 Evaluate（模型 / 记录）与 Evaluate = false 的次序、维与 Evaluate 混合 |
+| `vo-fx` | 7 | 带 fixed 属性（true / false / 常量 / 多属性）的参数在 Evaluate 链上都不固定；维照常连带 |
+| `vo-pd` | 2 | 61t 留下的两个：Evaluate = false 声明在后（链中段 / 末端） |
+| `vo-ut` | 5 | Evaluate 的访问序 / 深度 / fixed 属性（单测原文） |

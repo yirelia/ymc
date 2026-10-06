@@ -1,0 +1,159 @@
+//// set: vo-u3 — 同上：extends 的访问序、记录字段（修饰 / 整体绑定 / fixed）、记录自己的 Evaluate = false、子实例、if 式、size 越维
+//// model: U30
+model B
+parameter Real q = 3 annotation(Evaluate = false);
+end B;
+model U30
+parameter Real p = q annotation(Evaluate = true);
+extends B;
+Real y = p;
+end U30;
+//// model: U31
+model B
+parameter Real q = 3 annotation(Evaluate = false);
+end B;
+model U31
+extends B;
+parameter Real p = q annotation(Evaluate = true);
+Real y = p;
+end U31;
+//// model: U32
+model B
+parameter Real p = q annotation(Evaluate = true);
+end B;
+model U32
+parameter Real q = 3 annotation(Evaluate = false);
+extends B;
+Real y = p;
+end U32;
+//// model: U33
+model B
+parameter Real p = q annotation(Evaluate = true);
+end B;
+model U33
+extends B;
+parameter Real q = 3 annotation(Evaluate = false);
+Real y = p;
+end U33;
+//// model: U34
+record R
+parameter Real a = 1;
+end R;
+model U34
+parameter Real p = r.a annotation(Evaluate = true);
+parameter R r(a = q);
+parameter Real q = 2 annotation(Evaluate = false);
+Real y = p;
+end U34;
+//// model: U35
+record R
+parameter Real a = 1;
+end R;
+model U35
+parameter Real q = 2 annotation(Evaluate = false);
+parameter Real p = r.a annotation(Evaluate = true);
+parameter R r(a = q);
+Real y = p;
+end U35;
+//// model: U36
+record R
+parameter Real a = 1;
+end R;
+model U36
+parameter Real p = r.a annotation(Evaluate = true);
+parameter R r = s;
+parameter R s(a = q);
+parameter Real q = 2 annotation(Evaluate = false);
+Real y = p;
+end U36;
+//// model: U37
+record R
+parameter Real a = 1;
+end R;
+model U37
+parameter Real q = 2 annotation(Evaluate = false);
+parameter Real p = r.a annotation(Evaluate = true);
+parameter R r = s;
+parameter R s(a = q);
+Real y = p;
+end U37;
+//// model: U38
+record R
+parameter Real a = 1;
+end R;
+model U38
+parameter Real p = r.a annotation(Evaluate = true);
+parameter R r(a(fixed = false) = 2);
+Real y = p;
+end U38;
+//// model: U39
+record R
+parameter Real a = 1;
+end R;
+model U39
+parameter Real p = r.a annotation(Evaluate = true);
+parameter R r annotation(Evaluate = false);
+Real y = p;
+end U39;
+//// model: U310
+record R
+parameter Real a = 1;
+end R;
+model U310
+parameter R r annotation(Evaluate = false);
+parameter Real p = r.a annotation(Evaluate = true);
+Real y = p;
+end U310;
+//// model: U311
+model A
+parameter Real q = 3 annotation(Evaluate = false);
+end A;
+model U311
+A a;
+parameter Real p = a.q annotation(Evaluate = true);
+Real y = p;
+end U311;
+//// model: U312
+model A
+parameter Real q = 3 annotation(Evaluate = false);
+end A;
+model U312
+parameter Real p = a.q annotation(Evaluate = true);
+A a;
+Real y = p;
+end U312;
+//// model: U313
+model A
+parameter Real q = 3;
+end A;
+model U313
+parameter Real p = a.q annotation(Evaluate = true);
+A a(q(fixed = false) = 3);
+Real y = p;
+end U313;
+//// model: U314
+model U314
+parameter Real p = if b then 1 else 2 annotation(Evaluate = true);
+parameter Boolean b = true annotation(Evaluate = false);
+Real y = p;
+end U314;
+//// model: U315
+model U315
+parameter Boolean b = true annotation(Evaluate = false);
+parameter Real p = if b then 1 else 2 annotation(Evaluate = true);
+Real y = p;
+end U315;
+//// model: U316
+model U316
+parameter Integer n = 2 annotation(Evaluate = false);
+parameter Real p = sum(fill(1.0, n)) annotation(Evaluate = true);
+Real y = p;
+end U316;
+//// model: U317
+model U317
+parameter Real p = q annotation(Evaluate = true);
+parameter Real q = 1 annotation(Evaluate = false);
+Real x[2];
+equation
+x = {p, q};
+end U317;

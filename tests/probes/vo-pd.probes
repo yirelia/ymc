@@ -1,0 +1,15 @@
+//// set: vo-pd — 61t 留下的两个：Evaluate = false 声明在后（链中段 / 末端）
+//// model: T19
+model T19
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = j;
+parameter Integer j = 2 annotation(Evaluate = false);
+Real y = k;
+end T19;
+//// model: T117
+model T117
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = j annotation(Evaluate = false);
+parameter Integer j = 2 annotation(Evaluate = true);
+Real y = k;
+end T117;

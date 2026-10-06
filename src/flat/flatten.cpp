@@ -712,9 +712,18 @@ class Flattener {
         }
       };
       std::vector<std::int64_t> tmp;
+      const PrescanVisit pv(*this);
       for (NodeId cn : comps) {
         const Id<SElement> fd = I_.comps[I_.nodes[cn].comp].def;
         const SElement& fel = I_.scode.elems[fd];
+        {   // updateImplicitVariability 按声明序访问：访问到它时才可能降成 NON_STRUCTURAL（见 frame_value）
+          std::vector<Symbol> vn = prefix;
+          vn.push_back(I_.nodes[cn].name);
+          PSubs vs = psubs;
+          vs.resize(prefix.size());
+          vs.push_back({});
+          prescan_visited_.insert(int_key(vn, vs));
+        }
         // 声明自己的维 / 条件 / 修饰在声明所在类的作用域里求（继承来的 = 基类，见 decl_lex）。
         const NodeId dl = decl_lex(I_.nodes[cn].comp, inst_node);
         const ScodeScope dsc = dl == inst_node ? fscope : scode_scope_of(dl);
@@ -3559,6 +3568,29 @@ class Flattener {
       }
       if (cty.kind == TypeKind::Real) binding = to_real(binding);   // `= 2` → `= 2.0`
     }
+    // Evaluate = true（自己的或外层组件的）是唯一理由时，omc 先判它能不能当结构参数（Structural.isStructuralComponent →
+    // isBindingNotFixed(binding, maxDepth = 4)，NFStructural.mo:51-115 v1.25.0）：判定发生在 updateImplicitVariability 访问到
+    // 本参数时（见 visit_nf_），不固定 → 不是结构参数、照常打印（EV 探针 u10-u118 / u20-u222 / r10-r113）。
+    if (binding.is_valid()) raw_bindings_[vkey] = binding;   // 结构折叠 / 存回字面量之前的（visit_binding）
+    if (struct_final && eval_true && !struct_other && binding.is_valid()) {
+      bool unk = false;
+      forward_miss_ = false;
+      bool nf = false;
+      {
+        const VisitNf vn(*this);
+        nf = exp_not_fixed(binding, kEvalDepth, unk);
+      }
+      if (nf) {
+        struct_final = false;
+      } else if (unk) {
+        // 第一遍：不知道是因为碰到还没发射的参数 → 第二遍再判（第一遍的输出不用）。
+        if (lenient_ && forward_miss_) need_second_pass_ = true;
+        else {
+          set_unsupported("Evaluate annotation");
+          if (result_.unsupported_detail.empty()) result_.unsupported_detail = "fixedness unknown";   // 子原因
+        }
+      }
+    }
     // 结构 final 参数：绑定求值成字面量（init_x = p1 or p2 → true）。
     if (struct_final) {
       // 值取修饰感知求值的结果（frame_value 记在 const_vals_）；没有则按本实例帧现求（有效绑定 = 外来修饰 > 声明）。
@@ -3571,20 +3603,14 @@ class Flattener {
       // 影响输出：碰到的向前参数不算"发射前被求值"（ST 探针 t43 `Core core(cp = d.scp); parameter Data d;` 里 Evaluate 的
       // core.m 求得 3、`d.scp.m = d.m` 照旧；t53 `s.k = j + 1`）。定型期的求值（维 t55 `s.k = 2`、条件…）在各自的使用处碰。
       const std::size_t touch_mark = touched_log_.size();
-      std::unordered_set<std::uint32_t> used;
       forward_miss_ = false;
       if (auto it = const_vals_.find(vkey); it != const_vals_.end()) cv = it->second;
       if (!cv) {
         Cref self;
         self.parts.push_back(CrefPart{name.back(), {}});
-        const FrameHit fh = frame_value(ceval_frame_, self, /*allow_param=*/true, 0, &used);
+        const FrameHit fh = frame_value(ceval_frame_, self, /*allow_param=*/true, 0, nullptr);
         if (fh.kind == FrameHit::Value) cv = fh.v;
       }
-      // 只因 Evaluate = true 才结构化、但绑定用到 Evaluate = false 的参数：omc 不把它当结构参数（EV8 探针 `q = 3
-      // annotation(Evaluate = false); p = q annotation(Evaluate = true)` → `parameter Real p = q`）→ 撤销求值带来的标记。
-      if (eval_true && !struct_other)
-        for (std::uint32_t d : used)
-          if (evaluate_annotation(Id<SElement>::from_index(d)) == std::optional<bool>(false)) struct_final = false;
       untouch(touch_mark);
       if (!struct_final) {
         struct_restore(snap);
@@ -5251,6 +5277,20 @@ class Flattener {
     std::unordered_map<std::string, std::optional<bool>> not_fixed;       // 参数的 isExpressionNotFixed（key_not_fixed）
     std::unordered_map<std::string, std::optional<bool>> rec_not_fixed;   // 记录实例的（rec_not_fixed）
     std::unordered_map<std::string, std::vector<std::int64_t>> shapes;    // 数组组件的实际维（name_dims_，deep_dims）
+    struct VisitInfo {   // 判 Evaluate 时碰到的向前引用（forward_not_fixed）
+      enum Kind : std::uint8_t { Parameter, Constant, Other } kind = Other;
+      bool fixed_attr = false;    // 自己带 fixed 属性（判 Evaluate 时不论真假都不固定，见 key_not_fixed）
+      bool plain = false;         // 有绑定且不是从父记录整体绑定拆来的（那种走记录支，未做）
+      bool impure = false;        // 绑定里调了不纯函数
+      std::vector<std::string> deps;   // 绑定（结构折叠之前的）里引用的
+    };
+    std::unordered_map<std::string, VisitInfo> visit;
+    struct RecVisit {   // 判 Evaluate 时碰到的向前记录实例（rec_not_fixed）：它的整体绑定形态
+      enum Kind : std::uint8_t { Unbound, ByCref, Ctor, Unknown } kind = Unknown;
+      std::string src;                    // ByCref：源记录实例 key
+      std::vector<std::string> fields;    // Ctor：各叶字段 key（实参拆到了它们的绑定上）
+    };
+    std::unordered_map<std::string, RecVisit> rec_visit;
   };
   void set_carry(PassCarry c) { carry_ = std::move(c); }
   PassCarry take_carry() { return std::move(pass_out_); }
@@ -5283,6 +5323,36 @@ class Flattener {
       if (pi.origin == 1 && pi.rec_bind != 1) pass_out_.deep.insert(k);
     for (const auto& [k, d] : name_dims_)
       if (d) pass_out_.shapes.emplace(k, *d);
+    for (const FlatVariable& v : result_.model.variables) {
+      PassCarry::VisitInfo vi;
+      vi.kind = v.var_kind == FlatVarKind::Parameter  ? PassCarry::VisitInfo::Parameter
+                : v.var_kind == FlatVarKind::Constant ? PassCarry::VisitInfo::Constant
+                                                      : PassCarry::VisitInfo::Other;
+      vi.fixed_attr = has_fixed_attr(v);
+      const std::string k = var_key(v);
+      const auto pit = param_info_.find(k);
+      const Id<Expr> b = visit_binding(k, v.binding);
+      vi.plain = b.is_valid() && (pit == param_info_.end() || pit->second.origin != 1);
+      if (b.is_valid()) {
+        auto walk = [&](auto& self, Id<Expr> id) -> void {
+          if (!id.is_valid()) return;
+          const Expr& e = result_.model.exprs[id];
+          if (e.kind == ExprKind::Call)
+            for (const FlatFunction& f : result_.model.functions)
+              if (f.name == e.call_name && f.is_impure) vi.impure = true;
+          if (e.kind == ExprKind::Cref && e.cref.resolved_node != kFnLocal) vi.deps.push_back(expr_cref_key(e.cref));
+          if (e.kind == ExprKind::Cref)
+            for (const ExprCrefPart& cp : e.cref.parts)
+              for (Id<Expr> s : cp.subscripts) self(self, s);
+          for (Id<Expr> a : e.args) self(self, a);
+          self(self, e.a);
+          self(self, e.b);
+          self(self, e.c);
+        };
+        walk(walk, b);
+      }
+      pass_out_.visit.emplace(k, vi);
+    }
     var_index_.clear();
     ensure_var_index();
     index_vars_ = true;
@@ -5299,6 +5369,27 @@ class Flattener {
       bool unk = false;
       const bool nf = rec_not_fixed(p, kFixedDepth, unk);
       pass_out_.rec_not_fixed.emplace(p, nf || !unk ? std::optional<bool>(nf) : std::nullopt);
+      PassCarry::RecVisit rv;
+      const auto lf = rec_leaf_.find(p);
+      if (const FlatVariable* f = lf != rec_leaf_.end() ? emitted_var(lf->second) : nullptr) {
+        const auto pit = param_info_.find(lf->second);
+        const ParamInfo pi = pit != param_info_.end() ? pit->second : ParamInfo{};
+        if (f->var_kind == FlatVarKind::Constant || pi.origin != 1 || pi.rec_bind == 2) {
+          rv.kind = PassCarry::RecVisit::Unbound;
+        } else if (pi.rec_bind == 1 && pi.by_cref) {
+          if (cref_parent_key(visit_binding(lf->second, f->binding), rv.src)) rv.kind = PassCarry::RecVisit::ByCref;
+        } else if (pi.rec_bind == 1) {
+          rv.kind = PassCarry::RecVisit::Ctor;
+          for (const FlatVariable& v : result_.model.variables) {   // 同 siblings_not_fixed：嵌套记录引用拆的叶对不上 → 不知道
+            const std::string k = var_key(v);
+            if (k.size() <= p.size() || k.compare(0, p.size(), p) != 0) continue;
+            if (parent_key(k) != p)
+              if (const auto fp = param_info_.find(k); fp != param_info_.end() && fp->second.by_cref) rv.kind = PassCarry::RecVisit::Unknown;
+            rv.fields.push_back(k);
+          }
+        }
+      }
+      pass_out_.rec_visit.emplace(p, std::move(rv));
     }
     index_vars_ = false;
   }
@@ -6615,11 +6706,22 @@ class Flattener {
     const ModCtx* fctx = frames_[static_cast<std::size_t>(fi)].ctx;
     const SVariability var = var_min(fctx ? fctx->var_floor : SVariability::Var, I_.comps[cid].attributes.variability);
     const SElement& cel = I_.scode.elems[I_.comps[cid].def];
+    const Frame& F = frames_[static_cast<std::size_t>(fi)];
+    std::vector<Symbol> names = F.prefix;
+    names.push_back(c.parts[0].name);
+    PSubs isubs = F.psubs;
+    isubs.resize(F.prefix.size());
+    isubs.push_back({});
+    const std::string key = int_key(names, isubs);
     // `Evaluate = false` 的参数是 NON_STRUCTURAL_PARAMETER（updateImplicitVariability，NFInst.mo:3906-3912 v1.25.0），Ceval
     // 不求它（evalCref 的守卫，NFCeval.mo:311-314）：维留成 `Real[p] z`、下标留 `y[p]`，for 方程范围 / 条件组件 / fixed
-    // 报错（ND 探针 p1；此前照常求值 → `Real z[1]; Real z[2]` 与 `final parameter`）。
-    if (var == SVariability::Param && evaluate_annotation(I_.comps[cid].def) == std::optional<bool>(false)) {
-      if (used) used->insert(I_.comps[cid].def.raw);   // 调用方据此认出"非结构参数"（if 方程原样保留条件）
+    // 报错（ND 探针 p1；此前照常求值 → `Real z[1]; Real z[2]` 与 `final parameter`）。降级只发生在访问它（发射）那一刻、
+    // 且那时变率还是 PARAMETER：还没发射的（声明在前的 Evaluate 参数判成结构参数后连带求值，EV 探针 u10）、发射前已被实例化期
+    // 标成结构参数的，照常求。
+    if (var == SVariability::Param && evaluate_annotation(I_.comps[cid].def) == std::optional<bool>(false) &&
+        (typed_keys_.count(key) || prescan_visited_.count(key)) && !early_structural(key)) {
+      // 调用方据此认出"非结构参数"（if 方程原样保留条件）；预扫的 used 是结构参数集（final_params），不记。
+      if (used && !in_prescan_) used->insert(I_.comps[cid].def.raw);
       r.kind = FrameHit::Fail;
       return r;
     }
@@ -6643,13 +6745,6 @@ class Flattener {
     if (var == SVariability::Param && !allow_param) { r.kind = FrameHit::Fail; return r; }
     if (cel.condition.is_valid()) { r.kind = FrameHit::Fail; return r; }   // 引用条件组件（存在性未定，CyclicBindingConditional）
     if (used && var == SVariability::Param) used->insert(I_.comps[cid].def.raw);
-    const Frame& F = frames_[static_cast<std::size_t>(fi)];
-    std::vector<Symbol> names = F.prefix;
-    names.push_back(c.parts[0].name);
-    PSubs isubs = F.psubs;
-    isubs.resize(F.prefix.size());
-    isubs.push_back({});
-    const std::string key = int_key(names, isubs);
     // 结构标记（Structural.markExp / markComponent，v1.25.0 NFStructural.mo:246-326）：被求值式直接引用的参数打标记；它
     // 绑定里的参数（依赖）只在该绑定**尚未定型**时连带（markComponent 只进 Binding.untypedExp，:322-325）——Early 时全都
     // 未定型 → 一路连带；Binding 时看该参数发射了没有（AO 探针 a3：`n = k; s = x[n]` → 只 n final，n 声明在 s 之后则 k 也
@@ -16462,6 +16557,10 @@ class Flattener {
     deps_time_ = std::move(s.deps);
     untouch(s.touched_n);
   }
+  bool early_structural(const std::string& k) const {   // 实例化期（时刻 0）就被标成结构参数
+    const auto st = structural_set_.find(k);
+    return st != structural_set_.end() && st->second == 0;
+  }
   void untouch(std::size_t n) {   // 撤掉 touched_log_ 第 n 条之后的"发射前被求值"
     while (touched_log_.size() > n) {
       touched_.erase(touched_log_.back());
@@ -16782,6 +16881,15 @@ class Flattener {
   bool exp_not_fixed(Id<Expr> id, int depth, bool& unknown, bool* saw_param = nullptr) {
     if (!id.is_valid()) return false;
     const Expr& e = result_.model.exprs[id];   // 下面只读、不 add
+    if (visit_nf_ && e.kind == ExprKind::Call) {
+      // isExpressionNotFixed 的 CALL 支：不纯函数 → 不固定（外部函数的判定 Call.isExternal 对未定型调用看的是还没实例化的类，
+      // 认不出 → 当固定，CevalBinding10 的 pure external 照样结构求值）；SIZE 支只看维号（数组本身只要类型，NFStructural.mo:197-219、
+      // NFCall.mo:574-595 v1.25.0）。
+      for (const FlatFunction& f : result_.model.functions)
+        if (f.name == e.call_name && f.is_impure) return true;
+      if (e.call_name.size() == 1 && in_.str(e.call_name[0]) == "size")
+        return e.args.size() == 2 && exp_not_fixed(e.args[1], depth, unknown, saw_param);
+    }
     if (e.kind == ExprKind::Cref) {
       if (e.cref.resolved_node == kFnLocal) { unknown = true; return false; }
       for (const ExprCrefPart& cp : e.cref.parts)
@@ -16800,6 +16908,7 @@ class Flattener {
     if (!v) {
       // 还没发射（向前引用）：第二遍用第一遍末尾算好的（carry_.not_fixed）；第一遍记下要第二遍。
       if (saw_param) *saw_param = true;
+      if (visit_nf_) return forward_not_fixed(k, depth, unknown);
       if (const auto t = carry_.not_fixed.find(k); t != carry_.not_fixed.end()) {
         if (!t->second) unknown = true;
         return t->second.value_or(false);
@@ -16813,20 +16922,52 @@ class Flattener {
     if (saw_param) *saw_param = true;
     // 定型期（维 / 绑定 / Evaluate）就已是结构参数（var <= STRUCTURAL_PARAMETER）→ 固定。压平期（if 方程等）标的不算：omc 这个
     // 检查在定型期（typeIfEquation），压平期的标记（flattenIfEquation，NFFlatten.mo:1983-1985 v1.25.0）那时还没打。
-    if (const auto st = structural_set_.find(k); st != structural_set_.end() && st->second != INT_MAX) return false;
+    // 判 Evaluate 时（visit_nf_）只算实例化期的标记（时刻 0：维 / 条件 / 此前访问过的 Evaluate 参数连带的）。
+    if (const auto st = structural_set_.find(k); st != structural_set_.end() && (visit_nf_ ? st->second == 0 : st->second != INT_MAX))
+      return false;
     const auto pit = param_info_.find(k);
     const ParamInfo pi = pit != param_info_.end() ? pit->second : ParamInfo{};
-    if (pi.nonstruct || has_fixed_false(*v)) return true;
+    if (pi.nonstruct || has_fixed_false(*v)) return true;   // 判 Evaluate 时：已发射 = 访问过，Evaluate = false 已降成非结构
+    // 判 Evaluate 时，带任何 fixed 属性（哪怕 `fixed = true`）的都不固定：那一刻属性绑定还没定型，Component.isFixed 认不出真
+    //（NFComponent.mo:896-922 v1.25.0；EV 探针 fx0 / fx1 / fx6：`q(fixed = true) = 3` → `p = q` 不求值）。
+    if (visit_nf_ && has_fixed_attr(*v)) return true;
     if (pi.origin == 1) {
       if (pi.rec_bind == 2) return false;   // 父记录在 omc 里没有绑定 → 无绑定记录支（isRecord）→ 固定
       if (pi.rec_bind != 1) { unknown = true; return false; }
+      if (visit_nf_ && depth - 1 == 0) return true;   // isBindingNotFixed(父记录的绑定, 0)
       if (!pi.by_cref) return siblings_not_fixed(parent_key(k), depth - 1, unknown);
       std::string s;
       if (!cref_parent_key(v->binding, s)) { unknown = true; return false; }
       return rec_not_fixed(s, depth - 1, unknown);
     }
-    if (!v->binding.is_valid()) { unknown = true; return false; }   // 无绑定：omc 看 start / 父记录，未做
-    return exp_not_fixed(v->binding, depth - 1, unknown);
+    const Id<Expr> vb = visit_nf_ ? visit_binding(k, v->binding) : v->binding;
+    if (!vb.is_valid()) { unknown = true; return false; }   // 无绑定：omc 看 start / 父记录，未做
+    if (visit_nf_ && depth - 1 == 0) return true;   // isBindingNotFixed(…, 0)：omc 不再往下走，当不固定（u21：四层别名链）
+    return exp_not_fixed(vb, depth - 1, unknown);
+  }
+  // 判 Evaluate 时顺的是定型时的绑定：已被结构求值 / 存回成字面量的，取折叠之前的（raw_bindings_）。
+  Id<Expr> visit_binding(const std::string& k, Id<Expr> flat) const {
+    const auto it = raw_bindings_.find(k);
+    return it != raw_bindings_.end() ? it->second : flat;
+  }
+  // 判 Evaluate 时碰到还没发射的参数：omc 那一刻还没访问到它——Evaluate = false 还没降级，仍是 PARAMETER（u10 `n = k`、`k = j`、
+  // `j = 2 (Evaluate = false)` 全 final）；实例化期已被标成结构参数的固定；fixed = false 不看次序；其余顺它的绑定走（第一遍
+  // 末尾收的 carry_.visit / deps）。记录字段 / 无绑定的未做 → 不知道。
+  bool forward_not_fixed(const std::string& k, int depth, bool& unknown) {
+    if (const auto st = structural_set_.find(k); st != structural_set_.end() && st->second == 0) return false;
+    const auto vi = carry_.visit.find(k);
+    if (vi == carry_.visit.end()) {
+      if (!typed_keys_.count(k)) forward_miss_ = true;
+      unknown = true;
+      return false;
+    }
+    if (vi->second.kind == PassCarry::VisitInfo::Constant) return false;
+    if (vi->second.kind != PassCarry::VisitInfo::Parameter || vi->second.fixed_attr || vi->second.impure) return true;
+    if (!vi->second.plain) { unknown = true; return false; }
+    if (depth - 1 == 0) return true;
+    for (const std::string& x : vi->second.deps)
+      if (key_not_fixed(x, depth - 1, unknown)) return true;
+    return false;
   }
   // 记录实例 s 的引用（记录引用整体绑定 `fp = d` 的 d）：isExpressionNotFixed(cref d)——d 自己 Evaluate = false → 不固定
   //（FR 探针 p66）；d 有自己的整体绑定 → 查那个绑定；没有（字段各自的修饰 / 缺省）或绑定是从更上层拆来的 → 无绑定记录支 →
@@ -16837,6 +16978,33 @@ class Flattener {
     const auto lf = rec_leaf_.find(s);   // 同一记录实例的字段来历相同：看它第一个直属标量字段
     const FlatVariable* f = lf != rec_leaf_.end() ? emitted_var(lf->second) : nullptr;
     if (!f) {
+      if (visit_nf_) {   // 判 Evaluate 时碰到还没发射的记录：还没访问，按第一遍记下的整体绑定形态走（carry_.rec_visit）
+        const auto rv = carry_.rec_visit.find(s);
+        if (rv == carry_.rec_visit.end()) {
+          if (!typed_keys_.count(s)) forward_miss_ = true;
+          unknown = true;
+          return false;
+        }
+        switch (rv->second.kind) {
+          case PassCarry::RecVisit::Unbound: return false;   // 无整体绑定的记录（isRecord 支）→ 固定
+          case PassCarry::RecVisit::ByCref:
+            if (depth - 1 == 0) return true;
+            return rec_not_fixed(rv->second.src, depth - 1, unknown);
+          case PassCarry::RecVisit::Ctor:
+            if (depth - 1 == 0) return true;
+            for (const std::string& fk : rv->second.fields) {
+              const auto vi = carry_.visit.find(fk);
+              if (vi == carry_.visit.end()) { unknown = true; return false; }
+              if (vi->second.impure) return true;
+              for (const std::string& x : vi->second.deps)
+                if (key_not_fixed(x, depth - 1, unknown)) return true;
+            }
+            return false;
+          case PassCarry::RecVisit::Unknown: break;
+        }
+        unknown = true;
+        return false;
+      }
       if (const auto t = carry_.rec_not_fixed.find(s); t != carry_.rec_not_fixed.end()) {
         if (!t->second) unknown = true;
         return t->second.value_or(false);
@@ -16850,6 +17018,7 @@ class Flattener {
     const ParamInfo pi = pit != param_info_.end() ? pit->second : ParamInfo{};
     if (pi.origin != 1 || pi.rec_bind == 2) return false;
     if (pi.rec_bind != 1) { unknown = true; return false; }
+    if (visit_nf_ && depth - 1 == 0) return true;   // isBindingNotFixed(s 的绑定, 0)
     if (!pi.by_cref) return siblings_not_fixed(s, depth - 1, unknown);
     std::string s2;
     if (!cref_parent_key(f->binding, s2)) { unknown = true; return false; }
@@ -16886,6 +17055,12 @@ class Flattener {
     for (const FlatVariable& fv : result_.model.variables)
       if (var_key(fv) == k) return &fv;
     return nullptr;
+  }
+  bool has_fixed_attr(const FlatVariable& v) {
+    const Symbol fixed = in_.intern("fixed");
+    for (const FlatVarAttr& a : v.attributes)
+      if (a.name == fixed) return true;
+    return false;
   }
   bool has_fixed_false(const FlatVariable& v) {
     const Symbol fixed = in_.intern("fixed");
@@ -17002,6 +17177,9 @@ class Flattener {
       if (it == vals.end()) continue;
       const std::string vk = var_key(v);
       if (vals.count(vk)) continue;
+      // Evaluate = false 降成 NON_STRUCTURAL 的不连带（只对变率是 PARAMETER 的，NFTyping.mo:1150-1159；EV 探针 u14：
+      // `k = j (Evaluate = false)` 在前、j 是 Evaluate 参数 → k 不 final，绑定代入成 2）。
+      if (const auto pit = param_info_.find(vk); pit != param_info_.end() && pit->second.nonstruct) continue;
       if (alias_unknown_keys_.count(vk)) { set_unsupported("structural alias through distributed modifier"); return; }
       const auto at = alias_keys_.find(vk);
       if (at == alias_keys_.end() || result_.model.exprs[it->second].ty.kind != v.ty.kind) continue;
@@ -17625,6 +17803,38 @@ class Flattener {
     bool by_cref = false;        // origin 1：整体绑定是记录引用（字段拆成 `src.f`），否则记录构造
   };
   std::unordered_map<std::string, ParamInfo> param_info_;
+  // 正在判某个 Evaluate = true 参数能不能当结构参数（emit_variable）：omc 在 updateImplicitVariability 按声明序访问组件时判
+  //（NFInst.mo:3890-3925 v1.25.0），那一刻只有访问过的组件改了变率——Evaluate = false 的降成 NON_STRUCTURAL（不固定）、被
+  // 维 / 条件 / 先访问的 Evaluate 参数连带的成 STRUCTURAL（固定）；还没访问的仍是 PARAMETER，顺绑定走。走满 4 层当不固定。
+  bool visit_nf_ = false;
+  static constexpr int kEvalDepth = 4;   // isBindingNotFixed 的 maxDepth
+  std::unordered_map<std::string, Id<Expr>> raw_bindings_;   // 参数结构折叠之前的绑定（visit_binding）
+  // 类入口预扫维 / 条件时已"访问"过的组件（声明在被扫组件之前的，含它自己）：Evaluate = false 的到这一刻已降级（frame_value）。
+  std::unordered_set<std::string> prescan_visited_;
+  bool in_prescan_ = false;
+  struct PrescanVisit {   // 预扫结束即清：发射期按 typed_keys_ 认
+    Flattener& f;
+    std::unordered_set<std::string> saved;
+    bool saved_in;
+    explicit PrescanVisit(Flattener& fl) : f(fl), saved(std::move(fl.prescan_visited_)), saved_in(fl.in_prescan_) {
+      f.prescan_visited_.clear();
+      f.in_prescan_ = true;
+    }
+    ~PrescanVisit() {
+      f.prescan_visited_ = std::move(saved);
+      f.in_prescan_ = saved_in;
+    }
+    PrescanVisit(const PrescanVisit&) = delete;
+    PrescanVisit& operator=(const PrescanVisit&) = delete;
+  };
+  struct VisitNf {
+    Flattener& f;
+    bool saved;
+    explicit VisitNf(Flattener& fl) : f(fl), saved(fl.visit_nf_) { f.visit_nf_ = true; }
+    ~VisitNf() { f.visit_nf_ = saved; }
+    VisitNf(const VisitNf&) = delete;
+    VisitNf& operator=(const VisitNf&) = delete;
+  };
   std::unordered_map<std::string, std::string> rec_leaf_;   // 实例 key → 它第一个直属标量变量的 key（rec_not_fixed）
   std::unordered_set<std::string> rec_nonstruct_;           // 带 Evaluate = false 的记录参数实例 key（note_rec_nonstruct）
   std::unordered_set<std::string> touched_;                 // 发射之前就被求值过的参数（touch_key）

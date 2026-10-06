@@ -1,0 +1,153 @@
+//// set: vo-r1 — 记录整体绑定链上的 Evaluate：引用链三层求值 / 四层不求、构造实参、字段修饰链、无绑定记录
+//// model: R10
+record R
+parameter Integer a;
+end R;
+model R10
+parameter R r(a = 1);
+parameter Integer p = r.a annotation(Evaluate = true);
+Real y = p;
+end R10;
+//// model: R11
+record R
+parameter Integer a;
+end R;
+model R11
+parameter R s(a = 1);
+parameter R r = s;
+parameter Integer p = r.a annotation(Evaluate = true);
+Real y = p;
+end R11;
+//// model: R12
+record R
+parameter Integer a;
+end R;
+model R12
+parameter R s2(a = 1);
+parameter R s1 = s2;
+parameter R r = s1;
+parameter Integer p = r.a annotation(Evaluate = true);
+Real y = p;
+end R12;
+//// model: R13
+record R
+parameter Integer a;
+end R;
+model R13
+parameter R s3(a = 1);
+parameter R s2 = s3;
+parameter R s1 = s2;
+parameter R r = s1;
+parameter Integer p = r.a annotation(Evaluate = true);
+Real y = p;
+end R13;
+//// model: R14
+record R
+parameter Integer a;
+end R;
+model R14
+parameter R s4(a = 1);
+parameter R s3 = s4;
+parameter R s2 = s3;
+parameter R s1 = s2;
+parameter R r = s1;
+parameter Integer p = r.a annotation(Evaluate = true);
+Real y = p;
+end R14;
+//// model: R15
+record R
+parameter Integer a;
+end R;
+model R15
+parameter R r = R(q);
+parameter Integer q = 1;
+parameter Integer p = r.a annotation(Evaluate = true);
+Real y = p;
+end R15;
+//// model: R16
+record R
+parameter Integer a;
+end R;
+model R16
+parameter Integer p = r.a annotation(Evaluate = true);
+parameter R r = R(q);
+parameter Integer q = 1 annotation(Evaluate = false);
+Real y = p;
+end R16;
+//// model: R17
+record R
+parameter Integer a;
+end R;
+model R17
+parameter Integer q = 1 annotation(Evaluate = false);
+parameter R r = R(q);
+parameter Integer p = r.a annotation(Evaluate = true);
+Real y = p;
+end R17;
+//// model: R18
+record R
+parameter Integer a;
+end R;
+model R18
+parameter R r = R(q);
+parameter Integer q = k;
+parameter Integer k = j;
+parameter Integer j = 1;
+parameter Integer p = r.a annotation(Evaluate = true);
+Real y = p;
+end R18;
+//// model: R19
+record R
+parameter Integer a;
+end R;
+model R19
+parameter R r = R(q);
+parameter Integer q = k;
+parameter Integer k = 1;
+parameter Integer p = r.a annotation(Evaluate = true);
+Real y = p;
+end R19;
+//// model: R110
+record R
+parameter Integer a;
+end R;
+model R110
+parameter R r(a = q);
+parameter Integer q = k;
+parameter Integer k = j;
+parameter Integer j = 1;
+parameter Integer p = r.a annotation(Evaluate = true);
+Real y = p;
+end R110;
+//// model: R111
+record R
+parameter Integer a;
+end R;
+model R111
+parameter R r(a = q);
+parameter Integer q = k;
+parameter Integer k = j;
+parameter Integer j = i;
+parameter Integer i = 1;
+parameter Integer p = r.a annotation(Evaluate = true);
+Real y = p;
+end R111;
+//// model: R112
+record R
+parameter Integer a = 2;
+end R;
+model R112
+parameter R r;
+parameter Integer p = r.a annotation(Evaluate = true);
+Real y = p;
+end R112;
+//// model: R113
+record R
+parameter Integer a = 2;
+end R;
+model R113
+parameter R s;
+parameter R r = s;
+parameter Integer p = r.a annotation(Evaluate = true);
+Real y = p;
+end R113;

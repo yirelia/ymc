@@ -1,0 +1,143 @@
+//// set: vo-u1 — Evaluate 的结构判定按访问序：Evaluate = false 在前 / 在后、链上、维、子实例、if 式、等式段
+//// model: U10
+model U10
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = j;
+parameter Integer j = 2 annotation(Evaluate = false);
+Real y = k;
+end U10;
+//// model: U11
+model U11
+parameter Integer j = 2 annotation(Evaluate = false);
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = j;
+Real y = k;
+end U11;
+//// model: U12
+model U12
+parameter Integer k = j;
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer j = 2 annotation(Evaluate = false);
+Real y = k;
+end U12;
+//// model: U13
+model U13
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = j annotation(Evaluate = false);
+parameter Integer j = 2 annotation(Evaluate = true);
+Real y = k;
+end U13;
+//// model: U14
+model U14
+parameter Integer k = j annotation(Evaluate = false);
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer j = 2 annotation(Evaluate = true);
+Real y = k;
+end U14;
+//// model: U15
+model U15
+Real x[j];
+parameter Integer j = 2 annotation(Evaluate = false);
+end U15;
+//// model: U16
+model U16
+parameter Integer j = 2 annotation(Evaluate = false);
+Real x[j];
+end U16;
+//// model: U17
+model U17
+parameter Real p = q annotation(Evaluate = true);
+parameter Real q = 3 annotation(Evaluate = false);
+Real y = p;
+end U17;
+//// model: U18
+model U18
+parameter Real q = 3 annotation(Evaluate = false);
+parameter Real p = q annotation(Evaluate = true);
+Real y = p;
+end U18;
+//// model: U19
+model A
+parameter Real q = 3 annotation(Evaluate = false);
+end A;
+model U19
+parameter Real p = a.q annotation(Evaluate = true);
+A a;
+Real y = p;
+end U19;
+//// model: U110
+model A
+parameter Real q = 3 annotation(Evaluate = false);
+end A;
+model U110
+A a;
+parameter Real p = a.q annotation(Evaluate = true);
+Real y = p;
+end U110;
+//// model: U111
+model A
+parameter Real p = q annotation(Evaluate = true);
+parameter Real q = 3 annotation(Evaluate = false);
+end A;
+model U111
+A a;
+Real y = a.p;
+end U111;
+//// model: U112
+model A
+parameter Real p = 1 annotation(Evaluate = true);
+end A;
+model U112
+A a(p = q);
+parameter Real q = 3 annotation(Evaluate = false);
+Real y = a.p;
+end U112;
+//// model: U113
+model A
+parameter Real p = 1 annotation(Evaluate = true);
+end A;
+model U113
+parameter Real q = 3 annotation(Evaluate = false);
+A a(p = q);
+Real y = a.p;
+end U113;
+//// model: U114
+model U114
+parameter Real p = q + r annotation(Evaluate = true);
+parameter Real q = 3;
+parameter Real r = 4 annotation(Evaluate = false);
+Real y = p;
+end U114;
+//// model: U115
+model U115
+parameter Real p = q annotation(Evaluate = true);
+parameter Real q = 3 annotation(Evaluate = false);
+Real y = p + q;
+end U115;
+//// model: U116
+model U116
+parameter Real p = q annotation(Evaluate = true);
+parameter Real q(fixed = false) = 3;
+Real y = p;
+end U116;
+//// model: U117
+model U117
+parameter Real q(fixed = false) = 3;
+parameter Real p = q annotation(Evaluate = true);
+Real y = p;
+end U117;
+//// model: U118
+model U118
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = j;
+parameter Integer j = 2 annotation(Evaluate = false);
+Real z[j];
+end U118;
+//// model: U119
+model U119
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = j;
+parameter Integer j = i annotation(Evaluate = false);
+parameter Integer i = 2;
+Real y = i;
+end U119;

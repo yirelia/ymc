@@ -1,0 +1,59 @@
+//// set: vo-r2 — 外层组件 Evaluate（模型 / 记录）与 Evaluate = false 的次序、维与 Evaluate 混合
+//// model: R21
+record R
+parameter Integer a = 1;
+end R;
+model R21
+parameter R r(a = 2) annotation(Evaluate = true);
+Real y = r.a;
+end R21;
+//// model: R22
+record R
+parameter Integer a = 1;
+end R;
+model R22
+parameter R r = R(3) annotation(Evaluate = true);
+Real y = r.a;
+end R22;
+//// model: R24
+model A
+parameter Integer a = 1;
+parameter Integer b = a;
+end A;
+model R24
+A x annotation(Evaluate = true);
+Real y = x.b;
+end R24;
+//// model: R25
+model A
+parameter Integer a = 1;
+parameter Integer b = c;
+parameter Integer c = 2 annotation(Evaluate = false);
+end A;
+model R25
+A x annotation(Evaluate = true);
+Real y = x.b;
+end R25;
+//// model: R26
+model A
+parameter Integer c = 2 annotation(Evaluate = false);
+parameter Integer b = c;
+end A;
+model R26
+A x annotation(Evaluate = true);
+Real y = x.b;
+end R26;
+//// model: R27
+model R27
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = j;
+parameter Integer j = 2;
+Real y[n];
+end R27;
+//// model: R28
+model R28
+parameter Integer k = j;
+parameter Integer j = 2;
+parameter Integer n = k annotation(Evaluate = true);
+Real y = k;
+end R28;

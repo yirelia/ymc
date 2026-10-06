@@ -1,0 +1,43 @@
+//// set: vo-fx — 带 fixed 属性（true / false / 常量 / 多属性）的参数在 Evaluate 链上都不固定；维照常连带
+//// model: FX0
+model FX0
+parameter Real p = q annotation(Evaluate = true);
+parameter Real q(fixed = true) = 3;
+Real y = 1;
+end FX0;
+//// model: FX1
+model FX1
+parameter Real q(fixed = true) = 3;
+parameter Real p = q annotation(Evaluate = true);
+Real y = 1;
+end FX1;
+//// model: FX2
+model FX2
+parameter Real q(start = 1) = 3;
+parameter Real p = q annotation(Evaluate = true);
+Real y = 1;
+end FX2;
+//// model: FX3
+model FX3
+parameter Real q(fixed = b) = 3;
+constant Boolean b = true;
+parameter Real p = q annotation(Evaluate = true);
+Real y = 1;
+end FX3;
+//// model: FX4
+model FX4
+parameter Real p(fixed = true) = 3 annotation(Evaluate = true);
+Real y = 1;
+end FX4;
+//// model: FX5
+model FX5
+parameter Integer q(fixed = true) = 3;
+Real x[q];
+Real y = 1;
+end FX5;
+//// model: FX6
+model FX6
+parameter Real q(fixed = true, min = 0) = 3;
+parameter Real p = 2 * q annotation(Evaluate = true);
+Real y = 1;
+end FX6;
