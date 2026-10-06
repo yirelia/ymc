@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "absyn/absyn.h"
+#include "base/crt_math.h"  // 编译期求值的超越函数走 UCRT（与 omc 1.25.0 逐位一致，见 crt_math.h）
 #include "base/strings.h"   // unescape_modelica_string（字符串字面量；注释在 SCode 里已解过转义，直接用）
 
 namespace ymc {
@@ -5922,7 +5923,7 @@ class Flattener {
       case BinOp::Sub: return CVal::R(x - y);
       case BinOp::Mul: return CVal::R(x * y);
       case BinOp::Div: return y != 0.0 ? std::optional<CVal>(CVal::R(x / y)) : std::nullopt;
-      case BinOp::Pow: return (x < 0 && std::floor(y) != y) ? std::nullopt : std::optional<CVal>(CVal::R(std::pow(x, y)));
+      case BinOp::Pow: return (x < 0 && std::floor(y) != y) ? std::nullopt : std::optional<CVal>(CVal::R(crt::pow(x, y)));
     }
     return std::nullopt;
   }
@@ -11661,6 +11662,24 @@ class Flattener {
       sh.push_back(static_cast<std::int64_t>(v->ords.size()));
       if (dim_labels) dim_labels->push_back(v->type_name ? v->labels : std::vector<Id<Expr>>{});
     }
+    // 元素本身是数组构造子（MSL SpacePhasor `InverseTransformation[m, 2] = {{cos(…), -sin(…)} for k in 1:m}`）：结果的维 =
+    // 迭代的各维 + 元素的维（CE 探针 q10 / q11 / q14：`{{k, 2*k} for k in 1:3}` 是 Real[3, 2]）。
+    for (std::int64_t d : ctor_shape(red.a)) {
+      sh.push_back(d);
+      if (dim_labels) dim_labels->push_back({});
+    }
+    return sh;
+  }
+  // 书写的数组构造子 `{…}` 的形状（各层元素个数，须规整）；不是构造子（标量式 / 其它数组值的式子）/ 不规整 → 空。
+  std::vector<std::int64_t> ctor_shape(Id<Exp> x) {
+    if (!x.is_valid() || !is_array_ctor(x) || is_comprehension(x)) return {};
+    const std::vector<Id<Exp>> args = I_.absyn.exps[x].args;   // 拷贝
+    if (args.empty()) return {};
+    const std::vector<std::int64_t> sub = ctor_shape(args[0]);
+    for (std::size_t i = 1; i < args.size(); ++i)
+      if (ctor_shape(args[i]) != sub) return {};
+    std::vector<std::int64_t> sh{static_cast<std::int64_t>(args.size())};
+    sh.insert(sh.end(), sub.begin(), sub.end());
     return sh;
   }
   // 书写式里引用了带类型维的数组（声明维是类型名，或 `:` 维推出来是类型维）：它参与的数组值的维也是类型维。
@@ -11708,7 +11727,9 @@ class Flattener {
                               const std::vector<Symbol>& prefix) {
     Exp red = I_.absyn.exps[I_.absyn.exps[braw].args[0]];   // 拷贝
     const std::size_t n = red.iters.size();
-    if (n == 0 || idx.size() != n || !fill_implicit_ranges(red, scope, prefix)) {
+    // idx 超出迭代维的部分是元素构造子里的下标（见 comprehension_shape）。
+    const std::size_t m = ctor_shape(red.a).size();
+    if (n == 0 || idx.size() != n + m || !fill_implicit_ranges(red, scope, prefix)) {
       set_unsupported("comprehension shape");
       return lit_int(0);
     }
@@ -11729,11 +11750,13 @@ class Flattener {
       vals[k] = seq->ords[static_cast<std::size_t>(ix) - 1];
       if (seq->type_label.is_valid()) labs[k] = seq->labels[static_cast<std::size_t>(ix) - 1];
     }
+    const Id<Exp> body = m > 0 ? array_scalar_elem(red.a, idx, n) : red.a;   // 元素构造子里对应的那个分量
+    if (!body.is_valid()) { set_unsupported("comprehension shape"); return lit_int(0); }
     for (std::size_t k = 0; k < n; ++k) {
       loop_vars_[red.iters[k].name.id] = vals[k];
       if (labs[k].is_valid()) loop_labels_[red.iters[k].name.id] = labs[k];
     }
-    const Id<Expr> x = simplify_expr(inst_exp(red.a, scope, prefix));
+    const Id<Expr> x = simplify_expr(inst_exp(body, scope, prefix));
     for (std::size_t k = 0; k < n; ++k) {
       loop_vars_.erase(red.iters[k].name.id);
       loop_labels_.erase(red.iters[k].name.id);
@@ -13927,7 +13950,7 @@ class Flattener {
               // `Real y = (-1.0)^0.5` → `(-1.0) ^ 0.5`）；0 的负数次幂 omc 报错。
               if (x < 0 && std::floor(y) != y) break;
               if (x == 0 && y < 0) { set_unsupported("division by zero in constant"); return id; }
-              return lit_real(std::pow(x, y));
+              return lit_real(crt::pow(x, y));
           }
         }
         // 字符串常量拼接（Ceval.evalBinaryAdd 的字符串分支，StringConcatenation）。
@@ -14251,28 +14274,28 @@ class Flattener {
           if (x < 0.0) { set_unsupported("constant function domain"); return rebuild(); }
           return lit_real(std::sqrt(x));
         }
-        if (name == "sin") return lit_real(std::sin(x));
-        if (name == "cos") return lit_real(std::cos(x));
-        if (name == "tan") return lit_real(std::tan(x));
+        if (name == "sin") return lit_real(crt::sin(x));
+        if (name == "cos") return lit_real(crt::cos(x));
+        if (name == "tan") return lit_real(crt::tan(x));
         if (name == "asin" || name == "acos") {
           if (x < -1.0 || x > 1.0) { set_unsupported("constant function domain"); return rebuild(); }
-          return lit_real(name == "asin" ? std::asin(x) : std::acos(x));
+          return lit_real(name == "asin" ? crt::asin(x) : crt::acos(x));
         }
-        if (name == "atan") return lit_real(std::atan(x));
-        if (name == "sinh") return lit_real(std::sinh(x));
-        if (name == "cosh") return lit_real(std::cosh(x));
-        if (name == "tanh") return lit_real(std::tanh(x));
-        if (name == "exp") return lit_real(std::exp(x));
+        if (name == "atan") return lit_real(crt::atan(x));
+        if (name == "sinh") return lit_real(crt::sinh(x));
+        if (name == "cosh") return lit_real(crt::cosh(x));
+        if (name == "tanh") return lit_real(crt::tanh(x));
+        if (name == "exp") return lit_real(crt::exp(x));
         if (name == "log" || name == "log10") {
           if (x <= 0.0) { set_unsupported("constant function domain"); return rebuild(); }
-          return lit_real(name == "log" ? std::log(x) : std::log10(x));
+          return lit_real(name == "log" ? crt::log(x) : crt::log10(x));
         }
         if (name == "ceil") return lit_real(std::ceil(x));
         if (name == "floor") return lit_real(std::floor(x));
         if (name == "integer") return lit_int(static_cast<std::int64_t>(std::floor(x)));
 
         const double y = as_real(args[1]);
-        if (name == "atan2") return lit_real(std::atan2(x, y));   // NFCeval.mo:2248-2252：atan2(y, x)
+        if (name == "atan2") return lit_real(crt::atan2(x, y));   // NFCeval.mo:2248-2252：atan2(y, x)
         if ((name == "div" || name == "mod" || name == "rem") && y == 0.0) {
           set_unsupported("division by zero in constant");
           return rebuild();

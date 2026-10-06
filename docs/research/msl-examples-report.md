@@ -123,3 +123,9 @@ duplicate variable 2（HBridge）、矩阵构造套 size 的结构绑定 1（PID
 `InverseTransformation[m, 2] = {{…} for k in 1:m}`，"array binding shape/type mismatch" 22 个）、表达式里的数组值函数调用 5、
 常量求值 3、算法里的数组元素赋值 2、矩阵元素形状 1。FAIL / ACCEPTS-INVALID / CRASH 0。另：TDM-GCC 构建的超越函数（libmingwex）
 与 omc 1.25.0 的 UCRT 末位常差一个 ulp（MSVC 构建一致），推导式放开后会碰到，下一桶先做 CRT 数学函数垫片。
+
+## 2026-10-06 加宽 61q 之后：PASS 100（不变）
+
+超越函数折叠改走 UCRT（gcc 构建此前与 omc 末位常差一个 ulp）+ 元素是数组的推导式（SpacePhasor 的变换矩阵）之后，电机一族
+再往下：参数数组绑到常量实参的函数调用（`phi[m] = symmetricOrientation(m)`，omc 求值成字面量；"array binding higher
+variability"）、条件组件的条件。FAIL / ACCEPTS-INVALID / CRASH 0。

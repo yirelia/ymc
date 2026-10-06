@@ -1666,6 +1666,17 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           slice 625 例不变（PASS 560 / FAIL 0）；scodeinst PASS 560 / FAIL 29（不变，均在账）；整个 testsuite 实跑 PASS 1501 / FAIL 0
           （不变；RecordBinding14 由 SKIP → 新 SKIP 原因）；MSL 示例 100（不变：电机一族往下露出元素是数组的推导式等）；探针
           7418→7474（cs-* 3 集 22 个、ev-e1 4 个、rt-* 4 集 18 个）；单测 254→256。
+    - [x] (61q) flat + base：超越函数折叠与 UCRT 逐位一致 + 元素是数组的推导式（2026-10-06）：omc 1.25.0 的编译期求值用
+          UCRT 的 libm；gcc（TDM-GCC）构建的 libmingwex 末位常差一个 ulp（抽样 1.1 万点 78 个，`cos(4.188786666666666)` …336 vs
+          …338；MSVC 构建一致），推导式放开后 MSL 的变换矩阵就会碰到。新增 base/crt_math：MinGW 下运行时取 ucrtbase.dll 的同名函数
+          （msvcrt.dll 与 ucrtbase.dll 之间也有差，不能用 __imp_），其余平台 <cmath>；flatten 的 15 处超越函数改走它。元素是数组
+          构造子的推导式（MSL SpacePhasor `InverseTransformation[m, 2] = {{cos(…), -sin(…)} for k in 1:m}`，此前 SKIP "array binding
+          shape/type mismatch" 22 个）：comprehension_shape 拼上元素构造子的形状，comprehension_elem 用多出的下标取元素里的分量；
+          矩阵乘向量的方程（`vs = TM*v`）已能逐行展开。电机再往下：参数数组绑到常量实参的函数调用（`phi[m] =
+          symmetricOrientation(m)`，omc 求值成字面量）、条件组件的条件。
+          slice 625 例不变（PASS 560 / FAIL 0）；scodeinst PASS 560 / FAIL 29（不变，均在账）；整个 testsuite 实跑 PASS 1501 / FAIL 0
+          （不变）；MSL 示例 100（不变：电机一族往下露出参数数组绑函数调用、条件组件）；探针 7462→7477（ce-* 3 集 15 个）；单测
+          256→258。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

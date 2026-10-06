@@ -1,0 +1,32 @@
+//// set: ce-q2 — 编译期求值的超越函数（sin … log10、atan2、^）与 UCRT 逐位一致 + 推导式的形状（嵌套推导式 SKIP、形状不符报错）
+//// model: Q20
+model Q20
+parameter Real a = sin(0.3) + cos(4.188786666666666) + tan(1.1) + asin(0.3) + acos(0.4) + atan(2.5);
+end Q20;
+//// model: Q21
+model Q21
+parameter Real b = sinh(1.3) + cosh(0.7) + tanh(0.9) + exp(2.7) + log(3.3) + log10(47.0);
+end Q21;
+//// model: Q22
+model Q22
+parameter Real c = atan2(1.3, -2.2) + 2.7 ^ 1.37 + (-1.5) ^ 3;
+end Q22;
+//// model: Q23
+model Q23
+constant Integer m = 3;
+parameter Real c[m] = {cos((k - 1)/m*2*3.14159) for k in 1:m};
+parameter Real s[m] = {sin((k - 1)/m*2*3.14159) for k in 1:m};
+end Q23;
+//// model: Q24
+model Q24
+parameter Real T[2, 3] = {{k*j for k in 1:3} for j in 1:2};
+end Q24;
+//// model: Q25
+model Q25
+parameter Integer n = 2;
+parameter Real T[n, 2, 2] = {{{1, 2}, {3, 4}} for k in 1:n};
+end Q25;
+//// model: Q26
+model Q26
+parameter Real T[3, 2] = {{k, 2*k, 3} for k in 1:3};
+end Q26;

@@ -1,0 +1,38 @@
+//// set: ce-q1 — 元素是数组的推导式（参数数组 / 参数维 / 常量维 / 子模型里的矩阵乘向量 / 三维 / 变量数组 SKIP）
+//// model: Q10
+model Q10
+parameter Real T[3, 2] = {{k, 2*k} for k in 1:3};
+end Q10;
+//// model: Q11
+model Q11
+parameter Integer m = 3;
+parameter Real T[m, 2] = {{cos(-(k - 1)/m*2*3.14159), -sin(-(k - 1)/m*2*3.14159)} for k in 1:m};
+end Q11;
+//// model: Q12
+model Q12
+constant Integer m = 3;
+parameter Real T2[2, m] = 2/m*{{cos(+(k - 1)/m*2*3.14159) for k in 1:m}, {+sin(+(k - 1)/m*2*3.14159) for k in 1:m}};
+end Q12;
+//// model: Q13
+model SP
+constant Integer m = 3;
+Real v[m];
+Real vs[2];
+protected
+parameter Real TM[2, m] = 2/m*{{cos(+(k - 1)/m*2*3.14159) for k in 1:m}, {+sin(+(k - 1)/m*2*3.14159) for k in 1:m}};
+parameter Real IT[m, 2] = {{cos(-(k - 1)/m*2*3.14159), -sin(-(k - 1)/m*2*3.14159)} for k in 1:m};
+equation
+vs = TM*v;
+v = {time, 2*time, 3*time};
+end SP;
+model Q13
+SP s;
+end Q13;
+//// model: Q14
+model Q14
+parameter Real T[2, 2, 2] = {{{i, j} for j in 1:2} for i in 1:2};
+end Q14;
+//// model: Q15
+model Q15
+Real T[3, 2] = {{k, 2*k} for k in 1:3};
+end Q15;

@@ -5129,6 +5129,41 @@ YMC_TEST(flatten_evaluate_through_forward_record_binding) {
                            "  parameter Real scp.PRef = 1.0;\nend EVF1;\n"));
 }
 
+YMC_TEST(flatten_transcendental_folding_matches_ucrt) {
+  // 编译期求值的超越函数与 omc 1.25.0 逐位一致：omc 用 UCRT 的 libm，gcc（TDM / libmingwex）构建经 base/crt_math 取 ucrtbase.dll
+  // 的同名函数（cos(4.188786666666666) libmingwex 差一个 ulp）。期望 = omc 1.25.0 实跑（2026-10-06，下同）。
+  YMC_CHECK_EQ(flatten_src("model CRT1\n  parameter Real a = cos(4.188786666666666);\n"
+                           "  parameter Real b = sin(0.3) + tan(1.1) + asin(0.3) + acos(0.4) + atan(2.5);\n"
+                           "  parameter Real c = sinh(1.3) + cosh(0.7) + tanh(0.9) + exp(2.7) + log(3.3) + log10(47.0);\n"
+                           "  parameter Real d = atan2(1.3, -2.2) + 2.7 ^ 1.37;\nend CRT1;\n"),
+               std::string("class CRT1\n  parameter Real a = -0.5000030640984336;\n  parameter Real b = 4.914541948335329;\n"
+                           "  parameter Real c = 21.41560136440357;\n  parameter Real d = 6.50702022368719;\nend CRT1;\n"));
+}
+
+YMC_TEST(flatten_comprehension_with_array_elements) {
+  // 元素是数组构造子的推导式（MSL SpacePhasor `{{cos(…), -sin(…)} for k in 1:m}`）：形状 = 迭代维 + 元素维，参数数组逐元素
+  // 取对应分量；`2/m * {{… for k in 1:m}, {…}}` 同样逐元素；矩阵乘向量的方程逐行展开。
+  YMC_CHECK_EQ(flatten_src("model SP\n  constant Integer m = 3;\n  Real v[m];\n  Real vs[2];\nprotected\n"
+                           "  parameter Real TM[2, m] = 2/m*{{cos(+(k - 1)/m*2*3.14159) for k in 1:m}, {+sin(+(k - 1)/m*2*3.14159) for k in 1:m}};\n"
+                           "  parameter Real IT[m, 2] = {{cos(-(k - 1)/m*2*3.14159), -sin(-(k - 1)/m*2*3.14159)} for k in 1:m};\n"
+                           "equation\n  vs = TM*v;\n  v = {time, 2*time, 3*time};\nend SP;\nmodel CMP1\n  SP s;\nend CMP1;\n"),
+               std::string("class CMP1\n  constant Integer s.m = 3;\n  Real s.v[1];\n  Real s.v[2];\n  Real s.v[3];\n"
+                           "  Real s.vs[1];\n  Real s.vs[2];\n  protected parameter Real s.TM[1,1] = 0.6666666666666666;\n"
+                           "  protected parameter Real s.TM[1,2] = -0.33333231196562396;\n"
+                           "  protected parameter Real s.TM[1,3] = -0.3333353760656224;\n"
+                           "  protected parameter Real s.TM[2,1] = 0.0;\n"
+                           "  protected parameter Real s.TM[2,2] = 0.5773508588753431;\n"
+                           "  protected parameter Real s.TM[2,3] = -0.5773490898127704;\n"
+                           "  protected parameter Real s.IT[1,1] = 1.0;\n  protected parameter Real s.IT[1,2] = 0.0;\n"
+                           "  protected parameter Real s.IT[2,1] = -0.49999846794843594;\n"
+                           "  protected parameter Real s.IT[2,2] = 0.8660262883130146;\n"
+                           "  protected parameter Real s.IT[3,1] = -0.5000030640984336;\n"
+                           "  protected parameter Real s.IT[3,2] = -0.8660236347191557;\nequation\n"
+                           "  s.vs[1] = s.TM[1,1] * s.v[1] + s.TM[1,2] * s.v[2] + s.TM[1,3] * s.v[3];\n"
+                           "  s.vs[2] = s.TM[2,1] * s.v[1] + s.TM[2,2] * s.v[2] + s.TM[2,3] * s.v[3];\n  s.v[1] = time;\n"
+                           "  s.v[2] = 2.0 * time;\n  s.v[3] = 3.0 * time;\nend CMP1;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

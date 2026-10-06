@@ -83,6 +83,13 @@ ymc 以 **omc 1.25.0 实测**为准；这些用例从 `docs/research/s3-easy-sli
 给出不同的虚变量序（YmcExpHash2 探针：speed/torque/temp 实测 = 32 位序）。ymc 按 32 位（1.25.0 实测）；将来若有用例文件
 与实跑在虚变量序上分歧，按本条记账。
 
+**编译期求值的超越函数（已处理）**：omc 1.25.0 的编译期求值用 UCRT 的 sin / cos / exp / pow …（libOpenModelicaCompiler.dll 从
+api-ms-win-crt-math 导入），各家 libm 末位常差一个 ulp：TDM-GCC 链进的 libmingwex 抽样 1.1 万点 78 个与 UCRT 不同
+（`cos(4.188786666666666)`：UCRT -0.5000030640984336、libmingwex …338，真值几乎正好在中间），msvcrt.dll 与 ucrtbase.dll 之间
+也有 52 / 1.2 万。ymc 的 gcc 构建经 `base/crt_math` 在运行时取 ucrtbase.dll 的同名函数（MSVC 构建本就是 UCRT），与 1.25.0
+逐位一致（CE 探针 q20-q23、单测 CRT1）。testsuite 的 `// Result:` 若在 Linux（glibc）生成，个别末位可能与 1.25.0 不同，按本条
+记账（以 1.25.0 为准）。
+
 **源码 HEAD 与 1.25.0 的已知差异（按 1.25.0）**：`NFFlatten.verifyBinding` 在源码（基线 `3ceb0c9d06`）里对无绑定的
 constant 报 `NO_CONSTANT_BINDING`（:844-848），安装版 1.25.0 实跑不报、照印 `constant Integer n;`（YmcUnbConst1 探针）；
 无绑定、fixed 且无 start 的 parameter 两者都报 `UNBOUND_PARAMETER_ERROR`（UnboundParameter1、YmcUnbArr1）。凡按源码实现的
