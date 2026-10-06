@@ -1688,6 +1688,17 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           slice 625 例不变（PASS 560 / FAIL 0）；scodeinst PASS 560 / FAIL 29（不变，均在账）；整个 testsuite 实跑 PASS 1501 / FAIL 0
           （不变）；MSL 示例 100（不变：电机一族往下露出表达式里的数组值调用）；探针 7477→7493（pf-* 4 集 16 个；旧探针 3 个由
           SKIP 转 PASS）；单测 258→259。
+    - [x] (61s) flat：参数数组绑定里嵌在运算中的数组值调用 + 调用输出维里的实参成结构参数 + 取负的零（2026-10-06）：
+          MSL Polyphase.Sources 的 `parameter SI.Angle phase[m] = -symmetricOrientation(m)` 此前 SKIP "array-valued call inside an
+          expression"（全库此类三十余个）。参数 / 常量数组的绑定定型时（param_spread_）放行，scalarize 取 `f(…)[k]`（omc 照这样
+          标量化：`2.0 * sv(x)[1]`）；调用的输出维照 NFCall.evaluateCallTypeDim 先 markExp 再求值——维式里换进来的参数成结构参数
+          （fold_int_marking），实参会成字面量的压平末尾求值。取负的零照 omc：书写的 `-(0.0)` 括号里的数字字面量也直接成负字面量
+          （语法分析折进字面量）；字面量数组整体取负不护零（Ceval.evalUnaryOp 只在整个数组是零时原样，零元素 -0.0），会求值的
+          数组调用取负留 `(-f(…))[k]` 在数组层取负——此前 `-{0.0, 1.0, 2.0}`、`q = -(0.0)` 打 `0.0`（AC 探针 a30-a32，旧错）。
+          方程里的数组值调用（omc 保留数组方程、操作数次序还会变：`y = sv(x) * 2.0`）仍 SKIP。
+          slice 625 例不变（PASS 560 / FAIL 0）；scodeinst PASS 560 / FAIL 29（不变，均在账）；整个 testsuite 实跑 PASS 1501→1502
+          （arrays/ArraySizeFromFunc）/ FAIL 0；MSL 示例 100（不变）；探针 7493→7514（ac-* 4 集 21 个；旧探针 4 个由 SKIP 转
+          PASS）；单测 259→261。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

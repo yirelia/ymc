@@ -1,0 +1,57 @@
+//// set: ac-a2 — 同上：取负、乘常数、减字面量数组，结构实参整体求值后的零元素 -0.0，两次取负
+//// model: A20
+function sv
+input Real x;
+output Real o[3];
+algorithm
+o := {x, 2*x, 3*x};
+end sv;
+model A20
+parameter Real x = 2;
+parameter Real phi[3] = -sv(x);
+end A20;
+//// model: A21
+function sv
+input Real x;
+output Real o[3];
+algorithm
+o := {0*x, 2*x, 3*x};
+end sv;
+model A21
+parameter Real x = 2 annotation(Evaluate = true);
+parameter Real phi[3] = -sv(x);
+end A21;
+//// model: A22
+function sv
+input Real x;
+output Real o[3];
+algorithm
+o := {0*x, 2*x, 3*x};
+end sv;
+model A22
+parameter Real x = 2 annotation(Evaluate = true);
+parameter Real phi[3] = 2 * sv(x);
+end A22;
+//// model: A23
+function sv
+input Real x;
+output Real o[3];
+algorithm
+o := {0*x, 2*x, 3*x};
+end sv;
+model A23
+parameter Real x = 2 annotation(Evaluate = true);
+parameter Real phi[3] = sv(x) - {1, 0, 2};
+end A23;
+//// model: A24
+function so
+input Integer m;
+output Real o[m];
+algorithm
+o := {(k - 1)*2*3.14159/m for k in 1:m};
+end so;
+model A24
+parameter Integer m = 3;
+parameter Real p2[m] = -(-so(m));
+parameter Real p3[m] = -so(m) + so(m);
+end A24;

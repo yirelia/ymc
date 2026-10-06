@@ -1,0 +1,32 @@
+//// set: ac-ut — 数组值调用在参数数组绑定里 + 取负的零（单测原文）
+//// model: AC1
+function so
+  input Integer m;
+  output Real o[m];
+algorithm
+  o := {(k - 1)*2*3.14159/m for k in 1:m};
+end so;
+function sv
+  input Real x;
+  output Real o[3];
+algorithm
+  o := {x, 2*x, 3*x};
+end sv;
+model AC1
+  parameter Integer m = 3;
+  parameter Real x = 2;
+  parameter Real phase[m] = -so(m);
+  parameter Real scaled[m] = x * so(m);
+  parameter Real kept[3] = 2 * sv(x);
+  parameter Real neg[3] = -sv(x);
+end AC1;
+//// model: NZ1
+model NZ1
+  parameter Real p = -0.0;
+  parameter Real q = -(0.0);
+  parameter Real r[3] = -{0.0, 1.0, 2.0};
+  parameter Real s[2] = -{0.0, 0.0};
+  Real y[3];
+equation
+  y = -{0.0, 1.0, 2.0} * time;
+end NZ1;

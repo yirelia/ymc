@@ -135,3 +135,9 @@ variability"）、条件组件的条件。FAIL / ACCEPTS-INVALID / CRASH 0。
 参数绑到结构实参的用户函数调用求值（ToSpacePhasor 的 `phi[m] = symmetricOrientation(m)`、结构参数代入后的 `g(m)`）之后，
 电机一族再往下是表达式里的数组值调用（"qualified function call [array-valued call inside an expression]"，MSL 全库此类
 三十余个，下一桶）与条件组件的条件。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-06 加宽 61s 之后：PASS 100（不变）
+
+参数数组绑定里嵌在运算中的数组值调用（Polyphase.Sources 的 `phase[m] = -symmetricOrientation(m)`）+ 调用输出维的实参成结构
+参数 + 取负的零（旧错：`-{0.0, …}` 的零元素 omc 打 -0.0）之后，SKIP 原因的挪动：20 个 qualified function call → connect operand shape；7 个 qualified function call → constant evaluation；6 个 qualified function call → conditional component condition；4 个 qualified function call → non-numeric function argument；3 个 qualified function call → vectorized call argument；3 个 qualified function call → constant user call not evaluated。FAIL / ACCEPTS-INVALID /
+CRASH 0。

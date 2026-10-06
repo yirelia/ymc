@@ -1,0 +1,97 @@
+//// set: ac-a1 — 参数数组绑定里嵌在运算中的数组值调用（取负 / 乘参数 / 结构与非结构实参 / 子模型 / 相减；方程里的 SKIP）
+//// model: A10
+function so
+input Integer m;
+output Real o[m];
+algorithm
+o := {(k - 1)*2*3.14159/m for k in 1:m};
+end so;
+model A10
+parameter Integer m = 3;
+parameter Real phase[m] = -so(m);
+end A10;
+//// model: A11
+function so
+input Integer m;
+output Real o[m];
+algorithm
+o := {(k - 1)*2*3.14159/m for k in 1:m};
+end so;
+model A11
+parameter Integer m = 3;
+parameter Real x = 1;
+parameter Real phase[m] = x * so(m);
+end A11;
+//// model: A12
+function sv
+input Real x;
+output Real o[3];
+algorithm
+o := {x, 2*x, 3*x};
+end sv;
+model A12
+parameter Real x = 2;
+parameter Real phi[3] = 2 * sv(x);
+end A12;
+//// model: A13
+function sv
+input Real x;
+output Real o[3];
+algorithm
+o := {x, 2*x, 3*x};
+end sv;
+model A13
+parameter Real x = 2;
+parameter Real phi[3] = sv(x) + {1, 2, 3};
+end A13;
+//// model: A14
+function so
+input Integer m;
+output Real o[m];
+algorithm
+o := {(k - 1)*2*3.14159/m for k in 1:m};
+end so;
+model A14
+parameter Integer m = 3;
+Real y[m];
+equation
+y = -so(m) * time;
+end A14;
+//// model: A15
+function sv
+input Real x;
+output Real o[3];
+algorithm
+o := {x, 2*x, 3*x};
+end sv;
+model A15
+Real x = time;
+Real y[3];
+equation
+y = 2 * sv(x);
+end A15;
+//// model: A16
+function so
+input Integer m;
+output Real o[m];
+algorithm
+o := {(k - 1)*2*3.14159/m for k in 1:m};
+end so;
+model S
+parameter Integer m = 3;
+parameter Real phase[m] = -so(m);
+end S;
+model A16
+S s(m = 2);
+end A16;
+//// model: A17
+function so
+input Integer m;
+output Real o[m];
+algorithm
+o := {(k - 1)*2*3.14159/m for k in 1:m};
+end so;
+model A17
+parameter Integer m = 3;
+parameter Real phase[m] = so(m) - so(m);
+end A17;

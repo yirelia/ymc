@@ -2527,6 +2527,17 @@ class Flattener {
         return add(std::move(r));
       }
       case ExprKind::Unary: {
+        // 取负的是会求值成字面量的用户函数数组调用（实参是字面量 / 结构参数）：omc 先整体化简绑定——调用求值成数组、数组取负
+        // （不护零）——再标量化，零元素是 -0.0（AC 探针 a21 `-sv(x)`、x 结构参数 → `phi[1] = -0.0`；MSL Polyphase.Sources 的
+        // `phase = -symmetricOrientation(m)`）→ 留 `(-f(…))[k]`，压平末尾代入求值后取元素。不会求值的照逐元素 `-f(x)[k]`（a20）。
+        if (x.un == UnOp::Minus && x.ty.is_array() && user_call(x.a) && call_args_fold(x.a) && idx.size() == x.ty.dims.size()) {
+          Expr sx;
+          sx.kind = ExprKind::Subscript;
+          sx.a = e;
+          for (std::int64_t k : idx) sx.args.push_back(lit_int(k));
+          sx.ty = x.ty.element_type();
+          return add(std::move(sx));
+        }
         Id<Expr> sa = scalarize(x.a, idx);
         Expr r; r.kind = ExprKind::Unary; r.un = x.un; r.a = sa; r.ty = result_.model.exprs[sa].ty;
         return add(std::move(r));
@@ -2576,6 +2587,15 @@ class Flattener {
           c.args[0] = scalarize(x.args[0], idx);
           c.ty = x.ty.element_type();
           return add(std::move(c));
+        }
+        // 用户函数的数组调用（参数数组绑定里，见 param_spread_）：整个调用不动、取元素 `f(…)[k]`（AC 探针 a12 / a13）。
+        if (user_call(e) && x.ty.is_array() && idx.size() == x.ty.dims.size()) {
+          Expr sx;
+          sx.kind = ExprKind::Subscript;
+          sx.a = e;
+          for (std::int64_t k : idx) sx.args.push_back(lit_int(k));
+          sx.ty = x.ty.element_type();
+          return add(std::move(sx));
         }
         set_unsupported("array expression scalarization");
         return lit_int(0);
@@ -3093,6 +3113,67 @@ class Flattener {
   }
 
   // 条件是否为运行时（可作为 flat if 保留）：引用 time（未解析）或连续/离散变量，或残留调用。参数/常量 → false（SKIP）。
+  // 整数式里的参数 / 常量引用按值代入后折成整数（调用的输出维，见 try_emit_user_call）；求得出就把其中的参数标成结构参数。
+  // 引用变量 / 函数局部 / 求不出 → nullopt（维留未知）。
+  std::optional<std::int64_t> fold_int_marking(Id<Expr> sub) {
+    std::unordered_map<std::string, Id<Expr>> vals;
+    std::vector<std::string> params;
+    bool ok = true;
+    auto walk = [&](auto& self, Id<Expr> x) -> void {
+      if (!ok || !x.is_valid()) return;
+      const Expr e = result_.model.exprs[x];   // 拷贝（下面 flat_param_value / literal_of 会 add）
+      if (e.kind == ExprKind::Cref) {
+        if (e.cref.resolved_node == kFnLocal) { ok = false; return; }
+        const std::string k = expr_cref_key(e.cref);
+        if (vals.count(k)) return;
+        const FlatVariable* v = emitted_var(k);
+        if (!v || (v->var_kind != FlatVarKind::Parameter && v->var_kind != FlatVarKind::Constant)) { ok = false; return; }
+        const bool is_param = v->var_kind == FlatVarKind::Parameter;
+        const std::optional<CVal> cv = flat_param_value(k, 0);
+        if (!cv || is_arr(*cv) || cv->k == CVal::K::Record || cv->k == CVal::K::Undef) { ok = false; return; }
+        vals.emplace(k, literal_of(*cv));
+        if (is_param) params.push_back(k);
+        return;
+      }
+      for (Id<Expr> a : e.args) self(self, a);
+      self(self, e.a);
+      self(self, e.b);
+      self(self, e.c);
+    };
+    walk(walk, sub);
+    if (!ok || result_.unsupported) return std::nullopt;
+    const std::optional<std::int64_t> n = fold_int(simplify_expr(clone_subst(sub, vals)));
+    if (n)
+      for (const std::string& k : params) record_structural(k);
+    return n;
+  }
+  // 数值字面量（嵌套）数组的判定 / 取负（见 simplify_expr 的 Unary 支）。
+  bool all_numeric_literal(Id<Expr> id) {
+    const Expr& x = result_.model.exprs[id];
+    if (x.kind == ExprKind::Array) {
+      for (Id<Expr> el : x.args)
+        if (!all_numeric_literal(el)) return false;
+      return !x.args.empty();
+    }
+    return x.kind == ExprKind::IntLit || x.kind == ExprKind::RealLit;
+  }
+  bool all_zero_literal(Id<Expr> id) {
+    const Expr& x = result_.model.exprs[id];
+    if (x.kind == ExprKind::Array) {
+      for (Id<Expr> el : x.args)
+        if (!all_zero_literal(el)) return false;
+      return true;
+    }
+    return (x.kind == ExprKind::IntLit && x.ival == 0) || (x.kind == ExprKind::RealLit && x.rval == 0.0);
+  }
+  Id<Expr> negate_literal_array(Id<Expr> id) {
+    const Expr x = result_.model.exprs[id];   // 拷贝（下面 add）
+    if (x.kind == ExprKind::IntLit) return lit_int(-x.ival);
+    if (x.kind == ExprKind::RealLit) return lit_real(-x.rval);   // IEEE 取负：0.0 → -0.0
+    Expr r = x;
+    for (Id<Expr>& el : r.args) el = negate_literal_array(el);
+    return add(std::move(r));
+  }
   // 纯用户函数（发射过、非记录构造、非外部、非不纯）的调用。
   bool user_call(Id<Expr> id) {
     const Expr& e = result_.model.exprs[id];
@@ -3819,9 +3900,12 @@ class Flattener {
       if (!rhsE.is_valid()) {
         array_call_ok_ = I_.absyn.exps[braw].kind == ExpKind::Call;   // 整个绑定是调用（见 array_call_ok_）
         if_top_ = I_.absyn.exps[braw].kind == ExpKind::IfExp;         // 整个绑定是 if 表达式（见 if_top_）
+        const SVariability bv = var_min(ctx.var_floor, I_.comps[cid].attributes.variability);
+        param_spread_ = bv == SVariability::Param || bv == SVariability::Const;   // 逐元素摊开的绑定（见 param_spread_）
         rhsE = simplify_expr(inst_exp(braw, bscope, bprefix));
         array_call_ok_ = false;
         if_top_ = false;
+        param_spread_ = false;
       }
       return rhsE;
     };
@@ -8782,7 +8866,9 @@ class Flattener {
     if (!fn_scope_ && rty.is_array()) {
       // 模型语境里嵌在别的运算中的数组调用：须逐元素展开，未做 → SKIP。向量化调用的体不受此限（T9 `m = array(H(x[$i1]) for
       // $i1 in 1:3)`），它所在的位置由推导式的消费方把关（scalarize 的 red_scalarize_ok_）。
-      if (!whole && vd.empty()) return fn_fail<Id<Expr>>("array-valued call inside an expression");
+      // 参数 / 常量数组的绑定（逐元素摊开）里的除外：omc 逐元素取 `f(…)[k]`（AC 探针 a12 `2.0 * sv(x)[1]`、a13），结构实参的
+      // 代入后求值成字面量（a10 / a11 / a16 / a17，MSL Polyphase.Sources 的 `phase[m] = -symmetricOrientation(m)`）。
+      if (!whole && vd.empty() && !param_spread_) return fn_fail<Id<Expr>>("array-valued call inside an expression");
       // 调用处求输出维（NFCall.evaluateCallTypeDim :3061-3088）：维表达式里的输入换成实参再求值；buildParameterTree
       // 只放输入（局部不代换，:3104 TODO）→ 求不出的维留未知（与任何维相容，FuncUnknownDim3 `Real[n] result`）。
       for (Dimension& d : rty.dims) {
@@ -8792,7 +8878,10 @@ class Flattener {
           for (std::size_t j = 0; j < inputs.size(); ++j) if (params[j].name == nm) return args[j];
           return {};
         }, ok);
-        const std::optional<std::int64_t> n = ok ? fold_int(sub) : std::nullopt;
+        std::optional<std::int64_t> n = ok ? fold_int(sub) : std::nullopt;
+        // 维式里换进来的是参数（`symmetricOrientation(m)` 的 `o[m]`）：omc 先 Structural.markExp 再 Ceval（NFCall.mo:2984-2990
+        // v1.25.0）→ 参数成结构参数、按值求维（AC 探针 a10、FB 探针 f24：m final）。
+        if (ok && !n) n = fold_int_marking(sub);
         d = Dimension{};
         if (n) { d.kind = DimKind::Integer; d.size = *n; } else { d.kind = DimKind::Unknown; }
       }
@@ -11152,7 +11241,12 @@ class Flattener {
     // 书写的负实数字面量 `-0.0` / `-2.5` 直接成负字面量（omc 打 `x = -0.0`）；别的取负（括号里的、代入参数后的、化简出的）
     // 留给 simplify_expr，零取负得正零（Ceval.evalUnaryOp，NFSimplifyExp.simplifyUnaryOp :1140-1150 v1.25.0；Z 探针：
     // `-(0.0) * time`、`-p`（p = 0 结构参数）omc 都打 `0.0`；MSL 的 NPN `iS = -Ccs * der(vcs)`，Ccs = 0 → `iS = 0.0`）。
-    if (e.op == Op::UMinus && I_.absyn.exps[e.a].kind == ExpKind::RealLit) return lit_real(-I_.absyn.exps[e.a].rval);
+    // 括号里的字面量同样（omc 的语法分析把数字字面量的取负直接折进字面量，括号不留；AC 探针 a31 `q = -(0.0)` → `-0.0`）。
+    {
+      Id<Exp> la = e.a;
+      while (I_.absyn.exps[la].kind == ExpKind::Tuple && I_.absyn.exps[la].args.size() == 1) la = I_.absyn.exps[la].args[0];
+      if (e.op == Op::UMinus && I_.absyn.exps[la].kind == ExpKind::RealLit) return lit_real(-I_.absyn.exps[la].rval);
+    }
     Id<Expr> a = inst_exp(e.a, enclosing, prefix);
     if (e.op == Op::Not) {
       const Type tya = op_type(a);   // 数组字面量按形状取类型（`not {true, false}`）
@@ -14110,6 +14204,12 @@ class Flattener {
         if (op == UnOp::Minus) {
           if (ea.kind == ExprKind::IntLit) return lit_int(-ea.ival);
           if (ea.kind == ExprKind::RealLit) return lit_real(ea.rval == 0.0 ? 0.0 : -ea.rval);   // 零取负得正零（见 unary）
+          // 字面量数组取负：Ceval.evalUnaryOp 只在整个数组是零时原样返回，否则逐元素 evalUnaryMinus、不护零（NFCeval.mo:
+          // 1370-1393 v1.25.0）→ 零元素成 -0.0（AC 探针 a30 `p = -{0.0, 1.0, 2.0}` → `p[1] = -0.0`、a34 全零 → `0.0`）。
+          if (ea.kind == ExprKind::Array && all_numeric_literal(a)) {
+            if (all_zero_literal(a)) return a;
+            return negate_literal_array(a);
+          }
           bool neg = true;
           while (result_.model.exprs[a].kind == ExprKind::Unary) { a = result_.model.exprs[a].a; neg = !neg; }
           return neg ? negate_expr(a) : a;
@@ -17359,6 +17459,8 @@ class Flattener {
   std::unordered_set<std::uint32_t> derived_mods_;
   std::unordered_set<std::uint32_t> derived_cref_mods_;
   std::vector<std::string> pending_pre_;
+  // 正在定型参数 / 常量数组的绑定（逐元素摊开）：式子里的数组值用户函数调用可以留着，scalarize 取 `f(…)[k]`。
+  bool param_spread_ = false;
   // 发射过的用户函数：压平名（path_key）→ 定义（eval_flat_call）。
   std::unordered_map<std::string, FnRef> fn_refs_;   // when 外 pre / change 的声明为连续的实参（组件路径，check_pre_args）   // 其中记录引用整体绑定拆出的（split_record_cref_mod）
   std::size_t synth_mod_floor_ = 0;

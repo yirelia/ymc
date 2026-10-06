@@ -5197,6 +5197,39 @@ YMC_TEST(flatten_parameter_bound_to_user_function_call) {
                            "  t.y[2] = t.TM[2,1] * t.u[1] + t.TM[2,2] * t.u[2] + t.TM[2,3] * t.u[3];\nend FB1;\n"));
 }
 
+YMC_TEST(flatten_array_call_inside_parameter_array_binding) {
+  // 参数数组绑定里嵌在运算中的数组值用户函数调用（MSL Polyphase.Sources `phase[m] = -symmetricOrientation(m)`）：逐元素取
+  // `f(…)[k]`；实参是结构参数的整体求值（调用的输出维里的实参成结构参数，NFCall.evaluateCallTypeDim），取负在数组层（零元素
+  // -0.0）；不是结构参数的留 `2.0 * sv(x)[1]` / `-sv(x)[1]`。期望 = omc 1.25.0 实跑（2026-10-06，下同）。
+  YMC_CHECK_EQ(flatten_src("function so\n  input Integer m;\n  output Real o[m];\nalgorithm\n"
+                           "  o := {(k - 1)*2*3.14159/m for k in 1:m};\nend so;\nfunction sv\n  input Real x;\n"
+                           "  output Real o[3];\nalgorithm\n  o := {x, 2*x, 3*x};\nend sv;\nmodel AC1\n"
+                           "  parameter Integer m = 3;\n  parameter Real x = 2;\n  parameter Real phase[m] = -so(m);\n"
+                           "  parameter Real scaled[m] = x * so(m);\n  parameter Real kept[3] = 2 * sv(x);\n"
+                           "  parameter Real neg[3] = -sv(x);\nend AC1;\n"),
+               std::string("function sv\n  input Real x;\n  output Real[3] o;\nalgorithm\n  o := {x, 2.0 * x, 3.0 * x};\n"
+                           "end sv;\n\nclass AC1\n  final parameter Integer m = 3;\n  parameter Real x = 2.0;\n"
+                           "  parameter Real phase[1] = -0.0;\n  parameter Real phase[2] = -2.094393333333333;\n"
+                           "  parameter Real phase[3] = -4.188786666666666;\n  parameter Real scaled[1] = 0.0;\n"
+                           "  parameter Real scaled[2] = x * 2.094393333333333;\n"
+                           "  parameter Real scaled[3] = x * 4.188786666666666;\n  parameter Real kept[1] = 2.0 * sv(x)[1];\n"
+                           "  parameter Real kept[2] = 2.0 * sv(x)[2];\n  parameter Real kept[3] = 2.0 * sv(x)[3];\n"
+                           "  parameter Real neg[1] = -sv(x)[1];\n  parameter Real neg[2] = -sv(x)[2];\n"
+                           "  parameter Real neg[3] = -sv(x)[3];\nend AC1;\n"));
+}
+
+YMC_TEST(flatten_negative_zero_literal_negation) {
+  // 取负的零：书写的 `-0.0` / `-(0.0)` 是负零字面量；字面量数组整体取负不护零（`-{0.0, 1.0, 2.0}` → -0.0）、全零数组原样；
+  // 方程里乘到变量上的零照折成 0.0。
+  YMC_CHECK_EQ(flatten_src("model NZ1\n  parameter Real p = -0.0;\n  parameter Real q = -(0.0);\n"
+                           "  parameter Real r[3] = -{0.0, 1.0, 2.0};\n  parameter Real s[2] = -{0.0, 0.0};\n  Real y[3];\n"
+                           "equation\n  y = -{0.0, 1.0, 2.0} * time;\nend NZ1;\n"),
+               std::string("class NZ1\n  parameter Real p = -0.0;\n  parameter Real q = -0.0;\n  parameter Real r[1] = -0.0;\n"
+                           "  parameter Real r[2] = -1.0;\n  parameter Real r[3] = -2.0;\n  parameter Real s[1] = 0.0;\n"
+                           "  parameter Real s[2] = 0.0;\n  Real y[1];\n  Real y[2];\n  Real y[3];\nequation\n  y[1] = 0.0;\n"
+                           "  y[2] = -time;\n  y[3] = -2.0 * time;\nend NZ1;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);
