@@ -1,0 +1,102 @@
+//// set: sd-w4 — 子实例数组的下标越界（按实例的维判）、向前引用、组件数组元素、类型维、二维、两层子实例
+//// model: W40
+connector P
+parameter Integer n = 1;
+Real s[n];
+end P;
+block B
+parameter Integer n = 1;
+P p(n = 3);
+Real y = p.s[3];
+equation
+p.s = {1, 2, 3};
+end B;
+model W40
+B b;
+end W40;
+//// model: W41
+connector P
+parameter Integer n = 1;
+Real s[n];
+end P;
+block B
+parameter Integer n = 5;
+P p(n = 3);
+Real y = p.s[4];
+equation
+p.s = {1, 2, 3};
+end B;
+model W41
+B b;
+end W41;
+//// model: W42
+model A
+parameter Integer n = 1;
+Real s[n];
+end A;
+model W42
+Real u[:] = a.s;
+A a(n = 2);
+equation
+a.s = {1, 2};
+end W42;
+//// model: W43
+model A
+parameter Integer n = 1;
+Real s[n];
+end A;
+model W43
+A a[2](each n = 2);
+Real u[:] = a[1].s;
+equation
+a[1].s = {1, 2};
+a[2].s = {3, 4};
+end W43;
+//// model: W44
+model A
+parameter Integer n = 1;
+Real s[n];
+end A;
+model W44
+A a[2](n = {1, 2});
+Real u[:] = a[2].s;
+equation
+a[1].s = {1};
+a[2].s = {3, 4};
+end W44;
+//// model: W45
+type E = enumeration(x, y);
+model A
+Real s[E];
+end A;
+model W45
+A a;
+Real u[E] = a.s;
+equation
+a.s = {1, 2};
+end W45;
+//// model: W46
+model A
+parameter Integer n = 2;
+Real s[n, 2];
+end A;
+model W46
+A a(n = 3);
+Real z = sum(a.s);
+equation
+a.s = ones(3, 2);
+end W46;
+//// model: W47
+model A
+parameter Integer n = 2;
+Real s[n];
+end A;
+model B
+A a(n = 3);
+end B;
+model W47
+B b;
+Real z = sum(b.a.s);
+equation
+b.a.s = {1, 2, 3};
+end W47;

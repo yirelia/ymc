@@ -172,3 +172,8 @@ Evaluate 参数链都短，链上没有 Evaluate = false / fixed 属性）。FAI
 继承来的同名元素照 omc 去重（留先出现的，其余须相同）之后，PowerConverters 的 18 个示例（RectifierBridge2mPulse 6、
 RectifierCenterTap2mPulse 5、RectifierCenterTapmPulse 5、HBridge 2）转 PASS——它们的多相整流器同时继承了两个都声明 `m` /
 `fire_p` 的接口类。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-07 加宽 61y 之后：PASS 122（不变）
+
+子实例里数组的维改按它自己的实例取（发射时记下的实际维）、一维长 1 的向量化收成单元素数组之后，514 个示例逐例 verdict 与
+SKIP 原因都不变（受益的是 testsuite 里老 MSL 块 BC* / BM* 等 41 个）。FAIL / ACCEPTS-INVALID / CRASH 0。

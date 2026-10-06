@@ -1,0 +1,16 @@
+//// set: sd-ut — 子实例数组按自己的维（单测原文）
+//// model: WA1
+connector P
+  parameter Integer n = 1;
+  Real s[n];
+end P;
+block B
+  parameter Integer n = 1;
+  P p(n = 3);
+  Real u[:] = p.s;
+equation
+  p.s = {1, 2, 3};
+end B;
+model WA1
+  B b;
+end WA1;

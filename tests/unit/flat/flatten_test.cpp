@@ -5369,6 +5369,16 @@ YMC_TEST(flatten_nonidentical_inherited_elements_unsupported) {
   YMC_CHECK_EQ(out, std::string("<unsupported:duplicate elements not identical>"));
 }
 
+YMC_TEST(flatten_subinstance_array_reference_uses_its_own_dims) {
+  // 子实例里的数组 `p.s` 的维按它那个实例的修饰定（p.n = 3），不是引用处同名的参数（b.n = 1）；`u[:] = p.s` 的绑定 omc
+  // 挪成整体数组方程 `b.u = b.p.s`。期望 = omc 1.25.0 实跑（2026-10-07）。
+  YMC_CHECK_EQ(flatten_src("connector P\n  parameter Integer n = 1;\n  Real s[n];\nend P;\nblock B\n  parameter Integer n = 1;\n"
+                           "  P p(n = 3);\n  Real u[:] = p.s;\nequation\n  p.s = {1, 2, 3};\nend B;\nmodel WA1\n  B b;\nend WA1;\n"),
+               std::string("class WA1\n  parameter Integer b.n = 1;\n  final parameter Integer b.p.n = 3;\n  Real b.p.s[1];\n"
+                           "  Real b.p.s[2];\n  Real b.p.s[3];\n  Real b.u[1];\n  Real b.u[2];\n  Real b.u[3];\nequation\n"
+                           "  b.u = b.p.s;\n  b.p.s[1] = 1.0;\n  b.p.s[2] = 2.0;\n  b.p.s[3] = 3.0;\nend WA1;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

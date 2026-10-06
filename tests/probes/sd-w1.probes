@@ -1,0 +1,91 @@
+//// set: sd-w1 — 子实例里参数维数组的整体引用：顶层 / 块里 / final n = n、u[:] 绑定、sum、等式
+//// model: W10
+model W10
+Real y[2] = {1, 2};
+Real u[:] = y;
+end W10;
+//// model: W11
+connector P
+parameter Integer n = 1;
+Real s[n];
+end P;
+model W11
+P p(n = 2);
+Real u[:] = p.s;
+equation
+p.s = {1, 2};
+end W11;
+//// model: W12
+connector P
+parameter Integer n = 1;
+Real s[n];
+end P;
+block B
+parameter Integer n = 1;
+P p(final n = n);
+protected
+Real u[:] = p.s;
+equation
+p.s = fill(time, n);
+end B;
+model W12
+B b(n = 2);
+end W12;
+//// model: W13
+connector P
+parameter Integer n = 1;
+Real s[n];
+end P;
+block B
+parameter Integer n = 1;
+P p(final n = n);
+Real y[n];
+equation
+y = p.s;
+p.s = fill(time, n);
+end B;
+model W13
+B b(n = 2);
+end W13;
+//// model: W14
+connector P
+parameter Integer n = 1;
+Real s[n];
+end P;
+block B
+parameter Integer n = 1;
+P p(final n = n);
+Real y[n];
+equation
+y = 2 * p.s;
+p.s = fill(time, n);
+end B;
+model W14
+B b(n = 2);
+end W14;
+//// model: W15
+connector P
+parameter Integer n = 1;
+Real s[n];
+end P;
+block B
+parameter Integer n = 1;
+P p(final n = n);
+Real z = sum(p.s);
+equation
+p.s = fill(time, n);
+end B;
+model W15
+B b(n = 2);
+end W15;
+//// model: W16
+model A
+parameter Integer n = 1;
+Real s[n];
+end A;
+model W16
+A a(n = 3);
+Real u[3] = a.s;
+equation
+a.s = {1, 2, 3};
+end W16;

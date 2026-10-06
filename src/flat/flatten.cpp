@@ -8929,6 +8929,23 @@ class Flattener {
   }
   // 向量化调用的结果：末维在最内层，`array(array(f(…) for $i2 in 1:d2) for $i1 in 1:d1)`（T10 探针）。
   Id<Expr> wrap_vectorized(Id<Expr> call, const std::vector<std::int64_t>& vd) {
+    // 只向量化一维、长 1：omc 的化简把数组构造换成那一个元素的数组字面量（simplifyArrayConstructor 的 dim_size == 1 支，
+    // NFSimplifyExp.mo:600-615 v1.25.0），等式里随后逐元素标量化（WA 探针 w60 `y[1] = abs(u[1])`、w61 用户函数同；两维的
+    // `1:1 × 1:1` 不收，w63）。
+    if (vd.size() == 1 && vd[0] == 1) {
+      ExprCref it;
+      it.parts.push_back({in_.intern("$i1"), {}});
+      const std::unordered_map<std::string, Id<Expr>> vals{{expr_cref_key(it), lit_int(1)}};
+      const Id<Expr> el = simplify_expr(clone_subst(call, vals, /*fold_subs=*/true));
+      Dimension d;
+      d.kind = DimKind::Integer;
+      d.size = 1;
+      Expr arr;
+      arr.kind = ExprKind::Array;
+      arr.args = {el};
+      arr.ty = Type::array_of(result_.model.exprs[el].ty, {d});
+      return add(std::move(arr));
+    }
     Id<Expr> e = call;
     for (std::size_t k = vd.size(); k-- > 0;) {
       Expr rg;
@@ -11171,6 +11188,29 @@ class Flattener {
   // cref，且被引用者须先于引用处发射（前向引用 / 多段 → false，调用方 SKIP）。
   bool leaf_decl_dims(const SElement& lcel, const Cref& c, NodeId enclosing, const std::vector<Symbol>& prefix,
                       std::vector<std::int64_t>& out, std::vector<std::vector<Id<Expr>>>* labels = nullptr) {
+    // 子实例里的数组组件（多段引用 `p.s`）：维写在它自己的类里、按那个实例的修饰定——取发射时记下的实际维（deep_dims：
+    // name_dims_ / 第二遍的 carry），不在引用处的作用域里求（引用处同名的参数会顶替：`B` 里 `parameter Integer n = 1;
+    // P p(n = 3); … p.s` 此前按 B 的 n 当 1 维，WA 探针 w30-w32；引用处没有同名参数的就求不出，MSL 老版块 BC*/BM* 的
+    // `u[:] = inPort.signal`）。类型维（Boolean / 枚举，要标签）照旧走下面。
+    if (c.parts.size() > 1) {
+      bool type_dim = false;
+      for (const std::vector<Id<Exp>>* ds : {&lcel.attr.dims, &lcel.type.dims})
+        for (Id<Exp> d : *ds) {
+          if (I_.absyn.exps[d].kind != ExpKind::Colon && classify_type_dim(d, enclosing, prefix)) type_dim = true;
+          if (result_.unsupported) return false;
+        }
+      if (!type_dim) {
+        std::vector<Symbol> chain = prefix;
+        for (const CrefPart& p : c.parts) chain.push_back(p.name);
+        const std::optional<std::vector<std::int64_t>> dd = deep_dims(lcel, chain);
+        if (!dd) return false;
+        for (std::int64_t n : *dd) {
+          out.push_back(n);
+          if (labels) labels->emplace_back();
+        }
+        return true;
+      }
+    }
     const ScodeScope lscope = scode_scope_of(enclosing);
     bool colon = false;
     for (const std::vector<Id<Exp>>* ds : {&lcel.attr.dims, &lcel.type.dims})

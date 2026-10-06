@@ -1,0 +1,64 @@
+//// set: sd-w2 — 同上：维经 extends 修饰 `nout = size(k, 1)` / `= m` 一路传到连接器
+//// model: W20
+connector P
+parameter Integer n = 1;
+output Real s[n];
+end P;
+block MO
+parameter Integer nout(min = 1) = 1;
+P p(final n = nout);
+output Real y[nout];
+equation
+y = p.s;
+end MO;
+block C
+parameter Real k[:] = {1};
+extends MO(final nout = size(k, 1));
+equation
+p.s = k;
+end C;
+model W20
+C c;
+end W20;
+//// model: W21
+connector P
+parameter Integer n = 1;
+output Real s[n];
+end P;
+block MO
+parameter Integer nout(min = 1) = 1;
+P p(final n = nout);
+output Real y[nout];
+equation
+y = p.s;
+end MO;
+block C
+parameter Real k[:] = {1, 2};
+extends MO(final nout = size(k, 1));
+equation
+p.s = k;
+end C;
+model W21
+C c;
+end W21;
+//// model: W22
+connector P
+parameter Integer n = 1;
+output Real s[n];
+end P;
+block MO
+parameter Integer nout(min = 1) = 1;
+P p(final n = nout);
+output Real y[nout];
+equation
+y = p.s;
+end MO;
+block C
+parameter Integer m = 2;
+extends MO(final nout = m);
+equation
+p.s = fill(1, m);
+end C;
+model W22
+C c;
+end W22;

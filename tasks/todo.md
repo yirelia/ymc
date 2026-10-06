@@ -1754,6 +1754,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           同名 → omc 报 DUPLICATE_ELEMENTS_NOT_IDENTICAL → SKIP。exp_equal 挪进 absyn_util 供 inst / flatten 共用。
           scodeinst 的 DuplicateElements7 / 8 / Cond1 文件 Result 与 1.25.0 不符（空 / 旧前端），进分歧账本。
           门：slice 632→631 例（DuplicateElements8 进账本剔除）PASS 573 / FAIL 0 / oracle=live 不一致 0；scodeinst 567→573 / 29→32（新增 3 个进分歧账本）；testsuite 实跑 PASS 1513→1527 / FAIL 0 / ACC 3 / CRASH 0；MSL 示例 PASS 104→122；探针 7823→7845（du 共 22 个）；单测 270→272。
+    - [x] (61y) flat：子实例里数组的维按它自己的实例取 + 一维长 1 的向量化收成单元素数组（2026-10-07）：
+          多段引用 `p.s`（子实例里的参数维数组）此前在引用处的作用域里求维：引用处没有同名参数 → SKIP "whole-array reference"
+          （老 MSL 块 BC* / BM* 的 `u[:] = inPort.signal` 等 49 个 testsuite 用例）；有同名参数 → 按引用处的值算错（`B` 里
+          `parameter Integer n = 1; P p(n = 3); … p.s` 当 1 维，WA 探针 w30-w32 / w41 越界判错）。leaf_decl_dims 对多段引用改用
+          发射时记下的实际维（deep_dims：name_dims_ / 第二遍的 carry），类型维照旧。放开后露出一类旧错：只向量化一维、长 1 的调用
+          omc 化简成单元素数组再逐元素标量化（simplifyArrayConstructor 的 dim_size == 1 支：`y[1] = abs(u[1])`），ymc 留着
+          `array(… for $i1 in 1:1)`——BM1 等 16 个，已照改（两维的 `1:1 × 1:1` 不收）。
+          门：slice 631 例 PASS 573 / FAIL 0 / oracle=live 不一致 0（不变）；scodeinst 573 / 32（不变，在账）；testsuite 实跑 PASS 1527→1568 / FAIL 0 / ACC 3 / CRASH 0；MSL 示例 PASS 122（不变）；探针 7845→7881（sd 共 36 个）；单测 272→273。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

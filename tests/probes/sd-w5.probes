@@ -1,0 +1,47 @@
+//// set: sd-w5 — 向量化内建 / 用户函数在等式、绑定里（两元素保留 array(…) 形态）
+//// model: W50
+model W50
+Real u[2] = {time, 2 * time};
+Real y[2];
+equation
+y = abs(u);
+end W50;
+//// model: W51
+model W51
+Real u[2] = {time, 2 * time};
+Real y[2];
+equation
+y = sin(u);
+end W51;
+//// model: W52
+model W52
+Real u[2] = {time, 2 * time};
+Real y[2];
+equation
+y = sign(u);
+end W52;
+//// model: W53
+block B
+parameter Integer n = 1;
+input Real u[n];
+output Real y[n];
+equation
+y = abs(u);
+end B;
+model W53
+B b(n = 2);
+equation
+b.u = {time, -time};
+end W53;
+//// model: W54
+model W54
+Real u[2] = {time, 2 * time};
+Real y[2] = abs(u);
+end W54;
+//// model: W55
+model W55
+Real u[2] = {time, 2 * time};
+Real y[2];
+equation
+y = 2 * abs(u);
+end W55;

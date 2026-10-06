@@ -1,0 +1,47 @@
+//// set: sd-w3 — 引用处有同名参数 n（与子实例的维不同）：整体引用 / sum / 等式
+//// model: W30
+connector P
+parameter Integer n = 1;
+Real s[n];
+end P;
+block B
+parameter Integer n = 1;
+P p(n = 3);
+Real u[:] = p.s;
+equation
+p.s = {1, 2, 3};
+end B;
+model W30
+B b;
+end W30;
+//// model: W31
+connector P
+parameter Integer n = 1;
+Real s[n];
+end P;
+block B
+parameter Integer n = 1;
+P p(n = 3);
+Real z = sum(p.s);
+equation
+p.s = {1, 2, 3};
+end B;
+model W31
+B b;
+end W31;
+//// model: W32
+connector P
+parameter Integer n = 1;
+Real s[n];
+end P;
+block B
+parameter Integer n = 1;
+P p(n = 3);
+Real y[3];
+equation
+y = p.s;
+p.s = {1, 2, 3};
+end B;
+model W32
+B b;
+end W32;

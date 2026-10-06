@@ -1,0 +1,67 @@
+//// set: sd-w6 — 只向量化一维长 1：收成单元素数组、逐元素标量化（内建 / 用户函数、绑定、sum、算法）；两维不收
+//// model: W60
+model W60
+Real u[1] = {time};
+Real y[1];
+equation
+y = abs(u);
+end W60;
+//// model: W61
+function f
+input Real x;
+output Real y;
+algorithm
+y := 2 * x;
+end f;
+model W61
+Real u[1] = {time};
+Real y[1];
+equation
+y = f(u);
+end W61;
+//// model: W62
+function f
+input Real x;
+output Real y;
+algorithm
+y := 2 * x;
+end f;
+model W62
+Real u[2] = {time, time};
+Real y[2];
+equation
+y = f(u);
+end W62;
+//// model: W63
+model W63
+Real u[1, 1] = {{time}};
+Real y[1, 1];
+equation
+y = abs(u);
+end W63;
+//// model: W64
+model W64
+Real u[1] = {time};
+Real y[1] = abs(u);
+end W64;
+//// model: W65
+model W65
+Real u[1] = {time};
+Real y;
+equation
+y = sum(abs(u));
+end W65;
+//// model: W66
+model W66
+Real u[1] = {time};
+Real y[1];
+algorithm
+y := abs(u);
+end W66;
+//// model: W67
+model W67
+Real u[2, 1] = {{time}, {time}};
+Real y[2, 1];
+equation
+y = abs(u);
+end W67;
