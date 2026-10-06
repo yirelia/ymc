@@ -1,0 +1,167 @@
+//// set: lh-l2 — 同上换位置：Integer()、修饰值、when、记录缺省、for 枚举范围、根类在包里、外层模型里的枚举（SKIP）、函数、数组
+//// model: L20
+package P
+package Types
+type LH = enumeration(A, B, C);
+end Types;
+package N
+block L
+parameter Types.LH h = Types.LH.B;
+Integer k = Integer(Types.LH.C);
+end L;
+end N;
+end P;
+model L20
+P.N.L lim;
+end L20;
+//// model: L21
+package P
+package Types
+type LH = enumeration(A, B, C);
+end Types;
+package N
+block L
+parameter Types.LH h = Types.LH.B;
+end L;
+block W
+L l(h = Types.LH.C);
+end W;
+end N;
+end P;
+model L21
+P.N.W w;
+end L21;
+//// model: L22
+package P
+package Types
+type LH = enumeration(A, B, C);
+end Types;
+package N
+block L
+discrete Types.LH h(start = Types.LH.A);
+equation
+when time > 1 then
+h = Types.LH.C;
+end when;
+end L;
+end N;
+end P;
+model L22
+P.N.L lim;
+end L22;
+//// model: L23
+package P
+package Types
+type LH = enumeration(A, B, C);
+record R
+LH e = LH.B;
+Real x = 1;
+end R;
+end Types;
+package N
+block L
+parameter Types.R r;
+Real y = if r.e == Types.LH.B then time else 0;
+end L;
+end N;
+end P;
+model L23
+P.N.L lim;
+end L23;
+//// model: L24
+package P
+package Types
+type LH = enumeration(A, B, C);
+end Types;
+package N
+block L
+Real y[3];
+equation
+for e in Types.LH loop
+y[Integer(e)] = Integer(e);
+end for;
+end L;
+end N;
+end P;
+model L24
+P.N.L lim;
+end L24;
+//// model: L25
+package P
+package Types
+type LH = enumeration(A, B, C);
+end Types;
+package Ex
+model L25
+parameter Types.LH h = Types.LH.C;
+Real y = if h == Types.LH.A then 1 else time;
+end L25;
+end Ex;
+end P;
+model RUNNER
+P.Ex.L25 r;
+end RUNNER;
+//// model: L26
+package P
+package Sub
+package Types
+type LH = enumeration(A, B, C);
+end Types;
+end Sub;
+package N
+block L
+parameter Sub.Types.LH h = Sub.Types.LH.A;
+Real y = if h == Sub.Types.LH.B then 1 else time;
+end L;
+end N;
+end P;
+model L26
+P.N.L lim;
+end L26;
+//// model: L27
+model O
+type LH = enumeration(A, B, C);
+model I
+parameter LH h = LH.B;
+Real y = if h == LH.A then 1 else time;
+end I;
+I i;
+end O;
+model L27
+O o;
+end L27;
+//// model: L28
+package P
+package Types
+type LH = enumeration(A, B, C);
+end Types;
+package N
+function f
+input Types.LH e;
+output Real y;
+algorithm
+y := if e == Types.LH.B then 1 else 2;
+end f;
+block L
+Real y = f(Types.LH.B);
+end L;
+end N;
+end P;
+model L28
+P.N.L lim;
+end L28;
+//// model: L29
+package P
+package Types
+type LH = enumeration(A, B, C);
+end Types;
+package N
+block L
+parameter Types.LH h[2] = {Types.LH.A, Types.LH.C};
+Real y = if h[2] == Types.LH.C then time else 0;
+end L;
+end N;
+end P;
+model L29
+P.N.L lim;
+end L29;

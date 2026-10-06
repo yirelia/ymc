@@ -246,6 +246,7 @@ class Flattener {
           break;
         }
     check_discrete_reals();
+    check_pre_args();
     prune_functions();
     relabel_type_dims();
     // 第一遍要重来时先把第二遍要的收下（result_ 马上要搬走，param_exprs_ 等指着它的 exprs）。
@@ -321,6 +322,28 @@ class Flattener {
     for (const FlatVariable& v : result_.model.variables)
       if (v.var_kind == FlatVarKind::Discrete && v.ty.element_type().kind == TypeKind::Real) any = true;
     if (!any) return;
+    const std::unordered_set<std::string> defined = when_assigned_paths();
+    for (const FlatVariable& v : result_.model.variables)
+      if (v.var_kind == FlatVarKind::Discrete && v.ty.element_type().kind == TypeKind::Real && !defined.count(path_key(v.name))) {
+        set_unsupported("discrete Real not assigned in when");
+        return;
+      }
+  }
+  // when 外的 pre / change 实参是声明为连续的 Real（见 builtin_call）：在 when 方程 / when 语句里被赋值的变量 omc 标成
+  // IMPLICITLY_DISCRETE（markImplicitWhenExp，NFInst.mo:3965-4128 v1.25.0，实例化期、与方程先后无关），pre 只拒 CONTINUOUS
+  //（typePreChangeCall，NFBuiltinCall.mo:581）→ 放行（PD 探针 d10-d111：MSL Blocks.Discrete.ZeroOrderHold 的
+  // `y = pre(ySample)`）。标的是组件（数组任一元素赋值即整个数组，d13）；整体赋值的记录不连带字段（d14 omc 报错）。
+  void check_pre_args() {
+    if (result_.unsupported || pending_pre_.empty()) return;
+    const std::unordered_set<std::string> defined = when_assigned_paths();
+    for (const std::string& k : pending_pre_)
+      if (!defined.count(k)) {
+        set_unsupported("pre/change of continuous variable");
+        return;
+      }
+  }
+  // when 方程 / when 语句里等式 / 赋值左边的变量（组件路径，不带下标）。
+  std::unordered_set<std::string> when_assigned_paths() {
     std::unordered_set<std::string> defined;
     auto lhs = [&](Id<Expr> e) {
       if (!e.is_valid()) return;
@@ -348,11 +371,7 @@ class Flattener {
     };
     for (Id<FlatEquation> id : result_.model.equations) eqn(eqn, id, false);
     for (const FlatAlgorithm& a : result_.model.algorithms) for (Id<FlatStatement> id : a.stmts) stmt(stmt, id, false);
-    for (const FlatVariable& v : result_.model.variables)
-      if (v.var_kind == FlatVarKind::Discrete && v.ty.element_type().kind == TypeKind::Real && !defined.count(path_key(v.name))) {
-        set_unsupported("discrete Real not assigned in when");
-        return;
-      }
+    return defined;
   }
 
   // 多个 extends 时，某个 extends 的名字（首段）恰是另一基类里的局部类名：继承后再查会找到那个类（NFInst.instExtends
@@ -4698,8 +4717,10 @@ class Flattener {
         break;
       }
       // 实例节点是定义节点的克隆、parent_scope 指词法外层的**定义**节点（inst.cpp instantiate），故根类按 def 认。
+      // 更外层的包（MSL Blocks.Nonlinear.Limiter 里的 `Types.LimiterHomotopy.Linear`，Types 在 Modelica.Blocks 里）：路径 = 包的
+      // 全名（omc 打 `P.Types.LH.Linear`，LH 探针 l10-l16，同 import 来的）；更外层的非包、非根类：路径未核实。
       if (s.raw == scope.raw) path = prefix;
-      else if (I_.nodes[s].def.raw != I_.nodes[root_].def.raw) return std::nullopt;   // 更外层的非根类：路径未核实
+      else if (I_.nodes[s].def.raw != I_.nodes[root_].def.raw && !package_path(s, path)) return std::nullopt;
       break;
     }
     if (!el) el = class_in(I_.scode.program, type_parts[0]);
@@ -4714,6 +4735,17 @@ class Flattener {
     def = &el->def;
     path.insert(path.end(), type_parts.begin() + (head_done ? 1 : 0), type_parts.end());
     return path;
+  }
+  // 定义节点 s 是包、外层直到顶层也都是包 → out = 它的全名（外→内）；否则 false。
+  bool package_path(NodeId s, std::vector<Symbol>& out) {
+    std::vector<Symbol> names;
+    for (NodeId p = s; p.is_valid() && !I_.nodes[p].is_empty() && p != I_.top; p = I_.nodes[p].parent_scope) {
+      const Id<SElement> d = I_.nodes[p].def;
+      if (!d.is_valid() || I_.scode.elems[d].restriction != SRestriction::Package) return false;
+      names.push_back(I_.nodes[p].name);
+    }
+    out.assign(names.rbegin(), names.rend());
+    return true;
   }
   // 按简单名沿词法作用域链找类元素（任意 kind），最后再查顶层 program（顶层声明的连接器短类，Cardinality3）。
   // 继承/导入来的类不在链上 → nullptr（调用方 SKIP）。
@@ -13182,8 +13214,8 @@ class Flattener {
         supported = false;
       }
     // pre / change：实参须是变量（cref），且在 when 之外不能是连续变量（NFBuiltinCall.typePreChangeCall :578-588；P1 / P5 / P7
-    // 探针 omc 报 "must be a discrete expression" / "must be a variable"）。when 方程 / when 语句体里 1.25.0 接受连续实参
-    //（P4 / P8 探针）。
+    // 探针 omc 报 "must be a discrete expression" / "must be a variable"）——在 when 里被赋值的除外（隐式离散，压平完再查，见
+    // check_pre_args）。when 方程 / when 语句体里 1.25.0 接受连续实参（P4 / P8 探针）。
     // edge 的实参须是变量引用（NFBuiltinCall.typeEdgeCall :681-685 v1.25.0，ES 探针 `edge(true)`、`edge(not bb)` omc 报
     // "First argument to edge … must be a variable"）；按书写形态判（常量引用会被内联成字面量）。
     auto written_cref = [&](Id<Exp> x) {   // 括号不算（`edge((bb))` omc 接受）
@@ -13204,8 +13236,9 @@ class Flattener {
         set_unsupported("pre/change argument must be a variable");
         supported = false;
       } else if (alg_in_when_ == 0 && eq_in_when_ == 0 && cref_is_continuous(ax, prefix.size())) {
-        set_unsupported("pre/change of continuous variable");
-        supported = false;
+        std::vector<Symbol> nm;
+        for (const ExprCrefPart& cp : ax.cref.parts) nm.push_back(cp.name);
+        pending_pre_.push_back(path_key(nm));
       }
     }
     // der 的数组实参（整体 / 切片引用的 Real 数组）：不向量化，调用保持实参的数组类型——绑定里整体保留 `k1 = der(x)`，等式里
@@ -17067,7 +17100,8 @@ class Flattener {
   std::unordered_set<std::string> alias_unknown_keys_;
   std::vector<std::vector<std::string>> alias_groups_;   // 参数数组的裸 cref 绑定：同一数组的各元素 key（整体连带）
   std::unordered_set<std::uint32_t> derived_mods_;
-  std::unordered_set<std::uint32_t> derived_cref_mods_;   // 其中记录引用整体绑定拆出的（split_record_cref_mod）
+  std::unordered_set<std::uint32_t> derived_cref_mods_;
+  std::vector<std::string> pending_pre_;   // when 外 pre / change 的声明为连续的实参（组件路径，check_pre_args）   // 其中记录引用整体绑定拆出的（split_record_cref_mod）
   std::size_t synth_mod_floor_ = 0;
   // 空数组（某维为 0，不出变量行）的形状，int_key(全名, 逐段下标) → 维；`:` 维的引用 / size() 靠它（emitted_shape 的回退）。
   std::unordered_map<std::string, std::vector<std::int64_t>> empty_shapes_;

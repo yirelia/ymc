@@ -1,0 +1,139 @@
+//// set: pd-d1 — when 里被赋值的 Real 在 when 外 pre / change（方程先后、跨实例、数组元素、算法 when、if / for 里的 when、整体赋值的记录）
+//// model: D10
+model D10
+Real ySample(start = 0, fixed = true);
+Real y;
+Real u = sin(time);
+equation
+when sample(0, 0.1) then
+ySample = u;
+end when;
+y = pre(ySample);
+end D10;
+//// model: D11
+model D11
+Real ySample(start = 0, fixed = true);
+Real y;
+Real u = sin(time);
+equation
+y = pre(ySample);
+when sample(0, 0.1) then
+ySample = u;
+end when;
+end D11;
+//// model: D12
+model Z
+Real ySample(start = 0, fixed = true);
+Real y;
+equation
+y = pre(ySample);
+end Z;
+model D12
+Z z;
+equation
+when sample(0, 0.1) then
+z.ySample = time;
+end when;
+end D12;
+//// model: D13
+model D13
+Real x[2](each start = 0, each fixed = true);
+Real y;
+equation
+when sample(0, 0.1) then
+x[1] = time;
+end when;
+x[2] = 1;
+y = pre(x[2]);
+end D13;
+//// model: D14
+record R
+Real a;
+Real b;
+end R;
+model D14
+R r(a(start = 0, fixed = true), b(start = 0, fixed = true));
+Real y;
+equation
+when sample(0, 0.1) then
+r = R(time, 2*time);
+end when;
+y = pre(r.a);
+end D14;
+//// model: D15
+model D15
+Real x(start = 0, fixed = true);
+Real y;
+algorithm
+when sample(0, 0.1) then
+x := time;
+end when;
+equation
+y = pre(x);
+end D15;
+//// model: D16
+model D16
+Real x(start = 0, fixed = true);
+Boolean c;
+equation
+when sample(0, 0.1) then
+x = time;
+end when;
+c = change(x);
+end D16;
+//// model: D17
+model D17
+Real x(start = 0, fixed = true);
+Real y;
+equation
+when sample(0, 0.1) then
+x = time;
+end when;
+y = 2 * pre(x) + 1;
+end D17;
+//// model: D18
+model D18
+Real x;
+Real y;
+equation
+x = time;
+y = pre(x);
+end D18;
+//// model: D19
+model D19
+Real x(start = 0, fixed = true);
+Real y(start = 0, fixed = true);
+equation
+when sample(0, 0.1) then
+x = time;
+y = pre(x);
+end when;
+end D19;
+//// model: D110
+model D110
+Real x(start = 0, fixed = true);
+Real y;
+equation
+if time > 1 then
+when sample(0, 0.1) then
+x = time;
+end when;
+else
+when sample(0, 0.2) then
+x = 2*time;
+end when;
+end if;
+y = pre(x);
+end D110;
+//// model: D111
+model D111
+Real x[2](each start = 0, each fixed = true);
+Real y[2];
+equation
+for i in 1:2 loop
+when sample(0, 0.1) then
+x[i] = i * time;
+end when;
+end for;
+y = pre(x);
+end D111;

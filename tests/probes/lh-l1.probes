@@ -1,0 +1,135 @@
+//// set: lh-l1 — 枚举字面量的类型名在外层包里（if 式 / if 方程 / Evaluate / 修饰 / 变量 / 更深的包 / 继承来的方程）
+//// model: L10
+package P
+package Types
+type LH = enumeration(NoHomotopy, Linear, UpperLimit);
+end Types;
+package N
+block L
+parameter Types.LH h = P.Types.LH.Linear;
+Real u = time;
+Real s;
+equation
+s = if h == Types.LH.Linear then u else 0;
+end L;
+end N;
+end P;
+model L10
+P.N.L lim;
+end L10;
+//// model: L11
+package P
+package Types
+type LH = enumeration(NoHomotopy, Linear, UpperLimit);
+end Types;
+package N
+block L
+parameter Types.LH h = P.Types.LH.Linear annotation(Evaluate = true);
+Real u = time;
+Real s;
+equation
+s = if h == Types.LH.Linear then u else 0;
+end L;
+end N;
+end P;
+model L11
+P.N.L lim;
+end L11;
+//// model: L12
+package P
+package Types
+type LH = enumeration(NoHomotopy, Linear, UpperLimit);
+end Types;
+package N
+block L
+parameter Types.LH h = Types.LH.Linear;
+Real u = time;
+Real s;
+equation
+s = if h == Types.LH.Linear then u else 0;
+end L;
+end N;
+end P;
+model L12
+P.N.L lim;
+end L12;
+//// model: L13
+package P
+package Types
+type LH = enumeration(NoHomotopy, Linear, UpperLimit);
+end Types;
+package N
+block L
+parameter Types.LH h = Types.LH.Linear;
+Real u = time;
+Real s;
+equation
+if h == Types.LH.NoHomotopy then
+s = u;
+else
+s = 2*u;
+end if;
+end L;
+end N;
+end P;
+model L13
+P.N.L lim(h = P.Types.LH.NoHomotopy);
+end L13;
+//// model: L14
+package P
+package Types
+type LH = enumeration(NoHomotopy, Linear, UpperLimit);
+end Types;
+package N
+block L
+Types.LH h = Types.LH.Linear;
+Real s;
+equation
+s = if h == Types.LH.Linear then 1 else 0;
+end L;
+end N;
+end P;
+model L14
+P.N.L lim;
+end L14;
+//// model: L15
+package P
+package Types
+type LH = enumeration(NoHomotopy, Linear, UpperLimit);
+end Types;
+package N
+package M
+block L
+parameter Types.LH h = Types.LH.Linear;
+Real u = time;
+Real s;
+equation
+s = if h == Types.LH.Linear then u else 0;
+end L;
+end M;
+end N;
+end P;
+model L15
+P.N.M.L lim;
+end L15;
+//// model: L16
+package P
+package Types
+type LH = enumeration(NoHomotopy, Linear, UpperLimit);
+end Types;
+package N
+block L
+parameter Types.LH h = Types.LH.Linear;
+Real u = time;
+Real s;
+equation
+s = if h == Types.LH.Linear then u else 0;
+end L;
+block L2
+extends L;
+end L2;
+end N;
+end P;
+model L16
+P.N.L2 lim;
+end L16;

@@ -296,3 +296,7 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `rp-p9` | 5 | if 方程以外的方程段结构求值（for 范围 / if 表达式 / 维 / Evaluate）碰到声明在后的参数 |
 | `rp-pa` | 13 | 记录构造整体绑定查整个调用、嵌套记录 / 记录数组整体绑定、Evaluate = false 的记录、撤销求值副作用 |
 | `rp-ut` | 4 | 参数绑定链的结构求值 / 求值副作用 / 不固定条件（单测原文） |
+| `lh-l1` | 7 | 枚举字面量的类型名在外层包里（if 式 / if 方程 / Evaluate / 修饰 / 变量 / 更深的包 / 继承来的方程） |
+| `lh-l2` | 10 | 同上换位置：Integer()、修饰值、when、记录缺省、for 枚举范围、根类在包里、外层模型里的枚举（SKIP）、函数、数组 |
+| `pd-d1` | 12 | when 里被赋值的 Real 在 when 外 pre / change（方程先后、跨实例、数组元素、算法 when、if / for 里的 when、整体赋值的记录） |
+| `lh-ut` | 2 | 外层包里的枚举类型 + when 赋值变量的 pre（单测原文） |

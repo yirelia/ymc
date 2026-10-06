@@ -1,0 +1,47 @@
+//// set: lh-ut — 外层包里的枚举类型 + when 赋值变量的 pre（单测原文）
+//// model: LH1
+package P
+  package Types
+    type LH = enumeration(NoHomotopy, Linear, UpperLimit);
+  end Types;
+  package Nonlinear
+    block Limiter
+      parameter Real uMax = 1;
+      parameter Types.LH homotopyType = P.Types.LH.Linear annotation(Evaluate = true);
+      Real u = time;
+      Real y;
+      Real s;
+    equation
+      s = (if homotopyType == Types.LH.Linear then u else if homotopyType == Types.LH.UpperLimit then uMax else 0);
+      if homotopyType == Types.LH.NoHomotopy then
+        y = smooth(0, if u > uMax then uMax else u);
+      else
+        y = homotopy(actual = smooth(0, if u > uMax then uMax else u), simplified = s);
+      end if;
+    end Limiter;
+  end Nonlinear;
+end P;
+model LH1
+  P.Nonlinear.Limiter lim;
+end LH1;
+//// model: PD1
+model Z
+  Real ySample(start = 0, fixed = true);
+  Real y;
+equation
+  y = pre(ySample);
+end Z;
+model PD1
+  Z z;
+  Real x[2](each start = 0, each fixed = true);
+  Real w;
+  Boolean c;
+equation
+  when sample(0, 0.1) then
+    z.ySample = time;
+    x[1] = time;
+  end when;
+  x[2] = 1;
+  w = 2 * pre(x[2]) + 1;
+  c = change(z.ySample);
+end PD1;

@@ -1640,6 +1640,17 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           与 1.25.0 分歧，入账）；整个 testsuite 实跑 PASS 1498→1500（CevalRecordArray8、IfEquation9）/ FAIL 0；MSL 示例 83（不变：
           电机等 31 个从"if 条件求不出"露出下一层——复合数组元素引用 22、记录构造调用 9）；探针 7307→7387（rp-* 11 集 80 个）；
           单测 249→252。
+    - [x] (61o) flat：外层包里的枚举类型 + when 里赋值的变量的 pre（2026-10-06）：MSL Blocks.Nonlinear.Limiter 一族的
+          `homotopyType == Types.LimiterHomotopy.Linear`（Types 在 Modelica.Blocks 包里）此前 SKIP "qualified/cross-scope reference"
+          （21 个）：enum_type_path 沿词法作用域找到类型名的那一层是包、外层也全是包 → 类型路径取包的全名（omc 打
+          `P.Types.LH.Linear`，LH 探针；同 61l 的 import）；外层是非根的模型类时 omc 打外层**实例**路径（`o.LH.B`）→ 仍 SKIP。
+          露出的 PowerConverters 一族下一层：MSL Blocks.Discrete.ZeroOrderHold 的 `y = pre(ySample)`（ySample 声明为 Real、在 when
+          里赋值）。omc 把 when 里赋值的变量标成 IMPLICITLY_DISCRETE（markImplicitWhenExp，NFInst.mo:3965-4128，实例化期），pre /
+          change 只拒 CONTINUOUS（NFBuiltinCall.mo:581）→ when 外的 pre / change 遇到声明为连续的实参先记下，压平完查 when 赋值过的
+          组件路径（与方程先后、所在实例无关；数组任一元素赋值即整个组件；整体赋值的记录不连带字段，PD 探针 d14 omc 报错）。
+          slice 625 例不变（PASS 560 / FAIL 0）；scodeinst PASS 560 / FAIL 29（不变，均在账）；整个 testsuite 实跑 PASS 1500→1501
+          （NBackend/event_handling/hybridSys）/ FAIL 0；MSL 示例 83→100（TotalHarmonicDistortion、PowerConverters 16 个）；探针
+          7387→7418（lh-* 3 集 19 个、pd-d1 12 个）；单测 252→254。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

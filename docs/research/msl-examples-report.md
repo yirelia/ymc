@@ -107,3 +107,11 @@ Clocked 的 SimpleControlledDrive.Continuous / MixingUnitWithContinuousControl�
 压平处理声明在后的参数 + omc 的不固定检查 / 求值副作用）让电机一族的 if 条件求得出了（`friction.frictionParameters.PRef` ←
 `aimc.frictionParameters` ← 声明在最后的 `aimcData`）：原"if condition not evaluable"的 31 个露出下一层——复合数组元素引用
 （`plug.pin[m]` 这类子实例里的参数维，22 个）、记录构造调用（9 个）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-06 加宽 61o 之后：PASS 83 → 100
+
+外层包里的枚举类型（Blocks.Nonlinear.Limiter 的 `Types.LimiterHomotopy.Linear`）+ when 里赋值的变量的 pre（Blocks.Discrete.
+ZeroOrderHold 的 `y = pre(ySample)`）之后：Blocks.Examples.TotalHarmonicDistortion 与 PowerConverters 的 16 个（ACDC 的晶闸管
+整流一族 11 个、DCAC SinglePhaseTwoLevel 两个、DCDC Chopper 三个）通过；FAIL / ACCEPTS-INVALID / CRASH 0。同族剩下的露出：
+duplicate variable 2（HBridge）、矩阵构造套 size 的结构绑定 1（PID_Controller，1.25.0 怪癖，在账）、常量数组符号下标后切片 1、
+函数调用 1。

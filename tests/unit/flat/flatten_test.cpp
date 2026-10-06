@@ -5064,6 +5064,39 @@ YMC_TEST(flatten_if_condition_not_fixed_through_record_binding) {
                            "end PNF1;\n"));
 }
 
+YMC_TEST(flatten_enum_literal_through_enclosing_package) {
+  // 枚举字面量的类型名在外层包里找到（MSL Blocks.Nonlinear.Limiter 的 `Types.LimiterHomotopy.Linear`）：类型路径 = 包的全名
+  //（`P.Types.LH.Linear`）；Evaluate = true 的枚举参数作条件时 if 式 / if 方程按值折。期望 = omc 1.25.0 实跑（2026-10-06，下同）。
+  YMC_CHECK_EQ(flatten_src("package P\n  package Types\n    type LH = enumeration(NoHomotopy, Linear, UpperLimit);\n"
+                           "  end Types;\n  package Nonlinear\n    block Limiter\n      parameter Real uMax = 1;\n"
+                           "      parameter Types.LH homotopyType = P.Types.LH.Linear annotation(Evaluate = true);\n"
+                           "      Real u = time;\n      Real y;\n      Real s;\n    equation\n"
+                           "      s = (if homotopyType == Types.LH.Linear then u else if homotopyType == Types.LH.UpperLimit then uMax else 0);\n"
+                           "      if homotopyType == Types.LH.NoHomotopy then\n"
+                           "        y = smooth(0, if u > uMax then uMax else u);\n      else\n"
+                           "        y = homotopy(actual = smooth(0, if u > uMax then uMax else u), simplified = s);\n"
+                           "      end if;\n    end Limiter;\n  end Nonlinear;\nend P;\nmodel LH1\n  P.Nonlinear.Limiter lim;\n"
+                           "end LH1;\n"),
+               std::string("class LH1\n  parameter Real lim.uMax = 1.0;\n"
+                           "  final parameter enumeration(NoHomotopy, Linear, UpperLimit) lim.homotopyType = P.Types.LH.Linear;\n"
+                           "  Real lim.u = time;\n  Real lim.y;\n  Real lim.s;\nequation\n  lim.s = lim.u;\n"
+                           "  lim.y = homotopy(smooth(0, if lim.u > lim.uMax then lim.uMax else lim.u), lim.s);\nend LH1;\n"));
+}
+
+YMC_TEST(flatten_pre_of_when_assigned_variable) {
+  // when 外 pre / change 的实参声明为连续、但在 when 里被赋值（隐式离散）：omc 放行，与方程先后、所在实例无关；数组任一元素
+  // 赋值即整个组件。
+  YMC_CHECK_EQ(flatten_src("model Z\n  Real ySample(start = 0, fixed = true);\n  Real y;\nequation\n  y = pre(ySample);\n"
+                           "end Z;\nmodel PD1\n  Z z;\n  Real x[2](each start = 0, each fixed = true);\n  Real w;\n"
+                           "  Boolean c;\nequation\n  when sample(0, 0.1) then\n    z.ySample = time;\n    x[1] = time;\n"
+                           "  end when;\n  x[2] = 1;\n  w = 2 * pre(x[2]) + 1;\n  c = change(z.ySample);\nend PD1;\n"),
+               std::string("class PD1\n  Real z.ySample(start = 0.0, fixed = true);\n  Real z.y;\n"
+                           "  Real x[1](start = 0.0, fixed = true);\n  Real x[2](start = 0.0, fixed = true);\n  Real w;\n"
+                           "  Boolean c;\nequation\n  z.y = pre(z.ySample);\n  when sample(0.0, 0.1) then\n"
+                           "    z.ySample = time;\n    x[1] = time;\n  end when;\n  x[2] = 1.0;\n  w = 2.0 * pre(x[2]) + 1.0;\n"
+                           "  c = change(z.ySample);\nend PD1;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);
