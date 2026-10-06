@@ -1,0 +1,136 @@
+//// set: lx-v2 — 同上：多层继承（中间类在别的包）、类重声明（SKIP）、属性 / start / 嵌套组件修饰、维与 fill
+//// model: V20
+package P
+constant Real q = 1;
+model A
+parameter Real p = q;
+end A;
+end P;
+package Q
+constant Real q = 2;
+model B
+extends P.A;
+end B;
+end Q;
+model V20
+parameter Real q = 3;
+extends Q.B;
+end V20;
+//// model: V21
+package P
+constant Real q = 1;
+model A
+parameter Real p = q;
+end A;
+end P;
+package Q
+constant Real q = 2;
+model B
+extends P.A;
+parameter Real r = q;
+end B;
+end Q;
+model V21
+parameter Real q = 3;
+extends Q.B;
+end V21;
+//// model: V22
+package P
+constant Real q = 1;
+model A
+replaceable package M = P;
+parameter Real p = M.q;
+end A;
+end P;
+package P2
+constant Real q = 5;
+end P2;
+model V22
+extends P.A(redeclare package M = P2);
+end V22;
+//// model: V23
+package P
+constant Real q = 1;
+model A
+replaceable package M = P;
+parameter Real p = M.q;
+end A;
+end P;
+package P2
+constant Real q = 5;
+end P2;
+model V23
+P.A a(redeclare package M = P2);
+end V23;
+//// model: V24
+package P
+constant Real q = 1;
+model A
+parameter Real p = q;
+parameter Real q2 = p;
+end A;
+end P;
+model V24
+extends P.A(p = 7);
+end V24;
+//// model: V25
+package P
+constant Real q = 1;
+model A
+Real x[n];
+constant Integer n = 2;
+end A;
+end P;
+model V25
+extends P.A;
+end V25;
+//// model: V26
+package P
+constant Integer n = 2;
+model A
+Real x[n] = fill(q, n);
+end A;
+constant Real q = 1;
+end P;
+model V26
+parameter Integer n = 3;
+parameter Real q = 4;
+extends P.A;
+end V26;
+//// model: V27
+package P
+constant Real q = 1;
+model A
+parameter Real p(min = q) = 2;
+end A;
+end P;
+model V27
+parameter Real q = 3;
+extends P.A;
+end V27;
+//// model: V28
+package P
+constant Real q = 1;
+model A
+parameter Real p = 2;
+Real x(start = q);
+end A;
+end P;
+model V28
+parameter Real q = 3;
+extends P.A;
+end V28;
+//// model: V29
+package P
+constant Real q = 1;
+model C
+parameter Real c = 1;
+end C;
+model A
+C cc(c = q);
+end A;
+end P;
+model V29
+parameter Real q = 3;
+extends P.A;
+end V29;

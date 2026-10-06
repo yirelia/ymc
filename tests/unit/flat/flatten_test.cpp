@@ -5266,6 +5266,31 @@ YMC_TEST(flatten_evaluate_does_not_store_forward_binding) {
                            "  parameter Integer d.scp.m = d.m;\n  parameter Real d.scp.PRef = 0.0;\nend ST1;\n"));
 }
 
+YMC_TEST(flatten_inherited_declaration_resolves_in_base_scope) {
+  // 继承来的组件，其声明绑定 / 维 / extends 修饰在写它们的类的词法作用域里查名：派生类自己的同名参数 / 常量看不见（P.B 的
+  // `p = q` 是 P.q，`p[n]` 是 P.n；多层继承时 B 的 extends 修饰 `x(start = q)` 在 B 里查）。期望 = omc 1.25.0 实跑（2026-10-06）。
+  YMC_CHECK_EQ(flatten_src("package P\n  constant Real q = 1;\n  model B\n    parameter Real p = q;\n  end B;\nend P;\n"
+                           "model LX1\n  parameter Real q = 3;\n  extends P.B;\nend LX1;\n"),
+               std::string("class LX1\n  parameter Real q = 3.0;\n  parameter Real p = 1.0;\nend LX1;\n"));
+  YMC_CHECK_EQ(flatten_src("package P\n  constant Integer n = 2;\n  model B\n    parameter Real p[n] = fill(1, n);\n  end B;\n"
+                           "end P;\nmodel LX2\n  constant Integer n = 3;\n  extends P.B;\nend LX2;\n"),
+               std::string("class LX2\n  constant Integer n = 3;\n  parameter Real p[1] = 1.0;\n  parameter Real p[2] = 1.0;\n"
+                           "end LX2;\n"));
+  YMC_CHECK_EQ(flatten_src("package P\n  constant Real q = 1;\n  model A\n    Real x(start = 0);\n  end A;\n  model B\n"
+                           "    extends A(x(start = q));\n  end B;\nend P;\nmodel LX3\n  parameter Real q = 3;\n  extends P.B;\n"
+                           "end LX3;\n"),
+               std::string("class LX3\n  parameter Real q = 3.0;\n  Real x(start = 1.0);\nend LX3;\n"));
+}
+
+YMC_TEST(flatten_inherited_declaration_cannot_see_derived_element) {
+  // 基类的声明引用只有派生类才有的名字：omc 报 "Variable q not found in scope B"；ymc 查不到 → SKIP（此前在派生类里找到了 q）。
+  bool uns = false;
+  const std::string out = flatten_src("model B\n  parameter Real p = q;\nend B;\nmodel LX4\n  parameter Real q = 3;\n  extends B;\n"
+                                      "end LX4;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(out, std::string("<unsupported:unresolved name>"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

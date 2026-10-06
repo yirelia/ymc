@@ -150,3 +150,8 @@ CRASH 0。
 IMC_YDarc、Polyphase 的 TransformerYD / TransformerYY 转 PASS；16 个 PowerConverters 示例从 connect operand shape 往下露出到
 duplicate variable（多重继承来的同名元素 `hbridge.fire_p`、`rectifier.m`，omc 的 replaceDuplicates / checkDuplicates 只留一个，见 R11 §3.4 第 3 点、探针 P31；ymc 未做）。FAIL /
 ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-06 加宽 61u 之后：PASS 104（不变）
+
+继承来的声明（绑定 / 维 / 声明修饰 / 中间类的 extends 修饰）改在声明所在类的词法作用域里查名之后，514 个示例逐例
+verdict 都不变（MSL 里派生类没有遮住基类包里名字的同名元素）；15 个的 SKIP 原因往下挪：7 个 qualified function call → constant evaluation，8 个 enumeration type path → unqualified enum literal 4 / qualified/cross-scope reference（Digital.Tables 的枚举表）3 / qualified function call 1。FAIL / ACCEPTS-INVALID / CRASH 0。

@@ -1,0 +1,45 @@
+//// set: lx-ut — 继承来的声明在基类作用域查名（单测原文）
+//// model: LX1
+package P
+  constant Real q = 1;
+  model B
+    parameter Real p = q;
+  end B;
+end P;
+model LX1
+  parameter Real q = 3;
+  extends P.B;
+end LX1;
+//// model: LX2
+package P
+  constant Integer n = 2;
+  model B
+    parameter Real p[n] = fill(1, n);
+  end B;
+end P;
+model LX2
+  constant Integer n = 3;
+  extends P.B;
+end LX2;
+//// model: LX3
+package P
+  constant Real q = 1;
+  model A
+    Real x(start = 0);
+  end A;
+  model B
+    extends A(x(start = q));
+  end B;
+end P;
+model LX3
+  parameter Real q = 3;
+  extends P.B;
+end LX3;
+//// model: LX4
+model B
+  parameter Real p = q;
+end B;
+model LX4
+  parameter Real q = 3;
+  extends B;
+end LX4;

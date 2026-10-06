@@ -198,6 +198,10 @@ struct Component {
   // 修饰落到数组组件上）按组件维铺开（each_all）。
   std::vector<bool> derived_split;
   std::vector<Id<SMod>> extends_mods;        // extends 修饰里改本组件的子修饰（`extends A(x(start = 2))`、`extends A(c(x = 2))`），外层在前
+  std::vector<NodeId> extends_scopes;        // 与 extends_mods 平行：写这条 extends 子句的类实例（修饰值在那里解析）
+  // 声明（def）写在哪个类实例：声明自己的修饰 / 维 / 条件在这里解析——继承来的组件 = 声明它的基类实例（名字按基类的词法作用域
+  // 找，派生类自己的元素看不见），重声明的 = 写重声明的类。inst_component 记；没经过 inst_component 的为空。
+  NodeId decl_scope;
   // 被 extends 修饰重声明过（`extends M(redeclare B a(q = 3))`）：def 换成合成的元素（重声明元素 + 原声明补的维 / 条件 /
   // 前缀 / 注释，见 Instantiator::redeclare_component），orig_def = 最初的原声明，cc_mods = 约束修饰（外层在前），flatten 排在
   // def 自己的修饰之后。

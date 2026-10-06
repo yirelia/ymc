@@ -1,0 +1,81 @@
+//// set: lx-v1 — 继承来的声明在基类作用域查名：派生类同名参数遮不住包常量、基类引用派生类才有的名字（都拒）、方程段、extends 修饰
+//// model: V10
+model B
+parameter Real p = q;
+end B;
+model V10
+parameter Real q = 3;
+extends B;
+end V10;
+//// model: V11
+package P
+constant Real q = 1;
+model B
+parameter Real p = q;
+end B;
+end P;
+model V11
+parameter Real q = 3;
+extends P.B;
+end V11;
+//// model: V12
+package P
+constant Real q = 1;
+model B
+Real x = q * time;
+end B;
+end P;
+model V12
+parameter Real q = 3;
+extends P.B;
+end V12;
+//// model: V13
+package P
+constant Real q = 1;
+model B
+Real x;
+equation
+x = q * time;
+end B;
+end P;
+model V13
+parameter Real q = 3;
+extends P.B;
+end V13;
+//// model: V14
+model B
+Real x;
+equation
+x = q * time;
+end B;
+model V14
+parameter Real q = 3;
+extends B;
+end V14;
+//// model: V15
+model B
+parameter Real p = 1;
+end B;
+model V15
+parameter Real q = 3;
+extends B(p = q);
+end V15;
+//// model: V16
+model B
+replaceable parameter Real p = q;
+end B;
+model V16
+parameter Real q = 3;
+extends B;
+end V16;
+//// model: V17
+package P
+constant Integer n = 2;
+model B
+Real x[n];
+end B;
+end P;
+model V17
+parameter Integer n = 3;
+extends P.B;
+end V17;

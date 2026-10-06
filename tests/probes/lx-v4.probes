@@ -1,0 +1,194 @@
+//// set: lx-v4 — 同上：重声明、实例修饰、短类修饰、记录字段修饰、组件类型、中间类参数、fixed、派生类在后声明、数组维被引用、protected
+//// model: V40
+model A
+replaceable parameter Real x = 1;
+end A;
+model V40
+parameter Real q = 3;
+extends A(redeclare parameter Real x = q);
+end V40;
+//// model: V41
+package P
+model B
+parameter Real p = 1;
+end B;
+end P;
+model V41
+parameter Real q = 3;
+P.B b(p = q);
+end V41;
+//// model: V42
+package P
+constant Real q = 1;
+model B
+parameter Real p = 1;
+end B;
+model B2 = B(p = q);
+end P;
+model V42
+parameter Real q = 3;
+P.B2 b;
+end V42;
+//// model: V43
+package P
+constant Real q = 1;
+record Rec
+Real x;
+end Rec;
+model B
+Rec r(x = q);
+end B;
+end P;
+model V43
+parameter Real q = 3;
+extends P.B;
+end V43;
+//// model: V44
+package P
+model C
+parameter Real c = 1;
+end C;
+model B
+C cc;
+end B;
+end P;
+model V44
+model C
+parameter Real c = 2;
+end C;
+extends P.B;
+end V44;
+//// model: V45
+model A
+parameter Real a = 0;
+end A;
+model B
+parameter Real k = 2;
+extends A(a = k);
+end B;
+model V45
+extends B(k = 5);
+end V45;
+//// model: V46
+package P
+constant Boolean b = false;
+model B
+parameter Real p(fixed = b) = 1;
+end B;
+end P;
+model V46
+parameter Boolean b = true;
+extends P.B;
+end V46;
+//// model: V47
+package P
+constant Real q = 1;
+model B
+parameter Real p = q;
+end B;
+end P;
+model V47
+extends P.B(p = q);
+parameter Real q = 3;
+end V47;
+//// model: V48
+package P
+constant Real q = 1;
+model A
+parameter Real a = q;
+end A;
+model B
+extends A;
+parameter Real b = a + q;
+end B;
+end P;
+model V48
+parameter Real q = 3;
+extends P.B;
+end V48;
+//// model: V49
+package P
+constant Integer n = 2;
+model B
+Real x[n];
+equation
+x = fill(time, n);
+end B;
+end P;
+model V49
+constant Integer n = 3;
+extends P.B;
+end V49;
+//// model: V410
+package P
+constant Integer n = 2;
+model B
+Real x[n];
+Real s = sum(x);
+equation
+x = fill(time, n);
+end B;
+end P;
+model V410
+constant Integer n = 3;
+extends P.B;
+end V410;
+//// model: V411
+package P
+constant Integer n = 2;
+model B
+Real x[n] = fill(time, n);
+end B;
+end P;
+model V411
+constant Integer n = 3;
+extends P.B;
+Real y = x[2];
+end V411;
+//// model: V412
+package P
+constant Real q = 1;
+model B
+Real x(start = q, fixed = true);
+equation
+der(x) = -x;
+end B;
+end P;
+model V412
+parameter Real q = 3;
+extends P.B;
+end V412;
+//// model: V413
+package P
+type T = Real(min = 0);
+model B
+parameter T t = 1;
+end B;
+end P;
+model V413
+type T = Real(max = 9);
+extends P.B;
+end V413;
+//// model: V414
+model B
+parameter Real p = q;
+protected
+parameter Real q = 2;
+end B;
+model V414
+extends B;
+end V414;
+//// model: V415
+package P
+constant Real q = 1;
+model B
+parameter Real p = q;
+end B;
+end P;
+model M
+extends P.B;
+end M;
+model V415
+parameter Real q = 3;
+M m;
+end V415;

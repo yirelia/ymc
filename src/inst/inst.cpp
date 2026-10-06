@@ -525,7 +525,10 @@ void Instantiator::apply_extends_modifier(NodeId bc, Id<SMod> mod, NodeId scope)
     // 由内向外 merge：声明 → 各层 extends → 实例修饰），flatten 排在声明修饰之前（EX 探针 EX1：A 里 `Real x(start = 1)`，omc
     // 取 2.0；E 探针 e11：A 里 `C c(x = 3)`，omc 取 2.0）。多层继承时外层的 extends 后施加（基类实例先建好），插到前面 = 外层
     // 在前。此前混进 derived_mods（类型链修饰，排在声明修饰之后），优先级反了。
-    if (!sm.subs.empty()) comp.extends_mods.insert(comp.extends_mods.begin(), s.mod);
+    if (!sm.subs.empty()) {
+      comp.extends_mods.insert(comp.extends_mods.begin(), s.mod);
+      comp.extends_scopes.insert(comp.extends_scopes.begin(), scope);
+    }
   }
 }
 
@@ -679,6 +682,7 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
     comp.attributes.is_outer = el.prefixes.io == SInnerOuter::Outer || el.prefixes.io == SInnerOuter::InnerOuter;
     comp.class_inst = Inst::empty_node();
     comp.state = CompState::PartiallyInstantiated;
+    comp.decl_scope = enclosing;   // 元素修饰 / 维的作用域 = 声明所在类（NFInst.instComponentDef 的 parent，NFInst.mo:1942 / :1951）
   }
 
   // outer 组件指向别处的 inner，不实例化自己的子树（否则 `outer B b`（B 里又含 outer B）会无限递归）。

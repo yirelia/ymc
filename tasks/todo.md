@@ -1715,6 +1715,15 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           end B; model R parameter Real q = 3; extends B; end R;` omc 报 "Variable q not found in scope B"，ymc 照收（ACCEPTS-
           INVALID）；包常量同名时更糟：`P.B` 里 `p = q` 指 P.q，ymc 取到派生类的 q（静默错，scratchpad lx61v/v1 的 V11 / V12 / V17）。
           门：slice 625 例 PASS 560 / FAIL 0 / oracle=live 不一致 0；scodeinst 560 / 29（不变，均在账）；testsuite 实跑 PASS 1502 / FAIL 0 / ACC 3 / CRASH 0（不变）；MSL 示例 PASS 100→104；探针 7514→7610（sp / fd / st 共 96 个，旧探针 2 个 SKIP→PASS）；单测 261→264。
+    - [x] (61u) inst + flat：继承来的声明在基类的词法作用域里查名（2026-10-06）：
+          此前继承来的组件，其声明绑定 / 维 / 声明修饰 / 多层继承里中间类的 extends 修饰都在派生类的实例作用域里查名——派生类
+          自己的同名参数 / 常量会遮住基类包里的常量（`P.B` 的 `p = q` 取到派生类的 q，静默错），基类引用只有派生类才有的名字也
+          照收（omc 报 "Variable q not found in scope B"）。inst 本已给每条绑定记下"写它的类实例"（Binding::scope），flatten
+          没用；现给组件再记声明所在的类实例（Component::decl_scope）与每条 extends 修饰的书写处（extends_scopes），flatten 的
+          声明式子一律在各自书写处解析（decl_lex / bind_lex / ext_lex），帧里按名找值也只看书写处那个基类看得见的元素
+          （lex_view）。原来给"限定名 / 函数名按声明处"打的两处补丁（decl_scope_）随之删去。LX 探针 54 个，旧错 10 个 FAIL +
+          2 个 ACCEPTS-INVALID。
+          门：slice 625 例 PASS 560 / FAIL 0 / oracle=live 不一致 0；scodeinst 560 / 29（不变）；testsuite 实跑 PASS 1502→1503（extends/ExtendsModWithImport）/ FAIL 0 / ACC 3 / CRASH 0；MSL 示例 PASS 104（不变）；探针 7610→7668（lx 共 58 个，旧探针 1 个 SKIP→PASS）；单测 264→266。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
