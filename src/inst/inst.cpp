@@ -335,6 +335,36 @@ void Instantiator::partial_inst(NodeId cls) {
   c.tree = I_.trees.add(std::move(tree));
 }
 
+// 外部对象类的合法形态（makeExternalObjectType，NFInst.mo:918-990 v1.25.0）：不能有组件；除 ExternalObject 外的 extends
+// 只能是空类（图标包）；嵌套类恰是两个非 replaceable 的函数 constructor / destructor。不合法 omc 报错 → SKIP。
+void Instantiator::check_ext_object(NodeId cls) {
+  const ClassTree& tree = I_.trees[I_.node_class(cls).tree];
+  for (NodeId cn : tree.components)
+    if (I_.nodes[cn].kind == NodeKind::Component) { mark_unsupported("external object element", std::string(I_.interner.str(I_.nodes[cn].name))); return; }
+  for (NodeId ext : tree.exts) {
+    const SElement& ee = I_.scode.elems[I_.nodes[ext].def];
+    if (ee.base_path.size() == 1 && I_.interner.str(ee.base_path[0]) == "ExternalObject") continue;
+    const NodeId b = lookup_class_name(ee.base_path, cls);
+    const Id<SElement> bd = b.is_valid() && !I_.nodes[b].is_empty() ? I_.nodes[b].def : Id<SElement>{};
+    if (!bd.is_valid()) { mark_unsupported("external object element", "extends"); return; }
+    for (Id<SElement> x : I_.scode.elems[bd].def.elements)
+      if (I_.scode.elems[x].kind != SElementKind::Import) { mark_unsupported("external object element", "extends"); return; }
+  }
+  bool ctor = false, dtor = false;
+  for (NodeId k : I_.trees[I_.node_class(cls).tree].classes) {
+    const SElement& ke = I_.scode.elems[I_.nodes[k].def];
+    const std::string_view kn = I_.interner.str(ke.name);
+    if ((kn != "constructor" && kn != "destructor") || ke.kind != SElementKind::Class ||
+        (ke.restriction != SRestriction::Function && ke.restriction != SRestriction::ExternalFunction)) {
+      mark_unsupported("external object element", std::string(kn));
+      return;
+    }
+    if (ke.prefixes.is_replaceable) { mark_unsupported("replaceable external object structor"); return; }
+    (kn == "constructor" ? ctor : dtor) = true;
+  }
+  if (!ctor || !dtor) mark_unsupported("external object structor missing");
+}
+
 // -------------------------------------------------------------- expand（解析 extends）
 void Instantiator::expand(NodeId cls) {
   Class& c = I_.node_class(cls);
@@ -353,6 +383,12 @@ void Instantiator::expand(NodeId cls) {
     std::vector<NodeId> base_nodes;
     NodeId base = lookup_class_name(ee.base_path, cls, &base_nodes);
     if (!base.is_valid() || I_.nodes[base].is_empty()) {
+      // 查不到同名用户类的 `extends ExternalObject` = 内建的外部对象基类（omc 在 expandExtends 里认出内建基类名
+      // "ExternalObject"，NFInst.mo:736-737 v1.25.0）：只记标志，元素的校验在循环之后（check_ext_object）。
+      if (ee.base_path.size() == 1 && !ee.base_leading_dot && I_.interner.str(ee.base_path[0]) == "ExternalObject") {
+        I_.node_class(cls).is_ext_object = true;
+        continue;
+      }
       // v1 的最小 lookup 没做 import/内建枚举——基类查不到先当 v1 gap 标 unsupported（driver 退 66），不硬报错。
       mark_unsupported("unresolved base class", path_str(ee.base_path));
       continue;
@@ -366,6 +402,7 @@ void Instantiator::expand(NodeId cls) {
     if (I_.node_class(base).state == ClassState::NotInstantiated) partial_inst(base);
     expand(base);
   }
+  if (I_.node_class(cls).is_ext_object) check_ext_object(cls);
   // 本地组件登记进 lookup（下标 = def 组件数组里的位置；v1 未做继承元素合并到 lookup）。
   ClassTree& tree = I_.trees[tree_id];
   for (std::uint32_t li : tree.local_components) {

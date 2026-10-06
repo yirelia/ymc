@@ -38,6 +38,7 @@ struct FlatVariable {
   // 末段下标仍用上面的 subscripts。全为空（默认）时行为与旧模型一致。
   std::vector<std::vector<Id<Expr>>> name_subs;
   Type ty;                               // 塌陷后的内建/枚举标量类型
+  std::vector<Symbol> type_path;         // 外部对象类型：按类名打印（`ExtObj eo1`）；空 = 内建类型（ty）
   // 前缀（R13 §3.1 固定顺序：protected final par* const|param|discrete in|out 类型 名字）
   bool is_protected = false;
   bool is_final = false;                 // 结构参数强制 final（R13：final parameter）

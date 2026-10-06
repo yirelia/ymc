@@ -1,0 +1,308 @@
+//// set: xo-e4 — 外部对象的非法用法：算术、比较、传给 Real 形参、实参 / 绑定类型不符、两种外部对象相等、der、修饰、多余 / 命名不符的构造实参、if 式绑定
+//// model: E40
+class EO
+extends ExternalObject;
+function constructor
+input Integer i = 1;
+output EO o;
+external "C" o = initEO(i);
+end constructor;
+function destructor
+input EO o;
+external "C" freeEO(o);
+end destructor;
+end EO;
+model E40
+parameter EO e = EO();
+Real y = e + 1;
+end E40;
+//// model: E41
+class EO
+extends ExternalObject;
+function constructor
+input Integer i = 1;
+output EO o;
+external "C" o = initEO(i);
+end constructor;
+function destructor
+input EO o;
+external "C" freeEO(o);
+end destructor;
+end EO;
+model E41
+parameter EO e = EO();
+parameter EO e2 = EO();
+Boolean b = e == e2;
+end E41;
+//// model: E42
+class EO
+extends ExternalObject;
+function constructor
+input Integer i = 1;
+output EO o;
+external "C" o = initEO(i);
+end constructor;
+function destructor
+input EO o;
+external "C" freeEO(o);
+end destructor;
+end EO;
+function f
+input Real x;
+output Real y;
+algorithm
+y := x;
+end f;
+model E42
+parameter EO e = EO();
+Real y = f(e);
+end E42;
+//// model: E43
+class EO
+extends ExternalObject;
+function constructor
+input Integer i = 1;
+output EO o;
+external "C" o = initEO(i);
+end constructor;
+function destructor
+input EO o;
+external "C" freeEO(o);
+end destructor;
+end EO;
+function f
+input EO o;
+output Real y;
+external "C" y = useEO(o);
+end f;
+model E43
+Real y = f(1.0);
+end E43;
+//// model: E44
+class EO
+extends ExternalObject;
+function constructor
+input Integer i = 1;
+output EO o;
+external "C" o = initEO(i);
+end constructor;
+function destructor
+input EO o;
+external "C" freeEO(o);
+end destructor;
+end EO;
+model E44
+parameter EO e = EO("a");
+end E44;
+//// model: E45
+class EO
+extends ExternalObject;
+function constructor
+input Integer i = 1;
+output EO o;
+external "C" o = initEO(i);
+end constructor;
+function destructor
+input EO o;
+external "C" freeEO(o);
+end destructor;
+end EO;
+model E45
+parameter EO e = 1;
+end E45;
+//// model: E46
+class EO
+extends ExternalObject;
+function constructor
+input Integer i = 1;
+output EO o;
+external "C" o = initEO(i);
+end constructor;
+function destructor
+input EO o;
+external "C" freeEO(o);
+end destructor;
+end EO;
+class EB
+extends ExternalObject;
+function constructor
+output EB o;
+external "C" o = initEB();
+end constructor;
+function destructor
+input EB o;
+external "C" freeEB(o);
+end destructor;
+end EB;
+model E46
+EO e1 = EO();
+EB e2 = EB();
+equation
+e1 = e2;
+end E46;
+//// model: E47
+class EO
+extends ExternalObject;
+function constructor
+input Integer i = 1;
+output EO o;
+external "C" o = initEO(i);
+end constructor;
+function destructor
+input EO o;
+external "C" freeEO(o);
+end destructor;
+end EO;
+model E47
+EO e = EO();
+Real y = der(e);
+end E47;
+//// model: E48
+class EO
+extends ExternalObject;
+function constructor
+input Integer i = 1;
+output EO o;
+external "C" o = initEO(i);
+end constructor;
+function destructor
+input EO o;
+external "C" freeEO(o);
+end destructor;
+end EO;
+model E48
+EO e(start = 1);
+end E48;
+//// model: E49
+class EO
+extends ExternalObject;
+function constructor
+input Integer i = 1;
+output EO o;
+external "C" o = initEO(i);
+end constructor;
+function destructor
+input EO o;
+external "C" freeEO(o);
+end destructor;
+end EO;
+model E49
+discrete EO e;
+end E49;
+//// model: E410
+class EO
+extends ExternalObject;
+function constructor
+input Integer i = 1;
+output EO o;
+external "C" o = initEO(i);
+end constructor;
+function destructor
+input EO o;
+external "C" freeEO(o);
+end destructor;
+end EO;
+record R
+parameter EO e = EO(4);
+end R;
+model E410
+parameter R r1;
+parameter R r2 = r1;
+end E410;
+//// model: E411
+class EO
+extends ExternalObject;
+function constructor
+input Integer i = 1;
+output EO o;
+external "C" o = initEO(i);
+end constructor;
+function destructor
+input EO o;
+external "C" freeEO(o);
+end destructor;
+end EO;
+model E411
+EO e;
+equation
+when time > 1 then
+e = EO();
+end when;
+end E411;
+//// model: E412
+class EO
+extends ExternalObject;
+function constructor
+input Integer i = 1;
+output EO o;
+external "C" o = initEO(i);
+end constructor;
+function destructor
+input EO o;
+external "C" freeEO(o);
+end destructor;
+end EO;
+model E412
+parameter EO e = EO(2, 3);
+end E412;
+//// model: E413
+class EO
+extends ExternalObject;
+function constructor
+input Integer i = 1;
+output EO o;
+external "C" o = initEO(i);
+end constructor;
+function destructor
+input EO o;
+external "C" freeEO(o);
+end destructor;
+end EO;
+model E413
+parameter EO e = EO(j = 3);
+end E413;
+//// model: E414
+class EO
+extends ExternalObject;
+function constructor
+input Integer i = 1;
+output EO o;
+external "C" o = initEO(i);
+end constructor;
+function destructor
+input EO o;
+external "C" freeEO(o);
+end destructor;
+end EO;
+class EB
+extends ExternalObject;
+function constructor
+output EB o;
+external "C" o = initEB();
+end constructor;
+function destructor
+input EB o;
+external "C" freeEB(o);
+end destructor;
+end EB;
+model E414
+parameter EO e = EB();
+end E414;
+//// model: E415
+class EO
+extends ExternalObject;
+function constructor
+input Integer i = 1;
+output EO o;
+external "C" o = initEO(i);
+end constructor;
+function destructor
+input EO o;
+external "C" freeEO(o);
+end destructor;
+end EO;
+model E415
+parameter EO e = EO();
+Real y = if true then 1 else 2;
+parameter EO e2 = if true then e else e;
+end E415;

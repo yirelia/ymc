@@ -617,9 +617,18 @@ class Flattener {
       for (Id<FlatStatement> b : st.body) self(self, b);
       for (Id<FlatStatement> b : st.else_body) self(self, b);
     };
+    // 外部对象类型：构造 / 析构随类型保留（collectTypeFuncs，见 emit_structors）。
+    auto mark_structors = [&](const std::vector<Symbol>& tp) {
+      for (const char* w : {"constructor", "destructor"}) {
+        std::vector<Symbol> fnm = tp;
+        fnm.push_back(in_.intern(w));
+        mark_call(fnm);
+      }
+    };
     for (const FlatVariable& v : result_.model.variables) {
       walk_expr(v.binding);
       for (const FlatVarAttr& at : v.attributes) walk_expr(at.value);
+      if (!v.type_path.empty()) mark_structors(v.type_path);
     }
     for (Id<FlatEquation> q : result_.model.equations) eqn(eqn, q);
     for (Id<FlatEquation> q : result_.model.initial_equations) eqn(eqn, q);
@@ -630,6 +639,7 @@ class Flattener {
       work.pop_back();
       for (const FlatFuncParam& fp : fns[i].params) {
         if (fp.record_def != Id<SElement>::kInvalid) mark_call(fp.type_path);   // collectTypeFuncs：记录构造函数
+        else if (!fp.type_path.empty()) mark_structors(fp.type_path);             // 外部对象类型的形参
         walk_expr(fp.binding);
         for (const Dimension& d : fp.ty.dims) if (d.kind == DimKind::Exp) walk_expr(d.exp);
       }
@@ -854,6 +864,10 @@ class Flattener {
         continue;
       }
       const bool comp_final = ctx.final_all || sub_final || I_.comps[cid].attributes.is_final;
+      if (I_.comps[cid].ty.kind == TypeKind::Complex && is_ext_object(I_.comps[cid].class_inst)) {
+        emit_ext_object(cid, name, is_prot, prefix, psubs, inst_node, matched, ctx);
+        continue;
+      }
 
       // 数组组件：叶数组走 emit_array；复合数组 `A a[2]` 逐元素以 `a[i]` 前缀递归展开（2a 只做无修饰/无整体绑定）。
       if (has_dims) {
@@ -2302,7 +2316,14 @@ class Flattener {
     // 两侧是不同记录类：右侧按左侧类型匹配（NFTyping.mo:3517 matchExpressions(e2, ty2, e1, ty1) → matchComplexTypes）。
     // 同名同序同型 = PLUG_COMPATIBLE 原样（RO5 探针 `r1 = r4`）；字段顺序 / 类型要转 = typeCastRecord 成 `R1(r2.x, r2.y)`
     //（RO4、RecordOrder2；记录构造表达式未做）→ SKIP；字段对不上 = omc 类型错 → SKIP。
-    if (ta == TypeKind::Complex && tb == TypeKind::Complex &&
+    // 外部对象等式：两侧须是同一外部对象类型（EO 探针 e46：EO = EB，omc 报类型不符）。
+    if ((opaque_complex(result_.model.exprs[a].ty) || opaque_complex(result_.model.exprs[b].ty)) &&
+        (ext_type_of(a).empty() || ext_type_of(a) != ext_type_of(b))) {
+      set_unsupported("external object equation type");
+      return;
+    }
+    if (ta == TypeKind::Complex && tb == TypeKind::Complex && !opaque_complex(result_.model.exprs[a].ty) &&
+        !opaque_complex(result_.model.exprs[b].ty) &&
         record_match(result_.model.exprs[b].ty, result_.model.exprs[a].ty) > RecMatch::Plug) {
       set_unsupported("record equation type cast");
       return;
@@ -3391,6 +3412,137 @@ class Flattener {
       }
     }
     return inst;
+  }
+
+  // ---- 外部对象（`class EO extends ExternalObject; function constructor … end constructor; function destructor … end EO;`）----
+  bool is_ext_object(NodeId cls) {   // inst 认出的外部对象类（Class::is_ext_object）
+    return cls.is_valid() && !I_.nodes[cls].is_empty() && I_.nodes[cls].cls.is_valid() && I_.node_class(cls).is_ext_object;
+  }
+  // 外部对象值的类型名：变量引用取变量的 type_path，调用取函数首输出的；其余（函数局部等）→ 空。
+  std::vector<Symbol> ext_type_of(Id<Expr> id) {
+    const Expr& x = result_.model.exprs[id];
+    if (x.kind == ExprKind::Cref && x.cref.resolved_node != kFnLocal)
+      if (const FlatVariable* v = emitted_var(expr_cref_key(x.cref))) return v->type_path;
+    if (x.kind == ExprKind::Call)
+      for (const FlatFunction& f : result_.model.functions)
+        if (f.name == x.call_name)
+          for (const FlatFuncParam& p : f.params)
+            if (p.direction == FlatDirection::Output) return p.record_def == Id<SElement>::kInvalid ? p.type_path : std::vector<Symbol>{};
+    return {};
+  }
+  // 不按记录字段比的复杂类型值：外部对象（变量的实例类 / 构造调用的结果，后者没有类节点）。
+  bool opaque_complex(const Type& t) {
+    if (t.kind != TypeKind::Complex) return false;
+    if (t.complex_node == 0xFFFFFFFFu) return true;
+    return is_ext_object(NodeId::from_index(t.complex_node));
+  }
+  // SCode 层的同一认法（函数形参 / 调用名只有 SCode 作用域）：直接 extends 内建的 ExternalObject——从这个类查不到同名用户类。
+  // dscope = 类的定义作用域（内→外）。
+  bool scode_ext_object(Id<SElement> cls, const ScodeScope& dscope) {
+    if (!cls.is_valid() || I_.scode.elems[cls].kind != SElementKind::Class || I_.scode.elems[cls].def.kind != SClassDefKind::Parts)
+      return false;
+    for (Id<SElement> x : I_.scode.elems[cls].def.elements) {
+      const SElement& xe = I_.scode.elems[x];
+      if (xe.kind != SElementKind::Extends || xe.base_path.size() != 1 || xe.base_leading_dot ||
+          in_.str(xe.base_path[0]) != "ExternalObject")
+        continue;
+      ScodeScope s = dscope;
+      s.insert(s.begin(), cls);
+      ScodeScope unused;
+      return !resolve_class_path(xe.base_path, false, s, unused).is_valid();
+    }
+    return false;
+  }
+  Id<SElement> resolve_cref_class(const Cref& c, const ScodeScope& scope, ScodeScope& ds) {
+    std::vector<Symbol> parts;
+    for (const CrefPart& p : c.parts) {
+      if (!p.subscripts.empty()) return {};
+      parts.push_back(p.name);
+    }
+    return resolve_class_path(parts, c.leading_dot, scope, ds);
+  }
+  // 发射外部对象类型的构造 / 析构（collectTypeFuncs：类型用到就两个都收，NFFlatten.mo:2645 v1.25.0），返回类型的压平名
+  //（构造函数的压平名去掉末段，变量按它打印）。cls 是书写的类型名（在 enclosing 的作用域里解析）。
+  std::optional<std::vector<Symbol>> emit_structors(const Cref& cls, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    const ScodeScope sc = scode_scope_of(enclosing);
+    std::optional<std::vector<Symbol>> type_path;
+    const bool saved = ext_structor_ok_;
+    ext_structor_ok_ = true;
+    for (const char* which : {"constructor", "destructor"}) {
+      Cref fc = cls;   // 拷贝
+      fc.parts.push_back(CrefPart{in_.intern(which), {}});
+      const std::optional<FnRef> fr = resolve_fn(fc, sc);
+      FnSig sig;
+      std::unordered_set<std::uint32_t> seen;
+      Id<SElement> home;
+      const std::optional<std::vector<Symbol>> qname = fr ? fn_flat_name(fc, sc, enclosing, prefix, home) : std::nullopt;
+      if (!fr || !qname || qname->size() < 2 || !collect_fn_sig(fr->fe, fr->fscope, sig, seen, 0) ||
+          !emit_function(*fr, sig, *qname, {}, home) || result_.unsupported) {
+        type_path.reset();
+        break;
+      }
+      if (!type_path) type_path = std::vector<Symbol>(qname->begin(), qname->end() - 1);
+    }
+    ext_structor_ok_ = saved;
+    return type_path;
+  }
+  // 外部对象组件（`ExtObj eo = ExtObj(10)`）：omc 把外部对象当内建的复杂类型（NFInst.expandExternalObject，NFInst.mo:885-901
+  // v1.25.0），组件压平成一个叶变量，类型按类名打印（`ExtObj eo1`、`ExternalObject3.ExtObj eo1`）；final 不打（EO 探针 e10）。
+  // 修饰（omc 报 "Modified element x not found"，ExternalObjectMod1）、数组未做 → SKIP。
+  void emit_ext_object(CompId cid, const std::vector<Symbol>& name, bool is_prot, const std::vector<Symbol>& prefix,
+                       const PSubs& psubs, NodeId inst_node, const std::vector<ModSource>& matched, const ModCtx& ctx) {
+    const Id<SElement> def = I_.comps[cid].def;
+    if (!I_.scode.elems[def].attr.dims.empty() || !I_.scode.elems[def].type.dims.empty()) {
+      set_unsupported("external object array");
+      return;
+    }
+    bool mods = !I_.comps[cid].extends_mods.empty() || !I_.comps[cid].derived_mods.empty() || !I_.comps[cid].cc_mods.empty();
+    for (const ModSource& m : matched) mods = mods || !I_.scode.mods[m.mod].subs.empty();
+    if (const Id<SMod> dm = I_.scode.elems[def].mod; dm.is_valid()) mods = mods || !I_.scode.mods[dm].subs.empty();
+    if (mods) { set_unsupported("modifier on external object"); return; }
+    Cref tc;   // 书写的类型名
+    tc.leading_dot = I_.scode.elems[def].type.leading_dot;
+    for (Symbol s : I_.scode.elems[def].type.path) tc.parts.push_back(CrefPart{s, {}});
+    const std::optional<std::vector<Symbol>> tp = emit_structors(tc, decl_lex(cid, inst_node), prefix);
+    if (!tp) {
+      if (!result_.unsupported) set_unsupported("external object structors");
+      return;
+    }
+    Id<Expr> binding;
+    if (const ModSource* mb = first_bound(matched)) {
+      binding = inst_exp(I_.scode.mods[mb->mod].binding, mb->scope, mb->vprefix);
+    } else if (I_.comps[cid].binding.kind == BindingKind::Raw && I_.comps[cid].binding.raw_exp.is_valid()) {
+      binding = inst_exp(I_.comps[cid].binding.raw_exp, bind_lex(cid, inst_node), prefix);
+    }
+    if (result_.unsupported) return;
+    // 绑定须是同一外部对象类型的值（构造调用 / 同类型变量；字面量、别的外部对象、if 式 → omc 报类型错或未核实，EO 探针
+    // e45 / e414 / e415）。
+    if (binding.is_valid() && ext_type_of(binding) != *tp) {
+      set_unsupported("external object binding type");
+      return;
+    }
+    FlatVariable v;
+    v.name = name;
+    v.name_subs = psubs_to_exprs(psubs);
+    v.name_subs.push_back({});
+    v.ty = Type::of(TypeKind::Complex);
+    v.type_path = *tp;
+    v.is_protected = is_prot;
+    switch (var_min(ctx.var_floor, I_.comps[cid].attributes.variability)) {
+      case SVariability::Var: v.var_kind = FlatVarKind::Var; break;
+      case SVariability::Discrete: v.var_kind = FlatVarKind::Discrete; break;
+      case SVariability::Param: v.var_kind = FlatVarKind::Parameter; break;
+      case SVariability::Const: v.var_kind = FlatVarKind::Constant; break;
+    }
+    if (ctx.keep_dir) {
+      const SDirection d = merged_dir(I_.comps[cid].attributes.direction, ctx);
+      if (d == SDirection::Input) v.direction = FlatDirection::Input;
+      else if (d == SDirection::Output) v.direction = FlatDirection::Output;
+    }
+    v.binding = binding;
+    v.loc = I_.comps[cid].loc;
+    if (I_.scode.elems[def].cmt.str.is_valid()) v.comment = I_.scode.elems[def].cmt.str;
+    result_.model.variables.push_back(std::move(v));
   }
 
   // 外来子修饰里第一个带绑定的（优先级最高的绑定）；没有 → nullptr。
@@ -8490,6 +8642,7 @@ class Flattener {
     }
     // 形参类型：先按元素类型登记全部名字（维 / 绑定可互引），再按声明序算维（`Real z[n]`、`Real y[size(x, 1)]`）。
     std::unordered_map<std::uint32_t, std::vector<Symbol>> rec_paths;   // 记录类型形参 / 局部 → 记录压平名
+    std::unordered_map<std::uint32_t, std::vector<Symbol>> ext_paths;   // 外部对象类型形参 → 类名
     std::unordered_map<std::uint32_t, std::vector<std::pair<Id<SMod>, ScodeScope>>> type_mods;   // 短类链的类型修饰
     std::unordered_map<std::uint32_t, std::vector<std::size_t>> type_ldims;   // 与 type_mods 平行：那层类型本身的维数
     std::unordered_map<std::uint32_t, std::vector<Id<Exp>>> type_tdims;      // 短类链带的维（拼在变量维后面）
@@ -8509,6 +8662,21 @@ class Flattener {
         type_ldims[c.name.id] = std::move(ld);
         type_tdims[c.name.id] = std::move(tdims);
         continue;
+      }
+      // 外部对象类型（构造的 output、析构 / 查表函数的 input）：按类名打印（同构造函数的压平名去掉末段），不展开。
+      {
+        ScodeScope xs;
+        const Id<SElement> xc = resolve_class_path(c.type.path, c.type.leading_dot, fr.fscope, xs);
+        if (scode_ext_object(xc, xs)) {
+          if (!c.attr.dims.empty() || !c.type.dims.empty() || (c.mod.is_valid() && I_.scode.mods[c.mod].binding.is_valid()))
+            return fn_fail<std::optional<std::size_t>>("external object array / binding in function");
+          std::vector<Symbol> xp;
+          for (auto it = xs.rbegin(); it != xs.rend(); ++it) xp.push_back(I_.scode.elems[*it].name);
+          xp.push_back(I_.scode.elems[xc].name);
+          func_params_[c.name.id] = Type::of(TypeKind::Complex);
+          ext_paths[c.name.id] = std::move(xp);
+          continue;
+        }
       }
       // 记录类型（FunctionRecordArg1 `input R r`、FunctionCompOrder4 `R r(x = lx)`）：按类型名打印，构造函数块随之发射
       //（collectClassFunctions → collectTypeFuncs）；字段修饰不打印（只进依赖）；记录绑定 / 记录数组未做。枚举 / 派生
@@ -8667,6 +8835,7 @@ class Flattener {
         p.type_path = rp->second;
         p.record_def = fn_records_[c.name.id].rec.raw;
       }
+      if (const auto xp = ext_paths.find(c.name.id); xp != ext_paths.end()) p.type_path = xp->second;
       ff.params.push_back(std::move(p));
     };
     for (Id<SElement> eid : sig.inputs) param(eid, FlatDirection::Input);
@@ -8881,6 +9050,10 @@ class Flattener {
     fn_why_ = nullptr;
     const std::optional<FnRef> fr = resolve_fn(fn, sc);
     if (!fr) return {};   // 不是用户函数（内建 / 查不到）：无子原因
+    // 外部对象的构造 / 析构不能直接调（类树是空的，omc 报 "Function ExtObj.constructor not found"，ExternalObjectStructorCall1/2）。
+    if (!ext_structor_ok_ && fr->fscope.size() >= 2 &&
+        scode_ext_object(fr->fscope[1], ScodeScope(fr->fscope.begin() + 2, fr->fscope.end())))
+      return fn_fail<Id<Expr>>("external object structor called directly");
     FnSig sig;
     std::unordered_set<std::uint32_t> seen;
     if (!collect_fn_sig(fr->fe, fr->fscope, sig, seen, 0)) return fn_fail<Id<Expr>>("invalid or unsupported function signature");
@@ -8985,6 +9158,11 @@ class Flattener {
       // 记录形参：实参须是同一记录类的整体引用（构造调用等其余形态未做）。
       if (params[i].record_def != Id<SElement>::kInvalid && record_def_of(args[i]) != params[i].record_def)
         return fn_fail<Id<Expr>>("record argument form");
+      // 外部对象形参：实参须是同一外部对象类型（ExtObjError：把 B 传给要 A 的形参，omc 报 "Type mismatch for positional
+      // argument"）。
+      if (params[i].record_def == Id<SElement>::kInvalid && !params[i].type_path.empty() &&
+          ext_type_of(args[i]) != params[i].type_path)
+        return fn_fail<Id<Expr>>("external object argument type");
       const Id<Expr> a = coerce_to_param(args[i], params[i].ty);
       if (!a.is_valid()) return fn_fail<Id<Expr>>("argument type / shape");   // 实参类型 / 维不符（omc 报错）→ SKIP
       args[i] = simplify_expr(a);
@@ -9012,7 +9190,11 @@ class Flattener {
     }
     Type rty = sig.outputs.empty() ? Type{} : params[inputs.size()].ty;   // 首输出类型（无输出的语句调用：Unknown）
     if (!vd.empty() && rty.kind == TypeKind::Complex) return fn_fail<Id<Expr>>("vectorized record result");   // 未核实
-    if (rty.kind == TypeKind::Complex) {
+    if (rty.kind == TypeKind::Complex && params[inputs.size()].record_def == Id<SElement>::kInvalid &&
+        !params[inputs.size()].type_path.empty()) {
+      // 外部对象（构造函数的输出）：按类名的不透明值，不进记录的字段匹配。
+      if (sig.outputs.size() > 1) return fn_fail<Id<Expr>>("external object result");
+    } else if (rty.kind == TypeKind::Complex) {
       // 返回记录的调用（记录等式 `r = f(x)` / 记录赋值，RF1 探针）：类型取输出记录类的实例类节点（record_match /
       // 构造函数登记要节点）；没有实例节点 / 多输出 → SKIP。
       const std::uint32_t rd = params[inputs.size()].record_def;
@@ -11371,6 +11553,11 @@ class Flattener {
     LogOp lop;
     if (map_relop(e.op, rop)) {
       if (arr) { set_unsupported("array relation"); return lit_int(0); }   // 元素级 Boolean 数组关系本增量暂缓
+      // 记录 / 外部对象作关系运算数：omc 报 "Cannot resolve type of expression"（EO 探针 e41）→ SKIP。
+      if (result_.model.exprs[a].ty.kind == TypeKind::Complex || result_.model.exprs[b].ty.kind == TypeKind::Complex) {
+        set_unsupported("relation on complex operand");
+        return lit_int(0);
+      }
       bool real = result_.model.exprs[a].ty.kind == TypeKind::Real || result_.model.exprs[b].ty.kind == TypeKind::Real;
       // 函数外 Real 的 == / <>：omc 告警（"... on Real operands is deprecated in non-function contexts"，
       // OperationRelational1），ymc 不产告警文本 → SKIP。
@@ -11641,6 +11828,24 @@ class Flattener {
     if (!fn_scope_ && e.args.size() == 1 && fn.parts.size() == 1 && I_.absyn.exps[e.args[0]].kind == ExpKind::Reduction) {
       const std::string_view rn = in_.str(fn.parts[0].name);
       if (rn == "sum" || rn == "product" || rn == "min" || rn == "max") return reduction_call(e, rn, enclosing, prefix);
+    }
+    // 外部对象构造 `EO(args)` → `EO.constructor(args)`（NFLookup.fixExternalObjectCall，NFLookup.mo:233-270 v1.25.0；EO 探针
+    // e10-e115：默认 / 命名实参照常补）：按合成的 `EO.constructor` 走用户函数调用。
+    if (!fn_scope_) {
+      ScodeScope eds;
+      if (scode_ext_object(resolve_cref_class(fn, scode_scope_of(enclosing), eds), eds)) {
+        Cref cc = fn;   // 拷贝
+        cc.parts.push_back(CrefPart{in_.intern("constructor"), {}});
+        Exp ce = e;     // 拷贝
+        ce.cref = synth_cref(std::move(cc));
+        const bool saved = ext_structor_ok_;
+        ext_structor_ok_ = true;
+        const Id<Expr> r = try_emit_user_call(ce, enclosing, prefix);
+        ext_structor_ok_ = saved;
+        if (result_.unsupported) return lit_int(0);
+        if (!r.is_valid()) { set_unsupported_call("external object constructor"); return lit_int(0); }
+        return r;
+      }
     }
     // 用户函数常量折叠优先（支持命名/默认实参）：单名解析到 function 类且实参可求常量 → 折成字面量（CevalFunc1/FuncSimple）。
     {
@@ -15304,7 +15509,11 @@ class Flattener {
     };
     for (NodeId mn : pots) {
       const CompId mc = I_.nodes[mn].comp;
-      if (I_.comps[mc].ty.kind != TypeKind::Complex) { if (!leaf(mn, false)) return false; continue; }
+      // 外部对象成员也是势变量的叶（ConnectExternalObject1 `c1.eo = c2.eo`）。
+      if (I_.comps[mc].ty.kind != TypeKind::Complex || is_ext_object(I_.comps[mc].class_inst)) {
+        if (!leaf(mn, false)) return false;
+        continue;
+      }
       // 复合成员：子连接器就地递归（splitImpl :342-348）；记录成员按字段声明序展开（:354-360）。本身须标量、Var。
       NodeId sub = I_.comps[mc].class_inst;
       if (!sub.is_valid() || I_.nodes[sub].is_empty() || !I_.nodes[sub].def.is_valid()) return false;
@@ -16881,13 +17090,13 @@ class Flattener {
   bool exp_not_fixed(Id<Expr> id, int depth, bool& unknown, bool* saw_param = nullptr) {
     if (!id.is_valid()) return false;
     const Expr& e = result_.model.exprs[id];   // 下面只读、不 add
-    if (visit_nf_ && e.kind == ExprKind::Call) {
-      // isExpressionNotFixed 的 CALL 支：不纯函数 → 不固定（外部函数的判定 Call.isExternal 对未定型调用看的是还没实例化的类，
-      // 认不出 → 当固定，CevalBinding10 的 pure external 照样结构求值）；SIZE 支只看维号（数组本身只要类型，NFStructural.mo:197-219、
-      // NFCall.mo:574-595 v1.25.0）。
+    if (e.kind == ExprKind::Call) {
+      // isExpressionNotFixed 的 CALL 支：不纯 / 外部函数 → 不固定（NFStructural.mo:197-219、NFCall.mo:574-595 v1.25.0）。判 Evaluate
+      // 时（visit_nf_，定型之前）Call.isExternal 对未定型调用看的是还没实例化的类、认不出 → 只认不纯（CevalBinding10 的 pure
+      // external 照样结构求值）；定型期（if 方程条件，CevalIf2 的查表函数）都认。SIZE 支只看维号（数组本身只要类型）。
       for (const FlatFunction& f : result_.model.functions)
-        if (f.name == e.call_name && f.is_impure) return true;
-      if (e.call_name.size() == 1 && in_.str(e.call_name[0]) == "size")
+        if (f.name == e.call_name && (f.is_impure || (!visit_nf_ && f.is_external))) return true;
+      if (visit_nf_ && e.call_name.size() == 1 && in_.str(e.call_name[0]) == "size")
         return e.args.size() == 2 && exp_not_fixed(e.args[1], depth, unknown, saw_param);
     }
     if (e.kind == ExprKind::Cref) {
@@ -17806,6 +18015,7 @@ class Flattener {
   // 正在判某个 Evaluate = true 参数能不能当结构参数（emit_variable）：omc 在 updateImplicitVariability 按声明序访问组件时判
   //（NFInst.mo:3890-3925 v1.25.0），那一刻只有访问过的组件改了变率——Evaluate = false 的降成 NON_STRUCTURAL（不固定）、被
   // 维 / 条件 / 先访问的 Evaluate 参数连带的成 STRUCTURAL（固定）；还没访问的仍是 PARAMETER，顺绑定走。走满 4 层当不固定。
+  bool ext_structor_ok_ = false;   // 正在发射外部对象的构造 / 析构（合成的调用，见 emit_structors / call）
   bool visit_nf_ = false;
   static constexpr int kEvalDepth = 4;   // isBindingNotFixed 的 maxDepth
   std::unordered_map<std::string, Id<Expr>> raw_bindings_;   // 参数结构折叠之前的绑定（visit_binding）

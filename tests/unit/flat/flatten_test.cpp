@@ -5320,6 +5320,38 @@ YMC_TEST(flatten_evaluate_structural_decision_depth_and_fixed) {
                std::string("class EF1\n  parameter Real q(fixed = true) = 3.0;\n  parameter Real p = q;\n  Real y = p;\nend EF1;\n"));
 }
 
+YMC_TEST(flatten_external_object_variable_and_structors) {
+  // 外部对象：组件压平成按类名打印的叶变量，构造 `EO()` 换成 `EO.constructor(1)`（默认实参照补），构造 / 析构随类型发射
+  //（外部函数未声明 pure → impure）；当实参传给外部函数。期望 = omc 1.25.0 实跑（2026-10-07，下同）。
+  const std::string eo = "class EO\n  extends ExternalObject;\n  function constructor\n    input Integer i = 1;\n"
+                         "    output EO o;\n    external \"C\" o = initEO(i);\n  end constructor;\n  function destructor\n"
+                         "    input EO o;\n    external \"C\" freeEO(o);\n  end destructor;\nend EO;\n";
+  YMC_CHECK_EQ(flatten_src((eo + "function f\n  input EO o;\n  output Real y;\n  external \"C\" y = useEO(o);\nend f;\n"
+                                 "model XO1\n  parameter EO e = EO();\n  Real y = f(e);\nend XO1;\n").c_str()),
+               std::string("impure function EO.constructor\n  input Integer i = 1;\n  output EO o;\n\n"
+                           "  external \"C\" o = initEO(i);\nend EO.constructor;\n\nimpure function EO.destructor\n"
+                           "  input EO o;\n\n  external \"C\" freeEO(o);\nend EO.destructor;\n\nimpure function f\n"
+                           "  input EO o;\n  output Real y;\n\n  external \"C\" y = useEO(o);\nend f;\n\nclass XO1\n"
+                           "  parameter EO e = EO.constructor(1);\n  Real y = f(e);\nend XO1;\n"));
+  YMC_CHECK_EQ(flatten_src((eo + "connector C\n  EO eo;\nend C;\nmodel XO2\n  C c1, c2;\nequation\n  connect(c1, c2);\n"
+                                 "end XO2;\n").c_str()),
+               std::string("impure function EO.constructor\n  input Integer i = 1;\n  output EO o;\n\n"
+                           "  external \"C\" o = initEO(i);\nend EO.constructor;\n\nimpure function EO.destructor\n"
+                           "  input EO o;\n\n  external \"C\" freeEO(o);\nend EO.destructor;\n\nclass XO2\n  EO c1.eo;\n"
+                           "  EO c2.eo;\nequation\n  c1.eo = c2.eo;\nend XO2;\n"));
+}
+
+YMC_TEST(flatten_external_object_invalid_element_unsupported) {
+  // 外部对象类里只能有 constructor / destructor 两个函数：多一个 `g`，omc 报 "External object EO contains invalid element 'g'"。
+  bool uns = false;
+  const std::string out = flatten_src("class EO\n  extends ExternalObject;\n  function constructor\n    output EO o;\n"
+                                      "    external \"C\" o = initEO();\n  end constructor;\n  function destructor\n"
+                                      "    input EO o;\n    external \"C\" freeEO(o);\n  end destructor;\n  function g\n"
+                                      "  end g;\nend EO;\nmodel XO3\n  EO e;\nend XO3;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(out, std::string("<unsupported:external object element>"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

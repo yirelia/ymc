@@ -42,6 +42,7 @@ class Instantiator {
   // ---- 三趟 ----
   void partial_inst(NodeId cls);                 // 建 ClassTree（本地类/组件/extends 占位）
   void expand(NodeId cls);                        // 解析 extends、递归 expand 基类
+  void check_ext_object(NodeId cls);              // 外部对象类的元素校验（见 inst.cpp）
   NodeId instantiate(NodeId def_node, NodeId parent);  // 克隆 def 节点 + instClass 填实例树
   void inst_class(NodeId inst_node, NodeId def_node);  // 建 FlatTree：递归组件 + extends 就地展开
   void inst_component(NodeId comp_node, NodeId enclosing);  // 解析组件类型（叶/复合）

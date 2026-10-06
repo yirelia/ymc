@@ -1735,6 +1735,17 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           VO 探针 111 个，旧错 40 个 FAIL。留下：记录组件自己的 Evaluate（`parameter R r = s annotation(Evaluate = true)`：omc 把
           整个绑定求值、字段打字面量但不 final，scratchpad ef61u/pending61w 的 R20 / R23，旧错）。
           门：slice 625 例 PASS 560 / FAIL 0 / oracle=live 不一致 0；scodeinst 560 / 29（不变）；testsuite 实跑 PASS 1503 / FAIL 0 / ACC 3 / CRASH 0（不变）；MSL 示例 PASS 104（不变）；探针 7668→7779（vo 共 111 个，旧探针 1 个 SKIP→PASS）；单测 266→268。
+    - [x] (61w) inst + flat：外部对象（ExternalObject）（2026-10-07）：
+          此前 `extends ExternalObject` 一律 SKIP "unresolved base class"（testsuite 32 个、MSL 示例 30 个）。inst 在 expand 里
+          认内建基类 ExternalObject（Class::is_ext_object），照 makeExternalObjectType 校验：不能有组件、别的 extends 只能是空类、
+          嵌套类恰是非 replaceable 的 constructor / destructor 两个函数（不合法 omc 报错 → SKIP）。flatten：外部对象组件压平成
+          按类名打印的叶变量（`ExtObj eo1`、`ExternalObject3.ExtObj eo1`，final 不打）；构造 `EO(args)` 换成 `EO.constructor(args)`
+          走用户函数调用（默认 / 命名实参照补），直接写 `EO.constructor(…)` 照 omc 拒；构造 / 析构随类型发射并在裁剪时保留；
+          函数形参的外部对象类型按类名打印；连接器里的外部对象成员是势变量的叶；不按记录字段比（等式、调用结果）。类型检查：
+          实参 / 绑定 / 等式两侧须是同一外部对象类型，关系运算的复杂类型操作数拒（ExtObjError、EO 探针 e41-e415）。定型期的
+          "不固定"顺带认外部函数调用（if 条件的参数绑到查表函数 → 条件照留，EO 探针 e30-e33）。外部对象数组未做（ExternalObject6
+          SKIP）；MSL 的查表模型往下露出到类注释转义 / size() 矩阵等。
+          门：slice 625→632 例 PASS 567 / FAIL 0 / oracle=live 不一致 0；scodeinst 560→567 / 29（在账）；testsuite 实跑 PASS 1503→1513 / FAIL 0 / ACC 3 / CRASH 0；MSL 示例 PASS 104（不变，30 个 SKIP 原因往下挪）；探针 7779→7823（xo 共 44 个）；单测 268→270。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

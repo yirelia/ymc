@@ -1,0 +1,38 @@
+//// set: xo-e2 — 空的 if 方程（各分支都空）整条丢掉
+//// model: E20
+model E20
+parameter Real p(fixed = false);
+Real x;
+initial equation
+p = 1;
+equation
+if p > 0 then
+end if;
+x = time;
+end E20;
+//// model: E21
+model E21
+Real x;
+equation
+if time > 0 then
+end if;
+x = time;
+end E21;
+//// model: E22
+model E22
+Real x;
+equation
+if time > 0 then
+else
+end if;
+x = time;
+end E22;
+//// model: E23
+model E23
+Real x;
+equation
+if time > 0 then
+elseif time > 1 then
+end if;
+x = time;
+end E23;

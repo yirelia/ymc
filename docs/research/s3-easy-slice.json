@@ -623,5 +623,12 @@
 "TypeDimNonType1.mo",
 "TypeExtends2.mo",
 "dim16.mo",
-"CevalRecordArray8.mo"
+"CevalRecordArray8.mo",
+"ConnectExternalObject1.mo",
+"ExternalObject1.mo",
+"ExternalObject2.mo",
+"ExternalObject3.mo",
+"ExternalObject4.mo",
+"ExternalObject5.mo",
+"ExternalObjectVariability1.mo"
 ]

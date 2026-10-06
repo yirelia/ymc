@@ -154,7 +154,8 @@ class FlatDumper {
     }
     if (v.direction == FlatDirection::Input) out_ += "input ";
     else if (v.direction == FlatDirection::Output) out_ += "output ";
-    type_name(v.ty);
+    if (!v.type_path.empty()) dotted(v.type_path);   // 外部对象类型按类名（ExternalObject2 `ExtObj eo1`）
+    else type_name(v.ty);
     out_ += ' ';
     // 逐段名 + 该段下标（复合数组 `a[1].x`）；末段后再补叶数组下标 subscripts（`b.x[1,2]`）。R13 §4.2：`,` 无空格。
     auto emit_subs = [&](const std::vector<Id<Expr>>& s) {

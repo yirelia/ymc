@@ -160,3 +160,9 @@ verdict 都不变（MSL 里派生类没有遮住基类包里名字的同名元�
 
 Evaluate = true 的结构判定改照 omc 的访问序 / 深度 4 / fixed 属性之后，514 个示例逐例 verdict 与 SKIP 原因都不变（MSL 的
 Evaluate 参数链都短，链上没有 Evaluate = false / fixed 属性）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-07 加宽 61w 之后：PASS 104（不变）
+
+外部对象（`extends ExternalObject`）接上之后，30 个"unresolved base class [ExternalObject]"的示例都往下露出：size() 矩阵构造进
+结构绑定 8、记录构造无实例 6、if 式选中的支引用参数 5、类注释带转义 2、unresolved derived base 2、矩阵元素形状 2、redeclare
+修饰 2、条件组件 / 整体数组引用 / 继承记录的构造各 1。FAIL / ACCEPTS-INVALID / CRASH 0。

@@ -132,6 +132,9 @@ struct Class {
   // 短类（ExpandedDerived/TypedDerived）
   NodeId base_class;
   std::vector<Dimension> dims;               // v1 无维度短类时恒空
+  // `extends ExternalObject` 的外部对象类（NFInst.expandExternalObject，NFInst.mo:736-737 / :885-901 v1.25.0）：只含
+  // constructor / destructor 两个函数，组件压平成按类名打印的叶变量（见 flatten 的 emit_ext_object）。expand 里认、校验。
+  bool is_ext_object = false;
   // InstancedClass 的方程/算法段：v1 在 instExpressions 时从 def 的 SClassDef 取并类型化，
   // 类型化方程表放这里（先占位，instExpressions 落地时填）。
   // ponytail: sections 用类型化 Expr 的方程/语句，等 instExpressions pass 定义 InstEquation 后接上。

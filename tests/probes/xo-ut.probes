@@ -1,0 +1,61 @@
+//// set: xo-ut — 外部对象变量与构造 / 析构、连接、非法元素（单测原文）
+//// model: XO1
+class EO
+  extends ExternalObject;
+  function constructor
+    input Integer i = 1;
+    output EO o;
+    external "C" o = initEO(i);
+  end constructor;
+  function destructor
+    input EO o;
+    external "C" freeEO(o);
+  end destructor;
+end EO;
+function f
+  input EO o;
+  output Real y;
+  external "C" y = useEO(o);
+end f;
+model XO1
+  parameter EO e = EO();
+  Real y = f(e);
+end XO1;
+//// model: XO2
+class EO
+  extends ExternalObject;
+  function constructor
+    input Integer i = 1;
+    output EO o;
+    external "C" o = initEO(i);
+  end constructor;
+  function destructor
+    input EO o;
+    external "C" freeEO(o);
+  end destructor;
+end EO;
+connector C
+  EO eo;
+end C;
+model XO2
+  C c1, c2;
+equation
+  connect(c1, c2);
+end XO2;
+//// model: XO3
+class EO
+  extends ExternalObject;
+  function constructor
+    output EO o;
+    external "C" o = initEO();
+  end constructor;
+  function destructor
+    input EO o;
+    external "C" freeEO(o);
+  end destructor;
+  function g
+  end g;
+end EO;
+model XO3
+  EO e;
+end XO3;
