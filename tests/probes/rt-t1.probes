@@ -1,0 +1,96 @@
+//// set: rt-t1 — 记录引用整体绑定到另一个记录类型（字段次序不同 / 相同、参数值、变量记录）：按字段引用拆
+//// model: T10
+package C
+record NV
+parameter Real a = 1;
+parameter Real b;
+end NV;
+end C;
+package H
+record NV
+parameter Real b;
+parameter Real a = 1;
+end NV;
+end H;
+model M
+parameter C.NV nv;
+end M;
+model T10
+parameter H.NV h(b = 2);
+M m(nv = h);
+end T10;
+//// model: T11
+package C
+record NV
+parameter Real a = 1;
+parameter Real b;
+end NV;
+end C;
+model M
+parameter C.NV nv;
+end M;
+model T11
+parameter C.NV h(b = 2);
+M m(nv = h);
+end T11;
+//// model: T12
+package C
+record NV
+parameter Real a = 1;
+parameter Real b;
+end NV;
+end C;
+package H
+record NV
+parameter Real b;
+parameter Real a = 1;
+end NV;
+end H;
+model M
+parameter C.NV nv;
+end M;
+model T12
+parameter Real k = 3;
+parameter H.NV h(b = k);
+M m(nv = h);
+end T12;
+//// model: T13
+package C
+record NV
+parameter Real a = 1;
+parameter Real b;
+end NV;
+end C;
+package H
+record NV
+parameter Real a = 1;
+parameter Real b;
+end NV;
+end H;
+model M
+parameter C.NV nv;
+end M;
+model T13
+parameter H.NV h(b = 2);
+M m(nv = h);
+end T13;
+//// model: T14
+package C
+record NV
+Real a;
+Real b;
+end NV;
+end C;
+package H
+record NV
+Real a;
+Real b;
+end NV;
+end H;
+model M
+C.NV nv;
+end M;
+model T14
+H.NV h(a = time, b = 2*time);
+M m(nv = h);
+end T14;

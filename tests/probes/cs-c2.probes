@@ -1,0 +1,120 @@
+//// set: cs-c2 — 同上：参差的实例数组（SKIP）、实例数组整体、子实例修饰里的引用、维随声明在后的参数、数组运算、connect（SKIP）
+//// model: C20
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model C20
+Plug ps[2](m = {2, 3});
+Real v1 = ps[1].pin[2].v;
+end C20;
+//// model: C21
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model C21
+Real v[2, 2] = ps.pin.v;
+Plug ps[2](each m = 2);
+end C21;
+//// model: C22
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model S
+input Real u[2];
+end S;
+model C22
+S s(u = p.pin.v);
+Plug p(m = 2);
+end C22;
+//// model: C23
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model Q
+parameter Integer k = 2;
+Plug p(m = k);
+end Q;
+model C23
+Real vs[k2] = q.p.pin.v;
+Q q(k = k2);
+parameter Integer k2 = 3;
+end C23;
+//// model: C24
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model C24
+Plug ps[2](m = {2, 3});
+Real v[2] = ps[1].pin.v;
+end C24;
+//// model: C25
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model C25
+Real vs[2] = 2 * p.pin.v + {1, 2};
+Plug p(m = 2);
+end C25;
+//// model: C26
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model C26
+Real v1 = p.pin[2].v + p.pin[1].v;
+Real v2 = sum(p.pin.v);
+Plug p(m = 2);
+equation
+p.pin.v = {1, 2};
+end C26;
+//// model: C27
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model C27
+parameter Integer m = 2;
+Plug p(m = m);
+Plug n(m = m);
+Real vs[m] = p.pin.v - n.pin.v;
+equation
+connect(p, n);
+end C27;

@@ -1,0 +1,181 @@
+//// set: cs-c1 — 复合引用穿过子实例里参数维的数组（`p.pin.v`、`p.pin[2].v`、`q.p.pin.v`、sum / 方程里、声明在后的子实例）
+//// model: C10
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model C10
+parameter Integer m = 2;
+Plug p(m = m);
+Real vs[m] = p.pin.v;
+end C10;
+//// model: C11
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model C11
+parameter Integer m = 2;
+Real vs[m] = p.pin.v;
+Plug p(m = m);
+end C11;
+//// model: C12
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model C12
+parameter Integer m = 2;
+Real vs[m] = p.pin.v - n.pin.v;
+Plug p(m = m);
+Plug n(m = m);
+end C12;
+//// model: C13
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model C13
+final parameter Integer m = 3 annotation(Evaluate = true);
+Real vs[m] = p.pin.v;
+Plug p(final m = m);
+end C13;
+//// model: C14
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model M
+final parameter Integer m = 3 annotation(Evaluate = true);
+output Real vs[m] = p.pin.v - n.pin.v;
+output Real is[m] = p.pin.i;
+Plug p(final m = m);
+Plug n(final m = m);
+equation
+p.pin.i + n.pin.i = zeros(m);
+p.pin.v = {time, 2*time, 3*time};
+n.pin.v = zeros(m);
+end M;
+model C14
+M mm;
+end C14;
+//// model: C15
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model C15
+parameter Integer m = 2;
+Plug p(m = m);
+Real vs[m];
+equation
+vs = p.pin.v;
+end C15;
+//// model: C16
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model C16
+Plug p(m = 2);
+Real v1 = p.pin[2].v;
+end C16;
+//// model: C17
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model C17
+Real vs[3] = p.pin.v;
+Plug p;
+end C17;
+//// model: C18
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model Q
+parameter Integer k = 2;
+Plug p(m = k);
+end Q;
+model C18
+Real vs[4] = q.p.pin.v;
+Q q(k = 4);
+end C18;
+//// model: C19
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model C19
+Real vs[k] = p.pin.v;
+Plug p(m = k);
+parameter Integer k = 2;
+end C19;
+//// model: C110
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model C110
+Real v1 = p.pin[2].v;
+Plug p(m = 2);
+end C110;
+//// model: C111
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model C111
+parameter Integer m = 2;
+Real s = sum(p.pin.v);
+Plug p(m = m);
+end C111;

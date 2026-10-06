@@ -1,0 +1,33 @@
+//// set: cs-ut — 参数维数组的复合引用 + Evaluate 顺向前的记录绑定（单测原文）
+//// model: CSF1
+connector Pin
+  Real v;
+  flow Real i;
+end Pin;
+connector Plug
+  parameter Integer m = 3;
+  Pin pin[m];
+end Plug;
+model M
+  final parameter Integer m = 3 annotation(Evaluate = true);
+  output Real vs[m] = p.pin.v - n.pin.v;
+  Real v2 = p.pin[2].v;
+  Plug p(final m = m);
+  Plug n(final m = m);
+end M;
+model CSF1
+  M mm;
+end CSF1;
+//// model: EVF1
+record CP
+  parameter Integer m;
+  parameter Real PRef = 0;
+end CP;
+model Core
+  parameter CP coreParameters(m = 3);
+  final parameter Integer m = coreParameters.m annotation(Evaluate = true);
+end Core;
+model EVF1
+  Core statorCore(coreParameters = scp);
+  parameter CP scp(final m = 3, PRef = 1);
+end EVF1;

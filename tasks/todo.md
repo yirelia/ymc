@@ -1651,6 +1651,21 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           slice 625 例不变（PASS 560 / FAIL 0）；scodeinst PASS 560 / FAIL 29（不变，均在账）；整个 testsuite 实跑 PASS 1500→1501
           （NBackend/event_handling/hybridSys）/ FAIL 0；MSL 示例 83→100（TotalHarmonicDistortion、PowerConverters 16 个）；探针
           7387→7418（lh-* 3 集 19 个、pd-d1 12 个）；单测 252→254。
+    - [x] (61p) flat：复合引用穿过子实例里参数维的数组 + Evaluate 顺向前的记录绑定（2026-10-06）：MSL 电机一族的
+          `output SI.Voltage vs[m] = plug_sp.pin.v - plug_sn.pin.v`（pin[m] 的 m 是 plug 的参数，plug 声明在 vs 之后）此前 SKIP
+          "composite array element reference"（22 个）：复合引用更深一段的维此前只收字面量。deep_dims：参数维取那个子实例发射时
+          记下的实际维（name_dims_，同一声明的各实例一致才算，参差 → SKIP，omc 对参差的洞有怪相 CS 探针 c24）；还没发射 → 第一遍
+          先不要这条绑定（needs_forward_shape 只看书写的式子、无副作用；只对变量）、第二遍用第一遍记下的维（PassCarry::shapes）。
+          中间段带下标的（`p.pin[2].v`）同样。露出电机的下一层：Evaluate = true 的 `statorCore.m = coreParameters.m` 顺记录整体
+          绑定链到最后才声明的 aimcData——第一遍先留着、第二遍用第一遍的值（顺绑定链走到的不再限方程段，EV 探针 e12）。两遍压平
+          改成"要第二遍就走"：第一遍里先留着的项可能让第一遍在后面判 SKIP（结构参数绑定不是字面量），第二遍过了就不作数；两遍
+          都 SKIP 报第一遍的（第一遍在真卡点停下时带过去的值不全，第二遍会在更前面卡住）。电机再往下：SpacePhasor 的
+          `InverseTransformation[m, 2] = {{…} for k in 1:m}`（元素是数组的推导式）。放开参数维后 RecordBinding14 露出旧错（RT 探针
+          t41 在 61n / 61o 上就 FAIL）：final 的 parameter 记录绑到另一个记录类型、要转换的记录数组字段里字段次序不同 → omc 的绑定
+          定型成转换式、被求值（flattenComplexComponent 的 tryEvalExp，NFFlatten.mo:960-982），字段打字面量 → SKIP（未做）。
+          slice 625 例不变（PASS 560 / FAIL 0）；scodeinst PASS 560 / FAIL 29（不变，均在账）；整个 testsuite 实跑 PASS 1501 / FAIL 0
+          （不变；RecordBinding14 由 SKIP → 新 SKIP 原因）；MSL 示例 100（不变：电机一族往下露出元素是数组的推导式等）；探针
+          7418→7474（cs-* 3 集 22 个、ev-e1 4 个、rt-* 4 集 18 个）；单测 254→256。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

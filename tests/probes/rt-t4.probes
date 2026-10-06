@@ -1,0 +1,105 @@
+//// set: rt-t4 — final + 次序不同 + 记录数组字段：omc 求值成字面量（SKIP）；嵌套标量记录 / 不 final / 次序一致照常拆
+//// model: T40
+package C
+record NV
+parameter Real a = 1;
+parameter Real b;
+end NV;
+record D
+parameter NV nv;
+end D;
+end C;
+package H
+record NV
+parameter Real b;
+parameter Real a = 1;
+end NV;
+record D
+parameter NV nv;
+end D;
+end H;
+model M
+parameter C.D d;
+end M;
+model T40
+parameter H.D h(nv(b = 2));
+M m(final d = h);
+end T40;
+//// model: T41
+package C
+record NV
+parameter Real a = 1;
+parameter Real b;
+end NV;
+record D
+parameter NV nv[2];
+end D;
+end C;
+package H
+record NV
+parameter Real b;
+parameter Real a = 1;
+end NV;
+record D
+parameter NV nv[2];
+end D;
+end H;
+model M
+parameter C.D d;
+end M;
+model T41
+parameter H.D h(nv(each b = 2));
+M m(final d = h);
+end T41;
+//// model: T42
+package C
+record NV
+parameter Real a = 1;
+parameter Real b;
+end NV;
+record D
+parameter NV nv[2];
+end D;
+end C;
+package H
+record NV
+parameter Real b;
+parameter Real a = 1;
+end NV;
+record D
+parameter NV nv[2];
+end D;
+end H;
+model M
+parameter C.D d;
+end M;
+model T42
+parameter H.D h(nv(each b = 2));
+M m(d = h);
+end T42;
+//// model: T43
+package C
+record NV
+parameter Real a = 1;
+parameter Real b;
+end NV;
+record D
+parameter NV nv[2];
+end D;
+end C;
+package H
+record NV
+parameter Real a = 1;
+parameter Real b;
+end NV;
+record D
+parameter NV nv[2];
+end D;
+end H;
+model M
+parameter C.D d;
+end M;
+model T43
+parameter H.D h(nv(each b = 2));
+M m(final d = h);
+end T43;

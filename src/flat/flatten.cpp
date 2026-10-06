@@ -954,7 +954,8 @@ class Flattener {
               // 该元素的整体绑定 = 绑定式的第 aidx 个元素（字面量下降 / 数组 cref 补下标），再拆成字段修饰（排首位：字段绑定取它）。
               const Id<Exp> er = array_scalar_elem(wraw, aidx, 0);
               const bool rec_const = var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Const;
-              const Id<SMod> cm = er.is_valid() ? build_record_ctor_mod(er, ci, cdef, wscope, rec_const) : Id<SMod>{};
+              const bool final_param = comp_final && var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Param;
+              const Id<SMod> cm = er.is_valid() ? build_record_ctor_mod(er, ci, cdef, wscope, rec_const, final_param) : Id<SMod>{};
               if (!cm.is_valid()) { set_unsupported("composite array whole binding"); break; }
               achild.mods.push_back({cm, wscope, wvpfx});
             }
@@ -1073,7 +1074,9 @@ class Flattener {
         Id<SMod> ctor_mod;
         if (r == SRestriction::Record && whole_raw.is_valid())
           ctor_mod = build_record_ctor_mod(whole_raw, ci, cdef, whole_scope,
-                                           var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Const);
+                                           var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Const,
+                                           comp_final && var_min(ctx.var_floor, I_.comps[cid].attributes.variability) ==
+                                                             SVariability::Param);
         // 拆不开的记录整体绑定（返回记录的函数调用等）：挪成（初始）方程 `r = f(x)`，字段无绑定（RF1 探针）。
         bool moved_binding = false;
         if (whole_raw.is_valid() && !ctor_mod.is_valid()) {
@@ -3306,7 +3309,17 @@ class Flattener {
     }
     // 绑定：外来修饰优先（第一个带绑定的子修饰），否则组件自身声明绑定（R15 §3.4 外层实例修饰 > 声明默认）。
     Id<Expr> binding;
-    {
+    // 第一遍：变量的绑定引用了还没发射的子实例里的参数维数组（`Real s = sum(p.pin.v)`，p 声明在后）→ 这一遍先不要它，第二遍
+    // 用第一遍记下的维（deep_dims）。只对变量（参数的绑定第二遍还要带值，不能缺）。
+    bool defer_bind = false;
+    if (lenient_ && (var_min(var_floor, I_.comps[cid].attributes.variability) == SVariability::Var ||
+                     var_min(var_floor, I_.comps[cid].attributes.variability) == SVariability::Discrete)) {
+      if (mb) defer_bind = needs_forward_shape(I_.scode.mods[mb->mod].binding, mod_scope, mod_prefix);
+      else if (I_.comps[cid].binding.kind == BindingKind::Raw && I_.comps[cid].binding.raw_exp.is_valid())
+        defer_bind = needs_forward_shape(I_.comps[cid].binding.raw_exp, enclosing, prefix);
+      if (defer_bind) need_second_pass_ = true;
+    }
+    if (!defer_bind) {
       const Id<Exp> mraw = mb ? I_.scode.mods[mb->mod].binding : Id<Exp>{};
       // constant 标量：先按值求值（NFCeval；cref 取已发射常量的最终值 → 修饰感知，CevalBinding2；含数组运算如标量积
       // `{1, 2, 3} * {4, 5, 6}`，CevalVectorProduct1）。求不出（枚举 / 内建数学函数 / if 式…）→ 走下面的类型化路径。
@@ -3386,6 +3399,7 @@ class Flattener {
       std::optional<CVal> cv;
       const StructSnap snap = struct_snap();
       std::unordered_set<std::uint32_t> used;
+      forward_miss_ = false;
       if (auto it = const_vals_.find(vkey); it != const_vals_.end()) cv = it->second;
       if (!cv) {
         Cref self;
@@ -3402,6 +3416,9 @@ class Flattener {
         struct_restore(snap);
       } else {
         if (cv) { binding = literal_of(*cv); if (cty.kind == TypeKind::Real) binding = to_real(binding); }
+        // 第一遍：求不出是因为绑定链上的参数还没发射（MSL 电机 `statorCore.m = coreParameters.m`，记录整体绑定链到最后才声明的
+        // aimcData，EV 探针 e12）→ 先留着，第二遍用第一遍的值（见 flat_param_value）。
+        else if (eval_true && lenient_ && forward_miss_) need_second_pass_ = true;
         else if (eval_true) {
           set_unsupported("Evaluate annotation");
           if (result_.unsupported_detail.empty()) result_.unsupported_detail = "value not evaluable";   // 子原因
@@ -3684,6 +3701,15 @@ class Flattener {
     if (!braw.is_valid()) {
       const Binding& b = I_.comps[cid].binding;
       if (b.kind == BindingKind::Raw && b.raw_exp.is_valid()) { braw = b.raw_exp; bscope = enclosing; bprefix = prefix; }
+    }
+    // 第一遍：变量数组的绑定引用了还没发射的子实例里的参数维数组（MSL 电机 `vs[m] = plug_sp.pin.v - plug_sn.pin.v`）→ 这一遍先
+    // 当无绑定，第二遍用第一遍记下的维（同 emit_variable）。
+    if (lenient_ && braw.is_valid() &&
+        (var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Var ||
+         var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Discrete) &&
+        needs_forward_shape(braw, bscope, bprefix)) {
+      need_second_pass_ = true;
+      braw = {};
     }
     mark_ctor_ranges(braw, bscope);
     // constant 数组绑 ndims(…) / 单实参 size(…)：更高变率的绑定，omc 报错（同标量，见 emit_variable）。
@@ -5031,6 +5057,7 @@ class Flattener {
     std::unordered_set<std::string> deep;                                 // 值经嵌套记录 / 未细分整体绑定来的字段（use_forward）
     std::unordered_map<std::string, std::optional<bool>> not_fixed;       // 参数的 isExpressionNotFixed（key_not_fixed）
     std::unordered_map<std::string, std::optional<bool>> rec_not_fixed;   // 记录实例的（rec_not_fixed）
+    std::unordered_map<std::string, std::vector<std::int64_t>> shapes;    // 数组组件的实际维（name_dims_，deep_dims）
   };
   void set_carry(PassCarry c) { carry_ = std::move(c); }
   PassCarry take_carry() { return std::move(pass_out_); }
@@ -5061,6 +5088,8 @@ class Flattener {
     }
     for (const auto& [k, pi] : param_info_)
       if (pi.origin == 1 && pi.rec_bind != 1) pass_out_.deep.insert(k);
+    for (const auto& [k, d] : name_dims_)
+      if (d) pass_out_.shapes.emplace(k, *d);
     var_index_.clear();
     ensure_var_index();
     index_vars_ = true;
@@ -9505,8 +9534,9 @@ class Flattener {
     if (auto it = param_lits_.find(key); it != param_lits_.end()) return it->second;
     const auto pe = param_exprs_.find(key);
     if (pe == param_exprs_.end()) {
-      if (const auto fw = carry_.vals.find(key);
-          fw != carry_.vals.end() && !typed_keys_.count(key) && mark_phase_ == MarkPhase::Late) {
+      // 顺绑定链走到的（不打标记，见 const_lookup_val）不限阶段：定型期（Evaluate / 维）从记录字段一路走到声明在后的参数，
+      // omc 同样求得出（EV 探针 e12）。
+      if (const auto fw = carry_.vals.find(key); fw != carry_.vals.end() && !typed_keys_.count(key)) {
         if (!use_forward(key)) return std::nullopt;
         return fw->second;
       }
@@ -10144,21 +10174,22 @@ class Flattener {
       return se;
     };
     if (local.is_valid() && !I_.nodes[local].is_empty() && c.parts.size() > 1) {
-      // 中间段带下标（`b[1].q[2].x`、`b.q[2].x`，CA 探针 c1）：该段须是字面量整数维的复合数组、下标取尽各维、都是界内的
-      // 常量（子实例里的参数维受实例修饰影响，这里求不准 → SKIP；洞 / 切片已由 expand_composite_path 展开）。
+      // 中间段带下标（`b[1].q[2].x`、`b.q[2].x`，CA 探针 c1）：该段须是复合数组、下标取尽各维、都是界内的常量；维取那个子实例
+      // 的实际维（deep_dims：字面量 / 发射时记下的，CS 探针 c16 `p.pin[2].v`、m 是 p 的参数）；洞 / 切片已由
+      // expand_composite_path 展开。
       {
         NodeId mc = I_.nodes[local].comp.is_valid() ? I_.comps[I_.nodes[local].comp].class_inst : NodeId{};
         const ScodeScope mscope = scode_scope_of(enclosing);
+        std::vector<Symbol> chain = prefix;
+        chain.push_back(c.parts[0].name);
         for (std::size_t i = 1; i + 1 < c.parts.size(); ++i) {
           const NodeId mn = is_class_inst(mc) ? find_local(mc, c.parts[i].name) : NodeId{};
           if (!is_comp_node(mn)) break;   // 找不到：下面照常报
           const SElement& mel = I_.scode.elems[I_.comps[I_.nodes[mn].comp].def];
-          std::vector<std::int64_t> md;
-          bool mok = true;
-          for (const std::vector<Id<Exp>>* ds : {&mel.attr.dims, &mel.type.dims})
-            for (Id<Exp> d : *ds) {
-              if (I_.absyn.exps[d].kind == ExpKind::IntLit) md.push_back(I_.absyn.exps[d].ival); else mok = false;
-            }
+          chain.push_back(c.parts[i].name);
+          const std::optional<std::vector<std::int64_t>> mdd = deep_dims(mel, chain);
+          const std::vector<std::int64_t> md = mdd.value_or(std::vector<std::int64_t>{});
+          bool mok = mdd.has_value();
           const std::vector<Id<Exp>>& ms = c.parts[i].subscripts;
           mok = mok && ms.size() == md.size();
           for (std::size_t k = 0; mok && k < ms.size(); ++k) {
@@ -10783,25 +10814,26 @@ class Flattener {
     const ScodeScope scope = scode_scope_of(enclosing);
     NodeId cls = enclosing;
     bool any_hole = false;
+    std::vector<Symbol> chain = prefix;   // 各段的全名（不带下标，deep_dims 用）
     for (std::size_t i = 0; i < c.parts.size(); ++i) {
       const bool last = i + 1 == c.parts.size();
       const NodeId n = find_local(cls, c.parts[i].name);
       if (!is_comp_node(n) || (i > 0 && I_.nodes[n].visibility == Visibility::Protected)) return std::nullopt;
       if (last && !any_hole) return std::nullopt;   // 各复合段都取到了元素：照常解析（末段的切片另有处理）
       const SElement& el = I_.scode.elems[I_.comps[I_.nodes[n].comp].def];
+      chain.push_back(c.parts[i].name);
       std::vector<std::int64_t> dims;
-      for (const std::vector<Id<Exp>>* ds : {&el.attr.dims, &el.type.dims})
-        for (Id<Exp> d : *ds) {
-          if (i == 0) {
+      if (i == 0) {
+        for (const std::vector<Id<Exp>>* ds : {&el.attr.dims, &el.type.dims})
+          for (Id<Exp> d : *ds)
             if (!eval_dim(d, dims, scope)) return std::nullopt;
-          } else if (I_.absyn.exps[d].kind == ExpKind::IntLit) {
-            dims.push_back(I_.absyn.exps[d].ival);
-          } else {
-            // 更深的段是参数维 / `:` 维：有洞要展开时求不准 → 未做；没洞的留给照常解析去报。
-            if (any_hole || !c.parts[i].subscripts.empty() || !last) return unsupported();
-            return std::nullopt;
-          }
-        }
+      } else if (const std::optional<std::vector<std::int64_t>> dd = deep_dims(el, chain)) {
+        dims = *dd;
+      } else {
+        // 更深的段的实际维不知道（参差 / `:` 维）：有洞要展开时未做；没洞的留给照常解析去报。
+        if (any_hole || !c.parts[i].subscripts.empty() || !last) return unsupported();
+        return std::nullopt;
+      }
       const std::vector<Id<Exp>>& subs = c.parts[i].subscripts;
       if (subs.size() > dims.size()) return std::nullopt;   // 下标多于维数：omc 报错，照常解析去拒
       Part& p = ps[i];
@@ -10885,6 +10917,65 @@ class Flattener {
     return r;
   }
 
+  // 复合引用更深一段（子实例里的数组组件，chain = 它的全名、不带下标）的维：字面量维直接取；参数维看那个子实例发射时记下的
+  // 实际维（name_dims_：同一声明的各实例一致才算，参差 → 不知道），还没发射（向前引用：MSL 电机的 `vs[m] = plug_sp.pin.v -
+  // plug_sn.pin.v` 写在 plug 之前）→ 第二遍用第一遍记下的（carry_.shapes）。omc 是按定型后各实例的维展开（ExpandExp），与
+  // 声明先后无关（CS 探针 c10 / c11）。都没有 → nullopt。
+  std::optional<std::vector<std::int64_t>> deep_dims(const SElement& el, const std::vector<Symbol>& chain) {
+    std::vector<std::int64_t> dims;
+    bool literal = true;
+    for (const std::vector<Id<Exp>>* ds : {&el.attr.dims, &el.type.dims})
+      for (Id<Exp> d : *ds) {
+        if (I_.absyn.exps[d].kind == ExpKind::IntLit) dims.push_back(I_.absyn.exps[d].ival);
+        else literal = false;
+      }
+    if (literal) return dims;
+    const std::string k = int_key(chain, {});
+    if (const auto it = name_dims_.find(k); it != name_dims_.end()) return it->second;
+    if (const auto it = carry_.shapes.find(k); it != carry_.shapes.end()) return it->second;
+    return std::nullopt;
+  }
+  // 绑定式里有没有要靠还没发射的子实例才知道维的复合引用（`p.pin.v`、`p.pin[2].v`：更深一段是参数维数组、name_dims_ 里还没有、
+  // 第二遍带来的也没有）。只看书写的式子，不定型、无副作用（第一遍据此先不要这条绑定，见 emit_variable / emit_array）。
+  bool needs_forward_shape(Id<Exp> raw, NodeId scope, const std::vector<Symbol>& vpfx) {
+    bool hit = false;
+    auto walk = [&](auto& self, Id<Exp> x) -> void {
+      if (hit || !x.is_valid()) return;
+      const Exp& e = I_.absyn.exps[x];
+      if (e.kind == ExpKind::CrefExp) {
+        const Cref& c = I_.absyn.crefs[e.cref];
+        if (!c.leading_dot && c.parts.size() >= 2) {
+          std::vector<Symbol> chain = vpfx;
+          NodeId cls = scope;
+          for (std::size_t i = 0; i < c.parts.size() && !hit; ++i) {
+            const NodeId n = is_class_inst(cls) ? find_local(cls, c.parts[i].name) : NodeId{};
+            if (!is_comp_node(n)) break;
+            chain.push_back(c.parts[i].name);
+            if (i > 0) {
+              const SElement& el = I_.scode.elems[I_.comps[I_.nodes[n].comp].def];
+              bool literal = true;
+              for (const std::vector<Id<Exp>>* ds : {&el.attr.dims, &el.type.dims})
+                for (Id<Exp> d : *ds) literal = literal && I_.absyn.exps[d].kind == ExpKind::IntLit;
+              const std::string k = int_key(chain, {});
+              if (!literal && !name_dims_.count(k) && !carry_.shapes.count(k)) hit = true;
+            }
+            if (I_.comps[I_.nodes[n].comp].ty.kind != TypeKind::Complex) break;
+            cls = I_.comps[I_.nodes[n].comp].class_inst;
+          }
+        }
+        for (const CrefPart& p : c.parts)
+          for (Id<Exp> s : p.subscripts) self(self, s);
+        return;
+      }
+      self(self, e.a);
+      self(self, e.b);
+      self(self, e.c);
+      for (Id<Exp> a : e.args) self(self, a);
+      for (const ForIndex& it : e.iters) self(self, it.range);
+    };
+    walk(walk, raw);
+    return hit;
+  }
   // 在 enclosing 实例的 FlatTree 组件里按名字找（v1：直接线性找，规模小）。
   NodeId find_local(NodeId enclosing, Symbol name) {
     if (I_.nodes[enclosing].kind != NodeKind::Class || !I_.nodes[enclosing].cls.is_valid() ||
@@ -14402,8 +14493,10 @@ class Flattener {
   // 或名字（命名实参）匹配到字段，合成一个类修饰 SMod（缺省实参不进 subs → 该字段保留声明默认，RecordBinding1）。
   // 返回 invalid = 不适用/未支持（非构造调用、名字对不上、记录有 extends…），调用方据此仍走整体绑定 SKIP。
   // rec_const：记录组件（下沉后）是 constant——字段引用会折成字面量，与代入实参等价。
-  Id<SMod> build_record_ctor_mod(Id<Exp> callraw, NodeId ci, Id<SElement> cdef, NodeId scope, bool rec_const) {
-    if (I_.absyn.exps[callraw].kind == ExpKind::CrefExp) return split_record_cref_mod(callraw, ci, scope);
+  // final_param：组件是 final 的 parameter（记录引用绑定要类型转换时 omc 会求值，见 split_record_cref_mod）。
+  Id<SMod> build_record_ctor_mod(Id<Exp> callraw, NodeId ci, Id<SElement> cdef, NodeId scope, bool rec_const,
+                                 bool final_param) {
+    if (I_.absyn.exps[callraw].kind == ExpKind::CrefExp) return split_record_cref_mod(callraw, ci, scope, final_param);
     const Exp& call = I_.absyn.exps[callraw];
     if (call.kind != ExpKind::Call) return {};
     if (call.partial_fn || call.call_suffix.is_valid()) return {};
@@ -14488,7 +14581,8 @@ class Flattener {
   // `R(r1.x, r1.y)`，getRecordBindings（:877-918）再逐字段分发 = 类修饰 `r2(x = r1.x, y = r1.y)`。字段 = 目标记录类树的
   // 全部组件（含继承，声明序）。常量源的求值（evalExp，:958-961）由字段绑定里的常量 cref 折叠得到（RB1 探针 v1 = c1）。
   // 源须是本作用域可逐段找到的记录标量组件、且含目标的每个字段；否则（包常量 P.g、数组整体、缺字段）→ invalid → SKIP。
-  Id<SMod> split_record_cref_mod(Id<Exp> craw, NodeId ci, NodeId scope) {
+  // final_param：见 reordered_record_array。
+  Id<SMod> split_record_cref_mod(Id<Exp> craw, NodeId ci, NodeId scope, bool final_param) {
     const SourceLoc loc = I_.absyn.exps[craw].loc;
     const Cref src = I_.absyn.crefs[I_.absyn.exps[craw].cref];   // 拷贝（下面往 absyn arena add）
     auto local = [&](NodeId cls, Symbol name) {
@@ -14507,6 +14601,14 @@ class Flattener {
       cls = I_.comps[cid].class_inst;
     }
     if (!I_.nodes[cls].def.is_valid() || I_.scode.elems[I_.nodes[cls].def].restriction != SRestriction::Record) return {};
+    // final 的 parameter 记录绑到另一个记录类型、要转换的记录数组字段里字段次序不同（RecordBinding14：Cooling.DXCoil 绑
+    // Heating.DXCoil，sta[nSta] 的元素里 NominalValues 两边字段次序相反）：omc 的绑定定型成转换式，final parameter 的非 cref /
+    // 非记录式绑定被求值（flattenComplexComponent 的 tryEvalExp，NFFlatten.mo:960-982 v1.25.0）→ 字段打求得的字面量（RT 探针
+    // t41）；不 final（t42）、次序一致（t43）、不在数组里（t30 / t40）照常按字段引用拆。转换式的求值未做 → SKIP。
+    if (final_param && reordered_record_array(ci, cls, false)) {
+      set_unsupported("final record binding with reordered record array");
+      return {};
+    }
     const std::vector<NodeId> fields = I_.trees[I_.node_class(ci).tree].components;
     std::vector<SSubMod> subs;
     for (NodeId f : fields) {
@@ -14534,6 +14636,25 @@ class Flattener {
     return synth_mod(std::move(outer));
   }
 
+  // 目标记录类 to 与源记录类 from（同名字段一一对应）里，处在数组里的记录（in_array：经过了数组字段）字段次序不同？递归到底。
+  bool reordered_record_array(NodeId to, NodeId from, bool in_array) {
+    if (I_.nodes[to].def.raw == I_.nodes[from].def.raw) return false;   // 同一个记录类：次序必同
+    const std::vector<NodeId> tf = I_.trees[I_.node_class(to).tree].components;     // 拷贝
+    const std::vector<NodeId> ff = I_.trees[I_.node_class(from).tree].components;
+    bool same_order = tf.size() == ff.size();
+    for (std::size_t i = 0; same_order && i < tf.size(); ++i) same_order = I_.nodes[tf[i]].name == I_.nodes[ff[i]].name;
+    if (in_array && !same_order) return true;
+    for (NodeId t : tf) {
+      const NodeId f = find_local(from, I_.nodes[t].name);
+      if (!is_comp_node(t) || !is_comp_node(f) || I_.comps[I_.nodes[t].comp].ty.kind != TypeKind::Complex) continue;
+      const NodeId tc = I_.comps[I_.nodes[t].comp].class_inst, fc = I_.comps[I_.nodes[f].comp].class_inst;
+      if (!is_class_inst(tc) || !is_class_inst(fc)) continue;
+      const SElement& te = I_.scode.elems[I_.comps[I_.nodes[t].comp].def];
+      const bool arr = !te.attr.dims.empty() || !te.type.dims.empty();
+      if (reordered_record_array(tc, fc, in_array || arr)) return true;
+    }
+    return false;
+  }
   // 记录整体绑定是 if 式且条件 ≤ parameter：splitRecordCref 的 IF 分支（NFFlatten.mo:1061-1074）——条件求值成功即标结构参数
   // （帧求值读参数即记）、选支再拆（RE1 探针 `p3 = if k > 3 then P(1, 2) else P(a = k)` → k final、`p3.a = 2.0`）；条件引用运行时
   // 变量 → 原样（随后挪成方程）。条件参数须字面量绑定 / fixed（传递标记依赖 omc 求值次序，同 if 方程，见 cond_params_fixed），
@@ -17188,12 +17309,15 @@ FlattenResult flatten(Inst& inst, Interner& in, NodeId root) {
   Flattener f1(inst, in);
   f1.set_lenient(true);
   FlattenResult r1 = f1.run(root);
-  // 第一遍别处还有 SKIP：第二遍只多了向前引用的值，同样过不去——报第一遍的原因（更靠前的真卡点）。
-  if (!f1.needs_second_pass() || r1.unsupported) return r1;
+  // 要第二遍就走：第一遍里先留着的项（向前引用的值 / 维）可能让第一遍在后面判了 SKIP（结构参数绑定不是字面量…），第二遍过了
+  // 就不作数。两遍都 SKIP → 报第一遍的：第一遍若在真卡点停下，带过去的值不全，第二遍会在更前面的向前引用处卡住，那不是真卡点。
+  if (!f1.needs_second_pass()) return r1;
   auto carry = f1.take_carry();
   Flattener f2(inst, in);
   f2.set_carry(std::move(carry));
-  return f2.run(root);
+  FlattenResult r2 = f2.run(root);
+  if (r2.unsupported && r1.unsupported) return r1;
+  return r2;
 }
 
 }  // namespace ymc

@@ -1,0 +1,55 @@
+//// set: ev-e1 — Evaluate = true 的参数顺记录整体绑定链求值（记录参数声明在前 / 在后、外层实例里）
+//// model: E10
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+model Core
+parameter CP coreParameters(m = 3);
+final parameter Integer m = coreParameters.m annotation(Evaluate = true);
+end Core;
+model Mach
+parameter CP statorCoreParameters(final m = 3, PRef = 1);
+Core statorCore(final coreParameters = statorCoreParameters);
+end Mach;
+model E10
+Mach aimc;
+end E10;
+//// model: E11
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+model Core
+parameter CP coreParameters(m = 3);
+final parameter Integer m = coreParameters.m annotation(Evaluate = true);
+end Core;
+model E11
+parameter CP scp(final m = 3, PRef = 1);
+Core statorCore(final coreParameters = scp);
+end E11;
+//// model: E12
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+model Core
+parameter CP coreParameters(m = 3);
+final parameter Integer m = coreParameters.m annotation(Evaluate = true);
+end Core;
+model E12
+Core statorCore(coreParameters = scp);
+parameter CP scp(final m = 3, PRef = 1);
+end E12;
+//// model: E13
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+model Core
+parameter CP coreParameters(m = 3);
+parameter Integer m = coreParameters.m annotation(Evaluate = true);
+end Core;
+model E13
+Core statorCore;
+end E13;

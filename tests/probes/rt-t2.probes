@@ -1,0 +1,122 @@
+//// set: rt-t2 — 同上，含记录数组字段（参数维 / 字面量维、嵌套实例里再绑）
+//// model: T20
+package C
+record S
+parameter Real x = 1;
+end S;
+record D
+parameter Integer n = 1;
+parameter S s[n];
+end D;
+end C;
+package H
+record S
+parameter Real x = 1;
+end S;
+record D
+parameter Integer n = 1;
+parameter S s[n];
+end D;
+end H;
+model M
+parameter C.D d;
+end M;
+model T20
+parameter H.D h(s = {H.S(x = 2)});
+M m(d = h);
+end T20;
+//// model: T21
+package C
+record S
+parameter Real x = 1;
+end S;
+record D
+parameter Integer n = 1;
+parameter S s[n];
+end D;
+end C;
+model M
+parameter C.D d;
+end M;
+model T21
+parameter C.D h(s = {C.S(x = 2)});
+M m(d = h);
+end T21;
+//// model: T22
+package C
+record S
+parameter Real x = 1;
+end S;
+record D
+parameter S s[2];
+end D;
+end C;
+package H
+record S
+parameter Real x = 1;
+end S;
+record D
+parameter S s[2];
+end D;
+end H;
+model M
+parameter C.D d;
+end M;
+model T22
+parameter H.D h(s = {H.S(x = 2), H.S(x = 3)});
+M m(d = h);
+end T22;
+//// model: T23
+package C
+record S
+parameter Real x = 1;
+end S;
+record D
+parameter S s;
+end D;
+end C;
+package H
+record S
+parameter Real x = 1;
+end S;
+record D
+parameter S s;
+end D;
+end H;
+model M
+parameter C.D d;
+end M;
+model T23
+parameter H.D h(s = H.S(x = 2));
+M m(d = h);
+end T23;
+//// model: T24
+package C
+record S
+parameter Real x = 1;
+end S;
+record D
+parameter Integer n = 1;
+parameter S s[n];
+end D;
+end C;
+package H
+record S
+parameter Real x = 1;
+end S;
+record D
+parameter Integer n = 1;
+parameter S s[n];
+end D;
+end H;
+model M
+parameter C.D d;
+end M;
+model W
+parameter H.D hd;
+M m(d = hd);
+end W;
+model T24
+parameter H.D h(s = {H.S(x = 2)});
+W w(hd = h);
+end T24;

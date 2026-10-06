@@ -5097,6 +5097,38 @@ YMC_TEST(flatten_pre_of_when_assigned_variable) {
                            "  c = change(z.ySample);\nend PD1;\n"));
 }
 
+YMC_TEST(flatten_composite_reference_through_parameter_sized_array) {
+  // 复合引用穿过子实例里参数维的数组（MSL 电机 `vs[m] = plug_sp.pin.v - plug_sn.pin.v`，pin[m] 的 m 是 plug 的参数）：维取那个
+  // 子实例的实际维；plug 声明在后（向前引用）→ 两遍压平，第二遍用第一遍记下的维。期望 = omc 1.25.0 实跑（2026-10-06，下同）。
+  YMC_CHECK_EQ(flatten_src("connector Pin\n  Real v;\n  flow Real i;\nend Pin;\nconnector Plug\n  parameter Integer m = 3;\n"
+                           "  Pin pin[m];\nend Plug;\nmodel M\n  final parameter Integer m = 3 annotation(Evaluate = true);\n"
+                           "  output Real vs[m] = p.pin.v - n.pin.v;\n  Real v2 = p.pin[2].v;\n  Plug p(final m = m);\n"
+                           "  Plug n(final m = m);\nend M;\nmodel CSF1\n  M mm;\nend CSF1;\n"),
+               std::string("class CSF1\n  final parameter Integer mm.m = 3;\n  Real mm.vs[1];\n  Real mm.vs[2];\n"
+                           "  Real mm.vs[3];\n  Real mm.v2 = mm.p.pin[2].v;\n  final parameter Integer mm.p.m = 3;\n"
+                           "  Real mm.p.pin[1].v;\n  Real mm.p.pin[1].i;\n  Real mm.p.pin[2].v;\n  Real mm.p.pin[2].i;\n"
+                           "  Real mm.p.pin[3].v;\n  Real mm.p.pin[3].i;\n  final parameter Integer mm.n.m = 3;\n"
+                           "  Real mm.n.pin[1].v;\n  Real mm.n.pin[1].i;\n  Real mm.n.pin[2].v;\n  Real mm.n.pin[2].i;\n"
+                           "  Real mm.n.pin[3].v;\n  Real mm.n.pin[3].i;\nequation\n  mm.p.pin[1].i = 0.0;\n"
+                           "  mm.p.pin[2].i = 0.0;\n  mm.p.pin[3].i = 0.0;\n  mm.n.pin[1].i = 0.0;\n  mm.n.pin[2].i = 0.0;\n"
+                           "  mm.n.pin[3].i = 0.0;\n"
+                           "  mm.vs = {mm.p.pin[1].v - mm.n.pin[1].v, mm.p.pin[2].v - mm.n.pin[2].v, mm.p.pin[3].v - mm.n.pin[3].v};\n"
+                           "end CSF1;\n"));
+}
+
+YMC_TEST(flatten_evaluate_through_forward_record_binding) {
+  // Evaluate = true 的参数绑定顺记录整体绑定链到声明在后的记录参数（MSL 电机 `statorCore.m = coreParameters.m`）：第一遍先留着，
+  // 第二遍用第一遍的值；记录字段本身成结构参数，链上的依赖不连带。
+  YMC_CHECK_EQ(flatten_src("record CP\n  parameter Integer m;\n  parameter Real PRef = 0;\nend CP;\nmodel Core\n"
+                           "  parameter CP coreParameters(m = 3);\n"
+                           "  final parameter Integer m = coreParameters.m annotation(Evaluate = true);\nend Core;\nmodel EVF1\n"
+                           "  Core statorCore(coreParameters = scp);\n  parameter CP scp(final m = 3, PRef = 1);\nend EVF1;\n"),
+               std::string("class EVF1\n  final parameter Integer statorCore.coreParameters.m = 3;\n"
+                           "  parameter Real statorCore.coreParameters.PRef = scp.PRef;\n"
+                           "  final parameter Integer statorCore.m = 3;\n  final parameter Integer scp.m = 3;\n"
+                           "  parameter Real scp.PRef = 1.0;\nend EVF1;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);
