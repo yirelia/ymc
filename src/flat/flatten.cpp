@@ -3527,6 +3527,10 @@ class Flattener {
       const PhaseScope self_phase(*this, struct_early ? MarkPhase::Early : MarkPhase::Binding);
       std::optional<CVal> cv;
       const StructSnap snap = struct_snap();
+      // 这里求的是"打印用的字面量"——omc 在压平之后（EvalConstants）才求结构参数的绑定，那时变量都已压平，求值存回组件不再
+      // 影响输出：碰到的向前参数不算"发射前被求值"（ST 探针 t43 `Core core(cp = d.scp); parameter Data d;` 里 Evaluate 的
+      // core.m 求得 3、`d.scp.m = d.m` 照旧；t53 `s.k = j + 1`）。定型期的求值（维 t55 `s.k = 2`、条件…）在各自的使用处碰。
+      const std::size_t touch_mark = touched_log_.size();
       std::unordered_set<std::uint32_t> used;
       forward_miss_ = false;
       if (auto it = const_vals_.find(vkey); it != const_vals_.end()) cv = it->second;
@@ -3541,6 +3545,7 @@ class Flattener {
       if (eval_true && !struct_other)
         for (std::uint32_t d : used)
           if (evaluate_annotation(Id<SElement>::from_index(d)) == std::optional<bool>(false)) struct_final = false;
+      untouch(touch_mark);
       if (!struct_final) {
         struct_restore(snap);
       } else {
@@ -8400,9 +8405,24 @@ class Flattener {
         } else {
           const Id<Expr> de = fn_exp(d, Type::integer());
           if (result_.unsupported || !de.is_valid()) return fn_fail<std::optional<std::size_t>>("function variable dimension");
-          if (result_.model.exprs[de].kind == ExprKind::IntLit) {
+          // 维只引用常量（函数自己的 `constant Integer m = 3`、包常量）：omc 定型变量时把维求成字面量（体里的引用照留符号；
+          // MSL SpacePhasors.Functions.activePower 的 `input SI.Voltage v[m]` → `input Real[3] v(quantity = {…})`，IMC_YD）。
+          // 引用输入 / 参数的不求（allow_param = false）。
+          // 求值关掉实例帧：调用处的模型实例里同名的参数（电机的 `m`）不能遮住函数自己的常量（同 eval_user_call 的 frame_off）。
+          std::optional<std::int64_t> cdim;
+          if (result_.model.exprs[de].kind != ExprKind::IntLit) {
+            const int saved_frame = ceval_frame_;
+            const std::vector<Symbol>* saved_prefix = ceval_prefix_;
+            ceval_frame_ = -1;
+            ceval_prefix_ = nullptr;
+            const std::optional<CVal> cv = eval_scode(d, fr.fscope, 0, /*allow_param=*/false);
+            ceval_frame_ = saved_frame;
+            ceval_prefix_ = saved_prefix;
+            if (cv && cv->k == CVal::K::Int) cdim = cv->i;
+          }
+          if (result_.model.exprs[de].kind == ExprKind::IntLit || cdim) {
             dim.kind = DimKind::Integer;
-            dim.size = result_.model.exprs[de].ival;
+            dim.size = cdim ? *cdim : result_.model.exprs[de].ival;
           } else {
             dim.kind = DimKind::Exp;
             dim.exp = de;
@@ -15080,6 +15100,8 @@ class Flattener {
     std::vector<Symbol> path; bool is_flow; Type ty; std::vector<std::int64_t> dims;
     bool is_stream = false;
     std::vector<Symbol> flow_path;
+    // dims 各维落在 path 的哪一段（子连接器数组 `pin[m].v` 的维在 pin 段）；空 = 全在末段。
+    std::vector<std::size_t> dim_seg;
   };
   // connect 端的种类（sortConnections，NFExpandableConnectors.mo:126-171）：Expandable = expandable 连接器组件本身（cty
   // EXPANDABLE）；Declared = 已声明的 potentially present 成员；Virtual = expandable 里未声明的名字（虚元素，NAME 节点）。
@@ -15124,9 +15146,12 @@ class Flattener {
   // 连接器叶成员表（对标 Connector.split → splitImpl/splitImpl2，NFConnector.mo:328-393）：每层 potential 在前、flow 在后，
   // 组内**按名升序**（makeConnectorType 遍历 ClassTree.enumerateComponents = 按名 LookupTree 折叠，NFTyping.mo:339-354 /
   // NFClassTree.mo:1418-1444；cons/reverse 链净效果为升序，YmcOrder.Flat/Nested + ConnectDiffOrder2 探针实测）；
-  // 子连接器（potential 位）就地递归展开（splitImpl :342-348）。数组成员保留维度（:363），发射时再逐元素摊。
-  // stream / 记录成员（:354-360 未做）/ 子连接器数组 / `flow` 前缀子连接器（conn9）/ 非 Var 变率 / 非字面量维 → false（SKIP）。
-  bool connector_leaves(NodeId conn, const std::vector<Symbol>& mpath, std::vector<ConnMember>& out) {
+  // 子连接器（potential 位，含子连接器数组）就地递归展开（splitImpl :342-348）。数组成员保留维度（:363），发射时再逐元素摊。
+  // stream / 记录成员（:354-360 未做）/ 数组里的 stream / `flow` 前缀子连接器（conn9）/ 非 Var 变率 / 求不出的维 → false（SKIP）。
+  // inst：本连接器实例的全名链（不带下标）；成员 / 子连接器数组的参数维按它取发射时记下的实际维（name_dims_：`Plug p(m = 2)`
+  // 的 `Pin pin[m]` 是 2 不是类里的缺省 3）。nullptr = 不知道实例（只收字面量维）。
+  bool connector_leaves(NodeId conn, const std::vector<Symbol>& mpath, std::vector<ConnMember>& out,
+                        const std::vector<Symbol>* inst = nullptr) {
     const std::vector<NodeId> mnodes = I_.trees[I_.node_class(conn).tree].components;   // 拷贝（不跨 add）
     std::vector<NodeId> pots, flows, streams;   // makeConnectorType 三组（NFTyping.mo:339-354）
     for (NodeId mn : mnodes) {
@@ -15145,12 +15170,11 @@ class Flattener {
       // 非连续的 flow 未做 → SKIP。
       if (is_flow && I_.comps[mc].attributes.variability != SVariability::Var) return false;
       std::vector<std::int64_t> mdims;
-      for (Id<Exp> d : mcel.attr.dims) if (!eval_dim(d, mdims, mscope)) return false;   // 非字面量维 → SKIP
-      for (Id<Exp> d : mcel.type.dims) if (!eval_dim(d, mdims, mscope)) return false;
+      if (!member_dims(mcel, mscope, inst, I_.nodes[mn].name, mdims)) return false;
       for (std::int64_t n : mdims) if (n <= 0) return false;   // 空数组成员（omc 整体丢弃）未做 → SKIP
       std::vector<Symbol> p = mpath;
       p.push_back(I_.nodes[mn].name);
-      out.push_back({std::move(p), is_flow, I_.comps[mc].ty, std::move(mdims), false, {}});
+      out.push_back({std::move(p), is_flow, I_.comps[mc].ty, std::move(mdims), false, {}, {}});
       return true;
     };
     for (NodeId mn : pots) {
@@ -15161,13 +15185,33 @@ class Flattener {
       if (!sub.is_valid() || I_.nodes[sub].is_empty() || !I_.nodes[sub].def.is_valid()) return false;
       const SRestriction sr = I_.scode.elems[I_.nodes[sub].def].restriction;
       const SElement& mcel = I_.scode.elems[I_.comps[mc].def];
-      if (!mcel.attr.dims.empty() || !mcel.type.dims.empty()) return false;
+      // 子连接器数组（MSL Polyphase Plug 的 `Pin pin[m]`）：照样就地递归，递归出的成员都带上这一段的维（split 里数组成员
+      // 保留维、scalarize 行主序展开，NFConnector.mo:363 / NFConnection.mo:76-98；SP 探针 s10：`p.pin[1].v = n.pin[1].v;
+      // p.pin[2].v = n.pin[2].v;` 再 flow）。记录数组成员未做。
+      std::vector<std::int64_t> sdims;
+      if (!mcel.attr.dims.empty() || !mcel.type.dims.empty()) {
+        if (sr != SRestriction::Connector || !inst || !member_dims(mcel, mscope, inst, I_.nodes[mn].name, sdims)) return false;
+        for (std::int64_t n : sdims) if (n <= 0) return false;
+      }
       if (I_.comps[mc].attributes.variability != SVariability::Var) return false;
       std::vector<Symbol> p = mpath;
       p.push_back(I_.nodes[mn].name);
-      if (sr == SRestriction::Connector) { if (!connector_leaves(sub, p, out)) return false; }
+      std::vector<Symbol> sub_inst;
+      if (inst) { sub_inst = *inst; sub_inst.push_back(I_.nodes[mn].name); }
+      const std::size_t before = out.size();
+      if (sr == SRestriction::Connector) { if (!connector_leaves(sub, p, out, inst ? &sub_inst : nullptr)) return false; }
       else if (sr == SRestriction::Record) { if (!record_leaves(sub, p, false, out)) return false; }
       else return false;
+      if (!sdims.empty())
+        for (std::size_t k = before; k < out.size(); ++k) {
+          ConnMember& m = out[k];
+          if (m.is_stream) return false;   // 数组里的 stream 成员（关联 flow 要带下标）未做
+          std::vector<std::size_t> seg(sdims.size(), mpath.size());   // 子连接器那一段在成员路径里的位置
+          if (m.dim_seg.empty()) seg.insert(seg.end(), m.dims.size(), m.path.size() - 1);
+          else seg.insert(seg.end(), m.dim_seg.begin(), m.dim_seg.end());
+          m.dims.insert(m.dims.begin(), sdims.begin(), sdims.end());
+          m.dim_seg = std::move(seg);
+        }
     }
     for (NodeId mn : flows) {
       const CompId mc = I_.nodes[mn].comp;
@@ -15199,9 +15243,29 @@ class Flattener {
         if (I_.comps[mc].attributes.variability != SVariability::Var) return false;
         std::vector<Symbol> p = mpath;
         p.push_back(I_.nodes[mn].name);
-        out.push_back({std::move(p), false, I_.comps[mc].ty, {}, true, fpath});
+        out.push_back({std::move(p), false, I_.comps[mc].ty, {}, true, fpath, {}});
       }
     }
+    return true;
+  }
+  // 连接器成员的维：参数维优先取本实例发射时记下的实际维（name_dims_，inst + 成员名；参差 → false）——类里的缺省值不一定是
+  // 本实例的；没有记录 / 不知道实例的照旧按声明在类作用域求（字面量维同）。
+  bool member_dims(const SElement& el, const ScodeScope& scope, const std::vector<Symbol>* inst, Symbol name,
+                   std::vector<std::int64_t>& out) {
+    bool literal = true;
+    for (const std::vector<Id<Exp>>* ds : {&el.attr.dims, &el.type.dims})
+      for (Id<Exp> d : *ds) literal = literal && I_.absyn.exps[d].kind == ExpKind::IntLit;
+    if (!literal && inst) {
+      std::vector<Symbol> chain = *inst;
+      chain.push_back(name);
+      if (const auto it = name_dims_.find(int_key(chain, {})); it != name_dims_.end()) {
+        if (!it->second) return false;
+        out = *it->second;
+        return true;
+      }
+    }
+    for (Id<Exp> d : el.attr.dims) if (!eval_dim(d, out, scope)) return false;
+    for (Id<Exp> d : el.type.dims) if (!eval_dim(d, out, scope)) return false;
     return true;
   }
   // 记录成员的字段叶（splitImpl 记录分支，NFConnector.mo:354-360：ClassTree.getComponents = 组件数组 = **声明序**，
@@ -15228,7 +15292,7 @@ class Flattener {
       for (Id<Exp> d : fcel.attr.dims) if (!eval_dim(d, fdims, fscope)) return false;
       for (Id<Exp> d : fcel.type.dims) if (!eval_dim(d, fdims, fscope)) return false;
       for (std::int64_t n : fdims) if (n <= 0) return false;
-      out.push_back({std::move(p), is_flow, I_.comps[fc].ty, std::move(fdims), false, {}});
+      out.push_back({std::move(p), is_flow, I_.comps[fc].ty, std::move(fdims), false, {}, {}});
     }
     return true;
   }
@@ -15278,8 +15342,12 @@ class Flattener {
     std::string k = conn_key(c.path, c.subs);
     for (std::size_t i = 0; i < m.path.size(); ++i) {
       k += std::to_string(m.path[i].id);
-      if (i + 1 == m.path.size())
-        for (std::int64_t v : idx) { k.push_back('['); k += std::to_string(v); k.push_back(']'); }
+      for (std::size_t d = 0; d < idx.size(); ++d)
+        if ((m.dim_seg.empty() ? m.path.size() - 1 : m.dim_seg[d]) == i) {
+          k.push_back('[');
+          k += std::to_string(idx[d]);
+          k.push_back(']');
+        }
       k.push_back('.');
     }
     return k;
@@ -15394,7 +15462,9 @@ class Flattener {
       if (I_.comps[ccid].ty.kind == TypeKind::Complex) {
         const NodeId conn = class_of(cur);
         if (!conn.is_valid() || I_.scode.elems[I_.nodes[conn].def].restriction != SRestriction::Connector) return std::nullopt;
-        if (!connector_leaves(conn, {}, members)) return std::nullopt;
+        std::vector<Symbol> inst = prefix;   // 连接器实例的全名链（成员的参数维按实例取，见 connector_leaves）
+        inst.insert(inst.end(), path.begin(), path.end());
+        if (!connector_leaves(conn, {}, members, &inst)) return std::nullopt;
       } else {
         // 短类连接器（组件本身即唯一标量叶，splitImpl 非 COMPLEX 分支，NFConnector.mo:366），或 expandable 里声明的
         // 内建标量成员（`Real x`，isConnector 靠 POTENTIALLY_PRESENT 位）。
@@ -15403,7 +15473,7 @@ class Flattener {
         const bool fl = I_.comps[ccid].attributes.connector == SConnectorType::Flow;
         // `connector C = parameter Real`：parameter/constant 短类连接器照常连，发射时出断言（ConstantConnector1/2）；flow 须连续。
         if (fl && I_.comps[ccid].attributes.variability != SVariability::Var) return std::nullopt;
-        members.push_back({{}, fl, I_.comps[ccid].ty, {}, false, {}});
+        members.push_back({{}, fl, I_.comps[ccid].ty, {}, false, {}, {}});
       }
     }
     // 元素列表（对标 ExpandExp.expandCref：每段下标按 Subscript.expandList 展开——给定下标：整数/迭代变量取值、
@@ -15510,15 +15580,25 @@ class Flattener {
   }
 
   // 连接器成员 cref：`path[subs].m1.m2…[msubs]`（mpath = 成员相对路径，嵌套连接器多段；msubs = 数组成员的元素下标，标量空）。
+  // dim_seg：msubs 各下标落在 mpath 的哪一段（见 ConnMember::dim_seg）；空 = 全在末段。
   Id<Expr> member_cref(const std::vector<Symbol>& path, const std::vector<std::vector<Id<Expr>>>& subs,
-                       const std::vector<Symbol>& mpath, const std::vector<Id<Expr>>& msubs, Type ty) {
+                       const std::vector<Symbol>& mpath, const std::vector<Id<Expr>>& msubs, Type ty,
+                       const std::vector<std::size_t>& dim_seg = {}) {
     Expr e;
     e.kind = ExprKind::Cref;
     e.ty = ty;
     for (std::size_t i = 0; i < path.size(); ++i)
       e.cref.parts.push_back({path[i], i < subs.size() ? subs[i] : std::vector<Id<Expr>>{}});
-    for (std::size_t i = 0; i < mpath.size(); ++i)
-      e.cref.parts.push_back({mpath[i], i + 1 == mpath.size() ? msubs : std::vector<Id<Expr>>{}});
+    for (std::size_t i = 0; i < mpath.size(); ++i) {
+      std::vector<Id<Expr>> s;
+      if (dim_seg.empty()) {
+        if (i + 1 == mpath.size()) s = msubs;
+      } else {
+        for (std::size_t d = 0; d < msubs.size() && d < dim_seg.size(); ++d)
+          if (dim_seg[d] == i) s.push_back(msubs[d]);
+      }
+      e.cref.parts.push_back({mpath[i], std::move(s)});
+    }
     return add(std::move(e));
   }
   Id<Expr> neg_expr(Id<Expr> x) {
@@ -15659,7 +15739,7 @@ class Flattener {
         continue;
       }
       if (I_.comps[mc].attributes.connector != SConnectorType::Potential) return false;
-      out.push_back({std::move(p), false, I_.comps[mc].ty, {}, false, {}});
+      out.push_back({std::move(p), false, I_.comps[mc].ty, {}, false, {}, {}});
     }
     return true;
   }
@@ -15985,8 +16065,8 @@ class Flattener {
       const std::vector<Id<Expr>> msubs = idx_to_exprs(p.idx);
       auto endpoint = [&](const ConnInfo& c) -> std::size_t {
         const std::string nk = leaf_key(c, *p.m, p.idx);
-        SetNode n{member_cref(c.path, c.subs, p.m->path, msubs, p.m->ty), c.outside, p.m->is_flow, p.m->ty, p.r->loc,
-                  false, nk, {}, {}};
+        SetNode n{member_cref(c.path, c.subs, p.m->path, msubs, p.m->ty, p.m->dim_seg), c.outside, p.m->is_flow, p.m->ty,
+                  p.r->loc, false, nk, {}, {}};
         if (p.m->is_stream) {   // 关联 flow：同一连接器元素的唯一 flow（associatedFlowCref :1106-1126）
           n.is_stream = true;
           n.flow_cref = member_cref(c.path, c.subs, p.m->flow_path, {}, Type::real());
@@ -16350,7 +16430,10 @@ class Flattener {
     structural_keys_ = std::move(s.keys);
     structural_set_ = std::move(s.set);
     deps_time_ = std::move(s.deps);
-    while (touched_log_.size() > s.touched_n) {
+    untouch(s.touched_n);
+  }
+  void untouch(std::size_t n) {   // 撤掉 touched_log_ 第 n 条之后的"发射前被求值"
+    while (touched_log_.size() > n) {
       touched_.erase(touched_log_.back());
       touched_log_.pop_back();
     }

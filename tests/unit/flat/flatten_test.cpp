@@ -5230,6 +5230,42 @@ YMC_TEST(flatten_negative_zero_literal_negation) {
                            "  y[2] = -time;\n  y[3] = -2.0 * time;\nend NZ1;\n"));
 }
 
+YMC_TEST(flatten_sub_connector_array_connect) {
+  // 连接器里的子连接器数组（MSL Polyphase Plug 的 `Pin pin[m]`）：connect 整个 Plug → 逐元素的势相等 + 流和为零，下标落在 pin
+  // 段；维取本实例的修饰值（m = 2，不是类里的缺省 3）。期望 = omc 1.25.0 实跑（2026-10-06，下同）。
+  YMC_CHECK_EQ(flatten_src("connector Pin\n  Real v;\n  flow Real i;\nend Pin;\nconnector Plug\n"
+                           "  parameter Integer m = 3;\n  Pin pin[m];\nend Plug;\nmodel SP1\n  parameter Integer m = 2;\n"
+                           "  Plug p(m = m);\n  Plug n(m = m);\nequation\n  connect(p, n);\nend SP1;\n"),
+               std::string("class SP1\n  final parameter Integer m = 2;\n  final parameter Integer p.m = 2;\n"
+                           "  Real p.pin[1].v;\n  Real p.pin[1].i;\n  Real p.pin[2].v;\n  Real p.pin[2].i;\n"
+                           "  final parameter Integer n.m = 2;\n  Real n.pin[1].v;\n  Real n.pin[1].i;\n  Real n.pin[2].v;\n"
+                           "  Real n.pin[2].i;\nequation\n  p.pin[1].v = n.pin[1].v;\n  p.pin[2].v = n.pin[2].v;\n"
+                           "  -(p.pin[1].i + n.pin[1].i) = 0.0;\n  -(p.pin[2].i + n.pin[2].i) = 0.0;\n  p.pin[1].i = 0.0;\n"
+                           "  p.pin[2].i = 0.0;\n  n.pin[1].i = 0.0;\n  n.pin[2].i = 0.0;\nend SP1;\n"));
+}
+
+YMC_TEST(flatten_function_constant_dimension) {
+  // 函数形参的维只引用函数自己的常量：打印成字面量维 `Real[3] v`，体里的引用照留（MSL SpacePhasors 的 `v[m]`）。
+  YMC_CHECK_EQ(flatten_src("function f\n  input Real v[m];\n  output Real s;\nprotected\n  constant Integer m = 3;\n"
+                           "algorithm\n  s := sum(v);\nend f;\nmodel FD1\n  Real x[3] = {time, 2, 3};\n  Real y = f(x);\n"
+                           "end FD1;\n"),
+               std::string("function f\n  input Real[3] v;\n  output Real s;\n  protected constant Integer m = 3;\n"
+                           "algorithm\n  s := v[1] + v[2] + v[3];\nend f;\n\nclass FD1\n  Real x[1];\n  Real x[2];\n"
+                           "  Real x[3];\n  Real y = f(x);\nequation\n  x = {time, 2.0, 3.0};\nend FD1;\n"));
+}
+
+YMC_TEST(flatten_evaluate_does_not_store_forward_binding) {
+  // Evaluate = true 的 core.m 顺记录整体绑定一路求到声明在后的 d.scp.m：值照用（core.m = 3），但 omc 在压平之后才求这个
+  // 绑定，d.scp.m 的绑定不存回、照打 `d.m`（同样是向前引用，维的求值在定型期、会存回）。
+  YMC_CHECK_EQ(flatten_src("record CP\n  parameter Integer m;\n  parameter Real PRef = 0;\nend CP;\nrecord Data\n"
+                           "  parameter Integer m = 3;\n  parameter CP scp(m = m);\nend Data;\nmodel Core\n"
+                           "  parameter CP cp(m = 5);\n  parameter Integer m = cp.m annotation(Evaluate = true);\nend Core;\n"
+                           "model ST1\n  Core core(cp = d.scp);\n  parameter Data d;\nend ST1;\n"),
+               std::string("class ST1\n  final parameter Integer core.cp.m = 3;\n  parameter Real core.cp.PRef = d.scp.PRef;\n"
+                           "  final parameter Integer core.m = 3;\n  parameter Integer d.m = 3;\n"
+                           "  parameter Integer d.scp.m = d.m;\n  parameter Real d.scp.PRef = 0.0;\nend ST1;\n"));
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

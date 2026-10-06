@@ -1,0 +1,65 @@
+//// set: st-d5 — 外层整体绑定盖过内层字段修饰（final / 非 final），Evaluate 与否
+//// model: D50
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+record Data
+final parameter Integer m = 3 annotation(Evaluate = true);
+parameter CP scp(final m = m);
+end Data;
+model M
+parameter CP scp(final m = 4);
+end M;
+model D50
+M mm(scp = d.scp);
+parameter Data d;
+end D50;
+//// model: D51
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+record Data
+parameter Integer m = 3;
+parameter CP scp(m = m);
+end Data;
+model M
+parameter CP scp(final m = 4);
+end M;
+model D51
+M mm(scp = d.scp);
+parameter Data d;
+end D51;
+//// model: D52
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+record Data
+parameter Integer m = 3;
+parameter CP scp(m = m);
+end Data;
+model M
+parameter CP scp(m = 4);
+end M;
+model D52
+M mm(scp = d.scp);
+parameter Data d;
+end D52;
+//// model: D53
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+record Data
+parameter Integer m = 3;
+parameter CP scp(m = m);
+end Data;
+model M
+parameter CP scp(final m = 4);
+end M;
+model D53
+parameter Data d;
+M mm(scp = d.scp);
+end D53;

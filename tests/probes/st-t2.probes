@@ -1,0 +1,195 @@
+//// set: st-t2 — 同上：记录整体绑定、两个实例、方程段 / 维 才标的目标、Real / Boolean / 枚举 / 数组
+//// model: T20
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+record Data
+parameter Integer m = 3;
+parameter CP scp(final m = m);
+end Data;
+model Core
+parameter CP cp(m = 3);
+final parameter Integer m = cp.m annotation(Evaluate = true);
+end Core;
+model M
+parameter CP scp(final m = 3);
+Core core(final cp = scp);
+end M;
+model T20
+M mm(scp = d.scp);
+parameter Data d;
+end T20;
+//// model: T21
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+record Data
+final parameter Integer m = 3 annotation(Evaluate = true);
+parameter CP scp(m = m);
+end Data;
+model Core
+parameter CP cp(m = 3);
+final parameter Integer m = cp.m annotation(Evaluate = true);
+end Core;
+model M
+parameter CP scp(m = 3);
+Core core(final cp = scp);
+end M;
+model T21
+M mm(scp = d.scp);
+parameter Data d;
+end T21;
+//// model: T22
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+final parameter Real G = PRef / m;
+end CP;
+record Data
+final parameter Integer m = 3 annotation(Evaluate = true);
+parameter CP scp(final m = m, PRef = 2);
+end Data;
+model Core
+parameter CP cp(m = 3);
+final parameter Integer m = cp.m annotation(Evaluate = true);
+end Core;
+model M
+parameter CP scp(final m = 3);
+Core core(final cp = scp);
+end M;
+model T22
+M mm(scp = d.scp);
+parameter Data d;
+end T22;
+//// model: T23
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+record Data
+final parameter Integer m = 3 annotation(Evaluate = true);
+parameter CP scp(final m = m);
+end Data;
+model Core
+parameter CP cp(m = 3);
+final parameter Integer m = cp.m annotation(Evaluate = true);
+Real x[m];
+end Core;
+model M
+parameter CP scp(final m = 3);
+Core core(final cp = scp);
+end M;
+model T23
+M mm(scp = d.scp);
+parameter Data d;
+end T23;
+//// model: T24
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+record Data
+parameter Integer m = 3;
+parameter CP scp(final m = m);
+end Data;
+model Core
+parameter CP cp(m = 3);
+parameter Integer m = cp.m;
+Real x[m];
+end Core;
+model M
+parameter CP scp(final m = 3);
+Core core(final cp = scp);
+end M;
+model T24
+M mm(scp = d.scp);
+parameter Data d;
+end T24;
+//// model: T25
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+record Data
+final parameter Integer m = 3 annotation(Evaluate = true);
+parameter CP scp(final m = m);
+end Data;
+model Core
+parameter CP cp(m = 3);
+final parameter Integer m = cp.m annotation(Evaluate = true);
+end Core;
+model M
+parameter CP scp(final m = 3);
+Core core(final cp = scp);
+end M;
+model T25
+M mm(scp = d.scp);
+M mm2(scp = d.scp);
+parameter Data d;
+end T25;
+//// model: T26
+model T26
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = j;
+parameter Integer j = 2;
+Real y[2];
+Real w = k;
+equation
+for i in 1:j loop y[i] = i; end for;
+end T26;
+//// model: T27
+model T27
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = j;
+parameter Integer j = h;
+parameter Integer h = 2;
+Real y[h];
+Real w = k + j;
+end T27;
+//// model: T28
+model T28
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = j;
+parameter Integer j = 2;
+Real y[j];
+Real w = k;
+end T28;
+//// model: T29
+model T29
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = j;
+Real y[j];
+parameter Integer j = 2;
+Real w = k;
+end T29;
+//// model: T210
+model T210
+parameter Real n = k annotation(Evaluate = true);
+parameter Real k = j;
+parameter Real j = 2.5 annotation(Evaluate = true);
+Real w = k;
+end T210;
+//// model: T211
+model T211
+parameter Boolean n = k annotation(Evaluate = true);
+parameter Boolean k = j;
+parameter Boolean j = true annotation(Evaluate = true);
+Real w = if k then 1 else 2;
+end T211;
+//// model: T212
+type E = enumeration(a, b);
+model T212
+parameter E n = k annotation(Evaluate = true);
+parameter E k = j;
+parameter E j = E.b annotation(Evaluate = true);
+Real w = if k == E.b then 1 else 2;
+end T212;
+//// model: T213
+model T213
+parameter Integer n[2] = k annotation(Evaluate = true);
+parameter Integer k[2] = j;
+parameter Integer j[2] = {1, 2} annotation(Evaluate = true);
+Real w = k[1];
+end T213;

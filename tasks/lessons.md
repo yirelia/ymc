@@ -333,3 +333,13 @@
 - 同桶又犯了上一条：IF3 单测断言 `b = c > 1` 要 SKIP（"if condition folds via parameter"），固定检查顺绑定走之后它与 omc 逐字节
   一致了，正式门的 ctest 才红。没 grep，是因为这次不是"删掉一个 SKIP 原因"，而是"改了触发它的判定"。补规则：(4) 改了任何
   SKIP 的判定条件都按"放开"处理——precheck 先跑临时构建的全部单测（scratchpad/precheck.sh 已加 ctest 一步），再跑扫描。
+
+## 2026-10-06 — 模仿 omc"求值存回"时，先问求值发生在流水线的哪一步
+- 模式：61t 的 IMC_YD 只剩一处不同（`aimc.statorCoreParameters.m` omc 打 3）。缩出 D40 后先在症状处补了一刀（被"发射前求值"
+  换成字面量的别名，另记别名目标），探针全过。再补对照行才看出根因：omc 只在**定型期**的求值（维、条件……）把求得的值
+  存回组件；Evaluate / 结构参数的绑定是压平之后 EvalConstants 才求，那时变量早已压平，存回不影响输出。ymc 的
+  "touched"规则对所有求值一视同仁——T20/T43 这类此前就错（`d.scp.m` 打 3，omc `d.m`），症状补丁反倒把它盖住了。
+- 规则：(1) 补"omc 求值副作用"一类规则前，先查 omc 在哪一步求值（Typing 的 typeDimension / typeIfEquation 是定型期；
+  NFFlatten / NFEvalConstants 是压平期），探针各配一行"维里用"与"Evaluate 里用"的对照；(2) 症状补丁过了探针也别收：补一行
+  "可疑机制会造成可见差异"的对照（目标不是结构参数、值不同、声明前后各一），修好根因后把症状补丁删掉再跑一遍；(3) 新
+  探针矩阵顺带暴露的旧错若不属本桶（Evaluate = false 的声明次序），移出探针包、记进 todo 的下一桶，别让它卡门也别丢。

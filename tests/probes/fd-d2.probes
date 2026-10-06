@@ -1,0 +1,57 @@
+//// set: fd-d2 — 同上：extends 图标函数、import 常量、作为修饰绑定的调用
+//// model: D20
+package Icons
+partial function Function
+end Function;
+end Icons;
+function f
+extends Icons.Function;
+input Real v[m];
+output Real s;
+protected
+constant Integer m = 3;
+algorithm
+s := sum(v);
+end f;
+model D20
+Real x[3] = {time, 2, 3};
+Real y = f(x);
+end D20;
+//// model: D21
+package K
+constant Real pi = 3.14159;
+end K;
+function f
+import K.pi;
+input Real v[m];
+output Real s;
+protected
+constant Integer m = 3;
+algorithm
+s := sum(v) * pi;
+end f;
+model D21
+Real x[3] = {time, 2, 3};
+Real y = f(x);
+end D21;
+//// model: D22
+function f
+input Real v[m];
+input Real i[m];
+output Real p;
+protected
+constant Integer m = 3;
+algorithm
+p := v * i;
+end f;
+partial model PB
+input Real ps;
+end PB;
+model M
+Real vs[3] = {time, 2, 3};
+Real is[3] = {1, 2, time};
+replaceable output PB pb(final ps = f(vs, is));
+end M;
+model D22
+M mm;
+end D22;

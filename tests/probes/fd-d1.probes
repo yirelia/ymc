@@ -1,0 +1,67 @@
+//// set: fd-d1 — 函数形参的维只引用函数常量 / 包常量：打成字面量维；引用输入的照留
+//// model: D10
+function f
+input Real v[m];
+output Real s;
+protected
+constant Integer m = 3;
+algorithm
+s := sum(v);
+end f;
+model D10
+Real x[3] = {time, 2, 3};
+Real y = f(x);
+end D10;
+//// model: D11
+function f
+input Real v[n];
+input Integer n = 3;
+output Real s;
+algorithm
+s := sum(v);
+end f;
+model D11
+Real x[3] = {time, 2, 3};
+Real y = f(x, 3);
+end D11;
+//// model: D12
+package P
+constant Integer m = 2;
+function f
+input Real v[m](each unit = "V");
+output Real s;
+algorithm
+s := v[1] + v[2];
+end f;
+end P;
+model D12
+Real x[2] = {time, 2};
+Real y = P.f(x);
+end D12;
+//// model: D13
+function f
+input Real v[m + 1];
+output Real s;
+protected
+constant Integer m = 2;
+algorithm
+s := v[1];
+end f;
+model D13
+Real x[3] = {time, 2, 3};
+Real y = f(x);
+end D13;
+//// model: D14
+type Voltage = Real(quantity = "ElectricPotential", unit = "V");
+function f
+input Voltage v[m];
+output Real s;
+protected
+constant Integer m = 3;
+algorithm
+s := sum(v);
+end f;
+model D14
+Real x[3] = {time, 2, 3};
+Real y = f(x);
+end D14;

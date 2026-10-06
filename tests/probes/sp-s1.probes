@@ -1,0 +1,119 @@
+//// set: sp-s1 — 连接器里的子连接器数组 `Pin pin[m]`：整体 connect、子模型间、单个元素对 Pin、实例修饰的维、Plug 数组
+//// model: S10
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model S10
+parameter Integer m = 2;
+Plug p(m = m);
+Plug n(m = m);
+equation
+connect(p, n);
+end S10;
+//// model: S11
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model R
+Plug p(m = 2);
+Plug n(m = 2);
+equation
+p.pin.v - n.pin.v = {1, 2};
+p.pin.i + n.pin.i = zeros(2);
+end R;
+model S11
+R r1;
+R r2;
+equation
+connect(r1.n, r2.p);
+end S11;
+//// model: S12
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model S12
+Plug p(m = 2);
+Pin q;
+equation
+connect(p.pin[2], q);
+end S12;
+//// model: S13
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+Pin pin[2];
+end Plug;
+model S13
+Plug p;
+Plug n;
+equation
+connect(p, n);
+end S13;
+//// model: S14
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+Real g;
+end Plug;
+model S14
+Plug p(m = 2);
+Plug n(m = 2);
+equation
+connect(p, n);
+end S14;
+//// model: S15
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model PtP
+parameter Integer m = 3;
+parameter Integer k = 1;
+Plug plug(final m = m);
+Pin pin;
+equation
+connect(plug.pin[k], pin);
+end PtP;
+model S15
+PtP a(m = 2, k = 2);
+end S15;
+//// model: S16
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model S16
+Plug p[2](each m = 2);
+Plug n[2](each m = 2);
+equation
+connect(p, n);
+end S16;

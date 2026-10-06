@@ -141,3 +141,12 @@ variability"）、条件组件的条件。FAIL / ACCEPTS-INVALID / CRASH 0。
 参数数组绑定里嵌在运算中的数组值调用（Polyphase.Sources 的 `phase[m] = -symmetricOrientation(m)`）+ 调用输出维的实参成结构
 参数 + 取负的零（旧错：`-{0.0, …}` 的零元素 omc 打 -0.0）之后，SKIP 原因的挪动：20 个 qualified function call → connect operand shape；7 个 qualified function call → constant evaluation；6 个 qualified function call → conditional component condition；4 个 qualified function call → non-numeric function argument；3 个 qualified function call → vectorized call argument；3 个 qualified function call → constant user call not evaluated。FAIL / ACCEPTS-INVALID /
 CRASH 0。
+
+## 2026-10-06 加宽 61t 之后：PASS 100 → 104
+
+连接器里的子连接器数组（Polyphase `Plug` 的 `Pin pin[m]`，connect 逐元素展开、下标落在 pin 段、维取本实例的修饰值）+ 函数形参的
+常量维（SpacePhasors.activePower 的 `input SI.Voltage v[m]` → `Real[3] v`）+ Evaluate 求值不再把碰到的向前参数打成字面量（omc
+在压平之后才求结构参数的绑定；IMC_YD 的 `aimc.statorCoreParameters.m` 因此恢复别名连带、打 3）之后：Machines 的 IMC_YD /
+IMC_YDarc、Polyphase 的 TransformerYD / TransformerYY 转 PASS；16 个 PowerConverters 示例从 connect operand shape 往下露出到
+duplicate variable（多重继承来的同名元素 `hbridge.fire_p`、`rectifier.m`，omc 的 replaceDuplicates / checkDuplicates 只留一个，见 R11 §3.4 第 3 点、探针 P31；ymc 未做）。FAIL /
+ACCEPTS-INVALID / CRASH 0。

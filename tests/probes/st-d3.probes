@@ -1,0 +1,47 @@
+//// set: st-d3 — 记录参数里 Evaluate 的 final 字段：整体绑定前后声明、GcRef 代入
+//// model: D30
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+parameter Real VRef = 100;
+final parameter Real GcRef = if PRef <= 0 then 0 else PRef / VRef^2 / m;
+end CP;
+record Data
+final parameter Integer m = 3 annotation(Evaluate = true);
+parameter CP scp(final m = m, PRef = 0, VRef = 100);
+end Data;
+model D30
+parameter Data d;
+end D30;
+//// model: D31
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+record Data
+final parameter Integer m = 3 annotation(Evaluate = true);
+parameter CP scp(final m = m);
+end Data;
+model M
+parameter CP cp;
+end M;
+model D31
+M mm(cp = d.scp);
+parameter Data d;
+end D31;
+//// model: D32
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+record Data
+final parameter Integer m = 3 annotation(Evaluate = true);
+parameter CP scp(final m = m);
+end Data;
+model M
+parameter CP cp;
+end M;
+model D32
+parameter Data d;
+M mm(cp = d.scp);
+end D32;

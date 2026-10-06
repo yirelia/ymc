@@ -1699,6 +1699,22 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           slice 625 例不变（PASS 560 / FAIL 0）；scodeinst PASS 560 / FAIL 29（不变，均在账）；整个 testsuite 实跑 PASS 1501→1502
           （arrays/ArraySizeFromFunc）/ FAIL 0；MSL 示例 100（不变）；探针 7493→7514（ac-* 4 集 21 个；旧探针 4 个由 SKIP 转
           PASS）；单测 259→261。
+    - [x] (61t) flat：连接器里的子连接器数组 + 函数形参的常量维 + Evaluate 求值不存回向前的绑定（2026-10-06）：
+          MSL Polyphase 的 `Plug` 里是 `Pin pin[m]`，connect 两个 Plug 此前 SKIP "connect operand shape"。connector_leaves 照
+          splitImpl 就地递归子连接器数组，成员带上这一段的维，各维记下落在成员路径的哪一段（dim_seg），叶 key / 成员 cref 的
+          下标按段放（`p.pin[2].v`）；维取本实例发射时记下的实际维（name_dims_，`Plug p(m = 2)` 是 2 不是缺省 3）。数组里的
+          stream 成员仍 SKIP。函数形参的维只引用常量时打成字面量维（`input Real[3] v`，MSL SpacePhasors.activePower 的
+          `v[m]`），求值关掉调用处的实例帧（电机里同名的参数 m 不能遮住函数常量）。顺带修正一条旧规则：结构参数发射时为打印求
+          的字面量，碰到声明在后的参数不再算"发射前被求值"——omc 在压平之后（EvalConstants）才求结构参数的绑定，存回已不影响
+          输出；此前 `Core core(cp = d.scp); parameter Data d;` 里 Evaluate 的 core.m 让 d.scp.m 打成 `3`（omc `d.m`，ST 探针
+          t40-t45，旧错），也使 d.scp.m 失去别名连带（IMC_YD 的 `aimc.statorCoreParameters.m`）。维的求值在定型期，照旧存回。
+          留给下一桶：Evaluate = false 的参数在 omc 里与声明次序相关（updateImplicitVariabilityComp 只在变率仍是 PARAMETER 时
+          标 NON_STRUCTURAL，声明在前的 Evaluate 参数先把它标成结构参数就不再改），ymc 一律当"不定"——`n = k (Evaluate);
+          k = j; j = 2 (Evaluate = false)` omc 全 final（探针在 scratchpad ta61t/pending61u，T19 / T117，旧错）。另一个更要紧：
+          继承来的组件，其声明绑定 / 维在派生类的实例作用域里查名（应在基类的词法作用域）——`model B parameter Real p = q;
+          end B; model R parameter Real q = 3; extends B; end R;` omc 报 "Variable q not found in scope B"，ymc 照收（ACCEPTS-
+          INVALID）；包常量同名时更糟：`P.B` 里 `p = q` 指 P.q，ymc 取到派生类的 q（静默错，scratchpad lx61v/v1 的 V11 / V12 / V17）。
+          门：slice 625 例 PASS 560 / FAIL 0 / oracle=live 不一致 0；scodeinst 560 / 29（不变，均在账）；testsuite 实跑 PASS 1502 / FAIL 0 / ACC 3 / CRASH 0（不变）；MSL 示例 PASS 100→104；探针 7514→7610（sp / fd / st 共 96 个，旧探针 2 个 SKIP→PASS）；单测 261→264。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

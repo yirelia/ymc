@@ -1,0 +1,62 @@
+//// set: st-t5 — 同上，对照维的求值（存回 `s.k = 2`）与 Evaluate 的（`s.k = j + 1`）
+//// model: T50
+model T50
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = j + 1;
+parameter Integer j = 1;
+end T50;
+//// model: T51
+model A
+parameter Integer k = j + 1;
+parameter Integer j = 1;
+end A;
+model T51
+parameter Integer n = a.k annotation(Evaluate = true);
+A a;
+end T51;
+//// model: T52
+record R
+parameter Integer k = 1;
+end R;
+model T52
+parameter Integer n = r.k annotation(Evaluate = true);
+parameter R r(k = j + 1);
+parameter Integer j = 1;
+end T52;
+//// model: T53
+record R
+parameter Integer k = 1;
+end R;
+model T53
+parameter Integer n = r.k annotation(Evaluate = true);
+parameter R r = s;
+parameter R s(k = j + 1);
+parameter Integer j = 1;
+end T53;
+//// model: T54
+record R
+parameter Integer k = 1;
+end R;
+model T54
+parameter Integer n = r.k annotation(Evaluate = true);
+parameter R r = s;
+parameter R s(k = j);
+parameter Integer j = 1;
+end T54;
+//// model: T55
+record R
+parameter Integer k = 1;
+end R;
+model T55
+Real x[r.k];
+parameter R r = s;
+parameter R s(k = j + 1);
+parameter Integer j = 1;
+end T55;
+//// model: T56
+model T56
+Real x[n];
+parameter Integer n = k;
+parameter Integer k = j + 1;
+parameter Integer j = 1;
+end T56;

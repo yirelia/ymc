@@ -1,0 +1,246 @@
+//// set: sp-s2 — 同上：两对不同维、维不符（都拒）、二维 / 成员带维、Bus 里的 Plug 数组、stream / 空数组（SKIP）、链式、pin 整体对 Pin 数组、切片、300 元素
+//// model: S20
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model S20
+Plug p(m = 2);
+Plug n(m = 2);
+Plug q(m = 3);
+Plug r(m = 3);
+equation
+connect(p, n);
+connect(q, r);
+end S20;
+//// model: S21
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model S21
+Plug p(m = 2);
+Plug n(m = 3);
+equation
+connect(p, n);
+end S21;
+//// model: S22
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+Pin pin[2, 2];
+end Plug;
+model S22
+Plug p;
+Plug n;
+equation
+connect(p, n);
+end S22;
+//// model: S23
+connector Pin
+Real v[2];
+flow Real i[2];
+end Pin;
+connector Plug
+Pin pin[3];
+end Plug;
+model S23
+Plug p;
+Plug n;
+equation
+connect(p, n);
+end S23;
+//// model: S24
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+Pin pin[2];
+end Plug;
+connector Bus
+Plug pl[2];
+end Bus;
+model S24
+Bus a;
+Bus b;
+equation
+connect(a, b);
+end S24;
+//// model: S25
+connector Pin
+Real v;
+flow Real i;
+stream Real h;
+end Pin;
+connector Plug
+Pin pin[2];
+end Plug;
+model S25
+Plug p;
+Plug n;
+equation
+connect(p, n);
+end S25;
+//// model: S26
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+Pin pin[0];
+Real g;
+flow Real f;
+end Plug;
+model S26
+Plug p;
+Plug n;
+equation
+connect(p, n);
+end S26;
+//// model: S27
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+Pin pin[2];
+end Plug;
+model S27
+Plug p;
+Plug n;
+Plug o;
+equation
+connect(p, n);
+connect(n, o);
+end S27;
+//// model: S28
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+Pin pin[2];
+end Plug;
+model S28
+Plug p;
+Pin q[2];
+equation
+connect(p.pin, q);
+end S28;
+//// model: S29
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+Pin pin[2];
+end Plug;
+model M
+Plug p;
+equation
+p.pin.i = {1, 2};
+end M;
+model S29
+M a;
+M b;
+equation
+connect(a.p, b.p);
+end S29;
+//// model: S210
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+Pin pin[2];
+end Plug;
+model S210
+Plug p;
+equation
+p.pin.v = {1, 2};
+end S210;
+//// model: S211
+connector Pin
+input Real v;
+output Real w;
+end Pin;
+connector Plug
+Pin pin[2];
+end Plug;
+model S211
+Plug p;
+Plug n;
+equation
+connect(p, n);
+end S211;
+//// model: S212
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model S212
+parameter Integer k = 2;
+Plug p(m = k);
+Plug n(m = k);
+equation
+connect(p, n);
+end S212;
+//// model: S213
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+Pin pin[300];
+end Plug;
+model S213
+Plug p;
+Plug n;
+equation
+connect(p, n);
+end S213;
+//// model: S214
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model S214
+Plug p(m = 2);
+Plug n(m = 2);
+equation
+connect(p.pin, n.pin);
+end S214;
+//// model: S215
+connector Pin
+Real v;
+flow Real i;
+end Pin;
+connector Plug
+parameter Integer m = 3;
+Pin pin[m];
+end Plug;
+model S215
+Plug p(m = 2);
+Plug n(m = 2);
+equation
+connect(p.pin[1:2], n.pin[{2, 1}]);
+end S215;

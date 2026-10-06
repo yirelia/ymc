@@ -1,0 +1,125 @@
+//// set: st-t3 — 记录字段求值取哪个绑定：外层整体绑定盖过字段修饰（同层 / 跨层），维里的求值
+//// model: T30
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+record Data
+parameter Integer m = 3;
+parameter CP scp(final m = m);
+end Data;
+model Core
+parameter CP cp(m = 5);
+final parameter Integer m = cp.m annotation(Evaluate = true);
+end Core;
+model M
+parameter CP scp(final m = 3);
+Core core(final cp = scp);
+end M;
+model T30
+M mm(scp = d.scp);
+parameter Data d;
+end T30;
+//// model: T31
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+record Data
+parameter Integer m = 3;
+parameter CP scp(final m = m);
+end Data;
+model Core
+parameter CP cp(m = 5);
+final parameter Integer m = cp.m;
+end Core;
+model M
+parameter CP scp(final m = 3);
+Core core(final cp = scp);
+end M;
+model T31
+M mm(scp = d.scp);
+parameter Data d;
+end T31;
+//// model: T32
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+model Core
+parameter CP cp(m = 5);
+final parameter Integer m = cp.m annotation(Evaluate = true);
+end Core;
+model T32
+parameter CP scp(m = 3);
+Core core(cp = scp);
+end T32;
+//// model: T33
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+model Core
+parameter CP cp(m = 5);
+parameter Integer m = cp.m annotation(Evaluate = true);
+end Core;
+model T33
+Core core(cp = scp);
+parameter CP scp(m = 3);
+end T33;
+//// model: T34
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+model Core
+parameter CP cp;
+parameter Integer m = cp.m annotation(Evaluate = true);
+end Core;
+model T34
+Core core(cp = scp);
+parameter CP scp(m = 3);
+end T34;
+//// model: T35
+record CP
+parameter Integer m = 7;
+parameter Real PRef = 0;
+end CP;
+model Core
+parameter CP cp;
+parameter Integer m = cp.m annotation(Evaluate = true);
+end Core;
+model T35
+Core core(cp = scp);
+parameter CP scp(m = 3);
+end T35;
+//// model: T36
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+model T36
+parameter CP cp(m = 5) = scp;
+parameter Integer m = cp.m annotation(Evaluate = true);
+parameter CP scp(m = 3);
+end T36;
+//// model: T37
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+model T37
+parameter CP scp(m = 3);
+parameter CP cp(m = 5) = scp;
+parameter Integer m = cp.m annotation(Evaluate = true);
+end T37;
+//// model: T38
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+model T38
+parameter CP scp(m = 3);
+parameter CP cp(m = 5) = scp;
+Real x[cp.m];
+end T38;

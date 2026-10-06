@@ -1,0 +1,129 @@
+//// set: st-t1 — Evaluate 链上的别名连带：标量、括号、final / constant 目标、子实例、链式
+//// model: T10
+model T10
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = j;
+parameter Integer j = 2 annotation(Evaluate = true);
+Real y = k;
+end T10;
+//// model: T11
+model T11
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = j;
+parameter Integer j = 2;
+Real y = k;
+end T11;
+//// model: T12
+model T12
+Real x[n];
+parameter Integer n = k;
+parameter Integer k = j;
+parameter Integer j = 2 annotation(Evaluate = true);
+Real y = k;
+end T12;
+//// model: T13
+model T13
+parameter Integer n = k annotation(Evaluate = true);
+parameter Real k = j;
+parameter Integer j = 2 annotation(Evaluate = true);
+Real y = k;
+end T13;
+//// model: T14
+model T14
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = m;
+parameter Integer m = j;
+parameter Integer j = 2 annotation(Evaluate = true);
+Real y = k + m;
+end T14;
+//// model: T15
+model T15
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = j;
+parameter Integer j = 2 annotation(Evaluate = true);
+Real y;
+equation
+y = k;
+end T15;
+//// model: T16
+model T16
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = (j);
+parameter Integer j = 2 annotation(Evaluate = true);
+Real y = k;
+end T16;
+//// model: T17
+model T17
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = j;
+final parameter Integer j = 2;
+Real y = k;
+end T17;
+//// model: T18
+model T18
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = j;
+constant Integer j = 2;
+Real y = k;
+end T18;
+//// model: T110
+model T110
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = j;
+parameter Integer j = 2 annotation(Evaluate = true);
+parameter Integer q = k;
+Real y = q;
+end T110;
+//// model: T111
+model T111
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = j;
+parameter Integer j = 2 annotation(Evaluate = true);
+Real z[k];
+end T111;
+//// model: T112
+model A
+parameter Integer k = j;
+parameter Integer j = 2 annotation(Evaluate = true);
+end A;
+model T112
+parameter Integer n = a.k annotation(Evaluate = true);
+A a;
+Real y = a.k;
+end T112;
+//// model: T113
+model A
+parameter Integer k;
+end A;
+model T113
+parameter Integer n = a.k annotation(Evaluate = true);
+A a(k = j);
+parameter Integer j = 2 annotation(Evaluate = true);
+Real y = a.k;
+end T113;
+//// model: T114
+model A
+parameter Integer k;
+end A;
+model T114
+parameter Integer n = a.k annotation(Evaluate = true);
+A a(k = j);
+parameter Integer j = 2;
+Real y = a.k;
+end T114;
+//// model: T115
+model T115
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = j;
+parameter Integer j = i;
+parameter Integer i = 2 annotation(Evaluate = true);
+Real y = k + j;
+end T115;
+//// model: T116
+model T116
+parameter Integer n = k annotation(Evaluate = true);
+parameter Integer k = j;
+parameter Integer j = 2 annotation(Evaluate = true);
+Real y = k;
+Real w = n;
+end T116;

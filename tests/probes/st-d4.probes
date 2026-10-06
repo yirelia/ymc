@@ -1,0 +1,59 @@
+//// set: st-d4 — Evaluate 链经记录整体绑定走到声明在后的记录：别名连带的 d.scp.m、mm.scp.m 代入
+//// model: D40
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+record Data
+final parameter Integer m = 3 annotation(Evaluate = true);
+parameter CP scp(final m = m);
+end Data;
+model Core
+parameter CP cp(m = 3);
+final parameter Integer m = cp.m annotation(Evaluate = true);
+end Core;
+model M
+parameter CP scp(final m = 3);
+Core core(final cp = scp);
+end M;
+model D40
+M mm(scp = d.scp);
+parameter Data d;
+end D40;
+//// model: D41
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+record Data
+final parameter Integer m = 3 annotation(Evaluate = true);
+parameter CP scp(final m = m);
+end Data;
+model M
+parameter CP scp(final m = 3);
+end M;
+model D41
+M mm(scp = d.scp);
+parameter Data d;
+end D41;
+//// model: D42
+record CP
+parameter Integer m;
+parameter Real PRef = 0;
+end CP;
+record Data
+final parameter Integer m = 3 annotation(Evaluate = true);
+parameter CP scp(final m = m);
+end Data;
+model Core
+parameter CP cp(m = 3);
+final parameter Integer m = cp.m annotation(Evaluate = true);
+end Core;
+model M
+parameter CP scp(final m = 3);
+Core core(final cp = scp);
+end M;
+model D42
+parameter Data d;
+M mm(scp = d.scp);
+end D42;

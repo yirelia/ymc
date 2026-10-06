@@ -1,0 +1,47 @@
+//// set: sp-ut — 子连接器数组 connect + 函数常量维 + Evaluate 不存回向前的绑定（单测原文）
+//// model: FD1
+function f
+  input Real v[m];
+  output Real s;
+protected
+  constant Integer m = 3;
+algorithm
+  s := sum(v);
+end f;
+model FD1
+  Real x[3] = {time, 2, 3};
+  Real y = f(x);
+end FD1;
+//// model: SP1
+connector Pin
+  Real v;
+  flow Real i;
+end Pin;
+connector Plug
+  parameter Integer m = 3;
+  Pin pin[m];
+end Plug;
+model SP1
+  parameter Integer m = 2;
+  Plug p(m = m);
+  Plug n(m = m);
+equation
+  connect(p, n);
+end SP1;
+//// model: ST1
+record CP
+  parameter Integer m;
+  parameter Real PRef = 0;
+end CP;
+record Data
+  parameter Integer m = 3;
+  parameter CP scp(m = m);
+end Data;
+model Core
+  parameter CP cp(m = 5);
+  parameter Integer m = cp.m annotation(Evaluate = true);
+end Core;
+model ST1
+  Core core(cp = d.scp);
+  parameter Data d;
+end ST1;
