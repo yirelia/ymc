@@ -1,0 +1,158 @@
+//// set: rp-p6 — isExpressionNotFixed 经记录字段：fixed = false / Evaluate = false 在绑定链上、记录引用查记录本身
+//// model: P60
+record R
+parameter Real a = 1;
+end R;
+model F
+parameter R fp;
+Real tau;
+equation
+if fp.a <= 0 then
+tau = 0;
+else
+tau = time;
+end if;
+end F;
+model P60
+parameter Real k(fixed = false) = 0;
+F f(fp(a = k));
+end P60;
+//// model: P61
+record R
+parameter Real a = 1;
+end R;
+model F
+parameter R fp;
+Real tau;
+equation
+if fp.a <= 0 then
+tau = 0;
+else
+tau = time;
+end if;
+end F;
+model P61
+parameter R d(a(fixed = false) = 0);
+F f(fp = d);
+end P61;
+//// model: P62
+record R
+parameter Real a = 1;
+end R;
+model F
+parameter R fp;
+Real tau;
+equation
+if fp.a <= 0 then
+tau = 0;
+else
+tau = time;
+end if;
+end F;
+model P62
+parameter Real k = 0 annotation(Evaluate = false);
+F f(fp(a = k));
+end P62;
+//// model: P63
+record R
+parameter Real a = 1;
+end R;
+model F
+parameter R fp;
+Real tau;
+equation
+if fp.a <= 0 then
+tau = 0;
+else
+tau = time;
+end if;
+end F;
+model P63
+F f(fp(a = k));
+parameter Real k(fixed = false) = 0;
+end P63;
+//// model: P64
+model F
+parameter Integer n = 1;
+Real x;
+equation
+if n > 1 then
+x = 1;
+else
+x = 2;
+end if;
+end F;
+model P64
+parameter Integer k(start = 2);
+F f(n = k);
+end P64;
+//// model: P65
+model F
+parameter Integer n = 1;
+Real x;
+equation
+if n > 1 then
+x = 1;
+else
+x = 2;
+end if;
+end F;
+model P65
+parameter Integer k(fixed = false, start = 2);
+F f(n = k);
+end P65;
+//// model: P66
+record R
+parameter Real a = 1;
+end R;
+model F
+parameter R fp;
+Real tau;
+equation
+if fp.a <= 0 then
+tau = 0;
+else
+tau = time;
+end if;
+end F;
+model P66
+parameter R d(a = 0) annotation(Evaluate = false);
+F f(fp = d);
+end P66;
+//// model: P67
+record R
+parameter Real a = 1;
+end R;
+model F
+parameter R fp;
+Real tau;
+equation
+if fp.a <= 0 then
+tau = 0;
+else
+tau = time;
+end if;
+end F;
+model P67
+parameter Real k(fixed = false) = 0;
+parameter R d(a = k);
+F f(fp = d);
+end P67;
+//// model: P68
+model F
+parameter Integer n = 1;
+Real x;
+equation
+if n > 1 then
+x = 1;
+else
+x = 2;
+end if;
+end F;
+model G
+F f;
+end G;
+model P68
+G g(f(n = k));
+parameter Integer k(fixed = false) = 2;
+end P68;

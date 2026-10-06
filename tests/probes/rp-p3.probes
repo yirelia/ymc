@@ -1,0 +1,72 @@
+//// set: rp-p3 — 更像 MSL 电机：嵌套记录字段 + 记录整体绑定 + final 修饰 + 带 final 派生字段的记录
+//// model: P30
+record FP
+parameter Real PRef(min = 0) = 0;
+parameter Real wRef = 1;
+final parameter Real tauRef = if PRef <= 0 then 0 else PRef / wRef;
+end FP;
+record Data
+parameter Real wNominal = 2;
+parameter FP fp(wRef = wNominal);
+end Data;
+model F
+parameter FP fp;
+Real tau;
+equation
+if fp.PRef <= 0 then
+tau = 0;
+else
+tau = fp.tauRef * time;
+end if;
+end F;
+model M
+parameter FP fp;
+F friction(final fp = fp);
+end M;
+model P30
+parameter Data data;
+M m(fp = data.fp);
+end P30;
+//// model: P31
+record FP
+parameter Real PRef = 0;
+end FP;
+record Data
+parameter FP fp;
+end Data;
+model F
+parameter FP fp;
+Real tau;
+equation
+if fp.PRef <= 0 then
+tau = 0;
+else
+tau = time;
+end if;
+end F;
+model P31
+parameter Data data;
+F f(fp = data.fp);
+end P31;
+//// model: P32
+record FP
+parameter Real PRef = 0;
+end FP;
+model F
+parameter FP fp;
+Real tau;
+equation
+if fp.PRef <= 0 then
+tau = 0;
+else
+tau = time;
+end if;
+end F;
+model M
+parameter FP fp;
+F friction(final fp = fp);
+end M;
+model P32
+parameter FP data;
+M m(fp = data);
+end P32;

@@ -1,0 +1,42 @@
+//// set: rp-p4 — 记录整体绑定盖掉字段修饰的绑定：final 留在字段上、each 的绑定一并盖掉
+//// model: P40
+record CP
+parameter Integer m = 3;
+parameter Real VRef = 1;
+end CP;
+model M
+parameter CP cp(final m = 3, VRef = 2);
+end M;
+model P40
+parameter CP d(m = 3, VRef = 5);
+M x(cp = d);
+end P40;
+//// model: P41
+record CP
+parameter Integer m = 3;
+parameter Real VRef = 1;
+end CP;
+model M
+parameter CP cp(final m = 3);
+end M;
+model P41
+parameter CP d(m = 4);
+M x(cp = d);
+end P41;
+//// model: P42
+record CP
+parameter Integer m = 3;
+parameter Real VRef = 1;
+end CP;
+model P42
+parameter CP d(VRef = 5);
+parameter CP cp(final VRef = 7) = d;
+end P42;
+//// model: P43
+record CP
+parameter Real v[2] = {1, 2};
+end CP;
+model P43
+parameter CP d;
+parameter CP cp(each v = 3) = d;
+end P43;

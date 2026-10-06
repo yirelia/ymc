@@ -1,0 +1,95 @@
+//// set: rp-ut — 参数绑定链的结构求值 / 求值副作用 / 不固定条件（单测原文）
+//// model: PCS1
+record R
+  parameter Real a = 1;
+end R;
+model F
+  parameter R fp;
+  Real tau;
+equation
+  if fp.a <= 0 then
+    tau = 0;
+  else
+    tau = time;
+  end if;
+end F;
+model PCS1
+  F f(fp = data);
+  parameter R data(a = 0);
+end PCS1;
+//// model: PCT1
+record R
+  parameter Real a = 1;
+  parameter Real b = 2 * a;
+  parameter Integer n = 1;
+end R;
+model F
+  parameter R fp;
+  Real tau;
+  Real y[fp.n];
+equation
+  if fp.a <= 0 then
+    tau = 0;
+  else
+    tau = fp.b * time;
+  end if;
+  y = fill(tau, fp.n);
+end F;
+model M
+  parameter R fp;
+  F friction(final fp = fp);
+end M;
+model A
+  parameter Real p = 1;
+end A;
+model PCT1
+  parameter R data(a = 0, n = 2);
+  M m(fp = data);
+  A a(p = 4);
+  parameter Real q = a.p;
+  Real z;
+equation
+  if q > 2 then
+    z = 0;
+  else
+    z = time;
+  end if;
+end PCT1;
+//// model: PNF1
+record R
+  parameter Real a = 1;
+end R;
+model F
+  parameter R fp;
+  Real tau;
+equation
+  if fp.a <= 0 then
+    tau = 0;
+  else
+    tau = time;
+  end if;
+end F;
+model PNF1
+  parameter Real k(fixed = false) = 0;
+  F f(fp(a = k));
+  parameter R d(a = 0) annotation(Evaluate = false);
+  F g(fp = d);
+  parameter R e(a(fixed = false) = 0);
+  F h(fp = e);
+end PNF1;
+//// model: PST1
+model F
+  parameter Integer n = 1;
+  Real x;
+equation
+  if n > 1 then
+    x = 1;
+  else
+    x = 2;
+  end if;
+end F;
+model PST1
+  F f(n = k);
+  parameter Integer k = j + 1;
+  parameter Integer j = 1;
+end PST1;

@@ -1622,6 +1622,24 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           slice 609→624 例 PASS 540→559（+TypeDim1 / 2、TypeExtends1 / 2、BuiltinAttribute2 / 13 / 16-18 / 22、Each2、Subscript4…）；
           scodeinst PASS 540→559 / FAIL 28（在账）；整个 testsuite 实跑 PASS 1469→1498 / FAIL 0；MSL 示例 83（不变，MultiBody 露出
           composite outer）；探针 7272→7307（xb-* 5 集 35 个）；单测 248→249。
+    - [x] (61n) flat：结构求值顺着参数绑定链 + 两遍压平（向前引用）+ omc 的不固定检查 / 求值副作用（2026-10-06）：
+          if 条件 / 维里引用子实例 / 记录的参数（`fp.a`、`r.n`、`q = a.p`）此前只认"已发射的字面量绑定参数"，值经修饰 / 记录整体
+          绑定传下来的求不出 → SKIP（MSL 电机 `friction.frictionParameters.PRef` 那类）。record_const 把绑定不是字面量的标量参数
+          也记下，flat_param_value 顺绑定链求值；只给被引用的本身打结构标记（FR 探针 p20：1.25.0 记录字段的值来自外层记录的绑定）。
+          被引用的参数声明在后（MSL 电机的 aimcData 在最后）：flatten() 两遍——第一遍宽松走完、缺值的 if 先跳过，收下参数值 /
+          绑定依赖 / 不固定结论（PassCarry），第二遍带着重来。if 方程的"条件参数是否固定"照 omc 的 Structural.isExpressionNotFixed
+          重写（emit_variable 记 Evaluate = false / 绑定来历）：Evaluate = false / fixed = false 不固定；值来自外层记录整体绑定的
+          字段查父记录的绑定——父记录的绑定也是拆来的 → 固定，记录引用 `fp = d` → 查 d 本身（d 带 Evaluate = false 不固定，d 的字段
+          自己 fixed = false 不算），记录构造 → 查整个调用；只认定型期的结构标记（压平期的那时还没打）。此前多段引用根本不查（FR 探针
+          p60 / p62 / p63 / p66 会错折）。omc 求值的副作用：方程段的结构求值求到了还没压平的参数，evalComponentBinding 把求得的值
+          存回组件，压平在后的它打字面量（`F f(n = k); parameter Integer k = j + 1;` → `k = 2`）——单遍也有（for 范围，p90 此前就
+          FAIL）；值来自外层记录整体绑定的字段不存。经嵌套记录 / 记录数组整体绑定求到声明在后的（omc 把中间那层记录整个求值、
+          存回，RecordBinding16 `zonDat[1].conDat.x = 1.0`）未做 → SKIP。记录整体绑定盖掉字段修饰的绑定时 final 留在字段上、each
+          的绑定一并盖掉（p40-p43，此前 SKIP）。
+          slice 624→625 例 PASS 559→560（+CevalRecordArray8）；scodeinst PASS 559→560 / FAIL 28→29（IfEquation9：文件 Result
+          与 1.25.0 分歧，入账）；整个 testsuite 实跑 PASS 1498→1500（CevalRecordArray8、IfEquation9）/ FAIL 0；MSL 示例 83（不变：
+          电机等 31 个从"if 条件求不出"露出下一层——复合数组元素引用 22、记录构造调用 9）；探针 7307→7387（rp-* 11 集 80 个）；
+          单测 249→252。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

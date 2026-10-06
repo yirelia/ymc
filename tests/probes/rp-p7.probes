@@ -1,0 +1,142 @@
+//// set: rp-p7 — 求值副作用：声明在后的参数被结构求值求过 → 打求得的字面量；声明在前的照旧
+//// model: P70
+model F
+parameter Integer n = 1;
+Real x;
+equation
+if n > 1 then
+x = 1;
+else
+x = 2;
+end if;
+end F;
+model P70
+parameter Integer j = 1;
+parameter Integer k = j + 1;
+F f(n = k);
+end P70;
+//// model: P71
+model F
+parameter Integer n = 1;
+Real x;
+equation
+if n > 1 then
+x = 1;
+else
+x = 2;
+end if;
+end F;
+model P71
+parameter Integer k = j + 1;
+F f(n = k);
+parameter Integer j = 1;
+end P71;
+//// model: P72
+model F
+parameter Integer n = 1;
+Real x;
+equation
+if n > 1 then
+x = 1;
+else
+x = 2;
+end if;
+end F;
+model P72
+F f(n = k);
+F g(n = k);
+parameter Integer k = j + 1;
+parameter Integer j = 1;
+end P72;
+//// model: P73
+record R
+parameter Integer a = 1;
+end R;
+model F
+parameter R r;
+Real x;
+equation
+if r.a > 1 then
+x = 1;
+else
+x = 2;
+end if;
+end F;
+model P73
+F f(r(a = k));
+parameter Integer k = j + 1;
+parameter Integer j = 1;
+end P73;
+//// model: P74
+record R
+parameter Integer a = 1;
+end R;
+model F
+parameter R r;
+Real x;
+equation
+if r.a > 1 then
+x = 1;
+else
+x = 2;
+end if;
+end F;
+model P74
+parameter Integer j = 1;
+parameter Integer k = j + 1;
+F f(r(a = k));
+end P74;
+//// model: P75
+model F
+parameter Integer n = 1;
+Real x;
+equation
+if n > 1 then
+x = 1;
+else
+x = 2;
+end if;
+end F;
+model P75
+parameter Integer j = 1;
+parameter Integer k = j + 1;
+F f(n = k + 0);
+end P75;
+//// model: P76
+model F
+parameter Integer n = 1;
+Real x;
+equation
+if n > 1 then
+x = 1;
+else
+x = 2;
+end if;
+end F;
+model G
+parameter Integer m = 1;
+F f(n = m);
+end G;
+model P76
+parameter Integer j = 1;
+G g(m = j + 1);
+end P76;
+//// model: P77
+model F
+parameter Integer n = 1;
+Real x;
+equation
+if n > 1 then
+x = 1;
+else
+x = 2;
+end if;
+end F;
+model G
+F f(n = m);
+parameter Integer m = 1;
+end G;
+model P77
+parameter Integer j = 1;
+G g(m = j + 1);
+end P77;

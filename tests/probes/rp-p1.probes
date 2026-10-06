@@ -1,0 +1,166 @@
+//// set: rp-p1 — 结构求值里的记录字段参数（if 条件 / 维 / for 范围 / 绑定里引用 `r.a`、嵌套记录、Evaluate = false）
+//// model: P10
+record R
+parameter Real a = 1;
+end R;
+model P10
+parameter R r;
+Real y;
+equation
+if r.a <= 0 then
+y = 0;
+else
+y = time;
+end if;
+end P10;
+//// model: P11
+record R
+parameter Real a = 1;
+end R;
+model P11
+parameter R r(a = -1);
+Real y;
+equation
+if r.a <= 0 then
+y = 0;
+else
+y = time;
+end if;
+end P11;
+//// model: P12
+record R
+parameter Real a = 1;
+end R;
+model P12
+parameter R r0(a = 2);
+parameter R r = r0;
+Real y;
+equation
+if r.a <= 0 then
+y = 0;
+else
+y = time;
+end if;
+end P12;
+//// model: P13
+record R
+parameter Real a = 1;
+end R;
+model F
+parameter R r;
+Real y;
+equation
+if r.a <= 0 then
+y = 0;
+else
+y = time;
+end if;
+end F;
+model P13
+parameter R q(a = -3);
+F f(r = q);
+end P13;
+//// model: P14
+record R
+parameter Real a = 1;
+parameter Real b = 2 * a;
+end R;
+model P14
+parameter R r(a = 0.25);
+Real y;
+equation
+if r.b > 1 then
+y = 0;
+else
+y = time;
+end if;
+end P14;
+//// model: P15
+record R
+parameter Integer n = 2;
+end R;
+model P15
+parameter R r;
+Real v[r.n];
+equation
+v = fill(time, r.n);
+end P15;
+//// model: P16
+record R
+parameter Integer n = 2;
+end R;
+model P16
+parameter R r(n = 3);
+Real y;
+equation
+y = sum(i * time for i in 1:r.n);
+end P16;
+//// model: P17
+record R
+parameter Real a = 1;
+end R;
+model P17
+parameter R r;
+Real y;
+equation
+y = if r.a > 0 then time else 0;
+end P17;
+//// model: P18
+record R
+parameter Real a = 1;
+end R;
+model P18
+R r;
+Real y;
+equation
+if r.a <= 0 then
+y = 0;
+else
+y = time;
+end if;
+end P18;
+//// model: P19
+record R
+constant Real a = 1;
+end R;
+model P19
+parameter R r;
+Real y;
+equation
+if r.a <= 0 then
+y = 0;
+else
+y = time;
+end if;
+end P19;
+//// model: P110
+record R
+parameter Real a = 1;
+end R;
+model P110
+parameter R r annotation(Evaluate = false);
+Real y;
+equation
+if r.a <= 0 then
+y = 0;
+else
+y = time;
+end if;
+end P110;
+//// model: P111
+record R
+parameter Real a = 1;
+end R;
+record D
+R f;
+end D;
+model P111
+parameter D d;
+Real y;
+equation
+if d.f.a <= 0 then
+y = 0;
+else
+y = time;
+end if;
+end P111;

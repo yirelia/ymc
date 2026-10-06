@@ -1,0 +1,237 @@
+//// set: rp-pa — 记录构造整体绑定查整个调用、嵌套记录 / 记录数组整体绑定、Evaluate = false 的记录、撤销求值副作用
+//// model: PA0
+record R
+parameter Real a = 1;
+parameter Real b = 2;
+end R;
+model F
+parameter R fp;
+Real t;
+equation
+if fp.a > 0 then
+t = 1;
+else
+t = 2;
+end if;
+end F;
+model PA0
+parameter Real k(fixed = false) = 3;
+F f(fp = R(a = 1, b = k));
+end PA0;
+//// model: PA1
+record R
+parameter Real a = 1;
+parameter Real b = 2;
+end R;
+model F
+parameter R fp;
+Real t;
+equation
+if fp.a > 0 then
+t = 1;
+else
+t = 2;
+end if;
+end F;
+model PA1
+parameter Real k = 3;
+F f(fp = R(a = 1, b = k));
+end PA1;
+//// model: PA2
+record S
+parameter Real x = 1;
+end S;
+record R2
+S sub;
+end R2;
+model F
+parameter R2 fp;
+Real t;
+equation
+if fp.sub.x > 0 then
+t = 1;
+else
+t = 2;
+end if;
+end F;
+model PA2
+F f(fp = d2);
+parameter R2 d2;
+end PA2;
+//// model: PA3
+record S
+parameter Real x = 1;
+end S;
+record R2
+S sub;
+end R2;
+model F
+parameter R2 fp;
+Real t;
+equation
+if fp.sub.x > 0 then
+t = 1;
+else
+t = 2;
+end if;
+end F;
+model PA3
+parameter R2 d2;
+F f(fp = d2);
+end PA3;
+//// model: PA4
+record R
+parameter Real a = 1;
+end R;
+model F
+parameter R fp;
+Real t;
+equation
+if fp.a > 0 then
+t = 1;
+else
+t = 2;
+end if;
+end F;
+model PA4
+parameter R d = R(a = 0) annotation(Evaluate = false);
+F f(fp = d);
+end PA4;
+//// model: PA5
+record R
+parameter Real a = 1;
+end R;
+model PA5
+parameter R d(a = 2) annotation(Evaluate = false);
+Real t;
+equation
+if d.a > 0 then
+t = 1;
+else
+t = 2;
+end if;
+end PA5;
+//// model: PA6
+record R
+parameter Real a = 1;
+end R;
+model F
+parameter R fp;
+Real t;
+equation
+if fp.a > 0 then
+t = 1;
+else
+t = 2;
+end if;
+end F;
+model PA6
+F f(fp = e);
+parameter R e = d;
+parameter R d(a = 0) annotation(Evaluate = false);
+end PA6;
+//// model: PA7
+model F
+parameter Real x0 = 1;
+Real t;
+equation
+if x0 > 1 then
+t = 1;
+else
+t = 2;
+end if;
+end F;
+model PA7
+F f(x0 = k);
+parameter Real k = j * 2;
+parameter Integer j = 1;
+end PA7;
+//// model: PA8
+model F
+parameter Integer n = 1;
+Real x;
+equation
+if n > 1 then
+x = 1;
+else
+x = 2;
+end if;
+end F;
+model PA8
+F f(n = k);
+parameter Integer k(fixed = false) = j + 1;
+parameter Integer j = 1;
+end PA8;
+//// model: PA9
+model F
+parameter Integer n = 1;
+Real x;
+equation
+if n > 1 then
+x = 1;
+else
+x = 2;
+end if;
+end F;
+model G
+F f(n = m);
+parameter Integer m = 1;
+end G;
+model PA9
+G g(m = k);
+parameter Integer k = j + 1;
+parameter Integer j = 1;
+end PA9;
+//// model: PA10
+record R
+parameter Real a = 1;
+end R;
+model F
+parameter R fp;
+Real t;
+equation
+if fp.a > 0 then
+t = 1;
+else
+t = 2;
+end if;
+end F;
+model PA10
+F f[2](fp = {R(a = 1), R(a = -1)});
+end PA10;
+//// model: PA11
+record R
+parameter Real a = 1;
+end R;
+model F
+parameter R fp;
+Real t;
+equation
+if fp.a > 0 then
+t = 1;
+else
+t = 2;
+end if;
+end F;
+model PA11
+F f(fp = d[2]);
+parameter R d[2] = {R(a = 1), R(a = -1)};
+end PA11;
+//// model: PA12
+model F
+parameter Integer n = 1;
+Real x[3];
+equation
+for i in 1:n loop
+x[i] = 1;
+end for;
+for i in n+1:3 loop
+x[i] = 2;
+end for;
+end F;
+model PA12
+F f(n = k);
+parameter Integer k = j + i;
+parameter Integer j = i;
+parameter Integer i = 1;
+end PA12;

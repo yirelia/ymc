@@ -2408,8 +2408,8 @@ YMC_TEST(flatten_composite_array_field_expansion) {
 
 YMC_TEST(flatten_if_equation_structural_condition) {
   // if 方程的参数条件（此前各支都已折掉）= 结构条件：参数标 final、引用处代入值、按值选支（typeIfEquation NFTyping.mo:
-  // 3581-3590 + flattenIfEquation NFFlatten.mo:1975-2010）；前面有运行时分支的参数条件原样保留。条件参数非字面量绑定
-  //（omc 传递标记依赖求值次序）→ SKIP。期望 = omc 1.25.0 实跑 IF1 / IF2 / IF3（2026-10-02）。
+  // 3581-3590 + flattenIfEquation NFFlatten.mo:1975-2010）；前面有运行时分支的参数条件原样保留。期望 = omc 1.25.0 实跑
+  // IF1 / IF2（2026-10-02）、IF3（2026-10-06）。
   YMC_CHECK_EQ(flatten_src("model IF1\n  parameter Boolean b = true;\n  parameter Integer n = 2;\n  parameter Real p = 1.5;\n"
                            "  parameter Real q = 3;\n  Real x, y, w, v;\n  Real u = if b then 1 else 2;\nequation\n  if b then\n"
                            "    x = 1;\n  else\n    x = 2;\n  end if;\n  if n > 3 then\n    y = 1;\n  elseif n == 2 then\n    y = 2;\n"
@@ -2422,13 +2422,12 @@ YMC_TEST(flatten_if_equation_structural_condition) {
                            "  elseif b then\n    z = 2;\n  else\n    z = 3;\n  end if;\nend IF2;\n"),
                std::string("class IF2\n  parameter Boolean b = true;\n  Real z;\nequation\n  if time > 1.0 then\n    z = 1.0;\n"
                            "  elseif b then\n    z = 2.0;\n  else\n    z = 3.0;\n  end if;\nend IF2;\n"));
-  bool uns = false;
-  const std::string out = flatten_src(
-      "model IF3\n  parameter Real c = 2;\n  parameter Boolean b = c > 1;\n  Real x;\nequation\n  if b then\n    x = 1;\n"
-      "  else\n    x = 2;\n  end if;\nend IF3;\n",
-      &uns);
-  YMC_CHECK(uns);   // omc：b final、c 不 final（b 的绑定已被 Ceval 缓存，不再传递标记）
-  YMC_CHECK_EQ(out, std::string("<unsupported:if condition folds via parameter>"));
+  // 条件参数的绑定不是字面量（`b = c > 1`）：固定检查顺绑定走（c 固定）→ 结构条件；b final、c 不 final（方程段的标记不连带
+  // 绑定里的参数，markComponent 只进未定型的绑定）。
+  YMC_CHECK_EQ(flatten_src("model IF3\n  parameter Real c = 2;\n  parameter Boolean b = c > 1;\n  Real x;\nequation\n"
+                           "  if b then\n    x = 1;\n  else\n    x = 2;\n  end if;\nend IF3;\n"),
+               std::string("class IF3\n  parameter Real c = 2.0;\n  final parameter Boolean b = true;\n  Real x;\nequation\n"
+                           "  x = 1.0;\nend IF3;\n"));
 }
 
 YMC_TEST(flatten_subscripted_and_runtime_subscripts) {
@@ -5011,6 +5010,58 @@ YMC_TEST(inst_extends_builtin_types_and_type_dimensions) {
   YMC_CHECK_EQ(flatten_src("package P\n  constant Integer n = 2;\n  type V = Real[n];\nend P;\nmodel XBS1\n"
                            "  P.V x = {time, 1};\nend XBS1;\n", &uns), "<unsupported:derived-type array dimension>");
   YMC_CHECK(uns);
+}
+
+YMC_TEST(flatten_structural_parameter_binding_chains) {
+  // 结构求值里的多段参数引用顺着绑定链求值：记录字段经修饰 / 整体绑定传下来的值（`m.friction.fp.a` ← `m.fp.a` ← `data.a`），
+  // 只给被引用的本身打 final、依赖照旧；维里的同理（`y[fp.n]`）；if 条件里参数的 fixed 检查也顺绑定走（`q = a.p`）。
+  // 期望 = omc 1.25.0 实跑（2026-10-06，下同）。
+  YMC_CHECK_EQ(flatten_src("record R\n  parameter Real a = 1;\n  parameter Real b = 2 * a;\n  parameter Integer n = 1;\nend R;\n"
+                           "model F\n  parameter R fp;\n  Real tau;\n  Real y[fp.n];\nequation\n  if fp.a <= 0 then\n"
+                           "    tau = 0;\n  else\n    tau = fp.b * time;\n  end if;\n  y = fill(tau, fp.n);\nend F;\nmodel M\n"
+                           "  parameter R fp;\n  F friction(final fp = fp);\nend M;\nmodel A\n  parameter Real p = 1;\nend A;\n"
+                           "model PCT1\n  parameter R data(a = 0, n = 2);\n  M m(fp = data);\n  A a(p = 4);\n"
+                           "  parameter Real q = a.p;\n  Real z;\nequation\n  if q > 2 then\n    z = 0;\n  else\n    z = time;\n"
+                           "  end if;\nend PCT1;\n"),
+               std::string("class PCT1\n  parameter Real data.a = 0.0;\n  parameter Real data.b = 2.0 * data.a;\n"
+                           "  parameter Integer data.n = 2;\n  parameter Real m.fp.a = data.a;\n"
+                           "  parameter Real m.fp.b = data.b;\n  parameter Integer m.fp.n = data.n;\n"
+                           "  final parameter Real m.friction.fp.a = 0.0;\n  final parameter Real m.friction.fp.b = m.fp.b;\n"
+                           "  final parameter Integer m.friction.fp.n = 2;\n  Real m.friction.tau;\n  Real m.friction.y[1];\n"
+                           "  Real m.friction.y[2];\n  parameter Real a.p = 4.0;\n  final parameter Real q = 4.0;\n  Real z;\n"
+                           "equation\n  m.friction.tau = 0.0;\n  m.friction.y[1] = m.friction.tau;\n"
+                           "  m.friction.y[2] = m.friction.tau;\n  z = 0.0;\nend PCT1;\n"));
+  // 被引用的记录参数声明在后（还没发射）：两遍压平，第二遍用第一遍的值。
+  YMC_CHECK_EQ(flatten_src("record R\n  parameter Real a = 1;\nend R;\nmodel F\n  parameter R fp;\n  Real tau;\nequation\n"
+                           "  if fp.a <= 0 then\n    tau = 0;\n  else\n    tau = time;\n  end if;\nend F;\nmodel PCS1\n"
+                           "  F f(fp = data);\n  parameter R data(a = 0);\nend PCS1;\n"),
+               std::string("class PCS1\n  final parameter Real f.fp.a = 0.0;\n  Real f.tau;\n  parameter Real data.a = 0.0;\n"
+                           "equation\n  f.tau = 0.0;\nend PCS1;\n"));
+}
+
+YMC_TEST(flatten_parameter_evaluated_before_declaration) {
+  // 方程段的结构求值求到了声明在后的参数：omc 把求得的值存回组件，压平在后的它打字面量（`k = 2`，不是 `j + 1`）。
+  YMC_CHECK_EQ(flatten_src("model F\n  parameter Integer n = 1;\n  Real x;\nequation\n  if n > 1 then\n    x = 1;\n  else\n"
+                           "    x = 2;\n  end if;\nend F;\nmodel PST1\n  F f(n = k);\n  parameter Integer k = j + 1;\n"
+                           "  parameter Integer j = 1;\nend PST1;\n"),
+               std::string("class PST1\n  final parameter Integer f.n = 2;\n  Real f.x;\n  parameter Integer k = 2;\n"
+                           "  parameter Integer j = 1;\nequation\n  f.x = 1.0;\nend PST1;\n"));
+}
+
+YMC_TEST(flatten_if_condition_not_fixed_through_record_binding) {
+  // isExpressionNotFixed 顺绑定链：字段修饰绑到 fixed = false 的参数 → 不固定、if 原样留（f）；记录引用整体绑定查被引用的
+  // 记录本身——它带 Evaluate = false → 不固定（g），它字段自己 fixed = false 不算（无绑定记录支，h 照折）。
+  YMC_CHECK_EQ(flatten_src("record R\n  parameter Real a = 1;\nend R;\nmodel F\n  parameter R fp;\n  Real tau;\nequation\n"
+                           "  if fp.a <= 0 then\n    tau = 0;\n  else\n    tau = time;\n  end if;\nend F;\nmodel PNF1\n"
+                           "  parameter Real k(fixed = false) = 0;\n  F f(fp(a = k));\n"
+                           "  parameter R d(a = 0) annotation(Evaluate = false);\n  F g(fp = d);\n"
+                           "  parameter R e(a(fixed = false) = 0);\n  F h(fp = e);\nend PNF1;\n"),
+               std::string("class PNF1\n  parameter Real k(fixed = false) = 0.0;\n  parameter Real f.fp.a = k;\n  Real f.tau;\n"
+                           "  parameter Real d.a = 0.0;\n  parameter Real g.fp.a = d.a;\n  Real g.tau;\n"
+                           "  parameter Real e.a(fixed = false) = 0.0;\n  final parameter Real h.fp.a = 0.0;\n  Real h.tau;\n"
+                           "equation\n  if f.fp.a <= 0.0 then\n    f.tau = 0.0;\n  else\n    f.tau = time;\n  end if;\n"
+                           "  if g.fp.a <= 0.0 then\n    g.tau = 0.0;\n  else\n    g.tau = time;\n  end if;\n  h.tau = 0.0;\n"
+                           "end PNF1;\n"));
 }
 
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {

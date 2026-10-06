@@ -100,3 +100,10 @@ symmetricOrientation 等，"expression kind [Reduction]" 34 个）。
 （`LimiterHomotopy homotopyType … annotation(Evaluate = true)`）、Blocks 的 InverseModel / SlewRateLimiter / SinCosEncoder、
 Clocked 的 SimpleControlledDrive.Continuous / MixingUnitWithContinuousControl；FAIL / ACCEPTS-INVALID / CRASH 0（KinematicPTP2 的
 `nout = max([size(q_begin, 1); …])` 1.25.0 有标记怪癖，SKIP 入账）。
+
+## 2026-10-06 加宽 61m / 61n 之后：PASS 83（不变）
+
+61m（长类型 extends 内建类型 + 短类带维）让 MultiBody 露出下一层（composite outer 的 World）。61n（结构求值顺参数绑定链 + 两遍
+压平处理声明在后的参数 + omc 的不固定检查 / 求值副作用）让电机一族的 if 条件求得出了（`friction.frictionParameters.PRef` ←
+`aimc.frictionParameters` ← 声明在最后的 `aimcData`）：原"if condition not evaluable"的 31 个露出下一层——复合数组元素引用
+（`plug.pin[m]` 这类子实例里的参数维，22 个）、记录构造调用（9 个）。FAIL / ACCEPTS-INVALID / CRASH 0。

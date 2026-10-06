@@ -1,0 +1,81 @@
+//// set: rp-p8 — 非结构条件之后再引用同一参数（不留结构标记、不代入）
+//// model: P80
+model F
+parameter Integer n(fixed = false) = 2;
+Real x;
+Real y;
+equation
+if n > 1 then
+x = 1;
+else
+x = 2;
+end if;
+y = n * time;
+end F;
+model P80
+F f;
+end P80;
+//// model: P81
+record R
+parameter Real a = 1;
+end R;
+model F
+parameter R fp;
+Real tau;
+Real y;
+equation
+if fp.a <= 0 then
+tau = 0;
+else
+tau = time;
+end if;
+y = fp.a * time;
+end F;
+model P81
+parameter Real k(fixed = false) = 0;
+F f(fp(a = k));
+end P81;
+//// model: P82
+record R
+parameter Real a = 1;
+end R;
+model F
+parameter R fp;
+Real tau;
+Real y;
+equation
+if fp.a <= 0 then
+tau = 0;
+else
+tau = time;
+end if;
+y = fp.a * time;
+end F;
+model P82
+parameter R d(a = 0);
+F f(fp = d);
+end P82;
+//// model: P83
+record R
+parameter Real a = 1;
+end R;
+model F
+parameter R fp;
+Real tau;
+Real y;
+equation
+if fp.a <= 0 then
+tau = 0;
+else
+tau = time;
+end if;
+if fp.a > 1 then
+y = 1;
+else
+y = fp.a * time;
+end if;
+end F;
+model P83
+parameter Real k(fixed = false) = 0;
+F f(fp(a = k));
+end P83;

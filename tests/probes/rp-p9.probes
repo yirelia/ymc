@@ -1,0 +1,68 @@
+//// set: rp-p9 — if 方程以外的方程段结构求值（for 范围 / if 表达式 / 维 / Evaluate）碰到声明在后的参数
+//// model: P90
+model F
+parameter Integer n = 1;
+Real x[3];
+equation
+for i in 1:n loop
+x[i] = 1;
+end for;
+for i in n+1:3 loop
+x[i] = 2;
+end for;
+end F;
+model P90
+F f(n = k);
+parameter Integer k = j + 1;
+parameter Integer j = 1;
+end P90;
+//// model: P91
+model F
+parameter Integer n = 1;
+Real x[3];
+equation
+for i in 1:3 loop
+x[i] = if i <= n then 1 else 2;
+end for;
+end F;
+model P91
+F f(n = k);
+parameter Integer k = j + 1;
+parameter Integer j = 1;
+end P91;
+//// model: P92
+model F
+parameter Integer n = 1;
+Real x;
+equation
+x = if n > 1 then 1 else 2;
+end F;
+model P92
+F f(n = k);
+parameter Integer k = j + 1;
+parameter Integer j = 1;
+end P92;
+//// model: P93
+model F
+parameter Integer n = 1;
+Real x[n];
+equation
+x = ones(n);
+end F;
+model P93
+F f(n = k);
+parameter Integer k = j + 1;
+parameter Integer j = 1;
+end P93;
+//// model: P94
+model F
+parameter Integer n = 1;
+Real x;
+equation
+x = n;
+end F;
+model P94
+F f(n = k);
+parameter Integer k = j + 1 annotation(Evaluate = true);
+parameter Integer j = 1;
+end P94;

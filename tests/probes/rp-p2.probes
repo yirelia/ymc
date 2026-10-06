@@ -1,0 +1,136 @@
+//// set: rp-p2 — 结构求值顺着参数绑定链：记录字段的整体绑定 / 修饰绑定、只标被引用的本身、维、`q = a.p`
+//// model: P20
+record R
+parameter Real a = 1;
+parameter Real b = 2 * a;
+end R;
+model F
+parameter R fp;
+Real tau;
+equation
+if fp.a <= 0 then
+tau = 0;
+else
+tau = fp.b * time;
+end if;
+end F;
+model M
+parameter R fp;
+F friction(final fp = fp);
+end M;
+model P20
+parameter R data(a = 0);
+M m(fp = data);
+end P20;
+//// model: P21
+record R
+parameter Real a = 1;
+parameter Real b = 2 * a;
+end R;
+model F
+parameter R fp;
+Real tau;
+equation
+if fp.a <= 0 then
+tau = 0;
+else
+tau = fp.b * time;
+end if;
+end F;
+model M
+parameter R fp;
+F friction(final fp = fp);
+end M;
+model P21
+parameter R data(a = 3);
+M m(fp = data);
+end P21;
+//// model: P22
+record R
+parameter Real a = 1;
+end R;
+model P22
+parameter R r0(a = 2);
+parameter R r = r0;
+Real y;
+equation
+if r.a <= 0 then
+y = 0;
+else
+y = time;
+end if;
+end P22;
+//// model: P23
+record R
+parameter Real a = 1;
+end R;
+model F
+parameter R r;
+Real y;
+equation
+if r.a <= 0 then
+y = 0;
+else
+y = time;
+end if;
+end F;
+model P23
+parameter R q(a = -3);
+F f(r = q);
+end P23;
+//// model: P24
+record R
+parameter Real a = 1;
+parameter Real b = 2 * a;
+end R;
+model P24
+parameter R r(a = 0.25);
+Real y;
+equation
+if r.b > 1 then
+y = 0;
+else
+y = time;
+end if;
+end P24;
+//// model: P25
+record R
+parameter Real a = 1;
+end R;
+model P25
+parameter Real k = 5;
+parameter R r(a = k);
+Real y;
+equation
+if r.a > 2 then
+y = 0;
+else
+y = time;
+end if;
+end P25;
+//// model: P26
+record R
+parameter Integer n = 1;
+end R;
+model P26
+parameter R r0(n = 3);
+parameter R r = r0;
+Real y[r.n];
+equation
+y = fill(time, r.n);
+end P26;
+//// model: P27
+model A
+parameter Real p = 1;
+end A;
+model P27
+A a(p = 4);
+parameter Real q = a.p;
+Real y;
+equation
+if q > 2 then
+y = 0;
+else
+y = time;
+end if;
+end P27;
