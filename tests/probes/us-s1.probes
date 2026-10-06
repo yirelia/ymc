@@ -1,0 +1,89 @@
+//// set: us-s1 — 无绑定的固定参数拿 start 当绑定：标量 / Integer / fixed = true / start 是参数引用 / Evaluate / 数组 / each（SKIP）/ 子实例 / 外来修饰 / 维 / Boolean / 类型带的 start（不做）/ String / 记录字段（不做）/ 注释 / 常量
+//// model: S10
+model S10
+parameter Real p(start = 2);
+Real y = p * time;
+end S10;
+//// model: S11
+model S11
+parameter Integer n(start = 3);
+Real y = n;
+end S11;
+//// model: S12
+model S12
+parameter Real p(start = 2, fixed = true);
+Real y = p;
+end S12;
+//// model: S13
+model S13
+parameter Real q = 3;
+parameter Real p(start = q);
+Real y = p;
+end S13;
+//// model: S14
+model S14
+parameter Real p(start = 2) annotation(Evaluate = true);
+Real y = p;
+end S14;
+//// model: S15
+model S15
+parameter Real p[2](start = {1, 2});
+Real y = p[1];
+end S15;
+//// model: S16
+model S16
+parameter Real p[2](each start = 1);
+Real y = p[2];
+end S16;
+//// model: S17
+model A
+parameter Real p(start = 2);
+end A;
+model S17
+A a;
+Real y = a.p;
+end S17;
+//// model: S18
+model A
+parameter Real p;
+end A;
+model S18
+A a(p(start = 5));
+Real y = a.p;
+end S18;
+//// model: S19
+model S19
+parameter Integer n(start = 2);
+Real x[n];
+end S19;
+//// model: S110
+model S110
+parameter Boolean b(start = true);
+Real y = if b then 1 else 2;
+end S110;
+//// model: S111
+type T = Real(start = 4);
+model S111
+parameter T p;
+Real y = p;
+end S111;
+//// model: S112
+model S112
+parameter String s(start = "a");
+end S112;
+//// model: S113
+record R
+parameter Real a(start = 1);
+end R;
+model S113
+parameter R r;
+Real y = r.a;
+end S113;
+//// model: S114
+model S114
+parameter Real p(start = 2) "comment";
+end S114;
+//// model: S115
+model S115
+constant Real c(start = 2);
+end S115;

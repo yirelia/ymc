@@ -1,0 +1,90 @@
+//// set: us-s3 — 同上：extends 修饰的 start、fixed = false、类型带 start 的数组、记录数组字段、别的参数 / fill / 维用它、外来改 start / 改绑定、min、time 当 start（拒）、有绑定、start 链、连接器里的维
+//// model: S30
+model A
+parameter Real p;
+end A;
+model S30
+extends A(p(start = 3));
+Real y = p;
+end S30;
+//// model: S31
+model S31
+parameter Real p(start = 2, fixed = false);
+Real y = p;
+initial equation
+p = 1;
+end S31;
+//// model: S32
+type T = Real(start = 4);
+model S32
+parameter T p[2];
+Real y = p[1];
+end S32;
+//// model: S33
+record R
+parameter Real a[2](start = {1, 2});
+end R;
+model S33
+parameter R r;
+end S33;
+//// model: S34
+model S34
+parameter Real p(start = 2);
+parameter Real q = p;
+Real y = q;
+end S34;
+//// model: S35
+model S35
+parameter Real p(start = 2);
+Real x[2] = fill(p, 2);
+end S35;
+//// model: S36
+model S36
+parameter Integer n(start = 2);
+Real x[n];
+Real y = sum(x);
+equation
+x = fill(time, n);
+end S36;
+//// model: S37
+model A
+parameter Real p(start = 1);
+end A;
+model S37
+A a(p(start = 7));
+Real y = a.p;
+end S37;
+//// model: S38
+model A
+parameter Real p(start = 1);
+end A;
+model S38
+A a(p = 9);
+Real y = a.p;
+end S38;
+//// model: S39
+model S39
+parameter Real p(start = 2, min = 0);
+end S39;
+//// model: S310
+model S310
+parameter Real p(start = time);
+end S310;
+//// model: S311
+model S311
+parameter Real p(start = 2) = 3;
+end S311;
+//// model: S312
+model S312
+parameter Real p(start = 1);
+parameter Real q(start = p);
+Real y = q;
+end S312;
+//// model: S313
+connector C
+parameter Integer n(start = 2);
+Real v[n];
+end C;
+model S313
+C c;
+end S313;

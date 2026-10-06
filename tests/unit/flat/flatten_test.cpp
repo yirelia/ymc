@@ -1884,12 +1884,11 @@ YMC_TEST(flatten_flow_outside_connector_unsupported) {
   YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
 }
 
-YMC_TEST(flatten_unbound_parameter_with_start_unsupported) {
-  // 无绑定 parameter 带 start → omc 补默认绑定 + 告警（参数默认值规则），本桶未做 → 干净 SKIP。
-  bool uns = false;
-  std::string t = flatten_src("model M\n  parameter Real x(start = 1.0);\nend M;\n", &uns);
-  YMC_CHECK(uns);
-  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+YMC_TEST(flatten_unbound_parameter_with_start) {
+  // 无绑定的固定 parameter 带 start → omc 拿 start 当绑定（updateParameterBinding）+ 告警（stderr）。期望 = omc 1.25.0 实跑
+  //（2026-10-07）。
+  YMC_CHECK_EQ(flatten_src("model M\n  parameter Real x(start = 1.0);\nend M;\n"),
+               std::string("class M\n  parameter Real x(start = 1.0) = 1.0;\nend M;\n"));
 }
 
 YMC_TEST(flatten_scalar_builtin_fold_and_symbolic) {
@@ -2947,9 +2946,11 @@ YMC_TEST(flatten_evaluate_annotation_and_structural_alias) {
   YMC_CHECK_EQ(flatten_src("model EVT2\n  parameter Real q = 3 annotation(Evaluate = false);\n"
                            "  parameter Real p = q annotation(Evaluate = true);\n  Real x = p * time;\nend EVT2;\n"),
                std::string("class EVT2\n  parameter Real q = 3.0;\n  parameter Real p = q;\n  Real x = p * time;\nend EVT2;\n"));
-  // 未做的形态 → SKIP（EV 探针）：无绑定只有 start（omc 取 start 并告警）、fixed = false（omc 忽略 Evaluate）、数组参数。
-  for (const char* src : {"model E2\n  parameter Real p(start = 1) annotation(Evaluate = true);\n  Real x = p * time;\nend E2;\n",
-                          "model E3\n  parameter Real p(fixed = false) annotation(Evaluate = true);\n  Real x = p * time;\n"
+  // 无绑定只有 start：start 就是绑定（updateParameterBinding），照常结构求值（omc 1.25.0 实跑，2026-10-07）。
+  YMC_CHECK_EQ(flatten_src("model E2\n  parameter Real p(start = 1) annotation(Evaluate = true);\n  Real x = p * time;\nend E2;\n"),
+               std::string("class E2\n  final parameter Real p(start = 1.0) = 1.0;\n  Real x = time;\nend E2;\n"));
+  // 未做的形态 → SKIP（EV 探针）：fixed = false（omc 忽略 Evaluate）、数组参数。
+  for (const char* src : {"model E3\n  parameter Real p(fixed = false) annotation(Evaluate = true);\n  Real x = p * time;\n"
                           "initial equation\n  p = 3;\nend E3;\n",
                           "model E7\n  parameter Real x[3] = {1, 2, 3} annotation(Evaluate = true);\n  Real y = x[2] * time;\nend E7;\n"}) {
     bool uns = false;
@@ -5377,6 +5378,16 @@ YMC_TEST(flatten_subinstance_array_reference_uses_its_own_dims) {
                std::string("class WA1\n  parameter Integer b.n = 1;\n  final parameter Integer b.p.n = 3;\n  Real b.p.s[1];\n"
                            "  Real b.p.s[2];\n  Real b.p.s[3];\n  Real b.u[1];\n  Real b.u[2];\n  Real b.u[3];\nequation\n"
                            "  b.u = b.p.s;\n  b.p.s[1] = 1.0;\n  b.p.s[2] = 2.0;\n  b.p.s[3] = 3.0;\nend WA1;\n"));
+}
+
+YMC_TEST(flatten_parameter_start_becomes_binding) {
+  // 外来修饰的 start 同样当绑定（a.p = 5.0）；当绑定后照常结构求值（维 n = 2，final）；记录字段不做（omc 只告警，r.a 无绑定）。
+  // 期望 = omc 1.25.0 实跑（2026-10-07）。
+  YMC_CHECK_EQ(flatten_src("model A\n  parameter Real p(start = 2);\nend A;\nrecord R\n  parameter Real a(start = 1);\nend R;\n"
+                           "model US1\n  A a(p(start = 5));\n  parameter Integer n(start = 2);\n  Real x[n];\n  parameter R r;\n"
+                           "end US1;\n"),
+               std::string("class US1\n  parameter Real a.p(start = 5.0) = 5.0;\n  final parameter Integer n(start = 2) = 2;\n"
+                           "  Real x[1];\n  Real x[2];\n  parameter Real r.a(start = 1.0);\nend US1;\n"));
 }
 
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {

@@ -1762,6 +1762,15 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           omc 化简成单元素数组再逐元素标量化（simplifyArrayConstructor 的 dim_size == 1 支：`y[1] = abs(u[1])`），ymc 留着
           `array(… for $i1 in 1:1)`——BM1 等 16 个，已照改（两维的 `1:1 × 1:1` 不收）。
           门：slice 631 例 PASS 573 / FAIL 0 / oracle=live 不一致 0（不变）；scodeinst 573 / 32（不变，在账）；testsuite 实跑 PASS 1527→1568 / FAIL 0 / ACC 3 / CRASH 0；MSL 示例 PASS 122（不变）；探针 7845→7881（sd 共 36 个）；单测 272→273。
+    - [x] (61z) flat：无绑定的固定参数拿 start 当绑定（2026-10-07）：
+          此前无绑定、带 start 的 parameter 一律 SKIP "unbound parameter default from start"（testsuite 21 个 omc 能压平）。照
+          updateParameterBinding（NFInst.mo:2351-2387，instComponentDef 合并完修饰后对无绑定的内建类型参数调用 :2014-2017）：组件
+          自己的 start 修饰（外来 > extends > 声明 > 约束，优先级最高的）的式子当绑定、书写处照旧（start_as_binding；发射、数组、
+          帧求值三处同一判定）；类型定义带的 start、记录字段、`fixed = false`、常量不做，`fixed = true` 照做（US 探针）；没换成
+          绑定但有 start 的，omc 只告警、照原样打印（verifyBinding :853-875）。each 的 start 未做（SKIP）。两条旧单测断言了这个
+          SKIP（lessons 规则 4），照 omc 改成正向期望。scodeinst 的 UnboundParameter2/3/4、ForConnect2、IfConnect4 文件 Result
+          带 omc 的告警文本，进分歧账本，UnboundParameter2 从 slice 剔除。
+          门：slice 631→630 例（UnboundParameter2 进账本剔除）PASS 573 / FAIL 0 / oracle=live 不一致 0；scodeinst 573 / 32→37（新增 5 个均在账，只差告警文本）；testsuite 实跑 PASS 1568→1583 / FAIL 0 / ACC 3 / CRASH 0；MSL 示例 PASS 122（不变）；探针 7881→7920（us 共 39 个）；单测 273→274。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

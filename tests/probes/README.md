@@ -360,3 +360,7 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `sd-w5` | 6 | 向量化内建 / 用户函数在等式、绑定里（两元素保留 array(…) 形态） |
 | `sd-w6` | 8 | 只向量化一维长 1：收成单元素数组、逐元素标量化（内建 / 用户函数、绑定、sum、算法）；两维不收 |
 | `sd-ut` | 1 | 子实例数组按自己的维（单测原文） |
+| `us-s1` | 16 | 无绑定的固定参数拿 start 当绑定：标量 / Integer / fixed = true / start 是参数引用 / Evaluate / 数组 / each（SKIP）/ 子实例 / 外来修饰 / 维 / Boolean / 类型带的 start（不做）/ String / 记录字段（不做）/ 注释 / 常量 |
+| `us-s2` | 6 | 同上：记录字段（直接 / 外来修饰 / 嵌套在模型里）不做、连接器与两层模型照做 |
+| `us-s3` | 14 | 同上：extends 修饰的 start、fixed = false、类型带 start 的数组、记录数组字段、别的参数 / fill / 维用它、外来改 start / 改绑定、min、time 当 start（拒）、有绑定、start 链、连接器里的维 |
+| `us-ut` | 3 | start 当绑定（单测原文：外来修饰、维、记录字段；顶层；Evaluate） |

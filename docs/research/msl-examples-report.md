@@ -177,3 +177,8 @@ RectifierCenterTap2mPulse 5、RectifierCenterTapmPulse 5、HBridge 2）转 PASS�
 
 子实例里数组的维改按它自己的实例取（发射时记下的实际维）、一维长 1 的向量化收成单元素数组之后，514 个示例逐例 verdict 与
 SKIP 原因都不变（受益的是 testsuite 里老 MSL 块 BC* / BM* 等 41 个）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-07 加宽 61z 之后：PASS 122（不变）
+
+无绑定的固定参数拿 start 当绑定（updateParameterBinding）之后，514 个示例逐例 verdict 与 SKIP 原因都不变（MSL 示例里没有只靠
+start 的参数）。FAIL / ACCEPTS-INVALID / CRASH 0。

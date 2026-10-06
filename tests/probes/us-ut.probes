@@ -1,0 +1,23 @@
+//// set: us-ut — start 当绑定（单测原文：外来修饰、维、记录字段；顶层；Evaluate）
+//// model: M
+model M
+  parameter Real x(start = 1.0);
+end M;
+//// model: E2
+model E2
+  parameter Real p(start = 1) annotation(Evaluate = true);
+  Real x = p * time;
+end E2;
+//// model: US1
+model A
+  parameter Real p(start = 2);
+end A;
+record R
+  parameter Real a(start = 1);
+end R;
+model US1
+  A a(p(start = 5));
+  parameter Integer n(start = 2);
+  Real x[n];
+  parameter R r;
+end US1;

@@ -1,0 +1,54 @@
+//// set: us-s2 — 同上：记录字段（直接 / 外来修饰 / 嵌套在模型里）不做、连接器与两层模型照做
+//// model: S20
+record R
+parameter Real a(start = 1);
+end R;
+model S20
+R r;
+Real y = r.a;
+end S20;
+//// model: S21
+record R
+parameter Real a;
+end R;
+model S21
+parameter R r(a(start = 3));
+Real y = r.a;
+end S21;
+//// model: S22
+connector C
+parameter Real a(start = 1);
+Real v;
+flow Real i;
+end C;
+model S22
+C c;
+end S22;
+//// model: S23
+model A
+record R
+parameter Real a(start = 1);
+end R;
+parameter R r;
+end A;
+model S23
+A x;
+end S23;
+//// model: S24
+record R
+parameter Real a(start = 1);
+parameter Real b = 2;
+end R;
+model S24
+parameter R r(b = 3);
+end S24;
+//// model: S25
+model A
+parameter Real p(start = 2);
+end A;
+model B
+A a;
+end B;
+model S25
+B b;
+end S25;

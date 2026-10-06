@@ -164,6 +164,8 @@ struct ModCtx {
   // 本层记录实例的整体绑定的来历（拆出的字段记进 param_info_，见 key_not_fixed）：0 没有；1 自己的（书写 / 修饰分发来的）；
   // 2 从外层记录的整体绑定拆来的（omc 里本层记录没有绑定，绑定在更上层）；3 其它（if 选支、记录数组的元素…未细分）。
   std::uint8_t rec_bind = 0;
+  // 本层是记录（记录字段）：无绑定参数不拿 start 当绑定（见 start_as_binding）。
+  bool in_record = false;
 };
 
 // OMC Prefixes.variabilityMin（取更受约束者）：ymc 枚举 Var<Discrete<Param<Const 升序=更常量，故取序数较大者。
@@ -974,6 +976,7 @@ class Flattener {
             achild.flow_inherited = ctx.flow_inherited;   // 复合数组上的 flow 前缀仍在上方守卫处 SKIP
             achild.eval_parent = ctx.eval_parent || evaluate_true(I_.comps[cid].def);
             achild.rec_bind = wraw.is_valid() ? 3 : 0;   // omc 查整个数组绑定，逐元素拆开的对不上 → 未细分
+            achild.in_record = ctx.in_record || r == SRestriction::Record;
             // 数组各元素共用同一组件节点（present 标记按节点，YmcExpNode1 探针）；expandable 组件的成员重起链。
             if (!r_exp) achild.pp_chain = pp_self;
             if (wraw.is_valid()) {
@@ -1130,6 +1133,7 @@ class Flattener {
         child.unbound_fields = ctx.unbound_fields || moved_binding;
         child.eval_parent = ctx.eval_parent || evaluate_true(I_.comps[cid].def);   // EV 探针 ev1：`A a annotation(Evaluate = true)`
         child.rec_bind = ctor_mod.is_valid() ? whole_kind : 0;
+        child.in_record = ctx.in_record || r == SRestriction::Record;
         if (!r_exp) child.pp_chain = pp_self;   // expandable 组件的成员重起链（其直属成员由 exp_class 置 pp）
         if (ctor_mod.is_valid()) {
           // 整体绑定 + 字段修饰（RM1-RM4 探针）：字段绑定一律来自整体绑定（getRecordBindings 的 outerBinding 盖过字段修饰的
@@ -3546,6 +3550,42 @@ class Flattener {
     result_.model.variables.push_back(std::move(v));
   }
 
+  // 无绑定的固定参数拿 start 当绑定（updateParameterBinding，NFInst.mo:2351-2387 v1.25.0；instComponentDef 在合并完修饰后
+  // 对无绑定的内建类型参数调用，:2014-2017）：组件自己的 start 修饰（外来 > extends > 声明 > 约束，优先级最高的那个）的式子
+  // 当绑定，书写处照旧；类型定义带的 start 不算（hasTypeOrigin，US 探针 s111）；`fixed = false` 不做（Component.isFixed），
+  // `fixed = true` 照做（s12）；记录字段、常量不做（s20-s24 / s115）。mods = 命中本组件的外来子修饰。each 的 start 未做。
+  bool start_as_binding(CompId cid, const std::vector<ModSource>& mods, NodeId inst, const std::vector<Symbol>& prefix,
+                        const ModCtx& ctx, ModSource& out) {
+    if (ctx.in_record || fn_scope_ || var_min(ctx.var_floor, I_.comps[cid].attributes.variability) != SVariability::Param)
+      return false;
+    const TypeKind tk = I_.comps[cid].ty.element_type().kind;
+    if (tk == TypeKind::Complex || tk == TypeKind::Unknown || is_ext_object(I_.comps[cid].class_inst)) return false;
+    std::vector<ModSource> srcs = mods;
+    for (std::size_t i = 0; i < I_.comps[cid].extends_mods.size(); ++i)
+      srcs.push_back({I_.comps[cid].extends_mods[i], ext_lex(cid, i, inst), prefix});
+    if (const Id<SMod> dm = I_.scode.elems[I_.comps[cid].def].mod; dm.is_valid()) srcs.push_back({dm, decl_lex(cid, inst), prefix});
+    for (Id<SMod> cc : I_.comps[cid].cc_mods) srcs.push_back({cc, inst, prefix});
+    const Symbol start = in_.intern("start"), fixed = in_.intern("fixed");
+    bool fixed_seen = false;
+    for (const ModSource& m : srcs)
+      for (const SSubMod& s : I_.scode.mods[m.mod].subs) {
+        const SMod& sm = I_.scode.mods[s.mod];
+        if (s.ident == fixed && !fixed_seen && sm.binding.is_valid()) {
+          fixed_seen = true;
+          const Exp& fx = I_.absyn.exps[sm.binding];
+          if (fx.kind != ExpKind::BoolLit || !fx.bval) return false;   // fixed = false / 非字面量：不做（后者照旧 SKIP）
+        }
+        if (s.ident == start && !out.mod.is_valid() && sm.binding.is_valid()) {
+          if (sm.is_each) {   // `each start = 1`：omc 展开成各元素的绑定（Binding.expandEach），未做
+            set_unsupported("unbound parameter with each start");
+            return false;
+          }
+          out = {s.mod, m.scope, m.vprefix};
+        }
+      }
+    return out.mod.is_valid();
+  }
+
   // 外来子修饰里第一个带绑定的（优先级最高的绑定）；没有 → nullptr。
   const ModSource* first_bound(const std::vector<ModSource>& mods) const {
     for (const ModSource& m : mods)
@@ -3560,7 +3600,11 @@ class Flattener {
                      const std::unordered_set<std::uint32_t>& final_params,
                      SVariability var_floor, const ModCtx& ctx) {
     cur_psubs_ = psubs;   // 绑定里 cref 前缀改写用（复合数组元素 `a[i].y = a[i].x`）
-    const ModSource* const mb = first_bound(mod_subs);
+    const ModSource* mb = first_bound(mod_subs);
+    ModSource start_src;   // 无绑定的固定参数拿 start 修饰当绑定（见 start_as_binding）
+    if (!mb && !(I_.comps[cid].binding.kind == BindingKind::Raw && I_.comps[cid].binding.raw_exp.is_valid()) &&
+        start_as_binding(cid, mod_subs, enclosing, prefix, ctx, start_src))
+      mb = &start_src;
     const NodeId mod_scope = mb ? mb->scope : NodeId{};
     const std::vector<Symbol> mod_prefix = mb ? mb->vprefix : std::vector<Symbol>{};
     const PhaseScope bind_phase(*this, MarkPhase::Binding);
@@ -3912,9 +3956,11 @@ class Flattener {
         if (fx.kind == ExprKind::BoolLit) is_fixed = fx.bval; else fixed_lit = false;
       }
     }
+    // 有 start、仍没绑定的（start 来自类型定义 / 记录字段，没被 start_as_binding 换成绑定）：omc 只告警
+    //（UNBOUND_PARAMETER_WITH_START_VALUE_WARNING，verifyBinding NFFlatten.mo:853-875 v1.25.0），照原样打印（US 探针 s111 / s20）。
     if (!fixed_lit) set_unsupported("unbound parameter with non-literal fixed");
-    else if (is_fixed) set_unsupported(has_start ? "unbound parameter default from start" : "unbound parameter");
-    return fixed_lit && !is_fixed;
+    else if (is_fixed && !has_start) set_unsupported("unbound parameter");
+    return fixed_lit && (!is_fixed || has_start);
   }
 
   // 最高优先、带值、非 each 的 start 子修饰的值（`:` 维推断用）；没有 → invalid。
@@ -4057,6 +4103,11 @@ class Flattener {
     if (!braw.is_valid()) {
       const Binding& b = I_.comps[cid].binding;
       if (b.kind == BindingKind::Raw && b.raw_exp.is_valid()) { braw = b.raw_exp; bscope = bind_lex(cid, enclosing); bprefix = prefix; }
+    }
+    if (ModSource ss; !braw.is_valid() && start_as_binding(cid, mod_subs, enclosing, prefix, ctx, ss)) {
+      braw = I_.scode.mods[ss.mod].binding;
+      bscope = ss.scope;
+      bprefix = ss.vprefix;
     }
     // 第一遍：变量数组的绑定引用了还没发射的子实例里的参数维数组（MSL 电机 `vs[m] = plug_sp.pin.v - plug_sn.pin.v`）→ 这一遍先
     // 当无绑定，第二遍用第一遍记下的维（同 emit_variable）。
@@ -6968,6 +7019,17 @@ class Flattener {
       if (b.kind == BindingKind::Raw && b.raw_exp.is_valid()) {
         raw = b.raw_exp;
         scope_node = b.scope.is_valid() && !I_.nodes[b.scope].is_empty() ? b.scope : inst;
+      }
+    }
+    if (!raw.is_valid() && F.ctx) {   // 无绑定的固定参数：start 修饰就是绑定（omc 在实例化时就换上了，见 start_as_binding）
+      std::vector<ModSource> own;
+      for (const ModSource& m : F.ctx->mods)
+        for (const SSubMod& sm : I_.scode.mods[m.mod].subs)
+          if (sm.ident == c.parts[0].name) own.push_back({sm.mod, m.scope, m.vprefix, m.each_all});
+      if (ModSource ss; start_as_binding(cid, own, inst, F.prefix, *F.ctx, ss)) {
+        raw = I_.scode.mods[ss.mod].binding;
+        scope_node = ss.scope;
+        efi = frame_of(ss.scope);
       }
     }
     // 修饰书写处不在帧栈上：包 / 顶层短类的修饰（`model C2 = C(n = 2);`，只引常量，E 探针 e44）不按实例帧求值；别的 → 失败。
