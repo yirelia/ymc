@@ -1,0 +1,58 @@
+//// set: ue-u3 — 枚举字面量经 import / 全名：类型路径规范成导入目标的全名
+//// model: U30
+package Types
+type Init = enumeration(NoInit, SteadyState, InitialState, InitialOutput);
+end Types;
+block FO
+parameter Types.Init initType = Types.Init.NoInit annotation(Evaluate = true);
+parameter Real y_start = 0;
+Real y(start = y_start);
+initial equation
+if initType == Types.Init.SteadyState then
+der(y) = 0;
+elseif initType == Types.Init.InitialState or initType == Types.Init.InitialOutput then
+y = y_start;
+end if;
+equation
+der(y) = 1 - y;
+end FO;
+model U30
+FO a(initType = Types.Init.InitialState, y_start = 2);
+FO b;
+end U30;
+//// model: U31
+package Types
+type Init = enumeration(NoInit, SteadyState);
+end Types;
+block FO
+import Types.Init;
+parameter Init initType = Init.NoInit;
+Real y = time;
+end FO;
+model U31
+FO a;
+end U31;
+//// model: U32
+package Types
+type Init = enumeration(NoInit, SteadyState);
+end Types;
+block FO
+import Types.Init;
+parameter Init initType = Init.NoInit annotation(Evaluate = true);
+Real y = time;
+end FO;
+model U32
+FO a;
+end U32;
+//// model: U33
+package Types
+type Init = enumeration(NoInit, SteadyState);
+end Types;
+block FO
+import Types.Init;
+parameter Init initType = Init.NoInit;
+Real y = if initType == Init.SteadyState then 1 else time;
+end FO;
+model U33
+FO a;
+end U33;

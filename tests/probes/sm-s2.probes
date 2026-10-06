@@ -1,0 +1,49 @@
+//// set: sm-s2 — 结构标记：size 在哪儿会连带标记它的实参（矩阵构造 vs 普通实参 / if 条件）
+//// model: S20
+model S20
+parameter Real a[:] = {1, 2};
+final parameter Integer n = max([size(a, 1); 1]);
+Real x[n];
+equation
+x = fill(time, n);
+end S20;
+//// model: S21
+model S21
+parameter Real a[:] = {1, 2};
+parameter Integer n = max([size(a, 1); 1]);
+Real x[n];
+equation
+x = fill(time, n);
+end S21;
+//// model: S22
+model S22
+parameter Real a[:] = {1, 2};
+parameter Real p[2] = if size(a, 1) == 1 then ones(2) * a[1] else a;
+Real x[2];
+equation
+x = p * time;
+end S22;
+//// model: S23
+model S23
+parameter Real a[:] = {1, 2};
+parameter Real p[2] = if size(a, 1) == 1 then {a[1], a[1]} else a;
+Real x[2];
+equation
+x = p * time;
+end S23;
+//// model: S24
+model S24
+parameter Real a[:] = {1, 2};
+parameter Integer n = max(size(a, 1), 1);
+Real x[n];
+equation
+x = fill(time, n);
+end S24;
+//// model: S25
+model S25
+parameter Real a[:] = {1, 2};
+parameter Real p[2] = if size(a, 1) == 1 then ones(2) else a;
+Real x[2];
+equation
+x = p * time;
+end S25;

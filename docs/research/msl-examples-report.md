@@ -92,3 +92,11 @@ on composite"的 103 个（Machines / PowerConverters / FundamentalWave / QuasiS
 AmplifierWithOpAmpDetailed、Mechanics 的两个 EddyCurrentBrake 与三个 LossyGearDemo 通过；FAIL / ACCEPTS-INVALID / CRASH 0。原
 "函数变量类型"一类露出的下一层主要是函数体里的数组推导式（`{(k - 1)*2*pi/m for k in 1:m}`，Polyphase.Functions.
 symmetricOrientation 等，"expression kind [Reduction]" 34 个）。
+
+## 2026-10-06 加宽 61k / 61l 之后：PASS 61 → 83
+
+61k（函数体里的归约 / 推导式）让 Polyphase / Machines 一族露出下一层（模型语境里嵌在运算中的数组值函数调用，34 个），本身
+不增通过数。61l（用户枚举参数的结构求值 + import 来的枚举类型名）一次过了 22 个：Electrical.Analog.Examples.OpAmps 一族 19 个
+（`LimiterHomotopy homotopyType … annotation(Evaluate = true)`）、Blocks 的 InverseModel / SlewRateLimiter / SinCosEncoder、
+Clocked 的 SimpleControlledDrive.Continuous / MixingUnitWithContinuousControl；FAIL / ACCEPTS-INVALID / CRASH 0（KinematicPTP2 的
+`nout = max([size(q_begin, 1); …])` 1.25.0 有标记怪癖，SKIP 入账）。

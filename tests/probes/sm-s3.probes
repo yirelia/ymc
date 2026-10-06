@@ -1,0 +1,82 @@
+//// set: sm-s3 — 结构标记：if 表达式没选中的那支（维 / elseif / Evaluate / if 方程条件 / 绑定链 / for 范围）
+//// model: S30
+model S30
+parameter Boolean flag = true;
+parameter Integer k1 = 2;
+parameter Integer k2 = 3;
+Real x[if flag then k1 else k2];
+equation
+x = fill(time, size(x, 1));
+end S30;
+//// model: S31
+model S31
+parameter Boolean flag = false;
+parameter Integer k1 = 2;
+parameter Integer k2 = 3;
+parameter Integer k3 = 4;
+parameter Integer n = if flag then k1 elseif k2 > 2 then k2 else k3;
+Real x[n];
+equation
+x = fill(time, n);
+end S31;
+//// model: S32
+model S32
+parameter Boolean flag = true;
+parameter Real a = 1;
+parameter Real b = 2;
+parameter Real p = if flag then a else b annotation(Evaluate = true);
+Real x = p * time;
+end S32;
+//// model: S33
+model S33
+parameter Boolean flag = true;
+parameter Real a = 1;
+parameter Real b = 2;
+Real x;
+equation
+if (if flag then a else b) > 1.5 then
+x = time;
+else
+x = 0;
+end if;
+end S33;
+//// model: S34
+model S34
+parameter Boolean flag = true;
+parameter Integer k1 = 2;
+parameter Integer k2 = 3;
+parameter Integer m = k2 + 1;
+parameter Integer n = if flag then k1 else m;
+Real x[n];
+equation
+x = fill(time, n);
+end S34;
+//// model: S35
+model S35
+parameter Boolean flag = true;
+parameter Real a = 1;
+parameter Real b = 2;
+parameter Real p = if flag then a else b;
+Real x = p * time;
+end S35;
+//// model: S36
+model S36
+parameter Boolean flag = true;
+parameter Integer k1 = 2;
+parameter Integer k2 = 3;
+Real x[2];
+equation
+for i in 1:(if flag then k1 else k2) loop
+x[i] = time;
+end for;
+end S36;
+//// model: S37
+model S37
+parameter Boolean flag = true;
+parameter Integer k1 = 2;
+parameter Real k2 = 3;
+parameter Integer n = if flag then k1 else integer(k2);
+Real x[n];
+equation
+x = fill(time, n);
+end S37;

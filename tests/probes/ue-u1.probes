@@ -1,0 +1,106 @@
+//// set: ue-u1 — 用户枚举参数的结构求值：Evaluate、if 条件、修饰改值、包里的枚举、Integer()、别名、初始方程、维、属性、无绑定、常量
+//// model: U10
+type E = enumeration(a, b, c);
+model U10
+parameter E e = E.b annotation(Evaluate = true);
+Real x;
+equation
+if e == E.a then
+x = 1;
+else
+x = time;
+end if;
+end U10;
+//// model: U11
+type E = enumeration(a, b, c);
+model U11
+parameter E e = E.b;
+Real x;
+equation
+if e == E.a then
+x = 1;
+else
+x = time;
+end if;
+end U11;
+//// model: U12
+type E = enumeration(a, b, c);
+model A
+parameter E e = E.a annotation(Evaluate = true);
+Real x;
+equation
+if e == E.a then
+x = 1;
+else
+x = time;
+end if;
+end A;
+model U12
+A m(e = E.c);
+end U12;
+//// model: U13
+package P
+type E = enumeration(a, b, c);
+end P;
+model U13
+parameter P.E e = P.E.c annotation(Evaluate = true);
+Real x = if e > P.E.a then time else 0;
+end U13;
+//// model: U14
+type E = enumeration(a, b, c);
+model U14
+parameter E e = E.c annotation(Evaluate = true);
+Integer k = Integer(e);
+end U14;
+//// model: U15
+type E = enumeration(a, b, c);
+model U15
+parameter E e = E.b annotation(Evaluate = true);
+parameter E f = e;
+end U15;
+//// model: U16
+type E = enumeration(a, b, c);
+model U16
+parameter E e = E.b annotation(Evaluate = true);
+Real x;
+initial equation
+if e == E.b then
+x = 1;
+end if;
+equation
+der(x) = -x;
+end U16;
+//// model: U17
+type E = enumeration(a, b, c);
+model U17
+parameter E e = E.b annotation(Evaluate = true);
+Real x[if e == E.b then 2 else 1];
+equation
+x = fill(time, size(x, 1));
+end U17;
+//// model: U18
+type E = enumeration(a, b, c);
+model U18
+parameter E e = E.b annotation(Evaluate = true);
+Real x(start = if e == E.a then 1 else 2);
+equation
+der(x) = -x;
+end U18;
+//// model: U19
+type E = enumeration(a, b, c);
+model U19
+parameter E e = E.b annotation(Evaluate = true);
+Real x = if e == E.a or e == E.c then time else 2 * time;
+end U19;
+//// model: U110
+type E = enumeration(a, b, c);
+model U110
+parameter E e annotation(Evaluate = true);
+Real x = time;
+end U110;
+//// model: U111
+type E = enumeration(a, b, c);
+model U111
+constant E e = E.b;
+Real x = if e == E.b then time else 0;
+end U111;

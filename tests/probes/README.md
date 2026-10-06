@@ -273,3 +273,10 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `fc-c4` | 6 | 推导式的维：Integer 体转 Real 时整体转型打印的表达式维（getRangeTypeInt） |
 | `fc-ut` | 2 | 函数体归约 / 推导式（单测原文） |
 | `fc-ev` | 6 | 用户函数的编译期求值：函数体里的推导式 / 归约式 `sum(3 * i for i in 1:5)`、多输出调用（testsuite ForIterator1 的拆件） |
+| `ue-u1` | 12 | 用户枚举参数的结构求值：Evaluate、if 条件、修饰改值、包里的枚举、Integer()、别名、初始方程、维、属性、无绑定、常量 |
+| `ue-u2` | 10 | 用户枚举结构求值：MSL 式 Init / LimiterHomotopy、模型里定义的枚举（未做）、extends 改值、枚举数组（未做）、记录字段 |
+| `ue-u3` | 4 | 枚举字面量经 import / 全名：类型路径规范成导入目标的全名 |
+| `ue-ut` | 2 | 用户枚举结构参数（单测原文） |
+| `sm-s1` | 6 | 结构标记：未定型绑定里 size(a, k) 的实参、if 表达式没选中的那支、矩阵构造套 size（1.25.0 怪癖，SKIP） |
+| `sm-s2` | 6 | 结构标记：size 在哪儿会连带标记它的实参（矩阵构造 vs 普通实参 / if 条件） |
+| `sm-s3` | 8 | 结构标记：if 表达式没选中的那支（维 / elseif / Evaluate / if 方程条件 / 绑定链 / for 范围） |

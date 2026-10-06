@@ -1594,6 +1594,21 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           slice 608→609 例 PASS 538→539（+CevalReduction2）；scodeinst PASS 538→539 / FAIL 28（在账）；整个 testsuite 实跑 PASS
           1454→1458（ForIterator1 两份、ForIterator2、CevalReduction2）/ FAIL 0；MSL 示例 61（被它卡住的 34 个露出下一层：模型语境里
           嵌在运算中的数组值函数调用）；探针 7180→7224（fc-* 6 集 44 个）；单测 246→247。
+    - [x] (61l) flat：用户枚举参数的结构求值（2026-10-06）：MSL 的 "Evaluate annotation" SKIP 50 个几乎都是
+          `parameter Modelica.Blocks.Types.LimiterHomotopy homotopyType = … annotation(Evaluate = true)`、`Init initType` 这类库枚举
+          参数——求值器此前只认内建枚举（StateSelect）。scode_enum_value：枚举字面量 `E.b` / `P.E.c` 在 SCode 作用域里解析到
+          `type E = enumeration(…)`，取 1 基序数，打印路径取枚举类全名（外围全是包时；定义在模型里的只知序数、打印处 SKIP）；
+          枚举值的关系比较按序数（CVal::as_r），`Integer(枚举)` 求值成序数。绑定 / Integer() 实参里的枚举参数引用（`f = e`）不再
+          误当字面量；`Integer(枚举参数)` 照留符号（结构参数随后代入再折）。enum_type_path 认 import（MSL Blocks.Continuous 的
+          `import Modelica.Blocks.Types.Init;` + `Init.NoInit` → 打 `Modelica.Blocks.Types.Init.NoInit`），此前 SKIP。
+          **结构标记补两处**（枚举放开后 MSL 露出的 FAIL 顺藤摸出）：if 表达式没选中的那支里的参数也成结构参数（omc 的
+          Structural.markExp 遍历整个式子；`n = if flag then k1 else k2` → k2 也 final，SM 探针 s3 八个此前七个 FAIL）——求值器
+          在打标记时把另一支也求一遍；矩阵构造套 size(a, k)（`nout = max([size(q_begin, 1); …])`，MSL KinematicPTP2）1.25.0 会把
+          a 一并标成结构参数、不套矩阵就不标，像是矩阵定型的副作用，不复刻 → SKIP（入账）。
+          slice 609 例 PASS 539→540（FuncInteger）；scodeinst PASS 539→540 / FAIL 28（在账）；整个 testsuite 实跑 PASS
+          1458→1469（Enum3 / 6 / 11、Exercises 的 Aufgabe1_2 两份、expandable 两个、gbode 两个…）/ FAIL 0；**MSL 示例 61→83**
+          （OpAmps 一族 19 个、InverseModel、SlewRateLimiter、SinCosEncoder、Clocked 的两个连续版），FAIL 0；探针 7224→7272
+          （ue-* 4 集 28 个、sm-* 3 集 20 个）；单测 247→248。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

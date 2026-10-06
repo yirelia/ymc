@@ -4957,6 +4957,36 @@ YMC_TEST(flatten_function_reductions_and_comprehensions) {
   YMC_CHECK(uns);
 }
 
+YMC_TEST(flatten_user_enum_structural_parameters) {
+  // 用户枚举参数的结构求值：Evaluate = true 的枚举参数按值打 final、引用代入后 if 方程选支（a 的 InitialState → 初始方程
+  // `a.y = a.y_start`，b 的 NoInit → 无）；import 来的枚举类型名规范成全名（`Init.NoInit` → `Types.Init.NoInit`）；非结构的枚举
+  // 参数照常保留符号（`Integer(k)`、if 表达式）。期望 = omc 1.25.0 实跑 UET1（2026-10-06）。
+  YMC_CHECK_EQ(flatten_src("package Types\n  type Init = enumeration(NoInit, SteadyState, InitialState, InitialOutput);\n"
+                           "end Types;\nblock FO\n  import Types.Init;\n"
+                           "  parameter Init initType = Init.NoInit annotation(Evaluate = true);\n"
+                           "  parameter Real y_start = 0;\n  Real y(start = y_start);\ninitial equation\n"
+                           "  if initType == Init.SteadyState then\n    der(y) = 0;\n"
+                           "  elseif initType == Init.InitialState or initType == Init.InitialOutput then\n    y = y_start;\n"
+                           "  end if;\nequation\n  der(y) = 1 - y;\nend FO;\nmodel UET1\n"
+                           "  FO a(initType = Types.Init.InitialState, y_start = 2);\n  FO b;\n"
+                           "  parameter Types.Init k = Types.Init.SteadyState;\n  Integer n = Integer(k);\n"
+                           "  Real z = if k == Types.Init.NoInit then time else 2 * time;\nend UET1;\n"),
+               std::string("class UET1\n"
+                           "  final parameter enumeration(NoInit, SteadyState, InitialState, InitialOutput) a.initType = Types.Init.InitialState;\n"
+                           "  parameter Real a.y_start = 2.0;\n  Real a.y(start = a.y_start);\n"
+                           "  final parameter enumeration(NoInit, SteadyState, InitialState, InitialOutput) b.initType = Types.Init.NoInit;\n"
+                           "  parameter Real b.y_start = 0.0;\n  Real b.y(start = b.y_start);\n"
+                           "  parameter enumeration(NoInit, SteadyState, InitialState, InitialOutput) k = Types.Init.SteadyState;\n"
+                           "  Integer n = Integer(k);\n  Real z = if k == Types.Init.NoInit then time else 2.0 * time;\n"
+                           "initial equation\n  a.y = a.y_start;\nequation\n  der(a.y) = 1.0 - a.y;\n  der(b.y) = 1.0 - b.y;\n"
+                           "end UET1;\n"));
+  // Evaluate = true 而无绑定：omc 报错（UES1）。
+  bool uns = false;
+  YMC_CHECK_EQ(flatten_src("type E = enumeration(a, b, c);\nmodel UES1\n  parameter E e annotation(Evaluate = true);\n"
+                           "  Real x = time;\nend UES1;\n", &uns), "<unsupported:Evaluate annotation>");
+  YMC_CHECK(uns);
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

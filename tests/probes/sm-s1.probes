@@ -1,0 +1,52 @@
+//// set: sm-s1 — 结构标记：未定型绑定里 size(a, k) 的实参、if 表达式没选中的那支、矩阵构造套 size（1.25.0 怪癖，SKIP）
+//// model: S10
+model S10
+parameter Real a[:] = {1, 2};
+parameter Integer n = size(a, 1);
+Real x[n];
+equation
+x = fill(time, n);
+end S10;
+//// model: S11
+model S11
+parameter Real a[:] = {1, 2};
+Real x[size(a, 1)];
+equation
+x = fill(time, size(a, 1));
+end S11;
+//// model: S12
+model S12
+parameter Boolean flag = true;
+parameter Integer k1 = 2;
+parameter Integer k2 = 3;
+parameter Integer n = if flag then k1 else k2;
+Real x[n];
+equation
+x = fill(time, n);
+end S12;
+//// model: S13
+model S13
+parameter Real b = 5;
+parameter Real a[:] = {b, 2};
+parameter Integer n = size(a, 1);
+Real x[n];
+equation
+x = fill(time, n);
+end S13;
+//// model: S14
+model S14
+parameter Real a[:] = {1, 2};
+final parameter Integer n = max([size(a, 1); 1]);
+Real x[n];
+parameter Real p[n] = if size(a, 1) == 1 then ones(n) * a[1] else a;
+equation
+x = p * time;
+end S14;
+//// model: S15
+model S15
+parameter Real a[2] = {1, 2};
+parameter Integer n = size(a, 1);
+Real x[n];
+equation
+x = fill(time, n);
+end S15;

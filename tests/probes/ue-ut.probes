@@ -1,0 +1,32 @@
+//// set: ue-ut — 用户枚举结构参数（单测原文）
+//// model: UES1
+type E = enumeration(a, b, c);
+model UES1
+  parameter E e annotation(Evaluate = true);
+  Real x = time;
+end UES1;
+//// model: UET1
+package Types
+  type Init = enumeration(NoInit, SteadyState, InitialState, InitialOutput);
+end Types;
+block FO
+  import Types.Init;
+  parameter Init initType = Init.NoInit annotation(Evaluate = true);
+  parameter Real y_start = 0;
+  Real y(start = y_start);
+initial equation
+  if initType == Init.SteadyState then
+    der(y) = 0;
+  elseif initType == Init.InitialState or initType == Init.InitialOutput then
+    y = y_start;
+  end if;
+equation
+  der(y) = 1 - y;
+end FO;
+model UET1
+  FO a(initType = Types.Init.InitialState, y_start = 2);
+  FO b;
+  parameter Types.Init k = Types.Init.SteadyState;
+  Integer n = Integer(k);
+  Real z = if k == Types.Init.NoInit then time else 2 * time;
+end UET1;

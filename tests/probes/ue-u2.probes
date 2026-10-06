@@ -1,0 +1,118 @@
+//// set: ue-u2 — 用户枚举结构求值：MSL 式 Init / LimiterHomotopy、模型里定义的枚举（未做）、extends 改值、枚举数组（未做）、记录字段
+//// model: U20
+package Types
+type Init = enumeration(NoInit, SteadyState, InitialState, InitialOutput);
+end Types;
+block FO
+import Types.Init;
+parameter Init initType = Init.NoInit annotation(Evaluate = true);
+parameter Real y_start = 0;
+Real y(start = y_start);
+initial equation
+if initType == Init.SteadyState then
+der(y) = 0;
+elseif initType == Init.InitialState or initType == Init.InitialOutput then
+y = y_start;
+end if;
+equation
+der(y) = 1 - y;
+end FO;
+model U20
+FO a(initType = Types.Init.InitialState, y_start = 2);
+FO b;
+end U20;
+//// model: U21
+package Types
+type LimiterHomotopy = enumeration(NoHomotopy, Linear, UpperLimit, LowerLimit);
+end Types;
+block Lim
+parameter Real uMax = 1;
+parameter Types.LimiterHomotopy homotopyType = Types.LimiterHomotopy.Linear annotation(Evaluate = true);
+input Real u;
+output Real y;
+protected
+Real simplifiedExpr;
+equation
+simplifiedExpr = (if homotopyType == Types.LimiterHomotopy.Linear then u else if homotopyType == Types.LimiterHomotopy.UpperLimit then uMax else 0);
+if homotopyType == Types.LimiterHomotopy.NoHomotopy then
+y = min(u, uMax);
+else
+y = homotopy(actual = min(u, uMax), simplified = simplifiedExpr);
+end if;
+end Lim;
+model U21
+Lim l(u = time);
+end U21;
+//// model: U22
+model U22
+type E = enumeration(a, b);
+parameter E e = E.b annotation(Evaluate = true);
+Real x = if e == E.a then time else 0;
+end U22;
+//// model: U23
+type E = enumeration(a, b, c);
+model A
+parameter E e = E.a annotation(Evaluate = true);
+end A;
+model B
+extends A(e = E.c);
+Real x = if e == E.c then time else 0;
+end B;
+model U23
+B b;
+end U23;
+//// model: U24
+type E = enumeration(a, b, c);
+model U24
+parameter E e[2] = {E.a, E.b} annotation(Evaluate = true);
+Real x = time;
+end U24;
+//// model: U25
+type E = enumeration(a, b, c);
+record R
+parameter E e = E.b;
+end R;
+model U25
+parameter R r;
+Real x;
+equation
+if r.e == E.b then
+x = time;
+else
+x = 0;
+end if;
+end U25;
+//// model: U26
+type E = enumeration(a, b, c);
+model U26
+parameter E e = E.b annotation(Evaluate = true);
+parameter Boolean flag = e == E.b;
+Real x = if flag then time else 0;
+end U26;
+//// model: U27
+type E = enumeration(a, b, c);
+model U27
+parameter E e = E.b annotation(Evaluate = true);
+Real x;
+equation
+x = if e < E.c then time else 0;
+end U27;
+//// model: U28
+type E = enumeration(a, b, c);
+model U28
+parameter E e = E.b;
+parameter E f = e annotation(Evaluate = true);
+Real x = time;
+end U28;
+//// model: U29
+type E = enumeration(a, b, c);
+model U29
+parameter E e = E.b annotation(Evaluate = false);
+Real x;
+equation
+if e == E.a then
+x = 1;
+else
+x = time;
+end if;
+end U29;

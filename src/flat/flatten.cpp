@@ -3271,14 +3271,14 @@ class Flattener {
       if (binding.is_valid()) {
         // 已按值求得
       } else if (mraw.is_valid()) {
-        binding = (cty.kind == TypeKind::Enumeration && is_cref_exp(mraw)) ? enum_lit_value(mraw, mod_scope, mod_prefix)
+        binding = (cty.kind == TypeKind::Enumeration && enum_literal_cref(mraw, mod_scope)) ? enum_lit_value(mraw, mod_scope, mod_prefix)
                                                                            : inst_exp(mraw, mod_scope, mod_prefix);
       } else {
         const Binding& b = I_.comps[cid].binding;
         const BindingKind bk = b.kind;
         const Id<Exp> raw = b.raw_exp;
         if (bk == BindingKind::Raw && raw.is_valid())
-          binding = (cty.kind == TypeKind::Enumeration && is_cref_exp(raw)) ? enum_lit_value(raw, enclosing, prefix)
+          binding = (cty.kind == TypeKind::Enumeration && enum_literal_cref(raw, enclosing)) ? enum_lit_value(raw, enclosing, prefix)
                                                                             : inst_exp(raw, enclosing, prefix);
       }
     }
@@ -4613,9 +4613,24 @@ class Flattener {
         break;
       }
     }
+    bool head_done = false;   // path 里已含首段（经 import 解析成全名）
     for (NodeId s = scope; !el && s.is_valid() && !I_.nodes[s].is_empty(); s = I_.nodes[s].parent_scope) {
       const Id<SElement> d = I_.nodes[s].def;
-      if (!d.is_valid() || !(el = class_in(I_.scode.elems[d].def.elements, type_parts[0]))) continue;
+      if (!d.is_valid()) continue;
+      if (!(el = class_in(I_.scode.elems[d].def.elements, type_parts[0]))) {
+        // 这一层的 import 引入了首段（MSL Blocks.Continuous 的 `import Modelica.Blocks.Types.Init;` + `Init.NoInit`）：类型路径
+        // 取导入目标的全名（omc 打规范名 `Modelica.Blocks.Types.Init.NoInit`，UE 探针 u31-u33）。目标须在包里（实例路径未核实）。
+        ScodeScope ids;
+        const Id<SElement> t = import_lookup(type_parts[0], d, ids);
+        if (!t.is_valid() || I_.scode.elems[t].kind != SElementKind::Class) continue;
+        for (Id<SElement> x : ids)
+          if (I_.scode.elems[x].restriction != SRestriction::Package) return std::nullopt;
+        el = &I_.scode.elems[t];
+        for (auto it = ids.rbegin(); it != ids.rend(); ++it) path.push_back(I_.scode.elems[*it].name);
+        path.push_back(el->name);
+        head_done = true;
+        break;
+      }
       // 实例节点是定义节点的克隆、parent_scope 指词法外层的**定义**节点（inst.cpp instantiate），故根类按 def 认。
       if (s.raw == scope.raw) path = prefix;
       else if (I_.nodes[s].def.raw != I_.nodes[root_].def.raw) return std::nullopt;   // 更外层的非根类：路径未核实
@@ -4631,7 +4646,7 @@ class Flattener {
       if (!(el = class_in(el->def.elements, type_parts[i]))) return std::nullopt;
     if (el->def.kind != SClassDefKind::Enumeration) return std::nullopt;
     def = &el->def;
-    path.insert(path.end(), type_parts.begin(), type_parts.end());
+    path.insert(path.end(), type_parts.begin() + (head_done ? 1 : 0), type_parts.end());
     return path;
   }
   // 按简单名沿词法作用域链找类元素（任意 kind），最后再查顶层 program（顶层声明的连接器短类，Cardinality3）。
@@ -4882,7 +4897,8 @@ class Flattener {
   // package 常量往往没被实例化（没走 inst 树），所以直接在 SCODE 上按名解析 + 递归求值，不经 inst_exp/cref。
   struct CVal {
     // Undef：函数里未赋值的数组输出 / 局部元素（NFEvalFunction.buildBinding :342-365 用 EMPTY 占位）；读到即求值失败。
-    // Enum：内建枚举的字面量（i = 1 基序数，epath = 打印路径 `StateSelect.default`）；用户定义的枚举不求值（见 builtin_enum_value）。
+    // Enum：枚举字面量（i = 1 基序数，epath = 打印路径 `StateSelect.default` / `P.E.c`；空 = 只知序数、不能打印，见
+    // scode_enum_value）。
     enum class K { Int, Real, Bool, Str, Record, Array, Undef, Enum } k = K::Int;
     std::int64_t i = 0;
     double r = 0.0;
@@ -4899,7 +4915,8 @@ class Flattener {
     static CVal S(Symbol v) { CVal c; c.k = K::Str; c.s = v; return c; }
     static CVal Rec() { CVal c; c.k = K::Record; c.rec = std::make_shared<std::vector<std::pair<Symbol, CVal>>>(); return c; }
     static CVal Arr(std::vector<CVal> v) { CVal c; c.k = K::Array; c.arr = std::make_shared<std::vector<CVal>>(std::move(v)); return c; }
-    double as_r() const { return k == K::Int ? static_cast<double>(i) : r; }
+    // 数值视图（关系比较用）：枚举取序数（同类型的枚举按序数比，NFCeval.evalRelation 的 ENUM_LITERAL 支）。
+    double as_r() const { return k == K::Int || k == K::Enum ? static_cast<double>(i) : r; }
     void set_field(Symbol name, CVal v) {
       if (!rec) rec = std::make_shared<std::vector<std::pair<Symbol, CVal>>>();
       else if (rec.use_count() > 1) rec = std::make_shared<std::vector<std::pair<Symbol, CVal>>>(*rec);   // COW
@@ -4908,8 +4925,40 @@ class Flattener {
     }
   };
 
+  // 用户定义的枚举字面量 `E.b` / `P.E.c` / `Modelica.Blocks.Types.Init.NoInit` 的值（求值器语境，只有 SCode 作用域）：类型名
+  // 在 scope 里解析到 `type E = enumeration(…)`，字面量取 1 基序数。打印路径 = 枚举类的全名（各层外围类 + 类名，import /
+  // 短写都规范成全名，UE 探针 u13 `P.E.c`）——只在外围全是包（或顶层）时这样定；定义在模型等实例类里的（omc 打实例路径
+  // `m.F.v`，见 enum_type_path）路径留空，只能比较、不能打印（literal_of 那里 SKIP）。短类别名 `type E2 = E` 未核实 → nullopt。
+  std::optional<CVal> scode_enum_value(const Cref& c, const ScodeScope& scope) {
+    if (c.parts.size() < 2) return std::nullopt;
+    for (const CrefPart& p : c.parts)
+      if (!p.subscripts.empty()) return std::nullopt;
+    std::vector<Symbol> tparts;
+    for (std::size_t i = 0; i + 1 < c.parts.size(); ++i) tparts.push_back(c.parts[i].name);
+    ScodeScope ds;
+    const Id<SElement> t = resolve_class_path(tparts, c.leading_dot, scope, ds);
+    if (!t.is_valid() || I_.scode.elems[t].kind != SElementKind::Class ||
+        I_.scode.elems[t].def.kind != SClassDefKind::Enumeration)
+      return std::nullopt;
+    const SClassDef& ed = I_.scode.elems[t].def;
+    for (std::size_t i = 0; i < ed.enum_items.size(); ++i) {
+      if (ed.enum_items[i].literal != c.parts.back().name) continue;
+      CVal v;
+      v.k = CVal::K::Enum;
+      v.i = static_cast<std::int64_t>(i) + 1;
+      bool pkg_path = true;
+      for (Id<SElement> d : ds) pkg_path = pkg_path && I_.scode.elems[d].restriction == SRestriction::Package;
+      if (pkg_path) {
+        for (auto it = ds.rbegin(); it != ds.rend(); ++it) v.epath.push_back(I_.scode.elems[*it].name);
+        v.epath.push_back(I_.scode.elems[t].name);
+        v.epath.push_back(c.parts.back().name);
+      }
+      return v;
+    }
+    return std::nullopt;
+  }
   // 内建枚举的字面量 `StateSelect.default` / `AssertionLevel.warning` 的值：1 基序数 + 打印路径（内建类型在顶层，路径即书写名）。
-  // 用户定义的枚举不在此列——打印路径要按声明处规范化（enum_type_path），求值器里没有实例作用域，仍求不出。
+  // 用户定义的枚举见 scode_enum_value。
   std::optional<CVal> builtin_enum_value(const Cref& c) {
     if (c.leading_dot || c.parts.size() != 2 || !c.parts[0].subscripts.empty() || !c.parts[1].subscripts.empty())
       return std::nullopt;
@@ -5324,6 +5373,7 @@ class Flattener {
           }
         }
         if (std::optional<CVal> bv = builtin_enum_value(c)) return bv;
+        if (std::optional<CVal> ev = scode_enum_value(c, scope)) return ev;
         // 模型语境：本实例的局部参数 / 常量按修饰后的绑定求值（NF 的组件绑定 = 修饰合并后，Structural.markExp 把求值
         // 用到的参数标为结构参数）。
         if (ceval_frame_ >= 0 && !locals_ && !c.leading_dot) {
@@ -5388,7 +5438,11 @@ class Flattener {
       case ExpKind::IfExp: {   // 只求被选分支（elseif 嵌在 c 里）
         auto cnd = eval_scode(e.a, scope, depth + 1, allow_param, used);
         if (!cnd || cnd->k != CVal::K::Bool) return std::nullopt;
-        return eval_scode(cnd->b ? e.b : e.c, scope, depth + 1, allow_param, used);
+        std::optional<CVal> r = eval_scode(cnd->b ? e.b : e.c, scope, depth + 1, allow_param, used);
+        // 结构标记：omc 的 Structural.markExp 遍历整个式子，没选中的那支里的参数也成结构参数（NFStructural.mo:246-288 的
+        // applyShallow；SM 探针 s12 `n = if flag then k1 else k2` → k2 也 final）。另一支也求一遍，只为打标记（值不用、求不出不管）。
+        if (dep_mark_ && allow_param && ceval_frame_ >= 0) (void)eval_scode(cnd->b ? e.c : e.b, scope, depth + 1, allow_param, used);
+        return r;
       }
       case ExpKind::Range: {   // a:b / a:step:b（Absyn：a=起点, b=步长或终点, c=终点）
         auto a = eval_scode(e.a, scope, depth + 1, allow_param, used);
@@ -5481,6 +5535,12 @@ class Flattener {
           // 标量内建数学函数（abs/sqrt/sin/…/max(a, b)…，无同名用户类）：实参求值后复用类型化路径的折叠。
           if (fn.parts.size() == 1 && fn.parts[0].subscripts.empty() && lookup_builtin(in_.str(fn.parts[0].name)) &&
               !find_scode_element(fn.parts[0].name, scope).is_valid()) {
+            // Integer(枚举) = 序数（NFBuiltinCall 的 Integer 转换，UE 探针 u14 `Integer(e)` → 3）。
+            if (in_.str(fn.parts[0].name) == "Integer" && e.args.size() == 1 && !(e.arg_names.size() == 1 && e.arg_names[0].is_valid())) {
+              std::optional<CVal> v = eval_scode(e.args[0], scope, depth + 1, allow_param, used);
+              if (v && v->k == CVal::K::Enum) return CVal::I(v->i);
+              return std::nullopt;
+            }
             bool named = false;
             for (Symbol an : e.arg_names) named = named || an.is_valid();
             std::vector<CVal> bargs;
@@ -6278,6 +6338,13 @@ class Flattener {
                             (scope_node == I_.top || (I_.nodes[scope_node].def.is_valid() &&
                                                       I_.scode.elems[I_.nodes[scope_node].def].restriction == SRestriction::Package));
     if (!raw.is_valid() || (efi < 0 && !global_mod)) return fail();   // 无绑定参数 / 修饰书写处不在帧栈上
+    // 连带标记要走进的绑定里有矩阵构造套 size(a, k)：1.25.0 会把 a 一并标成结构参数（`n = max([size(a, 1); 1])` → a final；
+    // 不套矩阵的 `max(size(a, 1), 1)`、`size(a, 1)` 不标，SM 探针 s20 / s21 / s24 / s10），像是矩阵定型的副作用，不复刻 → SKIP
+    //（MSL Blocks.Sources.KinematicPTP2）。
+    if (deps && absyn_matrix_size(raw)) {
+      set_unsupported("size() in matrix constructor of structural binding");
+      return fail();
+    }
     frame_busy_.insert(key);
     std::optional<CVal> v;
     {
@@ -9058,6 +9125,7 @@ class Flattener {
       case CVal::K::Array: break;    // 数组值不应到这里（标量上下文才调 literal_of）
       case CVal::K::Undef: break;    // 未赋值占位不应到这里（coerce_to_kind 已拒）
       case CVal::K::Enum: {
+        if (v.epath.empty()) { set_unsupported("enum literal path"); break; }   // 只知序数（见 scode_enum_value）
         Expr e;
         e.kind = ExprKind::EnumLit;
         e.ty = Type::of(TypeKind::Enumeration);
@@ -9615,6 +9683,16 @@ class Flattener {
   }
 
   bool is_cref_exp(Id<Exp> ae) const { return I_.absyn.exps[ae].kind == ExpKind::CrefExp; }
+  // 书写的枚举字面量 `E.b` / `P.E.c`（至少两段、首段不是本作用域的组件）；单段名 / 组件引用（`f = e`、`r.e`，枚举参数）
+  // 照常按 cref 定型（UE 探针 u14 / u15）。
+  bool enum_literal_cref(Id<Exp> ae, NodeId scope) {
+    if (!is_cref_exp(ae)) return false;
+    const Cref& c = I_.absyn.crefs[I_.absyn.exps[ae].cref];
+    if (c.parts.size() < 2) return false;
+    if (c.leading_dot) return true;
+    const NodeId n = find_local(scope, c.parts[0].name);
+    return !(n.is_valid() && !I_.nodes[n].is_empty() && I_.nodes[n].kind == NodeKind::Component);
+  }
 
   Id<Expr> lit_int(std::int64_t v) { Expr e; e.kind = ExprKind::IntLit; e.ival = v; e.ty = Type::integer(); return add(std::move(e)); }
   Id<Expr> lit_real(double v) { Expr e; e.kind = ExprKind::RealLit; e.rval = v; e.ty = Type::real(); return add(std::move(e)); }
@@ -12722,7 +12800,7 @@ class Flattener {
       const bool label_iter = is_cref_exp(arg) && I_.absyn.crefs[I_.absyn.exps[arg].cref].parts.size() == 1 &&
                               (loop_labels_.count(I_.absyn.crefs[I_.absyn.exps[arg].cref].parts[0].name.id) > 0 ||
                                stmt_iter_label(arg).is_valid());
-      Id<Expr> a = supported && builtin_name == "Integer" && is_cref_exp(arg) && !label_iter
+      Id<Expr> a = supported && builtin_name == "Integer" && enum_literal_cref(arg, enclosing) && !label_iter
                        ? enum_lit_value(arg, enclosing, prefix)
                        : inst_exp(arg, enclosing, prefix);
       // der 作用在空数组（被换掉的空数组变量引用）上 = 同型空数组；所在方程随后按空数组整条删去（ABCDsystem
@@ -13716,9 +13794,11 @@ class Flattener {
         if (name == "Integer") {
           const Expr& ea = result_.model.exprs[args[0]];
           if (ea.kind == ExprKind::EnumLit && ea.enum_index) return lit_int(ea.enum_index);
-          // 留成符号的枚举迭代变量（for 语句 / 保留的归约）：调用原样留着（EN 探针 t2 `z[Integer(i)] := y[i]`）。
-          if (ea.kind == ExprKind::Cref && ea.ty.kind == TypeKind::Enumeration && ea.cref.parts.size() == 1 &&
-              stmt_iters_.count(ea.cref.parts[0].name.id))
+          // 留成符号的枚举迭代变量（for 语句 / 保留的归约）：调用原样留着（EN 探针 t2 `z[Integer(i)] := y[i]`）；枚举参数的引用
+          // 同样留着（结构参数随后代入成字面量再折，UE 探针 u14 `Integer(e)` → 3）。
+          if (ea.kind == ExprKind::Cref && ea.ty.kind == TypeKind::Enumeration &&
+              (ea.cref.resolved_node != Id<INode>::kInvalid ||
+               (ea.cref.parts.size() == 1 && stmt_iters_.count(ea.cref.parts[0].name.id))))
             return rebuild();
           set_unsupported("enum ordinal");   // 序数没解析出来（跨包枚举等）→ SKIP
           return rebuild();
@@ -15588,6 +15668,19 @@ class Flattener {
   };
   // 书写式里有 `ndims(…)` 或单实参的 `size(…)`：这两种调用在 omc 里总是参数变率（typeNdimsCall，NFBuiltinCall.mo:487-514；
   // typeSize 的无维号支返回 Variability.PARAMETER，NFTyping.mo，v1.25.0）——哪怕实参是字面量。不看是否被同名用户函数遮蔽。
+  // 式子里有矩阵构造 `[…]`、且其中有 size(…) 调用（MSL KinematicPTP2 的 `nout = max([size(q_begin, 1); …])`）。
+  bool absyn_matrix_size(Id<Exp> id, bool in_matrix = false) const {
+    if (!id.is_valid()) return false;
+    const Exp& e = I_.absyn.exps[id];
+    in_matrix = in_matrix || e.kind == ExpKind::Matrix;
+    if (in_matrix && e.kind == ExpKind::Call) {
+      const Cref& fn = I_.absyn.crefs[e.cref];
+      if (!fn.leading_dot && fn.parts.size() == 1 && in_.str(fn.parts[0].name) == "size") return true;
+    }
+    for (Id<Exp> a : e.args) if (absyn_matrix_size(a, in_matrix)) return true;
+    for (const ForIndex& it : e.iters) if (absyn_matrix_size(it.range, in_matrix)) return true;
+    return absyn_matrix_size(e.a, in_matrix) || absyn_matrix_size(e.b, in_matrix) || absyn_matrix_size(e.c, in_matrix);
+  }
   bool absyn_param_size_call(Id<Exp> id) const {
     if (!id.is_valid()) return false;
     const Exp& e = I_.absyn.exps[id];
