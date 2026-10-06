@@ -1,0 +1,26 @@
+//// set: fc-ut — 函数体归约 / 推导式（单测原文）
+//// model: FRS1
+function f
+  input Integer m;
+  output Real o[m, 2];
+algorithm
+  o := {{i, j} for i in 1:m, j in 1:2};
+end f;
+model FRS1
+  Real x[2, 2] = f(2) * time;
+end FRS1;
+//// model: FRT1
+function f
+  input Real x[:];
+  input Integer m;
+  output Real y;
+  output Real o[m, 2];
+protected
+  Real w[size(x, 1)] = {2 * x[i] for i in 1:size(x, 1)};
+algorithm
+  y := sum(w[i] * i for i in 1:size(x, 1)) + max(x[i] for i in 1:2) + sum(x[i] for i in 1:2) + sum(i * j for i in 1:m, j in 1:2);
+  o := {{i * j for j in 1:2} for i in 1:m};
+end f;
+model FRT1
+  Real y = f({time, 2}, 2);
+end FRT1;

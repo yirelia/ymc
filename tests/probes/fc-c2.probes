@@ -1,0 +1,108 @@
+//// set: fc-c2 — 函数体归约：字面量范围展开、多迭代变量嵌套、嵌套推导式、外层 for 变量作范围、数组字面量范围
+//// model: C20
+function f
+input Real x[2];
+output Real y;
+algorithm
+y := sum(x[i] for i in 1:2);
+end f;
+model C20
+Real z = f({time, 2});
+end C20;
+//// model: C21
+function f
+input Real a;
+output Real o[3];
+algorithm
+o := {k * a for k in 1:3};
+end f;
+model C21
+Real z[3] = f(time);
+end C21;
+//// model: C22
+function f
+input Integer m;
+input Real a;
+output Real y;
+algorithm
+y := sum(i * j * a for i in 1:m, j in 1:2);
+end f;
+model C22
+Real z = f(2, time);
+end C22;
+//// model: C23
+function f
+input Integer m;
+input Real a;
+output Real o[m, 2];
+algorithm
+o := {{i * j * a for j in 1:2} for i in 1:m};
+end f;
+model C23
+Real z[2, 2] = f(2, time);
+end C23;
+//// model: C24
+function f
+input Real x[:];
+output Real y;
+algorithm
+y := min(x[i] for i in 1:size(x, 1));
+end f;
+model C24
+Real z = f({time, 2});
+end C24;
+//// model: C25
+function f
+input Real x[:];
+output Real y;
+protected
+Integer n = size(x, 1);
+algorithm
+y := sum(x[i] * x[n - i + 1] for i in 1:n);
+end f;
+model C25
+Real z = f({time, 2});
+end C25;
+//// model: C26
+function f
+input Real x[:];
+output Real y;
+algorithm
+y := 0;
+for k in 1:size(x, 1) loop
+y := y + sum(x[i] for i in 1:k);
+end for;
+end f;
+model C26
+Real z = f({time, 2});
+end C26;
+//// model: C27
+function f
+input Real a;
+output Real o[2];
+algorithm
+o := array(a * i for i in {1, 3});
+end f;
+model C27
+Real z[2] = f(time);
+end C27;
+//// model: C28
+function f
+input Integer m;
+output Integer y;
+algorithm
+y := sum(i for i in 1:m);
+end f;
+model C28
+Integer k = f(integer(time));
+end C28;
+//// model: C29
+function f
+input Real x[:];
+output Real y[size(x, 1)];
+algorithm
+y := {sum(x[j] for j in 1:i) for i in 1:size(x, 1)};
+end f;
+model C29
+Real z[2] = f({time, 2});
+end C29;

@@ -1,0 +1,84 @@
+//// set: fc-c1 — 函数体里的推导式 / 归约：运行时范围保留、array(…) 写法、min / max / product、局部绑定里的推导式
+//// model: C10
+function f
+input Integer m;
+output Real o[m];
+algorithm
+o := {(k - 1) * 2 / m for k in 1:m};
+end f;
+model C10
+parameter Integer n = 3;
+Real x[n] = f(n) * time;
+end C10;
+//// model: C11
+function f
+input Real x[:];
+output Real y;
+algorithm
+y := sum(x[i] * i for i in 1:size(x, 1));
+end f;
+model C11
+Real z = f({time, 2});
+end C11;
+//// model: C12
+function f
+input Real x[:];
+output Real y[size(x, 1)];
+algorithm
+y := {x[i] ^ 2 for i in 1:size(x, 1)};
+end f;
+model C12
+Real z[2] = f({time, 2});
+end C12;
+//// model: C13
+function f
+input Integer m;
+output Real o[m];
+algorithm
+o := array(k for k in 1:m);
+end f;
+model C13
+Real x[2] = f(2) * time;
+end C13;
+//// model: C14
+function f
+input Real x[:];
+output Real y;
+algorithm
+y := max(abs(x[i]) for i in 1:size(x, 1));
+end f;
+model C14
+Real z = f({time, -2});
+end C14;
+//// model: C15
+function f
+input Real x[:];
+output Real y;
+algorithm
+y := product(x[i] for i in 1:size(x, 1));
+end f;
+model C15
+Real z = f({time, 2});
+end C15;
+//// model: C16
+function f
+input Integer m;
+output Real o[m, 2];
+algorithm
+o := {{i, j} for i in 1:m, j in 1:2};
+end f;
+model C16
+Real x[2, 2] = f(2) * time;
+end C16;
+//// model: C17
+function f
+input Real x[:];
+output Real y[size(x, 1)];
+protected
+Real t[size(x, 1)] = {2 * x[i] for i in 1:size(x, 1)};
+algorithm
+y := t;
+end f;
+model C17
+Real z[2] = f({time, 2});
+end C17;

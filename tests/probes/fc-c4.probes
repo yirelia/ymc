@@ -1,0 +1,62 @@
+//// set: fc-c4 — 推导式的维：Integer 体转 Real 时整体转型打印的表达式维（getRangeTypeInt）
+//// model: C40
+function f
+input Integer m;
+output Real o[m];
+algorithm
+o := {i for i in 1:m};
+end f;
+model C40
+Real z[2] = f(integer(time) + 2);
+end C40;
+//// model: C41
+function f
+input Integer m;
+output Real o[m - 1];
+algorithm
+o := {i for i in 2:m};
+end f;
+model C41
+Real z[2] = f(integer(time) + 3);
+end C41;
+//// model: C42
+function f
+input Integer m;
+output Real o[:];
+algorithm
+o := {i for i in 1:2:m};
+end f;
+model C42
+Real z[2] = f(integer(time) + 3);
+end C42;
+//// model: C43
+function f
+input Real x[:];
+output Real o[size(x, 1)];
+algorithm
+o := {i for i in 1:size(x, 1)};
+end f;
+model C43
+Real z[2] = f({time, 1});
+end C43;
+//// model: C44
+function f
+input Integer m;
+input Integer k;
+output Real o[:];
+algorithm
+o := {i for i in k:m};
+end f;
+model C44
+Real z[2] = f(integer(time) + 3, 2);
+end C44;
+//// model: C45
+function f
+input Integer m;
+output Integer o[m];
+algorithm
+o := {i for i in 1:m};
+end f;
+model C45
+Integer z[2] = f(integer(time) + 2);
+end C45;

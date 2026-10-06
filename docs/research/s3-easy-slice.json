@@ -606,5 +606,6 @@
 "RedeclareMod5.mo",
 "RedeclareMod6.mo",
 "UnboundParameter7.mo",
-"redeclare6.mo"
+"redeclare6.mo",
+"CevalReduction2.mo"
 ]

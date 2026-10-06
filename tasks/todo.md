@@ -1580,6 +1580,20 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           scodeinst 不变（538 / FAIL 28 在账）；整个 testsuite 实跑 PASS 1452→1454（Buildings 的
           DewPointTemperatureDerivativeCheck_amb、msl22 的 LossyGear1）/ FAIL 0；MSL 示例 54→61（Noise.Densities、
           AmplifierWithOpAmpDetailed、两个 EddyCurrentBrake、三个 LossyGearDemo）；探针 7144→7180（fv-* 4 集 36 个）；单测 245→246。
+    - [x] (61k) flat：函数体里的归约与推导式（2026-10-06）：`sum(e for i in r)` / `{e for i in r}` 在函数体里此前 SKIP
+          （"expression kind [Reduction]"，MSL 34 个，Polyphase.Functions.symmetricOrientation 一类；"function: sum"）。迭代变量当
+          运行时的局部 Integer（同函数 for 语句），体按符号定型一次、取值时代入；化简照 NFSimplifyExp：单迭代单元素 → 代入、空范围 →
+          缺省值、sum / product 的范围全是字面量 → 展开成 `e1 + e2 + …`（NF_SCALARIZE 的 simplifyReduction2），其余保留，多迭代变量
+          打成嵌套（先写的在最内层）；推导式 → `array(e for i in r)`，嵌套推导式照收，多迭代变量的 SKIP。推导式的维按
+          TypeCheck.getRangeTypeInt（`1:e` → e、其余 `max(stop - start + 1, 0)` / `max(div(…), …)`），整体转型 `/*Real[…]*/` 打表达式
+          维（此前一律打 `:`）。
+          函数体能发射之后露出：编译期求值器不认归约式的实参 `sum(3 * i for i in 1:5)`（只认数组），求值失败就落回发射函数 +
+          符号调用，而 omc 求得出（testsuite ForIterator1 的 `(i1, i2, r1, r2) = (45, 15, …)`）→ eval_reduction 的实参是推导式时
+          按推导式求值（与数组构造子共用 eval_comprehension）。SKIP 子原因：Evaluate 注解标出是哪一种（MSL 50 个全是
+          "value not evaluable"）。
+          slice 608→609 例 PASS 538→539（+CevalReduction2）；scodeinst PASS 538→539 / FAIL 28（在账）；整个 testsuite 实跑 PASS
+          1454→1458（ForIterator1 两份、ForIterator2、CevalReduction2）/ FAIL 0；MSL 示例 61（被它卡住的 34 个露出下一层：模型语境里
+          嵌在运算中的数组值函数调用）；探针 7180→7224（fc-* 6 集 44 个）；单测 246→247。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

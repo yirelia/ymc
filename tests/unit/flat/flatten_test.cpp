@@ -4935,6 +4935,28 @@ YMC_TEST(flatten_function_variable_attributes) {
   YMC_CHECK(uns);
 }
 
+YMC_TEST(flatten_function_reductions_and_comprehensions) {
+  // 函数体里的归约 / 推导式：范围是运行时的保留 `sum(e for i in 1:size(x, 1))`、`max(…)`；sum 的范围全是字面量 → 展开
+  //（`x[1] + x[2]`）；多迭代变量打成嵌套；推导式 `{e for i in r}` → `array(e for i in r)`，Integer 体转 Real 时整体转型带
+  // 表达式维（`/*Real[m, 2]*/`，getRangeTypeInt）。期望 = omc 1.25.0 实跑 FRT1（2026-10-06）。
+  YMC_CHECK_EQ(flatten_src("function f\n  input Real x[:];\n  input Integer m;\n  output Real y;\n  output Real o[m, 2];\n"
+                           "protected\n  Real w[size(x, 1)] = {2 * x[i] for i in 1:size(x, 1)};\nalgorithm\n"
+                           "  y := sum(w[i] * i for i in 1:size(x, 1)) + max(x[i] for i in 1:2) + sum(x[i] for i in 1:2) + sum(i * j for i in 1:m, j in 1:2);\n"
+                           "  o := {{i * j for j in 1:2} for i in 1:m};\nend f;\nmodel FRT1\n  Real y = f({time, 2}, 2);\n"
+                           "end FRT1;\n"),
+               std::string("function f\n  input Real[:] x;\n  input Integer m;\n  output Real y;\n  output Real[m, 2] o;\n"
+                           "  protected Real[size(x, 1)] w = array(2.0 * x[i] for i in 1:size(x, 1));\nalgorithm\n"
+                           "  y := sum(w[i] * /*Real*/(i) for i in 1:size(x, 1)) + max(x[i] for i in 1:2) + x[1] + x[2] + /*Real*/(sum(sum(i * j for i in 1:m) for j in 1:2));\n"
+                           "  o := /*Real[m, 2]*/(array(array(i * j for j in 1:2) for i in 1:m));\nend f;\n\nclass FRT1\n"
+                           "  Real y = f({time, 2.0}, 2)[1];\nend FRT1;\n"));
+  // 多迭代变量的推导式（体是数组）：omc 报类型不符（FRS1）。
+  bool uns = false;
+  YMC_CHECK_EQ(flatten_src("function f\n  input Integer m;\n  output Real o[m, 2];\nalgorithm\n"
+                           "  o := {{i, j} for i in 1:m, j in 1:2};\nend f;\nmodel FRS1\n  Real x[2, 2] = f(2) * time;\n"
+                           "end FRS1;\n", &uns), "<unsupported:function reduction form>");
+  YMC_CHECK(uns);
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);

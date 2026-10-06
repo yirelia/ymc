@@ -195,14 +195,18 @@ class ExprDumper {
         exp(e.c);   // elseif 是嵌进 c 的另一个 IfExp，会自然打成 "else if …"（R13 §4.1）
         break;
       case ExprKind::Cast:
-        // 数组转型带维：`/*Real[2, 3]*/(…)`（Type.toString 的数组形，AC2 探针）。
+        // 数组转型带维：`/*Real[2, 3]*/(…)`（Type.toString 的数组形，AC2 探针）；表达式维照打（`/*Real[max(m - 2 + 1, 0)]*/`，
+        // Dimension.toString 的 EXP 支，FC 探针 c40-c44），未知维打 `:`。
         out_ += "/*";
         out_ += cast_type_name(e.ty.element_type().kind);
         if (e.ty.is_array()) {
           out_ += '[';
           for (std::size_t i = 0; i < e.ty.dims.size(); ++i) {
             if (i) out_ += ", ";
-            out_ += e.ty.dims[i].kind == DimKind::Integer ? std::to_string(e.ty.dims[i].size) : std::string(":");
+            const Dimension& d = e.ty.dims[i];
+            if (d.kind == DimKind::Integer) out_ += std::to_string(d.size);
+            else if (d.kind == DimKind::Exp && d.exp.is_valid()) exp(d.exp);
+            else out_ += ':';
           }
           out_ += ']';
         }

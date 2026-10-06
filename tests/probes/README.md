@@ -267,3 +267,9 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `fv-f2` | 12 | 函数变量属性：数组铺开（已知维 / 未知维 / 二维）、each、引用别的形参、输出 start、局部绑定、Boolean / String 短类 |
 | `fv-f3` | 10 | 函数变量属性：表达式维的 fill、二维未知维、多层短类 + 声明修饰、属性名不对（omc 报错）、数组值属性 |
 | `fv-ut` | 2 | 函数变量属性（单测原文） |
+| `fc-c1` | 8 | 函数体里的推导式 / 归约：运行时范围保留、array(…) 写法、min / max / product、局部绑定里的推导式 |
+| `fc-c2` | 10 | 函数体归约：字面量范围展开、多迭代变量嵌套、嵌套推导式、外层 for 变量作范围、数组字面量范围 |
+| `fc-c3` | 12 | 函数体归约补充：min / max 字面量范围、空范围、单元素、步长、Integer 体、if 体、下标式 |
+| `fc-c4` | 6 | 推导式的维：Integer 体转 Real 时整体转型打印的表达式维（getRangeTypeInt） |
+| `fc-ut` | 2 | 函数体归约 / 推导式（单测原文） |
+| `fc-ev` | 6 | 用户函数的编译期求值：函数体里的推导式 / 归约式 `sum(3 * i for i in 1:5)`、多输出调用（testsuite ForIterator1 的拆件） |
