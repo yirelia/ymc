@@ -47,6 +47,8 @@ class Instantiator {
   void inst_component(NodeId comp_node, NodeId enclosing);  // 解析组件类型（叶/复合）
   // extends 修饰 `extends A(x = 1)`：把 mod 按名合并到继承来的组件 bc 上（绑定覆盖 + 属性 + final）。
   void apply_extends_modifier(NodeId bc, Id<SMod> mod, NodeId scope);
+  // 长类型只有一个 extends（`type TypeReal extends Real; end TypeReal;`）：返回那个 extends 元素；否则 invalid。
+  Id<SElement> type_extends_only(Id<SElement> ce) const;
   // extends 修饰里的组件重声明（见 inst.cpp 的说明）。scope = 写 extends 的类的实例。
   void redeclare_component(NodeId bc, Id<SElement> rel, NodeId scope);
 

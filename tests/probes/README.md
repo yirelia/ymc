@@ -280,3 +280,8 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `sm-s1` | 6 | 结构标记：未定型绑定里 size(a, k) 的实参、if 表达式没选中的那支、矩阵构造套 size（1.25.0 怪癖，SKIP） |
 | `sm-s2` | 6 | 结构标记：size 在哪儿会连带标记它的实参（矩阵构造 vs 普通实参 / if 条件） |
 | `sm-s3` | 8 | 结构标记：if 表达式没选中的那支（维 / elseif / Evaluate / if 方程条件 / 绑定链 / for 范围） |
+| `xb-x1` | 11 | 长类型 extends 内建类型（Icons.TypeReal 一类）：属性、后续短类、Integer / Boolean / String、数组、函数变量 |
+| `xb-x2` | 10 | 短类带维（`type Axis = Real[3](…)`）：each / 切分的类型修饰、组件再加维、二维、长类型作底、非字面量维（未做） |
+| `xb-x3` | 5 | 函数变量的类型带维：each 照标量、标量类型修饰按维铺开、数组类型修饰照原样 |
+| `xb-x4` | 7 | 长类型 extends 带修饰的短类（1.25.0 丢修饰，SKIP）/ extends 只 extends 的长类型（照留）/ type 里有 protected（omc 报错） |
+| `xb-ut` | 2 | extends 内建类型 + 类型维（单测原文） |

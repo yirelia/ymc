@@ -1,0 +1,62 @@
+//// set: xb-x4 — 长类型 extends 带修饰的短类（1.25.0 丢修饰，SKIP）/ extends 只 extends 的长类型（照留）/ type 里有 protected（omc 报错）
+//// model: X40
+type A = Real(unit = "m");
+type B
+extends A(start = 1);
+end B;
+model X40
+B b = time;
+end X40;
+//// model: X41
+type A = Real(unit = "m");
+type B
+extends A;
+end B;
+model X41
+B b = time;
+end X41;
+//// model: X42
+type A = Real[3](each unit = "m");
+type B
+extends A;
+end B;
+model X42
+B b = {time, 1, 2};
+end X42;
+//// model: X43
+type A = Real[3](each unit = "m");
+type B
+extends A(each start = 3);
+end B;
+model X43
+B b = {time, 1, 2};
+end X43;
+//// model: X44
+type A
+extends Real(unit = "m");
+end A;
+type B
+extends A(start = 1);
+end B;
+model X44
+B b = time;
+end X44;
+//// model: X45
+type A = Real(unit = "m");
+type A2 = A(min = 0);
+type B
+extends A2;
+end B;
+model X45
+B b = time;
+end X45;
+//// model: X46
+type T
+extends Real;
+protected
+model M
+end M;
+end T;
+model X46
+T t;
+end X46;

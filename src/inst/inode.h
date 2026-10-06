@@ -194,6 +194,9 @@ struct Component {
   Type ty;
   std::vector<Id<SMod>> derived_mods;        // 短类链上的属性修饰（`type V=Real(unit=…)`），外层派生在前（优先级高）
   std::vector<NodeId> derived_scopes;        // 与 derived_mods 平行：各短类定义所在的类（修饰值在那里解析）
+  // 与 derived_mods 平行：那层类型本身带维（`type V3 = Real[3](start = {1, 2, 3})`）→ 修饰按类型形状切分；否则（标量类型的
+  // 修饰落到数组组件上）按组件维铺开（each_all）。
+  std::vector<bool> derived_split;
   std::vector<Id<SMod>> extends_mods;        // extends 修饰里改本组件的子修饰（`extends A(x(start = 2))`、`extends A(c(x = 2))`），外层在前
   // 被 extends 修饰重声明过（`extends M(redeclare B a(q = 3))`）：def 换成合成的元素（重声明元素 + 原声明补的维 / 条件 /
   // 前缀 / 注释，见 Instantiator::redeclare_component），orig_def = 最初的原声明，cc_mods = 约束修饰（外层在前），flatten 排在

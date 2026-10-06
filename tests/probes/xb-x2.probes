@@ -1,0 +1,69 @@
+//// set: xb-x2 — 短类带维（`type Axis = Real[3](…)`）：each / 切分的类型修饰、组件再加维、二维、长类型作底、非字面量维（未做）
+//// model: X20
+type Axis = Real[3](each final unit = "1");
+model X20
+parameter Axis n = {1, 0, 0};
+end X20;
+//// model: X21
+type V3 = Real[3];
+model X21
+V3 x = {time, 1, 2};
+end X21;
+//// model: X22
+type V3 = Real[3];
+model X22
+V3 x[2];
+equation
+x = {{time, 1, 2}, {3, 4, 5}};
+end X22;
+//// model: X23
+type M2 = Real[2, 2](each unit = "m");
+model X23
+parameter M2 m = {{1, 2}, {3, 4}};
+end X23;
+//// model: X24
+type TR
+extends Real;
+end TR;
+type Axis = TR[3](each final unit = "1");
+model X24
+parameter Axis n = {1, 0, 0};
+end X24;
+//// model: X25
+type V3 = Real[3](start = {1, 2, 3});
+model X25
+V3 x;
+equation
+der(x) = -x;
+end X25;
+//// model: X26
+type V3 = Real[3];
+type W = V3(each min = 0);
+model X26
+W x = {time, 1, 2};
+end X26;
+//// model: X27
+package P
+constant Integer n = 2;
+type V = Real[n];
+end P;
+model X27
+P.V x = {time, 1};
+end X27;
+//// model: X28
+type V3 = Real[3];
+function f
+input V3 a;
+output Real y;
+algorithm
+y := sum(a);
+end f;
+model X28
+Real x = f({time, 1, 2});
+end X28;
+//// model: X29
+type V3 = Real[3];
+model X29
+parameter V3 p = {1, 2, 3};
+Real x = p[2] * time;
+end X29;

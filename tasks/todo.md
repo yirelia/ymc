@@ -1609,6 +1609,19 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           1458→1469（Enum3 / 6 / 11、Exercises 的 Aufgabe1_2 两份、expandable 两个、gbode 两个…）/ FAIL 0；**MSL 示例 61→83**
           （OpAmps 一族 19 个、InverseModel、SlewRateLimiter、SinCosEncoder、Clocked 的两个连续版），FAIL 0；探针 7224→7272
           （ue-* 4 集 28 个、sm-* 3 集 20 个）；单测 247→248。
+    - [x] (61m) inst + flat：长类型 extends 内建类型 + 短类带维（2026-10-06）：MSL 的 Icons.TypeReal（`type TypeReal extends
+          Real; end TypeReal;`）此前实例化成长类、撞上 "extends builtin type"（MSL 28 个）。inst 的类型链认"只有一个 extends 的
+          type 长类"（嵌套类不算，Frames.TransformationMatrices.Orientation 带 equalityConstraint 函数），等同短类：extends 的修饰
+          当链上修饰、基类当下一跳；flatten 的函数变量类型链同样。短类带字面量维（`type Axis = TypeReal[3](each final unit = "1")`，
+          此前 SKIP）：拼在组件维后面（MLS §10.1），合成维拼好的元素当组件定义（同重声明的合成，按元素读维）；那层类型自己的修饰
+          按类型形状切分（`type V3 = Real[3](start = {1, 2, 3})` → 各元素取各自的），组件自己也有维时有不带 each 的值 → SKIP；
+          非字面量维（维式换作用域会变义）→ SKIP。函数变量：`input Real[3] a(unit = "1")`（类型层 each 照标量）、标量类型修饰
+          按维铺开、数组类型修饰照原样。MultiBody 由此露出下一层（composite outer 的 World）。type 里有 protected 元素（omc 报错，
+          declarations/TypeRestriction3）不当短类；长类型 extends 带修饰的短类时 1.25.0 把短类的修饰丢了（MLS 说该继承，
+          modification/UsertypeModifications）→ SKIP 入账。SKIP 子原因："qualified/cross-scope reference" 带上名字。
+          slice 609→624 例 PASS 540→559（+TypeDim1 / 2、TypeExtends1 / 2、BuiltinAttribute2 / 13 / 16-18 / 22、Each2、Subscript4…）；
+          scodeinst PASS 540→559 / FAIL 28（在账）；整个 testsuite 实跑 PASS 1469→1498 / FAIL 0；MSL 示例 83（不变，MultiBody 露出
+          composite outer）；探针 7272→7307（xb-* 5 集 35 个）；单测 248→249。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

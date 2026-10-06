@@ -438,7 +438,7 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node) {
       // extends 短类/枚举/derived 基类（`model B = A; extends B`）v1 未做，标 unsupported。
       Id<SElement> bdef = I_.nodes[base_def].def;
       if (!bdef.is_valid() || I_.scode.elems[bdef].def.kind != SClassDefKind::Parts) {
-        mark_unsupported("extends short/enum/derived class");
+        mark_unsupported("extends short/enum/derived class", path_str(ee.base_path));
         continue;
       }
       const Id<SMod> ext_mod = ee.mod;   // extends 修饰（在 base_def lookup 之后取，避免跨 add 持 SElement 引用）
@@ -546,6 +546,25 @@ void Instantiator::apply_extends_modifier(NodeId bc, Id<SMod> mod, NodeId scope)
 //   - 原声明不是 replaceable 而类型不同 → omc 报错 REDECLARE_NON_REPLACEABLE（:2193-2199）。
 // 约束修饰按写 extends 的类的作用域解析（omc 在原声明所在的基类里解析）：它引用的多是基类的参数，继承下来名字、前缀都一样。
 // ponytail: 基类所在包里的常量 / 类型这类只在基类词法作用域可见的名字会解析不到（→ SKIP），要精确得让修饰带各自的作用域。
+Id<SElement> Instantiator::type_extends_only(Id<SElement> ce) const {
+  const SElement& c = I_.scode.elems[ce];
+  if (c.kind != SElementKind::Class || c.restriction != SRestriction::Type || c.def.kind != SClassDefKind::Parts ||
+      c.prefixes.io != SInnerOuter::None || !c.def.equations.empty() || !c.def.initial_equations.empty() ||
+      !c.def.algorithms.empty() || !c.def.initial_algorithms.empty() || c.def.external.present)
+    return {};
+  // 只许一个 extends；嵌套的类（MSL Frames.TransformationMatrices.Orientation 里的 equalityConstraint 函数）不影响它当短类用。
+  // 有 protected 元素：omc 报 "Protected sections are not allowed in type"（declarations/TypeRestriction3）→ 不当短类，照旧 SKIP。
+  Id<SElement> ext;
+  for (Id<SElement> e : c.def.elements) {
+    const SElementKind k = I_.scode.elems[e].kind;
+    if (I_.scode.elems[e].prefixes.vis == SVisibility::Protected) return {};
+    if (k == SElementKind::Class) continue;
+    if (k != SElementKind::Extends || ext.is_valid()) return {};
+    ext = e;
+  }
+  return ext;
+}
+
 void Instantiator::redeclare_component(NodeId bc, Id<SElement> rel, NodeId scope) {
   const CompId cid = I_.nodes[bc].comp;
   const Id<SElement> prev = I_.comps[cid].def;   // 当前定义（被内层 extends 重声明过 = 那次合成的元素）
@@ -716,7 +735,12 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
   SVariability mvar = el.attr.var;
   SDirection mdir = el.attr.dir;
   SConnectorType mct = el.attr.ct;
+  // 链上短类带的维（`type Axis = Real[3](…)`，外层在前）：拼在组件自己的维后面（MLS §10.1；XB 探针 x2：`Axis n` → n[3]、
+  // `V3 x[2]` → x[2, 3]）。mod_dims_at[i] = derived_mods[i] 那一层开始时 type_dims 的长度——之后的维就是那层类型的形状。
+  std::vector<Id<Exp>> type_dims;
+  std::vector<std::size_t> mod_dims_at;
   NodeId base = ty_node;
+  bool past_extends_type = false;   // 链上已经过一个"只 extends 的长类型"（见下：其后短类的修饰 1.25.0 会丢）
   for (int guard = 0; guard < 100 && base.is_valid() && !I_.nodes[base].is_empty(); ++guard) {
     bool builtin = false;
     for (int i = 0; i < 4; ++i)
@@ -724,6 +748,25 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
     if (builtin) break;
     const Id<SElement> ce = I_.nodes[base].def;
     if (!ce.is_valid()) break;
+    // 长类型只 extends 一个类型（MSL Icons.TypeReal：`type TypeReal extends Real; end TypeReal;`；`type T extends Real(unit =
+    // "m"); end T;`）：等同短类 `type T = Real(unit = "m")`——extends 的修饰当链上修饰、基类当下一跳（XB 探针 x1：属性照打、
+    // 后续短类 `type L = TR(unit = "m")` 照常）。此前实例化成长类、撞上 "extends builtin type"。
+    if (const Id<SElement> xe = type_extends_only(ce); xe.is_valid()) {
+      past_extends_type = true;
+      derived_type = true;
+      alias_res.push_back(SRestriction::Type);
+      const Id<SMod> xm = I_.scode.elems[xe].mod;
+      if (xm.is_valid() && (!I_.scode.mods[xm].subs.empty() || I_.scode.mods[xm].binding.is_valid())) {
+        derived_mods.push_back(xm);
+        derived_scopes.push_back(I_.nodes[base].parent_scope);
+        mod_dims_at.push_back(type_dims.size());
+      }
+      const std::vector<Symbol> bp = I_.scode.elems[xe].base_path;   // 拷贝：lookup 会 arena add
+      NodeId nxt = lookup_class_name(bp, I_.nodes[base].parent_scope);
+      if (!nxt.is_valid() || I_.nodes[nxt].is_empty()) unresolved_base = path_str(bp);
+      base = (nxt.is_valid() && !I_.nodes[nxt].is_empty()) ? nxt : Inst::empty_node();
+      continue;
+    }
     if (I_.scode.elems[ce].def.kind != SClassDefKind::Derived) break;   // Enumeration/Parts/… 到底
     const SClassDef& cd = I_.scode.elems[ce].def;
     // inner / outer 的短类定义（`outer model M = A;`，InnerOuterClass1 / Missing5 / InvalidMod4 / InvalidType2）：类的
@@ -739,15 +782,23 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
     }
     if (I_.scode.elems[ce].is_partial) alias_partial = true;
     alias_res.push_back(I_.scode.elems[ce].restriction);
-    // 派生类型带维度（`type V = Real[3]`，维度在 derived_attr.dims）→ 组件维要拼上类型维（TypeDim1/Subscript4），
-    // v1 未做 → SKIP。
-    if (!cd.derived_attr.dims.empty()) mark_unsupported("derived-type array dimension");
     if (cd.derived_mod.is_valid()) {
       const SMod& dm = I_.scode.mods[cd.derived_mod];
+      // 长类型 extends 一个带修饰的短类（`type A = Real(unit = "m"); type B extends A; end B;`）：1.25.0 把短类的修饰丢了
+      //（`Real b`，XB 探针 x40-x45；modification/UsertypeModifications），MLS 说该继承——不复刻 → SKIP（入账）。
+      if (past_extends_type && (!dm.subs.empty() || dm.binding.is_valid()))
+        mark_unsupported("extends of short class with modifiers");
       if (!dm.subs.empty() || dm.binding.is_valid()) {
         derived_mods.push_back(cd.derived_mod);
         derived_scopes.push_back(I_.nodes[base].parent_scope);
+        mod_dims_at.push_back(type_dims.size());
       }
+    }
+    // 派生类型带维（`type V = Real[3]`，维在 derived_attr.dims）：只收字面量维——维式在短类定义处求值，搬到组件上会换作用域
+    //（`type V = Real[n]` 的 n 在别处可能是另一个量）→ 非字面量 SKIP。
+    for (Id<Exp> d : cd.derived_attr.dims) {
+      if (I_.absyn.exps[d].kind != ExpKind::IntLit) mark_unsupported("derived-type array dimension");
+      type_dims.push_back(d);
     }
     if (mvar == SVariability::Var && cd.derived_attr.var != SVariability::Var) mvar = cd.derived_attr.var;
     if (mdir == SDirection::Bidir && cd.derived_attr.dir != SDirection::Bidir) mdir = cd.derived_attr.dir;
@@ -795,6 +846,32 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
     ty.complex_node = class_inst.raw;
   }
   Id<Exp> bind = el.mod.is_valid() ? I_.scode.mods[el.mod].binding : Id<Exp>{};
+  // 类型带维：类型修饰按那层类型的形状切分（`type V3 = Real[3](start = {1, 2, 3})` → x[j].start = 第 j 个，x25），不再按组件
+  // 维铺开；组件自己也有维时（`V3 x[2]`）要"组件维铺开 + 类型维切分"，未做 → 有不带 each 的值就 SKIP。合成一个维拼好的
+  // 元素当组件定义（同 redeclare_component 的做法），flatten 按元素读维。
+  std::vector<bool> derived_split(derived_mods.size(), false);
+  Id<SElement> dims_def;
+  if (!type_dims.empty() && !unsupported_) {
+    const bool own_dims = !el.attr.dims.empty() || !el.type.dims.empty();
+    for (std::size_t i = 0; i < derived_mods.size(); ++i) {
+      derived_split[i] = mod_dims_at[i] < type_dims.size();
+      if (!derived_split[i] || !own_dims) continue;
+      for (const SSubMod& s : I_.scode.mods[derived_mods[i]].subs)
+        if (!I_.scode.mods[s.mod].is_each && I_.scode.mods[s.mod].binding.is_valid())
+          mark_unsupported("derived-type array dimension", "type modifier over component dimensions");
+    }
+    const std::uint64_t key = (static_cast<std::uint64_t>(0xFFFFFFFFu) << 32) | def_id.raw;   // 与重声明的键不撞（od 不会是全 1）
+    if (auto it = redecl_elems_.find(key); it != redecl_elems_.end()) {
+      dims_def = it->second;
+    } else if (I_.scode.elems.size() >= synth_cap_) {
+      mark_unsupported("derived-type array dimension", "synthesized element budget");
+    } else {
+      SElement m = I_.scode.elems[def_id];   // 拷贝后再 add（预留容量内不搬家）
+      m.type.dims.insert(m.type.dims.end(), type_dims.begin(), type_dims.end());
+      dims_def = I_.scode.elems.add(std::move(m));
+      redecl_elems_.emplace(key, dims_def);
+    }
+  }
 
   // 全部 add 已完成，重新取引用回写最终值（R12 §2.4：绑定右式在 enclosing 作用域解析，留给 instExpressions）。
   Component& comp = I_.comps[cid];
@@ -802,6 +879,8 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
   comp.ty = ty;
   comp.derived_mods = std::move(derived_mods);
   comp.derived_scopes = std::move(derived_scopes);
+  comp.derived_split = std::move(derived_split);
+  if (dims_def.is_valid()) comp.def = dims_def;   // 维拼好的合成元素（见上）
   comp.derived_type = derived_type;
   comp.derived_attrs = derived_attrs;
   comp.attributes.variability = mvar;   // 含短类前缀（constant/input/…）累积

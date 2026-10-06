@@ -3584,7 +3584,11 @@ class Flattener {
     for (Id<SMod> em : I_.comps[cid].extends_mods) asrc.push_back({em, enclosing, prefix});
     if (cel.mod.is_valid()) asrc.push_back({cel.mod, enclosing, prefix});
     for (Id<SMod> cc : I_.comps[cid].cc_mods) asrc.push_back({cc, enclosing, prefix});   // 重声明的约束修饰
-    for (Id<SMod> dm : I_.comps[cid].derived_mods) asrc.push_back({dm, enclosing, prefix, /*each_all=*/true});
+    // 类型本身带维的那层修饰按类型形状切分（Component::derived_split，XB 探针 x25），其余按组件维铺开。
+    for (std::size_t i = 0; i < I_.comps[cid].derived_mods.size(); ++i) {
+      const bool split = i < I_.comps[cid].derived_split.size() && I_.comps[cid].derived_split[i];
+      asrc.push_back({I_.comps[cid].derived_mods[i], enclosing, prefix, /*each_all=*/!split});
+    }
     // 绑定：外来修饰优先，否则声明绑定。要求是数组构造子 `{…}` / `array(…)`，否则 SKIP。
     Id<Exp> braw;
     bool braw_written = true;   // 绑定是源码里书写的（非 flatten 合成的修饰）：结构参数的别名连带用
@@ -6478,26 +6482,69 @@ class Flattener {
 
   // 函数变量的类型是短类链（`type V = Real(unit = "V")`、`SI.Voltage`）：沿链走到内建标量类型，收各层的类型修饰（外层
   // 在前，各带短类定义处的作用域，值在那里求）。链上带维 / 前缀 / 绑定、不是 type、走到枚举 / 记录 / 解析不了 → false。
+  // tdims：链上短类带的字面量维（外层在前，拼在变量自己的维后面）；before[i] = chain[i] 那层开始时 tdims 的长度（之后的维就是
+  // 那层类型的形状，见 fn_var_attributes）。
   bool fn_derived_scalar(const SElement& c, const ScodeScope& scope, TypeKind& tk,
-                         std::vector<std::pair<Id<SMod>, ScodeScope>>& chain) {
+                         std::vector<std::pair<Id<SMod>, ScodeScope>>& chain, std::vector<Id<Exp>>& tdims,
+                         std::vector<std::size_t>& before) {
     std::vector<Symbol> path = c.type.path;
     bool lead = c.type.leading_dot;
     ScodeScope sc = scope;
+    bool past_extends_type = false;   // 见 Instantiator::inst_component：其后短类的修饰 1.25.0 会丢 → 不接
     for (int guard = 0; guard < 32; ++guard) {
       if (!lead && builtin_scalar_type_kind(path, tk)) return true;
       ScodeScope ds;
       const Id<SElement> e = resolve_class_path(path, lead, sc, ds);
       if (!e.is_valid()) return false;
       const SElement& el = I_.scode.elems[e];
+      // 长类型只 extends 一个类型（`type TR extends Real; end TR;`，XB 探针 x110）：同短类，extends 的修饰当链上修饰。
+      Id<SElement> xid;   // 唯一的 extends（嵌套类不算；有 protected 元素不算，见 Instantiator::type_extends_only）
+      bool only_ext = el.kind == SElementKind::Class && el.restriction == SRestriction::Type &&
+                      el.def.kind == SClassDefKind::Parts && el.def.equations.empty() && el.def.algorithms.empty() &&
+                      el.def.initial_equations.empty() && el.def.initial_algorithms.empty();
+      for (Id<SElement> x : el.def.elements) {
+        if (!only_ext) break;
+        const SElementKind k = I_.scode.elems[x].kind;
+        if (I_.scode.elems[x].prefixes.vis == SVisibility::Protected) { only_ext = false; break; }
+        if (k == SElementKind::Class) continue;
+        if (k != SElementKind::Extends || xid.is_valid()) only_ext = false;
+        else xid = x;
+      }
+      if (only_ext && xid.is_valid()) {
+        past_extends_type = true;
+        const SElement& xe = I_.scode.elems[xid];
+        if (xe.mod.is_valid()) {
+          if (I_.scode.mods[xe.mod].binding.is_valid()) return false;
+          if (!I_.scode.mods[xe.mod].subs.empty()) {
+            chain.push_back({xe.mod, ds});
+            before.push_back(tdims.size());
+          }
+        }
+        path = xe.base_path;
+        lead = false;
+        ScodeScope inner = ds;
+        inner.insert(inner.begin(), e);   // extends 的基类名在类型自己的作用域里查
+        sc = inner;
+        continue;
+      }
       if (el.kind != SElementKind::Class || el.restriction != SRestriction::Type || el.def.kind != SClassDefKind::Derived)
         return false;
       const SAttributes& da = el.def.derived_attr;
-      if (!da.dims.empty() || !el.def.derived_type.dims.empty() || da.var != SVariability::Var ||
-          da.dir != SDirection::Bidir || da.ct != SConnectorType::Potential)
+      if (!el.def.derived_type.dims.empty() || da.var != SVariability::Var || da.dir != SDirection::Bidir ||
+          da.ct != SConnectorType::Potential)
         return false;
       if (const Id<SMod> dm = el.def.derived_mod; dm.is_valid()) {
         if (I_.scode.mods[dm].binding.is_valid()) return false;
-        if (!I_.scode.mods[dm].subs.empty()) chain.push_back({dm, ds});
+        if (past_extends_type && !I_.scode.mods[dm].subs.empty()) return false;
+        if (!I_.scode.mods[dm].subs.empty()) {
+          chain.push_back({dm, ds});
+          before.push_back(tdims.size());
+        }
+      }
+      // 类型带维（`type V3 = Real[3]`，XB 探针 x30-x34 `input Real[3] a`）：只收字面量维（维式换作用域会变义）。
+      for (Id<Exp> d : da.dims) {
+        if (I_.absyn.exps[d].kind != ExpKind::IntLit) return false;
+        tdims.push_back(d);
       }
       path = el.def.derived_type.path;
       lead = el.def.derived_type.leading_dot;
@@ -6521,8 +6568,9 @@ class Flattener {
   // final 不打（f23 / f15）。数组变量：类型修饰的值按维铺开（整数维 → 嵌套数组字面量 `{"V", "V"}`；其余 →
   // `fill("V", n)` / `fill("V", size(v, 1))`，维取类型里的书写式 / size，f20 / f30 / f32）；声明修饰带 each 的照原样标量
   //（f21），不带 each 的须是数组值（f39）。属性名不对（omc 报错 f38）、值求不出 / 类型不符 → false。
+  // ldims[k] = chain[k] 那层类型本身的维数（类型带维时那层的修饰按类型形状给值，见下）。
   bool fn_var_attributes(const SElement& c, const Type ty, const std::vector<std::pair<Id<SMod>, ScodeScope>>& chain,
-                         std::vector<FlatVarAttr>& out) {
+                         const std::vector<std::size_t>& ldims, std::vector<FlatVarAttr>& out) {
     const TypeKind tk = ty.element_type().kind;
     const std::vector<AttrSpec>& table = attr_table(tk);
     auto spec_of = [&](Symbol n) -> const AttrSpec* {
@@ -6563,12 +6611,29 @@ class Flattener {
           seen = true;
           const SMod sm = I_.scode.mods[s.mod];
           const std::optional<Type> st = vk_type(a.vk);
-          if (!st || sm.kind != SModKind::Mod || sm.is_each || !sm.subs.empty() || !sm.binding.is_valid()) return false;
+          if (!st || sm.kind != SModKind::Mod || !sm.subs.empty() || !sm.binding.is_valid()) return false;
           const std::optional<CVal> cv = eval_scode(sm.binding, chain[k].second, 0, /*allow_param=*/false);
-          const std::optional<CVal> ce = cv ? coerce_to_kind(*cv, st->kind) : std::nullopt;
+          if (!cv) return false;
+          // 类型层的 each（`type Axis = Real[3](each final unit = "1")`）：照原样标量（x31 `input Real[3] a(unit = "1")`）。
+          if (sm.is_each) {
+            if (is_arr(*cv)) return false;
+            const std::optional<CVal> ec = coerce_to_kind(*cv, st->kind);
+            if (!ec) return false;
+            v = cval_expr(*ec, st->kind);
+            continue;
+          }
+          const std::size_t ldk = k < ldims.size() ? ldims[k] : 0;
+          const std::optional<CVal> ce = ldk > 0 ? cv : coerce_to_kind(*cv, st->kind);
           if (!ce) return false;
           auto mk = [&]() { return cval_expr(*ce, st->kind); };
-          if (!ty.is_array()) {
+          const std::size_t ld = k < ldims.size() ? ldims[k] : 0;
+          if (ld > 0) {
+            // 那层类型本身是数组（`type V3 = Real[3](start = {1, 2, 3})`）：值就是类型形状的数组，照原样打（x34）；变量自己
+            // 还有外层维时要再按外层铺开，未核实 → false。
+            if (ld != ty.dims.size() || !is_arr(*cv)) return false;
+            v = cval_expr(*cv, st->kind);
+            if (!v.is_valid()) return false;
+          } else if (!ty.is_array()) {
             v = mk();
           } else {
             bool all_int = true;
@@ -7944,15 +8009,23 @@ class Flattener {
     // 形参类型：先按元素类型登记全部名字（维 / 绑定可互引），再按声明序算维（`Real z[n]`、`Real y[size(x, 1)]`）。
     std::unordered_map<std::uint32_t, std::vector<Symbol>> rec_paths;   // 记录类型形参 / 局部 → 记录压平名
     std::unordered_map<std::uint32_t, std::vector<std::pair<Id<SMod>, ScodeScope>>> type_mods;   // 短类链的类型修饰
+    std::unordered_map<std::uint32_t, std::vector<std::size_t>> type_ldims;   // 与 type_mods 平行：那层类型本身的维数
+    std::unordered_map<std::uint32_t, std::vector<Id<Exp>>> type_tdims;      // 短类链带的维（拼在变量维后面）
     for (Id<SElement> eid : all) {
       const SElement& c = I_.scode.elems[eid];
       if (c.attr.ct != SConnectorType::Potential || c.prefixes.io != SInnerOuter::None)
         return fn_fail<std::optional<std::size_t>>("flow / stream / inner / outer function variable");
       TypeKind tk;
       std::vector<std::pair<Id<SMod>, ScodeScope>> chain;
-      if (builtin_scalar_type_kind(c.type.path, tk) || fn_derived_scalar(c, fr.fscope, tk, chain)) {
+      std::vector<Id<Exp>> tdims;
+      std::vector<std::size_t> before;
+      if (builtin_scalar_type_kind(c.type.path, tk) || fn_derived_scalar(c, fr.fscope, tk, chain, tdims, before)) {
         func_params_[c.name.id] = Type::of(tk);
         type_mods[c.name.id] = std::move(chain);
+        std::vector<std::size_t> ld;
+        for (std::size_t b : before) ld.push_back(tdims.size() - b);
+        type_ldims[c.name.id] = std::move(ld);
+        type_tdims[c.name.id] = std::move(tdims);
         continue;
       }
       // 记录类型（FunctionRecordArg1 `input R r`、FunctionCompOrder4 `R r(x = lx)`）：按类型名打印，构造函数块随之发射
@@ -7976,6 +8049,8 @@ class Flattener {
       const SElement& c = I_.scode.elems[eid];
       std::vector<Id<Exp>> dexps = c.attr.dims;
       dexps.insert(dexps.end(), c.type.dims.begin(), c.type.dims.end());   // 组件维在前、类型维在后（MLS §10.1）
+      if (const auto td = type_tdims.find(c.name.id); td != type_tdims.end())   // 再后面是短类链带的维
+        dexps.insert(dexps.end(), td->second.begin(), td->second.end());
       if (dexps.empty()) continue;
       std::vector<Dimension> ds;
       for (Id<Exp> d : dexps) {
@@ -8004,7 +8079,7 @@ class Flattener {
       const SElement& c = I_.scode.elems[eid];
       const auto tm = type_mods.find(c.name.id);
       if (tm == type_mods.end()) continue;   // 记录类型
-      if (!fn_var_attributes(c, func_params_[c.name.id], tm->second, attrs[c.name.id]))
+      if (!fn_var_attributes(c, func_params_[c.name.id], tm->second, type_ldims[c.name.id], attrs[c.name.id]))
         return fn_fail<std::optional<std::size_t>>("attribute modifier on function variable");
     }
     // 绑定：输入 = 别名默认（优先）或声明默认；输出 / 局部 = 声明绑定。
@@ -10207,8 +10282,13 @@ class Flattener {
       }
       // 单段未解析：只有内建变量 `time` 合法（MLS §3.6.7）；其余（import 别名 Import6、外层非常量组件 Lookup3…）ymc 未做
       // 或 omc 报错 → unsupported。多段解析不出（package 常量非字面量、redeclare、跨包 extends…）→ omc 会内联成值 → 同。
-      if (c.parts.size() > 1) set_unsupported("qualified/cross-scope reference");
-      else if (in_.str(c.parts[0].name) != "time") set_unsupported("unresolved name");
+      if (c.parts.size() > 1 && !result_.unsupported) {
+        set_unsupported("qualified/cross-scope reference");
+        for (std::size_t k = 0; k < c.parts.size(); ++k)   // 子原因：哪个名字（排桶用）
+          result_.unsupported_detail += (k ? "." : "") + std::string(in_.str(c.parts[k].name));
+      } else if (c.parts.size() == 1 && in_.str(c.parts[0].name) != "time") {
+        set_unsupported("unresolved name");
+      }
       for (const CrefPart& p : c.parts)
         if (!p.subscripts.empty()) set_unsupported("subscript on non-array");   // `time[2]` → omc 报错
       e.ty = Type::real();

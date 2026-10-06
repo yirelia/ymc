@@ -1,0 +1,35 @@
+//// set: xb-ut — extends 内建类型 + 类型维（单测原文）
+//// model: XBS1
+package P
+  constant Integer n = 2;
+  type V = Real[n];
+end P;
+model XBS1
+  P.V x = {time, 1};
+end XBS1;
+//// model: XBT1
+package Icons
+  type TypeReal "Icon for Real types"
+    extends Real;
+  end TypeReal;
+end Icons;
+type Length
+  extends Real(unit = "m", final quantity = "Length");
+end Length;
+type Axis = Icons.TypeReal[3](each final unit = "1");
+type V3 = Real[3](start = {1, 2, 3});
+function f
+  input Axis a;
+  input Length l;
+  output V3 y;
+algorithm
+  y := a * l;
+end f;
+model XBT1
+  parameter Axis n = {1, 0, 0};
+  Length x(start = 1) = time;
+  V3 v;
+  Real w[3] = f(n, 2);
+equation
+  der(v) = -v;
+end XBT1;

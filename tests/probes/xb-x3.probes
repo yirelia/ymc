@@ -1,0 +1,57 @@
+//// set: xb-x3 — 函数变量的类型带维：each 照标量、标量类型修饰按维铺开、数组类型修饰照原样
+//// model: X30
+type V3 = Real[3];
+function f
+input V3 a;
+output Real y;
+algorithm
+y := sum(a);
+end f;
+model X30
+Real x = f({time, 1, 2});
+end X30;
+//// model: X31
+type Axis = Real[3](each final unit = "1");
+function f
+input Axis a;
+output Real y;
+algorithm
+y := a[1];
+end f;
+model X31
+Real x = f({time, 1, 2});
+end X31;
+//// model: X32
+type V3 = Real[3];
+function f
+input V3 a[2];
+output Real y;
+algorithm
+y := a[1, 1];
+end f;
+model X32
+Real x = f({{time, 1, 2}, {3, 4, 5}});
+end X32;
+//// model: X33
+type V = Real(unit = "V");
+type V3 = V[3];
+function f
+input V3 a;
+output Real y;
+algorithm
+y := a[1];
+end f;
+model X33
+Real x = f({time, 1, 2});
+end X33;
+//// model: X34
+type V3 = Real[3](start = {1, 2, 3});
+function f
+input Real b;
+output V3 a;
+algorithm
+a := {b, b, b};
+end f;
+model X34
+Real x[3] = f(time);
+end X34;

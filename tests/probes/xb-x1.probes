@@ -1,0 +1,90 @@
+//// set: xb-x1 — 长类型 extends 内建类型（Icons.TypeReal 一类）：属性、后续短类、Integer / Boolean / String、数组、函数变量
+//// model: X10
+type TR
+extends Real;
+end TR;
+model X10
+TR x = time;
+end X10;
+//// model: X11
+type TR
+extends Real(unit = "m");
+end TR;
+model X11
+TR x = time;
+end X11;
+//// model: X12
+type TR
+extends Real(unit = "m", final quantity = "Length");
+end TR;
+model X12
+TR x(start = 1) = time;
+end X12;
+//// model: X13
+type TR "doc"
+extends Real;
+annotation(Icon);
+end TR;
+type L = TR(unit = "m");
+model X13
+L x = time;
+end X13;
+//// model: X14
+type TI
+extends Integer(min = 0);
+end TI;
+model X14
+parameter TI n = 2;
+end X14;
+//// model: X15
+type TB
+extends Boolean;
+end TB;
+model X15
+TB b = time > 1;
+end X15;
+//// model: X16
+type TS
+extends String;
+end TS;
+model X16
+parameter TS s = "a";
+end X16;
+//// model: X17
+type TR
+extends Real;
+end TR;
+type Axis = TR[3](each final unit = "1");
+model X17
+parameter Axis n = {1, 0, 0};
+end X17;
+//// model: X18
+package Icons
+type TypeReal
+extends Real;
+end TypeReal;
+end Icons;
+type T = Icons.TypeReal(unit = "s");
+model X18
+T t = time;
+end X18;
+//// model: X19
+type TR
+extends Real;
+end TR;
+model X19
+TR x[2] = {time, 1};
+end X19;
+//// model: X110
+type TR
+extends Real;
+end TR;
+function f
+input TR a;
+output TR b;
+algorithm
+b := 2 * a;
+end f;
+model X110
+Real x = f(time);
+end X110;

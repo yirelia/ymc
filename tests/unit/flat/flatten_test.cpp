@@ -4987,6 +4987,32 @@ YMC_TEST(flatten_user_enum_structural_parameters) {
   YMC_CHECK(uns);
 }
 
+YMC_TEST(inst_extends_builtin_types_and_type_dimensions) {
+  // 长类型只 extends 一个类型（`type TypeReal extends Real; end TypeReal;`、`type Length extends Real(unit = "m", …)`）当短类走；
+  // 短类带字面量维（`type Axis = TypeReal[3](each final unit = "1")`、`type V3 = Real[3](start = {1, 2, 3})`）拼在组件维后面，
+  // 那层类型自己的修饰按类型形状切分；函数变量同样（`input Real[3] a(unit = "1")`、`output Real[3] y(start = {1.0, 2.0, 3.0})`）。
+  // 期望 = omc 1.25.0 实跑 XBT1（2026-10-06）。
+  YMC_CHECK_EQ(flatten_src("package Icons\n  type TypeReal \"Icon for Real types\"\n    extends Real;\n  end TypeReal;\n"
+                           "end Icons;\ntype Length\n  extends Real(unit = \"m\", final quantity = \"Length\");\nend Length;\n"
+                           "type Axis = Icons.TypeReal[3](each final unit = \"1\");\ntype V3 = Real[3](start = {1, 2, 3});\n"
+                           "function f\n  input Axis a;\n  input Length l;\n  output V3 y;\nalgorithm\n  y := a * l;\nend f;\n"
+                           "model XBT1\n  parameter Axis n = {1, 0, 0};\n  Length x(start = 1) = time;\n  V3 v;\n"
+                           "  Real w[3] = f(n, 2);\nequation\n  der(v) = -v;\nend XBT1;\n"),
+               std::string("function f\n  input Real[3] a(unit = \"1\");\n  input Real l(quantity = \"Length\", unit = \"m\");\n"
+                           "  output Real[3] y(start = {1.0, 2.0, 3.0});\nalgorithm\n  y := {a[1] * l, a[2] * l, a[3] * l};\n"
+                           "end f;\n\nclass XBT1\n  parameter Real n[1](unit = \"1\") = 1.0;\n"
+                           "  parameter Real n[2](unit = \"1\") = 0.0;\n  parameter Real n[3](unit = \"1\") = 0.0;\n"
+                           "  Real x(quantity = \"Length\", unit = \"m\", start = 1.0) = time;\n  Real v[1](start = 1.0);\n"
+                           "  Real v[2](start = 2.0);\n  Real v[3](start = 3.0);\n  Real w[1];\n  Real w[2];\n  Real w[3];\n"
+                           "equation\n  w = f(n, 2.0);\n  der(v[1]) = -v[1];\n  der(v[2]) = -v[2];\n  der(v[3]) = -v[3];\n"
+                           "end XBT1;\n"));
+  // 短类的维不是字面量（`type V = Real[n]`，n 在包里）：维式搬到组件上会换作用域，未做（XBS1，omc 能过）。
+  bool uns = false;
+  YMC_CHECK_EQ(flatten_src("package P\n  constant Integer n = 2;\n  type V = Real[n];\nend P;\nmodel XBS1\n"
+                           "  P.V x = {time, 1};\nend XBS1;\n", &uns), "<unsupported:derived-type array dimension>");
+  YMC_CHECK(uns);
+}
+
 YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   bool uns = false;
   const std::string out = flatten_src("model M\n  Integer x = div(1, 0);\nend M;\n", &uns);
