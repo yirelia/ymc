@@ -1,0 +1,250 @@
+//// set: cc-c1 — 条件组件的条件：字符串比较（`<>` / `==`，start 当绑定、子实例修饰）；redeclare 进来的连接器里的条件（多层 extends 修饰传值）；条件经修饰引用声明在后的记录字段（第二遍）/ 声明在后的参数 / 记录参数修饰
+//// model: C10
+model A
+Real x;
+end A;
+model C10
+parameter String s = "Y";
+A a if s <> "D";
+end C10;
+//// model: C11
+model A
+Real x;
+end A;
+model C11
+parameter String s(start = "Y");
+A a if s <> "D";
+end C11;
+//// model: C12
+model A
+Real x;
+end A;
+model T
+parameter String s(start = "Y");
+A a if s <> "D";
+A b if s == "D";
+end T;
+model C12
+T t(s = "D");
+end C12;
+//// model: C13
+connector H
+Real T;
+flow Real Q;
+end H;
+connector P
+parameter Boolean u(start = true) annotation(Evaluate = true);
+H h if u;
+end P;
+model C13
+P p(u = false);
+end C13;
+//// model: C14
+connector H
+Real T;
+flow Real Q;
+end H;
+connector P
+parameter Boolean u(start = true) annotation(Evaluate = true);
+H h if u;
+end P;
+model C14
+P p;
+end C14;
+//// model: C15
+connector H
+Real T;
+flow Real Q;
+end H;
+connector P
+parameter Boolean u = true;
+H h if u;
+end P;
+model C15
+P p(u = false);
+end C15;
+//// model: C20
+connector H
+Real T;
+flow Real Q;
+end H;
+connector PBase
+end PBase;
+connector PSM
+extends PBase;
+parameter Boolean u(start = true) annotation(Evaluate = true);
+H h if u;
+end PSM;
+model AmbBase
+replaceable PBase tp;
+end AmbBase;
+model Amb
+parameter Boolean u(start = true) annotation(Evaluate = true);
+extends AmbBase(redeclare final PSM tp(final u = u));
+end Amb;
+model C20
+Amb amb(u = false);
+end C20;
+//// model: C21
+connector H
+Real T;
+flow Real Q;
+end H;
+connector PBase
+end PBase;
+connector PSM
+extends PBase;
+parameter Boolean u(start = true) annotation(Evaluate = true);
+H h if u;
+end PSM;
+model AmbBase
+replaceable PBase tp;
+end AmbBase;
+model Amb
+parameter Boolean u(start = true) annotation(Evaluate = true);
+extends AmbBase(redeclare final PSM tp(final u = u));
+end Amb;
+model C21
+Amb amb;
+end C21;
+//// model: C22
+connector H
+Real T;
+flow Real Q;
+end H;
+connector PSM
+parameter Boolean u(start = true);
+H h if u;
+end PSM;
+model Amb
+parameter Boolean u = true;
+PSM tp(final u = u);
+end Amb;
+model C22
+Amb amb(u = false);
+end C22;
+//// model: C30
+connector H
+Real T;
+flow Real Q;
+end H;
+connector PBase
+end PBase;
+connector PSM
+extends PBase;
+parameter Boolean u(start = true) annotation(Evaluate = true);
+H h if u;
+end PSM;
+model AmbBase
+replaceable PBase tp;
+end AmbBase;
+model Amb
+parameter Boolean u(start = true) annotation(Evaluate = true);
+extends AmbBase(redeclare final PSM tp(final u = u));
+end Amb;
+model MBase
+replaceable AmbBase amb;
+end MBase;
+model M
+parameter Boolean u(start = true);
+extends MBase(redeclare final Amb amb(final u = u));
+end M;
+model C30
+M m(u = false);
+end C30;
+//// model: C31
+connector H
+Real T;
+flow Real Q;
+end H;
+connector PBase
+end PBase;
+connector PSM
+extends PBase;
+parameter Boolean u(start = true) annotation(Evaluate = true);
+H h if u;
+end PSM;
+model AmbBase
+replaceable PBase tp;
+end AmbBase;
+model Amb
+parameter Boolean u(start = true) annotation(Evaluate = true);
+extends AmbBase(redeclare final PSM tp(final u = u));
+end Amb;
+model MBase
+replaceable AmbBase amb;
+end MBase;
+model M
+parameter Boolean u(start = true);
+extends MBase(redeclare final Amb amb(final u = u));
+end M;
+model W
+M m(u = false);
+end W;
+model C31
+W w;
+end C31;
+//// model: C40
+connector H
+Real T;
+flow Real Q;
+end H;
+connector PSM
+parameter Boolean u(start = true);
+H h if u;
+end PSM;
+record D
+parameter Boolean ud = false;
+end D;
+model C40
+parameter D d;
+PSM p(u = d.ud);
+end C40;
+//// model: C41
+connector H
+Real T;
+flow Real Q;
+end H;
+connector PSM
+parameter Boolean u(start = true);
+H h if u;
+end PSM;
+record D
+parameter Boolean ud = false;
+end D;
+model C41
+PSM p(u = d.ud);
+parameter D d;
+end C41;
+//// model: C42
+connector H
+Real T;
+flow Real Q;
+end H;
+connector PSM
+parameter Boolean u(start = true);
+H h if u;
+end PSM;
+model C42
+PSM p(u = b);
+parameter Boolean b = false;
+end C42;
+//// model: C43
+connector H
+Real T;
+flow Real Q;
+end H;
+connector PSM
+parameter Boolean u(start = true);
+H h if u;
+end PSM;
+record D
+parameter Boolean ud = false;
+end D;
+model M
+parameter D d;
+PSM p(u = d.ud);
+end M;
+model C43
+M m(d(ud = true));
+end C43;

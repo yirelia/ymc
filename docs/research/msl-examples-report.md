@@ -196,3 +196,11 @@ start 的参数）。FAIL / ACCEPTS-INVALID / CRASH 0。
 Evaluate = true 的参数数组当结构参数之后，此前卡在它上面的 37 个 MultiBody 示例（World 的 `parameter Types.Axis n`）往下露出：
 带记录形参的函数里记录构造（Frames.Orientation：数组字段 + extends Icons.Record）25、参数数组绑函数调用 6、复合组件的变率前缀 2、
 限定名函数调用 2、类注释带转义 2。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-07 加宽 62c 之后：PASS 122 → 132
+
+条件组件的条件能比较字符串、能经修饰引用声明在后的记录字段之后，Machines 的 10 个示例转 PASS：IMC_DOL / IMC_Initialize /
+IMC_Steinmetz / IMS_Start（TerminalBox 的 `star if terminalConnection <> "D"`）、SMPM_Braking / SMPM_CurrentSource /
+SMPM_NoLoad / SMPM_ResistiveBraking / SMPM_VoltageSource / SMR_DOL（`useDamperCage = smpmData.useDamperCage`，smpmData 声明在后）。
+SMPM_NoLoad 还顺带露出 rem 的内联（omc 把 rem 早内联成 `x - div(x, y) * y`，此前 ymc 原样打 `rem(…)`）。getInstanceName 接上后
+ActuatorWithNoise 往下卡在噪声种子的外部函数调用。FAIL / ACCEPTS-INVALID / CRASH 0。

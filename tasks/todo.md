@@ -1796,6 +1796,18 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           验证：slice 629→631 例 PASS 580 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 578→580 / FAIL 37（在账，不变）；整个
           testsuite PASS 1598→1601 / FAIL 0 / ACCEPTS-INVALID 2 / CRASH 0；MSL 514 个 PASS 122（不变）；探针 7992→8058（ea-* 6 集
           66 个）；四套构建零警告、单测 275→276；ASan 与 gcc 逐例一致。
+    - [x] (62c) flat：条件组件的条件（字符串比较 / 向前引用的记录字段）+ rem 内联 + getInstanceName（2026-10-07）：
+          MSL 25 个"conditional component condition"里多数是 Machines：TerminalBox 的 `star if terminalConnection <> "D"`
+          （求值器不认字符串比较——补上逐字节字典序，omc evalRelation* 的 STRING 支用 stringCompare）、MotorWithCurrentControl 的
+          `useDamperCage = smpmData.useDamperCage`（条件经修饰引用声明在后的记录字段：第一遍先当在、第二遍按第一遍的值求；定型期
+          用向前值只限绑定不再引用别的参数的，标它自己即完整，forward_leaf）。顺带露出 rem：omc 的 Internal.intRem / realRem 带
+          __OpenModelica_EarlyInline，定型时就内联成 `x - div(x, y) * y`（模型 / 算法 / 函数体都是），此前 ymc 原样打 `rem(…)`
+          ——非常量实参一律是静默错（MSL SMPM_NoLoad）。getInstanceName() 换成根类简单名 + 带下标的实例前缀（多维下标 ", "
+          分隔）。另：62b 的 Evaluate 记录组件数组字段，值来自外层记录整体绑定时 omc 不 final（scodeinst DimUnknown12，此前因
+          求不出值 SKIP 而没露出）→ SKIP。
+          验证：slice 631 例 PASS 580 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 580 / FAIL 37（在账，不变）；整个 testsuite
+          PASS 1601 / FAIL 0 / ACCEPTS-INVALID 2 / CRASH 0（不变）；MSL 514 个 PASS 122→132；探针 8058→8107（cc / rm / gi / ea-e8
+          5 集 49 个）；四套构建零警告、单测 276→277；ASan 与 gcc 逐例一致。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

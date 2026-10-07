@@ -1,0 +1,90 @@
+//// set: rm-r1 — rem 内联成 `x - div(x, y) * y`：time / 参数式 / Integer 离散 / 算法段 / 函数体 / 负数 / 嵌套；字面量折叠、Evaluate 参数、数组实参（SKIP）、关系式里、integer()、for 方程
+//// model: R10
+model R10
+Real y = rem(time, 2);
+end R10;
+//// model: R11
+model R11
+parameter Real p = 3;
+Real y = rem(time * p, p + 1);
+end R11;
+//// model: R12
+model R12
+discrete Integer k(start = 7);
+Integer j;
+equation
+when sample(0, 1) then
+k = pre(k) + 1;
+end when;
+j = rem(k, 3);
+end R12;
+//// model: R13
+model R13
+Real y;
+algorithm
+y := rem(time, 2);
+end R13;
+//// model: R14
+function f
+input Real x;
+output Real y;
+algorithm
+y := rem(x, 2);
+end f;
+model R14
+Real y = f(time);
+end R14;
+//// model: R15
+model R15
+Real y = rem(-time, 2) + rem(time, -3);
+end R15;
+//// model: R16
+model R16
+parameter Real p = 3;
+Real y = rem(p, 2);
+end R16;
+//// model: R17
+model R17
+Real y = rem(rem(time, 3), 2);
+end R17;
+//// model: R20
+model R20
+Real r;
+equation
+r = rem(27, 6);
+end R20;
+//// model: R21
+model R21
+Integer r = rem(-7, 3);
+Real s = rem(7.5, -2);
+end R21;
+//// model: R22
+model R22
+parameter Integer n = 7 annotation(Evaluate = true);
+Real y = rem(n, 3) * time;
+end R22;
+//// model: R23
+model R23
+Real y[2] = rem({time, 2 * time}, 2);
+end R23;
+//// model: R24
+model R24
+parameter Real p = rem(7, 3);
+Real y = p * time;
+end R24;
+//// model: R25
+model R25
+Boolean b = rem(time, 2) > 1;
+end R25;
+//// model: R26
+model R26
+Integer k = rem(integer(time), 2);
+end R26;
+//// model: R27
+model R27
+Real x[2];
+equation
+for i in 1:2 loop
+x[i] = rem(time + i, 2);
+end for;
+end R27;

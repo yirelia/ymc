@@ -376,3 +376,8 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `ea-e4` | 10 | 同上：记录参数 Evaluate 的数组字段 / 别名数组 / 元素引用别的数组 / 组件数组的修饰分发 / if 绑定里用 / 标量积 / 无绑定（拒）/ 只有 start / protected / 整体数组方程 |
 | `ea-e6` | 19 | 同上：依赖 Evaluate = false / fixed = false 的整个数组、向前引用的参数 / 整个数组、子实例参数、for 范围、子实例维、extends 修饰、经 outer 的整个数组、identity；经子实例的整个参数数组（`b.a`，求值 / 维里 sum） |
 | `ea-ut` | 4 | Evaluate 参数数组（单测原文：World 式 Axis、依赖 Evaluate = false、声明在后的别名、经子实例） |
+| `cc-c1` | 15 | 条件组件的条件：字符串比较（`<>` / `==`，start 当绑定、子实例修饰）；redeclare 进来的连接器里的条件（多层 extends 修饰传值）；条件经修饰引用声明在后的记录字段（第二遍）/ 声明在后的参数 / 记录参数修饰 |
+| `rm-r1` | 16 | rem 内联成 `x - div(x, y) * y`：time / 参数式 / Integer 离散 / 算法段 / 函数体 / 负数 / 嵌套；字面量折叠、Evaluate 参数、数组实参（SKIP）、关系式里、integer()、for 方程 |
+| `gi-g1` | 10 | getInstanceName()：根类自己 / 子实例 / 组件数组 / 方程 / 包里的类 / 传给外部函数；多维下标（`a[1, 1]`）/ extends / 字符串拼接 / 传给用户函数求值（SKIP）/ assert 消息 |
+| `ea-e8` | 4 | Evaluate 记录组件的数组字段：值来自外层记录整体绑定（`pr = F(v = …)`，omc 不 final → SKIP）/ 字段自己的修饰（final） |
+| `cc-ut` | 4 | 单测原文：字符串条件、向前记录字段条件、rem 内联、getInstanceName |

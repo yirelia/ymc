@@ -5363,6 +5363,29 @@ YMC_TEST(flatten_evaluate_parameter_array) {
                            "  final parameter Real n[1] = 1.0;\n  final parameter Real n[2] = 2.0;\n  Real y = 2.0 * time;\nend EA3;\n"));
 }
 
+YMC_TEST(flatten_condition_string_compare_forward_record_and_rem_inline) {
+  // 条件组件的条件里比较字符串（逐字节字典序）；条件经修饰引用声明在后的记录字段（第二遍按第一遍的值求）；rem 照 omc 的
+  // EarlyInline 内联成 `x - div(x, y) * y`。期望值为 omc 1.25.0 对原文实跑（CC 探针 c1-c4、RM 探针 r1-r2，2026-10-07）。
+  YMC_CHECK_EQ(flatten_src("model A\n  Real x;\nend A;\nmodel T\n  parameter String s(start = \"Y\");\n"
+                           "  A a if s <> \"D\";\n  A b if s == \"D\";\nend T;\nmodel CC1\n  T t(s = \"D\");\nend CC1;\n"),
+               std::string("class CC1\n  final parameter String t.s(start = \"Y\") = \"D\";\n  Real t.b.x;\nend CC1;\n"));
+  YMC_CHECK_EQ(flatten_src("connector H\n  Real T;\n  flow Real Q;\nend H;\nconnector P\n  parameter Boolean u(start = true);\n"
+                           "  H h if u;\nend P;\nrecord D\n  parameter Boolean ud = false;\nend D;\nmodel CC2\n"
+                           "  P p(u = d.ud);\n  parameter D d;\nend CC2;\n"),
+               std::string("class CC2\n  final parameter Boolean p.u(start = true) = false;\n"
+                           "  final parameter Boolean d.ud = false;\nend CC2;\n"));
+  YMC_CHECK_EQ(flatten_src("model RM1\n  Real y = rem(-time, 2) + rem(time, -3);\n  Integer k = rem(-7, 3);\nend RM1;\n"),
+               std::string("class RM1\n  Real y = time - div(time, -3.0) * (-3.0) - (time + div(-time, 2.0) * 2.0);\n"
+                           "  Integer k = -1;\nend RM1;\n"));
+  // getInstanceName()：根类简单名 + 带下标的实例前缀，多维下标用 ", " 分隔（GI 探针 g1-g2）。
+  YMC_CHECK_EQ(flatten_src("model A\n  parameter String s = getInstanceName();\nend A;\nmodel B\n  A a[1, 2];\nend B;\n"
+                           "model GI1\n  B b[2];\n  parameter String t = getInstanceName();\nend GI1;\n"),
+               std::string("class GI1\n  parameter String b[1].a[1,1].s = \"GI1.b[1].a[1, 1]\";\n"
+                           "  parameter String b[1].a[1,2].s = \"GI1.b[1].a[1, 2]\";\n"
+                           "  parameter String b[2].a[1,1].s = \"GI1.b[2].a[1, 1]\";\n"
+                           "  parameter String b[2].a[1,2].s = \"GI1.b[2].a[1, 2]\";\n  parameter String t = \"GI1\";\nend GI1;\n"));
+}
+
 YMC_TEST(flatten_external_object_variable_and_structors) {
   // 外部对象：组件压平成按类名打印的叶变量，构造 `EO()` 换成 `EO.constructor(1)`（默认实参照补），构造 / 析构随类型发射
   //（外部函数未声明 pure → impure）；当实参传给外部函数。期望 = omc 1.25.0 实跑（2026-10-07，下同）。

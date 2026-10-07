@@ -1,0 +1,40 @@
+//// set: ea-e8 — Evaluate 记录组件的数组字段：值来自外层记录整体绑定（`pr = F(v = …)`，omc 不 final → SKIP）/ 字段自己的修饰（final）
+//// model: E80
+record F
+parameter Real v[2];
+end F;
+record G
+parameter F pr(v = {0, 0}) annotation(Evaluate = true);
+end G;
+model E80
+parameter G g(pr = F(v = {1, 2}));
+end E80;
+//// model: E81
+record F
+parameter Real v[2];
+end F;
+record G
+parameter F pr(v = {0, 0}) annotation(Evaluate = true);
+end G;
+model E81
+parameter Real k = 2;
+parameter G g(pr = F(v = k * {1, 2}));
+end E81;
+//// model: E82
+record F
+parameter Real v[2];
+end F;
+record G
+parameter F pr(v = {0, 0}) annotation(Evaluate = true);
+end G;
+model E82
+parameter G g;
+end E82;
+//// model: E83
+record F
+parameter Real v[2];
+end F;
+model E83
+parameter F f = F(v = {1, 2}) annotation(Evaluate = true);
+Real y = f.v[1] * time;
+end E83;

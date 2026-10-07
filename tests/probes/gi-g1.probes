@@ -1,0 +1,85 @@
+//// set: gi-g1 — getInstanceName()：根类自己 / 子实例 / 组件数组 / 方程 / 包里的类 / 传给外部函数；多维下标（`a[1, 1]`）/ extends / 字符串拼接 / 传给用户函数求值（SKIP）/ assert 消息
+//// model: G10
+model G10
+parameter String s = getInstanceName();
+end G10;
+//// model: G11
+model A
+parameter String s = getInstanceName();
+end A;
+model G11
+A a;
+A b[2];
+end G11;
+//// model: G12
+model A
+String s;
+equation
+s = getInstanceName();
+end A;
+model G12
+A a;
+end G12;
+//// model: G13
+package P
+model A
+parameter String s = getInstanceName();
+end A;
+end P;
+model G13
+P.A a;
+end G13;
+//// model: G14
+model A
+parameter Integer seed = Modelica.Utilities.Strings.hashString(getInstanceName());
+end A;
+model G14
+A a;
+end G14;
+//// model: G20
+model A
+parameter String s = getInstanceName();
+end A;
+model B
+A a[2, 2];
+end B;
+model G20
+B b[2];
+end G20;
+//// model: G21
+model A
+String s = getInstanceName();
+end A;
+model G21
+extends A;
+A a;
+end G21;
+//// model: G22
+model A
+parameter String s = getInstanceName() + "x";
+end A;
+model G22
+A a;
+end G22;
+//// model: G23
+function f
+input String s;
+output Integer n;
+algorithm
+n := 1;
+end f;
+model A
+parameter Integer k = f(getInstanceName());
+end A;
+model G23
+A a;
+end G23;
+//// model: G24
+model A
+Real x;
+equation
+assert(x > 0, getInstanceName() + ": bad");
+end A;
+model G24
+A a(x = 1);
+end G24;

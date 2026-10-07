@@ -1,0 +1,45 @@
+//// set: cc-ut — 单测原文：字符串条件、向前记录字段条件、rem 内联、getInstanceName
+//// model: CC1
+model A
+  Real x;
+end A;
+model T
+  parameter String s(start = "Y");
+  A a if s <> "D";
+  A b if s == "D";
+end T;
+model CC1
+  T t(s = "D");
+end CC1;
+//// model: CC2
+connector H
+  Real T;
+  flow Real Q;
+end H;
+connector P
+  parameter Boolean u(start = true);
+  H h if u;
+end P;
+record D
+  parameter Boolean ud = false;
+end D;
+model CC2
+  P p(u = d.ud);
+  parameter D d;
+end CC2;
+//// model: GI1
+model A
+  parameter String s = getInstanceName();
+end A;
+model B
+  A a[1, 2];
+end B;
+model GI1
+  B b[2];
+  parameter String t = getInstanceName();
+end GI1;
+//// model: RM1
+model RM1
+  Real y = rem(-time, 2) + rem(time, -3);
+  Integer k = rem(-7, 3);
+end RM1;

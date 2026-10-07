@@ -839,11 +839,25 @@ class Flattener {
         // 在组件**声明处**作用域求值（继承成员 = 基类，条件里的兄弟参数在原类可见，Condition3）。
         const NodeId cscope = decl_lex(cid, inst_node);
         std::optional<CVal> cv;
+        forward_miss_ = false;
         {
           const PhaseScope early(*this, MarkPhase::Early);
           cv = eval_scode(cel.condition, scode_scope_of(cscope), 0, /*allow_param=*/true, nullptr);
         }
-        if (!cv || cv->k != CVal::K::Bool) { set_unsupported("conditional component condition"); continue; }
+        // 第一遍：求不出是因为碰到还没发射的参数（条件里引用声明在后的记录字段 `d.ud`，MSL MotorWithCurrentControl 的
+        // `useDamperCage = smpmData.useDamperCage`）→ 先当在、第二遍带着第一遍的值再求（第一遍的输出不用）。
+        if (!cv && lenient_ && forward_miss_ && !result_.unsupported) {
+          need_second_pass_ = true;
+          cv = CVal::B(true);
+        }
+        if (!cv || cv->k != CVal::K::Bool) {
+          if (!result_.unsupported) {   // 子原因：哪个组件（排桶用）
+            set_unsupported("conditional component condition");
+            for (Symbol p : prefix) result_.unsupported_detail += std::string(in_.str(p)) + ".";
+            result_.unsupported_detail += in_.str(cname);
+          }
+          continue;
+        }
         if (!cv->b) {
           // 键带逐段下标（复合数组各元素的条件各自求值，Condition8 / ConnectArrayCond2：b[2].a 被移除、b[1].a 保留）。
           std::vector<Symbol> rn = prefix;
@@ -4283,11 +4297,13 @@ class Flattener {
     // 绑定：外来修饰优先，否则声明绑定。要求是数组构造子 `{…}` / `array(…)`，否则 SKIP。
     Id<Exp> braw;
     bool braw_written = true;   // 绑定是源码里书写的（非 flatten 合成的修饰）：结构参数的别名连带用
+    bool braw_from_record = false;   // 绑定是外层记录整体绑定拆出的字段修饰（emit_variable 的 origin 1）
     NodeId bscope;
     std::vector<Symbol> bprefix;
     if (const ModSource* mb = first_bound(mod_subs)) {
       braw = I_.scode.mods[mb->mod].binding;
       braw_written = mb->mod.raw < synth_mod_floor_;
+      braw_from_record = !braw_written && derived_mods_.count(mb->mod.raw) > 0;
       bscope = mb->scope;
       bprefix = mb->vprefix;
     }
@@ -4390,6 +4406,9 @@ class Flattener {
         if (result_.unsupported_detail.empty()) result_.unsupported_detail = why;   // 子原因
       };
       if (!braw.is_valid()) { skip("parameter array without binding"); return; }
+      // 值来自外层记录的整体绑定（`pressure = flowParameters(V_flow = …)` 拆出的字段）：omc 对这种字段的判定走记录级
+      //（标量见 key_not_fixed 的 origin 1 支；scodeinst DimUnknown12 的 `pressure` 带 Evaluate、字段 omc 不 final），数组未做。
+      if (braw_from_record) { skip("array field from record binding"); return; }
       for (const ModSource& m : asrc)
         for (const SSubMod& sm : I_.scode.mods[m.mod].subs)
           if (in_.str(sm.ident) == "fixed") { skip("fixed attribute"); return; }
@@ -6380,6 +6399,19 @@ class Flattener {
         if (map_logop(e.op, lop) && a->k == CVal::K::Bool && b->k == CVal::K::Bool)   // 逻辑
           return CVal::B(lop == LogOp::And ? (a->b && b->b) : (a->b || b->b));
         RelOp rop;
+        // 字符串比较：逐字节字典序（omc evalRelationLess/Equal… 的 STRING 支用 stringCompare，NFCeval.mo:1583-1740 v1.25.0；
+        // MSL TerminalBox 的条件组件 `star if terminalConnection <> "D"`，CC 探针 c10-c12）。
+        if (map_relop(e.op, rop) && a->k == CVal::K::Str && b->k == CVal::K::Str) {
+          const int c = in_.str(a->s).compare(in_.str(b->s));
+          switch (rop) {
+            case RelOp::Lt: return CVal::B(c < 0);
+            case RelOp::Le: return CVal::B(c <= 0);
+            case RelOp::Gt: return CVal::B(c > 0);
+            case RelOp::Ge: return CVal::B(c >= 0);
+            case RelOp::Eq: return CVal::B(c == 0);
+            case RelOp::Ne: return CVal::B(c != 0);
+          }
+        }
         if (map_relop(e.op, rop) && a->k != CVal::K::Str && b->k != CVal::K::Str) {   // 关系（数值/布尔）
           const double x = a->k == CVal::K::Bool ? (a->b ? 1 : 0) : a->as_r();
           const double y = b->k == CVal::K::Bool ? (b->b ? 1 : 0) : b->as_r();
@@ -10358,7 +10390,7 @@ class Flattener {
         // 还没发射（向前引用）：第二遍用第一遍求出的值（见 flatten()），仍只标被引用的本身。只在方程段（Late）用——早期（维）
         // 1.25.0 还会连带标记被引用者的绑定里的参数，那要有被引用者的绑定才知道。
         if (const auto fw = carry_.vals.find(key);
-            fw != carry_.vals.end() && !typed_keys_.count(key) && mark_phase_ == MarkPhase::Late) {
+            fw != carry_.vals.end() && !typed_keys_.count(key) && (mark_phase_ == MarkPhase::Late || forward_leaf(key))) {
           if (!use_forward(key)) return std::nullopt;
           if (dep_mark_) record_structural(key);
           const_vals_[key] = fw->second;
@@ -14076,6 +14108,23 @@ class Flattener {
     }
     if (builtin_name == "scalar") return scalar_call(e, enclosing, prefix);
     if (builtin_name == "String") return string_call(e, enclosing, prefix);
+    // getInstanceName()：压平时换成实例名字符串——根类的简单名接上带下标的实例前缀（flattenExp 的 getInstanceName 支 →
+    // Prefix.instanceName，NFFlatten.mo:318-327 / :1614-1616 v1.25.0；GI 探针 g10-g14：`"G11.b[1]"`，根类自己 `"G10"`）。
+    // 函数 / 包里的（按调用处作用域的根路径求，Ceval.evalGetInstanceName :3091-3102）未做 → 照旧 SKIP。
+    if (builtin_name == "getInstanceName" && e.args.empty() && !fn_scope_) {
+      std::string s(in_.str(I_.nodes[root_].name));
+      for (std::size_t k = 0; k < prefix.size(); ++k) {
+        s += '.';
+        s += in_.str(prefix[k]);
+        if (k < cur_psubs_.size() && !cur_psubs_[k].empty()) {
+          s += '[';
+          // 多维下标照 ComponentRef.toString 用 ", " 分隔（g20：`"G20.b[1].a[1, 1]"`，变量名本身打 `a[1,1]`）。
+          for (std::size_t j = 0; j < cur_psubs_[k].size(); ++j) s += (j ? ", " : "") + std::to_string(cur_psubs_[k][j]);
+          s += ']';
+        }
+      }
+      return literal_of(CVal::S(in_.intern(s)));
+    }
     if (builtin_name == "delay" && !fn_scope_) return delay_call(e, enclosing, prefix);
     // 状态机算子：ticksInState / timeInState 没有实参，函数体里也能用（m2）；带状态实参的只在模型语境。
     if (builtin_name == "ticksInState" || builtin_name == "timeInState" ||
@@ -14377,6 +14426,19 @@ class Flattener {
         for (Id<Expr>& a : args) a = to_real(a);
     }
 
+    // rem(x, y)：omc 里是带 __OpenModelica_EarlyInline 的 Internal.intRem / realRem（`z := x - (div(x, y) * y)`，
+    // NFModelicaBuiltin.mo:326 / :1163-1179 v1.25.0），定型时就内联——模型方程、算法段、函数体里都打成 `x - div(x, y) * y`，
+    // 字面量实参照常折叠（RM 探针 r10-r17；MSL SMPM_NoLoad 的 hallSensor）。逐元素向量化的未核实，照旧。
+    if (supported && vd.empty() && builtin_name == "rem" && args.size() == 2) {
+      Expr dv;
+      dv.kind = ExprKind::Call;
+      dv.call_name = {in_.intern("div")};
+      dv.args = args;
+      dv.ty = result_.model.exprs[args[0]].ty.kind == TypeKind::Real || result_.model.exprs[args[1]].ty.kind == TypeKind::Real
+                  ? Type::real() : Type::integer();
+      const Id<Expr> d = add(std::move(dv));
+      return bin_expr(BinOp::Sub, args[0], bin_expr(BinOp::Mul, d, args[1]));
+    }
     Expr r;
     r.kind = ExprKind::Call;
     if (as_builtin.is_valid()) r.call_name = {as_builtin};
@@ -17699,6 +17761,14 @@ class Flattener {
   // 第二遍用到第一遍的值（向前引用）：omc 求值时连它绑定里引用的、同样还没压平的参数一起求值、存回（carry_.deps）。字段值经
   // 嵌套记录 / 未细分的整体绑定来的：omc 的求值走记录级——把中间那层记录整个求值、存回（makeRecordFieldBindingFromParent 对记录
   // 引用求值，NFCeval.mo:673-712；RecordBinding16 的 `zonDat[1].conDat.x = 1.0`），未做 → SKIP。
+  // 向前引用的参数，绑定不再引用别的参数（第一遍记下的 deps 为空：字面量 / 常量式）：定型期（条件、维）用到它也只需标它自己
+  // ——1.25.0 连带标记的是被引用者未定型的绑定里的参数，没有就没得连带（CC 探针 c41：`PSM p(u = d.ud); parameter D d;`，
+  // 条件 `h if u`）。
+  bool forward_leaf(const std::string& k) const {
+    const auto vi = carry_.visit.find(k);
+    return vi != carry_.visit.end() && vi->second.kind == PassCarry::VisitInfo::Parameter && vi->second.plain &&
+           vi->second.deps.empty();
+  }
   bool use_forward(const std::string& k) {
     if (deep_walk_ > 0) { set_unsupported("record binding evaluated before its declaration"); return false; }
     touch_forward(k);
