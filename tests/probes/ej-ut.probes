@@ -1,0 +1,139 @@
+//// set: ej-ut — 单测原文
+//// model: AA1
+model Sub
+  Real x;
+  Integer k;
+  discrete Real y(start = 0, fixed = true);
+algorithm
+  x := time;
+  k := integer(x * 3);
+  when time > 0.5 then
+    y := pre(y) + 1;
+  end when;
+end Sub;
+model AA1
+  Sub s[2];
+end AA1;
+//// model: CE2
+type L = enumeration(U, X, Z, O);
+model CE2
+  constant Integer t[L, L] = [1, 2, 3, 4; 2, 3, 4, 1; 3, 4, 1, 2; 4, 1, 2, 3];
+  constant Real r[L] = {1, 2, 3, 4};
+  discrete L a(start = L.U, fixed = true);
+  discrete L b(start = L.X, fixed = true);
+  Integer k1, k2, k3;
+  Real y;
+algorithm
+  when time > 0.5 then
+    a := L.Z;
+  end when;
+  k1 := t[L.X, b];
+  k2 := t[a, L.X];
+equation
+  k3 = t[b, a];
+  y = r[a] * time;
+end CE2;
+//// model: CP1
+record Medium
+  parameter Real rho = 1;
+  parameter Real cp = 2;
+end Medium;
+connector FlowPort
+  parameter Medium medium;
+  Real p;
+  flow Real m_flow;
+end FlowPort;
+model Comp
+  parameter Medium medium = Medium();
+  FlowPort port(final medium = medium);
+equation
+  port.m_flow = port.p * medium.rho;
+end Comp;
+model CP1
+  Comp a(medium = Medium(rho = 3)), b;
+equation
+  connect(a.port, b.port);
+end CP1;
+//// model: EU1
+type E = enumeration(a, b, c);
+model EU1
+  parameter E y0 = E.b;
+  constant E c0 = E.c;
+  parameter Boolean p = true;
+  discrete E y(start = y0, fixed = true);
+  discrete E u(start = if p then E.a else y0, min = E.a, max = c0);
+equation
+  when time > 0.5 then
+    y = E.c;
+    u = pre(y);
+  end when;
+end EU1;
+//// model: EU2
+type E = enumeration(a, b, c);
+type F = enumeration(x, y);
+model EU2
+  parameter F f0 = F.x;
+  discrete E y(start = f0, fixed = true);
+equation
+  when time > 0.5 then
+    y = E.c;
+  end when;
+end EU2;
+//// model: FX1
+model C
+  parameter Real T0 = 300;
+  parameter Boolean T0fixed = true;
+  Real T(start = T0, fixed = T0fixed);
+equation
+  der(T) = -T;
+end C;
+model FX1
+  C c1;
+  C c2(T(fixed = true));
+end FX1;
+//// model: IU1
+model IU1
+  parameter Real a = 2;
+  parameter Real k(fixed = false);
+  parameter Real m[2](each fixed = false);
+  Real x;
+initial algorithm
+  assert(a > 0, "a must be positive");
+  k := a * 2;
+  m := {k, 2 * k};
+equation
+  x = k * time + m[2];
+end IU1;
+//// model: IU2
+model IU2
+  parameter Real a = 2;
+  parameter Real k(fixed = false);
+  Real x;
+algorithm
+  k := a * 2;
+equation
+  x = k * time;
+end IU2;
+//// model: WU1
+model WU1
+  Boolean x = time > 0.3;
+  discrete Real y(start = 0, fixed = true);
+  discrete Real z(start = 0, fixed = true);
+equation
+  when {initial(), change(x) and not initial()} then
+    y = time;
+  end when;
+algorithm
+  when {x and not initial(), initial()} then
+    z := 2 * time;
+  end when;
+end WU1;
+//// model: WU2
+model WU2
+  Boolean x = time > 0.3;
+  discrete Real y(start = 0, fixed = true);
+equation
+  when {not initial(), x and not initial()} then
+    y = time;
+  end when;
+end WU2;

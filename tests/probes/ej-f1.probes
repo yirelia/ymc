@@ -1,0 +1,41 @@
+//// set: ej-f1 — fixed 被外来修饰 / extends 修饰盖过时，类里 `fixed = T0fixed` 的 T0fixed 不标 final；外层参数给的 fixed 照标
+//// model: FX1
+model C
+  parameter Real T0 = 300;
+  parameter Boolean T0fixed = true;
+  Real T(start = T0, fixed = T0fixed);
+equation
+  der(T) = -T;
+end C;
+model FX1
+  C c1;
+  C c2(T(fixed = true));
+end FX1;
+//// model: FX2
+model C
+  parameter Real T0 = 300;
+  parameter Boolean T0fixed = true;
+  Real T(start = T0, fixed = T0fixed);
+equation
+  der(T) = -T;
+end C;
+model D
+  extends C(T(fixed = false));
+end D;
+model FX2
+  D d;
+  C c;
+end FX2;
+//// model: FX3
+model C
+  parameter Real T0 = 300;
+  parameter Boolean T0fixed = true;
+  Real T(start = T0, fixed = T0fixed);
+equation
+  der(T) = -T;
+end C;
+model FX3
+  parameter Boolean b = false;
+  C c3(T(fixed = b));
+  C c4(T0fixed = b);
+end FX3;

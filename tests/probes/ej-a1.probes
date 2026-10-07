@@ -1,0 +1,69 @@
+//// set: ej-a1 — 组件数组各实例的算法段（目标 `s[1].x :=`）：for 体元素目标、整数组目标、嵌套组件数组、when 目标的连续绑定（omc 报错）、初始算法的参数目标
+//// model: AA1
+model Sub
+  Real x;
+  Integer k;
+  discrete Real y(start = 0, fixed = true);
+algorithm
+  x := time;
+  k := integer(x * 3);
+  when time > 0.5 then
+    y := pre(y) + 1;
+  end when;
+end Sub;
+model AA1
+  Sub s[2];
+end AA1;
+//// model: AA2
+model Sub
+  Real z[2];
+  Real v[2];
+algorithm
+  for k in 1:2 loop
+    z[k] := k * time;
+  end for;
+  v := {time, 2 * time};
+  v[2] := v[1] + z[2];
+end Sub;
+model AA2
+  Sub s[2];
+end AA2;
+//// model: AA3
+model Sub
+  Real y = time;
+algorithm
+  when time > 0.5 then
+    y := 2;
+  end when;
+end Sub;
+model AA3
+  Sub s[2];
+end AA3;
+//// model: AA4
+model Sub
+  Real x;
+algorithm
+  x := time;
+end Sub;
+model Mid
+  Sub s[2];
+  Real w;
+algorithm
+  w := s[1].x + s[2].x;
+end Mid;
+model AA4
+  Mid m[2];
+end AA4;
+//// model: AA5
+model Sub
+  parameter Real a = 2;
+  parameter Real k(fixed = false);
+  Real x;
+initial algorithm
+  k := a * 2;
+equation
+  x = k * time;
+end Sub;
+model AA5
+  Sub s[2](a = {1, 3});
+end AA5;

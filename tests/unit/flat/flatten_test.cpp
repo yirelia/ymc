@@ -5580,6 +5580,107 @@ YMC_TEST(flatten_structural_array_whole_references) {
                            "end CI4;\n"));
 }
 
+YMC_TEST(flatten_enum_attribute_expressions_when_initial_and_initial_algorithm_params) {
+  // 枚举属性值是参数引用 / if 式 / 常量：照常定型、保留符号（`start = y0`）；值的枚举类型须相符（别的枚举类型 → omc "Type
+  // mismatch in binding" → SKIP）。when 条件向量只要有一个元素是 initial() 本身或不含 initial() 就不告警（checkWhenInitial），
+  // 都不是 → omc 告警 → SKIP。参数只在初始算法里可赋（checkAssignment）。期望值为 omc 1.25.0 对原文实跑（EA / WJ / IA 探针
+  // ut，2026-10-07）。
+  YMC_CHECK_EQ(flatten_src("type E = enumeration(a, b, c);\nmodel EU1\n  parameter E y0 = E.b;\n  constant E c0 = E.c;\n"
+                           "  parameter Boolean p = true;\n  discrete E y(start = y0, fixed = true);\n"
+                           "  discrete E u(start = if p then E.a else y0, min = E.a, max = c0);\nequation\n"
+                           "  when time > 0.5 then\n    y = E.c;\n    u = pre(y);\n  end when;\nend EU1;\n"),
+               std::string("class EU1\n  parameter enumeration(a, b, c) y0 = E.b;\n  constant enumeration(a, b, c) c0 = E.c;\n"
+                           "  parameter Boolean p = true;\n  discrete enumeration(a, b, c) y(start = y0, fixed = true);\n"
+                           "  discrete enumeration(a, b, c) u(min = E.a, max = E.c, start = if p then E.a else y0);\nequation\n"
+                           "  when time > 0.5 then\n    y = E.c;\n    u = pre(y);\n  end when;\nend EU1;\n"));
+  YMC_CHECK_EQ(flatten_src("type E = enumeration(a, b, c);\ntype F = enumeration(x, y);\nmodel EU2\n  parameter F f0 = F.x;\n"
+                           "  discrete E y(start = f0, fixed = true);\nequation\n  when time > 0.5 then\n    y = E.c;\n"
+                           "  end when;\nend EU2;\n"),
+               std::string("<unsupported:attribute type mismatch>"));
+  YMC_CHECK_EQ(flatten_src("model WU1\n  Boolean x = time > 0.3;\n  discrete Real y(start = 0, fixed = true);\n"
+                           "  discrete Real z(start = 0, fixed = true);\nequation\n"
+                           "  when {initial(), change(x) and not initial()} then\n    y = time;\n  end when;\nalgorithm\n"
+                           "  when {x and not initial(), initial()} then\n    z := 2 * time;\n  end when;\nend WU1;\n"),
+               std::string("class WU1\n  Boolean x = time > 0.3;\n  discrete Real y(start = 0.0, fixed = true);\n"
+                           "  discrete Real z(start = 0.0, fixed = true);\nequation\n"
+                           "  when {initial(), change(x) and not initial()} then\n    y = time;\n  end when;\nalgorithm\n"
+                           "  when {x and not initial(), initial()} then\n    z := 2.0 * time;\n  end when;\nend WU1;\n"));
+  YMC_CHECK_EQ(flatten_src("model WU2\n  Boolean x = time > 0.3;\n  discrete Real y(start = 0, fixed = true);\nequation\n"
+                           "  when {not initial(), x and not initial()} then\n    y = time;\n  end when;\nend WU2;\n"),
+               std::string("<unsupported:when condition form>"));
+  YMC_CHECK_EQ(flatten_src("model IU1\n  parameter Real a = 2;\n  parameter Real k(fixed = false);\n"
+                           "  parameter Real m[2](each fixed = false);\n  Real x;\ninitial algorithm\n"
+                           "  assert(a > 0, \"a must be positive\");\n  k := a * 2;\n  m := {k, 2 * k};\nequation\n"
+                           "  x = k * time + m[2];\nend IU1;\n"),
+               std::string("class IU1\n  parameter Real a = 2.0;\n  parameter Real k(fixed = false);\n"
+                           "  parameter Real m[1](fixed = false);\n  parameter Real m[2](fixed = false);\n  Real x;\n"
+                           "initial algorithm\n  assert(a > 0.0, \"a must be positive\");\n  k := a * 2.0;\n"
+                           "  m := {k, 2.0 * k};\nequation\n  x = k * time + m[2];\nend IU1;\n"));
+  YMC_CHECK_EQ(flatten_src("model IU2\n  parameter Real a = 2;\n  parameter Real k(fixed = false);\n  Real x;\nalgorithm\n"
+                           "  k := a * 2;\nequation\n  x = k * time;\nend IU2;\n"),
+               std::string("<unsupported:algorithm assignment to non-continuous variable>"));
+}
+
+YMC_TEST(flatten_connector_record_params_fixed_override_array_algorithms_enum_tables) {
+  // 连接器里的参数记录成员按字段拆、各字段生成相等断言；外来修饰盖过类里的 `fixed = T0fixed` 时 T0fixed 不标 final；组件数组
+  // 各实例各出一段算法（目标 `s[1].x :=`）；枚举维常量表的运行时下标照写（`{2, 3, 4, 1}[b]`）。期望值为 omc 1.25.0 对原文
+  // 实跑（CP / FX / AA / CE 探针，2026-10-07）。
+  YMC_CHECK_EQ(flatten_src("record Medium\n  parameter Real rho = 1;\n  parameter Real cp = 2;\nend Medium;\n"
+                           "connector FlowPort\n  parameter Medium medium;\n  Real p;\n  flow Real m_flow;\nend FlowPort;\n"
+                           "model Comp\n  parameter Medium medium = Medium();\n  FlowPort port(final medium = medium);\n"
+                           "equation\n  port.m_flow = port.p * medium.rho;\nend Comp;\nmodel CP1\n"
+                           "  Comp a(medium = Medium(rho = 3)), b;\nequation\n  connect(a.port, b.port);\nend CP1;\n"),
+               std::string("class CP1\n  parameter Real a.medium.rho = 3.0;\n  parameter Real a.medium.cp = 2.0;\n"
+                           "  final parameter Real a.port.medium.rho = a.medium.rho;\n"
+                           "  final parameter Real a.port.medium.cp = a.medium.cp;\n  Real a.port.p;\n  Real a.port.m_flow;\n"
+                           "  parameter Real b.medium.rho = 1.0;\n  parameter Real b.medium.cp = 2.0;\n"
+                           "  final parameter Real b.port.medium.rho = b.medium.rho;\n"
+                           "  final parameter Real b.port.medium.cp = b.medium.cp;\n  Real b.port.p;\n  Real b.port.m_flow;\n"
+                           "equation\n"
+                           "  assert(abs(a.port.medium.rho - b.port.medium.rho) <= 0.0, \"Connected constants/parameters must be equal\");\n"
+                           "  assert(abs(a.port.medium.cp - b.port.medium.cp) <= 0.0, \"Connected constants/parameters must be equal\");\n"
+                           "  a.port.p = b.port.p;\n  b.port.m_flow + a.port.m_flow = 0.0;\n"
+                           "  a.port.m_flow = a.port.p * a.medium.rho;\n  b.port.m_flow = b.port.p * b.medium.rho;\nend CP1;\n"));
+  YMC_CHECK_EQ(flatten_src("model C\n  parameter Real T0 = 300;\n  parameter Boolean T0fixed = true;\n"
+                           "  Real T(start = T0, fixed = T0fixed);\nequation\n  der(T) = -T;\nend C;\nmodel FX1\n  C c1;\n"
+                           "  C c2(T(fixed = true));\nend FX1;\n"),
+               std::string("class FX1\n  parameter Real c1.T0 = 300.0;\n  final parameter Boolean c1.T0fixed = true;\n"
+                           "  Real c1.T(start = c1.T0, fixed = true);\n  parameter Real c2.T0 = 300.0;\n"
+                           "  parameter Boolean c2.T0fixed = true;\n  Real c2.T(start = c2.T0, fixed = true);\nequation\n"
+                           "  der(c1.T) = -c1.T;\n  der(c2.T) = -c2.T;\nend FX1;\n"));
+  YMC_CHECK_EQ(flatten_src("model Sub\n  Real x;\n  Integer k;\n  discrete Real y(start = 0, fixed = true);\nalgorithm\n"
+                           "  x := time;\n  k := integer(x * 3);\n  when time > 0.5 then\n    y := pre(y) + 1;\n  end when;\n"
+                           "end Sub;\nmodel AA1\n  Sub s[2];\nend AA1;\n"),
+               std::string("class AA1\n  Real s[1].x;\n  Integer s[1].k;\n  discrete Real s[1].y(start = 0.0, fixed = true);\n"
+                           "  Real s[2].x;\n  Integer s[2].k;\n  discrete Real s[2].y(start = 0.0, fixed = true);\nalgorithm\n"
+                           "  s[1].x := time;\n  s[1].k := integer(s[1].x * 3.0);\n  when time > 0.5 then\n"
+                           "    s[1].y := pre(s[1].y) + 1.0;\n  end when;\nalgorithm\n  s[2].x := time;\n"
+                           "  s[2].k := integer(s[2].x * 3.0);\n  when time > 0.5 then\n    s[2].y := pre(s[2].y) + 1.0;\n"
+                           "  end when;\nend AA1;\n"));
+  YMC_CHECK_EQ(flatten_src("type L = enumeration(U, X, Z, O);\nmodel CE2\n"
+                           "  constant Integer t[L, L] = [1, 2, 3, 4; 2, 3, 4, 1; 3, 4, 1, 2; 4, 1, 2, 3];\n"
+                           "  constant Real r[L] = {1, 2, 3, 4};\n  discrete L a(start = L.U, fixed = true);\n"
+                           "  discrete L b(start = L.X, fixed = true);\n  Integer k1, k2, k3;\n  Real y;\nalgorithm\n"
+                           "  when time > 0.5 then\n    a := L.Z;\n  end when;\n  k1 := t[L.X, b];\n  k2 := t[a, L.X];\n"
+                           "equation\n  k3 = t[b, a];\n  y = r[a] * time;\nend CE2;\n"),
+               std::string("class CE2\n  constant Integer t[L.U,L.U] = 1;\n  constant Integer t[L.U,L.X] = 2;\n"
+                           "  constant Integer t[L.U,L.Z] = 3;\n  constant Integer t[L.U,L.O] = 4;\n"
+                           "  constant Integer t[L.X,L.U] = 2;\n  constant Integer t[L.X,L.X] = 3;\n"
+                           "  constant Integer t[L.X,L.Z] = 4;\n  constant Integer t[L.X,L.O] = 1;\n"
+                           "  constant Integer t[L.Z,L.U] = 3;\n  constant Integer t[L.Z,L.X] = 4;\n"
+                           "  constant Integer t[L.Z,L.Z] = 1;\n  constant Integer t[L.Z,L.O] = 2;\n"
+                           "  constant Integer t[L.O,L.U] = 4;\n  constant Integer t[L.O,L.X] = 1;\n"
+                           "  constant Integer t[L.O,L.Z] = 2;\n  constant Integer t[L.O,L.O] = 3;\n"
+                           "  constant Real r[L.U] = 1.0;\n  constant Real r[L.X] = 2.0;\n  constant Real r[L.Z] = 3.0;\n"
+                           "  constant Real r[L.O] = 4.0;\n  discrete enumeration(U, X, Z, O) a(start = L.U, fixed = true);\n"
+                           "  discrete enumeration(U, X, Z, O) b(start = L.X, fixed = true);\n  Integer k1;\n  Integer k2;\n"
+                           "  Integer k3;\n  Real y;\nequation\n"
+                           "  k3 = {{1, 2, 3, 4}, {2, 3, 4, 1}, {3, 4, 1, 2}, {4, 1, 2, 3}}[b, a];\n"
+                           "  y = {1.0, 2.0, 3.0, 4.0}[a] * time;\nalgorithm\n  when time > 0.5 then\n    a := L.Z;\n"
+                           "  end when;\n  k1 := {2, 3, 4, 1}[b];\n"
+                           "  k2 := {{1, 2, 3, 4}, {2, 3, 4, 1}, {3, 4, 1, 2}, {4, 1, 2, 3}}[a, L.X];\nend CE2;\n"));
+}
+
 YMC_TEST(flatten_external_object_variable_and_structors) {
   // 外部对象：组件压平成按类名打印的叶变量，构造 `EO()` 换成 `EO.constructor(1)`（默认实参照补），构造 / 析构随类型发射
   //（外部函数未声明 pure → impure）；当实参传给外部函数。期望 = omc 1.25.0 实跑（2026-10-07，下同）。

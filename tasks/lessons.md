@@ -410,3 +410,10 @@
   （omc `f(time) * 2.0`），静默错。探针里没有"符号形态 + 结构参数"的组合。
 - 规则：凡是按节点 id 记的旁路标记（集合 / map），加的时候 grep 所有会复制 / 克隆 Expr 节点的函数（clone_subst、subst_slots、
   simplify 的重建…），逐个决定标记要不要跟着走；探针要带"该形态 + 压平末尾代入"（结构参数、for 迭代变量）的组合。
+
+## 2026-10-07 — 模仿 omc 在修饰上做的事，要按合并后的修饰取值
+- 模式：fixed 属性里参数的预扫（omc 把 `fixed = T0fixed` 的 T0fixed 标成结构参数）只看组件声明自己的修饰；外层
+  `cylinder2(T(fixed = true))` 盖过它时 ymc 照样把 cylinder2.T0fixed 打成 final（omc 不标，它标的是合并后修饰里的值），
+  静默错。探针 / testsuite 都没有"外层改掉该属性"的组合，直到 MSL FluidHeatFlow TestCylinder 才露。
+- 规则：凡是复刻 omc 对某个修饰 / 属性做的事（标结构参数、求值、判 final），都按合并后的修饰（外来 > extends > 声明）取值；
+  探针要带"外来修饰 / extends 修饰改掉该属性"的组合。

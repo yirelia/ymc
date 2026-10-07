@@ -245,3 +245,11 @@ qd_max 的求值。FAIL / ACCEPTS-INVALID / CRASH 0。
 Analog.Examples.CharacteristicThyristors）卡在数组式里的推导式，3 个（Machines IMC_Conveyor、Translational.Examples.Vehicle、
 FluidHeatFlow.Examples.TestOpenTank）卡在 derivative / inverse 注解的形态，SoftStarter 卡在常量求值，TestCylinder 卡在 connect
 操作数形状。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-08 加宽 62j 之后：PASS 155 → 166
+
+初始算法里可给 fixed = false 的参数赋值、连接器里的参数记录成员按字段生成相等断言之后，FluidHeatFlow 的 10 个示例转 PASS
+（SimpleCooling / ParallelCooling / IndirectCooling / PumpAndValve / PumpDropOut / ParallelPumpDropOut / OneMass / TwoMass /
+TwoTanks / TestCylinder——TestCylinder 还要 fixed 预扫按合并后的修饰取值，此前会把 cylinder2.T0fixed 错打成 final），另有
+Machines DCMachines.DCPM_Cooling。Digital 的 15 个示例越过枚举属性值的参数引用、when 条件向量里的 `not initial()`、组件数组
+实例的算法段、枚举维常量表的运行时下标，往下卡在包里的枚举值真值表（`Tables.OrTable[…]` 等）。FAIL / ACCEPTS-INVALID / CRASH 0。

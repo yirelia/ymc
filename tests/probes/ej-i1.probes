@@ -1,0 +1,72 @@
+//// set: ej-i1 — 初始算法给参数赋值（fixed = false / 有绑定的、数组参数整体 / 元素）；普通算法里的参数目标、常量目标、when 外的 discrete Real（omc 报错）；when 外的 Integer / Boolean 目标
+//// model: IA1
+model IA1
+  parameter Real a = 2;
+  parameter Real k(fixed = false);
+  Real x;
+initial algorithm
+  assert(a > 0, "a must be positive");
+  k := a * 2;
+equation
+  x = k * time;
+end IA1;
+//// model: IA2
+model IA2
+  parameter Real a = 2;
+  parameter Real k(fixed = true) = 1;
+  Real x;
+initial algorithm
+  k := a * 2;
+equation
+  x = k * time;
+end IA2;
+//// model: IA3
+model IA3
+  parameter Real a = 2;
+  parameter Real k(fixed = false);
+  Real x;
+algorithm
+  k := a * 2;
+equation
+  x = k * time;
+end IA3;
+//// model: IA4
+model IA4
+  constant Real c = 1;
+  Real x = time;
+initial algorithm
+  c := 2;
+end IA4;
+//// model: IA5
+model IA5
+  Integer n;
+  Boolean b;
+  discrete Real d;
+  Real x = time;
+algorithm
+  n := integer(time * 10);
+  b := x > 0.5;
+  d := 2 * x;
+end IA5;
+//// model: IA6
+model IA6
+  parameter Real a[2] = {1, 2};
+  parameter Real k[2](each fixed = false);
+  parameter Integer m(fixed = false);
+  Real x;
+initial algorithm
+  k := 2 * a;
+  m := 3;
+  k[1] := k[1] + m;
+equation
+  x = k[2] * time;
+end IA6;
+//// model: IA7
+model IA7
+  Integer n;
+  Boolean b;
+  Real x = time;
+algorithm
+  n := integer(time * 10);
+  b := x > 0.5;
+end IA7;

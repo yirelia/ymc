@@ -759,11 +759,23 @@ class Flattener {
         for (Id<Exp> d : fel.type.dims) { tmp.clear(); eval_dim(d, tmp, dsc, &final_params); }
         // 组件条件里的参数（`x if b` → b 是结构参数 → final，Condition3）。
         if (fel.condition.is_valid()) eval_scode(fel.condition, dsc, 0, /*allow_param=*/true, &final_params);
-        // fixed 属性里的参数（ceval3）。
+        // fixed 属性里的参数（ceval3）。外来修饰 / extends 修饰给了本组件的 fixed（`cylinder2(T(fixed = true))` 盖过类里的
+        // `T(fixed = T0fixed)`）→ 声明的值不用、参数不标：omc 标的是合并后修饰的值（updateImplicitVariabilityComp 的
+        // TYPE_ATTRIBUTE 支，NFInst.mo:3941-3950 v1.25.0；MSL FluidHeatFlow TestCylinder 的 cylinder2.T0fixed 不是 final）。
         const Id<SMod> fm = fel.mod;
         if (!fm.is_valid()) continue;
+        auto sets_fixed = [&](Id<SMod> m) {
+          for (const SSubMod& s : I_.scode.mods[m].subs)
+            if (s.ident == fixed_sym && I_.scode.mods[s.mod].binding.is_valid()) return true;
+          return false;
+        };
+        bool fixed_overridden = false;
+        for (const ModSource& m : ctx.mods)
+          for (const SSubMod& s : I_.scode.mods[m.mod].subs)
+            fixed_overridden = fixed_overridden || (s.ident == I_.nodes[cn].name && sets_fixed(s.mod));
+        for (Id<SMod> em : I_.comps[I_.nodes[cn].comp].extends_mods) fixed_overridden = fixed_overridden || sets_fixed(em);
         for (const SSubMod& s : I_.scode.mods[fm].subs)
-          if (s.ident == fixed_sym) {
+          if (s.ident == fixed_sym && !fixed_overridden) {
             const Id<Exp> fv = I_.scode.mods[s.mod].binding;
             if (fv.is_valid() && I_.absyn.exps[fv].kind != ExpKind::BoolLit)
               eval_scode(fv, dsc, 0, /*allow_param=*/true, &final_params);
@@ -1419,6 +1431,13 @@ class Flattener {
     if (!stop || *b == 0) return false;
     return *b > 0 ? *a > *stop : *a < *stop;
   }
+  // 算法赋值的目标：普通变量（when 语句体里另可 discrete）；参数只在初始算法里可赋，常量 / 别处的参数 omc 报错 → SKIP
+  //（checkAssignment，NFTyping.mo:3418-3431 v1.25.0；IA 探针：MSL FluidHeatFlow 的 `parameter Real k(fixed = false)` 在
+  // `initial algorithm` 里 `k := …`）。
+  bool assignable(FlatVarKind k) const {
+    return k == FlatVarKind::Var || (alg_in_when_ > 0 && k == FlatVarKind::Discrete) ||
+           (alg_initial_ && k == FlatVarKind::Parameter);
+  }
   // 元组赋值的目标（标量 cref 或元组里的各非空位）须是可赋值变量：已发射的 Var（when 体内另可 discrete），同标量赋值规则。
   bool tuple_assign_target_ok(Id<Expr> l) {
     const Expr le = result_.model.exprs[l];   // 拷贝
@@ -1433,7 +1452,7 @@ class Flattener {
       nm.push_back(p.name);
     }
     const FlatVariable* lv = find_scalar_flat_var(nm);
-    if (!lv || !(lv->var_kind == FlatVarKind::Var || (alg_in_when_ > 0 && lv->var_kind == FlatVarKind::Discrete))) {
+    if (!lv || !assignable(lv->var_kind)) {
       set_unsupported("algorithm assignment to non-continuous variable");
       return false;
     }
@@ -1522,7 +1541,8 @@ class Flattener {
           const NodeId n = find_local(enclosing, ac.parts[0].name);
           if (n.is_valid() && !I_.nodes[n].is_empty() && I_.nodes[n].comp.is_valid()) {
             const SVariability v = I_.comps[I_.nodes[n].comp].attributes.variability;
-            target_ok = v == SVariability::Var || (alg_in_when_ > 0 && v == SVariability::Discrete);
+            target_ok = v == SVariability::Var || (alg_in_when_ > 0 && v == SVariability::Discrete) ||
+                        (alg_initial_ && v == SVariability::Param);
           }
         }
       }
@@ -1537,16 +1557,20 @@ class Flattener {
       return {};   // 被删赋值里登记过的函数由 prune_functions 收走
     }
     std::vector<Symbol> lname;
+    std::vector<std::vector<Id<Expr>>> lsubs;   // 非末段的逐段下标
     bool array_elem = false;
     {
       const Expr& le = result_.model.exprs[lhs];
       if (le.kind != ExprKind::Cref) { set_unsupported("algorithm assignment target"); return {}; }
       for (std::size_t i = 0; i < le.cref.parts.size(); ++i) {
         lname.push_back(le.cref.parts[i].name);
-        if (!le.cref.parts[i].subscripts.empty()) {
-          if (i + 1 != le.cref.parts.size()) { set_unsupported("algorithm array-element assignment"); return {}; }  // 非末段下标暂缓
-          array_elem = true;   // 末段带下标 = 数组元素 / 切片赋值（for 体内 `x[i] :=`、`y[1:2] :=`）
-        }
+        if (le.cref.parts[i].subscripts.empty()) { lsubs.emplace_back(); continue; }
+        if (i + 1 == le.cref.parts.size()) { array_elem = true; break; }   // 末段带下标 = 数组元素 / 切片赋值（`x[i] :=`）
+        // 非末段下标：组件数组各实例的算法段（前缀带实例下标），omc 每个实例各出一段、目标照写 `s[1].x := …`（AA 探针；
+        // MSL Digital 的 `InertialDelaySensitive inertialDelaySensitive[n]`）。须全是字面量（for 迭代变量等符号下标未做）。
+        for (Id<Expr> sx : le.cref.parts[i].subscripts)
+          if (!is_literal(sx)) { set_unsupported("algorithm array-element assignment"); return {}; }
+        lsubs.push_back(le.cref.parts[i].subscripts);
       }
     }
     // 整数组赋值 `y := <数组式>`（目标是整体引用、各维已知）：语句不拆，右侧规整成整体保留的形态（whole_array_value；
@@ -1554,15 +1578,15 @@ class Flattener {
     // 目标是切片（`y[1:2] := z`、`y[1, :] := z`、`y[1] := z` 取矩阵的一行）同理，左侧照写。
     const std::vector<std::int64_t> ls = expr_shape(lhs);
     const bool whole = !ls.empty();
-    // 目标须是已发射的变量（Var；when 语句体里另可是 discrete）：标量取 find_scalar_flat_var；数组（元素 / 整体）取
-    // find_array_flat_var（标量化成 x[1..n]）。参数 / 常量目标 → omc 报错 → SKIP。
-    const FlatVariable* lv = array_elem || whole ? find_array_flat_var(lname) : find_scalar_flat_var(lname);
-    if (!lv || !(lv->var_kind == FlatVarKind::Var || (alg_in_when_ > 0 && lv->var_kind == FlatVarKind::Discrete))) {
+    // 目标须是已发射的变量（见 assignable）：标量取 find_scalar_flat_var；数组（元素 / 整体）取 find_array_flat_var（标量化成
+    // x[1..n]）。
+    const FlatVariable* lv = array_elem || whole ? find_array_flat_var(lname, lsubs) : find_scalar_flat_var(lname, lsubs);
+    if (!lv || !assignable(lv->var_kind)) {
       set_unsupported("algorithm assignment to non-continuous variable");
       return {};
     }
     // when 语句里赋值的变量是离散的：声明绑定是连续的 → omc 报错（同 when 方程，WC 探针 c5 `Real y = time; … when … y := 2`）。
-    if (alg_in_when_ > 0 && when_target_runtime_bound(lname)) {
+    if (alg_in_when_ > 0 && when_target_runtime_bound(lname, lsubs)) {
       set_unsupported("when-solved variable with non-constant binding");
       return {};
     }
@@ -1625,15 +1649,22 @@ class Flattener {
     return std::nullopt;
   }
 
-  // 在已发射变量里按点分名找标量变量（无末段下标、无逐段下标）。供算法赋值目标的可变性校验。
-  const FlatVariable* find_scalar_flat_var(const std::vector<Symbol>& nm) {
-    for (const FlatVariable& v : result_.model.variables) {
-      if (!v.subscripts.empty() || v.name != nm) continue;
-      bool clean = true;
-      for (const std::vector<Id<Expr>>& s : v.name_subs) if (!s.empty()) { clean = false; break; }
-      if (clean) return &v;
-    }
+  // 在已发射变量里按点分名找标量变量（无末段下标）；nsubs = 非末段的逐段下标（缺 / 空 = 该段无下标）。供算法赋值目标的
+  // 可变性校验。
+  const FlatVariable* find_scalar_flat_var(const std::vector<Symbol>& nm, const std::vector<std::vector<Id<Expr>>>& nsubs = {}) {
+    for (const FlatVariable& v : result_.model.variables)
+      if (v.subscripts.empty() && v.name == nm && name_subs_match(v, nsubs)) return &v;
     return nullptr;
+  }
+  bool name_subs_match(const FlatVariable& v, const std::vector<std::vector<Id<Expr>>>& nsubs) {
+    static const std::vector<Id<Expr>> none;
+    for (std::size_t i = 0; i < std::max(v.name_subs.size(), nsubs.size()); ++i) {
+      const std::vector<Id<Expr>>& a = i < v.name_subs.size() ? v.name_subs[i] : none;
+      const std::vector<Id<Expr>>& b = i < nsubs.size() ? nsubs[i] : none;
+      if (a.size() != b.size()) return false;
+      for (std::size_t k = 0; k < a.size(); ++k) if (!expr_equal(a[k], b[k])) return false;
+    }
+    return true;
   }
 
   // for-语句（KEPT loop，对标 NFFlatten.flattenStatement:2308——不展开）：范围类型化 + 迭代变量注册为符号 + 体翻译。
@@ -2019,9 +2050,10 @@ class Flattener {
   }
 
   // 在已发射变量里按点分名找标量化数组变量（name={x}、有末段下标 x[1..n]）。供 for 体 `x[i]:=` 目标校验。
-  const FlatVariable* find_array_flat_var(const std::vector<Symbol>& nm) {
+  // nsubs 非空时另核非末段的逐段下标（组件数组实例里的 `s[1].x[2] :=`）。
+  const FlatVariable* find_array_flat_var(const std::vector<Symbol>& nm, const std::vector<std::vector<Id<Expr>>>& nsubs = {}) {
     for (const FlatVariable& v : result_.model.variables)
-      if (v.name == nm && !v.subscripts.empty()) return &v;
+      if (v.name == nm && !v.subscripts.empty() && (nsubs.empty() || name_subs_match(v, nsubs))) return &v;
     return nullptr;
   }
 
@@ -2991,30 +3023,41 @@ class Flattener {
 
   // when 条件：标量 Boolean 式，或由它们组成的条件向量 `{c1, c2, …}`——omc 照化简后的式子打印，不挑形态（WC 探针 c1–c4：
   // 关系 / and / or / not / if、内建与用户函数调用作操作数、字面量 `when true`；W1 探针：`sample(0.0, h)`、`change(k)`）。
-  // 挡两类：① initial() 不是整个条件、也不是条件向量的直接元素 → omc 告警 "initial() may only be used as a when condition"
-  //（`not initial()`、`initial() or a > 1`；ymc 不产告警）；② noEvent 包着 Boolean 式（引用除外）→ 不是离散时间表达式，omc
-  // 报 "When-condition … is not a discrete-time expression"（`noEvent(a > 1)`；`noEvent(p)`、`noEvent(a) > 1` 可以）。
-  // Clock 条件在调用方另走。数组 cref 条件先经 expand_when_cond 展开。
+  // 挡两类：① omc 告警 "initial() may only be used as a when condition"（ymc 不产告警）：checkWhenInitial（NFTyping.mo:3622-3644
+  // v1.25.0，方程 / 语句的 when 都过，:3317 / :3576）认 initial() 本身或不含 initial() 的式子，条件向量**有一个**元素认得就不
+  // 告警（WJ 探针：`not initial()`、`x and not initial()` 告警；`{initial(), x and not initial()}`、`{x, initial() or x}` 不告警，
+  // MSL Digital 的 `when {initial(), (tLH > 0 or tHL > 0) and change(x) and not initial()}`）；② noEvent 包着 Boolean 式（引用
+  // 除外）→ 不是离散时间表达式，omc 报 "When-condition … is not a discrete-time expression"（`noEvent(a > 1)`；`noEvent(p)`、
+  // `noEvent(a) > 1` 可以），向量的每个元素都查。Clock 条件在调用方另走。数组 cref 条件先经 expand_when_cond 展开。
   bool when_cond_ok(Id<Expr> c) {
     const Expr& e = result_.model.exprs[c];
     auto elem = [&](Id<Expr> x) {
       const Expr& xe = result_.model.exprs[x];
-      if (xe.ty.kind != TypeKind::Boolean || xe.ty.is_array() || xe.kind == ExprKind::Array) return false;
-      return is_initial_call(xe) || when_operand_ok(x);
+      return xe.ty.kind == TypeKind::Boolean && !xe.ty.is_array() && xe.kind != ExprKind::Array && when_operand_ok(x);
     };
-    if (e.kind != ExprKind::Array) return elem(c);
+    auto init_ok = [&](Id<Expr> x) { return is_initial_call(result_.model.exprs[x]) || !has_initial(x); };
+    if (e.kind != ExprKind::Array) return elem(c) && init_ok(c);
     if (e.args.empty()) return false;
-    for (Id<Expr> x : e.args)
+    bool any = false;
+    for (Id<Expr> x : e.args) {
       if (!elem(x)) return false;
-    return true;
+      any = any || init_ok(x);
+    }
+    return any;
   }
   bool is_initial_call(const Expr& e) const {
     return e.kind == ExprKind::Call && e.call_name.size() == 1 && e.args.empty() && in_.str(e.call_name[0]) == "initial";
   }
+  bool has_initial(Id<Expr> id) const {
+    if (!id.is_valid()) return false;
+    const Expr& e = result_.model.exprs[id];
+    if (is_initial_call(e)) return true;
+    for (Id<Expr> a : e.args) if (has_initial(a)) return true;
+    return has_initial(e.a) || has_initial(e.b) || has_initial(e.c);
+  }
   bool when_operand_ok(Id<Expr> id) {
     if (!id.is_valid()) return true;
     const Expr& e = result_.model.exprs[id];
-    if (is_initial_call(e)) return false;
     if (e.kind == ExprKind::Call && e.call_name.size() == 1 && e.args.size() == 1 && in_.str(e.call_name[0]) == "noEvent") {
       const Expr& a = result_.model.exprs[e.args[0]];
       if (a.ty.kind == TypeKind::Boolean && a.kind != ExprKind::Cref) return false;
@@ -3037,8 +3080,9 @@ class Flattener {
   }
 
   // when 里解出 / 赋值的变量的声明绑定是否引用了变量或 time（标量看变量的绑定，数组看 emit_array 记下的绑定方程）。
-  bool when_target_runtime_bound(const std::vector<Symbol>& lname) {
-    if (const FlatVariable* v = find_scalar_flat_var(lname); v && v->binding.is_valid() && refs_runtime_var(v->binding)) return true;
+  bool when_target_runtime_bound(const std::vector<Symbol>& lname, const std::vector<std::vector<Id<Expr>>>& lsubs = {}) {
+    if (const FlatVariable* v = find_scalar_flat_var(lname, lsubs); v && v->binding.is_valid() && refs_runtime_var(v->binding))
+      return true;
     std::string nm;
     for (Symbol sy : lname) { if (!nm.empty()) nm += '.'; nm += in_.str(sy); }
     return runtime_bound_arrays_.count(nm) > 0;
@@ -4090,12 +4134,9 @@ class Flattener {
       if (cty.kind == TypeKind::Integer && bk == TypeKind::Real) set_unsupported("binding type mismatch");
       // 枚举绑定须是本枚举类型的字面量（Enum12 `E1 e = E2.B` → omc "Type mismatch in binding"）：按字面量路径的类型段与
       // 字面量名核对（类型别名写法会被保守 SKIP）。
-      if (cty.kind == TypeKind::Enumeration && result_.model.exprs[binding].kind == ExprKind::EnumLit) {
-        const std::vector<Symbol> ep = result_.model.exprs[binding].enum_path;
-        const bool lit_ok = ep.size() >= 2 && !cty.enum_path.empty() && ep[ep.size() - 2] == cty.enum_path.back() &&
-                            std::find(cty.enum_literals.begin(), cty.enum_literals.end(), ep.back()) != cty.enum_literals.end();
-        if (!lit_ok) set_unsupported("enumeration binding type mismatch");
-      }
+      if (cty.kind == TypeKind::Enumeration && result_.model.exprs[binding].kind == ExprKind::EnumLit &&
+          !enum_value_of(binding, cty))
+        set_unsupported("enumeration binding type mismatch");
       if (cty.kind == TypeKind::Real) binding = to_real(binding);   // `= 2` → `= 2.0`
     }
     // Evaluate = true（自己的或外层组件的）是唯一理由时，omc 先判它能不能当结构参数（Structural.isStructuralComponent →
@@ -5157,6 +5198,7 @@ class Flattener {
     NodeId scope;
     std::vector<Symbol> vprefix;
     Id<Expr> value;
+    Type cty;   // 组件类型（枚举属性值核类型用）
   };
 
   // 内建属性的取值计划（R13 §4.2）。sources 按优先级排（外来修饰在前、组件声明修饰在后），只看各来源的 **子修饰**（.subs）
@@ -5225,11 +5267,11 @@ class Flattener {
       }
       const bool each = sm.is_each || src->each_all;
       if (!dims.empty() && each_unbound && !each) { set_unsupported("each without value over attribute"); return out; }
-      AttrPlan p{&a, an, AttrPlan::Mode::Whole, sm.binding, src->scope, src->vprefix, {}};
+      AttrPlan p{&a, an, AttrPlan::Mode::Whole, sm.binding, src->scope, src->vprefix, {}, ty};
       const bool matrix = I_.absyn.exps[sm.binding].kind == ExpKind::Matrix;
       if (dims.empty() || each) {
         Id<Expr> v = attr_value(a.vk, sm.binding, src->scope, src->vprefix);
-        if (!finish_attr(a, an, v, sm.binding, src->scope)) return out;
+        if (!finish_attr(a, an, v, sm.binding, src->scope, ty)) return out;
         p.value = v;
       } else if ((is_array_ctor(sm.binding) && !is_comprehension(sm.binding)) || matrix) {
         const std::optional<std::vector<std::int64_t>> ld = lit_dims(sm.binding);
@@ -5261,7 +5303,7 @@ class Flattener {
         const Id<Exp> el = array_scalar_elem(p.raw, idx, 0);
         if (!el.is_valid()) { set_unsupported("array attribute element"); return out; }
         v = attr_value(p.spec->vk, el, p.scope, p.vprefix);
-        if (!finish_attr(*p.spec, p.name, v, el, p.scope)) return out;
+        if (!finish_attr(*p.spec, p.name, v, el, p.scope, p.cty)) return out;
       } else if (p.mode == AttrPlan::Mode::Typed) {
         // 属性的数组值逐元素摊分；推导式值同样逐元素代入（S16 探针 `Real t[3](start = {i for i in 1:3})` → `t[2](start = 2.0)`）。
         // 数组 if 表达式作属性值：1.25.0 是内部错 "NFScalarize.scalarizeVariable failed"（W26 探针
@@ -5271,7 +5313,7 @@ class Flattener {
         v = simplify_expr(scalarize(p.value, idx));
         if (result_.unsupported) return out;
         if (p.spec->vk == AttrVK::Real) v = to_real(v);
-        if (!finish_attr(*p.spec, p.name, v, {}, p.scope)) return out;
+        if (!finish_attr(*p.spec, p.name, v, {}, p.scope, p.cty)) return out;
       }
       out.push_back({p.name, v});
     }
@@ -5279,7 +5321,7 @@ class Flattener {
   }
 
   // 属性值的检查与归一（标量 / 逐元素共用）；raw = 该值的 Absyn（无则 invalid，fixed 只能是字面量）。失败 → unsupported。
-  bool finish_attr(const AttrSpec& a, Symbol an, Id<Expr>& v, Id<Exp> raw, NodeId scope) {
+  bool finish_attr(const AttrSpec& a, Symbol an, Id<Expr>& v, Id<Exp> raw, NodeId scope, const Type& cty) {
     // 数组值给标量属性（`Real y(start = {1, 2})`）→ omc 维度不符报错。
     if (result_.model.exprs[v].ty.is_array() || result_.model.exprs[v].kind == ExprKind::Array) {
       set_unsupported("attribute type mismatch"); return false;
@@ -5295,7 +5337,10 @@ class Flattener {
         case AttrVK::Real: bad = !num(vk) && vk != TypeKind::Unknown; break;
         case AttrVK::Int: bad = vk != TypeKind::Integer && vk != TypeKind::Unknown; break;
         case AttrVK::Bool: bad = vk != TypeKind::Boolean && vk != TypeKind::Unknown; break;
-        case AttrVK::StateSel: case AttrVK::EnumComp: break;
+        case AttrVK::StateSel: break;
+        // 枚举属性值须是本枚举类型的值（EA 探针：`E y(start = 1)` / `start = f0`、f0 是别的枚举类型 → omc "Type mismatch in
+        // binding start = …"）。
+        case AttrVK::EnumComp: bad = !enum_value_of(vin, cty); break;
       }
       if (bad) { set_unsupported("attribute type mismatch"); return false; }
     }
@@ -5413,7 +5458,20 @@ class Flattener {
       case AttrVK::StateSel:   // 字面量直接建；参数 / if 式按结构参数求值（state_select_value）
         if (!is_qualified_cref(I_.absyn.exps[val], I_.absyn)) return state_select_value(val, enclosing, prefix);
         return enum_lit_value(val, enclosing, prefix);
-      case AttrVK::EnumComp: return enum_lit_value(val, enclosing, prefix);   // `StateSelect.never` / `E.two`
+      // 书写的字面量 `StateSelect.never` / `E.two` 直接建；参数 / 组件引用等照常定型（omc 保留符号：MSL Digital 的
+      // `Logic y_auxiliary(start = y0)` → `start = delay.y0`，EA 探针）。
+      // 包常量（`start = P.c0`）也走通用路求值：类型段解析不成枚举类的不当字面量。
+      case AttrVK::EnumComp: {
+        bool lit = enum_literal_cref(val, enclosing);
+        if (lit) {
+          const Cref& c = I_.absyn.crefs[I_.absyn.exps[val].cref];
+          std::vector<Symbol> tparts;
+          for (std::size_t i = 0; i + 1 < c.parts.size(); ++i) tparts.push_back(c.parts[i].name);
+          const SClassDef* ed = nullptr;
+          lit = enum_type_path(tparts, enclosing, prefix, ed).has_value();
+        }
+        return lit ? enum_lit_value(val, enclosing, prefix) : simplify_expr(inst_exp(val, enclosing, prefix));
+      }
       case AttrVK::Real: return to_real(simplify_expr(inst_exp(val, enclosing, prefix)));   // `min = -100` → `-100.0`
       case AttrVK::Str:
       case AttrVK::Int:
@@ -5483,6 +5541,17 @@ class Flattener {
     r.enum_path = {c.parts[0].name, c.parts[1].name};
     r.enum_index = lit == "warning" ? 1 : 2;
     return add(std::move(r));
+  }
+  // v 是枚举类型 cty 的值：字面量按路径的类型段与字面量名核对（类型别名写法保守判否，Enum12 `E1 e = E2.B`）；别的式子
+  //（参数引用等）比类型名与字面量表（Type::enum_path 只有类型简名，inst.cpp:929）。
+  bool enum_value_of(Id<Expr> v, const Type& cty) const {
+    const Expr& e = result_.model.exprs[v];
+    if (e.kind == ExprKind::IfExp) return enum_value_of(e.b, cty) && enum_value_of(e.c, cty);
+    if (e.kind != ExprKind::EnumLit)
+      return e.ty.kind == TypeKind::Enumeration && e.ty.enum_path == cty.enum_path && e.ty.enum_literals == cty.enum_literals;
+    const std::vector<Symbol>& ep = e.enum_path;
+    return ep.size() >= 2 && !cty.enum_path.empty() && ep[ep.size() - 2] == cty.enum_path.back() &&
+           std::find(cty.enum_literals.begin(), cty.enum_literals.end(), ep.back()) != cty.enum_literals.end();
   }
   Id<Expr> make_enum_lit(const Cref& c, NodeId scope, const std::vector<Symbol>& prefix) {
     for (const CrefPart& p : c.parts)
@@ -11095,9 +11164,11 @@ class Flattener {
     if (ve.kind != ExprKind::Array || ve.args.empty()) { set_unsupported("constant array subscript"); return lit_int(0); }
     auto index = [&](Id<Expr> ix) -> Id<Expr> {
       const Expr ie = result_.model.exprs[ix];   // 拷贝
-      if (ie.kind == ExprKind::IntLit) {
-        if (ie.ival < 1 || static_cast<std::size_t>(ie.ival) > ve.args.size()) { set_unsupported("array subscript out of range"); return lit_int(0); }
-        return apply_const_subs(ve.args[static_cast<std::size_t>(ie.ival) - 1], s, k + 1);
+      // 已知下标：整数，或类型维上的枚举字面量（按序数取；调用方已核对是该维的标签）。
+      if (ie.kind == ExprKind::IntLit || (ie.kind == ExprKind::EnumLit && ie.enum_index > 0)) {
+        const std::int64_t at = ie.kind == ExprKind::IntLit ? ie.ival : ie.enum_index;
+        if (at < 1 || static_cast<std::size_t>(at) > ve.args.size()) { set_unsupported("array subscript out of range"); return lit_int(0); }
+        return apply_const_subs(ve.args[static_cast<std::size_t>(at) - 1], s, k + 1);
       }
       Expr r;
       r.kind = ExprKind::Subscript;
@@ -11705,25 +11776,66 @@ class Flattener {
               const std::vector<Id<Exp>> tsubs = c.parts[0].subscripts;   // 拷贝
               const ScodeScope tscope = scode_scope_of(enclosing);
               std::vector<std::int64_t> ords;
+              // 运行时的枚举 / 整数下标（MSL Digital `delayTable[y_old, x]`，y_old、x 是 Logic 变量）：整体值按下标取，已知的
+              // 前导下标取元素、其余照写（EvalConstants 求不出带变量下标的 cref → 求整体再 applySubscripts；CE 探针：
+              // `t[L.X, b]` → `{2, 3, 4, 1}[b]`、`t[a, L.X]` → `{{…}, …}[a, L.X]`、`r[a] * time`）。
+              std::vector<CSub> specs;
+              bool symbolic = false;
               for (std::size_t k = 0; typed && k < tsubs.size() && k < td.size(); ++k) {
                 std::optional<std::int64_t> o;
+                const ExpKind tk = I_.absyn.exps[tsubs[k]].kind;
+                if (tk == ExpKind::Colon || tk == ExpKind::Range || tk == ExpKind::End || is_array_ctor(tsubs[k])) {
+                  typed = false;
+                  break;
+                }
+                Id<Expr> se;
                 if (tl[k].empty()) {
                   o = subscript_int(tsubs[k], &tscope);
+                  if (o) se = lit_int(*o);
                 } else {
-                  const ExpKind tk = I_.absyn.exps[tsubs[k]].kind;
-                  if (tk != ExpKind::Colon && tk != ExpKind::Range && tk != ExpKind::End && !is_array_ctor(tsubs[k])) {
-                    const Id<Expr> se = simplify_expr(inst_exp(tsubs[k], enclosing, prefix));
-                    if (result_.unsupported) return lit_int(0);
-                    o = label_ordinal(se, tl[k]);
-                  }
+                  se = simplify_expr(inst_exp(tsubs[k], enclosing, prefix));
+                  if (result_.unsupported) return lit_int(0);
+                  o = label_ordinal(se, tl[k]);
                 }
-                if (!o || *o < 1 || *o > td[k]) typed = false; else ords.push_back(*o);
+                if (o) {
+                  if (*o < 1 || *o > td[k]) { typed = false; break; }
+                  ords.push_back(*o);
+                } else {
+                  // 符号下标：整数维须是整型式；类型维须是该枚举类型的式子（Boolean 维未做）。下标里的参数 omc 标成结构参数
+                  // 求值（markSubscript），不跟 → SKIP。
+                  if (!se.is_valid()) se = simplify_expr(inst_exp(tsubs[k], enclosing, prefix));
+                  if (result_.unsupported) return lit_int(0);
+                  // 枚举类型核对：Type::enum_path 只有类型简名（inst.cpp:929），标签字面量是全路径——比类型名那一段 + 字面量表。
+                  const Expr& sx = result_.model.exprs[se];
+                  bool sym_ok = !sx.ty.is_array() && (tl[k].empty() ? sx.ty.kind == TypeKind::Integer
+                                                                    : sx.ty.kind == TypeKind::Enumeration &&
+                                                                          !sx.ty.enum_path.empty() &&
+                                                                          sx.ty.enum_literals.size() == tl[k].size());
+                  for (std::size_t li = 0; sym_ok && li < tl[k].size(); ++li) {
+                    const Expr& lx = result_.model.exprs[tl[k][li]];
+                    sym_ok = lx.kind == ExprKind::EnumLit && lx.enum_path.size() >= 2 &&
+                             lx.enum_path[lx.enum_path.size() - 2] == sx.ty.enum_path.back() &&
+                             lx.enum_path.back() == sx.ty.enum_literals[li];
+                  }
+                  if (!sym_ok || refs_param_var(se)) { typed = false; break; }
+                  symbolic = true;
+                }
+                CSub cs;
+                cs.e = se;
+                specs.push_back(std::move(cs));
               }
-              if (typed && ords.size() == td.size()) {
-                std::vector<Symbol> nm = prefix;
-                nm.push_back(c.parts[0].name);
-                PSubs ps = cur_psubs_;
-                ps.resize(prefix.size());
+              std::vector<Symbol> nm = prefix;
+              nm.push_back(c.parts[0].name);
+              PSubs ps = cur_psubs_;
+              ps.resize(prefix.size());
+              if (typed && symbolic && specs.size() == td.size()) {
+                ps.push_back({});
+                if (auto it = const_vals_.find(int_key(nm, ps)); it != const_vals_.end() && is_arr(it->second))
+                  if (const Id<Expr> whole = literal_any(it->second); whole.is_valid()) {
+                    const Id<Expr> r = apply_const_subs(whole, specs, 0);
+                    return result_.unsupported ? lit_int(0) : simplify_expr(r);
+                  }
+              } else if (typed && ords.size() == td.size()) {
                 ps.push_back(ords);
                 if (auto it = const_vals_.find(int_key(nm, ps)); it != const_vals_.end() && !is_arr(it->second) &&
                                                                  it->second.k != CVal::K::Record)
@@ -16820,7 +16932,9 @@ class Flattener {
         if (sr != SRestriction::Connector || !inst || !member_dims(mcel, mscope, inst, I_.nodes[mn].name, sdims)) return false;
         for (std::int64_t n : sdims) if (n <= 0) return false;
       }
-      if (I_.comps[mc].attributes.variability != SVariability::Var) return false;
+      // 参数 / 常量的记录成员（MSL FluidHeatFlow FlowPort 的 `parameter Medium medium`）同样按字段拆（splitImpl 不看变率），
+      // 各字段发射时按集首变率生成相等断言（CP 探针）；参数子连接器未做。
+      if (I_.comps[mc].attributes.variability != SVariability::Var && sr != SRestriction::Record) return false;
       std::vector<Symbol> p = mpath;
       p.push_back(I_.nodes[mn].name);
       std::vector<Symbol> sub_inst;
@@ -16904,7 +17018,7 @@ class Flattener {
       const CompId fc = I_.nodes[fn].comp;
       const SElement& fcel = I_.scode.elems[I_.comps[fc].def];
       if (I_.comps[fc].attributes.connector != SConnectorType::Potential) return false;   // 字段自带 flow/stream → 未做
-      if (I_.comps[fc].attributes.variability != SVariability::Var) return false;
+      if (is_flow && I_.comps[fc].attributes.variability != SVariability::Var) return false;   // 非连续的 flow 未做
       std::vector<Symbol> p = mpath;
       p.push_back(I_.nodes[fn].name);
       if (I_.comps[fc].ty.kind == TypeKind::Complex) {

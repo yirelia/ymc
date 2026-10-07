@@ -1,0 +1,112 @@
+//// set: ej-w1 — when 条件里的 initial()（checkWhenInitial）：标量条件里嵌着的告警（SKIP）；条件向量有一个元素是 initial() 本身或不含 initial() 就不告警（`{initial(), change(x) and not initial()}`）、全都嵌着的告警；算法 when 同样
+//// model: WI1
+model WI1
+  Boolean x = time > 0.3;
+  discrete Real y(start = 0, fixed = true);
+equation
+  when {initial(), change(x) and not initial()} then
+    y = time;
+  end when;
+end WI1;
+//// model: WJ1
+model WJ1
+  Boolean x = time > 0.3;
+  discrete Real y(start = 0, fixed = true);
+equation
+  when not initial() then
+    y = time;
+  end when;
+end WJ1;
+//// model: WJ2
+model WJ2
+  Boolean x = time > 0.3;
+  discrete Real y(start = 0, fixed = true);
+equation
+  when initial() or x then
+    y = time;
+  end when;
+end WJ2;
+//// model: WJ3
+model WJ3
+  Boolean x = time > 0.3;
+  discrete Real y(start = 0, fixed = true);
+equation
+  when x and not initial() then
+    y = time;
+  end when;
+end WJ3;
+//// model: WJ4
+model WJ4
+  Boolean x = time > 0.3;
+  discrete Real y(start = 0, fixed = true);
+equation
+  when {initial(), not initial()} then
+    y = time;
+  end when;
+end WJ4;
+//// model: WJ5
+model WJ5
+  Boolean x = time > 0.3;
+  discrete Real y(start = 0, fixed = true);
+equation
+  when {x, x and not initial()} then
+    y = time;
+  end when;
+end WJ5;
+//// model: WJ6
+model WJ6
+  Boolean x = time > 0.3;
+  discrete Real y(start = 0, fixed = true);
+equation
+  when {x, initial() or x} then
+    y = time;
+  end when;
+end WJ6;
+//// model: WJ7
+model WJ7
+  Boolean x = time > 0.3;
+  discrete Real y(start = 0, fixed = true);
+equation
+  when change(x) and not initial() then
+    y = time;
+  end when;
+end WJ7;
+//// model: WJ8
+model WJ8
+  Boolean x = time > 0.3;
+  discrete Real y(start = 0, fixed = true);
+equation
+  when {initial(), x and initial()} then
+    y = time;
+  end when;
+end WJ8;
+//// model: WJ9
+model WJ9
+  Boolean x = time > 0.3;
+  discrete Real y(start = 0, fixed = true);
+equation
+  when {not initial(), x and not initial()} then
+    y = time;
+  end when;
+end WJ9;
+//// model: WJ10
+model WJ10
+  Boolean x = time > 0.3;
+  discrete Real y(start = 0, fixed = true);
+  discrete Real z(start = 0, fixed = true);
+algorithm
+  when {initial(), change(x) and not initial()} then
+    y := time;
+  elsewhen x and not initial() then
+    z := time;
+  end when;
+end WJ10;
+//// model: WJ11
+model WJ11
+  Boolean x = time > 0.3;
+  discrete Real y(start = 0, fixed = true);
+algorithm
+  when {initial(), change(x) and not initial()} then
+    y := time;
+  end when;
+end WJ11;

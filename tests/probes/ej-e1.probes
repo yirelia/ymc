@@ -1,0 +1,55 @@
+//// set: ej-e1 — 枚举属性值是式子：参数引用（`start = y0`、外层 `m.y0`）、if 式、包常量（`start = P.c0` → `P.E.b`）、extends 修饰里的；值是 Integer / 别的枚举类型（omc Type mismatch，SKIP）
+//// model: ES1
+package P
+  type E = enumeration(a, b, c);
+  model M
+    parameter E y0 = E.b;
+    discrete E y(start = y0, fixed = true);
+    E w(start = y0, fixed = true);
+    parameter E q(start = y0) = E.c;
+  equation
+    when time > 0.5 then y = E.c; end when;
+    when time > 0.3 then w = pre(y); end when;
+  end M;
+end P;
+model ES1
+  import P.E;
+  import P.M;
+    M m(y0 = E.a);
+    E z(start = m.y0, min = E.a, max = m.y0) = m.y;
+end ES1;
+//// model: ES2
+package P
+  type E = enumeration(a, b, c);
+  constant E c0 = E.b;
+  partial model SISO
+    discrete E y(start = E.a, fixed = true);
+  end SISO;
+end P;
+model ES2
+  import P.E;
+  parameter E y0 = E.c;
+  parameter Boolean b = true;
+  extends P.SISO(y(start = y0));
+  discrete E u(start = if b then E.a else y0, fixed = true);
+  discrete E v[2](each start = y0, each fixed = true);
+  discrete E w(start = P.c0, fixed = true);
+equation
+  when time > 0.5 then y = E.c; u = E.b; v = {E.a, E.b}; w = E.c; end when;
+end ES2;
+//// model: ES3
+type E = enumeration(a, b, c);
+model ES3
+  discrete E y(start = 1, fixed = true);
+equation
+  when time > 0.5 then y = E.c; end when;
+end ES3;
+//// model: ES4
+type E = enumeration(a, b, c);
+type F = enumeration(x, y);
+model ES4
+  parameter F f0 = F.x;
+  discrete E y(start = f0, fixed = true);
+equation
+  when time > 0.5 then y = E.c; end when;
+end ES4;

@@ -1877,6 +1877,18 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           求值（`max(k) * t` → `2.0 * t`），别的内建遇代入出的数组字面量实参 SKIP。size() 的实参是还没发射的 `:` 维数组（MO 基类的 nout 在 columns 之前定型）：按绑定求维；
           外部对象的向前引用按声明类型求类型名（CombiTimeTable 的 `getTimeTableTmin(tableID)`）。单测 APS2 对 omc 实跑后改正向。
           验证：slice 631 例 PASS 580 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 581 / FAIL 38（不变）；整个 testsuite PASS 1617→1620（msl/BS10、BS14、others/FlexibleShaftNonLinearTotal）/ FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 154→155；探针 8347→8383（wr-w1 / wr-v1 / wr-w2 / wr-m1 / wr-ut 36 个）；四套构建零警告、单测 282→283；ASan 与 gcc 逐例一致。
+    - [x] (62j) flat：枚举属性值的式子 + when 条件向量里的 initial() + 初始算法给参数赋值 + 连接器里的参数记录 + fixed 被
+          盖过时不标 final + 组件数组实例的算法段 + 枚举维常量表的运行时下标（2026-10-08）：枚举类型的 start / min / max 此前只认
+          书写的字面量，参数引用（MSL Digital 的 `Logic y_auxiliary(start = y0)`）SKIP——现在照常定型、保留符号，包常量求值，值的
+          枚举类型须相符（Integer / 别的枚举类型 → omc Type mismatch → SKIP）。when 条件里的 initial() 照 checkWhenInitial
+          （NFTyping.mo:3622-3644）：条件向量有一个元素是 initial() 本身或不含 initial() 就不告警（Digital 的
+          `{initial(), … and change(x) and not initial()}`）。参数目标只在初始算法里可赋（checkAssignment :3418-3431；
+          FluidHeatFlow 的 `parameter Real k(fixed = false)`）。连接器里的参数 / 常量记录成员（FlowPort 的
+          `parameter Medium medium`）按字段拆、各字段生成相等断言。fixed 预扫此前只看声明自己的 `fixed = T0fixed`，外来修饰
+          `cylinder2(T(fixed = true))` 盖过时也把 T0fixed 标 final（omc 标合并后修饰里的，NFInst.mo:3941-3950）——静默错，
+          TestCylinder 才露。组件数组各实例的算法段目标带实例下标（`s[1].x :=`）按逐段下标找变量。枚举维常量表的运行时下标
+          （Digital 的 `delayTable[y_old, x]`）：整体值按下标取、已知前导下标取元素、其余照写（`{2, 3, 4, 1}[b]`）。
+          验证：slice 631 例 PASS 580 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 581 / FAIL 38（不变）；整个 testsuite PASS 1620→1622（declarations/Ticket4276b、others/PEXPipeTotal）/ FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 155→166；探针 8383→8447（ej-e1 / w1 / i1 / c1 / f1 / a1 / k1 / ut 64 个）；四套构建零警告、单测 283→285；ASan 与 gcc 逐例一致。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

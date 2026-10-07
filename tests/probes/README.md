@@ -408,3 +408,11 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `wr-w2` | 4 | `:` 维由 `2:size(table, 2)` 推出的数组：外部函数实参、在 nout 之前 / 之后定型、Integer 数组绑定 |
 | `wr-m1` | 8 | 结构参数代入后打印标记跟着走（`x = k * f(time)` → `f(time) * 2.0`、`.- k` → `.+ -2.0`）、函数体 if 分支里的 zeros / fill 展开、APS2（整体引用代成 `{1, 2}`）、外部对象的向前引用（CombiTimeTable 的 tableID 式）、`:` 维数组的向前引用（size 里 / 等式里，Var 绑定里的 SKIP）、整体代入后 min / max 求值（`max(k) * time` → `2.0 * time`） |
 | `wr-ut` | 4 | 单测原文 |
+| `ej-e1` | 4 | 枚举属性值是式子：参数引用（`start = y0`、外层 `m.y0`）、if 式、包常量（`start = P.c0` → `P.E.b`）、extends 修饰里的；值是 Integer / 别的枚举类型（omc Type mismatch，SKIP） |
+| `ej-w1` | 12 | when 条件里的 initial()（checkWhenInitial）：标量条件里嵌着的告警（SKIP）；条件向量有一个元素是 initial() 本身或不含 initial() 就不告警（`{initial(), change(x) and not initial()}`）、全都嵌着的告警；算法 when 同样 |
+| `ej-i1` | 7 | 初始算法给参数赋值（fixed = false / 有绑定的、数组参数整体 / 元素）；普通算法里的参数目标、常量目标、when 外的 discrete Real（omc 报错）；when 外的 Integer / Boolean 目标 |
+| `ej-c1` | 6 | 连接器里的参数 / 常量记录成员按字段拆：各字段相等断言（嵌套记录、Integer 字段、三方连接、连接器数组 + each final）；Var 记录里的参数字段 |
+| `ej-f1` | 3 | fixed 被外来修饰 / extends 修饰盖过时，类里 `fixed = T0fixed` 的 T0fixed 不标 final；外层参数给的 fixed 照标 |
+| `ej-a1` | 5 | 组件数组各实例的算法段（目标 `s[1].x :=`）：for 体元素目标、整数组目标、嵌套组件数组、when 目标的连续绑定（omc 报错）、初始算法的参数目标 |
+| `ej-k1` | 17 | 枚举维常量表的运行时下标：`t[a, b]` → `{{…}, …}[a, b]`、已知前导下标取元素（`t[L.X, b]` → `{2, 3, 4, 1}[b]`）、已知尾随下标照写（`[a, L.X]`）、整数维混排、包里的枚举类型 / import 别名 / 连接器短类的输入（MSL Digital 的 delayTable 形态）；Boolean 维、参数下标（SKIP） |
+| `ej-ut` | 10 | 单测原文 |

@@ -1,0 +1,116 @@
+//// set: ej-c1 — 连接器里的参数 / 常量记录成员按字段拆：各字段相等断言（嵌套记录、Integer 字段、三方连接、连接器数组 + each final）；Var 记录里的参数字段
+//// model: CP1
+record Medium
+  parameter Real rho = 1;
+  parameter Real cp = 2;
+end Medium;
+connector FlowPort
+  parameter Medium medium;
+  Real p;
+  flow Real m_flow;
+end FlowPort;
+model Comp
+  parameter Medium medium = Medium();
+  FlowPort port(final medium = medium);
+equation
+  port.m_flow = port.p * medium.rho;
+end Comp;
+model CP1
+  Comp a(medium = Medium(rho = 3)), b;
+equation
+  connect(a.port, b.port);
+end CP1;
+//// model: CP2
+connector FlowPort
+  parameter Real k;
+  Real p;
+  flow Real m_flow;
+end FlowPort;
+model Comp
+  parameter Real k0 = 1;
+  FlowPort port(final k = k0);
+equation
+  port.m_flow = port.p * port.k;
+end Comp;
+model CP2
+  Comp a(k0 = 3), b;
+equation
+  connect(a.port, b.port);
+end CP2;
+//// model: CP3
+record R
+  parameter Real a = 1;
+  Real b;
+end R;
+connector C
+  R r;
+  flow Real f;
+end C;
+model CP3
+  C c1, c2;
+equation
+  connect(c1, c2);
+  c1.r.b = time;
+  c1.f = 1;
+end CP3;
+//// model: CP4
+record Inner
+  parameter Real x = 1;
+  parameter Integer n = 2;
+end Inner;
+record Medium
+  parameter Real rho = 1;
+  parameter Inner inr;
+end Medium;
+connector FlowPort
+  parameter Medium medium;
+  Real p;
+  flow Real m_flow;
+end FlowPort;
+model Comp
+  parameter Medium medium = Medium();
+  FlowPort port(final medium = medium);
+equation
+  port.m_flow = port.p * medium.rho;
+end Comp;
+model CP4
+  Comp a, b, c;
+equation
+  connect(a.port, b.port);
+  connect(b.port, c.port);
+end CP4;
+//// model: CP5
+record Medium
+  constant Real rho = 1;
+  constant Real cp = 2;
+end Medium;
+connector FlowPort
+  constant Medium medium;
+  Real p;
+  flow Real m_flow;
+end FlowPort;
+model CP5
+  FlowPort a, b;
+equation
+  connect(a, b);
+  a.m_flow = a.p * a.medium.rho;
+  b.p = time;
+end CP5;
+//// model: CP6
+record Medium
+  parameter Real rho = 1;
+end Medium;
+connector FlowPort
+  parameter Medium medium;
+  Real p;
+  flow Real m_flow;
+end FlowPort;
+model CP6
+  parameter Medium m1(rho = 2);
+  FlowPort ports[2](each final medium = m1);
+  FlowPort q(medium = Medium(rho = 3));
+equation
+  connect(ports[1], q);
+  connect(ports[2], ports[1]);
+  q.p = time;
+end CP6;

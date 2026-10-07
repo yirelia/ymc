@@ -1,0 +1,316 @@
+//// set: ej-k1 — 枚举维常量表的运行时下标：`t[a, b]` → `{{…}, …}[a, b]`、已知前导下标取元素（`t[L.X, b]` → `{2, 3, 4, 1}[b]`）、已知尾随下标照写（`[a, L.X]`）、整数维混排、包里的枚举类型 / import 别名 / 连接器短类的输入（MSL Digital 的 delayTable 形态）；Boolean 维、参数下标（SKIP）
+//// model: CE1
+type L = enumeration(U, X, Z, O);
+model CE1
+  constant Integer t[L, L] = [1, 2, 3, 4; 2, 3, 4, 1; 3, 4, 1, 2; 4, 1, 2, 3];
+  discrete L a(start = L.U, fixed = true);
+  discrete L b(start = L.X, fixed = true);
+  Integer k;
+algorithm
+  when time > 0.5 then
+    a := L.Z;
+  end when;
+  k := t[a, b];
+end CE1;
+//// model: CE2
+type L = enumeration(U, X, Z, O);
+model CE2
+  constant Integer t[L, L] = [1, 2, 3, 4; 2, 3, 4, 1; 3, 4, 1, 2; 4, 1, 2, 3];
+  constant Real r[L] = {1, 2, 3, 4};
+  discrete L a(start = L.U, fixed = true);
+  discrete L b(start = L.X, fixed = true);
+  Integer k1, k2, k3;
+  Real y;
+algorithm
+  when time > 0.5 then
+    a := L.Z;
+  end when;
+  k1 := t[L.X, b];
+  k2 := t[a, L.X];
+equation
+  k3 = t[b, a];
+  y = r[a] * time;
+end CE2;
+//// model: CE3
+model CE3
+  constant Real c[Boolean] = {1, 2};
+  Boolean b = time > 0.5;
+  Real y = c[b] * time;
+end CE3;
+//// model: CE4
+type L = enumeration(U, X, Z);
+model CE4
+  constant Integer m[L, 2] = {{1, 2}, {3, 4}, {5, 6}};
+  discrete L a(start = L.U, fixed = true);
+  Integer n = if time > 0.5 then 1 else 2;
+  Integer k1, k2;
+equation
+  when time > 0.3 then
+    a = L.Z;
+  end when;
+  k1 = m[a, 2];
+  k2 = m[L.X, n];
+end CE4;
+//// model: CE5
+type L = enumeration(U, X, Z);
+model CE5
+  constant Integer t[L, L] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+  parameter L p = L.X;
+  discrete L b(start = L.U, fixed = true);
+  Integer k;
+equation
+  when time > 0.3 then
+    b = L.Z;
+  end when;
+  k = t[p, b];
+end CE5;
+//// model: CE6
+package Pk
+  type Logic = enumeration('U', 'X', '0', '1');
+  package Tables
+    constant Integer DelayTable[Logic, Logic] = [1, 2, 3, 4; 2, 3, 4, 1; 3, 4, 1, 2; 4, 1, 2, 3];
+  end Tables;
+  connector DigitalInput = input Logic;
+  model IDS
+    import L = Pk.Logic;
+    DigitalInput x;
+  protected
+    constant Integer delayTable[L, L] = Pk.Tables.DelayTable;
+    L y_old(start = L.'U', fixed = true);
+    Integer lh;
+  algorithm
+    when change(x) then
+      y_old := x;
+    end when;
+    lh := delayTable[y_old, x];
+  end IDS;
+end Pk;
+model CE6
+  Pk.IDS d(x = if time > 0.5 then Pk.Logic.'1' else Pk.Logic.'0');
+end CE6;
+//// model: CE7
+package Pk
+  type Logic = enumeration('U', 'X', '0', '1');
+  package Tables
+    constant Integer DelayTable[Logic, Logic] = [1, 2, 3, 4; 2, 3, 4, 1; 3, 4, 1, 2; 4, 1, 2, 3];
+  end Tables;
+  connector DigitalInput = input Logic;
+  model IDS
+    import L = Pk.Logic;
+    DigitalInput x;
+  protected
+    constant Integer delayTable[L, L] = [1, 2, 3, 4; 2, 3, 4, 1; 3, 4, 1, 2; 4, 1, 2, 3];
+    L y_old(start = L.'U', fixed = true);
+    Integer lh;
+  algorithm
+    when change(x) then
+      y_old := x;
+    end when;
+    lh := delayTable[y_old, x];
+  end IDS;
+end Pk;
+model CE7
+  Pk.IDS d(x = if time > 0.5 then Pk.Logic.'1' else Pk.Logic.'0');
+end CE7;
+//// model: CE8
+package Pk
+  type Logic = enumeration('U', 'X', '0', '1');
+  package Tables
+    constant Integer DelayTable[Logic, Logic] = [1, 2, 3, 4; 2, 3, 4, 1; 3, 4, 1, 2; 4, 1, 2, 3];
+  end Tables;
+  connector DigitalInput = input Logic;
+  model IDS
+    import L = Pk.Logic;
+    DigitalInput x;
+  protected
+    constant Integer delayTable[Pk.Logic, Pk.Logic] = Pk.Tables.DelayTable;
+    L y_old(start = L.'U', fixed = true);
+    Integer lh;
+  algorithm
+    when change(x) then
+      y_old := x;
+    end when;
+    lh := delayTable[y_old, x];
+  end IDS;
+end Pk;
+model CE8
+  Pk.IDS d(x = if time > 0.5 then Pk.Logic.'1' else Pk.Logic.'0');
+end CE8;
+//// model: CE9
+type L = enumeration(U, X, Z, O);
+model Inner
+  constant Integer t[L, L] = [1, 2, 3, 4; 2, 3, 4, 1; 3, 4, 1, 2; 4, 1, 2, 3];
+  discrete L a(start = L.U, fixed = true);
+  Integer k;
+algorithm
+  when time > 0.5 then
+    a := L.Z;
+  end when;
+  k := t[a, a];
+end Inner;
+model CE9
+  Inner i;
+end CE9;
+//// model: CEa
+package Pk
+  type Logic = enumeration('U', 'X', '0', '1');
+  package Tables
+    constant Integer DelayTable[Logic, Logic] = [1, 2, 3, 4; 2, 3, 4, 1; 3, 4, 1, 2; 4, 1, 2, 3];
+  end Tables;
+  connector DigitalInput = input Logic;
+  model IDS
+    import L = Pk.Logic;
+    DigitalInput x;
+
+    constant Integer delayTable[L, L] = Pk.Tables.DelayTable;
+    L y_old(start = L.'U', fixed = true);
+    Integer lh;
+  algorithm
+    when change(x) then
+      y_old := x;
+    end when;
+    lh := delayTable[y_old, y_old];
+  end IDS;
+end Pk;
+model CEa
+  Pk.IDS d(x = if time > 0.5 then Pk.Logic.'1' else Pk.Logic.'0');
+end CEa;
+//// model: CEb
+package Pk
+  type Logic = enumeration(U, X, Z, O);
+  package Tables
+    constant Integer DelayTable[Logic, Logic] = [1, 2, 3, 4; 2, 3, 4, 1; 3, 4, 1, 2; 4, 1, 2, 3];
+  end Tables;
+  connector DigitalInput = input Logic;
+  model IDS
+    import L = Pk.Logic;
+    DigitalInput x;
+  protected
+    constant Integer delayTable[L, L] = Pk.Tables.DelayTable;
+    L y_old(start = L.U, fixed = true);
+    Integer lh;
+  algorithm
+    when change(x) then
+      y_old := x;
+    end when;
+    lh := delayTable[y_old, y_old];
+  end IDS;
+end Pk;
+model CEb
+  Pk.IDS d(x = if time > 0.5 then Pk.Logic.O else Pk.Logic.Z);
+end CEb;
+//// model: CEc
+package Pk
+  type Logic = enumeration('U', 'X', '0', '1');
+  package Tables
+    constant Integer DelayTable[Logic, Logic] = [1, 2, 3, 4; 2, 3, 4, 1; 3, 4, 1, 2; 4, 1, 2, 3];
+  end Tables;
+  connector DigitalInput = input Logic;
+  model IDS
+
+    DigitalInput x;
+  protected
+    constant Integer delayTable[Pk.Logic, Pk.Logic] = Pk.Tables.DelayTable;
+    Pk.Logic y_old(start = Pk.Logic.'U', fixed = true);
+    Integer lh;
+  algorithm
+    when change(x) then
+      y_old := x;
+    end when;
+    lh := delayTable[y_old, y_old];
+  end IDS;
+end Pk;
+model CEc
+  Pk.IDS d(x = if time > 0.5 then Pk.Logic.'1' else Pk.Logic.'0');
+end CEc;
+//// model: CEd
+package P
+  type L = enumeration(U, X, Z, O);
+end P;
+model Inner
+  constant Integer t[P.L, P.L] = [1, 2, 3, 4; 2, 3, 4, 1; 3, 4, 1, 2; 4, 1, 2, 3];
+  discrete P.L a(start = P.L.U, fixed = true);
+  Integer k;
+algorithm
+  when time > 0.5 then
+    a := P.L.Z;
+  end when;
+  k := t[a, a];
+end Inner;
+model CEd
+  Inner i;
+end CEd;
+//// model: CEe
+type L = enumeration(U, X, Z, O);
+package P
+  model Inner
+    constant Integer t[L, L] = [1, 2, 3, 4; 2, 3, 4, 1; 3, 4, 1, 2; 4, 1, 2, 3];
+    discrete L a(start = L.U, fixed = true);
+    Integer k;
+  algorithm
+    when time > 0.5 then
+      a := L.Z;
+    end when;
+    k := t[a, a];
+  end Inner;
+end P;
+model CEe
+  P.Inner i;
+end CEe;
+//// model: CE10
+type L = enumeration(U, X, Z, O);
+model CE10
+  input L x;
+  constant Integer t[L, L] = [1, 2, 3, 4; 2, 3, 4, 1; 3, 4, 1, 2; 4, 1, 2, 3];
+  Integer k;
+algorithm
+  k := t[x, x];
+end CE10;
+//// model: CE11
+package Pk
+  type Logic = enumeration('U', 'X', '0', '1');
+  package Tables
+    constant Integer DelayTable[Logic, Logic] = [1, 2, 3, 4; 2, 3, 4, 1; 3, 4, 1, 2; 4, 1, 2, 3];
+  end Tables;
+  connector DigitalInput = input Logic;
+  model IDS
+    import L = Pk.Logic;
+    input Logic x;
+  protected
+    constant Integer delayTable[L, L] = Pk.Tables.DelayTable;
+    L y_old(start = L.'U', fixed = true);
+    Integer lh;
+  algorithm
+    when change(x) then
+      y_old := x;
+    end when;
+    lh := delayTable[y_old, x];
+  end IDS;
+end Pk;
+model CE11
+  Pk.IDS d(x = if time > 0.5 then Pk.Logic.'1' else Pk.Logic.'0');
+end CE11;
+//// model: CE12
+package Pk
+  type Logic = enumeration('U', 'X', '0', '1');
+  package Tables
+    constant Integer DelayTable[Logic, Logic] = [1, 2, 3, 4; 2, 3, 4, 1; 3, 4, 1, 2; 4, 1, 2, 3];
+  end Tables;
+  connector DigitalInput = input Logic;
+  model IDS
+    import L = Pk.Logic;
+    DigitalInput x;
+  protected
+    constant Integer delayTable[L, L] = Pk.Tables.DelayTable;
+    L y_old(start = L.'U', fixed = true);
+    Integer lh;
+  algorithm
+    when change(x) then
+      y_old := x;
+    end when;
+    lh := delayTable[y_old, y_old];
+  end IDS;
+end Pk;
+model CE12
+  Pk.IDS d(x = if time > 0.5 then Pk.Logic.'1' else Pk.Logic.'0');
+end CE12;
