@@ -1,0 +1,218 @@
+//// set: pa-p1 — 参数数组整个绑定是实参求不成字面量的用户函数调用：不标量化、一行 `parameter Real[3] e(…) = f(n)`（组件数组里的、Integer / Boolean 输出、2 维）；带 min / max / nominal 的照逐元素 `f(n)[k]`；数组属性值整个打（引用 / if 原样、算术式展开成字面量）；要强转元素类型的属性值（SKIP）。单测取 1 / 4 / 7c
+//// model: PA1
+function nrm
+  input Real v[3];
+  output Real r[3];
+algorithm
+  r := v / sqrt(v * v);
+end nrm;
+model PA1
+  parameter Real n[3] = {1, 0, 0};
+  parameter Real e[3](each final unit = "1") = nrm(n);
+  Real y[3] = e * time;
+end PA1;
+//// model: PA2
+function nrm
+  input Real v[3];
+  output Real r[3];
+algorithm
+  r := v / sqrt(v * v);
+end nrm;
+model PA2
+  parameter Real n[3] = {1, 0, 0};
+  parameter Real e[3](each min = -1, start = {0, 0, 1}) = nrm(n) "unit axis";
+  final parameter Real e2[3] = 2 * nrm(n);
+  parameter Real e3[3] = nrm({1, 2, 3});
+  protected parameter Real e4[3] = nrm(n);
+  public Real y = e[1] * time + e2[2] + e4[3];
+end PA2;
+//// model: PA3
+function nrm
+  input Real v[3];
+  output Real r[3];
+algorithm
+  r := v / sqrt(v * v);
+end nrm;
+function mat
+  input Real v[3];
+  output Real m[3, 3];
+algorithm
+  m := [v[1], 0, 0; 0, v[2], 0; 0, 0, v[3]];
+end mat;
+model PA3
+  parameter Real n[3] = {1, 0, 0};
+  parameter Real e[3](start = {0, 0, 1}, each fixed = true, quantity = {"a", "b", "c"}) = nrm(n);
+  parameter Real m[3, 3](each unit = "m") = mat(n);
+  parameter Integer k = 2;
+  Real y = e[k] * time + m[1, 1];
+  Real z[3] = e * time;
+end PA3;
+//// model: PA4
+function mat
+  input Real v[2];
+  output Real m[2, 2];
+algorithm
+  m := [v[1], v[2]; -v[2], v[1]];
+end mat;
+model PA4
+  parameter Real v[2] = {1, 2};
+  parameter Real m[2, 2](each nominal = 2) = mat(v) "nominal forces scalarization";
+  parameter Real w[2, 2](each unit = "m", each fixed = false) = mat(v) "kept whole";
+  Real y = m[1, 2] * time + w[2, 1];
+end PA4;
+//// model: PA5
+function bnot
+  input Boolean b[:];
+  output Boolean r[size(b, 1)];
+algorithm
+  r := not b;
+end bnot;
+function nrm
+  input Real v[3];
+  output Real r[3];
+algorithm
+  r := v / sqrt(v * v);
+end nrm;
+model J
+  parameter Real n[3] = {1, 0, 0};
+  parameter Real e[3](start = n) = nrm(n);
+  Real y = e[1] * time;
+end J;
+model PA5
+  J j[2](n = {{1, 0, 0}, {0, 1, 0}});
+  J k(e(start = 2 * k.n));
+  parameter Boolean bs[2] = bnot({true, k.n[1] > 0});
+end PA5;
+//// model: PA6
+function nrm
+  input Real v[:];
+  output Real r[size(v, 1)];
+algorithm
+  r := v / sqrt(v * v);
+end nrm;
+function cnt
+  input Integer n;
+  input Real x;
+  output Integer r[n];
+algorithm
+  for i in 1:n loop
+    r[i] := integer(x) + i;
+  end for;
+end cnt;
+model PA6
+  parameter Real x = 1.5;
+  parameter Real n[3] = {1, 0, 0};
+  parameter Real e[3] = nrm(n);
+  parameter Real e2[3] = nrm(e);
+  parameter Integer c[2] = cnt(2, x);
+  parameter Real s = sum(e);
+  parameter Real d = e * e2;
+  Real z[3] = e2 * time;
+  Real w = (nrm(e))[2] + e[3];
+equation
+  der(z[1]) = 0;
+end PA6;
+//// model: PA7a
+function nrm
+  input Real v[3];
+  output Real r[3];
+algorithm
+  r := v / sqrt(v * v);
+end nrm;
+model PA7a
+  parameter Real n[3] = {1, 0, 0};
+  parameter Integer ni[3] = {1, 2, 3};
+  parameter Real e[3](start = if n[1] > 0 then n else 2 * n) = nrm(n);
+  Real y = e[2] * time;
+end PA7a;
+//// model: PA7b
+function nrm
+  input Real v[3];
+  output Real r[3];
+algorithm
+  r := v / sqrt(v * v);
+end nrm;
+model PA7b
+  parameter Real n[3] = {1, 0, 0};
+  parameter Integer ni[3] = {1, 2, 3};
+  parameter Real e[3](start = {i for i in 1:3}) = nrm(n);
+  Real y = e[2] * time;
+end PA7b;
+//// model: PA7c
+function nrm
+  input Real v[3];
+  output Real r[3];
+algorithm
+  r := v / sqrt(v * v);
+end nrm;
+model PA7c
+  parameter Real n[3] = {1, 0, 0};
+  parameter Integer ni[3] = {1, 2, 3};
+  parameter Real e[3](start = ni) = nrm(n);
+  Real y = e[2] * time;
+end PA7c;
+//// model: PA7d
+function nrm
+  input Real v[3];
+  output Real r[3];
+algorithm
+  r := v / sqrt(v * v);
+end nrm;
+model PA7d
+  parameter Real n[3] = {1, 0, 0};
+  parameter Integer ni[3] = {1, 2, 3};
+  parameter Real e[3](start = -n, each nominal = 3) = nrm(n);
+  Real y = e[2] * time;
+end PA7d;
+//// model: PA7e
+function nrm
+  input Real v[3];
+  output Real r[3];
+algorithm
+  r := v / sqrt(v * v);
+end nrm;
+model PA7e
+  parameter Real n[3] = {1, 0, 0};
+  parameter Integer ni[3] = {1, 2, 3};
+  parameter Real e[3](start = {n[1], 2, n[3] * 2}) = nrm(n);
+  Real y = e[2] * time;
+end PA7e;
+//// model: PA7f
+function nrm
+  input Real v[3];
+  output Real r[3];
+algorithm
+  r := v / sqrt(v * v);
+end nrm;
+model PA7f
+  parameter Real n[3] = {1, 0, 0};
+  parameter Integer ni[3] = {1, 2, 3};
+  parameter Real e[3](start = -n) = nrm(n);
+  Real y = e[2] * time;
+end PA7f;
+//// model: PA7g
+function nrm
+  input Real v[3];
+  output Real r[3];
+algorithm
+  r := v / sqrt(v * v);
+end nrm;
+model PA7g
+  parameter Real n[3] = {1, 0, 0};
+  parameter Integer ni[3] = {1, 2, 3};
+  parameter Real e[3](start = n .* n) = nrm(n);
+  Real y = e[2] * time;
+end PA7g;
+//// model: PA7h
+function nrm
+  input Real v[3];
+  output Real r[3];
+algorithm
+  r := v / sqrt(v * v);
+end nrm;
+model PA7h
+  parameter Real n[3] = {1, 0, 0};
+  parameter Integer ni[3] = {1, 2, 3};
+  parameter Real e[3](start = n / 2, each fixed = false, min = {-1, -1, -1}) = nrm(n);
+  Real y = e[2] * time;
+end PA7h;

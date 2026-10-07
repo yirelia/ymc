@@ -5879,6 +5879,39 @@ YMC_TEST(flatten_overdetermined_connection_graph_and_function_tuple_assign) {
                            "  a := x;\n  b := 2.0 * x;\n  c := 3;\nend g;\n\nclass FT1\n  Real y = f(time);\nend FT1;\n"));
 }
 
+YMC_TEST(flatten_parameter_array_bound_to_call_kept_whole) {
+  // 参数数组整个绑定是实参求不成字面量的用户函数调用：omc 不标量化（scalarizeVariable 的 isSubscriptedArrayCall，NFScalarize.mo
+  // :89-160 v1.25.0），一行 `parameter Real[3] e(unit = "1") = nrm(n)`；带 min / max / nominal 的照逐元素 `mat(v)[1, 2]`
+  //（variableHasForcedScalarAttribute :513-525）。Integer 数组引用给 Real 属性（omc 打 `/*Real*/(ni)`）未做 → SKIP。
+  // 期望值为 omc 1.25.0 对原文实跑的 stdout（PA 探针 1 / 4 / 7c，2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("function nrm\n  input Real v[3];\n  output Real r[3];\nalgorithm\n  r := v / sqrt(v * v);\n"
+                           "end nrm;\nmodel PA1\n  parameter Real n[3] = {1, 0, 0};\n"
+                           "  parameter Real e[3](each final unit = \"1\") = nrm(n);\n  Real y[3] = e * time;\nend PA1;\n"),
+               std::string("function nrm\n  input Real[3] v;\n  output Real[3] r;\nalgorithm\n"
+                           "  r := {v[1] / sqrt(v[1] * v[1] + v[2] * v[2] + v[3] * v[3]), v[2] / sqrt(v[1] * v[1] + v[2] * v[2] + v[3] * v[3]), v[3] / sqrt(v[1] * v[1] + v[2] * v[2] + v[3] * v[3])};\n"
+                           "end nrm;\n\nclass PA1\n  parameter Real n[1] = 1.0;\n  parameter Real n[2] = 0.0;\n"
+                           "  parameter Real n[3] = 0.0;\n  parameter Real[3] e(unit = \"1\") = nrm(n);\n  Real y[1];\n"
+                           "  Real y[2];\n  Real y[3];\nequation\n  y = {e[1] * time, e[2] * time, e[3] * time};\nend PA1;\n"));
+  YMC_CHECK_EQ(flatten_src("function mat\n  input Real v[2];\n  output Real m[2, 2];\nalgorithm\n"
+                           "  m := [v[1], v[2]; -v[2], v[1]];\nend mat;\nmodel PA4\n  parameter Real v[2] = {1, 2};\n"
+                           "  parameter Real m[2, 2](each nominal = 2) = mat(v) \"nominal forces scalarization\";\n"
+                           "  parameter Real w[2, 2](each unit = \"m\", each fixed = false) = mat(v) \"kept whole\";\n"
+                           "  Real y = m[1, 2] * time + w[2, 1];\nend PA4;\n"),
+               std::string("function mat\n  input Real[2] v;\n  output Real[2, 2] m;\nalgorithm\n"
+                           "  m := {{v[1], v[2]}, {-v[2], v[1]}};\nend mat;\n\nclass PA4\n  parameter Real v[1] = 1.0;\n"
+                           "  parameter Real v[2] = 2.0;\n"
+                           "  parameter Real m[1,1](nominal = 2.0) = mat(v)[1, 1] \"nominal forces scalarization\";\n"
+                           "  parameter Real m[1,2](nominal = 2.0) = mat(v)[1, 2] \"nominal forces scalarization\";\n"
+                           "  parameter Real m[2,1](nominal = 2.0) = mat(v)[2, 1] \"nominal forces scalarization\";\n"
+                           "  parameter Real m[2,2](nominal = 2.0) = mat(v)[2, 2] \"nominal forces scalarization\";\n"
+                           "  parameter Real[2, 2] w(unit = \"m\", fixed = false) = mat(v) \"kept whole\";\n"
+                           "  Real y = m[1,2] * time + w[2,1];\nend PA4;\n"));
+  YMC_CHECK_EQ(flatten_src("function nrm\n  input Real v[3];\n  output Real r[3];\nalgorithm\n  r := v / sqrt(v * v);\n"
+                           "end nrm;\nmodel PA7c\n  parameter Real n[3] = {1, 0, 0};\n  parameter Integer ni[3] = {1, 2, 3};\n"
+                           "  parameter Real e[3](start = ni) = nrm(n);\n  Real y = e[2] * time;\nend PA7c;\n"),
+               std::string("<unsupported:whole array attribute>"));
+}
+
 YMC_TEST(flatten_external_object_variable_and_structors) {
   // 外部对象：组件压平成按类名打印的叶变量，构造 `EO()` 换成 `EO.constructor(1)`（默认实参照补），构造 / 析构随类型发射
   //（外部函数未声明 pure → impure）；当实参传给外部函数。期望 = omc 1.25.0 实跑（2026-10-07，下同）。

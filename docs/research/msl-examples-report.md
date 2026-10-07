@@ -284,3 +284,10 @@ Clocked BooleanSignals 的 Hold / SubSample / SuperSample / ShiftSample / BackSa
 `Connections.root(frame_b.R)`，往下卡在：参数数组整个绑定是函数调用（关节的 `e = normalizeWithAssert(n)`）11（连同此前就卡在这里的共 17 个）、复合组件的变率
 6、类注释里的转义（omc 加载路径相关的怪相，入账）5、derivative 注解形式 2 等；Noise 的 7 个越过函数体元组赋值，卡在纯函数调
 非纯函数的告警。PASS 数不变。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-08 加宽 62o 之后：PASS 259 → 259
+
+参数数组整个绑定是实参求不成字面量的函数调用时整个变量不标量化（`parameter Real[3] e(unit = "1") =
+normalizeWithAssert(n)`，带 min / max / nominal 的照逐元素）之后，MultiBody 的 17 个示例越过关节的轴向量参数，往下卡在
+函数体里的 outerProduct 15（Frames.planarRotation，下一桶）、derivative 注解形式 2。PASS 数不变。
+FAIL / ACCEPTS-INVALID / CRASH 0。

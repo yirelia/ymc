@@ -180,6 +180,17 @@ class FlatDumper {
   }
 
   void type_name(const Type& t) {
+    // 不标量化的数组变量（`parameter Real[3, 3] m = f(n)`）：元素类型 + 各维。
+    if (t.is_array()) {
+      type_name(t.element_type());
+      out_ += '[';
+      for (std::size_t i = 0; i < t.dims.size(); ++i) {
+        if (i) out_ += ", ";
+        out_ += std::to_string(t.dims[i].size);
+      }
+      out_ += ']';
+      return;
+    }
     switch (t.kind) {
       case TypeKind::Real: out_ += "Real"; break;
       case TypeKind::Integer: out_ += "Integer"; break;

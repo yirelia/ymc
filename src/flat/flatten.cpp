@@ -4811,6 +4811,18 @@ class Flattener {
       alias_arr = I_.absyn.exps[b0].kind == ExpKind::CrefExp;
     }
     if (alias_arr) alias_groups_.emplace_back();
+    // 参数 / 常量数组整个绑定是实参求不成字面量的用户函数调用（MultiBody 关节的 `e = normalizeWithAssert(n)`）：omc 不标量化，
+    // 整个变量一行 `parameter Real[3] e(unit = "1") = f(n);`——scalarizeVariable 见绑定逐元素是 `f(n)[k]`（isSubscriptedArrayCall）
+    // 就整体留下，除非带 min / max / nominal（variableHasForcedScalarAttribute），NFScalarize.mo:89-160 / :513-525 v1.25.0；PA
+    // 探针：each 属性打一个值、非 each 的数组属性打整个数组字面量，引用处照常逐元素（`e[2]`）。带那三个属性的照逐元素 `f(n)[k]`。
+    if (spread && nlbind && !comp_spread && user_call(rhsE) && !call_args_fold(rhsE)) {
+      bool forced = false;
+      for (const AttrPlan& ap : aplan) {
+        const std::string_view an = in_.str(ap.name);
+        forced = forced || an == "min" || an == "max" || an == "nominal";
+      }
+      if (!forced) { emit_whole_array_var(cid, name, psubs, cty, dims, aplan, rhsE, is_protected, is_final, vk, dir, cel); return; }
+    }
     std::vector<std::int64_t> idx(dims.size(), 1);
     for (bool more = true; more;) {
       FlatVariable v;
@@ -4848,9 +4860,8 @@ class Flattener {
         } else if (nlbind && user_call(rhsE)) {
           // 整个绑定是一个用户函数调用（MSL ToSpacePhasor `phi[m] = symmetricOrientation(m)`）：实参都会成字面量（字面量 / 已是
           // 结构参数）的，omc 求值成各元素的字面量（FB 探针 f10 / f24 / f33）→ 逐元素取 `f(…)[k]`，压平末尾代入结构参数后求值
-          // （simplify_expr 的 Call / Subscript 支）。实参不会成字面量的 omc 不标量化、打 `parameter Real[3] phi = sv(x)`（f30），
-          // 未做 → SKIP。
-          if (!call_args_fold(rhsE)) { set_unsupported("parameter array bound to function call"); return; }
+          // （simplify_expr 的 Call / Subscript 支）。实参不会成字面量的到这里只剩带 min / max / nominal 的（其余整体留下，见上），
+          // omc 同样逐元素打 `f(n)[k]`（PA 探针 a2）。
           Expr sx;
           sx.kind = ExprKind::Subscript;
           sx.a = rhsE;
@@ -5247,6 +5258,51 @@ class Flattener {
     Id<Expr> value;
     Type cty;   // 组件类型（枚举属性值核类型用）
   };
+  // 不标量化的数组变量（见 emit_array 里的判定）：一行、类型带维（`Real[3, 3] m`）、绑定是整个调用；属性：each / 标量的打一个值，
+  // 字面量摊分的打整个数组字面量（Real 属性提 Real），定型过的数组值照打（PA 探针 a3：`(quantity = {"a", "b", "c"},
+  // start = {0.0, 0.0, 1.0}, fixed = true)`）。
+  void emit_whole_array_var(CompId cid, const std::vector<Symbol>& name, const PSubs& psubs, const Type& cty,
+                            const std::vector<std::int64_t>& dims, const std::vector<AttrPlan>& aplan, Id<Expr> rhs,
+                            bool is_protected, bool is_final, FlatVarKind vk, FlatDirection dir, const SElement& cel) {
+    FlatVariable v;
+    v.name = name;
+    v.name_subs = psubs_to_exprs(psubs);
+    v.name_subs.push_back({});
+    if (I_.comps[cid].comment_from_type) v.comment = I_.comps[cid].type_comment;
+    else if (cel.cmt.str.is_valid()) v.comment = cel.cmt.str;
+    std::vector<Dimension> ds;
+    for (std::int64_t n : dims) {
+      Dimension d;
+      d.kind = DimKind::Integer;
+      d.size = n;
+      ds.push_back(d);
+    }
+    v.ty = Type::array_of(cty.element_type(), std::move(ds));
+    v.is_protected = is_protected;
+    v.is_final = is_final;
+    v.var_kind = vk;
+    v.direction = dir;
+    v.loc = I_.comps[cid].loc;
+    for (const AttrPlan& p : aplan) {
+      Id<Expr> x = p.value;
+      if (p.mode == AttrPlan::Mode::Literal) {
+        x = simplify_expr(inst_exp(p.raw, p.scope, p.vprefix));
+        if (result_.unsupported) return;
+        if (p.spec->vk == AttrVK::Real) x = coerce_deep(x, TypeKind::Real);
+      } else if (p.mode == AttrPlan::Mode::Typed) {
+        // 定型的数组值整个打、规整成 omc 化简后的形态（kept_array_form）：引用 / if 原样，算术式逐元素展开成字面量（PA 探针 7f
+        // `start = -n` → `{-n[1], -n[2], -n[3]}`、7g `n .* n`）。要强转元素类型的（Integer 数组引用 / 推导式给 Real 属性，omc
+        // 打 `/*Real*/(ni)`、`/*Real[3]*/(array(…))`，7c / 7b）和含数组调用的未核实 → SKIP。
+        x = has_array_call(x) ? Id<Expr>{}
+                              : kept_array_form(x, dims, p.spec->vk == AttrVK::Real ? TypeKind::Real : expr_elem_kind(x));
+        if (result_.unsupported) return;
+      }
+      if (!x.is_valid()) { set_unsupported("whole array attribute"); return; }
+      v.attributes.push_back({p.name, x});
+    }
+    v.binding = rhs;
+    result_.model.variables.push_back(std::move(v));
+  }
 
   // 内建属性的取值计划（R13 §4.2）。sources 按优先级排（外来修饰在前、组件声明修饰在后），只看各来源的 **子修饰**（.subs）
   // ——顶层 .binding 是叶绑定另行处理；按类型属性表顺序，每属性取最高优先、带值的来源。dims 非空 = 数组叶组件：非 each

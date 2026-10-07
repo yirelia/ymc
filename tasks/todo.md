@@ -1927,6 +1927,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           核实并与 omc 在 1040 个随机模型上差分（0 不一致），本实现对其中 200 个逐字节一致。另：函数体里的元组赋值
           `(a, , c) := g(x)`（空位 `_`，数组输出目标）与用前未赋值检查认元组目标（markAssignedOutput 的 TUPLE 支）。
           验证：slice 637 例 PASS 586 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 587 / FAIL 38（不变）；整个 testsuite PASS 1641（不变）/ FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 259（不变；MultiBody 27 个越过 Connections.*）；探针 8489→8583（oc-p1 / oc-f1 / ft-t1 / oc-ut 94 个）；四套构建零警告、单测 288→289；ASan 与 gcc 逐例一致。
+    - [x] (62o) flat：参数数组整个绑定是函数调用时不标量化（2026-10-08）：MultiBody 关节的 `parameter Real e[3](each final
+          unit = "1") = Modelica.Math.Vectors.normalizeWithAssert(n)` 此前 SKIP（"parameter array bound to function call"，越过
+          Connections.* 之后 17 个示例卡在这里）。omc 的 scalarizeVariable 见绑定逐元素是 `f(n)[k]`（isSubscriptedArrayCall）就
+          整个变量留下，除非带 min / max / nominal（variableHasForcedScalarAttribute，NFScalarize.mo:89-160 / :513-525 v1.25.0）：
+          一行 `parameter Real[3] e(unit = "1") = f(n);`，类型带维打（`Real[2, 2]`），each 属性打一个值、数组属性值整个打（字面量
+          提 Real、引用 / if 原样、算术式展开成字面量 `{2.0 * k.n[1], …}`），引用处照常逐元素。带那三个属性的照逐元素
+          `f(n)[k]`。要强转元素类型的属性值（omc 打 `/*Real*/(ni)` / `/*Real[3]*/(array(…))`）SKIP。
+          验证：slice 637 例 PASS 586 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 587 / FAIL 38（不变）；整个 testsuite PASS 1641（不变）/ FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 259（不变；17 个 MultiBody 示例越过关节轴向量参数）；探针 8583→8597（pa-p1 14 个）；四套构建零警告、单测 289→290；ASan 与 gcc 逐例一致。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
