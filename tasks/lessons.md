@@ -379,3 +379,11 @@
   引用后才露成 FAIL。标量那边早有 origin 0 / 1 / 2 三种来历的分支（emit_variable、key_not_fixed），数组照搬时漏了。
 - 规则：(1) 把标量的规则推广到数组 / 记录字段时，先列出标量实现里按"来历"分的支（origin、rec_bind、by_cref…），数组每支一行
   探针，不支持的支显式 SKIP；(2) 一个桶修好"求不出值"一类的通路后，precheck 里 SKIP→FAIL 的用例先查是不是更早的桶的潜伏错。
+
+## 2026-10-07 — 把"节点"放宽成更弱的一种时，逐个查它的消费方
+- 模式：62d 让记录构造调用在模型里没有实例时也能定型，Complex 类型的 complex_node 退到作用域树里的类定义节点。record_match
+  逐字段比时直接取 `trees[node_class(n).tree].components`——类定义节点可能还没 partial_inst，树号无效 → arena 越界断言
+  （scodeinst RecordOrder1，precheck 的 testsuite 段报 CRASH）。
+- 规则：(1) 一个字段从"总是 A 类对象"放宽成"A 或 B"时，grep 它的全部读取点，逐个写明对 B 的处理（这次 11 处 complex_node，
+  只有 record_match 碰树）；(2) 探针矩阵配一行"只有新形态、没有旧形态"的模型（没有实例、只有构造调用），并让它走一遍比较 /
+  转换这类会深入结构的路径。

@@ -1,0 +1,247 @@
+//// set: rcf-t — 函数体里的 transpose / identity：`transpose(T) * v`、`M := transpose(T)`、`v * transpose(T)`、矩阵乘、模型语境对照；identity(3) * a、identity(n)（n 是输入，调用处求值）、记录值的常量函数（SKIP）；记录类型转换 `r1 = R2(…)`（SKIP，此前崩溃）/ 不同记录类实参 / final 字段（SKIP）；短类记录类型 `record R = BaseR(x = 2)` 的变量传给函数（omc 发射 R 的构造函数，SKIP——此前静默错）
+//// model: T10
+function g
+input Real T[2, 2];
+input Real v[2];
+output Real y[2];
+algorithm
+y := transpose(T) * v;
+end g;
+model T10
+Real y[2] = g({{1, 2}, {3, time}}, {1, time});
+end T10;
+//// model: T11
+function g
+input Real T[2, 3];
+output Real M[3, 2];
+algorithm
+M := transpose(T);
+end g;
+model T11
+Real M[3, 2] = g({{1, 2, 3}, {4, 5, time}});
+end T11;
+//// model: T12
+function g
+input Real T[2, 2];
+input Real v[2];
+output Real y[2];
+algorithm
+y := v * transpose(T);
+end g;
+model T12
+Real y[2] = g({{1, 2}, {3, time}}, {1, time});
+end T12;
+//// model: T13
+function g
+input Real T[2, 2];
+output Real z;
+algorithm
+z := transpose(T)[1, 2];
+end g;
+model T13
+Real z = g({{1, 2}, {3, time}});
+end T13;
+//// model: T14
+function g
+input Real T[2, 2];
+input Real S[2, 2];
+output Real M[2, 2];
+algorithm
+M := transpose(T) * S;
+end g;
+model T14
+Real M[2, 2] = g({{1, 2}, {3, time}}, {{1, 0}, {0, time}});
+end T14;
+//// model: T15
+model T15
+Real T[2, 2] = {{1, 2}, {3, time}};
+Real M[2, 2] = transpose(T);
+end T15;
+//// model: T16
+model T16
+Real T[2, 2] = {{1, 2}, {3, time}};
+Real v[2] = transpose(T) * {1, 2};
+end T16;
+//// model: T20
+function g
+input Real a;
+output Real M[3, 3];
+algorithm
+M := identity(3) * a;
+end g;
+model T20
+Real M[3, 3] = g(time);
+end T20;
+//// model: T21
+function g
+input Integer n;
+output Real M[n, n];
+algorithm
+M := identity(n);
+end g;
+model T21
+Real M[2, 2] = g(2);
+end T21;
+//// model: T22
+record R
+Real T[3, 3];
+Real w[3];
+end R;
+function nullR
+output R r;
+algorithm
+r := R(identity(3), zeros(3));
+end nullR;
+model T22
+R r = nullR();
+end T22;
+//// model: T23
+record R
+Real T[2, 2];
+end R;
+function f
+input R r;
+output Real y[2];
+algorithm
+y := transpose(r.T) * {1, 2};
+end f;
+model T23
+Real y[2] = f(R({{1, time}, {3, 4}}));
+end T23;
+//// model: T24
+record R
+Real a;
+Real b[2];
+end R;
+model T24
+R r = R(time, {1, 2});
+end T24;
+//// model: T25
+record R
+Real a;
+Real b[2];
+end R;
+model T25
+parameter R r = R(1, {2, 3});
+Real y = r.b[2] * time;
+end T25;
+//// model: T30
+record R1
+Real x;
+Real y;
+end R1;
+record R2
+Real y;
+Real x;
+end R2;
+model T30
+R1 r1;
+equation
+r1 = R2(1.0, 2.0);
+end T30;
+//// model: T31
+record R1
+Real x;
+Real y;
+end R1;
+record R2
+Real x;
+Real y;
+end R2;
+function f
+input R1 r;
+output Real z;
+algorithm
+z := r.x;
+end f;
+model T31
+Real z = f(R2(time, 2.0));
+end T31;
+//// model: T32
+record R
+constant Real c = 3;
+Real x;
+end R;
+function f
+input R r;
+output Real z;
+algorithm
+z := r.x + r.c;
+end f;
+model T32
+Real z = f(R(3, time));
+end T32;
+//// model: T33
+record R
+final Real c = 3;
+Real x;
+end R;
+function f
+input R r;
+output Real z;
+algorithm
+z := r.x + r.c;
+end f;
+model T33
+Real z = f(R(time));
+end T33;
+//// model: D10
+record BaseR
+Real x;
+end BaseR;
+record R = BaseR(x = 2);
+function f
+input BaseR r;
+output Real y;
+algorithm
+y := r.x;
+end f;
+model D10
+R r;
+Real y = f(r);
+end D10;
+//// model: D11
+record BaseR
+Real x;
+end BaseR;
+record R = BaseR(x = 2);
+function f
+input BaseR r;
+output Real y;
+algorithm
+y := r.x;
+end f;
+model D11
+BaseR r(x = time);
+Real y = f(r);
+end D11;
+//// model: D12
+record BaseR
+Real x;
+end BaseR;
+record R = BaseR;
+function f
+input R r;
+output Real y;
+algorithm
+y := r.x;
+end f;
+model D12
+R r(x = time);
+Real y = f(r);
+end D12;
+//// model: D13
+record BaseR
+constant Integer n;
+parameter Real x[n];
+end BaseR;
+function f
+input BaseR r;
+output Real x;
+algorithm
+x := r.x * r.x;
+end f;
+model D13
+BaseR r(n = 2, x = {1, 2});
+Real x = f(r);
+end D13;

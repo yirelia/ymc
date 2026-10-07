@@ -204,3 +204,9 @@ IMC_Steinmetz / IMS_Start（TerminalBox 的 `star if terminalConnection <> "D"`�
 SMPM_NoLoad / SMPM_ResistiveBraking / SMPM_VoltageSource / SMR_DOL（`useDamperCage = smpmData.useDamperCage`，smpmData 声明在后）。
 SMPM_NoLoad 还顺带露出 rem 的内联（omc 把 rem 早内联成 `x - div(x, y) * y`，此前 ymc 原样打 `rem(…)`）。getInstanceName 接上后
 ActuatorWithNoise 往下卡在噪声种子的外部函数调用。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-07 加宽 62d 之后：PASS 132 → 143
+
+记录构造函数能带数组 / 继承字段、函数里能取数组字段、函数体里的 transpose / identity 展开之后，DC 电机全系 11 个示例转 PASS
+（DCPM_* / DCEE_Start / DCSE_* / DC_CompareCharacteristics / ControlledDCDrives 两个——它们的损耗记录参数传进函数）。MultiBody
+往下卡在记录值的常量函数调用（Frames.nullRotation）。FAIL / ACCEPTS-INVALID / CRASH 0。

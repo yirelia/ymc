@@ -1808,6 +1808,19 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           验证：slice 631 例 PASS 580 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 580 / FAIL 37（在账，不变）；整个 testsuite
           PASS 1601 / FAIL 0 / ACCEPTS-INVALID 2 / CRASH 0（不变）；MSL 514 个 PASS 122→132；探针 8058→8107（cc / rm / gi / ea-e8
           5 集 49 个）；四套构建零警告、单测 276→277；ASan 与 gcc 逐例一致。
+    - [x] (62d) flat：记录构造函数（数组 / 继承字段）+ 函数里的数组字段 + 函数体 transpose / identity（2026-10-07）：
+          MSL 42 个"qualified function call [record constructor]"卡在带记录形参的函数要发射记录构造函数，而构造函数只认内建标量
+          字段。照 omc 的默认构造函数：输入 = 字段（extends 的基类字段就地展开）、只打类型 + 维 + 缺省（字段的 unit、注释、短类型
+          属性都不打），维照函数变量的规则（抽出 fn_var_dims，与 emit_function 共用）；constant 字段照样是输入、final 字段（构造
+          函数局部）未做。构造调用改走构造函数的输入，模型里没有这个记录的实例也行（record_type_node 退到类定义节点；record_match
+          对这种节点当不相容——此前给它会越界崩溃，precheck 露出）。函数里的记录字段带下标 / 整个数组字段（类型取构造函数的输入）；
+          函数体里 transpose / identity 维已知时同模型语境展开（MultiBody Frames.resolve1 / planarRotation）。实参里有全字面量的
+          记录构造调用的用户函数调用也算常量调用（omc 求值，ymc 求不出 → SKIP，子原因带函数名）。声明成短类记录类型
+          （`record R = BaseR(x = 2); R r;`）的变量被引用时 omc 发射的是 R 自己的构造函数（缺省取短类修饰），ymc 此前两边都不打
+          ——静默错（RC 探针 d10）→ SKIP（scodeinst FunctionRecordArg3 同理）。
+          验证：slice 631 例 PASS 580 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 580 / FAIL 37→38（RecordConstructor4 进账：
+          文件 Result 带 omc 告警文本）；整个 testsuite PASS 1601→1603 / FAIL 0 / ACCEPTS-INVALID 2 / CRASH 0；MSL 514 个 PASS
+          132→143；探针 8107→8149（rcf-* 3 集 42 个）；四套构建零警告、单测 277→278；ASan 与 gcc 逐例一致。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

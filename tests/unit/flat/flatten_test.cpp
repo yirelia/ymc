@@ -5386,6 +5386,26 @@ YMC_TEST(flatten_condition_string_compare_forward_record_and_rem_inline) {
                            "  parameter String b[2].a[1,2].s = \"GI1.b[2].a[1, 2]\";\n  parameter String t = \"GI1\";\nend GI1;\n"));
 }
 
+YMC_TEST(flatten_record_ctor_array_fields_and_function_transpose) {
+  // 记录构造函数：extends 来的字段就地展开、数组字段打维、短类型字段只打基类型（不打 unit、注释）；模型里没有这个记录的实例
+  // 也能构造调用；函数里取数组字段 `r.b[2]`、`r.T`，transpose / identity 在维已知时展开。期望值为 omc 1.25.0 对原文实跑
+  //（RC 探针 r1-r3 / t1-t2，2026-10-07）。
+  YMC_CHECK_EQ(flatten_src("record Base\n  Real a;\nend Base;\ntype L = Real(unit = \"m\");\nrecord R\n  extends Base;\n"
+                           "  L b[2] \"pos\";\nend R;\nfunction f\n  input R r;\n  output Real z;\nalgorithm\n  z := r.a + r.b[2];\n"
+                           "end f;\nmodel RC1\n  Real z = f(R(time, {2, 3}));\nend RC1;\n"),
+               std::string("function R \"Automatically generated record constructor for R\"\n  input Real a;\n  input Real[2] b;\n"
+                           "  output R res;\nend R;\n\nfunction f\n  input R r;\n  output Real z;\nalgorithm\n  z := r.a + r.b[2];\n"
+                           "end f;\n\nclass RC1\n  Real z = f(R(time, {2.0, 3.0}));\nend RC1;\n"));
+  YMC_CHECK_EQ(flatten_src("record R\n  Real T[2, 2];\nend R;\nfunction f\n  input R r;\n  input Real v[2];\n  output Real y[2];\n"
+                           "algorithm\n  y := transpose(r.T) * v + identity(2) * v;\nend f;\nmodel RC2\n"
+                           "  R r(T = {{1, 2}, {3, time}});\n  Real y[2] = f(r, {1, 2});\nend RC2;\n"),
+               std::string("function R \"Automatically generated record constructor for R\"\n  input Real[2, 2] T;\n  output R res;\n"
+                           "end R;\n\nfunction f\n  input R r;\n  input Real[2] v;\n  output Real[2] y;\nalgorithm\n"
+                           "  y := {r.T[1,1] * v[1] + r.T[2,1] * v[2] + v[1], r.T[1,2] * v[1] + r.T[2,2] * v[2] + v[2]};\nend f;\n\n"
+                           "class RC2\n  Real r.T[1,1];\n  Real r.T[1,2];\n  Real r.T[2,1];\n  Real r.T[2,2];\n  Real y[1];\n"
+                           "  Real y[2];\nequation\n  r.T = {{1.0, 2.0}, {3.0, time}};\n  y = f(r, {1.0, 2.0});\nend RC2;\n"));
+}
+
 YMC_TEST(flatten_external_object_variable_and_structors) {
   // 外部对象：组件压平成按类名打印的叶变量，构造 `EO()` 换成 `EO.constructor(1)`（默认实参照补），构造 / 析构随类型发射
   //（外部函数未声明 pure → impure）；当实参传给外部函数。期望 = omc 1.25.0 实跑（2026-10-07，下同）。

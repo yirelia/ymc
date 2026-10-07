@@ -381,3 +381,6 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `gi-g1` | 10 | getInstanceName()：根类自己 / 子实例 / 组件数组 / 方程 / 包里的类 / 传给外部函数；多维下标（`a[1, 1]`）/ extends / 字符串拼接 / 传给用户函数求值（SKIP）/ assert 消息 |
 | `ea-e8` | 4 | Evaluate 记录组件的数组字段：值来自外层记录整体绑定（`pr = F(v = …)`，omc 不 final → SKIP）/ 字段自己的修饰（final） |
 | `cc-ut` | 4 | 单测原文：字符串条件、向前记录字段条件、rem 内联、getInstanceName |
+| `rcf-r` | 19 | 记录构造函数与函数里的记录字段：数组字段 / extends 来的字段（两层）/ 短类型字段（不打 unit）/ 字段缺省（数组）/ 引用别的字段的维（`Real[n] b`）/ constant 字段（照样是输入）/ 混合类型；模型里没有实例的构造调用、`r.T[1, 2]`、整个数组字段、矩阵乘、全缺省的常量调用（omc 求值，SKIP）、函数返回带数组字段的记录（SKIP） |
+| `rcf-t` | 21 | 函数体里的 transpose / identity：`transpose(T) * v`、`M := transpose(T)`、`v * transpose(T)`、矩阵乘、模型语境对照；identity(3) * a、identity(n)（n 是输入，调用处求值）、记录值的常量函数（SKIP）；记录类型转换 `r1 = R2(…)`（SKIP，此前崩溃）/ 不同记录类实参 / final 字段（SKIP）；短类记录类型 `record R = BaseR(x = 2)` 的变量传给函数（omc 发射 R 的构造函数，SKIP——此前静默错） |
+| `rcf-ut` | 2 | 单测原文：extends + 短类型数组字段的构造、记录实例实参 + transpose / identity 展开 |

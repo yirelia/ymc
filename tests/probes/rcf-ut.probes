@@ -1,0 +1,34 @@
+//// set: rcf-ut — 单测原文：extends + 短类型数组字段的构造、记录实例实参 + transpose / identity 展开
+//// model: RC1
+record Base
+  Real a;
+end Base;
+type L = Real(unit = "m");
+record R
+  extends Base;
+  L b[2] "pos";
+end R;
+function f
+  input R r;
+  output Real z;
+algorithm
+  z := r.a + r.b[2];
+end f;
+model RC1
+  Real z = f(R(time, {2, 3}));
+end RC1;
+//// model: RC2
+record R
+  Real T[2, 2];
+end R;
+function f
+  input R r;
+  input Real v[2];
+  output Real y[2];
+algorithm
+  y := transpose(r.T) * v + identity(2) * v;
+end f;
+model RC2
+  R r(T = {{1, 2}, {3, time}});
+  Real y[2] = f(r, {1, 2});
+end RC2;
