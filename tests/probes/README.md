@@ -384,3 +384,7 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `rcf-r` | 19 | 记录构造函数与函数里的记录字段：数组字段 / extends 来的字段（两层）/ 短类型字段（不打 unit）/ 字段缺省（数组）/ 引用别的字段的维（`Real[n] b`）/ constant 字段（照样是输入）/ 混合类型；模型里没有实例的构造调用、`r.T[1, 2]`、整个数组字段、矩阵乘、全缺省的常量调用（omc 求值，SKIP）、函数返回带数组字段的记录（SKIP） |
 | `rcf-t` | 21 | 函数体里的 transpose / identity：`transpose(T) * v`、`M := transpose(T)`、`v * transpose(T)`、矩阵乘、模型语境对照；identity(3) * a、identity(n)（n 是输入，调用处求值）、记录值的常量函数（SKIP）；记录类型转换 `r1 = R2(…)`（SKIP，此前崩溃）/ 不同记录类实参 / final 字段（SKIP）；短类记录类型 `record R = BaseR(x = 2)` 的变量传给函数（omc 发射 R 的构造函数，SKIP——此前静默错） |
 | `rcf-ut` | 2 | 单测原文：extends + 短类型数组字段的构造、记录实例实参 + transpose / identity 展开 |
+| `rv-v1` | 16 | 记录值的常量函数调用：方程里 `r = nullR()` → 构造调用（字段字面量）、参数绑定摊到字段（数组字段逐元素）、标量字段；数组字段的记录值（位置 / 命名构造、identity）；折叠路的字段属性（短类型 / 字段修饰的 unit，此前静默丢）、注释；final 字段（按构造求好的值）、Evaluate 记录组件的折叠（不 final）、嵌套记录字段的折叠 |
+| `rv-s1` | 6 | 函数体里 smooth 的数组实参（if 表达式两支数组、整个向量）、cross / skew 展开（向量实参、与矩阵乘混用） |
+| `rv-ie` | 7 | 记录构造缺省里两支长短不一的 if 式 / 切片 `a[1:end-1]`：单独出现 1.25.0 都接受（两者同在的 scodeinst IfExpression13 1.25.0 拒、在账）；函数输入缺省同理 |
+| `rv-ut` | 2 | 单测原文：空基类 extends 的记录 + 记录值常量调用（方程 / 参数绑定）、短类型字段属性 + smooth / cross |

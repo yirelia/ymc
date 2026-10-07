@@ -1,0 +1,61 @@
+//// set: rv-ie — 记录构造缺省里两支长短不一的 if 式 / 切片 `a[1:end-1]`：单独出现 1.25.0 都接受（两者同在的 scodeinst IfExpression13 1.25.0 拒、在账）；函数输入缺省同理
+//// model: I10
+function g
+input Boolean c = false;
+input Real a[3] = if c then {1.0} else {1.0, 2.0, 3.0};
+output Real y;
+algorithm
+y := a[1];
+end g;
+model I10
+Real y = g();
+end I10;
+//// model: I11
+record R
+constant Boolean cond = false;
+constant Real[3] a = if cond then {1.0} else {1.0, 2.0, 3.0};
+end R;
+model I11
+R r = R();
+end I11;
+//// model: I12
+record R
+constant Boolean cond = false;
+constant Real[3] a = if cond then {1.0} else {1.0, 2.0, 3.0};
+end R;
+model I12
+R r;
+end I12;
+//// model: I13
+record R
+Boolean cond = false;
+Real[3] a = if cond then {4.0, 5.0, 6.0} else {1.0, 2.0, 3.0};
+end R;
+model I13
+R r = R();
+end I13;
+//// model: I20
+record R
+constant Real[3] a = {1.0, 2.0, 3.0};
+constant Real[2] b = a[1:end-1];
+end R;
+model I20
+R r = R();
+end I20;
+//// model: I21
+record R
+constant Real[3] a = {1.0, 2.0, 3.0};
+constant Real[2] b = a[1:2];
+end R;
+model I21
+R r = R();
+end I21;
+//// model: I22
+record R
+constant Boolean cond = false;
+constant Real[3] a = if cond then {1.0} else {1.0, 2.0, 3.0};
+constant Real[2] b = a[1:2];
+end R;
+model I22
+R r = R();
+end I22;

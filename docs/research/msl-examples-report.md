@@ -210,3 +210,10 @@ ActuatorWithNoise 往下卡在噪声种子的外部函数调用。FAIL / ACCEPTS
 记录构造函数能带数组 / 继承字段、函数里能取数组字段、函数体里的 transpose / identity 展开之后，DC 电机全系 11 个示例转 PASS
 （DCPM_* / DCEE_Start / DCSE_* / DC_CompareCharacteristics / ControlledDCDrives 两个——它们的损耗记录参数传进函数）。MultiBody
 往下卡在记录值的常量函数调用（Frames.nullRotation）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-07 加宽 62e 之后：PASS 143 → 146
+
+记录值的常量函数调用打成构造调用、记录组件的折叠绑定并进修饰通路之后，此前卡在 composite/record binding 的 3 个 FluxTubes 示例
+转 PASS（QuadraticCoreAirgap / ToroidalCoreAirgap / ToroidalCoreQuadraticCrossSection）。MultiBody 的 25 个示例越过
+Frames.nullRotation，往下卡在模型里嵌在运算中的数组值调用（26 个，Visualizers.Internal.Lines 的
+`r_abs = r + T.resolve1(R.T, r_lines)`）。FAIL / ACCEPTS-INVALID / CRASH 0。

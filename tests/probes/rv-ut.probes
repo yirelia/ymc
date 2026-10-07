@@ -1,0 +1,41 @@
+//// set: rv-ut — 单测原文：空基类 extends 的记录 + 记录值常量调用（方程 / 参数绑定）、短类型字段属性 + smooth / cross
+//// model: RV1
+record Icon
+end Icon;
+record R
+  extends Icon;
+  Real T[2, 2];
+  Real w[2];
+end R;
+function nullR
+  output R r;
+algorithm
+  r := R(T = identity(2), w = zeros(2));
+end nullR;
+model RV1
+  R r;
+  parameter R p = nullR();
+equation
+  r = nullR();
+end RV1;
+//// model: RV2
+type L = Real(unit = "m");
+record R
+  L x;
+end R;
+function g
+  output R r;
+algorithm
+  r := R(1);
+end g;
+function nz
+  input Real v[3];
+  input Real u[3];
+  output Real c[3];
+algorithm
+  c := smooth(0, v) + cross(v, u);
+end nz;
+model RV2
+  parameter R r = g();
+  Real c[3] = nz({time, 1, 2}, {3, time, 4});
+end RV2;

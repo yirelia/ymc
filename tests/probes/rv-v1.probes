@@ -1,0 +1,199 @@
+//// set: rv-v1 — 记录值的常量函数调用：方程里 `r = nullR()` → 构造调用（字段字面量）、参数绑定摊到字段（数组字段逐元素）、标量字段；数组字段的记录值（位置 / 命名构造、identity）；折叠路的字段属性（短类型 / 字段修饰的 unit，此前静默丢）、注释；final 字段（按构造求好的值）、Evaluate 记录组件的折叠（不 final）、嵌套记录字段的折叠
+//// model: V10
+record R
+Real T[2, 2];
+Real w[2];
+end R;
+model V10
+R r;
+equation
+r = R({{1, 0}, {0, 1}}, {0, 0});
+end V10;
+//// model: V11
+record R
+Real T[2, 2];
+Real w[2];
+end R;
+function nullR
+output R r;
+algorithm
+r := R(identity(2), zeros(2));
+end nullR;
+model V11
+R r;
+equation
+r = nullR();
+end V11;
+//// model: V12
+record R
+Real T[2, 2];
+Real w[2];
+end R;
+function nullR
+output R r;
+algorithm
+r := R(T = identity(2), w = zeros(2));
+end nullR;
+model V12
+parameter R r0 = nullR();
+end V12;
+//// model: V13
+record R
+Real a;
+Real b;
+end R;
+function g
+output R r;
+algorithm
+r := R(1, 2);
+end g;
+model V13
+R r;
+equation
+r = g();
+end V13;
+//// model: V14
+record R
+Real a;
+Real b;
+end R;
+model V14
+R r;
+equation
+r = R(time, 2);
+end V14;
+//// model: V20
+function g
+output Real M[2, 2];
+algorithm
+M := identity(2);
+end g;
+model V20
+Real M[2, 2] = g();
+end V20;
+//// model: V21
+record R
+Real w[2];
+end R;
+function g
+output R r;
+algorithm
+r := R({1, 2});
+end g;
+model V21
+R r;
+equation
+r = g();
+end V21;
+//// model: V22
+record R
+Real w[2];
+Real a;
+end R;
+function g
+output R r;
+algorithm
+r := R(w = {1, 2}, a = 3);
+end g;
+model V22
+R r;
+equation
+r = g();
+end V22;
+//// model: V23
+record R
+Real T[2, 2];
+end R;
+function g
+output R r;
+algorithm
+r := R(identity(2));
+end g;
+model V23
+R r;
+equation
+r = g();
+end V23;
+//// model: V30
+type L = Real(unit = "m");
+record R
+L x;
+end R;
+function g
+output R r;
+algorithm
+r := R(1);
+end g;
+model V30
+parameter R r = g();
+end V30;
+//// model: V31
+record R
+Real x(unit = "m");
+end R;
+function g
+output R r;
+algorithm
+r := R(1);
+end g;
+model V31
+parameter R r = g();
+end V31;
+//// model: V32
+record R
+Real x "the x";
+end R;
+function g
+output R r;
+algorithm
+r := R(1);
+end g;
+model V32
+R r = g();
+end V32;
+//// model: V40
+record R
+parameter Real a = 1;
+final parameter Real b = 2 * a;
+end R;
+model V40
+parameter R r2 = R(a = 5);
+end V40;
+//// model: V41
+record R
+parameter Integer a = 1;
+end R;
+model V41
+parameter R r = R(3) annotation(Evaluate = true);
+Real y = r.a;
+end V41;
+//// model: V42
+record B
+parameter Real x[2] = zeros(2);
+end B;
+record M
+parameter B b;
+end M;
+record P
+parameter M m = M();
+end P;
+model V42
+parameter P p;
+Real y = p.m.b.x[1] * time;
+end V42;
+//// model: V43
+record B
+Real x;
+end B;
+record M
+B b;
+Real c;
+end M;
+function g
+output M m;
+algorithm
+m := M(B(1), 2);
+end g;
+model V43
+parameter M m = g();
+end V43;

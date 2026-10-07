@@ -5406,6 +5406,29 @@ YMC_TEST(flatten_record_ctor_array_fields_and_function_transpose) {
                            "  Real y[2];\nequation\n  r.T = {{1.0, 2.0}, {3.0, time}};\n  y = f(r, {1.0, 2.0});\nend RC2;\n"));
 }
 
+YMC_TEST(flatten_record_valued_constant_calls) {
+  // 记录值的常量函数调用：方程里打成构造调用（字段字面量），参数绑定照构造调用摊到字段（数组字段逐元素、短类型字段带属性、
+  // 空基类 extends 不碍事）；函数体里 smooth 的数组实参、cross 展开。期望值为 omc 1.25.0 对原文实跑（RV 探针 v1-v3、SM 探针
+  // s1、RC 探针 t4，2026-10-07）。
+  YMC_CHECK_EQ(flatten_src("record Icon\nend Icon;\nrecord R\n  extends Icon;\n  Real T[2, 2];\n  Real w[2];\nend R;\n"
+                           "function nullR\n  output R r;\nalgorithm\n  r := R(T = identity(2), w = zeros(2));\nend nullR;\n"
+                           "model RV1\n  R r;\n  parameter R p = nullR();\nequation\n  r = nullR();\nend RV1;\n"),
+               std::string("function R \"Automatically generated record constructor for R\"\n  input Real[2, 2] T;\n  input Real[2] w;\n"
+                           "  output R res;\nend R;\n\nclass RV1\n  Real r.T[1,1];\n  Real r.T[1,2];\n  Real r.T[2,1];\n"
+                           "  Real r.T[2,2];\n  Real r.w[1];\n  Real r.w[2];\n  parameter Real p.T[1,1] = 1.0;\n"
+                           "  parameter Real p.T[1,2] = 0.0;\n  parameter Real p.T[2,1] = 0.0;\n  parameter Real p.T[2,2] = 1.0;\n"
+                           "  parameter Real p.w[1] = 0.0;\n  parameter Real p.w[2] = 0.0;\nequation\n"
+                           "  r = R({{1.0, 0.0}, {0.0, 1.0}}, {0.0, 0.0});\nend RV1;\n"));
+  YMC_CHECK_EQ(flatten_src("type L = Real(unit = \"m\");\nrecord R\n  L x;\nend R;\nfunction g\n  output R r;\nalgorithm\n"
+                           "  r := R(1);\nend g;\nfunction nz\n  input Real v[3];\n  input Real u[3];\n  output Real c[3];\n"
+                           "algorithm\n  c := smooth(0, v) + cross(v, u);\nend nz;\nmodel RV2\n  parameter R r = g();\n"
+                           "  Real c[3] = nz({time, 1, 2}, {3, time, 4});\nend RV2;\n"),
+               std::string("function nz\n  input Real[3] v;\n  input Real[3] u;\n  output Real[3] c;\nalgorithm\n"
+                           "  c := smooth(0, v) + {v[2] * u[3] - v[3] * u[2], v[3] * u[1] - v[1] * u[3], v[1] * u[2] - v[2] * u[1]};\n"
+                           "end nz;\n\nclass RV2\n  parameter Real r.x(unit = \"m\") = 1.0;\n  Real c[1];\n  Real c[2];\n  Real c[3];\n"
+                           "equation\n  c = nz({time, 1.0, 2.0}, {3.0, time, 4.0});\nend RV2;\n"));
+}
+
 YMC_TEST(flatten_external_object_variable_and_structors) {
   // 外部对象：组件压平成按类名打印的叶变量，构造 `EO()` 换成 `EO.constructor(1)`（默认实参照补），构造 / 析构随类型发射
   //（外部函数未声明 pure → impure）；当实参传给外部函数。期望 = omc 1.25.0 实跑（2026-10-07，下同）。

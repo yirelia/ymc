@@ -1821,6 +1821,18 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           验证：slice 631 例 PASS 580 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 580 / FAIL 37→38（RecordConstructor4 进账：
           文件 Result 带 omc 告警文本）；整个 testsuite PASS 1601→1603 / FAIL 0 / ACCEPTS-INVALID 2 / CRASH 0；MSL 514 个 PASS
           132→143；探针 8107→8149（rcf-* 3 集 42 个）；四套构建零警告、单测 277→278；ASan 与 gcc 逐例一致。
+    - [x] (62e) flat：记录值的常量函数调用 + 记录折叠并进修饰通路 + 函数体 smooth 数组 / cross / skew（2026-10-07）：
+          MultiBody 的 `Frames.nullRotation()` 这类返回记录的常量调用：求值器的记录值支持数组字段（维求得出、形状核对）与空基类
+          extends（`extends Modelica.Icons.Record`）；模型里求得的记录值打成对构造函数的调用、实参是字段字面量（方程 `r = nullR()`
+          → `r = R({{1.0, 0.0}, …}, {0.0, 0.0})`）。组件绑定 `parameter R p = f()` 原先另走 emit_record_fields 直接发字段，丢了字段
+          的属性（`r.x(unit = "m")` 少了 unit、`1` 没提 Real——静默错）：改成把记录值合成字段修饰 `p(x = 1.0, T = {{…}})`（全部
+          字段的字面量，含 final 的；嵌套记录字段再拆一层子修饰），往下照记录构造的整体绑定摊到字段，数组字段 / 属性 / Var 记录的
+          数组方程都走同一条路，emit_record_fields 删掉；折叠的字段不看外层 Evaluate（同旧路，VO 探针 R22）。build_record_ctor_mod
+          放行空基类的 extends。函数体里 smooth 的数组实参（看元素类型，Math.Vectors.normalize）、cross / skew 维已知时展开。
+          MultiBody 往下卡在模型里数组值的调用嵌在表达式里（`Frames.resolve2(…)[k]`）。另：调用的各条处理路在已判 unsupported
+          时可能交回 invalid，inst_exp 的调用入口统一换成占位字面量（testsuite QualifiedCrefArg 曾因此越界崩溃，precheck 露出）；
+          scodeinst IfExpression13 现与文件一致、1.25.0 拒（反向，进账）。
+          验证：slice 631 例 PASS 580 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 580→581 / FAIL 38（IfExpression13 现与文件一致、1.25.0 拒，反向分歧进账）；整个 testsuite PASS 1603→1605 / FAIL 0 / ACCEPTS-INVALID 2→3（IfExpression13，在账）/ CRASH 0；MSL 514 个 PASS 143→146；探针 8149→8180（rv-* 4 集 31 个）；四套构建零警告、单测 278→279；ASan 与 gcc 逐例一致。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

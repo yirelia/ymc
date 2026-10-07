@@ -1,0 +1,64 @@
+//// set: rv-s1 — 函数体里 smooth 的数组实参（if 表达式两支数组、整个向量）、cross / skew 展开（向量实参、与矩阵乘混用）
+//// model: S10
+function nz
+input Real v[3];
+input Real eps = 1e-13;
+output Real result[3];
+algorithm
+result := smooth(0, if sqrt(v * v) >= eps then v / sqrt(v * v) else v / eps);
+end nz;
+model S10
+Real y[3] = nz({time, 1, 2});
+end S10;
+//// model: S11
+function nz
+input Real v;
+output Real result;
+algorithm
+result := smooth(0, if v >= 0 then v else -v);
+end nz;
+model S11
+Real y = nz(time);
+end S11;
+//// model: S12
+function nz
+input Real v[2];
+output Real result[2];
+algorithm
+result := smooth(0, v);
+end nz;
+model S12
+Real y[2] = nz({time, 1});
+end S12;
+//// model: T40
+function g
+input Real a[3];
+input Real b[3];
+output Real c[3];
+algorithm
+c := cross(a, b);
+end g;
+model T40
+Real c[3] = g({time, 1, 2}, {3, time, 4});
+end T40;
+//// model: T41
+function g
+input Real a[3];
+output Real S[3, 3];
+algorithm
+S := skew(a);
+end g;
+model T41
+Real S[3, 3] = g({time, 1, 2});
+end T41;
+//// model: T42
+function g
+input Real a[3];
+input Real w;
+output Real c[3];
+algorithm
+c := cross(a, {0, 0, w}) + skew(a) * a;
+end g;
+model T42
+Real c[3] = g({time, 1, 2}, time);
+end T42;
