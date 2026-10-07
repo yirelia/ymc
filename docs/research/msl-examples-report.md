@@ -276,3 +276,11 @@ Clock 成了可实例化的内建类型（顶层作用域里查得到，`connect
 MSL BooleanTable 一族的 9 个示例转 PASS（Blocks.Examples.ShowLogicalSources / LogicalNetwork1、Analog.Examples.CharacteristicThyristors、
 Clocked BooleanSignals 的 Hold / SubSample / SuperSample / ShiftSample / BackSample / UpSample）。顺带修了取元素后再化简的静默错
 （`if b then 1.0 else 1.0` 被收成 `1.0`）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-08 加宽 62n 之后：PASS 259 → 259
+
+`Connections.*` 不再一律当限定名函数调用 SKIP：超定连接图（root / potentialRoot / branch 摘除、环里断开出 equalityConstraint
+方程、isRoot / rooted 按最终根与 BFS 距离代值）和函数体元组赋值做完之后，MultiBody 的 27 个示例越过 World 的
+`Connections.root(frame_b.R)`，往下卡在：参数数组整个绑定是函数调用（关节的 `e = normalizeWithAssert(n)`）11（连同此前就卡在这里的共 17 个）、复合组件的变率
+6、类注释里的转义（omc 加载路径相关的怪相，入账）5、derivative 注解形式 2 等；Noise 的 7 个越过函数体元组赋值，卡在纯函数调
+非纯函数的告警。PASS 数不变。FAIL / ACCEPTS-INVALID / CRASH 0。

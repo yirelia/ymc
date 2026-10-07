@@ -1,0 +1,60 @@
+//// set: ft-t1 — 函数体里的元组赋值 `(a, , c) := g(x)`：空位 `_`、数组输出目标、用前未赋值检查认元组目标
+//// model: FT1
+function g
+  input Real x;
+  output Real a;
+  output Real b;
+  output Integer c;
+algorithm
+  a := x;
+  b := 2 * x;
+  c := 3;
+end g;
+function f
+  input Real x;
+  output Real y;
+protected
+  Real a, b;
+  Real v[2];
+  Integer c;
+algorithm
+  (a, b) := g(x);
+  (, b, c) := g(2 * x);
+  (v[1], , c) := g(x);
+  y := a + b + v[1] + c;
+end f;
+model FT1
+  Real y = f(time);
+end FT1;
+//// model: FT2
+function g
+  input Integer s[2];
+  output Real r;
+  output Integer so[2];
+algorithm
+  so := {s[2], s[1] + 1};
+  r := s[1] / 10;
+end g;
+function f
+  input Integer s[2];
+  output Real y;
+  output Integer st[2];
+protected
+  Real r;
+algorithm
+  (r, st) := g(s);
+  (y, ) := g(st);
+  y := y + r;
+end f;
+function h
+  input Integer s[2];
+  output Real y;
+protected
+  Integer st[2];
+algorithm
+  (y, st) := f(s);
+  y := y + st[1];
+end h;
+model FT2
+  Real y = h({1, integer(time)}) * time;
+end FT2;

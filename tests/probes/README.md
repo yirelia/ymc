@@ -426,3 +426,7 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `ck-ut` | 4 | 单测原文 |
 | `ct-t1` | 5 | 参数数组 if 绑定逐元素摊开后不收拢（`if b then 1.0 else 1.0`、`if b then true else false`）、矩阵里的推导式列（BooleanTable 的 `[table[1], 1.0; table, {mod(i + 1, 2.0) for i in 1:n}]`）、子组件修饰里 + 条件参数向前引用、写出来的内层 if 照常收拢、选中支引用条件参数（SKIP） |
 | `ct-ut` | 2 | 单测原文 |
+| `oc-p1` | 29 | 超定连接图：root / branch 摘除、环里压平序最先的连接断开出 equalityConstraint 方程（函数按 lhs 实例路径起名）、潜在根按优先级 + cref 字节序、isRoot / rooted（BFS 距离、最后一个 branch 定对端）、纯连接环 / 重复连接不断、结构 if / for 里的、非结构 if 里留裸名、Real[0] 输出消失；标量输出 / 类型超定 / 裸 rooted / 绑定里的（SKIP） |
+| `oc-f1` | 60 | 超定连接图的随机模型（与 omc 差分核实过的 1040 个里取 60 个）：世界 / 潜在根 / 关节 / 三端关节 / 重复连接 |
+| `ft-t1` | 2 | 函数体里的元组赋值 `(a, , c) := g(x)`：空位 `_`、数组输出目标、用前未赋值检查认元组目标 |
+| `oc-ut` | 3 | 单测原文 |

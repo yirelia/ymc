@@ -1,5 +1,6 @@
 // 压平实现（S3 第一里程碑）。锚点见 flatten.h 头注与各处 R11/R13/R14 引用。
 #include "flat/flatten.h"
+#include "flat/expr_dump.h"   // 连接图的 cref 键（ComponentRef.toString 同款打印）
 
 #include <algorithm>
 #include <climits>
@@ -232,6 +233,7 @@ class Flattener {
     evaluate_stream_ops();
     apply_structural_params();   // 连接算子求值中结构化的参数：final + 属性折叠（NFEvalConstants 效果，受限）
     simplify_model();            // cardinality 求值 + 方程 / 语句的收尾折叠
+    if (oc_missing_branch_) set_unsupported("Connections.rooted without branch (warning)");
     // 某变量名同时出现在 removed_（另一同名声明条件为假被移除）：redeclare 一个 replaceable-conditional 成员的
     // 语义（保留原条件 / 禁止带条件 redeclare）v1 未做 → SKIP（RedeclareElementCondition1/2/3）。
     if (!removed_.empty())
@@ -2263,12 +2265,25 @@ class Flattener {
       // Structural.markExp）后求值选支（flattenIfEquation，NFFlatten.mo:1975-2010；IfConnect1/2）。前面有运行时分支、
       // 参数带 Evaluate=false（NON_STRUCTURAL，omc 保留 if，EvaluateFalse1）、参数非字面量绑定（传递标记未做）→ SKIP。
       std::vector<FlatEqBranch> out_branches;
+      bool oc_chain = false;   // 前面有条件含 isRoot / rooted 的支（见下）
       for (const SEqBranch& br : eq.branches) {   // if + elseif（保序）
         card_allowed_ = true;   // 条件里允许 cardinality（CardinalityInvalidContext*）
         Id<Expr> ce = simplify_expr(inst_exp(br.cond, enclosing, prefix));
         card_allowed_ = false;
         if (result_.unsupported) return;
         if (result_.model.exprs[ce].ty.kind != TypeKind::Boolean) { set_unsupported("if condition type"); return; }
+        // 条件里有 Connections.isRoot / rooted：连接图建好后才求值（subst_oc），这一支连同其后各支先照条件收下，收尾折叠时再选支
+        //（omc 同样压平后 evalConnectionsOperators、再由 SimplifyModel 折叠，NFOCConnectionGraph.mo:421 / NFSimplifyModel.mo
+        // :491-548；MultiBody Parts.Body 的 `if not Connections.isRoot(frame_a.R) then … elseif useQuaternions then …`）。isRoot
+        // 是参数变率（NFBuiltinCall.mo:1428），其后的参数条件定型期照结构参数标（NFTyping.mo:3531-3535）、值留到收尾代入。
+        if (oc_chain || oc_in(ce)) {
+          if (!oc_in(ce)) (void)eval_scode(br.cond, scode_scope_of(enclosing), 0, /*allow_param=*/true, nullptr);
+          oc_chain = true;
+          std::vector<Id<FlatEquation>> body_ids = collect_if_body(br.body, enclosing, prefix, psubs, is_initial);
+          if (result_.unsupported) return;
+          out_branches.push_back(FlatEqBranch{ce, std::move(body_ids)});
+          continue;
+        }
         std::unordered_set<std::uint32_t> used;
         // 帧求值读到的参数会被记为结构参数（frame_value；方程段里不连带其绑定里的参数，见 MarkPhase）；非结构条件要撤销。
         const StructSnap snap = struct_snap();
@@ -2358,6 +2373,18 @@ class Flattener {
     if (eq.kind == SEqKind::NoRetCall) {
       const Id<Expr> c = noret_call(eq.a, enclosing, prefix);
       if (!c.is_valid()) return;   // 删去 / unsupported
+      // 顶层的 Connections.root / potentialRoot / branch：进连接图、从方程里摘掉（addRootsAndBranches，NFOCConnectionGraph.mo
+      // :250-306 v1.25.0；只扫压平后的顶层方程表，结构 if 已选支、for 已展开）。嵌在非结构 if / when 里的、初始方程里的照留，
+      // 打裸名（OC 探针 i2 / w：`root(j.frame_a.R);`）。
+      if (const auto oc = oc_calls_.find(c.raw); oc != oc_calls_.end() && !in_if_ && !is_initial &&
+          (oc->second == OcOp::Root || oc->second == OcOp::PotentialRoot || oc->second == OcOp::Branch)) {
+        const Expr ce = result_.model.exprs[c];   // 拷贝
+        OcItem it{oc->second, oc_key(ce.args[0]), {}, 0.0};
+        if (oc->second == OcOp::Branch) it.b = oc_key(ce.args[1]);
+        if (oc->second == OcOp::PotentialRoot) it.prio = static_cast<double>(result_.model.exprs[ce.args[1]].ival);
+        oc_items_.push_back(std::move(it));
+        return;
+      }
       FlatEquation fe;
       fe.kind = FlatEqKind::NoRetCall;
       fe.a = c;
@@ -9008,8 +9035,13 @@ class Flattener {
       for (auto it = u.begin(); it != u.end();)
         if (refs.count(*it)) { warn = true; it = u.erase(it); } else ++it;
     };
-    auto assign = [&](Id<Expr> lhs, std::vector<std::uint32_t>& u) {
+    // 元组目标逐元素（markAssignedOutput 的 TUPLE 支，NFFunction.mo:3012-3018 v1.25.0）。
+    auto assign = [&](auto& self, Id<Expr> lhs, std::vector<std::uint32_t>& u) -> void {
       const Expr& l = result_.model.exprs[lhs];
+      if (l.kind == ExprKind::Tuple) {
+        for (Id<Expr> el : l.args) self(self, el, u);
+        return;
+      }
       if (l.kind != ExprKind::Cref || l.cref.parts.size() != 1) return;   // 记录字段赋值不动（记录不在追踪表里）
       u.erase(std::remove(u.begin(), u.end(), l.cref.parts.back().name.id), u.end());
     };
@@ -9017,7 +9049,7 @@ class Flattener {
       for (Id<FlatStatement> sid : body) {
         const FlatStatement& s = result_.model.stmts[sid];
         switch (s.kind) {
-          case FlatStmtKind::Assign: use(s.b, u); assign(s.a, u); break;
+          case FlatStmtKind::Assign: use(s.b, u); assign(assign, s.a, u); break;
           case FlatStmtKind::For: use(s.a, u); self(self, s.body, u); break;
           case FlatStmtKind::While: use(s.a, u); self(self, s.body, u); break;
           case FlatStmtKind::Assert: use(s.a, u); use(s.b, u); if (s.c.is_valid()) use(s.c, u); break;
@@ -9065,6 +9097,66 @@ class Flattener {
     };
     switch (st.kind) {
       case SStmtKind::Assign: {
+        // 元组赋值 `(a, , c) := g(x)`（MSL Noise 的 `(r, stateOut) := Xorshift64star.random(state)`）：各非空位是输出 / 局部
+        //（可带下标），空位打 `_`；右侧须是多输出函数调用，各位类型与对应输出相同——元素类型相同、数组的维数与已知的各维相同
+        //（omc 不插转型；FT 探针 t1 / t2）。
+        if (is_tuple_target(st.a)) {
+          const std::vector<Id<Exp>> elems = I_.absyn.exps[st.a].args;   // 拷贝
+          std::vector<Id<Expr>> lhs(elems.size());
+          for (std::size_t i = 0; i < elems.size(); ++i) {
+            const Exp x = I_.absyn.exps[elems[i]];   // 拷贝
+            if (x.kind == ExpKind::Tuple && x.args.empty()) continue;   // 空位
+            bool ok = false;
+            if (x.kind == ExpKind::CrefExp) {
+              const Cref& tc = I_.absyn.crefs[x.cref];
+              ok = tc.parts.size() == 1 && func_params_.count(tc.parts[0].name.id) && !fn_inputs_.count(tc.parts[0].name.id);
+            }
+            if (!ok) { set_unsupported("function assignment target"); return {}; }
+            lhs[i] = inst_exp(elems[i], Inst::empty_node(), {});
+            if (result_.unsupported) return {};
+          }
+          Id<Expr> c = inst_exp(st.b, Inst::empty_node(), {});   // 多输出调用在表达式里包成 TupleElement(调用, 1)
+          if (result_.unsupported) return {};
+          if (result_.model.exprs[c].kind == ExprKind::TupleElement) c = result_.model.exprs[c].a;
+          if (result_.model.exprs[c].kind != ExprKind::Call) { set_unsupported("function tuple assignment rhs"); return {}; }
+          std::vector<Type> otys;   // 被调函数的输出类型（按声明序）
+          {
+            const std::vector<Symbol> cname = result_.model.exprs[c].call_name;
+            for (const FlatFunction& f : result_.model.functions)
+              if (f.name == cname) {
+                for (const FlatFuncParam& fp : f.params)
+                  if (fp.direction == FlatDirection::Output) otys.push_back(fp.ty);
+                break;
+              }
+          }
+          if (otys.size() < elems.size()) { set_unsupported("tuple arity"); return {}; }
+          Expr t;
+          t.kind = ExprKind::Tuple;
+          t.ty = Type::real();
+          for (std::size_t i = 0; i < elems.size(); ++i) {
+            if (!lhs[i].is_valid()) {
+              Expr w;
+              w.kind = ExprKind::Wild;
+              t.args.push_back(add(std::move(w)));
+              continue;
+            }
+            const Type lt = result_.model.exprs[lhs[i]].ty;
+            const Type& ot = otys[i];
+            bool same = lt.element_type().kind == ot.element_type().kind && lt.is_array() == ot.is_array();
+            if (same && lt.is_array()) {
+              const std::vector<std::int64_t> ls = expr_shape(lhs[i]);
+              same = ls.size() == ot.dims.size();
+              for (std::size_t k = 0; same && k < ls.size(); ++k)
+                if (ot.dims[k].kind == DimKind::Integer && ot.dims[k].size != ls[k]) same = false;
+            }
+            if (!same) { set_unsupported("tuple element type mismatch"); return {}; }
+            t.args.push_back(lhs[i]);
+          }
+          fs.kind = FlatStmtKind::Assign;
+          fs.a = add(std::move(t));
+          fs.b = c;
+          break;
+        }
         const Exp& le = I_.absyn.exps[st.a];
         // 目标：输出 / 局部（可带下标）；或记录输出 / 局部的字段 `r.a`（RF2 探针 `r.a := x`）。
         bool target_ok = false;
@@ -15218,6 +15310,9 @@ class Flattener {
     }
     const BuiltinFn* bf = nullptr;
     bool supported = true;
+    if (fn.parts.size() == 2 && !fn.leading_dot && !as_builtin.is_valid() && in_.str(fn.parts[0].name) == "Connections" &&
+        fn.parts[0].subscripts.empty() && fn.parts[1].subscripts.empty())
+      return connections_call(e, in_.str(fn.parts[1].name), enclosing, prefix);
     if (fn.parts.size() != 1 && !as_builtin.is_valid()) {
       set_unsupported_call("qualified function call");
       supported = false;
@@ -16350,13 +16445,17 @@ class Flattener {
         }
 
         const bool nofold = nofold_calls_.count(id.raw) > 0;
+        const auto oc = oc_calls_.find(id.raw);
+        const bool is_oc = oc != oc_calls_.end();
+        const OcOp oc_op = is_oc ? oc->second : OcOp::Root;
         auto rebuild = [&]() {
           Expr r; r.kind = ExprKind::Call; r.call_name = call_name; r.args = args; r.ty = ty;
           const Id<Expr> n = add(std::move(r));
           if (nofold) nofold_calls_.insert(n.raw);
+          if (is_oc) oc_calls_[n.raw] = oc_op;   // Connections.* 调用（见 connections_call）：标记随新节点走、不按内建折
           return n;
         };
-        if (call_name.size() != 1 || nofold) return rebuild();
+        if (call_name.size() != 1 || nofold || is_oc) return rebuild();
         const std::string_view name = in_.str(call_name[0]);
         // fill(v, n1, n2, …) 的维实参全是字面量：展开成数组字面量、各元素都是 v（SimplifyExp.simplifyFill，NFSimplifyExp.mo
         // v1.25.0：维全字面量且 NF_SCALARIZE（缺省开）→ Expression.fillArgs）。函数体里 if 分支提实型后的 `fill(0.0, 3)`（WR 探针
@@ -17123,6 +17222,9 @@ class Flattener {
     std::vector<Symbol> flow_path;
     // dims 各维落在 path 的哪一段（子连接器数组 `pin[m].v` 的维在 pin 段）；空 = 全在末段。
     std::vector<std::size_t> dim_seg;
+    // 超定（overdetermined）前缀：path 的前 oc_len 段是离叶最近的超定记录成员（类里有 equalityConstraint，
+    // getOverconstrainedCref，NFOCConnectionGraph.mo:350-376 v1.25.0）；0 = 不在超定记录里。
+    std::size_t oc_len;
   };
   // connect 端的种类（sortConnections，NFExpandableConnectors.mo:126-171）：Expandable = expandable 连接器组件本身（cty
   // EXPANDABLE）；Declared = 已声明的 potentially present 成员；Virtual = expandable 里未声明的名字（虚元素，NAME 节点）。
@@ -17196,7 +17298,7 @@ class Flattener {
       for (std::int64_t n : mdims) if (n <= 0) return false;   // 空数组成员（omc 整体丢弃）未做 → SKIP
       std::vector<Symbol> p = mpath;
       p.push_back(I_.nodes[mn].name);
-      out.push_back({std::move(p), is_flow, I_.comps[mc].ty, std::move(mdims), false, {}, {}});
+      out.push_back({std::move(p), is_flow, I_.comps[mc].ty, std::move(mdims), false, {}, {}, 0});
       return true;
     };
     for (NodeId mn : pots) {
@@ -17230,6 +17332,9 @@ class Flattener {
       if (sr == SRestriction::Connector) { if (!connector_leaves(sub, p, out, inst ? &sub_inst : nullptr)) return false; }
       else if (sr == SRestriction::Record) { if (!record_leaves(sub, p, false, out)) return false; }
       else return false;
+      if (sr == SRestriction::Record && oc_class(sub))   // 离叶最近的超定记录（内层已标的不覆盖）
+        for (std::size_t k = before; k < out.size(); ++k)
+          if (out[k].oc_len == 0) out[k].oc_len = p.size();
       if (!sdims.empty())
         for (std::size_t k = before; k < out.size(); ++k) {
           ConnMember& m = out[k];
@@ -17271,7 +17376,7 @@ class Flattener {
         if (I_.comps[mc].attributes.variability != SVariability::Var) return false;
         std::vector<Symbol> p = mpath;
         p.push_back(I_.nodes[mn].name);
-        out.push_back({std::move(p), false, I_.comps[mc].ty, {}, true, fpath, {}});
+        out.push_back({std::move(p), false, I_.comps[mc].ty, {}, true, fpath, {}, 0});
       }
     }
     return true;
@@ -17313,14 +17418,18 @@ class Flattener {
         if (!sub.is_valid() || I_.nodes[sub].is_empty() || !I_.nodes[sub].def.is_valid() ||
             I_.scode.elems[I_.nodes[sub].def].restriction != SRestriction::Record) return false;
         if (!fcel.attr.dims.empty() || !fcel.type.dims.empty()) return false;
+        const std::size_t before = out.size();
         if (!record_leaves(sub, p, is_flow, out)) return false;
+        if (oc_class(sub))
+          for (std::size_t k = before; k < out.size(); ++k)
+            if (out[k].oc_len == 0) out[k].oc_len = p.size();
         continue;
       }
       std::vector<std::int64_t> fdims;
       for (Id<Exp> d : fcel.attr.dims) if (!eval_dim(d, fdims, fscope)) return false;
       for (Id<Exp> d : fcel.type.dims) if (!eval_dim(d, fdims, fscope)) return false;
       for (std::int64_t n : fdims) if (n <= 0) return false;
-      out.push_back({std::move(p), is_flow, I_.comps[fc].ty, std::move(fdims), false, {}, {}});
+      out.push_back({std::move(p), is_flow, I_.comps[fc].ty, std::move(fdims), false, {}, {}, 0});
     }
     return true;
   }
@@ -17513,7 +17622,7 @@ class Flattener {
         const bool fl = I_.comps[ccid].attributes.connector == SConnectorType::Flow;
         // `connector C = parameter Real`：parameter/constant 短类连接器照常连，发射时出断言（ConstantConnector1/2）；flow 须连续。
         if (fl && I_.comps[ccid].attributes.variability != SVariability::Var) return std::nullopt;
-        members.push_back({{}, fl, I_.comps[ccid].ty, {}, false, {}, {}});
+        members.push_back({{}, fl, I_.comps[ccid].ty, {}, false, {}, {}, 0});
       }
     }
     // 元素列表（对标 ExpandExp.expandCref：每段下标按 Subscript.expandList 展开——给定下标：整数/迭代变量取值、
@@ -17786,7 +17895,7 @@ class Flattener {
         continue;
       }
       if (I_.comps[mc].attributes.connector != SConnectorType::Potential) return false;
-      out.push_back({std::move(p), false, I_.comps[mc].ty, {}, false, {}, {}});
+      out.push_back({std::move(p), false, I_.comps[mc].ty, {}, false, {}, {}, 0});
     }
     return true;
   }
@@ -18012,6 +18121,340 @@ class Flattener {
     var_pp_.clear();
   }
 
+  // ==== 超定连接图（MLS §9.4；omc NFOCConnectionGraph.mo v1.25.0，由 NFFlatten.resolveConnections :2406-2428 调）====
+  // 整套只在某个 Connections.* 调用的实参是超定类时才跑（System.getHasOverconstrainedConnectors；置位只在
+  // NFBuiltinCall.checkConnectionsArgument :1753-1819 → Class.isOverdetermined）。root / potentialRoot / branch 取压平后顶层的
+  // 无返回值调用（见 collect_equation），连接边取每个逐元素连接里的超定 cref；断开的连接不进连接集、改出
+  // `<根类>.<lhs 路径>.equalityConstraint(lhs, rhs) = {0.0, …}`；isRoot / rooted 只在方程 / 初始方程里求值（simplify_model）。
+  // 规则逐条对 v1.25.0 源码，并与 omc 在 1040 个随机模型上差分核实（OC 探针 oc-*）。
+  enum class OcOp : std::uint8_t { Root, PotentialRoot, Branch, IsRoot, Rooted };
+  std::unordered_map<std::uint32_t, OcOp> oc_calls_;   // Connections.* 调用节点 → 种类（节点打印成裸名 `root(x)`）
+  struct OcItem { OcOp op; std::string a, b; double prio; };
+  std::vector<OcItem> oc_items_;                       // 顶层的 root / potentialRoot / branch（压平序）
+  bool oc_gate_ = false;
+  std::unordered_set<std::string> oc_roots_;           // 最终的根（findResultGraph 的 finalRoots）
+  std::unordered_map<std::string, std::int64_t> oc_dist_;              // 自根的 BFS 距离（setRootDistance :918-959）
+  std::vector<std::pair<std::string, std::string>> oc_branches_;       // graph.branches：逆添加序（getEdge 用）
+  bool oc_missing_branch_ = false;                     // rooted 找不到 branch（omc 告警 OCG_MISSING_BRANCH）
+
+  // Class.isOverdetermined（NFClass.mo:705-717）：类里查得到名为 equalityConstraint 的元素（不论种类），含继承来的与短类别名的
+  //（`record A = B`、extends 的基类，OC 探针 l）。实例类树不收记录里的函数类，按 SCode 查：本类元素 → extends 基类 → 短类的
+  // 基类，各在定义处的作用域链里解析。
+  bool oc_class(NodeId cls) {
+    if (!is_class_inst(cls) || !I_.nodes[cls].def.is_valid()) return false;
+    return scode_has_element(I_.nodes[cls].def, scode_scope_of(cls), in_.intern("equalityConstraint"), 0);
+  }
+  bool scode_has_element(Id<SElement> c, const ScodeScope& sc, Symbol name, int depth) {
+    if (depth > 20) return false;
+    const SElement el = I_.scode.elems[c];   // 拷贝（解析不加元素，但不跨调用持引用）
+    ScodeScope inner = sc;
+    if (inner.empty() || inner[0].raw != c.raw) inner.insert(inner.begin(), c);
+    for (Id<SElement> e : el.def.elements) {
+      const SElement& x = I_.scode.elems[e];
+      if ((x.kind == SElementKind::Class || x.kind == SElementKind::Component) && x.name == name) return true;
+    }
+    for (Id<SElement> e : el.def.elements) {
+      const SElement x = I_.scode.elems[e];
+      if (x.kind != SElementKind::Extends) continue;
+      ScodeScope bs;
+      const Id<SElement> b = resolve_class_path(x.base_path, x.base_leading_dot, inner, bs);
+      if (b.is_valid() && scode_has_element(b, bs, name, depth + 1)) return true;
+    }
+    if (el.def.kind == SClassDefKind::Derived && !el.def.derived_type.path.empty()) {
+      ScodeScope bs;
+      const Id<SElement> b = resolve_class_path(el.def.derived_type.path, el.def.derived_type.leading_dot, sc, bs);
+      if (b.is_valid() && scode_has_element(b, bs, name, depth + 1)) return true;
+    }
+    return false;
+  }
+  // 类型化 cref 的打印串（ComponentRef.toString：连接图的键，潜在根按它的字节序排）。
+  std::string oc_key(Id<Expr> c) { return dump_expr(result_.model.exprs, in_, c); }
+  // Connections.* 的 cref 实参：只做 `A.R` 形——R 的类超定、A 是连接器（checkConnectionsArgument :1769-1779；R 不超定 omc 报错，
+  // A 不是连接器 omc 告警，单段 `R` 形未做 → 都 SKIP）。
+  bool oc_argument(Id<Exp> raw, NodeId enclosing) {
+    if (I_.absyn.exps[raw].kind != ExpKind::CrefExp) return false;
+    const Cref c = I_.absyn.crefs[I_.absyn.exps[raw].cref];   // 拷贝
+    if (c.leading_dot || c.parts.size() < 2) return false;
+    NodeId cur = find_local(enclosing, c.parts[0].name);
+    NodeId parent;
+    for (std::size_t i = 1; i < c.parts.size() && is_comp_node(cur); ++i) {
+      parent = cur;
+      const NodeId cls = class_of(cur);
+      cur = cls.is_valid() ? find_local(cls, c.parts[i].name) : NodeId{};
+    }
+    if (!is_comp_node(cur) || !is_comp_node(parent) || !oc_class(class_of(cur))) return false;
+    const NodeId acls = class_of(parent);
+    return acls.is_valid() && I_.nodes[acls].def.is_valid() &&
+           I_.scode.elems[I_.nodes[acls].def].restriction == SRestriction::Connector;
+  }
+  // Connections.* 调用（定型同 NFBuiltinCall.typeBranchCall / typeIsRootCall / typePotentialRootCall / typeRootCall /
+  // typeRootedCall :1500-1620）：节点名去掉 `Connections.`（留下的调用 omc 打裸名）。potentialRoot 的优先级标结构参数、求成整数
+  //（:1517，缺省 0，打印时补上）。uniqueRoot / uniqueRootIndices（omc 告警非标准算子）→ SKIP。
+  Id<Expr> connections_call(const Exp& e, std::string_view op, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    for (Symbol n : e.arg_names)
+      if (n.is_valid()) { set_unsupported("named function argument"); return lit_int(0); }
+    OcOp k;
+    std::size_t ncref = 1, hi = 1;
+    if (op == "root") k = OcOp::Root;
+    else if (op == "potentialRoot") { k = OcOp::PotentialRoot; hi = 2; }
+    else if (op == "branch") { k = OcOp::Branch; ncref = hi = 2; }
+    else if (op == "isRoot") k = OcOp::IsRoot;
+    else if (op == "rooted") k = OcOp::Rooted;
+    else { set_unsupported("Connections operator"); return lit_int(0); }
+    if (e.args.size() < ncref || e.args.size() > hi) { set_unsupported("function arity"); return lit_int(0); }
+    const std::vector<Id<Exp>> raw = e.args;   // 拷贝
+    Expr r;
+    r.kind = ExprKind::Call;
+    r.call_name = {in_.intern(op)};
+    r.ty = (k == OcOp::IsRoot || k == OcOp::Rooted) ? Type::boolean() : Type::unknown();
+    for (std::size_t i = 0; i < ncref; ++i) {
+      if (!oc_argument(raw[i], enclosing)) { set_unsupported("Connections operator argument"); return lit_int(0); }
+      const Id<Expr> x = simplify_expr(inst_exp(raw[i], enclosing, prefix));
+      if (result_.unsupported) return lit_int(0);
+      if (result_.model.exprs[x].kind != ExprKind::Cref) { set_unsupported("Connections operator argument"); return lit_int(0); }
+      r.args.push_back(x);
+    }
+    if (k == OcOp::PotentialRoot) {
+      std::int64_t prio = 0;
+      if (raw.size() == 2) {
+        const std::optional<CVal> v = eval_scode(raw[1], scode_scope_of(enclosing), 0, /*allow_param=*/true, nullptr);
+        if (!v || v->k != CVal::K::Int) { set_unsupported("potentialRoot priority"); return lit_int(0); }
+        prio = v->i;
+      }
+      r.args.push_back(lit_int(prio));
+    }
+    oc_gate_ = true;
+    const Id<Expr> id = add(std::move(r));
+    oc_calls_[id.raw] = k;
+    return id;
+  }
+  // 式子里有没有 Connections.isRoot / rooted 调用节点。
+  bool oc_in(Id<Expr> id) {
+    if (!id.is_valid() || oc_calls_.empty()) return false;
+    if (const auto it = oc_calls_.find(id.raw); it != oc_calls_.end() && (it->second == OcOp::IsRoot || it->second == OcOp::Rooted))
+      return true;
+    const Expr x = result_.model.exprs[id];   // 拷贝
+    for (Id<Expr> k : x.args) if (oc_in(k)) return true;
+    return oc_in(x.a) || oc_in(x.b) || oc_in(x.c);
+  }
+  // 方程里的 isRoot / rooted 就地改成字面量（evalConnectionsOperators :999-1203，只走方程 / 初始方程）；返回是否改过。
+  //   isRoot(c) = c 是最终的根；rooted(c)：对端 = 压平序里最后一个提到 c 的 branch 的另一端（getEdge :1205-1226），
+  //   dist(c) < dist(对端)（两端都可达），有一端不可达 → true；没有 branch → false 且 omc 告警（→ SKIP）。
+  bool subst_oc(Id<Expr> id) {
+    {
+      const Expr& e = result_.model.exprs[id];
+      if (e.kind == ExprKind::Call && !e.args.empty())
+        if (const auto it = oc_calls_.find(id.raw);
+            it != oc_calls_.end() && (it->second == OcOp::IsRoot || it->second == OcOp::Rooted)) {
+          const std::string c = oc_key(e.args[0]);
+          bool v = false;
+          if (it->second == OcOp::IsRoot) {
+            v = oc_roots_.count(c) > 0;
+          } else {
+            const std::string* partner = nullptr;
+            for (const auto& [a, b] : oc_branches_) {
+              if (a == c) { partner = &b; break; }
+              if (b == c) { partner = &a; break; }
+            }
+            if (!partner) {
+              oc_missing_branch_ = true;
+            } else {
+              const auto dc = oc_dist_.find(c), dp = oc_dist_.find(*partner);
+              v = dc == oc_dist_.end() || dp == oc_dist_.end() || dc->second < dp->second;
+            }
+          }
+          Expr& ee = result_.model.exprs[id];
+          ee.kind = ExprKind::BoolLit;
+          ee.bval = v;
+          ee.ty = Type::boolean();
+          ee.args.clear();
+          ee.call_name.clear();
+          return true;
+        }
+    }
+    bool changed = false;
+    const Expr x = result_.model.exprs[id];   // 拷贝（递归里改别的节点不动它）
+    for (Id<Expr> k : x.args) changed = subst_oc(k) || changed;
+    for (Id<Expr> k : {x.a, x.b, x.c}) if (k.is_valid()) changed = subst_oc(k) || changed;
+    return changed;
+  }
+  // 一个逐元素连接两端的超定边（getOverconstrainedCrefs :336-348）：按叶成员序取各端的超定 cref、去重留先到者，再按位配对。
+  struct OcEnd { std::string key; std::vector<Symbol> path; std::vector<std::vector<Id<Expr>>> subs; };   // 超定 cref
+  struct OcEdge { OcEnd l, r; };
+  std::vector<OcEdge> oc_edges_of(const ConnInfo& a, const ConnInfo& b) {
+    auto ends = [&](const ConnInfo& c) {
+      std::vector<OcEnd> out;
+      for (const ConnMember& m : c.members) {
+        if (m.oc_len == 0) continue;
+        const std::vector<Symbol> mp(m.path.begin(), m.path.begin() + static_cast<std::ptrdiff_t>(m.oc_len));
+        std::string k = oc_key(member_cref(c.path, c.subs, mp, {}, Type::unknown()));
+        bool dup = false;
+        for (const OcEnd& o : out) dup = dup || o.key == k;
+        if (dup) continue;
+        OcEnd end{std::move(k), c.path, c.subs};
+        end.path.insert(end.path.end(), mp.begin(), mp.end());
+        end.subs.resize(end.path.size());
+        out.push_back(std::move(end));
+      }
+      return out;
+    };
+    const std::vector<OcEnd> la = ends(a), lb = ends(b);
+    std::vector<OcEdge> out;
+    for (std::size_t i = 0; i < la.size() && i < lb.size(); ++i) out.push_back({la[i], lb[i]});
+    return out;
+  }
+  // 断开的边的方程（generateEqualityConstraintEquation，NFOCConnectionGraph.mo:308-334）：
+  // `<lhs 去下标的路径>.equalityConstraint(lhs, rhs) = fill(0.0, n)`——函数在 lhs 实例的类作用域里查、按实例路径起名，即组件里的
+  // 函数（component_fn：`<根类>.world.frame_b.R.equalityConstraint`，OC 探针 e / n）；n = 输出大小，0 → 方程消失
+  //（SimplifyModel :250-252），函数随之不收（prune_functions）。输出不是一维数组（标量：omc 定型 fill(0.0) 失败、这条边当连通，
+  // 只在 stderr 报错，OC 探针 g2）→ SKIP。
+  bool emit_oc_constraint(const OcEdge& e, std::vector<Id<FlatEquation>>& out) {
+    auto acref = [&](const OcEnd& end, bool fn) -> std::optional<Id<Cref>> {
+      Cref c;
+      for (std::size_t i = 0; i < end.path.size(); ++i) {
+        CrefPart cp;
+        cp.name = end.path[i];
+        if (!fn)
+          for (Id<Expr> sx : end.subs[i]) {
+            if (result_.model.exprs[sx].kind != ExprKind::IntLit) return std::nullopt;
+            Exp ie;
+            ie.kind = ExpKind::IntLit;
+            ie.ival = result_.model.exprs[sx].ival;
+            cp.subscripts.push_back(synth_exp(std::move(ie)));
+          }
+        c.parts.push_back(std::move(cp));
+      }
+      if (fn) {
+        CrefPart cp;
+        cp.name = in_.intern("equalityConstraint");
+        c.parts.push_back(std::move(cp));
+      }
+      return synth_cref(std::move(c));
+    };
+    const std::optional<Id<Cref>> fc = acref(e.l, true), lc = acref(e.l, false), rc = acref(e.r, false);
+    if (!fc || !lc || !rc) { set_unsupported("equalityConstraint argument"); return false; }
+    Exp call;
+    call.kind = ExpKind::Call;
+    call.cref = *fc;
+    for (Id<Cref> ac : {*lc, *rc}) {
+      Exp a;
+      a.kind = ExpKind::CrefExp;
+      a.cref = ac;
+      call.args.push_back(synth_exp(std::move(a)));
+    }
+    const Id<Exp> ce = synth_exp(std::move(call));
+    const PSubs saved = cur_psubs_;
+    cur_psubs_.clear();
+    array_call_ok_ = true;   // 调用是方程的一整侧（返回数组，见 array_call_ok_）
+    const Id<Expr> x = simplify_expr(inst_exp(ce, root_, {}));   // 根类作用域：路径都是全名
+    array_call_ok_ = false;
+    cur_psubs_ = saved;
+    if (result_.unsupported) return false;
+    const Type ty = result_.model.exprs[x].ty;
+    if (!ty.is_array() || ty.dims.size() != 1 || ty.dims[0].kind != DimKind::Integer || ty.element_type().kind != TypeKind::Real) {
+      set_unsupported("equalityConstraint output");
+      return false;
+    }
+    if (ty.dims[0].size == 0) return true;   // Real[0]：方程消失
+    Expr z;
+    z.kind = ExprKind::Array;
+    z.ty = ty;
+    for (std::int64_t i = 0; i < ty.dims[0].size; ++i) z.args.push_back(lit_real(0.0));
+    FlatEquation fe;
+    fe.kind = FlatEqKind::Equality;
+    fe.a = x;
+    fe.b = add(std::move(z));
+    out.push_back(result_.model.add_eq(std::move(fe)));
+    return true;
+  }
+  // findResultGraph（:740-822；oc62n 的 ocgraph_ref.py 同款）：conns = 各逐元素连接（压平序）的超定边。返回断开的边
+  //（graph.connections 序 = 连接压平序、同一连接里边逆序），并记下最终的根、BFS 距离、branch 表（求 isRoot / rooted 用）。
+  std::vector<OcEdge> oc_graph(const std::vector<std::vector<OcEdge>>& conns) {
+    std::vector<std::string> definite;
+    std::vector<std::pair<std::string, double>> potential;
+    oc_branches_.clear();
+    for (const OcItem& it : oc_items_) {   // addRootsAndBranches：各表都前插（:446 / :461 / :504）
+      if (it.op == OcOp::Root) definite.insert(definite.begin(), it.a);
+      else if (it.op == OcOp::PotentialRoot) potential.insert(potential.begin(), {it.a, it.prio});
+      else oc_branches_.insert(oc_branches_.begin(), {it.a, it.b});
+    }
+    // addBreakableBranches（:211-248）：逐连接逆压平序、只用连接边的并查集，两端已连通的边（纯连接环 / 重复连接）直接丢掉；
+    // 留下的前插 → graph.connections = 连接压平序、同一连接里边逆序。
+    std::unordered_map<std::string, std::string> parent;
+    auto find = [&](std::string x) {
+      for (auto it = parent.find(x); it != parent.end() && it->second != x; it = parent.find(x)) x = it->second;
+      return x;
+    };
+    std::vector<OcEdge> gconns;
+    for (auto cit = conns.rbegin(); cit != conns.rend(); ++cit)
+      for (const OcEdge& e : *cit) {
+        const std::string sl = find(e.l.key), sr = find(e.r.key);
+        if (sl == sr) continue;
+        gconns.insert(gconns.begin(), e);
+        parent[sl] = sr;
+      }
+    oc_roots_.clear();
+    oc_dist_.clear();
+    std::vector<OcEdge> broken;
+    if (definite.empty() && potential.empty() && oc_branches_.empty() && gconns.empty()) return broken;
+    // canonical / connectCanonicalComponents（:534-628）：无路径压缩，合并取右侧的代表；哑根 = time（:651）。
+    const std::string kTime = "$time";
+    std::unordered_map<std::string, std::string> table;
+    auto canon = [&](std::string x) {
+      for (auto it = table.find(x); it != table.end(); it = table.find(x)) x = it->second;
+      return x;
+    };
+    for (const std::string& r : definite) table[r] = kTime;
+    for (const auto& [a, b] : oc_branches_) {
+      const std::string ca = canon(a), cb = canon(b);
+      if (ca != cb) table[ca] = cb;
+    }
+    // ord（:669-693）+ List.sort（不稳定的归并排序，List.mo:780-817 / :962-1000）：优先级升序、同级按 cref 串字节序升序。
+    using Pot = std::pair<std::string, double>;
+    auto gt = [](const Pot& e1, const Pot& e2) {
+      return (e1.second == e2.second && e1.first.compare(e2.first) > 0) || e1.second > e2.second;
+    };
+    std::function<std::vector<Pot>(const std::vector<Pot>&)> msort = [&](const std::vector<Pot>& l) -> std::vector<Pot> {
+      if (l.size() <= 1) return l;
+      if (l.size() == 2) return gt(l[1], l[0]) ? l : std::vector<Pot>{l[1], l[0]};
+      const auto mid = static_cast<std::ptrdiff_t>(l.size() / 2);
+      const std::vector<Pot> left = msort(std::vector<Pot>(l.begin(), l.begin() + mid));
+      const std::vector<Pot> right = msort(std::vector<Pot>(l.begin() + mid, l.end()));
+      std::vector<Pot> acc;
+      std::size_t i = 0, j = 0;
+      while (i < left.size() && j < right.size()) acc.push_back(gt(right[j], left[i]) ? left[i++] : right[j++]);
+      acc.insert(acc.end(), left.begin() + static_cast<std::ptrdiff_t>(i), left.end());
+      acc.insert(acc.end(), right.begin() + static_cast<std::ptrdiff_t>(j), right.end());
+      return acc;
+    };
+    const std::vector<Pot> ordered = msort(potential);
+    for (auto it = gconns.rbegin(); it != gconns.rend(); ++it) {   // listReverse(graph.connections) → addConnections（:724）
+      const std::string cl = canon(it->l.key), cr = canon(it->r.key);
+      if (cl == cr) broken.insert(broken.begin(), *it);
+      else table[cl] = cr;
+    }
+    std::vector<std::string> final_roots = definite;
+    for (const Pot& pr : ordered) {   // addPotentialRootsToTable（:695-722）
+      const std::string c1 = canon(pr.first), c2 = canon(kTime);
+      if (c1 != c2) { table[c1] = c2; final_roots.insert(final_roots.begin(), pr.first); }
+    }
+    for (const std::string& r : final_roots) oc_roots_.insert(r);
+    // setRootDistance（:918-959）：邻接 = branch 两向 + 非冗余连接边两向（含断开的），各自前插；自全部最终根逐层 BFS。
+    std::unordered_map<std::string, std::vector<std::string>> adj;
+    auto link = [&](const std::string& a, const std::string& b) { auto& v = adj[a]; v.insert(v.begin(), b); };
+    for (const auto& [a, b] : oc_branches_) { link(a, b); link(b, a); }
+    for (const OcEdge& e : gconns) { link(e.l.key, e.r.key); link(e.r.key, e.l.key); }
+    std::vector<std::string> level = final_roots;
+    for (std::int64_t d = 0; !level.empty(); ++d) {
+      std::vector<std::string> nxt;
+      for (const std::string& c : level)
+        if (oc_dist_.emplace(c, d).second)
+          if (const auto it = adj.find(c); it != adj.end()) nxt.insert(nxt.end(), it->second.begin(), it->second.end());
+      level = std::move(nxt);
+    }
+    return broken;
+  }
+
   // 连接集展开（对标 NFFlatten.resolveConnections :2433 → ConnectionSets.fromConnections + DisjointSets +
   // ConnectEquations.generateEquations；顺序规则与 14 个探针见 docs/research/connect-sets-order.md）。
   // 没有 connect 也要跑：全部 flow 变量作为 INSIDE 单元素集产出 `f = 0.0`。结果整体插到模型自身方程之前（NFFlatten.mo:2497）。
@@ -18058,6 +18501,27 @@ class Flattener {
     if (result_.unsupported) return;
     for (const Resolved& r : rs)
       if (r.a.members.size() != r.b.members.size()) { set_unsupported("connector member mismatch"); return; }
+    // 超定连接图（handleOverconstrainedConnections，NFFlatten.mo:2406-2409；见 oc_graph）：断开的边记下两向的键。
+    std::vector<OcEdge> oc_broken;
+    std::set<std::pair<std::string, std::string>> oc_broken_keys;
+    if (oc_gate_) {
+      std::vector<std::vector<OcEdge>> conns;
+      for (const Resolved& r : rs) conns.push_back(oc_edges_of(r.a, r.b));
+      oc_broken = oc_graph(conns);
+      for (const OcEdge& e : oc_broken) {
+        oc_broken_keys.insert({e.l.key, e.r.key});
+        oc_broken_keys.insert({e.r.key, e.l.key});
+      }
+    }
+    // 断开的连接里、超定 cref 下恰一层的叶不进连接集（连查找都不做——它决定节点插入序；ConnectionSets.addConnection
+    // :104-120 → isBroken :122-142 → ComponentRef.isPrefix :1182-1200 只认一层：`R.T[i,j]`、`R.w[i]` 去掉，嵌套记录里的
+    // `R.I.T[k]` 照连，同一连接的别的 potential / flow 照连；OC 探针 b / h / r）。
+    auto oc_skip = [&](const Resolved& r, const ConnMember& m) {
+      if (oc_broken_keys.empty() || m.oc_len == 0 || m.path.size() != m.oc_len + 1) return false;
+      const std::vector<Symbol> mp(m.path.begin(), m.path.begin() + static_cast<std::ptrdiff_t>(m.oc_len));
+      return oc_broken_keys.count({oc_key(member_cref(r.a.path, r.a.subs, mp, {}, Type::unknown())),
+                                   oc_key(member_cref(r.b.path, r.b.subs, mp, {}, Type::unknown()))}) > 0;
+    };
     // 标量叶配对（对标 Connection.split/scalarize 后的逐元素 CONNECTION），自然序：配对序 → 叶成员表序（每层 potential
     // 升序在前、flow 升序在后、子连接器就地展开，见 connector_leaves）→ 数组成员行主序（Connection.scalarize →
     // Connector.scalarize → scalarizeAll，NFConnection.mo:76-98）。任一侧成员为条件假被移除 → 整对丢弃（NFConnection.mo:68）。
@@ -18071,6 +18535,7 @@ class Flattener {
           set_unsupported("connector member mismatch"); return;
         }
         if (member_removed(r.a, m.path) || member_removed(r.b, m.path)) continue;
+        if (oc_skip(r, m)) continue;
         std::vector<std::int64_t> idx(m.dims.size(), 1);
         do { pairs.push_back({&r, &m, idx}); } while (next_index(idx, m.dims));
       }
@@ -18180,6 +18645,9 @@ class Flattener {
       }
       conn_eqs.push_back(result_.model.add_eq(std::move(fe)));
     }
+    // 断开的边的 equalityConstraint 方程紧接连接方程、在模型自身方程之前（NFFlatten.mo:2421-2428），按 broken 序。
+    for (const OcEdge& e : oc_broken)
+      if (!emit_oc_constraint(e, conn_eqs)) return;
     // 5. 连接方程整体置于模型自身方程之前（NFFlatten.mo:2497 `listAppend(conn_eql, flatModel.equations)`；EqPlace 探针）。
     result_.model.equations.insert(result_.model.equations.begin(), conn_eqs.begin(), conn_eqs.end());
   }
@@ -18371,6 +18839,8 @@ class Flattener {
     if (is_call && struct_subst_) struct_subst_calls_.insert(n.raw);
     // "不折叠"标记跟着克隆走（FE6 探针：external "C" 的 `g(n)`、n 是结构参数 → omc `sin(2.0)`，不求值）。
     if (is_call && nofold_calls_.count(id.raw)) nofold_calls_.insert(n.raw);
+    if (is_call)
+      if (const auto oc = oc_calls_.find(id.raw); oc != oc_calls_.end()) oc_calls_[n.raw] = oc->second;
     if (scalarized_logicals_.count(id.raw)) scalarized_logicals_.insert(n.raw);
     if (split_ifs_.count(id.raw)) split_ifs_.insert(n.raw);
     // 数组运算的打印 / 符号形态标记（点号、积、换位、书写的算符，见 sym_binary / sym_node）也跟着走：结构参数代入后克隆出的
@@ -19693,7 +20163,12 @@ class Flattener {
   }
   std::vector<Id<FlatEquation>> fold_eqs(const std::vector<Id<FlatEquation>>& eqs) {
     std::vector<Id<FlatEquation>> out;
-    auto subst = [&](Id<Expr>& x) { if (uses_cardinality_ && x.is_valid() && subst_cardinality(x)) x = simplify_expr(x); };
+    auto subst = [&](Id<Expr>& x) {
+      if (!x.is_valid()) return;
+      bool changed = uses_cardinality_ && subst_cardinality(x);
+      changed = (!oc_calls_.empty() && subst_oc(x)) || changed;   // isRoot / rooted 只在方程里求值（见 subst_oc）
+      if (changed) x = simplify_expr(x);
+    };
     for (Id<FlatEquation> id : eqs) {
       FlatEquation& fe = result_.model.eqs[id];   // 本趟不新增方程节点，引用稳定
       subst(fe.a); subst(fe.b); subst(fe.c);

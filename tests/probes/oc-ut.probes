@@ -1,0 +1,152 @@
+//// set: oc-ut — 单测原文
+//// model: FT1
+function g
+  input Real x;
+  output Real a;
+  output Real b;
+  output Integer c;
+algorithm
+  a := x;
+  b := 2 * x;
+  c := 3;
+end g;
+function f
+  input Real x;
+  output Real y;
+protected
+  Real a, b;
+  Real v[2];
+  Integer c;
+algorithm
+  (a, b) := g(x);
+  (, b, c) := g(2 * x);
+  (v[1], , c) := g(x);
+  y := a + b + v[1] + c;
+end f;
+model FT1
+  Real y = f(time);
+end FT1;
+//// model: ProbeQ
+// Probe (q): graph without any (definite or potential) root: isRoot=false, rooted=true (no distances), loop still broken.
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+
+  model RJ
+    Frame frame_a;
+    Frame frame_b;
+    Boolean ra;
+    Boolean rb;
+    Boolean ia;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    ra = Connections.rooted(frame_a.R);
+    rb = Connections.rooted(frame_b.R);
+    ia = Connections.isRoot(frame_a.R);
+    frame_a.f + frame_b.f = 0;
+  end RJ;
+end OCa;
+
+model ProbeQ
+  OCa.RJ j1;
+  OCa.RJ j2;
+equation
+  connect(j1.frame_b, j2.frame_a);
+  connect(j2.frame_b, j1.frame_a);
+end ProbeQ;
+//// model: ProbeX
+// Probe (x): overdetermined record connectors declared directly in the root model (no sub-components).
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+end OCa;
+
+model ProbeX
+  OCa.Frame a, b;
+equation
+  Connections.root(a.R);
+  Connections.branch(a.R, b.R);
+  connect(a, b);
+end ProbeX;

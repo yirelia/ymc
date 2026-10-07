@@ -1,0 +1,1846 @@
+//// set: oc-p1 — 超定连接图：root / branch 摘除、环里压平序最先的连接断开出 equalityConstraint 方程（函数按 lhs 实例路径起名）、潜在根按优先级 + cref 字节序、isRoot / rooted（BFS 距离、最后一个 branch 定对端）、纯连接环 / 重复连接不断、结构 if / for 里的、非结构 if 里留裸名、Real[0] 输出消失；标量输出 / 类型超定 / 裸 rooted / 绑定里的（SKIP）
+//// model: ProbeA
+// Probe (a): definite root (world) + chain of branches (joints), tree-shaped graph, no loop.
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+end OCa;
+
+model ProbeA
+  OCa.World world;
+  OCa.Joint j1;
+  OCa.Joint j2;
+  OCa.Body b;
+equation
+  connect(world.frame_b, j1.frame_a);
+  connect(j1.frame_b, j2.frame_a);
+  connect(j2.frame_b, b.frame_a);
+end ProbeA;
+//// model: ProbeB
+// Probe (b): kinematic loop (single cycle) world-j1-j2-j3-world; one connect must be broken.
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+end OCa;
+
+model ProbeB
+  OCa.World world;
+  OCa.Joint j1;
+  OCa.Joint j2;
+  OCa.Joint j3;
+equation
+  connect(world.frame_b, j1.frame_a);
+  connect(j1.frame_b, j2.frame_a);
+  connect(j2.frame_b, j3.frame_b);
+  connect(j3.frame_a, world.frame_b);
+end ProbeB;
+//// model: ProbeC
+// Probe (c): potential roots with different priorities, no definite root. Lower number wins?
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+
+  model FreeBody
+    Frame frame_a;
+    parameter Integer p = 0;
+    Boolean isR;
+  equation
+    Connections.potentialRoot(frame_a.R, p);
+    isR = Connections.isRoot(frame_a.R);
+    frame_a.f = 1;
+  end FreeBody;
+end OCa;
+
+model ProbeC
+  OCa.FreeBody b1(p = 2);
+  OCa.Joint j;
+  OCa.FreeBody b2(p = 1);
+equation
+  connect(b1.frame_a, j.frame_a);
+  connect(j.frame_b, b2.frame_a);
+end ProbeC;
+//// model: ProbeD
+// Probe (d): Connections.isRoot / Connections.rooted / rooted in if-equations, if-expressions, initial equations.
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+
+  model RJoint "joint whose equations depend on rooted()"
+    Frame frame_a;
+    Frame frame_b;
+    Real y;
+    Real y2;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    if Connections.rooted(frame_a.R) then
+      frame_b.R.T = frame_a.R.T;
+      frame_b.R.w = frame_a.R.w;
+    else
+      frame_a.R.T = frame_b.R.T;
+      frame_a.R.w = frame_b.R.w;
+    end if;
+    y = if rooted(frame_a.R) then 1 else 2;
+    y2 = if Connections.rooted(frame_b.R) then 3 else 4;
+    frame_b.r = frame_a.r;
+    frame_a.f + frame_b.f = 0;
+  end RJoint;
+
+  model FreeBody2
+    Frame frame_a;
+    Real z;
+  equation
+    Connections.potentialRoot(frame_a.R);
+    if Connections.isRoot(frame_a.R) then
+      frame_a.R.T = {1, 0};
+      frame_a.R.w = 0;
+    end if;
+    z = if Connections.isRoot(frame_a.R) then 10 else 20;
+    frame_a.f = 1;
+  initial equation
+    z = if Connections.isRoot(frame_a.R) then 10 else 20;
+  end FreeBody2;
+end OCa;
+
+model ProbeD
+  OCa.World world;
+  OCa.RJoint rj1;
+  OCa.RJoint rj2;
+  OCa.FreeBody2 fb;
+  OCa.RJoint rj3;
+equation
+  connect(world.frame_b, rj1.frame_a);
+  connect(rj1.frame_b, rj2.frame_b);
+  connect(rj3.frame_b, fb.frame_a);
+end ProbeD;
+//// model: ProbeE
+// Probe (e): MultiBody-like Frames.Orientation (T[3,3], w[3], equalityConstraint -> Real[3])
+// inside a connector with r_0[3], f[3], t[3]; two independent kinematic loops sharing the world frame
+// -> two broken connects with different lhs instance paths.
+package MB
+  record Orientation "Orientation object defining rotation from a frame 1 into a frame 2"
+    Real T[3, 3] "Transformation matrix from world frame to local frame";
+    Real w[3] "Absolute angular velocity of local frame, resolved in local frame";
+
+    encapsulated function equalityConstraint
+      "Return the constraint residues to express that two frames have the same orientation"
+      import MB;
+      input MB.Orientation R1 "Orientation object to rotate frame 0 into frame 1";
+      input MB.Orientation R2 "Orientation object to rotate frame 0 into frame 2";
+      output Real residue[3] "The rotation angles around x-, y-, and z-axis";
+    algorithm
+      residue := {
+         atan2(cross(R1.T[1, :], R1.T[2, :])*R2.T[2, :], R1.T[1, :]*R2.T[1, :]),
+         atan2(-cross(R1.T[1, :], R1.T[2, :])*R2.T[1, :], R1.T[2, :]*R2.T[2, :]),
+         atan2(R1.T[2, :]*R2.T[1, :], R1.T[3, :]*R2.T[3, :])};
+      annotation(Inline=true);
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame "Coordinate system fixed to the component with one cut-force and cut-torque"
+    Real r_0[3] "Position vector from world frame to the connector frame origin";
+    Orientation R "Orientation object to rotate the world frame into the connector frame";
+    flow Real f[3] "Cut-force resolved in connector frame";
+    flow Real t[3] "Cut-torque resolved in connector frame";
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r_0 = zeros(3);
+    frame_b.R.T = identity(3);
+    frame_b.R.w = zeros(3);
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r_0 = frame_a.r_0;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    zeros(3) = frame_a.f + frame_b.f;
+    zeros(3) = frame_a.t + frame_b.t;
+  end Joint;
+end MB;
+
+model ProbeE
+  MB.World world;
+  MB.Joint j1;
+  MB.Joint j2;
+  MB.Joint j3;
+  MB.Joint j4;
+equation
+  connect(world.frame_b, j1.frame_a);
+  connect(j1.frame_b, j2.frame_a);
+  connect(j2.frame_b, world.frame_b);
+  connect(j3.frame_b, j4.frame_a);
+  connect(world.frame_b, j3.frame_a);
+  connect(j4.frame_b, world.frame_b);
+end ProbeE;
+//// model: ProbeF
+// Probe (f): overdetermined connectors in a loop but NO Connections.* call anywhere (hasOverconstrainedConnectors flag never set).
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+end OCa;
+
+model ProbeF
+  OCa.World world;
+  OCa.Joint j1;
+  OCa.Joint j2;
+equation
+  connect(world.frame_b, j1.frame_a);
+  connect(j1.frame_b, j2.frame_a);
+  connect(j2.frame_b, world.frame_b);
+end ProbeF;
+//// model: ProbeG
+// Probe (g): zero-size residue (QuasiStatic-like Reference record), loop -> broken connect with Real[0] equalityConstraint.
+package QS
+  record Reference "Reference angle"
+    Real gamma;
+    function equalityConstraint "Equality constraint for reference angle"
+      input Reference reference1;
+      input Reference reference2;
+      output Real residue[0];
+    algorithm
+    end equalityConstraint;
+  end Reference;
+
+  connector Pin
+    Real v;
+    flow Real i;
+    Reference reference;
+  end Pin;
+
+  model Ground
+    Pin pin;
+  equation
+    Connections.potentialRoot(pin.reference, 256);
+    if Connections.isRoot(pin.reference) then
+      pin.reference.gamma = 0;
+    end if;
+    pin.v = 0;
+  end Ground;
+
+  model Res
+    Pin p;
+    Pin n;
+  equation
+    Connections.branch(p.reference, n.reference);
+    p.reference.gamma = n.reference.gamma;
+    p.v - n.v = p.i;
+    p.i + n.i = 0;
+  end Res;
+end QS;
+
+model ProbeG
+  QS.Ground g;
+  QS.Res r1;
+  QS.Res r2;
+equation
+  connect(g.pin, r1.p);
+  connect(r1.n, r2.p);
+  connect(r2.n, g.pin);
+  connect(r1.p, r2.n);
+end ProbeG;
+//// model: ProbeH
+// Probe (h): duplicate connect and pure-connection cycles are dropped from the graph (never broken).
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+end OCa;
+
+model ProbeH
+  OCa.World world;
+  OCa.Joint j1;
+  OCa.Body b1;
+  OCa.Body b2;
+equation
+  connect(world.frame_b, j1.frame_a);
+  connect(world.frame_b, j1.frame_a);
+  connect(j1.frame_b, b1.frame_a);
+  connect(b1.frame_a, b2.frame_a);
+  connect(b2.frame_a, j1.frame_b);
+  connect(j1.frame_b, world.frame_b);
+end ProbeH;
+//// model: ProbeI
+// Probe (i): Connections.root/potentialRoot inside a parameter if-equation (resolved at flattening) and Connections.branch inside a for-loop.
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+
+  model World2
+    parameter Boolean useRoot = true;
+    Frame frame_b;
+  equation
+    if useRoot then
+      Connections.root(frame_b.R);
+    else
+      Connections.potentialRoot(frame_b.R, 3);
+    end if;
+    frame_b.r = 0;
+  end World2;
+
+  model MultiJoint
+    parameter Integer n = 2;
+    Frame fa[n];
+    Frame fb[n];
+    Boolean ro[n];
+  equation
+    for i in 1:n loop
+      Connections.branch(fa[i].R, fb[i].R);
+      fb[i].R.T = fa[i].R.T;
+      fb[i].R.w = fa[i].R.w;
+      ro[i] = Connections.rooted(fa[i].R);
+      fa[i].f + fb[i].f = 0;
+    end for;
+  end MultiJoint;
+end OCa;
+
+model ProbeI
+  OCa.World2 wa(useRoot = true);
+  OCa.World2 wb(useRoot = false);
+  OCa.MultiJoint mj;
+equation
+  connect(wa.frame_b, mj.fa[1]);
+  connect(mj.fb[1], mj.fa[2]);
+  connect(wb.frame_b, mj.fb[2]);
+end ProbeI;
+//// model: ProbeJ
+// Probe (j): Connections.isRoot in a parameter binding and in an algorithm section (evaluation only covers equations/initial equations).
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+
+  model FB3
+    Frame frame_a;
+    parameter Boolean pr = Connections.isRoot(frame_a.R);
+    Boolean ar;
+  equation
+    Connections.potentialRoot(frame_a.R);
+    frame_a.f = 1;
+  algorithm
+    ar := Connections.isRoot(frame_a.R);
+  end FB3;
+end OCa;
+
+model ProbeJ
+  OCa.FB3 b;
+end ProbeJ;
+//// model: ProbeK
+// Probe (k): Connections.rooted on a cref that has no Connections.branch -> warning + false.
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+
+  model FB4
+    Frame frame_a;
+    Boolean bb;
+  equation
+    Connections.potentialRoot(frame_a.R);
+    bb = Connections.rooted(frame_a.R);
+    frame_a.f = 1;
+  end FB4;
+end OCa;
+
+model ProbeK
+  OCa.FB4 b;
+end ProbeK;
+//// model: ProbeL
+// Probe (l): name of the generated equalityConstraint function for different ways of declaring the overdetermined class:
+// record extending a base record that holds the function (b1), short-class record alias (b2), type extending Real[2] (b3).
+package OCl
+  record OBase
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input OBase R1;
+      input OBase R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1] - R2.T[1]};
+    end equalityConstraint;
+  end OBase;
+
+  record OExt
+    extends OBase;
+  end OExt;
+
+  record OAlias = OBase;
+
+  type Real2 = Real[2];
+  type OType
+    extends Real2;
+    function equalityConstraint
+      input Real u1[2];
+      input Real u2[2];
+      output Real residue[1];
+    algorithm
+      residue[1] := u1[1] - u2[1];
+    end equalityConstraint;
+  end OType;
+
+  connector F1
+    Real r;
+    OExt R;
+    flow Real f;
+  end F1;
+
+  connector F2
+    Real r;
+    OAlias R;
+    flow Real f;
+  end F2;
+
+  connector F3
+    Real r;
+    OType R;
+    flow Real f;
+  end F3;
+
+  model Loop1
+    F1 a, b;
+  equation
+    Connections.root(a.R);
+    Connections.branch(a.R, b.R);
+    connect(a, b);
+  end Loop1;
+
+  model Loop2
+    F2 a, b;
+  equation
+    Connections.root(a.R);
+    Connections.branch(a.R, b.R);
+    connect(a, b);
+  end Loop2;
+
+  model Loop3
+    F3 a, b;
+  equation
+    Connections.root(a.R);
+    Connections.branch(a.R, b.R);
+    connect(a, b);
+  end Loop3;
+end OCl;
+
+model ProbeL
+  OCl.Loop1 b1;
+  OCl.Loop2 b2;
+  OCl.Loop3 b3;
+end ProbeL;
+//// model: ProbeM
+// Probe (m): two definite roots in one component: via connections (one connect broken) and via a branch only.
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+end OCa;
+
+model ProbeM
+  OCa.World w1;
+  OCa.World w2;
+  OCa.Joint j;
+  OCa.World w3;
+  OCa.World w4;
+  OCa.Joint k;
+  OCa.Body b;
+equation
+  connect(w1.frame_b, j.frame_a);
+  connect(j.frame_b, w2.frame_b);
+  connect(w3.frame_b, w4.frame_b);
+  connect(k.frame_a, b.frame_a);
+end ProbeM;
+//// model: ProbeN
+// Probe (n): naming of the generated equalityConstraint function when lhs is nested / an array element.
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+end OCa;
+
+model Sub
+  OCa.World world;
+  OCa.Joint j[2];
+equation
+  connect(j[1].frame_b, world.frame_b);
+  connect(j[1].frame_a, j[2].frame_a);
+  connect(j[2].frame_b, world.frame_b);
+end Sub;
+
+model ProbeN
+  Sub sub;
+  OCa.World w2;
+  OCa.Joint jj[2];
+equation
+  connect(jj[2].frame_a, w2.frame_b);
+  connect(jj[1].frame_b, jj[2].frame_b);
+  connect(jj[1].frame_a, w2.frame_b);
+end ProbeN;
+//// model: ProbeP
+// Probe (p): connector arrays connected as whole arrays (connect(a.fs, b.fs)) -> per-element graph edges; loop over array elements.
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+
+  model Bus
+    Frame fs[2];
+  equation
+    Connections.branch(fs[1].R, fs[2].R);
+    fs[2].R.T = fs[1].R.T;
+    fs[2].R.w = fs[1].R.w;
+    fs[1].f + fs[2].f = 0;
+  end Bus;
+end OCa;
+
+model ProbeP
+  OCa.World world;
+  OCa.Bus a;
+  OCa.Bus b;
+equation
+  connect(world.frame_b, a.fs[1]);
+  connect(a.fs, b.fs);
+  connect(b.fs[2], world.frame_b);
+end ProbeP;
+//// model: ProbeQ
+// Probe (q): graph without any (definite or potential) root: isRoot=false, rooted=true (no distances), loop still broken.
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+
+  model RJ
+    Frame frame_a;
+    Frame frame_b;
+    Boolean ra;
+    Boolean rb;
+    Boolean ia;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    ra = Connections.rooted(frame_a.R);
+    rb = Connections.rooted(frame_b.R);
+    ia = Connections.isRoot(frame_a.R);
+    frame_a.f + frame_b.f = 0;
+  end RJ;
+end OCa;
+
+model ProbeQ
+  OCa.RJ j1;
+  OCa.RJ j2;
+equation
+  connect(j1.frame_b, j2.frame_a);
+  connect(j2.frame_b, j1.frame_a);
+end ProbeQ;
+//// model: ProbeR
+// Probe (r): overdetermined record that itself contains a nested record -> ComponentRef.isPrefix only strips ONE level,
+// so in a broken connect the nested-record leaves (R.I.T[*]) are still connected while direct leaves (R.w) are dropped.
+package OCr
+  record Inner
+    Real T[2];
+  end Inner;
+
+  record Orientation
+    Inner I;
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.I.T[1]*R2.I.T[2] - R1.I.T[2]*R2.I.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+end OCr;
+
+model ProbeR
+  OCr.World world;
+  OCr.Joint j1;
+equation
+  connect(world.frame_b, j1.frame_a);
+  connect(j1.frame_b, world.frame_b);
+end ProbeR;
+//// model: ProbeS
+// Probe (s): rooted() distances are computed on branches + NON-redundant connections only (connections dropped as redundant are not edges).
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+
+  model RJ2
+    Frame frame_a;
+    Frame frame_b;
+    Boolean ra;
+    Boolean rb;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    ra = Connections.rooted(frame_a.R);
+    rb = Connections.rooted(frame_b.R);
+    frame_a.f + frame_b.f = 0;
+  end RJ2;
+end OCa;
+
+model ProbeS
+  OCa.World w;
+  OCa.RJ2 j;
+  OCa.Body k;
+  OCa.Body l;
+equation
+  connect(j.frame_a, w.frame_b);
+  connect(j.frame_a, k.frame_a);
+  connect(k.frame_a, w.frame_b);
+  connect(w.frame_b, l.frame_a);
+  connect(l.frame_a, j.frame_b);
+end ProbeS;
+//// model: ProbeT
+// Probe (t): PowerSystems-style overdetermined TYPE (extends Real) used as an ARRAY theta[2] in a connector,
+// equalityConstraint with Real[0] residue; loop -> broken edge (a.theta, b.theta) removes theta[1] AND theta[2]
+// connections (ComponentRef.isPrefix ignores the subscripts of the last identifier).
+package PS
+  type ReferenceAngle "Reference angle"
+    extends Real;
+    function equalityConstraint
+      input ReferenceAngle theta1[:];
+      input ReferenceAngle theta2[:];
+      output Real[0] residue "No constraints";
+    algorithm
+    end equalityConstraint;
+  end ReferenceAngle;
+
+  connector Terminal
+    Real v[2];
+    flow Real i[2];
+    ReferenceAngle theta[2];
+  end Terminal;
+
+  model Source
+    Terminal term;
+  equation
+    Connections.potentialRoot(term.theta);
+    if Connections.isRoot(term.theta) then
+      term.theta = {0, 0};
+    end if;
+    term.v = {1, 2};
+  end Source;
+
+  model Line
+    Terminal term_p;
+    Terminal term_n;
+  equation
+    Connections.branch(term_p.theta, term_n.theta);
+    term_n.theta = term_p.theta;
+    term_p.i + term_n.i = {0, 0};
+    term_p.v - term_n.v = term_p.i;
+  end Line;
+end PS;
+
+model ProbeT
+  PS.Source s;
+  PS.Line l1;
+  PS.Line l2;
+equation
+  connect(s.term, l1.term_p);
+  connect(s.term, l2.term_p);
+  connect(l1.term_n, l2.term_n);
+end ProbeT;
+//// model: ProbeU
+// Probe (u): (1) rooted() partner selection when a cref is in two branches: the LAST added branch wins
+// (graph.branches is in reverse addition order); (2) broken connections are still edges for the rooted() BFS.
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+
+  model Tri
+    Frame frame_a;
+    Frame frame_b;
+    Frame frame_c;
+    Boolean ra;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    Connections.branch(frame_a.R, frame_c.R);
+    ra = Connections.rooted(frame_a.R);
+    frame_a.f + frame_b.f + frame_c.f = 0;
+  end Tri;
+
+  model RJ3
+    Frame frame_a;
+    Frame frame_b;
+    Boolean ra;
+    Boolean rb;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    ra = Connections.rooted(frame_a.R);
+    rb = Connections.rooted(frame_b.R);
+    frame_a.f + frame_b.f = 0;
+  end RJ3;
+end OCa;
+
+model ProbeU
+  OCa.World w;
+  OCa.Tri x;
+  OCa.RJ3 j1;
+  OCa.RJ3 j2;
+  OCa.RJ3 j3;
+equation
+  connect(w.frame_b, x.frame_b);
+  connect(w.frame_b, j1.frame_a);
+  connect(j1.frame_b, j2.frame_a);
+  connect(j2.frame_b, j3.frame_b);
+  connect(j3.frame_a, w.frame_b);
+end ProbeU;
+//// model: ProbeV
+// Probe (v): connector with TWO overdetermined records (Ra declared before Rb) -> one connect yields two graph edges;
+// both edges of the first connect get broken -> order of the two equalityConstraint equations within one connect.
+package OCv
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector F2
+    Real r;
+    Orientation Ra;
+    Orientation Rb;
+    flow Real f;
+  end F2;
+
+  model World
+    F2 f;
+  equation
+    Connections.root(f.Ra);
+    Connections.root(f.Rb);
+  end World;
+
+  model Joint
+    F2 a;
+    F2 b;
+  equation
+    Connections.branch(a.Ra, b.Ra);
+    Connections.branch(a.Rb, b.Rb);
+  end Joint;
+end OCv;
+
+model ProbeV
+  OCv.World w;
+  OCv.Joint j;
+equation
+  connect(w.f, j.a);
+  connect(j.b, w.f);
+end ProbeV;
+//// model: ProbeW
+// Probe (w): how Connections.* calls print when they are NOT consumed/evaluated (time-varying if-equation, algorithm, binding).
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+
+  model JW
+    Frame frame_a;
+    Frame frame_b;
+    Boolean ar;
+    parameter Boolean pb = Connections.rooted(frame_a.R);
+  equation
+    if time > 0.5 then
+      Connections.branch(frame_a.R, frame_b.R);
+      Connections.root(frame_a.R);
+    end if;
+    frame_a.f + frame_b.f = 0;
+  algorithm
+    ar := Connections.rooted(frame_a.R);
+  end JW;
+end OCa;
+
+model ProbeW
+  OCa.JW j;
+end ProbeW;
+//// model: ProbeX
+// Probe (x): overdetermined record connectors declared directly in the root model (no sub-components).
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+end OCa;
+
+model ProbeX
+  OCa.Frame a, b;
+equation
+  Connections.root(a.R);
+  Connections.branch(a.R, b.R);
+  connect(a, b);
+end ProbeX;
+//// model: ProbeB2
+// Probe (b2): same cycle as (b) but connects in a different source order.
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+end OCa;
+
+model ProbeB2
+  OCa.World world;
+  OCa.Joint j1;
+  OCa.Joint j2;
+  OCa.Joint j3;
+equation
+  connect(j2.frame_b, j3.frame_b);
+  connect(j3.frame_a, world.frame_b);
+  connect(world.frame_b, j1.frame_a);
+  connect(j1.frame_b, j2.frame_a);
+end ProbeB2;
+//// model: ProbeC2
+// Probe (c2): equal priorities -> tie-break by cref string (strcmp ascending)? b2 declared/connected first.
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+
+  model FreeBody
+    Frame frame_a;
+    parameter Integer p = 0;
+    Boolean isR;
+  equation
+    Connections.potentialRoot(frame_a.R, p);
+    isR = Connections.isRoot(frame_a.R);
+    frame_a.f = 1;
+  end FreeBody;
+end OCa;
+
+model ProbeC2
+  OCa.FreeBody zz(p = 0);
+  OCa.Joint j;
+  OCa.FreeBody aa(p = 0);
+equation
+  connect(zz.frame_a, j.frame_a);
+  connect(j.frame_b, aa.frame_a);
+end ProbeC2;
+//// model: ProbeC3
+// Probe (c3): definite root present in the same subgraph -> no potential root selected; second separate subgraph selects its own.
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+
+  model FreeBody
+    Frame frame_a;
+    parameter Integer p = 0;
+    Boolean isR;
+  equation
+    Connections.potentialRoot(frame_a.R, p);
+    isR = Connections.isRoot(frame_a.R);
+    frame_a.f = 1;
+  end FreeBody;
+end OCa;
+
+model ProbeC3
+  OCa.World world;
+  OCa.FreeBody b1(p = 0);
+  OCa.Joint j;
+  OCa.FreeBody b2(p = 5);
+  OCa.FreeBody b3(p = 7);
+  OCa.Joint j2;
+  OCa.FreeBody b4(p = 3);
+equation
+  connect(world.frame_b, b1.frame_a);
+  connect(b1.frame_a, j.frame_a);
+  connect(j.frame_b, b2.frame_a);
+  connect(b3.frame_a, j2.frame_a);
+  connect(j2.frame_b, b4.frame_a);
+end ProbeC3;
+//// model: ProbeG2
+// Probe (g2): equalityConstraint with a SCALAR output (not an array) in a loop.
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue;
+    algorithm
+      residue := R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1];
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+end OCa;
+
+model ProbeG2
+  OCa.World world;
+  OCa.Joint j1;
+equation
+  connect(world.frame_b, j1.frame_a);
+  connect(j1.frame_b, world.frame_b);
+end ProbeG2;
+//// model: ProbeI2
+// Probe (i2): Connections.potentialRoot inside an if-equation with a NON-parameter condition (not seen by the graph builder).
+package OCa
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector Frame
+    Real r;
+    Orientation R;
+    flow Real f;
+  end Frame;
+
+  model World
+    Frame frame_b;
+  equation
+    Connections.root(frame_b.R);
+    frame_b.r = 0;
+    frame_b.R.T = {1, 0};
+    frame_b.R.w = 0;
+  end World;
+
+  model Joint
+    Frame frame_a;
+    Frame frame_b;
+  equation
+    Connections.branch(frame_a.R, frame_b.R);
+    frame_b.r = frame_a.r + 1;
+    frame_b.R.T = frame_a.R.T;
+    frame_b.R.w = frame_a.R.w;
+    frame_a.f + frame_b.f = 0;
+  end Joint;
+
+  model Body
+    Frame frame_a;
+  equation
+    frame_a.f = 1;
+  end Body;
+
+  model FBTime
+    Frame frame_a;
+  equation
+    if time > 0.5 then
+      Connections.potentialRoot(frame_a.R);
+    end if;
+    frame_a.f = 1;
+  end FBTime;
+end OCa;
+
+model ProbeI2
+  OCa.FBTime b;
+end ProbeI2;
+//// model: ProbeV2
+// Probe (v2): same as (v) but Rb declared BEFORE Ra in the connector -> edge order is by NAME (connector potentials sorted), not declaration.
+// both edges of the first connect get broken -> order of the two equalityConstraint equations within one connect.
+package OCv
+  record Orientation
+    Real T[2];
+    Real w;
+    function equalityConstraint
+      input Orientation R1;
+      input Orientation R2;
+      output Real residue[1];
+    algorithm
+      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};
+    end equalityConstraint;
+  end Orientation;
+
+  connector F2
+    Real r;
+    Orientation Rb;
+    Orientation Ra;
+    flow Real f;
+  end F2;
+
+  model World
+    F2 f;
+  equation
+    Connections.root(f.Ra);
+    Connections.root(f.Rb);
+  end World;
+
+  model Joint
+    F2 a;
+    F2 b;
+  equation
+    Connections.branch(a.Ra, b.Ra);
+    Connections.branch(a.Rb, b.Rb);
+  end Joint;
+end OCv;
+
+model ProbeV2
+  OCv.World w;
+  OCv.Joint j;
+equation
+  connect(w.f, j.a);
+  connect(j.b, w.f);
+end ProbeV2;

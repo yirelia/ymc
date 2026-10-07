@@ -5809,6 +5809,76 @@ YMC_TEST(flatten_split_if_bindings_and_matrix_comprehensions) {
                            "  protected final parameter Integer bt.n = 3;\nend CT3;\n"));
 }
 
+YMC_TEST(flatten_overdetermined_connection_graph_and_function_tuple_assign) {
+  // 超定连接图：root / branch 从方程里摘掉，环里压平序最先的连接断开、改出 `<根类>.<lhs 路径>.equalityConstraint(…) = {0.0}`
+  //（紧接连接方程），断开连接的超定叶不进连接集；没有根时 isRoot 假、rooted 真。函数体里的元组赋值 `(a, , c) := g(x)`。
+  // 期望值为 omc 1.25.0 对原文实跑的 stdout（OC 探针 x / q、FT 探针 t1，2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("// Probe (x): overdetermined record connectors declared directly in the root model (no sub-components).\n"
+                           "package OCa\n  record Orientation\n    Real T[2];\n    Real w;\n    function equalityConstraint\n"
+                           "      input Orientation R1;\n      input Orientation R2;\n      output Real residue[1];\n"
+                           "    algorithm\n      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};\n    end equalityConstraint;\n"
+                           "  end Orientation;\n\n  connector Frame\n    Real r;\n    Orientation R;\n    flow Real f;\n"
+                           "  end Frame;\n\n  model World\n    Frame frame_b;\n  equation\n    Connections.root(frame_b.R);\n"
+                           "    frame_b.r = 0;\n    frame_b.R.T = {1, 0};\n    frame_b.R.w = 0;\n  end World;\n\n  model Joint\n"
+                           "    Frame frame_a;\n    Frame frame_b;\n  equation\n    Connections.branch(frame_a.R, frame_b.R);\n"
+                           "    frame_b.r = frame_a.r + 1;\n    frame_b.R.T = frame_a.R.T;\n    frame_b.R.w = frame_a.R.w;\n"
+                           "    frame_a.f + frame_b.f = 0;\n  end Joint;\n\n  model Body\n    Frame frame_a;\n  equation\n"
+                           "    frame_a.f = 1;\n  end Body;\nend OCa;\n\nmodel ProbeX\n  OCa.Frame a, b;\nequation\n"
+                           "  Connections.root(a.R);\n  Connections.branch(a.R, b.R);\n  connect(a, b);\nend ProbeX;\n"),
+               std::string("function OCa.Orientation \"Automatically generated record constructor for OCa.Orientation\"\n"
+                           "  input Real[2] T;\n  input Real w;\n  output Orientation res;\nend OCa.Orientation;\n\n"
+                           "function ProbeX.a.R.equalityConstraint\n  input OCa.Orientation R1;\n  input OCa.Orientation R2;\n"
+                           "  output Real[1] residue;\nalgorithm\n  residue := {R1.T[1] * R2.T[2] - R1.T[2] * R2.T[1]};\n"
+                           "end ProbeX.a.R.equalityConstraint;\n\nclass ProbeX\n  Real a.r;\n  Real a.R.T[1];\n"
+                           "  Real a.R.T[2];\n  Real a.R.w;\n  Real a.f;\n  Real b.r;\n  Real b.R.T[1];\n  Real b.R.T[2];\n"
+                           "  Real b.R.w;\n  Real b.f;\nequation\n  a.r = b.r;\n  -(a.f + b.f) = 0.0;\n  a.f = 0.0;\n"
+                           "  b.f = 0.0;\n  ProbeX.a.R.equalityConstraint(a.R, b.R) = {0.0};\nend ProbeX;\n"));
+  YMC_CHECK_EQ(flatten_src("// Probe (q): graph without any (definite or potential) root: isRoot=false, rooted=true (no distances), loop still broken.\n"
+                           "package OCa\n  record Orientation\n    Real T[2];\n    Real w;\n    function equalityConstraint\n"
+                           "      input Orientation R1;\n      input Orientation R2;\n      output Real residue[1];\n"
+                           "    algorithm\n      residue := {R1.T[1]*R2.T[2] - R1.T[2]*R2.T[1]};\n    end equalityConstraint;\n"
+                           "  end Orientation;\n\n  connector Frame\n    Real r;\n    Orientation R;\n    flow Real f;\n"
+                           "  end Frame;\n\n  model World\n    Frame frame_b;\n  equation\n    Connections.root(frame_b.R);\n"
+                           "    frame_b.r = 0;\n    frame_b.R.T = {1, 0};\n    frame_b.R.w = 0;\n  end World;\n\n  model Joint\n"
+                           "    Frame frame_a;\n    Frame frame_b;\n  equation\n    Connections.branch(frame_a.R, frame_b.R);\n"
+                           "    frame_b.r = frame_a.r + 1;\n    frame_b.R.T = frame_a.R.T;\n    frame_b.R.w = frame_a.R.w;\n"
+                           "    frame_a.f + frame_b.f = 0;\n  end Joint;\n\n  model Body\n    Frame frame_a;\n  equation\n"
+                           "    frame_a.f = 1;\n  end Body;\n\n  model RJ\n    Frame frame_a;\n    Frame frame_b;\n"
+                           "    Boolean ra;\n    Boolean rb;\n    Boolean ia;\n  equation\n"
+                           "    Connections.branch(frame_a.R, frame_b.R);\n    ra = Connections.rooted(frame_a.R);\n"
+                           "    rb = Connections.rooted(frame_b.R);\n    ia = Connections.isRoot(frame_a.R);\n"
+                           "    frame_a.f + frame_b.f = 0;\n  end RJ;\nend OCa;\n\nmodel ProbeQ\n  OCa.RJ j1;\n  OCa.RJ j2;\n"
+                           "equation\n  connect(j1.frame_b, j2.frame_a);\n  connect(j2.frame_b, j1.frame_a);\nend ProbeQ;\n"),
+               std::string("function OCa.Orientation \"Automatically generated record constructor for OCa.Orientation\"\n"
+                           "  input Real[2] T;\n  input Real w;\n  output Orientation res;\nend OCa.Orientation;\n\n"
+                           "function ProbeQ.j1.frame_b.R.equalityConstraint\n  input OCa.Orientation R1;\n"
+                           "  input OCa.Orientation R2;\n  output Real[1] residue;\nalgorithm\n"
+                           "  residue := {R1.T[1] * R2.T[2] - R1.T[2] * R2.T[1]};\nend ProbeQ.j1.frame_b.R.equalityConstraint;\n"
+                           "\nclass ProbeQ\n  Real j1.frame_a.r;\n  Real j1.frame_a.R.T[1];\n  Real j1.frame_a.R.T[2];\n"
+                           "  Real j1.frame_a.R.w;\n  Real j1.frame_a.f;\n  Real j1.frame_b.r;\n  Real j1.frame_b.R.T[1];\n"
+                           "  Real j1.frame_b.R.T[2];\n  Real j1.frame_b.R.w;\n  Real j1.frame_b.f;\n  Boolean j1.ra;\n"
+                           "  Boolean j1.rb;\n  Boolean j1.ia;\n  Real j2.frame_a.r;\n  Real j2.frame_a.R.T[1];\n"
+                           "  Real j2.frame_a.R.T[2];\n  Real j2.frame_a.R.w;\n  Real j2.frame_a.f;\n  Real j2.frame_b.r;\n"
+                           "  Real j2.frame_b.R.T[1];\n  Real j2.frame_b.R.T[2];\n  Real j2.frame_b.R.w;\n  Real j2.frame_b.f;\n"
+                           "  Boolean j2.ra;\n  Boolean j2.rb;\n  Boolean j2.ia;\nequation\n  j1.frame_b.r = j2.frame_a.r;\n"
+                           "  j2.frame_b.R.T[1] = j1.frame_a.R.T[1];\n  j2.frame_b.R.T[2] = j1.frame_a.R.T[2];\n"
+                           "  j2.frame_b.R.w = j1.frame_a.R.w;\n  j2.frame_b.r = j1.frame_a.r;\n"
+                           "  j2.frame_a.f + j1.frame_b.f = 0.0;\n  j2.frame_b.f + j1.frame_a.f = 0.0;\n"
+                           "  ProbeQ.j1.frame_b.R.equalityConstraint(j1.frame_b.R, j2.frame_a.R) = {0.0};\n  j1.ra = true;\n"
+                           "  j1.rb = true;\n  j1.ia = false;\n  j1.frame_a.f + j1.frame_b.f = 0.0;\n  j2.ra = true;\n"
+                           "  j2.rb = true;\n  j2.ia = false;\n  j2.frame_a.f + j2.frame_b.f = 0.0;\nend ProbeQ;\n"));
+  YMC_CHECK_EQ(flatten_src("function g\n  input Real x;\n  output Real a;\n  output Real b;\n  output Integer c;\nalgorithm\n"
+                           "  a := x;\n  b := 2 * x;\n  c := 3;\nend g;\nfunction f\n  input Real x;\n  output Real y;\n"
+                           "protected\n  Real a, b;\n  Real v[2];\n  Integer c;\nalgorithm\n  (a, b) := g(x);\n"
+                           "  (, b, c) := g(2 * x);\n  (v[1], , c) := g(x);\n  y := a + b + v[1] + c;\nend f;\nmodel FT1\n"
+                           "  Real y = f(time);\nend FT1;\n"),
+               std::string("function f\n  input Real x;\n  output Real y;\n  protected Real a;\n  protected Real b;\n"
+                           "  protected Real[2] v;\n  protected Integer c;\nalgorithm\n  (a, b) := g(x);\n"
+                           "  (_, b, c) := g(2.0 * x);\n  (v[1], _, c) := g(x);\n  y := a + b + v[1] + /*Real*/(c);\nend f;\n\n"
+                           "function g\n  input Real x;\n  output Real a;\n  output Real b;\n  output Integer c;\nalgorithm\n"
+                           "  a := x;\n  b := 2.0 * x;\n  c := 3;\nend g;\n\nclass FT1\n  Real y = f(time);\nend FT1;\n"));
+}
+
 YMC_TEST(flatten_external_object_variable_and_structors) {
   // 外部对象：组件压平成按类名打印的叶变量，构造 `EO()` 换成 `EO.constructor(1)`（默认实参照补），构造 / 析构随类型发射
   //（外部函数未声明 pure → impure）；当实参传给外部函数。期望 = omc 1.25.0 实跑（2026-10-07，下同）。

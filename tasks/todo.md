@@ -1916,6 +1916,17 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           applySubscriptIf（NFExpression.mo:1653-1683），取完不再化简（`parameter Real p[2] = if b then {1, 2} else {1, 3}` →
           `p[1] = if b then 1.0 else 1.0`，ymc 打 `p[1] = 1.0`）。
           验证：slice 637 例 PASS 586 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 587 / FAIL 38（不变）；整个 testsuite PASS 1641（不变）/ FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 250→259；探针 8482→8489（ct-t1 / ct-ut 7 个）；四套构建零警告、单测 287→288；ASan 与 gcc 逐例一致。
+    - [x] (62n) flat：超定连接图（Connections.root / potentialRoot / branch / isRoot / rooted + equalityConstraint）+ 函数体
+          元组赋值（2026-10-08）：此前 `Connections.*` 一律当限定名函数调用 SKIP（MultiBody 26 个示例卡在 World 的
+          `Connections.root(frame_b.R)`）。照 NFOCConnectionGraph（v1.25.0）实现：某个 Connections.* 调用的实参是超定类（类里有
+          equalityConstraint）才开图；root / potentialRoot / branch 取压平后顶层的无返回值调用、从方程里摘掉；各逐元素连接的超定
+          cref 成边，逆压平序过并查集（纯连接环 / 重复连接丢掉），根连哑根、branch 先连、连接边按序加、成环的断开，潜在根按
+          优先级 + cref 字节序补根；断开的连接里超定 cref 下恰一层的叶不进连接集（isPrefix 只认一层），改出
+          `<根类>.<lhs 路径>.equalityConstraint(lhs, rhs) = {0.0, …}`（紧接连接方程；Real[0] 消失）；isRoot / rooted 在收尾折叠时
+          按最终根与 BFS 距离代成字面量（只在方程里），条件含它们的 if 方程整条留到那时再选支。规则由研究子任务对源码逐条
+          核实并与 omc 在 1040 个随机模型上差分（0 不一致），本实现对其中 200 个逐字节一致。另：函数体里的元组赋值
+          `(a, , c) := g(x)`（空位 `_`，数组输出目标）与用前未赋值检查认元组目标（markAssignedOutput 的 TUPLE 支）。
+          验证：slice 637 例 PASS 586 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 587 / FAIL 38（不变）；整个 testsuite PASS 1641（不变）/ FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 259（不变；MultiBody 27 个越过 Connections.*）；探针 8489→8583（oc-p1 / oc-f1 / ft-t1 / oc-ut 94 个）；四套构建零警告、单测 288→289；ASan 与 gcc 逐例一致。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
