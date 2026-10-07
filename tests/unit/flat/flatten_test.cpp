@@ -5681,6 +5681,72 @@ YMC_TEST(flatten_connector_record_params_fixed_override_array_algorithms_enum_ta
                            "  k2 := {{1, 2, 3, 4}, {2, 3, 4, 1}, {3, 4, 1, 2}, {4, 1, 2, 3}}[a, L.X];\nend CE2;\n"));
 }
 
+YMC_TEST(flatten_enum_tables_runtime_enum_subscripts_and_alias_connectors) {
+  // 包里的枚举值真值表（矩阵 / 3 维 `[{{{…}}}]` 写法）按运行时枚举下标取元素：参数下标求值标 final、已知前导下标取元素、
+  // 嵌套的表取元素照写；变量 / 参数数组的枚举维上的运行时下标照写；import 别名下的短类连接器数组整体连接；枚举区间常量
+  // 数组的 `:` 维与 `Integer(pre(x))`；枚举数组属性 `start = fill(L.U, n)` 逐元素摊分。期望值为 omc 1.25.0 对原文实跑
+  //（DG 探针 ut，2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("package Pk\n  type L = enumeration(U, X, Z, O);\n  type R = enumeration(U, X, Z);\n"
+                           "  type S = enumeration(A, B);\n  package Tables\n    constant R Conv[L] = {R.U, R.X, R.Z, R.X};\n"
+                           "    constant L T3[S, R, R] = [{{{L.U, L.X, L.Z}, {L.X, L.X, L.O}, {L.Z, L.O, L.Z}}, {{L.O, L.U, L.X}, {L.Z, L.Z, L.Z}, {L.U, L.U, L.U}}}];\n"
+                           "  end Tables;\nend Pk;\nmodel TQ4\n  import T = Pk.Tables;\n  import Pk.L;\n"
+                           "  parameter Pk.S strength = Pk.S.B;\n  discrete L a(start = L.U, fixed = true);\n"
+                           "  discrete L b(start = L.X, fixed = true);\n  L y;\nalgorithm\n  when time > 0.5 then\n"
+                           "    a := L.Z;\n  end when;\n  y := T.T3[strength, T.Conv[a], T.Conv[b]];\nend TQ4;\n"),
+               std::string("class TQ4\n  final parameter enumeration(A, B) strength = Pk.S.B;\n"
+                           "  discrete enumeration(U, X, Z, O) a(start = Pk.L.U, fixed = true);\n"
+                           "  discrete enumeration(U, X, Z, O) b(start = Pk.L.X, fixed = true);\n  enumeration(U, X, Z, O) y;\n"
+                           "algorithm\n  when time > 0.5 then\n    a := Pk.L.Z;\n  end when;\n"
+                           "  y := {{Pk.L.O, Pk.L.U, Pk.L.X}, {Pk.L.Z, Pk.L.Z, Pk.L.Z}, {Pk.L.U, Pk.L.U, Pk.L.U}}[{Pk.R.U, Pk.R.X, Pk.R.Z, Pk.R.X}[a], {Pk.R.U, Pk.R.X, Pk.R.Z, Pk.R.X}[b]];\n"
+                           "end TQ4;\n"));
+  YMC_CHECK_EQ(flatten_src("type L = enumeration(U, X, Z, O);\nmodel PR1\n  parameter Integer ResetMap[L] = {1, 4, 3, 2};\n"
+                           "  discrete L reset(start = L.U, fixed = true);\n  Integer flag;\n  Real w[L];\n  Real v;\n"
+                           "algorithm\n  when time > 0.5 then\n    reset := L.Z;\n  end when;\n  flag := ResetMap[reset];\n"
+                           "equation\n  w = {time, 2 * time, 3 * time, 4 * time};\n  v = w[reset] + w[pre(reset)];\nend PR1;\n"),
+               std::string("class PR1\n  parameter Integer ResetMap[L.U] = 1;\n  parameter Integer ResetMap[L.X] = 4;\n"
+                           "  parameter Integer ResetMap[L.Z] = 3;\n  parameter Integer ResetMap[L.O] = 2;\n"
+                           "  discrete enumeration(U, X, Z, O) reset(start = L.U, fixed = true);\n  Integer flag;\n"
+                           "  Real w[L.U];\n  Real w[L.X];\n  Real w[L.Z];\n  Real w[L.O];\n  Real v;\nequation\n"
+                           "  w[L.U] = time;\n  w[L.X] = 2.0 * time;\n  w[L.Z] = 3.0 * time;\n  w[L.O] = 4.0 * time;\n"
+                           "  v = w[reset] + w[pre(reset)];\nalgorithm\n  when time > 0.5 then\n    reset := L.Z;\n  end when;\n"
+                           "  flag := ResetMap[reset];\nend PR1;\n"));
+  YMC_CHECK_EQ(flatten_src("package P\n  package Interfaces\n    type Logic = enumeration(U, X, Z);\n"
+                           "    connector DigitalSignal = Logic;\n    connector DigitalInput = input DigitalSignal;\n"
+                           "    connector DigitalOutput = output DigitalSignal;\n    partial block MISO\n      import D = P;\n"
+                           "      parameter Integer n = 2;\n      D.Interfaces.DigitalInput x[n];\n"
+                           "      D.Interfaces.DigitalOutput y;\n    end MISO;\n  end Interfaces;\n  block And\n"
+                           "    extends P.Interfaces.MISO;\n  equation\n    y = x[1];\n  end And;\nend P;\nmodel CS4\n"
+                           "  import D = P;\n  extends D.Interfaces.MISO;\n  D.And G1(final n = n);\nequation\n"
+                           "  connect(x, G1.x);\n  connect(G1.y, y);\nend CS4;\n"),
+               std::string("class CS4\n  final parameter Integer n = 2;\n  input enumeration(U, X, Z) x[1];\n"
+                           "  input enumeration(U, X, Z) x[2];\n  output enumeration(U, X, Z) y;\n"
+                           "  final parameter Integer G1.n = 2;\n  enumeration(U, X, Z) G1.x[1];\n"
+                           "  enumeration(U, X, Z) G1.x[2];\n  enumeration(U, X, Z) G1.y;\nequation\n  x[1] = G1.x[1];\n"
+                           "  x[2] = G1.x[2];\n  G1.y = y;\n  G1.y = G1.x[1];\nend CS4;\n"));
+  YMC_CHECK_EQ(flatten_src("type L = enumeration(U, X, Z, O);\nmodel ER1\n  constant L LogicValues[:] = L.U:L.O;\n"
+                           "  constant L Sub[:] = L.X:L.Z;\n  discrete L x(start = L.U, fixed = true);\n  Real xr;\n  L xd;\n"
+                           "equation\n  when time > 0.5 then\n    x = L.Z;\n  end when;\n  xr = Integer(pre(x));\n"
+                           "  xd = LogicValues[integer(delay(xr, 0.1))];\nend ER1;\n"),
+               std::string("class ER1\n  constant enumeration(U, X, Z, O) LogicValues[1] = L.U;\n"
+                           "  constant enumeration(U, X, Z, O) LogicValues[2] = L.X;\n"
+                           "  constant enumeration(U, X, Z, O) LogicValues[3] = L.Z;\n"
+                           "  constant enumeration(U, X, Z, O) LogicValues[4] = L.O;\n"
+                           "  constant enumeration(U, X, Z, O) Sub[1] = L.X;\n  constant enumeration(U, X, Z, O) Sub[2] = L.Z;\n"
+                           "  discrete enumeration(U, X, Z, O) x(start = L.U, fixed = true);\n  Real xr;\n"
+                           "  enumeration(U, X, Z, O) xd;\nequation\n  when time > 0.5 then\n    x = L.Z;\n  end when;\n"
+                           "  xr = /*Real*/(Integer(pre(x)));\n  xd = {L.U, L.X, L.Z, L.O}[integer(delay(xr, 0.1, 0.1))];\n"
+                           "end ER1;\n"));
+  YMC_CHECK_EQ(flatten_src("type L = enumeration(U, X, Z, O);\nmodel EF1\n  parameter Integer n = 3;\n"
+                           "  L s[n](start = fill(L.U, n));\n  discrete L d[2](start = {L.X, L.Z}, each fixed = true);\n"
+                           "equation\n  s = fill(L.O, n);\n  when time > 0.5 then\n    d = {L.U, L.U};\n  end when;\nend EF1;\n"),
+               std::string("class EF1\n  final parameter Integer n = 3;\n  enumeration(U, X, Z, O) s[1](start = L.U);\n"
+                           "  enumeration(U, X, Z, O) s[2](start = L.U);\n  enumeration(U, X, Z, O) s[3](start = L.U);\n"
+                           "  discrete enumeration(U, X, Z, O) d[1](start = L.X, fixed = true);\n"
+                           "  discrete enumeration(U, X, Z, O) d[2](start = L.Z, fixed = true);\nequation\n  s[1] = L.O;\n"
+                           "  s[2] = L.O;\n  s[3] = L.O;\n  when time > 0.5 then\n    d[1] = L.U;\n    d[2] = L.U;\n"
+                           "  end when;\nend EF1;\n"));
+}
+
 YMC_TEST(flatten_external_object_variable_and_structors) {
   // 外部对象：组件压平成按类名打印的叶变量，构造 `EO()` 换成 `EO.constructor(1)`（默认实参照补），构造 / 析构随类型发射
   //（外部函数未声明 pure → impure）；当实参传给外部函数。期望 = omc 1.25.0 实跑（2026-10-07，下同）。

@@ -1,0 +1,24 @@
+//// set: dk-e1 — 枚举数组的属性值按元素摊分：`start = fill(L.U, n)`、`fill(p, n)`（p 是枚举参数）、each
+//// model: EF1
+type L = enumeration(U, X, Z, O);
+model EF1
+  parameter Integer n = 3;
+  L s[n](start = fill(L.U, n));
+  discrete L d[2](start = {L.X, L.Z}, each fixed = true);
+equation
+  s = fill(L.O, n);
+  when time > 0.5 then
+    d = {L.U, L.U};
+  end when;
+end EF1;
+//// model: EF2
+type L = enumeration(U, X, Z, O);
+model EF2
+  parameter L p = L.X;
+  parameter Integer n = 2;
+  L s[n](start = fill(p, n));
+  L t[n](each start = p);
+equation
+  s = fill(L.O, n);
+  t = {L.U, L.X};
+end EF2;

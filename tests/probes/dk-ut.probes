@@ -1,0 +1,96 @@
+//// set: dk-ut — 单测原文
+//// model: CS4
+package P
+  package Interfaces
+    type Logic = enumeration(U, X, Z);
+    connector DigitalSignal = Logic;
+    connector DigitalInput = input DigitalSignal;
+    connector DigitalOutput = output DigitalSignal;
+    partial block MISO
+      import D = P;
+      parameter Integer n = 2;
+      D.Interfaces.DigitalInput x[n];
+      D.Interfaces.DigitalOutput y;
+    end MISO;
+  end Interfaces;
+  block And
+    extends P.Interfaces.MISO;
+  equation
+    y = x[1];
+  end And;
+end P;
+model CS4
+  import D = P;
+  extends D.Interfaces.MISO;
+  D.And G1(final n = n);
+equation
+  connect(x, G1.x);
+  connect(G1.y, y);
+end CS4;
+//// model: EF1
+type L = enumeration(U, X, Z, O);
+model EF1
+  parameter Integer n = 3;
+  L s[n](start = fill(L.U, n));
+  discrete L d[2](start = {L.X, L.Z}, each fixed = true);
+equation
+  s = fill(L.O, n);
+  when time > 0.5 then
+    d = {L.U, L.U};
+  end when;
+end EF1;
+//// model: ER1
+type L = enumeration(U, X, Z, O);
+model ER1
+  constant L LogicValues[:] = L.U:L.O;
+  constant L Sub[:] = L.X:L.Z;
+  discrete L x(start = L.U, fixed = true);
+  Real xr;
+  L xd;
+equation
+  when time > 0.5 then
+    x = L.Z;
+  end when;
+  xr = Integer(pre(x));
+  xd = LogicValues[integer(delay(xr, 0.1))];
+end ER1;
+//// model: PR1
+type L = enumeration(U, X, Z, O);
+model PR1
+  parameter Integer ResetMap[L] = {1, 4, 3, 2};
+  discrete L reset(start = L.U, fixed = true);
+  Integer flag;
+  Real w[L];
+  Real v;
+algorithm
+  when time > 0.5 then
+    reset := L.Z;
+  end when;
+  flag := ResetMap[reset];
+equation
+  w = {time, 2 * time, 3 * time, 4 * time};
+  v = w[reset] + w[pre(reset)];
+end PR1;
+//// model: TQ4
+package Pk
+  type L = enumeration(U, X, Z, O);
+  type R = enumeration(U, X, Z);
+  type S = enumeration(A, B);
+  package Tables
+    constant R Conv[L] = {R.U, R.X, R.Z, R.X};
+    constant L T3[S, R, R] = [{{{L.U, L.X, L.Z}, {L.X, L.X, L.O}, {L.Z, L.O, L.Z}}, {{L.O, L.U, L.X}, {L.Z, L.Z, L.Z}, {L.U, L.U, L.U}}}];
+  end Tables;
+end Pk;
+model TQ4
+  import T = Pk.Tables;
+  import Pk.L;
+  parameter Pk.S strength = Pk.S.B;
+  discrete L a(start = L.U, fixed = true);
+  discrete L b(start = L.X, fixed = true);
+  L y;
+algorithm
+  when time > 0.5 then
+    a := L.Z;
+  end when;
+  y := T.T3[strength, T.Conv[a], T.Conv[b]];
+end TQ4;

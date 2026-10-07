@@ -253,3 +253,11 @@ FluidHeatFlow.Examples.TestOpenTank）卡在 derivative / inverse 注解的形�
 TwoTanks / TestCylinder——TestCylinder 还要 fixed 预扫按合并后的修饰取值，此前会把 cylinder2.T0fixed 错打成 final），另有
 Machines DCMachines.DCPM_Cooling。Digital 的 15 个示例越过枚举属性值的参数引用、when 条件向量里的 `not initial()`、组件数组
 实例的算法段、枚举维常量表的运行时下标，往下卡在包里的枚举值真值表（`Tables.OrTable[…]` 等）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-08 加宽 62k 之后：PASS 166 → 189
+
+包里的枚举值真值表能按运行时枚举下标取元素（矩阵写法 / 3 维 `[{{{…}}}]` 的求值、限定名常量各维按声明处作用域解析类型）、
+枚举维变量数组的运行时下标照写、枚举数组属性逐元素摊分、枚举区间常量的 `:` 维、import 别名下的短类连接器之后，Digital 的
+22 个示例转 PASS（Multiplexer / FlipFlop / HalfAdder / FullAdder / Adder4 / Counter3 / Counter / VectorDelay / DFFREG ×4 /
+DLATREG ×4 / NXFER / NRXFER / BUF3S / INV3S / WiredX / MUX2x1），另有 Analog.Examples.AD_DA_conversion。Digital 只剩 RAM
+（限定名函数调用）。FAIL / ACCEPTS-INVALID / CRASH 0。

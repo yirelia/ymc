@@ -416,3 +416,9 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `ej-a1` | 5 | 组件数组各实例的算法段（目标 `s[1].x :=`）：for 体元素目标、整数组目标、嵌套组件数组、when 目标的连续绑定（omc 报错）、初始算法的参数目标 |
 | `ej-k1` | 17 | 枚举维常量表的运行时下标：`t[a, b]` → `{{…}, …}[a, b]`、已知前导下标取元素（`t[L.X, b]` → `{2, 3, 4, 1}[b]`）、已知尾随下标照写（`[a, L.X]`）、整数维混排、包里的枚举类型 / import 别名 / 连接器短类的输入（MSL Digital 的 delayTable 形态）；Boolean 维、参数下标（SKIP） |
 | `ej-ut` | 10 | 单测原文 |
+| `dk-e1` | 2 | 枚举数组的属性值按元素摊分：`start = fill(L.U, n)`、`fill(p, n)`（p 是枚举参数）、each |
+| `dk-q1` | 5 | 包里的枚举值真值表：矩阵 / 花括号 / 3 维 `[{{{…}}}]` 写法、import 别名 `T.OrTable[a, b]`、已知前导下标取元素、参数下标求值标 final、嵌套的表取元素照写；下标是别的枚举类型（omc 报错） |
+| `dk-p1` | 2 | 变量 / 参数数组的枚举维上的运行时下标照写（`ResetMap[reset]`、`w[pre(reset)]`）；`Integer(pre(x))`、运行时 if 式的 Integer() 照写 |
+| `dk-s1` | 4 | 短类连接器（`connector DigitalInput = input DigitalSignal`）数组整体连接：两层短类、partial block 的 MISO、类型路径首段是 import 别名（`D.Interfaces.DigitalInput x[n]`） |
+| `dk-r1` | 2 | 枚举区间常量数组 `LogicValues[:] = L.U:L.O` 的 `:` 维、带运行时整数下标的取元素（`delay` 补第三实参）；参数枚举区间（SKIP） |
+| `dk-ut` | 5 | 单测原文 |

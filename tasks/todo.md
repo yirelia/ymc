@@ -1889,6 +1889,16 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           TestCylinder 才露。组件数组各实例的算法段目标带实例下标（`s[1].x :=`）按逐段下标找变量。枚举维常量表的运行时下标
           （Digital 的 `delayTable[y_old, x]`）：整体值按下标取、已知前导下标取元素、其余照写（`{2, 3, 4, 1}[b]`）。
           验证：slice 631 例 PASS 580 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 581 / FAIL 38（不变）；整个 testsuite PASS 1620→1622（declarations/Ticket4276b、others/PEXPipeTotal）/ FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 155→166；探针 8383→8447（ej-e1 / w1 / i1 / c1 / f1 / a1 / k1 / ut 64 个）；四套构建零警告、单测 283→285；ASan 与 gcc 逐例一致。
+    - [x] (62k) flat：MSL Digital——包里的枚举值真值表的运行时下标 + 枚举维变量数组的运行时下标 + 枚举数组属性 + 枚举区间常量
+          + import 别名下的短类连接器（2026-10-08）：Digital 的真值表 `constant Logic OrTable[L, L] = [L.'U', …; …]`（矩阵写法、
+          3 维的 `[{{{…}}}]`）此前求不出值（矩阵求值只认数值 / Boolean / String）；按运行时枚举下标取（`T.OrTable[a, b]`）时
+          const_sub_specs 只认整数下标——现在矩阵求值认同一枚举类型的元素、单个 ≥ 3 维元素的矩阵就是它（MLS §10.4.2），限定名
+          常量的各维按声明处作用域解析类型（import 别名也认），枚举维上已知的下标取元素、运行时的照写（`{…}[a, b]`；参数下标
+          求值标 final）。枚举维变量 / 参数数组的运行时枚举下标（`ResetMap[reset]`）照写；`L s[n](start = fill(L.'U', n))`
+          逐元素摊分；`constant Logic LogicValues[:] = L.'U':L.'-'` 的 `:` 维按枚举区间求值；运行时枚举式的 `Integer(pre(x))`
+          照写。短类连接器的类型路径首段是 import 别名（MISO 的 `D.Interfaces.DigitalInput x[n]`）此前当非连接器 SKIP——改用
+          认 import 的类路径解析。由值合成的枚举字面量 ty 不带类型名：枚举类型核对按元素字面量路径的类型段认（has_enum_type）。
+          验证：slice 631 例 PASS 580 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 581 / FAIL 38（不变）；整个 testsuite PASS 1622（不变）/ FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 166→189；探针 8447→8467（dk-e1 / q1 / p1 / s1 / r1 / ut 20 个）；四套构建零警告、单测 285→286；ASan 与 gcc 逐例一致。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

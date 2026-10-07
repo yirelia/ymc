@@ -1,0 +1,90 @@
+//// set: dk-s1 — 短类连接器（`connector DigitalInput = input DigitalSignal`）数组整体连接：两层短类、partial block 的 MISO、类型路径首段是 import 别名（`D.Interfaces.DigitalInput x[n]`）
+//// model: CS1
+type L = enumeration(U, X, Z);
+connector DI = input L;
+connector DO = output L;
+model G
+  parameter Integer n = 2;
+  DI x[n];
+  DO y;
+equation
+  y = x[1];
+end G;
+model CS1
+  parameter Integer n = 2;
+  DI x[n];
+  DO y;
+  G g(n = n);
+equation
+  connect(g.x, x);
+  connect(g.y, y);
+end CS1;
+//// model: CS2
+connector RI = input Real;
+connector RO = output Real;
+model G
+  parameter Integer n = 2;
+  RI x[n];
+  RO y;
+equation
+  y = x[1];
+end G;
+model CS2
+  parameter Integer n = 2;
+  RI x[n];
+  RO y;
+  G g(n = n);
+equation
+  connect(g.x, x);
+  connect(g.y, y);
+end CS2;
+//// model: CS3
+type L = enumeration(U, X, Z);
+connector DS = L;
+connector DI = input DS;
+connector DO = output DS;
+partial model MISO
+  parameter Integer n = 2;
+  DI x[n];
+  DO y;
+end MISO;
+model G
+  extends MISO;
+equation
+  y = x[1];
+end G;
+model CS3
+  extends MISO;
+  G g(final n = n);
+equation
+  connect(g.x, x);
+  connect(g.y, y);
+end CS3;
+//// model: CS4
+package P
+  package Interfaces
+    type Logic = enumeration(U, X, Z);
+    connector DigitalSignal = Logic;
+    connector DigitalInput = input DigitalSignal;
+    connector DigitalOutput = output DigitalSignal;
+    partial block MISO
+      import D = P;
+      parameter Integer n = 2;
+      D.Interfaces.DigitalInput x[n];
+      D.Interfaces.DigitalOutput y;
+    end MISO;
+  end Interfaces;
+  block And
+    extends P.Interfaces.MISO;
+  equation
+    y = x[1];
+  end And;
+end P;
+model CS4
+  import D = P;
+  extends D.Interfaces.MISO;
+  D.And G1(final n = n);
+equation
+  connect(x, G1.x);
+  connect(G1.y, y);
+end CS4;

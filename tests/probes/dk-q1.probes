@@ -1,0 +1,91 @@
+//// set: dk-q1 — 包里的枚举值真值表：矩阵 / 花括号 / 3 维 `[{{{…}}}]` 写法、import 别名 `T.OrTable[a, b]`、已知前导下标取元素、参数下标求值标 final、嵌套的表取元素照写；下标是别的枚举类型（omc 报错）
+//// model: TQ1
+package Pk
+  type L = enumeration(U, X, Z, O);
+  package Tables
+    constant L OrTable[L, L] = [L.U, L.X, L.Z, L.O; L.X, L.X, L.O, L.O; L.Z, L.O, L.Z, L.O; L.O, L.O, L.O, L.O];
+  end Tables;
+end Pk;
+model TQ1
+  import T = Pk.Tables;
+  import Pk.L;
+  discrete L a(start = L.U, fixed = true);
+  discrete L b(start = L.X, fixed = true);
+  L y, z;
+equation
+  when time > 0.5 then
+    a = L.Z;
+  end when;
+  y = T.OrTable[a, b];
+  z = Pk.Tables.OrTable[L.X, b];
+end TQ1;
+//// model: TQ2
+package Pk
+  type L = enumeration(U, X, Z, O);
+  package Tables
+    constant L OrTable[L, L] = [L.U, L.X, L.Z, L.O; L.X, L.X, L.O, L.O; L.Z, L.O, L.Z, L.O; L.O, L.O, L.O, L.O];
+    constant Integer IntTable[L] = {1, 2, 3, 4};
+  end Tables;
+end Pk;
+model TQ2
+  import T = Pk.Tables;
+  import Pk.L;
+  L y = T.OrTable[L.X, L.Z];
+  L z = Pk.Tables.OrTable[L.X, L.Z];
+  Integer i = T.IntTable[L.Z];
+end TQ2;
+//// model: TQ3
+package Pk
+  type L = enumeration(U, X, Z, O);
+  package Tables
+    constant L Vec[L] = {L.U, L.X, L.Z, L.O};
+    constant L Br[L, L] = {{L.U, L.X, L.Z, L.O}, {L.X, L.X, L.O, L.O}, {L.Z, L.O, L.Z, L.O}, {L.O, L.O, L.O, L.O}};
+    constant L Mx[L, L] = [L.U, L.X, L.Z, L.O; L.X, L.X, L.O, L.O; L.Z, L.O, L.Z, L.O; L.O, L.O, L.O, L.O];
+  end Tables;
+end Pk;
+model TQ3
+  import Pk.L;
+  L v = Pk.Tables.Vec[L.Z];
+  L b = Pk.Tables.Br[L.X, L.Z];
+  L m = Pk.Tables.Mx[L.X, L.Z];
+end TQ3;
+//// model: TQ4
+package Pk
+  type L = enumeration(U, X, Z, O);
+  type R = enumeration(U, X, Z);
+  type S = enumeration(A, B);
+  package Tables
+    constant R Conv[L] = {R.U, R.X, R.Z, R.X};
+    constant L T3[S, R, R] = [{{{L.U, L.X, L.Z}, {L.X, L.X, L.O}, {L.Z, L.O, L.Z}}, {{L.O, L.U, L.X}, {L.Z, L.Z, L.Z}, {L.U, L.U, L.U}}}];
+  end Tables;
+end Pk;
+model TQ4
+  import T = Pk.Tables;
+  import Pk.L;
+  parameter Pk.S strength = Pk.S.B;
+  discrete L a(start = L.U, fixed = true);
+  discrete L b(start = L.X, fixed = true);
+  L y;
+algorithm
+  when time > 0.5 then
+    a := L.Z;
+  end when;
+  y := T.T3[strength, T.Conv[a], T.Conv[b]];
+end TQ4;
+//// model: TQ5
+package Pk
+  type L = enumeration(U, X, Z, O);
+  type F = enumeration(A, B, C, D);
+  package Tables
+    constant L T[L] = {L.U, L.X, L.Z, L.O};
+  end Tables;
+end Pk;
+model TQ5
+  discrete Pk.F f(start = Pk.F.A, fixed = true);
+  Pk.L y;
+equation
+  when time > 0.5 then
+    f = Pk.F.C;
+  end when;
+  y = Pk.Tables.T[f];
+end TQ5;

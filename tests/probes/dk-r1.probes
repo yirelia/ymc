@@ -1,0 +1,23 @@
+//// set: dk-r1 — 枚举区间常量数组 `LogicValues[:] = L.U:L.O` 的 `:` 维、带运行时整数下标的取元素（`delay` 补第三实参）；参数枚举区间（SKIP）
+//// model: ER1
+type L = enumeration(U, X, Z, O);
+model ER1
+  constant L LogicValues[:] = L.U:L.O;
+  constant L Sub[:] = L.X:L.Z;
+  discrete L x(start = L.U, fixed = true);
+  Real xr;
+  L xd;
+equation
+  when time > 0.5 then
+    x = L.Z;
+  end when;
+  xr = Integer(pre(x));
+  xd = LogicValues[integer(delay(xr, 0.1))];
+end ER1;
+//// model: ER2
+type L = enumeration(U, X, Z, O);
+model ER2
+  parameter L v[:] = L.X:L.O;
+  constant L w[:] = L.Z:L.X;
+  Real y = Integer(v[2]) * time;
+end ER2;

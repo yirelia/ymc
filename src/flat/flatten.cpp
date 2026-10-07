@@ -4637,6 +4637,18 @@ class Flattener {
             if (!cl[di].empty()) labels = cl[di];
           }
         }
+        // 枚举区间绑定直接求值取形状（`L.'U':L.'-'`：MSL Digital TransportDelay 的 LogicValues，DG 探针 r1 / r2；类型化的
+        // 区间不带枚举区间的维）。只认不引用参数的（求值不标结构参数）；数值区间照旧走下面的类型化形状。
+        const ScodeScope rsc = scode_scope_of(bscope);
+        if (const std::optional<CVal> rs = !n && nlbind && !comprehension && I_.absyn.exps[braw].kind == ExpKind::Range
+                                               ? eval_scode(I_.absyn.exps[braw].a, rsc, 0)
+                                               : std::nullopt;
+            rs && rs->k == CVal::K::Enum) {
+          if (const std::optional<CVal> bv = eval_scode(braw, rsc, 0); bv && is_arr(*bv)) {
+            const std::vector<std::int64_t> sh = cval_shape(*bv);
+            if (sh.size() == dim_exps.size() && sh[di] >= 0) n = sh[di];
+          }
+        }
         if (!n && nlbind && !comprehension) {
           const std::vector<std::int64_t> sh = expr_shape(typed_rhs());
           if (result_.unsupported) return;
@@ -5282,7 +5294,9 @@ class Flattener {
         }
         p.mode = AttrPlan::Mode::Literal;
       } else {
-        if (a.vk == AttrVK::StateSel || a.vk == AttrVK::EnumComp) { set_unsupported("array enumeration attribute"); return out; }
+        // 枚举数组的属性值（MSL Digital 的 `L nextstate[n_data](start = fill(L.'U', n_data))`）同样逐元素摊分（DG 探针 f1：
+        // `s[1](start = L.U)`…）；stateSelect 的数组值未做。
+        if (a.vk == AttrVK::StateSel) { set_unsupported("array enumeration attribute"); return out; }
         const Id<Expr> t = simplify_expr(inst_exp(sm.binding, src->scope, src->vprefix));
         if (result_.unsupported) return out;
         if (expr_shape(t) != dims) { set_unsupported("array attribute shape mismatch"); return out; }
@@ -5727,6 +5741,39 @@ class Flattener {
     if (x.kind == ExprKind::BoolLit) return true;
     return x.kind == ExprKind::EnumLit && !x.enum_path.empty() && x.enum_path.size() == y.enum_path.size() &&
            std::equal(x.enum_path.begin(), x.enum_path.end() - 1, y.enum_path.begin());
+  }
+  // 式子 se（标量）的类型是枚举类型（类型简名 tname、字面量表 lits）。Type::enum_path 只有类型简名（inst.cpp:929）——比类型名
+  // + 字面量表；字面量 / 常量表取元素（`{R.U, R.X}[a]`，由值合成的字面量的 ty 不带类型名）按各字面量路径的类型段认。
+  bool has_enum_type(Id<Expr> se, Symbol tname, const std::vector<Symbol>& lits) const {
+    const Expr& sx = result_.model.exprs[se];
+    if (sx.ty.is_array() || sx.ty.kind != TypeKind::Enumeration) return false;
+    if (!sx.ty.enum_path.empty()) return sx.ty.enum_path.back() == tname && sx.ty.enum_literals == lits;
+    auto lit_ok = [&](const Expr& x) {
+      return x.kind == ExprKind::EnumLit && x.enum_path.size() >= 2 && x.enum_path[x.enum_path.size() - 2] == tname &&
+             std::find(lits.begin(), lits.end(), x.enum_path.back()) != lits.end();
+    };
+    if (sx.kind == ExprKind::EnumLit) return lit_ok(sx);
+    if (sx.kind != ExprKind::Subscript) return false;
+    bool ok = true;
+    auto leaves = [&](auto& self, Id<Expr> a) -> void {
+      const Expr& x = result_.model.exprs[a];
+      if (x.kind == ExprKind::Array) for (Id<Expr> el : x.args) self(self, el);
+      else ok = ok && lit_ok(x);
+    };
+    leaves(leaves, sx.a);
+    return ok && result_.model.exprs[sx.a].kind == ExprKind::Array;
+  }
+  // 同上，类型由标签表 labels（枚举字面量）给。
+  bool enum_type_of_labels(Id<Expr> se, const std::vector<Id<Expr>>& labels) const {
+    if (labels.empty()) return false;
+    std::vector<Symbol> lits;
+    for (Id<Expr> l : labels) {
+      const Expr& lx = result_.model.exprs[l];
+      if (lx.kind != ExprKind::EnumLit || lx.enum_path.size() < 2) return false;
+      lits.push_back(lx.enum_path.back());
+    }
+    const Expr& l0 = result_.model.exprs[labels[0]];
+    return has_enum_type(se, l0.enum_path[l0.enum_path.size() - 2], lits);
   }
   // 类型化的值 se 是标签表 labels 那个类型的字面量 → 它的序数；不是字面量 / 类型不符 → nullopt。
   std::optional<std::int64_t> label_ordinal(Id<Expr> se, const std::vector<Id<Expr>>& labels) const {
@@ -6455,6 +6502,10 @@ class Flattener {
               for (const CVal& x : *v->arr) g.push_back({x});
             } else if (sh.size() == 2 && sh[0] > 0 && sh[1] > 0) {
               for (const CVal& r : *v->arr) g.push_back(*r.arr);
+            } else if (sh.size() >= 3 && e.args.size() == 1 && I_.absyn.exps[rid].args.size() == 1) {
+              // 只有一个 ≥ 3 维的元素：提升不变、也没得拼接 → 就是它（`[A]` = A，MLS §10.4.2；MSL Digital 的
+              // `Buf3sTable[S, R, R] = [{{{…}}}]`，DG 探针 q4）。
+              return v;
             } else {
               return std::nullopt;
             }
@@ -6468,10 +6519,17 @@ class Flattener {
         if (all.empty()) return std::nullopt;
         bool any_real = false;
         const CVal::K k0 = all[0][0].k;
+        // 枚举元素须同一个枚举类型（按字面量路径的类型部分比；只知序数的不认）：MSL Digital 的真值表
+        // `constant Logic OrTable[L, L] = [L.'U', …; …]`（DG 探针 q3）。
+        auto same_enum = [&](const CVal& x) {
+          const std::vector<Symbol>& p0 = all[0][0].epath;
+          return !p0.empty() && x.epath.size() == p0.size() && std::equal(p0.begin(), p0.end() - 1, x.epath.begin());
+        };
         for (const std::vector<CVal>& r : all)
           for (const CVal& x : r) {
             const bool num = x.k == CVal::K::Int || x.k == CVal::K::Real;
-            if (!(num && (k0 == CVal::K::Int || k0 == CVal::K::Real)) && (x.k != k0 || (k0 != CVal::K::Bool && k0 != CVal::K::Str)))
+            if (!(num && (k0 == CVal::K::Int || k0 == CVal::K::Real)) &&
+                (x.k != k0 || (k0 != CVal::K::Bool && k0 != CVal::K::Str && !(k0 == CVal::K::Enum && same_enum(x)))))
               return std::nullopt;
             any_real = any_real || x.k == CVal::K::Real;
           }
@@ -7157,6 +7215,22 @@ class Flattener {
       const std::int64_t st = step ? step->i : 1;
       if (st == 0) return std::nullopt;
       for (std::int64_t i = start.i; st > 0 ? i <= stop.i : i >= stop.i; i += st) els.push_back(CVal::I(i));
+    } else if (start.k == CVal::K::Enum && stop.k == CVal::K::Enum && !step && start.epath.size() >= 2 &&
+               start.epath.size() == stop.epath.size() &&
+               std::equal(start.epath.begin(), start.epath.end() - 1, stop.epath.begin())) {
+      // 枚举区间 `E.a:E.c`（MLS §10.4.1.1：按序数，不能带步长）：中间的字面量名取枚举定义（字面量路径是全名，按顶层路径
+      // 解析；MSL Digital TransportDelay 的 `LogicValues[:] = L.'U':L.'-'`，DG 探针 r1）。
+      ScodeScope ds;
+      const Id<SElement> ec = resolve_top_path(std::vector<Symbol>(start.epath.begin(), start.epath.end() - 1), ds);
+      if (!ec.is_valid() || I_.scode.elems[ec].def.kind != SClassDefKind::Enumeration) return std::nullopt;
+      const std::vector<SEnumItem> items = I_.scode.elems[ec].def.enum_items;   // 拷贝
+      for (std::int64_t i = start.i; i <= stop.i; ++i) {
+        if (i < 1 || static_cast<std::size_t>(i) > items.size()) return std::nullopt;
+        CVal v = start;
+        v.i = i;
+        v.epath.back() = items[static_cast<std::size_t>(i) - 1].literal;
+        els.push_back(std::move(v));
+      }
     } else if (num(start) && num(stop) && (!step || num(*step))) {
       const double a = start.as_r(), s = step ? step->as_r() : 1.0, z = stop.as_r();
       if (s == 0.0) return std::nullopt;
@@ -11079,8 +11153,13 @@ class Flattener {
   // p final）。
   struct CSub {
     enum class K { Index, Whole, Expanded } k = K::Index;
-    Id<Expr> e;                    // Index：下标（IntLit = 已知，否则留成符号）
+    Id<Expr> e;                    // Index：下标（IntLit / 枚举字面量 = 已知，否则留成符号）
     std::vector<Id<Expr>> elems;   // Expanded：展开的切片的各下标（同上）
+  };
+  // 类型维（枚举）的声明：类型名 + 字面量表（空 = 整数维），供 const_sub_specs 核对枚举下标。
+  struct EnumDim {
+    Symbol type_name;
+    std::vector<Symbol> lits;
   };
   // 下标式在大小为 dim 的维上的取值：`end` = dim；常量式（含 for 方程迭代变量的当前值）直接求，含参数的按结构参数求值
   //（typeSubscripts 的 Structural.markSubscript，NFTyping.mo:2122-2127）。整数 → Int，范围 / 下标数组 → Array。求不出 → nullopt。
@@ -11095,12 +11174,38 @@ class Flattener {
   // 标 Structural.markSubscript，NFTyping.mo:2122-2127）成字面量；其余定型后留成符号（运行时整型量、保留着的迭代变量）。
   // 越界的字面量 omc 照样留成 `{…}[7]`（applyIndexExpArray "that's someone else's problem"），不跟。失败 → unsupported。
   bool const_sub_specs(const std::vector<Id<Exp>>& subs, const std::vector<std::int64_t>& shape, NodeId enclosing,
-                       const std::vector<Symbol>& prefix, std::vector<CSub>& out) {
+                       const std::vector<Symbol>& prefix, std::vector<CSub>& out, const std::vector<EnumDim>* edims = nullptr) {
     const ScodeScope lscope = scode_scope_of(enclosing);
     for (std::size_t k = 0; k < subs.size(); ++k) {
       CSub cs;
       if (I_.absyn.exps[subs[k]].kind == ExpKind::Colon) {
         cs.k = CSub::K::Whole;
+        out.push_back(std::move(cs));
+        continue;
+      }
+      if (edims && k < edims->size() && !(*edims)[k].lits.empty()) {
+        // 枚举维：字面量下标按序数取元素（排在符号下标之后的照写成字面量，见 apply_const_subs），运行时的枚举下标留成符号
+        //（DG 探针 q1-q3：`T.OrTable[a, b]` → `{{…}, …}[a, b]`、`Tables.OrTable[L.X, b]` → `{…}[b]`）。类型须是该维的
+        // 枚举类型；下标里的参数同整数维（结构参数求值 / 符号的 SKIP）。
+        const EnumDim& ed = (*edims)[k];
+        std::optional<CVal> v;
+        if (!is_stmt_iter_subscript(subs[k])) v = eval_subscript(subs[k], shape[k], lscope, enclosing);
+        if (v) {
+          if (v->k != CVal::K::Enum || v->epath.size() < 2 || v->epath[v->epath.size() - 2] != ed.type_name || v->i < 1 ||
+              static_cast<std::size_t>(v->i) > ed.lits.size() || ed.lits[static_cast<std::size_t>(v->i) - 1] != v->epath.back()) {
+            set_unsupported("constant array subscript");
+            return false;
+          }
+          cs.e = literal_of(*v);
+        } else {
+          const Id<Expr> se = simplify_expr(inst_exp(subs[k], enclosing, prefix));
+          if (result_.unsupported) return false;
+          if (!has_enum_type(se, ed.type_name, ed.lits) || refs_param_var(se)) {
+            set_unsupported("constant array subscript");
+            return false;
+          }
+          cs.e = se;
+        }
         out.push_back(std::move(cs));
         continue;
       }
@@ -11203,13 +11308,43 @@ class Flattener {
     return add(std::move(arr));
   }
   // 整体值 whole（嵌套数组字面量）按书写的下标取：分类 → 应用 → 化简。不适用（下标多于维数）→ invalid。
-  Id<Expr> const_subscripted(Id<Expr> whole, const std::vector<Id<Exp>>& subs, NodeId enclosing, const std::vector<Symbol>& prefix) {
+  Id<Expr> const_subscripted(Id<Expr> whole, const std::vector<Id<Exp>>& subs, NodeId enclosing, const std::vector<Symbol>& prefix,
+                             const std::vector<EnumDim>* edims = nullptr) {
     const std::vector<std::int64_t> shape = expr_shape(whole);
     if (subs.empty() || subs.size() > shape.size()) return {};
     std::vector<CSub> specs;
-    if (!const_sub_specs(subs, shape, enclosing, prefix, specs)) return lit_int(0);
+    if (!const_sub_specs(subs, shape, enclosing, prefix, specs, edims)) return lit_int(0);
     const Id<Expr> r = apply_const_subs(whole, specs, 0);
     return result_.unsupported ? lit_int(0) : simplify_expr(r);
+  }
+  // 限定名常量（`T.OrTable`，中间段无下标）声明的各维：类型名维按声明处的作用域解析（import 别名也认，MSL Digital Tables 的
+  // `OrTable[L, L]`、L 是 Logic 的别名），枚举类型给类型名 + 字面量表；其余维（整数 / Boolean / 解析不出）为空。
+  std::vector<EnumDim> qual_const_enum_dims(const Cref& wc, NodeId res) {
+    std::vector<EnumDim> out;
+    std::vector<Symbol> names;
+    for (const CrefPart& p : wc.parts) {
+      if (!p.subscripts.empty()) return out;
+      names.push_back(p.name);
+    }
+    Id<SElement> comp;
+    ScodeScope dscope;
+    if (!resolve_qual_const(names, wc.leading_dot, scode_scope_of(res), comp, dscope)) return out;
+    const SElement de = I_.scode.elems[comp];   // 拷贝（下面的解析不加元素，但不跨调用持引用）
+    for (const std::vector<Id<Exp>>* ds : {&de.attr.dims, &de.type.dims})
+      for (Id<Exp> d : *ds) {
+        EnumDim ed;
+        if (I_.absyn.exps[d].kind == ExpKind::CrefExp) {
+          ScodeScope cs;
+          const Id<SElement> tc = resolve_cref_class(I_.absyn.crefs[I_.absyn.exps[d].cref], dscope, cs);
+          if (tc.is_valid() && I_.scode.elems[tc].kind == SElementKind::Class &&
+              I_.scode.elems[tc].def.kind == SClassDefKind::Enumeration) {
+            ed.type_name = I_.scode.elems[tc].name;
+            for (const SEnumItem& it : I_.scode.elems[tc].def.enum_items) ed.lits.push_back(it.literal);
+          }
+        }
+        out.push_back(std::move(ed));
+      }
+    return out;
   }
   // 已发射的 constant 数组（本地 / 子实例里的 / 记录字段）带下标的引用：取 const_vals_ 里的整体值。前面各段的下标须是
   // 字面量（`a[2].c[n]`）。没有整体值（非字面量元素、枚举值、空数组）→ invalid，调用方走原路。
@@ -11534,6 +11669,9 @@ class Flattener {
     if (!is_cref_exp(ae)) return false;
     const Cref& c = I_.absyn.crefs[I_.absyn.exps[ae].cref];
     if (c.parts.size() < 2) return false;
+    // 带下标的不是字面量（包里的枚举值常量表 `T.OrTable[L.X, L.Z]`，DG 探针 q2）。
+    for (const CrefPart& p : c.parts)
+      if (!p.subscripts.empty()) return false;
     if (c.leading_dot) return true;
     const NodeId n = find_local(scope, c.parts[0].name);
     return !(n.is_valid() && !I_.nodes[n].is_empty() && I_.nodes[n].kind == NodeKind::Component);
@@ -11805,18 +11943,9 @@ class Flattener {
                   // 求值（markSubscript），不跟 → SKIP。
                   if (!se.is_valid()) se = simplify_expr(inst_exp(tsubs[k], enclosing, prefix));
                   if (result_.unsupported) return lit_int(0);
-                  // 枚举类型核对：Type::enum_path 只有类型简名（inst.cpp:929），标签字面量是全路径——比类型名那一段 + 字面量表。
                   const Expr& sx = result_.model.exprs[se];
-                  bool sym_ok = !sx.ty.is_array() && (tl[k].empty() ? sx.ty.kind == TypeKind::Integer
-                                                                    : sx.ty.kind == TypeKind::Enumeration &&
-                                                                          !sx.ty.enum_path.empty() &&
-                                                                          sx.ty.enum_literals.size() == tl[k].size());
-                  for (std::size_t li = 0; sym_ok && li < tl[k].size(); ++li) {
-                    const Expr& lx = result_.model.exprs[tl[k][li]];
-                    sym_ok = lx.kind == ExprKind::EnumLit && lx.enum_path.size() >= 2 &&
-                             lx.enum_path[lx.enum_path.size() - 2] == sx.ty.enum_path.back() &&
-                             lx.enum_path.back() == sx.ty.enum_literals[li];
-                  }
+                  const bool sym_ok = tl[k].empty() ? sx.ty.kind == TypeKind::Integer && !sx.ty.is_array()
+                                                    : enum_type_of_labels(se, tl[k]);
                   if (!sym_ok || refs_param_var(se)) { typed = false; break; }
                   symbolic = true;
                 }
@@ -11958,11 +12087,12 @@ class Flattener {
                   const Id<Expr> se = simplify_expr(inst_exp(subs[k], enclosing, prefix));
                   if (result_.unsupported) break;
                   const std::optional<std::int64_t> ord = label_ordinal(se, llabels[k]);
-                  // Boolean 维上的运行时 Boolean 下标（`y[a > 1]`、`y[c]`）：原样留着（同运行时整型下标，EN 探针 t5）。枚举
-                  // 变量作下标的类型核对不到，未做。
-                  if (!ord && result_.model.exprs[llabels[k][0]].kind == ExprKind::BoolLit &&
-                      result_.model.exprs[se].ty.kind == TypeKind::Boolean && !result_.model.exprs[se].ty.is_array() &&
-                      cond_is_runtime(se)) {
+                  // Boolean 维上的运行时 Boolean 下标（`y[a > 1]`、`y[c]`）：原样留着（同运行时整型下标，EN 探针 t5）；枚举维上
+                  // 同一枚举类型的运行时下标同样（MSL Digital DFFR 的 `ResetMap[reset]`，DG 探针 p1：`w[reset] + w[pre(reset)]`）。
+                  const bool bool_dim = result_.model.exprs[llabels[k][0]].kind == ExprKind::BoolLit;
+                  if (!ord && cond_is_runtime(se) &&
+                      (bool_dim ? result_.model.exprs[se].ty.kind == TypeKind::Boolean && !result_.model.exprs[se].ty.is_array()
+                                : enum_type_of_labels(se, llabels[k]))) {
                     leaf_subs[k] = se;
                     continue;
                   }
@@ -12091,7 +12221,8 @@ class Flattener {
           if (std::optional<CVal> v = eval_qual_path(wc, scode_scope_of(qres), 0, /*allow_param=*/false, nullptr); v && is_arr(*v))
             if (const Id<Expr> whole = literal_any(*v); whole.is_valid()) {
               const std::vector<Id<Exp>> qsubs = c.parts.back().subscripts;   // 拷贝
-              if (const Id<Expr> sv = const_subscripted(whole, qsubs, enclosing, prefix); sv.is_valid()) return sv;
+              const std::vector<EnumDim> edims = qual_const_enum_dims(wc, qres);
+              if (const Id<Expr> sv = const_subscripted(whole, qsubs, enclosing, prefix, &edims); sv.is_valid()) return sv;
             }
         }
       }
@@ -16200,6 +16331,11 @@ class Flattener {
               (ea.cref.resolved_node != Id<INode>::kInvalid ||
                (ea.cref.parts.size() == 1 && stmt_iters_.count(ea.cref.parts[0].name.id))))
             return rebuild();
+          // 运行时的枚举式（`Integer(pre(x))`、常量表取元素）同样原样留着（MSL Digital TransportDelay 的
+          // `xr = Integer(pre(x))` → `xr = /*Real*/(Integer(pre(x)))`，DG 探针 r1）。
+          if (ea.kind != ExprKind::Cref && ea.kind != ExprKind::EnumLit && ea.ty.kind == TypeKind::Enumeration &&
+              !ea.ty.is_array() && cond_is_runtime(args[0]))
+            return rebuild();
           set_unsupported("enum ordinal");   // 序数没解析出来（跨包枚举等）→ SKIP
           return rebuild();
         }
@@ -17108,22 +17244,19 @@ class Flattener {
   // 短类连接器 `connector InReal = input Real`：class_inst 已塌到内建（inst.cpp 短类塌陷），故按声明类型名在**声明处**作用域
   // 找元素：须是 restriction=connector 的短类（`type T = input Real` 不是连接器，omc 报错 ConnectNonConnector*）。继承来的
   // 组件在基类里声明（inst 把它的 parent_scope 记成基类实例，本地组件的为空）；限定名（MSL 的 `Interfaces.RealOutput`）首段
-  // 按作用域找、其后逐段下降为局部类（CN 探针 c：`Blocks.Sources.Sine` 的 y 接 `Math.Gain` 的 u，此前当非连接器 SKIP）。
+  // 按作用域找、其后逐段下降为局部类（CN 探针 c：`Blocks.Sources.Sine` 的 y 接 `Math.Gain` 的 u，此前当非连接器 SKIP）；
+  // 首段也认 import 别名（MSL Digital MISO 的 `D.Interfaces.DigitalInput x[n]`，`import D = Modelica.Electrical.Digital`；
+  // DG 探针 s4）。
   bool short_class_connector(NodeId comp, NodeId decl) {
     const SElement& cel = I_.scode.elems[I_.comps[I_.nodes[comp].comp].def];
     if (cel.type.leading_dot || cel.type.path.empty()) return false;
     const NodeId lex = I_.nodes[comp].parent_scope;
-    const SElement* tel = find_class_elem(lex.is_valid() && !I_.nodes[lex].is_empty() ? lex : decl, cel.type.path[0]);
-    for (std::size_t k = 1; tel && k < cel.type.path.size(); ++k) {
-      const SElement* nxt = nullptr;
-      for (Id<SElement> m : tel->def.elements)
-        if (I_.scode.elems[m].kind == SElementKind::Class && I_.scode.elems[m].name == cel.type.path[k]) {
-          nxt = &I_.scode.elems[m];
-          break;
-        }
-      tel = nxt;
-    }
-    return tel && tel->restriction == SRestriction::Connector && tel->def.kind == SClassDefKind::Derived;
+    ScodeScope ds;
+    const std::vector<Symbol> tpath = cel.type.path;   // 拷贝（解析不加元素，但不跨调用持引用）
+    const Id<SElement> t =
+        resolve_class_path(tpath, false, scode_scope_of(lex.is_valid() && !I_.nodes[lex].is_empty() ? lex : decl), ds);
+    return t.is_valid() && I_.scode.elems[t].restriction == SRestriction::Connector &&
+           I_.scode.elems[t].def.kind == SClassDefKind::Derived;
   }
   // InstNode.isConnector（NFInstNode.mo:507-516）：cty 含 CONNECTOR / EXPANDABLE / POTENTIALLY_PRESENT 任一位
   // （NFPrefixes.mo:59-60/167-175）= connector / expandable 类组件、短类连接器、或 potentially present 成员。
