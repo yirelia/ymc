@@ -6684,8 +6684,23 @@ class Flattener {
     if (auto it = pending_shapes_.find(int_key(names, ps)); it != pending_shapes_.end())   // 正在发射的本数组
       return k < it->second.size() && it->second[k] >= 0 ? std::optional<CVal>(CVal::I(it->second[k])) : std::nullopt;
     const std::optional<std::vector<std::int64_t>> sh = emitted_shape(names, ps);
-    if (!sh || sh->size() != adims.size()) return std::nullopt;
-    return CVal::I((*sh)[k]);
+    if (sh && sh->size() == adims.size()) return CVal::I((*sh)[k]);
+    // 还没发射（结构求值走在组件发射之前：`nout = max([size(columns, 1); …])` 连带求 `columns = 2:size(table, 2)`，MSL
+    // CombiTimeTable）：按有效绑定（外来修饰优先，否则声明绑定）的书写形状取这一维——与发射时推 `:` 维同一规则
+    //（binding_dim_size，NFTyping.typeDimension 由绑定推维），只看形状、不求值不标记。绑定不是字面量构造 → nullopt。
+    if (sh) return std::nullopt;
+    Id<Exp> raw;
+    if (F.ctx)
+      for (const ModSource& m : F.ctx->mods)
+        for (const SSubMod& sm : I_.scode.mods[m.mod].subs)
+          if (!raw.is_valid() && sm.ident == anames[0] && I_.scode.mods[sm.mod].binding.is_valid())
+            raw = I_.scode.mods[sm.mod].binding;
+    if (!raw.is_valid()) {
+      const Binding& b = I_.comps[I_.nodes[ln].comp].binding;
+      if (b.kind == BindingKind::Raw && b.raw_exp.is_valid()) raw = b.raw_exp;
+    }
+    const std::optional<std::int64_t> n = binding_dim_size(raw, k);
+    return n ? std::optional<CVal>(CVal::I(*n)) : std::nullopt;
   }
 
   // 多段名沿实例树逐段找组件（首段是 inst 的本地组件，下标不看）：走通 → 末段的组件节点，任一段找不到 → invalid。
@@ -7415,12 +7430,35 @@ class Flattener {
                             (scope_node == I_.top || (I_.nodes[scope_node].def.is_valid() &&
                                                       I_.scode.elems[I_.nodes[scope_node].def].restriction == SRestriction::Package));
     if (!raw.is_valid() || (efi < 0 && !global_mod)) return fail();   // 无绑定参数 / 修饰书写处不在帧栈上
-    // 连带标记要走进的绑定里有矩阵构造套 size(a, k)：1.25.0 会把 a 一并标成结构参数（`n = max([size(a, 1); 1])` → a final；
-    // 不套矩阵的 `max(size(a, 1), 1)`、`size(a, 1)` 不标，SM 探针 s20 / s21 / s24 / s10），像是矩阵定型的副作用，不复刻 → SKIP
-    //（MSL Blocks.Sources.KinematicPTP2）。
+    // 连带标记要走进的绑定里有矩阵构造套 size(a, k)：1.25.0 会把 a 一并标成结构参数（`n = max([size(a, 1); 1])` → a 各元素
+    // final；不套矩阵的 `max(size(a, 1), 1)`、`size(a, 1)` 不标，SM 探针 s14 / s20 / s21 / s24 / s10），像是矩阵定型时把元素
+    // 求值的副作用——照做：这些 a 在绑定的求值语境里整体求值一遍（frame_value 的数组支给全部元素打标记、记下值）。a 不是引用 /
+    // 求不出 → SKIP。MSL Blocks.Sources.KinematicPTP2：`nout = max([size(deltaq, 1); size(qd_max, 1); size(qdd_max, 1)])` →
+    // deltaq / qd_max / qdd_max 各元素 final。
     if (deps && absyn_matrix_size(raw)) {
-      set_unsupported("size() in matrix constructor of structural binding");
-      return fail();
+      std::vector<Id<Exp>> sargs;
+      matrix_size_args(raw, false, sargs);
+      for (Id<Exp> sa : sargs) {
+        std::optional<CVal> sv;
+        if (I_.absyn.exps[sa].kind == ExpKind::CrefExp) {
+          frame_busy_.insert(key);
+          const int saved = ceval_frame_;
+          const bool saved_dep = dep_mark_;
+          ceval_frame_ = efi;
+          dep_mark_ = deps;
+          const Frame* ef = efi >= 0 ? &frames_[static_cast<std::size_t>(efi)] : nullptr;
+          const std::vector<Symbol> no_prefix;   // CevalCtx 存的是指针：不能传临时量
+          CevalCtx guard(*this, ef ? ef->prefix : no_prefix, ef ? ef->psubs : PSubs{});
+          sv = eval_scode(sa, scode_scope_of(scope_node), depth + 1, /*allow_param=*/true, used);
+          ceval_frame_ = saved;
+          dep_mark_ = saved_dep;
+          frame_busy_.erase(key);
+        }
+        if (!sv || !is_arr(*sv)) {
+          if (!result_.unsupported) set_unsupported("size() in matrix constructor of structural binding");
+          return fail();
+        }
+      }
     }
     frame_busy_.insert(key);
     std::optional<CVal> v;
@@ -17876,6 +17914,24 @@ class Flattener {
     for (Id<Exp> a : e.args) if (absyn_matrix_size(a, in_matrix)) return true;
     for (const ForIndex& it : e.iters) if (absyn_matrix_size(it.range, in_matrix)) return true;
     return absyn_matrix_size(e.a, in_matrix) || absyn_matrix_size(e.b, in_matrix) || absyn_matrix_size(e.c, in_matrix);
+  }
+  // absyn_matrix_size 找到的那些 size 调用的首实参（矩阵构造里的 `size(a, k)` 的 a）。
+  void matrix_size_args(Id<Exp> id, bool in_matrix, std::vector<Id<Exp>>& out) const {
+    if (!id.is_valid()) return;
+    const Exp& e = I_.absyn.exps[id];
+    in_matrix = in_matrix || e.kind == ExpKind::Matrix;
+    if (in_matrix && e.kind == ExpKind::Call) {
+      const Cref& fn = I_.absyn.crefs[e.cref];
+      if (!fn.leading_dot && fn.parts.size() == 1 && in_.str(fn.parts[0].name) == "size" && !e.args.empty()) {
+        out.push_back(e.args[0]);
+        return;
+      }
+    }
+    for (Id<Exp> a : e.args) matrix_size_args(a, in_matrix, out);
+    for (const ForIndex& it : e.iters) matrix_size_args(it.range, in_matrix, out);
+    matrix_size_args(e.a, in_matrix, out);
+    matrix_size_args(e.b, in_matrix, out);
+    matrix_size_args(e.c, in_matrix, out);
   }
   bool absyn_param_size_call(Id<Exp> id) const {
     if (!id.is_valid()) return false;

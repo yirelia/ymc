@@ -1,0 +1,29 @@
+//// set: sk-ut — 单测原文：KinematicPTP2 式（修饰给的 deltaq）、columns = 2:size(table, 2)、数组声明在 size() 引用处之后
+//// model: SK1
+model K
+parameter Real deltaq[:] = {1};
+parameter Real qd_max[:] = {1};
+final parameter Integer nout = max([size(deltaq, 1); size(qd_max, 1)]);
+parameter Real p_deltaq[nout] = (if size(deltaq, 1) == 1 then ones(nout) * deltaq[1] else deltaq);
+Real y[nout];
+equation
+y = p_deltaq * time;
+end K;
+model SK1
+K k(deltaq = {2, 3});
+end SK1;
+//// model: SK2
+model SK2
+  parameter Real table[:, :] = [0, 0, 0; 5, 0, 0];
+  parameter Integer columns[:] = 2:size(table, 2);
+  parameter Real offset[:] = {0};
+  final parameter Integer nout = max([size(columns, 1); size(offset, 1)]);
+  Real y[nout];
+equation
+  y = fill(time, nout);
+end SK2;
+//// model: DMS3
+model DMS3
+  Real y[size(a, 1)];
+  parameter Real a[:] = {1, 1};
+end DMS3;

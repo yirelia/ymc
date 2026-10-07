@@ -1857,6 +1857,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           MultiBody 往下卡在 World 里的 `Connections.root`（超定连接图），以及 `g * normalizeWithAssert(n)` 这种整个结构参数数组
           作实参的调用。
           验证：slice 631 例 PASS 580 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 581 / FAIL 38（不变）；整个 testsuite PASS 1608 / FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0（不变）；MSL 514 个 PASS 146→151；探针 8297→8333（cf-* 5 集 36 个）；四套构建零警告、单测 280→281；ASan 与 gcc 逐例一致。
+    - [x] (62h) flat：结构参数绑定里矩阵构造套 size(a, k) 的连带标记 + `:` 维按绑定形状取（2026-10-07）：1.25.0 把
+          `n = max([size(a, 1); …])` 里的 a 一并标成结构参数（各元素 final、引用它的参数绑定折成值；不套矩阵的 size 不标，SM 探针
+          s14 / s20 / s21 / s24）——此前不复刻、SKIP（13 个 MSL 示例，KinematicPTP2 / CombiTimeTable 的 nout）。现在这些 a 在绑定的
+          求值语境里整体求值一遍（frame_value 的数组支打标记）。求 `columns = 2:size(table, 2)` 时 table 还没发射：colon_dim_size
+          按有效绑定（外来修饰优先）的书写形状取维（与发射时推 `:` 维同一规则，只看形状、不标记）——顺带放开了数组声明在 size()
+          引用处之后的情形（单测 DMS3 对 omc 实跑后改正向）。CombiTimeTable 一族往下卡在对结构参数数组 columns 的整体引用（omc
+          代成 `{2, 3}`），同 MultiBody World 的 `normalizeWithAssert(n)`。
+          验证：slice 631 例 PASS 580 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 581 / FAIL 38（不变）；整个 testsuite PASS 1608→1617（StepAdvanced ×2、msl/BC2-BC9）/ FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 151→154；探针 8333→8347（sk-h1 / sk-ut 14 个）；四套构建零警告、单测 281→282；ASan 与 gcc 逐例一致。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

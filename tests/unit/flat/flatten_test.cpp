@@ -3447,11 +3447,10 @@ YMC_TEST(flatten_dims_from_size_of_colon_arrays) {
                            "  parameter Real q[2].c[1] = 1.0;\n  parameter Real q[2].c[2] = 2.0;\n  Real q[2].y[1];\n"
                            "  Real q[2].y[2];\n  final parameter Integer q[2].n = 1;\n  Real q[2].xp[1];\n  Real q[2].xp[2];\n"
                            "end DMT2;\n"));
-  // 被引用的数组声明在引用处之后（要靠绑定的类型推，未做）→ SKIP。
-  bool uns = false;
-  const std::string out = flatten_src("model DMS3\n  Real y[size(a, 1)];\n  parameter Real a[:] = {1, 1};\nend DMS3;\n", &uns);
-  YMC_CHECK(uns);
-  YMC_CHECK_EQ(out, std::string("<unsupported:non-literal array dimension>"));
+  // 被引用的数组声明在引用处之后：`:` 维按它绑定的书写形状取（62h 起，见 colon_dim_size；期望 = omc 1.25.0 实跑，2026-10-07）。
+  YMC_CHECK_EQ(flatten_src("model DMS3\n  Real y[size(a, 1)];\n  parameter Real a[:] = {1, 1};\nend DMS3;\n"),
+               std::string("class DMS3\n  Real y[1];\n  Real y[2];\n  parameter Real a[1] = 1.0;\n  parameter Real a[2] = 1.0;\n"
+                           "end DMS3;\n"));
 }
 
 YMC_TEST(flatten_whole_range_slices_and_when_arrays) {
@@ -5514,6 +5513,30 @@ YMC_TEST(flatten_component_functions_and_alias_defaults) {
                            "end CU4;\n"),
                std::string("function f\n  input Real c;\n  output Real k;\nalgorithm\n  k := c + 273.15;\nend f;\n\nclass CU4\n"
                            "  Real y = f(time);\nend CU4;\n"));
+}
+
+YMC_TEST(flatten_size_in_matrix_marks_structural) {
+  // 结构参数的绑定里矩阵构造套 size(a, k)：a 一并成结构参数（各元素 final、引用它的参数绑定折成值，KinematicPTP2 的
+  // `nout = max([size(deltaq, 1); size(qd_max, 1)])`）；a 的 `:` 维还没发射时按绑定的书写形状取（CombiTimeTable 的
+  // `columns = 2:size(table, 2)`）。期望值为 omc 1.25.0 对原文实跑（SK 探针 ut，2026-10-07）。
+  YMC_CHECK_EQ(flatten_src("model K\nparameter Real deltaq[:] = {1};\nparameter Real qd_max[:] = {1};\n"
+                           "final parameter Integer nout = max([size(deltaq, 1); size(qd_max, 1)]);\n"
+                           "parameter Real p_deltaq[nout] = (if size(deltaq, 1) == 1 then ones(nout) * deltaq[1] else deltaq);\n"
+                           "Real y[nout];\nequation\ny = p_deltaq * time;\nend K;\nmodel SK1\nK k(deltaq = {2, 3});\nend SK1;\n"),
+               std::string("class SK1\n  final parameter Real k.deltaq[1] = 2.0;\n  final parameter Real k.deltaq[2] = 3.0;\n"
+                           "  final parameter Real k.qd_max[1] = 1.0;\n  final parameter Integer k.nout = 2;\n"
+                           "  parameter Real k.p_deltaq[1] = 2.0;\n  parameter Real k.p_deltaq[2] = 3.0;\n  Real k.y[1];\n  Real k.y[2];\n"
+                           "equation\n  k.y[1] = k.p_deltaq[1] * time;\n  k.y[2] = k.p_deltaq[2] * time;\nend SK1;\n"));
+  YMC_CHECK_EQ(flatten_src("model SK2\n  parameter Real table[:, :] = [0, 0, 0; 5, 0, 0];\n"
+                           "  parameter Integer columns[:] = 2:size(table, 2);\n  parameter Real offset[:] = {0};\n"
+                           "  final parameter Integer nout = max([size(columns, 1); size(offset, 1)]);\n  Real y[nout];\nequation\n"
+                           "  y = fill(time, nout);\nend SK2;\n"),
+               std::string("class SK2\n  parameter Real table[1,1] = 0.0;\n  parameter Real table[1,2] = 0.0;\n"
+                           "  parameter Real table[1,3] = 0.0;\n  parameter Real table[2,1] = 5.0;\n  parameter Real table[2,2] = 0.0;\n"
+                           "  parameter Real table[2,3] = 0.0;\n  final parameter Integer columns[1] = 2;\n"
+                           "  final parameter Integer columns[2] = 3;\n  final parameter Real offset[1] = 0.0;\n"
+                           "  final parameter Integer nout = 2;\n  Real y[1];\n  Real y[2];\nequation\n  y[1] = time;\n  y[2] = time;\n"
+                           "end SK2;\n"));
 }
 
 YMC_TEST(flatten_external_object_variable_and_structors) {

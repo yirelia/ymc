@@ -1,0 +1,110 @@
+//// set: sk-h1 — 结构参数的绑定里矩阵构造套 size(a, k)：a 一并成结构参数（KinematicPTP2 式的 `nout = max([size(deltaq, 1); …])`，修饰给 / 默认 / 引用别的参数、二维、非 final 的 n）；a 的 `:` 维由 `2:size(table, 2)` 这类绑定推（CombiTimeTable 的 columns）；a 是变量 / 向前引用（SKIP）
+//// model: H1
+model H1
+  parameter Real table[:, :] = [0, 0, 0; 5, 0, 0];
+  parameter Integer columns[:] = 2:size(table, 2);
+  parameter Real offset[:] = {0};
+  final parameter Integer nout = max([size(columns, 1); size(offset, 1)]);
+  Real y[nout];
+equation
+  y = fill(time, nout);
+end H1;
+//// model: H2
+model H2
+  parameter Integer columns[:] = 2:3;
+  final parameter Integer nout = max([size(columns, 1); 1]);
+  Real y[nout];
+equation
+  y = fill(time, nout);
+end H2;
+//// model: H3
+model H3
+  parameter Real table[:, :] = [0, 0, 0; 5, 0, 0];
+  parameter Integer columns[:] = {2, size(table, 2)};
+  final parameter Integer nout = max([size(columns, 1); 1]);
+  Real y[nout];
+equation
+  y = fill(time, nout);
+end H3;
+//// model: HX0
+model K
+parameter Real deltaq[:] = {1};
+parameter Real qd_max[:] = {1};
+final parameter Integer nout = max([size(deltaq, 1); size(qd_max, 1)]);
+parameter Real p_deltaq[nout] = (if size(deltaq, 1) == 1 then ones(nout) * deltaq[1] else deltaq);
+Real y[nout];
+equation
+y = p_deltaq * time;
+end K;
+model HX0
+K k(deltaq = {2, 3});
+end HX0;
+//// model: HX1
+model K
+parameter Real deltaq[:] = {1};
+parameter Real qd_max[:] = {1};
+final parameter Integer nout = max([size(deltaq, 1); size(qd_max, 1)]);
+parameter Real p_deltaq[nout] = (if size(deltaq, 1) == 1 then ones(nout) * deltaq[1] else deltaq);
+Real y[nout];
+equation
+y = p_deltaq * time;
+end K;
+model HX1
+parameter Real q = 2;
+K k(qd_max = {q});
+end HX1;
+//// model: HX2
+model K
+parameter Real deltaq[:] = {1};
+parameter Real qd_max[:] = {1};
+final parameter Integer nout = max([size(deltaq, 1); size(qd_max, 1)]);
+parameter Real p_deltaq[nout] = (if size(deltaq, 1) == 1 then ones(nout) * deltaq[1] else deltaq);
+Real y[nout];
+equation
+y = p_deltaq * time;
+end K;
+model HX2
+K k;
+end HX2;
+//// model: HX3
+model HX3
+parameter Real m[:, :] = [1, 2; 3, 4];
+final parameter Integer n = max([size(m, 1); size(m, 2)]);
+Real y[n];
+equation
+y = fill(time, n);
+end HX3;
+//// model: HX4
+model HX4
+Real v[:] = {time, 1};
+final parameter Integer n = max([size(v, 1); 1]);
+Real y[n];
+equation
+y = fill(time, n);
+end HX4;
+//// model: HX5
+model HX5
+parameter Real a[:] = {1, 2};
+parameter Real b[:] = a;
+final parameter Integer n = max([size(b, 1); 1]);
+Real y[n];
+equation
+y = fill(time, n);
+end HX5;
+//// model: HX6
+model HX6
+parameter Integer c[:] = 2:size(t, 2);
+parameter Real t[:, :] = [0, 1, 2; 3, 4, 5];
+final parameter Integer n = max([size(c, 1); 1]);
+Real y[n];
+equation
+y = fill(time, n);
+end HX6;
+//// model: HX7
+model HX7
+parameter Real a[2] = {1, 2};
+parameter Integer n = max([size(a, 1); 3]);
+Real y[n];
+equation
+y = fill(time, n);
+end HX7;

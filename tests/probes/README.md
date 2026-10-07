@@ -401,3 +401,5 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `cf-p3` | 9 | 别名 / constrainedby 的注释、无绑定参数、继承来的函数类（SKIP）、枚举类型的函数输入（标量 / 数组、缺省、返回枚举的常量调用） |
 | `cf-q1` | 6 | 函数输入的短类型属性数组、枚举类型的函数变量与函数体里的枚举字面量、组件函数（CF1 / CF2）、函数体引用派生类型的包常量（QT1，`Modelica.Constants.T_zero` 那种）、MultiBody World 的复刻（`g * normalizeWithAssert(n)`，n 是 Evaluate 的参数数组，未做 → SKIP） |
 | `cf-ut` | 4 | 单测原文：组件函数 + inner/outer + 变量缺省、模型内别名缺省求值 + 参数数组、枚举函数变量、派生类型包常量 |
+| `sk-h1` | 11 | 结构参数的绑定里矩阵构造套 size(a, k)：a 一并成结构参数（KinematicPTP2 式的 `nout = max([size(deltaq, 1); …])`，修饰给 / 默认 / 引用别的参数、二维、非 final 的 n）；a 的 `:` 维由 `2:size(table, 2)` 这类绑定推（CombiTimeTable 的 columns）；a 是变量 / 向前引用（SKIP） |
+| `sk-ut` | 3 | 单测原文：KinematicPTP2 式（修饰给的 deltaq）、columns = 2:size(table, 2)、数组声明在 size() 引用处之后 |

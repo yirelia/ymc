@@ -230,3 +230,10 @@ Frames.nullRotation，往下卡在模型里嵌在运算中的数组值调用（2
 to_degC）能内联之后，5 个示例转 PASS：Analog.Examples.Resistor、Rotational / Translational.Examples.HeatLosses、
 HeatTransfer.Examples.ControlledTemperature / TwoMasses。组件里的函数调用（`world.gravityAcceleration`）接上后 MultiBody 往下
 卡在 World 的 `Connections.root`（超定连接图）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-07 加宽 62h 之后：PASS 151 → 154
+
+结构参数绑定里矩阵构造套 size(a, k) 的连带标记照 1.25.0 做了之后，KinematicPTP2 / CombiTimeTable 的 `nout` 那一族里 3 个示例
+转 PASS：Blocks.Examples.PID_Controller、Clocked.Examples.CascadeControlledDrive.Continuous、MultiBody.Examples.Systems.RobotR3.OneAxis。
+其余 10 个往下露：9 个卡在对结构参数数组 `columns` 的整体引用（CombiTimeTable 的外部对象构造，omc 代成 `{2, 3}`），1 个卡在
+qd_max 的求值。FAIL / ACCEPTS-INVALID / CRASH 0。
