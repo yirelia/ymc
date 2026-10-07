@@ -190,3 +190,9 @@ start 的参数）。FAIL / ACCEPTS-INVALID / CRASH 0。
 条件组件的条件 3、`inner outer` 2、Medium 包里的类型 3、getInstanceName / 嵌套类修饰各 1-2。FAIL / ACCEPTS-INVALID / CRASH 0。
 另：msl_sweep 的 omc 结果缓存曾把被打断（扫描进程被杀）的 omc 记成空文件，以后一直当 omc 拒绝——211 个空缓存已清掉，工具改为
 空输出不缓存、读到空缓存重跑。
+
+## 2026-10-07 加宽 62b 之后：PASS 122（不变）
+
+Evaluate = true 的参数数组当结构参数之后，此前卡在它上面的 37 个 MultiBody 示例（World 的 `parameter Types.Axis n`）往下露出：
+带记录形参的函数里记录构造（Frames.Orientation：数组字段 + extends Icons.Record）25、参数数组绑函数调用 6、复合组件的变率前缀 2、
+限定名函数调用 2、类注释带转义 2。FAIL / ACCEPTS-INVALID / CRASH 0。

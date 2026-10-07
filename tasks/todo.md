@@ -1784,6 +1784,18 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           验证：slice 630→629 例（InnerOuter13 剔除、进账）PASS 578 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 573→578 /
           FAIL 37（在账，不变）；整个 testsuite PASS 1583→1598 / FAIL 0 / ACCEPTS-INVALID 3→2 / CRASH 0；MSL 514 个 PASS 122
           （不变）；探针 7920→7992（io-* 6 集 72 个）；四套构建零警告、单测 274→275；ASan 与 gcc 逐例一致。
+    - [x] (62b) flat：Evaluate = true 的参数数组（2026-10-07）：
+          此前参数数组带 Evaluate = true（自己的或外层组件的）一律 SKIP "Evaluate annotation [parameter array]"（testsuite 24、
+          MSL 37——MultiBody World 的 `parameter Types.Axis n = {0, -1, 0} annotation(Evaluate = true)`）。omc 与标量一视同仁
+          （Structural.isStructuralComponent 看组件，NFStructural.mo:51-115）：先判绑定固定不固定（isBindingNotFixed，maxDepth 4，
+          整个定型的绑定），固定的在实例化期求值（frame_value 对数组的命中把全部元素记成结构参数），各元素 final + 字面量、
+          依赖连带、引用处代入，照旧由 apply_structural_params 落。判固定时整个数组的引用（`n = a`）按元素合并（任一不固定即
+          不固定，向前引用第二遍按第一遍记下的元素走），Evaluate = false 的参数数组元素记成非结构；经子实例 / outer 的整个参数
+          数组（`b.a`、`w.n0`）按发射时的形状拼成值（const_lookup_val）。无绑定、带 fixed 属性仍 SKIP。旧单测断言了这个 SKIP
+          （lessons 规则 4），照 omc 改成正向期望。
+          验证：slice 629→631 例 PASS 580 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 578→580 / FAIL 37（在账，不变）；整个
+          testsuite PASS 1598→1601 / FAIL 0 / ACCEPTS-INVALID 2 / CRASH 0；MSL 514 个 PASS 122（不变）；探针 7992→8058（ea-* 6 集
+          66 个）；四套构建零警告、单测 275→276；ASan 与 gcc 逐例一致。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

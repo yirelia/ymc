@@ -1,0 +1,65 @@
+//// set: ea-e4 — 同上：记录参数 Evaluate 的数组字段 / 别名数组 / 元素引用别的数组 / 组件数组的修饰分发 / if 绑定里用 / 标量积 / 无绑定（拒）/ 只有 start / protected / 整体数组方程
+//// model: E40
+record R
+Real a[2];
+Real b;
+end R;
+model E40
+parameter R r(a = {1, 2}, b = 3) annotation(Evaluate = true);
+Real y = r.a[2] * time;
+end E40;
+//// model: E41
+model A
+parameter Real n[2] = {1, 2} annotation(Evaluate = true);
+parameter Real m[2] = n;
+end A;
+model E41
+A a(n = {3, 4});
+end E41;
+//// model: E42
+model E42
+parameter Real a[2] = {1, 2};
+parameter Real n[2] = {a[2], 3} annotation(Evaluate = true);
+end E42;
+//// model: E43
+model A
+parameter Integer k[2] = {1, 2} annotation(Evaluate = true);
+Real y[k[2]];
+end A;
+model E43
+A a[2](k = {{1, 1}, {2, 3}});
+end E43;
+//// model: E44
+model E44
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+parameter Real u[3] = if abs(n[1]) >= 0.99 then {0, 1, 0} else {1, 0, 0};
+end E44;
+//// model: E45
+model E45
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+Real y;
+equation
+y = n * {1, 2, 3};
+end E45;
+//// model: E46
+model E46
+parameter Real n[2] annotation(Evaluate = true);
+Real y = n[1];
+end E46;
+//// model: E47
+model E47
+parameter Real n[2](start = {1, 2}) annotation(Evaluate = true);
+end E47;
+//// model: E48
+model E48
+parameter Real n[2] = {1, 2} annotation(Evaluate = true);
+protected
+parameter Real m[2] = 2 * n;
+end E48;
+//// model: E49
+model E49
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+Real x[3];
+equation
+x = n;
+end E49;

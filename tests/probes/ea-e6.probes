@@ -1,0 +1,143 @@
+//// set: ea-e6 — 同上：依赖 Evaluate = false / fixed = false 的整个数组、向前引用的参数 / 整个数组、子实例参数、for 范围、子实例维、extends 修饰、经 outer 的整个数组、identity；经子实例的整个参数数组（`b.a`，求值 / 维里 sum）
+//// model: E60
+model E60
+parameter Real a[2] = {1, 2} annotation(Evaluate = false);
+parameter Real n[2] = a annotation(Evaluate = true);
+end E60;
+//// model: E61
+model E61
+parameter Real a[2](each fixed = false);
+parameter Real n[2] = a annotation(Evaluate = true);
+initial equation
+a = {1, 2};
+end E61;
+//// model: E62
+model E62
+parameter Real n[2] = {p, 1} annotation(Evaluate = true);
+parameter Real p = 2;
+end E62;
+//// model: E63
+model E63
+parameter Real n[2] = a annotation(Evaluate = true);
+parameter Real a[2] = {1, 2};
+end E63;
+//// model: E64
+model B
+parameter Real k = 3;
+end B;
+model E64
+B b;
+parameter Real n[2] = {b.k, 1} annotation(Evaluate = true);
+Real y = n[1] * time;
+end E64;
+//// model: E65
+model E65
+parameter Integer n[3] = {1, 2, 3} annotation(Evaluate = true);
+Real x[3];
+equation
+for i in 1:size(n, 1) loop
+x[i] = n[i] * time;
+end for;
+end E65;
+//// model: E66
+model B
+parameter Integer m = 1;
+Real y[m];
+end B;
+model E66
+parameter Integer k[2] = {1, 2} annotation(Evaluate = true);
+B b(m = k[2]);
+end E66;
+//// model: E67
+model A
+parameter Real n[2] = {1, 2} annotation(Evaluate = true);
+end A;
+model E67
+extends A(n = {3, 4});
+Real y = n[2] * time;
+end E67;
+//// model: E68
+model W
+parameter Real n0[3] = {0, -1, 0};
+end W;
+model B
+outer W w;
+parameter Real n[3] = w.n0 annotation(Evaluate = true);
+Real y = n[2] * time;
+end B;
+model E68
+inner W w;
+B b;
+end E68;
+//// model: E69
+model E69
+parameter Real a[2] = {1, 2} annotation(Evaluate = false);
+parameter Real n[2] = {a[1], 3} annotation(Evaluate = true);
+end E69;
+//// model: E610
+model E610
+parameter Real a[2] = {1, 2};
+parameter Real n[2] = 2 * a annotation(Evaluate = true);
+Real y = a[1] * time;
+end E610;
+//// model: E611
+model E611
+parameter Real n[2, 2] = identity(2) annotation(Evaluate = true);
+Real y = n[1, 1] * time;
+end E611;
+//// model: E612
+model E612
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+parameter Real m[3] = n annotation(Evaluate = false);
+end E612;
+//// model: E613
+model E613
+parameter Real p = 1;
+parameter Real n[2] = {p, 2} annotation(Evaluate = true);
+Real y = p * time;
+end E613;
+//// model: E68b
+model W
+  parameter Real n0[3] = {0, -1, 0};
+end W;
+model B
+  outer W w;
+  parameter Real n[3] = w.n0;
+  Real y = n[2] * time;
+end B;
+model E68b
+  inner W w;
+  B b;
+end E68b;
+//// model: E70
+model B
+parameter Real a[2] = {1, 2};
+end B;
+model E70
+B b;
+parameter Real n[2] = b.a annotation(Evaluate = true);
+end E70;
+//// model: E71
+model B
+parameter Real a[2] = {1, 2};
+end B;
+model E71
+B b;
+parameter Real n = b.a[2] annotation(Evaluate = true);
+end E71;
+//// model: E72
+model B
+parameter Integer a[2] = {1, 2};
+end B;
+model E72
+B b;
+Real y[b.a[2]];
+end E72;
+//// model: E73
+model B
+parameter Integer a[2] = {1, 2};
+end B;
+model E73
+B b;
+Real y[sum(b.a)];
+end E73;

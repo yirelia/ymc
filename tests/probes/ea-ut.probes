@@ -1,0 +1,28 @@
+//// set: ea-ut — Evaluate 参数数组（单测原文：World 式 Axis、依赖 Evaluate = false、声明在后的别名、经子实例）
+//// model: E7
+model E7
+  parameter Real x[3] = {1, 2, 3} annotation(Evaluate = true);
+  Real y = x[2] * time;
+end E7;
+//// model: EA1
+type Axis = Real[3](each final unit = "1");
+model EA1
+  parameter Axis n = {0, -1, 0} "dir" annotation(Evaluate = true);
+  Real y = n[2] * time;
+end EA1;
+//// model: EA2
+model EA2
+  parameter Real p = 2 annotation(Evaluate = false);
+  parameter Real n[2] = {p, 1} annotation(Evaluate = true);
+  parameter Real m[2] = a annotation(Evaluate = true);
+  parameter Real a[2] = {3, 4};
+end EA2;
+//// model: EA3
+model B
+  parameter Real a[2] = {1, 2};
+end B;
+model EA3
+  B b;
+  parameter Real n[2] = b.a annotation(Evaluate = true);
+  Real y = n[2] * time;
+end EA3;

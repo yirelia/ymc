@@ -1,0 +1,61 @@
+//// set: ea-e1 — Evaluate = true 的参数数组：字面量绑定 / 整个数组别名 / 子实例修饰 / 别的参数用它 / 当维 / each 属性 / 无绑定（拒）/ time 绑定（拒）/ Boolean 选支 / 二维 / 依赖参数连带 final / 注释
+//// model: E10
+model E10
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+Real y = n[2] * time;
+end E10;
+//// model: E11
+model E11
+parameter Real a[2] = {1, 2};
+parameter Real n[2] = a annotation(Evaluate = true);
+Real y = n[1];
+end E11;
+//// model: E12
+model A
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+Real y = n[2] * time;
+end A;
+model E12
+A a(n = {1, 0, 0});
+end E12;
+//// model: E13
+model E13
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+parameter Real m[3] = n;
+end E13;
+//// model: E14
+model E14
+parameter Integer k[2] = {1, 2} annotation(Evaluate = true);
+Real y[k[2]];
+end E14;
+//// model: E15
+model E15
+parameter Real n[3](each min = -1) = {0, -1, 0} annotation(Evaluate = true);
+end E15;
+//// model: E16
+model E16
+parameter Real n[3] annotation(Evaluate = true);
+end E16;
+//// model: E17
+model E17
+parameter Real n[3] = fill(time, 3) annotation(Evaluate = true);
+end E17;
+//// model: E18
+model E18
+parameter Boolean b[2] = {true, false} annotation(Evaluate = true);
+Real y = if b[1] then 1 else 2;
+end E18;
+//// model: E19
+model E19
+parameter Real n[2, 2] = [1, 2; 3, 4] annotation(Evaluate = true);
+Real y = n[2, 1];
+end E19;
+//// model: E110
+model E110
+parameter Real s = 2;
+parameter Real n[2] = {s, 2 * s} annotation(Evaluate = true);
+end E110;
+//// model: E111
+model E111
+parameter Real n[3] = {0, -1, 0} "dir" annotation(Evaluate = true);
+end E111;

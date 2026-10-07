@@ -4253,14 +4253,11 @@ class Flattener {
     }
     // 外层记录整体绑定挪成方程后的数组字段（逐元素 fixed = false 等）未核实 → SKIP。
     if (ctx.unbound_fields) { set_unsupported("array field of record with equation binding"); return; }
-    // `annotation(Evaluate = true)` 的参数数组：同标量（emit_variable），omc 求值成 final 字面量，未做 → SKIP（CevalFuncArray6）。
-    if (var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Param &&
-        (evaluate_true(I_.comps[cid].def) ||
-         (ctx.eval_parent && evaluate_annotation(I_.comps[cid].def) != std::optional<bool>(false)))) {
-      set_unsupported("Evaluate annotation");
-      if (result_.unsupported_detail.empty()) result_.unsupported_detail = "parameter array";   // 子原因
-      return;
-    }
+    // `annotation(Evaluate = true)` 的参数数组（自己的或外层组件的，本数组写了 Evaluate = false 的除外）：同标量，见下面绑定
+    // 选定之后的 eval_arr 一段。
+    const bool eval_arr = var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Param &&
+                          (evaluate_true(I_.comps[cid].def) ||
+                           (ctx.eval_parent && evaluate_annotation(I_.comps[cid].def) != std::optional<bool>(false)));
     // 维度：组件维在前、类型维在后（R13 §3）。字面量 + 参数/常量/size()/算术求值。
     const NodeId dlex = decl_lex(cid, enclosing);   // 维写在声明里：在声明所在类的作用域求
     const ScodeScope dscope = scode_scope_of(dlex);
@@ -4381,6 +4378,45 @@ class Flattener {
       }
       return rhsE;
     };
+    // Evaluate = true 的参数数组：omc 与标量一视同仁（Structural.isStructuralComponent 看的是组件，NFStructural.mo:51-115
+    // v1.25.0）——先判绑定固定不固定（isBindingNotFixed，maxDepth 4，见 emit_variable 的同一段），固定的当结构参数：整个数组在
+    // 实例化期求值，各元素 final + 字面量，绑定里用到的参数连带 final，引用处代入（EA 探针 e10-e19、e30-e314、e40-e49：
+    // `final parameter Real n[2] = -1.0;`、`Real y = (-1.0) * time;`）。这里只打标记、记下各元素的值（frame_value 对数组的
+    // 命中把全部元素记成结构参数，见 hit），final 与字面量照旧由 apply_structural_params 统一落。依赖 Evaluate = false / fixed =
+    // false 的参数 → 不固定、照常打印（e38 / e39）。无绑定（omc 报错或拿 start，e16 / e46 / e47）、带 fixed 属性（e310）未做 → SKIP。
+    if (eval_arr) {
+      auto skip = [&](const char* why) {
+        set_unsupported("Evaluate annotation");
+        if (result_.unsupported_detail.empty()) result_.unsupported_detail = why;   // 子原因
+      };
+      if (!braw.is_valid()) { skip("parameter array without binding"); return; }
+      for (const ModSource& m : asrc)
+        for (const SSubMod& sm : I_.scode.mods[m.mod].subs)
+          if (in_.str(sm.ident) == "fixed") { skip("fixed attribute"); return; }
+      bool unk = false;
+      bool nf = false;
+      forward_miss_ = false;
+      {
+        const Id<Expr> tb = typed_rhs();   // 构造子绑定平时逐元素 inst，这里整个定型一次只为判固定
+        if (result_.unsupported) return;
+        const VisitNf vn(*this);
+        nf = exp_not_fixed(tb, kEvalDepth, unk);
+      }
+      if (!nf && unk) {
+        // 第一遍：不知道是因为碰到还没发射的参数 → 第二遍再判（第一遍的输出不用）。
+        if (lenient_ && forward_miss_) need_second_pass_ = true;
+        else { skip("fixedness unknown"); return; }
+      } else if (!nf) {
+        const PhaseScope early(*this, MarkPhase::Early);
+        forward_miss_ = false;
+        Cref self;
+        self.parts.push_back(CrefPart{name.back(), {}});
+        if (frame_value(ceval_frame_, self, /*allow_param=*/true, 0, nullptr).kind != FrameHit::Value) {
+          if (lenient_ && forward_miss_) need_second_pass_ = true;
+          else { skip("value not evaluable"); return; }
+        }
+      }
+    }
     // 解析各维成整数：字面量/参数/size()/算术走 eval_dim；`:` 维从绑定构造子形状推断（CevalArray*）。
     // 两趟：先定 `:` 维并登记到 pending_shapes_，再定其余的——别的维可以用 size() 引用本数组的 `:` 维
     //（`parameter Real A[:, size(A, 1)] = {{1, 0}, {0, 1}}`，Modelica.Blocks.Continuous.StateSpace 的写法；DM 探针 D8）。
@@ -4625,6 +4661,9 @@ class Flattener {
       if (!cur_pp_chain_.empty()) var_pp_.emplace(vidx, cur_pp_chain_);
       if (is_flow) flow_vars_.push_back({name, std::move(fsubs), cty, I_.comps[cid].loc, vidx, false});
       if (vk == FlatVarKind::Parameter) record_const(result_.model.variables[vidx]);
+      // Evaluate = false 的参数数组：判别人的 Evaluate 时按元素当"不固定"（同标量的 ParamInfo::nonstruct，见 key_not_fixed）。
+      if (vk == FlatVarKind::Parameter && evaluate_annotation(I_.comps[cid].def) == std::optional<bool>(false))
+        param_info_[var_key(result_.model.variables[vidx])].nonstruct = true;
       if (const_all) {
         const FlatVariable& cvv = result_.model.variables[vidx];
         std::optional<CVal> ev = cvv.binding.is_valid() ? cval_of(cvv.binding) : std::nullopt;
@@ -10289,6 +10328,25 @@ class Flattener {
     // → 结构参数（同 frame_value 的标记规则：dep_mark_ 时才标）。
     if (!allow_param || c.parts.size() < 2) return std::nullopt;
     const auto pl = param_lits_.find(key);
+    // 整个参数数组（`b.a`、经 outer 的 `w.n0`，末段不带下标）：各元素都是已发射的字面量绑定参数 → 按发射时记下的形状拼成
+    // 数组值，元素一起标结构参数（标记是组件级的，同下面的元素命中；EA 探针 e70 / e68）。元素组里混进别的实例（组件数组里的
+    // 参数数组）或有非字面量元素 → 不拼。
+    if (pl == param_lits_.end() && c.parts.back().subscripts.empty())
+      if (const auto sh = array_shapes_.find(key); sh != array_shapes_.end()) {
+        const ParamGroup& g = param_groups_[int_key(names, {})];
+        std::size_t n = 1;
+        for (std::int64_t d : sh->second) n *= static_cast<std::size_t>(std::max<std::int64_t>(d, 0));
+        if (n > 0 && g.count == n && g.keys.size() == n) {
+          std::vector<CVal> flat;
+          for (const std::string& k : g.keys) {
+            if (dep_mark_) record_structural(k);
+            const_vals_[k] = param_lits_[k];
+            flat.push_back(param_lits_[k]);
+          }
+          std::size_t pos = 0;
+          return cval_nest(flat, sh->second, 0, pos);
+        }
+      }
     if (pl == param_lits_.end()) {
       // 绑定不是字面量的标量参数（记录字段经整体绑定 / 修饰绑定来的值，MSL 电机 `friction.frictionParameters.PRef`）：顺着
       // 绑定链求值（flat_param_value），只给它本身打结构标记——依赖不连带（FR 探针 p20：`m.friction.fp.a` final、`m.fp.a` /
@@ -17418,6 +17476,13 @@ class Flattener {
     if (depth <= 0) { unknown = true; return false; }   // omc 的 maxDepth 用尽当不固定；不猜
     const FlatVariable* v = emitted_var(k);
     if (!v) {
+      // 整个数组的引用（`n = a`）：omc 看的是组件 a（它的整个绑定），ymc 的变量是逐元素的——任一元素不固定即不固定（EA 探针 e11；
+      // a 声明在后的 e63 第二遍按第一遍记下的各元素走）。
+      if (const std::vector<std::string> els = array_elem_keys(k); !els.empty()) {
+        for (const std::string& ek : els)
+          if (key_not_fixed(ek, depth, unknown, saw_param)) return true;
+        return false;
+      }
       // 还没发射（向前引用）：第二遍用第一遍末尾算好的（carry_.not_fixed）；第一遍记下要第二遍。
       if (saw_param) *saw_param = true;
       if (visit_nf_) return forward_not_fixed(k, depth, unknown);
@@ -17557,6 +17622,26 @@ class Flattener {
     if (exp_not_fixed(ce, kFixedDepth, unk)) return false;
     if (unk) return std::nullopt;
     return true;
+  }
+  // 已发射的数组变量 k（整体 key，`<名>.`）的各元素 key（`<名>[1].`…）；不是数组 / 还没发射 → 空。
+  std::vector<std::string> array_elem_keys(const std::string& k) {
+    std::vector<std::string> out;
+    if (k.empty() || k.back() != '.') return out;
+    const std::string base = k.substr(0, k.size() - 1);
+    auto elem_of = [&](const std::string& vk) {
+      return vk.size() > base.size() + 1 && vk.compare(0, base.size(), base) == 0 && vk[base.size()] == '[' &&
+             vk.find('.', base.size()) == vk.size() - 1;
+    };
+    for (const FlatVariable& fv : result_.model.variables) {
+      if (fv.subscripts.empty()) continue;
+      std::string vk = var_key(fv);
+      if (elem_of(vk)) out.push_back(std::move(vk));
+    }
+    // 还没发射（向前引用）：判 Evaluate 时用第一遍记下的各元素（carry_.visit，第二遍才有）。
+    if (out.empty() && visit_nf_)
+      for (const auto& [vk, vi] : carry_.visit)
+        if (elem_of(vk)) out.push_back(vk);
+    return out;
   }
   const FlatVariable* emitted_var(const std::string& k) {
     if (index_vars_) {

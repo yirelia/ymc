@@ -2969,15 +2969,16 @@ YMC_TEST(flatten_evaluate_annotation_and_structural_alias) {
   // 无绑定只有 start：start 就是绑定（updateParameterBinding），照常结构求值（omc 1.25.0 实跑，2026-10-07）。
   YMC_CHECK_EQ(flatten_src("model E2\n  parameter Real p(start = 1) annotation(Evaluate = true);\n  Real x = p * time;\nend E2;\n"),
                std::string("class E2\n  final parameter Real p(start = 1.0) = 1.0;\n  Real x = time;\nend E2;\n"));
-  // 未做的形态 → SKIP（EV 探针）：fixed = false（omc 忽略 Evaluate）、数组参数。
-  for (const char* src : {"model E3\n  parameter Real p(fixed = false) annotation(Evaluate = true);\n  Real x = p * time;\n"
-                          "initial equation\n  p = 3;\nend E3;\n",
-                          "model E7\n  parameter Real x[3] = {1, 2, 3} annotation(Evaluate = true);\n  Real y = x[2] * time;\nend E7;\n"}) {
-    bool uns = false;
-    const std::string out = flatten_src(src, &uns);
-    YMC_CHECK(uns);
-    YMC_CHECK_EQ(out, std::string("<unsupported:Evaluate annotation>"));
-  }
+  // 参数数组同样（加宽 62b；omc 1.25.0 实跑，2026-10-07）。
+  YMC_CHECK_EQ(flatten_src("model E7\n  parameter Real x[3] = {1, 2, 3} annotation(Evaluate = true);\n  Real y = x[2] * time;\nend E7;\n"),
+               std::string("class E7\n  final parameter Real x[1] = 1.0;\n  final parameter Real x[2] = 2.0;\n"
+                           "  final parameter Real x[3] = 3.0;\n  Real y = 2.0 * time;\nend E7;\n"));
+  // 未做的形态 → SKIP（EV 探针）：fixed = false（omc 忽略 Evaluate）。
+  bool uns = false;
+  const std::string out = flatten_src("model E3\n  parameter Real p(fixed = false) annotation(Evaluate = true);\n  Real x = p * time;\n"
+                                      "initial equation\n  p = 3;\nend E3;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(out, std::string("<unsupported:Evaluate annotation>"));
 }
 
 YMC_TEST(flatten_pre_change_argument_rules) {
@@ -5339,6 +5340,27 @@ YMC_TEST(flatten_evaluate_structural_decision_depth_and_fixed) {
   YMC_CHECK_EQ(flatten_src("model EF1\n  parameter Real q(fixed = true) = 3;\n  parameter Real p = q annotation(Evaluate = true);\n"
                            "  Real y = p;\nend EF1;\n"),
                std::string("class EF1\n  parameter Real q(fixed = true) = 3.0;\n  parameter Real p = q;\n  Real y = p;\nend EF1;\n"));
+}
+
+YMC_TEST(flatten_evaluate_parameter_array) {
+  // Evaluate = true 的参数数组与标量一样当结构参数：各元素 final + 字面量、引用处代入（数组类型带 `each final unit`，同 MultiBody
+  // World 的 n）；绑定依赖 Evaluate = false 的参数 → 不固定、照常打印；整个数组的别名（声明在后）、经子实例的整个数组也求值。
+  // 期望值为 omc 1.25.0 对原文实跑（EA 探针 e1-e7）。
+  YMC_CHECK_EQ(flatten_src("type Axis = Real[3](each final unit = \"1\");\nmodel EA1\n"
+                           "  parameter Axis n = {0, -1, 0} \"dir\" annotation(Evaluate = true);\n  Real y = n[2] * time;\nend EA1;\n"),
+               std::string("class EA1\n  final parameter Real n[1](unit = \"1\") = 0.0 \"dir\";\n"
+                           "  final parameter Real n[2](unit = \"1\") = -1.0 \"dir\";\n"
+                           "  final parameter Real n[3](unit = \"1\") = 0.0 \"dir\";\n  Real y = (-1.0) * time;\nend EA1;\n"));
+  YMC_CHECK_EQ(flatten_src("model EA2\n  parameter Real p = 2 annotation(Evaluate = false);\n"
+                           "  parameter Real n[2] = {p, 1} annotation(Evaluate = true);\n"
+                           "  parameter Real m[2] = a annotation(Evaluate = true);\n  parameter Real a[2] = {3, 4};\nend EA2;\n"),
+               std::string("class EA2\n  parameter Real p = 2.0;\n  parameter Real n[1] = p;\n  parameter Real n[2] = 1.0;\n"
+                           "  final parameter Real m[1] = 3.0;\n  final parameter Real m[2] = 4.0;\n"
+                           "  final parameter Real a[1] = 3.0;\n  final parameter Real a[2] = 4.0;\nend EA2;\n"));
+  YMC_CHECK_EQ(flatten_src("model B\n  parameter Real a[2] = {1, 2};\nend B;\nmodel EA3\n  B b;\n"
+                           "  parameter Real n[2] = b.a annotation(Evaluate = true);\n  Real y = n[2] * time;\nend EA3;\n"),
+               std::string("class EA3\n  final parameter Real b.a[1] = 1.0;\n  final parameter Real b.a[2] = 2.0;\n"
+                           "  final parameter Real n[1] = 1.0;\n  final parameter Real n[2] = 2.0;\n  Real y = 2.0 * time;\nend EA3;\n"));
 }
 
 YMC_TEST(flatten_external_object_variable_and_structors) {

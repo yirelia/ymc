@@ -370,3 +370,9 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `io-order` | 10 | 声明次序：引用写在 outer 声明前面（复合 / 标量 / 维）、根上先引用子实例里的 outer（SKIP）；根类 extends 来的 inner、嵌套 inner |
 | `io-detach` | 16 | omc 查名穿过类时把它整个实例化（instPackage），里面的 outer 沿词法外层找不到 inner 就生成：类型名 `P.M.J` / extends `M.Base` / 类里自引 `A.NestedA`（InnerOuter13）→ TOP_LEVEL_OUTER 或多出变量（SKIP）；简单名、经包、常量与函数引用不触发 |
 | `io-ut` | 2 | 复合 inner/outer（单测原文：两层使用者 + if 条件里的参数；不相干的 inner 类） |
+| `ea-e1` | 12 | Evaluate = true 的参数数组：字面量绑定 / 整个数组别名 / 子实例修饰 / 别的参数用它 / 当维 / each 属性 / 无绑定（拒）/ time 绑定（拒）/ Boolean 选支 / 二维 / 依赖参数连带 final / 注释 |
+| `ea-e2` | 6 | 对照：不带 Evaluate 的结构参数数组（维、if 条件、引用代入）；标量 Evaluate 的函数绑定、依赖 Evaluate = false |
+| `ea-e3` | 15 | 同上：数组类型带 `each final unit`（World 的 n）/ 整体引用 `g * n` / fill / zeros / 用户函数 / 外层组件 Evaluate / Integer 维 / if 表达式条件 / 依赖 Evaluate = false、fixed = false（不固定）/ each fixed（SKIP）/ sum（SKIP）/ 数组方程 / `:` 维 / String |
+| `ea-e4` | 10 | 同上：记录参数 Evaluate 的数组字段 / 别名数组 / 元素引用别的数组 / 组件数组的修饰分发 / if 绑定里用 / 标量积 / 无绑定（拒）/ 只有 start / protected / 整体数组方程 |
+| `ea-e6` | 19 | 同上：依赖 Evaluate = false / fixed = false 的整个数组、向前引用的参数 / 整个数组、子实例参数、for 范围、子实例维、extends 修饰、经 outer 的整个数组、identity；经子实例的整个参数数组（`b.a`，求值 / 维里 sum） |
+| `ea-ut` | 4 | Evaluate 参数数组（单测原文：World 式 Axis、依赖 Evaluate = false、声明在后的别名、经子实例） |

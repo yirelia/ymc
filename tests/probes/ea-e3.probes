@@ -1,0 +1,89 @@
+//// set: ea-e3 — 同上：数组类型带 `each final unit`（World 的 n）/ 整体引用 `g * n` / fill / zeros / 用户函数 / 外层组件 Evaluate / Integer 维 / if 表达式条件 / 依赖 Evaluate = false、fixed = false（不固定）/ each fixed（SKIP）/ sum（SKIP）/ 数组方程 / `:` 维 / String
+//// model: E30
+type Axis = Real[3](each final unit = "1");
+model E30
+parameter Axis n = {0, -1, 0} "dir" annotation(Evaluate = true);
+Real y = n[2] * time;
+end E30;
+//// model: E31
+model E31
+parameter Real g = 9.81;
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+Real v[3] = g * n;
+end E31;
+//// model: E32
+model E32
+parameter Real n[3] = fill(2, 3) annotation(Evaluate = true);
+end E32;
+//// model: E33
+model E33
+parameter Real n[3] = zeros(3) annotation(Evaluate = true);
+Real y = n[1] + time;
+end E33;
+//// model: E34
+function f
+input Real u;
+output Real y[2];
+algorithm
+y := {u, 2 * u};
+end f;
+model E34
+parameter Real n[2] = f(3) annotation(Evaluate = true);
+end E34;
+//// model: E35
+model A
+parameter Real n[2] = {1, 2};
+end A;
+model E35
+A a annotation(Evaluate = true);
+Real y = a.n[1] * time;
+end E35;
+//// model: E36
+model E36
+parameter Integer k[2] = {2, 3} annotation(Evaluate = true);
+Real y[k[1], k[2]];
+end E36;
+//// model: E37
+model E37
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+Real y;
+equation
+y = if n[2] < 0 then time else -time;
+end E37;
+//// model: E38
+model E38
+parameter Real p = 2 annotation(Evaluate = false);
+parameter Real n[2] = {p, 1} annotation(Evaluate = true);
+end E38;
+//// model: E39
+model E39
+parameter Real p(fixed = false);
+parameter Real n[2] = {p, 1} annotation(Evaluate = true);
+initial equation
+p = 1;
+end E39;
+//// model: E310
+model E310
+parameter Real n[2](each fixed = true) = {1, 2} annotation(Evaluate = true);
+end E310;
+//// model: E311
+model E311
+parameter Real n[2] = {1, 2} annotation(Evaluate = true);
+parameter Real s = sum(n);
+end E311;
+//// model: E312
+model E312
+parameter Real n[2] = {1, 2} annotation(Evaluate = true);
+Real x[2];
+equation
+x = n * time;
+end E312;
+//// model: E313
+model E313
+parameter Real n[:] = {1, 2, 3} annotation(Evaluate = true);
+Real y = n[3];
+end E313;
+//// model: E314
+model E314
+parameter String s[2] = {"a", "b"} annotation(Evaluate = true);
+end E314;

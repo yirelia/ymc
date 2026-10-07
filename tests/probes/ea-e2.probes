@@ -1,0 +1,43 @@
+//// set: ea-e2 — 对照：不带 Evaluate 的结构参数数组（维、if 条件、引用代入）；标量 Evaluate 的函数绑定、依赖 Evaluate = false
+//// model: E20
+model E20
+parameter Integer k[2] = {1, 2};
+Real y[k[2]];
+end E20;
+//// model: E21
+model E21
+parameter Real a[2] = {1, 2};
+parameter Real n = a[1] annotation(Evaluate = true);
+end E21;
+//// model: E22
+model E22
+parameter Integer k[2] = {1, 2};
+Real y[k[2]];
+Real z = k[1] * time;
+end E22;
+//// model: E23
+model E23
+parameter Boolean b[2] = {true, false};
+Real y;
+equation
+if b[1] then
+y = 1;
+else
+y = 2;
+end if;
+end E23;
+//// model: E50
+function f
+input Real u;
+output Real y;
+algorithm
+y := 2 * u;
+end f;
+model E50
+parameter Real p = f(3) annotation(Evaluate = true);
+end E50;
+//// model: E51
+model E51
+parameter Real p = 2 annotation(Evaluate = false);
+parameter Real n = p annotation(Evaluate = true);
+end E51;
