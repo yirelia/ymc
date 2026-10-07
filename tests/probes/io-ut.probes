@@ -1,0 +1,41 @@
+//// set: io-ut — 复合 inner/outer（单测原文：两层使用者 + if 条件里的参数；不相干的 inner 类）
+//// model: IO1
+model A
+  Real x;
+  parameter Integer k = 2;
+end A;
+model B
+  outer A a;
+  Real y = a.x;
+  Real z;
+equation
+  if a.k > 1 then
+    z = 1;
+  else
+    z = 2;
+  end if;
+end B;
+model C
+  B b;
+end C;
+model IO1
+  inner A a(x = time, k = 3);
+  C c;
+  B b;
+end IO1;
+//// model: IO2
+model A
+  Real x;
+end A;
+model A2
+  Real x;
+  Real w;
+end A2;
+model B
+  outer A a;
+  Real y = a.x;
+end B;
+model IO2
+  inner A2 a(x = 1, w = 2);
+  B b;
+end IO2;

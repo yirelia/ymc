@@ -1771,6 +1771,19 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           SKIP（lessons 规则 4），照 omc 改成正向期望。scodeinst 的 UnboundParameter2/3/4、ForConnect2、IfConnect4 文件 Result
           带 omc 的告警文本，进分歧账本，UnboundParameter2 从 slice 剔除。
           门：slice 631→630 例（UnboundParameter2 进账本剔除）PASS 573 / FAIL 0 / oracle=live 不一致 0；scodeinst 573 / 32→37（新增 5 个均在账，只差告警文本）；testsuite 实跑 PASS 1568→1583 / FAIL 0 / ACC 3 / CRASH 0；MSL 示例 PASS 122（不变）；探针 7881→7920（us 共 39 个）；单测 273→274。
+    - [x] (62a) inst/flat：复合 inner/outer（2026-10-07）：
+          此前 outer 只做内建标量类型，复合（模型 / 记录 / 连接器）一律 SKIP "composite/unresolved outer"（testsuite 57、MSL 59、
+          scodeinst 15）。照 omc 查名时把 outer 节点换成 inner 节点（InstNode.resolveOuter / Lookup.resolveInnerCref，R11 §5）：
+          经 outer 的引用 = inner 全名接上余下的段、从根解析（绑定、方程、维、if 条件、Evaluate 求值都走这条）；按名找值时 outer
+          的实例路径换成 inner 的；connect 的端点前缀换成 inner 所在实例（inner 那边的连接器算已连）。inner 全名前几段的下标照抄
+          引用处前缀（transferSubscripts，`C c[2]` 里 `c[1].x`——此前标量 outer 就错，打成 `c.x`）；outer 改到组件循环之前连好
+          （写在 outer 声明前面的引用此前也错）。omc 不比 inner / outer 的类型（v1.25.0 NF 无此检查，不相干的类照样压平）。
+          omc 查类名穿过非包类时把它整个实例化（instPackage），里面的 outer 沿词法外层找不到 inner 就生成 inner（根类有同名 inner
+          报 TOP_LEVEL_OUTER，否则多出变量）→ 判出来 SKIP（BioChem extra_cellularTotal）。缺 inner 时自动生成、`inner outer`、
+          outer 数组、经实例调函数 `a.f()` 仍 SKIP。
+          验证：slice 630→629 例（InnerOuter13 剔除、进账）PASS 578 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 573→578 /
+          FAIL 37（在账，不变）；整个 testsuite PASS 1583→1598 / FAIL 0 / ACCEPTS-INVALID 3→2 / CRASH 0；MSL 514 个 PASS 122
+          （不变）；探针 7920→7992（io-* 6 集 72 个）；四套构建零警告、单测 274→275；ASan 与 gcc 逐例一致。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

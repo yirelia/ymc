@@ -29,6 +29,7 @@ namespace {
 struct InnerVar {
   Symbol name;
   std::vector<Symbol> flat_name;   // inner 的压平全名（prefix + 名）
+  NodeId node;                     // inner 组件节点（复合 outer 经它的类实例解析余下的段）
 };
 
 // 内建属性表（R13 §4.2：压平属性顺序 = 内建组件数组顺序，与书写序无关）。
@@ -668,6 +669,19 @@ class Flattener {
     const SElement& def = I_.scode.elems[I_.nodes[inst_node].def];
     if (def.def.external.present) set_unsupported("external function");
     check_class_rules(def, scode_scope_of(inst_node));
+    // extends 的基类名穿过整个实例化后有 outer 缺 inner 的类（见 lookup_detaches_outer；IO 探针 j11：`extends M.Base`）。
+    for (std::vector<NodeId> todo{inst_node}; !todo.empty();) {
+      const NodeId n = todo.back();
+      todo.pop_back();
+      for (Id<SElement> eid : I_.scode.elems[I_.nodes[n].def].def.elements) {
+        const SElement& x = I_.scode.elems[eid];
+        if (x.kind == SElementKind::Extends && x.base_path.size() >= 2 &&
+            lookup_detaches_outer(eid, x.base_path, x.base_leading_dot, n))
+          set_unsupported("lookup through class with unmatched outer");
+      }
+      if (I_.nodes[n].cls.is_valid())
+        for (NodeId b : I_.trees[I_.node_class(n).tree].exts) todo.push_back(b);
+    }
     if (result_.unsupported) return;
     // import（表达式里的名字经 find_scode_element_at → import_lookup 解析；类型名 / 基类名的 import 在 inst，任务卡
     // T-S3-06）：`.*` 的包在 initImports 时立即解析，找不到 → omc 报错（R12 §5 探针 p19a）→ SKIP；import 名被本地元素遮蔽：
@@ -768,8 +782,34 @@ class Flattener {
       if (I_.comps[I_.nodes[cn].comp].attributes.is_inner) {
         std::vector<Symbol> fn = prefix;
         fn.push_back(I_.nodes[cn].name);
-        inners.push_back({I_.nodes[cn].name, std::move(fn)});
+        inners.push_back({I_.nodes[cn].name, std::move(fn), cn});
       }
+    // 纯 outer 先连到最近的 inner（组件循环之前：本类里写在 outer 声明前面的引用也要换，IO 探针 i70 / i71——omc 实例化时就
+    // linkInnerOuter，NFInst.mo 的 instClassTree 里 cloneComponent 之后，R11 §5）。没找到的留给循环里 SKIP。
+    for (NodeId cn : comps) {
+      const CompId cid = I_.nodes[cn].comp;
+      if (!I_.comps[cid].attributes.is_outer || I_.comps[cid].attributes.is_inner) continue;
+      const InnerVar* found = nullptr;
+      for (auto it = inners.rbegin(); it != inners.rend(); ++it)
+        if (it->name == I_.nodes[cn].name) { found = &*it; break; }
+      if (!found) continue;
+      // 复合 outer：经它的名字一律在 inner 的类里查（omc 不比 inner / outer 的类型——v1.25.0 NF 里没有这道检查，不相干的类照样
+      // 压平，IO 探针 i40 / i42；inner 的类里没有这个名字才报 "Variable a.x not found in scope B"，i15）。
+      if (I_.comps[cid].ty.kind == TypeKind::Complex) {
+        outer_inner_node_[cn.raw] = found->node;
+        // 经 outer 查名（变率检查、求值时顺实例路径走）落到 inner 的类实例上：omc 查名时 outer 节点就换成了 inner 节点。
+        I_.comps[cid].class_inst = I_.comps[I_.nodes[found->node].comp].class_inst;
+        std::vector<Symbol> on = prefix;
+        on.push_back(I_.nodes[cn].name);
+        PSubs os = psubs;
+        os.resize(prefix.size());
+        os.push_back({});
+        const Cref none;
+        // 按名找值（const_lookup_val）时把 outer 路径换成 inner 的；inner 在祖先实例里，下标全从本实例前缀来（必有值）。
+        outer_path_redirect_[int_key(on, os)] = {found->flat_name, *inner_subs(found->flat_name, psubs, prefix.size(), none)};
+      }
+      outer_redirect_[cn.raw] = found->flat_name;
+    }
     const PhaseScope comp_phase(*this, MarkPhase::Binding);   // 组件：绑定定型期；循环之后的方程 / 算法段：Late
     for (NodeId cn : comps) {
       const CompId cid = I_.nodes[cn].comp;
@@ -778,6 +818,11 @@ class Flattener {
       const SElement& cel = I_.scode.elems[I_.comps[cid].def];
       const bool has_dims = !cel.attr.dims.empty() || !cel.type.dims.empty();
       if (conflicting_direction(cel, inst_node)) { set_unsupported("conflicting direction prefix"); continue; }
+      if (cel.type.path.size() >= 2 &&
+          lookup_detaches_outer(I_.comps[cid].def, cel.type.path, cel.type.leading_dot, decl_lex(cid, inst_node))) {
+        set_unsupported("lookup through class with unmatched outer");
+        continue;
+      }
       const SDirection own_dir = I_.comps[cid].attributes.direction;
       if (ctx.dir_inh != SDirection::Bidir && own_dir != SDirection::Bidir) {   // mergeDirection 冲突（NFPrefixes :588-604）
         set_unsupported("conflicting direction prefix"); continue;
@@ -810,7 +855,7 @@ class Flattener {
           continue;
         }
       }
-      // outer 组件：不产出变量，按名连到最近外层 inner，记重定向表供 cref 改写（R11 §5）。找不到 inner → SKIP。
+      // outer 组件：不产出变量（上面已连到最近外层 inner，记好了重定向表供 cref 改写，R11 §5）。找不到 inner → SKIP。
       if (I_.comps[cid].attributes.is_outer) {
         // 外来修饰改 outer 元素（InnerOuterInvalidMod2/3：OUTER_ELEMENT_MOD）→ omc 报错 → SKIP。
         for (const ModSource& m : ctx.mods)
@@ -820,11 +865,7 @@ class Flattener {
         // `inner outer` 组合前缀：既声明本层变量又连外层 inner（InnerOuter3），v1 只做纯 outer → SKIP。
         if (I_.comps[cid].attributes.is_inner) { set_unsupported("inner outer combined"); continue; }
         if (has_dims) { set_unsupported("outer array"); continue; }
-        const InnerVar* found = nullptr;
-        for (auto it = inners.rbegin(); it != inners.rend(); ++it)
-          if (it->name == cname) { found = &*it; break; }
-        if (!found) { set_unsupported("outer without matching inner"); continue; }
-        outer_redirect_[cn.raw] = found->flat_name;
+        if (!outer_redirect_.count(cn.raw)) set_unsupported("outer without matching inner");
         continue;
       }
       bool is_prot = protected_ctx || vis == Visibility::Protected;
@@ -3584,6 +3625,159 @@ class Flattener {
         }
       }
     return out.mod.is_valid();
+  }
+
+  // 名字链（带逐段下标）里有一段是复合 outer 组件的实例路径 → 换成它连到的 inner 的全名接上余下的段（IO 探针 i22-i24：
+  // B 里 `a.k` 的值键是 `a.k` 不是 `b.a.k`）。
+  void redirect_outer_path(std::vector<Symbol>& names, PSubs& subs) {
+    if (outer_path_redirect_.empty()) return;
+    subs.resize(names.size());
+    for (std::size_t k = 1; k <= names.size(); ++k) {
+      const std::vector<Symbol> head(names.begin(), names.begin() + static_cast<std::ptrdiff_t>(k));
+      const PSubs hs(subs.begin(), subs.begin() + static_cast<std::ptrdiff_t>(k));
+      const auto it = outer_path_redirect_.find(int_key(head, hs));
+      if (it == outer_path_redirect_.end()) continue;
+      std::vector<Symbol> nn = it->second.first;
+      PSubs ns = it->second.second;
+      nn.insert(nn.end(), names.begin() + static_cast<std::ptrdiff_t>(k), names.end());
+      ns.insert(ns.end(), subs.begin() + static_cast<std::ptrdiff_t>(k), subs.end());
+      names = std::move(nn);
+      subs = std::move(ns);
+      return;
+    }
+  }
+  // 名字查找穿过一个类（`P.M.J` 先在 P、再在 M 里查）：omc 在每个被查的类上调 Inst.instPackage（Lookup.lookupLocalName，
+  // NFLookup.mo:699-700 v1.25.0），非包类也整个实例化（NFInst.mo:1357-1369），它的组件脱离实例树——里面的 outer 只能沿该类的
+  // 词法外层找 inner（Lookup.lookupInner :389-420），找不到就生成 inner：根类有同名 inner 报 TOP_LEVEL_OUTER，否则多出一个
+  // 变量 + 告警（IO 探针 i90-i94，BioChem extra_cellularTotal 的 `centralMetabolism.mitochondria.jox_`）。不复刻 → 调用方 SKIP。
+  // 首段的类若是书写处的实例祖先，omc 不调（isSelfReference，:611-627 / :765-767）——但写在模型 A 里的 `A.NestedA` 实测照样
+  // 实例化（IO 探针 j20 / InnerOuter13：TOP_LEVEL_OUTER），模型实例是克隆出来的、认不成自引用；这里不区分。
+  // site = 写这个名字的元素（组件 / extends，按它记忆：结果只取决于书写处）；at = 书写处的类实例。
+  bool lookup_detaches_outer(Id<SElement> site, const std::vector<Symbol>& path, bool leading_dot, NodeId at) {
+    if (const auto it = detach_memo_.find(site.raw); it != detach_memo_.end()) return it->second;
+    const bool r = detaches_outer(path, leading_dot, scode_scope_of(at));
+    detach_memo_[site.raw] = r;
+    return r;
+  }
+  bool detaches_outer(const std::vector<Symbol>& path, bool leading_dot, const ScodeScope& scope) {
+    for (std::size_t k = 1; k < path.size(); ++k) {
+      ScodeScope ds;
+      const std::vector<Symbol> head(path.begin(), path.begin() + static_cast<std::ptrdiff_t>(k));
+      const Id<SElement> x = resolve_class_path(head, leading_dot, scope, ds);
+      if (!x.is_valid() || I_.scode.elems[x].kind != SElementKind::Class) return false;
+      std::vector<Symbol> left = unmet_outers(x, ds, 0);
+      for (std::size_t a = 0; a < ds.size() && !left.empty(); ++a) {   // 词法外层里的 inner（含继承的）
+        OuterNeeds an;
+        collect_outer_needs(ds[a], ScodeScope(ds.begin() + static_cast<std::ptrdiff_t>(a) + 1, ds.end()), an, 0, false);
+        std::erase_if(left, [&](Symbol s) { return std::find(an.inners.begin(), an.inners.end(), s) != an.inners.end(); });
+      }
+      if (!left.empty()) return true;
+    }
+    return false;
+  }
+  // 类整个实例化时子树里找不到 inner 的 outer 名：本类（含继承）声明的 outer，加上各组件类型里的这类名减去本类（含继承）的
+  // inner。重声明、条件组件不看；环（递归类型）按空算。
+  struct OuterNeeds { std::vector<Symbol> outers, inners, child; };
+  void collect_outer_needs(Id<SElement> x, const ScodeScope& xs, OuterNeeds& out, int depth, bool deep) {
+    if (depth > 20) return;
+    const SElement& el = I_.scode.elems[x];
+    if (el.kind != SElementKind::Class) return;
+    ScodeScope inner_scope = xs;
+    inner_scope.insert(inner_scope.begin(), x);
+    if (el.def.kind == SClassDefKind::Derived) {   // 短类定义：照它指向的类
+      ScodeScope ds;
+      const Id<SElement> b = resolve_class_path(el.def.derived_type.path, el.def.derived_type.leading_dot, xs, ds);
+      if (b.is_valid()) collect_outer_needs(b, ds, out, depth + 1, deep);
+      return;
+    }
+    if (el.def.kind != SClassDefKind::Parts) return;
+    auto add = [](std::vector<Symbol>& v, Symbol s) { if (std::find(v.begin(), v.end(), s) == v.end()) v.push_back(s); };
+    for (Id<SElement> eid : el.def.elements) {
+      const SElement& c = I_.scode.elems[eid];
+      if (c.kind == SElementKind::Extends) {
+        ScodeScope ds;
+        const Id<SElement> b = resolve_class_path(c.base_path, c.base_leading_dot, inner_scope, ds);
+        if (b.is_valid()) collect_outer_needs(b, ds, out, depth + 1, deep);
+        continue;
+      }
+      if (c.kind != SElementKind::Component) continue;
+      if (c.prefixes.io == SInnerOuter::Outer || c.prefixes.io == SInnerOuter::InnerOuter) add(out.outers, c.name);
+      if (c.prefixes.io == SInnerOuter::Inner || c.prefixes.io == SInnerOuter::InnerOuter) add(out.inners, c.name);
+      if (!deep || c.prefixes.io == SInnerOuter::Outer) continue;   // 纯 outer 不实例化自己的子树
+      ScodeScope ds;
+      const Id<SElement> t = resolve_class_path(c.type.path, c.type.leading_dot, inner_scope, ds);
+      if (t.is_valid()) for (Symbol s : unmet_outers(t, ds, depth + 1)) add(out.child, s);
+    }
+  }
+  std::vector<Symbol> unmet_outers(Id<SElement> x, const ScodeScope& xs, int depth) {
+    if (const auto it = unmet_memo_.find(x.raw); it != unmet_memo_.end()) return it->second;
+    unmet_memo_[x.raw] = {};   // 环：先按空
+    OuterNeeds n;
+    collect_outer_needs(x, xs, n, depth, true);
+    std::vector<Symbol> u = n.outers;
+    for (Symbol s : n.child)
+      if (std::find(n.inners.begin(), n.inners.end(), s) == n.inners.end() && std::find(u.begin(), u.end(), s) == u.end())
+        u.push_back(s);
+    unmet_memo_[x.raw] = u;
+    return u;
+  }
+  // 换成 inner 全名时前 n-1 段的下标：inner 声明在 outer 的某个祖先实例里，这几段就是引用处实例路径（书写处前缀 + 引用的
+  // 前几段）的前缀，下标照抄它的（omc 压平时 inner 的 cref 从前缀继承下标：Prefix.apply → ComponentRef.transferSubscripts，
+  // NFFlatten.mo:281 / NFComponentRef.mo:904-942 v1.25.0；IO 探针 i50：`C c[2]` 里 `c[1].b.y = c[1].x`）。ps = 书写处前缀的
+  // 逐段下标。落在引用自己带下标的段上的未做 → nullopt（调用方 SKIP）。
+  static std::optional<PSubs> inner_subs(const std::vector<Symbol>& inner, const PSubs& ps, std::size_t prefix_len,
+                                         const Cref& c) {
+    PSubs s(inner.size());
+    for (std::size_t k = 0; k + 1 < inner.size(); ++k) {
+      if (k < prefix_len) {
+        if (k < ps.size()) s[k] = ps[k];
+      } else if (k - prefix_len >= c.parts.size() || !c.parts[k - prefix_len].subscripts.empty()) {
+        return std::nullopt;
+      }
+    }
+    return s;
+  }
+  // 引用经过复合 outer 组件（`a.x`、`d.c.b.a.x`，a 是 `outer A a`）：omc 查名时把 outer 节点换成 inner 节点（InstNode.resolveOuter），
+  // 等于 inner 的全名接上余下的段——从根实例解析（IO 探针 i10-i112）。余下的段的下标见下。
+  std::optional<Id<Expr>> cref_via_outer(const Cref& c, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    if (outer_inner_node_.empty() || c.parts.empty() || c.leading_dot) return std::nullopt;
+    NodeId node = find_local(enclosing, c.parts[0].name);
+    for (std::size_t i = 0; i < c.parts.size() && is_comp_node(node); ++i) {
+      if (const auto it = outer_inner_node_.find(node.raw); it != outer_inner_node_.end()) {
+        const std::vector<Symbol>& in = outer_redirect_.at(node.raw);
+        const std::optional<PSubs> is = inner_subs(in, cur_psubs_, prefix.size(), c);
+        if (!is || !c.parts[i].subscripts.empty()) { set_unsupported("subscript through outer"); return lit_int(0); }
+        auto int_exp = [&](std::int64_t v) {
+          Exp lit;
+          lit.kind = ExpKind::IntLit;
+          lit.ival = v;
+          return synth_exp(std::move(lit));
+        };
+        Cref nc;
+        for (std::size_t k = 0; k < in.size(); ++k) {
+          CrefPart p{in[k], {}};
+          for (std::int64_t v : (*is)[k]) p.subscripts.push_back(int_exp(v));
+          nc.parts.push_back(std::move(p));
+        }
+        // 余下各段的下标在书写处先求成整数（字面量、for 迭代变量、常量）再接上：从根解析时书写处的名字已不可见（IO 探针 i69：
+        // `a.x[i]`）。求不出的（参数、for 语句迭代变量、end）未做 → SKIP。
+        const ScodeScope ws = scode_scope_of(enclosing);
+        for (std::size_t k = i + 1; k < c.parts.size(); ++k) {
+          CrefPart p{c.parts[k].name, {}};
+          for (std::size_t j = 0; j < c.parts[k].subscripts.size(); ++j) {
+            const std::optional<std::int64_t> v = subscript_int(c.parts[k].subscripts[j], &ws);
+            if (!v) { set_unsupported("subscript through outer"); return lit_int(0); }
+            p.subscripts.push_back(int_exp(*v));
+          }
+          nc.parts.push_back(std::move(p));
+        }
+        return cref(synth_cref(std::move(nc)), root_, {});
+      }
+      if (i + 1 >= c.parts.size()) break;
+      const NodeId cls = I_.comps[I_.nodes[node].comp].class_inst;
+      node = is_class_inst(cls) ? find_local(cls, c.parts[i + 1].name) : NodeId{};
+    }
+    return std::nullopt;
   }
 
   // 外来子修饰里第一个带绑定的（优先级最高的绑定）；没有 → nullptr。
@@ -10087,6 +10281,7 @@ class Flattener {
       }
       isubs.push_back(std::move(is));
     }
+    redirect_outer_path(names, isubs);
     const std::string key = int_key(names, isubs);
     auto it = const_vals_.find(key);
     if (it != const_vals_.end()) return it->second;
@@ -10727,6 +10922,7 @@ class Flattener {
         return lit_int(it->second);
       }
     }
+    if (std::optional<Id<Expr>> r = cref_via_outer(c, enclosing, prefix)) return *r;
     Expr e;
     e.kind = ExprKind::Cref;
     std::vector<Id<Expr>> leaf_subs;   // 末段各下标的定型结果（invalid = 照常 inst：符号下标）
@@ -10855,7 +11051,13 @@ class Flattener {
         auto it = outer_redirect_.find(leaf.raw);
         if (it != outer_redirect_.end()) {
           e.ty = I_.comps[I_.nodes[leaf].comp].ty;
-          for (Symbol s : it->second) e.cref.parts.push_back({s, {}});
+          const std::optional<PSubs> is = inner_subs(it->second, cur_psubs_, prefix.size(), c);
+          if (!is) {
+            set_unsupported("subscript through outer");
+            return add(std::move(e));
+          }
+          const std::vector<std::vector<Id<Expr>>> xs = psubs_to_exprs(*is);
+          for (std::size_t k = 0; k < it->second.size(); ++k) e.cref.parts.push_back({it->second[k], xs[k]});
           return add(std::move(e));
         }
       }
@@ -15548,6 +15750,7 @@ class Flattener {
     NodeId node;              // 末段组件节点（Virtual 无）
     NodeId parent;            // Declared / Virtual：父段组件节点（须是 expandable）
     bool scalar_ref = true;   // 各段各维都由单个下标给出（虚元素取类型的另一端须是标量元素）
+    bool rooted = false;      // path 已是全名（经 outer 落到 inner 上）：不再接书写处前缀
   };
   struct Resolved { ConnInfo a, b; SourceLoc loc; };
   // 连接集节点（Util/DisjointSets.mo 的元素）= 标量叶 × 面。
@@ -15855,6 +16058,21 @@ class Flattener {
     std::vector<Symbol> path;
     NodeId cur = find_local(enclosing, c.parts[0].name);
     if (!cur.is_valid() || I_.nodes[cur].is_empty()) return std::nullopt;
+    // 经复合 outer 的连接（`connect(a.p, q)`，a 是 outer）：端点落在 inner 上——全名的前缀换成 inner 所在实例（inner 与 outer
+    // 同名，余下的段不变），不再接书写处前缀；inner 那边的连接器就算连上了（IO 探针 i16：`a.p.v = b.q.v; a.p.i - b.q.i = 0.0`，
+    // 没有 `a.p.i = 0.0`）。面照书写的 cref 定：crefFace 看首个非作用域段（NFConnector.mo:312-326），即 outer 换成的 inner，
+    // 是不是连接器与书写处一样。base / bsubs = 全名前缀及其逐段下标（实例维、参数维按它取）。
+    std::vector<Symbol> base = prefix;
+    PSubs bsubs = psubs;
+    bsubs.resize(prefix.size());
+    const bool rooted = outer_inner_node_.count(cur.raw) != 0;
+    if (rooted) {
+      const std::vector<Symbol>& in = outer_redirect_.at(cur.raw);
+      const std::optional<PSubs> is = inner_subs(in, psubs, prefix.size(), c);
+      if (!is) return std::nullopt;
+      base.assign(in.begin(), in.end() - 1);
+      bsubs.assign(is->begin(), is->end() - 1);
+    }
     segs.push_back({cur, enclosing});
     path.push_back(c.parts[0].name);
     // 面（crefFace，NFConnector.mo:312-326）：单段、或首段是连接器 → OUTSIDE；否则 INSIDE。
@@ -15899,7 +16117,7 @@ class Flattener {
       if (I_.comps[ccid].ty.kind == TypeKind::Complex) {
         const NodeId conn = class_of(cur);
         if (!conn.is_valid() || I_.scode.elems[I_.nodes[conn].def].restriction != SRestriction::Connector) return std::nullopt;
-        std::vector<Symbol> inst = prefix;   // 连接器实例的全名链（成员的参数维按实例取，见 connector_leaves）
+        std::vector<Symbol> inst = base;   // 连接器实例的全名链（成员的参数维按实例取，见 connector_leaves）
         inst.insert(inst.end(), path.begin(), path.end());
         if (!connector_leaves(conn, {}, members, &inst)) return std::nullopt;
       } else {
@@ -15925,9 +16143,9 @@ class Flattener {
     std::vector<std::vector<std::vector<std::int64_t>>> seg_lists(segs.size());   // [段][维] → 下标值列表
     bool scalar_ref = true;   // 各维都由单个整数下标给出（无缺省维、无范围/切片）
     const ScodeScope wscope = scode_scope_of(enclosing);   // 下标写在 connect 所在的类里
-    std::vector<Symbol> knames = prefix;
-    PSubs ksubs = psubs;
-    ksubs.resize(prefix.size());
+    if (rooted && kind != EndKind::Normal) return std::nullopt;   // 经 outer 的 expandable 端未核实
+    std::vector<Symbol> knames = base;
+    PSubs ksubs = bsubs;
     for (std::size_t si = 0; si < segs.size(); ++si) {
       const SElement& sel = I_.scode.elems[I_.comps[I_.nodes[segs[si].comp].comp].def];
       std::vector<std::int64_t> dims;
@@ -16011,6 +16229,13 @@ class Flattener {
       if (!is_virtual) info.node = cur;
       info.parent = parent;
       info.scalar_ref = scalar_ref;
+      if (rooted) {   // 接上 inner 所在实例的前缀，process_connects 不再接书写处前缀
+        std::vector<std::vector<Id<Expr>>> s = psubs_to_exprs(bsubs);
+        s.insert(s.end(), info.subs.begin(), info.subs.end());
+        info.path.insert(info.path.begin(), base.begin(), base.end());
+        info.subs = std::move(s);
+        info.rooted = true;
+      }
       out.push_back(std::move(info));
     } while (next_index(pos, sizes));
     return out;
@@ -16422,7 +16647,7 @@ class Flattener {
       if (A->size() != B->size()) { set_unsupported("connector array size mismatch"); return; }
       const std::vector<std::vector<Id<Expr>>> pre_subs = psubs_to_exprs(cs.psubs);
       auto prefixed = [&](ConnInfo& ci) {
-        if (cs.prefix.empty()) return;
+        if (cs.prefix.empty() || ci.rooted) return;
         std::vector<Symbol> p = cs.prefix;
         p.insert(p.end(), ci.path.begin(), ci.path.end());
         std::vector<std::vector<Id<Expr>>> s = pre_subs;
@@ -17940,6 +18165,11 @@ class Flattener {
   Interner& in_;
   FlattenResult result_;
   std::unordered_map<std::uint32_t, std::vector<Symbol>> outer_redirect_;   // outer 组件节点 raw → inner 全名
+  std::unordered_map<std::uint32_t, NodeId> outer_inner_node_;               // 复合 outer 组件节点 raw → inner 组件节点
+  std::unordered_map<std::uint32_t, std::vector<Symbol>> unmet_memo_;        // 类定义 raw → 整个实例化时缺 inner 的 outer 名
+  std::unordered_map<std::uint32_t, bool> detach_memo_;                      // 写类型名 / 基类名的元素 raw → 查名会生成 inner
+  // 复合 outer 的实例路径键 → inner 全名及其逐段下标
+  std::unordered_map<std::string, std::pair<std::vector<Symbol>, PSubs>> outer_path_redirect_;
   std::unordered_set<std::uint32_t> evaluating_;   // 正在求值的常量节点（环检测）
   PSubs cur_psubs_;     // 当前 prefix 的逐段下标（复合数组 `a[i]`）；cref 前缀改写读它。emit_*/collect_equation 入口设置
   std::unordered_map<std::uint32_t, CVal>* locals_ = nullptr;   // 用户函数解释期的局部环境（输入/局部/输出名→值）

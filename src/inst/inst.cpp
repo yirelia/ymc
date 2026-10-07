@@ -788,13 +788,14 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
     comp.decl_scope = enclosing;   // 元素修饰 / 维的作用域 = 声明所在类（NFInst.instComponentDef 的 parent，NFInst.mo:1942 / :1951）
   }
 
-  // outer 组件指向别处的 inner，不实例化自己的子树（否则 `outer B b`（B 里又含 outer B）会无限递归）。
-  // v1 只做标量 outer：解析类型名，是内建标量就记类型（flatten 靠名字连到 inner）；复合 outer 暂不做。
+  // outer 组件指向别处的 inner，不实例化自己的子树（否则 `outer B b`（B 里又含 outer B）会无限递归）。解析类型名：内建标量
+  // 记类型；复合（模型 / 记录 / 连接器）记成 Complex——flatten 按名连到最近的 inner，经它的引用都换到 inner 上（R11 §5）。
   if (el.prefixes.io == SInnerOuter::Outer || el.prefixes.io == SInnerOuter::InnerOuter) {
     NodeId tn = lookup_class_name(el.type.path, enclosing);   // arena add：下面重新取组件引用
     Type oty = Type::unknown();
     for (int i = 0; i < 4; ++i)
       if (tn == builtin_[i]) { oty = Type::of(kBuiltinKinds[i]); break; }
+    if (oty.kind == TypeKind::Unknown && tn.is_valid() && !I_.nodes[tn].is_empty()) oty = Type::of(TypeKind::Complex);
     if (oty.kind == TypeKind::Unknown) mark_unsupported("composite/unresolved outer");
     Component& comp = I_.comps[cid];
     comp.ty = oty;

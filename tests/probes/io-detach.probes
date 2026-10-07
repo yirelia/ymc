@@ -1,0 +1,218 @@
+//// set: io-detach — omc 查名穿过类时把它整个实例化（instPackage），里面的 outer 沿词法外层找不到 inner 就生成：类型名 `P.M.J` / extends `M.Base` / 类里自引 `A.NestedA`（InnerOuter13）→ TOP_LEVEL_OUTER 或多出变量（SKIP）；简单名、经包、常量与函数引用不触发
+//// model: I90
+package P
+model Mito
+model Jox_
+outer Real cv;
+Real y = cv;
+end Jox_;
+P.Mito.Jox_ jox;
+end Mito;
+model Cyto
+inner Real cv = 1;
+P.Mito mito;
+end Cyto;
+end P;
+model I90
+P.Cyto cyto;
+inner Real cv = cyto.cv;
+end I90;
+//// model: I91
+package P
+model Mito
+model Jox_
+outer Real cv;
+Real y = cv;
+end Jox_;
+Jox_ jox;
+end Mito;
+model Cyto
+inner Real cv = 1;
+P.Mito mito;
+end Cyto;
+end P;
+model I91
+P.Cyto cyto;
+inner Real cv = cyto.cv;
+end I91;
+//// model: I92
+package P
+model Jox
+outer Real cv;
+Real y = cv;
+end Jox;
+model Mito
+P.Jox jox;
+end Mito;
+model Cyto
+inner Real cv = 1;
+P.Mito mito;
+end Cyto;
+end P;
+model I92
+P.Cyto cyto;
+inner Real cv = cyto.cv;
+end I92;
+//// model: I93
+package P
+model Mito
+model Jox_
+outer Real cv;
+Real y = cv;
+end Jox_;
+P.Mito.Jox_ jox;
+end Mito;
+model Cyto
+inner Real cv = 1;
+P.Mito mito;
+end Cyto;
+end P;
+model I93
+P.Cyto cyto;
+end I93;
+//// model: I94
+package P
+model Mito
+model Jox_
+outer Real cv;
+Real y = cv;
+end Jox_;
+P.Mito.Jox_ jox;
+end Mito;
+end P;
+model I94
+inner Real cv = 1;
+P.Mito mito;
+end I94;
+//// model: J10
+model M
+constant Real k = 2;
+outer Real x;
+end M;
+model J10
+inner Real x = 1;
+Real y = M.k;
+end J10;
+//// model: J11
+model M
+model Base
+Real z;
+end Base;
+outer Real x;
+end M;
+model J11
+extends M.Base;
+inner Real x = 1;
+end J11;
+//// model: J12
+model M
+function f
+input Real u;
+output Real y;
+algorithm
+y := u;
+end f;
+outer Real x;
+end M;
+model J12
+inner Real x = 1;
+Real y = M.f(time);
+end J12;
+//// model: J13
+model M
+constant Real k = 2;
+outer Real x;
+end M;
+model J13
+Real y = M.k;
+end J13;
+//// model: J14
+package P
+constant Real k = 2;
+model M
+outer Real x;
+end M;
+end P;
+model J14
+inner Real x = 1;
+Real y = P.k;
+end J14;
+//// model: J20
+model A
+model NestedA
+outer Real x;
+end NestedA;
+A.NestedA nestedA;
+end A;
+model J20
+inner Real x = 1;
+A a;
+end J20;
+//// model: J21
+model A
+model NestedA
+outer Real x;
+Real y = x;
+end NestedA;
+A.NestedA nestedA;
+end A;
+model B
+A.NestedA n;
+end B;
+model J21
+inner Real x = 1;
+B b;
+end J21;
+//// model: J22
+model A
+model NestedA
+outer Real x;
+Real y = x;
+end NestedA;
+end A;
+model B
+A.NestedA n;
+end B;
+model J22
+inner Real x = 1;
+B b;
+end J22;
+//// model: J23
+package P
+model A
+model NestedA
+outer Real x;
+Real y = x;
+end NestedA;
+A.NestedA nestedA;
+end A;
+end P;
+model J23
+inner Real x = 1;
+P.A a;
+end J23;
+//// model: J24
+package P
+model A
+model NestedA
+outer Real x;
+Real y = x;
+end NestedA;
+P.A.NestedA nestedA;
+end A;
+end P;
+model J24
+inner Real x = 1;
+P.A a;
+end J24;
+//// model: J25
+model A
+model NestedA
+outer Real x;
+Real y = x;
+end NestedA;
+A.NestedA nestedA;
+end A;
+model J25
+A a;
+end J25;

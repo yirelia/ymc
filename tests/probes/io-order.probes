@@ -1,0 +1,128 @@
+//// set: io-order — 声明次序：引用写在 outer 声明前面（复合 / 标量 / 维）、根上先引用子实例里的 outer（SKIP）；根类 extends 来的 inner、嵌套 inner
+//// model: I70
+model A
+Real x;
+end A;
+model B
+Real y = a.x;
+outer A a;
+end B;
+model I70
+inner A a(x = time);
+B b;
+end I70;
+//// model: I71
+model B
+Real y = x;
+outer Real x;
+end B;
+model I71
+inner Real x = time;
+B b;
+end I71;
+//// model: I72
+model A
+Real x;
+end A;
+model B
+outer A a;
+end B;
+model I72
+Real z = b.a.x;
+B b;
+inner A a(x = time);
+end I72;
+//// model: I73
+model A
+Real x;
+end A;
+model B
+outer A a;
+end B;
+model I73
+inner A a(x = time);
+B b;
+Real z = b.a.x;
+end I73;
+//// model: I74
+model A
+parameter Integer n = 2;
+end A;
+model B
+Real y[a.n];
+outer A a;
+end B;
+model I74
+inner A a(n = 3);
+B b;
+end I74;
+//// model: I80
+model A
+outer Real x;
+Real y = x;
+end A;
+model E
+A a;
+inner Real x = 1;
+end E;
+model I80
+extends E;
+end I80;
+//// model: I81
+model A
+outer Real x;
+Real y = x;
+end A;
+model E
+inner Real x = 1;
+A a;
+end E;
+model I81
+extends E;
+end I81;
+//// model: I82
+model A
+Real x;
+end A;
+model B
+outer A a;
+Real y = a.x;
+end B;
+model E
+inner A a(x = 1);
+B b;
+end E;
+model I82
+extends E;
+end I82;
+//// model: I83
+model A
+outer Real x;
+Real y = x;
+end A;
+model C
+inner Real x = 2;
+A a;
+end C;
+model E
+C c;
+A a;
+inner Real x = c.x;
+end E;
+model I83
+extends E;
+end I83;
+//// model: I84
+model A
+outer Real x;
+Real y = x;
+end A;
+model C
+inner Real x = 2;
+A a;
+end C;
+model I84
+C c;
+A a;
+inner Real x = c.x;
+end I84;

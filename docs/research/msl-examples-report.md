@@ -182,3 +182,11 @@ SKIP 原因都不变（受益的是 testsuite 里老 MSL 块 BC* / BM* 等 41 �
 
 无绑定的固定参数拿 start 当绑定（updateParameterBinding）之后，514 个示例逐例 verdict 与 SKIP 原因都不变（MSL 示例里没有只靠
 start 的参数）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-07 加宽 62a 之后：PASS 122（不变）
+
+复合 inner/outer 接上之后，此前卡在"composite/unresolved outer"的 59 个示例都往下露出：参数数组的 Evaluate = true 37（MultiBody
+全系，World 的 `parameter Types.Axis n = {0, -1, 0} annotation(Evaluate = true)`）、函数里给输出赋值的形态 6、复合数组元素引用 5、
+条件组件的条件 3、`inner outer` 2、Medium 包里的类型 3、getInstanceName / 嵌套类修饰各 1-2。FAIL / ACCEPTS-INVALID / CRASH 0。
+另：msl_sweep 的 omc 结果缓存曾把被打断（扫描进程被杀）的 omc 记成空文件，以后一直当 omc 拒绝——211 个空缓存已清掉，工具改为
+空输出不缓存、读到空缓存重跑。

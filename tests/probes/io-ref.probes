@@ -1,0 +1,369 @@
+//// set: io-ref — 复合 outer 的引用：绑定 / 方程 / 嵌套两层 `d.c.b.a.x` / 两个使用者 / inner 是派生类 / 不相干的类（拒）/ 数组元素 / 记录 / 最近的 inner / 参数与 Evaluate / if 条件 / der / pre / 算法段 / 缺 inner（SKIP）/ outer 带修饰（拒）/ 经实例调函数（SKIP）
+//// model: I10
+model A
+Real x;
+end A;
+model B
+outer A a;
+Real y;
+equation
+y = a.x;
+end B;
+model I10
+inner A a(x = 1.0);
+B b;
+end I10;
+//// model: I11
+model A
+parameter Real p = 2;
+Real x;
+end A;
+model B
+outer A a;
+Real y = a.p * time;
+end B;
+model I11
+inner A a;
+B b;
+equation
+a.x = 1;
+end I11;
+//// model: I12
+model A
+Real x;
+end A;
+model B
+outer A a;
+end B;
+model C
+B b;
+inner A a(x = 1.0);
+end C;
+model D
+C c;
+Real y;
+equation
+y = c.b.a.x;
+end D;
+model I12
+D d;
+Real z;
+equation
+z = d.c.b.a.x;
+end I12;
+//// model: I13
+model A
+Real x;
+equation
+x = time;
+end A;
+model B
+outer A a;
+Real y = a.x;
+end B;
+model I13
+inner A a;
+B b1;
+B b2;
+end I13;
+//// model: I14
+model A
+Real x;
+end A;
+model A2
+extends A;
+Real z;
+end A2;
+model B
+outer A a;
+Real y = a.x;
+end B;
+model I14
+inner A2 a(x = 1, z = 2);
+B b;
+end I14;
+//// model: I15
+model A
+Real x;
+end A;
+model C2
+Real w;
+end C2;
+model B
+outer A a;
+Real y = a.x;
+end B;
+model I15
+inner C2 a(w = 1);
+B b;
+end I15;
+//// model: I16
+connector P
+Real v;
+flow Real i;
+end P;
+model A
+P p;
+end A;
+model B
+outer A a;
+P q;
+equation
+connect(a.p, q);
+end B;
+model I16
+inner A a;
+B b;
+end I16;
+//// model: I17
+model A
+Real x;
+end A;
+model B
+outer A a;
+Real y = a.x;
+end B;
+model I17
+B b;
+end I17;
+//// model: I18
+model A
+Real x[2];
+end A;
+model B
+outer A a;
+Real y = a.x[2];
+end B;
+model I18
+inner A a(x = {1, 2});
+B b;
+end I18;
+//// model: I19
+record R
+Real a;
+Real b;
+end R;
+model B
+outer R r;
+Real y = r.a + r.b;
+end B;
+model I19
+inner R r(a = 1, b = 2);
+B b;
+end I19;
+//// model: I110
+model A
+Real x;
+end A;
+model B
+outer A a;
+Real y = a.x;
+end B;
+model C
+inner A a(x = 3);
+B b;
+end C;
+model I110
+inner A a(x = 1);
+B b;
+C c;
+end I110;
+//// model: I111
+model A
+Real x;
+function f
+input Real u;
+output Real y;
+algorithm
+y := 2 * u;
+end f;
+end A;
+model B
+outer A a;
+Real y = a.x;
+end B;
+model I111
+inner A a(x = time);
+B b;
+end I111;
+//// model: I112
+model A
+parameter Integer n = 2;
+Real x[n];
+end A;
+model B
+outer A a;
+Real y[a.n];
+equation
+y = a.x;
+end B;
+model I112
+inner A a(n = 3, x = {1, 2, 3});
+B b;
+end I112;
+//// model: I113
+model A
+Real x;
+end A;
+model B
+outer A a(x = 2);
+end B;
+model I113
+inner A a;
+B b;
+end I113;
+//// model: I20
+model A
+parameter Real k = 2;
+function f
+input Real u;
+output Real y;
+algorithm
+y := 2 * u;
+end f;
+end A;
+model B
+outer A a;
+Real y = a.f(time);
+end B;
+model I20
+inner A a;
+B b;
+end I20;
+//// model: I21
+model A
+parameter Real k = 2;
+replaceable function f = g;
+end A;
+function g
+input Real u;
+output Real y;
+algorithm
+y := 3 * u;
+end g;
+model B
+outer A a;
+Real y = a.f(time);
+end B;
+model I21
+inner A a;
+B b;
+end I21;
+//// model: I22
+model A
+parameter Real k = 2;
+end A;
+model B
+outer A a;
+parameter Real p = a.k;
+Real y = p * time;
+end B;
+model I22
+inner A a(k = 5);
+B b;
+end I22;
+//// model: I23
+model A
+parameter Boolean on = true;
+end A;
+model B
+outer A a;
+Real y;
+equation
+if a.on then
+y = 1;
+else
+y = 2;
+end if;
+end B;
+model I23
+inner A a;
+B b;
+end I23;
+//// model: I24
+model A
+parameter Real k = 2;
+end A;
+model B
+outer A a;
+parameter Real p = a.k annotation(Evaluate = true);
+end B;
+model I24
+inner A a(k = 5);
+B b;
+end I24;
+//// model: I25
+model A
+Real x;
+end A;
+model B
+outer A a;
+Real y;
+equation
+y = der(a.x);
+end B;
+model I25
+inner A a(x = time);
+B b;
+end I25;
+//// model: I26
+model A
+Real x;
+end A;
+model B
+outer A a;
+Real y;
+algorithm
+y := a.x * 2;
+end B;
+model I26
+inner A a(x = time);
+B b;
+end I26;
+//// model: I27
+model A
+Real x;
+end A;
+model B
+outer A a;
+Real y;
+equation
+when a.x > 1 then
+y = pre(a.x);
+end when;
+end B;
+model I27
+inner A a(x = time);
+B b;
+end I27;
+//// model: I30
+model A
+parameter Real k = 2;
+function f
+input Real u;
+output Real y;
+algorithm
+y := 2 * u;
+end f;
+end A;
+model I30
+A a;
+Real y = a.f(time);
+end I30;
+//// model: I31
+model A
+parameter Real k = 2;
+function f
+input Real u;
+output Real y;
+algorithm
+y := 2 * u;
+end f;
+end A;
+model B
+A a;
+Real y = a.f(time);
+end B;
+model I31
+B b;
+end I31;

@@ -47,8 +47,13 @@ def oracle(name, args):
     if os.path.exists(cache):
         with open(cache, encoding="utf-8") as f:
             text = f.read()
-        return (None, "") if text == "<timeout>" else (text.startswith(("class", "function", "impure function")), text)
+        # 空缓存 = 当年那次 omc 被打断（扫描进程被杀）：不可信，重跑。
+        if text:
+            return (None, "") if text == "<timeout>" else (text.startswith(("class", "function", "impure function")), text)
     code, out, _ = run([args.omc, "-i=" + name, args.lib], args.omc_timeout)
+    # omc 正常失败也会在 stdout 打 "Error processing file"；什么都没打 = 被打断，不缓存（否则以后一直当 omc 拒绝）。
+    if code is not None and not out:
+        return None, ""
     os.makedirs(args.oracle_cache, exist_ok=True)
     with open(cache, "w", encoding="utf-8", newline="\n") as f:
         f.write("<timeout>" if code is None else out)

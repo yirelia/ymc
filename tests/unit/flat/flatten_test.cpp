@@ -332,8 +332,28 @@ YMC_TEST(flatten_inner_outer_scalar) {
   YMC_CHECK_EQ(flatten_src(src), std::string(want));
 }
 
+YMC_TEST(flatten_inner_outer_composite) {
+  // 复合 outer：经它的引用（绑定、if 条件里的参数）换成最近 inner 的全名，嵌套两层的 c.b 也一样；inner 的类与 outer 声明
+  // 类型不相干也照样压平（omc 不比类型）。期望值为 omc 1.25.0 对原文实跑（IO 探针 i1-i4）。
+  const char* src1 =
+      "model A\n  Real x;\n  parameter Integer k = 2;\nend A;\n"
+      "model B\n  outer A a;\n  Real y = a.x;\n  Real z;\nequation\n  if a.k > 1 then\n    z = 1;\n  else\n    z = 2;\n  end if;\nend B;\n"
+      "model C\n  B b;\nend C;\n"
+      "model IO1\n  inner A a(x = time, k = 3);\n  C c;\n  B b;\nend IO1;\n";
+  const char* want1 =
+      "class IO1\n  Real a.x = time;\n  final parameter Integer a.k = 3;\n  Real c.b.y = a.x;\n  Real c.b.z;\n"
+      "  Real b.y = a.x;\n  Real b.z;\nequation\n  c.b.z = 1.0;\n  b.z = 1.0;\nend IO1;\n";
+  YMC_CHECK_EQ(flatten_src(src1), std::string(want1));
+  const char* src2 =
+      "model A\n  Real x;\nend A;\nmodel A2\n  Real x;\n  Real w;\nend A2;\n"
+      "model B\n  outer A a;\n  Real y = a.x;\nend B;\n"
+      "model IO2\n  inner A2 a(x = 1, w = 2);\n  B b;\nend IO2;\n";
+  YMC_CHECK_EQ(flatten_src(src2),
+               std::string("class IO2\n  Real a.x = 1.0;\n  Real a.w = 2.0;\n  Real b.y = a.x;\nend IO2;\n"));
+}
+
 YMC_TEST(flatten_outer_without_inner_unsupported) {
-  // 没有匹配 inner 的 outer → 干净 SKIP（omc 报错，v1 未做诊断）。
+  // 没有匹配 inner 的 outer → 干净 SKIP（omc 自动生成 inner 并告警，R11 P08；未做）。
   bool uns = false;
   std::string t = flatten_src("model A\n  outer Real x;\n  Real y = x;\nend A;\n"
                               "model M\n  A a;\nend M;\n", &uns);

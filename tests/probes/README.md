@@ -364,3 +364,9 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `us-s2` | 6 | 同上：记录字段（直接 / 外来修饰 / 嵌套在模型里）不做、连接器与两层模型照做 |
 | `us-s3` | 14 | 同上：extends 修饰的 start、fixed = false、类型带 start 的数组、记录数组字段、别的参数 / fill / 维用它、外来改 start / 改绑定、min、time 当 start（拒）、有绑定、start 链、连接器里的维 |
 | `us-ut` | 3 | start 当绑定（单测原文：外来修饰、维、记录字段；顶层；Evaluate） |
+| `io-ref` | 24 | 复合 outer 的引用：绑定 / 方程 / 嵌套两层 `d.c.b.a.x` / 两个使用者 / inner 是派生类 / 不相干的类（拒）/ 数组元素 / 记录 / 最近的 inner / 参数与 Evaluate / if 条件 / der / pre / 算法段 / 缺 inner（SKIP）/ outer 带修饰（拒）/ 经实例调函数（SKIP） |
+| `io-type` | 8 | 同上：inner 的类与 outer 声明类型不相干也照样压平（omc 不比类型）、经 outer 访问派生类独有的元素；inner 在数组元素实例里（`C c[2]`，前缀下标照抄）、outer 维用 inner 的参数 |
+| `io-conn` | 12 | 经复合 outer 的 connect：outer 连接器本身 / 两个使用者 / inner 在数组元素里 / 根上也连 / 两端都经 outer / 连接器数组元素 / for 里连；短类型 / 短类连接器的 outer；内层 inner 遮住外层；for 迭代变量当下标 |
+| `io-order` | 10 | 声明次序：引用写在 outer 声明前面（复合 / 标量 / 维）、根上先引用子实例里的 outer（SKIP）；根类 extends 来的 inner、嵌套 inner |
+| `io-detach` | 16 | omc 查名穿过类时把它整个实例化（instPackage），里面的 outer 沿词法外层找不到 inner 就生成：类型名 `P.M.J` / extends `M.Base` / 类里自引 `A.NestedA`（InnerOuter13）→ TOP_LEVEL_OUTER 或多出变量（SKIP）；简单名、经包、常量与函数引用不触发 |
+| `io-ut` | 2 | 复合 inner/outer（单测原文：两层使用者 + if 条件里的参数；不相干的 inner 类） |

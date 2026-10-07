@@ -1,0 +1,120 @@
+//// set: io-type — 同上：inner 的类与 outer 声明类型不相干也照样压平（omc 不比类型）、经 outer 访问派生类独有的元素；inner 在数组元素实例里（`C c[2]`，前缀下标照抄）、outer 维用 inner 的参数
+//// model: I40
+model A
+Real x;
+end A;
+model C
+Real x;
+Real w;
+end C;
+model B
+outer A a;
+Real y = a.x;
+end B;
+model I40
+inner C a(x = 1, w = 2);
+B b;
+end I40;
+//// model: I41
+model A
+Real x;
+end A;
+model A2
+extends A;
+Real z;
+end A2;
+model B
+outer A a;
+Real y = a.z;
+end B;
+model I41
+inner A2 a(x = 1, z = 2);
+B b;
+end I41;
+//// model: I42
+model A
+parameter Real x = 1;
+end A;
+model C
+parameter Integer x = 3;
+end C;
+model B
+outer A a;
+Real y = a.x;
+end B;
+model I42
+inner C a;
+B b;
+end I42;
+//// model: I43
+connector P
+Real v;
+flow Real i;
+end P;
+model C
+P p;
+end C;
+model B
+outer C a;
+Real y = a.p.v;
+end B;
+model I43
+inner C a;
+B b;
+equation
+a.p.v = time;
+end I43;
+//// model: I50
+model B
+outer Real x;
+Real y = x;
+end B;
+model C
+inner Real x = 1;
+B b;
+end C;
+model I50
+C c[2];
+end I50;
+//// model: I51
+model A
+Real x;
+end A;
+model B
+outer A a;
+Real y = a.x;
+end B;
+model C
+inner A a(x = 1);
+B b;
+end C;
+model I51
+C c[2];
+end I51;
+//// model: I52
+model A
+parameter Integer k = 2;
+end A;
+model B
+outer A a;
+Real y[a.k];
+end B;
+model C
+inner A a(k = 3);
+B b;
+end C;
+model I52
+C c[2];
+end I52;
+//// model: I53
+model A
+parameter Integer k = 2;
+end A;
+model B
+outer A a;
+Real y[a.k];
+end B;
+model I53
+inner A a(k = 3);
+B b[2];
+end I53;
