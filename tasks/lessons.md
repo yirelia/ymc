@@ -395,3 +395,11 @@
   两个不同的临时 vector，迭代器配不成一个区间——未定义行为，单测里抛了 "cannot create std::vector larger than max_size()"。
 - 规则：(1) 给一种构造补功能时先查它有几条通路（grep 同一 SKIP 原因 / 同一类数据的发射点），能合成"等价的输入"喂给主通路的
   就合并（这次把记录值合成字段修饰），删掉旁路——合并后旁路原本绕开的检查（Evaluate、final 字段的修饰）会重新起作用，precheck 里逐条核对；(2) C++：要用某个函数返回的容器的迭代器区间，先存进局部变量再取 begin / end。
+
+## 2026-10-07 — omc 的打印形态不是化简：toDAE 才做的变换不能烤进还会被展开的树
+- 模式：62f 把含数组调用的 `2 * f(time)` 照 NFOperator.toDAE 换位成 `f(time) * 2.0`，起初在化简时（sym_binary 里调
+  fn_array_form）就建成换过位的节点。`sum(2 * {i * time for i in 1:2})` 的实参先化简、再由 sum 逐元素展开，取到的元素成了
+  `time * 2.0`（omc `2.0 * time`）——omc 的换位发生在转 DAE 打印时，展开用的是定型时的次序。单测 R2 当场红了。
+- 规则：照 omc 实现一个形态前先分清它出自哪一步——SimplifyExp / ExpandExp（改树，后面的步骤看得见）还是 toDAE / DAEDump
+  （只影响打印）。后者在 ymc 里只能做成打印标记（ew_binaries / product_binaries / swapped_binaries）或在发射前最后一步做，
+  不能改节点本身；探针要带"外层再展开"的组合（sum / product / 下标取元素）才测得出来。

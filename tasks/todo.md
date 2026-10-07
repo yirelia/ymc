@@ -1833,6 +1833,19 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           时可能交回 invalid，inst_exp 的调用入口统一换成占位字面量（testsuite QualifiedCrefArg 曾因此越界崩溃，precheck 露出）；
           scodeinst IfExpression13 现与文件一致、1.25.0 拒（反向，进账）。
           验证：slice 631 例 PASS 580 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 580→581 / FAIL 38（IfExpression13 现与文件一致、1.25.0 拒，反向分歧进账）；整个 testsuite PASS 1603→1605 / FAIL 0 / ACCEPTS-INVALID 2→3（IfExpression13，在账）/ CRASH 0；MSL 514 个 PASS 143→146；探针 8149→8180（rv-* 4 集 31 个）；四套构建零警告、单测 278→279；ASan 与 gcc 逐例一致。
+    - [x] (62f) flat：模型里嵌在运算中的数组值调用（2026-10-07）：omc 对含数组调用的等式不标量化（NFScalarize 的 hasArrayCall
+          支，contains 语义——嵌在运算里的也算），化简时只展开不含数组调用的运算（SimplifyExp.simplifyBinary 的
+          NF_EXPAND_OPERATIONS 支）。ymc：array_binary 在运算数含数组调用时走符号形态（同函数语境：积不展开、书写的算符留着），
+          运算数照 omc 的定型提实型（Expression.typeCast：字面量逐叶、引用 / 调用 / 运算整体 CAST，whole_real_operand）；化简
+          （sym_binary）先把不含数组调用的数组运算数展开成字面量、再做 simplifyBinaryAdd / Sub 的零元与负号挪动、`./` 的负号怪癖；
+          打印形态照 NFOperator.toDAE——点号、标量在前的 `*` / `.+` 换位（新的 FlatModel::swapped_binaries，打印时才换：外层
+          sum 再展开时按定型次序取元素）、`.-` 改 `.+ -b`。接入：等式两侧与 Var 数组的绑定（array_call_eq_）、标量等式 / 绑定、
+          用户函数实参、数组 if 的分支；内建的实参只 cross 放行（向量化 abs / sin omc 打成 `array(abs(f(time)[$i1]) …)`，未做）。
+          另：组件数组上推导式修饰按元素分发时代入迭代变量、整个体作该元素绑定（omc 对数组构造子取下标即代入；split_mod_ok 改用
+          comprehension_shape 核形状，不再整体定型）；vector 的矩阵构造 / 数组字面量实参压成向量字面量。MultiBody 往下卡在
+          `world.gravityAcceleration(…)`（组件里的可替换函数调用）。单测里 3 处断言 SKIP 的（推导式 / 向量化调用嵌在运算里）
+          对 omc 实跑后改正向。
+          验证：slice 631 例 PASS 580 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 581 / FAIL 38（不变）；整个 testsuite PASS 1605→1608（Vectorizable1、SuperSampleTest、FuncCross）/ FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 146（不变，MultiBody 26 个往下露）；探针 8180→8297（ax-* 8 集 117 个）；四套构建零警告、单测 279→280；ASan 与 gcc 逐例一致。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

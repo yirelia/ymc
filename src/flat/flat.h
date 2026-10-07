@@ -149,6 +149,9 @@ struct FlatModel {
   std::unordered_set<std::uint32_t> ew_binaries;        // 打点号的：MUL_ARR `.*`、DIV_ARR / DIV_SCALAR_ARRAY `./`、POW_* `.^`、
                                                         // ADD_ARRAY_SCALAR `.+`、SUB_SCALAR_ARRAY `.-`
   std::unordered_set<std::uint32_t> product_binaries;   // 向量 / 矩阵积（MUL_SCALAR_PRODUCT / MUL_MATRIX_PRODUCT，不可结合）
+  // 打印时两个运算数换位的（标量在前的 MUL_SCALAR_ARRAY / ADD_SCALAR_ARRAY：NFOperator.toDAE 换成 *_ARRAY_SCALAR）。节点里仍是
+  // 定型时的次序——外面再展开（sum 的实参等）按原次序取元素，换位只是打印形态。
+  std::unordered_set<std::uint32_t> swapped_binaries;
 
   Id<FlatEquation> add_eq(FlatEquation e) { return eqs.add(std::move(e)); }
   Id<FlatStatement> add_stmt(FlatStatement s) { return stmts.add(std::move(s)); }

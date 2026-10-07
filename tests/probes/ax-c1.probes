@@ -1,0 +1,424 @@
+//// set: ax-c1 — 内建包着数组调用（向量化 abs / sin → SKIP，cross / transpose 展开）、用户函数实参里的 `g(f(time) * 2.0)`、零元与负号化简（`f(time) + {0, 0, 0}` → `f(time)`、`-f(time) + a` → `a - f(time)`、`./` 的负号怪癖）、e - e（SKIP）、Var 绑定、der、when 体（SKIP）、if 分支、非法形态
+//// model: C10
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C10
+Real x[3];
+equation
+x = abs(f(time));
+end C10;
+//// model: C11
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C11
+Real x[3];
+equation
+x = 2 * abs(f(time));
+end C11;
+//// model: C12
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C12
+Real x[3];
+equation
+x = sin(f(time)) * 2;
+end C12;
+//// model: C13
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+function g
+input Real t[3];
+output Real y;
+algorithm
+y := t[1] + t[2];
+end g;
+model C13
+Real y;
+equation
+y = g(2 * f(time));
+end C13;
+//// model: C14
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+function g
+input Real t[3];
+output Real y;
+algorithm
+y := t[1] + t[2];
+end g;
+model C14
+parameter Real a[3] = {1, 2, 3};
+Real y;
+equation
+y = g(f(time) + a);
+end C14;
+//// model: C15
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C15
+parameter Real m[3, 3] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+Real x[3];
+equation
+x = transpose(m) * f(time);
+end C15;
+//// model: C16
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C16
+Real x[3];
+equation
+x = -2 * f(time);
+end C16;
+//// model: C17
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C17
+Real x[3];
+equation
+x = f(time) * (-2);
+end C17;
+//// model: C18
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C18
+Real x[3];
+equation
+x = -(2 * f(time));
+end C18;
+//// model: C19
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C19
+Real x[3];
+equation
+x = f(time) + {0, 0, 0};
+end C19;
+//// model: C110
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C110
+Real x[3];
+equation
+x = {0, 0, 0} - f(time);
+end C110;
+//// model: C111
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C111
+parameter Real a[3] = {1, 2, 3};
+Real x[3];
+equation
+x = f(time) - (-a);
+end C111;
+//// model: C112
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C112
+parameter Real a[3] = {1, 2, 3};
+Real x[3];
+equation
+x = -f(time) + a;
+end C112;
+//// model: C113
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C113
+Real x[3];
+equation
+x = f(time) - f(time);
+end C113;
+//// model: C114
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C114
+parameter Real a[3] = {1, 2, 3};
+Real x[3];
+equation
+x = (-f(time)) ./ a;
+end C114;
+//// model: C115
+function h
+input Integer k;
+output Integer y[3];
+algorithm
+y := {k, 2 * k, 3 * k};
+end h;
+model C115
+Integer k = integer(time);
+Real x[3] = h(k);
+end C115;
+//// model: C116
+function h
+input Integer k;
+output Integer y[3];
+algorithm
+y := {k, 2 * k, 3 * k};
+end h;
+model C116
+Integer k = integer(time);
+Real x[3];
+equation
+x = h(k);
+end C116;
+//// model: C117
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C117
+parameter Integer n[3] = {1, 2, 3};
+parameter Integer nn[3] = {4, 5, 6};
+Real x[3];
+equation
+x = n .* nn + f(time);
+end C117;
+//// model: C118
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C118
+parameter Integer n[3] = {1, 2, 3};
+parameter Integer nn[3] = {4, 5, 6};
+Real x[3];
+equation
+x = -n + f(time);
+end C118;
+//// model: C119
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C119
+Real x[3] = 2 * f(time);
+end C119;
+//// model: C120
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C120
+Real x[3] = -f(time);
+end C120;
+//// model: C121
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C121
+Real x[3](each start = 0);
+equation
+der(x) = 2 * f(time);
+end C121;
+//// model: C122
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C122
+parameter Real a[3] = {1, 2, 3};
+Real x[3];
+equation
+x = f(time) * 2 + {1, 2, 3} .* a;
+end C122;
+//// model: C123
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C123
+parameter Real a[3] = {1, 2, 3};
+Real s;
+equation
+s = f(time) * a + 1;
+end C123;
+//// model: C124
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C124
+parameter Real a[3] = {1, 2, 3};
+Real s;
+equation
+s = (2 * f(time)) * a;
+end C124;
+//// model: C125
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C125
+parameter Real m[3, 3] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+Real x[3];
+equation
+x = m * (2 * f(time));
+end C125;
+//// model: C126
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C126
+parameter Real m[3, 3] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+Real x[3];
+equation
+x = (m * f(time)) * 2;
+end C126;
+//// model: C127
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C127
+discrete Real x[3];
+equation
+when time > 0.5 then
+x = 2 * f(time);
+end when;
+end C127;
+//// model: C128
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C128
+parameter Real a[3] = {1, 2, 3};
+Real x[3];
+equation
+x = if time > 0.5 then 2 * f(time) else a;
+end C128;
+//// model: C129
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C129
+Real x[3];
+equation
+x = f(time) / {1, 2, 3};
+end C129;
+//// model: C130
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C130
+Real x[3];
+equation
+x = f(time) + 1;
+end C130;
+//// model: C131
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model C131
+parameter Real a[3] = {1, 2, 3};
+Real x[3];
+equation
+x = {1, 2, 3} * f(time) * a;
+end C131;
+//// model: C132
+function g2
+input Real t;
+output Real y;
+algorithm
+y := 2 * t;
+end g2;
+model C132
+parameter Real a[3] = {1, 2, 3};
+Real x[3];
+equation
+x = 2 * g2(a);
+end C132;

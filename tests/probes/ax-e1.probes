@@ -1,0 +1,56 @@
+//// set: ax-e1 — 组件数组上推导式修饰按元素代入迭代变量（体是数组 / 含数组调用 / vector 字面量实参）：`s[1].r = r0 + f({…})`
+//// model: E1
+function f
+  input Real t[3];
+  output Real y[3];
+algorithm
+  y := 2 * t;
+end f;
+model S
+  input Real r[3] = {0, 0, 0};
+  input Real d[3] = {1, 0, 0};
+end S;
+model E1
+  parameter Integer n = 2;
+  Real lines[n, 2] = {{1, 2}, {3, 4}} * time;
+  Real r0[3] = {1, 2, 3} * time;
+  S s[n](d = {f({lines[i, 1], lines[i, 2], 0}) for i in 1:n}, r = {r0 + f(vector([lines[i, :]; 0])) for i in 1:n});
+end E1;
+//// model: E2
+function f
+  input Real t[3];
+  output Real y[3];
+algorithm
+  y := 2 * t;
+end f;
+model S
+  input Real r[3] = {0, 0, 0};
+end S;
+model E2
+  Real r0[3] = {1, 2, 3} * time;
+  S s[2](r = {f(r0) for i in 1:2});
+  S s2[2](r = {r0 + f(r0) for i in 1:2});
+  S s3[2](r = {r0 * i for i in 1:2});
+end E2;
+//// model: E3
+function f
+  input Real t[3];
+  output Real y[3];
+algorithm
+  y := 2 * t;
+end f;
+model S
+  input Real r[3] = {0, 0, 0};
+end S;
+model E3
+  Real r0[3] = {1, 2, 3} * time;
+  S s[2](r = {f(r0) for i in 1:2});
+end E3;
+//// model: E4
+model S
+  input Real r[3] = {0, 0, 0};
+end S;
+model E4
+  Real r0[3] = {1, 2, 3} * time;
+  S s3[2](r = {r0 * i for i in 1:2});
+end E4;

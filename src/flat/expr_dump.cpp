@@ -28,8 +28,8 @@ std::string real_lit(double v) {
 class ExprDumper {
  public:
   ExprDumper(const ExprArena& a, const Interner& in, const std::unordered_set<std::uint32_t>* ew,
-             const std::unordered_set<std::uint32_t>* product)
-      : a_(a), in_(in), ew_(ew), product_(product) {}
+             const std::unordered_set<std::uint32_t>* product, const std::unordered_set<std::uint32_t>* swapped)
+      : a_(a), in_(in), ew_(ew), product_(product), swapped_(swapped) {}
 
   std::string run(Id<Expr> e) {
     out_.clear();
@@ -163,11 +163,14 @@ class ExprDumper {
           }
         }
         break;
-      case ExprKind::Binary:
-        operand(e.a, e, true);
+      case ExprKind::Binary: {
+        // 换位打印的（标量在前的数组运算，见 FlatModel::swapped_binaries）：右运算数打在左边，括号按打印位置定。
+        const bool sw = in_set(swapped_, id);
+        operand(sw ? e.b : e.a, e, true);
         out_ += binop(e.bin, in_set(ew_, id));
-        operand(e.b, e, false);
+        operand(sw ? e.a : e.b, e, false);
         break;
+      }
       case ExprKind::Unary:
         out_ += '-';
         operand(e.a, e, false);
@@ -312,14 +315,15 @@ class ExprDumper {
   const Interner& in_;
   const std::unordered_set<std::uint32_t>* ew_;        // 打点号的数组二元运算节点（可空）
   const std::unordered_set<std::uint32_t>* product_;   // 向量 / 矩阵积节点（可空）
+  const std::unordered_set<std::uint32_t>* swapped_;   // 打印时运算数换位的节点（可空）
   std::string out_;
 };
 
 }  // namespace
 
 std::string dump_expr(const ExprArena& a, const Interner& in, Id<Expr> e, const std::unordered_set<std::uint32_t>* ew,
-                      const std::unordered_set<std::uint32_t>* product) {
-  return ExprDumper(a, in, ew, product).run(e);
+                      const std::unordered_set<std::uint32_t>* product, const std::unordered_set<std::uint32_t>* swapped) {
+  return ExprDumper(a, in, ew, product, swapped).run(e);
 }
 
 }  // namespace ymc

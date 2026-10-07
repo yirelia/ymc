@@ -1,0 +1,136 @@
+//// set: ax-d1 — vector 作函数实参：矩阵构造 / 数组字面量实参压成向量字面量，引用实参 omc 留 `vector(x)`（SKIP）
+//// model: D10
+function g
+input Real t[3];
+output Real y;
+algorithm
+y := t[1] + t[2];
+end g;
+model D10
+parameter Real a[2] = {1, 2};
+parameter Real m[3, 1] = {{1}, {2}, {3}};
+parameter Real a3[3] = {1, 2, 3};
+Real y;
+equation
+y = g(vector([a; 0]));
+end D10;
+//// model: D11
+function g
+input Real t[3];
+output Real y;
+algorithm
+y := t[1] + t[2];
+end g;
+model D11
+parameter Real a[2] = {1, 2};
+parameter Real m[3, 1] = {{1}, {2}, {3}};
+parameter Real a3[3] = {1, 2, 3};
+Real y;
+equation
+y = g(vector({a[1], a[2], 0}));
+end D11;
+//// model: D12
+function g
+input Real t[3];
+output Real y;
+algorithm
+y := t[1] + t[2];
+end g;
+model D12
+parameter Real a[2] = {1, 2};
+parameter Real m[3, 1] = {{1}, {2}, {3}};
+parameter Real a3[3] = {1, 2, 3};
+Real y;
+equation
+y = g(vector(m));
+end D12;
+//// model: D13
+function g
+input Real t[3];
+output Real y;
+algorithm
+y := t[1] + t[2];
+end g;
+model D13
+parameter Real a[2] = {1, 2};
+parameter Real m[3, 1] = {{1}, {2}, {3}};
+parameter Real a3[3] = {1, 2, 3};
+Real y;
+equation
+y = g(vector([1; 2; 3]));
+end D13;
+//// model: D14
+function g
+input Real t[3];
+output Real y;
+algorithm
+y := t[1] + t[2];
+end g;
+model D14
+parameter Real a[2] = {1, 2};
+parameter Real m[3, 1] = {{1}, {2}, {3}};
+parameter Real a3[3] = {1, 2, 3};
+Real y;
+equation
+y = g(vector(a3));
+end D14;
+//// model: D15
+function g
+input Real t[3];
+output Real y;
+algorithm
+y := t[1] + t[2];
+end g;
+model D15
+parameter Real a[2] = {1, 2};
+parameter Real m[3, 1] = {{1}, {2}, {3}};
+parameter Real a3[3] = {1, 2, 3};
+Real y;
+equation
+y = g(vector([a; time]));
+end D15;
+//// model: D16
+function g
+input Real t[3];
+output Real y;
+algorithm
+y := t[1] + t[2];
+end g;
+model D16
+parameter Real a[2] = {1, 2};
+parameter Real m[3, 1] = {{1}, {2}, {3}};
+parameter Real a3[3] = {1, 2, 3};
+Real y;
+equation
+y = g(vector([m[1:2, 1]; 0]));
+end D16;
+//// model: D17
+function g
+input Real t[3];
+output Real y;
+algorithm
+y := t[1] + t[2];
+end g;
+model D17
+parameter Real a[2] = {1, 2};
+parameter Real m[3, 1] = {{1}, {2}, {3}};
+parameter Real a3[3] = {1, 2, 3};
+Real y;
+equation
+y = g(vector({{1}, {2}, {time}}));
+end D17;
+//// model: D18
+function g
+input Real t[3];
+output Real y;
+algorithm
+y := t[1] + t[2];
+end g;
+model D18
+parameter Real a[2] = {1, 2};
+parameter Real m[3, 1] = {{1}, {2}, {3}};
+parameter Real a3[3] = {1, 2, 3};
+Real y;
+equation
+y = g(vector([a3]));
+end D18;

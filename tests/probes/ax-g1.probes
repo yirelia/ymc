@@ -1,0 +1,45 @@
+//// set: ax-g1 — 实参是结构参数的数组调用（omc 化简时先求值成字面量、等式照常标量化）：一侧整个是它 `y = so(m)` → 逐元素；嵌在运算里的 SKIP
+//// model: G1
+function so
+input Integer m;
+output Real o[m];
+algorithm
+o := {(k - 1)*2*3.14159/m for k in 1:m};
+end so;
+model G1
+parameter Integer m = 3;
+Real y[m];
+Real z[m] = so(m);
+equation
+y = so(m);
+end G1;
+//// model: G2
+function so
+input Integer m;
+output Real o[m];
+algorithm
+o := {(k - 1)*2*3.14159/m for k in 1:m};
+end so;
+model G2
+parameter Integer m = 3;
+Real y[m];
+equation
+y = -so(m) * time;
+end G2;
+//// model: G3
+function so
+input Integer m;
+output Real o[m];
+algorithm
+o := {(k - 1)*2*3.14159/m for k in 1:m};
+end so;
+model G3
+parameter Integer m = 3;
+Real y[m];
+Real z[m];
+initial equation
+z = so(m);
+equation
+der(z) = so(m);
+y = so(m) + {time, time, time};
+end G3;

@@ -2693,18 +2693,18 @@ YMC_TEST(flatten_vector_matrix_builtins) {
   YMC_CHECK_EQ(out, std::string("<unsupported:symmetric argument shape>"));
 }
 
-YMC_TEST(flatten_comprehension_inside_array_expression_unsupported) {
+YMC_TEST(flatten_comprehension_inside_array_expression) {
   // 推导式嵌在数组运算里：omc 1.25.0 整体保留并按数组算符打印（R1 探针 `x = array(/*Real*/(i) * time for i in 1:3) * 2.0`、
-  // `y = -array(…)`；R2 探针 `s = array(…) * {1.0, 2.0, 3.0}`），ymc 未做 → 必须 SKIP，不能逐元素展开。参数数组的逐元素摊分
-  // 与 sum 的实参照旧展开（期望 = R2 探针，2026-10-02）。
-  for (const char* src : {"model R1a\n  Real x[3];\nequation\n  x = 2 * {i * time for i in 1:3};\nend R1a;\n",
-                          "model R1b\n  Real y[3] = -{i * time for i in 1:3};\nend R1b;\n",
-                          "model R2s\n  Real s = {i * time for i in 1:3} * {1, 2, 3};\nend R2s;\n"}) {
-    bool uns = false;
-    const std::string out = flatten_src(src, &uns);
-    YMC_CHECK(uns);
-    YMC_CHECK_EQ(out, std::string("<unsupported:comprehension inside array expression>"));
-  }
+  // `y = -array(…)`；R2 探针 `s = array(…) * {1.0, 2.0, 3.0}`；62f 起走含数组调用的符号形态，期望 = omc 1.25.0 对原文实跑，
+  // 2026-10-07）。参数数组的逐元素摊分与 sum 的实参照旧展开（期望 = R2 探针，2026-10-02）。
+  YMC_CHECK_EQ(flatten_src("model R1a\n  Real x[3];\nequation\n  x = 2 * {i * time for i in 1:3};\nend R1a;\n"),
+               std::string("class R1a\n  Real x[1];\n  Real x[2];\n  Real x[3];\nequation\n"
+                           "  x = array(/*Real*/(i) * time for i in 1:3) * 2.0;\nend R1a;\n"));
+  YMC_CHECK_EQ(flatten_src("model R1b\n  Real y[3] = -{i * time for i in 1:3};\nend R1b;\n"),
+               std::string("class R1b\n  Real y[1];\n  Real y[2];\n  Real y[3];\nequation\n  y = -array(/*Real*/(i) * time for i in 1:3);\n"
+                           "end R1b;\n"));
+  YMC_CHECK_EQ(flatten_src("model R2s\n  Real s = {i * time for i in 1:3} * {1, 2, 3};\nend R2s;\n"),
+               std::string("class R2s\n  Real s = array(/*Real*/(i) * time for i in 1:3) * {1.0, 2.0, 3.0};\nend R2s;\n"));
   YMC_CHECK_EQ(flatten_src("model R2\n  parameter Real q[3] = 2 * linspace(1, 2, 3);\n  parameter Real r[3] = -{i for i in 1:3};\n"
                            "  parameter Real p[3] = {i * 1.5 for i in 1:3} + q;\n  Real t = sum(2 * {i * time for i in 1:2});\nend R2;\n"),
                std::string("class R2\n  parameter Real q[1] = 2.0;\n  parameter Real q[2] = 3.0;\n  parameter Real q[3] = 4.0;\n"
@@ -2747,12 +2747,19 @@ YMC_TEST(flatten_vectorized_calls) {
                            "  v = array(F(w[1,$i1], 1.0) for $i1 in 1:3);\n  ac = array(atan2(x[$i1], x[$i1]) for $i1 in 1:3);\n"
                            "  ah = /*Real[3]*/(array(abs(k[$i1]) for $i1 in 1:3));\n  aj = array(sin(q[$i1]) for $i1 in 1:3);\n"
                            "  u = array(F(x[i], /*Real*/(i)) for i in 1:3);\nend VT1;\n"));
-  // 未做 / 非法的形态必须 SKIP（V4 探针）：嵌在数组运算里（omc `array(…) * 2.0`）、范围切片实参（omc `x[(2:3)[$i1]]`）、向量化
-  // 维不一致（omc 内部错）、rem（1.25.0 打成 OpenModelica.Internal.realRem）。
+  // 嵌在数组运算里的向量化调用整体保留（omc `array(…) * 2.0`；62f 起走含数组调用的符号形态，期望 = omc 1.25.0 实跑，
+  // 2026-10-07）。
+  YMC_CHECK_EQ(flatten_src("function F\n  input Real a;\n  input Real b;\n  output Real c = a + b;\nend F;\nmodel M\n"
+                           "  Real x[3] = {time, 1, 2};\n  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};\n  Real l[3] = 2 * F(x, 1);\nend M;\n"),
+               std::string("function F\n  input Real a;\n  input Real b;\n  output Real c = a + b;\nend F;\n\nclass M\n  Real x[1];\n"
+                           "  Real x[2];\n  Real x[3];\n  Real w[1,1];\n  Real w[1,2];\n  Real w[1,3];\n  Real w[2,1];\n  Real w[2,2];\n"
+                           "  Real w[2,3];\n  Real l[1];\n  Real l[2];\n  Real l[3];\nequation\n  x = {time, 1.0, 2.0};\n"
+                           "  w = {{time, 1.0, 2.0}, {3.0, 4.0, 5.0}};\n  l = array(F(x[$i1], 1.0) for $i1 in 1:3) * 2.0;\nend M;\n"));
+  // 未做 / 非法的形态必须 SKIP（V4 探针）：范围切片实参（omc `x[(2:3)[$i1]]`）、向量化维不一致（omc 内部错）、rem（1.25.0
+  // 打成 OpenModelica.Internal.realRem）。
   const char* pre = "function F\n  input Real a;\n  input Real b;\n  output Real c = a + b;\nend F;\nmodel M\n"
                     "  Real x[3] = {time, 1, 2};\n  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};\n";
   for (const auto& [line, why] : std::vector<std::pair<std::string, std::string>>{
-           {"  Real l[3] = 2 * F(x, 1);\n", "comprehension inside array expression"},
            {"  Real y[2] = F(x[2:3], 1);\n", "function: F"},
            {"  Real aa[2, 3] = F(w, x);\n", "function: F"},
            {"  Real b6[3] = rem(x, 2);\n", "non-numeric function argument"}}) {
@@ -5427,6 +5434,47 @@ YMC_TEST(flatten_record_valued_constant_calls) {
                            "  c := smooth(0, v) + {v[2] * u[3] - v[3] * u[2], v[3] * u[1] - v[1] * u[3], v[1] * u[2] - v[2] * u[1]};\n"
                            "end nz;\n\nclass RV2\n  parameter Real r.x(unit = \"m\") = 1.0;\n  Real c[1];\n  Real c[2];\n  Real c[3];\n"
                            "equation\n  c = nz({time, 1.0, 2.0}, {3.0, time, 4.0});\nend RV2;\n"));
+}
+
+YMC_TEST(flatten_array_call_inside_expressions) {
+  // 模型里嵌在运算中的数组值调用：所在等式 / Var 数组的绑定整体保留，运算留符号形态——运算数照 omc 的定型提实型（字面量逐叶、
+  // 调用整体 CAST）、标量挪右、`.-` 改 `.+ -`、积不展开、不含数组调用的运算数展开成字面量、数组 + / - 的负号挪动；if 分支里的
+  // 同样不展开；组件数组上推导式修饰按元素代入迭代变量；vector 的字面量实参压成向量字面量。期望值为 omc 1.25.0 对原文实跑
+  //（AX 探针 ut，2026-10-07）。
+  YMC_CHECK_EQ(flatten_src("function f\n  input Real t;\n  output Real y[3];\nalgorithm\n  y := {t, 2 * t, 3 * t};\nend f;\nmodel AX1\n"
+                           "  parameter Real a[3] = {1, 2, 3};\n  parameter Real m[3, 3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};\n"
+                           "  Real x[3], y[3], z[3], w[3], v[3], u[3], s;\nequation\n  x = {1, 2, 3} + f(time);\n  y = 2 * f(time);\n"
+                           "  z = m * f(time);\n  w = f(time) + a / 2;\n  v = f(time) .- 1;\n  u = -f(time) + a;\n  s = f(time) * a;\n"
+                           "end AX1;\n"),
+               std::string("function f\n  input Real t;\n  output Real[3] y;\nalgorithm\n  y := {t, 2.0 * t, 3.0 * t};\nend f;\n\n"
+                           "class AX1\n  parameter Real a[1] = 1.0;\n  parameter Real a[2] = 2.0;\n  parameter Real a[3] = 3.0;\n"
+                           "  parameter Real m[1,1] = 1.0;\n  parameter Real m[1,2] = 0.0;\n  parameter Real m[1,3] = 0.0;\n"
+                           "  parameter Real m[2,1] = 0.0;\n  parameter Real m[2,2] = 1.0;\n  parameter Real m[2,3] = 0.0;\n"
+                           "  parameter Real m[3,1] = 0.0;\n  parameter Real m[3,2] = 0.0;\n  parameter Real m[3,3] = 1.0;\n  Real x[1];\n"
+                           "  Real x[2];\n  Real x[3];\n  Real y[1];\n  Real y[2];\n  Real y[3];\n  Real z[1];\n  Real z[2];\n  Real z[3];\n"
+                           "  Real w[1];\n  Real w[2];\n  Real w[3];\n  Real v[1];\n  Real v[2];\n  Real v[3];\n  Real u[1];\n  Real u[2];\n"
+                           "  Real u[3];\n  Real s;\nequation\n  x = {1.0, 2.0, 3.0} + f(time);\n  y = f(time) * 2.0;\n  z = m * f(time);\n"
+                           "  w = f(time) + {a[1] / 2.0, a[2] / 2.0, a[3] / 2.0};\n  v = f(time) .+ -1.0;\n  u = a - f(time);\n"
+                           "  s = f(time) * a;\nend AX1;\n"));
+  YMC_CHECK_EQ(flatten_src("function f\n  input Real t;\n  output Real y[3];\nalgorithm\n  y := {t, 2 * t, 3 * t};\nend f;\nfunction h\n"
+                           "  input Integer k;\n  output Integer y[3];\nalgorithm\n  y := {k, 2 * k, 3 * k};\nend h;\nmodel AX2\n"
+                           "  parameter Real a[3] = {1, 2, 3};\n  Integer k = integer(time);\n  Real x[3] = a + f(time);\n"
+                           "  Real y[3] = h(k);\n  Real z[3];\nequation\n  z = if time > 0.5 then 2 * f(time) else a;\nend AX2;\n"),
+               std::string("function f\n  input Real t;\n  output Real[3] y;\nalgorithm\n  y := {t, 2.0 * t, 3.0 * t};\nend f;\n\n"
+                           "function h\n  input Integer k;\n  output Integer[3] y;\nalgorithm\n  y := {k, 2 * k, 3 * k};\nend h;\n\n"
+                           "class AX2\n  parameter Real a[1] = 1.0;\n  parameter Real a[2] = 2.0;\n  parameter Real a[3] = 3.0;\n"
+                           "  Integer k = integer(time);\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real y[1];\n  Real y[2];\n"
+                           "  Real y[3];\n  Real z[1];\n  Real z[2];\n  Real z[3];\nequation\n  x = a + f(time);\n  y = /*Real[3]*/(h(k));\n"
+                           "  z = if time > 0.5 then f(time) * 2.0 else a;\nend AX2;\n"));
+  YMC_CHECK_EQ(flatten_src("function g\n  input Real t[3];\n  output Real y[3];\nalgorithm\n  y := 2 * t;\nend g;\nmodel S\n"
+                           "  input Real r[3] = {0, 0, 0};\nend S;\nmodel AX3\n  Real p[2, 2] = {{1, 2}, {3, 4}} * time;\n"
+                           "  Real r0[3] = {1, 2, 3} * time;\n  S s[2](r = {r0 + g(vector([p[i, :]; 0])) for i in 1:2});\nend AX3;\n"),
+               std::string("function g\n  input Real[3] t;\n  output Real[3] y;\nalgorithm\n  y := {2.0 * t[1], 2.0 * t[2], 2.0 * t[3]};\n"
+                           "end g;\n\nclass AX3\n  Real p[1,1];\n  Real p[1,2];\n  Real p[2,1];\n  Real p[2,2];\n  Real r0[1];\n"
+                           "  Real r0[2];\n  Real r0[3];\n  Real s[1].r[1];\n  Real s[1].r[2];\n  Real s[1].r[3];\n  Real s[2].r[1];\n"
+                           "  Real s[2].r[2];\n  Real s[2].r[3];\nequation\n  p = {{time, 2.0 * time}, {3.0 * time, 4.0 * time}};\n"
+                           "  r0 = {time, 2.0 * time, 3.0 * time};\n  s[1].r = r0 + g({p[1,1], p[1,2], 0.0});\n"
+                           "  s[2].r = r0 + g({p[2,1], p[2,2], 0.0});\nend AX3;\n"));
 }
 
 YMC_TEST(flatten_external_object_variable_and_structors) {

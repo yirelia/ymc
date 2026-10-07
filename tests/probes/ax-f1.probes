@@ -1,0 +1,99 @@
+//// set: ax-f1 — 推导式（omc 的数组构造调用）嵌在运算里：外层 sum / product 按定型次序逐元素展开、点号与换位只是打印形态、下标取元素 / 向量化内建（SKIP）
+//// model: F10
+model F10
+Real y = (2 * {i * time for i in 1:3})[2];
+end F10;
+//// model: F11
+model F11
+Real y = sum({i * time for i in 1:3} * 2 + {1, 2, 3});
+end F11;
+//// model: F12
+model F12
+Real x[3] = 2 .+ {i * time for i in 1:3};
+end F12;
+//// model: F13
+model F13
+parameter Real p[3] = 2 * {i for i in 1:3};
+end F13;
+//// model: F14
+model F14
+Real x[3] = {i * time for i in 1:3} .- 1;
+end F14;
+//// model: F15
+model F15
+Real m[2, 2] = 2 * {{i * j * time for j in 1:2} for i in 1:2};
+end F15;
+//// model: F16
+model F16
+Real x[2] = {1, 2} .^ {i * time for i in 1:2};
+end F16;
+//// model: F17
+model F17
+Real y = product(2 * {i * time for i in 1:2});
+end F17;
+//// model: F18
+model F18
+Real x[3];
+equation
+x = 2 * {i * time for i in 1:3} + {time, 1, 2};
+end F18;
+//// model: F19
+model F19
+Real x[3](each start = 0);
+equation
+der(x) = -{i * time for i in 1:3};
+end F19;
+//// model: F110
+model F110
+Real x[3] = abs(2 * {i * time for i in 1:3});
+end F110;
+//// model: F111
+model F111
+Real x[3] = sin({i * time for i in 1:3}) * 2;
+end F111;
+//// model: F112
+model F112
+Real x[2];
+equation
+x = (2 * {i * time for i in 1:2}) / 3;
+end F112;
+//// model: F113
+model F113
+Real x[2];
+equation
+x = 3 / (2 * {i * time for i in 1:2});
+end F113;
+//// model: F114
+model F114
+Real y = sum(2 .+ {i * time for i in 1:3});
+end F114;
+//// model: F115
+model F115
+Real y = ({i * time for i in 1:3} .- 1)[1];
+end F115;
+//// model: F116
+model F116
+Real x[3];
+equation
+x = 2 * ({i * time for i in 1:3} + {1, 2, 3});
+end F116;
+//// model: F117
+model F117
+Real x[3];
+equation
+x = ({i * time for i in 1:3} + {1, 2, 3}) * time;
+end F117;
+//// model: F118
+model F118
+Real x[3];
+equation
+x = time * {i * time for i in 1:3} + 1 .* {i * time for i in 1:3};
+end F118;
+//// model: F119
+model F119
+Real x[3];
+equation
+for k in 1:3 loop
+x[k] = (2 * {i * time for i in 1:3})[k];
+end for;
+end F119;

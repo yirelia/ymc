@@ -1,0 +1,398 @@
+//// set: ax-b1 — 同上的各算符形态：`/ ./ .^ .- .+ .*` 的点号与换位、`.-` 改 `.+ -1.0`、`* 1` 不化简、Integer 运算数提实型（字面量逐叶 / 引用与调用整体 CAST）、不含数组调用的运算数展开成字面量（`a / 2` → `{a[1] / 2.0, …}`）、标量积、等式两侧 Integer / Real 整体转
+//// model: B10
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B10
+Real x[3];
+equation
+x = f(time) / 2;
+end B10;
+//// model: B11
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B11
+parameter Real a[3] = {1, 2, 3};
+Real x[3];
+equation
+x = f(time) .* a;
+end B11;
+//// model: B12
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B12
+Real x[3];
+equation
+x = 2 .- f(time);
+end B12;
+//// model: B13
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B13
+Real x[3];
+equation
+x = f(time) .- 1;
+end B13;
+//// model: B14
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B14
+Real x[3];
+equation
+x = -f(time);
+end B14;
+//// model: B15
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B15
+Real x[3];
+equation
+x = f(time) * 1;
+end B15;
+//// model: B16
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B16
+Real x[3];
+equation
+x = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}} * f(time);
+end B16;
+//// model: B17
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B17
+parameter Real a[3] = {1, 2, 3};
+Real x[3];
+equation
+x = a + 2 * f(time);
+end B17;
+//// model: B18
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B18
+Real x[3];
+equation
+x = {time, 2, 3} + f(time);
+end B18;
+//// model: B19
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B19
+Real x[3];
+equation
+x = fill(1, 3) + f(time);
+end B19;
+//// model: B110
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B110
+parameter Real a[3] = {1, 2, 3};
+Real x[3];
+equation
+x = if time > 0.5 then f(time) else a;
+end B110;
+//// model: B111
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B111
+parameter Integer n[3] = {1, 2, 3};
+Real x[3];
+equation
+x = n + f(time);
+end B111;
+//// model: B112
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B112
+Real x[3];
+equation
+x = f(time) + f(time) * 2;
+end B112;
+//// model: B113
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B113
+Real x[3];
+equation
+x = f(time) .^ 2;
+end B113;
+//// model: B114
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B114
+Real x[3];
+equation
+x = 2 ./ f(time);
+end B114;
+//// model: B115
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B115
+Real x[3];
+equation
+x = f(time) ./ f(2 * time);
+end B115;
+//// model: B116
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B116
+parameter Real a[3] = {1, 2, 3};
+Real x[3];
+equation
+x = f(time) * f(time) * a;
+end B116;
+//// model: B117
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B117
+parameter Real a[3] = {1, 2, 3};
+Real s;
+equation
+s = f(time) * a;
+end B117;
+//// model: B118
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B118
+parameter Real a[3] = {1, 2, 3};
+Real x[3];
+equation
+x = a .* f(time) + {1, 2, 3};
+end B118;
+//// model: B119
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B119
+parameter Real a[3] = {1, 2, 3};
+Real x[3];
+equation
+x = f(time) + a / 2;
+end B119;
+//// model: B120
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B120
+Real x[3];
+equation
+x = f(time) * time;
+end B120;
+//// model: B121
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B121
+Real x[3];
+equation
+x = time * f(time);
+end B121;
+//// model: B122
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B122
+Real x[3];
+equation
+x = (time + 1) * f(time);
+end B122;
+//// model: B123
+function h
+input Integer k;
+output Integer y[3];
+algorithm
+y := {k, 2 * k, 3 * k};
+end h;
+model B123
+Integer k = integer(time);
+Real x[3];
+equation
+x = h(k) * 1.5;
+end B123;
+//// model: B124
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B124
+Real x[3](each start = 0);
+equation
+der(x) = f(time);
+end B124;
+//// model: B125
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B125
+Real x[3];
+equation
+x = f(time) * {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+end B125;
+//// model: B126
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B126
+Real x[3];
+equation
+x = 2 * f(time) * 3;
+end B126;
+//// model: B127
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B127
+Real x[3];
+equation
+x = {1, 2, 3} * time + f(time);
+end B127;
+//// model: B128
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B128
+Real x[3];
+equation
+x = f(time) + {1, 2, 3} * 2;
+end B128;
+//// model: B129
+function h
+input Integer k;
+output Integer y[3];
+algorithm
+y := {k, 2 * k, 3 * k};
+end h;
+model B129
+Integer k = integer(time);
+Integer y[3];
+equation
+y = h(k) + {1, 2, 3};
+end B129;
+//// model: B130
+function h
+input Integer k;
+output Integer y[3];
+algorithm
+y := {k, 2 * k, 3 * k};
+end h;
+model B130
+Integer k = integer(time);
+Real x[3];
+equation
+x = h(k) + {1, 2, 3};
+end B130;
+//// model: B131
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model B131
+Real x[3];
+Real y[3];
+equation
+x = f(time);
+y = x + f(time);
+end B131;

@@ -217,3 +217,9 @@ ActuatorWithNoise 往下卡在噪声种子的外部函数调用。FAIL / ACCEPTS
 转 PASS（QuadraticCoreAirgap / ToroidalCoreAirgap / ToroidalCoreQuadraticCrossSection）。MultiBody 的 25 个示例越过
 Frames.nullRotation，往下卡在模型里嵌在运算中的数组值调用（26 个，Visualizers.Internal.Lines 的
 `r_abs = r + T.resolve1(R.T, r_lines)`）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-07 加宽 62f 之后：PASS 146（不变）
+
+模型里嵌在运算中的数组值调用整体保留、走符号形态之后，此前卡在它上面的 26 个 MultiBody 示例往下露出：24 个卡在
+`world.gravityAcceleration(…)`（组件里的可替换函数调用，Parts.Body 的重力）、1 个卡在嵌套类修饰、1 个卡在 derivative 注解的
+形态。FAIL / ACCEPTS-INVALID / CRASH 0。

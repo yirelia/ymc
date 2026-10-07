@@ -16,9 +16,11 @@
 namespace ymc {
 
 // 打印一个类型化表达式（顶层上下文，不加外围括号）。interner 用于取名字/字符串内容。
-// ew / product：打点号的数组二元运算节点、向量 / 矩阵积节点（见 FlatModel::ew_binaries / product_binaries；可空）。
+// ew / product / swapped：打点号的数组二元运算节点、向量 / 矩阵积节点、打印时运算数换位的节点（见 FlatModel::ew_binaries /
+// product_binaries / swapped_binaries；可空）。
 [[nodiscard]] std::string dump_expr(const ExprArena& a, const Interner& in, Id<Expr> e,
                                     const std::unordered_set<std::uint32_t>* ew = nullptr,
-                                    const std::unordered_set<std::uint32_t>* product = nullptr);
+                                    const std::unordered_set<std::uint32_t>* product = nullptr,
+                                    const std::unordered_set<std::uint32_t>* swapped = nullptr);
 
 }  // namespace ymc

@@ -1,0 +1,93 @@
+//// set: ax-a1 — 模型里嵌在运算中的数组值调用（等式 / Var 绑定整体保留）：`{1.0, 2.0, 3.0} + f(time)`、标量挪右 `f(time) * 2.0`、积不展开 `m * f(time)`、Var 绑定成方程 `x = a + f(time)`、sum / cross 里的数组调用
+//// model: A10
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model A10
+Real x[3];
+equation
+x = {1, 2, 3} + f(time);
+end A10;
+//// model: A11
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model A11
+Real x[3];
+equation
+x = 2 * f(time);
+end A11;
+//// model: A12
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model A12
+Real y = f(time)[2];
+end A12;
+//// model: A13
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model A13
+Real a[3] = {1, 2, 3};
+Real x[3] = a + f(time);
+end A13;
+//// model: A14
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model A14
+Real s = sum(f(time));
+end A14;
+//// model: A15
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model A15
+Real x[3];
+equation
+x = f(time) - f(2 * time);
+end A15;
+//// model: A16
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model A16
+Real x[3];
+Real m[3, 3] = identity(3);
+equation
+x = m * f(time);
+end A16;
+//// model: A17
+function f
+input Real t;
+output Real y[3];
+algorithm
+y := {t, 2 * t, 3 * t};
+end f;
+model A17
+Real x[3];
+equation
+x = cross(f(time), {0, 0, 1});
+end A17;
