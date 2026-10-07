@@ -237,3 +237,11 @@ HeatTransfer.Examples.ControlledTemperature / TwoMasses。组件里的函数调�
 转 PASS：Blocks.Examples.PID_Controller、Clocked.Examples.CascadeControlledDrive.Continuous、MultiBody.Examples.Systems.RobotR3.OneAxis。
 其余 10 个往下露：9 个卡在对结构参数数组 `columns` 的整体引用（CombiTimeTable 的外部对象构造，omc 代成 `{2, 3}`），1 个卡在
 qd_max 的求值。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-07 加宽 62i 之后：PASS 154 → 155
+
+结构参数数组的整体引用代成整个数组的字面量（调用随即求值）之后，此前卡在 `columns` 整体引用上的 CombiTimeTable 一族 10 个示例
+往下露：Thermal.HeatTransfer.Examples.Motor 转 PASS；4 个（Blocks.Examples.ShowLogicalSources / LogicalNetwork1 / Interaction1、
+Analog.Examples.CharacteristicThyristors）卡在数组式里的推导式，3 个（Machines IMC_Conveyor、Translational.Examples.Vehicle、
+FluidHeatFlow.Examples.TestOpenTank）卡在 derivative / inverse 注解的形态，SoftStarter 卡在常量求值，TestCylinder 卡在 connect
+操作数形状。FAIL / ACCEPTS-INVALID / CRASH 0。

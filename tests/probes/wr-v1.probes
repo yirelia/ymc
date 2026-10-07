@@ -1,0 +1,110 @@
+//// set: wr-v1 — Evaluate 参数数组 n 的整体引用：等式 / 绑定里 `nrm(n)`、`nrm(n) * time`、`g * nrm(n)`（代值求值后逐元素 / 展开）、标量积、sum（SKIP）、外部函数实参 `fe({0.0, -1.0, 0.0})`、参数数组别名、参数绑定里的调用
+//// model: V10
+function nrm
+input Real v[3];
+output Real r[3];
+algorithm
+r := v / sqrt(v * v);
+end nrm;
+model V10
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+Real y[3];
+equation
+y = nrm(n) * time;
+end V10;
+//// model: V11
+function nrm
+input Real v[3];
+output Real r[3];
+algorithm
+r := v / sqrt(v * v);
+end nrm;
+model V11
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+Real y[3];
+equation
+y = nrm(n);
+end V11;
+//// model: V12
+function nrm
+input Real v[3];
+output Real r[3];
+algorithm
+r := v / sqrt(v * v);
+end nrm;
+model V12
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+Real y[3] = nrm(n);
+end V12;
+//// model: V13
+model V13
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+Real s = n * {1, 2, 3};
+end V13;
+//// model: V14
+model V14
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+Real s = sum(n);
+end V14;
+//// model: V15
+function fe
+input Real c[3];
+output Real y;
+external "C" y = fe_c(c);
+end fe;
+model V15
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+Real y = fe(n) * time;
+end V15;
+//// model: V16
+model V16
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+parameter Real p[3] = n;
+end V16;
+//// model: V17
+function nrm
+input Real v[3];
+output Real r[3];
+algorithm
+r := v / sqrt(v * v);
+end nrm;
+model V17
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+parameter Real g = 9.81;
+Real y[3];
+equation
+y = g * nrm(n);
+end V17;
+//// model: V18
+model V18
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+Real y[3];
+equation
+y = n * time;
+end V18;
+//// model: V19
+function nrm
+input Real v[3];
+output Real r[3];
+algorithm
+r := v / sqrt(v * v);
+end nrm;
+model V19
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+parameter Real g = 9.81;
+parameter Real gv[3] = g * nrm(n);
+end V19;
+//// model: V110
+model V110
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+Real y[3];
+equation
+y = time * n + {1, 2, 3};
+end V110;
+//// model: V111
+model V111
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+Real y;
+equation
+y = n[2] * time;
+end V111;

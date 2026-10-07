@@ -1865,6 +1865,18 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           引用处之后的情形（单测 DMS3 对 omc 实跑后改正向）。CombiTimeTable 一族往下卡在对结构参数数组 columns 的整体引用（omc
           代成 `{2, 3}`），同 MultiBody World 的 `normalizeWithAssert(n)`。
           验证：slice 631 例 PASS 580 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 581 / FAIL 38（不变）；整个 testsuite PASS 1608→1617（StepAdvanced ×2、msl/BC2-BC9）/ FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 151→154；探针 8333→8347（sk-h1 / sk-ut 14 个）；四套构建零警告、单测 281→282；ASan 与 gcc 逐例一致。
+    - [x] (62i) flat：结构参数数组的整体引用 + 代入后的形态（2026-10-07）：压平末尾代入结构参数时，数组的整体引用此前一律
+          SKIP——现在代成整个数组的字面量（param_array_literal：形状取已发射的元素、各元素的值），调用随即常量求值
+          （`nrm(n)` → `{0.0, -1.0, 0.0}`、`fe({0.0, -1.0, 0.0})`、CombiTimeTable 的 `columns` → `{2, 3}`）；代入后不再含数组调用的
+          整体等式原位换成逐元素的、Var 绑定成的方程把数组运算展开成字面量、符号形态的运算（sym_binary）两侧都不再含数组调用就照常
+          展开（omc 先代值求值、再化简展开）。函数定义里的别名缺省同样认整个参数数组（MultiBody World 的
+          `g * normalizeWithAssert(n)` → 定义 `{0.0, -9.80665, 0.0}`、调用处 `{0.0, world.g * (-1.0), 0.0}`）。另修 62f 的静默错：
+          结构参数代入时克隆出的节点丢了打印标记（`x = k * f(time)` 打成 `2.0 * f(time)`，omc `f(time) * 2.0`）——clone_subst 让
+          标记随节点走。fill 的维实参全是字面量时展开成数组字面量（SimplifyExp.simplifyFill；函数体 if 分支里提实型后的
+          `fill(0.0, 3)` → `{0.0, 0.0, 0.0}`）；sum / product / min / max 的实参代成数值字面量数组时
+          求值（`max(k) * t` → `2.0 * t`），别的内建遇代入出的数组字面量实参 SKIP。size() 的实参是还没发射的 `:` 维数组（MO 基类的 nout 在 columns 之前定型）：按绑定求维；
+          外部对象的向前引用按声明类型求类型名（CombiTimeTable 的 `getTimeTableTmin(tableID)`）。单测 APS2 对 omc 实跑后改正向。
+          验证：slice 631 例 PASS 580 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 581 / FAIL 38（不变）；整个 testsuite PASS 1617→1620（msl/BS10、BS14、others/FlexibleShaftNonLinearTotal）/ FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 154→155；探针 8347→8383（wr-w1 / wr-v1 / wr-w2 / wr-m1 / wr-ut 36 个）；四套构建零警告、单测 282→283；ASan 与 gcc 逐例一致。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

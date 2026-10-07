@@ -403,3 +403,10 @@
 - 规则：照 omc 实现一个形态前先分清它出自哪一步——SimplifyExp / ExpandExp（改树，后面的步骤看得见）还是 toDAE / DAEDump
   （只影响打印）。后者在 ymc 里只能做成打印标记（ew_binaries / product_binaries / swapped_binaries）或在发射前最后一步做，
   不能改节点本身；探针要带"外层再展开"的组合（sum / product / 下标取元素）才测得出来。
+
+## 2026-10-07 — 新加的节点标记要查一遍所有克隆 / 改写节点的地方
+- 模式：62f 把数组运算的打印形态记成节点标记（swapped / ew / product / 书写的算符），探针与门都过了；62i 才发现压平末尾
+  代入结构参数时 clone_subst 克隆出的新节点不带这些标记——`parameter Integer k = 2; … x = k * f(time)` 打成 `2.0 * f(time)`
+  （omc `f(time) * 2.0`），静默错。探针里没有"符号形态 + 结构参数"的组合。
+- 规则：凡是按节点 id 记的旁路标记（集合 / map），加的时候 grep 所有会复制 / 克隆 Expr 节点的函数（clone_subst、subst_slots、
+  simplify 的重建…），逐个决定标记要不要跟着走；探针要带"该形态 + 压平末尾代入"（结构参数、for 迭代变量）的组合。

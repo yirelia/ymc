@@ -1,0 +1,53 @@
+//// set: wr-w2 — `:` 维由 `2:size(table, 2)` 推出的数组：外部函数实参、在 nout 之前 / 之后定型、Integer 数组绑定
+//// model: W20
+function fe
+input Integer c[:];
+input Real t[:, :];
+output Real y;
+external "C" y = fe_c(c, size(c, 1), t, size(t, 1), size(t, 2));
+end fe;
+model W20
+parameter Real table[:, :] = [0, 0, 0; 5, 0, 0];
+parameter Integer columns[:] = 2:size(table, 2);
+parameter Real offset[:] = {0};
+final parameter Integer nout = max([size(columns, 1); size(offset, 1)]);
+Real y[nout];
+Real z = fe(columns, table) * time;
+equation
+y = fill(time, nout);
+end W20;
+//// model: W21
+function fe
+input Integer c[:];
+input Real t[:, :];
+output Real y;
+external "C" y = fe_c(c, size(c, 1), t, size(t, 1), size(t, 2));
+end fe;
+model W21
+parameter Real table[:, :] = [0, 0, 0; 5, 0, 0];
+parameter Integer columns[:] = {2, 3};
+parameter Real offset[:] = {0};
+final parameter Integer nout = max([size(columns, 1); size(offset, 1)]);
+Real y[nout];
+Real z = fe(columns, table) * time;
+equation
+y = fill(time, nout);
+end W21;
+//// model: W22
+function fe
+input Integer c[:];
+input Real t[:, :];
+output Real y;
+external "C" y = fe_c(c, size(c, 1), t, size(t, 1), size(t, 2));
+end fe;
+model W22
+parameter Real table[:, :] = [0, 0, 0; 5, 0, 0];
+parameter Integer columns[:] = 2:size(table, 2);
+Real z = fe(columns, table) * time;
+end W22;
+//// model: W23
+model W23
+parameter Real table[:, :] = [0, 0, 0; 5, 0, 0];
+parameter Integer columns[:] = 2:size(table, 2);
+Integer k[2] = columns;
+end W23;

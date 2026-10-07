@@ -403,3 +403,8 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `cf-ut` | 4 | 单测原文：组件函数 + inner/outer + 变量缺省、模型内别名缺省求值 + 参数数组、枚举函数变量、派生类型包常量 |
 | `sk-h1` | 11 | 结构参数的绑定里矩阵构造套 size(a, k)：a 一并成结构参数（KinematicPTP2 式的 `nout = max([size(deltaq, 1); …])`，修饰给 / 默认 / 引用别的参数、二维、非 final 的 n）；a 的 `:` 维由 `2:size(table, 2)` 这类绑定推（CombiTimeTable 的 columns）；a 是变量 / 向前引用（SKIP） |
 | `sk-ut` | 3 | 单测原文：KinematicPTP2 式（修饰给的 deltaq）、columns = 2:size(table, 2)、数组声明在 size() 引用处之后 |
+| `wr-w1` | 8 | 结构参数数组（size-in-matrix 连带 / Evaluate）的整体引用：用户函数 / 外部函数实参、数组运算、调用嵌在运算里、sum 的实参（SKIP）、Var 绑定、`:` 维由区间绑定推出的 columns |
+| `wr-v1` | 12 | Evaluate 参数数组 n 的整体引用：等式 / 绑定里 `nrm(n)`、`nrm(n) * time`、`g * nrm(n)`（代值求值后逐元素 / 展开）、标量积、sum（SKIP）、外部函数实参 `fe({0.0, -1.0, 0.0})`、参数数组别名、参数绑定里的调用 |
+| `wr-w2` | 4 | `:` 维由 `2:size(table, 2)` 推出的数组：外部函数实参、在 nout 之前 / 之后定型、Integer 数组绑定 |
+| `wr-m1` | 8 | 结构参数代入后打印标记跟着走（`x = k * f(time)` → `f(time) * 2.0`、`.- k` → `.+ -2.0`）、函数体 if 分支里的 zeros / fill 展开、APS2（整体引用代成 `{1, 2}`）、外部对象的向前引用（CombiTimeTable 的 tableID 式）、`:` 维数组的向前引用（size 里 / 等式里，Var 绑定里的 SKIP）、整体代入后 min / max 求值（`max(k) * time` → `2.0 * time`） |
+| `wr-ut` | 4 | 单测原文 |

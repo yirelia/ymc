@@ -1,0 +1,81 @@
+//// set: wr-w1 — 结构参数数组（size-in-matrix 连带 / Evaluate）的整体引用：用户函数 / 外部函数实参、数组运算、调用嵌在运算里、sum 的实参（SKIP）、Var 绑定、`:` 维由区间绑定推出的 columns
+//// model: W10
+function f
+input Integer c[:];
+output Real y;
+algorithm
+y := sum(c);
+end f;
+model W10
+parameter Integer c[:] = {2, 3};
+final parameter Integer n = max([size(c, 1); 1]);
+Real y = f(c) * time;
+end W10;
+//// model: W11
+function fe
+input Integer c[:];
+output Real y;
+external "C" y = fe_c(c, size(c, 1));
+end fe;
+model W11
+parameter Integer c[:] = {2, 3};
+final parameter Integer n = max([size(c, 1); 1]);
+Real y = fe(c) * time;
+end W11;
+//// model: W12
+model W12
+parameter Integer c[:] = {2, 3};
+final parameter Integer n = max([size(c, 1); 1]);
+Real z[2] = c * time;
+end W12;
+//// model: W13
+function nrm
+input Real v[3];
+output Real r[3];
+algorithm
+r := v / sqrt(v * v);
+end nrm;
+model W13
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+Real y[3] = nrm(n) * time;
+end W13;
+//// model: W14
+function nrm
+input Real v[3];
+output Real r[3];
+algorithm
+r := v / sqrt(v * v);
+end nrm;
+model W14
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+parameter Real g = 9.81;
+Real y[3] = g * nrm(n);
+end W14;
+//// model: W15
+model W15
+parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+Real y[3] = n * time;
+Real s = sum(n) * time;
+end W15;
+//// model: W16
+model W16
+parameter Real table[:, :] = [0, 1, 2; 3, 4, 5];
+parameter Integer columns[:] = 2:size(table, 2);
+final parameter Integer nout = max([size(columns, 1); 1]);
+Real y[nout];
+Integer k[2] = columns;
+equation
+y = fill(time, nout);
+end W16;
+//// model: W17
+function fe
+input Integer c[:];
+output Real y;
+external "C" y = fe_c(c, size(c, 1));
+end fe;
+model W17
+parameter Real table[:, :] = [0, 1, 2; 3, 4, 5];
+parameter Integer columns[:] = 2:size(table, 2);
+final parameter Integer nout = max([size(columns, 1); 1]);
+Real y = fe(columns) * time;
+end W17;

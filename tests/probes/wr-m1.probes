@@ -1,0 +1,90 @@
+//// set: wr-m1 — 结构参数代入后打印标记跟着走（`x = k * f(time)` → `f(time) * 2.0`、`.- k` → `.+ -2.0`）、函数体 if 分支里的 zeros / fill 展开、APS2（整体引用代成 `{1, 2}`）、外部对象的向前引用（CombiTimeTable 的 tableID 式）、`:` 维数组的向前引用（size 里 / 等式里，Var 绑定里的 SKIP）、整体代入后 min / max 求值（`max(k) * time` → `2.0 * time`）
+//// model: M1
+function f
+  input Real t;
+  output Real y[3];
+algorithm
+  y := {t, 2 * t, 3 * t};
+end f;
+model M1
+  parameter Integer k = 2;
+  Real z[k];
+  Real x[3];
+  Real w[3];
+equation
+  z = fill(time, k);
+  x = k * f(time);
+  w = f(time) .- k;
+end M1;
+//// model: Z1
+function f
+  input Real x[3];
+  input Boolean b;
+  output Real y[3];
+  output Real z[3];
+  output Real w[3];
+algorithm
+  y := if b then x else zeros(3);
+  z := zeros(3);
+  w := if b then x else fill(1, 3);
+end f;
+model Z1
+  Real y[3] = f({time, 1, 2}, time > 0.5);
+end Z1;
+//// model: FW1
+model FW1
+  Real y[2] = c * time;
+  parameter Real c[:] = {1, 2};
+end FW1;
+//// model: FW2
+model FW2
+  Real y[2];
+  parameter Real c[:] = 2:3;
+equation
+  y = c * time;
+end FW2;
+//// model: FW3
+model FW3
+  final parameter Integer n = max([size(c, 1); 1]);
+  Real y[n];
+  parameter Integer c[:] = 2:3;
+equation
+  y = fill(time, n);
+end FW3;
+//// model: RD1
+model RD1
+  parameter Integer k[2] = {1, 2}; parameter Real r[3] = {1.5, -2, 4}; Real z[k[2]]; Real zz[integer(r[3])];
+  Real y = max(k) * time; Integer m = max(k); Real v = min(k); Real mr = max(r) + min(r) * time; Real w[2] = k * min(k);
+end RD1;
+//// model: TT1
+package P
+  class EO
+    extends ExternalObject;
+    function constructor
+      input Integer c[:];
+      output EO o;
+      external "C" o = initEO(c, size(c, 1));
+    end constructor;
+    function destructor
+      input EO o;
+      external "C" freeEO(o);
+    end destructor;
+  end EO;
+  function getT
+    input EO o;
+    output Real t;
+    external "C" t = getT_c(o);
+  end getT;
+end P;
+model TT1
+  parameter Integer columns[:] = {2, 3};
+  final parameter Real tmin = P.getT(tid);
+protected
+  parameter P.EO tid = P.EO(columns);
+end TT1;
+//// model: APS2
+model APS2
+  parameter Integer k[2] = {1, 2};
+  Real z[k[2]];
+  Integer y[2] = k;
+end APS2;

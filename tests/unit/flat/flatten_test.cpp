@@ -3321,12 +3321,12 @@ YMC_TEST(flatten_structural_array_parameters) {
                            "  parameter Integer u[2] = 2;\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real z[1];\n"
                            "  Real z[2];\n  Real y = x[2] + x[2] + x[3] + /*Real*/(u[1]);\n  Real w;\n  Real v;\nequation\n"
                            "  x = {time, 1.0, 2.0};\n  z[1] = time;\n  z[2] = 1.0;\n  w = 1.0;\n  v = 2.0;\nend APT1;\n"));
-  // 结构参数数组的整体 / 切片引用：omc 代入整个数组的值（`y = {1, 2}`，APS2），ymc 只按元素代入 → SKIP。
-  bool uns = false;
-  const std::string out = flatten_src("model APS2\n  parameter Integer k[2] = {1, 2};\n  Real z[k[2]];\n"
-                                      "  Integer y[2] = k;\nend APS2;\n", &uns);
-  YMC_CHECK(uns);
-  YMC_CHECK_EQ(out, std::string("<unsupported:whole reference to structural parameter array>"));
+  // 结构参数数组的整体引用：omc 代入整个数组的值（APS2 `y = {1, 2}`；62i 起照做，期望 = omc 1.25.0 实跑，2026-10-07）。
+  YMC_CHECK_EQ(flatten_src("model APS2\n  parameter Integer k[2] = {1, 2};\n  Real z[k[2]];\n"
+                           "  Integer y[2] = k;\nend APS2;\n"),
+               std::string("class APS2\n  final parameter Integer k[1] = 1;\n  final parameter Integer k[2] = 2;\n"
+                           "  Real z[1];\n  Real z[2];\n  Integer y[1];\n  Integer y[2];\nequation\n  y = {1, 2};\n"
+                           "end APS2;\n"));
 }
 
 YMC_TEST(flatten_boolean_absorption_and_model_folding) {
@@ -5537,6 +5537,47 @@ YMC_TEST(flatten_size_in_matrix_marks_structural) {
                            "  final parameter Integer columns[2] = 3;\n  final parameter Real offset[1] = 0.0;\n"
                            "  final parameter Integer nout = 2;\n  Real y[1];\n  Real y[2];\nequation\n  y[1] = time;\n  y[2] = time;\n"
                            "end SK2;\n"));
+}
+
+YMC_TEST(flatten_structural_array_whole_references) {
+  // 压平末尾代入结构参数：打印标记随克隆的节点走（`x = k * f(time)` → `f(time) * 2.0`）；结构参数数组的整体引用代成
+  // 整个数组的字面量、调用随即求值，不再含数组调用的等式逐元素、绑定方程展开（`y = g * nrm(n)`、`z = nrm(n) * time`）；
+  // 函数体 if 分支里的 zeros / fill 展开；外部对象的向前引用按声明类型求类型名。期望值为 omc 1.25.0 对原文实跑（WR 探针
+  // ut，2026-10-07）。
+  YMC_CHECK_EQ(flatten_src("function f\n  input Real t;\n  output Real y[3];\nalgorithm\n  y := {t, 2 * t, 3 * t};\nend f;\nmodel CI1\n"
+                           "  parameter Integer k = 2;\n  Real z[k];\n  Real x[3];\n  Real w[3];\nequation\n  z = fill(time, k);\n"
+                           "  x = k * f(time);\n  w = f(time) .- k;\nend CI1;\n"),
+               std::string("function f\n  input Real t;\n  output Real[3] y;\nalgorithm\n  y := {t, 2.0 * t, 3.0 * t};\nend f;\n\n"
+                           "class CI1\n  final parameter Integer k = 2;\n  Real z[1];\n  Real z[2];\n  Real x[1];\n  Real x[2];\n"
+                           "  Real x[3];\n  Real w[1];\n  Real w[2];\n  Real w[3];\nequation\n  z[1] = time;\n  z[2] = time;\n"
+                           "  x = f(time) * 2.0;\n  w = f(time) .+ -2.0;\nend CI1;\n"));
+  YMC_CHECK_EQ(flatten_src("function nrm\n  input Real v[3];\n  output Real r[3];\nalgorithm\n  r := v / sqrt(v * v);\nend nrm;\nmodel CI2\n"
+                           "  parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);\n  parameter Real g = 9.81;\n  Real y[3];\n"
+                           "  Real z[3] = nrm(n) * time;\nequation\n  y = g * nrm(n);\nend CI2;\n"),
+               std::string("class CI2\n  final parameter Real n[1] = 0.0;\n  final parameter Real n[2] = -1.0;\n"
+                           "  final parameter Real n[3] = 0.0;\n  parameter Real g = 9.81;\n  Real y[1];\n  Real y[2];\n  Real y[3];\n"
+                           "  Real z[1];\n  Real z[2];\n  Real z[3];\nequation\n  z = {0.0, (-1.0) * time, 0.0};\n  y[1] = 0.0;\n"
+                           "  y[2] = g * (-1.0);\n  y[3] = 0.0;\nend CI2;\n"));
+  YMC_CHECK_EQ(flatten_src("function f\n  input Real x[3];\n  input Boolean b;\n  output Real y[3];\n  output Real z[3];\n"
+                           "  output Real w[3];\nalgorithm\n  y := if b then x else zeros(3);\n  z := zeros(3);\n"
+                           "  w := if b then x else fill(1, 3);\nend f;\nmodel CI3\n  Real y[3] = f({time, 1, 2}, time > 0.5);\nend CI3;\n"),
+               std::string("function f\n  input Real[3] x;\n  input Boolean b;\n  output Real[3] y;\n  output Real[3] z;\n"
+                           "  output Real[3] w;\nalgorithm\n  y := if b then x else {0.0, 0.0, 0.0};\n  z := {0.0, 0.0, 0.0};\n"
+                           "  w := if b then x else {1.0, 1.0, 1.0};\nend f;\n\nclass CI3\n  Real y[1];\n  Real y[2];\n  Real y[3];\n"
+                           "equation\n  y = f({time, 1.0, 2.0}, time > 0.5)[1];\nend CI3;\n"));
+  YMC_CHECK_EQ(flatten_src("package P\n  class EO\n    extends ExternalObject;\n    function constructor\n      input Integer c[:];\n"
+                           "      output EO o;\n      external \"C\" o = initEO(c, size(c, 1));\n    end constructor;\n"
+                           "    function destructor\n      input EO o;\n      external \"C\" freeEO(o);\n    end destructor;\n  end EO;\n"
+                           "  function getT\n    input EO o;\n    output Real t;\n    external \"C\" t = getT_c(o);\n  end getT;\nend P;\n"
+                           "model CI4\n  parameter Integer columns[:] = {2, 3};\n  final parameter Real tmin = P.getT(tid);\nprotected\n"
+                           "  parameter P.EO tid = P.EO(columns);\nend CI4;\n"),
+               std::string("impure function P.EO.constructor\n  input Integer[:] c;\n  output P.EO o;\n\n"
+                           "  external \"C\" o = initEO(c, size(c, 1));\nend P.EO.constructor;\n\nimpure function P.EO.destructor\n"
+                           "  input P.EO o;\n\n  external \"C\" freeEO(o);\nend P.EO.destructor;\n\nimpure function P.getT\n"
+                           "  input P.EO o;\n  output Real t;\n\n  external \"C\" t = getT_c(o);\nend P.getT;\n\nclass CI4\n"
+                           "  parameter Integer columns[1] = 2;\n  parameter Integer columns[2] = 3;\n"
+                           "  final parameter Real tmin = P.getT(tid);\n  protected parameter P.EO tid = P.EO.constructor(columns);\n"
+                           "end CI4;\n"));
 }
 
 YMC_TEST(flatten_external_object_variable_and_structors) {

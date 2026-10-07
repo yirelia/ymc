@@ -1,0 +1,74 @@
+//// set: wr-ut — 单测原文
+//// model: CI1
+function f
+  input Real t;
+  output Real y[3];
+algorithm
+  y := {t, 2 * t, 3 * t};
+end f;
+model CI1
+  parameter Integer k = 2;
+  Real z[k];
+  Real x[3];
+  Real w[3];
+equation
+  z = fill(time, k);
+  x = k * f(time);
+  w = f(time) .- k;
+end CI1;
+//// model: CI2
+function nrm
+  input Real v[3];
+  output Real r[3];
+algorithm
+  r := v / sqrt(v * v);
+end nrm;
+model CI2
+  parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+  parameter Real g = 9.81;
+  Real y[3];
+  Real z[3] = nrm(n) * time;
+equation
+  y = g * nrm(n);
+end CI2;
+//// model: CI3
+function f
+  input Real x[3];
+  input Boolean b;
+  output Real y[3];
+  output Real z[3];
+  output Real w[3];
+algorithm
+  y := if b then x else zeros(3);
+  z := zeros(3);
+  w := if b then x else fill(1, 3);
+end f;
+model CI3
+  Real y[3] = f({time, 1, 2}, time > 0.5);
+end CI3;
+//// model: CI4
+package P
+  class EO
+    extends ExternalObject;
+    function constructor
+      input Integer c[:];
+      output EO o;
+      external "C" o = initEO(c, size(c, 1));
+    end constructor;
+    function destructor
+      input EO o;
+      external "C" freeEO(o);
+    end destructor;
+  end EO;
+  function getT
+    input EO o;
+    output Real t;
+    external "C" t = getT_c(o);
+  end getT;
+end P;
+model CI4
+  parameter Integer columns[:] = {2, 3};
+  final parameter Real tmin = P.getT(tid);
+protected
+  parameter P.EO tid = P.EO(columns);
+end CI4;
