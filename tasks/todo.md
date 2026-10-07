@@ -1899,6 +1899,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           照写。短类连接器的类型路径首段是 import 别名（MISO 的 `D.Interfaces.DigitalInput x[n]`）此前当非连接器 SKIP——改用
           认 import 的类路径解析。由值合成的枚举字面量 ty 不带类型名：枚举类型核对按元素字面量路径的类型段认（has_enum_type）。
           验证：slice 631 例 PASS 580 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 581 / FAIL 38（不变）；整个 testsuite PASS 1622（不变）/ FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 166→189；探针 8447→8467（dk-e1 / q1 / p1 / s1 / r1 / ut 20 个）；四套构建零警告、单测 285→286；ASan 与 gcc 逐例一致。
+    - [x] (62l) flat：Clock 类型的变量与连接器 + 求值存回参数（2026-10-08）：`Clock` 此前不是可实例化的类型（Clock 只出现在
+          表达式里），MSL Clocked 的 74 个示例都卡在 `connector ClockInput = input Clock` 的基类解析——现在 Clock 是第五个内建
+          类型（不像 Real 那样按名短路：omc 里它是顶层作用域 NFModelicaBuiltin.mo 声明的类，NFLookup.lookupSimpleBuiltinName
+          :803-813 只短路四个），挂进顶层查找表；`sample(u, clock)` 的钟也认 Clock 类型组件的引用。Clock 两实参构造的第二实参
+          omc 求值时把值存回被引用的参数（evalComponentBinding，NFCeval.mo:362-385）、压平时打字面量——沿引用链复刻；定型在
+          if 方程选支之前（typeIfEquation → flattenIfEquation），没选中的分支里的存回与同步算子计数实参的结构标记照样做
+          （dropped_branch_effects；EventClock 的 `if useSolver then y = Clock(Clock(u), solverMethod = …)`）。
+          验证：slice 631→637 例 PASS 580→586 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 581→587 / FAIL 38（不变）；整个 testsuite PASS 1622→1641 / FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 189→250；探针 8467→8482（ck-k1 / ck-ut 15 个）；四套构建零警告、单测 286→287；ASan 与 gcc 逐例一致。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

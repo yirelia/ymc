@@ -185,6 +185,7 @@ class FlatDumper {
       case TypeKind::Integer: out_ += "Integer"; break;
       case TypeKind::Boolean: out_ += "Boolean"; break;
       case TypeKind::String: out_ += "String"; break;
+      case TypeKind::Clock: out_ += "Clock"; break;
       case TypeKind::Enumeration:
         out_ += "enumeration(";
         for (std::size_t i = 0; i < t.enum_literals.size(); ++i) {

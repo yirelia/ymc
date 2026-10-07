@@ -417,3 +417,10 @@
   静默错。探针 / testsuite 都没有"外层改掉该属性"的组合，直到 MSL FluidHeatFlow TestCylinder 才露。
 - 规则：凡是复刻 omc 对某个修饰 / 属性做的事（标结构参数、求值、判 final），都按合并后的修饰（外来 > extends > 声明）取值；
   探针要带"外来修饰 / extends 修饰改掉该属性"的组合。
+
+## 2026-10-08 — omc 先定型全部分支、压平时才选支：没选中的分支也有副作用
+- 模式：ymc 对结构条件为假的 if 方程分支直接丢弃不看；omc 先定型整条 if 方程（typeIfEquation）、压平时才选支
+  （flattenIfEquation），定型的副作用——Ceval 求值存回参数绑定（evalComponentBinding）、Structural.markExp 标结构参数——在
+  没选中的分支里照样发生。MSL Clocked EventClock 的 `y_clock.solverMethod` 因此打成字面量（ymc 打引用，静默错，扫 MSL 才露）。
+- 规则：复刻 omc 的定型期行为时，问一句"被丢掉的分支 / 被删的方程定型过没有"；有副作用的定型逻辑（求值存回、结构标记）在
+  丢弃的分支里也要跑（dropped_branch_effects），做不到就 SKIP。

@@ -422,3 +422,5 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `dk-s1` | 4 | 短类连接器（`connector DigitalInput = input DigitalSignal`）数组整体连接：两层短类、partial block 的 MISO、类型路径首段是 import 别名（`D.Interfaces.DigitalInput x[n]`） |
 | `dk-r1` | 2 | 枚举区间常量数组 `LogicValues[:] = L.U:L.O` 的 `:` 维、带运行时整数下标的取元素（`delay` 补第三实参）；参数枚举区间（SKIP） |
 | `dk-ut` | 5 | 单测原文 |
+| `ck-k1` | 11 | Clock 类型的变量与短类连接器（`connector ClockInput = input Clock`、三方连接、连接器里的 Clock 成员）、`sample(u, clock)` 的钟是组件引用、Clock 两实参构造第二实参求值存回参数（沿链）、没选中的 if 分支里的存回与同步算子计数实参的结构标记、`parameter Clock` |
+| `ck-ut` | 4 | 单测原文 |

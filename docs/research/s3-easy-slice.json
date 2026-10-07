@@ -629,5 +629,11 @@
 "ExternalObject5.mo",
 "ExternalObjectVariability1.mo",
 "CevalFuncArray6.mo",
-"RecordBinding15.mo"
+"RecordBinding15.mo",
+"ClockConstructor1.mo",
+"FuncBuiltinBackSample1.mo",
+"FuncBuiltinNoClock1.mo",
+"FuncBuiltinShiftSample1.mo",
+"FuncBuiltinSubSample2.mo",
+"FuncBuiltinSuperSample2.mo"
 ]

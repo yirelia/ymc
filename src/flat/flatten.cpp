@@ -2315,7 +2315,11 @@ class Flattener {
           struct_restore(snap);
         }
         if (cv && cv->k == CVal::K::Bool && !keep_param) {
-          if (cv->b) {   // 字面量真：选中该分支，丢弃其余
+          if (cv->b) {   // 字面量真：选中该分支，丢弃其余（丢弃的照样有定型的副作用，见 dropped_branch_effects）
+            for (std::size_t bi = static_cast<std::size_t>(&br - eq.branches.data()) + 1; bi < eq.branches.size(); ++bi)
+              dropped_branch_effects(eq.branches[bi].body, enclosing, prefix);
+            dropped_branch_effects(eq.else_body, enclosing, prefix);
+            if (result_.unsupported) return;
             if (out_branches.empty()) {   // 无前置分支 → 直接内联体（无 if 外壳）
               for (Id<SEquation> beid : br.body) collect_equation(beid, enclosing, prefix, psubs, is_initial);
             } else {   // 有前置分支 → 该分支成为 else
@@ -2325,7 +2329,9 @@ class Flattener {
             }
             return;
           }
-          continue;   // 字面量假 → 丢弃该分支
+          dropped_branch_effects(br.body, enclosing, prefix);   // 字面量假 → 丢弃该分支（定型副作用照样）
+          if (result_.unsupported) return;
+          continue;
         }
         if (!keep_param && !cond_is_runtime(ce)) {
           // 第一遍（宽松）：求值缺的是还没发射的参数（向前引用，MSL 电机的 aimcData 声明在最后）→ 这条 if 先不要，记下要第二遍
@@ -14620,6 +14626,19 @@ class Flattener {
 
   // ---- 同步语言元素（MLS §16）：只做定型与打印，钟的推断 / 分区是后端的事。形态 = 1.25.0 实测（SY 探针 s1–s4）；声明见
   // v1.25.0 NFModelicaBuiltin.mo:530-580 / :872-963 / :1035-1099，定型见 NFBuiltinCall.mo:1875-2017 / :2158-2230。----
+  // 书写的 cref 引用 Clock 类型的组件：逐段在实例里找（只解析不定型——经典 sample 的第二实参还要按原路定型）。
+  bool absyn_clock_cref(Id<Exp> x, NodeId enclosing) {
+    if (I_.absyn.exps[x].kind != ExpKind::CrefExp) return false;
+    const Cref c = I_.absyn.crefs[I_.absyn.exps[x].cref];   // 拷贝（find_local 可能扩 arena）
+    if (c.leading_dot || c.parts.empty()) return false;
+    NodeId cur = find_local(enclosing, c.parts[0].name);
+    for (std::size_t i = 1; i < c.parts.size() && cur.is_valid() && !I_.nodes[cur].is_empty(); ++i) {
+      const NodeId cls = class_of(cur);
+      cur = cls.is_valid() ? find_local(cls, c.parts[i].name) : NodeId{};
+    }
+    return cur.is_valid() && !I_.nodes[cur].is_empty() && I_.nodes[cur].comp.is_valid() &&
+           I_.comps[I_.nodes[cur].comp].ty.kind == TypeKind::Clock;
+  }
   bool is_clock_ctor(const Expr& x) const {
     return x.kind == ExprKind::Call && x.ty.kind == TypeKind::Clock && x.call_name.size() == 1 &&
            in_.str(x.call_name[0]) == "Clock";
@@ -14699,11 +14718,101 @@ class Flattener {
       struct_restore(snap);
     }
     if (!bv) { set_unsupported("Clock constructor argument"); return lit_int(0); }
+    // 第二实参引用参数（`Clock(c, solverMethod = m3)`）：omc 求值时把值存回被求的参数（evalComponentBinding，NFCeval.mo
+    // :362-385 v1.25.0），压平时就打字面量、不 final；绑定是对另一参数的引用的沿链都存回（CK 探针 k5：m2 / m3 都成
+    // "ImplicitEuler"）。定型先于 if 方程选支：没选中的分支里的也算（k6；MSL Clocked EventClock 的 y_clock.solverMethod）。
+    if (I_.absyn.exps[args[1]].kind == ExpKind::CrefExp) {
+      std::vector<Symbol> names = prefix;
+      for (const CrefPart& cp : I_.absyn.crefs[I_.absyn.exps[args[1]].cref].parts) {
+        if (!cp.subscripts.empty()) { set_unsupported("Clock constructor argument"); return lit_int(0); }
+        names.push_back(cp.name);
+      }
+      if (!store_evaluated_binding(std::move(names), *bv)) { set_unsupported("Clock constructor argument"); return lit_int(0); }
+    }
     if (ak == TypeKind::Integer && bv->k == CVal::K::Int && bv->i >= 1) r.args.push_back(lit_int(bv->i));
     else if (ak == TypeKind::Boolean && (bv->k == CVal::K::Int || bv->k == CVal::K::Real)) r.args.push_back(lit_real(bv->as_r()));
     else if (ak == TypeKind::Clock && bv->k == CVal::K::Str) r.args.push_back(literal_of(*bv));
     else { set_unsupported("Clock constructor argument"); return lit_int(0); }
     return add(std::move(r));
+  }
+  // 被结构条件丢掉的 if 方程分支：omc 先定型全部分支、压平时才选支（typeIfEquation → flattenIfEquation，NFFlatten.mo
+  // :1975-2010 v1.25.0），定型的副作用照样发生。这里只复刻 Clock 两实参构造的第二实参求值存回（见 clock_ctor；MSL Clocked
+  // EventClock 的 `if useSolver then y = Clock(Clock(u), solverMethod = solverMethod)`，CK 探针 k6）与同步算子计数实参的
+  // 结构标记（CK 探针 k8）。
+  void dropped_branch_effects(const std::vector<Id<SEquation>>& body, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    auto scan = [&](auto& self, Id<Exp> x) -> void {
+      if (!x.is_valid() || result_.unsupported) return;
+      const Exp e = I_.absyn.exps[x];   // 拷贝（求值可能扩 arena）
+      if (e.kind == ExpKind::Call) {
+        const Cref fc = I_.absyn.crefs[e.cref];
+        const std::string_view fn = fc.parts.size() == 1 ? in_.str(fc.parts[0].name) : std::string_view{};
+        if (fn == "Clock" && e.args.size() == 2 && I_.absyn.exps[e.args[1]].kind == ExpKind::CrefExp) {
+          std::optional<CVal> bv;
+          {
+            const StructSnap snap = struct_snap();
+            bv = eval_scode(e.args[1], scode_scope_of(enclosing), 0, /*allow_param=*/true, nullptr);
+            struct_restore(snap);
+          }
+          std::vector<Symbol> names = prefix;
+          for (const CrefPart& cp : I_.absyn.crefs[I_.absyn.exps[e.args[1]].cref].parts) names.push_back(cp.name);
+          if (!bv || !store_evaluated_binding(std::move(names), *bv)) {
+            set_unsupported("Clock constructor argument in dropped branch");
+            return;
+          }
+        }
+        // 同步算子的计数实参：omc 标结构参数（Structural.markExp，NFBuiltinCall.mo:2172-2173 / :2191-2192 / :2210 / :2228），
+        // 没选中的分支里的照样标——按结构参数求值（同选中支的 counter，见 sync_call）；求不出 → SKIP。
+        if (fn == "subSample" || fn == "superSample" || fn == "shiftSample" || fn == "backSample")
+          for (std::size_t i = 1; i < e.args.size(); ++i)
+            if (absyn_refs_param(e.args[i], enclosing) &&
+                !eval_scode(e.args[i], scode_scope_of(enclosing), 0, /*allow_param=*/true, nullptr)) {
+              set_unsupported("clocked operator counter in dropped branch");
+              return;
+            }
+      }
+      for (Id<Exp> a : e.args) self(self, a);
+      self(self, e.a);
+      self(self, e.b);
+      self(self, e.c);
+    };
+    auto walk = [&](auto& self, const std::vector<Id<SEquation>>& eqs) -> void {
+      for (Id<SEquation> id : eqs) {
+        if (result_.unsupported) return;
+        const SEquation q = I_.scode.eqs[id];   // 拷贝
+        scan(scan, q.a);
+        scan(scan, q.b);
+        scan(scan, q.c);
+        for (const SEqBranch& b : q.branches) {
+          scan(scan, b.cond);
+          self(self, b.body);
+        }
+        self(self, q.body);
+        self(self, q.else_body);
+      }
+    };
+    walk(walk, body);
+  }
+  // 已发射的标量参数 / 常量 names 的绑定换成求得的值 v（omc 求值存回组件，见 clock_ctor）；绑定是对另一参数的（无下标）
+  // 引用 → 沿链继续存回；已是字面量 → 到头。找不到 / 别的绑定式 / 无绑定 → false（调用方 SKIP）。
+  bool store_evaluated_binding(std::vector<Symbol> names, const CVal& v) {
+    for (int guard = 0; guard < 64; ++guard) {
+      FlatVariable* fv = nullptr;
+      for (FlatVariable& x : result_.model.variables)
+        if (x.subscripts.empty() && x.name == names && name_subs_match(x, {})) { fv = &x; break; }
+      if (!fv || (fv->var_kind != FlatVarKind::Parameter && fv->var_kind != FlatVarKind::Constant) || !fv->binding.is_valid())
+        return false;
+      if (is_literal(fv->binding)) return true;
+      const Expr b = result_.model.exprs[fv->binding];   // 拷贝（下面 literal_of 往 arena 加）
+      if (b.kind != ExprKind::Cref) return false;
+      std::vector<Symbol> next;
+      for (const ExprCrefPart& cp : b.cref.parts) {
+        if (!cp.subscripts.empty()) return false;
+        next.push_back(cp.name);
+      }
+      fv->binding = literal_of(v);
+      names = std::move(next);
+    }
+    return false;
   }
   // 其余同步算子：sample(u[, c])（clocked 重载，结果类型同 u；缺 c → `Clock()`）、hold / noClock(u)（类型同 u）、previous(u)
   //（u 须是组件引用；数组按元素向量化 `array(previous(x[$i1]) for $i1 in 1:n)`）、backSample / shiftSample(u, 计数[,
@@ -14851,8 +14960,8 @@ class Flattener {
     for (const Op& o : kOps) if (o.name == name) op = &o;
     if (!op) return {};
     if (name == "sample") {
-      // 经典形 sample(start, interval)：第二个实参不是钟（typeSampleCall :1953-1985）。钟只可能是这些调用（Clock 类型的组件
-      // inst 还不认）。
+      // 经典形 sample(start, interval)：第二个实参不是钟（typeSampleCall :1953-1985）。钟是这些调用，或 Clock 类型组件的
+      // 引用（MSL Clocked 的 `sample(u, clock)`，clock 是 `ClockInput clock`；CK 探针 k1）。
       Id<Exp> second;
       for (std::size_t i = 0; i < e.args.size(); ++i) {
         const bool nm = i < e.arg_names.size() && e.arg_names[i].is_valid();
@@ -14869,6 +14978,7 @@ class Flattener {
           const std::string_view sn = sc.parts.size() == 1 ? in_.str(sc.parts[0].name) : std::string_view{};
           clock = sn == "Clock" || sn == "subSample" || sn == "superSample" || sn == "shiftSample" || sn == "backSample";
         }
+        clock = clock || absyn_clock_cref(second, enclosing);
         if (!clock) return {};
       }
     }

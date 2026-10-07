@@ -5747,6 +5747,37 @@ YMC_TEST(flatten_enum_tables_runtime_enum_subscripts_and_alias_connectors) {
                            "  end when;\nend EF1;\n"));
 }
 
+YMC_TEST(flatten_clock_variables_connectors_and_evaluated_solver_bindings) {
+  // Clock 类型的变量与短类连接器（`connector ClockInput = input Clock`）；Clock 两实参构造的第二实参求值后存回被引用的参数
+  //（沿引用链都打字面量、不 final）；没选中的 if 分支里同样（定型在选支之前），同步算子计数实参照样标结构参数。期望值为
+  // omc 1.25.0 对原文实跑的 stdout（CK 探针 ut，2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("connector ClockInput = input Clock;\nconnector ClockOutput = output Clock;\nblock PeriodicClock\n"
+                           "  ClockOutput y;\nequation\n  y = Clock(0.1);\nend PeriodicClock;\nblock SampleB\n  input Real u;\n"
+                           "  output Real y;\n  ClockInput clock;\nequation\n  y = sample(u, clock);\nend SampleB;\nmodel CK1\n"
+                           "  PeriodicClock pc;\n  SampleB s(u = time);\nequation\n  connect(pc.y, s.clock);\nend CK1;\n"),
+               std::string("class CK1\n  Clock pc.y;\n  Real s.u = time;\n  Real s.y;\n  Clock s.clock;\nequation\n"
+                           "  pc.y = s.clock;\n  pc.y = Clock(0.1);\n  s.y = sample(s.u, s.clock);\nend CK1;\n"));
+  YMC_CHECK_EQ(flatten_src("model CK5\n  parameter String m = \"ImplicitEuler\";\n  parameter String m2 = m;\n"
+                           "  parameter String m3 = m2;\n  Clock c = Clock(Clock(0.1), solverMethod = m3);\nend CK5;\n"),
+               std::string("class CK5\n  parameter String m = \"ImplicitEuler\";\n  parameter String m2 = \"ImplicitEuler\";\n"
+                           "  parameter String m3 = \"ImplicitEuler\";\n  Clock c = Clock(Clock(0.1), \"ImplicitEuler\");\n"
+                           "end CK5;\n"));
+  YMC_CHECK_EQ(flatten_src("block EC\n  parameter Boolean useSolver = false;\n"
+                           "  parameter String solverMethod = \"ExplicitEuler\";\n  input Boolean u;\n  output Clock y;\n"
+                           "equation\n  if useSolver then\n    y = Clock(Clock(u), solverMethod = solverMethod);\n  else\n"
+                           "    y = Clock(u);\n  end if;\nend EC;\nmodel CK6\n  parameter String sm = \"ExplicitEuler\";\n"
+                           "  EC ec(solverMethod = sm, u = time > 0.5);\nend CK6;\n"),
+               std::string("class CK6\n  parameter String sm = \"ExplicitEuler\";\n"
+                           "  final parameter Boolean ec.useSolver = false;\n"
+                           "  parameter String ec.solverMethod = \"ExplicitEuler\";\n  Boolean ec.u = time > 0.5;\n"
+                           "  Clock ec.y;\nequation\n  ec.y = Clock(ec.u, 0.0);\nend CK6;\n"));
+  YMC_CHECK_EQ(flatten_src("block SC\n  parameter Boolean sub = false;\n  parameter Integer f = 2;\n  input Clock u;\n"
+                           "  output Clock y;\nequation\n  if sub then\n    y = subSample(u, f);\n  else\n    y = u;\n"
+                           "  end if;\nend SC;\nmodel CK8\n  SC sc(u = Clock(0.1));\nend CK8;\n"),
+               std::string("class CK8\n  final parameter Boolean sc.sub = false;\n  final parameter Integer sc.f = 2;\n"
+                           "  Clock sc.u = Clock(0.1);\n  Clock sc.y;\nequation\n  sc.y = sc.u;\nend CK8;\n"));
+}
+
 YMC_TEST(flatten_external_object_variable_and_structors) {
   // 外部对象：组件压平成按类名打印的叶变量，构造 `EO()` 换成 `EO.constructor(1)`（默认实参照补），构造 / 析构随类型发射
   //（外部函数未声明 pure → impure）；当实参传给外部函数。期望 = omc 1.25.0 实跑（2026-10-07，下同）。

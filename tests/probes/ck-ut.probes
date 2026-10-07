@@ -1,0 +1,62 @@
+//// set: ck-ut — 单测原文
+//// model: CK1
+connector ClockInput = input Clock;
+connector ClockOutput = output Clock;
+block PeriodicClock
+  ClockOutput y;
+equation
+  y = Clock(0.1);
+end PeriodicClock;
+block SampleB
+  input Real u;
+  output Real y;
+  ClockInput clock;
+equation
+  y = sample(u, clock);
+end SampleB;
+model CK1
+  PeriodicClock pc;
+  SampleB s(u = time);
+equation
+  connect(pc.y, s.clock);
+end CK1;
+//// model: CK5
+model CK5
+  parameter String m = "ImplicitEuler";
+  parameter String m2 = m;
+  parameter String m3 = m2;
+  Clock c = Clock(Clock(0.1), solverMethod = m3);
+end CK5;
+//// model: CK6
+block EC
+  parameter Boolean useSolver = false;
+  parameter String solverMethod = "ExplicitEuler";
+  input Boolean u;
+  output Clock y;
+equation
+  if useSolver then
+    y = Clock(Clock(u), solverMethod = solverMethod);
+  else
+    y = Clock(u);
+  end if;
+end EC;
+model CK6
+  parameter String sm = "ExplicitEuler";
+  EC ec(solverMethod = sm, u = time > 0.5);
+end CK6;
+//// model: CK8
+block SC
+  parameter Boolean sub = false;
+  parameter Integer f = 2;
+  input Clock u;
+  output Clock y;
+equation
+  if sub then
+    y = subSample(u, f);
+  else
+    y = u;
+  end if;
+end SC;
+model CK8
+  SC sc(u = Clock(0.1));
+end CK8;

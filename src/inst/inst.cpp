@@ -6,15 +6,19 @@
 namespace ymc {
 
 namespace {
-// 内建类型名 ↔ TypeKind（R11 §4.3：Real/Integer/Boolean/String 是硬编码查找的短路名）。
-constexpr TypeKind kBuiltinKinds[4] = {TypeKind::Real, TypeKind::Integer, TypeKind::Boolean,
-                                       TypeKind::String};
+// 内建类型名 ↔ TypeKind（R11 §4.3：Real/Integer/Boolean/String 是硬编码查找的短路名，NFLookup.lookupSimpleBuiltinName
+// :803-813 v1.25.0）。Clock 不短路：它是顶层作用域里 NFModelicaBuiltin.mo 声明的类，照常查找（见 make_top_node）。
+constexpr int kBuiltinCount = 5;
+constexpr int kShortCircuitCount = 4;   // 前 4 个按名短路
+constexpr TypeKind kBuiltinKinds[kBuiltinCount] = {TypeKind::Real, TypeKind::Integer, TypeKind::Boolean,
+                                                   TypeKind::String, TypeKind::Clock};
 const char* builtin_name(int i) {
   switch (i) {
     case 0: return "Real";
     case 1: return "Integer";
     case 2: return "Boolean";
     case 3: return "String";
+    case 4: return "Clock";
   }
   return "";
 }
@@ -36,7 +40,7 @@ const std::vector<BuiltinEnum>& builtin_enum_table() {
 
 // -------------------------------------------------------------- 内建
 void Instantiator::make_builtin_types() {
-  for (int i = 0; i < 4; ++i) {
+  for (int i = 0; i < kBuiltinCount; ++i) {
     // 内建类型节点：BuiltinClass，cls 是 PartialBuiltin（v1 标量无属性，tree 留空）。
     Class c;
     c.state = ClassState::PartialBuiltin;
@@ -53,7 +57,7 @@ void Instantiator::make_builtin_types() {
 }
 
 NodeId Instantiator::builtin_node(TypeKind k) const {
-  for (int i = 0; i < 4; ++i)
+  for (int i = 0; i < kBuiltinCount; ++i)
     if (kBuiltinKinds[i] == k) return builtin_[i];
   return Inst::empty_node();
 }
@@ -112,6 +116,12 @@ void Instantiator::make_top_node() {
     tt.classes.push_back(cnid);
     builtin_enums_.push_back(cnid);
   }
+  // 内建 Clock 类型（NFModelicaBuiltin.mo 的 `type Clock`，MLS §16.3）：同样挂进顶层查找表——`connector ClockInput =
+  // input Clock`（MSL Clocked 的 74 个示例）、`Clock c;` 才查得到。用户的同名顶层类同上不覆盖（flatten 里 SKIP）。
+  if (const Symbol cs = I_.nodes[builtin_[4]].name; !tt.lookup.count(cs)) {
+    tt.lookup[cs] = LEntry{LEntry::Kind::Class, static_cast<std::uint32_t>(tt.classes.size())};
+    tt.classes.push_back(builtin_[4]);
+  }
   Class topc;
   topc.state = ClassState::ExpandedClass;
   topc.restriction = SRestriction::Package;
@@ -136,7 +146,7 @@ void Instantiator::make_top_node() {
 // -------------------------------------------------------------- 查找（最小版）
 NodeId Instantiator::lookup_simple_class(Symbol name, NodeId scope) {
   // 内建名先短路，不看作用域（R11 §4.3、R12 §2.1）。
-  for (int i = 0; i < 4; ++i)
+  for (int i = 0; i < kShortCircuitCount; ++i)
     if (I_.nodes[builtin_[i]].name == name) return builtin_[i];
   // 沿词法外层链逐层查（R12 §2）。每层先看本地类，再看这一层的 import（本地元素 > import，NFClassTree.mo:1654
   // addLocalElementConflict；import 名对本类里嵌套的类可见——它就是本类表里的一项，向外层走自然碰到）。
@@ -159,6 +169,7 @@ NodeId Instantiator::lookup_simple_class(Symbol name, NodeId scope) {
       if (cd.is_valid() && I_.scode.elems[cd].kind == SElementKind::Class && I_.scode.elems[cd].is_encapsulated) {
         for (NodeId b : builtin_enums_)   // 顶层的内建类照样看得见（require_builtin 支，NFLookup.mo:465-470）
           if (I_.nodes[b].name == name) return b;
+        if (I_.nodes[builtin_[4]].name == name) return builtin_[4];   // Clock
         return Inst::empty_node();
       }
     }
@@ -534,7 +545,7 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node) {
       if (!base_def.is_valid() || I_.nodes[base_def].is_empty()) continue;  // expand 已报错
       // extends 内建类型（extends Real 之类）v1 还没做，标 unsupported 并跳过（避免实例化无类体的内建节点）。
       bool base_builtin = false;
-      for (int k = 0; k < 4; ++k)
+      for (int k = 0; k < kBuiltinCount; ++k)
         if (base_def == builtin_[k]) base_builtin = true;
       if (base_builtin) { mark_unsupported("extends builtin type"); continue; }
       // extends 短类/枚举/derived 基类（`model B = A; extends B`）v1 未做，标 unsupported。
@@ -793,7 +804,7 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
   if (el.prefixes.io == SInnerOuter::Outer || el.prefixes.io == SInnerOuter::InnerOuter) {
     NodeId tn = lookup_class_name(el.type.path, enclosing);   // arena add：下面重新取组件引用
     Type oty = Type::unknown();
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < kBuiltinCount; ++i)
       if (tn == builtin_[i]) { oty = Type::of(kBuiltinKinds[i]); break; }
     if (oty.kind == TypeKind::Unknown && tn.is_valid() && !I_.nodes[tn].is_empty()) oty = Type::of(TypeKind::Complex);
     if (oty.kind == TypeKind::Unknown) mark_unsupported("composite/unresolved outer");
@@ -851,7 +862,7 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
   bool past_extends_type = false;   // 链上已经过一个"只 extends 的长类型"（见下：其后短类的修饰 1.25.0 会丢）
   for (int guard = 0; guard < 100 && base.is_valid() && !I_.nodes[base].is_empty(); ++guard) {
     bool builtin = false;
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < kBuiltinCount; ++i)
       if (base == builtin_[i]) { builtin = true; break; }
     if (builtin) break;
     const Id<SElement> ce = I_.nodes[base].def;
@@ -920,7 +931,7 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
   NodeId class_inst = Inst::empty_node();
   Type ty;
   bool leaf = false;
-  for (int i = 0; i < 4; ++i)
+  for (int i = 0; i < kBuiltinCount; ++i)
     if (base == builtin_[i]) { ty = Type::of(kBuiltinKinds[i]); class_inst = base; leaf = true; break; }
   if (!leaf && base.is_valid() && !I_.nodes[base].is_empty() &&
       I_.scode.elems[I_.nodes[base].def].def.kind == SClassDefKind::Enumeration) {

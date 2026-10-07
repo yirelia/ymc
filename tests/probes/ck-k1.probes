@@ -1,0 +1,154 @@
+//// set: ck-k1 — Clock 类型的变量与短类连接器（`connector ClockInput = input Clock`、三方连接、连接器里的 Clock 成员）、`sample(u, clock)` 的钟是组件引用、Clock 两实参构造第二实参求值存回参数（沿链）、没选中的 if 分支里的存回与同步算子计数实参的结构标记、`parameter Clock`
+//// model: CK1
+connector ClockInput = input Clock;
+connector ClockOutput = output Clock;
+block PeriodicClock
+  ClockOutput y;
+equation
+  y = Clock(0.1);
+end PeriodicClock;
+block SampleB
+  input Real u;
+  output Real y;
+  ClockInput clock;
+equation
+  y = sample(u, clock);
+end SampleB;
+model CK1
+  PeriodicClock pc;
+  SampleB s(u = time);
+equation
+  connect(pc.y, s.clock);
+end CK1;
+//// model: CK2
+model CK2
+  Clock c = Clock(0.1);
+  Clock d = subSample(c, 2);
+  Real y = sample(time, d);
+end CK2;
+//// model: CK3
+model CK3
+  Clock c;
+  Real x(start = 0);
+  Real h;
+  Real iv;
+  Boolean ft;
+equation
+  c = Clock(0.2);
+  when c then
+    x = previous(x) + 1;
+    iv = interval(c);
+    ft = firstTick(c);
+  end when;
+  h = hold(x);
+end CK3;
+//// model: CK4
+connector ClockInput = input Clock;
+connector ClockOutput = output Clock;
+block Src
+  ClockOutput y;
+equation
+  y = Clock(3, 100);
+end Src;
+block Smp
+  input Real u;
+  output Real y;
+  ClockInput clock;
+equation
+  y = sample(u, clock);
+end Smp;
+model CK4
+  Src src;
+  Smp s1(u = time), s2(u = 2 * time);
+  ClockOutput out;
+equation
+  connect(src.y, s1.clock);
+  connect(src.y, s2.clock);
+  connect(src.y, out);
+end CK4;
+//// model: CK5
+model CK5
+  parameter String m = "ImplicitEuler";
+  parameter String m2 = m;
+  parameter String m3 = m2;
+  Clock c = Clock(Clock(0.1), solverMethod = m3);
+end CK5;
+//// model: CK6
+block EC
+  parameter Boolean useSolver = false;
+  parameter String solverMethod = "ExplicitEuler";
+  input Boolean u;
+  output Clock y;
+equation
+  if useSolver then
+    y = Clock(Clock(u), solverMethod = solverMethod);
+  else
+    y = Clock(u);
+  end if;
+end EC;
+model CK6
+  parameter String sm = "ExplicitEuler";
+  EC ec(solverMethod = sm, u = time > 0.5);
+end CK6;
+//// model: CK7
+block EC2
+  parameter Boolean useStart = false;
+  parameter Real si = 0.1;
+  parameter Real si2 = si;
+  input Boolean u;
+  output Clock y;
+equation
+  if useStart then
+    y = Clock(u, si2);
+  else
+    y = Clock(u);
+  end if;
+end EC2;
+model CK7
+  EC2 ec(u = time > 0.5);
+end CK7;
+//// model: CK8
+block SC
+  parameter Boolean sub = false;
+  parameter Integer f = 2;
+  input Clock u;
+  output Clock y;
+equation
+  if sub then
+    y = subSample(u, f);
+  else
+    y = u;
+  end if;
+end SC;
+model CK8
+  SC sc(u = Clock(0.1));
+end CK8;
+//// model: CK9
+model CK9
+  parameter Clock c = Clock(0.1);
+  Real y = sample(time, c);
+end CK9;
+//// model: CK10
+connector CC
+  Clock c;
+  Real x;
+end CC;
+model CK10
+  CC a, b;
+equation
+  connect(a, b);
+  a.c = Clock(0.1);
+  a.x = sample(time, a.c);
+end CK10;
+//// model: CK11
+connector CR
+  Real c;
+  Real x;
+end CR;
+model CK11
+  CR a, b;
+equation
+  connect(a, b);
+  a.c = time;
+  a.x = 2 * time;
+end CK11;

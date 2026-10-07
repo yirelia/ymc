@@ -261,3 +261,11 @@ Machines DCMachines.DCPM_Cooling。Digital 的 15 个示例越过枚举属性值
 22 个示例转 PASS（Multiplexer / FlipFlop / HalfAdder / FullAdder / Adder4 / Counter3 / Counter / VectorDelay / DFFREG ×4 /
 DLATREG ×4 / NXFER / NRXFER / BUF3S / INV3S / WiredX / MUX2x1），另有 Analog.Examples.AD_DA_conversion。Digital 只剩 RAM
 （限定名函数调用）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-08 加宽 62l 之后：PASS 189 → 250
+
+Clock 成了可实例化的内建类型（顶层作用域里查得到，`connector ClockInput = input Clock`）、`sample(u, clock)` 认 Clock 组件
+引用、Clock 两实参构造的第二实参求值存回参数（没选中的 if 分支里也做，同步算子计数实参照样标结构参数）之后，Clocked.Examples
+的 61 个示例转 PASS（Elementary 各信号类型、CascadeControlledDrive / SimpleControlledDrive 的钟控版、Systems 的混合单元与
+发动机节气门等）。Clocked 余下 13 个：推导式嵌在数组式里（BooleanTable）6、向量化调用实参形态 3、constrainedby 2、元组 /
+函数赋值目标 2。FAIL / ACCEPTS-INVALID / CRASH 0。
