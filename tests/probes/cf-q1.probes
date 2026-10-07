@@ -1,0 +1,112 @@
+//// set: cf-q1 — 函数输入的短类型属性数组、枚举类型的函数变量与函数体里的枚举字面量、组件函数（CF1 / CF2）、函数体引用派生类型的包常量（QT1，`Modelica.Constants.T_zero` 那种）、MultiBody World 的复刻（`g * normalizeWithAssert(n)`，n 是 Evaluate 的参数数组，未做 → SKIP）
+//// model: Q1
+type Position = Real(quantity = "Length", unit = "m");
+function h
+  input Position r[3] "pos";
+  input Position s = 1;
+  output Real y;
+algorithm
+  y := r[1] + s;
+end h;
+model Q1
+  Real y = h({time, 1, 2});
+end Q1;
+//// model: Q2
+package P
+  type GT = enumeration(No, Uni, Point);
+end P;
+function h
+  input Real r;
+  input P.GT t = P.GT.Uni "type";
+  output Real y;
+algorithm
+  y := if t == P.GT.Uni then r else 0;
+end h;
+model Q2
+  Real y = h(time);
+end Q2;
+//// model: CF1
+function accBase
+  input Real r;
+  input Real gg = 1;
+  output Real a;
+algorithm
+  a := gg * r;
+end accBase;
+model W
+  parameter Real g = 9.81;
+  replaceable function acc = accBase(gg = g);
+end W;
+model CF1
+  W w;
+  Real y = w.acc(time);
+end CF1;
+//// model: CF2
+function accBase
+  input Real r;
+  input Real gg = 1;
+  output Real a;
+algorithm
+  a := gg * r;
+end accBase;
+model W
+  parameter Real g = 9.81;
+  replaceable function acc = accBase(gg = 2 * g);
+end W;
+model B
+  outer W w;
+  Real y = w.acc(time);
+end B;
+model CF2
+  inner W w(g = 3);
+  B b;
+end CF2;
+//// model: MB1
+package P
+  type GT = enumeration(No, Uni, Point);
+  function std
+    input Real r[3];
+    input GT t = GT.Uni;
+    input Real g[3] = {0, -9.81, 0};
+    input Real mu = 1;
+    output Real a[3];
+  algorithm
+    a := if t == GT.Uni then g else if t == GT.Point then -(mu / (r * r)) * (r / sqrt(r * r)) else zeros(3);
+  end std;
+  function nrm
+    input Real v[3];
+    output Real r[3];
+  algorithm
+    r := v / sqrt(v * v);
+  end nrm;
+  model World
+    parameter GT t = GT.Uni annotation(Evaluate = true);
+    parameter Real g = 9.81;
+    parameter Real n[3] = {0, -1, 0} annotation(Evaluate = true);
+    parameter Real mu = 3.986e14;
+    replaceable function gacc = std(t = t, g = g * nrm(n), mu = mu) constrainedby std "Function to compute the gravity acceleration";
+  end World;
+  model Body
+    outer World world;
+    Real r[3] = {time, 0, 0};
+    Real g0[3] = world.gacc(r);
+  end Body;
+end P;
+model MB1
+  inner P.World world;
+  P.Body body;
+end MB1;
+//// model: QT1
+package K
+  type TC = Real(unit = "degC");
+  constant TC T0 = -273.15;
+end K;
+function f
+  input Real c;
+  output Real k;
+algorithm
+  k := c - K.T0;
+end f;
+model QT1
+  Real y = f(time);
+end QT1;

@@ -1,0 +1,78 @@
+//// set: cf-ut — 单测原文：组件函数 + inner/outer + 变量缺省、模型内别名缺省求值 + 参数数组、枚举函数变量、派生类型包常量
+//// model: CU1
+function accBase
+  input Real r;
+  input Real gg = 1;
+  output Real a;
+algorithm
+  a := gg * r;
+end accBase;
+model W
+  parameter Real g = 9.81;
+  Real v = time;
+  replaceable function acc = accBase(gg = g);
+  replaceable function accv = accBase(gg = v);
+end W;
+model B
+  outer W w;
+  Real y = w.acc(time);
+end B;
+model CU1
+  inner W w(g = 4);
+  B b;
+  W w2;
+  Real z = w2.acc(time) + w2.accv(2 * time);
+end CU1;
+//// model: CU2
+function accBase
+  input Real r;
+  input Real gg = 1;
+  output Real a;
+algorithm
+  a := gg * r;
+end accBase;
+function accV
+  input Real r;
+  input Real gv[2] = {0, 0};
+  output Real a[2];
+algorithm
+  a := gv * r;
+end accV;
+model CU2
+  parameter Real g = 3;
+  parameter Real n[2] = {0, -1} annotation(Evaluate = true);
+  function acc = accBase(gg = g);
+  function accn = accV(gv = g * n);
+  Real y = acc(time);
+  Real x[2] = accn(time);
+end CU2;
+//// model: CU3
+package P
+  type GT = enumeration(No, Uni, Point);
+end P;
+function h
+  input Real r;
+  input P.GT t = P.GT.Uni "type";
+  output Real y;
+algorithm
+  y := if t == P.GT.Uni then r else 0;
+end h;
+model CU3
+  P.GT e = P.GT.Point;
+  Real y = h(time);
+  Real y2 = h(time, e);
+end CU3;
+//// model: CU4
+package K
+  type TC = Real(unit = "degC");
+  constant TC T0 = -273.15;
+end K;
+function f
+  input Real c;
+  output Real k;
+algorithm
+  k := c - K.T0;
+end f;
+model CU4
+  Real y = f(time);
+end CU4;

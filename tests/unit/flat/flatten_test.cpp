@@ -5477,6 +5477,45 @@ YMC_TEST(flatten_array_call_inside_expressions) {
                            "  s[2].r = r0 + g({p[2,1], p[2,2], 0.0});\nend AX3;\n"));
 }
 
+YMC_TEST(flatten_component_functions_and_alias_defaults) {
+  // 组件里的函数（`w.acc(time)`，outer 取 inner 的路径）：函数名 = 根类名 + 组件实例路径 + 函数名，短类修饰在组件里定型、
+  // 调用处补成修饰式（`w.g`），函数定义里的缺省求成值（参数 → 值、变量原样）；模型内函数别名的缺省同理；枚举类型的函数
+  // 变量打成字面量表；函数体引用派生类型的包常量内联其值。期望值为 omc 1.25.0 对原文实跑（CF 探针 ut，2026-10-07）。
+  YMC_CHECK_EQ(flatten_src("function accBase\n  input Real r;\n  input Real gg = 1;\n  output Real a;\nalgorithm\n  a := gg * r;\n"
+                           "end accBase;\nmodel W\n  parameter Real g = 9.81;\n  Real v = time;\n"
+                           "  replaceable function acc = accBase(gg = g);\n  replaceable function accv = accBase(gg = v);\nend W;\nmodel B\n"
+                           "  outer W w;\n  Real y = w.acc(time);\nend B;\nmodel CU1\n  inner W w(g = 4);\n  B b;\n  W w2;\n"
+                           "  Real z = w2.acc(time) + w2.accv(2 * time);\nend CU1;\n"),
+               std::string("function CU1.w.acc\n  input Real r;\n  input Real gg = 4.0;\n  output Real a;\nalgorithm\n  a := gg * r;\n"
+                           "end CU1.w.acc;\n\nfunction CU1.w2.acc\n  input Real r;\n  input Real gg = 9.81;\n  output Real a;\nalgorithm\n"
+                           "  a := gg * r;\nend CU1.w2.acc;\n\nfunction CU1.w2.accv\n  input Real r;\n  input Real gg = w2.v;\n"
+                           "  output Real a;\nalgorithm\n  a := gg * r;\nend CU1.w2.accv;\n\nclass CU1\n  parameter Real w.g = 4.0;\n"
+                           "  Real w.v = time;\n  Real b.y = CU1.w.acc(time, w.g);\n  parameter Real w2.g = 9.81;\n  Real w2.v = time;\n"
+                           "  Real z = CU1.w2.acc(time, w2.g) + CU1.w2.accv(2.0 * time, w2.v);\nend CU1;\n"));
+  YMC_CHECK_EQ(flatten_src("function accBase\n  input Real r;\n  input Real gg = 1;\n  output Real a;\nalgorithm\n  a := gg * r;\n"
+                           "end accBase;\nfunction accV\n  input Real r;\n  input Real gv[2] = {0, 0};\n  output Real a[2];\nalgorithm\n"
+                           "  a := gv * r;\nend accV;\nmodel CU2\n  parameter Real g = 3;\n"
+                           "  parameter Real n[2] = {0, -1} annotation(Evaluate = true);\n  function acc = accBase(gg = g);\n"
+                           "  function accn = accV(gv = g * n);\n  Real y = acc(time);\n  Real x[2] = accn(time);\nend CU2;\n"),
+               std::string("function CU2.acc\n  input Real r;\n  input Real gg = 3.0;\n  output Real a;\nalgorithm\n  a := gg * r;\n"
+                           "end CU2.acc;\n\nfunction CU2.accn\n  input Real r;\n  input Real[2] gv = {0.0, -3.0};\n  output Real[2] a;\n"
+                           "algorithm\n  a := {gv[1] * r, gv[2] * r};\nend CU2.accn;\n\nclass CU2\n  parameter Real g = 3.0;\n"
+                           "  final parameter Real n[1] = 0.0;\n  final parameter Real n[2] = -1.0;\n  Real y = CU2.acc(time, g);\n"
+                           "  Real x[1];\n  Real x[2];\nequation\n  x = CU2.accn(time, {0.0, g * (-1.0)});\nend CU2;\n"));
+  YMC_CHECK_EQ(flatten_src("package P\n  type GT = enumeration(No, Uni, Point);\nend P;\nfunction h\n  input Real r;\n"
+                           "  input P.GT t = P.GT.Uni \"type\";\n  output Real y;\nalgorithm\n  y := if t == P.GT.Uni then r else 0;\n"
+                           "end h;\nmodel CU3\n  P.GT e = P.GT.Point;\n  Real y = h(time);\n  Real y2 = h(time, e);\nend CU3;\n"),
+               std::string("function h\n  input Real r;\n  input enumeration(No, Uni, Point) t = P.GT.Uni \"type\";\n  output Real y;\n"
+                           "algorithm\n  y := if t == P.GT.Uni then r else 0.0;\nend h;\n\nclass CU3\n"
+                           "  enumeration(No, Uni, Point) e = P.GT.Point;\n  Real y = h(time, P.GT.Uni);\n  Real y2 = h(time, e);\n"
+                           "end CU3;\n"));
+  YMC_CHECK_EQ(flatten_src("package K\n  type TC = Real(unit = \"degC\");\n  constant TC T0 = -273.15;\nend K;\nfunction f\n"
+                           "  input Real c;\n  output Real k;\nalgorithm\n  k := c - K.T0;\nend f;\nmodel CU4\n  Real y = f(time);\n"
+                           "end CU4;\n"),
+               std::string("function f\n  input Real c;\n  output Real k;\nalgorithm\n  k := c + 273.15;\nend f;\n\nclass CU4\n"
+                           "  Real y = f(time);\nend CU4;\n"));
+}
+
 YMC_TEST(flatten_external_object_variable_and_structors) {
   // 外部对象：组件压平成按类名打印的叶变量，构造 `EO()` 换成 `EO.constructor(1)`（默认实参照补），构造 / 析构随类型发射
   //（外部函数未声明 pure → impure）；当实参传给外部函数。期望 = omc 1.25.0 实跑（2026-10-07，下同）。

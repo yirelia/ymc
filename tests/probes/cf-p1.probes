@@ -1,0 +1,171 @@
+//// set: cf-p1 — 组件里的函数调用：普通函数 / 短类别名带修饰（`w.acc(time)` → `P10.w.acc(…)`）、嵌套组件 `a.w.acc`、常量修饰、显式实参、两次调用共一个定义、参数数组修饰（Evaluate）、经 outer 调 inner 的（数组实例里）；调用名带下标（双拒）、redeclare（SKIP）
+//// model: P10
+function accBase
+input Real r;
+input Real gg = 1;
+output Real a;
+algorithm
+a := gg * r;
+end accBase;
+model W
+function acc
+input Real r;
+output Real a;
+algorithm
+a := 2 * r;
+end acc;
+end W;
+model P10
+W w;
+Real y = w.acc(time);
+end P10;
+//// model: P11
+function accBase
+input Real r;
+input Real gg = 1;
+output Real a;
+algorithm
+a := gg * r;
+end accBase;
+model W
+parameter Real g = 9.81;
+replaceable function acc = accBase(gg = g);
+end W;
+model P11
+W w[2](g = {1, 2});
+Real y = w[1].acc(time);
+end P11;
+//// model: P12
+function accBase
+input Real r;
+input Real gg = 1;
+output Real a;
+algorithm
+a := gg * r;
+end accBase;
+model W
+parameter Real g = 9.81;
+replaceable function acc = accBase(gg = g);
+end W;
+model A
+W w;
+end A;
+model P12
+A a;
+Real y = a.w.acc(time);
+end P12;
+//// model: P13
+function accBase
+input Real r;
+input Real gg = 1;
+output Real a;
+algorithm
+a := gg * r;
+end accBase;
+model W
+constant Real c = 2;
+replaceable function acc = accBase(gg = c);
+end W;
+model P13
+W w;
+Real y = w.acc(time);
+end P13;
+//// model: P14
+function accBase
+input Real r;
+input Real gg = 1;
+output Real a;
+algorithm
+a := gg * r;
+end accBase;
+function accOther
+input Real r;
+input Real gg = 1;
+output Real a;
+algorithm
+a := gg + r;
+end accOther;
+model W
+parameter Real g = 9.81;
+replaceable function acc = accBase(gg = g);
+end W;
+model P14
+W w(redeclare function acc = accOther(gg = 5));
+Real y = w.acc(time);
+end P14;
+//// model: P15
+function accBase
+input Real r;
+input Real gg = 1;
+output Real a;
+algorithm
+a := gg * r;
+end accBase;
+model W
+parameter Real g = 9.81;
+replaceable function acc = accBase(gg = g);
+end W;
+model P15
+W w;
+Real y = w.acc(time, 3);
+end P15;
+//// model: P16
+function accBase
+input Real r;
+input Real gg = 1;
+output Real a;
+algorithm
+a := gg * r;
+end accBase;
+model W
+parameter Real g = 9.81;
+replaceable function acc = accBase(gg = g);
+end W;
+model P16
+W w;
+Real y = w.acc(time) + w.acc(2 * time);
+end P16;
+//// model: P17
+function accBase
+input Real r;
+input Real gg = 1;
+output Real a;
+algorithm
+a := gg * r;
+end accBase;
+model W
+parameter Real g = 9.81;
+parameter Real n[2] = {0, -1} annotation(Evaluate = true);
+replaceable function acc = accV(gv = g * n);
+end W;
+function accV
+input Real r;
+input Real gv[2] = {0, 0};
+output Real a[2];
+algorithm
+a := gv * r;
+end accV;
+model P17
+W w;
+Real y[2] = w.acc(time);
+end P17;
+//// model: P18
+function accBase
+input Real r;
+input Real gg = 1;
+output Real a;
+algorithm
+a := gg * r;
+end accBase;
+model W
+parameter Real g = 9.81;
+replaceable function acc = accBase(gg = g);
+end W;
+model B
+outer W w;
+Real y = w.acc(time);
+end B;
+model P18
+inner W w;
+B b[2];
+end P18;

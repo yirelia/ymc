@@ -223,3 +223,10 @@ Frames.nullRotation，往下卡在模型里嵌在运算中的数组值调用（2
 模型里嵌在运算中的数组值调用整体保留、走符号形态之后，此前卡在它上面的 26 个 MultiBody 示例往下露出：24 个卡在
 `world.gravityAcceleration(…)`（组件里的可替换函数调用，Parts.Body 的重力）、1 个卡在嵌套类修饰、1 个卡在 derivative 注解的
 形态。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-07 加宽 62g 之后：PASS 146 → 151
+
+函数体引用派生类型的包常量（`Modelica.Constants.T_zero` 是 `NonSI.Temperature_degC`，Units.Conversions 的 from_degC /
+to_degC）能内联之后，5 个示例转 PASS：Analog.Examples.Resistor、Rotational / Translational.Examples.HeatLosses、
+HeatTransfer.Examples.ControlledTemperature / TwoMasses。组件里的函数调用（`world.gravityAcceleration`）接上后 MultiBody 往下
+卡在 World 的 `Connections.root`（超定连接图）。FAIL / ACCEPTS-INVALID / CRASH 0。

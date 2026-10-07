@@ -1,0 +1,140 @@
+//// set: cf-p3 — 别名 / constrainedby 的注释、无绑定参数、继承来的函数类（SKIP）、枚举类型的函数输入（标量 / 数组、缺省、返回枚举的常量调用）
+//// model: P30
+function accBase
+input Real r;
+input Real gg = 1;
+output Real a;
+algorithm
+a := gg * r;
+end accBase;
+model W
+parameter Real g = 9.81;
+replaceable function acc = accBase(gg = g) "the acc";
+end W;
+model P30
+W w;
+Real y = w.acc(time);
+end P30;
+//// model: P31
+function accBase
+input Real r;
+input Real gg = 1;
+output Real a;
+algorithm
+a := gg * r;
+end accBase;
+model W
+parameter Real g = 9.81;
+replaceable function acc = accBase(gg = g) constrainedby accBase "the acc";
+end W;
+model P31
+W w;
+Real y = w.acc(time);
+end P31;
+//// model: P32
+function accBase
+input Real r;
+input Real gg = 1;
+output Real a;
+algorithm
+a := gg * r;
+end accBase;
+model P32
+parameter Real g = 3;
+function acc = accBase(gg = g) "local acc";
+Real y = acc(time);
+end P32;
+//// model: P33
+function accBase
+input Real r;
+input Real gg = 1;
+output Real a;
+algorithm
+a := gg * r;
+end accBase;
+model W
+parameter Real g;
+replaceable function acc = accBase(gg = g);
+end W;
+model P33
+W w(g = time);
+Real y = w.acc(time);
+end P33;
+//// model: P34
+function accBase
+input Real r;
+input Real gg = 1;
+output Real a;
+algorithm
+a := gg * r;
+end accBase;
+model W
+parameter Real g = 9.81;
+replaceable function acc = accBase(gg = g);
+end W;
+model P34
+W w;
+Real y = w.acc(time);
+W w2 = w;
+end P34;
+//// model: P35
+function accBase
+input Real r;
+input Real gg = 1;
+output Real a;
+algorithm
+a := gg * r;
+end accBase;
+model W
+parameter Real g = 9.81;
+function acc = accBase(gg = g);
+end W;
+model V
+extends W(g = 2);
+end V;
+model P35
+V v;
+Real y = v.acc(time);
+end P35;
+//// model: P36
+package Q
+type E = enumeration(a, b);
+function f
+input E e;
+output Integer k;
+algorithm
+k := if e == E.a then 1 else 2;
+end f;
+end Q;
+model P36
+Integer k = Q.f(Q.E.b);
+Q.E ee = Q.E.a;
+Integer k2 = Q.f(ee);
+end P36;
+//// model: P37
+package Q
+type E = enumeration(a, b);
+function f
+input E e[2];
+output Integer k;
+algorithm
+k := if e[1] == E.a then 1 else 2;
+end f;
+end Q;
+model P37
+Q.E ee[2] = {Q.E.a, Q.E.b};
+Integer k2 = Q.f(ee);
+end P37;
+//// model: P38
+package Q
+type E = enumeration(a, b);
+function f
+input E e = E.b;
+output E o;
+algorithm
+o := e;
+end f;
+end Q;
+model P38
+Q.E ee = Q.f();
+end P38;

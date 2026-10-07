@@ -1846,6 +1846,17 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           `world.gravityAcceleration(…)`（组件里的可替换函数调用）。单测里 3 处断言 SKIP 的（推导式 / 向量化调用嵌在运算里）
           对 omc 实跑后改正向。
           验证：slice 631 例 PASS 580 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 581 / FAIL 38（不变）；整个 testsuite PASS 1605→1608（Vectorizable1、SuperSampleTest、FuncCross）/ FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 146（不变，MultiBody 26 个往下露）；探针 8180→8297（ax-* 8 集 117 个）；四套构建零警告、单测 279→280；ASan 与 gcc 逐例一致。
+    - [x] (62g) flat：组件里的函数调用 + 函数别名缺省求值 + 枚举类型的函数变量（2026-10-07）：调用名前几段是组件（outer 换成
+          inner）、末段是该组件类里声明的函数类的（`w.acc(time)`、MultiBody 的 `world.gravityAcceleration(r)`）：omc 的
+          lookupFunction 按找到处的作用域链给函数名加前缀、以组件为父实例化——函数名 = 根类名 + 组件实例路径 + 函数名，短类修饰在
+          组件里定型、调用处补成修饰式（`w.g`）。函数定义里别名缺省照 EvalConstants.evaluateFunction 求值：参数 / 常量 → 值、
+          变量原样（fn_eval_default；此前模型内别名 `function acc = accBase(gg = g)` 打 `gg = g`，omc `gg = 3.0`，静默错）。函数
+          变量 / 输入可以是枚举类型（打成 `enumeration(No, Uni, Point)`），函数体里的枚举字面量按定义处作用域解析成全路径；
+          函数体引用的包常量类型可以是短类链（`Modelica.Constants.T_zero` 是 `NonSI.Temperature_degC`，Units.Conversions 的
+          from_degC / to_degC 等，此前 SKIP）。
+          MultiBody 往下卡在 World 里的 `Connections.root`（超定连接图），以及 `g * normalizeWithAssert(n)` 这种整个结构参数数组
+          作实参的调用。
+          验证：slice 631 例 PASS 580 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 581 / FAIL 38（不变）；整个 testsuite PASS 1608 / FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0（不变）；MSL 514 个 PASS 146→151；探针 8297→8333（cf-* 5 集 36 个）；四套构建零警告、单测 280→281；ASan 与 gcc 逐例一致。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
