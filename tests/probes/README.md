@@ -424,3 +424,5 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `dk-ut` | 5 | 单测原文 |
 | `ck-k1` | 11 | Clock 类型的变量与短类连接器（`connector ClockInput = input Clock`、三方连接、连接器里的 Clock 成员）、`sample(u, clock)` 的钟是组件引用、Clock 两实参构造第二实参求值存回参数（沿链）、没选中的 if 分支里的存回与同步算子计数实参的结构标记、`parameter Clock` |
 | `ck-ut` | 4 | 单测原文 |
+| `ct-t1` | 5 | 参数数组 if 绑定逐元素摊开后不收拢（`if b then 1.0 else 1.0`、`if b then true else false`）、矩阵里的推导式列（BooleanTable 的 `[table[1], 1.0; table, {mod(i + 1, 2.0) for i in 1:n}]`）、子组件修饰里 + 条件参数向前引用、写出来的内层 if 照常收拢、选中支引用条件参数（SKIP） |
+| `ct-ut` | 2 | 单测原文 |

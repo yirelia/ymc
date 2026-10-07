@@ -269,3 +269,10 @@ Clock 成了可实例化的内建类型（顶层作用域里查得到，`connect
 的 61 个示例转 PASS（Elementary 各信号类型、CascadeControlledDrive / SimpleControlledDrive 的钟控版、Systems 的混合单元与
 发动机节气门等）。Clocked 余下 13 个：推导式嵌在数组式里（BooleanTable）6、向量化调用实参形态 3、constrainedby 2、元组 /
 函数赋值目标 2。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-08 加宽 62m 之后：PASS 250 → 259
+
+逐元素摊开的参数数组绑定里矩阵的推导式列照样展开、外层 if 的条件参数向前引用时第二遍再判、选中支只引用非结构参数的照常之后，
+MSL BooleanTable 一族的 9 个示例转 PASS（Blocks.Examples.ShowLogicalSources / LogicalNetwork1、Analog.Examples.CharacteristicThyristors、
+Clocked BooleanSignals 的 Hold / SubSample / SuperSample / ShiftSample / BackSample / UpSample）。顺带修了取元素后再化简的静默错
+（`if b then 1.0 else 1.0` 被收成 `1.0`）。FAIL / ACCEPTS-INVALID / CRASH 0。

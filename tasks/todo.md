@@ -1907,6 +1907,15 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           if 方程选支之前（typeIfEquation → flattenIfEquation），没选中的分支里的存回与同步算子计数实参的结构标记照样做
           （dropped_branch_effects；EventClock 的 `if useSolver then y = Clock(Clock(u), solverMethod = …)`）。
           验证：slice 631→637 例 PASS 580→586 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 581→587 / FAIL 38（不变）；整个 testsuite PASS 1622→1641 / FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 189→250；探针 8467→8482（ck-k1 / ck-ut 15 个）；四套构建零警告、单测 286→287；ASan 与 gcc 逐例一致。
+    - [x] (62m) flat：参数数组 if 绑定逐元素摊开不收拢 + 矩阵里的推导式 + 条件参数向前引用（2026-10-08）：MSL BooleanTable 的
+          `combiTimeTable(final table = if n > 0 then if startValue then [table[1], 1.0; table, {mod(i + 1, 2.0) for i in 1:n}]
+          else […] else …)`（Blocks 的 3 个示例、CharacteristicThyristors、Clocked BooleanSignals 6 个）此前卡在矩阵里的推导式。
+          现在逐元素摊开的参数 / 常量数组绑定里，矩阵元素是推导式的同样展开（ExpandExp.expandBuiltinCat）；外层 if 的条件参数
+          n 声明在后时第一遍不知道固定不固定 → 第二遍再判（同 if 方程）；选中支只引用别的（非结构）参数的照常（只挡引用条件参数
+          / Integer 的，V4z 的怪相）。另修静默错：数组 if 取元素造出的标量 if 此前还按 simplifyIf 收拢——omc 取元素是
+          applySubscriptIf（NFExpression.mo:1653-1683），取完不再化简（`parameter Real p[2] = if b then {1, 2} else {1, 3}` →
+          `p[1] = if b then 1.0 else 1.0`，ymc 打 `p[1] = 1.0`）。
+          验证：slice 637 例 PASS 586 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 587 / FAIL 38（不变）；整个 testsuite PASS 1641（不变）/ FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 250→259；探针 8482→8489（ct-t1 / ct-ut 7 个）；四套构建零警告、单测 287→288；ASan 与 gcc 逐例一致。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

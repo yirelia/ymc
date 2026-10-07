@@ -5778,6 +5778,37 @@ YMC_TEST(flatten_clock_variables_connectors_and_evaluated_solver_bindings) {
                            "  Clock sc.u = Clock(0.1);\n  Clock sc.y;\nequation\n  sc.y = sc.u;\nend CK8;\n"));
 }
 
+YMC_TEST(flatten_split_if_bindings_and_matrix_comprehensions) {
+  // 参数数组的 if 绑定逐元素摊开后不再按 simplifyIf 收拢（applySubscriptIf 取元素不化简：`if b then 1.0 else 1.0`）；逐元素摊开
+  // 的绑定里矩阵的推导式列照样展开；外层 if 的条件参数声明在后（向前引用）时第二遍再判固定。期望值为 omc 1.25.0 对原文实跑
+  // 的 stdout（CT 探针 ut，2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("model CT2\n  parameter Boolean b = true;\n  parameter Real p[2] = if b then {1, 2} else {1, 3};\n"
+                           "  parameter Boolean q[2] = if b then {true, false} else {false, false};\n"
+                           "  Real x[2] = if b then {time, 2} else {time, 3};\nend CT2;\n"),
+               std::string("class CT2\n  parameter Boolean b = true;\n  parameter Real p[1] = if b then 1.0 else 1.0;\n"
+                           "  parameter Real p[2] = if b then 2.0 else 3.0;\n"
+                           "  parameter Boolean q[1] = if b then true else false;\n"
+                           "  parameter Boolean q[2] = if b then false else false;\n  Real x[1];\n  Real x[2];\nequation\n"
+                           "  x = if b then {time, 2.0} else {time, 3.0};\nend CT2;\n"));
+  YMC_CHECK_EQ(flatten_src("model Tab\n  parameter Real table[:, :] = fill(0.0, 0, 2);\n  Real y = table[1, 2] * time;\n"
+                           "end Tab;\nblock BT\n  parameter Real table[:] = {0, 1};\n  parameter Boolean startValue = false;\n"
+                           "  Tab combiTimeTable(final table = if n > 0 then if startValue then [table[1], 1.0; table, {mod(i + 1, 2.0) for i in 1:n}] else [table[1], 0.0; table, {mod(i, 2.0) for i in 1:n}] else if startValue then [0.0, 1.0] else [0.0, 0.0]);\n"
+                           "protected\n  final parameter Integer n = size(table, 1);\nend BT;\nmodel CT3\n"
+                           "  BT bt(table = {0, 1, 3});\nend CT3;\n"),
+               std::string("class CT3\n  parameter Real bt.table[1] = 0.0;\n  parameter Real bt.table[2] = 1.0;\n"
+                           "  parameter Real bt.table[3] = 3.0;\n  parameter Boolean bt.startValue = false;\n"
+                           "  final parameter Real bt.combiTimeTable.table[1,1] = if bt.startValue then bt.table[1] else bt.table[1];\n"
+                           "  final parameter Real bt.combiTimeTable.table[1,2] = if bt.startValue then 1.0 else 0.0;\n"
+                           "  final parameter Real bt.combiTimeTable.table[2,1] = if bt.startValue then bt.table[1] else bt.table[1];\n"
+                           "  final parameter Real bt.combiTimeTable.table[2,2] = if bt.startValue then 0.0 else 1.0;\n"
+                           "  final parameter Real bt.combiTimeTable.table[3,1] = if bt.startValue then bt.table[2] else bt.table[2];\n"
+                           "  final parameter Real bt.combiTimeTable.table[3,2] = if bt.startValue then 1.0 else 0.0;\n"
+                           "  final parameter Real bt.combiTimeTable.table[4,1] = if bt.startValue then bt.table[3] else bt.table[3];\n"
+                           "  final parameter Real bt.combiTimeTable.table[4,2] = if bt.startValue then 0.0 else 1.0;\n"
+                           "  Real bt.combiTimeTable.y = bt.combiTimeTable.table[1,2] * time;\n"
+                           "  protected final parameter Integer bt.n = 3;\nend CT3;\n"));
+}
+
 YMC_TEST(flatten_external_object_variable_and_structors) {
   // 外部对象：组件压平成按类名打印的叶变量，构造 `EO()` 换成 `EO.constructor(1)`（默认实参照补），构造 / 析构随类型发射
   //（外部函数未声明 pure → impure）；当实参传给外部函数。期望 = omc 1.25.0 实跑（2026-10-07，下同）。

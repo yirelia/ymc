@@ -2767,7 +2767,9 @@ class Flattener {
         r.b = sb;
         r.c = sc;
         r.ty = x.ty.element_type();
-        return add(std::move(r));
+        const Id<Expr> n = add(std::move(r));
+        split_ifs_.insert(n.raw);   // 取元素造出的 if 不再按 simplifyIf 收拢（见 split_ifs_）
+        return n;
       }
       case ExprKind::Call:
         // der / pre 的数组调用逐元素（ExpressionIterator 把实参取到元素：`der(y)` → `der(y[i])`、`pre(b)` → `pre(b[i])`）。
@@ -11530,6 +11532,11 @@ class Flattener {
         const Id<Expr> x = inst_exp(el, enclosing, prefix);
         if (result_.unsupported) return lit_int(0);
         const std::vector<std::int64_t> sh = expr_shape(x);
+        // 逐元素摊开的参数 / 常量数组绑定里（param_spread_），元素是推导式的同样按元素展开：omc 拼接时把实参展开
+        //（ExpandExp.expandBuiltinCat，各实参 ExpandExp.expand；MSL BooleanTable 的 `[table, {mod(i + 1, 2.0) for i in 1:n}]`，
+        // CT 探针 t1）。别处的推导式照旧（见 scalarize 的 Reduction 支）。
+        std::optional<RedScalarize> rs;
+        if (param_spread_) rs.emplace(red_scalarize_ok_);
         Grid g;
         if (sh.empty()) {
           g = {{x}};
@@ -12881,7 +12888,14 @@ class Flattener {
     //（IfExpression6），不复刻、也不出结果。
     for (const std::vector<std::int64_t>& s : cur_psubs_) ok = ok && s.empty();
     if (ok && !used.empty()) {
+      forward_miss_ = false;
       const std::optional<bool> fx = cond_params_fixed(simplify_expr(c));
+      // 条件参数声明在后（向前引用，MSL BooleanTable 的 protected `n` 在 combiTimeTable 之后）：第一遍不知道固定不固定 →
+      // 先按选中的支走、记下要第二遍（同 if 方程），第二遍用第一遍末尾的结论（carry_.not_fixed）再判（CT 探针 t3）。
+      if (!fx && lenient_ && forward_miss_) {
+        need_second_pass_ = true;
+        return cv->b ? t : f;
+      }
       ok = fx && *fx;
     }
     if (!ok) {
@@ -12895,9 +12909,29 @@ class Flattener {
       set_unsupported("if-expression selected branch cast");
       return lit_int(0);
     }
-    // 选中的支里还引用参数（`fill(n, 2)` 的元素 n）：omc 连同结构参数一起求值，形态有怪相（V4z 探针 `Real b2x[:] = if n == 3
-    // then {1} else fill(n, 2)` → `b2x = {2, 2}`、`2.0 .* fill(n, 2)` → `{4.0, 4.0}`），未做 → SKIP。
-    if (refs_param_var(sel)) { set_unsupported("if-expression selected branch references parameter"); return lit_int(0); }
+    // 选中的支里还引用条件里的（结构）参数（`fill(n, 2)` 的元素 n）：omc 连同结构参数一起求值，形态有怪相（V4z 探针
+    // `Real b2x[:] = if n == 3 then {1} else fill(n, 2)` → `b2x = {2, 2}`、`2.0 .* fill(n, 2)` → `{4.0, 4.0}`），未做 → SKIP；
+    // Integer 的选中支同样。只引用别的（非结构）参数的照常（MSL BooleanTable 的 `if n > 0 then if startValue then […] else […]
+    // else …`：选中的内层 if 引用 startValue / table，逐元素摊开，CT 探针 t1）。
+    if (refs_param_var(sel)) {
+      bool cond_param = expr_elem_kind(sel) == TypeKind::Integer;
+      auto walk = [&](auto& self, Id<Expr> x) -> void {
+        if (!x.is_valid() || cond_param) return;
+        const Expr& xe = result_.model.exprs[x];
+        if (xe.kind == ExprKind::Cref && xe.cref.resolved_node != Id<INode>::kInvalid) {
+          const NodeId nd = NodeId::from_index(xe.cref.resolved_node);
+          if (I_.nodes.contains(nd) && !I_.nodes[nd].is_empty() && I_.nodes[nd].comp.is_valid() &&
+              used.count(I_.comps[I_.nodes[nd].comp].def.raw))
+            cond_param = true;
+        }
+        for (Id<Expr> a : xe.args) self(self, a);
+        self(self, xe.a);
+        self(self, xe.b);
+        self(self, xe.c);
+      };
+      walk(walk, sel);
+      if (cond_param) { set_unsupported("if-expression selected branch references parameter"); return lit_int(0); }
+    }
     return sel;
   }
 
@@ -16248,7 +16282,14 @@ class Flattener {
         if (ec.kind == ExprKind::BoolLit) return simplify_expr(ec.bval ? t0 : e0);
         Id<Expr> tt = simplify_expr(t0), ee = simplify_expr(e0);
         // simplifyIf（NFSimplifyExp.mo:1330-1337）：两支相等 → 该支；两支是（不等的）布尔字面量 → cond / not cond
-        //（logicNegate：not 的 not 抵消，否则包一层 not，NFExpression.mo:5334-5344）。
+        //（logicNegate：not 的 not 抵消，否则包一层 not，NFExpression.mo:5334-5344）。数组 if 取元素造出的不收拢（split_ifs_）。
+        const bool split = split_ifs_.count(id.raw) > 0;
+        if (split) {
+          Expr r; r.kind = ExprKind::IfExp; r.a = cc; r.b = tt; r.c = ee; r.ty = ty;
+          const Id<Expr> n = add(std::move(r));
+          split_ifs_.insert(n.raw);
+          return n;
+        }
         if (expr_equal(tt, ee)) return tt;
         if (result_.model.exprs[tt].kind == ExprKind::BoolLit && result_.model.exprs[ee].kind == ExprKind::BoolLit) {
           if (result_.model.exprs[tt].bval) return cc;
@@ -18331,6 +18372,7 @@ class Flattener {
     // "不折叠"标记跟着克隆走（FE6 探针：external "C" 的 `g(n)`、n 是结构参数 → omc `sin(2.0)`，不求值）。
     if (is_call && nofold_calls_.count(id.raw)) nofold_calls_.insert(n.raw);
     if (scalarized_logicals_.count(id.raw)) scalarized_logicals_.insert(n.raw);
+    if (split_ifs_.count(id.raw)) split_ifs_.insert(n.raw);
     // 数组运算的打印 / 符号形态标记（点号、积、换位、书写的算符，见 sym_binary / sym_node）也跟着走：结构参数代入后克隆出的
     // 节点丢了标记会打成 `2.0 * f(time)`（omc `f(time) * 2.0`，WR 探针 m1；62f 起有，压平末尾代入结构参数时）。
     if (is_bin) {
@@ -19797,6 +19839,10 @@ class Flattener {
   std::vector<std::string> pending_pre_;
   // 正在定型参数 / 常量数组的绑定（逐元素摊开）：式子里的数组值用户函数调用可以留着，scalarize 取 `f(…)[k]`。
   bool param_spread_ = false;
+  // 数组 if 取元素造出的标量 if（scalarize 的 IfExp 支）：omc 取元素是 applySubscriptIf，取完不再化简（NFExpression.mo
+  // :1653-1683 v1.25.0；CT 探针 t2：`parameter Real p[2] = if b then {1, 2} else {1, 3}` → `p[1] = if b then 1.0 else 1.0`、
+  // `q[1] = if b then true else false`），simplify_expr 对它们不做 simplifyIf 的两条收拢。克隆时标记跟着走（clone_subst）。
+  std::unordered_set<std::uint32_t> split_ifs_;
   // 正在定型一条等式的一侧 / Var 数组的绑定：嵌在别的运算里的数组调用也先收下（含数组调用的式子整体保留，见 collect_equation、
   // whole_array_value）。用户函数的实参继承（`g(f(time) * 2.0)`），内建的实参只 cross 继承（见 builtin_call）。
   bool array_call_eq_ = false;

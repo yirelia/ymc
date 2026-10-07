@@ -1,0 +1,23 @@
+//// set: ct-ut — 单测原文
+//// model: CT2
+model CT2
+  parameter Boolean b = true;
+  parameter Real p[2] = if b then {1, 2} else {1, 3};
+  parameter Boolean q[2] = if b then {true, false} else {false, false};
+  Real x[2] = if b then {time, 2} else {time, 3};
+end CT2;
+//// model: CT3
+model Tab
+  parameter Real table[:, :] = fill(0.0, 0, 2);
+  Real y = table[1, 2] * time;
+end Tab;
+block BT
+  parameter Real table[:] = {0, 1};
+  parameter Boolean startValue = false;
+  Tab combiTimeTable(final table = if n > 0 then if startValue then [table[1], 1.0; table, {mod(i + 1, 2.0) for i in 1:n}] else [table[1], 0.0; table, {mod(i, 2.0) for i in 1:n}] else if startValue then [0.0, 1.0] else [0.0, 0.0]);
+protected
+  final parameter Integer n = size(table, 1);
+end BT;
+model CT3
+  BT bt(table = {0, 1, 3});
+end CT3;

@@ -424,3 +424,10 @@
   没选中的分支里照样发生。MSL Clocked EventClock 的 `y_clock.solverMethod` 因此打成字面量（ymc 打引用，静默错，扫 MSL 才露）。
 - 规则：复刻 omc 的定型期行为时，问一句"被丢掉的分支 / 被删的方程定型过没有"；有副作用的定型逻辑（求值存回、结构标记）在
   丢弃的分支里也要跑（dropped_branch_effects），做不到就 SKIP。
+
+## 2026-10-08 — 标量化 / 取元素之后再化简不是无害的
+- 模式：参数数组的 if 绑定逐元素摊开时，ymc 对每个元素再跑一遍 simplify，把 `if b then 1.0 else 1.0` 收拢成 `1.0`、
+  `if b then true else false` 收拢成 `b`；omc 取元素是 applySubscriptIf（NFExpression.mo:1653-1683），取完不再化简，照打
+  原样。静默错一直在，BooleanTable 的真值表（相邻行同值）才露出来。
+- 规则：omc 是"先整体化简、后取元素 / 标量化"的地方，ymc 取元素后的再化简只能是幂等的整理；会改形态的化简规则（simplifyIf
+  的两条收拢、布尔 / 算术的合并）对取元素造出的节点要关掉（split_ifs_ 这类标记），探针带"两支在某个元素处相同"的组合。
