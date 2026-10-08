@@ -15,6 +15,7 @@
 #pragma once
 #include <cstdint>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "absyn/absyn.h"
@@ -241,6 +242,8 @@ struct Inst {
   NodeId top;
   NodeId annotation_scope;
   std::unordered_map<Symbol, NodeId> generated_inners;  // 自动生成的 inner，按名字（同名 outer 共用一个）
+  // 实例化时已施加的短类修饰里的组件重声明（SMod raw，见 inst_component）：flatten 不再把它们当修饰。
+  std::unordered_set<std::uint32_t> applied_redecls;
 
   Inst(Interner& in, Absyn& a, SCode& sc) : interner(in), absyn(a), scode(sc) {
     // id 0 = EMPTY 哨兵节点（往上走的终点，R11 §7.1 不变量 1）。

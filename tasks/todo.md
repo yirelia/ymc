@@ -2024,6 +2024,15 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           structural_keys_ / deps_time_）与值缓存 const_vals_ 的试探求值快照改成撤销日志（此前每次整份拷贝；testsuite
           EngineV6_output 走得更远后 22 s，近 30 s 超时）。常量求值的 SKIP 带上是哪个常量（排桶用）。
           验证：slice 637 例 PASS 586 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 587 / FAIL 39（不变，均在账）；整个 testsuite PASS 1657→1663（CGraphBug、mosfiles/Model1、Model2、hpcom/EngineCylinder、EngineV6_output、Engine1a_output）/ FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 301→311；探针 8859→8868（sx-p1 4、fw-p1 3、sv-p1 2）；四套构建零警告、单测 306→309；ASan 与 gcc 逐例一致。
+    - [x] (62w) flat：短类修饰里的组件重声明 + operator record 的构造调用 / 函数缓存 / 短类连接器别名（2026-10-09）：
+          `record SalientInductance = Salient(redeclare SI.Inductance d, …)` 的重声明施加到实例化出的记录字段上（新类型的
+          属性先打、原修饰照留）。operator record（MSL Complex）：`C(…)` 调 'constructor' 里的函数（压平名 = 调用名那个类的
+          路径 + 'constructor'.f，别名照别名；缺省补齐、实参提 Real；常量实参求值成记录式 `Complex(1.0, 2.0)`）；引用到
+          operator record 类型就打它整个函数缓存（默认构造函数 + 'constructor'），短类别名的记录类型是别名本身；绑定不再
+          按默认构造拆字段（常量的求值、参数的挪初始方程、连续的挪方程）；`connector ComplexOutput = output Complex` 的
+          组件按连接器（方向、connect 按记录字段声明序）。'constructor' 的合法性（encapsulated、恰一个本记录类型的输出）
+          照 omc 检查；多个重载、记录运算数的重载运算符（下一桶）SKIP（此前静默打成 `-c1`）。
+          slice 586 / FAIL 0；scodeinst 587→590；testsuite 1663→1666 / FAIL 0；MSL 311→312（TestConversionBlock）；探针 8868→9031；单测 309→311。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

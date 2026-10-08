@@ -1,0 +1,140 @@
+//// set: rs-p1 — 短类修饰里的组件重声明（`record SalientInductance = Salient(redeclare SI.Inductance d, redeclare SI.Inductance q)`，MSL FundamentalWave.Types / SI.Complex*）：施加到实例化出的记录的同名字段上，新类型的属性先打、原声明 / 重声明的修饰照留；同一短类修饰里同名的另一个子修饰报 DUPLICATE_MODIFICATIONS。单测取 RS7 / RS8
+//// model: RS1
+model RS1
+  type Inductance = Real(final quantity = "Inductance", final unit = "H");
+  record Salient
+    replaceable Real d "d-axis";
+    replaceable Real q "q-axis";
+  end Salient;
+  record SalientInductance = Salient(redeclare Inductance d, redeclare Inductance q) "Salient inductance";
+  parameter SalientInductance L(d = 1, q = 2);
+  Real x;
+equation
+  der(x) = L.d + L.q;
+end RS1;
+//// model: RS2
+model RS2
+  type Inductance = Real(final quantity = "Inductance", final unit = "H");
+  record Salient
+    replaceable Real d "d-axis";
+    replaceable Real q "q-axis";
+  end Salient;
+  record SalientInductance = Salient(redeclare Inductance d, redeclare Inductance q) "Salient inductance";
+  SalientInductance L;
+equation
+  L.d = time;
+  L.q = 2 * time;
+end RS2;
+//// model: RS3
+model RS3
+  type Inductance = Real(final quantity = "Inductance", final unit = "H");
+  record Salient
+    replaceable Real d(start = 1) "d-axis";
+    replaceable Real q "q-axis";
+  end Salient;
+  record SalientInductance = Salient(redeclare Inductance d(min = 0), redeclare Inductance q) "Salient inductance";
+  parameter SalientInductance L[2](each d = 3, q = {4, 5});
+end RS3;
+//// model: RS4
+model RS4
+  type Inductance = Real(final quantity = "Inductance", final unit = "H");
+  record Salient
+    replaceable Real d "d-axis";
+    replaceable Real q "q-axis";
+  end Salient;
+  record SalientInductance = Salient(redeclare Inductance d, redeclare Inductance q);
+  model M
+    parameter SalientInductance L(d = 1, q = 2);
+    Real y = L.d * time;
+  end M;
+  M m(L(d = 7));
+end RS4;
+//// model: RS5
+model RS5
+  type Inductance = Real(final quantity = "Inductance", final unit = "H");
+  record Salient
+    replaceable Real d "d-axis";
+    replaceable Real q "q-axis";
+  end Salient;
+  record SalientInductance = Salient(redeclare Inductance d, redeclare Inductance q);
+  parameter SalientInductance L = SalientInductance(d = 1, q = 2);
+  Real x;
+equation
+  der(x) = L.q;
+end RS5;
+//// model: RS6
+model RS6
+  package SI
+    type Inductance = Real(final quantity = "Inductance", final unit = "H");
+    type Resistance = Real(final quantity = "Resistance", final unit = "Ohm", min = 0);
+  end SI;
+  record Salient
+    replaceable Real d "d-axis";
+    replaceable Real q "q-axis";
+  end Salient;
+  record SalientInductance = Salient(redeclare SI.Inductance d, redeclare SI.Inductance q) "Salient inductance";
+  parameter SalientInductance L1(d = 1, q = 2);
+  parameter SalientInductance L2(d = 3, q = 4);
+  Real x = L1.d * time + L2.q;
+end RS6;
+//// model: RS7
+model RS7
+  package SI
+    type Inductance = Real(final quantity = "Inductance", final unit = "H");
+    type Resistance = Real(final quantity = "Resistance", final unit = "Ohm", min = 0);
+  end SI;
+  record Salient
+    replaceable Real d "d-axis";
+    replaceable Real q "q-axis";
+  end Salient;
+  record SalientInductance = Salient(redeclare SI.Inductance d, redeclare SI.Inductance q) "Salient inductance";
+  record SalientResistance = Salient(redeclare SI.Resistance d(start = 2), redeclare SI.Resistance q);
+  parameter SalientResistance R(d = 1, q = 5);
+end RS7;
+//// model: RS8
+model RS8
+  package SI
+    type Inductance = Real(final quantity = "Inductance", final unit = "H");
+    type Resistance = Real(final quantity = "Resistance", final unit = "Ohm", min = 0);
+  end SI;
+  record Salient
+    replaceable Real d "d-axis";
+    replaceable Real q "q-axis";
+  end Salient;
+  record SalientInductance = Salient(redeclare SI.Inductance d, redeclare SI.Inductance q) "Salient inductance";
+  record SL2 = SalientInductance(d(start = 3));
+  parameter SL2 L(d = 1, q = 2);
+end RS8;
+//// model: RS9
+model RS9
+  package SI
+    type Inductance = Real(final quantity = "Inductance", final unit = "H");
+    type Resistance = Real(final quantity = "Resistance", final unit = "Ohm", min = 0);
+  end SI;
+  record Salient
+    replaceable Real d "d-axis";
+    replaceable Real q "q-axis";
+  end Salient;
+  record SalientInductance = Salient(redeclare SI.Inductance d, redeclare SI.Inductance q) "Salient inductance";
+  record SL3
+    extends SalientInductance;
+  end SL3;
+  parameter SL3 L(d = 1, q = 2);
+end RS9;
+//// model: RS10
+model RS10
+  package SI
+    type Inductance = Real(final quantity = "Inductance", final unit = "H");
+    type Resistance = Real(final quantity = "Resistance", final unit = "Ohm", min = 0);
+  end SI;
+  record Salient
+    replaceable Real d "d-axis";
+    replaceable Real q "q-axis";
+  end Salient;
+  record SalientInductance = Salient(redeclare SI.Inductance d, redeclare SI.Inductance q) "Salient inductance";
+  model M
+    parameter SalientInductance L = SalientInductance(d = 1, q = 2);
+    Real i = L.d * time;
+  end M;
+  M m[2];
+end RS10;

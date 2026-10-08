@@ -355,3 +355,11 @@ Constraints.PrismaticConstraint / RevoluteConstraint / SphericalConstraint / Uni
 .ActuatedDrive / MovingActuatedDrive 逐字节一致（MultiBody 42 个示例里 33 个）。MultiBody 其余 9 个：4 + 1 个卡在修饰名指向
 嵌套类（`redeclare function` 修饰）、2 个卡在组件数组修饰分发出的结构别名、RollingWheel 卡在混合类型的数组修饰字面量、
 PlanarLoops_analytic 卡在无绑定的 Evaluate 参数数组。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-09 加宽 62w 之后：PASS 311 → 312
+
+operator record（MSL Complex）第一段：`Complex(…)` → `Complex.'constructor'.fromReal(…)`、记录类型的函数缓存（默认构造函数 +
+'constructor'，短类别名按别名的路径）、短类连接器别名 `connector ComplexOutput = output Complex`（类型是记录、组件按连接器）
+之后，ComplexBlocks.Examples.TestConversionBlock 逐字节一致。ComplexBlocks / Electrical.QuasiStatic / Magnetic.QuasiStatic 的
+其余 37 个 Complex 示例：多数卡在记录运算数的重载运算符（`v = R_actual*i`、`pin_p.i + pin_n.i = Complex(0)`、`-i`，下一桶），
+另有组件数组的外来修饰、函数形参的别名记录类型（`input SI.ComplexVoltage v[:]`）等。FAIL / ACCEPTS-INVALID / CRASH 0。

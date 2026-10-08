@@ -6512,4 +6512,107 @@ YMC_TEST(flatten_overridden_state_select_does_not_mark_parameter) {
                            "  der(i3.phi) = i3.w;\n  der(i3.w) = 1.0;\nend SS1;\n"));
 }
 
+YMC_TEST(flatten_short_class_redeclares_record_fields) {
+  // `record SalientResistance = Salient(redeclare SI.Resistance d(start = 2), …)`：短类修饰里的组件重声明施加到实例化出的
+  // 记录上——字段的属性先取新类型的（quantity / unit / min），再取重声明 / 原声明的修饰；短类的短类再加修饰照常（RS8）。
+  // 期望 = omc 1.25.0 实跑（2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("model RS7\n  package SI\n"
+                           "    type Inductance = Real(final quantity = \"Inductance\", final unit = \"H\");\n"
+                           "    type Resistance = Real(final quantity = \"Resistance\", final unit = \"Ohm\", min = 0);\n"
+                           "  end SI;\n  record Salient\n    replaceable Real d \"d-axis\";\n"
+                           "    replaceable Real q \"q-axis\";\n  end Salient;\n"
+                           "  record SalientInductance = Salient(redeclare SI.Inductance d, redeclare SI.Inductance q) \"Salient inductance\";\n"
+                           "  record SalientResistance = Salient(redeclare SI.Resistance d(start = 2), redeclare SI.Resistance q);\n"
+                           "  parameter SalientResistance R(d = 1, q = 5);\nend RS7;\n"),
+               std::string("class RS7\n"
+                           "  parameter Real R.d(quantity = \"Resistance\", unit = \"Ohm\", min = 0.0, start = 2.0) = 1.0 \"d-axis\";\n"
+                           "  parameter Real R.q(quantity = \"Resistance\", unit = \"Ohm\", min = 0.0) = 5.0 \"q-axis\";\n"
+                           "end RS7;\n"));
+  YMC_CHECK_EQ(flatten_src("model RS8\n  package SI\n"
+                           "    type Inductance = Real(final quantity = \"Inductance\", final unit = \"H\");\n"
+                           "    type Resistance = Real(final quantity = \"Resistance\", final unit = \"Ohm\", min = 0);\n"
+                           "  end SI;\n  record Salient\n    replaceable Real d \"d-axis\";\n"
+                           "    replaceable Real q \"q-axis\";\n  end Salient;\n"
+                           "  record SalientInductance = Salient(redeclare SI.Inductance d, redeclare SI.Inductance q) \"Salient inductance\";\n"
+                           "  record SL2 = SalientInductance(d(start = 3));\n  parameter SL2 L(d = 1, q = 2);\nend RS8;\n"),
+               std::string("class RS8\n"
+                           "  parameter Real L.d(quantity = \"Inductance\", unit = \"H\", start = 3.0) = 1.0 \"d-axis\";\n"
+                           "  parameter Real L.q(quantity = \"Inductance\", unit = \"H\") = 2.0 \"q-axis\";\nend RS8;\n"));
+}
+
+YMC_TEST(flatten_operator_record_constructor) {
+  // operator record（MSL Complex 一类）：`C(…)` 调的是 'constructor' 里的函数（压平名 `C.'constructor'.fromReal`，缺省补齐、
+  // 实参提 Real），实参全是常量的求值成记录式 `C(1.0, 2.0)`；引用到这个记录类型就打它整个函数缓存（默认构造函数 + fromReal）。
+  // 短类连接器别名 `connector CO = output C` 的组件按连接器（方向、connect 按字段声明序），记录类型是别名本身（只有默认
+  // 构造函数 `CO`）；operator record 别名 `P.CV` 的构造 / 缓存按别名的路径。参数绑定照返回记录的函数调用：常量实参的求值成
+  // 字段，参数实参的挪成初始方程（fixed = false）；没有 'constructor' 的照普通记录构造（ORU3）。
+  // 期望 = omc 1.25.0 实跑（2026-10-08，rp62x SPEC OR1-OR5 / OR13）。
+  YMC_CHECK_EQ(flatten_src("operator record C \"complex-like\"\n  Real re \"real part\";\n  Real im \"imaginary part\";\n"
+                           "  encapsulated operator 'constructor'\n    function fromReal \"from reals\"\n      import C;\n"
+                           "      input Real re \"re in\";\n      input Real im = 0 \"im in\";\n"
+                           "      output C result(re = re, im = im) \"result\";\n    algorithm\n"
+                           "      annotation(Inline = true);\n    end fromReal;\n  end 'constructor';\nend C;\n"
+                           "connector CO = output C \"out\";\nconnector CI = input C \"in\";\nmodel ORU1\n"
+                           "  CO y \"y comment\";\n  CI u;\n  C c = C(time, 1);\n  C d;\nequation\n  connect(y, u);\n"
+                           "  y = C(2 * time);\n  d = C(1, 2);\nend ORU1;\n"),
+               std::string("function C \"Automatically generated record constructor for C\"\n  input Real re;\n"
+                           "  input Real im;\n  output C res;\nend C;\n\nfunction C.'constructor'.fromReal \"from reals\"\n"
+                           "  input Real re \"re in\";\n  input Real im = 0.0 \"im in\";\n  output C result \"result\";\n"
+                           "algorithm\nend C.'constructor'.fromReal;\n\n"
+                           "function CO \"Automatically generated record constructor for CO\"\n  input Real re;\n"
+                           "  input Real im;\n  output CO res;\nend CO;\n\nclass ORU1\n  output Real y.re \"real part\";\n"
+                           "  output Real y.im \"imaginary part\";\n  input Real u.re \"real part\";\n"
+                           "  input Real u.im \"imaginary part\";\n  Real c.re \"real part\";\n  Real c.im \"imaginary part\";\n"
+                           "  Real d.re \"real part\";\n  Real d.im \"imaginary part\";\nequation\n  y.re = u.re;\n"
+                           "  y.im = u.im;\n  c = C.'constructor'.fromReal(time, 1.0);\n"
+                           "  y = C.'constructor'.fromReal(2.0 * time, 0.0);\n  d = C(1.0, 2.0);\nend ORU1;\n"));
+  YMC_CHECK_EQ(flatten_src("operator record C \"complex-like\"\n  Real re \"real part\";\n  Real im \"imaginary part\";\n"
+                           "  encapsulated operator 'constructor'\n    function fromReal \"from reals\"\n      import C;\n"
+                           "      input Real re \"re in\";\n      input Real im = 0 \"im in\";\n"
+                           "      output C result(re = re, im = im) \"result\";\n    algorithm\n"
+                           "      annotation(Inline = true);\n    end fromReal;\n  end 'constructor';\nend C;\nmodel ORU2\n"
+                           "  parameter Real r = 2;\n  parameter C p = C(r, 2 * r);\n  parameter C q = C(3);\n"
+                           "  constant C k = C(1, 2);\n  Real x = k.im * time;\nend ORU2;\n"),
+               std::string("function C \"Automatically generated record constructor for C\"\n  input Real re;\n"
+                           "  input Real im;\n  output C res;\nend C;\n\nfunction C.'constructor'.fromReal \"from reals\"\n"
+                           "  input Real re \"re in\";\n  input Real im = 0.0 \"im in\";\n  output C result \"result\";\n"
+                           "algorithm\nend C.'constructor'.fromReal;\n\nclass ORU2\n  parameter Real r = 2.0;\n"
+                           "  parameter Real p.re(fixed = false) \"real part\";\n"
+                           "  parameter Real p.im(fixed = false) \"imaginary part\";\n"
+                           "  parameter Real q.re = 3.0 \"real part\";\n  parameter Real q.im = 0.0 \"imaginary part\";\n"
+                           "  constant Real k.re = 1.0 \"real part\";\n  constant Real k.im = 2.0 \"imaginary part\";\n"
+                           "  Real x = 2.0 * time;\ninitial equation\n  p = C.'constructor'.fromReal(r, 2.0 * r);\nend ORU2;\n"));
+  YMC_CHECK_EQ(flatten_src("operator record OR \"no constructor\"\n  Real a;\n  Real b = 2;\nend OR;\nmodel ORU3\n  OR r1;\n"
+                           "  OR r2;\nequation\n  r1 = OR(time, 1);\n  r2 = OR(a = time);\nend ORU3;\n"),
+               std::string("function OR \"Automatically generated record constructor for OR\"\n  input Real a;\n"
+                           "  input Real b = 2.0;\n  output OR res;\nend OR;\n\nclass ORU3\n  Real r1.a;\n  Real r1.b = 2.0;\n"
+                           "  Real r2.a;\n  Real r2.b = 2.0;\nequation\n  r1 = OR(time, 1.0);\n  r2 = OR(time, 2.0);\n"
+                           "end ORU3;\n"));
+  YMC_CHECK_EQ(flatten_src("operator record C \"complex-like\"\n  replaceable Real re \"real part\";\n"
+                           "  replaceable Real im \"imaginary part\";\n  encapsulated operator 'constructor'\n"
+                           "    function fromReal \"from reals\"\n      import C;\n      input Real re \"re in\";\n"
+                           "      input Real im = 0 \"im in\";\n      output C result(re = re, im = im) \"result\";\n"
+                           "    algorithm\n      annotation(Inline = true);\n    end fromReal;\n  end 'constructor';\nend C;\n"
+                           "package P\n  type Voltage = Real(quantity = \"V\", unit = \"V\");\n"
+                           "  operator record CV = C(redeclare Voltage re, redeclare Voltage im) \"voltage\";\n"
+                           "  record R2 = C;\nend P;\nmodel ORU4\n  P.CV v;\n  P.CV w;\n  P.R2 z;\n  C c;\nequation\n"
+                           "  v = P.CV(time);\n  w = c;\n  z.re = time;\n  z.im = 0;\n  c = C(1, time);\nend ORU4;\n"),
+               std::string("function C \"Automatically generated record constructor for C\"\n  input Real re;\n"
+                           "  input Real im;\n  output C res;\nend C;\n\nfunction C.'constructor'.fromReal \"from reals\"\n"
+                           "  input Real re \"re in\";\n  input Real im = 0.0 \"im in\";\n  output C result \"result\";\n"
+                           "algorithm\nend C.'constructor'.fromReal;\n\n"
+                           "function P.CV \"Automatically generated record constructor for P.CV\"\n  input Real re;\n"
+                           "  input Real im;\n  output CV res;\nend P.CV;\n\n"
+                           "function P.CV.'constructor'.fromReal \"from reals\"\n  input Real re \"re in\";\n"
+                           "  input Real im = 0.0 \"im in\";\n  output C result \"result\";\nalgorithm\n"
+                           "end P.CV.'constructor'.fromReal;\n\nclass ORU4\n"
+                           "  Real v.re(quantity = \"V\", unit = \"V\") \"real part\";\n"
+                           "  Real v.im(quantity = \"V\", unit = \"V\") \"imaginary part\";\n"
+                           "  Real w.re(quantity = \"V\", unit = \"V\") \"real part\";\n"
+                           "  Real w.im(quantity = \"V\", unit = \"V\") \"imaginary part\";\n  Real z.re \"real part\";\n"
+                           "  Real z.im \"imaginary part\";\n  Real c.re \"real part\";\n  Real c.im \"imaginary part\";\n"
+                           "equation\n  v = P.CV.'constructor'.fromReal(time, 0.0);\n  w = c;\n  z.re = time;\n  z.im = 0.0;\n"
+                           "  c = C.'constructor'.fromReal(1.0, time);\nend ORU4;\n"));
+}
+
 YMC_TEST_MAIN

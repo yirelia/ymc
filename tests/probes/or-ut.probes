@@ -1,0 +1,94 @@
+//// set: or-ut — operator record 构造 / 函数缓存 / 连接器别名（单测原文，本地 operator record，不依赖 MSL）
+//// model: ORU1
+operator record C "complex-like"
+  Real re "real part";
+  Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import C;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output C result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+end C;
+connector CO = output C "out";
+connector CI = input C "in";
+model ORU1
+  CO y "y comment";
+  CI u;
+  C c = C(time, 1);
+  C d;
+equation
+  connect(y, u);
+  y = C(2 * time);
+  d = C(1, 2);
+end ORU1;
+//// model: ORU2
+operator record C "complex-like"
+  Real re "real part";
+  Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import C;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output C result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+end C;
+model ORU2
+  parameter Real r = 2;
+  parameter C p = C(r, 2 * r);
+  parameter C q = C(3);
+  constant C k = C(1, 2);
+  Real x = k.im * time;
+end ORU2;
+//// model: ORU3
+operator record OR "no constructor"
+  Real a;
+  Real b = 2;
+end OR;
+model ORU3
+  OR r1;
+  OR r2;
+equation
+  r1 = OR(time, 1);
+  r2 = OR(a = time);
+end ORU3;
+//// model: ORU4
+operator record C "complex-like"
+  replaceable Real re "real part";
+  replaceable Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import C;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output C result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+end C;
+package P
+  type Voltage = Real(quantity = "V", unit = "V");
+  operator record CV = C(redeclare Voltage re, redeclare Voltage im) "voltage";
+  record R2 = C;
+end P;
+model ORU4
+  P.CV v;
+  P.CV w;
+  P.R2 z;
+  C c;
+equation
+  v = P.CV(time);
+  w = c;
+  z.re = time;
+  z.im = 0;
+  c = C(1, time);
+end ORU4;

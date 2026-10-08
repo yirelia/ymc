@@ -635,5 +635,8 @@
 "FuncBuiltinNoClock1.mo",
 "FuncBuiltinShiftSample1.mo",
 "FuncBuiltinSubSample2.mo",
-"FuncBuiltinSuperSample2.mo"
+"FuncBuiltinSuperSample2.mo",
+"BindingArray7.mo",
+"ConnectComplexFlow1.mo",
+"OperatorOverloadConstructorDefault1.mo"
 ]

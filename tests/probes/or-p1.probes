@@ -1,0 +1,1372 @@
+//// set: or-p1 — operator record（MSL Complex 及其别名 SI.Complex* / ComplexInput / ComplexOutput）：变量 / 字段注释与属性、构造调用 `Complex(…)` → `Complex.'constructor'.fromReal(…)`（常量实参求值成记录式）、记录类型的函数缓存（默认构造函数 + 'constructor'，别名按别名路径）、绑定（求值 / 挪成方程）、短类连接器别名的 connect；运算符重载、强制内联等仍 SKIP（rp62x SPEC 的全部 149 个探针）
+//// model: a01_var
+model a01_var
+  Complex c "my complex";
+equation
+  c.re = time;
+  c.im = 1;
+end a01_var;
+//// model: a02_param_lit
+model a02_param_lit
+  parameter Complex p = Complex(1, 2) "param";
+end a02_param_lit;
+//// model: a03_param_mod
+model a03_param_mod
+  parameter Complex p(re = 1, im = 2);
+end a03_param_mod;
+//// model: a04_param_onearg
+model a04_param_onearg
+  parameter Complex p = Complex(3);
+end a04_param_onearg;
+//// model: a05_param_expr
+model a05_param_expr
+  parameter Real r = 2;
+  parameter Complex p = Complex(r, 2*r);
+end a05_param_expr;
+//// model: a06_cont_binding
+model a06_cont_binding
+  Complex c = Complex(time, 0);
+end a06_cont_binding;
+//// model: a07_constant
+model a07_constant
+  constant Complex k = Complex(1, 2);
+  Real x = k.re;
+  Real y = k.im * time;
+end a07_constant;
+//// model: a08_io_connectors
+connector CI = input Complex "ci";
+connector CO = output Complex "co";
+model a08_io_connectors
+  CI u;
+  CO y;
+equation
+  y = u;
+end a08_io_connectors;
+//// model: a09_connect_io
+connector CI = input Complex "ci";
+connector CO = output Complex "co";
+model Src
+  CO y;
+equation
+  y = Complex(time, 2*time);
+end Src;
+model Snk
+  CI u;
+  Real r;
+equation
+  r = u.re + u.im;
+end Snk;
+model a09_connect_io
+  Src a;
+  Snk b;
+equation
+  connect(a.y, b.u);
+end a09_connect_io;
+//// model: a10_flow_pin
+connector Pin
+  Complex v;
+  flow Complex i;
+end Pin;
+model R
+  Pin p, n;
+  parameter Real Rv = 1;
+equation
+  p.v - n.v = Rv * p.i;
+  p.i + n.i = Complex(0);
+end R;
+model G
+  Pin p;
+equation
+  p.v = Complex(0);
+end G;
+model a10_flow_pin
+  R r1, r2;
+  G g;
+equation
+  connect(r1.n, r2.p);
+  connect(r2.n, g.p);
+  connect(r1.p, g.p);
+end a10_flow_pin;
+//// model: a11_alias_fields
+operator record CV = Complex(redeclare Modelica.Units.SI.Voltage re "re of CV", redeclare Modelica.Units.SI.Voltage im "im of CV") "cv alias";
+model a11_alias_fields
+  CV v "a voltage";
+equation
+  v = Complex(time, 0);
+end a11_alias_fields;
+//// model: a12_field_attr_mods
+model a12_field_attr_mods
+  Complex c(re(start = 1, fixed = true), im(start = 2)) "with attrs";
+equation
+  der(c.re) = -c.re;
+  c.im = time;
+end a12_field_attr_mods;
+//// model: a13_array_var
+model a13_array_var
+  Complex z[2];
+equation
+  z[1] = Complex(time, 1);
+  z[2] = z[1];
+end a13_array_var;
+//// model: a14_array_param
+model a14_array_param
+  parameter Complex z[2] = {Complex(1, 2), Complex(3, 4)};
+end a14_array_param;
+//// model: a15_toplevel_io
+model a15_toplevel_io
+  input Complex u;
+  output Complex y;
+equation
+  y = u;
+end a15_toplevel_io;
+//// model: a16_protected
+model a16_protected
+  Real x;
+protected
+  Complex c;
+equation
+  c = Complex(time, 1);
+  x = c.re;
+end a16_protected;
+//// model: a17_field_binding_mod
+model a17_field_binding_mod
+  Complex c(re = time, im = 2);
+end a17_field_binding_mod;
+//// model: a18_param_from_param
+model a18_param_from_param
+  parameter Complex a = Complex(1, 2);
+  parameter Complex b = a;
+end a18_param_from_param;
+//// model: a19_final_param
+model a19_final_param
+  final parameter Complex a = Complex(1, 2);
+  parameter Complex b(re = 3) = Complex(1, 2);
+end a19_final_param;
+//// model: a20_nested_record
+record Rec
+  Complex z "z comment";
+  Real w;
+end Rec;
+model a20_nested_record
+  Rec r;
+equation
+  r.z = Complex(time, 1);
+  r.w = 3;
+end a20_nested_record;
+//// model: b01_ctor_lit
+model b01_ctor_lit
+  Complex c;
+equation
+  c = Complex(1, 2);
+end b01_ctor_lit;
+//// model: b02_ctor_time
+model b02_ctor_time
+  Complex c;
+equation
+  c = Complex(time, 2);
+end b02_ctor_time;
+//// model: b03_ctor_onearg
+model b03_ctor_onearg
+  Complex c;
+equation
+  c = Complex(time);
+end b03_ctor_onearg;
+//// model: b04_ctor_named
+model b04_ctor_named
+  Complex c;
+  Complex d;
+equation
+  c = Complex(re = time, im = 1);
+  d = Complex(im = time, re = 3);
+end b04_ctor_named;
+//// model: b05_ctor_const_onearg
+model b05_ctor_const_onearg
+  Complex c;
+equation
+  c = Complex(1);
+end b05_ctor_const_onearg;
+//// model: b06_ctor_param
+model b06_ctor_param
+  parameter Real p = 2;
+  Complex c;
+equation
+  c = Complex(p, p);
+end b06_ctor_param;
+//// model: b07_noctor_oprec
+operator record OR
+  Real a "a field";
+  Real b "b field";
+  encapsulated operator function '+'
+    import OR;
+    input OR x;
+    input OR y;
+    output OR z;
+  algorithm
+    z := OR(x.a + y.a, x.b + y.b);
+  end '+';
+end OR;
+model b07_noctor_oprec
+  OR r1, r2, r3;
+equation
+  r1 = OR(time, 1);
+  r2 = OR(1, 2);
+  r3 = r1 + r2;
+end b07_noctor_oprec;
+//// model: b08_two_ctors
+operator record C2
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    function fromReal
+      import C2;
+      input Real re;
+      input Real im = 0;
+      output C2 result(re = re, im = im);
+    algorithm
+    end fromReal;
+    function fromInt "from int"
+      import C2;
+      input Integer k;
+      output C2 result(re = k, im = -k);
+    algorithm
+    end fromInt;
+  end 'constructor';
+end C2;
+model b08_two_ctors
+  C2 a, b, c;
+  Integer n = integer(time);
+equation
+  a = C2(time, 2);
+  b = C2(n);
+  c = C2(3);
+end b08_two_ctors;
+//// model: b09_ctor_in_func
+function f
+  input Real x;
+  output Complex y;
+algorithm
+  y := Complex(x, 2*x);
+end f;
+model b09_ctor_in_func
+  Complex c;
+equation
+  c = f(time);
+end b09_ctor_in_func;
+//// model: b10_alias_ctor
+model b10_alias_ctor
+  Modelica.Units.SI.ComplexVoltage v;
+  Modelica.Units.SI.ComplexVoltage w;
+equation
+  v = Modelica.Units.SI.ComplexVoltage(time, 1);
+  w = Modelica.Units.SI.ComplexVoltage(1, 2);
+end b10_alias_ctor;
+//// model: b11_eval_func_constarg
+model b11_eval_func_constarg
+  Real x = Modelica.ComplexMath.abs(Complex(3, 4));
+  Real y;
+equation
+  y = Modelica.ComplexMath.real(Complex(5, 6)) * time;
+end b11_eval_func_constarg;
+//// model: b12_ctor_ctor_output_binding
+operator record C3
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    function fromReal
+      import C3;
+      input Real re;
+      input Real im = 0;
+      output C3 result = C3(re = re, im = im);
+    algorithm
+    end fromReal;
+  end 'constructor';
+end C3;
+model b12_ctor_ctor_output_binding
+  C3 a, b;
+equation
+  a = C3(time, 2);
+  b = C3(1, 2);
+end b12_ctor_ctor_output_binding;
+//// model: b13_ctor_with_body
+operator record C4
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    function fromReal
+      import C4;
+      input Real re;
+      input Real im = 0;
+      output C4 result;
+    algorithm
+      result.re := re;
+      result.im := im;
+    end fromReal;
+  end 'constructor';
+end C4;
+model b13_ctor_with_body
+  C4 a, b;
+equation
+  a = C4(time, 2);
+  b = C4(1, 2);
+end b13_ctor_with_body;
+//// model: b14_ctor_integer_arg
+model b14_ctor_integer_arg
+  Integer n = integer(time);
+  Complex c;
+equation
+  c = Complex(n, 1);
+end b14_ctor_integer_arg;
+//// model: c01_add
+model c01_add
+  Complex c1, c2, c3;
+equation
+  c1 = Complex(time, 1);
+  c2 = Complex(2, time);
+  c3 = c1 + c2;
+end c01_add;
+//// model: c02_sub
+model c02_sub
+  Complex c1, c2, c3;
+equation
+  c1 = Complex(time, 1);
+  c2 = Complex(2, time);
+  c3 = c1 - c2;
+end c02_sub;
+//// model: c03_neg
+model c03_neg
+  Complex c1, c3;
+equation
+  c1 = Complex(time, 1);
+  c3 = -c1;
+end c03_neg;
+//// model: c04_mul
+model c04_mul
+  Complex c1, c2, c3;
+equation
+  c1 = Complex(time, 1);
+  c2 = Complex(2, time);
+  c3 = c1 * c2;
+end c04_mul;
+//// model: c05_mul_real_right
+model c05_mul_real_right
+  Complex c1, c3;
+  Real r = time;
+equation
+  c1 = Complex(time, 1);
+  c3 = c1 * r;
+end c05_mul_real_right;
+//// model: c06_mul_real_left
+model c06_mul_real_left
+  Complex c1, c3;
+  Real r = time;
+equation
+  c1 = Complex(time, 1);
+  c3 = r * c1;
+end c06_mul_real_left;
+//// model: c07_div
+model c07_div
+  Complex c1, c2, c3;
+equation
+  c1 = Complex(time, 1);
+  c2 = Complex(2, time);
+  c3 = c1 / c2;
+end c07_div;
+//// model: c08_pow_int
+model c08_pow_int
+  Complex c1, c3;
+equation
+  c1 = Complex(time, 1);
+  c3 = c1 ^ 2;
+end c08_pow_int;
+//// model: c09_eq
+model c09_eq
+  Complex c1, c2;
+  Boolean b;
+equation
+  c1 = Complex(time, 1);
+  c2 = Complex(2, time);
+  b = c1 == c2;
+end c09_eq;
+//// model: c10_neq
+model c10_neq
+  Complex c1, c2;
+  Boolean b;
+equation
+  c1 = Complex(time, 1);
+  c2 = Complex(2, time);
+  b = c1 <> c2;
+end c10_neq;
+//// model: c11_add_int_lit
+model c11_add_int_lit
+  Complex c1, c3;
+equation
+  c1 = Complex(time, 1);
+  c3 = c1 + 1;
+end c11_add_int_lit;
+//// model: c12_mul_real_lit_left
+model c12_mul_real_lit_left
+  Complex c1, c3;
+equation
+  c1 = Complex(time, 1);
+  c3 = 2 * c1;
+end c12_mul_real_lit_left;
+//// model: c13_const_fold
+model c13_const_fold
+  constant Complex a = Complex(1, 2);
+  constant Complex b = Complex(3, 4);
+  Complex c;
+  Complex d;
+equation
+  c = a * b;
+  d = a + b * Complex(time, 0);
+end c13_const_fold;
+//// model: c14_param_operands
+model c14_param_operands
+  parameter Complex a = Complex(1, 2);
+  parameter Complex b = Complex(3, 4);
+  Complex c;
+equation
+  c = a * b;
+end c14_param_operands;
+//// model: c15_param_binding_op
+model c15_param_binding_op
+  parameter Complex a = Complex(1, 2);
+  parameter Complex b = Complex(3, 4);
+  parameter Complex c = a * b;
+  parameter Real r = 2;
+  parameter Complex d = a * r;
+equation
+
+end c15_param_binding_op;
+//// model: c16_chain
+model c16_chain
+  Complex c1, c2, c3, c4;
+equation
+  c1 = Complex(time, 1);
+  c2 = Complex(2, time);
+  c3 = Complex(time, time);
+  c4 = c1 + c2 * c3 - c1 / c2;
+end c16_chain;
+//// model: c17_j_chain
+model c17_j_chain
+  import Modelica.ComplexMath.j;
+  Real omega = time;
+  parameter Real L = 2;
+  Complex i, v;
+equation
+  i = Complex(time, 1);
+  v = j * omega * L * i;
+end c17_j_chain;
+//// model: c18_ew_mul
+model c18_ew_mul
+  Complex c1, c2, c3;
+equation
+  c1 = Complex(time, 1);
+  c2 = Complex(2, time);
+  c3 = c1 .* c2;
+end c18_ew_mul;
+//// model: c19_unary_plus
+model c19_unary_plus
+  Complex c1, c3;
+equation
+  c1 = Complex(time, 1);
+  c3 = +c1;
+end c19_unary_plus;
+//// model: c20_div_real
+model c20_div_real
+  Complex c1, c3;
+  Real r = time + 1;
+equation
+  c1 = Complex(time, 1);
+  c3 = c1 / r;
+end c20_div_real;
+//// model: c21_sub_real_left
+model c21_sub_real_left
+  Complex c1, c3;
+equation
+  c1 = Complex(time, 1);
+  c3 = 1 - c1;
+end c21_sub_real_left;
+//// model: c22_pow_real
+model c22_pow_real
+  Complex c1, c3;
+  Real r = time;
+equation
+  c1 = Complex(time, 1);
+  c3 = c1 ^ r;
+end c22_pow_real;
+//// model: c23_eq_real
+model c23_eq_real
+  Complex c1;
+  Boolean b;
+equation
+  c1 = Complex(time, 1);
+  b = c1 == 1;
+end c23_eq_real;
+//// model: c24_string
+model c24_string
+  Complex c1;
+  String s;
+equation
+  c1 = Complex(time, 1);
+  s = String(c1);
+end c24_string;
+//// model: c25_neg_const
+model c25_neg_const
+  constant Complex a = Complex(1, 2);
+  Complex c;
+equation
+  c = -a;
+end c25_neg_const;
+//// model: c26_mul_int_var
+model c26_mul_int_var
+  Integer n = integer(time);
+  Complex c1, c3;
+equation
+  c1 = Complex(time, 1);
+  c3 = c1 * n;
+end c26_mul_int_var;
+//// model: d01_two_aliases
+model d01_two_aliases
+  Modelica.Units.SI.ComplexVoltage v1, v2, v3;
+  Modelica.Units.SI.ComplexCurrent i1, i2, i3;
+equation
+  v1 = Complex(time, 1);
+  v2 = Complex(1, time);
+  i1 = Complex(time, 2);
+  i2 = Complex(2, time);
+  v3 = v1 * v2;
+  i3 = i1 * i2;
+end d01_two_aliases;
+//// model: d02_record_alias
+record R2 = Complex;
+model d02_record_alias
+  R2 a, b, c;
+equation
+  a = Complex(time, 1);
+  b = Complex(1, time);
+  c = a * b;
+end d02_record_alias;
+//// model: d03_oprec_alias
+operator record C2 = Complex "my alias";
+model d03_oprec_alias
+  C2 a, b, c;
+equation
+  a = Complex(time, 1);
+  b = C2(1, time);
+  c = a * b;
+end d03_oprec_alias;
+//// model: d04_alias_of_alias
+operator record C2 = Complex;
+operator record C3 = C2;
+model d04_alias_of_alias
+  C3 a, b, c;
+equation
+  a = Complex(time, 1);
+  b = C3(1, time);
+  c = a + b;
+end d04_alias_of_alias;
+//// model: d05_local_alias
+model d05_local_alias
+  operator record CC = Complex;
+  CC a, b, c;
+equation
+  a = Complex(time, 1);
+  b = Complex(1, time);
+  c = a - b;
+end d05_local_alias;
+//// model: d06_extends_oprec
+operator record C4
+  extends Complex;
+end C4;
+model d06_extends_oprec
+  C4 a, b, c;
+equation
+  a = Complex(time, 1);
+  b = Complex(1, time);
+  c = a * b;
+end d06_extends_oprec;
+//// model: d07_conn_input_op
+model d07_conn_input_op
+  Modelica.ComplexBlocks.Interfaces.ComplexInput u;
+  Modelica.ComplexBlocks.Interfaces.ComplexOutput y;
+  parameter Complex k = Complex(1, 2);
+equation
+  y = u * 2 + k * u;
+end d07_conn_input_op;
+//// model: d08_mixed_alias
+model d08_mixed_alias
+  Modelica.Units.SI.ComplexVoltage v;
+  Modelica.Units.SI.ComplexCurrent i;
+  Modelica.Units.SI.ComplexPower s1, s2;
+equation
+  v = Complex(time, 1);
+  i = Complex(2, time);
+  s1 = v * i;
+  s2 = i * v;
+end d08_mixed_alias;
+//// model: d09_plain_then_alias
+model d09_plain_then_alias
+  Complex c;
+  Modelica.Units.SI.ComplexCurrent i;
+  Complex s;
+equation
+  c = Complex(time, 1);
+  i = Complex(2, time);
+  s = c * i;
+end d09_plain_then_alias;
+//// model: d10_real_alias
+model d10_real_alias
+  Real r = time;
+  Modelica.Units.SI.ComplexCurrent i;
+  Complex s, t;
+equation
+  i = Complex(2, time);
+  s = r * i;
+  t = i * r;
+end d10_real_alias;
+//// model: d11_neg_alias
+model d11_neg_alias
+  Modelica.Units.SI.ComplexVoltage v, w;
+equation
+  v = Complex(time, 1);
+  w = -v;
+end d11_neg_alias;
+//// model: d12_result_type_chain
+model d12_result_type_chain
+  Modelica.Units.SI.ComplexVoltage v1, v2;
+  Modelica.Units.SI.ComplexCurrent i;
+  Complex s;
+equation
+  v1 = Complex(time, 1);
+  v2 = Complex(1, time);
+  i = Complex(2, time);
+  s = (v1 + v2) * i;
+end d12_result_type_chain;
+//// model: d13_import_alias
+model d13_import_alias
+  import SI = Modelica.Units.SI;
+  SI.ComplexCurrent i1, i2, i3;
+equation
+  i1 = Complex(time, 1);
+  i2 = Complex(1, time);
+  i3 = i1 + i2;
+end d13_import_alias;
+//// model: d14_conn_both_inputs
+model d14_conn_both_inputs
+  Modelica.ComplexBlocks.Interfaces.ComplexInput u1, u2;
+  Modelica.ComplexBlocks.Interfaces.ComplexOutput y;
+equation
+  y = u1 * u2;
+end d14_conn_both_inputs;
+//// model: d15_alias_array
+model d15_alias_array
+  Modelica.Units.SI.ComplexVoltage v[2];
+  Complex s;
+equation
+  v[1] = Complex(time, 1);
+  v[2] = Complex(1, time);
+  s = v[1] * v[2];
+end d15_alias_array;
+//// model: d16_alias_field_mod
+operator record CQ = Complex(re(unit = "A"), im(unit = "A"));
+model d16_alias_field_mod
+  CQ a, b;
+equation
+  a = Complex(time, 1);
+  b = a * a;
+end d16_alias_field_mod;
+//// model: d17_comp_in_submodel
+model Sub
+  Modelica.Units.SI.ComplexCurrent i;
+  Modelica.Units.SI.ComplexVoltage v;
+  parameter Modelica.Units.SI.ComplexImpedance Z = Complex(1, 2);
+equation
+  v = Z * i;
+  i = Complex(time, 0);
+end Sub;
+model d17_comp_in_submodel
+  Sub s1, s2;
+end d17_comp_in_submodel;
+//// model: e01_rec_eq_mul_real
+model e01_rec_eq_mul_real
+  Real x = time;
+  Complex c;
+equation
+  c = Complex(1, 2) * x;
+end e01_rec_eq_mul_real;
+//// model: e02_initial_eq
+model e02_initial_eq
+  Complex c;
+initial equation
+  c = Complex(1, 2);
+equation
+  der(c.re) = -c.re;
+  der(c.im) = -c.im;
+end e02_initial_eq;
+//// model: e03_if_expr
+model e03_if_expr
+  Complex c1, c2, c;
+equation
+  c1 = Complex(time, 1);
+  c2 = Complex(1, time);
+  c = if time > 0.5 then c1 else c2;
+end e03_if_expr;
+//// model: e04_if_eq
+model e04_if_eq
+  Complex c;
+equation
+  if time > 0.5 then
+    c = Complex(time, 1);
+  else
+    c = Complex(1, 2);
+  end if;
+end e04_if_eq;
+//// model: e05_der_record
+model e05_der_record
+  Complex c(re(start = 1), im(start = 0));
+equation
+  der(c) = Complex(-c.re, -c.im);
+end e05_der_record;
+//// model: e06_array_ops
+model e06_array_ops
+  Complex z[2];
+  Complex s;
+equation
+  z[1] = Complex(time, 1);
+  z[2] = z[1] * z[1];
+  s = z[1] + z[2];
+end e06_array_ops;
+//// model: e07_complexmath_funcs
+model e07_complexmath_funcs
+  Complex c;
+  Real a, p, r, i;
+  Complex cc, fp, ex;
+equation
+  c = Complex(time, 1);
+  a = Modelica.ComplexMath.abs(c);
+  p = Modelica.ComplexMath.arg(c);
+  r = Modelica.ComplexMath.real(c);
+  i = Modelica.ComplexMath.imag(c);
+  cc = Modelica.ComplexMath.conj(c);
+  fp = Modelica.ComplexMath.fromPolar(time, 1);
+  ex = Modelica.ComplexMath.exp(c);
+end e07_complexmath_funcs;
+//// model: e08_for_eq
+model e08_for_eq
+  Complex z[3];
+equation
+  for k in 1:3 loop
+    z[k] = Complex(k * time, k);
+  end for;
+end e08_for_eq;
+//// model: e09_user_func
+function sq
+  input Complex a;
+  output Complex b;
+algorithm
+  b := a * a + Complex(1, 0);
+end sq;
+model e09_user_func
+  Complex c, d;
+equation
+  c = Complex(time, 1);
+  d = sq(c);
+end e09_user_func;
+//// model: e10_algorithm
+model e10_algorithm
+  Complex c, d;
+algorithm
+  c := Complex(time, 1);
+  d := c * c;
+end e10_algorithm;
+//// model: e11_rec_eq_vars
+model e11_rec_eq_vars
+  Complex c1, c2;
+equation
+  c1 = Complex(time, 1);
+  c2 = c1;
+end e11_rec_eq_vars;
+//// model: e12_field_access_of_call
+model e12_field_access_of_call
+  Complex c1, c2;
+  Real y, z;
+equation
+  c1 = Complex(time, 1);
+  c2 = Complex(1, time);
+  y = Modelica.ComplexMath.real(c1 * c2);
+  z = c1.re * c2.im;
+end e12_field_access_of_call;
+//// model: e13_when
+model e13_when
+  discrete Complex c;
+equation
+  when time > 0.5 then
+    c = Complex(time, 1);
+  end when;
+end e13_when;
+//// model: e14_binding_op_continuous
+model e14_binding_op_continuous
+  Complex c1 = Complex(time, 1);
+  Complex c2 = c1 * c1;
+  Real r = Modelica.ComplexMath.abs(c2);
+end e14_binding_op_continuous;
+//// model: e15_sum_complex
+model e15_sum_complex
+  Complex z[2];
+  Complex s;
+equation
+  z[1] = Complex(time, 1);
+  z[2] = Complex(1, time);
+  s = sum(z);
+end e15_sum_complex;
+//// model: e16_scalar_product
+model e16_scalar_product
+  Complex z1[2], z2[2];
+  Complex s;
+equation
+  z1[1] = Complex(time, 1);
+  z1[2] = Complex(1, time);
+  z2[1] = Complex(2, time);
+  z2[2] = Complex(time, 2);
+  s = z1 * z2;
+end e16_scalar_product;
+//// model: e17_array_add
+model e17_array_add
+  Complex z1[2], z2[2], z3[2];
+equation
+  z1[1] = Complex(time, 1);
+  z1[2] = Complex(1, time);
+  z2[1] = Complex(2, time);
+  z2[2] = Complex(time, 2);
+  z3 = z1 + z2;
+end e17_array_add;
+//// model: e18_array_scalar_mul
+model e18_array_scalar_mul
+  Complex z1[2], z3[2];
+  Complex k;
+equation
+  z1[1] = Complex(time, 1);
+  z1[2] = Complex(1, time);
+  k = Complex(2, time);
+  z3 = k * z1;
+end e18_array_scalar_mul;
+//// model: e19_array_eq_whole
+model e19_array_eq_whole
+  Complex z1[2], z2[2];
+equation
+  z1 = {Complex(time, 1), Complex(1, time)};
+  z2 = z1;
+end e19_array_eq_whole;
+//// model: e20_noretcall_assert
+model e20_noretcall_assert
+  Complex c;
+equation
+  c = Complex(time, 1);
+  assert(Modelica.ComplexMath.abs(c) < 10, "too big");
+end e20_noretcall_assert;
+//// model: e21_binding_eq_order
+model Sub
+  Real x;
+  Complex c = Complex(x, 1);
+  Real y;
+equation
+  x = time;
+  y = c.re;
+end Sub;
+model e21_binding_eq_order
+  Real a;
+  Complex d = Complex(a, 2);
+  Sub s;
+  Complex e = d;
+equation
+  a = 2 * time;
+end e21_binding_eq_order;
+//// model: e23_array_binding_cont
+model e23_array_binding_cont
+  Complex c[2] = {Complex(time, 1), Complex(1, time)};
+end e23_array_binding_cont;
+//// model: e24_param_func_const
+model e24_param_func_const
+  parameter Complex p = Modelica.ComplexMath.fromPolar(2, 0);
+  parameter Complex q = Modelica.ComplexMath.conj(Complex(1, 2));
+end e24_param_func_const;
+//// model: e25_param_alias_params
+model e25_param_alias_params
+  import SI = Modelica.Units.SI;
+  parameter SI.Resistance R = 1;
+  parameter SI.Reactance X = 2;
+  parameter SI.ComplexImpedance Z = Complex(R, X);
+  parameter SI.ComplexImpedance Z2 = Complex(1, 2);
+  final parameter SI.ComplexImpedance Z3 = Z;
+end e25_param_alias_params;
+//// model: e26_eval_param_structural
+model e26_eval_param_structural
+  parameter Real R = 1 annotation(Evaluate = true);
+  parameter Complex Z = Complex(R, 2);
+  Complex c;
+equation
+  c = Complex(R, time);
+end e26_eval_param_structural;
+//// model: e27_conditional_record_conn
+connector CI = input Complex;
+model e27_conditional_record_conn
+  parameter Boolean use = false;
+  CI u if use;
+  Complex c;
+equation
+  c = Complex(time, 1);
+end e27_conditional_record_conn;
+//// model: f01_real_comprehension
+model f01_real_comprehension
+  Real x[3];
+  Real y[1];
+equation
+  x = {i * time for i in 1:3};
+  y = {i * time for i in 1:1};
+end f01_real_comprehension;
+//// model: f02_complex_comprehension
+model f02_complex_comprehension
+  Complex z[3];
+  Complex w[1];
+equation
+  z = {Complex(i * time, 0) for i in 1:3};
+  w = {Complex(i * time, 0) for i in 1:1};
+end f02_complex_comprehension;
+//// model: f03_tf_like
+model f03_tf_like
+  import Modelica.ComplexMath.j;
+  parameter Real a[:] = {1, 2, 3};
+  parameter Real b[:] = {1};
+  Real w = time;
+  Complex aw[size(a, 1)];
+  Complex bw[size(b, 1)];
+  Complex aSum;
+equation
+  aw = {a[i] * (j * w) ^ (i - 1) for i in 1:size(a, 1)};
+  bw = {b[i] * (j * w) ^ (i - 1) for i in 1:size(b, 1)};
+  aSum = Complex(sum(aw.re), sum(aw.im));
+end f03_tf_like;
+//// model: g01_ifexp_record_binding
+model g01_ifexp_record_binding
+  parameter Boolean b = false;
+  Complex u = Complex(time, 1);
+  Complex w = if b then Modelica.ComplexMath.conj(u) else u;
+end g01_ifexp_record_binding;
+//// model: g02_ifexp_plain_record_binding
+record PR
+  Real re;
+  Real im;
+end PR;
+function cj
+  input PR x;
+  output PR y;
+algorithm
+  y := PR(x.re, -x.im);
+end cj;
+model g02_ifexp_plain_record_binding
+  parameter Boolean b = false;
+  PR u = PR(time, 1);
+  PR w = if b then cj(u) else u;
+end g02_ifexp_plain_record_binding;
+//// model: g03_ifexp_record_eq
+model g03_ifexp_record_eq
+  parameter Boolean b = false;
+  Complex u, w;
+equation
+  u = Complex(time, 1);
+  w = if b then Modelica.ComplexMath.conj(u) else u;
+end g03_ifexp_record_eq;
+//// model: g04_array_field_cref
+model g04_array_field_cref
+  Complex z[3];
+  Real s, t;
+  Real r[3];
+equation
+  for k in 1:3 loop
+    z[k] = Complex(k * time, k);
+  end for;
+  s = sum(z.re);
+  t = sum(z.im) * 2;
+  r = z.re;
+end g04_array_field_cref;
+//// model: h01_const_alias_binding
+model h01_const_alias_binding
+  constant Modelica.Units.SI.ComplexVoltage cv = Complex(1, 2);
+  Modelica.Units.SI.ComplexVoltage v;
+equation
+  v = cv;
+end h01_const_alias_binding;
+//// model: h02_const_alias_fieldmods
+model h02_const_alias_fieldmods
+  constant Modelica.Units.SI.ComplexVoltage cv(re = 1, im = 2);
+  Modelica.Units.SI.ComplexVoltage v;
+  Complex w;
+equation
+  v = cv;
+  w = cv * Complex(time, 0);
+end h02_const_alias_fieldmods;
+//// model: h03_j_direct
+model h03_j_direct
+  Complex v, w;
+equation
+  v = Modelica.ComplexMath.j;
+  w = Modelica.ComplexMath.j * time;
+end h03_j_direct;
+//// model: h04_const_array_lit
+model h04_const_array_lit
+  constant Complex cz[2] = {Complex(1, 2), Complex(3, 4)};
+  Complex z[2];
+  Complex s;
+equation
+  z = cz;
+  s = cz[1] * Complex(time, 0);
+end h04_const_array_lit;
+//// model: h05_const_plain_complex_fieldmods
+model h05_const_plain_complex_fieldmods
+  constant Complex c(re = 1, im = 2);
+  Complex v;
+equation
+  v = c;
+end h05_const_plain_complex_fieldmods;
+//// model: h06_param_complex_in_eq
+model h06_param_complex_in_eq
+  parameter Complex p(re = 1, im = 2);
+  parameter Modelica.Units.SI.ComplexVoltage pv = Complex(3, 4);
+  Complex v, w;
+equation
+  v = p;
+  w = pv;
+end h06_param_complex_in_eq;
+//// model: h07_conn_type_literal
+model h07_conn_type_literal
+  constant Modelica.ComplexBlocks.Interfaces.ComplexOutput c(re = 1, im = 2);
+  Complex v;
+equation
+  v = c;
+end h07_conn_type_literal;
+//// model: i02_alias_fields_only
+model i02_alias_fields_only
+  Modelica.Units.SI.ComplexVoltage v;
+  Real x;
+equation
+  v.re = time;
+  v.im = 0;
+  x = v.re + v.im;
+end i02_alias_fields_only;
+//// model: i03_alias_connect_only
+connector P
+  Modelica.Units.SI.ComplexVoltage v;
+  flow Modelica.Units.SI.ComplexCurrent i;
+end P;
+model C1
+  P p;
+equation
+  p.v.re = time;
+  p.v.im = 0;
+end C1;
+model C2
+  P p;
+equation
+  p.i.re = 1;
+  p.i.im = 2;
+end C2;
+model i03_alias_connect_only
+  C1 a;
+  C2 b;
+equation
+  connect(a.p, b.p);
+end i03_alias_connect_only;
+//// model: i04_alias_rec_eq_mixed
+model i04_alias_rec_eq_mixed
+  Modelica.Units.SI.ComplexVoltage v;
+  Modelica.Units.SI.ComplexCurrent i;
+equation
+  i.re = time;
+  i.im = 1;
+  v = i;
+end i04_alias_rec_eq_mixed;
+//// model: i05_param_type_of_called_fn
+function f
+  input Modelica.Units.SI.ComplexVoltage v;
+  input Modelica.Units.SI.ComplexCurrent i[:];
+  output Real r;
+algorithm
+  r := v.re + i[1].im;
+end f;
+model i05_param_type_of_called_fn
+  Complex c;
+  Complex d[2];
+  Real r;
+equation
+  c.re = time;
+  c.im = 1;
+  d[1].re = 1;
+  d[1].im = 2;
+  d[2].re = 3;
+  d[2].im = 4;
+  r = f(c, d);
+end i05_param_type_of_called_fn;
+//// model: i07_fn_returns_alias
+function g
+  input Real x;
+  output Modelica.Units.SI.ComplexVoltage v;
+algorithm
+  v := Complex(x, 2 * x);
+end g;
+model i07_fn_returns_alias
+  Complex c, d;
+equation
+  c = Complex(time, 1);
+  d = g(time) * c;
+end i07_fn_returns_alias;
+//// model: i08_ifexp_operand
+model i08_ifexp_operand
+  parameter Boolean b = true;
+  Modelica.Units.SI.ComplexVoltage v1, v2;
+  Complex i, s;
+equation
+  v1 = Complex(time, 1);
+  v2 = Complex(1, time);
+  i = Complex(2, 3);
+  s = (if b then v1 else v2) * i;
+end i08_ifexp_operand;
+//// model: i09_record_ctor_input_type
+record R
+  Complex z "z comment";
+  Real w;
+end R;
+model i09_record_ctor_input_type
+  R r;
+equation
+  r = R(Complex(time, 1), 2);
+end i09_record_ctor_input_type;
+//// model: i10_alias_in_plain_record
+record R
+  Modelica.Units.SI.ComplexVoltage z;
+  Real w;
+end R;
+model i10_alias_in_plain_record
+  R r;
+  Complex c;
+equation
+  r.z = Complex(time, 1);
+  r.w = 2;
+  c = r.z * r.z;
+end i10_alias_in_plain_record;
+//// model: k01_plain_io
+record PR
+  Real re "pr re";
+  Real im "pr im";
+end PR;
+model k01_plain_io
+  input PR u;
+  output PR y;
+equation
+  y = u;
+end k01_plain_io;
+//// model: k02_plain_flow_pin
+record PR
+  Real re "pr re";
+  Real im "pr im";
+end PR;
+connector Pin
+  PR v;
+  flow PR i;
+end Pin;
+model R
+  Pin p, n;
+equation
+  p.v.re - n.v.re = p.i.re;
+  p.v.im - n.v.im = p.i.im;
+  p.i.re + n.i.re = 0;
+  p.i.im + n.i.im = 0;
+end R;
+model G
+  Pin p;
+equation
+  p.v = PR(0, 0);
+end G;
+model k02_plain_flow_pin
+  R r1, r2;
+  G g;
+equation
+  connect(r1.n, r2.p);
+  connect(r2.n, g.p);
+  connect(r1.p, g.p);
+end k02_plain_flow_pin;
+//// model: k03_plain_param_call
+record PR
+  Real re "pr re";
+  Real im "pr im";
+end PR;
+function mk
+  input Real a;
+  output PR r;
+algorithm
+  r := PR(a, 2*a);
+end mk;
+model k03_plain_param_call
+  parameter Real r = 2;
+  parameter PR p = mk(r);
+  parameter PR q = PR(r, 2*r);
+  PR c = mk(time);
+end k03_plain_param_call;
+//// model: k04_complex_output_conn
+connector CO = output Complex "co";
+model k04_complex_output_conn
+  output Complex y1;
+  CO y2;
+  input Complex u1;
+equation
+  y1 = u1;
+  y2 = u1;
+end k04_complex_output_conn;
+//// model: k05_plain_rec_array_eq
+record PR
+  Real re;
+  Real im;
+end PR;
+model k05_plain_rec_array_eq
+  PR z1[2], z2[2];
+equation
+  z1 = {PR(time, 1), PR(1, time)};
+  z2 = z1;
+end k05_plain_rec_array_eq;
+//// model: p01_final_ctor
+model p01_final_ctor
+  parameter Real a = 1;
+  parameter Real b = 2;
+  final parameter Complex c = Complex(a, b);
+  final parameter Complex d = Complex(a);
+end p01_final_ctor;
+//// model: p02_final_exp_param
+model p02_final_exp_param
+  parameter Real k = 3;
+  parameter Real phi = 0;
+  final parameter Complex N = k * Modelica.ComplexMath.exp(Complex(0, phi));
+end p02_final_exp_param;
+//// model: p03_final_exp_finalphi
+model p03_final_exp_finalphi
+  parameter Real k = 3;
+  final parameter Real phi = 2 * Modelica.Constants.pi / 3;
+  final parameter Complex N = k * Modelica.ComplexMath.exp(Complex(0, phi));
+end p03_final_exp_finalphi;
+//// model: p04_final_mul
+model p04_final_mul
+  parameter Complex a = Complex(1, 2);
+  parameter Complex b = Complex(3, 4);
+  final parameter Complex c = a * b;
+end p04_final_mul;
+//// model: p05_final_frompolar
+model p05_final_frompolar
+  parameter Real r = 2;
+  parameter Real phi = 0.5;
+  final parameter Complex c = Modelica.ComplexMath.fromPolar(r, phi);
+end p05_final_frompolar;
+//// model: p06_final_conj
+model p06_final_conj
+  parameter Complex a = Complex(1, 2);
+  final parameter Complex c = Modelica.ComplexMath.conj(a);
+end p06_final_conj;
+//// model: p07_final_array
+model p07_final_array
+  parameter Real a = 1;
+  parameter Real b = 2;
+  final parameter Complex z[2] = {Complex(a, b), Complex(b, a)};
+end p07_final_array;
+//// model: p08_final_neg
+model p08_final_neg
+  parameter Complex a = Complex(1, 2);
+  final parameter Complex c = -a;
+end p08_final_neg;
+//// model: p09_final_add_lit
+model p09_final_add_lit
+  parameter Complex a = Complex(1, 2);
+  final parameter Complex c = a + Complex(1, 0);
+  final parameter Complex d = a / a;
+end p09_final_add_lit;
+//// model: p10_evaluate_param
+model p10_evaluate_param
+  parameter Real a = 1 annotation(Evaluate = true);
+  parameter Real b = 2;
+  parameter Complex c = Complex(a, b);
+  parameter Complex d = Complex(a, a);
+end p10_evaluate_param;
+//// model: p11_final_mod_from_outside
+model Sub
+  parameter Complex Z = Complex(1, 2);
+end Sub;
+model p11_final_mod_from_outside
+  parameter Real R = 3;
+  parameter Real X = 4;
+  Sub s1(final Z = Complex(R, X));
+  Sub s2(Z = Complex(R, X));
+end p11_final_mod_from_outside;
+//// model: p12_final_alias_ctor
+model p12_final_alias_ctor
+  parameter Real R = 3;
+  parameter Real X = 4;
+  final parameter Modelica.Units.SI.ComplexImpedance Z = Complex(R, X);
+  final parameter Modelica.Units.SI.ComplexImpedance Z2 = Modelica.Units.SI.ComplexImpedance(R, X);
+end p12_final_alias_ctor;
+//// model: p13_final_param_matrix
+model p13_final_param_matrix
+  parameter Integer m = 3;
+  final parameter Complex sTM[m, m] = Modelica.Electrical.Polyphase.Functions.symmetricTransformationMatrix(m);
+end p13_final_param_matrix;
+//// model: q01_fill_complex
+model q01_fill_complex
+  parameter Integer n = 3;
+  parameter Complex k[n] = fill(Complex(1), n);
+  Complex z[n];
+equation
+  z = fill(Complex(time, 1), n);
+end q01_fill_complex;
+//// model: q02_neg_array
+model q02_neg_array
+  Complex z[2], w[2];
+equation
+  z[1] = Complex(time, 1);
+  z[2] = Complex(1, time);
+  w = -z;
+end q02_neg_array;
+//// model: q03_for_alias_neg
+model q03_for_alias_neg
+  parameter Integer m = 3;
+  Modelica.Units.SI.ComplexCurrent i[m], j[m];
+equation
+  for k in 1:m loop
+    i[k] = Complex(k * time, 0);
+    j[k] = -i[k];
+  end for;
+end q03_for_alias_neg;
+//// model: q04_array_div_scalar
+model q04_array_div_scalar
+  Complex z[2], w[2];
+  Complex d;
+equation
+  z[1] = Complex(time, 1);
+  z[2] = Complex(1, time);
+  d = Complex(2, 0.5);
+  w = z / d;
+end q04_array_div_scalar;
+//// model: r01_redeclare_comment_plain
+record PR
+  replaceable Real re "orig re";
+  replaceable Real im "orig im";
+end PR;
+record PV = PR(redeclare Modelica.Units.SI.Voltage re "new re", redeclare Modelica.Units.SI.Voltage im);
+model r01_redeclare_comment_plain
+  PV v;
+equation
+  v.re = time;
+  v.im = 1;
+end r01_redeclare_comment_plain;
+//// model: r02_alias_field_attr_merge
+model r02_alias_field_attr_merge
+  Modelica.Units.SI.ComplexVoltage v(re(start = 1, fixed = true), im(nominal = 2));
+equation
+  der(v.re) = -v.re;
+  v.im = time;
+end r02_alias_field_attr_merge;

@@ -958,11 +958,39 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
     //   s1）。未做 → SKIP。
     const SElement& be = I_.scode.elems[I_.nodes[base].def];
     if (!alias_res.empty() && (be.is_partial || alias_partial)) mark_unsupported("partial type");   // 直接写的类型归 bad_type_path
-    for (SRestriction ar : alias_res)
-      if (ar != be.restriction) mark_unsupported("short class restriction mismatch");
+    // 例外：operator record 的短类别名换成记录 / 连接器（`connector ComplexOutput = output Complex`、`record R2 = Complex`，
+    // MSL ComplexBlocks / SI.Complex*）——类型仍是记录（makeRecordComplexType 取最外层短类作记录类型，NFInst.mo:2580-2591
+    // v1.25.0），组件按短类的受限类型算连接器（flatten 的 short_class_connector）；rp62x SPEC OR2，探针 a08 / d02 / d07。
+    for (SRestriction ar : alias_res) {
+      const bool oprec_alias = be.restriction == SRestriction::OperatorRecord &&
+                               (ar == SRestriction::Record || ar == SRestriction::Connector);
+      if (ar != be.restriction && !oprec_alias) mark_unsupported("short class restriction mismatch");
+    }
     class_inst = instantiate(base, comp_node);   // ← arena add：此后不得用先前取的组件引用
     ty.kind = TypeKind::Complex;
     ty.complex_node = class_inst.raw;
+    // 短类修饰里的组件重声明（`record SalientInductance = Salient(redeclare SI.Inductance d, redeclare SI.Inductance q)`，MSL
+    // FundamentalWave.Types、SI.ComplexCurrent 一类）：同 extends 修饰里的（redeclare_component），施加到这次实例化出的类里的
+    // 同名组件上——类型按短类定义所在的作用域解析，新类型的属性（quantity / unit）照打、原声明的修饰照留（RS 探针 RS1-RS5）。
+    // 施加过的记进 applied_redecls，flatten 不再把它当修饰。同一短类修饰里同名的另一个子修饰（`R(redeclare B d, d(start = 1))`）
+    // omc 报 DUPLICATE_MODIFICATIONS（同 apply_extends_modifier）→ SKIP。
+    if (class_inst.is_valid() && !I_.nodes[class_inst].is_empty())
+      for (std::size_t i = 0; i < derived_mods.size(); ++i) {
+        const std::vector<SSubMod> subs = I_.scode.mods[derived_mods[i]].subs;   // 拷贝：重声明会往 arena add
+        for (const SSubMod& s : subs) {
+          const SMod& sm = I_.scode.mods[s.mod];
+          if (sm.kind != SModKind::Redecl || !sm.element.is_valid()) continue;
+          int same = 0;
+          for (const SSubMod& t : subs) same += t.ident == s.ident ? 1 : 0;
+          if (same > 1) { mark_unsupported("duplicate modification"); continue; }
+          NodeId fc;
+          for (NodeId c : I_.trees[I_.node_class(class_inst).tree].components)
+            if (I_.nodes[c].name == s.ident && I_.nodes[c].comp.is_valid()) { fc = c; break; }
+          if (!fc.is_valid()) { mark_unsupported("short class redeclare of missing element"); continue; }
+          redeclare_component(fc, sm.element, derived_scopes[i]);
+          I_.applied_redecls.insert(s.mod.raw);
+        }
+      }
   }
   Id<Exp> bind = el.mod.is_valid() ? I_.scode.mods[el.mod].binding : Id<Exp>{};
   // 类型带维：类型修饰按那层类型的形状切分（`type V3 = Real[3](start = {1, 2, 3})` → x[j].start = 第 j 个，x25），不再按组件
