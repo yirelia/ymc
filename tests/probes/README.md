@@ -451,3 +451,5 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `rs-p1` | 10 | 短类修饰里的组件重声明（`record SalientInductance = Salient(redeclare SI.Inductance d, …)`，MSL FundamentalWave.Types / SI.Complex*）：施加到实例化出的记录的同名字段上，新类型的属性先打、原声明 / 重声明的修饰照留；同一短类修饰里同名的另一个子修饰 omc 报错。单测取 RS7 / RS8 |
 | `or-p1` | 149 | operator record（MSL Complex 及其别名 SI.Complex* / ComplexInput / ComplexOutput）的全部 rp62x 探针：字段注释 / 属性、`Complex(…)` → `Complex.'constructor'.fromReal(…)`（常量实参求值成记录式）、记录类型的函数缓存（默认构造函数 + 'constructor'，别名按别名路径）、绑定求值 / 挪成方程、短类连接器别名的 connect；运算符重载、强制内联等仍 SKIP |
 | `or-ut` | 4 | operator record 构造 / 函数缓存 / 连接器别名（单测原文，本地 operator record） |
+| `oo-p1` | 7 | operator record 的边角：括号里的 if 记录绑定（MSL ComplexSISO 的 `uInternal = (if … then conj(u) else u)`）、写在声明之前的别名运算数（IdealACDCConverter 的 `vQS = pin_pQS.v - pin_nQS.v`）、常量构造绑定带字段修饰 / 别名类型、`-(-i1)`、模型里 operator record 常量的整体引用（`constant Complex j`） |
+| `oo-ut` | 4 | 记录运算数的重载运算符（单测原文，本地 operator record）：精确匹配、隐式构造（`C(2.0, 0.0)` 求值、Integer 转型）、别名路径 `P.CV.'*'.multiply`、`-(-a)`、局部常量 |

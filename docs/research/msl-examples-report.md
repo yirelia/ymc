@@ -363,3 +363,14 @@ operator record（MSL Complex）第一段：`Complex(…)` → `Complex.'constru
 之后，ComplexBlocks.Examples.TestConversionBlock 逐字节一致。ComplexBlocks / Electrical.QuasiStatic / Magnetic.QuasiStatic 的
 其余 37 个 Complex 示例：多数卡在记录运算数的重载运算符（`v = R_actual*i`、`pin_p.i + pin_n.i = Complex(0)`、`-i`，下一桶），
 另有组件数组的外来修饰、函数形参的别名记录类型（`input SI.ComplexVoltage v[:]`）等。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-09 加宽 62x 之后：PASS 312 → 325
+
+operator record 的重载运算符（记录运算数的 `+ - * / ^ ==` 等按 omc 的 checkOverloadedBinaryOperator：左运算数类型里的同名运算符
+函数、只认精确匹配、没有就隐式构造另一侧，函数名用运算数类型——别名照别名——的路径）、operator record 常量换成记录式
+（`Modelica.ComplexMath.j`、模型里的 `constant Complex j`）、括号里的 if 记录绑定选支、写在声明之前的别名运算数之后，
+Electrical.QuasiStatic.SinglePhase 的 SeriesResonance / ParallelResonance / SeriesBode / Rectifier / Transformer、
+ComplexBlocks.ShowTransferFunction、Magnetic.QuasiStatic.FluxTubes 的 7 个（BasicExamples 3、FixedShapes 2、Leakage 2）逐字节
+一致（38 个 Complex 示例里 14 个）。其余 24 个：Polyphase / 电机卡在组件数组的外来修饰、函数形参的别名记录类型
+（`input SI.ComplexVoltage v[:]`）、final 参数记录绑定的强制内联（FundamentalWave 的 `final parameter Complex N = …`），
+FluxTubes 的 Linear / NonLinearInductor 卡在材料数据记录的构造调用。FAIL / ACCEPTS-INVALID / CRASH 0。

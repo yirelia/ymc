@@ -1,0 +1,287 @@
+//// set: oo-ut — 记录运算数的重载运算符（单测原文，本地 operator record）：精确匹配、隐式构造、别名路径、`-(-a)`、局部常量
+//// model: ORU5
+operator record C "complex-like"
+  replaceable Real re "real part";
+  replaceable Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import C;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output C result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator function '+' "add"
+    import C;
+    input C c1 "c1";
+    input C c2 "c2";
+    output C c3 "c3";
+  algorithm
+    c3 := C(c1.re + c2.re, c1.im + c2.im);
+    annotation(Inline = true);
+  end '+';
+  encapsulated operator '-' "minus"
+    function negate "neg"
+      import C;
+      input C c1;
+      output C c2;
+    algorithm
+      c2 := C(-c1.re, -c1.im);
+    end negate;
+    function subtract "sub"
+      import C;
+      input C c1;
+      input C c2;
+      output C c3;
+    algorithm
+      c3 := C(c1.re - c2.re, c1.im - c2.im);
+    end subtract;
+  end '-';
+  encapsulated operator '*' "times"
+    function multiply "mul"
+      import C;
+      input C c1;
+      input C c2;
+      output C c3;
+    algorithm
+      c3 := C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+    end multiply;
+  end '*';
+  encapsulated operator function '==' "eq"
+    import C;
+    input C c1;
+    input C c2;
+    output Boolean result;
+  algorithm
+    result := c1.re == c2.re and c1.im == c2.im;
+  end '==';
+end C;
+package P
+  type Voltage = Real(quantity = "V", unit = "V");
+  operator record CV = C(redeclare Voltage re, redeclare Voltage im) "voltage";
+end P;
+model ORU5
+  C a, b, c, d;
+  Real r = time;
+  Boolean e;
+equation
+  a = C(time, 1);
+  b = a + C(2, time);
+  c = -a;
+  d = r * b - a;
+  e = a == b;
+end ORU5;
+//// model: ORU6
+operator record C "complex-like"
+  replaceable Real re "real part";
+  replaceable Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import C;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output C result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator function '+' "add"
+    import C;
+    input C c1 "c1";
+    input C c2 "c2";
+    output C c3 "c3";
+  algorithm
+    c3 := C(c1.re + c2.re, c1.im + c2.im);
+    annotation(Inline = true);
+  end '+';
+  encapsulated operator '-' "minus"
+    function negate "neg"
+      import C;
+      input C c1;
+      output C c2;
+    algorithm
+      c2 := C(-c1.re, -c1.im);
+    end negate;
+    function subtract "sub"
+      import C;
+      input C c1;
+      input C c2;
+      output C c3;
+    algorithm
+      c3 := C(c1.re - c2.re, c1.im - c2.im);
+    end subtract;
+  end '-';
+  encapsulated operator '*' "times"
+    function multiply "mul"
+      import C;
+      input C c1;
+      input C c2;
+      output C c3;
+    algorithm
+      c3 := C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+    end multiply;
+  end '*';
+  encapsulated operator function '==' "eq"
+    import C;
+    input C c1;
+    input C c2;
+    output Boolean result;
+  algorithm
+    result := c1.re == c2.re and c1.im == c2.im;
+  end '==';
+end C;
+package P
+  type Voltage = Real(quantity = "V", unit = "V");
+  operator record CV = C(redeclare Voltage re, redeclare Voltage im) "voltage";
+end P;
+model ORU6
+  P.CV v, w;
+  C a;
+equation
+  a = C(time, 2);
+  v = w * a;
+  w = a * 2;
+end ORU6;
+//// model: ORU7
+operator record C "complex-like"
+  replaceable Real re "real part";
+  replaceable Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import C;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output C result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator function '+' "add"
+    import C;
+    input C c1 "c1";
+    input C c2 "c2";
+    output C c3 "c3";
+  algorithm
+    c3 := C(c1.re + c2.re, c1.im + c2.im);
+    annotation(Inline = true);
+  end '+';
+  encapsulated operator '-' "minus"
+    function negate "neg"
+      import C;
+      input C c1;
+      output C c2;
+    algorithm
+      c2 := C(-c1.re, -c1.im);
+    end negate;
+    function subtract "sub"
+      import C;
+      input C c1;
+      input C c2;
+      output C c3;
+    algorithm
+      c3 := C(c1.re - c2.re, c1.im - c2.im);
+    end subtract;
+  end '-';
+  encapsulated operator '*' "times"
+    function multiply "mul"
+      import C;
+      input C c1;
+      input C c2;
+      output C c3;
+    algorithm
+      c3 := C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+    end multiply;
+  end '*';
+  encapsulated operator function '==' "eq"
+    import C;
+    input C c1;
+    input C c2;
+    output Boolean result;
+  algorithm
+    result := c1.re == c2.re and c1.im == c2.im;
+  end '==';
+end C;
+package P
+  type Voltage = Real(quantity = "V", unit = "V");
+  operator record CV = C(redeclare Voltage re, redeclare Voltage im) "voltage";
+end P;
+model ORU7
+  C a, b;
+  Integer n = 3;
+equation
+  a = C(time);
+  b = -(-a) + a * n;
+end ORU7;
+//// model: ORU8
+operator record C "complex-like"
+  replaceable Real re "real part";
+  replaceable Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import C;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output C result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator function '+' "add"
+    import C;
+    input C c1 "c1";
+    input C c2 "c2";
+    output C c3 "c3";
+  algorithm
+    c3 := C(c1.re + c2.re, c1.im + c2.im);
+    annotation(Inline = true);
+  end '+';
+  encapsulated operator '-' "minus"
+    function negate "neg"
+      import C;
+      input C c1;
+      output C c2;
+    algorithm
+      c2 := C(-c1.re, -c1.im);
+    end negate;
+    function subtract "sub"
+      import C;
+      input C c1;
+      input C c2;
+      output C c3;
+    algorithm
+      c3 := C(c1.re - c2.re, c1.im - c2.im);
+    end subtract;
+  end '-';
+  encapsulated operator '*' "times"
+    function multiply "mul"
+      import C;
+      input C c1;
+      input C c2;
+      output C c3;
+    algorithm
+      c3 := C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+    end multiply;
+  end '*';
+  encapsulated operator function '==' "eq"
+    import C;
+    input C c1;
+    input C c2;
+    output Boolean result;
+  algorithm
+    result := c1.re == c2.re and c1.im == c2.im;
+  end '==';
+end C;
+package P
+  type Voltage = Real(quantity = "V", unit = "V");
+  operator record CV = C(redeclare Voltage re, redeclare Voltage im) "voltage";
+end P;
+model ORU8
+  constant C j = C(0, 1);
+  C v, w;
+  parameter Real omega = 2;
+equation
+  v = -j * omega * w;
+  w = C(time);
+end ORU8;

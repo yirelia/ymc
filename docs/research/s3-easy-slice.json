@@ -638,5 +638,6 @@
 "FuncBuiltinSuperSample2.mo",
 "BindingArray7.mo",
 "ConnectComplexFlow1.mo",
-"OperatorOverloadConstructorDefault1.mo"
+"OperatorOverloadConstructorDefault1.mo",
+"OperatorOverloadBinaryWithBuiltin.mo"
 ]

@@ -1,0 +1,70 @@
+//// set: oo-p1 — operator record 的边角：括号里的 if 记录绑定（`R r = (if b then r1 else r2)`，MSL ComplexSISO）、向前引用的别名运算数（`SI.ComplexVoltage vQS = p.v - n.v` 写在 p 之前，IdealACDCConverter）、常量构造绑定带字段修饰 / 别名类型（`k(re(start = 1)) = Complex(1, 0)`）、`-(-i1)`、模型里 operator record 常量的整体引用（`constant Complex j`，FluxTubes ElectroMagneticConverter）
+//// model: OO1
+model OO1
+  record R
+    Real x;
+    Real y;
+  end R;
+  parameter Boolean b = false;
+  R r1(x = time, y = 1);
+  R r2(x = 2, y = time);
+  R r = (if b then r1 else r2);
+  Complex u = Complex(time, 1);
+  Complex w = (if b then Modelica.ComplexMath.conj(u) else u);
+end OO1;
+//// model: OO2
+model OO2
+  connector Pin
+    Modelica.Units.SI.ComplexVoltage v;
+    flow Modelica.Units.SI.ComplexCurrent i;
+  end Pin;
+  Modelica.Units.SI.ComplexVoltage vQS = p.v - n.v;
+  Modelica.Units.SI.ComplexCurrent iQS = p.i;
+  Modelica.Units.SI.ComplexPower s = vQS * Modelica.ComplexMath.conj(iQS);
+  Pin p, n;
+equation
+  p.v = Complex(time, 0);
+  n.v = Complex(0, time);
+  p.i + n.i = Complex(0);
+end OO2;
+//// model: OO3
+model OO3
+  parameter Complex k(re(start = 1), im(start = 0)) = Complex(1, 0);
+  parameter Modelica.Units.SI.ComplexVoltage V = Complex(2, 3);
+  Complex y = k;
+  Modelica.Units.SI.ComplexVoltage v(re(start = 1)) = Complex(4);
+end OO3;
+//// model: OO4
+model OO4
+  Modelica.Units.SI.ComplexCurrent i1 = p1;
+  Modelica.Units.SI.ComplexCurrent p1;
+  Modelica.Units.SI.ComplexCurrent i2;
+equation
+  p1 = Complex(time, 1);
+  i2 = -(-i1);
+end OO4;
+//// model: CJ1
+model CJ1
+  constant Complex j = Complex(0, 1);
+  Complex Phi;
+  Complex v;
+  parameter Real omega = 1;
+  parameter Real N = 2;
+equation
+  Phi = Complex(time, 0);
+  v = -j*omega*N*Phi;
+end CJ1;
+//// model: CJ2
+model CJ2
+  constant Complex j = Complex(0, 1);
+  Complex v;
+equation
+  v = j;
+end CJ2;
+//// model: CJ3
+model CJ3
+  constant Complex j = Complex(0, 1);
+  Complex v;
+equation
+  v = j * Complex(time, 0);
+end CJ3;

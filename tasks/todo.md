@@ -2033,6 +2033,16 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           组件按连接器（方向、connect 按记录字段声明序）。'constructor' 的合法性（encapsulated、恰一个本记录类型的输出）
           照 omc 检查；多个重载、记录运算数的重载运算符（下一桶）SKIP（此前静默打成 `-c1`）。
           slice 586 / FAIL 0；scodeinst 587→590；testsuite 1663→1666 / FAIL 0；MSL 311→312（TestConversionBlock）；探针 8868→9031；单测 309→311。
+    - [x] (62x) flat：operator record 的重载运算符（2026-10-09）：记录运算数的二元 / 一元 / 关系运算按 omc 的
+          checkOverloadedBinaryOperator 解析——候选是左运算数类型里的同名运算符函数（两侧不同定义再把右侧的排前），只认精确
+          匹配，没有就隐式构造另一侧（`R*i` → `ComplexCurrent.'*'.multiply(Complex.'constructor'.fromReal(R, 0.0), i)`，
+          常量实参的构造求值成 `Complex(2.0, 0.0)`）；函数名用运算数类型（别名照别名）的路径，结果类型是输出的声明类型；
+          `-(-x)` 实例化时消掉。运算数的记录类型：组件引用按其声明的短类（写在声明之前的向前引用当场登记）、调用按输出
+          类型、if 取 then 支。operator record 常量（`Modelica.ComplexMath.j`、模型里的 `constant Complex j`）换成记录式；
+          常量构造绑定带字段修饰 / 别名类型的求值后拆字段；括号里的 if 记录绑定照选支；结构参数代入后求值出记录值的
+          调用打成记录式；短类重声明经记录绑定的字段修饰不再被当成 redeclare 修饰。数组运算数、'String'、强制内联、
+          函数形参的别名记录类型未做（SKIP）。
+          slice 589 / FAIL 0；scodeinst 590→591；testsuite 1666→1670 / FAIL 0；MSL 312→325；探针 9031→9042；单测 311→312。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
