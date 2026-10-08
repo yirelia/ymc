@@ -1935,6 +1935,18 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           提 Real、引用 / if 原样、算术式展开成字面量 `{2.0 * k.n[1], …}`），引用处照常逐元素。带那三个属性的照逐元素
           `f(n)[k]`。要强转元素类型的属性值（omc 打 `/*Real*/(ni)` / `/*Real[3]*/(array(…))`）SKIP。
           验证：slice 637 例 PASS 586 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 587 / FAIL 38（不变）；整个 testsuite PASS 1641（不变）/ FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 259（不变；17 个 MultiBody 示例越过关节轴向量参数）；探针 8583→8597（pa-p1 14 个）；四套构建零警告、单测 289→290；ASan 与 gcc 逐例一致。
+    - [x] (62p) flat：outerProduct 留符号形态 + 全零运算数的积 + derivative 注解的修饰（2026-10-08）：MultiBody 15 个示例越过
+          关节参数后卡在 Frames.planarRotation 的 `outerProduct(e, e) + (identity(3) - outerProduct(e, e)) * cos(angle) - …`
+          （函数体里 "function: outerProduct"）。omc 把 outerProduct 早内联成 `matrix(v1) * transpose(matrix(v2))`
+          （__OpenModelica_EarlyInline，NFModelicaBuiltin.mo:338-347 v1.25.0），向量的 matrix 即 `promote(v, 2)`；实参全字面量的
+          promote / transpose 化简时求值成字面量矩阵，其余留调用、整个积含数组调用留符号形态：函数体里、模型的等式 / Var 绑定里
+          照此构造（Integer 引用整体转型 `promote(/*Real[3]*/(k), 2)`），外面的运算走已有的含数组调用规则；参数数组绑定（omc
+          逐元素 `e[1] * e[1]`）、结构参数代入后成字面量的 SKIP。常量求值器认 outerProduct。另：全零运算数此前一律 SKIP，照
+          simplifyBinaryOp（NFSimplifyExp.mo:974）只有标量积折零、矩阵积不折。derivative 注解的修饰 `order = <整数字面量>` /
+          `noDerivative`、`zeroDerivative = <输入名>`（getDerivativeAttributes，NFFunctionDerivative.mo:282-338）不进输出、引用的
+          函数照样发射（Frames.resolve2 的 `derivative(noDerivative = R) = Internal.resolve2_der`）；名字不是输入（omc 报错）、
+          其余属性（omc 告警）、order 写成式子 / Real 的 SKIP。
+          验证：slice 637 例 PASS 586 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 587 / FAIL 38（不变）；整个 testsuite PASS 1641→1646 / FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 259→266；探针 8597→8622（op-p1 / da-p1 25 个）；四套构建零警告、单测 290→292；ASan 与 gcc 逐例一致。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

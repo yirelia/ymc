@@ -291,3 +291,11 @@ Clocked BooleanSignals 的 Hold / SubSample / SuperSample / ShiftSample / BackSa
 normalizeWithAssert(n)`，带 min / max / nominal 的照逐元素）之后，MultiBody 的 17 个示例越过关节的轴向量参数，往下卡在
 函数体里的 outerProduct 15（Frames.planarRotation，下一桶）、derivative 注解形式 2。PASS 数不变。
 FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-08 加宽 62p 之后：PASS 259 → 266
+
+derivative 注解带修饰（`derivative(noDerivative = …)` / `zeroDerivative` / `order = 2`）的函数照样发射之后，7 个示例转 PASS
+（Analog.Examples.GenerationOfFMUs / ResonanceCircuits、Translational.Examples.GenerationOfFMUs / Vehicle、
+HeatTransfer.Examples.GenerationOfFMUs、FluidHeatFlow.Examples.TestOpenTank、MultiBody.Examples.Elementary.
+PointGravityWithPointMasses）。outerProduct 在函数体 / 等式里留符号形态（`promote(e, 2) * transpose(promote(e, 2))`）之后，
+MultiBody 的 15 个示例越过 Frames.planarRotation 与 resolve2，往下卡在类注释的转义（下一桶）。FAIL / ACCEPTS-INVALID / CRASH 0。

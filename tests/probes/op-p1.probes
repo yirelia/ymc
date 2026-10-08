@@ -1,0 +1,189 @@
+//// set: op-p1 — outerProduct 留符号形态 `promote(a, 2) * transpose(promote(b, 2))`：函数体、等式 / Var 绑定、全字面量实参的 promote / transpose 求值、Integer 引用整体转型、外面的运算（标量换位、矩阵积、取负、除）、全零运算数（标量积折零、矩阵积不折）、常量调用求值；参数数组绑定 / 结构参数代入后成字面量 / Integer 运算实参（SKIP）。单测取 1 / 4d / 7f / 4b
+//// model: OP1
+function f
+  input Real a[3];
+  input Real b[3];
+  output Real m[3, 3];
+algorithm
+  m := outerProduct(a, b);
+end f;
+function g
+  input Real a[3];
+  output Real m[3, 3];
+algorithm
+  m := identity(3) - outerProduct(a, a);
+end g;
+model OP1
+  Real x[3] = {time, 2, 3};
+  Real m[3, 3] = f(x, {1, 2, 3});
+  Real n[3, 3] = g(x);
+  Real p[2, 2] = outerProduct({time, 1}, {2, time});
+end OP1;
+//// model: OP2
+function pr
+  input Real e[3];
+  input Real angle;
+  output Real T[3, 3];
+algorithm
+  T := outerProduct(e, e) + (identity(3) - outerProduct(e, e))*cos(angle) - skew(e)*sin(angle);
+end pr;
+function fq
+  input Real Q[4];
+  output Real T[3, 3];
+algorithm
+  T := (2*Q[4]*Q[4] - 1)*identity(3) + 2*(outerProduct(Q[1:3], Q[1:3]) - Q[4]*skew(Q[1:3]));
+end fq;
+model OP2
+  Real T[3, 3] = pr({1, 0, 0}, time);
+  Real T2[3, 3] = fq({0, 0, 0, time});
+end OP2;
+//// model: OP5
+function f1
+  input Real a[3];
+  input Real b[2];
+  output Real m[3, 2];
+algorithm
+  m := 2 * outerProduct(a, b);
+end f1;
+function f2
+  input Real a[:];
+  output Real m[size(a, 1), size(a, 1)];
+algorithm
+  m := outerProduct(a, a);
+end f2;
+function f3
+  input Real a[3];
+  input Integer k[3];
+  output Real m[3, 3];
+algorithm
+  m := outerProduct(a, {1, 2, 3}) + outerProduct(a * 2, -a);
+end f3;
+function f4
+  input Real a[3];
+  output Real v[3];
+algorithm
+  v := outerProduct(a, a) * a;
+end f4;
+model OP5
+  Real x[3] = {time, 2, 3};
+  Real m[3, 2] = f1(x, {1, time});
+  Real n[3, 3] = f2(x);
+  Real p[3, 3] = f3(x, {1, 2, 3});
+  Real v[3] = f4(x);
+end OP5;
+//// model: OP6
+function g1
+  input Real a[3];
+  input Integer k[3];
+  output Real m1[3, 3];
+algorithm
+  m1 := outerProduct(k, a) + outerProduct({1, 2, 3}, a) + outerProduct(a[{1, 2, 3}], a[3:-1:1]);
+end g1;
+function g2
+  output Real m3[2, 2];
+algorithm
+  m3 := outerProduct({1, 2}, {3, 4});
+end g2;
+model OP6
+  Real x[3] = {time, 2, 3};
+  Real m1[3, 3] = g1(x, {1, 2, 3});
+  Real m3[2, 2] = g2();
+  Real y[2, 3] = outerProduct({1, 2}, x);
+  Real z[3, 3] = outerProduct(x, x) + outerProduct({1, 2, 3}, {1, 0, 0});
+end OP6;
+//// model: OP4a
+model OP4a
+  parameter Real e[3] = {0, 0, 1};
+  Real T[3, 3] = outerProduct(e, e) * time;
+  Real U[2, 3] = outerProduct({1, time}, 2 * e);
+  Real V[3, 3] = identity(3) - outerProduct(e, {time, 1, 2});
+  Real w[3] = outerProduct(e, e) * {time, 1, 2};
+end OP4a;
+//// model: OP4b
+model OP4b
+  parameter Real e[3] = {0, 0, 1};
+  parameter Real P[3, 3] = outerProduct(e, e);
+end OP4b;
+//// model: OP4c
+model OP4c
+  parameter Real e[3] = {0, 0, 1} annotation(Evaluate = true);
+  Real T[3, 3] = outerProduct(e, {time, 1, 2});
+end OP4c;
+//// model: OP4d
+model OP4d
+  parameter Integer k[3] = {1, 2, 3};
+  Real T[3, 2] = outerProduct(k, {time, 1});
+end OP4d;
+//// model: OP4e
+model OP4e
+  parameter Integer k[3] = {1, 2, 3};
+  Real U[2, 3] = 2 * outerProduct({time, 1}, -k);
+end OP4e;
+//// model: OP7a
+model OP7a
+  Real x[3] = {time, 2, 3};
+  Real z[3, 3] = 2 * outerProduct(x, x);
+  Real s[2, 2] = outerProduct(x[1:2], x[2:3]) / 2;
+  Real u[3, 3] = -outerProduct(x, x);
+end OP7a;
+//// model: OP7b
+model OP7b
+  Real x[3] = {time, 2, 3};
+  Real z[3, 3] = outerProduct(x, {0, 0, 0});
+end OP7b;
+//// model: OP7c
+function h
+  input Real a[3];
+  output Real m[3, 3];
+algorithm
+  m := outerProduct(a, {0, 0, 0}) + outerProduct(a, a) * 0;
+end h;
+model OP7c
+  Real x[3] = {time, 2, 3};
+  Real z[3, 3] = h(x);
+end OP7c;
+//// model: OP7d
+function h2
+  input Real a[3];
+  input Real b[3];
+  output Real v[3];
+  output Real s;
+algorithm
+  v := outerProduct(a, b) * b - b * outerProduct(a, a);
+  s := b * outerProduct(a, b) * a;
+end h2;
+model OP7d
+  Real x[3] = {time, 2, 3};
+  Real v[3] = h2(x, {1, 2, time});
+end OP7d;
+//// model: OP7e
+function g
+  input Real a[3];
+  output Real r[3];
+algorithm
+  r := a * 2;
+end g;
+function h3
+  input Real a[3];
+  output Real s;
+algorithm
+  s := {0, 0, 0} * g(a) + g(a) * {0.0, 0.0, 0.0};
+end h3;
+model OP7e
+  Real x[3] = {time, 2, 3};
+  Real s = h3(x);
+end OP7e;
+//// model: OP7f
+function g
+  input Real a[3];
+  output Real r[3];
+algorithm
+  r := a * 2;
+end g;
+model OP7f
+  Real x[3] = {time, 2, 3};
+  Real y;
+  Real m[2, 3] = {{0, 0, 0}, {0, 0, 0}} * outerProduct(x, x);
+equation
+  y = {0, 0, 0} * g(x);
+end OP7f;

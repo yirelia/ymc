@@ -7340,15 +7340,17 @@ class Flattener {
   //     0/1，fill(v, n…) 复制 v，identity(n) 为 Integer 单位阵；维数须为非负整数常量。
   //   transpose（:3069-3088，维数 ≥ 2，换前两维）、vector（:3090-3100，全部标量元素摊成向量）、diagonal（:2340-2377，零取
   //     元素类型）、scalar（:2846-2853，逐层取唯一元素）、der（:2333-2338，常量的导数 = 同形 Real 0）、skew（:2888-2913）。
-  //   cross / linspace 是 Modelica 层内建（NFModelicaBuiltin.mo:353-362 / :305-316），按其函数体求值：输入 Real（Int 提升），
-  //     cross = {x2·y3−x3·y2, x3·y1−x1·y3, x1·y2−x2·y1}，linspace = {x1 + (x2−x1)·(i−1)/(n−1) for i in 1:n}。
+  //   cross / linspace / outerProduct 是 Modelica 层内建（NFModelicaBuiltin.mo:353-362 / :305-316 / :338-347），按其函数体
+  //     求值：输入 Real（Int 提升），cross = {x2·y3−x3·y2, x3·y1−x1·y3, x1·y2−x2·y1}，linspace = {x1 + (x2−x1)·(i−1)/(n−1)
+  //     for i in 1:n}，outerProduct = matrix(v1) * transpose(matrix(v2))，即 o[i,j] = v1[i]·v2[j]（OP 探针 6：`m3 = g2()` →
+  //     `{{3.0, 4.0}, {6.0, 8.0}}`）。
   std::optional<CVal> eval_array_builtin(const Exp& e, const ScodeScope& scope, int depth, bool allow_param,
                                          std::unordered_set<std::uint32_t>* used) {
     const Cref& fn = I_.absyn.crefs[e.cref];
     if (fn.parts.size() != 1 || !fn.parts[0].subscripts.empty()) return std::nullopt;
     const std::string_view nm = in_.str(fn.parts[0].name);
     static constexpr std::string_view kNames[] = {"zeros", "ones", "fill", "identity", "transpose", "vector", "diagonal",
-                                                  "scalar", "der", "skew", "cross", "linspace"};
+                                                  "scalar", "der", "skew", "cross", "linspace", "outerProduct"};
     if (std::find(std::begin(kNames), std::end(kNames), nm) == std::end(kNames)) return std::nullopt;
     for (Symbol an : e.arg_names) if (an.is_valid()) return std::nullopt;
     if (find_scode_element(fn.parts[0].name, scope).is_valid()) return std::nullopt;
@@ -7418,6 +7420,25 @@ class Flattener {
       const std::vector<double>& b = *y;
       return CVal::Arr({CVal::R(a[1] * b[2] - a[2] * b[1]), CVal::R(a[2] * b[0] - a[0] * b[2]),
                         CVal::R(a[0] * b[1] - a[1] * b[0])});
+    }
+    if (nm == "outerProduct") {
+      if (args.size() != 2) return std::nullopt;
+      std::vector<std::vector<double>> v(2);
+      for (std::size_t k = 0; k < 2; ++k) {
+        if (!is_arr(args[k]) || cval_shape(args[k]).size() != 1) return std::nullopt;
+        for (const CVal& x : *args[k].arr) {
+          if (x.k != CVal::K::Int && x.k != CVal::K::Real) return std::nullopt;
+          v[k].push_back(x.as_r());
+        }
+      }
+      if (v[0].empty() || v[1].empty()) return std::nullopt;   // 空向量未核实
+      std::vector<CVal> rows;
+      for (double a : v[0]) {
+        std::vector<CVal> row;
+        for (double b : v[1]) row.push_back(CVal::R(a * b));
+        rows.push_back(CVal::Arr(std::move(row)));
+      }
+      return CVal::Arr(std::move(rows));
     }
     if (nm == "linspace") {
       if (args.size() != 3 || args[2].k != CVal::K::Int) return std::nullopt;
@@ -10092,7 +10113,32 @@ class Flattener {
       const std::string_view an = in_.str(sm.ident);
       const SMod& dm = I_.scode.mods[sm.mod];
       if (an == "derivative") {
-        if (!dm.subs.empty() || !dm.binding.is_valid() || I_.absyn.exps[dm.binding].kind != ExpKind::CrefExp) return false;
+        if (!dm.binding.is_valid() || I_.absyn.exps[dm.binding].kind != ExpKind::CrefExp) return false;
+        // 修饰（getDerivativeAttributes，NFFunctionDerivative.mo:282-338 v1.25.0）：`order = <Integer 字面量>`、
+        // `noDerivative / zeroDerivative = <本函数的输入名>`——都不进压平输出（注解不打印），被引用的函数照样发射（DA 探针
+        // 1 / 2 / 3 / 7 / 9，MultiBody Frames.resolve2 的 `derivative(noDerivative = R) = Internal.resolve2_der`）。名字不是输入
+        // omc 报错（getInputIndex :340-357，DA4）、order 重复报错；其余属性 omc 告警后忽略（DA5，stderr）、order 写成式子（DA6
+        // 内部错）/ Real（DA8 类型错）、限定名 / 带下标的名字（走 else 支告警）→ 一律 SKIP。
+        bool has_order = false;
+        for (const SSubMod& dsm : dm.subs) {
+          const std::string_view dn = in_.str(dsm.ident);
+          const SMod& dv = I_.scode.mods[dsm.mod];
+          if (!dv.subs.empty() || !dv.binding.is_valid()) return false;
+          const Exp& dx = I_.absyn.exps[dv.binding];
+          if (dn == "order") {
+            if (has_order || dx.kind != ExpKind::IntLit) return false;
+            has_order = true;
+          } else if (dn == "noDerivative" || dn == "zeroDerivative") {
+            if (dx.kind != ExpKind::CrefExp) return false;
+            const Cref& dc = I_.absyn.crefs[dx.cref];
+            if (dc.leading_dot || dc.parts.size() != 1 || !dc.parts[0].subscripts.empty()) return false;
+            bool is_input = false;
+            for (Id<SElement> in : sig.inputs) is_input = is_input || I_.scode.elems[in].name == dc.parts[0].name;
+            if (!is_input) return false;
+          } else {
+            return false;
+          }
+        }
         refs.push_back(I_.absyn.exps[dm.binding].cref);
       } else if (an == "inverse") {
         if (dm.binding.is_valid() || dm.subs.empty() || sig.outputs.size() != 1) return false;
@@ -14392,6 +14438,93 @@ class Flattener {
     return out;
   }
 
+  // outerProduct 的符号形态：omc 早内联（__OpenModelica_EarlyInline，NFModelicaBuiltin.mo:338-347 v1.25.0）体
+  // `matrix(v1) * transpose(matrix(v2))`，向量的 matrix 即 `promote(v, 2)`；化简时实参全字面量的 promote / transpose 当常量
+  // 内建求值成字面量矩阵（NFSimplifyExp.simplifyCall :186-195），其余留调用，整个积含数组调用、留符号形态（不按元素展开）。
+  // OP 探针 1 / 5 / 6：`m := promote(a, 2) * transpose(promote(b, 2))`、`outerProduct({1, 2, 3}, a)` →
+  // `{{1.0}, {2.0}, {3.0}} * transpose(promote(a, 2))`、Integer 引用整体转型 `promote(/*Real[3]*/(k), 2)`、运算实参先按元素
+  // 展开（函数体 `promote({a[1] * 2.0, …}, 2)`，模型语境 `promote({2.0 * e[1], …}, 2)`）。外面的运算照含数组调用的规则
+  //（函数体 fn_array_form、模型语境 sym_binary：`2 * outerProduct(a, b)` → `… * 2.0`）。
+  // 模型语境只收等式 / Var 绑定里的（array_call_eq_：整条留符号形态，OP 探针 4 的 T / U / V / w）；参数数组的绑定 omc 按元素
+  // 展开成 `e[1] * e[1]`（P），未做 → SKIP。实参里嵌着数组调用 / if 表达式、Integer 的非引用式未核实 → SKIP。
+  Id<Expr> outer_product_sym(Id<Expr> v1, Id<Expr> v2) {
+    if (!fn_scope_ && !array_call_eq_) { set_unsupported("outerProduct of non-literal"); return lit_int(0); }
+    auto dim = [](std::int64_t n) { Dimension d; d.kind = DimKind::Integer; d.size = n; return d; };
+    auto lit_leaves = [&](Id<Expr> x) {
+      const Expr& xe = result_.model.exprs[x];
+      if (xe.kind != ExprKind::Array || xe.args.empty()) return false;
+      for (Id<Expr> c : xe.args)
+        if (result_.model.exprs[c].kind != ExprKind::IntLit && result_.model.exprs[c].kind != ExprKind::RealLit) return false;
+      return true;
+    };
+    // promote(v, 2)：Real 化（字面量逐叶转、Integer 引用整体转型），模型语境的运算实参展开成字面量（函数体化简时已展开）；
+    // 全字面量 → 列矩阵字面量。
+    auto column = [&](Id<Expr> v) -> Id<Expr> {
+      const ExprKind vk = result_.model.exprs[v].kind;
+      if (has_array_call(v) || vk == ExprKind::IfExp) { set_unsupported("outerProduct argument form"); return {}; }
+      if (expr_elem_kind(v) == TypeKind::Integer && vk != ExprKind::Cref && vk != ExprKind::Array) {
+        set_unsupported("outerProduct argument form");
+        return {};
+      }
+      if (!fn_scope_) v = expand_operand(v);
+      v = fn_scope_ ? fn_real_operand(v) : whole_real_operand(v);
+      if (result_.unsupported || !v.is_valid()) { set_unsupported("outerProduct argument form"); return {}; }
+      const Dimension n = op_type(v).dims[0];
+      if (lit_leaves(v)) {
+        Expr m;
+        m.kind = ExprKind::Array;
+        m.ty = Type::array_of(Type::real(), {n, dim(1)});
+        for (Id<Expr> c : std::vector<Id<Expr>>(result_.model.exprs[v].args)) {
+          Expr row;
+          row.kind = ExprKind::Array;
+          row.ty = Type::array_of(Type::real(), {dim(1)});
+          row.args = {c};
+          m.args.push_back(add(std::move(row)));
+        }
+        return add(std::move(m));
+      }
+      Expr c;
+      c.kind = ExprKind::Call;
+      c.call_name = {in_.intern("promote")};
+      c.args = {v, lit_int(2)};
+      c.ty = Type::array_of(Type::real(), {n, dim(1)});
+      return add(std::move(c));
+    };
+    const Id<Expr> c1 = column(v1);
+    if (!c1.is_valid()) return lit_int(0);
+    const Id<Expr> c2 = column(v2);
+    if (!c2.is_valid()) return lit_int(0);
+    const Dimension n1 = op_type(c1).dims[0], n2 = op_type(c2).dims[0];
+    Id<Expr> row;   // transpose(promote(v2, 2))：列矩阵字面量 → 行矩阵字面量
+    if (result_.model.exprs[c2].kind == ExprKind::Array) {
+      Expr r;
+      r.kind = ExprKind::Array;
+      r.ty = Type::array_of(Type::real(), {n2});
+      for (Id<Expr> c : std::vector<Id<Expr>>(result_.model.exprs[c2].args)) r.args.push_back(result_.model.exprs[c].args[0]);
+      Expr m;
+      m.kind = ExprKind::Array;
+      m.ty = Type::array_of(Type::real(), {dim(1), n2});
+      m.args = {add(std::move(r))};
+      row = add(std::move(m));
+    } else {
+      Expr t;
+      t.kind = ExprKind::Call;
+      t.call_name = {in_.intern("transpose")};
+      t.args = {c2};
+      t.ty = Type::array_of(Type::real(), {dim(1), n2});
+      row = add(std::move(t));
+    }
+    Expr b;
+    b.kind = ExprKind::Binary;
+    b.bin = BinOp::Mul;
+    b.a = c1;
+    b.b = row;
+    b.ty = Type::array_of(Type::real(), {n1, n2});
+    const Id<Expr> r = add(std::move(b));
+    result_.model.product_binaries.insert(r.raw);
+    return r;
+  }
+
   // 模型语境的向量 / 矩阵内建（AB1 探针 + FuncBuiltinCross/Skew/OuterProduct/Symmetric/Matrix/Ndims）：
   // - cross / skew：__OpenModelica_EarlyInline 的 Modelica 体（NFModelicaBuiltin.mo:353-372）按实参展开再化简——符号实参照式
   //   保留（`c = {x[2] * y[3] - x[3] * y[2], …}`、`s = {{0.0, -x[3], x[2]}, …}`），字面量折叠（`{-3.0, 6.0, -3.0}`）。
@@ -14420,7 +14553,8 @@ class Flattener {
     };
     for (Id<Expr> a : args) {
       const TypeKind k = expr_elem_kind(a);
-      if (k != TypeKind::Real && (k != TypeKind::Integer || !all_lit(all_lit, a))) {
+      const bool int_ref = name == "outerProduct" && result_.model.exprs[a].kind == ExprKind::Cref;
+      if (k != TypeKind::Real && (k != TypeKind::Integer || !(all_lit(all_lit, a) || int_ref))) {
         set_unsupported("non-numeric function argument");
         return lit_int(0);
       }
@@ -14474,8 +14608,9 @@ class Flattener {
     }
     if (name == "outerProduct") {
       const std::vector<std::int64_t> s1 = expr_shape(args[1]);
-      if (s0.size() != 1 || s1.size() != 1 || s0[0] < 1 || s1[0] < 1) { set_unsupported("outerProduct argument shape"); return lit_int(0); }
-      if (!all_lit(all_lit, args[0]) || !all_lit(all_lit, args[1])) { set_unsupported("outerProduct of non-literal"); return lit_int(0); }
+      // 维未知（函数体里的 `a[:]`，-1）照留符号形态（OP 探针 5 f2）；空向量未核实。
+      if (s0.size() != 1 || s1.size() != 1 || s0[0] == 0 || s1[0] == 0) { set_unsupported("outerProduct argument shape"); return lit_int(0); }
+      if (!all_lit(all_lit, args[0]) || !all_lit(all_lit, args[1])) return outer_product_sym(args[0], args[1]);
       std::vector<Id<Expr>> rows;
       for (std::int64_t i = 1; i <= s0[0]; ++i) {
         std::vector<Id<Expr>> row;
@@ -15275,7 +15410,7 @@ class Flattener {
       ~EqFlag() { f = old; }
       EqFlag(const EqFlag&) = delete;
       EqFlag& operator=(const EqFlag&) = delete;
-    } eq_flag(array_call_eq_, builtin_name == "cross");
+    } eq_flag(array_call_eq_, builtin_name == "cross" || builtin_name == "outerProduct");
     if (builtin_name == "cardinality") return cardinality_call(e, enclosing, prefix);
     if (builtin_name == "size") return size_call(e, enclosing, prefix);
     // 函数体里的 ndims(a) = a 的维数（SZ 探针 `n := ndims(u)` → `n := 1`；模型语境在 model_matrix_builtin）。
@@ -15317,8 +15452,9 @@ class Flattener {
     // identity(n) 同理：n 是常量时展开成单位阵字面量（MultiBody Frames.planarRotation 的 `identity(3)` → `{{1.0, 0.0, 0.0}, …}`）。
     if (fn_scope_ && (builtin_name == "transpose" || builtin_name == "identity"))
       return model_array_builtin(e, builtin_name, enclosing, prefix);
-    // cross / skew 同理（3 维向量实参逐元素展开，MultiBody Frames.angularVelocity1 / resolveDyade…；RC 探针 t4）。
-    if (fn_scope_ && (builtin_name == "cross" || builtin_name == "skew"))
+    // cross / skew 同理（3 维向量实参逐元素展开，MultiBody Frames.angularVelocity1 / resolveDyade…；RC 探针 t4）；outerProduct
+    // 留符号形态（见 outer_product_sym；MultiBody Frames.planarRotation / Quaternions.to_T）。
+    if (fn_scope_ && (builtin_name == "cross" || builtin_name == "skew" || builtin_name == "outerProduct"))
       return model_matrix_builtin(e, builtin_name, enclosing, prefix);
     if (fn_scope_ && (builtin_name == "fill" || builtin_name == "zeros" || builtin_name == "ones"))
       return fill_call(e, builtin_name);
@@ -16043,7 +16179,8 @@ class Flattener {
 
   // 模型语境里含数组调用、留了符号形态的二元运算（array_binary 的 sym 支）的化简：照 SimplifyExp.simplifyBinary
   //（NFSimplifyExp.mo:929-978 v1.25.0）——两侧先化简，不含数组调用的数组运算数整体展开成字面量（expand_operand），再按算符：
-  //   积（向量 / 矩阵）原样（全零运算数的 SCALAR_PRODUCT 折零未核实 → SKIP）；
+  //   积（向量 / 矩阵）原样，全零运算数（isZero 认全零的数组字面量）只有标量积（向量 * 向量）折成零（:974 的 SCALAR_PRODUCT
+  //   支；矩阵积 / 矩阵乘向量走 else 支不折，OP 探针 7b `promote(x, 2) * {{0.0, 0.0, 0.0}}`）；
   //   数组 + / - 数组（Op.ADD / Op.SUB 带数组类型，两侧皆数组的 `.+` / `.-` 同）走 simplifyBinaryAdd / Sub 的零元与负号挪动
   //   （isZero 认全零的数组字面量，NFExpression.mo:4504-4516；AX 探针 c19 `f(time) + {0, 0, 0}` → `f(time)`、c112
   //   `-f(time) + a` → `a - f(time)`；e - e 折成零数组后整条等式改标量化（c113 `x[1] = 0.0`），未做 → SKIP）；
@@ -16070,7 +16207,7 @@ class Flattener {
     if (result_.unsupported) return id;
     const bool aarr = op_type(a).is_array(), barr = op_type(b).is_array();
     if (result_.model.product_binaries.count(id.raw) > 0) {
-      if (all_zero_literal(a) || all_zero_literal(b)) { set_unsupported("zero operand of array call product"); return id; }
+      if (!ty.is_array() && (all_zero_literal(a) || all_zero_literal(b))) return make_zero(ty);
       const Id<Expr> r = make_bin(a, op, b, ty);
       result_.model.product_binaries.insert(r.raw);
       return r;
@@ -16238,6 +16375,8 @@ class Flattener {
           if (Id<Expr> ex = fn_expand_binary(a, op, b, ty, product); ex.is_valid()) return ex;
           if (result_.unsupported) return id;
           if (product) {
+            // 全零运算数的标量积折成零（simplifyBinaryOp :974；OP 探针 7e `s := {0, 0, 0} * g(a) + …` → `s := 0.0`），矩阵积不折。
+            if (!ty.is_array() && (all_zero_literal(a) || all_zero_literal(b))) return make_zero(ty);
             const Id<Expr> r = simplify_binary_op(a, op, b, ty);
             if (result_.model.exprs[r].kind == ExprKind::Binary) result_.model.product_binaries.insert(r.raw);
             return r;
@@ -16513,6 +16652,16 @@ class Flattener {
         };
         if (call_name.size() != 1 || nofold || is_oc) return rebuild();
         const std::string_view name = in_.str(call_name[0]);
+        if ((name == "promote" || name == "transpose") && !args.empty() && result_.model.exprs[args[0]].kind == ExprKind::Array) {
+          bool lit = true;
+          auto walk = [&](auto& self, Id<Expr> x) -> void {
+            const Expr& xe = result_.model.exprs[x];
+            if (xe.kind == ExprKind::Array) { for (Id<Expr> c : xe.args) self(self, c); return; }
+            lit = lit && (xe.kind == ExprKind::IntLit || xe.kind == ExprKind::RealLit);
+          };
+          walk(walk, args[0]);
+          if (lit) { set_unsupported("outerProduct folded by structural parameter"); return rebuild(); }
+        }
         // fill(v, n1, n2, …) 的维实参全是字面量：展开成数组字面量、各元素都是 v（SimplifyExp.simplifyFill，NFSimplifyExp.mo
         // v1.25.0：维全字面量且 NF_SCALARIZE（缺省开）→ Expression.fillArgs）。函数体里 if 分支提实型后的 `fill(0.0, 3)`（WR 探针
         // z1 `y := if b then x else zeros(3)` → `{0.0, 0.0, 0.0}`；MultiBody standardGravityAcceleration 的 `zeros(3)`）。

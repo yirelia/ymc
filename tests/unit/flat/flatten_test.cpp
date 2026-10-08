@@ -3059,16 +3059,19 @@ YMC_TEST(flatten_function_annotations) {
                            "function h\n  input Real x;\n  input Real y;\n  output Real z = x * y;\nend h;\n\nfunction hi\n"
                            "  input Real x;\n  input Real z;\n  output Real y = z / x;\nend hi;\n\nclass FAT2\n  Real a = 2.0;\n"
                            "  Real b = f1(time);\n  Real c = e1(time);\n  Real d = h(time, 2.0);\nend FAT2;\n"));
-  // 未做 / omc 报错 → SKIP：__OpenModelica_EarlyInline（omc 把调用内联成 `2.0 * time`，FAS1）、derivative(order = 2)（FAS2）、
-  // derivative 指向不存在的函数（omc 报错，FAS3）。
+  // derivative(order = 2)：修饰不进输出，引用的函数照样发射（期望 = omc 1.25.0 实跑 FAS2，2026-10-08；此前未做、按 SKIP 断言）。
+  YMC_CHECK_EQ(flatten_src("function f1\n  input Real x;\n  output Real z = 2 * x;\n  annotation(derivative(order = 2) = f2);\n"
+                           "end f1;\nfunction f2\n  input Real x;\n  input Real der_x;\n  input Real der_der_x;\n"
+                           "  output Real z = 2 * der_der_x;\nend f2;\nmodel FAS2\n  Real b = f1(time);\nend FAS2;\n"),
+               std::string("function f1\n  input Real x;\n  output Real z = 2.0 * x;\nend f1;\n\nfunction f2\n  input Real x;\n"
+                           "  input Real der_x;\n  input Real der_der_x;\n  output Real z = 2.0 * der_der_x;\nend f2;\n\n"
+                           "class FAS2\n  Real b = f1(time);\nend FAS2;\n"));
+  // 未做 / omc 报错 → SKIP：__OpenModelica_EarlyInline（omc 把调用内联成 `2.0 * time`，FAS1）、derivative 指向不存在的函数
+  //（omc 报错，FAS3）。
   for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
            {"function f\n  input Real x;\n  output Real y = 2 * x;\n  annotation(__OpenModelica_EarlyInline = true);\nend f;\n"
             "model FAS1\n  Real a = f(time);\nend FAS1;\n",
             "function: f"},
-           {"function f1\n  input Real x;\n  output Real z = 2 * x;\n  annotation(derivative(order = 2) = f2);\nend f1;\n"
-            "function f2\n  input Real x;\n  input Real der_x;\n  input Real der_der_x;\n  output Real z = 2 * der_der_x;\nend f2;\n"
-            "model FAS2\n  Real b = f1(time);\nend FAS2;\n",
-            "function: f1"},
            {"function f1\n  input Real x;\n  output Real z = 2 * x;\n  annotation(derivative = nosuch);\nend f1;\n"
             "model FAS3\n  Real b = f1(time);\nend FAS3;\n",
             "function: f1"}}) {
@@ -5910,6 +5913,69 @@ YMC_TEST(flatten_parameter_array_bound_to_call_kept_whole) {
                            "end nrm;\nmodel PA7c\n  parameter Real n[3] = {1, 0, 0};\n  parameter Integer ni[3] = {1, 2, 3};\n"
                            "  parameter Real e[3](start = ni) = nrm(n);\n  Real y = e[2] * time;\nend PA7c;\n"),
                std::string("<unsupported:whole array attribute>"));
+}
+
+YMC_TEST(flatten_outer_product_kept_symbolic) {
+  // outerProduct 早内联成 `promote(v1, 2) * transpose(promote(v2, 2))`（NFModelicaBuiltin.mo:338-347 v1.25.0），全字面量实参的
+  // promote / transpose 求值成字面量矩阵，其余留调用、整个积留符号形态：函数体里、模型的等式 / Var 绑定里；Integer 引用整体转型。
+  // 全零运算数只有标量积折零（NFSimplifyExp.mo:974），矩阵积不折。参数数组绑定（omc 逐元素 `e[1] * e[1]`）未做 → SKIP。
+  // 期望值为 omc 1.25.0 对原文实跑的 stdout（OP 探针 1 / 4d / 7f / 4b，2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("function f\n  input Real a[3];\n  input Real b[3];\n  output Real m[3, 3];\nalgorithm\n"
+                           "  m := outerProduct(a, b);\nend f;\nfunction g\n  input Real a[3];\n  output Real m[3, 3];\n"
+                           "algorithm\n  m := identity(3) - outerProduct(a, a);\nend g;\nmodel OP1\n"
+                           "  Real x[3] = {time, 2, 3};\n  Real m[3, 3] = f(x, {1, 2, 3});\n  Real n[3, 3] = g(x);\n"
+                           "  Real p[2, 2] = outerProduct({time, 1}, {2, time});\nend OP1;\n"),
+               std::string("function f\n  input Real[3] a;\n  input Real[3] b;\n  output Real[3, 3] m;\nalgorithm\n"
+                           "  m := promote(a, 2) * transpose(promote(b, 2));\nend f;\n\nfunction g\n  input Real[3] a;\n"
+                           "  output Real[3, 3] m;\nalgorithm\n"
+                           "  m := {{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}} - promote(a, 2) * transpose(promote(a, 2));\n"
+                           "end g;\n\nclass OP1\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real m[1,1];\n  Real m[1,2];\n"
+                           "  Real m[1,3];\n  Real m[2,1];\n  Real m[2,2];\n  Real m[2,3];\n  Real m[3,1];\n  Real m[3,2];\n"
+                           "  Real m[3,3];\n  Real n[1,1];\n  Real n[1,2];\n  Real n[1,3];\n  Real n[2,1];\n  Real n[2,2];\n"
+                           "  Real n[2,3];\n  Real n[3,1];\n  Real n[3,2];\n  Real n[3,3];\n  Real p[1,1];\n  Real p[1,2];\n"
+                           "  Real p[2,1];\n  Real p[2,2];\nequation\n  x = {time, 2.0, 3.0};\n  m = f(x, {1.0, 2.0, 3.0});\n"
+                           "  n = g(x);\n  p = promote({time, 1.0}, 2) * transpose(promote({2.0, time}, 2));\nend OP1;\n"));
+  YMC_CHECK_EQ(flatten_src("model OP4d\n  parameter Integer k[3] = {1, 2, 3};\n  Real T[3, 2] = outerProduct(k, {time, 1});\n"
+                           "end OP4d;\n"),
+               std::string("class OP4d\n  parameter Integer k[1] = 1;\n  parameter Integer k[2] = 2;\n"
+                           "  parameter Integer k[3] = 3;\n  Real T[1,1];\n  Real T[1,2];\n  Real T[2,1];\n  Real T[2,2];\n"
+                           "  Real T[3,1];\n  Real T[3,2];\nequation\n"
+                           "  T = promote(/*Real[3]*/(k), 2) * transpose(promote({time, 1.0}, 2));\nend OP4d;\n"));
+  YMC_CHECK_EQ(flatten_src("function g\n  input Real a[3];\n  output Real r[3];\nalgorithm\n  r := a * 2;\nend g;\nmodel OP7f\n"
+                           "  Real x[3] = {time, 2, 3};\n  Real y;\n"
+                           "  Real m[2, 3] = {{0, 0, 0}, {0, 0, 0}} * outerProduct(x, x);\nequation\n  y = {0, 0, 0} * g(x);\n"
+                           "end OP7f;\n"),
+               std::string("class OP7f\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real y;\n  Real m[1,1];\n  Real m[1,2];\n"
+                           "  Real m[1,3];\n  Real m[2,1];\n  Real m[2,2];\n  Real m[2,3];\nequation\n  x = {time, 2.0, 3.0};\n"
+                           "  m = {{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}} * (promote(x, 2) * transpose(promote(x, 2)));\n  y = 0.0;\n"
+                           "end OP7f;\n"));
+  YMC_CHECK_EQ(flatten_src("model OP4b\n  parameter Real e[3] = {0, 0, 1};\n  parameter Real P[3, 3] = outerProduct(e, e);\n"
+                           "end OP4b;\n"),
+               std::string("<unsupported:outerProduct of non-literal>"));
+}
+
+YMC_TEST(flatten_derivative_annotation_modifiers) {
+  // derivative 注解带修饰 `order = 2` / `noDerivative = k` / `zeroDerivative = k`（getDerivativeAttributes，NFFunctionDerivative.mo
+  // :282-338 v1.25.0）：注解不打印，被引用的函数照样发射；名字不是输入 omc 报错（getInputIndex :340-357）→ SKIP。
+  // 期望值为 omc 1.25.0 对原文实跑的 stdout（DA 探针 3 / 4，2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("function f_der\n  input Real x;\n  input Real k;\n  input Real der_x;\n  output Real dy;\n"
+                           "algorithm\n  dy := k * der_x;\nend f_der;\nfunction f_der2\n  input Real x;\n  input Real k;\n"
+                           "  input Real der_x;\n  input Real der2_x;\n  output Real d2y;\nalgorithm\n  d2y := k * der2_x;\n"
+                           "end f_der2;\nfunction f\n  input Real x;\n  input Real k;\n  output Real y;\nalgorithm\n"
+                           "  y := k * x;\n  annotation(derivative(order = 2) = f_der2, derivative = f_der);\nend f;\n"
+                           "model DA3\n  Real y = f(time, 2);\nend DA3;\n"),
+               std::string("function f\n  input Real x;\n  input Real k;\n  output Real y;\nalgorithm\n  y := k * x;\nend f;\n\n"
+                           "function f_der\n  input Real x;\n  input Real k;\n  input Real der_x;\n  output Real dy;\n"
+                           "algorithm\n  dy := k * der_x;\nend f_der;\n\nfunction f_der2\n  input Real x;\n  input Real k;\n"
+                           "  input Real der_x;\n  input Real der2_x;\n  output Real d2y;\nalgorithm\n  d2y := k * der2_x;\n"
+                           "end f_der2;\n\nclass DA3\n  Real y = f(time, 2.0);\nend DA3;\n"));
+  YMC_CHECK_EQ(flatten_src("function f_der\n  input Real x;\n  input Real k;\n  input Real der_x;\n  output Real dy;\n"
+                           "algorithm\n  dy := k * der_x;\nend f_der;\nfunction f_der2\n  input Real x;\n  input Real k;\n"
+                           "  input Real der_x;\n  input Real der2_x;\n  output Real d2y;\nalgorithm\n  d2y := k * der2_x;\n"
+                           "end f_der2;\nfunction f\n  input Real x;\n  input Real k;\n  output Real y;\nalgorithm\n"
+                           "  y := k * x;\n  annotation(derivative(noDerivative = q) = f_der);\nend f;\nmodel DA4\n"
+                           "  Real y = f(time, 2);\nend DA4;\n"),
+               std::string("<unsupported:function: f>"));
 }
 
 YMC_TEST(flatten_external_object_variable_and_structors) {

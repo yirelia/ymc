@@ -1,0 +1,288 @@
+//// set: da-p1 — derivative 注解的修饰 order / noDerivative / zeroDerivative（不打印、引用的函数照样发射，含 MultiBody resolve2 式的记录输入与 cross 里的函数调用）；名字不是输入 / 未知属性 / order 写成式子或 Real（SKIP）。单测取 3 / 4 / FAS2
+//// model: DA1
+function f_der
+  input Real x;
+  input Real k;
+  input Real der_x;
+  output Real dy;
+algorithm
+  dy := k * der_x;
+end f_der;
+function f_der2
+  input Real x;
+  input Real k;
+  input Real der_x;
+  input Real der2_x;
+  output Real d2y;
+algorithm
+  d2y := k * der2_x;
+end f_der2;
+function f
+  input Real x;
+  input Real k;
+  output Real y;
+algorithm
+  y := k * x;
+  annotation(derivative(noDerivative = k) = f_der);
+end f;
+model DA1
+  Real y = f(time, 2);
+end DA1;
+//// model: DA2
+function f_der
+  input Real x;
+  input Real k;
+  input Real der_x;
+  output Real dy;
+algorithm
+  dy := k * der_x;
+end f_der;
+function f_der2
+  input Real x;
+  input Real k;
+  input Real der_x;
+  input Real der2_x;
+  output Real d2y;
+algorithm
+  d2y := k * der2_x;
+end f_der2;
+function f
+  input Real x;
+  input Real k;
+  output Real y;
+algorithm
+  y := k * x;
+  annotation(derivative(zeroDerivative = k) = f_der);
+end f;
+model DA2
+  Real y = f(time, 2);
+end DA2;
+//// model: DA3
+function f_der
+  input Real x;
+  input Real k;
+  input Real der_x;
+  output Real dy;
+algorithm
+  dy := k * der_x;
+end f_der;
+function f_der2
+  input Real x;
+  input Real k;
+  input Real der_x;
+  input Real der2_x;
+  output Real d2y;
+algorithm
+  d2y := k * der2_x;
+end f_der2;
+function f
+  input Real x;
+  input Real k;
+  output Real y;
+algorithm
+  y := k * x;
+  annotation(derivative(order = 2) = f_der2, derivative = f_der);
+end f;
+model DA3
+  Real y = f(time, 2);
+end DA3;
+//// model: DA4
+function f_der
+  input Real x;
+  input Real k;
+  input Real der_x;
+  output Real dy;
+algorithm
+  dy := k * der_x;
+end f_der;
+function f_der2
+  input Real x;
+  input Real k;
+  input Real der_x;
+  input Real der2_x;
+  output Real d2y;
+algorithm
+  d2y := k * der2_x;
+end f_der2;
+function f
+  input Real x;
+  input Real k;
+  output Real y;
+algorithm
+  y := k * x;
+  annotation(derivative(noDerivative = q) = f_der);
+end f;
+model DA4
+  Real y = f(time, 2);
+end DA4;
+//// model: DA5
+function f_der
+  input Real x;
+  input Real k;
+  input Real der_x;
+  output Real dy;
+algorithm
+  dy := k * der_x;
+end f_der;
+function f_der2
+  input Real x;
+  input Real k;
+  input Real der_x;
+  input Real der2_x;
+  output Real d2y;
+algorithm
+  d2y := k * der2_x;
+end f_der2;
+function f
+  input Real x;
+  input Real k;
+  output Real y;
+algorithm
+  y := k * x;
+  annotation(derivative(foo = 1) = f_der);
+end f;
+model DA5
+  Real y = f(time, 2);
+end DA5;
+//// model: DA6
+function f_der
+  input Real x;
+  input Real k;
+  input Real der_x;
+  output Real dy;
+algorithm
+  dy := k * der_x;
+end f_der;
+function f_der2
+  input Real x;
+  input Real k;
+  input Real der_x;
+  input Real der2_x;
+  output Real d2y;
+algorithm
+  d2y := k * der2_x;
+end f_der2;
+function f
+  input Real x;
+  input Real k;
+  output Real y;
+algorithm
+  y := k * x;
+  annotation(derivative(order = 1 + 1) = f_der2);
+end f;
+model DA6
+  Real y = f(time, 2);
+end DA6;
+//// model: DA7
+function f_der
+  input Real x;
+  input Real k;
+  input Real der_x;
+  output Real dy;
+algorithm
+  dy := k * der_x;
+end f_der;
+function f_der2
+  input Real x;
+  input Real k;
+  input Real der_x;
+  input Real der2_x;
+  output Real d2y;
+algorithm
+  d2y := k * der2_x;
+end f_der2;
+function f
+  input Real x;
+  input Real k;
+  output Real y;
+algorithm
+  y := k * x;
+  annotation(derivative(noDerivative = k, zeroDerivative = x) = f_der);
+end f;
+model DA7
+  Real y = f(time, 2);
+end DA7;
+//// model: DA8
+function f_der
+  input Real x;
+  input Real k;
+  input Real der_x;
+  output Real dy;
+algorithm
+  dy := k * der_x;
+end f_der;
+function f_der2
+  input Real x;
+  input Real k;
+  input Real der_x;
+  input Real der2_x;
+  output Real d2y;
+algorithm
+  d2y := k * der2_x;
+end f_der2;
+function f
+  input Real x;
+  input Real k;
+  output Real y;
+algorithm
+  y := k * x;
+  annotation(derivative(order = 2.0) = f_der2);
+end f;
+model DA8
+  Real y = f(time, 2);
+end DA8;
+//// model: DA9
+package DA9P
+  record Orientation
+    Real T[3, 3];
+    Real w[3];
+  end Orientation;
+  function resolve2
+    input Orientation R;
+    input Real v1[3];
+    output Real v2[3];
+  algorithm
+    v2 := R.T*v1;
+    annotation(derivative(noDerivative = R) = resolve2_der, InlineAfterIndexReduction = true);
+  end resolve2;
+  function resolve2_der
+    input Orientation R;
+    input Real v1[3];
+    input Real v1_der[3];
+    output Real v2_der[3];
+  algorithm
+    v2_der := resolve2(R, v1_der) - cross(R.w, resolve2(R, v1));
+    annotation(derivative(order = 2) = resolve2_der2);
+  end resolve2_der;
+  function resolve2_der2
+    input Orientation R;
+    input Real v1[3];
+    input Real v1_der[3];
+    input Real v1_der2[3];
+    output Real v2_der2[3];
+  algorithm
+    v2_der2 := resolve2(R, v1_der2);
+  end resolve2_der2;
+  model M
+    parameter Real T0[3, 3] = [1, 0, 0; 0, 1, 0; 0, 0, 1];
+    Real v[3] = resolve2(Orientation(T = T0, w = {0, 0, time}), {time, 1, 2});
+  end M;
+end DA9P;
+model DA9
+  extends DA9P.M;
+end DA9;
+//// model: FAS2
+function f1
+  input Real x;
+  output Real z = 2 * x;
+  annotation(derivative(order = 2) = f2);
+end f1;
+function f2
+  input Real x;
+  input Real der_x;
+  input Real der_der_x;
+  output Real z = 2 * der_der_x;
+end f2;
+model FAS2
+  Real b = f1(time);
+end FAS2;
