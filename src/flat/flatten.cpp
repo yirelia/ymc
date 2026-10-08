@@ -595,6 +595,7 @@ class Flattener {
         if (!keep[i] && fns[i].name == name) { keep[i] = true; work.push_back(i); }
     };
     for (const std::vector<Symbol>& rn : model_record_ctors_) mark_call(rn);
+    for (const std::vector<Symbol>& fn : comp_kept_fns_) mark_call(fn);   // 推导式绑定里调的函数（见 comp_bound_）
     auto expr = [&](auto& self, Id<Expr> id) -> void {
       if (!id.is_valid()) return;
       const Expr& x = result_.model.exprs[id];
@@ -1179,8 +1180,12 @@ class Flattener {
             StructSnap snap = struct_snap();
             // 求值把读到的参数值记进 const_vals_（结构参数的值缓存，别处按它把引用当已知值）：试探求值的痕迹要连它一起撤。
             auto cv_snap = const_vals_;
-            std::optional<CVal> rv = wbk == ExpKind::Call ? eval_user_call(I_.absyn.exps[wb], wsc, 0, /*allow_param=*/true)
-                                                         : eval_scode(wb, wsc, 0, /*allow_param=*/true);
+            std::optional<CVal> rv;
+            {
+              const EvalRoot root(*this, "@rec");   // 压平期的 Ceval（flattenComplexComponent）：存回的是组件
+              rv = wbk == ExpKind::Call ? eval_user_call(I_.absyn.exps[wb], wsc, 0, /*allow_param=*/true)
+                                        : eval_scode(wb, wsc, 0, /*allow_param=*/true);
+            }
             eval_probe_ = saved_probe;
             if (result_.unsupported) continue;
             if (probe.nonstruct) { set_unsupported("record binding via Evaluate = false parameter"); continue; }
@@ -2918,6 +2923,11 @@ class Flattener {
           c.ty = x.ty.element_type();
           return add(std::move(c));
         }
+        // 留成调用的 diagonal（见 model_array_builtin）：对角取实参的元素，其余 0（DG9 `d[1,2] = 0.0`、DG11 sum 照样带 `+ 0.0`）。
+        if (x.call_name.size() == 1 && in_.str(x.call_name[0]) == "diagonal" && x.args.size() == 1 && idx.size() == 2) {
+          if (idx[0] == idx[1]) return scalarize(x.args[0], {idx[0]});
+          return x.ty.element_type().kind == TypeKind::Real ? lit_real(0.0) : lit_int(0);
+        }
         // 用户函数的数组调用（参数数组绑定里，见 param_spread_）：整个调用不动、取元素 `f(…)[k]`（AC 探针 a12 / a13）。
         if (user_call(e) && x.ty.is_array() && idx.size() == x.ty.dims.size()) {
           Expr sx;
@@ -3566,6 +3576,19 @@ class Flattener {
     return false;
   }
   // 调用的实参是否都会成字面量：字面量（及其数组）/ 已是结构参数的引用（压平末尾代入值）。
+  // 已发射的参数 ek 会不会在压平末尾经别名连带成结构参数（同 apply_structural_params 的别名支：源码绑定是裸 cref、目标在本参数
+  // 定型之前已是结构参数、不是 Evaluate = false）。
+  bool alias_will_be_structural(const std::string& ek) {
+    const auto at = alias_keys_.find(ek);
+    if (at == alias_keys_.end()) return false;
+    const FlatVariable* v = emitted_var(ek);
+    if (!v || v->var_kind != FlatVarKind::Parameter || !v->binding.is_valid()) return false;
+    if (const auto pit = param_info_.find(ek); pit != param_info_.end() && pit->second.nonstruct) return false;
+    const Expr& b = result_.model.exprs[v->binding];
+    if (b.kind != ExprKind::Cref) return false;
+    const auto st = structural_set_.find(expr_cref_key(b.cref));
+    return st != structural_set_.end() && st->second < at->second;
+  }
   bool call_args_fold(Id<Expr> id, bool whole_arrays = false) {
     auto ok = [&](auto& self, Id<Expr> a) -> bool {
       const Expr& x = result_.model.exprs[a];
@@ -3580,7 +3603,17 @@ class Flattener {
       // `rev.e[1] = 0.0`，不是整体 `Real[3] rev.e = …`。其余调用方（式子里嵌着的调用）照旧只认标量结构参数。
       if (x.kind != ExprKind::Cref) return false;
       const std::string k = expr_cref_key(x.cref);
-      return whole_arrays ? key_structural_in(structural_set_, k, x.ty.is_array()) : structural_set_.count(k) > 0;
+      if (!whole_arrays) return structural_set_.count(k) > 0;
+      if (key_structural_in(structural_set_, k, x.ty.is_array())) return true;
+      // 参数数组是结构参数数组的裸 cref 别名（MSL Rotor1D 的 `rotorWith3DEffects(n = n)`，外层 n 带 Evaluate = true）：压平末尾
+      // 照 checkComponentBindingVariability 连带成结构参数（apply_structural_params 的别名支），这里先按同一条规则认——omc 的
+      // `e = normalizeWithAssert(n)` 于是求值成字面量、逐元素（MSL GyroscopicEffects / BevelGear1D 的 `rotorWith3DEffects.e[1]
+      // = 1.0`），不是整体 `Real[3] e = …`。
+      if (!x.ty.is_array()) return false;
+      const std::vector<std::string> els = array_elem_keys(k);
+      bool all = !els.empty();
+      for (const std::string& ek : els) all = all && alias_will_be_structural(ek);
+      return all;
     };
     for (Id<Expr> a : result_.model.exprs[id].args)
       if (!ok(ok, a)) return false;
@@ -4319,6 +4352,7 @@ class Flattener {
       // Evaluate / 维 / 条件 / fixed 带来的是实例化期的标记（依赖一路连带）；其余（此前某个绑定定型时标的）只是取值——本
       // 参数已定型，依赖不再连带。
       const PhaseScope self_phase(*this, struct_early ? MarkPhase::Early : MarkPhase::Binding);
+      const EvalRoot root(*this, vkey);   // EvalConstants 时刻的求值（见 comp_bound_）；末尾给自己打的标记也在内
       std::optional<CVal> cv;
       const StructSnap snap = struct_snap();
       // 这里求的是"打印用的字面量"——omc 在压平之后（EvalConstants）才求结构参数的绑定，那时变量都已压平，求值存回组件不再
@@ -4760,6 +4794,7 @@ class Flattener {
         else { skip("fixedness unknown"); return; }
       } else if (!nf) {
         const PhaseScope early(*this, MarkPhase::Early);
+        const EvalRoot root(*this, int_key(name, psubs));
         forward_miss_ = false;
         Cref self;
         self.parts.push_back(CrefPart{name.back(), {}});
@@ -5038,6 +5073,29 @@ class Flattener {
           if (!leaf_type_ok(eb, cty.kind)) { set_unsupported("array binding shape/type mismatch"); return; }
         }
         if (cty.kind == TypeKind::Real) eb = to_real(eb);
+        // 推导式绑定的参数数组（见 comp_bound_）：记下它和元素绑定里调的用户函数。
+        if (vk == FlatVarKind::Parameter &&
+            (comp_spread || (nlbind && result_.model.exprs[rhsE].kind == ExprKind::Reduction &&
+                             result_.model.exprs[rhsE].call_name.size() == 2 &&
+                             in_.str(result_.model.exprs[rhsE].call_name[0]) == "array"))) {
+          const std::string base = int_key(name, psubs);
+          comp_bound_.insert(base);
+          comp_elems_[base].push_back(eb);
+          auto calls = [&](auto& self, Id<Expr> x) -> void {
+            if (!x.is_valid()) return;
+            const Expr& xe = result_.model.exprs[x];
+            if (xe.kind == ExprKind::Call && user_call(x)) {
+              std::vector<std::vector<Symbol>>& fs = comp_fns_[base];
+              if (std::find(fs.begin(), fs.end(), xe.call_name) == fs.end()) fs.push_back(xe.call_name);
+            }
+            for (const ExprCrefPart& cp : xe.cref.parts) for (Id<Expr> sx : cp.subscripts) self(self, sx);
+            for (Id<Expr> a : xe.args) self(self, a);
+            self(self, xe.a);
+            self(self, xe.b);
+            self(self, xe.c);
+          };
+          calls(calls, eb);
+        }
         // constant 元素必须求值成字面量（同标量 constant 规则，R14 §3）。
         if (vk == FlatVarKind::Constant) {
           const ExprKind bk = result_.model.exprs[eb].kind;
@@ -5411,6 +5469,7 @@ class Flattener {
     std::vector<Symbol> vprefix;
     Id<Expr> value;
     Type cty;   // 组件类型（枚举属性值核类型用）
+    bool lift = false;   // 数组组件上类型链派生、不带 each 的标量属性（见 emit_whole_array_var）
   };
   // 不标量化的数组变量（见 emit_array 里的判定）：一行、类型带维（`Real[3, 3] m`）、绑定是整个调用；属性：each / 标量的打一个值，
   // 字面量摊分的打整个数组字面量（Real 属性提 Real），定型过的数组值照打（PA 探针 a3：`(quantity = {"a", "b", "c"},
@@ -5452,6 +5511,28 @@ class Flattener {
         if (result_.unsupported) return;
       }
       if (!x.is_valid()) { set_unsupported("whole array attribute"); return; }
+      // 类型链派生、不带 each 的标量属性（SI 类型的 quantity / unit …）：omc 按元素抬成同形数组（testsuite SingularPlanarLoop /
+      // VTT FreeBody18 里 MSL 3.2.3 Body 的 `z_a_start(quantity = {"AngularAcceleration", …}, unit = {"rad/s2", …})`）；带 each
+      // 的（MultiBody.Types.Axis 的 `each final unit = "1"`）打一个值（PA 探针）。
+      if (p.mode == AttrPlan::Mode::Whole && p.lift) {
+        auto lift = [&](auto& self, std::size_t k) -> Id<Expr> {
+          if (k == dims.size()) return x;
+          Expr arr;
+          arr.kind = ExprKind::Array;
+          for (std::int64_t i = 0; i < dims[k]; ++i) arr.args.push_back(self(self, k + 1));
+          std::vector<Dimension> tail;   // 这一层及以下的维
+          for (std::size_t j = k; j < dims.size(); ++j) {
+            Dimension d;
+            d.kind = DimKind::Integer;
+            d.size = dims[j];
+            tail.push_back(d);
+          }
+          const Type et = result_.model.exprs[x].ty;
+          arr.ty = Type::array_of(et, std::move(tail));
+          return add(std::move(arr));
+        };
+        x = lift(lift, 0);
+      }
       v.attributes.push_back({p.name, x});
     }
     v.binding = rhs;
@@ -5530,6 +5611,7 @@ class Flattener {
         Id<Expr> v = attr_value(a.vk, sm.binding, src->scope, src->vprefix);
         if (!finish_attr(a, an, v, sm.binding, src->scope, ty)) return out;
         p.value = v;
+        p.lift = !dims.empty() && !sm.is_each && src->each_all;
       } else if ((is_array_ctor(sm.binding) && !is_comprehension(sm.binding)) || matrix) {
         const std::optional<std::vector<std::int64_t>> ld = lit_dims(sm.binding);
         if (!ld || *ld != dims) { set_unsupported("array attribute shape mismatch"); return out; }
@@ -5587,6 +5669,7 @@ class Flattener {
           std::optional<CVal> cv;
           {
             const PhaseScope early(*this, MarkPhase::Early);
+            const EvalRoot root(*this, "@attr");   // fixed 在 EvalConstants 才求（evaluateTypeAttribute，NFEvalConstants.mo:148-162）
             const FrameAt frame_at(*this, p.scope);
             cv = eval_scode(p.raw, scode_scope_of(p.scope), 0, true, nullptr);
           }
@@ -5634,6 +5717,7 @@ class Flattener {
     if (an == in_.intern("fixed") && !is_literal(v)) {
       std::optional<CVal> cv;
       const PhaseScope early(*this, MarkPhase::Early);   // fixed 里的参数在实例化期就标（NFInst.mo:3947，v1.25.0）
+      const EvalRoot root(*this, "@attr");               // 值在 EvalConstants 才求（evaluateTypeAttribute）
       const FrameAt frame_at(*this, scope);
       if (raw.is_valid()) cv = eval_scode(raw, scode_scope_of(scope), 0, true, nullptr);
       if (cv) v = literal_of(*cv);
@@ -7991,6 +8075,7 @@ class Flattener {
           const Frame* ef = efi >= 0 ? &frames_[static_cast<std::size_t>(efi)] : nullptr;
           const std::vector<Symbol> no_prefix;   // CevalCtx 存的是指针：不能传临时量
           CevalCtx guard(*this, ef ? ef->prefix : no_prefix, ef ? ef->psubs : PSubs{});
+          const EvalRoot mark_only(*this, "@size");   // 只是标记的副作用，omc 没求 a 的绑定（见 comp_bound_；MSL FullRobot 的 angleBeg）
           sv = eval_scode(sa, scode_scope_of(scope_node), depth + 1, /*allow_param=*/true, used);
           ceval_frame_ = saved;
           dep_mark_ = saved_dep;
@@ -9253,6 +9338,10 @@ class Flattener {
       if (result_.unsupported) return {};
     }
     std::unordered_map<std::string, Id<Expr>> sub;
+    // 引用的参数还没发射（MSL 示例的 `inner World world` 多声明在最后，体里的重力调用先到）：第二遍用第一遍的值。omc 求函数
+    // 缺省不把值存回组件（AD 探针 AD5：`g = 9.81 * k` 照打符号式）→ 不按"发射前被求值"处理（见 flat_param_value）。
+    const bool saved_fde = fn_default_eval_;
+    fn_default_eval_ = true;
     auto walk = [&](auto& self, Id<Expr> id) -> void {
       if (!ok || !id.is_valid()) return;
       const Expr e = result_.model.exprs[id];   // 拷贝（下面 add）
@@ -9272,6 +9361,7 @@ class Flattener {
       self(self, e.c);
     };
     walk(walk, x);
+    fn_default_eval_ = saved_fde;
     if (!ok) return {};
     struct_subst_ = true;   // 代入后实参全成字面量的调用随即求值（simplify_expr 的 Call 支）
     const Id<Expr> r = simplify_expr(clone_subst(x, sub));
@@ -10060,8 +10150,15 @@ class Flattener {
       if (ad != alias_defaults.end()) {
         b = coerce_to_param(ad->second, ty);
         if (!b.is_valid()) return fn_fail<std::optional<std::size_t>>("alias default type");
-        b = fn_eval_default(b);
-        if (!b.is_valid()) return fn_fail<std::optional<std::size_t>>("alias default value");
+        const bool saved_fm = forward_miss_;
+        forward_miss_ = false;
+        const Id<Expr> eb = fn_eval_default(b);
+        const bool fwd = forward_miss_;
+        forward_miss_ = saved_fm || fwd;
+        // 第一遍：求不出是因为引用的参数还没发射（向前引用）→ 先照原式发射，第二遍用第一遍的值（第一遍的输出不用）。
+        if (eb.is_valid()) b = eb;
+        else if (lenient_ && fwd) need_second_pass_ = true;
+        else return fn_fail<std::optional<std::size_t>>("alias default value");
       } else if (c.mod.is_valid() && I_.scode.mods[c.mod].binding.is_valid()) {
         b = fn_exp(I_.scode.mods[c.mod].binding, ty);
         if (result_.unsupported || !b.is_valid())   // 绑定类型不符（omc 报错）
@@ -11047,23 +11144,57 @@ class Flattener {
     }
     // 先在**调用者**上下文求所有显式实参（用当前 locals_，支持嵌套 f(g(x))）。
     std::unordered_map<std::uint32_t, CVal> env;
+    std::vector<std::pair<std::size_t, CVal>> vec;   // 向量化的实参（输入下标, 值），见下
     for (std::size_t i = 0; i < inputs.size(); ++i) {
       if (!bound[i].is_valid()) continue;
       std::optional<CVal> v = eval_scode(bound[i], scope, depth + 1, allow_param);
       if (!v) return std::nullopt;
       {   // 实参秩高于内建标量类型形参的声明秩（`f({1, 2, 3})`，f 的输入是 Real）= 向量化调用：typing 改写成
-          // `array(f(x[$i]) for $i in …)`，omc 不求值（FuncVectorization3）→ 不折。
+          // `array(f(x[$i]) for $i in …)`（见下）。
         const SElement& ie = I_.scode.elems[inputs[i]];
         const std::size_t decl_rank = ie.attr.dims.size() + ie.type.dims.size();
         const bool builtin_scalar = ie.type.path.size() == 1 && !ie.type.leading_dot &&
                                     (in_.str(ie.type.path[0]) == "Real" || in_.str(ie.type.path[0]) == "Integer" ||
                                      in_.str(ie.type.path[0]) == "Boolean" || in_.str(ie.type.path[0]) == "String");
-        if (builtin_scalar && cval_shape(*v).size() > decl_rank) return std::nullopt;
+        if (builtin_scalar && cval_shape(*v).size() > decl_rank) {
+          vec.emplace_back(i, std::move(*v));
+          continue;
+        }
       }
       v = coerce_cval(*v, I_.scode.elems[inputs[i]].type.path);
       if (!v) return std::nullopt;
       if (I_.absyn.exps[bound[i]].kind == ExpKind::CrefExp) watch_arrays(*v);
       env[I_.scode.elems[inputs[i]].name.id] = *v;
+    }
+    // 向量化调用：类型化表达式路径 omc 不求值（推导式不折，FuncVectorization3 留 `array(f({1.0, 2.0, 3.0}[$i0]) for $i0
+    // in 1:3)`）→ 不折；结构语境（Ceval.evalExp 求绑定 / 维 / 条件，及函数体里，即 allow_param）推导式照逐元素求值（VE 探针：
+    // MSL BodyBox 的 `lengthDirection = to_unit1(r - r_shape) annotation(Evaluate = true)` → 各元素 final 字面量）。按头一维
+    // 逐元素调（向量化的实参取第 k 个、其余原样，一律按输入名传），更多的向量化维由递归再展开。只接单输出（多输出函数不能向量化，
+    // MLS §12.4.6）；各向量化实参的头一维须一致（不一致 omc 报错）。
+    if (!vec.empty()) {
+      if (!allow_param || all_outputs || noret || sig.outputs.size() != 1) return std::nullopt;
+      const std::int64_t n = cval_shape(vec[0].second).front();
+      for (const auto& [vi, vv] : vec)
+        if (cval_shape(vv).front() != n) return std::nullopt;
+      if (n < 1) return std::nullopt;   // 空数组的结果形状未核实
+      std::vector<CVal> out;
+      for (std::int64_t k = 0; k < n; ++k) {
+        Exp c;
+        c.kind = ExpKind::Call;
+        for (std::size_t i = 0; i < inputs.size(); ++i) {
+          if (!bound[i].is_valid()) continue;
+          Id<Exp> a = bound[i];
+          for (const auto& [vi, vv] : vec)
+            if (vi == i) a = cval_absyn((*vv.arr)[static_cast<std::size_t>(k)]);
+          if (!a.is_valid()) return std::nullopt;
+          c.args.push_back(a);
+          c.arg_names.push_back(I_.scode.elems[inputs[i]].name);
+        }
+        std::optional<CVal> r = eval_user_call(c, scope, depth + 1, allow_param, nullptr, false, &*fr);
+        if (!r) return std::nullopt;
+        out.push_back(std::move(*r));
+      }
+      return CVal::Arr(std::move(out));
     }
     // 别名修饰（`function g = f(r = x)`）= 输入默认（外层别名优先），在调用者上下文求值。
     for (Id<SMod> am : fr->alias_mods)
@@ -11371,6 +11502,73 @@ class Flattener {
 
   // ---- 已发射常量值表 const_vals_：修饰后的最终值（ymc 的修饰在 flatten 期才落到变量上），供两路求值的 cref 先查 ----
   // key 与 var_key / conn_key 同编码：段 id + 各整数下标 `[v]` + '.'；数组常量另存整体（末段无下标）。
+  // 推导式绑定的参数数组打成了字面量（见 comp_bound_）：推导式体里哪些调用在 omc 那里还留着。EvalConstants 把结构参数代入
+  // 推导式体后化简——以迭代变量作下标、各元素都相同的数组字面量取那一个元素（SimplifyExp.simplifySubscriptedExp，NFSimplifyExp.mo
+  // :1346-1379 v1.25.0），实参于是全成字面量的调用当场求值、函数不再被引用（VK 探针 VK3：`a = {0, 0, 0}` → f 不打；MSL
+  // FixedRotation 的 `lengthDirection = to_unit1(r - r_shape)`、r = r_shape = 0）。ymc 的元素绑定是逐元素的：同一调用处在各元素
+  // 上代入后的实参全是字面量、且各元素两两相同 ⟺ omc 推导式里那个下标数组各元素相同 → 调用折掉；否则留。实参里套着用户函数
+  // 调用的（折不折要看里层）未做 → SKIP。
+  void comp_kept_fns(const std::string& base, const std::unordered_map<std::string, Id<Expr>>& vals) {
+    const auto fit = comp_fns_.find(base);
+    if (fit == comp_fns_.end()) return;
+    const std::vector<Id<Expr>>& elems = comp_elems_[base];
+    std::vector<std::vector<Id<Expr>>> sites(elems.size());   // 各元素的用户函数调用（先序）
+    for (std::size_t k = 0; k < elems.size(); ++k) {
+      auto walk = [&](auto& self, Id<Expr> x) -> void {
+        if (!x.is_valid()) return;
+        const Expr& xe = result_.model.exprs[x];
+        if (xe.kind == ExprKind::Call && user_call(x)) sites[k].push_back(x);
+        for (const ExprCrefPart& cp : xe.cref.parts) for (Id<Expr> sx : cp.subscripts) self(self, sx);
+        for (Id<Expr> a : xe.args) self(self, a);
+        self(self, xe.a);
+        self(self, xe.b);
+        self(self, xe.c);
+      };
+      walk(walk, elems[k]);
+    }
+    auto keep = [&](const std::vector<Symbol>& fn) {
+      if (std::find(comp_kept_fns_.begin(), comp_kept_fns_.end(), fn) == comp_kept_fns_.end()) comp_kept_fns_.push_back(fn);
+    };
+    for (std::size_t k = 1; k < sites.size(); ++k)
+      if (sites[k].size() != sites[0].size()) {   // 各元素的调用形态不一（不该有）：照旧都留
+        for (const std::vector<Symbol>& fn : fit->second) keep(fn);
+        return;
+      }
+    for (std::size_t j = 0; !sites.empty() && j < sites[0].size(); ++j) {
+      bool folded = true;
+      std::vector<CVal> first;
+      for (std::size_t k = 0; k < sites.size() && folded; ++k) {
+        const std::vector<Id<Expr>> args = result_.model.exprs[sites[k][j]].args;   // 拷贝（下面 add）
+        for (std::size_t ai = 0; ai < args.size() && folded; ++ai) {
+          bool nested = false;
+          auto has_user = [&](auto& self, Id<Expr> x) -> void {
+            if (!x.is_valid() || nested) return;
+            const Expr& xe = result_.model.exprs[x];
+            if (xe.kind == ExprKind::Call && user_call(x)) { nested = true; return; }
+            for (Id<Expr> a : xe.args) self(self, a);
+            self(self, xe.a);
+            self(self, xe.b);
+            self(self, xe.c);
+          };
+          has_user(has_user, args[ai]);
+          if (nested) { set_unsupported("comprehension call folding with nested calls"); return; }
+          const Id<Expr> sv = simplify_expr(clone_subst(args[ai], vals));
+          const std::optional<CVal> cv = is_literal(sv) ? cval_of(sv) : std::nullopt;
+          if (!cv) { folded = false; break; }
+          if (k == 0) first.push_back(*cv);
+          else if (cv->k != first[ai].k || cv->as_r() != first[ai].as_r() || cv->b != first[ai].b || cv->s != first[ai].s)
+            folded = false;
+        }
+      }
+      if (!folded) keep(result_.model.exprs[sites[0][j]].call_name);
+    }
+  }
+  // key 的数组整体 key：去掉末段的叶下标（`5.7[2].` → `5.7.`；标量 key 原样）。
+  static std::string leaf_base(const std::string& k) {
+    const std::size_t seg = k.size() >= 2 ? k.rfind('.', k.size() - 2) : std::string::npos;
+    const std::size_t q = k.find('[', seg == std::string::npos ? 0 : seg + 1);
+    return q == std::string::npos ? k : k.substr(0, q) + ".";
+  }
   static std::string int_key(const std::vector<Symbol>& names, const PSubs& isubs) {
     std::string k;
     for (std::size_t i = 0; i < names.size(); ++i) {
@@ -11520,6 +11718,7 @@ class Flattener {
       // 顺绑定链走到的（不打标记，见 const_lookup_val）不限阶段：定型期（Evaluate / 维）从记录字段一路走到声明在后的参数，
       // omc 同样求得出（EV 探针 e12）。
       if (const auto fw = carry_.vals.find(key); fw != carry_.vals.end() && !typed_keys_.count(key)) {
+        if (fn_default_eval_) return carry_.deep.count(key) ? std::nullopt : std::optional<CVal>(fw->second);   // 见 fn_eval_default
         if (!use_forward(key)) return std::nullopt;
         return fw->second;
       }
@@ -11561,7 +11760,14 @@ class Flattener {
     deep_walk_ -= deep;
     flat_busy_.erase(key);
     if (!ok) return std::nullopt;
-    return cval_of(simplify_expr(clone_subst(b, sub)));
+    // 顺绑定链求值就是 omc 的 Ceval：绑定里实参代入后全成字面量的纯用户函数调用照样求值（MSL BodyShape 的 `length =
+    // Modelica.Math.Vectors.length(r - r_shape)`，条件组件的条件经子实例读到它）——这次克隆按结构代入登记（见 simplify_expr
+    // 的 Call 支），否则落到 "constant user call after structural substitution"。
+    const bool saved_ss = struct_subst_;
+    struct_subst_ = true;
+    const Id<Expr> sv = simplify_expr(clone_subst(b, sub));
+    struct_subst_ = saved_ss;
+    return cval_of(sv);
   }
   // 类型化路（cref()）：同上，下标须字面量 / for 迭代变量；只接标量值。
   Id<Expr> const_lookup_expr(const std::vector<Symbol>& prefix, const Cref& c) {
@@ -15211,6 +15417,27 @@ class Flattener {
       if (n < 1) { set_unsupported("array builtin of unknown / empty shape"); return lit_int(0); }
     if (name == "diagonal") {
       if (sh.size() != 1) { set_unsupported("diagonal of non-vector"); return lit_int(0); }
+      // omc 的化简不展开 diagonal（实参全是字面量的才按值求成矩阵，DG4 `f(diagonal({1, 2, 3}))` → 14.0）：整个数组的语境里
+      // 留调用（DG 探针 DG6 `z = diagonal(a) * time`、DG10 `z = diagonal(a)`、DG1 / DG2 / DG15 作函数实参——MSL BodyBox 的
+      // `I = Frames.resolveDyade1(R, diagonal({…}))`）；标量化时逐元素取（参数数组摊分 DG9 `d[1,1] = a[1]`、`d[1,2] = 0.0`，
+      // sum 的 DG11 `a[1] + 0.0 + …`），见 scalarize 的 Call 支。
+      if (!all_literal_leaves(a)) {
+        const TypeKind ek = expr_elem_kind(a);
+        // 实参照 omc 化简后的形态打：字面量叶统一成元素类型（`{a[1], 2.0 * a[2], 3.0}`），算术式逐元素展开（DG17
+        // `{(m * 3.0 - k) / 12.0, m * 4.0 / 12.0, k / 12.0}`，MSL BodyBox 的 `diagonal({…} / 12)`）；别的形态未核实 → SKIP。
+        const Id<Expr> ka = kept_array_form(a, sh, ek);
+        if (result_.unsupported) return lit_int(0);
+        if (!ka.is_valid()) { set_unsupported("diagonal argument form"); return lit_int(0); }
+        Dimension d;
+        d.kind = DimKind::Integer;
+        d.size = sh[0];
+        Expr c;
+        c.kind = ExprKind::Call;
+        c.call_name = {in_.intern("diagonal")};
+        c.args = {ka};
+        c.ty = Type::array_of(Type::of(ek), {d, d});
+        return add(std::move(c));
+      }
       const bool real = expr_elem_kind(a) == TypeKind::Real;
       return build({sh[0], sh[0]}, [&](const std::vector<std::int64_t>& ix) {
         return ix[0] == ix[1] ? scalarize(a, {ix[0]}) : (real ? lit_real(0.0) : lit_int(0));
@@ -16521,7 +16748,13 @@ class Flattener {
       if (all_zero_literal(a)) return op == BinOp::Add ? b : negate_expr(b);
       if (all_zero_literal(b)) return a;
       if (op == BinOp::Sub && expr_equal(a, b)) { set_unsupported("array call minus itself"); return id; }
-      return simplify_binary_op(a, op, b, ty);   // 负号挪动（零元已在上面；数组上 lit_is 恒假）
+      // 负号挪动（零元已在上面；数组上 lit_is 恒假）。结果仍登记成 sym 节点：压平末尾代入结构参数后再化简还走这里——一侧代成了
+      // 全零字面量的照 simplifyBinarySub 消掉（ZS 探针 ZS2：`ta + rot(R, tb) - cross(r, f)`、r = 0 → `ta + rot(R, tb)`；MSL
+      // FixedRotation 的 `zeros(3) = frame_a.t + resolve1(R_rel, frame_b.t) - cross(r, frame_a.f)`），此前留成 `- {0.0, 0.0, 0.0}`。
+      const Id<Expr> r = simplify_binary_op(a, op, b, ty);
+      if (result_.model.exprs[r].kind == ExprKind::Binary && !fn_array_ops_.count(r.raw))
+        fn_array_ops_[r.raw] = result_.model.exprs[r].bin == BinOp::Add ? Op::Add : Op::Sub;
+      return r;
     }
     if (aarr && barr && op == BinOp::Div && is_negated(a)) return sym_node(negate_expr(a), orig, op, negate_expr(b), ty);
     if (aarr && barr && op == BinOp::Pow && all_zero_literal(b)) { set_unsupported("array call power by zero array"); return id; }
@@ -16966,6 +17199,11 @@ class Flattener {
           walk(walk, args[0]);
           if (lit) { set_unsupported("outerProduct folded by structural parameter"); return rebuild(); }
         }
+        // diagonal 的实参（结构参数代入之后）全是字面量：按值求成矩阵字面量（DG 探针 DG8：Evaluate 的 a → `f(diagonal(a))` 整个
+        // 求值成 14.0）。
+        if (name == "diagonal" && args.size() == 1 && result_.model.exprs[args[0]].kind == ExprKind::Array &&
+            all_literal_leaves(args[0]))
+          if (const Id<Expr> m = diagonal_matrix(args[0]); m.is_valid()) return m;
         // fill(v, n1, n2, …) 的维实参全是字面量：展开成数组字面量、各元素都是 v（SimplifyExp.simplifyFill，NFSimplifyExp.mo
         // v1.25.0：维全字面量且 NF_SCALARIZE（缺省开）→ Expression.fillArgs）。函数体里 if 分支提实型后的 `fill(0.0, 3)`（WR 探针
         // z1 `y := if b then x else zeros(3)` → `{0.0, 0.0, 0.0}`；MultiBody standardGravityAcceleration 的 `zeros(3)`）。
@@ -17175,6 +17413,38 @@ class Flattener {
     }
   }
 
+  // 数组字面量的叶子全是字面量（`{1.0, 2.0}`、`{{1, 2}, {3, 4}}`）。
+  bool all_literal_leaves(Id<Expr> id) const {
+    const Expr& x = result_.model.exprs[id];
+    if (x.kind != ExprKind::Array) return is_literal(id);
+    for (Id<Expr> c : x.args)
+      if (!all_literal_leaves(c)) return false;
+    return true;
+  }
+  // diagonal(v) 展开成矩阵字面量：对角取 v 的元素，其余补 0（Real 补 0.0）。v 须是一维、维已知。
+  Id<Expr> diagonal_matrix(Id<Expr> v) {
+    const std::vector<std::int64_t> sh = expr_shape(v);
+    if (sh.size() != 1 || sh[0] < 1) return {};
+    const std::int64_t n = sh[0];
+    const bool real = expr_elem_kind(v) == TypeKind::Real;
+    Expr outer;
+    outer.kind = ExprKind::Array;
+    for (std::int64_t i = 1; i <= n; ++i) {
+      Expr row;
+      row.kind = ExprKind::Array;
+      for (std::int64_t j = 1; j <= n; ++j) row.args.push_back(i == j ? simplify_expr(scalarize(v, {i})) : (real ? lit_real(0.0) : lit_int(0)));
+      Dimension d;
+      d.kind = DimKind::Integer;
+      d.size = n;
+      row.ty = Type::array_of(Type::of(real ? TypeKind::Real : expr_elem_kind(v)), {d});
+      outer.args.push_back(add(std::move(row)));
+    }
+    Dimension d;
+    d.kind = DimKind::Integer;
+    d.size = n;
+    outer.ty = Type::array_of(Type::of(real ? TypeKind::Real : expr_elem_kind(v)), {d, d});
+    return add(std::move(outer));
+  }
   bool is_literal(Id<Expr> id) const {
     ExprKind k = result_.model.exprs[id].kind;
     return k == ExprKind::IntLit || k == ExprKind::RealLit || k == ExprKind::BoolLit ||
@@ -19529,7 +19799,17 @@ class Flattener {
   int mark_time() const {
     return mark_phase_ == MarkPhase::Early ? 0 : mark_phase_ == MarkPhase::Binding ? bind_clock_ : INT_MAX;
   }
+  // 结构求值读到参数 k（见 comp_bound_）：压平期的不算（那时变量都已压平）。
+  void note_read(const std::string& k) {
+    if (mark_phase_ == MarkPhase::Late) return;
+    const std::string b = leaf_base(k);
+    std::unordered_set<std::string>& into = eval_root_.empty() ? typing_reads_ : root_reads_[eval_root_];
+    into.insert(b);
+    if (b == eval_root_) return;
+    if (const auto r = root_reads_.find(b); r != root_reads_.end()) into.insert(r->second.begin(), r->second.end());
+  }
   void record_structural(const std::string& k) {
+    note_read(k);
     const int t = mark_time();
     const auto it = structural_set_.find(k);
     if (it == structural_set_.end()) {
@@ -19879,6 +20159,19 @@ class Flattener {
   bool exp_not_fixed(Id<Expr> id, int depth, bool& unknown, bool* saw_param = nullptr) {
     if (!id.is_valid()) return false;
     const Expr& e = result_.model.exprs[id];   // 下面只读、不 add
+    // 推导式 / 向量化调用（`array(to_unit1({…}[$i1]) for $i1 in 1:3)`）的迭代变量不是组件（CREF 支的 ComponentRef.isIterator
+    // 守卫，NFStructural.mo:161 v1.25.0）：体里引用它的不算，范围照查。MSL BodyBox 的 `lengthDirection = to_unit1(r - r_shape)
+    // annotation(Evaluate = true)` 此前因 `$i1` 判不清固定与否 → SKIP。
+    if (e.kind == ExprKind::Reduction && e.call_name.size() == 2) {
+      const Id<Expr> body = e.a, range = e.b;
+      nf_iters_.push_back(e.call_name[1].id);
+      const bool nf = exp_not_fixed(body, depth, unknown, saw_param);
+      nf_iters_.pop_back();
+      return nf || exp_not_fixed(range, depth, unknown, saw_param);
+    }
+    if (e.kind == ExprKind::Cref && e.cref.parts.size() == 1 && e.cref.parts[0].subscripts.empty() &&
+        std::find(nf_iters_.begin(), nf_iters_.end(), e.cref.parts[0].name.id) != nf_iters_.end())
+      return false;
     if (e.kind == ExprKind::Call) {
       // isExpressionNotFixed 的 CALL 支：不纯 / 外部函数 → 不固定（NFStructural.mo:197-219、NFCall.mo:574-595 v1.25.0）。判 Evaluate
       // 时（visit_nf_，定型之前）Call.isExternal 对未定型调用看的是还没实例化的类、认不出 → 只认不纯（CevalBinding10 的 pure
@@ -19893,6 +20186,23 @@ class Flattener {
       for (const ExprCrefPart& cp : e.cref.parts)
         for (Id<Expr> s : cp.subscripts)
           if (exp_not_fixed(s, depth, unknown, saw_param)) return true;
+      // 迭代变量作下标（向量化调用 `f(a)` 定型成 `array(f(a[$i1]) for $i1 in …)`）：omc 判的是未定型的 `f(a)`，CREF 支看的是
+      // 组件节点 a 整个的绑定（ComponentRef.node，NFStructural.mo:167-186 v1.25.0）→ 去掉这些下标、按整个数组判（VE 探针 VE8）。
+      if (!nf_iters_.empty()) {
+        ExprCref whole = e.cref;
+        bool strip = false;
+        auto is_iter = [&](Id<Expr> s) {
+          const Expr& se = result_.model.exprs[s];
+          return se.kind == ExprKind::Cref && se.cref.parts.size() == 1 && se.cref.parts[0].subscripts.empty() &&
+                 std::find(nf_iters_.begin(), nf_iters_.end(), se.cref.parts[0].name.id) != nf_iters_.end();
+        };
+        for (ExprCrefPart& cp : whole.parts)
+          if (std::any_of(cp.subscripts.begin(), cp.subscripts.end(), is_iter)) {
+            cp.subscripts.clear();
+            strip = true;
+          }
+        if (strip) return key_not_fixed(expr_cref_key(whole), depth, unknown, saw_param);
+      }
       return key_not_fixed(expr_cref_key(e.cref), depth, unknown, saw_param);
     }
     for (Id<Expr> a : e.args)
@@ -20182,9 +20492,17 @@ class Flattener {
       FlatVariable& v = result_.model.variables[vi];
       if (v.var_kind != FlatVarKind::Parameter && v.var_kind != FlatVarKind::Constant) { set_unsupported("structural parameter"); return; }
       if (v.var_kind == FlatVarKind::Parameter) v.is_final = true;
-      v.binding = lit;
       vals.emplace(k, lit);
+      // 推导式绑定的参数数组（见 comp_bound_）：压平期才标的元素绑定照旧（符号式）；打成字面量的、没在定型期被求值过的，
+      // 推导式里调的函数照打。
+      if (const std::string cb = leaf_base(k); comp_bound_.count(cb)) {
+        if (const auto st = structural_set_.find(k); st != structural_set_.end() && st->second == INT_MAX) continue;
+        if (!typing_reads_.count(cb)) comp_keep_.insert(cb);
+      }
+      v.binding = lit;
     }
+    for (const std::string& b : comp_keep_) comp_kept_fns(b, vals);
+    if (result_.unsupported) return;
     // 绑定恰是某个结构参数的引用的标量 parameter 连带成为结构参数（checkComponentBindingVariability，NFTyping.mo:1150-1159，
     // v1.25.0：绑定定型出来的变率是 STRUCTURAL_PARAMETER 且绑定是 cref）。判定发生在**本参数的绑定定型时**：目标须在那之前
     // 已是结构参数——实例化期标的（维 / Evaluate / 条件 / fixed …）总是；绑定定型期标的要声明在目标被标之后；方程段 / 压平期
@@ -20368,7 +20686,9 @@ class Flattener {
       }
       ps.push_back(std::move(s));
     }
-    const std::optional<std::vector<std::int64_t>> sh = emitted_shape(names, ps);
+    std::optional<std::vector<std::int64_t>> sh = emitted_shape(names, ps);
+    if (!sh && fn_default_eval_ && std::all_of(ps.begin(), ps.end(), [](const std::vector<std::int64_t>& v) { return v.empty(); }))
+      if (const auto cs = carry_.shapes.find(int_key(names, {})); cs != carry_.shapes.end()) sh = cs->second;   // 向前引用
     if (!sh || sh->empty()) return {};
     for (std::int64_t n : *sh)
       if (n < 1) return {};
@@ -20958,6 +21278,34 @@ class Flattener {
   bool dep_mark_ = true;                                  // frame_value：当前求值层的参数是否打结构标记
   EvalProbe* eval_probe_ = nullptr;                       // 记录绑定的试探求值收集读到的参数（见 EvalProbe）
   std::vector<std::string>* flat_visit_ = nullptr;        // flat_param_value 顺绑定链走到的 key（实例化期连带标记，见 const_lookup_val）
+  std::vector<std::uint32_t> nf_iters_;                   // exp_not_fixed 正在走的推导式 / 向量化迭代变量（见那里）
+  bool fn_default_eval_ = false;                          // 正在求函数别名修饰给的缺省值（见 fn_eval_default）
+  // 推导式绑定的参数数组（书写的 `{e for i in r}`，或向量化调用定型出的 `array(f(a[$i1]) for $i1 in …)`）。omc 的压平变量的
+  // 绑定一直是推导式：EvalConstants 只代入里面的结构参数、不求整个推导式（VE 探针 VE41 的 eval 段 `p = {2.0 * ({1.0, 2.0,
+  // 3.0})[i] for i in 1:3}`），标量化之后才逐元素化简。于是——
+  // - 函数收集（NFInst.mo:219，在标量化之前）时推导式还在：里面调的函数照打，哪怕元素都化成了字面量（VE8 / VE33）；
+  // - 压平期（if 方程条件、for 范围）才标成结构参数的：元素绑定照旧是符号式，只加 final（VE37 / VE39 `p[1] = 2.0 * a[1]`）；
+  // - 定型期（维 / 条件 …）就被求值过的：evalComponentBinding 把字面量存回了组件（NFCeval.mo:382-387），压平出来就是字面量，
+  //   函数不留（VE25 / VE26 / VE29）。EvalConstants 时刻的求值（Evaluate / 结构参数的打印值、fixed、记录绑定）存回的是组件，
+  //   不碰已压平的变量（VE23 / VE30 照样留函数）。
+  // 定型期 / EvalConstants 时刻用 eval_root_ 区分：后者求值期间置成被求的那个参数，读到的参数记进 root_reads_[它]；定型期
+  // 读到的（及其 root_reads_ 传递的）进 typing_reads_。
+  std::unordered_set<std::string> comp_bound_;                                    // 推导式绑定的参数数组（整体 key）
+  std::unordered_map<std::string, std::vector<std::vector<Symbol>>> comp_fns_;   // 其中调了用户函数的 → 那些函数（压平名）
+  std::unordered_set<std::string> comp_keep_;                                     // 打成字面量、函数要留的（apply_structural_params）
+  std::unordered_map<std::string, std::vector<Id<Expr>>> comp_elems_;             // 各元素发射时的绑定（行主序，见 comp_kept_fns）
+  std::vector<std::vector<Symbol>> comp_kept_fns_;                                 // 最后要留的（见 comp_kept_fns）
+  std::string eval_root_;                                                         // 见上；空 = 定型期
+  std::unordered_map<std::string, std::unordered_set<std::string>> root_reads_;
+  std::unordered_set<std::string> typing_reads_;
+  struct EvalRoot {   // EvalConstants 时刻的求值（见 comp_bound_）
+    Flattener& f;
+    std::string saved;
+    EvalRoot(Flattener& fl, std::string k) : f(fl), saved(std::move(fl.eval_root_)) { f.eval_root_ = std::move(k); }
+    ~EvalRoot() { f.eval_root_ = std::move(saved); }
+    EvalRoot(const EvalRoot&) = delete;
+    EvalRoot& operator=(const EvalRoot&) = delete;
+  };
   std::unordered_set<std::string> typed_keys_;            // 绑定已定型（已发射）的参数（数组记整体 key）
   std::unordered_map<std::string, CVal> param_lits_;      // 已发射的字面量绑定参数（标量叶）key → 值（record_const）
   std::unordered_map<std::string, Id<Expr>> param_exprs_;  // 已发射的、绑定不是字面量的标量参数 key → 绑定（flat_param_value）

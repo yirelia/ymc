@@ -1994,6 +1994,24 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           按 key 找已发射变量（emitted_var / array_elem_keys）改增量索引、查重变量改按 key 集合（原先逐个扫 / 逐对比都是
           O(变量数²)，VTT FreeBody18 走得更远后 5 s → 37 s 超时）。
           验证：slice 637 例 PASS 586 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 587 / FAIL 39（不变，均在账）；整个 testsuite PASS 1651→1652（WaveEquationSample）/ FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 276→281；探针 8763→8772（at-p1 9 个）；四套构建零警告、单测 296→298；ASan 与 gcc 逐例一致。
+    - [x] (62u) flat：MultiBody 的 BodyBox / BodyShape 一族——向量化调用 / 推导式绑定的结构求值 + 推导式里调的函数照打 +
+          别名修饰缺省的向前引用 + 类型派生属性抬成数组 + diagonal 留调用 + 全零数组运算数消掉 + 别名结构参数的调用实参
+          （2026-10-08）：BodyBox / BodyCylinder 卡在 `R = Frames.from_nxy(r, widthDirection)`——omc 走 A 支（只读结构参数，
+          Ceval），r 是被 Evaluate 的 `lengthDirection = to_unit1(r - r_shape)` 连带成结构参数的，ymc 求这个绑定时向量化调用一律
+          不求值。结构语境（Ceval：绑定 / 维 / 条件 / 函数体里）向量化调用逐元素求值；类型化路径照旧不折（FuncVectorization3）。
+          判 Evaluate 的固定与否认迭代变量（omc 判的是未定型的 `f(a)`，CREF 支看组件节点，NFStructural.mo:167-186）。omc 压平
+          变量的绑定一直是推导式（EvalConstants 只代入结构参数、不求整个推导式，VE41 的 eval 段），函数收集在标量化之前：推导式
+          里调的函数照打（VE8 / VE33），除非代入后下标数组各元素相同、调用当场求值（simplifySubscriptedExp，NFSimplifyExp.mo
+          :1346-1379；VK3、MSL FixedRotation 的 r = 0）；定型期（维 / 条件）求值过的已把字面量存回组件（evalComponentBinding，
+          NFCeval.mo:382-387）→ 不打（VE25 / VE26 / VE29）；只在压平期标成结构参数的元素绑定照旧是符号式、只加 final（VE37 /
+          VE39，此前打成字面量）。函数别名修饰给的缺省引用的参数还没发射（MSL 示例的 `inner World world` 多在最后、重力函数
+          `g = g * normalizeWithAssert(n)`）：第一遍照原式发射、第二遍用第一遍的值（omc 求缺省不存回组件，AD5）。不标量化的
+          数组参数上类型链派生、不带 each 的属性按元素抬成同形数组（MSL 3.2.3 Body 的 `z_a_start`）。diagonal 只在实参全是
+          字面量时展开，别处留调用、实参照化简后的形态（MSL BodyBox 的 `I = Frames.resolveDyade1(R, diagonal({…} / 12))`；
+          此前 `z = diagonal(a)` 等整个数组的等式也被展开、与 omc 不符）。数组运算一侧代入后成了全零字面量的照 simplifyBinarySub
+          消掉（FixedRotation 的 `- cross(r, frame_a.f)`）。参数数组是结构参数数组的裸 cref 别名时（Rotor1D 的
+          `rotorWith3DEffects(n = n)`），调用绑定 `e = normalizeWithAssert(n)` 按压平末尾的别名连带认成能求值、逐元素。
+          验证：slice 637 例 PASS 586 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 587 / FAIL 39（不变，均在账）；整个 testsuite PASS 1652→1657（crane ×2、VTT FreeBody18、SingularPlanarLoop、Tearing12）/ FAIL 0 / ACCEPTS-INVALID 3（在账）；门里 EngineV6_output 超时（CRASH）是同时跑编译拖的——空闲时 gcc 12.7 s / ASan 81 s（限 30 / 180 s），同源预检无 CRASH；MSL 514 个 PASS 281→301；探针 8772→8859（ve-p1 41、ad-p1 6、lt-p1 3、dg-p1 16、zs-p1 6、ra-p1 3、ab-p1 12）；四套构建零警告、单测 298→306；ASan 与 gcc 逐例一致。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

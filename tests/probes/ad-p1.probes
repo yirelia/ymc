@@ -1,0 +1,172 @@
+//// set: ad-p1 — 函数别名修饰给的缺省（`function acc = std(g = g * n, mu = mu)`，MultiBody World 的重力函数）引用的参数声明在调用者之后（向前引用，第二遍用第一遍的值）/ 之前；缺省里调用户函数（`g * nrm(n)`）；枚举输入；被引用参数的绑定非字面量（AD5 / AD6：omc 不存回组件，ymc 数组元素的非字面量绑定未做 → SKIP）。单测取 AD1
+//// model: AD1
+model AD1
+  function std
+    input Real r[3];
+    input Real g[3];
+    input Real mu;
+    output Real a[3];
+  algorithm
+    a := g + mu * r;
+  end std;
+  model W
+    parameter Real g = 9.81;
+    parameter Real n[3] = {0, -1, 0};
+    parameter Real mu = 1;
+    function acc = std(g = g * n, mu = mu);
+  end W;
+  model B
+    outer W world;
+    Real r[3];
+    Real a[3];
+  equation
+    a = world.acc(r);
+    der(r) = a;
+  end B;
+  B b;
+  inner W world;
+end AD1;
+//// model: AD2
+model AD2
+  function std
+    input Real r[3];
+    input Real g[3];
+    input Real mu;
+    output Real a[3];
+  algorithm
+    a := g + mu * r;
+  end std;
+  model W
+    parameter Real g = 9.81;
+    parameter Real n[3] = {0, -1, 0};
+    parameter Real mu = 1;
+    function acc = std(g = g * n, mu = mu);
+  end W;
+  model B
+    outer W world;
+    Real r[3];
+    Real a[3];
+  equation
+    a = world.acc(r);
+    der(r) = a;
+  end B;
+  inner W world;
+  B b;
+end AD2;
+//// model: AD3
+model AD3
+  function nrm
+    input Real v[:];
+    output Real u[size(v, 1)];
+  algorithm
+    u := v / sqrt(v * v);
+  end nrm;
+  function std
+    input Real r[3];
+    input Real g[3];
+    input Real mu;
+    output Real a[3];
+  algorithm
+    a := g + mu * r;
+  end std;
+  model W
+    parameter Real g = 9.81;
+    parameter Real n[3] = {0, -2, 0};
+    parameter Real mu = 1;
+    function acc = std(g = g * nrm(n), mu = mu);
+  end W;
+  model B
+    outer W world;
+    Real r[3];
+    Real a[3];
+  equation
+    a = world.acc(r);
+    der(r) = a;
+  end B;
+  B b;
+  inner W world;
+end AD3;
+//// model: AD4
+model AD4
+  type GT = enumeration(None, Uniform, Point);
+  function std
+    input Real r[3];
+    input GT t;
+    input Real g[3];
+    output Real a[3];
+  algorithm
+    a := if t == GT.Uniform then g else -r;
+  end std;
+  model W
+    parameter GT t = GT.Uniform;
+    parameter Real g = 9.81;
+    parameter Real n[3] = {0, -1, 0};
+    function acc = std(t = t, g = g * n);
+  end W;
+  model B
+    outer W world;
+    Real r[3];
+    Real a[3];
+  equation
+    a = world.acc(r);
+    der(r) = a;
+  end B;
+  B b;
+  inner W world(g = 3);
+end AD4;
+//// model: AD5
+model AD5
+  function std
+    input Real r[3];
+    input Real g[3];
+    input Real mu;
+    output Real a[3];
+  algorithm
+    a := g + mu * r;
+  end std;
+  model W
+    parameter Real g = 9.81 * k;
+    parameter Real k = 2;
+    parameter Real n[3] = {0, -k, 0};
+    parameter Real mu = 1;
+    function acc = std(g = g * n, mu = mu);
+  end W;
+  model B
+    outer W world;
+    Real r[3];
+    Real a[3];
+  equation
+    a = world.acc(r);
+    der(r) = a;
+  end B;
+  B b;
+  inner W world;
+end AD5;
+//// model: AD6
+model AD6
+  function std
+    input Real r[3];
+    input Real g[3];
+    input Real mu;
+    output Real a[3];
+  algorithm
+    a := g + mu * r;
+  end std;
+  model W
+    parameter Real g = 9.81 * k;
+    parameter Real k = 2;
+    parameter Real n[3] = {0, -k, 0};
+    parameter Real mu = 1;
+    function acc = std(g = g * n, mu = mu);
+  end W;
+  model B
+    outer W world;
+    Real r[3];
+    Real a[3];
+  equation
+    a = world.acc(r);
+    der(r) = a;
+  end B;
+  inner W world;
+  B b;
+end AD6;

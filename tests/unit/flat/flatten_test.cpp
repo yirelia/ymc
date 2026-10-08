@@ -6310,4 +6310,162 @@ YMC_TEST(flatten_scalar_builtin_division_by_zero_unsupported) {
   YMC_CHECK_EQ(out, std::string("<unsupported:division by zero in constant>"));
 }
 
+YMC_TEST(flatten_vectorized_structural_binding_keeps_function) {
+  // Evaluate 数组参数的绑定是向量化调用 `f(a)`：结构求值逐元素算出字面量（a 连带 final），omc 压平变量的绑定一直是推导式
+  //（EvalConstants 只代入里面的结构参数），函数收集在标量化之前 → f 照打（VE8）；同一个参数又被维 `x[integer(p[2])]` 在
+  // 定型期求值过 → evalComponentBinding 已把字面量存回，f 不打（VE25）。期望 = omc 1.25.0 实跑（2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("model VE8\n  function f\n    input Real r;\n    output Real y;\n  algorithm\n    y := 2 * r;\n"
+                           "  end f;\n  parameter Real a[3] = {1, 2, 3};\n"
+                           "  parameter Real p[3] = f(a) annotation(Evaluate = true);\n  Real x;\nequation\n  der(x) = p[2];\n"
+                           "end VE8;\n"),
+               std::string("function VE8.f\n  input Real r;\n  output Real y;\nalgorithm\n  y := 2.0 * r;\nend VE8.f;\n\n"
+                           "class VE8\n  final parameter Real a[1] = 1.0;\n  final parameter Real a[2] = 2.0;\n"
+                           "  final parameter Real a[3] = 3.0;\n  final parameter Real p[1] = 2.0;\n"
+                           "  final parameter Real p[2] = 4.0;\n  final parameter Real p[3] = 6.0;\n  Real x;\nequation\n"
+                           "  der(x) = 4.0;\nend VE8;\n"));
+  YMC_CHECK_EQ(flatten_src("model VE25\n  function f\n    input Real r;\n    output Real y;\n  algorithm\n    y := 2 * r;\n"
+                           "  end f;\n  parameter Real a[3] = {1, 2, 3};\n"
+                           "  parameter Real p[3] = f(a) annotation(Evaluate = true);\n  Real x[integer(p[2])];\nequation\n"
+                           "  for i in 1:4 loop der(x[i]) = p[1]; end for;\nend VE25;\n"),
+               std::string("class VE25\n  final parameter Real a[1] = 1.0;\n  final parameter Real a[2] = 2.0;\n"
+                           "  final parameter Real a[3] = 3.0;\n  final parameter Real p[1] = 2.0;\n"
+                           "  final parameter Real p[2] = 4.0;\n  final parameter Real p[3] = 6.0;\n  Real x[1];\n  Real x[2];\n"
+                           "  Real x[3];\n  Real x[4];\nequation\n  der(x[1]) = 2.0;\n  der(x[2]) = 2.0;\n  der(x[3]) = 2.0;\n"
+                           "  der(x[4]) = 2.0;\nend VE25;\n"));
+}
+
+YMC_TEST(flatten_comprehension_parameter_marking_contexts) {
+  // 推导式绑定的参数数组：被别的 Evaluate 参数的绑定读到（EvalConstants 时刻）→ 照样字面量、f 照打（VE23）；只在压平期
+  //（if 方程条件）才标成结构参数 → 元素绑定照旧是符号式、只加 final，引用处照样代入值（VE39）。期望 = omc 1.25.0 实跑
+  //（2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("model VE23\n  function f\n    input Real r;\n    output Real y;\n  algorithm\n    y := 2 * r;\n"
+                           "  end f;\n  parameter Real a[3] = {1, 2, 3};\n  parameter Real p[3] = f(a);\n"
+                           "  parameter Real q = p[2] annotation(Evaluate = true);\n  Real x;\nequation\n  der(x) = q + p[1];\n"
+                           "end VE23;\n"),
+               std::string("function VE23.f\n  input Real r;\n  output Real y;\nalgorithm\n  y := 2.0 * r;\nend VE23.f;\n\n"
+                           "class VE23\n  final parameter Real a[1] = 1.0;\n  final parameter Real a[2] = 2.0;\n"
+                           "  final parameter Real a[3] = 3.0;\n  final parameter Real p[1] = 2.0;\n"
+                           "  final parameter Real p[2] = 4.0;\n  final parameter Real p[3] = 6.0;\n"
+                           "  final parameter Real q = 4.0;\n  Real x;\nequation\n  der(x) = 6.0;\nend VE23;\n"));
+  YMC_CHECK_EQ(flatten_src("model VE39\n  function f\n    input Real r;\n    output Real y;\n  algorithm\n    y := 2 * r;\n"
+                           "  end f;\n  parameter Real a[3] = {1, 2, 3};\n  parameter Real p[3] = {2 * a[i] for i in 1:3};\n"
+                           "  Real x;\nequation\n  if p[2] > 1 then\n    der(x) = p[1];\n  else\n    der(x) = 0;\n  end if;\n"
+                           "end VE39;\n"),
+               std::string("class VE39\n  parameter Real a[1] = 1.0;\n  parameter Real a[2] = 2.0;\n"
+                           "  parameter Real a[3] = 3.0;\n  final parameter Real p[1] = 2.0 * a[1];\n"
+                           "  final parameter Real p[2] = 2.0 * a[2];\n  final parameter Real p[3] = 2.0 * a[3];\n  Real x;\n"
+                           "equation\n  der(x) = 2.0;\nend VE39;\n"));
+}
+
+YMC_TEST(flatten_alias_default_forward_reference) {
+  // 函数别名修饰给的缺省 `acc = std(g = g * n, mu = mu)` 引用的 world 声明在调用者之后：第一遍照原式发射、第二遍用第一遍
+  // 的值求缺省（MSL 示例的 `inner World world` 多在最后）。期望 = omc 1.25.0 实跑（2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("model AD1\n  function std\n    input Real r[3];\n    input Real g[3];\n    input Real mu;\n"
+                           "    output Real a[3];\n  algorithm\n    a := g + mu * r;\n  end std;\n  model W\n"
+                           "    parameter Real g = 9.81;\n    parameter Real n[3] = {0, -1, 0};\n    parameter Real mu = 1;\n"
+                           "    function acc = std(g = g * n, mu = mu);\n  end W;\n  model B\n    outer W world;\n"
+                           "    Real r[3];\n    Real a[3];\n  equation\n    a = world.acc(r);\n    der(r) = a;\n  end B;\n"
+                           "  B b;\n  inner W world;\nend AD1;\n"),
+               std::string("function AD1.world.acc\n  input Real[3] r;\n  input Real[3] g = {0.0, -9.81, 0.0};\n"
+                           "  input Real mu = 1.0;\n  output Real[3] a;\nalgorithm\n"
+                           "  a := {g[1] + mu * r[1], g[2] + mu * r[2], g[3] + mu * r[3]};\nend AD1.world.acc;\n\nclass AD1\n"
+                           "  Real b.r[1];\n  Real b.r[2];\n  Real b.r[3];\n  Real b.a[1];\n  Real b.a[2];\n  Real b.a[3];\n"
+                           "  parameter Real world.g = 9.81;\n  parameter Real world.n[1] = 0.0;\n"
+                           "  parameter Real world.n[2] = -1.0;\n  parameter Real world.n[3] = 0.0;\n"
+                           "  parameter Real world.mu = 1.0;\nequation\n"
+                           "  b.a = AD1.world.acc(b.r, {world.g * world.n[1], world.g * world.n[2], world.g * world.n[3]}, world.mu);\n"
+                           "  der(b.r[1]) = b.a[1];\n  der(b.r[2]) = b.a[2];\n  der(b.r[3]) = b.a[3];\nend AD1;\n"));
+}
+
+YMC_TEST(flatten_whole_array_var_lifts_type_attributes) {
+  // 不标量化的数组参数（绑定是整个用户函数调用）：类型链派生、不带 each 的属性按元素抬成同形数组，组件上带 each 的打一个值。
+  // 期望 = omc 1.25.0 实跑（2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("model LT2\n"
+                           "  type Angle = Real(final quantity = \"Angle\", final unit = \"rad\", displayUnit = \"deg\");\n"
+                           "  function f\n    input Real x;\n    output Real y[2, 2];\n  algorithm\n"
+                           "    y := {{x, 2 * x}, {3 * x, 4 * x}};\n  end f;\n  parameter Real p = 1;\n"
+                           "  parameter Angle phi[2, 2](each displayUnit = \"rad\") = f(p);\n  Real z;\nequation\n"
+                           "  der(z) = phi[2, 1];\nend LT2;\n"),
+               std::string("function LT2.f\n  input Real x;\n  output Real[2, 2] y;\nalgorithm\n"
+                           "  y := {{x, 2.0 * x}, {3.0 * x, 4.0 * x}};\nend LT2.f;\n\nclass LT2\n  parameter Real p = 1.0;\n"
+                           "  parameter Real[2, 2] phi(quantity = {{\"Angle\", \"Angle\"}, {\"Angle\", \"Angle\"}}, unit = {{\"rad\", \"rad\"}, {\"rad\", \"rad\"}}, displayUnit = \"rad\") = LT2.f(p);\n"
+                           "  Real z;\nequation\n  der(z) = phi[2,1];\nend LT2;\n"));
+}
+
+YMC_TEST(flatten_diagonal_kept_as_call) {
+  // omc 的化简不展开 diagonal（实参全是字面量的才求值）：整个数组的等式里留调用；参数数组摊分时逐元素取（对角取实参元素、
+  // 其余 0.0）。期望 = omc 1.25.0 实跑（2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("model DG6\n  function f\n    input Real m[3, 3];\n    output Real y;\n  algorithm\n"
+                           "    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3];\n  end f;\n  function g\n    input Real m[3, 3];\n"
+                           "    input Real k;\n    output Real y[3, 3];\n  algorithm\n    y := k * m;\n  end g;\n"
+                           "  parameter Real a[3] = {1, 2, 3};\n  Real z[3, 3] = diagonal(a) * time;\nend DG6;\n"),
+               std::string("class DG6\n  parameter Real a[1] = 1.0;\n  parameter Real a[2] = 2.0;\n"
+                           "  parameter Real a[3] = 3.0;\n  Real z[1,1];\n  Real z[1,2];\n  Real z[1,3];\n  Real z[2,1];\n"
+                           "  Real z[2,2];\n  Real z[2,3];\n  Real z[3,1];\n  Real z[3,2];\n  Real z[3,3];\nequation\n"
+                           "  z = diagonal(a) * time;\nend DG6;\n"));
+  YMC_CHECK_EQ(flatten_src("model DG9\n  function f\n    input Real m[3, 3];\n    output Real y;\n  algorithm\n"
+                           "    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3];\n  end f;\n  parameter Real a[3] = {1, 2, 3};\n"
+                           "  parameter Real d[3, 3] = diagonal(a);\nend DG9;\n"),
+               std::string("class DG9\n  parameter Real a[1] = 1.0;\n  parameter Real a[2] = 2.0;\n"
+                           "  parameter Real a[3] = 3.0;\n  parameter Real d[1,1] = a[1];\n  parameter Real d[1,2] = 0.0;\n"
+                           "  parameter Real d[1,3] = 0.0;\n  parameter Real d[2,1] = 0.0;\n  parameter Real d[2,2] = a[2];\n"
+                           "  parameter Real d[2,3] = 0.0;\n  parameter Real d[3,1] = 0.0;\n  parameter Real d[3,2] = 0.0;\n"
+                           "  parameter Real d[3,3] = a[3];\nend DG9;\n"));
+}
+
+YMC_TEST(flatten_zero_array_operand_dropped_after_substitution) {
+  // `ta + rot(R, tb) - cross(r, f)`，r 经 Evaluate 连带成结构参数、代入后 cross 成了全零：压平末尾再化简照 simplifyBinarySub
+  // 消掉（MSL FixedRotation 的力矩方程）。期望 = omc 1.25.0 实跑（2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("model ZS2\n  function rot\n    input Real R[3, 3];\n    input Real v[3];\n    output Real y[3];\n"
+                           "  algorithm\n    y := R * v;\n  end rot;\n  function to_unit1\n    input Real r;\n"
+                           "    output Real result;\n  algorithm\n    result := r;\n  end to_unit1;\n"
+                           "  parameter Real r[3] = {0, 0, 0};\n  parameter Real ld[3] = r annotation(Evaluate = true);\n"
+                           "  parameter Real R[3, 3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};\n  Real ta[3](each start = 0);\n"
+                           "  Real tb[3];\n  Real f[3];\nequation\n  zeros(3) = ta + rot(R, tb) - cross(r, f);\n"
+                           "  tb = {time, 0, 0};\n  f = {0, time, 0};\nend ZS2;\n"),
+               std::string("function ZS2.rot\n  input Real[3, 3] R;\n  input Real[3] v;\n  output Real[3] y;\nalgorithm\n"
+                           "  y := {R[1,1] * v[1] + R[1,2] * v[2] + R[1,3] * v[3], R[2,1] * v[1] + R[2,2] * v[2] + R[2,3] * v[3], R[3,1] * v[1] + R[3,2] * v[2] + R[3,3] * v[3]};\n"
+                           "end ZS2.rot;\n\nclass ZS2\n  final parameter Real r[1] = 0.0;\n  final parameter Real r[2] = 0.0;\n"
+                           "  final parameter Real r[3] = 0.0;\n  final parameter Real ld[1] = 0.0;\n"
+                           "  final parameter Real ld[2] = 0.0;\n  final parameter Real ld[3] = 0.0;\n"
+                           "  parameter Real R[1,1] = 1.0;\n  parameter Real R[1,2] = 0.0;\n  parameter Real R[1,3] = 0.0;\n"
+                           "  parameter Real R[2,1] = 0.0;\n  parameter Real R[2,2] = 1.0;\n  parameter Real R[2,3] = 0.0;\n"
+                           "  parameter Real R[3,1] = 0.0;\n  parameter Real R[3,2] = 0.0;\n  parameter Real R[3,3] = 1.0;\n"
+                           "  Real ta[1](start = 0.0);\n  Real ta[2](start = 0.0);\n  Real ta[3](start = 0.0);\n  Real tb[1];\n"
+                           "  Real tb[2];\n  Real tb[3];\n  Real f[1];\n  Real f[2];\n  Real f[3];\nequation\n"
+                           "  {0.0, 0.0, 0.0} = ta + ZS2.rot(R, tb);\n  tb[1] = time;\n  tb[2] = 0.0;\n  tb[3] = 0.0;\n"
+                           "  f[1] = 0.0;\n  f[2] = time;\n  f[3] = 0.0;\nend ZS2;\n"));
+}
+
+YMC_TEST(flatten_comprehension_call_folded_on_equal_elements) {
+  // Evaluate 数组参数 `p = f(a)`、a = {0, 0, 0}：omc 代入后推导式体里的 `{0.0, 0.0, 0.0}[$i1]` 化成 0.0、f(0.0) 当场求值，
+  // f 不再被引用（不打）。期望 = omc 1.25.0 实跑（2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("model VK3\n  function f\n    input Real r;\n    output Real y;\n  algorithm\n    y := 2 * r;\n"
+                           "  end f;\n  parameter Real a[3] = {0, 0, 0};\n"
+                           "  parameter Real p[3] = f(a) annotation(Evaluate = true);\n  Real x;\nequation\n  der(x) = p[2];\n"
+                           "end VK3;\n"),
+               std::string("class VK3\n  final parameter Real a[1] = 0.0;\n  final parameter Real a[2] = 0.0;\n"
+                           "  final parameter Real a[3] = 0.0;\n  final parameter Real p[1] = 0.0;\n"
+                           "  final parameter Real p[2] = 0.0;\n  final parameter Real p[3] = 0.0;\n  Real x;\nequation\n"
+                           "  der(x) = 0.0;\nend VK3;\n"));
+}
+
+YMC_TEST(flatten_alias_structural_array_argument_scalarizes) {
+  // `Inner i(n = n)`、外层 n 带 Evaluate：i.n 经别名连带成结构参数，`e = nrm(n)` 求值成字面量、逐元素（不是整体数组变量）。
+  // 期望 = omc 1.25.0 实跑（2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("model RA1\n  function nrm\n    input Real v[3];\n    output Real u[3];\n  algorithm\n"
+                           "    u := v / sqrt(v * v);\n  end nrm;\n  model Inner\n    parameter Real n[3] = {1, 0, 0};\n"
+                           "  protected\n    parameter Real e[3](each final unit = \"1\") = nrm(n);\n  public\n    Real x;\n"
+                           "  equation\n    der(x) = e[2];\n  end Inner;\n  model Outer\n"
+                           "    parameter Real n[3] = {0, 2, 0} annotation(Evaluate = true);\n    Inner i(n = n);\n"
+                           "  end Outer;\n  Outer o;\nend RA1;\n"),
+               std::string("class RA1\n  final parameter Real o.n[1] = 0.0;\n  final parameter Real o.n[2] = 2.0;\n"
+                           "  final parameter Real o.n[3] = 0.0;\n  final parameter Real o.i.n[1] = 0.0;\n"
+                           "  final parameter Real o.i.n[2] = 2.0;\n  final parameter Real o.i.n[3] = 0.0;\n"
+                           "  protected parameter Real o.i.e[1](unit = \"1\") = 0.0;\n"
+                           "  protected parameter Real o.i.e[2](unit = \"1\") = 1.0;\n"
+                           "  protected parameter Real o.i.e[3](unit = \"1\") = 0.0;\n  Real o.i.x;\nequation\n"
+                           "  der(o.i.x) = o.i.e[2];\nend RA1;\n"));
+}
+
 YMC_TEST_MAIN

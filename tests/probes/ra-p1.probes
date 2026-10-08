@@ -1,0 +1,62 @@
+//// set: ra-p1 — 参数数组是结构参数数组的裸 cref 别名（`Inner i(n = n)`、外层 n 带 Evaluate；`n = m`）：调用绑定 `e = nrm(n)` 求值成字面量、逐元素（MSL Rotor1D 的 `rotorWith3DEffects.e`）；非结构的照旧整体数组变量。单测取 RA1
+//// model: RA1
+model RA1
+  function nrm
+    input Real v[3];
+    output Real u[3];
+  algorithm
+    u := v / sqrt(v * v);
+  end nrm;
+  model Inner
+    parameter Real n[3] = {1, 0, 0};
+  protected
+    parameter Real e[3](each final unit = "1") = nrm(n);
+  public
+    Real x;
+  equation
+    der(x) = e[2];
+  end Inner;
+  model Outer
+    parameter Real n[3] = {0, 2, 0} annotation(Evaluate = true);
+    Inner i(n = n);
+  end Outer;
+  Outer o;
+end RA1;
+//// model: RA2
+model RA2
+  function nrm
+    input Real v[3];
+    output Real u[3];
+  algorithm
+    u := v / sqrt(v * v);
+  end nrm;
+  model Inner
+    parameter Real n[3] = {1, 0, 0};
+  protected
+    parameter Real e[3](each final unit = "1") = nrm(n);
+  public
+    Real x;
+  equation
+    der(x) = e[2];
+  end Inner;
+  model Outer
+    parameter Real n[3] = {0, 2, 0};
+    Inner i(n = n);
+  end Outer;
+  Outer o;
+end RA2;
+//// model: RA3
+model RA3
+  function nrm
+    input Real v[3];
+    output Real u[3];
+  algorithm
+    u := v / sqrt(v * v);
+  end nrm;
+  parameter Real m[3] = {0, 0, 3} annotation(Evaluate = true);
+  parameter Real n[3] = m;
+  parameter Real e[3] = nrm(n);
+  Real x;
+equation
+  der(x) = e[3];
+end RA3;

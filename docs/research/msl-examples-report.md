@@ -333,3 +333,16 @@ Machines 的 IMC_DCBraking（条件组件 `terminalBox.star` 经子实例求值�
 BodyCylinder 的 `R = Frames.from_nxy(r, widthDirection)`（r 由 Evaluate 的 `lengthDirection = to_unit1(r - r_shape)` 连带
 成结构参数，要先通向量化调用的结构求值）、8 个卡在 Vectors.length 的结构代入、8 个卡在 world 重力函数别名修饰的缺省值。
 FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-08 加宽 62u 之后：PASS 281 → 301
+
+向量化调用 / 推导式绑定的结构求值（推导式里调的函数按 omc 的化简决定打不打）、diagonal 留调用、函数别名修饰缺省的向前引用、
+全零数组运算数消掉、别名结构参数的调用实参逐元素之后，MultiBody 越过 BodyBox / BodyCylinder 的 `R = Frames.from_nxy(r,
+widthDirection)`、BodyShape 的 `length = Vectors.length(r - r_shape)`、World 重力函数的别名缺省：Elementary 的 DoublePendulum /
+DoublePendulumInitTip / ForceAndTorque / FreeBody / HeatLosses / InitSpringConstant / LineForceWithTwoMasses /
+PendulumWithSpringDamper / PointGravityWithPointMasses2 / SpringDamperSystem / SpringMassSystem / ThreeSprings，Loops 的
+Fourbar1 / Fourbar2，Rotational3DEffects 的 BevelGear1D / GearConstraint / GyroscopicEffects，Systems.RobotR3.FullRobot，
+以及 Machines 的 SMEE_LoadDump / SMEE_Rectifier 逐字节一致（MultiBody 42 个示例里 23 个）。MultiBody 其余：5 个卡在压平末尾
+标成结构参数的整体数组变量（RevolutePlanarLoopConstraint 的 `ey_a`）、5 个卡在结构参数的非字面量绑定（Constraints.* /
+ActuatedDrive）、4 + 1 个卡在修饰名指向嵌套类、2 个卡在组件数组修饰分发出的结构别名、RollingWheel 卡在混合类型的数组修饰
+字面量、PlanarLoops_analytic 卡在无绑定的 Evaluate 参数数组。FAIL / ACCEPTS-INVALID / CRASH 0。

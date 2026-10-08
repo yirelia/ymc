@@ -1,0 +1,737 @@
+//// set: ve-p1 — Evaluate / 结构参数数组的绑定是向量化调用（`to_unit1(r - r_shape)`、`f(a)`、`f(a, b)`、二维、带缺省实参）或书写的推导式：结构求值逐元素求出字面量；函数是否照打看 omc 压平变量的绑定是否还是推导式（Evaluate / 别的 Evaluate 参数读到 → 照打；维 / 条件在定型期求值过 → 不打；嵌在运算 / 外层调用里的被化简掉 → 不打）；压平期（if 方程条件、for 范围）才标的元素绑定照旧是符号式、只加 final；标量 / 非向量化的数组调用对照；记录绑定经 from_nxy 式函数（A 支）。单测取 VE8 / VE25 / VE23 / VE39
+//// model: VE1
+model VE1
+  function to_unit1
+    input Real r;
+    output Real result(unit = "1");
+  algorithm
+    result := r;
+    annotation(Inline = true);
+  end to_unit1;
+  model B
+    parameter Real r[3](start = {0.1, 0, 0});
+    parameter Real r_shape[3] = {0, 0, 0};
+    parameter Real lengthDirection[3] = to_unit1(r - r_shape) annotation(Evaluate = true);
+    Real x;
+  equation
+    der(x) = lengthDirection[1];
+  end B;
+  B b(r = {0.5, 0, 0});
+end VE1;
+//// model: VE2
+model VE2
+  record Rec
+    Real T[3, 3];
+    Real w[3];
+  end Rec;
+  function mk
+    input Real n[3];
+    input Real w[3];
+    output Rec R;
+  protected
+    Real a = sqrt(n * n);
+  algorithm
+    R := Rec(T = {n / a, w, {0, 0, 1}}, w = zeros(3));
+  end mk;
+  function to_unit1
+    input Real r;
+    output Real result(unit = "1");
+  algorithm
+    result := r;
+    annotation(Inline = true);
+  end to_unit1;
+  model B
+    parameter Real r[3](start = {0.1, 0, 0});
+    parameter Real r_shape[3] = {0, 0, 0};
+    parameter Real lengthDirection[3] = to_unit1(r - r_shape) annotation(Evaluate = true);
+    parameter Real widthDirection[3] = {0, 1, 0} annotation(Evaluate = true);
+    final parameter Rec R = mk(r, widthDirection);
+    Real x;
+  equation
+    der(x) = R.T[1, 1] + lengthDirection[2];
+  end B;
+  B b(r = {0.5, 0, 0});
+end VE2;
+//// model: VE3
+model VE3
+  record Rec
+    Real T[3, 3];
+    Real w[3];
+  end Rec;
+  function mk
+    input Real n[3];
+    input Real w[3];
+    output Rec R;
+  protected
+    Real a = sqrt(n * n);
+  algorithm
+    R := Rec(T = {n / a, w, {0, 0, 1}}, w = zeros(3));
+  end mk;
+  function to_unit1
+    input Real r;
+    output Real result(unit = "1");
+  algorithm
+    result := r;
+    annotation(Inline = true);
+  end to_unit1;
+  model B
+    parameter Real r[3](start = {0.1, 0, 0}) = {2, 0, 0};
+    parameter Real r_shape[3] = {0, 0, 0};
+    parameter Real lengthDirection[3] = to_unit1(r - r_shape) annotation(Evaluate = true);
+    parameter Real widthDirection[3] = {0, 1, 0} annotation(Evaluate = true);
+    final parameter Rec R = mk(r, widthDirection);
+    Real x;
+  equation
+    der(x) = R.T[1, 1] + lengthDirection[2];
+  end B;
+  B b;
+end VE3;
+//// model: VE4
+model VE4
+  record Rec
+    Real T[3, 3];
+    Real w[3];
+  end Rec;
+  function mk
+    input Real n[3];
+    input Real w[3];
+    output Rec R;
+  protected
+    Real a = sqrt(n * n);
+  algorithm
+    R := Rec(T = {n / a, w, {0, 0, 1}}, w = zeros(3));
+  end mk;
+  function to_unit1
+    input Real r;
+    output Real result(unit = "1");
+  algorithm
+    result := r;
+    annotation(Inline = true);
+  end to_unit1;
+  model B
+    parameter Real r[3](start = {0.1, 0, 0});
+    parameter Real r_shape[3] = {0, 0, 0};
+    parameter Real lengthDirection[3] = to_unit1(r - r_shape);
+    parameter Real widthDirection[3] = {0, 1, 0} annotation(Evaluate = true);
+    final parameter Rec R = mk(r, widthDirection);
+    Real x;
+  equation
+    der(x) = R.T[1, 1] + lengthDirection[2];
+  end B;
+  B b(r = {0.5, 0, 0});
+end VE4;
+//// model: VE5
+model VE5
+  function len
+    input Real v[:];
+    output Real result;
+  algorithm
+    result := sqrt(v * v);
+  end len;
+  model S
+    parameter Real d = 1;
+    Real y = d * time;
+  end S;
+  model B
+    parameter Real r[3](start = {0.1, 0, 0});
+    parameter Real r_shape[3] = {0, 0, 0};
+    parameter Real length = len(r - r_shape);
+    parameter Real dia = length / 4;
+    S s(d = dia) if dia > 0;
+    Real x;
+  equation
+    der(x) = length;
+  end B;
+  B b(r = {0.5, 0, 0});
+end VE5;
+//// model: VE6
+model VE6
+  record Orientation
+    Real T[3, 3];
+    Real w[3];
+  end Orientation;
+  function from_nxy
+    input Real n_x[3];
+    input Real n_y[3];
+    output Orientation R;
+  protected
+    Real abs_n_x = sqrt(n_x * n_x);
+    Real e_x[3] = if abs_n_x < 1.e-10 then {1, 0, 0} else n_x / abs_n_x;
+    Real n_z_aux[3] = cross(e_x, n_y);
+    Real n_y_aux[3] = if n_z_aux * n_z_aux > 1.0e-6 then n_y else (if abs(e_x[1]) > 1.0e-6 then {0, 1, 0} else {1, 0, 0});
+    Real e_z_aux[3] = cross(e_x, n_y_aux);
+    Real e_z[3] = e_z_aux / sqrt(e_z_aux * e_z_aux);
+  algorithm
+    R := Orientation(T = {e_x, cross(e_z, e_x), e_z}, w = {0, 0, 0});
+  end from_nxy;
+  function to_unit1
+    input Real r;
+    output Real result(unit = "1");
+  algorithm
+    result := r;
+    annotation(Inline = true);
+  end to_unit1;
+  model B
+    parameter Real r[3](start = {0.1, 0, 0});
+    parameter Real r_shape[3] = {0, 0, 0};
+    parameter Real lengthDirection[3] = to_unit1(r - r_shape) annotation(Evaluate = true);
+    parameter Real widthDirection[3] = {0, 1, 0} annotation(Evaluate = true);
+    final parameter Orientation R = from_nxy(r, widthDirection);
+    Real x;
+  equation
+    der(x) = R.T[2, 2] + lengthDirection[1];
+  end B;
+  B b(r = {0.5, 0.5, 0});
+end VE6;
+//// model: VE7
+model VE7
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a = 3;
+  parameter Real p = f(a) annotation(Evaluate = true);
+  Real x;
+equation
+  der(x) = p;
+end VE7;
+//// model: VE8
+model VE8
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = f(a) annotation(Evaluate = true);
+  Real x;
+equation
+  der(x) = p[2];
+end VE8;
+//// model: VE9
+model VE9
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = f(a);
+  Real x;
+equation
+  der(x) = p[2];
+end VE9;
+//// model: VE10
+model VE10
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[2] = {1, 2};
+  parameter Real p[2] = f(a) annotation(Evaluate = true);
+  Real x[2](start = f(a));
+equation
+  der(x) = p;
+end VE10;
+//// model: VE11
+model VE11
+  function f
+    input Real r;
+    input Real s = 1;
+    output Real y;
+  algorithm
+    y := 2 * r + s;
+  end f;
+  parameter Real a[2, 2] = {{1, 2}, {3, 4}};
+  parameter Real p[2, 2] = f(a, 3) annotation(Evaluate = true);
+  Real x;
+equation
+  der(x) = p[2, 1];
+end VE11;
+//// model: VE12
+model VE12
+  function f
+    input Real r;
+    input Real s;
+    output Real y;
+  algorithm
+    y := r * s;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real b[3] = {4, 5, 6};
+  parameter Real p[3] = f(a, b) annotation(Evaluate = true);
+  Real x;
+equation
+  der(x) = p[3];
+end VE12;
+//// model: VE13
+model VE13
+  function g
+    input Real v[3];
+    output Real y[3];
+  algorithm
+    y := 2 * v;
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = g(a) annotation(Evaluate = true);
+  Real x;
+equation
+  der(x) = p[2];
+end VE13;
+//// model: VE14
+model VE14
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = f(a) annotation(Evaluate = true);
+  parameter Real q = f(a[1]) annotation(Evaluate = true);
+  Real x;
+equation
+  der(x) = p[2] + q;
+end VE14;
+//// model: VE15
+model VE15
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[2] = {1, 2};
+  parameter Real p[2] = {f(a[1]), f(a[2])} annotation(Evaluate = true);
+  Real x;
+equation
+  der(x) = p[2];
+end VE15;
+//// model: VE16
+model VE16
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  function g
+    input Real v[3];
+    output Real y[3];
+  algorithm
+    y := v + {1, 1, 1};
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = 2 * f(a) annotation(Evaluate = true);
+  Real x;
+equation
+  der(x) = p[2];
+end VE16;
+//// model: VE17
+model VE17
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  function g
+    input Real v[3];
+    output Real y[3];
+  algorithm
+    y := v + {1, 1, 1};
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = f(a) + {1, 2, 3} annotation(Evaluate = true);
+  Real x;
+equation
+  der(x) = p[2];
+end VE17;
+//// model: VE18
+model VE18
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  function g
+    input Real v[3];
+    output Real y[3];
+  algorithm
+    y := v + {1, 1, 1};
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = f(2 * a) annotation(Evaluate = true);
+  Real x;
+equation
+  der(x) = p[2];
+end VE18;
+//// model: VE19
+model VE19
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  function g
+    input Real v[3];
+    output Real y[3];
+  algorithm
+    y := v + {1, 1, 1};
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = -f(a) annotation(Evaluate = true);
+  Real x;
+equation
+  der(x) = p[2];
+end VE19;
+//// model: VE20
+model VE20
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  function g
+    input Real v[3];
+    output Real y[3];
+  algorithm
+    y := v + {1, 1, 1};
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = g(f(a)) annotation(Evaluate = true);
+  Real x;
+equation
+  der(x) = p[2];
+end VE20;
+//// model: VE21
+model VE21
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  function g
+    input Real v[3];
+    output Real y[3];
+  algorithm
+    y := v + {1, 1, 1};
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = f(a) * 2 annotation(Evaluate = true);
+  Real x;
+equation
+  der(x) = p[2];
+end VE21;
+//// model: VE22
+model VE22
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real s = sum(f(a)) annotation(Evaluate = true);
+  Real x;
+equation
+  der(x) = s;
+end VE22;
+//// model: VE23
+model VE23
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = f(a);
+  parameter Real q = p[2] annotation(Evaluate = true);
+  Real x;
+equation
+  der(x) = q + p[1];
+end VE23;
+//// model: VE24
+model VE24
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = f(a);
+  Real x[integer(p[2])];
+equation
+  for i in 1:4 loop der(x[i]) = p[1]; end for;
+end VE24;
+//// model: VE25
+model VE25
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = f(a) annotation(Evaluate = true);
+  Real x[integer(p[2])];
+equation
+  for i in 1:4 loop der(x[i]) = p[1]; end for;
+end VE25;
+//// model: VE26
+model VE26
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  model S
+    Real y = time;
+  end S;
+  parameter Real p[3] = f(a);
+  S s if p[2] > 1;
+  Real x;
+equation
+  der(x) = p[1];
+end VE26;
+//// model: VE27
+model VE27
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = f(a);
+  Real x;
+equation
+  if p[2] > 1 then
+    der(x) = p[1];
+  else
+    der(x) = 0;
+  end if;
+end VE27;
+//// model: VE28
+model VE28
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = f(a);
+  Real x[4];
+equation
+  for i in 1:integer(p[2]) loop der(x[i]) = p[1]; end for;
+end VE28;
+//// model: VE29
+model VE29
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = f(a);
+  parameter Real q = p[2] annotation(Evaluate = true);
+  Real x[integer(q)];
+equation
+  for i in 1:4 loop der(x[i]) = p[1]; end for;
+end VE29;
+//// model: VE30
+model VE30
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = f(a) annotation(Evaluate = true);
+  parameter Real q[3] = p;
+  Real x;
+equation
+  der(x) = q[2];
+end VE30;
+//// model: VE31
+model VE31
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p = f(a[2]);
+  Real x;
+equation
+  if p > 1 then
+    der(x) = p;
+  else
+    der(x) = 0;
+  end if;
+end VE31;
+//// model: VE32
+model VE32
+  function g
+    input Real v[3];
+    output Real y[3];
+  algorithm
+    y := 2 * v;
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = g(a);
+  Real x;
+equation
+  if p[2] > 1 then
+    der(x) = p[1];
+  else
+    der(x) = 0;
+  end if;
+end VE32;
+//// model: VE33
+model VE33
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = {f(a[i]) for i in 1:3} annotation(Evaluate = true);
+  Real x;
+equation
+  der(x) = p[2];
+end VE33;
+//// model: VE34
+model VE34
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = {f(a[i]) + 1 for i in 1:3} annotation(Evaluate = true);
+  Real x;
+equation
+  der(x) = p[2];
+end VE34;
+//// model: VE35
+model VE35
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = {f(a[i]) for i in 1:3};
+  Real x;
+equation
+  der(x) = p[2];
+end VE35;
+//// model: VE36
+model VE36
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = f({1, 2, 3});
+  Real x;
+equation
+  der(x) = p[2];
+end VE36;
+//// model: VE37
+model VE37
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = {f(a[i]) for i in 1:3};
+  Real x;
+equation
+  if p[2] > 1 then
+    der(x) = p[1];
+  else
+    der(x) = 0;
+  end if;
+end VE37;
+//// model: VE38
+model VE38
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = {f(a[i]) for i in 1:3};
+  parameter Real q = p[2] annotation(Evaluate = true);
+  Real x;
+equation
+  der(x) = q + p[1];
+end VE38;
+//// model: VE39
+model VE39
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = {2 * a[i] for i in 1:3};
+  Real x;
+equation
+  if p[2] > 1 then
+    der(x) = p[1];
+  else
+    der(x) = 0;
+  end if;
+end VE39;
+//// model: VE40
+model VE40
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = {f(a[i]) for i in 1:3} annotation(Evaluate = true);
+  Real x[integer(p[2])];
+equation
+  for i in 1:4 loop der(x[i]) = p[1]; end for;
+end VE40;
+//// model: VE41
+model VE41
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = {2 * a[i] for i in 1:3} annotation(Evaluate = true);
+  Real x;
+equation
+  der(x) = p[2];
+end VE41;

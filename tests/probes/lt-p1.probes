@@ -1,0 +1,47 @@
+//// set: lt-p1 — 不标量化的数组参数（绑定是整个用户函数调用）上类型链派生、不带 each 的属性按元素抬成同形数组（SI 类型的 quantity / unit / displayUnit），组件上带 each 的打一个值；带 min / nominal 的照旧逐元素。单测取 LT2
+//// model: LT1
+model LT1
+  type Angle = Real(final quantity = "Angle", final unit = "rad", displayUnit = "deg");
+  function f
+    input Real x;
+    output Real y[3];
+  algorithm
+    y := {x, 2 * x, 3 * x};
+  end f;
+  parameter Real p = 1;
+  parameter Angle phi[3] = f(p);
+  Real z;
+equation
+  der(z) = phi[2];
+end LT1;
+//// model: LT2
+model LT2
+  type Angle = Real(final quantity = "Angle", final unit = "rad", displayUnit = "deg");
+  function f
+    input Real x;
+    output Real y[2, 2];
+  algorithm
+    y := {{x, 2 * x}, {3 * x, 4 * x}};
+  end f;
+  parameter Real p = 1;
+  parameter Angle phi[2, 2](each displayUnit = "rad") = f(p);
+  Real z;
+equation
+  der(z) = phi[2, 1];
+end LT2;
+//// model: LT3
+model LT3
+  type Len = Real(unit = "m", min = 0);
+  type L3 = Len[3](each nominal = 2);
+  function f
+    input Real x;
+    output Real y[3];
+  algorithm
+    y := {x, 2 * x, 3 * x};
+  end f;
+  parameter Real p = 1;
+  parameter L3 a = f(p);
+  Real z;
+equation
+  der(z) = a[3];
+end LT3;

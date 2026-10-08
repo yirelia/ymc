@@ -1,0 +1,106 @@
+//// set: zs-p1 — 结构参数代入后数组运算的一侧成了全零字面量（`ta + rot(R, tb) - cross(r, f)`、r = 0）：照 simplifyBinarySub 消掉；推导式绑定的 Evaluate 数组参数在下标数组各元素相同时（`a = {0, 0, 0}`）调用当场求值、函数不打（VK3 / VK4），否则照打（VK1 / VK2）。单测取 ZS2 / VK3
+//// model: VK1
+model VK1
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = f(a) annotation(Evaluate = true);
+end VK1;
+//// model: VK2
+model VK2
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = f(a) annotation(Evaluate = true);
+  Real x;
+equation
+  der(x) = a[2];
+end VK2;
+//// model: VK3
+model VK3
+  function f
+    input Real r;
+    output Real y;
+  algorithm
+    y := 2 * r;
+  end f;
+  parameter Real a[3] = {0, 0, 0};
+  parameter Real p[3] = f(a) annotation(Evaluate = true);
+  Real x;
+equation
+  der(x) = p[2];
+end VK3;
+//// model: VK4
+model VK4
+  function to_unit1
+    input Real r;
+    output Real result;
+  algorithm
+    result := r;
+  end to_unit1;
+  parameter Real r[3] = {0, 0, 0};
+  parameter Real ld[3] = to_unit1(r) annotation(Evaluate = true);
+  Real x;
+equation
+  der(x) = ld[1];
+end VK4;
+//// model: ZS1
+model ZS1
+  function rot
+    input Real R[3, 3];
+    input Real v[3];
+    output Real y[3];
+  algorithm
+    y := R * v;
+  end rot;
+  function to_unit1
+    input Real r;
+    output Real result;
+  algorithm
+    result := r;
+  end to_unit1;
+  parameter Real r[3] = {0, 0, 0};
+  parameter Real ld[3] = to_unit1(r) annotation(Evaluate = true);
+  parameter Real R[3, 3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+  Real ta[3](each start = 0);
+  Real tb[3];
+  Real f[3];
+equation
+  zeros(3) = ta + rot(R, tb) - cross(r, f);
+  tb = {time, 0, 0};
+  f = {0, time, 0};
+end ZS1;
+//// model: ZS2
+model ZS2
+  function rot
+    input Real R[3, 3];
+    input Real v[3];
+    output Real y[3];
+  algorithm
+    y := R * v;
+  end rot;
+  function to_unit1
+    input Real r;
+    output Real result;
+  algorithm
+    result := r;
+  end to_unit1;
+  parameter Real r[3] = {0, 0, 0};
+  parameter Real ld[3] = r annotation(Evaluate = true);
+  parameter Real R[3, 3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+  Real ta[3](each start = 0);
+  Real tb[3];
+  Real f[3];
+equation
+  zeros(3) = ta + rot(R, tb) - cross(r, f);
+  tb = {time, 0, 0};
+  f = {0, time, 0};
+end ZS2;

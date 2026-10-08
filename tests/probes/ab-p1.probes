@@ -1,0 +1,217 @@
+//// set: ab-p1 — 别的数组内建作函数实参 / 在整个数组的运算里（transpose / identity 展开、vector 的非字面量实参 SKIP、symmetric、skew、cross、fill、outerProduct、`diagonal(a) + m`、`m * a * time`）对照
+//// model: AB1
+model AB1
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3] + m[1, 2];
+  end f;
+  function g
+    input Real v[3];
+    output Real y;
+  algorithm
+    y := v[1] + 2 * v[2];
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real m[3, 3] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+  Real z[3, 3] = transpose(m) * time;
+end AB1;
+//// model: AB2
+model AB2
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3] + m[1, 2];
+  end f;
+  function g
+    input Real v[3];
+    output Real y;
+  algorithm
+    y := v[1] + 2 * v[2];
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real m[3, 3] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+  Real y = f(transpose(m));
+end AB2;
+//// model: AB3
+model AB3
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3] + m[1, 2];
+  end f;
+  function g
+    input Real v[3];
+    output Real y;
+  algorithm
+    y := v[1] + 2 * v[2];
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real m[3, 3] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+  Real y = g(vector(m[:, 1]));
+end AB3;
+//// model: AB4
+model AB4
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3] + m[1, 2];
+  end f;
+  function g
+    input Real v[3];
+    output Real y;
+  algorithm
+    y := v[1] + 2 * v[2];
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real m[3, 3] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+  Real z[3, 3] = identity(3) * time;
+end AB4;
+//// model: AB5
+model AB5
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3] + m[1, 2];
+  end f;
+  function g
+    input Real v[3];
+    output Real y;
+  algorithm
+    y := v[1] + 2 * v[2];
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real m[3, 3] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+  Real y = f(identity(3) * time);
+end AB5;
+//// model: AB6
+model AB6
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3] + m[1, 2];
+  end f;
+  function g
+    input Real v[3];
+    output Real y;
+  algorithm
+    y := v[1] + 2 * v[2];
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real m[3, 3] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+  Real z[3, 3] = symmetric(m) * time;
+end AB6;
+//// model: AB7
+model AB7
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3] + m[1, 2];
+  end f;
+  function g
+    input Real v[3];
+    output Real y;
+  algorithm
+    y := v[1] + 2 * v[2];
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real m[3, 3] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+  Real y = f(skew(a));
+end AB7;
+//// model: AB8
+model AB8
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3] + m[1, 2];
+  end f;
+  function g
+    input Real v[3];
+    output Real y;
+  algorithm
+    y := v[1] + 2 * v[2];
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real m[3, 3] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+  Real z[3] = cross(a, {time, 1, 2});
+end AB8;
+//// model: AB9
+model AB9
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3] + m[1, 2];
+  end f;
+  function g
+    input Real v[3];
+    output Real y;
+  algorithm
+    y := v[1] + 2 * v[2];
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real m[3, 3] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+  Real y = g(fill(time, 3));
+end AB9;
+//// model: AB10
+model AB10
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3] + m[1, 2];
+  end f;
+  function g
+    input Real v[3];
+    output Real y;
+  algorithm
+    y := v[1] + 2 * v[2];
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real m[3, 3] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+  Real z[3, 3] = outerProduct(a, a) * time;
+end AB10;
+//// model: AB11
+model AB11
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3] + m[1, 2];
+  end f;
+  function g
+    input Real v[3];
+    output Real y;
+  algorithm
+    y := v[1] + 2 * v[2];
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real m[3, 3] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+  Real y = f(diagonal(a) + m);
+end AB11;
+//// model: AB12
+model AB12
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3] + m[1, 2];
+  end f;
+  function g
+    input Real v[3];
+    output Real y;
+  algorithm
+    y := v[1] + 2 * v[2];
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real m[3, 3] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+  Real z[3] = m * a * time;
+end AB12;

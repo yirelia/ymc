@@ -1,0 +1,241 @@
+//// set: dg-p1 — diagonal(v)：作用户函数实参、整个数组的等式 / 绑定 / 矩阵积里留调用（实参照化简后的形态：字面量叶统一类型、算术式逐元素展开 `{(m * 3.0 - k) / 12.0, …}`），实参全是字面量（含结构参数代入后）的求值成矩阵；参数数组摊分、sum 里逐元素取（对角 / 0.0）。单测取 DG6 / DG9
+//// model: DG1
+model DG1
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3];
+  end f;
+  function g
+    input Real m[3, 3];
+    input Real k;
+    output Real y[3, 3];
+  algorithm
+    y := k * m;
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real s = f(diagonal(a));
+end DG1;
+//// model: DG2
+model DG2
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3];
+  end f;
+  function g
+    input Real m[3, 3];
+    input Real k;
+    output Real y[3, 3];
+  algorithm
+    y := k * m;
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real s = f(diagonal({a[1], 2 * a[2], 3}));
+end DG2;
+//// model: DG3
+model DG3
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3];
+  end f;
+  function g
+    input Real m[3, 3];
+    input Real k;
+    output Real y[3, 3];
+  algorithm
+    y := k * m;
+  end g;
+  Real y = f(diagonal({time, 1, 2}));
+end DG3;
+//// model: DG4
+model DG4
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3];
+  end f;
+  function g
+    input Real m[3, 3];
+    input Real k;
+    output Real y[3, 3];
+  algorithm
+    y := k * m;
+  end g;
+  parameter Real s = f(diagonal({1, 2, 3}));
+end DG4;
+//// model: DG5
+model DG5
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3];
+  end f;
+  function g
+    input Real m[3, 3];
+    input Real k;
+    output Real y[3, 3];
+  algorithm
+    y := k * m;
+  end g;
+  parameter Real m = 2;
+  parameter Real w = 3;
+  final parameter Real I[3, 3] = g(diagonal({m * w * w / 12, m / 12, 1}), m);
+  Real x;
+equation
+  der(x) = I[1, 1];
+end DG5;
+//// model: DG6
+model DG6
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3];
+  end f;
+  function g
+    input Real m[3, 3];
+    input Real k;
+    output Real y[3, 3];
+  algorithm
+    y := k * m;
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  Real z[3, 3] = diagonal(a) * time;
+end DG6;
+//// model: DG7
+model DG7
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3];
+  end f;
+  function g
+    input Real m[3, 3];
+    input Real k;
+    output Real y[3, 3];
+  algorithm
+    y := k * m;
+  end g;
+  parameter Real a[3] = {1, 2, 3};
+  Real y;
+equation
+  y = f(diagonal(a) * time);
+end DG7;
+//// model: DG8
+model DG8
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3];
+  end f;
+  function g
+    input Real m[3, 3];
+    input Real k;
+    output Real y[3, 3];
+  algorithm
+    y := k * m;
+  end g;
+  parameter Real a[3] = {1, 2, 3} annotation(Evaluate = true);
+  parameter Real s = f(diagonal(a));
+end DG8;
+//// model: DG9
+model DG9
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3];
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real d[3, 3] = diagonal(a);
+end DG9;
+//// model: DG10
+model DG10
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3];
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  Real z[3, 3] = diagonal(a);
+end DG10;
+//// model: DG11
+model DG11
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3];
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  Real w = sum(diagonal(a)) * time;
+end DG11;
+//// model: DG13
+model DG13
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3];
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  Real v[3] = diagonal(a) * {1, 2, time};
+end DG13;
+//// model: DG15
+model DG15
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3];
+  end f;
+  Real a[3] = {1, 2, 3} * time;
+  Real y = f(diagonal(a));
+end DG15;
+//// model: DG16
+model DG16
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3];
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  final parameter Real d[3, 3] = diagonal(a);
+  Real x;
+equation
+  der(x) = d[2, 2];
+end DG16;
+//// model: DG17
+model DG17
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3];
+  end f;
+  parameter Real m = 2;
+  parameter Real k = 1;
+  parameter Real s = f(diagonal({m * 3 - k, m * 4, k} / 12));
+end DG17;
+//// model: DG18
+model DG18
+  function f
+    input Real m[3, 3];
+    output Real y;
+  algorithm
+    y := m[1, 1] + 2 * m[2, 2] + 3 * m[3, 3];
+  end f;
+  parameter Real m = 2;
+  Real y = f(diagonal({m, 2 * m, time} * 2));
+end DG18;
