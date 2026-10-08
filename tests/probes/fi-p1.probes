@@ -1,0 +1,78 @@
+//// set: fi-p1 — 强制内联之后暴露出的两处：结构参数代入后算法段里的 `String(m)` 照常求值（FS）；记录整体绑定写在数据记录之前、字段别名链到 Evaluate 参数（MSL FundamentalWave 电机的 statorCoreParameters.m，T2；T1 / FM 是对照）
+//// model: FS2
+model FS2
+  parameter Integer m = 3;
+  Real x[m];
+equation
+  x = fill(time, m);
+initial algorithm
+  assert(m > 1, String(m) + " phases");
+end FS2;
+//// model: T1
+model T1
+  Modelica.Electrical.Machines.Utilities.ParameterRecords.IM_SquirrelCageData aimcData;
+  Modelica.Magnetic.FundamentalWave.BasicMachines.InductionMachines.IM_SquirrelCage aimc(statorCoreParameters = aimcData.statorCoreParameters);
+end T1;
+//// model: T2
+model T2
+  Modelica.Magnetic.FundamentalWave.BasicMachines.InductionMachines.IM_SquirrelCage aimc(statorCoreParameters = aimcData.statorCoreParameters);
+  Modelica.Electrical.Machines.Utilities.ParameterRecords.IM_SquirrelCageData aimcData;
+end T2;
+//// model: FM5
+model FM5
+  record CP
+    parameter Integer m;
+    parameter Real v = 1;
+  end CP;
+  record Data
+    final parameter Integer m = 3 annotation(Evaluate = true);
+    parameter CP cp(final m = m, v = 5);
+  end Data;
+  model Mach
+    parameter Integer m = 3;
+    parameter CP cp(final m = m, v = 2);
+  end Mach;
+  parameter Data data;
+  Mach mach(cp = data.cp);
+end FM5;
+//// model: FM7
+model FM7
+  record CP
+    parameter Integer m;
+    parameter Real v = 1;
+  end CP;
+  record Data
+    final parameter Integer m = 3 annotation(Evaluate = true);
+    parameter CP cp(final m = m, v = 5);
+  end Data;
+  model Mach
+    parameter Integer m = 3;
+    parameter CP cp(final m = m, v = 2);
+  end Mach;
+  Mach mach(cp = data.cp);
+  parameter Data data;
+end FM7;
+//// model: FM11
+model FM11
+  record CP
+    parameter Integer m;
+    parameter Real v = 1;
+  end CP;
+  record BaseData
+    final parameter Integer m = 3 annotation(Evaluate = true);
+    parameter CP cp(final m = m, v = 5);
+  end BaseData;
+  record Data
+    extends BaseData;
+    parameter Real w = 2;
+  end Data;
+  partial model MachBase
+    parameter Integer m(min = 3) = 3 annotation(Evaluate = true);
+    parameter CP cp(final m = m, v = 2);
+  end MachBase;
+  model Mach
+    extends MachBase;
+  end Mach;
+  Mach mach(cp = data.cp);
+  Data data;
+end FM11;

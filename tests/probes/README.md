@@ -453,3 +453,5 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `or-ut` | 4 | operator record 构造 / 函数缓存 / 连接器别名（单测原文，本地 operator record） |
 | `oo-p1` | 7 | operator record 的边角：括号里的 if 记录绑定（MSL ComplexSISO 的 `uInternal = (if … then conj(u) else u)`）、写在声明之前的别名运算数（IdealACDCConverter 的 `vQS = pin_pQS.v - pin_nQS.v`）、常量构造绑定带字段修饰 / 别名类型、`-(-i1)`、模型里 operator record 常量的整体引用（`constant Complex j`） |
 | `oo-ut` | 4 | 记录运算数的重载运算符（单测原文，本地 operator record）：精确匹配、隐式构造（`C(2.0, 0.0)` 求值、Integer 转型）、别名路径 `P.CV.'*'.multiply`、`-(-a)`、局部常量 |
+| `fi-ut` | 1 | final parameter 记录绑定的强制内联（单测原文，本地 operator record + 单语句函数）：'constructor' 取输出的字段修饰（`re = re`）、`k * cexp(C(0, phi))` 内联化简成 `k * cos(phi)`、`p * p` → `p.re * p.re - p.im * p.im`，不留函数块 |
+| `fi-p1` | 6 | 强制内联放行 FundamentalWave 电机之后暴露的两处：结构参数代入后算法段里的 `String(m)` 照常求值（FS2；方程里的 assert 消息不化简）；记录整体绑定写在数据记录之前、字段经别名链到 Evaluate 参数（`aimc(statorCoreParameters = aimcData.statorCoreParameters)`，T2；T1 / FM 是对照）。单测取 FS2 |

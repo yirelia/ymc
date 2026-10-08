@@ -374,3 +374,13 @@ ComplexBlocks.ShowTransferFunction、Magnetic.QuasiStatic.FluxTubes 的 7 个（
 一致（38 个 Complex 示例里 14 个）。其余 24 个：Polyphase / 电机卡在组件数组的外来修饰、函数形参的别名记录类型
 （`input SI.ComplexVoltage v[:]`）、final 参数记录绑定的强制内联（FundamentalWave 的 `final parameter Complex N = …`），
 FluxTubes 的 Linear / NonLinearInductor 卡在材料数据记录的构造调用。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-09 加宽 62y 之后：PASS 325 → 343
+
+final parameter 记录绑定的强制内联（FundamentalWave 的 `final parameter Complex N = effectiveTurns*Modelica.ComplexMath.exp(
+Complex(0, orientation))` 内联化简成 `N.re = effectiveTurns * …`）之后，Magnetic.FundamentalWave 的 BasicMachines 15 个
+（InductionMachines 的 IMC_Conveyor / IMC_DOL / IMC_Initialize / IMC_Inverter / IMC_Steinmetz / IMC_YD / IMS_Start，
+SynchronousMachines 的 SMEE_DOL / SMEE_LoadDump / SMEE_Rectifier / SMPM_Braking / SMPM_CurrentSource / SMPM_Inverter /
+SMPM_VoltageSource / SMR_Inverter）与 Components 的 EddyCurrentLosses / PolyphaseInductance / SinglePhaseInductance 逐字节一致。
+电机例子走得更远后暴露的两处一并修了：结构参数代入后算法段里的 `String(m)` 照常求值（`assert(true, "3 phases …")`），记录整体
+绑定写在数据记录之前时字段的结构别名（`aimc.statorCoreParameters.m = 3`）。FAIL / ACCEPTS-INVALID / CRASH 0。

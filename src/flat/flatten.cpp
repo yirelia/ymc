@@ -1139,6 +1139,8 @@ class Flattener {
         Id<SMod> folded_mod;           // 记录函数绑定求值后合成的字段修饰（见下）
         std::uint8_t folded_kind = 1;
         bool final_move_ok = false;    // final 记录：内联不了、tryEvalExp 也求不出 → 照下面挪成方程（R8 → R13）
+        const char* defer_inline = nullptr;   // final 记录的调用绑定能强制内联：交给下面的 forced_inline_mod，不成时的 SKIP 原因
+        std::string defer_detail;
         if (r == SRestriction::Record && pp_self.empty() && !own && !matched_field &&
             I_.comps[cid].derived_mods.empty()) {   // expandable 里的记录折叠字段不带 pp 链 → 不走此路
           Id<Exp> wb;
@@ -1217,24 +1219,22 @@ class Flattener {
               if (comp_final) {
                 if (wbk == ExpKind::Call) {
                   const InlineFate fate = record_inline_fate(I_.absyn.exps[wb], wsc);
-                  if (fate != InlineFate::Abort) {
-                    set_unsupported(fate == InlineFate::Inline ? "record binding forced inline" : "record binding inline fate");
-                    continue;
+                  if (fate != InlineFate::Abort) {   // 能内联的：下面 forced_inline_mod 内联成符号式，不成再 SKIP
+                    defer_inline = fate == InlineFate::Inline ? "record binding forced inline" : "record binding inline fate";
                   }
                 }
-                final_move_ok = true;
+                if (!defer_inline) final_move_ok = true;
               }
             } else if (!structural) {
               if (comp_final && wbk == ExpKind::Call) {
                 const InlineFate fate = record_inline_fate(I_.absyn.exps[wb], wsc);
-                if (fate != InlineFate::Abort) {
-                  set_unsupported(fate == InlineFate::Inline ? "record binding forced inline" : "record binding inline fate");
+                if (fate != InlineFate::Abort) {   // 能内联的：不求值（下面 (C) 那支撤痕迹），交给 forced_inline_mod
+                  defer_inline = fate == InlineFate::Inline ? "record binding forced inline" : "record binding inline fate";
                   for (const CrefPart& cp : I_.absyn.crefs[I_.absyn.exps[wb].cref].parts)   // 子原因：哪个函数（排桶用）
-                    result_.unsupported_detail += (result_.unsupported_detail.empty() ? "" : ".") + std::string(in_.str(cp.name));
-                  continue;
+                    defer_detail += (defer_detail.empty() ? "" : ".") + std::string(in_.str(cp.name));
                 }
               }
-              if (comp_final) {
+              if (comp_final && !defer_inline) {
                 // tryEvalExp：结构标记撤掉；求值写回照做——读到的、还没压平的参数按求得的值打（evalComponentBinding 存回，
                 // NFCeval.mo:382-387；SE1 `parameter Real p = 2.0`，声明在前的 SE2 照旧 `2.0 * q`），见 emit_variable 的
                 // touched_。还没压平的数组参数的存回未做 → SKIP。
@@ -1303,7 +1303,23 @@ class Flattener {
           if (whole_raw.raw != unfolded.raw) whole_kind = 3;
         }
         Id<SMod> ctor_mod = folded_mod;
-        if (r == SRestriction::Record && whole_raw.is_valid())
+        // final parameter 记录的整体绑定（求值 / 折叠都没收）：强制内联（见 forced_inline_mod；绑定是运算式 `a * b`、
+        // `k * exp(Complex(0, phi))` 的也在这里——定型后才是调用）。内联不成而上面已判定能内联的 → SKIP。
+        // 选过支的 if 绑定（whole_kind == 3）不内联：omc 只对定型后是调用的绑定强制内联，if 表达式走 tryEvalExp（RB 探针 OF6：
+        // `if b then f1(p) else f1(2 * p)`、p fixed = false → 挪成初始方程）。
+        if (!ctor_mod.is_valid() && whole_raw.is_valid() && r == SRestriction::Record && comp_final && !result_.unsupported &&
+            whole_kind != 3 && var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Param) {
+          cur_psubs_ = psubs;
+          ctor_mod = forced_inline_mod(whole_raw, whole_scope, whole_vpfx, cdef);
+          if (result_.unsupported) continue;
+          if (ctor_mod.is_valid()) whole_raw = {};
+        }
+        if (defer_inline && !ctor_mod.is_valid()) {
+          set_unsupported(defer_inline);
+          result_.unsupported_detail = defer_detail;
+          continue;
+        }
+        if (r == SRestriction::Record && whole_raw.is_valid() && !ctor_mod.is_valid())
           ctor_mod = build_record_ctor_mod(whole_raw, ci, cdef, whole_scope,
                                            var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Const,
                                            comp_final && var_min(ctx.var_floor, I_.comps[cid].attributes.variability) ==
@@ -1646,6 +1662,7 @@ class Flattener {
     return has_call_other_than_string(e.a) || has_call_other_than_string(e.b) || has_call_other_than_string(e.c);
   }
   bool raw_msg_ = false;
+  bool fold_strings_ = false;   // 结构参数代入算法段时：simplify_expr 把实参全是字面量的 String(…) 求值
 
   // 翻译一条语句（v1：只做标量赋值 `cref := expr`，目标须是已发射的连续变量；其余 kind/目标 → SKIP 保 FAIL=0）。
   Id<FlatStatement> collect_statement(Id<SStatement> sid, NodeId enclosing, const std::vector<Symbol>& prefix) {
@@ -9746,7 +9763,9 @@ class Flattener {
   // 根类里 → 根名 + 名）；记录定义在非根的实例类里（实例路径未核实）→ SKIP。
   // 记录类（实例节点 rn）的构造函数：路径（顶层 → 名；包里 → 包路径 + 名；根类里 → 根名 + 名）+ 登记构造函数块（每个
   // 路径一次）。记录定义在非根的实例类里（实例路径未核实）/ 构造函数块发射不了 → nullopt（已标 SKIP）。
-  std::optional<std::vector<Symbol>> ensure_record_ctor(NodeId rn) {
+  // root = false：只发射、不登记成模型的根（强制内联途中要构造函数的输入表，内联完的式子里不一定还有这个记录类型——omc 收函数
+  // 在内联之后，ORU9 / rp62x p02 一个函数都不打）。
+  std::optional<std::vector<Symbol>> ensure_record_ctor(NodeId rn, bool root = true) {
     const Id<SElement> rdef = I_.nodes[rn].def;
     const ScodeScope chain = scode_scope_of(rn);   // [R, 外层类, …]
     std::vector<Symbol> path;
@@ -9763,7 +9782,7 @@ class Flattener {
     }
     path.push_back(I_.scode.elems[rdef].name);
     if (!emit_record_ctor(rdef, chain, path) || result_.unsupported) { set_unsupported("record constructor"); return std::nullopt; }
-    if (std::find(model_record_ctors_.begin(), model_record_ctors_.end(), path) == model_record_ctors_.end())
+    if (root && std::find(model_record_ctors_.begin(), model_record_ctors_.end(), path) == model_record_ctors_.end())
       model_record_ctors_.push_back(path);
     return path;
   }
@@ -12499,7 +12518,12 @@ class Flattener {
       case ExpKind::RealLit: return lit_real(e.rval);
       case ExpKind::BoolLit: return lit_bool(e.bval);
       case ExpKind::StringLit: return lit_string(e.sval);
-      case ExpKind::CrefExp: return cref(e.cref, enclosing, prefix);
+      case ExpKind::CrefExp:
+        // 强制内联出的字段式子（见 forced_inline_mod）：占位名直接取定型好的式子。
+        if (!inline_binds_.empty() && I_.absyn.crefs[e.cref].parts.size() == 1)
+          if (const auto it = inline_binds_.find(I_.absyn.crefs[e.cref].parts[0].name.id); it != inline_binds_.end())
+            return it->second;
+        return cref(e.cref, enclosing, prefix);
       case ExpKind::End:   // 函数体下标里的 end（fn_local_cref 置为所在维大小）；其余语境未做
         if (fn_end_.is_valid()) return fn_end_;
         set_unsupported("expression kind");
@@ -14137,7 +14161,9 @@ class Flattener {
         result_.unsupported_detail += (k ? "." : "") + std::string(in_.str(fpath[k]));
       return lit_int(0);
     }
-    const std::optional<std::vector<Symbol>> path = ensure_record_ctor(rn);
+    // 函数体里的构造调用不登记成模型的根：函数留下时 prune 顺体里的调用收它，函数被强制内联掉时不该带出它（RB 探针 BR5：
+    // `final parameter R r = f1(p)`、f1 体 `r := R(x = a, y = 2 * a)` → omc 不打 R）。
+    const std::optional<std::vector<Symbol>> path = ensure_record_ctor(rn, /*root=*/!fn_scope_);
     if (!path) return lit_int(0);
     std::vector<FlatFuncParam> inputs;   // 拷贝：下面会 add
     for (const FlatFunction& ff : result_.model.functions)
@@ -14260,7 +14286,9 @@ class Flattener {
     if (!rec.is_valid() || !v.rec) return {};
     const NodeId rn = record_type_node(rec);
     if (!rn.is_valid()) return {};
-    const std::optional<std::vector<Symbol>> path = ensure_record_ctor(rn);
+    // 不在这里登记成模型的根：记录式留在模型里的，collect_record_ctors 照常收；随后被内联 / 求值掉的不该带出构造函数（omc 收
+    // 函数在 SimplifyModel 之后，rp62x p09 `final parameter Complex c = a + Complex(1, 0)` 一个函数都不打）。
+    const std::optional<std::vector<Symbol>> path = ensure_record_ctor(rn, /*root=*/false);
     if (!path) return {};
     std::vector<FlatFuncParam> inputs;   // 拷贝：下面会 add
     for (const FlatFunction& ff : result_.model.functions)
@@ -14340,6 +14368,227 @@ class Flattener {
     const std::optional<CVal> v = eval_scode(bnd.raw_exp, bs, 0, /*allow_param=*/false);
     if (!v || v->k != CVal::K::Record || result_.unsupported) return {};
     return oprec_ctor_literal(bnd.raw_exp, bs, *v);
+  }
+
+  // ---- 强制内联（final parameter 记录绑定；NFFlatten.flattenComplexComponent :965-986 → NFInline.inlineCallExp(forceInline =
+  // true)，NFInline.mo:80-170 v1.25.0；rp62x SPEC OR11、rp62r R6 / R7）----
+  // 式子里还有函数局部引用（代换没换干净）。
+  bool has_fn_local(Id<Expr> id) {
+    if (!id.is_valid()) return false;
+    const Expr& x = result_.model.exprs[id];
+    if (x.kind == ExprKind::Cref && x.cref.resolved_node == kFnLocal) return true;
+    for (const ExprCrefPart& cp : x.cref.parts)
+      for (Id<Expr> sx : cp.subscripts) if (has_fn_local(sx)) return true;
+    for (Id<Expr> a : x.args) if (has_fn_local(a)) return true;
+    return has_fn_local(x.a) || has_fn_local(x.b) || has_fn_local(x.c);
+  }
+  // 记录式（默认构造函数的调用形 `R(…)`）的输入名（声明序）；不是记录式 → 空。
+  std::vector<Symbol> record_literal_fields(const Expr& x) {
+    std::vector<Symbol> out;
+    if (x.kind != ExprKind::Call) return out;
+    for (const FlatFunction& f : result_.model.functions)
+      if (f.name == x.call_name) {
+        if (!f.is_record_ctor) return out;
+        for (const FlatFuncParam& p : f.params)
+          if (p.direction == FlatDirection::Input) out.push_back(p.name);
+        return out;
+      }
+    return out;
+  }
+  // 输入名 → 实参的代换表（replaceCrefNode / replaceCrefNode2）：`c1` → 实参；记录实参再给每个字段 `c1.re` → 实参的字段——
+  // 记录式取对应的元素，模型里的记录引用接成 `a.re`（字段类型取记录构造函数的输入）。别的记录实参（调用…）不给字段，体里用到
+  // 时代换不全 → 调用方放弃。
+  void inline_arg_map(Symbol name, Id<Expr> arg, std::unordered_map<std::string, Id<Expr>>& vals) {
+    ExprCref k;
+    k.parts.push_back({name, {}});
+    vals[expr_cref_key(k)] = arg;
+    const Expr ax = result_.model.exprs[arg];   // 拷贝
+    if (ax.ty.kind != TypeKind::Complex) return;
+    const std::vector<Symbol> lit = record_literal_fields(ax);
+    if (!lit.empty() && lit.size() == ax.args.size()) {
+      for (std::size_t i = 0; i < lit.size(); ++i) {
+        ExprCref fk = k;
+        fk.parts.push_back({lit[i], {}});
+        vals[expr_cref_key(fk)] = ax.args[i];
+      }
+      return;
+    }
+    if (ax.kind != ExprKind::Cref || ax.cref.resolved_node == kFnLocal) return;
+    const std::uint32_t rd = record_def_of(arg);
+    if (rd == Id<SElement>::kInvalid) return;
+    const NodeId rn = record_type_node(Id<SElement>::from_index(rd));
+    const std::optional<std::vector<Symbol>> path = rn.is_valid() ? ensure_record_ctor(rn, /*root=*/false) : std::nullopt;
+    if (!path) return;
+    std::vector<FlatFuncParam> ins;
+    for (const FlatFunction& f : result_.model.functions)
+      if (f.name == *path)
+        for (const FlatFuncParam& p : f.params)
+          if (p.direction == FlatDirection::Input) ins.push_back(p);
+    for (const FlatFuncParam& p : ins) {
+      if (p.ty.kind == TypeKind::Complex || p.ty.is_array()) continue;   // 嵌套记录 / 数组字段未做
+      Expr fx = ax;
+      fx.cref.parts.push_back({p.name, {}});
+      fx.ty = p.ty;
+      ExprCref fk = k;
+      fk.parts.push_back({p.name, {}});
+      vals[expr_cref_key(fk)] = add(std::move(fx));
+    }
+  }
+  // 强制内联一个调用（NFInline.inlineCall，forceInline = true）：
+  //   'constructor' 里的函数（名字倒数第二段是 'constructor'）、体空、无局部：输出的记录式（Class.makeRecordExp）——各字段取
+  //     输出声明上的字段修饰（MSL fromReal 的 `output Complex result(re = re, im = im)`），只认"输入名 / 字面量"这两种修饰值；
+  //     输出自带绑定的（b12）未做；
+  //   普通函数：至多一条语句、一个输出、无局部；体空取输出的绑定，否则唯一语句须是 `输出 := rhs`；rhs 里的输入换成实参
+  //     （见 inline_arg_map），结果再内联一次。
+  // 实参先各自内联。内建 / 外部 / 记录式 / 不合条件的调用照原样（omc 照留调用）；代换不全 → invalid（调用方放弃）。
+  Id<Expr> force_inline(Id<Expr> x, int depth) {
+    if (depth > 50 || !x.is_valid()) return {};
+    const Expr cx = result_.model.exprs[x];   // 拷贝
+    if (cx.kind != ExprKind::Call) return x;
+    std::optional<std::size_t> fi;
+    for (std::size_t i = 0; i < result_.model.functions.size(); ++i)
+      if (result_.model.functions[i].name == cx.call_name) { fi = i; break; }
+    // 内建 / external 函数：没有体、输出也没有绑定，inlineCall 的 makeOutputStatement 失败、整个强制内联放弃（rp62r R7：
+    // 调用处实参是内建调用 `cos(a)` / `zeros(3)` → 交给 tryEvalExp；RB 探针 IN13 `f11(p)` 体里 `f1(cos(a))`）。
+    if (!fi) return {};
+    const FlatFunction f = result_.model.functions[*fi];   // 拷贝（下面会往 functions 里添）
+    if (f.is_record_ctor) return x;
+    if (f.is_external) return {};
+    std::vector<FlatFuncParam> inputs, outputs;
+    bool locals = false;
+    for (const FlatFuncParam& p : f.params) {
+      if (p.direction == FlatDirection::Input) inputs.push_back(p);
+      else if (p.direction == FlatDirection::Output) outputs.push_back(p);
+      else locals = true;
+    }
+    if (outputs.size() != 1 || cx.args.size() != inputs.size()) return x;
+    std::vector<Id<Expr>> args;
+    for (Id<Expr> a : cx.args) {
+      const Id<Expr> ia = force_inline(a, depth + 1);
+      if (!ia.is_valid()) return {};
+      args.push_back(ia);
+    }
+    std::unordered_map<std::string, Id<Expr>> vals;
+    for (std::size_t i = 0; i < inputs.size(); ++i) inline_arg_map(inputs[i].name, args[i], vals);
+    const bool ctor = cx.call_name.size() >= 2 && in_.str(cx.call_name[cx.call_name.size() - 2]) == "'constructor'";
+    if (ctor && f.body.empty() && !locals) {
+      const auto it = fn_refs_.find(path_key(cx.call_name));
+      if (it == fn_refs_.end()) return {};
+      const FnRef fr = it->second;   // 拷贝
+      FnSig sig;
+      std::unordered_set<std::uint32_t> seen;
+      if (!collect_fn_sig(fr.fe, fr.fscope, sig, seen, 0) || sig.outputs.size() != 1) return {};
+      const SElement oel = I_.scode.elems[sig.outputs[0]];   // 拷贝
+      if (!oel.mod.is_valid() || I_.scode.mods[oel.mod].binding.is_valid()) return {};
+      const std::uint32_t rd = outputs[0].record_def;
+      if (rd == Id<SElement>::kInvalid) return {};
+      const NodeId rn = record_type_node(Id<SElement>::from_index(rd));
+      const std::optional<std::vector<Symbol>> path = rn.is_valid() ? ensure_record_ctor(rn, /*root=*/false) : std::nullopt;
+      if (!path) return {};
+      std::vector<FlatFuncParam> fields;
+      for (const FlatFunction& g : result_.model.functions)
+        if (g.name == *path)
+          for (const FlatFuncParam& p : g.params)
+            if (p.direction == FlatDirection::Input) fields.push_back(p);
+      Expr r;
+      r.kind = ExprKind::Call;
+      r.call_name = *path;
+      r.ty = cx.ty;   // 结果类型同调用（输出的记录类）
+      for (const FlatFuncParam& fp : fields) {
+        Id<Exp> fb;
+        for (const SSubMod& sm : I_.scode.mods[oel.mod].subs)
+          if (sm.ident == fp.name) fb = I_.scode.mods[sm.mod].binding;
+        if (!fb.is_valid()) return {};
+        const Exp be = I_.absyn.exps[fb];   // 拷贝
+        Id<Expr> v;
+        if (be.kind == ExpKind::CrefExp && I_.absyn.crefs[be.cref].parts.size() == 1 &&
+            I_.absyn.crefs[be.cref].parts[0].subscripts.empty()) {
+          ExprCref k;
+          k.parts.push_back({I_.absyn.crefs[be.cref].parts[0].name, {}});
+          const auto vt = vals.find(expr_cref_key(k));
+          if (vt == vals.end()) return {};
+          v = vt->second;
+        } else if (be.kind == ExpKind::IntLit || be.kind == ExpKind::RealLit || be.kind == ExpKind::BoolLit) {
+          v = be.kind == ExpKind::IntLit ? lit_int(be.ival) : be.kind == ExpKind::RealLit ? lit_real(be.rval) : lit_bool(be.bval);
+        } else {
+          return {};
+        }
+        const Id<Expr> cv = coerce_to_param(v, fp.ty);
+        if (!cv.is_valid()) return {};
+        r.args.push_back(cv);
+      }
+      return add(std::move(r));
+    }
+    if (f.body.size() > 1 || locals) return x;
+    Id<Expr> rhs;
+    if (f.body.empty()) {
+      rhs = outputs[0].binding;   // makeOutputStatement
+    } else {
+      const FlatStatement st = result_.model.stmts[f.body[0]];   // 拷贝
+      if (st.kind != FlatStmtKind::Assign) return x;
+      const Expr& lhs = result_.model.exprs[st.a];
+      if (lhs.kind != ExprKind::Cref || lhs.cref.parts.size() != 1 || !lhs.cref.parts[0].subscripts.empty() ||
+          lhs.cref.parts[0].name != outputs[0].name)
+        return x;
+      rhs = st.b;
+    }
+    if (!rhs.is_valid()) return x;
+    const Id<Expr> sub = clone_subst(rhs, vals);
+    if (result_.unsupported || has_fn_local(sub)) return {};
+    return force_inline(sub, depth + 1);
+  }
+  // final parameter 记录的整体绑定 raw（在 scope / vpfx 处写的）强制内联成字段修饰：定型后顶层是用户函数调用（重载运算符、
+  // 'constructor'、返回记录的函数）→ 内联成本记录类（cdef）的记录式 → 各字段的式子化简后当字段绑定（rp62x SPEC OR11：
+  // p01 `final parameter Real c.re = a`、p02 `N.re = k * cos(phi)`、p04 `c.re = a.re * b.re - a.im * b.im`）。字段式子经占位名
+  // 带给字段（inline_binds_，修饰记进 derived_mods_ = 整体绑定拆出的字段）。不合（不是调用 / 内联不成 / 结果不是本记录类的
+  // 记录式）→ invalid（调用方照旧）。
+  Id<SMod> forced_inline_mod(Id<Exp> raw, NodeId scope, const std::vector<Symbol>& vpfx, Id<SElement> cdef) {
+    // 只试定型后可能是调用的书写形态（调用、重载运算式）：引用 / 字面量 / if 不定型——提前定型会改变别处的结构求值次序
+    //（MSL FundamentalWave 电机的 `statorCoreParameters = aimcData.statorCoreParameters`，m 不再折成 3）。
+    {
+      Id<Exp> u = raw;
+      while (I_.absyn.exps[u].kind == ExpKind::Tuple && I_.absyn.exps[u].args.size() == 1) u = I_.absyn.exps[u].args[0];
+      const ExpKind k = I_.absyn.exps[u].kind;
+      if (k != ExpKind::Call && k != ExpKind::Binary && k != ExpKind::Unary) return {};
+    }
+    // 这次定型（含其中的构造调用）登记的模型根一律撤掉：内联成的字段式子留在模型里的，collect_record_ctors 照常收；内联不成
+    // 时调用方会照别的路重新定型（RB 探针 BR3：`final parameter R r = R(p, 2)` 照拆字段，不打 R）。
+    const std::size_t roots = model_record_ctors_.size();
+    struct RootUndo {
+      std::vector<std::vector<Symbol>>& v;
+      std::size_t n;
+      ~RootUndo() { if (v.size() > n) v.resize(n); }
+    } root_undo{model_record_ctors_, roots};
+    const Id<Expr> te = inst_exp(raw, scope, vpfx);
+    if (result_.unsupported || result_.model.exprs[te].kind != ExprKind::Call) return {};
+    if (!record_literal_fields(result_.model.exprs[te]).empty()) return {};   // 已是记录式（求值 / 普通记录构造）：别的路收
+    const Id<Expr> ie = force_inline(te, 0);
+    if (!ie.is_valid() || result_.unsupported) return {};
+    const Expr rx = result_.model.exprs[ie];   // 拷贝
+    const std::vector<Symbol> fields = record_literal_fields(rx);
+    if (fields.empty() || fields.size() != rx.args.size() || record_def_of(ie) != cdef.raw) return {};
+    std::vector<SSubMod> subs;
+    for (std::size_t k = 0; k < fields.size(); ++k) {
+      const Id<Expr> fx = simplify_expr(rx.args[k]);
+      if (result_.unsupported || has_fn_local(fx)) return {};
+      const Symbol ph = in_.intern("$inline" + std::to_string(inline_binds_.size()));
+      inline_binds_[ph.id] = fx;
+      Cref pc;
+      pc.parts.push_back(CrefPart{ph, {}});
+      Exp pe;
+      pe.kind = ExpKind::CrefExp;
+      pe.cref = synth_cref(std::move(pc));
+      SMod fm;
+      fm.kind = SModKind::Mod;
+      fm.binding = synth_exp(std::move(pe));
+      const Id<SMod> fid = synth_mod(std::move(fm));
+      derived_mods_.insert(fid.raw);
+      subs.push_back({fields[k], fid});
+    }
+    SMod outer;
+    outer.kind = SModKind::Mod;
+    outer.subs = std::move(subs);
+    return synth_mod(std::move(outer));
   }
 
   // ---- 运算符重载（operator record；NFTypeCheck.checkOverloadedBinaryOperator / checkOverloadedUnaryOperator，rp62x SPEC
@@ -14780,13 +15029,26 @@ class Flattener {
       full.push_back(slot.count(s_ml.id) ? slot[s_ml.id] : lit_int(0));
       full.push_back(slot.count(s_lj.id) ? slot[s_lj.id] : lit_bool(true));
     }
-    bool all_lit = !raw;   // 常量折叠
+    if (!raw)   // 常量折叠
+      if (const Id<Expr> sl = fold_string_lit(full, real, fmt); sl.is_valid() || result_.unsupported) return sl;
+    Expr r;
+    r.kind = ExprKind::Call;
+    r.call_name = {in_.intern("String")};
+    r.args = std::move(full);
+    r.ty = Type::string();
+    return add(std::move(r));
+  }
+  // String(…) 补齐缺省后的实参 full 全是字面量 → 字符串字面量（见 string_call）；否则 invalid。Real 求值结果带指数 → SKIP
+  //（invalid + unsupported）。
+  Id<Expr> fold_string_lit(const std::vector<Id<Expr>>& full, bool real, bool fmt) {
     for (Id<Expr> x : full) {
       const ExprKind k = result_.model.exprs[x].kind;
-      all_lit = all_lit && (k == ExprKind::IntLit || k == ExprKind::RealLit || k == ExprKind::BoolLit ||
-                            k == ExprKind::StringLit || k == ExprKind::EnumLit);
+      if (k != ExprKind::IntLit && k != ExprKind::RealLit && k != ExprKind::BoolLit && k != ExprKind::StringLit &&
+          k != ExprKind::EnumLit)
+        return {};
     }
-    if (all_lit) {
+    {
+      const Id<Expr> v = full[0];
       const Expr ve = result_.model.exprs[v];   // 拷贝
       const double rv = ve.kind == ExprKind::IntLit ? static_cast<double>(ve.ival) : ve.rval;
       std::string s;
@@ -14821,12 +15083,6 @@ class Flattener {
       r.sval = in_.intern(s);
       return add(std::move(r));
     }
-    Expr r;
-    r.kind = ExprKind::Call;
-    r.call_name = {in_.intern("String")};
-    r.args = std::move(full);
-    r.ty = Type::string();
-    return add(std::move(r));
   }
 
   // 模型语境的向量 / 矩阵积（形状规则 NFTypeCheck.checkBinaryOperationMul :1019-1093）：维已知时 omc 展开成积和（C1 探针：
@@ -17839,6 +18095,14 @@ class Flattener {
         std::vector<Id<Expr>> args;
         args.reserve(args0.size());
         for (Id<Expr> a : args0) args.push_back(simplify_expr(a));
+        // 结构参数代入后语句里的 `String(字面量…)`：omc 化简时求值（WC 探针 c6：语句照常化简；方程的 assert / terminate 消息
+        // 不化简——fold_strings_ 只在代入算法段时开；MSL FundamentalWave Machine 的 `assert(…, String(m) + " phases …")`）。
+        if (fold_strings_ && call_name.size() == 1 && in_.str(call_name[0]) == "String" && !args.empty()) {
+          const bool sreal = result_.model.exprs[args[0]].kind == ExprKind::RealLit;
+          const bool sfmt = sreal && args.size() == 2 && result_.model.exprs[args[1]].kind == ExprKind::StringLit;
+          if (args.size() == (sfmt ? 2u : sreal ? 4u : 3u))
+            if (const Id<Expr> sl = fold_string_lit(args, sreal, sfmt); sl.is_valid() || result_.unsupported) return sl;
+        }
 
         // 结构参数代入后实参全成字面量的纯用户函数调用：omc 的化简会求值（NFSimplifyExp.simplifyCall :182 / :206，
         // NF_EVAL_CONST_ARG_FUNCS；FD3 探针 `parameter Real m = g(n) + n`、n 是数组维 → `m = 6.0`，g 不再打印）。ymc 的函数
@@ -21356,7 +21620,14 @@ class Flattener {
     std::unordered_map<std::string, int> since = structural_set_;   // 成为结构参数的时刻
     for (FlatVariable& v : result_.model.variables) {
       if (v.var_kind != FlatVarKind::Parameter || !v.binding.is_valid()) continue;
-      const Expr& b = result_.model.exprs[v.binding];
+      // 看的是书写的绑定：发射前就被求值、绑定已存回字面量的（第二遍里的向前引用，见 emit_variable 的 touched_）照样是别名——
+      // 取折叠之前的（raw_bindings_）。MSL FundamentalWave 电机：`aimc(statorCoreParameters = aimcData.statorCoreParameters)`
+      // 写在 aimcData 之前，`aimcData.statorCoreParameters.m` 的绑定 `m`（Evaluate 的 aimcData.m）第二遍成了 3，它不再算结构
+      // 参数、aimc 那边的 `= aimcData.statorCoreParameters.m` 就没代成 3（omc 1.25.0 是 3）。
+      Id<Expr> bid = v.binding;
+      if (result_.model.exprs[bid].kind != ExprKind::Cref)
+        if (const auto rb = raw_bindings_.find(var_key(v)); rb != raw_bindings_.end()) bid = rb->second;
+      const Expr& b = result_.model.exprs[bid];
       if (b.kind != ExprKind::Cref) continue;
       const std::string tk = expr_cref_key(b.cref);
       const auto it = vals.find(tk);
@@ -21487,9 +21758,11 @@ class Flattener {
     };
     for (const std::vector<Id<FlatEquation>>* eqs : {&result_.model.equations, &result_.model.initial_equations})
       for (Id<FlatEquation> id : *eqs) eqn(eqn, id);
+    fold_strings_ = true;   // 算法段里照常化简 String(…)（见 simplify_expr）
     for (const std::vector<FlatAlgorithm>* algs : {&result_.model.algorithms, &result_.model.initial_algorithms})
       for (const FlatAlgorithm& alg : *algs)
         for (Id<FlatStatement> id : alg.stmts) stmt(stmt, id);
+    fold_strings_ = false;
     // 记下的整体等式原位换成逐元素的（collect_array_equation 追加到正在重建的那张表末尾 = 原位）；嵌在 if / for 体里的没换到
     // → SKIP。
     if (!rescal.empty() && !result_.unsupported) {
@@ -21974,6 +22247,8 @@ class Flattener {
   // operator record 短类别名组件的实例类节点 → 声明的（最外层）短类 + 其定义作用域链：记录类型就是它（见 flatten_class）。
   std::unordered_map<std::uint32_t, RecAlias> rec_alias_;
   std::unordered_set<std::uint32_t> rec_seen_;   // 已登记的记录组件实例类节点（rec_alias_ 已就绪，见 note_rec_class）
+  // 强制内联出的字段绑定：占位名（`$inlineN`，Symbol id）→ 定型好的式子（见 forced_inline_mod / inst_exp）。
+  std::unordered_map<std::uint32_t, Id<Expr>> inline_binds_;
   // 记录类型路径（path_key）→ 它函数缓存里默认构造函数之外的函数名（operator record 的 'constructor'，见 ensure_type_fns）。
   std::unordered_map<std::string, std::vector<std::vector<Symbol>>> type_fns_;
   // 复合 outer 的实例路径键 → inner 全名及其逐段下标

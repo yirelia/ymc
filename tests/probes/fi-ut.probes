@@ -1,0 +1,83 @@
+//// set: fi-ut — final parameter 记录绑定的强制内联（单测原文，本地 operator record + 单语句函数）：'constructor' 取输出的字段修饰、重载运算符 / 函数内联后字段式子化简，不留函数块
+//// model: ORU9
+operator record C "complex-like"
+  replaceable Real re "real part";
+  replaceable Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import C;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output C result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator function '+' "add"
+    import C;
+    input C c1 "c1";
+    input C c2 "c2";
+    output C c3 "c3";
+  algorithm
+    c3 := C(c1.re + c2.re, c1.im + c2.im);
+    annotation(Inline = true);
+  end '+';
+  encapsulated operator '-' "minus"
+    function negate "neg"
+      import C;
+      input C c1;
+      output C c2;
+    algorithm
+      c2 := C(-c1.re, -c1.im);
+    end negate;
+    function subtract "sub"
+      import C;
+      input C c1;
+      input C c2;
+      output C c3;
+    algorithm
+      c3 := C(c1.re - c2.re, c1.im - c2.im);
+    end subtract;
+  end '-';
+  encapsulated operator '*' "times"
+    function multiply "mul"
+      import C;
+      input C c1;
+      input C c2;
+      output C c3;
+    algorithm
+      c3 := C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+    end multiply;
+  end '*';
+  encapsulated operator function '==' "eq"
+    import C;
+    input C c1;
+    input C c2;
+    output Boolean result;
+  algorithm
+    result := c1.re == c2.re and c1.im == c2.im;
+  end '==';
+end C;
+package P
+  type Voltage = Real(quantity = "V", unit = "V");
+  operator record CV = C(redeclare Voltage re, redeclare Voltage im) "voltage";
+end P;
+function cexp "exp of C"
+  input C c1;
+  output C c2;
+algorithm
+  c2 := C(exp(c1.re) * cos(c1.im), exp(c1.re) * sin(c1.im));
+end cexp;
+model ORU9
+  parameter Real a = 1;
+  parameter Real b = 2;
+  parameter Real k = 3;
+  parameter Real phi = 0;
+  final parameter C c = C(a, b);
+  final parameter C d = C(a);
+  final parameter C n = k * cexp(C(0, phi));
+  parameter C p = C(1, 2);
+  final parameter C q = p * p;
+  final parameter C s = p + C(1, 0);
+  final parameter C t = -p;
+end ORU9;

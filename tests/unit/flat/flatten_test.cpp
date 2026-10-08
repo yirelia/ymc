@@ -6155,7 +6155,9 @@ YMC_TEST(flatten_record_parameter_binding_branches) {
                            "    output R r;\n  protected\n    Real t = 2 * a;\n  algorithm\n    r := R(x = a, y = t);\n"
                            "  end f3;\nend BR5P;\nmodel BR5\n  parameter Real p = 1;\n  final parameter BR5P.R r = BR5P.f1(p);\n"
                            "end BR5;\n"),
-               std::string("<unsupported:record binding forced inline>"));
+               // 62y 起强制内联（omc 1.25.0 实跑 = RB 探针 BR5）：字段成符号式，f1 / R 都不打。
+               std::string("class BR5\n  parameter Real p = 1.0;\n  final parameter Real r.x = p \"field x\";\n"
+                           "  final parameter Real r.y = 2.0 * p \"field y\";\nend BR5;\n"));
 }
 
 YMC_TEST(flatten_array_attribute_calls_and_structural_if_branch) {
@@ -6780,6 +6782,65 @@ YMC_TEST(flatten_operator_record_operators) {
                            "  parameter Real omega = 2.0;\nequation\n"
                            "  v = C.'-'.negate(C.'*'.multiply(C.'*'.multiply(C(0.0, 1.0), C.'constructor'.fromReal(omega, 0.0)), w));\n"
                            "  w = C.'constructor'.fromReal(time, 0.0);\nend ORU8;\n"));
+}
+
+YMC_TEST(flatten_final_record_binding_forced_inline) {
+  // final parameter 记录的整体绑定定型后是用户函数调用（'constructor'、重载运算符、返回记录的函数）→ 强制内联成记录式，各字段
+  // 的式子化简后当字段绑定：'constructor' 取输出的字段修饰（`re = re`），单语句函数代换输入（记录实参取字段：记录式取元素、
+  // 记录引用接成 `p.re`），`k * exp(0.0) * cos(phi) - 0.0 * …` 化简成 `k * cos(phi)`；内联完不留函数块。
+  // 期望 = omc 1.25.0 实跑（2026-10-09，rp62x SPEC OR11）。
+  YMC_CHECK_EQ(flatten_src("operator record C \"complex-like\"\n  replaceable Real re \"real part\";\n"
+                           "  replaceable Real im \"imaginary part\";\n  encapsulated operator 'constructor'\n"
+                           "    function fromReal \"from reals\"\n      import C;\n      input Real re \"re in\";\n"
+                           "      input Real im = 0 \"im in\";\n      output C result(re = re, im = im) \"result\";\n"
+                           "    algorithm\n      annotation(Inline = true);\n    end fromReal;\n  end 'constructor';\n"
+                           "  encapsulated operator function '+' \"add\"\n    import C;\n    input C c1 \"c1\";\n"
+                           "    input C c2 \"c2\";\n    output C c3 \"c3\";\n  algorithm\n"
+                           "    c3 := C(c1.re + c2.re, c1.im + c2.im);\n    annotation(Inline = true);\n  end '+';\n"
+                           "  encapsulated operator '-' \"minus\"\n    function negate \"neg\"\n      import C;\n"
+                           "      input C c1;\n      output C c2;\n    algorithm\n      c2 := C(-c1.re, -c1.im);\n"
+                           "    end negate;\n    function subtract \"sub\"\n      import C;\n      input C c1;\n"
+                           "      input C c2;\n      output C c3;\n    algorithm\n      c3 := C(c1.re - c2.re, c1.im - c2.im);\n"
+                           "    end subtract;\n  end '-';\n  encapsulated operator '*' \"times\"\n"
+                           "    function multiply \"mul\"\n      import C;\n      input C c1;\n      input C c2;\n"
+                           "      output C c3;\n    algorithm\n"
+                           "      c3 := C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);\n    end multiply;\n"
+                           "  end '*';\n  encapsulated operator function '==' \"eq\"\n    import C;\n    input C c1;\n"
+                           "    input C c2;\n    output Boolean result;\n  algorithm\n"
+                           "    result := c1.re == c2.re and c1.im == c2.im;\n  end '==';\nend C;\npackage P\n"
+                           "  type Voltage = Real(quantity = \"V\", unit = \"V\");\n"
+                           "  operator record CV = C(redeclare Voltage re, redeclare Voltage im) \"voltage\";\nend P;\n"
+                           "function cexp \"exp of C\"\n  input C c1;\n  output C c2;\nalgorithm\n"
+                           "  c2 := C(exp(c1.re) * cos(c1.im), exp(c1.re) * sin(c1.im));\nend cexp;\nmodel ORU9\n"
+                           "  parameter Real a = 1;\n  parameter Real b = 2;\n  parameter Real k = 3;\n"
+                           "  parameter Real phi = 0;\n  final parameter C c = C(a, b);\n  final parameter C d = C(a);\n"
+                           "  final parameter C n = k * cexp(C(0, phi));\n  parameter C p = C(1, 2);\n"
+                           "  final parameter C q = p * p;\n  final parameter C s = p + C(1, 0);\n  final parameter C t = -p;\n"
+                           "end ORU9;\n"),
+               std::string("class ORU9\n  parameter Real a = 1.0;\n  parameter Real b = 2.0;\n  parameter Real k = 3.0;\n"
+                           "  parameter Real phi = 0.0;\n  final parameter Real c.re = a \"real part\";\n"
+                           "  final parameter Real c.im = b \"imaginary part\";\n"
+                           "  final parameter Real d.re = a \"real part\";\n"
+                           "  final parameter Real d.im = 0.0 \"imaginary part\";\n"
+                           "  final parameter Real n.re = k * cos(phi) \"real part\";\n"
+                           "  final parameter Real n.im = k * sin(phi) \"imaginary part\";\n"
+                           "  parameter Real p.re = 1.0 \"real part\";\n  parameter Real p.im = 2.0 \"imaginary part\";\n"
+                           "  final parameter Real q.re = p.re * p.re - p.im * p.im \"real part\";\n"
+                           "  final parameter Real q.im = p.re * p.im + p.im * p.re \"imaginary part\";\n"
+                           "  final parameter Real s.re = p.re + 1.0 \"real part\";\n"
+                           "  final parameter Real s.im = p.im \"imaginary part\";\n"
+                           "  final parameter Real t.re = -p.re \"real part\";\n"
+                           "  final parameter Real t.im = -p.im \"imaginary part\";\nend ORU9;\n"));
+}
+
+YMC_TEST(flatten_string_folded_after_structural_substitution) {
+  // 结构参数代入后算法段里的 `String(m) + " phases"`（m 因数组维成结构参数）：omc 化简时求值成 "3 phases"（方程里的 assert
+  // 消息不化简，见 raw_message）。期望 = omc 1.25.0 实跑（2026-10-09）。
+  YMC_CHECK_EQ(flatten_src("model FS2\n  parameter Integer m = 3;\n  Real x[m];\nequation\n  x = fill(time, m);\n"
+                           "initial algorithm\n  assert(m > 1, String(m) + \" phases\");\nend FS2;\n"),
+               std::string("class FS2\n  final parameter Integer m = 3;\n  Real x[1];\n  Real x[2];\n  Real x[3];\n"
+                           "initial algorithm\n  assert(true, \"3 phases\");\nequation\n  x[1] = time;\n  x[2] = time;\n"
+                           "  x[3] = time;\nend FS2;\n"));
 }
 
 YMC_TEST_MAIN

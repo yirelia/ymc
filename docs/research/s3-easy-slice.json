@@ -639,5 +639,6 @@
 "BindingArray7.mo",
 "ConnectComplexFlow1.mo",
 "OperatorOverloadConstructorDefault1.mo",
-"OperatorOverloadBinaryWithBuiltin.mo"
+"OperatorOverloadBinaryWithBuiltin.mo",
+"Inline2.mo"
 ]

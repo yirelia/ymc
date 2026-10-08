@@ -2043,6 +2043,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           调用打成记录式；短类重声明经记录绑定的字段修饰不再被当成 redeclare 修饰。数组运算数、'String'、强制内联、
           函数形参的别名记录类型未做（SKIP）。
           slice 589 / FAIL 0；scodeinst 590→591；testsuite 1666→1670 / FAIL 0；MSL 312→325；探针 9031→9042；单测 311→312。
+    - [x] (62y) flat：final parameter 记录绑定的强制内联（2026-10-09）：绑定定型后是用户函数调用（'constructor'、重载运算符、
+          返回记录的函数）→ 照 NFInline.inlineCall 强制内联成记录式、各字段式子化简后当字段绑定（`final parameter Real
+          c.re = a`、`N.re = k * cos(phi)`、`c.re = a.re * b.re - a.im * b.im`）：'constructor' 取输出的字段修饰，单语句函数
+          代换输入（记录实参取字段），实参是内建 / external 调用的整个放弃（交给 tryEvalExp），if 绑定不内联。字段式子经占位名
+          带给字段。构造函数块只在模型 / 留下的函数里还引用时才打（内联途中、求值出的记录式、函数体里的构造调用不再提前登记）。
+          FundamentalWave 电机走得更远后暴露的两处一并修：结构参数代入后算法段里的 `String(m)` 照常求值（方程的 assert 消息
+          照旧不化简）；结构别名规则看书写的绑定（第二遍里存回字面量的向前引用照样算，`aimc.statorCoreParameters.m = 3`）。
+          slice 590 / FAIL 0；scodeinst 591→592；testsuite 1670→1672 / FAIL 0；MSL 325→343；探针 9042→9049；单测 312→314。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
