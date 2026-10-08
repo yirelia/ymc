@@ -313,3 +313,12 @@ MultiBody 越过类注释与 `to_unit1(r - r_shape)` 的那批，往下集中卡
 带属性修饰的空数组照样整体不出、元组方程的目标可以是整个数组 / 空数组（打 `_`）、函数体里空数组作实参打 `{}` 之后，
 Blocks.Examples.Filter / FilterWithDifferentiation / FilterWithRiseTime 与 Clocked RealSignals.UniformNoise 转 PASS。
 FastFourierTransform 的两个往下卡在实参类型 / 形状。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-08 加宽 62s 之后：PASS 276 → 276
+
+记录参数的整体绑定照 flattenComplexComponent 的三支走（含 equalityConstraint 的 Frames.Orientation 不再被当 operator record
+挡下；final 参数记录内联放弃后 tryEvalExp 成字面量、求不出挪初始方程）之后，MultiBody 的 29 个示例越过
+"variability on composite component"：14 个往下卡在属性值里的数组调用（`w_a(start = Frames.resolve2(R_start, w_0_start))`，
+下一桶）、13 个卡在 BodyBox / BodyCylinder 的 `R = Frames.from_nxy(r, widthDirection)`（omc 因 Evaluate = true 连带把 r 当
+结构参数、走求值支；ymc 的 Evaluate 数组参数这条路还没通）、2 个卡在数组 if 的调用分支。PASS 数不变。
+FAIL / ACCEPTS-INVALID / CRASH 0。

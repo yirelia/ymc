@@ -1,0 +1,3324 @@
+//// set: rb-p1 — 记录类型组件带整体绑定（研究子任务 rp62r：116 个探针 + SPEC 16 条规则，去掉 omc 崩溃的 IN8 与要装 MSL 的 MS*）：构造调用 / 记录引用 / if 选支、final 参数记录的强制内联与放弃（多条语句、有局部、调用处顶层实参是内建调用）、tryEvalExp 成字面量与写回、求不出挪成初始方程（数组字段 fixed = false）、结构参数实参求值、Evaluate = false / external（SKIP）。单测取 BR6 / IA2 / SE1 / BR8 / FD4 / BR5
+//// model: BR1
+package BR1P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end BR1P;
+model BR1
+  parameter BR1P.R r = BR1P.R(1, 2);
+end BR1;
+//// model: BR2
+package BR2P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end BR2P;
+model BR2
+  parameter Real p = 1;
+  parameter BR2P.R r = BR2P.R(p, 2);
+end BR2;
+//// model: BR3
+package BR3P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end BR3P;
+model BR3
+  parameter Real p = 1;
+  final parameter BR3P.R r = BR3P.R(p, 2);
+end BR3;
+//// model: BR4
+package BR4P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end BR4P;
+model BR4
+  parameter Real p = 1;
+  parameter BR4P.R r = BR4P.f1(p);
+end BR4;
+//// model: BR5
+package BR5P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end BR5P;
+model BR5
+  parameter Real p = 1;
+  final parameter BR5P.R r = BR5P.f1(p);
+end BR5;
+//// model: BR6
+package BR6P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end BR6P;
+model BR6
+  parameter Real p = 1;
+  final parameter BR6P.R r = BR6P.f2(p);
+end BR6;
+//// model: BR7
+package BR7P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end BR7P;
+model BR7
+  parameter Real p = 1;
+  final parameter BR7P.R r = BR7P.f3(p);
+end BR7;
+//// model: BR8
+package BR8P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end BR8P;
+model BR8
+  parameter Real p(fixed = false, start = 1);
+  final parameter BR8P.R r = BR8P.f2(p);
+initial equation
+  p = 1;
+end BR8;
+//// model: BR9
+package BR9P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end BR9P;
+model BR9
+  parameter Real p = 1 annotation(Evaluate = false);
+  final parameter BR9P.R r = BR9P.f1(p);
+end BR9;
+//// model: CC1
+package CC1P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end CC1P;
+model CC1
+  constant CC1P.R c = CC1P.R(1, 2);
+  Real y = c.x * time;
+end CC1;
+//// model: CC2
+package CC2P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end CC2P;
+model CC2
+  CC2P.R v = CC2P.R(time, 2);
+end CC2;
+//// model: CC3
+package CC3P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end CC3P;
+model CC3
+  CC3P.R v = CC3P.f1(time);
+end CC3;
+//// model: CC4
+package CC4P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end CC4P;
+model CC4
+  CC4P.R v = CC4P.f2(time);
+end CC4;
+//// model: CC5
+package CC5P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end CC5P;
+model CC5
+  parameter Real p = 1;
+  CC5P.R v = CC5P.f1(p);
+end CC5;
+//// model: CC6
+package CC6P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end CC6P;
+model CC6
+  parameter Real p = 1;
+  final CC6P.R v = CC6P.f2(p);
+end CC6;
+//// model: CC7
+package CC7P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end CC7P;
+model CC7
+  constant Real k = 2;
+  constant CC7P.R c = CC7P.f2(k);
+end CC7;
+//// model: CC8
+package CC8P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end CC8P;
+model CC8
+  discrete CC8P.R d = CC8P.R(1, 2);
+end CC8;
+//// model: FD1
+package FD1P
+  type AngularVelocity = Real(final quantity = "AngularVelocity", final unit = "rad/s");
+  record RM
+    Real T[2, 2] "T comment";
+    AngularVelocity w[2] "w comment";
+    Real s(min = 0, nominal = 2) = 1 "s comment";
+  end RM;
+  function h "array-valued, not inlinable"
+    input Real a;
+    output Real T[2, 2];
+  protected
+    Real c;
+  algorithm
+    c := cos(a);
+    T := [c, 0; 0, c];
+  end h;
+  function mkm "inlinable record function"
+    input Real a;
+    output RM m;
+  algorithm
+    m := RM(T = [cos(a), sin(a); -sin(a), cos(a)], w = {a, 0}, s = a);
+  end mkm;
+  function mkm2 "not inlinable record function"
+    input Real a;
+    output RM m;
+  algorithm
+    m.T := [cos(a), sin(a); -sin(a), cos(a)];
+    m.w := {a, 0};
+    m.s := a;
+  end mkm2;
+end FD1P;
+model FD1
+  parameter Real p = 0.5;
+  final parameter FD1P.RM r = FD1P.RM(T = [cos(p), sin(p); -sin(p), cos(p)], w = {p, 0}, s = 2);
+end FD1;
+//// model: FD2
+package FD2P
+  type AngularVelocity = Real(final quantity = "AngularVelocity", final unit = "rad/s");
+  record RM
+    Real T[2, 2] "T comment";
+    AngularVelocity w[2] "w comment";
+    Real s(min = 0, nominal = 2) = 1 "s comment";
+  end RM;
+  function h "array-valued, not inlinable"
+    input Real a;
+    output Real T[2, 2];
+  protected
+    Real c;
+  algorithm
+    c := cos(a);
+    T := [c, 0; 0, c];
+  end h;
+  function mkm "inlinable record function"
+    input Real a;
+    output RM m;
+  algorithm
+    m := RM(T = [cos(a), sin(a); -sin(a), cos(a)], w = {a, 0}, s = a);
+  end mkm;
+  function mkm2 "not inlinable record function"
+    input Real a;
+    output RM m;
+  algorithm
+    m.T := [cos(a), sin(a); -sin(a), cos(a)];
+    m.w := {a, 0};
+    m.s := a;
+  end mkm2;
+end FD2P;
+model FD2
+  parameter Real p = 0.5;
+  final parameter FD2P.RM r = FD2P.RM(T = FD2P.h(p), w = {p, 0}, s = 2);
+end FD2;
+//// model: FD3
+package FD3P
+  type AngularVelocity = Real(final quantity = "AngularVelocity", final unit = "rad/s");
+  record RM
+    Real T[2, 2] "T comment";
+    AngularVelocity w[2] "w comment";
+    Real s(min = 0, nominal = 2) = 1 "s comment";
+  end RM;
+  function h "array-valued, not inlinable"
+    input Real a;
+    output Real T[2, 2];
+  protected
+    Real c;
+  algorithm
+    c := cos(a);
+    T := [c, 0; 0, c];
+  end h;
+  function mkm "inlinable record function"
+    input Real a;
+    output RM m;
+  algorithm
+    m := RM(T = [cos(a), sin(a); -sin(a), cos(a)], w = {a, 0}, s = a);
+  end mkm;
+  function mkm2 "not inlinable record function"
+    input Real a;
+    output RM m;
+  algorithm
+    m.T := [cos(a), sin(a); -sin(a), cos(a)];
+    m.w := {a, 0};
+    m.s := a;
+  end mkm2;
+end FD3P;
+model FD3
+  parameter Real p = 0.5;
+protected
+  final parameter FD3P.RM r = FD3P.mkm(p);
+end FD3;
+//// model: FD4
+package FD4P
+  type AngularVelocity = Real(final quantity = "AngularVelocity", final unit = "rad/s");
+  record RM
+    Real T[2, 2] "T comment";
+    AngularVelocity w[2] "w comment";
+    Real s(min = 0, nominal = 2) = 1 "s comment";
+  end RM;
+  function h "array-valued, not inlinable"
+    input Real a;
+    output Real T[2, 2];
+  protected
+    Real c;
+  algorithm
+    c := cos(a);
+    T := [c, 0; 0, c];
+  end h;
+  function mkm "inlinable record function"
+    input Real a;
+    output RM m;
+  algorithm
+    m := RM(T = [cos(a), sin(a); -sin(a), cos(a)], w = {a, 0}, s = a);
+  end mkm;
+  function mkm2 "not inlinable record function"
+    input Real a;
+    output RM m;
+  algorithm
+    m.T := [cos(a), sin(a); -sin(a), cos(a)];
+    m.w := {a, 0};
+    m.s := a;
+  end mkm2;
+end FD4P;
+model FD4
+  parameter Real p = 0.5;
+  parameter FD4P.RM r = FD4P.mkm2(p);
+end FD4;
+//// model: FD5
+package FD5P
+  type AngularVelocity = Real(final quantity = "AngularVelocity", final unit = "rad/s");
+  record RM
+    Real T[2, 2] "T comment";
+    AngularVelocity w[2] "w comment";
+    Real s(min = 0, nominal = 2) = 1 "s comment";
+  end RM;
+  function h "array-valued, not inlinable"
+    input Real a;
+    output Real T[2, 2];
+  protected
+    Real c;
+  algorithm
+    c := cos(a);
+    T := [c, 0; 0, c];
+  end h;
+  function mkm "inlinable record function"
+    input Real a;
+    output RM m;
+  algorithm
+    m := RM(T = [cos(a), sin(a); -sin(a), cos(a)], w = {a, 0}, s = a);
+  end mkm;
+  function mkm2 "not inlinable record function"
+    input Real a;
+    output RM m;
+  algorithm
+    m.T := [cos(a), sin(a); -sin(a), cos(a)];
+    m.w := {a, 0};
+    m.s := a;
+  end mkm2;
+end FD5P;
+model FD5
+  parameter Real p = 0.5;
+  Real before = p;
+  final parameter FD5P.RM r = FD5P.mkm(p);
+  Real after = r.s;
+end FD5;
+//// model: FD6
+package FD6P
+  type AngularVelocity = Real(final quantity = "AngularVelocity", final unit = "rad/s");
+  record RM
+    Real T[2, 2] "T comment";
+    AngularVelocity w[2] "w comment";
+    Real s(min = 0, nominal = 2) = 1 "s comment";
+  end RM;
+  function h "array-valued, not inlinable"
+    input Real a;
+    output Real T[2, 2];
+  protected
+    Real c;
+  algorithm
+    c := cos(a);
+    T := [c, 0; 0, c];
+  end h;
+  function mkm "inlinable record function"
+    input Real a;
+    output RM m;
+  algorithm
+    m := RM(T = [cos(a), sin(a); -sin(a), cos(a)], w = {a, 0}, s = a);
+  end mkm;
+  function mkm2 "not inlinable record function"
+    input Real a;
+    output RM m;
+  algorithm
+    m.T := [cos(a), sin(a); -sin(a), cos(a)];
+    m.w := {a, 0};
+    m.s := a;
+  end mkm2;
+end FD6P;
+model FD6
+  parameter Real p = 0.5;
+  final parameter FD6P.RM r = FD6P.RM(T = FD6P.h(p) * 2, w = {p, 0}, s = 2);
+end FD6;
+//// model: FD7
+package FD7P
+  type AngularVelocity = Real(final quantity = "AngularVelocity", final unit = "rad/s");
+  record RM
+    Real T[2, 2] "T comment";
+    AngularVelocity w[2] "w comment";
+    Real s(min = 0, nominal = 2) = 1 "s comment";
+  end RM;
+  function h "array-valued, not inlinable"
+    input Real a;
+    output Real T[2, 2];
+  protected
+    Real c;
+  algorithm
+    c := cos(a);
+    T := [c, 0; 0, c];
+  end h;
+  function mkm "inlinable record function"
+    input Real a;
+    output RM m;
+  algorithm
+    m := RM(T = [cos(a), sin(a); -sin(a), cos(a)], w = {a, 0}, s = a);
+  end mkm;
+  function mkm2 "not inlinable record function"
+    input Real a;
+    output RM m;
+  algorithm
+    m.T := [cos(a), sin(a); -sin(a), cos(a)];
+    m.w := {a, 0};
+    m.s := a;
+  end mkm2;
+end FD7P;
+model FD7
+  parameter Real p = 0.5;
+  final parameter FD7P.RM r = FD7P.mkm2(p);
+end FD7;
+//// model: FL1
+model FL1
+  final parameter Real k = 2;
+  parameter Real m = k;
+  Real y = k * time;
+end FL1;
+//// model: FN1
+package FN1P
+  record In
+    Real a "a";
+    Real b[2] "b";
+  end In;
+  record Out
+    In i "inner";
+    Real z "z";
+  end Out;
+  function mk
+    input Real p;
+    output Out o;
+  algorithm
+    o := Out(i = In(a = p, b = {1, p}), z = 3);
+  end mk;
+  function mk2
+    input Real p;
+    output Out o;
+  algorithm
+    o.i := In(a = p, b = {1, p});
+    o.z := 3;
+  end mk2;
+end FN1P;
+model FN1
+  parameter Real p = 2;
+  final parameter FN1P.Out o = FN1P.Out(i = FN1P.In(a = p, b = {1, p}), z = 3);
+end FN1;
+//// model: FN2
+package FN2P
+  record In
+    Real a "a";
+    Real b[2] "b";
+  end In;
+  record Out
+    In i "inner";
+    Real z "z";
+  end Out;
+  function mk
+    input Real p;
+    output Out o;
+  algorithm
+    o := Out(i = In(a = p, b = {1, p}), z = 3);
+  end mk;
+  function mk2
+    input Real p;
+    output Out o;
+  algorithm
+    o.i := In(a = p, b = {1, p});
+    o.z := 3;
+  end mk2;
+end FN2P;
+model FN2
+  parameter Real p = 2;
+  final parameter FN2P.Out o = FN2P.mk(p);
+end FN2;
+//// model: FN3
+package FN3P
+  record In
+    Real a "a";
+    Real b[2] "b";
+  end In;
+  record Out
+    In i "inner";
+    Real z "z";
+  end Out;
+  function mk
+    input Real p;
+    output Out o;
+  algorithm
+    o := Out(i = In(a = p, b = {1, p}), z = 3);
+  end mk;
+  function mk2
+    input Real p;
+    output Out o;
+  algorithm
+    o.i := In(a = p, b = {1, p});
+    o.z := 3;
+  end mk2;
+end FN3P;
+model FN3
+  parameter Real p = 2;
+  parameter FN3P.Out o = FN3P.mk2(p);
+end FN3;
+//// model: FN4
+package FN4P
+  record In
+    Real a "a";
+    Real b[2] "b";
+  end In;
+  record Out
+    In i "inner";
+    Real z "z";
+  end Out;
+  function mk
+    input Real p;
+    output Out o;
+  algorithm
+    o := Out(i = In(a = p, b = {1, p}), z = 3);
+  end mk;
+  function mk2
+    input Real p;
+    output Out o;
+  algorithm
+    o.i := In(a = p, b = {1, p});
+    o.z := 3;
+  end mk2;
+end FN4P;
+model FN4
+  parameter Real p = 2;
+  parameter FN4P.Out o = FN4P.Out(i = FN4P.In(a = p, b = {1, p}), z = 3);
+end FN4;
+//// model: FN5
+package FN5P
+  record In
+    Real a "a";
+    Real b[2] "b";
+  end In;
+  record Out
+    In i "inner";
+    Real z "z";
+  end Out;
+  function mk
+    input Real p;
+    output Out o;
+  algorithm
+    o := Out(i = In(a = p, b = {1, p}), z = 3);
+  end mk;
+  function mk2
+    input Real p;
+    output Out o;
+  algorithm
+    o.i := In(a = p, b = {1, p});
+    o.z := 3;
+  end mk2;
+end FN5P;
+model FN5
+  parameter Real p = 2;
+  parameter FN5P.Out o(i = FN5P.In(a = p, b = {1, p}), z = 3);
+end FN5;
+//// model: FN6
+package FN6P
+  record In
+    Real a "a";
+    Real b[2] "b";
+  end In;
+  record Out
+    In i "inner";
+    Real z "z";
+  end Out;
+  function g "not inlinable, returns In"
+    input Real p;
+    output In i;
+  algorithm
+    i.a := p;
+    i.b := {1, p};
+  end g;
+end FN6P;
+model FN6
+  parameter Real p = 2;
+  parameter FN6P.Out o = FN6P.Out(i = FN6P.g(p), z = 3);
+end FN6;
+//// model: FN7
+package FN7P
+  record In
+    Real a "a";
+    Real b[2] "b";
+  end In;
+  record Out
+    In i "inner";
+    Real z "z";
+  end Out;
+  function g "not inlinable, returns In"
+    input Real p;
+    output In i;
+  algorithm
+    i.a := p;
+    i.b := {1, p};
+  end g;
+end FN7P;
+model FN7
+  parameter Real p(fixed = false, start = 2);
+  final parameter FN7P.Out o = FN7P.Out(i = FN7P.g(p), z = 3);
+initial equation
+  p = 2;
+end FN7;
+//// model: FN8
+package FN8P
+  record In
+    Real a "a";
+    Real b[2] "b";
+  end In;
+  record Out
+    In i "inner";
+    Real z "z";
+  end Out;
+  function g "not inlinable, returns In"
+    input Real p;
+    output In i;
+  algorithm
+    i.a := p;
+    i.b := {1, p};
+  end g;
+end FN8P;
+model FN8
+  parameter Real p = 2;
+  final parameter FN8P.Out o = FN8P.Out(i = FN8P.g(p), z = 3);
+end FN8;
+//// model: IA1
+package IA1P
+  record Orientation
+    Real T[2, 2];
+    Real w[2];
+  end Orientation;
+  function mk
+    input Real angle;
+    input Real w0[2];
+    output Orientation R;
+  algorithm
+    R := Orientation(T = [cos(angle), sin(angle); -sin(angle), cos(angle)], w = w0);
+  end mk;
+  function g1
+    input Real a;
+    output Real b;
+  algorithm
+    b := 2 * a;
+  end g1;
+  function g2
+    input Real a;
+    output Real b;
+  protected
+    Real t;
+  algorithm
+    t := 2 * a;
+    b := t + 1;
+  end g2;
+end IA1P;
+model IA1
+  parameter Real a0 = 0.1;
+  parameter Real wv[2] = {1, 2};
+  final parameter IA1P.Orientation R = IA1P.mk(a0, {0, 0});
+end IA1;
+//// model: IA2
+package IA2P
+  record Orientation
+    Real T[2, 2];
+    Real w[2];
+  end Orientation;
+  function mk
+    input Real angle;
+    input Real w0[2];
+    output Orientation R;
+  algorithm
+    R := Orientation(T = [cos(angle), sin(angle); -sin(angle), cos(angle)], w = w0);
+  end mk;
+  function g1
+    input Real a;
+    output Real b;
+  algorithm
+    b := 2 * a;
+  end g1;
+  function g2
+    input Real a;
+    output Real b;
+  protected
+    Real t;
+  algorithm
+    t := 2 * a;
+    b := t + 1;
+  end g2;
+end IA2P;
+model IA2
+  parameter Real a0 = 0.1;
+  parameter Real wv[2] = {1, 2};
+  final parameter IA2P.Orientation R = IA2P.mk(a0, zeros(2));
+end IA2;
+//// model: IA3
+package IA3P
+  record Orientation
+    Real T[2, 2];
+    Real w[2];
+  end Orientation;
+  function mk
+    input Real angle;
+    input Real w0[2];
+    output Orientation R;
+  algorithm
+    R := Orientation(T = [cos(angle), sin(angle); -sin(angle), cos(angle)], w = w0);
+  end mk;
+  function g1
+    input Real a;
+    output Real b;
+  algorithm
+    b := 2 * a;
+  end g1;
+  function g2
+    input Real a;
+    output Real b;
+  protected
+    Real t;
+  algorithm
+    t := 2 * a;
+    b := t + 1;
+  end g2;
+end IA3P;
+model IA3
+  parameter Real a0 = 0.1;
+  parameter Real wv[2] = {1, 2};
+  final parameter IA3P.Orientation R = IA3P.mk(a0, fill(0.0, 2));
+end IA3;
+//// model: IA4
+package IA4P
+  record Orientation
+    Real T[2, 2];
+    Real w[2];
+  end Orientation;
+  function mk
+    input Real angle;
+    input Real w0[2];
+    output Orientation R;
+  algorithm
+    R := Orientation(T = [cos(angle), sin(angle); -sin(angle), cos(angle)], w = w0);
+  end mk;
+  function g1
+    input Real a;
+    output Real b;
+  algorithm
+    b := 2 * a;
+  end g1;
+  function g2
+    input Real a;
+    output Real b;
+  protected
+    Real t;
+  algorithm
+    t := 2 * a;
+    b := t + 1;
+  end g2;
+end IA4P;
+model IA4
+  parameter Real a0 = 0.1;
+  parameter Real wv[2] = {1, 2};
+  final parameter IA4P.Orientation R = IA4P.mk(a0, ones(2));
+end IA4;
+//// model: IA5
+package IA5P
+  record Orientation
+    Real T[2, 2];
+    Real w[2];
+  end Orientation;
+  function mk
+    input Real angle;
+    input Real w0[2];
+    output Orientation R;
+  algorithm
+    R := Orientation(T = [cos(angle), sin(angle); -sin(angle), cos(angle)], w = w0);
+  end mk;
+  function g1
+    input Real a;
+    output Real b;
+  algorithm
+    b := 2 * a;
+  end g1;
+  function g2
+    input Real a;
+    output Real b;
+  protected
+    Real t;
+  algorithm
+    t := 2 * a;
+    b := t + 1;
+  end g2;
+end IA5P;
+model IA5
+  parameter Real a0 = 0.1;
+  parameter Real wv[2] = {1, 2};
+  final parameter IA5P.Orientation R = IA5P.mk(cos(a0), {0, 0});
+end IA5;
+//// model: IA6
+package IA6P
+  record Orientation
+    Real T[2, 2];
+    Real w[2];
+  end Orientation;
+  function mk
+    input Real angle;
+    input Real w0[2];
+    output Orientation R;
+  algorithm
+    R := Orientation(T = [cos(angle), sin(angle); -sin(angle), cos(angle)], w = w0);
+  end mk;
+  function g1
+    input Real a;
+    output Real b;
+  algorithm
+    b := 2 * a;
+  end g1;
+  function g2
+    input Real a;
+    output Real b;
+  protected
+    Real t;
+  algorithm
+    t := 2 * a;
+    b := t + 1;
+  end g2;
+end IA6P;
+model IA6
+  parameter Real a0 = 0.1;
+  parameter Real wv[2] = {1, 2};
+  final parameter IA6P.Orientation R = IA6P.mk(a0, wv);
+end IA6;
+//// model: IA7
+package IA7P
+  record Orientation
+    Real T[2, 2];
+    Real w[2];
+  end Orientation;
+  function mk
+    input Real angle;
+    input Real w0[2];
+    output Orientation R;
+  algorithm
+    R := Orientation(T = [cos(angle), sin(angle); -sin(angle), cos(angle)], w = w0);
+  end mk;
+  function g1
+    input Real a;
+    output Real b;
+  algorithm
+    b := 2 * a;
+  end g1;
+  function g2
+    input Real a;
+    output Real b;
+  protected
+    Real t;
+  algorithm
+    t := 2 * a;
+    b := t + 1;
+  end g2;
+end IA7P;
+model IA7
+  parameter Real a0 = 0.1;
+  parameter Real wv[2] = {1, 2};
+  final parameter IA7P.Orientation R = IA7P.mk(IA7P.g1(a0), {0, 0});
+end IA7;
+//// model: IA8
+package IA8P
+  record Orientation
+    Real T[2, 2];
+    Real w[2];
+  end Orientation;
+  function mk
+    input Real angle;
+    input Real w0[2];
+    output Orientation R;
+  algorithm
+    R := Orientation(T = [cos(angle), sin(angle); -sin(angle), cos(angle)], w = w0);
+  end mk;
+  function g1
+    input Real a;
+    output Real b;
+  algorithm
+    b := 2 * a;
+  end g1;
+  function g2
+    input Real a;
+    output Real b;
+  protected
+    Real t;
+  algorithm
+    t := 2 * a;
+    b := t + 1;
+  end g2;
+end IA8P;
+model IA8
+  parameter Real a0 = 0.1;
+  parameter Real wv[2] = {1, 2};
+  final parameter IA8P.Orientation R = IA8P.mk(IA8P.g2(a0), {0, 0});
+end IA8;
+//// model: IA9
+package IA9P
+  record Orientation
+    Real T[2, 2];
+    Real w[2];
+  end Orientation;
+  function mk
+    input Real angle;
+    input Real w0[2];
+    output Orientation R;
+  algorithm
+    R := Orientation(T = [cos(angle), sin(angle); -sin(angle), cos(angle)], w = w0);
+  end mk;
+  function g1
+    input Real a;
+    output Real b;
+  algorithm
+    b := 2 * a;
+  end g1;
+  function g2
+    input Real a;
+    output Real b;
+  protected
+    Real t;
+  algorithm
+    t := 2 * a;
+    b := t + 1;
+  end g2;
+end IA9P;
+model IA9
+  parameter Real a0 = 0.1;
+  parameter Real wv[2] = {1, 2};
+  final parameter IA9P.Orientation R = IA9P.mk(a0, {a0, 2 * a0});
+end IA9;
+//// model: IF1
+package IF1P
+  record Orientation
+    Real T[2, 2];
+    Real w[2];
+  end Orientation;
+  function mk
+    input Real angle;
+    output Orientation R;
+  algorithm
+    R := Orientation(T = [cos(angle), sin(angle); -sin(angle), cos(angle)], w = zeros(2));
+  end mk;
+end IF1P;
+model IF1
+  parameter Real a0 = 0.1;
+  final parameter IF1P.Orientation R = IF1P.mk(a0);
+end IF1;
+//// model: IF2
+package IF2P
+  record Orientation
+    Real T[2, 2];
+    Real w[2];
+  end Orientation;
+  function mk
+    input Real angle;
+    output Orientation R;
+  algorithm
+    R := Orientation(T = [cos(angle), sin(angle); -sin(angle), cos(angle)], w = fill(0.0, 2));
+  end mk;
+end IF2P;
+model IF2
+  parameter Real a0 = 0.1;
+  final parameter IF2P.Orientation R = IF2P.mk(a0);
+end IF2;
+//// model: IF3
+package IF3P
+  record Orientation
+    Real T[2, 2];
+    Real w[2];
+  end Orientation;
+  function mk
+    input Real angle;
+    output Orientation R;
+  algorithm
+    R := Orientation(T = [cos(angle), sin(angle); -sin(angle), cos(angle)], w = {cos(angle), 0});
+  end mk;
+end IF3P;
+model IF3
+  parameter Real a0 = 0.1;
+  final parameter IF3P.Orientation R = IF3P.mk(a0);
+end IF3;
+//// model: IF4
+package IF4P
+  record Orientation
+    Real T[2, 2];
+    Real w[2];
+  end Orientation;
+  function mk
+    input Real angle;
+    output Orientation R;
+  algorithm
+    R := Orientation(T = [cos(angle), sin(angle); -sin(angle), cos(angle)], w = ones(2) * angle);
+  end mk;
+end IF4P;
+model IF4
+  parameter Real a0 = 0.1;
+  final parameter IF4P.Orientation R = IF4P.mk(a0);
+end IF4;
+//// model: IF8
+package IF8P
+  record S
+    Real x;
+    Real y;
+  end S;
+  function mk
+    input Real a;
+    output S s;
+  algorithm
+    s := S(x = cos(a), y = a);
+  end mk;
+end IF8P;
+model IF8
+  parameter Real a0 = 0.1;
+  final parameter IF8P.S s = IF8P.mk(a0);
+end IF8;
+//// model: IN1
+package IN1P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+  function f4 "default input"
+    input Real a;
+    input Real b = 3;
+    output R r;
+  algorithm
+    r := R(a, b);
+  end f4;
+end IN1P;
+model IN1
+  parameter Real p = 1;
+  final parameter IN1P.R r = IN1P.f4(p);
+end IN1;
+//// model: IN2
+package IN2P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+  function f5 "output binding, no algorithm"
+    input Real a;
+    output R r = R(a, 2 * a);
+  end f5;
+end IN2P;
+model IN2
+  parameter Real p = 1;
+  final parameter IN2P.R r = IN2P.f5(p);
+end IN2;
+//// model: IN3
+package IN3P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+  function f6 "Inline=false"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(a, 2 * a);
+    annotation(Inline = false);
+  end f6;
+end IN3P;
+model IN3
+  parameter Real p = 1;
+  final parameter IN3P.R r = IN3P.f6(p);
+end IN3;
+//// model: IN4
+package IN4P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+  function f7 "if-expression result"
+    input Real a;
+    output R r;
+  algorithm
+    r := if a > 0 then R(a, 1) else R(-a, 2);
+  end f7;
+end IN4P;
+model IN4
+  parameter Real p = 1;
+  final parameter IN4P.R r = IN4P.f7(p);
+end IN4;
+//// model: IN5
+package IN5P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+  function f8 "result is a call to another inlinable function"
+    input Real a;
+    output R r;
+  algorithm
+    r := f1(3 * a);
+  end f8;
+end IN5P;
+model IN5
+  parameter Real p = 1;
+  final parameter IN5P.R r = IN5P.f8(p);
+end IN5;
+//// model: IN6
+package IN6P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+  function f9 "result is a call to a non-inlinable function"
+    input Real a;
+    output R r;
+  algorithm
+    r := f2(3 * a);
+  end f9;
+end IN6P;
+model IN6
+  parameter Real p = 1;
+  final parameter IN6P.R r = IN6P.f9(p);
+end IN6;
+//// model: IN7
+package IN7P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+  function f7 "if-expression result"
+    input Real a;
+    output R r;
+  algorithm
+    r := if a > 0 then R(a, 1) else R(-a, 2);
+  end f7;
+end IN7P;
+model IN7
+  parameter Real p(fixed = false, start = 1);
+  final parameter IN7P.R r = IN7P.f7(p);
+initial equation
+  p = 1;
+end IN7;
+//// model: IN9
+package IN9P
+  record Ori
+    Real T[2, 2] "T";
+    Real w[2] "w";
+  end Ori;
+  function inv "inlinable, reads fields of an input record"
+    input Ori R;
+    output Ori Ri;
+  algorithm
+    Ri := Ori(T = transpose(R.T), w = -R.w);
+  end inv;
+  function mk "not inlinable"
+    input Real a;
+    output Ori R;
+  algorithm
+    R.T := [cos(a), sin(a); -sin(a), cos(a)];
+    R.w := {a, 0};
+  end mk;
+end IN9P;
+model IN9
+  parameter Real p = 0.5;
+  parameter IN9P.Ori R1 = IN9P.mk(p);
+  final parameter IN9P.Ori R2 = IN9P.inv(R1);
+end IN9;
+//// model: OF1
+package OF1P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end OF1P;
+model OF1
+  parameter OF1P.R r1 = OF1P.R(1, 2);
+  parameter OF1P.R r2 = r1;
+end OF1;
+//// model: OF2
+package OF2P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end OF2P;
+model OF2
+  parameter OF2P.R r1 = OF2P.R(1, 2);
+  final parameter OF2P.R r2 = r1;
+end OF2;
+//// model: OF3
+package OF3P
+  type AngularVelocity = Real(final quantity = "AngularVelocity", final unit = "rad/s");
+  record RM
+    Real T[2, 2] "T comment";
+    AngularVelocity w[2] "w comment";
+    Real s(min = 0, nominal = 2) = 1 "s comment";
+  end RM;
+  function h "array-valued, not inlinable"
+    input Real a;
+    output Real T[2, 2];
+  protected
+    Real c;
+  algorithm
+    c := cos(a);
+    T := [c, 0; 0, c];
+  end h;
+  function mkm "inlinable record function"
+    input Real a;
+    output RM m;
+  algorithm
+    m := RM(T = [cos(a), sin(a); -sin(a), cos(a)], w = {a, 0}, s = a);
+  end mkm;
+  function mkm2 "not inlinable record function"
+    input Real a;
+    output RM m;
+  algorithm
+    m.T := [cos(a), sin(a); -sin(a), cos(a)];
+    m.w := {a, 0};
+    m.s := a;
+  end mkm2;
+end OF3P;
+model OF3
+  parameter Real p = 0.5;
+  parameter OF3P.RM m1 = OF3P.RM(T = [1, 2; 3, 4], w = {5, p}, s = 1);
+  parameter OF3P.RM m2 = m1;
+end OF3;
+//// model: OF4
+package OF4P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end OF4P;
+model OF4
+  parameter Boolean b = true;
+  parameter OF4P.R r = if b then OF4P.R(1, 2) else OF4P.R(3, 4);
+end OF4;
+//// model: OF5
+package OF5P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end OF5P;
+model OF5
+  parameter Boolean b = true;
+  parameter Real p = 1;
+  final parameter OF5P.R r = if b then OF5P.f1(p) else OF5P.f1(2 * p);
+end OF5;
+//// model: OF6
+package OF6P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end OF6P;
+model OF6
+  parameter Boolean b = true;
+  parameter Real p(fixed = false, start = 1);
+  final parameter OF6P.R r = if b then OF6P.f1(p) else OF6P.f1(2 * p);
+initial equation
+  p = 1;
+end OF6;
+//// model: OF7
+package OF7P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end OF7P;
+model OF7
+  parameter Boolean b = true;
+  parameter Real p = 1;
+  parameter OF7P.R r = if b then OF7P.R(p, 2) else OF7P.R(3, p);
+end OF7;
+//// model: OF8
+package OF8P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end OF8P;
+model OF8
+  parameter Boolean b = true;
+  parameter Real p = 1;
+  parameter OF8P.R r = if b then OF8P.f1(p) else OF8P.f2(p);
+end OF8;
+//// model: OF9
+package OF9P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end OF9P;
+model OF9
+  parameter OF9P.R rs[2] = {OF9P.R(1, 2), OF9P.R(3, 4)};
+end OF9;
+//// model: RC1
+package RC1P
+  record S
+    Real x;
+    Real y[2];
+  end S;
+end RC1P;
+model RC1
+  parameter Real a0 = 0.1;
+  final parameter RC1P.S s = RC1P.S(x = cos(a0), y = {a0, 0});
+end RC1;
+//// model: RC2
+package RC2P
+  record S
+    Real x;
+    Real y[2];
+  end S;
+end RC2P;
+model RC2
+  parameter Real a0 = 0.1;
+  final parameter RC2P.S s = RC2P.S(x = a0, y = zeros(2));
+end RC2;
+//// model: RC3
+package RC3P
+  record S
+    Real x;
+    Real y[2];
+  end S;
+end RC3P;
+model RC3
+  parameter Real a0 = 0.1;
+  final parameter RC3P.S s = RC3P.S(x = a0, y = {a0, 0});
+end RC3;
+//// model: RK1
+package RK1P
+  record RD
+    Real x "x";
+    Real y = 2 * x "y, default depends on x";
+    Real z = 7 "z, literal default";
+  end RD;
+end RK1P;
+model RK1
+  parameter Real p = 1;
+  final parameter RK1P.RD r = RK1P.RD(x = p);
+end RK1;
+//// model: RK2
+package RK2P
+  record RD
+    Real x "x";
+    Real y = 2 * x "y, default depends on x";
+    Real z = 7 "z, literal default";
+  end RD;
+end RK2P;
+model RK2
+  parameter Real p = 1;
+  parameter RK2P.RD r = RK2P.RD(x = p);
+end RK2;
+//// model: RK3
+package RK3P
+  record RD
+    Real x "x";
+    Real y = 2 * x "y, default depends on x";
+    Real z = 7 "z, literal default";
+  end RD;
+end RK3P;
+model RK3
+  parameter Real p = 1;
+  final parameter RK3P.RD r = RK3P.RD(z = 3 * p, x = p);
+end RK3;
+//// model: RK4
+package RK4P
+  record RD
+    Real x "x";
+    Real y = 2 * x "y, default depends on x";
+    Real z = 7 "z, literal default";
+  end RD;
+end RK4P;
+model RK4
+  parameter RK4P.RD r = RK4P.RD(x = 4);
+end RK4;
+//// model: RK5
+package RK5P
+  record RP
+    Real x "x";
+  protected
+    Real h = 3 * x "protected field";
+  end RP;
+end RK5P;
+model RK5
+  parameter Real p = 1;
+  parameter RK5P.RP r = RK5P.RP(x = p);
+end RK5;
+//// model: RK6
+package RK6P
+  record RF
+    Real x "x";
+    final Real k = 2 * x "final field";
+    constant Real c = 4 "constant field";
+  end RF;
+end RK6P;
+model RK6
+  parameter Real p = 1;
+  parameter RK6P.RF r = RK6P.RF(x = p);
+end RK6;
+//// model: RK7
+package RK7P
+  record RF
+    Real x "x";
+    final Real k = 2 * x "final field";
+    constant Real c = 4 "constant field";
+    Real y(start = 3) = 5 "y with default";
+  end RF;
+  function mk
+    input Real a;
+    output RF r;
+  algorithm
+    r.x := a;
+    r.y := 3 * a;
+  end mk;
+end RK7P;
+model RK7
+  parameter Real p = 1;
+  parameter RK7P.RF r = RK7P.mk(p);
+end RK7;
+//// model: RP1
+package RP1P
+  record Orientation
+    Real T[3, 3];
+    Real w[3];
+  end Orientation;
+  function axesRot
+    input Real angle;
+    output Orientation R;
+  algorithm
+    R := Orientation(T = [cos(angle), sin(angle), 0; -sin(angle), cos(angle), 0; 0, 0, 1], w = zeros(3));
+  end axesRot;
+  model Body
+    parameter Real a0 = 0.1;
+    final parameter Orientation R_start = axesRot(a0);
+    Real y = R_start.T[1, 2] * time;
+  end Body;
+end RP1P;
+model RP1
+  RP1P.Body body;
+end RP1;
+//// model: RT1
+package RT1P
+  type E = enumeration(one, two);
+  record RT
+    Integer n(min = 0) "n";
+    Boolean b "b";
+    String s "s";
+    E e "e";
+    Real x(start = 1, unit = "m") "x";
+  end RT;
+  function mk
+    input Integer k;
+    output RT r;
+  algorithm
+    r := RT(n = k, b = k > 1, s = "s", e = E.two, x = 2 * k);
+  end mk;
+  function mk2
+    input Integer k;
+    output RT r;
+  algorithm
+    r := mk(k);
+    r.n := 2 * k;
+  end mk2;
+end RT1P;
+model RT1
+  parameter Integer k = 2;
+  final parameter RT1P.RT r = RT1P.mk(k);
+end RT1;
+//// model: RT2
+package RT2P
+  type E = enumeration(one, two);
+  record RT
+    Integer n(min = 0) "n";
+    Boolean b "b";
+    String s "s";
+    E e "e";
+    Real x(start = 1, unit = "m") "x";
+  end RT;
+  function mk
+    input Integer k;
+    output RT r;
+  algorithm
+    r := RT(n = k, b = k > 1, s = "s", e = E.two, x = 2 * k);
+  end mk;
+  function mk2
+    input Integer k;
+    output RT r;
+  algorithm
+    r := mk(k);
+    r.n := 2 * k;
+  end mk2;
+end RT2P;
+model RT2
+  parameter Integer k = 2;
+  parameter RT2P.RT r = RT2P.mk2(k);
+end RT2;
+//// model: RT3
+package RT3P
+  type E = enumeration(one, two);
+  record RT
+    Integer n(min = 0) "n";
+    Boolean b "b";
+    String s "s";
+    E e "e";
+    Real x(start = 1, unit = "m") "x";
+  end RT;
+  function mk
+    input Integer k;
+    output RT r;
+  algorithm
+    r := RT(n = k, b = k > 1, s = "s", e = E.two, x = 2 * k);
+  end mk;
+  function mk2
+    input Integer k;
+    output RT r;
+  algorithm
+    r := mk(k);
+    r.n := 2 * k;
+  end mk2;
+end RT3P;
+model RT3
+  parameter Integer k = 2;
+  final parameter RT3P.RT r = RT3P.mk2(k);
+end RT3;
+//// model: SE1
+package SE1P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end SE1P;
+model SE1
+  parameter Real q = 1;
+  final parameter SE1P.R r = SE1P.f2(p);
+  parameter Real p = 2 * q;
+end SE1;
+//// model: SE2
+package SE2P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end SE2P;
+model SE2
+  parameter Real q = 1;
+  parameter Real p = 2 * q;
+  final parameter SE2P.R r = SE2P.f2(p);
+end SE2;
+//// model: SE3
+package SE3P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end SE3P;
+model SE3
+  parameter Boolean b = true;
+  parameter Real p = 1;
+  parameter SE3P.R r = if b then SE3P.R(p, 2) else SE3P.R(3, p);
+  Real z = if b then time else -time;
+end SE3;
+//// model: BR10
+package BR10P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end BR10P;
+model BR10
+  parameter Real p = 1 annotation(Evaluate = true);
+  parameter BR10P.R r = BR10P.f2(p);
+end BR10;
+//// model: BR11
+package BR11P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end BR11P;
+model BR11
+  parameter BR11P.R r = BR11P.f2(3);
+end BR11;
+//// model: BR12
+package BR12P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end BR12P;
+model BR12
+  parameter Real p = 1;
+  parameter BR12P.R r = BR12P.f1(p) annotation(Evaluate = true);
+end BR12;
+//// model: BR13
+package BR13P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end BR13P;
+model BR13
+  parameter Real p = 1;
+  parameter BR13P.R r(x = p, y = 3);
+end BR13;
+//// model: BR14
+package BR14P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end BR14P;
+model BR14
+  parameter Real p = 1;
+  parameter BR14P.R r = BR14P.f2(p);
+end BR14;
+//// model: BR15
+package BR15P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end BR15P;
+model BR15
+  parameter Real p = 1;
+  final parameter BR15P.R r = BR15P.f1(p) annotation(Evaluate = false);
+end BR15;
+//// model: EXT1
+package EXT1P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function fext
+    input Real a;
+    output R r;
+  external "C" fext_impl(a, r);
+  end fext;
+end EXT1P;
+model EXT1
+  parameter Real p = 1;
+  final parameter EXT1P.R r = EXT1P.fext(p);
+end EXT1;
+//// model: EXT2
+package EXT2P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function fext
+    input Real a;
+    output R r;
+  external "C" fext_impl(a, r);
+  end fext;
+end EXT2P;
+model EXT2
+  parameter EXT2P.R r = EXT2P.fext(1.0);
+end EXT2;
+//// model: IA10
+package IA10P
+  record Orientation
+    Real T[2, 2];
+    Real w[2];
+  end Orientation;
+  function mk
+    input Real angle;
+    input Real w0[2];
+    output Orientation R;
+  algorithm
+    R := Orientation(T = [cos(angle), sin(angle); -sin(angle), cos(angle)], w = w0);
+  end mk;
+  function g1
+    input Real a;
+    output Real b;
+  algorithm
+    b := 2 * a;
+  end g1;
+  function g2
+    input Real a;
+    output Real b;
+  protected
+    Real t;
+  algorithm
+    t := 2 * a;
+    b := t + 1;
+  end g2;
+  function gext
+    input Real a;
+    output Real b;
+  external "C" b = gext_impl(a);
+  end gext;
+end IA10P;
+model IA10
+  parameter Real a0 = 0.1;
+  parameter Real wv[2] = {1, 2};
+  final parameter IA10P.Orientation R = IA10P.mk(IA10P.gext(a0), {0, 0});
+end IA10;
+//// model: IA11
+package IA11P
+  record Orientation
+    Real T[2, 2];
+    Real w[2];
+  end Orientation;
+  function mk
+    input Real angle;
+    input Real w0[2];
+    output Orientation R;
+  algorithm
+    R := Orientation(T = [cos(angle), sin(angle); -sin(angle), cos(angle)], w = w0);
+  end mk;
+  function g1
+    input Real a;
+    output Real b;
+  algorithm
+    b := 2 * a;
+  end g1;
+  function g2
+    input Real a;
+    output Real b;
+  protected
+    Real t;
+  algorithm
+    t := 2 * a;
+    b := t + 1;
+  end g2;
+end IA11P;
+model IA11
+  parameter Real a0 = 0.1;
+  parameter Real wv[2] = {1, 2};
+  final parameter IA11P.Orientation R = IA11P.mk(a0, -zeros(2));
+end IA11;
+//// model: IA12
+package IA12P
+  record Orientation
+    Real T[2, 2];
+    Real w[2];
+  end Orientation;
+  function mk
+    input Real angle;
+    input Real w0[2];
+    output Orientation R;
+  algorithm
+    R := Orientation(T = [cos(angle), sin(angle); -sin(angle), cos(angle)], w = w0);
+  end mk;
+  function g1
+    input Real a;
+    output Real b;
+  algorithm
+    b := 2 * a;
+  end g1;
+  function g2
+    input Real a;
+    output Real b;
+  protected
+    Real t;
+  algorithm
+    t := 2 * a;
+    b := t + 1;
+  end g2;
+end IA12P;
+model IA12
+  parameter Real a0 = 0.1;
+  parameter Real wv[2] = {1, 2};
+  final parameter IA12P.Orientation R = IA12P.mk(a0, {0, 0} + zeros(2));
+end IA12;
+//// model: IA13
+package IA13P
+  record Orientation
+    Real T[2, 2];
+    Real w[2];
+  end Orientation;
+  function mk
+    input Real angle;
+    input Real w0[2];
+    output Orientation R;
+  algorithm
+    R := Orientation(T = [cos(angle), sin(angle); -sin(angle), cos(angle)], w = w0);
+  end mk;
+  function g1
+    input Real a;
+    output Real b;
+  algorithm
+    b := 2 * a;
+  end g1;
+  function g2
+    input Real a;
+    output Real b;
+  protected
+    Real t;
+  algorithm
+    t := 2 * a;
+    b := t + 1;
+  end g2;
+end IA13P;
+model IA13
+  parameter Real a0 = 0.1;
+  parameter Real wv[2] = {1, 2};
+  final parameter IA13P.Orientation R = IA13P.mk(a0, {sin(a0), 0});
+end IA13;
+//// model: IN10
+package IN10P
+  record Ori
+    Real T[2, 2] "T";
+    Real w[2] "w";
+  end Ori;
+  function inv "inlinable, reads fields of an input record"
+    input Ori R;
+    output Ori Ri;
+  algorithm
+    Ri := Ori(T = transpose(R.T), w = -R.w);
+  end inv;
+  function mk "not inlinable"
+    input Real a;
+    output Ori R;
+  algorithm
+    R.T := [cos(a), sin(a); -sin(a), cos(a)];
+    R.w := {a, 0};
+  end mk;
+end IN10P;
+model IN10
+  parameter Real p(fixed = false, start = 0.5);
+  final parameter IN10P.Ori R2 = IN10P.inv(IN10P.mk(p));
+initial equation
+  p = 0.5;
+end IN10;
+//// model: IN11
+package IN11P
+  record Ori
+    Real T[2, 2] "T";
+    Real w[2] "w";
+  end Ori;
+  function inv "inlinable, reads fields of an input record"
+    input Ori R;
+    output Ori Ri;
+  algorithm
+    Ri := Ori(T = transpose(R.T), w = -R.w);
+  end inv;
+  function mk "not inlinable"
+    input Real a;
+    output Ori R;
+  algorithm
+    R.T := [cos(a), sin(a); -sin(a), cos(a)];
+    R.w := {a, 0};
+  end mk;
+end IN11P;
+model IN11
+  parameter Real p = 0.5;
+  final parameter IN11P.Ori R2 = IN11P.inv(IN11P.mk(p));
+end IN11;
+//// model: IN12
+package IN12P
+  record Ori
+    Real T[2, 2] "T";
+    Real w[2] "w";
+  end Ori;
+  function inv "inlinable, reads fields of an input record"
+    input Ori R;
+    output Ori Ri;
+  algorithm
+    Ri := Ori(T = transpose(R.T), w = -R.w);
+  end inv;
+  function mk "not inlinable"
+    input Real a;
+    output Ori R;
+  algorithm
+    R.T := [cos(a), sin(a); -sin(a), cos(a)];
+    R.w := {a, 0};
+  end mk;
+end IN12P;
+model IN12
+  parameter Real p = 0.5;
+  parameter IN12P.Ori R1 = IN12P.mk(p);
+  parameter IN12P.Ori R2 = IN12P.inv(R1);
+end IN12;
+//// model: IN13
+package IN13P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+  function f11 "body calls inlinable f1 with a builtin-call argument"
+    input Real a;
+    output R r;
+  algorithm
+    r := f1(cos(a));
+  end f11;
+end IN13P;
+model IN13
+  parameter Real p = 1;
+  final parameter IN13P.R r = IN13P.f11(p);
+end IN13;
+//// model: IN14
+package IN14P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+  function f12 "body calls inlinable f1 with a fill argument inside a scalar context"
+    input Real a;
+    output R r;
+  algorithm
+    r := f1(sum(zeros(2)) + a);
+  end f12;
+end IN14P;
+model IN14
+  parameter Real p = 1;
+  final parameter IN14P.R r = IN14P.f12(p);
+end IN14;
+//// model: MOD1
+package MOD1P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end MOD1P;
+model MOD1Sub
+  parameter MOD1P.R r;
+  Real v = r.x * time;
+end MOD1Sub;
+model MOD1
+  parameter Real q = 1;
+  MOD1Sub s1(final r = MOD1P.f1(q));
+  MOD1Sub s2(r = MOD1P.f1(q));
+  MOD1Sub s3(final r = MOD1P.f2(q));
+end MOD1;
+//// model: OF10
+package OF10P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end OF10P;
+model OF10
+  parameter Real p = 1;
+  parameter OF10P.R rs[2] = {OF10P.R(p, 2), OF10P.R(3, p)};
+end OF10;
+//// model: OF11
+package OF11P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end OF11P;
+model OF11
+  parameter Real p = 1;
+  final parameter OF11P.R rs[2] = {OF11P.f1(p), OF11P.f1(2 * p)};
+end OF11;
+//// model: OF12
+package OF12P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end OF12P;
+model OF12
+  parameter Real p = 1;
+  parameter OF12P.R r1 = OF12P.R(p, 2);
+  final parameter OF12P.R r2 = r1;
+  parameter OF12P.R r3 = OF12P.f1(r1.x);
+end OF12;
+//// model: OF13
+package OF13P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end OF13P;
+model OF13
+  parameter Integer k = 1;
+  parameter Real p = 1;
+  final parameter OF13P.R r = if k == 1 then OF13P.f2(p) else OF13P.f3(p);
+end OF13;
+//// model: OF14
+package OF14P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end OF14P;
+model OF14
+  constant OF14P.R c = OF14P.R(1, 2);
+  final parameter OF14P.R r = c;
+  parameter OF14P.R r2 = c;
+end OF14;
+//// model: OF15
+package OF15P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+  function fv
+    input Real a;
+    output R rs[2];
+  algorithm
+    rs := {R(a, 1), R(2, a)};
+  end fv;
+end OF15P;
+model OF15
+  parameter Real p = 1;
+  parameter OF15P.R rs[2] = OF15P.fv(p);
+  final parameter OF15P.R rt[2] = OF15P.fv(p);
+end OF15;
+//// model: OF16
+package OF16P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end OF16P;
+model OF16
+  parameter Real p = 1;
+  parameter OF16P.R rs1[2] = {OF16P.R(p, 2), OF16P.R(3, p)};
+  parameter OF16P.R rs2[2] = rs1;
+  parameter OF16P.R r3 = rs1[2];
+end OF16;
+//// model: OF17
+package OF17P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end OF17P;
+model OF17
+  parameter Real p = 1;
+  parameter OF17P.R r1 = OF17P.f2(p);
+  final parameter OF17P.R r2 = if p > 0 then r1 else OF17P.R(0, 0);
+end OF17;
+//// model: ORD1
+package ORD1P
+  record R
+    Real x "field x";
+    Real y "field y";
+  end R;
+  function f1 "single assignment of a record constructor -> inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r := R(x = a, y = 2 * a);
+  end f1;
+  function f2 "two statements -> not inlinable"
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function f3 "single statement but a protected local -> not inlinable"
+    input Real a;
+    output R r;
+  protected
+    Real t = 2 * a;
+  algorithm
+    r := R(x = a, y = t);
+  end f3;
+end ORD1P;
+model ORD1Sub
+  parameter Real p = 1;
+  parameter ORD1P.R r = ORD1P.f2(p);
+  Real v;
+initial equation
+  v = 0;
+equation
+  der(v) = r.x;
+end ORD1Sub;
+model ORD1
+  parameter Real p = 2;
+  parameter ORD1P.R a = ORD1P.f1(p);
+  ORD1Sub s;
+  parameter ORD1P.R b = ORD1P.f2(p);
+  Real w;
+initial equation
+  w = 1;
+equation
+  der(w) = a.y + b.y;
+end ORD1;
+//// model: RB01
+package RB01P
+  type AngularVelocity = Real(final quantity = "AngularVelocity", final unit = "rad/s");
+  record Orientation
+    Real T[3, 3] "Transformation matrix from world frame to local frame";
+    AngularVelocity w[3] "Absolute angular velocity of local frame, resolved in local frame";
+  end Orientation;
+  function axisRotation
+    input Integer axis;
+    input Real angle;
+    output Real T[3, 3];
+  algorithm
+    T := if axis == 1 then [1, 0, 0; 0, cos(angle), sin(angle); 0, -sin(angle), cos(angle)] else if axis == 2 then [cos(angle), 0, -sin(angle); 0, 1, 0; sin(angle), 0, cos(angle)] else [cos(angle), sin(angle), 0; -sin(angle), cos(angle), 0; 0, 0, 1];
+    annotation(Inline = true);
+  end axisRotation;
+  function axesRotations
+    input Integer sequence[3] = {1, 2, 3};
+    input Real angles[3];
+    input AngularVelocity der_angles[3];
+    output Orientation R;
+  algorithm
+    R := Orientation(T = axisRotation(sequence[3], angles[3]) * axisRotation(sequence[2], angles[2]) * axisRotation(sequence[1], angles[1]), w = der_angles);
+    annotation(Inline = true);
+  end axesRotations;
+  model Body
+    parameter Real angles_start[3] = {0, 0, 0};
+    parameter Integer sequence_start[3] = {1, 2, 3} annotation(Evaluate = true);
+    final parameter Orientation R_start = axesRotations(sequence_start, angles_start, zeros(3));
+  end Body;
+end RB01P;
+model RB01
+  RB01P.Body body;
+end RB01;
+//// model: RB02
+package RB02P
+  type AngularVelocity = Real(final quantity = "AngularVelocity", final unit = "rad/s");
+  record Orientation
+    Real T[3, 3] "Transformation matrix from world frame to local frame";
+    AngularVelocity w[3] "Absolute angular velocity of local frame, resolved in local frame";
+  end Orientation;
+  function axisRotation
+    input Integer axis;
+    input Real angle;
+    output Real T[3, 3];
+  algorithm
+    T := if axis == 1 then [1, 0, 0; 0, cos(angle), sin(angle); 0, -sin(angle), cos(angle)] else if axis == 2 then [cos(angle), 0, -sin(angle); 0, 1, 0; sin(angle), 0, cos(angle)] else [cos(angle), sin(angle), 0; -sin(angle), cos(angle), 0; 0, 0, 1];
+    annotation(Inline = true);
+  end axisRotation;
+  function axesRotations
+    input Integer sequence[3] = {1, 2, 3};
+    input Real angles[3];
+    input AngularVelocity der_angles[3];
+    output Orientation R;
+  algorithm
+    R := Orientation(T = axisRotation(sequence[3], angles[3]) * axisRotation(sequence[2], angles[2]) * axisRotation(sequence[1], angles[1]), w = der_angles);
+    annotation(Inline = true);
+  end axesRotations;
+  model Body
+    parameter Real angles_start[3] = {0, 0, 0};
+    parameter Integer sequence_start[3] = {1, 2, 3};
+    final parameter Orientation R_start = axesRotations(sequence_start, angles_start, zeros(3));
+  end Body;
+end RB02P;
+model RB02
+  RB02P.Body body;
+end RB02;
+//// model: RB03
+package RB03P
+  type AngularVelocity = Real(final quantity = "AngularVelocity", final unit = "rad/s");
+  record Orientation
+    Real T[3, 3] "Transformation matrix from world frame to local frame";
+    AngularVelocity w[3] "Absolute angular velocity of local frame, resolved in local frame";
+  end Orientation;
+  function axisRotation
+    input Integer axis;
+    input Real angle;
+    output Real T[3, 3];
+  algorithm
+    T := if axis == 1 then [1, 0, 0; 0, cos(angle), sin(angle); 0, -sin(angle), cos(angle)] else if axis == 2 then [cos(angle), 0, -sin(angle); 0, 1, 0; sin(angle), 0, cos(angle)] else [cos(angle), sin(angle), 0; -sin(angle), cos(angle), 0; 0, 0, 1];
+    annotation(Inline = true);
+  end axisRotation;
+  function axesRotations
+    input Integer sequence[3] = {1, 2, 3};
+    input Real angles[3];
+    input AngularVelocity der_angles[3];
+    output Orientation R;
+  algorithm
+    R := Orientation(T = axisRotation(sequence[1], angles[1]), w = der_angles);
+    annotation(Inline = true);
+  end axesRotations;
+  model Body
+    parameter Real angles_start[3] = {0, 0, 0};
+    parameter Integer sequence_start[3] = {1, 2, 3} annotation(Evaluate = true);
+    final parameter Orientation R_start = axesRotations(sequence_start, angles_start, zeros(3));
+  end Body;
+end RB03P;
+model RB03
+  RB03P.Body body;
+end RB03;
+//// model: RB04
+package RB04P
+  type AngularVelocity = Real(final quantity = "AngularVelocity", final unit = "rad/s");
+  record Orientation
+    Real T[3, 3] "Transformation matrix from world frame to local frame";
+    AngularVelocity w[3] "Absolute angular velocity of local frame, resolved in local frame";
+  end Orientation;
+  function axisRotation
+    input Integer axis;
+    input Real angle;
+    output Real T[3, 3];
+  algorithm
+    T := if axis == 1 then [1, 0, 0; 0, cos(angle), sin(angle); 0, -sin(angle), cos(angle)] else if axis == 2 then [cos(angle), 0, -sin(angle); 0, 1, 0; sin(angle), 0, cos(angle)] else [cos(angle), sin(angle), 0; -sin(angle), cos(angle), 0; 0, 0, 1];
+    annotation(Inline = true);
+  end axisRotation;
+  function axesRotations
+    input Integer sequence[3] = {1, 2, 3};
+    input Real angles[3];
+    input AngularVelocity der_angles[3];
+    output Orientation R;
+  algorithm
+    R := Orientation(T = axisRotation(sequence[3], angles[3]) * axisRotation(sequence[2], angles[2]) * axisRotation(sequence[1], angles[1]), w = der_angles);
+    annotation(Inline = true);
+  end axesRotations;
+  model Body
+    parameter Real angles_start[3] = {0, 0, 0};
+    parameter Integer sequence_start[3] = {1, 2, 3} annotation(Evaluate = true);
+    final parameter Orientation R_start = axesRotations(sequence_start, angles_start, {0, 0, 0});
+  end Body;
+end RB04P;
+model RB04
+  RB04P.Body body;
+end RB04;

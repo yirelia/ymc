@@ -1970,6 +1970,16 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           k = 2` 与 `f(k, time)[1]`）。构建：flatten.cpp 的 Debug 目标文件节数超过 COFF 的 32767 上限（TDM-GCC 的汇编器不报错、
           链接时才报模板实例 undefined reference），CMake 给 MinGW 加 -Wa,-mbig-obj、MSVC 加 /bigobj。
           验证：slice 637 例 PASS 586 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 587 / FAIL 38（不变）；整个 testsuite PASS 1647→1648 / FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 272→276；探针 8639→8651（te-p1 12 个）；四套构建零警告、单测 294→295；ASan 与 gcc 逐例一致。
+    - [x] (62s) flat：记录参数的整体绑定按 flattenComplexComponent 的三支走（2026-10-08）：MultiBody 越过类注释后 29 个示例卡在
+          "variability on composite component"——Frames.Orientation 里有 equalityConstraint 函数，被当成 operator record 挡下。
+          研究子任务（rp62r：116 个探针、SPEC 16 条）查清 NFFlatten.flattenComplexComponent（:923-1028 v1.25.0）：(A) 绑定只读
+          结构参数 → 求值成字面量；(B) final 且读参数 → 先强制内联（NFInline.inlineCall：体至多一条 `输出 := rhs`、无局部；调用处
+          顶层实参是内建调用就放弃——MSL Body 的 `axesRotations(…, zeros(3))`），放弃的 tryEvalExp 成字面量，不标结构、写回照做；
+          (C) 其余只化简，求不成记录式的挪成初始方程、字段 fixed = false。实现：普通函数不再挡记录；(A) / (B) 用不留标记的试探
+          求值（快照 / 撤销结构标记与 const_vals_，读到的还没压平的参数照 evalComponentBinding 写回）；能内联成符号式的 SKIP；
+          final 的求不出也挪方程；挪方程的记录的数组字段逐元素 fixed = false（按属性序插）。求值器补 smooth / noEvent（NFCeval.mo
+          :1931 / :1942）；含数组调用的等式两侧按形状核类型（`zeros(3) = frame_a.f + resolve1(R_rel, frame_b.f)`）。
+          验证：slice 637 例 PASS 586 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 587 / FAIL 39（RecordBinding18 文件 / 1.25.0 分歧在账）；整个 testsuite PASS 1648→1651 / FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 276（不变；MultiBody 29 个越过 variability on composite component）；探针 8651→8763（rb-p1 112 个）；四套构建零警告、单测 295→296；ASan 与 gcc 逐例一致。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

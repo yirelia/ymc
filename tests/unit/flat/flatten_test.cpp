@@ -6062,6 +6062,102 @@ YMC_TEST(flatten_tuple_equation_array_and_empty_targets) {
                std::string("class EA1\n  final parameter Integer n = 0;\n  Real z = time;\nend EA1;\n"));
 }
 
+YMC_TEST(flatten_record_parameter_binding_branches) {
+  // 参数记录的整体绑定是用户函数调用（NFFlatten.flattenComplexComponent :961-989 v1.25.0；rp62r SPEC R5-R13）：final 的先强制
+  // 内联，内联不了（两条语句 BR6、调用处顶层实参是内建调用 `zeros(2)` IA2）→ tryEvalExp 成字面量、不标结构、写回照做（SE1：
+  // 声明在后的 p 打求得的 `2.0`）；求不出（p fixed = false）→ 挪成初始方程、字段 final + fixed = false（BR8）；非 final 的挪成
+  // 初始方程，数组字段逐元素 fixed = false、按属性序（FD4）；能内联成符号式的未做 → SKIP（BR5）。
+  // 期望值为 omc 1.25.0 对原文实跑的 stdout（rp62r 探针，2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("package BR6P\n  record R\n    Real x \"field x\";\n    Real y \"field y\";\n  end R;\n"
+                           "  function f1 \"single assignment of a record constructor -> inlinable\"\n    input Real a;\n"
+                           "    output R r;\n  algorithm\n    r := R(x = a, y = 2 * a);\n  end f1;\n"
+                           "  function f2 \"two statements -> not inlinable\"\n    input Real a;\n    output R r;\n  algorithm\n"
+                           "    r.x := a;\n    r.y := 2 * a;\n  end f2;\n"
+                           "  function f3 \"single statement but a protected local -> not inlinable\"\n    input Real a;\n"
+                           "    output R r;\n  protected\n    Real t = 2 * a;\n  algorithm\n    r := R(x = a, y = t);\n"
+                           "  end f3;\nend BR6P;\nmodel BR6\n  parameter Real p = 1;\n  final parameter BR6P.R r = BR6P.f2(p);\n"
+                           "end BR6;\n"),
+               std::string("class BR6\n  parameter Real p = 1.0;\n  final parameter Real r.x = 1.0 \"field x\";\n"
+                           "  final parameter Real r.y = 2.0 \"field y\";\nend BR6;\n"));
+  YMC_CHECK_EQ(flatten_src("package IA2P\n  record Orientation\n    Real T[2, 2];\n    Real w[2];\n  end Orientation;\n"
+                           "  function mk\n    input Real angle;\n    input Real w0[2];\n    output Orientation R;\n"
+                           "  algorithm\n    R := Orientation(T = [cos(angle), sin(angle); -sin(angle), cos(angle)], w = w0);\n"
+                           "  end mk;\n  function g1\n    input Real a;\n    output Real b;\n  algorithm\n    b := 2 * a;\n"
+                           "  end g1;\n  function g2\n    input Real a;\n    output Real b;\n  protected\n    Real t;\n"
+                           "  algorithm\n    t := 2 * a;\n    b := t + 1;\n  end g2;\nend IA2P;\nmodel IA2\n"
+                           "  parameter Real a0 = 0.1;\n  parameter Real wv[2] = {1, 2};\n"
+                           "  final parameter IA2P.Orientation R = IA2P.mk(a0, zeros(2));\nend IA2;\n"),
+               std::string("class IA2\n  parameter Real a0 = 0.1;\n  parameter Real wv[1] = 1.0;\n"
+                           "  parameter Real wv[2] = 2.0;\n  final parameter Real R.T[1,1] = 0.9950041652780258;\n"
+                           "  final parameter Real R.T[1,2] = 0.09983341664682815;\n"
+                           "  final parameter Real R.T[2,1] = -0.09983341664682815;\n"
+                           "  final parameter Real R.T[2,2] = 0.9950041652780258;\n  final parameter Real R.w[1] = 0.0;\n"
+                           "  final parameter Real R.w[2] = 0.0;\nend IA2;\n"));
+  YMC_CHECK_EQ(flatten_src("package SE1P\n  record R\n    Real x \"field x\";\n    Real y \"field y\";\n  end R;\n"
+                           "  function f1 \"single assignment of a record constructor -> inlinable\"\n    input Real a;\n"
+                           "    output R r;\n  algorithm\n    r := R(x = a, y = 2 * a);\n  end f1;\n"
+                           "  function f2 \"two statements -> not inlinable\"\n    input Real a;\n    output R r;\n  algorithm\n"
+                           "    r.x := a;\n    r.y := 2 * a;\n  end f2;\n"
+                           "  function f3 \"single statement but a protected local -> not inlinable\"\n    input Real a;\n"
+                           "    output R r;\n  protected\n    Real t = 2 * a;\n  algorithm\n    r := R(x = a, y = t);\n"
+                           "  end f3;\nend SE1P;\nmodel SE1\n  parameter Real q = 1;\n  final parameter SE1P.R r = SE1P.f2(p);\n"
+                           "  parameter Real p = 2 * q;\nend SE1;\n"),
+               std::string("class SE1\n  parameter Real q = 1.0;\n  final parameter Real r.x = 2.0 \"field x\";\n"
+                           "  final parameter Real r.y = 4.0 \"field y\";\n  parameter Real p = 2.0;\nend SE1;\n"));
+  YMC_CHECK_EQ(flatten_src("package BR8P\n  record R\n    Real x \"field x\";\n    Real y \"field y\";\n  end R;\n"
+                           "  function f1 \"single assignment of a record constructor -> inlinable\"\n    input Real a;\n"
+                           "    output R r;\n  algorithm\n    r := R(x = a, y = 2 * a);\n  end f1;\n"
+                           "  function f2 \"two statements -> not inlinable\"\n    input Real a;\n    output R r;\n  algorithm\n"
+                           "    r.x := a;\n    r.y := 2 * a;\n  end f2;\n"
+                           "  function f3 \"single statement but a protected local -> not inlinable\"\n    input Real a;\n"
+                           "    output R r;\n  protected\n    Real t = 2 * a;\n  algorithm\n    r := R(x = a, y = t);\n"
+                           "  end f3;\nend BR8P;\nmodel BR8\n  parameter Real p(fixed = false, start = 1);\n"
+                           "  final parameter BR8P.R r = BR8P.f2(p);\ninitial equation\n  p = 1;\nend BR8;\n"),
+               std::string("function BR8P.R \"Automatically generated record constructor for BR8P.R\"\n  input Real x;\n"
+                           "  input Real y;\n  output R res;\nend BR8P.R;\n\n"
+                           "function BR8P.f2 \"two statements -> not inlinable\"\n  input Real a;\n  output BR8P.R r;\n"
+                           "algorithm\n  r.x := a;\n  r.y := 2.0 * a;\nend BR8P.f2;\n\nclass BR8\n"
+                           "  parameter Real p(start = 1.0, fixed = false);\n"
+                           "  final parameter Real r.x(fixed = false) \"field x\";\n"
+                           "  final parameter Real r.y(fixed = false) \"field y\";\ninitial equation\n  r = BR8P.f2(p);\n"
+                           "  p = 1.0;\nend BR8;\n"));
+  YMC_CHECK_EQ(flatten_src("package FD4P\n"
+                           "  type AngularVelocity = Real(final quantity = \"AngularVelocity\", final unit = \"rad/s\");\n"
+                           "  record RM\n    Real T[2, 2] \"T comment\";\n    AngularVelocity w[2] \"w comment\";\n"
+                           "    Real s(min = 0, nominal = 2) = 1 \"s comment\";\n  end RM;\n"
+                           "  function h \"array-valued, not inlinable\"\n    input Real a;\n    output Real T[2, 2];\n"
+                           "  protected\n    Real c;\n  algorithm\n    c := cos(a);\n    T := [c, 0; 0, c];\n  end h;\n"
+                           "  function mkm \"inlinable record function\"\n    input Real a;\n    output RM m;\n  algorithm\n"
+                           "    m := RM(T = [cos(a), sin(a); -sin(a), cos(a)], w = {a, 0}, s = a);\n  end mkm;\n"
+                           "  function mkm2 \"not inlinable record function\"\n    input Real a;\n    output RM m;\n"
+                           "  algorithm\n    m.T := [cos(a), sin(a); -sin(a), cos(a)];\n    m.w := {a, 0};\n    m.s := a;\n"
+                           "  end mkm2;\nend FD4P;\nmodel FD4\n  parameter Real p = 0.5;\n"
+                           "  parameter FD4P.RM r = FD4P.mkm2(p);\nend FD4;\n"),
+               std::string("function FD4P.RM \"Automatically generated record constructor for FD4P.RM\"\n  input Real[2, 2] T;\n"
+                           "  input Real[2] w;\n  input Real s = 1.0;\n  output RM res;\nend FD4P.RM;\n\n"
+                           "function FD4P.mkm2 \"not inlinable record function\"\n  input Real a;\n  output FD4P.RM m;\n"
+                           "algorithm\n  m.T := {{cos(a), sin(a)}, {-sin(a), cos(a)}};\n  m.w := {a, 0.0};\n  m.s := a;\n"
+                           "end FD4P.mkm2;\n\nclass FD4\n  parameter Real p = 0.5;\n"
+                           "  parameter Real r.T[1,1](fixed = false) \"T comment\";\n"
+                           "  parameter Real r.T[1,2](fixed = false) \"T comment\";\n"
+                           "  parameter Real r.T[2,1](fixed = false) \"T comment\";\n"
+                           "  parameter Real r.T[2,2](fixed = false) \"T comment\";\n"
+                           "  parameter Real r.w[1](quantity = \"AngularVelocity\", unit = \"rad/s\", fixed = false) \"w comment\";\n"
+                           "  parameter Real r.w[2](quantity = \"AngularVelocity\", unit = \"rad/s\", fixed = false) \"w comment\";\n"
+                           "  parameter Real r.s(min = 0.0, fixed = false, nominal = 2.0) \"s comment\";\ninitial equation\n"
+                           "  r = FD4P.mkm2(p);\nend FD4;\n"));
+  YMC_CHECK_EQ(flatten_src("package BR5P\n  record R\n    Real x \"field x\";\n    Real y \"field y\";\n  end R;\n"
+                           "  function f1 \"single assignment of a record constructor -> inlinable\"\n    input Real a;\n"
+                           "    output R r;\n  algorithm\n    r := R(x = a, y = 2 * a);\n  end f1;\n"
+                           "  function f2 \"two statements -> not inlinable\"\n    input Real a;\n    output R r;\n  algorithm\n"
+                           "    r.x := a;\n    r.y := 2 * a;\n  end f2;\n"
+                           "  function f3 \"single statement but a protected local -> not inlinable\"\n    input Real a;\n"
+                           "    output R r;\n  protected\n    Real t = 2 * a;\n  algorithm\n    r := R(x = a, y = t);\n"
+                           "  end f3;\nend BR5P;\nmodel BR5\n  parameter Real p = 1;\n  final parameter BR5P.R r = BR5P.f1(p);\n"
+                           "end BR5;\n"),
+               std::string("<unsupported:record binding forced inline>"));
+}
+
 YMC_TEST(flatten_external_object_variable_and_structors) {
   // 外部对象：组件压平成按类名打印的叶变量，构造 `EO()` 换成 `EO.constructor(1)`（默认实参照补），构造 / 析构随类型发射
   //（外部函数未声明 pure → impure）；当实参传给外部函数。期望 = omc 1.25.0 实跑（2026-10-07，下同）。
