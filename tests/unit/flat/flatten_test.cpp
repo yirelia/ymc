@@ -6468,4 +6468,48 @@ YMC_TEST(flatten_alias_structural_array_argument_scalarizes) {
                            "  der(o.i.x) = o.i.e[2];\nend RA1;\n"));
 }
 
+YMC_TEST(flatten_evaluate_array_call_binding_scalarizes) {
+  // Evaluate 数组参数的绑定是用户函数调用、实参（`2 * a`）当时还折不成字面量：它自己已是结构参数，omc 求值成字面量、照常
+  // 逐元素（不是整体数组变量）。期望 = omc 1.25.0 实跑（2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("model SP4\n  function nrm\n    input Real v[3];\n    output Real u[3];\n  algorithm\n"
+                           "    u := v / sqrt(v * v);\n  end nrm;\n  parameter Real a[3] = {1, 1, 0};\n"
+                           "  parameter Real ey[3] = nrm(2 * a) annotation(Evaluate = true);\n  Real x;\nequation\n"
+                           "  der(x) = ey[1];\nend SP4;\n"),
+               std::string("class SP4\n  final parameter Real a[1] = 1.0;\n  final parameter Real a[2] = 1.0;\n"
+                           "  final parameter Real a[3] = 0.0;\n  final parameter Real ey[1] = 0.7071067811865475;\n"
+                           "  final parameter Real ey[2] = 0.7071067811865475;\n  final parameter Real ey[3] = 0.0;\n  Real x;\n"
+                           "equation\n  der(x) = 0.7071067811865475;\nend SP4;\n"));
+}
+
+YMC_TEST(flatten_condition_forward_reference_chain) {
+  // 条件组件的条件经 outer 读到声明在后的 world 参数、其绑定又引用别的参数：第二遍用第一遍的值，依赖一起标结构参数。
+  // 期望 = omc 1.25.0 实跑（2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("model W\n  parameter Real nominalLength = 1;\n"
+                           "  parameter Real defaultBodyDiameter = nominalLength / 9;\nend W;\nmodel B\n  outer W world;\n"
+                           "  parameter Real sphereDiameter = world.defaultBodyDiameter;\n"
+                           "  Real s = time if sphereDiameter > 0;\nend B;\nmodel CF1\n  B body;\n  inner W world;\nend CF1;\n"),
+               std::string("class CF1\n  final parameter Real body.sphereDiameter = 0.1111111111111111;\n  Real body.s = time;\n"
+                           "  final parameter Real world.nominalLength = 1.0;\n"
+                           "  final parameter Real world.defaultBodyDiameter = 0.1111111111111111;\nend CF1;\n"));
+}
+
+YMC_TEST(flatten_overridden_state_select_does_not_mark_parameter) {
+  // `i1(phi.stateSelect = StateSelect.always, …)` 盖过 Inertia 里的 `phi(stateSelect = stateSelect)`：声明里那个值不用、
+  // stateSelect 参数不标 final（只盖一个的 i3 仍 final）。期望 = omc 1.25.0 实跑（2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("model SS1\n  model Inertia\n    parameter StateSelect stateSelect = StateSelect.default;\n"
+                           "    Real phi(stateSelect = stateSelect);\n    Real w(stateSelect = stateSelect);\n  equation\n"
+                           "    der(phi) = w;\n    der(w) = 1;\n  end Inertia;\n"
+                           "  Inertia i1(phi.stateSelect = StateSelect.always, w.stateSelect = StateSelect.always);\n"
+                           "  Inertia i2;\n  Inertia i3(phi.stateSelect = StateSelect.prefer);\nend SS1;\n"),
+               std::string("class SS1\n"
+                           "  parameter enumeration(never, avoid, default, prefer, always) i1.stateSelect = StateSelect.default;\n"
+                           "  Real i1.phi(stateSelect = StateSelect.always);\n  Real i1.w(stateSelect = StateSelect.always);\n"
+                           "  final parameter enumeration(never, avoid, default, prefer, always) i2.stateSelect = StateSelect.default;\n"
+                           "  Real i2.phi(stateSelect = StateSelect.default);\n  Real i2.w(stateSelect = StateSelect.default);\n"
+                           "  final parameter enumeration(never, avoid, default, prefer, always) i3.stateSelect = StateSelect.default;\n"
+                           "  Real i3.phi(stateSelect = StateSelect.prefer);\n  Real i3.w(stateSelect = StateSelect.default);\n"
+                           "equation\n  der(i1.phi) = i1.w;\n  der(i1.w) = 1.0;\n  der(i2.phi) = i2.w;\n  der(i2.w) = 1.0;\n"
+                           "  der(i3.phi) = i3.w;\n  der(i3.w) = 1.0;\nend SS1;\n"));
+}
+
 YMC_TEST_MAIN

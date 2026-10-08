@@ -1,0 +1,46 @@
+//// set: fw-p1 — 条件组件的条件经 outer 读到声明在后的 world 参数（`sphereDiameter = world.defaultBodyDiameter = world.nominalLength / 9`），子实例里 / 修饰了 world：第二遍用第一遍的值，依赖一起标结构参数。单测取 CF1
+//// model: CF1
+model W
+  parameter Real nominalLength = 1;
+  parameter Real defaultBodyDiameter = nominalLength / 9;
+end W;
+model B
+  outer W world;
+  parameter Real sphereDiameter = world.defaultBodyDiameter;
+  Real s = time if sphereDiameter > 0;
+end B;
+model CF1
+  B body;
+  inner W world;
+end CF1;
+//// model: CF2
+model W
+  parameter Real nominalLength = 1;
+  parameter Real defaultBodyDiameter = nominalLength / 9;
+end W;
+model B
+  outer W world;
+  parameter Real sphereDiameter = world.defaultBodyDiameter;
+  Real s = time if sphereDiameter > 0;
+end B;
+model S
+  B body;
+end S;
+model CF2
+  S s1;
+  inner W world;
+end CF2;
+//// model: CF3
+model W
+  parameter Real nominalLength = 1;
+  parameter Real defaultBodyDiameter = nominalLength / 9;
+end W;
+model B
+  outer W world;
+  parameter Real sphereDiameter = world.defaultBodyDiameter;
+  Real s = time if sphereDiameter > 0;
+end B;
+model CF3
+  B body;
+  inner W world(nominalLength = 2);
+end CF3;

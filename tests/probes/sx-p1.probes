@@ -1,0 +1,70 @@
+//// set: sx-p1 — 参数数组绑定是用户函数调用、实参当时折不成字面量（`nrm(cross(e, nnx))`、`nrm(2 * a)`）：本参数自己带 Evaluate（已是结构参数）→ 求值成字面量、逐元素；不带的照旧整体数组变量；矩阵构造 `[ex, ey] * fc` 里引用。单测取 SP4
+//// model: SP1
+model SP1
+  function nrm
+    input Real v[3];
+    output Real u[3];
+  algorithm
+    u := v / sqrt(v * v);
+  end nrm;
+  parameter Real n[3] = {0, 0, 1} annotation(Evaluate = true);
+  parameter Real e[3](each final unit = "1") = nrm(n);
+  parameter Real nnx[3](each final unit = "1") = if abs(e[1]) > 0.1 then {0, 1, 0} else (if abs(e[2]) > 0.1 then {0, 0, 1} else {1, 0, 0});
+  parameter Real ey[3](each final unit = "1") = nrm(cross(e, nnx));
+  parameter Real ex[3](each final unit = "1") = cross(ey, e);
+  Real x;
+equation
+  der(x) = ey[1] + ex[2];
+end SP1;
+//// model: SP2
+model SP2
+  function nrm
+    input Real v[3];
+    output Real u[3];
+  algorithm
+    u := v / sqrt(v * v);
+  end nrm;
+  parameter Real n[3] = {0, 0, 1} annotation(Evaluate = true);
+  parameter Real e[3](each final unit = "1") = nrm(n);
+  parameter Real nnx[3](each final unit = "1") = if abs(e[1]) > 0.1 then {0, 1, 0} else (if abs(e[2]) > 0.1 then {0, 0, 1} else {1, 0, 0});
+  parameter Real ey[3](each final unit = "1") = nrm(cross(e, nnx));
+  parameter Real ex[3](each final unit = "1") = cross(ey, e);
+  Real f[3];
+  Real fc[2];
+equation
+  f = [ex, ey] * fc;
+  fc = {time, 2 * time};
+end SP2;
+//// model: SP3
+model SP3
+  function nrm
+    input Real v[3];
+    output Real u[3];
+  algorithm
+    u := v / sqrt(v * v);
+  end nrm;
+  parameter Real n[3] = {0, 0, 1} annotation(Evaluate = true);
+  parameter Real e[3](each final unit = "1") = nrm(n);
+  parameter Real nnx[3](each final unit = "1") = if abs(e[1]) > 0.1 then {0, 1, 0} else (if abs(e[2]) > 0.1 then {0, 0, 1} else {1, 0, 0}) annotation(Evaluate = true);
+  parameter Real ey[3](each final unit = "1") = nrm(cross(e, nnx)) annotation(Evaluate = true);
+  parameter Real ex[3](each final unit = "1") = cross(ey, e) annotation(Evaluate = true);
+  Real f[3];
+  Real fc[2];
+equation
+  f = [ex, ey] * fc;
+  fc = {time, 2 * time};
+end SP3;
+//// model: SP4
+model SP4
+  function nrm
+    input Real v[3];
+    output Real u[3];
+  algorithm
+    u := v / sqrt(v * v);
+  end nrm;
+  parameter Real a[3] = {1, 1, 0};
+  parameter Real ey[3] = nrm(2 * a) annotation(Evaluate = true);
+  Real x;
+equation
+  der(x) = ey[1];
+end SP4;

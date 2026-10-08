@@ -728,14 +728,17 @@ class Flattener {
       // stateSelect 属性里的参数（NFInst.mo:3941-3949：TYPE_ATTRIBUTE 的 fixed / stateSelect 绑定 Structural.markExp）——本组件
       // 的、嵌套修饰里子组件的（`Inertia J(phi(stateSelect = s))`）、本类 extends 修饰里的：值都写在本类里，按本类作用域求。
       // 扫过的修饰记进 state_scanned_：plan_attributes 只认这些来源里的参数引用（别处的参数没打上 final → SKIP）。
-      auto scan_state = [&](auto& self, Id<SMod> m, const ScodeScope& sc) -> void {
+      // skip_top：本组件自己的 stateSelect 被外来 / extends 修饰盖掉了（同下面 fixed 的 fixed_overridden）——声明里那个值不用、
+      // 参数不标（testsuite mosfiles/Model2：`inertia1(phi.stateSelect = StateSelect.always, …)` 盖过 Inertia 里的
+      // `phi(stateSelect = stateSelect)`，omc 的 inertia1.stateSelect 不 final）。
+      auto scan_state = [&](auto& self, Id<SMod> m, const ScodeScope& sc, bool skip_top) -> void {
         for (const SSubMod& s : I_.scode.mods[m].subs) {
           const Id<Exp> sv = I_.scode.mods[s.mod].binding;
-          if (s.ident == state_sym && sv.is_valid() && !is_qualified_cref(I_.absyn.exps[sv], I_.absyn)) {
+          if (s.ident == state_sym && !skip_top && sv.is_valid() && !is_qualified_cref(I_.absyn.exps[sv], I_.absyn)) {
             eval_scode(sv, sc, 0, /*allow_param=*/true, &final_params);
             state_scanned_.insert(m.raw);
           }
-          self(self, s.mod, sc);
+          self(self, s.mod, sc, false);
         }
       };
       std::vector<std::int64_t> tmp;
@@ -764,29 +767,35 @@ class Flattener {
         // TYPE_ATTRIBUTE 支，NFInst.mo:3941-3950 v1.25.0；MSL FluidHeatFlow TestCylinder 的 cylinder2.T0fixed 不是 final）。
         const Id<SMod> fm = fel.mod;
         if (!fm.is_valid()) continue;
-        auto sets_fixed = [&](Id<SMod> m) {
+        auto sets_attr = [&](Id<SMod> m, Symbol attr) {
           for (const SSubMod& s : I_.scode.mods[m].subs)
-            if (s.ident == fixed_sym && I_.scode.mods[s.mod].binding.is_valid()) return true;
+            if (s.ident == attr && I_.scode.mods[s.mod].binding.is_valid()) return true;
           return false;
         };
-        bool fixed_overridden = false;
+        bool fixed_overridden = false, state_overridden = false;
         for (const ModSource& m : ctx.mods)
           for (const SSubMod& s : I_.scode.mods[m.mod].subs)
-            fixed_overridden = fixed_overridden || (s.ident == I_.nodes[cn].name && sets_fixed(s.mod));
-        for (Id<SMod> em : I_.comps[I_.nodes[cn].comp].extends_mods) fixed_overridden = fixed_overridden || sets_fixed(em);
+            if (s.ident == I_.nodes[cn].name) {
+              fixed_overridden = fixed_overridden || sets_attr(s.mod, fixed_sym);
+              state_overridden = state_overridden || sets_attr(s.mod, state_sym);
+            }
+        for (Id<SMod> em : I_.comps[I_.nodes[cn].comp].extends_mods) {
+          fixed_overridden = fixed_overridden || sets_attr(em, fixed_sym);
+          state_overridden = state_overridden || sets_attr(em, state_sym);
+        }
         for (const SSubMod& s : I_.scode.mods[fm].subs)
           if (s.ident == fixed_sym && !fixed_overridden) {
             const Id<Exp> fv = I_.scode.mods[s.mod].binding;
             if (fv.is_valid() && I_.absyn.exps[fv].kind != ExpKind::BoolLit)
               eval_scode(fv, dsc, 0, /*allow_param=*/true, &final_params);
           }
-        scan_state(scan_state, fm, dsc);
+        scan_state(scan_state, fm, dsc, state_overridden);
       }
       // 本类 extends 子句里的修饰（`extends PartialRigid(s(stateSelect = stateSelect))`，Translational.Components.Mass）：
       // 值同样写在本类里。
       for (Id<SElement> eid : def.def.elements)
         if (I_.scode.elems[eid].kind == SElementKind::Extends && I_.scode.elems[eid].mod.is_valid())
-          scan_state(scan_state, I_.scode.elems[eid].mod, fscope);
+          scan_state(scan_state, I_.scode.elems[eid].mod, fscope, false);
     }
     // inner 作用域（R11 §5）：外层可见 inner + 本层 inner，供本层及子层的 outer 按名连接。
     std::vector<InnerVar> inners = outer_inners;
@@ -1179,7 +1188,7 @@ class Flattener {
             eval_probe_ = &probe;
             StructSnap snap = struct_snap();
             // 求值把读到的参数值记进 const_vals_（结构参数的值缓存，别处按它把引用当已知值）：试探求值的痕迹要连它一起撤。
-            auto cv_snap = const_vals_;
+            CvTrial cv_trial(*this);
             std::optional<CVal> rv;
             {
               const EvalRoot root(*this, "@rec");   // 压平期的 Ceval（flattenComplexComponent）：存回的是组件
@@ -1193,10 +1202,10 @@ class Flattener {
             // ymc 压平到它时才标；MSL BodyBox 的 r 由前面 `lengthDirection = to_unit1(r - r_shape)` 的 Evaluate = true 连带）。
             // 看求值之前的标记（快照）：求值本身会给读到的参数打标记。
             bool structural = !probe.keys.empty();
-            for (const auto& kv : probe.keys) structural = structural && key_structural_in(snap.set, kv.first, kv.second);
+            for (const auto& kv : probe.keys) structural = structural && structural_at(snap, kv.first, kv.second);
             if (!rv) {
               struct_restore(std::move(snap));   // 求不出：痕迹全撤，照下面的通路
-              const_vals_ = std::move(cv_snap);
+              cv_trial.rollback();
               // final 的：能内联的照样内联成符号式（不必求值，未做 → SKIP）；内联不了的求不出 → 挪成（初始）方程，字段 final、
               // fixed = false（rp62r 探针 BR8 `final parameter Real r.x(fixed = false)` + `r = BR8P.f2(p);`；if 表达式顶层的
               // 先照 splitRecordCref 选支，OF6）。
@@ -1235,16 +1244,16 @@ class Flattener {
                   if (const auto it = const_vals_.find(k); it != const_vals_.end()) keep.push_back({k, it->second});
                 }
                 struct_restore(std::move(snap));
-                const_vals_ = std::move(cv_snap);
+                cv_trial.rollback();
                 if (comp_arr) { set_unsupported("record binding evaluation writes back into a component array"); continue; }
                 if (arr_fwd) { set_unsupported("record binding evaluates array parameter before its declaration"); continue; }
                 for (auto& [k, v] : keep) {
-                  const_vals_[k] = std::move(v);
+                  cv_set(k, std::move(v));
                   touch_key(k);
                 }
               } else {
                 struct_restore(std::move(snap));        // (C)：不求值，痕迹全撤
-                const_vals_ = std::move(cv_snap);
+                cv_trial.rollback();
                 rv.reset();
               }
             }
@@ -3598,13 +3607,13 @@ class Flattener {
           if (!self(self, el)) return false;
         return true;
       }
-      // whole_arrays：结构参数数组的整体引用也算（标记打在各元素上，见 key_structural_in）——只用于参数数组整体绑定是调用时
+      // whole_arrays：结构参数数组的整体引用也算（标记打在各元素上，见 structural_now）——只用于参数数组整体绑定是调用时
       // 判不标量化（emit_array）：MSL Revolute 的 `e = normalizeWithAssert(n)`，n 带 Evaluate = true → omc 求值后逐元素
       // `rev.e[1] = 0.0`，不是整体 `Real[3] rev.e = …`。其余调用方（式子里嵌着的调用）照旧只认标量结构参数。
       if (x.kind != ExprKind::Cref) return false;
       const std::string k = expr_cref_key(x.cref);
       if (!whole_arrays) return structural_set_.count(k) > 0;
-      if (key_structural_in(structural_set_, k, x.ty.is_array())) return true;
+      if (structural_now(k, x.ty.is_array())) return true;
       // 参数数组是结构参数数组的裸 cref 别名（MSL Rotor1D 的 `rotorWith3DEffects(n = n)`，外层 n 带 Evaluate = true）：压平末尾
       // 照 checkComponentBindingVariability 连带成结构参数（apply_structural_params 的别名支），这里先按同一条规则认——omc 的
       // `e = normalizeWithAssert(n)` 于是求值成字面量、逐元素（MSL GyroscopicEffects / BevelGear1D 的 `rotorWith3DEffects.e[1]
@@ -4472,7 +4481,11 @@ class Flattener {
       ExprKind bk = result_.model.exprs[binding].kind;
       bool is_lit = bk == ExprKind::IntLit || bk == ExprKind::RealLit || bk == ExprKind::BoolLit ||
                     bk == ExprKind::StringLit || bk == ExprKind::EnumLit;
-      if (!is_lit) set_unsupported("constant evaluation");
+      if (!is_lit && !result_.unsupported) {
+        set_unsupported("constant evaluation");
+        for (std::size_t ni = 0; ni < name.size(); ++ni)   // 子原因：哪个常量（排桶用）
+          result_.unsupported_detail += (ni ? "." : "") + std::string(in_.str(name[ni]));
+      }
     }
     // Boolean 变量绑定到（未折叠的）noEvent(…)：noEvent 抑制事件 → 连续，绑到离散 Boolean 是错误（omc 报错，NoEvent1）→ SKIP。
     // 普通关系 `b = x > 1` 会产生事件→离散，合法，不在此列。
@@ -4605,7 +4618,7 @@ class Flattener {
     PSubs bsubs = psubs;
     bsubs.resize(name.size());
     std::size_t pos = 0;
-    const_vals_[int_key(name, bsubs)] = cval_nest(flat, shape, 0, pos);
+    cv_set(int_key(name, bsubs), cval_nest(flat, shape, 0, pos));
     return true;
   }
 
@@ -5003,7 +5016,11 @@ class Flattener {
     // 整个变量一行 `parameter Real[3] e(unit = "1") = f(n);`——scalarizeVariable 见绑定逐元素是 `f(n)[k]`（isSubscriptedArrayCall）
     // 就整体留下，除非带 min / max / nominal（variableHasForcedScalarAttribute），NFScalarize.mo:89-160 / :513-525 v1.25.0；PA
     // 探针：each 属性打一个值、非 each 的数组属性打整个数组字面量，引用处照常逐元素（`e[2]`）。带那三个属性的照逐元素 `f(n)[k]`。
-    if (spread && nlbind && !comp_spread && user_call(rhsE) && !call_args_fold(rhsE, /*whole_arrays=*/true)) {
+    // 本参数自己已是结构参数（Evaluate = true 求过值、或被维 / 条件读过，标记打在各元素上）的不算：omc 求值成字面量、照常逐元素
+    //（SP 探针 SP3 / SP4：`ey = nrm(cross(e, nnx)) annotation(Evaluate = true)` → `final parameter Real ey[1] = 0.0`；MSL
+    // RevolutePlanarLoopConstraint 的 `ey_a`，此前整体发射后被标结构参数 → SKIP）。
+    if (spread && nlbind && !comp_spread && user_call(rhsE) && !call_args_fold(rhsE, /*whole_arrays=*/true) &&
+        !structural_now(self_key, /*is_arr=*/true)) {
       bool forced = false;
       for (const AttrPlan& ap : aplan) {
         const std::string_view an = in_.str(ap.name);
@@ -5140,7 +5157,7 @@ class Flattener {
       PSubs bsubs = psubs;
       bsubs.resize(name.size());   // 末段（叶）无下标 = 整体键
       std::size_t pos = 0;
-      const_vals_[int_key(name, bsubs)] = cval_nest(const_flat, dims, 0, pos);
+      cv_set(int_key(name, bsubs), cval_nest(const_flat, dims, 0, pos));
     }
     // Var 数组绑定 → 单条数组方程（param/const 已在上面摊成逐元素绑定）。
     // 构造子：`name = {…}`；非构造子：整取同型 cref → `name = y`（保持整取，NFScalarize ARRAY_EQUALITY 不标量化）；
@@ -6789,16 +6806,13 @@ class Flattener {
   // allow_param：也内联 parameter（结构上下文如 `fixed=`）；used 非空时记下用到的 parameter 组件（→ 标 final）。
   // 顶层的带参数求值是一笔"事务"：求不出值就把途中打的结构标记撤掉。omc 的 Structural.markExp 只在式子确实被当结构式用的
   // 地方调用；ymc 的标记是求值的副作用，求值失败后调用方落回非结构路径，标记不该留下（ProbeTimeParam：if 方程的运行时条件
-  // `time > k` 求不出值，此前 k 仍被标成 final、代入成 `time > 5.0`，omc 原样）。快照在首次改动标记状态时才拍（txn_touch）。
+  // `time > k` 求不出值，此前 k 仍被标成 final、代入成 `time > 5.0`，omc 原样）。快照只是日志长度（见 StructSnap）。
   std::optional<CVal> eval_scode(Id<Exp> exp, const ScodeScope& scope, int depth,
                                  bool allow_param = false, std::unordered_set<std::uint32_t>* used = nullptr) {
     if (depth != 0 || !allow_param || ceval_frame_ < 0) return eval_scode_impl(exp, scope, depth, allow_param, used);
-    MarkTxn txn;
-    txn.outer = txn_;
-    txn_ = &txn;
+    const StructSnap snap = struct_snap();
     std::optional<CVal> v = eval_scode_impl(exp, scope, depth, allow_param, used);
-    txn_ = txn.outer;
-    if (!v && txn.snap) struct_restore(std::move(*txn.snap));
+    if (!v) struct_restore(snap);
     return v;
   }
   std::optional<CVal> eval_scode_impl(Id<Exp> exp, const ScodeScope& scope, int depth, bool allow_param,
@@ -8000,7 +8014,7 @@ class Flattener {
           es.back() = ix;
           const std::string ek = int_key(names, es);
           record_structural(ek);
-          const_vals_[ek] = *e;
+          cv_set(ek, *e);
           std::size_t k = sh.size();
           while (k > 0) { --k; if (++ix[k] <= sh[k]) break; ix[k] = 1; if (k == 0) more = false; }
         }
@@ -8119,14 +8133,19 @@ class Flattener {
       v = coerce_to_kind(*v, tk);
     }
     if (!v) return fail();
-    const_vals_[key] = *v;
+    cv_set(key, *v);
     // 方程段的结构求值求到了还没压平的参数（向前引用）：omc 把求得的值存回组件，它压平时打字面量（见 emit_variable）。
     // 数组参数未做。
     if (!arr_param && mark_phase_ == MarkPhase::Late && !typed_keys_.count(key)) touch_key(key);
     if (deps) {
       const auto dt = deps_time_.find(key);
-      if (dt == deps_time_.end()) { txn_touch(); deps_time_.emplace(key, mt); }
-      else if (mt < dt->second) { txn_touch(); dt->second = mt; }
+      if (dt == deps_time_.end()) {
+        mark_log_.push_back({MarkUndo::DepsNew, key, 0});
+        deps_time_.emplace(key, mt);
+      } else if (mt < dt->second) {
+        mark_log_.push_back({MarkUndo::DepsLower, key, dt->second});
+        dt->second = mt;
+      }
     }
     return hit(*v);
   }
@@ -11598,7 +11617,7 @@ class Flattener {
       if (v.var_kind == FlatVarKind::Parameter && v.subscripts.empty()) param_exprs_[var_key(v)] = v.binding;
       return;
     }
-    if (v.var_kind == FlatVarKind::Constant) { const_vals_[var_key(v)] = std::move(*cv); return; }
+    if (v.var_kind == FlatVarKind::Constant) { cv_set(var_key(v), std::move(*cv)); return; }
     // 参数只记字面量绑定的（见 const_lookup_val），另按名字链（不带下标）分组：同一组件的各元素。
     std::string key = var_key(v);
     param_groups_[int_key(v.name, {})].keys.push_back(key);
@@ -11648,7 +11667,7 @@ class Flattener {
           std::vector<CVal> flat;
           for (const std::string& k : g.keys) {
             if (dep_mark_) record_structural(k);
-            const_vals_[k] = param_lits_[k];
+            cv_set(k, param_lits_[k]);
             flat.push_back(param_lits_[k]);
           }
           std::size_t pos = 0;
@@ -11665,11 +11684,21 @@ class Flattener {
       if (!param_exprs_.count(key)) {
         // 还没发射（向前引用）：第二遍用第一遍求出的值（见 flatten()），仍只标被引用的本身。只在方程段（Late）用——早期（维）
         // 1.25.0 还会连带标记被引用者的绑定里的参数，那要有被引用者的绑定才知道。
+        // 实例化期碰到的、绑定里还引用别的参数的（`world.defaultBodyDiameter = world.nominalLength / 9`，world 声明在后——
+        // MSL Constraints.* / ActuatedDrive 的 `sphere(…) if … sphereDiameter > 0`）：第一遍记下的依赖一路都是普通参数就照用
+        // 第一遍的值，依赖一起标结构参数（markComponent 进未定型的绑定，NFStructural.mo:311-326；CF 探针 CF1：world.nominalLength
+        // / world.defaultBodyDiameter 都 final）。
+        std::vector<std::string> chain;
         if (const auto fw = carry_.vals.find(key);
-            fw != carry_.vals.end() && !typed_keys_.count(key) && (mark_phase_ == MarkPhase::Late || forward_leaf(key))) {
+            fw != carry_.vals.end() && !typed_keys_.count(key) &&
+            (mark_phase_ == MarkPhase::Late || forward_leaf(key) ||
+             (mark_phase_ == MarkPhase::Early && forward_chain(key, chain, 0)))) {
           if (!use_forward(key)) return std::nullopt;
-          if (dep_mark_) record_structural(key);
-          const_vals_[key] = fw->second;
+          if (dep_mark_) {
+            record_structural(key);
+            for (const std::string& d : chain) record_structural(d);
+          }
+          cv_set(key, fw->second);
           return fw->second;
         }
         if (!typed_keys_.count(key)) forward_miss_ = true;
@@ -11694,7 +11723,7 @@ class Flattener {
         for (const std::string& k : visited)
           if (const FlatVariable* fv = emitted_var(k); fv && fv->var_kind == FlatVarKind::Parameter) record_structural(k);
       }
-      const_vals_[key] = *v;
+      cv_set(key, *v);
       return v;
     }
     // 标记是组件级的：数组实例 / 参数数组的各元素一起成为结构参数（ND 探针 d2：`G g[2](each n = 2); Real z[g[2].n]` →
@@ -11703,7 +11732,7 @@ class Flattener {
     if (g.keys.size() != g.count) return std::nullopt;
     for (const std::string& k : g.keys) {
       if (dep_mark_) record_structural(k);
-      const_vals_[k] = param_lits_[k];
+      cv_set(k, param_lits_[k]);
     }
     return param_lits_[key];
   }
@@ -12633,7 +12662,11 @@ class Flattener {
             // constant 记录成员 `r1.x` → 复用已发射叶子的字面量绑定（Half B，NFCeval recordElement）。
             Id<Expr> v = eval_const_record_member(prefix, c);
             if (v.is_valid()) return v;
-            set_unsupported("constant evaluation");
+            if (!result_.unsupported) {
+              set_unsupported("constant evaluation");
+              for (std::size_t pi = 0; pi < c.parts.size(); ++pi)   // 子原因：哪个常量（排桶用）
+                result_.unsupported_detail += (pi ? "." : "") + std::string(in_.str(c.parts[pi].name));
+            }
           } else {
             // constant 数组的下标引用 `x[2]` → 绑定求值成数组值，再逐层按（常量）下标取标量（NFCeval subscriptBinding）。
             const SElement& clc = I_.scode.elems[I_.comps[I_.nodes[leaf].comp].def];
@@ -13556,20 +13589,20 @@ class Flattener {
     return add(std::move(r));
   }
 
-  // 条件只读已是结构参数（或常量）的（看求值前的标记，见 key_structural_in），按值求出、不新打标记；否则 nullopt。
+  // 条件只读已是结构参数（或常量）的（看求值前的标记，见 structural_at），按值求出、不新打标记；否则 nullopt。
   std::optional<bool> structural_condition(Id<Exp> craw, NodeId enclosing) {
     if (!craw.is_valid()) return std::nullopt;
     EvalProbe probe;
     EvalProbe* const saved_probe = eval_probe_;
     eval_probe_ = &probe;
     StructSnap snap = struct_snap();
-    auto cv_snap = const_vals_;
+    CvTrial cv_trial(*this);
     const std::optional<CVal> cv = eval_scode(craw, scode_scope_of(enclosing), 0, /*allow_param=*/true, nullptr);
     eval_probe_ = saved_probe;
     bool structural = !probe.nonstruct;
-    for (const auto& kv : probe.keys) structural = structural && key_structural_in(snap.set, kv.first, kv.second);
+    for (const auto& kv : probe.keys) structural = structural && structural_at(snap, kv.first, kv.second);
     struct_restore(std::move(snap));   // 读到的都已是结构参数：标记 / 值缓存不必留
-    const_vals_ = std::move(cv_snap);
+    cv_trial.rollback();
     if (!structural || !cv || cv->k != CVal::K::Bool) return std::nullopt;
     return cv->b;
   }
@@ -17462,14 +17495,6 @@ class Flattener {
   };
   // 参数（实例 key）此刻已是结构参数；数组参数的标记打在各元素的 key 上（`a[1].`，见 frame_value），标记是组件级的、有一个
   // 就算。
-  static bool key_structural_in(const std::unordered_map<std::string, int>& set, const std::string& k, bool is_arr) {
-    if (set.count(k)) return true;
-    if (!is_arr || k.empty()) return false;
-    const std::string pre = k.substr(0, k.size() - 1) + "[";
-    for (const auto& kv : set)
-      if (kv.first.compare(0, pre.size(), pre) == 0) return true;
-    return false;
-  }
   // 调用名解析到用户函数（不是记录构造 / 内建）。
   bool user_fn_call(Id<Exp> call, const ScodeScope& scope) {
     const Exp& e = I_.absyn.exps[call];
@@ -19813,34 +19838,101 @@ class Flattener {
     const int t = mark_time();
     const auto it = structural_set_.find(k);
     if (it == structural_set_.end()) {
-      txn_touch();
+      mark_log_.push_back({MarkUndo::SetNew, k, 0});
       structural_set_.emplace(k, t);
       structural_keys_.push_back(k);
+      ++struct_bases_[leaf_base(k)];
     } else if (t < it->second) {
-      txn_touch();
+      mark_log_.push_back({MarkUndo::SetLower, k, it->second});
       it->second = t;
     }
   }
-  // 试探性求值前后的快照 / 撤销（求值会打结构标记，omc 的 tryEvalExp 之类不标）。
+  // 试探性求值前后的快照 / 撤销（求值会打结构标记，omc 的 tryEvalExp 之类不标）。标记状态（structural_set_ / structural_keys_ /
+  // deps_time_）的改动都记进 mark_log_，快照 = 日志长度，撤销 = 倒着退回去。ponytail: 日志从不截短（大小 = 整个压平期标记
+  // 改动的次数）；此前快照是整份拷贝，结构参数多的模型（testsuite EngineV6_output）每次试探求值都拷几千项。
+  struct MarkUndo {
+    enum What : std::uint8_t { SetNew, SetLower, DepsNew, DepsLower } what;
+    std::string key;
+    int old;
+  };
   struct StructSnap {
-    std::vector<std::string> keys;
-    std::unordered_map<std::string, int> set, deps;
+    std::size_t log_n = 0;       // mark_log_ 的长度
     std::size_t touched_n = 0;   // touched_log_ 的长度
   };
-  StructSnap struct_snap() const { return {structural_keys_, structural_set_, deps_time_, touched_log_.size()}; }
-  // 求值事务（见 eval_scode）：标记状态要变之前，给还没拍快照的各层事务拍一张（内层在前；外层已有快照的更外层必也已有）。
-  struct MarkTxn {
-    std::optional<StructSnap> snap;
-    MarkTxn* outer = nullptr;
-  };
-  void txn_touch() {
-    for (MarkTxn* t = txn_; t && !t->snap; t = t->outer) t->snap = struct_snap();
-  }
+  StructSnap struct_snap() const { return {mark_log_.size(), touched_log_.size()}; }
   void struct_restore(StructSnap s) {
-    structural_keys_ = std::move(s.keys);
-    structural_set_ = std::move(s.set);
-    deps_time_ = std::move(s.deps);
+    while (mark_log_.size() > s.log_n) {
+      MarkUndo u = std::move(mark_log_.back());
+      mark_log_.pop_back();
+      switch (u.what) {
+        case MarkUndo::SetNew:
+          structural_set_.erase(u.key);
+          structural_keys_.pop_back();   // 与新增同序
+          if (const auto b = struct_bases_.find(leaf_base(u.key)); b != struct_bases_.end() && --b->second == 0) struct_bases_.erase(b);
+          break;
+        case MarkUndo::SetLower: structural_set_[u.key] = u.old; break;
+        case MarkUndo::DepsNew: deps_time_.erase(u.key); break;
+        case MarkUndo::DepsLower: deps_time_[u.key] = u.old; break;
+      }
+    }
     untouch(s.touched_n);
+  }
+  // const_vals_ 的写入一律经这里：试探求值期间（CvTrial 活着）记撤销日志，撤销时倒着退回去（此前每次试探整份拷贝值缓存）。
+  void cv_set(const std::string& k, CVal v) {
+    if (cv_trials_ > 0) {
+      const auto it = const_vals_.find(k);
+      cv_log_.push_back(it == const_vals_.end() ? CvUndo{k, false, CVal{}} : CvUndo{k, true, it->second});
+    }
+    const_vals_[k] = std::move(v);
+  }
+  struct CvUndo {
+    std::string key;
+    bool had;
+    CVal old;
+  };
+  struct CvTrial {   // 一次试探求值：析构即保留（commit），rollback() 撤回开始时的值缓存
+    Flattener& f;
+    std::size_t n;
+    bool done = false;
+    explicit CvTrial(Flattener& fl) : f(fl), n(fl.cv_log_.size()) { ++f.cv_trials_; }
+    CvTrial(const CvTrial&) = delete;
+    CvTrial& operator=(const CvTrial&) = delete;
+    void rollback() {
+      if (done) return;
+      done = true;
+      while (f.cv_log_.size() > n) {
+        CvUndo u = std::move(f.cv_log_.back());
+        f.cv_log_.pop_back();
+        if (u.had) f.const_vals_[u.key] = std::move(u.old);
+        else f.const_vals_.erase(u.key);
+      }
+      end();
+    }
+    void end() {
+      if (--f.cv_trials_ == 0) f.cv_log_.clear();
+    }
+    ~CvTrial() {
+      if (!done) end();
+    }
+  };
+  // k（数组参数取整体 key、标记打在各元素上）现在是不是结构参数。
+  bool structural_now(const std::string& k, bool is_arr) const {
+    if (structural_set_.count(k)) return true;
+    return is_arr && struct_bases_.count(k) > 0;
+  }
+  // 同上，但看快照 s 那一刻（之后新标的不算；见记录绑定的试探求值、structural_condition）。
+  bool structural_at(const StructSnap& s, const std::string& k, bool is_arr) const {
+    int fresh_elems = 0;
+    bool fresh_self = false;
+    for (std::size_t i = s.log_n; i < mark_log_.size(); ++i) {
+      if (mark_log_[i].what != MarkUndo::SetNew) continue;
+      if (mark_log_[i].key == k) fresh_self = true;
+      else if (is_arr && leaf_base(mark_log_[i].key) == k) ++fresh_elems;
+    }
+    if (structural_set_.count(k) && !fresh_self) return true;
+    if (!is_arr) return false;
+    const auto b = struct_bases_.find(k);
+    return b != struct_bases_.end() && b->second - fresh_elems > 0;
   }
   bool early_structural(const std::string& k) const {   // 实例化期（时刻 0）就被标成结构参数
     const auto st = structural_set_.find(k);
@@ -20422,7 +20514,6 @@ class Flattener {
   // 进求值事务：求值失败 / 条件非结构而撤销标记时一并撤（StructSnap::touched_n）。
   void touch_key(const std::string& k) {
     if (touched_.count(k)) return;
-    txn_touch();
     touched_.insert(k);
     touched_log_.push_back(k);
   }
@@ -20432,6 +20523,17 @@ class Flattener {
   // 向前引用的参数，绑定不再引用别的参数（第一遍记下的 deps 为空：字面量 / 常量式）：定型期（条件、维）用到它也只需标它自己
   // ——1.25.0 连带标记的是被引用者未定型的绑定里的参数，没有就没得连带（CC 探针 c41：`PSM p(u = d.ud); parameter D d;`，
   // 条件 `h if u`）。
+  // k 及其绑定里引用的参数（第一遍记下的 deps，一路往下）都是普通参数（有绑定、不经父记录整体绑定）→ true，链上除 k 外的
+  // 进 out（见 const_lookup_val 的向前引用支）。
+  bool forward_chain(const std::string& k, std::vector<std::string>& out, int depth) const {
+    if (depth > 16) return false;
+    const auto vi = carry_.visit.find(k);
+    if (vi == carry_.visit.end() || vi->second.kind != PassCarry::VisitInfo::Parameter || !vi->second.plain) return false;
+    if (depth > 0) out.push_back(k);
+    for (const std::string& d : vi->second.deps)
+      if (!forward_chain(d, out, depth + 1)) return false;
+    return true;
+  }
   bool forward_leaf(const std::string& k) const {
     const auto vi = carry_.visit.find(k);
     return vi != carry_.visit.end() && vi->second.kind == PassCarry::VisitInfo::Parameter && vi->second.plain &&
@@ -21369,7 +21471,10 @@ class Flattener {
   };
   std::unordered_map<std::string, ParamGroup> param_groups_;   // 名字链（不带下标）→ 该组件的各元素
   std::unordered_map<std::string, int> deps_time_;        // 参数 → 其依赖已按哪个时刻连带过（值有缓存时判是否要补走）
-  MarkTxn* txn_ = nullptr;                                // 当前最内层的求值事务（栈上对象，见 eval_scode）
+  std::vector<MarkUndo> mark_log_;                         // 标记状态的改动日志（见 StructSnap）
+  std::vector<CvUndo> cv_log_;                              // const_vals_ 的改动日志（见 cv_set / CvTrial）
+  int cv_trials_ = 0;                                       // 活着的 CvTrial 数
+  std::unordered_map<std::string, int> struct_bases_;       // 已标结构参数的数组整体 key → 已标元素数（structural_now）
   bool card_allowed_ = false;   // 只在 if 方程 / assert 的条件表达式里为 true（其它上下文 omc 报错 → SKIP）
   struct ConnectStmt {
     Id<Exp> a, b; NodeId enclosing; std::vector<Symbol> prefix; SourceLoc loc;

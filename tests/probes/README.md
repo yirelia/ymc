@@ -445,3 +445,6 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `zs-p1` | 6 | 结构参数代入后数组运算的一侧成了全零字面量（`ta + rot(R, tb) - cross(r, f)`、r = 0）：照 simplifyBinarySub 消掉；推导式绑定的 Evaluate 数组参数在下标数组各元素相同时（`a = {0, 0, 0}`）调用当场求值、函数不打（VK3 / VK4），否则照打（VK1 / VK2）。单测取 ZS2 / VK3 |
 | `ra-p1` | 3 | 参数数组是结构参数数组的裸 cref 别名（`Inner i(n = n)`、外层 n 带 Evaluate；`n = m`）：调用绑定 `e = nrm(n)` 求值成字面量、逐元素（MSL Rotor1D 的 `rotorWith3DEffects.e`）；非结构的照旧整体数组变量。单测取 RA1 |
 | `ab-p1` | 12 | 别的数组内建作函数实参 / 在整个数组的运算里（transpose / identity 展开、vector 的非字面量实参 SKIP、symmetric、skew、cross、fill、outerProduct、`diagonal(a) + m`、`m * a * time`）对照 |
+| `sx-p1` | 4 | 参数数组绑定是用户函数调用、实参当时折不成字面量（`nrm(cross(e, nnx))`、`nrm(2 * a)`）：本参数自己带 Evaluate（已是结构参数）→ 求值成字面量、逐元素；不带的照旧整体数组变量；矩阵构造 `[ex, ey] * fc` 里引用。单测取 SP4 |
+| `fw-p1` | 3 | 条件组件的条件经 outer 读到声明在后的 world 参数（`sphereDiameter = world.defaultBodyDiameter = world.nominalLength / 9`），子实例里 / 修饰了 world：第二遍用第一遍的值，依赖一起标结构参数。单测取 CF1 |
+| `sv-p1` | 2 | stateSelect 属性的参数引用被外来修饰盖掉（`inertia1(phi.stateSelect = StateSelect.always, …)`、嵌套 `d(j(phi(stateSelect = StateSelect.never)))`）：声明里的 `stateSelect = stateSelect` 不用、参数不标 final（testsuite mosfiles/Model2） |

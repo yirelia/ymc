@@ -2012,6 +2012,18 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           消掉（FixedRotation 的 `- cross(r, frame_a.f)`）。参数数组是结构参数数组的裸 cref 别名时（Rotor1D 的
           `rotorWith3DEffects(n = n)`），调用绑定 `e = normalizeWithAssert(n)` 按压平末尾的别名连带认成能求值、逐元素。
           验证：slice 637 例 PASS 586 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 587 / FAIL 39（不变，均在账）；整个 testsuite PASS 1652→1657（crane ×2、VTT FreeBody18、SingularPlanarLoop、Tearing12）/ FAIL 0 / ACCEPTS-INVALID 3（在账）；门里 EngineV6_output 超时（CRASH）是同时跑编译拖的——空闲时 gcc 12.7 s / ASan 81 s（限 30 / 180 s），同源预检无 CRASH；MSL 514 个 PASS 281→301；探针 8772→8859（ve-p1 41、ad-p1 6、lt-p1 3、dg-p1 16、zs-p1 6、ra-p1 3、ab-p1 12）；四套构建零警告、单测 298→306；ASan 与 gcc 逐例一致。
+    - [x] (62v) flat：Evaluate 数组参数的调用绑定逐元素 + 实例化期向前引用的依赖链 + 被盖掉的 stateSelect 不标参数 + 标记 /
+          值缓存的撤销日志（2026-10-08）：MultiBody 余下的 Loops / Constraints。RevolutePlanarLoopConstraint 的 `ey_a =
+          normalizeWithAssert(cross(e, nnx_a)) annotation(Evaluate = true)`：实参当时折不成字面量就整体发射成 `Real[3] ey_a`，
+          随后被标成结构参数 → SKIP；本参数自己已是结构参数（标记打在各元素上）的照常逐元素（omc 求值成字面量）。Body 的
+          `sphere(…) if … sphereDiameter > 0` 经 outer 读到声明在后的 world（`defaultBodyDiameter = nominalLength / 9`）：实例化期
+          的向前引用此前只认绑定不再引用参数的，现在第一遍记下的依赖一路都是普通参数就照用第一遍的值、依赖一起标结构参数
+          （markComponent 进未定型的绑定，NFStructural.mo:311-326）。stateSelect 属性的参数引用被外来 / extends 修饰盖掉的，
+          声明里那个值不用、参数不标 final（同 fixed 的覆盖规则，NFInst.mo:3941-3950 标的是合并后的修饰；testsuite
+          mosfiles/Model2 的 `inertia1(phi.stateSelect = StateSelect.always, …)`，走得更远后暴露）。结构标记（structural_set_ /
+          structural_keys_ / deps_time_）与值缓存 const_vals_ 的试探求值快照改成撤销日志（此前每次整份拷贝；testsuite
+          EngineV6_output 走得更远后 22 s，近 30 s 超时）。常量求值的 SKIP 带上是哪个常量（排桶用）。
+          验证：slice 637 例 PASS 586 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 587 / FAIL 39（不变，均在账）；整个 testsuite PASS 1657→1663（CGraphBug、mosfiles/Model1、Model2、hpcom/EngineCylinder、EngineV6_output、Engine1a_output）/ FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 301→311；探针 8859→8868（sx-p1 4、fw-p1 3、sv-p1 2）；四套构建零警告、单测 306→309；ASan 与 gcc 逐例一致。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

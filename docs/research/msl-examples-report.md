@@ -346,3 +346,12 @@ Fourbar1 / Fourbar2，Rotational3DEffects 的 BevelGear1D / GearConstraint / Gyr
 标成结构参数的整体数组变量（RevolutePlanarLoopConstraint 的 `ey_a`）、5 个卡在结构参数的非字面量绑定（Constraints.* /
 ActuatedDrive）、4 + 1 个卡在修饰名指向嵌套类、2 个卡在组件数组修饰分发出的结构别名、RollingWheel 卡在混合类型的数组修饰
 字面量、PlanarLoops_analytic 卡在无绑定的 Evaluate 参数数组。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-08 加宽 62v 之后：PASS 301 → 311
+
+Evaluate 数组参数的调用绑定逐元素（RevolutePlanarLoopConstraint 的 `ey_a`）、实例化期向前引用的依赖链（Body 的 `sphere(…) if
+… sphereDiameter > 0` 读到声明在后的 world）之后，MultiBody 的 Loops.Engine1a / Engine1b / EngineV6 / PlanarFourbar、
+Constraints.PrismaticConstraint / RevoluteConstraint / SphericalConstraint / UniversalConstraint、Rotational3DEffects
+.ActuatedDrive / MovingActuatedDrive 逐字节一致（MultiBody 42 个示例里 33 个）。MultiBody 其余 9 个：4 + 1 个卡在修饰名指向
+嵌套类（`redeclare function` 修饰）、2 个卡在组件数组修饰分发出的结构别名、RollingWheel 卡在混合类型的数组修饰字面量、
+PlanarLoops_analytic 卡在无绑定的 Evaluate 参数数组。FAIL / ACCEPTS-INVALID / CRASH 0。

@@ -1,0 +1,28 @@
+//// set: sv-p1 — stateSelect 属性的参数引用被外来修饰盖掉（`inertia1(phi.stateSelect = StateSelect.always, …)`、嵌套 `d(j(phi(stateSelect = StateSelect.never)))`）：声明里的 `stateSelect = stateSelect` 不用、参数不标 final（testsuite mosfiles/Model2）
+//// model: SS1
+model SS1
+  model Inertia
+    parameter StateSelect stateSelect = StateSelect.default;
+    Real phi(stateSelect = stateSelect);
+    Real w(stateSelect = stateSelect);
+  equation
+    der(phi) = w;
+    der(w) = 1;
+  end Inertia;
+  Inertia i1(phi.stateSelect = StateSelect.always, w.stateSelect = StateSelect.always);
+  Inertia i2;
+  Inertia i3(phi.stateSelect = StateSelect.prefer);
+end SS1;
+//// model: SS2
+model SS2
+  model Inertia
+    parameter StateSelect stateSelect = StateSelect.default;
+    Real phi(stateSelect = stateSelect);
+  equation
+    der(phi) = 1;
+  end Inertia;
+  model Drive
+    Inertia j;
+  end Drive;
+  Drive d(j(phi(stateSelect = StateSelect.never)));
+end SS2;
