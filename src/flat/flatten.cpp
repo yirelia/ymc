@@ -242,16 +242,13 @@ class Flattener {
         ns.resize(v.name.size());
         if (removed_.count(conn_key(v.name, ns))) { set_unsupported("conditional component redeclared"); break; }
       }
-    // 重复变量名 → omc 会去重（R11 §3.4-3）；v1 未做，标 unsupported（driver 退 66）。
-    for (std::size_t i = 0; i < result_.model.variables.size(); ++i)
-      for (std::size_t j = i + 1; j < result_.model.variables.size(); ++j)
-        if (result_.model.variables[i].name == result_.model.variables[j].name &&
-            name_subs_eq(result_.model.variables[i].name_subs, result_.model.variables[j].name_subs) &&
-            subs_eq(result_.model.variables[i].subscripts, result_.model.variables[j].subscripts)) {
-          set_unsupported("duplicate variable");
-          i = result_.model.variables.size();
-          break;
-        }
+    // 重复变量名 → omc 会去重（R11 §3.4-3）；v1 未做，标 unsupported（driver 退 66）。按 var_key 查重：变量的下标都是发射时
+    // 铺的字面量标签（整数 / Boolean / 枚举），key 按序数编码，同名同下标即同 key。逐对比是 O(变量数²)，VTT FreeBody18 卡 30 s。
+    {
+      std::unordered_set<std::string> keys;
+      for (const FlatVariable& v : result_.model.variables)
+        if (!keys.insert(var_key(v)).second) { set_unsupported("duplicate variable"); break; }
+    }
     check_discrete_reals();
     check_pre_args();
     prune_functions();
@@ -3569,7 +3566,7 @@ class Flattener {
     return false;
   }
   // 调用的实参是否都会成字面量：字面量（及其数组）/ 已是结构参数的引用（压平末尾代入值）。
-  bool call_args_fold(Id<Expr> id) {
+  bool call_args_fold(Id<Expr> id, bool whole_arrays = false) {
     auto ok = [&](auto& self, Id<Expr> a) -> bool {
       const Expr& x = result_.model.exprs[a];
       if (is_literal(a)) return true;
@@ -3578,7 +3575,12 @@ class Flattener {
           if (!self(self, el)) return false;
         return true;
       }
-      return x.kind == ExprKind::Cref && structural_set_.count(expr_cref_key(x.cref)) > 0;
+      // whole_arrays：结构参数数组的整体引用也算（标记打在各元素上，见 key_structural_in）——只用于参数数组整体绑定是调用时
+      // 判不标量化（emit_array）：MSL Revolute 的 `e = normalizeWithAssert(n)`，n 带 Evaluate = true → omc 求值后逐元素
+      // `rev.e[1] = 0.0`，不是整体 `Real[3] rev.e = …`。其余调用方（式子里嵌着的调用）照旧只认标量结构参数。
+      if (x.kind != ExprKind::Cref) return false;
+      const std::string k = expr_cref_key(x.cref);
+      return whole_arrays ? key_structural_in(structural_set_, k, x.ty.is_array()) : structural_set_.count(k) > 0;
     };
     for (Id<Expr> a : result_.model.exprs[id].args)
       if (!ok(ok, a)) return false;
@@ -4966,7 +4968,7 @@ class Flattener {
     // 整个变量一行 `parameter Real[3] e(unit = "1") = f(n);`——scalarizeVariable 见绑定逐元素是 `f(n)[k]`（isSubscriptedArrayCall）
     // 就整体留下，除非带 min / max / nominal（variableHasForcedScalarAttribute），NFScalarize.mo:89-160 / :513-525 v1.25.0；PA
     // 探针：each 属性打一个值、非 each 的数组属性打整个数组字面量，引用处照常逐元素（`e[2]`）。带那三个属性的照逐元素 `f(n)[k]`。
-    if (spread && nlbind && !comp_spread && user_call(rhsE) && !call_args_fold(rhsE)) {
+    if (spread && nlbind && !comp_spread && user_call(rhsE) && !call_args_fold(rhsE, /*whole_arrays=*/true)) {
       bool forced = false;
       for (const AttrPlan& ap : aplan) {
         const std::string_view an = in_.str(ap.name);
@@ -5540,7 +5542,15 @@ class Flattener {
         // 枚举数组的属性值（MSL Digital 的 `L nextstate[n_data](start = fill(L.'U', n_data))`）同样逐元素摊分（DG 探针 f1：
         // `s[1](start = L.U)`…）；stateSelect 的数组值未做。
         if (a.vk == AttrVK::StateSel) { set_unsupported("array enumeration attribute"); return out; }
+        // 属性值里的数组调用同参数数组绑定逐元素取 `f(p)[k]`（AT 探针：`start = f(p)` → `a[1](start = f(p)[1])`、
+        // `2 * f(p)` → `2.0 * f(p)[1]`、`f(p) + {1, 2, 3}` → `f(p)[1] + 1.0`；MSL Body 的 `w_a(start = Frames.resolve2(R_start,
+        // w_0_start))`）——照 param_spread_ 的路收（见 try_emit_user_call）。
+        const bool saved_spread = param_spread_, saved_ok = array_call_ok_;
+        param_spread_ = true;
+        array_call_ok_ = I_.absyn.exps[sm.binding].kind == ExpKind::Call;
         const Id<Expr> t = simplify_expr(inst_exp(sm.binding, src->scope, src->vprefix));
+        param_spread_ = saved_spread;
+        array_call_ok_ = saved_ok;
         if (result_.unsupported) return out;
         if (expr_shape(t) != dims) { set_unsupported("array attribute shape mismatch"); return out; }
         p.mode = AttrPlan::Mode::Typed;
@@ -5570,6 +5580,24 @@ class Flattener {
         v = simplify_expr(scalarize(p.value, idx));
         if (result_.unsupported) return out;
         if (p.spec->vk == AttrVK::Real) v = to_real(v);
+        // fixed 的数组值（MSL Body 的 `fixed = fill(w_0_fixed, 3)`）：同标量的 fixed（见 finish_attr），书写式整个结构求值后取
+        // 元素——参数在实例化期连带标结构（NFInst.mo:3947 v1.25.0；AT 探针 AT2：`fixed = {bg, not bh}`、`bh = bg` → bg / bh
+        // 都 final）。
+        if (p.name == in_.intern("fixed") && !is_literal(v)) {
+          std::optional<CVal> cv;
+          {
+            const PhaseScope early(*this, MarkPhase::Early);
+            const FrameAt frame_at(*this, p.scope);
+            cv = eval_scode(p.raw, scode_scope_of(p.scope), 0, true, nullptr);
+          }
+          const CVal* el = cv ? &*cv : nullptr;
+          for (std::int64_t k : idx) {
+            if (!el || !is_arr(*el) || k < 1 || static_cast<std::size_t>(k) > el->arr->size()) { el = nullptr; break; }
+            el = &(*el->arr)[static_cast<std::size_t>(k) - 1];
+          }
+          if (!el || el->k != CVal::K::Bool) { set_unsupported("parameter evaluation in attribute"); return out; }
+          v = literal_of(*el);
+        }
         if (!finish_attr(*p.spec, p.name, v, {}, p.scope, p.cty)) return out;
       }
       out.push_back({p.name, v});
@@ -6309,9 +6337,8 @@ class Flattener {
       }
       pass_out_.visit.emplace(k, vi);
     }
-    var_index_.clear();
+    reset_var_index();
     ensure_var_index();
-    index_vars_ = true;
     std::unordered_set<std::string> parents;
     for (const FlatVariable& v : result_.model.variables) {
       const std::string k = var_key(v);
@@ -6347,7 +6374,6 @@ class Flattener {
       }
       pass_out_.rec_visit.emplace(p, std::move(rv));
     }
-    index_vars_ = false;
   }
   // 这一遍发射过的标量参数 / 常量的值（字面量绑定的直接取，其余顺绑定链求）。
   std::unordered_map<std::string, CVal> param_values() {
@@ -11451,11 +11477,25 @@ class Flattener {
         if (!typed_keys_.count(key)) forward_miss_ = true;
         return std::nullopt;
       }
-      if ((!record_field_keys_.count(key) && mark_phase_ != MarkPhase::Late) || param_groups_[int_key(names, {})].count != 1)
+      // 实例化期（Early：条件组件的条件、…）：omc 的 markComponent 顺着还未定型的绑定一路连带标记（NFStructural.mo:311-326
+      // v1.25.0）——顺绑定链求值时走到的参数一起标结构（CC 探针 CC4：`Real s = time if a.p > 1`、`a.p = 2 * a.q` → a.p / a.q
+      // 都 final；CC5 经 outer：`body.sphereDiameter = world.defaultBodyDiameter = world.nominalLength / 9` 一串 final——MSL
+      // Body 的 `sphere(…) if world.enableAnimation and animation and sphereDiameter > 0`）。
+      const bool early_deps = mark_phase_ == MarkPhase::Early && !record_field_keys_.count(key);
+      if ((!record_field_keys_.count(key) && mark_phase_ != MarkPhase::Late && !early_deps) ||
+          param_groups_[int_key(names, {})].count != 1)
         return std::nullopt;
+      std::vector<std::string> visited;
+      std::vector<std::string>* const saved_visit = flat_visit_;
+      flat_visit_ = early_deps ? &visited : nullptr;
       std::optional<CVal> v = flat_param_value(key, 0);
+      flat_visit_ = saved_visit;
       if (!v) return std::nullopt;
-      if (dep_mark_) record_structural(key);
+      if (dep_mark_) {
+        record_structural(key);
+        for (const std::string& k : visited)
+          if (const FlatVariable* fv = emitted_var(k); fv && fv->var_kind == FlatVarKind::Parameter) record_structural(k);
+      }
       const_vals_[key] = *v;
       return v;
     }
@@ -11498,6 +11538,7 @@ class Flattener {
         if (e.cref.resolved_node == kFnLocal) { ok = false; return; }
         const std::string k = expr_cref_key(e.cref);
         if (sub.count(k)) return;
+        if (flat_visit_) flat_visit_->push_back(k);   // 实例化期的连带标记（见 const_lookup_val）
         const std::optional<CVal> v = flat_param_value(k, depth + 1);
         if (!v || is_arr(*v) || v->k == CVal::K::Record || v->k == CVal::K::Undef ||
             (v->k == CVal::K::Enum && v->epath.empty())) {
@@ -13284,7 +13325,15 @@ class Flattener {
     if (!num(ek) && ek != TypeKind::Boolean) { set_unsupported("if-expression branch type"); return lit_int(0); }
     const Id<Expr> tb = kept_array_form(t, st, ek), fb = kept_array_form(f, st, ek);
     if (result_.unsupported) return lit_int(0);
-    if (!tb.is_valid() || !fb.is_valid()) { set_unsupported("if-expression array branch"); return lit_int(0); }
+    if (!tb.is_valid() || !fb.is_valid()) {
+      // 条件只读已是结构参数（或常量）的：omc 代入结构参数后化简（simplifyIf）直接取那一支，留不留得住两支的形态无关（MSL Body
+      // 的 `phi_start = if sequence_start[1] == sequence_angleStates[1] and … then angles_start else
+      // Frames.axesRotationsAngles(R_start, sequence_angleStates)`，sequence_* 带 Evaluate = true → Pendulum 的
+      // `body.phi_start[1] = body.angles_start[1]`）。选中的支照常往下走。
+      if (const std::optional<bool> cb = structural_condition(craw, enclosing)) return *cb ? t : f;
+      set_unsupported("if-expression array branch");
+      return lit_int(0);
+    }
     std::vector<Dimension> dims;
     for (std::int64_t n : st) {
       Dimension d;
@@ -13301,6 +13350,23 @@ class Flattener {
     return add(std::move(r));
   }
 
+  // 条件只读已是结构参数（或常量）的（看求值前的标记，见 key_structural_in），按值求出、不新打标记；否则 nullopt。
+  std::optional<bool> structural_condition(Id<Exp> craw, NodeId enclosing) {
+    if (!craw.is_valid()) return std::nullopt;
+    EvalProbe probe;
+    EvalProbe* const saved_probe = eval_probe_;
+    eval_probe_ = &probe;
+    StructSnap snap = struct_snap();
+    auto cv_snap = const_vals_;
+    const std::optional<CVal> cv = eval_scode(craw, scode_scope_of(enclosing), 0, /*allow_param=*/true, nullptr);
+    eval_probe_ = saved_probe;
+    bool structural = !probe.nonstruct;
+    for (const auto& kv : probe.keys) structural = structural && key_structural_in(snap.set, kv.first, kv.second);
+    struct_restore(std::move(snap));   // 读到的都已是结构参数：标记 / 值缓存不必留
+    const_vals_ = std::move(cv_snap);
+    if (!structural || !cv || cv->k != CVal::K::Bool) return std::nullopt;
+    return cv->b;
+  }
   // 数组 if 的两支形状不相容：条件可按结构参数求值时取选中的那一支，条件里的参数标结构（1.25.0 实测 IfExpression4 / 8 / 14：
   // `final parameter Boolean b = true` + `x = {1.0, 2.0}`；运行时条件 = 类型错，IfExpression5）。条件参数须字面量绑定 / fixed
   //（传递标记依赖 omc 的求值次序，同 if 方程的 cond_params_fixed）、无 Evaluate = false。未选中的那支已定型过：它登记过的
@@ -18637,6 +18703,7 @@ class Flattener {
     for (FlowVar& f : flow_vars_)
       if (remap[f.var_idx] != kGone) { f.var_idx = remap[f.var_idx]; nf.push_back(std::move(f)); }
     vars = std::move(nv);
+    reset_var_index();
     flow_vars_ = std::move(nf);
     var_pp_.clear();
   }
@@ -19293,9 +19360,26 @@ class Flattener {
     if (!subs.empty()) subs.back() = v.subscripts;
     return conn_key(v.name, subs);
   }
+  // 变量 key → 下标，外加数组元素按整体 key 归组（array_elem_keys）。压平期变量只在发射处追加、key 不再变 → 从上回建到的位置
+  // 续建：压平期判固定 / Evaluate 每次都查（emitted_var），逐个扫变量表是 O(变量数²)——VTT FreeBody18 从 5 s 涨到 36 s 超时。
+  // 变量表整体重排（elaborate_expandable 前插虚变量、删不在场的）后 reset_var_index 重建。
   void ensure_var_index() {
-    if (!var_index_.empty()) return;
-    for (std::size_t i = 0; i < result_.model.variables.size(); ++i) var_index_.emplace(var_key(result_.model.variables[i]), i);
+    for (std::size_t i = var_indexed_; i < result_.model.variables.size(); ++i) {
+      const FlatVariable& v = result_.model.variables[i];
+      std::string k = var_key(v);
+      if (!v.subscripts.empty()) {   // 叶段每个 `[` 之前的前缀都算整体（`x[2][3].` 归 `x` 也归 `x[2]`，同原先的逐个比）
+        const std::size_t seg = k.rfind('.', k.size() - 2);
+        for (std::size_t q = k.find('[', seg == std::string::npos ? 0 : seg + 1); q != std::string::npos; q = k.find('[', q + 1))
+          elem_index_[k.substr(0, q)].push_back(k);
+      }
+      var_index_.emplace(std::move(k), i);
+    }
+    var_indexed_ = result_.model.variables.size();
+  }
+  void reset_var_index() {
+    var_index_.clear();
+    elem_index_.clear();
+    var_indexed_ = 0;
   }
   bool is_lit(Id<Expr> x) {
     const ExprKind k = result_.model.exprs[x].kind;
@@ -19976,11 +20060,8 @@ class Flattener {
       return vk.size() > base.size() + 1 && vk.compare(0, base.size(), base) == 0 && vk[base.size()] == '[' &&
              vk.find('.', base.size()) == vk.size() - 1;
     };
-    for (const FlatVariable& fv : result_.model.variables) {
-      if (fv.subscripts.empty()) continue;
-      std::string vk = var_key(fv);
-      if (elem_of(vk)) out.push_back(std::move(vk));
-    }
+    ensure_var_index();
+    if (const auto it = elem_index_.find(base); it != elem_index_.end()) out = it->second;
     // 还没发射（向前引用）：判 Evaluate 时用第一遍记下的各元素（carry_.visit，第二遍才有）。
     if (out.empty() && visit_nf_)
       for (const auto& [vk, vi] : carry_.visit)
@@ -19988,14 +20069,9 @@ class Flattener {
     return out;
   }
   const FlatVariable* emitted_var(const std::string& k) {
-    if (index_vars_) {
-      const auto it = var_index_.find(k);
-      return it == var_index_.end() ? nullptr : &result_.model.variables[it->second];
-    }
-    // ponytail: 线性找（压平期 var_index_ 未建）；条件里的参数少，模型大时再给压平期建增量索引。
-    for (const FlatVariable& fv : result_.model.variables)
-      if (var_key(fv) == k) return &fv;
-    return nullptr;
+    ensure_var_index();
+    const auto it = var_index_.find(k);
+    return it == var_index_.end() ? nullptr : &result_.model.variables[it->second];
   }
   bool has_fixed_attr(const FlatVariable& v) {
     const Symbol fixed = in_.intern("fixed");
@@ -20872,13 +20948,16 @@ class Flattener {
   std::vector<std::vector<std::size_t>> cs_sets_;
   std::vector<std::size_t> cs_set_of_;
   bool uses_stream_ops_ = false;
-  std::unordered_map<std::string, std::size_t> var_index_;   // 变量 key → model.variables 下标（flow 属性查询）
+  std::unordered_map<std::string, std::size_t> var_index_;   // 变量 key → model.variables 下标（见 ensure_var_index）
+  std::unordered_map<std::string, std::vector<std::string>> elem_index_;   // 数组整体 key（去尾 `.`）→ 各元素 key
+  std::size_t var_indexed_ = 0;                              // var_index_ 已建到的变量数
   std::vector<std::string> structural_keys_;   // 结构参数（变量 key，标记序；Structural.markExp）：apply_structural_params 统一处理
   std::unordered_map<std::string, int> structural_set_;   // key → 标记时刻（见 MarkPhase）
   MarkPhase mark_phase_ = MarkPhase::Late;
   int bind_clock_ = 0;                                    // 已开始定型绑定的变量数（标量 / 数组各算一拍）
   bool dep_mark_ = true;                                  // frame_value：当前求值层的参数是否打结构标记
   EvalProbe* eval_probe_ = nullptr;                       // 记录绑定的试探求值收集读到的参数（见 EvalProbe）
+  std::vector<std::string>* flat_visit_ = nullptr;        // flat_param_value 顺绑定链走到的 key（实例化期连带标记，见 const_lookup_val）
   std::unordered_set<std::string> typed_keys_;            // 绑定已定型（已发射）的参数（数组记整体 key）
   std::unordered_map<std::string, CVal> param_lits_;      // 已发射的字面量绑定参数（标量叶）key → 值（record_const）
   std::unordered_map<std::string, Id<Expr>> param_exprs_;  // 已发射的、绑定不是字面量的标量参数 key → 绑定（flat_param_value）
@@ -20933,7 +21012,6 @@ class Flattener {
   std::unordered_set<std::string> touched_;                 // 发射之前就被求值过的参数（touch_key）
   std::vector<std::string> touched_log_;                    // touched_ 的插入序（StructSnap 撤销用）
   int deep_walk_ = 0;                                       // flat_param_value 正在走嵌套记录整体绑定拆来的字段
-  bool index_vars_ = false;                                 // emitted_var 用 var_index_（snapshot_carry 期间，变量已发射全）
   static constexpr int kFixedDepth = 100;                   // typeIfEquation 给 isExpressionNotFixed 的 maxDepth
   std::unordered_set<std::string> flat_busy_;               // flat_param_value 求值中的 key（环检测）
   std::unordered_set<std::string> record_field_keys_;       // 绑定来自外层记录整体绑定拆出的字段的参数 key（emit_variable）

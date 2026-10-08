@@ -6158,6 +6158,82 @@ YMC_TEST(flatten_record_parameter_binding_branches) {
                std::string("<unsupported:record binding forced inline>"));
 }
 
+YMC_TEST(flatten_array_attribute_calls_and_structural_if_branch) {
+  // 数组变量的属性值里的数组调用逐元素取 `f(p)[k]`（同参数数组绑定）；数组值的 fixed 整个结构求值后取元素，参数连带标结构
+  //（NFInst.mo:3947 v1.25.0）；数组 if 的分支留不住形态时，条件只读已是结构参数的照值选支（代入后 simplifyIf），否则 SKIP。
+  // 期望值为 omc 1.25.0 对原文实跑的 stdout（AT 探针 1 / 2、IB 探针 1 / 2，2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("function f\n  input Real x;\n  output Real r[3];\nalgorithm\n  r := {x, 2*x, 3*x};\nend f;\n"
+                           "model AT1\n  parameter Real p = 1;\n  Real a[3](start = f(p));\n"
+                           "  Real b[3](start = 2 * f(p), each fixed = true);\n  Real c[3](start = f(p) + {1, 2, 3});\n"
+                           "  parameter Real d[3](start = f(p), each fixed = false);\nequation\n  der(a) = -a;\n  der(b) = -b;\n"
+                           "  der(c) = -c;\nend AT1;\n"),
+               std::string("function f\n  input Real x;\n  output Real[3] r;\nalgorithm\n  r := {x, 2.0 * x, 3.0 * x};\nend f;\n"
+                           "\nclass AT1\n  parameter Real p = 1.0;\n  Real a[1](start = f(p)[1]);\n"
+                           "  Real a[2](start = f(p)[2]);\n  Real a[3](start = f(p)[3]);\n"
+                           "  Real b[1](start = 2.0 * f(p)[1], fixed = true);\n"
+                           "  Real b[2](start = 2.0 * f(p)[2], fixed = true);\n"
+                           "  Real b[3](start = 2.0 * f(p)[3], fixed = true);\n  Real c[1](start = f(p)[1] + 1.0);\n"
+                           "  Real c[2](start = f(p)[2] + 2.0);\n  Real c[3](start = f(p)[3] + 3.0);\n"
+                           "  parameter Real d[1](start = f(p)[1], fixed = false);\n"
+                           "  parameter Real d[2](start = f(p)[2], fixed = false);\n"
+                           "  parameter Real d[3](start = f(p)[3], fixed = false);\nequation\n  der(a[1]) = -a[1];\n"
+                           "  der(a[2]) = -a[2];\n  der(a[3]) = -a[3];\n  der(b[1]) = -b[1];\n  der(b[2]) = -b[2];\n"
+                           "  der(b[3]) = -b[3];\n  der(c[1]) = -c[1];\n  der(c[2]) = -c[2];\n  der(c[3]) = -c[3];\nend AT1;\n"));
+  YMC_CHECK_EQ(flatten_src("model AT2\n  parameter Boolean bf = false annotation(Evaluate = true);\n"
+                           "  parameter Boolean bg = true;\n  parameter Boolean bh = bg;\n"
+                           "  Real a[3](start = {1, 2, 3}, fixed = fill(bf, 3));\n"
+                           "  Real b[2](start = {1, 2}, fixed = {bg, not bh});\nequation\n  der(a) = -a;\n  der(b) = -b;\n"
+                           "end AT2;\n"),
+               std::string("class AT2\n  final parameter Boolean bf = false;\n  final parameter Boolean bg = true;\n"
+                           "  final parameter Boolean bh = true;\n  Real a[1](start = 1.0, fixed = false);\n"
+                           "  Real a[2](start = 2.0, fixed = false);\n  Real a[3](start = 3.0, fixed = false);\n"
+                           "  Real b[1](start = 1.0, fixed = true);\n  Real b[2](start = 2.0, fixed = false);\nequation\n"
+                           "  der(a[1]) = -a[1];\n  der(a[2]) = -a[2];\n  der(a[3]) = -a[3];\n  der(b[1]) = -b[1];\n"
+                           "  der(b[2]) = -b[2];\nend AT2;\n"));
+  YMC_CHECK_EQ(flatten_src("function g\n  input Real x;\n  output Real r[2];\nalgorithm\n  r := {x, 2 * x};\nend g;\nmodel IB1\n"
+                           "  parameter Integer k = 1 annotation(Evaluate = true);\n  parameter Real p = 3;\n"
+                           "  parameter Real a[2] = {1, 2};\n  parameter Real b[2] = if k == 1 then a else g(p);\n"
+                           "  parameter Real c[2] = if k == 2 then a else g(p);\n  Real y = b[2] * time + c[1];\nend IB1;\n"),
+               std::string("function g\n  input Real x;\n  output Real[2] r;\nalgorithm\n  r := {x, 2.0 * x};\nend g;\n\n"
+                           "class IB1\n  final parameter Integer k = 1;\n  parameter Real p = 3.0;\n"
+                           "  parameter Real a[1] = 1.0;\n  parameter Real a[2] = 2.0;\n  parameter Real b[1] = a[1];\n"
+                           "  parameter Real b[2] = a[2];\n  parameter Real[2] c = g(p);\n  Real y = b[2] * time + c[1];\n"
+                           "end IB1;\n"));
+  YMC_CHECK_EQ(flatten_src("function g\n  input Real x;\n  output Real r[2];\nalgorithm\n  r := {x, 2 * x};\nend g;\nmodel IB2\n"
+                           "  parameter Integer k = 1;\n  parameter Real p = 3;\n  parameter Real a[2] = {1, 2};\n"
+                           "  parameter Real b[2] = if k == 1 then a else g(p);\n  Real y = b[2] * time;\nend IB2;\n"),
+               std::string("<unsupported:if-expression array branch>"));
+}
+
+YMC_TEST(flatten_subinstance_structural_evaluation) {
+  // 实例化期（条件组件的条件）求子实例 / 经 outer 的参数：顺绑定链求值，走到的参数一起标结构（markComponent 连带，
+  // NFStructural.mo:311-326 v1.25.0；MSL Body 的 `sphere(…) if world.enableAnimation and … and sphereDiameter > 0`）。参数数组的
+  // 整体绑定是调用、实参是结构参数数组的照常逐元素求值（MSL Revolute 的 `e = normalizeWithAssert(n)`）。
+  // 期望值为 omc 1.25.0 对原文实跑的 stdout（CC 探针 4 / 5、RE 探针 1，2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("model A\n  parameter Real q = 2;\n  parameter Real p = 2 * q;\nend A;\nmodel CC4\n  A a;\n"
+                           "  Real s = time if a.p > 1;\nend CC4;\n"),
+               std::string("class CC4\n  final parameter Real a.q = 2.0;\n  final parameter Real a.p = 4.0;\n  Real s = time;\n"
+                           "end CC4;\n"));
+  YMC_CHECK_EQ(flatten_src("model W\n  parameter Real nominalLength = 1;\n"
+                           "  parameter Real defaultBodyDiameter = nominalLength / 9;\nend W;\nmodel B\n  outer W world;\n"
+                           "  parameter Real sphereDiameter = world.defaultBodyDiameter;\n"
+                           "  Real s = time if sphereDiameter > 0;\nend B;\nmodel CC5\n  inner W world;\n  B body;\nend CC5;\n"),
+               std::string("class CC5\n  final parameter Real world.nominalLength = 1.0;\n"
+                           "  final parameter Real world.defaultBodyDiameter = 0.1111111111111111;\n"
+                           "  final parameter Real body.sphereDiameter = 0.1111111111111111;\n  Real body.s = time;\nend CC5;\n"));
+  YMC_CHECK_EQ(flatten_src("function nrm\n  input Real v[3];\n  output Real r[3];\nalgorithm\n  r := v / sqrt(v * v);\n"
+                           "end nrm;\nmodel RE1\n  parameter Real n[3] = {0, 3, 4} annotation(Evaluate = true);\n"
+                           "  parameter Real m[3] = {1, 0, 0};\n  parameter Real e[3](each final unit = \"1\") = nrm(n);\n"
+                           "  parameter Real f[3] = nrm(m);\n  Real y = e[3] * time + f[1];\nend RE1;\n"),
+               std::string("function nrm\n  input Real[3] v;\n  output Real[3] r;\nalgorithm\n"
+                           "  r := {v[1] / sqrt(v[1] * v[1] + v[2] * v[2] + v[3] * v[3]), v[2] / sqrt(v[1] * v[1] + v[2] * v[2] + v[3] * v[3]), v[3] / sqrt(v[1] * v[1] + v[2] * v[2] + v[3] * v[3])};\n"
+                           "end nrm;\n\nclass RE1\n  final parameter Real n[1] = 0.0;\n  final parameter Real n[2] = 3.0;\n"
+                           "  final parameter Real n[3] = 4.0;\n  parameter Real m[1] = 1.0;\n  parameter Real m[2] = 0.0;\n"
+                           "  parameter Real m[3] = 0.0;\n  parameter Real e[1](unit = \"1\") = 0.0;\n"
+                           "  parameter Real e[2](unit = \"1\") = 0.6;\n  parameter Real e[3](unit = \"1\") = 0.8;\n"
+                           "  parameter Real[3] f = nrm(m);\n  Real y = e[3] * time + f[1];\nend RE1;\n"));
+}
+
 YMC_TEST(flatten_external_object_variable_and_structors) {
   // 外部对象：组件压平成按类名打印的叶变量，构造 `EO()` 换成 `EO.constructor(1)`（默认实参照补），构造 / 析构随类型发射
   //（外部函数未声明 pure → impure）；当实参传给外部函数。期望 = omc 1.25.0 实跑（2026-10-07，下同）。

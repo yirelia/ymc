@@ -1,0 +1,119 @@
+//// set: at-p1 — 数组变量属性值里的数组调用逐元素取 `f(p)[k]`（`2 * f(p)`、`f(p) + {…}`，参数 / 变量）；数组值的 fixed 结构求值后取元素、参数连带 final；数组 if 的分支留不住形态时，条件只读结构参数的照值选支（选中调用支成整体数组参数），非结构条件 SKIP；条件组件的条件经子实例 / outer 引用非字面量绑定的参数（顺绑定链求值、连带标结构）；参数数组的调用绑定实参是结构参数数组的照常逐元素求值。单测取 AT1 / AT2 / IB1 / IB2、CC4 / CC5 / RE1
+//// model: AT1
+function f
+  input Real x;
+  output Real r[3];
+algorithm
+  r := {x, 2*x, 3*x};
+end f;
+model AT1
+  parameter Real p = 1;
+  Real a[3](start = f(p));
+  Real b[3](start = 2 * f(p), each fixed = true);
+  Real c[3](start = f(p) + {1, 2, 3});
+  parameter Real d[3](start = f(p), each fixed = false);
+equation
+  der(a) = -a;
+  der(b) = -b;
+  der(c) = -c;
+end AT1;
+//// model: AT2
+model AT2
+  parameter Boolean bf = false annotation(Evaluate = true);
+  parameter Boolean bg = true;
+  parameter Boolean bh = bg;
+  Real a[3](start = {1, 2, 3}, fixed = fill(bf, 3));
+  Real b[2](start = {1, 2}, fixed = {bg, not bh});
+equation
+  der(a) = -a;
+  der(b) = -b;
+end AT2;
+//// model: CC1
+model W
+  parameter Boolean enableAnimation = true;
+  parameter Real d = 0.1;
+end W;
+model B
+  outer W world;
+  parameter Boolean animation = true;
+  parameter Real dia = world.d;
+  Real s = time if world.enableAnimation and animation and dia > 0;
+end B;
+model CC1
+  inner W world;
+  B b;
+end CC1;
+//// model: CC2
+model A
+  parameter Boolean flag = true;
+end A;
+model CC2
+  A a;
+  Real s = time if a.flag;
+end CC2;
+//// model: CC4
+model A
+  parameter Real q = 2;
+  parameter Real p = 2 * q;
+end A;
+model CC4
+  A a;
+  Real s = time if a.p > 1;
+end CC4;
+//// model: CC5
+model W
+  parameter Real nominalLength = 1;
+  parameter Real defaultBodyDiameter = nominalLength / 9;
+end W;
+model B
+  outer W world;
+  parameter Real sphereDiameter = world.defaultBodyDiameter;
+  Real s = time if sphereDiameter > 0;
+end B;
+model CC5
+  inner W world;
+  B body;
+end CC5;
+//// model: IB1
+function g
+  input Real x;
+  output Real r[2];
+algorithm
+  r := {x, 2 * x};
+end g;
+model IB1
+  parameter Integer k = 1 annotation(Evaluate = true);
+  parameter Real p = 3;
+  parameter Real a[2] = {1, 2};
+  parameter Real b[2] = if k == 1 then a else g(p);
+  parameter Real c[2] = if k == 2 then a else g(p);
+  Real y = b[2] * time + c[1];
+end IB1;
+//// model: IB2
+function g
+  input Real x;
+  output Real r[2];
+algorithm
+  r := {x, 2 * x};
+end g;
+model IB2
+  parameter Integer k = 1;
+  parameter Real p = 3;
+  parameter Real a[2] = {1, 2};
+  parameter Real b[2] = if k == 1 then a else g(p);
+  Real y = b[2] * time;
+end IB2;
+//// model: RE1
+function nrm
+  input Real v[3];
+  output Real r[3];
+algorithm
+  r := v / sqrt(v * v);
+end nrm;
+model RE1
+  parameter Real n[3] = {0, 3, 4} annotation(Evaluate = true);
+  parameter Real m[3] = {1, 0, 0};
+  parameter Real e[3](each final unit = "1") = nrm(n);
+  parameter Real f[3] = nrm(m);
+  Real y = e[3] * time + f[1];
+end RE1;

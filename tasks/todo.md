@@ -1980,6 +1980,20 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           final 的求不出也挪方程；挪方程的记录的数组字段逐元素 fixed = false（按属性序插）。求值器补 smooth / noEvent（NFCeval.mo
           :1931 / :1942）；含数组调用的等式两侧按形状核类型（`zeros(3) = frame_a.f + resolve1(R_rel, frame_b.f)`）。
           验证：slice 637 例 PASS 586 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 587 / FAIL 39（RecordBinding18 文件 / 1.25.0 分歧在账）；整个 testsuite PASS 1648→1651 / FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 276（不变；MultiBody 29 个越过 variability on composite component）；探针 8651→8763（rb-p1 112 个）；四套构建零警告、单测 295→296；ASan 与 gcc 逐例一致。
+    - [x] (62t) flat：数组属性值里的数组调用 + 数组值的 fixed + 数组 if 按结构条件选支 + 实例化期经子实例求值（2026-10-08）：
+          MultiBody 越过记录参数后卡在 Body 的 `w_a(start = Frames.resolve2(R_start, w_0_start), fixed = fill(w_0_fixed, 3))`。
+          属性值里的数组调用照参数数组绑定的路逐元素取 `f(p)[k]`（`2.0 * f(p)[1]`、`f(p)[1] + 1.0`）；数组值的 fixed 书写式整个
+          结构求值后取元素，参数在实例化期连带标结构（NFInst.mo:3947 v1.25.0：`fixed = {bg, not bh}` → bg / bh final）。数组 if
+          的分支留不住形态（调用支）时，条件只读已是结构参数的照值选支（omc 代入结构参数后 simplifyIf；Body 的 `phi_start =
+          if sequence_start[1] == sequence_angleStates[1] and … then angles_start else axesRotationsAngles(…)` → `phi_start[k] =
+          angles_start[k]`），非结构条件 SKIP。实例化期（条件组件的条件）求子实例 / 经 outer 的参数，此前只认字面量绑定 →
+          现在照 markComponent 顺未定型的绑定一路连带（NFStructural.mo:311-326），顺绑定链求值、走到的参数一起标结构（Body 的
+          `sphere(…) if world.enableAnimation and animation and sphereDiameter > 0`，`sphereDiameter = world.defaultBodyDiameter =
+          world.nominalLength / 9`）。参数数组的调用绑定的实参是结构参数数组（标记打在各元素上）的照常逐元素求值成字面量、不当
+          整体数组（Revolute 的 `e = normalizeWithAssert(n)` → `rev.e[3] = 1.0`）。MSL Elementary.Pendulum 逐字节一致。压平期
+          按 key 找已发射变量（emitted_var / array_elem_keys）改增量索引、查重变量改按 key 集合（原先逐个扫 / 逐对比都是
+          O(变量数²)，VTT FreeBody18 走得更远后 5 s → 37 s 超时）。
+          验证：slice 637 例 PASS 586 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 587 / FAIL 39（不变，均在账）；整个 testsuite PASS 1651→1652（WaveEquationSample）/ FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 276→281；探针 8763→8772（at-p1 9 个）；四套构建零警告、单测 296→298；ASan 与 gcc 逐例一致。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

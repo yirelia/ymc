@@ -322,3 +322,14 @@ FastFourierTransform 的两个往下卡在实参类型 / 形状。FAIL / ACCEPTS
 下一桶）、13 个卡在 BodyBox / BodyCylinder 的 `R = Frames.from_nxy(r, widthDirection)`（omc 因 Evaluate = true 连带把 r 当
 结构参数、走求值支；ymc 的 Evaluate 数组参数这条路还没通）、2 个卡在数组 if 的调用分支。PASS 数不变。
 FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-08 加宽 62t 之后：PASS 276 → 281
+
+属性值里的数组调用逐元素取、数组值的 fixed 结构求值、数组 if 按结构条件选支、实例化期经子实例求值之后：MultiBody 的
+Elementary.Pendulum / PointGravity / SpringWithMass 逐字节一致（Body 的 `w_a(start = Frames.resolve2(R_start, w_0_start),
+fixed = fill(w_0_fixed, 3))`、`phi_start` 的数组 if、`sphere(…) if world.enableAnimation and animation and sphereDiameter >
+0`），Clocked 的 UniformNoiseXorshift64star（`state64(start = Xorshift64star.initialState(localSeed, globalSeed))`）与
+Machines 的 IMC_DCBraking（条件组件 `terminalBox.star` 经子实例求值）也通过。MultiBody 其余：15 个卡在 BodyBox /
+BodyCylinder 的 `R = Frames.from_nxy(r, widthDirection)`（r 由 Evaluate 的 `lengthDirection = to_unit1(r - r_shape)` 连带
+成结构参数，要先通向量化调用的结构求值）、8 个卡在 Vectors.length 的结构代入、8 个卡在 world 重力函数别名修饰的缺省值。
+FAIL / ACCEPTS-INVALID / CRASH 0。
