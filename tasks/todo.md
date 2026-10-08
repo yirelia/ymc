@@ -1958,6 +1958,18 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           `array(to_unit1({…}[$i1]) for $i1 in 1:3)`，参数数组绑定逐元素摊开后 `to_unit1(r[1] - r_shape[1])`。Integer 元素（omc
           整个取元素式转型）、含数组调用的 SKIP。
           验证：slice 637 例 PASS 586 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 587 / FAIL 38（不变）；整个 testsuite PASS 1646→1647 / FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 266→272；探针 8622→8639（qe-p1 / vx-p1 17 个）；四套构建零警告、单测 292→294；ASan 与 gcc 逐例一致。
+    - [x] (62r) flat：元组方程的数组 / 空数组目标 + 空数组实参 + 多输出调用各输出求维 + 带属性的空数组（2026-10-08）：Blocks 的
+          Filter 一族此前卡在 `parameter Real a[na](each fixed = false)`（na = 0，带属性修饰的空数组 SKIP）与初始方程
+          `(cr, c0, c1) = Bessel(order, normalized)`（目标是数组 → "tuple target"）。现在：带属性修饰的空数组照样整体不出，
+          属性照常定型核对（无绑定的空数组参数照样核 fixed / start：omc 报错 / 告警的 SKIP，probe empty2/E11 此前被属性 SKIP
+          掩着）；元组方程的目标可以是整个数组的引用（维与输出在调用处求出的维逐一相等），空数组目标打 `_`
+          （removeEmptyTupleElements，NFSimplifyModel.mo:447-465 v1.25.0），函数体的元组赋值 / 赋值右侧 / 无返回值调用里
+          空数组类型的形参 / 局部作实参打 `{}`（removeEmptyFunctionArguments :467-488，simplifyFunction :603-642 对函数体同样
+          做）。另修静默错：多输出调用此前只对首输出求维，其余输出维式里的参数没标结构——omc 定型时整个元组类型都求维
+          （TE2：只有第二个输出 `b[n]` 用到 n，`f(k, time)` 的 k 成 final、打 `f(2, time)[1]`，ymc 此前打 `parameter Integer
+          k = 2` 与 `f(k, time)[1]`）。构建：flatten.cpp 的 Debug 目标文件节数超过 COFF 的 32767 上限（TDM-GCC 的汇编器不报错、
+          链接时才报模板实例 undefined reference），CMake 给 MinGW 加 -Wa,-mbig-obj、MSVC 加 /bigobj。
+          验证：slice 637 例 PASS 586 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 587 / FAIL 38（不变）；整个 testsuite PASS 1647→1648 / FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 272→276；探针 8639→8651（te-p1 12 个）；四套构建零警告、单测 294→295；ASan 与 gcc 逐例一致。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

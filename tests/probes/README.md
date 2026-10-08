@@ -435,3 +435,4 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `da-p1` | 10 | derivative 注解的修饰 order / noDerivative / zeroDerivative（不打印、引用的函数照样发射，含 MultiBody resolve2 式的记录输入与 cross 里的函数调用）；名字不是输入 / 未知属性 / order 写成式子或 Real（SKIP）。单测取 3 / 4 / FAS2 |
 | `qe-p1` | 11 | 类注释里的转义随类级 annotation 走：没有 annotation 的长类存源码原文、打印再转义一遍（`\"` → `\\\"`、`\n` → `\\n`），有 annotation（空的、方程段里的）才解转义（`\n` 成真换行）；元素上的 annotation 不算。单测取 WCS4 / Wk / Wj |
 | `vx-p1` | 6 | 向量化调用的实参是不含数组调用的运算式（`to_unit1(r - r_shape)`）：先按元素展开成字面量再取 `[$i1]`，参数数组绑定逐元素摊开；2 维、多实参、短类型 Axis 的参数 / input；Integer 元素（omc 整个取元素式转型）/ 含数组调用（SKIP）。单测取 1 / 5 |
+| `te-p1` | 12 | 元组方程 / 函数体元组赋值的目标是整个数组的引用、空数组目标打 `_`、空数组实参打 `{}`（含函数局部，Blocks Filter 的 `(cr, _, _) := toHighestPowerOne(den1, {})`）；多输出调用的每个输出都求维、维式参数标结构；带属性修饰的空数组整体不出、属性形状 / each 不符（omc 报错，SKIP）；无绑定的空数组参数照核 fixed / start（U1–U5）。单测取 TE1 / TE2 / TE3 / EA1 |

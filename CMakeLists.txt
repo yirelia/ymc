@@ -33,6 +33,16 @@ else()
   )
 endif()
 
+# ---- 大目标文件（COFF 节数上限）----
+# flatten.cpp 的 Debug 目标文件模板实例多，节数超过普通 COFF 的 32767 上限：TDM-GCC 10 的汇编器不报错、产出缺节的目标文件，
+# 链接时才报 `std::_Sp_counted_ptr_inplace<ymc::Type …>` 等模板实例 undefined reference（2026-10-08，加宽 62r 时撞上）。
+# MinGW 用 -mbig-obj、MSVC 用 /bigobj 换成大目标格式（MSVC 上限 65279 节，先一并打开免得下次再撞）。
+if(MSVC)
+  add_compile_options(/bigobj)
+elseif(MINGW)
+  add_compile_options(-Wa,-mbig-obj)
+endif()
+
 # ---- AddressSanitizer 开关（预设 msvc-asan 打开）----
 # 不用覆盖 CMAKE_CXX_FLAGS 的方式：那样会把 CMake 给 MSVC 的默认 /EHsc 冲掉（C4530）。
 option(YMC_ASAN "Build with AddressSanitizer" OFF)

@@ -2066,8 +2066,10 @@ class Flattener {
   }
   // 元组赋值 / 元组方程 `(a, , c) := f(…)`、`(a, b) = f(…)`（NFSimplifyModel.simplifyTupleElement :430-464）：实参全常量 →
   // 用户函数求值后按元素拆成 (目标, 值) 对，空位跳过（T1 探针 `(p, q) = f(1.0)` → `p = 2.0; q = 3.0;`、`(, u) := f(2.0)` →
-  // `u := 6.0;`）；否则单对 (元组, 调用)，空位打 `_`（T2 探针 `(w, _, k) = f(time)`）。目标须是标量 cref，类型与对应输出
-  // 相容（常量值 Integer → Real 提升；符号形须同类型）。其余 → SKIP。
+  // `u := 6.0;`）；否则单对 (元组, 调用)，空位打 `_`（T2 探针 `(w, _, k) = f(time)`）。目标是标量 cref 或整个数组的引用，类型
+  // 与对应输出相容（常量值 Integer → Real 提升；符号形须同类型，数组目标各维与输出在调用处求出的维相等，TE 探针 TE1
+  // `(a2, b2, c2) = f(time, 1)`）；空数组目标打 `_`（removeEmptyTupleElements，NFSimplifyModel.mo:447-465 v1.25.0；TE1
+  // `(a, b, c) = f(time, 0)` → `(a, _, _) = f(time, 0)`）。其余 → SKIP。
   bool tuple_target(Id<Exp> ltuple, Id<Exp> rhs, NodeId enclosing, const std::vector<Symbol>& prefix,
                     std::vector<std::pair<Id<Expr>, Id<Expr>>>& out) {
     const std::vector<Id<Exp>> elems = I_.absyn.exps[ltuple].args;   // 拷贝
@@ -2079,7 +2081,15 @@ class Flattener {
       if (x.kind == ExpKind::Tuple && x.args.empty()) continue;   // 空位
       lhs[i] = simplify_expr(inst_exp(elems[i], enclosing, prefix));
       if (result_.unsupported) return false;
-      if (result_.model.exprs[lhs[i]].kind != ExprKind::Cref || !expr_shape(lhs[i]).empty()) {
+      const std::vector<std::int64_t> lsh = expr_shape(lhs[i]);
+      // 空数组变量的引用已换成 `{}`（见 cref 的空数组替换）：当空位。
+      if (result_.model.exprs[lhs[i]].kind == ExprKind::Array && std::find(lsh.begin(), lsh.end(), 0) != lsh.end()) {
+        lhs[i] = Id<Expr>{};
+        continue;
+      }
+      // 数组目标只收整个引用（带下标 / 切片的未核实）。
+      if (result_.model.exprs[lhs[i]].kind != ExprKind::Cref ||
+          (!lsh.empty() && !result_.model.exprs[lhs[i]].cref.parts.back().subscripts.empty())) {
         set_unsupported("tuple target");
         return false;
       }
@@ -2098,21 +2108,26 @@ class Flattener {
       }
       return true;
     }
+    array_call_ok_ = true;   // 调用是整个右侧（见 array_call_ok_）：首输出是数组也行（TE1 `(a, b, c) = f(time, n)`，a: Real[2]）
     Id<Expr> c = inst_exp(rhs, enclosing, prefix);   // 多输出调用在表达式里包成 TupleElement(调用, 1)
+    array_call_ok_ = false;
     if (result_.unsupported) return false;
     if (result_.model.exprs[c].kind == ExprKind::TupleElement) c = result_.model.exprs[c].a;
     if (result_.model.exprs[c].kind != ExprKind::Call) { set_unsupported("tuple call"); return false; }
-    std::vector<TypeKind> okinds;   // 被调函数的输出元素类型（按声明序）
-    {
+    // 被调函数的输出类型（按声明序；数组输出的维在调用处求好，见 try_emit_user_call 的 call_out_tys_）。
+    std::vector<Type> otys;
+    if (const auto ot = call_out_tys_.find(c.raw); ot != call_out_tys_.end()) {
+      otys = ot->second;
+    } else {
       const std::vector<Symbol> cname = result_.model.exprs[c].call_name;
       for (const FlatFunction& f : result_.model.functions)
         if (f.name == cname) {
           for (const FlatFuncParam& p : f.params)
-            if (p.direction == FlatDirection::Output) okinds.push_back(p.ty.is_array() ? TypeKind::Unknown : p.ty.kind);
+            if (p.direction == FlatDirection::Output) otys.push_back(p.ty.is_array() ? Type::unknown() : p.ty);
           break;
         }
     }
-    if (okinds.size() < n) { set_unsupported("tuple arity"); return false; }
+    if (otys.size() < n) { set_unsupported("tuple arity"); return false; }
     Expr t;
     t.kind = ExprKind::Tuple;
     t.ty = Type::real();
@@ -2123,7 +2138,12 @@ class Flattener {
         t.args.push_back(add(std::move(w)));
         continue;
       }
-      if (result_.model.exprs[lhs[i]].ty.kind != okinds[i]) { set_unsupported("tuple element type mismatch"); return false; }
+      const Type& ot = otys[i];
+      const std::vector<std::int64_t> lsh = expr_shape(lhs[i]);
+      bool same = lsh.size() == ot.dims.size() && result_.model.exprs[lhs[i]].ty.element_type().kind == ot.element_type().kind;
+      for (std::size_t k = 0; same && k < lsh.size(); ++k)
+        same = ot.dims[k].kind == DimKind::Integer && ot.dims[k].size == lsh[k];   // 输出维求不出的未核实
+      if (!same) { set_unsupported("tuple element type mismatch"); return false; }
       t.args.push_back(lhs[i]);
     }
     out.push_back({add(std::move(t)), c});
@@ -4717,11 +4737,34 @@ class Flattener {
     }
     const Type cty = I_.comps[cid].ty;
     // 空数组（某维为 0）：标量化成零个变量、类型为空数组的绑定方程被删（NFSimplifyModel.simplifyEqualityEquation :254）→
-    // 整体不出行（EmptyArrayAlgorithm、Array13 / 14）。绑定须与声明同形同类（否则 omc 类型错）；带属性修饰、字面量绑定未核实
-    // → SKIP。被删绑定里登记过的函数由 prune_functions 收走（omc 的函数收自化简后的模型）。
+    // 整体不出行（EmptyArrayAlgorithm、Array13 / 14）。绑定须与声明同形同类（否则 omc 类型错）；字面量绑定未核实 → SKIP。
+    // 被删绑定里登记过的函数由 prune_functions 收走（omc 的函数收自化简后的模型）。属性修饰同样不出（EA 探针：
+    // `Real x[0](each start = 1)`、n = 0 的 `Real y[n](start = s, each fixed = true)`），但照常定型核对（形状 / 类型不符 omc
+    // 报错 → plan_attributes 里 SKIP）。
     if (std::find(dims.begin(), dims.end(), 0) != dims.end()) {
-      for (const ModSource& s : asrc)
-        if (!I_.scode.mods[s.mod].subs.empty()) { set_unsupported("empty array attribute"); return; }
+      std::vector<AttrPlan> eplan;
+      {
+        const PhaseScope attr_phase(*this, MarkPhase::Binding);
+        eplan = plan_attributes(cid, asrc, dims);
+      }
+      if (result_.unsupported) return;
+      // 无绑定的参数照样核 fixed / start（verifyBinding，NFFlatten.mo:853-875 v1.25.0；EA 探针 U1 / U5：`parameter Real p[0];`
+      // → omc 报 "has neither value nor start value"；U3 `each fixed = false` 照常；U2 带 start 只告警——告警不复刻 → SKIP）。
+      // 无绑定的常量照常不出（U4）。
+      if (!braw.is_valid() && var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Param) {
+        bool has_start = false, unfixed = false, fixed_known = true;
+        for (const AttrPlan& ap : eplan) {
+          const std::string_view an = in_.str(ap.name);
+          if (an == "start") has_start = true;
+          if (an == "fixed") {
+            const bool lit = ap.mode == AttrPlan::Mode::Whole && ap.value.is_valid() &&
+                             result_.model.exprs[ap.value].kind == ExprKind::BoolLit;
+            if (lit) unfixed = !result_.model.exprs[ap.value].bval; else fixed_known = false;
+          }
+        }
+        if (!fixed_known) { set_unsupported("unbound parameter with non-literal fixed"); return; }
+        if (!unfixed) { set_unsupported(has_start ? "unbound parameter with start (warning)" : "unbound parameter"); return; }
+      }
       if (braw.is_valid()) {
         if (!nlbind) { set_unsupported("empty array literal binding"); return; }
         const std::vector<std::int64_t> bsh = expr_shape(typed_rhs());
@@ -9201,7 +9244,8 @@ class Flattener {
           t.kind = ExprKind::Tuple;
           t.ty = Type::real();
           for (std::size_t i = 0; i < elems.size(); ++i) {
-            if (!lhs[i].is_valid()) {
+            // 空位，及空数组类型的目标（removeEmptyTupleElements，NFSimplifyModel.mo:447-465；TE3 `c0: Real[0]` → `_`）。
+            if (!lhs[i].is_valid() || type_is_empty_array(result_.model.exprs[lhs[i]].ty)) {
               Expr w;
               w.kind = ExprKind::Wild;
               t.args.push_back(add(std::move(w)));
@@ -9221,7 +9265,8 @@ class Flattener {
           }
           fs.kind = FlatStmtKind::Assign;
           fs.a = add(std::move(t));
-          fs.b = c;
+          fs.b = drop_empty_args(c, false);
+          if (result_.unsupported) return {};
           break;
         }
         const Exp& le = I_.absyn.exps[st.a];
@@ -9251,7 +9296,8 @@ class Flattener {
         }
         fs.kind = FlatStmtKind::Assign;
         fs.a = lhs;
-        fs.b = rhs;
+        fs.b = drop_empty_args(rhs, false);
+        if (result_.unsupported) return {};
         break;
       }
       case SStmtKind::If:
@@ -9325,6 +9371,8 @@ class Flattener {
         fs.kind = FlatStmtKind::NoRetCall;
         fs.a = noret_call(st.a, Inst::empty_node(), {});
         if (!fs.a.is_valid()) return {};   // 删去的语句 / unsupported
+        fs.a = drop_empty_args(fs.a, false);
+        if (result_.unsupported) return {};
         break;
       default:
         set_unsupported("function statement");
@@ -10390,21 +10438,10 @@ class Flattener {
       if (!rn.is_valid() || sig.outputs.size() > 1) return fn_fail<Id<Expr>>("record result");
       rty.complex_node = rn.raw;
     }
-    bool nested_eq = false;   // 等式 / Var 绑定里嵌在运算中的数组调用（array_call_eq_ 放行的，见下）
-    if (!fn_scope_ && rty.is_array()) {
-      // 模型语境里嵌在别的运算中的数组调用：须逐元素展开，未做 → SKIP。向量化调用的体不受此限（T9 `m = array(H(x[$i1]) for
-      // $i1 in 1:3)`），它所在的位置由推导式的消费方把关（scalarize 的 red_scalarize_ok_）。
-      // 参数 / 常量数组的绑定（逐元素摊开）里的除外：omc 逐元素取 `f(…)[k]`（AC 探针 a12 `2.0 * sv(x)[1]`、a13），结构实参的
-      // 代入后求值成字面量（a10 / a11 / a16 / a17，MSL Polyphase.Sources 的 `phase[m] = -symmetricOrientation(m)`）。
-      // 等式两侧 / Var 数组的绑定（array_call_eq_）里嵌着的也行：含数组调用的式子整体保留、不逐元素展开（NFScalarize.
-      // scalarizeEquation :336-338 v1.25.0 的 hasArrayCall 支），运算留符号形态（array_binary 的 sym 支、sym_binary；AX 探针
-      // b1 / c1：`x = {1.0, 2.0, 3.0} + f(time)`、`y = g(f(time) * 2.0)`）。
-      if (!whole && vd.empty() && !param_spread_ && !array_call_eq_)
-        return fn_fail<Id<Expr>>("array-valued call inside an expression");
-      nested_eq = !whole && vd.empty() && !param_spread_;
-      // 调用处求输出维（NFCall.evaluateCallTypeDim :3061-3088）：维表达式里的输入换成实参再求值；buildParameterTree
-      // 只放输入（局部不代换，:3104 TODO）→ 求不出的维留未知（与任何维相容，FuncUnknownDim3 `Real[n] result`）。
-      for (Dimension& d : rty.dims) {
+    // 调用处求输出维（NFCall.evaluateCallTypeDim :3061-3088）：维表达式里的输入换成实参再求值；buildParameterTree
+    // 只放输入（局部不代换，:3104 TODO）→ 求不出的维留未知（与任何维相容，FuncUnknownDim3 `Real[n] result`）。
+    auto eval_out_dims = [&](Type& t) {
+      for (Dimension& d : t.dims) {
         if (d.kind != DimKind::Exp) continue;
         bool ok = true;
         const Id<Expr> sub = subst_slots(d.exp, [&](Symbol nm) -> Id<Expr> {
@@ -10418,6 +10455,32 @@ class Flattener {
         d = Dimension{};
         if (n) { d.kind = DimKind::Integer; d.size = *n; } else { d.kind = DimKind::Unknown; }
       }
+    };
+    bool nested_eq = false;   // 等式 / Var 绑定里嵌在运算中的数组调用（array_call_eq_ 放行的，见下）
+    if (!fn_scope_ && rty.is_array()) {
+      // 模型语境里嵌在别的运算中的数组调用：须逐元素展开，未做 → SKIP。向量化调用的体不受此限（T9 `m = array(H(x[$i1]) for
+      // $i1 in 1:3)`），它所在的位置由推导式的消费方把关（scalarize 的 red_scalarize_ok_）。
+      // 参数 / 常量数组的绑定（逐元素摊开）里的除外：omc 逐元素取 `f(…)[k]`（AC 探针 a12 `2.0 * sv(x)[1]`、a13），结构实参的
+      // 代入后求值成字面量（a10 / a11 / a16 / a17，MSL Polyphase.Sources 的 `phase[m] = -symmetricOrientation(m)`）。
+      // 等式两侧 / Var 数组的绑定（array_call_eq_）里嵌着的也行：含数组调用的式子整体保留、不逐元素展开（NFScalarize.
+      // scalarizeEquation :336-338 v1.25.0 的 hasArrayCall 支），运算留符号形态（array_binary 的 sym 支、sym_binary；AX 探针
+      // b1 / c1：`x = {1.0, 2.0, 3.0} + f(time)`、`y = g(f(time) * 2.0)`）。
+      if (!whole && vd.empty() && !param_spread_ && !array_call_eq_)
+        return fn_fail<Id<Expr>>("array-valued call inside an expression");
+      nested_eq = !whole && vd.empty() && !param_spread_;
+      eval_out_dims(rty);
+    }
+    // 多输出函数的其余输出：omc 定型调用时整个元组类型都求维（Call.typeMatchNormalCall → evaluateCallType），维式里换进来的
+    // 参数照样标结构（TE 探针 TE2：只有第二个输出 `b[n]` 用到 n，`f(k, time)` 的 k 也成 final、打 `f(2, time)[1]`）。各输出
+    // 求好的类型记下，元组方程的目标核对用（tuple_target）。
+    std::vector<Type> out_tys;
+    if (!fn_scope_ && sig.outputs.size() > 1) {
+      out_tys.push_back(rty);
+      for (std::size_t o = 1; o < sig.outputs.size(); ++o) {
+        Type t = params[inputs.size() + o].ty;
+        eval_out_dims(t);
+        out_tys.push_back(std::move(t));
+      }
     }
     Expr r;
     r.kind = ExprKind::Call;
@@ -10425,6 +10488,7 @@ class Flattener {
     r.args = std::move(args);
     r.ty = rty;
     Id<Expr> call = add(std::move(r));
+    if (!out_tys.empty()) call_out_tys_[call.raw] = std::move(out_tys);
     // 嵌在运算里、实参都会成字面量（字面量 / 结构参数）的：omc 化简时先求值成字面量（NF_EVAL_CONST_ARG_FUNCS），式子不再含
     // 数组调用、照常标量化（AX 探针 g2 `y = -so(m) * time` → `y[1] = 0.0; y[2] = -2.094… * time; …`）——逐元素的形态未核实
     // → 照旧 SKIP。
@@ -12494,6 +12558,46 @@ class Flattener {
     return add(std::move(e));
   }
 
+  // 函数调用实参里（任意深度）空数组类型的引用换成同型空数组字面量（removeEmptyFunctionArguments，NFSimplifyModel.mo:467-488
+  // v1.25.0：fillType(ty, 0)）。函数体的赋值右侧 / 无返回值调用经 simplifyFunction（:603-642）同样走这一步——Blocks Filter 的
+  // `(cr, c0, c1) := toHighestPowerOne(den1, den2)`、den2: Real[0, 2] → `(cr, _, _) := toHighestPowerOne(den1, {})`（TE 探针
+  // TE3）。模型变量的空数组引用在实例化时已换掉（见 cref），这里管函数的形参 / 局部。空数组的维里有求不出的未核实 → SKIP。
+  Id<Expr> drop_empty_args(Id<Expr> x, bool is_arg) {
+    if (!x.is_valid()) return x;
+    const Expr e = result_.model.exprs[x];   // 拷贝
+    if (is_arg && e.kind == ExprKind::Cref && e.ty.is_array()) {
+      std::vector<std::int64_t> dims;
+      bool zero = false, unknown = false;
+      for (const Dimension& d : e.ty.dims) {
+        if (d.kind != DimKind::Integer) { unknown = true; continue; }
+        dims.push_back(d.size);
+        zero = zero || d.size == 0;
+      }
+      if (!zero) return x;
+      if (unknown) { set_unsupported("empty array argument with unknown dimension"); return x; }
+      return empty_array_lit(e.ty.element_type(), dims);
+    }
+    const bool arg = is_arg || e.kind == ExprKind::Call;
+    Expr r = e;
+    bool changed = false;
+    for (Id<Expr>& a : r.args) {
+      const Id<Expr> n = drop_empty_args(a, arg);
+      changed = changed || n != a;
+      a = n;
+    }
+    for (Id<Expr>* k : {&r.a, &r.b, &r.c}) {
+      const Id<Expr> n = drop_empty_args(*k, arg);
+      changed = changed || n != *k;
+      *k = n;
+    }
+    return changed ? add(std::move(r)) : x;
+  }
+  // 类型里有已知为 0 的维（Type.isEmptyArray）。
+  bool type_is_empty_array(const Type& t) const {
+    for (const Dimension& d : t.dims)
+      if (d.kind == DimKind::Integer && d.size == 0) return true;
+    return false;
+  }
   // 空数组类型的缺省值字面量：嵌套空数组 `{}` / `{{}, {}}`（makeDefaultValue → fillType，NFExpression.mo:5270）。dims 自 k 起
   // 须含 0（递归在 0 维处收住）。
   Id<Expr> empty_array_lit(const Type& elem, const std::vector<std::int64_t>& dims, std::size_t k = 0) {
@@ -20539,6 +20643,7 @@ class Flattener {
   std::size_t synth_mod_floor_ = 0;
   // 空数组（某维为 0，不出变量行）的形状，int_key(全名, 逐段下标) → 维；`:` 维的引用 / size() 靠它（emitted_shape 的回退）。
   std::unordered_map<std::string, std::vector<std::int64_t>> empty_shapes_;
+  std::unordered_map<std::uint32_t, std::vector<Type>> call_out_tys_;   // 多输出调用节点 → 各输出在调用处求好维的类型
   // 已发射的数组组件（叶 / 复合）的实际各维：int_key(全名, 前缀各段下标) → 维。维里的参数是按该实例的修饰取的值
   //（`A a(M = 3)` 里的 `C p[M]`），connect 实参展开元素时用（resolve_connector）。
   std::unordered_map<std::string, std::vector<std::int64_t>> array_shapes_;

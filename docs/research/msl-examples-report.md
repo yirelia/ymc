@@ -307,3 +307,9 @@ Blocks.Examples.BooleanNetwork1、Batteries.Examples.SuperCapDischargeCharge 转
 （`to_unit1(r - r_shape)` 等）之后，Machines 的 IMC_Inverter / IMC_Conveyor / SMR_Inverter / SMPM_Inverter 转 PASS。
 MultiBody 越过类注释与 `to_unit1(r - r_shape)` 的那批，往下集中卡在记录参数的绑定（"variability on composite component"，
 29 个，`final parameter Frames.Orientation R_start = Frames.axesRotations(…)`）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-08 加宽 62r 之后：PASS 272 → 276
+
+带属性修饰的空数组照样整体不出、元组方程的目标可以是整个数组 / 空数组（打 `_`）、函数体里空数组作实参打 `{}` 之后，
+Blocks.Examples.Filter / FilterWithDifferentiation / FilterWithRiseTime 与 Clocked RealSignals.UniformNoise 转 PASS。
+FastFourierTransform 的两个往下卡在实参类型 / 形状。FAIL / ACCEPTS-INVALID / CRASH 0。

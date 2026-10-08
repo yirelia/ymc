@@ -6011,6 +6011,57 @@ YMC_TEST(flatten_vectorized_call_with_operation_argument) {
                std::string("<unsupported:function: f>"));
 }
 
+YMC_TEST(flatten_tuple_equation_array_and_empty_targets) {
+  // 元组方程的目标是整个数组的引用（维与输出在调用处求出的维相等）；空数组目标打 `_`、空数组实参打 `{}`（removeEmptyTupleElements /
+  // removeEmptyFunctionArguments，NFSimplifyModel.mo:447-488 v1.25.0；函数体同样，simplifyFunction :603-642）。多输出调用的每个
+  // 输出都在调用处求维，维式里的参数照样标结构（TE2：只有第二个输出用到 n，k 也成 final）。带属性修饰的空数组整体不出（EA1）。
+  // 期望值为 omc 1.25.0 对原文实跑的 stdout（TE 探针 1 / 2 / 3、EA 探针 1，2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("function f\n  input Real x;\n  input Integer n;\n  output Real a[2];\n  output Real b[n];\n"
+                           "  output Real c[n];\nalgorithm\n  a := {x, 2 * x};\n  b := fill(x, n);\n  c := fill(3 * x, n);\n"
+                           "end f;\nfunction g\n  input Real a[2];\n  input Real b[:];\n  input Real c[:];\n  output Real s;\n"
+                           "  output Real t[2];\nalgorithm\n  s := sum(a) + sum(b) + sum(c);\n  t := a;\nend g;\nmodel TE1\n"
+                           "  parameter Integer n = 0;\n  Real a[2], b[n], c[n], s, t[2];\n  Real a2[2], b2[1], c2[1];\n"
+                           "  Real u[2], v[2];\nequation\n  (a, b, c) = f(time, n);\n  (s, t) = g(a, b, c);\n"
+                           "  (a2, b2, c2) = f(time, 1);\n  (u, , v) = f(time, 2);\nend TE1;\n"),
+               std::string("function f\n  input Real x;\n  input Integer n;\n  output Real[2] a;\n  output Real[n] b;\n"
+                           "  output Real[n] c;\nalgorithm\n  a := {x, 2.0 * x};\n  b := fill(x, n);\n  c := fill(3.0 * x, n);\n"
+                           "end f;\n\nfunction g\n  input Real[2] a;\n  input Real[:] b;\n  input Real[:] c;\n  output Real s;\n"
+                           "  output Real[2] t;\nalgorithm\n  s := a[1] + a[2] + sum(b) + sum(c);\n  t := a;\nend g;\n\n"
+                           "class TE1\n  final parameter Integer n = 0;\n  Real a[1];\n  Real a[2];\n  Real s;\n  Real t[1];\n"
+                           "  Real t[2];\n  Real a2[1];\n  Real a2[2];\n  Real b2[1];\n  Real c2[1];\n  Real u[1];\n"
+                           "  Real u[2];\n  Real v[1];\n  Real v[2];\nequation\n  (a, _, _) = f(time, 0);\n"
+                           "  (s, t) = g(a, {}, {});\n  (a2, b2, c2) = f(time, 1);\n  (u, _, v) = f(time, 2);\nend TE1;\n"));
+  YMC_CHECK_EQ(flatten_src("function f\n  input Integer n;\n  input Real x;\n  output Real a;\n  output Real b[n];\nalgorithm\n"
+                           "  a := n * x;\n  b := fill(x, n);\nend f;\nmodel TE2\n  parameter Integer k = 2;\n"
+                           "  Real y = f(k, time);\nend TE2;\n"),
+               std::string("function f\n  input Integer n;\n  input Real x;\n  output Real a;\n  output Real[n] b;\nalgorithm\n"
+                           "  a := /*Real*/(n) * x;\n  b := fill(x, n);\nend f;\n\nclass TE2\n  final parameter Integer k = 2;\n"
+                           "  Real y = f(2, time)[1];\nend TE2;\n"));
+  YMC_CHECK_EQ(flatten_src("function h\n  input Real a[:];\n  input Real b[:, 2];\n  output Real r[size(a, 1)];\n"
+                           "  output Real s[size(b, 1)];\n  output Real t[size(b, 1)];\nalgorithm\n  r := a;\n  s := b[:, 1];\n"
+                           "  t := b[:, 2];\nend h;\nfunction k\n  input Real v[:];\n  output Real s;\nalgorithm\n"
+                           "  s := size(v, 1);\nend k;\nfunction g\n  input Integer n;\n  input Real x;\n  output Real cr[n];\n"
+                           "protected\n  Real den1[n];\n  Real den2[0, 2];\n  Real c0[0];\n  Real c1[0];\nalgorithm\n"
+                           "  for i in 1:n loop\n    den1[i] := i * x;\n  end for;\n  (cr, c0, c1) := h(den1, den2);\nend g;\n"
+                           "function g2\n  input Real x;\n  output Real y;\nprotected\n  Real e[0];\nalgorithm\n"
+                           "  y := x + k(e) + k({x, 2 * x});\nend g2;\nmodel TE3\n  Real y[2] = g(2, time);\n"
+                           "  Real z = g2(time);\nend TE3;\n"),
+               std::string("function g\n  input Integer n;\n  input Real x;\n  output Real[n] cr;\n  protected Real[n] den1;\n"
+                           "  protected Real[0, 2] den2;\n  protected Real[0] c0;\n  protected Real[0] c1;\nalgorithm\n"
+                           "  for i in 1:n loop\n    den1[i] := /*Real*/(i) * x;\n  end for;\n  (cr, _, _) := h(den1, {});\n"
+                           "end g;\n\nfunction g2\n  input Real x;\n  output Real y;\n  protected Real[0] e;\nalgorithm\n"
+                           "  y := x + k({}) + k({x, 2.0 * x});\nend g2;\n\nfunction h\n  input Real[:] a;\n"
+                           "  input Real[:, 2] b;\n  output Real[size(a, 1)] r;\n  output Real[size(b, 1)] s;\n"
+                           "  output Real[size(b, 1)] t;\nalgorithm\n  r := a;\n  s := b[:,1];\n  t := b[:,2];\nend h;\n\n"
+                           "function k\n  input Real[:] v;\n  output Real s;\nalgorithm\n  s := /*Real*/(size(v, 1));\nend k;\n"
+                           "\nclass TE3\n  Real y[1];\n  Real y[2];\n  Real z = g2(time);\nequation\n  y = g(2, time);\n"
+                           "end TE3;\n"));
+  YMC_CHECK_EQ(flatten_src("model EA1\n  parameter Integer n = 0;\n  parameter Real s[n] = fill(1, n);\n"
+                           "  Real x[0](each start = 1);\n  Real y[n](start = s, each fixed = true);\n"
+                           "  parameter Real p[n](each min = 0) = s;\n  Real z = time;\nequation\n  der(y) = -y;\nend EA1;\n"),
+               std::string("class EA1\n  final parameter Integer n = 0;\n  Real z = time;\nend EA1;\n"));
+}
+
 YMC_TEST(flatten_external_object_variable_and_structors) {
   // 外部对象：组件压平成按类名打印的叶变量，构造 `EO()` 换成 `EO.constructor(1)`（默认实参照补），构造 / 析构随类型发射
   //（外部函数未声明 pure → impure）；当实参传给外部函数。期望 = omc 1.25.0 实跑（2026-10-07，下同）。

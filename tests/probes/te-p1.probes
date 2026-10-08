@@ -1,0 +1,154 @@
+//// set: te-p1 — 元组方程 / 函数体元组赋值的目标是整个数组的引用、空数组目标打 `_`、空数组实参打 `{}`（含函数局部，Blocks Filter 的 `(cr, _, _) := toHighestPowerOne(den1, {})`）；多输出调用的每个输出都求维、维式参数标结构；带属性修饰的空数组整体不出、属性形状 / each 不符（omc 报错，SKIP）；无绑定的空数组参数照核 fixed / start（U1–U5）。单测取 TE1 / TE2 / TE3 / EA1
+//// model: U1
+model U1
+  parameter Real p[0];
+  Real y = time;
+end U1;
+//// model: U2
+model U2
+  parameter Real p[0](each start = 1);
+  Real y = time;
+end U2;
+//// model: U3
+model U3
+  parameter Real p[0](each fixed = false);
+  Real y = time;
+end U3;
+//// model: U4
+model U4
+  constant Real c[0];
+  Real y = time;
+end U4;
+//// model: U5
+model U5
+  parameter Integer n = 0;
+  parameter Real p[n];
+  Real y = time;
+end U5;
+//// model: EA1
+model EA1
+  parameter Integer n = 0;
+  parameter Real s[n] = fill(1, n);
+  Real x[0](each start = 1);
+  Real y[n](start = s, each fixed = true);
+  parameter Real p[n](each min = 0) = s;
+  Real z = time;
+equation
+  der(y) = -y;
+end EA1;
+//// model: EA2
+model EA2
+  Real y[0](start = {1, 2});
+  Real z = time;
+end EA2;
+//// model: EA3
+model EA3
+  Real y[0](start = 1);
+  Real z = time;
+end EA3;
+//// model: EA4
+function f
+  input Integer n;
+  output Real r[n];
+algorithm
+  r := fill(2, n);
+end f;
+model EA4
+  parameter Integer n = 0;
+  parameter Real p0 = 2;
+  Real y[n](start = f(n), each nominal = p0);
+  parameter Real q[n](each start = p0) = f(n);
+  Real z = time;
+end EA4;
+//// model: TE1
+function f
+  input Real x;
+  input Integer n;
+  output Real a[2];
+  output Real b[n];
+  output Real c[n];
+algorithm
+  a := {x, 2 * x};
+  b := fill(x, n);
+  c := fill(3 * x, n);
+end f;
+function g
+  input Real a[2];
+  input Real b[:];
+  input Real c[:];
+  output Real s;
+  output Real t[2];
+algorithm
+  s := sum(a) + sum(b) + sum(c);
+  t := a;
+end g;
+model TE1
+  parameter Integer n = 0;
+  Real a[2], b[n], c[n], s, t[2];
+  Real a2[2], b2[1], c2[1];
+  Real u[2], v[2];
+equation
+  (a, b, c) = f(time, n);
+  (s, t) = g(a, b, c);
+  (a2, b2, c2) = f(time, 1);
+  (u, , v) = f(time, 2);
+end TE1;
+//// model: TE2
+function f
+  input Integer n;
+  input Real x;
+  output Real a;
+  output Real b[n];
+algorithm
+  a := n * x;
+  b := fill(x, n);
+end f;
+model TE2
+  parameter Integer k = 2;
+  Real y = f(k, time);
+end TE2;
+//// model: TE3
+function h
+  input Real a[:];
+  input Real b[:, 2];
+  output Real r[size(a, 1)];
+  output Real s[size(b, 1)];
+  output Real t[size(b, 1)];
+algorithm
+  r := a;
+  s := b[:, 1];
+  t := b[:, 2];
+end h;
+function k
+  input Real v[:];
+  output Real s;
+algorithm
+  s := size(v, 1);
+end k;
+function g
+  input Integer n;
+  input Real x;
+  output Real cr[n];
+protected
+  Real den1[n];
+  Real den2[0, 2];
+  Real c0[0];
+  Real c1[0];
+algorithm
+  for i in 1:n loop
+    den1[i] := i * x;
+  end for;
+  (cr, c0, c1) := h(den1, den2);
+end g;
+function g2
+  input Real x;
+  output Real y;
+protected
+  Real e[0];
+algorithm
+  y := x + k(e) + k({x, 2 * x});
+end g2;
+model TE3
+  Real y[2] = g(2, time);
+  Real z = g2(time);
+end TE3;
