@@ -201,7 +201,7 @@ class Flattener {
          p = I_.nodes[p].parent_scope)
       result_.model.name.insert(result_.model.name.begin(), I_.nodes[p].name);
     const SElement& el = I_.scode.elems[I_.nodes[root].def];
-    result_.model.comment = class_comment(el.cmt.str);
+    result_.model.comment = el.cmt.str;   // 类注释的转义怪相见 absyn_to_scode 的 klass
     if (el.def.kind != SClassDefKind::Parts) set_unsupported("short/derived/enum root class");
     // 根类不可是 function / package（NFInst.checkInstanceRestriction :4186-4205，INST_INVALID_RESTRICTION）。
     if (el.restriction == SRestriction::Package || el.restriction == SRestriction::Function ||
@@ -7854,16 +7854,6 @@ class Flattener {
   // 函数引用（resolve_fn）与签名（collect_fn_sig）——前置定义，供下面的发射段在声明里用。
   // 函数里记录类型的形参 / 局部 → 其记录类（+ 作用域链、构造函数的压平名：字段类型取它的输入，见 fn_field_cref）
   struct FnRecord { Id<SElement> rec; ScodeScope rscope; std::vector<Symbol> ctor; };
-  // 类（模型 / 函数）的字符串注释。omc 打印时把源码原文（带着转义序列）再转义一遍：`"say \"hi\""` 打成
-  // `"say \\\"hi\\\""`、`"a\nb"` 打成 `"a\\nb"`（FC 探针 f1 / f2；变量、方程、语句的注释只转义一遍）。SCode 里存的是解过
-  // 转义的文本，原文还原不出来 → 含引号 / 反斜杠（只可能来自转义）的不复刻，SKIP。换行 / 制表符当作源码里直接写的
-  //（多行注释很常见：ListMultilineComment、ASSC，omc 照打）；真写成 `\n` 转义的类注释会打错（账本）。
-  Symbol class_comment(Symbol c) {
-    if (c.is_valid())
-      for (char ch : in_.str(c))
-        if (ch == '"' || ch == '\\') { set_unsupported("class comment with escapes"); break; }
-    return c;
-  }
   struct FnRef {
     Id<SElement> fe;
     Id<SElement> named;   // 调用里写的那个类（别名链的头；不是别名时 = fe）
@@ -9917,7 +9907,7 @@ class Flattener {
     ff.name = qname;
     ff.is_impure = impure;
     // 注释取调用里写的那个类自己的（别名 `function f = g "c"` 用别名的，没写就没有；不继承 g 的。FC 探针 f2）。
-    ff.comment = class_comment(I_.scode.elems[fr.named].cmt.str);
+    ff.comment = I_.scode.elems[fr.named].cmt.str;
     auto param = [&](Id<SElement> eid, FlatDirection dir) {
       const SElement& c = I_.scode.elems[eid];
       FlatFuncParam p;
@@ -10026,6 +10016,24 @@ class Flattener {
       s.args = iters;
       s.ty = rty;
       return add(std::move(s));
+    }
+    // 运算式实参（MultiBody Parts 的 `lengthDirection = to_unit1(r - r_shape)`）：omc 化简实参时不含数组调用的运算先按元素
+    // 展开成数组字面量（NF_EXPAND_OPERATIONS，NFSimplifyExp.mo:941-943 v1.25.0），再取 `[$i1]`——等式里
+    // `array(to_unit1({r[1] * time - r_shape[1], …}[$i1]) for $i1 in 1:3)`、`{-r[1], -r[2], -r[3]}[$i1]`，参数数组绑定逐元素
+    // 摊开后 `to_unit1(r[1] - r_shape[1])`（VU 探针 1 / 2 / 4 / 6）。Integer 元素 omc 整个取元素式转型
+    //（`to_unit1(/*Real*/({k[1] * 2, …}[$i1]))`，VU3；coerce_to_param 会把转型推进字面量里）、含数组调用的（`(g(time) - r)[$i1]`，
+    // VU5）未做 → SKIP。
+    if ((x.kind == ExprKind::Binary || x.kind == ExprKind::Unary) && elem.kind == TypeKind::Real && !has_array_call(a)) {
+      const Id<Expr> ex = expand_operand(a);
+      if (result_.unsupported || result_.model.exprs[ex].kind != ExprKind::Array) return {};
+      Expr s;
+      s.kind = ExprKind::Subscript;
+      s.a = ex;
+      s.args = iters;
+      s.ty = rty;
+      // 取元素式照常化简：各元素都相等的字面量取成那个元素（simplifySubscriptedExp；ES 探针 E884 `semiLinear(x - x, 1, 2)` →
+      // `array(semiLinear(0.0, 1.0, 2.0) for $i1 in 1:2)`）。
+      return simplify_expr(add(std::move(s)));
     }
     return {};
   }

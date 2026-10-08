@@ -3929,15 +3929,11 @@ YMC_TEST(flatten_comments_in_functions_and_escapes) {
                            "function FCT1.h\n  input Real x \"say \\\"hi\\\"\";\n  output Real y \"esc \\\\n kept\";\n"
                            "algorithm\n  y := 2.0 * x \"two\n  lines\";\nend FCT1.h;\n\nclass FCT1\n  Real a = time \"var\n"
                            " comment\";\n  Real b = FCT1.f(a) + FCT1.h(a);\nequation\n  a = a \"eq\n  comment\";\nend FCT1;\n"));
-  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
-           // 类注释里的转义 omc 再转义一遍（`"say \\\"hi\\\""`），不复刻。
-           // （标识符里的非 ASCII 字符现由词法器拒绝，见 parser_test 的 lexer_quoted_identifier_charset。）
-           {"model WCS4 \"say \\\"hi\\\"\"\n  Real y = time;\nend WCS4;\n", "class comment with escapes"}}) {
-    bool uns = false;
-    const std::string out = flatten_src(src.c_str(), &uns);
-    YMC_CHECK(uns);
-    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
-  }
+  // 没有类级 annotation 的类注释 omc 存源码原文（translateCommentList 不解转义，AbsynToSCode.mo:1474-1500 v1.25.0），打印时
+  // 再转义一遍：`"say \\\"hi\\\""`（此前不复刻、SKIP）。期望 = omc 1.25.0 实跑 WCS4（2026-10-08）。
+  // （标识符里的非 ASCII 字符现由词法器拒绝，见 parser_test 的 lexer_quoted_identifier_charset。）
+  YMC_CHECK_EQ(flatten_src("model WCS4 \"say \\\"hi\\\"\"\n  Real y = time;\nend WCS4;\n"),
+               std::string("class WCS4 \"say \\\\\\\"hi\\\\\\\"\"\n  Real y = time;\nend WCS4;\n"));
 }
 
 YMC_TEST(flatten_size_of_array_expressions) {
@@ -5975,6 +5971,43 @@ YMC_TEST(flatten_derivative_annotation_modifiers) {
                            "end f_der2;\nfunction f\n  input Real x;\n  input Real k;\n  output Real y;\nalgorithm\n"
                            "  y := k * x;\n  annotation(derivative(noDerivative = q) = f_der);\nend f;\nmodel DA4\n"
                            "  Real y = f(time, 2);\nend DA4;\n"),
+               std::string("<unsupported:function: f>"));
+}
+
+YMC_TEST(flatten_class_comment_escapes_follow_class_annotation) {
+  // 类注释：没有类级 annotation 时 omc 存源码原文、打印再转义一遍（`"a\nb"` → `"a\\nb"`）；有 annotation 才解转义（`\n` 成
+  // 真换行照打、`\"` 照原样打）——translateCommentList，AbsynToSCode.mo:1474-1500 v1.25.0。期望 = omc 1.25.0 实跑 CC 探针
+  // Wk / Wj（2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("model Wk \"a\\nb\"\n  Real y = time;\nend Wk;\n"),
+               std::string("class Wk \"a\\\\nb\"\n  Real y = time;\nend Wk;\n"));
+  YMC_CHECK_EQ(flatten_src("model Wj \"a\\nb \\\"j\\\"\"\n  Real y = time;\n  annotation(Icon);\nend Wj;\n"),
+               std::string("class Wj \"a\nb \\\"j\\\"\"\n  Real y = time;\nend Wj;\n"));
+}
+
+YMC_TEST(flatten_vectorized_call_with_operation_argument) {
+  // 向量化调用的实参是不含数组调用的运算式（MultiBody Parts 的 `to_unit1(r - r_shape)`）：omc 化简时先按元素展开成字面量再取
+  // `[$i1]`（等式里 `array(to_unit1({…}[$i1]) for $i1 in 1:3)`），参数数组绑定逐元素摊开后 `to_unit1(r[1] - r_shape[1])`。
+  // 含数组调用的（omc 打 `(g(time) - r)[$i1]`）未做 → SKIP。期望值为 omc 1.25.0 对原文实跑的 stdout（VU 探针 1 / 5，2026-10-08）。
+  YMC_CHECK_EQ(flatten_src("function to_unit1 \"Change the unit of a Real number to unit=\\\"1\\\"\"\n  input Real r;\n"
+                           "  output Real result(unit = \"1\");\nalgorithm\n  result := r;\n  annotation(Inline = true);\n"
+                           "end to_unit1;\nmodel VU1\n  parameter Real r[3] = {1, 0, 0};\n"
+                           "  parameter Real r_shape[3] = {0, 0, 0};\n"
+                           "  parameter Real lengthDirection[3](each final unit = \"1\") = to_unit1(r - r_shape);\n"
+                           "  Real x[3] = to_unit1(r * time - r_shape);\n  Real y[3] = to_unit1(-r);\nend VU1;\n"),
+               std::string("function to_unit1 \"Change the unit of a Real number to unit=\\\"1\\\"\"\n  input Real r;\n"
+                           "  output Real result(unit = \"1\");\nalgorithm\n  result := r;\nend to_unit1;\n\nclass VU1\n"
+                           "  parameter Real r[1] = 1.0;\n  parameter Real r[2] = 0.0;\n  parameter Real r[3] = 0.0;\n"
+                           "  parameter Real r_shape[1] = 0.0;\n  parameter Real r_shape[2] = 0.0;\n"
+                           "  parameter Real r_shape[3] = 0.0;\n"
+                           "  parameter Real lengthDirection[1](unit = \"1\") = to_unit1(r[1] - r_shape[1]);\n"
+                           "  parameter Real lengthDirection[2](unit = \"1\") = to_unit1(r[2] - r_shape[2]);\n"
+                           "  parameter Real lengthDirection[3](unit = \"1\") = to_unit1(r[3] - r_shape[3]);\n  Real x[1];\n"
+                           "  Real x[2];\n  Real x[3];\n  Real y[1];\n  Real y[2];\n  Real y[3];\nequation\n"
+                           "  x = array(to_unit1({r[1] * time - r_shape[1], r[2] * time - r_shape[2], r[3] * time - r_shape[3]}[$i1]) for $i1 in 1:3);\n"
+                           "  y = array(to_unit1({-r[1], -r[2], -r[3]}[$i1]) for $i1 in 1:3);\nend VU1;\n"));
+  YMC_CHECK_EQ(flatten_src("function g\n  input Real t;\n  output Real v[3];\nalgorithm\n  v := {t, 2 * t, 3 * t};\nend g;\n"
+                           "function f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2 * x;\nend f;\nmodel VU5\n"
+                           "  parameter Real r[3] = {1, 0, 0};\n  Real y[3] = f(g(time) - r);\nend VU5;\n"),
                std::string("<unsupported:function: f>"));
 }
 

@@ -629,8 +629,16 @@ Id<SElement> Translator::klass(Id<ClassDef> cid, const SPrefixes& prefixes) {
   Id<SMod> class_ann = annotation(c.annotation);
   se.def = class_def(c, class_ann);
   se.cmt.annotation = class_ann;
-  if (c.string_comment.is_valid())  // 注释串解转义（translateCommentList → System.unescapedString，:1496-1503）
-    se.cmt.str = a_.interner.intern(unescape_modelica_string(name(c.string_comment)));
+  // 类的字符串注释：长类（PARTS / CLASS_EXTENDS）走 translateCommentList（AbsynToSCode.mo:1474-1500 v1.25.0）——没有类级
+  // annotation 时（`case ({},_)`）原文不解转义，打印时再转义一遍成双重转义（`"say \"hi\""` → `"say \\\"hi\\\""`、`"a\nb"` →
+  // `"a\\nb"`，CC 探针 We / Wk）；有 annotation（空的 `annotation()`、夹在方程段里的也算，Wf / Wl）才 System.unescapedString
+  //（Wg / Wj：`\n` 解成真换行、照原样打）。短类 / 枚举 / der 走 translateComment（:1454-1472），恒解转义。
+  if (c.string_comment.is_valid()) {
+    const bool long_form = !c.is_short && !c.is_enumeration && !c.is_der;
+    se.cmt.str = long_form && !c.annotation.is_valid()
+                     ? c.string_comment
+                     : a_.interner.intern(unescape_modelica_string(name(c.string_comment)));
+  }
   return s_.add_elem(std::move(se));
 }
 

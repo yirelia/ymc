@@ -1,0 +1,93 @@
+//// set: vx-p1 — 向量化调用的实参是不含数组调用的运算式（`to_unit1(r - r_shape)`）：先按元素展开成字面量再取 `[$i1]`，参数数组绑定逐元素摊开；2 维、多实参、短类型 Axis 的参数 / input；Integer 元素（omc 整个取元素式转型）/ 含数组调用（SKIP）。单测取 1 / 5
+//// model: VU1
+function to_unit1 "Change the unit of a Real number to unit=\"1\""
+  input Real r;
+  output Real result(unit = "1");
+algorithm
+  result := r;
+  annotation(Inline = true);
+end to_unit1;
+model VU1
+  parameter Real r[3] = {1, 0, 0};
+  parameter Real r_shape[3] = {0, 0, 0};
+  parameter Real lengthDirection[3](each final unit = "1") = to_unit1(r - r_shape);
+  Real x[3] = to_unit1(r * time - r_shape);
+  Real y[3] = to_unit1(-r);
+end VU1;
+//// model: VU2
+function to_unit1 "Change the unit of a Real number to unit=\"1\""
+  input Real r;
+  output Real result(unit = "1");
+algorithm
+  result := r;
+  annotation(Inline = true);
+end to_unit1;
+model VU2
+  parameter Real M[2, 2] = [1, 2; 3, 4];
+  Real y[2, 2] = to_unit1(M * time - M);
+  parameter Real p[2, 2] = to_unit1(-M);
+end VU2;
+//// model: VU3
+function to_unit1 "Change the unit of a Real number to unit=\"1\""
+  input Real r;
+  output Real result(unit = "1");
+algorithm
+  result := r;
+  annotation(Inline = true);
+end to_unit1;
+model VU3
+  parameter Integer k[3] = {1, 2, 3};
+  Real y[3] = to_unit1(k * 2);
+end VU3;
+//// model: VU4
+function f
+  input Real x;
+  input Real s;
+  output Real y;
+algorithm
+  y := s * x;
+end f;
+model VU4
+  parameter Real r[3] = {1, 0, 0};
+  parameter Real r_shape[3] = {0, 0, 1};
+  Real y[3] = f(r - r_shape, time);
+  Real z[3] = f(r * time, 2);
+  parameter Real q[3] = f(2 * r, 3);
+end VU4;
+//// model: VU5
+function g
+  input Real t;
+  output Real v[3];
+algorithm
+  v := {t, 2 * t, 3 * t};
+end g;
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end f;
+model VU5
+  parameter Real r[3] = {1, 0, 0};
+  Real y[3] = f(g(time) - r);
+end VU5;
+//// model: VU6
+package VU6P
+  type Axis = Real[3](each final unit = "1");
+  function to_unit1 "Change the unit of a Real number to unit=\"1\""
+    input Real r;
+    output Real result(unit = "1");
+  algorithm
+    result := r;
+    annotation(Inline = true);
+  end to_unit1;
+  model Shape
+    parameter Real r[3] = {0.1, 0, 0};
+    parameter Real r_shape[3] = {0, 0, 0};
+    parameter Axis lengthDirection = to_unit1(r - r_shape);
+    input Axis widthDirection = to_unit1(r_shape - r);
+  end Shape;
+end VU6P;
+model VU6
+  VU6P.Shape s(r = {0.2, 0.1, 0});
+end VU6;

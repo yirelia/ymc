@@ -299,3 +299,11 @@ derivative 注解带修饰（`derivative(noDerivative = …)` / `zeroDerivative`
 HeatTransfer.Examples.GenerationOfFMUs、FluidHeatFlow.Examples.TestOpenTank、MultiBody.Examples.Elementary.
 PointGravityWithPointMasses）。outerProduct 在函数体 / 等式里留符号形态（`promote(e, 2) * transpose(promote(e, 2))`）之后，
 MultiBody 的 15 个示例越过 Frames.planarRotation 与 resolve2，往下卡在类注释的转义（下一桶）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-08 加宽 62q 之后：PASS 266 → 272
+
+类注释的转义照 translateCommentList 的怪相走（没有类级 annotation 的长类双重转义、有 annotation 的照原样）之后，
+Blocks.Examples.BooleanNetwork1、Batteries.Examples.SuperCapDischargeCharge 转 PASS；向量化调用的实参是运算式
+（`to_unit1(r - r_shape)` 等）之后，Machines 的 IMC_Inverter / IMC_Conveyor / SMR_Inverter / SMPM_Inverter 转 PASS。
+MultiBody 越过类注释与 `to_unit1(r - r_shape)` 的那批，往下集中卡在记录参数的绑定（"variability on composite component"，
+29 个，`final parameter Frames.Orientation R_start = Frames.axesRotations(…)`）。FAIL / ACCEPTS-INVALID / CRASH 0。

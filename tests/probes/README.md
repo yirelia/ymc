@@ -433,3 +433,5 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `pa-p1` | 14 | 参数数组整个绑定是实参求不成字面量的用户函数调用：不标量化、一行 `parameter Real[3] e(…) = f(n)`（组件数组里的、Integer / Boolean 输出、2 维）；带 min / max / nominal 的照逐元素 `f(n)[k]`；数组属性值整个打（引用 / if 原样、算术式展开成字面量）；要强转元素类型的属性值（SKIP）。单测取 1 / 4 / 7c |
 | `op-p1` | 15 | outerProduct 留符号形态 `promote(a, 2) * transpose(promote(b, 2))`：函数体、等式 / Var 绑定、全字面量实参的 promote / transpose 求值、Integer 引用整体转型、外面的运算（标量换位、矩阵积、取负、除）、全零运算数（标量积折零、矩阵积不折）、常量调用求值；参数数组绑定 / 结构参数代入后成字面量 / Integer 运算实参（SKIP）。单测取 1 / 4d / 7f / 4b |
 | `da-p1` | 10 | derivative 注解的修饰 order / noDerivative / zeroDerivative（不打印、引用的函数照样发射，含 MultiBody resolve2 式的记录输入与 cross 里的函数调用）；名字不是输入 / 未知属性 / order 写成式子或 Real（SKIP）。单测取 3 / 4 / FAS2 |
+| `qe-p1` | 11 | 类注释里的转义随类级 annotation 走：没有 annotation 的长类存源码原文、打印再转义一遍（`\"` → `\\\"`、`\n` → `\\n`），有 annotation（空的、方程段里的）才解转义（`\n` 成真换行）；元素上的 annotation 不算。单测取 WCS4 / Wk / Wj |
+| `vx-p1` | 6 | 向量化调用的实参是不含数组调用的运算式（`to_unit1(r - r_shape)`）：先按元素展开成字面量再取 `[$i1]`，参数数组绑定逐元素摊开；2 维、多实参、短类型 Axis 的参数 / input；Integer 元素（omc 整个取元素式转型）/ 含数组调用（SKIP）。单测取 1 / 5 |

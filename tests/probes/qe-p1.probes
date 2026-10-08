@@ -1,0 +1,88 @@
+//// set: qe-p1 — 类注释里的转义随类级 annotation 走：没有 annotation 的长类存源码原文、打印再转义一遍（`\"` → `\\\"`、`\n` → `\\n`），有 annotation（空的、方程段里的）才解转义（`\n` 成真换行）；元素上的 annotation 不算。单测取 WCS4 / Wk / Wj
+//// model: Ta
+package Va
+  function g "unit=\"1\""
+
+    input Real r;
+    output Real result;
+  algorithm
+    result := r;
+    annotation(Inline=true);
+  end g;
+end Va;
+model Ta
+  Real y = Va.g(time);
+end Ta;
+//// model: Tc
+package Vc
+  function g "unit=\"1\""
+
+    input Real r;
+    output Real result;
+  algorithm
+    result := r;
+
+  end g;
+end Vc;
+model Tc
+  Real y = Vc.g(time);
+end Tc;
+//// model: Td
+package Vd
+  function g "unit=\"1\""
+
+    input Real r;
+    output Real result;
+  algorithm
+    result := r;
+    annotation(Documentation(info="x"));
+  end g;
+end Vd;
+model Td
+  Real y = Vd.g(time);
+end Td;
+//// model: We
+model We "root \"e\""
+  Real y = time annotation(Dialog);
+end We;
+//// model: Wf
+model Wf "root \"f\""
+  Real y = time;
+  annotation();
+end Wf;
+//// model: Wg
+model Wg "root \"g\""
+  Real y = time;
+  annotation(experiment(StopTime = 1));
+end Wg;
+//// model: Wj
+model Wj "a\nb \"j\""
+  Real y = time;
+  annotation(Icon);
+end Wj;
+//// model: Wk
+model Wk "a\nb"
+  Real y = time;
+end Wk;
+//// model: Wl
+model Wl "root \"l\""
+  Real y = time;
+equation
+  annotation(Icon);
+end Wl;
+//// model: CC4
+package P3
+  function f "fn \"q\" end"
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+end P3;
+model CC4 "root \"q\""
+  Real y = P3.f(time);
+end CC4;
+//// model: WCS4
+model WCS4 "say \"hi\""
+  Real y = time;
+end WCS4;

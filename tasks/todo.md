@@ -1947,6 +1947,17 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           函数照样发射（Frames.resolve2 的 `derivative(noDerivative = R) = Internal.resolve2_der`）；名字不是输入（omc 报错）、
           其余属性（omc 告警）、order 写成式子 / Real 的 SKIP。
           验证：slice 637 例 PASS 586 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 587 / FAIL 38（不变）；整个 testsuite PASS 1641→1646 / FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 259→266；探针 8597→8622（op-p1 / da-p1 25 个）；四套构建零警告、单测 290→292；ASan 与 gcc 逐例一致。
+    - [x] (62q) scode / flat：类注释的转义随类级 annotation 走 + 向量化调用的运算式实参（2026-10-08）：此前含引号 / 反斜杠的
+          类注释一律 SKIP（omc 有时打双重转义、有时照原样，账本里猜是装载路径不同；MSL 10 个示例卡在这里）。查实是
+          AbsynToSCode.translateCommentList（AbsynToSCode.mo:1474-1500 v1.25.0）的怪相：长类（PARTS / CLASS_EXTENDS）没有任何类级
+          annotation 时（`case ({},_)`）注释原文不解转义，打印时再转义一遍成双重转义；有 annotation（空的 `annotation()`、夹在
+          方程段里的都算，元素上的不算）才 System.unescapedString（`\n` 成真换行照打）；短类 / 枚举 / der 走
+          translateComment，恒解转义。ymc 的 SCode 翻译照此存串，flatten 去掉那条 SKIP；账本那条划掉。另：向量化调用的实参是
+          不含数组调用的运算式（MultiBody Parts 的 `lengthDirection = to_unit1(r - r_shape)`，越过类注释后 18 个示例卡在这里）：
+          omc 化简实参时先按元素展开成数组字面量（NF_EXPAND_OPERATIONS），再取 `[$i1]`——等式里
+          `array(to_unit1({…}[$i1]) for $i1 in 1:3)`，参数数组绑定逐元素摊开后 `to_unit1(r[1] - r_shape[1])`。Integer 元素（omc
+          整个取元素式转型）、含数组调用的 SKIP。
+          验证：slice 637 例 PASS 586 / FAIL 0、oracle=live 不一致 0；scodeinst PASS 587 / FAIL 38（不变）；整个 testsuite PASS 1646→1647 / FAIL 0 / ACCEPTS-INVALID 3（在账）/ CRASH 0；MSL 514 个 PASS 266→272；探针 8622→8639（qe-p1 / vx-p1 17 个）；四套构建零警告、单测 292→294；ASan 与 gcc 逐例一致。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
