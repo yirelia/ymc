@@ -2119,6 +2119,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           的发射照 rec 的作用域翻译缺省，仍只收本地的；非常量的派生记录构造给基类型记录组件按字段拆开（omc `m.B = time`）未做
           （SKIP）。
           slice 653 例 PASS 602 / FAIL 0（oracle=live 不一致 0）；scodeinst 603 / 43（不变）；testsuite 1696→1697 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 397→402；探针 9157→9164；单测 325→326。
+    - [x] (63i) flat：常量记录的整体引用与记录构造函数的外来基类（2026-10-10）：整个常量记录作实参（`constant K C;` 无绑定取字段
+          缺省）→ 记录式 `K(1.0359431399069999e-10, …)`（MSL Spice3 `mos1RenameParameters(modelcard, C)`），值取已发射的字段
+          常量；记录构造函数的字段按各自作用域解析（类型 / 维在声明字段的记录、缺省在写它的记录里），基类在别的包里也行（Spice3
+          MosModelLineParams）。两处静默错改正：Evaluate = true 的 final 记录参数由函数求值时、绑定里读到的参数连带成结构参数
+          （`final parameter Real x0`）；ymc 求不出的 final 记录函数绑定只在读到不固定的参数时才照 tryEvalExp 失败挪成初始方程，
+          读到的全固定（记录参数作实参，omc 求值成字面量字段）→ SKIP。SKIP 子原因补名字（修饰命中的非组件名、限定名调用、记录构造）。
+          模型里局部记录类作函数形参类型、整个记录参数的求值未做（SKIP）。
+          slice 653 例 PASS 602 / FAIL 0（oracle=live 不一致 0）；scodeinst 603 / 43（不变）；testsuite 1697 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0（不变）；MSL 402（不变）；探针 9164→9180；单测 326→327。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

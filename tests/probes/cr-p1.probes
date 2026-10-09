@@ -1,0 +1,294 @@
+//// set: cr-p1 — 整个常量记录的引用作实参（`constant K C;` 无绑定取字段缺省 / 带绑定）→ 记录式 `K(1.0359431399069999e-10, …)`（CRL3 / CRL4，MSL Spice3 的 `mos1RenameParameters(modelcard, C)`）、字段引用（CRL1）；记录构造函数的字段按各自作用域解析——基类在别的包里、SI 类型带 start 属性（CRL15，Spice3 MosModelLineParams）；Evaluate = true 的记录参数：绑定里读到的参数连带成结构参数（CRL6 `final parameter Real x0`，此前静默错）、只带字段修饰的（CRL8）；final 记录的函数绑定（CRL7 / CRL10 / CRL11 求值、CRL9 标量照留）；ymc 求不出、读到的参数又全固定的 final 记录绑定 SKIP（CRL12–CRL14，omc 求值成字面量字段；此前挪成初始方程，静默错）；模型里局部记录类作函数形参类型（CRL2 / CRL5）未做 SKIP
+//// model: CRL1
+model CRL1
+  record K
+    constant Real EPS = 11.7 * 8.854214871e-12;
+    constant Real CHARGE = 1.6021918e-19;
+    constant Real VT = 1.380622e-23 * 300.15 / CHARGE;
+  end K;
+  constant K C;
+  Real z = C.CHARGE * time + C.VT;
+end CRL1;
+//// model: CRL2
+model CRL2
+  record K
+    constant Real EPS = 11.7 * 8.854214871e-12;
+    constant Real CHARGE = 1.6021918e-19;
+  end K;
+  function f
+    input Real x;
+    input K k;
+    output Real y;
+  algorithm
+    y := x * k.CHARGE + k.EPS;
+  end f;
+  constant K C;
+  Real z = f(time, C);
+end CRL2;
+//// model: CRL3
+package CRL3P
+  record K
+    constant Real EPS = 11.7 * 8.854214871e-12;
+    constant Real CHARGE = 1.6021918e-19;
+  end K;
+  function f
+    input Real x;
+    input K k;
+    output Real y;
+  algorithm
+    y := x * k.CHARGE + k.EPS;
+  end f;
+end CRL3P;
+model CRL3
+  constant CRL3P.K C;
+  Real z = CRL3P.f(time, C);
+end CRL3;
+//// model: CRL4
+package CRL4P
+  record K
+    Real EPS = 11.7 * 8.854214871e-12;
+    Real CHARGE = 1.6021918e-19;
+  end K;
+  function f
+    input Real x;
+    input K k;
+    output Real y;
+  algorithm
+    y := x * k.CHARGE + k.EPS;
+  end f;
+end CRL4P;
+model CRL4
+  constant CRL4P.K C;
+  Real z = CRL4P.f(time, C);
+end CRL4;
+//// model: CRL5
+model CRL5
+  record K
+    Real EPS = 11.7 * 8.854214871e-12;
+    Real CHARGE = 1.6021918e-19;
+  end K;
+  function f
+    input Real x;
+    input K k;
+    output Real y;
+  algorithm
+    y := x * k.CHARGE + k.EPS;
+  end f;
+  constant K C = K(EPS = 2.5);
+  constant K D;
+  Real z = f(time, C);
+  Real w = f(time, D);
+end CRL5;
+//// model: CRL6
+package CRL6P
+  record LP
+    Real a;
+    Real b;
+  end LP;
+  function ren
+    input Real x;
+    output LP r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end ren;
+end CRL6P;
+model CRL6
+  parameter Real x0 = 0.7;
+  final parameter CRL6P.LP p = CRL6P.ren(x0) annotation(Evaluate = true);
+  Real y = p.a * time;
+end CRL6;
+//// model: CRL7
+package CRL7P
+  record LP
+    Real a;
+    Real b;
+  end LP;
+  function ren
+    input Real x;
+    output LP r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end ren;
+end CRL7P;
+model CRL7
+  parameter Real x0 = 0.7;
+  final parameter CRL7P.LP p = CRL7P.ren(x0);
+  Real y = p.a * time;
+end CRL7;
+//// model: CRL8
+package CRL8P
+  record MC
+    parameter Real VTO = -1e40;
+    parameter Real TNOM = -1e40;
+  end MC;
+end CRL8P;
+model CRL8
+  parameter CRL8P.MC modelcard(VTO = 0.7) annotation(Evaluate = true);
+  Real y = modelcard.VTO * time;
+end CRL8;
+//// model: CRL9
+package CRL9P
+  record MC
+    parameter Real VTO = -1e40;
+    parameter Real TNOM = -1e40;
+  end MC;
+  function f
+    input MC ex;
+    output Real y;
+  algorithm
+    y := if ex.VTO > -1e40 then ex.VTO else 0;
+  end f;
+end CRL9P;
+model CRL9
+  parameter CRL9P.MC mc(VTO = 0.7);
+  parameter CRL9P.MC mc2 = CRL9P.MC(VTO = 0.5);
+  final parameter Real q = CRL9P.f(mc);
+  final parameter Real q2 = CRL9P.f(mc2);
+  Real y = q * time + q2;
+end CRL9;
+//// model: CRL10
+package CRL10P
+  record LP
+    Real a;
+    Real b;
+  end LP;
+  function ren
+    input Real x;
+    output LP r;
+  algorithm
+    r.a := if x > 0 then 1 else 0;
+    r.b := x;
+  end ren;
+end CRL10P;
+model CRL10
+  parameter Real x0 = 0.7;
+  final parameter CRL10P.LP p = CRL10P.ren(x0);
+end CRL10;
+//// model: CRL11
+package CRL11P
+  record LP
+    Real a;
+    Real b;
+  end LP;
+  function ren
+    input Real x;
+    output LP r;
+  algorithm
+    r.a := if x > 0 then 1.0 else 0.0;
+    r.b := x;
+  end ren;
+end CRL11P;
+model CRL11
+  parameter Real x0 = 0.7;
+  final parameter CRL11P.LP p = CRL11P.ren(x0);
+end CRL11;
+//// model: CRL12
+package CRL12P
+  record MC
+    parameter Real VTO = -1e40;
+  end MC;
+  record LP
+    Real a;
+    Real b;
+  end LP;
+  function ren
+    input MC ex;
+    output LP r;
+  algorithm
+    r.a := ex.VTO;
+    r.b := 2;
+  end ren;
+end CRL12P;
+model CRL12
+  parameter CRL12P.MC mc(VTO = 0.7);
+  final parameter CRL12P.LP p = CRL12P.ren(mc);
+end CRL12;
+//// model: CRL13
+package CRL13P
+  record K
+    constant Real CtoK = 273.15;
+  end K;
+  record MC
+    parameter Real VTO = -1e40;
+    parameter Real TNOM = -1e40;
+  end MC;
+  record LP
+    Real m_vt0;
+    Real m_vtOIsGiven;
+    Real m_tnom;
+  end LP;
+  function ren
+    input MC ex;
+
+    output LP intern;
+  algorithm
+    intern.m_vtOIsGiven := if (ex.VTO > -1e40) then 1 else 0;
+    intern.m_vt0 := if (ex.VTO > -1e40) then ex.VTO else 0;
+    intern.m_tnom := if (ex.TNOM > -1e40) then ex.TNOM + 273.15 else 300.15;
+  end ren;
+end CRL13P;
+model CRL13
+  parameter CRL13P.MC modelcard = CRL13P.MC(VTO = 0.7);
+  constant CRL13P.K C;
+  final parameter CRL13P.LP p = CRL13P.ren(modelcard);
+  Real y = p.m_vt0 * time;
+end CRL13;
+//// model: CRL14
+package CRL14P
+  record K
+    constant Real CtoK = 273.15;
+  end K;
+  record MC
+    parameter Real VTO = -1e40;
+    parameter Real TNOM = -1e40;
+  end MC;
+  record LP
+    Real m_vt0;
+    Real m_vtOIsGiven;
+    Real m_tnom;
+  end LP;
+  function ren
+    input MC ex;
+    input K con;
+    output LP intern;
+  algorithm
+    intern.m_vtOIsGiven := if (ex.VTO > -1e40) then 1 else 0;
+    intern.m_vt0 := if (ex.VTO > -1e40) then ex.VTO else 0;
+    intern.m_tnom := if (ex.TNOM > -1e40) then ex.TNOM + K.CtoK else 300.15;
+  end ren;
+end CRL14P;
+model CRL14
+  parameter CRL14P.MC modelcard(VTO = 0.7) annotation(Evaluate = true);
+  constant CRL14P.K C;
+  final parameter CRL14P.LP p = CRL14P.ren(modelcard, C) annotation(Evaluate = true);
+  Real y = p.m_vt0 * time;
+end CRL14;
+//// model: CRL15
+package CRL15P
+  package Base
+    record LineParams
+      Modelica.Units.SI.Voltage v0(start = 0.0) "threshold";
+      Real k(start = 1.0);
+      Real c = 2;
+    end LineParams;
+  end Base;
+  package Mos
+    record MosParams
+      extends CRL15P.Base.LineParams(c = 3);
+      Real extra(start = 0.5);
+    end MosParams;
+    function g
+      input MosParams p;
+      input Real x;
+      output Real y;
+    algorithm
+      y := p.v0 * x + p.k + p.c + p.extra;
+    end g;
+  end Mos;
+end CRL15P;
+model CRL15
+  CRL15P.Mos.MosParams mp(v0 = time, k = 2, extra = 1);
+  Real y = CRL15P.Mos.g(mp, time);
+end CRL15;

@@ -7183,4 +7183,26 @@ YMC_TEST(flatten_record_value_foreign_base) {
                            "end FRBU1;\n"));
 }
 
+YMC_TEST(flatten_constant_record_reference_literal) {
+  // 整个常量记录的引用作实参（`constant K C;` 无绑定取字段缺省）→ 记录式 `CRLU1P.K(1.0359431399069999e-10, …)`；Evaluate =
+  // true 的 final 记录参数由函数求值成字段字面量，读到的 x0 连带成结构参数（final）。期望 = omc 1.25.0 实跑（2026-10-10，
+  // 探针 cr-ut）。
+  YMC_CHECK_EQ(flatten_src("package CRLU1P\n  record K\n    constant Real EPS = 11.7 * 8.854214871e-12;\n"
+                           "    constant Real CHARGE = 1.6021918e-19;\n  end K;\n  record LP\n    Real a;\n    Real b;\n"
+                           "  end LP;\n  function f\n    input Real x;\n    input K k;\n    output Real y;\n  algorithm\n"
+                           "    y := x * k.CHARGE + k.EPS;\n  end f;\n  function ren\n    input Real x;\n    output LP r;\n"
+                           "  algorithm\n    r.a := x;\n    r.b := 2 * x;\n  end ren;\nend CRLU1P;\nmodel CRLU1\n"
+                           "  constant CRLU1P.K C;\n  Real z = CRLU1P.f(time, C);\n  parameter Real x0 = 0.7;\n"
+                           "  final parameter CRLU1P.LP p = CRLU1P.ren(x0) annotation(Evaluate = true);\n"
+                           "  Real y = p.a * time;\nend CRLU1;\n"),
+               std::string("function CRLU1P.K \"Automatically generated record constructor for CRLU1P.K\"\n"
+                           "  input Real EPS = 1.0359431399069999e-10;\n  input Real CHARGE = 1.6021918e-19;\n  output K res;\n"
+                           "end CRLU1P.K;\n\nfunction CRLU1P.f\n  input Real x;\n  input CRLU1P.K k;\n  output Real y;\n"
+                           "algorithm\n  y := x * k.CHARGE + k.EPS;\nend CRLU1P.f;\n\nclass CRLU1\n"
+                           "  constant Real C.EPS = 1.0359431399069999e-10;\n  constant Real C.CHARGE = 1.6021918e-19;\n"
+                           "  Real z = CRLU1P.f(time, CRLU1P.K(1.0359431399069999e-10, 1.6021918e-19));\n"
+                           "  final parameter Real x0 = 0.7;\n  final parameter Real p.a = 0.7;\n"
+                           "  final parameter Real p.b = 1.4;\n  Real y = p.a * time;\nend CRLU1;\n"));
+}
+
 YMC_TEST_MAIN

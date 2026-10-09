@@ -463,3 +463,10 @@ CRASH 0。Math.Random.Examples.GenerateRandomNumbers 往前走到算法里给非
 mu_i = 1210, …)`，BaseData 的字段带缺省、类型是 SI 短类）做完：FluxTubes 的 SaturatedInductor / SolenoidActuator
 ComparisonQuasiStatic / ComparisonPullInStroke、QuasiStatic.FluxTubes 的 LinearInductor / NonLinearInductor 转 PASS，均与 omc
 逐字节一致。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-10 加宽 63i 之后：PASS 402（不变）
+
+常量记录的整体引用作实参（`mos1RenameParameters(modelcard, C)`）、记录构造函数的外来基类字段（`MosModelLineParams extends
+Mosfet.MosfetModelLineParams`）做完，Spice3 的 Inverter / Nand / CascodeCircuit 往前走到 `final parameter … p = Mos1.
+mos1RenameParameters(modelcard, C) annotation(Evaluate = true)`——实参里整个记录参数（modelcard）在编译期求值未做，照旧 SKIP
+（此前同形态的 final 记录绑定会被挪成初始方程，静默错，现 SKIP）。FAIL / ACCEPTS-INVALID / CRASH 0。

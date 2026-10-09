@@ -1,0 +1,33 @@
+//// set: cr-ut — 整个常量记录的引用作实参（单测原文）：`CRLU1P.f(time, C)` → 记录式；Evaluate = true 的 final 记录参数由函数求值、读到的 x0 连带成 final
+//// model: CRLU1
+package CRLU1P
+  record K
+    constant Real EPS = 11.7 * 8.854214871e-12;
+    constant Real CHARGE = 1.6021918e-19;
+  end K;
+  record LP
+    Real a;
+    Real b;
+  end LP;
+  function f
+    input Real x;
+    input K k;
+    output Real y;
+  algorithm
+    y := x * k.CHARGE + k.EPS;
+  end f;
+  function ren
+    input Real x;
+    output LP r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end ren;
+end CRLU1P;
+model CRLU1
+  constant CRLU1P.K C;
+  Real z = CRLU1P.f(time, C);
+  parameter Real x0 = 0.7;
+  final parameter CRLU1P.LP p = CRLU1P.ren(x0) annotation(Evaluate = true);
+  Real y = p.a * time;
+end CRLU1;
