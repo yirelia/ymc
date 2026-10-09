@@ -418,3 +418,11 @@ UnsymmetricalLoad 等，均与 omc 逐字节一致。余下 10 个停在：外�
 `C1 = substring(VectorGroup, 1, 1)`，TransformerTestbench / IMC_Transformer）、TestSensors 的限定名调用、FluxTubes 的无实例材料
 记录构造、组件里的函数 `singleToMultiPhase.u` 一类（SMPM_CurrentSource / SMPM_MTPA / SMR_CurrentSource）、向量化实参形态
 （IMC_Conveyor）、when 体（IMC_withLosses）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-09 加宽 63c 之后：PASS 361→369（+8）
+
+外部 C 字符串函数（ModelicaStrings_substring / length）照 omc 的 FFI 求值就地算、经组件向前引用的常量照样内联：变压器一族
+（PartialBasicTransformer 的 `constant String C1 = substring(VectorGroup, 1, 1)`、示例里 `transformerData(C1 = substring(
+transformer.VectorGroup, 1, 1))`）转 PASS——Electrical.Machines.Examples.Transformers 的 AsymmetricalLoad / Rectifier6pulse /
+Rectifier12pulse / IMC_Transformer、InductionMachines.IMC_Transformer、FundamentalWave 与 QuasiStatic FundamentalWave 的
+IMC_Transformer、QuasiStatic TransformerTestbench，均与 omc 逐字节一致。FAIL / ACCEPTS-INVALID / CRASH 0。

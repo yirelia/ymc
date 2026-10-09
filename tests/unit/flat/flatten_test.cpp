@@ -7052,4 +7052,28 @@ YMC_TEST(flatten_record_array_function_evaluation) {
                            "  final parameter Integer ip[2] = 2;\nend RZU2;\n"));
 }
 
+YMC_TEST(flatten_external_string_function_constants) {
+  // 外部 C 字符串函数（ModelicaStrings_substring / ModelicaStrings_length）：常量绑定照 omc 的 Ceval（FFI 实调库函数）就地
+  // 求值，向前引用的常量（`R1(start = if c1 == "D" …)`）同；endIndex 越过串尾照 omc 取到串尾（`substr(g, 3, 9)` → "01"）；
+  // 参数绑定不求（未声明纯度的外部函数是 impure），函数照打 `impure function`；常量作维。期望 = omc 1.25.0 实跑
+  // （2026-10-09，探针 xc-ut）。
+  YMC_CHECK_EQ(flatten_src("function substr \"substring\"\n  input String string;\n  input Integer startIndex;\n"
+                           "  input Integer endIndex;\n  output String result;\n"
+                           "external \"C\" result = ModelicaStrings_substring(string, startIndex, endIndex) annotation(Library=\"ModelicaExternalC\");\n"
+                           "end substr;\nfunction len \"length\"\n  input String string;\n  output Integer result;\n"
+                           "external \"C\" result = ModelicaStrings_length(string) annotation(Library=\"ModelicaExternalC\");\n"
+                           "end len;\nmodel XCU1\n  constant String g = \"Dy01\";\n"
+                           "  parameter Real R1(start = if c1 == \"D\" then 1 else 3) = 2;\n"
+                           "  constant String c1 = substr(g, 1, 1);\n  constant String c2 = substr(g, 3, 9);\n"
+                           "  constant Integer n = len(g);\n  parameter String p = substr(g, 2, 2);\n"
+                           "  Real x[len(g)] = fill(time, n);\nend XCU1;\n"),
+               std::string("impure function substr \"substring\"\n  input String string;\n  input Integer startIndex;\n"
+                           "  input Integer endIndex;\n  output String result;\n\n"
+                           "  external \"C\" result = ModelicaStrings_substring(string, startIndex, endIndex);\nend substr;\n\n"
+                           "class XCU1\n  constant String g = \"Dy01\";\n  parameter Real R1(start = 1.0) = 2.0;\n"
+                           "  constant String c1 = \"D\";\n  constant String c2 = \"01\";\n  constant Integer n = 4;\n"
+                           "  parameter String p = substr(\"Dy01\", 2, 2);\n  Real x[1];\n  Real x[2];\n  Real x[3];\n"
+                           "  Real x[4];\nequation\n  x = {time, time, time, time};\nend XCU1;\n"));
+}
+
 YMC_TEST_MAIN

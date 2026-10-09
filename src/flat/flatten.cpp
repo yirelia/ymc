@@ -8391,6 +8391,62 @@ class Flattener {
   // 只对 "builtin" 语言求值：external "C" 的仍算外部函数（Class.isExternalFunction :694-707 只把 "builtin" 除外），
   // SimplifyExp.simplifyCall :182 对外部调用不求值（Function12 `f = Modelica.Math.atan2` → `atan2(...)`、LogCall1
   // `mylog(100)` → `log(100.0)` 不折叠）。ext_c 回报是否 external "C"。
+  // 照库函数语义就地求值的外部 C 函数（MSL ModelicaExternalC 的 ModelicaStrings.c）：omc 的 Ceval 经 FFI 实调库函数
+  //（NFEvalFunction.evaluateExternal → callExternalFunction :1143-1176 v1.25.0）——常量绑定 `C1 = Modelica.Utilities.Strings.
+  // substring(VectorGroup, 1, 1)` → "Y"、`length("hello")` → 5（SX 探针；MSL 变压器的 PartialBasicTransformer）。外部调用须是
+  // `output = name(输入, …)`、实参全是输入名。参数绑定里 omc 不求（外部函数未声明纯度即 impure，NFSimplifyExp 的常量实参
+  // 求值不碰），ymc 的类型化化简同样不碰（FlatFunction::is_impure）。不认识 → 空。
+  std::string_view sig_native_ext(const FnRef& fr) {
+    const SElement& el = I_.scode.elems[fr.fe];
+    if (el.restriction != SRestriction::ExternalFunction || !el.def.external.present) return {};
+    const SExternalDecl& ed = el.def.external;
+    if ((ed.lang.is_valid() && in_.str(ed.lang) != "C") || !ed.func_name.is_valid() || !ed.output.is_valid()) return {};
+    const std::string_view xn = in_.str(ed.func_name);
+    if (xn != "ModelicaStrings_substring" && xn != "ModelicaStrings_length") return {};
+    FnSig sig;
+    std::unordered_set<std::uint32_t> seen;
+    if (!collect_fn_sig(fr.fe, fr.fscope, sig, seen, 0) || sig.outputs.size() != 1) return {};
+    auto input_ref = [&](Id<Exp> x, bool output) {
+      const Exp& ex = I_.absyn.exps[x];
+      if (ex.kind != ExpKind::CrefExp) return false;
+      const Cref& c = I_.absyn.crefs[ex.cref];
+      if (c.leading_dot || c.parts.size() != 1 || !c.parts[0].subscripts.empty()) return false;
+      if (output) return c.parts[0].name == I_.scode.elems[sig.outputs[0]].name;
+      for (Id<SElement> in : sig.inputs)
+        if (I_.scode.elems[in].name == c.parts[0].name) return true;
+      return false;
+    };
+    if (!input_ref(ed.output, true)) return {};
+    for (Id<Exp> a : ed.args)
+      if (!input_ref(a, false)) return {};
+    return xn;
+  }
+  // ModelicaStrings.c（MSL 4.0.0 Resources/C-Sources）的语义：substring(string, startIndex, endIndex) 取字节
+  // [startIndex, endIndex]（endIndex = -999 → 取一个字节）；length(string) = strlen。出错处调 ModelicaFormatError——omc 1.25.0 的
+  // FFI 里它不中断也不报（XC3 / XC6 探针），C 代码接着往下走：endIndex > 长度时 strncpy 拷到串尾为止（`("ab", 2, 5)` → "b"、
+  // `("ab", 3, 5)` → ""、`("abc", 1, 9)` → "abc"），照做；startIndex < 1、endIndex < startIndex、起点越过串尾是越界读 / 分配
+  // 未定义 → 不求（求值失败，调用方 SKIP）。
+  std::optional<CVal> eval_native_ext(std::string_view name, const std::vector<CVal>& a) {
+    if (name == "ModelicaStrings_length") {
+      if (a.size() != 1 || a[0].k != CVal::K::Str) return std::nullopt;
+      const std::string_view str = in_.str(a[0].s);
+      return CVal::I(static_cast<std::int64_t>(str.substr(0, str.find('\0')).size()));
+    }
+    if (name == "ModelicaStrings_substring") {
+      if (a.size() != 3 || a[0].k != CVal::K::Str || a[1].k != CVal::K::Int || a[2].k != CVal::K::Int) return std::nullopt;
+      const std::string_view str = in_.str(a[0].s);
+      const std::int64_t len = static_cast<std::int64_t>(str.size());
+      const std::int64_t start = a[1].i;
+      std::int64_t end = a[2].i;
+      if (start < 1) return std::nullopt;
+      if (end == -999) end = start;
+      else if (end < start) return std::nullopt;
+      if (start - 1 > len) return std::nullopt;
+      const std::int64_t stop = std::min(end, len);   // strncpy 遇串尾即停
+      return CVal::S(in_.intern(std::string(str.substr(static_cast<std::size_t>(start - 1), static_cast<std::size_t>(stop - start + 1)))));
+    }
+    return std::nullopt;
+  }
   std::optional<std::string> builtin_equiv(const FnRef& fr, bool* ext_c = nullptr) {
     const SElement& el = I_.scode.elems[fr.fe];
     if (el.restriction != SRestriction::ExternalFunction || !el.def.external.present) return std::nullopt;
@@ -11676,7 +11732,9 @@ class Flattener {
     if (fn_annotation_blocks(fel.cmt.annotation)) return std::nullopt;
     FnSig sig;
     std::unordered_set<std::uint32_t> seen;
-    if (!collect_fn_sig(fr->fe, fr->fscope, sig, seen, 0) || sig.external || (sig.outputs.empty() && !noret)) return std::nullopt;
+    const std::string_view native = sig_native_ext(*fr);   // 照库函数语义就地算的外部 C 函数（见 eval_native_ext）
+    if (!collect_fn_sig(fr->fe, fr->fscope, sig, seen, 0) || (sig.external && native.empty()) || (sig.outputs.empty() && !noret))
+      return std::nullopt;
     // derivative / inverse 注解形态不在已做范围内（omc 的告警 / 报错，FunctionInverseInvalid1/2）→ 不求值（发射一侧同样拒）。
     if (std::vector<Id<Cref>> refs; !fn_ref_annotations(fel.cmt.annotation, sig, refs)) return std::nullopt;
     const std::vector<Id<SElement>>& inputs = sig.inputs;
@@ -11835,6 +11893,18 @@ class Flattener {
       const SElement& c = I_.scode.elems[eid];
       ScodeScope rs;
       if ((c.mod.is_valid() && I_.scode.mods[c.mod].binding.is_valid()) || record_class_of(c, fscope, rs).is_valid()) return fail();
+    }
+    if (!native.empty()) {   // 外部 C 函数：照库函数语义算出输出（实参按外部调用的形参名从 env 取）
+      const SExternalDecl& ed = I_.scode.elems[fr->fe].def.external;
+      std::vector<CVal> xargs;
+      for (Id<Exp> a : ed.args) {
+        const auto ai = env.find(I_.absyn.crefs[I_.absyn.exps[a].cref].parts[0].name.id);
+        if (ai == env.end()) return fail();
+        xargs.push_back(ai->second);
+      }
+      std::optional<CVal> r = eval_native_ext(native, xargs);
+      if (!r) return fail();
+      env[I_.scode.elems[sig.outputs[0]].name.id] = std::move(*r);
     }
     // 算法段：直线赋值 + if/for/while/return（exec_body 返回控制信号）。
     if (sig.alg) {
@@ -12371,6 +12441,36 @@ class Flattener {
     return cval_of(sv);
   }
   // 类型化路（cref()）：同上，下标须字面量 / for 迭代变量；只接标量值。
+  // 经组件引用的标量常量还没压平到（向前引用）：第二遍取第一遍记下的值；第一遍只记下要第二遍（nullopt）；第二遍也没有 → 标
+  // unsupported。下标求不出 / 不是标量值 → nullopt（照旧往下走）。
+  std::optional<CVal> forward_const_val(const std::vector<Symbol>& prefix, const Cref& c) {
+    std::vector<Symbol> names = prefix;
+    PSubs isubs = cur_psubs_;
+    isubs.resize(prefix.size());
+    for (const CrefPart& p : c.parts) {
+      names.push_back(p.name);
+      std::vector<std::int64_t> is;
+      for (Id<Exp> sx : p.subscripts) {
+        std::optional<std::int64_t> iv = subscript_int(sx);
+        if (!iv) return std::nullopt;
+        is.push_back(*iv);
+      }
+      isubs.push_back(std::move(is));
+    }
+    const std::string key = int_key(names, isubs);
+    if (const_vals_.count(key)) return std::nullopt;   // 已压平（数组 / 记录值，const_lookup_expr 不收的）：照旧
+    if (lenient_) {
+      need_second_pass_ = true;
+      return std::nullopt;
+    }
+    const auto it = carry_.vals.find(key);
+    if (it == carry_.vals.end() || is_arr(it->second) || it->second.k == CVal::K::Record || it->second.k == CVal::K::Undef) {
+      set_unsupported("forward reference to constant in component");
+      result_.unsupported_detail = key;
+      return std::nullopt;
+    }
+    return it->second;
+  }
   Id<Expr> const_lookup_expr(const std::vector<Symbol>& prefix, const Cref& c) {
     std::vector<Symbol> names = prefix;
     PSubs isubs = cur_psubs_;
@@ -13154,6 +13254,11 @@ class Flattener {
         if (var != SVariability::Const && c.parts.size() > 1 &&
             I_.comps[I_.nodes[leaf].comp].attributes.variability == SVariability::Const) {
           if (Id<Expr> kv = const_lookup_expr(prefix, c); kv.is_valid()) return kv;
+          // 向前引用（那个组件还没压平到）：omc 的 EvalConstants 照样内联，与声明先后无关（XC13；MSL 变压器示例的
+          // `transformerData(C1 = substring(transformer.VectorGroup, 1, 1))`）——第一遍记下要第二遍，第二遍取第一遍求出的值
+          //（carry_.vals）；还是没有 → SKIP（不打成对常量的引用）。
+          if (const std::optional<CVal> fv = forward_const_val(prefix, c)) return literal_of(*fv);
+          if (result_.unsupported) return add(std::move(e));
           // 末段带切片 / 参数下标 / 运行时下标的（此前落到变量路上，打成对常量的引用 `a.c[n]`——错；CX 探针 c3）。
           if (const Id<Expr> sv = const_array_ref(prefix, c, enclosing); sv.is_valid()) return sv;
         }
@@ -14419,8 +14524,10 @@ class Flattener {
       // A 的 `v = h(time)` → `R.a2.h`），与限定常量同理。
       const ScodeScope sc = scode_scope_of(enclosing);
       bool oprec_ctor_call = false;   // operator record 的构造调用（见 oprec_ctor）
+      bool impure_ext = false;        // 就地求值的外部 C 函数（见 sig_native_ext）：未声明纯度即 impure
       if (std::optional<FnRef> bfr = resolve_fn(fn, sc)) {
         oprec_ctor_call = !bfr->ctor_name.empty();
+        impure_ext = !sig_native_ext(*bfr).empty();
         bool ext_c = false;
         if (std::optional<std::string> bn = builtin_equiv(*bfr, &ext_c)) {
           array_call_ok_ = false;
@@ -14429,8 +14536,10 @@ class Flattener {
           return r;
         }
       }
-      // 函数体里实参引用函数局部量（含局部常量）的调用不求值（YmcFnEmit1：局部常量在函数里保留引用）。
-      const bool fold = !(fn_scope_ && exp_refs_fn_locals(e));
+      // 函数体里实参引用函数局部量（含局部常量）的调用不求值（YmcFnEmit1：局部常量在函数里保留引用）。impure 的外部函数这里
+      // 也不求（这条路对应 omc 化简的常量实参求值，只收纯函数；SX 探针 `parameter String p = substring("Yd01", 2, 2)` 照留
+      // 调用）——常量绑定走 Ceval 那条路（emit_variable 的按值求值）照样求。
+      const bool fold = !(fn_scope_ && exp_refs_fn_locals(e)) && !impure_ext;
       // 函数语境的 sum / product / min / max(常量数组) 整体求值。模型语境的归约式走上面的 reduction_call，数组实参先定型再定
       // 去留（字面量数组才求值，数组构造子 / 混合字面量展开成不化简的元素链，见 model_reduce_builtin）。
       if (fold && fn_scope_ && fn.parts.size() == 1)
@@ -18987,6 +19096,12 @@ class Flattener {
     if (!raw.is_valid()) return {};
     evaluating_.insert(key);
     Id<Expr> e = simplify_expr(inst_exp(raw, scope, {}));   // 常量值与前缀无关
+    // 定型化简没求成字面量（impure 的外部函数调用化简不求，见 call() 的 impure_ext）：常量照 omc 的 Ceval 按值求（XC 探针
+    // XC11：`R1(start = if C1 == "D" …)` 向前引用 `constant String C1 = substring(g, 1, 1)`，MSL PartialBasicTransformer）。
+    if (!is_literal(e) && !result_.unsupported)
+      if (const std::optional<CVal> cv = eval_scode(raw, scode_scope_of(scope), 0, /*allow_param=*/false);
+          cv && !result_.unsupported)
+        if (const std::optional<CVal> ce = coerce_to_kind(*cv, result_.model.exprs[e].ty.kind)) e = literal_of(*ce);
     evaluating_.erase(key);
     return is_literal(e) ? e : Id<Expr>{};
   }

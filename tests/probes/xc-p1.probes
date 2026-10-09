@@ -1,0 +1,132 @@
+//// set: xc-p1 — 外部 C 字符串函数（MSL ModelicaExternalC 的 ModelicaStrings_substring / ModelicaStrings_length）的常量求值：omc 的 Ceval 经 FFI 实调库函数，ymc 照 ModelicaStrings.c 就地算；常量绑定求、参数绑定照留调用（外部函数未声明纯度即 impure）；越过串尾的 endIndex 照 omc 取到串尾（FFI 里 ModelicaFormatError 不中断，XC3 / XC6）、-999；向前引用的常量（XC10 / XC11，MSL PartialBasicTransformer 的 R1(start = …C1…)）；经组件向前引用的常量照样内联（XC13 / XC15，MSL 变压器示例的 transformerData(C1 = substring(transformer.VectorGroup, 1, 1))）；Yd01 变压器（XC9）
+//// model: XC1
+model XC1
+  constant String s = Modelica.Utilities.Strings.substring("Yd01", 1, 1);
+  constant Integer n = Modelica.Utilities.Strings.length("hello");
+  parameter String p = Modelica.Utilities.Strings.substring("Yd01", 2, 2);
+  constant String t = Modelica.Utilities.Strings.substring("Yd01", 3, 4);
+  Real x = if s == "Y" then 1 else 2;
+  Real y = if p == "d" then time else 0;
+end XC1;
+//// model: XC2
+model XC2
+  parameter String VectorGroup = "Yd01";
+  constant String C1 = Modelica.Utilities.Strings.substring("Yd01", 1, 1);
+  final parameter String C2 = Modelica.Utilities.Strings.substring(VectorGroup, 2, 2);
+  parameter Integer k = if C1 == "D" then 1 else 2;
+end XC2;
+//// model: XC3
+model XC3
+  constant String e = Modelica.Utilities.Strings.substring("ab", 2, 5);
+end XC3;
+//// model: XC4
+model XC4
+  constant String b = Modelica.Utilities.Strings.substring("abc", 2, -999);
+  constant Integer n1 = Modelica.Utilities.Strings.length("a\"b\n");
+  constant Integer n2 = Modelica.Utilities.Strings.length("äb");
+  constant String q = Modelica.Utilities.Strings.substring("x\ty", 2, 3);
+end XC4;
+//// model: XC5
+model XC5
+  constant String g = "Dy05";
+  constant String c1 = Modelica.Utilities.Strings.substring(g, 1, 1);
+  Real x[Modelica.Utilities.Strings.length(g)];
+  parameter Real k = if c1 == "D" then 1 else 3;
+equation
+  x = fill(time, 4);
+end XC5;
+//// model: XC6
+model XC6
+  constant String e1 = Modelica.Utilities.Strings.substring("ab", 3, 5);
+  constant String e2 = Modelica.Utilities.Strings.substring("abc", 1, 9);
+end XC6;
+//// model: XC7
+model XC7
+  partial model PB
+    constant String VectorGroup = "Yy00";
+    constant String C1 = Modelica.Utilities.Strings.substring(VectorGroup, 1, 1);
+    parameter Real r = if C1 == "D" then 1 else 2;
+  end PB;
+  model T
+    extends PB(final VectorGroup = "Dy01");
+  end T;
+  T t;
+end XC7;
+//// model: XC8
+model XC8
+  partial model PB
+    constant String VectorGroup = "Yy00";
+    constant String C1 = VectorGroup;
+    parameter Real r = if C1 == "D" then 1 else 2;
+  end PB;
+  model T
+    extends PB(final VectorGroup = "Dy01");
+  end T;
+  T t;
+end XC8;
+//// model: XC9
+model XC9
+  Modelica.Electrical.Machines.BasicMachines.Transformers.Yd.Yd01 transformer(n = 1, R1 = 1, L1sigma = 1, R2 = 1, L2sigma = 1, T1Ref = 293.15, alpha20_1 = 0, T2Ref = 293.15, alpha20_2 = 0, T1Operational = 293.15, T2Operational = 293.15);
+end XC9;
+//// model: XC10
+model XC10
+  partial model PB
+    constant String VectorGroup = "Yy00";
+    parameter Real R1(start = 5E-3 / (if C1 == "D" then 1 else 3));
+  protected
+    constant String C1 = Modelica.Utilities.Strings.substring(VectorGroup, 1, 1);
+  end PB;
+  model T
+    extends PB(final VectorGroup = "Dy01");
+  end T;
+  T t(R1 = 2);
+end XC10;
+//// model: XC11
+model XC11
+  constant String g = "Dy01";
+  parameter Real R1(start = if C1 == "D" then 1 else 3) = 2;
+  constant String C1 = Modelica.Utilities.Strings.substring(g, 1, 1);
+end XC11;
+//// model: XC12
+model XC12
+  constant String g = "Dy01";
+  parameter Real R1(start = if C1 == "D" then 1 else 3) = 2;
+  constant String C1 = g;
+end XC12;
+//// model: XC13
+model XC13
+  model T
+    constant String VectorGroup = "Yy00";
+  end T;
+  model D
+    parameter String C1 = "Y";
+  end D;
+  D d(C1 = Modelica.Utilities.Strings.substring(t.VectorGroup, 1, 1));
+  T t;
+end XC13;
+//// model: XC14
+model XC14
+  model T
+    constant String VectorGroup = "Yy00";
+  end T;
+  model D
+    parameter String C1 = "Y";
+  end D;
+  T t;
+  D d(C1 = Modelica.Utilities.Strings.substring(t.VectorGroup, 1, 1));
+end XC14;
+//// model: XC15
+model XC15
+  model T
+    constant Real k = 2;
+  end T;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := x;
+  end f;
+  parameter Real p = f(t.k) + time0;
+  parameter Real time0 = 1;
+  T t;
+end XC15;

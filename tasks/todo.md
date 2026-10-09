@@ -2080,6 +2080,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           范围作数组运算数（`(0:n - 1)*k + ones(n)`）；输出维里的调用在调用处按结构代入求值（`ind[nb(m)]`）。SKIP 子原因
           只记第一处。
           slice 653 / FAIL 0；scodeinst 603（不变）；testsuite 1689→1692 / FAIL 0（ArrayFieldSlice ×2、TestComplexSum）；MSL 349→361；探针 9068→9085；单测 318→320。
+    - [x] (63c) flat：外部 C 字符串函数的常量求值、经组件向前引用的常量（2026-10-09）：omc 的 Ceval 经 FFI 实调 MSL
+          ModelicaExternalC 的库函数，ymc 照 ModelicaStrings.c 就地算 ModelicaStrings_substring / ModelicaStrings_length
+          （FFI 里 ModelicaFormatError 不中断：endIndex 越过串尾取到串尾，照做；越界读的形态不求）——常量绑定、向前引用的常量
+          （定型化简不求时退回按值求）求；参数绑定照留调用（未声明纯度的外部函数是 impure，化简的常量实参求值不碰）。经组件
+          引用、组件还没压平到的常量（`transformerData(C1 = substring(transformer.VectorGroup, 1, 1))`）：第一遍记下要第二遍，
+          第二遍取第一遍求出的值内联；还没有 → SKIP（此前静默打成对常量的引用）。
+          slice 653 / FAIL 0；scodeinst 603（不变）；testsuite 1692 / FAIL 0（不变）；MSL 361→369；探针 9085→9101；单测 320→321。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

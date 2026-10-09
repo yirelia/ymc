@@ -1,0 +1,23 @@
+//// set: xc-ut — 外部 C 字符串函数的常量求值（单测原文，本地声明的外部函数）：常量求、向前引用的常量求、参数照留调用、endIndex 越过串尾、常量作维
+//// model: XCU1
+function substr "substring"
+  input String string;
+  input Integer startIndex;
+  input Integer endIndex;
+  output String result;
+external "C" result = ModelicaStrings_substring(string, startIndex, endIndex) annotation(Library="ModelicaExternalC");
+end substr;
+function len "length"
+  input String string;
+  output Integer result;
+external "C" result = ModelicaStrings_length(string) annotation(Library="ModelicaExternalC");
+end len;
+model XCU1
+  constant String g = "Dy01";
+  parameter Real R1(start = if c1 == "D" then 1 else 3) = 2;
+  constant String c1 = substr(g, 1, 1);
+  constant String c2 = substr(g, 3, 9);
+  constant Integer n = len(g);
+  parameter String p = substr(g, 2, 2);
+  Real x[len(g)] = fill(time, n);
+end XCU1;

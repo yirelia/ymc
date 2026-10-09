@@ -461,3 +461,5 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `ry-ut` | 2 | 记录数组整体绑定挪成逐元素方程 + scalarProduct + `.*`（RYU1）、组件声明修饰里只换类型的成员重声明（RYU2）（单测原文） |
 | `rz-p1` | 15 | 函数里的记录（数组）：记录数组元素字段 `u[k].re` 与 `sum({…for k in 1:m})` → `sum(… for k in 1:m)`（MSL quasiRMS）；operator record 短类别名形参（`input Modelica.Units.SI.ComplexVoltage[:] v`，别名构造 / 类型函数随之打、运算符按别名命名，RZ4-RZ6）；推导式实参在函数体里向量化（MSL activePower RZ3、RZ9）；记录数组整体绑定的复合路径（`p.v`、`plug_p.pin.i`）与向前引用的 plug（RZ7 / RZ8）；返回记录数组的函数求值后拆字段（RZ10 多相电磁转换器、RZ11 / RZ12）、常量实参的记录函数元素（RZ13）、范围运算数与输出维里的调用（RZ14）、数组取负的 -0.0（RZ15） |
 | `rz-ut` | 2 | 函数的记录形参（RZU1，本地 operator record + 短类别名 `P.CV`）、返回记录数组的函数求值（RZU2）（单测原文） |
+| `xc-p1` | 15 | 外部 C 字符串函数（ModelicaStrings_substring / ModelicaStrings_length）的常量求值：常量绑定求、参数绑定照留调用（impure）；endIndex 越过串尾照 omc 取到串尾（XC3 / XC6）、-999、转义 / UTF-8 字节长度（XC4）；向前引用的常量（XC10 / XC11，MSL PartialBasicTransformer 的 `R1(start = …C1…)`）；经组件向前引用的常量内联（XC13 / XC15）；MSL Yd01 变压器（XC9） |
+| `xc-ut` | 1 | 外部 C 字符串函数的常量求值（单测原文，本地声明的外部函数 `impure function substr`） |
