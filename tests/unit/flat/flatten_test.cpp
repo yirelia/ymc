@@ -1638,7 +1638,7 @@ YMC_TEST(flatten_function_emit_external_and_tuple) {
 YMC_TEST(flatten_function_emit_locals_prune_and_errors) {
   // 局部拓扑序（sortLocals）：`n` 先于 `z[n]`，常量绑定求值（FunctionCompOrder3）；被结构参数求值掉的调用不留函数块
   //（collectFunctions 在求值后收，ceval4）；循环外 break（BREAK_OUTSIDE_LOOP，Break2）、输出未赋值告警
-  //（UNASSIGNED_FUNCTION_OUTPUT）、纯函数调 impure（ImpureCall1 告警）→ SKIP。期望 = 文件 Result 且与 1.25.0 实跑一致。
+  //（UNASSIGNED_FUNCTION_OUTPUT）→ SKIP。期望 = 文件 Result 且与 1.25.0 实跑一致。
   const char* s1 =
       "function f\n  input Real x;\n  output Real y;\nprotected\n  Real z[n] = ones(3);\n  parameter Integer n = 3;\n"
       "algorithm\n  y := z[1];\nend f;\nmodel FunctionCompOrder3\n  Real x = f(time);\nend FunctionCompOrder3;\n";
@@ -1655,13 +1655,18 @@ YMC_TEST(flatten_function_emit_locals_prune_and_errors) {
   for (const char* s : {
            "function f\n  input Integer n;\n  output Integer res;\nalgorithm\n  res := n * n;\n  break;\nend f;\n"
            "model M\n  Integer k = 2;\n  Real x1 = f(k);\nend M;\n",
-           "function f\n  input Real x;\n  output Real y;\nend f;\nmodel M\n  Real x1 = f(time);\nend M;\n",
-           "impure function f\n  input Real x;\n  output Real y = x;\nend f;\nfunction f2\n  input Real x;\n  output Real y;\n"
-           "algorithm\n  y := f(x);\nend f2;\nmodel M\n  Real x = f2(time);\nend M;\n"}) {
+           "function f\n  input Real x;\n  output Real y;\nend f;\nmodel M\n  Real x1 = f(time);\nend M;\n"}) {
     bool uns = false;
     flatten_src(s, &uns);
     YMC_CHECK(uns);
   }
+  // 纯函数顶层调 impure（`y := f(x)`）：omc 把 f2 标成 impure、告警走 stderr（ImpureCall1；加宽(63g) 起不再 SKIP）。期望 =
+  // omc 1.25.0 实跑的 stdout（2026-10-10）。
+  YMC_CHECK_EQ(flatten_src("impure function f\n  input Real x;\n  output Real y = x;\nend f;\nfunction f2\n  input Real x;\n"
+                           "  output Real y;\nalgorithm\n  y := f(x);\nend f2;\nmodel M\n  Real x = f2(time);\nend M;\n"),
+               std::string("impure function f\n  input Real x;\n  output Real y = x;\nend f;\n\nimpure function f2\n"
+                           "  input Real x;\n  output Real y;\nalgorithm\n  y := f(x);\nend f2;\n\nclass M\n"
+                           "  Real x = f2(time);\nend M;\n"));
 }
 
 YMC_TEST(flatten_function_emit_array_bodies) {
@@ -7139,6 +7144,25 @@ YMC_TEST(flatten_dead_branch_out_of_range_subscript) {
                            "  inPort[1].occupied = localActive;\n  inPort[1].set = false;\n"
                            "  inPort[2].occupied = inPort[1].occupied or inPort[1].set;\n  inPort[2].set = false;\n"
                            "  y[1] = 0.0;\n  y[2] = x[1];\n  y[3] = x[1] + x[3];\nend DBU1;\n"));
+}
+
+YMC_TEST(flatten_pure_function_marked_impure) {
+  // 纯函数体里顶层调 impure 函数（`g(x);`）→ omc 把它标成 impure（checkPureCall，NFFunction.mo:1643-1681）：打
+  // `impure function`、模型里常量实参的调用不再折叠；嵌在运算里的（h 的 `f(x) + 1`）不标、照常求值（体里的 impure 调用
+  // 一并求）。when 体里的元组方程整条保留。期望 = omc 1.25.0 实跑（2026-10-09，探针 ip-ut）。
+  YMC_CHECK_EQ(flatten_src("model IPU1\n  impure function g\n    input Real x;\n  algorithm\n    assert(x > 0, \"x\");\n"
+                           "  end g;\n  function f \"top-level impure call: marked impure\"\n    input Real x;\n"
+                           "    output Real y;\n    output Real z;\n  algorithm\n    g(x);\n    y := x + 1;\n    z := 2 * x;\n"
+                           "  end f;\n  function h \"impure call nested in an expression: stays pure\"\n    input Real x;\n"
+                           "    output Real y;\n  algorithm\n    y := f(x) + 1;\n  end h;\n  parameter Real p = f(1.0);\n"
+                           "  parameter Real q = h(1.0);\n  discrete Real a, b;\nequation\n  when sample(0, 0.1) then\n"
+                           "    (a, b) = f(time);\n  end when;\nend IPU1;\n"),
+               std::string("impure function IPU1.f \"top-level impure call: marked impure\"\n  input Real x;\n  output Real y;\n"
+                           "  output Real z;\nalgorithm\n  IPU1.g(x);\n  y := x + 1.0;\n  z := 2.0 * x;\nend IPU1.f;\n\n"
+                           "impure function IPU1.g\n  input Real x;\nalgorithm\n  assert(x > 0.0, \"x\");\nend IPU1.g;\n\n"
+                           "class IPU1\n  parameter Real p = IPU1.f(1.0)[1];\n  parameter Real q = 3.0;\n  discrete Real a;\n"
+                           "  discrete Real b;\nequation\n  when sample(0.0, 0.1) then\n    (a, b) = IPU1.f(time);\n"
+                           "  end when;\nend IPU1;\n"));
 }
 
 YMC_TEST_MAIN

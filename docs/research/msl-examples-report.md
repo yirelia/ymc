@@ -447,3 +447,12 @@ TransformerTestbench、Polyphase 的 Rectifier / TestSensors、FundamentalWave �
 localActive else inPort[i-1].occupied or inPort[i-1].set`，i = 1 时剪掉的支引用 `inPort[0]`）：StateGraph 的 FirstExample /
 FirstExample_Variant2 / FirstExample_Variant3 / ExecutionPaths 转 PASS，均与 omc 逐字节一致；ControlledTanks 往前走到
 `inner outer` 组件（CompositeStep 的 stateGraphRoot）照旧 SKIP。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-10 加宽 63g 之后：PASS 387→397（+10）
+
+纯函数后标 impure（MSL Random.Utilities.initializeImpureRandom 体里 `setInternalState(rngState, id);`）、ModelicaStrings_hashString
+就地求值（`automaticLocalSeed(getInstanceName())`）、when 体里的元组方程（Blocks.Interfaces.PartialNoise 的 `(r_raw, state) =
+generator.random(pre(state))`）做完：Blocks.Examples.Noise 的 UniformNoise / AutomaticSeed / Distributions / UniformNoiseProperties /
+NormalNoiseProperties / ImpureGenerator / ActuatorWithNoise / DrydenContinuousTurbulence 转 PASS；元组目标算进 discrete Real 的
+赋值后 Blocks.Examples.Interaction1、PowerConverters HBridge_DC_Drive 一并转 PASS。均与 omc 逐字节一致；FAIL / ACCEPTS-INVALID /
+CRASH 0。Math.Random.Examples.GenerateRandomNumbers 往前走到算法里给非连续变量赋值，照旧 SKIP。

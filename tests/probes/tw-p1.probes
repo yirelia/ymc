@@ -1,0 +1,108 @@
+//// set: tw-p1 — when 体里的元组方程（MSL Blocks.Interfaces.PartialNoise 的 `(r_raw, state) = generator.random(pre(state))`）：整条保留（TU2 数组目标、TU4 带 elsewhen）、空位打 `_`（TU5）、常量实参拆成逐元素等式（TU3），元组目标算进 discrete Real 的赋值（checkDiscreteRealExp 的 TUPLE 支）；模型语境（TU1）。ModelicaStrings_hashString 的就地求值（HS2：包装函数里求、直接调用不求）与折出来的 getInstanceName() 作实参（HS1 `automaticLocalSeed(getInstanceName())`）
+//// model: TU1
+model TU1
+  function f
+    input Real x;
+    output Real a;
+    output Real b;
+  algorithm
+    a := x;
+    b := 2 * x;
+  end f;
+  Real a, b;
+equation
+  (a, b) = f(time);
+end TU1;
+//// model: TU2
+model TU2
+  function f
+    input Integer s[2];
+    output Real r;
+    output Integer t[2];
+  algorithm
+    t := {s[2], s[1] + 1};
+    r := s[1] / 10;
+  end f;
+  discrete Real r;
+  Integer state[2];
+initial equation
+  pre(state) = {1, 2};
+equation
+  when sample(0, 0.1) then
+    (r, state) = f(pre(state));
+  end when;
+end TU2;
+//// model: TU3
+model TU3
+  function f
+    input Real x;
+    output Real a;
+    output Real b;
+  algorithm
+    a := x;
+    b := 2 * x;
+  end f;
+  discrete Real a, b;
+equation
+  when sample(0, 0.1) then
+    (a, b) = f(1.0);
+  end when;
+end TU3;
+//// model: TU4
+model TU4
+  function f
+    input Real x;
+    output Real a;
+    output Real b;
+  algorithm
+    a := x;
+    b := 2 * x;
+  end f;
+  discrete Real a, b;
+equation
+  when sample(0, 0.1) then
+    (a, b) = f(time);
+  elsewhen time > 0.55 then
+    (a, b) = f(2 * time);
+  end when;
+end TU4;
+//// model: TU5
+model TU5
+  function f
+    input Real x;
+    output Real a;
+    output Real b;
+  algorithm
+    a := x;
+    b := 2 * x;
+  end f;
+  discrete Real a, b;
+equation
+  when sample(0, 0.1) then
+    (a, ) = f(time);
+    b = 1;
+  end when;
+end TU5;
+//// model: HS1
+model HS1
+  model B
+    parameter Boolean useAuto = true;
+    parameter Integer fixedSeed = 1;
+    final parameter Integer localSeed(fixed = false);
+  initial equation
+    localSeed = if useAuto then Modelica.Math.Random.Utilities.automaticLocalSeed(getInstanceName()) else fixedSeed;
+  end B;
+  B b;
+end HS1;
+//// model: HS2
+model HS2
+  function w
+    input String s;
+    output Integer h;
+  algorithm
+    h := Modelica.Utilities.Strings.hashString(s);
+  end w;
+  parameter Integer h1 = w("HS2.b");
+  parameter Integer h2 = Modelica.Math.Random.Utilities.automaticLocalSeed("UniformNoise.uniformNoise1");
+  parameter Integer h3 = Modelica.Utilities.Strings.hashString("abc");
+end HS2;

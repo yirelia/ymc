@@ -350,9 +350,14 @@ class Flattener {
   // when 方程 / when 语句里等式 / 赋值左边的变量（组件路径，不带下标）。
   std::unordered_set<std::string> when_assigned_paths() {
     std::unordered_set<std::string> defined;
-    auto lhs = [&](Id<Expr> e) {
+    auto lhs = [&](auto& self, Id<Expr> e) -> void {
       if (!e.is_valid()) return;
       const Expr& x = result_.model.exprs[e];
+      // 元组目标逐个元素算（checkDiscreteRealExp 的 TUPLE 支，NFVerifyModel.mo:544-550 v1.25.0；TU 探针 `(r, state) = f(…)`）。
+      if (x.kind == ExprKind::Tuple) {
+        for (Id<Expr> el : x.args) self(self, el);
+        return;
+      }
       if (x.kind != ExprKind::Cref) return;
       std::vector<Symbol> nm;
       for (const ExprCrefPart& cp : x.cref.parts) nm.push_back(cp.name);
@@ -360,7 +365,7 @@ class Flattener {
     };
     auto eqn = [&](auto& self, Id<FlatEquation> id, bool in_when) -> void {
       const FlatEquation& q = result_.model.eqs[id];
-      if (q.kind == FlatEqKind::Equality && in_when) lhs(q.a);
+      if (q.kind == FlatEqKind::Equality && in_when) lhs(lhs, q.a);
       const bool w = in_when || q.kind == FlatEqKind::When;
       for (const FlatEqBranch& br : q.branches) for (Id<FlatEquation> b : br.body) self(self, b, w);
       for (Id<FlatEquation> b : q.body) self(self, b, w);
@@ -368,7 +373,7 @@ class Flattener {
     };
     auto stmt = [&](auto& self, Id<FlatStatement> id, bool in_when) -> void {
       const FlatStatement& st = result_.model.stmts[id];
-      if (st.kind == FlatStmtKind::Assign && in_when) lhs(st.a);
+      if (st.kind == FlatStmtKind::Assign && in_when) lhs(lhs, st.a);
       const bool w = in_when || st.kind == FlatStmtKind::When;
       for (const FlatStmtBranch& br : st.branches) for (Id<FlatStatement> b : br.body) self(self, b, w);
       for (Id<FlatStatement> b : st.body) self(self, b, w);
@@ -3384,6 +3389,29 @@ class Flattener {
     };
     for (Id<SEquation> beid : body) {
       const SEquation& b = I_.scode.eqs[beid];
+      if (b.kind == SEqKind::Equals && is_tuple_target(b.a)) {
+        // 元组方程（MSL Blocks.Interfaces.PartialNoise 的 `(r_raw, state) = generator.random(pre(state))`）：同模型方程（见
+        // tuple_target）——常量实参求值后拆成逐元素等式（TU 探针 TU3 `a = 1.0; b = 2.0;`），否则整条保留、空位打 `_`（TU4 带
+        // elsewhen、TU5）。解出的变量 = 各目标（整个数组目标按整体记，elsewhen 里须同形）。
+        std::vector<std::pair<Id<Expr>, Id<Expr>>> pairs;
+        if (!tuple_target(b.a, b.b, enclosing, prefix, pairs)) return false;
+        for (const auto& [l, r] : pairs) {
+          FlatEquation fe;
+          fe.kind = FlatEqKind::Equality;
+          fe.a = l;
+          fe.b = r;
+          fe.loc = b.loc;
+          out.push_back(result_.model.add_eq(std::move(fe)));
+          if (result_.model.exprs[l].kind != ExprKind::Tuple) {
+            if (!solve(l)) return false;
+            continue;
+          }
+          const std::vector<Id<Expr>> targets = result_.model.exprs[l].args;   // 拷贝
+          for (Id<Expr> t : targets)
+            if (result_.model.exprs[t].kind == ExprKind::Cref && !solve(t)) return false;
+        }
+        continue;
+      }
       if (b.kind == SEqKind::Equals) {
         Id<Expr> a = inst_exp(b.a, enclosing, prefix);
         Id<Expr> rhs = inst_exp(b.b, enclosing, prefix);
@@ -8402,7 +8430,7 @@ class Flattener {
     const SExternalDecl& ed = el.def.external;
     if ((ed.lang.is_valid() && in_.str(ed.lang) != "C") || !ed.func_name.is_valid() || !ed.output.is_valid()) return {};
     const std::string_view xn = in_.str(ed.func_name);
-    if (xn != "ModelicaStrings_substring" && xn != "ModelicaStrings_length") return {};
+    if (xn != "ModelicaStrings_substring" && xn != "ModelicaStrings_length" && xn != "ModelicaStrings_hashString") return {};
     FnSig sig;
     std::unordered_set<std::uint32_t> seen;
     if (!collect_fn_sig(fr.fe, fr.fscope, sig, seen, 0) || sig.outputs.size() != 1) return {};
@@ -8427,6 +8455,20 @@ class Flattener {
   // `("ab", 3, 5)` → ""、`("abc", 1, 9)` → "abc"），照做；startIndex < 1、endIndex < startIndex、起点越过串尾是越界读 / 分配
   // 未定义 → 不求（求值失败，调用方 SKIP）。
   std::optional<CVal> eval_native_ext(std::string_view name, const std::vector<CVal>& a) {
+    // hashString(string)：uthash 的 HASH_AP（ModelicaStrings.c :88-91 定 HASH_FUNCTION、:545-556；uthash.h 的 HASH_AP），按
+    // strlen 个无符号字节、32 位无符号运算，结果按 int 读（union）。MSL Random.Utilities.automaticLocalSeed(getInstanceName())
+    // → omc 经 FFI 求得 `-1017887075`（"UniformNoise.uniformNoise1"，HS 探针）。
+    if (name == "ModelicaStrings_hashString") {
+      if (a.size() != 1 || a[0].k != CVal::K::Str) return std::nullopt;
+      std::string_view str = in_.str(a[0].s);
+      str = str.substr(0, str.find('\0'));
+      std::uint32_t h = 0xAAAAAAAAu;
+      for (std::size_t i = 0; i < str.size(); ++i) {
+        const std::uint32_t c = static_cast<unsigned char>(str[i]);
+        h ^= (i & 1) == 0 ? ((h << 7) ^ (c * (h >> 3))) : ~((h << 11) + (c ^ (h >> 5)));
+      }
+      return CVal::I(static_cast<std::int64_t>(static_cast<std::int32_t>(h)));
+    }
     if (name == "ModelicaStrings_length") {
       if (a.size() != 1 || a[0].k != CVal::K::Str) return std::nullopt;
       const std::string_view str = in_.str(a[0].s);
@@ -10503,6 +10545,86 @@ class Flattener {
     return I_.nodes[cls].def.raw;
   }
 
+  // 函数的纯度（Function.isImpure）。声明的（makeAttributes :2626-2633 v1.25.0）：显式 pure / impure 照写；未声明时自带
+  // external 段的函数 impure，继承来的 external 段不算（FunctionSections5 `function f extends base_f` 打 `function f`）；外部
+  // 调用名为 ModelicaError → pure。再加体里的后标（见 fn_marked_impure）。
+  bool fn_impure(const FnRef& fr) {
+    const SElement& fel = I_.scode.elems[fr.fe];
+    const bool modelica_error = fel.def.external.present && fel.def.external.func_name.is_valid() &&
+                                in_.str(fel.def.external.func_name) == "ModelicaError";
+    if (!modelica_error && (fel.purity == Purity::Impure ||
+                            (fel.purity == Purity::None && fel.restriction == SRestriction::ExternalFunction)))
+      return true;
+    return fn_marked_impure(fr);
+  }
+  // 纯函数（含显式 pure）里"顶层"调了 impure 函数：omc 把它标成 impure 并告警 PURE_FUNCTION_WITH_IMPURE_CALLS（typeFunctionBody
+  // → checkPureCall，NFFunction.mo:1643-1652、:1663-1681 v1.25.0）——打 `impure function`，模型里对它的常量实参调用不再求值
+  //（`parameter Real p = f(1.0)` 照留调用；常量绑定 omc 照样求值，ymc 未做 → SKIP）。"顶层" = Function.foldExp（:2204-2227）
+  // 浅遍历到的式子本身是调用（Expression.isImpureCall 只认 CALL，NFExpression.mo:335-343）：语句的各式子（Statement.foldExp
+  // NFStatement.mo:727-808：赋值两侧、if / while 条件、for 范围、assert / terminate / reinit 的实参、无返回值调用，体里的语句
+  // 递归）与形参 / 局部的绑定。嵌在运算里的（`y := g(x) + 1`、`assert(g(x) > 0, …)`）、被 Integer → Real 转型包住的（`y :=
+  // gi(n)`，y 是 Real：定型后是 CAST）不算；被调函数的不纯含后标的（传递，与声明先后无关）。IP 探针；MSL Random 的
+  // initializeImpureRandom（体里 `setInternalState(rngState, id);`）。
+  bool fn_marked_impure(const FnRef& fr) {
+    if (const auto it = fn_marked_impure_.find(fr.fe.raw); it != fn_marked_impure_.end()) return it->second;
+    fn_marked_impure_[fr.fe.raw] = false;   // 求的过程中按纯算（自递归 / 互递归）
+    FnSig sig;
+    std::unordered_set<std::uint32_t> seen;
+    bool marked = false;
+    if (collect_fn_sig(fr.fe, fr.fscope, sig, seen, 0) && !sig.external) {
+      // 顶层式子 x：是调用、被调的不纯、且没被转型包住（real_target：赋值左侧 / 绑定的变量是 Real，被调的首输出是 Integer）。
+      auto top = [&](Id<Exp> x, bool real_target) {
+        if (marked || !x.is_valid() || I_.absyn.exps[x].kind != ExpKind::Call) return;
+        const std::optional<FnRef> cr = resolve_fn(I_.absyn.crefs[I_.absyn.exps[x].cref], fr.fscope);
+        if (!cr || builtin_equiv(*cr)) return;
+        if (real_target && fn_first_output_int(*cr)) return;
+        marked = fn_impure(*cr);
+      };
+      auto stmts = [&](auto& self, const std::vector<Id<SStatement>>& body) -> void {
+        for (Id<SStatement> sid : body) {
+          if (marked) return;
+          const SStatement& st = I_.scode.stmts[sid];   // SCode 只读（flatten 期不增），引用稳定
+          bool real_lhs = false;
+          if (st.kind == SStmtKind::Assign && st.a.is_valid() && I_.absyn.exps[st.a].kind == ExpKind::CrefExp) {
+            const Cref& lc = I_.absyn.crefs[I_.absyn.exps[st.a].cref];
+            real_lhs = !lc.parts.empty() && fn_var_is_real(lc.parts[0].name, fr.fscope);
+          }
+          top(st.a, false);
+          top(st.b, real_lhs);
+          top(st.c, false);
+          for (const SStmtBranch& br : st.branches) {
+            top(br.cond, false);
+            self(self, br.body);
+          }
+          self(self, st.body);
+          self(self, st.else_body);
+        }
+      };
+      if (sig.alg) stmts(stmts, sig.alg->stmts);
+      for (const std::vector<Id<SElement>>* vs : {&sig.inputs, &sig.outputs, &sig.locals})
+        for (Id<SElement> eid : *vs) {
+          const SElement& c = I_.scode.elems[eid];
+          if (c.mod.is_valid()) top(I_.scode.mods[c.mod].binding, fn_var_is_real(c.name, fr.fscope));
+        }
+    }
+    fn_marked_impure_[fr.fe.raw] = marked;
+    return marked;
+  }
+  // 函数的首输出是 Integer（标量或数组）。
+  bool fn_first_output_int(const FnRef& fr) {
+    FnSig sig;
+    std::unordered_set<std::uint32_t> seen;
+    if (!collect_fn_sig(fr.fe, fr.fscope, sig, seen, 0) || sig.outputs.empty()) return false;
+    const SElement& c = I_.scode.elems[sig.outputs[0]];
+    TypeKind tk;
+    std::vector<std::pair<Id<SMod>, ScodeScope>> chain;
+    std::vector<Id<Exp>> td;
+    std::vector<std::size_t> before;
+    return (builtin_scalar_type_kind(c.type.path, tk) || fn_derived_scalar(c, fr.fscope, tk, chain, td, before)) &&
+           tk == TypeKind::Integer;
+  }
+  std::unordered_map<std::uint32_t, bool> fn_marked_impure_;   // 函数元素 → 是否被后标成 impure（见 fn_marked_impure）
+
   // 发射函数定义（去重按压平名；先登记形参表再翻译函数体 → 自递归调用能找到自己）。返回在 result_.model.functions 里的
   // 下标；不可发射 → nullopt（调用方 SKIP）。alias_defaults：别名修饰给的输入默认（已在别名定义处按模型语境定型，
   // FuncDefaultArg6 `function g = f(r = x)` → `input Real r = x`）。home：见 fn_flat_name。
@@ -10519,12 +10641,7 @@ class Flattener {
     if (!fn_ref_annotations(fel.cmt.annotation, sig, ann_refs) ||
         (sig.ext && !fn_ref_annotations(sig.ext->annotation, sig, ann_refs)))
       return fn_fail<std::optional<std::size_t>>("derivative / inverse annotation form");
-    // 纯度（makeAttributes :2626-2633）：显式 pure / impure 照写；未声明时自带 external 段的函数 impure，继承来的 external
-    // 段不算（FunctionSections5 `function f extends base_f` 打 `function f`）；外部调用名为 ModelicaError → pure。
-    const bool modelica_error = fel.def.external.present && fel.def.external.func_name.is_valid() &&
-                                in_.str(fel.def.external.func_name) == "ModelicaError";
-    const bool impure = !modelica_error && (fel.purity == Purity::Impure ||
-                                            (fel.purity == Purity::None && fel.restriction == SRestriction::ExternalFunction));
+    const bool impure = fn_impure(fr);   // 声明的纯度 + 体里顶层调 impure 的后标（见 fn_impure）
     FnCtxGuard guard(*this, &fr.fscope, home, impure);
     std::vector<Id<SElement>> all = sig.inputs;
     all.insert(all.end(), sig.outputs.begin(), sig.outputs.end());
@@ -11098,10 +11215,6 @@ class Flattener {
     const std::optional<std::size_t> fi = emit_function(*fr, sig, *qname, alias_defaults, home);
     if (!fi || result_.unsupported) return fn_fail<Id<Expr>>("function body");
     const std::vector<FlatFuncParam> params = result_.model.functions[*fi].params;   // 拷贝（下面会往 arena add）
-    if (fn_scope_ && result_.model.functions[*fi].is_impure && !fn_impure_) {
-      set_unsupported("pure function calls impure function (warning)");
-      return {};
-    }
     // 缺省槽（fillDefaultSlot2）：取输入绑定，引用别的输入槽处代换成该槽实参（按槽类型强转，被引用的缺省槽先递归补齐）；
     // 互相引用 → CYCLIC_DEFAULT_VALUE、无默认 → UNFILLED_SLOT → SKIP。YmcFnEmit1：`f(a)` → `f(a, 2.0 * a, 3)`。
     std::vector<int> status(inputs.size(), 0);   // 0 未求 / 1 求值中 / 2 已定
@@ -11819,7 +11932,10 @@ class Flattener {
       ~AliasScope() { if (--f.alias_eval_depth_ == 0) f.alias_watch_.clear(); }
     } alias_scope{*this};
     const SElement& fel = I_.scode.elems[fr->fe];
-    if (fel.purity == Purity::Impure) return std::nullopt;   // 不纯函数不能常量折叠（须发射，ImpureCall1）
+    // 不纯函数（声明的或后标的，见 fn_marked_impure）的调用本身不能常量折叠（须发射，ImpureCall1；IP3 `parameter Real p =
+    // f(1.0)` 照留）；被求值的函数体里嵌着的 impure 调用照常求（omc 的 Ceval 不看纯度，IP1 `p = f(1.0)` → 3.0，f 体里
+    // `y := g(x) + 1`、g impure）。
+    if (depth == 0 && (fel.purity == Purity::Impure || fn_marked_impure(*fr))) return std::nullopt;
     if (fn_annotation_blocks(fel.cmt.annotation)) return std::nullopt;
     FnSig sig;
     std::unordered_set<std::uint32_t> seen;
@@ -12023,7 +12139,7 @@ class Flattener {
   }
 
   // 类型化的用户函数调用、实参全是字面量（结构参数代入后的 `g(3)`）：按压平名找回发射时的定义，把字面量实参合成成 Absyn
-  // 字面量交给解释器（eval_user_call 的 known 入口）。只接 Integer / Real / Boolean 及其数组的实参；求不出 → nullopt。
+  // 字面量交给解释器（eval_user_call 的 known 入口）。只接 Integer / Real / Boolean / String 及其数组的实参；求不出 → nullopt。
   std::optional<CVal> eval_flat_call(const std::vector<Symbol>& call_name, const std::vector<Id<Expr>>& args) {
     const auto it = fn_refs_.find(path_key(call_name));
     if (it == fn_refs_.end()) return std::nullopt;
@@ -12035,6 +12151,9 @@ class Flattener {
         case ExprKind::IntLit: e.kind = ExpKind::IntLit; e.ival = x.ival; break;
         case ExprKind::RealLit: e.kind = ExpKind::RealLit; e.rval = x.rval; break;
         case ExprKind::BoolLit: e.kind = ExpKind::BoolLit; e.bval = x.bval; break;
+        // 两边的 sval 都是转义后的原文（求值时再 unescape）。折出来的 getInstanceName()（MSL Random.Utilities.automaticLocalSeed
+        // 的实参，HS 探针 `b.localSeed = if b.useAuto then 658610408 else …`）。
+        case ExprKind::StringLit: e.kind = ExpKind::StringLit; e.sval = x.sval; break;
         case ExprKind::Array:
           e.kind = ExpKind::Array;
           for (Id<Expr> el : x.args) {
@@ -14566,7 +14685,7 @@ class Flattener {
       if (const std::optional<FnRef> fr = resolve_fn(I_.absyn.crefs[e.cref], sc)) {
         FnSig sig;
         std::unordered_set<std::uint32_t> seen;
-        const bool impure = I_.scode.elems[fr->fe].purity == Purity::Impure;
+        const bool impure = I_.scode.elems[fr->fe].purity == Purity::Impure || fn_marked_impure(*fr);
         if (!builtin_equiv(*fr) && collect_fn_sig(fr->fe, fr->fscope, sig, seen, 0) && !impure && !sig.external) {
           // 纯的用户函数：omc 把调用求值掉（整条删去）；求值失败（体里的 assert 不成立，N2 探针 `f(-1.0)`）时调用照留——
           // ymc 求不出时分不清是哪种 → SKIP。

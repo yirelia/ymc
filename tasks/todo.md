@@ -2106,6 +2106,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           下标换成 1（复合数组段、数组 cref 的末段、常量数组）；活的支越界、剪掉的支里类型 / 名字错照旧。条件靠下标里才成
           结构参数的 n（`if n > 1 then x[n-1] else 0`）未做（SKIP）。
           slice 653 例 PASS 602 / FAIL 0（oracle=live 不一致 0）；scodeinst 603 / 42（不变）；testsuite 1695 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0（不变）；MSL 383→387；探针 9117→9132；单测 323→324。
+    - [x] (63g) flat：纯函数后标 impure + 噪声块一路（2026-10-10）：纯函数体里"顶层"调 impure 函数（无返回值调用、赋值右侧
+          整个是调用、局部 / 输入缺省的绑定，体里语句递归；Function.foldExp 浅遍历）→ 打 `impure function`、模型里常量实参的
+          调用不再折叠，传递且与声明先后无关；嵌在运算里 / 被 Integer → Real 转型包住的不算，被求值函数体里嵌着的 impure 调用
+          照常求值（此前一律 SKIP）。ModelicaStrings_hashString 就地求值（HASH_AP）；类型化调用的字面量实参收 String（折出来的
+          getInstanceName()）；when 体里的元组方程（同模型方程：保留 / 空位 `_` / 常量实参拆开），元组目标算进 discrete Real
+          的赋值。常量绑定里顶层的 impure 调用（omc 照样求值）未做（SKIP）。ImpureCall1 文件比对缺告警行 → 记账（FAIL 42→43）。
+          slice 653 例 PASS 602 / FAIL 0（oracle=live 不一致 0）；scodeinst 603 / 43（ImpureCall1 告警行在账）；testsuite 1695→1696 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 387→397；探针 9132→9157；单测 324→325。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

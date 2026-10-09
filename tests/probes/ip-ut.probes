@@ -1,0 +1,31 @@
+//// set: ip-ut — 纯函数后标 impure 与 when 体里的元组方程（单测原文）：顶层 `g(x);` 的 f 打 `impure function`、常量实参调用照留；f 嵌在运算里的 h 照常求值；`(a, b) = f(time)` 在 when 里整条保留
+//// model: IPU1
+model IPU1
+  impure function g
+    input Real x;
+  algorithm
+    assert(x > 0, "x");
+  end g;
+  function f "top-level impure call: marked impure"
+    input Real x;
+    output Real y;
+    output Real z;
+  algorithm
+    g(x);
+    y := x + 1;
+    z := 2 * x;
+  end f;
+  function h "impure call nested in an expression: stays pure"
+    input Real x;
+    output Real y;
+  algorithm
+    y := f(x) + 1;
+  end h;
+  parameter Real p = f(1.0);
+  parameter Real q = h(1.0);
+  discrete Real a, b;
+equation
+  when sample(0, 0.1) then
+    (a, b) = f(time);
+  end when;
+end IPU1;

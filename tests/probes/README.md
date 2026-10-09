@@ -469,3 +469,6 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `tv-ut` | 1 | 本地 ToSpacePhasor 复刻（单测原文）：`cos(+phi)` 向量化、数组字面量体的推导式、`{…} * 2.0 / /*Real*/(m)`、`final parameter` |
 | `db-p1` | 14 | 被字面量条件剪掉的 if 分支里的越界下标：for 展开后的复合连接器数组 `inPort[i-1].occupied`（MSL StateGraph，DB1 / DB2）、Real 数组 / 书写的 `x[0]` / if 方程 / 常量数组 / elseif 链 / 中间段 / 数组值的 if（DB3–DB9）；活的支越界（DB10 SKIP、DB11 双拒）、剪掉的支里类型 / 名字错（DB12 / DB13 双拒）、条件靠下标才成结构参数（DB14 SKIP） |
 | `db-ut` | 1 | 剪掉的 if 分支里的越界下标（单测原文）：复合连接器数组的 `inPort[i - 1].occupied`、Real 数组的 elseif 链 |
+| `ip-p1` | 17 | 纯函数里"顶层"调 impure → omc 后标 impure（无返回值调用 / 赋值右侧整个是调用 / for 体 / while 条件 / 局部与输入缺省的绑定 / 元组赋值，传递且与声明先后无关）；嵌在运算里、被 Integer → Real 转型包住的不算，被求值函数体里嵌着的 impure 调用照常求值；常量绑定里顶层的 impure 调用（IPA / IPD）SKIP |
+| `tw-p1` | 7 | when 体里的元组方程（保留、数组目标、elsewhen、空位 `_`、常量实参拆开）与模型语境；ModelicaStrings_hashString 的就地求值、折出来的 getInstanceName() 作实参（`automaticLocalSeed(getInstanceName())`） |
+| `ip-ut` | 1 | 纯函数后标 impure（单测原文）：`impure function f`、常量实参调用照留、嵌着的 h 照常求值、when 里的元组方程 |
