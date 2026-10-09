@@ -6843,4 +6843,69 @@ YMC_TEST(flatten_string_folded_after_structural_substitution) {
                            "  x[3] = time;\nend FS2;\n"));
 }
 
+YMC_TEST(flatten_short_class_modifier_on_record_array) {
+  // 记录数组的声明类型是带修饰的短类（`record S = R0(a(start = 3), b(min = 0)); S s[2];`）：短类修饰是类型上的，每个元素原样
+  // 照收（不按下标切分），优先级最低。期望 = omc 1.25.0 实跑（2026-10-09）。
+  YMC_CHECK_EQ(flatten_src("model VA2\n  record R0\n    Real a = 1;\n    Real b = 2;\n  end R0;\n"
+                           "  record S = R0(a(start = 3), b(min = 0));\n  S s[2];\nequation\n  s[1].a = time;\n"
+                           "  s[2].a = 2 * time;\nend VA2;\n"),
+               std::string("class VA2\n  Real s[1].a(start = 3.0) = 1.0;\n  Real s[1].b(min = 0.0) = 2.0;\n"
+                           "  Real s[2].a(start = 3.0) = 1.0;\n  Real s[2].b(min = 0.0) = 2.0;\nequation\n  s[1].a = time;\n"
+                           "  s[2].a = 2.0 * time;\nend VA2;\n"));
+}
+
+YMC_TEST(flatten_overloaded_operator_on_record_arrays) {
+  // 记录数组作重载运算符的运算数：+ / - 两侧同形逐元素、标量 * 数组 / 数组 * 标量逐元素（每个元素照标量解析：精确匹配或隐式
+  // 构造），结果是元素调用的数组、方程里逐元素标量化。期望 = omc 1.25.0 实跑（2026-10-09，rp62x SPEC OR10）。
+  YMC_CHECK_EQ(flatten_src("operator record C \"complex-like\"\n  replaceable Real re \"real part\";\n"
+                           "  replaceable Real im \"imaginary part\";\n  encapsulated operator 'constructor'\n"
+                           "    function fromReal \"from reals\"\n      import C;\n      input Real re \"re in\";\n"
+                           "      input Real im = 0 \"im in\";\n      output C result(re = re, im = im) \"result\";\n"
+                           "    algorithm\n      annotation(Inline = true);\n    end fromReal;\n  end 'constructor';\n"
+                           "  encapsulated operator function '+' \"add\"\n    import C;\n    input C c1 \"c1\";\n"
+                           "    input C c2 \"c2\";\n    output C c3 \"c3\";\n  algorithm\n"
+                           "    c3 := C(c1.re + c2.re, c1.im + c2.im);\n    annotation(Inline = true);\n  end '+';\n"
+                           "  encapsulated operator '-' \"minus\"\n    function negate \"neg\"\n      import C;\n"
+                           "      input C c1;\n      output C c2;\n    algorithm\n      c2 := C(-c1.re, -c1.im);\n"
+                           "    end negate;\n    function subtract \"sub\"\n      import C;\n      input C c1;\n"
+                           "      input C c2;\n      output C c3;\n    algorithm\n      c3 := C(c1.re - c2.re, c1.im - c2.im);\n"
+                           "    end subtract;\n  end '-';\n  encapsulated operator '*' \"times\"\n"
+                           "    function multiply \"mul\"\n      import C;\n      input C c1;\n      input C c2;\n"
+                           "      output C c3;\n    algorithm\n"
+                           "      c3 := C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);\n    end multiply;\n"
+                           "  end '*';\n  encapsulated operator function '==' \"eq\"\n    import C;\n    input C c1;\n"
+                           "    input C c2;\n    output Boolean result;\n  algorithm\n"
+                           "    result := c1.re == c2.re and c1.im == c2.im;\n  end '==';\nend C;\npackage P\n"
+                           "  type Voltage = Real(quantity = \"V\", unit = \"V\");\n"
+                           "  operator record CV = C(redeclare Voltage re, redeclare Voltage im) \"voltage\";\nend P;\n"
+                           "model ORU10\n  C z1[2], z2[2], z3[2], z4[2], z5[2];\n  C k;\n  Real r = 2;\nequation\n"
+                           "  k = C(time, 1);\n  z1[1] = C(1, time);\n  z1[2] = C(time, 2);\n  z2 = z1;\n  z3 = z1 + z2;\n"
+                           "  z4 = k * z1;\n  z5 = z1 * r;\nend ORU10;\n"),
+               std::string("function C \"Automatically generated record constructor for C\"\n  input Real re;\n"
+                           "  input Real im;\n  output C res;\nend C;\n\nfunction C.'*'.multiply \"mul\"\n  input C c1;\n"
+                           "  input C c2;\n  output C c3;\nalgorithm\n"
+                           "  c3 := C.'constructor'.fromReal(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);\n"
+                           "end C.'*'.multiply;\n\nfunction C.'+' \"add\"\n  input C c1 \"c1\";\n  input C c2 \"c2\";\n"
+                           "  output C c3 \"c3\";\nalgorithm\n  c3 := C.'constructor'.fromReal(c1.re + c2.re, c1.im + c2.im);\n"
+                           "end C.'+';\n\nfunction C.'constructor'.fromReal \"from reals\"\n  input Real re \"re in\";\n"
+                           "  input Real im = 0.0 \"im in\";\n  output C result \"result\";\nalgorithm\n"
+                           "end C.'constructor'.fromReal;\n\nclass ORU10\n  Real z1[1].re \"real part\";\n"
+                           "  Real z1[1].im \"imaginary part\";\n  Real z1[2].re \"real part\";\n"
+                           "  Real z1[2].im \"imaginary part\";\n  Real z2[1].re \"real part\";\n"
+                           "  Real z2[1].im \"imaginary part\";\n  Real z2[2].re \"real part\";\n"
+                           "  Real z2[2].im \"imaginary part\";\n  Real z3[1].re \"real part\";\n"
+                           "  Real z3[1].im \"imaginary part\";\n  Real z3[2].re \"real part\";\n"
+                           "  Real z3[2].im \"imaginary part\";\n  Real z4[1].re \"real part\";\n"
+                           "  Real z4[1].im \"imaginary part\";\n  Real z4[2].re \"real part\";\n"
+                           "  Real z4[2].im \"imaginary part\";\n  Real z5[1].re \"real part\";\n"
+                           "  Real z5[1].im \"imaginary part\";\n  Real z5[2].re \"real part\";\n"
+                           "  Real z5[2].im \"imaginary part\";\n  Real k.re \"real part\";\n  Real k.im \"imaginary part\";\n"
+                           "  Real r = 2.0;\nequation\n  k = C.'constructor'.fromReal(time, 1.0);\n"
+                           "  z1[1] = C.'constructor'.fromReal(1.0, time);\n  z1[2] = C.'constructor'.fromReal(time, 2.0);\n"
+                           "  z2[1] = z1[1];\n  z2[2] = z1[2];\n  z3[1] = C.'+'(z1[1], z2[1]);\n  z3[2] = C.'+'(z1[2], z2[2]);\n"
+                           "  z4[1] = C.'*'.multiply(k, z1[1]);\n  z4[2] = C.'*'.multiply(k, z1[2]);\n"
+                           "  z5[1] = C.'*'.multiply(z1[1], C.'constructor'.fromReal(r, 0.0));\n"
+                           "  z5[2] = C.'*'.multiply(z1[2], C.'constructor'.fromReal(r, 0.0));\nend ORU10;\n"));
+}
+
 YMC_TEST_MAIN

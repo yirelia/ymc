@@ -1007,7 +1007,13 @@ class Flattener {
           if (cel.mod.is_valid() && !I_.scode.mods[cel.mod].subs.empty()) dmods.push_back({cel.mod, decl_lex(cid, inst_node), prefix});
           for (Id<SMod> cc : I_.comps[cid].cc_mods)
             if (!I_.scode.mods[cc].subs.empty()) dmods.push_back({cc, inst_node, prefix});
-          if (!I_.comps[cid].derived_mods.empty()) { set_unsupported("composite array external modifier"); continue; }
+          // 短类链修饰（SI.ComplexVoltage 的 `Complex(redeclare SI.Voltage re, …)`、`record S = R(a = 5)`）：类型上的修饰，每个
+          // 元素原样照收（不按下标切分），优先级排在最后，同标量复合组件（derived_mod_sources；MSL QuasiStatic Polyphase 的
+          // `SI.ComplexVoltage v[m]`）。
+          std::vector<ModSource> dvmods;
+          if (!I_.comps[cid].derived_mods.empty() &&
+              !derived_mod_sources(cid, cn, inst_node, prefix, wraw.is_valid(), dvmods))
+            continue;
           if (wraw.is_valid()) {
             std::vector<ModSource> kept;
             for (const ModSource& m : dmods) {
@@ -1082,6 +1088,7 @@ class Flattener {
               if (!em.is_valid()) { set_unsupported("composite array modifier distribution"); break; }
               achild.mods.push_back({em, m.scope, m.vprefix});
             }
+            achild.mods.insert(achild.mods.end(), dvmods.begin(), dvmods.end());
             if (result_.unsupported) break;
             if (r == SRestriction::Record) note_rec_nonstruct(cid, name, cps);
             flatten_class(ci, name, cps, is_prot, achild, inners);
@@ -1389,42 +1396,9 @@ class Flattener {
         // 自己的在前，链上外层的短类在前），排在最后。值在短类定义处解析：定义在组件所在的类里 → 与组件自己的修饰同一
         // 作用域；定义在包里 / 顶层 → 包 / 全局作用域（只引常量）；别处（外层模型里的短类等）未做 → SKIP。
         if (!result_.unsupported && !I_.comps[cid].derived_mods.empty()) {
-          const std::vector<Id<SMod>> dmods = I_.comps[cid].derived_mods;    // 拷贝
-          const std::vector<NodeId> dscopes = I_.comps[cid].derived_scopes;
-          NodeId lex = I_.nodes[cn].parent_scope;   // 组件的词法作用域：继承来的组件 = 基类实例，本地组件 = 本实例
-          if (!lex.is_valid() || I_.nodes[lex].is_empty()) lex = inst_node;
-          for (std::size_t k = 0; k < dmods.size() && !result_.unsupported; ++k) {
-            const NodeId d = k < dscopes.size() ? dscopes[k] : NodeId{};
-            NodeId sc;
-            std::vector<Symbol> vp;
-            if (d.is_valid() && !I_.nodes[d].is_empty() && I_.nodes[d].def.is_valid() && I_.nodes[d].def == I_.nodes[lex].def) {
-              sc = lex;
-              vp = prefix;
-            } else if (d.is_valid() && !I_.nodes[d].is_empty() && I_.nodes[d].def.is_valid() &&
-                       I_.scode.elems[I_.nodes[d].def].restriction == SRestriction::Package) {
-              sc = d;
-            } else if (d == I_.top) {   // 顶层短类 `model C2 = C(x = 4);`（E 探针 e214 / e316 / e317）
-              sc = d;
-            } else {
-              set_unsupported("short class modifier scope");
-              break;
-            }
-            // 同一短类修饰里重复改一个元素（`model A2 = A(x = 1.0, x = 2.0)`，DuplicateMod7）→ omc 报错。
-            if (mod_has_duplicates({dmods[k]})) { set_unsupported("duplicate modification"); break; }
-            Id<SMod> dm = dmods[k];
-            if (ctor_mod.is_valid()) {
-              // 整体绑定给出全部字段的绑定（同上面的 take：getRecordBindings 的 outerBinding 盖过字段修饰）。构造函数是链底
-              // 长类的（build_record_ctor_mod 要求解析到 cdef），缺省值也是它的：`record S = R(a = 5); S s = R(b = 4);` →
-              // s.a = 1.0（R 的缺省，SC 探针 t T7）。短类修饰只留属性。
-              bool ok = true;
-              dm = strip_field_bindings(dm, ok);
-              if (!ok) { set_unsupported("record binding + final/each field binding"); break; }
-              if (!dm.is_valid()) continue;
-            }
-            // 短类修饰里 final 的元素又被更外层的修饰改了（`model B = A(final k = 2); B b(k = 3);`）→ 子层的 matched 判。
-            child.mods.push_back({dm, sc, vp});
-          }
-          if (result_.unsupported) continue;
+          std::vector<ModSource> dsrc;
+          if (!derived_mod_sources(cid, cn, inst_node, prefix, ctor_mod.is_valid(), dsrc)) continue;
+          child.mods.insert(child.mods.end(), dsrc.begin(), dsrc.end());
         }
         PSubs cps = psubs;
         cps.push_back({});   // 标量复合段无下标
@@ -10450,7 +10424,8 @@ class Flattener {
       d.size = sh[k];
       rest.push_back(d);
     }
-    const Type elem = Type::of(expr_elem_kind(a));
+    // 元素类型：记录数组照留记录类型（complex_node，record_def_of / 运算符查找要它）。
+    const Type elem = expr_elem_kind(a) == TypeKind::Complex ? x.ty.element_type() : Type::of(expr_elem_kind(a));
     const Type rty = rest.empty() ? elem : Type::array_of(elem, std::move(rest));
     if (x.kind == ExprKind::Cref && !x.cref.parts.empty()) {
       Expr c = x;
@@ -10771,7 +10746,13 @@ class Flattener {
     if (!fn_scope_) {
       std::vector<std::size_t> vec;
       for (std::size_t i = 0; i < inputs.size(); ++i) {
-        if (params[i].record_def != Id<SElement>::kInvalid) continue;
+        // 记录形参：实参是同一记录类的数组（`Modelica.ComplexMath.abs(v)`，`SI.ComplexVoltage v[3]`）→ 照样向量化成
+        // `array(Modelica.ComplexMath.abs(v[$i1]) for $i1 in 1:3)`（MSL QuasiStatic Polyphase 的 `abs_v = abs(v)`）；
+        // 别的记录实参形态照旧（下面 record_def_of 再核）。
+        if (params[i].record_def != Id<SElement>::kInvalid &&
+            !(result_.model.exprs[args[i]].ty.is_array() &&
+              result_.model.exprs[args[i]].ty.element_type().kind == TypeKind::Complex))
+          continue;
         const std::vector<std::int64_t> ash = expr_shape(args[i]);
         const std::size_t pr = params[i].ty.dims.size();
         if (ash.size() <= pr) continue;
@@ -14850,7 +14831,7 @@ class Flattener {
       if (!result_.unsupported) set_unsupported(why);
       return lit_int(0);
     };
-    if (op_type(a).is_array() || op_type(b).is_array()) return fail("overloaded operator on array operand");
+    if (op_type(a).is_array() || op_type(b).is_array()) return overloaded_array_binary(op, a, b);
     const char* opname = op_fn_name(op);
     if (!opname) return fail("overloaded operator kind");
     const bool ca = result_.model.exprs[a].ty.kind == TypeKind::Complex;
@@ -14902,6 +14883,58 @@ class Flattener {
     if (hits.size() != 1) return fail(hits.empty() ? "no matching overloaded operator" : "ambiguous overloaded operator");
     const Id<Expr> c = typed_fn_call(cands[hits[0].fn], {hits[0].x, hits[0].y});
     return c.is_valid() ? c : fail("overloaded operator call");
+  }
+  // 记录数组运算数（matchOverloadedBinaryOperator 没有精确匹配 / 隐式构造之后的数组支，NFTypeCheck.mo:300-312 → :417-767
+  // v1.25.0；rp62x SPEC OR10）：
+  //   + / -（及元素级 .+ .- .* ./）：两侧同形，ExpandExp.expand 后逐元素（checkOverloadedBinaryArrayAddSub2 / ArrayEW2）；
+  //   *：标量 * 数组、数组 * 标量逐元素（checkOverloadedBinaryScalarArray / ArrayScalar）；矩阵积 omc 未实现（报错）；
+  //   /：数组 / 标量逐元素（checkOverloadedBinaryArrayDiv）；其余 omc 报错 → SKIP。
+  // 每个元素照标量的 overloaded_binary 解析（候选、精确匹配、隐式构造都按元素）。结果是数组字面量（元素是调用），方程里随后逐元素
+  // 标量化（e17 `z3[1] = Complex.'+'(z1[1], z2[1]);`、e18 `z3[1] = Complex.'*'.multiply(k, z1[1]);`、q04 `w[1] = Complex.'/'(z[1],
+  // d);`）。向量 * 向量是 scalarProduct 的精确匹配（e16），形参是记录数组的函数未做 → SKIP。
+  Id<Expr> overloaded_array_binary(Op op, Id<Expr> a, Id<Expr> b) {
+    auto fail = [&](const char* why) {
+      if (!result_.unsupported) set_unsupported(why);
+      return lit_int(0);
+    };
+    const std::vector<std::int64_t> sa = expr_shape(a), sb = expr_shape(b);
+    for (std::int64_t n : sa) if (n < 1) return fail("overloaded operator on array of unknown / empty size");
+    for (std::int64_t n : sb) if (n < 1) return fail("overloaded operator on array of unknown / empty size");
+    const bool ew = op == Op::EWAdd || op == Op::EWSub || op == Op::EWMul || op == Op::EWDiv || op == Op::EWPow;
+    const bool addsub = op == Op::Add || op == Op::Sub || op == Op::EWAdd || op == Op::EWSub;
+    const std::vector<std::int64_t>& shape = sa.empty() ? sb : sa;
+    if (!sa.empty() && !sb.empty()) {
+      if (!addsub && !ew) return fail(op == Op::Mul ? "overloaded operator on record arrays (scalarProduct)"
+                                                    : "overloaded operator on record arrays");
+      if (sa != sb) return fail("overloaded operator on record arrays of different shapes");
+    } else if (!sa.empty()) {   // 数组 op 标量
+      if (!(op == Op::Mul || op == Op::Div || ew)) return fail("overloaded operator on record array and scalar");
+    } else {                     // 标量 op 数组
+      if (!(op == Op::Mul || ew)) return fail("overloaded operator on scalar and record array");
+    }
+    std::vector<std::int64_t> idx(shape.size(), 1);
+    std::function<Id<Expr>(std::size_t)> build = [&](std::size_t k) -> Id<Expr> {
+      if (k == shape.size()) {
+        const Id<Expr> ea = sa.empty() ? a : scalarize(a, idx);
+        const Id<Expr> eb = sb.empty() ? b : scalarize(b, idx);
+        if (result_.unsupported) return lit_int(0);
+        return overloaded_binary(op, ea, eb);
+      }
+      Expr arr;
+      arr.kind = ExprKind::Array;
+      for (std::int64_t i = 1; i <= shape[k]; ++i) {
+        idx[k] = i;
+        const Id<Expr> el = build(k + 1);
+        if (result_.unsupported) return lit_int(0);
+        arr.args.push_back(el);
+      }
+      Dimension d;   // 本层一维；元素（下一层）的维由 array_of 接在后面
+      d.kind = DimKind::Integer;
+      d.size = shape[k];
+      arr.ty = Type::array_of(result_.model.exprs[arr.args[0]].ty, {d});
+      return add(std::move(arr));
+    };
+    return build(0);
   }
   // 记录取负 `-a`（checkOverloadedUnaryOperator :1332-1388）：a 的类型里 `'-'` 的各函数，恰一个一元精确匹配（MSL 的 negate；
   // subtract 第二个输入无缺省、不配）→ 调用（SPEC OR9 c03 `Complex.'-'.negate(c1)`、d11 别名的）。数组 / 对不上 → SKIP。
@@ -18912,6 +18945,48 @@ class Flattener {
   // 字段修饰去掉各子修饰的绑定（整体记录绑定下字段绑定由整体绑定给），留属性 / 嵌套修饰；去完为空 → invalid。
   // final 的子修饰去掉绑定后 final 还留着（FR 探针 p40-p42：`M x(cp = d)`、M 里 `parameter CP cp(final m = 3)` →
   // `final parameter Integer x.cp.m = d.m`）；each 的绑定同样被整体绑定盖掉（p43），没别的就整个丢。redeclare 等 → ok = false。
+  // 组件 cid（节点 cn，在类实例 inst_node 里、前缀 prefix）的短类链修饰 → 子层修饰源（`model B = A(k = 2); B b;`，MLS §4.5.1：
+  // 短类定义 = 基类 + 修饰）：优先级最低（外来的、组件自己的在前，链上外层的短类在前），调用方排在最后。值在短类定义处解析：
+  // 定义在组件所在的类里 → 与组件自己的修饰同一作用域；定义在包里 / 顶层 → 包 / 全局作用域（只引常量）；别处（外层模型里的
+  // 短类等）未做 → SKIP。strip：有整体绑定（ctor_mod）时字段绑定都来自它（getRecordBindings 的 outerBinding 盖过字段修饰；构造
+  // 函数是链底长类的，缺省值也是它的：`record S = R(a = 5); S s = R(b = 4);` → s.a = 1.0，SC 探针 t T7），短类修饰只留属性。
+  // 不合 → false（已标 unsupported）。
+  bool derived_mod_sources(CompId cid, NodeId cn, NodeId inst_node, const std::vector<Symbol>& prefix, bool strip,
+                           std::vector<ModSource>& out) {
+    const std::vector<Id<SMod>> dmods = I_.comps[cid].derived_mods;    // 拷贝
+    const std::vector<NodeId> dscopes = I_.comps[cid].derived_scopes;
+    NodeId lex = I_.nodes[cn].parent_scope;   // 组件的词法作用域：继承来的组件 = 基类实例，本地组件 = 本实例
+    if (!lex.is_valid() || I_.nodes[lex].is_empty()) lex = inst_node;
+    for (std::size_t k = 0; k < dmods.size(); ++k) {
+      const NodeId d = k < dscopes.size() ? dscopes[k] : NodeId{};
+      NodeId sc;
+      std::vector<Symbol> vp;
+      if (d.is_valid() && !I_.nodes[d].is_empty() && I_.nodes[d].def.is_valid() && I_.nodes[d].def == I_.nodes[lex].def) {
+        sc = lex;
+        vp = prefix;
+      } else if (d.is_valid() && !I_.nodes[d].is_empty() && I_.nodes[d].def.is_valid() &&
+                 I_.scode.elems[I_.nodes[d].def].restriction == SRestriction::Package) {
+        sc = d;
+      } else if (d == I_.top) {   // 顶层短类 `model C2 = C(x = 4);`（E 探针 e214 / e316 / e317）
+        sc = d;
+      } else {
+        set_unsupported("short class modifier scope");
+        return false;
+      }
+      // 同一短类修饰里重复改一个元素（`model A2 = A(x = 1.0, x = 2.0)`，DuplicateMod7）→ omc 报错。
+      if (mod_has_duplicates({dmods[k]})) { set_unsupported("duplicate modification"); return false; }
+      Id<SMod> dm = dmods[k];
+      if (strip) {
+        bool ok = true;
+        dm = strip_field_bindings(dm, ok);
+        if (!ok) { set_unsupported("record binding + final/each field binding"); return false; }
+        if (!dm.is_valid()) continue;
+      }
+      // 短类修饰里 final 的元素又被更外层的修饰改了（`model B = A(final k = 2); B b(k = 3);`）→ 子层的 matched 判。
+      out.push_back({dm, sc, vp});
+    }
+    return true;
+  }
   Id<SMod> strip_field_bindings(Id<SMod> m, bool& ok) {
     const std::vector<SSubMod> subs = I_.scode.mods[m].subs;   // 拷贝（下面 add_mod 会 realloc mods arena）
     std::vector<SSubMod> out;

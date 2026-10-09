@@ -384,3 +384,11 @@ SynchronousMachines 的 SMEE_DOL / SMEE_LoadDump / SMEE_Rectifier / SMPM_Braking
 SMPM_VoltageSource / SMR_Inverter）与 Components 的 EddyCurrentLosses / PolyphaseInductance / SinglePhaseInductance 逐字节一致。
 电机例子走得更远后暴露的两处一并修了：结构参数代入后算法段里的 `String(m)` 照常求值（`assert(true, "3 phases …")`），记录整体
 绑定写在数据记录之前时字段的结构别名（`aimc.statorCoreParameters.m = 3`）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-09 加宽 62z 之后：PASS 343（不变）
+
+记录数组三处（带修饰短类的声明类型、作记录形参的实参的向量化、作重载运算符的运算数逐元素）做完，QuasiStatic Polyphase / 电机
+示例越过了此前的 `composite array external modifier` / `record argument form` / `overloaded operator on array operand`，停在
+下一处：BalancingStar / EddyCurrentLosses 的 symmetricOrientation 常量调用、BalancingDelta / TransformerTestbench /
+PolyphaseInductance 的记录数组整体绑定、TestSensors 的函数里的记录数组（`input SI.ComplexVoltage v[:]`）、UnsymmetricalLoad
+的组件数组修饰分发。FAIL / ACCEPTS-INVALID / CRASH 0。

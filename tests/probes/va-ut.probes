@@ -1,0 +1,89 @@
+//// set: va-ut — 带修饰短类的记录数组、记录数组作重载运算符的运算数（单测原文）
+//// model: VA2
+model VA2
+  record R0
+    Real a = 1;
+    Real b = 2;
+  end R0;
+  record S = R0(a(start = 3), b(min = 0));
+  S s[2];
+equation
+  s[1].a = time;
+  s[2].a = 2 * time;
+end VA2;
+//// model: ORU10
+operator record C "complex-like"
+  replaceable Real re "real part";
+  replaceable Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import C;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output C result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator function '+' "add"
+    import C;
+    input C c1 "c1";
+    input C c2 "c2";
+    output C c3 "c3";
+  algorithm
+    c3 := C(c1.re + c2.re, c1.im + c2.im);
+    annotation(Inline = true);
+  end '+';
+  encapsulated operator '-' "minus"
+    function negate "neg"
+      import C;
+      input C c1;
+      output C c2;
+    algorithm
+      c2 := C(-c1.re, -c1.im);
+    end negate;
+    function subtract "sub"
+      import C;
+      input C c1;
+      input C c2;
+      output C c3;
+    algorithm
+      c3 := C(c1.re - c2.re, c1.im - c2.im);
+    end subtract;
+  end '-';
+  encapsulated operator '*' "times"
+    function multiply "mul"
+      import C;
+      input C c1;
+      input C c2;
+      output C c3;
+    algorithm
+      c3 := C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+    end multiply;
+  end '*';
+  encapsulated operator function '==' "eq"
+    import C;
+    input C c1;
+    input C c2;
+    output Boolean result;
+  algorithm
+    result := c1.re == c2.re and c1.im == c2.im;
+  end '==';
+end C;
+package P
+  type Voltage = Real(quantity = "V", unit = "V");
+  operator record CV = C(redeclare Voltage re, redeclare Voltage im) "voltage";
+end P;
+model ORU10
+  C z1[2], z2[2], z3[2], z4[2], z5[2];
+  C k;
+  Real r = 2;
+equation
+  k = C(time, 1);
+  z1[1] = C(1, time);
+  z1[2] = C(time, 2);
+  z2 = z1;
+  z3 = z1 + z2;
+  z4 = k * z1;
+  z5 = z1 * r;
+end ORU10;

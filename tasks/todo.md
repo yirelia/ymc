@@ -2051,6 +2051,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           FundamentalWave 电机走得更远后暴露的两处一并修：结构参数代入后算法段里的 `String(m)` 照常求值（方程的 assert 消息
           照旧不化简）；结构别名规则看书写的绑定（第二遍里存回字面量的向前引用照样算，`aimc.statorCoreParameters.m = 3`）。
           slice 590 / FAIL 0；scodeinst 591→592；testsuite 1670→1672 / FAIL 0；MSL 325→343；探针 9042→9049；单测 312→314。
+    - [x] (62z) flat：记录数组——带修饰短类的声明类型、作记录形参的实参、作重载运算符的运算数（2026-10-09）：记录数组的声明
+          类型是带修饰的短类（SI.ComplexVoltage、`record S = R0(a(start = 3))`）时短类修饰每个元素原样照收（不按下标切分，
+          优先级最低，同标量的 derived_mod_sources）；记录数组作记录形参的实参照样向量化（`abs(v)` → `array(abs(v[$i1]) for
+          $i1 in 1:3)`）；记录数组作重载运算符的运算数照 omc 的数组支逐元素（+ / - 同形、标量 * 数组、数组 * 标量、数组 / 标量，
+          结果是元素调用的数组、方程里逐元素标量化）。向量 * 向量（scalarProduct，形参是记录数组的函数）、记录数组的 sum、
+          连接器数组的字段作实参（`p.v`）未做（SKIP）。QuasiStatic Polyphase 示例的下一处：symmetricOrientation 的常量调用、
+          记录数组的整体绑定、函数里的记录数组。
+          slice 591 / FAIL 0；scodeinst 592；testsuite 1672 / FAIL 0；MSL 343（不变）；探针 9049→9055；单测 314→316。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

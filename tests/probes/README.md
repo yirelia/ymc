@@ -455,3 +455,5 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `oo-ut` | 4 | 记录运算数的重载运算符（单测原文，本地 operator record）：精确匹配、隐式构造（`C(2.0, 0.0)` 求值、Integer 转型）、别名路径 `P.CV.'*'.multiply`、`-(-a)`、局部常量 |
 | `fi-ut` | 1 | final parameter 记录绑定的强制内联（单测原文，本地 operator record + 单语句函数）：'constructor' 取输出的字段修饰（`re = re`）、`k * cexp(C(0, phi))` 内联化简成 `k * cos(phi)`、`p * p` → `p.re * p.re - p.im * p.im`，不留函数块 |
 | `fi-p1` | 6 | 强制内联放行 FundamentalWave 电机之后暴露的两处：结构参数代入后算法段里的 `String(m)` 照常求值（FS2；方程里的 assert 消息不化简）；记录整体绑定写在数据记录之前、字段经别名链到 Evaluate 参数（`aimc(statorCoreParameters = aimcData.statorCoreParameters)`，T2；T1 / FM 是对照）。单测取 FS2 |
+| `va-p1` | 4 | 记录数组的声明类型是带修饰的短类（SI.ComplexVoltage、`record S = R0(a(start = 3))`、`operator record CX = Complex(re(start = 1))`）：每个元素原样照收短类修饰；记录数组作记录形参的实参照样向量化（`abs(v)` → `array(Modelica.ComplexMath.abs(v[$i1]) for $i1 in 1:2)`）；连接器数组的字段 `p.v` 作实参仍 SKIP（VA4） |
+| `va-ut` | 2 | 带修饰短类的记录数组（VA2）、记录数组作重载运算符的运算数（ORU10：`z1 + z2`、`k * z1`、`z1 * r` 逐元素）（单测原文） |
