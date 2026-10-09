@@ -463,3 +463,5 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `rz-ut` | 2 | 函数的记录形参（RZU1，本地 operator record + 短类别名 `P.CV`）、返回记录数组的函数求值（RZU2）（单测原文） |
 | `xc-p1` | 15 | 外部 C 字符串函数（ModelicaStrings_substring / ModelicaStrings_length）的常量求值：常量绑定求、参数绑定照留调用（impure）；endIndex 越过串尾照 omc 取到串尾（XC3 / XC6）、-999、转义 / UTF-8 字节长度（XC4）；向前引用的常量（XC10 / XC11，MSL PartialBasicTransformer 的 `R1(start = …C1…)`）；经组件向前引用的常量内联（XC13 / XC15）；MSL Yd01 变压器（XC9） |
 | `xc-ut` | 1 | 外部 C 字符串函数的常量求值（单测原文，本地声明的外部函数 `impure function substr`） |
+| `rq-p1` | 6 | 记录类 `extends Base(field = …)` 的缺省：构造调用求值（RQ1 / RQ2 MSL FluidHeatFlow.Media.Water）、多层 extends + 属性子修饰 + 引用别的字段的缺省（RQ4）、带实参的构造（RQ6）；派生记录传给基类形参（RQ3）、extends 里的 final 修饰（RQ5）SKIP |
+| `rq-ut` | 1 | 派生记录的构造函数（单测原文）：`input Real rho = 995.6`、多层 extends、构造调用求值与缺省补齐 |

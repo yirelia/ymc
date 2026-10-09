@@ -10026,7 +10026,14 @@ class Flattener {
       for (std::size_t k = chain.size(); k-- > 1;) path.push_back(I_.scode.elems[chain[k]].name);
     }
     path.push_back(I_.scode.elems[rdef].name);
-    if (!emit_record_ctor(rdef, chain, path) || result_.unsupported) { set_unsupported("record constructor"); return std::nullopt; }
+    if (!emit_record_ctor(rdef, chain, path) || result_.unsupported) {
+      if (!result_.unsupported) {
+        set_unsupported("record constructor");
+        for (std::size_t k = 0; k < path.size(); ++k)   // 子原因：哪个记录（排桶用）
+          result_.unsupported_detail += (k ? "." : "") + std::string(in_.str(path[k]));
+      }
+      return std::nullopt;
+    }
     if (root && std::find(model_record_ctors_.begin(), model_record_ctors_.end(), path) == model_record_ctors_.end())
       model_record_ctors_.push_back(path);
     return path;
@@ -10123,7 +10130,14 @@ class Flattener {
     if (!tp) { set_unsupported("record constructor naming"); return; }
     ScodeScope rs = bs;
     rs.insert(rs.begin(), rdef);
-    if (!emit_record_ctor(rdef, rs, *tp) || result_.unsupported) { set_unsupported("record constructor"); return; }
+    if (!emit_record_ctor(rdef, rs, *tp) || result_.unsupported) {
+      if (!result_.unsupported) {
+        set_unsupported("record constructor");
+        for (std::size_t k = 0; k < tp->size(); ++k)   // 子原因：哪个记录（排桶用）
+          result_.unsupported_detail += (k ? "." : "") + std::string(in_.str((*tp)[k]));
+      }
+      return;
+    }
     if (root && std::find(model_record_ctors_.begin(), model_record_ctors_.end(), *tp) == model_record_ctors_.end())
       model_record_ctors_.push_back(*tp);
     ensure_type_fns(*tp, ra.cls, rdef, bs);
@@ -10283,19 +10297,56 @@ class Flattener {
   // 作用域里时字段的类型 / 维 / 缺省会在那边解析，只收内建标量、无维无修饰的字段（MSL 的 `extends Modelica.Icons.Record` 没有
   // 字段），否则 false。同名字段（继承去重）未做 → false。
   bool record_fields(Id<SElement> rec, const ScodeScope& rscope, std::vector<Id<SElement>>& out, bool foreign, int depth) {
+    std::vector<RecField> rfs;
+    if (!record_fields_ex(rec, rscope, rfs, foreign, depth)) return false;
+    for (const RecField& rf : rfs) out.push_back(rf.f);
+    return true;
+  }
+  // 同上，并给出各字段生效的缺省：字段自己的绑定，或 extends 修饰改过的（`record Water extends Medium(rho = 995.6, cp = 4177)`，
+  // MSL FluidHeatFlow.Media / FluxTubes.Material；外层 extends 后施加、盖过内层与字段自己的——Modifier.merge 外层优先，
+  // NFModifier.mo:383-437 v1.25.0；RE 探针：构造函数 `input Real rho = 995.6`、`P.Water()` 求值得 995.6）。extends 修饰只收对
+  // 内建（含派生）类型字段的绑定，属性子修饰（`rho(start = …)`）不影响构造与值、略过；final 修饰（字段成构造函数的局部）、对记录
+  // 字段 / 非字段 / redeclare 的修饰、整体绑定 → false。fscope = 声明字段的记录的作用域链 [记录, 外层…]，dscope = 缺省的求值
+  // 作用域链（extends 修饰的 = 写 extends 的记录）。基类与 rec 同一外层作用域才算本地（类型 / 缺省照 rec 的作用域解析）。
+  struct RecField {
+    Id<SElement> f;
+    ScodeScope fscope;
+    Id<Exp> dflt;
+    ScodeScope dscope;
+  };
+  bool record_fields_ex(Id<SElement> rec, const ScodeScope& rscope, std::vector<RecField>& out, bool foreign, int depth) {
     if (depth > 20) return false;
     ScodeScope inner = rscope;
     if (inner.empty() || inner.front() != rec) inner.insert(inner.begin(), rec);
+    const ScodeScope outer(inner.begin() + 1, inner.end());
     for (Id<SElement> fid : I_.scode.elems[rec].def.elements) {
       const SElement& f = I_.scode.elems[fid];
       if (f.kind == SElementKind::Extends) {
-        if (f.mod.is_valid()) return false;   // extends 修饰（改继承字段的缺省）未做
         ScodeScope bds;
         const Id<SElement> b = resolve_class_path(f.base_path, f.base_leading_dot, inner, bds);
         if (!b.is_valid() || I_.scode.elems[b].kind != SElementKind::Class || !rec_restr(I_.scode.elems[b].restriction) ||
             I_.scode.elems[b].def.kind != SClassDefKind::Parts)
           return false;
-        if (!record_fields(b, bds, out, foreign || bds != rscope, depth + 1)) return false;
+        const std::size_t first = out.size();
+        if (!record_fields_ex(b, bds, out, foreign || bds != outer, depth + 1)) return false;
+        if (f.mod.is_valid()) {
+          const SMod em = I_.scode.mods[f.mod];   // 拷贝
+          if (em.binding.is_valid()) return false;
+          for (const SSubMod& sm : em.subs) {
+            const SMod& fm = I_.scode.mods[sm.mod];
+            if (fm.kind != SModKind::Mod || fm.is_final) return false;
+            std::size_t hit = out.size();
+            for (std::size_t k = first; k < out.size(); ++k)
+              if (I_.scode.elems[out[k].f].name == sm.ident) hit = k;
+            if (hit == out.size()) return false;
+            ScodeScope frs;
+            if (record_class_of(I_.scode.elems[out[hit].f], out[hit].fscope, frs).is_valid()) return false;
+            if (fm.binding.is_valid()) {
+              out[hit].dflt = fm.binding;
+              out[hit].dscope = inner;
+            }
+          }
+        }
         continue;
       }
       if (f.kind != SElementKind::Component) continue;
@@ -10304,9 +10355,16 @@ class Flattener {
         if (!builtin_scalar_type_kind(f.type.path, tk) || !f.attr.dims.empty() || !f.type.dims.empty() || f.mod.is_valid())
           return false;
       }
-      for (Id<SElement> o : out)
-        if (I_.scode.elems[o].name == f.name) return false;
-      out.push_back(fid);
+      for (const RecField& o : out)
+        if (I_.scode.elems[o.f].name == f.name) return false;
+      RecField rf;
+      rf.f = fid;
+      rf.fscope = inner;
+      if (f.mod.is_valid() && I_.scode.mods[f.mod].binding.is_valid()) {
+        rf.dflt = I_.scode.mods[f.mod].binding;
+        rf.dscope = inner;
+      }
+      out.push_back(std::move(rf));
     }
     return true;
   }
@@ -10319,8 +10377,10 @@ class Flattener {
   std::optional<std::size_t> emit_record_ctor(Id<SElement> rec, const ScodeScope& rscope, const std::vector<Symbol>& path) {
     for (std::size_t i = 0; i < result_.model.functions.size(); ++i)
       if (result_.model.functions[i].name == path) return i;
+    std::vector<RecField> rfs;
+    if (!record_fields_ex(rec, rscope, rfs, false, 0)) return std::nullopt;
     std::vector<Id<SElement>> fields;
-    if (!record_fields(rec, rscope, fields, false, 0)) return std::nullopt;
+    for (const RecField& rf : rfs) fields.push_back(rf.f);
     ScodeScope inner = rscope;
     if (inner.empty() || inner.front() != rec) inner.insert(inner.begin(), rec);
     FnCtxGuard guard(*this, &rscope, Id<SElement>{}, false);
@@ -10344,14 +10404,14 @@ class Flattener {
     std::string cmt = "Automatically generated record constructor for ";
     for (std::size_t i = 0; i < path.size(); ++i) { if (i) cmt += '.'; cmt += in_.str(path[i]); }
     ff.comment = in_.intern(cmt);
-    for (Id<SElement> fid : fields) {
-      const SElement& f = I_.scode.elems[fid];
+    for (const RecField& rf : rfs) {
+      const SElement& f = I_.scode.elems[rf.f];
       FlatFuncParam p;
       p.name = f.name;
       p.ty = func_params_[f.name.id];
       p.direction = FlatDirection::Input;
-      if (f.mod.is_valid() && I_.scode.mods[f.mod].binding.is_valid()) {
-        p.binding = fn_exp(I_.scode.mods[f.mod].binding, p.ty);
+      if (rf.dflt.is_valid()) {   // 字段自己的缺省，或 extends 修饰改过的（见 record_fields_ex）
+        p.binding = fn_exp(rf.dflt, p.ty);
         if (result_.unsupported || !p.binding.is_valid()) return std::nullopt;
       }
       ff.params.push_back(std::move(p));
@@ -11563,19 +11623,18 @@ class Flattener {
     CVal r = CVal::Rec();
     const std::size_t base = citers_.size();
     auto done = [&](std::optional<CVal> v) { citers_.resize(base); return v; };
-    for (Id<SElement> fid : I_.scode.elems[rec].def.elements) {
+    // 字段按 record_fields_ex：继承来的就地展开、extends 修饰改过的缺省生效（RE 探针 `P.Water()` → rho = 995.6）。
+    std::vector<RecField> rfs;
+    if (!record_fields_ex(rec, rscope, rfs, false, 0)) return done(std::nullopt);
+    for (const RecField& rf : rfs) {
+      const Id<SElement> fid = rf.f;
       const SElement& f = I_.scode.elems[fid];
-      // 记录继承未做；基类一个字段都没有的（`extends Modelica.Icons.Record`，MultiBody Frames.Orientation）不影响值。
-      if (f.kind == SElementKind::Extends) {
-        if (!empty_record_base(f, rscope)) return done(std::nullopt);
-        continue;
-      }
-      if (f.kind != SElementKind::Component) continue;
+      const ScodeScope& fscope = rf.fscope;   // 声明字段的记录的作用域（维、记录类型、自身缺省都在这里）
       // 数组字段：维须求得出（字面量 / 常量 / 前面已定的字段，`Real x[n]`），值的形状须与之相同（RV 探针 v21-v23、MultiBody
       // Frames.Orientation 的 `T[3, 3]`、`w[3]`）；缺值的照标量字段走 Undef 占位。
       std::vector<std::int64_t> fdims;
-      for (Id<Exp> d : f.attr.dims) if (!eval_dim(d, fdims, rscope)) return done(std::nullopt);
-      for (Id<Exp> d : f.type.dims) if (!eval_dim(d, fdims, rscope)) return done(std::nullopt);
+      for (Id<Exp> d : f.attr.dims) if (!eval_dim(d, fdims, fscope)) return done(std::nullopt);
+      for (Id<Exp> d : f.type.dims) if (!eval_dim(d, fdims, fscope)) return done(std::nullopt);
       std::optional<CVal> v;
       for (const auto& g : given) if (g.first == f.name) v = g.second;
       Id<SMod> fmod;
@@ -11584,12 +11643,11 @@ class Flattener {
       if (!v && fmod.is_valid() && I_.scode.mods[fmod].binding.is_valid())
         v = eval_scode(I_.scode.mods[fmod].binding, mod_scope, depth + 1, true);
       ScodeScope frs;
-      const Id<SElement> frec = v ? Id<SElement>{} : record_class_of(f, rscope, frs);
+      const Id<SElement> frec = v ? Id<SElement>{} : record_class_of(f, fscope, frs);
       if (!v && frec.is_valid())
         v = fmod.is_valid() ? record_value(frec, frs, fmod, mod_scope, {}, depth + 1, allow_undef)
-                            : record_value(frec, frs, f.mod, rscope, {}, depth + 1, allow_undef);
-      if (!v && f.mod.is_valid() && I_.scode.mods[f.mod].binding.is_valid())
-        v = eval_scode(I_.scode.mods[f.mod].binding, rscope, depth + 1, true);
+                            : record_value(frec, frs, f.mod, fscope, {}, depth + 1, allow_undef);
+      if (!v && rf.dflt.is_valid()) v = eval_scode(rf.dflt, rf.dscope, depth + 1, true);
       if (!v && allow_undef) {
         CVal u;
         u.k = CVal::K::Undef;
@@ -17741,7 +17799,10 @@ class Flattener {
         const TypeKind k = result_.model.exprs[a].ty.kind;
         const bool numeric = k == TypeKind::Integer || k == TypeKind::Real;
         if ((bf->argdom == BFArg::Real || (bf->foldable && builtin_name != "Integer")) && !numeric) {
-          set_unsupported("non-numeric function argument");
+          if (!result_.unsupported) {
+            set_unsupported("non-numeric function argument");
+            result_.unsupported_detail = std::string(builtin_name);   // 子原因：哪个内建（排桶用）
+          }
           supported = false;
           break;
         }

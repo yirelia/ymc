@@ -1,0 +1,28 @@
+//// set: rq-ut — 派生记录的构造函数（单测原文）：`input Real rho = 995.6` 取 extends 修饰的缺省、多层 extends、属性子修饰、构造调用求值与缺省补齐（`P.Water(995.6, time, 3.0)`）
+//// model: RQU1
+package P
+  record Base "base data"
+    parameter Real rho = 1 "density";
+    parameter Real cp = 2;
+    parameter Real x(unit = "m") = 3;
+  end Base;
+  record Water "water"
+    extends Base(rho = 995.6, cp(min = 0) = 4177);
+  end Water;
+  record Cold "cold water"
+    extends Water(rho = 999.7);
+  end Cold;
+  function f
+    input Water b;
+    input Real t;
+    output Real y;
+  algorithm
+    y := b.rho * t + b.cp;
+  end f;
+end P;
+model RQU1
+  parameter P.Base m = P.Cold();
+  P.Water w;
+  Real y = P.f(P.Water(cp = time), time);
+  Real z = P.f(w, time);
+end RQU1;

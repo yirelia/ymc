@@ -7076,4 +7076,25 @@ YMC_TEST(flatten_external_string_function_constants) {
                            "  Real x[4];\nequation\n  x = {time, time, time, time};\nend XCU1;\n"));
 }
 
+YMC_TEST(flatten_record_extends_modifier_defaults) {
+  // 记录类 `extends Base(field = …)`：构造函数的输入缺省取 extends 修饰（`input Real rho = 995.6`），多层 extends 外层优先，
+  // 属性子修饰不影响构造；构造调用求值（`P.Cold()` → rho = 999.7）、带实参的构造补齐缺省（`P.Water(995.6, time, 3.0)`）。
+  // 期望 = omc 1.25.0 实跑（2026-10-09，探针 rq-ut）。
+  YMC_CHECK_EQ(flatten_src("package P\n  record Base \"base data\"\n    parameter Real rho = 1 \"density\";\n"
+                           "    parameter Real cp = 2;\n    parameter Real x(unit = \"m\") = 3;\n  end Base;\n"
+                           "  record Water \"water\"\n    extends Base(rho = 995.6, cp(min = 0) = 4177);\n  end Water;\n"
+                           "  record Cold \"cold water\"\n    extends Water(rho = 999.7);\n  end Cold;\n  function f\n"
+                           "    input Water b;\n    input Real t;\n    output Real y;\n  algorithm\n    y := b.rho * t + b.cp;\n"
+                           "  end f;\nend P;\nmodel RQU1\n  parameter P.Base m = P.Cold();\n  P.Water w;\n"
+                           "  Real y = P.f(P.Water(cp = time), time);\n  Real z = P.f(w, time);\nend RQU1;\n"),
+               std::string("function P.Water \"Automatically generated record constructor for P.Water\"\n"
+                           "  input Real rho = 995.6;\n  input Real cp = 4177.0;\n  input Real x = 3.0;\n  output Water res;\n"
+                           "end P.Water;\n\nfunction P.f\n  input P.Water b;\n  input Real t;\n  output Real y;\nalgorithm\n"
+                           "  y := b.rho * t + b.cp;\nend P.f;\n\nclass RQU1\n  parameter Real m.rho = 999.7 \"density\";\n"
+                           "  parameter Real m.cp = 4177.0;\n  parameter Real m.x(unit = \"m\") = 3.0;\n"
+                           "  parameter Real w.rho = 995.6 \"density\";\n  parameter Real w.cp(min = 0.0) = 4177.0;\n"
+                           "  parameter Real w.x(unit = \"m\") = 3.0;\n  Real y = P.f(P.Water(995.6, time, 3.0), time);\n"
+                           "  Real z = P.f(w, time);\nend RQU1;\n"));
+}
+
 YMC_TEST_MAIN

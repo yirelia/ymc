@@ -2087,6 +2087,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           引用、组件还没压平到的常量（`transformerData(C1 = substring(transformer.VectorGroup, 1, 1))`）：第一遍记下要第二遍，
           第二遍取第一遍求出的值内联；还没有 → SKIP（此前静默打成对常量的引用）。
           slice 653 / FAIL 0；scodeinst 603（不变）；testsuite 1692 / FAIL 0（不变）；MSL 361→369；探针 9085→9101；单测 320→321。
+    - [x] (63d) flat：记录类 `extends Base(field = …)`（2026-10-09）：extends 修饰改继承字段的缺省——记录构造函数的输入缺省
+          取它（`function P.Water` 的 `input Real rho = 995.6`），多层 extends 外层优先、属性子修饰不影响构造；记录值的求值
+          （构造调用、函数变量的初值）照样按继承展开字段、用改过的缺省（此前记录继承一律不求）。基类与派生记录同一外层作用域即
+          本地（此前比较时多带了派生记录本身，基类一律被当成外来）。extends 里的 final 修饰、对记录字段的修饰、把派生记录传给
+          基类形参（记录类型相容）未做（SKIP）。
+          slice 653 / FAIL 0；scodeinst 603（不变）；testsuite 1692→1695 / FAIL 0（records/DefaultRecordParameters、EngineSAAB95Total、RecordModifications）；MSL 369→376；探针 9101→9108；单测 321→322。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

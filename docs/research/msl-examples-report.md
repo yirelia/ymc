@@ -426,3 +426,10 @@ UnsymmetricalLoad 等，均与 omc 逐字节一致。余下 10 个停在：外�
 transformer.VectorGroup, 1, 1))`）转 PASS——Electrical.Machines.Examples.Transformers 的 AsymmetricalLoad / Rectifier6pulse /
 Rectifier12pulse / IMC_Transformer、InductionMachines.IMC_Transformer、FundamentalWave 与 QuasiStatic FundamentalWave 的
 IMC_Transformer、QuasiStatic TransformerTestbench，均与 omc 逐字节一致。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-09 加宽 63d 之后：PASS 369→376（+7）
+
+记录类 `extends Base(field = …)` 的缺省（构造函数输入、记录值求值按继承展开）做完：FluxTubes 的 MovingCoilActuator
+（ArmatureStroke / ForceCurrentBehaviour / ForceStrokeBehaviour，`PlasticNdFeB extends BaseData(H_cBRef = …)`）、Hysteresis 的
+InductorWithHysteresis / SinglePhaseTransformerWithHysteresis2 / ThreePhaseTransformerWithRectifier、FluidHeatFlow 的 WaterPump
+（`Media.Water extends Medium(rho = 995.6, …)`）转 PASS，均与 omc 逐字节一致。FAIL / ACCEPTS-INVALID / CRASH 0。

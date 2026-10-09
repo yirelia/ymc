@@ -1,0 +1,97 @@
+//// set: rq-p1 — 记录类 `extends Base(field = …)`：extends 修饰改继承字段的缺省——构造调用求值（`parameter P.Base medium = P.Water()` → rho = 995.6，MSL FluidHeatFlow.Media.Water / FluxTubes 材料记录）、多层 extends 外层优先 + 属性子修饰 + 引用别的字段的缺省（RQ4）、带实参的构造（RQ6）；把派生记录传给基类形参（RQ3，记录类型相容未做）与 extends 里的 final 修饰（RQ5）照旧 SKIP
+//// model: RQ1
+package P
+  record Base "base data"
+    parameter Real rho = 1 "density";
+    parameter Real cp = 2;
+    parameter Real x(unit = "m") = 3;
+  end Base;
+  record Water "water"
+    extends Base(rho = 995.6, cp = 4177);
+  end Water;
+end P;
+model RQ1
+  parameter P.Base medium = P.Water();
+  Real y = medium.rho * time;
+end RQ1;
+//// model: RQ2
+model RQ2
+  parameter Modelica.Thermal.FluidHeatFlow.Media.Medium medium = Modelica.Thermal.FluidHeatFlow.Media.Water();
+  Real y = medium.rho * time;
+end RQ2;
+//// model: RQ3
+package P
+  record Base "base data"
+    parameter Real rho = 1 "density";
+    parameter Real cp = 2;
+    parameter Real x(unit = "m") = 3;
+  end Base;
+  record Water "water"
+    extends Base(rho = 995.6, cp = 4177);
+  end Water;
+  function f
+    input Base b;
+    input Real t;
+    output Real y;
+  algorithm
+    y := b.rho * t;
+  end f;
+end P;
+model RQ3
+  P.Water w;
+  Real y = P.f(P.Water(cp = time), time);
+  Real z = P.f(w, time);
+end RQ3;
+//// model: RQ4
+package P
+  record Base "base"
+    parameter Real a = 1;
+    parameter Real b = 2 * a;
+    parameter Real c(unit = "s") = 3;
+  end Base;
+  record Mid "mid"
+    extends Base(a = 10, c(start = 7) = 30);
+  end Mid;
+  record Top "top"
+    extends Mid(a = 100);
+  end Top;
+end P;
+model RQ4
+  parameter P.Base t = P.Top();
+  parameter P.Base m = P.Mid(b = 5);
+  Real y = t.a * time + m.b;
+end RQ4;
+//// model: RQ5
+package P
+  record Base "base"
+    parameter Real a = 1;
+    parameter Real b = 2;
+  end Base;
+  record Fin "final"
+    extends Base(final a = 5);
+  end Fin;
+end P;
+model RQ5
+  parameter P.Base f = P.Fin();
+end RQ5;
+//// model: RQ6
+package P
+  record Base "base"
+    parameter Real a = 1;
+    parameter Real b = 2;
+  end Base;
+  record Der "derived"
+    extends Base(b = 3 * a);
+  end Der;
+  function g
+    input Real t;
+    output Real y;
+  algorithm
+    y := 2 * t;
+  end g;
+end P;
+model RQ6
+  P.Der d(a = 2);
+  parameter P.Base e = P.Der(a = 4);
+  Real y = P.g(d.b * time);
+end RQ6;
