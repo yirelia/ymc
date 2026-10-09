@@ -10366,13 +10366,17 @@ class Flattener {
   // 内建（含派生）类型字段的绑定，属性子修饰（`rho(start = …)`）不影响构造与值、略过；final 修饰（字段成构造函数的局部）、对记录
   // 字段 / 非字段 / redeclare 的修饰、整体绑定 → false。fscope = 声明字段的记录的作用域链 [记录, 外层…]，dscope = 缺省的求值
   // 作用域链（extends 修饰的 = 写 extends 的记录）。基类与 rec 同一外层作用域才算本地（类型 / 缺省照 rec 的作用域解析）。
+  // any_base：调用方按各字段自己的 fscope / dscope 解析（record_value 的求值），别的作用域里的基类字段（带缺省、短类类型、维）
+  // 也收——MSL FluxTubes 的 `record M350_50A extends FluxTubes.Material.SoftMagnetic.BaseData(mu_i = 1210, …)`，BaseData 在别的包里、
+  // 字段是 `SI.RelativePermeability mu_i = 1`（RB 探针）。emit_record_ctor 照 rec 的作用域翻译缺省，仍只收本地的。
   struct RecField {
     Id<SElement> f;
     ScodeScope fscope;
     Id<Exp> dflt;
     ScodeScope dscope;
   };
-  bool record_fields_ex(Id<SElement> rec, const ScodeScope& rscope, std::vector<RecField>& out, bool foreign, int depth) {
+  bool record_fields_ex(Id<SElement> rec, const ScodeScope& rscope, std::vector<RecField>& out, bool foreign, int depth,
+                        bool any_base = false) {
     if (depth > 20) return false;
     ScodeScope inner = rscope;
     if (inner.empty() || inner.front() != rec) inner.insert(inner.begin(), rec);
@@ -10386,7 +10390,7 @@ class Flattener {
             I_.scode.elems[b].def.kind != SClassDefKind::Parts)
           return false;
         const std::size_t first = out.size();
-        if (!record_fields_ex(b, bds, out, foreign || bds != outer, depth + 1)) return false;
+        if (!record_fields_ex(b, bds, out, foreign || bds != outer, depth + 1, any_base)) return false;
         if (f.mod.is_valid()) {
           const SMod em = I_.scode.mods[f.mod];   // 拷贝
           if (em.binding.is_valid()) return false;
@@ -10408,7 +10412,7 @@ class Flattener {
         continue;
       }
       if (f.kind != SElementKind::Component) continue;
-      if (foreign) {
+      if (foreign && !any_base) {
         TypeKind tk;
         if (!builtin_scalar_type_kind(f.type.path, tk) || !f.attr.dims.empty() || !f.type.dims.empty() || f.mod.is_valid())
           return false;
@@ -11771,7 +11775,7 @@ class Flattener {
     auto done = [&](std::optional<CVal> v) { citers_.resize(base); return v; };
     // 字段按 record_fields_ex：继承来的就地展开、extends 修饰改过的缺省生效（RE 探针 `P.Water()` → rho = 995.6）。
     std::vector<RecField> rfs;
-    if (!record_fields_ex(rec, rscope, rfs, false, 0)) return done(std::nullopt);
+    if (!record_fields_ex(rec, rscope, rfs, false, 0, /*any_base=*/true)) return done(std::nullopt);
     for (const RecField& rf : rfs) {
       const Id<SElement> fid = rf.f;
       const SElement& f = I_.scode.elems[fid];

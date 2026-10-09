@@ -1,0 +1,116 @@
+//// set: fr-p1 — 派生记录的构造调用求值、基类在别的包里（MSL FluxTubes 的 `record M350_50A extends FluxTubes.Material.SoftMagnetic.BaseData(mu_i = 1210, …)`）：基类字段带缺省 / 短类类型（SI 属性）/ 数组，缺省在基类自己的作用域里求（只在那个包里可见的常量、引用别的字段），extends 修饰与构造实参照常（FRB1–FRB4）；非常量的派生记录构造给基类型记录组件按字段拆开（FRB5 外来基类、FRB6 本地，omc `m.B = time`）未做 SKIP
+//// model: FRB1
+model FRB1
+  record Base
+    parameter Real mu_i = 1;
+    parameter Real B = 1;
+  end Base;
+  record Steel
+    extends Base(mu_i = 400, B = 1.5);
+  end Steel;
+  model Tube
+    parameter Base material = Base();
+    Real y = material.mu_i * time;
+  end Tube;
+  Tube t(material = Steel());
+end FRB1;
+//// model: FRB2
+package FRB2P
+  package Material
+    record Base
+      parameter Real mu_i = 1;
+      parameter Real B = 1;
+    end Base;
+    package Steels
+      record Steel
+        extends Material.Base(mu_i = 400, B = 1.5);
+      end Steel;
+    end Steels;
+  end Material;
+  model Tube
+    parameter Material.Base material = Material.Base();
+    Real y = material.mu_i * time;
+  end Tube;
+end FRB2P;
+model FRB2
+  FRB2P.Tube t(material = FRB2P.Material.Steels.Steel());
+  FRB2P.Tube t2;
+end FRB2;
+//// model: FRB3
+package FRB3P
+  package Material
+    constant Real k = 2.5;
+    record Base
+      parameter Real mu_i = k;
+      parameter Real B = 2 * mu_i;
+    end Base;
+    package Steels
+      record Steel
+        extends Material.Base(B = 1.5);
+      end Steel;
+      record Iron
+        extends Material.Base;
+      end Iron;
+    end Steels;
+  end Material;
+  model Tube
+    parameter Material.Base material = Material.Base();
+    Real y = material.mu_i * material.B * time;
+  end Tube;
+end FRB3P;
+model FRB3
+  FRB3P.Tube t(material = FRB3P.Material.Steels.Steel());
+  FRB3P.Tube t2(material = FRB3P.Material.Steels.Iron());
+end FRB3;
+//// model: FRB4
+package FRB4P
+  package Material
+    record Base
+      extends Modelica.Icons.Record;
+      parameter Modelica.Units.SI.RelativePermeability mu_i = 1 "initial";
+      parameter Modelica.Units.SI.MagneticFluxDensity B(min = 0) = 1 "max";
+      parameter Real c[2] = {1, 2};
+    end Base;
+    package Steels
+      record Steel
+        extends Material.Base(mu_i = 400, B = 1.5, c = {3, 4});
+      end Steel;
+    end Steels;
+  end Material;
+  model Tube
+    parameter Material.Base material = Material.Base();
+    Real y = material.mu_i * material.c[2] * time;
+  end Tube;
+end FRB4P;
+model FRB4
+  FRB4P.Tube t(material = FRB4P.Material.Steels.Steel());
+  FRB4P.Tube t2(material = FRB4P.Material.Steels.Steel(mu_i = 7));
+end FRB4;
+//// model: FRB5
+package FRB5P
+  package Material
+    record Base
+      Real mu_i = 1;
+      Real B = 1;
+    end Base;
+    package Steels
+      record Steel
+        extends Material.Base(mu_i = 400);
+      end Steel;
+    end Steels;
+  end Material;
+end FRB5P;
+model FRB5
+  FRB5P.Material.Base m = FRB5P.Material.Steels.Steel(B = time);
+end FRB5;
+//// model: FRB6
+model FRB6
+  record Base
+    Real mu_i = 1;
+    Real B = 1;
+  end Base;
+  record Steel
+    extends Base(mu_i = 400);
+  end Steel;
+  Base m = Steel(B = time);
+end FRB6;

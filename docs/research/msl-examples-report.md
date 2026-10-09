@@ -456,3 +456,10 @@ generator.random(pre(state))`）做完：Blocks.Examples.Noise 的 UniformNoise 
 NormalNoiseProperties / ImpureGenerator / ActuatorWithNoise / DrydenContinuousTurbulence 转 PASS；元组目标算进 discrete Real 的
 赋值后 Blocks.Examples.Interaction1、PowerConverters HBridge_DC_Drive 一并转 PASS。均与 omc 逐字节一致；FAIL / ACCEPTS-INVALID /
 CRASH 0。Math.Random.Examples.GenerateRandomNumbers 往前走到算法里给非连续变量赋值，照旧 SKIP。
+
+## 2026-10-10 加宽 63h 之后：PASS 397→402（+5）
+
+派生记录的构造调用求值、基类在别的包里（FluxTubes 材料记录 `record M350_50A extends FluxTubes.Material.SoftMagnetic.BaseData(
+mu_i = 1210, …)`，BaseData 的字段带缺省、类型是 SI 短类）做完：FluxTubes 的 SaturatedInductor / SolenoidActuator
+ComparisonQuasiStatic / ComparisonPullInStroke、QuasiStatic.FluxTubes 的 LinearInductor / NonLinearInductor 转 PASS，均与 omc
+逐字节一致。FAIL / ACCEPTS-INVALID / CRASH 0。

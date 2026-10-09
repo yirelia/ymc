@@ -2113,6 +2113,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           getInstanceName()）；when 体里的元组方程（同模型方程：保留 / 空位 `_` / 常量实参拆开），元组目标算进 discrete Real
           的赋值。常量绑定里顶层的 impure 调用（omc 照样求值）未做（SKIP）。ImpureCall1 文件比对缺告警行 → 记账（FAIL 42→43）。
           slice 653 例 PASS 602 / FAIL 0（oracle=live 不一致 0）；scodeinst 603 / 43（ImpureCall1 告警行在账）；testsuite 1695→1696 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 387→397；探针 9132→9157；单测 324→325。
+    - [x] (63h) flat：派生记录的构造调用求值、基类在别的包里（2026-10-10）：`record M350_50A extends FluxTubes.Material.
+          SoftMagnetic.BaseData(mu_i = 1210, …)` 一类（基类与派生记录不在同一外层作用域）——求记录值时基类字段带缺省 / 短类
+          类型 / 数组也收，各按字段自己的作用域解析（缺省里只在基类包里可见的常量、引用别的字段），此前一律 SKIP。记录构造函数
+          的发射照 rec 的作用域翻译缺省，仍只收本地的；非常量的派生记录构造给基类型记录组件按字段拆开（omc `m.B = time`）未做
+          （SKIP）。
+          slice 653 例 PASS 602 / FAIL 0（oracle=live 不一致 0）；scodeinst 603 / 43（不变）；testsuite 1696→1697 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 397→402；探针 9157→9164；单测 325→326。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

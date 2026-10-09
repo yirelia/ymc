@@ -1,0 +1,27 @@
+//// set: fr-ut — 派生记录的构造调用求值、基类在别的包里（单测原文）：基类字段的缺省在基类的作用域里求（包常量 k、引用别的字段），extends 修饰照常
+//// model: FRBU1
+package FRBU1P
+  package Material
+    constant Real k = 2.5;
+    record Base
+      parameter Real mu_i = k;
+      parameter Real B = 2 * mu_i;
+    end Base;
+    package Steels
+      record Steel
+        extends Material.Base(B = 1.5);
+      end Steel;
+      record Iron
+        extends Material.Base;
+      end Iron;
+    end Steels;
+  end Material;
+  model Tube
+    parameter Material.Base material = Material.Base();
+    Real y = material.mu_i * material.B * time;
+  end Tube;
+end FRBU1P;
+model FRBU1
+  FRBU1P.Tube t(material = FRBU1P.Material.Steels.Steel());
+  FRBU1P.Tube t2(material = FRBU1P.Material.Steels.Iron());
+end FRBU1;

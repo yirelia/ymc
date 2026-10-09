@@ -7165,4 +7165,22 @@ YMC_TEST(flatten_pure_function_marked_impure) {
                            "  end when;\nend IPU1;\n"));
 }
 
+YMC_TEST(flatten_record_value_foreign_base) {
+  // 派生记录的构造调用作记录组件的修饰、基类在别的包里（MSL FluxTubes 材料记录）：值按字段求，基类字段的缺省在基类自己的
+  // 作用域里求（只在 Material 包里可见的常量 k、`B = 2 * mu_i`），extends 修饰盖过缺省。期望 = omc 1.25.0 实跑
+  //（2026-10-10，探针 fr-ut）。
+  YMC_CHECK_EQ(flatten_src("package FRBU1P\n  package Material\n    constant Real k = 2.5;\n    record Base\n"
+                           "      parameter Real mu_i = k;\n      parameter Real B = 2 * mu_i;\n    end Base;\n"
+                           "    package Steels\n      record Steel\n        extends Material.Base(B = 1.5);\n      end Steel;\n"
+                           "      record Iron\n        extends Material.Base;\n      end Iron;\n    end Steels;\n"
+                           "  end Material;\n  model Tube\n    parameter Material.Base material = Material.Base();\n"
+                           "    Real y = material.mu_i * material.B * time;\n  end Tube;\nend FRBU1P;\nmodel FRBU1\n"
+                           "  FRBU1P.Tube t(material = FRBU1P.Material.Steels.Steel());\n"
+                           "  FRBU1P.Tube t2(material = FRBU1P.Material.Steels.Iron());\nend FRBU1;\n"),
+               std::string("class FRBU1\n  parameter Real t.material.mu_i = 2.5;\n  parameter Real t.material.B = 1.5;\n"
+                           "  Real t.y = t.material.mu_i * t.material.B * time;\n  parameter Real t2.material.mu_i = 2.5;\n"
+                           "  parameter Real t2.material.B = 5.0;\n  Real t2.y = t2.material.mu_i * t2.material.B * time;\n"
+                           "end FRBU1;\n"));
+}
+
 YMC_TEST_MAIN

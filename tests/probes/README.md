@@ -472,3 +472,5 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `ip-p1` | 17 | 纯函数里"顶层"调 impure → omc 后标 impure（无返回值调用 / 赋值右侧整个是调用 / for 体 / while 条件 / 局部与输入缺省的绑定 / 元组赋值，传递且与声明先后无关）；嵌在运算里、被 Integer → Real 转型包住的不算，被求值函数体里嵌着的 impure 调用照常求值；常量绑定里顶层的 impure 调用（IPA / IPD）SKIP |
 | `tw-p1` | 7 | when 体里的元组方程（保留、数组目标、elsewhen、空位 `_`、常量实参拆开）与模型语境；ModelicaStrings_hashString 的就地求值、折出来的 getInstanceName() 作实参（`automaticLocalSeed(getInstanceName())`） |
 | `ip-ut` | 1 | 纯函数后标 impure（单测原文）：`impure function f`、常量实参调用照留、嵌着的 h 照常求值、when 里的元组方程 |
+| `fr-p1` | 6 | 派生记录的构造调用求值、基类在别的包里（MSL FluxTubes 材料记录）：基类字段的缺省 / 短类类型（SI 属性）/ 数组、缺省在基类作用域里求、extends 修饰与构造实参（FRB1–FRB4）；非常量构造给基类型记录组件按字段拆开（FRB5 / FRB6）SKIP |
+| `fr-ut` | 1 | 派生记录的构造调用求值、基类在别的包里（单测原文）：包常量 k、`B = 2 * mu_i`、extends 修饰 |
