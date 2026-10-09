@@ -6908,4 +6908,74 @@ YMC_TEST(flatten_overloaded_operator_on_record_arrays) {
                            "  z5[2] = C.'*'.multiply(z1[2], C.'constructor'.fromReal(r, 0.0));\nend ORU10;\n"));
 }
 
+YMC_TEST(flatten_record_array_binding_equations) {
+  // 记录数组的整体绑定：推导式元素按结构条件选支（cj 成 final 参数）、fill 逐元素求值；有元素拆不开（`conj(u[2])`）→ 整个
+  // 绑定挪成逐元素方程，记录 cref 元素写成字段的记录式 `C(u[1].re, u[1].im)`；向量 * 向量精确匹配到形参是记录数组的
+  // scalarProduct（`input C[:] c1`）；`.*` 逐元素。期望 = omc 1.25.0 实跑（2026-10-09，探针 ry-ut）。
+  YMC_CHECK_EQ(flatten_src("operator record C \"complex-like\"\n  replaceable Real re \"real part\";\n"
+                           "  replaceable Real im \"imaginary part\";\n  encapsulated operator 'constructor'\n"
+                           "    function fromReal \"from reals\"\n      import C;\n      input Real re \"re in\";\n"
+                           "      input Real im = 0 \"im in\";\n      output C result(re = re, im = im) \"result\";\n"
+                           "    algorithm\n      annotation(Inline = true);\n    end fromReal;\n  end 'constructor';\n"
+                           "  encapsulated operator function '+' \"add\"\n    import C;\n    input C c1 \"c1\";\n"
+                           "    input C c2 \"c2\";\n    output C c3 \"c3\";\n  algorithm\n"
+                           "    c3 := C(c1.re + c2.re, c1.im + c2.im);\n    annotation(Inline = true);\n  end '+';\n"
+                           "  encapsulated operator '*' \"times\"\n    function multiply \"mul\"\n      import C;\n"
+                           "      input C c1;\n      input C c2;\n      output C c3;\n    algorithm\n"
+                           "      c3 := C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);\n    end multiply;\n"
+                           "    function scalarProduct \"dot\"\n      import C;\n      input C c1[:] \"v1\";\n"
+                           "      input C c2[size(c1, 1)] \"v2\";\n      output C c3 \"c1*c2\";\n    algorithm\n"
+                           "      c3 := C(0);\n      for i in 1:size(c1, 1) loop\n        c3 := c3 + c1[i] * c2[i];\n"
+                           "      end for;\n    end scalarProduct;\n  end '*';\nend C;\nfunction conj \"conjugate\"\n"
+                           "  input C c1;\n  output C c2;\nalgorithm\n  c2 := C(c1.re, -c1.im);\nend conj;\nmodel RYU1\n"
+                           "  parameter Integer n = 2;\n  parameter Boolean cj[n] = {false, true};\n  C u[n];\n"
+                           "  C w[n] = {if cj[k] then conj(u[k]) else u[k] for k in 1:n};\n"
+                           "  parameter C g[n] = fill(C(2, 1), n);\n  C y = g * w;\n  C v[n] = u .* w;\nequation\n"
+                           "  for k in 1:n loop\n    u[k] = C(k * time, 1);\n  end for;\nend RYU1;\n"),
+               std::string("function C \"Automatically generated record constructor for C\"\n  input Real re;\n"
+                           "  input Real im;\n  output C res;\nend C;\n\nfunction C.'*'.multiply \"mul\"\n  input C c1;\n"
+                           "  input C c2;\n  output C c3;\nalgorithm\n"
+                           "  c3 := C.'constructor'.fromReal(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);\n"
+                           "end C.'*'.multiply;\n\nfunction C.'*'.scalarProduct \"dot\"\n  input C[:] c1 \"v1\";\n"
+                           "  input C[size(c1, 1)] c2 \"v2\";\n  output C c3 \"c1*c2\";\nalgorithm\n  c3 := C(0.0, 0.0);\n"
+                           "  for i in 1:size(c1, 1) loop\n    c3 := C.'+'(c3, C.'*'.multiply(c1[i], c2[i]));\n  end for;\n"
+                           "end C.'*'.scalarProduct;\n\nfunction C.'+' \"add\"\n  input C c1 \"c1\";\n  input C c2 \"c2\";\n"
+                           "  output C c3 \"c3\";\nalgorithm\n  c3 := C.'constructor'.fromReal(c1.re + c2.re, c1.im + c2.im);\n"
+                           "end C.'+';\n\nfunction C.'constructor'.fromReal \"from reals\"\n  input Real re \"re in\";\n"
+                           "  input Real im = 0.0 \"im in\";\n  output C result \"result\";\nalgorithm\n"
+                           "end C.'constructor'.fromReal;\n\nfunction conj \"conjugate\"\n  input C c1;\n  output C c2;\n"
+                           "algorithm\n  c2 := C.'constructor'.fromReal(c1.re, -c1.im);\nend conj;\n\nclass RYU1\n"
+                           "  final parameter Integer n = 2;\n  final parameter Boolean cj[1] = false;\n"
+                           "  final parameter Boolean cj[2] = true;\n  Real u[1].re \"real part\";\n"
+                           "  Real u[1].im \"imaginary part\";\n  Real u[2].re \"real part\";\n"
+                           "  Real u[2].im \"imaginary part\";\n  Real w[1].re \"real part\";\n"
+                           "  Real w[1].im \"imaginary part\";\n  Real w[2].re \"real part\";\n"
+                           "  Real w[2].im \"imaginary part\";\n  parameter Real g[1].re = 2.0 \"real part\";\n"
+                           "  parameter Real g[1].im = 1.0 \"imaginary part\";\n  parameter Real g[2].re = 2.0 \"real part\";\n"
+                           "  parameter Real g[2].im = 1.0 \"imaginary part\";\n  Real y.re \"real part\";\n"
+                           "  Real y.im \"imaginary part\";\n  Real v[1].re \"real part\";\n  Real v[1].im \"imaginary part\";\n"
+                           "  Real v[2].re \"real part\";\n  Real v[2].im \"imaginary part\";\nequation\n"
+                           "  w[1] = C(u[1].re, u[1].im);\n  w[2] = conj(u[2]);\n  y = C.'*'.scalarProduct(g, w);\n"
+                           "  v[1] = C.'*'.multiply(u[1], w[1]);\n  v[2] = C.'*'.multiply(u[2], w[2]);\n"
+                           "  u[1] = C.'constructor'.fromReal(time, 1.0);\n  u[2] = C.'constructor'.fromReal(2.0 * time, 1.0);\n"
+                           "end RYU1;\n"));
+}
+
+YMC_TEST(flatten_component_redeclare_in_declaration_modifier) {
+  // 组件声明修饰里的成员重声明（只换类型、不引用名字）：记录数组带 each 的每个元素都换（`final` 前缀照打），标量的同样；
+  // 整体绑定照常拆字段。期望 = omc 1.25.0 实跑（2026-10-09，探针 ry-ut）。
+  YMC_CHECK_EQ(flatten_src("record R \"pair\"\n  replaceable Real re \"first\";\n  replaceable Real im \"second\";\nend R;\n"
+                           "model RYU2\n  type Cur = Real(quantity = \"Current\", unit = \"A\");\n"
+                           "  R r[2](redeclare each Cur re, redeclare each final Cur im);\n  R s(redeclare Cur re) = R(1, 2);\n"
+                           "equation\n  r[1] = R(time, 1);\n  r[2] = R(1, time);\nend RYU2;\n"),
+               std::string("function R \"Automatically generated record constructor for R\"\n  input Real re;\n"
+                           "  input Real im;\n  output R res;\nend R;\n\nclass RYU2\n"
+                           "  Real r[1].re(quantity = \"Current\", unit = \"A\") \"first\";\n"
+                           "  final Real r[1].im(quantity = \"Current\", unit = \"A\") \"second\";\n"
+                           "  Real r[2].re(quantity = \"Current\", unit = \"A\") \"first\";\n"
+                           "  final Real r[2].im(quantity = \"Current\", unit = \"A\") \"second\";\n"
+                           "  Real s.re(quantity = \"Current\", unit = \"A\") = 1.0 \"first\";\n  Real s.im = 2.0 \"second\";\n"
+                           "equation\n  r[1] = R(time, 1.0);\n  r[2] = R(1.0, time);\nend RYU2;\n"));
+}
+
 YMC_TEST_MAIN

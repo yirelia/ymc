@@ -392,3 +392,16 @@ SMPM_VoltageSource / SMR_Inverter）与 Components 的 EddyCurrentLosses / Polyp
 下一处：BalancingStar / EddyCurrentLosses 的 symmetricOrientation 常量调用、BalancingDelta / TransformerTestbench /
 PolyphaseInductance 的记录数组整体绑定、TestSensors 的函数里的记录数组（`input SI.ComplexVoltage v[:]`）、UnsymmetricalLoad
 的组件数组修饰分发。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-09 加宽 63a 之后：PASS 349（+6）
+
+记录数组续（推导式 / fill 整体绑定、拆不开时挪成逐元素方程、形参是记录数组的 scalarProduct、组件声明修饰里只换类型的成员
+重声明）做完：QuasiStatic Polyphase 的 BalancingStar / BalancingDelta 转 PASS（与 omc 逐字节一致：PowerSensor 的 Sum 块
+`uInternal` 推导式、`k = fill(Complex(1, 0), nin)`、`y = Complex.'*'.scalarProduct(k, uInternal)`，多相电流 / 电压传感器的
+`redeclare each final SI.Current re`）；FundamentalWave ComparisonPolyphase 的四个（IMC_DOL / IMS_Start / SMPM_Inverter /
+SMR_Inverter_Polyphase）因结构代入后的常量用户调用照常求值转 PASS。QuasiStatic 其余示例停在下一处：函数形参是 operator
+record 短类别名的记录数组（FundamentalWave 电机 12 个停在 function variable type，IMC_YD 核实是
+`activePower(input SI.ComplexVoltage v[:], …)`）、函数里记录字段的
+引用形态（TestSensors / IMC_DOL / SMPM_Mains 等）、final parameter 的 Complex 矩阵绑定（`sTM = symmetricTransformationMatrix(m)`，
+UnsymmetricalLoad）、PolyphaseInductance / EddyCurrentLosses 的多相电磁转换器里的记录数组整体绑定（子原因待查）、无实例的材料记录构造（FluxTubes Linear/NonLinearInductor）。
+FAIL / ACCEPTS-INVALID / CRASH 0。

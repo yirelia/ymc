@@ -640,5 +640,16 @@
 "ConnectComplexFlow1.mo",
 "OperatorOverloadConstructorDefault1.mo",
 "OperatorOverloadBinaryWithBuiltin.mo",
-"Inline2.mo"
+"Inline2.mo",
+"ArrayConstructorComplex1.mo",
+"FuncViaComp.mo",
+"FuncViaComp3.mo",
+"InnerOuterReplaceable1.mo",
+"RedeclareConnectorType1.mo",
+"RedeclareConnectorType2.mo",
+"RedeclareMod1.mo",
+"RedeclareMod7.mo",
+"redeclare13.mo",
+"redeclare2.mo",
+"redeclare4.mo"
 ]

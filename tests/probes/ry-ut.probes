@@ -1,0 +1,78 @@
+//// set: ry-ut — 记录数组整体绑定挪成逐元素方程（单测原文，本地 operator record）：推导式元素按结构条件选支、fill 逐元素求值、有元素拆不开（conj）→ 全部元素成方程、记录 cref 元素写成字段记录式；形参是记录数组的 scalarProduct；`.*` 逐元素；组件声明修饰里只换类型的成员重声明（RYU2）
+//// model: RYU1
+operator record C "complex-like"
+  replaceable Real re "real part";
+  replaceable Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import C;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output C result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator function '+' "add"
+    import C;
+    input C c1 "c1";
+    input C c2 "c2";
+    output C c3 "c3";
+  algorithm
+    c3 := C(c1.re + c2.re, c1.im + c2.im);
+    annotation(Inline = true);
+  end '+';
+  encapsulated operator '*' "times"
+    function multiply "mul"
+      import C;
+      input C c1;
+      input C c2;
+      output C c3;
+    algorithm
+      c3 := C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+    end multiply;
+    function scalarProduct "dot"
+      import C;
+      input C c1[:] "v1";
+      input C c2[size(c1, 1)] "v2";
+      output C c3 "c1*c2";
+    algorithm
+      c3 := C(0);
+      for i in 1:size(c1, 1) loop
+        c3 := c3 + c1[i] * c2[i];
+      end for;
+    end scalarProduct;
+  end '*';
+end C;
+function conj "conjugate"
+  input C c1;
+  output C c2;
+algorithm
+  c2 := C(c1.re, -c1.im);
+end conj;
+model RYU1
+  parameter Integer n = 2;
+  parameter Boolean cj[n] = {false, true};
+  C u[n];
+  C w[n] = {if cj[k] then conj(u[k]) else u[k] for k in 1:n};
+  parameter C g[n] = fill(C(2, 1), n);
+  C y = g * w;
+  C v[n] = u .* w;
+equation
+  for k in 1:n loop
+    u[k] = C(k * time, 1);
+  end for;
+end RYU1;
+//// model: RYU2
+record R "pair"
+  replaceable Real re "first";
+  replaceable Real im "second";
+end R;
+model RYU2
+  type Cur = Real(quantity = "Current", unit = "A");
+  R r[2](redeclare each Cur re, redeclare each final Cur im);
+  R s(redeclare Cur re) = R(1, 2);
+equation
+  r[1] = R(time, 1);
+  r[2] = R(1, time);
+end RYU2;

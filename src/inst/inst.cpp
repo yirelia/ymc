@@ -991,6 +991,60 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing) {
           I_.applied_redecls.insert(s.mod.raw);
         }
       }
+    // 组件声明修饰里的成员重声明（MSL 多相电流 / 电压传感器 `ComplexOutput i[m](redeclare each final SI.Current re, redeclare
+    // each final SI.Current im)`；scodeinst RedeclareMod1 / redeclare2 / redeclare4 …）：同上施加到这个组件的类实例里（声明修饰
+    // 在短类修饰之外，后施加 = 外层的替掉内层的，redeclare_component 的"外层又重声明一次"）；类型名在声明所在的类里解析
+    //（NFInst.instComponentDef 的 parent）。数组元素共用这一个类实例，故只收 each 的。
+    // 只收不引用名字的：重声明元素的修饰 / 绑定 / 维、被替的原声明的维都只含字面量。引用名字的要在写修饰的类（外层实例，前缀
+    // 少一段）里解析——flatten 拿组件自己的前缀去解析（`A a(redeclare Real x = p)` 成了 `a.p`、`redeclare Real x[n]` 的 n 找成
+    // `a.n`，RD 探针 / scodeinst RedeclareDim1），未做 → 照旧留给 flatten → SKIP。
+    if (class_inst.is_valid() && !I_.nodes[class_inst].is_empty() && el.mod.is_valid()) {
+      auto lit_exp = [&](auto& self, Id<Exp> e) -> bool {
+        if (!e.is_valid()) return true;
+        const Exp& x = I_.absyn.exps[e];
+        if (x.kind == ExpKind::CrefExp || x.kind == ExpKind::Call || x.kind == ExpKind::Reduction) return false;
+        for (Id<Exp> k : {x.a, x.b, x.c})
+          if (!self(self, k)) return false;
+        for (Id<Exp> k : x.args)
+          if (!self(self, k)) return false;
+        return true;
+      };
+      auto lit_mod = [&](auto& self, Id<SMod> m) -> bool {
+        if (!m.is_valid()) return true;
+        const SMod& md = I_.scode.mods[m];
+        if (md.kind != SModKind::Mod || !lit_exp(lit_exp, md.binding)) return false;
+        for (const SSubMod& sub : md.subs)
+          if (!self(self, sub.mod)) return false;
+        return true;
+      };
+      auto lit_dims = [&](const SElement& d) {
+        for (const std::vector<Id<Exp>>* ds : {&d.attr.dims, &d.type.dims})
+          for (Id<Exp> x : *ds)
+            if (!lit_exp(lit_exp, x)) return false;
+        return true;
+      };
+      const std::vector<SSubMod> subs = I_.scode.mods[el.mod].subs;   // 拷贝：重声明会往 arena add
+      const bool is_array = !el.attr.dims.empty() || !el.type.dims.empty() || !type_dims.empty();
+      for (const SSubMod& s : subs) {
+        const SMod& sm = I_.scode.mods[s.mod];
+        if (sm.kind != SModKind::Redecl || !sm.element.is_valid() || (is_array && !sm.is_each)) continue;
+        int same = 0;
+        for (const SSubMod& t : subs) same += t.ident == s.ident ? 1 : 0;
+        if (same > 1) { mark_unsupported("duplicate modification"); continue; }
+        NodeId fc;
+        for (NodeId c : I_.trees[I_.node_class(class_inst).tree].components)
+          if (I_.nodes[c].name == s.ident && I_.nodes[c].comp.is_valid()) { fc = c; break; }
+        if (!fc.is_valid()) continue;   // 不是成员：照旧留给 flatten
+        // 被替的成员是 protected / final：omc 报 "Protected element 'x' may not be modified"（redeclare/RedeclareVisibility2、
+        // RV3 探针）/ 改 final 元素 → 不施加，留给 flatten 照旧 SKIP。
+        if (I_.nodes[fc].visibility == Visibility::Protected || I_.comps[I_.nodes[fc].comp].attributes.is_final) continue;
+        const SElement& re = I_.scode.elems[sm.element];
+        const SElement& oe = I_.scode.elems[I_.comps[I_.nodes[fc].comp].def];
+        if (re.prefixes.has_cc || !lit_mod(lit_mod, re.mod) || !lit_dims(re) || !lit_dims(oe)) continue;
+        redeclare_component(fc, sm.element, enclosing);
+        I_.applied_redecls.insert(s.mod.raw);
+      }
+    }
   }
   Id<Exp> bind = el.mod.is_valid() ? I_.scode.mods[el.mod].binding : Id<Exp>{};
   // 类型带维：类型修饰按那层类型的形状切分（`type V3 = Real[3](start = {1, 2, 3})` → x[j].start = 第 j 个，x25），不再按组件

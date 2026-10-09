@@ -2059,6 +2059,16 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           连接器数组的字段作实参（`p.v`）未做（SKIP）。QuasiStatic Polyphase 示例的下一处：symmetricOrientation 的常量调用、
           记录数组的整体绑定、函数里的记录数组。
           slice 591 / FAIL 0；scodeinst 592；testsuite 1672 / FAIL 0；MSL 343（不变）；探针 9049→9055；单测 314→316。
+    - [x] (63a) flat：记录数组续——整体绑定的推导式 / fill 元素、拆不开时挪成逐元素方程、形参是记录数组的函数（scalarProduct）、
+          组件声明修饰里的成员重声明（2026-10-09）：记录数组的整体绑定是推导式（单迭代变量、范围从字面量起）/ `fill(x, n)` 时
+          逐元素取（迭代变量代入、if 照结构条件选支），operator record 构造调用的常量元素求值后拆字段；有元素拆不开（`conj(u[2])`、
+          `a .* b` 的元素是调用）→ 整个绑定挪成逐元素方程（splitRecordCref 后不是记录数组），记录 cref 元素写成字段的记录式
+          `ComplexInput(u[1].re, u[1].im)`、各元素字段无绑定（只做连续变量）。函数形参 / 局部可以是记录数组（`input Complex[:]
+          c1`），向量 * 向量先找精确匹配（scalarProduct），元素级运算直接逐元素；展开的数组字面量（`{p.pin[1].v, …}`）作运算数
+          按元素类型找候选。组件声明修饰里的成员重声明（`ComplexOutput i[m](redeclare each final SI.Current re, …)`）实例化时
+          施加（数组只收 each 的；只收不引用名字的，引用外层参数的要换前缀解析，未做 → SKIP；改 protected / final 成员照旧
+          SKIP）；经组件调 protected 函数（`a.f()`）不再放行。
+          slice 642→653 / FAIL 0；scodeinst 592→603（FAIL 41→42，RedeclareConstant1 文件 Result 错贴、ymc 同 1.25.0，入账）；testsuite 1672→1689 / FAIL 0；MSL 343→349；探针 9055→9068；单测 316→318。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

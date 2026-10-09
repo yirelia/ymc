@@ -457,3 +457,5 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `fi-p1` | 6 | 强制内联放行 FundamentalWave 电机之后暴露的两处：结构参数代入后算法段里的 `String(m)` 照常求值（FS2；方程里的 assert 消息不化简）；记录整体绑定写在数据记录之前、字段经别名链到 Evaluate 参数（`aimc(statorCoreParameters = aimcData.statorCoreParameters)`，T2；T1 / FM 是对照）。单测取 FS2 |
 | `va-p1` | 4 | 记录数组的声明类型是带修饰的短类（SI.ComplexVoltage、`record S = R0(a(start = 3))`、`operator record CX = Complex(re(start = 1))`）：每个元素原样照收短类修饰；记录数组作记录形参的实参照样向量化（`abs(v)` → `array(Modelica.ComplexMath.abs(v[$i1]) for $i1 in 1:2)`）；连接器数组的字段 `p.v` 作实参仍 SKIP（VA4） |
 | `va-ut` | 2 | 带修饰短类的记录数组（VA2）、记录数组作重载运算符的运算数（ORU10：`z1 + z2`、`k * z1`、`z1 * r` 逐元素）（单测原文） |
+| `ry-p1` | 11 | 记录数组续：整体绑定是推导式 / fill（MSL ComplexMISO 的 `uInternal`、Sum 的 `k = fill(Complex(1, 0), nin)`）逐元素取；有元素拆不开（`conj(u[2])`、`a .* b`）→ 全部元素挪成方程、记录 cref 元素写成字段记录式（RY1 `ComplexInput(s.u[1].re, s.u[1].im)`）；向量 * 向量精确匹配 `Complex.'*'.scalarProduct`（数组字面量运算数 `{a[1], a[2]} * b` 同）；`.*` 逐元素；展开的连接器数组字段作运算数；组件声明修饰里只换类型的成员重声明（MSL 多相传感器 RY5、RY10）。RY8 / RY9 引用外层参数的重声明 SKIP，RY11 改 protected 成员两边都拒 |
+| `ry-ut` | 2 | 记录数组整体绑定挪成逐元素方程 + scalarProduct + `.*`（RYU1）、组件声明修饰里只换类型的成员重声明（RYU2）（单测原文） |
