@@ -440,3 +440,10 @@ InductorWithHysteresis / SinglePhaseTransformerWithHysteresis2 / ThreePhaseTrans
 `{{+cos(-phi[k]), -sin(-phi[k])} for k in 1:m}`、`protected final parameter Integer m`）：Machines 的 SMEE_DOL / SMEE_Generator /
 TransformerTestbench、Polyphase 的 Rectifier / TestSensors、FundamentalWave 的 SMEE_Generator / SMEE_Generator_Polyphase 转 PASS，
 均与 omc 逐字节一致。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-09 加宽 63f 之后：PASS 383→387（+4）
+
+被字面量条件剪掉的 if 分支里的越界下标不再 SKIP（MSL StateGraph PartialStep 的 for 展开 `inPort[i].occupied = if i == 1 then
+localActive else inPort[i-1].occupied or inPort[i-1].set`，i = 1 时剪掉的支引用 `inPort[0]`）：StateGraph 的 FirstExample /
+FirstExample_Variant2 / FirstExample_Variant3 / ExecutionPaths 转 PASS，均与 omc 逐字节一致；ControlledTanks 往前走到
+`inner outer` 组件（CompositeStep 的 stateGraphRoot）照旧 SKIP。FAIL / ACCEPTS-INVALID / CRASH 0。

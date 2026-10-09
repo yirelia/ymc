@@ -467,3 +467,5 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `rq-ut` | 1 | 派生记录的构造函数（单测原文）：`input Real rho = 995.6`、多层 extends、构造调用求值与缺省补齐 |
 | `tv-p1` | 8 | 函数体里的元素式内建向量化（MSL ToSpacePhasor）：一维局部数组上的 `cos(phi)` → `array(cos(phi[$i1]) for $i1 in 1:m)`（书写的维 / `size(x, 1)` / Integer 元素转型，TV1 / TV2 / TV7）、数组字面量体的推导式、标量乘行长未知 / 已知的数组字面量（TV5 / TV6）、`2 / m * x` 换位（TV3）、作调用输出维实参的 parameter 局部打 `final parameter`（TV4）；运算式实参的向量化（TV8）SKIP |
 | `tv-ut` | 1 | 本地 ToSpacePhasor 复刻（单测原文）：`cos(+phi)` 向量化、数组字面量体的推导式、`{…} * 2.0 / /*Real*/(m)`、`final parameter` |
+| `db-p1` | 14 | 被字面量条件剪掉的 if 分支里的越界下标：for 展开后的复合连接器数组 `inPort[i-1].occupied`（MSL StateGraph，DB1 / DB2）、Real 数组 / 书写的 `x[0]` / if 方程 / 常量数组 / elseif 链 / 中间段 / 数组值的 if（DB3–DB9）；活的支越界（DB10 SKIP、DB11 双拒）、剪掉的支里类型 / 名字错（DB12 / DB13 双拒）、条件靠下标才成结构参数（DB14 SKIP） |
+| `db-ut` | 1 | 剪掉的 if 分支里的越界下标（单测原文）：复合连接器数组的 `inPort[i - 1].occupied`、Real 数组的 elseif 链 |

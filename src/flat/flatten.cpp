@@ -12678,13 +12678,14 @@ class Flattener {
         else ix.push_back(se);
       }
       if (ix.empty()) { set_unsupported("constant array subscript"); return false; }   // 空切片未核实
-      for (Id<Expr> i : ix) {
+      for (Id<Expr>& i : ix) {
         const Expr& ie = result_.model.exprs[i];
         if (ie.ty.kind != TypeKind::Integer || ie.ty.is_array() || ie.kind == ExprKind::Array || ie.kind == ExprKind::Range) {
           set_unsupported("constant array subscript");   // 留着的切片（`x[n:n + 1]` → `{…}[n:n + 1]`）未做
           return false;
         }
         if (ie.kind == ExprKind::IntLit && (ie.ival < 1 || ie.ival > shape[k])) {
+          if (dead_branch_ > 0 && shape[k] >= 1) { i = lit_int(1); continue; }   // 见 dead_branch_（ie 此后不再用）
           set_unsupported("array subscript out of range");
           return false;
         }
@@ -13228,6 +13229,7 @@ class Flattener {
       if (!iv && !sym && absyn_refs_param(sx, enclosing))
         if (std::optional<CVal> pv = eval_scode(sx, sc, 0, /*allow_param=*/true, nullptr); pv && pv->k == CVal::K::Int)
           iv = pv->i;
+      if (iv && (*iv < 1 || *iv > dim) && dead_branch_ > 0 && dim >= 1) iv = 1;   // 剪掉的 if 分支（见 dead_branch_）
       if (iv) return *iv >= 1 && *iv <= dim ? lit_int(*iv) : Id<Expr>{};
       const ExpKind sk = I_.absyn.exps[sx].kind;
       if (sk == ExpKind::Colon || sk == ExpKind::Range || is_array_ctor(sx)) return {};
@@ -13605,6 +13607,7 @@ class Flattener {
                   // 定型化简后已是整数字面量（`y[Integer(i)]`，i 是枚举迭代变量：值求值路没有枚举值）。
                   if (result_.model.exprs[se].kind == ExprKind::IntLit) iv = result_.model.exprs[se].ival;
                 }
+                if (iv && (*iv < 1 || *iv > ldims[k]) && dead_branch_ > 0 && ldims[k] >= 1) iv = 1;   // 见 dead_branch_
                 if (!iv || *iv < 1 || *iv > ldims[k]) {
                   set_unsupported("array subscript out of range");
                   break;
@@ -14497,8 +14500,19 @@ class Flattener {
     const bool top = if_top_;   // 本 if 是整个绑定 / 等式一侧（见 if_top_）；条件与两支里的 if 都不是
     if_top_ = false;
     Id<Expr> c = inst_exp(e.a, enclosing, prefix);
+    // 条件折成字面量（for 方程展开后的 `if i == 1 then localActive else inPort[i-1].occupied`）：两支照样都定型、类型照对
+    //（NFTyping.typeIfExpression :2631-2674 v1.25.0），但被剪掉那支里的越界下标不算错——omc 的越界检查在化简之后
+    //（VerifyModel.checkSubscriptBounds，NFVerifyModel.mo:264-324；NFInst.mo:210 的化简先于 :257 的校验），剪掉的支已不在
+    //（SG 探针：`if true then 0 else x[0]` → `y = 0.0`；MSL StateGraph 的 PartialStep）。见 dead_branch_。
+    std::optional<bool> cb;
+    if (!fn_scope_ && !result_.unsupported)
+      if (const Id<Expr> cs = simplify_expr(c); result_.model.exprs[cs].kind == ExprKind::BoolLit) cb = result_.model.exprs[cs].bval;
+    if (cb == std::optional<bool>(false)) ++dead_branch_;
     Id<Expr> t = inst_exp(e.b, enclosing, prefix);
+    if (cb == std::optional<bool>(false)) --dead_branch_;
+    if (cb == std::optional<bool>(true)) ++dead_branch_;
     Id<Expr> f = inst_exp(e.c, enclosing, prefix);
+    if (cb == std::optional<bool>(true)) --dead_branch_;
     if (!fn_scope_ && !result_.unsupported && (!expr_shape(t).empty() || !expr_shape(f).empty())) {
       // 条件折成字面量：直接取那一支，另一支不参与形状 / 类型匹配（IfExpression10 `if false then {1, 2} elseif false then {1}
       // else {3, 4}` → `x = {3.0, 4.0}`）。
@@ -23196,6 +23210,9 @@ class Flattener {
   std::unordered_map<std::uint32_t, FnRecord> fn_records_;      // 记录类型的形参 / 局部名 → 记录类（字段访问 `r.x`）
   // 当前函数里成了结构参数的局部名（调用的输出维引用了它所在的实参，见 try_emit_user_call）：parameter 局部打 `final parameter`。
   std::unordered_set<std::uint32_t> fn_struct_locals_;
+  // > 0：正在定型被字面量条件剪掉的 if 分支（见 if_exp）。其中越界的常量下标换成 1 照常定型——该支随后被丢掉，omc 不查它的
+  // 越界（VerifyModel 只看化简后留下的式子）；类型 / 名字错照样报。
+  int dead_branch_ = 0;
   NodeId root_;                                                 // 被压平的根类实例
   // 模型语境里返回数组的调用只许出现在整个绑定 / 等式一侧（NFScalarize.scalarizeEquation :343-346 把含数组调用的等式
   // 整体保留；嵌在别的运算里要逐元素展开，未做）。emit_array / collect_equation 在对应 inst_exp 前置位，

@@ -1,0 +1,153 @@
+//// set: db-p1 — 被字面量条件剪掉的 if 分支里的越界下标（omc 的越界检查 VerifyModel 在化简之后，剪掉的支不查）：for 展开后 `if i == 1 then localActive else inPort[i-1].occupied …`（复合连接器数组，MSL StateGraph PartialStep，DB1 / DB2）、Real 数组 `x[i-1]`（DB3）、书写的 `if true then 0 else x[0]`（DB4）、if 方程（DB5）、常量数组（DB6）、elseif 链（DB7）、中间段 `b[i].q[i-1].x`（DB8）、数组值的 if（DB9）；活的那支越界（DB10 复合：omc 照打不存在的变量 / DB11：omc 报错）、剪掉的支里类型 / 名字错（DB12 / DB13：omc 报错）、条件靠下标里才成结构参数的 n（DB14）SKIP
+//// model: DB1
+model DB1
+  connector P
+    Boolean occupied;
+    Boolean set;
+  end P;
+  parameter Integer nIn = 1;
+  P inPort[nIn];
+  Boolean localActive = time > 0.5;
+equation
+  for i in 1:nIn loop
+    inPort[i].occupied = if i == 1 then localActive else inPort[i-1].occupied or inPort[i-1].set;
+    inPort[i].set = false;
+  end for;
+end DB1;
+//// model: DB2
+model DB2
+  connector P
+    Boolean occupied;
+    Boolean set;
+  end P;
+  parameter Integer nIn = 2;
+  P inPort[nIn];
+  Boolean localActive = time > 0.5;
+  Boolean b;
+equation
+  for i in 1:nIn loop
+    inPort[i].occupied = if i == 1 then localActive else inPort[i-1].occupied or inPort[i-1].set;
+    inPort[i].set = false;
+  end for;
+  b = Modelica.Math.BooleanVectors.anyTrue(inPort.set);
+end DB2;
+//// model: DB3
+model DB3
+  parameter Integer n = 2;
+  Real x[n] = {time, 2 * time};
+  Real y[n];
+equation
+  for i in 1:n loop
+    y[i] = if i == 1 then 0 else x[i-1];
+  end for;
+end DB3;
+//// model: DB4
+model DB4
+  Real x[2] = {time, 2 * time};
+  Real y = if true then 0 else x[0];
+end DB4;
+//// model: DB5
+model DB5
+  parameter Integer n = 2;
+  Real x[n] = {time, 2 * time};
+  Real y[n];
+equation
+  for i in 1:n loop
+    if i == 1 then
+      y[i] = 0;
+    else
+      y[i] = x[i-1];
+    end if;
+  end for;
+end DB5;
+//// model: DB6
+model DB6
+  constant Real c[2] = {1.5, 2.5};
+  parameter Integer n = 2;
+  Real y[n];
+equation
+  for i in 1:n loop
+    y[i] = if i == 1 then time else c[i-1] * time;
+  end for;
+end DB6;
+//// model: DB7
+model DB7
+  parameter Integer n = 3;
+  Real x[n] = {time, 2 * time, 3 * time};
+  Real y[n];
+equation
+  for i in 1:n loop
+    y[i] = if i == 1 then 0 elseif i == 2 then x[i-1] else x[i-2] + x[i+1-1];
+  end for;
+end DB7;
+//// model: DB8
+model DB8
+  record R
+    Real x;
+  end R;
+  model B
+    R q[2];
+  end B;
+  B b[2];
+  Real y[2];
+equation
+  for i in 1:2 loop
+    b[i].q[1].x = time;
+    b[i].q[2].x = 2 * time;
+    y[i] = if i == 1 then 0 else b[i].q[i-1].x;
+  end for;
+end DB8;
+//// model: DB9
+model DB9
+  Real x[2] = {time, 2 * time};
+  Real z[2] = if false then {x[0], x[3]} else {x[2], x[1]};
+end DB9;
+//// model: DB10
+model DB10
+  connector P
+    Real v;
+    flow Real i;
+  end P;
+  P p[2];
+  Real y[2];
+equation
+  for i in 1:2 loop
+    y[i] = p[i+1].v;
+  end for;
+end DB10;
+//// model: DB11
+model DB11
+  parameter Integer n = 2;
+  Real x[n] = {time, 2 * time};
+  Real y[n];
+equation
+  for i in 1:n loop
+    y[i] = if i == 1 then 0 else x[i+1];
+  end for;
+end DB11;
+//// model: DB12
+model DB12
+  parameter Integer n = 2;
+  Real x[n] = {time, 2 * time};
+  Real y[n];
+equation
+  for i in 1:n loop
+    y[i] = if i <= n then x[i] else "a";
+  end for;
+end DB12;
+//// model: DB13
+model DB13
+  parameter Integer n = 2;
+  Real x[n] = {time, 2 * time};
+  Real y[n];
+equation
+  for i in 1:n loop
+    y[i] = if i > 1 then x[i-1] else undefinedName[i-1];
+  end for;
+end DB13;
+//// model: DB14
+model DB14
+  parameter Integer n = 1;
+  Real x[2] = {time, 2 * time};
+  Real y = if n > 1 then x[n-1] else 0;
+end DB14;

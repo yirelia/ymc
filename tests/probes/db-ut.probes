@@ -1,0 +1,21 @@
+//// set: db-ut — 剪掉的 if 分支里的越界下标（单测原文）：复合连接器数组的 `inPort[i - 1].occupied`、Real 数组的 elseif 链
+//// model: DBU1
+model DBU1
+  connector P
+    Boolean occupied;
+    Boolean set;
+  end P;
+  parameter Integer nIn = 2;
+  P inPort[nIn];
+  Boolean localActive = time > 0.5;
+  Real x[3] = {time, 2 * time, 3 * time};
+  Real y[3];
+equation
+  for i in 1:nIn loop
+    inPort[i].occupied = if i == 1 then localActive else inPort[i - 1].occupied or inPort[i - 1].set;
+    inPort[i].set = false;
+  end for;
+  for i in 1:3 loop
+    y[i] = if i == 1 then 0 elseif i == 2 then x[i - 1] else x[i - 2] + x[i];
+  end for;
+end DBU1;

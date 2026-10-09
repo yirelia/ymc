@@ -7122,4 +7122,23 @@ YMC_TEST(flatten_function_vectorized_builtins) {
                            "  u = {sin(time), cos(time), time};\n  (v, v0) = TVU1.toSP(u);\nend TVU1;\n"));
 }
 
+YMC_TEST(flatten_dead_branch_out_of_range_subscript) {
+  // 被字面量条件剪掉的 if 分支里的越界下标不算错（omc 的越界检查 VerifyModel 在化简之后）：for 展开后 i = 1 的
+  // `inPort[0].occupied`、`x[0]` / `x[-1]` 所在的支被剪掉，活的支照常。期望 = omc 1.25.0 实跑（2026-10-09，探针 db-ut）。
+  YMC_CHECK_EQ(flatten_src("model DBU1\n  connector P\n    Boolean occupied;\n    Boolean set;\n  end P;\n"
+                           "  parameter Integer nIn = 2;\n  P inPort[nIn];\n  Boolean localActive = time > 0.5;\n"
+                           "  Real x[3] = {time, 2 * time, 3 * time};\n  Real y[3];\nequation\n  for i in 1:nIn loop\n"
+                           "    inPort[i].occupied = if i == 1 then localActive else inPort[i - 1].occupied or inPort[i - 1].set;\n"
+                           "    inPort[i].set = false;\n  end for;\n  for i in 1:3 loop\n"
+                           "    y[i] = if i == 1 then 0 elseif i == 2 then x[i - 1] else x[i - 2] + x[i];\n  end for;\n"
+                           "end DBU1;\n"),
+               std::string("class DBU1\n  final parameter Integer nIn = 2;\n  Boolean inPort[1].occupied;\n"
+                           "  Boolean inPort[1].set;\n  Boolean inPort[2].occupied;\n  Boolean inPort[2].set;\n"
+                           "  Boolean localActive = time > 0.5;\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real y[1];\n"
+                           "  Real y[2];\n  Real y[3];\nequation\n  x = {time, 2.0 * time, 3.0 * time};\n"
+                           "  inPort[1].occupied = localActive;\n  inPort[1].set = false;\n"
+                           "  inPort[2].occupied = inPort[1].occupied or inPort[1].set;\n  inPort[2].set = false;\n"
+                           "  y[1] = 0.0;\n  y[2] = x[1];\n  y[3] = x[1] + x[3];\nend DBU1;\n"));
+}
+
 YMC_TEST_MAIN
