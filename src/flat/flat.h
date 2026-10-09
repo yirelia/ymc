@@ -106,6 +106,7 @@ struct FlatFuncParam {
   FlatDirection direction = FlatDirection::None;  // Input/Output；None = protected 局部
   bool is_protected = false;
   FlatVarKind var_kind = FlatVarKind::Var;        // 局部保留；in/out 归一 Var
+  bool is_final = false;                         // 成了结构参数的 parameter 局部（打 `final parameter`）
   Id<Expr> binding;                              // 默认值 / 输出定义 / 局部绑定；无则 invalid
   std::vector<Symbol> type_path;                 // 记录类型：按类型名打印（`input R r`）；空 = 内建类型（ty）
   std::uint32_t record_def = 0xFFFFFFFFu;        // 记录类型的 SCode 类元素（Id<SElement>.raw），调用处实参匹配用；不打印

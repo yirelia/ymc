@@ -1,0 +1,128 @@
+//// set: tv-p1 — 函数体里的元素式内建向量化与相关形态（MSL SpacePhasors.Functions.ToSpacePhasor）：一维函数局部数组上的 `cos(phi)` → `array(cos(phi[$i1]) for $i1 in 1:m)`（范围取维的尺寸式：书写的 `m`、`size(x, 1)`，Integer 元素加转型，TV1 / TV2 / TV7）；数组字面量体的推导式 `array({cos(-phi[k]), -sin(-phi[k])} for k in 1:m)`；标量乘行长未知的数组字面量不展开、照 toDAE 换位打 `{phi, phi} * 2.0 / /*Real*/(m)`（TV5），行长已知的照展开（TV6），`2 / m * x` → `x * 2.0 / /*Real*/(m)`（TV3）；parameter 局部作调用的输出维实参成结构参数、打 `final parameter`（TV4）；向量化的实参是运算式（TV8）未做 SKIP
+//// model: TV1
+model TV1
+  function toSP
+    input Real x[:];
+    output Real y[2];
+    output Real y0;
+  protected
+    parameter Integer m = size(x, 1) annotation(Evaluate = true);
+    parameter Real phi[m] = {(k - 1) * 2 * 3.141592653589793 / m for k in 1:m};
+    parameter Real T[2, m] = 2 / m * {+cos(+phi), +sin(+phi)};
+    parameter Real IT[m, 2] = {{+cos(-phi[k]), -sin(-phi[k])} for k in 1:m};
+  algorithm
+    y := T * x;
+    y0 := 1 / m * sum(x);
+  end toSP;
+  Real u[3] = {sin(time), cos(time), time};
+  Real v[2];
+  Real v0;
+equation
+  (v, v0) = toSP(u);
+end TV1;
+//// model: TV2
+model TV2
+  Real u[3] = {sin(time), cos(time), time};
+  Real v[2] = Modelica.Electrical.Machines.SpacePhasors.Functions.ToSpacePhasor(u);
+end TV2;
+//// model: TV3
+model TV3
+  function f
+    input Real x[:];
+    output Real y;
+  protected
+    Integer m = size(x, 1);
+    Real a[size(x, 1)] = 2 / m * x;
+    Real b[size(x, 1)] = 2 * x;
+    Real c[size(x, 1)] = x / m;
+    Real d[size(x, 1)] = (2 / m) * x;
+    Real e[size(x, 1)] = 2.5 * x / m;
+    Real g[size(x, 1)] = m * x;
+    Real h[size(x, 1)] = x * 2 / m;
+    Real k[size(x, 1)] = 1 / m * x;
+  algorithm
+    y := sum(a) + sum(b) + sum(c) + sum(d) + sum(e) + sum(g) + sum(h) + sum(k);
+  end f;
+  Real u[3] = {sin(time), cos(time), time};
+  Real v = f(u);
+end TV3;
+//// model: TV4
+model TV4
+  function g
+    input Integer n;
+    output Real o[n];
+  algorithm
+    o := fill(1.0, n);
+  end g;
+  function f
+    input Real x[:];
+    output Real y;
+  protected
+    parameter Integer m = size(x, 1);
+    parameter Integer m2 = size(x, 1) annotation(Evaluate = true);
+    Integer m3 = size(x, 1);
+    parameter Integer m4 = size(x, 1);
+    parameter Real phi[m] = g(m);
+    Real psi[m3] = g(m3);
+    parameter Real chi[m2] = g(m2);
+    parameter Real eta[m4] = x;
+  algorithm
+    y := sum(phi) + sum(psi) + sum(chi) + sum(eta);
+  end f;
+  Real u[3] = {sin(time), cos(time), time};
+  Real v = f(u);
+end TV4;
+//// model: TV5
+model TV5
+  function f
+    input Real x[:];
+    output Real y;
+  protected
+    parameter Integer m = size(x, 1);
+    parameter Real phi[m] = x;
+    parameter Real T[2, m] = 2 / m * {phi, phi};
+  algorithm
+    y := sum(T);
+  end f;
+  Real u[3] = {sin(time), cos(time), time};
+  Real v = f(u);
+end TV5;
+//// model: TV6
+model TV6
+  function f
+    input Real a[3];
+    output Real b[2, 3];
+  algorithm
+    b := 2 * {a, a};
+  end f;
+  Real u[3] = {sin(time), cos(time), time};
+  Real v[2, 3] = f(u);
+end TV6;
+//// model: TV7
+model TV7
+  function f
+    input Real x[:];
+    input Integer n[:];
+    output Real y;
+  protected
+    Real s[size(x, 1)] = sqrt(x);
+    Real c[size(n, 1)] = cos(n);
+  algorithm
+    y := sum(s) + sum(c);
+  end f;
+  Real u[3] = {sin(time), cos(time), time};
+  Real v = f(u, {1, 2});
+end TV7;
+//// model: TV8
+model TV8
+  function f
+    input Real x[:];
+    output Real y;
+  protected
+    Real e[3] = exp({1.0, 2.0, 3.0} .* x[1:3]);
+  algorithm
+    y := sum(e);
+  end f;
+  Real u[3] = {sin(time), cos(time), time};
+  Real v = f(u);
+end TV8;

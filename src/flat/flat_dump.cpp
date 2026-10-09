@@ -109,6 +109,7 @@ class FlatDumper {
     ind_ = "  ";
     out_ += "  ";
     if (p.is_protected) out_ += "protected ";
+    if (p.is_final) out_ += "final ";
     switch (p.var_kind) {   // 局部保留 kind；in/out 已在发射期归一 Var（不打前缀）
       case FlatVarKind::Discrete: out_ += "discrete "; break;
       case FlatVarKind::Parameter: out_ += "parameter "; break;

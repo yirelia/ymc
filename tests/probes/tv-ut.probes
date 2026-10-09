@@ -1,0 +1,28 @@
+//// set: tv-ut — 函数体里的元素式内建向量化（单测原文，本地 ToSpacePhasor 复刻）：`cos(phi)` 向量化、数组字面量体的推导式、标量乘行长未知的字面量不展开、作调用输出维实参的 parameter 局部打 `final parameter`
+//// model: TVU1
+model TVU1
+  function g "orientation"
+    input Integer n;
+    output Real o[n];
+  algorithm
+    o := {(k - 1) * 2 * 3.141592653589793 / n for k in 1:n};
+  end g;
+  function toSP "space phasor"
+    input Real x[:];
+    output Real y[2];
+    output Real y0;
+  protected
+    parameter Integer m = size(x, 1) annotation(Evaluate = true);
+    parameter Real phi[m] = g(m);
+    parameter Real T[2, m] = 2 / m * {+cos(+phi), +sin(+phi)};
+    parameter Real IT[m, 2] = {{+cos(-phi[k]), -sin(-phi[k])} for k in 1:m};
+  algorithm
+    y := T * x;
+    y0 := 1 / m * sum(x);
+  end toSP;
+  Real u[3] = {sin(time), cos(time), time};
+  Real v[2];
+  Real v0;
+equation
+  (v, v0) = toSP(u);
+end TVU1;

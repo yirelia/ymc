@@ -433,3 +433,10 @@ IMC_Transformer、QuasiStatic TransformerTestbench，均与 omc 逐字节一致�
 （ArmatureStroke / ForceCurrentBehaviour / ForceStrokeBehaviour，`PlasticNdFeB extends BaseData(H_cBRef = …)`）、Hysteresis 的
 InductorWithHysteresis / SinglePhaseTransformerWithHysteresis2 / ThreePhaseTransformerWithRectifier、FluidHeatFlow 的 WaterPump
 （`Media.Water extends Medium(rho = 995.6, …)`）转 PASS，均与 omc 逐字节一致。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-09 加宽 63e 之后：PASS 376→383（+7）
+
+函数体里的元素式内建向量化做完（MSL SpacePhasors.Functions.ToSpacePhasor 的 `2/m*{+cos(+phi), +sin(+phi)}` 与
+`{{+cos(-phi[k]), -sin(-phi[k])} for k in 1:m}`、`protected final parameter Integer m`）：Machines 的 SMEE_DOL / SMEE_Generator /
+TransformerTestbench、Polyphase 的 Rectifier / TestSensors、FundamentalWave 的 SMEE_Generator / SMEE_Generator_Polyphase 转 PASS，
+均与 omc 逐字节一致。FAIL / ACCEPTS-INVALID / CRASH 0。

@@ -8705,14 +8705,17 @@ class Flattener {
     std::unordered_map<std::uint32_t, FnRecord> records;
     std::unordered_map<std::uint32_t, std::vector<Id<Exp>>> dim_exps;
     std::unordered_map<std::uint32_t, Id<Expr>> iter_labels, loop_labels;
+    std::unordered_set<std::uint32_t> struct_locals;
     FnCtxGuard(Flattener& fl, const ScodeScope* sc, Id<SElement> h, bool imp)
         : f(fl), params(std::move(fl.func_params_)), inputs(std::move(fl.fn_inputs_)), scope(fl.fn_scope_),
           home(fl.fn_home_), impure(fl.fn_impure_), end(fl.fn_end_), loops_depth(fl.fn_loops_),
           iters(std::move(fl.stmt_iters_)), loops(std::move(fl.loop_vars_)), cpfx(fl.ceval_prefix_),
           cpsubs(std::move(fl.ceval_psubs_)), citers(std::move(fl.citers_)), locals(fl.locals_), in_names(fl.input_names_),
           records(std::move(fl.fn_records_)), dim_exps(std::move(fl.fn_dim_exps_)),
-          iter_labels(std::move(fl.stmt_iter_labels_)), loop_labels(std::move(fl.loop_labels_)) {
+          iter_labels(std::move(fl.stmt_iter_labels_)), loop_labels(std::move(fl.loop_labels_)),
+          struct_locals(std::move(fl.fn_struct_locals_)) {
       f.func_params_.clear(); f.fn_inputs_.clear(); f.stmt_iters_.clear(); f.loop_vars_.clear(); f.fn_records_.clear();
+      f.fn_struct_locals_.clear();
       f.fn_dim_exps_.clear(); f.stmt_iter_labels_.clear(); f.loop_labels_.clear();
       f.ceval_psubs_.clear(); f.citers_.clear();
       f.fn_scope_ = sc; f.fn_home_ = h; f.fn_impure_ = imp; f.fn_end_ = Id<Expr>{}; f.fn_loops_ = 0;
@@ -8726,6 +8729,7 @@ class Flattener {
       f.citers_ = std::move(citers); f.locals_ = locals; f.input_names_ = in_names; f.fn_records_ = std::move(records);
       f.fn_dim_exps_ = std::move(dim_exps);
       f.stmt_iter_labels_ = std::move(iter_labels); f.loop_labels_ = std::move(loop_labels);
+      f.fn_struct_locals_ = std::move(struct_locals);
     }
     FnCtxGuard(const FnCtxGuard&) = delete;
     FnCtxGuard& operator=(const FnCtxGuard&) = delete;
@@ -9380,8 +9384,11 @@ class Flattener {
     }
     if (result_.unsupported) return lit_int(0);
     const Type bty = result_.model.exprs[body].ty;
-    // 体是数组：只认推导式套推导式（c23 `{{i * j * a for j in 1:2} for i in 1:m}` → `array(array(… for j in 1:2) for i in 1:m)`）。
-    if (!expr_shape(body).empty() && !(is_array && result_.model.exprs[body].kind == ExprKind::Reduction)) {
+    // 体是数组：推导式套推导式（c23 `{{i * j * a for j in 1:2} for i in 1:m}` → `array(array(… for j in 1:2) for i in 1:m)`），
+    // 或数组字面量（MSL ToSpacePhasor 的 `{{+cos(-phi[k]), -sin(-phi[k])} for k in 1:m}` → `array({cos(-phi[k]), -sin(-phi[k])}
+    // for k in 1:m)`，TP 探针；字面量的类型是粗的，维取 expr_shape）。
+    const bool lit_body = is_array && result_.model.exprs[body].kind == ExprKind::Array;
+    if (!expr_shape(body).empty() && !(is_array && result_.model.exprs[body].kind == ExprKind::Reduction) && !lit_body) {
       set_unsupported("array-valued reduction body");
       return lit_int(0);
     }
@@ -9462,8 +9469,17 @@ class Flattener {
           d.size = static_cast<std::int64_t>(vals[k]->size());
         }
         std::vector<Dimension> ds{d};
-        ds.insert(ds.end(), bty.dims.begin(), bty.dims.end());   // 体是推导式：它的维在内
-        r.ty = Type::array_of(bty.element_type(), std::move(ds));
+        if (lit_body && k == 0) {   // 数组字面量体：粗类型不带维，按形状补（未知长 → Unknown）
+          for (std::int64_t n : expr_shape(body)) {
+            Dimension bd;
+            if (n >= 0) { bd.kind = DimKind::Integer; bd.size = n; } else { bd.kind = DimKind::Unknown; }
+            ds.push_back(bd);
+          }
+          r.ty = Type::array_of(Type::of(expr_elem_kind(body)), std::move(ds));
+        } else {
+          ds.insert(ds.end(), bty.dims.begin(), bty.dims.end());   // 体是推导式：它的维在内
+          r.ty = Type::array_of(bty.element_type(), std::move(ds));
+        }
       } else {
         r.ty = bty;
       }
@@ -10744,6 +10760,9 @@ class Flattener {
       }
     result_.model.functions[fi].body = std::move(body);
     result_.model.functions[fi].has_algorithm = sig.alg != nullptr;
+    for (FlatFuncParam& p : result_.model.functions[fi].params)   // 结构参数化的 parameter 局部（见 fn_struct_locals_）
+      p.is_final = p.is_final || (p.direction == FlatDirection::None && p.var_kind == FlatVarKind::Parameter &&
+                                  fn_struct_locals_.count(p.name.id) > 0);
     if (sig.ext) {
       FlatFunction ext_part;   // 先填到临时对象（下面的 inst_exp 不会发射函数，但不跨调用持 functions 引用）
       if (!fn_external(sig, ext_part)) return fn_fail<std::optional<std::size_t>>("external declaration form");
@@ -11219,6 +11238,20 @@ class Flattener {
         }
       }
     }
+    // 函数体里：输出维引用的输入换成实参后，实参里的函数局部成结构参数（evaluateCallTypeDim → Structural.markExp，NFCall.mo
+    // :2984-2990 v1.25.0）——parameter 局部打 `final parameter`（TP5 探针 `parameter Real phi[m] = g(m)` → m final；变量局部、
+    // 只作维用的不标；MSL ToSpacePhasor 的 `phi = symmetricOrientation(m)`）。
+    if (fn_scope_)
+      for (std::size_t o = inputs.size(); o < inputs.size() + sig.outputs.size() && o < params.size(); ++o)
+        for (const Dimension& d : params[o].ty.dims) {
+          if (d.kind != DimKind::Exp) continue;
+          bool ok = true;
+          const Id<Expr> sub = subst_slots(d.exp, [&](Symbol nm) -> Id<Expr> {
+            for (std::size_t j = 0; j < inputs.size(); ++j) if (params[j].name == nm) return args[j];
+            return {};
+          }, ok);
+          if (ok) collect_fn_refs(sub, fn_struct_locals_);
+        }
     Type rty = sig.outputs.empty() ? Type{} : params[inputs.size()].ty;   // 首输出类型（无输出的语句调用：Unknown）
     if ((!vd.empty() || fvec_range.is_valid()) && rty.kind == TypeKind::Complex)
       return fn_fail<Id<Expr>>("vectorized record result");   // 未核实
@@ -17794,6 +17827,41 @@ class Flattener {
         return add(std::move(r));
       }
     }
+    // 函数体里单个 Real 实参的元素式内建（sin / cos / exp / …）作用在一维的函数局部数组上：omc 向量化（vectorizeCall，
+    // NFCall.mo:2851-2907 v1.25.0）成 `array(cos(phi[$i1]) for $i1 in 1:m)`——迭代范围取那一维的尺寸式（Dimension.sizeExp：
+    // 书写的维 `m`、已知维的字面量、`:` 维取 `size(phi, 1)`，同 fn_end_value）（MSL SpacePhasors ToSpacePhasor 的
+    // `{+cos(+phi), +sin(+phi)}`，TP 探针）。多维 / 别的实参形态照旧（下面 SKIP）。
+    if (supported && fn_scope_ && args.size() == 1 && bf->argdom == BFArg::Real) {
+      const Expr a0 = result_.model.exprs[args[0]];   // 拷贝
+      const TypeKind ek = a0.ty.element_type().kind;
+      if (a0.ty.is_array() && a0.ty.dims.size() == 1 && (ek == TypeKind::Real || ek == TypeKind::Integer) &&
+          a0.kind == ExprKind::Cref && a0.cref.resolved_node == kFnLocal && a0.cref.parts.size() == 1 &&
+          a0.cref.parts[0].subscripts.empty()) {
+        const Id<Expr> n = fn_end_value(args[0], a0.ty, 0, a0.cref.parts[0].name);
+        if (result_.unsupported) return lit_int(0);
+        Expr rg;
+        rg.kind = ExprKind::Range;
+        rg.a = lit_int(1);
+        rg.b = n;
+        rg.ty = Type::integer();
+        const Id<Expr> it = vect_iter(1);
+        Id<Expr> el = vectorize_arg(args[0], {it}, false);
+        if (!el.is_valid()) { set_unsupported("vectorized builtin argument form"); return lit_int(0); }
+        if (ek == TypeKind::Integer) el = to_real(el);
+        Expr c;
+        c.kind = ExprKind::Call;
+        c.call_name = {in_.intern(builtin_name)};
+        c.args = {el};
+        c.ty = Type::real();
+        Expr v;
+        v.kind = ExprKind::Reduction;
+        v.call_name = {in_.intern("array"), in_.intern("$i1")};
+        v.a = add(std::move(c));
+        v.b = add(std::move(rg));
+        v.ty = Type::array_of(Type::real(), {a0.ty.dims[0]});
+        return add(std::move(v));
+      }
+    }
     if (supported) {
       for (Id<Expr> a : args) {
         const TypeKind k = result_.model.exprs[a].ty.kind;
@@ -18098,7 +18166,20 @@ class Flattener {
   // 能展开的：全整数维的 cref（逐元素下标）、数组字面量。其余（`:` / 表达式维、调用）→ invalid（整式不展开）。
   Id<Expr> fn_expand(Id<Expr> id) {
     const Expr x = result_.model.exprs[id];
-    if (x.kind == ExprKind::Array) return id;
+    // 数组字面量：元素是数组的要逐个展开（ExpandExp.expandArray 逐元素 expand，有一个展不开 → 整个不展开：`2 * {phi, phi}`、
+    // phi 维未知 → omc 留 `{phi, phi} * 2.0`，TP 探针；MSL ToSpacePhasor 的 `2/m*{+cos(+phi), +sin(+phi)}`）。
+    if (x.kind == ExprKind::Array) {
+      Expr r = x;
+      bool changed = false;
+      for (Id<Expr>& el : r.args) {
+        if (expr_shape(el).empty()) continue;
+        const Id<Expr> ee = fn_expand(el);
+        if (!ee.is_valid()) return {};
+        changed = changed || !(ee == el);
+        el = ee;
+      }
+      return changed ? add(std::move(r)) : id;
+    }
     // 整个留着的 `size(u)`（见 size_call）：维数已知，展开成 `{size(u, 1), size(u, 2), …}`（SZ 探针 s2：
     // `n := size(u) + {1, 1}` → `{size(u, 1) + 1, size(u, 2) + 1}`、`sum(size(u))` → `size(u, 1) + size(u, 2)`）。
     if (x.kind == ExprKind::Size && x.args.size() == 1 && x.ty.dims.size() == 1 && x.ty.dims[0].kind == DimKind::Integer) {
@@ -23113,6 +23194,8 @@ class Flattener {
   bool noret_call_ = false;                                     // 正在定型一条无返回值调用语句的最外层调用（见 noret_call）
   std::unordered_set<std::uint32_t> nofold_bins_;               // sum / product 展开出的元素链的 Binary 节点（simplify 原样留）
   std::unordered_map<std::uint32_t, FnRecord> fn_records_;      // 记录类型的形参 / 局部名 → 记录类（字段访问 `r.x`）
+  // 当前函数里成了结构参数的局部名（调用的输出维引用了它所在的实参，见 try_emit_user_call）：parameter 局部打 `final parameter`。
+  std::unordered_set<std::uint32_t> fn_struct_locals_;
   NodeId root_;                                                 // 被压平的根类实例
   // 模型语境里返回数组的调用只许出现在整个绑定 / 等式一侧（NFScalarize.scalarizeEquation :343-346 把含数组调用的等式
   // 整体保留；嵌在别的运算里要逐元素展开，未做）。emit_array / collect_equation 在对应 inst_exp 前置位，

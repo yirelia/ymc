@@ -7097,4 +7097,29 @@ YMC_TEST(flatten_record_extends_modifier_defaults) {
                            "  Real z = P.f(w, time);\nend RQU1;\n"));
 }
 
+YMC_TEST(flatten_function_vectorized_builtins) {
+  // 函数体里的元素式内建向量化（MSL SpacePhasors.ToSpacePhasor 复刻）：`cos(+phi)` → `array(cos(phi[$i1]) for $i1 in 1:m)`；
+  // 数组字面量体的推导式；标量乘行长未知的字面量不展开、照 toDAE 换位（`{…} * 2.0 / /*Real*/(m)`）；作调用 `g(m)` 输出维实参的
+  // parameter 局部打 `final parameter`。期望 = omc 1.25.0 实跑（2026-10-09，探针 tv-ut）。
+  YMC_CHECK_EQ(flatten_src("model TVU1\n  function g \"orientation\"\n    input Integer n;\n    output Real o[n];\n  algorithm\n"
+                           "    o := {(k - 1) * 2 * 3.141592653589793 / n for k in 1:n};\n  end g;\n"
+                           "  function toSP \"space phasor\"\n    input Real x[:];\n    output Real y[2];\n    output Real y0;\n"
+                           "  protected\n    parameter Integer m = size(x, 1) annotation(Evaluate = true);\n"
+                           "    parameter Real phi[m] = g(m);\n    parameter Real T[2, m] = 2 / m * {+cos(+phi), +sin(+phi)};\n"
+                           "    parameter Real IT[m, 2] = {{+cos(-phi[k]), -sin(-phi[k])} for k in 1:m};\n  algorithm\n"
+                           "    y := T * x;\n    y0 := 1 / m * sum(x);\n  end toSP;\n"
+                           "  Real u[3] = {sin(time), cos(time), time};\n  Real v[2];\n  Real v0;\nequation\n"
+                           "  (v, v0) = toSP(u);\nend TVU1;\n"),
+               std::string("function TVU1.g \"orientation\"\n  input Integer n;\n  output Real[n] o;\nalgorithm\n"
+                           "  o := array(/*Real*/((k - 1) * 2) * 3.141592653589793 / /*Real*/(n) for k in 1:n);\nend TVU1.g;\n\n"
+                           "function TVU1.toSP \"space phasor\"\n  input Real[:] x;\n  output Real[2] y;\n  output Real y0;\n"
+                           "  protected final parameter Integer m = size(x, 1);\n"
+                           "  protected parameter Real[m] phi = TVU1.g(m);\n"
+                           "  protected parameter Real[2, m] T = {array(cos(phi[$i1]) for $i1 in 1:m), array(sin(phi[$i1]) for $i1 in 1:m)} * 2.0 / /*Real*/(m);\n"
+                           "  protected parameter Real[m, 2] IT = array({cos(-phi[k]), -sin(-phi[k])} for k in 1:m);\n"
+                           "algorithm\n  y := T * x;\n  y0 := 1.0 / /*Real*/(m) * sum(x);\nend TVU1.toSP;\n\nclass TVU1\n"
+                           "  Real u[1];\n  Real u[2];\n  Real u[3];\n  Real v[1];\n  Real v[2];\n  Real v0;\nequation\n"
+                           "  u = {sin(time), cos(time), time};\n  (v, v0) = TVU1.toSP(u);\nend TVU1;\n"));
+}
+
 YMC_TEST_MAIN

@@ -2093,6 +2093,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           本地（此前比较时多带了派生记录本身，基类一律被当成外来）。extends 里的 final 修饰、对记录字段的修饰、把派生记录传给
           基类形参（记录类型相容）未做（SKIP）。
           slice 653 / FAIL 0；scodeinst 603（不变）；testsuite 1692→1695 / FAIL 0（records/DefaultRecordParameters、EngineSAAB95Total、RecordModifications）；MSL 369→376；探针 9101→9108；单测 321→322。
+    - [x] (63e) flat：函数体里的元素式内建向量化（2026-10-09）：单 Real 实参的元素式内建（sin / cos / exp / …）作用在一维的
+          函数局部数组上 → `array(cos(phi[$i1]) for $i1 in 1:m)`（范围取那一维的尺寸式：书写的 `m`、`:` 维的 `size(x, 1)`；
+          Integer 元素加转型）；推导式的体可以是数组字面量（`array({cos(-phi[k]), -sin(-phi[k])} for k in 1:m)`）；数组字面量
+          逐元素展开、有一个展不开整个不展开（`2 / m * {phi, phi}`、phi 维未知 → `{phi, phi} * 2.0 / /*Real*/(m)`，此前错把标量
+          分配进去）；parameter 局部作调用输出维的实参 → 结构参数、打 `final parameter`（evaluateCallTypeDim → Structural.markExp）。
+          向量化的实参是运算式（`exp({1.0, 2.0, 3.0} .* x[1:3])`，omc 先展开成字面量再取元素）未做（SKIP）。
+          slice 653 例 PASS 602 / FAIL 0（oracle=live 不一致 0）；scodeinst 603 / 42（不变）；testsuite 1695 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0（不变）；MSL 376→383；探针 9108→9117；单测 322→323。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
