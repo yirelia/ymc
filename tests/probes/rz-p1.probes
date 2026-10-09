@@ -1,0 +1,168 @@
+//// set: rz-p1 — 函数的记录形参续：记录数组元素的字段 `u[k].re`（MSL QuasiStatic quasiRMS）、`sum({…for k in 1:m})` 化成归约；operator record 短类别名的形参（`input SI.ComplexVoltage v[:]`，别名构造 / 类型函数随之打、运算符按别名命名）；记录数组实参；函数体里标量记录形参的推导式实参向量化（MSL activePower 的 `sum(real(… v[(1:size(v, 1))[$i1]] …) for $i1 in 1:size(v, 1))`）；记录数组整体绑定的复合路径（`p.v`、`plug.pin.i`）逐元素取、向前引用的 plug 维第二遍再定；返回记录数组的函数求值后逐元素拆字段（RZ10 多相电磁转换器、RZ11 symmetricTransformationMatrix(3)、RZ12）、常量实参的记录函数元素逐个求值（RZ13 fromPolar）、范围作数组运算数与输出维里的调用（RZ14 indexPositiveSequence）、Integer 赋给 Real 局部后数组取负的 -0.0（RZ15）
+//// model: RZ1
+model RZ1
+  function rms
+    input Complex u[:];
+    output Real y;
+  protected
+    Integer m = size(u, 1);
+  algorithm
+    y := sum(sqrt(u[k].re ^ 2 + u[k].im ^ 2) for k in 1:m) / m;
+  end rms;
+  Complex z[3];
+  Real r = rms(z);
+equation
+  for k in 1:3 loop
+    z[k] = Complex(k * time, 1);
+  end for;
+end RZ1;
+//// model: RZ2
+model RZ2
+  Complex z[3];
+  Real r = Modelica.Electrical.QuasiStatic.Polyphase.Functions.quasiRMS(z);
+equation
+  for k in 1:3 loop
+    z[k] = Complex(k * time, 1);
+  end for;
+end RZ2;
+//// model: RZ3
+model RZ3
+  Modelica.Units.SI.ComplexVoltage v[3];
+  Modelica.Units.SI.ComplexCurrent i[3];
+  Real p = Modelica.Electrical.QuasiStatic.Polyphase.Functions.activePower(v, i);
+equation
+  for k in 1:3 loop
+    v[k] = Complex(k * time, 1);
+    i[k] = Complex(1, k * time);
+  end for;
+end RZ3;
+//// model: RZ4
+model RZ4
+  function f
+    input Modelica.Units.SI.ComplexVoltage v;
+    output Real r;
+  algorithm
+    r := v.re + v.im;
+  end f;
+  Modelica.Units.SI.ComplexVoltage v;
+  Real r = f(v);
+equation
+  v = Complex(time, 1);
+end RZ4;
+//// model: RZ5
+model RZ5
+  function f
+    input Modelica.Units.SI.ComplexVoltage v;
+    output Real r;
+  algorithm
+    r := v.re + v.im;
+  end f;
+  Complex z;
+  Real r = f(z);
+equation
+  z = Complex(time, 1);
+end RZ5;
+//// model: RZ6
+model RZ6
+  function g
+    input Modelica.Units.SI.ComplexVoltage v[:];
+    input Complex w[size(v, 1)];
+    output Complex s;
+  algorithm
+    s := Complex(0);
+    for k in 1:size(v, 1) loop
+      s := s + v[k] * w[k];
+    end for;
+  end g;
+  Complex z[2];
+  Complex y = g(z, z);
+equation
+  z[1] = Complex(time, 1);
+  z[2] = Complex(1, time);
+end RZ6;
+//// model: RZ7
+model RZ7
+  connector Pin
+    Complex v;
+    flow Complex i;
+  end Pin;
+  Pin p[3];
+  Complex vv[3] = p.v;
+equation
+  for k in 1:3 loop
+    p[k].v = Complex(k * time, 0);
+  end for;
+end RZ7;
+//// model: RZ8
+model RZ8
+  connector Pin
+    Complex v;
+    flow Complex i;
+  end Pin;
+  connector Plug
+    parameter Integer m = 3;
+    Pin pin[m];
+  end Plug;
+  parameter Integer m = 3;
+  Complex vs[m] = plug_p.pin.v - plug_n.pin.v;
+  Complex is[m] = plug_p.pin.i;
+  Plug plug_p(final m = m), plug_n(final m = m);
+equation
+  for k in 1:m loop
+    plug_p.pin[k].v = Complex(k * time, 1);
+    plug_n.pin[k].v = Complex(0, k);
+  end for;
+end RZ8;
+//// model: RZ9
+model RZ9
+  function vsum
+    input Modelica.Units.SI.ComplexVoltage v[:];
+    output Real r;
+  algorithm
+    r := sum(Modelica.ComplexMath.real({v[k] * Modelica.ComplexMath.conj(v[k]) for k in 1:size(v, 1)}));
+  end vsum;
+  Modelica.Units.SI.ComplexVoltage u[2];
+  Real r = vsum(u);
+equation
+  u[1] = Complex(time, 1);
+  u[2] = Complex(1, time);
+end RZ9;
+//// model: RZ10
+model RZ10
+  Modelica.Magnetic.QuasiStatic.FundamentalWave.Components.PolyphaseElectroMagneticConverter c(effectiveTurns = 1);
+end RZ10;
+//// model: RZ11
+model RZ11
+  final parameter Complex sTM[3, 3] = Modelica.Electrical.Polyphase.Functions.symmetricTransformationMatrix(3);
+end RZ11;
+//// model: RZ12
+model RZ12
+  function f
+    input Integer m;
+    output Complex t[m, m];
+  algorithm
+    for i in 1:m loop
+      for j in 1:m loop
+        t[i, j] := Complex(i, j);
+      end for;
+    end for;
+  end f;
+  final parameter Complex c[2, 2] = f(2);
+end RZ12;
+//// model: RZ13
+model RZ13
+  final parameter Complex c[2] = {Modelica.ComplexMath.fromPolar(1, 0.5), Modelica.ComplexMath.fromPolar(2, 1)};
+  final parameter Real o[3, 3] = Modelica.Electrical.Polyphase.Functions.symmetricOrientationMatrix(3);
+  final parameter Integer nb = Modelica.Electrical.Polyphase.Functions.numberOfSymmetricBaseSystems(3);
+end RZ13;
+//// model: RZ14
+model RZ14
+  parameter Integer m = 3 annotation(Evaluate = true);
+  final parameter Integer indexNonPos[:] = Modelica.Electrical.Polyphase.Functions.indexNonPositiveSequence(m);
+  final parameter Integer indexPos[:] = Modelica.Electrical.Polyphase.Functions.indexPositiveSequence(m);
+end RZ14;
+//// model: RZ15
+model RZ15
+  final parameter Complex sTM[2, 2] = Modelica.Electrical.Polyphase.Functions.symmetricTransformationMatrix(2);
+  final parameter Real o[2, 2] = Modelica.Electrical.Polyphase.Functions.symmetricOrientationMatrix(2);
+end RZ15;

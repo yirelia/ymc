@@ -459,3 +459,5 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `va-ut` | 2 | 带修饰短类的记录数组（VA2）、记录数组作重载运算符的运算数（ORU10：`z1 + z2`、`k * z1`、`z1 * r` 逐元素）（单测原文） |
 | `ry-p1` | 11 | 记录数组续：整体绑定是推导式 / fill（MSL ComplexMISO 的 `uInternal`、Sum 的 `k = fill(Complex(1, 0), nin)`）逐元素取；有元素拆不开（`conj(u[2])`、`a .* b`）→ 全部元素挪成方程、记录 cref 元素写成字段记录式（RY1 `ComplexInput(s.u[1].re, s.u[1].im)`）；向量 * 向量精确匹配 `Complex.'*'.scalarProduct`（数组字面量运算数 `{a[1], a[2]} * b` 同）；`.*` 逐元素；展开的连接器数组字段作运算数；组件声明修饰里只换类型的成员重声明（MSL 多相传感器 RY5、RY10）。RY8 / RY9 引用外层参数的重声明 SKIP，RY11 改 protected 成员两边都拒 |
 | `ry-ut` | 2 | 记录数组整体绑定挪成逐元素方程 + scalarProduct + `.*`（RYU1）、组件声明修饰里只换类型的成员重声明（RYU2）（单测原文） |
+| `rz-p1` | 15 | 函数里的记录（数组）：记录数组元素字段 `u[k].re` 与 `sum({…for k in 1:m})` → `sum(… for k in 1:m)`（MSL quasiRMS）；operator record 短类别名形参（`input Modelica.Units.SI.ComplexVoltage[:] v`，别名构造 / 类型函数随之打、运算符按别名命名，RZ4-RZ6）；推导式实参在函数体里向量化（MSL activePower RZ3、RZ9）；记录数组整体绑定的复合路径（`p.v`、`plug_p.pin.i`）与向前引用的 plug（RZ7 / RZ8）；返回记录数组的函数求值后拆字段（RZ10 多相电磁转换器、RZ11 / RZ12）、常量实参的记录函数元素（RZ13）、范围运算数与输出维里的调用（RZ14）、数组取负的 -0.0（RZ15） |
+| `rz-ut` | 2 | 函数的记录形参（RZU1，本地 operator record + 短类别名 `P.CV`）、返回记录数组的函数求值（RZU2）（单测原文） |

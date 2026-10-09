@@ -6978,4 +6978,78 @@ YMC_TEST(flatten_component_redeclare_in_declaration_modifier) {
                            "equation\n  r[1] = R(time, 1.0);\n  r[2] = R(1.0, time);\nend RYU2;\n"));
 }
 
+YMC_TEST(flatten_function_record_array_params) {
+  // 函数的记录形参：记录数组元素的字段 `u[k].re`、operator record 短类别名的形参（`input P.CV[:] v`，别名的构造 / 类型函数随之
+  // 打、运算符按别名命名 `P.CV.'*'.multiply`）、记录数组实参；函数体里标量记录形参的实参是推导式 → 向量化成
+  // `P.re(… v[(1:size(v, 1))[$i1]] …) for $i1 in 1:size(v, 1)`，`sum` 化成归约。期望 = omc 1.25.0 实跑（2026-10-09，探针 rz-ut）。
+  YMC_CHECK_EQ(flatten_src("operator record C \"complex-like\"\n  replaceable Real re \"real part\";\n"
+                           "  replaceable Real im \"imaginary part\";\n  encapsulated operator 'constructor'\n"
+                           "    function fromReal \"from reals\"\n      import C;\n      input Real re \"re in\";\n"
+                           "      input Real im = 0 \"im in\";\n      output C result(re = re, im = im) \"result\";\n"
+                           "    algorithm\n      annotation(Inline = true);\n    end fromReal;\n  end 'constructor';\n"
+                           "  encapsulated operator '*' \"times\"\n    function multiply \"mul\"\n      import C;\n"
+                           "      input C c1;\n      input C c2;\n      output C c3;\n    algorithm\n"
+                           "      c3 := C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);\n    end multiply;\n"
+                           "  end '*';\nend C;\npackage P\n  type Voltage = Real(quantity = \"V\", unit = \"V\");\n"
+                           "  operator record CV = C(redeclare Voltage re, redeclare Voltage im) \"voltage\";\n"
+                           "  function re \"real part\"\n    input C c;\n    output Real r;\n  algorithm\n    r := c.re;\n"
+                           "  end re;\n  function power \"sum of real products\"\n    input CV v[:];\n"
+                           "    input C i[size(v, 1)];\n    output Real p;\n  algorithm\n"
+                           "    p := sum(re({v[k] * i[k] for k in 1:size(v, 1)}));\n  end power;\n  function rms \"rms\"\n"
+                           "    input C u[:];\n    output Real y;\n  protected\n    Integer m = size(u, 1);\n  algorithm\n"
+                           "    y := sum({sqrt(u[k].re ^ 2 + u[k].im ^ 2) for k in 1:m}) / m;\n  end rms;\nend P;\nmodel RZU1\n"
+                           "  P.CV v[2];\n  C i[2];\n  Real p = P.power(v, i);\n  Real r = P.rms(i);\nequation\n"
+                           "  v[1] = C(time, 1);\n  v[2] = C(1, time);\n  i[1] = C(2, time);\n  i[2] = C(time, 2);\nend RZU1;\n"),
+               std::string("function C \"Automatically generated record constructor for C\"\n  input Real re;\n"
+                           "  input Real im;\n  output C res;\nend C;\n\nfunction C.'constructor'.fromReal \"from reals\"\n"
+                           "  input Real re \"re in\";\n  input Real im = 0.0 \"im in\";\n  output C result \"result\";\n"
+                           "algorithm\nend C.'constructor'.fromReal;\n\n"
+                           "function P.CV \"Automatically generated record constructor for P.CV\"\n  input Real re;\n"
+                           "  input Real im;\n  output CV res;\nend P.CV;\n\nfunction P.CV.'*'.multiply \"mul\"\n  input C c1;\n"
+                           "  input C c2;\n  output C c3;\nalgorithm\n"
+                           "  c3 := C.'constructor'.fromReal(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);\n"
+                           "end P.CV.'*'.multiply;\n\nfunction P.CV.'constructor'.fromReal \"from reals\"\n"
+                           "  input Real re \"re in\";\n  input Real im = 0.0 \"im in\";\n  output C result \"result\";\n"
+                           "algorithm\nend P.CV.'constructor'.fromReal;\n\nfunction P.power \"sum of real products\"\n"
+                           "  input P.CV[:] v;\n  input C[size(v, 1)] i;\n  output Real p;\nalgorithm\n"
+                           "  p := sum(P.re(P.CV.'*'.multiply(v[(1:size(v, 1))[$i1]], i[(1:size(v, 1))[$i1]])) for $i1 in 1:size(v, 1));\n"
+                           "end P.power;\n\nfunction P.re \"real part\"\n  input C c;\n  output Real r;\nalgorithm\n"
+                           "  r := c.re;\nend P.re;\n\nfunction P.rms \"rms\"\n  input C[:] u;\n  output Real y;\n"
+                           "  protected Integer m = size(u, 1);\nalgorithm\n"
+                           "  y := sum(sqrt(u[k].re ^ 2.0 + u[k].im ^ 2.0) for k in 1:m) / /*Real*/(m);\nend P.rms;\n\n"
+                           "class RZU1\n  Real v[1].re(quantity = \"V\", unit = \"V\") \"real part\";\n"
+                           "  Real v[1].im(quantity = \"V\", unit = \"V\") \"imaginary part\";\n"
+                           "  Real v[2].re(quantity = \"V\", unit = \"V\") \"real part\";\n"
+                           "  Real v[2].im(quantity = \"V\", unit = \"V\") \"imaginary part\";\n  Real i[1].re \"real part\";\n"
+                           "  Real i[1].im \"imaginary part\";\n  Real i[2].re \"real part\";\n"
+                           "  Real i[2].im \"imaginary part\";\n  Real p = P.power(v, i);\n  Real r = P.rms(i);\nequation\n"
+                           "  v[1] = C.'constructor'.fromReal(time, 1.0);\n  v[2] = C.'constructor'.fromReal(1.0, time);\n"
+                           "  i[1] = C.'constructor'.fromReal(2.0, time);\n  i[2] = C.'constructor'.fromReal(time, 2.0);\n"
+                           "end RZU1;\n"));
+}
+
+YMC_TEST(flatten_record_array_function_evaluation) {
+  // 返回记录数组的函数作 final parameter 记录数组的整体绑定：实参是结构参数 → 求值后逐元素拆字段；函数体里范围作数组运算数
+  // （`(0:n - 1)*integer(m/n) + ones(n)`）、输出维里的调用在调用处求值（`ind[nb(m)]`）；Integer 赋给 Real 局部存成 Real
+  // （`q := -o` 逐元素取负得 -0.0）。期望 = omc 1.25.0 实跑（2026-10-09，探针 rz-ut）。
+  YMC_CHECK_EQ(flatten_src("record R \"pair\"\n  Real re \"first\";\n  Real im \"second\";\nend R;\nfunction nb \"base count\"\n"
+                           "  input Integer m;\n  output Integer n;\nalgorithm\n  n := if mod(m, 2) == 0 then 2 else 1;\n"
+                           "end nb;\nfunction idx \"indices\"\n  input Integer m;\n  output Integer ind[nb(m)];\nprotected\n"
+                           "  Integer n = nb(m);\nalgorithm\n  ind := (0:n - 1)*integer(m/n) + ones(n);\nend idx;\n"
+                           "function tm \"matrix\"\n  input Integer m;\n  output R t[m, m];\nprotected\n  Real o[m];\n"
+                           "  Real q[m];\nalgorithm\n  o[1] := 0;\n  for k in 2:m loop\n    o[k] := k;\n  end for;\n  q := -o;\n"
+                           "  for i in 1:m loop\n    for j in 1:m loop\n      t[i, j] := R(i * o[j], q[i]);\n    end for;\n"
+                           "  end for;\nend tm;\nmodel RZU2\n  parameter Integer m = 2 annotation(Evaluate = true);\n"
+                           "  final parameter R t[m, m] = tm(m);\n  final parameter Integer ip[:] = idx(m);\nend RZU2;\n"),
+               std::string("class RZU2\n  final parameter Integer m = 2;\n  final parameter Real t[1,1].re = 0.0 \"first\";\n"
+                           "  final parameter Real t[1,1].im = -0.0 \"second\";\n"
+                           "  final parameter Real t[1,2].re = 2.0 \"first\";\n"
+                           "  final parameter Real t[1,2].im = -0.0 \"second\";\n"
+                           "  final parameter Real t[2,1].re = 0.0 \"first\";\n"
+                           "  final parameter Real t[2,1].im = -2.0 \"second\";\n"
+                           "  final parameter Real t[2,2].re = 4.0 \"first\";\n"
+                           "  final parameter Real t[2,2].im = -2.0 \"second\";\n  final parameter Integer ip[1] = 1;\n"
+                           "  final parameter Integer ip[2] = 2;\nend RZU2;\n"));
+}
+
 YMC_TEST_MAIN

@@ -2069,6 +2069,17 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           施加（数组只收 each 的；只收不引用名字的，引用外层参数的要换前缀解析，未做 → SKIP；改 protected / final 成员照旧
           SKIP）；经组件调 protected 函数（`a.f()`）不再放行。
           slice 642→653 / FAIL 0；scodeinst 592→603（FAIL 41→42，RedeclareConstant1 文件 Result 错贴、ymc 同 1.25.0，入账）；testsuite 1672→1689 / FAIL 0；MSL 343→349；探针 9055→9068；单测 316→318。
+    - [x] (63b) flat：函数里的记录（数组）——记录数组元素字段、operator record 短类别名形参、推导式实参的向量化、返回记录
+          数组的函数求值（2026-10-09）：函数里记录数组局部的元素字段 `u[k].re`；形参 / 局部的声明类型是 operator record 的
+          短类别名（`input SI.ComplexVoltage v[:]`）→ 打别名路径、别名的构造 / 类型函数随函数留下、运算符按别名命名；记录数组
+          实参配记录数组形参；函数体里 `sum` / `product` 的一维数组构造展不开 → 归约 `sum(e for k in r)`；标量记录形参的实参是
+          `1:E` 推导式 → `array(f(…(1:E)[$i1]…) for $i1 in 1:E)`（MSL activePower）。记录数组的整体绑定：复合路径
+          （`plug_p.pin.i`）的下标落到中间的数组段；引用向前声明的 plug 的第一遍先不要；返回记录数组的用户函数调用、绑定变率
+          ≤ 结构参数 → 求值后逐元素拆字段（`sTM = symmetricTransformationMatrix(m)`）；常量实参的记录函数元素逐个求值。求值器：
+          记录数组输出 / 局部按维建初值；赋给 Real（含派生 Real 类型）局部的 Integer 值存成 Real（数组取负得 -0.0）。函数体里
+          范围作数组运算数（`(0:n - 1)*k + ones(n)`）；输出维里的调用在调用处按结构代入求值（`ind[nb(m)]`）。SKIP 子原因
+          只记第一处。
+          slice 653 / FAIL 0；scodeinst 603（不变）；testsuite 1689→1692 / FAIL 0（ArrayFieldSlice ×2、TestComplexSum）；MSL 349→361；探针 9068→9085；单测 318→320。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

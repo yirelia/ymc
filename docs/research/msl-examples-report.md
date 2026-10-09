@@ -405,3 +405,16 @@ record 短类别名的记录数组（FundamentalWave 电机 12 个停在 functio
 引用形态（TestSensors / IMC_DOL / SMPM_Mains 等）、final parameter 的 Complex 矩阵绑定（`sTM = symmetricTransformationMatrix(m)`，
 UnsymmetricalLoad）、PolyphaseInductance / EddyCurrentLosses 的多相电磁转换器里的记录数组整体绑定（子原因待查）、无实例的材料记录构造（FluxTubes Linear/NonLinearInductor）。
 FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-09 加宽 63b 之后：PASS 349→361（+12）
+
+函数里的记录（数组）做完：记录数组元素字段（quasiRMS 的 `u[k].re`）、operator record 短类别名形参（activePower 的 `input
+SI.ComplexVoltage v[:]`）、函数体里推导式实参的向量化（`sum(real(… v[(1:size(v, 1))[$i1]] …) for $i1 in 1:size(v, 1))`）、返回
+记录数组的函数求值后拆字段（多相电磁转换器的 `sTM = symmetricTransformationMatrix(m)`，含 -0.0 的取负）、范围作数组运算数与
+输出维里的调用（indexPositiveSequence）。MSL Complex 示例 38 个里 PASS 16→28：QuasiStatic FundamentalWave 的 InductionMachines
+/ SynchronousMachines 电机示例（IMC_Characteristics / IMC_DOL / IMC_YD / IMC_Initialize / IMS_Characteristics / IMS_Start /
+SMPM_OpenCircuit / SMPM_Mains / SMEE_Generator）、Components 的 PolyphaseInductance / EddyCurrentLosses、Polyphase 的
+UnsymmetricalLoad 等，均与 omc 逐字节一致。余下 10 个停在：外部字符串函数的常量求值（PartialBasicTransformer 的
+`C1 = substring(VectorGroup, 1, 1)`，TransformerTestbench / IMC_Transformer）、TestSensors 的限定名调用、FluxTubes 的无实例材料
+记录构造、组件里的函数 `singleToMultiPhase.u` 一类（SMPM_CurrentSource / SMPM_MTPA / SMR_CurrentSource）、向量化实参形态
+（IMC_Conveyor）、when 体（IMC_withLosses）。FAIL / ACCEPTS-INVALID / CRASH 0。

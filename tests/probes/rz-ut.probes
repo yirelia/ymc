@@ -1,0 +1,104 @@
+//// set: rz-ut — 函数的记录形参（单测原文，本地 operator record + 短类别名）：记录数组元素字段、别名形参、推导式实参的向量化与 sum 归约（RZU1）；返回记录数组的函数求值后拆字段、范围作数组运算数、输出维里的调用、Integer 赋给 Real 局部（RZU2）
+//// model: RZU1
+operator record C "complex-like"
+  replaceable Real re "real part";
+  replaceable Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import C;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output C result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '*' "times"
+    function multiply "mul"
+      import C;
+      input C c1;
+      input C c2;
+      output C c3;
+    algorithm
+      c3 := C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+    end multiply;
+  end '*';
+end C;
+package P
+  type Voltage = Real(quantity = "V", unit = "V");
+  operator record CV = C(redeclare Voltage re, redeclare Voltage im) "voltage";
+  function re "real part"
+    input C c;
+    output Real r;
+  algorithm
+    r := c.re;
+  end re;
+  function power "sum of real products"
+    input CV v[:];
+    input C i[size(v, 1)];
+    output Real p;
+  algorithm
+    p := sum(re({v[k] * i[k] for k in 1:size(v, 1)}));
+  end power;
+  function rms "rms"
+    input C u[:];
+    output Real y;
+  protected
+    Integer m = size(u, 1);
+  algorithm
+    y := sum({sqrt(u[k].re ^ 2 + u[k].im ^ 2) for k in 1:m}) / m;
+  end rms;
+end P;
+model RZU1
+  P.CV v[2];
+  C i[2];
+  Real p = P.power(v, i);
+  Real r = P.rms(i);
+equation
+  v[1] = C(time, 1);
+  v[2] = C(1, time);
+  i[1] = C(2, time);
+  i[2] = C(time, 2);
+end RZU1;
+//// model: RZU2
+record R "pair"
+  Real re "first";
+  Real im "second";
+end R;
+function nb "base count"
+  input Integer m;
+  output Integer n;
+algorithm
+  n := if mod(m, 2) == 0 then 2 else 1;
+end nb;
+function idx "indices"
+  input Integer m;
+  output Integer ind[nb(m)];
+protected
+  Integer n = nb(m);
+algorithm
+  ind := (0:n - 1)*integer(m/n) + ones(n);
+end idx;
+function tm "matrix"
+  input Integer m;
+  output R t[m, m];
+protected
+  Real o[m];
+  Real q[m];
+algorithm
+  o[1] := 0;
+  for k in 2:m loop
+    o[k] := k;
+  end for;
+  q := -o;
+  for i in 1:m loop
+    for j in 1:m loop
+      t[i, j] := R(i * o[j], q[i]);
+    end for;
+  end for;
+end tm;
+model RZU2
+  parameter Integer m = 2 annotation(Evaluate = true);
+  final parameter R t[m, m] = tm(m);
+  final parameter Integer ip[:] = idx(m);
+end RZU2;
