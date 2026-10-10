@@ -484,3 +484,5 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `il-ut` | 2 | 继承来的类 / 函数 / 常量 / 短类型的查找（单测原文）：`ILU1.a.f`；外层实例上被改过的常量被嵌套类读到 SKIP（ILU2） |
 | `sa-p1` | 20 | 根类是短类别名：`model R = A` / 带修饰与注释（SA1 / SA2）、两层别名链（SA3、经包里的别名 SA19）、connector 别名记录（SA4）、修饰引包常量（SA5）、类里的函数名取别名根 `SA6.f`（SA6）、注解（SA7）、结构参数（SA8）、block（SA10）、final 修饰（SA13）、getInstanceName（SA16）、记录字段修饰（SA17）、继承 + protected（SA20）、连接（SA26）；partial 别名 / 基类（SA9 / SA11）、重复修饰（SA22）、`each` 修饰（SA25）双拒；别名里的 redeclare（SA21）SKIP |
 | `sa-ut` | 1 | 根类是短类别名（单测原文）：两层别名链的修饰（外层在前、final）、别名的注释 |
+| `gn-p1` | 13 | 找不到 inner 的 outer：根类末尾生成同名 inner（GN1；带 extends GN2 / GN12、同名 outer 共用第一个 GN3、内建类型 GN4、连接器 + connect GN7、组件数组 GN8、missingInnerMessage GN9、部分子树有 inner GN10、两个生成的 inner 次序与生成次序相反 GN11、经 protected extends 继承的 outer GN13）；无值 parameter（GN5）、根类里已有同名元素（GN6）双拒 |
+| `gn-ut` | 2 | 找不到 inner 的 outer 生成 inner（单测原文）：内建类型的 outer（GNU0）、两个生成的 inner 的次序（GNU1） |

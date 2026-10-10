@@ -1,0 +1,26 @@
+//// set: gn-ut — 找不到 inner 的 outer 生成 inner（单测原文）：两个生成的 inner 在根类末尾、次序与生成次序相反
+//// model: GNU1
+model GNU1
+  model A
+    parameter Real p = 3;
+    Real x = p * time;
+  end A;
+  model W
+    parameter Real g = 9.81;
+  end W;
+  model B
+    outer A a;
+    outer W w;
+    Real y = a.x * w.g;
+  end B;
+  B b;
+  Real z = 1;
+end GNU1;
+//// model: GNU0
+model GNU0A
+  outer Real x;
+  Real y = x;
+end GNU0A;
+model GNU0
+  GNU0A a;
+end GNU0;

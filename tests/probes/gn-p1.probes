@@ -1,0 +1,178 @@
+//// set: gn-p1 — 找不到 inner 的 outer：omc 在根类末尾生成同名 inner（generateInner / insertGeneratedInners，同名 outer 共用第一个、末尾次序与生成次序相反 GN11、根类里已有同名元素 GN6 / 无值 parameter GN5 双拒）；带 extends / 组件数组 / 连接器 / 部分有 inner 的子树（GN10）
+//// model: GN1
+model GN1
+  model A
+    Real x = time;
+  end A;
+  model B
+    outer A a;
+    Real y = a.x;
+  end B;
+  B b;
+  Real z;
+equation
+  z = b.y;
+end GN1;
+//// model: GN2
+model GN2
+  model A
+    Real x = time;
+  end A;
+  model B
+    outer A a;
+    Real y = a.x;
+  end B;
+  model Base
+    Real w = 1;
+  end Base;
+  B b;
+  extends Base;
+  Real z = 2;
+end GN2;
+//// model: GN3
+model GN3
+  model A
+    parameter Real p = 3;
+    Real x = p * time;
+  end A;
+  model B
+    outer A a;
+    Real y = a.x;
+  end B;
+  model C
+    outer A a;
+    B b;
+    Real v = a.p;
+  end C;
+  C c;
+  B b2;
+end GN3;
+//// model: GN4
+model GN4
+  model B
+    outer Real T;
+    Real y = T;
+  end B;
+  B b;
+end GN4;
+//// model: GN5
+model GN5
+  model B
+    outer parameter Real T;
+    Real y = T;
+  end B;
+  B b;
+end GN5;
+//// model: GN6
+model GN6
+  model A
+    Real x = time;
+  end A;
+  model B
+    outer A a;
+    Real y = a.x;
+  end B;
+  B b;
+  A a;
+end GN6;
+//// model: GN7
+model GN7
+  connector C
+    Real e;
+    flow Real f;
+  end C;
+  model B
+    outer C c;
+    C d;
+  equation
+    connect(c, d);
+  end B;
+  B b;
+end GN7;
+//// model: GN8
+model GN8
+  model A
+    Real x = time;
+  end A;
+  model B
+    outer A a;
+    Real y = a.x;
+  end B;
+  B b[2];
+end GN8;
+//// model: GN9
+model GN9
+  model World
+    parameter Real g = 9.81;
+    annotation(missingInnerMessage = "No world");
+  end World;
+  model B
+    outer World world;
+    Real y = world.g * time;
+  end B;
+  B b1, b2;
+end GN9;
+//// model: GN10
+model GN10
+  model A
+    Real x = time;
+  end A;
+  model B
+    outer A a;
+    Real y = a.x;
+  end B;
+  model M
+    B b;
+  end M;
+  model N
+    inner A a;
+    M m;
+  end N;
+  M m1;
+  N n;
+end GN10;
+//// model: GN11
+model GN11
+  model A
+    Real x = time;
+  end A;
+  model W
+    parameter Real g = 9.81;
+  end W;
+  model B
+    outer A a;
+    outer W w;
+    Real y = a.x * w.g;
+  end B;
+  B b;
+  Real z = 1;
+end GN11;
+//// model: GN12
+model GN12
+  model A
+    Real x = time;
+  end A;
+  model B
+    outer A a;
+    Real y = a.x;
+  end B;
+  model Base
+    B b;
+  end Base;
+  extends Base;
+  Real z = 2;
+end GN12;
+//// model: GN13
+model GN13
+  model A
+    Real x = time;
+  end A;
+  model P0
+    outer A a;
+    Real y = a.x;
+  end P0;
+  model B
+    protected extends P0;
+  end B;
+  B b;
+end GN13;

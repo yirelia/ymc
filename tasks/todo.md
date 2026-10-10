@@ -2148,6 +2148,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           也算）/ 受限类型 / commandLineOptions 注解取别名，链上各层修饰当根实例的外来修饰（外层在前，值在短类定义处解析：顶层 /
           包里），getInstanceName 取别名。链上带维 / 前缀 / redeclare、底是内建或枚举、模型里的别名修饰 → SKIP。
           slice 654 例 PASS 605→606 / FAIL 0（oracle=live 不一致 0）；scodeinst 606→607 / 44（在账）；testsuite 1707→1711 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 410（不变）；探针 9243→9264；单测 329→330。
+    - [x] (63m) inst：找不到 inner 的 outer 生成 inner（2026-10-10）：照 generateInner / makeInnerNode / insertGeneratedInners——
+          实例树先序遍历找出祖先各层都没有同名 inner 的 outer（同名共用第一个），在根类组件末尾按生成次序的逆序补同名 inner
+          （outer 的声明换成 inner：类型在 outer 声明处的类实例里查、protected 照搬）。实例的类树照样带定义里的类（同 OMC 的
+          INSTANTIATED_TREE），实例化完了还能从实例查类型。根类里已有同名元素、生成的 inner 里又有缺 inner 的 outer、outer 数组 →
+          SKIP；omc 的告警 ymc 不产，文件 Result 带告警的六例入账、从 slice 剔除五例（654→649）。
+          slice 654→649 例 PASS 606 / FAIL 0（oracle=live 不一致 0）；scodeinst 607 / 44→50（带告警的六例入账）；testsuite 1711→1718 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 410（不变）；探针 9264→9279；单测 330。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

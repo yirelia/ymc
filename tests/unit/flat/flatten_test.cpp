@@ -352,13 +352,16 @@ YMC_TEST(flatten_inner_outer_composite) {
                std::string("class IO2\n  Real a.x = 1.0;\n  Real a.w = 2.0;\n  Real b.y = a.x;\nend IO2;\n"));
 }
 
-YMC_TEST(flatten_outer_without_inner_unsupported) {
-  // 没有匹配 inner 的 outer → 干净 SKIP（omc 自动生成 inner 并告警，R11 P08；未做）。
-  bool uns = false;
-  std::string t = flatten_src("model A\n  outer Real x;\n  Real y = x;\nend A;\n"
-                              "model M\n  A a;\nend M;\n", &uns);
-  YMC_CHECK(uns);
-  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+YMC_TEST(flatten_outer_without_inner_generated) {
+  // 没有匹配 inner 的 outer → omc 在根类末尾生成同名 inner（并告警，R11 P08；generateInner / insertGeneratedInners）。两个
+  // 生成的 inner 次序与生成次序相反（w 在 a 前）。期望 = omc 1.25.0 实跑（2026-10-10，探针 gn-ut 的 GNU0 / GNU1）。
+  YMC_CHECK_EQ(flatten_src("model GNU0A\n  outer Real x;\n  Real y = x;\nend GNU0A;\nmodel GNU0\n  GNU0A a;\nend GNU0;\n"),
+               std::string("class GNU0\n  Real a.y = x;\n  Real x;\nend GNU0;\n"));
+  YMC_CHECK_EQ(flatten_src("model GNU1\n  model A\n    parameter Real p = 3;\n    Real x = p * time;\n  end A;\n"
+                           "  model W\n    parameter Real g = 9.81;\n  end W;\n  model B\n    outer A a;\n    outer W w;\n"
+                           "    Real y = a.x * w.g;\n  end B;\n  B b;\n  Real z = 1;\nend GNU1;\n"),
+               std::string("class GNU1\n  Real b.y = a.x * w.g;\n  Real z = 1.0;\n  parameter Real w.g = 9.81;\n"
+                           "  parameter Real a.p = 3.0;\n  Real a.x = a.p * time;\nend GNU1;\n"));
 }
 
 YMC_TEST(flatten_array_scalarize_binding_and_subscript) {

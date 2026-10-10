@@ -490,3 +490,8 @@ CRASH 0。
 
 根类是短类别名（`model R = A(p = 2) "c";`）做完；MSL 示例都是长类定义，不受影响，PASS / SKIP 逐例不变。FAIL / ACCEPTS-INVALID /
 CRASH 0。
+
+## 2026-10-10 加宽 63m 之后：PASS 410（不变）
+
+找不到 inner 的 outer 生成 inner（generateInner / insertGeneratedInners）做完；MSL 示例都自带 inner（World 等），PASS / SKIP
+逐例不变。FAIL / ACCEPTS-INVALID / CRASH 0。
