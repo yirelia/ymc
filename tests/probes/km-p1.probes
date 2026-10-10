@@ -1,0 +1,328 @@
+//// set: km-p1 — 修饰里的类重声明（施加到对应实例的类树，新类的词法作用域 = 写修饰处）：extends 修饰（KM1；新类修饰引写修饰的类的参数 KM5）、组件声明修饰（KM2；基类继承来的被换类 KM6；组件数组 / 数组组件 each KM7 / KM8；长形态 KM9；包里的新类 KM10；修饰引外层参数 KM11、嵌套实例里 KM12；与被换组件的修饰并用 KM17；约束子句 KM20）、短类修饰（KM3；包里的别名 KM15）、根类别名（KM14）；外层修饰里的（KM4 `d(a(redeclare …))`）、经组件数组且新类修饰引外层名（KM16）、经 SCode 链查到被换的函数（KM18）SKIP；枚举的重声明（redeclareEnum）：`enumeration(:)` 换成枚举（KM21 引字面量 SKIP；短类别名到枚举 KM24 声明类型校验 SKIP）、字面量相同的直接枚举（KM22）、多了字面量 / 别名到同字面量枚举（KM23 / KM25）与 outer 类上的重声明修饰（KM26）双拒
+//// model: KM1
+model KM1
+  model X
+    Real z = 3;
+  end X;
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  model C
+    extends A(redeclare model B = X);
+  end C;
+  C c;
+end KM1;
+//// model: KM2
+model KM2
+  model X
+    Real z = 3;
+  end X;
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  A a(redeclare model B = X);
+  A a2;
+end KM2;
+//// model: KM3
+model KM3
+  model X
+    parameter Real p = 1;
+    Real z = p;
+  end X;
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  model A2 = A(redeclare model B = X(p = 4));
+  A2 a;
+end KM3;
+//// model: KM4
+model KM4
+  model X
+    Real z = 3;
+  end X;
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  model D
+    A a;
+  end D;
+  D d(a(redeclare model B = X));
+end KM4;
+//// model: KM5
+model KM5
+  model X
+    parameter Real p = 1;
+    Real z = p;
+  end X;
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  model C
+    parameter Real q = 6;
+    extends A(redeclare model B = X(p = q));
+  end C;
+  C c;
+end KM5;
+//// model: KM6
+model KM6
+  model X
+    Real z = 3;
+  end X;
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  model A0
+    extends A;
+  end A0;
+  A0 a(redeclare model B = X);
+end KM6;
+//// model: KM7
+model KM7
+  model X
+    Real z = 3;
+  end X;
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b[2];
+  end A;
+  A a(redeclare model B = X);
+end KM7;
+//// model: KM8
+model KM8
+  model X
+    Real z = 3;
+  end X;
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  A a[2](redeclare each model B = X);
+end KM8;
+//// model: KM9
+model KM9
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  A a(redeclare model B
+    Real w = 9;
+  end B);
+end KM9;
+//// model: KM10
+model KM10
+  package P
+    model X
+      Real z = 3;
+    end X;
+  end P;
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  A a(redeclare model B = P.X);
+end KM10;
+//// model: KM11
+model KM11
+  model X
+    parameter Real p = 1;
+    Real z = p;
+  end X;
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  parameter Real q = 6;
+  A a(redeclare model B = X(p = q));
+end KM11;
+//// model: KM12
+model KM12
+  model X
+    parameter Real p = 1;
+    Real z = p;
+  end X;
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  model W
+    parameter Real q = 5;
+    A a(redeclare model B = X(p = q));
+  end W;
+  W w;
+end KM12;
+//// model: KM14
+model KM14X
+  Real z = 3;
+end KM14X;
+model KM14A
+  replaceable model B
+    Real x = 1;
+  end B;
+  B b;
+end KM14A;
+model KM14 = KM14A(redeclare model B = KM14X);
+//// model: KM15
+model KM15
+  package P
+    model X
+      Real z = 3;
+    end X;
+    model A
+      replaceable model B
+        Real x = 1;
+      end B;
+      B b;
+    end A;
+    model A2 = A(redeclare model B = X);
+  end P;
+  P.A2 a;
+end KM15;
+//// model: KM16
+model KM16
+  model X
+    parameter Real p = 1;
+    Real z = p;
+  end X;
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  parameter Real q = 6;
+  A a[2](redeclare each model B = X(p = q));
+end KM16;
+//// model: KM17
+model KM17
+  model X
+    Real z = 3;
+  end X;
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  A a(redeclare model B = X, b(z = 7));
+end KM17;
+//// model: KM18
+model KM18
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 3 * x;
+  end g;
+  model A
+    replaceable function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := 2 * x;
+    end f;
+    Real v = f(time);
+  end A;
+  A a(redeclare function f = g);
+end KM18;
+//// model: KM20
+model KM20
+  model X
+    parameter Real p = 1;
+    Real z = p;
+  end X;
+  model A
+    replaceable model B = X constrainedby X(p = 2);
+    B b;
+  end A;
+  A a(redeclare model B = X(p = 9));
+end KM20;
+//// model: KM21
+model KM21
+  model A
+    replaceable type E = enumeration(:);
+    E e = E.b;
+  end A;
+  model C
+    extends A(redeclare type E = enumeration(a, b));
+  end C;
+  C c;
+end KM21;
+//// model: KM22
+model KM22
+  model A
+    replaceable type E = enumeration(a, b);
+    E e;
+  end A;
+  model C
+    extends A(redeclare type E = enumeration(a, b));
+  end C;
+  C c;
+end KM22;
+//// model: KM23
+model KM23
+  model A
+    replaceable type E = enumeration(a);
+    E e;
+  end A;
+  A a(redeclare type E = enumeration(a, b));
+end KM23;
+//// model: KM24
+model KM24
+  type E2 = enumeration(x, y);
+  model A
+    replaceable type E = enumeration(:);
+    E e;
+  end A;
+  A a(redeclare type E = E2);
+end KM24;
+//// model: KM25
+model KM25
+  type E2 = enumeration(a, b);
+  model A
+    replaceable type E = enumeration(a, b);
+    E e;
+  end A;
+  A a(redeclare type E = E2);
+end KM25;
+//// model: KM26
+model KM26
+  model B
+    Real x;
+  end B;
+  model A
+    outer replaceable model M = B;
+    M m;
+  end A;
+  inner model M = B(x = 2.0);
+  A a(redeclare model M = B(x = 1.0));
+end KM26;

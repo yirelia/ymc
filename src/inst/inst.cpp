@@ -576,6 +576,7 @@ NodeId Instantiator::instantiate(NodeId def_node, NodeId parent, const ClassRede
     for (const auto& [n, node] : *redecls) {
       const auto it = t.lookup.find(n);
       if (it == t.lookup.end() || it->second.kind != LEntry::Kind::Class || t.classes[it->second.index] == node) continue;
+      if (!class_redeclare_ok(t.classes[it->second.index], node)) break;
       if (const Id<SElement> od = I_.nodes[t.classes[it->second.index]].def; od.is_valid()) {
         I_.redeclared_classes.insert(od.raw);
         replaced.push_back(od.raw);
@@ -638,6 +639,85 @@ bool Instantiator::nested_in(NodeId cls, NodeId inst) const {
   return false;
 }
 
+// 类 orig 被 repl 顶替合不合法（omc 报错 → SKIP）：
+//   - orig 是枚举（redeclareClass 的 PARTIAL_BUILTIN 支 → redeclareEnum，NFInst.mo v1.25.0）：`enumeration(:)` 只收枚举类型（直接
+//     写的或短类别名到枚举）；带字面量的只收直接写的、字面量表相同的枚举（RedeclareEnum2 / 4 / 6：多了字面量、换成 Real → 报
+//     "not a subtype"）；
+//   - orig 是 outer 类：重声明修饰落在 outer 元素上（InnerOuterInvalidMod5："Modifier … found on outer element"）。
+bool Instantiator::class_redeclare_ok(NodeId orig, NodeId repl) {
+  const Id<SElement> od = I_.nodes[orig].def;
+  if (!od.is_valid()) return true;
+  const SElement& oe = I_.scode.elems[od];
+  if (oe.prefixes.io == SInnerOuter::Outer || oe.prefixes.io == SInnerOuter::InnerOuter) {
+    mark_unsupported("modifier on outer element");
+    return false;
+  }
+  if (oe.kind != SElementKind::Class || oe.def.kind != SClassDefKind::Enumeration) return true;
+  // repl 顺短类链到底（`type E = E2`），记下直接写的那个是不是枚举。
+  NodeId cur = repl;
+  bool direct = true;
+  for (int guard = 0; guard < 20 && cur.is_valid() && !I_.nodes[cur].is_empty() && I_.nodes[cur].def.is_valid(); ++guard) {
+    const SElement& ce = I_.scode.elems[I_.nodes[cur].def];
+    if (ce.kind != SElementKind::Class || ce.def.kind != SClassDefKind::Derived) break;
+    const std::vector<Symbol> bp = ce.def.derived_type.path;   // 拷贝：查找会 arena add
+    cur = lookup_class_name(bp, I_.nodes[cur].parent_scope);
+    direct = false;
+  }
+  const Id<SElement> rd = cur.is_valid() && !I_.nodes[cur].is_empty() ? I_.nodes[cur].def : Id<SElement>{};
+  const bool repl_enum = rd.is_valid() && I_.scode.elems[rd].kind == SElementKind::Class &&
+                         I_.scode.elems[rd].def.kind == SClassDefKind::Enumeration;
+  bool ok = repl_enum;
+  if (ok && !oe.def.enum_unspecified) {
+    const std::vector<SEnumItem>& a = oe.def.enum_items;
+    const std::vector<SEnumItem>& b = I_.scode.elems[rd].def.enum_items;
+    ok = direct && a.size() == b.size();
+    for (std::size_t i = 0; ok && i < a.size(); ++i) ok = a[i].literal == b[i].literal;
+  }
+  if (!ok) mark_unsupported("enumeration redeclare not a subtype", std::string(I_.interner.str(oe.name)));
+  return ok;
+}
+
+// 修饰里的类重声明元素（`redeclare model B = X(p = 4)`、长形态 `redeclare model B … end B`）的类节点：词法作用域 = 写修饰的类
+//（R15 §1：重声明元素的父亲是写修饰处；新类的修饰 `p = 4` 在那里解析），按元素缓存（同一元素总写在同一处）。
+NodeId Instantiator::redecl_class_node(Id<SElement> rel, NodeId scope) {
+  if (const auto it = redecl_class_nodes_.find(rel.raw); it != redecl_class_nodes_.end()) return it->second;
+  INode cn;
+  cn.kind = NodeKind::Class;
+  cn.name = I_.scode.elems[rel].name;
+  cn.def = rel;
+  cn.parent_scope = scope;
+  cn.visibility = vis_of(I_.scode.elems[rel].prefixes.vis);
+  cn.node_type = InstNodeType::normal_class();
+  cn.cls = I_.classes.add(Class{});
+  const NodeId n = I_.nodes.add(std::move(cn));
+  redecl_class_nodes_[rel.raw] = n;
+  return n;
+}
+
+// 修饰 m（写在 scope 这个类里）中的类重声明子修饰追加进 r：已有的名字不覆盖（外层的修饰先收 = 外层优先，Modifier.merge）。
+// 施加的子修饰记进 applied_redecls（flatten 不再把它当修饰）。class extends 形态未做、base（被修饰的类，含它继承来的）里没有
+// 这个名字（omc 报错）→ SKIP。
+void Instantiator::collect_class_redecls(Id<SMod> m, NodeId scope, NodeId base, ClassRedecls& r) {
+  if (!m.is_valid()) return;
+  // base 的继承元素要等它展开（member_def 顺 ext_bases 找）。
+  if (I_.nodes[base].cls.is_valid() && I_.node_class(base).state == ClassState::NotInstantiated) partial_inst(base);
+  if (I_.nodes[base].cls.is_valid() && I_.node_class(base).state == ClassState::PartialClass) expand(base);
+  const std::vector<SSubMod> subs = I_.scode.mods[m].subs;   // 拷贝：建类节点会往 arena add
+  for (const SSubMod& s : subs) {
+    const SMod& sm = I_.scode.mods[s.mod];
+    if (sm.kind != SModKind::Redecl || !sm.element.is_valid() || I_.scode.elems[sm.element].kind != SElementKind::Class) continue;
+    if (I_.scode.elems[sm.element].def.kind == SClassDefKind::ClassExtends) { mark_unsupported("class extends redeclare"); continue; }
+    if (!member_def(base, s.ident, 0).is_valid()) {
+      mark_unsupported("redeclare of missing element", std::string(I_.interner.str(s.ident)));
+      continue;
+    }
+    bool have = false;
+    for (const auto& [n, node] : r) have = have || n == s.ident;
+    if (!have) r.push_back({s.ident, redecl_class_node(sm.element, scope)});
+    I_.applied_redecls.insert(s.mod.raw);
+  }
+}
+
 void Instantiator::inst_class(NodeId inst_node, NodeId def_node, const ClassRedecls* redecls) {
   ClassTreeId def_tree_id = I_.node_class(def_node).tree;
   // 传给各基类实例的类重声明集 = 外来的（更外层派生类的，优先）+ 本类自己的元素级类重声明（`redeclare model B … end B;` /
@@ -697,7 +777,11 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node, const ClassRede
         continue;
       }
       const Id<SMod> ext_mod = ee.mod;   // extends 修饰（在 base_def lookup 之后取，避免跨 add 持 SElement 引用）
-      NodeId base_inst = instantiate(base_def, inst_node, base_redecls.empty() ? nullptr : &base_redecls);
+      // extends 修饰里的类重声明（`extends A(redeclare model B = X)`）：施加到这个基类实例的类树（排在本类的元素级重声明之后——
+      // 同名的照那个），新类的词法作用域 = 本类（写修饰处）。
+      ClassRedecls ext_redecls = base_redecls;
+      collect_class_redecls(ext_mod, def_node, base_def, ext_redecls);
+      NodeId base_inst = instantiate(base_def, inst_node, ext_redecls.empty() ? nullptr : &ext_redecls);
       // 基类实例按 extends 出现序记进本实例的类树：基类的方程 / 算法段由 flatten 的 collect_inherited_sections 收
       //（段序 = 本类在前、各 extends 按**逆序**在后，NFInst.instExpressions + Sections.join 头插，NFInst.mo:2511-2514 /
       // NFSections.mo:192-209；名字在基类实例里解析，前缀与本实例相同）。只记实例化后的基类节点（FlatTree），不记 Ref /
@@ -716,7 +800,7 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node, const ClassRede
       // extends 修饰命名了非组件（嵌套类型/类，如 mod9 `extends A(MyReal(start=y))`）→ v1 未做类修饰，标 unsupported。
       if (ext_mod.is_valid())
         for (const SSubMod& s : I_.scode.mods[ext_mod].subs) {
-          bool found = false;
+          bool found = I_.applied_redecls.count(s.mod.raw) > 0;   // 施加过的类重声明（见上）
           for (NodeId bc : base_comps)
             if (I_.nodes[bc].name == s.ident) { found = true; break; }
           if (!found) mark_unsupported("extends modifier names non-component (nested class)");
@@ -1133,7 +1217,14 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing, bool gener
                                (ar == SRestriction::Record || ar == SRestriction::Connector);
       if (ar != be.restriction && !oprec_alias) mark_unsupported("short class restriction mismatch");
     }
-    class_inst = instantiate(base, comp_node);   // ← arena add：此后不得用先前取的组件引用
+    // 组件声明修饰（外层）与短类链修饰（外层的短类在前）里的类重声明（`A a(redeclare model B = X)`、`model A2 = A(redeclare
+    // model B = X(p = 4))`）：施加到这个组件的类实例（及其各层基类实例）的类树。外来的修饰里的（`d(a(redeclare …))`）inst 看不到，
+    // 留给 flatten 照旧 SKIP。
+    ClassRedecls comp_redecls;
+    collect_class_redecls(el.mod, enclosing, base, comp_redecls);
+    for (std::size_t i = 0; i < derived_mods.size(); ++i)
+      collect_class_redecls(derived_mods[i], derived_scopes[i], base, comp_redecls);
+    class_inst = instantiate(base, comp_node, comp_redecls.empty() ? nullptr : &comp_redecls);   // ← arena add：此后不得用先前取的组件引用
     ty.kind = TypeKind::Complex;
     ty.complex_node = class_inst.raw;
     // 短类修饰里的组件重声明（`record SalientInductance = Salient(redeclare SI.Inductance d, redeclare SI.Inductance q)`，MSL
@@ -1147,6 +1238,9 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing, bool gener
         for (const SSubMod& s : subs) {
           const SMod& sm = I_.scode.mods[s.mod];
           if (sm.kind != SModKind::Redecl || !sm.element.is_valid()) continue;
+          // 类重声明实例化前已施加（见上）；不能按 applied_redecls 判——组件重声明施加一次后也记在里面，同一短类类型的第二个组件
+          // 照样要施加（ORU4 的 `P.CV v; P.CV w;`）。
+          if (I_.scode.elems[sm.element].kind == SElementKind::Class) continue;
           int same = 0;
           for (const SSubMod& t : subs) same += t.ident == s.ident ? 1 : 0;
           if (same > 1) { mark_unsupported("duplicate modification"); continue; }
@@ -1296,11 +1390,16 @@ NodeId Instantiator::instantiate_root_class(NodeId def_node) {
       return Inst::empty_node();
     }
     if (cd.derived_mod.is_valid()) {
-      for (const SSubMod& s : I_.scode.mods[cd.derived_mod].subs)
-        if (I_.scode.mods[s.mod].kind != SModKind::Mod) {
+      // 类重声明（`model R = A(redeclare model B = X)`）收进根实例的类重声明集（下面实例化长类时施加）；组件重声明未做 → SKIP。
+      for (const SSubMod& s : I_.scode.mods[cd.derived_mod].subs) {
+        const SMod& sm = I_.scode.mods[s.mod];
+        const bool cls_redecl = sm.kind == SModKind::Redecl && sm.element.is_valid() &&
+                                I_.scode.elems[sm.element].kind == SElementKind::Class;
+        if (sm.kind != SModKind::Mod && !cls_redecl) {
           mark_unsupported("short/derived/enum root class", "redeclare");
           return Inst::empty_node();
         }
+      }
       I_.root_alias.mods.push_back(cd.derived_mod);
       I_.root_alias.scopes.push_back(I_.nodes[cur].parent_scope);
     }
@@ -1319,7 +1418,10 @@ NodeId Instantiator::instantiate_root_class(NodeId def_node) {
   }
   for (int k = 0; k < kBuiltinCount; ++k)
     if (cur == builtin_[k]) { mark_unsupported("short/derived/enum root class", "builtin"); return Inst::empty_node(); }
-  const NodeId root = instantiate(cur, Inst::empty_node());
+  ClassRedecls root_redecls;
+  for (std::size_t k = 0; k < I_.root_alias.mods.size(); ++k)
+    collect_class_redecls(I_.root_alias.mods[k], I_.root_alias.scopes[k], cur, root_redecls);
+  const NodeId root = instantiate(cur, Inst::empty_node(), root_redecls.empty() ? nullptr : &root_redecls);
   insert_generated_inners(root);
   return root;
 }

@@ -7271,4 +7271,17 @@ YMC_TEST(flatten_element_class_redeclare) {
                            "  Real c.b.z = c.b.p;\n  Real c.w = 4.0;\nend KRU1;\n"));
 }
 
+YMC_TEST(flatten_modifier_class_redeclare) {
+  // 修饰里的类重声明：extends 修饰（新类修饰引写修饰的类的参数 q）、组件声明修饰、短类修饰，各施加到对应实例的类树。
+  // 期望 = omc 1.25.0 实跑（2026-10-10，探针 km-ut）。
+  YMC_CHECK_EQ(flatten_src("model KMU1\n  model X\n    parameter Real p = 1;\n    Real z = p;\n  end X;\n  model A\n"
+                           "    replaceable model B\n      Real x = 1;\n    end B;\n    B b;\n  end A;\n  model C\n"
+                           "    parameter Real q = 6;\n    extends A(redeclare model B = X(p = q));\n  end C;\n"
+                           "  model A2 = A(redeclare model B = X(p = 4));\n  C c;\n  A a(redeclare model B = X);\n  A2 a2;\n"
+                           "end KMU1;\n"),
+               std::string("class KMU1\n  parameter Real c.q = 6.0;\n  parameter Real c.b.p = c.q;\n  Real c.b.z = c.b.p;\n"
+                           "  parameter Real a.b.p = 1.0;\n  Real a.b.z = a.b.p;\n  parameter Real a2.b.p = 4.0;\n"
+                           "  Real a2.b.z = a2.b.p;\nend KMU1;\n"));
+}
+
 YMC_TEST_MAIN

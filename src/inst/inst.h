@@ -54,6 +54,11 @@ class Instantiator {
   NodeId instantiate_root_class(NodeId def_node);      // 根类：短类别名顺链到长类、补生成的 inner（见 inst.cpp）
   void inst_class(NodeId inst_node, NodeId def_node, const ClassRedecls* redecls = nullptr);  // 建 FlatTree：递归组件 + extends 就地展开
   bool mentions_any(Id<SElement> cls, const ClassRedecls& r, int depth) const;   // 类体里写到 r 的名字（见 inst_component）
+  // 修饰里的类重声明（`redeclare model B = X(p = 4)`）：元素的类节点（词法作用域 scope = 写修饰的类，按元素缓存）；修饰 m 里的
+  // 这类子修饰追加进 r（已有的名字不覆盖 = 外层优先），base 里没有这个类 → SKIP。见 inst.cpp。
+  NodeId redecl_class_node(Id<SElement> rel, NodeId scope);
+  bool class_redeclare_ok(NodeId orig, NodeId repl);   // 顶替的合法性（枚举子类型、outer 类，见 inst.cpp）
+  void collect_class_redecls(Id<SMod> m, NodeId scope, NodeId base, ClassRedecls& r);
   bool nested_in(NodeId cls, NodeId inst) const;   // cls 的词法外层链经过 inst 的类或它的各层基类
   // 解析组件类型（叶/复合）。generated_inner：为找不到 inner 的 outer 生成的 inner（见 insert_generated_inners）——照 inner 实例化。
   void inst_component(NodeId comp_node, NodeId enclosing, bool generated_inner = false);
@@ -95,6 +100,7 @@ class Instantiator {
   // redeclare_component 合成的组件元素：(原声明 << 32 | 重声明元素) → 合成元素；elems 的预留上限（见 make_top_node）。
   std::unordered_map<std::uint64_t, Id<SElement>> redecl_elems_;
   std::unordered_map<std::uint32_t, ClassRedecls> inst_redecls_;   // 实例节点 → 施加在它类树上的类重声明集
+  std::unordered_map<std::uint32_t, NodeId> redecl_class_nodes_;   // 修饰里的类重声明元素 → 它的类节点
   std::size_t synth_cap_ = 0;
 };
 

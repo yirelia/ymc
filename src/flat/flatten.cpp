@@ -766,7 +766,12 @@ class Flattener {
     FramePush frame_push(*this, inst_node, prefix, psubs, ctx);
     const SElement& def = I_.scode.elems[I_.nodes[inst_node].def];
     if (def.def.external.present) set_unsupported("external function");
-    check_class_rules(def, scode_scope_of(inst_node));
+    {   // 结构性校验照原声明查名（被类重声明顶替过的组件类型也按声明校验，不触发 redeclared_check）
+      const bool saved_guard = redecl_guard_off_;
+      redecl_guard_off_ = true;
+      check_class_rules(def, scode_scope_of(inst_node));
+      redecl_guard_off_ = saved_guard;
+    }
     // extends 的基类名穿过整个实例化后有 outer 缺 inner 的类（见 lookup_detaches_outer；IO 探针 j11：`extends M.Base`）。
     for (std::vector<NodeId> todo{inst_node}; !todo.empty();) {
       const NodeId n = todo.back();
@@ -5867,7 +5872,7 @@ class Flattener {
   void check_modifier_names(const std::vector<NodeId>& comps, const ModCtx& ctx) {
     for (const ModSource& m : ctx.mods)
       for (const SSubMod& s : I_.scode.mods[m.mod].subs) {
-        bool found = false;
+        bool found = I_.applied_redecls.count(s.mod.raw) > 0;   // inst 已施加的类重声明（Instantiator::collect_class_redecls）
         for (NodeId cn : comps)
           if (I_.nodes[cn].kind == NodeKind::Component && I_.nodes[cn].name == s.ident) { found = true; break; }
         if (!found && !result_.unsupported) {
@@ -20544,15 +20549,30 @@ class Flattener {
       const NodeId d = k < dscopes.size() ? dscopes[k] : NodeId{};
       NodeId sc;
       std::vector<Symbol> vp;
-      // 写短类修饰的类 = 组件所在实例，或它所在的派生实例（基类实例的 instance_parent 是派生类实例、前缀相同）——后者是派生类里的
-      // 元素级类重声明 `redeclare model B = X(p = 3)`（RE8 探针：b 是基类 A 的组件，修饰写在派生类 C 里）。
+      // 写短类修饰的类 = 组件所在实例，或沿实例链往上的某个实例：派生实例（基类实例的 instance_parent 是派生类实例、前缀相同——
+      // 派生类里的元素级类重声明 `redeclare model B = X(p = 3)`，RE8 探针），或更外层组件的实例（组件修饰里的类重声明 `A a(redeclare
+      // model B = X(p = q))`，修饰写在 a 所在的类里，前缀少 a 那一段）。经过组件数组的未做 → SKIP。
       NodeId owner;
-      for (NodeId n = lex; d.is_valid() && n.is_valid() && !I_.nodes[n].is_empty() && I_.nodes[n].kind == NodeKind::Class;
-           n = I_.nodes[n].instance_parent)
+      std::size_t owner_len = prefix.size();
+      bool through_array = false;
+      for (NodeId n = lex; d.is_valid() && n.is_valid() && !I_.nodes[n].is_empty(); n = I_.nodes[n].instance_parent) {
+        if (I_.nodes[n].kind == NodeKind::Component) {
+          if (owner_len == 0) break;
+          --owner_len;
+          const SElement& ce = I_.scode.elems[I_.comps[I_.nodes[n].comp].def];
+          through_array = through_array || !ce.attr.dims.empty() || !ce.type.dims.empty();
+          continue;
+        }
+        if (I_.nodes[n].kind != NodeKind::Class) break;
         if (I_.nodes[d].def.is_valid() && I_.nodes[d].def == I_.nodes[n].def) { owner = n; break; }
+      }
+      if (owner.is_valid() && !I_.nodes[owner].is_empty() && owner_len < prefix.size() && through_array) {
+        set_unsupported("short class modifier scope");
+        return false;
+      }
       if (owner.is_valid() && !I_.nodes[owner].is_empty()) {
         sc = owner;
-        vp = prefix;
+        vp.assign(prefix.begin(), prefix.begin() + static_cast<std::ptrdiff_t>(owner_len));
       } else if (d.is_valid() && !I_.nodes[d].is_empty() && I_.nodes[d].def.is_valid() &&
                  I_.scode.elems[I_.nodes[d].def].restriction == SRestriction::Package) {
         sc = d;

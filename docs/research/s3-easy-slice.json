@@ -656,5 +656,14 @@
 "RedeclareElementClass2.mo",
 "inst2.mo",
 "redeclare8.mo",
-"redeclare9.mo"
+"redeclare9.mo",
+"ModClass1.mo",
+"ModClass5.mo",
+"MultiInheritanceRedeclare2.mo",
+"RedeclareClass1.mo",
+"RedeclareEnum1.mo",
+"RedeclareEnum3.mo",
+"RedeclareEnum5.mo",
+"redeclare11.mo",
+"redeclare12.mo"
 ]

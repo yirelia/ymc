@@ -507,3 +507,8 @@ FAIL / ACCEPTS-INVALID / CRASH 0。
 派生类里的元素级类重声明（`redeclare model B … end B;` / `redeclare model B = X(p = 3)`）在基类实例的类树里顶替做完；MSL 示例的
 类重声明几乎都写在修饰里（`redeclare package Medium = …`、`redeclare model HeatTransfer = …`），PASS / SKIP 逐例不变。FAIL /
 ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-10 加宽 63p 之后：PASS 412（不变）
+
+修饰里的类重声明（extends / 组件声明 / 短类修饰、根类别名）做完；MSL 示例里的类重声明几乎都是包（`redeclare package Medium = …`），
+包里的类型、常量、函数经 SCode 链解析仍待第 2 阶段，PASS / SKIP 逐例不变。FAIL / ACCEPTS-INVALID / CRASH 0。
