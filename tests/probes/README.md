@@ -486,3 +486,5 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `sa-ut` | 1 | 根类是短类别名（单测原文）：两层别名链的修饰（外层在前、final）、别名的注释 |
 | `gn-p1` | 13 | 找不到 inner 的 outer：根类末尾生成同名 inner（GN1；带 extends GN2 / GN12、同名 outer 共用第一个 GN3、内建类型 GN4、连接器 + connect GN7、组件数组 GN8、missingInnerMessage GN9、部分子树有 inner GN10、两个生成的 inner 次序与生成次序相反 GN11、经 protected extends 继承的 outer GN13）；无值 parameter（GN5）、根类里已有同名元素（GN6）双拒 |
 | `gn-ut` | 2 | 找不到 inner 的 outer 生成 inner（单测原文）：内建类型的 outer（GNU0）、两个生成的 inner 的次序（GNU1） |
+| `cb-p1` | 12 | 没被重声明的 replaceable 元素的约束子句修饰：外来 > 声明 > 约束（CB1–CB3）、写在类里的参数（CB5）、继承来的（CB6）、复合 / 记录 / 数组组件（CB4 / CB10 / CB9）、2.x 的 `extends A(…)` 写法（CB8）、重声明后原约束修饰照样施加（CB11）、自带约束子句的重声明（CB12）；final 约束修饰被外来修饰改（CB7）双拒 |
+| `cb-ut` | 1 | 约束子句修饰（单测原文）：外来 > 声明 > 约束；自带约束子句的重声明 |

@@ -638,8 +638,7 @@ class Flattener {
       if (c.mod.is_valid() && mod_has_duplicates({c.mod})) { set_unsupported("duplicate modification"); return; }
       // outer 元素不可带修饰（InnerOuterInvalidMod1-3：OUTER_ELEMENT_MOD）。
       if (c.prefixes.io == SInnerOuter::Outer && c.mod.is_valid()) { set_unsupported("modifier on outer element"); return; }
-      // constrainedby（含 2.x 的 `extends A(...)` 写法）的修饰要施加到元素上（ConstrainingClass1 / redeclare5），未做 → SKIP。
-      if (c.prefixes.has_cc) { set_unsupported("constrainedby clause"); return; }
+      // constrainedby（含 2.x 的 `extends A(...)` 写法）的修饰由 inst 记进 cc_mods，排在声明修饰之后（见 Instantiator::inst_component）。
       // constant 带 fixed = false（NonFixedConstant1："Constant must be fixed"）。
       if (c.attr.var == SVariability::Const && c.mod.is_valid())
         for (const SSubMod& sm : I_.scode.mods[c.mod].subs)

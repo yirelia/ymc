@@ -495,3 +495,9 @@ CRASH 0。
 
 找不到 inner 的 outer 生成 inner（generateInner / insertGeneratedInners）做完；MSL 示例都自带 inner（World 等），PASS / SKIP
 逐例不变。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-10 加宽 63n 之后：PASS 410→412（+2）
+
+约束子句的修饰（`replaceable … constrainedby T(mods)`，instElementModifier：声明修饰之后、短类链之前）做完：Clocked 的
+Elementary.RealSignals.SampleWithADeffects、SimpleControlledDrive.ClockedWith_AD_DA_Effects 转 PASS，均与 omc 逐字节一致。
+FAIL / ACCEPTS-INVALID / CRASH 0。

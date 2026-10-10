@@ -7251,4 +7251,13 @@ YMC_TEST(flatten_short_class_alias_root) {
                            "  Real x(start = 5.0);\nequation\n  x = p * q * time;\nend SAU1;\n"));
 }
 
+YMC_TEST(flatten_constrainedby_modifier) {
+  // 约束子句的修饰排在声明修饰之后（外来 > 声明 > 约束，instElementModifier）；自带约束子句的重声明，新约束修饰在原约束修饰之前。
+  // 期望 = omc 1.25.0 实跑（2026-10-10，探针 cb-ut）。
+  YMC_CHECK_EQ(flatten_src("model CBU1\n  model A\n    replaceable Real x(start = 3) constrainedby Real(start = 1, min = 0);\n"
+                           "    replaceable Real y constrainedby Real(start = 4);\n  end A;\n"
+                           "  A a(x(start = 5), redeclare replaceable Real y(min = 1) constrainedby Real(start = 6));\nend CBU1;\n"),
+               std::string("class CBU1\n  Real a.x(min = 0.0, start = 5.0);\n  Real a.y(min = 1.0, start = 6.0);\nend CBU1;\n"));
+}
+
 YMC_TEST_MAIN

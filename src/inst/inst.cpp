@@ -864,6 +864,11 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing, bool gener
     comp.class_inst = Inst::empty_node();
     comp.state = CompState::PartiallyInstantiated;
     comp.decl_scope = enclosing;   // 元素修饰 / 维的作用域 = 声明所在类（NFInst.instComponentDef 的 parent，NFInst.mo:1942 / :1951）
+    // 没被重声明的 replaceable 元素的约束子句修饰（`replaceable Real x constrainedby Real(start = 1.0)`）：instElementModifier
+    //（NFInst.mo:2025-2040 v1.25.0）mod := merge(声明修饰, 约束修饰)——约束修饰排在声明修饰之后（flatten 照 cc_mods 的次序）。被重声明
+    // 过的由 redeclare_component 另算（那时 orig_def 已置）。1.25.0 不查声明类型是不是约束类型的子类型。
+    if (el.prefixes.has_cc && el.prefixes.cc.mod.is_valid() && !comp.orig_def.is_valid() && comp.cc_mods.empty())
+      comp.cc_mods.push_back(el.prefixes.cc.mod);
   }
 
   // outer 组件指向别处的 inner，不实例化自己的子树（否则 `outer B b`（B 里又含 outer B）会无限递归）。解析类型名：内建标量
@@ -1107,7 +1112,11 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing, bool gener
         if (I_.nodes[fc].visibility == Visibility::Protected || I_.comps[I_.nodes[fc].comp].attributes.is_final) continue;
         const SElement& re = I_.scode.elems[sm.element];
         const SElement& oe = I_.scode.elems[I_.comps[I_.nodes[fc].comp].def];
-        if (re.prefixes.has_cc || !lit_mod(lit_mod, re.mod) || !lit_dims(re) || !lit_dims(oe)) continue;
+        // 重声明元素自带约束子句（`redeclare replaceable Real x(min = 1.0) constrainedby Real(start = 2.0)`）：新约束修饰排在原约束
+        // 修饰之前（redeclare_component 的 cc_mods，ConstrainingClass3 → `start = 2.0`），照常施加；其修饰同样只收字面量。
+        if (!lit_mod(lit_mod, re.mod) || (re.prefixes.has_cc && !lit_mod(lit_mod, re.prefixes.cc.mod)) || !lit_dims(re) ||
+            !lit_dims(oe))
+          continue;
         redeclare_component(fc, sm.element, enclosing);
         I_.applied_redecls.insert(s.mod.raw);
       }

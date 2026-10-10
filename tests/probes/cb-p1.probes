@@ -1,0 +1,98 @@
+//// set: cb-p1 — 没被重声明的 replaceable 元素的约束子句修饰（instElementModifier：mod := merge(声明修饰, 约束修饰)）：外来 > 声明 > 约束（CB1–CB3）、写在类里的参数（CB5）、继承来的（CB6）、复合 / 记录 / 数组组件（CB4 / CB10 / CB9）、2.x 的 `extends A(…)` 写法（CB8）、重声明后约束修饰照样施加（CB11）、自带约束子句的重声明（CB12）；final 约束修饰被外来修饰改（CB7）双拒
+//// model: CB1
+model CB1
+  model A
+    Real x = 1;
+  end A;
+  model B
+    extends A;
+    Real y = 2;
+  end B;
+  replaceable B b constrainedby A(x = 4);
+end CB1;
+//// model: CB2
+model CB2
+  replaceable Real x(start = 3) constrainedby Real(start = 1, min = 0);
+end CB2;
+//// model: CB3
+model CB3
+  model A
+    replaceable Real x(start = 3) constrainedby Real(start = 1, min = 0);
+  end A;
+  A a(x(start = 5));
+end CB3;
+//// model: CB4
+model CB4
+  model A
+    parameter Real p = 1;
+    Real x = p * time;
+  end A;
+  replaceable A a constrainedby A(p = 2);
+  A a2;
+end CB4;
+//// model: CB5
+model CB5
+  parameter Real s0 = 2;
+  replaceable Real x constrainedby Real(start = s0);
+equation
+  der(x) = -x;
+end CB5;
+//// model: CB6
+model CB6
+  model Base
+    parameter Real s0 = 2;
+    replaceable Real x constrainedby Real(start = s0);
+  equation
+    der(x) = -x;
+  end Base;
+  model D
+    extends Base(s0 = 7);
+  end D;
+  D d;
+end CB6;
+//// model: CB7
+model CB7
+  model A
+    replaceable Real x constrainedby Real(final start = 1);
+  end A;
+  A a(x(start = 2));
+end CB7;
+//// model: CB8
+model CB8
+  model A
+    Real x;
+  end A;
+  model B
+    extends A;
+    Real y;
+  end B;
+  replaceable B b extends A(x = 4, y = 6) "c";
+end CB8;
+//// model: CB9
+model CB9
+  replaceable Real x[2] constrainedby Real(each start = 1);
+equation
+  x = {time, 2 * time};
+end CB9;
+//// model: CB10
+model CB10
+  record R
+    Real a = 1;
+    Real b = 2;
+  end R;
+  replaceable R r constrainedby R(a = 3);
+end CB10;
+//// model: CB11
+model CB11
+  model A
+    replaceable Real x constrainedby Real(start = 1.0);
+  end A;
+  A a(redeclare Real x(min = 1.0));
+end CB11;
+//// model: CB12
+model CB12
+  model A
+    replaceable Real x constrainedby Real(start = 1.0);
+  end A;
+  A a(redeclare replaceable Real x(min = 1.0) constrainedby Real(start = 2.0));
+end CB12;

@@ -2154,6 +2154,11 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           INSTANTIATED_TREE），实例化完了还能从实例查类型。根类里已有同名元素、生成的 inner 里又有缺 inner 的 outer、outer 数组 →
           SKIP；omc 的告警 ymc 不产，文件 Result 带告警的六例入账、从 slice 剔除五例（654→649）。
           slice 654→649 例 PASS 606 / FAIL 0（oracle=live 不一致 0）；scodeinst 607 / 44→50（带告警的六例入账）；testsuite 1711→1718 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 410（不变）；探针 9264→9279；单测 330。
+    - [x] (63n) inst + flat：约束子句的修饰（2026-10-10）：没被重声明的 replaceable 元素 `… constrainedby T(mods)`（含 2.x 的
+          `extends T(mods)` 写法）照 instElementModifier（mod := merge(声明修饰, 约束修饰)）记进 cc_mods、排在声明修饰之后；组件声明
+          修饰里自带约束子句的重声明（`redeclare replaceable Real x(min = 1) constrainedby Real(start = 2)`）照常施加，新约束修饰
+          在原约束修饰之前。1.25.0 不查声明类型是否约束类型的子类型，照之。
+          slice 649→653 例 PASS 606→610 / FAIL 0（oracle=live 不一致 0）；scodeinst 607→611 / 50（在账）；testsuite 1718→1725 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 410→412；探针 9279→9292；单测 330→331。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

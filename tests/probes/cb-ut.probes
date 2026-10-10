@@ -1,0 +1,9 @@
+//// set: cb-ut — 约束子句修饰（单测原文）：外来 > 声明 > 约束；自带约束子句的重声明
+//// model: CBU1
+model CBU1
+  model A
+    replaceable Real x(start = 3) constrainedby Real(start = 1, min = 0);
+    replaceable Real y constrainedby Real(start = 4);
+  end A;
+  A a(x(start = 5), redeclare replaceable Real y(min = 1) constrainedby Real(start = 6));
+end CBU1;
