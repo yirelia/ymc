@@ -512,3 +512,9 @@ ACCEPTS-INVALID / CRASH 0。
 
 修饰里的类重声明（extends / 组件声明 / 短类修饰、根类别名）做完；MSL 示例里的类重声明几乎都是包（`redeclare package Medium = …`），
 包里的类型、常量、函数经 SCode 链解析仍待第 2 阶段，PASS / SKIP 逐例不变。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-10 加宽 63q 之后：PASS 412（不变）
+
+class extends（`redeclare model extends B … end B;`）做完；MSL 里的 class extends 集中在 Media 的介质包（`redeclare record extends
+ThermodynamicState`、`redeclare model extends BaseProperties`），随包重声明一起仍待第 2 阶段，PASS / SKIP 逐例不变。FAIL /
+ACCEPTS-INVALID / CRASH 0。

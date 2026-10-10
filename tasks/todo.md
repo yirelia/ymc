@@ -2171,7 +2171,8 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
             `model A2 = A(redeclare …)`——同一机制施加到对应实例；放开 inst 的 "class redeclare in extends modifier" 与 flatten 的
             "modifier names non-component" 里能处理的形态。（2026-10-10 完成：根类别名的也收；短类修饰的书写处沿实例链往上找、
             前缀按经过的组件截短；外层修饰里的 `d(a(redeclare …))`、经组件数组的引名修饰照旧 SKIP。）slice 658→667 例 PASS 615→624 / FAIL 0（oracle=live 不一致 0）；scodeinst 616→625 / 50（在账）；testsuite 1730→1749 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 412（不变）；探针 9315→9340；单测 332→333。
-      - [ ] (63q) class extends `redeclare model extends B … end B;`：新类隐式 extends 原类（setClassExtends）。
+      - [x] (63q) class extends `redeclare model extends B … end B;`：新类隐式 extends 原类（setClassExtends）。（2026-10-10 完成：
+            不带 redeclare 前缀的同样；原类元素在前；记录 / 函数的 class extends 照旧 SKIP。）slice 667→671 例 PASS 624→628 / FAIL 0（oracle=live 不一致 0）；scodeinst 625→629 / 50→52（带告警的两例入账）；testsuite 1749→1759 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 412（不变）；探针 9340→9352；单测 333→334。
       - 包重声明（`redeclare package Medium = X`）里的类型可先经 inst 生效；`Medium.nX`、`Medium.f(…)` 等经 SCode 链的仍待第 2 阶段。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍

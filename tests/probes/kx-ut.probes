@@ -1,0 +1,24 @@
+//// set: kx-ut — class extends（单测原文）：目标经中间基类继承来、class extends 的修饰施加到原类元素、派生类自己也用
+//// model: KXU1
+model KXU1
+  model A
+    replaceable model B
+      Real x;
+      Real y;
+    end B;
+    B b;
+  end A;
+  model A2
+    extends A;
+  end A2;
+  model C
+    extends A2;
+    redeclare model extends B(x = y)
+      Real z = 3;
+    equation
+      y = z;
+    end B;
+    B b2;
+  end C;
+  C c;
+end KXU1;

@@ -269,12 +269,36 @@ NodeId Instantiator::lookup_class_name(const std::vector<Symbol>& path, NodeId s
 
 // -------------------------------------------------------------- partialInst（建目录）
 void Instantiator::partial_inst(NodeId cls) {
+  // class extends（`redeclare model extends B(mod) … end B;`）：类树的第一个 extends 预留给原类（ClassTree.fromSCode 的
+  // isClassExtends 支，NFClassTree.mo:139-160 v1.25.0：exts[1] 与组件数组首位的 REF；redeclareClass 时 setClassExtends 填上）——
+  // 原类的元素排在本体元素之前。ymc 合成一个 extends 元素占这个位（修饰 = class extends 的修饰），基类在 expand 里按外层类记下的
+  // 目标取（Inst::class_extends_target），不按名字查。
+  std::vector<Id<SElement>> elems = I_.scode.elems[I_.nodes[cls].def].def.elements;   // 拷贝
+  if (I_.scode.elems[I_.nodes[cls].def].def.kind == SClassDefKind::ClassExtends) {
+    const Id<SElement> cd = I_.nodes[cls].def;
+    Id<SElement> xe;
+    if (const auto it = ce_ext_elem_.find(cd.raw); it != ce_ext_elem_.end()) {
+      xe = it->second;
+    } else if (I_.scode.elems.size() >= synth_cap_) {
+      mark_unsupported("class extends redeclare", "synthesized element budget");
+    } else {
+      SElement x;
+      x.kind = SElementKind::Extends;
+      x.name = I_.scode.elems[cd].name;
+      x.base_path = {I_.scode.elems[cd].name};
+      x.mod = I_.scode.elems[cd].def.class_extends_mod;
+      x.loc = I_.scode.elems[cd].loc;
+      xe = I_.scode.elems.add(std::move(x));
+      ce_ext_elem_[cd.raw] = xe;
+      ce_ext_elems_.insert(xe.raw);
+    }
+    if (xe.is_valid()) elems.insert(elems.begin(), xe);
+  }
   const SElement& el = I_.scode.elems[I_.nodes[cls].def];
-  const SClassDef& def = el.def;
   ClassTree tree;
   tree.state = TreeState::PartialTree;
   // v1 只处理 PARTS（长类）；短类/枚举等后续子步。
-  for (Id<SElement> eid : def.elements) {
+  for (Id<SElement> eid : elems) {
     const SElement& e = I_.scode.elems[eid];
     switch (e.kind) {
       case SElementKind::Class: {
@@ -452,7 +476,18 @@ void Instantiator::expand(NodeId cls) {
     // NFClassTree.mo:202 newExtends(e, parent)、NFInst.mo:775-776 `scope := InstNode.parent(ext)`，v1.25.0）——看得见它
     // 自己的嵌套类（`package Modelica … extends Icons.Library;`），看不见继承来的元素（此时只登记了本地类）。任务卡 T-S3-07。
     std::vector<NodeId> base_nodes;
-    NodeId base = lookup_class_name(ee.base_path, cls, &base_nodes);
+    NodeId base;
+    if (ce_ext_elems_.count(I_.nodes[exts[xi]].def.raw)) {
+      // class extends 的隐式基类：外层类 expand 时记下的继承来的同名原类（见下"class extends 的目标"）；按名字查会查到自己。
+      const auto it = I_.class_extends_target.find(I_.nodes[cls].def.raw);
+      if (it == I_.class_extends_target.end()) {
+        mark_unsupported("class extends target not found", std::string(I_.interner.str(I_.nodes[cls].name)));
+        continue;
+      }
+      base = it->second;
+    } else {
+      base = lookup_class_name(ee.base_path, cls, &base_nodes);
+    }
     if (!base.is_valid() || I_.nodes[base].is_empty()) {
       // 查不到同名用户类的 `extends ExternalObject` = 内建的外部对象基类（omc 在 expandExtends 里认出内建基类名
       // "ExternalObject"，NFInst.mo:736-737 v1.25.0）：只记标志，元素的校验在循环之后（check_ext_object）。
@@ -509,6 +544,26 @@ void Instantiator::expand(NodeId cls) {
       tree.lookup[I_.nodes[bc].name] = LEntry{LEntry::Kind::Class, idx};
       tree.classes.push_back(bc);
       if (modded || I_.trees[bt].classes_via_mod.count(j)) tree.classes_via_mod.insert(idx);
+    }
+  }
+  // class extends 的目标：本类的 `model extends B … end B;`（带不带 redeclare 前缀都是）顶替继承来的同名类，隐式 extends 它
+  //（redeclareClass 的 isClassExtends 支 → setClassExtends，NFInst.mo:1734-1762 v1.25.0）。基类里没有同名类 → omc 报
+  // CLASS_EXTENDS_TARGET_NOT_FOUND（NFClassTree.mo:2246-2249）→ SKIP。
+  {
+    const std::vector<Id<SElement>> lel = I_.scode.elems[I_.nodes[cls].def].def.elements;   // 拷贝
+    for (Id<SElement> e : lel) {
+      if (I_.scode.elems[e].kind != SElementKind::Class || I_.scode.elems[e].def.kind != SClassDefKind::ClassExtends) continue;
+      const Symbol nm = I_.scode.elems[e].name;
+      NodeId target;
+      for (NodeId b : bases) {
+        if (I_.nodes[b].is_empty() || !I_.nodes[b].cls.is_valid() || !I_.node_class(b).tree.is_valid()) continue;
+        if (const NodeId t = tree_class(I_.node_class(b).tree, nm); !I_.nodes[t].is_empty()) { target = t; break; }
+      }
+      if (!target.is_valid() || I_.nodes[target].is_empty()) {
+        mark_unsupported("class extends target not found", std::string(I_.interner.str(nm)));
+        continue;
+      }
+      I_.class_extends_target[e.raw] = target;
     }
   }
   I_.trees[tree_id].ext_bases = std::move(bases);
@@ -728,8 +783,8 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node, const ClassRede
     const std::vector<Id<SElement>> elems = I_.scode.elems[I_.nodes[def_node].def].def.elements;   // 拷贝
     for (Id<SElement> e : elems) {
       const SElement& el = I_.scode.elems[e];
-      if (el.kind != SElementKind::Class || !el.prefixes.is_redeclare) continue;
-      if (el.def.kind == SClassDefKind::ClassExtends) { mark_unsupported("class extends redeclare"); continue; }
+      // class extends（`model extends B … end B;`，带不带 redeclare 前缀）同样顶替继承来的同名类（新类隐式 extends 原类，见 expand）。
+      if (el.kind != SElementKind::Class || (!el.prefixes.is_redeclare && el.def.kind != SClassDefKind::ClassExtends)) continue;
       bool outer = false;
       for (const auto& [n, node] : base_redecls) outer = outer || n == el.name;
       if (outer) continue;
@@ -772,7 +827,8 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node, const ClassRede
       if (base_builtin) { mark_unsupported("extends builtin type"); continue; }
       // extends 短类/枚举/derived 基类（`model B = A; extends B`）v1 未做，标 unsupported。
       Id<SElement> bdef = I_.nodes[base_def].def;
-      if (!bdef.is_valid() || I_.scode.elems[bdef].def.kind != SClassDefKind::Parts) {
+      if (!bdef.is_valid() || (I_.scode.elems[bdef].def.kind != SClassDefKind::Parts &&
+                               I_.scode.elems[bdef].def.kind != SClassDefKind::ClassExtends)) {
         mark_unsupported("extends short/enum/derived class", path_str(ee.base_path));
         continue;
       }

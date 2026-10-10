@@ -492,3 +492,5 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `kr-ut` | 1 | 派生类里的元素级类重声明（单测原文）：两层之下换成带修饰的短类，同一基类另有不重声明的实例 |
 | `km-p1` | 18 | 修饰里的类重声明：extends 修饰（KM1；新类修饰引写修饰的类的参数 KM5）、组件声明修饰（KM2；被换类是基类继承来的 KM6；组件数组 / 数组组件 each KM7 / KM8；长形态 KM9；包里的新类 KM10；修饰引外层参数 KM11、嵌套实例里 KM12；与被换组件的修饰并用 KM17；约束子句 KM20）、短类修饰（KM3；包里的别名 KM15）、根类别名（KM14）；外层修饰里的（KM4 `d(a(redeclare …))`）、经组件数组且新类修饰引外层名（KM16）、经 SCode 链查到被换的函数（KM18）SKIP |
 | `km-ut` | 1 | 修饰里的类重声明（单测原文）：extends 修饰（引写修饰的类的参数）、组件声明修饰、短类修饰 |
+| `kx-p1` | 11 | class extends：新类隐式 extends 继承来的同名原类（原类元素在前）顶替基类实例里的原类（KX1）；class extends 的修饰施加到原类元素（KX2）；不带 redeclare 前缀（KX3）；目标经中间基类继承来（KX4）；原类自己有 extends（KX5）；派生类自己也用（KX6）；两层 class extends 串起来（KX8）；新增参数（KX7）；记录的（KX10）SKIP；函数的（KX9，两段算法 omc 报错）、找不到目标（KX11）双拒 |
+| `kx-ut` | 1 | class extends（单测原文）：目标经中间基类继承来、class extends 的修饰施加到原类元素、派生类自己也用 |

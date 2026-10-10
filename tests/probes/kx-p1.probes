@@ -1,0 +1,204 @@
+//// set: kx-p1 — class extends（`redeclare model extends B … end B;`）：新类隐式 extends 继承来的同名原类（ClassTree.fromSCode 的预留位 + setClassExtends，原类元素在前），顶替基类实例里的原类；class extends 的修饰施加到原类元素（KX2）；不带 redeclare 前缀（KX3）；目标经中间基类继承来（KX4）；原类自己有 extends（KX5）；派生类自己也用（KX6）；两层 class extends 串起来（KX8）；新增参数进方程（KX7）；记录的 class extends（KX10）SKIP；函数的（KX9，两段算法 omc 报错）、找不到目标（KX11）双拒
+//// model: KX1
+model KX1
+  model A
+    replaceable model B
+      Real x;
+    equation
+      x = time;
+    end B;
+    B b;
+  end A;
+  model C
+    extends A;
+    redeclare model extends B
+      Real y;
+    equation
+      y = 2 * x;
+    end B;
+  end C;
+  C c;
+end KX1;
+//// model: KX2
+model KX2
+  model A
+    replaceable model B
+      Real x;
+      Real y;
+    end B;
+    B b;
+  end A;
+  model C
+    extends A;
+    redeclare model extends B(x = y)
+      Real z = 3;
+    equation
+      y = z;
+    end B;
+  end C;
+  C c;
+end KX2;
+//// model: KX3
+model KX3
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  model C
+    extends A;
+    model extends B
+      Real y = 2;
+    end B;
+  end C;
+  C c;
+end KX3;
+//// model: KX4
+model KX4
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  model A2
+    extends A;
+  end A2;
+  model C
+    extends A2;
+    redeclare model extends B
+      Real y = 2;
+    end B;
+  end C;
+  C c;
+end KX4;
+//// model: KX5
+model KX5
+  model Base
+    Real w = 5;
+  end Base;
+  model A
+    replaceable model B
+      extends Base;
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  model C
+    extends A;
+    redeclare model extends B
+      Real y = 2;
+    end B;
+  end C;
+  C c;
+end KX5;
+//// model: KX6
+model KX6
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  model C
+    extends A;
+    redeclare model extends B
+      Real y = 2;
+    end B;
+    B b2;
+  end C;
+  C c;
+end KX6;
+//// model: KX7
+model KX7
+  model A
+    replaceable model B
+      Real x;
+    equation
+      der(x) = -x;
+    end B;
+    B b;
+  end A;
+  model C
+    extends A;
+    redeclare model extends B
+      parameter Real k = 3;
+      Real y = k * x;
+    end B;
+  end C;
+  C c;
+end KX7;
+//// model: KX8
+model KX8
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  model C1
+    extends A;
+    redeclare replaceable model extends B
+      Real y = 2;
+    end B;
+  end C1;
+  model C2
+    extends C1;
+    redeclare model extends B
+      Real z = 3;
+    end B;
+  end C2;
+  C2 c;
+end KX8;
+//// model: KX9
+model KX9
+  model A
+    replaceable function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := 2 * x;
+    end f;
+    Real v = f(time);
+  end A;
+  model C
+    extends A;
+    redeclare function extends f
+    algorithm
+      y := 3 * x;
+    end f;
+  end C;
+  C c;
+end KX9;
+//// model: KX10
+model KX10
+  model A
+    replaceable record R
+      Real a = 1;
+    end R;
+    R r;
+  end A;
+  model C
+    extends A;
+    redeclare record extends R
+      Real b = 2;
+    end R;
+  end C;
+  C c;
+end KX10;
+//// model: KX11
+model KX11
+  model A
+    model B
+      Real x = 1;
+    end B;
+  end A;
+  model C
+    extends A;
+    redeclare model extends D
+      Real y = 2;
+    end D;
+  end C;
+  C c;
+end KX11;

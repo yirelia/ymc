@@ -7284,4 +7284,15 @@ YMC_TEST(flatten_modifier_class_redeclare) {
                            "  Real a2.b.z = a2.b.p;\nend KMU1;\n"));
 }
 
+YMC_TEST(flatten_class_extends_redeclare) {
+  // class extends：新类隐式 extends 经中间基类继承来的原类（原类元素在前），class extends 的修饰 `(x = y)` 施加到原类元素；
+  // 基类实例与派生类自己的组件都用新类。期望 = omc 1.25.0 实跑（2026-10-10，探针 kx-ut）。
+  YMC_CHECK_EQ(flatten_src("model KXU1\n  model A\n    replaceable model B\n      Real x;\n      Real y;\n    end B;\n"
+                           "    B b;\n  end A;\n  model A2\n    extends A;\n  end A2;\n  model C\n    extends A2;\n"
+                           "    redeclare model extends B(x = y)\n      Real z = 3;\n    equation\n      y = z;\n    end B;\n"
+                           "    B b2;\n  end C;\n  C c;\nend KXU1;\n"),
+               std::string("class KXU1\n  Real c.b.x = c.b.y;\n  Real c.b.y;\n  Real c.b.z = 3.0;\n  Real c.b2.x = c.b2.y;\n"
+                           "  Real c.b2.y;\n  Real c.b2.z = 3.0;\nequation\n  c.b.y = c.b.z;\n  c.b2.y = c.b2.z;\nend KXU1;\n"));
+}
+
 YMC_TEST_MAIN

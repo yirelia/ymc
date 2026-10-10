@@ -254,6 +254,9 @@ struct Inst {
   // 查找在这样的实例语境里落到原类 → SKIP（flatten 按词法链查名，看不到实例上的替换，ADR-007 第 2 阶段）。
   std::unordered_set<std::uint32_t> redeclared_classes;
   std::unordered_map<std::uint32_t, std::unordered_set<std::uint32_t>> replaced_in;   // 实例节点 raw → 顶替掉的原类 raw
+  // class extends（`redeclare model extends B … end B;`）的隐式基类：class extends 类的 SCode 元素 raw → 外层类继承来的同名原类
+  // 节点（见 Instantiator::expand；flatten 的 SCode 层继承查找也认它）。
+  std::unordered_map<std::uint32_t, NodeId> class_extends_target;
   struct RootAlias {
     NodeId node;                      // 别名类节点；invalid = 根不是别名
     std::vector<Id<SMod>> mods;

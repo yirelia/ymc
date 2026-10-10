@@ -631,9 +631,8 @@ class Flattener {
     if (extends_shadowed(def)) { set_unsupported("extends of inherited class name"); return; }
     for (Id<SElement> e : def.def.elements) {
       const SElement& c = I_.scode.elems[e];
-      // 元素级重声明：类的（非 class extends）由 inst 在基类实例的类树里顶替（Instantiator::inst_class）；组件的未做 → SKIP。
-      if (c.prefixes.is_redeclare && c.kind != SElementKind::Extends &&
-          !(c.kind == SElementKind::Class && c.def.kind != SClassDefKind::ClassExtends)) {
+      // 元素级重声明：类的（含 class extends）由 inst 在基类实例的类树里顶替（Instantiator::inst_class）；组件的未做 → SKIP。
+      if (c.prefixes.is_redeclare && c.kind != SElementKind::Extends && c.kind != SElementKind::Class) {
         set_unsupported("element redeclare");
         return;
       }
@@ -1290,10 +1289,11 @@ class Flattener {
       }
 
       if (I_.comps[cid].ty.kind == TypeKind::Complex) {
-        // 复合组件的类型必须是长类（PARTS）；短类/枚举/derived 走到这里说明 v1 还没做。
+        // 复合组件的类型必须是长类（PARTS，或 class extends——inst 给它补了隐式基类）；短类/枚举/derived 走到这里说明 v1 还没做。
         NodeId ci = I_.comps[cid].class_inst;
         Id<SElement> cdef = I_.nodes[ci].def;
-        if (!cdef.is_valid() || I_.scode.elems[cdef].def.kind != SClassDefKind::Parts) {
+        if (!cdef.is_valid() || (I_.scode.elems[cdef].def.kind != SClassDefKind::Parts &&
+                                 I_.scode.elems[cdef].def.kind != SClassDefKind::ClassExtends)) {
           set_unsupported("short/enum/derived type");
           continue;
         }
@@ -4378,7 +4378,17 @@ class Flattener {
       if (b.is_valid()) collect_outer_needs(b, ds, out, depth + 1, deep);
       return;
     }
-    if (el.def.kind != SClassDefKind::Parts) return;
+    if (el.def.kind == SClassDefKind::ClassExtends) {   // 隐式基类的 outer / inner 也算（再看本体元素）
+      const auto it = I_.class_extends_target.find(x.raw);
+      if (it == I_.class_extends_target.end()) return;
+      const NodeId t = it->second;
+      if (I_.nodes[t].def.is_valid()) {
+        const ScodeScope ts = scode_scope_of(I_.nodes[t].parent_scope);
+        collect_outer_needs(I_.nodes[t].def, ts, out, depth + 1, deep);
+      }
+    } else if (el.def.kind != SClassDefKind::Parts) {
+      return;
+    }
     auto add = [](std::vector<Symbol>& v, Symbol s) { if (std::find(v.begin(), v.end(), s) == v.end()) v.push_back(s); };
     for (Id<SElement> eid : el.def.elements) {
       const SElement& c = I_.scode.elems[eid];
@@ -10626,6 +10636,8 @@ class Flattener {
   bool record_fields_ex(Id<SElement> rec, const ScodeScope& rscope, std::vector<RecField>& out, bool foreign, int depth,
                         bool any_base = false) {
     if (depth > 20) return false;
+    // class extends 的记录（`redeclare record extends R …`）：原类的字段在隐式基类里，SCode 层的字段收集不认 → 调用方 SKIP。
+    if (I_.scode.elems[rec].def.kind == SClassDefKind::ClassExtends) return false;
     ScodeScope inner = rscope;
     if (inner.empty() || inner.front() != rec) inner.insert(inner.begin(), rec);
     const ScodeScope outer(inner.begin() + 1, inner.end());
@@ -11787,6 +11799,16 @@ class Flattener {
     if (const auto it = ext_bases_memo_.find(cls.raw); it != ext_bases_memo_.end()) return it->second;
     ext_bases_memo_[cls.raw];   // 环（extends 自身 / 互相 extends）：先按没有基类
     std::vector<ExtBase> out;
+    // class extends 的隐式基类（Inst::class_extends_target，排在最前，同 ClassTree.fromSCode 的预留位）。
+    if (I_.scode.elems[cls].kind == SElementKind::Class && I_.scode.elems[cls].def.kind == SClassDefKind::ClassExtends)
+      if (const auto it = I_.class_extends_target.find(cls.raw); it != I_.class_extends_target.end()) {
+        ExtBase eb;
+        eb.chain = scode_scope_of(it->second);
+        if (!eb.chain.empty() && eb.chain.front() == I_.nodes[it->second].def) {
+          eb.mod_hits = ext_mod_hits_consts(eb.chain, I_.scode.elems[cls].def.class_extends_mod);
+          out.push_back(std::move(eb));
+        }
+      }
     if (I_.scode.elems[cls].kind == SElementKind::Class) {
       const ScodeScope self(scope.begin() + static_cast<std::ptrdiff_t>(k), scope.end());
       const std::vector<Id<SElement>> elems = I_.scode.elems[cls].def.elements;   // 拷贝
@@ -21719,6 +21741,11 @@ class Flattener {
   }
   bool scode_has_element(Id<SElement> c, const ScodeScope& sc, Symbol name, int depth) {
     if (depth > 20) return false;
+    if (I_.scode.elems[c].def.kind == SClassDefKind::ClassExtends)   // class extends 的隐式基类
+      if (const auto it = I_.class_extends_target.find(c.raw); it != I_.class_extends_target.end())
+        if (const NodeId t = it->second; I_.nodes[t].def.is_valid() &&
+                                         scode_has_element(I_.nodes[t].def, scode_scope_of(t), name, depth + 1))
+          return true;
     const SElement el = I_.scode.elems[c];   // 拷贝（解析不加元素，但不跨调用持引用）
     ScodeScope inner = sc;
     if (inner.empty() || inner[0].raw != c.raw) inner.insert(inner.begin(), c);
