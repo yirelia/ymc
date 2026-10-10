@@ -536,7 +536,10 @@ class Flattener {
   bool bad_type_path(const SElement& c, const ScodeScope& scope) {
     if (c.type.path.empty()) return false;
     ScodeScope ds;
+    const bool saved_guard = redecl_guard_off_;
+    redecl_guard_off_ = true;
     Id<SElement> e = find_scode_element_at(c.type.path[0], c.type.leading_dot ? ScodeScope{} : scope, ds);
+    redecl_guard_off_ = saved_guard;
     if (!e.is_valid()) {   // SCODE 查找不到（encapsulated 边界，Encapsulated1）而又不是内建类型 → SKIP
       const std::string_view n = in_.str(c.type.path[0]);
       return !(c.type.path.size() == 1 && (n == "Real" || n == "Integer" || n == "Boolean" || n == "String" ||
@@ -628,7 +631,12 @@ class Flattener {
     if (extends_shadowed(def)) { set_unsupported("extends of inherited class name"); return; }
     for (Id<SElement> e : def.def.elements) {
       const SElement& c = I_.scode.elems[e];
-      if (c.prefixes.is_redeclare && c.kind != SElementKind::Extends) { set_unsupported("element redeclare"); return; }
+      // 元素级重声明：类的（非 class extends）由 inst 在基类实例的类树里顶替（Instantiator::inst_class）；组件的未做 → SKIP。
+      if (c.prefixes.is_redeclare && c.kind != SElementKind::Extends &&
+          !(c.kind == SElementKind::Class && c.def.kind != SClassDefKind::ClassExtends)) {
+        set_unsupported("element redeclare");
+        return;
+      }
       if (c.kind == SElementKind::Extends) {
         if (c.mod.is_valid() && mod_has_duplicates({c.mod})) { set_unsupported("duplicate modification"); return; }
         if (bad_extends_path(c, scope)) { set_unsupported("invalid extends lookup"); return; }
@@ -11735,7 +11743,7 @@ class Flattener {
       for (Id<SElement> e : I_.scode.elems[scope[k]].def.elements)
         if (hit(e)) {
           def_scope.assign(scope.begin() + static_cast<std::ptrdiff_t>(k), scope.end());
-          return enclosing_const_check(e, scope[k]);
+          return redeclared_check(enclosing_const_check(e, scope[k]), scope[k]);
         }
       if (k > 0 || inherit0) {
         bool via_mod = false;
@@ -11746,7 +11754,7 @@ class Flattener {
             return {};
           }
           inh_bases_.insert(def_scope[0].raw);
-          return enclosing_const_check(ie, scope[k]);
+          return redeclared_check(enclosing_const_check(ie, scope[k]), def_scope[0]);
         }
       }
       // 本层的 import（本地元素之后、外层之前：同处一张 LookupTree，本地优先，R12 §2.1）。
@@ -11879,6 +11887,27 @@ class Flattener {
     }
     return e;
   }
+  // SCode 查找在类 decl_cls 这一层落到被类重声明顶替过的原类：最内一个对应这一层的实例（祖先帧或其基类实例）若正是顶替掉它的
+  // 那个（Inst::replaced_in），实例上已是新类、词法链看不到 → SKIP（ADR-007 第 2 阶段）；对应的实例没被顶替（同一个基类另有
+  // 不重声明的实例，RE27 探针 `A a; C c;`）或没有实例语境 → 原类就是对的。组件类型路径的合法性检查（bad_type_path）照原声明
+  // 查，关掉（redecl_guard_off_）。
+  Id<SElement> redeclared_check(Id<SElement> e, Id<SElement> decl_cls) {
+    if (redecl_guard_off_ || !e.is_valid() || I_.scode.elems[e].kind != SElementKind::Class ||
+        !I_.redeclared_classes.count(e.raw) || result_.unsupported)
+      return e;
+    for (std::size_t i = frames_.size(); i-- > 0;) {
+      const NodeId inst = inst_of_class(frames_[i].inst, decl_cls);
+      if (I_.nodes[inst].is_empty()) continue;
+      const auto it = I_.replaced_in.find(inst.raw);
+      if (it != I_.replaced_in.end() && it->second.count(e.raw)) {
+        set_unsupported("lookup of redeclared class");
+        result_.unsupported_detail = std::string(in_.str(I_.scode.elems[e].name));
+      }
+      break;
+    }
+    return e;
+  }
+  bool redecl_guard_off_ = false;
   // 实例 inst 本身或它的（多层）基类实例里类定义是 cls 的那个；没有 → empty。
   NodeId inst_of_class(NodeId inst, Id<SElement> cls) const {
     std::vector<NodeId> todo{inst};
@@ -20515,8 +20544,14 @@ class Flattener {
       const NodeId d = k < dscopes.size() ? dscopes[k] : NodeId{};
       NodeId sc;
       std::vector<Symbol> vp;
-      if (d.is_valid() && !I_.nodes[d].is_empty() && I_.nodes[d].def.is_valid() && I_.nodes[d].def == I_.nodes[lex].def) {
-        sc = lex;
+      // 写短类修饰的类 = 组件所在实例，或它所在的派生实例（基类实例的 instance_parent 是派生类实例、前缀相同）——后者是派生类里的
+      // 元素级类重声明 `redeclare model B = X(p = 3)`（RE8 探针：b 是基类 A 的组件，修饰写在派生类 C 里）。
+      NodeId owner;
+      for (NodeId n = lex; d.is_valid() && n.is_valid() && !I_.nodes[n].is_empty() && I_.nodes[n].kind == NodeKind::Class;
+           n = I_.nodes[n].instance_parent)
+        if (I_.nodes[d].def.is_valid() && I_.nodes[d].def == I_.nodes[n].def) { owner = n; break; }
+      if (owner.is_valid() && !I_.nodes[owner].is_empty()) {
+        sc = owner;
         vp = prefix;
       } else if (d.is_valid() && !I_.nodes[d].is_empty() && I_.nodes[d].def.is_valid() &&
                  I_.scode.elems[I_.nodes[d].def].restriction == SRestriction::Package) {

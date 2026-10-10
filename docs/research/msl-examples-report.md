@@ -501,3 +501,9 @@ CRASH 0。
 约束子句的修饰（`replaceable … constrainedby T(mods)`，instElementModifier：声明修饰之后、短类链之前）做完：Clocked 的
 Elementary.RealSignals.SampleWithADeffects、SimpleControlledDrive.ClockedWith_AD_DA_Effects 转 PASS，均与 omc 逐字节一致。
 FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-10 加宽 63o 之后：PASS 412（不变）
+
+派生类里的元素级类重声明（`redeclare model B … end B;` / `redeclare model B = X(p = 3)`）在基类实例的类树里顶替做完；MSL 示例的
+类重声明几乎都写在修饰里（`redeclare package Medium = …`、`redeclare model HeatTransfer = …`），PASS / SKIP 逐例不变。FAIL /
+ACCEPTS-INVALID / CRASH 0。

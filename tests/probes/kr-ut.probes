@@ -1,0 +1,24 @@
+//// set: kr-ut — 派生类里的元素级类重声明（单测原文）：两层之下的 replaceable 类换成带修饰的短类，同一基类另有不重声明的实例
+//// model: KRU1
+model KRU1
+  model X
+    parameter Real p = 1;
+    Real z = p;
+  end X;
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+    Real w = 4;
+  end A;
+  model A2
+    extends A;
+  end A2;
+  model C
+    extends A2;
+    redeclare model B = X(p = 3);
+  end C;
+  A a;
+  C c;
+end KRU1;

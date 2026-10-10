@@ -2159,6 +2159,19 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           修饰里自带约束子句的重声明（`redeclare replaceable Real x(min = 1) constrainedby Real(start = 2)`）照常施加，新约束修饰
           在原约束修饰之前。1.25.0 不查声明类型是否约束类型的子类型，照之。
           slice 649→653 例 PASS 606→610 / FAIL 0（oracle=live 不一致 0）；scodeinst 607→611 / 50（在账）；testsuite 1718→1725 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 410→412；探针 9279→9292；单测 330→331。
+    - [ ] 类重声明第 1 阶段（ADR-007；ADR-006 D4 已计划，inst 侧）——分桶做，每桶照常探针 / 门 / 提交：
+      - [x] (63o) 派生类里的元素级类重声明 `redeclare model B … end B;` / `redeclare model B = X;`（非 class extends）：
+            照 redeclareClass（NFInst.mo:1707-1801 v1.25.0：新类 = 重声明元素的类，词法作用域 = 写它的类，前缀并合）在派生类
+            实例与它各层基类实例的类树里顶替被替换的 replaceable 类（实例专属类树：复制定义树、改那一项）；继承来的组件的类型
+            于是查到新类。守卫（SKIP）：被替换的不是 replaceable / 是组件；基类里的嵌套类体经词法链会读到被替换名；flatten 的
+            SCode 查找落到被替换的原类（记进 Inst 的被替换集合）——函数 / 常量 / 包名经 SCode 链解析的照旧 SKIP（第 2 阶段）。
+            （2026-10-10 完成：守卫按帧——对应那一层的实例确实顶替过才 SKIP，同一基类另有不重声明的实例照用原类；派生类里写的短类
+            修饰在派生类实例里解析。）slice 653→658 例 PASS 610→615 / FAIL 0（oracle=live 不一致 0）；scodeinst 611→616 / 50（在账）；testsuite 1725→1730 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 412（不变）；探针 9292→9315；单测 331→332。
+      - [ ] (63p) 修饰形态：extends 修饰 `extends A(redeclare model B = X)`、组件修饰 `A a(redeclare model B = X)`、短类修饰
+            `model A2 = A(redeclare …)`——同一机制施加到对应实例；放开 inst 的 "class redeclare in extends modifier" 与 flatten 的
+            "modifier names non-component" 里能处理的形态。
+      - [ ] (63q) class extends `redeclare model extends B … end B;`：新类隐式 extends 原类（setClassExtends）。
+      - 包重声明（`redeclare package Medium = X`）里的类型可先经 inst 生效；`Medium.nX`、`Medium.f(…)` 等经 SCode 链的仍待第 2 阶段。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

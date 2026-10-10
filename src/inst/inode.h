@@ -250,6 +250,10 @@ struct Inst {
   std::unordered_set<std::uint32_t> applied_redecls;
   // 根类是短类别名（`model R = A(p = 2) "c";`）：inst 实例化的是链底的长类，这里记别名本身（压平名 / 注释 / partial 取它）与
   // 链上各层的修饰（外层在前）及其书写处（各短类的词法外层），flatten 当根实例的外来修饰（见 Instantiator::instantiate_root_path）。
+  // 被类重声明顶替过的原类（SCode 元素 raw，见 Instantiator::instantiate 的实例专属类树）与各实例里顶替掉的那些：flatten 的 SCode
+  // 查找在这样的实例语境里落到原类 → SKIP（flatten 按词法链查名，看不到实例上的替换，ADR-007 第 2 阶段）。
+  std::unordered_set<std::uint32_t> redeclared_classes;
+  std::unordered_map<std::uint32_t, std::unordered_set<std::uint32_t>> replaced_in;   // 实例节点 raw → 顶替掉的原类 raw
   struct RootAlias {
     NodeId node;                      // 别名类节点；invalid = 根不是别名
     std::vector<Id<SMod>> mods;

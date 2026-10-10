@@ -7260,4 +7260,15 @@ YMC_TEST(flatten_constrainedby_modifier) {
                std::string("class CBU1\n  Real a.x(min = 0.0, start = 5.0);\n  Real a.y(min = 1.0, start = 6.0);\nend CBU1;\n"));
 }
 
+YMC_TEST(flatten_element_class_redeclare) {
+  // 派生类里的元素级类重声明顶替两层之下基类里的 replaceable 类（继承来的组件 b 的类型查到新类 X(p = 3)，短类修饰在派生类里解析）；
+  // 同一基类另有不重声明的实例 a 照用原类。期望 = omc 1.25.0 实跑（2026-10-10，探针 kr-ut）。
+  YMC_CHECK_EQ(flatten_src("model KRU1\n  model X\n    parameter Real p = 1;\n    Real z = p;\n  end X;\n  model A\n"
+                           "    replaceable model B\n      Real x = 1;\n    end B;\n    B b;\n    Real w = 4;\n  end A;\n"
+                           "  model A2\n    extends A;\n  end A2;\n  model C\n    extends A2;\n    redeclare model B = X(p = 3);\n"
+                           "  end C;\n  A a;\n  C c;\nend KRU1;\n"),
+               std::string("class KRU1\n  Real a.b.x = 1.0;\n  Real a.w = 4.0;\n  parameter Real c.b.p = 3.0;\n"
+                           "  Real c.b.z = c.b.p;\n  Real c.w = 4.0;\nend KRU1;\n"));
+}
+
 YMC_TEST_MAIN

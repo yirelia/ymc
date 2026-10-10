@@ -1,0 +1,396 @@
+//// set: kr-p1 — 派生类里的元素级类重声明（redeclareClass：基类实例的类树里顶替 replaceable 类，新类的词法作用域 = 写它的类）：长 / 短 / 带修饰的新类（KR1 / KR2 / KR8）、多层基类（KR3 / KR23）、新类引派生类的常量（KR4）、不是 replaceable 的也照换（KR6，1.25.0 不查）、派生类自己也用（KR7）、带修饰 / extends 修饰的继承组件（KR12 / KR17 / KR28）、两层重声明（KR14）、type（KR16）、根类（KR18）、两个（KR19）、组件数组（KR21）、派生类的嵌套类（KR22）、同一基类另有不重声明的实例（KR27）；基类的嵌套类体写到被换名（KR5 / KR26）、经 SCode 链查到被换的函数 / 记录（KR10 / KR11）SKIP
+//// model: KR1
+model KR1
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  model C
+    extends A;
+    redeclare model B
+      Real y = 2;
+    end B;
+  end C;
+  C c;
+end KR1;
+//// model: KR2
+model KR2
+  model X
+    Real z = 3;
+  end X;
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  model C
+    extends A;
+    redeclare model B = X;
+  end C;
+  C c;
+end KR2;
+//// model: KR3
+model KR3
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  model A2
+    extends A;
+    Real w = 4;
+  end A2;
+  model C
+    extends A2;
+    redeclare model B
+      Real y = 2;
+    end B;
+  end C;
+  C c;
+end KR3;
+//// model: KR4
+model KR4
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  model C
+    extends A;
+    constant Real k = 5;
+    redeclare model B
+      Real y = k;
+    end B;
+  end C;
+  C c;
+end KR4;
+//// model: KR5
+model KR5
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    model M
+      B b2;
+    end M;
+    M m;
+  end A;
+  model C
+    extends A;
+    redeclare model B
+      Real y = 2;
+    end B;
+  end C;
+  C c;
+end KR5;
+//// model: KR6
+model KR6
+  model A
+    model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  model C
+    extends A;
+    redeclare model B
+      Real y = 2;
+    end B;
+  end C;
+  C c;
+end KR6;
+//// model: KR7
+model KR7
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  model C
+    extends A;
+    redeclare model B
+      Real y = 2;
+    end B;
+    B b3;
+  end C;
+  C c;
+end KR7;
+//// model: KR8
+model KR8
+  model X
+    parameter Real p = 1;
+    Real z = p;
+  end X;
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  model C
+    extends A;
+    redeclare model B = X(p = 3);
+  end C;
+  C c;
+end KR8;
+//// model: KR10
+model KR10
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 3 * x;
+  end g;
+  model A
+    replaceable function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := 2 * x;
+    end f;
+    Real v = f(time);
+  end A;
+  model C
+    extends A;
+    redeclare function f = g;
+  end C;
+  C c;
+end KR10;
+//// model: KR11
+model KR11
+  model A
+    replaceable record R
+      Real a = 1;
+    end R;
+    R r;
+  end A;
+  model C
+    extends A;
+    redeclare record R
+      Real b = 2;
+    end R;
+  end C;
+  C c;
+end KR11;
+//// model: KR12
+model KR12
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b(x = 2);
+  end A;
+  model C
+    extends A;
+    redeclare model B
+      Real x = 5;
+      Real y = 2;
+    end B;
+  end C;
+  C c;
+end KR12;
+//// model: KR14
+model KR14
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  model C1
+    extends A;
+    redeclare replaceable model B
+      Real y = 2;
+    end B;
+  end C1;
+  model C2
+    extends C1;
+    redeclare model B
+      Real z = 3;
+    end B;
+  end C2;
+  C2 c;
+end KR14;
+//// model: KR16
+model KR16
+  model A
+    replaceable type T = Real(unit = "m");
+    T t = time;
+  end A;
+  model C
+    extends A;
+    redeclare type T = Real(unit = "s");
+  end C;
+  C c;
+end KR16;
+//// model: KR17
+model KR17
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  model C
+    extends A(b(y = 7));
+    redeclare model B
+      Real y = 2;
+    end B;
+  end C;
+  C c;
+end KR17;
+//// model: KR18
+model KR18A
+  replaceable model B
+    Real x = 1;
+  end B;
+  B b;
+  Real w = 3;
+end KR18A;
+model KR18
+  extends KR18A;
+  redeclare model B
+    Real y = 2;
+  end B;
+end KR18;
+//// model: KR19
+model KR19
+  model A
+    replaceable model B1
+      Real x = 1;
+    end B1;
+    replaceable model B2
+      Real u = 1;
+    end B2;
+    B1 b1;
+    B2 b2;
+  end A;
+  model C
+    extends A;
+    redeclare model B1
+      Real y = 2;
+    end B1;
+    redeclare model B2
+      Real v = 4;
+    end B2;
+  end C;
+  C c;
+end KR19;
+//// model: KR21
+model KR21
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b[2];
+  end A;
+  model C
+    extends A;
+    redeclare model B
+      Real y = 2;
+    end B;
+  end C;
+  C c;
+end KR21;
+//// model: KR22
+model KR22
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  model C
+    extends A;
+    redeclare model B
+      Real y = 2;
+    end B;
+    model N
+      B bn;
+    end N;
+    N n;
+  end C;
+  C c;
+end KR22;
+//// model: KR23
+model KR23
+  model A0
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A0;
+  model A
+    extends A0;
+  end A;
+  model C
+    extends A;
+    redeclare model B
+      Real y = 2;
+    end B;
+  end C;
+  C c;
+end KR23;
+//// model: KR26
+model KR26
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    model D
+      extends B;
+    end D;
+    D d;
+  end A;
+  model C
+    extends A;
+    redeclare model B
+      Real y = 2;
+    end B;
+  end C;
+  C c;
+end KR26;
+//// model: KR27
+model KR27
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+  model C
+    extends A;
+    redeclare model B
+      Real y = 2;
+    end B;
+  end C;
+  A a;
+  C c;
+end KR27;
+//// model: KR28
+model KR28
+  model A
+    replaceable model B
+      parameter Real p = 1;
+      Real x = p * time;
+    end B;
+    B b(p = 5);
+  equation
+    b.x = time;
+  end A;
+  model C
+    extends A;
+    redeclare model B
+      parameter Real p = 1;
+      Real x;
+      Real y = 2 * p;
+    end B;
+  end C;
+  C c;
+end KR28;

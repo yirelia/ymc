@@ -544,7 +544,7 @@ Id<SElement> Instantiator::member_def(NodeId cls, Symbol name, int depth) {
 }
 
 // -------------------------------------------------------------- instClass（克隆 + 建 FlatTree）
-NodeId Instantiator::instantiate(NodeId def_node, NodeId parent) {
+NodeId Instantiator::instantiate(NodeId def_node, NodeId parent, const ClassRedecls* redecls) {
   // 递归深度守卫：递归定义（RECURSIVE_DEFINITION，R11 §6.2）或 v1 未做的 inner/outer 链接可能无限递归；
   // 超过上限就标 unsupported 并返回克隆但不再下钻，避免栈溢出（driver 退 66）。
   if (++depth_ > 200) {
@@ -566,17 +566,102 @@ NodeId Instantiator::instantiate(NodeId def_node, NodeId parent) {
   if (I_.node_class(def_node).state == ClassState::PartialClass) expand(def_node);
   // 克隆：新 Class 单元（Pointer.create，断开与定义节点共享）+ 新节点（R11 §7.0）。
   Class inst_c = I_.classes[I_.nodes[def_node].cls];   // 拷贝 def 的 Class（含 ExpandedTree 引用，供查找）
+  // 类重声明（派生类的元素级 `redeclare model B … end B;`，NFInst.redeclareClass :1707-1801 v1.25.0）：OMC 在实例的类树里用新类
+  // 节点顶替原来的（Mutable 槽，基类的视图同步），继承来的组件的类型于是查到新类。ymc 给这个实例复制一份定义类树、把那些名字的项
+  // 换成新类节点；被顶替的原类记进 Inst::redeclared_classes（flatten 的 SCode 查找撞到 → SKIP）。
+  bool specialized = false;
+  std::vector<std::uint32_t> replaced;   // 顶替掉的原类（实例建好后记进 Inst::replaced_in）
+  if (redecls && !redecls->empty() && inst_c.tree.is_valid()) {
+    ClassTree t = I_.trees[inst_c.tree];   // 拷贝
+    for (const auto& [n, node] : *redecls) {
+      const auto it = t.lookup.find(n);
+      if (it == t.lookup.end() || it->second.kind != LEntry::Kind::Class || t.classes[it->second.index] == node) continue;
+      if (const Id<SElement> od = I_.nodes[t.classes[it->second.index]].def; od.is_valid()) {
+        I_.redeclared_classes.insert(od.raw);
+        replaced.push_back(od.raw);
+      }
+      t.classes[it->second.index] = node;
+      t.classes_via_mod.erase(it->second.index);
+      specialized = true;
+    }
+    if (specialized) inst_c.tree = I_.trees.add(std::move(t));
+  }
   INode inst_n = I_.nodes[def_node];                   // 拷贝节点（parent_scope 保留词法外层）
   inst_n.cls = I_.classes.add(std::move(inst_c));
   inst_n.instance_parent = parent;
   NodeId inst_node = I_.nodes.add(std::move(inst_n));
-  inst_class(inst_node, def_node);
+  if (specialized) {
+    inst_redecls_[inst_node.raw] = *redecls;
+    I_.replaced_in[inst_node.raw].insert(replaced.begin(), replaced.end());
+  }
+  inst_class(inst_node, def_node, redecls);
   --depth_;
   return inst_node;
 }
 
-void Instantiator::inst_class(NodeId inst_node, NodeId def_node) {
+// 类 cls 的体里（组件类型、extends 名、短类的基类、嵌套类递归）首段写到 r 里的某个名字。
+bool Instantiator::mentions_any(Id<SElement> cls, const ClassRedecls& r, int depth) const {
+  if (depth > 30 || !cls.is_valid() || I_.scode.elems[cls].kind != SElementKind::Class) return false;
+  auto hit = [&](const std::vector<Symbol>& path) {
+    if (path.empty()) return false;
+    for (const auto& [n, node] : r)
+      if (n == path[0]) return true;
+    return false;
+  };
+  const SClassDef& d = I_.scode.elems[cls].def;
+  if (d.kind == SClassDefKind::Derived && hit(d.derived_type.path)) return true;
+  for (Id<SElement> e : d.elements) {
+    const SElement& el = I_.scode.elems[e];
+    if (el.kind == SElementKind::Component && hit(el.type.path)) return true;
+    if (el.kind == SElementKind::Extends && hit(el.base_path)) return true;
+    if (el.kind == SElementKind::Class && mentions_any(e, r, depth + 1)) return true;
+  }
+  return false;
+}
+
+// cls 的词法外层链（parent_scope）经过实例 inst 的类定义或它的某层基类定义——即 cls 是在 inst 的继承层级里声明的嵌套类。
+bool Instantiator::nested_in(NodeId cls, NodeId inst) const {
+  std::unordered_set<std::uint32_t> defs;
+  std::vector<NodeId> todo{inst};
+  for (int guard = 0; !todo.empty() && guard < 256; ++guard) {
+    const NodeId n = todo.back();
+    todo.pop_back();
+    if (!n.is_valid() || I_.nodes[n].is_empty() || !I_.nodes[n].cls.is_valid()) continue;
+    if (I_.nodes[n].def.is_valid()) defs.insert(I_.nodes[n].def.raw);
+    const ClassTreeId t = I_.classes[I_.nodes[n].cls].tree;
+    if (!t.is_valid()) continue;
+    for (NodeId b : I_.trees[t].ext_bases) todo.push_back(b);
+    for (NodeId b : I_.trees[t].exts) todo.push_back(b);
+  }
+  for (NodeId p = I_.nodes[cls].parent_scope; p.is_valid() && !I_.nodes[p].is_empty(); p = I_.nodes[p].parent_scope)
+    if (I_.nodes[p].def.is_valid() && defs.count(I_.nodes[p].def.raw)) return true;
+  return false;
+}
+
+void Instantiator::inst_class(NodeId inst_node, NodeId def_node, const ClassRedecls* redecls) {
   ClassTreeId def_tree_id = I_.node_class(def_node).tree;
+  // 传给各基类实例的类重声明集 = 外来的（更外层派生类的，优先）+ 本类自己的元素级类重声明（`redeclare model B … end B;` /
+  // `redeclare model B = X;`，本类查找表里的本地项，词法作用域 = 本类，R15 §1）。class extends 形态（`redeclare model extends B`）
+  // 未做；重声明了基类里没有的类（omc 报错）→ SKIP。
+  ClassRedecls base_redecls = redecls ? *redecls : ClassRedecls{};
+  if (def_tree_id.is_valid() && I_.nodes[def_node].def.is_valid()) {
+    const std::vector<Id<SElement>> elems = I_.scode.elems[I_.nodes[def_node].def].def.elements;   // 拷贝
+    for (Id<SElement> e : elems) {
+      const SElement& el = I_.scode.elems[e];
+      if (el.kind != SElementKind::Class || !el.prefixes.is_redeclare) continue;
+      if (el.def.kind == SClassDefKind::ClassExtends) { mark_unsupported("class extends redeclare"); continue; }
+      bool outer = false;
+      for (const auto& [n, node] : base_redecls) outer = outer || n == el.name;
+      if (outer) continue;
+      bool inherited = false;
+      for (NodeId b : I_.trees[def_tree_id].ext_bases)
+        inherited = inherited || (!I_.nodes[b].is_empty() && member_def(b, el.name, 0).is_valid());
+      if (!inherited) { mark_unsupported("redeclare of missing element", std::string(I_.interner.str(el.name))); continue; }
+      const auto it = I_.trees[def_tree_id].lookup.find(el.name);
+      if (it == I_.trees[def_tree_id].lookup.end() || it->second.kind != LEntry::Kind::Class) continue;
+      base_redecls.push_back({el.name, I_.trees[def_tree_id].classes[it->second.index]});
+    }
+  }
   if (!def_tree_id.is_valid()) {
     // 无类体（内建类型 / 尚未支持的短类/derived）——给个空 FlatTree 防崩，标 unsupported（driver 退 66）。
     mark_unsupported("no class body (builtin/derived type)");
@@ -612,7 +697,7 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node) {
         continue;
       }
       const Id<SMod> ext_mod = ee.mod;   // extends 修饰（在 base_def lookup 之后取，避免跨 add 持 SElement 引用）
-      NodeId base_inst = instantiate(base_def, inst_node);
+      NodeId base_inst = instantiate(base_def, inst_node, base_redecls.empty() ? nullptr : &base_redecls);
       // 基类实例按 extends 出现序记进本实例的类树：基类的方程 / 算法段由 flatten 的 collect_inherited_sections 收
       //（段序 = 本类在前、各 extends 按**逆序**在后，NFInst.instExpressions + Sections.join 头插，NFInst.mo:2511-2514 /
       // NFSections.mo:192-209；名字在基类实例里解析，前缀与本实例相同）。只记实例化后的基类节点（FlatTree），不记 Ref /
@@ -893,6 +978,16 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing, bool gener
     mark_unsupported("unresolved component type", path_str(el.type.path));
     I_.comps[cid].kind = CompKind::Invalid;
     return;
+  }
+  // 所在实例的类树带类重声明时，类型是那个继承层级里声明的嵌套类（不是顶替进来的新类）、且它的体里写到被重声明的名字：OMC 里
+  // 嵌套类的父亲是实例（看得到新类，RE5 探针 `c.m.b2.y`），ymc 的嵌套类节点父亲是未特化的定义 → SKIP。
+  if (const auto rit = inst_redecls_.find(enclosing.raw); rit != inst_redecls_.end()) {
+    bool replacement = false;
+    for (const auto& [n, node] : rit->second) replacement = replacement || node == ty_node;
+    if (!replacement && nested_in(ty_node, enclosing) && mentions_any(I_.nodes[ty_node].def, rit->second, 0)) {
+      mark_unsupported("redeclared class seen from nested class", std::string(I_.interner.str(el.name)));
+      return;
+    }
   }
   // 声明类型是带 `annotation(absoluteValue = false)` 的 type（MSL 的 SI.TemperatureDifference）：omc 把组件的注释换成类型
   // 定义的注释（instComponentDef :1990-1996 v1.25.0，issue 12533 的修补）——类型定义大多没有描述串，组件的注释就没了（MSL

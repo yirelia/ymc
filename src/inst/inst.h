@@ -47,9 +47,14 @@ class Instantiator {
   void dedup_components(std::vector<NodeId>& comps, NodeId def_node);   // 继承来的同名组件去重（见 inst.cpp）
   bool binding_exp_equal(Id<Exp> a, Id<Exp> b) const;
   void collect_class_names(NodeId def_node, std::unordered_set<std::uint32_t>& out, int depth);
-  NodeId instantiate(NodeId def_node, NodeId parent);  // 克隆 def 节点 + instClass 填实例树
+  // 类重声明集：名字 → 顶替进来的类节点（外层在前；见 inst.cpp 的 inst_class）。
+  using ClassRedecls = std::vector<std::pair<Symbol, NodeId>>;
+  // 克隆 def 节点 + instClass 填实例树；redecls 非空：实例的类树里这些名字换成新类（基类实例看到派生类的元素级类重声明）。
+  NodeId instantiate(NodeId def_node, NodeId parent, const ClassRedecls* redecls = nullptr);
   NodeId instantiate_root_class(NodeId def_node);      // 根类：短类别名顺链到长类、补生成的 inner（见 inst.cpp）
-  void inst_class(NodeId inst_node, NodeId def_node);  // 建 FlatTree：递归组件 + extends 就地展开
+  void inst_class(NodeId inst_node, NodeId def_node, const ClassRedecls* redecls = nullptr);  // 建 FlatTree：递归组件 + extends 就地展开
+  bool mentions_any(Id<SElement> cls, const ClassRedecls& r, int depth) const;   // 类体里写到 r 的名字（见 inst_component）
+  bool nested_in(NodeId cls, NodeId inst) const;   // cls 的词法外层链经过 inst 的类或它的各层基类
   // 解析组件类型（叶/复合）。generated_inner：为找不到 inner 的 outer 生成的 inner（见 insert_generated_inners）——照 inner 实例化。
   void inst_component(NodeId comp_node, NodeId enclosing, bool generated_inner = false);
   void insert_generated_inners(NodeId root);   // 找不到 inner 的 outer：在根类末尾生成同名 inner（见 inst.cpp）
@@ -89,6 +94,7 @@ class Instantiator {
   int depth_ = 0;   // instantiate 递归深度（防无限递归栈溢出）
   // redeclare_component 合成的组件元素：(原声明 << 32 | 重声明元素) → 合成元素；elems 的预留上限（见 make_top_node）。
   std::unordered_map<std::uint64_t, Id<SElement>> redecl_elems_;
+  std::unordered_map<std::uint32_t, ClassRedecls> inst_redecls_;   // 实例节点 → 施加在它类树上的类重声明集
   std::size_t synth_cap_ = 0;
 };
 
