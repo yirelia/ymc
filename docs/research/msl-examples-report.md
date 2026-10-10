@@ -525,3 +525,9 @@ ACCEPTS-INVALID / CRASH 0。
 resume = …)`，步里的 `outer` 连它、本层的 `connect(outerState.subgraphStatePort, stateGraphRoot.subgraphStatePort)` 落到外层的
 stateGraphRoot）——Examples.ShowCompositeStep、ShowExceptions、ControlledTanks 转 PASS，均与 omc 逐字节一致。FAIL /
 ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-11 加宽 63s 之后：PASS 415（不变）
+
+元素级组件重声明（`extends A; redeclare Real x = 2.0;`）做完，修饰里重声明取自原声明的条件 / 维改在原声明处求；MSL 示例里的
+组件重声明都写在修饰里（`redeclare Medium.BaseProperties medium(…)` 之类，随包重声明待第 2 阶段），PASS / SKIP 逐例不变。
+FAIL / ACCEPTS-INVALID / CRASH 0。

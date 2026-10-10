@@ -1,0 +1,35 @@
+//// set: el-ut — 元素级组件重声明（单测原文）：留在本类的位置、原声明与 extends 修饰只带绑定；取自原声明的条件在原声明处求（元素级与修饰里的两种）
+//// model: ELRU1
+model ELRU1
+  model A
+    Real a = 1;
+    replaceable Real x(start = 1) = 1.0;
+    Real b = 2;
+  end A;
+  model B
+    extends A(x = 7);
+    Real c = 3;
+    redeclare Real x(max = 5);
+  end B;
+  B b;
+end ELRU1;
+//// model: ELRU2
+package P
+  constant Boolean on = false;
+  model A
+    replaceable Real x = 1.0 if on;
+    Real y = 1;
+  end A;
+end P;
+model ELRU2
+  constant Boolean on = true;
+  model B
+    extends P.A;
+    redeclare Real x = 2.0;
+  end B;
+  model C
+    extends P.A(redeclare Real x = 3.0);
+  end C;
+  B b;
+  C c;
+end ELRU2;

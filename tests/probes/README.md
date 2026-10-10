@@ -496,3 +496,5 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `kx-ut` | 1 | class extends（单测原文）：目标经中间基类继承来、class extends 的修饰施加到原类元素、派生类自己也用 |
 | `iy-p1` | 26 | inner outer：对子层是 inner（子层 outer 连它自己）、经它查名（本层 / 从外面）落到外层 inner（IY1-IY4、IY11）；连接（IY21，inner 是别的类）、继承来的（IY23）、数组（IY24 / IY25）、constant 两头内联（IY26）、复合带方程（IY27）；外来修饰（IY8）；生成外层 inner（IY7）；根类里的 TOP_LEVEL_OUTER（IY6）；没有子层 outer 连它 omc 内部错误（IY5 / IY12 / IY13）；前缀漏进惰性实例化的 inner（IY14 / IY19 SKIP，IY15 / IY20 不漏）；经它求值的结构参数（复合的 IY10 照常求，标量的 IY9 SKIP）；纯 outer 连 constant 内联（IY16）、连嵌套 protected inner（IY17 / IY18） |
 | `iy-ut` | 2 | inner outer（单测原文）：本层 / 从外面经它查名落到外层 inner、子层 outer 连它自己；constant 两头内联 |
+| `el-p1` | 36 | 元素级组件重声明：留在本类的位置（ELR1 / ELR12）；原声明的修饰、改它的 extends 修饰不带，只带绑定（ELR2 / ELR4 / ELR15，对照修饰里的 ELR3）；外来修饰（ELR5）；条件 / 注释 / 维 / 前缀取原声明的（ELR6 / ELR7 / ELR13 / ELR14）；非 replaceable 同类型（ELR8）；复合（ELR10 / ELR17）、经中间基类（ELR11）、protected（ELR16 / ELR23）、自己的 constrainedby 修饰不并（ELR18）、条件引基类参数（ELR19）、再套修饰重声明（ELR21）、变率合并（ELR22）、带方程（ELR24）；omc 报错的：无继承元素（ELR9）、重声明的类的段里 / 从外面引用它（ELR20、ELRQ1-ELRQ8，绑定 ELRQ3 与基类的段 ELRQ4 可以）；取自原声明的条件 / 维在原声明处求（ELRS1-ELRS4） |
+| `el-ut` | 2 | 元素级组件重声明（单测原文）：位置、只带绑定；原声明的条件在原处求（元素级与修饰里的两种） |

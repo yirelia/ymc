@@ -2183,6 +2183,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           标量 outer 也走这条——引到 constant 照常内联（此前 `outer constant Real c` 打成 `l.a = c`，静默错）。经标量 inner outer
           求值的结构参数（复合的经路径重定向照常求）、connect 里后面的段是 outer 未做（SKIP）。
           slice 671→672 例 PASS 628→629 / FAIL 0（oracle=live 不一致 0）；scodeinst 629→630 / 52（在账）；testsuite 1759→1766 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 412→415；探针 9352→9380；单测 334→335。
+    - [x] (63s) inst + flat：元素级组件重声明（2026-10-11）：`extends A; redeclare Real x = 2.0;` 照 redeclareElements /
+          redeclareComponentElement——本类的重声明元素顶替继承来的同名组件、留在自己的位置（继承来的那项当重复项删掉），基类实例里的
+          那一项也换成它；合并照 redeclareComponent（与修饰里的重声明共用 merge_redeclared_elem），但约束修饰为空：原声明的修饰、改它
+          的 extends 修饰、重声明自己的 constrainedby 修饰都不并，绑定照"外来 > 重声明的 > 原组件的（含 extends 修饰给的）"。取自原
+          声明的条件 / 维改在原声明处求（Component::cond_scope / dims_scope）——修饰里的重声明此前在派生类里求，派生类自己的同名常量会
+          顶上（静默错）。omc 1.25.0 在重声明的类（及其派生类）的方程 / 算法段里、从外面经路径都找不到这个组件（查找树记的是被删的
+          那项）→ 这类引用 SKIP；没有继承来的同名元素（omc 报错）、继承来不止一个 → SKIP。
+          slice 672→679 例 PASS 629→636 / FAIL 0（oracle=live 不一致 0）；scodeinst 630→637 / 52（在账）；testsuite 1766→1780 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 415（不变）；探针 9380→9418；单测 335→336。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

@@ -607,7 +607,7 @@ class Flattener {
   }
   // 本类的结构性校验（与 OMC 报错对齐，命中即 SKIP）：局部同名元素、受限类的段 / 可见性（NFRestriction.checkClass
   // :404-497）、记录 / 连接器成员前缀（NFAttributes.checkDeclaredComponentAttributes :402-429）、组件 / extends 修饰里的
-  // 重复修饰、元素级 redeclare（ymc 未做：Illegal redeclare 判定与替换语义）、组件类型名命中本类组件（Lookup8
+  // 重复修饰、组件类型名命中本类组件（Lookup8
   // `Cytosol Cytosol`：类型查找先找到组件 → "Expected X to be a class"）。
   void check_class_rules(const SElement& def, const ScodeScope& scope) {
     if (has_duplicate_names(def.def.elements)) { set_unsupported("duplicate element declaration"); return; }
@@ -631,11 +631,8 @@ class Flattener {
     if (extends_shadowed(def)) { set_unsupported("extends of inherited class name"); return; }
     for (Id<SElement> e : def.def.elements) {
       const SElement& c = I_.scode.elems[e];
-      // 元素级重声明：类的（含 class extends）由 inst 在基类实例的类树里顶替（Instantiator::inst_class）；组件的未做 → SKIP。
-      if (c.prefixes.is_redeclare && c.kind != SElementKind::Extends && c.kind != SElementKind::Class) {
-        set_unsupported("element redeclare");
-        return;
-      }
+      // 元素级重声明由 inst 顶替：类的（含 class extends）在基类实例的类树里（Instantiator::inst_class），组件的与继承来的原组件
+      // 合并、留在本类的位置（Instantiator::redeclare_local_components）。
       if (c.kind == SElementKind::Extends) {
         if (c.mod.is_valid() && mod_has_duplicates({c.mod})) { set_unsupported("duplicate modification"); return; }
         if (bad_extends_path(c, scope)) { set_unsupported("invalid extends lookup"); return; }
@@ -859,11 +856,14 @@ class Flattener {
         // 声明自己的维 / 条件 / 修饰在声明所在类的作用域里求（继承来的 = 基类，见 decl_lex）。
         const NodeId dl = decl_lex(I_.nodes[cn].comp, inst_node);
         const ScodeScope dsc = dl == inst_node ? fscope : scode_scope_of(dl);
+        auto scope_at = [&](NodeId at) { return at == dl ? dsc : at == inst_node ? fscope : scode_scope_of(at); };
         // 数组维度里的参数（`Real x[n]` → n）被求值成结构参数 → final（Dim1）。
-        for (Id<Exp> d : fel.attr.dims) { tmp.clear(); eval_dim(d, tmp, dsc, &final_params); }
-        for (Id<Exp> d : fel.type.dims) { tmp.clear(); eval_dim(d, tmp, dsc, &final_params); }
+        const ScodeScope dmsc = scope_at(dims_lex(I_.nodes[cn].comp, inst_node));
+        for (Id<Exp> d : fel.attr.dims) { tmp.clear(); eval_dim(d, tmp, dmsc, &final_params); }
+        for (Id<Exp> d : fel.type.dims) { tmp.clear(); eval_dim(d, tmp, dmsc, &final_params); }
         // 组件条件里的参数（`x if b` → b 是结构参数 → final，Condition3）。
-        if (fel.condition.is_valid()) eval_scode(fel.condition, dsc, 0, /*allow_param=*/true, &final_params);
+        if (fel.condition.is_valid())
+          eval_scode(fel.condition, scope_at(cond_lex(I_.nodes[cn].comp, inst_node)), 0, /*allow_param=*/true, &final_params);
         // fixed 属性里的参数（ceval3）。外来修饰 / extends 修饰给了本组件的 fixed（`cylinder2(T(fixed = true))` 盖过类里的
         // `T(fixed = T0fixed)`）→ 声明的值不用、参数不标：omc 标的是合并后修饰的值（updateImplicitVariabilityComp 的
         // TYPE_ATTRIBUTE 支，NFInst.mo:3941-3950 v1.25.0；MSL FluidHeatFlow TestCylinder 的 cylinder2.T0fixed 不是 final）。
@@ -972,8 +972,8 @@ class Flattener {
       // 条件组件 `x if cond`：cond 须求值成常量 Bool（MLS §4.4.5）。false → 移除组件（不产变量/不递归）、
       // 记路径供 connect 丢弃；true → 正常展开（条件抹掉）。求不出常量 Bool → SKIP。
       if (cel.condition.is_valid()) {
-        // 在组件**声明处**作用域求值（继承成员 = 基类，条件里的兄弟参数在原类可见，Condition3）。
-        const NodeId cscope = decl_lex(cid, inst_node);
+        // 在组件**声明处**作用域求值（继承成员 = 基类，条件里的兄弟参数在原类可见，Condition3；重声明的在原声明处）。
+        const NodeId cscope = cond_lex(cid, inst_node);
         std::optional<CVal> cv;
         forward_miss_ = false;
         {
@@ -1147,7 +1147,7 @@ class Flattener {
             dmods = std::move(kept);
           }
           std::vector<std::int64_t> adims;
-          const ScodeScope adscope = scode_scope_of(decl_lex(cid, inst_node));
+          const ScodeScope adscope = scode_scope_of(dims_lex(cid, inst_node));
           bool okdim = true;
           {
             // `:` 维按整体绑定字面量的形状推（deduceDimensionFromExp，NFTyping.mo:781-826；RecordBinding5 `R1 t[:] = {r1}`）。
@@ -1677,6 +1677,7 @@ class Flattener {
       cur_pp_chain_.clear();
     }
     const PhaseScope late(*this, MarkPhase::Late);
+    if (sections_lose_redecl(inst_node, def.def)) { set_unsupported("section refers to element-redeclared component"); return; }
     // 本类方程（子组件方程已在上面递归时加入 → 符合 R11 §3.4-6"子组件先、本类后"）。
     // 段序：initial equation 先于 equation（R13 §2）；enclosing = 本实例，cref 前缀 = prefix。
     for (Id<SEquation> eid : def.def.initial_equations) collect_equation(eid, inst_node, prefix, psubs, /*initial=*/true);
@@ -1700,6 +1701,7 @@ class Flattener {
       const NodeId b = *it;
       if (!b.is_valid() || I_.nodes[b].is_empty() || !I_.nodes[b].def.is_valid()) continue;
       const SClassDef& bd = I_.scode.elems[I_.nodes[b].def].def;
+      if (sections_lose_redecl(b, bd)) { set_unsupported("section refers to element-redeclared component"); return; }
       for (Id<SEquation> eid : bd.initial_equations) collect_equation(eid, b, prefix, psubs, /*initial=*/true);
       for (Id<SEquation> eid : bd.equations) collect_equation(eid, b, prefix, psubs, /*initial=*/false);
       for (const SAlgorithm& alg : bd.initial_algorithms) collect_algorithm(alg, b, prefix, psubs, /*initial=*/true);
@@ -2358,6 +2360,84 @@ class Flattener {
     if (absyn_mentions_time(e.a) || absyn_mentions_time(e.b) || absyn_mentions_time(e.c)) return true;
     for (Id<Exp> a : e.args) if (absyn_mentions_time(a)) return true;
     for (const ForIndex& it : e.iters) if (absyn_mentions_time(it.range)) return true;
+    return false;
+  }
+  // 式子 / 方程 / 语句里有首段是 names 里某个名字的 cref（只看写法，不解析；同名的迭代变量也算——宁可多 SKIP）。
+  bool exp_mentions(Id<Exp> x, const std::vector<Symbol>& names) {
+    if (!x.is_valid()) return false;
+    const Exp& e = I_.absyn.exps[x];
+    if (e.kind == ExpKind::CrefExp) {
+      const Cref& c = I_.absyn.crefs[e.cref];
+      if (!c.leading_dot && !c.parts.empty() && std::find(names.begin(), names.end(), c.parts[0].name) != names.end())
+        return true;
+      for (const CrefPart& p : c.parts)
+        for (Id<Exp> sx : p.subscripts) if (exp_mentions(sx, names)) return true;
+      return false;
+    }
+    if (exp_mentions(e.a, names) || exp_mentions(e.b, names) || exp_mentions(e.c, names)) return true;
+    for (Id<Exp> a : e.args) if (exp_mentions(a, names)) return true;
+    for (const ForIndex& it : e.iters) if (exp_mentions(it.range, names)) return true;
+    return false;
+  }
+  bool eq_mentions(Id<SEquation> id, const std::vector<Symbol>& names) {
+    const SEquation& q = I_.scode.eqs[id];
+    if (exp_mentions(q.a, names) || exp_mentions(q.b, names) || exp_mentions(q.c, names)) return true;
+    for (const SEqBranch& br : q.branches) {
+      if (exp_mentions(br.cond, names)) return true;
+      for (Id<SEquation> x : br.body) if (eq_mentions(x, names)) return true;
+    }
+    for (Id<SEquation> x : q.body) if (eq_mentions(x, names)) return true;
+    for (Id<SEquation> x : q.else_body) if (eq_mentions(x, names)) return true;
+    return false;
+  }
+  bool stmt_mentions(Id<SStatement> id, const std::vector<Symbol>& names) {
+    const SStatement& q = I_.scode.stmts[id];
+    if (exp_mentions(q.a, names) || exp_mentions(q.b, names) || exp_mentions(q.c, names)) return true;
+    for (const SStmtBranch& br : q.branches) {
+      if (exp_mentions(br.cond, names)) return true;
+      for (Id<SStatement> x : br.body) if (stmt_mentions(x, names)) return true;
+    }
+    for (Id<SStatement> x : q.body) if (stmt_mentions(x, names)) return true;
+    for (Id<SStatement> x : q.else_body) if (stmt_mentions(x, names)) return true;
+    return false;
+  }
+  // 实例 h 里写的方程 / 算法段 omc 1.25.0 找不到的名字：h 或它（逐层）的基类实例里做过元素级组件重声明的组件
+  //（Component::redecl_home）。omc 先实例化本类组件的式子、再 ClassTree.flatten 去掉重复项、最后实例化段（NFInst.instExpressions
+  // :2470-2500 v1.25.0）；重声明项在查找树里记的是继承来的那一项的下标（addInheritedElementConflict 对 REDECLARE 项
+  // `entry := newEntry`，NFClassTree.mo:2059-2066），flatten 时它被当重复项删掉 → 段里查名 "Variable x not found"（ER 探针
+  // EQ1 / EQ2 / EQ5-EQ7；绑定 EQ3、基类的段 EQ4 不受影响）。派生类的查找树照抄基类的同样坏。
+  std::vector<Symbol> lost_redecl_names(NodeId h) {
+    std::vector<Symbol> out;
+    if (!h.is_valid() || I_.nodes[h].is_empty() || !I_.nodes[h].cls.is_valid() || !I_.node_class(h).tree.is_valid()) return out;
+    for (NodeId cn : I_.trees[I_.node_class(h).tree].components) {
+      if (!is_comp_node(cn)) continue;
+      const NodeId home = I_.comps[I_.nodes[cn].comp].redecl_home;
+      if (!home.is_valid()) continue;
+      bool derived = home == h;
+      std::vector<NodeId> todo{h};
+      for (int guard = 0; !derived && !todo.empty() && guard < 1024; ++guard) {
+        const NodeId b = todo.back();
+        todo.pop_back();
+        if (!b.is_valid() || I_.nodes[b].is_empty() || !I_.nodes[b].cls.is_valid() || !I_.node_class(b).tree.is_valid()) continue;
+        for (NodeId e : I_.trees[I_.node_class(b).tree].exts) {
+          derived = derived || e == home;
+          todo.push_back(e);
+        }
+      }
+      if (derived) out.push_back(I_.nodes[cn].name);
+    }
+    return out;
+  }
+  // 实例 h 的段（initial / 普通方程、算法）里写到 omc 找不到的元素级重声明组件 → SKIP（见 lost_redecl_names）。
+  bool sections_lose_redecl(NodeId h, const SClassDef& d) {
+    const std::vector<Symbol> names = lost_redecl_names(h);
+    if (names.empty()) return false;
+    for (Id<SEquation> q : d.initial_equations) if (eq_mentions(q, names)) return true;
+    for (Id<SEquation> q : d.equations) if (eq_mentions(q, names)) return true;
+    for (const SAlgorithm& alg : d.initial_algorithms)
+      for (Id<SStatement> x : alg.stmts) if (stmt_mentions(x, names)) return true;
+    for (const SAlgorithm& alg : d.algorithms)
+      for (Id<SStatement> x : alg.stmts) if (stmt_mentions(x, names)) return true;
     return false;
   }
   bool mod_mentions_time(Id<SMod> m) {
@@ -4090,6 +4170,15 @@ class Flattener {
     const NodeId d = I_.comps[cid].decl_scope;
     return d.is_valid() && !I_.nodes[d].is_empty() ? d : inst;
   }
+  // 条件 / 维的书写处：重声明取自原声明的在原声明所在的类实例（Component::cond_scope / dims_scope），其余同 decl_lex。
+  NodeId cond_lex(CompId cid, NodeId inst) const {
+    const NodeId s = I_.comps[cid].cond_scope;
+    return s.is_valid() && !I_.nodes[s].is_empty() ? s : decl_lex(cid, inst);
+  }
+  NodeId dims_lex(CompId cid, NodeId inst) const {
+    const NodeId s = I_.comps[cid].dims_scope;
+    return s.is_valid() && !I_.nodes[s].is_empty() ? s : decl_lex(cid, inst);
+  }
   // 组件绑定的解析作用域：inst 记的"写下这条绑定的类实例"（声明绑定 = 声明所在类，extends 修饰覆盖的 = 写 extends 的类）。
   NodeId bind_lex(CompId cid, NodeId inst) const {
     const NodeId s = I_.comps[cid].binding.scope;
@@ -4496,6 +4585,10 @@ class Flattener {
       if (i + 1 >= c.parts.size()) break;
       const NodeId cls = I_.comps[I_.nodes[node].comp].class_inst;
       node = is_class_inst(cls) ? find_local(cls, c.parts[i + 1].name) : NodeId{};
+      if (is_comp_node(node) && I_.comps[I_.nodes[node].comp].redecl_home.is_valid()) {   // 同 cref 主路
+        set_unsupported("reference to element-redeclared component");
+        return lit_int(0);
+      }
     }
     return std::nullopt;
   }
@@ -4997,7 +5090,7 @@ class Flattener {
                            (ctx.eval_parent && evaluate_annotation(I_.comps[cid].def) != std::optional<bool>(false) &&
                             (!ctx.eval_start_only || comp_has_start(cid, mod_subs))));
     // 维度：组件维在前、类型维在后（R13 §3）。字面量 + 参数/常量/size()/算术求值。
-    const NodeId dlex = decl_lex(cid, enclosing);   // 维写在声明里：在声明所在类的作用域求
+    const NodeId dlex = dims_lex(cid, enclosing);   // 维写在声明里：在声明所在类的作用域求（重声明取原声明的：原处）
     const ScodeScope dscope = scode_scope_of(dlex);
     // 维度表达式：组件维在前、类型维在后（R13 §3）。先收集，绑定就绪后再解析（`:` 维靠绑定形状推断）。
     std::vector<Id<Exp>> dim_exps;
@@ -14042,6 +14135,8 @@ class Flattener {
         if (!nxt.is_valid() || I_.nodes[nxt].is_empty()) { ok = false; break; }
         // 从外面访问 protected 元素（ProtectedAccess2 `tm.x`）→ omc 报错（ILLEGAL_ACCESS_PROTECTED）。
         if (i >= trusted && I_.nodes[nxt].visibility == Visibility::Protected) { set_unsupported("access of protected element"); ok = false; break; }
+        // 从外面经路径到元素级重声明的组件：omc 那时那个类的查找树多半已坏（见 lost_redecl_names，ER 探针 EQ8）→ SKIP。
+        if (I_.comps[I_.nodes[nxt].comp].redecl_home.is_valid()) { set_unsupported("reference to element-redeclared component"); ok = false; break; }
         cur = nxt;
         leaf = nxt;
       }
@@ -21205,6 +21300,7 @@ class Flattener {
       // 后面的段是 outer（`connect(a.p, q)`，p 是 a 里的 outer / inner outer）：omc 把全名收成 inner 的（resolveInnerCref），
       // 未做 → SKIP（此前当成 a 自己的 p 连）。
       if (outer_inner_node_.count(nxt.raw)) return std::nullopt;
+      if (I_.comps[I_.nodes[nxt].comp].redecl_home.is_valid()) return std::nullopt;   // 见 lost_redecl_names
       pp = (cls_exp || pp) && !is_expandable_comp(nxt);
       if (!is_connector_comp(nxt, cls, pp)) return std::nullopt;
       cur = nxt;

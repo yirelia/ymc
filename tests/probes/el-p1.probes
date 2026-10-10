@@ -1,0 +1,457 @@
+//// set: el-p1 — 元素级组件重声明（`extends A; redeclare Real x = 2.0;`）：本类的重声明元素顶替继承来的同名组件、留在自己的位置（ELR1、写在 extends 前的 ELR12）；原声明的修饰与改它的 extends 修饰都不带（ELR2 / ELR4，对照修饰里的重声明 ELR3），绑定 = 外来修饰 > 重声明的 > 原组件的（ELR5、ELR15 extends 给的 7）；条件 / 注释取原声明的（ELR7、ELR13 链）、维没写取原声明的（ELR6、ELR20 段里引用 omc 报错）、前缀合并（ELR14 discrete）；非 replaceable 同类型照样（ELR8）；复合（ELR10 / ELR17）、经中间基类（ELR11）、protected（ELR16 / ELR23）、自己的 constrainedby 修饰不并（ELR18）、条件引基类参数（ELR19）、上面再套修饰重声明（ELR21）、变率合并（ELR22）、带方程（ELR24）；没有继承来的同名元素 omc 报错（ELR9）。omc 1.25.0 在重声明的类（及派生类）的段里、从外面经路径都找不到它（ELRQ1-ELRQ8，ymc SKIP；绑定 ELRQ3、基类的段 ELRQ4 可以）。取自原声明的条件 / 维在原声明处求（ELRS1-ELRS4：派生类自己的同名常量不算——ELRS1 是修饰里重声明此前的静默错）
+//// model: ELR1
+model ELR1
+  model A
+    Real a = 1;
+    replaceable Real x = 1.0;
+    Real b = 2;
+  end A;
+  model B
+    extends A;
+    Real c = 3;
+    redeclare Real x = 2.0;
+    Real d = 4;
+  end B;
+  B b;
+end ELR1;
+//// model: ELR2
+model ELR2
+  model A
+    replaceable Real x(start = 1, min = 0) = 1.0;
+  end A;
+  model B
+    extends A;
+    redeclare Real x(max = 5);
+  end B;
+  B b;
+end ELR2;
+//// model: ELR3
+model ELR3
+  model A
+    replaceable Real x(start = 1, min = 0) = 1.0;
+  end A;
+  model B
+    extends A(redeclare Real x(max = 5));
+  end B;
+  B b;
+end ELR3;
+//// model: ELR4
+model ELR4
+  model A
+    replaceable Real x = 1.0;
+  end A;
+  model B
+    extends A(x(start = 3));
+    redeclare Real x;
+  end B;
+  B b;
+end ELR4;
+//// model: ELR5
+model ELR5
+  model A
+    replaceable Real x = 1.0;
+  end A;
+  model B
+    extends A;
+    redeclare parameter Real x = 2.0;
+  end B;
+  B b(x = 3);
+end ELR5;
+//// model: ELR6
+model ELR6
+  model A
+    replaceable Real x[2] = {1, 2};
+  end A;
+  model B
+    extends A;
+    redeclare Real x = {3, 4};
+  end B;
+  B b;
+end ELR6;
+//// model: ELR7
+model ELR7
+  model A
+    replaceable Real x = 1.0 if false;
+    Real y = 2;
+  end A;
+  model B
+    extends A;
+    redeclare Real x = 2.0;
+  end B;
+  B b;
+end ELR7;
+//// model: ELR8
+model ELR8
+  model A
+    Real x = 1.0;
+  end A;
+  model B
+    extends A;
+    redeclare Real x = 2.0;
+  end B;
+  B b;
+end ELR8;
+//// model: ELR9
+model ELR9
+  model A
+    Real a;
+  end A;
+  model B
+    extends A;
+    redeclare Real x = 2.0;
+  end B;
+  B b;
+end ELR9;
+//// model: ELR10
+model ELR10
+  model C1
+    Real p = 1;
+  end C1;
+  model C2
+    extends C1;
+    Real q = 2;
+  end C2;
+  model A
+    replaceable C1 c;
+  end A;
+  model B
+    extends A;
+    redeclare C2 c(p = 5);
+  end B;
+  B b;
+end ELR10;
+//// model: ELR11
+model ELR11
+  model A
+    replaceable Real x = 1.0;
+  end A;
+  model A2
+    extends A;
+  end A2;
+  model B
+    extends A2;
+    redeclare Real x = 2.0;
+  end B;
+  B b;
+end ELR11;
+//// model: ELR12
+model ELR12
+  model A
+    replaceable Real x = 1.0;
+    Real y = x;
+  end A;
+  model B
+    Real z = 0;
+    redeclare Real x = 2.0;
+    extends A;
+  end B;
+  B b;
+end ELR12;
+//// model: ELR13
+model ELR13
+  model A
+    replaceable Real x = 1.0 "orig";
+  end A;
+  model B
+    extends A;
+    redeclare replaceable Real x = 2.0 "new";
+  end B;
+  model C
+    extends B;
+    redeclare Real x = 3.0;
+  end C;
+  C c;
+end ELR13;
+//// model: ELR14
+model ELR14
+  model A
+    replaceable discrete Real x = 1.0;
+  end A;
+  model B
+    extends A;
+    redeclare Real x = 2.0;
+  end B;
+  B b;
+end ELR14;
+//// model: ELR15
+model ELR15
+  model A
+    replaceable Real x = 1.0;
+  end A;
+  model B
+    extends A(x = 7);
+    redeclare Real x;
+  end B;
+  B b;
+end ELR15;
+//// model: ELR16
+model ELR16
+  model A
+    Real a = 1;
+  protected
+    replaceable Real x = 1.0;
+  end A;
+  model B
+    extends A;
+    redeclare Real x = 2.0;
+  end B;
+  B b;
+end ELR16;
+//// model: ELR17
+model ELR17
+  model C1
+    parameter Real p = 1;
+  end C1;
+  model C2
+    extends C1;
+    parameter Real q = 2;
+  end C2;
+  model A
+    replaceable C1 c(p = 7);
+  end A;
+  model B
+    parameter Real k = 3;
+    extends A;
+    redeclare C2 c(q = k);
+  end B;
+  B b;
+end ELR17;
+//// model: ELR18
+model ELR18
+  model A
+    replaceable Real x = 1.0;
+  end A;
+  model B
+    extends A;
+    redeclare replaceable Real x = 2.0 constrainedby Real(start = 4);
+  end B;
+  B b;
+end ELR18;
+//// model: ELR19
+model ELR19
+  model A
+    parameter Boolean use = false;
+    replaceable Real x = 1.0 if use;
+    Real y = 2;
+  end A;
+  model B
+    parameter Boolean use2 = true;
+    extends A;
+    redeclare Real x = 3.0;
+  end B;
+  B b;
+end ELR19;
+//// model: ELR20
+model ELR20
+  model A
+    parameter Integer n = 2;
+    replaceable Real x[n];
+  end A;
+  model B
+    extends A;
+    redeclare Real x;
+  equation
+    x = fill(time, n);
+  end B;
+  B b(n = 3);
+end ELR20;
+//// model: ELR21
+model ELR21
+  model A
+    replaceable Real x = 1.0;
+  end A;
+  model B
+    extends A;
+    redeclare replaceable Real x = 2.0;
+  end B;
+  B b(redeclare Real x = 5.0);
+end ELR21;
+//// model: ELR22
+model ELR22
+  model A
+    replaceable parameter Real x = 1.0;
+  end A;
+  model B
+    extends A;
+    redeclare Real x = 2.0;
+    Real y = x;
+  end B;
+  B b;
+end ELR22;
+//// model: ELR23
+model ELR23
+  model A
+    replaceable Real x = 1.0;
+  end A;
+  model B
+    extends A;
+  protected
+    redeclare Real x = 2.0;
+  end B;
+  B b;
+end ELR23;
+//// model: ELR24
+model ELR24
+  model A
+    replaceable Real x(start = 1) = 1.0;
+    Real y;
+  equation
+    y = der(x);
+  end A;
+  model B
+    extends A;
+    redeclare Real x(start = 2) = time;
+  end B;
+  B b;
+end ELR24;
+//// model: ELRQ1
+model ELRQ1
+  model A
+    replaceable Real x;
+  end A;
+  model B
+    extends A;
+    redeclare Real x;
+  equation
+    x = time;
+  end B;
+  B b;
+end ELRQ1;
+//// model: ELRQ2
+model ELRQ2
+  model A
+    replaceable Real x[2];
+  end A;
+  model B
+    extends A;
+    redeclare Real x[2];
+  equation
+    x = fill(time, 2);
+  end B;
+  B b;
+end ELRQ2;
+//// model: ELRQ3
+model ELRQ3
+  model A
+    replaceable Real x;
+  end A;
+  model B
+    extends A;
+    redeclare Real x;
+    Real y = x;
+  end B;
+  B b;
+end ELRQ3;
+//// model: ELRQ4
+model ELRQ4
+  model A
+    replaceable Real x;
+  equation
+    x = time;
+  end A;
+  model B
+    extends A;
+    redeclare Real x;
+  end B;
+  B b;
+end ELRQ4;
+//// model: ELRQ5
+model ELRQ5
+  model A
+    replaceable Real x;
+  end A;
+  model B
+    extends A;
+    redeclare Real x;
+  algorithm
+    x := time;
+  end B;
+  B b;
+end ELRQ5;
+//// model: ELRQ6
+model ELRQ6
+  model A
+    replaceable Real x;
+  end A;
+  model B
+    redeclare Real x;
+    extends A;
+  equation
+    x = time;
+  end B;
+  B b;
+end ELRQ6;
+//// model: ELRQ7
+model ELRQ7
+  model A
+    replaceable Real x;
+  end A;
+  model B
+    extends A;
+    redeclare Real x;
+  equation
+    der(x) = 1;
+  end B;
+  B b;
+end ELRQ7;
+//// model: ELRQ8
+model ELRQ8
+  model A
+    replaceable Real x;
+  end A;
+  model B
+    extends A;
+    redeclare Real x;
+  end B;
+  B b;
+equation
+  b.x = time;
+end ELRQ8;
+//// model: ELRS1
+package P
+  constant Boolean b = false;
+  model A
+    replaceable Real x = 1.0 if b;
+    Real y = 1;
+  end A;
+end P;
+model ELRS1
+  constant Boolean b = true;
+  extends P.A(redeclare Real x = 2.0);
+end ELRS1;
+//// model: ELRS2
+package P
+  constant Boolean b = false;
+  model A
+    replaceable Real x = 1.0 if b;
+    Real y = 1;
+  end A;
+end P;
+model ELRS2
+  constant Boolean b = true;
+  extends P.A;
+  redeclare Real x = 2.0;
+end ELRS2;
+//// model: ELRS3
+package P
+  constant Integer n = 2;
+  model A
+    replaceable Real x[n] = fill(1.0, n);
+  end A;
+end P;
+model ELRS3
+  constant Integer n = 3;
+  extends P.A(redeclare Real x);
+end ELRS3;
+//// model: ELRS4
+package P
+  constant Integer n = 2;
+  model A
+    replaceable Real x[n];
+  end A;
+end P;
+model ELRS4
+  constant Integer n = 3;
+  extends P.A;
+  redeclare Real x;
+end ELRS4;

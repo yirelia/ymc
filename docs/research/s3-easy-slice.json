@@ -670,5 +670,12 @@
 "ClassExtends6.mo",
 "ClassExtends7.mo",
 "ClassExtendsMod1.mo",
-"InnerOuter3.mo"
+"InnerOuter3.mo",
+"RedeclareElementComp1.mo",
+"RedeclareElementComp2.mo",
+"RedeclareElementComp3.mo",
+"RedeclareElementComp4.mo",
+"RedeclareElementComp5.mo",
+"RedeclareElementCondition1.mo",
+"RedeclareElementCondition3.mo"
 ]

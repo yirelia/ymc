@@ -69,6 +69,8 @@ class Instantiator {
   Id<SElement> type_extends_only(Id<SElement> ce) const;
   // extends 修饰里的组件重声明（见 inst.cpp 的说明）。scope = 写 extends 的类的实例。
   void redeclare_component(NodeId bc, Id<SElement> rel, NodeId scope);
+  Id<SElement> merge_redeclared_elem(NodeId bc, Id<SElement> od, Id<SElement> rel, NodeId scope);
+  void redeclare_local_components(ClassTree& flat, NodeId inst_node);   // 元素级组件重声明（见 inst.cpp）
 
   // ---- 查找（最小版，只够 v1：内建类型 + 本类/嵌套类 + 顶层）----
   // path_nodes 非空：顺路记下路径各段解析到的类节点（基类名的 replaceable 检查用）。

@@ -1,6 +1,8 @@
 // 实例化 pass 实现（S3 第一里程碑）。锚点见 inst.h 头注与各处 R11 引用。
 #include "inst/inst.h"
 
+#include <algorithm>
+
 #include "absyn/absyn_util.h"
 
 namespace ymc {
@@ -868,10 +870,13 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node, const ClassRede
       nn.comp = I_.comps.add(std::move(nc));
       nn.instance_parent = inst_node;
       NodeId icomp = I_.nodes.add(std::move(nn));
-      inst_component(icomp, inst_node);
+      // 元素级组件重声明等基类都展开了再与继承来的原组件合并（见 redeclare_local_components）。
+      const bool rdcl = I_.scode.elems[I_.comps[I_.nodes[icomp].comp].def].prefixes.is_redeclare;
+      if (!rdcl) inst_component(icomp, inst_node);
       flat.components.push_back(icomp);
     }
   }
+  redeclare_local_components(flat, inst_node);
   dedup_components(flat.components, def_node);
   // 实例的类树照样带定义里的类（本地 + 继承来的；OMC 的 INSTANTIATED_TREE 保留 classes 与查找表）：实例化完了还要从实例查类型
   // 的（生成的 inner 在 outer 声明处的类实例里查类型，InnerOuterMissing8 的 `outer B b`，B 是那个类的嵌套类）。组件项的下标
@@ -974,22 +979,19 @@ Id<SElement> Instantiator::type_extends_only(Id<SElement> ce) const {
   return ext;
 }
 
-void Instantiator::redeclare_component(NodeId bc, Id<SElement> rel, NodeId scope) {
-  const CompId cid = I_.nodes[bc].comp;
-  const Id<SElement> prev = I_.comps[cid].def;   // 当前定义（被内层 extends 重声明过 = 那次合成的元素）
-  const Id<SElement> od = I_.comps[cid].orig_def.is_valid() ? I_.comps[cid].orig_def : prev;   // 最初的原声明
+// 重声明元素 rel 与原声明 od 合成新组件的定义（规则见上：维 / 条件 / 前缀 / 注释取原声明的）。bc = 被顶替的组件（类型名撞组件
+// 时看它所在的基类实例），scope = 写重声明的类。不合法 / 未做的形态 → mark_unsupported，返回无效 id。
+Id<SElement> Instantiator::merge_redeclared_elem(NodeId bc, Id<SElement> od, Id<SElement> rel, NodeId scope) {
   // 拷贝：下面要往 elems 里 add 合成元素（预留容量内不搬家，拷贝只图省心）；组件元素没有类体，拷贝便宜。
   const SElement o = I_.scode.elems[od];
   const SElement r = I_.scode.elems[rel];
-  if (r.kind != SElementKind::Component) { mark_unsupported("class redeclare in extends modifier"); return; }
-  // v1 未做的形态 → SKIP：inner / outer；先被更内层的 extends 修饰改过（omc 把那些修饰丢掉，r117：`N extends M(a(p = 2))`、
-  // 再 `extends N(redeclare B a)` → a.p 取原声明的 9）。
+  if (r.kind != SElementKind::Component) { mark_unsupported("class redeclare in extends modifier"); return {}; }
+  // v1 未做的形态 → SKIP：inner / outer。
   if (o.prefixes.io != SInnerOuter::None || r.prefixes.io != SInnerOuter::None) {
     mark_unsupported("redeclare form", "inner/outer");
-    return;
+    return {};
   }
-  if (!I_.comps[cid].extends_mods.empty()) { mark_unsupported("redeclare form", "after extends modifier"); return; }
-  if (r.condition.is_valid()) { mark_unsupported("redeclare with condition"); return; }   // omc 报错
+  if (r.condition.is_valid()) { mark_unsupported("redeclare with condition"); return {}; }   // omc 报错
   // 重声明元素的类型名首段先撞上组件（被重声明的组件同名 `redeclare B B`、本类 / 基类的组件）：omc 的查找先找到组件 →
   // "Found a component with same name when looking for type B"（others/ComponentNamesRedecl）→ SKIP。
   if (!r.type.leading_dot && !r.type.path.empty()) {
@@ -1003,12 +1005,12 @@ void Instantiator::redeclare_component(NodeId bc, Id<SElement> rel, NodeId scope
       auto it = st.lookup.find(tn);
       hits = hits || (it != st.lookup.end() && it->second.kind == LEntry::Kind::Component);
     }
-    if (hits) { mark_unsupported("type name resolves to a component"); return; }
+    if (hits) { mark_unsupported("type name resolves to a component"); return {}; }
   }
   if (!o.prefixes.is_replaceable) {
     const NodeId ot = lookup_class_name(o.type.path, I_.nodes[bc].parent_scope);
     const NodeId nt = lookup_class_name(r.type.path, scope);
-    if (ot != nt) { mark_unsupported("redeclare of non-replaceable component"); return; }
+    if (ot != nt) { mark_unsupported("redeclare of non-replaceable component"); return {}; }
   }
   // 前缀合并（mergeRedeclaredComponentAttributes）：重声明写了的用它的（与原声明的冲突 → omc 报错），没写的取原声明的。
   // 变率：ymc 的枚举序 Var < Discrete < Param < Const（越大越常量），重声明比原声明更"变" → 报错。
@@ -1031,18 +1033,28 @@ void Instantiator::redeclare_component(NodeId bc, Id<SElement> rel, NodeId scope
     clash = clash || (o.attr.ct != SConnectorType::Potential && o.attr.ct != r.attr.ct);
   else
     m.attr.ct = o.attr.ct;
-  if (clash) { mark_unsupported("redeclare prefix mismatch"); return; }
+  if (clash) { mark_unsupported("redeclare prefix mismatch"); return {}; }
   m.cmt = o.cmt;
   // 合成元素按 (原声明, 重声明元素) 缓存——同一处 extends 每实例化一次就走一遍这里。
   const std::uint64_t key = (static_cast<std::uint64_t>(od.raw) << 32) | rel.raw;
-  Id<SElement> mid;
-  if (auto it = redecl_elems_.find(key); it != redecl_elems_.end()) {
-    mid = it->second;
-  } else {
-    if (I_.scode.elems.size() >= synth_cap_) { mark_unsupported("redeclare form", "synthesized element budget"); return; }
-    mid = I_.scode.elems.add(std::move(m));
-    redecl_elems_.emplace(key, mid);
-  }
+  if (auto it = redecl_elems_.find(key); it != redecl_elems_.end()) return it->second;
+  if (I_.scode.elems.size() >= synth_cap_) { mark_unsupported("redeclare form", "synthesized element budget"); return {}; }
+  const Id<SElement> mid = I_.scode.elems.add(std::move(m));
+  redecl_elems_.emplace(key, mid);
+  return mid;
+}
+
+void Instantiator::redeclare_component(NodeId bc, Id<SElement> rel, NodeId scope) {
+  const CompId cid = I_.nodes[bc].comp;
+  const Id<SElement> prev = I_.comps[cid].def;   // 当前定义（被内层 extends 重声明过 = 那次合成的元素）
+  const Id<SElement> od = I_.comps[cid].orig_def.is_valid() ? I_.comps[cid].orig_def : prev;   // 最初的原声明
+  // 先被更内层的 extends 修饰改过（omc 把那些修饰丢掉，r117：`N extends M(a(p = 2))`、再 `extends N(redeclare B a)` → a.p 取
+  // 原声明的 9）→ SKIP。
+  if (!I_.comps[cid].extends_mods.empty()) { mark_unsupported("redeclare form", "after extends modifier"); return; }
+  const Id<SElement> mid = merge_redeclared_elem(bc, od, rel, scope);
+  if (!mid.is_valid()) return;
+  const SElement& o = I_.scode.elems[od];
+  const SElement& r = I_.scode.elems[rel];
   // 约束修饰，外层在前（见上）。
   std::vector<Id<SMod>> cc;
   if (r.prefixes.has_cc) cc.push_back(r.prefixes.cc.mod);
@@ -1050,6 +1062,21 @@ void Instantiator::redeclare_component(NodeId bc, Id<SElement> rel, NodeId scope
   cc.push_back(o.prefixes.has_cc ? o.prefixes.cc.mod : o.mod);
   std::erase_if(cc, [](Id<SMod> x) { return !x.is_valid(); });
   const bool r_bound = r.mod.is_valid() && I_.scode.mods[r.mod].binding.is_valid();
+  const Id<Exp> o_binding = o.mod.is_valid() ? I_.scode.mods[o.mod].binding : Id<Exp>{};
+  // 取自原声明的条件 / 维的书写处（见 Component::cond_scope）：原组件的（inst_component 会把 decl_scope 换成 scope）。原组件
+  // 已被内层重声明过、那次用了自己的维，这次又要原声明的（非字面量）维：原声明写在哪不知道 → SKIP。
+  const bool take_dims = r.attr.dims.empty() && r.type.dims.empty();
+  const NodeId old_decl = I_.comps[cid].decl_scope;
+  const NodeId cond_at = I_.comps[cid].cond_scope.is_valid() ? I_.comps[cid].cond_scope : old_decl;
+  const NodeId dims_at = I_.comps[cid].dims_scope.is_valid() ? I_.comps[cid].dims_scope : old_decl;
+  // 字面量维在哪求都一样（rf 探针 R33：`A a[2]` → 中间一层 `B a[3]` → `redeclare C a` 取 a[2]）。
+  auto literal = [&](const std::vector<Id<Exp>>& ds) {
+    return std::all_of(ds.begin(), ds.end(), [&](Id<Exp> d) { return I_.absyn.exps[d].kind == ExpKind::IntLit; });
+  };
+  if (take_dims && prev != od && !I_.comps[cid].dims_scope.is_valid() && (!literal(o.attr.dims) || !literal(o.type.dims))) {
+    mark_unsupported("redeclare form", "original dimensions through redeclare chain");
+    return;
+  }
   {
     Component& comp = I_.comps[cid];
     comp.orig_def = od;
@@ -1061,11 +1088,79 @@ void Instantiator::redeclare_component(NodeId bc, Id<SElement> rel, NodeId scope
     comp.state = CompState::CompDef;
   }
   inst_component(bc, scope);
-  if (!r_bound && o.mod.is_valid() && I_.scode.mods[o.mod].binding.is_valid()) {   // 重声明没写绑定：取原声明的
+  I_.comps[cid].cond_scope = cond_at;
+  I_.comps[cid].dims_scope = take_dims ? dims_at : NodeId{};
+  if (!r_bound && o_binding.is_valid()) {   // 重声明没写绑定：取原声明的
     Component& comp = I_.comps[cid];
     comp.binding.kind = BindingKind::Raw;
-    comp.binding.raw_exp = I_.scode.mods[o.mod].binding;
+    comp.binding.raw_exp = o_binding;
     comp.binding.scope = I_.nodes[bc].parent_scope;   // 原声明所在的基类实例
+  }
+}
+
+// 元素级组件重声明（`extends A; redeclare Real x = 2.0;`，MLS §7.3）：照 redeclareElements / redeclareComponentElement
+//（NFInst.mo:1649-1705 v1.25.0）——本类的重声明元素顶替继承来的同名组件，留在它自己的位置（ClassTree.flatten 去重时留下
+// REDECLARE 项本身、继承来的是它的子项，NFClassTree.mo:2150-2190 / :2225-2260；ER 探针 ER1 / ER12）。合并照 redeclareComponent
+//（merge_redeclared_elem）；与修饰里的重声明不同，约束修饰为空（redeclareComponentElement 传 NOMOD）：原声明的修饰、改原组件
+// 的 extends 修饰都不带过来（ER2 `max = 5.0` 没有原声明的 start / min，ER4 extends 的 `start = 3` 也没有），只有绑定照
+// "外来修饰 > 重声明的 > 原组件的（含 extends 修饰给的）"（ER15 `extends A(x = 7)` → 7.0）。原组件已被基类里的重声明顶替过
+// 就以那个为原声明（链，ER13 注释仍是最初的 "orig"）。本类没有继承来的同名组件 → omc 报 REDECLARE_NONEXISTING_ELEMENT（ER9）
+// → SKIP；继承来不止一个（多重继承的重复项）未做 → SKIP。
+void Instantiator::redeclare_local_components(ClassTree& flat, NodeId inst_node) {
+  std::vector<NodeId>& comps = flat.components;
+  for (std::size_t i = 0; i < comps.size(); ++i) {
+    const NodeId lc = comps[i];
+    if (I_.nodes[lc].parent_scope.is_valid() || I_.comps[I_.nodes[lc].comp].state != CompState::CompDef) continue;
+    const Id<SElement> rel = I_.comps[I_.nodes[lc].comp].def;   // 本类的重声明元素（inst_class 留着没实例化的）
+    std::vector<std::size_t> hits;
+    for (std::size_t k = 0; k < comps.size(); ++k)
+      if (k != i && I_.nodes[comps[k]].name == I_.nodes[lc].name && I_.nodes[comps[k]].parent_scope.is_valid()) hits.push_back(k);
+    const std::string nm(I_.interner.str(I_.nodes[lc].name));
+    if (hits.empty()) { mark_unsupported("redeclare of missing element", nm); return; }
+    if (hits.size() > 1) { mark_unsupported("redeclare of duplicated inherited element", nm); return; }
+    const NodeId bc = comps[hits[0]];
+    const CompId bcid = I_.nodes[bc].comp;
+    const Id<SElement> od = I_.comps[bcid].def;
+    const Id<SElement> mid = merge_redeclared_elem(bc, od, rel, inst_node);
+    if (!mid.is_valid()) return;
+    // 原组件的绑定：extends 修饰给的（apply_extends_modifier 记在组件上，值在写 extends 的类里解析）> 原声明自己的（在它所在的
+    // 基类实例里解析）。
+    Binding fb = I_.comps[bcid].binding;
+    if (fb.kind != BindingKind::Raw || !fb.raw_exp.is_valid()) {
+      fb = Binding{};
+      const SElement& o = I_.scode.elems[od];
+      if (o.mod.is_valid() && I_.scode.mods[o.mod].binding.is_valid()) {
+        fb.kind = BindingKind::Raw;
+        fb.raw_exp = I_.scode.mods[o.mod].binding;
+        fb.scope = I_.nodes[bc].parent_scope;
+      }
+    }
+    const SElement& r = I_.scode.elems[rel];
+    const bool r_bound = r.mod.is_valid() && I_.scode.mods[r.mod].binding.is_valid();
+    const bool take_dims = r.attr.dims.empty() && r.type.dims.empty();
+    // 取自原声明的条件 / 维在原组件写它们的地方求（见 Component::cond_scope）。
+    const NodeId old_decl = I_.comps[bcid].decl_scope;
+    const NodeId cond_at = I_.comps[bcid].cond_scope.is_valid() ? I_.comps[bcid].cond_scope : old_decl;
+    const NodeId dims_at = I_.comps[bcid].dims_scope.is_valid() ? I_.comps[bcid].dims_scope : old_decl;
+    I_.comps[I_.nodes[lc].comp].def = mid;
+    I_.comps[I_.nodes[lc].comp].redecl_home = inst_node;   // 先记：inst_component 据此不并约束修饰（见那里）
+    inst_component(lc, inst_node);
+    I_.comps[I_.nodes[lc].comp].cond_scope = cond_at;
+    I_.comps[I_.nodes[lc].comp].dims_scope = take_dims ? dims_at : NodeId{};
+    // 基类实例里的那一项也换成它（omc 的重声明链各槽 Mutable.update 成同一个节点，NFInst.redeclareElements :1649-1675）：
+    // 基类自己的段 / 绑定按名查到的是重声明后的组件（ER 探针 EQ4）。
+    std::vector<NodeId> todo(flat.exts.begin(), flat.exts.end());
+    for (int guard = 0; !todo.empty() && guard < 1024; ++guard) {
+      const NodeId b = todo.back();
+      todo.pop_back();
+      if (!b.is_valid() || I_.nodes[b].is_empty() || !I_.nodes[b].cls.is_valid() || !I_.node_class(b).tree.is_valid()) continue;
+      ClassTree& bt = I_.trees[I_.node_class(b).tree];
+      std::replace(bt.components.begin(), bt.components.end(), bc, lc);
+      todo.insert(todo.end(), bt.exts.begin(), bt.exts.end());
+    }
+    if (!r_bound && fb.kind == BindingKind::Raw) I_.comps[I_.nodes[lc].comp].binding = fb;
+    comps.erase(comps.begin() + static_cast<std::ptrdiff_t>(hits[0]));
+    if (hits[0] < i) --i;
   }
 }
 
@@ -1092,7 +1187,10 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing, bool gener
     // 没被重声明的 replaceable 元素的约束子句修饰（`replaceable Real x constrainedby Real(start = 1.0)`）：instElementModifier
     //（NFInst.mo:2025-2040 v1.25.0）mod := merge(声明修饰, 约束修饰)——约束修饰排在声明修饰之后（flatten 照 cc_mods 的次序）。被重声明
     // 过的由 redeclare_component 另算（那时 orig_def 已置）。1.25.0 不查声明类型是不是约束类型的子类型。
-    if (el.prefixes.has_cc && el.prefixes.cc.mod.is_valid() && !comp.orig_def.is_valid() && comp.cc_mods.empty())
+    // 元素级重声明合并出的组件不并它自己的约束修饰（instElementModifier 的 isRedeclared 支只 propagateRedeclaredMod，
+    // NFInst.mo v1.25.0；ER 探针 ER18 `redeclare replaceable Real x = 2.0 constrainedby Real(start = 4)` → 没有 start）。
+    if (el.prefixes.has_cc && el.prefixes.cc.mod.is_valid() && !comp.orig_def.is_valid() && !comp.redecl_home.is_valid() &&
+        comp.cc_mods.empty())
       comp.cc_mods.push_back(el.prefixes.cc.mod);
   }
 

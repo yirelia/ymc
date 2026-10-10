@@ -7310,4 +7310,20 @@ YMC_TEST(flatten_inner_outer_combined) {
                            "  Real m.l.a = 6.0;\nend IYU2;\n"));
 }
 
+YMC_TEST(flatten_element_component_redeclare) {
+  // 元素级组件重声明：留在本类写它的位置（c 之后），原声明的修饰（start）不带、extends 修饰只带绑定（7）；取自原声明的条件在
+  // 原声明处求（P.on = false，派生类外层的 on = true 不算）——元素级的 b.x、修饰里重声明的 c.x 都移除（后者此前静默留着）。
+  // 期望 = omc 1.25.0 实跑（2026-10-11，探针 el-ut）。
+  YMC_CHECK_EQ(flatten_src("model ELRU1\n  model A\n    Real a = 1;\n    replaceable Real x(start = 1) = 1.0;\n    Real b = 2;\n"
+                           "  end A;\n  model B\n    extends A(x = 7);\n    Real c = 3;\n    redeclare Real x(max = 5);\n  end B;\n"
+                           "  B b;\nend ELRU1;\n"),
+               std::string("class ELRU1\n  Real b.a = 1.0;\n  Real b.b = 2.0;\n  Real b.c = 3.0;\n  Real b.x(max = 5.0) = 7.0;\n"
+                           "end ELRU1;\n"));
+  YMC_CHECK_EQ(flatten_src("package P\n  constant Boolean on = false;\n  model A\n    replaceable Real x = 1.0 if on;\n"
+                           "    Real y = 1;\n  end A;\nend P;\nmodel ELRU2\n  constant Boolean on = true;\n  model B\n"
+                           "    extends P.A;\n    redeclare Real x = 2.0;\n  end B;\n  model C\n"
+                           "    extends P.A(redeclare Real x = 3.0);\n  end C;\n  B b;\n  C c;\nend ELRU2;\n"),
+               std::string("class ELRU2\n  constant Boolean on = true;\n  Real b.y = 1.0;\n  Real c.y = 1.0;\nend ELRU2;\n"));
+}
+
 YMC_TEST_MAIN

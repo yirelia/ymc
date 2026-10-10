@@ -210,6 +210,13 @@ struct Component {
   // 声明（def）写在哪个类实例：声明自己的修饰 / 维 / 条件在这里解析——继承来的组件 = 声明它的基类实例（名字按基类的词法作用域
   // 找，派生类自己的元素看不见），重声明的 = 写重声明的类。inst_component 记；没经过 inst_component 的为空。
   NodeId decl_scope;
+  // 重声明合成的定义里取自原声明的条件 / 维（redeclareComponent :2208-2220 v1.25.0：条件总用原声明的，重声明没写维时用原声明
+  // 的）写在哪个类实例：omc 的原组件在原处实例化好了，名字按那里解析（SC 探针 SC1 / SC2：派生类自己的同名常量不算）。
+  // 无效 = 同 decl_scope。
+  NodeId cond_scope, dims_scope;
+  // 元素级组件重声明（`extends A; redeclare Real x`）留下的组件：重声明写在的类实例。omc 1.25.0 在这个类（及其派生类）的
+  // 方程 / 算法段里、从外面经路径都找不到它（见 flatten 的 lost_redecl_names）。无效 = 不是。
+  NodeId redecl_home;
   // 被 extends 修饰重声明过（`extends M(redeclare B a(q = 3))`）：def 换成合成的元素（重声明元素 + 原声明补的维 / 条件 /
   // 前缀 / 注释，见 Instantiator::redeclare_component），orig_def = 最初的原声明，cc_mods = 约束修饰（外层在前），flatten 排在
   // def 自己的修饰之后。
