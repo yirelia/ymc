@@ -2143,6 +2143,11 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           （IL5 `x[1]`、IL9 `y := x`、IL10 `2.0`，omc 是 `x[1..3]`、`3.0 * x`、`6.0`）。包路径访问继承元素、类重声明照旧 SKIP
           （ADR-007 第 2 阶段，补了 63k 的发现）。
           slice 654 例 PASS 602→605 / FAIL 0（oracle=live 不一致 0）；scodeinst 604→606 / 43→44（DuplicateElements6 文件 Result 错贴，入账）；testsuite 1700→1707 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 410（不变）；探针 9219→9243；单测 328→329。
+    - [x] (63l) inst + flat：根类是短类别名（2026-10-10）：`model R = A(p = 2) "c";` 照 expandClassDerived / instClass 的
+          EXPANDED_DERIVED 支——inst 顺链实例化链底的长类、别名记进 Inst::root_alias；压平名 / 注释 / partial（基类 partial 别名
+          也算）/ 受限类型 / commandLineOptions 注解取别名，链上各层修饰当根实例的外来修饰（外层在前，值在短类定义处解析：顶层 /
+          包里），getInstanceName 取别名。链上带维 / 前缀 / redeclare、底是内建或枚举、模型里的别名修饰 → SKIP。
+          slice 654 例 PASS 605→606 / FAIL 0（oracle=live 不一致 0）；scodeinst 606→607 / 44（在账）；testsuite 1707→1711 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 410（不变）；探针 9243→9264；单测 329→330。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

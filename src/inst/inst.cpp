@@ -1160,7 +1160,52 @@ NodeId Instantiator::instantiate_root(Symbol name) {
     diags_.error(SourceLoc{}, "Class " + std::string(I_.interner.str(name)) + " not found in scope <top>.");
     return Inst::empty_node();
   }
-  return instantiate(def_node, Inst::empty_node());
+  return instantiate_root_class(def_node);
+}
+
+// 根类是短类别名（`model R = A(p = 2);`）：照 expandClassDerived（NFInst.mo:1012-1061 v1.25.0，基类名从别名的词法外层查）与
+// instClass 的 EXPANDED_DERIVED 支（:1200-1222：别名的修饰并到外来修饰上，再实例化基类）顺链走到长类定义，实例化它；别名与链上
+// 各层修饰记进 Inst::root_alias（压平名 / 注释取别名，修饰当根实例的外来修饰，SR 探针）。链上带维 / 前缀 / redeclare 修饰、底是
+// 内建或枚举 → SKIP。
+NodeId Instantiator::instantiate_root_class(NodeId def_node) {
+  I_.root_alias = {};
+  NodeId cur = def_node;
+  for (int guard = 0; guard < 20; ++guard) {
+    const Id<SElement> ce = I_.nodes[cur].def;
+    if (!ce.is_valid() || I_.scode.elems[ce].kind != SElementKind::Class ||
+        I_.scode.elems[ce].def.kind != SClassDefKind::Derived)
+      break;
+    const SClassDef& cd = I_.scode.elems[ce].def;
+    const SAttributes& da = cd.derived_attr;
+    if (!da.dims.empty() || da.var != SVariability::Var || da.dir != SDirection::Bidir || da.ct != SConnectorType::Potential) {
+      mark_unsupported("short/derived/enum root class", "dimensions / prefixes");
+      return Inst::empty_node();
+    }
+    if (cd.derived_mod.is_valid()) {
+      for (const SSubMod& s : I_.scode.mods[cd.derived_mod].subs)
+        if (I_.scode.mods[s.mod].kind != SModKind::Mod) {
+          mark_unsupported("short/derived/enum root class", "redeclare");
+          return Inst::empty_node();
+        }
+      I_.root_alias.mods.push_back(cd.derived_mod);
+      I_.root_alias.scopes.push_back(I_.nodes[cur].parent_scope);
+    }
+    const std::vector<Symbol> bp = cd.derived_type.path;   // 拷贝：查找会 arena add
+    const NodeId nxt = lookup_class_name(bp, I_.nodes[cur].parent_scope);
+    if (!nxt.is_valid() || I_.nodes[nxt].is_empty()) {
+      mark_unsupported("unresolved base class", path_str(bp));
+      return Inst::empty_node();
+    }
+    if (nxt == cur) {   // `class A = A`（RECURSIVE_SHORT_CLASS_DEFINITION）
+      mark_unsupported("short/derived/enum root class", "recursive");
+      return Inst::empty_node();
+    }
+    I_.root_alias.node = def_node;
+    cur = nxt;
+  }
+  for (int k = 0; k < kBuiltinCount; ++k)
+    if (cur == builtin_[k]) { mark_unsupported("short/derived/enum root class", "builtin"); return Inst::empty_node(); }
+  return instantiate(cur, Inst::empty_node());
 }
 
 NodeId Instantiator::instantiate_root_path(const std::vector<Symbol>& path) {
@@ -1170,7 +1215,7 @@ NodeId Instantiator::instantiate_root_path(const std::vector<Symbol>& path) {
     diags_.error(SourceLoc{}, "Class " + path_str(path) + " not found in scope <top>.");
     return Inst::empty_node();
   }
-  return instantiate(def_node, Inst::empty_node());
+  return instantiate_root_class(def_node);
 }
 
 }  // namespace ymc

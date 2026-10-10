@@ -201,17 +201,22 @@ class Flattener {
     synth_mod_floor_ = I_.scode.mods.size();
     // 全名（R13 §2）：根类的全限定名——顶层类就是类名，库里的示例模型是 `Modelica.Blocks.Examples.PID_Controller`
     //（omc -i=… 打 `class Modelica.Blocks.Examples.PID_Controller "…"`）。沿词法外层往上拼到 <top>。
-    result_.model.name = {I_.nodes[root].name};
-    for (NodeId p = I_.nodes[root].parent_scope; p.is_valid() && !I_.nodes[p].is_empty() && p != I_.top;
+    // 根类是短类别名（`model R = A(p = 2) "c";`，inst 实例化的是链底的长类 A，见 Instantiator::instantiate_root_class）：
+    // 压平名 / 注释 / partial / 受限类型 / 注解取别名本身（omc 的根节点就是别名，SR 探针 `class SR2 "short root"`）。
+    const NodeId named = I_.root_alias.node.is_valid() && !I_.nodes[I_.root_alias.node].is_empty() ? I_.root_alias.node : root;
+    result_.model.name = {I_.nodes[named].name};
+    for (NodeId p = I_.nodes[named].parent_scope; p.is_valid() && !I_.nodes[p].is_empty() && p != I_.top;
          p = I_.nodes[p].parent_scope)
       result_.model.name.insert(result_.model.name.begin(), I_.nodes[p].name);
+    const SElement& nel = I_.scode.elems[I_.nodes[named].def];
     const SElement& el = I_.scode.elems[I_.nodes[root].def];
-    result_.model.comment = el.cmt.str;   // 类注释的转义怪相见 absyn_to_scode 的 klass
+    result_.model.comment = nel.cmt.str;   // 类注释的转义怪相见 absyn_to_scode 的 klass
     if (el.def.kind != SClassDefKind::Parts) set_unsupported("short/derived/enum root class");
     // 根类不可是 function / package（NFInst.checkInstanceRestriction :4186-4205，INST_INVALID_RESTRICTION）。
-    if (el.restriction == SRestriction::Package || el.restriction == SRestriction::Function ||
-        el.restriction == SRestriction::ExternalFunction || el.restriction == SRestriction::OperatorFunction)
-      set_unsupported("root class is package/function");
+    for (const SElement* r : {&nel, &el})
+      if (r->restriction == SRestriction::Package || r->restriction == SRestriction::Function ||
+          r->restriction == SRestriction::ExternalFunction || r->restriction == SRestriction::OperatorFunction)
+        set_unsupported("root class is package/function");
     // 顶层作用域的类树：同名元素 → DOUBLE_DECLARATION_OF_ELEMENTS（NFClassTree.addLocalElementConflict :1653-1676）；
     // 与 NF 顶层内建类型同名（Clock2 的 `model Clock`，NFModelicaBuiltin.mo）同样冲突。
     if (has_duplicate_names(I_.scode.program)) set_unsupported("duplicate element declaration");
@@ -220,15 +225,27 @@ class Flattener {
       if (n == "Clock" || n == "StateSelect" || n == "Uncertainty" || n == "AssertionLevel" || n == "Connections")
         set_unsupported("class name collides with builtin");
     }
-    // 实例化 partial 根类（NFInst.checkPartialClass，PartialClass1）→ omc 报错。
-    if (el.is_partial) set_unsupported("partial root class");
+    // 实例化 partial 根类（NFInst.checkPartialClass，PartialClass1）→ omc 报错。别名派生自 partial 类也是 partial
+    //（expandClassDerived，NFInst.mo:1041-1044 v1.25.0）。
+    if (el.is_partial || nel.is_partial) set_unsupported("partial root class");
     // __OpenModelica_commandLineOptions（-d=evaluateAllParameters / mergeComponents …）会重写整个
-    // 展平结果，是 OMC 专属变换，v1 不做 → 标 unsupported（driver 退 66，记 SKIP 不是 FAIL）。
-    if (el.cmt.annotation.is_valid())
-      for (const SSubMod& s : I_.scode.mods[el.cmt.annotation].subs)
+    // 展平结果，是 OMC 专属变换，v1 不做 → 标 unsupported（driver 退 66，记 SKIP 不是 FAIL）。omc 读被实例化的那个类的注解。
+    if (nel.cmt.annotation.is_valid())
+      for (const SSubMod& s : I_.scode.mods[nel.cmt.annotation].subs)
         if (s.ident == in_.intern("__OpenModelica_commandLineOptions"))
           set_unsupported("__OpenModelica_commandLineOptions annotation");
-    flatten_class(root, {}, {}, /*protected_ctx=*/false, ModCtx{}, {});
+    // 别名链上的修饰 = 根实例的外来修饰（外层别名在前，NFInst.instClass EXPANDED_DERIVED 支的 Modifier.merge），值在各短类定义处
+    // 解析：顶层 / 包里（只引常量）；别处（模型里的短类别名）未做 → SKIP（同组件的 derived_mod_sources）。
+    ModCtx root_ctx;
+    for (std::size_t k = 0; k < I_.root_alias.mods.size(); ++k) {
+      const NodeId sc = I_.root_alias.scopes[k];
+      const bool pkg = sc == I_.top || (sc.is_valid() && !I_.nodes[sc].is_empty() && I_.nodes[sc].def.is_valid() &&
+                                         I_.scode.elems[I_.nodes[sc].def].restriction == SRestriction::Package);
+      if (!pkg) { set_unsupported("short class modifier scope"); break; }
+      if (mod_has_duplicates({I_.root_alias.mods[k]})) { set_unsupported("duplicate modification"); break; }
+      root_ctx.mods.push_back({I_.root_alias.mods[k], sc, {}});
+    }
+    flatten_class(root, {}, {}, /*protected_ctx=*/false, root_ctx, {});
     // 连接集展开（DisjointSets 序：potential 相等、flow 求和、未连接 flow `=0`），整体插到模型自身方程之前
     //（NFFlatten.mo:2497）。顶层（outside）连接器的 flow 既进求和集（OUTSIDE 面）又留 INSIDE 单元素集 → 同时有
     // `-(c1.f + c2.f) = 0` 与 `c1.f = 0`（Connector.isEqual 含 face，NFConnector.mo:143-148）。
@@ -18265,7 +18282,7 @@ class Flattener {
     // Prefix.instanceName，NFFlatten.mo:318-327 / :1614-1616 v1.25.0；GI 探针 g10-g14：`"G11.b[1]"`，根类自己 `"G10"`）。
     // 函数 / 包里的（按调用处作用域的根路径求，Ceval.evalGetInstanceName :3091-3102）未做 → 照旧 SKIP。
     if (builtin_name == "getInstanceName" && e.args.empty() && !fn_scope_) {
-      std::string s(in_.str(I_.nodes[root_].name));
+      std::string s(in_.str(result_.model.name.back()));   // 根类的简单名（别名根取别名）
       for (std::size_t k = 0; k < prefix.size(); ++k) {
         s += '.';
         s += in_.str(prefix[k]);

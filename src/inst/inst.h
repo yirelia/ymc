@@ -48,6 +48,7 @@ class Instantiator {
   bool binding_exp_equal(Id<Exp> a, Id<Exp> b) const;
   void collect_class_names(NodeId def_node, std::unordered_set<std::uint32_t>& out, int depth);
   NodeId instantiate(NodeId def_node, NodeId parent);  // 克隆 def 节点 + instClass 填实例树
+  NodeId instantiate_root_class(NodeId def_node);      // 根类：短类别名顺链到长类（见 inst.cpp）
   void inst_class(NodeId inst_node, NodeId def_node);  // 建 FlatTree：递归组件 + extends 就地展开
   void inst_component(NodeId comp_node, NodeId enclosing);  // 解析组件类型（叶/复合）
   // extends 修饰 `extends A(x = 1)`：把 mod 按名合并到继承来的组件 bc 上（绑定覆盖 + 属性 + final）。

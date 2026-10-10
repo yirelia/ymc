@@ -7238,4 +7238,14 @@ YMC_TEST(flatten_inherited_class_and_function_lookup) {
   YMC_CHECK_EQ(t, std::string("<unsupported:constant of modified enclosing instance>"));
 }
 
+YMC_TEST(flatten_short_class_alias_root) {
+  // 根类是短类别名：链底的长类照常压平，压平名 / 注释取别名，两层别名的修饰外层在前（final 照打）。期望 = omc 1.25.0 实跑
+  //（2026-10-10，探针 sa-ut）。
+  YMC_CHECK_EQ(flatten_src("model SAU1A\n  parameter Real p = 1;\n  parameter Real q = 2;\n  Real x;\nequation\n"
+                           "  x = p * q * time;\nend SAU1A;\nmodel SAU1B = SAU1A(p = 3);\n"
+                           "model SAU1 = SAU1B(final q = 4, x(start = 5)) \"alias root\";\n"),
+               std::string("class SAU1 \"alias root\"\n  parameter Real p = 3.0;\n  final parameter Real q = 4.0;\n"
+                           "  Real x(start = 5.0);\nequation\n  x = p * q * time;\nend SAU1;\n"));
+}
+
 YMC_TEST_MAIN

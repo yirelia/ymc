@@ -1,0 +1,169 @@
+//// set: sa-p1 — 根类是短类别名（`model R = A(p = 2) "c";`）：expandClassDerived / instClass 的 EXPANDED_DERIVED 支——实例化链底的长类，压平名 / 注释取别名，链上各层修饰当根的外来修饰（外层在前、值在短类定义处解析）；别名或基类 partial（SA9 / SA11）双拒；链上 redeclare（SA21）SKIP
+//// model: SA1
+model SA1A
+  parameter Real p = 1;
+  Real x(start = 0);
+equation
+  der(x) = -p * x;
+end SA1A;
+model SA1 = SA1A;
+//// model: SA2
+model SA2A
+  parameter Real p = 1;
+  Real x(start = 0);
+equation
+  der(x) = -p * x;
+end SA2A;
+model SA2 = SA2A(p = 2, x(start = 1)) "short root";
+//// model: SA3
+model SA3A
+  parameter Real p = 1;
+  Real x;
+equation
+  x = p * time;
+end SA3A;
+model SA3B = SA3A(p = 3);
+model SA3 = SA3B(x(start = 5));
+//// model: SA4
+record SA4A
+  Real x;
+end SA4A;
+connector SA4 = SA4A;
+//// model: SA5
+package SA5P
+  constant Real c = 4;
+  model A
+    parameter Real p;
+    parameter Real q = c;
+  end A;
+end SA5P;
+model SA5 = SA5P.A(p = SA5P.c);
+//// model: SA6
+model SA6A
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  type E = enumeration(one, two);
+  E e = E.two;
+  Real y = f(time);
+end SA6A;
+model SA6 = SA6A;
+//// model: SA7
+model SA7A
+  Real x;
+equation
+  x = time;
+end SA7A;
+model SA7 = SA7A annotation(experiment(StopTime = 2));
+//// model: SA8
+model SA8A
+  parameter Integer n = 2;
+  Real x[n];
+equation
+  x = fill(time, n);
+end SA8A;
+model SA8 = SA8A(n = 3);
+//// model: SA9
+model SA9A
+  Real x;
+equation
+  x = time;
+end SA9A;
+partial model SA9 = SA9A;
+//// model: SA10
+block SA10A
+  input Real u;
+  output Real y;
+equation
+  y = 2 * u;
+end SA10A;
+block SA10 = SA10A;
+//// model: SA11
+partial model SA11A
+  Real x;
+equation
+  x = time;
+end SA11A;
+model SA11 = SA11A;
+//// model: SA13
+model SA13A
+  parameter Real p = 1;
+  Real x = p * time;
+end SA13A;
+model SA13 = SA13A(final p = 2);
+//// model: SA16
+model SA16A
+  String s = getInstanceName();
+  Real x = time;
+end SA16A;
+model SA16 = SA16A;
+//// model: SA17
+record SA17R
+  Real x = 1;
+  Real y = 2;
+end SA17R;
+model SA17A
+  parameter SA17R r;
+  Real z = r.x * time;
+end SA17A;
+model SA17 = SA17A(r(x = 3));
+//// model: SA19
+package SA19P
+  model A
+    parameter Real p = 1;
+    Real x;
+  equation
+    x = p * time;
+  end A;
+  model B = A(p = 3);
+end SA19P;
+model SA19 = SA19P.B(x(start = 5));
+//// model: SA20
+model SA20Base
+  parameter Real k = 2;
+protected
+  Real h = k * time;
+end SA20Base;
+model SA20A
+  extends SA20Base(k = 4);
+  Real y = 1;
+end SA20A;
+model SA20 = SA20A(y(start = 1));
+//// model: SA21
+model SA21A
+  replaceable model M
+    Real x = 1;
+  end M;
+  M m;
+end SA21A;
+model SA21B
+  Real x = 2;
+end SA21B;
+model SA21 = SA21A(redeclare model M = SA21B);
+//// model: SA22
+model SA22A
+  parameter Real p = 1;
+end SA22A;
+model SA22 = SA22A(p = 1, p = 2);
+//// model: SA25
+model SA25A
+  Real x[3];
+equation
+  x = {1, 2, 3} * time;
+end SA25A;
+model SA25 = SA25A(each x(start = 1));
+//// model: SA26
+model SA26A
+  connector C
+    Real e;
+    flow Real f;
+  end C;
+  C c1, c2;
+equation
+  connect(c1, c2);
+  c1.e = time;
+end SA26A;
+model SA26 = SA26A;

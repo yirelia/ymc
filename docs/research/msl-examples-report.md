@@ -485,3 +485,8 @@ Spice3BenchmarkFourBitBinaryAdder 停在记录函数折叠的字段形态，三�
 剩下的 SKIP 主要卡在类重声明（Media 的 `redeclare package Medium`、MultiBody 的重声明函数 / 模型），继承查找只是它们的前提之一。
 新加的守卫（经改了常量的 extends / 元素级重声明继承来的类、外层实例上改过的常量）在 MSL 示例里没有触发。FAIL / ACCEPTS-INVALID /
 CRASH 0。
+
+## 2026-10-10 加宽 63l 之后：PASS 410（不变）
+
+根类是短类别名（`model R = A(p = 2) "c";`）做完；MSL 示例都是长类定义，不受影响，PASS / SKIP 逐例不变。FAIL / ACCEPTS-INVALID /
+CRASH 0。

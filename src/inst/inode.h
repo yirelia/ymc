@@ -248,6 +248,13 @@ struct Inst {
   std::unordered_map<Symbol, NodeId> generated_inners;  // 自动生成的 inner，按名字（同名 outer 共用一个）
   // 实例化时已施加的短类修饰里的组件重声明（SMod raw，见 inst_component）：flatten 不再把它们当修饰。
   std::unordered_set<std::uint32_t> applied_redecls;
+  // 根类是短类别名（`model R = A(p = 2) "c";`）：inst 实例化的是链底的长类，这里记别名本身（压平名 / 注释 / partial 取它）与
+  // 链上各层的修饰（外层在前）及其书写处（各短类的词法外层），flatten 当根实例的外来修饰（见 Instantiator::instantiate_root_path）。
+  struct RootAlias {
+    NodeId node;                      // 别名类节点；invalid = 根不是别名
+    std::vector<Id<SMod>> mods;
+    std::vector<NodeId> scopes;
+  } root_alias;
 
   Inst(Interner& in, Absyn& a, SCode& sc) : interner(in), absyn(a), scode(sc) {
     // id 0 = EMPTY 哨兵节点（往上走的终点，R11 §7.1 不变量 1）。

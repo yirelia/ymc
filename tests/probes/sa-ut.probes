@@ -1,0 +1,11 @@
+//// set: sa-ut — 根类是短类别名（单测原文）：两层别名链的修饰（外层在前、final）、别名的注释
+//// model: SAU1
+model SAU1A
+  parameter Real p = 1;
+  parameter Real q = 2;
+  Real x;
+equation
+  x = p * q * time;
+end SAU1A;
+model SAU1B = SAU1A(p = 3);
+model SAU1 = SAU1B(final q = 4, x(start = 5)) "alias root";
