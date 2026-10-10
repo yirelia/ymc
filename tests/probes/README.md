@@ -474,5 +474,9 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `ip-ut` | 1 | 纯函数后标 impure（单测原文）：`impure function f`、常量实参调用照留、嵌着的 h 照常求值、when 里的元组方程 |
 | `fr-p1` | 6 | 派生记录的构造调用求值、基类在别的包里（MSL FluxTubes 材料记录）：基类字段的缺省 / 短类类型（SI 属性）/ 数组、缺省在基类作用域里求、extends 修饰与构造实参（FRB1–FRB4）；非常量构造给基类型记录组件按字段拆开（FRB5 / FRB6）SKIP |
 | `fr-ut` | 1 | 派生记录的构造调用求值、基类在别的包里（单测原文）：包常量 k、`B = 2 * mu_i`、extends 修饰 |
-| `cr-p1` | 15 | 整个常量记录的引用作实参 → 记录式（无绑定 / 带绑定，CRL3 / CRL4）、字段引用（CRL1）；记录构造函数的外来基类字段（SI 类型、start 属性，CRL15）；Evaluate = true 的记录参数连带结构参数（CRL6）、只带字段修饰（CRL8）；final 记录的函数绑定求值（CRL7 / CRL10 / CRL11）、标量照留（CRL9）；求不出且读到的全固定的 final 记录绑定 SKIP（CRL12–CRL14）；模型里局部记录类作函数形参类型 SKIP（CRL2 / CRL5） |
+| `cr-p1` | 15 | 整个常量记录的引用作实参 → 记录式（无绑定 / 带绑定，CRL3 / CRL4）、字段引用（CRL1）；记录构造函数的外来基类字段（SI 类型、start 属性，CRL15）；Evaluate = true 的记录参数连带结构参数（CRL6）、只带字段修饰（CRL8）；final 记录的函数绑定求值（CRL7 / CRL10 / CRL11）、标量照留（CRL9）；读到的全固定的 final 记录绑定求值成字面量字段（CRL12–CRL14，63j 起）；模型里局部记录类作函数形参类型 SKIP（CRL2 / CRL5） |
 | `cr-ut` | 1 | 整个常量记录的引用作实参 + Evaluate = true 的 final 记录参数由函数求值、x0 连带 final（单测原文） |
+| `ws-p1` | 16 | 整个记录参数的编译期求值与结构记录：final 记录绑定里的记录参数实参（WS1–WS3）、Evaluate 记录绑定读整个记录 / 常量记录（WS4–WS7）、带 start 的字段才是结构参数（WS8–WS10、WS15 / WS16）、整体引用代成记录式（WS12 结构语境读过的、WS14 自己 Evaluate 且有整体绑定的）、记录引用整体绑定求值（WS13）；强制内联（WS11）SKIP |
+| `ws-p2` | 6 | 函数体：字面量条件的 if 语句化简（WS17 / WS18）、只 extends 不加字段的派生记录实参（WS19；加字段 omc 报错 WS20）、元组赋值给记录字段（WS21）、模型里没有实例的输出记录类（WS22） |
+| `eg-p1` | 16 | Evaluate = true 的记录参数 × 字段声明网格：整体绑定下只有带 start 的字段是结构参数，只带字段修饰的都是 |
+| `ws-ut` | 1 | 整个记录参数作实参的编译期求值（单测原文）：元组赋值给记录字段、死的 if 语句、带 start 字段代入、mc 字段不 final |

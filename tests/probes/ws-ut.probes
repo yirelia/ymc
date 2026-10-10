@@ -1,0 +1,34 @@
+//// set: ws-ut — 整个记录参数作实参的编译期求值（单测原文）：`p = ren(mc)`（Evaluate = true）里元组赋值给记录字段、死的 if 语句；p 的带 start 的字段成结构参数、引用处代入，mc 字段不 final
+//// model: WSU1
+package WSU1P
+  record MC
+    parameter Real VTO = -1e40;
+    parameter Real TNOM = -1e40;
+  end MC;
+  record LP
+    Real a(start = 0.0);
+    Real b;
+  end LP;
+  function g2
+    input Real x;
+    output Real p;
+    output Real q;
+  algorithm
+    p := x;
+    q := 2 * x;
+  end g2;
+  function ren
+    input MC ex;
+    output LP r;
+  algorithm
+    (r.a, r.b) := g2(ex.VTO);
+    if false then
+      r.b := 0;
+    end if;
+  end ren;
+end WSU1P;
+model WSU1
+  parameter WSU1P.MC mc(VTO = 0.7);
+  final parameter WSU1P.LP p = WSU1P.ren(mc) annotation(Evaluate = true);
+  Real y = p.a * time + p.b;
+end WSU1;

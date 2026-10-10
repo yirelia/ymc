@@ -1,0 +1,203 @@
+//// set: ws-p2 — 函数体：条件化简成字面量的 if 语句（false 支删、true 支成 else / 整条换成体，simplifyIfStmtBranches；WS17，模型算法 WS18）；派生记录只 extends 不加字段的实参传给基类形参（PLUG_COMPATIBLE，WS19；加了字段的 omc 报错 WS20）；元组赋值给记录字段 `(r.a, r.b) := g2(x)` 的发射与求值（WS21）；输出记录类模型里没有实例的记录结果 `q := qm(x)`（WS22）
+//// model: WS17
+model WS17
+  function g
+    output Boolean b;
+  algorithm
+    b := false;
+  end g;
+  function h
+    output Boolean b;
+  algorithm
+    b := true;
+  end h;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := x;
+    if x > 1 then
+      y := 2 * x;
+    elseif g() then
+      y := 3 * x;
+    else
+      y := 4 * x;
+    end if;
+    if g() then
+      y := y + 1;
+    end if;
+    if h() then
+      y := y + 2;
+    else
+      y := y + 3;
+    end if;
+    if x > 2 then
+      y := y + 4;
+    elseif h() then
+      y := y + 5;
+    else
+      y := y + 6;
+    end if;
+    if g() then
+      y := y + 7;
+    elseif x > 3 then
+      y := y + 8;
+    end if;
+  end f;
+  Real z = f(time);
+end WS17;
+//// model: WS18
+model WS18
+  function g
+    output Boolean b;
+  algorithm
+    b := false;
+  end g;
+  constant Boolean c = true;
+  Real y, z;
+algorithm
+  y := time;
+  if time > 1 then
+    y := 2 * time;
+  elseif g() then
+    y := 3 * time;
+  end if;
+  if c then
+    z := 1;
+  else
+    z := 2;
+  end if;
+end WS18;
+//// model: WS19
+package WS19P
+  record Base
+    Real a;
+    Real b;
+  end Base;
+  record Same
+    extends Base;
+  end Same;
+  record More
+    extends Base;
+    Real c;
+  end More;
+  function g
+    input Real x;
+    input Base r;
+    output Real y;
+  algorithm
+    y := x * r.a + r.b;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  protected
+    Same s;
+    More m;
+  algorithm
+    s.a := x;
+    s.b := 2 * x;
+    m.a := x;
+    m.b := 3 * x;
+    m.c := 4 * x;
+    y := g(x, s);
+  end f;
+end WS19P;
+model WS19
+  Real z = WS19P.f(time);
+end WS19;
+//// model: WS20
+package WS20P
+  record Base
+    Real a;
+    Real b;
+  end Base;
+  record Same
+    extends Base;
+  end Same;
+  record More
+    extends Base;
+    Real c;
+  end More;
+  function g
+    input Real x;
+    input Base r;
+    output Real y;
+  algorithm
+    y := x * r.a + r.b;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  protected
+    Same s;
+    More m;
+  algorithm
+    s.a := x;
+    s.b := 2 * x;
+    m.a := x;
+    m.b := 3 * x;
+    m.c := 4 * x;
+    y := g(x, s) + g(x, m);
+  end f;
+end WS20P;
+model WS20
+  Real z = WS20P.f(time);
+end WS20;
+//// model: WS21
+package WS21P
+  record R
+    Real a;
+    Real b;
+  end R;
+  function g2
+    input Real x;
+    output Real p;
+    output Real q;
+  algorithm
+    p := x;
+    q := 2 * x;
+  end g2;
+  function f
+    input Real x;
+    output Real y;
+  protected
+    R r;
+    Real c;
+  algorithm
+    (r.a, r.b) := g2(x);
+    (c, ) := g2(r.b);
+    y := r.a + r.b + c;
+  end f;
+end WS21P;
+model WS21
+  parameter Real p = WS21P.f(1.5);
+  Real z = WS21P.f(time);
+end WS21;
+//// model: WS22
+package WS22P
+  record Q
+    Real cgs;
+    Real cgd;
+  end Q;
+  function qm
+    input Real v;
+    output Q out;
+  algorithm
+    out.cgs := v;
+    out.cgd := 2 * v;
+  end qm;
+  function f
+    input Real x;
+    output Real y;
+  protected
+    Q q;
+  algorithm
+    q := qm(x);
+    y := q.cgs + q.cgd;
+  end f;
+end WS22P;
+model WS22
+  parameter Real p = WS22P.f(1.5);
+  Real z = WS22P.f(time);
+end WS22;

@@ -1,0 +1,448 @@
+//// set: ws-p1 — 整个记录参数的编译期求值与结构记录：final 记录绑定里的记录参数实参（`p = ren(mc)`，tryEvalExp 求成字段字面量，WS1–WS3）、Evaluate = true 的记录绑定读整个记录参数 / 常量记录（WS4–WS7）；Evaluate = true 且有整体绑定的记录：字段只有带 start 的是结构参数、引用处代入（WS8–WS10、WS15 / WS16，isStructuralComponent 取 start）；整体引用：结构语境整体读过的记录参数节点（WS12 `g(mc, time)` → `g(MC(0.7, -1e40), time)`，字段照旧不 final）、自己 Evaluate 且有整体绑定的记录（WS14，名取值的记录类型）；记录引用整体绑定的结构记录求值成字段字面量（WS13 `m1(modelcard = MP)`）；final 记录绑定要强制内联（WS11）SKIP
+//// model: WS1
+package WS1P
+  record MC
+    parameter Real VTO = -1e40;
+  end MC;
+  record LP
+    Real a;
+    Real b;
+  end LP;
+  function ren
+    input MC ex;
+    output LP r;
+  algorithm
+    r.a := ex.VTO;
+    r.b := 2;
+  end ren;
+end WS1P;
+model WS1
+  parameter WS1P.MC mc(VTO = 0.7);
+  final parameter WS1P.LP p = WS1P.ren(mc);
+end WS1;
+//// model: WS2
+package WS2P
+  record K
+    constant Real CtoK = 273.15;
+  end K;
+  record MC
+    parameter Real VTO = -1e40;
+    parameter Real TNOM = -1e40;
+  end MC;
+  record LP
+    Real m_vt0;
+    Real m_vtOIsGiven;
+    Real m_tnom;
+  end LP;
+  function ren
+    input MC ex;
+
+    output LP intern;
+  algorithm
+    intern.m_vtOIsGiven := if (ex.VTO > -1e40) then 1 else 0;
+    intern.m_vt0 := if (ex.VTO > -1e40) then ex.VTO else 0;
+    intern.m_tnom := if (ex.TNOM > -1e40) then ex.TNOM + 273.15 else 300.15;
+  end ren;
+end WS2P;
+model WS2
+  parameter WS2P.MC modelcard = WS2P.MC(VTO = 0.7);
+  constant WS2P.K C;
+  final parameter WS2P.LP p = WS2P.ren(modelcard);
+  Real y = p.m_vt0 * time;
+end WS2;
+//// model: WS3
+package WS3P
+  record K
+    constant Real CtoK = 273.15;
+  end K;
+  record MC
+    parameter Real VTO = -1e40;
+    parameter Real TNOM = -1e40;
+  end MC;
+  record LP
+    Real m_vt0;
+    Real m_vtOIsGiven;
+    Real m_tnom;
+  end LP;
+  function ren
+    input MC ex;
+
+    output LP intern;
+  algorithm
+    intern.m_vtOIsGiven := if (ex.VTO > -1e40) then 1 else 0;
+    intern.m_vt0 := if (ex.VTO > -1e40) then ex.VTO else 0;
+    intern.m_tnom := if (ex.TNOM > -1e40) then ex.TNOM + 273.15 else 300.15;
+  end ren;
+end WS3P;
+model WS3
+  parameter WS3P.MC modelcard(VTO = 0.7);
+  constant WS3P.K C;
+  final parameter WS3P.LP p = WS3P.ren(modelcard);
+  Real y = p.m_vt0 * time;
+end WS3;
+//// model: WS4
+package WS4P
+  record K
+    constant Real CtoK = 273.15;
+  end K;
+  record MC
+    parameter Real VTO = -1e40;
+    parameter Real TNOM = -1e40;
+  end MC;
+  record LP
+    Real m_vt0;
+    Real m_vtOIsGiven;
+    Real m_tnom;
+  end LP;
+  function ren
+    input MC ex;
+    input K con;
+    output LP intern;
+  algorithm
+    intern.m_vtOIsGiven := if (ex.VTO > -1e40) then 1 else 0;
+    intern.m_vt0 := if (ex.VTO > -1e40) then ex.VTO else 0;
+    intern.m_tnom := if (ex.TNOM > -1e40) then ex.TNOM + K.CtoK else 300.15;
+  end ren;
+end WS4P;
+model WS4
+  parameter WS4P.MC modelcard(VTO = 0.7) annotation(Evaluate = true);
+  constant WS4P.K C;
+  final parameter WS4P.LP p = WS4P.ren(modelcard, C) annotation(Evaluate = true);
+  Real y = p.m_vt0 * time;
+end WS4;
+//// model: WS5
+package WS5P
+  record K
+    constant Real CtoK = 273.15;
+  end K;
+  record MC
+    parameter Real VTO = -1e40;
+    parameter Real TNOM = -1e40;
+  end MC;
+  record LP
+    Real m_vt0;
+    Real m_vtOIsGiven;
+    Real m_tnom;
+  end LP;
+  function ren
+    input MC ex;
+    input K con;
+    output LP intern;
+  algorithm
+    intern.m_vtOIsGiven := if (ex.VTO > -1e40) then 1 else 0;
+    intern.m_vt0 := if (ex.VTO > -1e40) then ex.VTO else 0;
+    intern.m_tnom := if (ex.TNOM > -1e40) then ex.TNOM + 273.15 else 300.15;
+  end ren;
+end WS5P;
+model WS5
+  parameter WS5P.MC modelcard(VTO = 0.7) annotation(Evaluate = true);
+  constant WS5P.K C;
+  final parameter WS5P.LP p = WS5P.ren(modelcard, C) annotation(Evaluate = true);
+  Real y = p.m_vt0 * time;
+end WS5;
+//// model: WS6
+package WS6P
+  record K
+    constant Real CtoK = 273.15;
+  end K;
+  record MC
+    parameter Real VTO = -1e40;
+    parameter Real TNOM = -1e40;
+  end MC;
+  record LP
+    Real m_vt0;
+    Real m_vtOIsGiven;
+    Real m_tnom;
+  end LP;
+  function ren
+    input MC ex;
+
+    output LP intern;
+  algorithm
+    intern.m_vtOIsGiven := if (ex.VTO > -1e40) then 1 else 0;
+    intern.m_vt0 := if (ex.VTO > -1e40) then ex.VTO else 0;
+    intern.m_tnom := if (ex.TNOM > -1e40) then ex.TNOM + K.CtoK else 300.15;
+  end ren;
+end WS6P;
+model WS6
+  parameter WS6P.MC modelcard(VTO = 0.7) annotation(Evaluate = true);
+  constant WS6P.K C;
+  final parameter WS6P.LP p = WS6P.ren(modelcard) annotation(Evaluate = true);
+  Real y = p.m_vt0 * time;
+end WS6;
+//// model: WS7
+package WS7P
+  record K
+    constant Real CtoK = 273.15;
+  end K;
+  record MC
+    parameter Real VTO = -1e40;
+    parameter Real TNOM = -1e40;
+  end MC;
+  record LP
+    Real m_vt0;
+    Real m_vtOIsGiven;
+    Real m_tnom;
+  end LP;
+  function ren
+    input MC ex;
+
+    output LP intern;
+  algorithm
+    intern.m_vtOIsGiven := if (ex.VTO > -1e40) then 1 else 0;
+    intern.m_vt0 := if (ex.VTO > -1e40) then ex.VTO else 0;
+    intern.m_tnom := if (ex.TNOM > -1e40) then ex.TNOM + 273.15 else 300.15;
+  end ren;
+end WS7P;
+model WS7
+  parameter WS7P.MC modelcard(VTO = 0.7) annotation(Evaluate = true);
+  constant WS7P.K C;
+  final parameter WS7P.LP p = WS7P.ren(modelcard) annotation(Evaluate = true);
+  Real y = p.m_vt0 * time;
+end WS7;
+//// model: WS8
+package WS8P
+  record MC
+    parameter Real RB = 0;
+    parameter Real RC = 1;
+  end MC;
+  record LP
+    Real rb(start = 0.0);
+    Real rc(start = 0.0);
+  end LP;
+  function ren
+    input MC ex;
+    output LP r;
+  algorithm
+    r.rb := ex.RB;
+    r.rc := ex.RC;
+  end ren;
+end WS8P;
+model WS8
+  parameter WS8P.MC modelcard annotation(Evaluate = true);
+  final parameter WS8P.LP p = WS8P.ren(modelcard) annotation(Evaluate = true);
+  parameter Real x0 = 0.7;
+  final parameter WS8P.LP q = WS8P.ren(WS8P.MC(RB = x0)) annotation(Evaluate = true);
+  Real e = p.rc * time;
+  Real g = q.rb * time;
+  Real d;
+  Real h;
+equation
+  d = p.rc * time;
+  h = q.rb * time;
+end WS8;
+//// model: WS9
+package WS9P
+  record LP
+    Real a(start = 0.0);
+    Real b(start = 0.0);
+  end LP;
+  function ren
+    input Real x;
+    output LP r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end ren;
+end WS9P;
+model WS9
+  parameter Real x0 = 0.7;
+  final parameter WS9P.LP p = WS9P.ren(x0) annotation(Evaluate = true);
+  Real y = p.a * time;
+end WS9;
+//// model: WS10
+package WS10P
+  record MC
+    parameter Real RB = 0;
+    parameter Real RC = 1;
+  end MC;
+  record LP
+    Real rb;
+    Real rc;
+  end LP;
+  function ren
+    input MC ex;
+    output LP r;
+  algorithm
+    r.rb := ex.RB;
+    r.rc := ex.RC;
+  end ren;
+end WS10P;
+model WS10
+  parameter WS10P.MC modelcard annotation(Evaluate = true);
+  final parameter WS10P.LP p = WS10P.ren(modelcard) annotation(Evaluate = true);
+  parameter Real x0 = 0.7;
+  final parameter WS10P.LP q = WS10P.ren(WS10P.MC(RB = x0)) annotation(Evaluate = true);
+  Real e = p.rc * time;
+  Real g = q.rb * time;
+  Real d;
+  Real h;
+equation
+  d = p.rc * time;
+  h = q.rb * time;
+end WS10;
+//// model: WS11
+package WS11P
+  record MC
+    parameter Real RB = 0;
+    parameter Real RC = 1;
+  end MC;
+  record LP
+    Real rb(start = 0.0);
+    Real rc(start = 0.0);
+  end LP;
+  function ren
+    input MC ex;
+    output LP r;
+  algorithm
+    r.rb := ex.RB;
+    r.rc := ex.RC;
+  end ren;
+  function ren2
+    input LP lp;
+    output LP r;
+  algorithm
+    r := lp;
+  end ren2;
+end WS11P;
+model WS11
+  parameter WS11P.MC modelcard annotation(Evaluate = true);
+  final parameter WS11P.LP p = WS11P.ren(modelcard) annotation(Evaluate = true);
+  final parameter WS11P.LP p1 = WS11P.ren2(p);
+  parameter Real x0 = 0.7;
+  final parameter WS11P.LP q = WS11P.ren(WS11P.MC(RB = x0)) annotation(Evaluate = true);
+  Real a, b, c, d;
+equation
+  a * p.rb = time;
+  b * p1.rc = time;
+  c * q.rb = time;
+  d = p.rc * time;
+end WS11;
+//// model: WS12
+package WS12P
+  record MC
+    parameter Real VTO = -1e40;
+    parameter Real TNOM = -1e40;
+  end MC;
+  record LP
+    Real a;
+    Real b;
+  end LP;
+  function ren
+    input MC ex;
+    output LP r;
+  algorithm
+    r.a := ex.VTO;
+    r.b := ex.TNOM;
+  end ren;
+  function g
+    input MC ex;
+    input Real t;
+    output Real y;
+  algorithm
+    y := ex.VTO * t;
+  end g;
+end WS12P;
+model WS12
+  parameter WS12P.MC mc(VTO = 0.7);
+  final parameter WS12P.LP p = WS12P.ren(mc) annotation(Evaluate = true);
+  Real y = WS12P.g(mc, time);
+  Real z = p.a * time;
+end WS12;
+//// model: WS13
+package WS13P
+  record MC
+    parameter Real VTO = -1e40;
+    parameter Real TNOM = -1e40;
+  end MC;
+  record LP
+    Real a;
+    Real b;
+  end LP;
+  function ren
+    input MC ex;
+    output LP r;
+  algorithm
+    r.a := ex.VTO;
+    r.b := ex.TNOM;
+  end ren;
+  model M
+    parameter MC modelcard annotation(Evaluate = true);
+    final parameter LP p = ren(modelcard) annotation(Evaluate = true);
+    Real z = p.a * time;
+  end M;
+end WS13P;
+model WS13
+  parameter WS13P.MC MP(VTO = 0.7);
+  WS13P.M m1(modelcard = MP);
+  WS13P.M m2(modelcard(VTO = 0.5));
+end WS13;
+//// model: WS14
+package WS14P
+  record R
+    Real a;
+    Integer n;
+    Boolean b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.n := 2;
+    r.b := false;
+  end f;
+  function g
+    input R r;
+    input Real t;
+    output Real y;
+  algorithm
+    y := r.a * t + r.n;
+  end g;
+end WS14P;
+model WS14
+  parameter WS14P.R r1 = WS14P.f(3) annotation(Evaluate = true);
+  final parameter WS14P.R r2 = WS14P.f(4);
+  parameter WS14P.R r3(a = 5, n = 1, b = true) annotation(Evaluate = true);
+  Real y1 = WS14P.g(r1, time);
+  Real y2 = WS14P.g(r2, time);
+  Real y3 = WS14P.g(r3, time);
+end WS14;
+//// model: WS15
+package WS15P
+  record LP
+    Real a;
+    Real b;
+  end LP;
+  function ren
+    input Real x;
+    output LP r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end ren;
+end WS15P;
+model WS15
+  parameter Real x0 = 0.7;
+  final parameter WS15P.LP p = WS15P.ren(x0) annotation(Evaluate = true);
+  Real y = p.a * time;
+end WS15;
+//// model: WS16
+package WS16P
+  record LP
+    Real a;
+    Real b;
+  end LP;
+  function ren
+    input Real x;
+    output LP r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end ren;
+end WS16P;
+model WS16
+  parameter Real x0 = 0.7;
+  final parameter WS16P.LP p = WS16P.ren(x0);
+  Real y = p.a * time;
+end WS16;

@@ -7205,4 +7205,20 @@ YMC_TEST(flatten_constant_record_reference_literal) {
                            "  final parameter Real p.b = 1.4;\n  Real y = p.a * time;\nend CRLU1;\n"));
 }
 
+YMC_TEST(flatten_record_parameter_whole_evaluation) {
+  // 整个记录参数作实参的编译期求值：Evaluate = true 的 final 记录 `p = ren(mc)`，ren 体里元组赋值给记录字段、死的 if 语句被删；
+  // p 的字段只有带 start 的 `a` 成结构参数（引用处代入），mc 的字段不 final。期望 = omc 1.25.0 实跑（2026-10-10，探针 ws-ut）。
+  YMC_CHECK_EQ(flatten_src("package WSU1P\n  record MC\n    parameter Real VTO = -1e40;\n    parameter Real TNOM = -1e40;\n"
+                           "  end MC;\n  record LP\n    Real a(start = 0.0);\n    Real b;\n  end LP;\n  function g2\n"
+                           "    input Real x;\n    output Real p;\n    output Real q;\n  algorithm\n    p := x;\n"
+                           "    q := 2 * x;\n  end g2;\n  function ren\n    input MC ex;\n    output LP r;\n  algorithm\n"
+                           "    (r.a, r.b) := g2(ex.VTO);\n    if false then\n      r.b := 0;\n    end if;\n  end ren;\n"
+                           "end WSU1P;\nmodel WSU1\n  parameter WSU1P.MC mc(VTO = 0.7);\n"
+                           "  final parameter WSU1P.LP p = WSU1P.ren(mc) annotation(Evaluate = true);\n"
+                           "  Real y = p.a * time + p.b;\nend WSU1;\n"),
+               std::string("class WSU1\n  parameter Real mc.VTO = 0.7;\n  parameter Real mc.TNOM = -1e40;\n"
+                           "  final parameter Real p.a(start = 0.0) = 0.7;\n  final parameter Real p.b = 1.4;\n"
+                           "  Real y = 0.7 * time + p.b;\nend WSU1;\n"));
+}
+
 YMC_TEST_MAIN

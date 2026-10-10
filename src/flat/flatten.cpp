@@ -163,6 +163,11 @@ struct ModCtx {
   // 外层某个组件带 `annotation(Evaluate = true)`：子树里的参数同样当结构参数（updateImplicitVariability 往下传的
   // parentEval，NFInst.mo:3934-3936；Structural.isStructuralComponent 的 `compEval or parentEval`，NFStructural.mo:67）。
   bool eval_parent = false;
+  // eval_parent 来自带整体绑定的记录（构造 / 函数调用求值后拆到字段、构造修饰、记录数组的整体绑定）：omc 实例化期字段自己的绑定
+  // 已被整体绑定盖掉，isStructuralComponent 只剩 start 属性可当绑定（NFStructural.mo:68-69、:80-88 v1.25.0）→ 只有带 start
+  // 的字段才是结构参数（EG 网格探针：`parameter R r = R(3)` / `= f(3) annotation(Evaluate = true)` 下 `Real a(start = 1)` →
+  // final 且引用处代入，`Real a = 1` / `Real a` 照旧不是；修饰给值的 `r(a = 3)` 不受此限，VO 探针 R21 / R22）。
+  bool eval_start_only = false;
   // 本层记录实例的整体绑定的来历（拆出的字段记进 param_info_，见 key_not_fixed）：0 没有；1 自己的（书写 / 修饰分发来的）；
   // 2 从外层记录的整体绑定拆来的（omc 里本层记录没有绑定，绑定在更上层）；3 其它（if 选支、记录数组的元素…未细分）。
   std::uint8_t rec_bind = 0;
@@ -232,6 +237,7 @@ class Flattener {
     // 随后按 SimplifyModel 折叠。
     evaluate_stream_ops();
     apply_structural_params();   // 连接算子求值中结构化的参数：final + 属性折叠（NFEvalConstants 效果，受限）
+    apply_structural_records();  // 结构记录参数的整体引用代成记录式（见 struct_records_）
     simplify_model();            // cardinality 求值 + 方程 / 语句的收尾折叠
     if (oc_missing_branch_) set_unsupported("Connections.rooted without branch (warning)");
     // 某变量名同时出现在 removed_（另一同名声明条件为假被移除）：redeclare 一个 replaceable-conditional 成员的
@@ -319,6 +325,62 @@ class Flattener {
     }
   }
 
+  // 结构记录参数（见发射处 struct_records_）的整体引用（式子里的 cref `r1`、`mp.p`）原地换成记录式 `R(3.0, 2, false)`——值是绑定
+  // 求得的记录值、照默认构造函数的输入序；名字是值的记录类型：绑定是函数调用时取函数的输出记录类（MSL Spice3 `final parameter
+  // Mos1.Mos1ModelLineParams p = Mos1.mos1RenameParameters(…)`，输出 `Mos.MosModelLineParams intern` → 打
+  // `Mos.MosModelLineParams(…)`；同 record_literal_call），否则组件的记录类。只扫收尾前已有的结点（记录式新加的不再看）。拼不出
+  //（字段值形态不认）→ SKIP。
+  void apply_structural_records() {
+    if (struct_records_.empty() || result_.unsupported) return;
+    const std::uint32_t n = static_cast<std::uint32_t>(result_.model.exprs.exprs.size());
+    for (std::uint32_t i = 0; i < n; ++i) {
+      const Expr& e = result_.model.exprs[Id<Expr>::from_index(i)];
+      if (e.kind != ExprKind::Cref || e.cref.resolved_node == kFnLocal || e.ty.kind != TypeKind::Complex || e.ty.is_array())
+        continue;
+      const std::string key = expr_cref_key(e.cref);
+      const auto it = struct_records_.find(key);
+      Id<Expr> lit;
+      if (it != struct_records_.end()) {
+        const StructRecord sr = it->second;   // 拷贝（record_literal 往 arena 添，不持 map 里的引用）
+        lit = sr.call.is_valid() ? record_literal_call(I_.absyn.exps[sr.call], sr.scope, sr.val) : Id<Expr>{};
+        if (!lit.is_valid() && !result_.unsupported) lit = record_literal(sr.rec, sr.val);
+      } else if (record_marks_.count(key)) {
+        // 被结构语境整体读过的记录参数（见 mark_record）：值取各字段压平后的值，记录式名取组件的记录类（SP 探针 SPV
+        // `g(mc, time)` → `g(SPVP.MC(0.7, -1e40), time)`）。
+        lit = marked_record_literal(e.cref);
+      } else {
+        continue;
+      }
+      if (!lit.is_valid()) {
+        set_unsupported("structural record reference");
+        return;
+      }
+      const Expr copy = result_.model.exprs[lit];   // 拷贝：arena 扩容后再写回
+      result_.model.exprs[Id<Expr>::from_index(i)] = copy;
+    }
+  }
+
+  // record_marks_ 里的记录参数引用 c → 记录式：各字段（record_fields_ex 序）取压平后的值（flat_param_value），名取组件的记录类。
+  // 拼不出 → invalid（调用方 SKIP）。
+  Id<Expr> marked_record_literal(const ExprCref& c) {
+    if (c.resolved_node == Id<INode>::kInvalid || c.resolved_node == kFnLocal) return {};
+    const NodeId n = NodeId::from_index(c.resolved_node);
+    if (!is_comp_node(n)) return {};
+    const NodeId cls = I_.comps[I_.nodes[n].comp].class_inst;
+    if (!is_class_inst(cls)) return {};
+    const Id<SElement> rec = I_.nodes[cls].def;
+    std::vector<RecField> rfs;
+    if (!rec.is_valid() || !record_fields_ex(rec, scode_scope_of(cls), rfs, false, 0, /*any_base=*/true)) return {};
+    CVal v = CVal::Rec();
+    for (const RecField& rf : rfs) {
+      ExprCref fc = c;   // 拷贝
+      fc.parts.push_back({I_.scode.elems[rf.f].name, {}});
+      const std::optional<CVal> fv = flat_param_value(expr_cref_key(fc), 0);
+      if (!fv || fv->k == CVal::K::Record || is_arr(*fv)) return {};
+      v.set_field(I_.scode.elems[rf.f].name, *fv);
+    }
+    return record_literal(rec, v);
+  }
   // NFVerifyModel.checkDiscreteReal :345-390：discrete Real 变量必须出现在某个 when 体（含其中嵌套 if / for）里等式或
   // 赋值的左侧，否则 DISCRETE_REAL_UNDEFINED 报错（Discrete2 / DiscreteDeclRecord / DiscreteDeclType）。按去下标的路径比。
   void check_discrete_reals() {
@@ -1161,6 +1223,7 @@ class Flattener {
             achild.in_conn = ctx.in_conn || r == SRestriction::Connector || conn_alias || r_exp;
             achild.flow_inherited = ctx.flow_inherited;   // 复合数组上的 flow 前缀仍在上方守卫处 SKIP
             achild.eval_parent = ctx.eval_parent || evaluate_true(I_.comps[cid].def);
+            achild.eval_start_only = ctx.eval_start_only || wraw.is_valid();
             achild.rec_bind = wraw.is_valid() ? 3 : 0;   // omc 查整个数组绑定，逐元素拆开的对不上 → 未细分
             achild.in_record = ctx.in_record || r == SRestriction::Record;
             // 数组各元素共用同一组件节点（present 标记按节点，YmcExpNode1 探针）；expandable 组件的成员重起链。
@@ -1238,6 +1301,9 @@ class Flattener {
         // 字段（CevalFuncRecord1/2）。组件自己 / 外来修饰带字段修饰的、短类修饰（`record S = R(a(start = 1))`、
         // `R(redeclare MyReal x)`，RedeclareRecordComponent1）不折——这些形态与折叠的组合没有核实过，照旧走下面的通路。
         Id<SMod> folded_mod;           // 记录函数绑定求值后合成的字段修饰（见下）
+        std::optional<CVal> folded_val;   // 与 folded_mod 同源的记录值（结构记录的整体引用代成记录式用，见 struct_records_）
+        Id<Exp> folded_call;              // 求得 folded_val 的绑定调用（记录式的名字取它的输出记录类）
+        ScodeScope folded_scope;
         std::uint8_t folded_kind = 1;
         bool final_move_ok = false;    // final 记录：内联不了、tryEvalExp 也求不出 → 照下面挪成方程（R8 → R13）
         const char* defer_inline = nullptr;   // final 记录的调用绑定能强制内联：交给下面的 forced_inline_mod，不成时的 SKIP 原因
@@ -1274,6 +1340,9 @@ class Flattener {
               folded_mod = record_value_mod(ci, *rv);
               if (!folded_mod.is_valid()) { set_unsupported("record function fold field"); continue; }
               folded_kind = wkind;
+              folded_val = *rv;
+              folded_call = wb;
+              folded_scope = scode_scope_of(ws);
             }
           }
           // 参数实参的记录绑定（NFFlatten.flattenComplexComponent :961-989 v1.25.0；rp62r SPEC R5-R8），绑定顶层是用户函数调用
@@ -1372,6 +1441,11 @@ class Flattener {
               folded_mod = record_value_mod(ci, *rv);
               if (!folded_mod.is_valid()) { set_unsupported("record function fold field"); continue; }
               folded_kind = wkind;
+              folded_val = *rv;
+              if (wbk == ExpKind::Call) {
+                folded_call = wb;
+                folded_scope = wsc;
+              }
             }
           }
         }
@@ -1396,6 +1470,48 @@ class Flattener {
           whole_raw = I_.comps[cid].binding.raw_exp;
           whole_scope = bind_lex(cid, inst_node);
         }
+        // Evaluate = true 的记录参数（自己的，或外层的且本层不受整体绑定所限）、整体绑定还没求值（记录引用 `modelcard =
+        // MPmos`、参数实参的构造 / 函数调用…）：记录本身是结构参数（isStructuralComponent：有绑定、固定），压平时整体绑定被求值
+        // 成记录值、拆成字段字面量（flattenComplexComponent :956-961 v1.25.0；SP 探针 SPW `m1(modelcard = MP)` →
+        // `m1.modelcard.VTO = 0.7`；ea-e8 E81 / scodeinst DimUnknown12 `pr = F(v = k * {1, 2})` → 字段字面量、k final；
+        // CevalFuncRecord5 `r2 = f(r1)`），绑定里读到的参数照常标结构（记录引用只标记录节点，见 record_param_value）；字段只有
+        // 带 start 的成结构参数（见 eval_start_only）。整体绑定盖过字段修饰（声明的 `pr(v = {0, 0})`）。求不出 → SKIP（omc
+        // 求值失败报错，CevalRecord8）。expandable 链里的、带短类修饰的未核实，不走这里。
+        if (!folded_mod.is_valid() && whole_raw.is_valid() && r == SRestriction::Record && pp_self.empty() &&
+            I_.comps[cid].derived_mods.empty() && !ctx.unbound_fields &&
+            var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Param &&
+            (evaluate_true(I_.comps[cid].def) ||
+             (ctx.eval_parent && !ctx.eval_start_only &&
+              evaluate_annotation(I_.comps[cid].def) != std::optional<bool>(false)))) {
+          std::optional<CVal> rv;
+          {
+            // 绑定在书写处的帧里求（外来修饰写在外层实例：`g(pr = F(v = k * {1, 2}))` 的 k 在 E81 那一帧，读到即标结构参数；同
+            // frame_value 求修饰绑定的做法）。
+            cur_psubs_ = psubs;
+            const EvalRoot root(*this, "@rec");
+            const int efi = frame_of(whole_scope);
+            const int saved_frame = ceval_frame_;
+            if (efi >= 0) ceval_frame_ = efi;
+            const Frame* ef = efi >= 0 ? &frames_[static_cast<std::size_t>(efi)] : nullptr;
+            const std::vector<Symbol> no_prefix;   // CevalCtx 存的是指针：不能传临时量
+            CevalCtx guard(*this, ef ? ef->prefix : no_prefix, ef ? ef->psubs : PSubs{});
+            rv = eval_scode(whole_raw, scode_scope_of(whole_scope), 0, /*allow_param=*/true);
+            ceval_frame_ = saved_frame;
+          }
+          if (result_.unsupported) continue;
+          if (!rv || rv->k != CVal::K::Record) { set_unsupported("structural record binding not evaluated"); continue; }
+          folded_mod = record_value_mod(ci, *rv);
+          if (!folded_mod.is_valid()) { set_unsupported("record function fold field"); continue; }
+          folded_kind = whole_kind;
+          folded_val = *rv;
+          if (I_.absyn.exps[whole_raw].kind == ExpKind::Call) {
+            folded_call = whole_raw;
+            folded_scope = scode_scope_of(whole_scope);
+          }
+        }
+        // 有整体绑定（不论随后怎么拆：求值的字段修饰、构造修饰、记录引用 `modelcard = MPmos`、挪成方程）：字段自己的绑定在 omc 里
+        // 被盖掉（见 ModCtx::eval_start_only）。
+        const bool had_whole = whole_raw.is_valid() || folded_mod.is_valid() || ctx.unbound_fields;
         if (folded_mod.is_valid()) {   // 记录函数已求值（见上）：字段修饰现成，不再拆整体绑定
           whole_raw = {};
           whole_kind = folded_kind;
@@ -1467,9 +1583,19 @@ class Flattener {
         child.flow_inherited = ctx.flow_inherited || flow_rec;
         child.unbound_fields = ctx.unbound_fields || moved_binding;
         child.eval_parent = ctx.eval_parent || evaluate_true(I_.comps[cid].def);   // EV 探针 ev1：`A a annotation(Evaluate = true)`
-        // 记录函数折叠的字段 omc 不当结构参数（VO 探针 R22：`parameter R r = R(3) annotation(Evaluate = true)` → `r.a = 3` 不
-        // final、引用处不代入；此前直发字段的旧路同样不看 Evaluate）。
-        if (folded_mod.is_valid()) child.eval_parent = false;
+        // 整体绑定的记录（函数 / 构造求值后的字段修饰、构造修饰）：字段只有带 start 的才是结构参数（见 eval_start_only；VO 探针
+        // R22 的 `parameter R r = R(3)`，R 的字段 `parameter Integer a = 1` 没有 start → `r.a = 3` 不 final、引用处不代入）。
+        child.eval_start_only = ctx.eval_start_only || had_whole;
+        // 记录参数本身是结构参数（自己 Evaluate = true，或外层的且本层不受整体绑定所限；有整体绑定、已求值成记录值——
+        // isStructuralComponent 里整体绑定算绑定，NFStructural.mo:67-95 v1.25.0）：式子里对它的整体引用在收尾代成记录式
+        //（NFEvalConstants.evaluateExpTraverser 对结构参数的 cref 求值，:195-210；WR 探针 WR1 `g(r1, time)` → `g(WR1P.R(3.0, 2,
+        // false), time)`、只带字段修饰没有整体绑定的 r3 照留；MSL Spice3 的 `mosCalcNoBypassCode(m, m_type, c2, p, …)` 里 m / p）。
+        // 只收普通记录（operator record 的记录式打声明类型，另一条路）。
+        if (folded_val && I_.scode.elems[cdef].restriction == SRestriction::Record &&
+            var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Param &&
+            (evaluate_true(I_.comps[cid].def) ||
+             (ctx.eval_parent && !ctx.eval_start_only && evaluate_annotation(I_.comps[cid].def) != std::optional<bool>(false))))
+          struct_records_[int_key(name, psubs)] = StructRecord{cdef, *folded_val, folded_call, folded_scope};
         child.rec_bind = ctor_mod.is_valid() ? whole_kind : 0;
         child.in_record = ctx.in_record || r == SRestriction::Record;
         if (!r_exp) child.pp_chain = pp_self;   // expandable 组件的成员重起链（其直属成员由 exp_class 置 pp）
@@ -4109,6 +4235,21 @@ class Flattener {
     result_.model.variables.push_back(std::move(v));
   }
 
+  // 组件自己有 start 修饰（外来 / extends / 声明 / 约束，同 start_as_binding 的来源；类型定义带的不算）。见 eval_start_only。
+  bool comp_has_start(CompId cid, const std::vector<ModSource>& mods) {
+    const Symbol start = in_.intern("start");
+    auto has = [&](Id<SMod> m) {
+      if (!m.is_valid()) return false;
+      for (const SSubMod& sm : I_.scode.mods[m].subs)
+        if (sm.ident == start && I_.scode.mods[sm.mod].binding.is_valid()) return true;
+      return false;
+    };
+    for (const ModSource& m : mods) if (has(m.mod)) return true;
+    for (Id<SMod> em : I_.comps[cid].extends_mods) if (has(em)) return true;
+    if (has(I_.scode.elems[I_.comps[cid].def].mod)) return true;
+    for (Id<SMod> cc : I_.comps[cid].cc_mods) if (has(cc)) return true;
+    return false;
+  }
   // 无绑定的固定参数拿 start 当绑定（updateParameterBinding，NFInst.mo:2351-2387 v1.25.0；instComponentDef 在合并完修饰后
   // 对无绑定的内建类型参数调用，:2014-2017）：组件自己的 start 修饰（外来 > extends > 声明 > 约束，优先级最高的那个）的式子
   // 当绑定，书写处照旧；类型定义带的 start 不算（hasTypeOrigin，US 探针 s111）；`fixed = false` 不做（Component.isFixed），
@@ -4328,7 +4469,9 @@ class Flattener {
     // 外层组件的 Evaluate = true 同样算（ctx.eval_parent），本参数自己写了 Evaluate = false 的除外；变率看下沉后的（记录字段）。
     const std::optional<bool> own_eval = evaluate_annotation(I_.comps[cid].def);
     const bool eval_true = var_min(var_floor, I_.comps[cid].attributes.variability) == SVariability::Param &&
-                           (own_eval == std::optional<bool>(true) || (ctx.eval_parent && own_eval != std::optional<bool>(false)));
+                           (own_eval == std::optional<bool>(true) ||
+                            (ctx.eval_parent && own_eval != std::optional<bool>(false) &&
+                             (!ctx.eval_start_only || comp_has_start(cid, mod_subs))));
     // 先算绑定/属性（会往 model.exprs add），再取组件字段——不跨 add 持组件引用（arena 纪律）。
     const Type cty = I_.comps[cid].ty;   // 拷贝，跨 add 稳定
     // 结构 final（ceval3）：本参数被某 fixed 用到 → final parameter + 绑定求值成字面量。
@@ -4790,7 +4933,8 @@ class Flattener {
     // 选定之后的 eval_arr 一段。
     const bool eval_arr = var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Param &&
                           (evaluate_true(I_.comps[cid].def) ||
-                           (ctx.eval_parent && evaluate_annotation(I_.comps[cid].def) != std::optional<bool>(false)));
+                           (ctx.eval_parent && evaluate_annotation(I_.comps[cid].def) != std::optional<bool>(false) &&
+                            (!ctx.eval_start_only || comp_has_start(cid, mod_subs))));
     // 维度：组件维在前、类型维在后（R13 §3）。字面量 + 参数/常量/size()/算术求值。
     const NodeId dlex = decl_lex(cid, enclosing);   // 维写在声明里：在声明所在类的作用域求
     const ScodeScope dscope = scode_scope_of(dlex);
@@ -7206,6 +7350,8 @@ class Flattener {
                 return kv;
             }
           }
+          if (c.parts.size() == 1 && c.parts[0].subscripts.empty())
+            if (std::optional<CVal> rv = record_param_value(c, scope, depth, allow_param)) return rv;
           const FrameHit fh = frame_value(ceval_frame_, c, allow_param, depth, used, &scope);
           if (fh.kind == FrameHit::Value) return fh.v;
           if (fh.kind == FrameHit::Fail) return std::nullopt;
@@ -9798,6 +9944,13 @@ class Flattener {
 
   // 函数体语句：赋值（目标须是输出 / 局部，可带下标）、if、for（显式范围）、while、return、break、assert（无级别）。
   // 其余 → unsupported（SKIP）。
+  // collect_fn_stmt 交回 invalid 时可能是"换成了一串语句"（常量条件的 if 换成选中支的体）：那串放在 fn_spliced_，调用方紧接着
+  // 取走（take_spliced）。
+  std::vector<Id<FlatStatement>> fn_spliced_;
+  void take_spliced(std::vector<Id<FlatStatement>>& out) {
+    out.insert(out.end(), fn_spliced_.begin(), fn_spliced_.end());
+    fn_spliced_.clear();
+  }
   Id<FlatStatement> collect_fn_stmt(Id<SStatement> sid) {
     const SStatement& st = I_.scode.stmts[sid];   // SCode 只读（flatten 期不增），引用稳定
     FlatStatement fs;
@@ -9807,7 +9960,8 @@ class Flattener {
       for (Id<SStatement> b : in) {
         const Id<FlatStatement> s = collect_fn_stmt(b);
         if (result_.unsupported) return false;
-        if (s.is_valid()) out.push_back(s);   // invalid = 删去的语句（实参全是常量的无返回值调用）
+        if (s.is_valid()) out.push_back(s);   // invalid = 删去的语句（实参全是常量的无返回值调用），或换成了一串（见 fn_spliced_）
+        else take_spliced(out);
       }
       return true;
     };
@@ -9830,9 +9984,20 @@ class Flattener {
             bool ok = false;
             if (x.kind == ExpKind::CrefExp) {
               const Cref& tc = I_.absyn.crefs[x.cref];
-              ok = tc.parts.size() == 1 && func_params_.count(tc.parts[0].name.id) && !fn_inputs_.count(tc.parts[0].name.id);
+              const std::uint32_t head = tc.parts[0].name.id;
+              // 同单个赋值的目标：输出 / 局部，或记录输出 / 局部的字段（MSL Spice3 的 `(out_c.m_tCj, …) := Spice3.Internal.
+              // Functions.junctionParamDepTempSPICE3(…)`，TF 探针）。
+              ok = (tc.parts.size() == 1 && func_params_.count(head) && !fn_inputs_.count(head)) ||
+                   (tc.parts.size() == 2 && fn_records_.count(head) && !fn_inputs_.count(head) &&
+                    tc.parts[0].subscripts.empty() && tc.parts[1].subscripts.empty());
             }
-            if (!ok) { set_unsupported("function assignment target"); return {}; }
+            if (!ok) {
+              if (!result_.unsupported) {
+                set_unsupported("function assignment target");
+                if (x.kind == ExpKind::CrefExp) result_.unsupported_detail = cref_names(I_.absyn.crefs[x.cref]);   // 子原因
+              }
+              return {};
+            }
             lhs[i] = inst_exp(elems[i], Inst::empty_node(), {});
             if (result_.unsupported) return {};
           }
@@ -9892,7 +10057,13 @@ class Flattener {
             target_ok = fn_records_.count(head) && !fn_inputs_.count(head) && tc.parts[0].subscripts.empty() &&
                         tc.parts[1].subscripts.empty();
         }
-        if (!target_ok) { set_unsupported("function assignment target"); return {}; }   // 元组 / 输入 / 非局部目标
+        if (!target_ok) {   // 元组 / 输入 / 非局部目标
+          if (!result_.unsupported) {
+            set_unsupported("function assignment target");
+            if (le.kind == ExpKind::CrefExp) result_.unsupported_detail = cref_names(I_.absyn.crefs[le.cref]);   // 子原因
+          }
+          return {};
+        }
         const Id<Expr> lhs = inst_exp(st.a, Inst::empty_node(), {});
         if (result_.unsupported) return {};
         const Type lty = result_.model.exprs[lhs].ty;   // 拷贝：fn_exp 会往 arena add（不跨 add 持引用）
@@ -9911,16 +10082,39 @@ class Flattener {
         if (result_.unsupported) return {};
         break;
       }
-      case SStmtKind::If:
+      case SStmtKind::If: {
+        // 条件化简成字面量的支（simplifyIfStmtBranches，NFSimplifyModel.mo:556-600 v1.25.0；函数体同样经它化简）：false 的支
+        // 删去；true 的支——前面没有留下的支时整条 if 换成它的体，否则它成为最后的 else、其后的支丢掉；else 当条件 true 的末支
+        // 同理，什么都不剩 → 整条删去（IFS 探针；MSL Spice3 的 `elseif (Spice3.Internal.SpiceRoot.initJunctionVoltagesRevised())
+        // then` → 删去）。各支照样都先定型（omc 定型在化简之前，死支里的错照报），留下的才进结果。
         fs.kind = FlatStmtKind::If;
+        std::vector<FlatStmtBranch> all;
         for (const SStmtBranch& br : st.branches) {
           FlatStmtBranch fb;
           fb.cond = cond(br.cond);
           if (result_.unsupported || !body(br.body, fb.body)) return {};
+          all.push_back(std::move(fb));
+        }
+        std::vector<Id<FlatStatement>> else_body;
+        if (!body(st.else_body, else_body)) return {};
+        bool closed = false;   // 遇到了 true 的支（成了 else）
+        for (FlatStmtBranch& fb : all) {
+          const Expr& ce = result_.model.exprs[simplify_expr(fb.cond)];
+          if (ce.kind == ExprKind::BoolLit && !ce.bval) continue;
+          if (ce.kind == ExprKind::BoolLit && ce.bval) {
+            if (fs.branches.empty()) { fn_spliced_ = std::move(fb.body); return {}; }
+            fs.else_body = std::move(fb.body);
+            closed = true;
+            break;
+          }
           fs.branches.push_back(std::move(fb));
         }
-        if (!body(st.else_body, fs.else_body)) return {};
+        if (!closed) {
+          if (fs.branches.empty()) { fn_spliced_ = std::move(else_body); return {}; }
+          fs.else_body = std::move(else_body);
+        }
         break;
+      }
       case SStmtKind::For: {
         Id<Exp> ra = st.a;
         if (!ra.is_valid()) {
@@ -10545,7 +10739,17 @@ class Flattener {
       const std::uint32_t t = record_def_of(x.b);
       return t == record_def_of(x.c) ? t : Id<SElement>::kInvalid;
     }
-    // 返回记录的调用（构造调用 / 用户函数）：类型带输出记录类的实例节点 → 其定义。
+    // 返回记录的调用（构造调用 / 用户函数）：类型带输出记录类的实例节点 → 其定义；函数体里没有类节点的（见 try_emit_user_call
+    // 的记录结果）→ 被调函数（已发射）首输出形参的记录类。
+    if (x.kind == ExprKind::Call && x.ty.kind == TypeKind::Complex && x.ty.complex_node == Id<INode>::kInvalid) {
+      for (const FlatFunction& f : result_.model.functions)
+        if (f.name == x.call_name) {
+          for (const FlatFuncParam& pr : f.params)
+            if (pr.direction == FlatDirection::Output) return pr.record_def;
+          break;
+        }
+      return Id<SElement>::kInvalid;
+    }
     if (x.kind == ExprKind::Call && x.ty.kind == TypeKind::Complex && x.ty.complex_node != Id<INode>::kInvalid) {
       const NodeId cn = NodeId::from_index(x.ty.complex_node);
       return I_.nodes.contains(cn) && !I_.nodes[cn].is_empty() ? I_.nodes[cn].def.raw : Id<SElement>::kInvalid;
@@ -10894,6 +11098,7 @@ class Flattener {
         const Id<FlatStatement> s = collect_fn_stmt(sid);
         if (result_.unsupported) return std::nullopt;
         if (s.is_valid()) body.push_back(s);
+        else take_spliced(body);
       }
     result_.model.functions[fi].body = std::move(body);
     result_.model.functions[fi].has_algorithm = sig.alg != nullptr;
@@ -11331,7 +11536,8 @@ class Flattener {
     for (std::size_t i = 0; i < inputs.size(); ++i) {
       // 记录形参：实参须是同一记录类的整体引用（构造调用等其余形态未做）；记录数组形参（`input Complex u[:]`，MSL QuasiStatic
       // quasiRMS）收同类记录数组的整体引用 / 数组字面量（RZ 探针）。
-      if (params[i].record_def != Id<SElement>::kInvalid && record_elem_def_of(args[i]) != params[i].record_def)
+      if (params[i].record_def != Id<SElement>::kInvalid && record_elem_def_of(args[i]) != params[i].record_def &&
+          !record_arg_plug(args[i], I_.scode.elems[sig.inputs[i]], fr->fscope))
         return fn_fail<Id<Expr>>("record argument form");
       // 外部对象形参：实参须是同一外部对象类型（ExtObjError：把 B 传给要 A 的形参，omc 报 "Type mismatch for positional
       // argument"）。
@@ -11398,9 +11604,14 @@ class Flattener {
       // 返回记录的调用（记录等式 `r = f(x)` / 记录赋值，RF1 探针）：类型取输出记录类的实例类节点（record_match /
       // 构造函数登记要节点）；没有实例节点 / 多输出 → SKIP。
       const std::uint32_t rd = params[inputs.size()].record_def;
-      const NodeId rn = rd == Id<SElement>::kInvalid ? NodeId{} : record_class_node(Id<SElement>::from_index(rd));
-      if (!rn.is_valid() || sig.outputs.size() > 1) return fn_fail<Id<Expr>>("record result");
-      rty.complex_node = rn.raw;
+      NodeId rn = rd == Id<SElement>::kInvalid ? NodeId{} : record_class_node(Id<SElement>::from_index(rd));
+      // 函数体里（`qm := mosCalcDEVqmeyer(…)`，输出记录类只在函数里用、模型里可能没有实例，MSL Spice3；RR 探针）：结果只拿来与
+      // 目标比记录类定义——有类节点（实例的或作用域树里的，record_type_node）就用它，没有就留空（record_def_of 按被调函数的输出
+      // 形参取记录类）。
+      if (!rn.is_valid() && fn_scope_ && rd != Id<SElement>::kInvalid) rn = record_type_node(Id<SElement>::from_index(rd));
+      if (sig.outputs.size() > 1 || (!rn.is_valid() && !(fn_scope_ && rd != Id<SElement>::kInvalid)))
+        return fn_fail<Id<Expr>>("record result");
+      if (rn.is_valid()) rty.complex_node = rn.raw;
     }
     // 调用处求输出维（NFCall.evaluateCallTypeDim :3061-3088）：维表达式里的输入换成实参再求值；buildParameterTree
     // 只放输入（局部不代换，:3104 TODO）→ 求不出的维留未知（与任何维相容，FuncUnknownDim3 `Real[n] result`）。
@@ -12280,42 +12491,71 @@ class Flattener {
   }
 
   // 单语句解释：赋值 / if-elseif-else / for / while / return / break。其余 → Fail（调用方 SKIP）。
+  // 赋值目标的形态（函数体求值）：标量 / 局部数组带下标（`x[i] :=`、`table[:, 1] :=`）/ 记录字段 `r.x`（不带下标）；不给输入
+  // 赋值（AssignInput1）。
+  bool exec_target_ok(const Cref& lc) const {
+    if (lc.parts.empty() || (lc.parts.size() != 1 && lc.parts.size() != 2)) return false;
+    const bool subscripted = lc.parts.size() == 1 && !lc.parts[0].subscripts.empty();
+    for (const CrefPart& p : lc.parts) if (!p.subscripts.empty() && !subscripted) return false;
+    return !(input_names_ && input_names_->count(lc.parts[0].name.id));
+  }
+  // 把值 v 赋给目标 lc（形态已由 exec_target_ok 核过）。
+  bool exec_assign_to(const Cref& lc, CVal v, const ScodeScope& fscope, int depth) {
+    // 目标声明成 Real（内建或派生自 Real 的短类型 `SI.Angle`）：Integer 值转 Real——omc 定型赋值时插 `/*Real*/(…)`，存的是
+    // Real（MSL symmetricOrientation 的 `orientation[1] := 0` 再取负是 -0.0，symmetricOrientationMatrix(2) 的 `o[2, 1]`，
+    // NZ2 探针）。
+    // 只在真有 Integer 叶时转（转型会另建数组：Real 值原样留着，`y := x` 与实参共用存储，见 watch_arrays 的别名监视）。
+    if (lc.parts.size() == 1 && cval_has_int(v) && fn_var_is_real(lc.parts[0].name, fscope))
+      if (std::optional<CVal> c = coerce_cval(v, {in_.intern("Real")})) v = std::move(*c);
+    if (lc.parts.size() == 1 && !lc.parts[0].subscripts.empty()) {
+      auto it = locals_->find(lc.parts[0].name.id);
+      if (it == locals_->end()) return false;
+      CVal target = it->second;   // 共享存储，cval_assign 写时复制
+      if (!cval_assign(target, lc.parts[0].subscripts, 0, v, fscope, depth)) return false;
+      (*locals_)[lc.parts[0].name.id] = std::move(target);
+      return true;
+    }
+    if (lc.parts.size() == 1) {
+      (*locals_)[lc.parts[0].name.id] = std::move(v);
+    } else {   // 记录字段赋值 `r.x := …`
+      CVal& rec = (*locals_)[lc.parts[0].name.id];
+      if (rec.k != CVal::K::Record) rec = CVal::Rec();
+      rec.set_field(lc.parts[1].name, std::move(v));
+    }
+    return true;
+  }
+
   Flow exec_stmt(Id<SStatement> sid, const ScodeScope& fscope, int depth) {
     const SStatement& st = I_.scode.stmts[sid];
     switch (st.kind) {
       case SStmtKind::Assign: {
+        // 元组赋值 `(a, r.x, ) := f(…)`（MSL Spice3 的 `(out_c.m_tCj, …) := Spice3.Internal.Functions.junctionParamDepTempSPICE3(
+        // …)`）：调用求值一次、各输出按声明序依次赋给各目标，空位跳过；目标照单个赋值的规则（TF 探针）。
+        if (is_tuple_target(st.a)) {
+          const std::vector<Id<Exp>> elems = I_.absyn.exps[st.a].args;   // 拷贝
+          for (Id<Exp> x : elems) {
+            const Exp& xe = I_.absyn.exps[x];
+            if (xe.kind == ExpKind::Tuple && xe.args.empty()) continue;   // 空位
+            if (xe.kind != ExpKind::CrefExp || !exec_target_ok(I_.absyn.crefs[xe.cref])) return Flow::Fail;
+          }
+          const Exp rhs = I_.absyn.exps[st.b];   // 拷贝
+          if (rhs.kind != ExpKind::Call) return Flow::Fail;
+          std::vector<CVal> outs;
+          if (!eval_user_call(rhs, fscope, depth + 1, true, &outs) || outs.size() < elems.size()) return Flow::Fail;
+          for (std::size_t i = 0; i < elems.size(); ++i) {
+            const Exp& xe = I_.absyn.exps[elems[i]];
+            if (xe.kind == ExpKind::Tuple && xe.args.empty()) continue;
+            if (!exec_assign_to(I_.absyn.crefs[xe.cref], outs[i], fscope, depth)) return Flow::Fail;
+          }
+          return Flow::Normal;
+        }
         const Exp& lhs = I_.absyn.exps[st.a];
         if (lhs.kind != ExpKind::CrefExp) return Flow::Fail;
         const Cref& lc = I_.absyn.crefs[lhs.cref];
-        if (lc.parts.empty() || (lc.parts.size() != 1 && lc.parts.size() != 2)) return Flow::Fail;   // 标量或记录字段 `r.x`
-        // 下标赋值只做单名局部数组（`x[i] :=`、`table[:, 1] :=`）；记录字段带下标未做。
-        const bool subscripted = lc.parts.size() == 1 && !lc.parts[0].subscripts.empty();
-        for (const CrefPart& p : lc.parts) if (!p.subscripts.empty() && !subscripted) return Flow::Fail;
-        if (input_names_ && input_names_->count(lc.parts[0].name.id)) return Flow::Fail;   // 给输入赋值 = 错误（AssignInput1）
+        if (!exec_target_ok(lc)) return Flow::Fail;
         std::optional<CVal> v = eval_scode(st.b, fscope, depth + 1, true);
         if (!v) return Flow::Fail;
-        // 目标声明成 Real（内建或派生自 Real 的短类型 `SI.Angle`）：Integer 值转 Real——omc 定型赋值时插 `/*Real*/(…)`，存的是
-        // Real（MSL symmetricOrientation 的 `orientation[1] := 0` 再取负是 -0.0，symmetricOrientationMatrix(2) 的 `o[2, 1]`，
-        // NZ2 探针）。
-        // 只在真有 Integer 叶时转（转型会另建数组：Real 值原样留着，`y := x` 与实参共用存储，见 watch_arrays 的别名监视）。
-        if (lc.parts.size() == 1 && cval_has_int(*v) && fn_var_is_real(lc.parts[0].name, fscope))
-          if (std::optional<CVal> c = coerce_cval(*v, {in_.intern("Real")})) v = std::move(c);
-        if (subscripted) {
-          auto it = locals_->find(lc.parts[0].name.id);
-          if (it == locals_->end()) return Flow::Fail;
-          CVal target = it->second;   // 共享存储，cval_assign 写时复制
-          if (!cval_assign(target, lc.parts[0].subscripts, 0, *v, fscope, depth)) return Flow::Fail;
-          (*locals_)[lc.parts[0].name.id] = std::move(target);
-          return Flow::Normal;
-        }
-        if (lc.parts.size() == 1) {
-          (*locals_)[lc.parts[0].name.id] = *v;
-        } else {   // 记录字段赋值 `r.x := …`
-          CVal& rec = (*locals_)[lc.parts[0].name.id];
-          if (rec.k != CVal::K::Record) rec = CVal::Rec();
-          rec.set_field(lc.parts[1].name, *v);
-        }
-        return Flow::Normal;
+        return exec_assign_to(lc, std::move(*v), fscope, depth) ? Flow::Normal : Flow::Fail;
       }
       case SStmtKind::If: {
         for (const SStmtBranch& br : st.branches) {   // if + elseif（保留列表）
@@ -12502,6 +12742,86 @@ class Flattener {
     std::vector<CVal> els;
     for (std::int64_t i = 0; i < dims[k]; ++i) els.push_back(cval_nest(flat, dims, k + 1, pos));
     return CVal::Arr(std::move(els));
+  }
+  // 本实例的整个记录参数 / 常量 `mc`（作函数实参 `ren(mc)`；MSL Spice3 `mos1RenameParameters(modelcard, C)` 的 modelcard）：
+  // 逐字段照多段名 `mc.f` 取已发射的值（const_lookup_val：字面量绑定、或顺绑定链求值；结构语境下各字段随之标结构参数——omc 的
+  // Structural.markExp 标的是整个组件，字段一起 final）拼成记录值。只收普通记录、非数组、无条件、字段是标量内建类型的；有字段
+  // 取不到 → nullopt（调用方照旧：frame_value 对记录参数 Fail）。SP 探针 SPN / SPK / SP9：`final parameter LP p = ren(mc)` →
+  // omc 求值成字段字面量（tryEvalExp），带 Evaluate = true 的连带 mc 各字段 final。
+  std::optional<CVal> record_param_value(const Cref& c, const ScodeScope& scope, int depth, bool allow_param) {
+    const Frame& F = frames_[static_cast<std::size_t>(ceval_frame_)];
+    const NodeId ln = find_local(lex_view(F.inst, &scope), c.parts[0].name);
+    if (!is_comp_node(ln)) return std::nullopt;
+    const CompId cid = I_.nodes[ln].comp;
+    const SElement& cel = I_.scode.elems[I_.comps[cid].def];
+    if (!cel.attr.dims.empty() || !cel.type.dims.empty() || cel.condition.is_valid()) return std::nullopt;
+    const SVariability var = var_min(F.ctx ? F.ctx->var_floor : SVariability::Var, I_.comps[cid].attributes.variability);
+    if (var != SVariability::Const && !(allow_param && var == SVariability::Param)) return std::nullopt;
+    if (evaluate_annotation(I_.comps[cid].def) == std::optional<bool>(false)) return std::nullopt;
+    const NodeId cls = I_.comps[cid].class_inst;
+    if (!is_class_inst(cls)) return std::nullopt;
+    const Id<SElement> rec = I_.nodes[cls].def;
+    if (!rec.is_valid() || I_.scode.elems[rec].kind != SElementKind::Class ||
+        I_.scode.elems[rec].restriction != SRestriction::Record)
+      return std::nullopt;
+    std::vector<RecField> rfs;
+    if (!record_fields_ex(rec, scode_scope_of(cls), rfs, false, 0, /*any_base=*/true) || rfs.empty()) return std::nullopt;
+    const std::vector<Symbol>& pfx = ceval_prefix_ ? *ceval_prefix_ : F.prefix;
+    const PSubs& psubs = ceval_prefix_ ? ceval_psubs_ : F.psubs;
+    std::vector<Symbol> rnames = pfx;
+    rnames.push_back(c.parts[0].name);
+    PSubs rsubs = psubs;
+    rsubs.resize(pfx.size());
+    rsubs.push_back({});
+    redirect_outer_path(rnames, rsubs);
+    // 字段逐个取值时不打结构标记：omc 标的是整个记录组件节点（Structural.markExp 的 CREF 支 markComponent 只改该节点），字段
+    // 照旧不 final（SP 探针 SPV `final parameter LP p = ren(mc) annotation(Evaluate = true)` → mc.VTO 照打 `parameter`；MSL
+    // Spice3 InvertersApartRecord 的 mp1.modelcard.*）；记录节点本身记进 record_marks_。
+    const bool mark = dep_mark_ && var == SVariability::Param;
+    const bool saved_dep = dep_mark_;
+    dep_mark_ = false;
+    CVal r = CVal::Rec();
+    bool ok = true;
+    for (const RecField& rf : rfs) {
+      const Symbol fname = I_.scode.elems[rf.f].name;
+      Cref fc = c;   // 拷贝
+      fc.parts.push_back(CrefPart{fname, {}});
+      std::optional<CVal> v = const_lookup_val(pfx, psubs, fc, scope, depth, allow_param);
+      if (!v) {
+        // 已发射、没有绑定的字段（`parameter Real y(fixed = false)`）：值是空的（EMPTY），读到才失败（CevalFuncRecord5 的
+        // `f(r1)` 只用 r1.x）。
+        std::vector<Symbol> fn = rnames;
+        fn.push_back(fname);
+        PSubs fs = rsubs;
+        fs.push_back({});
+        // 只收 parameter 且 fixed = false 的：没值的 constant 被读到 omc 报错（scodeinst CevalFuncRecord4 "Constant r1.x is
+        // used without having been given a value"），fixed 的无绑定参数 omc 另有 start / 报错的规矩，未核实。
+        if (const FlatVariable* fv = emitted_var(int_key(fn, fs));
+            fv && !fv->binding.is_valid() && fv->var_kind == FlatVarKind::Parameter) {
+          bool not_fixed = false;
+          for (const FlatVarAttr& a : fv->attributes)
+            if (in_.str(a.name) == "fixed" && a.value.is_valid() && result_.model.exprs[a.value].kind == ExprKind::BoolLit &&
+                !result_.model.exprs[a.value].bval)
+              not_fixed = true;
+          if (not_fixed) {
+            CVal u;
+            u.k = CVal::K::Undef;
+            v = u;
+          }
+        }
+      }
+      if (!v || v->k == CVal::K::Record || is_arr(*v)) { ok = false; break; }
+      r.set_field(fname, std::move(*v));
+    }
+    dep_mark_ = saved_dep;
+    if (!ok) return std::nullopt;
+    if (var == SVariability::Param) {
+      const std::string rk = int_key(rnames, rsubs);
+      // 同 frame_value：试探求值的探针记下读到的参数（Evaluate = true 的记录绑定据此保留标记，见压平处的 EvalProbe）。
+      if (eval_probe_) eval_probe_->keys.push_back({rk, false});
+      if (mark) mark_record(rk);
+    }
+    return r;
   }
   // 值求值路（eval_scode）：书写处前缀（含逐段下标）+ cref 各段（常量整数下标）→ const_vals_ 里的值。
   std::optional<CVal> const_lookup_val(const std::vector<Symbol>& prefix, const PSubs& psubs, const Cref& c,
@@ -14918,6 +15238,13 @@ class Flattener {
       for (const auto& [n, x] : *v.rec)
         if (n == fname) fv = &x;
       if (!fv) return {};
+      // 求值里没赋到的字段（函数输出记录没写的 `outR.y`）：字段声明本就没有绑定时不给子修饰，照声明打（scodeinst
+      // CevalFuncRecord5 `parameter Real r2.y(fixed = false);`）；声明有绑定的形态未核实 → invalid。
+      if (fv->k == CVal::K::Undef) {
+        const SElement& fd = I_.scode.elems[I_.comps[I_.nodes[f].comp].def];
+        if (fd.mod.is_valid() && I_.scode.mods[fd.mod].binding.is_valid()) return {};
+        continue;
+      }
       Id<SMod> fid;
       if (fv->k == CVal::K::Record) {
         // 嵌套记录字段：再拆一层成子修饰 `paramsMid(paramsBottom(bottom = {…}))`（scodeinst RecordBinding15）。
@@ -15468,6 +15795,30 @@ class Flattener {
     if (cn == Id<INode>::kInvalid) return Id<SElement>::kInvalid;
     const NodeId n = NodeId::from_index(cn);
     return I_.nodes.contains(n) && !I_.nodes[n].is_empty() ? I_.nodes[n].def.raw : Id<SElement>::kInvalid;
+  }
+  // 记录实参的类与形参的类不同、却逐字段就是同一组声明（派生记录只 extends 不加字段：MSL Spice3 `record Mos1Calc extends
+  // Mos.MosCalc` 的局部 int_c 传给 `input MosCalc in_c`）：matchComplexTypes 判 PLUG_COMPATIBLE、实参原样（字段数相同、各位
+  // 同名同型，NFTypeCheck.mo matchComplexTypes / matchComplexComponents v1.25.0；RA 探针 RA2 `g(x, s)`，s 是 `record Same
+  // extends Base`）。字段多了（`More extends Base` 加 `Real c`）omc 报类型不配 → 不收（调用方 SKIP）；同名同型却不是同一组声明
+  // 的（结构相同的两个记录类）未核实 → 不收。只收函数局部的整个记录（fn_records_）。in / fscope = 形参的声明与被调函数的作用域。
+  bool record_arg_plug(Id<Expr> arg, const SElement& in, const ScodeScope& fscope) {
+    const Expr& x = result_.model.exprs[arg];
+    if (x.kind != ExprKind::Cref || x.cref.resolved_node != kFnLocal || x.cref.parts.size() != 1 ||
+        !x.cref.parts[0].subscripts.empty())
+      return false;
+    const auto it = fn_records_.find(x.cref.parts[0].name.id);
+    if (it == fn_records_.end()) return false;
+    const FnRecord ar = it->second;   // 拷贝（下面解析不改 fn_records_，但不跨调用持引用）
+    ScodeScope es;
+    const Id<SElement> erec = record_class_of(in, fscope, es);
+    if (!erec.is_valid()) return false;
+    std::vector<RecField> af, ef;
+    if (!record_fields_ex(ar.rec, ar.rscope, af, false, 0, /*any_base=*/true) ||
+        !record_fields_ex(erec, es, ef, false, 0, /*any_base=*/true) || af.size() != ef.size())
+      return false;
+    for (std::size_t k = 0; k < af.size(); ++k)
+      if (af[k].f != ef[k].f) return false;
+    return true;
   }
   // 实参 arg 与函数输入 in 精确相配（matchFunctionsSilent 的 EXACT——不转型、不向量化，NFTypeCheck.mo:283-335）：记录输入要
   // 同一定义的记录（Type.isEqual → InstNode.isSame，别名与长类同定义，NFType.mo:1244）；内建标量输入要同种类型（Integer 进
@@ -19795,6 +20146,8 @@ class Flattener {
       bool unk = false;
       if (!exp_not_fixed(rhs, kFixedDepth, unk)) {
         set_unsupported("final record binding not evaluated");
+        for (std::size_t ni = 0; ni < name.size(); ++ni)   // 子原因：哪个组件（排桶用）
+          result_.unsupported_detail += (ni ? "." : "") + std::string(in_.str(name[ni]));
         return false;
       }
     }
@@ -21950,7 +22303,7 @@ class Flattener {
   // deps_time_）的改动都记进 mark_log_，快照 = 日志长度，撤销 = 倒着退回去。ponytail: 日志从不截短（大小 = 整个压平期标记
   // 改动的次数）；此前快照是整份拷贝，结构参数多的模型（testsuite EngineV6_output）每次试探求值都拷几千项。
   struct MarkUndo {
-    enum What : std::uint8_t { SetNew, SetLower, DepsNew, DepsLower } what;
+    enum What : std::uint8_t { SetNew, SetLower, DepsNew, DepsLower, RecNew } what;
     std::string key;
     int old;
   };
@@ -21959,6 +22312,11 @@ class Flattener {
     std::size_t touched_n = 0;   // touched_log_ 的长度
   };
   StructSnap struct_snap() const { return {mark_log_.size(), touched_log_.size()}; }
+  // 整个记录参数被结构语境读到（record_param_value）：omc 的 Structural.markExp 标的是记录组件节点本身（字段节点照旧），式子里
+  // 对它的整体引用随后代成记录式（apply_structural_records）。同结构标记一起记进 mark_log_，试探求值撤销时一并退回。
+  void mark_record(const std::string& k) {
+    if (record_marks_.insert(k).second) mark_log_.push_back({MarkUndo::RecNew, k, 0});
+  }
   void struct_restore(StructSnap s) {
     while (mark_log_.size() > s.log_n) {
       MarkUndo u = std::move(mark_log_.back());
@@ -21972,6 +22330,7 @@ class Flattener {
         case MarkUndo::SetLower: structural_set_[u.key] = u.old; break;
         case MarkUndo::DepsNew: deps_time_.erase(u.key); break;
         case MarkUndo::DepsLower: deps_time_[u.key] = u.old; break;
+        case MarkUndo::RecNew: record_marks_.erase(u.key); break;
       }
     }
     untouch(s.touched_n);
@@ -23403,6 +23762,10 @@ class Flattener {
   std::unordered_map<std::uint32_t, FnRecord> fn_records_;      // 记录类型的形参 / 局部名 → 记录类（字段访问 `r.x`）
   // 当前函数里成了结构参数的局部名（调用的输出维引用了它所在的实参，见 try_emit_user_call）：parameter 局部打 `final parameter`。
   std::unordered_set<std::uint32_t> fn_struct_locals_;
+  // rec = 组件的记录类；call / scope = 求值的绑定调用（有则记录式名取其输出记录类，见 apply_structural_records）。
+  struct StructRecord { Id<SElement> rec; CVal val; Id<Exp> call; ScodeScope scope; };
+  std::unordered_set<std::string> record_marks_;   // 被结构语境整体读过的记录参数的键（见 mark_record）
+  std::unordered_map<std::string, StructRecord> struct_records_;   // 结构记录参数的键 → 记录类与值（见 apply_structural_records）
   // > 0：正在定型被字面量条件剪掉的 if 分支（见 if_exp）。其中越界的常量下标换成 1 照常定型——该支随后被丢掉，omc 不查它的
   // 越界（VerifyModel 只看化简后留下的式子）；类型 / 名字错照样报。
   int dead_branch_ = 0;

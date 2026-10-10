@@ -1,4 +1,4 @@
-//// set: cr-p1 — 整个常量记录的引用作实参（`constant K C;` 无绑定取字段缺省 / 带绑定）→ 记录式 `K(1.0359431399069999e-10, …)`（CRL3 / CRL4，MSL Spice3 的 `mos1RenameParameters(modelcard, C)`）、字段引用（CRL1）；记录构造函数的字段按各自作用域解析——基类在别的包里、SI 类型带 start 属性（CRL15，Spice3 MosModelLineParams）；Evaluate = true 的记录参数：绑定里读到的参数连带成结构参数（CRL6 `final parameter Real x0`，此前静默错）、只带字段修饰的（CRL8）；final 记录的函数绑定（CRL7 / CRL10 / CRL11 求值、CRL9 标量照留）；ymc 求不出、读到的参数又全固定的 final 记录绑定 SKIP（CRL12–CRL14，omc 求值成字面量字段；此前挪成初始方程，静默错）；模型里局部记录类作函数形参类型（CRL2 / CRL5）未做 SKIP
+//// set: cr-p1 — 整个常量记录的引用作实参（`constant K C;` 无绑定取字段缺省 / 带绑定）→ 记录式 `K(1.0359431399069999e-10, …)`（CRL3 / CRL4，MSL Spice3 的 `mos1RenameParameters(modelcard, C)`）、字段引用（CRL1）；记录构造函数的字段按各自作用域解析——基类在别的包里、SI 类型带 start 属性（CRL15，Spice3 MosModelLineParams）；Evaluate = true 的记录参数：绑定里读到的参数连带成结构参数（CRL6 `final parameter Real x0`，此前静默错）、只带字段修饰的（CRL8）；final 记录的函数绑定（CRL7 / CRL10 / CRL11 求值、CRL9 标量照留）；读到的参数全固定的 final 记录绑定求值成字面量字段（CRL12–CRL14，63j 起整个记录参数可求值；63i 之前挪成初始方程，静默错）；模型里局部记录类作函数形参类型（CRL2 / CRL5）未做 SKIP
 //// model: CRL1
 model CRL1
   record K

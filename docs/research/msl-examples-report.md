@@ -470,3 +470,11 @@ ComparisonQuasiStatic / ComparisonPullInStroke、QuasiStatic.FluxTubes 的 Linea
 Mosfet.MosfetModelLineParams`）做完，Spice3 的 Inverter / Nand / CascodeCircuit 往前走到 `final parameter … p = Mos1.
 mos1RenameParameters(modelcard, C) annotation(Evaluate = true)`——实参里整个记录参数（modelcard）在编译期求值未做，照旧 SKIP
 （此前同形态的 final 记录绑定会被挪成初始方程，静默错，现 SKIP）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-10 加宽 63j 之后：PASS 402→410（+8）
+
+整个记录参数的编译期求值（`mos1RenameParameters(modelcard, C)` 的 modelcard）、Evaluate = true 记录的结构语义（带 start 的字段
+才是结构参数并代入、结构记录的整体引用代成记录式、记录引用整体绑定求值成字段字面量）、函数体元组赋值 / 字面量条件的 if / 派生
+记录实参做完：Spice3 的 Inverter / InvertersApartRecord / InvertersExtendedModel / FourInverters / Nand / Nor（MOSFET）、
+Oscillator（BJT）、CascodeCircuit（JFET）转 PASS，均与 omc 逐字节一致。FAIL / ACCEPTS-INVALID / CRASH 0。Graetz /
+Spice3BenchmarkFourBitBinaryAdder 停在记录函数折叠的字段形态，三个 Benchmark 停在结构记录绑定求值，照旧 SKIP。

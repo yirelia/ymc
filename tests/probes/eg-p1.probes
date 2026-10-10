@@ -1,0 +1,225 @@
+//// set: eg-p1 — Evaluate = true 的记录参数 × 字段声明网格（omc 1.25.0 实测）：整体绑定（构造 `R(3)` / 函数 `f(3)` / final）下只有带 start 的字段成结构参数（final、引用处代入），字段绑定 / 无绑定的不是；只带字段修饰（`r(a = 3)`）的各字段都是
+//// model: EGCB
+model EGCB
+  record R
+    Real a = 1;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+  end f;
+  parameter R r = R(3) annotation(Evaluate = true);
+  Real y = r.a * time;
+end EGCB;
+//// model: EGCN
+model EGCN
+  record R
+    Real a;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+  end f;
+  parameter R r = R(3) annotation(Evaluate = true);
+  Real y = r.a * time;
+end EGCN;
+//// model: EGCPB
+model EGCPB
+  record R
+    parameter Real a = 1;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+  end f;
+  parameter R r = R(3) annotation(Evaluate = true);
+  Real y = r.a * time;
+end EGCPB;
+//// model: EGCS
+model EGCS
+  record R
+    Real a(start = 1);
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+  end f;
+  parameter R r = R(3) annotation(Evaluate = true);
+  Real y = r.a * time;
+end EGCS;
+//// model: EGFB
+model EGFB
+  record R
+    Real a = 1;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+  end f;
+  parameter R r = f(3) annotation(Evaluate = true);
+  Real y = r.a * time;
+end EGFB;
+//// model: EGFFB
+model EGFFB
+  record R
+    Real a = 1;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+  end f;
+  final parameter R r = f(3) annotation(Evaluate = true);
+  Real y = r.a * time;
+end EGFFB;
+//// model: EGFFN
+model EGFFN
+  record R
+    Real a;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+  end f;
+  final parameter R r = f(3) annotation(Evaluate = true);
+  Real y = r.a * time;
+end EGFFN;
+//// model: EGFFPB
+model EGFFPB
+  record R
+    parameter Real a = 1;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+  end f;
+  final parameter R r = f(3) annotation(Evaluate = true);
+  Real y = r.a * time;
+end EGFFPB;
+//// model: EGFFS
+model EGFFS
+  record R
+    Real a(start = 1);
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+  end f;
+  final parameter R r = f(3) annotation(Evaluate = true);
+  Real y = r.a * time;
+end EGFFS;
+//// model: EGFN
+model EGFN
+  record R
+    Real a;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+  end f;
+  parameter R r = f(3) annotation(Evaluate = true);
+  Real y = r.a * time;
+end EGFN;
+//// model: EGFPB
+model EGFPB
+  record R
+    parameter Real a = 1;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+  end f;
+  parameter R r = f(3) annotation(Evaluate = true);
+  Real y = r.a * time;
+end EGFPB;
+//// model: EGFS
+model EGFS
+  record R
+    Real a(start = 1);
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+  end f;
+  parameter R r = f(3) annotation(Evaluate = true);
+  Real y = r.a * time;
+end EGFS;
+//// model: EGMB
+model EGMB
+  record R
+    Real a = 1;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+  end f;
+  parameter R r(a = 3) annotation(Evaluate = true);
+  Real y = r.a * time;
+end EGMB;
+//// model: EGMN
+model EGMN
+  record R
+    Real a;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+  end f;
+  parameter R r(a = 3) annotation(Evaluate = true);
+  Real y = r.a * time;
+end EGMN;
+//// model: EGMPB
+model EGMPB
+  record R
+    parameter Real a = 1;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+  end f;
+  parameter R r(a = 3) annotation(Evaluate = true);
+  Real y = r.a * time;
+end EGMPB;
+//// model: EGMS
+model EGMS
+  record R
+    Real a(start = 1);
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+  end f;
+  parameter R r(a = 3) annotation(Evaluate = true);
+  Real y = r.a * time;
+end EGMS;

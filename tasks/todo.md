@@ -2127,6 +2127,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           读到的全固定（记录参数作实参，omc 求值成字面量字段）→ SKIP。SKIP 子原因补名字（修饰命中的非组件名、限定名调用、记录构造）。
           模型里局部记录类作函数形参类型、整个记录参数的求值未做（SKIP）。
           slice 653 例 PASS 602 / FAIL 0（oracle=live 不一致 0）；scodeinst 603 / 43（不变）；testsuite 1697 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0（不变）；MSL 402（不变）；探针 9164→9180；单测 326→327。
+    - [x] (63j) flat：整个记录参数的编译期求值与结构记录（2026-10-10）：结构 / tryEvalExp 语境读整个记录参数（`ren(mc)`）逐字段取值，
+          只标记录节点（字段照旧不 final），随后式子里对它的整体引用代成记录式；Evaluate = true 的记录：有整体绑定时字段只有带
+          start 的才是结构参数（isStructuralComponent 取 start，网格探针），自己有整体绑定的记录节点是结构参数、整体引用代成记录式
+          （名取值的记录类型），记录引用整体绑定（`m1(modelcard = MP)`）求值成字段字面量。函数体：元组赋值（求值器）与给记录字段
+          的元组赋值、条件化简成字面量的 if 语句（simplifyIfStmtBranches）、派生记录只 extends 不加字段的实参（PLUG_COMPATIBLE）、
+          模型里没有实例的输出记录类。结构记录绑定求不出 → SKIP。
+          slice 653→654 例 PASS 602 / FAIL 0（oracle=live 不一致 0）；scodeinst 603→604 / 43；testsuite 1697→1700 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 402→410；探针 9180→9219；单测 327→328。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
