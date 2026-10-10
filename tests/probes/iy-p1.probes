@@ -1,0 +1,371 @@
+//// set: iy-p1 — inner outer 组合前缀：对子层是 inner（子层 outer 连它自己），经它查名（本层、从外面）一律落到外层 inner（IY1-IY4、IY11、IY21 连接、IY23 继承来的、IY24 / IY25 数组、IY26 constant 两头内联、IY27 复合带方程）；外来修饰照常施加（IY8）；找不到外层 inner → 生成（IY7）；根类里的 → TOP_LEVEL_OUTER（IY6）；没有子层 outer 连它 → omc 内部错误（IY5 / IY12 / IY13，SKIP）；前缀漏进惰性实例化的 inner（IY14 inner outer、IY19 纯 outer，SKIP；IY15 input 不漏、IY20 inner 在前不漏）；经它求值的结构参数（复合的 IY10 经路径重定向照常求；标量的 IY9 SKIP）；顺带：纯 outer 连 constant 内联（IY16）、连嵌套 protected inner（IY17 复合 / IY18 标量）
+//// model: IY1
+model IY1
+  model CI
+    outer Boolean isEnabled;
+    Real x(start = 1);
+  equation
+    der(x) = if isEnabled then -x else 0;
+  end CI;
+  model Sub
+    Boolean enableMe = time <= 1;
+    inner outer Boolean isEnabled = isEnabled and enableMe;
+    CI c1;
+    CI c2;
+  end Sub;
+  Sub sub;
+  inner Boolean isEnabled = time >= 0.5;
+end IY1;
+//// model: IY2
+model IY2
+  model Leaf
+    outer Real T;
+    Real y = 2 * T;
+  end Leaf;
+  model Mid
+    inner outer Real T = T + 1;
+    Leaf l;
+  end Mid;
+  inner Real T = time;
+  Mid m;
+  Leaf l0;
+end IY2;
+//// model: IY3
+model IY3
+  model Leaf
+    outer parameter Real k;
+    Real y = k * time;
+  end Leaf;
+  model Mid
+    inner outer parameter Real k = 2 * k;
+    Leaf l;
+  end Mid;
+  model Mid2
+    inner outer parameter Real k = k + 1;
+    Mid m;
+  end Mid2;
+  inner parameter Real k = 3;
+  Mid2 m2;
+end IY3;
+//// model: IY4
+model IY4
+  model W
+    Real g = 9.81;
+  end W;
+  model Leaf
+    outer W w;
+    Real y = w.g;
+  end Leaf;
+  model Mid
+    inner outer W w;
+    Leaf l;
+    Real z = w.g;
+  end Mid;
+  inner W w;
+  Mid m;
+end IY4;
+//// model: IY5
+model IY5
+  model Sub
+    inner outer Real T = 2 * T;
+    Real a = T;
+  end Sub;
+  Sub sub;
+  inner Real T = time;
+  Real b = sub.T;
+end IY5;
+//// model: IY6
+model IY6
+  model L
+    outer Real x;
+    Real y = x;
+  end L;
+  inner outer Real x = 1;
+  Real z = x;
+  L l;
+end IY6;
+//// model: IY7
+model IY7
+  model L
+    outer Real x;
+    Real y = x;
+  end L;
+  model M
+    inner outer Real x = 1;
+    Real z = x;
+    L l;
+  end M;
+  M m;
+end IY7;
+//// model: IY8
+model IY8
+  model L
+    outer Real x;
+    Real y = x;
+  end L;
+  model M
+    inner outer Real x = 1;
+    L l;
+  end M;
+  inner Real x = 5;
+  M m(x = 2);
+end IY8;
+//// model: IY9
+model IY9
+  model L
+    outer parameter Integer n;
+    Real v[n];
+  end L;
+  model M
+    inner outer parameter Integer n = n + 1;
+    L l;
+    Real w[n];
+  end M;
+  inner parameter Integer n = 2;
+  M m;
+end IY9;
+//// model: IY10
+model IY10
+  model W
+    parameter Integer n = 2;
+  end W;
+  model L
+    outer W w;
+    Real y[w.n];
+  end L;
+  model M
+    inner outer W w(n = 3);
+    L l;
+    Real z[w.n];
+  end M;
+  inner W w(n = 4);
+  M m;
+end IY10;
+//// model: IY11
+model IY11
+  model Leaf
+    outer Real T;
+    Real y = 2 * T;
+  end Leaf;
+  model Mid
+    inner outer Real T = T + 1;
+    Leaf l;
+  end Mid;
+  inner Real T = time;
+  Mid m;
+  Real b = m.T;
+end IY11;
+//// model: IY12
+model IY12
+  connector Pin
+    Real v;
+    flow Real i;
+  end Pin;
+  model A
+    inner outer Pin p;
+  end A;
+  inner Pin p;
+  A a;
+  Pin q;
+equation
+  connect(a.p, q);
+end IY12;
+//// model: IY13
+model IY13
+  model Sub
+    inner outer constant Real c = 2 * c;
+    Real a = c;
+  end Sub;
+  Sub sub;
+  inner constant Real c = 3;
+end IY13;
+//// model: IY14
+model IY14
+  model L
+    outer Real x;
+    Real y = x;
+  end L;
+  model M
+    inner outer Real x = 1;
+    final L l;
+  end M;
+  inner Real x = 2;
+  M m;
+end IY14;
+//// model: IY15
+model IY15
+  model L
+    outer Real x;
+    Real y = x;
+  end L;
+  model M
+    inner outer Real x = 1;
+    input L l;
+  end M;
+  inner Real x = 2;
+  M m;
+end IY15;
+//// model: IY16
+model IY16
+  model L
+    outer constant Real c;
+    Real a = c;
+    Real b = 2 * c;
+  end L;
+  inner constant Real c = 3;
+  L l;
+end IY16;
+//// model: IY17
+model IY17
+  model W
+    Real g = 9.81;
+  end W;
+  model L
+    outer W w;
+    Real y = w.g;
+  end L;
+  model M
+    L l;
+  protected
+    inner W w;
+  end M;
+  M m;
+end IY17;
+//// model: IY18
+model IY18
+  model L
+    outer Real x;
+    Real y = x;
+  end L;
+  model M
+    L l;
+  protected
+    inner Real x = time;
+  end M;
+  M m;
+end IY18;
+//// model: IY19
+model IY19
+  model L
+    outer Real x;
+    Real y = x;
+  end L;
+  final L l;
+  inner Real x = 2;
+end IY19;
+//// model: IY20
+model IY20
+  model L
+    outer Real x;
+    Real y = x;
+  end L;
+  inner Real x = 2;
+  final L l;
+end IY20;
+//// model: IY21
+model IY21
+  connector Pin
+    Real v;
+    flow Real i;
+  end Pin;
+  model Root
+    Pin p;
+    Real extra = 1;
+  end Root;
+  model Base
+    Pin p;
+  end Base;
+  model Leaf
+    outer Base b;
+    Pin q;
+  equation
+    connect(b.p, q);
+  end Leaf;
+  model Mid
+    inner outer Base b;
+    Leaf l;
+    Pin r;
+  equation
+    connect(b.p, r);
+  end Mid;
+  inner Root b;
+  Mid m;
+end IY21;
+//// model: IY23
+model IY23
+  model Leaf
+    outer Real T;
+    Real y = 2 * T;
+  end Leaf;
+  model Base
+    inner outer Real T = T + 1;
+  end Base;
+  model Mid
+    extends Base;
+    Leaf l;
+  end Mid;
+  inner Real T = time;
+  Mid m;
+end IY23;
+//// model: IY24
+model IY24
+  model Leaf
+    outer Real T;
+    Real y = 2 * T;
+  end Leaf;
+  model Mid
+    inner outer Real T = T + 1;
+    Leaf l[2];
+  end Mid;
+  inner Real T = time;
+  Mid m;
+end IY24;
+//// model: IY25
+model IY25
+  model Leaf
+    outer Real T;
+    Real y = 2 * T;
+  end Leaf;
+  model Mid
+    inner outer Real T = T + 1;
+    Leaf l;
+  end Mid;
+  inner Real T = time;
+  Mid m[2];
+end IY25;
+//// model: IY26
+model IY26
+  model L
+    outer constant Real c;
+    Real a = c;
+  end L;
+  model M
+    inner outer constant Real c = 2 * c;
+    Real b = c;
+    L l;
+  end M;
+  inner constant Real c = 3;
+  M m;
+end IY26;
+//// model: IY27
+model IY27
+  model W
+    Real g = 9.81;
+    Real h;
+  equation
+    h = 2 * g;
+  end W;
+  model L
+    outer W w;
+    Real y = w.h;
+  end L;
+  model M
+    inner outer W w(g = 1);
+    L l;
+    Real z = w.h + w.g;
+  equation
+    der(z) = w.g;
+  end M;
+  inner W w;
+  M m;
+end IY27;

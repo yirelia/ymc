@@ -518,3 +518,10 @@ ACCEPTS-INVALID / CRASH 0。
 class extends（`redeclare model extends B … end B;`）做完；MSL 里的 class extends 集中在 Media 的介质包（`redeclare record extends
 ThermodynamicState`、`redeclare model extends BaseProperties`），随包重声明一起仍待第 2 阶段，PASS / SKIP 逐例不变。FAIL /
 ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-11 加宽 63r 之后：PASS 412→415（+3）
+
+`inner outer` 组合前缀做完：StateGraph 的复合步（PartialCompositeStep 的 `inner outer CompositeStepState stateGraphRoot(suspend = …,
+resume = …)`，步里的 `outer` 连它、本层的 `connect(outerState.subgraphStatePort, stateGraphRoot.subgraphStatePort)` 落到外层的
+stateGraphRoot）——Examples.ShowCompositeStep、ShowExceptions、ControlledTanks 转 PASS，均与 omc 逐字节一致。FAIL /
+ACCEPTS-INVALID / CRASH 0。

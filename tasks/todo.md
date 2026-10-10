@@ -2174,6 +2174,15 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       - [x] (63q) class extends `redeclare model extends B … end B;`：新类隐式 extends 原类（setClassExtends）。（2026-10-10 完成：
             不带 redeclare 前缀的同样；原类元素在前；记录 / 函数的 class extends 照旧 SKIP。）slice 667→671 例 PASS 624→628 / FAIL 0（oracle=live 不一致 0）；scodeinst 625→629 / 50→52（带告警的两例入账）；testsuite 1749→1759 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 412（不变）；探针 9340→9352；单测 333→334。
       - 包重声明（`redeclare package Medium = X`）里的类型可先经 inst 生效；`Medium.nX`、`Medium.f(…)` 等经 SCode 链的仍待第 2 阶段。
+    - [x] (63r) inst + flat：`inner outer` 组合前缀（2026-10-11）：照 INNER_OUTER_NODE——对子层是 inner（子层 outer 连的是它
+          自己），outer 一面只连外层 inner、不连自己（lookupInner 从实例的 instanceParent 找起；根类里的生成同名 inner、撞
+          TOP_LEVEL_OUTER），经它查名（本层的、从外面的 `m.T`）一律落到那个外层 inner；照常发射、外来修饰照常施加，找不到外层
+          inner 时生成。omc 只在子层 outer 连上它时才实例化它，没人连 → 定型时内部错误 → SKIP；被惰性实例化的 inner（inner outer、
+          生成的、实例化序在那条链之后的普通 inner）带上那条链的 final / 变率前缀 → SKIP（此前纯 outer 的 `final L l; inner Real x`
+          静默丢 `final`）。经 outer 的引用从根解析时 inner 自己那几段不再转、不查 protected（`protected inner W w` 此前 SKIP），
+          标量 outer 也走这条——引到 constant 照常内联（此前 `outer constant Real c` 打成 `l.a = c`，静默错）。经标量 inner outer
+          求值的结构参数（复合的经路径重定向照常求）、connect 里后面的段是 outer 未做（SKIP）。
+          slice 671→672 例 PASS 628→629 / FAIL 0（oracle=live 不一致 0）；scodeinst 629→630 / 52（在账）；testsuite 1759→1766 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 412→415；探针 9352→9380；单测 334→335。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

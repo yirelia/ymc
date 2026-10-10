@@ -1098,7 +1098,8 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing, bool gener
 
   // outer 组件指向别处的 inner，不实例化自己的子树（否则 `outer B b`（B 里又含 outer B）会无限递归）。解析类型名：内建标量
   // 记类型；复合（模型 / 记录 / 连接器）记成 Complex——flatten 按名连到最近的 inner，经它的引用都换到 inner 上（R11 §5）。
-  if (!generated_inner && (el.prefixes.io == SInnerOuter::Outer || el.prefixes.io == SInnerOuter::InnerOuter)) {
+  // `inner outer` 照常实例化：它对子层是 inner（omc 在子层 outer 连上它时实例化它，没连的 SKIP，见 insert_generated_inners）。
+  if (!generated_inner && el.prefixes.io == SInnerOuter::Outer) {
     NodeId tn = lookup_class_name(el.type.path, enclosing);   // arena add：下面重新取组件引用
     Type oty = Type::unknown();
     for (int i = 0; i < kBuiltinCount; ++i)
@@ -1489,34 +1490,81 @@ NodeId Instantiator::instantiate_root_class(NodeId def_node) {
 //（checkTopLevelOuter :3809-3846：MISSING_INNER_NAME_CONFLICT / TOP_LEVEL_OUTER）→ omc 报错 → SKIP；生成的 inner 里又有找不到
 // inner 的 outer（omc 取生成表时已定长，不再补）→ SKIP。外层可见的 inner = 实例链上各层类实例的 inner 组件（lookupInner 顺
 // instanceParent 上溯，同 flatten 的 inner 作用域）。
+//
+// `inner outer` 组件：omc 的类树里放的是 INNER_OUTER_NODE（ClassTree.instantiate 对 isOuter 的组件 linkInnerOuter，NFClassTree.mo:
+// 560-575 v1.25.0）。它的 outer 一面从所在实例的 instanceParent 找起——实例自己是组件节点、类还没建好，getClass 失败，根类的树还是
+// EXPANDED_TREE、resolveComponent 也失败（lookupInner，NFLookup.mo:389-420；NFClassTree.mo:472-475）——所以不会连到自己，根类里的
+// 还会生成同名 inner、撞 TOP_LEVEL_OUTER（IY 探针 IY6）。实例化它的类时 applyLocalComponents 对它调 instComponent，那里先
+// resolveInner（NFInst.mo instComponent），实例化的是它连上的外层 inner；它自己只在子层某个 outer 连上它（lookupInner 取
+// resolveOuter = 它自己）时才被实例化，没有子层 outer 连它 → 定型时 "NFTyping.typeComponent got noninstantiated component"
+//（IY 探针 IY5 / IY12 / IY13）→ SKIP。
+//
+// 前缀漏进 inner：被 resolveInner 实例化的 inner 用的是触发它的 outer 所在类传下的 attributes（instClassDef 的
+// applyLocalComponents(instComponent(attributes = …))），即那条链上组件的 final / 变率前缀（IY 探针 IY14：
+// `final L l` 里的 outer 连上 m.x → `final Real m.x`；IY19：`final L l; inner Real x` → `final Real x`）。inner outer、生成的
+// inner 必是这样实例化的；普通 inner 在实例化序（先各 extends 的组件、再本地组件，instClassDef）里排在那条链之后才是。链上（inner
+// 那层起、到 outer 的父实例）有这类前缀 → SKIP。
+// ponytail: 实例化序按类树里的位置算（继承来的整体在前）；extends 写在本地元素之后的多层继承里位置会偏，要精确得记各基类的实例化序。
 void Instantiator::insert_generated_inners(NodeId root) {
   if (!root.is_valid() || I_.nodes[root].is_empty() || unsupported_) return;
   struct Gen { Symbol name; NodeId outer, scope; };
   std::vector<Gen> gens;
-  // 实例树先序遍历（组件序 = 实例化序）：visible = 祖先各层与本层的 inner 名。
-  auto walk = [&](auto& self, NodeId ci, std::vector<Symbol> visible, int depth) -> void {
+  struct Vis { Symbol name; NodeId node; std::size_t level; int order; };   // 可见 inner：所在层、在那层实例化序里的位置
+  struct Step { int order; bool prefixed; };                                // 实例链上各层通往当前实例的组件
+  std::vector<Step> path;
+  std::unordered_set<std::uint32_t> linked;   // 被子层 outer 连上的 inner outer
+  std::vector<NodeId> inner_outers;
+  bool leak = false;
+  auto order_of = [&](NodeId c, std::size_t idx) {   // 继承来的组件 parent_scope = 基类实例，本地组件的为空
+    return static_cast<int>(idx) + (I_.nodes[c].parent_scope.is_valid() ? 0 : (1 << 20));
+  };
+  auto lazy_leak = [&](std::size_t level) {
+    for (std::size_t k = level; k < path.size(); ++k) leak = leak || path[k].prefixed;
+  };
+  // 实例树先序遍历（组件序 = 实例化序）：visible = 祖先各层与本层的 inner。
+  auto walk = [&](auto& self, NodeId ci, std::vector<Vis> visible, int depth) -> void {
     if (depth > 200 || !ci.is_valid() || I_.nodes[ci].is_empty() || I_.nodes[ci].kind != NodeKind::Class ||
         !I_.nodes[ci].cls.is_valid() || !I_.node_class(ci).tree.is_valid())
       return;
     const std::vector<NodeId> comps = I_.trees[I_.node_class(ci).tree].components;   // 拷贝
-    for (NodeId c : comps)
-      if (I_.nodes[c].kind == NodeKind::Component && I_.comps[I_.nodes[c].comp].attributes.is_inner)
-        visible.push_back(I_.nodes[c].name);
-    for (NodeId c : comps) {
+    const std::size_t outer_n = visible.size();   // 祖先层的 inner（inner outer 的 outer 一面只看这些，见上）
+    for (std::size_t i = 0; i < comps.size(); ++i)
+      if (I_.nodes[comps[i]].kind == NodeKind::Component && I_.comps[I_.nodes[comps[i]].comp].attributes.is_inner)
+        visible.push_back({I_.nodes[comps[i]].name, comps[i], path.size(), order_of(comps[i], i)});
+    for (std::size_t i = 0; i < comps.size(); ++i) {
+      const NodeId c = comps[i];
       if (I_.nodes[c].kind != NodeKind::Component) continue;
       const Component& comp = I_.comps[I_.nodes[c].comp];
-      if (comp.attributes.is_outer && !comp.attributes.is_inner) {
+      if (comp.attributes.is_outer) {
         const Symbol n = I_.nodes[c].name;
-        bool seen = std::find(visible.begin(), visible.end(), n) != visible.end();
-        for (const Gen& g : gens) seen = seen || g.name == n;
-        if (!seen) gens.push_back({n, c, ci});
-        continue;
+        const Vis* t = nullptr;
+        for (std::size_t k = comp.attributes.is_inner ? outer_n : visible.size(); k-- > 0;)
+          if (visible[k].name == n) { t = &visible[k]; break; }
+        if (t) {
+          const bool io = I_.comps[I_.nodes[t->node].comp].attributes.is_outer;
+          if (io) linked.insert(t->node.raw);
+          if (io || (t->level < path.size() && path[t->level].order < t->order)) lazy_leak(t->level);
+        } else {
+          bool seen = false;
+          for (const Gen& g : gens) seen = seen || g.name == n;
+          if (!seen) gens.push_back({n, c, ci});
+          lazy_leak(0);
+        }
+        if (!comp.attributes.is_inner) continue;   // 纯 outer 不实例化子树
+        inner_outers.push_back(c);
       }
+      path.push_back({order_of(c, i), comp.attributes.is_final || comp.attributes.variability != SVariability::Var});
       self(self, comp.class_inst, visible, depth + 1);
+      path.pop_back();
     }
   };
   walk(walk, root, {}, 0);
-  if (gens.empty()) return;
+  auto io_checks = [&]() {
+    for (NodeId c : inner_outers)
+      if (!linked.count(c.raw)) { mark_unsupported("inner outer without outer linked to it"); return; }
+    if (leak) mark_unsupported("outer link leaks prefixes into inner");
+  };
+  if (gens.empty()) { io_checks(); return; }
   for (auto it = gens.rbegin(); it != gens.rend(); ++it) {
     const Gen g = *it;
     // 根类里（本地类 / 组件、继承来的组件）或顶层已有同名元素 → omc 报错。
@@ -1555,12 +1603,20 @@ void Instantiator::insert_generated_inners(NodeId root) {
     I_.trees[I_.node_class(root).tree].components.push_back(gi);
   }
   // 生成的 inner 的子树里又有找不到 inner 的 outer → SKIP（见上）。
-  std::vector<Symbol> top;
-  for (NodeId c : I_.trees[I_.node_class(root).tree].components)
-    if (I_.nodes[c].kind == NodeKind::Component && I_.comps[I_.nodes[c].comp].attributes.is_inner) top.push_back(I_.nodes[c].name);
+  const std::vector<NodeId>& rcomps = I_.trees[I_.node_class(root).tree].components;
+  std::vector<Vis> top;
+  for (std::size_t i = 0; i < rcomps.size(); ++i)
+    if (I_.nodes[rcomps[i]].kind == NodeKind::Component && I_.comps[I_.nodes[rcomps[i]].comp].attributes.is_inner)
+      top.push_back({I_.nodes[rcomps[i]].name, rcomps[i], 0, order_of(rcomps[i], i)});
   const std::size_t before = gens.size();
-  for (const auto& [n, gi] : I_.generated_inners) walk(walk, I_.comps[I_.nodes[gi].comp].class_inst, top, 1);
+  for (const auto& [n, gi] : I_.generated_inners) {
+    const Component& gc = I_.comps[I_.nodes[gi].comp];
+    path.push_back({1 << 21, gc.attributes.is_final || gc.attributes.variability != SVariability::Var});   // 排在根类组件之后
+    walk(walk, gc.class_inst, top, 1);
+    path.pop_back();
+  }
   if (gens.size() != before) mark_unsupported("outer inside generated inner");
+  io_checks();
 }
 
 NodeId Instantiator::instantiate_root_path(const std::vector<Symbol>& path) {

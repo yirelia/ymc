@@ -7295,4 +7295,19 @@ YMC_TEST(flatten_class_extends_redeclare) {
                            "  Real c.b2.y;\n  Real c.b2.z = 3.0;\nequation\n  c.b.y = c.b.z;\n  c.b2.y = c.b2.z;\nend KXU1;\n"));
 }
 
+YMC_TEST(flatten_inner_outer_combined) {
+  // inner outer：子层 outer 连的是它自己（m.l.y = 2.0 * m.T），本层与从外面经它查名都落到外层 inner（`T + 1` 的 T、`b = m.T`
+  // → `b = T`）；constant 两头照常内联（m.b 取外层的 3、m.l.a 取它自己的 6）。期望 = omc 1.25.0 实跑（2026-10-11，探针 iy-ut）。
+  YMC_CHECK_EQ(flatten_src("model IYU1\n  model Leaf\n    outer Real T;\n    Real y = 2 * T;\n  end Leaf;\n  model Mid\n"
+                           "    inner outer Real T = T + 1;\n    Leaf l;\n  end Mid;\n  inner Real T = time;\n  Mid m;\n"
+                           "  Real b = m.T;\nend IYU1;\n"),
+               std::string("class IYU1\n  Real T = time;\n  Real m.T = T + 1.0;\n  Real m.l.y = 2.0 * m.T;\n  Real b = T;\n"
+                           "end IYU1;\n"));
+  YMC_CHECK_EQ(flatten_src("model IYU2\n  model L\n    outer constant Real c;\n    Real a = c;\n  end L;\n  model M\n"
+                           "    inner outer constant Real c = 2 * c;\n    Real b = c;\n    L l;\n  end M;\n"
+                           "  inner constant Real c = 3;\n  M m;\nend IYU2;\n"),
+               std::string("class IYU2\n  constant Real c = 3.0;\n  constant Real m.c = 6.0;\n  Real m.b = 3.0;\n"
+                           "  Real m.l.a = 6.0;\nend IYU2;\n"));
+}
+
 YMC_TEST_MAIN

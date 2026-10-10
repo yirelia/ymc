@@ -494,3 +494,5 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `km-ut` | 1 | 修饰里的类重声明（单测原文）：extends 修饰（引写修饰的类的参数）、组件声明修饰、短类修饰 |
 | `kx-p1` | 11 | class extends：新类隐式 extends 继承来的同名原类（原类元素在前）顶替基类实例里的原类（KX1）；class extends 的修饰施加到原类元素（KX2）；不带 redeclare 前缀（KX3）；目标经中间基类继承来（KX4）；原类自己有 extends（KX5）；派生类自己也用（KX6）；两层 class extends 串起来（KX8）；新增参数（KX7）；记录的（KX10）SKIP；函数的（KX9，两段算法 omc 报错）、找不到目标（KX11）双拒 |
 | `kx-ut` | 1 | class extends（单测原文）：目标经中间基类继承来、class extends 的修饰施加到原类元素、派生类自己也用 |
+| `iy-p1` | 26 | inner outer：对子层是 inner（子层 outer 连它自己）、经它查名（本层 / 从外面）落到外层 inner（IY1-IY4、IY11）；连接（IY21，inner 是别的类）、继承来的（IY23）、数组（IY24 / IY25）、constant 两头内联（IY26）、复合带方程（IY27）；外来修饰（IY8）；生成外层 inner（IY7）；根类里的 TOP_LEVEL_OUTER（IY6）；没有子层 outer 连它 omc 内部错误（IY5 / IY12 / IY13）；前缀漏进惰性实例化的 inner（IY14 / IY19 SKIP，IY15 / IY20 不漏）；经它求值的结构参数（复合的 IY10 照常求，标量的 IY9 SKIP）；纯 outer 连 constant 内联（IY16）、连嵌套 protected inner（IY17 / IY18） |
+| `iy-ut` | 2 | inner outer（单测原文）：本层 / 从外面经它查名落到外层 inner、子层 outer 连它自己；constant 两头内联 |

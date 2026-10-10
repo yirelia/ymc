@@ -907,21 +907,29 @@ class Flattener {
         fn.push_back(I_.nodes[cn].name);
         inners.push_back({I_.nodes[cn].name, std::move(fn), cn});
       }
-    // 纯 outer 先连到最近的 inner（组件循环之前：本类里写在 outer 声明前面的引用也要换，IO 探针 i70 / i71——omc 实例化时就
+    // outer 先连到最近的 inner（组件循环之前：本类里写在 outer 声明前面的引用也要换，IO 探针 i70 / i71——omc 实例化时就
     // linkInnerOuter，NFInst.mo 的 instClassTree 里 cloneComponent 之后，R11 §5）。没找到的留给循环里 SKIP。
+    // `inner outer`：对子层是 inner（上面已进 inners），outer 一面只连外层的 inner、不连自己（lookupInner 从实例的 instanceParent
+    // 找起，见 Instantiator::insert_generated_inners）。经它查名一律落到那个外层 inner（类树里是 INNER_OUTER_NODE，查名处
+    // resolveInner / resolveInnerCref，NFLookup.mo:927-941、:1047-1068 v1.25.0）：本层的引用（IY 探针 IY1 `isEnabled and
+    // enableMe` 里的 isEnabled）、从外面经它的（IY11 `m.T` → `T`）都是；只有子层 outer 连的是它自己（lookupInner 取 resolveOuter）。
     for (NodeId cn : comps) {
       const CompId cid = I_.nodes[cn].comp;
-      if (!I_.comps[cid].attributes.is_outer || I_.comps[cid].attributes.is_inner) continue;
+      if (!I_.comps[cid].attributes.is_outer) continue;
+      const bool inner_outer = I_.comps[cid].attributes.is_inner;
       const InnerVar* found = nullptr;
-      for (auto it = inners.rbegin(); it != inners.rend(); ++it)
-        if (it->name == I_.nodes[cn].name) { found = &*it; break; }
+      for (std::size_t k = inner_outer ? outer_inners.size() : inners.size(); k-- > 0;)
+        if (inners[k].name == I_.nodes[cn].name) { found = &inners[k]; break; }
       if (!found) continue;
+      // 经 outer 的引用从根按 inner 的全名解析（cref_via_outer）：标量的也是——引到 constant 照常内联（IY 探针 IY16：`outer
+      // constant Real c` → `l.a = 3.0`，此前打成 `l.a = c`）。
+      outer_inner_node_[cn.raw] = found->node;
       // 复合 outer：经它的名字一律在 inner 的类里查（omc 不比 inner / outer 的类型——v1.25.0 NF 里没有这道检查，不相干的类照样
       // 压平，IO 探针 i40 / i42；inner 的类里没有这个名字才报 "Variable a.x not found in scope B"，i15）。
       if (I_.comps[cid].ty.kind == TypeKind::Complex) {
-        outer_inner_node_[cn.raw] = found->node;
         // 经 outer 查名（变率检查、求值时顺实例路径走）落到 inner 的类实例上：omc 查名时 outer 节点就换成了 inner 节点。
-        I_.comps[cid].class_inst = I_.comps[I_.nodes[found->node].comp].class_inst;
+        // inner outer 自己要照常发射，类实例不换（经它的查名由 outer_inner_node_ / outer_path_redirect_ 转走）。
+        if (!inner_outer) I_.comps[cid].class_inst = I_.comps[I_.nodes[found->node].comp].class_inst;
         std::vector<Symbol> on = prefix;
         on.push_back(I_.nodes[cn].name);
         PSubs os = psubs;
@@ -929,7 +937,9 @@ class Flattener {
         os.push_back({});
         const Cref none;
         // 按名找值（const_lookup_val）时把 outer 路径换成 inner 的；inner 在祖先实例里，下标全从本实例前缀来（必有值）。
-        outer_path_redirect_[int_key(on, os)] = {found->flat_name, *inner_subs(found->flat_name, psubs, prefix.size(), none)};
+        const std::string okey = int_key(on, os);
+        outer_path_redirect_[okey] = {found->flat_name, *inner_subs(found->flat_name, psubs, prefix.size(), none)};
+        if (inner_outer) io_path_keys_.insert(okey);   // 它自己的实例路径也是真路径（见 redirect_outer_path）
       }
       outer_redirect_[cn.raw] = found->flat_name;
     }
@@ -996,17 +1006,18 @@ class Flattener {
         }
       }
       // outer 组件：不产出变量（上面已连到最近外层 inner，记好了重定向表供 cref 改写，R11 §5）。找不到 inner → SKIP。
+      // `inner outer` 照常发射（对子层是 inner），外来修饰照常施加（applyModifier 只拒纯 outer，NFInst.mo:1590 v1.25.0；IY 探针
+      // IY8 `M m(x = 2)` → `m.x = 2.0`）。
       if (I_.comps[cid].attributes.is_outer) {
         // 外来修饰改 outer 元素（InnerOuterInvalidMod2/3：OUTER_ELEMENT_MOD）→ omc 报错 → SKIP。
-        for (const ModSource& m : ctx.mods)
-          for (const SSubMod& sm : I_.scode.mods[m.mod].subs)
-            if (sm.ident == cname) set_unsupported("modifier on outer element");
+        if (!I_.comps[cid].attributes.is_inner)
+          for (const ModSource& m : ctx.mods)
+            for (const SSubMod& sm : I_.scode.mods[m.mod].subs)
+              if (sm.ident == cname) set_unsupported("modifier on outer element");
         if (result_.unsupported) continue;
-        // `inner outer` 组合前缀：既声明本层变量又连外层 inner（InnerOuter3），v1 只做纯 outer → SKIP。
-        if (I_.comps[cid].attributes.is_inner) { set_unsupported("inner outer combined"); continue; }
         if (has_dims) { set_unsupported("outer array"); continue; }
-        if (!outer_redirect_.count(cn.raw)) set_unsupported("outer without matching inner");
-        continue;
+        if (!outer_redirect_.count(cn.raw)) { set_unsupported("outer without matching inner"); continue; }
+        if (!I_.comps[cid].attributes.is_inner) continue;
       }
       bool is_prot = protected_ctx || vis == Visibility::Protected;
       std::vector<Symbol> name = prefix;
@@ -4316,14 +4327,17 @@ class Flattener {
   }
 
   // 名字链（带逐段下标）里有一段是复合 outer 组件的实例路径 → 换成它连到的 inner 的全名接上余下的段（IO 探针 i22-i24：
-  // B 里 `a.k` 的值键是 `a.k` 不是 `b.a.k`）。
-  void redirect_outer_path(std::vector<Symbol>& names, PSubs& subs) {
+  // B 里 `a.k` 的值键是 `a.k` 不是 `b.a.k`）。plen = 书写处前缀的段数：inner outer 的路径同时是它自己的实例路径，前缀里的
+  //（在它自己的实例里求值）不转，cref 的段经它的才转；正按 inner 自己解析的那条（io_pass_key_，见 cref_via_outer）也不转。
+  void redirect_outer_path(std::vector<Symbol>& names, PSubs& subs, std::size_t plen) {
     if (outer_path_redirect_.empty()) return;
     subs.resize(names.size());
     for (std::size_t k = 1; k <= names.size(); ++k) {
       const std::vector<Symbol> head(names.begin(), names.begin() + static_cast<std::ptrdiff_t>(k));
       const PSubs hs(subs.begin(), subs.begin() + static_cast<std::ptrdiff_t>(k));
-      const auto it = outer_path_redirect_.find(int_key(head, hs));
+      const std::string key = int_key(head, hs);
+      if (io_path_keys_.count(key) && (k <= plen || key == io_pass_key_)) continue;
+      const auto it = outer_path_redirect_.find(key);
       if (it == outer_path_redirect_.end()) continue;
       std::vector<Symbol> nn = it->second.first;
       PSubs ns = it->second.second;
@@ -4435,13 +4449,14 @@ class Flattener {
     }
     return s;
   }
-  // 引用经过复合 outer 组件（`a.x`、`d.c.b.a.x`，a 是 `outer A a`）：omc 查名时把 outer 节点换成 inner 节点（InstNode.resolveOuter），
-  // 等于 inner 的全名接上余下的段——从根实例解析（IO 探针 i10-i112）。余下的段的下标见下。
-  std::optional<Id<Expr>> cref_via_outer(const Cref& c, NodeId enclosing, const std::vector<Symbol>& prefix) {
+  // 引用经过 outer 组件（`a.x`、`d.c.b.a.x`，a 是 `outer A a`；标量的 `x`）：omc 查名时把 outer 节点换成 inner 节点（InstNode.resolveOuter），
+  // 等于 inner 的全名接上余下的段——从根实例解析（IO 探针 i10-i112）。余下的段的下标见下。trusted = 前几段是正按 inner 自己
+  // 解析的全名（本函数递归进来的那次）：不再转。
+  std::optional<Id<Expr>> cref_via_outer(const Cref& c, NodeId enclosing, const std::vector<Symbol>& prefix, std::size_t trusted) {
     if (outer_inner_node_.empty() || c.parts.empty() || c.leading_dot) return std::nullopt;
     NodeId node = find_local(enclosing, c.parts[0].name);
     for (std::size_t i = 0; i < c.parts.size() && is_comp_node(node); ++i) {
-      if (const auto it = outer_inner_node_.find(node.raw); it != outer_inner_node_.end()) {
+      if (const auto it = i >= trusted ? outer_inner_node_.find(node.raw) : outer_inner_node_.end(); it != outer_inner_node_.end()) {
         const std::vector<Symbol>& in = outer_redirect_.at(node.raw);
         const std::optional<PSubs> is = inner_subs(in, cur_psubs_, prefix.size(), c);
         if (!is || !c.parts[i].subscripts.empty()) { set_unsupported("subscript through outer"); return lit_int(0); }
@@ -4469,7 +4484,14 @@ class Flattener {
           }
           nc.parts.push_back(std::move(p));
         }
-        return cref(synth_cref(std::move(nc)), root_, {});
+        // inner 的全名这几段是它自己的实例路径：不再经 outer / inner outer 转（inner outer 连上的是它自己，不是它外层的 inner），
+        // 也不查 protected（IY 探针 IY17：`protected inner W w` → `m.l.y = m.w.g`，此前 SKIP）。
+        const std::string saved_key = io_pass_key_;
+        io_pass_key_ = int_key(in, *is);
+        trusted_parts_ = in.size();
+        const Id<Expr> r = cref(synth_cref(std::move(nc)), root_, {});
+        io_pass_key_ = saved_key;
+        return r;
       }
       if (i + 1 >= c.parts.size()) break;
       const NodeId cls = I_.comps[I_.nodes[node].comp].class_inst;
@@ -8371,6 +8393,12 @@ class Flattener {
     const NodeId ln = find_local(lex_view(inst, cscope), c.parts[0].name);
     if (!ln.is_valid() || I_.nodes[ln].is_empty() || !I_.nodes[ln].comp.is_valid()) return r;
     const CompId cid = I_.nodes[ln].comp;
+    // inner outer：本层按名查到它 = 它外层的 inner（见压平处的连接），值不是本帧它自己的 → 不求（调用方 SKIP / 照符号）。
+    // ponytail: 改按外层 inner 的值求（同纯 outer，那边也还没做），要等 inner 发射序问题一起做。
+    if (I_.comps[cid].attributes.is_outer && I_.comps[cid].attributes.is_inner) {
+      r.kind = FrameHit::Fail;
+      return r;
+    }
     // 有效变率 = 声明变率按本帧实例的下限下沉（`constant R r` 里的 `Real x` 是 constant，variabilityMin；RecordBinding7）。
     const ModCtx* fctx = frames_[static_cast<std::size_t>(fi)].ctx;
     const SVariability var = var_min(fctx ? fctx->var_floor : SVariability::Var, I_.comps[cid].attributes.variability);
@@ -13012,7 +13040,7 @@ class Flattener {
     PSubs rsubs = psubs;
     rsubs.resize(pfx.size());
     rsubs.push_back({});
-    redirect_outer_path(rnames, rsubs);
+    redirect_outer_path(rnames, rsubs, pfx.size());
     // 字段逐个取值时不打结构标记：omc 标的是整个记录组件节点（Structural.markExp 的 CREF 支 markComponent 只改该节点），字段
     // 照旧不 final（SP 探针 SPV `final parameter LP p = ren(mc) annotation(Evaluate = true)` → mc.VTO 照打 `parameter`；MSL
     // Spice3 InvertersApartRecord 的 mp1.modelcard.*）；记录节点本身记进 record_marks_。
@@ -13078,7 +13106,7 @@ class Flattener {
       }
       isubs.push_back(std::move(is));
     }
-    redirect_outer_path(names, isubs);
+    redirect_outer_path(names, isubs, prefix.size());
     const std::string key = int_key(names, isubs);
     auto it = const_vals_.find(key);
     if (it != const_vals_.end()) return it->second;
@@ -13855,6 +13883,7 @@ class Flattener {
 
   // cref：解析首段到 enclosing 的本地组件；命中 → 前缀改写 + 取其类型；否则（time 等内建）原样、类型 Real。
   Id<Expr> cref(Id<Cref> ac, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    const std::size_t trusted = std::exchange(trusted_parts_, 0);   // 只给这一层（见 cref_via_outer）
     const Cref& c = I_.absyn.crefs[ac];
     // for-语句迭代变量（KEPT loop）：符号引用，元素类型，不内联/不加前缀（对标 flattenStatement 不替换迭代变量）。
     if (!stmt_iters_.empty() && c.parts.size() == 1 && c.parts[0].subscripts.empty()) {
@@ -13885,7 +13914,7 @@ class Flattener {
         return lit_int(it->second);
       }
     }
-    if (std::optional<Id<Expr>> r = cref_via_outer(c, enclosing, prefix)) return *r;
+    if (std::optional<Id<Expr>> r = cref_via_outer(c, enclosing, prefix, trusted)) return *r;
     Expr e;
     e.kind = ExprKind::Cref;
     std::vector<Id<Expr>> leaf_subs;   // 末段各下标的定型结果（invalid = 照常 inst：符号下标）
@@ -14012,12 +14041,13 @@ class Flattener {
         NodeId nxt = has_tree ? find_local(cls, c.parts[i].name) : Inst::empty_node();
         if (!nxt.is_valid() || I_.nodes[nxt].is_empty()) { ok = false; break; }
         // 从外面访问 protected 元素（ProtectedAccess2 `tm.x`）→ omc 报错（ILLEGAL_ACCESS_PROTECTED）。
-        if (I_.nodes[nxt].visibility == Visibility::Protected) { set_unsupported("access of protected element"); ok = false; break; }
+        if (i >= trusted && I_.nodes[nxt].visibility == Visibility::Protected) { set_unsupported("access of protected element"); ok = false; break; }
         cur = nxt;
         leaf = nxt;
       }
-      // 叶子是 outer 组件 → 整条引用换成它连接到的 inner 全名（不加前缀）：`a.x`(x outer) → `c.x`（R11 §5）。
-      if (ok) {
+      // 叶子是 outer 组件 → 整条引用换成它连接到的 inner 全名（不加前缀）：`a.x`(x outer) → `c.x`（R11 §5）。叶子在正按 inner 自己
+      // 解析的全名里（见 cref_via_outer）→ 不转。
+      if (ok && c.parts.size() > trusted) {
         auto it = outer_redirect_.find(leaf.raw);
         if (it != outer_redirect_.end()) {
           e.ty = I_.comps[I_.nodes[leaf].comp].ty;
@@ -21160,9 +21190,11 @@ class Flattener {
     const bool outside = c.parts.size() == 1 || first_conn;
     bool pp = false;            // 当前段 potentially present（ModCtx::pp_chain 同一规则）
     bool is_virtual = false;
+    // 首段是 outer：往下的段在 inner 的类里查（纯 outer 的类实例已换成 inner 的；inner outer 的是它自己的，要另取）。
+    auto walk_node = [&](std::size_t i) { return i == 1 && rooted ? outer_inner_node_.at(cur.raw) : cur; };
     for (std::size_t i = 1; i < c.parts.size(); ++i) {
-      const NodeId cls = class_of(cur);
-      const bool cls_exp = is_expandable_comp(cur);
+      const NodeId cls = class_of(walk_node(i));
+      const bool cls_exp = is_expandable_comp(walk_node(i));
       const NodeId nxt = cls.is_valid() ? find_local(cls, c.parts[i].name) : NodeId{};
       if (!nxt.is_valid() || I_.nodes[nxt].is_empty()) {
         if (!cls_exp || i + 1 != c.parts.size() || !c.parts[i].subscripts.empty()) return std::nullopt;
@@ -21170,6 +21202,9 @@ class Flattener {
         path.push_back(c.parts[i].name);
         break;
       }
+      // 后面的段是 outer（`connect(a.p, q)`，p 是 a 里的 outer / inner outer）：omc 把全名收成 inner 的（resolveInnerCref），
+      // 未做 → SKIP（此前当成 a 自己的 p 连）。
+      if (outer_inner_node_.count(nxt.raw)) return std::nullopt;
       pp = (cls_exp || pp) && !is_expandable_comp(nxt);
       if (!is_connector_comp(nxt, cls, pp)) return std::nullopt;
       cur = nxt;
@@ -21177,6 +21212,9 @@ class Flattener {
       path.push_back(c.parts[i].name);
     }
     // 端种类 + 叶成员表（split 序：每层 potential 升序 → flow 升序，子连接器就地展开；见 connector_leaves）。
+    // 端点就是首段的 inner outer：成员按它连上的 inner 取（omc 解析成那个 inner 节点）；经 outer 的 expandable 端下面照旧 SKIP。
+    const bool io_end = segs.size() == 1 && rooted && I_.comps[I_.nodes[cur].comp].attributes.is_inner;
+    const NodeId end_node = io_end ? outer_inner_node_.at(cur.raw) : cur;
     EndKind kind = EndKind::Normal;
     NodeId parent;
     std::vector<ConnMember> members;
@@ -21186,7 +21224,7 @@ class Flattener {
     } else if (is_expandable_comp(cur)) {
       kind = EndKind::Expandable;   // 成员 = 增广后的类型（updateExpandableConnector :490-500，增广时补）
     } else {
-      const CompId ccid = I_.nodes[cur].comp;
+      const CompId ccid = I_.nodes[end_node].comp;
       if (pp) {
         kind = EndKind::Declared;
         parent = segs[segs.size() - 2].comp;   // pp 只能在第二段起成立
@@ -21194,7 +21232,7 @@ class Flattener {
         if (!sel.attr.dims.empty() || !sel.type.dims.empty()) return std::nullopt;   // pp 数组成员属增量 B
       }
       if (I_.comps[ccid].ty.kind == TypeKind::Complex) {
-        const NodeId conn = class_of(cur);
+        const NodeId conn = class_of(end_node);
         if (!conn.is_valid()) return std::nullopt;
         if (I_.scode.elems[I_.nodes[conn].def].restriction == SRestriction::OperatorRecord) {
           // operator record 的短类连接器（`connector ComplexOutput = output Complex`，is_connector_comp 已核）：成员是记录字段、
@@ -23959,7 +23997,7 @@ class Flattener {
   Interner& in_;
   FlattenResult result_;
   std::unordered_map<std::uint32_t, std::vector<Symbol>> outer_redirect_;   // outer 组件节点 raw → inner 全名
-  std::unordered_map<std::uint32_t, NodeId> outer_inner_node_;               // 复合 outer 组件节点 raw → inner 组件节点
+  std::unordered_map<std::uint32_t, NodeId> outer_inner_node_;               // outer 组件节点 raw → inner 组件节点
   std::unordered_map<std::uint32_t, std::vector<Symbol>> unmet_memo_;        // 类定义 raw → 整个实例化时缺 inner 的 outer 名
   std::unordered_map<std::uint32_t, bool> detach_memo_;                      // 写类型名 / 基类名的元素 raw → 查名会生成 inner
   std::unordered_set<std::uint32_t> derived_record_insts_;                   // 声明类型是短类记录的组件的实例类节点
@@ -23972,6 +24010,9 @@ class Flattener {
   std::unordered_map<std::string, std::vector<std::vector<Symbol>>> type_fns_;
   // 复合 outer 的实例路径键 → inner 全名及其逐段下标
   std::unordered_map<std::string, std::pair<std::vector<Symbol>, PSubs>> outer_path_redirect_;
+  std::unordered_set<std::string> io_path_keys_;   // 其中 inner outer 的（也是它自己的实例路径，见 redirect_outer_path）
+  std::string io_pass_key_;       // 正按 inner 自己解析的全名的路径键（见 cref_via_outer）
+  std::size_t trusted_parts_ = 0;  // 下一次 cref() 的前几段是正按 inner 自己解析的全名（见 cref_via_outer）
   std::unordered_set<std::uint32_t> evaluating_;   // 正在求值的常量节点（环检测）
   PSubs cur_psubs_;     // 当前 prefix 的逐段下标（复合数组 `a[i]`）；cref 前缀改写读它。emit_*/collect_equation 入口设置
   std::unordered_map<std::uint32_t, CVal>* locals_ = nullptr;   // 用户函数解释期的局部环境（输入/局部/输出名→值）

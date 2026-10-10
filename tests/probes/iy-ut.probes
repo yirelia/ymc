@@ -1,0 +1,29 @@
+//// set: iy-ut — inner outer（单测原文）：本层 / 从外面经它查名落到外层 inner、子层 outer 连它自己；constant 两头内联
+//// model: IYU1
+model IYU1
+  model Leaf
+    outer Real T;
+    Real y = 2 * T;
+  end Leaf;
+  model Mid
+    inner outer Real T = T + 1;
+    Leaf l;
+  end Mid;
+  inner Real T = time;
+  Mid m;
+  Real b = m.T;
+end IYU1;
+//// model: IYU2
+model IYU2
+  model L
+    outer constant Real c;
+    Real a = c;
+  end L;
+  model M
+    inner outer constant Real c = 2 * c;
+    Real b = c;
+    L l;
+  end M;
+  inner constant Real c = 3;
+  M m;
+end IYU2;
