@@ -1,0 +1,337 @@
+//// set: il-p1 — 继承来的类 / 元素的查找（ClassTree.expand：本地 > 继承 > import，extends 先后先到先得；继承类的词法父亲是基类）；经改了基类常量的 extends 继承来的类、本类有元素级重声明时继承来的类（IL22）、外层实例上被改过的常量（嵌套类 / 模型内函数读到的是改过的值）SKIP；继承来的函数的压平名 = 访问它的实例路径，经包路径访问的 SKIP
+//// model: IL1
+model IL1
+  model Base
+    model B
+      Real x = 1;
+    end B;
+  end Base;
+  model A
+    extends Base;
+    B b;
+  end A;
+  A a;
+end IL1;
+//// model: IL2
+model IL2
+  model Base
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := 2 * x;
+    end f;
+    constant Real k = 3;
+    type T = Real(unit = "m");
+  end Base;
+  model A
+    extends Base;
+    Real y = f(time) + k;
+    T z = time;
+  end A;
+  A a;
+end IL2;
+//// model: IL3
+model IL3
+  package Base
+    constant Integer n = 1;
+    model B
+      Real x[n] = fill(1, n);
+    end B;
+  end Base;
+  package P
+    extends Base(n = 3);
+  end P;
+  P.B b;
+end IL3;
+//// model: IL4
+model IL4
+  package Base
+    constant Integer n = 2;
+    type T = Real(unit = "m");
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := n * x;
+    end f;
+    model B
+      T x = f(time);
+    end B;
+  end Base;
+  package P
+    extends Base;
+  end P;
+  P.B b;
+  P.T t = P.f(time) + P.n;
+end IL4;
+//// model: IL5
+model IL5
+  model A
+    constant Integer n = 1;
+    model B
+      Real x[n] = fill(1, n);
+    end B;
+    B b;
+  end A;
+  A a(n = 3);
+end IL5;
+//// model: IL6
+model IL6
+  model Base
+    constant Integer n = 1;
+    model B
+      Real x[n] = fill(1, n);
+    end B;
+  end Base;
+  model A
+    extends Base;
+    B b;
+  end A;
+  A a(n = 3);
+end IL6;
+//// model: IL7
+model IL7
+  model Base
+    constant Integer n = 1;
+    model B
+      Real x = n;
+    end B;
+  end Base;
+  model A
+    extends Base(n = 3);
+    B b;
+  end A;
+  A a;
+end IL7;
+//// model: IL8
+model IL8
+  model Base
+    parameter Integer n = 1;
+    model B
+      Real x = n;
+    end B;
+  end Base;
+  model A
+    extends Base(n = 3);
+    B b;
+  end A;
+  A a;
+end IL8;
+//// model: IL9
+model IL9
+  model A
+    constant Integer n = 1;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := n * x;
+    end f;
+    Real y = f(time);
+  end A;
+  A a(n = 3);
+end IL9;
+//// model: IL10
+model IL10
+  model A
+    constant Integer n = 1;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := n * x;
+    end f;
+    Real y = f(2);
+  end A;
+  A a(n = 3);
+end IL10;
+//// model: IL11
+model IL11
+  model A
+    constant Integer n = 2;
+    constant Integer m = 4;
+    model B
+      Real x[m] = fill(1, m);
+    end B;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := m * x;
+    end f;
+    B b;
+    Real y = f(time);
+  end A;
+  A a(n = 3);
+end IL11;
+//// model: IL12
+model IL12
+  model A
+    constant Integer n = 2;
+    model B
+      Real x[n] = fill(1, n);
+    end B;
+    B b;
+  end A;
+  A a;
+end IL12;
+//// model: IL13
+model IL13
+  model Base1
+    model B
+      Real x = 1;
+    end B;
+  end Base1;
+  model Base2
+    model B
+      Real y = 2;
+    end B;
+  end Base2;
+  model A
+    extends Base1;
+    extends Base2;
+    B b;
+  end A;
+  A a;
+end IL13;
+//// model: IL14
+package IL14P
+  package PartialMedium
+    constant Integer nX = 3;
+    constant Real reference_X[nX] = fill(1 / nX, nX);
+    model BaseProperties
+      Real[nX] X(start = reference_X[1:nX]);
+    end BaseProperties;
+  end PartialMedium;
+  package TableBased
+    extends PartialMedium;
+  end TableBased;
+  package Glycol
+    extends TableBased;
+  end Glycol;
+end IL14P;
+model IL14
+  IL14P.Glycol.BaseProperties medium;
+end IL14;
+//// model: IL15
+model IL15
+  model Base
+    parameter Real p = 1;
+    model B
+      Real x = 2;
+    end B;
+  end Base;
+  model A
+    extends Base(p = 5);
+    B b;
+    Real z = p;
+  end A;
+  A a;
+end IL15;
+//// model: IL16
+model IL16
+  model Base
+    model B
+      Real x = 1;
+    end B;
+  end Base;
+  model A
+    extends Base;
+  end A;
+  A.B b;
+end IL16;
+//// model: IL17
+model IL17
+  model Base
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := 2 * x;
+    end f;
+    function g
+      input Real x;
+      output Real y;
+    algorithm
+      y := f(x) + 1;
+    end g;
+  end Base;
+  model A
+    extends Base;
+    Real y = g(time);
+  end A;
+  A a;
+end IL17;
+//// model: IL18
+model IL18
+  model Base
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := 2 * x;
+    end f;
+  end Base;
+  extends Base;
+  Real y = f(time);
+end IL18;
+//// model: IL19
+model IL19
+  package Base
+    type E = enumeration(a, b);
+    constant E ce = E.b;
+  end Base;
+  package P
+    extends Base;
+  end P;
+  P.E e = P.ce;
+end IL19;
+//// model: IL20
+model IL20
+  model Base
+    record R
+      Real x;
+      Real y = 2;
+    end R;
+  end Base;
+  model A
+    extends Base;
+    R r = R(time, 3);
+  end A;
+  A a;
+end IL20;
+//// model: IL21
+model IL21
+  model Base
+    model B
+      Real x = 1;
+    end B;
+  end Base;
+  model A
+    extends Base;
+    model B
+      Real y = 2;
+    end B;
+    B b;
+  end A;
+  A a;
+end IL21;
+//// model: IL22
+model IL22
+  package P1
+    model M1
+      M2 m;
+    end M1;
+    replaceable model M2
+      Real q = 1;
+    end M2;
+  end P1;
+  package P2
+    extends P1;
+    redeclare model M2
+      Real r = 2;
+    end M2;
+  end P2;
+  P2.M1 m1;
+end IL22;

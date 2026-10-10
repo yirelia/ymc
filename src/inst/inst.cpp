@@ -154,11 +154,8 @@ NodeId Instantiator::lookup_simple_class(Symbol name, NodeId scope) {
   while (cur.is_valid() && !I_.nodes[cur].is_empty()) {
     if (I_.nodes[cur].kind == NodeKind::Class && I_.nodes[cur].cls.is_valid()) {
       const ClassTreeId tid = I_.classes[I_.nodes[cur].cls].tree;
-      if (tid.is_valid()) {
-        const ClassTree& t = I_.trees[tid];
-        auto it = t.lookup.find(name);
-        if (it != t.lookup.end() && it->second.kind == LEntry::Kind::Class) return t.classes[it->second.index];
-      }
+      if (tid.is_valid())
+        if (const NodeId hit = tree_class(tid, name); !I_.nodes[hit].is_empty()) return hit;
       const NodeId im = import_class(name, cur);   // 可能 partial_inst / expand 别的包 → arena add，上面的引用不再用
       if (im.is_valid() && !I_.nodes[im].is_empty()) return im;
       if (unsupported_) return Inst::empty_node();   // 冲突 / 解析不到的 import：不再往外层找（omc 在这里报错）
@@ -229,11 +226,9 @@ NodeId Instantiator::import_class(Symbol name, NodeId cls) {
     if (I_.node_class(pkg).state == ClassState::PartialClass) expand(pkg);
     const ClassTreeId pt = I_.node_class(pkg).tree;
     if (!pt.is_valid()) continue;
-    const ClassTree& t = I_.trees[pt];
-    const auto it = t.lookup.find(name);
-    if (it == t.lookup.end()) continue;
+    if (!I_.trees[pt].lookup.count(name)) continue;
     ++matches;
-    found = it->second.kind == LEntry::Kind::Class ? t.classes[it->second.index] : Inst::empty_node();
+    found = tree_class(pt, name);
   }
   if (matches >= 2) { mark_unsupported("conflicting imports"); return Inst::empty_node(); }
   if (matches == 1 && (!found.is_valid() || I_.nodes[found].is_empty())) {   // 类型名查到的是组件（常量）→ omc 报错
@@ -241,6 +236,17 @@ NodeId Instantiator::import_class(Symbol name, NodeId cls) {
     return Inst::empty_node();
   }
   return found;
+}
+
+// 类树 tid 里名为 name 的类（本地或继承来的，见 expand）；没有 / 是组件 → empty。经改了基类常量 / 类的 extends、或本类有元素级
+// 重声明时继承来的 → 标 SKIP（见 expand）。
+NodeId Instantiator::tree_class(ClassTreeId tid, Symbol name) {
+  const ClassTree& t = I_.trees[tid];
+  const auto it = t.lookup.find(name);
+  if (it == t.lookup.end() || it->second.kind != LEntry::Kind::Class) return Inst::empty_node();
+  if (t.classes_via_mod.count(it->second.index))
+    mark_unsupported("inherited class seen through modifier / redeclare", std::string(I_.interner.str(name)));
+  return t.classes[it->second.index];
 }
 
 NodeId Instantiator::lookup_class_name(const std::vector<Symbol>& path, NodeId scope, std::vector<NodeId>* path_nodes) {
@@ -254,15 +260,8 @@ NodeId Instantiator::lookup_class_name(const std::vector<Symbol>& path, NodeId s
       partial_inst(cur);
       expand(cur);
     }
-    const Class& c = I_.node_class(cur);
-    NodeId next = Inst::empty_node();
-    if (c.tree.is_valid()) {
-      const ClassTree& t = I_.trees[c.tree];
-      auto it = t.lookup.find(path[i]);
-      if (it != t.lookup.end() && it->second.kind == LEntry::Kind::Class)
-        next = t.classes[it->second.index];
-    }
-    cur = next;
+    const ClassTreeId ct = I_.node_class(cur).tree;
+    cur = ct.is_valid() ? tree_class(ct, path[i]) : Inst::empty_node();
     if (path_nodes && cur.is_valid() && !I_.nodes[cur].is_empty()) path_nodes->push_back(cur);
   }
   return (cur.is_valid() && !I_.nodes[cur].is_empty()) ? cur : Inst::empty_node();
@@ -397,18 +396,13 @@ bool Instantiator::binding_exp_equal(Id<Exp> a, Id<Exp> b) const {
   return exp_equal(I_.absyn, a, b);
 }
 
-// 类的元素里（本地 + 顺 extends 继承来的）嵌套类的名字。
+// 类的元素里（本地 + 顺 extends 继承来的）嵌套类的名字。顺 expand 解析好的基类走（被同名本地组件挡在查找表外的继承类也要算上）。
 void Instantiator::collect_class_names(NodeId def_node, std::unordered_set<std::uint32_t>& out, int depth) {
   if (depth > 50 || !def_node.is_valid() || I_.nodes[def_node].is_empty() || !I_.nodes[def_node].cls.is_valid()) return;
   const ClassTreeId tid = I_.node_class(def_node).tree;
   if (!tid.is_valid()) return;
   for (NodeId k : I_.trees[tid].classes) out.insert(I_.nodes[k].name.id);
-  const std::vector<NodeId> exts = I_.trees[tid].exts;   // 拷贝（lookup 会 arena add）
-  for (NodeId ext : exts) {
-    const std::vector<Symbol> bp = I_.scode.elems[I_.nodes[ext].def].base_path;
-    const NodeId b = lookup_class_name(bp, def_node);
-    if (b.is_valid() && !I_.nodes[b].is_empty()) collect_class_names(b, out, depth + 1);
-  }
+  for (std::size_t i = 0; i < I_.trees[tid].ext_bases.size(); ++i) collect_class_names(I_.trees[tid].ext_bases[i], out, depth + 1);
 }
 
 // 外部对象类的合法形态（makeExternalObjectType，NFInst.mo:918-990 v1.25.0）：不能有组件；除 ExternalObject 外的 extends
@@ -449,8 +443,9 @@ void Instantiator::expand(NodeId cls) {
   ClassTreeId tree_id = I_.node_class(cls).tree;
   // 校验并展开各基类（其树要就绪，inst_extends 才能取到继承组件）。
   const std::vector<NodeId> exts = I_.trees[tree_id].exts;   // 拷一份避免遍历中 arena 变动
-  for (NodeId ext : exts) {
-    const SElement& ee = I_.scode.elems[I_.nodes[ext].def];
+  std::vector<NodeId> bases(exts.size(), Inst::empty_node());   // 各 extends 解析到的基类（记进 ext_bases，之后不重查）
+  for (std::size_t xi = 0; xi < exts.size(); ++xi) {
+    const SElement& ee = I_.scode.elems[I_.nodes[exts[xi]].def];
     // extends 带整体绑定 `extends A = expr` 不合法/未做；子修饰 `extends A(x=1)` 在 inst_class 合并（见下）。
     if (ee.mod.is_valid() && I_.scode.mods[ee.mod].binding.is_valid()) mark_unsupported("extends whole binding");
     // 基类名从**扩展类自身**开始查（MLS §7.1：在扩展类的部分展平形态里查；extends 节点的 parent 是扩展类本身，
@@ -477,15 +472,75 @@ void Instantiator::expand(NodeId cls) {
     }
     if (I_.node_class(base).state == ClassState::NotInstantiated) partial_inst(base);
     expand(base);
+    bases[xi] = base;
   }
   if (I_.node_class(cls).is_ext_object) check_ext_object(cls);
-  // 本地组件登记进 lookup（下标 = def 组件数组里的位置；v1 未做继承元素合并到 lookup）。
-  ClassTree& tree = I_.trees[tree_id];
-  for (std::uint32_t li : tree.local_components) {
-    const INode& cn = I_.nodes[tree.components[li]];
-    tree.lookup[cn.name] = LEntry{LEntry::Kind::Component, li};
+  // 本地组件登记进 lookup（下标 = def 组件数组里的位置；继承来的组件不登记——压平按实例树找组件）。
+  {
+    ClassTree& tree = I_.trees[tree_id];
+    for (std::uint32_t li : tree.local_components) {
+      const INode& cn = I_.nodes[tree.components[li]];
+      tree.lookup[cn.name] = LEntry{LEntry::Kind::Component, li};
+    }
   }
-  tree.state = TreeState::ExpandedTree;
+  // 继承来的类进本类的查找表（ClassTree.expand → expandExtends / addInheritedElement，NFClassTree.mo:349-426 / :1941-2010
+  // v1.25.0）：本地元素优先，其次按 extends 先后、先到先得（addInheritedElementConflict 留下标小的；同名的两个类 omc 不比
+  // 内容，Class.isIdentical NFClass.mo 只比前缀）；import 不继承。基类名在合并前就都解析完了（上面的循环 = expandExtends 先于
+  // ClassTree.expand，R12 p11）。继承类节点与基类共享，词法父亲仍是基类定义；OMC 里父亲是带修饰的 extends 实例——extends 改了
+  // 基类的常量 / 类时嵌套类读到改过的值（IC11 探针：`extends Base(n = 3)` 里继承来的 B 读 n 得 3），ymc 读不到 → 记下，用到
+  // 时 SKIP（tree_class）。本类有元素级重声明（`redeclare model M2 … end M2;`）同理：OMC 里继承类按 extends 实例查到的是替换后
+  // 的类（RedeclareClass2：P2 继承来的 M1 里的 `M2 m` 是 P2 重声明的 M2），ymc 的继承类节点看到的是基类里原来的。
+  bool local_redecl = false;
+  for (Id<SElement> e : I_.scode.elems[I_.nodes[cls].def].def.elements)
+    local_redecl = local_redecl || (I_.scode.elems[e].prefixes.is_redeclare && I_.scode.elems[e].kind != SElementKind::Extends);
+  for (std::size_t xi = 0; xi < exts.size(); ++xi) {
+    const NodeId base = bases[xi];
+    if (I_.nodes[base].is_empty() || !I_.nodes[base].cls.is_valid() || !I_.node_class(base).tree.is_valid()) continue;
+    const ClassTreeId bt = I_.node_class(base).tree;
+    const bool modded = local_redecl || ext_mod_hits_consts(base, I_.scode.elems[I_.nodes[exts[xi]].def].mod);
+    for (std::uint32_t j = 0; j < I_.trees[bt].classes.size(); ++j) {
+      const NodeId bc = I_.trees[bt].classes[j];
+      const auto bit = I_.trees[bt].lookup.find(I_.nodes[bc].name);
+      // 基类里被遮住的同名类（基类本地的那个才在表里）不往下传。
+      if (bit == I_.trees[bt].lookup.end() || bit->second.kind != LEntry::Kind::Class || bit->second.index != j) continue;
+      ClassTree& tree = I_.trees[tree_id];
+      if (tree.lookup.count(I_.nodes[bc].name)) continue;
+      const auto idx = static_cast<std::uint32_t>(tree.classes.size());
+      tree.lookup[I_.nodes[bc].name] = LEntry{LEntry::Kind::Class, idx};
+      tree.classes.push_back(bc);
+      if (modded || I_.trees[bt].classes_via_mod.count(j)) tree.classes_via_mod.insert(idx);
+    }
+  }
+  I_.trees[tree_id].ext_bases = std::move(bases);
+  I_.trees[tree_id].state = TreeState::ExpandedTree;
+}
+
+// extends 修饰 m 改到了基类 base（含它继承来的）的常量或类：嵌套类按词法读得到它们（外层作用域里查到的组件须是常量，
+// MLS §5.3.1；IC10 探针：读外层的 parameter → omc "found in an enclosing scope but is not a constant"）。名字找不到 → 算改到了
+//（保守）。
+bool Instantiator::ext_mod_hits_consts(NodeId base, Id<SMod> m) {
+  if (!m.is_valid()) return false;
+  for (const SSubMod& sm : I_.scode.mods[m].subs) {
+    const Id<SElement> e = member_def(base, sm.ident, 0);
+    if (!e.is_valid() || I_.scode.elems[e].kind != SElementKind::Component ||
+        I_.scode.elems[e].attr.var == SVariability::Const)
+      return true;
+  }
+  return false;
+}
+
+// 已 expand 的类 cls 自己声明的、或顺 extends 继承来的、名为 name 的元素（类 / 组件）的 SCode 声明；没有 → invalid。
+Id<SElement> Instantiator::member_def(NodeId cls, Symbol name, int depth) {
+  if (depth > 50 || I_.nodes[cls].is_empty() || !I_.nodes[cls].def.is_valid()) return {};
+  for (Id<SElement> e : I_.scode.elems[I_.nodes[cls].def].def.elements) {
+    const SElement& el = I_.scode.elems[e];
+    if ((el.kind == SElementKind::Component || el.kind == SElementKind::Class) && el.name == name) return e;
+  }
+  if (!I_.nodes[cls].cls.is_valid() || !I_.node_class(cls).tree.is_valid()) return {};
+  const ClassTreeId t = I_.node_class(cls).tree;
+  for (std::size_t i = 0; i < I_.trees[t].ext_bases.size(); ++i)
+    if (const Id<SElement> e = member_def(I_.trees[t].ext_bases[i], name, depth + 1); e.is_valid()) return e;
+  return {};
 }
 
 // -------------------------------------------------------------- instClass（克隆 + 建 FlatTree）
@@ -541,7 +596,9 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node) {
       std::uint32_t ext_i = I_.nodes[cn].ext_index;
       NodeId ext = I_.trees[def_tree_id].exts[ext_i];
       const SElement& ee = I_.scode.elems[I_.nodes[ext].def];
-      NodeId base_def = lookup_class_name(ee.base_path, def_node);   // 同 expand：从扩展类自身查（T-S3-07）
+      // expand 解析好的基类（从扩展类自身、只看本地类查的，T-S3-07）；此时再查会看到继承来的同名类。
+      const NodeId base_def = ext_i < I_.trees[def_tree_id].ext_bases.size() ? I_.trees[def_tree_id].ext_bases[ext_i]
+                                                                              : Inst::empty_node();
       if (!base_def.is_valid() || I_.nodes[base_def].is_empty()) continue;  // expand 已报错
       // extends 内建类型（extends Real 之类）v1 还没做，标 unsupported 并跳过（避免实例化无类体的内建节点）。
       bool base_builtin = false;

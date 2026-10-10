@@ -496,7 +496,7 @@ class Flattener {
   bool bad_extends_path(const SElement& x, const ScodeScope& scope) {
     if (x.base_path.empty()) return false;
     ScodeScope ds;
-    Id<SElement> e = find_scode_element_at(x.base_path[0], x.base_leading_dot ? ScodeScope{} : scope, ds);
+    Id<SElement> e = find_scode_element_at(x.base_path[0], x.base_leading_dot ? ScodeScope{} : scope, ds, /*inherit0=*/false);
     if (e.is_valid() && I_.scode.elems[e].kind == SElementKind::Class && I_.scode.elems[e].prefixes.is_replaceable) return true;
     for (std::size_t k = 0; e.is_valid() && k + 1 < x.base_path.size(); ++k) {
       const SElement& el = I_.scode.elems[e];
@@ -4139,7 +4139,7 @@ class Flattener {
       ScodeScope s = dscope;
       s.insert(s.begin(), cls);
       ScodeScope unused;
-      return !resolve_class_path(xe.base_path, false, s, unused).is_valid();
+      return !resolve_class_path(xe.base_path, false, s, unused, /*inherit0=*/false).is_valid();
     }
     return false;
   }
@@ -4355,7 +4355,7 @@ class Flattener {
       const SElement& c = I_.scode.elems[eid];
       if (c.kind == SElementKind::Extends) {
         ScodeScope ds;
-        const Id<SElement> b = resolve_class_path(c.base_path, c.base_leading_dot, inner_scope, ds);
+        const Id<SElement> b = resolve_class_path(c.base_path, c.base_leading_dot, inner_scope, ds, /*inherit0=*/false);
         if (b.is_valid()) collect_outer_needs(b, ds, out, depth + 1, deep);
         continue;
       }
@@ -6895,7 +6895,7 @@ class Flattener {
       CVal v;
       v.k = CVal::K::Enum;
       v.i = static_cast<std::int64_t>(i) + 1;
-      bool pkg_path = true;
+      bool pkg_path = !inh_tainted(ds);
       for (Id<SElement> d : ds) pkg_path = pkg_path && I_.scode.elems[d].restriction == SRestriction::Package;
       if (pkg_path) {
         for (auto it = ds.rbegin(); it != ds.rend(); ++it) v.epath.push_back(I_.scode.elems[*it].name);
@@ -8961,9 +8961,22 @@ class Flattener {
     std::size_t plen = prefix.size();
     for (NodeId n = enclosing; n.is_valid() && !I_.nodes[n].is_empty(); n = I_.nodes[n].instance_parent) {
       const INode& nd = I_.nodes[n];
-      if (nd.kind == NodeKind::Class) chain.push_back({nd.def.raw, plen});
-      else if (nd.kind == NodeKind::Component && plen > 0) --plen;
-      else break;
+      if (nd.kind == NodeKind::Class) {
+        // 实例的各层基类实例与它同层：继承来的函数的压平名 = 访问它的实例路径（IC3 探针 `IC3.a.f`；NFInstNode.scopeList 把
+        // BASE_CLASS 换成派生类）。
+        std::vector<NodeId> todo{n};
+        while (!todo.empty()) {
+          const NodeId b = todo.back();
+          todo.pop_back();
+          chain.push_back({I_.nodes[b].def.raw, plen});
+          if (I_.nodes[b].cls.is_valid() && I_.node_class(b).tree.is_valid())
+            for (NodeId x : I_.trees[I_.node_class(b).tree].exts) todo.push_back(x);
+        }
+      } else if (nd.kind == NodeKind::Component && plen > 0) {
+        --plen;
+      } else {
+        break;
+      }
     }
     for (const auto& c : chain)
       if (c.first == ds[0].raw) {
@@ -8978,6 +8991,7 @@ class Flattener {
       if (d.raw == root_def) return std::nullopt;
       for (const auto& c : chain) if (c.first == d.raw) return std::nullopt;
     }
+    if (inh_tainted(ds)) return std::nullopt;
     std::vector<Symbol> head;
     for (auto it = ds.rbegin(); it != ds.rend(); ++it) head.push_back(I_.scode.elems[*it].name);
     return qualified(std::move(head));
@@ -9296,6 +9310,7 @@ class Flattener {
       return {};
     for (Id<SElement> d : ds)
       if (I_.scode.elems[d].restriction != SRestriction::Package) return {};
+    if (inh_tainted(ds)) return {};
     Expr r;
     r.kind = ExprKind::EnumLit;
     r.ty = Type::of(TypeKind::Enumeration);
@@ -10491,6 +10506,7 @@ class Flattener {
     const std::uint32_t root_def = I_.nodes[root_].def.raw;
     for (Id<SElement> d : ds)
       if (d.raw == root_def || (fn_home_.is_valid() && d.raw == fn_home_.raw)) return std::nullopt;
+    if (inh_tainted(ds)) return std::nullopt;
     std::vector<Symbol> path;
     for (auto it = ds.rbegin(); it != ds.rend(); ++it) path.push_back(I_.scode.elems[*it].name);
     path.push_back(I_.scode.elems[rec].name);
@@ -10588,7 +10604,7 @@ class Flattener {
       const SElement& f = I_.scode.elems[fid];
       if (f.kind == SElementKind::Extends) {
         ScodeScope bds;
-        const Id<SElement> b = resolve_class_path(f.base_path, f.base_leading_dot, inner, bds);
+        const Id<SElement> b = resolve_class_path(f.base_path, f.base_leading_dot, inner, bds, /*inherit0=*/false);
         if (!b.is_valid() || I_.scode.elems[b].kind != SElementKind::Class || !rec_restr(I_.scode.elems[b].restriction) ||
             I_.scode.elems[b].def.kind != SClassDefKind::Parts)
           return false;
@@ -10901,6 +10917,7 @@ class Flattener {
         if (scode_ext_object(xc, xs)) {
           if (!c.attr.dims.empty() || !c.type.dims.empty() || (c.mod.is_valid() && I_.scode.mods[c.mod].binding.is_valid()))
             return fn_fail<std::optional<std::size_t>>("external object array / binding in function");
+          if (inh_tainted(xs)) return fn_fail<std::optional<std::size_t>>("external object type through inheritance");
           std::vector<Symbol> xp;
           for (auto it = xs.rbegin(); it != xs.rend(); ++it) xp.push_back(I_.scode.elems[*it].name);
           xp.push_back(I_.scode.elems[xc].name);
@@ -11689,8 +11706,11 @@ class Flattener {
   }
 
   // ---- 用户函数：解析 / 签名 / 记录值（NFFunction + NFEvalFunction）----
-  // find_scode_element 并给出命中处的定义作用域链（命中类及其外层，内→外；顶层 → 空链）。
-  Id<SElement> find_scode_element_at(Symbol name, const ScodeScope& scope, ScodeScope& def_scope) {
+  // find_scode_element 并给出命中处的定义作用域链（命中类及其外层，内→外；顶层 → 空链）。每层依次看本地元素、继承来的元素、
+  // import（OMC 的查找表里本地 > 继承 > import：addLocalElementConflict / addInheritedElementConflict，NFClassTree.mo v1.25.0）。
+  // 继承来的元素的定义作用域链是声明它的基类那条（词法父亲 = 基类）。inherit0 = false：首层不看继承来的——解析该类自己的
+  // extends 名时继承元素还没并进查找表（expandExtends 先于 ClassTree.expand，R12 p11）。
+  Id<SElement> find_scode_element_at(Symbol name, const ScodeScope& scope, ScodeScope& def_scope, bool inherit0 = true) {
     auto hit = [&](Id<SElement> e) {
       const SElement& el = I_.scode.elems[e];
       return el.name == name && (el.kind == SElementKind::Class || el.kind == SElementKind::Component);
@@ -11699,8 +11719,20 @@ class Flattener {
       for (Id<SElement> e : I_.scode.elems[scope[k]].def.elements)
         if (hit(e)) {
           def_scope.assign(scope.begin() + static_cast<std::ptrdiff_t>(k), scope.end());
-          return e;
+          return enclosing_const_check(e, scope[k]);
         }
+      if (k > 0 || inherit0) {
+        bool via_mod = false;
+        if (const Id<SElement> ie = inherited_member_at(scope, k, name, def_scope, via_mod, 0); ie.is_valid()) {
+          if (via_mod) {   // 经改了基类常量 / 类的 extends、或本类有元素级重声明（见 ext_bases_at）
+            set_unsupported("inherited element seen through modifier / redeclare");
+            result_.unsupported_detail = std::string(in_.str(name));
+            return {};
+          }
+          inh_bases_.insert(def_scope[0].raw);
+          return enclosing_const_check(ie, scope[k]);
+        }
+      }
       // 本层的 import（本地元素之后、外层之前：同处一张 LookupTree，本地优先，R12 §2.1）。
       if (const Id<SElement> im = import_lookup(name, scope[k], def_scope); im.is_valid()) return im;
       if (result_.unsupported) return {};
@@ -11711,11 +11743,145 @@ class Flattener {
       if (hit(e)) { def_scope.clear(); return e; }
     return {};
   }
-  // 类路径 `P.Q.f`：首段按作用域链找，其后逐段下降为局部类；给出末段类的定义作用域链。前导点 = 从顶层找。
+  // ---- 继承来的元素（SCode 上的 ClassTree.expand，同 inst 的 Instantiator::expand）----
+  struct ExtBase {
+    ScodeScope chain;        // 基类 + 其外层链 = 基类本地元素的定义作用域链
+    bool mod_hits = false;   // extends 修饰改到了基类的常量 / 类（ext_mod_hits_consts），或派生类有元素级重声明
+  };
+  std::unordered_map<std::uint32_t, std::vector<ExtBase>> ext_bases_memo_;   // 类元素 → 各 extends 的基类（见 ext_bases_at）
+  std::unordered_set<std::uint32_t> inh_bases_;   // 经继承查到过元素的基类（压平名不照它的词法链拼，见 inh_tainted）
+  // 类 scope[k]（外层链 scope[k+1..]）各 extends 解析到的基类，按 extends 先后。基类名从该类自身查、这一层不看继承来的（同
+  // inst 的 expand），多段名的后续段照 resolve_class_path 下降。解析不到 / 不是长类定义 → 跳过（inst 那边已 SKIP）。按类元素
+  // 记忆化：类元素的词法位置唯一，外层链随之唯一。
+  const std::vector<ExtBase>& ext_bases_at(const ScodeScope& scope, std::size_t k) {
+    const Id<SElement> cls = scope[k];
+    if (const auto it = ext_bases_memo_.find(cls.raw); it != ext_bases_memo_.end()) return it->second;
+    ext_bases_memo_[cls.raw];   // 环（extends 自身 / 互相 extends）：先按没有基类
+    std::vector<ExtBase> out;
+    if (I_.scode.elems[cls].kind == SElementKind::Class) {
+      const ScodeScope self(scope.begin() + static_cast<std::ptrdiff_t>(k), scope.end());
+      const std::vector<Id<SElement>> elems = I_.scode.elems[cls].def.elements;   // 拷贝
+      // 本类有元素级重声明：继承来的元素按 extends 实例看到的是替换后的类 / 组件（RedeclareClass2），ymc 的链指向基类原来的
+      // → 一律当"改到了"（同 inst 的 expand）。
+      bool local_redecl = false;
+      for (Id<SElement> x : elems)
+        local_redecl = local_redecl || (I_.scode.elems[x].prefixes.is_redeclare && I_.scode.elems[x].kind != SElementKind::Extends);
+      for (Id<SElement> x : elems) {
+        if (I_.scode.elems[x].kind != SElementKind::Extends || I_.scode.elems[x].base_path.empty()) continue;
+        const std::vector<Symbol> bp = I_.scode.elems[x].base_path;
+        const bool lead = I_.scode.elems[x].base_leading_dot;
+        const Id<SMod> xm = I_.scode.elems[x].mod;
+        ScodeScope bds;
+        const Id<SElement> b = resolve_class_path(bp, lead, self, bds, /*inherit0=*/false);
+        if (!b.is_valid() || I_.scode.elems[b].kind != SElementKind::Class || I_.scode.elems[b].def.kind != SClassDefKind::Parts)
+          continue;
+        ExtBase eb;
+        eb.chain = std::move(bds);
+        eb.chain.insert(eb.chain.begin(), b);
+        eb.mod_hits = local_redecl || ext_mod_hits_consts(eb.chain, xm);
+        out.push_back(std::move(eb));
+      }
+    }
+    return ext_bases_memo_[cls.raw] = std::move(out);
+  }
+  // 类 scope[k] 经 extends 继承来的、名为 name 的类 / 组件（extends 先后、先到先得；基类里先本地再它继承的）。def_scope = 命中
+  // 元素所在基类 + 其外层链。via_mod：途经的 extends 改了基类的常量 / 类。
+  Id<SElement> inherited_member_at(const ScodeScope& scope, std::size_t k, Symbol name, ScodeScope& def_scope, bool& via_mod,
+                                   int depth) {
+    if (depth > 30) return {};
+    const std::vector<ExtBase>& bases = ext_bases_at(scope, k);   // 记忆表按节点存，递归插入不使引用失效
+    for (const ExtBase& b : bases) {
+      const Id<SElement> m = class_member_at(b.chain, name, def_scope, via_mod, depth + 1);
+      if (!m.is_valid()) continue;
+      via_mod = via_mod || b.mod_hits;
+      return m;
+    }
+    return {};
+  }
+  // 类 chain[0]（外层链 chain[1..]）里名为 name 的类 / 组件：先本地，再继承来的。
+  Id<SElement> class_member_at(const ScodeScope& chain, Symbol name, ScodeScope& def_scope, bool& via_mod, int depth) {
+    for (Id<SElement> e : I_.scode.elems[chain[0]].def.elements) {
+      const SElement& el = I_.scode.elems[e];
+      if (el.name == name && (el.kind == SElementKind::Class || el.kind == SElementKind::Component)) {
+        def_scope = chain;
+        return e;
+      }
+    }
+    return inherited_member_at(chain, 0, name, def_scope, via_mod, depth);
+  }
+  // extends 修饰 m 改到了基类（链 base_chain）的常量或类：嵌套类、模型内函数按词法读得到它们（外层作用域里查到的组件须是常量，
+  // MLS §5.3.1；IC10 探针：读外层 parameter → omc 报错），OMC 读的是改过的（继承元素的父亲是带修饰的 extends 实例，IC11 探针
+  // `extends Base(n = 3)` 里继承来的 B 读 n 得 3），ymc 的链指向未改的基类定义。名字找不到 → 算改到了（保守）。
+  bool ext_mod_hits_consts(const ScodeScope& base_chain, Id<SMod> m) {
+    if (!m.is_valid()) return false;
+    const std::vector<SSubMod> subs = I_.scode.mods[m].subs;   // 拷贝
+    for (const SSubMod& sm : subs) {
+      ScodeScope ds;
+      bool vm = false;
+      const Id<SElement> e = class_member_at(base_chain, sm.ident, ds, vm, 0);
+      if (!e.is_valid() || I_.scode.elems[e].kind != SElementKind::Component ||
+          I_.scode.elems[e].attr.var == SVariability::Const)
+        return true;
+    }
+    return false;
+  }
+  // 压平名照定义作用域链 ds 拼时，链上有"经继承查到过元素"的基类：OMC 按访问它的派生类拼（NFInstNode.scopeList 把 BASE_CLASS
+  // 换成派生类；IC9 探针 `IC9P.P.f`、`IC9P.P.E.b`，函数体 / 常量绑定里再查到的同样），ymc 的链记的是声明处 → 不拼（调用方 SKIP）。
+  // ponytail: 只要基类经继承访问过就整条不拼（直接访问基类成员也一起 SKIP）；要拼对得让作用域链带访问路径（ADR-007 第 2 阶段）。
+  bool inh_tainted(const ScodeScope& ds) const {
+    for (Id<SElement> d : ds)
+      if (inh_bases_.count(d.raw)) return true;
+    return false;
+  }
+  // SCode 查到的常量 e 在类 level_cls 这一层（本地或继承来的）。OMC 里这一层若是外层实例（嵌套类、模型内函数的父亲是外层实例），
+  // 读到的是实例上改过的值（IC7 / IC14 / IC15 探针：`A a(n = 3)` 里嵌套类的 `Real x[n]`、模型内函数体的 n 都得 3）；ymc 这里取
+  // SCode 的声明值。祖先帧里最内一个是这个类（或以它为基类）的实例、实例上这个常量被改过（外来修饰 / extends 修饰）→ SKIP
+  //（此前静默用声明值）。
+  Id<SElement> enclosing_const_check(Id<SElement> e, Id<SElement> level_cls) {
+    if (I_.scode.elems[e].kind != SElementKind::Component || I_.scode.elems[e].attr.var != SVariability::Const) return e;
+    const Symbol name = I_.scode.elems[e].name;
+    for (std::size_t i = frames_.size(); i-- > 0;) {
+      const NodeId inst = inst_of_class(frames_[i].inst, level_cls);
+      if (I_.nodes[inst].is_empty()) continue;
+      bool modded = false;
+      if (const ModCtx* fc = frames_[i].ctx)
+        for (const ModSource& m : fc->mods)
+          for (const SSubMod& sm : I_.scode.mods[m.mod].subs) modded = modded || sm.ident == name;
+      const NodeId c = find_local(inst, name);
+      if (is_comp_node(c)) {
+        const Component& comp = I_.comps[I_.nodes[c].comp];
+        const Id<SMod> dm = I_.scode.elems[e].mod;
+        const Id<Exp> decl = dm.is_valid() ? I_.scode.mods[dm].binding : Id<Exp>{};
+        modded = modded || !comp.extends_mods.empty() ||
+                 (comp.binding.kind == BindingKind::Raw && comp.binding.raw_exp.is_valid() && comp.binding.raw_exp != decl);
+      }
+      if (modded && !result_.unsupported) {
+        set_unsupported("constant of modified enclosing instance");
+        result_.unsupported_detail = std::string(in_.str(name));
+      }
+      break;   // 最内的那个实例才是父亲
+    }
+    return e;
+  }
+  // 实例 inst 本身或它的（多层）基类实例里类定义是 cls 的那个；没有 → empty。
+  NodeId inst_of_class(NodeId inst, Id<SElement> cls) const {
+    std::vector<NodeId> todo{inst};
+    for (int guard = 0; !todo.empty() && guard < 256; ++guard) {
+      const NodeId n = todo.back();
+      todo.pop_back();
+      if (!n.is_valid() || I_.nodes[n].is_empty() || I_.nodes[n].kind != NodeKind::Class) continue;
+      if (I_.nodes[n].def == cls) return n;
+      if (!I_.nodes[n].cls.is_valid() || !I_.node_class(n).tree.is_valid()) continue;
+      for (NodeId b : I_.trees[I_.node_class(n).tree].exts) todo.push_back(b);
+    }
+    return Inst::empty_node();
+  }
+  // 类路径 `P.Q.f`：首段按作用域链找，其后逐段下降为局部类；给出末段类的定义作用域链。前导点 = 从顶层找。inherit0 见
+  // find_scode_element_at（解析 extends 名时传 false）。
   Id<SElement> resolve_class_path(const std::vector<Symbol>& parts, bool leading_dot, const ScodeScope& scope,
-                                  ScodeScope& def_scope) {
+                                  ScodeScope& def_scope, bool inherit0 = true) {
     if (parts.empty()) return {};
-    Id<SElement> e = find_scode_element_at(parts[0], leading_dot ? ScodeScope{} : scope, def_scope);
+    Id<SElement> e = find_scode_element_at(parts[0], leading_dot ? ScodeScope{} : scope, def_scope, inherit0);
     for (std::size_t k = 1; k < parts.size() && e.is_valid(); ++k) {
       if (I_.scode.elems[e].kind != SElementKind::Class) return {};
       Id<SElement> nxt;
@@ -11804,6 +11970,7 @@ class Flattener {
   // 记录类型 tcls（定义作用域链 tds）的压平路径（InstNode.fullPath）：顶层 → 名；包里 → 包路径 + 名；根类里 → 根名 + 名。
   // 定义在别的实例类里（实例路径未核实）→ nullopt。同 ensure_record_ctor 的规则。
   std::optional<std::vector<Symbol>> class_flat_path(Id<SElement> tcls, const ScodeScope& tds) {
+    if (inh_tainted(tds)) return std::nullopt;
     std::vector<Symbol> path;
     const std::uint32_t root_def = I_.nodes[root_].def.raw;
     if (!tds.empty() && tds[0].raw == root_def) {
@@ -11954,7 +12121,7 @@ class Flattener {
       if (c.kind == SElementKind::Extends) {
         if (c.mod.is_valid() && !I_.scode.mods[c.mod].subs.empty()) return false;   // extends 修饰未做
         ScodeScope bds;
-        const Id<SElement> b = resolve_class_path(c.base_path, c.base_leading_dot, fscope, bds);
+        const Id<SElement> b = resolve_class_path(c.base_path, c.base_leading_dot, fscope, bds, /*inherit0=*/false);
         if (!b.is_valid() || I_.scode.elems[b].kind != SElementKind::Class) return false;
         bds.insert(bds.begin(), b);
         if (!collect_fn_sig(b, bds, sig, seen, depth + 1)) return false;
@@ -19837,6 +20004,7 @@ class Flattener {
       const Id<SElement> def = I_.comps[I_.nodes[comp].comp].def;
       if (def.is_valid() && I_.scode.elems[def].attr.var == SVariability::Const) {
         found_scope = cur;
+        if (I_.nodes[cur].def.is_valid()) enclosing_const_check(def, I_.nodes[cur].def);
         return comp;
       }
     }
@@ -21491,7 +21659,7 @@ class Flattener {
       const SElement x = I_.scode.elems[e];
       if (x.kind != SElementKind::Extends) continue;
       ScodeScope bs;
-      const Id<SElement> b = resolve_class_path(x.base_path, x.base_leading_dot, inner, bs);
+      const Id<SElement> b = resolve_class_path(x.base_path, x.base_leading_dot, inner, bs, /*inherit0=*/false);
       if (b.is_valid() && scode_has_element(b, bs, name, depth + 1)) return true;
     }
     if (el.def.kind == SClassDefKind::Derived && !el.def.derived_type.path.empty()) {

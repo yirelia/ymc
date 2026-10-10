@@ -63,6 +63,9 @@ class Instantiator {
   NodeId lookup_simple_class(Symbol name, NodeId scope);
   // 类节点 cls 自己的 import 里叫 name 的类（见 inst.cpp 的规则说明）；没有 → empty。
   NodeId import_class(Symbol name, NodeId cls);
+  NodeId tree_class(ClassTreeId tid, Symbol name);   // 类树里（本地 + 继承来的）名为 name 的类；没有 → empty
+  bool ext_mod_hits_consts(NodeId base, Id<SMod> m);  // extends 修饰改到基类的常量 / 类（见 expand）
+  Id<SElement> member_def(NodeId cls, Symbol name, int depth);   // 类自己的或继承来的元素声明
 
   // ---- 内建 ----
   void make_builtin_types();

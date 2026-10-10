@@ -478,3 +478,10 @@ mos1RenameParameters(modelcard, C) annotation(Evaluate = true)`——实参里�
 记录实参做完：Spice3 的 Inverter / InvertersApartRecord / InvertersExtendedModel / FourInverters / Nand / Nor（MOSFET）、
 Oscillator（BJT）、CascodeCircuit（JFET）转 PASS，均与 omc 逐字节一致。FAIL / ACCEPTS-INVALID / CRASH 0。Graetz /
 Spice3BenchmarkFourBitBinaryAdder 停在记录函数折叠的字段形态，三个 Benchmark 停在结构记录绑定求值，照旧 SKIP。
+
+## 2026-10-10 加宽 63k 之后：PASS 410（不变）
+
+继承来的类 / 元素进查找表（inst 的类树合并 + flatten 的 SCode 查找本地 → 继承 → import）做完，MSL 示例的 PASS / SKIP 逐例不变：
+剩下的 SKIP 主要卡在类重声明（Media 的 `redeclare package Medium`、MultiBody 的重声明函数 / 模型），继承查找只是它们的前提之一。
+新加的守卫（经改了常量的 extends / 元素级重声明继承来的类、外层实例上改过的常量）在 MSL 示例里没有触发。FAIL / ACCEPTS-INVALID /
+CRASH 0。

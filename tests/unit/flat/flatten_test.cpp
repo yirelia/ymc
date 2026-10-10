@@ -7221,4 +7221,21 @@ YMC_TEST(flatten_record_parameter_whole_evaluation) {
                            "  Real y = 0.7 * time + p.b;\nend WSU1;\n"));
 }
 
+YMC_TEST(flatten_inherited_class_and_function_lookup) {
+  // 继承来的嵌套类作组件类型、继承来的函数 / 常量 / 短类型在派生类里引用（ClassTree.expand：继承元素进派生类的查找表）；函数的
+  // 压平名 = 访问它的实例路径 `ILU1.a.f`。期望 = omc 1.25.0 实跑（2026-10-10，探针 il-p1 的 IL1 / IL2 合并）。
+  YMC_CHECK_EQ(flatten_src("model ILU1\n  model Base\n    model B\n      Real x = 1;\n    end B;\n    function f\n"
+                           "      input Real x;\n      output Real y;\n    algorithm\n      y := 2 * x;\n    end f;\n"
+                           "    constant Real k = 3;\n    type T = Real(unit = \"m\");\n  end Base;\n  model A\n"
+                           "    extends Base;\n    B b;\n    Real y = f(time) + k;\n    T z = time;\n  end A;\n  A a;\n"
+                           "end ILU1;\n"),
+               std::string("function ILU1.a.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\n"
+                           "end ILU1.a.f;\n\nclass ILU1\n  constant Real a.k = 3.0;\n  Real a.b.x = 1.0;\n"
+                           "  Real a.y = ILU1.a.f(time) + 3.0;\n  Real a.z(unit = \"m\") = time;\nend ILU1;\n"));
+  // 外层实例上被改过的常量被嵌套类读到（omc 读改过的 3，ymc 的 SCode 词法查找只有声明值 1）→ SKIP（此前静默出 x[1]）。
+  const std::string t = flatten_src("model ILU2\n  model A\n    constant Integer n = 1;\n    model B\n"
+                                    "      Real x[n] = fill(1, n);\n    end B;\n    B b;\n  end A;\n  A a(n = 3);\nend ILU2;\n");
+  YMC_CHECK_EQ(t, std::string("<unsupported:constant of modified enclosing instance>"));
+}
+
 YMC_TEST_MAIN

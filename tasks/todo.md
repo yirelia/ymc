@@ -2134,6 +2134,15 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           的元组赋值、条件化简成字面量的 if 语句（simplifyIfStmtBranches）、派生记录只 extends 不加字段的实参（PLUG_COMPATIBLE）、
           模型里没有实例的输出记录类。结构记录绑定求不出 → SKIP。
           slice 653→654 例 PASS 602 / FAIL 0（oracle=live 不一致 0）；scodeinst 603→604 / 43；testsuite 1697→1700 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 402→410；探针 9180→9219；单测 327→328。
+    - [x] (63k) inst + flat：继承来的类 / 元素的查找（2026-10-10）：inst 的 expand 把各基类查找表里的类并进派生类（ClassTree.expand
+          / addInheritedElement：本地 > 继承 > import、extends 先后先到先得；基类名在合并前解析、记进 ext_bases 不再重查）；flatten 的
+          SCode 查找每层看本地 → 继承 → import（解析 extends 名时首层不看继承），继承元素的定义作用域 = 声明它的基类；继承来的函数
+          的压平名 = 访问它的实例路径（基类实例与派生实例同层，`ILU1.a.f`）。四处守卫（SKIP）：经改了基类常量 / 类的 extends、或本类
+          有元素级重声明时继承来的类 / 元素（OMC 里继承元素的父亲是带修饰的 extends 实例，IL3 / IL7 / IL22）；压平名照经继承访问过的
+          基类的词法链拼（OMC 按访问路径 `P.f`、`P.E.b`，IL4 / IL19）；外层实例上被改过的常量被嵌套类 / 模型内函数读到——**此前静默错**
+          （IL5 `x[1]`、IL9 `y := x`、IL10 `2.0`，omc 是 `x[1..3]`、`3.0 * x`、`6.0`）。包路径访问继承元素、类重声明照旧 SKIP
+          （ADR-007 第 2 阶段，补了 63k 的发现）。
+          slice 654 例 PASS 602→605 / FAIL 0（oracle=live 不一致 0）；scodeinst 604→606 / 43→44（DuplicateElements6 文件 Result 错贴，入账）；testsuite 1700→1707 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 410（不变）；探针 9219→9243；单测 328→329。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

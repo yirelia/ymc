@@ -156,7 +156,11 @@ struct ClassTree {
   std::vector<NodeId> classes;              // 本地 + 继承（继承类排局部之后，不保序，R11 §7.4 不变量 2）
   std::vector<NodeId> components;           // 含 Ref 占位；顺序 = SCode 声明序（保序！压平变量顺序的根）
   std::vector<NodeId> exts;                 // 各 extends 节点，按源码顺序
+  std::vector<NodeId> ext_bases;            // 与 exts 平行：expand 时解析到的基类（解析不到 = empty）；之后不再重查
   std::vector<std::uint32_t> local_components;  // 本类自己声明的组件在 components 里的下标
+  // classes 里经"改了基类常量 / 类"的 extends（或本类有元素级重声明时）继承来的下标：嵌套类按词法读到的是改过 / 替换过的基类
+  //（OMC 里继承类的父亲是带修饰的 extends 实例），ymc 的继承类节点共享、父亲是未改的基类定义 → 用到即 SKIP（见 Instantiator::expand）。
+  std::unordered_set<std::uint32_t> classes_via_mod;
   // ponytail: InstantiatedTree 阶段 OMC 用 Mutable<InstNode>（SlotId 间接层）让继承元素与基类共享、
   //   redeclare/去重"一处改多视图同步"（R11 §7.0 不变量 4）。v1 单继承链、无 redeclare、无菱形，
   //   继承组件直接以 NodeId 拷进 components 即可；引入 SlotId 推迟到 redeclare/数组竖切片。
