@@ -7382,4 +7382,54 @@ YMC_TEST(flatten_distributed_alias_and_negative_zero) {
                            "  Real v[1];\n  Real v[2];\n  Real v[3];\nequation\n  v = {-0.0, -2.0, -0.0};\nend DZU3;\n"));
 }
 
+YMC_TEST(flatten_empty_blocks_and_conditional_arrays) {
+  // 矩阵构造的空块（TransferFunction 的 `vector([zeros(max(0, na - nb), 1); b])`）；零长切片的方程整条不出；组件数组里的
+  // 数组方程照常（含数组调用的整条保留，带下标前缀）；elseif 链里形状不相容的内层 if 由外层选支后按结构参数定；被移除的
+  // 条件组件里维用到的参数经修饰绑定连带外面（k final、`j = 3 * k` 代成 3）。期望 = omc 1.25.0 实跑（2026-10-11，探针 mx-ut）。
+  YMC_CHECK_EQ(flatten_src("model MXU1\n  parameter Real a[2] = {1, 1};\n  parameter Real b[2] = {-1, 1};\n"
+                           "  parameter Integer na = size(a, 1);\n  parameter Integer nb = size(b, 1);\n"
+                           "  parameter Real bb[:] = vector([zeros(max(0, na - nb), 1); b]);\n  parameter Real d = bb[1] / a[1];\n"
+                           "end MXU1;\n"),
+               std::string("class MXU1\n  parameter Real a[1] = 1.0;\n  parameter Real a[2] = 1.0;\n  parameter Real b[1] = -1.0;\n"
+                           "  parameter Real b[2] = 1.0;\n  final parameter Integer na = 2;\n  final parameter Integer nb = 2;\n"
+                           "  parameter Real bb[1] = b[1];\n  parameter Real bb[2] = b[2];\n  parameter Real d = bb[1] / a[1];\n"
+                           "end MXU1;\n"));
+  YMC_CHECK_EQ(flatten_src("model MXU2\n  parameter Integer nx = 1;\n  Real x[nx](each start = 1);\ninitial equation\n"
+                           "  der(x[2:nx]) = zeros(nx - 1);\nequation\n  der(x[1]) = -x[1];\n  der(x[2:nx]) = x[1:nx - 1];\n"
+                           "end MXU2;\n"),
+               std::string("class MXU2\n  final parameter Integer nx = 1;\n  Real x[1](start = 1.0);\nequation\n  der(x[1]) = -x[1];\n"
+                           "end MXU2;\n"));
+  YMC_CHECK_EQ(flatten_src("model MXU3\n  function f\n    input Real u[2];\n    output Real v[2];\n  algorithm\n    v := 2 * u;\n"
+                           "  end f;\n  model A\n    Real x[2];\n    Real z[2];\n  equation\n    z = f(x);\n"
+                           "    x = {time, 2 * time};\n  end A;\n  A a;\n  A b[2];\nend MXU3;\n"),
+               std::string("function MXU3.f\n  input Real[2] u;\n  output Real[2] v;\nalgorithm\n  v := {2.0 * u[1], 2.0 * u[2]};\n"
+                           "end MXU3.f;\n\nclass MXU3\n  Real a.x[1];\n  Real a.x[2];\n  Real a.z[1];\n  Real a.z[2];\n"
+                           "  Real b[1].x[1];\n  Real b[1].x[2];\n  Real b[1].z[1];\n  Real b[1].z[2];\n  Real b[2].x[1];\n"
+                           "  Real b[2].x[2];\n  Real b[2].z[1];\n  Real b[2].z[2];\nequation\n  a.z = MXU3.f(a.x);\n"
+                           "  a.x[1] = time;\n  a.x[2] = 2.0 * time;\n  b[1].z = MXU3.f(b[1].x);\n  b[1].x[1] = time;\n"
+                           "  b[1].x[2] = 2.0 * time;\n  b[2].z = MXU3.f(b[2].x);\n  b[2].x[1] = time;\n  b[2].x[2] = 2.0 * time;\n"
+                           "end MXU3;\n"));
+  YMC_CHECK_EQ(flatten_src("package P\n  type K = enumeration(A, B, C);\nend P;\nmodel MXU4\n\n  parameter P.K k = P.K.B;\n"
+                           "  parameter Real t[:, :] = if k == P.K.A then Lin elseif k == P.K.B then H else R;\nprotected\n"
+                           "  constant Real Lin[:, 2] = [0, 1; 1, 0];\n  constant Real H[:, 2] = [0, 1; 0.5, 0.7; 1, 0];\n"
+                           "  constant Real R[:, 2] = [0, 1; 0.2, 0.9; 0.6, 0.4; 1, 0];\nend MXU4;\n"),
+               std::string("class MXU4\n  final parameter enumeration(A, B, C) k = P.K.B;\n  parameter Real t[1,1] = 0.0;\n"
+                           "  parameter Real t[1,2] = 1.0;\n  parameter Real t[2,1] = 0.5;\n  parameter Real t[2,2] = 0.7;\n"
+                           "  parameter Real t[3,1] = 1.0;\n  parameter Real t[3,2] = 0.0;\n"
+                           "  protected constant Real Lin[1,1] = 0.0;\n  protected constant Real Lin[1,2] = 1.0;\n"
+                           "  protected constant Real Lin[2,1] = 1.0;\n  protected constant Real Lin[2,2] = 0.0;\n"
+                           "  protected constant Real H[1,1] = 0.0;\n  protected constant Real H[1,2] = 1.0;\n"
+                           "  protected constant Real H[2,1] = 0.5;\n  protected constant Real H[2,2] = 0.7;\n"
+                           "  protected constant Real H[3,1] = 1.0;\n  protected constant Real H[3,2] = 0.0;\n"
+                           "  protected constant Real R[1,1] = 0.0;\n  protected constant Real R[1,2] = 1.0;\n"
+                           "  protected constant Real R[2,1] = 0.2;\n  protected constant Real R[2,2] = 0.9;\n"
+                           "  protected constant Real R[3,1] = 0.6;\n  protected constant Real R[3,2] = 0.4;\n"
+                           "  protected constant Real R[4,1] = 1.0;\n  protected constant Real R[4,2] = 0.0;\nend MXU4;\n"));
+  YMC_CHECK_EQ(flatten_src("model MXU5\n  connector Pl\n    parameter Integer m = 1;\n    Real v[m];\n  end Pl;\n"
+                           "  parameter Integer k = 1;\n  parameter Integer j = 3 * k;\n  parameter Boolean use = false;\n"
+                           "  Pl p(final m = k) if use;\n  Real y = j;\nend MXU5;\n"),
+               std::string("class MXU5\n  final parameter Integer k = 1;\n  parameter Integer j = 3;\n"
+                           "  final parameter Boolean use = false;\n  Real y = /*Real*/(j);\nend MXU5;\n"));
+}
+
 YMC_TEST_MAIN

@@ -1,0 +1,511 @@
+//// set: mx-p1 — 矩阵构造的空块（MZ）；零长切片（ESL）；组件数组里的数组方程（AP）；向前引用的数组常量与 elseif 链的条件数组（CL）；被移除的条件组件里的结构标记（CR / TB）
+//// model: MZ1
+model MZ1
+  parameter Real b[2] = {1, 2};
+  parameter Real bb[:] = vector([zeros(0, 1); b]);
+end MZ1;
+//// model: MZ2
+model MZ2
+  parameter Real a[2] = {1, 1};
+  parameter Real b[2] = {-1, 1};
+  parameter Integer na = size(a, 1);
+  parameter Integer nb = size(b, 1);
+  parameter Real bb[:] = vector([zeros(max(0, na - nb), 1); b]);
+  parameter Real d = bb[1] / a[1];
+end MZ2;
+//// model: MZ3
+model MZ3
+  parameter Real a[3] = {1, 2, 1};
+  parameter Real b[2] = {-1, 1};
+  parameter Integer na = size(a, 1);
+  parameter Integer nb = size(b, 1);
+  parameter Real bb[:] = vector([zeros(max(0, na - nb), 1); b]);
+end MZ3;
+//// model: MZ4
+model MZ4
+  parameter Real m[2, 2] = [zeros(2, 0), [1, 2; 3, 4]];
+end MZ4;
+//// model: MZ5
+model MZ5
+  Real x[2, 1] = [zeros(0, 1); [time; 2 * time]];
+end MZ5;
+//// model: MZ6
+model MZ6
+  parameter Real e[0, 2] = [zeros(0, 2); zeros(0, 2)];
+  Real y = time;
+end MZ6;
+//// model: MZ7
+model MZ7
+  parameter Real e[0, 3] = [zeros(0, 1), zeros(0, 2)];
+  Real y = time;
+end MZ7;
+//// model: MZ8
+model MZ8
+  parameter Real v[3] = vector([fill(1.0, 0, 1); {1, 2, 3}]);
+end MZ8;
+//// model: MZ9
+model MZ9
+  Real v[2, 1] = [zeros(0, 1); {1, 2}];
+  Real w = time;
+end MZ9;
+//// model: MZ10
+model MZ10
+  Modelica.Blocks.Continuous.TransferFunction tf(b = {-1, 1}, a = {1, 1});
+equation
+  tf.u = time;
+end MZ10;
+//// model: MZ11
+model MZ11
+  parameter Real fa = 2;
+  Modelica.Blocks.Continuous.TransferFunction tf[2](each final b = {-1 / fa, 1}, each final a = {1 / fa, 1});
+equation
+  tf[1].u = time;
+  tf[2].u = tf[1].y;
+end MZ11;
+//// model: MZ12
+model MZ12
+  parameter Real b[2] = {1, 2};
+  parameter Real bb[:] = vector([b; zeros(0, 1)]);
+end MZ12;
+//// model: MZ13
+model MZ13
+  block T
+    parameter Real a[2] = {1, 1};
+    parameter Integer nx = size(a, 1) - 1;
+    Real x[nx];
+    Real xs[size(x, 1)];
+    input Real u;
+  equation
+    der(xs[1]) = (-a[2:2] * xs + u) / a[1];
+    der(xs[2:nx]) = xs[1:nx - 1];
+    x = xs / 2;
+  end T;
+  T t[2];
+equation
+  t[1].u = time;
+  t[2].u = t[1].x[1];
+end MZ13;
+//// model: ESL1
+model ESL1
+  parameter Integer nx = 1;
+  parameter Real a[2] = {1, 2};
+  Real x[nx];
+equation
+  der(x[1]) = -a[2:2] * x;
+  der(x[2:nx]) = x[1:nx - 1];
+end ESL1;
+//// model: ESL2
+model ESL2
+  parameter Integer nx = 1;
+  parameter Real a[2] = {1, 2};
+  Real x[nx];
+equation
+  der(x[1]) = -a[2:2] * x;
+end ESL2;
+//// model: ESL3
+model ESL3
+  parameter Integer nx = 1;
+  Real x[nx](each start = 1);
+equation
+  der(x[1]) = -x[1];
+  der(x[2:nx]) = x[1:nx - 1];
+end ESL3;
+//// model: ESL4
+model ESL4
+  parameter Integer n = 1;
+  Real x[2] = {time, 2 * time};
+  Real s = sum(x[2:n]);
+  Real q = x[2:n] * x[1:n - 1];
+end ESL4;
+//// model: ESL5
+model ESL5
+  Real x[2] = {time, 2 * time};
+  Real w[0] = x[2:1];
+  Real z[2];
+equation
+  z[1:0] = x[2:1];
+  z = x;
+end ESL5;
+//// model: ESL6
+model ESL6
+  Real x[1] = {time};
+  Real y[0] = x[5:4];
+end ESL6;
+//// model: ESL7
+model ESL7
+  parameter Integer nx = 1;
+  Real x[nx](each start = 1);
+initial equation
+  der(x[2:nx]) = zeros(nx - 1);
+equation
+  der(x[1]) = -x[1];
+  der(x[2:nx]) = x[1:nx - 1];
+end ESL7;
+//// model: ESL8
+model ESL8
+  parameter Integer nx = 1;
+  parameter Integer k = 0;
+  Real x[nx](each start = 1);
+initial equation
+  if k == 1 then
+    der(x[2:nx]) = zeros(nx - 1);
+  end if;
+equation
+  der(x[1]) = -x[1];
+end ESL8;
+//// model: ESL9
+model ESL9
+  parameter Real p[3] = {1, 2, 3};
+  parameter Real e[0] = p[3:2];
+  parameter Real f[2] = p[2:3];
+  Real y = sum(p[3:2]) + time;
+end ESL9;
+//// model: AP1
+model AP1
+  model A
+    Real x;
+    Real y[3];
+  equation
+    x = 4;
+    y = {1, 2, 3};
+  end A;
+  A a;
+end AP1;
+//// model: AP2
+model AP2
+  model A
+    input Real x[3];
+    input Real y[3];
+    output Real z[3];
+  equation
+    z = cross(x, y);
+  end A;
+  A a;
+equation
+  a.x = time * {1, 2, 3};
+  a.y = {time, time^3, time^2};
+end AP2;
+//// model: AP3
+model AP3
+  function f
+    input Real u[2];
+    output Real v[2];
+  algorithm
+    v := 2 * u;
+  end f;
+  model A
+    Real x[2];
+    Real z[2];
+  equation
+    z = f(x);
+    x = {time, 2 * time};
+  end A;
+  A a;
+  A b[2];
+end AP3;
+//// model: CL1
+model CL1
+  constant Real Lin[:, 2] = [0, 1; 1, 0];
+  parameter Real t[:, :] = Lin;
+end CL1;
+//// model: CL4
+model CL4
+  constant Real Lin[:, 2] = [0, 1; 1, 0];
+  constant Real H[:, 2] = [0, 1; 0.5, 0.7; 1, 0];
+  type K = enumeration(A, B, C);
+  parameter K k = K.A;
+  parameter Real t[:, :] = if k == K.A then Lin else H;
+end CL4;
+//// model: CL5
+model CL5
+  parameter Real t[:, :] = Lin;
+protected
+  constant Real Lin[:, 2] = [0, 1; 1, 0];
+end CL5;
+//// model: CL6
+model CL6
+  constant Real Lin[:, 2] = [0, 1; 1, 0];
+  constant Real H[:, 2] = [0, 1; 0.5, 0.7; 1, 0];
+  parameter Boolean b = true;
+  parameter Real t[:, :] = if b then Lin else H;
+end CL6;
+//// model: CL7
+package P
+  type K = enumeration(A, B, C);
+end P;
+model CL7
+
+  parameter P.K k = P.K.A;
+  parameter Real t[:, :] = if k == P.K.A then Lin elseif k == P.K.B then H else R;
+protected
+  constant Real Lin[:, 2] = [0, 1; 1, 0];
+  constant Real H[:, 2] = [0, 1; 0.5, 0.7; 1, 0];
+  constant Real R[:, 2] = [0, 1; 0.2, 0.9; 0.6, 0.4; 1, 0];
+end CL7;
+//// model: CL8
+package P
+  type K = enumeration(A, B, C);
+end P;
+model CL8
+  block T
+    parameter Real table[:, :] = fill(0.0, 0, 2);
+    Real y = table[1, 2] + time;
+  end T;
+
+  parameter P.K k = P.K.A;
+  T tab(final table = if k == P.K.A then Lin elseif k == P.K.B then H else R);
+protected
+  constant Real Lin[:, 2] = [0, 1; 1, 0];
+  constant Real H[:, 2] = [0, 1; 0.5, 0.7; 1, 0];
+  constant Real R[:, 2] = [0, 1; 0.2, 0.9; 0.6, 0.4; 1, 0];
+end CL8;
+//// model: CL9
+package P
+  type K = enumeration(A, B, C);
+end P;
+model CL9
+  parameter P.K k = P.K.A;
+  parameter Real t[:, :] = if k == P.K.A then Lin else H;
+protected
+  constant Real Lin[:, 2] = [0, 1; 1, 0];
+  constant Real H[:, 2] = [0, 1; 0.5, 0.7; 1, 0];
+end CL9;
+//// model: CL10
+model CL10
+  parameter Boolean b = true;
+  parameter Real t[:, :] = if b then Lin else H;
+protected
+  constant Real Lin[:, 2] = [0, 1; 1, 0];
+  constant Real H[:, 2] = [0, 1; 0.5, 0.7; 1, 0];
+end CL10;
+//// model: CL11
+package P
+  type K = enumeration(A, B, C);
+end P;
+model CL11
+
+  parameter P.K k = P.K.B;
+  parameter Real t[:, :] = if k == P.K.A then Lin elseif k == P.K.B then H else R;
+protected
+  constant Real Lin[:, 2] = [0, 1; 1, 0];
+  constant Real H[:, 2] = [0, 1; 0.5, 0.7; 1, 0];
+  constant Real R[:, 2] = [0, 1; 0.2, 0.9; 0.6, 0.4; 1, 0];
+end CL11;
+//// model: CL12
+package P
+  type K = enumeration(A, B, C);
+end P;
+model CL12
+
+  parameter P.K k = P.K.C;
+  parameter Real t[:, :] = if k == P.K.A then Lin elseif k == P.K.B then H else R;
+protected
+  constant Real Lin[:, 2] = [0, 1; 1, 0];
+  constant Real H[:, 2] = [0, 1; 0.5, 0.7; 1, 0];
+  constant Real R[:, 2] = [0, 1; 0.2, 0.9; 0.6, 0.4; 1, 0];
+end CL12;
+//// model: CL13
+model CL13
+  parameter Boolean b1 = false;
+  parameter Boolean b2 = true;
+  parameter Real t[:] = if b1 then {1, 2} else (if b2 then {3, 4, 5} else {6});
+  Real y = time;
+end CL13;
+//// model: CL14
+model CL14
+  parameter Boolean b1 = false;
+  parameter Boolean b2 = true;
+  parameter Real t[:] = if b1 then {1, 2} elseif b2 then {3, 4, 5} else {6};
+  Real y = time;
+end CL14;
+//// model: CL15
+model CL15
+  Modelica.Electrical.PowerConverters.ACAC.Control.VoltageToAngle v(VNominal = 100);
+equation
+  v.vRef = time;
+end CL15;
+//// model: CL16
+package P
+  type K = enumeration(Lin, H01, RMS);
+end P;
+model CL16
+  block T
+    parameter Real table[:, :] = fill(0.0, 0, 2);
+    parameter Integer columns[:] = 2:size(table, 2);
+    Real y = table[1, columns[1]] + time;
+  end T;
+  parameter P.K k = P.K.Lin;
+  T tab(final table = if k == P.K.Lin then Lin elseif k == P.K.H01 then H else R);
+protected
+  constant Real Lin[:, 2] = [0, 1; 1, 0];
+  constant Real H[:, 2] = [0, 1; 0.5, 0.7; 1, 0];
+  constant Real R[:, 2] = [0, 1; 0.2, 0.9; 0.6, 0.4; 1, 0];
+end CL16;
+//// model: CL17
+model CL17
+  Modelica.Electrical.PowerConverters.ACAC.Control.VoltageToAngle v(VNominal = 1, voltage2Angle = Modelica.Electrical.PowerConverters.Types.Voltage2AngleType.RMS);
+equation
+  v.vRef = time;
+end CL17;
+//// model: CL18
+package P
+  type K = enumeration(Lin, H01, RMS);
+end P;
+model CL18
+  model V
+  block T
+    parameter Real table[:, :] = fill(0.0, 0, 2);
+    parameter Integer columns[:] = 2:size(table, 2);
+    Real y = table[1, columns[1]] + time;
+  end T;
+  parameter P.K k = P.K.Lin;
+  T tab(final table = if k == P.K.Lin then Lin elseif k == P.K.H01 then H else R);
+protected
+  constant Real Lin[:, 2] = [0, 1; 1, 0];
+  constant Real H[:, 2] = [0, 1; 0.5, 0.7; 1, 0];
+  constant Real R[:, 2] = [0, 1; 0.2, 0.9; 0.6, 0.4; 1, 0];
+  end V;
+  V v(k = P.K.RMS);
+end CL18;
+//// model: CL19
+package P
+  type K = enumeration(Lin, H01, RMS);
+end P;
+model CL19
+  model V
+    parameter P.K k = P.K.Lin;
+    Modelica.Blocks.Tables.CombiTable1Ds tab(final table = if k == P.K.Lin then Lin elseif k == P.K.H01 then H else R, final extrapolation = Modelica.Blocks.Types.Extrapolation.HoldLastPoint);
+  protected
+    constant Real Lin[:, 2] = [0, 1; 1, 0];
+    constant Real H[:, 2] = [0, 1; 0.5, 0.7; 1, 0];
+    constant Real R[:, 2] = [0, 1; 0.2, 0.9; 0.6, 0.4; 1, 0];
+  end V;
+  V v(k = P.K.RMS);
+equation
+  v.tab.u = time;
+end CL19;
+//// model: CL20
+package P
+  type K = enumeration(Lin, H01, RMS);
+end P;
+model CL20
+  model V
+    parameter P.K k = P.K.Lin;
+    Modelica.Blocks.Tables.CombiTable1Ds tab(final table = if k == P.K.Lin then Lin elseif k == P.K.H01 then H else R, final extrapolation = Modelica.Blocks.Types.Extrapolation.HoldLastPoint);
+  protected
+    constant Real Lin[:, 2] = [0, 1; 1, 0];
+    constant Real H[:, 2] = [0, 1; 0.5, 0.7; 1, 0];
+    constant Real R[:, 2] = [0, 1; 0.2, 0.9; 0.6, 0.4; 1, 0];
+  end V;
+  V v(k = P.K.H01);
+equation
+  v.tab.u = time;
+end CL20;
+//// model: CL21
+package P
+  type K = enumeration(Lin, H01, RMS);
+end P;
+model CL21
+  model V
+    parameter P.K k = P.K.Lin;
+    Modelica.Blocks.Tables.CombiTable1Ds tab(final table = if k == P.K.Lin then Lin elseif k == P.K.H01 then H01 else RMS, final extrapolation = Modelica.Blocks.Types.Extrapolation.HoldLastPoint);
+  protected
+    constant Real Lin[:, 2] = [0, 1; 1, 0];
+    constant Real H01[:, 2] = [0, 1; 0.5, 0.7; 1, 0];
+    constant Real RMS[:, 2] = [0, 1; 0.2, 0.9; 0.6, 0.4; 1, 0];
+  end V;
+  V v(k = P.K.RMS);
+equation
+  v.tab.u = time;
+end CL21;
+//// model: CL22
+package P
+  type K = enumeration(A, B, C);
+end P;
+model CL22
+  parameter P.K k = P.K.C;
+  parameter Real t[:, :] = if k == P.K.A then Lin elseif k == P.K.B then H else R;
+protected
+  constant Real Lin[:, 2] = [0, 1; 1, 0];
+  constant Real H[:, 2] = [0, 1; 0.5, 0.7; 1, 0];
+  constant Real R[:, 2] = [0, 1; 0.2, 0.9; 1, 0];
+end CL22;
+//// model: CL23
+package P
+  type K = enumeration(A, B, C);
+end P;
+model CL23
+  parameter P.K k = P.K.B;
+  parameter Real t[:, :] = if k == P.K.A then Lin elseif k == P.K.B then H else R;
+protected
+  constant Real Lin[:, 2] = [0, 1; 1, 0];
+  constant Real H[:, 2] = [0, 1; 0.5, 0.7; 1, 0];
+  constant Real R[:, 2] = [0, 1; 0.2, 0.9; 1, 0];
+end CL23;
+//// model: CL24
+model CL24
+  parameter Boolean b1 = false;
+  parameter Boolean b2 = true;
+  parameter Real t[:] = if b1 then {1, 2} elseif b2 then {3, 4, 5} else {6, 7, 8};
+  Real y = time;
+end CL24;
+//// model: CR1
+model CR1
+  connector Pl
+    parameter Integer m = 1;
+    Real v[m];
+  end Pl;
+  parameter Integer k = 1;
+  parameter Integer j = 3 * k;
+  parameter Boolean use = false;
+  Pl p(final m = k) if use;
+  Real y = j;
+end CR1;
+//// model: CR2
+model CR2
+  model Sub
+    parameter Integer m = 1;
+    Real v[m];
+  end Sub;
+  parameter Integer k = 2;
+  parameter Integer j = 3 * k;
+  Sub s(m = k) if false;
+  Real y = j;
+end CR2;
+//// model: CR3
+model CR3
+  model Sub
+    parameter Integer m = 1;
+    Real v[m];
+  end Sub;
+  parameter Integer k = 2;
+  parameter Integer j = 3 * k;
+  Sub s(m = k) if true;
+  Real y = j;
+end CR3;
+//// model: TB1
+model TB1
+  parameter Integer m = 3;
+  Modelica.Electrical.Machines.Utilities.MultiTerminalBox terminalBox(m = m, terminalConnection = "Y");
+end TB1;
+//// model: TB2
+model TB2
+  function nsb
+    input Integer m;
+    output Integer n;
+  algorithm
+    n := if m == 3 then 1 else 2;
+  end nsb;
+  model Box
+    parameter Integer m(min = 1) = 3 annotation(Evaluate = true);
+    final parameter Integer mSystems = nsb(m);
+    final parameter Integer mBasic = integer(m / mSystems);
+  end Box;
+  parameter Integer m = 3;
+  Box terminalBox(m = m);
+end TB2;
+//// model: TB3
+model TB3
+  parameter Integer m = 3;
+  Modelica.Electrical.Machines.Utilities.MultiTerminalBox terminalBox(m = m, terminalConnection = "D");
+end TB3;

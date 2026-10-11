@@ -502,3 +502,5 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `bx-ut` | 3 | 记录绑定求值规则（单测原文）：Evaluate 字段只看 start、参数数组作下标、继承来的字段照留 if 方程 |
 | `dz-p1` | 24 | 组件数组修饰分发的结构参数别名连带：原式是 cref 才连带（整体 / 切片 / 括号 / 记录字段 / 两层分发 / 数组参数，DZ1 / DZ8 / DZ9 / DZ16 / DZ18 / DZ20）、数组字面量 / 负号 / 常量 / Evaluate = false 不连带（DZ3 / DZ10 / DZ11 / DZ15）、each（DZ4 / DZ17）、时刻按共享节点的定型序（DZ5-DZ7 / DZ19 / DZ21）、别名的别名（DZ12）、extends 修饰（DZ13）、MSL JointSSP 形态（DZ14）；负零：书写的 `-0.0` 不护零、混排数组取负、Real 目标的 `-{0, 1}`（DZ22-DZ24） |
 | `dz-ut` | 3 | 分发别名连带与负零（单测原文） |
+| `mx-p1` | 53 | TransferFunction 一路：矩阵构造的 0 行 / 0 列块只占维（MZ1-MZ13，含 MSL TransferFunction 单个 / 数组）；零长切片——方程整条不出、sum / 点积折 0.0、空范围不查越界（ESL1-ESL9）；组件数组里的数组方程与整条保留的数组调用方程（AP1-AP3）；向前引用的数组常量、elseif 链里形状不相容 / 同形的内层 if 由外层选支后按结构参数定（CL，CL13 / CL14 / CL24 omc 打怪式子、CL4 模型里定义的枚举 SKIP）；被移除的条件组件里维用到的参数经修饰绑定连带外面（CR1-CR3、MultiTerminalBox TB1-TB3） |
+| `mx-ut` | 5 | 同上（单测原文） |

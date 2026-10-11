@@ -545,3 +545,13 @@ MultiBody 解析式闭环一路：组件数组修饰分发的结构参数别名�
 omc 看分发前的原式是不是 cref）；另改负零（CylinderBase 的 `rRod2_ib = -{0, pistonLength, 0}`：Integer / Real 混排数组定型成 Real
 再取负得 `-0.0`）。Mechanics.MultiBody.Examples.Loops.Fourbar_analytic、Engine1b_analytic、EngineV6_analytic 转 PASS，均与 omc
 逐字节一致。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-11 加宽 64a 之后：PASS 422→428（+6）
+
+TransferFunction / PowerConverters 一路：矩阵构造的空块（`vector([zeros(max(0, na - nb), 1); b])`，na = nb）、零长切片
+（`der(x_scaled[2:nx]) = x_scaled[1:nx - 1]`，nx = 1）、组件数组里的数组方程（PowerConverters Filter 的 `transferFunction[na]`）、
+向前引用的数组常量与 elseif 链的条件数组（VoltageToAngle 的 `table = if … then Lin elseif … then H01 else RMS`）、被移除的
+条件组件里的结构标记（MultiTerminalBox 三角形接法的 `starpoint(final m = mSystems)` → mBasic 代成 3）。
+Electrical.PowerConverters.Examples.ACDC.RectifierBridge2Pulse.ThyristorBridge2Pulse_DC_Drive、RectifierBridge2mPulse.
+ThyristorBridge2mPulse_DC_Drive、ACAC.Dimmer_R、Dimmer_RL、SoftStarter、Electrical.Polyphase.Examples.PolyphaseRectifier 转 PASS，
+均与 omc 逐字节一致。FAIL / ACCEPTS-INVALID / CRASH 0。

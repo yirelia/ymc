@@ -2206,6 +2206,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           `-0.0` 在求值器里也不护零（makeUnary）、Integer / Real 混排数组定型成 Real 再取负、Real 目标的 `-{0, 1}` 先转型再整体
           取负（omc 都打 `-0.0`，此前 `0.0`）；求值路径的 `-{0, 1}` 与结构参数代入次序两处残余记入 open-questions。
           slice 679 例 PASS 636 / FAIL 0（oracle=live 不一致 0）；scodeinst 637 / 52（在账）；testsuite 1780 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0（不变）；MSL 419→422；探针 9475→9502；单测 337→338。
+    - [x] (64a) flat：TransferFunction / PowerConverters 一路（2026-10-11）：矩阵构造的 0 行 / 0 列块只占维（`vector([zeros(
+          max(0, na - nb), 1); b])`）；零长切片（`x_scaled[2:nx]`，nx = 1）——方程整条不出、sum / 点积折 0.0、空范围不查越界，
+          `der` 收零长实参；组件数组里的数组方程（此前一律 SKIP，omc 与无数组前缀同规则，eq2 / eq3 / Inline1）；向前引用的数组常量
+          （全字面量数组也是值）；elseif 链的条件数组：形状不相容 / 同形的内层 if 挂起，外层顶层 if 选到它时按结构参数定（omc 化简
+          时条件已是字面量；读非结构参数的 omc 打怪式子 → SKIP）；被移除的条件组件里实例化期的结构标记（维 / 条件 / fixed /
+          stateSelect 里的名字，经子组件修饰递归）经修饰绑定连带外面的参数（此前静默不标，CR 探针 / MSL MultiTerminalBox 三角形
+          接法）。第一版用"目标在子组件修饰里出现就 SKIP"的宽护栏，precheck 掉了 55 个 PASS → 改成按结构位置递归。
+          slice 683 例 PASS 640 / FAIL 0（oracle=live 不一致 0）；scodeinst 641 / 52（在账）；testsuite 1785 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 422→428；探针 9502→9560；单测 338→339。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

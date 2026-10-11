@@ -862,8 +862,11 @@ class Flattener {
         for (Id<Exp> d : fel.attr.dims) { tmp.clear(); eval_dim(d, tmp, dmsc, &final_params); }
         for (Id<Exp> d : fel.type.dims) { tmp.clear(); eval_dim(d, tmp, dmsc, &final_params); }
         // 组件条件里的参数（`x if b` → b 是结构参数 → final，Condition3）。
+        std::optional<CVal> cond_v;
         if (fel.condition.is_valid())
-          eval_scode(fel.condition, scope_at(cond_lex(I_.nodes[cn].comp, inst_node)), 0, /*allow_param=*/true, &final_params);
+          cond_v = eval_scode(fel.condition, scope_at(cond_lex(I_.nodes[cn].comp, inst_node)), 0, /*allow_param=*/true,
+                              &final_params);
+        if (cond_v && cond_v->k == CVal::K::Bool && !cond_v->b) mark_removed_dims(cn, inst_node, dsc, ctx, final_params);
         // fixed 属性里的参数（ceval3）。外来修饰 / extends 修饰给了本组件的 fixed（`cylinder2(T(fixed = true))` 盖过类里的
         // `T(fixed = T0fixed)`）→ 声明的值不用、参数不标：omc 标的是合并后修饰的值（updateImplicitVariabilityComp 的
         // TYPE_ATTRIBUTE 支，NFInst.mo:3941-3950 v1.25.0；MSL FluidHeatFlow TestCylinder 的 cylinder2.T0fixed 不是 final）。
@@ -2264,7 +2267,8 @@ class Flattener {
         out.push_back(*v);
       }
     }
-    if (out.empty()) return std::nullopt;   // 空切片 = 零长数组，未做
+    // 空切片 = 零长数组（TransferFunction nx = 1 时的 `x_scaled[2:nx]`）：没有元素就没有越界可查（ESL 探针 ESL6：`x[5:4]` 落在
+    // `Real x[1]` 上 omc 照收）；引用它的方程两边都是零长 → 一个标量方程都不出（ESL5 / ESL7），sum / 点积折成 0.0（ESL4）。
     for (std::int64_t i : out)
       if (i < 1 || i > dim) return std::nullopt;
     return out;
@@ -2285,7 +2289,7 @@ class Flattener {
     if (whole && cmp_dim != dim) set_unsupported("partial slice printed as whole by omc");
     if (kind == ExpKind::Colon || whole) {
       r.kind = ExprKind::Wild;
-    } else if (kind == ExpKind::Range) {
+    } else if (kind == ExpKind::Range && !sel.empty()) {   // 空切片落到下面的空下标数组（零长，不会留到打印）
       r.kind = ExprKind::Range;
       r.a = lit_int(sel.front());
       if (has_step) {   // 步长、终点照写（ArraySlice `w3 = w[1:2:4]`；此前按选中的下标重算成 `1:2:3`）
@@ -3094,8 +3098,6 @@ class Flattener {
     for (const Type* t : {&aty, &bty})
       for (const Dimension& d : t->dims)
         if (d.kind == DimKind::Integer && d.size == 0) { set_unsupported("empty array call equation"); return; }
-    for (const std::vector<std::int64_t>& s : cur_psubs_)
-      if (!s.empty()) { set_unsupported("array equation under array prefix"); return; }
     FlatEquation fe;
     fe.kind = FlatEqKind::Equality;
     fe.a = simplify_expr(a);
@@ -3116,9 +3118,6 @@ class Flattener {
       set_unsupported("array equation shape mismatch");
       return;
     }
-    // 复合数组前缀（enclosing 带 `a[i]` 段下标）与叶数组标量化的组合本增量暂缓（eq2/eq3）→ SKIP。
-    for (const std::vector<std::int64_t>& s : cur_psubs_)
-      if (!s.empty()) { set_unsupported("array equation under array prefix"); return; }
     std::vector<std::int64_t> idx(dims.size(), 1);
     bool more = !dims.empty();
     while (more) {
@@ -6018,6 +6017,124 @@ class Flattener {
     r.ty = Type::real();
     r.args = std::move(out);
     return add(std::move(r));
+  }
+
+  // 条件为假、要被移除的组件 cn：omc 先实例化整棵树、再在定型时按条件删组件，实例化期的结构标记照样打在它里面
+  //（updateImplicitVariability 标维 / 条件 / fixed / stateSelect 里的参数，markComponent 连带被标参数的绑定，NFInst.mo /
+  // NFStructural.mo v1.25.0）——经它的修饰绑定连带到外面的参数（CR 探针 CR1 / CR2：`Pl p(final m = k) if use`、Pl 里
+  // `Real v[m]` → k final、`j = 3 * k` 代成 3；MSL MultiTerminalBox 三角形接法时被移除的 `starpoint(final m = mSystems)` →
+  // mBasic 代成 3）。修饰绑定的目标是组件类里的结构参数名（structural_names）→ 按维的标法求这条绑定（参数记进 final_params）；
+  // 修饰来自外层实例（参数不在本类，这里标不到）→ SKIP。绑定读到的都已是结构参数的不必再标。
+  void mark_removed_dims(NodeId cn, NodeId inst_node, const ScodeScope& dsc, const ModCtx& ctx,
+                         std::unordered_set<std::uint32_t>& final_params) {
+    const CompId cid = I_.nodes[cn].comp;
+    const NodeId ci = I_.comps[cid].class_inst;
+    if (!is_class_inst(ci)) return;
+    struct Bound { Symbol name; Id<Exp> exp; bool own; ScodeScope scope; NodeId at; };
+    std::vector<Bound> bound;
+    auto add_subs = [&](Id<SMod> m, bool own, const ScodeScope& sc, NodeId at) {
+      if (!m.is_valid()) return;
+      for (const SSubMod& s : I_.scode.mods[m].subs) {
+        const Id<Exp> b = I_.scode.mods[s.mod].binding;
+        if (!b.is_valid()) continue;
+        if (std::any_of(bound.begin(), bound.end(), [&](const Bound& x) { return x.name == s.ident; })) continue;   // 外层优先
+        bound.push_back({s.ident, b, own, sc, at});
+      }
+    };
+    for (const ModSource& m : ctx.mods)
+      for (const SSubMod& s : I_.scode.mods[m.mod].subs)
+        if (s.ident == I_.nodes[cn].name) add_subs(s.mod, /*own=*/false, scode_scope_of(m.scope), m.scope);
+    for (std::size_t i = 0; i < I_.comps[cid].extends_mods.size(); ++i) {
+      const NodeId el = ext_lex(cid, i, inst_node);
+      add_subs(I_.comps[cid].extends_mods[i], /*own=*/true, scode_scope_of(el), el);
+    }
+    add_subs(I_.scode.elems[I_.comps[cid].def].mod, /*own=*/true, dsc, decl_lex(cid, inst_node));
+    if (bound.empty()) return;
+    // 绑定读到的参数都已是结构参数（Evaluate = true / 本类预扫已标）：再标也不变（MultiTerminalBox 里被移除的 multiStar /
+    // multiDelta 的 `final m = m`，m 带 Evaluate = true）。
+    auto already_structural = [&](auto& self, Id<Exp> x, NodeId at) -> bool {
+      if (!x.is_valid()) return true;
+      const Exp& e = I_.absyn.exps[x];
+      if (e.kind == ExpKind::CrefExp) {
+        const Cref& c = I_.absyn.crefs[e.cref];
+        if (c.leading_dot || c.parts.empty()) return true;
+        const NodeId n = find_local(at, c.parts[0].name);
+        if (is_comp_node(n) && I_.comps[I_.nodes[n].comp].attributes.variability == SVariability::Param) {
+          const Id<SElement> d = I_.comps[I_.nodes[n].comp].def;
+          if (!evaluate_true(d) && !final_params.count(d.raw)) return false;
+        }
+        for (const CrefPart& p : c.parts)
+          for (Id<Exp> sx : p.subscripts) if (!self(self, sx, at)) return false;
+        return true;
+      }
+      if (!self(self, e.a, at) || !self(self, e.b, at) || !self(self, e.c, at)) return false;
+      for (Id<Exp> a : e.args) if (!self(self, a, at)) return false;
+      return true;
+    };
+    std::unordered_map<std::uint32_t, std::vector<Symbol>> memo;
+    const std::vector<Symbol> sn = structural_names(ci, memo, 0);
+    for (const Bound& b : bound) {
+      if (std::find(sn.begin(), sn.end(), b.name) == sn.end()) continue;
+      if (!absyn_refs_param(b.exp, b.at) || already_structural(already_structural, b.exp, b.at)) continue;
+      if (!b.own) {
+        set_unsupported("structural marking inside removed conditional component");
+        result_.unsupported_detail = std::string(in_.str(I_.nodes[cn].name));   // 子原因：哪个组件（排桶用）
+        return;
+      }
+      eval_scode(b.exp, b.scope, 0, /*allow_param=*/true, &final_params);
+    }
+  }
+  // 类实例 ci 里实例化期会被标成结构参数的名字（只看写法）：本类组件的维、条件、fixed / stateSelect 属性修饰里提到的；经组件
+  // 修饰绑定传给子组件、而子组件那边该名是结构参数的（递归，memo 按类实例）。`start` 之类别的属性 / 普通绑定不算——omc 只在
+  // 这几处标（updateImplicitVariabilityComp，NFInst.mo v1.25.0）。ponytail: Evaluate = true 的参数、经 extends 修饰传的不看，
+  // 遇上再加。
+  std::vector<Symbol> structural_names(NodeId ci, std::unordered_map<std::uint32_t, std::vector<Symbol>>& memo, int depth) {
+    if (const auto it = memo.find(ci.raw); it != memo.end()) return it->second;
+    memo[ci.raw] = {};   // 递归护栏
+    std::vector<Symbol> out;
+    if (depth > 32) return out;
+    auto heads = [&](auto& self, Id<Exp> x) -> void {
+      if (!x.is_valid()) return;
+      const Exp& e = I_.absyn.exps[x];
+      if (e.kind == ExpKind::CrefExp) {
+        const Cref& c = I_.absyn.crefs[e.cref];
+        if (!c.leading_dot && !c.parts.empty() && std::find(out.begin(), out.end(), c.parts[0].name) == out.end())
+          out.push_back(c.parts[0].name);
+        for (const CrefPart& p : c.parts)
+          for (Id<Exp> sx : p.subscripts) self(self, sx);
+        return;
+      }
+      self(self, e.a);
+      self(self, e.b);
+      self(self, e.c);
+      for (Id<Exp> a : e.args) self(self, a);
+      for (const ForIndex& it : e.iters) self(self, it.range);
+    };
+    const Symbol fixed_sym = in_.intern("fixed"), state_sym = in_.intern("stateSelect");
+    auto attr_mods = [&](auto& self, Id<SMod> m) -> void {   // 修饰树里的 fixed / stateSelect 绑定（`phi(fixed = b)` 也算）
+      if (!m.is_valid()) return;
+      for (const SSubMod& s : I_.scode.mods[m].subs) {
+        if (s.ident == fixed_sym || s.ident == state_sym) heads(heads, I_.scode.mods[s.mod].binding);
+        self(self, s.mod);
+      }
+    };
+    const std::vector<NodeId> comps = I_.trees[I_.node_class(ci).tree].components;   // 拷贝
+    for (NodeId n : comps) {
+      if (!is_comp_node(n)) continue;
+      const CompId c = I_.nodes[n].comp;
+      const SElement& de = I_.scode.elems[I_.comps[c].def];
+      for (const std::vector<Id<Exp>>* ds : {&de.attr.dims, &de.type.dims})
+        for (Id<Exp> d : *ds) heads(heads, d);
+      heads(heads, de.condition);
+      attr_mods(attr_mods, de.mod);
+      const NodeId sub = I_.comps[c].class_inst;
+      if (!is_class_inst(sub) || !de.mod.is_valid()) continue;
+      const std::vector<Symbol> inner = structural_names(sub, memo, depth + 1);
+      for (const SSubMod& s : I_.scode.mods[de.mod].subs)
+        if (std::find(inner.begin(), inner.end(), s.ident) != inner.end()) heads(heads, I_.scode.mods[s.mod].binding);
+    }
+    memo[ci.raw] = out;
+    return out;
   }
 
   // 校验外来修饰的每个子名都命中本类某组件——否则是嵌套类修饰 `a(B(...))`（ClassMod1）或写错名 → unsupported。
@@ -13870,25 +13987,36 @@ class Flattener {
   Id<Expr> matrix_exp(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
     using Grid = std::vector<std::vector<Id<Expr>>>;   // 行 × 列的标量元素
     const std::vector<Id<Exp>> rows = e.args;          // 拷贝：inst 期间不持 absyn 引用
+    // 块的维单独记：0 行 / 0 列的块（TransferFunction 的 `[zeros(max(0, na - nb), 1); b]`，na = nb 时 0×1）不留元素、只占维
+    //（makeCatExp 按维相加，空块贡献 0，MZ 探针：`[zeros(0, 1); b]` → `{{b[1]}, {b[2]}}`、`[zeros(2, 0), A]` → A）。
     Grid all;
+    std::int64_t all_cols = -1;                     // 已拼各行块的列数（-1 = 还没有）
+    TypeKind empty_kind = TypeKind::Unknown;        // 结果为空时的元素类型（各块元素类型取宽）
     for (Id<Exp> row : rows) {
       const std::vector<Id<Exp>> els = I_.absyn.exps[row].args;
       Grid block;
+      std::int64_t brows = -1, bcols = 0;           // 本行块的行数（-1 = 还没有）/ 列数
       for (Id<Exp> el : els) {
         const Id<Expr> x = inst_exp(el, enclosing, prefix);
         if (result_.unsupported) return lit_int(0);
         const std::vector<std::int64_t> sh = expr_shape(x);
+        const TypeKind xk = expr_elem_kind(x);
+        if (empty_kind == TypeKind::Unknown || (empty_kind == TypeKind::Integer && xk == TypeKind::Real)) empty_kind = xk;
         // 逐元素摊开的参数 / 常量数组绑定里（param_spread_），元素是推导式的同样按元素展开：omc 拼接时把实参展开
         //（ExpandExp.expandBuiltinCat，各实参 ExpandExp.expand；MSL BooleanTable 的 `[table, {mod(i + 1, 2.0) for i in 1:n}]`，
         // CT 探针 t1）。别处的推导式照旧（见 scalarize 的 Reduction 支）。
         std::optional<RedScalarize> rs;
         if (param_spread_) rs.emplace(red_scalarize_ok_);
-        Grid g;
+        Grid g;   // gr 行（0 列时是 gr 个空行）
+        std::int64_t gr = 1, gc = 1;
         if (sh.empty()) {
           g = {{x}};
-        } else if (sh.size() == 1 && sh[0] > 0) {
+        } else if (sh.size() == 1 && sh[0] >= 0) {
+          gr = sh[0];
           for (std::int64_t i = 1; i <= sh[0]; ++i) g.push_back({scalarize(x, {i})});
-        } else if (sh.size() == 2 && sh[0] > 0 && sh[1] > 0) {
+        } else if (sh.size() == 2 && sh[0] >= 0 && sh[1] >= 0) {
+          gr = sh[0];
+          gc = sh[1];
           for (std::int64_t i = 1; i <= sh[0]; ++i) {
             g.emplace_back();
             for (std::int64_t j = 1; j <= sh[1]; ++j) g.back().push_back(scalarize(x, {i, j}));
@@ -13897,16 +14025,21 @@ class Flattener {
           set_unsupported("matrix element shape"); return lit_int(0);
         }
         if (result_.unsupported) return lit_int(0);
-        if (block.empty()) { block = std::move(g); continue; }
-        if (g.size() != block.size()) { set_unsupported("matrix concatenation dimensions"); return lit_int(0); }
+        if (brows < 0) { block = std::move(g); brows = gr; bcols = gc; continue; }
+        if (gr != brows) { set_unsupported("matrix concatenation dimensions"); return lit_int(0); }
         for (std::size_t i = 0; i < g.size(); ++i) block[i].insert(block[i].end(), g[i].begin(), g[i].end());
+        bcols += gc;
       }
-      if (!all.empty() && (block.empty() || block[0].size() != all[0].size())) {
-        set_unsupported("matrix concatenation dimensions"); return lit_int(0);
-      }
+      if (all_cols >= 0 && bcols != all_cols) { set_unsupported("matrix concatenation dimensions"); return lit_int(0); }
+      all_cols = bcols;
       for (std::vector<Id<Expr>>& r : block) all.push_back(std::move(r));
     }
-    if (all.empty() || all[0].empty()) { set_unsupported("empty matrix"); return lit_int(0); }
+    // 拼出来是空矩阵（0 行或 0 列）：带全维的空数组字面量（同 `zeros(0, 2)` 的展开；MZ 探针 MZ6 / MZ7，omc 不打这样的变量）。
+    if (all.empty() || all_cols <= 0) {
+      if (all_cols < 0) { set_unsupported("empty matrix"); return lit_int(0); }
+      return empty_array_lit(Type::of(empty_kind == TypeKind::Unknown ? TypeKind::Real : empty_kind),
+                             {static_cast<std::int64_t>(all.size()), all_cols});
+    }
     // 公共元素类型（matchExpressions：Integer 与 Real 取 Real；其余须相同）。
     TypeKind common = TypeKind::Unknown;
     for (const std::vector<Id<Expr>>& r : all)
@@ -15306,16 +15439,30 @@ class Flattener {
   // craw / enclosing：条件的 Absyn、所在实例（两支不相容时按结构参数求值选支，见 select_if_branch）；
   // top：本 if 是整个绑定 / 等式一侧——只有这个位置 1.25.0 才选支（V4z 探针：`2 * (if pt then {1, 2} else {3, 4, 5})` 是类型错，
   // 嵌在另一个 if 的分支里的不相容 if 被原样留下 `d1 = if pf then {1.0} else {2.0, 3.0}`）。
-  Id<Expr> array_if_exp(Id<Expr> c, Id<Expr> t, Id<Expr> f, Id<Exp> craw, NodeId enclosing, bool top) {
+  // direct：本 if 恰是另一个 if 的一支（见 if_branch_）。
+  Id<Expr> array_if_exp(Id<Expr> c, Id<Expr> t, Id<Expr> f, Id<Exp> craw, NodeId enclosing, bool top, bool direct = false) {
     const std::vector<std::int64_t> st = expr_shape(t), sf = expr_shape(f);
     if (result_.unsupported) return lit_int(0);
     bool ok = !st.empty() && st == sf;
     for (std::int64_t n : st) ok = ok && n >= 1;
     if (!ok) {
       // 只有"都是数组、同秩、维不同"才按条件求值选支；标量对数组、秩不同是 omc 类型错（V4z 探针 `if pt then {1, 2} else 3`）。
+      // 挂起的 if（elseif 链里更深的一层）的维未知（-1），同样算。
       bool dims_only = !st.empty() && st.size() == sf.size();
-      for (std::int64_t n : st) dims_only = dims_only && n >= 1;
-      for (std::int64_t n : sf) dims_only = dims_only && n >= 1;
+      for (std::int64_t n : st) dims_only = dims_only && (n >= 1 || (n == -1 && pending_ifs_.count(t.raw)));
+      for (std::int64_t n : sf) dims_only = dims_only && (n >= 1 || (n == -1 && pending_ifs_.count(f.raw)));
+      // elseif 链里的一层（不是绑定顶层、恰是外层 if 的一支）：挂起，外层选到它再定（见 resolve_pending_if）。
+      if (dims_only && !top && direct) {
+        Expr r;
+        r.kind = ExprKind::IfExp;
+        r.a = c;
+        r.b = t;
+        r.c = f;
+        r.ty = result_.model.exprs[t].ty;
+        const Id<Expr> id = add(std::move(r));
+        pending_ifs_.emplace(id.raw, PendingIf{craw, t, f, enclosing});
+        return id;
+      }
       if (!dims_only || !top) { set_unsupported("if-expression branch shape"); return lit_int(0); }
       return select_if_branch(craw, c, t, f, enclosing);
     }
@@ -15355,7 +15502,9 @@ class Flattener {
     r.b = tb;
     r.c = fb;
     r.ty = Type::array_of(Type::of(ek), std::move(dims));
-    return add(std::move(r));
+    const Id<Expr> id = add(std::move(r));
+    if (direct) nested_ifs_.emplace(id.raw, PendingIf{craw, tb, fb, enclosing});   // elseif 链的一层（见 resolve_pending_if）
+    return id;
   }
 
   // 条件只读已是结构参数（或常量）的（看求值前的标记，见 structural_at），按值求出、不新打标记；否则 nullopt。
@@ -15380,6 +15529,25 @@ class Flattener {
   //（传递标记依赖 omc 的求值次序，同 if 方程的 cond_params_fixed）、无 Evaluate = false。未选中的那支已定型过：它登记过的
   // 函数由 prune_functions 收走。选中的支是 Integer 算术式时 1.25.0 丢了对 Real 的整体转型（IfExpression12 `x = {6, 6}`），
   // 不复刻 → SKIP。
+  // 外层选到的支是挂起的 if（elseif 链）：omc 不在绑定顶层的 if 不选支、原样留着，外层选支把条件里的参数标成结构参数之后，
+  // EvalConstants 代入、化简时它的条件成了字面量才选（CL 探针 CL11 / CL12：`if k == A then Lin elseif k == B then H else R`
+  // 选到 H / R）。条件里还读非结构参数的，omc 打出逐元素的怪式子（CL13 / CL14：`{/*Integer*/(6.0)}[2]`）→ SKIP。两支同形的
+  // 那层（nested_ifs_，MSL VoltageToAngle 的 H01 / RMS 行数相同）同理选；条件定不了的原样留着（omc 也留，之后的检查照旧，CL24）。
+  Id<Expr> resolve_pending_if(Id<Expr> x) {
+    while (true) {
+      const auto pit = pending_ifs_.find(x.raw);
+      const auto nit = pit == pending_ifs_.end() ? nested_ifs_.find(x.raw) : nested_ifs_.end();
+      if (pit == pending_ifs_.end() && nit == nested_ifs_.end()) return x;
+      const PendingIf p = pit != pending_ifs_.end() ? pit->second : nit->second;   // 拷贝（下面求值可能往表里加）
+      const std::optional<bool> b = structural_condition(p.craw, p.enclosing);
+      if (!b) {
+        if (pit == pending_ifs_.end()) return x;
+        set_unsupported("if-expression branch shape");
+        return lit_int(0);
+      }
+      x = *b ? p.t : p.f;
+    }
+  }
   Id<Expr> select_if_branch(Id<Exp> craw, Id<Expr> c, Id<Expr> t, Id<Expr> f, NodeId enclosing) {
     const StructSnap snap = struct_snap();
     // 条件是在压平期才标的（flattenConditionalArrayIfExp，NFFlatten.mo:1733-1737，v1.25.0）：哪怕 if 写在绑定里，声明在后的
@@ -15409,7 +15577,8 @@ class Flattener {
       set_unsupported("if-expression branch shape");
       return lit_int(0);
     }
-    const Id<Expr> sel = cv->b ? t : f;
+    const Id<Expr> sel = resolve_pending_if(cv->b ? t : f);
+    if (result_.unsupported) return lit_int(0);
     const ExprKind sk = result_.model.exprs[sel].kind;
     if ((sk == ExprKind::Binary || sk == ExprKind::Unary) && expr_elem_kind(sel) == TypeKind::Integer) {
       set_unsupported("if-expression selected branch cast");
@@ -15427,8 +15596,10 @@ class Flattener {
         if (xe.kind == ExprKind::Cref && xe.cref.resolved_node != Id<INode>::kInvalid) {
           const NodeId nd = NodeId::from_index(xe.cref.resolved_node);
           if (I_.nodes.contains(nd) && !I_.nodes[nd].is_empty() && I_.nodes[nd].comp.is_valid() &&
-              used.count(I_.comps[I_.nodes[nd].comp].def.raw))
+              used.count(I_.comps[I_.nodes[nd].comp].def.raw)) {
             cond_param = true;
+            result_.unsupported_detail = std::string(in_.str(xe.cref.parts.back().name));   // 子原因：哪个参数（排桶用）
+          }
         }
         for (Id<Expr> a : xe.args) self(self, a);
         self(self, xe.a);
@@ -15436,7 +15607,12 @@ class Flattener {
         self(self, xe.c);
       };
       walk(walk, sel);
-      if (cond_param) { set_unsupported("if-expression selected branch references parameter"); return lit_int(0); }
+      if (cond_param) {
+        const std::string why = result_.unsupported_detail.empty() ? std::string("Integer") : result_.unsupported_detail;
+        set_unsupported("if-expression selected branch references parameter");
+        result_.unsupported_detail = why;
+        return lit_int(0);
+      }
     }
     return sel;
   }
@@ -15444,6 +15620,18 @@ class Flattener {
   Id<Expr> if_exp(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
     const bool top = if_top_;   // 本 if 是整个绑定 / 等式一侧（见 if_top_）；条件与两支里的 if 都不是
     if_top_ = false;
+    const bool direct = std::exchange(if_branch_, false);   // 本 if 恰是外层 if 的一支（见 if_branch_）
+    auto if_child = [&](Id<Exp> x) {
+      while (I_.absyn.exps[x].kind == ExpKind::Tuple && I_.absyn.exps[x].args.size() == 1) x = I_.absyn.exps[x].args[0];
+      return I_.absyn.exps[x].kind == ExpKind::IfExp;
+    };
+    // 字面量条件直接取出的支若是挂起的 if：顶层就地定，仍是外层一支的照挂着，别处 SKIP（见 resolve_pending_if）。
+    auto settle = [&](Id<Expr> x) -> Id<Expr> {
+      if (!pending_ifs_.count(x.raw) || direct) return x;
+      if (top) return resolve_pending_if(x);
+      set_unsupported("if-expression branch shape");
+      return lit_int(0);
+    };
     Id<Expr> c = inst_exp(e.a, enclosing, prefix);
     // 条件折成字面量（for 方程展开后的 `if i == 1 then localActive else inPort[i-1].occupied`）：两支照样都定型、类型照对
     //（NFTyping.typeIfExpression :2631-2674 v1.25.0），但被剪掉那支里的越界下标不算错——omc 的越界检查在化简之后
@@ -15453,17 +15641,21 @@ class Flattener {
     if (!fn_scope_ && !result_.unsupported)
       if (const Id<Expr> cs = simplify_expr(c); result_.model.exprs[cs].kind == ExprKind::BoolLit) cb = result_.model.exprs[cs].bval;
     if (cb == std::optional<bool>(false)) ++dead_branch_;
+    if_branch_ = !fn_scope_ && if_child(e.b);
     Id<Expr> t = inst_exp(e.b, enclosing, prefix);
+    if_branch_ = false;
     if (cb == std::optional<bool>(false)) --dead_branch_;
     if (cb == std::optional<bool>(true)) ++dead_branch_;
+    if_branch_ = !fn_scope_ && if_child(e.c);
     Id<Expr> f = inst_exp(e.c, enclosing, prefix);
+    if_branch_ = false;
     if (cb == std::optional<bool>(true)) --dead_branch_;
     if (!fn_scope_ && !result_.unsupported && (!expr_shape(t).empty() || !expr_shape(f).empty())) {
       // 条件折成字面量：直接取那一支，另一支不参与形状 / 类型匹配（IfExpression10 `if false then {1, 2} elseif false then {1}
       // else {3, 4}` → `x = {3.0, 4.0}`）。
       if (const Id<Expr> cs = simplify_expr(c); result_.model.exprs[cs].kind == ExprKind::BoolLit)
-        return result_.model.exprs[cs].bval ? t : f;
-      return array_if_exp(c, t, f, e.a, enclosing, top);
+        return settle(result_.model.exprs[cs].bval ? t : f);
+      return array_if_exp(c, t, f, e.a, enclosing, top, direct);
     }
     // 函数体里的数组 if：两支元素一个 Integer 一个 Real → Integer 的那支提到 Real（引用整体转型、字面量逐叶转；FS 探针 t3
     // `if k > 0 then /*Real[2]*/(n2) else w[1:2]`、`… else {3.0, 4.0}`）；其余不同类 → omc 类型错。
@@ -18810,7 +19002,8 @@ class Flattener {
         };
         const bool xf = der_xfield && expr_elem_kind(args[0]) == TypeKind::Real && all_vars(all_vars, args[0]);
         ok = ok || xf;
-        for (std::int64_t n : sh) ok = ok && n >= 1;
+        // 零长的（空切片 `der(x_scaled[2:nx])`，nx = 1）照收：所在方程两边零长、一个标量方程都不出（ESL 探针 ESL7）。
+        for (std::int64_t n : sh) ok = ok && n >= 0;
         if (!ok) {
           set_unsupported("der of array expression");
           supported = false;
@@ -20275,6 +20468,11 @@ class Flattener {
           cv && !result_.unsupported)
         if (const std::optional<CVal> ce = coerce_to_kind(*cv, result_.model.exprs[e].ty.kind)) e = literal_of(*ce);
     evaluating_.erase(key);
+    // 数值字面量数组也是值（向前引用还没发射的数组常量：MSL VoltageToAngle 的 `table = if … then Lin elseif … then H01 else
+    // RMS`，`protected constant Real Lin[:, 2] = [0, 1; 1, 0]` 声明在后；CL 探针 CL5）：叶按声明类型转（Real 常量的整数
+    // 字面量 → Real，omc 打 `t[1,1] = 0.0`）。
+    if (result_.model.exprs[e].kind == ExprKind::Array && all_numeric_literal(e))
+      return I_.comps[cid].ty.element_type().kind == TypeKind::Real ? coerce_deep(e, TypeKind::Real) : e;
     return is_literal(e) ? e : Id<Expr>{};
   }
 
@@ -24326,6 +24524,12 @@ class Flattener {
   // 下一个被定型的 if 表达式是整个绑定 / 等式一侧（两支不相容时允许按结构参数求值选支，见 array_if_exp）。emit_array /
   // collect_equation 在对应 inst_exp 前按 Absyn 置位，if_exp 进入即清。
   bool if_top_ = false;
+  // 下一个被定型的 if 表达式恰是另一个 if 的一支（elseif 链；if_exp 按 Absyn 置位、进入即清）。这样的 if 两支形状不相容时不
+  // 当场 SKIP，先挂起（pending_ifs_），由外层顶层 if 选到它时再定（见 resolve_pending_if）。
+  bool if_branch_ = false;
+  struct PendingIf { Id<Exp> craw; Id<Expr> t, f; NodeId enclosing; };
+  std::unordered_map<std::uint32_t, PendingIf> pending_ifs_;   // 挂起的 if 的 Expr id → 条件与两支
+  std::unordered_map<std::uint32_t, PendingIf> nested_ifs_;    // 两支同形、恰是外层 if 一支的数组 if（同上，选不选看条件）
   // scalarize 可否代入展开推导式（见 scalarize 的 Reduction 支）：只在核实过的调用点由 RedScalarize 置位。
   bool red_scalarize_ok_ = false;
   struct RedScalarize {

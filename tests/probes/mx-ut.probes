@@ -1,0 +1,63 @@
+//// set: mx-ut — 空块矩阵 / 零长切片 / 组件数组里的数组方程 / elseif 链的条件数组 / 被移除条件组件的结构标记（单测原文）
+//// model: MXU1
+model MXU1
+  parameter Real a[2] = {1, 1};
+  parameter Real b[2] = {-1, 1};
+  parameter Integer na = size(a, 1);
+  parameter Integer nb = size(b, 1);
+  parameter Real bb[:] = vector([zeros(max(0, na - nb), 1); b]);
+  parameter Real d = bb[1] / a[1];
+end MXU1;
+//// model: MXU2
+model MXU2
+  parameter Integer nx = 1;
+  Real x[nx](each start = 1);
+initial equation
+  der(x[2:nx]) = zeros(nx - 1);
+equation
+  der(x[1]) = -x[1];
+  der(x[2:nx]) = x[1:nx - 1];
+end MXU2;
+//// model: MXU3
+model MXU3
+  function f
+    input Real u[2];
+    output Real v[2];
+  algorithm
+    v := 2 * u;
+  end f;
+  model A
+    Real x[2];
+    Real z[2];
+  equation
+    z = f(x);
+    x = {time, 2 * time};
+  end A;
+  A a;
+  A b[2];
+end MXU3;
+//// model: MXU4
+package P
+  type K = enumeration(A, B, C);
+end P;
+model MXU4
+
+  parameter P.K k = P.K.B;
+  parameter Real t[:, :] = if k == P.K.A then Lin elseif k == P.K.B then H else R;
+protected
+  constant Real Lin[:, 2] = [0, 1; 1, 0];
+  constant Real H[:, 2] = [0, 1; 0.5, 0.7; 1, 0];
+  constant Real R[:, 2] = [0, 1; 0.2, 0.9; 0.6, 0.4; 1, 0];
+end MXU4;
+//// model: MXU5
+model MXU5
+  connector Pl
+    parameter Integer m = 1;
+    Real v[m];
+  end Pl;
+  parameter Integer k = 1;
+  parameter Integer j = 3 * k;
+  parameter Boolean use = false;
+  Pl p(final m = k) if use;
+  Real y = j;
+end MXU5;
