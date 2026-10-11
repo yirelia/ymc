@@ -1,0 +1,554 @@
+//// set: vb-p1 — 函数体里的向量化调用（VB）；FFT 一路的函数调用 / 元组赋值数组目标（VFF）；函数里零长 fill（VFL）；scodeinst FuncVectorization5（VFV5）
+//// model: VB1
+model VB1
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  function h
+    input Real x;
+    input Real k;
+    output Real y;
+  algorithm
+    y := k * x;
+  end h;
+  function f
+    input Real u[:];
+    output Real a[size(u, 1)];
+  algorithm
+    a := g(u);
+  end f;
+  Real r[:] = f({time, 2, 3});
+end VB1;
+//// model: VB2
+model VB2
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  function h
+    input Real x;
+    input Real k;
+    output Real y;
+  algorithm
+    y := k * x;
+  end h;
+  function f
+    input Real u[:];
+    input Integer n;
+    output Real a[n];
+  algorithm
+    a := g(u[1:n]);
+  end f;
+  Real r[:] = f({time, 2, 3}, 2);
+end VB2;
+//// model: VB3
+model VB3
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  function h
+    input Real x;
+    input Real k;
+    output Real y;
+  algorithm
+    y := k * x;
+  end h;
+  function f
+    input Real u[:];
+    output Real a[2];
+  algorithm
+    a := g(u[2:3]);
+  end f;
+  Real r[:] = f({time, 2, 3});
+end VB3;
+//// model: VB4
+model VB4
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  function h
+    input Real x;
+    input Real k;
+    output Real y;
+  algorithm
+    y := k * x;
+  end h;
+  function f
+    input Real m[:, :];
+    output Real a[size(m, 1), size(m, 2)];
+  algorithm
+    a := g(m);
+  end f;
+  Real r[:, :] = f({{time, 2}, {3, 4}});
+end VB4;
+//// model: VB5
+model VB5
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  function h
+    input Real x;
+    input Real k;
+    output Real y;
+  algorithm
+    y := k * x;
+  end h;
+  function f
+    input Real u[:];
+    input Real v[size(u, 1)];
+    output Real a[size(u, 1)];
+  algorithm
+    a := h(u, v);
+  end f;
+  Real r[:] = f({time, 2, 3}, {4, 5, 6});
+end VB5;
+//// model: VB6
+model VB6
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  function h
+    input Real x;
+    input Real k;
+    output Real y;
+  algorithm
+    y := k * x;
+  end h;
+  function f
+    input Real u[:];
+    output Real a[size(u, 1)];
+  algorithm
+    a := h(u, 2.0);
+  end f;
+  Real r[:] = f({time, 2, 3});
+end VB6;
+//// model: VB7
+model VB7
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  function h
+    input Real x;
+    input Real k;
+    output Real y;
+  algorithm
+    y := k * x;
+  end h;
+  function f
+    input Real u[:];
+    output Real a[div(size(u, 1), 2) + 1];
+  protected
+    Real w[div(size(u, 1), 2) + 1];
+  algorithm
+    w := u[1:div(size(u, 1), 2) + 1];
+    a := g(w);
+  end f;
+  Real r[:] = f({time, 2, 3, 4});
+end VB7;
+//// model: VB8
+model VB8
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  function h
+    input Real x;
+    input Real k;
+    output Real y;
+  algorithm
+    y := k * x;
+  end h;
+  function f
+    input Real u[:];
+    output Real s;
+  algorithm
+    s := sum(g(u));
+  end f;
+  Real r[:] = {f({time, 2, 3})};
+end VB8;
+//// model: VB9
+model VB9
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  function h
+    input Real x;
+    input Real k;
+    output Real y;
+  algorithm
+    y := k * x;
+  end h;
+  function f
+    input Real u[3];
+    output Real a[3];
+  protected
+    Real w[3];
+  algorithm
+    w := u;
+    a := g(w);
+  end f;
+  Real r[:] = f({time, 2, 3});
+end VB9;
+//// model: VB10
+model VB10
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  function h
+    input Real x;
+    input Real k;
+    output Real y;
+  algorithm
+    y := k * x;
+  end h;
+  function f
+    input Real u[:];
+    output Real a[size(u, 1)];
+  algorithm
+    a := g(g(u));
+  end f;
+  Real r[:] = f({time, 2, 3});
+end VB10;
+//// model: VB11
+model VB11
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  function h
+    input Real x;
+    input Real k;
+    output Real y;
+  algorithm
+    y := k * x;
+  end h;
+  function f
+    input Real u[:];
+    output Real a[size(u, 1)];
+  algorithm
+    a := g(2 * u);
+  end f;
+  Real r[:] = f({time, 2, 3});
+end VB11;
+//// model: VB12
+model VB12
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  function h
+    input Real x;
+    input Real k;
+    output Real y;
+  algorithm
+    y := k * x;
+  end h;
+  function f
+    input Real u[:];
+    input Integer nfi;
+    output Real a[nfi];
+  protected
+    Real Phi[div(size(u, 1), 2) + 1];
+  algorithm
+    Phi := u[1:div(size(u, 1), 2) + 1];
+    a := Modelica.Units.Conversions.to_deg(Phi[1:nfi]);
+  end f;
+  Real r[:] = f({time, 2, 3, 4}, 2);
+end VB12;
+//// model: VB13
+model VB13
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  function h
+    input Real x;
+    input Real k;
+    output Real y;
+  algorithm
+    y := k * x;
+  end h;
+  function f
+    input Real u[:];
+    output Real a[2];
+  algorithm
+    a := g(u[1:2:3]);
+  end f;
+  Real r[:] = f({time, 2, 3});
+end VB13;
+//// model: VB14
+model VB14
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  function h
+    input Real x;
+    input Real k;
+    output Real y;
+  algorithm
+    y := k * x;
+  end h;
+  function f
+    input Real m[:, :];
+    output Real a[size(m, 2)];
+  algorithm
+    a := g(m[1, :]);
+  end f;
+  Real r[:] = f({{time, 2}, {3, 4}});
+end VB14;
+//// model: VB15
+model VB15
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  function h
+    input Real x;
+    input Real k;
+    output Real y;
+  algorithm
+    y := k * x;
+  end h;
+  function f
+    input Real u[:];
+    input Integer k;
+    output Real a[size(u, 1) - k + 1];
+  algorithm
+    a := g(u[k:size(u, 1)]);
+  end f;
+  Real r[:] = f({time, 2, 3}, 2);
+end VB15;
+//// model: VFF1
+model VFF1
+  import Modelica.Math.FastFourierTransform.*;
+  parameter Integer ns = realFFTsamplePoints(4, 0.2, f_max_factor = 5);
+  Real y_buf[ns](start = vector([6.5; fill(0, ns - 1)]), each fixed = true);
+equation
+  der(y_buf) = zeros(ns);
+end VFF1;
+//// model: VFF2
+model VFF2
+  import Modelica.Math.FastFourierTransform.*;
+  parameter Integer ns = 4;
+  parameter Integer nfi = 2;
+  Real y_buf[ns](each start = 1, each fixed = true);
+  Real Ai[nfi](each start = 0, each fixed = true);
+  Real Phii[nfi](each start = 0, each fixed = true);
+  Integer info(start = 0, fixed = true);
+equation
+  der(y_buf) = zeros(ns);
+algorithm
+  when sample(0, 0.1) then
+    (info, Ai, Phii) := realFFT(y_buf, nfi);
+  end when;
+end VFF2;
+//// model: VFF4
+model VFF4
+  function f
+    input Real u[:];
+    input Integer n;
+    output Integer info;
+    output Real a[n];
+  algorithm
+    info := 0;
+    a := u[1:n];
+  end f;
+  Real y[4](each start = 1, each fixed = true);
+  Real A[2](each start = 0, each fixed = true);
+  Integer info(start = 0, fixed = true);
+equation
+  der(y) = zeros(4);
+algorithm
+  when sample(0, 0.1) then
+    (info, A) := f(y, 2);
+  end when;
+end VFF4;
+//// model: VFF5
+model VFF5
+  function f
+    input Real u[:];
+    input Integer n;
+    output Real a[n];
+  algorithm
+    a := u[1:n];
+  end f;
+  Real y[4](each start = 1, each fixed = true);
+  Real A[2];
+equation
+  der(y) = zeros(4);
+  A = f(y, 2);
+end VFF5;
+//// model: VFF6
+model VFF6
+  function f
+    input Real u[:];
+    input Integer n;
+    output Real a[n];
+  algorithm
+    a := u[1:n];
+  end f;
+  Real y[4](each start = 1, each fixed = true);
+  parameter Integer nfi = 2;
+  Real A[nfi];
+equation
+  der(y) = zeros(4);
+  A = f(y, nfi);
+end VFF6;
+//// model: VFF7
+model VFF7
+  function f
+    input Real u[:];
+    input Integer n;
+    output Real a[n];
+  algorithm
+    a := u[1:n];
+  end f;
+  parameter Integer ns = 4;
+  Real y[ns](each start = 1, each fixed = true);
+  Real A[2];
+equation
+  der(y) = zeros(ns);
+  A = f(y, 2);
+end VFF7;
+//// model: VFF8
+model VFF8
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  function f
+    input Real u[:];
+    input Integer n;
+    output Real a[n];
+  algorithm
+    a := g(u[1:n]);
+  end f;
+  Real y[4](each start = 1, each fixed = true);
+  Real A[2];
+equation
+  der(y) = zeros(4);
+  A = f(y, 2);
+end VFF8;
+//// model: VFL1
+model VFL1
+  function f
+    input Real u[:];
+    input Real p[:] = fill(0.0, 0);
+    input Real q[:] = fill(1.0, 2);
+    input Real r[:] = zeros(0);
+    input Real s[:] = ones(3);
+    input Integer k = 2;
+    input Real w[:] = fill(2.0, k);
+    output Real y;
+  protected
+    Real a[0] = fill(0.0, 0);
+    Real b[2] = fill(1.0, 2);
+    Real c[:] = fill(3.0, size(u, 1));
+  algorithm
+    y := sum(u) + sum(p) + sum(q) + sum(r) + sum(s) + sum(w) + sum(a) + sum(b) + sum(c);
+  end f;
+  Real y1 = f({time, 2});
+  Real y2 = f({time, 2}, fill(0.0, 0));
+end VFL1;
+//// model: VFL2
+model VFL2
+  function f
+    input Real u[:];
+    input Real p[:, :] = fill(0.0, 2, 0);
+    input Real q[:, :] = fill(0.0, 0, 2);
+    output Real y;
+  algorithm
+    y := sum(u) + size(p, 1) + size(q, 2);
+  end f;
+  Real y1 = f({time, 2});
+  parameter Real e[0] = fill(0.0, 0);
+  Real z[2, 0] = fill(time, 2, 0);
+end VFL2;
+//// model: VFV5
+// name: VFV5
+// keywords: vectorization function
+// status: correct
+//
+//
+
+model VFV5
+  function mySum
+    input Real x;
+    input Real y;
+    output Real z = x + y;
+  end mySum;
+
+  function f
+    input Real[:, :] x;
+    input Real[:, :] y;
+    output Real s = 0.0;
+  algorithm
+    s := sum(mySum(x, y));
+  end f;
+
+  Real x = f({{time, 2, 3}, {4, 5, 6}}, {{1, 2, 3}, {4, 5, 6}});
+  Real y = f({{1, 2, 3}, {4, 5, 6}}, {{1, 2, 3}, {4, 5, 6}});
+end VFV5;
+
+
+// Result:
+// function VFV5.f
+//   input Real[:, :] x;
+//   input Real[:, :] y;
+//   output Real s = 0.0;
+// algorithm
+//   s := sum(array(array(VFV5.mySum(x[$i0,$i1], y[$i0,$i1]) for $i1 in 1:size(x, 2)) for $i0 in 1:size(x, 1)));
+// end VFV5.f;
+//
+// function VFV5.mySum
+//   input Real x;
+//   input Real y;
+//   output Real z = x + y;
+// end VFV5.mySum;
+//
+// class VFV5
+//   Real x = VFV5.f({{time, 2.0, 3.0}, {4.0, 5.0, 6.0}}, {{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}});
+//   Real y = 42.0;
+// end VFV5;
+// endResult

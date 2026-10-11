@@ -555,3 +555,12 @@ TransferFunction / PowerConverters 一路：矩阵构造的空块（`vector([zer
 Electrical.PowerConverters.Examples.ACDC.RectifierBridge2Pulse.ThyristorBridge2Pulse_DC_Drive、RectifierBridge2mPulse.
 ThyristorBridge2mPulse_DC_Drive、ACAC.Dimmer_R、Dimmer_RL、SoftStarter、Electrical.Polyphase.Examples.PolyphaseRectifier 转 PASS，
 均与 omc 逐字节一致。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-11 加宽 64b 之后：PASS 428→433（+5）
+
+FFT 一路：函数体里的向量化调用（realFFT 的 `phases := to_deg(Phi[1:nfi])` →
+`array(Modelica.Units.Conversions.to_deg(Phi[(1:nfi)[$i1]]) for $i1 in 1:nfi)`）、when 算法里元组赋值的整体数组目标
+（`(info, Ai, Phii) := realFFT(y_buf, nfi)`；GenerateRandomNumbers 的 `(r64, state64) := Generators.Xorshift64star.random(pre(state64))` 同）、函数输入缺省 `phases[:] = fill(0.0, 0)`
+折成 `{}`。Math.FastFourierTransform.Examples.RealFFT1、RealFFT2、Blocks.Examples.Rectifier6pulseFFT、Rectifier12pulseFFT、
+Math.Random.Examples.GenerateRandomNumbers 转 PASS，均与 omc 逐字节一致（stdout；omc 在 stderr 另报 realFFTwriteToFile 调 impure
+removeFile 的 Warning）。FAIL / ACCEPTS-INVALID / CRASH 0。

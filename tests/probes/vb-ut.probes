@@ -1,0 +1,80 @@
+//// set: vb-ut — 函数体里的向量化调用 / 元组赋值的数组目标 / 零长 fill 折成 {}（单测原文）
+//// model: VBU1
+model VBU1
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  function h
+    input Real x;
+    input Real k;
+    output Real y;
+  algorithm
+    y := k * x;
+  end h;
+  function f
+    input Real u[:];
+    input Integer n;
+    output Real a[n];
+  algorithm
+    a := g(u[1:n]);
+  end f;
+  Real r[:] = f({time, 2, 3}, 2);
+end VBU1;
+//// model: VBU2
+model VBU2
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  function h
+    input Real x;
+    input Real k;
+    output Real y;
+  algorithm
+    y := k * x;
+  end h;
+  function f
+    input Real m[:, :];
+    output Real a[size(m, 1), size(m, 2)];
+  algorithm
+    a := g(m);
+  end f;
+  Real r[:, :] = f({{time, 2}, {3, 4}});
+end VBU2;
+//// model: VBU3
+model VBU3
+  function f
+    input Real u[:];
+    input Integer n;
+    output Integer info;
+    output Real a[n];
+  algorithm
+    info := 0;
+    a := u[1:n];
+  end f;
+  Real y[4](each start = 1, each fixed = true);
+  Real A[2](each start = 0, each fixed = true);
+  Integer info(start = 0, fixed = true);
+equation
+  der(y) = zeros(4);
+algorithm
+  when sample(0, 0.1) then
+    (info, A) := f(y, 2);
+  end when;
+end VBU3;
+//// model: VBU4
+model VBU4
+  function f
+    input Real u[:];
+    input Real p[:] = fill(0.0, 0);
+    output Real y;
+  algorithm
+    y := sum(u) + sum(p);
+  end f;
+  Real y1 = f({time, 2});
+end VBU4;

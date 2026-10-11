@@ -7432,4 +7432,44 @@ YMC_TEST(flatten_empty_blocks_and_conditional_arrays) {
                            "  final parameter Boolean use = false;\n  Real y = /*Real*/(j);\nend MXU5;\n"));
 }
 
+YMC_TEST(flatten_function_body_vectorization) {
+  // 函数体里的向量化调用：切片实参 `u[(1:n)[$i1]]`、范围 `1:n`；二维嵌套 `array(array(… for $i2 in 1:size(m, 2)) for $i1 in
+  // 1:size(m, 1))`；when 算法里元组赋值的整体数组目标；函数输入缺省 `fill(0.0, 0)` 折成 `{}`。期望 = omc 1.25.0 实跑
+  //（2026-10-11，探针 vb-ut）。
+  YMC_CHECK_EQ(flatten_src("model VBU1\n  function g\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n  end g;\n"
+                           "  function h\n    input Real x;\n    input Real k;\n    output Real y;\n  algorithm\n    y := k * x;\n"
+                           "  end h;\n  function f\n    input Real u[:];\n    input Integer n;\n    output Real a[n];\n  algorithm\n"
+                           "    a := g(u[1:n]);\n  end f;\n  Real r[:] = f({time, 2, 3}, 2);\nend VBU1;\n"),
+               std::string("function VBU1.f\n  input Real[:] u;\n  input Integer n;\n  output Real[n] a;\nalgorithm\n"
+                           "  a := array(VBU1.g(u[(1:n)[$i1]]) for $i1 in 1:n);\nend VBU1.f;\n\nfunction VBU1.g\n  input Real x;\n"
+                           "  output Real y;\nalgorithm\n  y := 2.0 * x;\nend VBU1.g;\n\nclass VBU1\n  Real r[1];\n  Real r[2];\n"
+                           "equation\n  r = VBU1.f({time, 2.0, 3.0}, 2);\nend VBU1;\n"));
+  YMC_CHECK_EQ(flatten_src("model VBU2\n  function g\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n  end g;\n"
+                           "  function h\n    input Real x;\n    input Real k;\n    output Real y;\n  algorithm\n    y := k * x;\n"
+                           "  end h;\n  function f\n    input Real m[:, :];\n    output Real a[size(m, 1), size(m, 2)];\n  algorithm\n"
+                           "    a := g(m);\n  end f;\n  Real r[:, :] = f({{time, 2}, {3, 4}});\nend VBU2;\n"),
+               std::string("function VBU2.f\n  input Real[:, :] m;\n  output Real[size(m, 1), size(m, 2)] a;\nalgorithm\n"
+                           "  a := array(array(VBU2.g(m[$i1,$i2]) for $i2 in 1:size(m, 2)) for $i1 in 1:size(m, 1));\nend VBU2.f;\n\n"
+                           "function VBU2.g\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend VBU2.g;\n\n"
+                           "class VBU2\n  Real r[1,1];\n  Real r[1,2];\n  Real r[2,1];\n  Real r[2,2];\nequation\n"
+                           "  r = VBU2.f({{time, 2.0}, {3.0, 4.0}});\nend VBU2;\n"));
+  YMC_CHECK_EQ(flatten_src("model VBU3\n  function f\n    input Real u[:];\n    input Integer n;\n    output Integer info;\n"
+                           "    output Real a[n];\n  algorithm\n    info := 0;\n    a := u[1:n];\n  end f;\n"
+                           "  Real y[4](each start = 1, each fixed = true);\n  Real A[2](each start = 0, each fixed = true);\n"
+                           "  Integer info(start = 0, fixed = true);\nequation\n  der(y) = zeros(4);\nalgorithm\n"
+                           "  when sample(0, 0.1) then\n    (info, A) := f(y, 2);\n  end when;\nend VBU3;\n"),
+               std::string("function VBU3.f\n  input Real[:] u;\n  input Integer n;\n  output Integer info;\n  output Real[n] a;\n"
+                           "algorithm\n  info := 0;\n  a := u[1:n];\nend VBU3.f;\n\nclass VBU3\n"
+                           "  Real y[1](start = 1.0, fixed = true);\n  Real y[2](start = 1.0, fixed = true);\n"
+                           "  Real y[3](start = 1.0, fixed = true);\n  Real y[4](start = 1.0, fixed = true);\n"
+                           "  Real A[1](start = 0.0, fixed = true);\n  Real A[2](start = 0.0, fixed = true);\n"
+                           "  Integer info(start = 0, fixed = true);\nequation\n  der(y[1]) = 0.0;\n  der(y[2]) = 0.0;\n"
+                           "  der(y[3]) = 0.0;\n  der(y[4]) = 0.0;\nalgorithm\n  when sample(0.0, 0.1) then\n"
+                           "    (info, A) := VBU3.f(y, 2);\n  end when;\nend VBU3;\n"));
+  YMC_CHECK_EQ(flatten_src("model VBU4\n  function f\n    input Real u[:];\n    input Real p[:] = fill(0.0, 0);\n    output Real y;\n"
+                           "  algorithm\n    y := sum(u) + sum(p);\n  end f;\n  Real y1 = f({time, 2});\nend VBU4;\n"),
+               std::string("function VBU4.f\n  input Real[:] u;\n  input Real[:] p = {};\n  output Real y;\nalgorithm\n"
+                           "  y := sum(u) + sum(p);\nend VBU4.f;\n\nclass VBU4\n  Real y1 = VBU4.f({time, 2.0}, {});\nend VBU4;\n"));
+}
+
 YMC_TEST_MAIN

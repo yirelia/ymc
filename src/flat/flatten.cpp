@@ -1837,7 +1837,9 @@ class Flattener {
       if (!p.subscripts.empty()) { set_unsupported("tuple target"); return false; }
       nm.push_back(p.name);
     }
-    const FlatVariable* lv = find_scalar_flat_var(nm);
+    // 整体引用的数组目标（MSL FFT 的 `(info, Ai, Phii) := realFFT(y_buf, nfi)`）：同普通赋值，按标量化成的元素查（omc 照写
+    // 元组，FF 探针 FF4 `(info, A) := FF4.f(y, 2)`）。
+    const FlatVariable* lv = expr_shape(l).empty() ? find_scalar_flat_var(nm) : find_array_flat_var(nm);
     if (!lv || !assignable(lv->var_kind)) {
       set_unsupported("algorithm assignment to non-continuous variable");
       return false;
@@ -11565,6 +11567,60 @@ class Flattener {
     }
     return {};
   }
+  // 函数体里向量化实参 arg 的第 k 维（0 基）的尺寸式（Dimension.sizeExp，NFDimension.mo v1.25.0）：末段下标里第 k 个切片位是
+  // 范围 → 它的长度（range_dim：`1:n` → n、`2:3` → 2、`k:size(u, 1)` → `max(size(u, 1) - k + 1, 0)`）；否则看类型的维——已知
+  // → 字面量、整体引用的声明维式照写（`Real w[div(size(u, 1), 2) + 1]`）、未知（`:` 形参、`m[1, :]`）→ `size(arg, k)`
+  //（VB 探针 VB1 / VB7 / VB14 `1:size(m[1,:], 1)`）。非引用实参（omc `(u * 2.0)[$i1]`）、带下标的表达式维 → invalid（SKIP）。
+  Id<Expr> fn_vect_dim_size(Id<Expr> arg, std::size_t k) {
+    const Expr x = result_.model.exprs[arg];   // 拷贝（下面 add）
+    if (x.kind != ExprKind::Cref || x.cref.parts.empty() || k >= x.ty.dims.size()) return {};
+    const std::vector<Id<Expr>>& subs = x.cref.parts.back().subscripts;
+    std::size_t slot = 0;
+    for (Id<Expr> s : subs) {
+      const ExprKind sk = result_.model.exprs[s].kind;
+      if (sk != ExprKind::Wild && sk != ExprKind::Range && sk != ExprKind::Array) continue;   // 标量下标不占维
+      if (slot++ != k) continue;
+      if (sk == ExprKind::Array) return {};   // 下标数组切片未核实
+      if (sk == ExprKind::Range) {
+        const Dimension d = range_dim(s);
+        return d.kind == DimKind::Integer ? lit_int(d.size) : d.kind == DimKind::Exp ? d.exp : Id<Expr>{};
+      }
+      break;   // `:` 取类型的维
+    }
+    const Dimension& d = x.ty.dims[k];
+    if (d.kind == DimKind::Integer) return lit_int(d.size);
+    if (d.kind == DimKind::Exp) return subs.empty() ? fn_end_value(arg, x.ty, k, x.cref.parts.back().name) : Id<Expr>{};
+    return dim_size_expr(arg, x.ty, k);
+  }
+  // 函数体里向量化实参取 `[$i1, …]`（Expression.applySubscript）：迭代变量逐个落到末段的切片位——`:` 换成它、范围 `a:b` 换成
+  // `(a:b)[$ik]`（VB2 `u[(1:n)[$i1]]`、VB13 `u[(1:2:3)[$i1]]`）——余下的接在末尾（`u` → `u[$i1]`、`m` → `m[$i1,$i2]`）。
+  // 非引用实参 / 下标数组切片未做 → invalid。
+  Id<Expr> fn_vectorize_arg(Id<Expr> a, const std::vector<Id<Expr>>& iters) {
+    const Expr x = result_.model.exprs[a];   // 拷贝
+    if (x.kind != ExprKind::Cref || x.cref.parts.empty() || x.ty.dims.size() < iters.size()) return {};
+    Expr c = x;
+    std::vector<Id<Expr>>& subs = c.cref.parts.back().subscripts;   // c 是拷贝，下面 add 不失效
+    std::size_t next = 0;
+    for (Id<Expr>& s : subs) {
+      if (next == iters.size()) break;
+      const ExprKind sk = result_.model.exprs[s].kind;
+      if (sk == ExprKind::Array) return {};
+      if (sk == ExprKind::Wild) {
+        s = iters[next++];
+      } else if (sk == ExprKind::Range) {
+        Expr sx;
+        sx.kind = ExprKind::Subscript;
+        sx.a = s;
+        sx.args = {iters[next++]};
+        sx.ty = Type::integer();
+        s = add(std::move(sx));
+      }
+    }
+    while (next < iters.size()) subs.push_back(iters[next++]);
+    const std::vector<Dimension> rest(x.ty.dims.begin() + static_cast<std::ptrdiff_t>(iters.size()), x.ty.dims.end());
+    c.ty = rest.empty() ? x.ty.element_type() : Type::array_of(x.ty.element_type(), rest);
+    return add(std::move(c));
+  }
   // 向量化调用的结果：末维在最内层，`array(array(f(…) for $i2 in 1:d2) for $i1 in 1:d1)`（T10 探针）。
   Id<Expr> wrap_vectorized(Id<Expr> call, const std::vector<std::int64_t>& vd) {
     // 只向量化一维、长 1：omc 的化简把数组构造换成那一个元素的数组字面量（simplifyArrayConstructor 的 dim_size == 1 支，
@@ -11871,7 +11927,44 @@ class Flattener {
     // 尺寸式），实参在 `[$i1]` 处取元素（Expression.applySubscript 对数组构造：体里的迭代变量换成 `(1:E)[$i1]`）→
     // `array(real(… v[(1:size(v, 1))[$i1]] …) for $i1 in 1:size(v, 1))`（RZ3）。别的形态照旧（下面的记录实参检查报 SKIP）。
     Id<Expr> fvec_range;
+    // 函数体里的一般向量化（非记录形参，实参秩 > 形参秩）：多出的前导维逐维一个迭代变量 `$ik`，范围 `1:E`——E 取实参那一维的
+    // 尺寸式（Dimension.sizeExp）：已知维 → 字面量、声明里的维式照写、切片 `a:b` → 它的长度（getRangeTypeInt，见 range_dim）、
+    // 其余未知 → `size(实参, k)`；实参取 `[$ik]` 照 Expression.applySubscript（见 fn_vectorize_arg）。VB 探针：`g(u)` →
+    // `array(g(u[$i1]) for $i1 in 1:size(u, 1))`、`g(u[1:n])` → `array(g(u[(1:n)[$i1]]) for $i1 in 1:n)`、二维嵌套
+    // `array(array(g(m[$i1,$i2]) for $i2 in 1:size(m, 2)) for $i1 in 1:size(m, 1))`。
+    std::vector<Id<Expr>> fvec_ranges;
     if (fn_scope_) {
+      std::vector<std::size_t> vec;
+      std::size_t nlead = 0;
+      for (std::size_t i = 0; i < inputs.size(); ++i) {
+        if (params[i].record_def != Id<SElement>::kInvalid) continue;
+        const std::size_t ar = result_.model.exprs[args[i]].ty.dims.size(), pr = params[i].ty.dims.size();
+        if (ar <= pr) continue;
+        if (!vec.empty() && ar - pr != nlead) return fn_fail<Id<Expr>>("vectorization dimension mismatch");
+        nlead = ar - pr;
+        vec.push_back(i);
+      }
+      if (!vec.empty()) {
+        if (sig.outputs.size() > 1 || noret) return fn_fail<Id<Expr>>("vectorized multi-output / statement call");
+        std::vector<Id<Expr>> iters;
+        for (std::size_t k = 0; k < nlead; ++k) {
+          const Id<Expr> extent = fn_vect_dim_size(args[vec[0]], k);
+          if (!extent.is_valid()) return fn_fail<Id<Expr>>("vectorized argument form");
+          Expr rg;
+          rg.kind = ExprKind::Range;
+          rg.ty = Type::integer();
+          rg.a = lit_int(1);
+          rg.b = extent;
+          fvec_ranges.push_back(add(std::move(rg)));
+          iters.push_back(vect_iter(k + 1));
+        }
+        for (std::size_t i : vec) {
+          args[i] = fn_vectorize_arg(args[i], iters);
+          if (!args[i].is_valid()) return fn_fail<Id<Expr>>("vectorized argument form");
+        }
+      }
+    }
+    if (fn_scope_ && fvec_ranges.empty()) {
       std::size_t vi = inputs.size();
       bool many = false;
       for (std::size_t i = 0; i < inputs.size(); ++i) {
@@ -12052,6 +12145,24 @@ class Flattener {
       v.b = fvec_range;
       v.ty = Type::array_of(rty, {range_dim(fvec_range)});
       return add(std::move(v));
+    }
+    if (!fvec_ranges.empty()) {   // 一般向量化（见上）：末维在最内层
+      if (rty.is_array() || rty.kind == TypeKind::Complex) return fn_fail<Id<Expr>>("vectorized array / record result");
+      Id<Expr> wrapped = call;
+      Type ety = rty;
+      for (std::size_t k = fvec_ranges.size(); k-- > 0;) {
+        std::vector<Dimension> dims{range_dim(fvec_ranges[k])};
+        for (const Dimension& d : ety.dims) dims.push_back(d);
+        Expr v;
+        v.kind = ExprKind::Reduction;
+        v.call_name = {in_.intern("array"), in_.intern("$i" + std::to_string(k + 1))};
+        v.a = wrapped;
+        v.b = fvec_ranges[k];
+        v.ty = Type::array_of(rty.element_type(), std::move(dims));
+        ety = v.ty;
+        wrapped = add(std::move(v));
+      }
+      return wrapped;
     }
     return vd.empty() ? call : wrap_vectorized(call, vd);
   }
@@ -20094,11 +20205,12 @@ class Flattener {
           if (const Id<Expr> m = diagonal_matrix(args[0]); m.is_valid()) return m;
         // fill(v, n1, n2, …) 的维实参全是字面量：展开成数组字面量、各元素都是 v（SimplifyExp.simplifyFill，NFSimplifyExp.mo
         // v1.25.0：维全字面量且 NF_SCALARIZE（缺省开）→ Expression.fillArgs）。函数体里 if 分支提实型后的 `fill(0.0, 3)`（WR 探针
-        // z1 `y := if b then x else zeros(3)` → `{0.0, 0.0, 0.0}`；MultiBody standardGravityAcceleration 的 `zeros(3)`）。
+        // z1 `y := if b then x else zeros(3)` → `{0.0, 0.0, 0.0}`；MultiBody standardGravityAcceleration 的 `zeros(3)`）。零长的同样
+        // 展开成空数组字面量 `{}`（FL 探针：函数输入缺省 `phases[:] = fill(0.0, 0)` → `= {}`，MSL realFFTwriteToFile）。
         if (name == "fill" && args.size() >= 2 && !result_.model.exprs[args[0]].ty.is_array()) {
           std::vector<std::int64_t> fd;
           for (std::size_t i = 1; i < args.size(); ++i)
-            if (result_.model.exprs[args[i]].kind == ExprKind::IntLit && result_.model.exprs[args[i]].ival >= 1)
+            if (result_.model.exprs[args[i]].kind == ExprKind::IntLit && result_.model.exprs[args[i]].ival >= 0)
               fd.push_back(result_.model.exprs[args[i]].ival);
           if (fd.size() + 1 == args.size()) {
             const Type et = result_.model.exprs[args[0]].ty;

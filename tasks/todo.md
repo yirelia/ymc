@@ -2214,6 +2214,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           stateSelect 里的名字，经子组件修饰递归）经修饰绑定连带外面的参数（此前静默不标，CR 探针 / MSL MultiTerminalBox 三角形
           接法）。第一版用"目标在子组件修饰里出现就 SKIP"的宽护栏，precheck 掉了 55 个 PASS → 改成按结构位置递归。
           slice 683 例 PASS 640 / FAIL 0（oracle=live 不一致 0）；scodeinst 641 / 52（在账）；testsuite 1785 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 422→428；探针 9502→9560；单测 338→339。
+    - [x] (64b) flat：函数体里的向量化调用 / FFT 一路（2026-10-11）：标量形参收高秩实参（vectorizeCall 不分语境）——多出的
+          前导维逐维 `$ik`，范围取实参那一维的尺寸式（已知 → 字面量、声明维式、切片长度照 getRangeTypeInt、未知 →
+          `size(arg, k)`），实参取 `[$ik]` 照 applySubscript（`:` 位换成它、范围切片 → `(a:b)[$ik]`），二维嵌套
+          `array(array(…))`；when 算法里元组赋值的整体数组目标（`(info, Ai, Phii) := realFFT(…)`）；函数里零长的
+          `fill(0.0, 0)` 折成 `{}`（此前留 `fill(0.0, 0)`，二维的 `{{}, {}}` 未做 → SKIP）。嵌套向量化 / 运算式实参未做。
+          slice 683 例 PASS 640 / FAIL 0（oracle=live 不一致 0）；scodeinst 641 / 53（在账，+FuncVectorization5 命名分歧）；testsuite 1787 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 428→433；探针 9560→9589；单测 339→340。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
