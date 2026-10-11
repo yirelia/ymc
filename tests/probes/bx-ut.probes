@@ -1,0 +1,43 @@
+//// set: bx-ut — 记录绑定求值规则（单测原文）：Evaluate = true 字段在整体绑定的记录里只看 start；Integer 参数数组作下标；if 方程条件里继承来的记录字段不算固定
+//// model: BXU1
+model BXU1
+  record R
+    parameter Real Idis = 0 annotation(Evaluate = true);
+    parameter Real q = 1;
+  end R;
+  parameter R cd(Idis = 0.001);
+  parameter R c2 = cd;
+  Real g = c2.Idis * 2;
+end BXU1;
+//// model: BXU2
+model BXU2
+  parameter Real table[2, 2] = [0, 1; 1, 2];
+  parameter Integer c[1] = {2};
+  Real y[1];
+equation
+  y = table[1, c];
+end BXU2;
+//// model: BXU3
+model BXU3
+  record R0
+    parameter Integer s = 1;
+  end R0;
+  record R1
+    extends R0;
+  end R1;
+  model B
+    replaceable parameter R0 cellData;
+    Real y;
+  equation
+    if cellData.s == 1 then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end B;
+  model C
+    extends B(redeclare R1 cellData);
+  end C;
+  parameter R1 cd(s = 2);
+  C c(cellData = cd);
+end BXU3;

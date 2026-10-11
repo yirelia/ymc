@@ -2191,6 +2191,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           顶上（静默错）。omc 1.25.0 在重声明的类（及其派生类）的方程 / 算法段里、从外面经路径都找不到这个组件（查找树记的是被删的
           那项）→ 这类引用 SKIP；没有继承来的同名元素（omc 报错）、继承来不止一个 → SKIP。
           slice 672→679 例 PASS 629→636 / FAIL 0（oracle=live 不一致 0）；scodeinst 630→637 / 52（在账）；testsuite 1766→1780 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 415（不变）；探针 9380→9418；单测 335→336。
+    - [x] (63t) flat：MSL Batteries 一路的记录 / 数组求值（2026-10-11）：下标是 Integer 参数数组（CombiTable1Ds 的 `columns`）
+          当下标表、参数成结构参数；`:` 维向前引用时绑定是对已发射数组的引用（记录字段经记录绑定传下来）按其形状推；枚举字面量
+          进参数字面量表（枚举参数经记录字段求值）；记录构造的记录类有继承来的字段（别的包里的基类、常量也是构造输入）；复合数组
+          修饰按元素分发时 cref 的中间段是记录数组（`resistor[n](T_ref = cellData.rcData.T_ref)` → `cellData.rcData[i].T_ref`）。
+          两处静默错改正：整体绑定的记录里字段自己的 Evaluate = true 只看 start（此前打 final、引用处代入）；if 方程条件里整体绑定的
+          记录的继承来的字段不算固定（omc 取父节点拿到 extends 节点）、照留 if 方程（此前求值选支）。Stack 一路（记录里的记录
+          重声明）、ShowImpedance（字符串常量经记录绑定）未做。
+          slice 679 例 PASS 636 / FAIL 0（oracle=live 不一致 0）；scodeinst 637 / 52（在账）；testsuite 1780 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0（不变）；MSL 415→419；探针 9418→9475；单测 336→337。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

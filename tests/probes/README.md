@@ -498,3 +498,5 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `iy-ut` | 2 | inner outer（单测原文）：本层 / 从外面经它查名落到外层 inner、子层 outer 连它自己；constant 两头内联 |
 | `el-p1` | 36 | 元素级组件重声明：留在本类的位置（ELR1 / ELR12）；原声明的修饰、改它的 extends 修饰不带，只带绑定（ELR2 / ELR4 / ELR15，对照修饰里的 ELR3）；外来修饰（ELR5）；条件 / 注释 / 维 / 前缀取原声明的（ELR6 / ELR7 / ELR13 / ELR14）；非 replaceable 同类型（ELR8）；复合（ELR10 / ELR17）、经中间基类（ELR11）、protected（ELR16 / ELR23）、自己的 constrainedby 修饰不并（ELR18）、条件引基类参数（ELR19）、再套修饰重声明（ELR21）、变率合并（ELR22）、带方程（ELR24）；omc 报错的：无继承元素（ELR9）、重声明的类的段里 / 从外面引用它（ELR20、ELRQ1-ELRQ8，绑定 ELRQ3 与基类的段 ELRQ4 可以）；取自原声明的条件 / 维在原声明处求（ELRS1-ELRS4） |
 | `el-ut` | 2 | 元素级组件重声明（单测原文）：位置、只带绑定；原声明的条件在原处求（元素级与修饰里的两种） |
+| `bx-p1` | 54 | MSL Batteries 一路：Integer 参数数组作下标（BX2 / BX5-BX7）；`:` 维向前引用、绑定引用已发射数组（BX8-BX19）；枚举参数经记录字段求值（BX20-BX28，模型里定义的枚举 BX22 SKIP）；整体绑定记录里字段的 Evaluate = true 只看 start（BX29 / BX30）；记录构造的记录类有继承来的字段（BX31-BX41）；复合数组修饰分发经记录数组中间段（BX42-BX44）；if 方程条件里继承来的记录字段不算固定（BX45-BX54） |
+| `bx-ut` | 3 | 记录绑定求值规则（单测原文）：Evaluate 字段只看 start、参数数组作下标、继承来的字段照留 if 方程 |

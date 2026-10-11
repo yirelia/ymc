@@ -531,3 +531,10 @@ ACCEPTS-INVALID / CRASH 0。
 元素级组件重声明（`extends A; redeclare Real x = 2.0;`）做完，修饰里重声明取自原声明的条件 / 维改在原声明处求；MSL 示例里的
 组件重声明都写在修饰里（`redeclare Medium.BaseProperties medium(…)` 之类，随包重声明待第 2 阶段），PASS / SKIP 逐例不变。
 FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-11 加宽 63t 之后：PASS 415→419（+4）
+
+MSL Batteries 一路：CombiTable1Ds 的 `columns` 作下标 / 经记录字段传下来的表的 `:` 维、枚举参数经记录字段求值、记录构造的继承
+字段、复合数组修饰经记录数组中间段分发；另改两处静默错（整体绑定记录里 Evaluate 字段只看 start；if 方程条件里继承来的记录字段不算
+固定）。Electrical.Batteries.Examples.BatteryDischargeCharge、CCCVcharging、CCCV_Cell、CCCV_CellRC 转 PASS，均与 omc 逐字节一致；
+CCCV_Stack / CCCV_StackRC（记录里的记录重声明）、ShowImpedance（字符串常量经记录绑定）未做。FAIL / ACCEPTS-INVALID / CRASH 0。

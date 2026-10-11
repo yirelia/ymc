@@ -1,0 +1,994 @@
+//// set: bx-p1 — MSL Batteries 一路：下标是 Integer 参数数组（BX2、BX5-BX7 `table[1, c]` → 结构参数，BX4 字面量下标数组对照）；`:` 维向前引用、绑定是对已发射数组的引用（记录字段经记录绑定传下来，BX8-BX19，关键是 BX19）；枚举参数经记录字段求值（BX20-BX28，模型里定义的枚举打不出路径 BX22 SKIP）；记录字段自己的 Evaluate = true 在整体绑定的记录里只看 start（BX29 / BX30，此前打 final 并代入，静默错）；记录构造的记录类有继承来的字段（BX31-BX41，常量也是构造输入）；复合数组修饰按元素分发时 cref 的中间段是记录数组（BX42-BX44）；if 方程条件里整体绑定的记录的继承来的字段不算固定、照留 if 方程（BX45-BX54，自己声明的字段 / 结构语境照常求值）
+//// model: BX1
+model BX1
+  record R
+    parameter Boolean lin = true;
+    parameter Real a = 1;
+    parameter Real T[:, 2] = [0, a; 1, 1];
+    final parameter Real Ti[:, 2] = if lin then [0, a; 1, 1] else T;
+  end R;
+  parameter R r;
+end BX1;
+//// model: BX2
+model BX2
+  block Tab
+    parameter Real table[:, :];
+    parameter Integer columns[:] = 2:size(table, 2);
+    output Real y[size(columns, 1)];
+  equation
+    y = table[1, columns];
+  end Tab;
+  parameter Real T[2, 2] = [0, 1; 1, 2];
+  Tab t(table = T);
+end BX2;
+//// model: BX3
+model BX3
+  block Tab
+    parameter Real table[:, :];
+    parameter Integer columns[:] = 2:size(table, 2);
+    output Real y[size(columns, 1)];
+  end Tab;
+  parameter Real T[2, 2] = [0, 1; 1, 2];
+  Tab t(table = T);
+end BX3;
+//// model: BX4
+model BX4
+  parameter Real table[2, 2] = [0, 1; 1, 2];
+  Real y[1];
+equation
+  y = table[1, {2}];
+end BX4;
+//// model: BX5
+model BX5
+  parameter Real table[2, 2] = [0, 1; 1, 2];
+  parameter Integer c[1] = {2};
+  Real y[1];
+equation
+  y = table[1, c];
+end BX5;
+//// model: BX6
+model BX6
+  parameter Real table[:, :] = [0, 1; 1, 2];
+  parameter Integer c[:] = 2:size(table, 2);
+  Real y[size(c, 1)];
+equation
+  y = table[1, c];
+end BX6;
+//// model: BX7
+model BX7
+  parameter Real table[2, 2] = [0, 1; 1, 2];
+  parameter Integer c[:] = 2:2;
+  Real y[1];
+equation
+  y = table[1, c];
+end BX7;
+//// model: BX8
+model BX8
+  record R
+    parameter Boolean lin = true;
+    parameter Real a = 1;
+    parameter Real T[:, 2] = [0, a; 1, 1];
+    final parameter Real Ti[:, 2] = if lin then [0, a; 1, 1] else T;
+  end R;
+  block Tab
+    parameter Real table[:, :];
+    parameter Integer columns[:] = 2:size(table, 2);
+    output Real y[size(columns, 1)];
+  equation
+    y = table[1, columns];
+  end Tab;
+  parameter R r;
+  Tab t(final table = r.Ti);
+end BX8;
+//// model: BX9
+model BX9
+  record R
+    parameter Real a = 1;
+    parameter Real T[:, 2] = [0, a; 1, 1];
+  end R;
+  block Tab
+    parameter Real table[:, :];
+    parameter Integer columns[:] = 2:size(table, 2);
+    output Real y[size(columns, 1)];
+  equation
+    y = table[1, columns];
+  end Tab;
+  parameter R r;
+  Tab t(table = r.T);
+end BX9;
+//// model: BX10
+model BX10
+  record R
+    parameter Boolean lin = true;
+    parameter Real a = 1;
+    parameter Real T[:, 2] = [0, a; 1, 1];
+    final parameter Real Ti[:, 2] = if lin then [0, a; 1, 1] else T;
+  end R;
+  block Tab
+    parameter Real table[:, :];
+    parameter Integer columns[:] = 2:size(table, 2);
+    output Real y[size(columns, 1)];
+  equation
+    y = table[1, columns];
+  end Tab;
+  model Stack
+    parameter R cellData;
+    Tab t(final table = cellData.Ti);
+  end Stack;
+  parameter R r1(a = 2);
+  Stack s(cellData = r1);
+end BX10;
+//// model: BX11
+model BX11
+  function f
+    input Integer c[:];
+    output Real y;
+  algorithm
+    y := sum(c);
+  end f;
+  block Tab
+    parameter Real table[:, :];
+    parameter Integer columns[:] = 2:size(table, 2);
+    parameter Real z = f(columns);
+  end Tab;
+  parameter Real T[2, 2] = [0, 1; 1, 2];
+  Tab t(table = T);
+end BX11;
+//// model: BX12
+model BX12
+  record R
+    parameter Real a = 1;
+    parameter Real T[:, 2] = [0, a; 1, 1];
+  end R;
+  block Tab
+    parameter Real table[:, :];
+    parameter Integer columns[:] = 2:size(table, 2);
+    output Real y[size(columns, 1)];
+  equation
+    y = table[1, columns];
+  end Tab;
+  model Stack
+    parameter R cellData;
+    Tab t(final table = cellData.T);
+  end Stack;
+  parameter R r1(a = 2);
+  Stack s(cellData = r1);
+end BX12;
+//// model: BX13
+model BX13
+  record R
+    parameter Boolean lin = true;
+    parameter Real a = 1;
+    parameter Real T[:, 2] = [0, a; 1, 1];
+    final parameter Real Ti[:, 2] = if lin then [0, a; 1, 1] else T;
+  end R;
+  record RE
+    extends R(lin = false, T = [0, 0.5; 0.5, 0.7; 1, 1]);
+  end RE;
+  block Tab
+    parameter Real table[:, :];
+    parameter Integer columns[:] = 2:size(table, 2);
+    output Real y[size(columns, 1)];
+  equation
+    y = table[1, columns];
+  end Tab;
+  model Stack
+    parameter R cellData;
+    Tab t(final table = cellData.Ti);
+  end Stack;
+  parameter RE r2;
+  Stack s2(cellData = r2);
+end BX13;
+//// model: BX14
+model BX14
+  record R
+    parameter Boolean lin = true;
+    parameter Real a = 1;
+    parameter Real T[:, 2] = [0, a; 1, 1];
+    final parameter Real Ti[:, 2] = if lin then [0, a; 1, 1] else T;
+  end R;
+  record RE
+    extends R(lin = false, T = [0, 0.5; 0.5, 0.7; 1, 1]);
+  end RE;
+  parameter RE r2;
+end BX14;
+//// model: BX15
+model BX15
+  class EO
+    extends ExternalObject;
+    function constructor
+      input Real table[:, :];
+      input Integer columns[:];
+      output EO eo;
+      external "C" eo = initEO(table, size(table, 1), size(table, 2), columns, size(columns, 1));
+    end constructor;
+    function destructor
+      input EO eo;
+      external "C" closeEO(eo);
+    end destructor;
+  end EO;
+  block Tab
+    parameter Real table[:, :];
+    parameter Integer columns[:] = 2:size(table, 2);
+    output Real y[size(columns, 1)];
+  protected
+    parameter EO tableID = EO(table, columns);
+  end Tab;
+  parameter Real T[2, 2] = [0, 1; 1, 2];
+  Tab t(table = T);
+end BX15;
+//// model: BX16
+model BX16
+  record R
+    parameter Boolean lin = true;
+    parameter Real a = 1;
+    parameter Real T[:, 2] = [0, a; 1, 1];
+    final parameter Real Ti[:, 2] = if lin then [0, a; 1, 1] else T;
+  end R;
+  record RE
+    extends R(lin = false, T = [0, 0.5; 0.5, 0.7; 1, 1]);
+  end RE;
+  function f
+    input Integer c[:];
+    output Real y;
+  algorithm
+    y := sum(c);
+  end f;
+  block Tab
+    parameter Real table[:, :];
+    parameter Integer columns[:] = 2:size(table, 2);
+    parameter Real z = f(columns);
+  end Tab;
+  model Stack
+    replaceable parameter R cellData;
+    Tab t(final table = cellData.Ti);
+  end Stack;
+  model Base
+    replaceable parameter R cellData;
+    replaceable Stack cell;
+  end Base;
+  model Wrap
+    extends Base(redeclare R cellData, redeclare Stack cell(cellData = cellData));
+  end Wrap;
+  parameter RE cd;
+  Wrap w(cellData = cd);
+end BX16;
+//// model: BX17
+model BX17
+  record R
+    parameter Boolean lin = true;
+    parameter Real a = 1;
+    parameter Real T[:, 2] = [0, a; 1, 1];
+    final parameter Real Ti[:, 2] = if lin then [0, a; 1, 1] else T;
+  end R;
+  record RE
+    extends R(lin = false, T = [0, 0.5; 0.5, 0.7; 1, 1]);
+  end RE;
+  function f
+    input Integer c[:];
+    output Real y;
+  algorithm
+    y := sum(c);
+  end f;
+  block Tab
+    parameter Real table[:, :];
+    parameter Integer columns[:] = 2:size(table, 2);
+    parameter Real z = f(columns);
+  end Tab;
+  model Stack
+    parameter R cellData;
+    Tab t(final table = cellData.Ti);
+  end Stack;
+  model Wrap
+    parameter R cellData;
+    Stack cell(cellData = cellData);
+  end Wrap;
+  parameter RE cd;
+  Wrap w(cellData = cd);
+end BX17;
+//// model: BX18
+model BX18
+  block SIMO
+    parameter Integer nout = 1;
+    output Real y[nout];
+  end SIMO;
+  block Tab
+    extends SIMO(final nout = size(columns, 1));
+    parameter Real table[:, :];
+    parameter Integer columns[:] = 2:size(table, 2);
+  end Tab;
+  parameter Real T[2, 3] = [0, 1, 2; 1, 2, 3];
+  Tab t(table = T);
+end BX18;
+//// model: BX19
+model BX19
+  record R
+    parameter Boolean lin = true;
+    parameter Real a = 1;
+    parameter Real T[:, 2] = [0, a; 1, 1];
+    final parameter Real Ti[:, 2] = if lin then [0, a; 1, 1] else T;
+  end R;
+  record RE
+    extends R(lin = false, T = [0, 0.5; 0.5, 0.7; 1, 1]);
+  end RE;
+  block SIMO
+    parameter Integer nout = 1;
+    output Real y[nout];
+  end SIMO;
+  block Tab
+    extends SIMO(final nout = size(columns, 1));
+    parameter Real table[:, :];
+    parameter Integer columns[:] = 2:size(table, 2);
+  end Tab;
+  model Stack
+    parameter R cellData;
+    Tab t(final table = cellData.Ti);
+  end Stack;
+  model Wrap
+    parameter R cellData;
+    Stack cell(cellData = cellData);
+  end Wrap;
+  parameter RE cd;
+  Wrap w(cellData = cd);
+end BX19;
+//// model: BX20
+model BX20
+  type Sm = enumeration(A, B, C);
+  record R
+    parameter Sm sm = Sm.B;
+  end R;
+  block Tab
+    parameter Sm smoothness = Sm.A;
+    output Real y;
+  equation
+    if smoothness == Sm.A then
+      y = 1;
+    elseif smoothness == Sm.B then
+      y = 2;
+    else
+      y = 3;
+    end if;
+  end Tab;
+  model Stack
+    parameter R cellData;
+    Tab t(final smoothness = cellData.sm);
+  end Stack;
+  model Wrap
+    parameter R cellData;
+    Stack cell(cellData = cellData);
+  end Wrap;
+  parameter R cd(sm = Sm.C);
+  Wrap w(cellData = cd);
+end BX20;
+//// model: BX21
+model BX21
+  type Sm = enumeration(A, B, C);
+  record R
+    parameter Sm sm = Sm.B;
+  end R;
+  block Tab
+    parameter Sm smoothness = Sm.A;
+    output Real y;
+  equation
+    if smoothness == Sm.A then
+      y = 1;
+    elseif smoothness == Sm.B then
+      y = 2;
+    else
+      y = 3;
+    end if;
+  end Tab;
+  parameter R cd(sm = Sm.C);
+  Tab t(final smoothness = cd.sm);
+end BX21;
+//// model: BX22
+model BX22
+  type Sm = enumeration(A, B, C);
+  block Tab
+    parameter Sm smoothness = Sm.A;
+    output Real y;
+  equation
+    if smoothness == Sm.A then
+      y = 1;
+    else
+      y = 3;
+    end if;
+  end Tab;
+  parameter Sm s0 = Sm.C;
+  Tab t(final smoothness = s0);
+end BX22;
+//// model: BX23
+model BX23
+  record R
+    parameter Integer k = 1;
+  end R;
+  block Tab
+    parameter Integer m = 1;
+    output Real y;
+  equation
+    if m == 1 then
+      y = 1;
+    else
+      y = 3;
+    end if;
+  end Tab;
+  parameter R cd(k = 2);
+  Tab t(final m = cd.k);
+end BX23;
+//// model: BX24
+model BX24
+  type Sm = enumeration(A, B, C);
+  record R
+    parameter Sm sm = Sm.B;
+  end R;
+  parameter R cd(sm = Sm.C);
+  parameter Sm s = cd.sm;
+  Real y;
+equation
+  if s == Sm.A then
+    y = 1;
+  else
+    y = 3;
+  end if;
+end BX24;
+//// model: BX25
+package PE
+  type Sm = enumeration(A, B, C);
+end PE;
+model BX25
+  record R
+    parameter PE.Sm sm = PE.Sm.B;
+  end R;
+  block Tab
+    parameter PE.Sm smoothness = PE.Sm.A;
+    output Real y;
+  equation
+    if smoothness == PE.Sm.A then
+      y = 1;
+    elseif smoothness == PE.Sm.B then
+      y = 2;
+    else
+      y = 3;
+    end if;
+  end Tab;
+  model Stack
+    parameter R cellData;
+    Tab t(final smoothness = cellData.sm);
+  end Stack;
+  model Wrap
+    parameter R cellData;
+    Stack cell(cellData = cellData);
+  end Wrap;
+  parameter R cd(sm = PE.Sm.C);
+  Wrap w(cellData = cd);
+end BX25;
+//// model: BX26
+package PE
+  type Sm = enumeration(A, B, C);
+end PE;
+model BX26
+  record R
+    parameter PE.Sm sm = PE.Sm.B;
+  end R;
+  block Tab
+    parameter PE.Sm smoothness = PE.Sm.A;
+    output Real y;
+  equation
+    if smoothness == PE.Sm.A then
+      y = 1;
+    elseif smoothness == PE.Sm.B then
+      y = 2;
+    else
+      y = 3;
+    end if;
+  end Tab;
+  parameter R cd(sm = PE.Sm.C);
+  Tab t(final smoothness = cd.sm);
+end BX26;
+//// model: BX27
+package PE
+  type Sm = enumeration(A, B, C);
+end PE;
+model BX27
+  block Tab
+    parameter PE.Sm smoothness = PE.Sm.A;
+    output Real y;
+  equation
+    if smoothness == PE.Sm.A then
+      y = 1;
+    else
+      y = 3;
+    end if;
+  end Tab;
+  parameter PE.Sm s0 = PE.Sm.C;
+  Tab t(final smoothness = s0);
+end BX27;
+//// model: BX28
+package PE
+  type Sm = enumeration(A, B, C);
+end PE;
+model BX28
+  record R
+    parameter PE.Sm sm = PE.Sm.B;
+  end R;
+  parameter R cd(sm = PE.Sm.C);
+  parameter PE.Sm s = cd.sm;
+  Real y;
+equation
+  if s == PE.Sm.A then
+    y = 1;
+  else
+    y = 3;
+  end if;
+end BX28;
+//// model: BX29
+model BX29
+  record R
+    parameter Real Idis = 0 annotation(Evaluate = true);
+    parameter Real q = 1;
+  end R;
+  model Stack
+    parameter R cellData;
+    Real g = cellData.Idis * 2;
+  end Stack;
+  model Wrap
+    parameter R cellData;
+    Stack cell(cellData = cellData);
+  end Wrap;
+  parameter R cd(Idis = 0.001);
+  Wrap w(cellData = cd);
+end BX29;
+//// model: BX30
+model BX30
+  record R
+    parameter Real Idis = 0 annotation(Evaluate = true);
+    parameter Real q = 1;
+  end R;
+  parameter R cd(Idis = 0.001);
+  parameter R c2 = cd;
+  Real g = c2.Idis * 2;
+end BX30;
+//// model: BX31
+model BX31
+  record Base
+    constant String CellType = "Base";
+  end Base;
+  record RCData
+    extends Base(CellType = "RC elements");
+    parameter Real R;
+    parameter Real T_ref = 293.15;
+    parameter Real C;
+  end RCData;
+  record CellData
+    parameter Real Ri = 1;
+    parameter Integer nRC = 1 annotation(Evaluate = true);
+    parameter RCData rcData[nRC] = {RCData(R = 0, C = 0)};
+  end CellData;
+  parameter CellData cd(Ri = 2, nRC = 2, rcData = {RCData(R = 0.2 * cd.Ri, C = 60 / (0.2 * cd.Ri)), RCData(R = 0.1 * cd.Ri, C = 10 / (0.1 * cd.Ri))});
+end BX31;
+//// model: BX32
+model BX32
+  record RCData
+    parameter Real R;
+    parameter Real C;
+  end RCData;
+  record CellData
+    parameter Real Ri = 1;
+    parameter Integer nRC = 1 annotation(Evaluate = true);
+    parameter RCData rcData[nRC] = {RCData(R = 0, C = 0)};
+  end CellData;
+  parameter CellData cd(Ri = 2, nRC = 2, rcData = {RCData(R = 0.2 * cd.Ri, C = 3), RCData(R = 0.1 * cd.Ri, C = 4)});
+end BX32;
+//// model: BX33
+model BX33
+  record RCData
+    parameter Real R;
+    parameter Real C;
+  end RCData;
+  record CellData
+    parameter Integer nRC = 1 annotation(Evaluate = true);
+    parameter RCData rcData[nRC] = {RCData(R = 0, C = 0)};
+  end CellData;
+  parameter CellData cd(nRC = 2, rcData = {RCData(R = 1, C = 3), RCData(R = 2, C = 4)});
+end BX33;
+//// model: BX34
+model BX34
+  record RCData
+    parameter Real R;
+    parameter Real C;
+  end RCData;
+  record CellData
+    parameter Integer nRC = 1 annotation(Evaluate = true);
+    parameter RCData rcData[nRC] = {RCData(R = 0, C = 0)};
+  end CellData;
+  parameter CellData cd;
+end BX34;
+//// model: BX35
+model BX35
+  record Base
+    constant String CellType = "Base";
+  end Base;
+  record RCData
+    extends Base(CellType = "RC elements");
+    parameter Real R;
+    parameter Real C;
+  end RCData;
+  record CellData
+    parameter Integer nRC = 1 annotation(Evaluate = true);
+    parameter RCData rcData[nRC] = {RCData(R = 0, C = 0)};
+  end CellData;
+  parameter CellData cd(nRC = 2, rcData = {RCData(R = 1, C = 3), RCData(R = 2, C = 4)});
+end BX35;
+//// model: BX36
+model BX36
+  record RCData
+    constant String CellType = "RC";
+    parameter Real R;
+    parameter Real C;
+  end RCData;
+  record CellData
+    parameter Integer nRC = 1 annotation(Evaluate = true);
+    parameter RCData rcData[nRC] = {RCData(R = 0, C = 0)};
+  end CellData;
+  parameter CellData cd(nRC = 2, rcData = {RCData(R = 1, C = 3), RCData(R = 2, C = 4)});
+end BX36;
+//// model: BX37
+model BX37
+  record RCData
+    parameter Real R;
+    parameter Real T_ref = 293.15;
+    parameter Real C;
+  end RCData;
+  record CellData
+    parameter Real Ri = 1;
+    parameter Integer nRC = 1 annotation(Evaluate = true);
+    parameter RCData rcData[nRC] = {RCData(R = 0, C = 0)};
+  end CellData;
+  parameter CellData cd(Ri = 2, nRC = 2, rcData = {RCData(R = 0.2 * cd.Ri, C = 60 / (0.2 * cd.Ri)), RCData(R = 0.1 * cd.Ri, C = 10 / (0.1 * cd.Ri))});
+end BX37;
+//// model: BX38
+model BX38
+  record Base
+    parameter Real a = 1;
+    constant Integer k = 2;
+  end Base;
+  record R
+    extends Base(a = 5);
+    parameter Real b = 3;
+  end R;
+  parameter R r1 = R(7, 2, 9);
+  parameter R r2 = R(b = 4);
+  parameter R ra[2] = {R(a = 1, b = 2), R(b = 3)};
+end BX38;
+//// model: BX39
+model BX39
+  record Base
+    parameter Real a = 1;
+  end Base;
+  record R
+    parameter Real b = 3;
+    extends Base;
+  end R;
+  parameter R r1 = R(7, 2);
+end BX39;
+//// model: BX40
+model BX40
+  partial record BaseIcon
+    constant String CellType = "Cell Data";
+  end BaseIcon;
+  partial record TransientIcon
+    constant String CellType = "Cell Data";
+  end TransientIcon;
+  record CellData
+    extends BaseIcon;
+    parameter Real Ri = 1;
+    parameter Real R0 = Ri;
+  end CellData;
+  record RCData
+    extends TransientIcon(CellType = "RC elements");
+    parameter Real R;
+    parameter Real C;
+  end RCData;
+  record TCellData
+    extends CellData(R0 = Ri - sum(rcData.R));
+    extends TransientIcon;
+    parameter Integer nRC = 1 annotation(Evaluate = true);
+    parameter RCData rcData[nRC] = {RCData(R = 0, C = 0)};
+  end TCellData;
+  record ExampleData
+    extends TCellData(CellType = "Example data", nRC = 2,
+      rcData = {RCData(R = 0.2 * Ri, C = 60 / (0.2 * Ri)), RCData(R = 0.1 * Ri, C = 10 / (0.1 * Ri))});
+  end ExampleData;
+  parameter ExampleData cd2(Ri = 2, nRC = 2, rcData = {RCData(R = 0.2 * cd2.Ri, C = 60 / (0.2 * cd2.Ri)), RCData(R = 0.1 * cd2.Ri, C = 10 / (0.1 * cd2.Ri))});
+end BX40;
+//// model: BX41
+model BX41
+  partial record TransientIcon
+    constant String CellType = "Cell Data";
+  end TransientIcon;
+  record RCData
+    extends TransientIcon(CellType = "RC elements");
+    parameter Real R;
+    parameter Real C;
+  end RCData;
+  record TCellData
+    parameter Real Ri = 1;
+    parameter Integer nRC = 1 annotation(Evaluate = true);
+    parameter RCData rcData[nRC] = {RCData(R = 0, C = 0)};
+  end TCellData;
+  record ExampleData
+    extends TCellData(nRC = 2, rcData = {RCData(R = 0.2 * Ri, C = 3), RCData(R = 0.1 * Ri, C = 4)});
+  end ExampleData;
+  parameter ExampleData cd2;
+end BX41;
+//// model: BX42
+model BX42
+  record RC
+    parameter Real R = 1;
+    parameter Real T = 2;
+  end RC;
+  record CD
+    parameter Integer n = 2;
+    parameter RC rc[n] = {RC(R = 1, T = 3), RC(R = 2, T = 4)};
+  end CD;
+  model Res
+    parameter Real R = 1;
+    parameter Real T = 0;
+  end Res;
+  parameter CD cd;
+  Res res[cd.n](final R = 2 * cd.rc.R, final T = cd.rc.T);
+end BX42;
+//// model: BX43
+model BX43
+  record RC
+    parameter Real R = 1;
+    parameter Real T = 2;
+  end RC;
+  record CD
+    parameter Integer n = 2;
+    parameter RC rc[n] = {RC(R = 1, T = 3), RC(R = 2, T = 4)};
+  end CD;
+  parameter CD cd;
+  parameter Real s = sum(cd.rc.R);
+  parameter Real v[2] = cd.rc.T;
+end BX43;
+//// model: BX44
+model BX44
+  model Res
+    parameter Real R = 1;
+    parameter Real T = 0;
+  end Res;
+  parameter Real rr[2] = {1, 2};
+  Res res[2](final R = 2 * rr, final T = rr);
+end BX44;
+//// model: BX45
+model BX45
+  record R0
+    parameter Integer s = 1;
+  end R0;
+  record R1
+    extends R0;
+    parameter Real extra = 2;
+  end R1;
+  model B
+    replaceable parameter R0 cellData;
+    Real y;
+  equation
+    if cellData.s == 1 then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end B;
+  model C
+    extends B(redeclare R1 cellData);
+  end C;
+  parameter R1 cd(s = 2);
+  C c(cellData = cd);
+end BX45;
+//// model: BX46
+model BX46
+  record R0
+    parameter Integer s = 1;
+  end R0;
+  record R1
+    extends R0;
+    parameter Real extra = 2;
+  end R1;
+  model B
+    replaceable parameter R0 cellData;
+    Real y;
+  equation
+    if cellData.s == 1 then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end B;
+  model C
+    extends B(redeclare R0 cellData);
+  end C;
+  parameter R0 cd(s = 2);
+  C c(cellData = cd);
+end BX46;
+//// model: BX47
+model BX47
+  record R0
+    parameter Integer s = 1;
+  end R0;
+  record R1
+    extends R0;
+    parameter Real extra = 2;
+  end R1;
+  model B
+    replaceable parameter R0 cellData;
+    Real y;
+  equation
+    if cellData.s == 1 then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end B;
+  model C
+    extends B;
+  end C;
+  parameter R0 cd(s = 2);
+  C c(cellData = cd);
+end BX47;
+//// model: BX48
+model BX48
+  record R0
+    parameter Integer s = 1;
+  end R0;
+  record R1
+    parameter Integer s = 1;
+    parameter Real extra = 2;
+  end R1;
+  model B
+    replaceable parameter R0 cellData;
+    Real y;
+  equation
+    if cellData.s == 1 then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end B;
+  model C
+    extends B(redeclare R1 cellData);
+  end C;
+  parameter R1 cd(s = 2);
+  C c(cellData = cd);
+end BX48;
+//// model: BX49
+model BX49
+  record R0
+    parameter Integer s = 1;
+  end R0;
+  record R1
+    extends R0;
+  end R1;
+  model B
+    replaceable parameter R0 cellData;
+    Real y;
+  equation
+    if cellData.s == 1 then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end B;
+  model C
+    extends B(redeclare R1 cellData);
+  end C;
+  parameter R1 cd(s = 2);
+  C c(cellData = cd);
+end BX49;
+//// model: BX50
+model BX50
+  record R0
+    parameter Integer s = 1;
+  end R0;
+  record R1
+    extends R0;
+    parameter Real extra = 2;
+  end R1;
+  model B
+    replaceable parameter R0 cellData;
+    Real y;
+  equation
+    if cellData.s == 1 then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end B;
+  model C
+    extends B(redeclare R1 cellData);
+  end C;
+  parameter R1 cd(s = 2);
+  C c(cellData(s = 2));
+end BX50;
+//// model: BX51
+model BX51
+  record R0
+    parameter Integer s = 1;
+  end R0;
+  record R1
+    extends R0;
+    parameter Real extra = 2;
+  end R1;
+  model B
+    replaceable parameter R1 cellData;
+    Real y;
+  equation
+    if cellData.s == 1 then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end B;
+  model C
+    extends B;
+  end C;
+  parameter R1 cd(s = 2);
+  C c(cellData = cd);
+end BX51;
+//// model: BX52
+model BX52
+  record R0
+    parameter Real extra = 2;
+  end R0;
+  record R1
+    extends R0;
+    parameter Integer s = 1;
+  end R1;
+  model B
+    parameter R1 cellData;
+    Real y;
+  equation
+    if cellData.s == 1 then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end B;
+  parameter R1 cd(s = 2);
+  B c(cellData = cd);
+end BX52;
+//// model: BX53
+model BX53
+  record R0
+    parameter Integer s = 1;
+  end R0;
+  record R1
+    extends R0;
+    parameter Real extra = 2;
+  end R1;
+  model B
+    parameter R1 cellData;
+    Real y;
+  equation
+    if cellData.s == 1 then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end B;
+  B c(cellData = R1(s = 2));
+end BX53;
+//// model: BX54
+model BX54
+  record R0
+    parameter Integer s = 1;
+  end R0;
+  record R1
+    extends R0;
+    parameter Real extra = 2;
+  end R1;
+  parameter R1 cd(s = 2);
+  parameter R1 c2 = cd;
+  parameter Integer k = if c2.s == 1 then 1 else 2;
+  Real x[k];
+end BX54;

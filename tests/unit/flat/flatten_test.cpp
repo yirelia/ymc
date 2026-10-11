@@ -7326,4 +7326,29 @@ YMC_TEST(flatten_element_component_redeclare) {
                std::string("class ELRU2\n  constant Boolean on = true;\n  Real b.y = 1.0;\n  Real c.y = 1.0;\nend ELRU2;\n"));
 }
 
+YMC_TEST(flatten_record_binding_evaluation_rules) {
+  // 整体绑定的记录：字段自己的 Evaluate = true 只看 start（c2.Idis 不 final、引用处不代入；此前静默错）；下标是 Integer 参数数组
+  //（c 成结构参数、`y[1] = table[1,2]`）；if 方程条件里整体绑定的记录的继承来的字段不算固定、照留 if 方程。期望 = omc 1.25.0
+  // 实跑（2026-10-11，探针 bx-ut）。
+  YMC_CHECK_EQ(flatten_src("model BXU1\n  record R\n    parameter Real Idis = 0 annotation(Evaluate = true);\n"
+                           "    parameter Real q = 1;\n  end R;\n  parameter R cd(Idis = 0.001);\n  parameter R c2 = cd;\n"
+                           "  Real g = c2.Idis * 2;\nend BXU1;\n"),
+               std::string("class BXU1\n  final parameter Real cd.Idis = 0.001;\n  parameter Real cd.q = 1.0;\n"
+                           "  parameter Real c2.Idis = 0.001;\n  parameter Real c2.q = cd.q;\n  Real g = c2.Idis * 2.0;\n"
+                           "end BXU1;\n"));
+  YMC_CHECK_EQ(flatten_src("model BXU2\n  parameter Real table[2, 2] = [0, 1; 1, 2];\n  parameter Integer c[1] = {2};\n"
+                           "  Real y[1];\nequation\n  y = table[1, c];\nend BXU2;\n"),
+               std::string("class BXU2\n  parameter Real table[1,1] = 0.0;\n  parameter Real table[1,2] = 1.0;\n"
+                           "  parameter Real table[2,1] = 1.0;\n  parameter Real table[2,2] = 2.0;\n"
+                           "  final parameter Integer c[1] = 2;\n  Real y[1];\nequation\n  y[1] = table[1,2];\nend BXU2;\n"));
+  YMC_CHECK_EQ(flatten_src("model BXU3\n  record R0\n    parameter Integer s = 1;\n  end R0;\n  record R1\n    extends R0;\n"
+                           "  end R1;\n  model B\n    replaceable parameter R0 cellData;\n    Real y;\n  equation\n"
+                           "    if cellData.s == 1 then\n      y = 1;\n    else\n      y = 2;\n    end if;\n  end B;\n"
+                           "  model C\n    extends B(redeclare R1 cellData);\n  end C;\n  parameter R1 cd(s = 2);\n"
+                           "  C c(cellData = cd);\nend BXU3;\n"),
+               std::string("class BXU3\n  parameter Integer cd.s = 2;\n  parameter Integer c.cellData.s = cd.s;\n  Real c.y;\n"
+                           "equation\n  if c.cellData.s == 1 then\n    c.y = 1.0;\n  else\n    c.y = 2.0;\n  end if;\n"
+                           "end BXU3;\n"));
+}
+
 YMC_TEST_MAIN

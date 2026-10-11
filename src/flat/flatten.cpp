@@ -1273,7 +1273,7 @@ class Flattener {
             }
             // 该元素的合成修饰：每个子修饰绑定按 aidx 下降取标量（`x={1,2,3}`→`x=vi`；each 保持原值）。
             for (const ModSource& m : dmods) {
-              const Id<SMod> em = distribute_mod(m.mod, aidx);
+              const Id<SMod> em = distribute_mod(m.mod, aidx, m.scope);
               if (!em.is_valid()) {
                 if (!result_.unsupported) {
                   set_unsupported("composite array modifier distribution");
@@ -4622,10 +4622,13 @@ class Flattener {
     // omc 忽略 Evaluate，EV3）→ SKIP。
     // 外层组件的 Evaluate = true 同样算（ctx.eval_parent），本参数自己写了 Evaluate = false 的除外；变率看下沉后的（记录字段）。
     const std::optional<bool> own_eval = evaluate_annotation(I_.comps[cid].def);
+    // 外层记录有整体绑定（ModCtx::eval_start_only）：字段自己的 Evaluate = true 同样只剩 start 可当绑定（omc 实例化子树时
+    // useBinding = false，字段的声明绑定不算，NFStructural.isStructuralComponent :67-95 v1.25.0；EV 探针 EV1 / EV2：`parameter R
+    // c2 = cd` 里 `Idis = 0 annotation(Evaluate = true)` → `parameter Real c2.Idis`，引用处不代入——此前打 final、代入，静默错）。
     const bool eval_true = var_min(var_floor, I_.comps[cid].attributes.variability) == SVariability::Param &&
                            (own_eval == std::optional<bool>(true) ||
-                            (ctx.eval_parent && own_eval != std::optional<bool>(false) &&
-                             (!ctx.eval_start_only || comp_has_start(cid, mod_subs))));
+                            (ctx.eval_parent && own_eval != std::optional<bool>(false))) &&
+                           (!ctx.eval_start_only || comp_has_start(cid, mod_subs));
     // 先算绑定/属性（会往 model.exprs add），再取组件字段——不跨 add 持组件引用（arena 纪律）。
     const Type cty = I_.comps[cid].ty;   // 拷贝，跨 add 稳定
     // 结构 final（ceval3）：本参数被某 fixed 用到 → final parameter + 绑定求值成字面量。
@@ -4687,6 +4690,7 @@ class Flattener {
       pi.origin = static_cast<std::uint8_t>(origin);
       pi.rec_bind = ctx.rec_bind;
       pi.by_cref = origin == 1 && derived_cref_mods_.count(mb->mod.raw) > 0;
+      pi.inherited = origin == 1 && I_.comps[cid].decl_scope.is_valid() && !(I_.comps[cid].decl_scope == enclosing);
       if (pi.nonstruct || pi.origin != 0) param_info_[vkey] = pi;
       rec_leaf_.emplace(parent_key(vkey), vkey);
     }
@@ -5087,8 +5091,8 @@ class Flattener {
     // 选定之后的 eval_arr 一段。
     const bool eval_arr = var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Param &&
                           (evaluate_true(I_.comps[cid].def) ||
-                           (ctx.eval_parent && evaluate_annotation(I_.comps[cid].def) != std::optional<bool>(false) &&
-                            (!ctx.eval_start_only || comp_has_start(cid, mod_subs))));
+                           (ctx.eval_parent && evaluate_annotation(I_.comps[cid].def) != std::optional<bool>(false))) &&
+                          (!ctx.eval_start_only || comp_has_start(cid, mod_subs));
     // 维度：组件维在前、类型维在后（R13 §3）。字面量 + 参数/常量/size()/算术求值。
     const NodeId dlex = dims_lex(cid, enclosing);   // 维写在声明里：在声明所在类的作用域求（重声明取原声明的：原处）
     const ScodeScope dscope = scode_scope_of(dlex);
@@ -5809,7 +5813,7 @@ class Flattener {
   // general = 复合数组修饰的分发（split_submod）：剩余下标落在一般表达式上（`2 * p`、`fill(…)`、切片引用、推导式、if 式）
   // 时合成 `(E)[i, j]`（Absyn 的 Subscript 节点），定型交给 subscripted_exp。
   // expand_comp：推导式也按元素展开（只给记录数组的整体绑定用，见下）。
-  // scope（只随 expand_comp 用）：式子书写处的类实例，复合路径的中间数组段（见 cref 支）按它查组件。
+  // scope：式子书写处的类实例，复合路径的中间数组段（见 cref 支）按它查组件；无效 = 不查（下标照旧补在末段）。
   Id<Exp> array_scalar_elem(Id<Exp> e, const std::vector<std::int64_t>& idx, std::size_t start, bool general = false,
                             bool expand_comp = false, NodeId scope = {}) {
     if (start == idx.size()) return e;
@@ -5874,7 +5878,7 @@ class Flattener {
       // i[m] = plug_p.pin.i`）：剩余下标落到这一段（omc 的 ExpandExp 展开整条引用，`i[k].re = plug_p.pin[k].i.re`，TestSensors）。
       // 段的秩按声明的维数；前面的段须已取尽各维。找不到这样的段 → 照旧补在末段。
       std::size_t hole = nc.parts.size() - 1;
-      if (expand_comp && scope.is_valid() && !nc.leading_dot && nc.parts.size() > 1) {
+      if (scope.is_valid() && !nc.leading_dot && nc.parts.size() > 1) {
         NodeId cls = scope;
         for (std::size_t i = 0; i + 1 < nc.parts.size(); ++i) {
           const NodeId n = is_class_inst(cls) || i == 0 ? find_local(cls, nc.parts[i].name) : NodeId{};
@@ -7787,6 +7791,24 @@ class Flattener {
       }
     }
     if (const std::optional<std::int64_t> n = binding_dim_size(raw, k)) return CVal::I(*n);
+    // 绑定是对已发射数组的引用（MSL Batteries 的 CombiTable1Ds `final table = cellData.OCV_SOC_internal`：记录字段经记录绑定
+    // 一路传下来，值求不出）：只要形状——取被引用者已发射的形状（omc 由绑定的类型推 `:` 维，NFTyping.typeDimension；BT 探针
+    // BT14）。首段须是绑定所在实例的本地非 outer 组件（outer / inner outer 经它的名字落到别处）。
+    if (raw.is_valid() && I_.absyn.exps[raw].kind == ExpKind::CrefExp && refi >= 0) {
+      const Cref& rc = I_.absyn.crefs[I_.absyn.exps[raw].cref];
+      bool plain = !rc.leading_dot && !rc.parts.empty();
+      for (const CrefPart& p : rc.parts) plain = plain && p.subscripts.empty();
+      const Frame& rf = frames_[static_cast<std::size_t>(refi)];
+      const NodeId head = plain ? find_local(rf.inst, rc.parts[0].name) : NodeId{};
+      if (is_comp_node(head) && !I_.comps[I_.nodes[head].comp].attributes.is_outer) {
+        std::vector<Symbol> rn = rf.prefix;
+        for (const CrefPart& p : rc.parts) rn.push_back(p.name);
+        PSubs rps = rf.psubs;
+        rps.resize(rn.size() - 1);   // 引用的中间段无下标（plain）；末段（叶）不算，同 emitted_shape 的约定
+        if (const std::optional<std::vector<std::int64_t>> rsh = emitted_shape(rn, rps); rsh && rsh->size() == adims.size())
+          return CVal::I((*rsh)[k]);
+      }
+    }
     // 绑定不是字面量构造（CombiTimeTable 的 `columns = 2:size(table, 2)`）：在绑定的求值语境里求它的值、取形状——omc 由绑定的
     // 类型推 `:` 维（NFTyping.typeDimension），区间的类型维要求界的值；这里只求值不打结构标记。
     const std::string bk = int_key(names, ps);
@@ -13077,7 +13099,15 @@ class Flattener {
       case ExprKind::RealLit: return CVal::R(e.rval);
       case ExprKind::BoolLit: return CVal::B(e.bval);
       case ExprKind::StringLit: return CVal::S(e.sval);
-      default: return std::nullopt;   // 枚举字面量等 CVal 无对应 → 不记
+      case ExprKind::EnumLit: {   // 序数 + 打印路径（同 literal_of 的逆）；未解析的（序数 0）不记
+        if (e.enum_index < 1 || e.enum_path.empty()) return std::nullopt;
+        CVal v;
+        v.k = CVal::K::Enum;
+        v.i = e.enum_index;
+        v.epath = e.enum_path;
+        return v;
+      }
+      default: return std::nullopt;   // CVal 无对应 → 不记
     }
   }
   void record_const(const FlatVariable& v) {
@@ -14303,7 +14333,11 @@ class Flattener {
             std::vector<std::int64_t> ldims;
             const bool alit = leaf_decl_dims(lcel, c, enclosing, prefix, ldims);
             if (!alit) {
-              set_unsupported("whole-array reference");
+              if (!result_.unsupported) {
+                set_unsupported("whole-array reference");
+                for (Symbol p : prefix) result_.unsupported_detail += std::string(in_.str(p)) + ".";   // 子原因：哪个名字（排桶用）
+                result_.unsupported_detail += cref_names(c);
+              }
             } else {
               std::vector<Dimension> ads;
               ads.reserve(ldims.size());
@@ -14411,6 +14445,27 @@ class Flattener {
                   sd.size = static_cast<std::int64_t>(sel->size());
                   sdims.push_back(sd);
                   continue;
+                }
+                // 下标是 Integer 数组的参数 / 常量（`table[1, columns]`，MSL CombiTable1Ds 的 `columns = 2:size(table, 2)`）：
+                // 同下标数组 `{i, j}`，下标表取它的值——参数同标量下标成结构参数（typeSubscripts 的 Structural.markSubscript，
+                // NFTyping.mo:2122-2127 v1.25.0；BT 探针 BT2d：`y = table[1, c]` → `y[1] = table[1,2]`、c final）。
+                if (sk == ExpKind::CrefExp) {
+                  if (std::optional<CVal> av = eval_scode(subs[k], lscope, 0, /*allow_param=*/true, nullptr); av && is_arr(*av)) {
+                    std::vector<std::int64_t> sel;
+                    bool okv = av->arr && !av->arr->empty();
+                    if (okv)
+                      for (const CVal& x : *av->arr) {
+                        if (x.k != CVal::K::Int || x.i < 1 || x.i > ldims[k]) { okv = false; break; }
+                        sel.push_back(x.i);
+                      }
+                    if (!okv) { set_unsupported("array subscript out of range"); break; }
+                    leaf_subs[k] = slice_subscript(ExpKind::Array, sel, false, ldims[k], ldims[ldims.size() - subs.size() + k], {1, 0});
+                    Dimension sd;
+                    sd.kind = DimKind::Integer;
+                    sd.size = static_cast<std::int64_t>(sel.size());
+                    sdims.push_back(sd);
+                    continue;
+                  }
                 }
                 // `end` = 该维大小；常量下标求值；参数变率的下标是结构参数（typeSubscripts 标 Structural.markSubscript，
                 // NFTyping.mo:2122-2127）→ 带参数求值（frame_value 记结构参数，post-pass 打 final）。都打印成字面量。
@@ -20308,19 +20363,19 @@ class Flattener {
     // 有 'constructor' 的 operator record：`Complex(time, 0)` 是对 'constructor' 函数的调用、不是记录式（SPEC OR4 / OR5），
     // 不拆字段——调用方照返回记录的函数调用处理（求值 / 挪成方程，a05 / a06）。
     if (I_.scode.elems[cdef].restriction == SRestriction::OperatorRecord && oprec_has_ctor(cdef, fds)) return {};
-    // 记录含 extends（继承字段的构造序/约束）本桶未验证 → SKIP（RecordExtends）；基类一个字段都没有的（MSL 的
-    // `extends Modelica.Icons.Record`）不影响构造序，放行。
+    // 记录的字段形态 ymc 收不全的（record_fields 不认的）→ SKIP。继承来的字段照常：构造函数的输入按实例类树的组件序（继承来的
+    // 在 extends 处），同 NFRecord.collectRecordParams 遍历的类树（NFRecord.mo:214-255 v1.25.0；RC 探针 RC5：`extends
+    // Base(CellType = "RC elements")` 的记录数组元素 `RCData(R = 1, C = 3)`）。
+    // 别的作用域里的基类字段（带缺省，MSL Batteries 的 `RCData extends Icons.TransientCellRecord(CellType = "RC elements")`）
+    // 也收（any_base）：这里只合成字段修饰，继承来的字段照常在各自的作用域里压平，不翻译缺省。
     {
-      std::vector<Id<SElement>> all, own;
+      std::vector<RecField> all;
       ScodeScope outer = scode_scope_of(ci);   // [R, 外层…] → 外层链
       if (!outer.empty()) outer.erase(outer.begin());
-      if (!record_fields(cdef, outer, all, false, 0)) return {};
-      for (Id<SElement> eid : I_.scode.elems[cdef].def.elements)
-        if (I_.scode.elems[eid].kind == SElementKind::Component) own.push_back(eid);
-      if (all != own) return {};
+      if (!record_fields_ex(cdef, outer, all, false, 0, /*any_base=*/true)) return {};
     }
-    // 构造函数的输入 = 非 protected、非 final 的字段（声明序）；protected / final 字段是构造函数局部，保留自身绑定
-    //（NFRecord.collectRecordParam :260-283；RecordBinding6/7 `final constant Real y = 2.0` → `R(1.0, 3.0)` 给 x、z）。
+    // 构造函数的输入 = 非 protected、非 final 的字段（实例类树序；constant 也是输入）；protected / final 字段是构造函数局部，
+    // 保留自身绑定（NFRecord.collectRecordParam :257-283；RecordBinding6/7 `final constant Real y = 2.0` → `R(1.0, 3.0)` 给 x、z）。
     std::vector<Symbol> inputs;
     for (NodeId f : I_.trees[I_.node_class(ci).tree].components)
       if (I_.nodes[f].visibility != Visibility::Protected && !I_.comps[I_.nodes[f].comp].attributes.is_final)
@@ -20769,12 +20824,12 @@ class Flattener {
   // 复合数组第 aidx 个元素的合成修饰（Modifier.propagate → propagateSubMod，NFModifier.mo:444-513）：每个非 each 子修饰的
   // 绑定按 aidx 逐维下降（`x={1,2,3}` 的元素 i → `x=vi`），并递归到更深的子修饰（`x(start={{…},…})` → `x(start={…})`，余下
   // 的维由 x 自己切分，BuiltinAttribute10）；each 子修饰整棵原样（每元素同值）。下降不了 → 返回 invalid。
-  Id<SMod> distribute_mod(Id<SMod> m, const std::vector<std::int64_t>& aidx) {
+  Id<SMod> distribute_mod(Id<SMod> m, const std::vector<std::int64_t>& aidx, NodeId scope) {
     const std::vector<SSubMod> subs = I_.scode.mods[m].subs;   // 拷贝（下面 add_mod 会 realloc mods arena）
     const SourceLoc mloc = I_.scode.mods[m].loc;
     std::vector<SSubMod> out;
     for (const SSubMod& s : subs) {
-      const Id<SMod> d = split_submod(s.mod, aidx);
+      const Id<SMod> d = split_submod(s.mod, aidx, scope);
       if (!d.is_valid()) return {};
       out.push_back({s.ident, d});
     }
@@ -20784,20 +20839,21 @@ class Flattener {
     outer.loc = mloc;
     return synth_mod(std::move(outer));
   }
-  Id<SMod> split_submod(Id<SMod> sm, const std::vector<std::int64_t>& aidx) {
+  // scope = 修饰书写处的类实例（cref 的中间段是复合数组时下标落到那一段，见 array_scalar_elem）。
+  Id<SMod> split_submod(Id<SMod> sm, const std::vector<std::int64_t>& aidx, NodeId scope) {
     SMod n = I_.scode.mods[sm];   // 拷贝
     // each 整棵跳过（propagateSubMod 的 else ()，MODIFIER 与 REDECLARE 都是）：MSL 多相电流传感器的 `ComplexOutput i[m](redeclare
     // each final SI.Current re, …)`——原 id 照传，实例化时已施加的重声明 flatten 按 id 认出（applied_redecls）。
     if (n.is_each) return sm;
     if (n.kind != SModKind::Mod) return {};   // 非 each 的 redeclare（innerMod 下降 + propagatedSubs）未做
     if (n.binding.is_valid()) {
-      n.binding = array_scalar_elem(n.binding, aidx, 0, /*general=*/true);
+      n.binding = array_scalar_elem(n.binding, aidx, 0, /*general=*/true, /*expand_comp=*/false, scope);
       if (!n.binding.is_valid()) return {};
     }
     const std::vector<SSubMod> subs = std::move(n.subs);
     n.subs.clear();
     for (const SSubMod& s : subs) {
-      const Id<SMod> d = split_submod(s.mod, aidx);
+      const Id<SMod> d = split_submod(s.mod, aidx, scope);
       if (!d.is_valid()) return {};
       n.subs.push_back({s.ident, d});
     }
@@ -23197,6 +23253,19 @@ class Flattener {
     //（NFComponent.mo:896-922 v1.25.0；EV 探针 fx0 / fx1 / fx6：`q(fixed = true) = 3` → `p = q` 不求值）。
     if (visit_nf_ && has_fixed_attr(*v)) return true;
     if (pi.origin == 1) {
+      // 继承来的字段：omc 取父节点时拿到的是 extends 节点、不是记录组件（isComponentBindingNotFixed 的 InstNode.parent，
+      // NFStructural.mo v1.25.0），只看自己的 start 属性——字面量 start 固定，没有 start（无绑定）不固定（RS 探针 T9 / T11 /
+      // T13：`if c.cellData.s == 1` 照留 if 方程；自己声明的字段 T12 照常求值；MSL Batteries 的 CellRCStack）。
+      if (pi.inherited) {
+        const Symbol start = in_.intern("start");
+        for (const FlatVarAttr& a : v->attributes)
+          if (a.name == start) {
+            if (is_literal(a.value)) return false;
+            unknown = true;
+            return false;
+          }
+        return true;
+      }
       if (pi.rec_bind == 2) return false;   // 父记录在 omc 里没有绑定 → 无绑定记录支（isRecord）→ 固定
       if (pi.rec_bind != 1) { unknown = true; return false; }
       if (visit_nf_ && depth - 1 == 0) return true;   // isBindingNotFixed(父记录的绑定, 0)
@@ -24308,6 +24377,7 @@ class Flattener {
     std::uint8_t origin = 0;     // 绑定来历（见 emit_variable）
     std::uint8_t rec_bind = 0;   // origin 1：父记录整体绑定的来历（ModCtx::rec_bind）
     bool by_cref = false;        // origin 1：整体绑定是记录引用（字段拆成 `src.f`），否则记录构造
+    bool inherited = false;      // origin 1：字段是记录类继承来的（omc 里它的父节点是 extends 节点，见 key_not_fixed）
   };
   std::unordered_map<std::string, ParamInfo> param_info_;
   // 正在判某个 Evaluate = true 参数能不能当结构参数（emit_variable）：omc 在 updateImplicitVariability 按声明序访问组件时判
