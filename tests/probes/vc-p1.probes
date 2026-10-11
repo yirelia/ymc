@@ -1,0 +1,132 @@
+//// set: vc-p1 — 模型语境向量化调用的范围切片实参（整条保留 / 带步长 / 结构参数界 / 二维 / 运算里 / sum 里）；der、previous、pre 的切片逐元素（VSL1-VSL10）
+//// model: VSL1
+model VSL1
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  Real x[3] = {time, 2 * time, 3 * time};
+  Real y[2];
+equation
+  y = g(x[2:3]);
+end VSL1;
+//// model: VSL2
+model VSL2
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  Real x[3] = {time, 2 * time, 3 * time};
+  Real y[2] = g(x[2:3]);
+end VSL2;
+//// model: VSL3
+model VSL3
+  Real x[3](each start = 1, each fixed = true);
+equation
+  der(x[1:2]) = {-x[1], -x[2]};
+  der(x[3]) = 0;
+end VSL3;
+//// model: VSL4
+model VSL4
+  parameter Integer n = 2;
+  Real u = sample(time, Clock(0.1));
+  Real ub[n + 1](each start = 0.0);
+equation
+  ub = cat(1, {u}, previous(ub[1:n]));
+end VSL4;
+//// model: VSL5
+model VSL5
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  Real x[3] = {time, 2 * time, 3 * time};
+  Real y[2];
+equation
+  y = g(x[1:2:3]);
+end VSL5;
+//// model: VSL6
+model VSL6
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  parameter Integer n = 2;
+  Real x[3] = {time, 2 * time, 3 * time};
+  Real y[n];
+equation
+  y = g(x[1:n]);
+end VSL6;
+//// model: VSL7
+model VSL7
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  Real m[3, 2] = {{time, 1}, {2, time}, {3, 4}};
+  Real y[2, 2];
+equation
+  y = g(m[1:2, :]);
+end VSL7;
+//// model: VSL8
+model VSL8
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  Real x[3] = {time, 2 * time, 3 * time};
+  Real y[2];
+equation
+  y = 2 * g(x[2:3]);
+end VSL8;
+//// model: VSL9
+model VSL9
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  Real x[3] = {time, 2 * time, 3 * time};
+  Real s = sum(g(x[2:3]));
+end VSL9;
+//// model: VSL10
+model VSL10
+  Integer c[3](each start = 0, each fixed = true);
+algorithm
+  when sample(0, 0.1) then
+    c[2:3] := pre(c[1:2]) + {1, 1};
+    c[1] := pre(c[1]) + 1;
+  end when;
+end VSL10;
+//// model: VSL11
+model VSL11
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  function f
+    input Real u[3];
+    output Real a[3];
+  protected
+    Real w[3];
+  algorithm
+    w := u;
+    a := g(w[1:3]);
+  end f;
+  Real r[:] = f({time, 2, 3});
+end VSL11;

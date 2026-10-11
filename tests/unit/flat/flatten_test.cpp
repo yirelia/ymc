@@ -2763,12 +2763,11 @@ YMC_TEST(flatten_vectorized_calls) {
                            "  Real x[2];\n  Real x[3];\n  Real w[1,1];\n  Real w[1,2];\n  Real w[1,3];\n  Real w[2,1];\n  Real w[2,2];\n"
                            "  Real w[2,3];\n  Real l[1];\n  Real l[2];\n  Real l[3];\nequation\n  x = {time, 1.0, 2.0};\n"
                            "  w = {{time, 1.0, 2.0}, {3.0, 4.0, 5.0}};\n  l = array(F(x[$i1], 1.0) for $i1 in 1:3) * 2.0;\nend M;\n"));
-  // 未做 / 非法的形态必须 SKIP（V4 探针）：范围切片实参（omc `x[(2:3)[$i1]]`）、向量化维不一致（omc 内部错）、rem（1.25.0
-  // 打成 OpenModelica.Internal.realRem）。
+  // 非法 / 不复刻的形态必须 SKIP（V4 探针）：向量化维不一致（omc 内部错）、rem（1.25.0 打成 OpenModelica.Internal.realRem）。
+  // 范围切片实参（omc `x[(2:3)[$i1]]`）64c 起照做，见 flatten_model_vectorization_slices 的 VCU4。
   const char* pre = "function F\n  input Real a;\n  input Real b;\n  output Real c = a + b;\nend F;\nmodel M\n"
                     "  Real x[3] = {time, 1, 2};\n  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};\n";
   for (const auto& [line, why] : std::vector<std::pair<std::string, std::string>>{
-           {"  Real y[2] = F(x[2:3], 1);\n", "function: F"},
            {"  Real aa[2, 3] = F(w, x);\n", "function: F"},
            {"  Real b6[3] = rem(x, 2);\n", "non-numeric function argument"}}) {
     bool uns = false;
@@ -7470,6 +7469,38 @@ YMC_TEST(flatten_function_body_vectorization) {
                            "  algorithm\n    y := sum(u) + sum(p);\n  end f;\n  Real y1 = f({time, 2});\nend VBU4;\n"),
                std::string("function VBU4.f\n  input Real[:] u;\n  input Real[:] p = {};\n  output Real y;\nalgorithm\n"
                            "  y := sum(u) + sum(p);\nend VBU4.f;\n\nclass VBU4\n  Real y1 = VBU4.f({time, 2.0}, {});\nend VBU4;\n"));
+}
+
+YMC_TEST(flatten_model_vectorization_slices) {
+  // 模型语境的向量化调用、实参是范围切片：整条保留 `y = array(g(x[(2:3)[$i1]]) for $i1 in 1:2)`、二维 `m[(1:2)[$i1],$i2]`；
+  // 向量化的 previous 不算数组调用、所在等式逐元素展开（`ub[2] = previous(ub[1])`，`(1:2)[1]` 折成 1）。期望 = omc 1.25.0
+  // 实跑（2026-10-11，探针 vc-ut）。
+  YMC_CHECK_EQ(flatten_src("model VCU1\n  function g\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n  end g;\n"
+                           "  Real x[3] = {time, 2 * time, 3 * time};\n  Real y[2];\nequation\n  y = g(x[2:3]);\nend VCU1;\n"),
+               std::string("function VCU1.g\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend VCU1.g;\n\n"
+                           "class VCU1\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real y[1];\n  Real y[2];\nequation\n"
+                           "  x = {time, 2.0 * time, 3.0 * time};\n  y = array(VCU1.g(x[(2:3)[$i1]]) for $i1 in 1:2);\nend VCU1;\n"));
+  YMC_CHECK_EQ(flatten_src("model VCU2\n  parameter Integer n = 2;\n  Real u = sample(time, Clock(0.1));\n"
+                           "  Real ub[n + 1](each start = 0.0);\nequation\n  ub = cat(1, {u}, previous(ub[1:n]));\nend VCU2;\n"),
+               std::string("class VCU2\n  final parameter Integer n = 2;\n  Real u = sample(time, Clock(0.1));\n"
+                           "  Real ub[1](start = 0.0);\n  Real ub[2](start = 0.0);\n  Real ub[3](start = 0.0);\nequation\n"
+                           "  ub[1] = u;\n  ub[2] = previous(ub[1]);\n  ub[3] = previous(ub[2]);\nend VCU2;\n"));
+  YMC_CHECK_EQ(flatten_src("model VCU3\n  function g\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n  end g;\n"
+                           "  Real m[3, 2] = {{time, 1}, {2, time}, {3, 4}};\n  Real y[2, 2];\nequation\n  y = g(m[1:2, :]);\n"
+                           "end VCU3;\n"),
+               std::string("function VCU3.g\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend VCU3.g;\n\n"
+                           "class VCU3\n  Real m[1,1];\n  Real m[1,2];\n  Real m[2,1];\n  Real m[2,2];\n  Real m[3,1];\n"
+                           "  Real m[3,2];\n  Real y[1,1];\n  Real y[1,2];\n  Real y[2,1];\n  Real y[2,2];\nequation\n"
+                           "  m = {{time, 1.0}, {2.0, time}, {3.0, 4.0}};\n"
+                           "  y = array(array(VCU3.g(m[(1:2)[$i1],$i2]) for $i2 in 1:2) for $i1 in 1:2);\nend VCU3;\n"));
+  YMC_CHECK_EQ(flatten_src("function F\n  input Real a;\n  input Real b;\n  output Real c = a + b;\nend F;\nmodel VCU4\n"
+                           "  Real x[3] = {time, 1, 2};\n  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};\n  Real y[2] = F(x[2:3], 1);\n"
+                           "end VCU4;\n"),
+               std::string("function F\n  input Real a;\n  input Real b;\n  output Real c = a + b;\nend F;\n\nclass VCU4\n"
+                           "  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real w[1,1];\n  Real w[1,2];\n  Real w[1,3];\n  Real w[2,1];\n"
+                           "  Real w[2,2];\n  Real w[2,3];\n  Real y[1];\n  Real y[2];\nequation\n  x = {time, 1.0, 2.0};\n"
+                           "  w = {{time, 1.0, 2.0}, {3.0, 4.0, 5.0}};\n  y = array(F(x[(2:3)[$i1]], 1.0) for $i1 in 1:2);\n"
+                           "end VCU4;\n"));
 }
 
 YMC_TEST_MAIN

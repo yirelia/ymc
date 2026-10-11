@@ -564,3 +564,10 @@ FFT 一路：函数体里的向量化调用（realFFT 的 `phases := to_deg(Phi[
 折成 `{}`。Math.FastFourierTransform.Examples.RealFFT1、RealFFT2、Blocks.Examples.Rectifier6pulseFFT、Rectifier12pulseFFT、
 Math.Random.Examples.GenerateRandomNumbers 转 PASS，均与 omc 逐字节一致（stdout；omc 在 stderr 另报 realFFTwriteToFile 调 impure
 removeFile 的 Warning）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-11 加宽 64c 之后：PASS 433→436（+3）
+
+Clocked 一路：模型语境向量化调用的范围切片实参（applySubscript 对 SLICE 下标 → `x[(a:b)[$i1]]`），向量化出来的 previous
+不算数组调用、所在等式逐元素展开——FIRbyCoefficients 的 `u_buffer = cat(1, {u}, previous(u_buffer[1:n]))` →
+`u_buffer[2] = … previous(u_buffer[1])`。Clocked.Examples.Elementary.RealSignals.UpSample2、FractionalDelay、
+Clocked.Examples.Systems.EngineThrottleControl 转 PASS，均与 omc 逐字节一致。FAIL / ACCEPTS-INVALID / CRASH 0。

@@ -1,0 +1,46 @@
+//// set: vc-ut — 模型语境向量化调用的范围切片实参 / 向量化 previous 逐元素展开（单测原文）
+//// model: VCU1
+model VCU1
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  Real x[3] = {time, 2 * time, 3 * time};
+  Real y[2];
+equation
+  y = g(x[2:3]);
+end VCU1;
+//// model: VCU2
+model VCU2
+  parameter Integer n = 2;
+  Real u = sample(time, Clock(0.1));
+  Real ub[n + 1](each start = 0.0);
+equation
+  ub = cat(1, {u}, previous(ub[1:n]));
+end VCU2;
+//// model: VCU3
+model VCU3
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end g;
+  Real m[3, 2] = {{time, 1}, {2, time}, {3, 4}};
+  Real y[2, 2];
+equation
+  y = g(m[1:2, :]);
+end VCU3;
+//// model: VCU4
+function F
+  input Real a;
+  input Real b;
+  output Real c = a + b;
+end F;
+model VCU4
+  Real x[3] = {time, 1, 2};
+  Real w[2, 3] = {{time, 1, 2}, {3, 4, 5}};
+  Real y[2] = F(x[2:3], 1);
+end VCU4;

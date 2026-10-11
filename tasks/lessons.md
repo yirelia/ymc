@@ -444,3 +444,8 @@
   FAIL 仍是 0、门不会红。
 - 规则：护栏只拦 omc 真会产生差异的那个语义位置（这里：维 / 条件 / fixed / stateSelect，经子组件修饰递归），不拦
   "名字出现过"；precheck 的 MSL / testsuite 变化清单里每一条 PASS → SKIP 都当回退处理，不是只看 FAIL = 0。
+
+## 2026-10-11 — 逐组比对的正则只认带横杠的组名，rec / alg / v4 这类组的回退看不见
+- 模式：precheck.sh 的逐组 diff 用 `[a-z0-9]+-[a-z0-9]+` 认组行，不带横杠的组（rec、alg、v4、misc …，十几个）整组漏比；
+  64c 的 rec/V3 是 FAIL 才在总数行露出来，换成 PASS → SKIP 就静默过去了。
+- 规则：按"组名 + 空格 + 判定词"认组行（precheck.sh 已改）；门后手工逐组 diff 用同一个正则。

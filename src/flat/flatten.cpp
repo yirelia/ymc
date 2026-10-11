@@ -2291,6 +2291,22 @@ class Flattener {
     if (whole && cmp_dim != dim) set_unsupported("partial slice printed as whole by omc");
     if (kind == ExpKind::Colon || whole) {
       r.kind = ExprKind::Wild;
+      if (whole) {   // 书写的整段范围：向量化时照原范围取 `(1:3)[$i1]`（见 full_range_wilds_）
+        Expr rg;
+        rg.kind = ExprKind::Range;
+        rg.ty = Type::integer();
+        rg.a = lit_int(1);
+        if (has_step) {
+          rg.b = lit_int(written.first);
+          rg.c = lit_int(written.second);
+        } else {
+          rg.b = lit_int(cmp_dim);
+        }
+        const Id<Expr> rid = add(std::move(rg));
+        const Id<Expr> wid = add(std::move(r));
+        full_range_wilds_.emplace(wid.raw, rid);
+        return wid;
+      }
     } else if (kind == ExpKind::Range && !sel.empty()) {   // 空切片落到下面的空下标数组（零长，不会留到打印）
       r.kind = ExprKind::Range;
       r.a = lit_int(sel.front());
@@ -3149,7 +3165,10 @@ class Flattener {
       // 只在核实过的位置展开（red_scalarize_ok_：sum / product 的实参、参数数组绑定的逐元素摊分）。其余位置 omc 把含数组调用
       // 的式子整体保留并按数组算符打印（Expression.hasArrayCall = contains，NFExpression.mo:5440-5471；R1 / R2 探针
       // `x = array(…) * 2.0`、`y = -array(…)`、`s = array(…) * {1.0, 2.0, 3.0}`），未做 → SKIP。
-      if (!red_scalarize_ok_) { set_unsupported("comprehension inside array expression"); return lit_int(0); }
+      // 向量化出来的 der / pre / previous（迭代变量 `$ik`）不算数组调用（Call.isVectorizeable 为假，hasArrayCall 不认），所在
+      // 等式照常逐元素展开（VS 探针 VS4：FIR 的 `ub = cat(1, {u}, previous(ub[1:n]))` → `ub[2] = previous(ub[1])`）。
+      const bool nonvec = in_.str(x.call_name[1]).front() == '$' && non_vectorizeable_call(result_.model.exprs[x.a]);
+      if (!red_scalarize_ok_ && !nonvec) { set_unsupported("comprehension inside array expression"); return lit_int(0); }
       const std::optional<RangeLit> l = range_lit(result_.model.exprs[x.b]);
       if (!l || !l->integer || l->boolean || idx.empty() || idx[0] < 1 || idx[0] > l->n) {
         set_unsupported("comprehension scalarization");
@@ -9582,7 +9601,13 @@ class Flattener {
           set_unsupported("partial slice printed as whole by omc");
           return lit_int(0);
         }
-        subs.push_back(full ? wild() : s);
+        if (full) {
+          const Id<Expr> w = wild();
+          full_range_wilds_.emplace(w.raw, s);   // 向量化时照原范围（见 full_range_wilds_）
+          subs.push_back(w);
+        } else {
+          subs.push_back(s);
+        }
         rest.push_back(d);
         continue;
       }
@@ -11532,8 +11557,30 @@ class Flattener {
       std::size_t next = 0;
       for (Id<Expr>& s : subs) {
         const ExprKind k = result_.model.exprs[s].kind;
-        if (k == ExprKind::Range || k == ExprKind::Array) return {};
-        if (k == ExprKind::Wild && next < iters.size()) s = iters[next++];
+        if (k == ExprKind::Array) return {};
+        if (k == ExprKind::Wild && next < iters.size()) {
+          const auto fr = full_range_wilds_.find(s.raw);
+          if (fr == full_range_wilds_.end()) {
+            s = iters[next++];
+          } else {   // 书写成整段范围的：照原范围（VS 探针 / rec V3：`sin(x[1:3])` → `sin(x[(1:3)[$i1]])`）
+            Expr sx;
+            sx.kind = ExprKind::Subscript;
+            sx.a = fr->second;
+            sx.args = {iters[next++]};
+            sx.ty = Type::integer();
+            s = add(std::move(sx));
+          }
+        }
+        // 范围切片：迭代变量取范围的第几个（applySubscript 对 SLICE 下标，VS 探针 VS1 `y = array(g(x[(2:3)[$i1]]) for $i1 in
+        // 1:2)`、VS5 带步长 `(1:2:3)[$i1]`、VS7 `m[(1:2)[$i1],$i2]`）；逐元素展开后 `(2:3)[1]` 折成 2（simplify_expr 的 Subscript 支）。
+        else if (k == ExprKind::Range && next < iters.size()) {
+          Expr sx;
+          sx.kind = ExprKind::Subscript;
+          sx.a = s;
+          sx.args = {iters[next++]};
+          sx.ty = Type::integer();
+          s = add(std::move(sx));
+        }
       }
       while (next < iters.size()) subs.push_back(iters[next++]);
       c.ty = rty;
@@ -11605,9 +11652,11 @@ class Flattener {
       if (next == iters.size()) break;
       const ExprKind sk = result_.model.exprs[s].kind;
       if (sk == ExprKind::Array) return {};
-      if (sk == ExprKind::Wild) {
+      const auto fr = sk == ExprKind::Wild ? full_range_wilds_.find(s.raw) : full_range_wilds_.end();
+      if (sk == ExprKind::Wild && fr == full_range_wilds_.end()) {
         s = iters[next++];
-      } else if (sk == ExprKind::Range) {
+      } else if (sk == ExprKind::Range || fr != full_range_wilds_.end()) {
+        if (fr != full_range_wilds_.end()) s = fr->second;   // 书写成整段范围的 `:`：照原范围
         Expr sx;
         sx.kind = ExprKind::Subscript;
         sx.a = s;
@@ -20065,6 +20114,20 @@ class Flattener {
             base = be.args[0];
             ++used;
           }
+        // 范围取整数字面量下标（applyIndexSubscriptRange）：起止（步）都是字面量 → 那个值（向量化实参 `x[(2:3)[$i1]]` 逐元素
+        // 展开后 `(2:3)[1]` → 2，VS 探针 VS4 `previous(ub[(1:2)[$i1]])` → `previous(ub[1])`、VS9）。
+        if (used + 1 == x.args.size() && result_.model.exprs[base].kind == ExprKind::Range && int_lit(x.args[used])) {
+          const Expr rg = result_.model.exprs[base];   // 拷贝
+          const bool has_step = rg.c.is_valid();
+          const Id<Expr> r_stop = has_step ? rg.c : rg.b;
+          if (int_lit(rg.a) && int_lit(r_stop) && (!has_step || int_lit(rg.b))) {
+            const std::int64_t a = result_.model.exprs[rg.a].ival, b = result_.model.exprs[r_stop].ival;
+            const std::int64_t st = has_step ? result_.model.exprs[rg.b].ival : 1;
+            const std::int64_t pos = result_.model.exprs[x.args[used]].ival;
+            const std::int64_t n = st != 0 ? std::max<std::int64_t>((b - a) / st + 1, 0) : 0;
+            if (pos >= 1 && pos <= n) return lit_int(a + (pos - 1) * st);
+          }
+        }
         // 其余下标照 applySubscripts 应用：打头的整数字面量取元素，碰到符号下标就连同后面的留着（`{{…}, {…}}[1, n]` →
         // `{…}[n]`）。
         while (used < x.args.size() && result_.model.exprs[base].kind == ExprKind::Array) {
@@ -24584,6 +24647,9 @@ class Flattener {
   std::unordered_set<std::uint32_t> fn_inputs_;                 // 输入名（不可作赋值目标）
   std::unordered_set<std::uint32_t> xfield_elems_;              // "复合数组取字段"展开出来的各元素 cref（语句里原样留着的要拒）
   std::unordered_set<std::uint32_t> split_subscripts_;          // 修饰分发合成的 `(E)[i]` 节点（Absyn id；与书写的区分）
+  // 书写成整段范围、按 simplifySlice 收成 `:` 的下标节点（Wild 的 Expr id）→ 原范围。向量化取元素在 simplifySlice 之前
+  //（vectorizeCall 定型时就 applySubscript），omc 打 `x[(1:3)[$i1]]` 不是 `x[$i1]`（rec 探针 V3）。
+  std::unordered_map<std::uint32_t, Id<Expr>> full_range_wilds_;
   std::unordered_set<std::uint32_t> const_subscripts_;          // constant 引用换出来的 `{…}[n]` 节点（Expr id；转型不往里推）
   // 保留着的迭代变量（stmt_iters_）里变率高于结构参数的：范围是运行时量（`for i in 1:n`）、带普通参数的归约范围、
   // 函数体的 for。其余（范围是常量 / 结构参数）是常量变率——体里只引用它们的归约 omc 当常量式求值（见 reduction_call）。

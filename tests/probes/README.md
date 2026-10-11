@@ -506,3 +506,5 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `mx-ut` | 5 | 同上（单测原文） |
 | `vb-p1` | 25 | 函数体里的向量化调用：整体 `u[$i1]` / 切片 `u[(1:n)[$i1]]` / `:` 位 `m[1,$i1]`，范围取实参那一维的尺寸式（已知 → 字面量、声明维式、切片长度 `max(size(u, 1) - k + 1, 0)`、未知 → `size(u, 1)`），二维嵌套、多实参、sum 里（VB1-VB15，VB7 模型侧维式 / VB10 嵌套向量化 / VB11 运算式实参 SKIP）；FFT：输出维取输入值、when 算法里元组赋值的整体数组目标（VFF）；函数输入缺省 `fill(0.0, 0)` → `{}`（VFL1，二维 VFL2 SKIP）；scodeinst FuncVectorization5（VFV5） |
 | `vb-ut` | 4 | 同上（单测原文） |
+| `vc-p1` | 11 | 模型语境向量化调用的范围切片实参：`y = array(g(x[(2:3)[$i1]]) for $i1 in 1:2)`（整条保留，VSL1 / VSL2）、带步长 `(1:2:3)[$i1]`（VSL5）、结构参数界代入 `(1:2)[$i1]`（VSL6）、二维 `m[(1:2)[$i1],$i2]`（VSL7）、运算里 `array(…) * 2.0`（VSL8）、sum 里逐项 `g(x[2]) + g(x[3])`（VSL9）；der / pre 的切片（VSL3 / VSL10）、previous 的切片在 cat 里逐元素（VSL4，MSL Clocked FIR）；书写成整段范围的切片照原范围 `w[(1:3)[$i1]]`（VSL11，函数体） |
+| `vc-ut` | 4 | 同上（单测原文） |
