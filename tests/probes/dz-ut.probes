@@ -1,0 +1,32 @@
+//// set: dz-ut — 分发修饰的结构参数别名连带与负零（单测原文）
+//// model: DZU1
+model DZU1
+  block B
+    parameter Real k(start = 1);
+    Real y = k;
+  end B;
+  parameter Real r[2] = {1, 2} annotation(Evaluate = true);
+  parameter Real s = 3 annotation(Evaluate = true);
+  B a[2](k = r);
+  B c[2](k = {s, s});
+  B d[2](k = r[1:2]);
+end DZU1;
+//// model: DZU2
+model DZU2
+  block BI
+    parameter Integer k = 1;
+    Integer y = k;
+  end BI;
+  parameter Integer n[2] = {2, 3};
+  BI b[2](k = n);
+  Real z[2] = fill(1.0, n[1]);
+  BI e[2](k = n);
+end DZU2;
+//// model: DZU3
+model DZU3
+  parameter Real p = 2;
+  parameter Real r[3] = -{0, p, 0} annotation(Evaluate = true);
+  parameter Real q[2] = -{0, 1};
+  constant Real c = -0.0;
+  Real v[3] = r;
+end DZU3;

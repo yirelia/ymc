@@ -7351,4 +7351,35 @@ YMC_TEST(flatten_record_binding_evaluation_rules) {
                            "end BXU3;\n"));
 }
 
+YMC_TEST(flatten_distributed_alias_and_negative_zero) {
+  // 组件数组修饰分发的结构参数别名连带：看分发前的原式是不是 cref（`k = r`、`k = r[1:2]` 连带，`k = {s, s}` 不连带），时刻按
+  // 共享节点的定型序（目标在后面的绑定里才被标 → 前面的不连带）；负零：书写的 `-0.0` 不护零，Integer / Real 混排的数组取负
+  // 得 `-0.0`，Real 目标的 `-{0, 1}` 先转型再取负。期望 = omc 1.25.0 实跑（2026-10-11，探针 dz-ut）。
+  YMC_CHECK_EQ(flatten_src("model DZU1\n  block B\n    parameter Real k(start = 1);\n    Real y = k;\n  end B;\n"
+                           "  parameter Real r[2] = {1, 2} annotation(Evaluate = true);\n"
+                           "  parameter Real s = 3 annotation(Evaluate = true);\n  B a[2](k = r);\n  B c[2](k = {s, s});\n"
+                           "  B d[2](k = r[1:2]);\nend DZU1;\n"),
+               std::string("class DZU1\n  final parameter Real r[1] = 1.0;\n  final parameter Real r[2] = 2.0;\n"
+                           "  final parameter Real s = 3.0;\n  final parameter Real a[1].k(start = 1.0) = 1.0;\n"
+                           "  Real a[1].y = 1.0;\n  final parameter Real a[2].k(start = 1.0) = 2.0;\n  Real a[2].y = 2.0;\n"
+                           "  parameter Real c[1].k(start = 1.0) = 3.0;\n  Real c[1].y = c[1].k;\n"
+                           "  parameter Real c[2].k(start = 1.0) = 3.0;\n  Real c[2].y = c[2].k;\n"
+                           "  final parameter Real d[1].k(start = 1.0) = 1.0;\n  Real d[1].y = 1.0;\n"
+                           "  final parameter Real d[2].k(start = 1.0) = 2.0;\n  Real d[2].y = 2.0;\nend DZU1;\n"));
+  YMC_CHECK_EQ(flatten_src("model DZU2\n  block BI\n    parameter Integer k = 1;\n    Integer y = k;\n  end BI;\n"
+                           "  parameter Integer n[2] = {2, 3};\n  BI b[2](k = n);\n  Real z[2] = fill(1.0, n[1]);\n"
+                           "  BI e[2](k = n);\nend DZU2;\n"),
+               std::string("class DZU2\n  final parameter Integer n[1] = 2;\n  final parameter Integer n[2] = 3;\n"
+                           "  parameter Integer b[1].k = 2;\n  Integer b[1].y = b[1].k;\n  parameter Integer b[2].k = 3;\n"
+                           "  Integer b[2].y = b[2].k;\n  Real z[1];\n  Real z[2];\n  final parameter Integer e[1].k = 2;\n"
+                           "  Integer e[1].y = 2;\n  final parameter Integer e[2].k = 3;\n  Integer e[2].y = 3;\nequation\n"
+                           "  z = {1.0, 1.0};\nend DZU2;\n"));
+  YMC_CHECK_EQ(flatten_src("model DZU3\n  parameter Real p = 2;\n  parameter Real r[3] = -{0, p, 0} annotation(Evaluate = true);\n"
+                           "  parameter Real q[2] = -{0, 1};\n  constant Real c = -0.0;\n  Real v[3] = r;\nend DZU3;\n"),
+               std::string("class DZU3\n  final parameter Real p = 2.0;\n  final parameter Real r[1] = -0.0;\n"
+                           "  final parameter Real r[2] = -2.0;\n  final parameter Real r[3] = -0.0;\n"
+                           "  parameter Real q[1] = -0.0;\n  parameter Real q[2] = -1.0;\n  constant Real c = -0.0;\n"
+                           "  Real v[1];\n  Real v[2];\n  Real v[3];\nequation\n  v = {-0.0, -2.0, -0.0};\nend DZU3;\n"));
+}
+
 YMC_TEST_MAIN

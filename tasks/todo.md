@@ -2199,6 +2199,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           记录的继承来的字段不算固定（omc 取父节点拿到 extends 节点）、照留 if 方程（此前求值选支）。Stack 一路（记录里的记录
           重声明）、ShowImpedance（字符串常量经记录绑定）未做。
           slice 679 例 PASS 636 / FAIL 0（oracle=live 不一致 0）；scodeinst 637 / 52（在账）；testsuite 1780 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0（不变）；MSL 415→419；探针 9418→9475；单测 336→337。
+    - [x] (63u) flat：组件数组修饰分发的结构参数别名连带（2026-10-11）：`Constant position_b[3](k = rRod2_ib)` 合成的
+          `position_b[i].k = rRod2_ib[i]` 照 omc 看分发前的原式是不是 cref（各元素共用一个组件节点，Binding.isCrefExp）——整体 /
+          切片 / 括号 / 记录字段 / 两层分发 / 数组参数都连带，数组字面量 / 负号 / 常量 / Evaluate = false 不连带，时刻按共享节点
+          的定型序，同一节点的元素一组整体连带（此前一律 SKIP，切片 / 括号 / 两层分发 / 数组参数则静默不连带）。负零：书写的
+          `-0.0` 在求值器里也不护零（makeUnary）、Integer / Real 混排数组定型成 Real 再取负、Real 目标的 `-{0, 1}` 先转型再整体
+          取负（omc 都打 `-0.0`，此前 `0.0`）；求值路径的 `-{0, 1}` 与结构参数代入次序两处残余记入 open-questions。
+          slice 679 例 PASS 636 / FAIL 0（oracle=live 不一致 0）；scodeinst 637 / 52（在账）；testsuite 1780 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0（不变）；MSL 419→422；探针 9475→9502；单测 337→338。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

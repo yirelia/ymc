@@ -1,0 +1,258 @@
+//// set: dz-p1 — 组件数组修饰分发的结构参数别名连带（DZ1-DZ21）；负零（DZ22-DZ24）
+//// model: DZ1
+model DZ1
+  block B
+    parameter Real k(start = 1);
+    Real y = k;
+  end B;
+  parameter Real r[3] = {1, 2, 3} annotation(Evaluate = true);
+  B b[3](k = r);
+end DZ1;
+//// model: DZ2
+model DZ2
+  block B
+    parameter Real k(start = 1);
+    Real y = k;
+  end B;
+  parameter Real r[3] = {1, 2, 3};
+  B b[3](k = r);
+end DZ2;
+//// model: DZ3
+model DZ3
+  block B
+    parameter Real k(start = 1);
+    Real y = k;
+  end B;
+  parameter Real s = 1 annotation(Evaluate = true);
+  parameter Real t = 2 annotation(Evaluate = true);
+  B b[2](k = {s, t});
+end DZ3;
+//// model: DZ4
+model DZ4
+  block B
+    parameter Real k(start = 1);
+    Real y = k;
+  end B;
+  parameter Real s = 1 annotation(Evaluate = true);
+  B b[2](each k = s);
+end DZ4;
+//// model: DZ5
+model DZ5
+  block BI
+    parameter Integer k = 1;
+    Integer y = k;
+  end BI;
+  parameter Integer n[2] = {2, 3};
+  Real x[n[1]] = ones(n[1]);
+  BI b[2](k = n);
+end DZ5;
+//// model: DZ6
+model DZ6
+  block BI
+    parameter Integer k = 1;
+    Integer y = k;
+  end BI;
+  parameter Integer n[2] = {2, 3};
+  BI b[2](k = n);
+  Real z[2] = fill(1.0, n[1]);
+end DZ6;
+//// model: DZ7
+model DZ7
+  block BI
+    parameter Integer k = 1;
+    Integer y = k;
+  end BI;
+  parameter Integer n[2] = {2, 3};
+  Real z[2] = fill(1.0, n[1]);
+  BI b[2](k = n);
+end DZ7;
+//// model: DZ8
+model DZ8
+  block B
+    parameter Real k(start = 1);
+    Real y = k;
+  end B;
+  model C
+    B b[2];
+  end C;
+  parameter Real rr[2, 2] = {{1, 2}, {3, 4}} annotation(Evaluate = true);
+  C c[2](b(k = rr));
+end DZ8;
+//// model: DZ9
+model DZ9
+  block B
+    parameter Real k(start = 1);
+    Real y = k;
+  end B;
+  parameter Real r[3] = {1, 2, 3} annotation(Evaluate = true);
+  B b[2](k = r[2:3]);
+end DZ9;
+//// model: DZ10
+model DZ10
+  block B
+    parameter Real k(start = 1);
+    Real y = k;
+  end B;
+  constant Real c[2] = {1, 2};
+  B b[2](k = c);
+end DZ10;
+//// model: DZ11
+model DZ11
+  block B2
+    parameter Real k = 1 annotation(Evaluate = false);
+    Real y = k;
+  end B2;
+  parameter Real r[2] = {1, 2} annotation(Evaluate = true);
+  B2 b[2](k = r);
+end DZ11;
+//// model: DZ12
+model DZ12
+  block B
+    parameter Real k(start = 1);
+    Real y = k;
+  end B;
+  parameter Real r[2] = {1, 2} annotation(Evaluate = true);
+  B b[2](k = r);
+  parameter Real q = b[1].k;
+  Real w = q;
+end DZ12;
+//// model: DZ13
+model DZ13
+  block B
+    parameter Real k(start = 1);
+    Real y = k;
+  end B;
+  model Base
+    B b[2];
+  end Base;
+  model M2
+    extends Base(b(k = r));
+    parameter Real r[2] = {1, 2} annotation(Evaluate = true);
+  end M2;
+  M2 m;
+end DZ13;
+//// model: DZ14
+model DZ14
+  block B
+    parameter Real k(start = 1);
+    Real y = k;
+  end B;
+  block F
+    parameter Real r[3](start = {0, 0, 0});
+    parameter Real d[3] = r / 2 annotation(Evaluate = true);
+    Real v[3] = r;
+  end F;
+  model J
+    parameter Real rr[3] = {1, 0, 0};
+    F rod(r = rr);
+    B pb[3](k = rr);
+  end J;
+  J j(rr = {0, 0.2, 0});
+end DZ14;
+//// model: DZ15
+model DZ15
+  block B
+    parameter Real k(start = 1);
+    Real y = k;
+  end B;
+  parameter Real r[2] = {1, 2} annotation(Evaluate = true);
+  B b[2](k = -r);
+end DZ15;
+//// model: DZ16
+model DZ16
+  block B
+    parameter Real k(start = 1);
+    Real y = k;
+  end B;
+  parameter Real r[2] = {1, 2} annotation(Evaluate = true);
+  B b[2](k = (r));
+end DZ16;
+//// model: DZ17
+model DZ17
+  block B
+    parameter Real k(start = 1);
+    Real y = k;
+  end B;
+  parameter Real r[2] = {1, 2} annotation(Evaluate = true);
+  B b[2](each k = r[2]);
+end DZ17;
+//// model: DZ18
+model DZ18
+  block BV
+    parameter Real k[3] = {0, 0, 0};
+    Real y[3] = k;
+  end BV;
+  parameter Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}} annotation(Evaluate = true);
+  BV b[2](k = m);
+end DZ18;
+//// model: DZ19
+model DZ19
+  block B
+    parameter Real k(start = 1);
+    Real y = k;
+  end B;
+  parameter Real r[2] = {2, 3};
+  B b[2](k = r);
+  Real z[2] = fill(1.0, integer(r[1]));
+end DZ19;
+//// model: DZ20
+model DZ20
+  block B
+    parameter Real k(start = 1);
+    Real y = k;
+  end B;
+  record R
+    Real a[2];
+  end R;
+  parameter R rec(a = {1, 2}) annotation(Evaluate = true);
+  B b[2](k = rec.a);
+end DZ20;
+//// model: DZ21
+model DZ21
+  block B
+    parameter Real k(start = 1);
+    Real y = k;
+  end B;
+  parameter Real r[2] = {1, 2};
+  B b[2](k = r);
+  Real u;
+equation
+  if r[1] > 0 then u = 1; else u = 2; end if;
+end DZ21;
+//// model: DZ22
+model DZ22
+  parameter Real p = 2;
+  parameter Real r[3] = -{0, p, 0} annotation(Evaluate = true);
+  parameter Real x = -0.0 annotation(Evaluate = true);
+  parameter Real y = -0 annotation(Evaluate = true);
+  parameter Real z = -(0.0 * p) annotation(Evaluate = true);
+  parameter Real w[2] = -{0.0, 1.0} annotation(Evaluate = true);
+  parameter Real u = 0.0 * (-1) annotation(Evaluate = true);
+  constant Real c = -0.0;
+  Real v[3] = r;
+  Real q = x + y + z + c;
+end DZ22;
+//// model: DZ23
+model DZ23
+  parameter Real x2 = -0.0;
+  Real y2 = -0.0;
+  parameter Real x3 = -0.0 annotation(Evaluate = true);
+  final parameter Real x4 = -0.0;
+  constant Real c = -0.0;
+  Real z = x3 + c;
+end DZ23;
+//// model: DZ24
+model DZ24
+  parameter Real p = 2;
+  parameter Real r3[2] = -{0.0, 0.0} annotation(Evaluate = true);
+  parameter Real r4[2] = -{0, 0.0} annotation(Evaluate = true);
+  parameter Real r5[2] = -{0, p} annotation(Evaluate = true);
+  parameter Real r6[2] = -{0, 1} * p annotation(Evaluate = true);
+  parameter Real r7[2] = {-0.0, -p} annotation(Evaluate = true);
+  parameter Real r8[2] = -{0, 1};
+  parameter Real r10[2] = -{0, 0};
+  constant Real c1 = -(0.0);
+  constant Real c2[2] = -{0, 1.0};
+  parameter Integer n2[2] = -{0, 1} annotation(Evaluate = true);
+  Real v[2] = r5 + r6 + r7 + r8 + r10 + c2;
+end DZ24;

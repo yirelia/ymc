@@ -4678,7 +4678,14 @@ class Flattener {
         set_unsupported("binding of higher variability");
       while (braw0.is_valid() && I_.absyn.exps[braw0].kind == ExpKind::Tuple && I_.absyn.exps[braw0].args.size() == 1)
         braw0 = I_.absyn.exps[braw0].args[0];
-      if (braw0.is_valid() && I_.absyn.exps[braw0].kind == ExpKind::CrefExp) {
+      // 组件数组修饰分发合成的绑定：omc 不逐元素拆，各元素共用一个组件节点、绑定是分发前的整个原式，连带看的是它是不是 cref
+      //（Binding.isCrefExp，checkComponentBindingVariability，NFTyping.mo:1150-1159 v1.25.0）——合成出的元素式子（`r[i]`、
+      // `(r[2:3])[i]`）长什么样不论。DZ 探针：`B b[3](k = r)`、`k = r[2:3]`、`k = (r)`、`k = rec.a`、两层分发都连带，
+      // `k = {s, t}`、`k = -r` 不连带（MSL JointSSP 的 `Constant position_b[3](k = rRod2_ib)`）。
+      const auto sc = origin == 2 ? split_cref_.find(mb->mod.raw) : split_cref_.end();
+      if (sc != split_cref_.end()) {
+        if (sc->second) add_dist_alias(vkey);
+      } else if (braw0.is_valid() && I_.absyn.exps[braw0].kind == ExpKind::CrefExp) {
         if (origin == 0) alias_keys_.emplace(vkey, bind_clock_);
         else if (origin == 2) alias_unknown_keys_.insert(vkey);
       }
@@ -5119,12 +5126,14 @@ class Flattener {
     Id<Exp> braw;
     bool braw_written = true;   // 绑定是源码里书写的（非 flatten 合成的修饰）：结构参数的别名连带用
     bool braw_from_record = false;   // 绑定是外层记录整体绑定拆出的字段修饰（emit_variable 的 origin 1）
+    bool braw_dist_cref = false;     // 组件数组修饰分发合成、分发前的原式是 cref（同 emit_variable 的 split_cref_）
     NodeId bscope;
     std::vector<Symbol> bprefix;
     if (const ModSource* mb = first_bound(mod_subs)) {
       braw = I_.scode.mods[mb->mod].binding;
       braw_written = mb->mod.raw < synth_mod_floor_;
       braw_from_record = !braw_written && derived_mods_.count(mb->mod.raw) > 0;
+      if (const auto sc = split_cref_.find(mb->mod.raw); sc != split_cref_.end()) braw_dist_cref = sc->second;
       bscope = mb->scope;
       bprefix = mb->vprefix;
     }
@@ -5210,7 +5219,18 @@ class Flattener {
         const SVariability bv = var_min(ctx.var_floor, I_.comps[cid].attributes.variability);
         param_spread_ = bv == SVariability::Param || bv == SVariability::Const;   // 逐元素摊开的绑定（见 param_spread_）
         array_call_eq_ = !param_spread_;   // Var 数组的绑定成整条等式（whole_array_value），嵌着的数组调用也收
-        rhsE = simplify_expr(inst_exp(braw, bscope, bprefix));
+        Id<Expr> ie = inst_exp(braw, bscope, bprefix);
+        // Real 目标的 `-{…}`：定型时转型就推进一元负号与数组字面量（Expression.typeCast 的 UNARY / ARRAY 支，NFExpression.mo
+        // v1.25.0），化简在后——`-{0, 1}` 成 `-{0.0, 1.0}`、整个数组取负得 `{-0.0, -1.0}`（DZ 探针 DZ24 的 r8）；此前先按 Integer
+        // 折成 `{0, -1}` 再逐元素转型，零丢了符号。
+        if (I_.comps[cid].ty.element_type().kind == TypeKind::Real && result_.model.exprs[ie].kind == ExprKind::Unary &&
+            result_.model.exprs[ie].un == UnOp::Minus && result_.model.exprs[result_.model.exprs[ie].a].kind == ExprKind::Array) {
+          Expr u = result_.model.exprs[ie];   // 拷贝（下面 add）
+          u.a = coerce_deep(u.a, TypeKind::Real);
+          u.ty = u.ty.is_array() ? Type::array_of(Type::real(), u.ty.dims) : Type::real();
+          ie = add(std::move(u));
+        }
+        rhsE = simplify_expr(ie);
         array_call_ok_ = false;
         if_top_ = false;
         param_spread_ = false;
@@ -5456,6 +5476,7 @@ class Flattener {
       alias_arr = I_.absyn.exps[b0].kind == ExpKind::CrefExp;
     }
     if (alias_arr) alias_groups_.emplace_back();
+    const bool dist_alias = spread && vk == FlatVarKind::Parameter && braw_dist_cref;   // DZ 探针 DZ18：`BV b[2](k = m)`
     // 参数 / 常量数组整个绑定是实参求不成字面量的用户函数调用（MultiBody 关节的 `e = normalizeWithAssert(n)`）：omc 不标量化，
     // 整个变量一行 `parameter Real[3] e(unit = "1") = f(n);`——scalarizeVariable 见绑定逐元素是 `f(n)[k]`（isSubscriptedArrayCall）
     // 就整体留下，除非带 min / max / nominal（variableHasForcedScalarAttribute），NFScalarize.mo:89-160 / :513-525 v1.25.0；PA
@@ -5575,6 +5596,8 @@ class Flattener {
         const std::string ek = var_key(result_.model.variables[vidx]);
         alias_keys_.emplace(ek, bind_clock_);
         alias_groups_.back().push_back(ek);
+      } else if (dist_alias) {
+        add_dist_alias(var_key(result_.model.variables[vidx]));
       }
       if (!cur_pp_chain_.empty()) var_pp_.emplace(vidx, cur_pp_chain_);
       if (is_flow) flow_vars_.push_back({name, std::move(fsubs), cty, I_.comps[cid].loc, vidx, false});
@@ -7384,7 +7407,12 @@ class Flattener {
           if (!v) return std::nullopt;
           els.push_back(std::move(*v));
         }
-        return CVal::Arr(std::move(els));
+        CVal arr = CVal::Arr(std::move(els));
+        // Integer 与 Real 混排：定型时整个数组取 Real、Integer 元素转成 Real 字面量（typeArray → TypeCheck.matchExpressions，
+        // Expression.typeCast :1180-1200 v1.25.0）——之后取负逐元素作用在 0.0 上得 -0.0（DZ 探针 DZ22 `-{0, p, 0}` → `-0.0`；MSL
+        // CylinderBase 的 `rRod2_ib = -{0, pistonLength, 0}`）。
+        if (cval_has_real(arr) && cval_has_int(arr)) arr = cval_real_leaves(arr);
+        return arr;
       }
       case ExpKind::Subscript: {
         // `(E)[i, j]`：基求值后按下标取（修饰分发合成的，或基只可能来自带括号写法的——见 subscripted_exp；IfEquation9
@@ -7548,7 +7576,14 @@ class Flattener {
         auto v = eval_scode(e.a, scope, depth + 1, allow_param, used);
         if (!v) return std::nullopt;
         if (e.op == Op::UPlus) return v;
-        if (e.op == Op::UMinus) return cval_is_zero(*v) ? v : cval_negate(*v);   // evalUnaryOp :1548-1549
+        if (e.op == Op::UMinus) {
+          // 书写的数字字面量取负在实例化时就折进字面量（Expression.makeUnary → negate，NFExpression.mo:6526-6537 v1.25.0），
+          // 不护零：`-0.0`、`-(0.0)` → -0.0（DZ 探针 DZ22-DZ24）。别的取负到求值期（evalUnaryOp :1548-1549）：值为零原样返回。
+          Id<Exp> la = e.a;
+          while (I_.absyn.exps[la].kind == ExpKind::Tuple && I_.absyn.exps[la].args.size() == 1) la = I_.absyn.exps[la].args[0];
+          if (I_.absyn.exps[la].kind == ExpKind::RealLit || I_.absyn.exps[la].kind == ExpKind::IntLit) return cval_negate(*v);
+          return cval_is_zero(*v) ? v : cval_negate(*v);
+        }
         if (e.op == Op::Not && v->k == CVal::K::Bool) return CVal::B(!v->b);
         return std::nullopt;
       }
@@ -8134,6 +8169,21 @@ class Flattener {
       for (const CVal& e : *v.arr)
         if (cval_has_int(e)) return true;
     return false;
+  }
+  static bool cval_has_real(const CVal& v) {
+    if (v.k == CVal::K::Real) return true;
+    if (v.k == CVal::K::Array && v.arr)
+      for (const CVal& e : *v.arr)
+        if (cval_has_real(e)) return true;
+    return false;
+  }
+  static CVal cval_real_leaves(const CVal& v) {
+    if (v.k == CVal::K::Int) return CVal::R(static_cast<double>(v.i));
+    if (v.k != CVal::K::Array || !v.arr) return v;
+    std::vector<CVal> out;
+    out.reserve(v.arr->size());
+    for (const CVal& e : *v.arr) out.push_back(cval_real_leaves(e));
+    return CVal::Arr(std::move(out));
   }
   static bool cval_is_zero(const CVal& v) {
     if (v.k == CVal::K::Int) return v.i == 0;
@@ -13081,6 +13131,21 @@ class Flattener {
     const std::size_t seg = k.size() >= 2 ? k.rfind('.', k.size() - 2) : std::string::npos;
     const std::size_t q = k.find('[', seg == std::string::npos ? 0 : seg + 1);
     return q == std::string::npos ? k : k.substr(0, q) + ".";
+  }
+  // 分发来的别名候选（见 emit_variable 的 split_cref_）：omc 的结构标记打在组件节点上，组件数组各元素（及参数数组各元素）共用
+  // 一个节点 → 同一节点的元素一组整体连带（apply_structural_params 的部分连带检查）；节点 key = 变量 key 去掉全部下标。
+  void add_dist_alias(const std::string& vkey) {
+    alias_keys_.emplace(vkey, bind_clock_);
+    std::string node;
+    bool in_sub = false;
+    for (char ch : vkey) {
+      if (ch == '[') in_sub = true;
+      else if (ch == ']') in_sub = false;
+      else if (!in_sub) node.push_back(ch);
+    }
+    const auto [it, fresh] = dist_groups_.emplace(node, alias_groups_.size());
+    if (fresh) alias_groups_.emplace_back();
+    alias_groups_[it->second].push_back(vkey);
   }
   static std::string int_key(const std::vector<Symbol>& names, const PSubs& isubs) {
     std::string k;
@@ -20846,7 +20911,17 @@ class Flattener {
     // each final SI.Current re, …)`——原 id 照传，实例化时已施加的重声明 flatten 按 id 认出（applied_redecls）。
     if (n.is_each) return sm;
     if (n.kind != SModKind::Mod) return {};   // 非 each 的 redeclare（innerMod 下降 + propagatedSubs）未做
+    // 原式是不是 cref（别名连带看它，见 emit_variable）：书写的修饰看自己的绑定（括号剥掉，omc 的 SCode 里没有括号）；上一层
+    // 分发合成的继承上一层记下的；别的合成修饰（记录绑定拆出的字段）不记 → 照旧按"未核实"处理。
+    std::optional<bool> root_cref;
     if (n.binding.is_valid()) {
+      if (sm.raw < synth_mod_floor_) {
+        Id<Exp> b0 = n.binding;
+        while (I_.absyn.exps[b0].kind == ExpKind::Tuple && I_.absyn.exps[b0].args.size() == 1) b0 = I_.absyn.exps[b0].args[0];
+        root_cref = I_.absyn.exps[b0].kind == ExpKind::CrefExp;
+      } else if (const auto it = split_cref_.find(sm.raw); it != split_cref_.end()) {
+        root_cref = it->second;
+      }
       n.binding = array_scalar_elem(n.binding, aidx, 0, /*general=*/true, /*expand_comp=*/false, scope);
       if (!n.binding.is_valid()) return {};
     }
@@ -20857,7 +20932,9 @@ class Flattener {
       if (!d.is_valid()) return {};
       n.subs.push_back({s.ident, d});
     }
-    return synth_mod(std::move(n));
+    const Id<SMod> out = synth_mod(std::move(n));
+    if (root_cref) split_cref_.emplace(out.raw, *root_cref);
+    return out;
   }
   // 复合数组修饰切分前的整体检查（各将被下降的非 each 字面量绑定）：前 N 维须恰是数组维（多 / 少 = omc 维度不符报错）；
   // 数值目标的叶类型须一致（split_leaves_uniform）。子修饰名在 cls（类实例）的组件里查；cls 无效 = 内建类型 bkind 的属性。
@@ -24282,6 +24359,9 @@ class Flattener {
   std::unordered_map<std::string, int> alias_keys_;      // 候选 → 其绑定的定型序号（bind_clock_）
   std::unordered_set<std::string> alias_unknown_keys_;
   std::vector<std::vector<std::string>> alias_groups_;   // 参数数组的裸 cref 绑定：同一数组的各元素 key（整体连带）
+  // 组件数组修饰分发合成的子修饰（split_submod，Mod id）→ 分发前的原式（层层往上到书写的那个）是不是 cref。
+  std::unordered_map<std::uint32_t, bool> split_cref_;
+  std::unordered_map<std::string, std::size_t> dist_groups_;   // 分发来的别名候选：组件节点 key（去下标）→ alias_groups_ 下标
   std::unordered_set<std::uint32_t> derived_mods_;
   std::unordered_set<std::uint32_t> derived_cref_mods_;
   std::vector<std::string> pending_pre_;

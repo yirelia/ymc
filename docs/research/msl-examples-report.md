@@ -538,3 +538,10 @@ MSL Batteries 一路：CombiTable1Ds 的 `columns` 作下标 / 经记录字段�
 字段、复合数组修饰经记录数组中间段分发；另改两处静默错（整体绑定记录里 Evaluate 字段只看 start；if 方程条件里继承来的记录字段不算
 固定）。Electrical.Batteries.Examples.BatteryDischargeCharge、CCCVcharging、CCCV_Cell、CCCV_CellRC 转 PASS，均与 omc 逐字节一致；
 CCCV_Stack / CCCV_StackRC（记录里的记录重声明）、ShowImpedance（字符串常量经记录绑定）未做。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-11 加宽 63u 之后：PASS 419→422（+3）
+
+MultiBody 解析式闭环一路：组件数组修饰分发的结构参数别名连带（JointSSP / JointRRP 的 `Constant position_b[3](k = rRod2_ib)`，
+omc 看分发前的原式是不是 cref）；另改负零（CylinderBase 的 `rRod2_ib = -{0, pistonLength, 0}`：Integer / Real 混排数组定型成 Real
+再取负得 `-0.0`）。Mechanics.MultiBody.Examples.Loops.Fourbar_analytic、Engine1b_analytic、EngineV6_analytic 转 PASS，均与 omc
+逐字节一致。FAIL / ACCEPTS-INVALID / CRASH 0。
