@@ -571,3 +571,10 @@ Clocked 一路：模型语境向量化调用的范围切片实参（applySubscri
 不算数组调用、所在等式逐元素展开——FIRbyCoefficients 的 `u_buffer = cat(1, {u}, previous(u_buffer[1:n]))` →
 `u_buffer[2] = … previous(u_buffer[1])`。Clocked.Examples.Elementary.RealSignals.UpSample2、FractionalDelay、
 Clocked.Examples.Systems.EngineThrottleControl 转 PASS，均与 omc 逐字节一致。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-11 加宽 64d 之后：PASS 436→438（+2）
+
+SVPWM 一路：常量数组在符号下标后跟 `:`（`fire_p = fire[ka + 1, :]`）由所在等式逐元素展开（`fire_p[1] = {{true, false, false}, …}
+[ka + 1, 1]`）；另改常量矩阵绑定逐元素丢注释的静默错（`constant Boolean fire[6, m] = […] "Switching patterns"`）。
+Electrical.Machines.Examples.InductionMachines.IMC_InverterDrive、Electrical.PowerConverters.Examples.DCAC.PolyphaseTwoLevel.
+ThreePhaseTwoLevel_PWM 转 PASS，均与 omc 逐字节一致。FAIL / ACCEPTS-INVALID / CRASH 0。

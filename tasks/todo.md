@@ -2225,6 +2225,11 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           der / pre / previous 不算数组调用（isVectorizeable 为假），所在等式逐元素展开（MSL Clocked FIR 的
           `ub = cat(1, {u}, previous(ub[1:n]))`）。下标数组切片 `x[{1, 3}]` 仍 SKIP。
           slice 683 例 PASS 640 / FAIL 0（oracle=live 不一致 0）；scodeinst 641 / 53（在账）；testsuite 1787 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0（不变）；MSL 433→436；探针 9589→9604；单测 340→341。
+    - [x] (64d) flat：常量数组在符号下标后跟 `:`（2026-10-11）：`fire_p = fire[ka + 1, :]`（MSL SVPWM）——留 `:` 的常量取下标
+          节点由所在等式逐元素展开时填下标（`fire_p[1] = {{true, …}, …}[ka + 1, 1]`），绑定里随运算展开；整条留进输出的（算法
+          里，omc 是 NFSubscript.toDAEExp 内部错）收尾 SKIP。另改静默错：常量矩阵 `[…]` 绑定（emit_const_array 那条路）逐元素
+          丢了声明注释。`m[n, 2:3]` 仍 SKIP。
+          slice 683 例 PASS 640 / FAIL 0（oracle=live 不一致 0）；scodeinst 641 / 53（在账）；testsuite 1787 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0（不变）；MSL 436→438；探针 9604→9612；单测 341→342。
   - [~] 3g：driver 从库里按名压平（`--load-model` + 类名）→ MSL Examples 压平通过率报告（S3 退出条件）。（第一版报告见 (61f)）
 - [ ] S3.1 门：easy slice 220 例 FAIL=0，PASS 数记入本节；错误用例（incorrect）里查找/修饰类的文案对拍
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect

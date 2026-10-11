@@ -4610,10 +4610,11 @@ YMC_TEST(flatten_constant_array_subscripts) {
             "  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};\n  Integer n = integer(time) + 1;\n"
             "  Real tt = time;\n  parameter Integer q(fixed = false);\n  Real y = x[q];\ninitial equation\n"
             "  q = 2;\nend CXS7;\n", "parameter in symbolic subscript"},
-           // 符号下标后面跟 `:`：omc 内部错（NFSubscript.toDAEExp failed on unknown subscript ':'），CXS8。
+           // 符号下标后面跟 `:`、整条留在绑定里：omc 内部错（NFSubscript.toDAEExp failed on unknown subscript ':'，2026-10-11
+           // 复核），CXS8。64d 起等式里逐元素展开的照做（ks 探针），这里在绑定处就 SKIP。
            {"model CXS8\n  constant Real x[5] = {1, 2, 3, 4, 5};\n"
             "  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};\n  Integer n = integer(time) + 1;\n"
-            "  Real tt = time;\n  Real y[3] = m[n, :];\nend CXS8;\n", "slice after symbolic subscript on constant array"}}) {
+            "  Real tt = time;\n  Real y[3] = m[n, :];\nend CXS8;\n", "non-literal array binding"}}) {
     bool uns = false;
     const std::string out = flatten_src(src.c_str(), &uns);
     YMC_CHECK(uns);
@@ -7501,6 +7502,45 @@ YMC_TEST(flatten_model_vectorization_slices) {
                            "  Real w[2,2];\n  Real w[2,3];\n  Real y[1];\n  Real y[2];\nequation\n  x = {time, 1.0, 2.0};\n"
                            "  w = {{time, 1.0, 2.0}, {3.0, 4.0, 5.0}};\n  y = array(F(x[(2:3)[$i1]], 1.0) for $i1 in 1:2);\n"
                            "end VCU4;\n"));
+}
+
+YMC_TEST(flatten_constant_slice_after_symbolic_subscript) {
+  // 常量数组在符号下标后跟 `:`（MSL SVPWM 的 `fire_p = fire[ka + 1, :]`）：所在等式逐元素展开，`:` 换成元素下标
+  //（`b[1] = {{true, false}, …}[k + 1, 1]`）；绑定里随运算展开；常量矩阵逐元素照打声明注释。期望 = omc 1.25.0 实跑
+  //（2026-10-11，探针 ks-ut）。
+  YMC_CHECK_EQ(flatten_src("model KSU1\n  constant Boolean fire[3, 2] = [true, false; false, true; true, true];\n"
+                           "  Integer k(start = 0, fixed = true);\n  Boolean b[2];\nequation\n  when sample(0, 0.1) then\n"
+                           "    k = mod(pre(k) + 1, 3);\n  end when;\n  b = fire[k + 1, :];\nend KSU1;\n"),
+               std::string("class KSU1\n  constant Boolean fire[1,1] = true;\n  constant Boolean fire[1,2] = false;\n"
+                           "  constant Boolean fire[2,1] = false;\n  constant Boolean fire[2,2] = true;\n"
+                           "  constant Boolean fire[3,1] = true;\n  constant Boolean fire[3,2] = true;\n"
+                           "  Integer k(start = 0, fixed = true);\n  Boolean b[1];\n  Boolean b[2];\nequation\n"
+                           "  when sample(0.0, 0.1) then\n    k = mod(pre(k) + 1, 3);\n  end when;\n"
+                           "  b[1] = {{true, false}, {false, true}, {true, true}}[k + 1, 1];\n"
+                           "  b[2] = {{true, false}, {false, true}, {true, true}}[k + 1, 2];\nend KSU1;\n"));
+  YMC_CHECK_EQ(flatten_src("model KSU2\n  constant Real T[2, 3] = {{1, 2, 3}, {4, 5, 6}};\n  Integer k(start = 1, fixed = true);\n"
+                           "  Real c[3] = T[k, :] * time;\nequation\n  when sample(0, 0.1) then\n    k = 3 - pre(k);\n  end when;\n"
+                           "end KSU2;\n"),
+               std::string("class KSU2\n  constant Real T[1,1] = 1.0;\n  constant Real T[1,2] = 2.0;\n  constant Real T[1,3] = 3.0;\n"
+                           "  constant Real T[2,1] = 4.0;\n  constant Real T[2,2] = 5.0;\n  constant Real T[2,3] = 6.0;\n"
+                           "  Integer k(start = 1, fixed = true);\n  Real c[1];\n  Real c[2];\n  Real c[3];\nequation\n"
+                           "  c = {{{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}}[k, 1] * time, {{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}}[k, 2] * time, {{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}}[k, 3] * time};\n"
+                           "  when sample(0.0, 0.1) then\n    k = 3 - pre(k);\n  end when;\nend KSU2;\n"));
+  YMC_CHECK_EQ(flatten_src("model KSU3\n  constant Integer m = 3;\n"
+                           "  constant Boolean fire[2, m] = [true, false, false; false, true, true] \"Switching patterns\";\n"
+                           "  constant Real r[2, 2] = [1, 2; 3, 4] \"Matrix\";\n  constant Real v[2] = {1, 2} \"Vector\";\n"
+                           "  parameter Real p[2, 2] = [1, 2; 3, 4] \"Param matrix\";\n  Real y = time;\nend KSU3;\n"),
+               std::string("class KSU3\n  constant Integer m = 3;\n  constant Boolean fire[1,1] = true \"Switching patterns\";\n"
+                           "  constant Boolean fire[1,2] = false \"Switching patterns\";\n"
+                           "  constant Boolean fire[1,3] = false \"Switching patterns\";\n"
+                           "  constant Boolean fire[2,1] = false \"Switching patterns\";\n"
+                           "  constant Boolean fire[2,2] = true \"Switching patterns\";\n"
+                           "  constant Boolean fire[2,3] = true \"Switching patterns\";\n  constant Real r[1,1] = 1.0 \"Matrix\";\n"
+                           "  constant Real r[1,2] = 2.0 \"Matrix\";\n  constant Real r[2,1] = 3.0 \"Matrix\";\n"
+                           "  constant Real r[2,2] = 4.0 \"Matrix\";\n  constant Real v[1] = 1.0 \"Vector\";\n"
+                           "  constant Real v[2] = 2.0 \"Vector\";\n  parameter Real p[1,1] = 1.0 \"Param matrix\";\n"
+                           "  parameter Real p[1,2] = 2.0 \"Param matrix\";\n  parameter Real p[2,1] = 3.0 \"Param matrix\";\n"
+                           "  parameter Real p[2,2] = 4.0 \"Param matrix\";\n  Real y = time;\nend KSU3;\n"));
 }
 
 YMC_TEST_MAIN

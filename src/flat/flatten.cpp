@@ -274,6 +274,7 @@ class Flattener {
     }
     check_discrete_reals();
     check_pre_args();
+    check_const_slices();
     prune_functions();
     relabel_type_dims();
     // 第一遍要重来时先把第二遍要的收下（result_ 马上要搬走，param_exprs_ 等指着它的 exprs）。
@@ -417,6 +418,44 @@ class Flattener {
   // IMPLICITLY_DISCRETE（markImplicitWhenExp，NFInst.mo:3965-4128 v1.25.0，实例化期、与方程先后无关），pre 只拒 CONTINUOUS
   //（typePreChangeCall，NFBuiltinCall.mo:581）→ 放行（PD 探针 d10-d111：MSL Blocks.Discrete.ZeroOrderHold 的
   // `y = pre(ySample)`）。标的是组件（数组任一元素赋值即整个数组，d13）；整体赋值的记录不连带字段（d14 omc 报错）。
+  // 留着 `:` 的常量取下标（`{…}[n, :]`，见 apply_const_subs）没被逐元素展开、留进了输出：omc 是内部错 → SKIP。
+  void check_const_slices() {
+    if (result_.unsupported || const_slices_.empty()) return;
+    bool hit = false;
+    auto expr = [&](auto& self, Id<Expr> id) -> void {
+      if (!id.is_valid() || hit) return;
+      if (const_slices_.count(id.raw)) { hit = true; return; }
+      const Expr& x = result_.model.exprs[id];
+      for (const ExprCrefPart& cp : x.cref.parts) for (Id<Expr> sub : cp.subscripts) self(self, sub);
+      self(self, x.a);
+      self(self, x.b);
+      self(self, x.c);
+      for (Id<Expr> a : x.args) self(self, a);
+    };
+    auto eqn = [&](auto& self, Id<FlatEquation> id) -> void {
+      const FlatEquation& q = result_.model.eqs[id];
+      expr(expr, q.a); expr(expr, q.b); expr(expr, q.c);
+      for (const FlatEqBranch& br : q.branches) { expr(expr, br.cond); for (Id<FlatEquation> b : br.body) self(self, b); }
+      for (Id<FlatEquation> b : q.body) self(self, b);
+      for (Id<FlatEquation> b : q.else_body) self(self, b);
+    };
+    auto stmt = [&](auto& self, Id<FlatStatement> id) -> void {
+      const FlatStatement& st = result_.model.stmts[id];
+      expr(expr, st.a); expr(expr, st.b); expr(expr, st.c);
+      for (const FlatStmtBranch& br : st.branches) { expr(expr, br.cond); for (Id<FlatStatement> b : br.body) self(self, b); }
+      for (Id<FlatStatement> b : st.body) self(self, b);
+      for (Id<FlatStatement> b : st.else_body) self(self, b);
+    };
+    for (const FlatVariable& v : result_.model.variables) {
+      expr(expr, v.binding);
+      for (const FlatVarAttr& at : v.attributes) expr(expr, at.value);
+    }
+    for (Id<FlatEquation> id : result_.model.equations) eqn(eqn, id);
+    for (Id<FlatEquation> id : result_.model.initial_equations) eqn(eqn, id);
+    for (const FlatAlgorithm& a : result_.model.algorithms) for (Id<FlatStatement> id : a.stmts) stmt(stmt, id);
+    for (const FlatAlgorithm& a : result_.model.initial_algorithms) for (Id<FlatStatement> id : a.stmts) stmt(stmt, id);
+    if (hit) set_unsupported("slice after symbolic subscript on constant array");
+  }
   void check_pre_args() {
     if (result_.unsupported || pending_pre_.empty()) return;
     const std::unordered_set<std::string> defined = when_assigned_paths();
@@ -3158,6 +3197,20 @@ class Flattener {
       }
       return scalarize(x.args[static_cast<std::size_t>(idx[0]) - 1], std::vector<std::int64_t>(idx.begin() + 1, idx.end()));
     }
+    if (x.kind == ExprKind::Subscript && const_slices_.count(e.raw)) {   // `{…}[n, :]` 的元素（见 apply_const_subs）
+      Expr r = x;
+      std::size_t used = 0;
+      for (Id<Expr>& a : r.args)
+        if (result_.model.exprs[a].kind == ExprKind::Wild) {
+          if (used == idx.size()) { set_unsupported("slice after symbolic subscript on constant array"); return lit_int(0); }
+          a = lit_int(idx[used++]);
+        }
+      if (used != idx.size()) { set_unsupported("slice after symbolic subscript on constant array"); return lit_int(0); }
+      r.ty = x.ty.element_type();
+      const Id<Expr> id = add(std::move(r));
+      const_subscripts_.insert(id.raw);
+      return id;
+    }
     if (expr_shape(e).empty()) return e;   // 标量（广播操作数）；形状看穿字面量 / 一元的粗类型（`-{1, 2}`）
     if (x.kind == ExprKind::Reduction && x.call_name.size() == 2) {
       // 推导式的第 idx[0] 个元素：迭代变量代入范围的该值后化简，余下下标交给体（嵌套推导式）。AC3 探针
@@ -5080,6 +5133,10 @@ class Flattener {
       v.var_kind = FlatVarKind::Constant;
       v.direction = dir;
       v.loc = I_.comps[cid].loc;
+      // 声明注释逐元素照打（同 emit_array；CM 探针 / MSL SVPWM 的 `constant Boolean fire[6, m] = […] "Switching patterns"`，
+      // 此前这条路丢了注释）。
+      if (I_.comps[cid].comment_from_type) v.comment = I_.comps[cid].type_comment;
+      else if (const SComment& dc = I_.scode.elems[I_.comps[cid].def].cmt; dc.str.is_valid()) v.comment = dc.str;
       v.binding = literal_of(flat[fi++]);
       result_.model.variables.push_back(std::move(v));
       if (!cur_pp_chain_.empty()) var_pp_.emplace(result_.model.variables.size() - 1, cur_pp_chain_);
@@ -13910,17 +13967,34 @@ class Flattener {
       r.kind = ExprKind::Subscript;
       r.a = v;
       r.args.push_back(ix);
+      // 符号下标后面跟 `:`：整条留着是 omc 的内部错（NFSubscript.toDAEExp failed on unknown subscript ':'），所在等式逐元素
+      // 展开时 `:` 换成元素下标（MSL SVPWM 的 `fire_p = fire[ka + 1, :]` → `fire_p[1] = {{true, …}, …}[ka + 1, 1]`，SV 探针）——
+      // 留 `:` 的节点记进 const_slices_，scalarize 填下标，没被逐元素展开的收尾 SKIP（check_const_slices）。`m[n, 2:3]`
+      //（omc 留 `{…}[n, 2:3]`）未做。
+      const std::vector<std::int64_t> vsh = expr_shape(v);
+      std::vector<Dimension> wdims;
       for (std::size_t j = k + 1; j < s.size(); ++j) {
-        // 符号下标后面跟切片：`m[n, :]` 是 omc 的内部错（NFSubscript.toDAEExp failed on unknown subscript ':'），
-        // `m[n, 2:3]` 留成 `{…}[n, 2:3]`，未做。
+        if (s[j].k == CSub::K::Whole && j - k < vsh.size() && vsh[j - k] >= 1) {
+          Expr w;
+          w.kind = ExprKind::Wild;
+          w.ty = Type::integer();
+          r.args.push_back(add(std::move(w)));
+          Dimension d;
+          d.kind = DimKind::Integer;
+          d.size = vsh[j - k];
+          wdims.push_back(d);
+          continue;
+        }
         if (s[j].k != CSub::K::Index) { set_unsupported("slice after symbolic subscript on constant array"); return lit_int(0); }
         r.args.push_back(s[j].e);
       }
       // ponytail: 没取尽各维的（`m[n]` → 数组值的 `{{…}, {…}}[n]`）下游的标量化 / 整体保留都还不认 → SKIP。
       if (r.args.size() != ve.ty.dims.size()) { set_unsupported("array-valued subscripted constant"); return lit_int(0); }
-      r.ty = ve.ty.element_type();
+      r.ty = wdims.empty() ? ve.ty.element_type() : Type::array_of(ve.ty.element_type(), std::move(wdims));
+      const bool sliced = r.ty.is_array();
       const Id<Expr> id = add(std::move(r));
       const_subscripts_.insert(id.raw);
+      if (sliced) const_slices_.insert(id.raw);
       return id;
     };
     if (s[k].k == CSub::K::Index) return index(s[k].e);
@@ -24650,6 +24724,7 @@ class Flattener {
   // 书写成整段范围、按 simplifySlice 收成 `:` 的下标节点（Wild 的 Expr id）→ 原范围。向量化取元素在 simplifySlice 之前
   //（vectorizeCall 定型时就 applySubscript），omc 打 `x[(1:3)[$i1]]` 不是 `x[$i1]`（rec 探针 V3）。
   std::unordered_map<std::uint32_t, Id<Expr>> full_range_wilds_;
+  std::unordered_set<std::uint32_t> const_slices_;   // 留着 `:` 的常量取下标节点 `{…}[n, :]`（见 apply_const_subs）
   std::unordered_set<std::uint32_t> const_subscripts_;          // constant 引用换出来的 `{…}[n]` 节点（Expr id；转型不往里推）
   // 保留着的迭代变量（stmt_iters_）里变率高于结构参数的：范围是运行时量（`for i in 1:n`）、带普通参数的归约范围、
   // 函数体的 for。其余（范围是常量 / 结构参数）是常量变率——体里只引用它们的归约 omc 当常量式求值（见 reduction_call）。

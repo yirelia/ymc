@@ -508,3 +508,5 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `vb-ut` | 4 | 同上（单测原文） |
 | `vc-p1` | 11 | 模型语境向量化调用的范围切片实参：`y = array(g(x[(2:3)[$i1]]) for $i1 in 1:2)`（整条保留，VSL1 / VSL2）、带步长 `(1:2:3)[$i1]`（VSL5）、结构参数界代入 `(1:2)[$i1]`（VSL6）、二维 `m[(1:2)[$i1],$i2]`（VSL7）、运算里 `array(…) * 2.0`（VSL8）、sum 里逐项 `g(x[2]) + g(x[3])`（VSL9）；der / pre 的切片（VSL3 / VSL10）、previous 的切片在 cat 里逐元素（VSL4，MSL Clocked FIR）；书写成整段范围的切片照原范围 `w[(1:3)[$i1]]`（VSL11，函数体） |
 | `vc-ut` | 4 | 同上（单测原文） |
+| `ks-p1` | 5 | 常量数组在符号下标后跟 `:`：等式 / if 分支里逐元素 `b[1] = {{true, false}, …}[k + 1, 1]`（CSL1 / CSL2，MSL SVPWM）、绑定随运算展开（CSL3）、算法里整条留着是 omc 内部错（CSL4，ymc SKIP）；常量矩阵 `[…]` 绑定逐元素照打声明注释（CM1，此前丢注释） |
+| `ks-ut` | 3 | 同上（单测原文） |
