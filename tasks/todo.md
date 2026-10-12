@@ -2235,6 +2235,31 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
 - [ ] 之后按桶加宽：3c 数组（Dim/Array/Subscript/Size/For…）→ 3e 函数与求值（Func/Function/Ceval/Record/External）→ 3d connect
       （Connect/Expandable/Stream/Cardinality）→ 3b 余下的 Redeclare/Constraining → when/if/算法 → 3g Base Modelica + MSL Examples
 
+## ADR-007 第 2 阶段：A 实例树查找（2026-10-12 用户拍板，见 docs/adr/007）
+
+目标：flatten 的名字查找照 OMC 走实例链（NFLookup v1.25.0），一并解决类替换 / 访问路径命名 / 外层实例修饰；
+解锁 MSL Fluid / Media（约 44 个示例）、MultiBody 曲面 / 重力（约 5 个）、testsuite 约 53 例。每步单独过门提交。
+
+- [ ] (65a) 基础：inst 查找进类时按需实例化包 / 类（instPackage，NFInst.mo:1312）；flatten 加 `lookup_inst(scope, path)`
+      照 lookupName :580 / lookupFirstIdent :660 / lookupSimpleName :434 / lookupLocalName :679；双跑一致性检查（新旧查找
+      不一致、又不属已知类替换 → SKIP + 计数）。探针族：被替换类在基类代码里被引用、跨层 `redeclare package Medium = Medium`、
+      函数 / 常量 / 类型三种用法、访问路径命名（IL4 / IL19）、外层实例修饰（IL5 / IL9 / IL10 / IL7）。
+- [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
+      surfaceCharacteristic）。
+- [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。
+- [ ] (65d) 记录类与其余查找点（`record_class_of` …）。
+- [ ] (65e) 外层实例上的修饰：嵌套类 / 模型内函数读外层常量取实例值。
+- [ ] (65f) 拆 63k 与第 1 阶段的 SKIP 守卫；SCode 词法查找退役（`scode_scope_of` 调用点清零或注明理由）。
+
+## S5 后端启动（与 S3 长尾交替推进，2026-10-12 起）
+
+- [ ] (S5.0) ADR-008：BackendDAE IR + `.bdae` 文本格式（dump / parse，对齐 `-d=bltdump` 口径）+ 输入（先吃 ymc 自己已与 omc
+      逐字节一致的 FlatModel：testsuite 1787 / MSL 438）+ 结构对拍口径（`-d=backenddaeinfo,bltdump` 的状态数 / 强连通分量计数 /
+      块大小序列，tools/structcompare.py）。**定稿前与用户确认（架构决定）。**
+- [ ] (S5a) lower + 预处理：变量 / 方程分箱、绑定、别名消除、DetectStates、Events（NBackendDAE.mo:259 / :540、NBAlias.mo:118、
+      NBDetectStates.mo:79、NBEvents.mo:88）；验收子集 equations / parameters / commonSubExp 的结构计数与 omc 一致。
+- [ ] (S5b) 邻接 / 匹配 / 排序；(S5c) 指标约简；(S5d) 初始化；(S5e) Solve / 撕裂 / 雅可比 —— 按方案 §5 S5 表逐个开。
+
 ## 下一里程碑
 
 - S3 门 + 结构比对接 Dymola（spec FR-052）。
