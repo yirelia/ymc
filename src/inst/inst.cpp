@@ -534,6 +534,8 @@ void Instantiator::expand(NodeId cls) {
         mark_unsupported("class extends target not found", std::string(I_.interner.str(I_.nodes[cls].name)));
         continue;
       }
+      if (ce_via_mod_.count(I_.nodes[cls].def.raw))   // 目标经改了常量 / 类的 extends 继承来（见下"class extends 的目标"）
+        mark_unsupported("inherited class seen through modifier / redeclare", std::string(I_.interner.str(I_.nodes[cls].name)));
       base = it->second;
     } else {
       base = lookup_class_name(ee.base_path, cls, &base_nodes);
@@ -599,25 +601,138 @@ void Instantiator::expand(NodeId cls) {
   // class extends 的目标：本类的 `model extends B … end B;`（带不带 redeclare 前缀都是）顶替继承来的同名类，隐式 extends 它
   //（redeclareClass 的 isClassExtends 支 → setClassExtends，NFInst.mo:1734-1762 v1.25.0）。基类里没有同名类 → omc 报
   // CLASS_EXTENDS_TARGET_NOT_FOUND（NFClassTree.mo:2246-2249）→ SKIP。
+  // 目标是经"改了基类常量 / 类的 extends"、或本类另有元素级类重声明时继承来的（同 classes_via_mod），且目标的体里写到了被改的
+  // 名字：OMC 的目标是 extends 实例里的那份（redeclareClass 取实例类树里的原类，:1741），体里读到的是改过的常量 / 顶替过的类（PKX
+  // 探针：`extends PartialMedium(nX = 2)` 后 `redeclare model extends BaseProperties` 的基类 `Real X[nX]` 得 2 个），ymc 的目标是
+  // 共享的基类定义 → 记下，用到时 SKIP（见上面 ce_ext_elems_ 那支；此前静默按声明值展开）。体里没写到的照常（ClassExtends2：另一个
+  // `redeclare model extends M2` 不影响 M1）。
   {
     const std::vector<Id<SElement>> lel = I_.scode.elems[I_.nodes[cls].def].def.elements;   // 拷贝
     for (Id<SElement> e : lel) {
       if (I_.scode.elems[e].kind != SElementKind::Class || I_.scode.elems[e].def.kind != SClassDefKind::ClassExtends) continue;
       const Symbol nm = I_.scode.elems[e].name;
       NodeId target;
-      for (NodeId b : bases) {
+      std::vector<Symbol> changed;   // 经 extends 修饰改到的名字 + 本类另外重声明的类名
+      for (std::size_t xi = 0; xi < bases.size(); ++xi) {
+        const NodeId b = bases[xi];
         if (I_.nodes[b].is_empty() || !I_.nodes[b].cls.is_valid() || !I_.node_class(b).tree.is_valid()) continue;
-        if (const NodeId t = tree_class(I_.node_class(b).tree, nm); !I_.nodes[t].is_empty()) { target = t; break; }
+        if (const NodeId t = tree_class(I_.node_class(b).tree, nm); !I_.nodes[t].is_empty()) {
+          target = t;
+          const Id<SMod> xm = I_.scode.elems[I_.nodes[exts[xi]].def].mod;
+          if (ext_mod_hits_consts(b, xm))
+            for (const SSubMod& sm : I_.scode.mods[xm].subs) changed.push_back(sm.ident);
+          break;
+        }
       }
       if (!target.is_valid() || I_.nodes[target].is_empty()) {
         mark_unsupported("class extends target not found", std::string(I_.interner.str(nm)));
         continue;
       }
+      for (Id<SElement> o : lel)
+        if (o != e && I_.scode.elems[o].kind == SElementKind::Class && I_.scode.elems[o].prefixes.is_redeclare)
+          changed.push_back(I_.scode.elems[o].name);
       I_.class_extends_target[e.raw] = target;
+      if (!changed.empty() && body_mentions(I_.nodes[target].def, changed, 0)) ce_via_mod_.insert(e.raw);
     }
   }
   I_.trees[tree_id].ext_bases = std::move(bases);
   I_.trees[tree_id].state = TreeState::ExpandedTree;
+}
+
+// 类 cls 的体里写到 names 里的名字（首段）：组件类型 / 维 / 修饰、短类的基类 / 修饰 / 维、方程 / 算法、嵌套类、修饰里的重声明元素。
+// 体里有 extends 或 cls 本身是 class extends（基类的体没看）→ 也算写到（保守）。
+bool Instantiator::body_mentions(Id<SElement> cls, const std::vector<Symbol>& names, int depth) const {
+  if (depth > 30 || !cls.is_valid() || I_.scode.elems[cls].kind != SElementKind::Class) return true;
+  auto named = [&](Symbol n) { return std::find(names.begin(), names.end(), n) != names.end(); };
+  auto path_hit = [&](const std::vector<Symbol>& p) { return !p.empty() && named(p[0]); };
+  auto exp_hit = [&](auto& self, Id<Exp> x) -> bool {
+    if (!x.is_valid()) return false;
+    const Exp& ex = I_.absyn.exps[x];
+    if (ex.cref.is_valid()) {   // CrefExp 的名字、Call 的函数名
+      const Cref& c = I_.absyn.crefs[ex.cref];
+      if (!c.leading_dot && !c.parts.empty() && named(c.parts[0].name)) return true;
+      for (const CrefPart& p : c.parts)
+        for (Id<Exp> sx : p.subscripts)
+          if (self(self, sx)) return true;
+    }
+    if (self(self, ex.a) || self(self, ex.b) || self(self, ex.c)) return true;
+    for (Id<Exp> a : ex.args)
+      if (self(self, a)) return true;
+    for (const ForIndex& it : ex.iters)
+      if (self(self, it.range)) return true;
+    return false;
+  };
+  auto mod_hit = [&](auto& self, Id<SMod> m) -> bool {
+    if (!m.is_valid()) return false;
+    const SMod& md = I_.scode.mods[m];
+    if (exp_hit(exp_hit, md.binding)) return true;
+    if (md.element.is_valid() && body_mentions(md.element, names, depth + 1)) return true;
+    for (const SSubMod& s : md.subs)
+      if (self(self, s.mod)) return true;
+    return false;
+  };
+  auto dims_hit = [&](const std::vector<Id<Exp>>& ds) {
+    for (Id<Exp> d : ds)
+      if (exp_hit(exp_hit, d)) return true;
+    return false;
+  };
+  auto eq_hit = [&](auto& self, Id<SEquation> id) -> bool {
+    const SEquation& q = I_.scode.eqs[id];
+    if (exp_hit(exp_hit, q.a) || exp_hit(exp_hit, q.b) || exp_hit(exp_hit, q.c)) return true;
+    for (const SEqBranch& br : q.branches) {
+      if (exp_hit(exp_hit, br.cond)) return true;
+      for (Id<SEquation> x : br.body)
+        if (self(self, x)) return true;
+    }
+    for (Id<SEquation> x : q.body)
+      if (self(self, x)) return true;
+    for (Id<SEquation> x : q.else_body)
+      if (self(self, x)) return true;
+    return false;
+  };
+  auto stmt_hit = [&](auto& self, Id<SStatement> id) -> bool {
+    const SStatement& q = I_.scode.stmts[id];
+    if (exp_hit(exp_hit, q.a) || exp_hit(exp_hit, q.b) || exp_hit(exp_hit, q.c)) return true;
+    for (const SStmtBranch& br : q.branches) {
+      if (exp_hit(exp_hit, br.cond)) return true;
+      for (Id<SStatement> x : br.body)
+        if (self(self, x)) return true;
+    }
+    for (Id<SStatement> x : q.body)
+      if (self(self, x)) return true;
+    for (Id<SStatement> x : q.else_body)
+      if (self(self, x)) return true;
+    return false;
+  };
+  const SClassDef& d = I_.scode.elems[cls].def;
+  if (d.kind == SClassDefKind::ClassExtends) return true;
+  if (d.kind == SClassDefKind::Derived)
+    return path_hit(d.derived_type.path) || mod_hit(mod_hit, d.derived_mod) || dims_hit(d.derived_attr.dims) ||
+           dims_hit(d.derived_type.dims);
+  for (Id<SElement> eid : d.elements) {
+    const SElement& el = I_.scode.elems[eid];
+    switch (el.kind) {
+      case SElementKind::Extends: return true;
+      case SElementKind::Component:
+        if (path_hit(el.type.path) || dims_hit(el.attr.dims) || dims_hit(el.type.dims) || mod_hit(mod_hit, el.mod)) return true;
+        break;
+      case SElementKind::Class:
+        if (body_mentions(eid, names, depth + 1)) return true;
+        break;
+      case SElementKind::Import: break;
+    }
+  }
+  for (Id<SEquation> q : d.equations)
+    if (eq_hit(eq_hit, q)) return true;
+  for (Id<SEquation> q : d.initial_equations)
+    if (eq_hit(eq_hit, q)) return true;
+  for (const SAlgorithm& a : d.algorithms)
+    for (Id<SStatement> x : a.stmts)
+      if (stmt_hit(stmt_hit, x)) return true;
+  for (const SAlgorithm& a : d.initial_algorithms)
+    for (Id<SStatement> x : a.stmts)
+      if (stmt_hit(stmt_hit, x)) return true;
+  return false;
 }
 
 // extends 修饰 m 改到了基类 base（含它继承来的）的常量或类：嵌套类按词法读得到它们（外层作用域里查到的组件须是常量，
@@ -649,6 +764,46 @@ Id<SElement> Instantiator::member_def(NodeId cls, Symbol name, int depth) {
 }
 
 // -------------------------------------------------------------- instClass（克隆 + 建 FlatTree）
+// 定义节点 def 的类树里本地类的个数：partial_inst 按 SCode 元素序先登记本地类（类树 classes 的前若干项），继承来的排在后面（expand）。
+std::size_t Instantiator::local_class_count(NodeId def) const {
+  std::size_t n = 0;
+  for (Id<SElement> e : I_.scode.elems[I_.nodes[def].def].def.elements)
+    if (I_.scode.elems[e].kind == SElementKind::Class) ++n;
+  return n;
+}
+
+// 实例 inst 类树里的本地类 c（ClassTree.instantiate :514-524 v1.25.0）：类型类的只改父亲、共用类单元（InstNode.setParent），其余克隆
+// 一份类单元再改父亲（InstNode.clone）。类单元停在 PartialClass 的（只建了目录、基类还没解析）不共享那棵没展开完的树：克隆回
+// NotInstantiated，用到时自己 partial_inst / expand（结果相同，嵌套类的父亲是克隆）。
+NodeId Instantiator::instance_class(NodeId c, NodeId inst, bool typish) {
+  INode n = I_.nodes[c];   // 拷贝
+  if (!typish && n.cls.is_valid())
+    n.cls = I_.classes.add(I_.classes[n.cls].state == ClassState::PartialClass ? Class{} : Class(I_.classes[n.cls]));
+  n.parent_scope = inst;
+  return I_.nodes.add(std::move(n));
+}
+
+// 基类实例 base 的类项换进实例 inst 的类树（ClassTree.instantiate 先实例化各 extends、再把它们的类数组拷进来，NFClassTree.mo:
+// 492-556 v1.25.0）——之后的组件按类型查到的是基类实例里的那份（父亲是基类实例，看得到 extends 修饰改过的常量 / 顶替过的类；
+// PKN2：`extends Base(redeclare package M = W)` 后派生类自己的 `M.T z`），所以这些项不再按 classes_via_mod 拦。继承来的项（下标
+// ≥ nlocal）照 extends 先后先到先得（同 expand）；本实例自己顶替的不换。
+void Instantiator::adopt_inherited_classes(NodeId inst, NodeId base, std::size_t nlocal,
+                                           std::unordered_set<std::uint32_t>& taken) {
+  if (!I_.node_class(inst).tree.is_valid() || !I_.node_class(base).tree.is_valid()) return;
+  ClassTree& t = I_.trees[I_.node_class(inst).tree];
+  const ClassTree& bt = I_.trees[I_.node_class(base).tree];
+  for (const auto& [n, le] : bt.lookup) {
+    if (le.kind != LEntry::Kind::Class || taken.count(n.id)) continue;
+    const auto it = t.lookup.find(n);
+    if (it == t.lookup.end() || it->second.kind != LEntry::Kind::Class || it->second.index < nlocal) continue;
+    const INode& cur = I_.nodes[t.classes[it->second.index]];
+    if (cur.node_type.kind == NodeTypeKind::RedeclaredClass && cur.node_type.parent == inst) continue;
+    taken.insert(n.id);
+    t.classes[it->second.index] = bt.classes[le.index];
+    t.classes_via_mod.erase(it->second.index);
+  }
+}
+
 NodeId Instantiator::instantiate(NodeId def_node, NodeId parent, const ClassRedecls* redecls) {
   // 递归深度守卫：递归定义（RECURSIVE_DEFINITION，R11 §6.2）或 v1 未做的 inner/outer 链接可能无限递归；
   // 超过上限就标 unsupported 并返回克隆但不再下钻，避免栈溢出（driver 退 66）。
@@ -671,31 +826,49 @@ NodeId Instantiator::instantiate(NodeId def_node, NodeId parent, const ClassRede
   if (I_.node_class(def_node).state == ClassState::PartialClass) expand(def_node);
   // 克隆：新 Class 单元（Pointer.create，断开与定义节点共享）+ 新节点（R11 §7.0）。
   Class inst_c = I_.classes[I_.nodes[def_node].cls];   // 拷贝 def 的 Class（含 ExpandedTree 引用，供查找）
-  // 类重声明（派生类的元素级 `redeclare model B … end B;`，NFInst.redeclareClass :1707-1801 v1.25.0）：OMC 在实例的类树里用新类
-  // 节点顶替原来的（Mutable 槽，基类的视图同步），继承来的组件的类型于是查到新类。ymc 给这个实例复制一份定义类树、把那些名字的项
-  // 换成新类节点；被顶替的原类记进 Inst::redeclared_classes（flatten 的 SCode 查找撞到 → SKIP）。
-  bool specialized = false;
-  std::vector<std::uint32_t> replaced;   // 顶替掉的原类（实例建好后记进 Inst::replaced_in）
-  if (redecls && !redecls->empty() && inst_c.tree.is_valid()) {
-    ClassTree t = I_.trees[inst_c.tree];   // 拷贝
-    for (const auto& [n, node] : *redecls) {
-      const auto it = t.lookup.find(n);
-      if (it == t.lookup.end() || it->second.kind != LEntry::Kind::Class || t.classes[it->second.index] == node) continue;
-      if (!class_redeclare_ok(t.classes[it->second.index], node)) break;
-      if (const Id<SElement> od = I_.nodes[t.classes[it->second.index]].def; od.is_valid()) {
-        I_.redeclared_classes.insert(od.raw);
-        replaced.push_back(od.raw);
-      }
-      t.classes[it->second.index] = node;
-      t.classes_via_mod.erase(it->second.index);
-      specialized = true;
-    }
-    if (specialized) inst_c.tree = I_.trees.add(std::move(t));
-  }
   INode inst_n = I_.nodes[def_node];                   // 拷贝节点（parent_scope 保留词法外层）
   inst_n.cls = I_.classes.add(std::move(inst_c));
   inst_n.instance_parent = parent;
-  NodeId inst_node = I_.nodes.add(std::move(inst_n));
+  const NodeId inst_node = I_.nodes.add(std::move(inst_n));
+  instances_.insert(inst_node.raw);
+  // 实例自己的类树（ClassTree.instantiate，NFClassTree.mo:428-551 v1.25.0）：
+  //   - 本地类：类型类（type / operator record / operator）的只改父亲（InstNode.setParent，共用类单元），其余克隆一份再改父亲
+  //     （InstNode.clone，:514-524）——嵌套类向外查名时经过这个实例，看得到实例上顶替过的类（ADR-007 第 2 阶段，RE5 探针）；
+  //   - 类重声明（派生类的元素级 `redeclare model B … end B;`、修饰里的 `redeclare package Medium = …`，NFInst.redeclareClass
+  //     :1707-1801）：OMC 在实例的类树里用新类节点顶替原来的（Mutable 槽，基类的视图同步），继承来的组件的类型于是查到新类。ymc 给
+  //     每个实例一份新类节点（REDECLARED_CLASS，父亲 = 原类的父亲 = 这个实例，:1797-1800；词法外层仍是写修饰处，R15 §1）；被顶替
+  //     的原类记进 Inst::redeclared_classes（flatten 的 SCode 查找撞到 → SKIP）。
+  //   继承来的类等各基类实例化完换成基类实例里的（见 adopt_inherited_classes）。
+  bool specialized = false;
+  std::vector<std::uint32_t> replaced;   // 顶替掉的原类（记进 Inst::replaced_in）
+  if (const ClassTreeId dtid = I_.node_class(inst_node).tree; dtid.is_valid()) {
+    const std::size_t nlocal = local_class_count(def_node);
+    if (!I_.trees[dtid].classes.empty() || (redecls && !redecls->empty())) {
+      ClassTree t = I_.trees[dtid];   // 拷贝
+      const SRestriction res = I_.scode.elems[I_.nodes[def_node].def].restriction;
+      const bool typish = res == SRestriction::Type || res == SRestriction::OperatorRecord || res == SRestriction::Operator;
+      for (std::size_t i = 0; i < nlocal && i < t.classes.size(); ++i) t.classes[i] = instance_class(t.classes[i], inst_node, typish);
+      if (redecls)
+        for (const auto& [n, node] : *redecls) {
+          const auto it = t.lookup.find(n);
+          if (it == t.lookup.end() || it->second.kind != LEntry::Kind::Class ||
+              I_.nodes[t.classes[it->second.index]].def == I_.nodes[node].def)
+            continue;
+          if (!class_redeclare_ok(t.classes[it->second.index], node)) break;
+          if (const Id<SElement> od = I_.nodes[t.classes[it->second.index]].def; od.is_valid()) {
+            I_.redeclared_classes.insert(od.raw);
+            replaced.push_back(od.raw);
+          }
+          INode rn = I_.nodes[node];   // 共用类单元
+          rn.node_type = InstNodeType::of(NodeTypeKind::RedeclaredClass);
+          rn.node_type.parent = inst_node;
+          t.classes[it->second.index] = I_.nodes.add(std::move(rn));
+          t.classes_via_mod.erase(it->second.index);
+          specialized = true;
+        }
+      I_.node_class(inst_node).tree = I_.trees.add(std::move(t));
+    }
+  }
   if (specialized) {
     inst_redecls_[inst_node.raw] = *redecls;
     I_.replaced_in[inst_node.raw].insert(replaced.begin(), replaced.end());
@@ -842,9 +1015,10 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node, const ClassRede
       for (NodeId b : I_.trees[def_tree_id].ext_bases)
         inherited = inherited || (!I_.nodes[b].is_empty() && member_def(b, el.name, 0).is_valid());
       if (!inherited) { mark_unsupported("redeclare of missing element", std::string(I_.interner.str(el.name))); continue; }
-      const auto it = I_.trees[def_tree_id].lookup.find(el.name);
-      if (it == I_.trees[def_tree_id].lookup.end() || it->second.kind != LEntry::Kind::Class) continue;
-      base_redecls.push_back({el.name, I_.trees[def_tree_id].classes[it->second.index]});
+      const ClassTree& it_tree = I_.trees[I_.node_class(inst_node).tree];   // 实例的类树：本地类是克隆（见 instantiate）
+      const auto it = it_tree.lookup.find(el.name);
+      if (it == it_tree.lookup.end() || it->second.kind != LEntry::Kind::Class) continue;
+      base_redecls.push_back({el.name, it_tree.classes[it->second.index]});
     }
   }
   if (!def_tree_id.is_valid()) {
@@ -858,6 +1032,8 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node, const ClassRede
     return;
   }
   const std::vector<NodeId> def_comps = I_.trees[def_tree_id].components;  // 拷一份
+  const std::size_t nlocal_classes = local_class_count(def_node);
+  std::unordered_set<std::uint32_t> adopted;   // 已从某个基类实例换进来的继承类名（先到先得）
   ClassTree flat;
   flat.state = TreeState::FlatTree;
   for (NodeId cn : def_comps) {
@@ -888,6 +1064,7 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node, const ClassRede
       ClassRedecls ext_redecls = base_redecls;
       collect_class_redecls(ext_mod, def_node, base_def, ext_redecls);
       NodeId base_inst = instantiate(base_def, inst_node, ext_redecls.empty() ? nullptr : &ext_redecls);
+      adopt_inherited_classes(inst_node, base_inst, nlocal_classes, adopted);
       // 基类实例按 extends 出现序记进本实例的类树：基类的方程 / 算法段由 flatten 的 collect_inherited_sections 收
       //（段序 = 本类在前、各 extends 按**逆序**在后，NFInst.instExpressions + Sections.join 头插，NFInst.mo:2511-2514 /
       // NFSections.mo:192-209；名字在基类实例里解析，前缀与本实例相同）。只记实例化后的基类节点（FlatTree），不记 Ref /
@@ -926,14 +1103,15 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node, const ClassRede
   }
   redeclare_local_components(flat, inst_node);
   dedup_components(flat.components, def_node);
-  // 实例的类树照样带定义里的类（本地 + 继承来的；OMC 的 INSTANTIATED_TREE 保留 classes 与查找表）：实例化完了还要从实例查类型
-  // 的（生成的 inner 在 outer 声明处的类实例里查类型，InnerOuterMissing8 的 `outer B b`，B 是那个类的嵌套类）。组件项的下标
-  // 对不上 FlatTree 的组件数组，不搬。
+  // 实例的类树照样带类（本地 + 继承来的；OMC 的 INSTANTIATED_TREE 保留 classes 与查找表）：实例化完了还要从实例查类型的（生成的
+  // inner 在 outer 声明处的类实例里查类型，InnerOuterMissing8 的 `outer B b`，B 是那个类的嵌套类；flatten 按实例查类，ADR-007
+  // 第 2 阶段）。本地类是克隆、类重声明已顶替（见 instantiate），继承来的已换成基类实例里的（见 adopt_inherited_classes）。组件项
+  // 的下标对不上 FlatTree 的组件数组，不搬。
   {
-    const ClassTree& dt = I_.trees[def_tree_id];
-    flat.classes = dt.classes;
-    flat.classes_via_mod = dt.classes_via_mod;
-    for (const auto& [n, le] : dt.lookup)
+    const ClassTree& it_tree = I_.trees[I_.node_class(inst_node).tree];
+    flat.classes = it_tree.classes;
+    flat.classes_via_mod = it_tree.classes_via_mod;
+    for (const auto& [n, le] : it_tree.lookup)
       if (le.kind == LEntry::Kind::Class) flat.lookup.emplace(n, le);
   }
   Class& ic = I_.classes[I_.nodes[inst_node].cls];
@@ -1267,11 +1445,13 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing, bool gener
     return;
   }
   // 所在实例的类树带类重声明时，类型是那个继承层级里声明的嵌套类（不是顶替进来的新类）、且它的体里写到被重声明的名字：OMC 里
-  // 嵌套类的父亲是实例（看得到新类，RE5 探针 `c.m.b2.y`），ymc 的嵌套类节点父亲是未特化的定义 → SKIP。
+  // 嵌套类的父亲是实例（看得到新类，RE5 探针 `c.m.b2.y`）。类型的父亲是实例（本实例的本地类克隆、基类实例里的，见 instantiate /
+  // adopt_inherited_classes）→ 放行（PKN4）；还是定义节点的（extends 写在组件后面，基类实例还没建）→ SKIP。
   if (const auto rit = inst_redecls_.find(enclosing.raw); rit != inst_redecls_.end()) {
     bool replacement = false;
-    for (const auto& [n, node] : rit->second) replacement = replacement || node == ty_node;
-    if (!replacement && nested_in(ty_node, enclosing) && mentions_any(I_.nodes[ty_node].def, rit->second, 0)) {
+    for (const auto& [n, node] : rit->second) replacement = replacement || I_.nodes[node].def == I_.nodes[ty_node].def;
+    if (!replacement && !instances_.count(I_.nodes[ty_node].parent_scope.raw) && nested_in(ty_node, enclosing) &&
+        mentions_any(I_.nodes[ty_node].def, rit->second, 0)) {
       mark_unsupported("redeclared class seen from nested class", std::string(I_.interner.str(el.name)));
       return;
     }

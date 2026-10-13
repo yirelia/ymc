@@ -2252,6 +2252,17 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           的 `replaceable package M = PM` 里的 `M.T`）。探针 pk-p1（ADR-007 第 2 阶段目标族 10 例，随后续各步逐个转 PASS）/ pk-p2
           （partial 查名 7 例）/ pk-ut。
           slice 683 例 PASS 640 / FAIL 0（oracle=live 不一致 0）；scodeinst 641→643 / 53（在账）；testsuite 1787→1791 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 438（不变：Fluid 的 `Medium.*` 从查不到组件类型推进到 "inherited class seen through modifier"，待包实例）；探针 9612→9630；单测 342→344。
+    - [x] (65a-2) 实例树按 OMC 建类（2026-10-13）：每个实例一份自己的类树（ClassTree.instantiate，NFClassTree.mo:428-556 v1.25.0）——
+          本地类克隆、父亲改成实例（类型 / operator record / operator 的只改父亲）；类重声明每实例一份 REDECLARED_CLASS 新类（父亲 =
+          原类的父亲 = 实例，NFInst.redeclareClass :1797-1800）、实例化完不再丢回定义里的原类；各基类实例一建好就把它的类项换进来
+          （继承来的类 = 基类实例里的克隆，看得到 extends 修饰 / 重声明，不再按 classes_via_mod 拦）。flatten 的 SCode 作用域链每层
+          带实例节点（ScopeLevel），实例层先按实例类树认类重声明——先只认短类形态的包（Medium 式；经它往下的常量 / 函数照旧 SKIP，
+          待包实例），并做双跑一致检查（实例层 SCode 查到的类与实例类树不一致 → SKIP）。inst 的 "redeclared class seen from nested
+          class" 守卫只留给父亲还是定义节点的（extends 写在组件后面）。另补一处早就有的静默错：`extends PartialMedium(nX = 2)` 后
+          `redeclare model extends BaseProperties` 的隐式基类取的是共享的基类定义，基类体里 `Real X[nX]` 读声明值（omc 2 个，ymc 1 个，
+          PKX3）——目标经改了常量 / 类的 extends 继承来、且目标体里写到了被改的名字 → SKIP（同 classes_via_mod），待包实例。
+          探针 pk-p3（6 例）/ pk-p4（4 例，class extends 目标）。
+          slice 686 例 FAIL 0（oracle=live 不一致 0）；scodeinst 643→644；testsuite 1791→1793（Redeclare6、ModClass3）/ FAIL 0 / CRASH 0；MSL 438（不变）；探针 9630→9640（kr-p1 KR5 也转 PASS）；单测 344→346。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

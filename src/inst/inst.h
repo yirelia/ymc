@@ -51,6 +51,9 @@ class Instantiator {
   using ClassRedecls = std::vector<std::pair<Symbol, NodeId>>;
   // 克隆 def 节点 + instClass 填实例树；redecls 非空：实例的类树里这些名字换成新类（基类实例看到派生类的元素级类重声明）。
   NodeId instantiate(NodeId def_node, NodeId parent, const ClassRedecls* redecls = nullptr);
+  std::size_t local_class_count(NodeId def) const;          // 定义类树里本地类的个数（排在继承来的之前）
+  NodeId instance_class(NodeId c, NodeId inst, bool typish);   // 实例类树里的本地类：克隆 / 改父亲（见 inst.cpp）
+  void adopt_inherited_classes(NodeId inst, NodeId base, std::size_t nlocal, std::unordered_set<std::uint32_t>& taken);
   NodeId instantiate_root_class(NodeId def_node);      // 根类：短类别名顺链到长类、补生成的 inner（见 inst.cpp）
   void inst_class(NodeId inst_node, NodeId def_node, const ClassRedecls* redecls = nullptr);  // 建 FlatTree：递归组件 + extends 就地展开
   bool mentions_any(Id<SElement> cls, const ClassRedecls& r, int depth) const;   // 类体里写到 r 的名字（见 inst_component）
@@ -81,6 +84,7 @@ class Instantiator {
   NodeId import_class(Symbol name, NodeId cls);
   NodeId tree_class(ClassTreeId tid, Symbol name);   // 类树里（本地 + 继承来的）名为 name 的类；没有 → empty
   bool ext_mod_hits_consts(NodeId base, Id<SMod> m);  // extends 修饰改到基类的常量 / 类（见 expand）
+  bool body_mentions(Id<SElement> cls, const std::vector<Symbol>& names, int depth) const;   // 类体写到这些名字（见 inst.cpp）
   Id<SElement> member_def(NodeId cls, Symbol name, int depth);   // 类自己的或继承来的元素声明
 
   // ---- 内建 ----
@@ -104,10 +108,12 @@ class Instantiator {
   // redeclare_component 合成的组件元素：(原声明 << 32 | 重声明元素) → 合成元素；elems 的预留上限（见 make_top_node）。
   std::unordered_map<std::uint64_t, Id<SElement>> redecl_elems_;
   std::unordered_map<std::uint32_t, ClassRedecls> inst_redecls_;   // 实例节点 → 施加在它类树上的类重声明集
+  std::unordered_set<std::uint32_t> instances_;   // instantiate 建的实例节点（父亲是实例的类 = 克隆，见 inst_component）
   std::unordered_map<std::uint32_t, NodeId> redecl_class_nodes_;   // 修饰里的类重声明元素 → 它的类节点
   // class extends 类合成的隐式 extends 元素（class extends 的 SCode 元素 raw → 合成的 Extends 元素）与合成元素的集合（见 partial_inst）。
   std::unordered_map<std::uint32_t, Id<SElement>> ce_ext_elem_;
   std::unordered_set<std::uint32_t> ce_ext_elems_;
+  std::unordered_set<std::uint32_t> ce_via_mod_;   // 目标经改了常量 / 类的 extends 继承来的 class extends 元素（见 expand）
   std::size_t synth_cap_ = 0;
 };
 

@@ -449,3 +449,11 @@
 - 模式：precheck.sh 的逐组 diff 用 `[a-z0-9]+-[a-z0-9]+` 认组行，不带横杠的组（rec、alg、v4、misc …，十几个）整组漏比；
   64c 的 rec/V3 是 FAIL 才在总数行露出来，换成 PASS → SKIP 就静默过去了。
 - 规则：按"组名 + 空格 + 判定词"认组行（precheck.sh 已改）；门后手工逐组 diff 用同一个正则。
+
+## 2026-10-13 — 放开一条新查找路径，下游的旧静默错会跟着放出来
+- 模式：65a-2 让重声明的包（`redeclare package Medium = P.Water`）在 flatten 里查得到，PK9 转 PASS；但 `Medium.BaseProperties`
+  的 class extends 隐式基类一直取共享的基类定义（绕过了 classes_via_mod 守卫），基类里 `Real X[nX]` 读声明值 1，而 omc 取
+  extends 实例里的那份（`extends PartialMedium(nX = 2)` → 2 个）。直接写 `P.Water.BaseProperties` 早就静默错（PKX3），只是没有
+  探针带"基类体读被 extends 修饰改过的常量"；新路径又把它引到 Medium 用法上（PKX4）。门不会红：语料里没有这个组合。
+- 规则：放开新路径（查名、类重声明、实例化）前，探针要带"沿途被修饰 / 重声明改过的东西在下游被读到"的组合（维、绑定、
+  基类体、函数体各一）；每个绕开既有守卫的取法（这里：class extends 目标直接取基类树）都要问一遍守卫的理由是否同样适用。

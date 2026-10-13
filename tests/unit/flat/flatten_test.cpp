@@ -7572,4 +7572,30 @@ YMC_TEST(flatten_lookup_in_partial_class) {
   }
 }
 
+YMC_TEST(flatten_redeclared_package_as_type_prefix) {
+  // 修饰里重声明的包当类型路径前缀（`redeclare package M = P.W` 后的 `M.T x`）：inst 的实例类树里每个实例一份顶替进来的新类
+  //（REDECLARED_CLASS，NFInst.redeclareClass :1797-1800 v1.25.0），flatten 在实例层按实例的类树认它（ADR-007 第 2 阶段 65a-2），
+  // 两层传递 `redeclare package M = M` 照样。期望 = omc 1.25.0 实跑（2026-10-13，探针 pk-p3 PKN1）。
+  YMC_CHECK_EQ(flatten_src("package P\n  partial package PM\n    type T = Real(unit = \"K\", min = 0);\n  end PM;\n  package W\n"
+                           "    extends PM;\n  end W;\n  model V\n    replaceable package M = PM;\n    M.T x = 1;\n  end V;\n"
+                           "  model S\n    replaceable package M = PM;\n    V v(redeclare package M = M);\n    M.T y = 2;\n  end S;\n"
+                           "end P;\nmodel PKN1\n  P.S s(redeclare package M = P.W);\nend PKN1;\n"),
+               std::string("class PKN1\n  Real s.v.x(unit = \"K\", min = 0.0) = 1.0;\n  Real s.y(unit = \"K\", min = 0.0) = 2.0;\n"
+                           "end PKN1;\n"));
+}
+
+YMC_TEST(flatten_class_extends_target_through_modified_extends) {
+  // `extends PartialMedium(nX = 2)` 后的 `redeclare model extends BaseProperties`：OMC 的隐式基类是 extends 实例里的那份
+  //（NFInst.redeclareClass :1741 v1.25.0），基类的 `Real X[nX]` 得 2 个（omc 1.25.0 实跑，2026-10-13，探针 pk-p4 PKX3）；ymc 的
+  // 目标是共享的基类定义、读到声明值 1——此前静默只出 X[1]，现 SKIP（同按名查经改了常量的 extends 继承来的类）。
+  bool uns = false;
+  const std::string out = flatten_src("package P\n  partial package PartialMedium\n    constant Integer nX = 1;\n"
+                                     "    replaceable partial model BaseProperties\n      Real X[nX];\n    end BaseProperties;\n"
+                                     "  end PartialMedium;\n  package Water\n    extends PartialMedium(nX = 2);\n"
+                                     "    redeclare model extends BaseProperties\n      Real p = 1;\n    end BaseProperties;\n  end Water;\n"
+                                     "end P;\nmodel PKX3\n  P.Water.BaseProperties medium;\nend PKX3;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(out, std::string("<unsupported:inherited class seen through modifier / redeclare>"));
+}
+
 YMC_TEST_MAIN

@@ -1,0 +1,114 @@
+//// set: pk-p3 — 重声明的包 / 类在实例树里（每实例一份新类、本地类克隆、继承类取自基类实例）：类型路径前缀、两层传递、extends 修饰里重声明、嵌套类里用
+//// model: PKN1
+package P
+  partial package PM
+    type T = Real(unit = "K", min = 0);
+  end PM;
+  package W
+    extends PM;
+  end W;
+  model V
+    replaceable package M = PM;
+    M.T x = 1;
+  end V;
+  model S
+    replaceable package M = PM;
+    V v(redeclare package M = M);
+    M.T y = 2;
+  end S;
+end P;
+model PKN1
+  P.S s(redeclare package M = P.W);
+end PKN1;
+//// model: PKN2
+package P
+  partial package PM
+    type T = Real(unit = "K");
+  end PM;
+  package W
+    extends PM;
+  end W;
+  model Base
+    replaceable package M = PM;
+    M.T x = time;
+  end Base;
+  model D
+    extends Base(redeclare package M = W);
+    M.T z = 3;
+  end D;
+end P;
+model PKN2
+  P.D d;
+end PKN2;
+//// model: PKN3
+package P
+  partial package PM
+    type T = Real(unit = "K");
+  end PM;
+  package W
+    extends PM;
+  end W;
+  model V
+    replaceable package M = PM;
+    model Inner
+      M.T y = 2;
+    end Inner;
+    Inner i;
+  end V;
+end P;
+model PKN3
+  P.V v(redeclare package M = P.W);
+end PKN3;
+//// model: PKN4
+model PKN4
+  model A
+    replaceable model B
+      Real x = 1;
+    end B;
+    model N
+      B b;
+    end N;
+    N n;
+  end A;
+  model Y
+    Real x = 2;
+    Real y = 3;
+  end Y;
+  A a(redeclare model B = Y);
+end PKN4;
+//// model: PKN5
+package P
+  partial package PM
+    type T = Real(unit = "K");
+    record R
+      Real p;
+    end R;
+  end PM;
+  package W
+    extends PM;
+  end W;
+  model V
+    replaceable package M = PM;
+    M.R r(p = time);
+  end V;
+end P;
+model PKN5
+  P.V v(redeclare package M = P.W);
+end PKN5;
+//// model: PKN6
+package P
+  partial package PM
+    type T = Real(unit = "K");
+  end PM;
+  package W
+    extends PM;
+  end W;
+  package W2 = W;
+  model V
+    replaceable package M = PM;
+    M.T x = 1;
+  end V;
+end P;
+model PKN6
+  P.V v(redeclare package M = P.W2);
+end PKN6;

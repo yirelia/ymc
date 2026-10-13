@@ -1,0 +1,83 @@
+//// set: pk-p4 — 经改了常量的 extends 继承来的类当 class extends 的目标（`extends PartialMedium(nX = 2)` + `redeclare model extends BaseProperties`）
+//// model: PKX1
+package P
+  partial package PartialMedium
+    constant Integer nX = 1;
+    replaceable partial model BaseProperties
+      Real X[nX];
+    end BaseProperties;
+  end PartialMedium;
+  package Water
+    extends PartialMedium(nX = 2);
+    redeclare model extends BaseProperties
+    equation
+      X = fill(1, nX);
+    end BaseProperties;
+  end Water;
+end P;
+model PKX1
+  P.Water.BaseProperties medium;
+end PKX1;
+//// model: PKX2
+package P
+  partial package PartialMedium
+    constant Integer nX = 1;
+    replaceable partial model BaseProperties
+      Real X[nX];
+    end BaseProperties;
+  end PartialMedium;
+  package Water
+    extends PartialMedium(nX = 2);
+    redeclare model extends BaseProperties
+    equation
+      X = fill(1, nX);
+    end BaseProperties;
+  end Water;
+  model Vessel
+    replaceable package Medium = PartialMedium;
+    Medium.BaseProperties medium;
+  end Vessel;
+end P;
+model PKX2
+  P.Vessel v(redeclare package Medium = P.Water);
+end PKX2;
+//// model: PKX3
+package P
+  partial package PartialMedium
+    constant Integer nX = 1;
+    replaceable partial model BaseProperties
+      Real X[nX];
+    end BaseProperties;
+  end PartialMedium;
+  package Water
+    extends PartialMedium(nX = 2);
+    redeclare model extends BaseProperties
+      Real p = 1;
+    end BaseProperties;
+  end Water;
+end P;
+model PKX3
+  P.Water.BaseProperties medium;
+end PKX3;
+//// model: PKX4
+package P
+  partial package PartialMedium
+    constant Integer nX = 1;
+    replaceable partial model BaseProperties
+      Real X[nX];
+    end BaseProperties;
+  end PartialMedium;
+  package Water
+    extends PartialMedium(nX = 2);
+    redeclare model extends BaseProperties
+      Real p = 1;
+    end BaseProperties;
+  end Water;
+  model Vessel
+    replaceable package Medium = PartialMedium;
+    Medium.BaseProperties medium;
+  end Vessel;
+end P;
+model PKX4
+  P.Vessel v(redeclare package Medium = P.Water);
+end PKX4;

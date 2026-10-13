@@ -189,7 +189,19 @@ class Flattener {
     I_.scode.mods.reserve(mod_limit_ = I_.scode.mods.size() + kSynthCap);
   }
 
-  using ScodeScope = std::vector<Id<SElement>>;   // SCODE 作用域链：类 SElement，内→外（前置声明，供 eval_dim 等用）
+  // SCODE 作用域链的一层（链内→外）：类元素 + 它在实例树里的那个实例（scode_scope_of 从实例节点取链时填；在 SCode 上逐段下降
+  // 得到的层没有 = 空）。有实例的层按实例的类树认类重声明（ADR-007 第 2 阶段 A，见 find_scode_element_at）。与类元素互相隐式
+  // 转换：沿用"作用域链 = 类元素列表"的写法（elems[scope[k]]、insert(begin(), e)）。
+  struct ScopeLevel {
+    Id<SElement> cls;
+    NodeId inst;
+    ScopeLevel(Id<SElement> c) : cls(c) {}   // NOLINT(google-explicit-constructor)
+    ScopeLevel(Id<SElement> c, NodeId i) : cls(c), inst(i) {}
+    operator Id<SElement>() const { return cls; }   // NOLINT(google-explicit-constructor)
+    bool operator==(const ScopeLevel& o) const { return cls == o.cls; }   // 链相等按类比（record_fields_ex 的 foreign 判定）
+    bool operator==(Id<SElement> e) const { return cls == e; }
+  };
+  using ScodeScope = std::vector<ScopeLevel>;   // SCODE 作用域链（内→外；前置声明，供 eval_dim 等用）
   using PSubs = std::vector<std::vector<std::int64_t>>;   // 与 prefix 平行的逐段下标（复合数组 `a[1].x`；空段=无下标）
 
   // 两遍压平的接口（见 flatten()）。
@@ -6752,7 +6764,7 @@ class Flattener {
         if (!(el = class_in(I_.scode.elems[sc[k]].def.elements, type_parts[0]))) continue;
         std::size_t r = sc.size();
         for (std::size_t j = k; j < sc.size(); ++j)
-          if (sc[j].raw == root_def) { r = j; break; }
+          if (sc[j].cls.raw == root_def) { r = j; break; }
         for (std::size_t j = r; j > k; --j) path.push_back(I_.scode.elems[sc[j - 1]].name);
         break;
       }
@@ -7307,9 +7319,24 @@ class Flattener {
     ScodeScope s;
     for (NodeId n = enclosing; n.is_valid() && !I_.nodes[n].is_empty(); n = I_.nodes[n].parent_scope) {
       const Id<SElement> d = I_.nodes[n].def;
-      if (d.is_valid() && I_.scode.elems[d].kind == SElementKind::Class) s.push_back(d);
+      if (d.is_valid() && I_.scode.elems[d].kind == SElementKind::Class)
+        s.push_back(ScopeLevel{d, is_instance(n) ? n : NodeId{}});
     }
     return s;
+  }
+  // 类实例节点（inst 的 instantiate 建的、实例化完了的；定义节点停在 Expanded）：它的类树是这个实例的（本地类克隆、类重声明已
+  // 顶替，见 Instantiator::instantiate）。
+  bool is_instance(NodeId n) const {
+    return n.is_valid() && !I_.nodes[n].is_empty() && I_.nodes[n].kind == NodeKind::Class && I_.nodes[n].cls.is_valid() &&
+           I_.node_class(n).state == ClassState::InstancedClass;
+  }
+  // 实例 inst 的类树里名为 name 的类项；没有 / 是组件 → 无效。
+  NodeId inst_tree_class(NodeId inst, Symbol name) const {
+    const ClassTreeId t = I_.node_class(inst).tree;
+    if (!t.is_valid()) return {};
+    const auto it = I_.trees[t].lookup.find(name);
+    if (it == I_.trees[t].lookup.end() || it->second.kind != LEntry::Kind::Class) return {};
+    return I_.trees[t].classes[it->second.index];
   }
 
   // 在作用域链（内→外）+ 顶层 program 里找名为 name 的类或组件元素（内层优先 → 支持遮蔽）；每层本地元素之后查该层的
@@ -9406,14 +9433,14 @@ class Flattener {
       }
     }
     for (const auto& c : chain)
-      if (c.first == ds[0].raw) {
+      if (c.first == ds[0].cls.raw) {
         if (c.first != root_def) home = ds[0];
         std::vector<Symbol> head = result_.model.name;
         head.insert(head.end(), prefix.begin(), prefix.begin() + static_cast<std::ptrdiff_t>(c.second));
         return qualified(std::move(head));
       }
-    if (ds[0].raw == root_def) return qualified(result_.model.name);
-    if (fn_home_.is_valid() && ds[0].raw == fn_home_.raw) return std::nullopt;
+    if (ds[0].cls.raw == root_def) return qualified(result_.model.name);
+    if (fn_home_.is_valid() && ds[0].cls.raw == fn_home_.raw) return std::nullopt;
     for (Id<SElement> d : ds) {
       if (d.raw == root_def) return std::nullopt;
       for (const auto& c : chain) if (c.first == d.raw) return std::nullopt;
@@ -10724,11 +10751,11 @@ class Flattener {
     const ScodeScope chain = scode_scope_of(rn);   // [R, 外层类, …]
     std::vector<Symbol> path;
     const std::uint32_t root_def = I_.nodes[root_].def.raw;
-    if (chain.size() >= 2 && chain[1].raw == root_def) {
+    if (chain.size() >= 2 && chain[1].cls.raw == root_def) {
       path = result_.model.name;
     } else {
       for (std::size_t k = 1; k < chain.size(); ++k)
-        if (chain[k].raw == root_def || I_.scode.elems[chain[k]].restriction != SRestriction::Package) {
+        if (chain[k].cls.raw == root_def || I_.scode.elems[chain[k]].restriction != SRestriction::Package) {
           set_unsupported("record constructor naming");
           return std::nullopt;
         }
@@ -11926,7 +11953,7 @@ class Flattener {
       const bool comp = cfn.cls.is_valid();
       if (fn_scope_ || fr->alias_mods.size() != 1 ||
           (!comp && (fn.parts.size() != 1 || sc.empty() || !find_scode_element_at(fn.parts[0].name, sc, ads).is_valid() ||
-                     ads.empty() || ads[0].raw != sc[0].raw)))
+                     ads.empty() || ads[0].cls.raw != sc[0].cls.raw)))
         return fn_fail<Id<Expr>>("function alias with modifiers");
       // 组件里的函数：短类修饰在该组件（inner）的实例里定型（CF 探针 p20 / p23：`gg = g` → 调用处补 `w.g`）；组件路径上没有
       // 数组下标（component_fn 已拦）。
@@ -12284,10 +12311,33 @@ class Flattener {
       return el.name == name && (el.kind == SElementKind::Class || el.kind == SElementKind::Component);
     };
     for (std::size_t k = 0; k < scope.size(); ++k) {
+      // 实例层：名字查的是实例的类树（NFLookup.lookupLocalSimpleName → Class.lookupElement，NFLookup.mo:422-432 v1.25.0）——类重声明
+      // 顶替进来的新类（修饰里的 `redeclare package Medium = P.Water`，PK 探针 PK9）。新类的定义作用域 = 写修饰处（它的节点的词法
+      // 外层，R15 §1）。
+      // ponytail: 只认短类形态的包（Medium 式）：经它再往下的名字（`Medium.nX`、`Medium.f`）在 SCode 上下降不进短类，照旧 SKIP；
+      //   长形态 / 函数 / 模型的类重声明经它查到的成员要按实例路径命名（`X.v.B.f`），待包实例（65a 后续步）。
+      const NodeId lin = scope[k].inst;
+      const NodeId ic = lin.is_valid() ? inst_tree_class(lin, name) : NodeId{};
+      if (ic.is_valid() && I_.nodes[ic].node_type.kind == NodeTypeKind::RedeclaredClass) {
+        const SElement& rel = I_.scode.elems[I_.nodes[ic].def];
+        if (rel.restriction == SRestriction::Package && rel.def.kind == SClassDefKind::Derived) {
+          def_scope = scode_scope_of(I_.nodes[ic].parent_scope);
+          return I_.nodes[ic].def;
+        }
+      }
+      // 双跑一致：实例层上 SCode 查到的类须是实例类树里的那个（本地类的克隆、继承来的）；不一致又不是已知的类重声明 → SKIP。
+      auto agree = [&](Id<SElement> e) {
+        if (ic.is_valid() && I_.scode.elems[e].kind == SElementKind::Class && I_.nodes[ic].def != e &&
+            I_.nodes[ic].node_type.kind != NodeTypeKind::RedeclaredClass && !result_.unsupported) {
+          set_unsupported("instance / SCode class lookup mismatch");
+          result_.unsupported_detail = std::string(in_.str(name));
+        }
+        return e;
+      };
       for (Id<SElement> e : I_.scode.elems[scope[k]].def.elements)
         if (hit(e)) {
           def_scope.assign(scope.begin() + static_cast<std::ptrdiff_t>(k), scope.end());
-          return redeclared_check(enclosing_const_check(e, scope[k]), scope[k]);
+          return redeclared_check(enclosing_const_check(agree(e), scope[k]), scope[k]);
         }
       if (k > 0 || inherit0) {
         bool via_mod = false;
@@ -12297,8 +12347,8 @@ class Flattener {
             result_.unsupported_detail = std::string(in_.str(name));
             return {};
           }
-          inh_bases_.insert(def_scope[0].raw);
-          return redeclared_check(enclosing_const_check(ie, scope[k]), def_scope[0]);
+          inh_bases_.insert(def_scope[0].cls.raw);
+          return redeclared_check(enclosing_const_check(agree(ie), scope[k]), def_scope[0]);
         }
       }
       // 本层的 import（本地元素之后、外层之前：同处一张 LookupTree，本地优先，R12 §2.1）。
@@ -12584,7 +12634,7 @@ class Flattener {
     if (inh_tainted(tds)) return std::nullopt;
     std::vector<Symbol> path;
     const std::uint32_t root_def = I_.nodes[root_].def.raw;
-    if (!tds.empty() && tds[0].raw == root_def) {
+    if (!tds.empty() && tds[0].cls.raw == root_def) {
       path = result_.model.name;
     } else {
       for (Id<SElement> d : tds)
@@ -12639,7 +12689,7 @@ class Flattener {
       if (el.kind != SElementKind::Class || !rok) return std::nullopt;
       if (el.def.kind == SClassDefKind::Parts) {
         r.fe = e;
-        r.local_to_caller = !ds.empty() && !scope.empty() && ds[0].raw == scope[0].raw;
+        r.local_to_caller = !ds.empty() && !scope.empty() && ds[0].cls.raw == scope[0].cls.raw;
         r.fscope = std::move(ds);
         r.fscope.insert(r.fscope.begin(), e);
         return r;
@@ -13205,7 +13255,7 @@ class Flattener {
   // 局部不看（→ false，不转型）。
   bool fn_var_is_real(Symbol name, const ScodeScope& fscope) {
     if (fscope.empty()) return false;
-    const std::uint64_t key = (static_cast<std::uint64_t>(fscope[0].raw) << 32) | name.id;   // 每条赋值都问：按 (函数, 名) 缓存
+    const std::uint64_t key = (static_cast<std::uint64_t>(fscope[0].cls.raw) << 32) | name.id;   // 每条赋值都问：按 (函数, 名) 缓存
     if (const auto it = fn_real_cache_.find(key); it != fn_real_cache_.end()) return it->second;
     bool real = false;
     for (Id<SElement> eid : I_.scode.elems[fscope[0]].def.elements) {
@@ -22474,7 +22524,7 @@ class Flattener {
           return true;
     const SElement el = I_.scode.elems[c];   // 拷贝（解析不加元素，但不跨调用持引用）
     ScodeScope inner = sc;
-    if (inner.empty() || inner[0].raw != c.raw) inner.insert(inner.begin(), c);
+    if (inner.empty() || inner[0].cls.raw != c.raw) inner.insert(inner.begin(), c);
     for (Id<SElement> e : el.def.elements) {
       const SElement& x = I_.scode.elems[e];
       if ((x.kind == SElementKind::Class || x.kind == SElementKind::Component) && x.name == name) return true;

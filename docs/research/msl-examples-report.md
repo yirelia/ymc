@@ -585,3 +585,9 @@ inst 进类查名前顺短类链到底（`replaceable package Medium = …` 当�
 从 "unresolved component type [Medium.BaseProperties]"（34 例）推进到 "inherited class seen through modifier / redeclare"
 （Media 包 `extends PartialMedium(…)` 改了常量后继承来的 ThermodynamicState / BaseProperties，32 例）——下一步要按实例化包
 （Inst.instPackage）让继承类看到改过的常量。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-13 ADR-007 第 2 阶段 65a-2 之后：PASS 438（不变）
+
+实例树按 OMC 建类（本地类按实例克隆、类重声明每实例一份、继承类取自基类实例），flatten 在实例层认修饰里重声明的包。PASS / SKIP
+逐例不变：Fluid / Media 卡在 Medium 包里经 `extends PartialMedium(…)` 改过常量后继承来的类与常量（"inherited class seen through
+modifier"），要等包实例（下一步）。FAIL / ACCEPTS-INVALID / CRASH 0。
