@@ -598,3 +598,10 @@ modifier"），要等包实例（下一步）。FAIL / ACCEPTS-INVALID / CRASH 0
 的 SKIP 原因从 "inherited class seen through modifier [ThermodynamicState]"（29 例）推进到 "extends modifier names non-component
 (nested class)"——Media 包 `extends PartialTwoPhaseMedium(Temperature(min = 273.15, …), …)` 这类在 extends 修饰里改嵌套类型（类修饰），
 下一步做。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-14 ADR-007 第 2 阶段 65a-4 之后：PASS 438（不变）
+
+类修饰（Media 包 `extends PartialTwoPhaseMedium(Temperature(min = 273.15, …), …)`）、短类链修饰按写在处求值、多层 `redeclare model
+extends BaseProperties` 的重声明链。PASS / SKIP 逐例不变；Fluid / Media 的 SKIP 原因推进到 flatten 里定义层 SCode 查找撞上经
+改了常量的 extends 继承来的 `FluidConstants` / `SpecificHeatCapacity`（包函数体 / 记录在定义层的作用域里查名），下一步。FAIL /
+ACCEPTS-INVALID / CRASH 0。

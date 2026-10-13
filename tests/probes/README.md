@@ -511,8 +511,10 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `ks-p1` | 5 | 常量数组在符号下标后跟 `:`：等式 / if 分支里逐元素 `b[1] = {{true, false}, …}[k + 1, 1]`（CSL1 / CSL2，MSL SVPWM）、绑定随运算展开（CSL3）、算法里整条留着是 omc 内部错（CSL4，ymc SKIP）；常量矩阵 `[…]` 绑定逐元素照打声明注释（CM1，此前丢注释） |
 | `ks-ut` | 3 | 同上（单测原文） |
 | `pk-p1` | 10 | ADR-007 第 2 阶段（A 实例树查找）的目标探针族，随 65a–65f 逐个转 PASS：Medium 式包重声明——组件类型 `Medium.BaseProperties`（PK1 / PK9）、常量 `Medium.nX` 与函数 `PK3.v.Medium.g`（实例路径命名，PK3）、包里继承来的类型 / 记录（PK4 / PK5）、两层 `redeclare package Medium = Medium`（PK6）；外层实例修饰（PK7）；继承函数的访问路径（PK8）；默认 partial 包（PK2，omc 报错）；递归短类（PKR1，omc 报错） |
-| `pk-ut` | 1 | 进类查名顺短类链到底（单测原文） |
+| `pk-ut` | 3 | 进类查名顺短类链到底；组件修饰 / extends 修饰里的类修饰（单测原文） |
 | `pk-p2` | 7 | partial 类里不许查名（lookupLocalName / lookupCrefInNode 的 isPartial 检查）：`P.PM.T x`（PKP1）、partial 模型 `A.B b`（PKP4）、表达式里的 `P.PM.c` / `P.PM.f(time)`（PKP5 / PKP6，此前 ymc 误接受）、没被重声明的 `replaceable package M = PM` 里的 `M.T` / `M.n`（PKP2 / PKP7，omc "contains the definition of a partial class"）→ omc 报错；重声明成非 partial 包的照常（PKP3，待 65a 后续步） |
 | `pk-p3` | 6 | 重声明的包 / 类在实例树里（ADR-007 第 2 阶段 65a-2）：`redeclare package M = P.W` 后 `M.T` 当类型（两层 `redeclare package M = M`，PKN1）、`extends Base(redeclare package M = W)` 后派生类自己的 `M.T z`（PKN2）、嵌套模型 / 记录里用（PKN3 / PKN5）、嵌套模型的组件类型是被重声明的模型（PKN4，此前 inst SKIP）、重声明成短类别名包（PKN6） |
 | `pk-p4` | 4 | 经改了常量的 extends 继承来的类当 class extends 的目标（`extends PartialMedium(nX = 2)` 后 `redeclare model extends BaseProperties`，基类里 `Real X[nX]`）：omc 取 extends 实例里的那份、X 有 2 个；ymc 此前直接用 `P.Water.BaseProperties` 时静默只出 X[1]（PKX3），现 SKIP，待包实例（65a-3）转 PASS |
 | `pk-p5` | 6 | 经重声明的包查常量 / 函数（包实例，ADR-007 第 2 阶段 65a-3）：包里函数互调 `M.h2` → `M.h`（PKF1）、同一模型两个不同 Medium 各出一套函数 `PKF2.a.M.h` / `PKF2.b.M.h`（PKF2）、常量链 `nXi = nX - 1` 与嵌套包 `M.Sub.m` 当维（PKF3）、包函数调别的包的函数（PKF4）、记录类型输出 `PKF5.v.M.R`（PKF5，记录构造按实例路径命名未做 → SKIP）、两层传递后当参数绑定（PKF6） |
+| `pk-p6` | 5 | 类修饰（ADR-007 第 2 阶段 65a-4）：extends 修饰里改嵌套类型 `extends PM(Temperature(min = 273.15, …))`——组件修饰 > 类修饰 > 类型定义的修饰（PKC1）、直接用 `P.W.Temperature`（PKC2）、改过的包常量与类修饰一起落到记录字段（PKC3）、两层 extends 的类修饰叠加（PKC4）、修饰里引用包常量 `start = Tstart * 2`（PKC5） |
+| `pk-p7` | 2 | 短类链修饰在类型定义处求值：包里 `type T = Real(min = Tmin)` 取包常量 5，模型自己另有 `Tmin = 7` 时此前静默打成 7.0（PKD1）、模型里没有同名的（PKD2，此前 SKIP） |

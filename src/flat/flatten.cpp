@@ -4952,7 +4952,7 @@ class Flattener {
       if (dm.is_valid()) asrc.push_back({dm, decl_lex(cid, enclosing), prefix});
     }
     for (Id<SMod> cc : I_.comps[cid].cc_mods) asrc.push_back({cc, enclosing, prefix});   // 重声明的约束修饰
-    for (Id<SMod> dm : I_.comps[cid].derived_mods) asrc.push_back({dm, enclosing, prefix});
+    if (!leaf_derived_sources(cid, enclosing, prefix, /*arr=*/false, asrc)) return;
     std::vector<FlatVarAttr> attrs = collect_attributes(cid, asrc);
     if (eval_true && struct_final)   // fixed = false 时 omc 忽略 Evaluate（EV3 探针）；带 fixed 属性的组合未逐一核实 → SKIP
       for (const FlatVarAttr& a : attrs)
@@ -5207,10 +5207,7 @@ class Flattener {
     if (cel.mod.is_valid()) asrc.push_back({cel.mod, dlex, prefix});
     for (Id<SMod> cc : I_.comps[cid].cc_mods) asrc.push_back({cc, enclosing, prefix});   // 重声明的约束修饰
     // 类型本身带维的那层修饰按类型形状切分（Component::derived_split，XB 探针 x25），其余按组件维铺开。
-    for (std::size_t i = 0; i < I_.comps[cid].derived_mods.size(); ++i) {
-      const bool split = i < I_.comps[cid].derived_split.size() && I_.comps[cid].derived_split[i];
-      asrc.push_back({I_.comps[cid].derived_mods[i], enclosing, prefix, /*each_all=*/!split});
-    }
+    if (!leaf_derived_sources(cid, enclosing, prefix, /*arr=*/true, asrc)) return;
     // 绑定：外来修饰优先，否则声明绑定。要求是数组构造子 `{…}` / `array(…)`，否则 SKIP。
     Id<Exp> braw;
     bool braw_written = true;   // 绑定是源码里书写的（非 flatten 合成的修饰）：结构参数的别名连带用
@@ -6231,7 +6228,8 @@ class Flattener {
   void check_modifier_names(const std::vector<NodeId>& comps, const ModCtx& ctx) {
     for (const ModSource& m : ctx.mods)
       for (const SSubMod& s : I_.scode.mods[m.mod].subs) {
-        bool found = I_.applied_redecls.count(s.mod.raw) > 0;   // inst 已施加的类重声明（Instantiator::collect_class_redecls）
+        // inst 已施加的类重声明（Instantiator::collect_class_redecls）/ 类修饰（Instantiator::inst_component）
+        bool found = I_.applied_redecls.count(s.mod.raw) > 0 || I_.applied_class_mods.count(s.mod.raw) > 0;
         for (NodeId cn : comps)
           if (I_.nodes[cn].kind == NodeKind::Component && I_.nodes[cn].name == s.ident) { found = true; break; }
         if (!found && !result_.unsupported) {
@@ -12357,6 +12355,8 @@ class Flattener {
       //   长形态 / 函数 / 模型的类重声明经它查到的成员要按实例路径命名（`X.v.B.f`），待包实例（65a 后续步）。
       const NodeId lin = scope[k].inst;
       const NodeId ic = lin.is_valid() ? inst_tree_class(lin, name) : NodeId{};
+      // 挂了类修饰的类（`A a(B(i = 4))`）：报出节点，经它往下的查名走包实例 → inst 拦下（Instantiator::inst_package，未做 → SKIP）。
+      if (node_out && ic.is_valid() && I_.class_modded.count(ic.raw)) *node_out = ic;
       if (ic.is_valid() && I_.nodes[ic].node_type.kind == NodeTypeKind::RedeclaredClass) {
         const SElement& rel = I_.scode.elems[I_.nodes[ic].def];
         if (rel.restriction == SRestriction::Package && rel.def.kind == SClassDefKind::Derived) {
@@ -14675,6 +14675,16 @@ class Flattener {
       }
     }
     if (std::optional<Id<Expr>> r = cref_via_outer(c, enclosing, prefix, trusted)) return *r;
+    // 包作用域（短类链修饰 / 类修饰写在包里，见 leaf_derived_sources）：本地命中的名字是包常量，值内联（omc 把包常量求值成字面量）
+    // ——不当模型变量造不带前缀的 cref，否则撞上模型里同名的变量（PKD 探针 PKD1：`P.T x` 的 `min = Tmin` 取了模型自己的 Tmin）。
+    if (!c.parts.empty() && c.parts.size() == 1 && c.parts[0].subscripts.empty() && enclosing.is_valid() &&
+        !I_.nodes[enclosing].is_empty() && I_.nodes[enclosing].def.is_valid() &&
+        I_.scode.elems[I_.nodes[enclosing].def].restriction == SRestriction::Package)
+      if (const NodeId pc = find_local(enclosing, c.parts[0].name); is_comp_node(pc)) {
+        if (const Id<Expr> v = eval_const_value(pc, enclosing); v.is_valid()) return v;
+        set_unsupported("constant evaluation");
+        result_.unsupported_detail = std::string(in_.str(c.parts[0].name));
+      }
     Expr e;
     e.kind = ExprKind::Cref;
     std::vector<Id<Expr>> leaf_subs;   // 末段各下标的定型结果（invalid = 照常 inst：符号下标）
@@ -21458,6 +21468,101 @@ class Flattener {
   // 短类等）未做 → SKIP。strip：有整体绑定（ctor_mod）时字段绑定都来自它（getRecordBindings 的 outerBinding 盖过字段修饰；构造
   // 函数是链底长类的，缺省值也是它的：`record S = R(a = 5); S s = R(b = 4);` → s.a = 1.0，SC 探针 t T7），短类修饰只留属性。
   // 不合 → false（已标 unsupported）。
+  // 叶组件（标量 / 数组）短类链修饰（类型定义上的、类修饰）的属性来源：求值处同 derived_mod_sources——修饰写在的类实例在组件的
+  // 实例链上（它本身或它的基类实例）→ 那个实例 + 它的前缀；写在包里 / 顶层 → 那里（只引常量）；都不是 → SKIP。此前一律在组件所在的类
+  // 里求（PKD 探针 PKD1：`package P constant Real Tmin = 5; type T = Real(min = Tmin); end P;` 被模型自己的 `Tmin = 7` 遮住、打成
+  // 7.0，omc 5.0；类修饰写在包实例里，PKC5）。arr：数组组件——类型本身带维的那层按类型形状切分（derived_split），其余每个元素取同值。
+  bool leaf_derived_sources(CompId cid, NodeId enclosing, const std::vector<Symbol>& prefix, bool arr,
+                            std::vector<ModSource>& asrc) {
+    const std::vector<Id<SMod>> dmods = I_.comps[cid].derived_mods;   // 拷贝
+    const std::vector<NodeId> dscopes = I_.comps[cid].derived_scopes;
+    const NodeId lex = decl_lex(cid, enclosing);
+    for (std::size_t i = 0; i < dmods.size(); ++i) {
+      NodeId sc = enclosing;
+      std::vector<Symbol> vp = prefix;
+      // 求值处定不下来（经过组件数组等）：修饰里没有名字引用的在哪求都一样，照旧（FQ 探针 F28：根类里的 `type V = Real(unit = "V")`
+      // 经 `A a[2]` 用到）；有的 → SKIP。
+      if (i < dscopes.size() && dscopes[i].is_valid() && !I_.nodes[dscopes[i]].is_empty() &&
+          !mod_scope_of(dscopes[i], lex, prefix, sc, vp) && mod_refs_names(dmods[i])) {
+        set_unsupported("short class modifier scope");
+        return false;
+      }
+      const bool split = arr && i < I_.comps[cid].derived_split.size() && I_.comps[cid].derived_split[i];
+      asrc.push_back({dmods[i], sc, vp, /*each_all=*/arr && !split});
+    }
+    return true;
+  }
+  // 修饰写在的类实例 / 包 d（Component::derived_scopes）对组件词法作用域 lex 而言的求值处：d 是 lex 往上实例链上某个类实例本身或它的
+  //（多层）基类实例 → 那个实例 + 那层前缀（经过组件数组未做 → false）；按定义认同一个类的（d 是定义节点：类型经定义层路径查到）同；
+  // d 是包（定义或包实例）/ 顶层 → d、空前缀；否则 false。
+  bool mod_scope_of(NodeId d, NodeId lex, const std::vector<Symbol>& prefix, NodeId& sc, std::vector<Symbol>& vp) {
+    for (int pass = 0; pass < 2; ++pass) {   // 先按节点认，再按定义认
+      std::size_t len = prefix.size();
+      bool through_array = false;
+      for (NodeId n = lex; n.is_valid() && !I_.nodes[n].is_empty(); n = I_.nodes[n].instance_parent) {
+        if (I_.nodes[n].kind == NodeKind::Component) {
+          if (len == 0) break;
+          --len;
+          const SElement& ce = I_.scode.elems[I_.comps[I_.nodes[n].comp].def];
+          through_array = through_array || !ce.attr.dims.empty() || !ce.type.dims.empty();
+          continue;
+        }
+        if (I_.nodes[n].kind != NodeKind::Class) break;
+        const bool hit = pass == 0 ? (n == d || has_base_instance(n, d))
+                                   : (I_.nodes[d].def.is_valid() && I_.nodes[d].def == I_.nodes[n].def);
+        if (!hit) continue;
+        if (len < prefix.size() && through_array) return false;
+        sc = n;
+        vp.assign(prefix.begin(), prefix.begin() + static_cast<std::ptrdiff_t>(len));
+        return true;
+      }
+    }
+    if (d == I_.top ||
+        (I_.nodes[d].def.is_valid() && I_.scode.elems[I_.nodes[d].def].restriction == SRestriction::Package)) {
+      sc = d;
+      vp.clear();
+      return true;
+    }
+    return false;
+  }
+  // 修饰（绑定 / 子修饰，递归）里有名字引用（cref、函数调用；内建枚举字面量 `StateSelect.prefer` 不算）。
+  bool mod_refs_names(Id<SMod> m) {
+    if (!m.is_valid()) return false;
+    const SMod& md = I_.scode.mods[m];
+    if (exp_refs_names(md.binding)) return true;
+    for (const SSubMod& s : md.subs)
+      if (mod_refs_names(s.mod)) return true;
+    return false;
+  }
+  bool exp_refs_names(Id<Exp> x) {
+    if (!x.is_valid()) return false;
+    const Exp& e = I_.absyn.exps[x];
+    if (e.cref.is_valid()) {
+      const Cref& c = I_.absyn.crefs[e.cref];
+      const std::string_view h = c.parts.empty() ? std::string_view{} : in_.str(c.parts[0].name);
+      if (e.kind != ExpKind::CrefExp || c.parts.size() != 2 || (h != "StateSelect" && h != "AssertionLevel")) return true;
+    }
+    if (exp_refs_names(e.a) || exp_refs_names(e.b) || exp_refs_names(e.c)) return true;
+    for (Id<Exp> a : e.args)
+      if (exp_refs_names(a)) return true;
+    for (const ForIndex& it : e.iters)
+      if (exp_refs_names(it.range)) return true;
+    return false;
+  }
+  // d 是类实例 n 的（多层）基类实例。
+  bool has_base_instance(NodeId n, NodeId d) const {
+    std::vector<NodeId> todo{n};
+    for (int guard = 0; !todo.empty() && guard < 1024; ++guard) {
+      const NodeId b = todo.back();
+      todo.pop_back();
+      if (!b.is_valid() || I_.nodes[b].is_empty() || !I_.nodes[b].cls.is_valid() || !I_.node_class(b).tree.is_valid()) continue;
+      for (NodeId e : I_.trees[I_.node_class(b).tree].exts) {
+        if (e == d) return true;
+        todo.push_back(e);
+      }
+    }
+    return false;
+  }
   bool derived_mod_sources(CompId cid, NodeId cn, NodeId inst_node, const std::vector<Symbol>& prefix, bool strip,
                            std::vector<ModSource>& out) {
     const std::vector<Id<SMod>> dmods = I_.comps[cid].derived_mods;    // 拷贝

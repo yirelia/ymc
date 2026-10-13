@@ -53,7 +53,10 @@ class Instantiator {
   // 类重声明集：名字 → 顶替进来的类节点（外层在前；见 inst.cpp 的 inst_class）。
   using ClassRedecls = std::vector<std::pair<Symbol, NodeId>>;
   // 克隆 def 节点 + instClass 填实例树；redecls 非空：实例的类树里这些名字换成新类（基类实例看到派生类的元素级类重声明）。
-  NodeId instantiate(NodeId def_node, NodeId parent, const ClassRedecls* redecls = nullptr);
+  // 类修饰：(类名, 修饰, 写修饰的类实例)，施加到实例类树里的本地类上（见 instantiate）。
+  struct ClassMod { Symbol name; Id<SMod> mod; NodeId scope; };
+  NodeId instantiate(NodeId def_node, NodeId parent, const ClassRedecls* redecls = nullptr,
+                     const std::vector<ClassMod>* cmods = nullptr);
   std::size_t local_class_count(NodeId def) const;          // 定义类树里本地类的个数（排在继承来的之前）
   NodeId instance_class(NodeId c, NodeId inst, bool typish);   // 实例类树里的本地类：克隆 / 改父亲（见 inst.cpp）
   void adopt_inherited_classes(NodeId inst, NodeId base, std::size_t nlocal, std::unordered_set<std::uint32_t>& taken);
@@ -71,6 +74,8 @@ class Instantiator {
   void insert_generated_inners(NodeId root);   // 找不到 inner 的 outer：在根类末尾生成同名 inner（见 inst.cpp）
   // extends 修饰 `extends A(x = 1)`：把 mod 按名合并到继承来的组件 bc 上（绑定覆盖 + 属性 + final）。
   void apply_extends_modifier(NodeId bc, Id<SMod> mod, NodeId scope);
+  void apply_class_mod(NodeId inst, NodeId cls, Id<SMod> m, NodeId scope, int depth);   // 类修饰补到已实例化的组件（见 inst.cpp）
+  bool plain_class_mod(NodeId cls, Id<SMod> m) const;   // 能当类修饰施加的形态（见 inst.cpp）
   // 长类型只有一个 extends（`type TypeReal extends Real; end TypeReal;`）：返回那个 extends 元素；否则 invalid。
   Id<SElement> type_extends_only(Id<SElement> ce) const;
   // extends 修饰里的组件重声明（见 inst.cpp 的说明）。scope = 写 extends 的类的实例。
@@ -84,7 +89,7 @@ class Instantiator {
   NodeId lookup_simple_class(Symbol name, NodeId scope);
   bool in_instance_context(NodeId cls) const;   // 重声明顶替进来的 / 实例类树里克隆的类（见 inst_package）
   void mark_package_instance(NodeId inst);
-  NodeId inherited_in_bases(NodeId inst, Symbol name, Id<SElement> self) const;   // class extends 的目标（见 inst.cpp）
+  NodeId inherited_in_bases(NodeId inst, Symbol name, int depth) const;   // class extends 的目标（见 inst.cpp）
   NodeId through_short_classes(NodeId cls, bool& partial);   // 进类查名前顺短类链到底；partial：链上有 partial 的（见 inst.cpp）
   // 类节点 cls 自己的 import 里叫 name 的类（见 inst.cpp 的规则说明）；没有 → empty。
   NodeId import_class(Symbol name, NodeId cls);
@@ -116,6 +121,8 @@ class Instantiator {
   std::unordered_map<std::uint64_t, Id<SElement>> redecl_elems_;
   std::unordered_map<std::uint32_t, ClassRedecls> inst_redecls_;   // 实例节点 → 施加在它类树上的类重声明集
   std::unordered_map<std::uint32_t, NodeId> pkg_cache_;   // 类节点 → 它的包实例（见 inst_package）
+  // 类修饰：类节点 → (修饰, 写修饰的类实例)，外层在前（extends 修饰里改嵌套类，见 inst_class / inst_component）。
+  std::unordered_map<std::uint32_t, std::vector<std::pair<Id<SMod>, NodeId>>> class_mods_;
   std::unordered_map<std::uint32_t, NodeId> redecl_orig_;   // 实例类树里顶替进来的新类节点 → 顶替前的原类（见 instantiate）
   std::unordered_set<std::uint32_t> instances_;   // instantiate 建的实例节点（父亲是实例的类 = 克隆，见 inst_component）
   std::unordered_map<std::uint32_t, NodeId> redecl_class_nodes_;   // 修饰里的类重声明元素 → 它的类节点

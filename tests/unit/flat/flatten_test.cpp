@@ -267,14 +267,12 @@ YMC_TEST(flatten_modifier_override_wins) {
   YMC_CHECK_EQ(flatten_src(src), std::string("class M\n  Real a.x = 2.0;\nend M;\n"));
 }
 
-YMC_TEST(flatten_nested_class_modifier_unsupported) {
-  // 嵌套类修饰 a(B(x=2.0))（B 是类名非组件名）→ 干净 SKIP。
-  bool uns = false;
-  std::string t = flatten_src(
-      "model A\n  model B\n    Real x = 1.0;\n  end B;\n  B b;\nend A;\n"
-      "model M\n  A a(B(x = 2.0));\nend M;\n", &uns);
-  YMC_CHECK(uns);
-  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+YMC_TEST(flatten_nested_class_modifier) {
+  // 组件修饰里改嵌套类（类修饰 `a(B(x = 2.0))`）：挂到 a 的类实例里那个本地类上，b 实例化时并进去（NFInst.applyModifier，
+  // NFInst.mo:2116-2160 v1.25.0；ADR-007 第 2 阶段 65a-4，此前 SKIP）。期望 = omc 1.25.0 实跑（2026-10-14，探针 pk-ut PKU2）。
+  YMC_CHECK_EQ(flatten_src("model A\n  model B\n    Real x = 1.0;\n  end B;\n  B b;\nend A;\n"
+                           "model M\n  A a(B(x = 2.0));\nend M;\n"),
+               std::string("class M\n  Real a.b.x = 2.0;\nend M;\n"));
 }
 
 YMC_TEST(flatten_derived_type_collapses) {
@@ -311,14 +309,12 @@ YMC_TEST(flatten_extends_modifier_chain_attrs) {
       std::string("class C\n  Real x(unit = \"kg\", start = 1.0);\nend C;\n"));
 }
 
-YMC_TEST(flatten_extends_modifier_on_nested_type_unsupported) {
-  // extends 修饰命名嵌套类型（类修饰 mod9）→ 干净 SKIP。
-  bool uns = false;
-  std::string t = flatten_src(
-      "model A\n  type MyReal = Real;\n  MyReal x;\nend A;\n"
-      "model B\n  extends A(MyReal(start = 2.0));\nend B;\n", &uns);
-  YMC_CHECK(uns);
-  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+YMC_TEST(flatten_extends_modifier_on_nested_type) {
+  // extends 修饰里改嵌套类型（类修饰，scodeinst mod9 的形态）：挂到 extends 实例类树里的类上，基类实例里已实例化的 x 补上
+  //（ADR-007 第 2 阶段 65a-4，此前 SKIP）。期望 = omc 1.25.0 实跑（2026-10-14，探针 pk-ut PKU3）。
+  YMC_CHECK_EQ(flatten_src("model A\n  type MyReal = Real;\n  MyReal x;\nend A;\n"
+                           "model B\n  extends A(MyReal(start = 2.0));\nend B;\n"),
+               std::string("class B\n  Real x(start = 2.0);\nend B;\n"));
 }
 
 YMC_TEST(flatten_inner_outer_scalar) {
@@ -7627,6 +7623,14 @@ YMC_TEST(flatten_class_extends_target_in_package_instance) {
                            "  model Vessel\n    replaceable package Medium = PartialMedium;\n    Medium.BaseProperties medium;\n"
                            "  end Vessel;\nend P;\nmodel PKX4\n  P.Vessel v(redeclare package Medium = P.Water);\nend PKX4;\n"),
                std::string("class PKX4\n  Real v.medium.X[1];\n  Real v.medium.X[2];\n  Real v.medium.p = 1.0;\nend PKX4;\n"));
+}
+
+YMC_TEST(flatten_derived_type_modifier_scope) {
+  // 短类链修饰在类型定义处求值：包里 `type T = Real(min = Tmin)` 的 Tmin 是包常量 5，不是模型自己的 Tmin = 7（此前一律在组件所在
+  // 的类里求、静默打成 7.0）。期望 = omc 1.25.0 实跑（2026-10-14，探针 pk-p7 PKD1）。
+  YMC_CHECK_EQ(flatten_src("package P\n  constant Real Tmin = 5;\n  type T = Real(min = Tmin);\nend P;\nmodel PKD1\n"
+                           "  constant Real Tmin = 7;\n  P.T x = time;\nend PKD1;\n"),
+               std::string("class PKD1\n  constant Real Tmin = 7.0;\n  Real x(min = 5.0) = time;\nend PKD1;\n"));
 }
 
 YMC_TEST_MAIN

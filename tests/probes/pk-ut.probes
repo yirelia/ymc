@@ -11,3 +11,21 @@ end P;
 model PKU1
   P.B.M m;
 end PKU1;
+//// model: PKU2
+model A
+  model B
+    Real x = 1.0;
+  end B;
+  B b;
+end A;
+model PKU2
+  A a(B(x = 2.0));
+end PKU2;
+//// model: PKU3
+model A
+  type MyReal = Real;
+  MyReal x;
+end A;
+model PKU3
+  extends A(MyReal(start = 2.0));
+end PKU3;

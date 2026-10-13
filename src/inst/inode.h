@@ -228,6 +228,8 @@ struct Component {
   bool derived_attrs = false;
   // 声明类型带 `annotation(absoluteValue = false)`：omc 把组件注释换成类型定义的注释（见 inst_component），flatten 用 type_comment。
   bool comment_from_type = false;
+  // 声明类型解析到的类节点（短类链的第一层）：extends 修饰改这个类（类修饰）时，已实例化的组件据此补上（见 Instantiator::apply_class_mod）。
+  NodeId type_node;
   Symbol type_comment;
   Binding binding;
   Id<Expr> condition;                        // 条件组件 `if cond`（v1 占位，条件组件不在 v1）
@@ -267,6 +269,10 @@ struct Inst {
   // 包实例（Instantiator::inst_package，Inst.instPackage）及其各层基类实例：它们的组件不受外来修饰（不在模型实例树里），值就是
   // inst 记的绑定（extends 修饰覆盖后的）——flatten 在这样的实例层按实例取常量（ADR-007 第 2 阶段 65a-3）。
   std::unordered_set<std::uint32_t> package_instances;
+  // 组件修饰里施加过的类修饰（`A a(B(x = 2.0))`，SMod raw，见 Instantiator::inst_component）：flatten 不再把它当"改了不存在的组件"。
+  std::unordered_set<std::uint32_t> applied_class_mods;
+  // 挂了类修饰的类节点（Instantiator 的 class_mods_）：经它往下查名（`B.C`、`B.i`）要按带修饰的包实例查，未做 → SKIP。
+  std::unordered_set<std::uint32_t> class_modded;
   struct RootAlias {
     NodeId node;                      // 别名类节点；invalid = 根不是别名
     std::vector<Id<SMod>> mods;

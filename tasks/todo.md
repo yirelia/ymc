@@ -2274,6 +2274,17 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           redeclare10、redeclare7；EngineV6_output 负载下超时，单跑 15s 与上一版同）/ FAIL 0；MSL 438（不变：Fluid / Media 推进到
           "extends modifier names non-component"——`extends PartialTwoPhaseMedium(Temperature(min = …))` 的类修饰）；探针 9640→9646
           （il-p1 / lx-v2 各 +2）；单测 346→348。
+    - [x] (65a-4) 类修饰（2026-10-14）：extends 修饰 / 组件修饰里改嵌套类（`extends PartialTwoPhaseMedium(Temperature(min = 273.15, …))`、
+          `A a(B(x = 2.0))`）挂到实例类树里那个类上（NFInst.applyModifier → mergeModifier，NFInst.mo:2116-2160 v1.25.0），用它的组件
+          并进类型修饰——组件修饰 > 类修饰 > 类型定义的修饰；基类实例里已实例化的组件补上。类修饰里含重声明 / 再改嵌套类的、带类修饰的
+          类被当路径前缀进入（`B.C`、`B.i`）→ SKIP。另修三处：叶组件的短类链修饰此前一律在组件所在的类里求值，包里 `type T =
+          Real(min = Tmin)` 被模型自己的同名常量遮住（PKD1 静默错）——改为在修饰写在的类实例 / 包里求，包作用域的名字按包常量内联；
+          多层 `redeclare model extends BaseProperties`（WaterIF97_base 与 PartialTwoPhaseMedium）互为基类成环——class extends 的目标
+          按重声明链拆回各层顶替前的原类；定义层 class extends 目标不再在 expand 时就 SKIP（用到才拦）。探针 pk-p6（5）/ pk-p7（2）/
+          pk-ut（+2）。
+          slice 691 例 FAIL 0（oracle=live 不一致 0）；scodeinst 648→651；testsuite 1797→1803（ClassMod1 / ClassMod4 / mod9 /
+          Modification2 / MissingModifiers / MissingModifiersPackages；EngineV6_output 负载下超时，单跑 16s 与上一版同）/ FAIL 0；MSL 438
+          （不变：Fluid / Media 推进到 flatten 里定义层查到的 `FluidConstants` 等）；探针 9646→9655（misc +1）；单测 348→349。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

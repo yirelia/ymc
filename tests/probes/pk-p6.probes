@@ -1,0 +1,88 @@
+//// set: pk-p6 — 类修饰：extends 修饰里改嵌套类型（Media 的 `Temperature(min = …)`），优先级、两层叠加、修饰里引用包常量
+//// model: PKC1
+package P
+  partial package PM
+    type Temperature = Real(unit = "K", min = 1, max = 1e4, nominal = 300, start = 300);
+  end PM;
+  package W
+    extends PM(Temperature(min = 273.15, max = 2273.15, start = 500));
+  end W;
+  model V
+    replaceable package M = PM;
+    M.Temperature T;
+    M.Temperature T2(start = 400);
+  end V;
+end P;
+model PKC1
+  P.V v(redeclare package M = P.W);
+end PKC1;
+//// model: PKC2
+package P
+  package PM
+    type Temperature = Real(unit = "K", min = 1, nominal = 300);
+  end PM;
+  package W
+    extends PM(Temperature(min = 273.15));
+  end W;
+end P;
+model PKC2
+  P.W.Temperature T = 300;
+end PKC2;
+//// model: PKC3
+package P
+  partial package PM
+    constant Real Tmin = 200;
+    type Temperature = Real(unit = "K", min = Tmin);
+    record State
+      Temperature T;
+    end State;
+  end PM;
+  package W
+    extends PM(Tmin = 250, Temperature(max = 600));
+  end W;
+  model V
+    replaceable package M = PM;
+    M.State s(T = time);
+  end V;
+end P;
+model PKC3
+  P.V v(redeclare package M = P.W);
+end PKC3;
+//// model: PKC4
+package P
+  partial package PM
+    type Temperature = Real(unit = "K", min = 1);
+  end PM;
+  partial package PM2
+    extends PM(Temperature(min = 100));
+  end PM2;
+  package W
+    extends PM2(Temperature(max = 900));
+  end W;
+  model V
+    replaceable package M = PM;
+    M.Temperature T = time;
+  end V;
+end P;
+model PKC4
+  P.V v(redeclare package M = P.W);
+end PKC4;
+//// model: PKC5
+package P
+  partial package PM
+    constant Real Tstart = 300;
+    type Temperature = Real(unit = "K", start = 1);
+  end PM;
+  package W
+    extends PM(Temperature(start = Tstart * 2));
+  end W;
+  model V
+    replaceable package M = PM;
+    M.Temperature T;
+  equation
+    der(T) = 1;
+  end V;
+end P;
+model PKC5
+  P.V v(redeclare package M = P.W);
+end PKC5;

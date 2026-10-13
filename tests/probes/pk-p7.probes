@@ -1,0 +1,18 @@
+//// set: pk-p7 — 短类链修饰在类型定义处求值（包常量 vs 模型里同名常量）
+//// model: PKD1
+package P
+  constant Real Tmin = 5;
+  type T = Real(min = Tmin);
+end P;
+model PKD1
+  constant Real Tmin = 7;
+  P.T x = time;
+end PKD1;
+//// model: PKD2
+package P
+  constant Real Tmin = 5;
+  type T = Real(min = Tmin);
+end P;
+model PKD2
+  P.T x = time;
+end PKD2;
