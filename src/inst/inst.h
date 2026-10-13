@@ -76,6 +76,7 @@ class Instantiator {
   // path_nodes 非空：顺路记下路径各段解析到的类节点（基类名的 replaceable 检查用）。
   NodeId lookup_class_name(const std::vector<Symbol>& path, NodeId scope, std::vector<NodeId>* path_nodes = nullptr);
   NodeId lookup_simple_class(Symbol name, NodeId scope);
+  NodeId through_short_classes(NodeId cls, bool& partial);   // 进类查名前顺短类链到底；partial：链上有 partial 的（见 inst.cpp）
   // 类节点 cls 自己的 import 里叫 name 的类（见 inst.cpp 的规则说明）；没有 → empty。
   NodeId import_class(Symbol name, NodeId cls);
   NodeId tree_class(ClassTreeId tid, Symbol name);   // 类树里（本地 + 继承来的）名为 name 的类；没有 → empty
@@ -99,6 +100,7 @@ class Instantiator {
   std::string unsupported_reason_;
   std::string unsupported_detail_;
   int depth_ = 0;   // instantiate 递归深度（防无限递归栈溢出）
+  std::vector<std::uint32_t> short_active_;   // through_short_classes 正在解析的短类节点（递归定义的守卫）
   // redeclare_component 合成的组件元素：(原声明 << 32 | 重声明元素) → 合成元素；elems 的预留上限（见 make_top_node）。
   std::unordered_map<std::uint64_t, Id<SElement>> redecl_elems_;
   std::unordered_map<std::uint32_t, ClassRedecls> inst_redecls_;   // 实例节点 → 施加在它类树上的类重声明集

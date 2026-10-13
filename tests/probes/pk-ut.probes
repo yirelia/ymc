@@ -1,0 +1,13 @@
+//// set: pk-ut — 进类查名顺短类链到底（单测原文）
+//// model: PKU1
+package P
+  package A
+    model M
+      Real x = 1;
+    end M;
+  end A;
+  package B = A;
+end P;
+model PKU1
+  P.B.M m;
+end PKU1;

@@ -1,0 +1,278 @@
+//// set: pk-p1 — ADR-007 第 2 阶段（A 实例树查找）的目标探针族：Medium 式包重声明（组件类型 / 常量 / 函数 / 类型 / 记录 / 两层传递）、外层实例修饰、继承函数的访问路径、递归短类
+//// model: PK1
+package P
+  partial package PartialMedium
+    replaceable partial model BaseProperties
+      Real p;
+    end BaseProperties;
+    constant Integer nX = 1;
+    replaceable partial function f
+      input Real x;
+      output Real y;
+    end f;
+  end PartialMedium;
+  package Water
+    extends PartialMedium(nX = 2);
+    redeclare model extends BaseProperties
+    equation
+      p = 1;
+    end BaseProperties;
+    redeclare function extends f
+    algorithm
+      y := 2 * x;
+    end f;
+  end Water;
+  model Vessel
+    replaceable package Medium = PartialMedium;
+    Medium.BaseProperties medium;
+    Real x[Medium.nX];
+    Real y = Medium.f(time);
+  end Vessel;
+end P;
+model PK1
+  P.Vessel v(redeclare package Medium = P.Water);
+end PK1;
+//// model: PK2
+package P
+  partial package PartialMedium
+    replaceable partial model BaseProperties
+      Real p;
+    end BaseProperties;
+    constant Integer nX = 1;
+    type MassFlowRate = Real(quantity = "MassFlowRate", unit = "kg/s", min = -1e5, max = 1e5);
+    replaceable record ThermodynamicState
+      Real T;
+    end ThermodynamicState;
+    replaceable function g
+      input Real x;
+      output Real y;
+    algorithm
+      y := x + nX;
+    end g;
+  end PartialMedium;
+  package Water
+    extends PartialMedium(nX = 2);
+    redeclare model extends BaseProperties
+    equation
+      p = 1;
+    end BaseProperties;
+  end Water;
+  model Vessel
+    replaceable package Medium = PartialMedium;
+    Real x[Medium.nX];
+    Real y = Medium.g(time);
+  end Vessel;
+end P;
+model PK2
+  P.Vessel v;
+end PK2;
+//// model: PK3
+package P
+  partial package PartialMedium
+    replaceable partial model BaseProperties
+      Real p;
+    end BaseProperties;
+    constant Integer nX = 1;
+    type MassFlowRate = Real(quantity = "MassFlowRate", unit = "kg/s", min = -1e5, max = 1e5);
+    replaceable record ThermodynamicState
+      Real T;
+    end ThermodynamicState;
+    replaceable function g
+      input Real x;
+      output Real y;
+    algorithm
+      y := x + nX;
+    end g;
+  end PartialMedium;
+  package Water
+    extends PartialMedium(nX = 2);
+    redeclare model extends BaseProperties
+    equation
+      p = 1;
+    end BaseProperties;
+  end Water;
+  model Vessel
+    replaceable package Medium = PartialMedium;
+    Real x[Medium.nX];
+    Real y = Medium.g(time);
+  end Vessel;
+end P;
+model PK3
+  P.Vessel v(redeclare package Medium = P.Water);
+end PK3;
+//// model: PK4
+package P
+  partial package PartialMedium
+    replaceable partial model BaseProperties
+      Real p;
+    end BaseProperties;
+    constant Integer nX = 1;
+    type MassFlowRate = Real(quantity = "MassFlowRate", unit = "kg/s", min = -1e5, max = 1e5);
+    replaceable record ThermodynamicState
+      Real T;
+    end ThermodynamicState;
+    replaceable function g
+      input Real x;
+      output Real y;
+    algorithm
+      y := x + nX;
+    end g;
+  end PartialMedium;
+  package Water
+    extends PartialMedium(nX = 2);
+    redeclare model extends BaseProperties
+    equation
+      p = 1;
+    end BaseProperties;
+  end Water;
+  model Vessel
+    replaceable package Medium = PartialMedium;
+    Medium.MassFlowRate m_flow = time;
+  end Vessel;
+end P;
+model PK4
+  P.Vessel v(redeclare package Medium = P.Water);
+end PK4;
+//// model: PK5
+package P
+  partial package PartialMedium
+    replaceable partial model BaseProperties
+      Real p;
+    end BaseProperties;
+    constant Integer nX = 1;
+    type MassFlowRate = Real(quantity = "MassFlowRate", unit = "kg/s", min = -1e5, max = 1e5);
+    replaceable record ThermodynamicState
+      Real T;
+    end ThermodynamicState;
+    replaceable function g
+      input Real x;
+      output Real y;
+    algorithm
+      y := x + nX;
+    end g;
+  end PartialMedium;
+  package Water
+    extends PartialMedium(nX = 2);
+    redeclare model extends BaseProperties
+    equation
+      p = 1;
+    end BaseProperties;
+  end Water;
+  model Vessel
+    replaceable package Medium = PartialMedium;
+    Medium.ThermodynamicState state(T = time);
+  end Vessel;
+end P;
+model PK5
+  P.Vessel v(redeclare package Medium = P.Water);
+end PK5;
+//// model: PK6
+package P
+  partial package PartialMedium
+    replaceable partial model BaseProperties
+      Real p;
+    end BaseProperties;
+    constant Integer nX = 1;
+    type MassFlowRate = Real(quantity = "MassFlowRate", unit = "kg/s", min = -1e5, max = 1e5);
+    replaceable record ThermodynamicState
+      Real T;
+    end ThermodynamicState;
+    replaceable function g
+      input Real x;
+      output Real y;
+    algorithm
+      y := x + nX;
+    end g;
+  end PartialMedium;
+  package Water
+    extends PartialMedium(nX = 2);
+    redeclare model extends BaseProperties
+    equation
+      p = 1;
+    end BaseProperties;
+  end Water;
+  model Vessel
+    replaceable package Medium = PartialMedium;
+    Real x[Medium.nX];
+  end Vessel;
+  model System
+    replaceable package Medium = PartialMedium;
+    Vessel v(redeclare package Medium = Medium);
+  end System;
+end P;
+model PK6
+  P.System s(redeclare package Medium = P.Water);
+end PK6;
+//// model: PK7
+model PK7
+  model A
+    constant Integer n = 2;
+    model B
+      Real x[n];
+    end B;
+    B b;
+  end A;
+  A a(n = 3);
+end PK7;
+//// model: PK8
+package P8
+  model Base
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := 2 * x;
+    end f;
+  end Base;
+  model M
+    extends Base;
+    Real y = f(time);
+  end M;
+end P8;
+model PK8
+  P8.M m;
+end PK8;
+//// model: PK9
+package P
+  partial package PartialMedium
+    replaceable partial model BaseProperties
+      Real p;
+    end BaseProperties;
+    constant Integer nX = 1;
+    type MassFlowRate = Real(quantity = "MassFlowRate", unit = "kg/s", min = -1e5, max = 1e5);
+    replaceable record ThermodynamicState
+      Real T;
+    end ThermodynamicState;
+    replaceable function g
+      input Real x;
+      output Real y;
+    algorithm
+      y := x + nX;
+    end g;
+  end PartialMedium;
+  package Water
+    extends PartialMedium(nX = 2);
+    redeclare model extends BaseProperties
+    equation
+      p = 1;
+    end BaseProperties;
+  end Water;
+  model Vessel
+    replaceable package Medium = PartialMedium;
+    Medium.BaseProperties medium;
+  end Vessel;
+end P;
+model PK9
+  P.Vessel v(redeclare package Medium = P.Water);
+end PK9;
+//// model: PKR1
+model PKR1
+  class Env
+    type Env = Real;
+  end Env;
+  class A
+    type Env = Env.Env;
+    Env e = 1.0;
+  end A;
+  A a;
+end PKR1;

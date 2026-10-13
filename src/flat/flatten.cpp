@@ -7422,7 +7422,7 @@ class Flattener {
     Id<SElement> el = find_scode_element_at(parts[0], leading_dot ? ScodeScope{} : scope, cur);
     if (!el.is_valid()) return false;
     for (std::size_t idx = 1; idx < parts.size(); ++idx) {
-      if (I_.scode.elems[el].kind != SElementKind::Class) return false;   // 中间段必须是类
+      if (I_.scode.elems[el].kind != SElementKind::Class || enter_partial(el)) return false;   // 中间段必须是类
       cur.insert(cur.begin(), el);   // 进入该类（压到作用域链最内）
       Id<SElement> nxt;
       for (Id<SElement> e : I_.scode.elems[el].def.elements) {
@@ -7453,7 +7453,7 @@ class Flattener {
     Id<SElement> el = find_scode_element_at(c.parts[0].name, c.leading_dot ? ScodeScope{} : scope, cur);
     std::size_t k = 0;
     while (el.is_valid() && I_.scode.elems[el].kind == SElementKind::Class) {
-      if (!c.parts[k].subscripts.empty() || ++k >= c.parts.size()) return std::nullopt;
+      if (!c.parts[k].subscripts.empty() || ++k >= c.parts.size() || enter_partial(el)) return std::nullopt;
       cur.insert(cur.begin(), el);
       Id<SElement> nxt;
       for (Id<SElement> e : I_.scode.elems[el].def.elements) {
@@ -12475,6 +12475,18 @@ class Flattener {
     }
     return Inst::empty_node();
   }
+  // 限定名下降进类 cls 查后续段：partial 类里不许查名（NFLookup.lookupLocalName / lookupCrefInNode 进类前 instPackage 后的
+  // isPartial 检查，NFLookup.mo:703-706 / :979-982 v1.25.0；PKP 探针 PKP5 `P.PM.c`、PKP6 `P.PM.f(time)` → omc "PM is partial,
+  // name lookup is not allowed in partial classes"，此前 ymc 照常求值）→ SKIP。omc 对自引用（首段是书写处的外层类本身）、要被
+  // redeclare 换掉的元素不查，ymc 一律 SKIP（保守）。
+  bool enter_partial(Id<SElement> cls) {
+    if (!I_.scode.elems[cls].is_partial) return false;
+    if (!result_.unsupported) {
+      set_unsupported("lookup in partial class");
+      result_.unsupported_detail = std::string(in_.str(I_.scode.elems[cls].name));
+    }
+    return true;
+  }
   // 类路径 `P.Q.f`：首段按作用域链找，其后逐段下降为局部类；给出末段类的定义作用域链。前导点 = 从顶层找。inherit0 见
   // find_scode_element_at（解析 extends 名时传 false）。
   Id<SElement> resolve_class_path(const std::vector<Symbol>& parts, bool leading_dot, const ScodeScope& scope,
@@ -12482,7 +12494,7 @@ class Flattener {
     if (parts.empty()) return {};
     Id<SElement> e = find_scode_element_at(parts[0], leading_dot ? ScodeScope{} : scope, def_scope, inherit0);
     for (std::size_t k = 1; k < parts.size() && e.is_valid(); ++k) {
-      if (I_.scode.elems[e].kind != SElementKind::Class) return {};
+      if (I_.scode.elems[e].kind != SElementKind::Class || enter_partial(e)) return {};
       Id<SElement> nxt;
       for (Id<SElement> c : I_.scode.elems[e].def.elements)
         if (I_.scode.elems[c].name == parts[k] && I_.scode.elems[c].kind == SElementKind::Class) { nxt = c; break; }

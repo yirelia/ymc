@@ -7543,4 +7543,33 @@ YMC_TEST(flatten_constant_slice_after_symbolic_subscript) {
                            "  parameter Real p[2,2] = 4.0 \"Param matrix\";\n  Real y = time;\nend KSU3;\n"));
 }
 
+YMC_TEST(flatten_lookup_through_short_class) {
+  // 进类查名前顺短类链到底（Class.classTree 对 EXPANDED_DERIVED 取基类的树，NFClass.mo:337-350 v1.25.0）：`package B = A;`
+  // 里查 M 等于查 A 的。期望 = omc 1.25.0 实跑（2026-10-13，探针 pk-ut）。递归的短类定义（基类名查回自己）omc 报错，ymc SKIP
+  //（此前无界递归、栈溢出，testsuite others/RecursiveShort）。
+  YMC_CHECK_EQ(flatten_src("package P\n  package A\n    model M\n      Real x = 1;\n    end M;\n  end A;\n  package B = A;\nend P;\n"
+                           "model PKU1\n  P.B.M m;\nend PKU1;\n"),
+               std::string("class PKU1\n  Real m.x = 1.0;\nend PKU1;\n"));
+  bool uns = false;
+  const std::string out = flatten_src("model PKR1\n  class Env\n    type Env = Real;\n  end Env;\n  class A\n    type Env = Env.Env;\n"
+                                     "    Env e = 1.0;\n  end A;\n  A a;\nend PKR1;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(out, std::string("<unsupported:recursive short class definition>"));
+}
+
+YMC_TEST(flatten_lookup_in_partial_class) {
+  // partial 类里不许查名（NFLookup.lookupLocalName / lookupCrefInNode 进类前的 isPartial 检查，NFLookup.mo:703-706 / :979-982
+  // v1.25.0；派生自 partial 类的短类本身也是 partial，NFInst.mo:1046-1049）：没被重声明的 `replaceable package M = PM` 里的
+  // `M.T x`、表达式里的 `P.PM.c`——omc 1.25.0 都报错（2026-10-13 实跑，探针 pk-p2 PKP2 / PKP5），ymc SKIP（此前照常接受）。
+  for (const char* src : {"package P\n  partial package PM\n    type T = Real(unit = \"K\");\n  end PM;\n  model V\n"
+                          "    replaceable package M = PM;\n    M.T x = 1;\n  end V;\nend P;\nmodel PKP2\n  P.V v;\nend PKP2;\n",
+                          "package P\n  partial package PM\n    constant Real c = 2;\n  end PM;\nend P;\nmodel PKP5\n"
+                          "  Real x = P.PM.c;\nend PKP5;\n"}) {
+    bool uns = false;
+    const std::string out = flatten_src(src, &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, std::string("<unsupported:lookup in partial class>"));
+  }
+}
+
 YMC_TEST_MAIN

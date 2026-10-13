@@ -2244,6 +2244,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       照 lookupName :580 / lookupFirstIdent :660 / lookupSimpleName :434 / lookupLocalName :679；双跑一致性检查（新旧查找
       不一致、又不属已知类替换 → SKIP + 计数）。探针族：被替换类在基类代码里被引用、跨层 `redeclare package Medium = Medium`、
       函数 / 常量 / 类型三种用法、访问路径命名（IL4 / IL19）、外层实例修饰（IL5 / IL9 / IL10 / IL7）。
+    - [x] (65a-1) inst：进类查名前顺短类链到底（2026-10-13）：`package Medium = P.Water` 里查 BaseProperties = 查 P.Water 的
+          （Class.classTree 对 EXPANDED_DERIVED 取基类的树，NFClass.mo:337-350 v1.25.0；lookupLocalName 进类前 instPackage）。
+          带修饰的短类（基类是带修饰实例化出来的那份）SKIP；递归的短类定义（`type Env = Env.Env`，此前无界递归、栈溢出）SKIP。
+          partial 类里不许查名（lookupLocalName / lookupCrefInNode 的 isPartial 检查；派生自 partial 的短类也是 partial）：inst 进类、
+          flatten 限定名下降都查，SKIP——补上此前就有的误接受（表达式里的 `P.PM.c`、`P.PM.f(time)`）与顺短类后会有的（没被重声明
+          的 `replaceable package M = PM` 里的 `M.T`）。探针 pk-p1（ADR-007 第 2 阶段目标族 10 例，随后续各步逐个转 PASS）/ pk-p2
+          （partial 查名 7 例）/ pk-ut。
+          slice 683 例 PASS 640 / FAIL 0（oracle=live 不一致 0）；scodeinst 641→643 / 53（在账）；testsuite 1787→1791 / FAIL 0 / ACCEPTS-INVALID 3 / CRASH 0；MSL 438（不变：Fluid 的 `Medium.*` 从查不到组件类型推进到 "inherited class seen through modifier"，待包实例）；探针 9612→9630；单测 342→344。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

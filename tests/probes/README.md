@@ -510,3 +510,6 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `vc-ut` | 4 | 同上（单测原文） |
 | `ks-p1` | 5 | 常量数组在符号下标后跟 `:`：等式 / if 分支里逐元素 `b[1] = {{true, false}, …}[k + 1, 1]`（CSL1 / CSL2，MSL SVPWM）、绑定随运算展开（CSL3）、算法里整条留着是 omc 内部错（CSL4，ymc SKIP）；常量矩阵 `[…]` 绑定逐元素照打声明注释（CM1，此前丢注释） |
 | `ks-ut` | 3 | 同上（单测原文） |
+| `pk-p1` | 10 | ADR-007 第 2 阶段（A 实例树查找）的目标探针族，随 65a–65f 逐个转 PASS：Medium 式包重声明——组件类型 `Medium.BaseProperties`（PK1 / PK9）、常量 `Medium.nX` 与函数 `PK3.v.Medium.g`（实例路径命名，PK3）、包里继承来的类型 / 记录（PK4 / PK5）、两层 `redeclare package Medium = Medium`（PK6）；外层实例修饰（PK7）；继承函数的访问路径（PK8）；默认 partial 包（PK2，omc 报错）；递归短类（PKR1，omc 报错） |
+| `pk-ut` | 1 | 进类查名顺短类链到底（单测原文） |
+| `pk-p2` | 7 | partial 类里不许查名（lookupLocalName / lookupCrefInNode 的 isPartial 检查）：`P.PM.T x`（PKP1）、partial 模型 `A.B b`（PKP4）、表达式里的 `P.PM.c` / `P.PM.f(time)`（PKP5 / PKP6，此前 ymc 误接受）、没被重声明的 `replaceable package M = PM` 里的 `M.T` / `M.n`（PKP2 / PKP7，omc "contains the definition of a partial class"）→ omc 报错；重声明成非 partial 包的照常（PKP3，待 65a 后续步） |

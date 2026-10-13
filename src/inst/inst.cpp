@@ -251,11 +251,59 @@ NodeId Instantiator::tree_class(ClassTreeId tid, Symbol name) {
   return t.classes[it->second.index];
 }
 
+// 进类查名前顺短类链到底：omc 进类前先 instPackage（NFLookup.lookupLocalName :679-742，Inst.instPackage NFInst.mo:1312
+// v1.25.0），短类展开成 EXPANDED_DERIVED，类树取基类的（Class.classTree，NFClass.mo:337-350）——`package Medium = P.Water`
+// 里查 BaseProperties 等于查 P.Water 的（ADR-007 第 2 阶段 65a，PK 探针）。短类带修饰的：omc 的基类是带着修饰实例化出来的那份
+//（包常量 / 类重声明随之改），ymc 的基类节点是共享的未改那份 → SKIP。partial：链上有一层是 partial（派生自 partial 类的短类
+// 本身也是 partial，expandClassDerived NFInst.mo:1046-1049）。
+NodeId Instantiator::through_short_classes(NodeId cls, bool& partial) {
+  NodeId cur = cls;
+  for (int guard = 0; guard < 32; ++guard) {
+    if (!cur.is_valid() || I_.nodes[cur].is_empty() || I_.nodes[cur].kind != NodeKind::Class || !I_.nodes[cur].def.is_valid())
+      return cur;
+    const SElement& ce = I_.scode.elems[I_.nodes[cur].def];
+    if (ce.kind == SElementKind::Class && ce.is_partial) partial = true;
+    if (ce.kind != SElementKind::Class || ce.def.kind != SClassDefKind::Derived) return cur;
+    if (ce.def.derived_mod.is_valid()) {
+      const SMod& dm = I_.scode.mods[ce.def.derived_mod];
+      if (!dm.subs.empty() || dm.binding.is_valid()) {
+        mark_unsupported("lookup into modified short class", std::string(I_.interner.str(ce.name)));
+        return Inst::empty_node();
+      }
+    }
+    // 递归的短类定义（`class A type Env = Env.Env; …`：基类名查回自己，others/RecursiveShort）→ omc 报 "Recursive short class
+    // definition"；正在解析的短类再被解析到 → SKIP（此前无界递归、栈溢出）。
+    if (std::find(short_active_.begin(), short_active_.end(), cur.raw) != short_active_.end()) {
+      mark_unsupported("recursive short class definition", std::string(I_.interner.str(ce.name)));
+      return Inst::empty_node();
+    }
+    const std::vector<Symbol> bp = ce.def.derived_type.path;   // 拷贝：查找会 arena add
+    const NodeId scope = ce.def.derived_type.leading_dot ? I_.top : I_.nodes[cur].parent_scope;
+    short_active_.push_back(cur.raw);
+    cur = lookup_class_name(bp, scope);
+    short_active_.pop_back();
+  }
+  mark_unsupported("short class chain too deep");
+  return Inst::empty_node();
+}
+
 NodeId Instantiator::lookup_class_name(const std::vector<Symbol>& path, NodeId scope, std::vector<NodeId>* path_nodes) {
   if (path.empty()) return Inst::empty_node();
   NodeId cur = lookup_simple_class(path[0], scope);
   if (path_nodes && cur.is_valid() && !I_.nodes[cur].is_empty()) path_nodes->push_back(cur);
   for (std::size_t i = 1; i < path.size() && cur.is_valid() && !I_.nodes[cur].is_empty(); ++i) {
+    // 进类查名前顺短类链到底（`package Medium = P.Water` 里查 BaseProperties = 查 P.Water 的，见 through_short_classes）。
+    bool partial = false;
+    cur = through_short_classes(cur, partial);
+    if (!cur.is_valid() || I_.nodes[cur].is_empty()) break;
+    // partial 类里不许查名（lookupLocalName / lookupLocalNames 进类前的 isPartial 检查，NFLookup.mo:703-706 / :772-777 v1.25.0；
+    // PKP 探针：`P.PM.T x`、没被重声明的 `replaceable package M = PM` 里的 `M.T x` → omc "name lookup is not allowed in
+    // partial classes" / "contains the definition of a partial class"）→ SKIP。omc 对自引用（首段是书写处的外层类本身）、
+    // 要被 redeclare 换掉的元素不查，ymc 一律 SKIP（保守）。
+    if (partial) {
+      mark_unsupported("lookup in partial class", std::string(I_.interner.str(I_.nodes[cur].name)));
+      return Inst::empty_node();
+    }
     // 复合名后续段：进入该类内部查（需先 expand 出树）。
     if (I_.node_class(cur).state == ClassState::NotInstantiated ||
         I_.node_class(cur).state == ClassState::PartialClass) {

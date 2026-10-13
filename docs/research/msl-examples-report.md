@@ -578,3 +578,10 @@ SVPWM 一路：常量数组在符号下标后跟 `:`（`fire_p = fire[ka + 1, :]
 [ka + 1, 1]`）；另改常量矩阵绑定逐元素丢注释的静默错（`constant Boolean fire[6, m] = […] "Switching patterns"`）。
 Electrical.Machines.Examples.InductionMachines.IMC_InverterDrive、Electrical.PowerConverters.Examples.DCAC.PolyphaseTwoLevel.
 ThreePhaseTwoLevel_PWM 转 PASS，均与 omc 逐字节一致。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-13 ADR-007 第 2 阶段 65a-1 之后：PASS 438（不变）
+
+inst 进类查名前顺短类链到底（`replaceable package Medium = …` 当路径前缀）。PASS / SKIP 逐例不变；Fluid / Media 的 SKIP 原因
+从 "unresolved component type [Medium.BaseProperties]"（34 例）推进到 "inherited class seen through modifier / redeclare"
+（Media 包 `extends PartialMedium(…)` 改了常量后继承来的 ThermodynamicState / BaseProperties，32 例）——下一步要按实例化包
+（Inst.instPackage）让继承类看到改过的常量。FAIL / ACCEPTS-INVALID / CRASH 0。

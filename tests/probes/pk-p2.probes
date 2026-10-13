@@ -1,0 +1,82 @@
+//// set: pk-p2 — partial 类里不许查名：直接路径（类型 / 常量 / 函数）、指向 partial 的短类（没被重声明 / 已重声明）、partial 模型
+//// model: PKP1
+package P
+  partial package PM
+    type T = Real(unit = "K");
+  end PM;
+end P;
+model PKP1
+  P.PM.T x = 1;
+end PKP1;
+//// model: PKP2
+package P
+  partial package PM
+    type T = Real(unit = "K");
+  end PM;
+  model V
+    replaceable package M = PM;
+    M.T x = 1;
+  end V;
+end P;
+model PKP2
+  P.V v;
+end PKP2;
+//// model: PKP3
+package P
+  partial package PM
+    type T = Real(unit = "K");
+  end PM;
+  package W
+    extends PM;
+  end W;
+  model V
+    replaceable package M = PM;
+    M.T x = 1;
+  end V;
+end P;
+model PKP3
+  P.V v(redeclare package M = P.W);
+end PKP3;
+//// model: PKP4
+partial model A
+  model B
+    Real y = 1;
+  end B;
+end A;
+model PKP4
+  A.B b;
+end PKP4;
+//// model: PKP5
+package P
+  partial package PM
+    constant Real c = 2;
+  end PM;
+end P;
+model PKP5
+  Real x = P.PM.c;
+end PKP5;
+//// model: PKP6
+package P
+  partial package PM
+    function f
+      input Real x;
+      output Real y = 2 * x;
+    end f;
+  end PM;
+end P;
+model PKP6
+  Real x = P.PM.f(time);
+end PKP6;
+//// model: PKP7
+package P
+  partial package PM
+    constant Integer n = 2;
+  end PM;
+  model V
+    replaceable package M = PM;
+    Real x[M.n];
+  end V;
+end P;
+model PKP7
+  P.V v;
+end PKP7;
