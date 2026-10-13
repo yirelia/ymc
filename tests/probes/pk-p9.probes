@@ -1,0 +1,242 @@
+//// set: pk-p9 — Medium 包常量：class extends 修饰里的 stateSelect、空切片、`:` 维常量的 size、String / Boolean 数组常量、空数组常量
+//// model: PKS1
+package P
+  partial package PM
+    constant Boolean ph_explicit = false;
+    replaceable partial model BaseProperties
+      Real p;
+      Real h;
+      parameter Boolean preferredMediumStates = false;
+    end BaseProperties;
+  end PM;
+  package W
+    extends PM(ph_explicit = true);
+    redeclare model extends BaseProperties(
+      h(stateSelect = if ph_explicit and preferredMediumStates then StateSelect.prefer else StateSelect.default))
+    equation
+      p = 1;
+      h = time;
+    end BaseProperties;
+  end W;
+  model V
+    replaceable package M = PM;
+    M.BaseProperties medium(preferredMediumStates = true);
+  end V;
+end P;
+model PKS1
+  P.V v(redeclare package M = P.W);
+end PKS1;
+//// model: PKS3
+package P
+  partial package PM
+    constant Integer nX = 2;
+    constant Integer nXi = nX - 1;
+    constant Real reference_X[nX] = fill(1 / nX, nX);
+    replaceable partial model BaseProperties
+      Real X[nX](start = reference_X);
+      Real Xi[nXi](start = reference_X[1:nXi]);
+    end BaseProperties;
+  end PM;
+  package W
+    extends PM(nX = 1);
+    redeclare model extends BaseProperties
+    equation
+      X = {1};
+    end BaseProperties;
+  end W;
+  model V
+    replaceable package M = PM;
+    M.BaseProperties medium;
+  end V;
+end P;
+model PKS3
+  P.V v(redeclare package M = P.W);
+end PKS3;
+//// model: PKS4
+package P
+  partial package PM
+    constant Integer nX = 2;
+    constant Integer nXi = nX - 1;
+    constant Real reference_X[nX] = fill(1 / nX, nX);
+    replaceable partial model BaseProperties
+      Real X[nX](start = reference_X);
+      Real Xi[nXi](start = reference_X[1:nXi]);
+    end BaseProperties;
+  end PM;
+  package W
+    extends PM(nX = 3);
+    redeclare model extends BaseProperties
+    equation
+      X = {1, 2, 3};
+    end BaseProperties;
+  end W;
+  model V
+    replaceable package M = PM;
+    M.BaseProperties medium;
+  end V;
+end P;
+model PKS4
+  P.V v(redeclare package M = P.W);
+end PKS4;
+//// model: PKS5
+package P
+  partial package PM
+    constant Integer nX = 2;
+    constant Integer nXi = nX - 1;
+    constant Real reference_X[nX] = fill(1 / nX, nX);
+    replaceable partial model BaseProperties
+      Real X[nX](start = reference_X);
+      Real Xi[nXi](start = reference_X[1:nXi]);
+    end BaseProperties;
+  end PM;
+  partial package PP
+    extends PM;
+  end PP;
+  package W
+    extends PP(nX = 1);
+    redeclare model extends BaseProperties
+    equation
+      X = {1};
+    end BaseProperties;
+  end W;
+  package W2 = W;
+  model V
+    replaceable package M = PM;
+    M.BaseProperties medium;
+  end V;
+end P;
+model PKS5
+  replaceable package Medium = P.W2 constrainedby P.PM;
+  P.V v(redeclare package M = Medium);
+end PKS5;
+//// model: PKS6
+package P
+  partial package PM
+    constant String mediumName = "unusablePartialMedium";
+    constant String substanceNames[:] = {mediumName};
+    constant Boolean reducedX = true;
+    constant Boolean fixedX = false;
+    final constant Integer nS = size(substanceNames, 1);
+    constant Integer nX = nS;
+    constant Integer nXi = if fixedX then 0 else if reducedX then nS - 1 else nS;
+    constant Real reference_X[nX] = fill(1 / nX, nX);
+    replaceable partial model BaseProperties
+      Real X[nX](start = reference_X);
+      Real Xi[nXi](start = reference_X[1:nXi]);
+    end BaseProperties;
+  end PM;
+  partial package PP
+    extends PM(final reducedX = true, final fixedX = true);
+  end PP;
+  package W
+    extends PP(mediumName = "W", substanceNames = {"water"});
+    redeclare model extends BaseProperties
+    equation
+      X = {1};
+    end BaseProperties;
+  end W;
+  model V
+    replaceable package M = PM;
+    M.BaseProperties medium;
+  end V;
+end P;
+model PKS6
+  P.V v(redeclare package M = P.W);
+end PKS6;
+//// model: PKS7
+package P
+  partial package PM
+    constant String mediumName = "unusablePartialMedium";
+    constant String substanceNames[:] = {mediumName};
+    constant Boolean reducedX = true;
+    constant Boolean fixedX = false;
+    final constant Integer nS = size(substanceNames, 1);
+    constant Integer nX = nS;
+    constant Integer nXi = if fixedX then 0 else if reducedX then nS - 1 else nS;
+    constant Real reference_X[nX] = fill(1 / nX, nX);
+    replaceable partial model BaseProperties
+      Real X[nX](start = reference_X);
+      Real Xi[nXi](start = reference_X[1:nXi]);
+    end BaseProperties;
+  end PM;
+  package W
+    extends PM(mediumName = "W", substanceNames = {"a", "b"});
+    redeclare model extends BaseProperties
+    equation
+      X = {1, 2};
+      Xi = {3};
+    end BaseProperties;
+  end W;
+  model V
+    replaceable package M = PM;
+    M.BaseProperties medium;
+    String s[M.nS] = M.substanceNames;
+  end V;
+end P;
+model PKS7
+  P.V v(redeclare package M = P.W);
+end PKS7;
+//// model: PKS8
+model PKS8
+  constant String names[:] = {"x", "y", "z"};
+  constant Boolean flags[:] = {true, false};
+  parameter Integer n = size(names, 1);
+  String s[3] = names;
+  Boolean b[2] = flags;
+  Real r[size(flags, 1)] = {1, 2};
+end PKS8;
+//// model: PKS9
+package P
+  constant String names[:] = fill("", 0);
+  constant Integer n = size(names, 1);
+  constant Real e[:] = fill(1.0, 0);
+end P;
+model PKS9
+  Real C[P.n](quantity = P.names);
+  Real D[P.n](start = P.e);
+  Real x;
+equation
+  x = 1;
+end PKS9;
+//// model: PKS10
+package P
+  partial package PM
+    constant String extraPropertiesNames[:] = fill("", 0);
+    final constant Integer nC = size(extraPropertiesNames, 1);
+    constant Real C_default[nC] = fill(0, nC);
+  end PM;
+  package W
+    extends PM;
+  end W;
+  package W2
+    extends PM(extraPropertiesNames = {"CO2"});
+  end W2;
+  model V
+    replaceable package M = PM;
+    parameter Real C_start[M.nC](quantity = M.extraPropertiesNames) = M.C_default;
+    Real C[M.nC](quantity = M.extraPropertiesNames, start = C_start);
+    String s[M.nC] = M.extraPropertiesNames;
+  equation
+    der(C) = -C;
+  end V;
+end P;
+model PKS10
+  P.V v(redeclare package M = P.W);
+  P.V v2(redeclare package M = P.W2);
+end PKS10;
+//// model: PKS11
+package P
+  package PM
+    constant String mediumName = "m";
+    constant String substanceNames[:] = {mediumName};
+    constant Integer nS = size(substanceNames, 1);
+    model B
+      Real X[nS];
+    end B;
+  end PM;
+end P;
+model PKS11
+  P.PM.B b;
+equation
+  b.X = {1};
+end PKS11;

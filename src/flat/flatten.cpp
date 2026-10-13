@@ -952,6 +952,11 @@ class Flattener {
       for (Id<SElement> eid : def.def.elements)
         if (I_.scode.elems[eid].kind == SElementKind::Extends && I_.scode.elems[eid].mod.is_valid())
           scan_state(scan_state, I_.scode.elems[eid].mod, fscope, false);
+      // class extends 的修饰（MSL Media WaterIF97_base 的 `redeclare model extends BaseProperties(h(stateSelect = if ph_explicit and
+      // preferredMediumStates then …))`）：是隐式 extends 的修饰（Instantiator::partial_inst 合成的 extends 元素），值同样写在本类
+      // 里（PKS 探针 PKS1：omc 把 preferredMediumStates 标 final）。此前没扫 → "stateSelect parameter not pre-scanned"。
+      if (def.def.kind == SClassDefKind::ClassExtends && def.def.class_extends_mod.is_valid())
+        scan_state(scan_state, def.def.class_extends_mod, fscope, false);
     }
     // inner 作用域（R11 §5）：外层可见 inner + 本层 inner，供本层及子层的 outer 按名连接。
     std::vector<InnerVar> inners = outer_inners;
@@ -7945,6 +7950,7 @@ class Flattener {
           if (is_ndims) return CVal::I(static_cast<std::int64_t>(adims.size()));
           for (std::size_t k = 0; k < adims.size(); ++k) {
             std::optional<CVal> dv = colon_dim_size(anames, acomp, adims, k);
+            if (!dv) dv = const_colon_dim(e.args[0], acomp, adims, k, scope, depth, used);
             if (!dv) dv = eval_scode(adims[k], ascope, depth + 1, allow_param, used);
             if (!dv || dv->k != CVal::K::Int) return std::nullopt;
             out.push_back(*dv);
@@ -8033,6 +8039,8 @@ class Flattener {
         const std::int64_t di = dv->i;   // 1 基
         if (di < 1 || static_cast<std::size_t>(di) > adims.size()) return std::nullopt;
         if (std::optional<CVal> cd = colon_dim_size(anames, acomp, adims, static_cast<std::size_t>(di) - 1)) return cd;
+        if (std::optional<CVal> cd = const_colon_dim(e.args[0], acomp, adims, static_cast<std::size_t>(di) - 1, scope, depth, used))
+          return cd;
         if (std::optional<CVal> tn = type_dim_size(adims[di - 1])) return tn;   // 维写的是类型名（`Real e[E]`）
         return eval_scode(adims[di - 1], ascope, depth + 1, allow_param, used);
       }
@@ -8041,6 +8049,17 @@ class Flattener {
     }
   }
 
+  // 常量的 `:` 维（MSL Media 的 `constant String substanceNames[:] = {mediumName}`、`nS = size(substanceNames, 1)`）：由绑定
+  // 推维（typeDimension 的 UNKNOWN 支，NFTyping.mo:686-725 v1.25.0）——求整体值（修饰过的绑定照常经查名得到）、取第 k 维。
+  std::optional<CVal> const_colon_dim(Id<Exp> arg, Id<SElement> acomp, const std::vector<Id<Exp>>& adims, std::size_t k,
+                                      const ScodeScope& scope, int depth, std::unordered_set<std::uint32_t>* used) {
+    if (I_.absyn.exps[adims[k]].kind != ExpKind::Colon || I_.scode.elems[acomp].attr.var != SVariability::Const) return std::nullopt;
+    const std::optional<CVal> v = eval_scode(arg, scope, depth + 1, /*allow_param=*/false, used);
+    if (!v || !is_arr(*v)) return std::nullopt;
+    const std::vector<std::int64_t> vs = cval_shape(*v);
+    if (vs.size() != adims.size()) return std::nullopt;
+    return CVal::I(vs[k]);
+  }
   // size() 的实参是当前求值帧里的本地数组、第 k 维写的是 `:`（由绑定推断）：取已发射元素的形状——emit_array 已按推出的维
   // 逐元素发射，所以被引用的数组须先于引用处发射（前向 / 自引用 → nullopt，调用方 SKIP）。size 只看类型，不把数组标成
   // 结构参数（Structural.markExp 的 SIZE 支，NFStructural.mo:270-282 v1.25.0；DM 探针 D1 `Real x[size(a, 1) - 1]` → a 不
@@ -14133,7 +14152,6 @@ class Flattener {
         if (x.kind == ExprKind::Array) { scalar = false; ix = x.args; }   // `x[{n, 1}]`：逐个下标应用
         else ix.push_back(se);
       }
-      if (ix.empty()) { set_unsupported("constant array subscript"); return false; }   // 空切片未核实
       for (Id<Expr>& i : ix) {
         const Expr& ie = result_.model.exprs[i];
         if (ie.ty.kind != TypeKind::Integer || ie.ty.is_array() || ie.kind == ExprKind::Array || ie.kind == ExprKind::Range) {
@@ -14217,6 +14235,15 @@ class Flattener {
     Dimension d;
     d.kind = DimKind::Integer;
     d.size = static_cast<std::int64_t>(arr.args.size());
+    if (arr.args.empty()) {
+      // 空切片（`reference_X[1:nXi]`、nXi = 0；MSL Media 的 Xi 起值）得空数组，类型 = 去掉这一维的整体类型、首维 0
+      //（typeSubscriptedArray，NFExpression.mo:1420-1443 v1.25.0）。ponytail: 后面还有下标的（`m[1:0, 2]`）要按下标改类型，未做 → SKIP。
+      if (k + 1 != s.size() || ve.ty.dims.empty()) { set_unsupported("constant array subscript"); return lit_int(0); }
+      std::vector<Dimension> ds{d};
+      ds.insert(ds.end(), ve.ty.dims.begin() + 1, ve.ty.dims.end());
+      arr.ty = Type::array_of(ve.ty.element_type(), std::move(ds));
+      return add(std::move(arr));
+    }
     arr.ty = Type::array_of(result_.model.exprs[arr.args[0]].ty, {d});   // array_of 把子数组的维接在后面
     return add(std::move(arr));
   }
@@ -14286,6 +14313,25 @@ class Flattener {
     if (!whole.is_valid()) return {};
     const std::vector<Id<Exp>> subs = c.parts.back().subscripts;   // 拷贝（下面往 arena 加）
     return const_subscripted(whole, subs, enclosing, prefix);
+  }
+  // 空数组常量（MSL Media 的 `constant String extraPropertiesNames[:] = fill("", 0)`）的值没有元素可定型：按声明类型（内建
+  // 标量 / 短类链到内建标量）建 `{}`（omc 的空数组字面量带类型，makeEmptyArray，NFExpression.mo:1077-1083 v1.25.0）。
+  // ponytail: 只做一维（多维空数组的值丢了后几维，要按声明维求）。
+  Id<Expr> empty_const_literal(Id<SElement> comp, const ScodeScope& scope, const CVal& v) {
+    const SElement& ce = I_.scode.elems[comp];
+    if (!v.arr || !v.arr->empty() || ce.attr.dims.size() + ce.type.dims.size() != 1) return {};
+    TypeKind tk;
+    std::vector<std::pair<Id<SMod>, ScodeScope>> chain;
+    std::vector<Id<Exp>> tdims;
+    std::vector<std::size_t> before;
+    if (!fn_derived_scalar(ce, scope, tk, chain, tdims, before) || !tdims.empty()) return {};
+    Dimension d;
+    d.kind = DimKind::Integer;
+    d.size = 0;
+    Expr arr;
+    arr.kind = ExprKind::Array;
+    arr.ty = Type::array_of(Type::of(tk), {d});
+    return add(std::move(arr));
   }
   // 值 → 字面量；数组值 → 嵌套数组字面量（ty = 元素类型 + 各维，不用 inst_exp 的粗类型）。记录 / 未赋值 / 空数组 → invalid。
   Id<Expr> literal_any(const CVal& v) {
@@ -15212,6 +15258,8 @@ class Flattener {
             std::optional<CVal> v = eval_scode(I_.scode.mods[m].binding, qscope, 0);
             if (v)
               if (const Id<Expr> lit = literal_any(*v); lit.is_valid()) return lit;   // 数组常量 → 数组字面量（PA1 `y = P.x`）
+            if (v && is_arr(*v))
+              if (const Id<Expr> el = empty_const_literal(qcomp, qscope, *v); el.is_valid()) return el;
             // operator record 常量（`Modelica.ComplexMath.j`）→ 记录式 `Complex(0.0, 1.0)`（EvalConstants 换成值，SPEC OR6 h03 / SR）。
             if (v && v->k == CVal::K::Record)
               if (const Id<Expr> rl = oprec_const_literal(qcomp, qscope, *v); rl.is_valid() || result_.unsupported) return rl;
@@ -15240,6 +15288,7 @@ class Flattener {
         for (std::size_t k = 0; k < c.parts.size(); ++k)   // 子原因：哪个名字（排桶用）
           result_.unsupported_detail += (k ? "." : "") + std::string(in_.str(c.parts[k].name));
       } else if (c.parts.size() == 1 && in_.str(c.parts[0].name) != "time") {
+        if (!result_.unsupported) result_.unsupported_detail = std::string(in_.str(c.parts[0].name));   // 子原因：哪个名字（排桶用）
         set_unsupported("unresolved name");
       }
       for (const CrefPart& p : c.parts)
@@ -20937,9 +20986,10 @@ class Flattener {
     evaluating_.erase(key);
     // 数值字面量数组也是值（向前引用还没发射的数组常量：MSL VoltageToAngle 的 `table = if … then Lin elseif … then H01 else
     // RMS`，`protected constant Real Lin[:, 2] = [0, 1; 1, 0]` 声明在后；CL 探针 CL5）：叶按声明类型转（Real 常量的整数
-    // 字面量 → Real，omc 打 `t[1,1] = 0.0`）。
-    if (result_.model.exprs[e].kind == ExprKind::Array && all_numeric_literal(e))
-      return I_.comps[cid].ty.element_type().kind == TypeKind::Real ? coerce_deep(e, TypeKind::Real) : e;
+    // 字面量 → Real，omc 打 `t[1,1] = 0.0`）。String / Boolean / 枚举的字面量数组原样（MSL Media 的包常量 `substanceNames =
+    // {"water"}`，`nS = size(substanceNames, 1)` 经包作用域内联取它；PKS 探针）。
+    if (const Expr& ex = result_.model.exprs[e]; ex.kind == ExprKind::Array && !ex.args.empty() && all_literal_leaves(e))
+      return all_numeric_literal(e) && I_.comps[cid].ty.element_type().kind == TypeKind::Real ? coerce_deep(e, TypeKind::Real) : e;
     return is_literal(e) ? e : Id<Expr>{};
   }
 

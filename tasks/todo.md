@@ -2291,6 +2291,15 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           slice 691 例 FAIL 0（oracle=live 不一致 0）；scodeinst 651（不变）；testsuite 1803（不变）/ FAIL 0；MSL 438（不变：Fluid / Media
           的 44 例 SKIP 分散到长尾——stateSelect 参数 11、整数组引用 `tank.X_start` 8、非字面量维 8、包常量 / Medium 函数各 5、带修饰的
           短类包 3 …）；探针 9655→9657；单测 349→350。
+- [x] (66a) MSL Media 包常量的长尾（2026-10-14）：① class extends 的修饰（`redeclare model extends BaseProperties(h(stateSelect
+      = if ph_explicit and preferredMediumStates then …))`）也预扫 stateSelect，参数照 omc 标 final；② 常量数组的空切片
+      `reference_X[1:nXi]`（nXi = 0）得空数组（typeSubscriptedArray，NFExpression.mo:1420-1443）；③ 常量的 `:` 维由（被修饰改过
+      的）绑定推出，`nS = size(substanceNames, 1)` 求得出（NFTyping.mo:686-725）；④ String / Boolean 的字面量数组常量当值
+      内联；⑤ 空数组常量 `fill("", 0)` 按声明类型定型成 `{}`（makeEmptyArray）。未解析名的 SKIP 带上名字（排桶用）。
+      探针 pk-p9（10）；单测 +3（PKS3 / PKS7 / PKS10，期望 = omc 实跑）。
+      slice 691 例 FAIL 0（oracle=live 不一致 0）；scodeinst 651（不变）；testsuite 1803→1804（redeclare/BranchingDynamicPipes）/
+      FAIL 0；MSL 438（不变：Fluid / Media 的 44 例越过 Medium 常量，停在 Medium 函数 / 记录常量 `fluidConstants.molarMass` /
+      `Medium.singleState` 等限定引用 11、限定函数调用 8、复合数组元素引用 4 …）；探针 9657→9667；单测 350→353。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

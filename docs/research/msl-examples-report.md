@@ -612,3 +612,11 @@ ACCEPTS-INVALID / CRASH 0。
 分散到各自的长尾特性：stateSelect 参数未预扫（11，PumpingSystem 等）、整数组引用 `tank.X_start`（8，HeatingSystem / Tanks）、
 非字面量维（8，DrumBoiler 等）、`Medium.singleState` 等包常量引用（5）、`Medium.specificHeatCapacityCp` 等函数（5，记录类型
 按实例路径命名 / 函数的 class extends）、带修饰的短类包（3，TraceSubstances）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-14 66a 之后：PASS 438（不变）
+
+Medium 包常量的长尾：class extends 修饰里的 stateSelect 预扫、常量数组空切片、`:` 维常量的 `size`（绑定被 extends 修饰改过）、
+String / Boolean 数组常量、空数组常量。PASS / SKIP 逐例不变；Fluid / Media 的 44 例 SKIP 越过 `reference_X` / `substanceNames` /
+`extraPropertiesNames` 等常量，现停在：限定引用 11（`fluidConstants.molarMass` 记录数组常量、`Medium.singleState`、`Medium.h_default`
+函数求值等）、限定函数调用 8（`Medium.density` 等经重声明的包的函数）、复合数组元素引用 4（`ports.C_outflow`）、未解析名 4（`MMX`）、
+stateSelect 值 3、带修饰的短类包 3、函数体内的 Medium 函数 / 类型 7 等。FAIL / ACCEPTS-INVALID / CRASH 0。

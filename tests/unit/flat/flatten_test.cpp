@@ -7645,4 +7645,57 @@ YMC_TEST(flatten_outer_scan_skips_package_constants) {
                std::string("class PKO1\n  Real v.x(unit = \"K\") = time;\nend PKO1;\n"));
 }
 
+YMC_TEST(flatten_empty_slice_of_constant_array) {
+  // 常量数组的空切片（`reference_X[1:nXi]`、nXi = 0）得空数组（typeSubscriptedArray，NFExpression.mo:1420-1443 v1.25.0），
+  // 空数组 Xi 的属性照常定型后整个丢掉（MSL Media BaseProperties 的 Xi 起值）。期望 = omc 1.25.0 实跑（2026-10-14，探针 pk-p9 PKS3）。
+  YMC_CHECK_EQ(flatten_src("package P\n  partial package PM\n    constant Integer nX = 2;\n    constant Integer nXi = nX - 1;\n"
+                           "    constant Real reference_X[nX] = fill(1 / nX, nX);\n    replaceable partial model BaseProperties\n"
+                           "      Real X[nX](start = reference_X);\n      Real Xi[nXi](start = reference_X[1:nXi]);\n"
+                           "    end BaseProperties;\n  end PM;\n  package W\n    extends PM(nX = 1);\n"
+                           "    redeclare model extends BaseProperties\n    equation\n      X = {1};\n    end BaseProperties;\n"
+                           "  end W;\n  model V\n    replaceable package M = PM;\n    M.BaseProperties medium;\n  end V;\nend P;\n"
+                           "model PKS3\n  P.V v(redeclare package M = P.W);\nend PKS3;\n"),
+               std::string("class PKS3\n  Real v.medium.X[1](start = 1.0);\nequation\n  v.medium.X[1] = 1.0;\nend PKS3;\n"));
+}
+
+YMC_TEST(flatten_colon_dim_of_modified_package_constant) {
+  // 包常量的 `:` 维由（被 extends 修饰改过的）绑定推出（typeDimension 的 UNKNOWN 支，NFTyping.mo:686-725 v1.25.0）：
+  // `nS = size(substanceNames, 1)` 随 `extends PM(substanceNames = {"a", "b"})` 变成 2；String 数组常量内联成字面量。
+  // 期望 = omc 1.25.0 实跑（2026-10-14，探针 pk-p9 PKS7）。
+  YMC_CHECK_EQ(flatten_src("package P\n  partial package PM\n    constant String mediumName = \"unusablePartialMedium\";\n"
+                           "    constant String substanceNames[:] = {mediumName};\n    constant Boolean reducedX = true;\n"
+                           "    constant Boolean fixedX = false;\n    final constant Integer nS = size(substanceNames, 1);\n"
+                           "    constant Integer nX = nS;\n"
+                           "    constant Integer nXi = if fixedX then 0 else if reducedX then nS - 1 else nS;\n"
+                           "    constant Real reference_X[nX] = fill(1 / nX, nX);\n    replaceable partial model BaseProperties\n"
+                           "      Real X[nX](start = reference_X);\n      Real Xi[nXi](start = reference_X[1:nXi]);\n"
+                           "    end BaseProperties;\n  end PM;\n  package W\n"
+                           "    extends PM(mediumName = \"W\", substanceNames = {\"a\", \"b\"});\n"
+                           "    redeclare model extends BaseProperties\n    equation\n      X = {1, 2};\n      Xi = {3};\n"
+                           "    end BaseProperties;\n  end W;\n  model V\n    replaceable package M = PM;\n"
+                           "    M.BaseProperties medium;\n    String s[M.nS] = M.substanceNames;\n  end V;\nend P;\nmodel PKS7\n"
+                           "  P.V v(redeclare package M = P.W);\nend PKS7;\n"),
+               std::string("class PKS7\n  Real v.medium.X[1](start = 0.5);\n  Real v.medium.X[2](start = 0.5);\n"
+                           "  Real v.medium.Xi[1](start = 0.5);\n  String v.s[1];\n  String v.s[2];\nequation\n"
+                           "  v.medium.X[1] = 1.0;\n  v.medium.X[2] = 2.0;\n  v.medium.Xi[1] = 3.0;\n  v.s = {\"a\", \"b\"};\n"
+                           "end PKS7;\n"));
+}
+
+YMC_TEST(flatten_empty_package_constant_array) {
+  // 空数组常量（`extraPropertiesNames[:] = fill("", 0)`）按声明类型定型成 `{}`（makeEmptyArray，NFExpression.mo:1077-1083
+  // v1.25.0），空数组组件的属性 / 绑定照常核对后丢掉；修饰成非空的照常展开。期望 = omc 1.25.0 实跑（2026-10-14，探针 pk-p9 PKS10）。
+  YMC_CHECK_EQ(flatten_src("package P\n  partial package PM\n    constant String extraPropertiesNames[:] = fill(\"\", 0);\n"
+                           "    final constant Integer nC = size(extraPropertiesNames, 1);\n"
+                           "    constant Real C_default[nC] = fill(0, nC);\n  end PM;\n  package W\n    extends PM;\n  end W;\n"
+                           "  package W2\n    extends PM(extraPropertiesNames = {\"CO2\"});\n  end W2;\n  model V\n"
+                           "    replaceable package M = PM;\n"
+                           "    parameter Real C_start[M.nC](quantity = M.extraPropertiesNames) = M.C_default;\n"
+                           "    Real C[M.nC](quantity = M.extraPropertiesNames, start = C_start);\n"
+                           "    String s[M.nC] = M.extraPropertiesNames;\n  equation\n    der(C) = -C;\n  end V;\nend P;\n"
+                           "model PKS10\n  P.V v(redeclare package M = P.W);\n  P.V v2(redeclare package M = P.W2);\nend PKS10;\n"),
+               std::string("class PKS10\n  parameter Real v2.C_start[1](quantity = \"CO2\") = 0.0;\n"
+                           "  Real v2.C[1](quantity = \"CO2\", start = v2.C_start[1]);\n  String v2.s[1];\nequation\n"
+                           "  v2.s = {\"CO2\"};\n  der(v2.C[1]) = -v2.C[1];\nend PKS10;\n"));
+}
+
 YMC_TEST_MAIN
