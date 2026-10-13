@@ -518,3 +518,4 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `pk-p5` | 6 | 经重声明的包查常量 / 函数（包实例，ADR-007 第 2 阶段 65a-3）：包里函数互调 `M.h2` → `M.h`（PKF1）、同一模型两个不同 Medium 各出一套函数 `PKF2.a.M.h` / `PKF2.b.M.h`（PKF2）、常量链 `nXi = nX - 1` 与嵌套包 `M.Sub.m` 当维（PKF3）、包函数调别的包的函数（PKF4）、记录类型输出 `PKF5.v.M.R`（PKF5，记录构造按实例路径命名未做 → SKIP）、两层传递后当参数绑定（PKF6） |
 | `pk-p6` | 5 | 类修饰（ADR-007 第 2 阶段 65a-4）：extends 修饰里改嵌套类型 `extends PM(Temperature(min = 273.15, …))`——组件修饰 > 类修饰 > 类型定义的修饰（PKC1）、直接用 `P.W.Temperature`（PKC2）、改过的包常量与类修饰一起落到记录字段（PKC3）、两层 extends 的类修饰叠加（PKC4）、修饰里引用包常量 `start = Tstart * 2`（PKC5） |
 | `pk-p7` | 2 | 短类链修饰在类型定义处求值：包里 `type T = Real(min = Tmin)` 取包常量 5，模型自己另有 `Tmin = 7` 时此前静默打成 7.0（PKD1）、模型里没有同名的（PKD2，此前 SKIP） |
+| `pk-p8` | 2 | 查名穿过重声明的包时扫它子树里的 outer（lookup_detaches_outer）：包里常量的类型不下钻（MLS §4.7）——`constant FC fc` 的记录类型经 `extends PM(redeclare replaceable record FC = …)` 继承来（PKO1）、`constant C cp_const` 的类型经 `extends PM(n = 2)` 继承来（PKO2），此前都 SKIP |

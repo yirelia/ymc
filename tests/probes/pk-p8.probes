@@ -1,0 +1,49 @@
+//// set: pk-p8 — 查名穿过重声明的包时扫 outer：包常量的类型（经改了常量 / 重声明的 extends 继承来）不下钻
+//// model: PKO1
+package P
+  record FC2
+    Real a = 1;
+    Real b = 2;
+  end FC2;
+  partial package PM
+    replaceable record FC
+      Real a = 1;
+    end FC;
+    type T = Real(unit = "K");
+  end PM;
+  partial package PM2
+    extends PM(redeclare replaceable record FC = P.FC2);
+    constant FC fc;
+  end PM2;
+  package W
+    extends PM2;
+  end W;
+  model V
+    replaceable package M = PM;
+    M.T x = time;
+  end V;
+end P;
+model PKO1
+  P.V v(redeclare package M = P.W);
+end PKO1;
+//// model: PKO2
+package P
+  partial package PM
+    constant Integer n = 1;
+    type C = Real(unit = "J/(kg.K)");
+  end PM;
+  partial package PM2
+    extends PM(n = 2);
+    constant C cp_const = 4184;
+  end PM2;
+  package W
+    extends PM2;
+  end W;
+  model V
+    replaceable package M = PM;
+    M.C cp = M.cp_const;
+  end V;
+end P;
+model PKO2
+  P.V v(redeclare package M = P.W);
+end PKO2;

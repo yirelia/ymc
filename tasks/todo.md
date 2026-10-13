@@ -2285,6 +2285,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           slice 691 例 FAIL 0（oracle=live 不一致 0）；scodeinst 648→651；testsuite 1797→1803（ClassMod1 / ClassMod4 / mod9 /
           Modification2 / MissingModifiers / MissingModifiersPackages；EngineV6_output 负载下超时，单跑 16s 与上一版同）/ FAIL 0；MSL 438
           （不变：Fluid / Media 推进到 flatten 里定义层查到的 `FluidConstants` 等）；探针 9646→9655（misc +1）；单测 348→349。
+    - [x] (65a-5) 查名穿过重声明的包时扫 outer 不下钻包常量的类型（2026-10-14）：lookup_detaches_outer 的深扫把包里常量的类型
+          （`constant FluidConstants[nS] fluidConstants`，经 `extends PartialPureSubstance(redeclare replaceable record FluidConstants = …)`
+          继承来）也拿去解析、撞守卫 SKIP——包里只有类和常量，常量的类型里不会有 inner / outer（MLS §4.7），不下钻。探针 pk-p8（2）。
+          slice 691 例 FAIL 0（oracle=live 不一致 0）；scodeinst 651（不变）；testsuite 1803（不变）/ FAIL 0；MSL 438（不变：Fluid / Media
+          的 44 例 SKIP 分散到长尾——stateSelect 参数 11、整数组引用 `tank.X_start` 8、非字面量维 8、包常量 / Medium 函数各 5、带修饰的
+          短类包 3 …）；探针 9655→9657；单测 349→350。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

@@ -605,3 +605,10 @@ modifier"），要等包实例（下一步）。FAIL / ACCEPTS-INVALID / CRASH 0
 extends BaseProperties` 的重声明链。PASS / SKIP 逐例不变；Fluid / Media 的 SKIP 原因推进到 flatten 里定义层 SCode 查找撞上经
 改了常量的 extends 继承来的 `FluidConstants` / `SpecificHeatCapacity`（包函数体 / 记录在定义层的作用域里查名），下一步。FAIL /
 ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-14 ADR-007 第 2 阶段 65a-5 之后：PASS 438（不变）
+
+查名穿过重声明的包时扫 outer 不再下钻包常量的类型。PASS / SKIP 逐例不变；Fluid / Media 的 44 例 SKIP 不再卡在类重声明上，
+分散到各自的长尾特性：stateSelect 参数未预扫（11，PumpingSystem 等）、整数组引用 `tank.X_start`（8，HeatingSystem / Tanks）、
+非字面量维（8，DrumBoiler 等）、`Medium.singleState` 等包常量引用（5）、`Medium.specificHeatCapacityCp` 等函数（5，记录类型
+按实例路径命名 / 函数的 class extends）、带修饰的短类包（3，TraceSubstances）。FAIL / ACCEPTS-INVALID / CRASH 0。

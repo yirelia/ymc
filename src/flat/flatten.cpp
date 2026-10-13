@@ -4590,6 +4590,9 @@ class Flattener {
       if (c.prefixes.io == SInnerOuter::Outer || c.prefixes.io == SInnerOuter::InnerOuter) add(out.outers, c.name);
       if (c.prefixes.io == SInnerOuter::Inner || c.prefixes.io == SInnerOuter::InnerOuter) add(out.inners, c.name);
       if (!deep || c.prefixes.io == SInnerOuter::Outer) continue;   // 纯 outer 不实例化自己的子树
+      // 包里只有类和常量，常量的类型（记录 / type / 内建）里不会有 inner / outer（MLS §4.7：record 的元素不许带 inner / outer）
+      // → 不下钻（MSL Media 包的 `constant FluidConstants[nS] fluidConstants`：类型经改了常量的 extends 继承来，下钻去解析会撞守卫）。
+      if (el.restriction == SRestriction::Package) continue;
       ScodeScope ds;
       const Id<SElement> t = resolve_class_path(c.type.path, c.type.leading_dot, inner_scope, ds);
       if (t.is_valid()) for (Symbol s : unmet_outers(t, ds, depth + 1)) add(out.child, s);

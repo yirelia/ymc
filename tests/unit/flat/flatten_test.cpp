@@ -7633,4 +7633,16 @@ YMC_TEST(flatten_derived_type_modifier_scope) {
                std::string("class PKD1\n  constant Real Tmin = 7.0;\n  Real x(min = 5.0) = time;\nend PKD1;\n"));
 }
 
+YMC_TEST(flatten_outer_scan_skips_package_constants) {
+  // 查名穿过重声明的包时扫它子树里的 outer（lookup_detaches_outer）：包里只有类和常量，常量的类型里不会有 inner / outer（MLS §4.7），
+  // 不下钻——此前去解析 `constant FC fc` 的类型（经 `extends PM(redeclare replaceable record FC = …)` 继承来）撞守卫 SKIP（MSL
+  // Fluid / Media 的 `fluidConstants`）。期望 = omc 1.25.0 实跑（2026-10-14，探针 pk-p8 PKO1）。
+  YMC_CHECK_EQ(flatten_src("package P\n  record FC2\n    Real a = 1;\n    Real b = 2;\n  end FC2;\n  partial package PM\n"
+                           "    replaceable record FC\n      Real a = 1;\n    end FC;\n    type T = Real(unit = \"K\");\n  end PM;\n"
+                           "  partial package PM2\n    extends PM(redeclare replaceable record FC = P.FC2);\n    constant FC fc;\n"
+                           "  end PM2;\n  package W\n    extends PM2;\n  end W;\n  model V\n    replaceable package M = PM;\n"
+                           "    M.T x = time;\n  end V;\nend P;\nmodel PKO1\n  P.V v(redeclare package M = P.W);\nend PKO1;\n"),
+               std::string("class PKO1\n  Real v.x(unit = \"K\") = time;\nend PKO1;\n"));
+}
+
 YMC_TEST_MAIN
