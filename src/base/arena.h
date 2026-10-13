@@ -5,8 +5,10 @@
 // = 野指针风险。Arena 一次性回答"谁拥有节点"：arena 拥有一切，别人只拿号（Id）。
 // 同类先例：LLVM SlotIndex、rustc 的 arena + NodeId、游戏引擎 ECS。
 //
-// 关键纪律（会踩的第一个大坑）：add() 可能触发底层 vector 扩容，使之前拿到的 T& 引用失效。
-// 规范：持有 Id，不要持有引用跨越一次 add()。Id 是值语义，扩容后依然有效。
+// 存储分块（ADR-007 第 2 阶段 65a 起）：每块 kChunk 个元素、块内容量一次预留够，add() 只在末块里 push_back、满了另开一块
+// ——已有元素**永不搬家**，拿到的 T& 跨 add() 依然有效。此前是单个 std::vector，扩容使引用失效（"会踩的第一个大坑"）；
+// 压平期要按需实例化包（OMC 的 Lookup.lookupLocalName 进类前 Inst.instPackage，NFLookup.mo:699-700 v1.25.0），flatten 里
+// 到处持着节点引用，不能再要求"引用不跨 add"。纪律照旧推荐持有 Id（值语义、可存可比可哈希），引用只是不再是雷。
 #pragma once
 #include <cstddef>
 #include <cstdint>
@@ -40,26 +42,32 @@ class Arena {
   Arena() = default;
 
   // 按值接收 + std::move 进容器：这样只可移动的类型（unique_ptr）也能放进来（A-8）。
-  // 返回新 id = 旧 size；id 永不复用。可能扩容 → 之前的引用失效（见文件头纪律）。
+  // 返回新 id = 旧 size；id 永不复用。不搬家：末块容量预留满 kChunk，块内 push_back 不重新分配（块对象本身随外层 vector 移动
+  // 时，元素缓冲区不动）。
   [[nodiscard]] Id<T> add(T value) {
-    items_.push_back(std::move(value));
-    return Id<T>::from_index(static_cast<std::uint32_t>(items_.size() - 1));
+    if (chunks_.empty() || chunks_.back().size() == kChunk) {
+      chunks_.emplace_back();
+      chunks_.back().reserve(kChunk);
+    }
+    chunks_.back().push_back(std::move(value));
+    return Id<T>::from_index(static_cast<std::uint32_t>(size_++));
   }
 
   [[nodiscard]] T& operator[](Id<T> id) {
     YMC_ASSERT(contains(id), "Arena: id out of range");
-    return items_[id.raw];
+    return chunks_[id.raw >> kShift][id.raw & kMask];
   }
   [[nodiscard]] const T& operator[](Id<T> id) const {
     YMC_ASSERT(contains(id), "Arena: id out of range");
-    return items_[id.raw];
+    return chunks_[id.raw >> kShift][id.raw & kMask];
   }
 
   [[nodiscard]] bool contains(Id<T> id) const noexcept {
-    return id.is_valid() && id.raw < items_.size();
+    return id.is_valid() && id.raw < size_;
   }
-  [[nodiscard]] std::size_t size() const noexcept { return items_.size(); }
-  void reserve(std::size_t n) { items_.reserve(n); }
+  [[nodiscard]] std::size_t size() const noexcept { return size_; }
+  // 分块存储不搬家，无需预留（保留接口：调用方此前为"引用不失效"预留的，现在是空操作）。
+  void reserve(std::size_t) {}
 
   // 遍历标准写法（暂无迭代器；用到再加 IdRange）：
   //   for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(a.size()); ++i) {
@@ -67,7 +75,11 @@ class Arena {
   //   }
 
  private:
-  std::vector<T> items_;
+  static constexpr std::uint32_t kShift = 10;
+  static constexpr std::size_t kChunk = std::size_t{1} << kShift;
+  static constexpr std::uint32_t kMask = (1u << kShift) - 1;
+  std::vector<std::vector<T>> chunks_;   // 每块容量 = kChunk（见 add）
+  std::size_t size_ = 0;
 };
 
 }  // namespace ymc

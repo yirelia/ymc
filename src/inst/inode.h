@@ -264,6 +264,9 @@ struct Inst {
   // class extends（`redeclare model extends B … end B;`）的隐式基类：class extends 类的 SCode 元素 raw → 外层类继承来的同名原类
   // 节点（见 Instantiator::expand；flatten 的 SCode 层继承查找也认它）。
   std::unordered_map<std::uint32_t, NodeId> class_extends_target;
+  // 包实例（Instantiator::inst_package，Inst.instPackage）及其各层基类实例：它们的组件不受外来修饰（不在模型实例树里），值就是
+  // inst 记的绑定（extends 修饰覆盖后的）——flatten 在这样的实例层按实例取常量（ADR-007 第 2 阶段 65a-3）。
+  std::unordered_set<std::uint32_t> package_instances;
   struct RootAlias {
     NodeId node;                      // 别名类节点；invalid = 根不是别名
     std::vector<Id<SMod>> mods;

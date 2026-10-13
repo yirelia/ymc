@@ -31,6 +31,9 @@ class Instantiator {
   NodeId instantiate_root(Symbol name);
   // 按全限定名实例化根类（`Modelica.Blocks.Examples.PID_Controller`，库里的示例模型）：从顶层逐段查。
   NodeId instantiate_root_path(const std::vector<Symbol>& path);
+  // 包实例（Inst.instPackage）：查名进实例语境里的类前把它实例化一份，按节点缓存；不能实例化（partial / 带修饰的短类 / 环）→ empty。
+  // flatten 经实例链查名时也调（ADR-007 第 2 阶段 65a-3，见 inst.cpp）。
+  NodeId inst_package(NodeId cls);
 
   // v1 还没做的构造（内建枚举/时钟类型、extends 内建类型…）在实例化阶段就撞上时标记，
   // driver 据此退 66（记 SKIP，不是 FAIL）。与 flatten 的 unsupported 合并判断。
@@ -79,10 +82,14 @@ class Instantiator {
   // path_nodes 非空：顺路记下路径各段解析到的类节点（基类名的 replaceable 检查用）。
   NodeId lookup_class_name(const std::vector<Symbol>& path, NodeId scope, std::vector<NodeId>* path_nodes = nullptr);
   NodeId lookup_simple_class(Symbol name, NodeId scope);
+  bool in_instance_context(NodeId cls) const;   // 重声明顶替进来的 / 实例类树里克隆的类（见 inst_package）
+  void mark_package_instance(NodeId inst);
+  NodeId inherited_in_bases(NodeId inst, Symbol name, Id<SElement> self) const;   // class extends 的目标（见 inst.cpp）
   NodeId through_short_classes(NodeId cls, bool& partial);   // 进类查名前顺短类链到底；partial：链上有 partial 的（见 inst.cpp）
   // 类节点 cls 自己的 import 里叫 name 的类（见 inst.cpp 的规则说明）；没有 → empty。
   NodeId import_class(Symbol name, NodeId cls);
   NodeId tree_class(ClassTreeId tid, Symbol name);   // 类树里（本地 + 继承来的）名为 name 的类；没有 → empty
+  NodeId class_in(NodeId cls, ClassTreeId tid, Symbol name);   // 同上；定义层不可信的项改取包实例里的（见 inst.cpp）
   bool ext_mod_hits_consts(NodeId base, Id<SMod> m);  // extends 修饰改到基类的常量 / 类（见 expand）
   bool body_mentions(Id<SElement> cls, const std::vector<Symbol>& names, int depth) const;   // 类体写到这些名字（见 inst.cpp）
   Id<SElement> member_def(NodeId cls, Symbol name, int depth);   // 类自己的或继承来的元素声明
@@ -108,6 +115,8 @@ class Instantiator {
   // redeclare_component 合成的组件元素：(原声明 << 32 | 重声明元素) → 合成元素；elems 的预留上限（见 make_top_node）。
   std::unordered_map<std::uint64_t, Id<SElement>> redecl_elems_;
   std::unordered_map<std::uint32_t, ClassRedecls> inst_redecls_;   // 实例节点 → 施加在它类树上的类重声明集
+  std::unordered_map<std::uint32_t, NodeId> pkg_cache_;   // 类节点 → 它的包实例（见 inst_package）
+  std::unordered_map<std::uint32_t, NodeId> redecl_orig_;   // 实例类树里顶替进来的新类节点 → 顶替前的原类（见 instantiate）
   std::unordered_set<std::uint32_t> instances_;   // instantiate 建的实例节点（父亲是实例的类 = 克隆，见 inst_component）
   std::unordered_map<std::uint32_t, NodeId> redecl_class_nodes_;   // 修饰里的类重声明元素 → 它的类节点
   // class extends 类合成的隐式 extends 元素（class extends 的 SCode 元素 raw → 合成的 Extends 元素）与合成元素的集合（见 partial_inst）。

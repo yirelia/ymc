@@ -684,5 +684,9 @@
 "eq3.mo",
 "ClassExtends8.mo",
 "inst8.mo",
-"ModClass3.mo"
+"ModClass3.mo",
+"ClassExtends5.mo",
+"MultiInheritanceRedeclare1.mo",
+"redeclare10.mo",
+"redeclare7.mo"
 ]

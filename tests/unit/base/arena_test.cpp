@@ -109,4 +109,16 @@ YMC_TEST(million_inserts) {
   YMC_CHECK_EQ(a[Id<Expr>::from_index(999'999)].value, 999'999);
 }
 
+// A-11 分块存储：拿到的引用跨 add() 依然有效（元素不搬家，ADR-007 第 2 阶段 65a：压平期按需实例化包要往 inst 的 arena 里加节点，
+//      flatten 持着节点引用）
+YMC_TEST(references_stable_across_add) {
+  Arena<Expr> a;
+  const Id<Expr> first = a.add(Expr{7});
+  const Expr* p = &a[first];
+  for (int v = 0; v < 5000; ++v) (void)a.add(Expr{v});   // 跨好几块
+  YMC_CHECK(p == &a[first]);
+  YMC_CHECK_EQ(p->value, 7);
+  YMC_CHECK_EQ(a[Id<Expr>::from_index(4321)].value, 4320);
+}
+
 YMC_TEST_MAIN

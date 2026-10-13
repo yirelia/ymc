@@ -2263,6 +2263,17 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           PKX3）——目标经改了常量 / 类的 extends 继承来、且目标体里写到了被改的名字 → SKIP（同 classes_via_mod），待包实例。
           探针 pk-p3（6 例）/ pk-p4（4 例，class extends 目标）。
           slice 686 例 FAIL 0（oracle=live 不一致 0）；scodeinst 643→644；testsuite 1791→1793（Redeclare6、ModClass3）/ FAIL 0 / CRASH 0；MSL 438（不变）；探针 9630→9640（kr-p1 KR5 也转 PASS）；单测 344→346。
+    - [x] (65a-3) 包实例（2026-10-13）：Instantiator::inst_package（Inst.instPackage，NFInst.mo:1312-1369 v1.25.0，按节点缓存；短类顺链到
+          长类、实例父亲记成那个类节点）。inst 查名进实例语境里的类（重声明顶替进来的、实例类树里克隆的）走包实例；定义类树里经改了常量的
+          extends 继承来的项（classes_via_mod）改取包实例里的（全路径 `Modelica.Media.Water.StandardWater.ThermodynamicState`）。class
+          extends 在实例里按实例取目标（基类实例里顶替前的原类，NFInst.redeclareClass :1734-1762；克隆时从头展开）。flatten：包实例层按
+          实例查名——常量取 inst 记的绑定（extends 修饰覆盖的合成元素，lower_pkg_comp），类取实例类树里的；限定名经实例语境里的类逐段
+          进包实例（`Medium.nX`、`Medium.g(time)`）；函数按实例路径命名（NFInstNode.scopePath：`PK3.v.Medium.g`），记录 / 类型的实例路径
+          命名未做 → SKIP。base/arena.h 改分块存储（引用跨 add 不失效：压平期按需实例化包、合成元素）。探针 pk-p5（6 例）。
+          slice 690 例 FAIL 0（oracle=live 不一致 0）；scodeinst 644→648；testsuite 1793→1797（ClassExtends5、MultiInheritanceRedeclare1、
+          redeclare10、redeclare7；EngineV6_output 负载下超时，单跑 15s 与上一版同）/ FAIL 0；MSL 438（不变：Fluid / Media 推进到
+          "extends modifier names non-component"——`extends PartialTwoPhaseMedium(Temperature(min = …))` 的类修饰）；探针 9640→9646
+          （il-p1 / lx-v2 各 +2）；单测 346→348。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

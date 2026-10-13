@@ -591,3 +591,10 @@ inst 进类查名前顺短类链到底（`replaceable package Medium = …` 当�
 实例树按 OMC 建类（本地类按实例克隆、类重声明每实例一份、继承类取自基类实例），flatten 在实例层认修饰里重声明的包。PASS / SKIP
 逐例不变：Fluid / Media 卡在 Medium 包里经 `extends PartialMedium(…)` 改过常量后继承来的类与常量（"inherited class seen through
 modifier"），要等包实例（下一步）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-13 ADR-007 第 2 阶段 65a-3 之后：PASS 438（不变）
+
+包实例（Inst.instPackage）：重声明的 Medium 包按实例查常量 / 函数 / 类，函数按实例路径命名。PASS / SKIP 逐例不变；Fluid / Media
+的 SKIP 原因从 "inherited class seen through modifier [ThermodynamicState]"（29 例）推进到 "extends modifier names non-component
+(nested class)"——Media 包 `extends PartialTwoPhaseMedium(Temperature(min = 273.15, …), …)` 这类在 extends 修饰里改嵌套类型（类修饰），
+下一步做。FAIL / ACCEPTS-INVALID / CRASH 0。

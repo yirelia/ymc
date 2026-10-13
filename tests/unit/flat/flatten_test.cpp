@@ -37,7 +37,7 @@ std::string flatten_src(const char* src, bool* unsupported = nullptr) {
   NodeId root = I.instantiate_root(sc.elems[sc.program.back()].name);
   if (!root.is_valid() || inst.nodes[root].is_empty() || d.has_errors()) return "<error>";
   // 未实现判定要合并 inst 与 flatten 两阶段（同 driver）：inst 阶段的 mark_unsupported 不体现在 FlattenResult 上。
-  FlattenResult fr = flatten(inst, in, root);
+  FlattenResult fr = flatten(inst, in, root, &I);
   const bool uns = I.unsupported() || fr.unsupported;
   if (unsupported) *unsupported = uns;
   if (uns) return "<unsupported:" + (I.unsupported() ? I.unsupported_reason() : fr.unsupported_reason) + ">";
@@ -7596,6 +7596,37 @@ YMC_TEST(flatten_class_extends_target_through_modified_extends) {
                                      "end P;\nmodel PKX3\n  P.Water.BaseProperties medium;\nend PKX3;\n", &uns);
   YMC_CHECK(uns);
   YMC_CHECK_EQ(out, std::string("<unsupported:inherited class seen through modifier / redeclare>"));
+}
+
+YMC_TEST(flatten_package_instance_constants_and_functions) {
+  // 重声明的包按包实例查（Inst.instPackage，NFInst.mo:1312-1369 v1.25.0；ADR-007 第 2 阶段 65a-3）：`Medium.nX` 取 extends 修饰
+  // 改过的值 2，`Medium.g` 的体里读 nX 也得 2，函数按实例路径命名（NFInstNode.scopePath：`PK3.v.Medium.g`）。期望 = omc 1.25.0
+  // 实跑（2026-10-13，探针 pk-p1 PK3）。
+  YMC_CHECK_EQ(flatten_src("package P\n  partial package PartialMedium\n    replaceable partial model BaseProperties\n      Real p;\n"
+                           "    end BaseProperties;\n    constant Integer nX = 1;\n"
+                           "    type MassFlowRate = Real(quantity = \"MassFlowRate\", unit = \"kg/s\", min = -1e5, max = 1e5);\n"
+                           "    replaceable record ThermodynamicState\n      Real T;\n    end ThermodynamicState;\n"
+                           "    replaceable function g\n      input Real x;\n      output Real y;\n    algorithm\n      y := x + nX;\n"
+                           "    end g;\n  end PartialMedium;\n  package Water\n    extends PartialMedium(nX = 2);\n"
+                           "    redeclare model extends BaseProperties\n    equation\n      p = 1;\n    end BaseProperties;\n"
+                           "  end Water;\n  model Vessel\n    replaceable package Medium = PartialMedium;\n    Real x[Medium.nX];\n"
+                           "    Real y = Medium.g(time);\n  end Vessel;\nend P;\nmodel PK3\n"
+                           "  P.Vessel v(redeclare package Medium = P.Water);\nend PK3;\n"),
+               std::string("function PK3.v.Medium.g\n  input Real x;\n  output Real y;\nalgorithm\n  y := x + 2.0;\n"
+                           "end PK3.v.Medium.g;\n\nclass PK3\n  Real v.x[1];\n  Real v.x[2];\n  Real v.y = PK3.v.Medium.g(time);\n"
+                           "end PK3;\n"));
+}
+
+YMC_TEST(flatten_class_extends_target_in_package_instance) {
+  // 包实例里的 `redeclare model extends BaseProperties`：隐式基类是那个包实例的基类实例里顶替前的原类（NFInst.redeclareClass :1741
+  // v1.25.0），基类的 `Real X[nX]` 读 extends 修饰改过的 nX = 2。期望 = omc 1.25.0 实跑（2026-10-13，探针 pk-p4 PKX4）。
+  YMC_CHECK_EQ(flatten_src("package P\n  partial package PartialMedium\n    constant Integer nX = 1;\n"
+                           "    replaceable partial model BaseProperties\n      Real X[nX];\n    end BaseProperties;\n"
+                           "  end PartialMedium;\n  package Water\n    extends PartialMedium(nX = 2);\n"
+                           "    redeclare model extends BaseProperties\n      Real p = 1;\n    end BaseProperties;\n  end Water;\n"
+                           "  model Vessel\n    replaceable package Medium = PartialMedium;\n    Medium.BaseProperties medium;\n"
+                           "  end Vessel;\nend P;\nmodel PKX4\n  P.Vessel v(redeclare package Medium = P.Water);\nend PKX4;\n"),
+               std::string("class PKX4\n  Real v.medium.X[1];\n  Real v.medium.X[2];\n  Real v.medium.p = 1.0;\nend PKX4;\n"));
 }
 
 YMC_TEST_MAIN

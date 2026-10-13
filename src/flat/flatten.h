@@ -22,7 +22,8 @@ struct FlattenResult {
   std::string unsupported_detail;    // 可选的细目（用户函数调用卡在哪一步），driver 接在后面打 ` [<detail>]`
 };
 
-// 压平一个已实例化的根节点（instantiate_root 的返回值）。
-[[nodiscard]] FlattenResult flatten(Inst& inst, Interner& in, NodeId root);
+// 压平一个已实例化的根节点（instantiate_root 的返回值）。instr：实例化它的 Instantiator——经实例链查名进重声明的包时按需实例化
+// 包（Inst.instPackage，ADR-007 第 2 阶段 65a-3b）；空 = 不做（那类名字照旧 SKIP）。
+[[nodiscard]] FlattenResult flatten(Inst& inst, Interner& in, NodeId root, Instantiator* instr = nullptr);
 
 }  // namespace ymc

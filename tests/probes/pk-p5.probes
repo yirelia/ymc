@@ -1,0 +1,362 @@
+//// set: pk-p5 — 经重声明的包查常量 / 函数（包实例）：函数互调、常量链、同一模型两个 Medium、绑定 / 维里用、跨包调用、记录输出、两层参数
+//// model: PKF1
+package P
+  package Util
+    function sq
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * x;
+    end sq;
+  end Util;
+  partial package PM
+    constant Integer nX = 1;
+    constant Integer nXi = nX - 1;
+    constant Real k = 2.5;
+    function h
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * nX;
+    end h;
+    function h2
+      input Real x;
+      output Real y;
+    algorithm
+      y := h(x) + nXi;
+    end h2;
+    function hu
+      input Real x;
+      output Real y;
+    algorithm
+      y := P.Util.sq(x) + k;
+    end hu;
+    package Sub
+      constant Integer m = nX + 1;
+    end Sub;
+    record R
+      Real T;
+    end R;
+    function mk
+      input Real T;
+      output R r;
+    algorithm
+      r.T := T;
+    end mk;
+  end PM;
+  package W
+    extends PM(nX = 3, k = 4.0);
+  end W;
+  package W2
+    extends PM;
+  end W2;
+  model V
+    replaceable package M = PM;
+    Real y = M.h2(time);
+  end V;
+end P;
+model PKF1
+  P.V v(redeclare package M = P.W);
+end PKF1;
+//// model: PKF2
+package P
+  package Util
+    function sq
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * x;
+    end sq;
+  end Util;
+  partial package PM
+    constant Integer nX = 1;
+    constant Integer nXi = nX - 1;
+    constant Real k = 2.5;
+    function h
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * nX;
+    end h;
+    function h2
+      input Real x;
+      output Real y;
+    algorithm
+      y := h(x) + nXi;
+    end h2;
+    function hu
+      input Real x;
+      output Real y;
+    algorithm
+      y := P.Util.sq(x) + k;
+    end hu;
+    package Sub
+      constant Integer m = nX + 1;
+    end Sub;
+    record R
+      Real T;
+    end R;
+    function mk
+      input Real T;
+      output R r;
+    algorithm
+      r.T := T;
+    end mk;
+  end PM;
+  package W
+    extends PM(nX = 3, k = 4.0);
+  end W;
+  package W2
+    extends PM;
+  end W2;
+  model V
+    replaceable package M = PM;
+    Real y = M.h(time);
+  end V;
+end P;
+model PKF2
+  P.V a(redeclare package M = P.W);
+  P.V b(redeclare package M = P.W2);
+end PKF2;
+//// model: PKF3
+package P
+  package Util
+    function sq
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * x;
+    end sq;
+  end Util;
+  partial package PM
+    constant Integer nX = 1;
+    constant Integer nXi = nX - 1;
+    constant Real k = 2.5;
+    function h
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * nX;
+    end h;
+    function h2
+      input Real x;
+      output Real y;
+    algorithm
+      y := h(x) + nXi;
+    end h2;
+    function hu
+      input Real x;
+      output Real y;
+    algorithm
+      y := P.Util.sq(x) + k;
+    end hu;
+    package Sub
+      constant Integer m = nX + 1;
+    end Sub;
+    record R
+      Real T;
+    end R;
+    function mk
+      input Real T;
+      output R r;
+    algorithm
+      r.T := T;
+    end mk;
+  end PM;
+  package W
+    extends PM(nX = 3, k = 4.0);
+  end W;
+  package W2
+    extends PM;
+  end W2;
+  model V
+    replaceable package M = PM;
+    Real y = M.nX * 2 + M.nXi;
+    Real z[M.Sub.m];
+  end V;
+end P;
+model PKF3
+  P.V v(redeclare package M = P.W);
+end PKF3;
+//// model: PKF4
+package P
+  package Util
+    function sq
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * x;
+    end sq;
+  end Util;
+  partial package PM
+    constant Integer nX = 1;
+    constant Integer nXi = nX - 1;
+    constant Real k = 2.5;
+    function h
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * nX;
+    end h;
+    function h2
+      input Real x;
+      output Real y;
+    algorithm
+      y := h(x) + nXi;
+    end h2;
+    function hu
+      input Real x;
+      output Real y;
+    algorithm
+      y := P.Util.sq(x) + k;
+    end hu;
+    package Sub
+      constant Integer m = nX + 1;
+    end Sub;
+    record R
+      Real T;
+    end R;
+    function mk
+      input Real T;
+      output R r;
+    algorithm
+      r.T := T;
+    end mk;
+  end PM;
+  package W
+    extends PM(nX = 3, k = 4.0);
+  end W;
+  package W2
+    extends PM;
+  end W2;
+  model V
+    replaceable package M = PM;
+    Real y = M.hu(time);
+  end V;
+end P;
+model PKF4
+  P.V v(redeclare package M = P.W);
+end PKF4;
+//// model: PKF5
+package P
+  package Util
+    function sq
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * x;
+    end sq;
+  end Util;
+  partial package PM
+    constant Integer nX = 1;
+    constant Integer nXi = nX - 1;
+    constant Real k = 2.5;
+    function h
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * nX;
+    end h;
+    function h2
+      input Real x;
+      output Real y;
+    algorithm
+      y := h(x) + nXi;
+    end h2;
+    function hu
+      input Real x;
+      output Real y;
+    algorithm
+      y := P.Util.sq(x) + k;
+    end hu;
+    package Sub
+      constant Integer m = nX + 1;
+    end Sub;
+    record R
+      Real T;
+    end R;
+    function mk
+      input Real T;
+      output R r;
+    algorithm
+      r.T := T;
+    end mk;
+  end PM;
+  package W
+    extends PM(nX = 3, k = 4.0);
+  end W;
+  package W2
+    extends PM;
+  end W2;
+  model V
+    replaceable package M = PM;
+    M.R r = M.mk(time);
+  end V;
+end P;
+model PKF5
+  P.V v(redeclare package M = P.W);
+end PKF5;
+//// model: PKF6
+package P
+  package Util
+    function sq
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * x;
+    end sq;
+  end Util;
+  partial package PM
+    constant Integer nX = 1;
+    constant Integer nXi = nX - 1;
+    constant Real k = 2.5;
+    function h
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * nX;
+    end h;
+    function h2
+      input Real x;
+      output Real y;
+    algorithm
+      y := h(x) + nXi;
+    end h2;
+    function hu
+      input Real x;
+      output Real y;
+    algorithm
+      y := P.Util.sq(x) + k;
+    end hu;
+    package Sub
+      constant Integer m = nX + 1;
+    end Sub;
+    record R
+      Real T;
+    end R;
+    function mk
+      input Real T;
+      output R r;
+    algorithm
+      r.T := T;
+    end mk;
+  end PM;
+  package W
+    extends PM(nX = 3, k = 4.0);
+  end W;
+  package W2
+    extends PM;
+  end W2;
+  model V
+    replaceable package M = PM;
+    parameter Real p = M.k;
+    Real y = p * time;
+  end V;
+  model S
+    replaceable package M = PM;
+    V v(redeclare package M = M);
+  end S;
+end P;
+model PKF6
+  P.S s(redeclare package M = P.W);
+end PKF6;

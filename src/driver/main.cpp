@@ -253,7 +253,7 @@ int dump_flat_pipeline(ymc::Absyn& absyn, ymc::Diagnostics& diags, ymc::Interner
   }
   diags.print(stderr, "");
   if (!root.is_valid() || inst.nodes[root].is_empty() || diags.has_errors()) return 1;
-  ymc::FlattenResult fr = ymc::flatten(inst, interner, root);
+  ymc::FlattenResult fr = ymc::flatten(inst, interner, root, &instr);
   if (fr.unsupported) {
     if (fr.unsupported_detail.empty()) std::fprintf(stderr, "ymc: not implemented: %s\n", fr.unsupported_reason.c_str());
     else std::fprintf(stderr, "ymc: not implemented: %s [%s]\n", fr.unsupported_reason.c_str(), fr.unsupported_detail.c_str());

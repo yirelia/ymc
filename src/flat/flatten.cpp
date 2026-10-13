@@ -182,7 +182,7 @@ inline SVariability var_min(SVariability a, SVariability b) {
 
 class Flattener {
  public:
-  Flattener(Inst& inst, Interner& in) : I_(inst), in_(in) {
+  Flattener(Inst& inst, Interner& in, Instantiator* instr) : I_(inst), in_(in), instr_(instr) {
     // 合成节点的预留（见 synth）：上限在这里算——成员按声明序初始化，I_ 声明在类尾，默认成员初始化式里还用不了。
     I_.absyn.exps.reserve(exp_limit_ = I_.absyn.exps.size() + kSynthCap);
     I_.absyn.crefs.reserve(cref_limit_ = I_.absyn.crefs.size() + kSynthCap);
@@ -7446,9 +7446,26 @@ class Flattener {
     if (parts.empty()) return false;
     // 首段命中处的定义作用域链（经 import 命中 = 目标包的链）：被引常量的绑定在其声明处的词法作用域里求值。
     ScodeScope cur;
-    Id<SElement> el = find_scode_element_at(parts[0], leading_dot ? ScodeScope{} : scope, cur);
+    NodeId node;
+    Id<SElement> el = find_scode_element_at(parts[0], leading_dot ? ScodeScope{} : scope, cur, true, &node);
     if (!el.is_valid()) return false;
     for (std::size_t idx = 1; idx < parts.size(); ++idx) {
+      if (node.is_valid()) {   // 实例语境里的类：在它的包实例里查（见 resolve_class_path），组件按实例取值（lower_pkg_comp）
+        const NodeId pk = pkg_instance(node);
+        if (!pk.is_valid()) return false;
+        if (const NodeId cn = find_local(pk, parts[idx]); is_comp_node(cn)) {
+          if (idx + 1 != parts.size()) return false;   // 经包常量再往下（记录字段）未做
+          el = lower_pkg_comp(cn, cur);
+          node = NodeId{};
+          break;
+        }
+        const NodeId c = inst_tree_class(pk, parts[idx]);
+        if (!c.is_valid()) return false;
+        node = c;
+        el = I_.nodes[c].def;
+        cur = scode_scope_of(I_.nodes[c].parent_scope);
+        continue;
+      }
       if (I_.scode.elems[el].kind != SElementKind::Class || enter_partial(el)) return false;   // 中间段必须是类
       cur.insert(cur.begin(), el);   // 进入该类（压到作用域链最内）
       Id<SElement> nxt;
@@ -7477,9 +7494,26 @@ class Flattener {
                                      std::unordered_set<std::uint32_t>* used) {
     if (c.parts.empty() || depth > 100) return std::nullopt;
     ScodeScope cur;
-    Id<SElement> el = find_scode_element_at(c.parts[0].name, c.leading_dot ? ScodeScope{} : scope, cur);
+    NodeId node;
+    Id<SElement> el = find_scode_element_at(c.parts[0].name, c.leading_dot ? ScodeScope{} : scope, cur, true, &node);
     std::size_t k = 0;
     while (el.is_valid() && I_.scode.elems[el].kind == SElementKind::Class) {
+      if (node.is_valid()) {   // 实例语境里的类：在它的包实例里查（见 resolve_qual_const）
+        if (!c.parts[k].subscripts.empty() || ++k >= c.parts.size()) return std::nullopt;
+        const NodeId pk = pkg_instance(node);
+        if (!pk.is_valid()) return std::nullopt;
+        if (const NodeId cn = find_local(pk, c.parts[k].name); is_comp_node(cn)) {
+          el = lower_pkg_comp(cn, cur);
+          node = NodeId{};
+          break;
+        }
+        const NodeId cc = inst_tree_class(pk, c.parts[k].name);
+        if (!cc.is_valid()) return std::nullopt;
+        node = cc;
+        el = I_.nodes[cc].def;
+        cur = scode_scope_of(I_.nodes[cc].parent_scope);
+        continue;
+      }
       if (!c.parts[k].subscripts.empty() || ++k >= c.parts.size() || enter_partial(el)) return std::nullopt;
       cur.insert(cur.begin(), el);
       Id<SElement> nxt;
@@ -9010,6 +9044,7 @@ class Flattener {
     std::vector<Id<SMod>> alias_mods;
     bool local_to_caller = false;
     std::vector<Symbol> ctor_name;   // operator record 的构造调用 `C(…)`：所调 'constructor' 函数的压平名（见 oprec_ctor）
+    NodeId node;                     // 实例语境里找到的函数类节点（压平名按实例路径，见 scope_path）；无效 = 照定义作用域
   };
   struct FnSig {
     std::vector<Id<SElement>> inputs, outputs, locals;
@@ -11941,6 +11976,8 @@ class Flattener {
       home = cfn.cls_def;
     } else if (!fr->ctor_name.empty()) {
       qname = fr->ctor_name;   // operator record 的构造调用（见 oprec_ctor）
+    } else if (fr->node.is_valid()) {
+      qname = scope_path(fr->node);   // 实例语境里找到的函数（经重声明的包 / 包实例）：实例路径（NFInstNode.scopePath）
     } else {
       qname = fn_flat_name(fn, sc, enclosing, prefix, home);
     }
@@ -12305,7 +12342,9 @@ class Flattener {
   // import（OMC 的查找表里本地 > 继承 > import：addLocalElementConflict / addInheritedElementConflict，NFClassTree.mo v1.25.0）。
   // 继承来的元素的定义作用域链是声明它的基类那条（词法父亲 = 基类）。inherit0 = false：首层不看继承来的——解析该类自己的
   // extends 名时继承元素还没并进查找表（expandExtends 先于 ClassTree.expand，R12 p11）。
-  Id<SElement> find_scode_element_at(Symbol name, const ScodeScope& scope, ScodeScope& def_scope, bool inherit0 = true) {
+  Id<SElement> find_scode_element_at(Symbol name, const ScodeScope& scope, ScodeScope& def_scope, bool inherit0 = true,
+                                    NodeId* node_out = nullptr) {
+    if (node_out) *node_out = NodeId{};
     auto hit = [&](Id<SElement> e) {
       const SElement& el = I_.scode.elems[e];
       return el.name == name && (el.kind == SElementKind::Class || el.kind == SElementKind::Component);
@@ -12322,6 +12361,18 @@ class Flattener {
         const SElement& rel = I_.scode.elems[I_.nodes[ic].def];
         if (rel.restriction == SRestriction::Package && rel.def.kind == SClassDefKind::Derived) {
           def_scope = scode_scope_of(I_.nodes[ic].parent_scope);
+          if (node_out) *node_out = ic;
+          return I_.nodes[ic].def;
+        }
+      }
+      // 包实例层（Inst::package_instances，inst 经 Inst.instPackage 建的）：名字按实例查——组件取 inst 记的绑定（extends 修饰覆盖后的，
+      // PK 探针 PK4 / PK5、PKX2 / PKX4：Medium 包里经 `extends PartialMedium(nX = 2)` 继承来的类读到 nX = 2），类取实例类树里的那份
+      //（克隆 / 基类实例里的；词法外层是实例，往下查也走实例）。
+      if (lin.is_valid() && I_.package_instances.count(lin.raw)) {
+        if (const NodeId cn = find_local(lin, name); is_comp_node(cn)) return lower_pkg_comp(cn, def_scope);
+        if (ic.is_valid()) {
+          def_scope = scode_scope_of(I_.nodes[ic].parent_scope);
+          if (node_out) *node_out = ic;
           return I_.nodes[ic].def;
         }
       }
@@ -12459,8 +12510,40 @@ class Flattener {
   bool inh_tainted(const ScodeScope& ds) const {
     for (Id<SElement> d : ds)
       if (inh_bases_.count(d.raw)) return true;
+    return pkg_scope(ds);
+  }
+  // 作用域链里有包实例层：在那里查到的类 / 函数，压平名要按实例路径拼（NFInstNode.scopePath：`X.v.Medium.f`），照定义作用域链拼
+  // 不对 → 调用方 SKIP（ADR-007 第 2 阶段 65a-3b 接上实例路径命名）。
+  bool pkg_scope(const ScodeScope& ds) const {
+    for (const ScopeLevel& l : ds)
+      if (l.inst.is_valid() && I_.package_instances.count(l.inst.raw)) return true;
     return false;
   }
+  // 包实例里的组件 → SCode 元素 + 求值作用域链（ADR-007 第 2 阶段 65a-3a）。值就是 inst 记的绑定：声明的，或 extends 修饰覆盖的
+  //（apply_extends_modifier 把覆盖式与写 extends 的实例记进 Component::binding；包实例不在模型实例树里，没有外来修饰）。覆盖过的
+  // 合成一个元素（声明的修饰换掉绑定，按组件节点缓存），求值作用域 = 写 extends 的实例；没覆盖的就是声明本身，作用域 = 声明所在
+  // 的（基类）实例——绑定里再查的名字也走实例（`nXi = if fixedX then 0 else nX`）。
+  Id<SElement> lower_pkg_comp(NodeId cn, ScodeScope& def_scope) {
+    const Component& c = I_.comps[I_.nodes[cn].comp];
+    const Id<SElement> decl = c.def;
+    const Id<SMod> dm = I_.scode.elems[decl].mod;
+    const Id<Exp> dbind = dm.is_valid() ? I_.scode.mods[dm].binding : Id<Exp>{};
+    if (c.binding.kind != BindingKind::Raw || !c.binding.raw_exp.is_valid() || c.binding.raw_exp == dbind ||
+        !c.binding.scope.is_valid()) {
+      def_scope = scode_scope_of(c.decl_scope.is_valid() ? c.decl_scope : I_.nodes[cn].parent_scope);
+      return decl;
+    }
+    def_scope = scode_scope_of(c.binding.scope);
+    if (const auto it = lowered_comps_.find(cn.raw); it != lowered_comps_.end()) return it->second;
+    SMod m = dm.is_valid() ? I_.scode.mods[dm] : SMod{};   // 拷贝：子修饰（属性）照留
+    m.binding = c.binding.raw_exp;
+    SElement e = I_.scode.elems[decl];   // 拷贝
+    e.mod = I_.scode.mods.add(std::move(m));
+    const Id<SElement> x = I_.scode.elems.add(std::move(e));
+    lowered_comps_[cn.raw] = x;
+    return x;
+  }
+  std::unordered_map<std::uint32_t, Id<SElement>> lowered_comps_;   // 包实例组件节点 → 换了绑定的合成元素（见 lower_pkg_comp）
   // SCode 查到的常量 e 在类 level_cls 这一层（本地或继承来的）。OMC 里这一层若是外层实例（嵌套类、模型内函数的父亲是外层实例），
   // 读到的是实例上改过的值（IC7 / IC14 / IC15 探针：`A a(n = 3)` 里嵌套类的 `Real x[n]`、模型内函数体的 n 都得 3）；ymc 这里取
   // SCode 的声明值。祖先帧里最内一个是这个类（或以它为基类）的实例、实例上这个常量被改过（外来修饰 / extends 修饰）→ SKIP
@@ -12539,11 +12622,25 @@ class Flattener {
   }
   // 类路径 `P.Q.f`：首段按作用域链找，其后逐段下降为局部类；给出末段类的定义作用域链。前导点 = 从顶层找。inherit0 见
   // find_scode_element_at（解析 extends 名时传 false）。
+  // node_out：末段是实例语境里的类（重声明顶替进来的包、包实例里的类）时给出它的节点（按实例路径命名用，见 scope_path）。
   Id<SElement> resolve_class_path(const std::vector<Symbol>& parts, bool leading_dot, const ScodeScope& scope,
-                                  ScodeScope& def_scope, bool inherit0 = true) {
+                                  ScodeScope& def_scope, bool inherit0 = true, NodeId* node_out = nullptr) {
+    if (node_out) *node_out = NodeId{};
     if (parts.empty()) return {};
-    Id<SElement> e = find_scode_element_at(parts[0], leading_dot ? ScodeScope{} : scope, def_scope, inherit0);
+    NodeId node;
+    Id<SElement> e = find_scode_element_at(parts[0], leading_dot ? ScodeScope{} : scope, def_scope, inherit0, &node);
     for (std::size_t k = 1; k < parts.size() && e.is_valid(); ++k) {
+      // 实例语境里的类：后续段在它的包实例里查（Inst.instPackage，NFLookup.lookupLocalName :699-700 v1.25.0）——继承来的是基类
+      // 实例里的那份（`Medium.f`：Medium 包里经 `extends PartialMedium(nX = 2)` 继承的函数，体里读 nX 得 2，PK 探针 PK3）。
+      if (node.is_valid()) {
+        const NodeId pk = pkg_instance(node);
+        const NodeId c = pk.is_valid() ? inst_tree_class(pk, parts[k]) : NodeId{};
+        if (!c.is_valid()) return {};
+        node = c;
+        e = I_.nodes[c].def;
+        def_scope = scode_scope_of(I_.nodes[c].parent_scope);
+        continue;
+      }
       if (I_.scode.elems[e].kind != SElementKind::Class || enter_partial(e)) return {};
       Id<SElement> nxt;
       for (Id<SElement> c : I_.scode.elems[e].def.elements)
@@ -12552,7 +12649,49 @@ class Flattener {
       def_scope.insert(def_scope.begin(), e);
       e = nxt;
     }
+    if (node_out) *node_out = node;
     return e;
+  }
+  // 实例语境里的类节点 cls 的包实例（Inst.instPackage，按节点缓存，见 Instantiator::inst_package）；不能实例化（partial / 带修饰的
+  // 短类 / 环）→ 无效。实例化包时 inst 撞上未做的构造（mark_unsupported）→ 带进压平结果（driver 在压平前只查过一次 inst）。
+  NodeId pkg_instance(NodeId cls) {
+    if (!instr_) return {};
+    const NodeId pk = instr_->inst_package(cls);
+    if (instr_->unsupported() && !result_.unsupported) {
+      set_unsupported(instr_->unsupported_reason().c_str());
+      result_.unsupported_detail = instr_->unsupported_detail();
+    }
+    return pk.is_valid() && !I_.nodes[pk].is_empty() ? pk : NodeId{};
+  }
+  // 实例路径名（NFInstNode.scopePath 的 INCLUDING_ROOT，NFInstNode.mo:1217-1290 v1.25.0）：组件 = 实例父亲的路径 + 名；重声明顶替进来
+  // 的类（REDECLARED_CLASS）= 原类父亲（实例）的路径 + 名；实例父亲是类节点的（基类实例、包实例）跳过自己的名（BASE_CLASS）；组件
+  // 的类实例 = 那个组件的路径；根实例 = 模型全名；其余类节点（定义 / 克隆）= 词法外层的路径 + 名（顶层止）。PK3：`PK3.v.Medium.g`。
+  std::optional<std::vector<Symbol>> scope_path(NodeId n) {
+    std::vector<Symbol> rev;
+    for (int guard = 0; guard < 256; ++guard) {
+      if (!n.is_valid() || I_.nodes[n].is_empty() || n == I_.top) return std::vector<Symbol>(rev.rbegin(), rev.rend());
+      if (n == root_) {
+        std::vector<Symbol> out = result_.model.name;
+        out.insert(out.end(), rev.rbegin(), rev.rend());
+        return out;
+      }
+      const INode& nd = I_.nodes[n];
+      if (nd.kind == NodeKind::Component) {
+        rev.push_back(nd.name);
+        n = nd.instance_parent;
+      } else if (nd.kind != NodeKind::Class) {
+        return std::nullopt;
+      } else if (nd.node_type.kind == NodeTypeKind::RedeclaredClass) {
+        rev.push_back(nd.name);
+        n = nd.node_type.parent;
+      } else if (nd.instance_parent.is_valid() && !I_.nodes[nd.instance_parent].is_empty()) {
+        n = nd.instance_parent;
+      } else {
+        rev.push_back(nd.name);
+        n = nd.parent_scope;
+      }
+    }
+    return std::nullopt;
   }
   // 函数引用：长类定义 + 函数体作用域（定义处，非调用处：ExtendsShort2 的 P.f 体内 f2 在 P 里解析）。短类别名
   // `function f = P.f` / `function g = f(r = x)` 逐层追到长类，沿途修饰记为输入默认。local_to_caller：函数就定义在调用者
@@ -12564,10 +12703,14 @@ class Flattener {
       parts.push_back(p.name);
     }
     ScodeScope ds;
-    const Id<SElement> e = resolve_class_path(parts, fn.leading_dot, scope, ds);
+    NodeId node;
+    const Id<SElement> e = resolve_class_path(parts, fn.leading_dot, scope, ds, true, &node);
     if (want == SRestriction::Function)
       if (std::optional<FnRef> c = oprec_ctor(e, ds)) return c;
-    return resolve_fn_from(e, std::move(ds), scope, want);
+    std::optional<FnRef> r = resolve_fn_from(e, std::move(ds), scope, want);
+    // 实例语境里找到的长函数：压平名按实例路径（见 scope_path）。短类别名（`function f = g`）的命名未核实 → 不记（照旧 SKIP）。
+    if (r && node.is_valid() && r->fe == e) r->node = node;
+    return r;
   }
   // 短类链追到底的长类（定义作用域链随之更新）；链断 / 太长 → invalid。
   Id<SElement> long_class_of(Id<SElement> e, ScodeScope& ds) {
@@ -24746,6 +24889,7 @@ class Flattener {
 
   Inst& I_;
   Interner& in_;
+  Instantiator* instr_;   // 经实例链查名时按需实例化包（见 pkg_instance）；可空
   FlattenResult result_;
   std::unordered_map<std::uint32_t, std::vector<Symbol>> outer_redirect_;   // outer 组件节点 raw → inner 全名
   std::unordered_map<std::uint32_t, NodeId> outer_inner_node_;               // outer 组件节点 raw → inner 组件节点
@@ -25046,15 +25190,15 @@ class Flattener {
 // 两遍压平：结构求值（if 条件等）引用到还没发射的参数（向前引用——MSL 示例把参数记录 `aimcData` 声明在最后）时，单遍 DFS 求不出。
 // 第一遍宽松地走完（缺值的 if 先跳过），收下全部参数的值；第二遍带着这些值重来，向前引用就有值可用（omc 先把全部组件定型、
 // 再定型方程，本没有先后问题）。不缺值的模型只走一遍。
-FlattenResult flatten(Inst& inst, Interner& in, NodeId root) {
-  Flattener f1(inst, in);
+FlattenResult flatten(Inst& inst, Interner& in, NodeId root, Instantiator* instr) {
+  Flattener f1(inst, in, instr);
   f1.set_lenient(true);
   FlattenResult r1 = f1.run(root);
   // 要第二遍就走：第一遍里先留着的项（向前引用的值 / 维）可能让第一遍在后面判了 SKIP（结构参数绑定不是字面量…），第二遍过了
   // 就不作数。两遍都 SKIP → 报第一遍的：第一遍若在真卡点停下，带过去的值不全，第二遍会在更前面的向前引用处卡住，那不是真卡点。
   if (!f1.needs_second_pass()) return r1;
   auto carry = f1.take_carry();
-  Flattener f2(inst, in);
+  Flattener f2(inst, in, instr);
   f2.set_carry(std::move(carry));
   FlattenResult r2 = f2.run(root);
   if (r2.unsupported && r1.unsupported) return r1;
