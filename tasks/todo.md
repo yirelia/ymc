@@ -2253,12 +2253,17 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
 
 ## S5 后端启动（与 S3 长尾交替推进，2026-10-12 起）
 
-- [ ] (S5.0) ADR-008：BackendDAE IR + `.bdae` 文本格式（dump / parse，对齐 `-d=bltdump` 口径）+ 输入（先吃 ymc 自己已与 omc
-      逐字节一致的 FlatModel：testsuite 1787 / MSL 438）+ 结构对拍口径（`-d=backenddaeinfo,bltdump` 的状态数 / 强连通分量计数 /
-      块大小序列，tools/structcompare.py）。**定稿前与用户确认（架构决定）。**
-- [ ] (S5a) lower + 预处理：变量 / 方程分箱、绑定、别名消除、DetectStates、Events（NBackendDAE.mo:259 / :540、NBAlias.mo:118、
-      NBDetectStates.mo:79、NBEvents.mo:88）；验收子集 equations / parameters / commonSubExp 的结构计数与 omc 一致。
-- [ ] (S5b) 邻接 / 匹配 / 排序；(S5c) 指标约简；(S5d) 初始化；(S5e) Solve / 撕裂 / 雅可比 —— 按方案 §5 S5 表逐个开。
+- [x] (S5.0) ADR-008 已决定（2026-10-13）：IR 照 NB `BackendDAE.MAIN`（22 个变量桶 / 8 个方程桶）；`.bdae` = NB 自己的 dump 版式；
+      输入 = ymc 内存 FlatModel + 准入 A1–A4（与 omc 逐字节一致、无数组 / 记录、NB 跑得通、所需 pre 模块已实现）；结构 oracle =
+      1.25.0 NB（`--newBackend -s --simCodeTarget=None -d=optdaedump,bltdump,backenddaeinfo`），旧后端只作旁证；**块序与分区内各序
+      与 OMC 逐位同序**（用户裁定）；NB 1.25.0 无指标约简、不撕裂连续环 → 5a / 5b 之后尽早接 S6，5c / 5e 以 L2 数值为准。
+- [ ] (S5a) lower + NB 九个 pre 模块，按模块增量（Bindings → FunctionAlias → Early Inline → Simplify 1 → Alias → Simplify 2 →
+      Remove Stream → Detect States → Events）；首批子集 `simulation/modelica/NBackend/{basics,alias,event_handling}` + equations /
+      parameters 的准入模型；验收见 ADR-008 D5（签名一致、`.bdae` 回读逐字节、单测期望来自 oracle、四套构建零警告）。
+- [ ] (S5b-0) OMC 哈希容器复刻：`UnorderedSet` / `UnorderedMap` 的桶数 / 扩容 / 插入 / 遍历序 + `ComponentRef.hash`（djb2，Windows
+      32 位 long）；探针核实遍历序与 OMC 逐位一致（块序逐位同序的前置）。
+- [ ] (S5b) 邻接 / 匹配 / 排序 / 分区（块与各序逐位同 NB）。
+- [ ] (S6 提前) 生成 C + 借 OMC 运行时仿真（5a / 5b 落地后即开），之后 5c 指标约简、5d 初始化、5e 撕裂 / 雅可比以 L2 数值验收。
 
 ## 下一里程碑
 

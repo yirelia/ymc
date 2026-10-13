@@ -65,7 +65,7 @@
               │            │             │                   │                        │
               ▼            ▼             ▼                   ▼                        ▼
            .absyn 文本   .scode 文本   Base Modelica 文本    .bdae 文本               （C 本身就是文本）
-           (unparse)                   (MLS 附录 / OMC --baseModelicaOptions)  (对齐 OMC -d=bltdump 格式)
+           (unparse)                   (MLS 附录 / OMC --baseModelicaOptions)  (对齐 OMC -d=bltdump 格式；块结构只在 --newBackend 下有，ADR-008)
 
  每个箭头 = 一个可单独运行的 pass：  ymc --from=<ir文件> --run=<pass> --dump-after=<pass>
 ```
@@ -209,7 +209,7 @@ class Diagnostics { public: void report(Diagnostic); bool has_errors() const; /*
 | `scode::Program/Class/Element` | `FrontEnd/SCode.mo`（PARTS :193、CLASS :560、COMPONENT :571） | `.scode`（自定义，仅调试） | 语法糖归一：一个 `COMPONENT` 一个名字 |
 | `inst::Node/Class/Component/Modifier` | `NFFrontEnd/NFInstNode.mo`、`NFClass.mo`、`NFComponent.mo`、`NFModifier.mo` | 无（树太大，只 dump 子树） | 可变共享树：arena + Id，父子/继承指针都是 Id |
 | `flat::Model/Variable/Equation` | `NFFrontEnd/NFFlatModel.mo`、`NFVariable.mo`、`NFEquation.mo` | **Base Modelica** | S3 出口、S5 入口 |
-| `bdae::Var/Eqn/Partition/StrongComponent` | `NBackEnd/Classes/NBVariable.mo`（VAR_DATA_SIM :2450）、`NBEquation.mo`（Equation :1110、EQ_DATA_SIM :4683）、`NBPartition.mo`（PARTITION :310）、`NBStrongComponent.mo`（:109–173） | `.bdae`（对齐 `-d=bltdump` 的块格式） | 桶 = `std::vector<Id<Var>>` 视图 |
+| `bdae::Var/Eqn/Partition/StrongComponent` | `NBackEnd/Classes/NBVariable.mo`（VAR_DATA_SIM :2053，v1.25.0）、`NBEquation.mo`（Equation :899、EQ_DATA_SIM :4303）、`NBPartition.mo`（PARTITION :176）、`NBStrongComponent.mo`（:102–164） | `.bdae`（= NB 自己的 dump 版式，`--newBackend -d=optdaedump,bltdump`；见 ADR-008 D3） | 桶 = `std::vector<Id<Var>>` 视图 |
 | `simcode::Block/SimVar` | `NSimCode/NSimStrongComponent.mo`（Block :94）、`NSimVar.mo` | 对齐 `-d=dumpSimCode` | |
 | `Expr`（所有 IR 共用） | `NFExpression.mo` / `DAE.Exp` | Modelica 表达式文法 | arena 化、hash-consing（同结构同 Id）便于 CSE/别名 |
 
@@ -304,7 +304,7 @@ struct Expr {
 
 | 子阶段 | 内容 | OMC 入口（新后端为主，缺的看旧后端） | 验收子集（L2，需 S6 后跑通） |
 |---|---|---|---|
-| **5a lower + 预处理** | 变量/方程分箱（VAR_DATA_SIM 23 桶、EQ_DATA_SIM）、Bindings、别名消除、DetectStates（`der(x)→$DER.x`）、Events（关系式→`$SEV/$TEV`） | `NBackendDAE.mo:259 lower`、`:540 lowerVariableData`、`2_Pre/NBBindings.mo:55`、`NBAlias.mo:118`、`NBDetectStates.mo:79`、`NBEvents.mo:88`；旧后端别名 `BackEnd/RemoveSimpleEquations.mo` | `equations`、`parameters`、`commonSubExp`（40） |
+| **5a lower + 预处理** | 变量/方程分箱（VAR_DATA_SIM 22 桶（v1.25.0）、EQ_DATA_SIM 8 桶）、Bindings、别名消除、DetectStates（`der(x)→$DER.x`）、Events（关系式→`$SEV/$TEV`） | `NBackendDAE.mo:259 lower`、`:505 lowerVariableData`、`:815 lowerEquationData`、`2_Pre/NBBindings.mo:50`、`NBAlias.mo:113`、`NBDetectStates.mo:71`、`NBEvents.mo:80`（v1.25.0）；旧后端别名 `BackEnd/RemoveSimpleEquations.mo` | `equations`、`parameters`、`commonSubExp`（40） |
 | **5b 邻接 / 匹配 / 排序** | `Adjacency.Matrix`（FULL→FINAL，可解性靠偏导）、PF+ 匹配、Tarjan；分区 | `NBCausalize.mo:247 causalizePseudoArray`、`NBAdjacency.mo`（:81 strictness、:838 refine）、`NBMatching.mo:119 singular`、`NBSorting.mo:233 tarjan`、`NBPartitioning.mo:472`（细读见 `NFBackend-匹配与排序导读.html`） | `others`、`arrays`（68，标量化后） |
 | **5c 指标约简** | Pantelides（MSSS 染色）+ 静态哑导数（分阶段匹配）；**动态状态选择**（新后端没有，看旧后端） | `NBResolveSingularities.mo:67 indexReduction`（细读见 `NB-指标约简导读.html`）；动态选择 `BackEnd/IndexReduction.mo`（`dynamicStateSelection`、StateSet） | `indexreduction`（8）、`start_value_selection`（8） |
 | **5d 初始化** | 克隆 + `$START` + 参数变未知量 + 三阶段匹配 + 平衡 + homotopy λ=0 | `NBInitialization.mo:82`（细读见 `NB-初始化系统导读.html`）、`NBResolveSingularities.mo:344 balanceInitialization`、`NBCausalize.mo:262` | `initialization`（91） |
@@ -313,7 +313,7 @@ struct Expr {
 - **不做（S8）**：数组保持、DAE 模式（`daemode` 13）、同步（`synchronous` 22/`synchronous_c` 18）、状态机（14）。
 - **手写清单**：全部算法。
 - **我提供**：每个算法的伪码 + OMC 实现的逐段注释 + 论文引用（Pantelides 1988、Tarjan 1972、Mattsson–Söderlind 1993 哑导数、Elmqvist–Otter 撕裂）；`.bdae` 格式规格；用 OMC `-d=bltdump,backenddaeinfo` 抓的参考 dump。
-- **验收（S6 之前的结构级）**：对每个用例，`backenddaeinfo` 统计（状态数、强连通分量按类型计数）与 OMC 一致；`bltdump` 块大小序列一致。
+- **验收（S6 之前的结构级，ADR-008 D4 / D5）**：结构 oracle = 安装版 1.25.0 的 NB（`--newBackend`；默认的旧后端只作旁证）；准入模型上 5a 签名与 NB `(Events)` 段一致、5b 的块与分区内各序与 NB **逐位同序**（复刻 OMC 哈希容器遍历序）。NB 1.25.0 没有指标约简、不撕裂连续代数环 → 5c / 5e 尽早接 S6、以 L2 仿真数值为准（2026-10-13 用户裁定）。首批子集改为 `simulation/modelica/NBackend/{basics,alias,event_handling}` + equations / parameters 的准入模型。
 - **调试**：`.bdae` dump/parse 让每个 pass 可从文件重放；`--trace=$RES_SIM_3`；邻接矩阵 dump（对齐 `-d=bltmatrixdump`）。
 - **C++ 学习点**：图算法与位集、`std::sort` 自定义比较、递归深度（Tarjan 大模型要迭代版）、性能剖析（perf/VS Profiler）。
 
