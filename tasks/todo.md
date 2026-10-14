@@ -2362,6 +2362,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       slice 692 例 FAIL 0（oracle=live 不一致 0）；scodeinst 652（不变）；testsuite 1808（不变）/ FAIL 0；**MSL 439→445**（Fluid 再 +6：
       Tanks.ThreeTanks / EmptyTanks、AST_BatchPlant.Test.TwoTanks / TankWithEmptyingPipe2 / TanksWithEmptyingPipe1 / 2，Fluid 7/23）；
       探针 9698→9699；单测 372→373。
+- [x] (66j) 向量化内建的两种实参（2026-10-14）：零长数组实参（`abs(m_flows)`、n = 0）→ 同形空数组（元素类型照内建结果规则）；
+      复合数组字段实参（`abs(ports.m_flow)`）——expand_field_over_array / expand_composite_path 给展开出的数组记下首个元素的 cref
+      与各洞的位置，vectorize_arg 把迭代变量填进洞里（`abs(s2.ports[$i1].m_flow)`，sum 展开 / max 成归约照普通数组）。向量化
+      失败的 SKIP 带上内建名。探针 pk-p18（3）、旧组 SKIP→PASS 3（ca-c3、ca-c4、va-p1）；单测 +2。
+      slice 692 例 FAIL 0（oracle=live 不一致 0）；scodeinst 652（不变）；testsuite 1808（不变）/ FAIL 0；**MSL 445→449**（Fluid 再 +4：
+      DrumBoiler、AST_BatchPlant.Test.OneTank / TankWithEmptyingPipe1、Explanatory.MeasuringTemperature，Fluid 11/23）；
+      探针 9699→9702；单测 373→375。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

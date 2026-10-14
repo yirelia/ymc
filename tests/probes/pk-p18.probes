@@ -1,0 +1,42 @@
+//// set: pk-p18 — 向量化内建：零长数组实参、复合数组字段实参（`abs(ports.m_flow)`）、普通数组对照
+//// model: PKJ1
+model PKJ1
+  parameter Integer n = 0;
+  Real m_flows[n];
+  Real Res[n];
+  Real x[2];
+  Real z[2];
+equation
+  Res = abs(m_flows) * 2;
+  m_flows = fill(time, n);
+  x = {time, 2 * time};
+  z = abs(x);
+end PKJ1;
+//// model: PKJ2
+package P
+  connector FP
+    flow Real m_flow;
+    Real p;
+  end FP;
+  model Src
+    parameter Integer nPorts = 1;
+    FP ports[nPorts];
+  equation
+    assert(abs(sum(abs(ports.m_flow)) - max(abs(ports.m_flow))) <= 1e-60, "only one connection");
+    for i in 1:nPorts loop
+      ports[i].p = 1;
+    end for;
+  end Src;
+end P;
+model PKJ2
+  P.Src s1;
+  P.Src s2(nPorts = 2);
+end PKJ2;
+//// model: PKJ3
+model PKJ3
+  Real x[2] = {time, 2 * time};
+  Real y[1] = {3 * time};
+equation
+  assert(abs(sum(abs(x)) - max(abs(x))) <= 1e-60, "msg2");
+  assert(abs(sum(abs(y)) - max(abs(y))) <= 1e-60, "msg1");
+end PKJ3;

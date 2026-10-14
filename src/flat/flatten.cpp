@@ -11829,6 +11829,16 @@ class Flattener {
       c.ty = rty;
       return add(std::move(c));
     }
+    // 复合数组引用展开出的数组（`ports.m_flow` → `{ports[1].m_flow, …}`）：取元素 = 首个元素的 cref、洞的下标换成迭代变量
+    //（omc `abs(s2.ports[$i1].m_flow)`，PKJ 探针 PKJ2；见 expand_composite_path 末尾）。洞数须等于向量化的维数。
+    if (const auto cv = composite_vec_.find(a.raw); x.kind == ExprKind::Array && cv != composite_vec_.end() &&
+                                                     cv->second.second.size() == iters.size() && rest.empty()) {
+      Expr c = result_.model.exprs[cv->second.first];   // 拷贝
+      for (std::size_t n = 0; n < iters.size(); ++n)
+        c.cref.parts[cv->second.second[n].first].subscripts[cv->second.second[n].second] = iters[n];
+      c.ty = rty;
+      return add(std::move(c));
+    }
     if (x.kind == ExprKind::Array && written_literal) {
       Expr s;
       s.kind = ExprKind::Subscript;
@@ -15723,6 +15733,7 @@ class Flattener {
         fty.kind == TypeKind::Unknown)
       return std::nullopt;
     std::vector<std::int64_t> idx(hd.size(), 1);
+    Id<Expr> first_leaf;   // 首个元素（向量化模板，见末尾）
     auto build = [&](auto& self, std::size_t k) -> Id<Expr> {
       if (k == hd.size()) {
         Cref ec = c;   // 首段：已给下标原样在前，余维补字面量
@@ -15735,6 +15746,7 @@ class Flattener {
         }
         const Id<Expr> el = cref(synth_cref(std::move(ec)), enclosing, prefix);
         xfield_elems_.insert(el.raw);
+        if (!first_leaf.is_valid()) first_leaf = el;
         return el;
       }
       Expr arr;
@@ -15753,7 +15765,20 @@ class Flattener {
       }
       return add(std::move(arr));
     };
-    return build(build, ns);
+    const Id<Expr> r = build(build, ns);
+    // 向量化内建取元素用（`abs(ports.m_flow)` → `abs(ports[$i1].m_flow)`，见 vectorize_arg / expand_composite_path 末尾）：
+    // 余下各维都是取满的洞，在首段的下标位 ns.. 上。
+    if (first_leaf.is_valid() && result_.model.exprs[first_leaf].kind == ExprKind::Cref) {
+      const ExprCref& fc = result_.model.exprs[first_leaf].cref;
+      if (fc.parts.size() >= 2) {
+        const std::size_t head = fc.parts.size() - 2;   // 扁平 cref 里首段（复合数组）的位置
+        std::vector<std::pair<std::size_t, std::size_t>> holes;
+        for (std::size_t j = ns; j < hd.size(); ++j)
+          if (j < fc.parts[head].subscripts.size()) holes.push_back({head, j});
+        if (holes.size() == hd.size() - ns) composite_vec_[r.raw] = {first_leaf, std::move(holes)};
+      }
+    }
+    return r;
   }
 
   // 子原因（排桶用）：cref 的点分名（不带下标）。
@@ -15862,6 +15887,7 @@ class Flattener {
     // 逐层展开：(段, 维) 按序；洞 → 一层数组，标量 → 定值。走到底合成全标量下标的 cref。
     std::vector<std::vector<std::int64_t>> pick(ps.size());
     for (std::size_t i = 0; i < ps.size(); ++i) pick[i].assign(ps[i].sel.size(), 0);
+    Id<Expr> first_leaf;   // 首个元素（向量化模板，见末尾）
     auto build = [&](auto& self, std::size_t i, std::size_t k) -> Id<Expr> {
       if (result_.unsupported) return lit_int(0);
       if (i == ps.size()) {
@@ -15877,6 +15903,7 @@ class Flattener {
         }
         const Id<Expr> el = cref(synth_cref(std::move(ec)), enclosing, prefix);
         xfield_elems_.insert(el.raw);
+        if (!first_leaf.is_valid()) first_leaf = el;
         return el;
       }
       if (k == ps[i].sel.size()) return self(self, i + 1, 0);
@@ -15916,6 +15943,23 @@ class Flattener {
     };
     const Id<Expr> r = build(build, 0, 0);
     if (result_.unsupported) return std::nullopt;
+    // 向量化内建取它的元素（`abs(ports.m_flow)` → `array(abs(ports[$i1].m_flow) for $i1 in 1:n)`，MSL Fluid PartialFlowSource 的
+    // assert；PKJ 探针 PKJ2）：记下首个元素的 cref 与各洞在其中的位置（洞须取满整维），vectorize_arg 把迭代变量填进洞里。
+    if (first_leaf.is_valid() && result_.model.exprs[first_leaf].kind == ExprKind::Cref) {
+      const ExprCref& fc = result_.model.exprs[first_leaf].cref;
+      std::vector<std::pair<std::size_t, std::size_t>> holes;   // (扁平 cref 的段, 下标位)
+      bool full = fc.parts.size() >= ps.size();
+      const std::size_t off = full ? fc.parts.size() - ps.size() : 0;   // 前缀段数
+      for (std::size_t i = 0; full && i < ps.size(); ++i)
+        for (std::size_t k = 0; full && k < ps[i].sel.size(); ++k) {
+          if (!ps[i].hole[k]) continue;
+          for (std::size_t q = 0; full && q < ps[i].sel[k].size(); ++q)
+            full = ps[i].sel[k][q] == static_cast<std::int64_t>(q) + 1;
+          full = full && k < fc.parts[off + i].subscripts.size();
+          holes.push_back({off + i, k});
+        }
+      if (full && !holes.empty()) composite_vec_[r.raw] = {first_leaf, std::move(holes)};
+    }
     return r;
   }
 
@@ -19677,6 +19721,33 @@ class Flattener {
           "log10", "sqrt", "abs", "sign", "integer", "floor", "ceil",  "mod",     "div",   "homotopy", "semiLinear",
           "edge"};   // edge(b) → `array(edge(b[$i1]) for $i1 in 1:2)`（V4r 探针；change(b) 则不向量化，见下）
       if (kVectorizable.count(builtin_name)) {
+        // 零长的数组实参（MSL Fluid 管道的 `abs(m_flows)`，只有一段时各段之间的量是空数组）：结果是同形的空数组（变量引用，
+        // 不算字面量），所在等式不产生方程（PKJ 探针 PKJ1，omc 同）。元素类型照内建的结果规则；别的结果规则未做 → 照旧 SKIP。
+        {
+          bool consistent = true;
+          std::vector<std::int64_t> zs;
+          for (Id<Expr> a : args) {
+            const std::vector<std::int64_t> sh = expr_shape(a);
+            if (sh.empty()) continue;
+            if (!zs.empty() && zs != sh) consistent = false;
+            zs = sh;
+          }
+          if (consistent && bf && std::find(zs.begin(), zs.end(), 0) != zs.end()) {
+            TypeKind rk = TypeKind::Unknown;
+            switch (bf->res) {
+              case BFRes::SameArg0: rk = expr_elem_kind(args[0]); break;
+              case BFRes::Real: rk = TypeKind::Real; break;
+              case BFRes::Integer: rk = TypeKind::Integer; break;
+              case BFRes::Boolean: rk = TypeKind::Boolean; break;
+              default: break;
+            }
+            if (rk == TypeKind::Real || rk == TypeKind::Integer || rk == TypeKind::Boolean) {
+              const Id<Expr> ea = empty_array_lit(Type::of(rk), zs);
+              var_empty_arrays_.insert(ea.raw);
+              return ea;
+            }
+          }
+        }
         bool same = true;
         for (Id<Expr> a : args) {
           const std::vector<std::int64_t> sh = expr_shape(a);
@@ -19705,6 +19776,7 @@ class Flattener {
             if (v.is_valid()) args[i] = v; else same = false;
           }
           if (!same) {
+            if (!result_.unsupported) result_.unsupported_detail = std::string(builtin_name);   // 子原因：哪个内建（排桶用）
             set_unsupported("vectorized call argument");
             supported = false;
             vd.clear();
@@ -25408,6 +25480,8 @@ class Flattener {
   std::unordered_set<std::uint32_t> fn_inputs_;                 // 输入名（不可作赋值目标）
   std::unordered_set<std::uint32_t> xfield_elems_;              // "复合数组取字段"展开出来的各元素 cref（语句里原样留着的要拒）
   std::unordered_set<std::uint32_t> var_empty_arrays_;          // 变量引用展开出的空数组（零长的洞，见 expand_composite_path）：不算字面量实参
+  // 复合数组引用展开出的数组 → (首个元素 cref, 各洞在扁平 cref 里的 (段, 下标位))：向量化取元素用（见 vectorize_arg）。
+  std::unordered_map<std::uint32_t, std::pair<Id<Expr>, std::vector<std::pair<std::size_t, std::size_t>>>> composite_vec_;
   std::vector<std::pair<std::uint32_t, std::vector<Symbol>>> fn_emit_names_;   // 正在发射的函数：定义 raw → 压平名（内层在后，见 emit_function）
   std::unordered_set<std::uint32_t> split_subscripts_;          // 修饰分发合成的 `(E)[i]` 节点（Absyn id；与书写的区分）
   // 书写成整段范围、按 simplifySlice 收成 `:` 的下标节点（Wild 的 Expr id）→ 原范围。向量化取元素在 simplifySlice 之前

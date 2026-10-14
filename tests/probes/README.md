@@ -528,3 +528,4 @@ python tools/probe_recheck.py            # 全部；--show 5 打印差异，<集
 | `pk-p15` | 1 | 空数组用已展开的下标向量 / 字面量范围取：`C_start[1:Medium.nC]`（nC = 0）、`x[1:2, :]`，初始方程 / 方程 / fill 里（PKH9；MSL Fluid 容器的 `mC_scaled = m * C_start[1:Medium.nC] ./ Medium.C_nominal`） |
 | `pk-p16` | 4 | 函数里的嵌套函数：经重声明的包找到的函数里的（`PKI1.f.WallFriction.pressureLoss_m_flow.interpolateInRegion2`，PKI1）、包函数 / 模型里函数的（`P.f.g`、`PKI2.m.h.k`，PKI2）；点分名访问 protected 的嵌套函数 `P.f.g(…)`（omc 报错，PKI3）；写在带类重声明的 extends 的类里的 if 条件读继承来的 outer `system.use_eps_Re`、inner 声明在后（PKI6，MSL Fluid DetailedPipeFlow） |
 | `pk-p17` | 1 | class extends 的函数从基类继承来的输入缺省 `crossArea = pi * diameter ^ 2 / 4`（pi 是基类所在包 import 的，import 不继承）在声明它的函数的作用域里解析（PKI7；MSL Fluid PartialWallFriction） |
+| `pk-p18` | 3 | 向量化内建：实参是零长数组 `abs(m_flows)`（PKJ1）；实参是复合数组的字段 `abs(ports.m_flow)` → `abs(s2.ports[$i1].m_flow)`、sum 展开 / max 成归约、一个端口时整条 assert 化简掉（PKJ2，MSL Fluid PartialFlowSource）；普通数组的同一写法对照（PKJ3） |

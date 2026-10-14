@@ -8160,4 +8160,30 @@ YMC_TEST(flatten_inherited_function_default_in_base_scope) {
                            "  Real f.dp = PKI7.f.WallFriction.pressureLoss_m_flow(f.m_flow, 0.1, 0.007853981633974483);\nend PKI7;\n"));
 }
 
+YMC_TEST(flatten_vectorized_builtin_empty_array) {
+  // 向量化内建的实参是零长数组（`abs(m_flows)`、m_flows[n] 而 n = 0）：结果是同形空数组，所在等式不产生方程。期望 = omc 1.25.0
+  // 实跑（2026-10-14，探针 pk-p18 PKJ1）。
+  YMC_CHECK_EQ(flatten_src("model PKJ1\n  parameter Integer n = 0;\n  Real m_flows[n];\n  Real Res[n];\n  Real x[2];\n  Real z[2];\n"
+                           "equation\n  Res = abs(m_flows) * 2;\n  m_flows = fill(time, n);\n  x = {time, 2 * time};\n  z = abs(x);\n"
+                           "end PKJ1;\n"),
+               std::string("class PKJ1\n  final parameter Integer n = 0;\n  Real x[1];\n  Real x[2];\n  Real z[1];\n  Real z[2];\n"
+                           "equation\n  x[1] = time;\n  x[2] = 2.0 * time;\n  z = array(abs(x[$i1]) for $i1 in 1:2);\nend PKJ1;\n"));
+}
+
+YMC_TEST(flatten_vectorized_builtin_composite_field) {
+  // 向量化内建取复合数组的字段（`abs(ports.m_flow)` → `abs(s2.ports[$i1].m_flow)`，MSL Fluid PartialFlowSource 的 assert）；
+  // 只有一个端口时整条 assert 化简掉。期望 = omc 1.25.0 实跑（2026-10-14，探针 pk-p18 PKJ2）。
+  YMC_CHECK_EQ(flatten_src("package P\n  connector FP\n    flow Real m_flow;\n    Real p;\n  end FP;\n  model Src\n"
+                           "    parameter Integer nPorts = 1;\n    FP ports[nPorts];\n  equation\n"
+                           "    assert(abs(sum(abs(ports.m_flow)) - max(abs(ports.m_flow))) <= 1e-60, \"only one connection\");\n"
+                           "    for i in 1:nPorts loop\n      ports[i].p = 1;\n    end for;\n  end Src;\nend P;\nmodel PKJ2\n"
+                           "  P.Src s1;\n  P.Src s2(nPorts = 2);\nend PKJ2;\n"),
+               std::string("class PKJ2\n  final parameter Integer s1.nPorts = 1;\n  Real s1.ports[1].m_flow;\n  Real s1.ports[1].p;\n"
+                           "  final parameter Integer s2.nPorts = 2;\n  Real s2.ports[1].m_flow;\n  Real s2.ports[1].p;\n"
+                           "  Real s2.ports[2].m_flow;\n  Real s2.ports[2].p;\nequation\n  s1.ports[1].m_flow = 0.0;\n"
+                           "  s2.ports[1].m_flow = 0.0;\n  s2.ports[2].m_flow = 0.0;\n  s1.ports[1].p = 1.0;\n"
+                           "  assert(abs(abs(s2.ports[1].m_flow) + abs(s2.ports[2].m_flow) - max(abs(s2.ports[$i1].m_flow) for $i1 in 1:2)) <= 1e-60, \"only one connection\");\n"
+                           "  s2.ports[1].p = 1.0;\n  s2.ports[2].p = 1.0;\nend PKJ2;\n"));
+}
+
 YMC_TEST_MAIN

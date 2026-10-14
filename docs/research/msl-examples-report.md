@@ -675,3 +675,10 @@ Modelica.Fluid.Examples.Tanks.ThreeTanks、Tanks.EmptyTanks、AST_BatchPlant.Tes
 TanksWithEmptyingPipe1、TanksWithEmptyingPipe2（连同 66g 的 ControlledTanks，Fluid 7/23，均与 omc 1.25.0 逐字节一致）。
 Fluid 余下 16 例：向量化调用实参（5）、类重声明的函数 `flowCharacteristic`（3）、带修饰的短类包（2）等；Media 21 例停在 Medium
 函数的限定调用（7）、函数体非本地引用（`data.MM`、`Constants.Tred`、`R134aData.data.FPCRIT`）等。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-14 66j 之后：PASS 449（+4，Fluid 11/23）
+
+向量化内建的零长数组实参与复合数组字段实参（PartialFlowSource 的 `assert(abs(sum(abs(ports.m_flow)) - max(abs(ports.m_flow))) <= …)`）。
+转 PASS：Modelica.Fluid.Examples.DrumBoiler.DrumBoiler、AST_BatchPlant.Test.OneTank、AST_BatchPlant.Test.TankWithEmptyingPipe1、
+Explanatory.MeasuringTemperature。Fluid 余下 12 例：类重声明的函数 `flowCharacteristic`（3）、更高变率的绑定（2）、带修饰的短类包（2）、
+`Medium.singleState`、`MMX`、`reference_h`、derivative 注解引用的函数、stateSelect 预扫各 1。FAIL / ACCEPTS-INVALID / CRASH 0。
