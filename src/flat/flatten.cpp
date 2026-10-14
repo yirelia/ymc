@@ -7809,9 +7809,16 @@ class Flattener {
               // 首段之后有 protected 段：omc 报错（访问受保护元素；ND 探针 p1：`constant Integer k = f.p`、`1:f.p`、`y[f.p]`
               // 此前都按已发射的值放行）。Evaluate = false 的参数不求（见 frame_value）。
               if (prot || evaluate_annotation(I_.comps[I_.nodes[leaf].comp].def) == std::optional<bool>(false)) return std::nullopt;
-              if (std::optional<CVal> kv = const_lookup_val(ceval_prefix_ ? *ceval_prefix_ : F.prefix,
-                                                            ceval_prefix_ ? ceval_psubs_ : F.psubs, c, scope, depth, allow_param))
-                return kv;
+              const bool saved_miss = std::exchange(forward_miss_, false);
+              std::optional<CVal> kv = const_lookup_val(ceval_prefix_ ? *ceval_prefix_ : F.prefix,
+                                                        ceval_prefix_ ? ceval_psubs_ : F.psubs, c, scope, depth, allow_param);
+              const bool fwd = forward_miss_;
+              forward_miss_ = forward_miss_ || saved_miss;
+              if (kv) return kv;
+              // 实例里的组件路径、值还没发射（向前引用：MSL Fluid 的 inner system 声明在用它的管道之后，if 条件里的
+              // `system.allowFlowReversal`）：第一遍到此为止，第二遍带着第一遍的值再求（见 forward_miss_）——别落到下面 SCode 层的
+              // 限定常量查找（按声明求值、忽略修饰；经带修饰的 extends 继承来的还撞守卫；PKI 探针 PKI4）。
+              if (fwd && lenient_) return std::nullopt;
             }
           }
           if (c.parts.size() == 1 && c.parts[0].subscripts.empty())
@@ -9497,6 +9504,11 @@ class Flattener {
       head.insert(head.end(), parts.begin(), parts.end());
       return head;
     };
+    // 在正在发射的函数里找到的（函数里嵌套的函数：MSL Fluid WallFriction.Detailed 的 `pressureLoss_m_flow` 里 protected 的
+    // `interpolateInRegion2`）：压平名 = 那个函数的压平名 + 名（NFInstNode.scopePath 经函数节点；它若在实例语境里按实例路径命名，
+    // 嵌套的随之，PKI 探针 PKI1 `PKI1.f.WallFriction.pressureLoss_m_flow.interpolateInRegion2`）。
+    for (auto it = fn_emit_names_.rbegin(); it != fn_emit_names_.rend(); ++it)
+      if (it->first == ds[0].cls.raw) return qualified(it->second);
     const std::uint32_t root_def = I_.nodes[root_].def.raw;
     std::vector<std::pair<std::uint32_t, std::size_t>> chain;   // (实例的类 def raw, 该层前缀长)
     std::size_t plen = prefix.size();
@@ -11470,6 +11482,14 @@ class Flattener {
       return fn_fail<std::optional<std::size_t>>("derivative / inverse annotation form");
     const bool impure = fn_impure(fr);   // 声明的纯度 + 体里顶层调 impure 的后标（见 fn_impure）
     FnCtxGuard guard(*this, &fr.fscope, home, impure);
+    // 正在发射的函数：体里调的嵌套函数按它的压平名命名（见 fn_flat_name）。
+    struct EmitName {
+      Flattener& f;
+      EmitName(Flattener& fl, Id<SElement> fe, const std::vector<Symbol>& q) : f(fl) { f.fn_emit_names_.push_back({fe.raw, q}); }
+      ~EmitName() { f.fn_emit_names_.pop_back(); }
+      EmitName(const EmitName&) = delete;
+      EmitName& operator=(const EmitName&) = delete;
+    } emit_name(*this, fr.fe, qname);
     std::vector<Id<SElement>> all = sig.inputs;
     all.insert(all.end(), sig.outputs.begin(), sig.outputs.end());
     all.insert(all.end(), sig.locals.begin(), sig.locals.end());
@@ -12441,8 +12461,9 @@ class Flattener {
   // import（OMC 的查找表里本地 > 继承 > import：addLocalElementConflict / addInheritedElementConflict，NFClassTree.mo v1.25.0）。
   // 继承来的元素的定义作用域链是声明它的基类那条（词法父亲 = 基类）。inherit0 = false：首层不看继承来的——解析该类自己的
   // extends 名时继承元素还没并进查找表（expandExtends 先于 ClassTree.expand，R12 p11）。
+  // class_path：查的是类路径的首段（resolve_class_path）——查到经修饰继承来的组件不是类，当没找到（不拦），见下。
   Id<SElement> find_scode_element_at(Symbol name, const ScodeScope& scope, ScodeScope& def_scope, bool inherit0 = true,
-                                    NodeId* node_out = nullptr) {
+                                    NodeId* node_out = nullptr, bool class_path = false) {
     if (node_out) *node_out = NodeId{};
     auto hit = [&](Id<SElement> e) {
       const SElement& el = I_.scode.elems[e];
@@ -12495,6 +12516,9 @@ class Flattener {
         bool via_mod = false;
         if (const Id<SElement> ie = inherited_member_at(scope, k, name, def_scope, via_mod, 0); ie.is_valid()) {
           if (via_mod) {   // 经改了基类常量 / 类的 extends、或本类有元素级重声明（见 ext_bases_at）
+            // 类路径的首段查到的是组件：类路径走不通组件，当没找到（MSL Fluid DetailedPipeFlow 的 if 条件里 `system.…`，求值器先试
+            // 当枚举字面量 `T.lit` 解析 → 撞守卫误 SKIP；PKI 探针 PKI4）。
+            if (class_path && I_.scode.elems[ie].kind == SElementKind::Component) return {};
             set_unsupported("inherited element seen through modifier / redeclare");
             result_.unsupported_detail = std::string(in_.str(name));
             return {};
@@ -12729,7 +12753,7 @@ class Flattener {
     if (node_out) *node_out = NodeId{};
     if (parts.empty()) return {};
     NodeId node;
-    Id<SElement> e = find_scode_element_at(parts[0], leading_dot ? ScodeScope{} : scope, def_scope, inherit0, &node);
+    Id<SElement> e = find_scode_element_at(parts[0], leading_dot ? ScodeScope{} : scope, def_scope, inherit0, &node, true);
     for (std::size_t k = 1; k < parts.size() && e.is_valid(); ++k) {
       // 实例语境里的类：后续段在它的包实例里查（Inst.instPackage，NFLookup.lookupLocalName :699-700 v1.25.0）——继承来的是基类
       // 实例里的那份（`Medium.f`：Medium 包里经 `extends PartialMedium(nX = 2)` 继承的函数，体里读 nX 得 2，PK 探针 PK3）。
@@ -12737,6 +12761,7 @@ class Flattener {
         const NodeId pk = pkg_instance(node);
         const NodeId c = pk.is_valid() ? inst_tree_class(pk, parts[k]) : NodeId{};
         if (!c.is_valid()) return {};
+        if (protected_access(I_.nodes[c].def)) return {};
         node = c;
         e = I_.nodes[c].def;
         def_scope = scode_scope_of(I_.nodes[c].parent_scope);
@@ -12746,12 +12771,22 @@ class Flattener {
       Id<SElement> nxt;
       for (Id<SElement> c : I_.scode.elems[e].def.elements)
         if (I_.scode.elems[c].name == parts[k] && I_.scode.elems[c].kind == SElementKind::Class) { nxt = c; break; }
-      if (!nxt.is_valid()) return {};
+      if (!nxt.is_valid() || protected_access(nxt)) return {};
       def_scope.insert(def_scope.begin(), e);
       e = nxt;
     }
     if (node_out) *node_out = node;
     return e;
+  }
+  // 点分名的非首段查到 protected 元素：omc 报 "Illegal access of protected element"（LookupState.checkProtection，
+  // NFLookupState.mo:441-466 v1.25.0；首段可以是 protected）→ SKIP（PKI 探针 PKI3：`P.f.g(…)`，g 是 f 里 protected 的函数）。
+  bool protected_access(Id<SElement> e) {
+    if (!e.is_valid() || I_.scode.elems[e].prefixes.vis != SVisibility::Protected) return false;
+    if (!result_.unsupported) {
+      set_unsupported("access of protected element");
+      result_.unsupported_detail = std::string(in_.str(I_.scode.elems[e].name));
+    }
+    return true;
   }
   // 实例语境里的类节点 cls 的包实例（Inst.instPackage，按节点缓存，见 Instantiator::inst_package）；不能实例化（partial / 带修饰的
   // 短类 / 环）→ 无效。实例化包时 inst 撞上未做的构造（mark_unsupported）→ 带进压平结果（driver 在压平前只查过一次 inst）。
@@ -25362,6 +25397,7 @@ class Flattener {
   std::unordered_set<std::uint32_t> fn_inputs_;                 // 输入名（不可作赋值目标）
   std::unordered_set<std::uint32_t> xfield_elems_;              // "复合数组取字段"展开出来的各元素 cref（语句里原样留着的要拒）
   std::unordered_set<std::uint32_t> var_empty_arrays_;          // 变量引用展开出的空数组（零长的洞，见 expand_composite_path）：不算字面量实参
+  std::vector<std::pair<std::uint32_t, std::vector<Symbol>>> fn_emit_names_;   // 正在发射的函数：定义 raw → 压平名（内层在后，见 emit_function）
   std::unordered_set<std::uint32_t> split_subscripts_;          // 修饰分发合成的 `(E)[i]` 节点（Absyn id；与书写的区分）
   // 书写成整段范围、按 simplifySlice 收成 `:` 的下标节点（Wild 的 Expr id）→ 原范围。向量化取元素在 simplifySlice 之前
   //（vectorizeCall 定型时就 applySubscript），omc 打 `x[(1:3)[$i1]]` 不是 `x[$i1]`（rec 探针 V3）。

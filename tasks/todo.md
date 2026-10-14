@@ -2348,6 +2348,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       单测 +1。**MSL 438→439：Modelica.Fluid 首个示例 ControlledTankSystem.ControlledTanks 与 omc 1.25.0 逐字节一致。**
       slice 692 例 FAIL 0（oracle=live 不一致 0）；scodeinst 652（不变）；testsuite 1808（不变）/ FAIL 0；探针 9693→9694；
       单测 368→369。Fluid 余下的 SKIP 头号是管道摩擦函数里嵌套函数的压平名（`interpolateInRegion2`，7）、向量化调用实参（5）。
+- [x] (66h) 函数里的嵌套函数与继承来的 outer（2026-10-14）：发射函数时记下它的压平名（fn_emit_names_），体里调的嵌套函数 = 外层函数
+      的压平名 + 名（`…WallFriction.pressureLoss_m_flow.interpolateInRegion2`；顺带修好模型里函数的嵌套函数此前静默打成词法路径
+      `P.M.h.k` 的错名）；点分名的非首段查到 protected 元素 → omc 报错（LookupState.checkProtection，NFLookupState.mo:441-466）→ SKIP；
+      类路径首段经带修饰的继承查到组件当没找到（求值器先试枚举字面量 `system.x` 时撞守卫）；实例组件路径向前引用时第一遍不落到
+      SCode 层的限定常量查找。探针 pk-p16（4，含 1 例两边都拒）；单测 +3。
+      slice 692 例 FAIL 0（oracle=live 不一致 0）；scodeinst 652（不变）；testsuite 1808（不变）/ FAIL 0；MSL 439（不变：Fluid / Media
+      停在 Medium 函数体里的非本地引用 12、限定函数调用 7、向量化调用实参 5 等）；探针 9694→9698；单测 369→372。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

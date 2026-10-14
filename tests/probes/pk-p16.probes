@@ -1,0 +1,142 @@
+//// set: pk-p16 — 函数里的嵌套函数按外层函数的压平名命名；点分名访问 protected；继承来的 outer 在条件里（类路径首段 / 向前引用）
+//// model: PKI1
+package P
+  package WF
+    partial package PartialWallFriction
+      replaceable partial function pressureLoss_m_flow
+        input Real m_flow;
+        output Real dp;
+      end pressureLoss_m_flow;
+    end PartialWallFriction;
+    package Detailed
+      extends PartialWallFriction;
+      redeclare function extends pressureLoss_m_flow
+      protected
+        function interpolateInRegion2
+          input Real x;
+          output Real y;
+        algorithm
+          y := 2 * x;
+        end interpolateInRegion2;
+      algorithm
+        dp := interpolateInRegion2(m_flow);
+      end pressureLoss_m_flow;
+    end Detailed;
+  end WF;
+  model Flow
+    replaceable package WallFriction = WF.PartialWallFriction;
+    Real m_flow = time;
+    Real dp = WallFriction.pressureLoss_m_flow(m_flow);
+  end Flow;
+end P;
+model PKI1
+  P.Flow f(redeclare package WallFriction = P.WF.Detailed);
+end PKI1;
+//// model: PKI2
+package P
+  function f
+    input Real x;
+    output Real y;
+  protected
+    function g
+      input Real a;
+      output Real b;
+    algorithm
+      b := a + 1;
+    end g;
+  algorithm
+    y := g(x) + g(2 * x);
+  end f;
+  model M
+    function h
+      input Real x;
+      output Real y;
+    protected
+      function k
+        input Real a;
+        output Real b;
+      algorithm
+        b := 3 * a;
+      end k;
+    algorithm
+      y := k(x);
+    end h;
+    Real z = h(time);
+  end M;
+end P;
+model PKI2
+  Real y = P.f(time);
+  P.M m;
+end PKI2;
+//// model: PKI3
+package P
+  function f
+    input Real x;
+    output Real y;
+  protected
+    function g
+      input Real a;
+      output Real b;
+    algorithm
+      b := a + 1;
+    end g;
+  algorithm
+    y := g(x) + P.f.g(2 * x);
+  end f;
+  model M
+    function h
+      input Real x;
+      output Real y;
+    protected
+      function k
+        input Real a;
+        output Real b;
+      algorithm
+        b := 3 * a;
+      end k;
+    algorithm
+      y := k(x);
+    end h;
+    Real z = h(time);
+  end M;
+end P;
+model PKI3
+  Real y = P.f(time);
+  P.M m;
+end PKI3;
+//// model: PKI6
+package P
+  model System
+    parameter Boolean use_eps_Re = false;
+  end System;
+  package WF1
+    constant Boolean dp_is_zero = false;
+  end WF1;
+  package WF2
+    constant Boolean dp_is_zero = true;
+  end WF2;
+  partial model PartialFlow
+    outer System system;
+    replaceable package WallFriction = WF1;
+    Real dp_nominal(start = 1, fixed = false);
+  end PartialFlow;
+  model Detailed
+    extends PartialFlow(redeclare package WallFriction = WF2);
+    Real x;
+  initial equation
+    if system.use_eps_Re then
+      dp_nominal = 1;
+    else
+      dp_nominal = 2;
+    end if;
+  equation
+    der(x) = dp_nominal;
+  end Detailed;
+  model Pipe
+    Detailed fm;
+  end Pipe;
+end P;
+model PKI6
+  P.Pipe pipe;
+  inner P.System system(use_eps_Re = true);
+end PKI6;

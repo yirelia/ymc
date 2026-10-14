@@ -8082,4 +8082,61 @@ YMC_TEST(flatten_empty_array_index_vector_slice) {
                std::string("class PKH9\n  Real v.m = 1.0 + time;\nend PKH9;\n"));
 }
 
+YMC_TEST(flatten_nested_function_in_instance_function) {
+  // 经重声明的包找到的函数里 protected 的嵌套函数：压平名 = 外层函数的压平名 + 名（`PKI1.f.WallFriction.pressureLoss_m_flow.
+  // interpolateInRegion2`，MSL Fluid WallFriction.Detailed）。期望 = omc 1.25.0 实跑（2026-10-14，探针 pk-p16 PKI1）。
+  YMC_CHECK_EQ(flatten_src("package P\n  package WF\n    partial package PartialWallFriction\n"
+                           "      replaceable partial function pressureLoss_m_flow\n        input Real m_flow;\n"
+                           "        output Real dp;\n      end pressureLoss_m_flow;\n    end PartialWallFriction;\n"
+                           "    package Detailed\n      extends PartialWallFriction;\n"
+                           "      redeclare function extends pressureLoss_m_flow\n      protected\n"
+                           "        function interpolateInRegion2\n          input Real x;\n          output Real y;\n"
+                           "        algorithm\n          y := 2 * x;\n        end interpolateInRegion2;\n      algorithm\n"
+                           "        dp := interpolateInRegion2(m_flow);\n      end pressureLoss_m_flow;\n    end Detailed;\n"
+                           "  end WF;\n  model Flow\n    replaceable package WallFriction = WF.PartialWallFriction;\n"
+                           "    Real m_flow = time;\n    Real dp = WallFriction.pressureLoss_m_flow(m_flow);\n  end Flow;\nend P;\n"
+                           "model PKI1\n  P.Flow f(redeclare package WallFriction = P.WF.Detailed);\nend PKI1;\n"),
+               std::string("function PKI1.f.WallFriction.pressureLoss_m_flow\n  input Real m_flow;\n  output Real dp;\nalgorithm\n"
+                           "  dp := PKI1.f.WallFriction.pressureLoss_m_flow.interpolateInRegion2(m_flow);\n"
+                           "end PKI1.f.WallFriction.pressureLoss_m_flow;\n\n"
+                           "function PKI1.f.WallFriction.pressureLoss_m_flow.interpolateInRegion2\n  input Real x;\n  output Real y;\n"
+                           "algorithm\n  y := 2.0 * x;\nend PKI1.f.WallFriction.pressureLoss_m_flow.interpolateInRegion2;\n\n"
+                           "class PKI1\n  Real f.m_flow = time;\n  Real f.dp = PKI1.f.WallFriction.pressureLoss_m_flow(f.m_flow);\n"
+                           "end PKI1;\n"));
+}
+
+YMC_TEST(flatten_nested_function_names) {
+  // 包里函数 / 模型里函数的嵌套函数：`P.f.g`、`PKI2.m.h.k`（此前模型里的这个静默打成 `P.M.h.k`）。期望 = omc 1.25.0 实跑
+  // （2026-10-14，探针 pk-p16 PKI2）。
+  YMC_CHECK_EQ(flatten_src("package P\n  function f\n    input Real x;\n    output Real y;\n  protected\n    function g\n"
+                           "      input Real a;\n      output Real b;\n    algorithm\n      b := a + 1;\n    end g;\n  algorithm\n"
+                           "    y := g(x) + g(2 * x);\n  end f;\n  model M\n    function h\n      input Real x;\n"
+                           "      output Real y;\n    protected\n      function k\n        input Real a;\n        output Real b;\n"
+                           "      algorithm\n        b := 3 * a;\n      end k;\n    algorithm\n      y := k(x);\n    end h;\n"
+                           "    Real z = h(time);\n  end M;\nend P;\nmodel PKI2\n  Real y = P.f(time);\n  P.M m;\nend PKI2;\n"),
+               std::string("function P.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := P.f.g(x) + P.f.g(2.0 * x);\nend P.f;\n"
+                           "\nfunction P.f.g\n  input Real a;\n  output Real b;\nalgorithm\n  b := a + 1.0;\nend P.f.g;\n\n"
+                           "function PKI2.m.h\n  input Real x;\n  output Real y;\nalgorithm\n  y := PKI2.m.h.k(x);\nend PKI2.m.h;\n\n"
+                           "function PKI2.m.h.k\n  input Real a;\n  output Real b;\nalgorithm\n  b := 3.0 * a;\nend PKI2.m.h.k;\n\n"
+                           "class PKI2\n  Real y = P.f(time);\n  Real m.z = PKI2.m.h(time);\nend PKI2;\n"));
+}
+
+YMC_TEST(flatten_inherited_outer_in_condition_forward) {
+  // 写在 `extends PartialFlow(redeclare package WallFriction = WF2)` 的类里的 if 条件 `system.use_eps_Re`（system 是继承来的
+  // outer、inner 声明在后）：求值器先试枚举字面量时类路径首段查到组件当没找到；向前引用第一遍不落到 SCode 层。期望 = omc
+  // 1.25.0 实跑（2026-10-14，探针 pk-p16 PKI6）。
+  YMC_CHECK_EQ(flatten_src("package P\n  model System\n    parameter Boolean use_eps_Re = false;\n  end System;\n  package WF1\n"
+                           "    constant Boolean dp_is_zero = false;\n  end WF1;\n  package WF2\n"
+                           "    constant Boolean dp_is_zero = true;\n  end WF2;\n  partial model PartialFlow\n"
+                           "    outer System system;\n    replaceable package WallFriction = WF1;\n"
+                           "    Real dp_nominal(start = 1, fixed = false);\n  end PartialFlow;\n  model Detailed\n"
+                           "    extends PartialFlow(redeclare package WallFriction = WF2);\n    Real x;\n  initial equation\n"
+                           "    if system.use_eps_Re then\n      dp_nominal = 1;\n    else\n      dp_nominal = 2;\n    end if;\n"
+                           "  equation\n    der(x) = dp_nominal;\n  end Detailed;\n  model Pipe\n    Detailed fm;\n  end Pipe;\n"
+                           "end P;\nmodel PKI6\n  P.Pipe pipe;\n  inner P.System system(use_eps_Re = true);\nend PKI6;\n"),
+               std::string("class PKI6\n  Real pipe.fm.dp_nominal(start = 1.0, fixed = false);\n  Real pipe.fm.x;\n"
+                           "  final parameter Boolean system.use_eps_Re = true;\ninitial equation\n  pipe.fm.dp_nominal = 1.0;\n"
+                           "equation\n  der(pipe.fm.x) = pipe.fm.dp_nominal;\nend PKI6;\n"));
+}
+
 YMC_TEST_MAIN

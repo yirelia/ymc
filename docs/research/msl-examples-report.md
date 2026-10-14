@@ -661,3 +661,9 @@ FAIL / ACCEPTS-INVALID / CRASH 0。
 Fluid 的第一个：从 65a（实例树查找）到 66g 一路越过 Medium 包常量、class extends 的函数 / 记录、端口数组的空成员、stream 算子。
 Fluid 余下 22 例 SKIP：管道摩擦函数里嵌套函数的压平名（`interpolateInRegion2`，7）、向量化调用实参（5）、类重声明的函数
 （`flowCharacteristic`，2）等；Media 21 例停在 Medium 函数里的非本地引用 / 限定函数调用等。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-14 66h 之后：PASS 439（不变）
+
+函数里的嵌套函数按外层函数的压平名命名、点分名访问 protected 元素照 omc 拒绝、继承来的 outer（`system`）在条件里的两处误拦。
+PASS / SKIP 逐例不变；Fluid / Media 44 例里 43 例 SKIP，头号原因换成 Medium 函数体里的非本地引用（12）、限定函数调用（7）、
+向量化调用实参（5）。FAIL / ACCEPTS-INVALID / CRASH 0。
