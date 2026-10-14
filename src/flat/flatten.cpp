@@ -9101,6 +9101,10 @@ class Flattener {
     const SExternalDecl* ext = nullptr;     // external 段（整条链至多一个；与算法段互斥）
     Id<SElement> ext_owner;                 // external 段所在类：隐式调用名 = 其类名（instExternalDecl :3227，FunctionSections5）
     bool external = false;
+    // 从基类函数（extends / class extends 的隐式基类）收来的成员 → 声明它的函数的作用域：缺省值与维在那里解析（import 不继承，
+    // MLS §13.2.1；MSL Fluid PartialWallFriction 的 `import Modelica.Constants.pi` 与 `input SI.Area crossArea = pi*diameter^2/4`，
+    // omc 打 `crossArea = 3.141592653589793 * diameter ^ 2.0 / 4.0`；PKI 探针 PKI7）。
+    std::unordered_map<std::uint32_t, ScodeScope> decl_scope;
   };
 
   // external 函数按内建处理（NFFunction.makeAttributes :2584-2593 → SCodeUtil.isBuiltinFunction :2525-2560）：
@@ -9853,6 +9857,7 @@ class Flattener {
     }
     if (plain)
       if (const Id<Expr> el = fn_enum_lit(names, c.leading_dot); el.is_valid()) return el;
+    if (!result_.unsupported) result_.unsupported_detail = cref_names(c);   // 子原因：哪个名字（排桶用）
     set_unsupported("function body references non-local");
     return lit_int(0);
   }
@@ -11602,7 +11607,9 @@ class Flattener {
     for (Id<SElement> eid : all) {
       const SElement& c = I_.scode.elems[eid];
       const auto td = type_tdims.find(c.name.id);
-      if (!fn_var_dims(c, td != type_tdims.end() ? td->second : std::vector<Id<Exp>>{}, fr.fscope))
+      const auto dsc = sig.decl_scope.find(eid.raw);
+      if (!fn_var_dims(c, td != type_tdims.end() ? td->second : std::vector<Id<Exp>>{},
+                       dsc != sig.decl_scope.end() ? dsc->second : fr.fscope))
         return fn_fail<std::optional<std::size_t>>("function variable dimension");
     }
     // 属性（见 fn_var_attributes）：维定好之后算（数组的铺开要用维）。
@@ -11646,7 +11653,10 @@ class Flattener {
         else if (lenient_ && fwd) need_second_pass_ = true;
         else return fn_fail<std::optional<std::size_t>>("alias default value");
       } else if (c.mod.is_valid() && I_.scode.mods[c.mod].binding.is_valid()) {
+        const ScodeScope* const saved_scope = fn_scope_;
+        if (const auto dsc = sig.decl_scope.find(eid.raw); dsc != sig.decl_scope.end()) fn_scope_ = &dsc->second;
         b = fn_exp(I_.scode.mods[c.mod].binding, ty);
+        fn_scope_ = saved_scope;
         if (result_.unsupported || !b.is_valid())   // 绑定类型不符（omc 报错）
           return fn_fail<std::optional<std::size_t>>("function variable binding");
       }
@@ -13103,6 +13113,7 @@ class Flattener {
       if (c.attr.ct != SConnectorType::Potential) return false;
       if (!seen.insert(c.name.id).second) continue;         // 同名去重
       sig.all.push_back(eid);
+      if (depth > 0) sig.decl_scope[eid.raw] = fscope;
       if (c.attr.dir == SDirection::Input) sig.inputs.push_back(eid);
       else if (c.attr.dir == SDirection::Output) sig.outputs.push_back(eid);
       else if (c.prefixes.vis == SVisibility::Protected) sig.locals.push_back(eid);

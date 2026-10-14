@@ -667,3 +667,11 @@ Fluid 余下 22 例 SKIP：管道摩擦函数里嵌套函数的压平名（`inte
 函数里的嵌套函数按外层函数的压平名命名、点分名访问 protected 元素照 omc 拒绝、继承来的 outer（`system`）在条件里的两处误拦。
 PASS / SKIP 逐例不变；Fluid / Media 44 例里 43 例 SKIP，头号原因换成 Medium 函数体里的非本地引用（12）、限定函数调用（7）、
 向量化调用实参（5）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-14 66i 之后：PASS 445（+6，Fluid 7/23）
+
+继承来的函数成员（输入缺省 `crossArea = pi*diameter^2/4`）在声明它的函数的作用域里解析（import 不继承）。转 PASS：
+Modelica.Fluid.Examples.Tanks.ThreeTanks、Tanks.EmptyTanks、AST_BatchPlant.Test.TwoTanks、TankWithEmptyingPipe2、
+TanksWithEmptyingPipe1、TanksWithEmptyingPipe2（连同 66g 的 ControlledTanks，Fluid 7/23，均与 omc 1.25.0 逐字节一致）。
+Fluid 余下 16 例：向量化调用实参（5）、类重声明的函数 `flowCharacteristic`（3）、带修饰的短类包（2）等；Media 21 例停在 Medium
+函数的限定调用（7）、函数体非本地引用（`data.MM`、`Constants.Tred`、`R134aData.data.FPCRIT`）等。FAIL / ACCEPTS-INVALID / CRASH 0。

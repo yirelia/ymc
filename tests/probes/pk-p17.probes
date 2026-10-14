@@ -1,0 +1,33 @@
+//// set: pk-p17 — 继承来的函数成员的缺省 / 维在声明它的函数的作用域里解析（基类包里的 import）
+//// model: PKI7
+package P
+  package Constants
+    constant Real pi = 3.141592653589793;
+  end Constants;
+  package WF
+    partial package PartialWallFriction
+      import P.Constants.pi;
+      replaceable partial function pressureLoss_m_flow
+        input Real m_flow;
+        input Real diameter;
+        input Real crossArea = pi * diameter ^ 2 / 4;
+        output Real dp;
+      end pressureLoss_m_flow;
+    end PartialWallFriction;
+    package Detailed
+      extends PartialWallFriction;
+      redeclare function extends pressureLoss_m_flow
+      algorithm
+        dp := m_flow / crossArea;
+      end pressureLoss_m_flow;
+    end Detailed;
+  end WF;
+  model Flow
+    replaceable package WallFriction = WF.PartialWallFriction;
+    Real m_flow = time;
+    Real dp = WallFriction.pressureLoss_m_flow(m_flow, 0.1);
+  end Flow;
+end P;
+model PKI7
+  P.Flow f(redeclare package WallFriction = P.WF.Detailed);
+end PKI7;

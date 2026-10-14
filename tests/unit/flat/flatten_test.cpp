@@ -8139,4 +8139,25 @@ YMC_TEST(flatten_inherited_outer_in_condition_forward) {
                            "equation\n  der(pipe.fm.x) = pipe.fm.dp_nominal;\nend PKI6;\n"));
 }
 
+YMC_TEST(flatten_inherited_function_default_in_base_scope) {
+  // class extends 的函数从基类继承来的输入缺省（`crossArea = pi * diameter ^ 2 / 4`，pi 是基类所在包里 import 的）：在声明它的
+  // 函数的作用域里解析（import 不继承，MLS §13.2.1）。期望 = omc 1.25.0 实跑（2026-10-14，探针 pk-p17 PKI7）。
+  YMC_CHECK_EQ(flatten_src("package P\n  package Constants\n    constant Real pi = 3.141592653589793;\n  end Constants;\n"
+                           "  package WF\n    partial package PartialWallFriction\n      import P.Constants.pi;\n"
+                           "      replaceable partial function pressureLoss_m_flow\n        input Real m_flow;\n"
+                           "        input Real diameter;\n        input Real crossArea = pi * diameter ^ 2 / 4;\n"
+                           "        output Real dp;\n      end pressureLoss_m_flow;\n    end PartialWallFriction;\n"
+                           "    package Detailed\n      extends PartialWallFriction;\n"
+                           "      redeclare function extends pressureLoss_m_flow\n      algorithm\n        dp := m_flow / crossArea;\n"
+                           "      end pressureLoss_m_flow;\n    end Detailed;\n  end WF;\n  model Flow\n"
+                           "    replaceable package WallFriction = WF.PartialWallFriction;\n    Real m_flow = time;\n"
+                           "    Real dp = WallFriction.pressureLoss_m_flow(m_flow, 0.1);\n  end Flow;\nend P;\nmodel PKI7\n"
+                           "  P.Flow f(redeclare package WallFriction = P.WF.Detailed);\nend PKI7;\n"),
+               std::string("function PKI7.f.WallFriction.pressureLoss_m_flow\n  input Real m_flow;\n  input Real diameter;\n"
+                           "  input Real crossArea = 3.141592653589793 * diameter ^ 2.0 / 4.0;\n  output Real dp;\nalgorithm\n"
+                           "  dp := m_flow / crossArea;\nend PKI7.f.WallFriction.pressureLoss_m_flow;\n\nclass PKI7\n"
+                           "  Real f.m_flow = time;\n"
+                           "  Real f.dp = PKI7.f.WallFriction.pressureLoss_m_flow(f.m_flow, 0.1, 0.007853981633974483);\nend PKI7;\n"));
+}
+
 YMC_TEST_MAIN

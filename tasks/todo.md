@@ -2355,6 +2355,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       SCode 层的限定常量查找。探针 pk-p16（4，含 1 例两边都拒）；单测 +3。
       slice 692 例 FAIL 0（oracle=live 不一致 0）；scodeinst 652（不变）；testsuite 1808（不变）/ FAIL 0；MSL 439（不变：Fluid / Media
       停在 Medium 函数体里的非本地引用 12、限定函数调用 7、向量化调用实参 5 等）；探针 9694→9698；单测 369→372。
+- [x] (66i) 继承来的函数成员在声明它的函数的作用域里解析（2026-10-14）：collect_fn_sig 给从基类函数（extends / class extends 的
+      隐式基类）收来的成员记下声明处作用域（FnSig::decl_scope），发射时缺省值与维在那里解析——import 不继承（MLS §13.2.1），MSL Fluid
+      PartialWallFriction 的 `import Modelica.Constants.pi` 与 `input SI.Area crossArea = pi*diameter^2/4`。函数体非本地引用的 SKIP
+      带上名字。探针 pk-p17（1）；单测 +1。
+      slice 692 例 FAIL 0（oracle=live 不一致 0）；scodeinst 652（不变）；testsuite 1808（不变）/ FAIL 0；**MSL 439→445**（Fluid 再 +6：
+      Tanks.ThreeTanks / EmptyTanks、AST_BatchPlant.Test.TwoTanks / TankWithEmptyingPipe2 / TanksWithEmptyingPipe1 / 2，Fluid 7/23）；
+      探针 9698→9699；单测 372→373。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。
