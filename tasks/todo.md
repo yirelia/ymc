@@ -2300,6 +2300,16 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       slice 691 例 FAIL 0（oracle=live 不一致 0）；scodeinst 651（不变）；testsuite 1803→1804（redeclare/BranchingDynamicPipes）/
       FAIL 0；MSL 438（不变：Fluid / Media 的 44 例越过 Medium 常量，停在 Medium 函数 / 记录常量 `fluidConstants.molarMass` /
       `Medium.singleState` 等限定引用 11、限定函数调用 8、复合数组元素引用 4 …）；探针 9657→9667；单测 350→353。
+- [x] (66b) Medium 长尾二（2026-10-14）：① 记录常量（无绑定、按 `each` 修饰逐字段构造）的继承字段——record_value 改按
+      record_fields_ex 收字段（`fluidConstants[1].molarMass`，TwoPhase.FluidConstants extends Basic.FluidConstants）；② String(Real)
+      编译期求值的指数照 Windows 版 omc 1.25.0 补到 3 位（"1e-005"，NFCeval.mo:2748-2793；平台相关，记入 open-questions；带宽度的
+      format 仍 SKIP）——推翻 58m 的"与工具链相关 → SKIP"（testsuite 无此类结果、与文件不冲突，跟实跑）；③ stateSelect 的值碰到
+      声明在后的 inner 参数（ThreeTanks 的 `preferredMediumStates = (if energyDynamics == …)`、`energyDynamics = system.energyDynamics`）
+      → 第一遍占位、第二遍求；绑定定型期的向前引用也连带依赖链（forward_chain，原只在实例化期），删 forward_leaf。
+      探针 pk-p10（8）、旧组 SKIP→PASS 5（es-e4 3 / misc 1 / rec 1）；单测 +3、flatten_string_builtin 的指数 SKIP 断言改对拍。
+      slice 691 例 FAIL 0（oracle=live 不一致 0）；scodeinst 651（不变）；testsuite 1804（不变）/ FAIL 0；MSL 438（不变：Fluid /
+      Media 越过 `fluidConstants` / String 指数 / ThreeTanks 的 stateSelect，停在 Medium 函数（saturationTemperature / bubbleEnthalpy
+      等）与复合数组（`ports.C_outflow`、`tank.topPorts`）上）；探针 9667→9675（PASS +13）；单测 353→356。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

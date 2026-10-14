@@ -1,0 +1,265 @@
+//// set: pk-p10 — Medium 长尾：记录常量的继承字段、String(Real) 的指数位数、stateSelect 经声明在后的 inner 参数
+//// model: PKM1
+package P
+  record FC
+    String name;
+    Real molarMass;
+  end FC;
+  constant FC[1] wc(each name = "H2O", each molarMass = 0.018);
+  partial package PM
+    constant Integer nS = 1;
+    constant FC[nS] fluidConstants;
+    replaceable partial model BaseProperties
+      Real MM;
+    end BaseProperties;
+  end PM;
+  package W
+    extends PM(fluidConstants = wc);
+    redeclare model extends BaseProperties
+    equation
+      MM = fluidConstants[1].molarMass;
+    end BaseProperties;
+  end W;
+  model V
+    replaceable package M = PM;
+    M.BaseProperties medium;
+  end V;
+end P;
+model PKM1
+  P.V v(redeclare package M = P.W);
+end PKM1;
+//// model: PKM2
+package P
+  package Types
+    record Basic
+      String name;
+      Real molarMass(unit = "kg/mol");
+    end Basic;
+    record TwoPhase
+      extends Basic;
+      Real criticalTemperature;
+    end TwoPhase;
+  end Types;
+  partial package PM
+    replaceable record FluidConstants = Types.Basic;
+    constant Integer nS = 1;
+    constant FluidConstants[nS] fluidConstants;
+    replaceable partial model BaseProperties
+      Real MM;
+    end BaseProperties;
+  end PM;
+  partial package PT
+    extends PM(redeclare replaceable record FluidConstants = Types.TwoPhase);
+  end PT;
+  package Water
+    constant Types.TwoPhase[1] wc(each name = "H2O", each molarMass = 0.018, each criticalTemperature = 647.0);
+    partial package WB
+      extends PT(fluidConstants = wc);
+      redeclare model extends BaseProperties
+      equation
+        MM = fluidConstants[1].molarMass;
+      end BaseProperties;
+    end WB;
+    package W
+      extends WB;
+    end W;
+  end Water;
+  model V
+    replaceable package M = PM;
+    M.BaseProperties medium;
+  end V;
+end P;
+model PKM2
+  P.V v(redeclare package M = P.Water.W);
+end PKM2;
+//// model: PKM3
+package P
+  record B
+    Real molarMass;
+  end B;
+  record T
+    extends B;
+    Real tc;
+  end T;
+  constant T[1] wc(each molarMass = 0.018, each tc = 1);
+  constant T w1(molarMass = 0.02, tc = 2);
+end P;
+model PKM3
+  Real MM = P.wc[1].molarMass;
+  Real M1 = P.w1.molarMass;
+  Real t = P.wc[1].tc;
+end PKM3;
+//// model: PKM4
+model PKM4
+  String s1 = String(1e-5);
+  String s2 = String(1.5e10);
+  String s3 = String(123456789.0);
+  String s4 = String(0.0001);
+  String s5 = String(1e6);
+  String s6 = String(-2.5e-7, significantDigits = 3);
+  String s7 = String(1e100);
+  String s8 = String(1e-5, format = "g");
+  String s10 = String(611.657e3, minimumLength = 12, leftJustified = false);
+end PKM4;
+//// model: PKM5
+package P
+  partial package PM
+    replaceable partial model BaseProperties
+      Real p;
+      Real T;
+      parameter Boolean preferredMediumStates = false;
+    end BaseProperties;
+  end PM;
+  partial package PS
+    extends PM;
+    redeclare replaceable model extends BaseProperties(
+      T(stateSelect = if preferredMediumStates then StateSelect.prefer else StateSelect.default),
+      p(stateSelect = if preferredMediumStates then StateSelect.prefer else StateSelect.default))
+    equation
+      p = 1;
+      T = time;
+    end BaseProperties;
+  end PS;
+  package W
+    extends PS;
+  end W;
+  model V
+    replaceable package M = PM;
+    M.BaseProperties medium(preferredMediumStates = true, p(start = 2));
+  end V;
+end P;
+model PKM5
+  P.V v(redeclare package M = P.W);
+end PKM5;
+//// model: PKM6
+package P
+  type Dynamics = enumeration(DynamicFreeInitial, FixedInitial, SteadyStateInitial, SteadyState);
+  model System
+    parameter Dynamics energyDynamics = Dynamics.DynamicFreeInitial;
+    parameter Dynamics massDynamics = energyDynamics;
+  end System;
+  partial package PM
+    replaceable partial model BaseProperties
+      Real p(stateSelect = if preferredMediumStates then StateSelect.prefer else StateSelect.default);
+      parameter Boolean preferredMediumStates = false;
+    end BaseProperties;
+  end PM;
+  package W
+    extends PM;
+    redeclare model extends BaseProperties
+    equation
+      p = time;
+    end BaseProperties;
+  end W;
+  model Vol
+    outer System system;
+    replaceable package Medium = PM;
+    parameter Dynamics energyDynamics = system.energyDynamics;
+    parameter Dynamics massDynamics = system.massDynamics;
+    Medium.BaseProperties medium(
+      preferredMediumStates = (if energyDynamics == Dynamics.SteadyState and
+                               massDynamics == Dynamics.SteadyState then false else true));
+  end Vol;
+end P;
+model PKM6
+  inner P.System system;
+  P.Vol tank(redeclare package Medium = P.W);
+end PKM6;
+//// model: PKM7
+package P
+  package Types
+    type Dynamics = enumeration(DynamicFreeInitial, FixedInitial, SteadyStateInitial, SteadyState);
+  end Types;
+  model System
+    parameter Types.Dynamics energyDynamics = Types.Dynamics.DynamicFreeInitial;
+    parameter Types.Dynamics massDynamics = energyDynamics;
+  end System;
+  partial package PM
+    replaceable partial model BaseProperties
+      Real p;
+      Real T;
+      parameter Boolean preferredMediumStates = false;
+    end BaseProperties;
+  end PM;
+  partial package PS
+    extends PM;
+    redeclare replaceable model extends BaseProperties(
+      T(stateSelect = if preferredMediumStates then StateSelect.prefer else StateSelect.default),
+      p(stateSelect = if preferredMediumStates then StateSelect.prefer else StateSelect.default))
+    equation
+      p = 1;
+      T = time;
+    end BaseProperties;
+  end PS;
+  package W
+    extends PS;
+  end W;
+  partial model Vol
+    import P.Types;
+    import P.Types.Dynamics;
+    outer System system;
+    replaceable package Medium = PM;
+    parameter Types.Dynamics energyDynamics = system.energyDynamics;
+    parameter Types.Dynamics massDynamics = system.massDynamics;
+    Medium.BaseProperties medium(
+      preferredMediumStates = (if energyDynamics == Dynamics.SteadyState and
+                               massDynamics == Dynamics.SteadyState then false else true));
+  end Vol;
+  model Tank
+    extends Vol;
+  end Tank;
+end P;
+model PKM7
+  replaceable package Medium = P.W constrainedby P.PM;
+  P.Tank tank1(redeclare package Medium = Medium);
+  inner P.System system(energyDynamics = P.Types.Dynamics.FixedInitial);
+end PKM7;
+//// model: PKM7b
+package P
+  package Types
+    type Dynamics = enumeration(DynamicFreeInitial, FixedInitial, SteadyStateInitial, SteadyState);
+  end Types;
+  model System
+    parameter Types.Dynamics energyDynamics = Types.Dynamics.DynamicFreeInitial;
+    parameter Types.Dynamics massDynamics = energyDynamics;
+  end System;
+  partial package PM
+    replaceable partial model BaseProperties
+      Real p;
+      Real T;
+      parameter Boolean preferredMediumStates = false;
+    end BaseProperties;
+  end PM;
+  partial package PS
+    extends PM;
+    redeclare replaceable model extends BaseProperties(
+      T(stateSelect = if preferredMediumStates then StateSelect.prefer else StateSelect.default),
+      p(stateSelect = if preferredMediumStates then StateSelect.prefer else StateSelect.default))
+    equation
+      p = 1;
+      T = time;
+    end BaseProperties;
+  end PS;
+  package W
+    extends PS;
+  end W;
+  partial model Vol
+    import P.Types;
+    import P.Types.Dynamics;
+    outer System system;
+    replaceable package Medium = PM;
+    parameter Types.Dynamics energyDynamics = system.energyDynamics;
+    parameter Types.Dynamics massDynamics = system.massDynamics;
+    Medium.BaseProperties medium(
+      preferredMediumStates = (if energyDynamics == Dynamics.SteadyState and
+                               massDynamics == Dynamics.SteadyState then false else true));
+  end Vol;
+  model Tank
+    extends Vol;
+  end Tank;
+end P;
+model PKM7b
+  replaceable package Medium = P.W constrainedby P.PM;
+  P.Tank tank1(redeclare package Medium = Medium);
+  inner P.System system;
+end PKM7b;

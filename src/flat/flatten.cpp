@@ -3,6 +3,7 @@
 #include "flat/expr_dump.h"   // 连接图的 cref 键（ComponentRef.toString 同款打印）
 
 #include <algorithm>
+#include <cctype>
 #include <climits>
 #include <cmath>
 #include <deque>
@@ -6671,10 +6672,19 @@ class Flattener {
   // 预扫打（组件声明里的修饰，含嵌套的 `a(x(stateSelect = s))`）；值在这里按实例帧求。
   Id<Expr> state_select_value(Id<Exp> val, NodeId scope, const std::vector<Symbol>& prefix) {
     std::optional<CVal> cv;
+    forward_miss_ = false;
     {
       const FrameAt frame_at(*this, scope);
       CevalCtx guard(*this, prefix, cur_psubs_);
       cv = eval_scode(val, scode_scope_of(scope), 0, /*allow_param=*/true);
+    }
+    // 第一遍：求不出是因为碰到还没发射的参数（inner system 声明在用它的组件之后，MSL Fluid ThreeTanks 的 `preferredMediumStates
+    // = (if energyDynamics == …)`、`energyDynamics = system.energyDynamics`）→ 先占个值、第二遍带着第一遍的值再求（第一遍的输出不用）。
+    if (!cv && lenient_ && forward_miss_ && !result_.unsupported) {
+      need_second_pass_ = true;
+      Cref dflt;
+      dflt.parts = {{in_.intern("StateSelect"), {}}, {in_.intern("default"), {}}};
+      cv = builtin_enum_value(dflt);
     }
     if (!cv || cv->k != CVal::K::Enum) { set_unsupported("stateSelect value"); return lit_int(0); }
     return literal_of(*cv);
@@ -7592,27 +7602,27 @@ class Flattener {
     ceval_frame_ = saved_frame;
     return out;
   }
-  // 记录值：逐字段——外来修饰（subs，在 mscope 求值）优先：带绑定取绑定、只带嵌套修饰的记录字段递归；否则字段声明绑定
-  // （在记录作用域求值）；否则记录字段按其缺省递归构造。字段数组 / extends / 求不出 → nullopt。rds = 记录类的定义作用域链。
+  // 记录值：逐字段——外来修饰（subs，在 mscope 求值）优先：带绑定取绑定、只带嵌套修饰的记录字段递归；否则字段缺省（声明
+  // 绑定或 extends 修饰改过的，在写它的记录的作用域求值）；否则记录字段按其缺省递归构造。字段按 record_fields_ex 收：继承来的
+  // 就地展开（MSL Media 的 `constant TwoPhase.FluidConstants[1] waterConstants(each molarMass = …)`，TwoPhase.FluidConstants
+  // extends Basic.FluidConstants；PKM 探针）。字段数组 / 求不出 → nullopt。rds = 记录类的定义作用域链。
   std::optional<CVal> record_value(Id<SElement> rec, const ScodeScope& rds, const std::vector<SSubMod>& subs,
                                    const ScodeScope& mscope, int depth) {
     if (depth > 50) return std::nullopt;
-    ScodeScope fscope = rds;
-    fscope.insert(fscope.begin(), rec);
+    std::vector<RecField> rfs;
+    if (!record_fields_ex(rec, rds, rfs, false, 0, /*any_base=*/true)) return std::nullopt;
     CVal r = CVal::Rec();
-    const std::vector<Id<SElement>> fields = I_.scode.elems[rec].def.elements;   // 拷贝
-    for (Id<SElement> f : fields) {
-      const SElement fe = I_.scode.elems[f];
-      if (fe.kind == SElementKind::Extends) return std::nullopt;
-      if (fe.kind != SElementKind::Component) continue;
+    for (const RecField& rf : rfs) {
+      const SElement fe = I_.scode.elems[rf.f];   // 拷贝（求值可能扩 arena）
+      const ScodeScope& fscope = rf.fscope;     // 声明字段的记录的作用域（字段类型在这里解析）
       if (!fe.attr.dims.empty() || !fe.type.dims.empty()) return std::nullopt;
       const SSubMod* hit = nullptr;
       for (const SSubMod& s : subs) if (s.ident == fe.name) { hit = &s; break; }
       std::optional<CVal> fv;
       if (hit && I_.scode.mods[hit->mod].binding.is_valid()) {
         fv = eval_scode(I_.scode.mods[hit->mod].binding, mscope, depth + 1);
-      } else if (fe.mod.is_valid() && I_.scode.mods[fe.mod].binding.is_valid() && !hit) {
-        fv = eval_scode(I_.scode.mods[fe.mod].binding, fscope, depth + 1);
+      } else if (rf.dflt.is_valid() && !hit) {
+        fv = eval_scode(rf.dflt, rf.dscope, depth + 1);
       } else {
         ScodeScope frds;
         const Id<SElement> frec = resolve_class_path(fe.type.path, fe.type.leading_dot, fscope, frds);
@@ -13895,12 +13905,14 @@ class Flattener {
         // 实例化期碰到的、绑定里还引用别的参数的（`world.defaultBodyDiameter = world.nominalLength / 9`，world 声明在后——
         // MSL Constraints.* / ActuatedDrive 的 `sphere(…) if … sphereDiameter > 0`）：第一遍记下的依赖一路都是普通参数就照用
         // 第一遍的值，依赖一起标结构参数（markComponent 进未定型的绑定，NFStructural.mo:311-326；CF 探针 CF1：world.nominalLength
-        // / world.defaultBodyDiameter 都 final）。
+        // / world.defaultBodyDiameter 都 final）。绑定定型期（属性）同理：被引用者声明在后 = 还没定型，依赖照样连带（同 frame_value
+        // 的 deps；PKM 探针 PKM7：`stateSelect = if preferredMediumStates …`、`preferredMediumStates = (if energyDynamics == … )`、
+        // `energyDynamics = system.energyDynamics`，inner system 声明在后、`system.massDynamics = energyDynamics`——MSL Fluid 的
+        // ThreeTanks 等）。
         std::vector<std::string> chain;
         if (const auto fw = carry_.vals.find(key);
             fw != carry_.vals.end() && !typed_keys_.count(key) &&
-            (mark_phase_ == MarkPhase::Late || forward_leaf(key) ||
-             (mark_phase_ == MarkPhase::Early && forward_chain(key, chain, 0)))) {
+            (mark_phase_ == MarkPhase::Late || forward_chain(key, chain, 0))) {
           if (!use_forward(key)) return std::nullopt;
           if (dep_mark_) {
             record_structural(key);
@@ -17396,7 +17408,7 @@ class Flattener {
     r.ty = Type::string();
     return add(std::move(r));
   }
-  // String(…) 补齐缺省后的实参 full 全是字面量 → 字符串字面量（见 string_call）；否则 invalid。Real 求值结果带指数 → SKIP
+  // String(…) 补齐缺省后的实参 full 全是字面量 → 字符串字面量（见 string_call）；否则 invalid。带宽度的 format 打出指数 → SKIP
   //（invalid + unsupported）。
   Id<Expr> fold_string_lit(const std::vector<Id<Expr>>& full, bool real, bool fmt) {
     for (Id<Expr> x : full) {
@@ -17426,7 +17438,24 @@ class Flattener {
       } else {
         s = std::string(in_.str(ve.enum_path.back()));
       }
-      if ((real || fmt) && s.find_first_of("eE") != std::string::npos) { set_unsupported("String exponent format"); return lit_int(0); }
+      // 指数：omc 按 C 的 sprintf 打（evalBuiltinString，NFCeval.mo:2748-2793 v1.25.0），Windows 版 omc 1.25.0（MinGW 链 msvcrt）
+      // 的指数至少 3 位（PKM 探针 PKM4：`String(1e-5)` → "1e-005"、`String(1.5e10)` → "1.5e+010"）——照它补零。带宽度的 format
+      //（`"10.3e"`）补零后宽度要重算，未做 → SKIP。
+      if (const std::size_t ep = s.find_first_of("eE"); (real || fmt) && ep != std::string::npos) {
+        if (fmt) {
+          const std::string_view fs = in_.str(result_.model.exprs[full[1]].sval);
+          const std::size_t w = fs.find_first_not_of("-+ #0");
+          if (w != std::string_view::npos && std::isdigit(static_cast<unsigned char>(fs[w]))) {
+            set_unsupported("String exponent format");
+            return lit_int(0);
+          }
+        }
+        std::size_t d = ep + 1;
+        if (d < s.size() && (s[d] == '+' || s[d] == '-')) ++d;
+        std::size_t n = 0;
+        while (d + n < s.size() && std::isdigit(static_cast<unsigned char>(s[d + n]))) ++n;
+        if (n > 0 && n < 3) s.insert(d, 3 - n, '0');
+      }
       if (!fmt) {
         const std::int64_t ml = result_.model.exprs[full[full.size() - 2]].ival;
         const bool lj = result_.model.exprs[full.back()].bval;
@@ -24334,11 +24363,9 @@ class Flattener {
   // 第二遍用到第一遍的值（向前引用）：omc 求值时连它绑定里引用的、同样还没压平的参数一起求值、存回（carry_.deps）。字段值经
   // 嵌套记录 / 未细分的整体绑定来的：omc 的求值走记录级——把中间那层记录整个求值、存回（makeRecordFieldBindingFromParent 对记录
   // 引用求值，NFCeval.mo:673-712；RecordBinding16 的 `zonDat[1].conDat.x = 1.0`），未做 → SKIP。
-  // 向前引用的参数，绑定不再引用别的参数（第一遍记下的 deps 为空：字面量 / 常量式）：定型期（条件、维）用到它也只需标它自己
-  // ——1.25.0 连带标记的是被引用者未定型的绑定里的参数，没有就没得连带（CC 探针 c41：`PSM p(u = d.ud); parameter D d;`，
-  // 条件 `h if u`）。
   // k 及其绑定里引用的参数（第一遍记下的 deps，一路往下）都是普通参数（有绑定、不经父记录整体绑定）→ true，链上除 k 外的
-  // 进 out（见 const_lookup_val 的向前引用支）。
+  // 进 out（见 const_lookup_val 的向前引用支）。deps 为空（字面量 / 常量式）的只标它自己——1.25.0 连带标记的是被引用者未定型的
+  // 绑定里的参数，没有就没得连带（CC 探针 c41：`PSM p(u = d.ud); parameter D d;`，条件 `h if u`）。
   bool forward_chain(const std::string& k, std::vector<std::string>& out, int depth) const {
     if (depth > 16) return false;
     const auto vi = carry_.visit.find(k);
@@ -24347,11 +24374,6 @@ class Flattener {
     for (const std::string& d : vi->second.deps)
       if (!forward_chain(d, out, depth + 1)) return false;
     return true;
-  }
-  bool forward_leaf(const std::string& k) const {
-    const auto vi = carry_.visit.find(k);
-    return vi != carry_.visit.end() && vi->second.kind == PassCarry::VisitInfo::Parameter && vi->second.plain &&
-           vi->second.deps.empty();
   }
   bool use_forward(const std::string& k) {
     if (deep_walk_ > 0) { set_unsupported("record binding evaluated before its declaration"); return false; }

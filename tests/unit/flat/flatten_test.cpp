@@ -2279,7 +2279,8 @@ YMC_TEST(flatten_parameter_constant_records) {
 
 YMC_TEST(flatten_string_builtin) {
   // String(x, …)（MLS §3.7.2）：实参按重载补齐缺省打印；全常量 → 求值成字符串（%g 有效数字、minimumLength 补空格、format、
-  // 枚举字面量名）；Real 结果带指数（1.25.0 是 Windows CRT 的三位指数）→ SKIP。期望 = omc 1.25.0 实跑 S1 / S3（2026-10-02）。
+  // 枚举字面量名）；Real 结果带指数照 Windows 版 omc 1.25.0 补到三位（见 docs/open-questions.md），带宽度的 format 打出指数
+  // → SKIP。期望 = omc 1.25.0 实跑 S1 / S3（2026-10-02）、`String(1e10)`（2026-10-14）。
   const char* src1 =
       "model S1\n  Real x = time;\n  Integer n = 3;\n  Boolean b = true;\n  parameter Real p = 1.5;\n  String s1 = String(x);\n"
       "  String s2 = String(n);\n  String s3 = String(b);\n  String s4 = String(p, significantDigits = 3);\n"
@@ -2300,9 +2301,11 @@ YMC_TEST(flatten_string_builtin) {
                std::string("class S3\n  String a = \"0.333333\";\n  String d = \"100\";\n  String e = \"3   \";\n"
                            "  String f = \"   3\";\n  String g = \"true  \";\n  String h = \"2.5\";\n  String i = \"  2.50\";\n"
                            "  String j = \"two\";\n  String k = \"-0.5\";\nend S3;\n"));
+  YMC_CHECK_EQ(flatten_src("model M\n  String b = String(1e10);\nend M;\n"),
+               std::string("class M\n  String b = \"1e+010\";\nend M;\n"));
   bool uns = false;
-  const std::string t = flatten_src("model M\n  String b = String(1e10);\nend M;\n", &uns);
-  YMC_CHECK(uns);
+  const std::string t = flatten_src("model M\n  String b = String(1e10, format = \"10.3e\");\nend M;\n", &uns);
+  YMC_CHECK(uns);   // omc 打 "1.000e+010"（宽度 10 内含三位指数），补零后宽度要重算，未做
   YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
 }
 
@@ -7696,6 +7699,65 @@ YMC_TEST(flatten_empty_package_constant_array) {
                std::string("class PKS10\n  parameter Real v2.C_start[1](quantity = \"CO2\") = 0.0;\n"
                            "  Real v2.C[1](quantity = \"CO2\", start = v2.C_start[1]);\n  String v2.s[1];\nequation\n"
                            "  v2.s = {\"CO2\"};\n  der(v2.C[1]) = -v2.C[1];\nend PKS10;\n"));
+}
+
+YMC_TEST(flatten_record_constant_inherited_field) {
+  // 记录常量（无绑定，按组件修饰逐字段构造）的继承字段：`record T extends B` 的 `wc[1].molarMass`（MSL Media 的
+  // `waterConstants`，TwoPhase.FluidConstants extends Basic.FluidConstants）。期望 = omc 1.25.0 实跑（2026-10-14，探针 pk-p10 PKM3）。
+  YMC_CHECK_EQ(flatten_src("package P\n  record B\n    Real molarMass;\n  end B;\n  record T\n    extends B;\n    Real tc;\n  end T;\n"
+                           "  constant T[1] wc(each molarMass = 0.018, each tc = 1);\n  constant T w1(molarMass = 0.02, tc = 2);\n"
+                           "end P;\nmodel PKM3\n  Real MM = P.wc[1].molarMass;\n  Real M1 = P.w1.molarMass;\n  Real t = P.wc[1].tc;\n"
+                           "end PKM3;\n"),
+               std::string("class PKM3\n  Real MM = 0.018;\n  Real M1 = 0.02;\n  Real t = 1.0;\nend PKM3;\n"));
+}
+
+YMC_TEST(flatten_string_real_exponent_three_digits) {
+  // String(Real) 编译期求值的指数：omc 按 C 的 sprintf 打（NFCeval.mo:2748-2793 v1.25.0），Windows 版 omc 1.25.0 指数至少
+  // 3 位（"1e-005"）——平台相关，见 docs/open-questions.md。期望 = omc 1.25.0 实跑（2026-10-14，探针 pk-p10 PKM4）。
+  YMC_CHECK_EQ(flatten_src("model PKM4\n  String s1 = String(1e-5);\n  String s2 = String(1.5e10);\n"
+                           "  String s3 = String(123456789.0);\n  String s4 = String(0.0001);\n  String s5 = String(1e6);\n"
+                           "  String s6 = String(-2.5e-7, significantDigits = 3);\n  String s7 = String(1e100);\n"
+                           "  String s8 = String(1e-5, format = \"g\");\n"
+                           "  String s10 = String(611.657e3, minimumLength = 12, leftJustified = false);\nend PKM4;\n"),
+               std::string("class PKM4\n  String s1 = \"1e-005\";\n  String s2 = \"1.5e+010\";\n  String s3 = \"1.23457e+008\";\n"
+                           "  String s4 = \"0.0001\";\n  String s5 = \"1e+006\";\n  String s6 = \"-2.5e-007\";\n"
+                           "  String s7 = \"1e+100\";\n  String s8 = \"1e-005\";\n  String s10 = \"      611657\";\nend PKM4;\n"));
+}
+
+YMC_TEST(flatten_state_select_forward_inner_parameter) {
+  // stateSelect 的值经 preferredMediumStates → energyDynamics → system.energyDynamics（inner system 声明在后）：第一遍
+  // 缺值 → 第二遍带着第一遍的值求，依赖链（system.massDynamics = energyDynamics）一起标结构参数。期望 = omc 1.25.0 实跑
+  // （2026-10-14，探针 pk-p10 PKM7）。
+  YMC_CHECK_EQ(flatten_src("package P\n  package Types\n"
+                           "    type Dynamics = enumeration(DynamicFreeInitial, FixedInitial, SteadyStateInitial, SteadyState);\n"
+                           "  end Types;\n  model System\n"
+                           "    parameter Types.Dynamics energyDynamics = Types.Dynamics.DynamicFreeInitial;\n"
+                           "    parameter Types.Dynamics massDynamics = energyDynamics;\n  end System;\n  partial package PM\n"
+                           "    replaceable partial model BaseProperties\n      Real p;\n      Real T;\n"
+                           "      parameter Boolean preferredMediumStates = false;\n    end BaseProperties;\n  end PM;\n"
+                           "  partial package PS\n    extends PM;\n    redeclare replaceable model extends BaseProperties(\n"
+                           "      T(stateSelect = if preferredMediumStates then StateSelect.prefer else StateSelect.default),\n"
+                           "      p(stateSelect = if preferredMediumStates then StateSelect.prefer else StateSelect.default))\n"
+                           "    equation\n      p = 1;\n      T = time;\n    end BaseProperties;\n  end PS;\n  package W\n"
+                           "    extends PS;\n  end W;\n  partial model Vol\n    import P.Types;\n    import P.Types.Dynamics;\n"
+                           "    outer System system;\n    replaceable package Medium = PM;\n"
+                           "    parameter Types.Dynamics energyDynamics = system.energyDynamics;\n"
+                           "    parameter Types.Dynamics massDynamics = system.massDynamics;\n    Medium.BaseProperties medium(\n"
+                           "      preferredMediumStates = (if energyDynamics == Dynamics.SteadyState and\n"
+                           "                               massDynamics == Dynamics.SteadyState then false else true));\n  end Vol;\n"
+                           "  model Tank\n    extends Vol;\n  end Tank;\nend P;\nmodel PKM7\n"
+                           "  replaceable package Medium = P.W constrainedby P.PM;\n"
+                           "  P.Tank tank1(redeclare package Medium = Medium);\n"
+                           "  inner P.System system(energyDynamics = P.Types.Dynamics.FixedInitial);\nend PKM7;\n"),
+               std::string("class PKM7\n"
+                           "  final parameter enumeration(DynamicFreeInitial, FixedInitial, SteadyStateInitial, SteadyState) tank1.energyDynamics = P.Types.Dynamics.FixedInitial;\n"
+                           "  final parameter enumeration(DynamicFreeInitial, FixedInitial, SteadyStateInitial, SteadyState) tank1.massDynamics = P.Types.Dynamics.FixedInitial;\n"
+                           "  Real tank1.medium.p(stateSelect = StateSelect.prefer);\n"
+                           "  Real tank1.medium.T(stateSelect = StateSelect.prefer);\n"
+                           "  final parameter Boolean tank1.medium.preferredMediumStates = true;\n"
+                           "  final parameter enumeration(DynamicFreeInitial, FixedInitial, SteadyStateInitial, SteadyState) system.energyDynamics = P.Types.Dynamics.FixedInitial;\n"
+                           "  final parameter enumeration(DynamicFreeInitial, FixedInitial, SteadyStateInitial, SteadyState) system.massDynamics = P.Types.Dynamics.FixedInitial;\n"
+                           "equation\n  tank1.medium.p = 1.0;\n  tank1.medium.T = time;\nend PKM7;\n"));
 }
 
 YMC_TEST_MAIN

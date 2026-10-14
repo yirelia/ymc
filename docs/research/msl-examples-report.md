@@ -620,3 +620,10 @@ String / Boolean 数组常量、空数组常量。PASS / SKIP 逐例不变；Flu
 `extraPropertiesNames` 等常量，现停在：限定引用 11（`fluidConstants.molarMass` 记录数组常量、`Medium.singleState`、`Medium.h_default`
 函数求值等）、限定函数调用 8（`Medium.density` 等经重声明的包的函数）、复合数组元素引用 4（`ports.C_outflow`）、未解析名 4（`MMX`）、
 stateSelect 值 3、带修饰的短类包 3、函数体内的 Medium 函数 / 类型 7 等。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-14 66b 之后：PASS 438（不变）
+
+记录常量的继承字段（`fluidConstants[1].molarMass`）、String(Real) 的三位指数（Windows 版 omc）、stateSelect 经声明在后的
+inner 参数（ThreeTanks / EmptyTanks / OneTank）。PASS / SKIP 逐例不变；Fluid / Media 的 SKIP 前移到 Medium 函数的发射
+（`saturationTemperature` / `bubbleEnthalpy` / `specificEnthalpy` / `temperature`，以及经重声明的包调用的限定函数 8 例）与
+复合数组（`ports.C_outflow` 4、`tank.topPorts` / `tank1.ports` 修饰分发 2、非 parts 类型的复合数组 2）。FAIL / ACCEPTS-INVALID / CRASH 0。

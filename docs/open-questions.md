@@ -249,6 +249,8 @@ connect 实参下标的几处 1.25.0 行为（CN 探针 n1–n5，2026-10-03）�
 
 Integer 的极值（待用户定，2026-10-02）：`max` / `min` 作用在空的 Integer 数组 / 空范围上取 `∓System.intMaxLit`（Expression.makeMinValue / makeMaxValue，v1.25.0 NFExpression.mo:4908-4934），这个值随 omc 构建的整数位宽而变——本机安装版 1.25.0（Windows）打 `1073741823`，testsuite 文件（64 位 Linux 生成）是 `4611686018427387903`。跟实跑的 omc 就要把 30 位的值写进 ymc，跟文件又过不了 oracle=live 门；ymc 目前两边都不跟，遇到即 SKIP（`Integer extreme of empty min/max (platform-dependent in omc)`）。受影响：scodeinst 的 CevalReduction1、FuncBuiltinMax / Max2 / Min / Min2、FuncBuiltinReduction 六例（其余内容已与 1.25.0 一致，只差这一个值）。Real（`±8.777798510069901e304`）、Boolean、枚举的极值与平台无关，已做。
 
+String(Real) 的指数位数（2026-10-14，跟实跑）：编译期求值 `String(r, …)` 按 C 的 sprintf 打（evalBuiltinString，v1.25.0 NFCeval.mo:2748-2793），本机 Windows 版 omc 1.25.0 的指数至少 3 位（`String(1e-5)` → `"1e-005"`、`String(1.5e10)` → `"1.5e+010"`，PKM 探针 PKM4），glibc 构建的 omc 是 2 位（C 标准只要求至少 2 位）。testsuite 文件里没有这种结果（全库 grep 无），与文件不冲突 → ymc 跟实跑：补零到 3 位。带宽度的 format（`String(x, format = "10.3e")`）补零后宽度要重算，未做 → SKIP（`String exponent format`）。换 Linux 版 omc 当 oracle 时这里要改回。
+
 ## 已研究待实现：多条 connect 连接集（union-find）
 
 **状态**：算法已从 OMC 新前端源码 + 实跑 omc 1.25.0 探针完整摸清，暂不实现——理由是当前 testsuite 里
