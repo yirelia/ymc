@@ -7967,4 +7967,104 @@ YMC_TEST(flatten_empty_variable_array_call_kept) {
                            "  final parameter Integer n = 0;\n  Boolean y = PKH4.anyTrue({}) or time > 1.0;\nend PKH4;\n"));
 }
 
+YMC_TEST(flatten_class_extends_composite_array) {
+  // 元素类型是 class extends 的复合数组（`Medium.BaseProperties[n] mediums`，`redeclare model extends BaseProperties`）：同标量
+  // 复合组件，成员在实例类树里。期望 = omc 1.25.0 实跑（2026-10-14，探针 pk-p14 PKH6）。
+  YMC_CHECK_EQ(flatten_src("package P\n  partial package PM\n    replaceable partial model BaseProperties\n      Real p;\n"
+                           "      Real h;\n      parameter Boolean preferredMediumStates = false;\n    end BaseProperties;\n"
+                           "  end PM;\n  package W\n    extends PM;\n"
+                           "    redeclare model extends BaseProperties(h(stateSelect = if preferredMediumStates then StateSelect.prefer else StateSelect.default))\n"
+                           "    equation\n      p = 2 * h;\n    end BaseProperties;\n  end W;\n  model Pipe\n"
+                           "    replaceable package Medium = PM;\n    parameter Integer n = 2;\n"
+                           "    Medium.BaseProperties[n] mediums(each preferredMediumStates = true, h(each start = 1));\n  equation\n"
+                           "    for i in 1:n loop\n      mediums[i].h = i * time;\n    end for;\n  end Pipe;\nend P;\nmodel PKH6\n"
+                           "  P.Pipe pipe(redeclare package Medium = P.W);\nend PKH6;\n"),
+               std::string("class PKH6\n  final parameter Integer pipe.n = 2;\n  Real pipe.mediums[1].p;\n"
+                           "  Real pipe.mediums[1].h(start = 1.0, stateSelect = StateSelect.prefer);\n"
+                           "  final parameter Boolean pipe.mediums[1].preferredMediumStates = true;\n  Real pipe.mediums[2].p;\n"
+                           "  Real pipe.mediums[2].h(start = 1.0, stateSelect = StateSelect.prefer);\n"
+                           "  final parameter Boolean pipe.mediums[2].preferredMediumStates = true;\nequation\n"
+                           "  pipe.mediums[1].p = 2.0 * pipe.mediums[1].h;\n  pipe.mediums[2].p = 2.0 * pipe.mediums[2].h;\n"
+                           "  pipe.mediums[1].h = time;\n  pipe.mediums[2].h = 2.0 * time;\nend PKH6;\n"));
+}
+
+YMC_TEST(flatten_empty_stream_members_in_equations) {
+  // 端口数组上的非 each 类重声明（`ports[nPorts](redeclare package Medium = Medium, …)`）、空数组的字面量切片引用
+  // （`ports_mXi_flow[i, :]`）、空 stream 数组成员当 actualStream / inStream 实参、`m_flow * actualStream(h)` 包 smooth(0, …)。
+  // 期望 = omc 1.25.0 实跑（2026-10-14，探针 pk-p14 PKH7）。
+  YMC_CHECK_EQ(flatten_src("package P\n  partial package PM\n    constant Integer nXi = 0;\n    constant Integer nC = 0;\n  end PM;\n"
+                           "  package W\n    extends PM;\n  end W;\n  connector FluidPort\n    replaceable package Medium = PM;\n"
+                           "    flow Real m_flow;\n    Real p;\n    stream Real h_outflow;\n    stream Real Xi_outflow[Medium.nXi];\n"
+                           "    stream Real C_outflow[Medium.nC];\n  end FluidPort;\n  model Source\n"
+                           "    replaceable package Medium = PM;\n    parameter Integer nPorts = 0;\n    parameter Real p = 1e5;\n"
+                           "    parameter Real h = 1e5;\n    parameter Real X[Medium.nXi] = fill(0, Medium.nXi);\n"
+                           "    parameter Real C[Medium.nC] = fill(0, Medium.nC);\n"
+                           "    FluidPort ports[nPorts](redeclare package Medium = Medium, m_flow(each start = 0));\n"
+                           "    Real ports_H_flow[nPorts];\n    Real ports_mXi_flow[nPorts, Medium.nXi];\n"
+                           "    Real ports_mC_flow[nPorts, Medium.nC];\n  equation\n    ports.p = fill(p, nPorts);\n"
+                           "    ports.h_outflow = fill(h, nPorts);\n    ports.Xi_outflow = fill(X, nPorts);\n"
+                           "    ports.C_outflow = fill(C, nPorts);\n    for i in 1:nPorts loop\n"
+                           "      assert(cardinality(ports[i]) <= 1, \"only one connection per port\");\n"
+                           "      ports_H_flow[i] = ports[i].m_flow * actualStream(ports[i].h_outflow);\n"
+                           "      ports_mXi_flow[i, :] = ports[i].m_flow * actualStream(ports[i].Xi_outflow);\n"
+                           "      ports_mC_flow[i, :] = ports[i].m_flow * inStream(ports[i].C_outflow);\n    end for;\n  end Source;\n"
+                           "  model Sink\n    replaceable package Medium = PM;\n"
+                           "    FluidPort port(redeclare package Medium = Medium);\n    Real H_flow;\n    Real mXi_flow[Medium.nXi];\n"
+                           "  equation\n    H_flow = port.m_flow * actualStream(port.h_outflow);\n"
+                           "    mXi_flow = port.m_flow * actualStream(port.Xi_outflow);\n    port.p = 1;\n    port.h_outflow = 2;\n"
+                           "    port.Xi_outflow = fill(0, Medium.nXi);\n    port.C_outflow = fill(0, Medium.nC);\n  end Sink;\n"
+                           "end P;\nmodel PKH7\n  P.Source s1(nPorts = 2, redeclare package Medium = P.W);\n"
+                           "  P.Source s0(redeclare package Medium = P.W);\n  P.Sink k(redeclare package Medium = P.W);\nequation\n"
+                           "  connect(s1.ports[1], k.port);\nend PKH7;\n"),
+               std::string("class PKH7\n  final parameter Integer s1.nPorts = 2;\n  parameter Real s1.p = 1e5;\n"
+                           "  parameter Real s1.h = 1e5;\n  Real s1.ports[1].m_flow(start = 0.0);\n  Real s1.ports[1].p;\n"
+                           "  Real s1.ports[1].h_outflow;\n  Real s1.ports[2].m_flow(start = 0.0);\n  Real s1.ports[2].p;\n"
+                           "  Real s1.ports[2].h_outflow;\n  Real s1.ports_H_flow[1];\n  Real s1.ports_H_flow[2];\n"
+                           "  final parameter Integer s0.nPorts = 0;\n  parameter Real s0.p = 1e5;\n  parameter Real s0.h = 1e5;\n"
+                           "  Real k.port.m_flow;\n  Real k.port.p;\n  Real k.port.h_outflow;\n  Real k.H_flow;\nequation\n"
+                           "  s1.ports[1].p = k.port.p;\n  k.port.m_flow + s1.ports[1].m_flow = 0.0;\n  s1.ports[2].m_flow = 0.0;\n"
+                           "  s1.ports[1].p = s1.p;\n  s1.ports[2].p = s1.p;\n  s1.ports[1].h_outflow = s1.h;\n"
+                           "  s1.ports[2].h_outflow = s1.h;\n"
+                           "  s1.ports_H_flow[1] = smooth(0, s1.ports[1].m_flow * (if s1.ports[1].m_flow > 0.0 then k.port.h_outflow else s1.ports[1].h_outflow));\n"
+                           "  s1.ports_H_flow[2] = smooth(0, s1.ports[2].m_flow * s1.ports[2].h_outflow);\n"
+                           "  k.H_flow = smooth(0, k.port.m_flow * (if k.port.m_flow > 0.0 then s1.ports[1].h_outflow else k.port.h_outflow));\n"
+                           "  k.port.p = 1.0;\n  k.port.h_outflow = 2.0;\nend PKH7;\n"));
+}
+
+YMC_TEST(flatten_actualstream_product_forms) {
+  // evaluateActualStreamMul（NFConnectEquations.mo:1014-1038 v1.25.0）：cref 换到前面、cref 是关联 flow 且结果是 if 式才包
+  // smooth；flow 方向已知（min = 0）不出 if；别的因子照常求值。期望 = omc 1.25.0 实跑（2026-10-14，探针 pk-p14 PKH8）。
+  YMC_CHECK_EQ(flatten_src("model PKH8\n  connector FP\n    flow Real m_flow;\n    Real p;\n    stream Real h_outflow;\n  end FP;\n"
+                           "  connector FPin\n    flow Real m_flow(min = 0);\n    Real p;\n    stream Real h_outflow;\n  end FPin;\n"
+                           "  model Comp\n    FP port;\n    Real x = time;\n    Real H1;\n    Real H2;\n    Real H3;\n    Real H4;\n"
+                           "  equation\n    port.h_outflow = 3;\n    H1 = actualStream(port.h_outflow) * port.m_flow;\n"
+                           "    H2 = x * actualStream(port.h_outflow);\n    H3 = 2 * actualStream(port.h_outflow);\n"
+                           "    H4 = -port.m_flow * actualStream(port.h_outflow);\n  end Comp;\n  model CompIn\n    FPin port;\n"
+                           "    Real H;\n  equation\n    port.h_outflow = 4;\n    H = port.m_flow * actualStream(port.h_outflow);\n"
+                           "  end CompIn;\n  Comp a;\n  Comp b;\n  CompIn c;\n  Comp d;\nequation\n  connect(a.port, b.port);\n"
+                           "  connect(c.port, d.port);\n  a.port.p = 1;\n  c.port.p = 1;\n  a.port.m_flow = time;\n"
+                           "  c.port.m_flow = time;\nend PKH8;\n"),
+               std::string("class PKH8\n  Real a.port.m_flow;\n  Real a.port.p;\n  Real a.port.h_outflow;\n  Real a.x = time;\n"
+                           "  Real a.H1;\n  Real a.H2;\n  Real a.H3;\n  Real a.H4;\n  Real b.port.m_flow;\n  Real b.port.p;\n"
+                           "  Real b.port.h_outflow;\n  Real b.x = time;\n  Real b.H1;\n  Real b.H2;\n  Real b.H3;\n  Real b.H4;\n"
+                           "  Real c.port.m_flow(min = 0.0);\n  Real c.port.p;\n  Real c.port.h_outflow;\n  Real c.H;\n"
+                           "  Real d.port.m_flow;\n  Real d.port.p;\n  Real d.port.h_outflow;\n  Real d.x = time;\n  Real d.H1;\n"
+                           "  Real d.H2;\n  Real d.H3;\n  Real d.H4;\nequation\n  a.port.p = b.port.p;\n  c.port.p = d.port.p;\n"
+                           "  b.port.m_flow + a.port.m_flow = 0.0;\n  d.port.m_flow + c.port.m_flow = 0.0;\n"
+                           "  a.port.h_outflow = 3.0;\n"
+                           "  a.H1 = smooth(0, a.port.m_flow * (if a.port.m_flow > 0.0 then b.port.h_outflow else a.port.h_outflow));\n"
+                           "  a.H2 = a.x * (if a.port.m_flow > 0.0 then b.port.h_outflow else a.port.h_outflow);\n"
+                           "  a.H3 = 2.0 * (if a.port.m_flow > 0.0 then b.port.h_outflow else a.port.h_outflow);\n"
+                           "  a.H4 = -smooth(0, a.port.m_flow * (if a.port.m_flow > 0.0 then b.port.h_outflow else a.port.h_outflow));\n"
+                           "  b.port.h_outflow = 3.0;\n"
+                           "  b.H1 = smooth(0, b.port.m_flow * (if b.port.m_flow > 0.0 then a.port.h_outflow else b.port.h_outflow));\n"
+                           "  b.H2 = b.x * (if b.port.m_flow > 0.0 then a.port.h_outflow else b.port.h_outflow);\n"
+                           "  b.H3 = 2.0 * (if b.port.m_flow > 0.0 then a.port.h_outflow else b.port.h_outflow);\n"
+                           "  b.H4 = -smooth(0, b.port.m_flow * (if b.port.m_flow > 0.0 then a.port.h_outflow else b.port.h_outflow));\n"
+                           "  c.port.h_outflow = 4.0;\n  c.H = c.port.m_flow * d.port.h_outflow;\n  d.port.h_outflow = 3.0;\n"
+                           "  d.H1 = smooth(0, d.port.m_flow * d.port.h_outflow);\n  d.H2 = d.x * d.port.h_outflow;\n"
+                           "  d.H3 = 2.0 * d.port.h_outflow;\n  d.H4 = -smooth(0, d.port.m_flow * d.port.h_outflow);\n"
+                           "  a.port.p = 1.0;\n  c.port.p = 1.0;\n  a.port.m_flow = time;\n  c.port.m_flow = time;\nend PKH8;\n"));
+}
+
 YMC_TEST_MAIN

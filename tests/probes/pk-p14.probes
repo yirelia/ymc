@@ -1,0 +1,187 @@
+//// set: pk-p14 — MSL Fluid 端口与管道：非 each 类重声明、class extends 复合数组、空 stream 成员进方程、flow * actualStream 包 smooth
+//// model: PKH5
+package P
+  partial package PM
+    constant Integer nXi = 0;
+    constant Integer nC = 0;
+  end PM;
+  package W
+    extends PM;
+  end W;
+  connector FluidPort
+    replaceable package Medium = PM;
+    flow Real m_flow;
+    Real p;
+    stream Real h_outflow;
+    stream Real Xi_outflow[Medium.nXi];
+    stream Real C_outflow[Medium.nC];
+  end FluidPort;
+  model Source
+    replaceable package Medium = PM;
+    parameter Integer nPorts = 0;
+    parameter Real p = 1e5;
+    parameter Real h = 1e5;
+    parameter Real X[Medium.nXi] = fill(0, Medium.nXi);
+    parameter Real C[Medium.nC] = fill(0, Medium.nC);
+    FluidPort ports[nPorts](redeclare package Medium = Medium, m_flow(each start = 0));
+  equation
+    ports.p = fill(p, nPorts);
+    ports.h_outflow = fill(h, nPorts);
+    ports.Xi_outflow = fill(X, nPorts);
+    ports.C_outflow = fill(C, nPorts);
+    for i in 1:nPorts loop
+      assert(cardinality(ports[i]) <= 1, "only one connection per port");
+    end for;
+  end Source;
+  model Sink
+    replaceable package Medium = PM;
+    FluidPort port(redeclare package Medium = Medium);
+  equation
+    port.p = 1;
+    port.h_outflow = 2;
+    port.Xi_outflow = fill(0, Medium.nXi);
+    port.C_outflow = fill(0, Medium.nC);
+  end Sink;
+end P;
+model PKH5
+  P.Source s1(nPorts = 2, redeclare package Medium = P.W);
+  P.Source s0(redeclare package Medium = P.W);
+  P.Sink k(redeclare package Medium = P.W);
+equation
+  connect(s1.ports[1], k.port);
+end PKH5;
+//// model: PKH6
+package P
+  partial package PM
+    replaceable partial model BaseProperties
+      Real p;
+      Real h;
+      parameter Boolean preferredMediumStates = false;
+    end BaseProperties;
+  end PM;
+  package W
+    extends PM;
+    redeclare model extends BaseProperties(h(stateSelect = if preferredMediumStates then StateSelect.prefer else StateSelect.default))
+    equation
+      p = 2 * h;
+    end BaseProperties;
+  end W;
+  model Pipe
+    replaceable package Medium = PM;
+    parameter Integer n = 2;
+    Medium.BaseProperties[n] mediums(each preferredMediumStates = true, h(each start = 1));
+  equation
+    for i in 1:n loop
+      mediums[i].h = i * time;
+    end for;
+  end Pipe;
+end P;
+model PKH6
+  P.Pipe pipe(redeclare package Medium = P.W);
+end PKH6;
+//// model: PKH7
+package P
+  partial package PM
+    constant Integer nXi = 0;
+    constant Integer nC = 0;
+  end PM;
+  package W
+    extends PM;
+  end W;
+  connector FluidPort
+    replaceable package Medium = PM;
+    flow Real m_flow;
+    Real p;
+    stream Real h_outflow;
+    stream Real Xi_outflow[Medium.nXi];
+    stream Real C_outflow[Medium.nC];
+  end FluidPort;
+  model Source
+    replaceable package Medium = PM;
+    parameter Integer nPorts = 0;
+    parameter Real p = 1e5;
+    parameter Real h = 1e5;
+    parameter Real X[Medium.nXi] = fill(0, Medium.nXi);
+    parameter Real C[Medium.nC] = fill(0, Medium.nC);
+    FluidPort ports[nPorts](redeclare package Medium = Medium, m_flow(each start = 0));
+    Real ports_H_flow[nPorts];
+    Real ports_mXi_flow[nPorts, Medium.nXi];
+    Real ports_mC_flow[nPorts, Medium.nC];
+  equation
+    ports.p = fill(p, nPorts);
+    ports.h_outflow = fill(h, nPorts);
+    ports.Xi_outflow = fill(X, nPorts);
+    ports.C_outflow = fill(C, nPorts);
+    for i in 1:nPorts loop
+      assert(cardinality(ports[i]) <= 1, "only one connection per port");
+      ports_H_flow[i] = ports[i].m_flow * actualStream(ports[i].h_outflow);
+      ports_mXi_flow[i, :] = ports[i].m_flow * actualStream(ports[i].Xi_outflow);
+      ports_mC_flow[i, :] = ports[i].m_flow * inStream(ports[i].C_outflow);
+    end for;
+  end Source;
+  model Sink
+    replaceable package Medium = PM;
+    FluidPort port(redeclare package Medium = Medium);
+    Real H_flow;
+    Real mXi_flow[Medium.nXi];
+  equation
+    H_flow = port.m_flow * actualStream(port.h_outflow);
+    mXi_flow = port.m_flow * actualStream(port.Xi_outflow);
+    port.p = 1;
+    port.h_outflow = 2;
+    port.Xi_outflow = fill(0, Medium.nXi);
+    port.C_outflow = fill(0, Medium.nC);
+  end Sink;
+end P;
+model PKH7
+  P.Source s1(nPorts = 2, redeclare package Medium = P.W);
+  P.Source s0(redeclare package Medium = P.W);
+  P.Sink k(redeclare package Medium = P.W);
+equation
+  connect(s1.ports[1], k.port);
+end PKH7;
+//// model: PKH8
+model PKH8
+  connector FP
+    flow Real m_flow;
+    Real p;
+    stream Real h_outflow;
+  end FP;
+  connector FPin
+    flow Real m_flow(min = 0);
+    Real p;
+    stream Real h_outflow;
+  end FPin;
+  model Comp
+    FP port;
+    Real x = time;
+    Real H1;
+    Real H2;
+    Real H3;
+    Real H4;
+  equation
+    port.h_outflow = 3;
+    H1 = actualStream(port.h_outflow) * port.m_flow;
+    H2 = x * actualStream(port.h_outflow);
+    H3 = 2 * actualStream(port.h_outflow);
+    H4 = -port.m_flow * actualStream(port.h_outflow);
+  end Comp;
+  model CompIn
+    FPin port;
+    Real H;
+  equation
+    port.h_outflow = 4;
+    H = port.m_flow * actualStream(port.h_outflow);
+  end CompIn;
+  Comp a;
+  Comp b;
+  CompIn c;
+  Comp d;
+equation
+  connect(a.port, b.port);
+  connect(c.port, d.port);
+  a.port.p = 1;
+  c.port.p = 1;
+  a.port.m_flow = time;
+  c.port.m_flow = time;
+end PKH8;

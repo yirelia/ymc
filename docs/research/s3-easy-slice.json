@@ -689,5 +689,6 @@
 "MultiInheritanceRedeclare1.mo",
 "redeclare10.mo",
 "redeclare7.mo",
-"ClassMod4.mo"
+"ClassMod4.mo",
+"ClassExtendsMod2.mo"
 ]

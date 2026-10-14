@@ -2336,6 +2336,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       slice 691 例 FAIL 0（oracle=live 不一致 0）；scodeinst 651（不变）；testsuite 1805→1807（diff/TrueHoldWithResetBefore、
       interactive-API/Bug3783）/ FAIL 0；MSL 438（不变：Fluid 越过端口空成员，停在端口数组修饰分发 5、非 parts 类型的复合数组 4、
       stream 算子下标 4 等）；探针 9684→9689（PASS +7）；单测 362→365。
+- [x] (66f) MSL Fluid 端口与管道（2026-10-14）：数组修饰分发里不带 each 的类重声明（`ports[nPorts](redeclare package Medium =
+      Medium, …)`）原样传（OMC 只给 REDECLARE 的 innerMod 加下标，NFModifier.mo:486-509）；元素类型是 class extends 的复合数组
+      （`Medium.BaseProperties[n] mediums`）同标量复合组件；空数组的字面量切片引用（`ports_mXi_flow[i, :]`）与空 stream 数组成员当
+      actualStream / inStream 实参都得空数组；`cref * actualStream(s)` 照 evaluateActualStreamMul（NFConnectEquations.mo:1014-1038）
+      写成 `cref * 求值结果`、是关联 flow 且结果是 if 式时包 `smooth(0, …)`（此前一律 SKIP）。探针 pk-p14（4）；单测 +3。
+      slice 691→692（scodeinst ClassExtendsMod2）FAIL 0（oracle=live 不一致 0）；scodeinst 651→652；testsuite 1807→1808 / FAIL 0；
+      MSL 438（不变：Fluid 停在其余空数组下标引用 6、向量化调用实参 4、函数压平名 2 等）；探针 9689→9693；单测 365→368。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

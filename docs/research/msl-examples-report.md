@@ -647,3 +647,10 @@ FAIL / ACCEPTS-INVALID / CRASH 0。
 Fluid 端口数组的空成员（`Xi_outflow` / `C_outflow` 对水是空数组、`nPorts = 0`）：复合数组整体引用、fill、连接与 cardinality 都照
 omc 丢掉空的部分。PASS / SKIP 逐例不变；Fluid 的 SKIP 前移到端口数组的修饰分发（`tank.topPorts` 等 5）、非 parts 类型的复合数组
 （4）、stream 算子带下标（4）、向量化调用实参（2）等。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-14 66f 之后：PASS 438（不变）
+
+端口数组上不带 each 的类重声明、class extends 复合数组（`Medium.BaseProperties[n] mediums`）、空 stream 数组成员进方程、
+`m_flow * actualStream(h)` 包 smooth。PASS / SKIP 逐例不变；Fluid 的 SKIP 前移到其余形态的空数组下标引用（6）、向量化调用实参（4）、
+管道摩擦函数里嵌套函数的压平名（`interpolateInRegion2`，2）、类重声明的函数（`flowCharacteristic`，2）等。
+FAIL / ACCEPTS-INVALID / CRASH 0。

@@ -1130,7 +1130,10 @@ class Flattener {
         if (I_.comps[cid].ty.kind == TypeKind::Complex) {
           NodeId ci = I_.comps[cid].class_inst;
           Id<SElement> cdef = I_.nodes[ci].def;
-          if (!cdef.is_valid() || I_.scode.elems[cdef].def.kind != SClassDefKind::Parts) {
+          // class extends 的类型（MSL Fluid 管道的 `Medium.BaseProperties[n] mediums`，`redeclare model extends BaseProperties`）同
+          // 标量复合组件：成员在实例类树里（隐式基类已由 inst 展开，PKH 探针 PKH6）。
+          if (!cdef.is_valid() || (I_.scode.elems[cdef].def.kind != SClassDefKind::Parts &&
+                                   I_.scode.elems[cdef].def.kind != SClassDefKind::ClassExtends)) {
             set_unsupported("composite array (non-parts type)"); continue;
           }
           SRestriction r = I_.scode.elems[cdef].restriction;
@@ -15424,6 +15427,23 @@ class Flattener {
       e.cref.parts.push_back({p.name, std::move(subs)});
     }
     if (!empty_dims.empty()) {
+      // 下标只有界内的字面量与 `:`（`ports_mXi_flow[i, :]`，[nPorts, nXi] 而 nXi = 0，i 是展开后的迭代变量；MSL Fluid 容器）：
+      // 零长的维没被下标取到，结果就是余下各维的空数组（类型 e.ty；变量引用，不算字面量实参），所在等式不产生方程（PKH 探针
+      // PKH7，omc 同）。
+      {
+        bool lit_slice = e.ty.is_array();
+        for (Id<Expr> s : e.cref.parts.back().subscripts) {
+          const ExprKind k = result_.model.exprs[s].kind;
+          lit_slice = lit_slice && (k == ExprKind::IntLit || k == ExprKind::Wild);
+        }
+        std::vector<std::int64_t> rd;
+        for (const Dimension& d : e.ty.dims) rd.push_back(d.kind == DimKind::Integer ? d.size : -1);
+        if (lit_slice && std::find(rd.begin(), rd.end(), 0) != rd.end() && std::find(rd.begin(), rd.end(), -1) == rd.end()) {
+          const Id<Expr> ea = empty_array_lit(e.ty.element_type(), rd);
+          var_empty_arrays_.insert(ea.raw);
+          return ea;
+        }
+      }
       // 空数组的下标引用（只剩符号下标，字面量下标已判越界）→ 缺省值加下标 `{}[m - 1]`（replaceEmptyArraysExp 的
       // SUBSCRIPTED_EXP 支；EmptyArray2）。限单段本地名、无前缀下标、无切片；其余未核实 → SKIP。
       bool simple = c.parts.size() == 1 && e.ty.element_type().kind != TypeKind::Complex;
@@ -21899,7 +21919,13 @@ class Flattener {
     // each 整棵跳过（propagateSubMod 的 else ()，MODIFIER 与 REDECLARE 都是）：MSL 多相电流传感器的 `ComplexOutput i[m](redeclare
     // each final SI.Current re, …)`——原 id 照传，实例化时已施加的重声明 flatten 按 id 认出（applied_redecls）。
     if (n.is_each) return sm;
-    if (n.kind != SModKind::Mod) return {};   // 非 each 的 redeclare（innerMod 下降 + propagatedSubs）未做
+    // 非 each 的类重声明（MSL Fluid 的 `ports[nPorts](redeclare package Medium = Medium, m_flow(each start = 0))`）：OMC 只给
+    // REDECLARE 的 innerMod 加下标（propagateSubMod，NFModifier.mo:486-509 v1.25.0），类本身对各元素都一样——类定义不带修饰的
+    // 原 id 照传（同 each，实例化时已施加，见 applied_redecls；PKH 探针 PKH5）。组件的 / 类带修饰的未做。
+    if (n.kind == SModKind::Redecl && n.element.is_valid() && I_.scode.elems[n.element].kind == SElementKind::Class &&
+        !(I_.scode.elems[n.element].def.kind == SClassDefKind::Derived && I_.scode.elems[n.element].def.derived_mod.is_valid()))
+      return sm;
+    if (n.kind != SModKind::Mod) return {};   // 非 each 的组件 redeclare（innerMod 下降 + propagatedSubs）未做
     // 原式是不是 cref（别名连带看它，见 emit_variable）：书写的修饰看自己的绑定（括号剥掉，omc 的 SCode 里没有括号）；上一层
     // 分发合成的继承上一层记下的；别的合成修饰（记录绑定拆出的字段）不记 → 照旧按"未核实"处理。
     std::optional<bool> root_cref;
@@ -23608,7 +23634,24 @@ class Flattener {
       }
       if (!cur.is_valid() || I_.nodes[cur].is_empty() || !I_.nodes[cur].comp.is_valid()) return bad("stream operator argument");
       const SElement& sel = I_.scode.elems[I_.comps[I_.nodes[cur].comp].def];
-      if (c.parts[i].subscripts.size() != sel.attr.dims.size() + sel.type.dims.size()) return bad("stream operator subscript");
+      if (c.parts[i].subscripts.size() != sel.attr.dims.size() + sel.type.dims.size()) {
+        // 末段是空的 stream 数组成员、不带下标（`actualStream(ports[i].Xi_outflow)`，水 nXi = 0；MSL Fluid 容器的
+        // `ports_mXi_flow[i, :] = ports[i].m_flow * actualStream(ports[i].Xi_outflow)`）：结果是空数组（变量引用，不算字面量实参），
+        // 所在等式不产生方程（PKH 探针 PKH7，omc 同）。维按成员在连接器实例里的声明求。非空的 stream 数组实参未做 → SKIP。
+        if (i > 0 && i + 1 == c.parts.size() && c.parts[i].subscripts.empty()) {
+          std::vector<std::int64_t> ed;
+          bool ok = true;
+          for (const std::vector<Id<Exp>>* ds : {&sel.attr.dims, &sel.type.dims})
+            for (Id<Exp> d : *ds) ok = ok && eval_dim(d, ed, scode_scope_of(decl));
+          if (result_.unsupported) return lit_real(0.0);
+          if (ok && std::find(ed.begin(), ed.end(), 0) != ed.end()) {
+            const Id<Expr> ea = empty_array_lit(I_.comps[I_.nodes[cur].comp].ty.element_type(), ed);
+            var_empty_arrays_.insert(ea.raw);
+            return ea;
+          }
+        }
+        return bad("stream operator subscript");
+      }
       std::vector<Id<Expr>> seg;
       for (Id<Exp> sub : c.parts[i].subscripts) {
         std::optional<std::int64_t> iv = subscript_int(sub);
@@ -25024,11 +25067,37 @@ class Flattener {
       result_.model.exprs[id] = rv;
       return true;
     }
-    // `flow * actualStream(stream)` 要包 smooth(0, …)（evaluateActualStreamMul :1018-1042）——未做 → SKIP。
-    if (e.kind == ExprKind::Binary && e.bin == BinOp::Mul &&
-        (is_stream_call(e.a, "actualStream") || is_stream_call(e.b, "actualStream"))) {
-      set_unsupported("flow * actualStream (smooth wrap)");
-      return false;
+    // `cref * actualStream(s)` / `actualStream(s) * cref`（evaluateOperators 的 BINARY 支 → evaluateActualStreamMul，
+    // NFConnectEquations.mo:126-185 / :1014-1038 v1.25.0）：写成 `cref * 求值结果`（cref 换到前面）；求值结果是 if 式、且 cref 就是
+    // 关联的 flow 时包 smooth(0, …)——按化简前的 if 定（PKH 探针 PKH7：未连接的端口两支相同，化简后成 `smooth(0, m_flow *
+    // h_outflow)`）。另一因子不是 cref 的照常逐个求值（mapShallow）。
+    if (e.kind == ExprKind::Binary && e.bin == BinOp::Mul) {
+      const bool a_call = is_stream_call(e.a, "actualStream");
+      const Id<Expr> cr = a_call ? e.b : e.a;
+      const Id<Expr> call = a_call ? e.a : e.b;
+      if ((a_call || is_stream_call(e.b, "actualStream")) && result_.model.exprs[cr].kind == ExprKind::Cref &&
+          result_.model.exprs[call].args.size() == 2) {
+        const Expr ce = result_.model.exprs[call];   // 拷贝：求值会 add
+        const Id<Expr> ev = eval_actualstream(ce.args[0], ce.args[1]);
+        Expr m;
+        m.kind = ExprKind::Binary;
+        m.bin = BinOp::Mul;
+        m.a = cr;
+        m.b = ev;
+        m.ty = e.ty;
+        Expr out = m;
+        if (result_.model.exprs[ev].kind == ExprKind::IfExp &&
+            expr_cref_key(result_.model.exprs[cr].cref) == expr_cref_key(result_.model.exprs[ce.args[1]].cref)) {
+          Expr sm;
+          sm.kind = ExprKind::Call;
+          sm.call_name = {in_.intern("smooth")};
+          sm.args = {lit_int(0), add(std::move(m))};
+          sm.ty = e.ty;
+          out = std::move(sm);
+        }
+        result_.model.exprs[id] = std::move(out);
+        return true;
+      }
     }
     bool changed = false;
     for (Id<Expr> k : e.args) changed = subst_stream(k) || changed;
