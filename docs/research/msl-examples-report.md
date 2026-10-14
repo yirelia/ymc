@@ -641,3 +641,9 @@ class extends 记录继承来的字段改按实例层的隐式基类解析（含
 示例全部越过 Medium 层，SKIP 收拢到端口数组（`ports.C_outflow` 复合数组元素引用 7、端口数组修饰分发 3、非 parts 类型复合数组 2、
 stream 算子下标 2）；Media 的余项是 Medium 函数里的非本地引用 / 限定函数调用（`Medium.setState_pT` 等）与带修饰的短类包。
 FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-14 66e 之后：PASS 438（不变）
+
+Fluid 端口数组的空成员（`Xi_outflow` / `C_outflow` 对水是空数组、`nPorts = 0`）：复合数组整体引用、fill、连接与 cardinality 都照
+omc 丢掉空的部分。PASS / SKIP 逐例不变；Fluid 的 SKIP 前移到端口数组的修饰分发（`tank.topPorts` 等 5）、非 parts 类型的复合数组
+（4）、stream 算子带下标（4）、向量化调用实参（2）等。FAIL / ACCEPTS-INVALID / CRASH 0。

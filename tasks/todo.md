@@ -2328,6 +2328,14 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       slice 691 例 FAIL 0（oracle=live 不一致 0）；scodeinst 651（不变）；testsuite 1805（不变）/ FAIL 0；MSL 438（不变：Fluid 的
       PumpingSystem / DrumBoiler / HeatExchangerSimulation 等越过 Medium 函数，停在端口数组——`ports.C_outflow` 复合数组元素引用、
       `tank.topPorts` 修饰分发、非 parts 类型的复合数组、stream 算子下标）；探针 9681→9684；单测 359→362。
+- [x] (66e) MSL Fluid 端口数组的空成员（2026-10-14）：复合数组整体引用里零长的洞展开成空数组（`ports.C_outflow`，C_outflow[nC]
+      而 nC = 0；nPorts = 0 时深段的维按类实例里的声明求），这样的空数组记为变量引用、当函数实参时不算字面量（omc 照留
+      `anyTrue({})`）；`fill(X, n)` 的值是空数组 → 空数组（非空数组值仍 SKIP）；连接器的空数组成员（含 stream 的
+      `Xi_outflow[nXi]` / `C_outflow[nC]`）没有标量叶、直接丢掉（omc 同样一条方程不出），连接与 `cardinality(ports[i])` 随之照常。
+      探针 pk-p13（5）、旧组 SKIP→PASS 2（ca-c3、empty2）；单测 +3（PKH2 / PKH3 / PKH4）。
+      slice 691 例 FAIL 0（oracle=live 不一致 0）；scodeinst 651（不变）；testsuite 1805→1807（diff/TrueHoldWithResetBefore、
+      interactive-API/Bug3783）/ FAIL 0；MSL 438（不变：Fluid 越过端口空成员，停在端口数组修饰分发 5、非 parts 类型的复合数组 4、
+      stream 算子下标 4 等）；探针 9684→9689（PASS +7）；单测 362→365。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

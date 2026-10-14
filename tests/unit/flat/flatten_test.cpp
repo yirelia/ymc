@@ -7898,4 +7898,73 @@ YMC_TEST(flatten_bare_annotation_entries) {
                            "class PKG9\n  parameter Real p = 2.0;\n  Real x = p * time;\n  Real y = PKG9.f(x);\nend PKG9;\n"));
 }
 
+YMC_TEST(flatten_zero_size_composite_and_fill) {
+  // 端口数组的整体引用 `ports.C_outflow = fill(C, nPorts)`：C_outflow[nC] 而 nC = 0（零长的洞展开成空数组）、nPorts = 0
+  // （深段的维按类实例里的声明求）、fill 的值是空数组——两边都空，不产生方程。期望 = omc 1.25.0 实跑（2026-10-14，探针
+  // pk-p13 PKH2）。
+  YMC_CHECK_EQ(flatten_src("package P\n  partial package PM\n    constant Integer nXi = 0;\n    constant Integer nC = 0;\n  end PM;\n"
+                           "  package W\n    extends PM;\n  end W;\n  connector FluidPort\n    replaceable package Medium = PM;\n"
+                           "    flow Real m_flow;\n    Real p;\n    stream Real h_outflow;\n    stream Real Xi_outflow[Medium.nXi];\n"
+                           "    stream Real C_outflow[Medium.nC];\n  end FluidPort;\n  model Source\n"
+                           "    replaceable package Medium = PM;\n    parameter Integer nPorts = 0;\n    parameter Real p = 1e5;\n"
+                           "    parameter Real h = 1e5;\n    parameter Real X[Medium.nXi] = fill(0, Medium.nXi);\n"
+                           "    parameter Real C[Medium.nC] = fill(0, Medium.nC);\n"
+                           "    FluidPort ports[nPorts](redeclare each package Medium = Medium);\n  equation\n"
+                           "    ports.p = fill(p, nPorts);\n    ports.h_outflow = fill(h, nPorts);\n"
+                           "    ports.Xi_outflow = fill(X, nPorts);\n    ports.C_outflow = fill(C, nPorts);\n  end Source;\nend P;\n"
+                           "model PKH2\n  P.Source s1(nPorts = 2, redeclare package Medium = P.W);\n"
+                           "  P.Source s0(redeclare package Medium = P.W);\nend PKH2;\n"),
+               std::string("class PKH2\n  final parameter Integer s1.nPorts = 2;\n  parameter Real s1.p = 1e5;\n"
+                           "  parameter Real s1.h = 1e5;\n  Real s1.ports[1].m_flow;\n  Real s1.ports[1].p;\n"
+                           "  Real s1.ports[1].h_outflow;\n  Real s1.ports[2].m_flow;\n  Real s1.ports[2].p;\n"
+                           "  Real s1.ports[2].h_outflow;\n  final parameter Integer s0.nPorts = 0;\n  parameter Real s0.p = 1e5;\n"
+                           "  parameter Real s0.h = 1e5;\nequation\n  s1.ports[1].m_flow = 0.0;\n  s1.ports[2].m_flow = 0.0;\n"
+                           "  s1.ports[1].p = s1.p;\n  s1.ports[2].p = s1.p;\n  s1.ports[1].h_outflow = s1.h;\n"
+                           "  s1.ports[2].h_outflow = s1.h;\nend PKH2;\n"));
+}
+
+YMC_TEST(flatten_connector_empty_members_cardinality) {
+  // 连接器的空数组成员（含 stream 的 `Xi_outflow[nXi]` / `C_outflow[nC]`，nXi = nC = 0）没有标量叶，连接与 cardinality 照常
+  // （`assert(cardinality(ports[i]) <= 1, …)` 求值为真后整条去掉）。期望 = omc 1.25.0 实跑（2026-10-14，探针 pk-p13 PKH3）。
+  YMC_CHECK_EQ(flatten_src("package P\n  partial package PM\n    constant Integer nXi = 0;\n    constant Integer nC = 0;\n  end PM;\n"
+                           "  package W\n    extends PM;\n  end W;\n  connector FluidPort\n    replaceable package Medium = PM;\n"
+                           "    flow Real m_flow;\n    Real p;\n    stream Real h_outflow;\n    stream Real Xi_outflow[Medium.nXi];\n"
+                           "    stream Real C_outflow[Medium.nC];\n  end FluidPort;\n  model Source\n"
+                           "    replaceable package Medium = PM;\n    parameter Integer nPorts = 0;\n    parameter Real p = 1e5;\n"
+                           "    parameter Real h = 1e5;\n    parameter Real X[Medium.nXi] = fill(0, Medium.nXi);\n"
+                           "    parameter Real C[Medium.nC] = fill(0, Medium.nC);\n"
+                           "    FluidPort ports[nPorts](redeclare each package Medium = Medium);\n  equation\n"
+                           "    ports.p = fill(p, nPorts);\n    ports.h_outflow = fill(h, nPorts);\n"
+                           "    ports.Xi_outflow = fill(X, nPorts);\n    ports.C_outflow = fill(C, nPorts);\n"
+                           "    for i in 1:nPorts loop\n      assert(cardinality(ports[i]) <= 1, \"only one connection per port\");\n"
+                           "    end for;\n  end Source;\n  model Sink\n    replaceable package Medium = PM;\n"
+                           "    FluidPort port(redeclare package Medium = Medium);\n  equation\n    port.p = 1;\n"
+                           "    port.h_outflow = 2;\n    port.Xi_outflow = fill(0, Medium.nXi);\n"
+                           "    port.C_outflow = fill(0, Medium.nC);\n  end Sink;\nend P;\nmodel PKH3\n"
+                           "  P.Source s1(nPorts = 2, redeclare package Medium = P.W);\n"
+                           "  P.Source s0(redeclare package Medium = P.W);\n  P.Sink k(redeclare package Medium = P.W);\nequation\n"
+                           "  connect(s1.ports[1], k.port);\nend PKH3;\n"),
+               std::string("class PKH3\n  final parameter Integer s1.nPorts = 2;\n  parameter Real s1.p = 1e5;\n"
+                           "  parameter Real s1.h = 1e5;\n  Real s1.ports[1].m_flow;\n  Real s1.ports[1].p;\n"
+                           "  Real s1.ports[1].h_outflow;\n  Real s1.ports[2].m_flow;\n  Real s1.ports[2].p;\n"
+                           "  Real s1.ports[2].h_outflow;\n  final parameter Integer s0.nPorts = 0;\n  parameter Real s0.p = 1e5;\n"
+                           "  parameter Real s0.h = 1e5;\n  Real k.port.m_flow;\n  Real k.port.p;\n  Real k.port.h_outflow;\n"
+                           "equation\n  s1.ports[1].p = k.port.p;\n  k.port.m_flow + s1.ports[1].m_flow = 0.0;\n"
+                           "  s1.ports[2].m_flow = 0.0;\n  s1.ports[1].p = s1.p;\n  s1.ports[2].p = s1.p;\n"
+                           "  s1.ports[1].h_outflow = s1.h;\n  s1.ports[2].h_outflow = s1.h;\n  k.port.p = 1.0;\n"
+                           "  k.port.h_outflow = 2.0;\nend PKH3;\n"));
+}
+
+YMC_TEST(flatten_empty_variable_array_call_kept) {
+  // 变量引用展开出的空数组（`anyTrue(c.occupied)`、c[n] 而 n = 0）当实参：调用变率不是常量，omc 照留 `anyTrue({})`、打函数
+  // 定义，不求值（testsuite TrueHoldWithResetBefore）。期望 = omc 1.25.0 实跑（2026-10-14，探针 pk-p13 PKH4）。
+  YMC_CHECK_EQ(flatten_src("model PKH4\n  connector C\n    Boolean occupied;\n  end C;\n  function anyTrue\n    input Boolean b[:];\n"
+                           "    output Boolean result;\n  algorithm\n    result := false;\n    for i in 1:size(b, 1) loop\n"
+                           "      result := result or b[i];\n    end for;\n  end anyTrue;\n  parameter Integer n = 0;\n  C c[n];\n"
+                           "  Boolean y = anyTrue(c.occupied) or time > 1;\nend PKH4;\n"),
+               std::string("function PKH4.anyTrue\n  input Boolean[:] b;\n  output Boolean result;\nalgorithm\n  result := false;\n"
+                           "  for i in 1:size(b, 1) loop\n    result := result or b[i];\n  end for;\nend PKH4.anyTrue;\n\nclass PKH4\n"
+                           "  final parameter Integer n = 0;\n  Boolean y = PKH4.anyTrue({}) or time > 1.0;\nend PKH4;\n"));
+}
+
 YMC_TEST_MAIN

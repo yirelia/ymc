@@ -8745,11 +8745,13 @@ class Flattener {
   // omc 的函数求值把 cref 实参的数组对象原样交给输入（不复制），函数里 `y := x; y[i] := …` 原地改写的就是调用者的值——
   // 连被引用的 constant 也被改掉打印出来（FunctionBubblesort：constant a 打印成排好序的；分歧账本）。ymc 写时复制、语义
   // 正确但与 1.25.0 不一致 → 下标写入命中这类共享存储即 SKIP（分歧账本）。监视表 = cref 实参的各层数组存储。
-  std::vector<const std::vector<CVal>*> alias_watch_;
+  // 存 weak_ptr 而不是裸指针：被监视的数组释放后，新数组可能落在同一地址，裸指针比较会误报（随分配器而变：gcc / MSVC、
+  // Debug / Release 结果不同，testsuite Bug3783）；weak_ptr 不改 use_count（不影响下面的写时复制），过期的不比。
+  std::vector<std::weak_ptr<const std::vector<CVal>>> alias_watch_;
   int alias_eval_depth_ = 0;
   void watch_arrays(const CVal& v) {
     if (!is_arr(v)) return;
-    alias_watch_.push_back(v.arr.get());
+    alias_watch_.push_back(v.arr);
     for (const CVal& e : *v.arr) watch_arrays(e);
   }
   // 按下标写入（函数里 `x[i] := v`、`x[i, j] := v`、切片 `table[:, 1] := vec`）：逐层写时复制，切片须与右值同长。
@@ -8757,8 +8759,11 @@ class Flattener {
                    int depth) {
     if (k == subs.size()) { target = val; return true; }
     if (!is_arr(target)) return false;
-    if (std::find(alias_watch_.begin(), alias_watch_.end(), target.arr.get()) != alias_watch_.end())
-      set_unsupported("omc aliases input array in function evaluation");
+    for (const std::weak_ptr<const std::vector<CVal>>& w : alias_watch_)
+      if (const std::shared_ptr<const std::vector<CVal>> a = w.lock(); a && a.get() == target.arr.get()) {
+        set_unsupported("omc aliases input array in function evaluation");
+        break;
+      }
     if (target.arr.use_count() > 1) target.arr = std::make_shared<std::vector<CVal>>(*target.arr);   // COW
     std::optional<std::vector<std::int64_t>> idx =
         sub_indices(subs[k], static_cast<std::int64_t>(target.arr->size()), scope, depth);
@@ -15698,6 +15703,8 @@ class Flattener {
     const ScodeScope scope = scode_scope_of(enclosing);
     NodeId cls = enclosing;
     bool any_hole = false;
+    bool zero_hole = false;   // 已有零长的洞（其后的段一个元素都没有）
+    Type leaf_ty;   // 末段组件的元素类型（零长的洞没有元素可取类型，见 build）
     std::vector<Symbol> chain = prefix;   // 各段的全名（不带下标，deep_dims 用）
     for (std::size_t i = 0; i < c.parts.size(); ++i) {
       const bool last = i + 1 == c.parts.size();
@@ -15713,6 +15720,13 @@ class Flattener {
             if (!eval_dim(d, dims, scope)) return std::nullopt;
       } else if (const std::optional<std::vector<std::int64_t>> dd = deep_dims(el, chain)) {
         dims = *dd;
+      } else if (zero_hole) {
+        // 前面有零长的洞（`ports.Xi_outflow` 而 nPorts = 0）：元素一个都没发射，深段的维按它在类实例里的声明求（结果反正是空数组，
+        // 维只定类型的形状；PKH 探针 PKH2 的 s0）。
+        bool ok = true;
+        for (const std::vector<Id<Exp>>* ds : {&el.attr.dims, &el.type.dims})
+          for (Id<Exp> d : *ds) ok = ok && eval_dim(d, dims, scode_scope_of(cls));
+        if (!ok) return unsupported();
       } else {
         // 更深的段的实际维不知道（参差 / `:` 维）：有洞要展开时未做；没洞的留给照常解析去报。
         if (any_hole || !c.parts[i].subscripts.empty() || !last) return unsupported();
@@ -15741,12 +15755,15 @@ class Flattener {
           sel.push_back(*iv);
           hole = false;
         }
-        if (sel.empty()) return unsupported();   // 空的洞（零长度的复合数组）：未做
         if (hole && !last) any_hole = true;
+        if (sel.empty()) zero_hole = true;
         p.sel.push_back(std::move(sel));
         p.hole.push_back(hole);
       }
-      if (last) break;
+      if (last) {
+        leaf_ty = I_.comps[I_.nodes[n].comp].ty.element_type();
+        break;
+      }
       if (I_.comps[I_.nodes[n].comp].ty.kind != TypeKind::Complex) return std::nullopt;
       cls = I_.comps[I_.nodes[n].comp].class_inst;
       if (!is_class_inst(cls)) return std::nullopt;
@@ -15789,6 +15806,23 @@ class Flattener {
         pick[i][k] = v;
         arr.args.push_back(self(self, i, k + 1));
         if (result_.unsupported) return lit_int(0);
+      }
+      if (arr.args.empty()) {
+        // 零长的洞（MSL Fluid Sources 的 `ports.C_outflow = fill(C, nPorts)`：C_outflow[nC] 而 nC = 0，或 nPorts = 0）：空数组，
+        // 类型 = 末段的元素类型 + 此处起各洞的长；所在等式两边都空，不产生标量方程（PKH 探针 PKH2，omc 同样一条不打）。
+        std::vector<Dimension> ds;
+        for (std::size_t j = i; j < ps.size(); ++j)
+          for (std::size_t q = j == i ? k : 0; q < ps[j].sel.size(); ++q)
+            if (ps[j].hole[q]) {
+              Dimension dd;
+              dd.kind = DimKind::Integer;
+              dd.size = static_cast<std::int64_t>(ps[j].sel[q].size());
+              ds.push_back(dd);
+            }
+        arr.ty = Type::array_of(leaf_ty, std::move(ds));
+        const Id<Expr> ea = add(std::move(arr));
+        var_empty_arrays_.insert(ea.raw);
+        return ea;
       }
       Dimension d;
       d.kind = DimKind::Integer;
@@ -18806,7 +18840,24 @@ class Flattener {
       }
       const Id<Expr> val = fill ? inst_exp(args[0], enclosing, prefix) : lit_int(name == "ones" ? 1 : 0);
       if (result_.unsupported) return lit_int(0);
-      if (!expr_shape(val).empty()) { set_unsupported("fill of array value"); return lit_int(0); }
+      if (const std::vector<std::int64_t> vsh = expr_shape(val); !vsh.empty()) {
+        // 值是空数组（MSL Fluid Sources 的 `ports.Xi_outflow = fill(X, nPorts)`，X[nXi] 而 nXi = 0）：结果也是空数组，形状 = 维实参
+        // ++ 值的形状（fill 的类型，MLS §10.3.3）；所在等式两边都空，不产生标量方程（PKH 探针 PKH2）。非空的数组值未做 → SKIP。
+        if (std::find(vsh.begin(), vsh.end(), 0) == vsh.end()) { set_unsupported("fill of array value"); return lit_int(0); }
+        const Type et = result_.model.exprs[val].ty.element_type();
+        auto rec = [&](auto& self, std::size_t k) -> Id<Expr> {
+          if (k == dims.size()) return val;
+          Expr arr;
+          arr.kind = ExprKind::Array;
+          for (std::int64_t i = 1; i <= dims[k]; ++i) arr.args.push_back(self(self, k + 1));
+          std::vector<Dimension> rest;
+          for (std::size_t j = k; j < dims.size(); ++j) { Dimension d; d.kind = DimKind::Integer; d.size = dims[j]; rest.push_back(d); }
+          for (std::int64_t n : vsh) { Dimension d; d.kind = DimKind::Integer; d.size = n; rest.push_back(d); }
+          arr.ty = Type::array_of(et, std::move(rest));
+          return add(std::move(arr));
+        };
+        return rec(rec, 0);
+      }
       return build(dims, [&](const std::vector<std::int64_t>&) { return val; }, result_.model.exprs[val].ty.kind);
     }
     if (name == "cat") {
@@ -20673,6 +20724,8 @@ class Flattener {
               if (!ctor) return false;
             } else if (x.kind != ExprKind::Array) {
               return is_literal(a);
+            } else if (var_empty_arrays_.count(a.raw)) {
+              return false;   // 变量引用展开出的空数组（`anyTrue(inPort.occupied)`、nIn = 0）：调用变率不是常量，omc 照留（PKH 探针 PKH4）
             }
             for (Id<Expr> el : x.args) if (!self(self, el)) return false;
             return true;
@@ -22035,7 +22088,9 @@ class Flattener {
       if (is_flow && I_.comps[mc].attributes.variability != SVariability::Var) return false;
       std::vector<std::int64_t> mdims;
       if (!member_dims(mcel, mscope, inst, I_.nodes[mn].name, mdims)) return false;
-      for (std::int64_t n : mdims) if (n <= 0) return false;   // 空数组成员（omc 整体丢弃）未做 → SKIP
+      for (std::int64_t n : mdims) if (n < 0) return false;
+      // 空数组成员（MSL Fluid 端口的 `Xi_outflow[Medium.nXi]`，水 nXi = 0）：没有标量叶，连接不产生方程（PKH 探针 PKH3，omc 同）。
+      if (std::find(mdims.begin(), mdims.end(), 0) != mdims.end()) return true;
       std::vector<Symbol> p = mpath;
       p.push_back(I_.nodes[mn].name);
       out.push_back({std::move(p), is_flow, I_.comps[mc].ty, std::move(mdims), false, {}, {}, 0});
@@ -22113,7 +22168,14 @@ class Flattener {
       for (NodeId mn : streams) {
         const CompId mc = I_.nodes[mn].comp;
         const SElement& mcel = I_.scode.elems[I_.comps[mc].def];
-        if (I_.comps[mc].ty.kind == TypeKind::Complex || !mcel.attr.dims.empty() || !mcel.type.dims.empty()) return false;
+        if (I_.comps[mc].ty.kind == TypeKind::Complex) return false;
+        if (!mcel.attr.dims.empty() || !mcel.type.dims.empty()) {
+          // 空的 stream 数组成员（`C_outflow[Medium.nC]`，nC = 0）同上丢掉；非空的 stream 数组成员未做 → SKIP。
+          std::vector<std::int64_t> sd;
+          if (!member_dims(mcel, mscope, inst, I_.nodes[mn].name, sd)) return false;
+          if (std::find(sd.begin(), sd.end(), 0) == sd.end()) return false;
+          continue;
+        }
         if (I_.comps[mc].attributes.variability != SVariability::Var) return false;
         std::vector<Symbol> p = mpath;
         p.push_back(I_.nodes[mn].name);
@@ -25212,6 +25274,7 @@ class Flattener {
   std::unordered_map<std::uint32_t, Type> func_params_;         // 形参 / 局部名 → 类型（含维，cref 解析成 kFnLocal 裸名）
   std::unordered_set<std::uint32_t> fn_inputs_;                 // 输入名（不可作赋值目标）
   std::unordered_set<std::uint32_t> xfield_elems_;              // "复合数组取字段"展开出来的各元素 cref（语句里原样留着的要拒）
+  std::unordered_set<std::uint32_t> var_empty_arrays_;          // 变量引用展开出的空数组（零长的洞，见 expand_composite_path）：不算字面量实参
   std::unordered_set<std::uint32_t> split_subscripts_;          // 修饰分发合成的 `(E)[i]` 节点（Absyn id；与书写的区分）
   // 书写成整段范围、按 simplifySlice 收成 `:` 的下标节点（Wild 的 Expr id）→ 原范围。向量化取元素在 simplifySlice 之前
   //（vectorizeCall 定型时就 applySubscript），omc 打 `x[(1:3)[$i1]]` 不是 `x[$i1]`（rec 探针 V3）。
