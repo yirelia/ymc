@@ -2369,6 +2369,20 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       slice 692 例 FAIL 0（oracle=live 不一致 0）；scodeinst 652（不变）；testsuite 1808（不变）/ FAIL 0；**MSL 445→449**（Fluid 再 +4：
       DrumBoiler、AST_BatchPlant.Test.OneTank / TankWithEmptyingPipe1、Explanatory.MeasuringTemperature，Fluid 11/23）；
       探针 9699→9702；单测 373→375。
+- [x] (66k) 组件 / extends 修饰里重声明的函数（2026-10-15）：`P.Pump pumps(redeclare function flowCharacteristic =
+      quadraticFlow(V_flow_nominal = {…}, head_nominal = {…}))`——实例层的 SCode 查找认实例类树里顶替进来的函数（此前
+      "lookup of redeclared class" SKIP），按实例路径命名（`X.pumps.flowCharacteristic`，短类别名也是；数组元素共用不带下标的名），
+      短类修饰在写重声明的类的实例里定型（组件修饰 → 声明组件的类的实例，extends 修饰 → 派生类实例）：函数定义打求值后的缺省、
+      调用处补修饰式；长形态、class extends（基类是长函数）同样。未做：经组件从外面调（PKK10）、class extends 的基类是短类（PKK8）。
+      泵模型一路暴露、连带修的：矩阵构造里 `ones` / `fill` 列的标量化（ExpandExp.expandBuiltinFill）；函数形参的维引用自己
+      （Matrices.solve 的 `A[:, size(A, 1)]`）；派生类去重丢掉的同名继承组件在基类实例里查到时换成留下的（ClassTree.replaceDuplicates：
+      PartialTwoPort 与 PartialLumpedVolume 各一个 `outer system`，`system.T_start` 此前误判更高变率）；整记录引用的构造函数按记录
+      实例节点去重（同一定义经不同包实例各有一个名，此前先引到的挡掉后面的——静默漏打 `pump.monitoring.Medium.ThermodynamicState`；
+      调用照旧按定义，它的 complex_node 只是同定义的某个代表）；包实例里的记录类型字段按那个类节点解析（经 `Medium = Medium` 的
+      class extends 记录）；求值时实例里查到的是变量就判求不出（此前落到 SCode 层撞继承守卫 SKIP，PumpMonitoringNPSH 的
+      `Medium.density(state_in)`）。探针 pk-p19（24）、旧组 SKIP→PASS 2（km-p1、kr-p1）；单测 +10。
+      slice 692→694 例 FAIL 0（oracle=live 不一致 0）；scodeinst 652→654（ConstrainingClassFunc2、FuncDefaultArg7）；testsuite
+      1808→1816 / FAIL 0；**MSL 449→450**（Modelica.Fluid.Examples.InverseParameterization，Fluid 12/23）；探针 9702→9726；单测 375→385。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

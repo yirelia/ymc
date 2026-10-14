@@ -682,3 +682,12 @@ Fluid 余下 16 例：向量化调用实参（5）、类重声明的函数 `flow
 转 PASS：Modelica.Fluid.Examples.DrumBoiler.DrumBoiler、AST_BatchPlant.Test.OneTank、AST_BatchPlant.Test.TankWithEmptyingPipe1、
 Explanatory.MeasuringTemperature。Fluid 余下 12 例：类重声明的函数 `flowCharacteristic`（3）、更高变率的绑定（2）、带修饰的短类包（2）、
 `Medium.singleState`、`MMX`、`reference_h`、derivative 注解引用的函数、stateSelect 预扫各 1。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-15 66k 之后：PASS 450（+1，Fluid 12/23）
+
+组件 / extends 修饰里重声明的函数（`redeclare function flowCharacteristic = quadraticFlow(V_flow_nominal = …)`）按实例路径命名、
+短类修饰成输入缺省；连带：`ones` / `fill` 列的矩阵构造、形参维引用自己（Matrices.solve）、去重后的 `outer system`、按包实例的记录
+构造函数、input 记录实参不求值。转 PASS：Modelica.Fluid.Examples.InverseParameterization。另两例过了函数重声明、卡在后面：
+PumpingSystem——常量实参调用 `flowCharacteristic(0)` 要经 Matrices.solve → LAPACK dgesv 求值（omc 打 100.0）；
+AST_BatchPlant.BatchPlant_StandardWater——数组推导式的范围（comprehension range，同 NonCircularPipes）。HeatExchangerSimulation
+卡 shadowed reduction iterator。FAIL / ACCEPTS-INVALID / CRASH 0。

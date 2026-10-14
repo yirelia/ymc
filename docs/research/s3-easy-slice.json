@@ -690,5 +690,7 @@
 "redeclare10.mo",
 "redeclare7.mo",
 "ClassMod4.mo",
-"ClassExtendsMod2.mo"
+"ClassExtendsMod2.mo",
+"ConstrainingClassFunc2.mo",
+"FuncDefaultArg7.mo"
 ]

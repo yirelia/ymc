@@ -3386,6 +3386,14 @@ class Flattener {
           c.ty = x.ty.element_type();
           return add(std::move(c));
         }
+        // fill(s, n1, …, nk)（`ones(3)` 定型成 `fill(1, 3)`）：前 k 个下标落在填充维上、取哪个都一样，余下的下标取进 s
+        //（ExpandExp.expandBuiltinFill → Expression.fillArgs，NFExpandExp.mo:381-387 v1.25.0；PKK 探针 PKK13：MSL Fluid
+        // quadraticFlow 的 `[ones(3), V_flow_nominal, V_flow_nominal2]` → `{{1.0, V_flow_nominal[1], V_flow_nominal2[1]}, …}`）。
+        if (x.call_name.size() == 1 && in_.str(x.call_name[0]) == "fill" && x.args.size() >= 2 &&
+            idx.size() == x.ty.dims.size() && idx.size() >= x.args.size() - 1) {
+          const std::vector<std::int64_t> rest(idx.begin() + static_cast<std::ptrdiff_t>(x.args.size() - 1), idx.end());
+          return rest.empty() ? x.args[0] : scalarize(x.args[0], rest);
+        }
         // 留成调用的 diagonal（见 model_array_builtin）：对角取实参的元素，其余 0（DG9 `d[1,2] = 0.0`、DG11 sum 照样带 `+ 0.0`）。
         if (x.call_name.size() == 1 && in_.str(x.call_name[0]) == "diagonal" && x.args.size() == 1 && idx.size() == 2) {
           if (idx[0] == idx[1]) return scalarize(x.args[0], {idx[0]});
@@ -7826,6 +7834,14 @@ class Flattener {
           const FrameHit fh = frame_value(ceval_frame_, c, allow_param, depth, used, &scope);
           if (fh.kind == FrameHit::Value) return fh.v;
           if (fh.kind == FrameHit::Fail) return std::nullopt;
+          // 实例里查到的是变量（MSL Fluid PumpMonitoringNPSH 的 `rho_in = Medium.density(state_in)`，state_in 是 input 记录）：
+          // 不是常量、求不出——别落到下面 SCode 层的限定常量查找（它经带重声明的 extends 继承来，撞守卫误 SKIP；PKK 探针 PKK22）。
+          // 只在求值作用域就是这个实例（或其基类实例）的类时认（别的作用域里同名的可能是包常量）。
+          if (const NodeId lv = lex_view(frames_[static_cast<std::size_t>(ceval_frame_)].inst, &scope);
+              !scope.empty() && I_.nodes[lv].def == scope.front().cls)
+            if (const std::optional<SVariability> pv = absyn_cref_var(c, lv);
+                pv && (*pv == SVariability::Var || *pv == SVariability::Discrete))
+              return std::nullopt;
         }
         // 书写处实例前缀上已发射的常量（修饰后的最终值，const_vals_）优先：`A a(x = 1)` 里 `z = x + y` 的 x 取 1。
         if (ceval_prefix_ && !c.leading_dot)
@@ -10853,7 +10869,7 @@ class Flattener {
   // named：调用方已按实例路径定好的名（见 record_ctor_call）。
   std::optional<std::vector<Symbol>> ensure_record_ctor(NodeId rn, bool root = true, const std::vector<Symbol>* named = nullptr) {
     const Id<SElement> rdef = I_.nodes[rn].def;
-    const ScodeScope chain = scode_scope_of(rn);   // [R, 外层类, …]
+    ScodeScope chain = scode_scope_of(rn);   // [R, 外层类, …]
     std::vector<Symbol> path;
     const std::uint32_t root_def = I_.nodes[root_].def.raw;
     // 组件的声明类型是包实例里的类（经重声明的包：`M.ThermodynamicState s`，MSL Media）：压平名按那个类节点的实例路径（同
@@ -10866,6 +10882,12 @@ class Flattener {
       std::optional<std::vector<Symbol>> sp = scope_path(tn);   // 含记录名本身
       if (!sp) { set_unsupported("record constructor naming"); return std::nullopt; }
       path = std::move(*sp);
+      // 字段也按包实例里的那个类节点解析（同 record_class_of：class extends 的记录带上类节点，继承来的字段按实例类树里的隐式基类）。
+      // 组件自己的记录实例（rn）的隐式基类落在定义上，经"改了基类的 extends"继承来的字段类型查不下去（MSL Fluid PartialPump 的
+      // monitoring 经 `redeclare final package Medium = Medium` 用的 WaterIF97 ThermodynamicState：PartialTwoPhaseMedium 的
+      // `FixedPhase phase`；PKK 探针 PKK20）。
+      chain = scode_scope_of(tn);
+      if (I_.scode.elems[rdef].def.kind == SClassDefKind::ClassExtends) chain.front() = ScopeLevel{rdef, tn};
     } else {
       if (chain.size() >= 2 && chain[1].cls.raw == root_def) {
         path = result_.model.name;
@@ -10997,7 +11019,7 @@ class Flattener {
   }
 
   void collect_record_ctors() {
-    std::unordered_set<std::uint32_t> seen, seen_alias;
+    std::unordered_set<std::uint32_t> seen_node, seen_def, seen_alias;
     auto visit_cref = [&](const Expr& x) {
       if (x.ty.element_type().kind != TypeKind::Complex) return;
       const std::uint32_t cn = x.ty.element_type().complex_node;
@@ -11016,7 +11038,13 @@ class Flattener {
         if (seen_alias.insert(ra.cls.raw).second) rec_alias_type(ra, rdef);
         return;
       }
-      if (!seen.insert(rdef.raw).second) return;
+      // 整记录引用按它自己的记录实例节点去重、不按定义：同一个定义经不同的包实例有不同的构造函数名（`pump.Medium.ThermodynamicState`
+      // 与 `pump.monitoring.Medium.ThermodynamicState`，MSL Fluid PartialPump 的 monitoring；PKK 探针 PKK18），同名的由
+      // ensure_record_ctor / ensure_type_fns 按路径去重。调用的 complex_node 只是同定义的某个实例（见上；按它算出的名可能是别的
+      // 组件的包实例路径——MSL AST_BatchPlant.Test 的 `pipe.Medium.setState_phX(…)` 算成 `tank.Medium.ThermodynamicState`）：照旧按
+      // 定义、且定义已被引到过就不再收（omc 收调用的输出类型经被调函数本身，NFFlatten.collectExpFuncs_traverse :2872-2876）。
+      if (x.kind == ExprKind::Cref ? !seen_node.insert(rn.raw).second : seen_def.count(rdef.raw) != 0) return;
+      seen_def.insert(rdef.raw);
       if (const std::optional<std::vector<Symbol>> path = ensure_record_ctor(rn)) {
         ScodeScope bs = scode_scope_of(rn);   // [记录类, 外层…]
         bs.erase(bs.begin());
@@ -11114,6 +11142,12 @@ class Flattener {
     dexps.insert(dexps.end(), c.type.dims.begin(), c.type.dims.end());
     dexps.insert(dexps.end(), tdims.begin(), tdims.end());
     if (dexps.empty()) return true;
+    // 维里引用变量自己（MSL Matrices.solve / LAPACK.dgesv_vec 的 `input Real A[:, size(A, 1)]`）：先按秩登记成全未知维的数组，
+    // `size(A, 1)` 取到 `:` 那维 → 照留表达式（omc 打 `input Real[:, size(A, 1)] A`）；此前 A 还是标量 → "size of non-array"。
+    const Type elem = func_params_[c.name.id];
+    Dimension unknown;
+    unknown.kind = DimKind::Unknown;
+    func_params_[c.name.id] = Type::array_of(elem, std::vector<Dimension>(dexps.size(), unknown));
     std::vector<Dimension> ds;
     for (Id<Exp> d : dexps) {
       Dimension dim;
@@ -11143,7 +11177,7 @@ class Flattener {
       }
       ds.push_back(dim);
     }
-    func_params_[c.name.id] = Type::array_of(func_params_[c.name.id], std::move(ds));
+    func_params_[c.name.id] = Type::array_of(elem, std::move(ds));
     fn_dim_exps_[c.name.id] = std::move(dexps);
     return true;
   }
@@ -12127,16 +12161,31 @@ class Flattener {
     if (!fr->alias_mods.empty()) {
       ScodeScope ads;
       const bool comp = cfn.cls.is_valid();
+      // 类重声明顶替进来的短类（`redeclare function flowCharacteristic = quadraticFlow(V_flow_nominal = …)`）：修饰在写重声明的类
+      // 的实例里定型（见 redecl_mod_scope）。函数名不带下标（PKK 探针 PKK9 `pumps[2]` 也调 `PKK9.pumps.flowCharacteristic`），
+      // 同一个函数的缺省只能有一份：写修饰的实例本身在数组元素里（修饰随元素变）→ SKIP。
+      const bool redecl = !comp && fr->node.is_valid() && I_.nodes[fr->node].node_type.kind == NodeTypeKind::RedeclaredClass;
+      NodeId renc;
+      std::size_t rlen = 0;
+      if (redecl) {
+        if (!redecl_mod_scope(fr->node, enclosing, prefix.size(), renc, rlen))
+          return fn_fail<Id<Expr>>("function alias with modifiers");
+        for (std::size_t i = 0; i < rlen && i < cur_psubs_.size(); ++i)
+          if (!cur_psubs_[i].empty()) return fn_fail<Id<Expr>>("function redeclared in array instance");
+      }
       if (fn_scope_ || fr->alias_mods.size() != 1 ||
-          (!comp && (fn.parts.size() != 1 || sc.empty() || !find_scode_element_at(fn.parts[0].name, sc, ads).is_valid() ||
-                     ads.empty() || ads[0].cls.raw != sc[0].cls.raw)))
+          (!comp && !redecl &&
+           (fn.parts.size() != 1 || sc.empty() || !find_scode_element_at(fn.parts[0].name, sc, ads).is_valid() ||
+            ads.empty() || ads[0].cls.raw != sc[0].cls.raw)))
         return fn_fail<Id<Expr>>("function alias with modifiers");
       // 组件里的函数：短类修饰在该组件（inner）的实例里定型（CF 探针 p20 / p23：`gg = g` → 调用处补 `w.g`）；组件路径上没有
       // 数组下标（component_fn 已拦）。
-      const NodeId menc = comp ? cfn.cls : enclosing;
-      const std::vector<Symbol>& mpre = comp ? cfn.path : prefix;
+      const std::vector<Symbol> rpre(prefix.begin(), prefix.begin() + static_cast<std::ptrdiff_t>(std::min(rlen, prefix.size())));
+      const NodeId menc = comp ? cfn.cls : redecl ? renc : enclosing;
+      const std::vector<Symbol>& mpre = comp ? cfn.path : redecl ? rpre : prefix;
       const PSubs saved_psubs = cur_psubs_;
       if (comp) cur_psubs_ = PSubs(cfn.path.size());
+      else if (redecl) cur_psubs_ = PSubs(rpre.size());
       for (const SSubMod& s : I_.scode.mods[fr->alias_mods[0]].subs) {
         const SMod& sm = I_.scode.mods[s.mod];
         if (!sm.binding.is_valid() || !sm.subs.empty()) {
@@ -12499,9 +12548,13 @@ class Flattener {
       const NodeId ic = lin.is_valid() ? inst_tree_class(lin, name) : NodeId{};
       // 挂了类修饰的类（`A a(B(i = 4))`）：报出节点，经它往下的查名走包实例 → inst 拦下（Instantiator::inst_package，未做 → SKIP）。
       if (node_out && ic.is_valid() && I_.class_modded.count(ic.raw)) *node_out = ic;
+      // 函数（`P.Pump pumps(redeclare function flowCharacteristic = quadraticFlow(V_flow_nominal = …))`、派生类体里的长形态
+      // `redeclare function flowCharacteristic … end flowCharacteristic;`）：调用经它按实例路径命名（见 resolve_fn），短类修饰在写
+      // 重声明的类的实例里定型（见 redecl_mod_scope）。
       if (ic.is_valid() && I_.nodes[ic].node_type.kind == NodeTypeKind::RedeclaredClass) {
         const SElement& rel = I_.scode.elems[I_.nodes[ic].def];
-        if (rel.restriction == SRestriction::Package && rel.def.kind == SClassDefKind::Derived) {
+        const bool fn = rel.restriction == SRestriction::Function || rel.restriction == SRestriction::ExternalFunction;
+        if ((rel.restriction == SRestriction::Package && rel.def.kind == SClassDefKind::Derived) || fn) {
           def_scope = scode_scope_of(I_.nodes[ic].parent_scope);
           if (node_out) *node_out = ic;
           return I_.nodes[ic].def;
@@ -12859,6 +12912,36 @@ class Flattener {
     }
     return std::nullopt;
   }
+  // 类重声明顶替进来的函数 rnode 的短类修饰在哪个实例里定型：写重声明的类（它的词法外层，R15 §1）在调用实例链上的那个实例——
+  // 组件修饰 → 声明组件的类的实例，extends 修饰 → 写 extends 的派生类实例（PKK 探针 PKK3 `{0.0, pump.q, 1.5 * pump.q}`、PKK6
+  // `{0.0, m.k, 2.0 * m.k}`）。从调用处 enclosing（前缀长 plen）沿 instance_parent 上溯，各层的基类实例与它同层（同 fn_flat_name）；
+  // 找到 → menc + 它的前缀长 mlen；不在链上 → false。
+  bool redecl_mod_scope(NodeId rnode, NodeId enclosing, std::size_t plen, NodeId& menc, std::size_t& mlen) {
+    const NodeId lex = I_.nodes[rnode].parent_scope;
+    if (!lex.is_valid() || I_.nodes[lex].is_empty() || !I_.nodes[lex].def.is_valid()) return false;
+    const Id<SElement> want = I_.nodes[lex].def;
+    for (NodeId n = enclosing; n.is_valid() && !I_.nodes[n].is_empty(); n = I_.nodes[n].instance_parent) {
+      const INode& nd = I_.nodes[n];
+      if (nd.kind == NodeKind::Component && plen > 0) {
+        --plen;
+        continue;
+      }
+      if (nd.kind != NodeKind::Class) return false;
+      std::vector<NodeId> todo{n};
+      while (!todo.empty()) {
+        const NodeId b = todo.back();
+        todo.pop_back();
+        if (I_.nodes[b].def == want) {
+          menc = b;
+          mlen = plen;
+          return true;
+        }
+        if (I_.nodes[b].cls.is_valid() && I_.node_class(b).tree.is_valid())
+          for (NodeId x : I_.trees[I_.node_class(b).tree].exts) todo.push_back(x);
+      }
+    }
+    return false;
+  }
   // 函数引用：长类定义 + 函数体作用域（定义处，非调用处：ExtendsShort2 的 P.f 体内 f2 在 P 里解析）。短类别名
   // `function f = P.f` / `function g = f(r = x)` 逐层追到长类，沿途修饰记为输入默认。local_to_caller：函数就定义在调用者
   // 所在类里（模型内嵌函数）→ 函数体可见调用实例的常量（func1：`A a1(z = 2)` 里 f 读 z 得 2）。
@@ -12874,8 +12957,12 @@ class Flattener {
     if (want == SRestriction::Function)
       if (std::optional<FnRef> c = oprec_ctor(e, ds)) return c;
     std::optional<FnRef> r = resolve_fn_from(e, std::move(ds), scope, want);
-    // 实例语境里找到的长函数：压平名按实例路径（见 scope_path）。短类别名（`function f = g`）的命名未核实 → 不记（照旧 SKIP）。
-    if (r && node.is_valid() && r->fe == e) r->node = node;
+    // 实例语境里找到的长函数：压平名按实例路径（见 scope_path）。短类别名（`function f = g`）的命名未核实 → 不记（照旧 SKIP）；
+    // 类重声明顶替进来的短类别名例外：照实例路径（NFFunction.lookupFunction 取找到处的作用域路径 + 名；PKK 探针 PKK1 / PKK2
+    // `PKK2.pumps.flowCharacteristic`、PKK7 两个组件各一份）。
+    if (r && node.is_valid() &&
+        (r->fe == e || (I_.nodes[node].node_type.kind == NodeTypeKind::RedeclaredClass && I_.nodes[node].def == e)))
+      r->node = node;
     return r;
   }
   // 短类链追到底的长类（定义作用域链随之更新）；链断 / 太长 → invalid。
@@ -16022,14 +16109,20 @@ class Flattener {
     walk(walk, raw);
     return hit;
   }
-  // 在 enclosing 实例的 FlatTree 组件里按名字找（v1：直接线性找，规模小）。
+  // 在 enclosing 实例的 FlatTree 组件里按名字找（v1：直接线性找，规模小）。派生类去重时丢掉的那份换成留下的（Inst::dup_kept：
+  // PartialTwoPort 与 PartialLumpedVolume 各声明一个 `outer System system`，MSL Fluid PartialPump 里 PartialLumpedVolume 那层的
+  // `system.T_start` 查到的须是连好 inner 的那个；PKK 探针 PKK15）。
   NodeId find_local(NodeId enclosing, Symbol name) {
     if (I_.nodes[enclosing].kind != NodeKind::Class || !I_.nodes[enclosing].cls.is_valid() ||
         !I_.node_class(enclosing).tree.is_valid())
       return Inst::empty_node();
     ClassTreeId t = I_.node_class(enclosing).tree;
     for (NodeId cn : I_.trees[t].components)
-      if (I_.nodes[cn].kind == NodeKind::Component && I_.nodes[cn].name == name) return cn;
+      if (I_.nodes[cn].kind == NodeKind::Component && I_.nodes[cn].name == name) {
+        NodeId r = cn;   // 留下的那份可能在更外层又被去重（多层继承），顺链走到底
+        for (auto k = I_.dup_kept.find(r.raw); k != I_.dup_kept.end(); k = I_.dup_kept.find(r.raw)) r = k->second;
+        return r;
+      }
     return Inst::empty_node();
   }
 

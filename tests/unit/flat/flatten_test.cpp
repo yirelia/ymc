@@ -8186,4 +8186,253 @@ YMC_TEST(flatten_vectorized_builtin_composite_field) {
                            "  s2.ports[1].p = 1.0;\n  s2.ports[2].p = 1.0;\nend PKJ2;\n"));
 }
 
+YMC_TEST(flatten_redeclared_function_short_class_modifiers) {
+  // 组件修饰里重声明的函数 `redeclare function flowCharacteristic = quadraticFlow(V_flow_nominal = {…}, head_nominal = {…})`：
+  // 按实例路径命名 `PKK1.pumps.flowCharacteristic`，短类修饰成输入缺省、调用处补齐。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p19 PKK1）。
+  YMC_CHECK_EQ(flatten_src("package P\n  package Chars\n    partial function baseFlow\n      input Real V_flow;\n"
+                           "      output Real head;\n    end baseFlow;\n    function quadraticFlow\n      extends baseFlow;\n"
+                           "      input Real V_flow_nominal[3];\n      input Real head_nominal[3];\n    algorithm\n"
+                           "      head := head_nominal[1] + V_flow * (V_flow_nominal[2] - head_nominal[3]);\n    end quadraticFlow;\n"
+                           "  end Chars;\n  partial model PartialPump\n    replaceable function flowCharacteristic = Chars.baseFlow;\n"
+                           "    Real V_flow = time;\n    Real head;\n  equation\n    head = flowCharacteristic(V_flow);\n"
+                           "  end PartialPump;\n  model Pump\n    extends PartialPump;\n  end Pump;\nend P;\nmodel PKK1\n"
+                           "  P.Pump pumps(redeclare function flowCharacteristic = P.Chars.quadraticFlow(V_flow_nominal = {0, 0.25, 0.5}, head_nominal = {100, 60, 0}));\n"
+                           "end PKK1;\n"),
+               std::string("function PKK1.pumps.flowCharacteristic\n  input Real V_flow;\n"
+                           "  input Real[3] V_flow_nominal = {0.0, 0.25, 0.5};\n  input Real[3] head_nominal = {100.0, 60.0, 0.0};\n"
+                           "  output Real head;\nalgorithm\n"
+                           "  head := head_nominal[1] + V_flow * (V_flow_nominal[2] - head_nominal[3]);\n"
+                           "end PKK1.pumps.flowCharacteristic;\n\nclass PKK1\n  Real pumps.V_flow = time;\n  Real pumps.head;\n"
+                           "equation\n"
+                           "  pumps.head = PKK1.pumps.flowCharacteristic(pumps.V_flow, {0.0, 0.25, 0.5}, {100.0, 60.0, 0.0});\n"
+                           "end PKK1;\n"));
+}
+
+YMC_TEST(flatten_redeclared_function_extends_modifier_params) {
+  // extends 修饰里重声明的函数（MSL Fluid ControlledPump）：修饰引用派生类的参数——函数定义里打求值后的缺省，调用处补
+  // `{0.0, pump.q, 1.5 * pump.q}`。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p19 PKK3）。
+  YMC_CHECK_EQ(flatten_src("package P\n  package Chars\n    partial function baseFlow\n      input Real V_flow;\n"
+                           "      output Real head;\n    end baseFlow;\n    function quadraticFlow\n      extends baseFlow;\n"
+                           "      input Real V_flow_nominal[3];\n      input Real head_nominal[3];\n    algorithm\n"
+                           "      head := head_nominal[1] + V_flow * (V_flow_nominal[2] - head_nominal[3]);\n    end quadraticFlow;\n"
+                           "    function linearFlow\n      extends baseFlow;\n      input Real a = 2;\n    algorithm\n"
+                           "      head := a * V_flow;\n    end linearFlow;\n  end Chars;\n  partial model PartialPump\n"
+                           "    replaceable function flowCharacteristic = Chars.baseFlow;\n    Real V_flow = time;\n    Real head;\n"
+                           "  equation\n    head = flowCharacteristic(V_flow);\n  end PartialPump;\n  model Pump\n"
+                           "    extends PartialPump;\n  end Pump;\n  model CPump\n    parameter Real q = 1;\n"
+                           "    parameter Real h = 3;\n"
+                           "    extends PartialPump(redeclare replaceable function flowCharacteristic = Chars.quadraticFlow(V_flow_nominal = {0, q, 1.5 * q}, head_nominal = {2 * h, h, 0}));\n"
+                           "  end CPump;\n  model LPump\n    extends PartialPump;\n    redeclare function flowCharacteristic\n"
+                           "      extends Chars.baseFlow;\n    algorithm\n      head := 3 * V_flow;\n    end flowCharacteristic;\n"
+                           "  end LPump;\n  model ZPump\n    extends PartialPump;\n    Real y = time * flowCharacteristic(0);\n"
+                           "  end ZPump;\n  model M\n    parameter Real k = 0.25;\n"
+                           "    P.Pump pumps(redeclare function flowCharacteristic = P.Chars.quadraticFlow(V_flow_nominal = {0, k, 2 * k}, head_nominal = {100, 60, 0}));\n"
+                           "  end M;\nend P;\nmodel PKK3\n  P.CPump pump(q = 2);\nend PKK3;\n"),
+               std::string("function PKK3.pump.flowCharacteristic\n  input Real V_flow;\n"
+                           "  input Real[3] V_flow_nominal = {0.0, 2.0, 3.0};\n  input Real[3] head_nominal = {6.0, 3.0, 0.0};\n"
+                           "  output Real head;\nalgorithm\n"
+                           "  head := head_nominal[1] + V_flow * (V_flow_nominal[2] - head_nominal[3]);\n"
+                           "end PKK3.pump.flowCharacteristic;\n\nclass PKK3\n  parameter Real pump.q = 2.0;\n"
+                           "  parameter Real pump.h = 3.0;\n  Real pump.V_flow = time;\n  Real pump.head;\nequation\n"
+                           "  pump.head = PKK3.pump.flowCharacteristic(pump.V_flow, {0.0, pump.q, 1.5 * pump.q}, {2.0 * pump.h, pump.h, 0.0});\n"
+                           "end PKK3;\n"));
+}
+
+YMC_TEST(flatten_redeclared_function_long_element) {
+  // 派生类体里长形态的函数重声明 `redeclare function flowCharacteristic … end flowCharacteristic;`，基类的方程调它：
+  // `PKK4.pump.flowCharacteristic`。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p19 PKK4）。
+  YMC_CHECK_EQ(flatten_src("package P\n  package Chars\n    partial function baseFlow\n      input Real V_flow;\n"
+                           "      output Real head;\n    end baseFlow;\n    function quadraticFlow\n      extends baseFlow;\n"
+                           "      input Real V_flow_nominal[3];\n      input Real head_nominal[3];\n    algorithm\n"
+                           "      head := head_nominal[1] + V_flow * (V_flow_nominal[2] - head_nominal[3]);\n    end quadraticFlow;\n"
+                           "    function linearFlow\n      extends baseFlow;\n      input Real a = 2;\n    algorithm\n"
+                           "      head := a * V_flow;\n    end linearFlow;\n  end Chars;\n  partial model PartialPump\n"
+                           "    replaceable function flowCharacteristic = Chars.baseFlow;\n    Real V_flow = time;\n    Real head;\n"
+                           "  equation\n    head = flowCharacteristic(V_flow);\n  end PartialPump;\n  model Pump\n"
+                           "    extends PartialPump;\n  end Pump;\n  model CPump\n    parameter Real q = 1;\n"
+                           "    parameter Real h = 3;\n"
+                           "    extends PartialPump(redeclare replaceable function flowCharacteristic = Chars.quadraticFlow(V_flow_nominal = {0, q, 1.5 * q}, head_nominal = {2 * h, h, 0}));\n"
+                           "  end CPump;\n  model LPump\n    extends PartialPump;\n    redeclare function flowCharacteristic\n"
+                           "      extends Chars.baseFlow;\n    algorithm\n      head := 3 * V_flow;\n    end flowCharacteristic;\n"
+                           "  end LPump;\n  model ZPump\n    extends PartialPump;\n    Real y = time * flowCharacteristic(0);\n"
+                           "  end ZPump;\n  model M\n    parameter Real k = 0.25;\n"
+                           "    P.Pump pumps(redeclare function flowCharacteristic = P.Chars.quadraticFlow(V_flow_nominal = {0, k, 2 * k}, head_nominal = {100, 60, 0}));\n"
+                           "  end M;\nend P;\nmodel PKK4\n  P.LPump pump;\nend PKK4;\n"),
+               std::string("function PKK4.pump.flowCharacteristic\n  input Real V_flow;\n  output Real head;\nalgorithm\n"
+                           "  head := 3.0 * V_flow;\nend PKK4.pump.flowCharacteristic;\n\nclass PKK4\n  Real pump.V_flow = time;\n"
+                           "  Real pump.head;\nequation\n  pump.head = PKK4.pump.flowCharacteristic(pump.V_flow);\nend PKK4;\n"));
+}
+
+YMC_TEST(flatten_redeclared_function_constant_call_folded) {
+  // 重声明的函数以常量实参调用（`flowCharacteristic(0)`，缺省来自短类修饰）：整个调用求值成 100.0。期望 = omc 1.25.0
+  // 实跑（2026-10-15，探针 pk-p19 PKK5）。
+  YMC_CHECK_EQ(flatten_src("package P\n  package Chars\n    partial function baseFlow\n      input Real V_flow;\n"
+                           "      output Real head;\n    end baseFlow;\n    function quadraticFlow\n      extends baseFlow;\n"
+                           "      input Real V_flow_nominal[3];\n      input Real head_nominal[3];\n    algorithm\n"
+                           "      head := head_nominal[1] + V_flow * (V_flow_nominal[2] - head_nominal[3]);\n    end quadraticFlow;\n"
+                           "    function linearFlow\n      extends baseFlow;\n      input Real a = 2;\n    algorithm\n"
+                           "      head := a * V_flow;\n    end linearFlow;\n  end Chars;\n  partial model PartialPump\n"
+                           "    replaceable function flowCharacteristic = Chars.baseFlow;\n    Real V_flow = time;\n    Real head;\n"
+                           "  equation\n    head = flowCharacteristic(V_flow);\n  end PartialPump;\n  model Pump\n"
+                           "    extends PartialPump;\n  end Pump;\n  model CPump\n    parameter Real q = 1;\n"
+                           "    parameter Real h = 3;\n"
+                           "    extends PartialPump(redeclare replaceable function flowCharacteristic = Chars.quadraticFlow(V_flow_nominal = {0, q, 1.5 * q}, head_nominal = {2 * h, h, 0}));\n"
+                           "  end CPump;\n  model LPump\n    extends PartialPump;\n    redeclare function flowCharacteristic\n"
+                           "      extends Chars.baseFlow;\n    algorithm\n      head := 3 * V_flow;\n    end flowCharacteristic;\n"
+                           "  end LPump;\n  model ZPump\n    extends PartialPump;\n    Real y = time * flowCharacteristic(0);\n"
+                           "  end ZPump;\n  model M\n    parameter Real k = 0.25;\n"
+                           "    P.Pump pumps(redeclare function flowCharacteristic = P.Chars.quadraticFlow(V_flow_nominal = {0, k, 2 * k}, head_nominal = {100, 60, 0}));\n"
+                           "  end M;\nend P;\nmodel PKK5\n"
+                           "  P.ZPump pumps(redeclare function flowCharacteristic = P.Chars.quadraticFlow(V_flow_nominal = {0, 0.25, 0.5}, head_nominal = {100, 60, 0}));\n"
+                           "end PKK5;\n"),
+               std::string("function PKK5.pumps.flowCharacteristic\n  input Real V_flow;\n"
+                           "  input Real[3] V_flow_nominal = {0.0, 0.25, 0.5};\n  input Real[3] head_nominal = {100.0, 60.0, 0.0};\n"
+                           "  output Real head;\nalgorithm\n"
+                           "  head := head_nominal[1] + V_flow * (V_flow_nominal[2] - head_nominal[3]);\n"
+                           "end PKK5.pumps.flowCharacteristic;\n\nclass PKK5\n  Real pumps.V_flow = time;\n  Real pumps.head;\n"
+                           "  Real pumps.y = time * 100.0;\nequation\n"
+                           "  pumps.head = PKK5.pumps.flowCharacteristic(pumps.V_flow, {0.0, 0.25, 0.5}, {100.0, 60.0, 0.0});\n"
+                           "end PKK5;\n"));
+}
+
+YMC_TEST(flatten_fill_column_in_matrix_construction) {
+  // 矩阵构造里的 `ones(3)` / `fill(2.5, 3)` 列逐元素展开（ExpandExp.expandBuiltinFill；MSL Fluid quadraticFlow 的
+  // `[ones(3), V_flow_nominal, V_flow_nominal2]`），函数里与模型里都是。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p19 PKK13）。
+  YMC_CHECK_EQ(flatten_src("model PKK13\n  function f\n    input Real v[3];\n    output Real y;\n  protected\n"
+                           "    Real m[3, 3] = [ones(3), v, fill(2.5, 3)];\n  algorithm\n    y := m[1, 1] + m[3, 2] + m[2, 3];\n"
+                           "  end f;\n  Real y[3] = {time, 2 * time, 3};\n  Real z = f(y);\n  Real m2[3, 2] = [ones(3), y];\n"
+                           "  Real m3[3, 2] = [fill(2, 3, 1), y];\nend PKK13;\n"),
+               std::string("function PKK13.f\n  input Real[3] v;\n  output Real y;\n"
+                           "  protected Real[3, 3] m = {{1.0, v[1], 2.5}, {1.0, v[2], 2.5}, {1.0, v[3], 2.5}};\nalgorithm\n"
+                           "  y := m[1,1] + m[3,2] + m[2,3];\nend PKK13.f;\n\nclass PKK13\n  Real y[1];\n  Real y[2];\n  Real y[3];\n"
+                           "  Real z = PKK13.f(y);\n  Real m2[1,1];\n  Real m2[1,2];\n  Real m2[2,1];\n  Real m2[2,2];\n"
+                           "  Real m2[3,1];\n  Real m2[3,2];\n  Real m3[1,1];\n  Real m3[1,2];\n  Real m3[2,1];\n  Real m3[2,2];\n"
+                           "  Real m3[3,1];\n  Real m3[3,2];\nequation\n  y = {time, 2.0 * time, 3.0};\n"
+                           "  m2 = {{1.0, y[1]}, {1.0, y[2]}, {1.0, y[3]}};\n  m3 = {{2.0, y[1]}, {2.0, y[2]}, {2.0, y[3]}};\n"
+                           "end PKK13;\n"));
+}
+
+YMC_TEST(flatten_function_dimension_refers_to_itself) {
+  // 函数形参的维引用自己（MSL Matrices.solve 的 `input Real A[:, size(A, 1)]`）：照留 `size(A, 1)`。期望 = omc 1.25.0
+  // 实跑（2026-10-15，探针 pk-p19 PKK14）。
+  YMC_CHECK_EQ(flatten_src("model PKK14\n  function solve2\n    input Real A[:, size(A, 1)];\n    input Real b[size(A, 1)];\n"
+                           "    output Real x[size(b, 1)];\n  protected\n    Real Awork[size(A, 1), size(A, 1)] = A;\n  algorithm\n"
+                           "    x := b / Awork[1, 1];\n  end solve2;\n  Real b[2] = {time, 1};\n"
+                           "  Real x[2] = solve2({{2, 0}, {0, 2}}, b);\nend PKK14;\n"),
+               std::string("function PKK14.solve2\n  input Real[:, size(A, 1)] A;\n  input Real[size(A, 1)] b;\n"
+                           "  output Real[size(b, 1)] x;\n  protected Real[size(A, 1), size(A, 1)] Awork = A;\nalgorithm\n"
+                           "  x := b / Awork[1,1];\nend PKK14.solve2;\n\nclass PKK14\n  Real b[1];\n  Real b[2];\n  Real x[1];\n"
+                           "  Real x[2];\nequation\n  b = {time, 1.0};\n  x = PKK14.solve2({{2.0, 0.0}, {0.0, 2.0}}, b);\nend PKK14;\n"));
+}
+
+YMC_TEST(flatten_duplicate_outer_lookup_in_base) {
+  // 两个基类各声明同一个 `outer System system`，去重后在被丢掉那份所在的基类里查 `system.T_start`：查到留下的那个（连好
+  // inner，参数），绑定不是更高变率（ClassTree.replaceDuplicates）。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p19 PKK15）。
+  YMC_CHECK_EQ(flatten_src("model PKK15\n  model System\n    parameter Real T_start = 300;\n    parameter Real p_start = 1e5;\n"
+                           "  end System;\n  partial model TwoPort\n    outer System system \"System wide properties\";\n"
+                           "    Real m_flow = time;\n  end TwoPort;\n  partial model LumpedVolume\n"
+                           "    outer System system \"System properties\";\n    parameter Boolean use_T_start = true;\n"
+                           "    parameter Real T_start = if use_T_start then system.T_start else 2 * p_start;\n"
+                           "    parameter Real p_start = system.p_start;\n    Real T(start = T_start);\n  equation\n"
+                           "    der(T) = -T + T_start;\n  end LumpedVolume;\n  model Pump\n    extends TwoPort;\n"
+                           "    extends LumpedVolume(final p_start = 2e5);\n  end Pump;\n  inner System system;\n  Pump pump;\n"
+                           "end PKK15;\n"),
+               std::string("class PKK15\n  parameter Real system.T_start = 300.0;\n  parameter Real system.p_start = 1e5;\n"
+                           "  Real pump.m_flow = time;\n  parameter Boolean pump.use_T_start = true;\n"
+                           "  parameter Real pump.T_start = if pump.use_T_start then system.T_start else 2.0 * pump.p_start;\n"
+                           "  final parameter Real pump.p_start = 2e5;\n  Real pump.T(start = pump.T_start);\nequation\n"
+                           "  der(pump.T) = pump.T_start - pump.T;\nend PKK15;\n"));
+}
+
+YMC_TEST(flatten_record_constructor_per_package_instance) {
+  // 同一个记录定义经不同的包实例各有一个构造函数（`pump.Medium.ThermodynamicState`、`pump.monitoring.Medium.…`、
+  // `P16.W.ThermodynamicState`），先引到的不能挡掉后面的。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p19 PKK18）。
+  YMC_CHECK_EQ(flatten_src("package P16\n  partial package PM\n    replaceable record ThermodynamicState\n      Real p;\n"
+                           "    end ThermodynamicState;\n    replaceable partial function setState\n      input Real p;\n"
+                           "      output ThermodynamicState s;\n    end setState;\n  end PM;\n  package W\n    extends PM;\n"
+                           "    redeclare record extends ThermodynamicState\n      Real T;\n    end ThermodynamicState;\n"
+                           "    redeclare function extends setState\n    algorithm\n      s := ThermodynamicState(p = p, T = 300);\n"
+                           "    end setState;\n  end W;\n  model Mon\n    replaceable package Medium = PM;\n"
+                           "    input Medium.ThermodynamicState state_in;\n  end Mon;\n  model Pump\n"
+                           "    replaceable package Medium = PM;\n"
+                           "    Mon monitoring(redeclare final package Medium = Medium, final state_in = Medium.setState(time));\n"
+                           "  end Pump;\nend P16;\nmodel PKK18\n  P16.Pump pump0(redeclare package Medium = P16.W);\n"
+                           "  P16.Pump pump(redeclare package Medium = P16.W);\n  P16.W.ThermodynamicState s0;\nequation\n"
+                           "  s0 = pump0.monitoring.state_in;\nend PKK18;\n"),
+               std::string("function P16.W.ThermodynamicState \"Automatically generated record constructor for P16.W.ThermodynamicState\"\n"
+                           "  input Real p;\n  input Real T;\n  output ThermodynamicState res;\nend P16.W.ThermodynamicState;\n\n"
+                           "function PKK18.pump.Medium.ThermodynamicState \"Automatically generated record constructor for PKK18.pump.Medium.ThermodynamicState\"\n"
+                           "  input Real p;\n  input Real T;\n  output ThermodynamicState res;\n"
+                           "end PKK18.pump.Medium.ThermodynamicState;\n\nfunction PKK18.pump.Medium.setState\n  input Real p;\n"
+                           "  output PKK18.pump.Medium.ThermodynamicState s;\nalgorithm\n"
+                           "  s := PKK18.pump.Medium.ThermodynamicState(p, 300.0);\nend PKK18.pump.Medium.setState;\n\n"
+                           "function PKK18.pump.monitoring.Medium.ThermodynamicState \"Automatically generated record constructor for PKK18.pump.monitoring.Medium.ThermodynamicState\"\n"
+                           "  input Real p;\n  input Real T;\n  output ThermodynamicState res;\n"
+                           "end PKK18.pump.monitoring.Medium.ThermodynamicState;\n\n"
+                           "function PKK18.pump0.Medium.ThermodynamicState \"Automatically generated record constructor for PKK18.pump0.Medium.ThermodynamicState\"\n"
+                           "  input Real p;\n  input Real T;\n  output ThermodynamicState res;\n"
+                           "end PKK18.pump0.Medium.ThermodynamicState;\n\nfunction PKK18.pump0.Medium.setState\n  input Real p;\n"
+                           "  output PKK18.pump0.Medium.ThermodynamicState s;\nalgorithm\n"
+                           "  s := PKK18.pump0.Medium.ThermodynamicState(p, 300.0);\nend PKK18.pump0.Medium.setState;\n\n"
+                           "function PKK18.pump0.monitoring.Medium.ThermodynamicState \"Automatically generated record constructor for PKK18.pump0.monitoring.Medium.ThermodynamicState\"\n"
+                           "  input Real p;\n  input Real T;\n  output ThermodynamicState res;\n"
+                           "end PKK18.pump0.monitoring.Medium.ThermodynamicState;\n\nclass PKK18\n"
+                           "  final Real pump0.monitoring.state_in.p;\n  final Real pump0.monitoring.state_in.T;\n"
+                           "  final Real pump.monitoring.state_in.p;\n  final Real pump.monitoring.state_in.T;\n  Real s0.p;\n"
+                           "  Real s0.T;\nequation\n  pump0.monitoring.state_in = PKK18.pump0.Medium.setState(time);\n"
+                           "  pump.monitoring.state_in = PKK18.pump.Medium.setState(time);\n  s0 = pump0.monitoring.state_in;\n"
+                           "end PKK18;\n"));
+}
+
+YMC_TEST(flatten_record_constructor_alias_medium_class_extends) {
+  // `redeclare final package Medium = Medium` 里的 class extends 记录的构造函数：继承来的字段（基类经带重声明的 extends
+  // 继承来的类型 FixedPhase）按包实例解析。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p19 PKK20）。
+  YMC_CHECK_EQ(flatten_src("package P20\n  partial package PM\n    type FixedPhase = Integer(min = 0, max = 2);\n"
+                           "    replaceable record FluidConstants\n      Real mm;\n    end FluidConstants;\n"
+                           "    replaceable record ThermodynamicState\n    end ThermodynamicState;\n"
+                           "    replaceable partial function setState\n      input Real p;\n      output ThermodynamicState s;\n"
+                           "    end setState;\n  end PM;\n  record FC2\n    Real mm;\n    Real tc;\n  end FC2;\n"
+                           "  partial package PM2\n    extends PM(redeclare record FluidConstants = FC2);\n"
+                           "    redeclare replaceable record extends ThermodynamicState\n      FixedPhase phase(min = 0, max = 2);\n"
+                           "    end ThermodynamicState;\n  end PM2;\n  package W\n    extends PM2;\n"
+                           "    redeclare record extends ThermodynamicState\n      Real p;\n    end ThermodynamicState;\n"
+                           "    redeclare function extends setState\n    algorithm\n      s := ThermodynamicState(phase = 1, p = p);\n"
+                           "    end setState;\n  end W;\n  model Mon\n    replaceable package Medium = PM;\n"
+                           "    input Medium.ThermodynamicState state_in;\n  end Mon;\n  model Pump\n"
+                           "    replaceable package Medium = PM;\n"
+                           "    Mon monitoring(redeclare final package Medium = Medium, final state_in = Medium.setState(time));\n"
+                           "  end Pump;\nend P20;\nmodel PKK20\n  P20.Pump pump(redeclare package Medium = P20.W);\nend PKK20;\n"),
+               std::string("function PKK20.pump.Medium.ThermodynamicState \"Automatically generated record constructor for PKK20.pump.Medium.ThermodynamicState\"\n"
+                           "  input Integer phase;\n  input Real p;\n  output ThermodynamicState res;\n"
+                           "end PKK20.pump.Medium.ThermodynamicState;\n\nfunction PKK20.pump.Medium.setState\n  input Real p;\n"
+                           "  output PKK20.pump.Medium.ThermodynamicState s;\nalgorithm\n"
+                           "  s := PKK20.pump.Medium.ThermodynamicState(1, p);\nend PKK20.pump.Medium.setState;\n\n"
+                           "function PKK20.pump.monitoring.Medium.ThermodynamicState \"Automatically generated record constructor for PKK20.pump.monitoring.Medium.ThermodynamicState\"\n"
+                           "  input Integer phase;\n  input Real p;\n  output ThermodynamicState res;\n"
+                           "end PKK20.pump.monitoring.Medium.ThermodynamicState;\n\nclass PKK20\n"
+                           "  final Integer pump.monitoring.state_in.phase(min = 0, max = 2);\n"
+                           "  final Real pump.monitoring.state_in.p;\nequation\n"
+                           "  pump.monitoring.state_in = PKK20.pump.Medium.setState(time);\nend PKK20;\n"));
+}
+
+YMC_TEST(flatten_runtime_record_argument_not_evaluated) {
+  // 绑定里调函数、实参是经带重声明的 extends 继承来的 input 记录变量（MSL Fluid PumpMonitoringNPSH 的
+  // `rho_in = Medium.density(state_in)`）：变量求不出值，照留调用。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p19 PKK22）。
+  YMC_CHECK_EQ(flatten_src("package P22\n  partial package PM\n    replaceable record ThermodynamicState\n      Real p;\n"
+                           "    end ThermodynamicState;\n    replaceable partial function density\n"
+                           "      input ThermodynamicState state;\n      output Real d;\n    end density;\n  end PM;\n"
+                           "  partial package PM2\n    extends PM;\n  end PM2;\n  package W\n    extends PM2;\n"
+                           "    redeclare function extends density\n    algorithm\n      d := state.p / 2;\n    end density;\n"
+                           "  end W;\n  model MonBase\n    replaceable package Medium = PM;\n"
+                           "    input Medium.ThermodynamicState state_in;\n  end MonBase;\n  model MonNPSH\n"
+                           "    extends MonBase(redeclare replaceable package Medium = PM2);\n"
+                           "    Real rho_in = Medium.density(state_in);\n  end MonNPSH;\nend P22;\nmodel PKK22\n"
+                           "  P22.MonNPSH m(redeclare package Medium = P22.W, state_in(p = time));\nend PKK22;\n"),
+               std::string("function PKK22.m.Medium.ThermodynamicState \"Automatically generated record constructor for PKK22.m.Medium.ThermodynamicState\"\n"
+                           "  input Real p;\n  output ThermodynamicState res;\nend PKK22.m.Medium.ThermodynamicState;\n\n"
+                           "function PKK22.m.Medium.density\n  input PKK22.m.Medium.ThermodynamicState state;\n  output Real d;\n"
+                           "algorithm\n  d := state.p / 2.0;\nend PKK22.m.Medium.density;\n\nclass PKK22\n"
+                           "  Real m.state_in.p = time;\n  Real m.rho_in = PKK22.m.Medium.density(m.state_in);\nend PKK22;\n"));
+}
+
 YMC_TEST_MAIN

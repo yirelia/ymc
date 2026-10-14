@@ -534,6 +534,7 @@ void Instantiator::dedup_components(std::vector<NodeId>& comps, NodeId def_node)
       mark_unsupported("duplicate elements not identical", std::string(I_.interner.str(I_.nodes[c].name)));
       return;
     }
+    I_.dup_kept[c.raw] = it->second;   // 基类实例里查到 c 时换成留下的（见 Inst::dup_kept）
   }
   comps = std::move(kept);
 }

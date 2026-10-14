@@ -1,0 +1,1041 @@
+//// set: pk-p19 — 组件 / extends 修饰里重声明的函数（短类带修饰、长形态、class extends、数组、嵌套）、fill 列标量化、形参维引用自己、去重后的 outer、按包实例的记录构造函数、input 记录实参不求值
+//// model: PKK1
+package P
+  package Chars
+    partial function baseFlow
+      input Real V_flow;
+      output Real head;
+    end baseFlow;
+    function quadraticFlow
+      extends baseFlow;
+      input Real V_flow_nominal[3];
+      input Real head_nominal[3];
+    algorithm
+      head := head_nominal[1] + V_flow * (V_flow_nominal[2] - head_nominal[3]);
+    end quadraticFlow;
+  end Chars;
+  partial model PartialPump
+    replaceable function flowCharacteristic = Chars.baseFlow;
+    Real V_flow = time;
+    Real head;
+  equation
+    head = flowCharacteristic(V_flow);
+  end PartialPump;
+  model Pump
+    extends PartialPump;
+  end Pump;
+end P;
+model PKK1
+  P.Pump pumps(redeclare function flowCharacteristic = P.Chars.quadraticFlow(V_flow_nominal = {0, 0.25, 0.5}, head_nominal = {100, 60, 0}));
+end PKK1;
+//// model: PKK2
+package P
+  package Chars
+    partial function baseFlow
+      input Real V_flow;
+      output Real head;
+    end baseFlow;
+    function quadraticFlow
+      extends baseFlow;
+      input Real V_flow_nominal[3];
+      input Real head_nominal[3];
+    algorithm
+      head := head_nominal[1] + V_flow * (V_flow_nominal[2] - head_nominal[3]);
+    end quadraticFlow;
+    function linearFlow
+      extends baseFlow;
+      input Real a = 2;
+    algorithm
+      head := a * V_flow;
+    end linearFlow;
+  end Chars;
+  partial model PartialPump
+    replaceable function flowCharacteristic = Chars.baseFlow;
+    Real V_flow = time;
+    Real head;
+  equation
+    head = flowCharacteristic(V_flow);
+  end PartialPump;
+  model Pump
+    extends PartialPump;
+  end Pump;
+  model CPump
+    parameter Real q = 1;
+    parameter Real h = 3;
+    extends PartialPump(redeclare replaceable function flowCharacteristic = Chars.quadraticFlow(V_flow_nominal = {0, q, 1.5 * q}, head_nominal = {2 * h, h, 0}));
+  end CPump;
+  model LPump
+    extends PartialPump;
+    redeclare function flowCharacteristic
+      extends Chars.baseFlow;
+    algorithm
+      head := 3 * V_flow;
+    end flowCharacteristic;
+  end LPump;
+  model ZPump
+    extends PartialPump;
+    Real y = time * flowCharacteristic(0);
+  end ZPump;
+  model M
+    parameter Real k = 0.25;
+    P.Pump pumps(redeclare function flowCharacteristic = P.Chars.quadraticFlow(V_flow_nominal = {0, k, 2 * k}, head_nominal = {100, 60, 0}));
+  end M;
+end P;
+model PKK2
+  P.Pump pumps(redeclare function flowCharacteristic = P.Chars.linearFlow);
+end PKK2;
+//// model: PKK3
+package P
+  package Chars
+    partial function baseFlow
+      input Real V_flow;
+      output Real head;
+    end baseFlow;
+    function quadraticFlow
+      extends baseFlow;
+      input Real V_flow_nominal[3];
+      input Real head_nominal[3];
+    algorithm
+      head := head_nominal[1] + V_flow * (V_flow_nominal[2] - head_nominal[3]);
+    end quadraticFlow;
+    function linearFlow
+      extends baseFlow;
+      input Real a = 2;
+    algorithm
+      head := a * V_flow;
+    end linearFlow;
+  end Chars;
+  partial model PartialPump
+    replaceable function flowCharacteristic = Chars.baseFlow;
+    Real V_flow = time;
+    Real head;
+  equation
+    head = flowCharacteristic(V_flow);
+  end PartialPump;
+  model Pump
+    extends PartialPump;
+  end Pump;
+  model CPump
+    parameter Real q = 1;
+    parameter Real h = 3;
+    extends PartialPump(redeclare replaceable function flowCharacteristic = Chars.quadraticFlow(V_flow_nominal = {0, q, 1.5 * q}, head_nominal = {2 * h, h, 0}));
+  end CPump;
+  model LPump
+    extends PartialPump;
+    redeclare function flowCharacteristic
+      extends Chars.baseFlow;
+    algorithm
+      head := 3 * V_flow;
+    end flowCharacteristic;
+  end LPump;
+  model ZPump
+    extends PartialPump;
+    Real y = time * flowCharacteristic(0);
+  end ZPump;
+  model M
+    parameter Real k = 0.25;
+    P.Pump pumps(redeclare function flowCharacteristic = P.Chars.quadraticFlow(V_flow_nominal = {0, k, 2 * k}, head_nominal = {100, 60, 0}));
+  end M;
+end P;
+model PKK3
+  P.CPump pump(q = 2);
+end PKK3;
+//// model: PKK4
+package P
+  package Chars
+    partial function baseFlow
+      input Real V_flow;
+      output Real head;
+    end baseFlow;
+    function quadraticFlow
+      extends baseFlow;
+      input Real V_flow_nominal[3];
+      input Real head_nominal[3];
+    algorithm
+      head := head_nominal[1] + V_flow * (V_flow_nominal[2] - head_nominal[3]);
+    end quadraticFlow;
+    function linearFlow
+      extends baseFlow;
+      input Real a = 2;
+    algorithm
+      head := a * V_flow;
+    end linearFlow;
+  end Chars;
+  partial model PartialPump
+    replaceable function flowCharacteristic = Chars.baseFlow;
+    Real V_flow = time;
+    Real head;
+  equation
+    head = flowCharacteristic(V_flow);
+  end PartialPump;
+  model Pump
+    extends PartialPump;
+  end Pump;
+  model CPump
+    parameter Real q = 1;
+    parameter Real h = 3;
+    extends PartialPump(redeclare replaceable function flowCharacteristic = Chars.quadraticFlow(V_flow_nominal = {0, q, 1.5 * q}, head_nominal = {2 * h, h, 0}));
+  end CPump;
+  model LPump
+    extends PartialPump;
+    redeclare function flowCharacteristic
+      extends Chars.baseFlow;
+    algorithm
+      head := 3 * V_flow;
+    end flowCharacteristic;
+  end LPump;
+  model ZPump
+    extends PartialPump;
+    Real y = time * flowCharacteristic(0);
+  end ZPump;
+  model M
+    parameter Real k = 0.25;
+    P.Pump pumps(redeclare function flowCharacteristic = P.Chars.quadraticFlow(V_flow_nominal = {0, k, 2 * k}, head_nominal = {100, 60, 0}));
+  end M;
+end P;
+model PKK4
+  P.LPump pump;
+end PKK4;
+//// model: PKK5
+package P
+  package Chars
+    partial function baseFlow
+      input Real V_flow;
+      output Real head;
+    end baseFlow;
+    function quadraticFlow
+      extends baseFlow;
+      input Real V_flow_nominal[3];
+      input Real head_nominal[3];
+    algorithm
+      head := head_nominal[1] + V_flow * (V_flow_nominal[2] - head_nominal[3]);
+    end quadraticFlow;
+    function linearFlow
+      extends baseFlow;
+      input Real a = 2;
+    algorithm
+      head := a * V_flow;
+    end linearFlow;
+  end Chars;
+  partial model PartialPump
+    replaceable function flowCharacteristic = Chars.baseFlow;
+    Real V_flow = time;
+    Real head;
+  equation
+    head = flowCharacteristic(V_flow);
+  end PartialPump;
+  model Pump
+    extends PartialPump;
+  end Pump;
+  model CPump
+    parameter Real q = 1;
+    parameter Real h = 3;
+    extends PartialPump(redeclare replaceable function flowCharacteristic = Chars.quadraticFlow(V_flow_nominal = {0, q, 1.5 * q}, head_nominal = {2 * h, h, 0}));
+  end CPump;
+  model LPump
+    extends PartialPump;
+    redeclare function flowCharacteristic
+      extends Chars.baseFlow;
+    algorithm
+      head := 3 * V_flow;
+    end flowCharacteristic;
+  end LPump;
+  model ZPump
+    extends PartialPump;
+    Real y = time * flowCharacteristic(0);
+  end ZPump;
+  model M
+    parameter Real k = 0.25;
+    P.Pump pumps(redeclare function flowCharacteristic = P.Chars.quadraticFlow(V_flow_nominal = {0, k, 2 * k}, head_nominal = {100, 60, 0}));
+  end M;
+end P;
+model PKK5
+  P.ZPump pumps(redeclare function flowCharacteristic = P.Chars.quadraticFlow(V_flow_nominal = {0, 0.25, 0.5}, head_nominal = {100, 60, 0}));
+end PKK5;
+//// model: PKK6
+package P
+  package Chars
+    partial function baseFlow
+      input Real V_flow;
+      output Real head;
+    end baseFlow;
+    function quadraticFlow
+      extends baseFlow;
+      input Real V_flow_nominal[3];
+      input Real head_nominal[3];
+    algorithm
+      head := head_nominal[1] + V_flow * (V_flow_nominal[2] - head_nominal[3]);
+    end quadraticFlow;
+    function linearFlow
+      extends baseFlow;
+      input Real a = 2;
+    algorithm
+      head := a * V_flow;
+    end linearFlow;
+  end Chars;
+  partial model PartialPump
+    replaceable function flowCharacteristic = Chars.baseFlow;
+    Real V_flow = time;
+    Real head;
+  equation
+    head = flowCharacteristic(V_flow);
+  end PartialPump;
+  model Pump
+    extends PartialPump;
+  end Pump;
+  model CPump
+    parameter Real q = 1;
+    parameter Real h = 3;
+    extends PartialPump(redeclare replaceable function flowCharacteristic = Chars.quadraticFlow(V_flow_nominal = {0, q, 1.5 * q}, head_nominal = {2 * h, h, 0}));
+  end CPump;
+  model LPump
+    extends PartialPump;
+    redeclare function flowCharacteristic
+      extends Chars.baseFlow;
+    algorithm
+      head := 3 * V_flow;
+    end flowCharacteristic;
+  end LPump;
+  model ZPump
+    extends PartialPump;
+    Real y = time * flowCharacteristic(0);
+  end ZPump;
+  model M
+    parameter Real k = 0.25;
+    P.Pump pumps(redeclare function flowCharacteristic = P.Chars.quadraticFlow(V_flow_nominal = {0, k, 2 * k}, head_nominal = {100, 60, 0}));
+  end M;
+end P;
+model PKK6
+  P.M m(k = 0.3);
+end PKK6;
+//// model: PKK7
+package P
+  package Chars
+    partial function baseFlow
+      input Real V_flow;
+      output Real head;
+    end baseFlow;
+    function quadraticFlow
+      extends baseFlow;
+      input Real V_flow_nominal[3];
+      input Real head_nominal[3];
+    algorithm
+      head := head_nominal[1] + V_flow * (V_flow_nominal[2] - head_nominal[3]);
+    end quadraticFlow;
+    function linearFlow
+      extends baseFlow;
+      input Real a = 2;
+    algorithm
+      head := a * V_flow;
+    end linearFlow;
+  end Chars;
+  partial model PartialPump
+    replaceable function flowCharacteristic = Chars.baseFlow;
+    Real V_flow = time;
+    Real head;
+  equation
+    head = flowCharacteristic(V_flow);
+  end PartialPump;
+  model Pump
+    extends PartialPump;
+  end Pump;
+  model CPump
+    parameter Real q = 1;
+    parameter Real h = 3;
+    extends PartialPump(redeclare replaceable function flowCharacteristic = Chars.quadraticFlow(V_flow_nominal = {0, q, 1.5 * q}, head_nominal = {2 * h, h, 0}));
+  end CPump;
+  model LPump
+    extends PartialPump;
+    redeclare function flowCharacteristic
+      extends Chars.baseFlow;
+    algorithm
+      head := 3 * V_flow;
+    end flowCharacteristic;
+  end LPump;
+  model ZPump
+    extends PartialPump;
+    Real y = time * flowCharacteristic(0);
+  end ZPump;
+  model M
+    parameter Real k = 0.25;
+    P.Pump pumps(redeclare function flowCharacteristic = P.Chars.quadraticFlow(V_flow_nominal = {0, k, 2 * k}, head_nominal = {100, 60, 0}));
+  end M;
+end P;
+model PKK7
+  P.Pump p1(redeclare function flowCharacteristic = P.Chars.quadraticFlow(V_flow_nominal = {0, 0.25, 0.5}, head_nominal = {100, 60, 0}));
+  P.Pump p2(redeclare function flowCharacteristic = P.Chars.linearFlow(a = 5));
+end PKK7;
+//// model: PKK8
+package P
+  package Chars
+    partial function baseFlow
+      input Real V_flow;
+      output Real head;
+    end baseFlow;
+    function quadraticFlow
+      extends baseFlow;
+      input Real V_flow_nominal[3];
+      input Real head_nominal[3];
+    algorithm
+      head := head_nominal[1] + V_flow * (V_flow_nominal[2] - head_nominal[3]);
+    end quadraticFlow;
+    function linearFlow
+      extends baseFlow;
+      input Real a = 2;
+    algorithm
+      head := a * V_flow;
+    end linearFlow;
+  end Chars;
+  partial model PartialPump
+    replaceable function flowCharacteristic = Chars.baseFlow;
+    Real V_flow = time;
+    Real head;
+  equation
+    head = flowCharacteristic(V_flow);
+  end PartialPump;
+  model Pump
+    extends PartialPump;
+  end Pump;
+  model CPump
+    parameter Real q = 1;
+    parameter Real h = 3;
+    extends PartialPump(redeclare replaceable function flowCharacteristic = Chars.quadraticFlow(V_flow_nominal = {0, q, 1.5 * q}, head_nominal = {2 * h, h, 0}));
+  end CPump;
+  model LPump
+    extends PartialPump;
+    redeclare function flowCharacteristic
+      extends Chars.baseFlow;
+    algorithm
+      head := 3 * V_flow;
+    end flowCharacteristic;
+  end LPump;
+  model ZPump
+    extends PartialPump;
+    Real y = time * flowCharacteristic(0);
+  end ZPump;
+  model M
+    parameter Real k = 0.25;
+    P.Pump pumps(redeclare function flowCharacteristic = P.Chars.quadraticFlow(V_flow_nominal = {0, k, 2 * k}, head_nominal = {100, 60, 0}));
+  end M;
+end P;
+model PKK8
+  model EPump
+    extends P.PartialPump;
+    redeclare function extends flowCharacteristic
+    algorithm
+      head := 4 * V_flow;
+    end flowCharacteristic;
+  end EPump;
+  EPump pump;
+end PKK8;
+//// model: PKK9
+package P
+  package Chars
+    partial function baseFlow
+      input Real V_flow;
+      output Real head;
+    end baseFlow;
+    function quadraticFlow
+      extends baseFlow;
+      input Real V_flow_nominal[3];
+      input Real head_nominal[3];
+    algorithm
+      head := head_nominal[1] + V_flow * (V_flow_nominal[2] - head_nominal[3]);
+    end quadraticFlow;
+    function linearFlow
+      extends baseFlow;
+      input Real a = 2;
+    algorithm
+      head := a * V_flow;
+    end linearFlow;
+  end Chars;
+  partial model PartialPump
+    replaceable function flowCharacteristic = Chars.baseFlow;
+    Real V_flow = time;
+    Real head;
+  equation
+    head = flowCharacteristic(V_flow);
+  end PartialPump;
+  model Pump
+    extends PartialPump;
+  end Pump;
+  model CPump
+    parameter Real q = 1;
+    parameter Real h = 3;
+    extends PartialPump(redeclare replaceable function flowCharacteristic = Chars.quadraticFlow(V_flow_nominal = {0, q, 1.5 * q}, head_nominal = {2 * h, h, 0}));
+  end CPump;
+  model LPump
+    extends PartialPump;
+    redeclare function flowCharacteristic
+      extends Chars.baseFlow;
+    algorithm
+      head := 3 * V_flow;
+    end flowCharacteristic;
+  end LPump;
+  model ZPump
+    extends PartialPump;
+    Real y = time * flowCharacteristic(0);
+  end ZPump;
+  model M
+    parameter Real k = 0.25;
+    P.Pump pumps(redeclare function flowCharacteristic = P.Chars.quadraticFlow(V_flow_nominal = {0, k, 2 * k}, head_nominal = {100, 60, 0}));
+  end M;
+end P;
+model PKK9
+  P.Pump pumps[2](redeclare each function flowCharacteristic = P.Chars.linearFlow(a = 5));
+end PKK9;
+//// model: PKK10
+package P
+  package Chars
+    partial function baseFlow
+      input Real V_flow;
+      output Real head;
+    end baseFlow;
+    function quadraticFlow
+      extends baseFlow;
+      input Real V_flow_nominal[3];
+      input Real head_nominal[3];
+    algorithm
+      head := head_nominal[1] + V_flow * (V_flow_nominal[2] - head_nominal[3]);
+    end quadraticFlow;
+    function linearFlow
+      extends baseFlow;
+      input Real a = 2;
+    algorithm
+      head := a * V_flow;
+    end linearFlow;
+  end Chars;
+  partial model PartialPump
+    replaceable function flowCharacteristic = Chars.baseFlow;
+    Real V_flow = time;
+    Real head;
+  equation
+    head = flowCharacteristic(V_flow);
+  end PartialPump;
+  model Pump
+    extends PartialPump;
+  end Pump;
+  model CPump
+    parameter Real q = 1;
+    parameter Real h = 3;
+    extends PartialPump(redeclare replaceable function flowCharacteristic = Chars.quadraticFlow(V_flow_nominal = {0, q, 1.5 * q}, head_nominal = {2 * h, h, 0}));
+  end CPump;
+  model LPump
+    extends PartialPump;
+    redeclare function flowCharacteristic
+      extends Chars.baseFlow;
+    algorithm
+      head := 3 * V_flow;
+    end flowCharacteristic;
+  end LPump;
+  model ZPump
+    extends PartialPump;
+    Real y = time * flowCharacteristic(0);
+  end ZPump;
+  model M
+    parameter Real k = 0.25;
+    P.Pump pumps(redeclare function flowCharacteristic = P.Chars.quadraticFlow(V_flow_nominal = {0, k, 2 * k}, head_nominal = {100, 60, 0}));
+  end M;
+end P;
+model PKK10
+  model Base
+    parameter Real k = 0.5;
+    P.Pump pumps(redeclare function flowCharacteristic = P.Chars.quadraticFlow(V_flow_nominal = {0, k, 2 * k}, head_nominal = {100, 60, 0}));
+  end Base;
+  extends Base(k = 0.7);
+  Real z = pumps.flowCharacteristic(1);
+end PKK10;
+//// model: PKK11
+package P
+  package Chars
+    partial function baseFlow
+      input Real V_flow;
+      output Real head;
+    end baseFlow;
+    function quadraticFlow
+      extends baseFlow;
+      input Real V_flow_nominal[3];
+      input Real head_nominal[3];
+    algorithm
+      head := head_nominal[1] + V_flow * (V_flow_nominal[2] - head_nominal[3]);
+    end quadraticFlow;
+    function linearFlow
+      extends baseFlow;
+      input Real a = 2;
+    algorithm
+      head := a * V_flow;
+    end linearFlow;
+  end Chars;
+  partial model PartialPump
+    replaceable function flowCharacteristic = Chars.baseFlow;
+    Real V_flow = time;
+    Real head;
+  equation
+    head = flowCharacteristic(V_flow);
+  end PartialPump;
+  model Pump
+    extends PartialPump;
+  end Pump;
+  model CPump
+    parameter Real q = 1;
+    parameter Real h = 3;
+    extends PartialPump(redeclare replaceable function flowCharacteristic = Chars.quadraticFlow(V_flow_nominal = {0, q, 1.5 * q}, head_nominal = {2 * h, h, 0}));
+  end CPump;
+  model LPump
+    extends PartialPump;
+    redeclare function flowCharacteristic
+      extends Chars.baseFlow;
+    algorithm
+      head := 3 * V_flow;
+    end flowCharacteristic;
+  end LPump;
+  model ZPump
+    extends PartialPump;
+    Real y = time * flowCharacteristic(0);
+  end ZPump;
+  model M
+    parameter Real k = 0.25;
+    P.Pump pumps(redeclare function flowCharacteristic = P.Chars.quadraticFlow(V_flow_nominal = {0, k, 2 * k}, head_nominal = {100, 60, 0}));
+  end M;
+end P;
+model PKK11
+  model Base
+    parameter Real k = 0.5;
+    P.Pump pumps(redeclare function flowCharacteristic = P.Chars.quadraticFlow(V_flow_nominal = {0, k, 2 * k}, head_nominal = {100, 60, 0}));
+  end Base;
+  extends Base(k = 0.7);
+end PKK11;
+//// model: PKK12
+model PKK12
+  partial model Base
+    replaceable partial function f
+      input Real x;
+      input Real k = 1;
+      output Real y;
+    end f;
+    Real z = f(time);
+  end Base;
+  model D
+    extends Base;
+    redeclare function extends f
+      input Real m = 3;
+    algorithm
+      y := m * k * x;
+    end f;
+  end D;
+  D d;
+end PKK12;
+//// model: PKK13
+model PKK13
+  function f
+    input Real v[3];
+    output Real y;
+  protected
+    Real m[3, 3] = [ones(3), v, fill(2.5, 3)];
+  algorithm
+    y := m[1, 1] + m[3, 2] + m[2, 3];
+  end f;
+  Real y[3] = {time, 2 * time, 3};
+  Real z = f(y);
+  Real m2[3, 2] = [ones(3), y];
+  Real m3[3, 2] = [fill(2, 3, 1), y];
+end PKK13;
+//// model: PKK14
+model PKK14
+  function solve2
+    input Real A[:, size(A, 1)];
+    input Real b[size(A, 1)];
+    output Real x[size(b, 1)];
+  protected
+    Real Awork[size(A, 1), size(A, 1)] = A;
+  algorithm
+    x := b / Awork[1, 1];
+  end solve2;
+  Real b[2] = {time, 1};
+  Real x[2] = solve2({{2, 0}, {0, 2}}, b);
+end PKK14;
+//// model: PKK15
+model PKK15
+  model System
+    parameter Real T_start = 300;
+    parameter Real p_start = 1e5;
+  end System;
+  partial model TwoPort
+    outer System system "System wide properties";
+    Real m_flow = time;
+  end TwoPort;
+  partial model LumpedVolume
+    outer System system "System properties";
+    parameter Boolean use_T_start = true;
+    parameter Real T_start = if use_T_start then system.T_start else 2 * p_start;
+    parameter Real p_start = system.p_start;
+    Real T(start = T_start);
+  equation
+    der(T) = -T + T_start;
+  end LumpedVolume;
+  model Pump
+    extends TwoPort;
+    extends LumpedVolume(final p_start = 2e5);
+  end Pump;
+  inner System system;
+  Pump pump;
+end PKK15;
+//// model: PKK16
+package P16
+  partial package PM
+    replaceable record ThermodynamicState
+      Real p;
+    end ThermodynamicState;
+    replaceable partial function setState
+      input Real p;
+      output ThermodynamicState s;
+    end setState;
+  end PM;
+  package W
+    extends PM;
+    redeclare record extends ThermodynamicState
+      Real T;
+    end ThermodynamicState;
+    redeclare function extends setState
+    algorithm
+      s := ThermodynamicState(p = p, T = 300);
+    end setState;
+  end W;
+  model Mon
+    replaceable package Medium = PM;
+    input Medium.ThermodynamicState state_in;
+  end Mon;
+  model Pump
+    replaceable package Medium = PM;
+    Mon monitoring(redeclare final package Medium = Medium, final state_in = Medium.setState(time));
+  end Pump;
+end P16;
+model PKK16
+  P16.Pump pump(redeclare package Medium = P16.W);
+end PKK16;
+//// model: PKK17
+package P16
+  partial package PM
+    replaceable record ThermodynamicState
+      Real p;
+    end ThermodynamicState;
+    replaceable partial function setState
+      input Real p;
+      output ThermodynamicState s;
+    end setState;
+  end PM;
+  package W
+    extends PM;
+    redeclare record extends ThermodynamicState
+      Real T;
+    end ThermodynamicState;
+    redeclare function extends setState
+    algorithm
+      s := ThermodynamicState(p = p, T = 300);
+    end setState;
+  end W;
+  model Mon
+    replaceable package Medium = PM;
+    input Medium.ThermodynamicState state_in;
+  end Mon;
+  model Pump
+    replaceable package Medium = PM;
+    Medium.ThermodynamicState st;
+    Mon monitoring(redeclare final package Medium = Medium, final state_in = Medium.setState(time));
+  equation
+    st = Medium.setState(2 * time);
+  end Pump;
+end P16;
+model PKK17
+  P16.Pump pump(redeclare package Medium = P16.W);
+end PKK17;
+//// model: PKK18
+package P16
+  partial package PM
+    replaceable record ThermodynamicState
+      Real p;
+    end ThermodynamicState;
+    replaceable partial function setState
+      input Real p;
+      output ThermodynamicState s;
+    end setState;
+  end PM;
+  package W
+    extends PM;
+    redeclare record extends ThermodynamicState
+      Real T;
+    end ThermodynamicState;
+    redeclare function extends setState
+    algorithm
+      s := ThermodynamicState(p = p, T = 300);
+    end setState;
+  end W;
+  model Mon
+    replaceable package Medium = PM;
+    input Medium.ThermodynamicState state_in;
+  end Mon;
+  model Pump
+    replaceable package Medium = PM;
+    Mon monitoring(redeclare final package Medium = Medium, final state_in = Medium.setState(time));
+  end Pump;
+end P16;
+model PKK18
+  P16.Pump pump0(redeclare package Medium = P16.W);
+  P16.Pump pump(redeclare package Medium = P16.W);
+  P16.W.ThermodynamicState s0;
+equation
+  s0 = pump0.monitoring.state_in;
+end PKK18;
+//// model: PKK19
+package P19
+  partial package PM
+    type FixedPhase = Integer(min = 0, max = 2);
+    type Temp = Real(min = 0);
+    replaceable record ThermodynamicState
+      FixedPhase phase;
+      Temp T;
+    end ThermodynamicState;
+    replaceable partial function setState
+      input Real p;
+      output ThermodynamicState s;
+    end setState;
+  end PM;
+  package W
+    extends PM(Temp(min = 273.15, start = 300));
+    redeclare record extends ThermodynamicState
+      Real p;
+    end ThermodynamicState;
+    redeclare function extends setState
+    algorithm
+      s := ThermodynamicState(phase = 1, T = 300, p = p);
+    end setState;
+  end W;
+  model Mon
+    replaceable package Medium = PM;
+    input Medium.ThermodynamicState state_in;
+  end Mon;
+  model Pump
+    replaceable package Medium = PM;
+    Mon monitoring(redeclare final package Medium = Medium, final state_in = Medium.setState(time));
+  end Pump;
+end P19;
+model PKK19
+  P19.Pump pump(redeclare package Medium = P19.W);
+end PKK19;
+//// model: PKK20
+package P20
+  partial package PM
+    type FixedPhase = Integer(min = 0, max = 2);
+    replaceable record FluidConstants
+      Real mm;
+    end FluidConstants;
+    replaceable record ThermodynamicState
+    end ThermodynamicState;
+    replaceable partial function setState
+      input Real p;
+      output ThermodynamicState s;
+    end setState;
+  end PM;
+  record FC2
+    Real mm;
+    Real tc;
+  end FC2;
+  partial package PM2
+    extends PM(redeclare record FluidConstants = FC2);
+    redeclare replaceable record extends ThermodynamicState
+      FixedPhase phase(min = 0, max = 2);
+    end ThermodynamicState;
+  end PM2;
+  package W
+    extends PM2;
+    redeclare record extends ThermodynamicState
+      Real p;
+    end ThermodynamicState;
+    redeclare function extends setState
+    algorithm
+      s := ThermodynamicState(phase = 1, p = p);
+    end setState;
+  end W;
+  model Mon
+    replaceable package Medium = PM;
+    input Medium.ThermodynamicState state_in;
+  end Mon;
+  model Pump
+    replaceable package Medium = PM;
+    Mon monitoring(redeclare final package Medium = Medium, final state_in = Medium.setState(time));
+  end Pump;
+end P20;
+model PKK20
+  P20.Pump pump(redeclare package Medium = P20.W);
+end PKK20;
+//// model: PKK21
+package P21
+  partial package PM
+    type FixedPhase = Integer(min = 0, max = 2);
+    replaceable record FluidConstants
+      Real mm;
+    end FluidConstants;
+    replaceable record ThermodynamicState
+    end ThermodynamicState;
+    replaceable partial function setState
+      input Real p;
+      output ThermodynamicState s;
+    end setState;
+  end PM;
+  record FC2
+    Real mm;
+    Real tc;
+  end FC2;
+  partial package PM2
+    extends PM(redeclare record FluidConstants = FC2);
+    redeclare replaceable record extends ThermodynamicState
+      FixedPhase phase(min = 0, max = 2);
+    end ThermodynamicState;
+  end PM2;
+  package W
+    extends PM2;
+    redeclare record extends ThermodynamicState
+      Real p;
+    end ThermodynamicState;
+    redeclare function extends setState
+    algorithm
+      s := ThermodynamicState(phase = 1, p = p);
+    end setState;
+  end W;
+  model Mon
+    replaceable package Medium = PM;
+    input Medium.ThermodynamicState state_in;
+  end Mon;
+  model Pump
+    replaceable package Medium = PM;
+    Medium.ThermodynamicState st;
+  equation
+    st = Medium.setState(time);
+  end Pump;
+end P21;
+model PKK21
+  P21.Pump pump(redeclare package Medium = P21.W);
+end PKK21;
+//// model: PKK22
+package P22
+  partial package PM
+    replaceable record ThermodynamicState
+      Real p;
+    end ThermodynamicState;
+    replaceable partial function density
+      input ThermodynamicState state;
+      output Real d;
+    end density;
+  end PM;
+  partial package PM2
+    extends PM;
+  end PM2;
+  package W
+    extends PM2;
+    redeclare function extends density
+    algorithm
+      d := state.p / 2;
+    end density;
+  end W;
+  model MonBase
+    replaceable package Medium = PM;
+    input Medium.ThermodynamicState state_in;
+  end MonBase;
+  model MonNPSH
+    extends MonBase(redeclare replaceable package Medium = PM2);
+    Real rho_in = Medium.density(state_in);
+  end MonNPSH;
+end P22;
+model PKK22
+  P22.MonNPSH m(redeclare package Medium = P22.W, state_in(p = time));
+end PKK22;
+//// model: PKK23
+package P23
+  partial package PM
+    replaceable record ThermodynamicState
+      Real p;
+    end ThermodynamicState;
+    replaceable partial function setState
+      input Real p;
+      output ThermodynamicState s;
+    end setState;
+  end PM;
+  package W
+    extends PM;
+    redeclare record extends ThermodynamicState
+      Real T;
+    end ThermodynamicState;
+    redeclare function extends setState
+    algorithm
+      s := ThermodynamicState(p = p, T = 300);
+    end setState;
+  end W;
+  model Mon
+    replaceable package Medium = PM;
+    input Medium.ThermodynamicState state_in;
+  end Mon;
+  model Pump
+    replaceable package Medium = PM;
+    Mon monitoring(redeclare final package Medium = Medium, final state_in = Medium.setState(time));
+  end Pump;
+
+  model Pipe
+    replaceable package Medium = PM;
+    Medium.ThermodynamicState st;
+  equation
+    st = Medium.setState(time);
+  end Pipe;
+end P23;
+model PKK23
+  P23.Pump tank(redeclare package Medium = P23.W);
+  P23.Pipe pipe(redeclare package Medium = P23.W);
+end PKK23;
+//// model: PKK24
+package P24
+  partial package PM
+    replaceable record ThermodynamicState
+      Real p;
+    end ThermodynamicState;
+    replaceable partial function setState
+      input Real p;
+      output ThermodynamicState s;
+    end setState;
+  end PM;
+  package W
+    extends PM;
+    redeclare record extends ThermodynamicState
+      Real T;
+    end ThermodynamicState;
+    redeclare function extends setState
+    algorithm
+      s := ThermodynamicState(p = p, T = 300);
+    end setState;
+  end W;
+  model Mon
+    replaceable package Medium = PM;
+    input Medium.ThermodynamicState state_in;
+  end Mon;
+  model Pump
+    replaceable package Medium = PM;
+    Mon monitoring(redeclare final package Medium = Medium, final state_in = Medium.setState(time));
+  end Pump;
+
+  model Pipe
+    replaceable package Medium = PM;
+    Medium.ThermodynamicState st;
+  equation
+    st = Medium.setState(time);
+  end Pipe;
+
+  model Holder
+    replaceable package Medium = PM;
+    Medium.ThermodynamicState s0;
+  equation
+    s0.p = time;
+    s0.T = 300;
+  end Holder;
+end P24;
+model PKK24
+  P24.Holder tank(redeclare package Medium = P24.W);
+  P24.Pipe pipe(redeclare package Medium = P24.W);
+end PKK24;
