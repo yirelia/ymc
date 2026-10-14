@@ -654,3 +654,10 @@ omc 丢掉空的部分。PASS / SKIP 逐例不变；Fluid 的 SKIP 前移到端�
 `m_flow * actualStream(h)` 包 smooth。PASS / SKIP 逐例不变；Fluid 的 SKIP 前移到其余形态的空数组下标引用（6）、向量化调用实参（4）、
 管道摩擦函数里嵌套函数的压平名（`interpolateInRegion2`，2）、类重声明的函数（`flowCharacteristic`，2）等。
 FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-14 66g 之后：PASS 439（+1，Modelica.Fluid 首个）
+
+空数组的下标向量 / 范围切片（`C_start[1:Medium.nC]`）。**Modelica.Fluid.Examples.ControlledTankSystem.ControlledTanks 转 PASS**——
+Fluid 的第一个：从 65a（实例树查找）到 66g 一路越过 Medium 包常量、class extends 的函数 / 记录、端口数组的空成员、stream 算子。
+Fluid 余下 22 例 SKIP：管道摩擦函数里嵌套函数的压平名（`interpolateInRegion2`，7）、向量化调用实参（5）、类重声明的函数
+（`flowCharacteristic`，2）等；Media 21 例停在 Medium 函数里的非本地引用 / 限定函数调用等。FAIL / ACCEPTS-INVALID / CRASH 0。

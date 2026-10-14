@@ -1,0 +1,28 @@
+//// set: pk-p15 — 空数组的下标向量 / 范围切片（MSL Fluid 容器的 `C_start[1:Medium.nC]`）
+//// model: PKH9
+package P
+  partial package PM
+    constant Integer nC = 0;
+    constant Real C_nominal[nC] = fill(1, nC);
+  end PM;
+  package W
+    extends PM;
+  end W;
+  model Vol
+    replaceable package Medium = PM;
+    parameter Real C_start[Medium.nC] = fill(0, Medium.nC);
+    Real m = 1 + time;
+    Real mC_scaled[Medium.nC];
+    Real Cs[3, Medium.nC];
+    Real x[2, Medium.nC];
+  initial equation
+    mC_scaled = m * C_start[1:Medium.nC] ./ Medium.C_nominal;
+  equation
+    der(mC_scaled) = zeros(Medium.nC);
+    Cs = fill(C_start[1:Medium.nC], 3);
+    x[1:2, :] = zeros(2, Medium.nC);
+  end Vol;
+end P;
+model PKH9
+  P.Vol v(redeclare package Medium = P.W);
+end PKH9;

@@ -2343,6 +2343,11 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       写成 `cref * 求值结果`、是关联 flow 且结果是 if 式时包 `smooth(0, …)`（此前一律 SKIP）。探针 pk-p14（4）；单测 +3。
       slice 691→692（scodeinst ClassExtendsMod2）FAIL 0（oracle=live 不一致 0）；scodeinst 651→652；testsuite 1807→1808 / FAIL 0；
       MSL 438（不变：Fluid 停在其余空数组下标引用 6、向量化调用实参 4、函数压平名 2 等）；探针 9689→9693；单测 365→368。
+- [x] (66g) 空数组的下标向量 / 范围切片（2026-10-14）：`C_start[1:Medium.nC]`（nC = 0，定型后下标成 `{}`）、`x[1:2, :]` 这类只有界内
+      整数字面量 / 下标向量 / 字面量范围 / `:` 的引用，结果形状按叶的各维逐维算，含零长维 → 空数组（变量引用）。探针 pk-p15（1）；
+      单测 +1。**MSL 438→439：Modelica.Fluid 首个示例 ControlledTankSystem.ControlledTanks 与 omc 1.25.0 逐字节一致。**
+      slice 692 例 FAIL 0（oracle=live 不一致 0）；scodeinst 652（不变）；testsuite 1808（不变）/ FAIL 0；探针 9693→9694；
+      单测 368→369。Fluid 余下的 SKIP 头号是管道摩擦函数里嵌套函数的压平名（`interpolateInRegion2`，7）、向量化调用实参（5）。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

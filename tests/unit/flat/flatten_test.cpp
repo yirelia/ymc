@@ -8067,4 +8067,19 @@ YMC_TEST(flatten_actualstream_product_forms) {
                            "  a.port.p = 1.0;\n  c.port.p = 1.0;\n  a.port.m_flow = time;\n  c.port.m_flow = time;\nend PKH8;\n"));
 }
 
+YMC_TEST(flatten_empty_array_index_vector_slice) {
+  // 空数组用已展开的下标向量 / 范围取（`C_start[1:Medium.nC]`、nC = 0 → `{}`；`x[1:2, :]`）：结果是空数组，所在方程（含初始
+  // 方程）不产生标量方程。期望 = omc 1.25.0 实跑（2026-10-14，探针 pk-p15 PKH9）。
+  YMC_CHECK_EQ(flatten_src("package P\n  partial package PM\n    constant Integer nC = 0;\n"
+                           "    constant Real C_nominal[nC] = fill(1, nC);\n  end PM;\n  package W\n    extends PM;\n  end W;\n"
+                           "  model Vol\n    replaceable package Medium = PM;\n"
+                           "    parameter Real C_start[Medium.nC] = fill(0, Medium.nC);\n    Real m = 1 + time;\n"
+                           "    Real mC_scaled[Medium.nC];\n    Real Cs[3, Medium.nC];\n    Real x[2, Medium.nC];\n"
+                           "  initial equation\n    mC_scaled = m * C_start[1:Medium.nC] ./ Medium.C_nominal;\n  equation\n"
+                           "    der(mC_scaled) = zeros(Medium.nC);\n    Cs = fill(C_start[1:Medium.nC], 3);\n"
+                           "    x[1:2, :] = zeros(2, Medium.nC);\n  end Vol;\nend P;\nmodel PKH9\n"
+                           "  P.Vol v(redeclare package Medium = P.W);\nend PKH9;\n"),
+               std::string("class PKH9\n  Real v.m = 1.0 + time;\nend PKH9;\n"));
+}
+
 YMC_TEST_MAIN

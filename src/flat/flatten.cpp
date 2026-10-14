@@ -15430,15 +15430,33 @@ class Flattener {
       // 下标只有界内的字面量与 `:`（`ports_mXi_flow[i, :]`，[nPorts, nXi] 而 nXi = 0，i 是展开后的迭代变量；MSL Fluid 容器）：
       // 零长的维没被下标取到，结果就是余下各维的空数组（类型 e.ty；变量引用，不算字面量实参），所在等式不产生方程（PKH 探针
       // PKH7，omc 同）。
+      // 字面量的整数范围同样（`C_start[1:Medium.nC]`、nC = 0 → `1:0` 是空范围；MSL Fluid 容器的初始方程）：取那一维的长；非空的
+      // 范围须落在界内。结果的形状按叶的各维与下标逐维算。
       {
-        bool lit_slice = e.ty.is_array();
-        for (Id<Expr> s : e.cref.parts.back().subscripts) {
-          const ExprKind k = result_.model.exprs[s].kind;
-          lit_slice = lit_slice && (k == ExprKind::IntLit || k == ExprKind::Wild);
-        }
+        const std::vector<Id<Expr>>& ls = e.cref.parts.back().subscripts;
+        bool lit_slice = ls.size() <= empty_dims.size();
         std::vector<std::int64_t> rd;
-        for (const Dimension& d : e.ty.dims) rd.push_back(d.kind == DimKind::Integer ? d.size : -1);
-        if (lit_slice && std::find(rd.begin(), rd.end(), 0) != rd.end() && std::find(rd.begin(), rd.end(), -1) == rd.end()) {
+        for (std::size_t k = 0; lit_slice && k < empty_dims.size(); ++k) {
+          if (k >= ls.size()) { rd.push_back(empty_dims[k]); continue; }   // 缺的尾部下标 = `:`
+          const Expr sx = result_.model.exprs[ls[k]];   // 拷贝
+          if (sx.kind == ExprKind::IntLit) continue;   // 界内（上面已核）
+          if (sx.kind == ExprKind::Wild) { rd.push_back(empty_dims[k]); continue; }
+          if (sx.kind == ExprKind::Array) {   // 已展开的下标向量（`1:nC` 定型后成 `{}` / `{1, 2}`）：各元素须是界内的整数字面量
+            for (Id<Expr> ax : sx.args) {
+              const Expr& ae = result_.model.exprs[ax];
+              if (ae.kind != ExprKind::IntLit || ae.ival < 1 || ae.ival > empty_dims[k]) lit_slice = false;
+            }
+            if (!lit_slice) break;
+            rd.push_back(static_cast<std::int64_t>(sx.args.size()));
+            continue;
+          }
+          const std::optional<RangeLit> rl = range_lit(sx);
+          const bool in_bounds = rl && rl->integer &&
+                                 (rl->n == 0 || (std::min(rl->start, rl->stop) >= 1 && std::max(rl->start, rl->stop) <= empty_dims[k]));
+          if (!in_bounds) { lit_slice = false; break; }
+          rd.push_back(rl->n);
+        }
+        if (lit_slice && std::find(rd.begin(), rd.end(), 0) != rd.end()) {
           const Id<Expr> ea = empty_array_lit(e.ty.element_type(), rd);
           var_empty_arrays_.insert(ea.raw);
           return ea;
