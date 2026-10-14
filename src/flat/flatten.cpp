@@ -2088,6 +2088,9 @@ class Flattener {
     if (!ann.is_valid()) return std::nullopt;
     for (const SSubMod& sm : I_.scode.mods[ann].subs)
       if (in_.str(sm.ident) == "Evaluate") {
+        // 注解顶层的空修饰（`annotation(Evaluate, …)`，MSL 3rd-party 写法）保留成 NOMOD（无效 Id，见 absyn_to_scode 的 translateArgs）
+        // → 不是字面量。
+        if (!sm.mod.is_valid()) return std::nullopt;
         const Id<Exp> b = I_.scode.mods[sm.mod].binding;
         if (b.is_valid() && I_.absyn.exps[b].kind == ExpKind::BoolLit) return I_.absyn.exps[b].bval;
         return std::nullopt;
@@ -11067,7 +11070,9 @@ class Flattener {
       path.push_back(I_.scode.elems[rec].name);
     }
     rscope = ds;
-    rscope.insert(rscope.begin(), rec);
+    // class extends 的记录带上类节点：它继承来的字段按实例类树里的隐式基类解析（见 record_fields_ex）。
+    const bool ce = node.is_valid() && I_.scode.elems[rec].def.kind == SClassDefKind::ClassExtends;
+    rscope.insert(rscope.begin(), ce ? ScopeLevel{rec, node} : ScopeLevel{rec});
     return path;
   }
   // 记录构造函数块（Record.instDefaultConstructor :140-184 + DAEDumpTpl RECORD_CONSTRUCTOR :124-133 / dumpRecordVar
@@ -11161,14 +11166,20 @@ class Flattener {
     // 目标经改了常量的 extends 继承来的（class_extends_via_mod）：基类字段的缺省在定义层看不到修改 → 有缺省就不认。
     if (I_.scode.elems[rec].def.kind == SClassDefKind::ClassExtends) {
       if (!rec_long(rec) || I_.scode.elems[rec].def.class_extends_mod.is_valid()) return false;
-      const NodeId t = I_.class_extends_target.at(rec.raw);
+      // 实例语境里的记录（rscope 首层带类节点，见 rec_flat_name / ensure_record_ctor）：隐式基类取实例类树里的那份（基类实例里的同名
+      // 原类，Instantiator::class_extends_base）——基类字段的类型 / 缺省按实例层解析，看得到 extends 修饰改过的常量 / 类，不撞定义层的
+      // 继承守卫（PKG 探针 PKG7：`FixedPhase` 经 `extends PM(final fixedX = true)` 继承来，MSL Media 的 PartialTwoPhaseMedium）。
+      NodeId t = inner.front().inst.is_valid() ? ce_base(inner.front().inst) : NodeId{};
+      if (result_.unsupported) return false;
+      const bool inst_base = t.is_valid();
+      if (!inst_base) t = I_.class_extends_target.at(rec.raw);
       const ScodeScope ts = scode_scope_of(t);   // [基类, 外层…]
       if (ts.empty() || !(ts.front() == I_.nodes[t].def)) return false;
       const std::size_t first = out.size();
       if (!record_fields_ex(I_.nodes[t].def, ts, out, foreign || ScodeScope(ts.begin() + 1, ts.end()) != outer, depth + 1,
                             any_base))
         return false;
-      if (I_.class_extends_via_mod.count(rec.raw))
+      if (!inst_base && I_.class_extends_via_mod.count(rec.raw))
         for (std::size_t k = first; k < out.size(); ++k)
           if (out[k].dflt.is_valid()) return false;
     }
@@ -11946,6 +11957,11 @@ class Flattener {
     if (!ann.is_valid()) return true;
     for (const SSubMod& sm : I_.scode.mods[ann].subs) {
       const std::string_view an = in_.str(sm.ident);
+      // 注解顶层的空修饰保留成 NOMOD（无效 Id，见 evaluate_annotation）：光写 `derivative` / `inverse` 的形态未核实 → SKIP，别的不管。
+      if (!sm.mod.is_valid()) {
+        if (an == "derivative" || an == "inverse") return false;
+        continue;
+      }
       const SMod& dm = I_.scode.mods[sm.mod];
       if (an == "derivative") {
         if (!dm.binding.is_valid() || I_.absyn.exps[dm.binding].kind != ExpKind::CrefExp) return false;
@@ -12740,6 +12756,16 @@ class Flattener {
     }
     return pk.is_valid() && !I_.nodes[pk].is_empty() ? pk : NodeId{};
   }
+  // class extends 类节点的隐式基类（Instantiator::class_extends_base；展开时 inst 判的 SKIP 照传）。
+  NodeId ce_base(NodeId cls) {
+    if (!instr_) return {};
+    const NodeId b = instr_->class_extends_base(cls);
+    if (instr_->unsupported() && !result_.unsupported) {
+      set_unsupported(instr_->unsupported_reason().c_str());
+      result_.unsupported_detail = instr_->unsupported_detail();
+    }
+    return b.is_valid() && !I_.nodes[b].is_empty() ? b : NodeId{};
+  }
   // 实例路径名（NFInstNode.scopePath 的 INCLUDING_ROOT，NFInstNode.mo:1217-1290 v1.25.0）：组件 = 实例父亲的路径 + 名；重声明顶替进来
   // 的类（REDECLARED_CLASS）= 原类父亲（实例）的路径 + 名；实例父亲是类节点的（基类实例、包实例）跳过自己的名（BASE_CLASS）；组件
   // 的类实例 = 那个组件的路径；根实例 = 模型全名；其余类节点（定义 / 克隆）= 词法外层的路径 + 名（顶层止）。PK3：`PK3.v.Medium.g`。
@@ -13048,10 +13074,14 @@ class Flattener {
   // 组件的类型若是记录长类 → 该记录类（+ 其定义作用域链，内→外，含记录本身在首）；否则 invalid。
   Id<SElement> record_class_of(const SElement& c, const ScodeScope& scope, ScodeScope& rscope) {
     ScodeScope ds;
-    Id<SElement> e = resolve_class_path(c.type.path, c.type.leading_dot, scope, ds);
+    NodeId node;
+    Id<SElement> e = resolve_class_path(c.type.path, c.type.leading_dot, scope, ds, true, &node);
     if (!rec_long(e)) return {};
     rscope = std::move(ds);
-    rscope.insert(rscope.begin(), e);
+    // class extends 的记录带上类节点：继承来的字段按实例类树里的隐式基类解析（见 record_fields_ex；函数解释期的记录值，MSL Media
+    // 的 `setState_pTX` 等）。
+    const bool ce = node.is_valid() && I_.scode.elems[e].def.kind == SClassDefKind::ClassExtends;
+    rscope.insert(rscope.begin(), ce ? ScopeLevel{e, node} : ScopeLevel{e});
     return e;
   }
   // 记录值（NFEvalFunction.buildRecordBinding :386-434）：字段声明序；显式给定（构造实参）> 修饰（`R r(x = x)`，在 mod_scope

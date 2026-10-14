@@ -2319,6 +2319,15 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       slice 691 例 FAIL 0（oracle=live 不一致 0）；scodeinst 651（不变）；testsuite 1804→1805（packages/RedeclarePackage）/ FAIL 0；
       MSL 438（不变：Fluid / Media 的 Medium 函数越过 class extends，多数停在定义层继承守卫 `FixedPhase` / `AbsolutePressure`——
       class extends 记录的基类字段按定义层作用域解析，下一桶改按实例层的隐式基类）；探针 9675→9681（PASS +8）；单测 356→359。
+- [x] (66d) class extends 记录继承来的字段按实例层的隐式基类解析（2026-10-14）：Instantiator::class_extends_base（公开；没展开的
+      先展开，取 ext_bases[0]——实例类树里克隆的 class extends 的隐式基类是基类实例里的同名原类）；rec_flat_name / record_class_of
+      给 class extends 记录的作用域首层带上类节点，record_fields_ex 据此取实例层基类、字段类型 / 缺省按实例层解析（`FixedPhase`
+      经 `extends PM(final fixedX = true)` 继承来，定义层查撞继承守卫）；函数解释期的记录值同路。另修潜伏的崩溃：注解顶层的空修饰
+      （`annotation(Evaluate, …)`，保留成 NOMOD）在 evaluate_annotation / fn_ref_annotations / inst 的 absoluteValue 处被直接解引用
+      → 断言崩（testsuite Ticket6406 在本桶前进后撞上；小模型 PKG9 在 66c 上就崩）。探针 pk-p12（3）；单测 +3。
+      slice 691 例 FAIL 0（oracle=live 不一致 0）；scodeinst 651（不变）；testsuite 1805（不变）/ FAIL 0；MSL 438（不变：Fluid 的
+      PumpingSystem / DrumBoiler / HeatExchangerSimulation 等越过 Medium 函数，停在端口数组——`ports.C_outflow` 复合数组元素引用、
+      `tank.topPorts` 修饰分发、非 parts 类型的复合数组、stream 算子下标）；探针 9681→9684；单测 359→362。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

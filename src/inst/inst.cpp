@@ -331,6 +331,18 @@ NodeId Instantiator::inst_package(NodeId cls) {
   return inst;
 }
 
+NodeId Instantiator::class_extends_base(NodeId cls) {
+  if (!cls.is_valid() || I_.nodes[cls].is_empty() || I_.nodes[cls].kind != NodeKind::Class || !I_.nodes[cls].def.is_valid() ||
+      !I_.nodes[cls].cls.is_valid() || I_.scode.elems[I_.nodes[cls].def].def.kind != SClassDefKind::ClassExtends)
+    return Inst::empty_node();
+  if (I_.node_class(cls).state == ClassState::NotInstantiated) partial_inst(cls);
+  expand(cls);
+  const ClassTreeId t = I_.node_class(cls).tree;
+  if (!t.is_valid() || I_.trees[t].ext_bases.empty()) return Inst::empty_node();
+  const NodeId b = I_.trees[t].ext_bases[0];
+  return b.is_valid() && !I_.nodes[b].is_empty() ? b : Inst::empty_node();
+}
+
 void Instantiator::mark_package_instance(NodeId inst) {
   if (!inst.is_valid() || I_.nodes[inst].is_empty() || !I_.package_instances.insert(inst.raw).second) return;
   if (!I_.nodes[inst].cls.is_valid() || !I_.node_class(inst).tree.is_valid()) return;
@@ -1643,7 +1655,7 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing, bool gener
     bool abs_false = false;
     if (ann.is_valid())
       for (const SSubMod& s : I_.scode.mods[ann].subs)
-        if (I_.interner.str(s.ident) == "absoluteValue" && I_.scode.mods[s.mod].binding.is_valid()) {
+        if (I_.interner.str(s.ident) == "absoluteValue" && s.mod.is_valid() && I_.scode.mods[s.mod].binding.is_valid()) {
           const Exp& b = I_.absyn.exps[I_.scode.mods[s.mod].binding];
           abs_false = b.kind == ExpKind::BoolLit && !b.bval;
         }

@@ -7833,4 +7833,69 @@ YMC_TEST(flatten_record_class_extends_chain) {
                            "end PKG6;\n"));
 }
 
+YMC_TEST(flatten_record_class_extends_instance_base) {
+  // class extends 记录继承来的字段按实例类树里的隐式基类解析（Instantiator::class_extends_base）：`FixedPhase` 经带修饰的
+  // extends（`extends PM(final fixedX = true)`）继承来，定义层查会撞继承守卫。期望 = omc 1.25.0 实跑（2026-10-14，探针 pk-p12 PKG7）。
+  YMC_CHECK_EQ(flatten_src("package P\n  package Types\n    type FixedPhase = Integer(min = 0, max = 2);\n  end Types;\n"
+                           "  partial package PM\n    extends Types;\n    constant Boolean fixedX = false;\n"
+                           "    replaceable record ThermodynamicState\n    end ThermodynamicState;\n"
+                           "    replaceable partial function setState_p\n      input Real p;\n      input FixedPhase phase = 0;\n"
+                           "      output ThermodynamicState state;\n    end setState_p;\n  end PM;\n  partial package PP\n"
+                           "    extends PM(final fixedX = true);\n  end PP;\n  partial package PT\n    extends PP;\n"
+                           "    redeclare replaceable record extends ThermodynamicState\n      FixedPhase phase(min = 0, max = 2);\n"
+                           "    end ThermodynamicState;\n  end PT;\n  package W\n    extends PT;\n"
+                           "    redeclare record extends ThermodynamicState\n      Real p;\n    end ThermodynamicState;\n"
+                           "    redeclare function extends setState_p\n    algorithm\n"
+                           "      state := ThermodynamicState(phase = phase, p = p);\n    end setState_p;\n  end W;\n  model V\n"
+                           "    replaceable package M = PM;\n    M.ThermodynamicState s = M.setState_p(1e5 + time);\n  end V;\n"
+                           "end P;\nmodel PKG7\n  P.V v(redeclare package M = P.W);\nend PKG7;\n"),
+               std::string("function PKG7.v.M.ThermodynamicState \"Automatically generated record constructor for PKG7.v.M.ThermodynamicState\"\n"
+                           "  input Integer phase;\n  input Real p;\n  output ThermodynamicState res;\n"
+                           "end PKG7.v.M.ThermodynamicState;\n\nfunction PKG7.v.M.setState_p\n  input Real p;\n"
+                           "  input Integer phase(min = 0, max = 2) = 0;\n  output PKG7.v.M.ThermodynamicState state;\nalgorithm\n"
+                           "  state := PKG7.v.M.ThermodynamicState(phase, p);\nend PKG7.v.M.setState_p;\n\nclass PKG7\n"
+                           "  Integer v.s.phase(min = 0, max = 2);\n  Real v.s.p;\nequation\n"
+                           "  v.s = PKG7.v.M.setState_p(1e5 + time, 0);\nend PKG7;\n"));
+}
+
+YMC_TEST(flatten_ce_record_in_constant_evaluation) {
+  // 包常量 `h_default = specificEnthalpy_pT(p_default, T_default)` 编译期求值：解释期的 class extends 记录值同样按实例层的
+  // 隐式基类收字段。期望 = omc 1.25.0 实跑（2026-10-14，探针 pk-p12 PKG8）。
+  YMC_CHECK_EQ(flatten_src("package P\n  package Types\n    type FixedPhase = Integer(min = 0, max = 2);\n  end Types;\n"
+                           "  partial package PM\n    extends Types;\n    constant Boolean fixedX = false;\n"
+                           "    constant Real p_default = 1e5;\n    constant Real T_default = 300;\n"
+                           "    constant Real h_default = specificEnthalpy_pT(p_default, T_default);\n"
+                           "    replaceable record ThermodynamicState\n    end ThermodynamicState;\n"
+                           "    replaceable partial function setState_pT\n      input Real p;\n      input Real T;\n"
+                           "      input FixedPhase phase = 0;\n      output ThermodynamicState state;\n    end setState_pT;\n"
+                           "    replaceable partial function specificEnthalpy\n      input ThermodynamicState state;\n"
+                           "      output Real h;\n    end specificEnthalpy;\n    replaceable function specificEnthalpy_pT\n"
+                           "      input Real p;\n      input Real T;\n      output Real h;\n    algorithm\n"
+                           "      h := specificEnthalpy(setState_pT(p, T));\n    end specificEnthalpy_pT;\n  end PM;\n"
+                           "  partial package PT\n    extends PM(final fixedX = true);\n"
+                           "    redeclare replaceable record extends ThermodynamicState\n      FixedPhase phase(min = 0, max = 2);\n"
+                           "    end ThermodynamicState;\n  end PT;\n  package W\n    extends PT;\n"
+                           "    redeclare record extends ThermodynamicState\n      Real T;\n      Real h;\n"
+                           "    end ThermodynamicState;\n    redeclare function extends setState_pT\n    algorithm\n"
+                           "      state := ThermodynamicState(phase = phase, T = T, h = 4184 * T);\n    end setState_pT;\n"
+                           "    redeclare function extends specificEnthalpy\n    algorithm\n      h := state.h;\n"
+                           "    end specificEnthalpy;\n  end W;\n  model V\n    replaceable package M = PM;\n"
+                           "    parameter Real h_start = M.h_default;\n    Real h(start = h_start);\n  equation\n    der(h) = -h;\n"
+                           "  end V;\nend P;\nmodel PKG8\n  P.V v(redeclare package M = P.W);\nend PKG8;\n"),
+               std::string("class PKG8\n  parameter Real v.h_start = 1.2552e6;\n  Real v.h(start = v.h_start);\nequation\n"
+                           "  der(v.h) = -v.h;\nend PKG8;\n"));
+}
+
+YMC_TEST(flatten_bare_annotation_entries) {
+  // 注解顶层的空修饰（`annotation(Evaluate, …)`、`annotation(Inline, smoothOrder)`、类型的 `annotation(absoluteValue)`）
+  // 保留成 NOMOD（无效 Id）：读注解的地方此前直接取它的修饰 → 断言崩（testsuite Ticket6406）。期望 = omc 1.25.0 实跑
+  // （2026-10-14，探针 pk-p12 PKG9）。
+  YMC_CHECK_EQ(flatten_src("model PKG9\n  type T = Real annotation(absoluteValue);\n  function f\n    input Real x;\n"
+                           "    output Real y;\n  algorithm\n    y := 2 * x;\n    annotation(Inline, smoothOrder);\n  end f;\n"
+                           "  parameter Real p = 2 annotation(Evaluate, Dialog(tab = \"General\"));\n  T x = p * time;\n"
+                           "  Real y = f(x);\nend PKG9;\n"),
+               std::string("function PKG9.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend PKG9.f;\n\n"
+                           "class PKG9\n  parameter Real p = 2.0;\n  Real x = p * time;\n  Real y = PKG9.f(x);\nend PKG9;\n"));
+}
+
 YMC_TEST_MAIN

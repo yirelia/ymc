@@ -1,0 +1,121 @@
+//// set: pk-p12 — class extends 记录继承来的字段按实例类树里的隐式基类解析（模型里 / 编译期函数求值里）
+//// model: PKG7
+package P
+  package Types
+    type FixedPhase = Integer(min = 0, max = 2);
+  end Types;
+  partial package PM
+    extends Types;
+    constant Boolean fixedX = false;
+    replaceable record ThermodynamicState
+    end ThermodynamicState;
+    replaceable partial function setState_p
+      input Real p;
+      input FixedPhase phase = 0;
+      output ThermodynamicState state;
+    end setState_p;
+  end PM;
+  partial package PP
+    extends PM(final fixedX = true);
+  end PP;
+  partial package PT
+    extends PP;
+    redeclare replaceable record extends ThermodynamicState
+      FixedPhase phase(min = 0, max = 2);
+    end ThermodynamicState;
+  end PT;
+  package W
+    extends PT;
+    redeclare record extends ThermodynamicState
+      Real p;
+    end ThermodynamicState;
+    redeclare function extends setState_p
+    algorithm
+      state := ThermodynamicState(phase = phase, p = p);
+    end setState_p;
+  end W;
+  model V
+    replaceable package M = PM;
+    M.ThermodynamicState s = M.setState_p(1e5 + time);
+  end V;
+end P;
+model PKG7
+  P.V v(redeclare package M = P.W);
+end PKG7;
+//// model: PKG8
+package P
+  package Types
+    type FixedPhase = Integer(min = 0, max = 2);
+  end Types;
+  partial package PM
+    extends Types;
+    constant Boolean fixedX = false;
+    constant Real p_default = 1e5;
+    constant Real T_default = 300;
+    constant Real h_default = specificEnthalpy_pT(p_default, T_default);
+    replaceable record ThermodynamicState
+    end ThermodynamicState;
+    replaceable partial function setState_pT
+      input Real p;
+      input Real T;
+      input FixedPhase phase = 0;
+      output ThermodynamicState state;
+    end setState_pT;
+    replaceable partial function specificEnthalpy
+      input ThermodynamicState state;
+      output Real h;
+    end specificEnthalpy;
+    replaceable function specificEnthalpy_pT
+      input Real p;
+      input Real T;
+      output Real h;
+    algorithm
+      h := specificEnthalpy(setState_pT(p, T));
+    end specificEnthalpy_pT;
+  end PM;
+  partial package PT
+    extends PM(final fixedX = true);
+    redeclare replaceable record extends ThermodynamicState
+      FixedPhase phase(min = 0, max = 2);
+    end ThermodynamicState;
+  end PT;
+  package W
+    extends PT;
+    redeclare record extends ThermodynamicState
+      Real T;
+      Real h;
+    end ThermodynamicState;
+    redeclare function extends setState_pT
+    algorithm
+      state := ThermodynamicState(phase = phase, T = T, h = 4184 * T);
+    end setState_pT;
+    redeclare function extends specificEnthalpy
+    algorithm
+      h := state.h;
+    end specificEnthalpy;
+  end W;
+  model V
+    replaceable package M = PM;
+    parameter Real h_start = M.h_default;
+    Real h(start = h_start);
+  equation
+    der(h) = -h;
+  end V;
+end P;
+model PKG8
+  P.V v(redeclare package M = P.W);
+end PKG8;
+//// model: PKG9
+model PKG9
+  type T = Real annotation(absoluteValue);
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+    annotation(Inline, smoothOrder);
+  end f;
+  parameter Real p = 2 annotation(Evaluate, Dialog(tab = "General"));
+  T x = p * time;
+  Real y = f(x);
+end PKG9;

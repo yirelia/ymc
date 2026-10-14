@@ -34,6 +34,10 @@ class Instantiator {
   // 包实例（Inst.instPackage）：查名进实例语境里的类前把它实例化一份，按节点缓存；不能实例化（partial / 带修饰的短类 / 环）→ empty。
   // flatten 经实例链查名时也调（ADR-007 第 2 阶段 65a-3，见 inst.cpp）。
   NodeId inst_package(NodeId cls);
+  // class extends 类节点（`redeclare record extends R … end R;`）的隐式基类（排在 extends 首位，见 partial_inst）：实例类树里的 →
+  // 基类实例里的同名原类（inherited_in_bases），定义层的 → class_extends_target；没展开的先展开。不是 class extends / 取不到 →
+  // invalid。flatten 按它的作用域解析 class extends 记录继承来的字段（ADR-007 第 2 阶段 66d）。
+  NodeId class_extends_base(NodeId cls);
 
   // v1 还没做的构造（内建枚举/时钟类型、extends 内建类型…）在实例化阶段就撞上时标记，
   // driver 据此退 66（记 SKIP，不是 FAIL）。与 flatten 的 unsupported 合并判断。

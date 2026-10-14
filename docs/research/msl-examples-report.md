@@ -634,3 +634,10 @@ Medium 函数 / 记录的 class extends（`redeclare function extends`、`redecl
 按实例路径命名、函数变量类型的 extends 类修饰。PASS / SKIP 逐例不变；Fluid / Media 里调 Medium 函数的示例越过函数解析，8 例停在
 定义层继承守卫（`FixedPhase` 6、`AbsolutePressure` 2：class extends 记录 / 函数的隐式基类按定义层解析，经改过修饰的 extends
 继承来的名字被拦），其余停在复合数组、`Medium.singleState` 等。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-14 66d 之后：PASS 438（不变）
+
+class extends 记录继承来的字段改按实例层的隐式基类解析（含编译期函数求值）。PASS / SKIP 逐例不变；Fluid 里经 Medium 函数的
+示例全部越过 Medium 层，SKIP 收拢到端口数组（`ports.C_outflow` 复合数组元素引用 7、端口数组修饰分发 3、非 parts 类型复合数组 2、
+stream 算子下标 2）；Media 的余项是 Medium 函数里的非本地引用 / 限定函数调用（`Medium.setState_pT` 等）与带修饰的短类包。
+FAIL / ACCEPTS-INVALID / CRASH 0。
