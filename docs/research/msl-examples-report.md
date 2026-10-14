@@ -627,3 +627,10 @@ stateSelect 值 3、带修饰的短类包 3、函数体内的 Medium 函数 / �
 inner 参数（ThreeTanks / EmptyTanks / OneTank）。PASS / SKIP 逐例不变；Fluid / Media 的 SKIP 前移到 Medium 函数的发射
 （`saturationTemperature` / `bubbleEnthalpy` / `specificEnthalpy` / `temperature`，以及经重声明的包调用的限定函数 8 例）与
 复合数组（`ports.C_outflow` 4、`tank.topPorts` / `tank1.ports` 修饰分发 2、非 parts 类型的复合数组 2）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-14 66c 之后：PASS 438（不变）
+
+Medium 函数 / 记录的 class extends（`redeclare function extends`、`redeclare record extends ThermodynamicState`）、包实例里的记录
+按实例路径命名、函数变量类型的 extends 类修饰。PASS / SKIP 逐例不变；Fluid / Media 里调 Medium 函数的示例越过函数解析，8 例停在
+定义层继承守卫（`FixedPhase` 6、`AbsolutePressure` 2：class extends 记录 / 函数的隐式基类按定义层解析，经改过修饰的 extends
+继承来的名字被拦），其余停在复合数组、`Medium.singleState` 等。FAIL / ACCEPTS-INVALID / CRASH 0。

@@ -266,12 +266,18 @@ struct Inst {
   // class extends（`redeclare model extends B … end B;`）的隐式基类：class extends 类的 SCode 元素 raw → 外层类继承来的同名原类
   // 节点（见 Instantiator::expand；flatten 的 SCode 层继承查找也认它）。
   std::unordered_map<std::uint32_t, NodeId> class_extends_target;
+  // 其中目标经"改了常量 / 类的 extends"继承来、且目标的体里写到了被改的名字的（见 Instantiator::expand）：SCode 层看到的是没改过的
+  // 基类定义 → 用到时 SKIP（inst 的 expand、flatten 的函数签名）。
+  std::unordered_set<std::uint32_t> class_extends_via_mod;
   // 包实例（Instantiator::inst_package，Inst.instPackage）及其各层基类实例：它们的组件不受外来修饰（不在模型实例树里），值就是
   // inst 记的绑定（extends 修饰覆盖后的）——flatten 在这样的实例层按实例取常量（ADR-007 第 2 阶段 65a-3）。
   std::unordered_set<std::uint32_t> package_instances;
   // 组件修饰里施加过的类修饰（`A a(B(x = 2.0))`，SMod raw，见 Instantiator::inst_component）：flatten 不再把它当"改了不存在的组件"。
   std::unordered_set<std::uint32_t> applied_class_mods;
-  // 挂了类修饰的类节点（Instantiator 的 class_mods_）：经它往下查名（`B.C`、`B.i`）要按带修饰的包实例查，未做 → SKIP。
+  // 类修饰：类节点 → (修饰, 写修饰的类实例)，外层在前（extends 修饰里改嵌套类 `extends PM(AbsolutePressure(min = …))`，见
+  // Instantiator::inst_class / inst_component；flatten 给函数变量的类型并进同样的修饰）。
+  std::unordered_map<std::uint32_t, std::vector<std::pair<Id<SMod>, NodeId>>> class_mods;
+  // 挂了类修饰的类节点（class_mods 的键）：经它往下查名（`B.C`、`B.i`）要按带修饰的包实例查，未做 → SKIP。
   std::unordered_set<std::uint32_t> class_modded;
   struct RootAlias {
     NodeId node;                      // 别名类节点；invalid = 根不是别名

@@ -7760,4 +7760,77 @@ YMC_TEST(flatten_state_select_forward_inner_parameter) {
                            "equation\n  tank1.medium.p = 1.0;\n  tank1.medium.T = time;\nend PKM7;\n"));
 }
 
+YMC_TEST(flatten_function_class_extends_record_instance_path) {
+  // 经重声明的包调 `redeclare function extends` 定义的函数：签名先收隐式基类（class_extends_target）的成员；记录类型形参与它的
+  // 构造函数按实例路径命名（`PKG2.v.M.ThermodynamicState`，NFInstNode.scopePath）。期望 = omc 1.25.0 实跑（2026-10-14，
+  // 探针 pk-p11 PKG2）。
+  YMC_CHECK_EQ(flatten_src("package P\n  partial package PM\n    record ThermodynamicState\n      Real T;\n"
+                           "    end ThermodynamicState;\n    replaceable partial function specificHeatCapacityCp\n"
+                           "      input ThermodynamicState state;\n      output Real cp;\n    end specificHeatCapacityCp;\n  end PM;\n"
+                           "  package W\n    extends PM;\n    redeclare function extends specificHeatCapacityCp \"Cp of W\"\n"
+                           "    algorithm\n      cp := 4184 + state.T;\n    end specificHeatCapacityCp;\n  end W;\n  model V\n"
+                           "    replaceable package M = PM;\n    M.ThermodynamicState s(T = time);\n"
+                           "    Real cp = M.specificHeatCapacityCp(s);\n  end V;\nend P;\nmodel PKG2\n"
+                           "  P.V v(redeclare package M = P.W);\nend PKG2;\n"),
+               std::string("function PKG2.v.M.ThermodynamicState \"Automatically generated record constructor for PKG2.v.M.ThermodynamicState\"\n"
+                           "  input Real T;\n  output ThermodynamicState res;\nend PKG2.v.M.ThermodynamicState;\n\n"
+                           "function PKG2.v.M.specificHeatCapacityCp \"Cp of W\"\n  input PKG2.v.M.ThermodynamicState state;\n"
+                           "  output Real cp;\nalgorithm\n  cp := 4184.0 + state.T;\nend PKG2.v.M.specificHeatCapacityCp;\n\n"
+                           "class PKG2\n  Real v.s.T = time;\n  Real v.cp = PKG2.v.M.specificHeatCapacityCp(v.s);\nend PKG2;\n"));
+}
+
+YMC_TEST(flatten_function_variable_type_class_modifier) {
+  // 函数变量的类型被包的 extends 类修饰改过（`extends PM(AbsolutePressure(min = 611.657, …))`）：类修饰并在类型链最前
+  // （`p(min = 611.657, max = 1e8, start = 5e6, nominal = 1e5)`）。期望 = omc 1.25.0 实跑（2026-10-14，探针 pk-p11 PKG4）。
+  YMC_CHECK_EQ(flatten_src("package P\n  partial package PM\n"
+                           "    type AbsolutePressure = Real(min = 0, max = 1e8, nominal = 1e5, start = 1e5);\n"
+                           "    replaceable partial function saturationTemperature\n      input AbsolutePressure p;\n"
+                           "      output Real T;\n    end saturationTemperature;\n  end PM;\n  package W\n"
+                           "    extends PM(AbsolutePressure(min = 611.657, max = 1e8, start = 5e6));\n"
+                           "    redeclare function extends saturationTemperature\n    algorithm\n      T := 2 * p;\n"
+                           "    end saturationTemperature;\n  end W;\n  model V\n    replaceable package M = PM;\n"
+                           "    Real T = M.saturationTemperature(time);\n  end V;\nend P;\nmodel PKG4\n"
+                           "  P.V v(redeclare package M = P.W);\nend PKG4;\n"),
+               std::string("function PKG4.v.M.saturationTemperature\n"
+                           "  input Real p(min = 611.657, max = 1e8, start = 5e6, nominal = 1e5);\n  output Real T;\nalgorithm\n"
+                           "  T := 2.0 * p;\nend PKG4.v.M.saturationTemperature;\n\nclass PKG4\n"
+                           "  Real v.T = PKG4.v.M.saturationTemperature(time);\nend PKG4;\n"));
+}
+
+YMC_TEST(flatten_record_class_extends_chain) {
+  // `redeclare record extends ThermodynamicState` 一层层顶替：字段 = 隐式基类的（phase）+ 本体的（p, T）；函数体里的构造调用
+  // 按实例路径命名。期望 = omc 1.25.0 实跑（2026-10-14，探针 pk-p11 PKG6）。
+  YMC_CHECK_EQ(flatten_src("package P\n  partial package PM\n"
+                           "    type AbsolutePressure = Real(min = 0, max = 1e8, nominal = 1e5, start = 1e5);\n"
+                           "    type Temperature = Real(min = 1, max = 1e4, nominal = 300, start = 288.15);\n"
+                           "    replaceable record ThermodynamicState\n    end ThermodynamicState;\n"
+                           "    replaceable partial function setState_pT\n      input AbsolutePressure p;\n"
+                           "      input Temperature T;\n      output ThermodynamicState state;\n    end setState_pT;\n"
+                           "    replaceable partial function temperature\n      input ThermodynamicState state;\n"
+                           "      output Temperature T;\n    end temperature;\n  end PM;\n  partial package PT\n    extends PM;\n"
+                           "    redeclare replaceable record extends ThermodynamicState\n      Integer phase(min = 0, max = 2);\n"
+                           "    end ThermodynamicState;\n  end PT;\n  package W\n"
+                           "    extends PT(AbsolutePressure(min = 611.657, start = 5e6), Temperature(start = 500));\n"
+                           "    redeclare record extends ThermodynamicState\n      AbsolutePressure p;\n      Temperature T;\n"
+                           "    end ThermodynamicState;\n    redeclare function extends setState_pT\n    algorithm\n"
+                           "      state := ThermodynamicState(phase = 1, p = p, T = T);\n    end setState_pT;\n"
+                           "    redeclare function extends temperature\n    algorithm\n      T := state.T;\n    end temperature;\n"
+                           "  end W;\n  model V\n    replaceable package M = PM;\n"
+                           "    M.ThermodynamicState s = M.setState_pT(1e5, 300 + time);\n    Real T = M.temperature(s);\n  end V;\n"
+                           "end P;\nmodel PKG6\n  P.V v(redeclare package M = P.W);\nend PKG6;\n"),
+               std::string("function PKG6.v.M.ThermodynamicState \"Automatically generated record constructor for PKG6.v.M.ThermodynamicState\"\n"
+                           "  input Integer phase;\n  input Real p;\n  input Real T;\n  output ThermodynamicState res;\n"
+                           "end PKG6.v.M.ThermodynamicState;\n\nfunction PKG6.v.M.setState_pT\n"
+                           "  input Real p(min = 611.657, max = 1e8, start = 5e6, nominal = 1e5);\n"
+                           "  input Real T(min = 1.0, max = 1e4, start = 500.0, nominal = 300.0);\n"
+                           "  output PKG6.v.M.ThermodynamicState state;\nalgorithm\n  state := PKG6.v.M.ThermodynamicState(1, p, T);\n"
+                           "end PKG6.v.M.setState_pT;\n\nfunction PKG6.v.M.temperature\n  input PKG6.v.M.ThermodynamicState state;\n"
+                           "  output Real T(min = 1.0, max = 1e4, start = 500.0, nominal = 300.0);\nalgorithm\n  T := state.T;\n"
+                           "end PKG6.v.M.temperature;\n\nclass PKG6\n  Integer v.s.phase(min = 0, max = 2);\n"
+                           "  Real v.s.p(min = 611.657, max = 1e8, start = 5e6, nominal = 1e5);\n"
+                           "  Real v.s.T(min = 1.0, max = 1e4, start = 500.0, nominal = 300.0);\n"
+                           "  Real v.T = PKG6.v.M.temperature(v.s);\nequation\n  v.s = PKG6.v.M.setState_pT(1e5, 300.0 + time);\n"
+                           "end PKG6;\n"));
+}
+
 YMC_TEST_MAIN

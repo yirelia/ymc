@@ -1,0 +1,198 @@
+//// set: pk-p11 — Medium 函数：function / record 的 class extends、包实例里的记录按实例路径命名、函数变量类型的类修饰
+//// model: PKG1
+package P
+  partial package PM
+    replaceable partial model BaseProperties
+      Real p;
+      Real T;
+    end BaseProperties;
+    replaceable partial function saturationTemperature
+      input Real p;
+      output Real T;
+    end saturationTemperature;
+  end PM;
+  package W
+    extends PM;
+    redeclare model extends BaseProperties
+    equation
+      p = time;
+      T = saturationTemperature(p);
+    end BaseProperties;
+    redeclare function extends saturationTemperature
+    algorithm
+      T := 2 * p;
+    end saturationTemperature;
+  end W;
+  model V
+    replaceable package M = PM;
+    M.BaseProperties medium;
+  end V;
+end P;
+model PKG1
+  P.V v(redeclare package M = P.W);
+end PKG1;
+//// model: PKG2
+package P
+  partial package PM
+    record ThermodynamicState
+      Real T;
+    end ThermodynamicState;
+    replaceable partial function specificHeatCapacityCp
+      input ThermodynamicState state;
+      output Real cp;
+    end specificHeatCapacityCp;
+  end PM;
+  package W
+    extends PM;
+    redeclare function extends specificHeatCapacityCp "Cp of W"
+    algorithm
+      cp := 4184 + state.T;
+    end specificHeatCapacityCp;
+  end W;
+  model V
+    replaceable package M = PM;
+    M.ThermodynamicState s(T = time);
+    Real cp = M.specificHeatCapacityCp(s);
+  end V;
+end P;
+model PKG2
+  P.V v(redeclare package M = P.W);
+end PKG2;
+//// model: PKG3
+package P
+  partial package PM
+    record ThermodynamicState
+      Real T;
+    end ThermodynamicState;
+    replaceable partial function specificHeatCapacityCp
+      input ThermodynamicState state;
+      output Real cp;
+    end specificHeatCapacityCp;
+  end PM;
+  package W1
+    extends PM;
+    redeclare function extends specificHeatCapacityCp
+    algorithm
+      cp := 4184 + state.T;
+    end specificHeatCapacityCp;
+  end W1;
+  package W2
+    extends PM;
+    redeclare function extends specificHeatCapacityCp
+    algorithm
+      cp := 1000 + 2 * state.T;
+    end specificHeatCapacityCp;
+  end W2;
+  model V
+    replaceable package M = PM;
+    M.ThermodynamicState s(T = time);
+    Real cp = M.specificHeatCapacityCp(s);
+  end V;
+end P;
+model PKG3
+  P.V v1(redeclare package M = P.W1);
+  P.V v2(redeclare package M = P.W2);
+end PKG3;
+//// model: PKG4
+package P
+  partial package PM
+    type AbsolutePressure = Real(min = 0, max = 1e8, nominal = 1e5, start = 1e5);
+    replaceable partial function saturationTemperature
+      input AbsolutePressure p;
+      output Real T;
+    end saturationTemperature;
+  end PM;
+  package W
+    extends PM(AbsolutePressure(min = 611.657, max = 1e8, start = 5e6));
+    redeclare function extends saturationTemperature
+    algorithm
+      T := 2 * p;
+    end saturationTemperature;
+  end W;
+  model V
+    replaceable package M = PM;
+    Real T = M.saturationTemperature(time);
+  end V;
+end P;
+model PKG4
+  P.V v(redeclare package M = P.W);
+end PKG4;
+//// model: PKG5
+package P
+  partial package PM
+    constant Integer nX = 1;
+    constant Real R = 287;
+    replaceable partial function f
+      input Real x[nX];
+      output Real y;
+    end f;
+    replaceable function g
+      input Real x;
+      output Real y;
+    algorithm
+      y := R * x;
+    end g;
+  end PM;
+  package W
+    extends PM(nX = 2, R = 461);
+    redeclare function extends f
+    algorithm
+      y := R * sum(x);
+    end f;
+  end W;
+  model V
+    replaceable package M = PM;
+    Real y = M.f({1, 2} * time);
+    Real z = M.g(time);
+  end V;
+end P;
+model PKG5
+  P.V v(redeclare package M = P.W);
+end PKG5;
+//// model: PKG6
+package P
+  partial package PM
+    type AbsolutePressure = Real(min = 0, max = 1e8, nominal = 1e5, start = 1e5);
+    type Temperature = Real(min = 1, max = 1e4, nominal = 300, start = 288.15);
+    replaceable record ThermodynamicState
+    end ThermodynamicState;
+    replaceable partial function setState_pT
+      input AbsolutePressure p;
+      input Temperature T;
+      output ThermodynamicState state;
+    end setState_pT;
+    replaceable partial function temperature
+      input ThermodynamicState state;
+      output Temperature T;
+    end temperature;
+  end PM;
+  partial package PT
+    extends PM;
+    redeclare replaceable record extends ThermodynamicState
+      Integer phase(min = 0, max = 2);
+    end ThermodynamicState;
+  end PT;
+  package W
+    extends PT(AbsolutePressure(min = 611.657, start = 5e6), Temperature(start = 500));
+    redeclare record extends ThermodynamicState
+      AbsolutePressure p;
+      Temperature T;
+    end ThermodynamicState;
+    redeclare function extends setState_pT
+    algorithm
+      state := ThermodynamicState(phase = 1, p = p, T = T);
+    end setState_pT;
+    redeclare function extends temperature
+    algorithm
+      T := state.T;
+    end temperature;
+  end W;
+  model V
+    replaceable package M = PM;
+    M.ThermodynamicState s = M.setState_pT(1e5, 300 + time);
+    Real T = M.temperature(s);
+  end V;
+end P;
+model PKG6
+  P.V v(redeclare package M = P.W);
+end PKG6;

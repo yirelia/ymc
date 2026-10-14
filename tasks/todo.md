@@ -2310,6 +2310,15 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       slice 691 例 FAIL 0（oracle=live 不一致 0）；scodeinst 651（不变）；testsuite 1804（不变）/ FAIL 0；MSL 438（不变：Fluid /
       Media 越过 `fluidConstants` / String 指数 / ThreeTanks 的 stateSelect，停在 Medium 函数（saturationTemperature / bubbleEnthalpy
       等）与复合数组（`ports.C_outflow`、`tank.topPorts`）上）；探针 9667→9675（PASS +13）；单测 353→356。
+- [x] (66c) Medium 函数 / 记录的 class extends（2026-10-14）：`redeclare function extends f` 与 `redeclare record extends
+      ThermodynamicState` 一层层顶替——签名 / 字段先收隐式基类（Inst::class_extends_target）再收本体；包实例里查到的记录类型与
+      构造函数按实例路径命名（`X.v.M.ThermodynamicState`，函数体里的构造调用同）；函数变量类型并进 extends 的类修饰（`extends PM(
+      AbsolutePressure(min = 611.657, …))` → `input Real p(min = 611.657, …)`；类修饰表移进 Inst::class_mods）；目标经改了常量 / 类型
+      的 extends 继承来的（Inst::class_extends_via_mod，原 inst 私有）在包实例语境里放行（类型 / 常量都按实例查），定义层仍 SKIP。
+      探针 pk-p11（6）、旧组 SKIP→PASS 2（pk-p1 PK1、pk-p5 PKF5）；单测 +3（PKG2 / PKG4 / PKG6）。
+      slice 691 例 FAIL 0（oracle=live 不一致 0）；scodeinst 651（不变）；testsuite 1804→1805（packages/RedeclarePackage）/ FAIL 0；
+      MSL 438（不变：Fluid / Media 的 Medium 函数越过 class extends，多数停在定义层继承守卫 `FixedPhase` / `AbsolutePressure`——
+      class extends 记录的基类字段按定义层作用域解析，下一桶改按实例层的隐式基类）；探针 9675→9681（PASS +8）；单测 356→359。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

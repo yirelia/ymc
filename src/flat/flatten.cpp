@@ -9231,8 +9231,19 @@ class Flattener {
     for (int guard = 0; guard < 32; ++guard) {
       if (!lead && builtin_scalar_type_kind(path, tk)) return true;
       ScodeScope ds;
-      const Id<SElement> e = resolve_class_path(path, lead, sc, ds);
+      NodeId tn;
+      const Id<SElement> e = resolve_class_path(path, lead, sc, ds, true, guard == 0 ? &tn : nullptr);
       if (!e.is_valid()) return false;
+      // 声明类型在实例语境里查到、那个类节点挂着 extends 的类修饰（MSL Media `extends PartialTwoPhaseMedium(AbsolutePressure(min =
+      // 611.657, …))` 后 Medium 函数的 `input AbsolutePressure p`）：类修饰并在链最前（外层优先，同组件的 apply_class_mod；PKG 探针
+      // PKG4 `input Real p(min = 611.657, max = 1e8, start = 5e6, nominal = 1e5)`），值在写 extends 的类里求。
+      if (tn.is_valid())
+        if (const auto cm = I_.class_mods.find(tn.raw); cm != I_.class_mods.end())
+          for (const auto& [m, at] : cm->second) {
+            if (I_.scode.mods[m].binding.is_valid()) return false;
+            chain.push_back({m, scode_scope_of(at)});
+            before.push_back(tdims.size());
+          }
       const SElement& el = I_.scode.elems[e];
       // 长类型只 extends 一个类型（`type TR extends Real; end TR;`，XB 探针 x110）：同短类，extends 的修饰当链上修饰。
       Id<SElement> xid;   // 唯一的 extends（嵌套类不算；有 protected 元素不算，见 Instantiator::type_extends_only）
@@ -10811,22 +10822,35 @@ class Flattener {
   // 路径一次）。记录定义在非根的实例类里（实例路径未核实）/ 构造函数块发射不了 → nullopt（已标 SKIP）。
   // root = false：只发射、不登记成模型的根（强制内联途中要构造函数的输入表，内联完的式子里不一定还有这个记录类型——omc 收函数
   // 在内联之后，ORU9 / rp62x p02 一个函数都不打）。
-  std::optional<std::vector<Symbol>> ensure_record_ctor(NodeId rn, bool root = true) {
+  // named：调用方已按实例路径定好的名（见 record_ctor_call）。
+  std::optional<std::vector<Symbol>> ensure_record_ctor(NodeId rn, bool root = true, const std::vector<Symbol>* named = nullptr) {
     const Id<SElement> rdef = I_.nodes[rn].def;
     const ScodeScope chain = scode_scope_of(rn);   // [R, 外层类, …]
     std::vector<Symbol> path;
     const std::uint32_t root_def = I_.nodes[root_].def.raw;
-    if (chain.size() >= 2 && chain[1].cls.raw == root_def) {
-      path = result_.model.name;
+    // 组件的声明类型是包实例里的类（经重声明的包：`M.ThermodynamicState s`，MSL Media）：压平名按那个类节点的实例路径（同
+    // rec_flat_name；PKG 探针 PKG2 `PKG2.v.M.ThermodynamicState`）。
+    NodeId tn;
+    if (const NodeId ip = I_.nodes[rn].instance_parent; is_comp_node(ip)) tn = I_.comps[I_.nodes[ip].comp].type_node;
+    if (named) {
+      path = *named;
+    } else if (tn.is_valid() && !I_.nodes[tn].is_empty() && I_.nodes[tn].def == rdef && pkg_scope(scode_scope_of(tn))) {
+      std::optional<std::vector<Symbol>> sp = scope_path(tn);   // 含记录名本身
+      if (!sp) { set_unsupported("record constructor naming"); return std::nullopt; }
+      path = std::move(*sp);
     } else {
-      for (std::size_t k = 1; k < chain.size(); ++k)
-        if (chain[k].cls.raw == root_def || I_.scode.elems[chain[k]].restriction != SRestriction::Package) {
-          set_unsupported("record constructor naming");
-          return std::nullopt;
-        }
-      for (std::size_t k = chain.size(); k-- > 1;) path.push_back(I_.scode.elems[chain[k]].name);
+      if (chain.size() >= 2 && chain[1].cls.raw == root_def) {
+        path = result_.model.name;
+      } else {
+        for (std::size_t k = 1; k < chain.size(); ++k)
+          if (chain[k].cls.raw == root_def || I_.scode.elems[chain[k]].restriction != SRestriction::Package) {
+            set_unsupported("record constructor naming");
+            return std::nullopt;
+          }
+        for (std::size_t k = chain.size(); k-- > 1;) path.push_back(I_.scode.elems[chain[k]].name);
+      }
+      path.push_back(I_.scode.elems[rdef].name);
     }
-    path.push_back(I_.scode.elems[rdef].name);
     if (!emit_record_ctor(rdef, chain, path) || result_.unsupported) {
       if (!result_.unsupported) {
         set_unsupported("record constructor");
@@ -11024,17 +11048,24 @@ class Flattener {
   std::optional<std::vector<Symbol>> rec_flat_name(const SElement& c, const ScodeScope& scope, Id<SElement>& rec,
                                                    ScodeScope& rscope) {
     ScodeScope ds;
-    rec = resolve_class_path(c.type.path, c.type.leading_dot, scope, ds);
-    if (!rec.is_valid() || I_.scode.elems[rec].kind != SElementKind::Class ||
-        !rec_restr(I_.scode.elems[rec].restriction) || I_.scode.elems[rec].def.kind != SClassDefKind::Parts)
-      return std::nullopt;
+    NodeId node;
+    rec = resolve_class_path(c.type.path, c.type.leading_dot, scope, ds, true, &node);
+    if (!rec_long(rec)) return std::nullopt;
     const std::uint32_t root_def = I_.nodes[root_].def.raw;
     for (Id<SElement> d : ds)
-      if (d.raw == root_def || (fn_home_.is_valid() && d.raw == fn_home_.raw)) return std::nullopt;
-    if (inh_tainted(ds)) return std::nullopt;
+      if (d.raw == root_def || (fn_home_.is_valid() && d.raw == fn_home_.raw) || inh_bases_.count(d.raw)) return std::nullopt;
     std::vector<Symbol> path;
-    for (auto it = ds.rbegin(); it != ds.rend(); ++it) path.push_back(I_.scode.elems[*it].name);
-    path.push_back(I_.scode.elems[rec].name);
+    if (node.is_valid()) {
+      // 实例语境里找到的记录（经重声明的包 / 包实例：MSL Media 的 `input ThermodynamicState state`）：压平名按实例路径
+      //（NFInstNode.scopePath，同函数，见 scope_path；PKG 探针 PKG2 `PKG2.v.M.ThermodynamicState`）。
+      std::optional<std::vector<Symbol>> sp = scope_path(node);
+      if (!sp) return std::nullopt;
+      path = std::move(*sp);
+    } else {
+      if (pkg_scope(ds)) return std::nullopt;
+      for (auto it = ds.rbegin(); it != ds.rend(); ++it) path.push_back(I_.scode.elems[*it].name);
+      path.push_back(I_.scode.elems[rec].name);
+    }
     rscope = ds;
     rscope.insert(rscope.begin(), rec);
     return path;
@@ -11122,11 +11153,25 @@ class Flattener {
   bool record_fields_ex(Id<SElement> rec, const ScodeScope& rscope, std::vector<RecField>& out, bool foreign, int depth,
                         bool any_base = false) {
     if (depth > 20) return false;
-    // class extends 的记录（`redeclare record extends R …`）：原类的字段在隐式基类里，SCode 层的字段收集不认 → 调用方 SKIP。
-    if (I_.scode.elems[rec].def.kind == SClassDefKind::ClassExtends) return false;
     ScodeScope inner = rscope;
     if (inner.empty() || inner.front() != rec) inner.insert(inner.begin(), rec);
     const ScodeScope outer(inner.begin() + 1, inner.end());
+    // class extends 的记录（`redeclare record extends ThermodynamicState …`，MSL Media 一层层顶替）：隐式基类（class_extends_target）
+    // 的字段排在最前（ClassTree.fromSCode 给它预留首位），再收本体的（PKG 探针 PKG6：`phase` 来自 PT 那层、`p` / `T` 来自 W）。
+    // 目标经改了常量的 extends 继承来的（class_extends_via_mod）：基类字段的缺省在定义层看不到修改 → 有缺省就不认。
+    if (I_.scode.elems[rec].def.kind == SClassDefKind::ClassExtends) {
+      if (!rec_long(rec) || I_.scode.elems[rec].def.class_extends_mod.is_valid()) return false;
+      const NodeId t = I_.class_extends_target.at(rec.raw);
+      const ScodeScope ts = scode_scope_of(t);   // [基类, 外层…]
+      if (ts.empty() || !(ts.front() == I_.nodes[t].def)) return false;
+      const std::size_t first = out.size();
+      if (!record_fields_ex(I_.nodes[t].def, ts, out, foreign || ScodeScope(ts.begin() + 1, ts.end()) != outer, depth + 1,
+                            any_base))
+        return false;
+      if (I_.class_extends_via_mod.count(rec.raw))
+        for (std::size_t k = first; k < out.size(); ++k)
+          if (out[k].dflt.is_valid()) return false;
+    }
     for (Id<SElement> fid : I_.scode.elems[rec].def.elements) {
       const SElement& f = I_.scode.elems[fid];
       if (f.kind == SElementKind::Extends) {
@@ -12862,7 +12907,14 @@ class Flattener {
                        (want == SRestriction::Record && el.restriction == SRestriction::OperatorRecord &&
                         el.def.kind == SClassDefKind::Parts && !oprec_has_ctor(e, ds));
       if (el.kind != SElementKind::Class || !rok) return std::nullopt;
-      if (el.def.kind == SClassDefKind::Parts) {
+      // `redeclare function extends f … end f;`（MSL Media 的 Medium 函数）：隐式基类 = 外层类继承来的同名原函数（class_extends_target，
+      // 见 collect_fn_sig）。目标经改了常量 / 类型的 extends 继承来、体里写到被改名字的（`input AbsolutePressure p`，类型被
+      // `extends PartialTwoPhaseMedium(AbsolutePressure(min = …))` 改过）：函数在包实例里找到的，变量类型 / 常量都按实例查（类修饰见
+      // fn_derived_scalar），照常；定义层找到的看不到修改 → 不认（调用方 SKIP）。
+      if (el.def.kind == SClassDefKind::ClassExtends &&
+          (!I_.class_extends_target.count(e.raw) || (I_.class_extends_via_mod.count(e.raw) && !pkg_scope(ds))))
+        return std::nullopt;
+      if (el.def.kind == SClassDefKind::Parts || el.def.kind == SClassDefKind::ClassExtends) {
         r.fe = e;
         r.local_to_caller = !ds.empty() && !scope.empty() && ds[0].cls.raw == scope[0].cls.raw;
         r.fscope = std::move(ds);
@@ -12944,7 +12996,18 @@ class Flattener {
                       int depth) {
     if (depth > 20) return false;
     const SElement& el = I_.scode.elems[fe];
-    if (el.def.kind != SClassDefKind::Parts) return false;
+    if (el.def.kind == SClassDefKind::ClassExtends) {
+      // class extends 的隐式基类排在最前（ClassTree.fromSCode 给它预留首位，Instantiator::partial_inst 合成的 extends）：先收
+      // 基类（class_extends_target）的成员，再收本体的（PKG 探针 PKG1：`redeclare function extends saturationTemperature`）。
+      if (el.def.class_extends_mod.is_valid()) return false;   // `function extends f(x = 1)` 的修饰未做
+      const auto it = I_.class_extends_target.find(fe.raw);
+      if (it == I_.class_extends_target.end() || !I_.nodes[it->second].def.is_valid()) return false;
+      const ScodeScope ts = scode_scope_of(it->second);
+      if (ts.empty() || !(ts.front() == I_.nodes[it->second].def)) return false;
+      if (!collect_fn_sig(I_.nodes[it->second].def, ts, sig, seen, depth + 1)) return false;
+    } else if (el.def.kind != SClassDefKind::Parts) {
+      return false;
+    }
     if (el.def.external.present) {
       if (sig.ext) return false;
       sig.external = true;
@@ -12986,9 +13049,7 @@ class Flattener {
   Id<SElement> record_class_of(const SElement& c, const ScodeScope& scope, ScodeScope& rscope) {
     ScodeScope ds;
     Id<SElement> e = resolve_class_path(c.type.path, c.type.leading_dot, scope, ds);
-    if (!e.is_valid() || I_.scode.elems[e].kind != SElementKind::Class ||
-        !rec_restr(I_.scode.elems[e].restriction) || I_.scode.elems[e].def.kind != SClassDefKind::Parts)
-      return {};
+    if (!rec_long(e)) return {};
     rscope = std::move(ds);
     rscope.insert(rscope.begin(), e);
     return e;
@@ -16347,10 +16408,9 @@ class Flattener {
       fpath.push_back(p.name);
     }
     ScodeScope ds;
-    const Id<SElement> rec = resolve_class_path(fpath, fn.leading_dot, sc, ds);
-    if (!rec.is_valid() || I_.scode.elems[rec].kind != SElementKind::Class || !rec_restr(I_.scode.elems[rec].restriction) ||
-        I_.scode.elems[rec].def.kind != SClassDefKind::Parts)
-      return {};
+    NodeId tnode;
+    const Id<SElement> rec = resolve_class_path(fpath, fn.leading_dot, sc, ds, true, &tnode);
+    if (!rec_long(rec)) return {};
     // 有 'constructor' 的 operator record 不能调默认构造函数（NFCall.mo:2775-2779 v1.25.0；一个重载的走 oprec_ctor，
     // 多个的 b08 未做）→ 不是这里的事。
     if (I_.scode.elems[rec].restriction == SRestriction::OperatorRecord && oprec_has_ctor(rec, ds)) return {};
@@ -16361,9 +16421,16 @@ class Flattener {
         result_.unsupported_detail += (k ? "." : "") + std::string(in_.str(fpath[k]));
       return lit_int(0);
     }
+    // 在包实例里查到的记录（Medium 函数体里的 `ThermodynamicState(phase = 1, …)`）：构造函数名按实例路径（同 rec_flat_name；
+    // PKG 探针 PKG6 `PKG6.v.M.ThermodynamicState(1, p, T)`）。
+    std::optional<std::vector<Symbol>> ipath;
+    if (tnode.is_valid() && pkg_scope(ds)) {
+      ipath = scope_path(tnode);
+      if (!ipath) { set_unsupported("record constructor naming"); return lit_int(0); }
+    }
     // 函数体里的构造调用不登记成模型的根：函数留下时 prune 顺体里的调用收它，函数被强制内联掉时不该带出它（RB 探针 BR5：
     // `final parameter R r = f1(p)`、f1 体 `r := R(x = a, y = 2 * a)` → omc 不打 R）。
-    const std::optional<std::vector<Symbol>> path = ensure_record_ctor(rn, /*root=*/!fn_scope_);
+    const std::optional<std::vector<Symbol>> path = ensure_record_ctor(rn, /*root=*/!fn_scope_, ipath ? &*ipath : nullptr);
     if (!path) return lit_int(0);
     std::vector<FlatFuncParam> inputs;   // 拷贝：下面会 add
     for (const FlatFunction& ff : result_.model.functions)
@@ -22136,6 +22203,15 @@ class Flattener {
 
   // 记录类：operator record 同普通记录（字段、绑定、构造、连接的规则一样，rp62x SPEC 开头）。
   static bool rec_restr(SRestriction r) { return r == SRestriction::Record || r == SRestriction::OperatorRecord; }
+  // 长定义的记录类：parts，或目标已知的 class extends（`redeclare record extends ThermodynamicState … end ThermodynamicState;`，
+  // MSL Media；字段见 record_fields_ex）。
+  bool rec_long(Id<SElement> e) const {
+    if (!e.is_valid()) return false;
+    const SElement& el = I_.scode.elems[e];
+    return el.kind == SElementKind::Class && rec_restr(el.restriction) &&
+           (el.def.kind == SClassDefKind::Parts ||
+            (el.def.kind == SClassDefKind::ClassExtends && I_.class_extends_target.count(e.raw)));
+  }
   // 记录组件 cid（在类实例 inst_node 里）的实例类登记进 rec_seen_：声明类型是短类定义的——operator record 的短类别名
   //（SI.ComplexVoltage、ComplexOutput）记录类型就是这个最外层短类（makeRecordComplexType，NFInst.mo:2580-2591 v1.25.0），
   // 构造函数 / 'constructor' / 运算符函数按它的路径命名（rp62x SPEC OR1 / OR2 / OR7）→ rec_alias_；普通记录的短类别名

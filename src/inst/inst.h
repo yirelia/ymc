@@ -121,15 +121,12 @@ class Instantiator {
   std::unordered_map<std::uint64_t, Id<SElement>> redecl_elems_;
   std::unordered_map<std::uint32_t, ClassRedecls> inst_redecls_;   // 实例节点 → 施加在它类树上的类重声明集
   std::unordered_map<std::uint32_t, NodeId> pkg_cache_;   // 类节点 → 它的包实例（见 inst_package）
-  // 类修饰：类节点 → (修饰, 写修饰的类实例)，外层在前（extends 修饰里改嵌套类，见 inst_class / inst_component）。
-  std::unordered_map<std::uint32_t, std::vector<std::pair<Id<SMod>, NodeId>>> class_mods_;
   std::unordered_map<std::uint32_t, NodeId> redecl_orig_;   // 实例类树里顶替进来的新类节点 → 顶替前的原类（见 instantiate）
   std::unordered_set<std::uint32_t> instances_;   // instantiate 建的实例节点（父亲是实例的类 = 克隆，见 inst_component）
   std::unordered_map<std::uint32_t, NodeId> redecl_class_nodes_;   // 修饰里的类重声明元素 → 它的类节点
   // class extends 类合成的隐式 extends 元素（class extends 的 SCode 元素 raw → 合成的 Extends 元素）与合成元素的集合（见 partial_inst）。
   std::unordered_map<std::uint32_t, Id<SElement>> ce_ext_elem_;
   std::unordered_set<std::uint32_t> ce_ext_elems_;
-  std::unordered_set<std::uint32_t> ce_via_mod_;   // 目标经改了常量 / 类的 extends 继承来的 class extends 元素（见 expand）
   std::size_t synth_cap_ = 0;
 };
 

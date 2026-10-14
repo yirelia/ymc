@@ -605,7 +605,7 @@ void Instantiator::expand(NodeId cls) {
           mark_unsupported("class extends target not found", std::string(I_.interner.str(I_.nodes[cls].name)));
           continue;
         }
-        if (ce_via_mod_.count(I_.nodes[cls].def.raw))   // 目标经改了常量 / 类的 extends 继承来（见下"class extends 的目标"）
+        if (I_.class_extends_via_mod.count(I_.nodes[cls].def.raw))   // 目标经改了常量 / 类的 extends 继承来（见下"class extends 的目标"）
           mark_unsupported("inherited class seen through modifier / redeclare", std::string(I_.interner.str(I_.nodes[cls].name)));
         base = it->second;
       }
@@ -708,7 +708,8 @@ void Instantiator::expand(NodeId cls) {
         if (o != e && I_.scode.elems[o].kind == SElementKind::Class && I_.scode.elems[o].prefixes.is_redeclare)
           changed.push_back(I_.scode.elems[o].name);
       I_.class_extends_target[e.raw] = target;
-      if (deep_via_mod || (!changed.empty() && body_mentions(I_.nodes[target].def, changed, 0))) ce_via_mod_.insert(e.raw);
+      if (deep_via_mod || (!changed.empty() && body_mentions(I_.nodes[target].def, changed, 0)))
+        I_.class_extends_via_mod.insert(e.raw);
     }
   }
   I_.trees[tree_id].ext_bases = std::move(bases);
@@ -984,7 +985,7 @@ NodeId Instantiator::instantiate(NodeId def_node, NodeId parent, const ClassRede
         for (const ClassMod& cm : *cmods) {
           const auto it = t.lookup.find(cm.name);
           if (it == t.lookup.end() || it->second.kind != LEntry::Kind::Class || it->second.index >= nlocal) continue;
-          std::vector<std::pair<Id<SMod>, NodeId>>& v = class_mods_[t.classes[it->second.index].raw];
+          std::vector<std::pair<Id<SMod>, NodeId>>& v = I_.class_mods[t.classes[it->second.index].raw];
           v.insert(v.begin(), {cm.mod, cm.scope});
           I_.class_modded.insert(t.classes[it->second.index].raw);
         }
@@ -1204,7 +1205,7 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node, const ClassRede
       }
       // extends 修饰里改嵌套类（类修饰：scodeinst mod9 `extends A(MyReal(start = y))`、MSL Media 的 `extends PartialTwoPhaseMedium(
       // Temperature(min = 273.15, …))`）：OMC 把修饰挂到 extends 实例类树里的那个类上（NFInst.applyModifier → InstNode.mergeModifier，
-      // :2116-2160 v1.25.0），用这个类型的组件实例化时并进类型修饰（见 inst_component 的短类链）。记进 class_mods_（外层的 extends 在
+      // :2116-2160 v1.25.0），用这个类型的组件实例化时并进类型修饰（见 inst_component 的短类链）。记进 Inst::class_mods（外层的 extends 在
       // 前），修饰在写 extends 的类里求值；基类实例里已实例化的这类组件补上（apply_class_mod）。名字不是组件也不是类（写错名）、修饰
       // 带绑定（`MyReal = …`，omc MISSING_REDECLARE_IN_CLASS_MOD）/ each / 不是普通修饰 → SKIP。
       if (ext_mod.is_valid()) {
@@ -1224,7 +1225,7 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node, const ClassRede
             mark_unsupported("extends modifier names non-component (nested class)");
             continue;
           }
-          std::vector<std::pair<Id<SMod>, NodeId>>& v = class_mods_[cls.raw];
+          std::vector<std::pair<Id<SMod>, NodeId>>& v = I_.class_mods[cls.raw];
           v.insert(v.begin(), {s.mod, inst_node});
           I_.class_modded.insert(cls.raw);
           apply_class_mod(base_inst, cls, s.mod, inst_node, 0);
@@ -1681,7 +1682,7 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing, bool gener
     // 类修饰（extends 修饰里改这个类，见 inst_class）：排在这一层类型自己的修饰之前——组件修饰 > 类修饰 > 类型定义的修饰
     //（instClassDef 的 EXPANDED_DERIVED 支：outer_mod = merge(外来修饰, 类上的修饰) 再 merge 定义的，NFInst.mo:1200-1214 v1.25.0；
     // PKC 探针 PKC1：`Temperature(min = 273.15)` 盖过类型定义的 min = 1）。
-    if (const auto cm = class_mods_.find(base.raw); cm != class_mods_.end())
+    if (const auto cm = I_.class_mods.find(base.raw); cm != I_.class_mods.end())
       for (const auto& [m, sc] : cm->second) {
         derived_mods.push_back(m);
         derived_scopes.push_back(sc);
