@@ -13443,14 +13443,25 @@ class Flattener {
       if (!bound[i].is_valid()) continue;
       std::optional<CVal> v = eval_scode(bound[i], scope, depth + 1, allow_param);
       if (!v) return std::nullopt;
-      {   // 实参秩高于内建标量类型形参的声明秩（`f({1, 2, 3})`，f 的输入是 Real）= 向量化调用：typing 改写成
-          // `array(f(x[$i]) for $i in …)`（见下）。
+      {   // 实参秩高于标量类型形参的声明秩（`f({1, 2, 3})`，f 的输入是 Real）= 向量化调用：typing 改写成
+          // `array(f(x[$i]) for $i in …)`（见下）。内建标量类型的短类派生也是标量（MSL Units.Conversions.from_rpm 的
+          // `input NonSI.AngularVelocity_rpm rpm`；短类链带的维计入声明秩）：此前不认，整个数组当实参算下去、值被当成非向量化
+          // 调用的常量用掉，函数定义就没打——静默错（omc 求值了也照打定义）。认出后同 Real 输入的向量化调用走（V4g 规矩：未做 →
+          // SKIP；PKL 探针 PKL15，MSL IMC_withLosses 的 `wtable = from_rpm({…})`）。
         const SElement& ie = I_.scode.elems[inputs[i]];
-        const std::size_t decl_rank = ie.attr.dims.size() + ie.type.dims.size();
-        const bool builtin_scalar = ie.type.path.size() == 1 && !ie.type.leading_dot &&
-                                    (in_.str(ie.type.path[0]) == "Real" || in_.str(ie.type.path[0]) == "Integer" ||
-                                     in_.str(ie.type.path[0]) == "Boolean" || in_.str(ie.type.path[0]) == "String");
-        if (builtin_scalar && cval_shape(*v).size() > decl_rank) {
+        std::size_t decl_rank = ie.attr.dims.size() + ie.type.dims.size();
+        TypeKind tk;
+        bool scalar_type = !ie.type.leading_dot && builtin_scalar_type_kind(ie.type.path, tk);
+        if (!scalar_type && cval_shape(*v).size() > decl_rank) {   // 只在可能向量化时才沿短类链查（查名可能撞守卫）
+          std::vector<std::pair<Id<SMod>, ScodeScope>> chain;
+          std::vector<Id<Exp>> tdims;
+          std::vector<std::size_t> before;
+          const auto dsc = sig.decl_scope.find(inputs[i].raw);
+          scalar_type = fn_derived_scalar(ie, dsc != sig.decl_scope.end() ? dsc->second : fr->fscope, tk, chain, tdims, before);
+          if (result_.unsupported) return std::nullopt;
+          decl_rank += tdims.size();
+        }
+        if (scalar_type && cval_shape(*v).size() > decl_rank) {
           vec.emplace_back(i, std::move(*v));
           continue;
         }
@@ -17989,7 +18000,13 @@ class Flattener {
       for (std::size_t j = 0; j < k; ++j) dup = dup || red.iters[j].name == it.name;
       if (dup) { set_unsupported("shadowed comprehension iterator"); return lit_int(0); }
       if (absyn_refs_iter(it.range, loop_vars_)) { set_unsupported("comprehension range depends on iterator"); return lit_int(0); }
-      const std::optional<IterVals> seq = iter_values(it.range, scope, prefix);
+      // 范围在写推导式的实例帧里求（同 comprehension_shape）：组件修饰里的推导式（MSL IMC_withLosses 的 `combiTable1Ds(table =
+      // {{Ptable[j], …} for j in 1:size(Ptable, 1)})`）此前在组件自己的帧里求 `size(Ptable, 1)` → 找不到 → SKIP（PKL 探针 PKL6）。
+      std::optional<IterVals> seq;
+      {
+        const FrameAt frame_at(*this, scope);
+        seq = iter_values(it.range, scope, prefix);
+      }
       const std::int64_t ix = idx[n - 1 - k];
       if (!seq || ix < 1 || static_cast<std::size_t>(ix) > seq->ords.size()) {
         if (!result_.unsupported) set_unsupported("comprehension range");
@@ -18066,6 +18083,17 @@ class Flattener {
       ilabels.emplace_back();
       std::pair<std::int64_t, std::int64_t> written{1, 0};
       const std::optional<std::vector<std::int64_t>> seq = eval_range(it.range, scode_scope_of(scope), 0, &written);
+      // 单迭代、范围为空：结果是 T[0] 的空数组字面量（simplifyArrayConstructor 的 dim_size == 0 支 → Expression.makeEmptyArray，
+      // NFSimplifyExp.mo:606-608 v1.25.0；PKL 探针 PKL1-3：MSL Fluid DynamicPipe n = 2 的 `Wb_flows[2:n-1] = {… for i in 2:n-1} *
+      // nParallel` 整条方程消失、`sum({…})` → 0）。元素类型照体定型（迭代变量作符号引用，同下）；体是数组的未核实 → SKIP。
+      if (seq && seq->empty() && red.iters.size() == 1) {
+        stmt_iters_[it.name.id] = TypeKind::Integer;
+        const Id<Expr> el = simplify_expr(inst_exp(red.a, scope, prefix));
+        stmt_iters_.erase(it.name.id);
+        if (result_.unsupported) return lit_int(0);
+        if (!expr_shape(el).empty()) { set_unsupported("array-valued comprehension body"); return lit_int(0); }
+        return empty_array_lit(result_.model.exprs[el].ty, {0});
+      }
       if (!seq || seq->empty()) { set_unsupported("comprehension range"); return lit_int(0); }
       if (seq0.empty()) seq0 = *seq;
       // 只有一个元素的单迭代构造子：omc 展开成 `{体[i := 该值]}` 再化简（simplifyArrayConstructor 的 dim_size == 1 支，
@@ -19879,6 +19907,15 @@ class Flattener {
     }
     // der 作用在"复合数组取字段"的展开数组上（`der(a.x)`）：见下面 der 的数组实参。
     const bool der_xfield = supported && !fn_scope_ && builtin_name == "der" && args.size() == 1 && is_xfield_array(args[0]);
+    // der 的零长数组实参（空数组的切片 `der(mXis[i, :])`、Medium.nXi = 0，切片已化成空数组字面量，见 apply_const_subs；MSL Fluid
+    // PartialDistributedVolume 的物质平衡）：结果就是这个零长数组，所在方程两边零长、一个标量方程都不出（omc 同，PKL 探针 PKL4 / PKL5）。
+    auto zero_len = [&](Id<Expr> a) {
+      const std::vector<std::int64_t> sh = expr_shape(a);
+      return result_.model.exprs[a].kind == ExprKind::Array && std::find(sh.begin(), sh.end(), 0) != sh.end();
+    };
+    const bool der_empty = supported && !fn_scope_ && builtin_name == "der" && args.size() == 1 && zero_len(args[0]) &&
+                           expr_elem_kind(args[0]) == TypeKind::Real;
+    if (der_empty) return args[0];
     for (Id<Expr> a : args)
       if (result_.model.exprs[a].kind == ExprKind::Array && !der_xfield) {
         set_unsupported("array function argument");

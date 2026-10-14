@@ -1,0 +1,180 @@
+//// set: pk-p20 — 空范围的推导式、der 的零长数组实参、组件修饰里推导式的范围、向量化调用的派生标量输入（求值了也留函数，未做 → SKIP）
+//// model: PKL1
+model PKL1
+  parameter Integer n = 2;
+  parameter Integer np = 3;
+  Real x[n] = {time, 2 * time};
+  Real w[n];
+equation
+  w[2:n - 1] = {x[i] * 2 for i in 2:n - 1} * np;
+  w[1] = x[1];
+  w[n] = x[n];
+end PKL1;
+//// model: PKL2
+model PKL2
+  parameter Integer n = 0;
+  Real x[3] = {time, 2 * time, 3};
+  Real y[n] = {x[i] for i in 1:n};
+  Real s = sum({x[i] for i in 1:n}) + time;
+  Real m = max({x[i] for i in 1:n});
+end PKL2;
+//// model: PKL3
+model PKL3
+  parameter Integer n = 0;
+  parameter Real p[n] = {2.0 * i for i in 1:n};
+  Real z = time;
+end PKL3;
+//// model: PKL4
+model PKL4
+  parameter Integer nX = 0;
+  parameter Integer n = 2;
+  Real m[n, nX];
+  Real f[n, nX];
+  Real u[n];
+equation
+  for i in 1:n loop
+    der(m[i, :]) = f[i, :];
+    der(u[i]) = -u[i];
+  end for;
+  for i in 1:n loop
+    f[i, :] = zeros(nX);
+  end for;
+end PKL4;
+//// model: PKL5
+model PKL5
+  parameter Integer nX = 0;
+  Real m[nX];
+  Real f[nX];
+  Real u;
+equation
+  der(m) = f;
+  der(m[:]) = f[1:nX];
+  der(u) = -u + sum(m);
+end PKL5;
+//// model: PKL6
+model PKL6
+  parameter Real Ptable[:] = {1, 2, 3};
+  parameter Real Itable[:] = {4, 5, 6};
+  model T
+    parameter Real table[:, :];
+    Real y = table[1, 1] * time;
+  end T;
+  T t(table = {{Ptable[j], Itable[j]} for j in 1:size(Ptable, 1)});
+end PKL6;
+//// model: PKL7
+model PKL7
+  parameter Real Ptable[:] = {1, 2, 3};
+  parameter Real q[:] = {2 * Ptable[j] for j in 1:size(Ptable, 1)};
+  Real y = q[2] * time;
+end PKL7;
+//// model: PKL8
+model PKL8
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real wtable[:] = f({1500, 1496});
+  Real y = wtable[1] * time;
+end PKL8;
+//// model: PKL9
+model PKL9
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real wtable[:] = f({1500, 1496});
+  model T
+    parameter Real table[:, :];
+    Real y = table[1, 1] * time;
+  end T;
+  T t(table = {{wtable[j], 1} for j in 1:size(wtable, 1)});
+end PKL9;
+//// model: PKL10
+model PKL10
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real wtable[2] = f({1500, 1496});
+  Real y = wtable[1] * time;
+end PKL10;
+//// model: PKL11
+model PKL11
+  function g
+    input Real x[:];
+    output Real y[size(x, 1)];
+  algorithm
+    y := 2 * x;
+  end g;
+  parameter Real wtable[:] = g({1500, 1496});
+  Real y = wtable[1] * time;
+end PKL11;
+//// model: PKL12
+package P12
+  function from_rpm
+    input Real rpm;
+    output Real rs;
+  algorithm
+    rs := 0.1 * rpm;
+  end from_rpm;
+end P12;
+model PKL12
+  import P12.from_rpm;
+  parameter Real wtable[:] = from_rpm({1500, 1496});
+  Real y = wtable[1] * time;
+end PKL12;
+//// model: PKL13
+package P13
+  function from_rpm
+    input Real rpm;
+    output Real rs;
+  algorithm
+    rs := 0.1 * rpm;
+  end from_rpm;
+end P13;
+model PKL13
+  import P13.from_rpm;
+  parameter Real Ptable[:] = {1, 2};
+  parameter Real wtable[:] = from_rpm({1500, 1496});
+  model T
+    parameter Real table[:, :];
+    Real y = table[1, 1] * time;
+  end T;
+  T t(table = {{Ptable[j], wtable[j]} for j in 1:size(Ptable, 1)});
+end PKL13;
+//// model: PKL14
+package P14
+  function from_rpm
+    input Real rpm;
+    output Real rs;
+  algorithm
+    rs := 0.1 * rpm;
+  end from_rpm;
+end P14;
+model PKL14
+  import P14.from_rpm;
+  parameter Real w0 = from_rpm(1462.5);
+  parameter Real wtable[:] = from_rpm({1500, 1496});
+  Real y = wtable[1] * time;
+end PKL14;
+//// model: PKL15
+package P15
+  type Rpm = Real(final quantity = "AngularVelocity", final unit = "rev/min");
+  function from_rpm
+    input Rpm rpm;
+    output Real rs;
+  algorithm
+    rs := 0.1 * rpm;
+  end from_rpm;
+end P15;
+model PKL15
+  import P15.from_rpm;
+  parameter Real wtable[:] = from_rpm({1500, 1496});
+  Real y = wtable[1] * time;
+end PKL15;

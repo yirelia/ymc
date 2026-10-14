@@ -2383,6 +2383,15 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       `Medium.density(state_in)`）。探针 pk-p19（24）、旧组 SKIP→PASS 2（km-p1、kr-p1）；单测 +10。
       slice 692→694 例 FAIL 0（oracle=live 不一致 0）；scodeinst 652→654（ConstrainingClassFunc2、FuncDefaultArg7）；testsuite
       1808→1816 / FAIL 0；**MSL 449→450**（Modelica.Fluid.Examples.InverseParameterization，Fluid 12/23）；探针 9702→9726；单测 375→385。
+- [x] (66l) 推导式与零长数组的几处（2026-10-15）：单迭代推导式的范围为空 → T[0] 的空数组字面量（simplifyArrayConstructor 的
+      dim_size == 0 支，NFSimplifyExp.mo:606-608；MSL DynamicPipe n = 2 的 `Wb_flows[2:n-1] = {…}` 方程消失、sum → 0、max → Real 最小值）；
+      der 的零长数组实参（空数组切片 `der(mXis[i, :])`、nXi = 0）→ 那个零长数组、方程消失；组件修饰里推导式的范围在写修饰的实例帧里
+      求（同 comprehension_shape；IMC_withLosses 的 `combiTable1Ds(table = {… for j in 1:size(Ptable, 1)})`）；求值器的向量化判定认
+      内建标量的短类派生输入（`input NonSI.AngularVelocity_rpm rpm`）——此前整个数组当实参算、静默丢了函数定义（omc 照打，PKL15），
+      认出后照 V4g 规矩 SKIP。4 例 MSL（NonCircularPipes、BatchPlant_StandardWater、两个 IMC_withLosses）越过 "comprehension range"，
+      卡到下一处：整个结构参数数组的引用、推导式里 inStream 带迭代变量下标、向量化调用求值后留函数定义（未做）。
+      探针 pk-p20（15）、旧组 SKIP→PASS 3（cmp-k1、nd-c3 ×2）；单测 +6。slice 694 例 FAIL 0（oracle=live 不一致 0）；scodeinst 654、
+      testsuite 1816、MSL 450（均不变）/ FAIL 0；探针 9726→9741；单测 385→391。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

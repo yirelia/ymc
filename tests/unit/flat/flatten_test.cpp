@@ -8435,4 +8435,68 @@ YMC_TEST(flatten_runtime_record_argument_not_evaluated) {
                            "  Real m.state_in.p = time;\n  Real m.rho_in = PKK22.m.Medium.density(m.state_in);\nend PKK22;\n"));
 }
 
+YMC_TEST(flatten_empty_comprehension_in_equation) {
+  // 单迭代推导式的范围为空（`w[2:n-1] = {x[i] * 2 for i in 2:n-1} * np`、n = 2）：空数组字面量（makeEmptyArray），整条方程
+  // 消失（MSL Fluid DynamicPipe 的 Wb_flows）。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p20 PKL1）。
+  YMC_CHECK_EQ(flatten_src("model PKL1\n  parameter Integer n = 2;\n  parameter Integer np = 3;\n  Real x[n] = {time, 2 * time};\n"
+                           "  Real w[n];\nequation\n  w[2:n - 1] = {x[i] * 2 for i in 2:n - 1} * np;\n  w[1] = x[1];\n  w[n] = x[n];\n"
+                           "end PKL1;\n"),
+               std::string("class PKL1\n  final parameter Integer n = 2;\n  parameter Integer np = 3;\n  Real x[1];\n  Real x[2];\n"
+                           "  Real w[1];\n  Real w[2];\nequation\n  x = {time, 2.0 * time};\n  w[1] = x[1];\n  w[2] = x[2];\n"
+                           "end PKL1;\n"));
+}
+
+YMC_TEST(flatten_empty_comprehension_reductions) {
+  // 空推导式作绑定（`Real y[0]` 不出变量）、sum 折成 0、max 折成 Real 的最小值。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p20 PKL2）。
+  YMC_CHECK_EQ(flatten_src("model PKL2\n  parameter Integer n = 0;\n  Real x[3] = {time, 2 * time, 3};\n"
+                           "  Real y[n] = {x[i] for i in 1:n};\n  Real s = sum({x[i] for i in 1:n}) + time;\n"
+                           "  Real m = max({x[i] for i in 1:n});\nend PKL2;\n"),
+               std::string("class PKL2\n  final parameter Integer n = 0;\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real s = time;\n"
+                           "  Real m = -8.777798510069901e304;\nequation\n  x = {time, 2.0 * time, 3.0};\nend PKL2;\n"));
+}
+
+YMC_TEST(flatten_der_of_empty_slice) {
+  // 空数组的切片 `der(m[i, :])`（nX = 0，MSL Fluid PartialDistributedVolume 的物质平衡）：方程两边零长、不出方程。期望 =
+  // omc 1.25.0 实跑（2026-10-15，探针 pk-p20 PKL4）。
+  YMC_CHECK_EQ(flatten_src("model PKL4\n  parameter Integer nX = 0;\n  parameter Integer n = 2;\n  Real m[n, nX];\n  Real f[n, nX];\n"
+                           "  Real u[n];\nequation\n  for i in 1:n loop\n    der(m[i, :]) = f[i, :];\n    der(u[i]) = -u[i];\n"
+                           "  end for;\n  for i in 1:n loop\n    f[i, :] = zeros(nX);\n  end for;\nend PKL4;\n"),
+               std::string("class PKL4\n  final parameter Integer nX = 0;\n  final parameter Integer n = 2;\n  Real u[1];\n"
+                           "  Real u[2];\nequation\n  der(u[1]) = -u[1];\n  der(u[2]) = -u[2];\nend PKL4;\n"));
+}
+
+YMC_TEST(flatten_der_of_empty_variable_array) {
+  // 零长数组变量的 `der(m)` / `der(m[:])`：方程消失，`sum(m)` 折成 0。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p20 PKL5）。
+  YMC_CHECK_EQ(flatten_src("model PKL5\n  parameter Integer nX = 0;\n  Real m[nX];\n  Real f[nX];\n  Real u;\nequation\n"
+                           "  der(m) = f;\n  der(m[:]) = f[1:nX];\n  der(u) = -u + sum(m);\nend PKL5;\n"),
+               std::string("class PKL5\n  final parameter Integer nX = 0;\n  Real u;\nequation\n  der(u) = -u;\nend PKL5;\n"));
+}
+
+YMC_TEST(flatten_comprehension_range_in_component_modifier) {
+  // 组件修饰里的推导式 `t(table = {{Ptable[j], Itable[j]} for j in 1:size(Ptable, 1)})`：范围在写修饰的实例里求（MSL
+  // IMC_withLosses 的 combiTable1Ds）。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p20 PKL6）。
+  YMC_CHECK_EQ(flatten_src("model PKL6\n  parameter Real Ptable[:] = {1, 2, 3};\n  parameter Real Itable[:] = {4, 5, 6};\n  model T\n"
+                           "    parameter Real table[:, :];\n    Real y = table[1, 1] * time;\n  end T;\n"
+                           "  T t(table = {{Ptable[j], Itable[j]} for j in 1:size(Ptable, 1)});\nend PKL6;\n"),
+               std::string("class PKL6\n  parameter Real Ptable[1] = 1.0;\n  parameter Real Ptable[2] = 2.0;\n"
+                           "  parameter Real Ptable[3] = 3.0;\n  parameter Real Itable[1] = 4.0;\n  parameter Real Itable[2] = 5.0;\n"
+                           "  parameter Real Itable[3] = 6.0;\n  parameter Real t.table[1,1] = Ptable[1];\n"
+                           "  parameter Real t.table[1,2] = Itable[1];\n  parameter Real t.table[2,1] = Ptable[2];\n"
+                           "  parameter Real t.table[2,2] = Itable[2];\n  parameter Real t.table[3,1] = Ptable[3];\n"
+                           "  parameter Real t.table[3,2] = Itable[3];\n  Real t.y = t.table[1,1] * time;\nend PKL6;\n"));
+}
+
+YMC_TEST(flatten_vectorized_call_derived_scalar_input) {
+  // 向量化调用的输入是内建标量的短类派生（`input Rpm rpm`，MSL from_rpm）：omc 求值后照打函数定义（PKL 探针 PKL15，同 V4g），
+  // 未做 → 须 SKIP；此前求值器不认这种向量化、静默丢了函数定义。
+  bool uns = false;
+  const std::string out = flatten_src("package P15\n  type Rpm = Real(final quantity = \"AngularVelocity\", final unit = \"rev/min\");\n"
+                                     "  function from_rpm\n    input Rpm rpm;\n    output Real rs;\n  algorithm\n    rs := 0.1 * rpm;\n"
+                                     "  end from_rpm;\nend P15;\nmodel PKL15\n  import P15.from_rpm;\n"
+                                     "  parameter Real wtable[:] = from_rpm({1500, 1496});\n  Real y = wtable[1] * time;\nend PKL15;\n",
+                                      &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(out, std::string("<unsupported:constant user call after structural substitution>"));
+}
+
 YMC_TEST_MAIN

@@ -691,3 +691,10 @@ Explanatory.MeasuringTemperature。Fluid 余下 12 例：类重声明的函数 `
 PumpingSystem——常量实参调用 `flowCharacteristic(0)` 要经 Matrices.solve → LAPACK dgesv 求值（omc 打 100.0）；
 AST_BatchPlant.BatchPlant_StandardWater——数组推导式的范围（comprehension range，同 NonCircularPipes）。HeatExchangerSimulation
 卡 shadowed reduction iterator。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-15 66l 之后：PASS 450（不变）
+
+空范围的推导式、der 的零长数组实参、组件修饰里推导式的范围、派生标量输入的向量化判定。"comprehension range" 的 4 例越过此处、
+卡到下一处：NonCircularPipes——整个结构参数数组的引用；AST_BatchPlant.BatchPlant_StandardWater——MultiPort 的
+`sum({positiveMax(ports_b[j].m_flow) * inStream(ports_b[j].h_outflow) for j in 1:nPorts_b})`（omc 按连接集展开成和式）；
+两个 IMC_withLosses——`wtable = from_rpm({…})` 向量化调用求值后 omc 照打函数定义（V4g 规矩，未做）。FAIL / ACCEPTS-INVALID / CRASH 0。
