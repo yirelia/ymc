@@ -8622,4 +8622,112 @@ YMC_TEST(flatten_empty_slice_function_argument) {
                            "  Real y = h_start * time;\n  Real z = PKM8.f(time, {});\nend PKM8;\n"));
 }
 
+YMC_TEST(flatten_reduction_iterator_shadows_function_local) {
+  // 函数体里归约的迭代变量 i 遮住同名的函数局部 `Integer i`：字面量范围的 `sum(a[i] * T ^ (i - 1) for i in 1:4)` 展开成和式，
+  // 归约外的 `+ i` 仍是局部，范围依赖输入的 `sum(a[i] for i in 1:n)` 留原样。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p22 PKQ1）。
+  YMC_CHECK_EQ(flatten_src("model PKQ1\n  function f\n    input Real T;\n    input Integer n;\n    output Real y;\n  protected\n"
+                           "    Integer i;\n    Real a[4] = {1, 2, 3, 4};\n  algorithm\n    i := 2;\n"
+                           "    y := T ^ 0.5 * sum(a[i] * T ^ (i - 1) for i in 1:4) + i + sum(a[i] for i in 1:n) + i;\n  end f;\n"
+                           "  Real y = f(time, 3);\nend PKQ1;\n"),
+               std::string("function PKQ1.f\n  input Real T;\n  input Integer n;\n  output Real y;\n  protected Integer i;\n"
+                           "  protected Real[4] a = {1.0, 2.0, 3.0, 4.0};\nalgorithm\n  i := 2;\n"
+                           "  y := T ^ 0.5 * (a[1] + a[2] * T + a[3] * T ^ 2.0 + a[4] * T ^ 3.0) + /*Real*/(i) + sum(a[i] for i in 1:n) + /*Real*/(i);\n"
+                           "end PKQ1.f;\n\nclass PKQ1\n  Real y = PKQ1.f(time, 3);\nend PKQ1;\n"));
+}
+
+YMC_TEST(flatten_package_instance_record_constant_fields) {
+  // 经重声明的包实例取记录常量的字段（MSL MoistAir 的 `MMX = {steam.MM, dryair.MM}`、`k_mair = steam.MM / dryair.MM`，
+  // steam / dryair 是包里的记录常量）→ 折成字面量。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p22 PKN10）。
+  YMC_CHECK_EQ(flatten_src("package P10\n  record IconRecord\n  end IconRecord;\n  package Common\n    record DataRecord\n"
+                           "      extends IconRecord;\n      String name;\n      Real MM;\n      Real Hf;\n      Real Tlimit;\n"
+                           "      Real alow[3];\n      Real blow[2];\n      Real R_s;\n    end DataRecord;\n"
+                           "    package SingleGasesData\n      constant Real R_NASA_2002 = 8.3144598;\n"
+                           "      constant DataRecord H2O(name = \"H2O\", MM = 0.01801528, Hf = -13423382.8, Tlimit = 1000, alow = {-39479.6, 575.57, 0.93}, blow = {-33039.7, 17.24}, R_s = R_NASA_2002 / H2O.MM);\n"
+                           "      constant DataRecord Air(name = \"Air\", MM = 0.0289651159, Hf = -4333.83, Tlimit = 1000, alow = {10099.5, -196.827, 5.00915}, blow = {-176.796, -3.92150}, R_s = R_NASA_2002 / Air.MM);\n"
+                           "    end SingleGasesData;\n  end Common;\n  partial package PartialMedium\n    constant Integer nX = 2;\n"
+                           "    replaceable partial model BaseProperties\n      Real Xi = 0.01 * time;\n      Real MM;\n"
+                           "    end BaseProperties;\n  end PartialMedium;\n  package MoistAir\n    extends PartialMedium;\n"
+                           "    constant Integer Water = 1;\n    constant Integer Air = 2;\n"
+                           "    constant Real k_mair = steam.MM / dryair.MM;\n"
+                           "    constant Common.DataRecord dryair = Common.SingleGasesData.Air;\n"
+                           "    constant Common.DataRecord steam = Common.SingleGasesData.H2O;\n"
+                           "    constant Real MMX[2] = {steam.MM, dryair.MM};\n    redeclare model extends BaseProperties\n"
+                           "    equation\n      MM = 1 / (Xi / MMX[Water] + (1.0 - Xi) / MMX[Air]) * k_mair;\n"
+                           "    end BaseProperties;\n  end MoistAir;\n  model Volume\n"
+                           "    replaceable package Medium = PartialMedium;\n    Medium.BaseProperties medium;\n  end Volume;\n"
+                           "end P10;\nmodel PKN10\n  P10.Volume v(redeclare package Medium = P10.MoistAir);\nend PKN10;\n"),
+               std::string("class PKN10\n  Real v.medium.Xi = 0.01 * time;\n  Real v.medium.MM;\nequation\n"
+                           "  v.medium.MM = 1.0 / (v.medium.Xi / 0.01801528 + (1.0 - v.medium.Xi) / 0.0289651159) * 0.6219647130774989;\n"
+                           "end PKN10;\n"));
+}
+
+YMC_TEST(flatten_record_constant_array_field_modifier) {
+  // 按修饰逐字段给值、带数组字段的记录常量（`H2O(name = "H2O", MM = 0.018, alow = {…})`）取标量字段 → 0.018。
+  // 期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p22 PKY2）。
+  YMC_CHECK_EQ(flatten_src("package PY2\n  record IconRecord\n  end IconRecord;\n  record DataRecord\n    String name;\n    Real MM;\n"
+                           "    Real alow[3];\n  end DataRecord;\n"
+                           "  constant DataRecord H2O(name = \"H2O\", MM = 0.018, alow = {-39479.6, 575.57, 0.93});\nend PY2;\n"
+                           "model PKY2\n  Real a = PY2.H2O.MM * time;\nend PKY2;\n"),
+               std::string("class PKY2\n  Real a = 0.018 * time;\nend PKY2;\n"));
+}
+
+YMC_TEST(flatten_record_constant_field_self_reference) {
+  // 记录常量的字段修饰里引用记录自己（MSL SingleGasesData 的 `R_s = R_NASA_2002 / H2O.MM`）：直接取、经包常量 `steam`、
+  // 经数组常量 `MMX[1]` 取 MM 都折成 0.01801528。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p22 PKW7）。
+  YMC_CHECK_EQ(flatten_src("package PW7\n  record IconRecord\n  end IconRecord;\n  package Common\n    record DataRecord\n"
+                           "      extends IconRecord;\n      String name;\n      Real MM;\n      Real Hf;\n      Real Tlimit;\n"
+                           "      Real R_s;\n    end DataRecord;\n    package SingleGasesData\n"
+                           "      constant Real R_NASA_2002 = 8.3144598;\n"
+                           "      constant DataRecord H2O(name = \"H2O\", MM = 0.01801528, Hf = -13423382.8, Tlimit = 1000, R_s = R_NASA_2002 / H2O.MM);\n"
+                           "      constant DataRecord Air(name = \"Air\", MM = 0.0289651159, Hf = -4333.83, Tlimit = 1000, R_s = R_NASA_2002 / Air.MM);\n"
+                           "    end SingleGasesData;\n  end Common;\n  partial package PartialMedium\n    constant Integer nX = 2;\n"
+                           "    replaceable partial model BaseProperties\n      Real Xi = 0.01 * time;\n      Real MM;\n"
+                           "    end BaseProperties;\n  end PartialMedium;\n  package MoistAir\n    extends PartialMedium;\n"
+                           "    constant Integer Water = 1;\n    constant Integer Air = 2;\n"
+                           "    constant Real k_mair = steam.MM / dryair.MM;\n"
+                           "    constant Common.DataRecord dryair = Common.SingleGasesData.Air;\n"
+                           "    constant Common.DataRecord steam = Common.SingleGasesData.H2O;\n"
+                           "    constant Real MMX[2] = {steam.MM, dryair.MM};\n    redeclare model extends BaseProperties\n"
+                           "    equation\n      MM = 1 / (Xi / MMX[Water] + (1.0 - Xi) / MMX[Air]) * k_mair;\n"
+                           "    end BaseProperties;\n  end MoistAir;\n  model Volume\n"
+                           "    replaceable package Medium = PartialMedium;\n    Medium.BaseProperties medium;\n  end Volume;\n"
+                           "end PW7;\nmodel PKW7\n  Real a = PW7.Common.SingleGasesData.H2O.MM * time;\n"
+                           "  Real b = PW7.MoistAir.steam.MM * time;\n  Real c = PW7.MoistAir.MMX[1] * time;\nend PKW7;\n"),
+               std::string("class PKW7\n  Real a = 0.01801528 * time;\n  Real b = 0.01801528 * time;\n  Real c = 0.01801528 * time;\n"
+                           "end PKW7;\n"));
+}
+
+YMC_TEST(flatten_function_cat_kept) {
+  // 函数体里的 `cat(1, X, {1 - sum(X)})` 留调用（不展开），记录构造函数的命名实参改按位置写出。
+  // 期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p22 PKN14）。
+  YMC_CHECK_EQ(flatten_src("package PN14\n  record State\n    Real p;\n    Real X[2];\n  end State;\n  function f\n    input Real p;\n"
+                           "    input Real X[:] = {0.01, 0.99};\n    output State s;\n  algorithm\n"
+                           "    s := if size(X, 1) == 2 then State(p = p, X = X) else State(p = p, X = cat(1, X, {1 - sum(X)}));\n"
+                           "  end f;\nend PN14;\nmodel PKN14\n  PN14.State z = PN14.f(time, {0.2});\nend PKN14;\n"),
+               std::string("function PN14.State \"Automatically generated record constructor for PN14.State\"\n  input Real p;\n"
+                           "  input Real[2] X;\n  output State res;\nend PN14.State;\n\nfunction PN14.f\n  input Real p;\n"
+                           "  input Real[:] X = {0.01, 0.99};\n  output PN14.State s;\nalgorithm\n"
+                           "  s := if size(X, 1) == 2 then PN14.State(p, X) else PN14.State(p, cat(1, X, {1.0 - sum(X)}));\n"
+                           "end PN14.f;\n\nclass PKN14\n  Real z.p;\n  Real z.X[1];\n  Real z.X[2];\nequation\n"
+                           "  z = PN14.f(time, {0.2});\nend PKN14;\n"));
+}
+
+YMC_TEST(flatten_modified_short_class_package) {
+  // 带修饰的短类包 `package Medium = PN15.Air(extraPropertiesNames = {"CO2"}, …)`：经它重声明的组件与根上的
+  // `Medium.nC` 都看到修饰后的常量（nC = 1）。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p22 PKN15）。
+  YMC_CHECK_EQ(flatten_src("package PN15\n  partial package PartialMedium\n"
+                           "    constant String extraPropertiesNames[:] = fill(\"\", 0);\n"
+                           "    constant Integer nC = size(extraPropertiesNames, 1);\n"
+                           "    constant Real C_nominal[nC] = fill(1.0e-6, nC);\n    replaceable partial model BaseProperties\n"
+                           "      Real p = time;\n    end BaseProperties;\n  end PartialMedium;\n  package Air\n"
+                           "    extends PartialMedium;\n    redeclare model extends BaseProperties\n    end BaseProperties;\n"
+                           "  end Air;\n  model Volume\n    replaceable package Medium = PartialMedium;\n"
+                           "    Medium.BaseProperties medium;\n    Real C[Medium.nC] = fill(time, Medium.nC);\n"
+                           "    parameter Real Cn[Medium.nC] = Medium.C_nominal;\n  end Volume;\nend PN15;\nmodel PKN15\n"
+                           "  package Medium = PN15.Air(extraPropertiesNames = {\"CO2\"}, C_nominal = {1.519E-3});\n"
+                           "  PN15.Volume v(redeclare package Medium = Medium);\n  Real n = Medium.nC * time;\nend PKN15;\n"),
+               std::string("class PKN15\n  Real v.medium.p = time;\n  Real v.C[1];\n  parameter Real v.Cn[1] = 0.001519;\n"
+                           "  Real n = time;\nequation\n  v.C = {time};\nend PKN15;\n"));
+}
+
 YMC_TEST_MAIN

@@ -706,3 +706,11 @@ AST_BatchPlant.BatchPlant_StandardWater——数组推导式的范围（comprehe
 Fluid 余 9 例：PumpingSystem（LAPACK dgesv 求值）、HeatExchangerSimulation（shadowed reduction iterator）、RoomCO2 ×2（带修饰的
 短类包）、IncompressibleFluidNetwork（Medium.singleState）、BranchingDynamicPipes（MMX）、HeatingSystem（reference_h）、
 TanksWithOverflow（derivative 注解）、MomentumBalanceFittings（stateSelect 预扫）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-15 66n 之后：PASS 453（Fluid 15/23）
+
+带修饰的短类包、经包实例取记录常量的字段、记录常量的数组字段与自引用字段、derivative 注解函数的实例路径命名、函数里的 cat、
+归约迭代变量遮住函数局部。转 PASS：Modelica.Fluid.Examples.Tanks.TanksWithOverflow。MoistAir 一族（RoomCO2 ×2、
+BranchingDynamicPipes、Media.Examples.MoistAir）卡到 "function body references non-local [steam]"；HeatExchangerSimulation 卡在
+向量化 homotopy（嵌套向量化的打印形态）；SimpleLiquidWater 卡在短类包的类修饰（`SpecificEnthalpy(max = 1e6)`）。FAIL / ACCEPTS-INVALID /
+CRASH 0。

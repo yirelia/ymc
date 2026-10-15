@@ -7558,6 +7558,42 @@ class Flattener {
     const SVariability v = I_.scode.elems[el].attr.var;
     if (v != SVariability::Const && !(allow_param && v == SVariability::Param)) return std::nullopt;
     if (used && v == SVariability::Param) used->insert(el.raw);
+    // 没有整体绑定、按修饰逐字段给值的记录常量，取的是修饰里带绑定的字段（`constant DataRecord H2O(MM = 0.01801528, …,
+    // R_s = R_NASA_2002 / H2O.MM)`，MSL IdealGases.Common.SingleGasesData）：直接求那个绑定。omc 的字段是各自带绑定的组件，取
+    // `H2O.MM` 只求 MM 的绑定；先构造整个记录会求到 R_s 里的 `H2O.MM`、绕回自己 → 求不出（PKW 探针 PKW7）。值按字段的声明类型
+    // 强转；字段还带子修饰的照旧整体构造。
+    if (k + 1 < c.parts.size() && c.parts[k].subscripts.empty()) {
+      const SElement ce = I_.scode.elems[el];   // 拷贝
+      if (ce.mod.is_valid() && !I_.scode.mods[ce.mod].binding.is_valid() && ce.attr.dims.empty() && ce.type.dims.empty()) {
+        const std::vector<SSubMod> subs = I_.scode.mods[ce.mod].subs;   // 拷贝
+        for (const SSubMod& s : subs) {
+          if (s.ident != c.parts[k + 1].name) continue;
+          const SMod sm = I_.scode.mods[s.mod];   // 拷贝
+          if (!sm.binding.is_valid() || !sm.subs.empty()) break;
+          ScodeScope rds;
+          const Id<SElement> rec = resolve_class_path(ce.type.path, ce.type.leading_dot, cur, rds);
+          std::vector<RecField> rfs;
+          if (!rec.is_valid() || I_.scode.elems[rec].kind != SElementKind::Class ||
+              !rec_restr(I_.scode.elems[rec].restriction) || !record_fields_ex(rec, rds, rfs, false, 0, true))
+            break;
+          Id<SElement> fdecl;
+          for (const RecField& f : rfs) if (I_.scode.elems[f.f].name == s.ident) fdecl = f.f;
+          if (!fdecl.is_valid()) break;
+          const std::vector<Symbol>* saved = ceval_prefix_;
+          const int saved_frame = ceval_frame_;
+          ceval_prefix_ = nullptr;
+          ceval_frame_ = -1;
+          std::optional<CVal> fv = eval_scode(sm.binding, cur, depth + 1);
+          ceval_prefix_ = saved;
+          ceval_frame_ = saved_frame;
+          if (fv) fv = coerce_cval(*fv, I_.scode.elems[fdecl].type.path);
+          if (!fv) break;
+          Cref rest;
+          rest.parts.assign(c.parts.begin() + static_cast<std::ptrdiff_t>(k) + 1, c.parts.end());
+          return cval_path(*fv, rest, scope, depth);
+        }
+      }
+    }
     const std::optional<CVal> root = const_comp_value(el, cur, depth);
     if (!root) return std::nullopt;
     Cref rest;
@@ -7630,7 +7666,11 @@ class Flattener {
     for (const RecField& rf : rfs) {
       const SElement fe = I_.scode.elems[rf.f];   // 拷贝（求值可能扩 arena）
       const ScodeScope& fscope = rf.fscope;     // 声明字段的记录的作用域（字段类型在这里解析）
-      if (!fe.attr.dims.empty() || !fe.type.dims.empty()) return std::nullopt;
+      // 数组字段（MSL IdealGases.Common.DataRecord 的 `Real alow[7]`，SingleGasesData 的常量逐字段给值）：维须求得出（字面量 /
+      // 常量），值取修饰或缺省、形状须相符（同另一个 record_value 的数组字段；PKX 探针 PKX1-3）。数组的记录字段未做。
+      std::vector<std::int64_t> fdims;
+      for (const std::vector<Id<Exp>>* ds : {&fe.attr.dims, &fe.type.dims})
+        for (Id<Exp> d : *ds) if (!eval_dim(d, fdims, fscope)) return std::nullopt;
       const SSubMod* hit = nullptr;
       for (const SSubMod& s : subs) if (s.ident == fe.name) { hit = &s; break; }
       std::optional<CVal> fv;
@@ -7638,6 +7678,8 @@ class Flattener {
         fv = eval_scode(I_.scode.mods[hit->mod].binding, mscope, depth + 1);
       } else if (rf.dflt.is_valid() && !hit) {
         fv = eval_scode(rf.dflt, rf.dscope, depth + 1);
+      } else if (!fdims.empty()) {
+        return std::nullopt;
       } else {
         ScodeScope frds;
         const Id<SElement> frec = resolve_class_path(fe.type.path, fe.type.leading_dot, fscope, frds);
@@ -7650,7 +7692,7 @@ class Flattener {
       }
       if (!fv) return std::nullopt;
       fv = coerce_cval(*fv, fe.type.path);
-      if (!fv) return std::nullopt;
+      if (!fv || cval_shape(*fv) != fdims) return std::nullopt;
       r.set_field(fe.name, std::move(*fv));
     }
     return r;
@@ -10085,6 +10127,49 @@ class Flattener {
     r.ty = Type::array_of(vty, std::move(ds));
     return add(std::move(r));
   }
+  // 函数体里的 cat(k, A1, A2, …)：omc 留调用（MSL Media MoistAir.setState_pTX 的 `cat(1, X, {1.0 - sum(X)})`；PKN 探针 PKN14）。
+  // k 须是整数字面量 1..秩、各实参同秩同元素类型（Integer 与 Real 混着时的转型未核实 → SKIP）；结果第 k 维 = 各实参第 k 维之和
+  //（有未知的 → 未知维），其余维取首个实参的。
+  Id<Expr> fn_cat_call(const Exp& e) {
+    for (Symbol n : e.arg_names) if (n.is_valid()) { set_unsupported("named function argument"); return lit_int(0); }
+    if (e.args.size() < 2) { set_unsupported("function arity"); return lit_int(0); }
+    const Id<Expr> k = simplify_expr(inst_exp(e.args[0], Inst::empty_node(), {}));
+    if (result_.unsupported) return lit_int(0);
+    if (result_.model.exprs[k].kind != ExprKind::IntLit) { set_unsupported("non-constant cat dimension"); return lit_int(0); }
+    const std::int64_t kd = result_.model.exprs[k].ival;
+    std::vector<Id<Expr>> cargs{k};
+    std::vector<Dimension> ds;
+    TypeKind ek = TypeKind::Unknown;
+    for (std::size_t i = 1; i < e.args.size(); ++i) {
+      const Id<Expr> x = simplify_expr(inst_exp(e.args[i], Inst::empty_node(), {}));
+      if (result_.unsupported) return lit_int(0);
+      const Type t = op_type(x);
+      if (!t.is_array()) { set_unsupported("cat of scalar"); return lit_int(0); }
+      const TypeKind xk = t.element_type().kind;
+      if (i == 1) {
+        ek = xk;
+        ds = t.dims;
+        if (kd < 1 || static_cast<std::size_t>(kd) > ds.size()) { set_unsupported("cat dimension out of range"); return lit_int(0); }
+      } else {
+        if (xk != ek || t.dims.size() != ds.size()) { set_unsupported("cat argument types"); return lit_int(0); }
+        Dimension& d = ds[static_cast<std::size_t>(kd) - 1];
+        const Dimension& xd = t.dims[static_cast<std::size_t>(kd) - 1];
+        if (d.kind == DimKind::Integer && xd.kind == DimKind::Integer) {
+          d.size += xd.size;
+        } else {
+          d = Dimension{};
+          d.kind = DimKind::Unknown;
+        }
+      }
+      cargs.push_back(x);
+    }
+    Expr r;
+    r.kind = ExprKind::Call;
+    r.call_name = {in_.intern("cat")};
+    r.args = std::move(cargs);
+    r.ty = Type::array_of(Type::of(ek), std::move(ds));
+    return add(std::move(r));
+  }
   // 整数范围的维（TypeCheck.getRangeTypeInt，NFTypeCheck.mo:2734-2796 v1.25.0）：起止（步）都是字面量 → 整数维；`1:e` → e；
   // 起止相同 → 1；其余 → `max(stop - start + 1, 0)` / `max(div(stop - start, step) + 1, 0)`（化简后；FC 探针 c40-c44：推导式
   // 转 Real 时 cast 打印的类型维 `/*Real[max(m - 2 + 1, 0)]*/`）。range 不是 Range 节点 → 未知维。
@@ -10155,7 +10240,9 @@ class Flattener {
     std::vector<std::optional<std::vector<std::int64_t>>> vals;
     for (const ForIndex& it : red.iters) {
       if (!it.range.is_valid()) { set_unsupported("implicit-range function reduction"); return lit_int(0); }
-      if (stmt_iters_.count(it.name.id) || func_params_.count(it.name.id)) {
+      // 迭代变量与函数的形参 / 局部同名（MSL IF97 cond_dTp 的 `protected Integer i` 与 `sum(a[i] * TREL^(i - 1) for i in 1:4)`）：
+      // 体里遮住外层的（迭代变量先于函数变量查，见 cref；PKN 探针 PKN1，omc 同）。与外层 for 语句的迭代变量同名的未核实 → SKIP。
+      if (stmt_iters_.count(it.name.id)) {
         set_unsupported("shadowed reduction iterator");
         return lit_int(0);
       }
@@ -12104,7 +12191,10 @@ class Flattener {
     std::unordered_set<std::uint32_t> seen;
     if (!collect_fn_sig(fr->fe, fr->fscope, sig, seen, 0) || sig.outputs.empty()) return std::nullopt;
     Id<SElement> home;
-    const std::optional<std::vector<Symbol>> qname = fn_flat_name(fn, sc, Inst::empty_node(), {}, home);
+    // 在包实例里找到的（引用它的函数本身经包实例命名，MSL Media MoistAir 的 `derivative = saturationPressureLiquid_der`）：同普通
+    // 调用按实例路径命名（`RoomCO2.boundary1.Medium.saturationPressureLiquid_der`，omc 同）。
+    const std::optional<std::vector<Symbol>> qname =
+        fr->node.is_valid() ? scope_path(fr->node) : fn_flat_name(fn, sc, Inst::empty_node(), {}, home);
     if (!qname) return std::nullopt;
     const std::optional<std::size_t> li = emit_function(*fr, sig, *qname, {}, home);
     return result_.unsupported ? std::nullopt : li;
@@ -12552,6 +12642,17 @@ class Flattener {
       // 函数（`P.Pump pumps(redeclare function flowCharacteristic = quadraticFlow(V_flow_nominal = …))`、派生类体里的长形态
       // `redeclare function flowCharacteristic … end flowCharacteristic;`）：调用经它按实例路径命名（见 resolve_fn），短类修饰在写
       // 重声明的类的实例里定型（见 redecl_mod_scope）。
+      // 实例里的本地短类包带修饰（`package Medium = Air(extraPropertiesNames = {"CO2"}, …)`，MSL Fluid RoomCO2）：经它往下的名字
+      // 按包实例查（Instantiator::inst_package 施加短类修饰；PKN 探针 PKN15 的 `Medium.nC`）——SCode 层下降不进短类。不带修饰的照旧。
+      if (ic.is_valid() && I_.nodes[ic].node_type.kind != NodeTypeKind::RedeclaredClass && I_.nodes[ic].def.is_valid()) {
+        const SElement& sel = I_.scode.elems[I_.nodes[ic].def];
+        if (sel.kind == SElementKind::Class && sel.restriction == SRestriction::Package && sel.def.kind == SClassDefKind::Derived &&
+            sel.def.derived_mod.is_valid() && !I_.scode.mods[sel.def.derived_mod].subs.empty()) {
+          def_scope = scode_scope_of(I_.nodes[ic].parent_scope);
+          if (node_out) *node_out = ic;
+          return I_.nodes[ic].def;
+        }
+      }
       if (ic.is_valid() && I_.nodes[ic].node_type.kind == NodeTypeKind::RedeclaredClass) {
         const SElement& rel = I_.scode.elems[I_.nodes[ic].def];
         const bool fn = rel.restriction == SRestriction::Function || rel.restriction == SRestriction::ExternalFunction;
@@ -15260,6 +15361,12 @@ class Flattener {
             // constant 记录成员 `r1.x` → 复用已发射叶子的字面量绑定（Half B，NFCeval recordElement）。
             Id<Expr> v = eval_const_record_member(prefix, c);
             if (v.is_valid()) return v;
+            // 包实例里的记录常量（不发射成模型变量，没有已发射的叶子）：沿路径按值求（eval_qual_path 在包实例层取 inst 记的绑定）——
+            // MSL Media MoistAir 的 `k_mair = steam.MM / dryair.MM`、`MMX = {steam.MM, dryair.MM}`，steam / dryair 是记录常量
+            //（PKN 探针 PKN6-8：经 `redeclare package Medium = MoistAir` 的包实例查）。
+            if (!result_.unsupported && I_.package_instances.count(enclosing.raw))
+              if (std::optional<CVal> pv = eval_qual_path(c, scode_scope_of(enclosing), 0, /*allow_param=*/false, nullptr))
+                if (const Id<Expr> lit = literal_any(*pv); lit.is_valid()) return lit;
             if (!result_.unsupported) {
               set_unsupported("constant evaluation");
               for (std::size_t pi = 0; pi < c.parts.size(); ++pi)   // 子原因：哪个常量（排桶用）
@@ -19773,6 +19880,7 @@ class Flattener {
       return model_matrix_builtin(e, builtin_name, enclosing, prefix);
     if (fn_scope_ && (builtin_name == "fill" || builtin_name == "zeros" || builtin_name == "ones"))
       return fill_call(e, builtin_name);
+    if (fn_scope_ && builtin_name == "cat") return fn_cat_call(e);
     if (fn_scope_ && e.args.size() == 1 &&
         (builtin_name == "sum" || builtin_name == "product" || builtin_name == "min" || builtin_name == "max")) {
       if (I_.absyn.exps[e.args[0]].kind == ExpKind::Reduction && !(e.arg_names.size() == 1 && e.arg_names[0].is_valid()))

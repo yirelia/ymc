@@ -692,5 +692,7 @@
 "ClassMod4.mo",
 "ClassExtendsMod2.mo",
 "ConstrainingClassFunc2.mo",
-"FuncDefaultArg7.mo"
+"FuncDefaultArg7.mo",
+"RecordExtends2.mo",
+"ih2.mo"
 ]

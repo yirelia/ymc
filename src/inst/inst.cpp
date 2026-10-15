@@ -270,7 +270,7 @@ NodeId Instantiator::class_in(NodeId cls, ClassTreeId tid, Symbol name) {
 // 里查 BaseProperties 等于查 P.Water 的（ADR-007 第 2 阶段 65a，PK 探针）。短类带修饰的：omc 的基类是带着修饰实例化出来的那份
 //（包常量 / 类重声明随之改），ymc 的基类节点是共享的未改那份 → SKIP。partial：链上有一层是 partial（派生自 partial 类的短类
 // 本身也是 partial，expandClassDerived NFInst.mo:1046-1049）。
-NodeId Instantiator::through_short_classes(NodeId cls, bool& partial) {
+NodeId Instantiator::through_short_classes(NodeId cls, bool& partial, std::vector<std::pair<Id<SMod>, NodeId>>* mods) {
   NodeId cur = cls;
   for (int guard = 0; guard < 32; ++guard) {
     if (!cur.is_valid() || I_.nodes[cur].is_empty() || I_.nodes[cur].kind != NodeKind::Class || !I_.nodes[cur].def.is_valid())
@@ -281,8 +281,11 @@ NodeId Instantiator::through_short_classes(NodeId cls, bool& partial) {
     if (ce.def.derived_mod.is_valid()) {
       const SMod& dm = I_.scode.mods[ce.def.derived_mod];
       if (!dm.subs.empty() || dm.binding.is_valid()) {
-        mark_unsupported("lookup into modified short class", std::string(I_.interner.str(ce.name)));
-        return Inst::empty_node();
+        if (!mods || dm.binding.is_valid()) {
+          mark_unsupported("lookup into modified short class", std::string(I_.interner.str(ce.name)));
+          return Inst::empty_node();
+        }
+        mods->push_back({ce.def.derived_mod, I_.nodes[cur].parent_scope});   // 修饰在短类的词法外层（写它的类）里求值
       }
     }
     // 递归的短类定义（`class A type Env = Env.Env; …`：基类名查回自己，others/RecursiveShort）→ omc 报 "Recursive short class
@@ -320,12 +323,41 @@ NodeId Instantiator::inst_package(NodeId cls) {
   }
   pkg_cache_[cls.raw] = Inst::empty_node();
   bool partial = false;
-  const NodeId l = through_short_classes(cls, partial);
+  std::vector<std::pair<Id<SMod>, NodeId>> short_mods;   // 链上短类的修饰（外层在前）
+  const NodeId l = through_short_classes(cls, partial, &short_mods);
   if (!l.is_valid() || I_.nodes[l].is_empty() || partial || !I_.nodes[l].def.is_valid() ||
       I_.scode.elems[I_.nodes[l].def].kind != SElementKind::Class ||
       I_.scode.elems[I_.nodes[l].def].def.kind != SClassDefKind::Parts)
     return Inst::empty_node();
+  // 带修饰的短类（`package Medium = MoistAir(extraPropertiesNames = {"CO2"}, C_nominal = {1.519E-3})`，MSL Fluid RoomCO2）：
+  // expandClassDerived 把短类的修饰并进基类的实例（NFInst.mo:1012-1068 v1.25.0）——包实例里被修饰的常量取修饰值，依赖它的
+  // （`nC = size(extraPropertiesNames, 1)`）随之。ymc 照最外层的 extends 修饰施加到实例的各组件上（内层的短类先施加，外层后
+  // 施加盖过；值在写短类的类里求，见 apply_extends_modifier）。只收对组件的普通绑定修饰；类修饰 / 重声明 / 子修饰 / 改不存在的
+  // 名字 → SKIP。
+  for (const auto& [m, at] : short_mods)
+    for (const SSubMod& s : I_.scode.mods[m].subs) {
+      const SMod& sm = I_.scode.mods[s.mod];
+      if (sm.kind != SModKind::Mod || !sm.binding.is_valid() || !sm.subs.empty()) {
+        mark_unsupported("lookup into modified short class", std::string(I_.interner.str(s.ident)));
+        return Inst::empty_node();
+      }
+    }
   const NodeId inst = instantiate(l, cls);
+  if (!short_mods.empty()) {
+    const std::vector<NodeId> comps = I_.trees[I_.node_class(inst).tree].components;   // 拷贝
+    for (const auto& [m, at] : short_mods)
+      for (const SSubMod& s : I_.scode.mods[m].subs) {
+        bool hit = false;
+        for (NodeId c : comps) hit = hit || (I_.nodes[c].kind == NodeKind::Component && I_.nodes[c].name == s.ident);
+        if (!hit) {
+          mark_unsupported("lookup into modified short class", std::string(I_.interner.str(s.ident)));
+          return Inst::empty_node();
+        }
+      }
+    for (auto it = short_mods.rbegin(); it != short_mods.rend(); ++it)
+      for (NodeId c : comps)
+        if (I_.nodes[c].kind == NodeKind::Component) apply_extends_modifier(c, it->first, it->second);
+  }
   mark_package_instance(inst);
   pkg_cache_[cls.raw] = inst;
   return inst;
@@ -357,9 +389,15 @@ NodeId Instantiator::lookup_class_name(const std::vector<Symbol>& path, NodeId s
   for (std::size_t i = 1; i < path.size() && cur.is_valid() && !I_.nodes[cur].is_empty(); ++i) {
     const NodeId entered = cur;   // 顺短类链之前的那个（包实例按它缓存、按它命名）
     // 进类查名前顺短类链到底（`package Medium = P.Water` 里查 BaseProperties = 查 P.Water 的，见 through_short_classes）。
+    // 带修饰的短类只在实例语境里接（下面按包实例查，修饰由 inst_package 施加）；定义层查不到修饰后的值 → SKIP。
     bool partial = false;
-    cur = through_short_classes(cur, partial);
+    std::vector<std::pair<Id<SMod>, NodeId>> smods;
+    cur = through_short_classes(cur, partial, &smods);
     if (!cur.is_valid() || I_.nodes[cur].is_empty()) break;
+    if (!smods.empty() && !in_instance_context(entered)) {
+      mark_unsupported("lookup into modified short class", std::string(I_.interner.str(I_.nodes[entered].name)));
+      return Inst::empty_node();
+    }
     // partial 类里不许查名（lookupLocalName / lookupLocalNames 进类前的 isPartial 检查，NFLookup.mo:703-706 / :772-777 v1.25.0；
     // PKP 探针：`P.PM.T x`、没被重声明的 `replaceable package M = PM` 里的 `M.T x` → omc "name lookup is not allowed in
     // partial classes" / "contains the definition of a partial class"）→ SKIP。omc 对自引用（首段是书写处的外层类本身）、

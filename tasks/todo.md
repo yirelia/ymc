@@ -2402,6 +2402,17 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       探针 pk-p21（8）、旧组 SKIP→PASS（ap-p1、cx-c3、ea-e3、wr-v1、wr-w1）；单测 +5。slice 694 例 FAIL 0（oracle=live 不一致 0）；
       scodeinst 654、testsuite 1816（不变）/ FAIL 0；**MSL 450→452**（Modelica.Fluid.Examples.NonCircularPipes、
       AST_BatchPlant.BatchPlant_StandardWater，Fluid 14/23）；单测 391→396。
+- [x] (66n) 包实例、带修饰的短类包与记录常量（2026-10-15）：函数里归约的迭代变量遮住同名的函数局部（MSL IF97 cond_dTp 的
+      `protected Integer i` 与 `sum(… for i in 1:4)`，omc 同）；带修饰的短类包（`package Medium = MoistAir(extraPropertiesNames =
+      {"CO2"}, C_nominal = {…})`）——through_short_classes 收链上的修饰、inst_package 把它们当最外层的 extends 修饰施加到包实例
+      （expandClassDerived，NFInst.mo:1012-1068），经它的重声明与根上的 `Medium.nC` 都按包实例查；经包实例取记录常量的字段
+      （`k_mair = steam.MM / dryair.MM`，eval_qual_path 兜底）；按修饰逐字段给值的记录常量支持数组字段，字段修饰引用记录自己时直接
+      求那个字段的修饰（`R_s = R_NASA_2002 / H2O.MM`，omc 的字段是各自带绑定的组件）；derivative 注解引用的函数在包实例里找到的
+      按实例路径命名（`boundary1.Medium.saturationPressureLiquid_der`）；函数体里的 `cat(k, …)` 留调用。RoomCO2 ×2、
+      BranchingDynamicPipes、Media MoistAir 卡到下一处 "function body references non-local [steam]"。
+      探针 pk-p22、旧组 SKIP→PASS（cx-c8 ×2、sl-s3）；单测 +6。slice 694→696 例 FAIL 0（oracle=live 不一致 0）；scodeinst 654→656
+      （RecordExtends2、ih2）；testsuite 1816→1819 / FAIL 0；**MSL 452→453**（Modelica.Fluid.Examples.Tanks.TanksWithOverflow）；
+      探针 9749→9775；单测 396→402。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

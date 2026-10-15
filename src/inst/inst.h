@@ -94,7 +94,8 @@ class Instantiator {
   bool in_instance_context(NodeId cls) const;   // 重声明顶替进来的 / 实例类树里克隆的类（见 inst_package）
   void mark_package_instance(NodeId inst);
   NodeId inherited_in_bases(NodeId inst, Symbol name, int depth) const;   // class extends 的目标（见 inst.cpp）
-  NodeId through_short_classes(NodeId cls, bool& partial);   // 进类查名前顺短类链到底；partial：链上有 partial 的（见 inst.cpp）
+  // 进类查名前顺短类链到底；partial：链上有 partial 的；mods：给了就收链上短类的修饰（外层在前，各带写处）而不当 SKIP（见 inst.cpp）。
+  NodeId through_short_classes(NodeId cls, bool& partial, std::vector<std::pair<Id<SMod>, NodeId>>* mods = nullptr);
   // 类节点 cls 自己的 import 里叫 name 的类（见 inst.cpp 的规则说明）；没有 → empty。
   NodeId import_class(Symbol name, NodeId cls);
   NodeId tree_class(ClassTreeId tid, Symbol name);   // 类树里（本地 + 继承来的）名为 name 的类；没有 → empty

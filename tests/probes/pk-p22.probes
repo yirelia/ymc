@@ -1,0 +1,991 @@
+//// set: pk-p22 — 函数里归约迭代变量遮住同名局部、经包实例取记录常量的字段、记录常量的数组字段 / 字段修饰自引用、函数体里的 cat、带修饰的短类包
+//// model: PKQ1
+model PKQ1
+  function f
+    input Real T;
+    input Integer n;
+    output Real y;
+  protected
+    Integer i;
+    Real a[4] = {1, 2, 3, 4};
+  algorithm
+    i := 2;
+    y := T ^ 0.5 * sum(a[i] * T ^ (i - 1) for i in 1:4) + i + sum(a[i] for i in 1:n) + i;
+  end f;
+  Real y = f(time, 3);
+end PKQ1;
+//// model: PKQ2
+model PKQ2
+  function f
+    input Real T;
+    input Integer n;
+    output Real y;
+  protected
+    Integer i;
+    Real a[4] = {1, 2, 3, 4};
+  algorithm
+    i := 2;
+    y := T ^ 0.5 * sum(a[i] * T ^ (i - 1) for i in 1:4) + i + sum(a[i] for i in 1:n) + i;
+  end f;
+  Real y = f(2.0, 3) * time;
+  parameter Real p = f(3.0, 2);
+end PKQ2;
+//// model: PKQ5
+package PQ5
+  record DataRecord
+    String name;
+    Real MM;
+  end DataRecord;
+  package Data
+    constant DataRecord H2O(name = "H2O", MM = 0.018);
+    constant DataRecord Air(name = "Air", MM = 0.0289);
+  end Data;
+  package MoistAir
+    constant DataRecord steam = Data.H2O;
+    constant DataRecord dryair = Data.Air;
+    constant Real MMX[2] = {steam.MM, dryair.MM};
+    constant Integer Water = 1;
+    constant Integer Air = 2;
+    model BaseProperties
+      Real Xi = 0.01 * time;
+      Real MM;
+    equation
+      MM = 1 / (Xi / MMX[Water] + (1.0 - Xi) / MMX[Air]);
+    end BaseProperties;
+  end MoistAir;
+end PQ5;
+model PKQ5
+  package Medium = PQ5.MoistAir;
+  Medium.BaseProperties medium;
+end PKQ5;
+//// model: PKQ6
+package PQ6
+  package Common
+    record DataRecord
+      String name;
+      Real MM;
+    end DataRecord;
+    package SingleGasesData
+      constant DataRecord H2O(name = "H2O", MM = 0.018);
+      constant DataRecord Air(name = "Air", MM = 0.0289);
+    end SingleGasesData;
+  end Common;
+  partial package PartialMedium
+    type Temperature = Real(min = 1);
+    constant Integer nX = 2;
+    replaceable partial model BaseProperties
+      Real Xi = 0.01 * time;
+      Real MM;
+      Temperature T = 300;
+    end BaseProperties;
+  end PartialMedium;
+  package MoistAir
+    extends PartialMedium(Temperature(min = 190));
+    constant Integer Water = 1;
+    constant Integer Air = 2;
+    constant Real k_mair = steam.MM / dryair.MM;
+    constant Common.DataRecord dryair = Common.SingleGasesData.Air;
+    constant Common.DataRecord steam = Common.SingleGasesData.H2O;
+    constant Real MMX[2] = {steam.MM, dryair.MM};
+    redeclare model extends BaseProperties
+    equation
+      MM = 1 / (Xi / MMX[Water] + (1.0 - Xi) / MMX[Air]) * k_mair;
+    end BaseProperties;
+  end MoistAir;
+  model Volume
+    replaceable package Medium = PartialMedium;
+    Medium.BaseProperties medium;
+  end Volume;
+end PQ6;
+model PKQ6
+  PQ6.Volume v(redeclare package Medium = PQ6.MoistAir);
+end PKQ6;
+//// model: PKN7
+package P7
+  package Common
+    record DataRecord
+      String name;
+      Real MM;
+    end DataRecord;
+    package SingleGasesData
+      constant DataRecord H2O(name = "H2O", MM = 0.018);
+      constant DataRecord Air(name = "Air", MM = 0.0289);
+    end SingleGasesData;
+  end Common;
+  partial package PartialMedium
+    type Temperature = Real(min = 1);
+    constant Integer nX = 2;
+    replaceable partial model BaseProperties
+      Real Xi = 0.01 * time;
+      Real MM;
+      Temperature T = 300;
+    end BaseProperties;
+  end PartialMedium;
+  package MoistAir
+    extends PartialMedium;
+    constant Integer Water = 1;
+    constant Integer Air = 2;
+    constant Real k_mair = steam.MM / dryair.MM;
+    constant Common.DataRecord dryair = Common.SingleGasesData.Air;
+    constant Common.DataRecord steam = Common.SingleGasesData.H2O;
+    constant Real MMX[2] = {steam.MM, dryair.MM};
+    redeclare model extends BaseProperties
+    equation
+      MM = 1 / (Xi / MMX[Water] + (1.0 - Xi) / MMX[Air]) * k_mair;
+    end BaseProperties;
+  end MoistAir;
+  model Volume
+    replaceable package Medium = PartialMedium;
+    Medium.BaseProperties medium;
+  end Volume;
+end P7;
+model PKN7
+  P7.Volume v(redeclare package Medium = P7.MoistAir);
+end PKN7;
+//// model: PKN8
+package P8
+  package Common
+    record DataRecord
+      String name;
+      Real MM;
+    end DataRecord;
+    package SingleGasesData
+      constant DataRecord H2O(name = "H2O", MM = 0.018);
+      constant DataRecord Air(name = "Air", MM = 0.0289);
+    end SingleGasesData;
+  end Common;
+  partial package PartialMedium
+    type Temperature = Real(min = 1);
+    constant Integer nX = 2;
+    replaceable partial model BaseProperties
+      Real Xi = 0.01 * time;
+      Real MM;
+      Temperature T = 300;
+    end BaseProperties;
+  end PartialMedium;
+  package MoistAir
+    extends PartialMedium(Temperature(min = 190));
+    constant Integer Water = 1;
+    constant Integer Air = 2;
+
+    constant Common.DataRecord dryair = Common.SingleGasesData.Air;
+    constant Common.DataRecord steam = Common.SingleGasesData.H2O;
+    constant Real MMX[2] = {steam.MM, dryair.MM};
+    constant Real k_mair = steam.MM / dryair.MM;
+    redeclare model extends BaseProperties
+    equation
+      MM = 1 / (Xi / MMX[Water] + (1.0 - Xi) / MMX[Air]) * k_mair;
+    end BaseProperties;
+  end MoistAir;
+  model Volume
+    replaceable package Medium = PartialMedium;
+    Medium.BaseProperties medium;
+  end Volume;
+end P8;
+model PKN8
+  P8.Volume v(redeclare package Medium = P8.MoistAir);
+end PKN8;
+//// model: PKN9
+package P9
+  package Common
+    record DataRecord
+      String name;
+      Real MM;
+    end DataRecord;
+    package SingleGasesData
+      constant DataRecord H2O(name = "H2O", MM = 0.018);
+      constant DataRecord Air(name = "Air", MM = 0.0289);
+    end SingleGasesData;
+  end Common;
+  partial package PartialMedium
+    type Temperature = Real(min = 1);
+    constant Integer nX = 2;
+    replaceable partial model BaseProperties
+      Real Xi = 0.01 * time;
+      Real MM;
+      Temperature T = 300;
+    end BaseProperties;
+  end PartialMedium;
+  package MoistAir
+    extends PartialMedium(Temperature(min = 190));
+    constant Integer Water = 1;
+    constant Integer Air = 2;
+    constant Real k_mair = steam.MM / dryair.MM;
+    constant Common.DataRecord dryair = Common.SingleGasesData.Air;
+    constant Common.DataRecord steam = Common.SingleGasesData.H2O;
+    constant Real MMX[2] = {steam.MM, dryair.MM};
+    redeclare model extends BaseProperties
+    equation
+      MM = 1 / (Xi / MMX[Water] + (1.0 - Xi) / MMX[Air]) * k_mair;
+    end BaseProperties;
+  end MoistAir;
+  model Volume
+    replaceable package Medium = PartialMedium;
+    Medium.BaseProperties medium;
+  end Volume;
+end P9;
+model PKN9
+  P9.MoistAir.BaseProperties m;
+end PKN9;
+//// model: PKN10
+package P10
+  record IconRecord
+  end IconRecord;
+  package Common
+    record DataRecord
+      extends IconRecord;
+      String name;
+      Real MM;
+      Real Hf;
+      Real Tlimit;
+      Real alow[3];
+      Real blow[2];
+      Real R_s;
+    end DataRecord;
+    package SingleGasesData
+      constant Real R_NASA_2002 = 8.3144598;
+      constant DataRecord H2O(name = "H2O", MM = 0.01801528, Hf = -13423382.8, Tlimit = 1000, alow = {-39479.6, 575.57, 0.93}, blow = {-33039.7, 17.24}, R_s = R_NASA_2002 / H2O.MM);
+      constant DataRecord Air(name = "Air", MM = 0.0289651159, Hf = -4333.83, Tlimit = 1000, alow = {10099.5, -196.827, 5.00915}, blow = {-176.796, -3.92150}, R_s = R_NASA_2002 / Air.MM);
+    end SingleGasesData;
+  end Common;
+  partial package PartialMedium
+    constant Integer nX = 2;
+    replaceable partial model BaseProperties
+      Real Xi = 0.01 * time;
+      Real MM;
+    end BaseProperties;
+  end PartialMedium;
+  package MoistAir
+    extends PartialMedium;
+    constant Integer Water = 1;
+    constant Integer Air = 2;
+    constant Real k_mair = steam.MM / dryair.MM;
+    constant Common.DataRecord dryair = Common.SingleGasesData.Air;
+    constant Common.DataRecord steam = Common.SingleGasesData.H2O;
+    constant Real MMX[2] = {steam.MM, dryair.MM};
+    redeclare model extends BaseProperties
+    equation
+      MM = 1 / (Xi / MMX[Water] + (1.0 - Xi) / MMX[Air]) * k_mair;
+    end BaseProperties;
+  end MoistAir;
+  model Volume
+    replaceable package Medium = PartialMedium;
+    Medium.BaseProperties medium;
+  end Volume;
+end P10;
+model PKN10
+  P10.Volume v(redeclare package Medium = P10.MoistAir);
+end PKN10;
+//// model: PKN11
+package P11
+  record IconRecord
+  end IconRecord;
+  package Common
+    record DataRecord
+      extends IconRecord;
+      String name;
+      Real MM;
+      Real Hf;
+      Real Tlimit;
+      Real alow[3];
+      Real blow[2];
+      Real R_s;
+    end DataRecord;
+    package SingleGasesData
+      constant Real R_NASA_2002 = 8.3144598;
+      constant DataRecord H2O(name = "H2O", MM = 0.01801528, Hf = -13423382.8, Tlimit = 1000, alow = {-39479.6, 575.57, 0.93}, blow = {-33039.7, 17.24}, R_s = 461.5);
+      constant DataRecord Air(name = "Air", MM = 0.0289651159, Hf = -4333.83, Tlimit = 1000, alow = {10099.5, -196.827, 5.00915}, blow = {-176.796, -3.92150}, R_s = 287.0);
+    end SingleGasesData;
+  end Common;
+  partial package PartialMedium
+    constant Integer nX = 2;
+    replaceable partial model BaseProperties
+      Real Xi = 0.01 * time;
+      Real MM;
+    end BaseProperties;
+  end PartialMedium;
+  package MoistAir
+    extends PartialMedium;
+    constant Integer Water = 1;
+    constant Integer Air = 2;
+    constant Real k_mair = steam.MM / dryair.MM;
+    constant Common.DataRecord dryair = Common.SingleGasesData.Air;
+    constant Common.DataRecord steam = Common.SingleGasesData.H2O;
+    constant Real MMX[2] = {steam.MM, dryair.MM};
+    redeclare model extends BaseProperties
+    equation
+      MM = 1 / (Xi / MMX[Water] + (1.0 - Xi) / MMX[Air]) * k_mair;
+    end BaseProperties;
+  end MoistAir;
+  model Volume
+    replaceable package Medium = PartialMedium;
+    Medium.BaseProperties medium;
+  end Volume;
+end P11;
+model PKN11
+  P11.Volume v(redeclare package Medium = P11.MoistAir);
+end PKN11;
+//// model: PKN12
+package P12
+  record IconRecord
+  end IconRecord;
+  package Common
+    record DataRecord
+      extends IconRecord;
+      String name;
+      Real MM;
+      Real Hf;
+      Real Tlimit;
+      Real R_s;
+    end DataRecord;
+    package SingleGasesData
+      constant Real R_NASA_2002 = 8.3144598;
+      constant DataRecord H2O(name = "H2O", MM = 0.01801528, Hf = -13423382.8, Tlimit = 1000, R_s = R_NASA_2002 / H2O.MM);
+      constant DataRecord Air(name = "Air", MM = 0.0289651159, Hf = -4333.83, Tlimit = 1000, R_s = R_NASA_2002 / Air.MM);
+    end SingleGasesData;
+  end Common;
+  partial package PartialMedium
+    constant Integer nX = 2;
+    replaceable partial model BaseProperties
+      Real Xi = 0.01 * time;
+      Real MM;
+    end BaseProperties;
+  end PartialMedium;
+  package MoistAir
+    extends PartialMedium;
+    constant Integer Water = 1;
+    constant Integer Air = 2;
+    constant Real k_mair = steam.MM / dryair.MM;
+    constant Common.DataRecord dryair = Common.SingleGasesData.Air;
+    constant Common.DataRecord steam = Common.SingleGasesData.H2O;
+    constant Real MMX[2] = {steam.MM, dryair.MM};
+    redeclare model extends BaseProperties
+    equation
+      MM = 1 / (Xi / MMX[Water] + (1.0 - Xi) / MMX[Air]) * k_mair;
+    end BaseProperties;
+  end MoistAir;
+  model Volume
+    replaceable package Medium = PartialMedium;
+    Medium.BaseProperties medium;
+  end Volume;
+end P12;
+model PKN12
+  P12.Volume v(redeclare package Medium = P12.MoistAir);
+end PKN12;
+//// model: PKN13
+package P13
+  record IconRecord
+  end IconRecord;
+  package Common
+    record DataRecord
+      String name;
+      Real MM;
+      Real Hf;
+      Real Tlimit;
+      Real alow[3];
+      Real blow[2];
+      Real R_s;
+    end DataRecord;
+    package SingleGasesData
+      constant Real R_NASA_2002 = 8.3144598;
+      constant DataRecord H2O(name = "H2O", MM = 0.01801528, Hf = -13423382.8, Tlimit = 1000, alow = {-39479.6, 575.57, 0.93}, blow = {-33039.7, 17.24}, R_s = R_NASA_2002 / H2O.MM);
+      constant DataRecord Air(name = "Air", MM = 0.0289651159, Hf = -4333.83, Tlimit = 1000, alow = {10099.5, -196.827, 5.00915}, blow = {-176.796, -3.92150}, R_s = R_NASA_2002 / Air.MM);
+    end SingleGasesData;
+  end Common;
+  partial package PartialMedium
+    constant Integer nX = 2;
+    replaceable partial model BaseProperties
+      Real Xi = 0.01 * time;
+      Real MM;
+    end BaseProperties;
+  end PartialMedium;
+  package MoistAir
+    extends PartialMedium;
+    constant Integer Water = 1;
+    constant Integer Air = 2;
+    constant Real k_mair = steam.MM / dryair.MM;
+    constant Common.DataRecord dryair = Common.SingleGasesData.Air;
+    constant Common.DataRecord steam = Common.SingleGasesData.H2O;
+    constant Real MMX[2] = {steam.MM, dryair.MM};
+    redeclare model extends BaseProperties
+    equation
+      MM = 1 / (Xi / MMX[Water] + (1.0 - Xi) / MMX[Air]) * k_mair;
+    end BaseProperties;
+  end MoistAir;
+  model Volume
+    replaceable package Medium = PartialMedium;
+    Medium.BaseProperties medium;
+  end Volume;
+end P13;
+model PKN13
+  P13.Volume v(redeclare package Medium = P13.MoistAir);
+end PKN13;
+//// model: PKN14
+package PN14
+  record State
+    Real p;
+    Real X[2];
+  end State;
+  function f
+    input Real p;
+    input Real X[:] = {0.01, 0.99};
+    output State s;
+  algorithm
+    s := if size(X, 1) == 2 then State(p = p, X = X) else State(p = p, X = cat(1, X, {1 - sum(X)}));
+  end f;
+end PN14;
+model PKN14
+  PN14.State z = PN14.f(time, {0.2});
+end PKN14;
+//// model: PKN15
+package PN15
+  partial package PartialMedium
+    constant String extraPropertiesNames[:] = fill("", 0);
+    constant Integer nC = size(extraPropertiesNames, 1);
+    constant Real C_nominal[nC] = fill(1.0e-6, nC);
+    replaceable partial model BaseProperties
+      Real p = time;
+    end BaseProperties;
+  end PartialMedium;
+  package Air
+    extends PartialMedium;
+    redeclare model extends BaseProperties
+    end BaseProperties;
+  end Air;
+  model Volume
+    replaceable package Medium = PartialMedium;
+    Medium.BaseProperties medium;
+    Real C[Medium.nC] = fill(time, Medium.nC);
+    parameter Real Cn[Medium.nC] = Medium.C_nominal;
+  end Volume;
+end PN15;
+model PKN15
+  package Medium = PN15.Air(extraPropertiesNames = {"CO2"}, C_nominal = {1.519E-3});
+  PN15.Volume v(redeclare package Medium = Medium);
+  Real n = Medium.nC * time;
+end PKN15;
+//// model: PKV1
+package PV1
+  record IconRecord
+  end IconRecord;
+  package Common
+    record DataRecord
+      extends IconRecord;
+      String name;
+      Real MM;
+      Real Tlimit;
+      Real alow[3];
+      Real blow[2];
+      Real R_s;
+    end DataRecord;
+    package SingleGasesData
+      constant Real R_NASA_2002 = 8.3144598;
+      constant DataRecord H2O(name = "H2O", MM = 0.01801528, Tlimit = 1000, alow = {-39479.6, 575.57, 0.93}, blow = {-33039.7, 17.24}, R_s = R_NASA_2002 / H2O.MM);
+      constant DataRecord Air(name = "Air", MM = 0.0289651159, Tlimit = 1000, alow = {10099.5, -196.827, 5.00915}, blow = {-176.796, -3.92150}, R_s = R_NASA_2002 / Air.MM);
+    end SingleGasesData;
+  end Common;
+  partial package PartialMedium
+    constant Integer nX = 2;
+    replaceable partial model BaseProperties
+      Real Xi = 0.01 * time;
+      Real MM;
+    end BaseProperties;
+  end PartialMedium;
+  package MoistAir
+    extends PartialMedium;
+    constant Integer Water = 1;
+    constant Integer Air = 2;
+    constant Real k_mair = steam.MM / dryair.MM;
+    constant Common.DataRecord dryair = Common.SingleGasesData.Air;
+    constant Common.DataRecord steam = Common.SingleGasesData.H2O;
+    constant Real MMX[2] = {steam.MM, dryair.MM};
+    redeclare model extends BaseProperties
+    equation
+      MM = 1 / (Xi / MMX[Water] + (1.0 - Xi) / MMX[Air]) * k_mair;
+    end BaseProperties;
+  end MoistAir;
+  model Volume
+    replaceable package Medium = PartialMedium;
+    Medium.BaseProperties medium;
+  end Volume;
+end PV1;
+model PKV1
+  PV1.Volume v(redeclare package Medium = PV1.MoistAir);
+end PKV1;
+//// model: PKV2
+package PV2
+  record IconRecord
+  end IconRecord;
+  package Common
+    record DataRecord
+      extends IconRecord;
+      String name;
+      Real MM;
+      Real Hf;
+      Real alow[3];
+      Real blow[2];
+      Real R_s;
+    end DataRecord;
+    package SingleGasesData
+      constant Real R_NASA_2002 = 8.3144598;
+      constant DataRecord H2O(name = "H2O", MM = 0.01801528, Hf = -13423382.8, alow = {-39479.6, 575.57, 0.93}, blow = {-33039.7, 17.24}, R_s = R_NASA_2002 / H2O.MM);
+      constant DataRecord Air(name = "Air", MM = 0.0289651159, Hf = -4333.83, alow = {10099.5, -196.827, 5.00915}, blow = {-176.796, -3.92150}, R_s = R_NASA_2002 / Air.MM);
+    end SingleGasesData;
+  end Common;
+  partial package PartialMedium
+    constant Integer nX = 2;
+    replaceable partial model BaseProperties
+      Real Xi = 0.01 * time;
+      Real MM;
+    end BaseProperties;
+  end PartialMedium;
+  package MoistAir
+    extends PartialMedium;
+    constant Integer Water = 1;
+    constant Integer Air = 2;
+    constant Real k_mair = steam.MM / dryair.MM;
+    constant Common.DataRecord dryair = Common.SingleGasesData.Air;
+    constant Common.DataRecord steam = Common.SingleGasesData.H2O;
+    constant Real MMX[2] = {steam.MM, dryair.MM};
+    redeclare model extends BaseProperties
+    equation
+      MM = 1 / (Xi / MMX[Water] + (1.0 - Xi) / MMX[Air]) * k_mair;
+    end BaseProperties;
+  end MoistAir;
+  model Volume
+    replaceable package Medium = PartialMedium;
+    Medium.BaseProperties medium;
+  end Volume;
+end PV2;
+model PKV2
+  PV2.Volume v(redeclare package Medium = PV2.MoistAir);
+end PKV2;
+//// model: PKV3
+package PV3
+  record IconRecord
+  end IconRecord;
+  package Common
+    record DataRecord
+      extends IconRecord;
+      String name;
+      Real MM;
+      Real Hf;
+      Real Tlimit;
+      Real alow[3];
+      Real blow[2];
+    end DataRecord;
+    package SingleGasesData
+      constant Real R_NASA_2002 = 8.3144598;
+      constant DataRecord H2O(name = "H2O", MM = 0.01801528, Hf = -13423382.8, Tlimit = 1000, alow = {-39479.6, 575.57, 0.93}, blow = {-33039.7, 17.24});
+      constant DataRecord Air(name = "Air", MM = 0.0289651159, Hf = -4333.83, Tlimit = 1000, alow = {10099.5, -196.827, 5.00915}, blow = {-176.796, -3.92150});
+    end SingleGasesData;
+  end Common;
+  partial package PartialMedium
+    constant Integer nX = 2;
+    replaceable partial model BaseProperties
+      Real Xi = 0.01 * time;
+      Real MM;
+    end BaseProperties;
+  end PartialMedium;
+  package MoistAir
+    extends PartialMedium;
+    constant Integer Water = 1;
+    constant Integer Air = 2;
+    constant Real k_mair = steam.MM / dryair.MM;
+    constant Common.DataRecord dryair = Common.SingleGasesData.Air;
+    constant Common.DataRecord steam = Common.SingleGasesData.H2O;
+    constant Real MMX[2] = {steam.MM, dryair.MM};
+    redeclare model extends BaseProperties
+    equation
+      MM = 1 / (Xi / MMX[Water] + (1.0 - Xi) / MMX[Air]) * k_mair;
+    end BaseProperties;
+  end MoistAir;
+  model Volume
+    replaceable package Medium = PartialMedium;
+    Medium.BaseProperties medium;
+  end Volume;
+end PV3;
+model PKV3
+  PV3.Volume v(redeclare package Medium = PV3.MoistAir);
+end PKV3;
+//// model: PKV4
+package PV4
+  record IconRecord
+  end IconRecord;
+  package Common
+    record DataRecord
+      extends IconRecord;
+      Real MM;
+      Real Hf;
+      Real Tlimit;
+      Real alow[3];
+      Real blow[2];
+      Real R_s;
+    end DataRecord;
+    package SingleGasesData
+      constant Real R_NASA_2002 = 8.3144598;
+      constant DataRecord H2O(MM = 0.01801528, Hf = -13423382.8, Tlimit = 1000, alow = {-39479.6, 575.57, 0.93}, blow = {-33039.7, 17.24}, R_s = R_NASA_2002 / H2O.MM);
+      constant DataRecord Air(MM = 0.0289651159, Hf = -4333.83, Tlimit = 1000, alow = {10099.5, -196.827, 5.00915}, blow = {-176.796, -3.92150}, R_s = R_NASA_2002 / Air.MM);
+    end SingleGasesData;
+  end Common;
+  partial package PartialMedium
+    constant Integer nX = 2;
+    replaceable partial model BaseProperties
+      Real Xi = 0.01 * time;
+      Real MM;
+    end BaseProperties;
+  end PartialMedium;
+  package MoistAir
+    extends PartialMedium;
+    constant Integer Water = 1;
+    constant Integer Air = 2;
+    constant Real k_mair = steam.MM / dryair.MM;
+    constant Common.DataRecord dryair = Common.SingleGasesData.Air;
+    constant Common.DataRecord steam = Common.SingleGasesData.H2O;
+    constant Real MMX[2] = {steam.MM, dryair.MM};
+    redeclare model extends BaseProperties
+    equation
+      MM = 1 / (Xi / MMX[Water] + (1.0 - Xi) / MMX[Air]) * k_mair;
+    end BaseProperties;
+  end MoistAir;
+  model Volume
+    replaceable package Medium = PartialMedium;
+    Medium.BaseProperties medium;
+  end Volume;
+end PV4;
+model PKV4
+  PV4.Volume v(redeclare package Medium = PV4.MoistAir);
+end PKV4;
+//// model: PKV5
+package PV5
+  record IconRecord
+  end IconRecord;
+  package Common
+    record DataRecord
+      extends IconRecord;
+      String name;
+      Real MM;
+      Real alow[3];
+      Real blow[2];
+    end DataRecord;
+    package SingleGasesData
+      constant Real R_NASA_2002 = 8.3144598;
+      constant DataRecord H2O(name = "H2O", MM = 0.01801528, alow = {-39479.6, 575.57, 0.93}, blow = {-33039.7, 17.24});
+      constant DataRecord Air(name = "Air", MM = 0.0289651159, alow = {10099.5, -196.827, 5.00915}, blow = {-176.796, -3.92150});
+    end SingleGasesData;
+  end Common;
+  partial package PartialMedium
+    constant Integer nX = 2;
+    replaceable partial model BaseProperties
+      Real Xi = 0.01 * time;
+      Real MM;
+    end BaseProperties;
+  end PartialMedium;
+  package MoistAir
+    extends PartialMedium;
+    constant Integer Water = 1;
+    constant Integer Air = 2;
+    constant Real k_mair = steam.MM / dryair.MM;
+    constant Common.DataRecord dryair = Common.SingleGasesData.Air;
+    constant Common.DataRecord steam = Common.SingleGasesData.H2O;
+    constant Real MMX[2] = {steam.MM, dryair.MM};
+    redeclare model extends BaseProperties
+    equation
+      MM = 1 / (Xi / MMX[Water] + (1.0 - Xi) / MMX[Air]) * k_mair;
+    end BaseProperties;
+  end MoistAir;
+  model Volume
+    replaceable package Medium = PartialMedium;
+    Medium.BaseProperties medium;
+  end Volume;
+end PV5;
+model PKV5
+  PV5.Volume v(redeclare package Medium = PV5.MoistAir);
+end PKV5;
+//// model: PKV6
+package PV6
+  record IconRecord
+  end IconRecord;
+  package Common
+    record DataRecord
+      extends IconRecord;
+      String name;
+      Real MM;
+      Real Hf;
+      Real Tlimit;
+      Real R_s;
+    end DataRecord;
+    package SingleGasesData
+      constant Real R_NASA_2002 = 8.3144598;
+      constant DataRecord H2O(name = "H2O", MM = 0.01801528, Hf = -13423382.8, Tlimit = 1000, R_s = 461.5);
+      constant DataRecord Air(name = "Air", MM = 0.0289651159, Hf = -4333.83, Tlimit = 1000, R_s = 287.0);
+    end SingleGasesData;
+  end Common;
+  partial package PartialMedium
+    constant Integer nX = 2;
+    replaceable partial model BaseProperties
+      Real Xi = 0.01 * time;
+      Real MM;
+    end BaseProperties;
+  end PartialMedium;
+  package MoistAir
+    extends PartialMedium;
+    constant Integer Water = 1;
+    constant Integer Air = 2;
+    constant Real k_mair = steam.MM / dryair.MM;
+    constant Common.DataRecord dryair = Common.SingleGasesData.Air;
+    constant Common.DataRecord steam = Common.SingleGasesData.H2O;
+    constant Real MMX[2] = {steam.MM, dryair.MM};
+    redeclare model extends BaseProperties
+    equation
+      MM = 1 / (Xi / MMX[Water] + (1.0 - Xi) / MMX[Air]) * k_mair;
+    end BaseProperties;
+  end MoistAir;
+  model Volume
+    replaceable package Medium = PartialMedium;
+    Medium.BaseProperties medium;
+  end Volume;
+end PV6;
+model PKV6
+  PV6.Volume v(redeclare package Medium = PV6.MoistAir);
+end PKV6;
+//// model: PKV7
+package PV7
+  record IconRecord
+  end IconRecord;
+  package Common
+    record DataRecord
+      extends IconRecord;
+      String name;
+      Real MM;
+      Real Hf;
+      Real Tlimit;
+      Real R_s;
+    end DataRecord;
+    package SingleGasesData
+      constant Real R_NASA_2002 = 8.3144598;
+      constant DataRecord H2O(name = "H2O", MM = 0.01801528, Hf = -13423382.8, Tlimit = 1000, R_s = R_NASA_2002 / H2O.MM);
+      constant DataRecord Air(name = "Air", MM = 0.0289651159, Hf = -4333.83, Tlimit = 1000, R_s = R_NASA_2002 / Air.MM);
+    end SingleGasesData;
+  end Common;
+  partial package PartialMedium
+    constant Integer nX = 2;
+    replaceable partial model BaseProperties
+      Real Xi = 0.01 * time;
+      Real MM;
+    end BaseProperties;
+  end PartialMedium;
+  package MoistAir
+    extends PartialMedium;
+    constant Integer Water = 1;
+    constant Integer Air = 2;
+    constant Real k_mair = steam.MM / dryair.MM;
+    constant Common.DataRecord dryair = Common.SingleGasesData.Air;
+    constant Common.DataRecord steam = Common.SingleGasesData.H2O;
+    constant Real MMX[2] = {steam.MM, dryair.MM};
+    redeclare model extends BaseProperties
+    equation
+      MM = 1 / (Xi / MMX[Water] + (1.0 - Xi) / MMX[Air]) * k_mair;
+    end BaseProperties;
+  end MoistAir;
+  model Volume
+    replaceable package Medium = PartialMedium;
+    Medium.BaseProperties medium;
+  end Volume;
+end PV7;
+model PKV7
+  PV7.Volume v(redeclare package Medium = PV7.MoistAir);
+end PKV7;
+//// model: PKV8
+package PV8
+  record IconRecord
+  end IconRecord;
+  package Common
+    record DataRecord
+      extends IconRecord;
+      String name;
+      Real MM;
+      Real Hf;
+      Real Tlimit;
+      Real alow[3];
+      Real blow[2];
+      Real R_s;
+    end DataRecord;
+    package SingleGasesData
+      constant Real R_NASA_2002 = 8.3144598;
+      constant DataRecord H2O(name = "H2O", MM = 0.01801528, Hf = -13423382.8, Tlimit = 1000, alow = {-39479.6, 575.57, 0.93}, blow = {-33039.7, 17.24}, R_s = 461.5);
+      constant DataRecord Air(name = "Air", MM = 0.0289651159, Hf = -4333.83, Tlimit = 1000, alow = {10099.5, -196.827, 5.00915}, blow = {-176.796, -3.92150}, R_s = 287.0);
+    end SingleGasesData;
+  end Common;
+  partial package PartialMedium
+    constant Integer nX = 2;
+    replaceable partial model BaseProperties
+      Real Xi = 0.01 * time;
+      Real MM;
+    end BaseProperties;
+  end PartialMedium;
+  package MoistAir
+    extends PartialMedium;
+    constant Integer Water = 1;
+    constant Integer Air = 2;
+    constant Real k_mair = steam.MM / dryair.MM;
+    constant Common.DataRecord dryair = Common.SingleGasesData.Air;
+    constant Common.DataRecord steam = Common.SingleGasesData.H2O;
+    constant Real MMX[2] = {steam.MM, dryair.MM};
+    redeclare model extends BaseProperties
+    equation
+      MM = 1 / (Xi / MMX[Water] + (1.0 - Xi) / MMX[Air]) * k_mair;
+    end BaseProperties;
+  end MoistAir;
+  model Volume
+    replaceable package Medium = PartialMedium;
+    Medium.BaseProperties medium;
+  end Volume;
+end PV8;
+model PKV8
+  PV8.Volume v(redeclare package Medium = PV8.MoistAir);
+end PKV8;
+//// model: PKW7
+package PW7
+  record IconRecord
+  end IconRecord;
+  package Common
+    record DataRecord
+      extends IconRecord;
+      String name;
+      Real MM;
+      Real Hf;
+      Real Tlimit;
+      Real R_s;
+    end DataRecord;
+    package SingleGasesData
+      constant Real R_NASA_2002 = 8.3144598;
+      constant DataRecord H2O(name = "H2O", MM = 0.01801528, Hf = -13423382.8, Tlimit = 1000, R_s = R_NASA_2002 / H2O.MM);
+      constant DataRecord Air(name = "Air", MM = 0.0289651159, Hf = -4333.83, Tlimit = 1000, R_s = R_NASA_2002 / Air.MM);
+    end SingleGasesData;
+  end Common;
+  partial package PartialMedium
+    constant Integer nX = 2;
+    replaceable partial model BaseProperties
+      Real Xi = 0.01 * time;
+      Real MM;
+    end BaseProperties;
+  end PartialMedium;
+  package MoistAir
+    extends PartialMedium;
+    constant Integer Water = 1;
+    constant Integer Air = 2;
+    constant Real k_mair = steam.MM / dryair.MM;
+    constant Common.DataRecord dryair = Common.SingleGasesData.Air;
+    constant Common.DataRecord steam = Common.SingleGasesData.H2O;
+    constant Real MMX[2] = {steam.MM, dryair.MM};
+    redeclare model extends BaseProperties
+    equation
+      MM = 1 / (Xi / MMX[Water] + (1.0 - Xi) / MMX[Air]) * k_mair;
+    end BaseProperties;
+  end MoistAir;
+  model Volume
+    replaceable package Medium = PartialMedium;
+    Medium.BaseProperties medium;
+  end Volume;
+end PW7;
+model PKW7
+  Real a = PW7.Common.SingleGasesData.H2O.MM * time;
+  Real b = PW7.MoistAir.steam.MM * time;
+  Real c = PW7.MoistAir.MMX[1] * time;
+end PKW7;
+//// model: PKW8
+package PW8
+  record IconRecord
+  end IconRecord;
+  package Common
+    record DataRecord
+      extends IconRecord;
+      String name;
+      Real MM;
+      Real Hf;
+      Real Tlimit;
+      Real alow[3];
+      Real blow[2];
+      Real R_s;
+    end DataRecord;
+    package SingleGasesData
+      constant Real R_NASA_2002 = 8.3144598;
+      constant DataRecord H2O(name = "H2O", MM = 0.01801528, Hf = -13423382.8, Tlimit = 1000, alow = {-39479.6, 575.57, 0.93}, blow = {-33039.7, 17.24}, R_s = 461.5);
+      constant DataRecord Air(name = "Air", MM = 0.0289651159, Hf = -4333.83, Tlimit = 1000, alow = {10099.5, -196.827, 5.00915}, blow = {-176.796, -3.92150}, R_s = 287.0);
+    end SingleGasesData;
+  end Common;
+  partial package PartialMedium
+    constant Integer nX = 2;
+    replaceable partial model BaseProperties
+      Real Xi = 0.01 * time;
+      Real MM;
+    end BaseProperties;
+  end PartialMedium;
+  package MoistAir
+    extends PartialMedium;
+    constant Integer Water = 1;
+    constant Integer Air = 2;
+    constant Real k_mair = steam.MM / dryair.MM;
+    constant Common.DataRecord dryair = Common.SingleGasesData.Air;
+    constant Common.DataRecord steam = Common.SingleGasesData.H2O;
+    constant Real MMX[2] = {steam.MM, dryair.MM};
+    redeclare model extends BaseProperties
+    equation
+      MM = 1 / (Xi / MMX[Water] + (1.0 - Xi) / MMX[Air]) * k_mair;
+    end BaseProperties;
+  end MoistAir;
+  model Volume
+    replaceable package Medium = PartialMedium;
+    Medium.BaseProperties medium;
+  end Volume;
+end PW8;
+model PKW8
+  Real a = PW8.Common.SingleGasesData.H2O.MM * time;
+  Real b = PW8.MoistAir.steam.MM * time;
+  Real c = PW8.MoistAir.MMX[1] * time;
+end PKW8;
+//// model: PKY1
+package PY1
+  record IconRecord
+  end IconRecord;
+  record DataRecord
+    extends IconRecord;
+    String name;
+    Real MM;
+    Real alow[3];
+  end DataRecord;
+  constant DataRecord H2O(name = "H2O", MM = 0.018, alow = {-39479.6, 575.57, 0.93});
+end PY1;
+model PKY1
+  Real a = PY1.H2O.MM * time;
+end PKY1;
+//// model: PKY2
+package PY2
+  record IconRecord
+  end IconRecord;
+  record DataRecord
+    String name;
+    Real MM;
+    Real alow[3];
+  end DataRecord;
+  constant DataRecord H2O(name = "H2O", MM = 0.018, alow = {-39479.6, 575.57, 0.93});
+end PY2;
+model PKY2
+  Real a = PY2.H2O.MM * time;
+end PKY2;
+//// model: PKY3
+package PY3
+  record IconRecord
+  end IconRecord;
+  record DataRecord
+    extends IconRecord;
+    String name;
+    Real MM;
+    Real alow[3];
+  end DataRecord;
+  constant DataRecord H2O(name = "H2O", MM = 0.018, alow = {39479.6, 575.57, 0.93});
+end PY3;
+model PKY3
+  Real a = PY3.H2O.MM * time;
+end PKY3;
