@@ -8879,4 +8879,117 @@ YMC_TEST(flatten_fn_constant_array_subscripts) {
                            "end P16s.Mix.f1;\n\nclass PKT16s\n  Real y = P16s.Mix.f1(time, 3);\nend PKT16s;\n"));
 }
 
+YMC_TEST(flatten_partial_application_nested_function) {
+  // 函数体里的部分函数应用（ADR-009；MSL MoistAir.T_phX 的 `solveOneNonlinearEquation(function f_nonlinear(p = p, …), …)`）：
+  // 被调函数的函数型输入打 `f<function>(#Real u) => #Real f`、体里 `unbox(f(#(u_min)))`，调用处 `function PZ1.T_ph.f_nl(#(p),
+  // #(h))`。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p24 PKZ1）。
+  YMC_CHECK_EQ(flatten_src("package PZ1\n  partial function PSF \"base\"\n    input Real u \"Independent variable\";\n"
+                           "    output Real y \"Dependent variable\";\n  end PSF;\n  function solve \"solve f(u) = 0\"\n"
+                           "    input PSF f \"the function\";\n    input Real u_min;\n    input Real u_max;\n"
+                           "    input Real tolerance = 1e-13;\n    output Real u;\n  protected\n    Real fa;\n    Real fb;\n"
+                           "  algorithm\n    fa := f(u_min);\n    fb := f(u_max);\n"
+                           "    u := if abs(fa) < tolerance then u_min else u_max - fb * (u_max - u_min) / (fb - fa);\n  end solve;\n"
+                           "  function T_ph \"inverse\"\n    input Real p;\n    input Real h;\n    output Real T;\n  protected\n"
+                           "    function f_nl \"residual\"\n      extends PSF;\n      input Real p;\n      input Real h;\n"
+                           "    algorithm\n      y := p * u - h;\n    end f_nl;\n  algorithm\n"
+                           "    T := solve(function f_nl(p = p, h = h), 190, 647);\n  end T_ph;\nend PZ1;\nmodel PKZ1\n"
+                           "  Real T = PZ1.T_ph(time, 2);\nend PKZ1;\n"),
+               std::string("function PZ1.T_ph \"inverse\"\n  input Real p;\n  input Real h;\n  output Real T;\nalgorithm\n"
+                           "  T := PZ1.solve(function PZ1.T_ph.f_nl(#(p), #(h)), 190.0, 647.0, 1e-13);\nend PZ1.T_ph;\n\n"
+                           "function PZ1.T_ph.f_nl \"residual\"\n  input Real u \"Independent variable\";\n  input Real p;\n"
+                           "  input Real h;\n  output Real y \"Dependent variable\";\nalgorithm\n  y := p * u - h;\n"
+                           "end PZ1.T_ph.f_nl;\n\nfunction PZ1.solve \"solve f(u) = 0\"\n"
+                           "  input f<function>(#Real u) => #Real f \"the function\";\n  input Real u_min;\n  input Real u_max;\n"
+                           "  input Real tolerance = 1e-13;\n  output Real u;\n  protected Real fa;\n  protected Real fb;\nalgorithm\n"
+                           "  fa := unbox(f(#(u_min)));\n  fb := unbox(f(#(u_max)));\n"
+                           "  u := if abs(fa) < tolerance then u_min else u_max - fb * (u_max - u_min) / (fb - fa);\nend PZ1.solve;\n"
+                           "\nclass PKZ1\n  Real T = PZ1.T_ph(time, 2.0);\nend PKZ1;\n"));
+}
+
+YMC_TEST(flatten_partial_application_slot_order) {
+  // 部分应用的实参按被调函数的输入槽序（`g(b = b, a = a)` → `function PZ2.g(#(a), #(b))`）；函数类型的路径 = 形参名
+  // （`fun<function>`）；经函数型输入的调用在运算里照样拆箱。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p24 PKZ2）。
+  YMC_CHECK_EQ(flatten_src("package PZ2\n  partial function PSF\n    input Real u;\n    output Real y;\n  end PSF;\n  function g\n"
+                           "    extends PSF;\n    input Real a;\n    input Real b;\n  algorithm\n    y := a * u + b;\n  end g;\n"
+                           "  function solve\n    input PSF fun;\n    input Real x;\n    output Real r;\n  algorithm\n"
+                           "    r := fun(x) + 2 * fun(x + 1);\n  end solve;\n  function h\n    input Real a;\n    input Real b;\n"
+                           "    output Real r;\n  algorithm\n    r := solve(function g(b = b, a = a), 3);\n  end h;\nend PZ2;\n"
+                           "model PKZ2\n  Real r = PZ2.h(time, 2);\nend PKZ2;\n"),
+               std::string("function PZ2.g\n  input Real u;\n  input Real a;\n  input Real b;\n  output Real y;\nalgorithm\n"
+                           "  y := a * u + b;\nend PZ2.g;\n\nfunction PZ2.h\n  input Real a;\n  input Real b;\n  output Real r;\n"
+                           "algorithm\n  r := PZ2.solve(function PZ2.g(#(a), #(b)), 3.0);\nend PZ2.h;\n\nfunction PZ2.solve\n"
+                           "  input fun<function>(#Real u) => #Real fun;\n  input Real x;\n  output Real r;\nalgorithm\n"
+                           "  r := unbox(fun(#(x))) + 2.0 * unbox(fun(#(x + 1.0)));\nend PZ2.solve;\n\nclass PKZ2\n"
+                           "  Real r = PZ2.h(time, 2.0);\nend PKZ2;\n"));
+}
+
+YMC_TEST(flatten_functional_parameter_type_default) {
+  // 函数类型里的数组输入与缺省（`#Real[2] u, #Integer k := #(2)`），调用时缺的实参补缺省的装箱字面量 `f(#(v), #(2))`。
+  // 期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p24 PKZ4）。
+  YMC_CHECK_EQ(flatten_src("package PZ4\n  partial function PF\n    input Real u[2];\n    input Integer k = 2;\n    output Real y;\n"
+                           "  end PF;\n  function g\n    extends PF;\n    input Real c;\n  algorithm\n    y := c * u[1] + k * u[2];\n"
+                           "  end g;\n  function apply\n    input PF f;\n    input Real v[2];\n    output Real r;\n  algorithm\n"
+                           "    r := f(v);\n  end apply;\n  function h\n    input Real c;\n    output Real r;\n  algorithm\n"
+                           "    r := apply(function g(c = c), {c, 2 * c});\n  end h;\nend PZ4;\nmodel PKZ4\n  Real r = PZ4.h(time);\n"
+                           "end PKZ4;\n"),
+               std::string("function PZ4.apply\n  input f<function>(#Real[2] u, #Integer k := #(2)) => #Real f;\n  input Real[2] v;\n"
+                           "  output Real r;\nalgorithm\n  r := unbox(f(#(v), #(2)));\nend PZ4.apply;\n\nfunction PZ4.g\n"
+                           "  input Real[2] u;\n  input Integer k = 2;\n  input Real c;\n  output Real y;\nalgorithm\n"
+                           "  y := c * u[1] + /*Real*/(k) * u[2];\nend PZ4.g;\n\nfunction PZ4.h\n  input Real c;\n  output Real r;\n"
+                           "algorithm\n  r := PZ4.apply(function PZ4.g(#(c)), {c, 2.0 * c});\nend PZ4.h;\n\nclass PKZ4\n"
+                           "  Real r = PZ4.h(time);\nend PKZ4;\n"));
+}
+
+YMC_TEST(flatten_partial_application_model_context) {
+  // 模型绑定里的部分应用：`PZ5.solve(function PZ5.g(#(a)), time)`。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p24 PKZ5）。
+  YMC_CHECK_EQ(flatten_src("package PZ5\n  partial function PSF\n    input Real u;\n    output Real y;\n  end PSF;\n  function g\n"
+                           "    extends PSF;\n    input Real a;\n  algorithm\n    y := a * u - 1;\n  end g;\n  function solve\n"
+                           "    input PSF f;\n    input Real x;\n    output Real r;\n  algorithm\n    r := f(x);\n  end solve;\n"
+                           "end PZ5;\nmodel PKZ5\n  parameter Real a = 2;\n  Real r = PZ5.solve(function PZ5.g(a = a), time);\n"
+                           "end PKZ5;\n"),
+               std::string("function PZ5.g\n  input Real u;\n  input Real a;\n  output Real y;\nalgorithm\n  y := a * u - 1.0;\n"
+                           "end PZ5.g;\n\nfunction PZ5.solve\n  input f<function>(#Real u) => #Real f;\n  input Real x;\n"
+                           "  output Real r;\nalgorithm\n  r := unbox(f(#(x)));\nend PZ5.solve;\n\nclass PKZ5\n"
+                           "  parameter Real a = 2.0;\n  Real r = PZ5.solve(function PZ5.g(#(a)), time);\nend PKZ5;\n"));
+}
+
+YMC_TEST(flatten_partial_application_redeclared_package) {
+  // 经 `redeclare package Medium = …` 的包实例里的函数（MSL Fluid 的 Medium.T_phX）：嵌套函数按实例路径命名
+  // `PKZ6.c.Medium.T_phX.f_nl`。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p24 PKZ6）。
+  YMC_CHECK_EQ(flatten_src("package PZ6\n  partial function PSF\n    input Real u;\n    output Real y;\n  end PSF;\n  function solve\n"
+                           "    input PSF f;\n    input Real a;\n    input Real b;\n    output Real r;\n  algorithm\n"
+                           "    r := (f(a) + f(b)) / 2;\n  end solve;\n  package BaseMedium\n    constant Integer nX = 2;\n"
+                           "    replaceable function T_phX\n      input Real p;\n      input Real h;\n      input Real X[:];\n"
+                           "      output Real T;\n    end T_phX;\n  end BaseMedium;\n  package Moist\n"
+                           "    extends BaseMedium(nX = 2);\n    constant Integer nXi = 1;\n    redeclare function extends T_phX\n"
+                           "    protected\n      function f_nl\n        extends PSF;\n        input Real p;\n        input Real h;\n"
+                           "        input Real X[:];\n      algorithm\n        y := p * u - h + sum(X);\n      end f_nl;\n"
+                           "    algorithm\n      T := solve(function f_nl(p = p, h = h, X = X[1:nXi]), 190, 647);\n    end T_phX;\n"
+                           "  end Moist;\n  model Comp\n    replaceable package Medium = BaseMedium;\n"
+                           "    Real T = Medium.T_phX(1e5, time, {0.1, 0.9});\n  end Comp;\nend PZ6;\nmodel PKZ6\n"
+                           "  PZ6.Comp c(redeclare package Medium = PZ6.Moist);\nend PKZ6;\n"),
+               std::string("function PKZ6.c.Medium.T_phX\n  input Real p;\n  input Real h;\n  input Real[:] X;\n  output Real T;\n"
+                           "algorithm\n  T := PZ6.solve(function PKZ6.c.Medium.T_phX.f_nl(#(p), #(h), #(X[1:1])), 190.0, 647.0);\n"
+                           "end PKZ6.c.Medium.T_phX;\n\nfunction PKZ6.c.Medium.T_phX.f_nl\n  input Real u;\n  input Real p;\n"
+                           "  input Real h;\n  input Real[:] X;\n  output Real y;\nalgorithm\n  y := p * u - h + sum(X);\n"
+                           "end PKZ6.c.Medium.T_phX.f_nl;\n\nfunction PZ6.solve\n  input f<function>(#Real u) => #Real f;\n"
+                           "  input Real a;\n  input Real b;\n  output Real r;\nalgorithm\n"
+                           "  r := (unbox(f(#(a))) + unbox(f(#(b)))) / 2.0;\nend PZ6.solve;\n\nclass PKZ6\n"
+                           "  Real c.T = PKZ6.c.Medium.T_phX(1e5, time, {0.1, 0.9});\nend PKZ6;\n"));
+}
+
+YMC_TEST(flatten_function_name_as_argument) {
+  // 函数名当实参 `solve(g, a)` → `PZ8.solve(PZ8.g, a)`；经函数型输入的命名实参调用 `f(u = x)` → `unbox(f(#(x)))`。
+  // 期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p24 PKZ8）。
+  YMC_CHECK_EQ(flatten_src("package PZ8\n  partial function PSF\n    input Real u;\n    output Real y;\n  end PSF;\n  function g\n"
+                           "    extends PSF;\n  algorithm\n    y := 2 * u - 1;\n  end g;\n  function solve\n    input PSF f;\n"
+                           "    input Real x;\n    output Real r;\n  algorithm\n    r := f(u = x);\n  end solve;\n  function h\n"
+                           "    input Real a;\n    output Real r;\n  algorithm\n    r := solve(g, a);\n  end h;\nend PZ8;\n"
+                           "model PKZ8\n  Real r = PZ8.h(time);\nend PKZ8;\n"),
+               std::string("function PZ8.g\n  input Real u;\n  output Real y;\nalgorithm\n  y := 2.0 * u - 1.0;\nend PZ8.g;\n\n"
+                           "function PZ8.h\n  input Real a;\n  output Real r;\nalgorithm\n  r := PZ8.solve(PZ8.g, a);\nend PZ8.h;\n\n"
+                           "function PZ8.solve\n  input f<function>(#Real u) => #Real f;\n  input Real x;\n  output Real r;\n"
+                           "algorithm\n  r := unbox(f(#(x)));\nend PZ8.solve;\n\nclass PKZ8\n  Real r = PZ8.h(time);\nend PKZ8;\n"));
+}
+
 YMC_TEST_MAIN

@@ -722,3 +722,10 @@ CRASH 0。
 BranchingDynamicPipes）与 ReferenceAir ×2——"named function argument [missing argument / default value]"；MixtureGases——
 `Medium1.mediumName`；R134a ×2——经带修饰 extends 继承的类型 `Density`。HeatingSystem 卡在经短类包调函数（另做）。修了函数里
 定长输入上的归约没展开的静默错（PKT17）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-15 66p 之后：PASS 455（+2）
+
+函数型实参与部分函数应用（ADR-009）。转 PASS：Modelica.Media.Examples.SolveOneNonlinearEquation.Inverse_sine、
+Modelica.Math.Nonlinear.Examples.QuadratureLobatto3。MoistAir 一族越过部分应用、卡到下一处：Media.Examples.MoistAir——模型语境的
+`Medium.dryair.MM`；RoomCO2 ×2、BranchingDynamicPipes——stream connector；ReferenceAir.MoistAir / MoistAir2——函数里记录局部的
+绑定（Ice09 Gibbs 的 `t`）。FAIL / ACCEPTS-INVALID / CRASH 0。

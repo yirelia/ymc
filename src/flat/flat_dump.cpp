@@ -119,6 +119,7 @@ class FlatDumper {
     if (p.direction == FlatDirection::Input) out_ += "input ";
     else if (p.direction == FlatDirection::Output) out_ += "output ";
     if (!p.type_path.empty()) dotted(p.type_path);   // 记录类型按名（FunctionRecordArg1 `input R r`）
+    else if (p.ty.kind == TypeKind::Function) fn_type(p);
     else type_name(p.ty.element_type());
     // 维在类型上（dumpVar printTypeDimension=true → dumpTypeDimensions，`, ` 分隔）：`Real[3] x`、`Real[:] x`、
     // `Real[2, 4] y`、`Real[size(x, 1)] y`、`Real[n] z`（ExternalFunction* / ImplicitRangeExp3 / FunctionCompOrder3）。
@@ -178,6 +179,35 @@ class FlatDumper {
     }
     comment(v.comment, " ");
     out_ += ";\n";
+  }
+
+  // 函数型形参的类型（ADR-009；DAEDumpTpl.dumpFunctionType :373-382 v1.25.0）：`<路径><function>(<各输入>) => <输出>`，路径 =
+  // 函数类型的名字 = 形参名（NFFunction.lookupFunction :318-345 找到组件、不加前缀；PKZ 探针 PKZ2 `fun<function>`）。输入照
+  // dumpFuncArg（:384-394）打 `<类型> <名>[ := <缺省>]`（函数型的输入变率 / 并行前缀都为空），类型都装箱（T_METABOXED :344 →
+  // `#`，boxFunctionParameter）；数组维照 dumpArrayType（`#Real[2] u`，PKZ4）。多个输出照 dumpTupleType（:366-371）`(…)`。
+  void fn_type(const FlatFuncParam& p) {
+    out_ += in_.str(p.name);
+    out_ += "<function>(";
+    for (std::size_t i = 0; i < p.fn_inputs.size(); ++i) {
+      const FlatFnTypeArg& a = p.fn_inputs[i];
+      if (i) out_ += ", ";
+      out_ += '#';
+      type_name(a.ty);
+      out_ += ' ';
+      out_ += in_.str(a.name);
+      if (a.dflt.is_valid()) {
+        out_ += " := ";
+        expr(a.dflt);
+      }
+    }
+    out_ += ") => ";
+    if (p.fn_outputs.size() != 1) out_ += '(';
+    for (std::size_t i = 0; i < p.fn_outputs.size(); ++i) {
+      if (i) out_ += ", ";
+      out_ += '#';
+      type_name(p.fn_outputs[i].ty);
+    }
+    if (p.fn_outputs.size() != 1) out_ += ')';
   }
 
   void type_name(const Type& t) {

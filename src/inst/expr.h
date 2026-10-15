@@ -61,6 +61,15 @@ enum class ExprKind : std::uint8_t {
   Reduction,    // sum(e for i in r) / array(e for …)
   Wild,         // 元组通配 _
   End,          // 下标里的 end（typing 前；typing 后被换成 size）
+  // —— 函数型实参（ADR-009，对标 NFExpression 的 BOX / UNBOX / PARTIAL_FUNCTION_APPLICATION；打印照 DAE dump 的
+  //    ExpressionDumpTpl.tpl v1.25.0）——
+  Box,          // #(a)：装箱（:148-149）。ty = 被装箱式的类型（不另记"已装箱"）
+  Unbox,        // unbox(a)：拆箱（:150-151）。a = 经函数型形参的调用；ty = 拆出的类型
+  PartialApp,   // function F(#(a1), …)：部分函数应用（PARTEVALFUNCTION :60-63）。call_name = F 的压平名，args = 已装箱的绑定
+                // 实参（按 F 的输入槽序，NFFunction.makePartialApplicationFromSlots）；ty.kind = Function
+  FnRef,        // F：函数名当值（NFInst.instCrefFunction 的函数引用 cref）。call_name = 压平名；ty.kind = Function
+  FnParamCall,  // f(#(a1), …)：经函数型形参 f 的调用（NFFunction.lookupFunction 找到的是组件 → 名字不带前缀）。
+                // call_name = {f}，args = 已装箱的实参；ty = 输出类型（外面套 Unbox）。与 Call 分开：名字不是函数，不进按名找函数的各处
 };
 
 struct Expr {
@@ -85,8 +94,8 @@ struct Expr {
   Id<Expr> a, b, c;            // 见各 kind 注释（Binary/Relation/Logical: a,b；Unary/Not/Cast: a；IfExp: a,b,c）
 
   // 调用
-  std::vector<Symbol> call_name;   // Call：函数全限定名（点分；打印去前导点）
-  std::vector<Id<Expr>> args;      // Call / Array / Tuple 元素
+  std::vector<Symbol> call_name;   // Call / PartialApp / FnRef / FnParamCall：函数全限定名（点分；打印去前导点）
+  std::vector<Id<Expr>> args;      // Call / PartialApp / FnParamCall 实参；Array / Tuple 元素
 };
 
 // 表达式变率（R14 §2；不常驻 Expr 节点，定型时算、只存到需要检查处：组件、绑定）。

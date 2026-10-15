@@ -2424,6 +2424,15 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       value]"、MixtureGases "Medium1.mediumName"、R134a ×2 "inherited element seen through modifier [Density]"。
       探针 pk-p23（42）；单测 +8。slice 696 例 FAIL 0（oracle=live 不一致 0）；scodeinst 656、testsuite 1819、MSL 453（均不变）/
       FAIL 0；探针 9775→9817；单测 402→410。
+- [x] (66p) 函数型实参与部分函数应用（2026-10-15，ADR-009）：flat IR 加 Box / Unbox / PartialApp / FnRef / FnParamCall，
+      函数型输入打 `f<function>(#Real u) => #Real f`、经它的调用 `unbox(f(#(x)))`、调用处 `function F(#(p), #(h), #(X[1:1]))`
+      （命名实参按槽序装箱，NFFunction.typePartialApplication / makePartialApplicationFromSlots；函数类型照 matchFunctionTypes 比，
+      不符 SKIP）；函数名当值、转传函数型输入、模型语境的部分应用同样。照旧 SKIP：经部分应用的常量调用求值（omc 经闭包求成值，
+      PKZ12）、记录 / 待化简的绑定实参、没被引用的函数型输入（omc 内部错）。MSL 下一处：MoistAir "Medium.dryair.MM"（模型语境）、
+      RoomCO2 ×2 / BranchingDynamicPipes "stream connector"、ReferenceAir ×2 "record binding in function"。
+      探针 pk-p24（28）；单测 +6。slice 696→700 例 FAIL 0（oracle=live 不一致 0）；scodeinst 656→660（FunctionalArg1 / 2、
+      FunctionalArgBinary1、PartialApplication3）；testsuite 1819→1827 / FAIL 0；**MSL 453→455**（Media.Examples.
+      SolveOneNonlinearEquation.Inverse_sine、Math.Nonlinear.Examples.QuadratureLobatto3）；探针 9817→9845；单测 410→416。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

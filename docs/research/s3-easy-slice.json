@@ -694,5 +694,9 @@
 "ConstrainingClassFunc2.mo",
 "FuncDefaultArg7.mo",
 "RecordExtends2.mo",
-"ih2.mo"
+"ih2.mo",
+"FunctionalArg1.mo",
+"FunctionalArg2.mo",
+"FunctionalArgBinary1.mo",
+"PartialApplication3.mo"
 ]

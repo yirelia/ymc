@@ -1,0 +1,901 @@
+//// set: pk-p24 — 函数型实参（ADR-009）：函数型输入的函数类型、部分函数应用、函数名当值、经函数型输入的调用（装箱 / 拆箱）
+//// model: PKZ1
+package PZ1
+  partial function PSF "base"
+    input Real u "Independent variable";
+    output Real y "Dependent variable";
+  end PSF;
+  function solve "solve f(u) = 0"
+    input PSF f "the function";
+    input Real u_min;
+    input Real u_max;
+    input Real tolerance = 1e-13;
+    output Real u;
+  protected
+    Real fa;
+    Real fb;
+  algorithm
+    fa := f(u_min);
+    fb := f(u_max);
+    u := if abs(fa) < tolerance then u_min else u_max - fb * (u_max - u_min) / (fb - fa);
+  end solve;
+  function T_ph "inverse"
+    input Real p;
+    input Real h;
+    output Real T;
+  protected
+    function f_nl "residual"
+      extends PSF;
+      input Real p;
+      input Real h;
+    algorithm
+      y := p * u - h;
+    end f_nl;
+  algorithm
+    T := solve(function f_nl(p = p, h = h), 190, 647);
+  end T_ph;
+end PZ1;
+model PKZ1
+  Real T = PZ1.T_ph(time, 2);
+end PKZ1;
+//// model: PKZ2
+package PZ2
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function g
+    extends PSF;
+    input Real a;
+    input Real b;
+  algorithm
+    y := a * u + b;
+  end g;
+  function solve
+    input PSF fun;
+    input Real x;
+    output Real r;
+  algorithm
+    r := fun(x) + 2 * fun(x + 1);
+  end solve;
+  function h
+    input Real a;
+    input Real b;
+    output Real r;
+  algorithm
+    r := solve(function g(b = b, a = a), 3);
+  end h;
+end PZ2;
+model PKZ2
+  Real r = PZ2.h(time, 2);
+end PKZ2;
+//// model: PKZ3
+package PZ3
+  constant Integer n = 1;
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function solve
+    input PSF f;
+    input Real a;
+    output Real r;
+  algorithm
+    r := f(a);
+  end solve;
+  function T_X
+    input Real p;
+    input Real X[:];
+    output Real T;
+  protected
+    function f_nl
+      extends PSF;
+      input Real p;
+      input Real X[:];
+    algorithm
+      y := p * u - sum(X);
+    end f_nl;
+  algorithm
+    T := solve(function f_nl(p = p, X = X[1:n]), 1);
+  end T_X;
+end PZ3;
+model PKZ3
+  Real T = PZ3.T_X(time, {0.5, 0.5});
+end PKZ3;
+//// model: PKZ4
+package PZ4
+  partial function PF
+    input Real u[2];
+    input Integer k = 2;
+    output Real y;
+  end PF;
+  function g
+    extends PF;
+    input Real c;
+  algorithm
+    y := c * u[1] + k * u[2];
+  end g;
+  function apply
+    input PF f;
+    input Real v[2];
+    output Real r;
+  algorithm
+    r := f(v);
+  end apply;
+  function h
+    input Real c;
+    output Real r;
+  algorithm
+    r := apply(function g(c = c), {c, 2 * c});
+  end h;
+end PZ4;
+model PKZ4
+  Real r = PZ4.h(time);
+end PKZ4;
+//// model: PKZ4b
+package PZ4b
+  constant Integer n = 2;
+  partial function PF
+    input Real u;
+    input Real x[n];
+    input Real k = 1;
+    output Real y;
+  end PF;
+  function g
+    extends PF;
+    input Real c;
+  algorithm
+    y := c * u + k * x[1] + x[2];
+  end g;
+  function apply
+    input PF f;
+    input Real v;
+    input Real w[2];
+    output Real r;
+  algorithm
+    r := f(v, w) - f(x = w, u = 2 * v, k = 3);
+  end apply;
+  function h
+    input Real c;
+    output Real r;
+  algorithm
+    r := apply(function g(c = c), c, {c, 1});
+  end h;
+end PZ4b;
+model PKZ4b
+  Real r = PZ4b.h(time);
+end PKZ4b;
+//// model: PKZ5
+package PZ5
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function g
+    extends PSF;
+    input Real a;
+  algorithm
+    y := a * u - 1;
+  end g;
+  function solve
+    input PSF f;
+    input Real x;
+    output Real r;
+  algorithm
+    r := f(x);
+  end solve;
+end PZ5;
+model PKZ5
+  parameter Real a = 2;
+  Real r = PZ5.solve(function PZ5.g(a = a), time);
+end PKZ5;
+//// model: PKZ6
+package PZ6
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function solve
+    input PSF f;
+    input Real a;
+    input Real b;
+    output Real r;
+  algorithm
+    r := (f(a) + f(b)) / 2;
+  end solve;
+  package BaseMedium
+    constant Integer nX = 2;
+    replaceable function T_phX
+      input Real p;
+      input Real h;
+      input Real X[:];
+      output Real T;
+    end T_phX;
+  end BaseMedium;
+  package Moist
+    extends BaseMedium(nX = 2);
+    constant Integer nXi = 1;
+    redeclare function extends T_phX
+    protected
+      function f_nl
+        extends PSF;
+        input Real p;
+        input Real h;
+        input Real X[:];
+      algorithm
+        y := p * u - h + sum(X);
+      end f_nl;
+    algorithm
+      T := solve(function f_nl(p = p, h = h, X = X[1:nXi]), 190, 647);
+    end T_phX;
+  end Moist;
+  model Comp
+    replaceable package Medium = BaseMedium;
+    Real T = Medium.T_phX(1e5, time, {0.1, 0.9});
+  end Comp;
+end PZ6;
+model PKZ6
+  PZ6.Comp c(redeclare package Medium = PZ6.Moist);
+end PKZ6;
+//// model: PKZ7
+package PZ7
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function g
+    extends PSF;
+    input Real a;
+  algorithm
+    y := a * u;
+  end g;
+  function solve
+    input PSF f;
+    input Real x;
+    output Real r;
+  algorithm
+    r := f(x);
+  end solve;
+  function solve2
+    input PSF f;
+    input Real x;
+    output Real r;
+  algorithm
+    r := solve(f, x) * 2;
+  end solve2;
+  function h
+    input Real a;
+    output Real r;
+  algorithm
+    r := solve2(function g(a = a), 3);
+  end h;
+end PZ7;
+model PKZ7
+  Real r = PZ7.h(time);
+end PKZ7;
+//// model: PKZ8
+package PZ8
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function g
+    extends PSF;
+  algorithm
+    y := 2 * u - 1;
+  end g;
+  function solve
+    input PSF f;
+    input Real x;
+    output Real r;
+  algorithm
+    r := f(u = x);
+  end solve;
+  function h
+    input Real a;
+    output Real r;
+  algorithm
+    r := solve(g, a);
+  end h;
+end PZ8;
+model PKZ8
+  Real r = PZ8.h(time);
+end PKZ8;
+//// model: PKZ9
+package PZ9
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function g
+    extends PSF;
+    input Real a;
+  algorithm
+    y := a * u;
+  end g;
+  function solve
+    input PSF f;
+    input Real x;
+    output Real r;
+  algorithm
+    r := f(x);
+  end solve;
+  function h
+    input Real a;
+    output Real r;
+  algorithm
+    r := solve(function g(a), 3);
+  end h;
+end PZ9;
+model PKZ9
+  Real r = PZ9.h(time);
+end PKZ9;
+//// model: PKZ10
+package PZ10
+  type Temp = Real(unit = "K", min = 0);
+  partial function PSF
+    input Temp u "temperature";
+    output Real y;
+  end PSF;
+  function g
+    extends PSF;
+    input Real a;
+  algorithm
+    y := a * u;
+  end g;
+  function solve
+    input PSF f;
+    input Real x;
+    output Real r;
+  algorithm
+    r := f(x);
+  end solve;
+  function h
+    input Real a;
+    output Real r;
+  algorithm
+    r := solve(function g(a = 2 * a), 3);
+  end h;
+end PZ10;
+model PKZ10
+  Real r = PZ10.h(time);
+end PKZ10;
+//// model: PKZ11
+package PZ11
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function g
+    extends PSF;
+    input Real a;
+  algorithm
+    y := a * u;
+  end g;
+  function useless
+    input PSF fn;
+    input Real x;
+    output Real r;
+  algorithm
+    r := 2 * x;
+  end useless;
+  function h
+    input Real a;
+    output Real r;
+  algorithm
+    r := useless(function g(a = a), 3);
+  end h;
+end PZ11;
+model PKZ11
+  Real r = PZ11.h(time);
+end PKZ11;
+//// model: PKZ11b
+package PZ11b
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function g
+    extends PSF;
+    input Real a;
+  algorithm
+    y := a * u;
+  end g;
+  function useless
+    input PSF f;
+    input Real x;
+    output Real r;
+  algorithm
+    r := 2 * x;
+  end useless;
+  function h
+    input Real a;
+    output Real r;
+  algorithm
+    r := useless(function g(a = a), 3);
+  end h;
+end PZ11b;
+model PKZ11b
+  Real r = PZ11b.h(time);
+end PKZ11b;
+//// model: PKZ11c
+package PZ11c
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function g
+    extends PSF;
+    input Real a;
+  algorithm
+    y := a * u;
+  end g;
+  function useless
+    input PSF f;
+    input Real x;
+    output Real r;
+  algorithm
+    r := if x > 0 then 2 * x else f(x);
+  end useless;
+  function h
+    input Real a;
+    output Real r;
+  algorithm
+    r := useless(function g(a = a), 3);
+  end h;
+end PZ11c;
+model PKZ11c
+  Real r = PZ11c.h(time);
+end PKZ11c;
+//// model: PKZ12
+package PZ12
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function solve
+    input PSF f;
+    input Real a;
+    input Real b;
+    output Real r;
+  algorithm
+    r := (f(a) + f(b)) / 2;
+  end solve;
+  function T_ph
+    input Real p;
+    input Real h;
+    output Real T;
+  protected
+    function f_nl
+      extends PSF;
+      input Real p;
+      input Real h;
+    algorithm
+      y := p * u - h;
+    end f_nl;
+  algorithm
+    T := solve(function f_nl(p = p, h = h), 190, 647);
+  end T_ph;
+end PZ12;
+model PKZ12
+  parameter Real T0 = PZ12.T_ph(2, 3);
+  constant Real T1 = PZ12.T_ph(2, 3);
+  Real T = T0 + T1 * time;
+end PKZ12;
+//// model: PKZ13
+package PZ13
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function g
+    extends PSF;
+  algorithm
+    y := 3 * u;
+  end g;
+  function solve
+    input PSF f;
+    input Real x;
+    output Real r;
+  algorithm
+    r := f(x);
+  end solve;
+  function h
+    input Real a;
+    output Real r;
+  algorithm
+    r := solve(function g(), a);
+  end h;
+end PZ13;
+model PKZ13
+  Real r = PZ13.h(time);
+end PKZ13;
+//// model: PKZ14
+package PZ14
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function g
+    input Real v;
+    input Real a;
+    output Real y;
+  algorithm
+    y := a * v;
+  end g;
+  function solve
+    input PSF f;
+    input Real x;
+    output Real r;
+  algorithm
+    r := f(x);
+  end solve;
+  function h
+    input Real a;
+    output Real r;
+  algorithm
+    r := solve(function g(a = a), 3);
+  end h;
+end PZ14;
+model PKZ14
+  Real r = PZ14.h(time);
+end PKZ14;
+//// model: PKZ15
+package PZ15
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function g
+    extends PSF;
+    input Real a;
+    input Real b;
+  algorithm
+    y := a * u + b;
+  end g;
+  function solve
+    input PSF f;
+    input Integer n;
+    output Real r;
+  algorithm
+    r := f(n) + f(2);
+  end solve;
+  function h
+    input Integer k;
+    output Real r;
+  algorithm
+    r := solve(function g(a = k, b = 2), 3);
+  end h;
+end PZ15;
+model PKZ15
+  Real r = PZ15.h(integer(time));
+end PKZ15;
+//// model: PKZ16
+package PZ16
+  record Data
+    Real a;
+    Real b;
+  end Data;
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function g
+    extends PSF;
+    input Data d;
+  algorithm
+    y := d.a * u + d.b;
+  end g;
+  function solve
+    input PSF f;
+    input Real x;
+    output Real r;
+  algorithm
+    r := f(x);
+  end solve;
+  function h
+    input Data d;
+    input Real x;
+    output Real r;
+  algorithm
+    r := solve(function g(d = d), x);
+  end h;
+end PZ16;
+model PKZ16
+  Real r = PZ16.h(PZ16.Data(2, 3), time);
+end PKZ16;
+//// model: PKZ16b
+package PZ16b
+  record Data
+    Real a;
+    Real b;
+  end Data;
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function g
+    extends PSF;
+    input Data d;
+  algorithm
+    y := d.a * u + d.b;
+  end g;
+  function solve
+    input PSF f;
+    input Real x;
+    output Real r;
+  algorithm
+    r := f(x);
+  end solve;
+  function h
+    input Data d;
+    input Real x;
+    output Real r;
+  algorithm
+    r := solve(function g(d = d), x);
+  end h;
+end PZ16b;
+model PKZ16b
+  PZ16b.Data d(a = 2, b = 3);
+  Real r = PZ16b.h(d, time);
+end PKZ16b;
+//// model: PKZ17
+package PZ17
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function g
+    extends PSF;
+    input Real p[2];
+  algorithm
+    y := p[1] * u + p[2];
+  end g;
+  function solve
+    input PSF f;
+    input Real x;
+    output Real r;
+  algorithm
+    r := f(x);
+  end solve;
+  function h
+    input Real x;
+    output Real r;
+  protected
+    Real q[2] = {x, 1};
+  algorithm
+    r := solve(function g(p = {5, 1}), x) + solve(function g(p = q), x) + solve(function g(p = 2 * q), x);
+  end h;
+end PZ17;
+model PKZ17
+  Real r = PZ17.h(time);
+end PKZ17;
+//// model: PKZ18
+package PZ18
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function solve
+    input PSF f;
+    input Real u_min;
+    input Real u_max;
+    input Real tolerance = 1e-13;
+    output Real u;
+  protected
+    Real fa;
+  algorithm
+    fa := f(u_min);
+    u := if fa > 0 then u_min else u_max;
+  end solve;
+end PZ18;
+model PKZ18
+  parameter Real y_zero = 0.5;
+  parameter Real A = 1;
+  parameter Real w = 1;
+  Real x_zero;
+  function f_nonlinear
+    extends PZ18.PSF;
+    input Real A = 1;
+    input Real w = 1;
+    input Real s = 0;
+  algorithm
+    y := A * sin(w * u) + s;
+  end f_nonlinear;
+equation
+  x_zero = PZ18.solve(function f_nonlinear(A = A, w = w, s = -y_zero), -1.7, 1.7);
+end PKZ18;
+//// model: PKZ19
+package PZ19
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function g
+    extends PSF;
+  algorithm
+    y := 2 * u + 1;
+  end g;
+  function solve
+    input PSF f;
+    input Real x;
+    output Real r;
+  algorithm
+    r := f(x) - 1;
+  end solve;
+end PZ19;
+model PKZ19
+  Real r = PZ19.solve(PZ19.g, time);
+  Real s = PZ19.solve(function PZ19.g(), 2 * time);
+end PKZ19;
+//// model: PKZ20
+package PZ20
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function g
+    input Integer u;
+    input Real a;
+    output Real y;
+  algorithm
+    y := a * u;
+  end g;
+  function solve
+    input PSF f;
+    input Real x;
+    output Real r;
+  algorithm
+    r := f(x);
+  end solve;
+  function h
+    input Real a;
+    output Real r;
+  algorithm
+    r := solve(function g(a = a), 3);
+  end h;
+end PZ20;
+model PKZ20
+  Real r = PZ20.h(time);
+end PKZ20;
+//// model: PKZ21
+package PZ21
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function g
+    extends PSF;
+    input Real a;
+  algorithm
+    y := a * u + 1;
+  end g;
+  function g0
+    extends PSF;
+  algorithm
+    y := 3 * u;
+  end g0;
+  function solve
+    input PSF f;
+    input Real x;
+    output Real r;
+  algorithm
+    r := f(x);
+  end solve;
+  function h
+    input Real x;
+    output Real r;
+  algorithm
+    r := x + solve(function g(a = 2), 3);
+  end h;
+end PZ21;
+model PKZ21
+  Real r = PZ21.h(time);
+  Real r2 = PZ21.solve(function PZ21.g(a = 2), 3);
+  Real r3 = PZ21.solve(PZ21.g0, 4);
+  parameter Real p = PZ21.solve(PZ21.g0, 5);
+end PKZ21;
+//// model: PKZ22
+package PZ22
+  record State
+    Real p;
+    Real T;
+  end State;
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function g
+    extends PSF;
+    input Real p;
+  algorithm
+    y := p * u - 1;
+  end g;
+  function solve
+    input PSF f;
+    input Real x;
+    output Real r;
+  algorithm
+    r := if f(x) > 0 then x else -x;
+  end solve;
+  function h
+    input State state;
+    output Real r;
+  algorithm
+    r := solve(function g(p = state.p), state.T);
+  end h;
+end PZ22;
+model PKZ22
+  PZ22.State s(p = 2, T = time);
+  Real r = PZ22.h(s);
+end PKZ22;
+//// model: PKZ23
+package PZ23
+  record DataRecord
+    Real MM;
+    Real R_s;
+  end DataRecord;
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function solve
+    input PSF f;
+    input Real a;
+    input Real b;
+    output Real r;
+  algorithm
+    r := (f(a) + f(b)) / 2;
+  end solve;
+  package Gas
+    constant DataRecord data(MM = 0.018, R_s = 461.5);
+    function T_h
+      input Real h;
+      output Real T;
+    protected
+      function f_nonlinear
+        extends PSF;
+        input DataRecord data;
+        input Real h;
+      algorithm
+        y := data.R_s * u - h;
+      end f_nonlinear;
+    algorithm
+      T := solve(function f_nonlinear(data = data, h = h), 200, 6000);
+    end T_h;
+  end Gas;
+end PZ23;
+model PKZ23
+  Real T = PZ23.Gas.T_h(time);
+end PKZ23;
+//// model: PKZ25
+package PZ25
+  partial function PSF
+    input Real u;
+    output Real y;
+  end PSF;
+  function g
+    input Real u;
+    input Real a;
+    input Integer k = 2;
+    output Real y;
+  algorithm
+    y := a * u ^ k;
+  end g;
+  function solve
+    input PSF f;
+    input Real x;
+    output Real r;
+  algorithm
+    r := f(x) + 1;
+  end solve;
+  function h
+    input Real a;
+    output Real r;
+  algorithm
+    r := solve(function g(a = a), 3);
+  end h;
+end PZ25;
+model PKZ25
+  Real r = PZ25.h(time);
+end PKZ25;

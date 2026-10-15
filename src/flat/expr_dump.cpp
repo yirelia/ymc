@@ -58,6 +58,12 @@ class ExprDumper {
       case ExprKind::Logical: return e.log == LogOp::And ? 8 : 9;
       case ExprKind::Range: return 10;
       case ExprKind::IfExp: return 11;
+      // 函数型实参（ADR-009）：BOX / UNBOX / PARTEVALFUNCTION / 函数引用 / 调用都落旧 Expression.priority 的 else 0（:10842-10866）。
+      case ExprKind::Box:
+      case ExprKind::Unbox:
+      case ExprKind::PartialApp:
+      case ExprKind::FnRef:
+      case ExprKind::FnParamCall: return 0;
       default: return 0;                            // cref/call/字面量/cast/array…
     }
   }
@@ -218,6 +224,7 @@ class ExprDumper {
         out_ += ')';
         break;
       case ExprKind::Call:
+      case ExprKind::FnParamCall:   // 经函数型形参的调用（ADR-009）：DAE 里同是 CALL，名字 = 形参名
         dotted(e.call_name);
         out_ += '(';
         for (std::size_t i = 0; i < e.args.size(); ++i) {
@@ -226,6 +233,28 @@ class ExprDumper {
         }
         out_ += ')';
         break;
+      // —— 函数型实参（ADR-009；ExpressionDumpTpl.tpl v1.25.0）。旧 Expression.priority 对这几种取 0（:10842-10866），不加括号 ——
+      case ExprKind::Box:   // BOX :148-149
+        out_ += "#(";
+        exp(e.a);
+        out_ += ')';
+        break;
+      case ExprKind::Unbox:   // UNBOX :150-151
+        out_ += "unbox(";
+        exp(e.a);
+        out_ += ')';
+        break;
+      case ExprKind::PartialApp:   // PARTEVALFUNCTION :60-63：`function <路径>(<实参>)`，实参以 ", " 相连
+        out_ += "function ";
+        dotted(e.call_name);
+        out_ += '(';
+        for (std::size_t i = 0; i < e.args.size(); ++i) {
+          if (i) out_ += ", ";
+          exp(e.args[i]);
+        }
+        out_ += ')';
+        break;
+      case ExprKind::FnRef: dotted(e.call_name); break;   // 函数引用 cref（PKZ 探针 PKZ8 `PZ8.solve(PZ8.g, a)`）
       // —— v1 不产出，先给最简打印，数组/元组等竖切片再精修 ——
       case ExprKind::Array:
         out_ += '{';
@@ -262,11 +291,13 @@ class ExprDumper {
       case ExprKind::TupleElement: {
         // TSUB（ExpressionDumpTpl :131-136）：`<exp>[<ix>]`，exp 非字面量/cref/调用/数组/元组/cast/size/归约时加括号
         //（parenthesizeSubExp :194-210）。a = 元组表达式，ival = 1 基输出序号（TupleOperation1 `-f(time)[1]`）。
+        // 经函数型形参的调用是 CALL、函数引用是 CREF（不加括号）；BOX / UNBOX / PARTEVALFUNCTION 走 else 支（加）。
         const ExprKind k = a_[e.a].kind;
         const bool bare = k == ExprKind::IntLit || k == ExprKind::RealLit || k == ExprKind::StringLit ||
                           k == ExprKind::BoolLit || k == ExprKind::EnumLit || k == ExprKind::Cref ||
                           k == ExprKind::Call || k == ExprKind::Array || k == ExprKind::Tuple ||
-                          k == ExprKind::Cast || k == ExprKind::Size || k == ExprKind::Reduction;
+                          k == ExprKind::Cast || k == ExprKind::Size || k == ExprKind::Reduction ||
+                          k == ExprKind::FnParamCall || k == ExprKind::FnRef;
         if (!bare) out_ += '(';
         exp(e.a);
         if (!bare) out_ += ')';
@@ -278,12 +309,13 @@ class ExprDumper {
       case ExprKind::Subscript: {
         // ASUB（ExpressionDumpTpl.tpl:89-95 v1.25.0）：`<exp>[s1, s2]`，下标以 ", " 相连（CX 探针 c2：
         // `{{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}}[n, 1]`）；exp 加括号的规则同 TSUB（parenthesizeSubExp :159-176）。
-        // a = 被取下标式，args = 下标。
+        // a = 被取下标式，args = 下标。函数型实参的几种同 TSUB。
         const ExprKind k = a_[e.a].kind;
         const bool bare = k == ExprKind::IntLit || k == ExprKind::RealLit || k == ExprKind::StringLit ||
                           k == ExprKind::BoolLit || k == ExprKind::EnumLit || k == ExprKind::Cref ||
                           k == ExprKind::Call || k == ExprKind::Array || k == ExprKind::Tuple ||
-                          k == ExprKind::Cast || k == ExprKind::Size || k == ExprKind::Reduction;
+                          k == ExprKind::Cast || k == ExprKind::Size || k == ExprKind::Reduction ||
+                          k == ExprKind::FnParamCall || k == ExprKind::FnRef;
         if (!bare) out_ += '(';
         exp(e.a);
         if (!bare) out_ += ')';

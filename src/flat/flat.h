@@ -99,6 +99,15 @@ struct FlatAlgorithm {
 };
 
 // ---- 压平函数（S3.e：发射被调用户函数；DAEDump 函数块）----
+// 函数类型里的一个输入 / 输出（ADR-009）：函数型形参的类型（partial function 的形参，NFTyping.typeClassType :278-287
+// FUNCTIONAL_PARAMETER；形参类型被装箱，NFFunction.boxFunctionParameter :1684-1692 v1.25.0），也用来比部分应用 / 函数名的函数
+// 类型（TypeCheck.matchFunctionTypes）。
+struct FlatFnTypeArg {
+  Symbol name;
+  Type ty;           // 未装箱的类型（打印时前缀 `#`，DAEDumpTpl.dumpType 的 T_METABOXED :344）
+  Id<Expr> dflt;     // 输入的缺省值（打印用：装箱式 `#(2)`；比类型时只看有无）；无 → invalid
+};
+
 // 形参/局部：维在**类型**上（与类体变量维在名上相反）；in/out 变率剥离成 Var（不打前缀），protected 局部保留 kind。
 struct FlatFuncParam {
   Symbol name;
@@ -112,6 +121,10 @@ struct FlatFuncParam {
   std::uint32_t record_def = 0xFFFFFFFFu;        // 记录类型的 SCode 类元素（Id<SElement>.raw），调用处实参匹配用；不打印
   Symbol comment;                                // 字符串注释（`input Real x "the x";`，dumpVar 照打）
   std::vector<FlatVarAttr> attributes;           // 属性（`input Real v(unit = "V")`，dumpVar 照打，名字后、绑定前；final 不打）
+  // 函数型形参（ty.kind == Function，ADR-009）的函数类型：打成 `input f<function>(#Real u, #Integer k := #(2)) => #Real f`
+  //（DAEDumpTpl.dumpFunctionType :373-382、dumpFuncArg :384-394 v1.25.0）。
+  std::vector<FlatFnTypeArg> fn_inputs;
+  std::vector<FlatFnTypeArg> fn_outputs;
 };
 struct FlatFunction {
   std::vector<Symbol> name;                      // 压平名（点分：顶层 f；包 P.f；模型内嵌按实例路径 M.a.f）

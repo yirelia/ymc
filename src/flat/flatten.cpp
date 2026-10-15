@@ -746,7 +746,9 @@ class Flattener {
     auto expr = [&](auto& self, Id<Expr> id) -> void {
       if (!id.is_valid()) return;
       const Expr& x = result_.model.exprs[id];
-      if (x.kind == ExprKind::Call) mark_call(x.call_name);
+      // 部分应用 / 函数引用引用的函数同样收（collectExpFuncs_traverse 的 PARTIAL_FUNCTION_APPLICATION 支 / CREF 支的函数类型，
+      // NFFlatten.mo:2878-2896 v1.25.0；ADR-009）。经函数型输入的调用（FnParamCall）名字是形参，不是函数。
+      if (x.kind == ExprKind::Call || x.kind == ExprKind::PartialApp || x.kind == ExprKind::FnRef) mark_call(x.call_name);
       for (const ExprCrefPart& cp : x.cref.parts) for (Id<Expr> sub : cp.subscripts) self(self, sub);
       self(self, x.a);
       self(self, x.b);
@@ -1965,6 +1967,7 @@ class Flattener {
   bool has_call_other_than_string(Id<Expr> id) {
     if (!id.is_valid()) return false;
     const Expr& e = result_.model.exprs[id];
+    if (e.kind == ExprKind::FnParamCall) return true;   // 经函数型输入的调用也是调用（ADR-009）
     if (e.kind == ExprKind::Call && !(e.call_name.size() == 1 && in_.str(e.call_name[0]) == "String")) return true;
     for (Id<Expr> a : e.args) if (has_call_other_than_string(a)) return true;
     return has_call_other_than_string(e.a) || has_call_other_than_string(e.b) || has_call_other_than_string(e.c);
@@ -4169,6 +4172,16 @@ class Flattener {
       case ExprKind::IfExp:
         return cond_is_runtime(e.a) || cond_is_runtime(e.b) || cond_is_runtime(e.c);
       case ExprKind::Call: return true;
+      // 函数型实参（ADR-009）：经函数型输入的调用同调用；装箱随被装箱式；部分应用的变率 = 绑定实参变率的最大值
+      //（NFFunction.typePartialApplication :1724-1729 v1.25.0），函数引用是常量。
+      case ExprKind::Unbox:
+      case ExprKind::FnParamCall: return true;
+      case ExprKind::Box: return cond_is_runtime(e.a);
+      case ExprKind::PartialApp:
+        for (Id<Expr> a : e.args)
+          if (cond_is_runtime(a)) return true;
+        return false;
+      case ExprKind::FnRef: return false;
       default: return false;
     }
   }
@@ -4243,6 +4256,12 @@ class Flattener {
       case ExprKind::Call: return x.call_name == y.call_name && list_eq(x.args, y.args);
       case ExprKind::Array: return list_eq(x.args, y.args);
       case ExprKind::Subscript: return expr_equal(x.a, y.a) && list_eq(x.args, y.args);   // `{…}[n] - {…}[n]` → 0.0（CX c7）
+      // 函数型实参（ADR-009；NFExpression.compare 的 BOX / UNBOX / PARTIAL_FUNCTION_APPLICATION 支逐子式比，v1.25.0）。
+      case ExprKind::Box:
+      case ExprKind::Unbox: return expr_equal(x.a, y.a);
+      case ExprKind::PartialApp:
+      case ExprKind::FnParamCall: return x.call_name == y.call_name && list_eq(x.args, y.args);
+      case ExprKind::FnRef: return x.call_name == y.call_name;
       default: return false;
     }
   }
@@ -9149,6 +9168,8 @@ class Flattener {
   // 函数里记录类型的形参 / 局部 → 其记录类（+ 作用域链、构造函数的压平名：字段类型取它的输入，见 fn_field_cref）
   // alias / ascope：声明类型是 operator record 的短类别名（`SI.ComplexVoltage`）时的别名类及其定义作用域（运算符按别名命名）。
   struct FnRecord { Id<SElement> rec; ScodeScope rscope; std::vector<Symbol> ctor; Id<SElement> alias; ScodeScope ascope; };
+  // 函数类型（ADR-009）：函数型形参的类型、部分应用 / 函数名的类型，比较照 TypeCheck.matchFunctionTypes（见 fn_types_match）。
+  struct FnType { std::vector<FlatFnTypeArg> inputs, outputs; };
   struct FnRef {
     Id<SElement> fe;
     Id<SElement> named;   // 调用里写的那个类（别名链的头；不是别名时 = fe）
@@ -9519,6 +9540,9 @@ class Flattener {
     std::unordered_map<std::uint32_t, std::vector<Id<Exp>>> dim_exps;
     std::unordered_map<std::uint32_t, Id<Expr>> iter_labels, loop_labels;
     std::unordered_set<std::uint32_t> struct_locals;
+    std::unordered_map<std::uint32_t, FnType> fn_types;   // 函数型形参（ADR-009）
+    std::unordered_set<std::uint32_t> fn_types_used;
+    bool in_body;
     FnCtxGuard(Flattener& fl, const ScodeScope* sc, Id<SElement> h, bool imp)
         : f(fl), params(std::move(fl.func_params_)), inputs(std::move(fl.fn_inputs_)), scope(fl.fn_scope_),
           home(fl.fn_home_), impure(fl.fn_impure_), end(fl.fn_end_), loops_depth(fl.fn_loops_),
@@ -9526,9 +9550,10 @@ class Flattener {
           cpsubs(std::move(fl.ceval_psubs_)), citers(std::move(fl.citers_)), locals(fl.locals_), in_names(fl.input_names_),
           records(std::move(fl.fn_records_)), dim_exps(std::move(fl.fn_dim_exps_)),
           iter_labels(std::move(fl.stmt_iter_labels_)), loop_labels(std::move(fl.loop_labels_)),
-          struct_locals(std::move(fl.fn_struct_locals_)) {
+          struct_locals(std::move(fl.fn_struct_locals_)), fn_types(std::move(fl.fn_types_)),
+          fn_types_used(std::move(fl.fn_types_used_)), in_body(fl.fn_in_body_) {
       f.func_params_.clear(); f.fn_inputs_.clear(); f.stmt_iters_.clear(); f.loop_vars_.clear(); f.fn_records_.clear();
-      f.fn_struct_locals_.clear();
+      f.fn_struct_locals_.clear(); f.fn_types_.clear(); f.fn_types_used_.clear(); f.fn_in_body_ = false;
       f.fn_dim_exps_.clear(); f.stmt_iter_labels_.clear(); f.loop_labels_.clear();
       f.ceval_psubs_.clear(); f.citers_.clear();
       f.fn_scope_ = sc; f.fn_home_ = h; f.fn_impure_ = imp; f.fn_end_ = Id<Expr>{}; f.fn_loops_ = 0;
@@ -9543,6 +9568,9 @@ class Flattener {
       f.fn_dim_exps_ = std::move(dim_exps);
       f.stmt_iter_labels_ = std::move(iter_labels); f.loop_labels_ = std::move(loop_labels);
       f.fn_struct_locals_ = std::move(struct_locals);
+      f.fn_types_ = std::move(fn_types);
+      f.fn_types_used_ = std::move(fn_types_used);
+      f.fn_in_body_ = in_body;
     }
     FnCtxGuard(const FnCtxGuard&) = delete;
     FnCtxGuard& operator=(const FnCtxGuard&) = delete;
@@ -11914,6 +11942,29 @@ class Flattener {
         type_tdims[c.name.id] = std::move(tdims);
         continue;
       }
+      // 函数型输入（ADR-009；MSL `input Modelica.Math.Nonlinear.Interfaces.partialScalarFunction f`）：类型是 partial function，
+      // 形参打函数类型（fn_type_of_class）。不是 partial → omc 报 META_FUNCTION_TYPE_NO_PARTIAL_PREFIX（NFInst.checkPartialComponent
+      // :2104-2127 v1.25.0）；函数型的输出 / 局部、继承来的、数组、带修饰 / 前缀 / 别名缺省的未核实 → SKIP。
+      {
+        Id<SElement> fcls;
+        ScodeScope fcs;
+        const int fk = fn_typed_component(c, fr.fscope, fcls, fcs);
+        if (result_.unsupported) return std::nullopt;
+        if (fk < 0) return fn_fail<std::optional<std::size_t>>("functional parameter form");
+        if (fk > 0) {
+          const bool is_input = std::find(sig.inputs.begin(), sig.inputs.end(), eid) != sig.inputs.end();
+          if (!is_input || sig.decl_scope.count(eid.raw) || !c.attr.dims.empty() || !c.type.dims.empty() || c.mod.is_valid() ||
+              c.attr.var != SVariability::Var || c.prefixes.is_final || alias_defaults.count(c.name.id))
+            return fn_fail<std::optional<std::size_t>>("functional parameter form");
+          if (!I_.scode.elems[fcls].is_partial) return fn_fail<std::optional<std::size_t>>("functional parameter type not partial");
+          std::optional<FnType> ft = fn_type_of_class(fcls, fcs);
+          if (result_.unsupported) return std::nullopt;
+          if (!ft) return fn_fail<std::optional<std::size_t>>("functional parameter type");
+          func_params_[c.name.id] = Type::of(TypeKind::Function);
+          fn_types_[c.name.id] = std::move(*ft);
+          continue;
+        }
+      }
       // 外部对象类型（构造的 output、析构 / 查表函数的 input）：按类名打印（同构造函数的压平名去掉末段），不展开。
       {
         ScodeScope xs;
@@ -12126,6 +12177,10 @@ class Flattener {
         p.record_def = fn_records_[c.name.id].rec.raw;
       }
       if (const auto xp = ext_paths.find(c.name.id); xp != ext_paths.end()) p.type_path = xp->second;
+      if (const auto ft = fn_types_.find(c.name.id); ft != fn_types_.end()) {   // 函数型输入（ADR-009）
+        p.fn_inputs = ft->second.inputs;
+        p.fn_outputs = ft->second.outputs;
+      }
       ff.params.push_back(std::move(p));
     };
     for (Id<SElement> eid : sig.inputs) param(eid, FlatDirection::Input);
@@ -12134,6 +12189,7 @@ class Flattener {
     const std::size_t fi = result_.model.functions.size();
     result_.model.functions.push_back(std::move(ff));   // 先登记（体里的自递归调用按名找到它）
     fn_refs_.emplace(path_key(qname), fr);              // 代入后实参全成字面量时按名求值（eval_flat_call）
+    fn_in_body_ = true;   // 算法段（函数值 / 经函数型输入的调用只核实过这里的，见 fn_in_body_；FnCtxGuard 出函数时恢复）
     std::vector<Id<FlatStatement>> body;
     if (sig.alg)
       for (Id<SStatement> sid : sig.alg->stmts) {
@@ -12144,6 +12200,13 @@ class Flattener {
       }
     result_.model.functions[fi].body = std::move(body);
     result_.model.functions[fi].has_algorithm = sig.alg != nullptr;
+    // 体里没被引用（调用 / 当实参传）的函数型输入：omc 1.25.0 实例化失败（"Internal error Instantiation of … failed with no error
+    // message"，PKZ 探针 PKZ11 / PKZ11b；引用了的照常，PKZ11c）→ SKIP。
+    for (const auto& kv : fn_types_)
+      if (!fn_types_used_.count(kv.first)) {
+        set_unsupported("functional parameter not referenced in function body");
+        return std::nullopt;
+      }
     for (FlatFuncParam& p : result_.model.functions[fi].params)   // 结构参数化的 parameter 局部（见 fn_struct_locals_）
       p.is_final = p.is_final || (p.direction == FlatDirection::None && p.var_kind == FlatVarKind::Parameter &&
                                   fn_struct_locals_.count(p.name.id) > 0);
@@ -12482,6 +12545,342 @@ class Flattener {
     return result_.unsupported ? std::nullopt : li;
   }
 
+  // ---- 函数型实参（ADR-009；MLS §12.4.2）：函数型输入、部分函数应用、函数名当值、经函数型输入的调用 ----
+  // MSL 的 `Modelica.Math.Nonlinear.solveOneNonlinearEquation(function f_nonlinear(p = p, h = h, X = X[1:nXi]), 190, 647)`
+  //（Media MoistAir.T_phX、ReferenceMoistAir、Fluid 的各 Medium）。omc 1.25.0 的输出（PKZ 探针）：被调函数头
+  // `input f<function>(#Real u) => #Real f`、体里 `fa := unbox(f(#(u_min)))`、调用处 `function M.T_phX.f_nonlinear(#(p), #(h),
+  // #(X[1:1]))`。
+
+  // 装箱 `#(x)`（Expression.box；ty 取被装箱式的，不另记"已装箱"）。
+  Id<Expr> box_expr(Id<Expr> x) {
+    Expr b;
+    b.kind = ExprKind::Box;
+    b.a = x;
+    b.ty = result_.model.exprs[x].ty;
+    return add(std::move(b));
+  }
+  // 组件 c 的类型是不是函数类（函数型形参，NFTyping.typeClassType :278-287 v1.25.0 的 FUNCTIONAL_PARAMETER）：1 = 长定义的函数类
+  //（cls / cscope 给出类与其定义作用域链，不含类本身）；0 = 不是；-1 = 是函数类但形态未做（短类别名 / class extends / external /
+  // operator 函数）→ 调用方 SKIP。类型路径在 scope 里解析（同 emit_function 查外部对象类型的那一次，不多出查找的副作用）。
+  int fn_typed_component(const SElement& c, const ScodeScope& scope, Id<SElement>& cls, ScodeScope& cscope) {
+    TypeKind tk;
+    if (builtin_scalar_type_kind(c.type.path, tk)) return 0;
+    ScodeScope ds;
+    const Id<SElement> e = resolve_class_path(c.type.path, c.type.leading_dot, scope, ds);
+    if (!e.is_valid() || I_.scode.elems[e].kind != SElementKind::Class) return 0;
+    const SElement& el = I_.scode.elems[e];
+    if (el.restriction != SRestriction::Function && el.restriction != SRestriction::ExternalFunction &&
+        el.restriction != SRestriction::OperatorFunction)
+      return 0;
+    if (el.restriction != SRestriction::Function || el.def.kind != SClassDefKind::Parts) return -1;
+    cls = e;
+    cscope = std::move(ds);
+    return 1;
+  }
+  // 被调函数各输入是不是函数型（fn_typed_component）；按压平名缓存（同一函数的形参类型不变，emit_function 也按压平名去重）。
+  std::vector<int> fn_slots(const std::vector<Symbol>& qname, const FnSig& sig, const FnRef& fr) {
+    const std::string k = path_key(qname);
+    if (const auto it = fn_slot_cache_.find(k); it != fn_slot_cache_.end()) return it->second;
+    std::vector<int> v;
+    for (Id<SElement> in : sig.inputs) {
+      Id<SElement> cls;
+      ScodeScope cs;
+      v.push_back(fn_typed_component(I_.scode.elems[in], fr.fscope, cls, cs));
+    }
+    fn_slot_cache_.emplace(k, v);
+    return v;
+  }
+  // 函数型形参的函数类型：partial function cls（定义作用域链 cds）的输入 / 输出，形参类型装箱（NFFunction.typeFunctionSignature
+  // :1598-1600 → boxFunctionParameter :1684-1692 v1.25.0）。只接核实过的形态（PKZ 探针）：恰一个 Real 标量输出；输入是 Real /
+  // Integer、维是常量整数（PKZ4 `#Real[2] u`）；派生类型照内建类型、属性不打（dumpFuncArg 不打属性，PKZ10 `#Real u`）；组件上的
+  // 修饰 / 变率前缀未核实；输入缺省须常量求值成标量，打成装箱的字面量（PKZ4 `#Integer k := #(2)`）。其余 → nullopt（调用方 SKIP）。
+  std::optional<FnType> fn_type_of_class(Id<SElement> cls, const ScodeScope& cds) {
+    ScodeScope fscope = cds;
+    fscope.insert(fscope.begin(), cls);
+    FnSig sig;
+    std::unordered_set<std::uint32_t> seen;
+    if (!collect_fn_sig(cls, fscope, sig, seen, 0) || sig.external || sig.outputs.size() != 1) return std::nullopt;
+    // 维 / 缺省按函数定义处求值，不按调用处的实例帧（同 fn_var_dims）。
+    struct FrameOff {
+      Flattener& f;
+      int frame;
+      const std::vector<Symbol>* prefix;
+      ~FrameOff() {
+        f.ceval_frame_ = frame;
+        f.ceval_prefix_ = prefix;
+      }
+    } frame_off{*this, ceval_frame_, ceval_prefix_};
+    ceval_frame_ = -1;
+    ceval_prefix_ = nullptr;
+    auto arg = [&](Id<SElement> eid, bool input) -> std::optional<FlatFnTypeArg> {
+      const SElement& c = I_.scode.elems[eid];
+      if (c.attr.var != SVariability::Var || c.prefixes.io != SInnerOuter::None || c.prefixes.is_final) return std::nullopt;
+      const auto dsc = sig.decl_scope.find(eid.raw);
+      const ScodeScope& ds = dsc != sig.decl_scope.end() ? dsc->second : fscope;
+      TypeKind tk;
+      std::vector<std::pair<Id<SMod>, ScodeScope>> chain;
+      std::vector<Id<Exp>> tdims;
+      std::vector<std::size_t> before;
+      if (!builtin_scalar_type_kind(c.type.path, tk) && !fn_derived_scalar(c, ds, tk, chain, tdims, before)) return std::nullopt;
+      if (result_.unsupported || (tk != TypeKind::Real && (!input || tk != TypeKind::Integer))) return std::nullopt;
+      std::vector<Id<Exp>> dexps = c.attr.dims;
+      dexps.insert(dexps.end(), c.type.dims.begin(), c.type.dims.end());
+      dexps.insert(dexps.end(), tdims.begin(), tdims.end());
+      if (!input && !dexps.empty()) return std::nullopt;   // 数组输出未核实
+      std::vector<Dimension> dims;
+      for (Id<Exp> d : dexps) {
+        if (I_.absyn.exps[d].kind == ExpKind::Colon) return std::nullopt;
+        const std::optional<CVal> v = eval_scode(d, ds, 0, /*allow_param=*/false);
+        if (!v || v->k != CVal::K::Int || v->i < 0) return std::nullopt;
+        Dimension dim;
+        dim.kind = DimKind::Integer;
+        dim.size = v->i;
+        dims.push_back(dim);
+      }
+      FlatFnTypeArg a;
+      a.name = c.name;
+      a.ty = dims.empty() ? Type::of(tk) : Type::array_of(Type::of(tk), std::move(dims));
+      if (c.mod.is_valid()) {
+        const SMod& m = I_.scode.mods[c.mod];
+        if (m.kind != SModKind::Mod || !m.subs.empty()) return std::nullopt;
+        if (m.binding.is_valid()) {
+          if (!input || a.ty.is_array()) return std::nullopt;
+          const std::optional<CVal> v = eval_scode(m.binding, ds, 0, /*allow_param=*/false);
+          if (!v || is_arr(*v)) return std::nullopt;
+          const Id<Expr> lit = cval_expr(*v, tk);
+          if (!lit.is_valid()) return std::nullopt;
+          a.dflt = box_expr(lit);
+        }
+      }
+      return a;
+    };
+    FnType t;
+    for (Id<SElement> eid : sig.inputs) {
+      std::optional<FlatFnTypeArg> a = arg(eid, true);
+      if (!a) return std::nullopt;
+      t.inputs.push_back(std::move(*a));
+    }
+    std::optional<FlatFnTypeArg> o = arg(sig.outputs[0], false);
+    if (!o) return std::nullopt;
+    t.outputs.push_back(std::move(*o));
+    return t;
+  }
+  // 发射出的函数的形参 → 函数类型（输入按槽序，skip 里标了的槽不算；dflt 只用来记有无缺省）。
+  static void fn_type_from_params(const std::vector<FlatFuncParam>& params, FnType& ty, const std::vector<bool>* skip = nullptr) {
+    for (std::size_t j = 0; j < params.size(); ++j) {
+      const FlatFuncParam& p = params[j];
+      if (p.direction == FlatDirection::Input && !(skip && j < skip->size() && (*skip)[j]))
+        ty.inputs.push_back(FlatFnTypeArg{p.name, p.ty, p.binding});
+      else if (p.direction == FlatDirection::Output)
+        ty.outputs.push_back(FlatFnTypeArg{p.name, p.ty, Id<Expr>{}});
+    }
+  }
+  // 函数类型相容（TypeCheck.matchFunctionTypes / matchFunctionParameters，NFTypeCheck.mo:2080-2169 v1.25.0）：输出个数相同；期望的
+  // 每个输出、输入与实际的按序同名、类型精确相同（拆箱后 matchTypes 为 EXACT——只认核实过的 Real / Integer、维都已知且相等）；
+  // 期望的输入有缺省则实际的也得有；实际多出的输入都得有缺省。不相容 omc 报 Type mismatch（PKZ14 名字不同、PKZ20 Integer 对
+  // Real）→ false（调用方 SKIP）。
+  static bool fn_types_match(const FnType& act, const FnType& exp) {
+    auto same = [](const Type& a, const Type& b) {
+      const TypeKind ka = a.element_type().kind;
+      if (ka != b.element_type().kind || a.dims.size() != b.dims.size()) return false;
+      if (ka != TypeKind::Real && ka != TypeKind::Integer) return false;
+      for (std::size_t k = 0; k < a.dims.size(); ++k)
+        if (a.dims[k].kind != DimKind::Integer || b.dims[k].kind != DimKind::Integer || a.dims[k].size != b.dims[k].size)
+          return false;
+      return true;
+    };
+    if (act.outputs.size() != exp.outputs.size() || act.inputs.size() < exp.inputs.size()) return false;
+    for (std::size_t i = 0; i < exp.outputs.size(); ++i)
+      if (act.outputs[i].name != exp.outputs[i].name || !same(act.outputs[i].ty, exp.outputs[i].ty)) return false;
+    for (std::size_t i = 0; i < exp.inputs.size(); ++i) {
+      if (act.inputs[i].name != exp.inputs[i].name || !same(act.inputs[i].ty, exp.inputs[i].ty)) return false;
+      if (exp.inputs[i].dflt.is_valid() && !act.inputs[i].dflt.is_valid()) return false;
+    }
+    for (std::size_t i = exp.inputs.size(); i < act.inputs.size(); ++i)
+      if (!act.inputs[i].dflt.is_valid()) return false;
+    return true;
+  }
+  // 函数值引用的函数：解析、签名、压平名（同 try_emit_user_call：实例语境里找到的按实例路径——MSL Fluid 的
+  // `RoomCO2.boundary4.Medium.T_phX.f_nonlinear`，PKZ6；其余 fn_flat_name——函数体里嵌套的 `PZ1.T_ph.f_nl`、模型里的
+  // `PKZ18.f_nonlinear`）、发射。别名修饰 / operator record 构造 / 内建等价 / external / impure 的函数当函数值未核实 → nullopt。
+  struct FnTarget {
+    std::size_t fi;
+    std::size_t nin;
+    std::vector<Symbol> qname;
+  };
+  std::optional<FnTarget> fn_value_target(const Cref& fn, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    const ScodeScope sc = scode_scope_of(enclosing);
+    const std::optional<FnRef> fr = resolve_fn(fn, sc);
+    if (!fr) return fn_fail<std::optional<FnTarget>>("function value name");
+    if (!fr->alias_mods.empty() || !fr->ctor_name.empty() || builtin_equiv(*fr) || fn_impure(*fr))
+      return fn_fail<std::optional<FnTarget>>("function value form");
+    FnSig sig;
+    std::unordered_set<std::uint32_t> seen;
+    if (!collect_fn_sig(fr->fe, fr->fscope, sig, seen, 0) || sig.external || sig.outputs.empty())
+      return fn_fail<std::optional<FnTarget>>("function value form");
+    Id<SElement> home;
+    const std::optional<std::vector<Symbol>> qname =
+        fr->node.is_valid() ? scope_path(fr->node) : fn_flat_name(fn, sc, enclosing, prefix, home);
+    if (!qname) return fn_fail<std::optional<FnTarget>>("flattened function name");
+    const std::optional<std::size_t> fi = emit_function(*fr, sig, *qname, {}, home);
+    if (!fi || result_.unsupported) return fn_fail<std::optional<FnTarget>>("function body");
+    return FnTarget{*fi, sig.inputs.size(), *qname};
+  }
+  // 函数名当值（PKZ8 `solve(g, a)` → `PZ8.solve(PZ8.g, a)`；`function g()` 同，PKZ13）→ 函数引用；函数类型 = g 的全部输入 / 输出。
+  Id<Expr> fn_ref_value(const Cref& fn, NodeId enclosing, const std::vector<Symbol>& prefix, FnType& ty) {
+    const std::optional<FnTarget> t = fn_value_target(fn, enclosing, prefix);
+    if (!t) return {};
+    fn_type_from_params(result_.model.functions[t->fi].params, ty);
+    Expr r;
+    r.kind = ExprKind::FnRef;
+    r.call_name = t->qname;
+    r.ty = Type::of(TypeKind::Function);
+    return add(std::move(r));
+  }
+  // 部分函数应用 `function F(a = e1, …)`（NFFunction.typePartialApplication :1694-1738 / makePartialApplicationFromSlots
+  // :1740-1785 v1.25.0）：命名实参入 F 的输入槽、按槽序（不是书写序：PKZ2 `g(b = b, a = a)` → `function PZ2.g(#(a), #(b))`）照槽
+  // 类型匹配后装箱；没给的槽成为结果函数类型的输入（槽序），F 的输出照搬。位置实参 omc 解析就报错（PKZ9）→ SKIP。
+  // 绑定的实参 omc 不化简（SimplifyExp.simplify 没有 PARTIAL_FUNCTION_APPLICATION 支，NFSimplifyExp.mo:78-124：PKZ17 的 `2 * q`
+  // 照留 `#(q * 2.0)`），常量照求（EvalConstants：PKZ3 `X[1:nXi]` → `#(X[1:1])`）、Integer → Real 照转（PKZ15 `#(/*Real*/(k))`、
+  // `#(2.0)`）——ymc 的定型结果再化简还会变的形态未核实 → SKIP；记录槽只接同类记录变量的整体引用（PKZ16 `#(d)`）。
+  Id<Expr> partial_app_value(const Exp& x, NodeId enclosing, const std::vector<Symbol>& prefix, FnType& ty) {
+    for (std::size_t i = 0; i < x.args.size(); ++i)
+      if (i >= x.arg_names.size() || !x.arg_names[i].is_valid())
+        return fn_fail<Id<Expr>>("positional argument in partial application");
+    const Cref fc = I_.absyn.crefs[x.cref];   // 拷贝
+    if (x.args.empty()) return fn_ref_value(fc, enclosing, prefix, ty);   // `function F()` = F（instPartEvalFunction :3087-3109）
+    // 模型语境展开的 for 方程 / 推导式里（迭代变量按值内联，loop_vars_）：omc 定型时迭代变量还是 cref（`a = i` 进 Real 槽得
+    // CAST(Real, i)），展开后不再化简部分应用的实参，打印形态与 ymc 内联后折出的字面量可能不同，未核实 → SKIP。
+    if (!loop_vars_.empty()) return fn_fail<Id<Expr>>("partial application inside an unrolled loop");
+    const std::optional<FnTarget> t = fn_value_target(fc, enclosing, prefix);
+    if (!t) return {};
+    const std::vector<FlatFuncParam> params = result_.model.functions[t->fi].params;   // 拷贝（下面定型实参会发射函数）
+    std::vector<Id<Exp>> bound(t->nin);
+    for (std::size_t i = 0; i < x.args.size(); ++i) {
+      std::size_t j = 0;
+      while (j < t->nin && params[j].name != x.arg_names[i]) ++j;
+      if (j >= t->nin || bound[j].is_valid()) return fn_fail<Id<Expr>>("named argument does not match an input");
+      bound[j] = x.args[i];
+    }
+    std::vector<Id<Expr>> args;
+    std::vector<bool> filled(params.size(), false);
+    for (std::size_t j = 0; j < t->nin; ++j) {
+      if (!bound[j].is_valid()) continue;
+      filled[j] = true;
+      const FlatFuncParam& p = params[j];
+      if (p.ty.kind == TypeKind::Function || (!p.type_path.empty() && p.record_def == Id<SElement>::kInvalid))
+        return fn_fail<Id<Expr>>("partial application argument type");   // 函数型 / 外部对象的槽未核实
+      Id<Expr> a = inst_exp(bound[j], enclosing, prefix);
+      if (result_.unsupported) return {};
+      if (p.record_def != Id<SElement>::kInvalid) {
+        const Expr& ax = result_.model.exprs[a];
+        if (ax.kind != ExprKind::Cref || ax.ty.is_array() || record_elem_def_of(a) != p.record_def)
+          return fn_fail<Id<Expr>>("partial application argument type");
+      } else {
+        a = coerce_to_param(a, p.ty);   // 不符 → NAMED_ARG_TYPE_MISMATCH（:1764-1768）
+        if (!a.is_valid()) return fn_fail<Id<Expr>>("partial application argument type");
+      }
+      const bool stable = expr_equal(simplify_expr(a), a);
+      if (result_.unsupported) return {};
+      if (!stable || type_is_empty_array(result_.model.exprs[a].ty)) return fn_fail<Id<Expr>>("partial application argument form");
+      args.push_back(box_expr(a));
+    }
+    fn_type_from_params(params, ty, &filled);
+    Expr r;
+    r.kind = ExprKind::PartialApp;
+    r.call_name = t->qname;
+    r.args = std::move(args);
+    r.ty = Type::of(TypeKind::Function);
+    return add(std::move(r));
+  }
+  // 函数型输入 p 的实参：部分应用 → PartialApp；`function F()` / 函数名 → 函数引用（NFInst.instPartEvalFunction 没有命名实参时就是
+  // 函数名的 cref）；函数体里另一个函数型输入 → 照写其名、不装箱（PKZ7 `PZ7.solve(f, x)`）。实参的函数类型须与 p 的相容
+  //（fn_types_match），否则 omc 报 Type mismatch → invalid（调用方 SKIP）。
+  Id<Expr> fn_value_arg(Id<Exp> raw, const FlatFuncParam& p, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    // 函数里只核实过算法段的（PKZ1 等）；形参 / 局部绑定里的调用实参（`protected Real z = solve(function g(a = x), 1)`）未核实。
+    if (fn_scope_ && !fn_in_body_) return fn_fail<Id<Expr>>("functional argument in function variable binding");
+    const Exp x = I_.absyn.exps[raw];   // 拷贝
+    FnType actual;
+    Id<Expr> v;
+    if (x.kind == ExpKind::Call && x.partial_fn && !x.call_suffix.is_valid()) {
+      v = partial_app_value(x, enclosing, prefix, actual);
+    } else if (x.kind == ExpKind::CrefExp) {
+      const Cref c = I_.absyn.crefs[x.cref];   // 拷贝
+      if (fn_scope_ && !c.leading_dot && c.parts.size() == 1 && c.parts[0].subscripts.empty())
+        if (const auto ft = fn_types_.find(c.parts[0].name.id); ft != fn_types_.end()) {
+          actual = ft->second;
+          fn_types_used_.insert(c.parts[0].name.id);
+          v = fn_local_cref(c.parts[0], Type::of(TypeKind::Function));
+        }
+      if (!v.is_valid() && !result_.unsupported) v = fn_ref_value(c, enclosing, prefix, actual);
+    } else {
+      return fn_fail<Id<Expr>>("functional argument form");
+    }
+    if (!v.is_valid() || result_.unsupported) return {};
+    if (!fn_types_match(actual, FnType{p.fn_inputs, p.fn_outputs})) return fn_fail<Id<Expr>>("functional argument type");
+    return v;
+  }
+  // 函数体里经函数型输入 f 的调用 `f(x)`（NFFunction.lookupFunction :318-345 找到的是组件、名字不加前缀）：实参照形参类型匹配后装箱
+  //（TypeCheck.matchTypes_cast 的 (_, METABOXED) 支 :2598-2604 v1.25.0），结果是装箱的输出、按目标拆箱（(METABOXED, _) 支 :2590-2596）
+  // → `unbox(f(#(x)))`（PKZ1 `fa := unbox(f(#(u_min)))`、PKZ2 `unbox(fun(#(x))) + 2.0 * unbox(fun(#(x + 1.0)))`、PKZ11c 在 if 支里）。
+  // 实参按位置 / 名字入槽（PKZ8 `f(u = x)` → `f(#(x))`），缺的取函数类型里的缺省（PKZ4 `f(#(v), #(2))`）；实参照常化简（Call 的实参
+  // 照化简、BOX 往里化简，NFSimplifyExp.mo:122）、Integer 进 Real 带转型（PKZ15 `#(/*Real*/(n))`、`#(2.0)`）。语句位置的调用、数组实参
+  // 的非整体引用形态、向量化未核实 → SKIP。
+  Id<Expr> fn_param_call(const Exp& e, Symbol fname, const FnType& ft, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    auto fail = [&](const char* why) {
+      set_unsupported(why);
+      return lit_int(0);
+    };
+    if (noret_call_) return fail("call of functional parameter as statement");
+    // 形参 / 局部的绑定、维里的调用（`protected Real z = f(x)`）未核实——只认算法段里的。
+    if (!fn_in_body_) return fail("call of functional parameter outside the algorithm section");
+    if (ft.outputs.size() != 1) return fail("functional parameter call form");
+    const std::size_t n = ft.inputs.size();
+    std::vector<Id<Exp>> raw(n);
+    std::size_t pos = 0;
+    for (std::size_t i = 0; i < e.args.size(); ++i) {
+      if (i < e.arg_names.size() && e.arg_names[i].is_valid()) {
+        std::size_t j = 0;
+        while (j < n && ft.inputs[j].name != e.arg_names[i]) ++j;
+        if (j >= n || raw[j].is_valid()) return fail("functional parameter call argument");
+        raw[j] = e.args[i];
+      } else {
+        if (pos >= n || raw[pos].is_valid()) return fail("functional parameter call argument");
+        raw[pos++] = e.args[i];
+      }
+    }
+    std::vector<Id<Expr>> args;
+    for (std::size_t k = 0; k < n; ++k) {
+      if (!raw[k].is_valid()) {
+        if (!ft.inputs[k].dflt.is_valid()) return fail("functional parameter call argument");   // 缺实参（omc 报错）
+        args.push_back(ft.inputs[k].dflt);   // 已是装箱的字面量
+        continue;
+      }
+      Id<Expr> a = inst_exp(raw[k], enclosing, prefix);
+      if (result_.unsupported) return lit_int(0);
+      a = coerce_to_param(a, ft.inputs[k].ty);
+      if (!a.is_valid()) return fail("functional parameter call argument type");
+      a = simplify_expr(a);
+      if (result_.unsupported) return lit_int(0);
+      const Expr& ax = result_.model.exprs[a];
+      if ((ax.ty.is_array() && ax.kind != ExprKind::Cref) || type_is_empty_array(ax.ty))
+        return fail("functional parameter call argument form");
+      args.push_back(box_expr(a));
+    }
+    fn_types_used_.insert(fname.id);
+    Expr c;
+    c.kind = ExprKind::FnParamCall;
+    c.call_name = {fname};
+    c.args = std::move(args);
+    c.ty = ft.outputs[0].ty;
+    const Id<Expr> call = add(std::move(c));
+    Expr u;
+    u.kind = ExprKind::Unbox;
+    u.a = call;
+    u.ty = ft.outputs[0].ty;
+    return add(std::move(u));
+  }
+
   // 用户函数调用 → 发射函数定义 + 符号调用：压平名（fn_flat_name）、实参补全（位置 / 命名 / 缺省代换，fillArgs）、按形参
   // 类型匹配。多输出函数在表达式里取首输出 `f(x)[1]`（TupleOperation1/2、FunctionMultiOutput2/4）。纯函数体里调 impure
   // 函数 → omc 把调用者改标 impure 并告警（PURE_FUNCTION_WITH_IMPURE_CALLS，ImpureCall1）→ SKIP。不可发射 → invalid。
@@ -12586,15 +12985,31 @@ class Flattener {
         raw[pos++] = e.args[i];
       }
     }
+    // 函数型输入（ADR-009）的实参是函数值（部分应用 / 函数名 / 函数型形参），等形参的函数类型定下来（emit_function 之后）再定型、
+    // 比类型（fn_value_arg）；部分应用落在别的输入上 = 类型错（omc 报 Type mismatch）→ SKIP。
+    const std::vector<int> fslot = fn_slots(*qname, sig, *fr);
+    if (result_.unsupported) return {};
+    for (std::size_t i = 0; i < inputs.size(); ++i) {
+      if (fslot[i] < 0) return fn_fail<Id<Expr>>("functional parameter form");
+      if (fslot[i] == 0 && raw[i].is_valid() && I_.absyn.exps[raw[i]].kind == ExpKind::Call && I_.absyn.exps[raw[i]].partial_fn)
+        return fn_fail<Id<Expr>>("partial application to non-functional input");
+    }
     std::vector<Id<Expr>> args(inputs.size());   // 显式实参先在调用处定型（未强转）
     for (std::size_t i = 0; i < inputs.size(); ++i)
-      if (raw[i].is_valid()) {
+      if (raw[i].is_valid() && fslot[i] == 0) {
         args[i] = inst_exp(raw[i], enclosing, prefix);
         if (result_.unsupported) return {};
       }
     const std::optional<std::size_t> fi = emit_function(*fr, sig, *qname, alias_defaults, home);
     if (!fi || result_.unsupported) return fn_fail<Id<Expr>>("function body");
     const std::vector<FlatFuncParam> params = result_.model.functions[*fi].params;   // 拷贝（下面会往 arena add）
+    for (std::size_t i = 0; i < inputs.size(); ++i) {
+      if (fslot[i] == 0 || !raw[i].is_valid()) continue;   // 没给的照下面 fill 报缺（函数型输入不许有缺省，见 emit_function）
+      if (params[i].ty.kind != TypeKind::Function) return fn_fail<Id<Expr>>("functional parameter form");
+      args[i] = fn_value_arg(raw[i], params[i], enclosing, prefix);
+      if (result_.unsupported) return {};
+      if (!args[i].is_valid()) return fn_fail<Id<Expr>>("functional argument");
+    }
     // 缺省槽（fillDefaultSlot2）：取输入绑定，引用别的输入槽处代换成该槽实参（按槽类型强转，被引用的缺省槽先递归补齐）；
     // 互相引用 → CYCLIC_DEFAULT_VALUE、无默认 → UNFILLED_SLOT → SKIP。YmcFnEmit1：`f(a)` → `f(a, 2.0 * a, 3)`。
     std::vector<int> status(inputs.size(), 0);   // 0 未求 / 1 求值中 / 2 已定
@@ -12726,6 +13141,12 @@ class Flattener {
       }
     }
     for (std::size_t i = 0; i < inputs.size(); ++i) {
+      // 函数型输入的实参（函数值）已在上面按函数类型比过（fn_value_arg），不装箱、不化简（PKZ7 `PZ7.solve(f, x)`）。
+      if (params[i].ty.kind == TypeKind::Function) {
+        if (fslot[i] <= 0) return fn_fail<Id<Expr>>("functional parameter form");
+        continue;
+      }
+      if (fslot[i] != 0) return fn_fail<Id<Expr>>("functional parameter form");
       // 记录形参：实参须是同一记录类的整体引用（构造调用等其余形态未做）；记录数组形参（`input Complex u[:]`，MSL QuasiStatic
       // quasiRMS）收同类记录数组的整体引用 / 数组字面量（RZ 探针）。
       if (params[i].record_def != Id<SElement>::kInvalid && record_elem_def_of(args[i]) != params[i].record_def &&
@@ -13766,6 +14187,9 @@ class Flattener {
                                      std::vector<CVal>* all_outputs = nullptr, bool noret = false,
                                      const FnRef* known = nullptr) {
     if (depth > 100) return std::nullopt;
+    // 部分函数应用（ADR-009）不是调用：解释器没有函数值（闭包），一律求不出（omc 的 Ceval 能求，PKZ 探针 PKZ12 `parameter Real T0 =
+    // PZ12.T_ph(2, 3)` → 834.0——ymc 求不出、留下的全字面量调用由 simplify_expr 的 "constant user call not evaluated" 拦成 SKIP）。
+    if (call.partial_fn) return std::nullopt;
     // 实参在调用处求值（可用实例帧）；函数体 / 记录构造在定义处求值，实例帧不适用（函数不能引用模型参数）。
     struct FrameOff {
       Flattener& f;
@@ -17058,6 +17482,15 @@ class Flattener {
     const Cref& fn = I_.absyn.crefs[e.cref];
     // 调用结果的字段访问 `f(i).y`：1.25.0 自己报内部错误（DotOperator），ymc 未做 → SKIP（此前被静默当成 f(i)）。
     if (e.call_suffix.is_valid()) { set_unsupported("field access on call result"); return lit_int(0); }
+    // 部分函数应用（ADR-009）只在函数型输入的实参位置定型（try_emit_user_call 先接走，见 fn_value_arg）；落到这里的在别的位置
+    //（当普通值用 / 内建函数的实参），omc 报类型错 → SKIP。
+    if (e.partial_fn) { set_unsupported("partial function application outside a functional argument"); return lit_int(0); }
+    // 函数体里经函数型输入的调用 `f(x)`（见 fn_param_call）。
+    if (fn_scope_ && fn.parts.size() == 1 && !fn.leading_dot && fn.parts[0].subscripts.empty())
+      if (const auto ft = fn_types_.find(fn.parts[0].name.id); ft != fn_types_.end()) {
+        const FnType t = ft->second;   // 拷贝（fn_param_call 里定型实参，不跨调用持容器里的引用）
+        return fn_param_call(e, fn.parts[0].name, t, enclosing, prefix);
+      }
     // 模型语境里直接写的归约式 `sum / product / min / max(e for i in r, …)`。
     if (!fn_scope_ && e.args.size() == 1 && fn.parts.size() == 1 && I_.absyn.exps[e.args[0]].kind == ExpKind::Reduction) {
       const std::string_view rn = in_.str(fn.parts[0].name);
@@ -18961,7 +19394,7 @@ class Flattener {
   bool has_call(Id<Expr> id) {
     if (!id.is_valid()) return false;
     const Expr& e = result_.model.exprs[id];
-    if (e.kind == ExprKind::Call) return true;
+    if (e.kind == ExprKind::Call || e.kind == ExprKind::FnParamCall) return true;   // 经函数型输入的调用也是调用（ADR-009）
     for (Id<Expr> a : e.args) if (has_call(a)) return true;
     return has_call(e.a) || has_call(e.b) || has_call(e.c);
   }
@@ -21771,6 +22204,29 @@ class Flattener {
         r.a = a; r.b = b; r.c = c;
         return add(std::move(r));
       }
+      // 函数型实参（ADR-009；NFSimplifyExp.simplify :78-124 v1.25.0）：UNBOX / BOX 往里化简（:118 / :122），经函数型输入的调用照
+      // 调用化简实参；部分应用 / 函数引用没有对应的支（落 else，原样）——绑定实参不化简（PKZ17 `#(q * 2.0)`）。
+      case ExprKind::Box:
+      case ExprKind::Unbox: {
+        Expr r = result_.model.exprs[id];
+        const Id<Expr> a = simplify_expr(r.a);
+        if (a == r.a) return id;
+        r.a = a;
+        return add(std::move(r));
+      }
+      case ExprKind::FnParamCall: {
+        Expr r = result_.model.exprs[id];
+        bool changed = false;
+        for (Id<Expr>& x : r.args) {
+          const Id<Expr> n = simplify_expr(x);
+          changed = changed || !(n == x);
+          x = n;
+        }
+        return changed ? add(std::move(r)) : id;
+      }
+      case ExprKind::PartialApp:
+      case ExprKind::FnRef:
+        return id;
       default:
         return id;   // 叶（cref/time/…）、Array 等原样
     }
@@ -26254,6 +26710,13 @@ class Flattener {
   std::unordered_map<std::uint32_t, FnRecord> fn_records_;      // 记录类型的形参 / 局部名 → 记录类（字段访问 `r.x`）
   // 当前函数里成了结构参数的局部名（调用的输出维引用了它所在的实参，见 try_emit_user_call）：parameter 局部打 `final parameter`。
   std::unordered_set<std::uint32_t> fn_struct_locals_;
+  // 当前函数的函数型形参（ADR-009）：名 → 函数类型（emit_function 定；体里 `f(x)` 与把 f 当实参时用）。
+  std::unordered_map<std::uint32_t, FnType> fn_types_;
+  // 当前函数体里引用到的函数型形参（调用 / 当实参传）：没被引用的 omc 1.25.0 内部错（PKZ 探针 PKZ11），见 emit_function。
+  std::unordered_set<std::uint32_t> fn_types_used_;
+  std::unordered_map<std::string, std::vector<int>> fn_slot_cache_;   // 压平名 → 各输入是否函数型（见 fn_slots）
+  // 正在翻译当前函数的算法段（emit_function 置；形参 / 局部的绑定与维不算）：函数值 / 经函数型输入的调用只核实过算法段里的。
+  bool fn_in_body_ = false;
   // rec = 组件的记录类；call / scope = 求值的绑定调用（有则记录式名取其输出记录类，见 apply_structural_records）。
   struct StructRecord { Id<SElement> rec; CVal val; Id<Exp> call; ScodeScope scope; };
   std::unordered_set<std::string> record_marks_;   // 被结构语境整体读过的记录参数的键（见 mark_record）
