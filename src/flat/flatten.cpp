@@ -269,6 +269,7 @@ class Flattener {
     apply_structural_params();   // 连接算子求值中结构化的参数：final + 属性折叠（NFEvalConstants 效果，受限）
     apply_structural_records();  // 结构记录参数的整体引用代成记录式（见 struct_records_）
     simplify_model();            // cardinality 求值 + 方程 / 语句的收尾折叠
+    drop_empty_model_args();     // 调用的空数组实参换成 `{}`（removeEmptyFunctionArguments）
     if (oc_missing_branch_) set_unsupported("Connections.rooted without branch (warning)");
     // 某变量名同时出现在 removed_（另一同名声明条件为假被移除）：redeclare 一个 replaceable-conditional 成员的
     // 语义（保留原条件 / 禁止带条件 redeclare）v1 未做 → SKIP（RedeclareElementCondition1/2/3）。
@@ -18037,6 +18038,20 @@ class Flattener {
     return x;
   }
 
+  // 书写的式子里有没有 inStream / actualStream 调用（只看写法，不解析名字）。
+  bool absyn_has_stream_call(Id<Exp> x) {
+    if (!x.is_valid()) return false;
+    const Exp& e = I_.absyn.exps[x];
+    if (e.kind == ExpKind::Call) {
+      const Cref& fn = I_.absyn.crefs[e.cref];
+      if (!fn.leading_dot && fn.parts.size() == 1 &&
+          (in_.str(fn.parts[0].name) == "inStream" || in_.str(fn.parts[0].name) == "actualStream"))
+        return true;
+    }
+    if (absyn_has_stream_call(e.a) || absyn_has_stream_call(e.b) || absyn_has_stream_call(e.c)) return true;
+    for (Id<Exp> a : e.args) if (absyn_has_stream_call(a)) return true;
+    return false;
+  }
   // 推导式表达式 `{e for i in r, j in s}`：omc 保留成 `array(e for i in r)`，最右的迭代变量在最外层（嵌套
   // `array(array(e for j in s) for i in r)` 的反序：`{e for j in 1:3, i in 1:2}` → `array(array(e for j in 1:3) for i in 1:2)`，
   // AC2 / AC3 探针）。迭代变量在体里作符号引用（stmt_iters_，Integer）；范围须求成整数等差序列（参数范围按结构参数求值，
@@ -18111,6 +18126,27 @@ class Flattener {
         arr.kind = ExprKind::Array;
         arr.ty = Type::array_of(result_.model.exprs[el].ty, {d});
         arr.args = {el};
+        return add(std::move(arr));
+      }
+      // 体里有 inStream / actualStream：omc 先把构造子展开（迭代变量代成各值）再求流算子——它们不接非字面量下标
+      //（evaluateOperatorArrayConstructorExp / evaluateOperatorReductionExp，NFConnectEquations.mo:160-170、:746-810 v1.25.0；
+      // PKM 探针 PKM1：MSL Fluid MultiPort 的 `sum({positiveMax(ports_b[j].m_flow) * inStream(ports_b[j].h_outflow) for j in
+      // 1:nPorts_b})` → 按连接集代好的和式）。单迭代：逐值实例化成数组字面量；多迭代未核实 → 照旧（下面 SKIP）。
+      if (red.iters.size() == 1 && absyn_has_stream_call(red.a)) {
+        Expr arr;
+        arr.kind = ExprKind::Array;
+        for (std::int64_t v : *seq) {
+          loop_vars_[it.name.id] = v;
+          const Id<Expr> el = simplify_expr(inst_exp(red.a, scope, prefix));
+          loop_vars_.erase(it.name.id);
+          if (result_.unsupported) return lit_int(0);
+          if (!expr_shape(el).empty()) { set_unsupported("array-valued comprehension body"); return lit_int(0); }
+          arr.args.push_back(el);
+        }
+        Dimension d;
+        d.kind = DimKind::Integer;
+        d.size = static_cast<std::int64_t>(seq->size());
+        arr.ty = Type::array_of(result_.model.exprs[arr.args.front()].ty, {d});
         return add(std::move(arr));
       }
       lens.push_back(static_cast<std::int64_t>(seq->size()));
@@ -19015,7 +19051,10 @@ class Flattener {
       chain.push_back(acc);
     }
     if (!ctor && all_lit) return simplify_expr(acc);
-    for (Id<Expr> c : chain) nofold_bins_.insert(c.raw);
+    for (Id<Expr> c : chain) {
+      nofold_bins_.insert(c.raw);
+      sum_chain_bins_.insert(c.raw);
+    }
     return acc;
   }
   // 表达式树里（任意深度）有返回数组的调用 / 数组构造子（Expression.hasArrayCall = contains，NFExpression.mo:5440-5471）。
@@ -24030,8 +24069,20 @@ class Flattener {
       changed = changed || !(n == *k);
       *k = n;
     }
-    // 代换改到了 sum / product 元素链里：克隆出的链失去"不再化简"标记，代换后的形态未核实 → SKIP。
-    if (changed && c.kind == ExprKind::Binary && nofold_bins_.count(id.raw)) set_unsupported("substitution into sum/product chain");
+    // 代换改到了 sum / product 元素链里：克隆出的链失去"不再化简"标记，代换后的形态未核实 → SKIP。代换后链上的项全成数值字面量的
+    // 例外：omc 代入的是没展开的 `sum(lengths)` → `sum({50.0, 50.0})`、随即求值（MSL Fluid DynamicPipe 的 `dxs = lengths /
+    // sum(lengths)`，lengths 是结构参数 → `dxs[1] = 0.5`；PKM 探针 PKM7），与把全字面量的链折掉相同。
+    if (changed && c.kind == ExprKind::Binary && nofold_bins_.count(id.raw)) {
+      // semiLinear 化简出的积（`semiLinear(pr, pr, pr)` → `pr * pr`）不在此例：omc 先代入再化简，全字面量的 semiLinear 求值失败照留
+      //（ES 探针 E980 `semiLinear(2.0, 2.0, 2.0)`）。
+      auto all_lit = [&](auto& self, Id<Expr> x) -> bool {
+        const Expr& xe = result_.model.exprs[x];
+        if (xe.kind == ExprKind::Binary && xe.bin == c.bin) return self(self, xe.a) && self(self, xe.b);
+        return is_num_lit(xe);
+      };
+      if (!sum_chain_bins_.count(id.raw) || !all_lit(all_lit, c.a) || !all_lit(all_lit, c.b))
+        set_unsupported("substitution into sum/product chain");
+    }
     if (!changed) return id;
     const bool is_call = c.kind == ExprKind::Call, is_bin = c.kind == ExprKind::Binary;
     const Id<Expr> n = add(std::move(c));
@@ -24979,8 +25030,9 @@ class Flattener {
         base.parts.back().subscripts.clear();
         bool elem = !subs.empty();
         for (Id<Expr> sx : subs) elem = elem && result_.model.exprs[sx].kind == ExprKind::IntLit;
-        // 整体引用已有整个数组的字面量（add_whole_refs）的不算。
-        if (!elem && structural_arrays.count(expr_cref_key(base)) && !(subs.empty() && vals.count(expr_cref_key(base))))
+        // 整体引用已有整个数组的字面量（add_whole_refs）、非字面量下标的已有代换（add_sym_index_refs）的不算。
+        if (!elem && structural_arrays.count(expr_cref_key(base)) && !(subs.empty() && vals.count(expr_cref_key(base))) &&
+            !vals.count(expr_cref_key(x.cref)))
           return true;
         for (const ExprCrefPart& cp : x.cref.parts)
           for (Id<Expr> sx : cp.subscripts) if (self(self, sx)) return true;
@@ -25009,9 +25061,69 @@ class Flattener {
       self(self, x.b);
       self(self, x.c);
     };
+    // 以非字面量下标引用结构参数数组（推导式 / for 里的 `lengths[i]`，MSL Fluid DynamicPipe 的 `fluidVolumes = {crossAreas[i] *
+    // lengths[i] for i in 1:n} * nParallel`）：EvalConstants 代入整个数组的值 → `{50.0, 50.0}[i]`，化简时只要被取的数组非空且各元素
+    // 都相同就取第一个、去掉这一个下标（SimplifyExp.simplifySubscriptedExp，NFSimplifyExp.mo:1346-1379 v1.25.0），余下的照
+    // `{1.0, 3.0}[i]` 留（PKM 探针 PKM5 / PKM6）。数组须整个有字面量（param_array_literal）、下标数 = 秩；取不尽时剩下的下标里有
+    // 字面量（`a[1, i]`，applySubscripts 的形态未核实）→ 不改（下面 whole_ref 照旧 SKIP）。
+    auto add_sym_index_refs = [&](auto& self, Id<Expr> id) -> void {
+      if (!id.is_valid() || result_.unsupported) return;
+      const Expr x = result_.model.exprs[id];   // 拷贝（下面 add）
+      if (x.kind == ExprKind::Cref && !x.cref.parts.empty() && !x.cref.parts.back().subscripts.empty()) {
+        ExprCref base = x.cref;
+        const std::vector<Id<Expr>> subs = base.parts.back().subscripts;
+        base.parts.back().subscripts.clear();
+        // 字面量下标（整数、`:`、字面量范围、整数下标向量，Subscript.isLiteral）omc 直接套用（`k[1:2]` → `{1, 2}`，AP 探针
+        // Q221），不走这条；有非字面量下标（迭代变量 / 变量）才走。
+        auto lit_sub = [&](Id<Expr> sx) {
+          const Expr& se = result_.model.exprs[sx];
+          if (se.kind == ExprKind::IntLit || se.kind == ExprKind::Wild) return true;
+          if (se.kind == ExprKind::Range) return range_lit(se).has_value();
+          if (se.kind != ExprKind::Array) return false;
+          for (Id<Expr> el : se.args) if (result_.model.exprs[el].kind != ExprKind::IntLit) return false;
+          return true;
+        };
+        bool lit_subs = true;
+        for (Id<Expr> sx : subs) lit_subs = lit_subs && lit_sub(sx);
+        const std::string key = expr_cref_key(x.cref);
+        if (!lit_subs && !vals.count(key) && structural_arrays.count(expr_cref_key(base))) {
+          Id<Expr> cur = param_array_literal(base, &vals);
+          if (cur.is_valid() && expr_shape(cur).size() == subs.size()) {
+            std::size_t k = 0;
+            for (; k < subs.size(); ++k) {
+              const Expr& ce = result_.model.exprs[cur];
+              if (ce.kind != ExprKind::Array || ce.args.empty()) break;
+              bool same = true;
+              for (Id<Expr> el : ce.args) same = same && expr_equal(el, ce.args.front());
+              if (!same) break;
+              cur = ce.args.front();
+            }
+            bool rest_lit = false;
+            for (std::size_t j = k; j < subs.size(); ++j) rest_lit = rest_lit || lit_sub(subs[j]);
+            if (k == subs.size()) {
+              vals.emplace(key, cur);
+            } else if (!rest_lit) {
+              Expr sx;
+              sx.kind = ExprKind::Subscript;
+              sx.a = cur;
+              sx.args.assign(subs.begin() + static_cast<std::ptrdiff_t>(k), subs.end());
+              sx.ty = x.ty;
+              vals.emplace(key, add(std::move(sx)));
+            }
+          }
+        }
+      }
+      for (const ExprCrefPart& cp : x.cref.parts)
+        for (Id<Expr> sx : cp.subscripts) self(self, sx);
+      for (Id<Expr> a : x.args) self(self, a);
+      self(self, x.a);
+      self(self, x.b);
+      self(self, x.c);
+    };
     // EvalConstants：结构参数的引用处一律代入值（变量绑定 / 属性、方程、算法；函数体不涉及模型参数），代入后化简。
     auto subst = [&](Id<Expr>& e) {
       if (e.is_valid() && !structural_arrays.empty()) {
+        add_sym_index_refs(add_sym_index_refs, e);
         add_whole_refs(add_whole_refs, e);
         if (whole_ref(whole_ref, e)) set_unsupported("whole reference to structural parameter array");
       }
@@ -25491,6 +25603,36 @@ class Flattener {
   //   → `if b then e`，AP p7 探针）——omc 的错，不跟 → SKIP。if 方程全空 → 整条删去；if 语句全空 omc 也删，但所在算法段
   //   空了仍打 `algorithm` → 未做，SKIP。
   // - 体为空的 for 语句删去（simplifyStatement :308）；语句删光的算法段删去（simplifyAlgorithms :287-300）。
+  // 模型里函数调用的空数组类型实参换成同型空数组字面量（removeEmptyFunctionArguments：simplifyBinding、方程 / 赋值的右侧、无返回值
+  // 调用，NFSimplifyModel.mo:87 / :156 / :228 / :257 / :372 / :401 v1.25.0；for / if / when 体照递归，左侧与 assert 等不在其列）。
+  // 整个是空数组的模型变量的引用在实例化时就换掉了（见 cref）；这里收的是非空数组的空切片（`X_start[1:Medium.nXi]`、nXi = 0 →
+  // `f(p, {})`；PKM 探针 PKM8，MSL Fluid AST_BatchPlant TankWithTopPorts 的 h_start，此前打成 `X_start[{}]`）。放在折叠之后：omc
+  // 换完不再化简。
+  void drop_empty_model_args() {
+    for (FlatVariable& v : result_.model.variables) v.binding = drop_empty_args(v.binding, false);
+    auto eqn = [&](auto& self, Id<FlatEquation> id) -> void {
+      FlatEquation q = result_.model.eqs[id];   // 拷贝：drop_empty_args 会往 exprs 添加
+      if (q.kind == FlatEqKind::Equality) q.b = drop_empty_args(q.b, false);
+      else if (q.kind == FlatEqKind::NoRetCall) q.a = drop_empty_args(q.a, false);
+      for (const FlatEqBranch& br : q.branches) for (Id<FlatEquation> b : br.body) self(self, b);
+      for (Id<FlatEquation> b : q.body) self(self, b);
+      for (Id<FlatEquation> b : q.else_body) self(self, b);
+      result_.model.eqs[id] = std::move(q);
+    };
+    auto stmt = [&](auto& self, Id<FlatStatement> id) -> void {
+      FlatStatement st = result_.model.stmts[id];
+      if (st.kind == FlatStmtKind::Assign) st.b = drop_empty_args(st.b, false);
+      else if (st.kind == FlatStmtKind::NoRetCall) st.a = drop_empty_args(st.a, false);
+      for (const FlatStmtBranch& br : st.branches) for (Id<FlatStatement> b : br.body) self(self, b);
+      for (Id<FlatStatement> b : st.body) self(self, b);
+      for (Id<FlatStatement> b : st.else_body) self(self, b);
+      result_.model.stmts[id] = std::move(st);
+    };
+    for (const std::vector<Id<FlatEquation>>* eqs : {&result_.model.equations, &result_.model.initial_equations})
+      for (Id<FlatEquation> q : *eqs) eqn(eqn, q);
+    for (const std::vector<FlatAlgorithm>* algs : {&result_.model.algorithms, &result_.model.initial_algorithms})
+      for (const FlatAlgorithm& a : *algs) for (Id<FlatStatement> s : a.stmts) stmt(stmt, s);
+  }
   void simplify_model() {
     if (uses_cardinality_)
       for (FlatVariable& v : result_.model.variables)
@@ -25652,6 +25794,7 @@ class Flattener {
   std::unordered_set<std::uint32_t> scalarized_logicals_;       // scalarize 逐元素建的 and / or 节点（simplify 不做吸收律）
   bool noret_call_ = false;                                     // 正在定型一条无返回值调用语句的最外层调用（见 noret_call）
   std::unordered_set<std::uint32_t> nofold_bins_;               // sum / product 展开出的元素链的 Binary 节点（simplify 原样留）
+  std::unordered_set<std::uint32_t> sum_chain_bins_;            // 其中 sum / product 展开出的（不含 semiLinear 的积，见 clone_subst）
   std::unordered_map<std::uint32_t, FnRecord> fn_records_;      // 记录类型的形参 / 局部名 → 记录类（字段访问 `r.x`）
   // 当前函数里成了结构参数的局部名（调用的输出维引用了它所在的实参，见 try_emit_user_call）：parameter 局部打 `final parameter`。
   std::unordered_set<std::uint32_t> fn_struct_locals_;

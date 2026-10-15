@@ -698,3 +698,11 @@ AST_BatchPlant.BatchPlant_StandardWater——数组推导式的范围（comprehe
 卡到下一处：NonCircularPipes——整个结构参数数组的引用；AST_BatchPlant.BatchPlant_StandardWater——MultiPort 的
 `sum({positiveMax(ports_b[j].m_flow) * inStream(ports_b[j].h_outflow) for j in 1:nPorts_b})`（omc 按连接集展开成和式）；
 两个 IMC_withLosses——`wtable = from_rpm({…})` 向量化调用求值后 omc 照打函数定义（V4g 规矩，未做）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-15 66m 之后：PASS 452（+2，Fluid 14/23）
+
+推导式里的流算子先展开再求、结构参数数组以迭代变量下标引用时代入整个数组（元素全相同取一个）、sum 链代入后全字面量求值、
+调用的空切片实参换成 `{}`。转 PASS：Modelica.Fluid.Examples.NonCircularPipes、AST_BatchPlant.BatchPlant_StandardWater。
+Fluid 余 9 例：PumpingSystem（LAPACK dgesv 求值）、HeatExchangerSimulation（shadowed reduction iterator）、RoomCO2 ×2（带修饰的
+短类包）、IncompressibleFluidNetwork（Medium.singleState）、BranchingDynamicPipes（MMX）、HeatingSystem（reference_h）、
+TanksWithOverflow（derivative 注解）、MomentumBalanceFittings（stateSelect 预扫）。FAIL / ACCEPTS-INVALID / CRASH 0。

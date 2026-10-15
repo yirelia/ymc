@@ -8499,4 +8499,127 @@ YMC_TEST(flatten_vectorized_call_derived_scalar_input) {
   YMC_CHECK_EQ(out, std::string("<unsupported:constant user call after structural substitution>"));
 }
 
+YMC_TEST(flatten_instream_in_comprehension) {
+  // 推导式体里的 inStream 带迭代变量下标（MSL Fluid MultiPort 的 `sum({positiveMax(ports_b[j].m_flow) *
+  // inStream(ports_b[j].h_outflow) for j in 1:nPorts_b})`）：先展开再求流算子，打成按连接集代好的和式。期望 = omc 1.25.0
+  // 实跑（2026-10-15，探针 pk-p21 PKM1）。
+  YMC_CHECK_EQ(flatten_src("package PM1\n  connector FluidPort\n    flow Real m_flow;\n    stream Real h_outflow;\n    Real p;\n"
+                           "  end FluidPort;\n  model MultiPort\n    parameter Integer n = 3;\n    FluidPort port_a;\n"
+                           "    FluidPort ports_b[n];\n  protected\n    function positiveMax\n      input Real x;\n"
+                           "      output Real y;\n    algorithm\n      y := max(x, 1e-10);\n    end positiveMax;\n  equation\n"
+                           "    0 = port_a.m_flow + sum(ports_b.m_flow);\n    ports_b.p = fill(port_a.p, n);\n"
+                           "    port_a.h_outflow = sum({positiveMax(ports_b[j].m_flow) * inStream(ports_b[j].h_outflow) for j in 1:n}) / sum({positiveMax(ports_b[j].m_flow) for j in 1:n});\n"
+                           "    for j in 1:n loop\n      ports_b[j].h_outflow = inStream(port_a.h_outflow);\n    end for;\n"
+                           "  end MultiPort;\n  model Source\n    FluidPort port;\n    parameter Real h = 1;\n"
+                           "    parameter Real mf = 1;\n  equation\n    port.h_outflow = h;\n    port.m_flow = -mf;\n  end Source;\n"
+                           "  model Sink\n    FluidPort port;\n  equation\n    port.h_outflow = 0;\n    port.p = 1;\n  end Sink;\n"
+                           "end PM1;\nmodel PKM1\n  PM1.MultiPort mp(n = 3);\n  PM1.Source s1(h = 1), s2(h = 2), s3(h = 3);\n"
+                           "  PM1.Sink sink;\nequation\n  connect(s1.port, mp.ports_b[1]);\n  connect(s2.port, mp.ports_b[2]);\n"
+                           "  connect(s3.port, mp.ports_b[3]);\n  connect(mp.port_a, sink.port);\nend PKM1;\n"),
+               std::string("function PKM1.mp.positiveMax\n  input Real x;\n  output Real y;\nalgorithm\n  y := max(x, 1e-10);\n"
+                           "end PKM1.mp.positiveMax;\n\nclass PKM1\n  final parameter Integer mp.n = 3;\n  Real mp.port_a.m_flow;\n"
+                           "  Real mp.port_a.h_outflow;\n  Real mp.port_a.p;\n  Real mp.ports_b[1].m_flow;\n"
+                           "  Real mp.ports_b[1].h_outflow;\n  Real mp.ports_b[1].p;\n  Real mp.ports_b[2].m_flow;\n"
+                           "  Real mp.ports_b[2].h_outflow;\n  Real mp.ports_b[2].p;\n  Real mp.ports_b[3].m_flow;\n"
+                           "  Real mp.ports_b[3].h_outflow;\n  Real mp.ports_b[3].p;\n  Real s1.port.m_flow;\n"
+                           "  Real s1.port.h_outflow;\n  Real s1.port.p;\n  parameter Real s1.h = 1.0;\n"
+                           "  parameter Real s1.mf = 1.0;\n  Real s2.port.m_flow;\n  Real s2.port.h_outflow;\n  Real s2.port.p;\n"
+                           "  parameter Real s2.h = 2.0;\n  parameter Real s2.mf = 1.0;\n  Real s3.port.m_flow;\n"
+                           "  Real s3.port.h_outflow;\n  Real s3.port.p;\n  parameter Real s3.h = 3.0;\n"
+                           "  parameter Real s3.mf = 1.0;\n  Real sink.port.m_flow;\n  Real sink.port.h_outflow;\n"
+                           "  Real sink.port.p;\nequation\n  s1.port.p = mp.ports_b[1].p;\n  s2.port.p = mp.ports_b[2].p;\n"
+                           "  s3.port.p = mp.ports_b[3].p;\n  mp.port_a.p = sink.port.p;\n"
+                           "  sink.port.m_flow + mp.port_a.m_flow = 0.0;\n  s1.port.m_flow + mp.ports_b[1].m_flow = 0.0;\n"
+                           "  s2.port.m_flow + mp.ports_b[2].m_flow = 0.0;\n  s3.port.m_flow + mp.ports_b[3].m_flow = 0.0;\n"
+                           "  0.0 = mp.port_a.m_flow + mp.ports_b[1].m_flow + mp.ports_b[2].m_flow + mp.ports_b[3].m_flow;\n"
+                           "  mp.ports_b[1].p = mp.port_a.p;\n  mp.ports_b[2].p = mp.port_a.p;\n  mp.ports_b[3].p = mp.port_a.p;\n"
+                           "  mp.port_a.h_outflow = (PKM1.mp.positiveMax(mp.ports_b[1].m_flow) * s1.port.h_outflow + PKM1.mp.positiveMax(mp.ports_b[2].m_flow) * s2.port.h_outflow + PKM1.mp.positiveMax(mp.ports_b[3].m_flow) * s3.port.h_outflow) / (PKM1.mp.positiveMax(mp.ports_b[1].m_flow) + PKM1.mp.positiveMax(mp.ports_b[2].m_flow) + PKM1.mp.positiveMax(mp.ports_b[3].m_flow));\n"
+                           "  mp.ports_b[1].h_outflow = sink.port.h_outflow;\n  mp.ports_b[2].h_outflow = sink.port.h_outflow;\n"
+                           "  mp.ports_b[3].h_outflow = sink.port.h_outflow;\n  s1.port.h_outflow = s1.h;\n"
+                           "  s1.port.m_flow = -s1.mf;\n  s2.port.h_outflow = s2.h;\n  s2.port.m_flow = -s2.mf;\n"
+                           "  s3.port.h_outflow = s3.h;\n  s3.port.m_flow = -s3.mf;\n  sink.port.h_outflow = 0.0;\n"
+                           "  sink.port.p = 1.0;\nend PKM1;\n"));
+}
+
+YMC_TEST(flatten_actualstream_in_comprehension) {
+  // 同上，actualStream。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p21 PKM4）。
+  YMC_CHECK_EQ(flatten_src("package PM4\n  connector FluidPort\n    flow Real m_flow;\n    stream Real h_outflow;\n    Real p;\n"
+                           "  end FluidPort;\n  model MultiPort\n    parameter Integer n = 3;\n    FluidPort port_a;\n"
+                           "    FluidPort ports_b[n];\n  protected\n    function positiveMax\n      input Real x;\n"
+                           "      output Real y;\n    algorithm\n      y := max(x, 1e-10);\n    end positiveMax;\n  equation\n"
+                           "    0 = port_a.m_flow + sum(ports_b.m_flow);\n    ports_b.p = fill(port_a.p, n);\n"
+                           "    port_a.h_outflow = sum({positiveMax(ports_b[j].m_flow) * actualStream(ports_b[j].h_outflow) for j in 1:n}) / sum({positiveMax(ports_b[j].m_flow) for j in 1:n});\n"
+                           "    for j in 1:n loop\n      ports_b[j].h_outflow = inStream(port_a.h_outflow);\n    end for;\n"
+                           "  end MultiPort;\n  model Source\n    FluidPort port;\n    parameter Real h = 1;\n"
+                           "    parameter Real mf = 1;\n  equation\n    port.h_outflow = h;\n    port.m_flow = -mf;\n  end Source;\n"
+                           "  model Sink\n    FluidPort port;\n  equation\n    port.h_outflow = 0;\n    port.p = 1;\n  end Sink;\n"
+                           "end PM4;\nmodel PKM4\n  PM4.MultiPort mp(n = 3);\n  PM4.Source s1(h = 1), s2(h = 2), s3(h = 3);\n"
+                           "  PM4.Sink sink;\nequation\n  connect(s1.port, mp.ports_b[1]);\n  connect(s2.port, mp.ports_b[2]);\n"
+                           "  connect(s3.port, mp.ports_b[3]);\n  connect(mp.port_a, sink.port);\nend PKM4;\n"),
+               std::string("function PKM4.mp.positiveMax\n  input Real x;\n  output Real y;\nalgorithm\n  y := max(x, 1e-10);\n"
+                           "end PKM4.mp.positiveMax;\n\nclass PKM4\n  final parameter Integer mp.n = 3;\n  Real mp.port_a.m_flow;\n"
+                           "  Real mp.port_a.h_outflow;\n  Real mp.port_a.p;\n  Real mp.ports_b[1].m_flow;\n"
+                           "  Real mp.ports_b[1].h_outflow;\n  Real mp.ports_b[1].p;\n  Real mp.ports_b[2].m_flow;\n"
+                           "  Real mp.ports_b[2].h_outflow;\n  Real mp.ports_b[2].p;\n  Real mp.ports_b[3].m_flow;\n"
+                           "  Real mp.ports_b[3].h_outflow;\n  Real mp.ports_b[3].p;\n  Real s1.port.m_flow;\n"
+                           "  Real s1.port.h_outflow;\n  Real s1.port.p;\n  parameter Real s1.h = 1.0;\n"
+                           "  parameter Real s1.mf = 1.0;\n  Real s2.port.m_flow;\n  Real s2.port.h_outflow;\n  Real s2.port.p;\n"
+                           "  parameter Real s2.h = 2.0;\n  parameter Real s2.mf = 1.0;\n  Real s3.port.m_flow;\n"
+                           "  Real s3.port.h_outflow;\n  Real s3.port.p;\n  parameter Real s3.h = 3.0;\n"
+                           "  parameter Real s3.mf = 1.0;\n  Real sink.port.m_flow;\n  Real sink.port.h_outflow;\n"
+                           "  Real sink.port.p;\nequation\n  s1.port.p = mp.ports_b[1].p;\n  s2.port.p = mp.ports_b[2].p;\n"
+                           "  s3.port.p = mp.ports_b[3].p;\n  mp.port_a.p = sink.port.p;\n"
+                           "  sink.port.m_flow + mp.port_a.m_flow = 0.0;\n  s1.port.m_flow + mp.ports_b[1].m_flow = 0.0;\n"
+                           "  s2.port.m_flow + mp.ports_b[2].m_flow = 0.0;\n  s3.port.m_flow + mp.ports_b[3].m_flow = 0.0;\n"
+                           "  0.0 = mp.port_a.m_flow + mp.ports_b[1].m_flow + mp.ports_b[2].m_flow + mp.ports_b[3].m_flow;\n"
+                           "  mp.ports_b[1].p = mp.port_a.p;\n  mp.ports_b[2].p = mp.port_a.p;\n  mp.ports_b[3].p = mp.port_a.p;\n"
+                           "  mp.port_a.h_outflow = (PKM4.mp.positiveMax(mp.ports_b[1].m_flow) * (if mp.ports_b[1].m_flow > 0.0 then s1.port.h_outflow else mp.ports_b[1].h_outflow) + PKM4.mp.positiveMax(mp.ports_b[2].m_flow) * (if mp.ports_b[2].m_flow > 0.0 then s2.port.h_outflow else mp.ports_b[2].h_outflow) + PKM4.mp.positiveMax(mp.ports_b[3].m_flow) * (if mp.ports_b[3].m_flow > 0.0 then s3.port.h_outflow else mp.ports_b[3].h_outflow)) / (PKM4.mp.positiveMax(mp.ports_b[1].m_flow) + PKM4.mp.positiveMax(mp.ports_b[2].m_flow) + PKM4.mp.positiveMax(mp.ports_b[3].m_flow));\n"
+                           "  mp.ports_b[1].h_outflow = sink.port.h_outflow;\n  mp.ports_b[2].h_outflow = sink.port.h_outflow;\n"
+                           "  mp.ports_b[3].h_outflow = sink.port.h_outflow;\n  s1.port.h_outflow = s1.h;\n"
+                           "  s1.port.m_flow = -s1.mf;\n  s2.port.h_outflow = s2.h;\n  s2.port.m_flow = -s2.mf;\n"
+                           "  s3.port.h_outflow = s3.h;\n  s3.port.m_flow = -s3.mf;\n  sink.port.h_outflow = 0.0;\n"
+                           "  sink.port.p = 1.0;\nend PKM4;\n"));
+}
+
+YMC_TEST(flatten_structural_array_iterator_subscript_equal) {
+  // 结构参数数组以迭代变量下标引用（`{crossAreas[i] * lengths[i] for i in 1:n}`）、各元素相同 → 取那一个（simplifySubscriptedExp）；
+  // `lengths / sum(lengths)`、`sum(lengths)` 代入后全字面量 → 求值。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p21 PKM5）。
+  YMC_CHECK_EQ(flatten_src("model PKM5\n  parameter Integer n = 2;\n  parameter Real length = 100;\n"
+                           "  parameter Real lengths[n] = fill(length / n, n) annotation(Evaluate = true);\n"
+                           "  parameter Real dxs[n] = lengths / sum(lengths);\n  Real crossAreas[n] = {time, 2 * time};\n"
+                           "  Real fluidVolumes[n] = {crossAreas[i] * lengths[i] for i in 1:n};\n  Real s = sum(lengths) * time;\n"
+                           "  Real w[n] = lengths * time;\nend PKM5;\n"),
+               std::string("class PKM5\n  final parameter Integer n = 2;\n  final parameter Real length = 100.0;\n"
+                           "  final parameter Real lengths[1] = 50.0;\n  final parameter Real lengths[2] = 50.0;\n"
+                           "  parameter Real dxs[1] = 0.5;\n  parameter Real dxs[2] = 0.5;\n  Real crossAreas[1];\n"
+                           "  Real crossAreas[2];\n  Real fluidVolumes[1];\n  Real fluidVolumes[2];\n  Real s = 100.0 * time;\n"
+                           "  Real w[1];\n  Real w[2];\nequation\n  crossAreas = {time, 2.0 * time};\n"
+                           "  fluidVolumes = array(crossAreas[i] * 50.0 for i in 1:2);\n  w = {50.0 * time, 50.0 * time};\nend PKM5;\n"));
+}
+
+YMC_TEST(flatten_structural_array_iterator_subscript_distinct) {
+  // 同上、各元素不同 → 留 `{1.0, 3.0}[i]`。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p21 PKM6）。
+  YMC_CHECK_EQ(flatten_src("model PKM6\n  parameter Integer n = 2;\n"
+                           "  parameter Real lengths[n] = {1, 3} annotation(Evaluate = true);\n"
+                           "  Real crossAreas[n] = {time, 2 * time};\n"
+                           "  Real fluidVolumes[n] = {crossAreas[i] * lengths[i] for i in 1:n};\nend PKM6;\n"),
+               std::string("class PKM6\n  final parameter Integer n = 2;\n  final parameter Real lengths[1] = 1.0;\n"
+                           "  final parameter Real lengths[2] = 3.0;\n  Real crossAreas[1];\n  Real crossAreas[2];\n"
+                           "  Real fluidVolumes[1];\n  Real fluidVolumes[2];\nequation\n  crossAreas = {time, 2.0 * time};\n"
+                           "  fluidVolumes = array(crossAreas[i] * {1.0, 3.0}[i] for i in 1:2);\nend PKM6;\n"));
+}
+
+YMC_TEST(flatten_empty_slice_function_argument) {
+  // 非空数组的空切片作调用实参（`f(p, X_start[1:nXi])`、nXi = 0）→ `{}`（removeEmptyFunctionArguments）。期望 = omc 1.25.0
+  // 实跑（2026-10-15，探针 pk-p21 PKM8）。
+  YMC_CHECK_EQ(flatten_src("model PKM8\n  function f\n    input Real p;\n    input Real X[:];\n    output Real h;\n  algorithm\n"
+                           "    h := p + sum(X);\n  end f;\n  parameter Integer nXi = 0;\n  parameter Real p = 2;\n"
+                           "  parameter Real X_start[1] = {1.0};\n  parameter Real h_start = f(p, X_start[1:nXi]);\n"
+                           "  Real y = h_start * time;\n  Real z = f(time, X_start[1:nXi]);\nend PKM8;\n"),
+               std::string("function PKM8.f\n  input Real p;\n  input Real[:] X;\n  output Real h;\nalgorithm\n  h := p + sum(X);\n"
+                           "end PKM8.f;\n\nclass PKM8\n  final parameter Integer nXi = 0;\n  parameter Real p = 2.0;\n"
+                           "  parameter Real X_start[1] = 1.0;\n  parameter Real h_start = PKM8.f(p, {});\n"
+                           "  Real y = h_start * time;\n  Real z = PKM8.f(time, {});\nend PKM8;\n"));
+}
+
 YMC_TEST_MAIN

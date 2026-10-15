@@ -1,0 +1,249 @@
+//// set: pk-p21 — 推导式里的流算子、结构参数数组的迭代变量下标 / sum 链代入、空切片作调用实参
+//// model: PKM1
+package PM1
+  connector FluidPort
+    flow Real m_flow;
+    stream Real h_outflow;
+    Real p;
+  end FluidPort;
+  model MultiPort
+    parameter Integer n = 3;
+    FluidPort port_a;
+    FluidPort ports_b[n];
+  protected
+    function positiveMax
+      input Real x;
+      output Real y;
+    algorithm
+      y := max(x, 1e-10);
+    end positiveMax;
+  equation
+    0 = port_a.m_flow + sum(ports_b.m_flow);
+    ports_b.p = fill(port_a.p, n);
+    port_a.h_outflow = sum({positiveMax(ports_b[j].m_flow) * inStream(ports_b[j].h_outflow) for j in 1:n}) / sum({positiveMax(ports_b[j].m_flow) for j in 1:n});
+    for j in 1:n loop
+      ports_b[j].h_outflow = inStream(port_a.h_outflow);
+    end for;
+  end MultiPort;
+  model Source
+    FluidPort port;
+    parameter Real h = 1;
+    parameter Real mf = 1;
+  equation
+    port.h_outflow = h;
+    port.m_flow = -mf;
+  end Source;
+  model Sink
+    FluidPort port;
+  equation
+    port.h_outflow = 0;
+    port.p = 1;
+  end Sink;
+end PM1;
+model PKM1
+  PM1.MultiPort mp(n = 3);
+  PM1.Source s1(h = 1), s2(h = 2), s3(h = 3);
+  PM1.Sink sink;
+equation
+  connect(s1.port, mp.ports_b[1]);
+  connect(s2.port, mp.ports_b[2]);
+  connect(s3.port, mp.ports_b[3]);
+  connect(mp.port_a, sink.port);
+end PKM1;
+//// model: PKM2
+package PM2
+  connector FluidPort
+    flow Real m_flow;
+    stream Real h_outflow;
+    Real p;
+  end FluidPort;
+  model MultiPort
+    parameter Integer n = 3;
+    FluidPort port_a;
+    FluidPort ports_b[n];
+  protected
+    function positiveMax
+      input Real x;
+      output Real y;
+    algorithm
+      y := max(x, 1e-10);
+    end positiveMax;
+  equation
+    0 = port_a.m_flow + sum(ports_b.m_flow);
+    ports_b.p = fill(port_a.p, n);
+    port_a.h_outflow = sum({positiveMax(ports_b[j].m_flow) * 2 for j in 1:n}) / sum({positiveMax(ports_b[j].m_flow) for j in 1:n});
+    for j in 1:n loop
+      ports_b[j].h_outflow = inStream(port_a.h_outflow);
+    end for;
+  end MultiPort;
+  model Source
+    FluidPort port;
+    parameter Real h = 1;
+    parameter Real mf = 1;
+  equation
+    port.h_outflow = h;
+    port.m_flow = -mf;
+  end Source;
+  model Sink
+    FluidPort port;
+  equation
+    port.h_outflow = 0;
+    port.p = 1;
+  end Sink;
+end PM2;
+model PKM2
+  PM2.MultiPort mp(n = 3);
+  PM2.Source s1(h = 1), s2(h = 2), s3(h = 3);
+  PM2.Sink sink;
+equation
+  connect(s1.port, mp.ports_b[1]);
+  connect(s2.port, mp.ports_b[2]);
+  connect(s3.port, mp.ports_b[3]);
+  connect(mp.port_a, sink.port);
+end PKM2;
+//// model: PKM3
+package PM3
+  connector FluidPort
+    flow Real m_flow;
+    stream Real h_outflow;
+    Real p;
+  end FluidPort;
+  model MultiPort
+    parameter Integer n = 3;
+    FluidPort port_a;
+    FluidPort ports_b[n];
+  protected
+    function positiveMax
+      input Real x;
+      output Real y;
+    algorithm
+      y := max(x, 1e-10);
+    end positiveMax;
+  equation
+    0 = port_a.m_flow + sum(ports_b.m_flow);
+    ports_b.p = fill(port_a.p, n);
+    port_a.h_outflow = sum(positiveMax(ports_b[j].m_flow) * inStream(ports_b[j].h_outflow) for j in 1:n) / sum({positiveMax(ports_b[j].m_flow) for j in 1:n});
+    for j in 1:n loop
+      ports_b[j].h_outflow = inStream(port_a.h_outflow);
+    end for;
+  end MultiPort;
+  model Source
+    FluidPort port;
+    parameter Real h = 1;
+    parameter Real mf = 1;
+  equation
+    port.h_outflow = h;
+    port.m_flow = -mf;
+  end Source;
+  model Sink
+    FluidPort port;
+  equation
+    port.h_outflow = 0;
+    port.p = 1;
+  end Sink;
+end PM3;
+model PKM3
+  PM3.MultiPort mp(n = 3);
+  PM3.Source s1(h = 1), s2(h = 2), s3(h = 3);
+  PM3.Sink sink;
+equation
+  connect(s1.port, mp.ports_b[1]);
+  connect(s2.port, mp.ports_b[2]);
+  connect(s3.port, mp.ports_b[3]);
+  connect(mp.port_a, sink.port);
+end PKM3;
+//// model: PKM4
+package PM4
+  connector FluidPort
+    flow Real m_flow;
+    stream Real h_outflow;
+    Real p;
+  end FluidPort;
+  model MultiPort
+    parameter Integer n = 3;
+    FluidPort port_a;
+    FluidPort ports_b[n];
+  protected
+    function positiveMax
+      input Real x;
+      output Real y;
+    algorithm
+      y := max(x, 1e-10);
+    end positiveMax;
+  equation
+    0 = port_a.m_flow + sum(ports_b.m_flow);
+    ports_b.p = fill(port_a.p, n);
+    port_a.h_outflow = sum({positiveMax(ports_b[j].m_flow) * actualStream(ports_b[j].h_outflow) for j in 1:n}) / sum({positiveMax(ports_b[j].m_flow) for j in 1:n});
+    for j in 1:n loop
+      ports_b[j].h_outflow = inStream(port_a.h_outflow);
+    end for;
+  end MultiPort;
+  model Source
+    FluidPort port;
+    parameter Real h = 1;
+    parameter Real mf = 1;
+  equation
+    port.h_outflow = h;
+    port.m_flow = -mf;
+  end Source;
+  model Sink
+    FluidPort port;
+  equation
+    port.h_outflow = 0;
+    port.p = 1;
+  end Sink;
+end PM4;
+model PKM4
+  PM4.MultiPort mp(n = 3);
+  PM4.Source s1(h = 1), s2(h = 2), s3(h = 3);
+  PM4.Sink sink;
+equation
+  connect(s1.port, mp.ports_b[1]);
+  connect(s2.port, mp.ports_b[2]);
+  connect(s3.port, mp.ports_b[3]);
+  connect(mp.port_a, sink.port);
+end PKM4;
+//// model: PKM5
+model PKM5
+  parameter Integer n = 2;
+  parameter Real length = 100;
+  parameter Real lengths[n] = fill(length / n, n) annotation(Evaluate = true);
+  parameter Real dxs[n] = lengths / sum(lengths);
+  Real crossAreas[n] = {time, 2 * time};
+  Real fluidVolumes[n] = {crossAreas[i] * lengths[i] for i in 1:n};
+  Real s = sum(lengths) * time;
+  Real w[n] = lengths * time;
+end PKM5;
+//// model: PKM6
+model PKM6
+  parameter Integer n = 2;
+  parameter Real lengths[n] = {1, 3} annotation(Evaluate = true);
+  Real crossAreas[n] = {time, 2 * time};
+  Real fluidVolumes[n] = {crossAreas[i] * lengths[i] for i in 1:n};
+end PKM6;
+//// model: PKM7
+model PKM7
+  parameter Integer n = 2;
+  parameter Real length = 100;
+  parameter Real lengths[n] = fill(length / n, n) annotation(Evaluate = true);
+  parameter Real dxs[n] = lengths / sum(lengths);
+  Real crossAreas[n] = {time, 2 * time};
+  Real fluidVolumes[n] = {crossAreas[i] * lengths[i] for i in 1:n};
+  Real w[n] = lengths * time;
+end PKM7;
+//// model: PKM8
+model PKM8
+  function f
+    input Real p;
+    input Real X[:];
+    output Real h;
+  algorithm
+    h := p + sum(X);
+  end f;
+  parameter Integer nXi = 0;
+  parameter Real p = 2;
+  parameter Real X_start[1] = {1.0};
+  parameter Real h_start = f(p, X_start[1:nXi]);
+  Real y = h_start * time;
+  Real z = f(time, X_start[1:nXi]);
+end PKM8;

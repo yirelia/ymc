@@ -2392,6 +2392,16 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       卡到下一处：整个结构参数数组的引用、推导式里 inStream 带迭代变量下标、向量化调用求值后留函数定义（未做）。
       探针 pk-p20（15）、旧组 SKIP→PASS 3（cmp-k1、nd-c3 ×2）；单测 +6。slice 694 例 FAIL 0（oracle=live 不一致 0）；scodeinst 654、
       testsuite 1816、MSL 450（均不变）/ FAIL 0；探针 9726→9741；单测 385→391。
+- [x] (66m) 推导式里的流算子、结构参数数组的迭代变量下标、调用的空切片实参（2026-10-15）：推导式体里有 inStream / actualStream
+      时先逐值展开再求流算子（evaluateOperatorArrayConstructorExp / evaluateOperatorReductionExp，NFConnectEquations.mo:160-170、
+      :746-810；MSL MultiPort 的 `sum({positiveMax(ports_b[j].m_flow) * inStream(ports_b[j].h_outflow) for j in 1:nPorts_b})`）；
+      以非字面量下标引用结构参数数组（`{crossAreas[i] * lengths[i] for i in 1:n}`）代入整个数组的值，元素全相同取一个、否则留
+      `{1.0, 3.0}[i]`（simplifySubscriptedExp，NFSimplifyExp.mo:1346-1379；字面量下标照旧）；sum / product 展开出的链代入后全成
+      字面量 → 求值（`dxs = lengths / sum(lengths)` → 0.5；semiLinear 化简出的积不在此例）；模型里调用的空数组类型实参换成 `{}`
+      （removeEmptyFunctionArguments，NFSimplifyModel.mo:87 / :156 / :228 / :257：`X_start[1:Medium.nXi]` 此前打成 `X_start[{}]`）。
+      探针 pk-p21（8）、旧组 SKIP→PASS（ap-p1、cx-c3、ea-e3、wr-v1、wr-w1）；单测 +5。slice 694 例 FAIL 0（oracle=live 不一致 0）；
+      scodeinst 654、testsuite 1816（不变）/ FAIL 0；**MSL 450→452**（Modelica.Fluid.Examples.NonCircularPipes、
+      AST_BatchPlant.BatchPlant_StandardWater，Fluid 14/23）；单测 391→396。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。
