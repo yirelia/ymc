@@ -1,0 +1,1308 @@
+//// set: pk-p23 — 函数体里的包常量换成值：记录常量的字段 / 整个记录 / 记录数组、常量数组的下标、限定常量名经继承的成员、归约范围定型后是字面量、函数局部的 final
+//// model: PKT1
+package P1
+  record Rec
+    String name;
+    Real MM;
+    Real a[3];
+    Real R_s;
+  end Rec;
+  package Data
+    constant Rec H2O(name = "H2O", MM = 0.01801528, a = {1.5, 2.5, 3.5}, R_s = 461.5233290850878);
+    constant Rec Air(name = "Air", MM = 0.0289651159, a = {4.0, 5.0, 6.0}, R_s = 287.0512249529787);
+  end Data;
+  package Moist
+    constant Rec steam = Data.H2O;
+    constant Rec dryair = Data.Air;
+    function R_gas
+      input Real x;
+      output Real R;
+    algorithm
+      R := dryair.R_s * (1 - x) + steam.R_s * x;
+    end R_gas;
+  end Moist;
+end P1;
+model PKT1
+  Real r = P1.Moist.R_gas(time);
+end PKT1;
+//// model: PKT2
+package P2
+  record Rec
+    String name;
+    Real MM;
+    Real a[3];
+    Real R_s;
+  end Rec;
+  package Data
+    constant Rec H2O(name = "H2O", MM = 0.01801528, a = {1.5, 2.5, 3.5}, R_s = 461.5233290850878);
+  end Data;
+  function h_T
+    input Rec data;
+    input Real T;
+    input Real h_off = 0;
+    output Real h;
+  algorithm
+    h := data.R_s * T + data.a[1] + h_off;
+  end h_T;
+  package Moist
+    constant Rec steam = Data.H2O;
+    function h_pT
+      input Real T;
+      output Real h;
+    algorithm
+      h := h_T(data = steam, T = T, h_off = 46479.819 + 2501014.5);
+    end h_pT;
+  end Moist;
+end P2;
+model PKT2
+  Real h = P2.Moist.h_pT(time);
+end PKT2;
+//// model: PKT2m
+package P2m
+  record Rec
+    String name;
+    Real MM;
+    Real a[3];
+    Real R_s;
+  end Rec;
+  package Data
+    constant Rec H2O(name = "H2O", MM = 0.01801528, a = {1.5, 2.5, 3.5}, R_s = 461.5233290850878);
+  end Data;
+  function h_T
+    input Rec data;
+    input Real T;
+    input Real h_off = 0;
+    output Real h;
+  algorithm
+    h := data.R_s * T + data.a[1] + h_off;
+  end h_T;
+  package Moist
+    constant Rec steam = Data.H2O;
+    function h_pT
+      input Real T;
+      output Real h;
+    algorithm
+      h := h_T(data = steam, T = T, h_off = 46479.819 + 2501014.5);
+    end h_pT;
+  end Moist;
+end P2m;
+model PKT2m
+  Real h = P2m.h_T(P2m.Moist.steam, time);
+end PKT2m;
+//// model: PKT3
+package P3
+  record Rec
+    String name;
+    Real MM;
+    Real a[3];
+    Real R_s;
+  end Rec;
+  package Moist
+    constant Rec steam(name = "H2O", MM = 0.01801528, a = {1.5, 2.5, 3.5}, R_s = 461.5233290850878);
+    function f
+      input Real x;
+      output Real y;
+    protected
+      Real v[3];
+    algorithm
+      v := steam.a * x;
+      y := steam.a[2] * x;
+      for i in 1:3 loop
+        y := y + steam.a[i] * v[i];
+      end for;
+    end f;
+  end Moist;
+end P3;
+model PKT3
+  Real y = P3.Moist.f(time);
+end PKT3;
+//// model: PKT4
+package P4
+  package Moist
+    constant Real c[3] = {1.5, 2.5, 3.5};
+    function f
+      input Real x;
+      output Real y;
+    protected
+      Real v[3];
+    algorithm
+      v := c * x;
+      y := c[2] * x;
+      for i in 1:3 loop
+        y := y + c[i] * v[i];
+      end for;
+    end f;
+  end Moist;
+end P4;
+model PKT4
+  Real y = P4.Moist.f(time);
+end PKT4;
+//// model: PKT4a
+package P4a
+  package Moist
+    constant Real c[3] = {1.5, 2.5, 3.5};
+    function f
+      input Real x;
+      output Real y[3];
+    algorithm
+      y := c * x;
+    end f;
+  end Moist;
+end P4a;
+model PKT4a
+  Real y[3] = P4a.Moist.f(time);
+end PKT4a;
+//// model: PKT4b
+package P4b
+  package Moist
+    constant Real c[3] = {1.5, 2.5, 3.5};
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := c[2] * x;
+    end f;
+  end Moist;
+end P4b;
+model PKT4b
+  Real y = P4b.Moist.f(time);
+end PKT4b;
+//// model: PKT4c
+package P4c
+  package Moist
+    constant Real c[3] = {1.5, 2.5, 3.5};
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := x;
+      for i in 1:3 loop
+        y := y + c[i] * x;
+      end for;
+    end f;
+  end Moist;
+end P4c;
+model PKT4c
+  Real y = P4c.Moist.f(time);
+end PKT4c;
+//// model: PKT5
+package QPKT5
+  record Rec
+    String name;
+    Real MM;
+    Real R_s;
+  end Rec;
+  record FC
+    String chemicalFormula;
+    Real Tc;
+    Real mu;
+    Boolean hasDipoleMoment;
+  end FC;
+  package Data
+    constant Rec N2(name = "N2", MM = 0.0280134, R_s = 296.8033869505308);
+    constant Rec O2(name = "O2", MM = 0.0319988, R_s = 259.8369938872708);
+  end Data;
+  package FData
+    constant FC N2(chemicalFormula = "N2", Tc = 126.2, mu = 0.0, hasDipoleMoment = true);
+    constant FC O2(chemicalFormula = "O2", Tc = 154.58, mu = 0.0, hasDipoleMoment = true);
+  end FData;
+  function cp_T
+    input Rec data;
+    input Real T;
+    output Real cp;
+  algorithm
+    cp := data.R_s * T;
+  end cp_T;
+  package Mix
+    constant Rec[:] data = {Data.N2, Data.O2};
+    constant FC[2] fc = {FData.N2, FData.O2};
+    constant Integer nX = 2;
+    function f
+      input Real X[nX];
+      output Real MM;
+    algorithm
+      MM := X * data.MM;
+    end f;
+  end Mix;
+end QPKT5;
+model PKT5
+  Real x[2] = {0.3, 0.7} * time;
+  Real a = QPKT5.Mix.f(x);
+end PKT5;
+//// model: PKT5b
+package P5b
+  package Mix
+    constant Real MMX[2] = {0.0280134, 0.0319988};
+    function f
+      input Real X[2];
+      output Real MM;
+    algorithm
+      MM := X * MMX;
+    end f;
+    function g
+      input Real T;
+      input Real X[2];
+      output Real h;
+    algorithm
+      h := {T * 2, T * 3} * X + MMX * X;
+    end g;
+  end Mix;
+end P5b;
+model PKT5b
+  Real x[2] = {0.3, 0.7} * time;
+  Real a = P5b.Mix.f(x);
+  Real b = P5b.Mix.g(time, x);
+end PKT5b;
+//// model: PKT6
+package QPKT6
+  record Rec
+    String name;
+    Real MM;
+    Real R_s;
+  end Rec;
+  record FC
+    String chemicalFormula;
+    Real Tc;
+    Real mu;
+    Boolean hasDipoleMoment;
+  end FC;
+  package Data
+    constant Rec N2(name = "N2", MM = 0.0280134, R_s = 296.8033869505308);
+    constant Rec O2(name = "O2", MM = 0.0319988, R_s = 259.8369938872708);
+  end Data;
+  package FData
+    constant FC N2(chemicalFormula = "N2", Tc = 126.2, mu = 0.0, hasDipoleMoment = true);
+    constant FC O2(chemicalFormula = "O2", Tc = 154.58, mu = 0.0, hasDipoleMoment = true);
+  end FData;
+  function cp_T
+    input Rec data;
+    input Real T;
+    output Real cp;
+  algorithm
+    cp := data.R_s * T;
+  end cp_T;
+  package Mix
+    constant Rec[:] data = {Data.N2, Data.O2};
+    constant FC[2] fc = {FData.N2, FData.O2};
+    constant Integer nX = 2;
+    function f
+      input Real T;
+      input Real X[nX];
+      output Real cp;
+    algorithm
+      cp := {cp_T(data[i], T) for i in 1:nX} * X;
+    end f;
+  end Mix;
+end QPKT6;
+model PKT6
+  Real x[2] = {0.3, 0.7} * time;
+  Real a = QPKT6.Mix.f(time, x);
+end PKT6;
+//// model: PKT7
+package QPKT7
+  record Rec
+    String name;
+    Real MM;
+    Real R_s;
+  end Rec;
+  record FC
+    String chemicalFormula;
+    Real Tc;
+    Real mu;
+    Boolean hasDipoleMoment;
+  end FC;
+  package Data
+    constant Rec N2(name = "N2", MM = 0.0280134, R_s = 296.8033869505308);
+    constant Rec O2(name = "O2", MM = 0.0319988, R_s = 259.8369938872708);
+  end Data;
+  package FData
+    constant FC N2(chemicalFormula = "N2", Tc = 126.2, mu = 0.0, hasDipoleMoment = true);
+    constant FC O2(chemicalFormula = "O2", Tc = 154.58, mu = 0.0, hasDipoleMoment = true);
+  end FData;
+  function cp_T
+    input Rec data;
+    input Real T;
+    output Real cp;
+  algorithm
+    cp := data.R_s * T;
+  end cp_T;
+  package Mix
+    constant Rec[:] data = {Data.N2, Data.O2};
+    constant FC[2] fc = {FData.N2, FData.O2};
+    constant Integer nX = 2;
+    function f
+      input Real X[nX];
+      output Real MM;
+    algorithm
+      MM := 1 / sum(X[j] / data[j].MM for j in 1:size(X, 1));
+    end f;
+  end Mix;
+end QPKT7;
+model PKT7
+  Real x[2] = {0.3, 0.7} * time;
+  Real a = QPKT7.Mix.f(x);
+end PKT7;
+//// model: PKT8
+package QPKT8
+  record Rec
+    String name;
+    Real MM;
+    Real R_s;
+  end Rec;
+  record FC
+    String chemicalFormula;
+    Real Tc;
+    Real mu;
+    Boolean hasDipoleMoment;
+  end FC;
+  package Data
+    constant Rec N2(name = "N2", MM = 0.0280134, R_s = 296.8033869505308);
+    constant Rec O2(name = "O2", MM = 0.0319988, R_s = 259.8369938872708);
+  end Data;
+  package FData
+    constant FC N2(chemicalFormula = "N2", Tc = 126.2, mu = 0.0, hasDipoleMoment = true);
+    constant FC O2(chemicalFormula = "O2", Tc = 154.58, mu = 0.0, hasDipoleMoment = true);
+  end FData;
+  function cp_T
+    input Rec data;
+    input Real T;
+    output Real cp;
+  algorithm
+    cp := data.R_s * T;
+  end cp_T;
+  package Mix
+    constant Rec[:] data = {Data.N2, Data.O2};
+    constant FC[2] fc = {FData.N2, FData.O2};
+    constant Integer nX = 2;
+    function f
+      input Real T;
+      output Real y;
+    algorithm
+      y := 0;
+      for i in 1:nX loop
+        assert(fc[i].hasDipoleMoment, "no dipole for " + fc[i].chemicalFormula);
+        y := y + fc[i].Tc * T + fc[i].mu;
+      end for;
+    end f;
+  end Mix;
+end QPKT8;
+model PKT8
+  Real x[2] = {0.3, 0.7} * time;
+  Real a = QPKT8.Mix.f(time);
+end PKT8;
+//// model: PKT8a
+package QPKT8a
+  record Rec
+    String name;
+    Real MM;
+    Real R_s;
+  end Rec;
+  record FC
+    String chemicalFormula;
+    Real Tc;
+    Real mu;
+    Boolean hasDipoleMoment;
+  end FC;
+  package Data
+    constant Rec N2(name = "N2", MM = 0.0280134, R_s = 296.8033869505308);
+    constant Rec O2(name = "O2", MM = 0.0319988, R_s = 259.8369938872708);
+  end Data;
+  package FData
+    constant FC N2(chemicalFormula = "N2", Tc = 126.2, mu = 0.0, hasDipoleMoment = true);
+    constant FC O2(chemicalFormula = "O2", Tc = 154.58, mu = 0.0, hasDipoleMoment = true);
+  end FData;
+  function cp_T
+    input Rec data;
+    input Real T;
+    output Real cp;
+  algorithm
+    cp := data.R_s * T;
+  end cp_T;
+  package Mix
+    constant Rec[:] data = {Data.N2, Data.O2};
+    constant FC[2] fc = {FData.N2, FData.O2};
+    constant Integer nX = 2;
+    function f
+      input Real T;
+      output Real y;
+    algorithm
+      y := 0;
+      for i in 1:nX loop
+        y := y + cp_T(data[i], T);
+      end for;
+    end f;
+  end Mix;
+end QPKT8a;
+model PKT8a
+  Real x[2] = {0.3, 0.7} * time;
+  Real a = QPKT8a.Mix.f(time);
+end PKT8a;
+//// model: PKT9
+package P9
+  record FundamentalConstants
+    Real R_s;
+    Real MM;
+    Real Tred;
+    Real pred;
+  end FundamentalConstants;
+  package Ice
+    package Basic
+      record IceConstants
+        extends FundamentalConstants;
+        Real p0;
+      end IceConstants;
+      constant IceConstants Constants(R_s = 461.52364, MM = 18.015268E-003, Tred = 273.16, pred = 611.657, p0 = 101325);
+      function Gibbs
+        input Real p;
+        input Real T;
+        output Real g;
+      protected
+        final constant Real s_0 = -0.332733756492168E+004;
+        final Real pi0 = Constants.p0 / Constants.pred;
+        Real theta;
+      algorithm
+        g := Constants.R_s;
+        theta := T / Constants.Tred;
+        g := g + s_0 * Constants.Tred * theta + 1 / Constants.Tred * p / Constants.pred + pi0;
+      end Gibbs;
+    end Basic;
+  end Ice;
+end P9;
+model PKT9
+  Real g = P9.Ice.Basic.Gibbs(1e5, time);
+end PKT9;
+//// model: PKT10
+package P10
+  package Data
+    constant Real R_s = data.R_s;
+    record crit
+      constant Real TCRIT = 374.18;
+      constant Real PCRIT = 4056290.0;
+    end crit;
+    record fcrit
+      constant Real FTCRIT = 374.209;
+      constant Real FPCRIT = 4059280.0;
+    end fcrit;
+    record data
+      constant Real R_s = 81.4888564372;
+      constant Real MM = 0.102032;
+      extends crit;
+      constant Real HCRIT = 389653;
+      extends fcrit;
+    end data;
+  end Data;
+  package R134a
+    function f
+      input Real p;
+      output Real pred;
+    algorithm
+      pred := p / Data.data.FPCRIT + p / Data.data.MM + Data.R_s * p + P10.Data.data.TCRIT;
+    end f;
+  end R134a;
+end P10;
+model PKT10
+  Real p = P10.R134a.f(time);
+end PKT10;
+//// model: PKT10b
+package P10b
+  package Data
+    constant Real R_s = data.R_s;
+    record crit
+      constant Real TCRIT = 374.18;
+      constant Real PCRIT = 4056290.0;
+    end crit;
+    record fcrit
+      constant Real FTCRIT = 374.209;
+      constant Real FPCRIT = 4059280.0;
+    end fcrit;
+    record data
+      constant Real R_s = 81.4888564372;
+      constant Real MM = 0.102032;
+      extends crit;
+      constant Real HCRIT = 389653;
+      extends fcrit;
+    end data;
+  end Data;
+  package R134a
+    function f
+      input Real p;
+      output Real pred;
+    algorithm
+      pred := p / Data.data.MM + Data.R_s * p;
+    end f;
+  end R134a;
+end P10b;
+model PKT10b
+  Real p = P10b.R134a.f(time);
+end PKT10b;
+//// model: PKT10c
+package P10c
+  package Data
+    constant Real R_s = data.R_s;
+    record crit
+      constant Real TCRIT = 374.18;
+      constant Real PCRIT = 4056290.0;
+    end crit;
+    record fcrit
+      constant Real FTCRIT = 374.209;
+      constant Real FPCRIT = 4059280.0;
+    end fcrit;
+    record data
+      constant Real R_s = 81.4888564372;
+      constant Real MM = 0.102032;
+      extends crit;
+      constant Real HCRIT = 389653;
+      extends fcrit;
+    end data;
+  end Data;
+  package R134a
+    function f
+      input Real p;
+      output Real pred;
+    algorithm
+      pred := p / Data.data.TCRIT;
+    end f;
+  end R134a;
+end P10c;
+model PKT10c
+  Real p = P10c.R134a.f(time);
+end PKT10c;
+//// model: PKT10d
+package P10d
+  package Data
+    record fcrit
+      constant Real FPCRIT = 4059280.0;
+    end fcrit;
+    record data
+      constant Real MM = 0.102032;
+      extends fcrit;
+    end data;
+  end Data;
+  model M
+    Real x = Data.data.FPCRIT * time;
+  end M;
+end P10d;
+model PKT10d
+  P10d.M m;
+  Real y = P10d.Data.data.FPCRIT * time;
+end PKT10d;
+//// model: PKT11
+package P11
+  partial package PartialMedium
+    constant Real reference_T = 298.15;
+    replaceable partial function temperature_phX
+      input Real p;
+      input Real h;
+      output Real T;
+    end temperature_phX;
+  end PartialMedium;
+  partial package PartialLinearFluid
+    extends PartialMedium;
+    constant Real cp_const;
+    constant Real reference_h;
+    redeclare function extends temperature_phX
+    algorithm
+      T := (h - reference_h) / cp_const + reference_T;
+    end temperature_phX;
+  end PartialLinearFluid;
+  package LinearColdWater
+    extends PartialLinearFluid(reference_T = 278.15, reference_h = 104929, cp_const = 4181.9);
+  end LinearColdWater;
+  model Vol
+    replaceable package Medium = PartialMedium;
+    Real T = Medium.temperature_phX(1e5, 1e5 * time);
+  end Vol;
+end P11;
+model PKT11
+  P11.Vol v(redeclare package Medium = P11.LinearColdWater);
+end PKT11;
+//// model: PKT12
+package P12
+  package StandardWater
+    record ThermodynamicState
+      Real p;
+      Real T;
+    end ThermodynamicState;
+    function setState_pT
+      input Real p;
+      input Real T;
+      output ThermodynamicState state;
+    algorithm
+      state := ThermodynamicState(p = p, T = T);
+    end setState_pT;
+    function specificEnthalpy
+      input ThermodynamicState state;
+      output Real h;
+    algorithm
+      h := 4184 * (state.T - 273.15) + state.p / 1000;
+    end specificEnthalpy;
+  end StandardWater;
+  partial package PartialMedium
+    constant Real reference_p = 101325;
+    constant Real reference_T = 298.15;
+    replaceable partial function temperature_phX
+      input Real p;
+      input Real h;
+      output Real T;
+    end temperature_phX;
+  end PartialMedium;
+  partial package PartialLinearFluid
+    extends PartialMedium;
+    constant Real cp_const;
+    constant Real reference_h;
+    redeclare function extends temperature_phX
+    algorithm
+      T := (h - reference_h) / cp_const + reference_T;
+    end temperature_phX;
+  end PartialLinearFluid;
+  partial package LinearWater_pT
+    extends PartialLinearFluid(reference_h = StandardWater.specificEnthalpy(state), cp_const = 4181.9);
+    constant StandardWater.ThermodynamicState state = StandardWater.setState_pT(reference_p, reference_T);
+  end LinearWater_pT;
+  package LinearWater_pT_Ambient
+    extends LinearWater_pT(reference_p = 101325, reference_T = 298.15);
+  end LinearWater_pT_Ambient;
+  model Vol
+    replaceable package Medium = PartialMedium;
+    Real T = Medium.temperature_phX(1e5, 1e5 * time);
+  end Vol;
+end P12;
+model PKT12
+  P12.Vol v(redeclare package Medium = P12.LinearWater_pT_Ambient);
+end PKT12;
+//// model: PKT13
+package P13
+  record DataRecord
+    String name;
+    Real MM;
+    Real alow[3];
+    Real R_s;
+  end DataRecord;
+  package SingleGasesData
+    constant DataRecord H2O(name = "H2O", MM = 0.01801528, alow = {-39479.6083, 575.573102, 0.931782653}, R_s = 461.5233290850878);
+    constant DataRecord Air(name = "Air", MM = 0.0289651159, alow = {10099.5016, -196.827561, 5.00915511}, R_s = 287.0512249529787);
+  end SingleGasesData;
+  function h_Tlow
+    input DataRecord data;
+    input Real T;
+    input Real h_off = 0;
+    output Real h;
+  algorithm
+    h := data.R_s * T * data.alow[3] + h_off;
+  end h_Tlow;
+  partial package PartialMedium
+    constant Integer nX = 1;
+    replaceable partial function h_pTX
+      input Real p;
+      input Real T;
+      input Real X[nX];
+      output Real h;
+    end h_pTX;
+  end PartialMedium;
+  package MoistAir
+    extends PartialMedium(nX = 2);
+    constant DataRecord dryair = SingleGasesData.Air;
+    constant DataRecord steam = SingleGasesData.H2O;
+    redeclare function extends h_pTX
+    protected
+      Real R_gas;
+    algorithm
+      R_gas := dryair.R_s * X[2] + steam.R_s * X[1];
+      h := {h_Tlow(data = steam, T = T, h_off = 46479.819 + 2501014.5), h_Tlow(data = dryair, T = T, h_off = 25104.684)} * X + R_gas * p;
+    end h_pTX;
+  end MoistAir;
+  model Vol
+    replaceable package Medium = PartialMedium;
+    Real h = Medium.h_pTX(1e5, time, {0.01, 0.99});
+  end Vol;
+end P13;
+model PKT13
+  P13.Vol v(redeclare package Medium = P13.MoistAir);
+end PKT13;
+//// model: PKT14
+package P14
+  record DataRecord
+    String name;
+    Real MM;
+    Real R_s;
+  end DataRecord;
+  record FluidConstants
+    String chemicalFormula;
+    Real criticalTemperature;
+    Real dipoleMoment;
+    Boolean hasDipoleMoment;
+  end FluidConstants;
+  package SingleGasesData
+    constant DataRecord N2(name = "N2", MM = 0.0280134, R_s = 296.8033869505308);
+    constant DataRecord O2(name = "O2", MM = 0.0319988, R_s = 259.8369938872708);
+  end SingleGasesData;
+  package FluidData
+    constant FluidConstants N2(chemicalFormula = "N2", criticalTemperature = 126.2, dipoleMoment = 0.0, hasDipoleMoment = true);
+    constant FluidConstants O2(chemicalFormula = "O2", criticalTemperature = 154.58, dipoleMoment = 0.0, hasDipoleMoment = true);
+  end FluidData;
+  function cp_T
+    input DataRecord data;
+    input Real T;
+    output Real cp;
+  algorithm
+    cp := data.R_s * T;
+  end cp_T;
+  partial package PartialMixtureMedium
+    constant String substanceNames[:] = {"a"};
+    constant Integer nS = size(substanceNames, 1);
+    constant Integer nX = nS;
+    constant FluidConstants[nS] fluidConstants;
+    replaceable partial function f
+      input Real T;
+      input Real X[nX];
+      output Real y;
+    end f;
+  end PartialMixtureMedium;
+  partial package MixtureGasNasa
+    extends PartialMixtureMedium;
+    constant DataRecord[:] data;
+    redeclare function extends f
+    protected
+      Real MM;
+    algorithm
+      MM := 1 / sum(X[j] / data[j].MM for j in 1:size(X, 1));
+      y := {cp_T(data[i], T) for i in 1:nX} * X + X * data.MM + MM;
+      for i in 1:nX loop
+        assert(fluidConstants[i].hasDipoleMoment, "no dipole for " + fluidConstants[i].chemicalFormula);
+        y := y + fluidConstants[i].criticalTemperature * T + fluidConstants[i].dipoleMoment;
+      end for;
+    end f;
+  end MixtureGasNasa;
+  package CombustionAir
+    extends MixtureGasNasa(data = {SingleGasesData.N2, SingleGasesData.O2}, fluidConstants = {FluidData.N2, FluidData.O2}, substanceNames = {"Nitrogen", "Oxygen"});
+  end CombustionAir;
+  model Vol
+    replaceable package Medium = PartialMixtureMedium;
+    Real y = Medium.f(time, {0.768, 0.232});
+  end Vol;
+end P14;
+model PKT14
+  P14.Vol v(redeclare package Medium = P14.CombustionAir);
+end PKT14;
+//// model: PKT15
+package P15
+  partial package PartialMedium
+    type SpecificEnthalpy = Real(min = -1e10, max = 1e10);
+    replaceable record ThermodynamicState
+    end ThermodynamicState;
+    replaceable partial function specificEnthalpy
+      input ThermodynamicState state;
+      output SpecificEnthalpy h;
+    end specificEnthalpy;
+  end PartialMedium;
+  partial package WaterBase
+    extends PartialMedium(SpecificEnthalpy(start = 1e5));
+    redeclare record extends ThermodynamicState
+      SpecificEnthalpy h;
+    end ThermodynamicState;
+    redeclare function extends specificEnthalpy
+    algorithm
+      h := state.h;
+    end specificEnthalpy;
+  end WaterBase;
+  package Water_ph
+    extends WaterBase;
+  end Water_ph;
+  package StandardWater = Water_ph;
+  partial package PartialLinearFluid
+    constant Real reference_h;
+    function f
+      input Real h;
+      output Real y;
+    algorithm
+      y := h - reference_h;
+    end f;
+  end PartialLinearFluid;
+  package LinearWater
+    extends PartialLinearFluid(reference_h = StandardWater.specificEnthalpy(state));
+    constant StandardWater.ThermodynamicState state(h = 104929.0);
+  end LinearWater;
+  model Vol
+    replaceable package Medium = PartialLinearFluid;
+    Real y = Medium.f(time);
+  end Vol;
+end P15;
+model PKT15
+  P15.Vol v(redeclare package Medium = P15.LinearWater);
+end PKT15;
+//// model: PKT15b
+package P15
+  partial package PartialMedium
+    type SpecificEnthalpy = Real(min = -1e10, max = 1e10);
+    replaceable record ThermodynamicState
+    end ThermodynamicState;
+    replaceable partial function specificEnthalpy
+      input ThermodynamicState state;
+      output SpecificEnthalpy h;
+    end specificEnthalpy;
+  end PartialMedium;
+  partial package WaterBase
+    extends PartialMedium(SpecificEnthalpy(start = 1e5));
+    redeclare record extends ThermodynamicState
+      SpecificEnthalpy h;
+    end ThermodynamicState;
+    redeclare function extends specificEnthalpy
+    algorithm
+      h := state.h;
+    end specificEnthalpy;
+  end WaterBase;
+  package Water_ph
+    extends WaterBase;
+  end Water_ph;
+  package StandardWater = Water_ph;
+  partial package PartialLinearFluid
+    constant Real reference_h;
+    function f
+      input Real h;
+      output Real y;
+    algorithm
+      y := h - reference_h;
+    end f;
+  end PartialLinearFluid;
+  package LinearWater
+    extends PartialLinearFluid(reference_h = StandardWater.specificEnthalpy(state));
+    constant StandardWater.ThermodynamicState state(h = 104929.0);
+  end LinearWater;
+  model Vol
+    replaceable package Medium = PartialLinearFluid;
+    Real y = Medium.f(time);
+  end Vol;
+end P15;
+model PKT15b
+  constant Real hh = P15.StandardWater.specificEnthalpy(P15.StandardWater.ThermodynamicState(h = 1.5));
+  Real x = hh * time;
+end PKT15b;
+//// model: PKT15c
+package P15
+  partial package PartialMedium
+    type SpecificEnthalpy = Real(min = -1e10, max = 1e10);
+    replaceable record ThermodynamicState
+    end ThermodynamicState;
+    replaceable partial function specificEnthalpy
+      input ThermodynamicState state;
+      output SpecificEnthalpy h;
+    end specificEnthalpy;
+  end PartialMedium;
+  partial package WaterBase
+    extends PartialMedium(SpecificEnthalpy(start = 1e5));
+    redeclare record extends ThermodynamicState
+      SpecificEnthalpy h;
+    end ThermodynamicState;
+    redeclare function extends specificEnthalpy
+    algorithm
+      h := state.h;
+    end specificEnthalpy;
+  end WaterBase;
+  package Water_ph
+    extends WaterBase;
+  end Water_ph;
+  package StandardWater = Water_ph;
+  partial package PartialLinearFluid
+    constant Real reference_h;
+    function f
+      input Real h;
+      output Real y;
+    algorithm
+      y := h - reference_h;
+    end f;
+  end PartialLinearFluid;
+  package LinearWater
+    extends PartialLinearFluid(reference_h = StandardWater.specificEnthalpy(state));
+    constant StandardWater.ThermodynamicState state(h = 104929.0);
+  end LinearWater;
+  model Vol
+    replaceable package Medium = PartialLinearFluid;
+    Real y = Medium.f(time);
+  end Vol;
+end P15;
+model PKT15c
+  constant Real hh = P15.Water_ph.specificEnthalpy(P15.Water_ph.ThermodynamicState(h = 1.5));
+  Real x = hh * time;
+end PKT15c;
+//// model: PKT16
+package P16
+  record FC
+    Real Tc;
+    Real arr[3];
+  end FC;
+  record Rec
+    String name;
+    Real MM;
+  end Rec;
+  package Mix
+    constant Integer Water = 2;
+    constant FC[2] fc = {FC(Tc = 126.2, arr = {1.0, 2.0, 3.0}), FC(Tc = 154.58, arr = {4.0, 5.0, 6.0})};
+    constant Real c[3] = {1.5, 2.5, 3.5};
+    constant Rec[2] data = {Rec(name = "N2", MM = 0.0280134), Rec(name = "O2", MM = 0.0319988)};
+    function f1
+      input Real T;
+      input Integer n;
+      output Real y;
+    algorithm
+      y := 0;
+      for i in 1:2 loop
+        y := y + fc[i].arr[2] * T + fc[2].arr[i] + data[i].MM;
+        for j in 1:3 loop
+          y := y + fc[i].arr[j];
+        end for;
+      end for;
+      y := y + sum(fc[:].Tc) * T + c[Water] * T + sum(c[1:2]) * T + sum(c[2:n]) * T + c[n] + fc[n].Tc;
+    end f1;
+  end Mix;
+end P16;
+model PKT16
+  Real y = P16.Mix.f1(time, 3);
+end PKT16;
+//// model: PKT16s
+package P16s
+  record FC
+    Real Tc;
+    Real arr[3];
+  end FC;
+  record Rec
+    String name;
+    Real MM;
+  end Rec;
+  package Mix
+    constant Integer Water = 2;
+    constant FC[2] fc = {FC(Tc = 126.2, arr = {1.0, 2.0, 3.0}), FC(Tc = 154.58, arr = {4.0, 5.0, 6.0})};
+    constant Real c[3] = {1.5, 2.5, 3.5};
+    constant Rec[2] data = {Rec(name = "N2", MM = 0.0280134), Rec(name = "O2", MM = 0.0319988)};
+    function f1
+      input Real T;
+      input Integer n;
+      output Real y;
+    algorithm
+      y := 0;
+      for i in 1:2 loop
+        y := y + fc[i].arr[2] * T + fc[2].arr[i] + data[i].MM;
+        for j in 1:3 loop
+          y := y + fc[i].arr[j];
+        end for;
+      end for;
+      y := y + sum(fc[:].Tc) * T + c[Water] * T + c[n] + fc[n].Tc + c[end] * T + c[n - 1] * T;
+    end f1;
+  end Mix;
+end P16s;
+model PKT16s
+  Real y = P16s.Mix.f1(time, 3);
+end PKT16s;
+//// model: PKT17
+package P17
+  package Mix
+    constant Real K = 0.0280134;
+    function f
+      input Real X[2];
+      output Real MM;
+    algorithm
+      MM := 1 / sum(X[j] / K for j in 1:size(X, 1));
+    end f;
+  end Mix;
+end P17;
+model PKT17
+  Real x[2] = {0.3, 0.7} * time;
+  Real a = P17.Mix.f(x);
+end PKT17;
+//// model: PKT18
+package P18
+  record Rec
+    String name;
+    Real MM;
+    Real a[2];
+  end Rec;
+  package Moist
+    constant Rec steam(name = "H2O", MM = 0.01801528, a = {1.5, 2.5});
+    function f
+      input Real x;
+      output Rec r;
+    algorithm
+      r := steam;
+      r.MM := r.MM * x;
+    end f;
+    function g
+      input Real x;
+      output Real y;
+    protected
+      Rec r = steam;
+    algorithm
+      y := r.MM * x;
+    end g;
+  end Moist;
+end P18;
+model PKT18
+  P18.Rec r = P18.Moist.f(time);
+  Real y = P18.Moist.g(time);
+end PKT18;
+//// model: PKT19
+operator record Cplx
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    function fromReal
+      input Real re;
+      input Real im = 0;
+      output .Cplx result(re = re, im = im);
+    algorithm
+    end fromReal;
+  end 'constructor';
+end Cplx;
+package P19
+  constant Cplx j = Cplx(0, 1);
+  function f
+    input Real x;
+    output Real y;
+  protected
+    Cplx c;
+  algorithm
+    c := j;
+    y := j.im * x + c.re;
+  end f;
+end P19;
+model PKT19
+  Real y = P19.f(time);
+end PKT19;
+//// model: PKT20
+package P20
+  package Mix
+    constant Integer k[3] = {3, 1, 2};
+    function f
+      input Real x;
+      input Integer n;
+      output Real y;
+    algorithm
+      y := k[n] * x + k[n];
+      for i in 1:3 loop
+        y := y + k[i] * x;
+      end for;
+    end f;
+  end Mix;
+end P20;
+model PKT20
+  Real y = P20.Mix.f(time, 2);
+end PKT20;
+//// model: PKT21
+package P21
+  record Rec
+    String name;
+    Real MM;
+    Real a[2];
+  end Rec;
+  package Data
+    constant Rec N2(name = "N2", MM = 0.0280134, a = {1.0, 2.0});
+    constant Rec O2(name = "O2", MM = 0.0319988, a = {3.0, 4.0});
+  end Data;
+  function g
+    input Rec r[:];
+    input Real T;
+    output Real y;
+  algorithm
+    y := 0;
+    for i in 1:size(r, 1) loop
+      y := y + r[i].MM * T;
+    end for;
+  end g;
+  package Mix
+    constant Rec[:] data = {Data.N2, Data.O2};
+    function f
+      input Real T;
+      input Integer n;
+      output Real y;
+    algorithm
+      y := g(data, T) + Data.N2.MM * T + Data.O2.a[2] * T + Data.O2.a[n] * T + data[2].a[n] + data[n].a[1];
+    end f;
+  end Mix;
+end P21;
+model PKT21
+  Real y = P21.Mix.f(time, 2);
+end PKT21;
+//// model: PKT22
+package P22
+  record Rec
+    String name;
+    Real MM;
+  end Rec;
+  package Data
+    constant Rec N2(name = "N2", MM = 0.0280134);
+    constant Rec O2(name = "O2", MM = 0.0319988);
+  end Data;
+  package Mix
+    constant Rec[:] data = {Data.N2, Data.O2};
+  end Mix;
+end P22;
+model PKT22
+  parameter Real mm[2] = P22.Mix.data.MM;
+  Real x = P22.Mix.data[2].MM * time;
+  Real z[2] = P22.Mix.data.MM * time;
+end PKT22;
+//// model: PKT23
+package P23
+  package B
+    constant Real c = 1.0;
+    constant Real d = 5.0;
+  end B;
+  package A
+    extends B(c = 2.0);
+  end A;
+  package Use
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := A.c * x + A.d;
+    end f;
+  end Use;
+end P23;
+model PKT23
+  Real y = P23.Use.f(time);
+  Real z = P23.A.c * time + P23.A.d;
+end PKT23;
+//// model: PKT23m
+package P23m
+  package B
+    constant Real c = 1.0;
+    constant Real d = 5.0;
+  end B;
+  package A
+    extends B(c = 2.0);
+  end A;
+end P23m;
+model PKT23m
+  Real z = P23m.A.c * time + P23m.A.d;
+end PKT23m;
+//// model: PKT24
+package P24
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output Real s;
+  protected
+    R r[2];
+    Real xs[2];
+  algorithm
+    r[1] := R(a, 2 * a);
+    r[2] := R(3 * a, 4 * a);
+    xs := r.x;
+    s := xs[1] + xs[2];
+  end f;
+end P24;
+model PKT24
+  parameter Real p = P24.f(1.5);
+  Real y = p * time;
+end PKT24;
+//// model: PKT24b
+package P24b
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output Real s;
+  protected
+    R r[2];
+    Real xs[2];
+  algorithm
+    r[1] := R(a, 2 * a);
+    r[2] := R(3 * a, 4 * a);
+    xs := {r[1].x, r[2].x};
+    s := xs[1] + xs[2];
+  end f;
+end P24b;
+model PKT24b
+  parameter Real p = P24b.f(1.5);
+  Real y = p * time;
+end PKT24b;
+//// model: PKT25
+package P25
+  record Sub
+    Real x;
+    Real v[2];
+  end Sub;
+  record Rec
+    String name;
+    Sub sub;
+  end Rec;
+  package Data
+    constant Rec N2(name = "N2", sub(x = 1.5, v = {2.0, 3.0}));
+    constant Rec[2] arr = {Rec(name = "a", sub = Sub(x = 1.0, v = {4.0, 5.0})), Rec(name = "b", sub = Sub(x = 2.0, v = {6.0, 7.0}))};
+  end Data;
+  function f
+    input Real T;
+    input Integer n;
+    output Real y;
+  algorithm
+    y := Data.N2.sub.x * T + Data.N2.sub.v[n] + Data.arr[n].sub.x + Data.arr[2].sub.v[n] + Data.arr[n].sub.v[1];
+  end f;
+end P25;
+model PKT25
+  Real y = P25.f(time, 2);
+end PKT25;
+//// model: PKT26
+package P26
+  record Rec
+    String name;
+    Real MM;
+    Real a[2];
+  end Rec;
+  package Data
+    constant Rec[2] data = {Rec(name = "a", MM = 1.0, a = {4.0, 5.0}), Rec(name = "b", MM = 2.0, a = {6.0, 7.0})};
+  end Data;
+end P26;
+model PKT26
+  parameter Real p[2] = P26.Data.data.a[2];
+  Real y = P26.Data.data[2].a[1] * time;
+end PKT26;
+//// model: PKT27
+package P27
+  record FC
+    Real Tc;
+    Real arr[3];
+  end FC;
+  package Mix
+    constant FC[2] fc = {FC(Tc = 126.2, arr = {1.0, 2.0, 3.0}), FC(Tc = 154.58, arr = {4.0, 5.0, 6.0})};
+    function f
+      input Real T;
+      output Real y[2];
+    algorithm
+      y := fc[:].arr[2] * T;
+    end f;
+  end Mix;
+end P27;
+model PKT27
+  Real y[2] = P27.Mix.f(time);
+end PKT27;
+//// model: PKT28
+package P28
+  record Rec
+    String name;
+    Real MM;
+  end Rec;
+  package Mix
+    constant Rec[:] data = {Rec(name = "N2", MM = 0.0280134), Rec(name = "O2", MM = 0.0319988)};
+    constant Real c[3] = {1.5, 2.5, 3.5};
+    function f
+      input Real T;
+      output Real y;
+    algorithm
+      y := 0;
+      for i in 1:size(data, 1) loop
+        y := y + data[i].MM * T;
+      end for;
+      for j in 1:size(data.MM, 1) loop
+        y := y + data[j].MM;
+      end for;
+      y := y + size(c, 1) * T + sum(data.MM) * T + max(data.MM);
+    end f;
+  end Mix;
+end P28;
+model PKT28
+  Real y = P28.Mix.f(time);
+end PKT28;

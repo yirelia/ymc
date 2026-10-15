@@ -8730,4 +8730,153 @@ YMC_TEST(flatten_modified_short_class_package) {
                            "  Real n = time;\nequation\n  v.C = {time};\nend PKN15;\n"));
 }
 
+YMC_TEST(flatten_fn_reduction_range_literal_after_typing) {
+  // 函数体里归约的范围引用输入、定型后是字面量（`1:size(X, 1)`、`input Real X[2]` → `1:2`）：按字面量范围展开 sum（此前错留成
+  // `sum(X[j] / 0.0280134 for j in 1:2)`）。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p23 PKT17）。
+  YMC_CHECK_EQ(flatten_src("package P17\n  package Mix\n    constant Real K = 0.0280134;\n    function f\n      input Real X[2];\n"
+                           "      output Real MM;\n    algorithm\n      MM := 1 / sum(X[j] / K for j in 1:size(X, 1));\n    end f;\n"
+                           "  end Mix;\nend P17;\nmodel PKT17\n  Real x[2] = {0.3, 0.7} * time;\n  Real a = P17.Mix.f(x);\n"
+                           "end PKT17;\n"),
+               std::string("function P17.Mix.f\n  input Real[2] X;\n  output Real MM;\nalgorithm\n"
+                           "  MM := 1.0 / (X[1] / 0.0280134 + X[2] / 0.0280134);\nend P17.Mix.f;\n\nclass PKT17\n  Real x[1];\n"
+                           "  Real x[2];\n  Real a = P17.Mix.f(x);\nequation\n  x = {0.3 * time, 0.7 * time};\nend PKT17;\n"));
+}
+
+YMC_TEST(flatten_fn_record_constant_field) {
+  // 函数体里包常量记录的字段 `dryair.R_s`（dryair = Data.Air）换成值（EvalConstants.evaluateFuncExpTraverser → Ceval.evalCref）。
+  // 期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p23 PKT1）。
+  YMC_CHECK_EQ(flatten_src("package P1\n  record Rec\n    String name;\n    Real MM;\n    Real a[3];\n    Real R_s;\n  end Rec;\n"
+                           "  package Data\n"
+                           "    constant Rec H2O(name = \"H2O\", MM = 0.01801528, a = {1.5, 2.5, 3.5}, R_s = 461.5233290850878);\n"
+                           "    constant Rec Air(name = \"Air\", MM = 0.0289651159, a = {4.0, 5.0, 6.0}, R_s = 287.0512249529787);\n"
+                           "  end Data;\n  package Moist\n    constant Rec steam = Data.H2O;\n    constant Rec dryair = Data.Air;\n"
+                           "    function R_gas\n      input Real x;\n      output Real R;\n    algorithm\n"
+                           "      R := dryair.R_s * (1 - x) + steam.R_s * x;\n    end R_gas;\n  end Moist;\nend P1;\nmodel PKT1\n"
+                           "  Real r = P1.Moist.R_gas(time);\nend PKT1;\n"),
+               std::string("function P1.Moist.R_gas\n  input Real x;\n  output Real R;\nalgorithm\n"
+                           "  R := 287.0512249529787 * (1.0 - x) + 461.5233290850878 * x;\nend P1.Moist.R_gas;\n\nclass PKT1\n"
+                           "  Real r = P1.Moist.R_gas(time);\nend PKT1;\n"));
+}
+
+YMC_TEST(flatten_fn_whole_record_constant_argument) {
+  // 函数体里整个包常量记录 `steam` 作实参 → 记录式 `P2.Rec("H2O", …)`，构造函数随之发射（记录只出现在函数里，没有实例节点）。
+  // 期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p23 PKT2）。
+  YMC_CHECK_EQ(flatten_src("package P2\n  record Rec\n    String name;\n    Real MM;\n    Real a[3];\n    Real R_s;\n  end Rec;\n"
+                           "  package Data\n"
+                           "    constant Rec H2O(name = \"H2O\", MM = 0.01801528, a = {1.5, 2.5, 3.5}, R_s = 461.5233290850878);\n"
+                           "  end Data;\n  function h_T\n    input Rec data;\n    input Real T;\n    input Real h_off = 0;\n"
+                           "    output Real h;\n  algorithm\n    h := data.R_s * T + data.a[1] + h_off;\n  end h_T;\n  package Moist\n"
+                           "    constant Rec steam = Data.H2O;\n    function h_pT\n      input Real T;\n      output Real h;\n"
+                           "    algorithm\n      h := h_T(data = steam, T = T, h_off = 46479.819 + 2501014.5);\n    end h_pT;\n"
+                           "  end Moist;\nend P2;\nmodel PKT2\n  Real h = P2.Moist.h_pT(time);\nend PKT2;\n"),
+               std::string("function P2.Moist.h_pT\n  input Real T;\n  output Real h;\nalgorithm\n"
+                           "  h := P2.h_T(P2.Rec(\"H2O\", 0.01801528, {1.5, 2.5, 3.5}, 461.5233290850878), T, 2.547494319e6);\n"
+                           "end P2.Moist.h_pT;\n\nfunction P2.Rec \"Automatically generated record constructor for P2.Rec\"\n"
+                           "  input String name;\n  input Real MM;\n  input Real[3] a;\n  input Real R_s;\n  output Rec res;\n"
+                           "end P2.Rec;\n\nfunction P2.h_T\n  input P2.Rec data;\n  input Real T;\n  input Real h_off = 0.0;\n"
+                           "  output Real h;\nalgorithm\n  h := data.R_s * T + data.a[1] + h_off;\nend P2.h_T;\n\nclass PKT2\n"
+                           "  Real h = P2.Moist.h_pT(time);\nend PKT2;\n"));
+}
+
+YMC_TEST(flatten_fn_record_array_field) {
+  // 函数体里记录数组常量的字段 `data.MM`（`Rec[:] data`）逐元素取 → `{0.0280134, 0.0319988}`，与输入的点积按元素展开。
+  // 期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p23 PKT5）。
+  YMC_CHECK_EQ(flatten_src("package QPKT5\n  record Rec\n    String name;\n    Real MM;\n    Real R_s;\n  end Rec;\n  record FC\n"
+                           "    String chemicalFormula;\n    Real Tc;\n    Real mu;\n    Boolean hasDipoleMoment;\n  end FC;\n"
+                           "  package Data\n    constant Rec N2(name = \"N2\", MM = 0.0280134, R_s = 296.8033869505308);\n"
+                           "    constant Rec O2(name = \"O2\", MM = 0.0319988, R_s = 259.8369938872708);\n  end Data;\n"
+                           "  package FData\n"
+                           "    constant FC N2(chemicalFormula = \"N2\", Tc = 126.2, mu = 0.0, hasDipoleMoment = true);\n"
+                           "    constant FC O2(chemicalFormula = \"O2\", Tc = 154.58, mu = 0.0, hasDipoleMoment = true);\n"
+                           "  end FData;\n  function cp_T\n    input Rec data;\n    input Real T;\n    output Real cp;\n  algorithm\n"
+                           "    cp := data.R_s * T;\n  end cp_T;\n  package Mix\n    constant Rec[:] data = {Data.N2, Data.O2};\n"
+                           "    constant FC[2] fc = {FData.N2, FData.O2};\n    constant Integer nX = 2;\n    function f\n"
+                           "      input Real X[nX];\n      output Real MM;\n    algorithm\n      MM := X * data.MM;\n    end f;\n"
+                           "  end Mix;\nend QPKT5;\nmodel PKT5\n  Real x[2] = {0.3, 0.7} * time;\n  Real a = QPKT5.Mix.f(x);\n"
+                           "end PKT5;\n"),
+               std::string("function QPKT5.Mix.f\n  input Real[2] X;\n  output Real MM;\nalgorithm\n"
+                           "  MM := X[1] * 0.0280134 + X[2] * 0.0319988;\nend QPKT5.Mix.f;\n\nclass PKT5\n  Real x[1];\n  Real x[2];\n"
+                           "  Real a = QPKT5.Mix.f(x);\nequation\n  x = {0.3 * time, 0.7 * time};\nend PKT5;\n"));
+}
+
+YMC_TEST(flatten_fn_record_array_element_field_in_reduction) {
+  // 归约体里的 `data[j].MM`：先取字段再取符号下标（`{…}[j]`），范围 `1:size(X, 1)` 定型成字面量后展开、下标代入取元素。
+  // 期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p23 PKT7）。
+  YMC_CHECK_EQ(flatten_src("package QPKT7\n  record Rec\n    String name;\n    Real MM;\n    Real R_s;\n  end Rec;\n  record FC\n"
+                           "    String chemicalFormula;\n    Real Tc;\n    Real mu;\n    Boolean hasDipoleMoment;\n  end FC;\n"
+                           "  package Data\n    constant Rec N2(name = \"N2\", MM = 0.0280134, R_s = 296.8033869505308);\n"
+                           "    constant Rec O2(name = \"O2\", MM = 0.0319988, R_s = 259.8369938872708);\n  end Data;\n"
+                           "  package FData\n"
+                           "    constant FC N2(chemicalFormula = \"N2\", Tc = 126.2, mu = 0.0, hasDipoleMoment = true);\n"
+                           "    constant FC O2(chemicalFormula = \"O2\", Tc = 154.58, mu = 0.0, hasDipoleMoment = true);\n"
+                           "  end FData;\n  function cp_T\n    input Rec data;\n    input Real T;\n    output Real cp;\n  algorithm\n"
+                           "    cp := data.R_s * T;\n  end cp_T;\n  package Mix\n    constant Rec[:] data = {Data.N2, Data.O2};\n"
+                           "    constant FC[2] fc = {FData.N2, FData.O2};\n    constant Integer nX = 2;\n    function f\n"
+                           "      input Real X[nX];\n      output Real MM;\n    algorithm\n"
+                           "      MM := 1 / sum(X[j] / data[j].MM for j in 1:size(X, 1));\n    end f;\n  end Mix;\nend QPKT7;\n"
+                           "model PKT7\n  Real x[2] = {0.3, 0.7} * time;\n  Real a = QPKT7.Mix.f(x);\nend PKT7;\n"),
+               std::string("function QPKT7.Mix.f\n  input Real[2] X;\n  output Real MM;\nalgorithm\n"
+                           "  MM := 1.0 / (X[1] / 0.0280134 + X[2] / 0.0319988);\nend QPKT7.Mix.f;\n\nclass PKT7\n  Real x[1];\n"
+                           "  Real x[2];\n  Real a = QPKT7.Mix.f(x);\nequation\n  x = {0.3 * time, 0.7 * time};\nend PKT7;\n"));
+}
+
+YMC_TEST(flatten_fn_inherited_record_field_and_final_locals) {
+  // 函数体里只按修饰逐字段给值的记录常量 `Constants` 的字段（含 extends 来的 `Tred`）换成值；声明成 final 的函数局部打 `final`
+  // （NFConvertDAE.convertVarAttributes）。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p23 PKT9）。
+  YMC_CHECK_EQ(flatten_src("package P9\n  record FundamentalConstants\n    Real R_s;\n    Real MM;\n    Real Tred;\n    Real pred;\n"
+                           "  end FundamentalConstants;\n  package Ice\n    package Basic\n      record IceConstants\n"
+                           "        extends FundamentalConstants;\n        Real p0;\n      end IceConstants;\n"
+                           "      constant IceConstants Constants(R_s = 461.52364, MM = 18.015268E-003, Tred = 273.16, pred = 611.657, p0 = 101325);\n"
+                           "      function Gibbs\n        input Real p;\n        input Real T;\n        output Real g;\n"
+                           "      protected\n        final constant Real s_0 = -0.332733756492168E+004;\n"
+                           "        final Real pi0 = Constants.p0 / Constants.pred;\n        Real theta;\n      algorithm\n"
+                           "        g := Constants.R_s;\n        theta := T / Constants.Tred;\n"
+                           "        g := g + s_0 * Constants.Tred * theta + 1 / Constants.Tred * p / Constants.pred + pi0;\n"
+                           "      end Gibbs;\n    end Basic;\n  end Ice;\nend P9;\nmodel PKT9\n"
+                           "  Real g = P9.Ice.Basic.Gibbs(1e5, time);\nend PKT9;\n"),
+               std::string("function P9.Ice.Basic.Gibbs\n  input Real p;\n  input Real T;\n  output Real g;\n"
+                           "  protected final constant Real s_0 = -3327.33756492168;\n"
+                           "  protected final Real pi0 = 165.65656895940043;\n  protected Real theta;\nalgorithm\n  g := 461.52364;\n"
+                           "  theta := T / 273.16;\n  g := g + s_0 * 273.16 * theta + 0.0036608581051398447 * p / 611.657 + pi0;\n"
+                           "end P9.Ice.Basic.Gibbs;\n\nclass PKT9\n  Real g = P9.Ice.Basic.Gibbs(1e5, time);\nend PKT9;\n"));
+}
+
+YMC_TEST(flatten_fn_inherited_member_in_qualified_constant) {
+  // 限定常量名经记录类往下、成员是 extends 来的（`Data.data.FPCRIT`，data extends fcrit）。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p23 PKT10）。
+  YMC_CHECK_EQ(flatten_src("package P10\n  package Data\n    constant Real R_s = data.R_s;\n    record crit\n"
+                           "      constant Real TCRIT = 374.18;\n      constant Real PCRIT = 4056290.0;\n    end crit;\n"
+                           "    record fcrit\n      constant Real FTCRIT = 374.209;\n      constant Real FPCRIT = 4059280.0;\n"
+                           "    end fcrit;\n    record data\n      constant Real R_s = 81.4888564372;\n"
+                           "      constant Real MM = 0.102032;\n      extends crit;\n      constant Real HCRIT = 389653;\n"
+                           "      extends fcrit;\n    end data;\n  end Data;\n  package R134a\n    function f\n      input Real p;\n"
+                           "      output Real pred;\n    algorithm\n"
+                           "      pred := p / Data.data.FPCRIT + p / Data.data.MM + Data.R_s * p + P10.Data.data.TCRIT;\n    end f;\n"
+                           "  end R134a;\nend P10;\nmodel PKT10\n  Real p = P10.R134a.f(time);\nend PKT10;\n"),
+               std::string("function P10.R134a.f\n  input Real p;\n  output Real pred;\nalgorithm\n"
+                           "  pred := p / 4.05928e6 + p / 0.102032 + 81.4888564372 * p + 374.18;\nend P10.R134a.f;\n\nclass PKT10\n"
+                           "  Real p = P10.R134a.f(time);\nend PKT10;\n"));
+}
+
+YMC_TEST(flatten_fn_constant_array_subscripts) {
+  // 函数体里常量数组 / 记录数组带下标：字面量下标取元素（`c[Water]`、`c[end]`），符号下标连同其后的留成 `{…}[i, 2]`、`{…}[n - 1]`，
+  // `fc[:].Tc` 整维取后 sum 求值。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p23 PKT16s）。
+  YMC_CHECK_EQ(flatten_src("package P16s\n  record FC\n    Real Tc;\n    Real arr[3];\n  end FC;\n  record Rec\n    String name;\n"
+                           "    Real MM;\n  end Rec;\n  package Mix\n    constant Integer Water = 2;\n"
+                           "    constant FC[2] fc = {FC(Tc = 126.2, arr = {1.0, 2.0, 3.0}), FC(Tc = 154.58, arr = {4.0, 5.0, 6.0})};\n"
+                           "    constant Real c[3] = {1.5, 2.5, 3.5};\n"
+                           "    constant Rec[2] data = {Rec(name = \"N2\", MM = 0.0280134), Rec(name = \"O2\", MM = 0.0319988)};\n"
+                           "    function f1\n      input Real T;\n      input Integer n;\n      output Real y;\n    algorithm\n"
+                           "      y := 0;\n      for i in 1:2 loop\n        y := y + fc[i].arr[2] * T + fc[2].arr[i] + data[i].MM;\n"
+                           "        for j in 1:3 loop\n          y := y + fc[i].arr[j];\n        end for;\n      end for;\n"
+                           "      y := y + sum(fc[:].Tc) * T + c[Water] * T + c[n] + fc[n].Tc + c[end] * T + c[n - 1] * T;\n"
+                           "    end f1;\n  end Mix;\nend P16s;\nmodel PKT16s\n  Real y = P16s.Mix.f1(time, 3);\nend PKT16s;\n"),
+               std::string("function P16s.Mix.f1\n  input Real T;\n  input Integer n;\n  output Real y;\nalgorithm\n  y := 0.0;\n"
+                           "  for i in 1:2 loop\n"
+                           "    y := y + {{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}}[i, 2] * T + {4.0, 5.0, 6.0}[i] + {0.0280134, 0.0319988}[i];\n"
+                           "    for j in 1:3 loop\n      y := y + {{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}}[i, j];\n    end for;\n"
+                           "  end for;\n"
+                           "  y := y + 280.78000000000003 * T + 2.5 * T + {1.5, 2.5, 3.5}[n] + {126.2, 154.58}[n] + 3.5 * T + {1.5, 2.5, 3.5}[n - 1] * T;\n"
+                           "end P16s.Mix.f1;\n\nclass PKT16s\n  Real y = P16s.Mix.f1(time, 3);\nend PKT16s;\n"));
+}
+
 YMC_TEST_MAIN

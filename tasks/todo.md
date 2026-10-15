@@ -2413,6 +2413,17 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       探针 pk-p22、旧组 SKIP→PASS（cx-c8 ×2、sl-s3）；单测 +6。slice 694→696 例 FAIL 0（oracle=live 不一致 0）；scodeinst 654→656
       （RecordExtends2、ih2）；testsuite 1816→1819 / FAIL 0；**MSL 452→453**（Modelica.Fluid.Examples.Tanks.TanksWithOverflow）；
       探针 9749→9775；单测 396→402。
+- [x] (66o) 函数体里引用包常量（2026-10-15）：照 EvalConstants.evaluateFuncExpTraverser（NFEvalConstants.mo:600-638）把函数外的
+      包常量引用代成值——记录常量的字段（`dryair.R_s` → 287.05…）、整个记录常量（→ 记录构造式 `P.Rec("H2O", …)`，构造函数随之
+      发射）、记录数组上取字段（`data.MM` → `{0.0280134, 0.0319988}`，recordElement 的 ARRAY 支）、带下标（字面量取元素，非字面量
+      留 `{…}[i]`，元素全相同取一个）、operator record 常量；限定常量查找经继承来的成员（`R134aData.data.FPCRIT`，class_member_at）；
+      函数变量声明的 final 照打（convertVarAttributes）；protected 记录局部绑定成包常量记录。修了一处静默错：函数里
+      `sum(X[j] / K for j in 1:size(X, 1))`（X 是定长输入）定型后范围是字面量却没展开（omc `1.0 / (X[1] / K + X[2] / K)`）。符号切片、
+      经带修饰 extends 继承的、函数局部记录数组上取字段（omc 求不出、照留）、`fc[:].arr[2]` 的 omc 怪形态等照旧 SKIP。
+      9 个 MSL 目标越过此处、卡到下一处：MoistAir 一族与 ReferenceAir ×2 "named function argument [missing argument / default
+      value]"、MixtureGases "Medium1.mediumName"、R134a ×2 "inherited element seen through modifier [Density]"。
+      探针 pk-p23（42）；单测 +8。slice 696 例 FAIL 0（oracle=live 不一致 0）；scodeinst 656、testsuite 1819、MSL 453（均不变）/
+      FAIL 0；探针 9775→9817；单测 402→410。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

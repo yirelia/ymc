@@ -714,3 +714,11 @@ TanksWithOverflow（derivative 注解）、MomentumBalanceFittings（stateSelect
 BranchingDynamicPipes、Media.Examples.MoistAir）卡到 "function body references non-local [steam]"；HeatExchangerSimulation 卡在
 向量化 homotopy（嵌套向量化的打印形态）；SimpleLiquidWater 卡在短类包的类修饰（`SpecificEnthalpy(max = 1e6)`）。FAIL / ACCEPTS-INVALID /
 CRASH 0。
+
+## 2026-10-15 66o 之后：PASS 453（不变）
+
+函数体里引用包常量（记录字段、整个记录常量 → 构造式、记录数组取字段、带下标、继承来的成员）。原先卡在
+"function body references non-local" 的 9 例越过此处、卡到下一处：MoistAir 一族（Media.Examples.MoistAir、RoomCO2 ×2、
+BranchingDynamicPipes）与 ReferenceAir ×2——"named function argument [missing argument / default value]"；MixtureGases——
+`Medium1.mediumName`；R134a ×2——经带修饰 extends 继承的类型 `Density`。HeatingSystem 卡在经短类包调函数（另做）。修了函数里
+定长输入上的归约没展开的静默错（PKT17）。FAIL / ACCEPTS-INVALID / CRASH 0。
