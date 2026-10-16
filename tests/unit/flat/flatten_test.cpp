@@ -9167,11 +9167,155 @@ YMC_TEST(flatten_local_short_package_record_ctor_without_component) {
 
 YMC_TEST(flatten_local_short_package_protected_access) {
   // 经本地短类包取 protected 常量：omc 报 "Illegal access of protected element secret"（LookupState.checkProtection，
-  // NFLookupState.mo:441-466 v1.25.0）→ SKIP（此前包实例路径不查 protected、静默出值；2026-10-15，探针 pk-p25 PKE13）。
+  // NFLookupState.mo:442-467 v1.25.0）→ SKIP（此前包实例路径不查 protected、静默出值；2026-10-15，探针 pk-p25 PKE13）。
   YMC_CHECK_EQ(flatten_src("package PE13\n  package Gas\n    constant Real a = 1.5;\n  protected\n    constant Real secret = 2.5;\n"
                            "  end Gas;\nend PE13;\nmodel PKE13\n  package Medium = PE13.Gas;\n  parameter Real y = Medium.secret;\n"
                            "end PKE13;\n"),
                std::string("<unsupported:access of protected element>"));
+}
+
+YMC_TEST(flatten_record_ctor_colon_dim_from_derived_default) {
+  // 记录参数绑子记录的构造调用 `mat = Derived()`，字段 `Real[:, :] tab` 的维由 Derived 经 extends 修饰换的值推出（3 行，
+  // NFTyping.typeDimension 的 UNKNOWN 支，NFTyping.mo:687-769 v1.25.0；MSL FluxTubes 的 HysteresisTableData，此前
+  // "composite/record binding" SKIP）。期望 = omc 1.25.0 实跑（2026-10-16，探针 pk-p26 PKB1）。
+  YMC_CHECK_EQ(flatten_src("package PKBP1\n  record Base \"base\"\n    parameter Real[:,:] tab = [1, 2; 3, 4] \"tab\";\n"
+                           "    parameter Real s = 1 \"s\";\n  end Base;\n  record Derived \"derived\"\n"
+                           "    extends Base(tab = [5, 6; 7, 8; 9, 10], s = 2);\n  end Derived;\n  model M\n"
+                           "    parameter Base mat = Base() \"mat\";\n    parameter Real e = mat.tab[size(mat.tab, 1), 2];\n"
+                           "  end M;\nend PKBP1;\n\nmodel PKB1\n  PKBP1.M m(mat = PKBP1.Derived());\nend PKB1;\n"),
+               std::string("class PKB1\n  parameter Real m.mat.tab[1,1] = 5.0 \"tab\";\n"
+                           "  parameter Real m.mat.tab[1,2] = 6.0 \"tab\";\n  parameter Real m.mat.tab[2,1] = 7.0 \"tab\";\n"
+                           "  parameter Real m.mat.tab[2,2] = 8.0 \"tab\";\n  parameter Real m.mat.tab[3,1] = 9.0 \"tab\";\n"
+                           "  parameter Real m.mat.tab[3,2] = 10.0 \"tab\";\n  parameter Real m.mat.s = 2.0 \"s\";\n"
+                           "  parameter Real m.e = m.mat.tab[3,2];\nend PKB1;\n"));
+}
+
+YMC_TEST(flatten_final_param_record_forced_inline_subscripted_input) {
+  // final parameter 记录的强制内联：函数体里带下标的输入 `v[1]` 按实参 `u` 接下标成 `u[1]`（NFInline.replaceCrefNode2 →
+  // Expression.applySubscripts，NFInline.mo:199-214 v1.25.0；此前 "record binding forced inline" SKIP）。
+  // 期望 = omc 1.25.0 实跑（2026-10-16，探针 pk-p26 PKB12）。
+  YMC_CHECK_EQ(flatten_src("package PKBP12\n  record Ori \"ori\"\n    Real T[2, 2] \"T\";\n    Real w[2] \"w\";\n  end Ori;\n"
+                           "  function fromv \"fromv\"\n    input Real v[2];\n    output Ori R;\n  algorithm\n"
+                           "    R := Ori(T = {{v[1], v[2]}, {-v[2], v[1]}}, w = zeros(2));\n  end fromv;\n"
+                           "  function rot \"rot\"\n    input Real a;\n    output Ori R;\n  algorithm\n"
+                           "    R := Ori(T = {{cos(a), sin(a)}, {-sin(a), cos(a)}}, w = {0, 0});\n  end rot;\n"
+                           "  function res2 \"res2\"\n    input Ori R;\n    input Real v[2];\n    output Real v2[2];\n"
+                           "  algorithm\n    v2 := R.T * v;\n  end res2;\n  function absRot \"absRot\"\n    input Ori R1;\n"
+                           "    input Ori Rr;\n    output Ori R2;\n  algorithm\n"
+                           "    R2 := Ori(T = Rr.T * R1.T, w = res2(Rr, R1.w) + Rr.w);\n  end absRot;\n  model Surf\n"
+                           "    input Ori R = fromv({1, 0}) \"R\";\n    Real y = R.T[1, 1];\n  end Surf;\nend PKBP12;\n\n"
+                           "model PKB12\n  parameter Real u[2] = {1, 0};\n  final parameter PKBP12.Ori R = PKBP12.fromv(u);\n"
+                           "end PKB12;\n"),
+               std::string("class PKB12\n  parameter Real u[1] = 1.0;\n  parameter Real u[2] = 0.0;\n"
+                           "  final parameter Real R.T[1,1] = u[1] \"T\";\n  final parameter Real R.T[1,2] = u[2] \"T\";\n"
+                           "  final parameter Real R.T[2,1] = -u[2] \"T\";\n  final parameter Real R.T[2,2] = u[1] \"T\";\n"
+                           "  final parameter Real R.w[1] = 0.0 \"w\";\n  final parameter Real R.w[2] = 0.0 \"w\";\nend PKB12;\n"));
+}
+
+YMC_TEST(flatten_final_continuous_record_forced_inline) {
+  // final 的连续记录、绑定只读参数：照 binding_var == PARAMETER 强制内联（NFFlatten.mo:965-986 v1.25.0），内联用化简前的
+  // 函数体（积在代换后才按元素展开）、内联出的 `res2(Ori(…), {0.0, 0.0})` 实参全成字面量随即求值；字段是连续变量，数组
+  // 绑定挪成方程。期望 = omc 1.25.0 实跑（2026-10-16，探针 pk-p26 PKB11）。
+  YMC_CHECK_EQ(flatten_src("package PKBP11\n  record Ori \"ori\"\n    Real T[2, 2] \"T\";\n    Real w[2] \"w\";\n  end Ori;\n"
+                           "  function fromv \"fromv\"\n    input Real v[2];\n    output Ori R;\n  algorithm\n"
+                           "    R := Ori(T = {{v[1], v[2]}, {-v[2], v[1]}}, w = zeros(2));\n  end fromv;\n"
+                           "  function rot \"rot\"\n    input Real a;\n    output Ori R;\n  algorithm\n"
+                           "    R := Ori(T = {{cos(a), sin(a)}, {-sin(a), cos(a)}}, w = {0, 0});\n  end rot;\n"
+                           "  function res2 \"res2\"\n    input Ori R;\n    input Real v[2];\n    output Real v2[2];\n"
+                           "  algorithm\n    v2 := R.T * v;\n  end res2;\n  function absRot \"absRot\"\n    input Ori R1;\n"
+                           "    input Ori Rr;\n    output Ori R2;\n  algorithm\n"
+                           "    R2 := Ori(T = Rr.T * R1.T, w = res2(Rr, R1.w) + Rr.w);\n  end absRot;\n  model Surf\n"
+                           "    input Ori R = fromv({1, 0}) \"R\";\n    Real y = R.T[1, 1];\n  end Surf;\nend PKBP11;\n\n"
+                           "model PKB11\n  parameter Real u[2] = {1, 0};\n"
+                           "  PKBP11.Surf s(final R = PKBP11.absRot(PKBP11.fromv(u), PKBP11.rot(0.5)));\nend PKB11;\n"),
+               std::string("class PKB11\n  parameter Real u[1] = 1.0;\n  parameter Real u[2] = 0.0;\n"
+                           "  final Real s.R.T[1,1] \"T\";\n  final Real s.R.T[1,2] \"T\";\n  final Real s.R.T[2,1] \"T\";\n"
+                           "  final Real s.R.T[2,2] \"T\";\n  final Real s.R.w[1] \"w\";\n  final Real s.R.w[2] \"w\";\n"
+                           "  Real s.y = s.R.T[1,1];\nequation\n"
+                           "  s.R.T = {{0.8775825618903728 * u[1] + 0.479425538604203 * (-u[2]), 0.8775825618903728 * u[2] + 0.479425538604203 * u[1]}, {(-0.479425538604203) * u[1] + 0.8775825618903728 * (-u[2]), (-0.479425538604203) * u[2] + 0.8775825618903728 * u[1]}};\n"
+                           "  s.R.w = {0.0, 0.0};\nend PKB11;\n"));
+}
+
+YMC_TEST(flatten_final_continuous_record_world_surface) {
+  // MSL World 的 `surface(final R = absoluteRotation(from_nxy(n, gu), axesRotations(…)))` 的同构模型：内联后 T 留积
+  // `{{…}} * TM.from_nxy({0.0, 0.0, -1.0}, world.gu)`（from_nxy 有局部、不内联），w 求值成零向量；只剩 from_nxy 的函数定义。
+  // 期望 = omc 1.25.0 实跑（2026-10-16，探针 pk-p26 PKB10）。
+  YMC_CHECK_EQ(flatten_src("package PKBP10\n  constant Real pi = 3.141592653589793;\n  record Ori \"ori\"\n"
+                           "    Real T[3, 3] \"T\";\n    Real w[3] \"w\";\n  end Ori;\n  package TM\n"
+                           "    function axisRotation \"axis rotation\"\n      input Integer axis;\n      input Real angle;\n"
+                           "      output Real T[3, 3];\n    algorithm\n"
+                           "      T := if axis == 1 then [1, 0, 0; 0, cos(angle), sin(angle); 0, -sin(angle), cos(angle)] else if axis == 2 then [cos(angle), 0, -sin(angle); 0, 1, 0; sin(angle), 0, cos(angle)] else [cos(angle), sin(angle), 0; -sin(angle), cos(angle), 0; 0, 0, 1];\n"
+                           "    end axisRotation;\n    function from_nxy \"from nxy\"\n      input Real n_x[3];\n"
+                           "      input Real n_y[3];\n      output Real T[3, 3];\n    protected\n      Real e_x[3];\n"
+                           "      Real e_y[3];\n    algorithm\n      e_x := n_x / sqrt(n_x * n_x);\n"
+                           "      e_y := n_y / sqrt(n_y * n_y);\n"
+                           "      T := {e_x, e_y, {e_x[2] * e_y[3] - e_x[3] * e_y[2], e_x[3] * e_y[1] - e_x[1] * e_y[3], e_x[1] * e_y[2] - e_x[2] * e_y[1]}};\n"
+                           "    end from_nxy;\n    function resolve2 \"resolve2\"\n      input Real T[3, 3];\n"
+                           "      input Real v1[3];\n      output Real v2[3];\n    algorithm\n      v2 := T * v1;\n"
+                           "    end resolve2;\n  end TM;\n  function axis \"axis\"\n    input Integer axis;\n"
+                           "    output Real e[3];\n  algorithm\n"
+                           "    e := if axis == 1 then {1, 0, 0} else (if axis == 2 then {0, 1, 0} else {0, 0, 1});\n"
+                           "  end axis;\n  function from_nxy \"from nxy\"\n    input Real n_x[3];\n    input Real n_y[3];\n"
+                           "    output Ori R;\n  algorithm\n    R := Ori(T = TM.from_nxy(n_x, n_y), w = zeros(3));\n"
+                           "  end from_nxy;\n  function axesRotations \"axes rotations\"\n"
+                           "    input Integer sequence[3] = {1, 2, 3};\n    input Real angles[3];\n"
+                           "    input Real der_angles[3];\n    output Ori R;\n  algorithm\n"
+                           "    R := Ori(T = TM.axisRotation(sequence[3], angles[3]) * TM.axisRotation(sequence[2], angles[2]) * TM.axisRotation(sequence[1], angles[1]), w = axis(sequence[3]) * der_angles[3] + TM.resolve2(TM.axisRotation(sequence[3], angles[3]), axis(sequence[2]) * der_angles[2]) + TM.resolve2(TM.axisRotation(sequence[3], angles[3]) * TM.axisRotation(sequence[2], angles[2]), axis(sequence[1]) * der_angles[1]));\n"
+                           "  end axesRotations;\n  function resolve2 \"resolve2\"\n    input Ori R;\n    input Real v1[3];\n"
+                           "    output Real v2[3];\n  algorithm\n    v2 := R.T * v1;\n  end resolve2;\n"
+                           "  function absoluteRotation \"absolute rotation\"\n    input Ori R1;\n    input Ori R_rel;\n"
+                           "    output Ori R2;\n  algorithm\n"
+                           "    R2 := Ori(T = R_rel.T * R1.T, w = resolve2(R_rel, R1.w) + R_rel.w);\n  end absoluteRotation;\n"
+                           "  function nullRotation \"null rotation\"\n    output Ori R;\n  algorithm\n"
+                           "    R := Ori(T = [1, 0, 0; 0, 1, 0; 0, 0, 1], w = zeros(3));\n  end nullRotation;\n"
+                           "  model Surf \"surface\"\n    input Ori R = nullRotation() \"R\";\n"
+                           "    input Real r_0[3] = {0, 0, 0} \"r_0\";\n  end Surf;\n  model World \"world\"\n"
+                           "    parameter Real n[3] = {0, -1, 0} \"n\" annotation(Evaluate = true);\n"
+                           "    parameter Real gu[3] = if abs(n[1]) >= 0.99 then {0, 1, 0} else {1, 0, 0} \"gu\";\n"
+                           "    Surf surface(final R = absoluteRotation(from_nxy(n, gu), axesRotations({1, 2, 3}, {pi / 2, pi / 2, 0}, {0, 0, 0})), final r_0 = zeros(3));\n"
+                           "  end World;\nend PKBP10;\n\nmodel PKB10\n  PKBP10.World world(n = {0, 0, -1});\nend PKB10;\n"),
+               std::string("function PKBP10.TM.from_nxy \"from nxy\"\n  input Real[3] n_x;\n  input Real[3] n_y;\n"
+                           "  output Real[3, 3] T;\n  protected Real[3] e_x;\n  protected Real[3] e_y;\nalgorithm\n"
+                           "  e_x := {n_x[1] / sqrt(n_x[1] * n_x[1] + n_x[2] * n_x[2] + n_x[3] * n_x[3]), n_x[2] / sqrt(n_x[1] * n_x[1] + n_x[2] * n_x[2] + n_x[3] * n_x[3]), n_x[3] / sqrt(n_x[1] * n_x[1] + n_x[2] * n_x[2] + n_x[3] * n_x[3])};\n"
+                           "  e_y := {n_y[1] / sqrt(n_y[1] * n_y[1] + n_y[2] * n_y[2] + n_y[3] * n_y[3]), n_y[2] / sqrt(n_y[1] * n_y[1] + n_y[2] * n_y[2] + n_y[3] * n_y[3]), n_y[3] / sqrt(n_y[1] * n_y[1] + n_y[2] * n_y[2] + n_y[3] * n_y[3])};\n"
+                           "  T := {e_x, e_y, {e_x[2] * e_y[3] - e_x[3] * e_y[2], e_x[3] * e_y[1] - e_x[1] * e_y[3], e_x[1] * e_y[2] - e_x[2] * e_y[1]}};\n"
+                           "end PKBP10.TM.from_nxy;\n\nclass PKB10\n  final parameter Real world.n[1] = 0.0 \"n\";\n"
+                           "  final parameter Real world.n[2] = 0.0 \"n\";\n  final parameter Real world.n[3] = -1.0 \"n\";\n"
+                           "  parameter Real world.gu[1] = 1.0 \"gu\";\n  parameter Real world.gu[2] = 0.0 \"gu\";\n"
+                           "  parameter Real world.gu[3] = 0.0 \"gu\";\n  final Real world.surface.R.T[1,1] \"T\";\n"
+                           "  final Real world.surface.R.T[1,2] \"T\";\n  final Real world.surface.R.T[1,3] \"T\";\n"
+                           "  final Real world.surface.R.T[2,1] \"T\";\n  final Real world.surface.R.T[2,2] \"T\";\n"
+                           "  final Real world.surface.R.T[2,3] \"T\";\n  final Real world.surface.R.T[3,1] \"T\";\n"
+                           "  final Real world.surface.R.T[3,2] \"T\";\n  final Real world.surface.R.T[3,3] \"T\";\n"
+                           "  final Real world.surface.R.w[1] \"w\";\n  final Real world.surface.R.w[2] \"w\";\n"
+                           "  final Real world.surface.R.w[3] \"w\";\n  final Real world.surface.r_0[1] \"r_0\";\n"
+                           "  final Real world.surface.r_0[2] \"r_0\";\n  final Real world.surface.r_0[3] \"r_0\";\nequation\n"
+                           "  world.surface.R.T = {{6.123233995736766e-17, 1.0, -6.123233995736766e-17}, {0.0, 6.123233995736766e-17, 1.0}, {1.0, -6.123233995736766e-17, 3.749399456654644e-33}} * PKBP10.TM.from_nxy({0.0, 0.0, -1.0}, world.gu);\n"
+                           "  world.surface.R.w = {0.0, 0.0, 0.0};\n  world.surface.r_0 = {0.0, 0.0, 0.0};\nend PKB10;\n"));
+}
+
+YMC_TEST(flatten_qualified_protected_constant) {
+  // 限定名非首段查到 protected 常量（SCode 路，qual_member）：omc 报 "Illegal access of protected element secret"
+  // （LookupState.checkProtection，NFLookupState.mo:442-467 v1.25.0）→ SKIP（此前静默出值）。2026-10-16，探针 pk-p26 PKA1。
+  YMC_CHECK_EQ(flatten_src("package PKAP1\n  constant Real a = 1.5;\nprotected\n  constant Real secret = 2.5;\nend PKAP1;\n"
+                           "model PKA1\n  parameter Real y = PKAP1.secret;\nend PKA1;\n"),
+               std::string("<unsupported:access of protected element>"));
+}
+
+YMC_TEST(flatten_qualified_protected_constant_self_reference) {
+  // 包自己的函数体里写 `PKAP4.secret`：非首段照查，omc 同样报错（PKA4）→ SKIP。2026-10-16，探针 pk-p26 PKA4。
+  YMC_CHECK_EQ(flatten_src("package PKAP4\nprotected\n  constant Real secret = 2.5;\npublic\n  function f\n    output Real y;\n"
+                           "  algorithm\n    y := PKAP4.secret;\n  end f;\nend PKAP4;\nmodel PKA4\n"
+                           "  Real y = PKAP4.f() * time;\nend PKA4;\n"),
+               std::string("<unsupported:access of protected element>"));
+}
+
+YMC_TEST(flatten_protected_first_part_allowed) {
+  // 包里不限定地用自己的 protected 常量（首段）照常（PKA8 `t = s * 3` → 6.0）。期望 = omc 1.25.0 实跑（2026-10-16，探针
+  // pk-p26 PKA8）。
+  YMC_CHECK_EQ(flatten_src("package PKAP8\nprotected\n  constant Real s = 2.0;\npublic\n  constant Real t = s * 3;\nend PKAP8;\n"
+                           "model PKA8\n  parameter Real y = PKAP8.t;\nend PKA8;\n"),
+               std::string("class PKA8\n  parameter Real y = 6.0;\nend PKA8;\n"));
 }
 
 YMC_TEST_MAIN

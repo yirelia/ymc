@@ -737,3 +737,10 @@ WaterIF97、PsychrometricData、MoistAir、SolveOneNonlinearEquation.Inverse_sh_
 记录作部分应用实参（PKZ23）；MixtureGases——经 extends 修饰重声明的 FluidConstants；InverseIncompressible_sh_T、
 Fluid.Examples.IncompressibleFluidNetwork——编译期多项式拟合（Poly.fitting）；ReferenceAir.Inverse_sh_T / Inverse_sh_TX /
 DryAir1——带修饰 extends 的包要定义层 instPackage、h_default 经 Helmholtz 状态方程求值。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-16 66r 之后：PASS 463（+3）
+
+记录整体绑定：构造调用里 `:` 维字段的维由值推出；final 连续记录的调用绑定照 omc 强制内联化简前的函数体。转 PASS：
+Magnetic.FluxTubes.Examples.Hysteresis.SinglePhaseTransformerWithHysteresis1、Mechanics.MultiBody.Examples.Elementary.
+RollingWheelSetDriving / RollingWheelSetPulling。同簇卡到下一处：FluxTubes HysteresisModelComparison——when 里的 if 方程；
+MultiBody Elementary.Surfaces——matrix element shape。FAIL / ACCEPTS-INVALID / CRASH 0。

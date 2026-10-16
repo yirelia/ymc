@@ -2350,7 +2350,7 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       单测 368→369。Fluid 余下的 SKIP 头号是管道摩擦函数里嵌套函数的压平名（`interpolateInRegion2`，7）、向量化调用实参（5）。
 - [x] (66h) 函数里的嵌套函数与继承来的 outer（2026-10-14）：发射函数时记下它的压平名（fn_emit_names_），体里调的嵌套函数 = 外层函数
       的压平名 + 名（`…WallFriction.pressureLoss_m_flow.interpolateInRegion2`；顺带修好模型里函数的嵌套函数此前静默打成词法路径
-      `P.M.h.k` 的错名）；点分名的非首段查到 protected 元素 → omc 报错（LookupState.checkProtection，NFLookupState.mo:441-466）→ SKIP；
+      `P.M.h.k` 的错名）；点分名的非首段查到 protected 元素 → omc 报错（LookupState.checkProtection，NFLookupState.mo:442-467）→ SKIP；
       类路径首段经带修饰的继承查到组件当没找到（求值器先试枚举字面量 `system.x` 时撞守卫）；实例组件路径向前引用时第一遍不落到
       SCode 层的限定常量查找。探针 pk-p16（4，含 1 例两边都拒）；单测 +3。
       slice 692 例 FAIL 0（oracle=live 不一致 0）；scodeinst 652（不变）；testsuite 1808（不变）/ FAIL 0；MSL 439（不变：Fluid / Media
@@ -2444,9 +2444,23 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       探针 pk-p25（26）；单测 +7。slice 700 例 FAIL 0（oracle=live 不一致 0）；scodeinst 660、testsuite 1827（均不变）/ FAIL 0；
       **MSL 455→460**（Media.Examples.IdealGasH2O / WaterIF97 / PsychrometricData / MoistAir、SolveOneNonlinearEquation.
       Inverse_sh_TX）；探针 9845→9871；单测 416→423。
-- [ ] (66r 候选) 已有的 ACCEPTS-INVALID（66q 调查时发现）：SCode 路径的限定名查找（qual_member）不查 protected——
+- [x] (66r 候选，66r 已修) 已有的 ACCEPTS-INVALID（66q 调查时发现）：SCode 路径的限定名查找（qual_member）不查 protected——
       `package T1P protected constant Real secret = 2.5; end T1P; model T1 parameter Real y = T1P.secret; end T1;` ymc 打
-      `parameter Real y = 2.5;`，omc 报 "Illegal access of protected element secret"（NFLookupState.checkProtection :441-466）。
+      `parameter Real y = 2.5;`，omc 报 "Illegal access of protected element secret"（NFLookupState.checkProtection :442-467）。
+- [x] (66r) 记录整体绑定两处 + 限定名的 protected（2026-10-16）：
+      (1) 构造调用里 `:` 维字段的维由值推出（NFTyping.typeDimension 的 UNKNOWN 支，NFTyping.mo:687-769）：MSL FluxTubes
+      `parameter BaseData mat = M330_50A()`（子记录经 extends 修饰换了表长）；函数变量的 `:` 字段（omc 按类缺省定维再截取，PKB8）照旧 SKIP。
+      (2) final 连续记录、绑定是只读参数的调用（MSL MultiBody World 的 `surface(final R = absoluteRotation(…))`）：omc 按绑定变率
+      走强制内联（NFFlatten.flattenComplexComponent :965-986），内联的是定型后、化简前的函数体（NFInline.inlineCall :120-166）
+      → 单条 `输出 := 记录式` 的体另做一遍"实参不化简"的定型留给内联（fn_stmt_typed_；碰上未做的形态撤销 SKIP 标记、不留）；
+      内联代换带下标的函数局部 `v[1]`（replaceCrefNode2 → applySubscripts）；代换后实参全成字面量的调用求值（含记录式实参）。
+      读到的都是结构参数（PKB17，Ceval）、内联不了（PKB18，tryEvalExp）的照旧 SKIP。
+      (3) SCode 路径限定名的非首段 protected → 照拒（checkProtection：书写处就在该包里、经 protected extends 继承的也算；首段
+      照常）——修 66q 发现的 ACCEPTS-INVALID（PKA 探针 13 种写法）。
+      下一处：HysteresisModelComparison "unsupported when-body equation"（when 里的 if 方程）、MultiBody Surfaces "matrix element shape"。
+      探针 pk-p26（43）；单测 +7。slice 700 例 FAIL 0（oracle=live 不一致 0）；scodeinst 660、testsuite 1827（均不变）/ FAIL 0；
+      **MSL 460→463**（FluxTubes Hysteresis.SinglePhaseTransformerWithHysteresis1、MultiBody Elementary.RollingWheelSetDriving /
+      RollingWheelSetPulling）；探针 9871→9914；单测 423→430。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

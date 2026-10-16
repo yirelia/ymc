@@ -1,0 +1,890 @@
+//// set: pk-p26 — 记录整体绑定：构造调用里 `:` 维的字段维由值推出（子记录经 extends 修饰换了表的长度，MSL FluxTubes HysteresisTableData）；final 连续记录、绑定是只读参数的用户函数调用 → 强制内联（按化简前的函数体，MSL World 的 surface.R）、内联里函数局部带下标的代换、实参全成字面量的内联调用求值（含记录式实参）；限定名非首段查到 protected 元素照 omc 报错（经 extends / protected extends 继承来的、函数体 / 包里自引用的、import 的）
+//// model: PKB1
+package PKBP1
+  record Base "base"
+    parameter Real[:,:] tab = [1, 2; 3, 4] "tab";
+    parameter Real s = 1 "s";
+  end Base;
+  record Derived "derived"
+    extends Base(tab = [5, 6; 7, 8; 9, 10], s = 2);
+  end Derived;
+  model M
+    parameter Base mat = Base() "mat";
+    parameter Real e = mat.tab[size(mat.tab, 1), 2];
+  end M;
+end PKBP1;
+
+model PKB1
+  PKBP1.M m(mat = PKBP1.Derived());
+end PKB1;
+//// model: PKB2
+package PKBP2
+  record Base "base"
+    parameter Real[:] tab = {1, 2} "tab";
+    parameter Real s = 1 "s";
+  end Base;
+  record Derived "derived"
+    extends Base(tab = {5, 6, 7}, s = 2);
+  end Derived;
+  model M
+    parameter Base mat = Base() "mat";
+  end M;
+end PKBP2;
+
+model PKB2
+  PKBP2.M m(mat = PKBP2.Derived());
+end PKB2;
+//// model: PKB3
+package PKBP3
+  record Base "base"
+    parameter Real[:] tab = {1, 2} "tab";
+    parameter Real s = 1 "s";
+  end Base;
+  record Derived "derived"
+    extends Base(tab = {5, 6, 7}, s = 2);
+  end Derived;
+end PKBP3;
+
+model PKB3
+  parameter PKBP3.Base d = PKBP3.Derived();
+end PKB3;
+//// model: PKB4
+package PKBP4
+  record Base "base"
+    parameter Real[:] tab = {1, 2} "tab";
+    parameter Real s = 1 "s";
+  end Base;
+  record Derived "derived"
+    extends Base(tab = {5, 6, 7}, s = 2);
+  end Derived;
+  record Outer "outer"
+    parameter Base b "b";
+    parameter Real k = 4 "k";
+  end Outer;
+end PKBP4;
+
+model PKB4
+  parameter PKBP4.Outer o = PKBP4.Outer(b = PKBP4.Derived());
+end PKB4;
+//// model: PKB5
+package PKBP5
+  record Base "base"
+    parameter Real[:] tab = {1, 2} "tab";
+    parameter Real s = 1 "s";
+  end Base;
+  record Derived "derived"
+    extends Base(tab = {5, 6, 7}, s = 2);
+  end Derived;
+end PKBP5;
+
+model PKB5
+  constant PKBP5.Base c = PKBP5.Derived();
+  parameter Real x = c.tab[3];
+end PKB5;
+//// model: PKB6
+package PKBP6
+  record Base "base"
+    parameter Real[:] tab = {1, 2} "tab";
+    parameter Real s = 1 "s";
+  end Base;
+  record Derived "derived"
+    extends Base(tab = {5, 6, 7}, s = 2);
+  end Derived;
+end PKBP6;
+
+model PKB6
+  parameter PKBP6.Base d = PKBP6.Derived();
+  parameter Real y = sum(d.tab);
+  Real z = d.tab[3] * time;
+end PKB6;
+//// model: PKB7
+package PKBP7
+  record Base "base"
+    parameter Real[:, :] tab = [1, 2; 3, 4] "tab";
+    parameter Real s = 1 "s";
+  end Base;
+  record Derived "derived"
+    extends Base(tab = [5, 6, 7; 8, 9, 10], s = 2);
+  end Derived;
+  model M
+    parameter Base mat = Base() "mat";
+    parameter Real e = mat.tab[size(mat.tab, 1), 2];
+  end M;
+end PKBP7;
+
+model PKB7
+  PKBP7.M m1(mat = PKBP7.Derived());
+  PKBP7.M m2;
+end PKB7;
+//// model: PKB8
+package PKBP8
+  record Base "base"
+    parameter Real[:] tab = {1, 2} "tab";
+    parameter Real s = 1 "s";
+  end Base;
+  function f
+    output Base b;
+  algorithm
+    b := Base(tab = {5, 6, 7}, s = 2);
+  end f;
+end PKBP8;
+
+model PKB8
+  parameter PKBP8.Base d = PKBP8.f();
+end PKB8;
+//// model: PKB9
+package PKBP9
+  record Base "base"
+    parameter Real[:,:] tab = [1, 2; 3, 4] "tab";
+    parameter Real s = 1 "s";
+  end Base;
+  model M
+    parameter Base mat = Base() "mat";
+    parameter Real e = mat.tab[size(mat.tab, 1), 2];
+  end M;
+end PKBP9;
+
+model PKB9
+  PKBP9.M m(mat = PKBP9.Base(tab = [5, 6; 7, 8; 9, 10]));
+end PKB9;
+//// model: PKB10
+package PKBP10
+  constant Real pi = 3.141592653589793;
+  record Ori "ori"
+    Real T[3, 3] "T";
+    Real w[3] "w";
+  end Ori;
+  package TM
+    function axisRotation "axis rotation"
+      input Integer axis;
+      input Real angle;
+      output Real T[3, 3];
+    algorithm
+      T := if axis == 1 then [1, 0, 0; 0, cos(angle), sin(angle); 0, -sin(angle), cos(angle)] else if axis == 2 then [cos(angle), 0, -sin(angle); 0, 1, 0; sin(angle), 0, cos(angle)] else [cos(angle), sin(angle), 0; -sin(angle), cos(angle), 0; 0, 0, 1];
+    end axisRotation;
+    function from_nxy "from nxy"
+      input Real n_x[3];
+      input Real n_y[3];
+      output Real T[3, 3];
+    protected
+      Real e_x[3];
+      Real e_y[3];
+    algorithm
+      e_x := n_x / sqrt(n_x * n_x);
+      e_y := n_y / sqrt(n_y * n_y);
+      T := {e_x, e_y, {e_x[2] * e_y[3] - e_x[3] * e_y[2], e_x[3] * e_y[1] - e_x[1] * e_y[3], e_x[1] * e_y[2] - e_x[2] * e_y[1]}};
+    end from_nxy;
+    function resolve2 "resolve2"
+      input Real T[3, 3];
+      input Real v1[3];
+      output Real v2[3];
+    algorithm
+      v2 := T * v1;
+    end resolve2;
+  end TM;
+  function axis "axis"
+    input Integer axis;
+    output Real e[3];
+  algorithm
+    e := if axis == 1 then {1, 0, 0} else (if axis == 2 then {0, 1, 0} else {0, 0, 1});
+  end axis;
+  function from_nxy "from nxy"
+    input Real n_x[3];
+    input Real n_y[3];
+    output Ori R;
+  algorithm
+    R := Ori(T = TM.from_nxy(n_x, n_y), w = zeros(3));
+  end from_nxy;
+  function axesRotations "axes rotations"
+    input Integer sequence[3] = {1, 2, 3};
+    input Real angles[3];
+    input Real der_angles[3];
+    output Ori R;
+  algorithm
+    R := Ori(T = TM.axisRotation(sequence[3], angles[3]) * TM.axisRotation(sequence[2], angles[2]) * TM.axisRotation(sequence[1], angles[1]), w = axis(sequence[3]) * der_angles[3] + TM.resolve2(TM.axisRotation(sequence[3], angles[3]), axis(sequence[2]) * der_angles[2]) + TM.resolve2(TM.axisRotation(sequence[3], angles[3]) * TM.axisRotation(sequence[2], angles[2]), axis(sequence[1]) * der_angles[1]));
+  end axesRotations;
+  function resolve2 "resolve2"
+    input Ori R;
+    input Real v1[3];
+    output Real v2[3];
+  algorithm
+    v2 := R.T * v1;
+  end resolve2;
+  function absoluteRotation "absolute rotation"
+    input Ori R1;
+    input Ori R_rel;
+    output Ori R2;
+  algorithm
+    R2 := Ori(T = R_rel.T * R1.T, w = resolve2(R_rel, R1.w) + R_rel.w);
+  end absoluteRotation;
+  function nullRotation "null rotation"
+    output Ori R;
+  algorithm
+    R := Ori(T = [1, 0, 0; 0, 1, 0; 0, 0, 1], w = zeros(3));
+  end nullRotation;
+  model Surf "surface"
+    input Ori R = nullRotation() "R";
+    input Real r_0[3] = {0, 0, 0} "r_0";
+  end Surf;
+  model World "world"
+    parameter Real n[3] = {0, -1, 0} "n" annotation(Evaluate = true);
+    parameter Real gu[3] = if abs(n[1]) >= 0.99 then {0, 1, 0} else {1, 0, 0} "gu";
+    Surf surface(final R = absoluteRotation(from_nxy(n, gu), axesRotations({1, 2, 3}, {pi / 2, pi / 2, 0}, {0, 0, 0})), final r_0 = zeros(3));
+  end World;
+end PKBP10;
+
+model PKB10
+  PKBP10.World world(n = {0, 0, -1});
+end PKB10;
+//// model: PKB11
+package PKBP11
+  record Ori "ori"
+    Real T[2, 2] "T";
+    Real w[2] "w";
+  end Ori;
+  function fromv "fromv"
+    input Real v[2];
+    output Ori R;
+  algorithm
+    R := Ori(T = {{v[1], v[2]}, {-v[2], v[1]}}, w = zeros(2));
+  end fromv;
+  function rot "rot"
+    input Real a;
+    output Ori R;
+  algorithm
+    R := Ori(T = {{cos(a), sin(a)}, {-sin(a), cos(a)}}, w = {0, 0});
+  end rot;
+  function res2 "res2"
+    input Ori R;
+    input Real v[2];
+    output Real v2[2];
+  algorithm
+    v2 := R.T * v;
+  end res2;
+  function absRot "absRot"
+    input Ori R1;
+    input Ori Rr;
+    output Ori R2;
+  algorithm
+    R2 := Ori(T = Rr.T * R1.T, w = res2(Rr, R1.w) + Rr.w);
+  end absRot;
+  model Surf
+    input Ori R = fromv({1, 0}) "R";
+    Real y = R.T[1, 1];
+  end Surf;
+end PKBP11;
+
+model PKB11
+  parameter Real u[2] = {1, 0};
+  PKBP11.Surf s(final R = PKBP11.absRot(PKBP11.fromv(u), PKBP11.rot(0.5)));
+end PKB11;
+//// model: PKB12
+package PKBP12
+  record Ori "ori"
+    Real T[2, 2] "T";
+    Real w[2] "w";
+  end Ori;
+  function fromv "fromv"
+    input Real v[2];
+    output Ori R;
+  algorithm
+    R := Ori(T = {{v[1], v[2]}, {-v[2], v[1]}}, w = zeros(2));
+  end fromv;
+  function rot "rot"
+    input Real a;
+    output Ori R;
+  algorithm
+    R := Ori(T = {{cos(a), sin(a)}, {-sin(a), cos(a)}}, w = {0, 0});
+  end rot;
+  function res2 "res2"
+    input Ori R;
+    input Real v[2];
+    output Real v2[2];
+  algorithm
+    v2 := R.T * v;
+  end res2;
+  function absRot "absRot"
+    input Ori R1;
+    input Ori Rr;
+    output Ori R2;
+  algorithm
+    R2 := Ori(T = Rr.T * R1.T, w = res2(Rr, R1.w) + Rr.w);
+  end absRot;
+  model Surf
+    input Ori R = fromv({1, 0}) "R";
+    Real y = R.T[1, 1];
+  end Surf;
+end PKBP12;
+
+model PKB12
+  parameter Real u[2] = {1, 0};
+  final parameter PKBP12.Ori R = PKBP12.fromv(u);
+end PKB12;
+//// model: PKB13
+package PKBP13
+  record Ori "ori"
+    Real T[2, 2] "T";
+    Real w[2] "w";
+  end Ori;
+  function fromv "fromv"
+    input Real v[2];
+    output Ori R;
+  algorithm
+    R := Ori(T = {{v[1], v[2]}, {-v[2], v[1]}}, w = zeros(2));
+  end fromv;
+  function rot "rot"
+    input Real a;
+    output Ori R;
+  algorithm
+    R := Ori(T = {{cos(a), sin(a)}, {-sin(a), cos(a)}}, w = {0, 0});
+  end rot;
+  function res2 "res2"
+    input Ori R;
+    input Real v[2];
+    output Real v2[2];
+  algorithm
+    v2 := R.T * v;
+  end res2;
+  function absRot "absRot"
+    input Ori R1;
+    input Ori Rr;
+    output Ori R2;
+  algorithm
+    R2 := Ori(T = Rr.T * R1.T, w = res2(Rr, R1.w) + Rr.w);
+  end absRot;
+  model Surf
+    input Ori R = fromv({1, 0}) "R";
+    Real y = R.T[1, 1];
+  end Surf;
+end PKBP13;
+
+model PKB13
+  parameter Real u[2] = {1, 0};
+  final parameter PKBP13.Ori R = PKBP13.absRot(PKBP13.fromv(u), PKBP13.rot(0.5));
+end PKB13;
+//// model: PKB14
+package PKBP14
+  record Ori "ori"
+    Real T[2, 2] "T";
+    Real w[2] "w";
+  end Ori;
+  function fromv "fromv"
+    input Real v[2];
+    output Ori R;
+  algorithm
+    R := Ori(T = {{v[1], v[2]}, {-v[2], v[1]}}, w = zeros(2));
+  end fromv;
+  function rot "rot"
+    input Real a;
+    output Ori R;
+  algorithm
+    R := Ori(T = {{cos(a), sin(a)}, {-sin(a), cos(a)}}, w = {0, 0});
+  end rot;
+  function res2 "res2"
+    input Ori R;
+    input Real v[2];
+    output Real v2[2];
+  algorithm
+    v2 := R.T * v;
+  end res2;
+  function absRot "absRot"
+    input Ori R1;
+    input Ori Rr;
+    output Ori R2;
+  algorithm
+    R2 := Ori(T = Rr.T * R1.T, w = res2(Rr, R1.w) + Rr.w);
+  end absRot;
+  model Surf
+    input Ori R = fromv({1, 0}) "R";
+    Real y = R.T[1, 1];
+  end Surf;
+end PKBP14;
+
+model PKB14
+  parameter Real u[2] = {1, 0};
+  final parameter PKBP14.Ori R = PKBP14.absRot(PKBP14.fromv(u), PKBP14.fromv(u));
+end PKB14;
+//// model: PKB15
+package PKBP15
+  record Ori "ori"
+    Real T[2, 2] "T";
+    Real w[2] "w";
+  end Ori;
+  function fromv "fromv"
+    input Real v[2];
+    output Ori R;
+  algorithm
+    R := Ori(T = {{v[1], v[2]}, {-v[2], v[1]}}, w = zeros(2));
+  end fromv;
+  function rot "rot"
+    input Real a;
+    output Ori R;
+  algorithm
+    R := Ori(T = {{cos(a), sin(a)}, {-sin(a), cos(a)}}, w = {0, 0});
+  end rot;
+  function rot2 "rot2"
+    input Real a;
+    output Ori R;
+  protected
+    Real c = cos(a);
+  algorithm
+    R := Ori(T = {{c, sin(a)}, {-sin(a), c}}, w = {0, 0});
+  end rot2;
+  model Surf
+    input Ori R = fromv({1, 0}) "R";
+    Real y = R.T[1, 1];
+  end Surf;
+end PKBP15;
+
+model PKB15
+  parameter Real u[2] = {1, 0};
+  PKBP15.Surf s(R = PKBP15.fromv(u));
+end PKB15;
+//// model: PKB16
+package PKBP16
+  record Ori "ori"
+    Real T[2, 2] "T";
+    Real w[2] "w";
+  end Ori;
+  function fromv "fromv"
+    input Real v[2];
+    output Ori R;
+  algorithm
+    R := Ori(T = {{v[1], v[2]}, {-v[2], v[1]}}, w = zeros(2));
+  end fromv;
+  function rot "rot"
+    input Real a;
+    output Ori R;
+  algorithm
+    R := Ori(T = {{cos(a), sin(a)}, {-sin(a), cos(a)}}, w = {0, 0});
+  end rot;
+  function rot2 "rot2"
+    input Real a;
+    output Ori R;
+  protected
+    Real c = cos(a);
+  algorithm
+    R := Ori(T = {{c, sin(a)}, {-sin(a), c}}, w = {0, 0});
+  end rot2;
+  model Surf
+    input Ori R = fromv({1, 0}) "R";
+    Real y = R.T[1, 1];
+  end Surf;
+end PKBP16;
+
+model PKB16
+  Real u[2] = {1, time};
+  PKBP16.Surf s(final R = PKBP16.fromv(u));
+end PKB16;
+//// model: PKB17
+package PKBP17
+  record Ori "ori"
+    Real T[2, 2] "T";
+    Real w[2] "w";
+  end Ori;
+  function fromv "fromv"
+    input Real v[2];
+    output Ori R;
+  algorithm
+    R := Ori(T = {{v[1], v[2]}, {-v[2], v[1]}}, w = zeros(2));
+  end fromv;
+  function rot "rot"
+    input Real a;
+    output Ori R;
+  algorithm
+    R := Ori(T = {{cos(a), sin(a)}, {-sin(a), cos(a)}}, w = {0, 0});
+  end rot;
+  function rot2 "rot2"
+    input Real a;
+    output Ori R;
+  protected
+    Real c = cos(a);
+  algorithm
+    R := Ori(T = {{c, sin(a)}, {-sin(a), c}}, w = {0, 0});
+  end rot2;
+  model Surf
+    input Ori R = fromv({1, 0}) "R";
+    Real y = R.T[1, 1];
+  end Surf;
+end PKBP17;
+
+model PKB17
+  parameter Real u[2] = {1, 0} annotation(Evaluate = true);
+  PKBP17.Surf s(final R = PKBP17.fromv(u));
+end PKB17;
+//// model: PKB18
+package PKBP18
+  record Ori "ori"
+    Real T[2, 2] "T";
+    Real w[2] "w";
+  end Ori;
+  function fromv "fromv"
+    input Real v[2];
+    output Ori R;
+  algorithm
+    R := Ori(T = {{v[1], v[2]}, {-v[2], v[1]}}, w = zeros(2));
+  end fromv;
+  function rot "rot"
+    input Real a;
+    output Ori R;
+  algorithm
+    R := Ori(T = {{cos(a), sin(a)}, {-sin(a), cos(a)}}, w = {0, 0});
+  end rot;
+  function rot2 "rot2"
+    input Real a;
+    output Ori R;
+  protected
+    Real c = cos(a);
+  algorithm
+    R := Ori(T = {{c, sin(a)}, {-sin(a), c}}, w = {0, 0});
+  end rot2;
+  model Surf
+    input Ori R = fromv({1, 0}) "R";
+    Real y = R.T[1, 1];
+  end Surf;
+end PKBP18;
+
+model PKB18
+  parameter Real a = 0.5;
+  PKBP18.Surf s(final R = PKBP18.rot2(a));
+end PKB18;
+//// model: PKB19
+package PKBP19
+  record Ori "ori"
+    Real T[2, 2] "T";
+    Real w[2] "w";
+  end Ori;
+  function fromv "fromv"
+    input Real v[2];
+    output Ori R;
+  algorithm
+    R := Ori(T = {{v[1], v[2]}, {-v[2], v[1]}}, w = zeros(2));
+  end fromv;
+  function rot "rot"
+    input Real a;
+    output Ori R;
+  algorithm
+    R := Ori(T = {{cos(a), sin(a)}, {-sin(a), cos(a)}}, w = {0, 0});
+  end rot;
+  function rot2 "rot2"
+    input Real a;
+    output Ori R;
+  protected
+    Real c = cos(a);
+  algorithm
+    R := Ori(T = {{c, sin(a)}, {-sin(a), c}}, w = {0, 0});
+  end rot2;
+  model Surf
+    input Ori R = fromv({1, 0}) "R";
+    Real y = R.T[1, 1];
+  end Surf;
+end PKBP19;
+
+model PKB19
+  parameter Real a = 0.5;
+  PKBP19.Surf s(final R = PKBP19.rot(a));
+end PKB19;
+//// model: PKB20
+model PKB20
+  inner Modelica.Mechanics.MultiBody.World world(animateGround = true, n = {0, 0, -1});
+end PKB20;
+//// model: PKB21
+package PKBP21
+  record Ori "ori"
+    Real T[2, 2] "T";
+    Real w[2] "w";
+  end Ori;
+  function fromv "fromv"
+    input Real v[2];
+    output Ori R;
+  algorithm
+    R := Ori(T = {{v[1], v[2]}, {-v[2], v[1]}}, w = zeros(2));
+  end fromv;
+  function rot "rot"
+    input Real a;
+    output Ori R;
+  algorithm
+    R := Ori(T = {{cos(a), sin(a)}, {-sin(a), cos(a)}}, w = {0, 0});
+  end rot;
+  function rot2 "rot2"
+    input Real a;
+    output Ori R;
+  protected
+    Real c = cos(a);
+  algorithm
+    R := Ori(T = {{c, sin(a)}, {-sin(a), c}}, w = {0, 0});
+  end rot2;
+  model Surf
+    input Ori R = fromv({1, 0}) "R";
+    Real y = R.T[1, 1];
+  end Surf;
+end PKBP21;
+
+model PKB21
+  parameter Real p = 2;
+  final parameter PKBP21.Ori R = PKBP21.fromv({p, 2 * p});
+end PKB21;
+//// model: PKA1
+package PKAP1
+  constant Real a = 1.5;
+protected
+  constant Real secret = 2.5;
+end PKAP1;
+model PKA1
+  parameter Real y = PKAP1.secret;
+end PKA1;
+//// model: PKA2
+package PKAP2
+  constant Real a = 1.5;
+protected
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+end PKAP2;
+model PKA2
+  Real y = PKAP2.f(time);
+end PKA2;
+//// model: PKA3
+package PKAP3
+protected
+  record R
+    Real x;
+  end R;
+public
+  constant Real a = 1.5;
+end PKAP3;
+model PKA3
+  PKAP3.R r(x = time);
+end PKA3;
+//// model: PKA4
+package PKAP4
+protected
+  constant Real secret = 2.5;
+public
+  function f
+    output Real y;
+  algorithm
+    y := PKAP4.secret;
+  end f;
+end PKAP4;
+model PKA4
+  Real y = PKAP4.f() * time;
+end PKA4;
+//// model: PKA5
+package PKAP5
+  package Base
+  protected
+    constant Real secret = 3.0;
+  end Base;
+  package P
+    extends Base;
+    constant Real a = 1.0;
+  end P;
+end PKAP5;
+model PKA5
+  parameter Real y = PKAP5.P.secret;
+end PKA5;
+//// model: PKA6
+package PKAP6
+  constant Real x = 4.0;
+end PKAP6;
+model PKA6
+protected
+  package Medium = PKAP6;
+public
+  parameter Real y = Medium.x;
+end PKA6;
+//// model: PKA7
+package PKAP7
+protected
+  package Q
+    constant Real c = 5.0;
+  end Q;
+public
+  constant Real a = 1.0;
+end PKAP7;
+model PKA7
+  parameter Real y = PKAP7.Q.c;
+end PKA7;
+//// model: PKA8
+package PKAP8
+protected
+  constant Real s = 2.0;
+public
+  constant Real t = s * 3;
+end PKAP8;
+model PKA8
+  parameter Real y = PKAP8.t;
+end PKA8;
+//// model: PKA9
+package PKAP9
+protected
+  constant Real secret = 2.5;
+public
+  constant Real t = PKAP9.secret;
+end PKAP9;
+model PKA9
+  parameter Real y = PKAP9.t;
+end PKA9;
+//// model: PKA10
+package PKAP10
+protected
+  constant Real secret[2] = {1.0, 2.0};
+end PKAP10;
+model PKA10
+  parameter Real y = PKAP10.secret[2];
+end PKA10;
+//// model: PKA11
+package PKAP11
+  record R
+    Real x;
+    Real z;
+  end R;
+protected
+  constant R r = R(1.0, 2.0);
+end PKAP11;
+model PKA11
+  parameter Real y = PKAP11.r.x;
+end PKA11;
+//// model: PKA12
+model PKA12
+  model A
+  protected
+    parameter Real k = 1.0;
+  end A;
+  A a;
+  Real y = a.k * time;
+end PKA12;
+//// model: PKA13
+package PKAP13
+protected
+  constant Real secret = 2.5;
+public
+  model M
+    parameter Real y = PKAP13.secret;
+  end M;
+end PKAP13;
+model PKA13
+  PKAP13.M m;
+end PKA13;
+//// model: PKA14
+package PKAP14
+protected
+  constant Real secret = 2.5;
+public
+  model M
+    parameter Real y = secret;
+  end M;
+end PKAP14;
+model PKA14
+  PKAP14.M m;
+end PKA14;
+//// model: PKA15
+package PKAP15
+  package Inner
+    constant Real c = 7.0;
+  protected
+    constant Real h = 8.0;
+  end Inner;
+end PKAP15;
+model PKA15
+  import PKAP15.Inner;
+  parameter Real y = Inner.c;
+  parameter Real z = Inner.h;
+end PKA15;
+//// model: PKA16
+package PKAP16
+  constant Real a = 1.5;
+protected
+  constant Real secret = 2.5;
+end PKAP16;
+model PKA16
+  parameter Real y = .PKAP16.secret;
+end PKA16;
+//// model: PKA17
+package PKAP17
+  package Base
+    constant Real x = 3.0;
+  end Base;
+  package P
+  protected
+    extends Base;
+  public
+    constant Real a = 1.0;
+  end P;
+end PKAP17;
+model PKA17
+  parameter Real y = PKAP17.P.x;
+end PKA17;
+//// model: PKA18
+package PKAP18
+protected
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+public
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := PKAP18.f(x);
+  end g;
+end PKAP18;
+model PKA18
+  Real y = PKAP18.g(time);
+end PKA18;
+//// model: PKA19
+package PKAP19
+protected
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+public
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := f(x);
+  end g;
+end PKAP19;
+model PKA19
+  Real y = PKAP19.g(time);
+end PKA19;
+//// model: PKA20
+package PKAP20
+  constant Real a = 1.5;
+protected
+  constant Real secret = 2.5;
+end PKAP20;
+model PKA20
+  package Alias = PKAP20;
+  parameter Real y = Alias.a;
+  parameter Real z = Alias.secret;
+end PKA20;
+//// model: PKA21
+package PKAP21
+  constant Real a = 1.5;
+protected
+  constant Real secret = 2.5;
+end PKAP21;
+model PKA21
+  Real y[2] = {PKAP21.a, PKAP21.secret} * time;
+end PKA21;
+//// model: PKA22
+package PKAP22
+  constant Integer n = 2;
+protected
+  constant Integer m = 3;
+end PKAP22;
+model PKA22
+  Real x[PKAP22.m] = fill(time, PKAP22.m);
+end PKA22;
