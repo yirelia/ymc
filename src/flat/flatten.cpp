@@ -3252,6 +3252,13 @@ class Flattener {
       return id;
     }
     if (expr_shape(e).empty()) return e;   // 标量（广播操作数）；形状看穿字面量 / 一元的粗类型（`-{1, 2}`）
+    // 向量化调用的逐元素求值（vec_eval_）只认经运算 / 转型 / 数组字面量到达的推导式——omc 展开这些时逐元素化简（ExpandExp
+    // .expandBinaryScalarArray 等，NFExpandExp.mo:628-647；VQ5 `2 * f({1, 2})`、VQ19、VQ39、VQ40、VQ44）；if 表达式两支只取下标
+    // 不化简（VQ18），其余未核实 → 关掉。
+    std::optional<VecEval> vec_off;
+    if (vec_eval_ && x.kind != ExprKind::Reduction && x.kind != ExprKind::Binary && x.kind != ExprKind::Unary &&
+        x.kind != ExprKind::Cast)
+      vec_off.emplace(*this, false, nullptr);
     if (x.kind == ExprKind::Reduction && x.call_name.size() == 2) {
       // 推导式的第 idx[0] 个元素：迭代变量代入范围的该值后化简，余下下标交给体（嵌套推导式）。AC3 探针
       // `sum({x[i] * i for i in 1:3})` → `x[1] + x[2] * 2.0 + x[3] * 3.0`。
@@ -3272,7 +3279,31 @@ class Flattener {
       ic.cref.parts.push_back({x.call_name[1], {}});
       const std::unordered_map<std::string, Id<Expr>> vals{
           {expr_cref_key(ic.cref), lit_int(static_cast<std::int64_t>(l->start + static_cast<double>(idx[0] - 1) * l->step))}};
-      const Id<Expr> el = simplify_expr(clone_subst(x.a, vals, /*fold_subs=*/true));
+      // 向量化调用在核实过的展开处（vec_eval_）：头一遍化简不求值、记下求值前的调用（vec_held_，函数去留用），有放过的常量调用就
+      // 再化简一遍——那时它不在 subst_calls_ 里，照 simplify_expr 的 Call 支求值（求不出照旧 SKIP，VQ38）。多维的内层推导式是外层
+      // 代入后克隆出来的，归到外层（vec_group_）。
+      const bool vec = vec_eval_ && in_.str(x.call_name[1]).front() == '$';
+      struct GroupScope {
+        Id<Expr>& g;
+        GroupScope(Id<Expr>& r, Id<Expr> v) : g(r) { g = v; }
+        ~GroupScope() { g = Id<Expr>{}; }
+        GroupScope(const GroupScope&) = delete;
+        GroupScope& operator=(const GroupScope&) = delete;
+      };
+      std::optional<GroupScope> group;
+      if (vec && !vec_group_.is_valid()) group.emplace(vec_group_, e);
+      Id<Expr> el;
+      if (vec && user_call(x.a)) {
+        const std::size_t holds = vec_holds_;
+        {
+          const RedScalarize hold(vec_hold_);   // 同样是"作用域内置真"
+          el = simplify_expr(clone_subst(x.a, vals, /*fold_subs=*/true));
+        }
+        if (vec_held_ && user_call(el)) vec_held_->push_back({vec_group_, el});
+        if (vec_holds_ != holds) el = simplify_expr(el);
+      } else {
+        el = simplify_expr(clone_subst(x.a, vals, /*fold_subs=*/true));
+      }
       // 代入后实参全成字面量的调用 omc 会求值（V4c 探针 `sum(F({1, 2, time}, 2))` 的前两项 → `3.0 + 4.0 + …`）；内建的已被
       // simplify 折掉，用户函数的调用处求值未接进来 → SKIP。
       if (has_const_call(el)) { set_unsupported("constant call after comprehension substitution"); return lit_int(0); }
@@ -5634,6 +5665,7 @@ class Flattener {
       }
       if (!forced) { emit_whole_array_var(cid, name, psubs, cty, dims, aplan, rhsE, is_protected, is_final, vk, dir, cel); return; }
     }
+    const std::string arr_base = int_key(name, psubs);   // 数组整体 key（comp_bound_ / vec_bound_）
     std::vector<std::int64_t> idx(dims.size(), 1);
     for (bool more = true; more;) {
       FlatVariable v;
@@ -5657,7 +5689,7 @@ class Flattener {
       v.loc = I_.comps[cid].loc;
       {
         const PhaseScope attr_phase(*this, MarkPhase::Binding);
-        v.attributes = attributes_at(aplan, idx);
+        v.attributes = attributes_at(aplan, idx, &arr_base);
       }
       if (result_.unsupported) return;
       if (ctx.unbound_fields && vk == FlatVarKind::Parameter) force_unfixed(v.attributes, cty.kind);
@@ -5665,6 +5697,7 @@ class Flattener {
       if (vk == FlatVarKind::Parameter && !braw.is_valid() && !unbound_param_ok(v.attributes)) return;
       if (spread) {
         Id<Expr> eb;
+        std::vector<VecHeld> held;   // 本元素里向量化调用求值前的调用（见 vec_eval_）
         if (comp_spread) {
           eb = comprehension_elem(braw, idx, bscope, bprefix);
           if (result_.unsupported) return;
@@ -5683,8 +5716,10 @@ class Flattener {
           if (result_.unsupported) return;
         } else if (nlbind) {
           // 逐元素：y[i] / 2.0*y[i]（B1/B2/B4/B5/B8）；含推导式的也逐元素代入（R2 探针 `q = 2 * linspace(1, 2, 3)` →
-          // `q[2] = 3.0`、`p = {i * 1.5 for i in 1:3} + q` → `p[1] = 1.5 + q[1]`）。
+          // `q[2] = 3.0`、`p = {i * 1.5 for i in 1:3} + q` → `p[1] = 1.5 + q[1]`）。参数数组里的向量化调用逐元素求值（见
+          // vec_eval_；常量数组的未做：定型期有没有被求值过 ymc 不记，VQ41 → 照旧 SKIP）。
           const RedScalarize rs(red_scalarize_ok_);
+          const VecEval ve(*this, vk == FlatVarKind::Parameter, &held);
           eb = simplify_expr(scalarize(rhsE, idx));
           if (result_.unsupported) return;
         } else {
@@ -5696,14 +5731,26 @@ class Flattener {
           if (!leaf_type_ok(eb, cty.kind)) { set_unsupported("array binding shape/type mismatch"); return; }
         }
         if (cty.kind == TypeKind::Real) eb = to_real(eb);
-        // 推导式绑定的参数数组（见 comp_bound_）：记下它和元素绑定里调的用户函数。
-        if (vk == FlatVarKind::Parameter &&
-            (comp_spread || (nlbind && result_.model.exprs[rhsE].kind == ExprKind::Reduction &&
-                             result_.model.exprs[rhsE].call_name.size() == 2 &&
-                             in_.str(result_.model.exprs[rhsE].call_name[0]) == "array"))) {
-          const std::string base = int_key(name, psubs);
+        // 整个绑定就是推导式（书写的 / 向量化调用定型出的）。元素类型要与变量的相同：Integer 推导式给 Real 参数时 omc 外面包一层
+        // CAST(Real[n], …)，同嵌在运算里（结构参数时被 EvalConstants 整个求值，VQ71 / VQ81 不打函数）。
+        const bool bare_red = !comp_spread && nlbind && result_.model.exprs[rhsE].kind == ExprKind::Reduction &&
+                              result_.model.exprs[rhsE].call_name.size() == 2 &&
+                              in_.str(result_.model.exprs[rhsE].call_name[0]) == "array" &&
+                              !(cty.kind == TypeKind::Real && result_.model.exprs[rhsE].ty.element_type().kind == TypeKind::Integer);
+        // 向量化调用逐元素展开过（见 vec_eval_）：记下各元素求值前的调用，压平末尾定函数去留（vec_kept_fns）。
+        if (!held.empty()) {
+          VecBound& vb = vec_bound_[arr_base];
+          vb.param = true;
+          vb.embedded = !bare_red;
+          vb.calls.insert(vb.calls.end(), held.begin(), held.end());
+        }
+        // 推导式绑定的参数数组（见 comp_bound_）：记下它和元素绑定里调的用户函数。向量化调用逐元素求值过的记求值前的调用（求值后
+        // 是字面量，comp_kept_fns 看不到调用处）。
+        if (vk == FlatVarKind::Parameter && (comp_spread || bare_red)) {
+          const std::string& base = arr_base;
+          const Id<Expr> site = held.size() == 1 ? held[0].call : eb;
           comp_bound_.insert(base);
-          comp_elems_[base].push_back(eb);
+          comp_elems_[base].push_back(site);
           auto calls = [&](auto& self, Id<Expr> x) -> void {
             if (!x.is_valid()) return;
             const Expr& xe = result_.model.exprs[x];
@@ -5717,7 +5764,7 @@ class Flattener {
             self(self, xe.b);
             self(self, xe.c);
           };
-          calls(calls, eb);
+          calls(calls, site);
         }
         // constant 元素必须求值成字面量（同标量 constant 规则，R14 §3）。
         if (vk == FlatVarKind::Constant) {
@@ -6487,8 +6534,9 @@ class Flattener {
     return out;
   }
 
-  // 按计划取元素 idx（1 基；标量组件为空）处的各属性值。
-  std::vector<FlatVarAttr> attributes_at(const std::vector<AttrPlan>& plans, const std::vector<std::int64_t>& idx) {
+  // 按计划取元素 idx（1 基；标量组件为空）处的各属性值。vbase：数组变量的整体 key（属性值里的向量化调用逐元素求值，见 vec_eval_）。
+  std::vector<FlatVarAttr> attributes_at(const std::vector<AttrPlan>& plans, const std::vector<std::int64_t>& idx,
+                                         const std::string* vbase = nullptr) {
     std::vector<FlatVarAttr> out;
     for (const AttrPlan& p : plans) {
       Id<Expr> v = p.value;
@@ -6503,8 +6551,19 @@ class Flattener {
         // `Real r2[3](start = if n == 2 then {1, 2, 3} else {4, 5, 6})`）→ 不复刻、也不出结果，SKIP。
         if (result_.model.exprs[p.value].kind == ExprKind::IfExp) { set_unsupported("if-expression array attribute"); return out; }
         const RedScalarize rs(red_scalarize_ok_);
-        v = simplify_expr(scalarize(p.value, idx));
+        // 属性值里的向量化调用逐元素求值、函数照打（见 vec_eval_；VQ4 start、VQ23 nominal、VQ73）。fixed / stateSelect 在
+        // EvalConstants 求（evaluateTypeAttribute，NFEvalConstants.mo:148-164 v1.25.0），未核实 → 不放。
+        const std::string_view an = in_.str(p.name);
+        std::vector<VecHeld> held;
+        {
+          const VecEval ve(*this, vbase != nullptr && an != "fixed" && an != "stateSelect", &held);
+          v = simplify_expr(scalarize(p.value, idx));
+        }
         if (result_.unsupported) return out;
+        if (!held.empty()) {
+          VecBound& vb = vec_bound_[*vbase + "@" + std::string(an)];
+          vb.calls.insert(vb.calls.end(), held.begin(), held.end());
+        }
         if (p.spec->vk == AttrVK::Real) v = to_real(v);
         // fixed 的数组值（MSL Body 的 `fixed = fill(w_0_fixed, 3)`）：同标量的 fixed（见 finish_attr），书写式整个结构求值后取
         // 元素——参数在实例化期连带标结构（NFInst.mo:3947 v1.25.0；AT 探针 AT2：`fixed = {bg, not bh}`、`bh = bg` → bg / bh
@@ -12502,7 +12561,8 @@ class Flattener {
   }
   // 表达式里还留着实参全是字面量的调用。向量化调用 / 推导式整体保留时不求值（V4g 探针 `bk = array(F({1.0, 2.0, 3.0}[$i1],
   // 2.0) for $i1 in 1:3)`），逐元素展开时（参数摊分、sum、属性）迭代变量代入后成常量的 `F(1.0, 2.0)` omc 会求值
-  //（`bp[1] = 3.0`、`sum(…)` → `3.0 + 4.0 + 5.0`）；内建的已被 simplify 折掉，用户函数的未做。
+  //（`bp[1] = 3.0`、`sum(…)` → `3.0 + 4.0 + 5.0`）；内建的已被 simplify 折掉，向量化的用户函数调用在核实过的展开处已求（见
+  // vec_eval_），书写的推导式里的未做。
   bool has_const_call(Id<Expr> id) {
     if (!id.is_valid()) return false;
     const Expr& x = result_.model.exprs[id];
@@ -12953,6 +13013,7 @@ class Flattener {
   Id<Expr> try_emit_user_call(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
     const bool whole = array_call_ok_;   // 本调用是否整个绑定 / 等式一侧（见 array_call_ok_）
     const bool noret = noret_call_;      // 本调用是一条无返回值调用语句（见 noret_call）：可以没有输出、不取首输出
+    const bool split_base = std::exchange(split_base_, false);   // 修饰分发合成的取元素式的基里（见 split_base_）
     struct FlagReset {
       bool& f;
       bool v;
@@ -13332,6 +13393,7 @@ class Flattener {
       }
     };
     bool nested_eq = false;   // 等式 / Var 绑定里嵌在运算中的数组调用（array_call_eq_ 放行的，见下）
+    bool split_nested = false;   // 修饰分发合成的取元素式的基里嵌在运算中的数组调用（见下）
     if (!fn_scope_ && rty.is_array()) {
       // 模型语境里嵌在别的运算中的数组调用：须逐元素展开，未做 → SKIP。向量化调用的体不受此限（T9 `m = array(H(x[$i1]) for
       // $i1 in 1:3)`），它所在的位置由推导式的消费方把关（scalarize 的 red_scalarize_ok_）。
@@ -13340,9 +13402,14 @@ class Flattener {
       // 等式两侧 / Var 数组的绑定（array_call_eq_）里嵌着的也行：含数组调用的式子整体保留、不逐元素展开（NFScalarize.
       // scalarizeEquation :336-338 v1.25.0 的 hasArrayCall 支），运算留符号形态（array_binary 的 sym 支、sym_binary；AX 探针
       // b1 / c1：`x = {1.0, 2.0, 3.0} + f(time)`、`y = g(f(time) * 2.0)`）。
-      if (!whole && vd.empty() && !param_spread_ && !array_call_eq_)
+      // 组件数组修饰按元素分发合成的取元素式（`(-f(m))[k]`，split_base_）：基里嵌在运算中的同参数数组绑定逐元素取（scalarize 的
+      // Unary / Call 支），实参会成字面量的压平末尾代入求值（下面核；omc 化简时先求值再取元素，simplifySubscriptedExp，
+      // NFSimplifyExp.mo:1346-1379 v1.25.0；VQS1-5，MSL PolyphaseTwoLevel 的 `sine[m](phase = -symmetricOrientation(m))` →
+      // `sine[1].phase = -0.0`、函数不打）。
+      split_nested = split_base && !whole && vd.empty() && !param_spread_ && !array_call_eq_;
+      if (!whole && vd.empty() && !param_spread_ && !array_call_eq_ && !split_nested)
         return fn_fail<Id<Expr>>("array-valued call inside an expression");
-      nested_eq = !whole && vd.empty() && !param_spread_;
+      nested_eq = !whole && vd.empty() && !param_spread_ && !split_nested;
       eval_out_dims(rty);
     }
     // 多输出函数的其余输出：omc 定型调用时整个元组类型都求维（Call.typeMatchNormalCall → evaluateCallType），维式里换进来的
@@ -13368,6 +13435,8 @@ class Flattener {
     // 数组调用、照常标量化（AX 探针 g2 `y = -so(m) * time` → `y[1] = 0.0; y[2] = -2.094… * time; …`）——逐元素的形态未核实
     // → 照旧 SKIP。
     if (nested_eq && call_args_fold(call)) return fn_fail<Id<Expr>>("array-valued call inside an expression");
+    // 修饰分发的基里的：实参不会成字面量的 omc 取元素后的形态未核实 → SKIP。
+    if (split_nested && !call_args_fold(call)) return fn_fail<Id<Expr>>("array-valued call inside an expression");
     if (sig.outputs.size() > 1 && !noret) {   // 语句调用不取首输出（N1 探针：两个输出的 `f(t);` 原样）
       Expr t;
       t.kind = ExprKind::TupleElement;
@@ -14390,8 +14459,8 @@ class Flattener {
       {   // 实参秩高于标量类型形参的声明秩（`f({1, 2, 3})`，f 的输入是 Real）= 向量化调用：typing 改写成
           // `array(f(x[$i]) for $i in …)`（见下）。内建标量类型的短类派生也是标量（MSL Units.Conversions.from_rpm 的
           // `input NonSI.AngularVelocity_rpm rpm`；短类链带的维计入声明秩）：此前不认，整个数组当实参算下去、值被当成非向量化
-          // 调用的常量用掉，函数定义就没打——静默错（omc 求值了也照打定义）。认出后同 Real 输入的向量化调用走（V4g 规矩：未做 →
-          // SKIP；PKL 探针 PKL15，MSL IMC_withLosses 的 `wtable = from_rpm({…})`）。
+          // 调用的常量用掉，函数定义就没打——静默错（omc 求值了也照打定义）。认出后同 Real 输入的向量化调用走（V4g 规矩：逐元素
+          // 求值、照打定义，见 vec_eval_；PKL 探针 PKL15，MSL IMC_withLosses 的 `wtable = from_rpm({…})`）。
         const SElement& ie = I_.scode.elems[inputs[i]];
         std::size_t decl_rank = ie.attr.dims.size() + ie.type.dims.size();
         TypeKind tk;
@@ -14925,6 +14994,48 @@ class Flattener {
         }
       }
       if (!folded) keep(result_.model.exprs[sites[0][j]].call_name);
+    }
+  }
+  // 压平末尾定向量化调用的函数去留（见 vec_eval_ / vec_bound_）：omc 收函数时绑定 / 属性值里的推导式还在 → 照打，除非——
+  //   - 参数数组的绑定在定型期被求值过（维 / 条件 …：Ceval.evalComponentBinding 把字面量存回组件，NFCeval.mo:382-387 v1.25.0），
+  //     压平出来就是字面量（VQ13 / VQ21 / VQ36 / VQ67）；
+  //   - 参数是结构参数、推导式嵌在运算 / 转型 / 数组字面量里：EvalConstants 把整个绑定求值成字面量（VQ47 / VQ66 / VQ68 / VQ69 /
+  //     VQ71，同 VE 探针 VE16 / VE17）；整个绑定就是推导式的不求，照打（VQ14 / VQ64 / VQ65 / VQ72，同 VE8，见 comp_bound_）；
+  //   - 化简把调用化掉了：代入结构参数后，该推导式各元素上的实参全是字面量且两两相同（体里以迭代变量作下标的数组各元素相同，
+  //     simplifySubscriptedExp，NFSimplifyExp.mo:1346-1379 → 调用求值；VQ45 `f({n, 2})`、n = 2 → 不打，属性值 VQ74）。
+  // 只加不减（还被引用的函数本来就留）。vals：结构参数的值（同 comp_kept_fns）；实参里套的调用代入后照结构代入求值（同
+  // apply_structural_params）。
+  void vec_kept_fns(const std::unordered_map<std::string, Id<Expr>>& vals) {
+    for (const auto& [base, vb] : vec_bound_) {
+      if (vb.param && (typing_reads_.count(base) || (vb.embedded && struct_bases_.count(base)))) continue;
+      std::vector<Id<Expr>> groups;
+      for (const VecHeld& h : vb.calls)
+        if (std::find(groups.begin(), groups.end(), h.group) == groups.end()) groups.push_back(h.group);
+      for (const Id<Expr> g : groups) {
+        bool folded = true;
+        std::vector<CVal> first;
+        std::vector<Symbol> fn;
+        for (const VecHeld& h : vb.calls) {
+          if (!(h.group == g)) continue;
+          const std::vector<Id<Expr>> args = result_.model.exprs[h.call].args;   // 拷贝（下面 add）
+          if (fn.empty()) fn = result_.model.exprs[h.call].call_name;
+          for (std::size_t ai = 0; ai < args.size() && folded; ++ai) {
+            const bool saved_ss = struct_subst_;
+            struct_subst_ = true;
+            const Id<Expr> sv = simplify_expr(clone_subst(args[ai], vals));
+            struct_subst_ = saved_ss;
+            if (result_.unsupported) return;
+            const std::optional<CVal> cv = is_literal(sv) ? cval_of(sv) : std::nullopt;
+            if (!cv) folded = false;
+            else if (first.size() <= ai) first.push_back(*cv);
+            else if (cv->k != first[ai].k || cv->as_r() != first[ai].as_r() || cv->b != first[ai].b || cv->s != first[ai].s)
+              folded = false;
+          }
+          if (!folded) break;
+        }
+        if (!folded && std::find(comp_kept_fns_.begin(), comp_kept_fns_.end(), fn) == comp_kept_fns_.end())
+          comp_kept_fns_.push_back(fn);
+      }
     }
   }
   // key 的数组整体 key：去掉末段的叶下标（`5.7[2].` → `5.7.`；标量 key 原样）。
@@ -17625,6 +17736,7 @@ class Flattener {
 
   Id<Expr> call(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
     fn_why_ = nullptr;   // 子原因按调用清零（见 fn_fail）
+    const bool split_top = std::exchange(split_base_, false);   // 只交给本调用（见 split_base_）
     const Cref& fn = I_.absyn.crefs[e.cref];
     // 调用结果的字段访问 `f(i).y`：1.25.0 自己报内部错误（DotOperator），ymc 未做 → SKIP（此前被静默当成 f(i)）。
     if (e.call_suffix.is_valid()) { set_unsupported("field access on call result"); return lit_int(0); }
@@ -17713,6 +17825,7 @@ class Flattener {
           }
         }
       // 折不成常量 → 发射函数定义 + 保留符号调用（加宽(55)-B）。不可发射 → 落到下面 SKIP。
+      split_base_ = split_top;
       if (Id<Expr> uc = try_emit_user_call(e, enclosing, prefix); uc.is_valid()) return uc;
       if (result_.unsupported) return lit_int(0);
       if (Id<Expr> rc = record_ctor_call(e, enclosing, prefix, sc); rc.is_valid() || result_.unsupported) return rc;
@@ -20102,6 +20215,8 @@ class Flattener {
     std::vector<Id<Expr>> els;   // 行主序的各元素（各自化简）
     {
       const RedScalarize rs(red_scalarize_ok_);
+      // 实参里的向量化调用逐元素求值（化简期展开，函数不因此留下，见 vec_eval_；VQ3 / VQ25 / VQ59、V4g 探针 G5）。
+      const VecEval ve(*this, true, nullptr);
       std::vector<std::int64_t> ix(sh.size(), 1);
       for (bool more = true; more;) {
         Id<Expr> x = simplify_expr(scalarize(a, ix));
@@ -21354,7 +21469,9 @@ class Flattener {
       const bool saved_call = array_call_ok_, saved_if = if_top_;
       array_call_ok_ = I_.absyn.exps[base].kind == ExpKind::Call;
       if_top_ = I_.absyn.exps[base].kind == ExpKind::IfExp;
+      split_base_ = split && split_arith_base(base);   // 修饰分发合成的（见 split_base_）
       const Id<Expr> b = simplify_expr(inst_exp(base, enclosing, prefix));
+      split_base_ = false;
       array_call_ok_ = saved_call;
       if_top_ = saved_if;
       if (result_.unsupported) return lit_int(0);
@@ -22137,9 +22254,14 @@ class Flattener {
           if (all)
             for (const FlatFunction& f : result_.model.functions)
               if (f.name == call_name && !f.is_record_ctor && !f.is_external && !f.is_impure) user = true;
+          // 向量化调用逐元素展开的头一遍（vec_hold_，见 vec_eval_）：迭代变量代入出来的先放过，由 scalarize 再化简一遍时求值。
+          if (user && vec_hold_ && subst_calls_.count(id.raw) && !struct_subst_calls_.count(id.raw)) {
+            user = false;
+            ++vec_holds_;
+          }
           // 结构参数代入出来的：现在按定义求值（FAS4 / FB 探针 f22 `p = g(m)`、m 是结构参数 → `p = 6.5`、g 不再打印；f10 数组
           // 输出逐元素）。向量化调用的迭代变量代入出来的（`bp[3] = F({1, 2, 3}, 2)` → `F(1, 2)`）omc 同样求值、却照打 F 的定义
-          //（函数收集在求值之前，V4g 探针）→ 仍 SKIP。
+          //（函数收集在求值之前，V4g 探针）：核实过的展开处由 scalarize 放过再求（见 vec_eval_），别处仍 SKIP。
           // 定型时实参就全是字面量、却没在 call() 里求值掉的（结果是数组、位置不在整个绑定 / 等式一侧，call() 不收：MSL
           // BalancingStar 的 `constant Integer m = 3` 配 `phi = -symmetricOrientation(m)`）：omc 化简时照样求值（nfEvalConstArgFuncs），
           // 这里补求；求不出的照旧 SKIP。迭代变量代入出来的（subst_calls_，不是结构代入）不在此列（见上 V4g）。
@@ -23355,6 +23477,15 @@ class Flattener {
     if (root_cref) split_cref_.emplace(out.raw, *root_cref);
     return out;
   }
+  // 修饰按元素分发的数组值绑定（或其合成的取元素式的基）是取负 / 四则运算（含点号的）：`-f(m)`、`2 * f(m)`、`f(m) .- 1`…
+  //（VQS1-5、VQS7-9、VQS12-15，MSL PolyphaseTwoLevel 的 `sine[m](phase = -symmetricOrientation(m))`）。幂、关系、逻辑运算未核实。
+  bool split_arith_base(Id<Exp> base) const {
+    const Exp& bx = I_.absyn.exps[base];
+    if (bx.kind == ExpKind::Unary) return bx.op == Op::UMinus;
+    return bx.kind == ExpKind::Binary &&
+           (bx.op == Op::Add || bx.op == Op::Sub || bx.op == Op::Mul || bx.op == Op::Div || bx.op == Op::EWAdd ||
+            bx.op == Op::EWSub || bx.op == Op::EWMul || bx.op == Op::EWDiv);
+  }
   // 复合数组修饰切分前的整体检查（各将被下降的非 each 字面量绑定）：前 N 维须恰是数组维（多 / 少 = omc 维度不符报错）；
   // 数值目标的叶类型须一致（split_leaves_uniform）。子修饰名在 cls（类实例）的组件里查；cls 无效 = 内建类型 bkind 的属性。
   bool split_mod_ok(Id<SMod> m, NodeId cls, TypeKind bkind, const std::vector<std::int64_t>& adims, NodeId scope,
@@ -23406,7 +23537,9 @@ class Flattener {
           const bool saved_call = array_call_ok_, saved_if = if_top_;
           array_call_ok_ = I_.absyn.exps[base].kind == ExpKind::Call;
           if_top_ = I_.absyn.exps[base].kind == ExpKind::IfExp;
+          split_base_ = split_arith_base(base);   // 同 subscripted_exp 里分发后的取元素式（见 split_base_）
           const Id<Expr> tb = inst_exp(base, scope, prefix);
+          split_base_ = false;
           array_call_ok_ = saved_call;
           if_top_ = saved_if;
           if (result_.unsupported) return false;
@@ -26053,7 +26186,8 @@ class Flattener {
     return false;
   }
   void apply_structural_params() {
-    if (structural_keys_.empty() || result_.unsupported) return;
+    if (result_.unsupported) return;
+    if (structural_keys_.empty()) { vec_kept_fns({}); return; }   // 向量化调用的函数去留照样要定（见 vec_kept_fns）
     ensure_var_index();
     std::unordered_map<std::string, Id<Expr>> vals;
     for (const std::string& k : structural_keys_) {
@@ -26082,6 +26216,7 @@ class Flattener {
       v.binding = lit;
     }
     for (const std::string& b : comp_keep_) comp_kept_fns(b, vals);
+    if (!result_.unsupported) vec_kept_fns(vals);
     if (result_.unsupported) return;
     // 绑定恰是某个结构参数的引用的标量 parameter 连带成为结构参数（checkComponentBindingVariability，NFTyping.mo:1150-1159，
     // v1.25.0：绑定定型出来的变率是 STRUCTURAL_PARAMETER 且绑定是 cref）。判定发生在**本参数的绑定定型时**：目标须在那之前
@@ -26956,6 +27091,43 @@ class Flattener {
     RedScalarize(const RedScalarize&) = delete;
     RedScalarize& operator=(const RedScalarize&) = delete;
   };
+  // 向量化调用（定型成 `array(f(a[$i1]) for $i1 in …)`，NFCall.vectorizeCall，NFCall.mo:2851-2907 v1.25.0）逐元素展开时，代入后
+  // 实参全成字面量的用户函数调用：omc 化简时求值（NFSimplifyExp.mo:200-201 → Ceval），函数照不照打看求值在收函数
+  //（Flatten.collectFunctions，NFInst.mo:219）之前还是之后——
+  //   之后：标量化（NFInst.mo:231）逐元素展开参数数组的绑定 / 数组属性值，推导式在展开时逐个化简（ExpandExp.expandArrayConstructor2，
+  //         NFExpandExp.mo:486-492）；化简期（:210）推导式除迭代范围长 ≤ 1 外原样留着（simplifyArrayConstructor，NFSimplifyExp.mo
+  //         :583-637），收函数时还在 → 照打（VQ1 `p[2] = f({1, 2})` → `p[1] = 2.0`、`p[2] = 4.0` 且打 f；属性值 VQ4）。去留在压平
+  //         末尾定（vec_bound_ / vec_kept_fns）。
+  //   之前：化简期 sum / product 展开实参（simplifySumProduct :418-454 → ExpandExp.expand）就求值 → 不打（VQ3 `sum(f({1, 2}))` →
+  //         `2.0 + 4.0`、VQ59）。
+  // 只在这几处由 VecEval 置位；其余位置照旧 SKIP（if 表达式的两支 omc 只取下标、不化简，VQ18 `if b then f({1.0, 2.0}[1]) else
+  // 0.0`，见 scalarize）。
+  bool vec_eval_ = false;
+  bool vec_hold_ = false;      // scalarize 头一遍化简：代入出来的常量用户调用先不求值、不判 SKIP（留下求值前的调用）
+  std::size_t vec_holds_ = 0;  // 头一遍里这样放过的调用数（没有就不必再化简一遍）
+  struct VecHeld { Id<Expr> group; Id<Expr> call; };   // group = 最外层的向量化推导式（多维的内层归它）
+  std::vector<VecHeld>* vec_held_ = nullptr;           // 求值前的各元素调用收到这里（参数数组 / 属性值；sum / product 不收）
+  Id<Expr> vec_group_;                                 // 正在展开的最外层向量化推导式（见 scalarize 的 Reduction 支）
+  struct VecEval {
+    Flattener& f;
+    bool old;
+    std::vector<VecHeld>* old_held;
+    VecEval(Flattener& fl, bool on, std::vector<VecHeld>* held) : f(fl), old(fl.vec_eval_), old_held(fl.vec_held_) {
+      f.vec_eval_ = on;
+      f.vec_held_ = held;
+    }
+    ~VecEval() { f.vec_eval_ = old; f.vec_held_ = old_held; }
+    VecEval(const VecEval&) = delete;
+    VecEval& operator=(const VecEval&) = delete;
+  };
+  // 绑定 / 属性值里有向量化调用、逐元素展开过的数组 → 各元素求值前的调用（vec_kept_fns 定函数去留）。key：参数数组的整体 key
+  //（同 comp_bound_）；属性值另加 `@属性名`。
+  struct VecBound {
+    bool param = false;      // 参数数组的绑定（不是属性值）
+    bool embedded = false;   // 推导式嵌在运算 / 转型 / 数组字面量里（整个绑定不就是它）
+    std::vector<VecHeld> calls;
+  };
+  std::unordered_map<std::string, VecBound> vec_bound_;
   bool in_if_ = false;   // 正在收集 if 分支体（connect 不能进分支体 → SKIP）
   struct FlowVar {
     std::vector<Symbol> name; std::vector<std::vector<Id<Expr>>> subs; Type ty; SourceLoc loc;
@@ -26987,6 +27159,9 @@ class Flattener {
   std::vector<std::string> pending_pre_;
   // 正在定型参数 / 常量数组的绑定（逐元素摊开）：式子里的数组值用户函数调用可以留着，scalarize 取 `f(…)[k]`。
   bool param_spread_ = false;
+  // 正在定型修饰分发合成的取元素式 `(…)[k]` 的基（subscripted_exp 的 split）：基里碰到的头一个调用若是用户函数，可以嵌在运算里
+  //（见 try_emit_user_call）；call() 进门就清，内建的实参里的调用照常。
+  bool split_base_ = false;
   // 数组 if 取元素造出的标量 if（scalarize 的 IfExp 支）：omc 取元素是 applySubscriptIf，取完不再化简（NFExpression.mo
   // :1653-1683 v1.25.0；CT 探针 t2：`parameter Real p[2] = if b then {1, 2} else {1, 3}` → `p[1] = if b then 1.0 else 1.0`、
   // `q[1] = if b then true else false`），simplify_expr 对它们不做 simplifyIf 的两条收拢。克隆时标记跟着走（clone_subst）。

@@ -744,3 +744,11 @@ DryAir1——带修饰 extends 的包要定义层 instPackage、h_default 经 He
 Magnetic.FluxTubes.Examples.Hysteresis.SinglePhaseTransformerWithHysteresis1、Mechanics.MultiBody.Examples.Elementary.
 RollingWheelSetDriving / RollingWheelSetPulling。同簇卡到下一处：FluxTubes HysteresisModelComparison——when 里的 if 方程；
 MultiBody Elementary.Surfaces——matrix element shape。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-16 66s 之后：PASS 467（+4）
+
+向量化调用在标量化时逐元素求值、函数定义照 omc 的收函数时机去留；修饰分发里取负 / 四则运算中的数组调用。转 PASS：
+Electrical.Machines.Examples.InductionMachines.IMC_withLosses、Magnetic.FundamentalWave.Examples.BasicMachines.InductionMachines.
+IMC_withLosses、Electrical.PowerConverters.Examples.DCAC.PolyphaseTwoLevel.PolyphaseTwoLevel_R / _RL。Magnetic.QuasiStatic 的
+IMC_withLosses 卡到下一处：MultiDelta 的 `when initial() then if … then print(…); end if; end when;`（omc 打成空的 when）。
+FAIL / ACCEPTS-INVALID / CRASH 0。

@@ -1,0 +1,1165 @@
+//// set: pk-p27 — 向量化调用逐元素求值与函数去留（V4g 规矩，MSL IMC_withLosses 的 `wtable = from_rpm({…})`）：参数数组绑定 / 数组属性值里的向量化调用在标量化时逐元素求值、收函数在前 → 照打（VQ1 / VQ5 嵌在运算里 / VQ7 部分求不出 / VQ15 二维 / VQ16 两个向量化实参 / VQ17 组件修饰 / VQ22 MSL 同构 / VQ4 / VQ23 / VQ73 属性）；收函数之前就化掉的不打：迭代范围长 1（VQ2）、sum / product 化简期展开（VQ3 / VQ25 / VQ59）、代入结构参数后以迭代变量作下标的数组各元素相同（VQ45 / VQ63 / VQ74，对照 VQ29-31）、定型期被读（VQ13 / VQ21 / VQ36 / VQ67）、结构参数且推导式嵌在运算 / 转型 / 数组字面量里（VQ47 / VQ48 / VQ66 / VQ68 / VQ69 / VQ71 / VQ81）；整个绑定就是推导式的结构参数照打（VQ14 / VQ64 / VQ65 / VQ72 / VQ76）；实参末尾才代入结构参数的照打（VQ27 / VQ28 / VQ6 / VQ49，VQ28 / VQ49 此前静默丢函数）；函数另有引用（VQ8）、嵌套调用（VQ10 / VQ43 里层在化简期求值）；照旧 SKIP：if 表达式两支（VQ18，omc 只取下标不化简）、常量数组（VQ11 / VQ41）、求值失败（VQ38）、向量化实参里套向量化调用（VQ9 / VQ62）、组件数组修饰分发（VQ61）、数组字面量里的推导式（VQ69 / VQ70 别的原因）；组件数组修饰按元素分发、值是嵌着数组值用户函数调用的取负 / 四则运算（MSL PolyphaseTwoLevel 的 `sine[m](phase = -symmetricOrientation(m))`）：实参会成字面量的化简期求值后取元素、不打函数（VQS1-5 / VQS7-9 / VQS12-15，VQS6 整个是调用对照），实参不会成字面量的 omc 打 `(-f(k))[1]`（VQS10）、两个调用（VQS11）照旧 SKIP
+//// model: VQ1
+model VQ1
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = f({1, 2});
+  Real y = p[1] * time;
+end VQ1;
+//// model: VQ2
+model VQ2
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[1] = f({3});
+  Real y = p[1] * time;
+end VQ2;
+//// model: VQ3
+model VQ3
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real s = sum(f({1, 2}));
+  Real y = s * time;
+end VQ3;
+//// model: VQ4
+model VQ4
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  Real x[2](start = f({1, 2}));
+equation
+  der(x) = -x;
+end VQ4;
+//// model: VQ5
+model VQ5
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = 2 * f({1, 2});
+  Real y = p[1] * time;
+end VQ5;
+//// model: VQ6
+model VQ6
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Integer n = 2;
+  Real z[n];
+  parameter Real p[2] = f({n, 3});
+  Real y = p[1] * time;
+equation
+  z = {time, time};
+end VQ6;
+//// model: VQ7
+model VQ7
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real a = 2;
+  parameter Real p[2] = f({a, 3});
+  Real y = p[1] * time;
+end VQ7;
+//// model: VQ8
+model VQ8
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = f({1, 2});
+  Real y = f(time) + p[1];
+end VQ8;
+//// model: VQ9
+model VQ9
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := x + 1;
+  end g;
+  parameter Real p[2] = f(g({1, 2}));
+  Real y = p[1] * time;
+end VQ9;
+//// model: VQ10
+model VQ10
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := x + 1;
+  end g;
+  parameter Real p[2] = f({g(1), 2});
+  Real y = p[1] * time;
+end VQ10;
+//// model: VQ11
+model VQ11
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  constant Real c[2] = f({1, 2});
+  Real y = c[1] * time;
+end VQ11;
+//// model: VQ12
+model VQ12
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  Real x[2];
+equation
+  x = f({1, 2});
+end VQ12;
+//// model: VQ13
+model VQ13
+  function g
+    input Real x;
+    output Integer y;
+  algorithm
+    y := integer(2 * x);
+  end g;
+  parameter Integer k[2] = g({1, 2});
+  Real x[k[1]];
+equation
+  x = fill(time, k[1]);
+end VQ13;
+//// model: VQ14
+model VQ14
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = f({1, 2}) annotation(Evaluate = true);
+  Real y = p[1] * time;
+end VQ14;
+//// model: VQ15
+model VQ15
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2, 2] = f({{1, 2}, {3, 4}});
+  Real y = p[1, 2] * time;
+end VQ15;
+//// model: VQ16
+model VQ16
+  function F
+    input Real a;
+    input Real b;
+    output Real c;
+  algorithm
+    c := a + 10 * b;
+  end F;
+  parameter Real p[2] = F({1, 2}, {3, 4});
+  Real y = p[1] * time;
+end VQ16;
+//// model: VQ17
+model VQ17
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  model T
+    parameter Real table[:];
+    Real y = table[1] * time;
+  end T;
+  T t(table = f({1, 2}));
+end VQ17;
+//// model: VQ18
+model VQ18
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Boolean b = true;
+  parameter Real p[2] = if b then f({1, 2}) else {0, 0};
+  Real y = p[1] * time;
+end VQ18;
+//// model: VQ19
+model VQ19
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = f({1, 2}) + {1, 2};
+  Real y = p[1] * time;
+end VQ19;
+//// model: VQ20
+model VQ20
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = {f(1), f(2)};
+  Real y = p[1] * time;
+end VQ20;
+//// model: VQ21
+model VQ21
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = f({1, 2});
+  parameter Integer n = integer(p[1]);
+  Real x[n];
+equation
+  x = fill(time, n);
+end VQ21;
+//// model: VQ22
+model VQ22
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[:] = f({1, 2, 3});
+  model T
+    parameter Real table[:, :];
+    Real y = table[1, 1] * time;
+  end T;
+  T t(table = {{p[j], 1} for j in 1:size(p, 1)});
+end VQ22;
+//// model: VQ23
+model VQ23
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  Real x[2](each start = 1, nominal = f({1, 2}));
+equation
+  der(x) = -x;
+end VQ23;
+//// model: VQ24
+model VQ24
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real s = max(f({1, 2}));
+  Real y = s * time;
+end VQ24;
+//// model: VQ25
+model VQ25
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  Real s = sum(f({1, 2})) * time;
+end VQ25;
+//// model: VQ26
+model VQ26
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = f({1, 2});
+  parameter Real q[2] = f({3, 4});
+  Real y = (p[1] + q[2]) * time;
+end VQ26;
+//// model: VQ27
+model VQ27
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real a = 2 annotation(Evaluate = true);
+  parameter Real p[2] = f({a, 3});
+  Real y = p[1] * time;
+end VQ27;
+//// model: VQ28
+model VQ28
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real a = 2 annotation(Evaluate = true);
+  parameter Real b = 3 annotation(Evaluate = true);
+  parameter Real p[2] = f({a, b});
+  Real y = p[1] * time;
+end VQ28;
+//// model: VQ29
+model VQ29
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = f({1, 1});
+  Real y = p[1] * time;
+end VQ29;
+//// model: VQ30
+model VQ30
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Integer n = 2;
+  Real z[n];
+  parameter Real p[2] = f({n, n});
+  Real y = p[1] * time;
+equation
+  z = {time, time};
+end VQ30;
+//// model: VQ31
+model VQ31
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real a = 2 annotation(Evaluate = true);
+  parameter Real p[2] = f({a, a});
+  Real y = p[1] * time;
+end VQ31;
+//// model: VQ32
+model VQ32
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = f({1, 2});
+  parameter Real q = p[1] annotation(Evaluate = true);
+  Real y = q * time;
+end VQ32;
+//// model: VQ33
+model VQ33
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = f({1, 2});
+  Real x[2](start = p);
+equation
+  der(x) = -x;
+end VQ33;
+//// model: VQ34
+model VQ34
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[3] = f({1, 2, 3});
+  final parameter Real q[3] = f({4, 5, 6});
+  Real y = (p[1] + q[3]) * time;
+end VQ34;
+//// model: VQ35
+model VQ35
+  function f
+    input Integer x;
+    output Integer y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Integer p[2] = f({1, 2});
+  Real y = p[1] * time;
+end VQ35;
+//// model: VQ36
+model VQ36
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = f({1, 2}) annotation(Evaluate = true);
+  Real z[integer(p[1])];
+equation
+  z = fill(time, integer(p[1]));
+end VQ36;
+//// model: VQ37
+model VQ37
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = f({1, 2});
+  Real y[2] = p * time;
+end VQ37;
+//// model: VQ38
+model VQ38
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := x / 0;
+  end f;
+  parameter Real p[2] = f({1, 2});
+  Real y = p[1] * time;
+end VQ38;
+//// model: VQ39
+model VQ39
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = -f({1, 2});
+  Real y = p[1] * time;
+end VQ39;
+//// model: VQ40
+model VQ40
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = f({1, 2}) * 2;
+  parameter Real q[2] = {3, 4} .* f({1, 2});
+  Real y = (p[1] + q[2]) * time;
+end VQ40;
+//// model: VQ41
+model VQ41
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  constant Real c[2] = f({1, 2});
+  Real z[integer(c[2])];
+equation
+  z = fill(time, integer(c[2]));
+end VQ41;
+//// model: VQ43
+model VQ43
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := x + 1;
+  end g;
+  parameter Real p[2] = f({g(1), 3});
+  Real y = p[1] * time;
+end VQ43;
+//// model: VQ44
+model VQ44
+  function g
+    input Integer x;
+    output Integer y;
+  algorithm
+    y := 2 * x;
+  end g;
+  parameter Real p[2] = g({1, 2});
+  Real y = p[1] * time;
+end VQ44;
+//// model: VQ45
+model VQ45
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Integer n = 2;
+  Real z[n];
+  parameter Real p[2] = f({n, 2});
+  Real y = p[1] * time;
+equation
+  z = {time, time};
+end VQ45;
+//// model: VQ46
+model VQ46
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = f({1, 2});
+  Real z[size(p, 1)];
+equation
+  z = p * time;
+end VQ46;
+//// model: VQ47
+model VQ47
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = 2 * f({1, 2}) annotation(Evaluate = true);
+  Real y = p[1] * time;
+end VQ47;
+//// model: VQ48
+model VQ48
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = f({1, 2}) + {1, 2} annotation(Evaluate = true);
+  Real y = p[1] * time;
+end VQ48;
+//// model: VQ49
+model VQ49
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real p[3] = f(a);
+  Real z[integer(a[1])];
+equation
+  z = {p[2] * time};
+end VQ49;
+//// model: VQ51
+model VQ51
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2](start = f({1, 2})) = {1, 2};
+  Real z[integer(p[1])];
+equation
+  z = {time};
+end VQ51;
+//// model: VQ52
+model VQ52
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  Real x[2];
+equation
+  x = 2 * f({1, 2});
+end VQ52;
+//// model: VQ58
+model VQ58
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real s = sum(f({1, 2})) annotation(Evaluate = true);
+  Real y = s * time;
+end VQ58;
+//// model: VQ59
+model VQ59
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  Real s = product(f({1, 2})) * time;
+end VQ59;
+//// model: VQ61
+model VQ61
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  model T
+    parameter Real k;
+    Real y = k * time;
+  end T;
+  T t[2](k = f({1, 2}));
+end VQ61;
+//// model: VQ62
+model VQ62
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  constant Real c[2] = {1, 2};
+  parameter Real p[2] = f(c);
+  Real y = p[1] * time;
+end VQ62;
+//// model: VQ63
+model VQ63
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real a = 2 annotation(Evaluate = true);
+  parameter Real p[2] = f({a, 2});
+  Real y = p[1] * time;
+end VQ63;
+//// model: VQ64
+model VQ64
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = f({1, 2}) annotation(Evaluate = true);
+  parameter Real q[2] = 2 * p;
+  Real y = q[1] * time;
+end VQ64;
+//// model: VQ65
+model VQ65
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = f({1, 2});
+  Real x;
+equation
+  if p[1] > 1 then
+    der(x) = 1;
+  else
+    der(x) = 2;
+  end if;
+end VQ65;
+//// model: VQ66
+model VQ66
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = 2 * f({1, 2});
+  Real x;
+equation
+  if p[1] > 1 then
+    der(x) = 1;
+  else
+    der(x) = 2;
+  end if;
+end VQ66;
+//// model: VQ67
+model VQ67
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = 2 * f({1, 2});
+  parameter Integer n = integer(p[1]);
+  Real z[n];
+equation
+  z = fill(time, n);
+end VQ67;
+//// model: VQ68
+model VQ68
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = 2 * f({1, 2});
+  parameter Real q = p[1] annotation(Evaluate = true);
+  Real y = q * time;
+end VQ68;
+//// model: VQ69
+model VQ69
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2, 2] = {f({1, 2}), f({3, 4})} annotation(Evaluate = true);
+  Real y = p[1, 2] * time;
+end VQ69;
+//// model: VQ70
+model VQ70
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2, 2] = {f({1, 2}), f({3, 4})};
+  Real y = p[1, 2] * time;
+end VQ70;
+//// model: VQ71
+model VQ71
+  function g
+    input Integer x;
+    output Integer y;
+  algorithm
+    y := 2 * x;
+  end g;
+  parameter Real p[2] = g({1, 2}) annotation(Evaluate = true);
+  Real y = p[1] * time;
+end VQ71;
+//// model: VQ72
+model VQ72
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2, 2] = f({{1, 2}, {3, 4}}) annotation(Evaluate = true);
+  Real y = p[1, 2] * time;
+end VQ72;
+//// model: VQ73
+model VQ73
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2] = f({1, 2});
+  Real x[2](start = 2 * f({3, 4}));
+equation
+  der(x) = -x;
+end VQ73;
+//// model: VQ74
+model VQ74
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Integer n = 2;
+  Real z[n];
+  Real x[2](start = f({n, 2}));
+equation
+  der(x) = -x;
+  z = {time, time};
+end VQ74;
+//// model: VQ75
+model VQ75
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2](each min = 0) = f({1, 2});
+  Real y = p[1] * time;
+end VQ75;
+//// model: VQ76
+model VQ76
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[3] = f({1, 2, 3}) annotation(Evaluate = true);
+  Real x[2];
+equation
+  for i in 1:integer(p[1]) loop
+    der(x[i]) = p[i];
+  end for;
+end VQ76;
+//// model: VQ77
+model VQ77
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  model M
+    parameter Real p[2] = f({1, 2});
+    Real y = p[1] * time;
+  end M;
+  M m1;
+  M m2(p = {5, 6});
+end VQ77;
+//// model: VQ78
+model VQ78
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  record R
+    parameter Real p[2];
+  end R;
+  parameter R r(p = f({1, 2}));
+  Real y = r.p[1] * time;
+end VQ78;
+//// model: VQ79
+model VQ79
+  function f
+    input Real x;
+    input Real k = 2;
+    output Real y;
+  algorithm
+    y := k * x;
+  end f;
+  parameter Real p[2] = f({1, 2});
+  parameter Real q[2] = f({1, 2}, k = 3);
+  Real y = (p[1] + q[2]) * time;
+end VQ79;
+//// model: VQ80
+model VQ80
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[3] = f({1, 2, 3});
+  parameter Real q[3] = f(p);
+  Real y = q[1] * time;
+end VQ80;
+//// model: VQ81
+model VQ81
+  function g
+    input Integer x;
+    output Integer y;
+  algorithm
+    y := 2 * x;
+  end g;
+  parameter Integer a[2] = {1, 2};
+  parameter Real p[2] = g(a) annotation(Evaluate = true);
+  Real y = p[1] * time;
+end VQ81;
+//// model: VQ82
+model VQ82
+  function g
+    input Integer x;
+    output Integer y;
+  algorithm
+    y := 2 * x;
+  end g;
+  parameter Integer p[2] = g({1, 2}) annotation(Evaluate = true);
+  Real y = p[1] * time;
+end VQ82;
+//// model: VQ83
+model VQ83
+  function g
+    input Integer x;
+    output Integer y;
+  algorithm
+    y := 2 * x;
+  end g;
+  parameter Integer n = 3;
+  Real z[n];
+  parameter Real p[2] = g({n, 1});
+  Real y = p[1] * time;
+equation
+  z = fill(time, n);
+end VQ83;
+//// model: VQS1
+model VQS1
+  function so
+    input Integer m;
+    output Real o[m];
+  algorithm
+    o := {(k - 1) * 2 / m for k in 1:m};
+  end so;
+  model S
+    parameter Real phase = 0;
+    Real y = sin(time + phase);
+  end S;
+  parameter Integer m = 3 annotation(Evaluate = true);
+  S s[m](phase = -so(m));
+end VQS1;
+//// model: VQS2
+model VQS2
+  function so
+    input Integer m;
+    output Real o[m];
+  algorithm
+    o := {(k - 1) * 2 / m for k in 1:m};
+  end so;
+  model S
+    parameter Real phase = 0;
+    Real y = sin(time + phase);
+  end S;
+  parameter Integer m = 3;
+  S s[3](phase = -so(m));
+end VQS2;
+//// model: VQS3
+model VQS3
+  function so
+    input Integer m;
+    output Real o[m];
+  algorithm
+    o := {(k - 1) * 2 / m for k in 1:m};
+  end so;
+  model S
+    parameter Real phase = 0;
+    Real y = sin(time + phase);
+  end S;
+  S s[3](phase = -so(3));
+end VQS3;
+//// model: VQS4
+model VQS4
+  function so
+    input Integer m;
+    output Real o[m];
+  algorithm
+    o := {(k - 1) * 2 / m for k in 1:m};
+  end so;
+  model S
+    parameter Real phase = 0;
+    Real y = sin(time + phase);
+  end S;
+  parameter Integer m = 3 annotation(Evaluate = true);
+  S s[m](phase = 2 * so(m));
+end VQS4;
+//// model: VQS5
+model VQS5
+  function so
+    input Integer m;
+    output Real o[m];
+  algorithm
+    o := {(k - 1) * 2 / m for k in 1:m};
+  end so;
+  model S
+    Real phase;
+    Real y = sin(time + phase);
+  end S;
+  parameter Integer m = 3 annotation(Evaluate = true);
+  S s[m](phase = -so(m));
+end VQS5;
+//// model: VQS6
+model VQS6
+  function so
+    input Integer m;
+    output Real o[m];
+  algorithm
+    o := {(k - 1) * 2 / m for k in 1:m};
+  end so;
+  model S
+    parameter Real phase = 0;
+    Real y = sin(time + phase);
+  end S;
+  parameter Integer m = 3 annotation(Evaluate = true);
+  S s[m](phase = so(m));
+end VQS6;
+//// model: VQS7
+model VQS7
+  function so
+    input Integer m;
+    output Real o[m];
+  algorithm
+    o := {(k - 1) * 2 / m for k in 1:m};
+  end so;
+  model S
+    parameter Real phase = 0;
+    Real y = sin(time + phase);
+  end S;
+  parameter Integer m = 3 annotation(Evaluate = true);
+  S s[m](phase = so(m) + {1, 1, 1});
+end VQS7;
+//// model: VQS8
+model VQS8
+  function so
+    input Integer m;
+    output Real o[m];
+  algorithm
+    o := {(k - 1) * 2 / m for k in 1:m};
+  end so;
+  model S
+    parameter Real phase = 0;
+    Real y = sin(time + phase);
+  end S;
+  parameter Integer m = 3 annotation(Evaluate = true);
+  S s[m](phase = so(m) / 2);
+end VQS8;
+//// model: VQS9
+model VQS9
+  function so
+    input Integer m;
+    output Real o[m];
+  algorithm
+    o := {(k - 1) * 2 / m for k in 1:m};
+  end so;
+  model S
+    parameter Real phase = 0;
+    Real y = sin(time + phase);
+  end S;
+  parameter Integer m = 3 annotation(Evaluate = true);
+  S s[m](phase = 1 .- so(m));
+end VQS9;
+//// model: VQS10
+model VQS10
+  function so2
+    input Real x;
+    output Real o[3];
+  algorithm
+    o := {x, 2 * x, 3 * x};
+  end so2;
+  model S
+    parameter Real phase = 0;
+    Real y = sin(time + phase);
+  end S;
+  parameter Real k = 2;
+  S s[3](phase = -so2(k));
+end VQS10;
+//// model: VQS11
+model VQS11
+  function so
+    input Integer m;
+    output Real o[m];
+  algorithm
+    o := {(k - 1) * 2 / m for k in 1:m};
+  end so;
+  model S
+    parameter Real phase = 0;
+    Real y = sin(time + phase);
+  end S;
+  parameter Integer m = 3 annotation(Evaluate = true);
+  S s[m](phase = -so(m) + so(m));
+end VQS11;
+//// model: VQS12
+model VQS12
+  function so
+    input Integer m;
+    output Real o[m];
+  algorithm
+    o := {(k - 1) * 2 / m for k in 1:m};
+  end so;
+  model S
+    parameter Real phase = 0;
+    Real y = sin(time + phase);
+  end S;
+  parameter Integer m = 3 annotation(Evaluate = true);
+  S s[m](phase = so(m) - {1, 1, 1});
+end VQS12;
+//// model: VQS13
+model VQS13
+  function so
+    input Integer m;
+    output Real o[m];
+  algorithm
+    o := {(k - 1) * 2 / m for k in 1:m};
+  end so;
+  model S
+    parameter Real phase = 0;
+    Real y = sin(time + phase);
+  end S;
+  parameter Integer m = 3 annotation(Evaluate = true);
+  S s[m](phase = so(m) .+ 1);
+end VQS13;
+//// model: VQS14
+model VQS14
+  function so
+    input Integer m;
+    output Real o[m];
+  algorithm
+    o := {(k - 1) * 2 / m for k in 1:m};
+  end so;
+  model S
+    parameter Real phase = 0;
+    Real y = sin(time + phase);
+  end S;
+  parameter Integer m = 3 annotation(Evaluate = true);
+  S s[m](phase = so(m) .* {1, 2, 3});
+end VQS14;
+//// model: VQS15
+model VQS15
+  function so
+    input Integer m;
+    output Real o[m];
+  algorithm
+    o := {(k - 1) * 2 / m for k in 1:m};
+  end so;
+  model S
+    parameter Real phase = 0;
+    Real y = sin(time + phase);
+  end S;
+  parameter Integer m = 3 annotation(Evaluate = true);
+  S s[m](phase = so(m) ./ 2);
+end VQS15;

@@ -2802,13 +2802,13 @@ YMC_TEST(flatten_sum_product_min_max_of_arrays) {
                            "  Real bt = 0.8414709848078965 + 0.9092974268256817 + 0.1411200080598672;\n  Real bj[1];\n"
                            "  Real bj[2];\n  Real bj[3];\nequation\n  x = {time, 1.0, 2.0};\n"
                            "  bj = array(sin({1.0, 2.0, 3.0}[$i1]) for $i1 in 1:3);\nend SR1;\n"));
-  // 展开时成常量的用户函数调用 omc 会求值（`parameter Real bp[3] = F({1, 2, 3}, 2)` → `bp[1] = 3.0`，V4g 探针），未做 → SKIP。
-  bool uns = false;
-  const std::string out = flatten_src("function F\n  input Real a;\n  input Real b;\n  output Real c = a + b;\nend F;\nmodel BP\n"
-                                      "  parameter Real bp[3] = F({1, 2, 3}, 2);\nend BP;\n",
-                                      &uns);
-  YMC_CHECK(uns);
-  YMC_CHECK_EQ(out, std::string("<unsupported:constant user call after structural substitution>"));
+  // 展开时成常量的用户函数调用 omc 会求值（`parameter Real bp[3] = F({1, 2, 3}, 2)` → `bp[1] = 3.0`，V4g 探针），且照打 F 的
+  // 定义（标量化在收函数之后，NFInst.mo:219 / :231 v1.25.0）。期望 = omc 1.25.0 实跑（2026-10-16，探针 pk-p27 同类 VQ1）。
+  YMC_CHECK_EQ(flatten_src("function F\n  input Real a;\n  input Real b;\n  output Real c = a + b;\nend F;\nmodel BP\n"
+                           "  parameter Real bp[3] = F({1, 2, 3}, 2);\nend BP;\n"),
+               std::string("function F\n  input Real a;\n  input Real b;\n  output Real c = a + b;\nend F;\n\nclass BP\n"
+                           "  parameter Real bp[1] = 3.0;\n  parameter Real bp[2] = 4.0;\n  parameter Real bp[3] = 5.0;\n"
+                           "end BP;\n"));
 }
 
 YMC_TEST(flatten_der_pre_on_arrays) {
@@ -8487,16 +8487,17 @@ YMC_TEST(flatten_comprehension_range_in_component_modifier) {
 }
 
 YMC_TEST(flatten_vectorized_call_derived_scalar_input) {
-  // 向量化调用的输入是内建标量的短类派生（`input Rpm rpm`，MSL from_rpm）：omc 求值后照打函数定义（PKL 探针 PKL15，同 V4g），
-  // 未做 → 须 SKIP；此前求值器不认这种向量化、静默丢了函数定义。
-  bool uns = false;
-  const std::string out = flatten_src("package P15\n  type Rpm = Real(final quantity = \"AngularVelocity\", final unit = \"rev/min\");\n"
-                                     "  function from_rpm\n    input Rpm rpm;\n    output Real rs;\n  algorithm\n    rs := 0.1 * rpm;\n"
-                                     "  end from_rpm;\nend P15;\nmodel PKL15\n  import P15.from_rpm;\n"
-                                     "  parameter Real wtable[:] = from_rpm({1500, 1496});\n  Real y = wtable[1] * time;\nend PKL15;\n",
-                                      &uns);
-  YMC_CHECK(uns);
-  YMC_CHECK_EQ(out, std::string("<unsupported:constant user call after structural substitution>"));
+  // 向量化调用的输入是内建标量的短类派生（`input Rpm rpm`，MSL from_rpm）：omc 逐元素求值后照打函数定义（PKL 探针 PKL15，同
+  // V4g；标量化在收函数之后，NFInst.mo:219 / :231 v1.25.0）。此前求值器不认这种向量化、静默丢了函数定义。期望 = omc 1.25.0
+  // 实跑（2026-10-16，探针 pk-p20 PKL15）。
+  YMC_CHECK_EQ(flatten_src("package P15\n  type Rpm = Real(final quantity = \"AngularVelocity\", final unit = \"rev/min\");\n"
+                           "  function from_rpm\n    input Rpm rpm;\n    output Real rs;\n  algorithm\n    rs := 0.1 * rpm;\n"
+                           "  end from_rpm;\nend P15;\nmodel PKL15\n  import P15.from_rpm;\n"
+                           "  parameter Real wtable[:] = from_rpm({1500, 1496});\n  Real y = wtable[1] * time;\nend PKL15;\n"),
+               std::string("function P15.from_rpm\n  input Real rpm(quantity = \"AngularVelocity\", unit = \"rev/min\");\n"
+                           "  output Real rs;\nalgorithm\n  rs := 0.1 * rpm;\nend P15.from_rpm;\n\nclass PKL15\n"
+                           "  parameter Real wtable[1] = 150.0;\n  parameter Real wtable[2] = 149.6;\n"
+                           "  Real y = wtable[1] * time;\nend PKL15;\n"));
 }
 
 YMC_TEST(flatten_instream_in_comprehension) {
@@ -9316,6 +9317,149 @@ YMC_TEST(flatten_protected_first_part_allowed) {
   YMC_CHECK_EQ(flatten_src("package PKAP8\nprotected\n  constant Real s = 2.0;\npublic\n  constant Real t = s * 3;\nend PKAP8;\n"
                            "model PKA8\n  parameter Real y = PKAP8.t;\nend PKA8;\n"),
                std::string("class PKA8\n  parameter Real y = 6.0;\nend PKA8;\n"));
+}
+
+YMC_TEST(flatten_vectorized_call_param_array_keeps_function) {
+  // 参数数组绑定里的向量化调用（定型成 `{f(a[$i1]) for $i1 in 1:n}`，NFCall.mo:2851-2907 v1.25.0）：化简期推导式原样留着
+  //（simplifyArrayConstructor，NFSimplifyExp.mo:583-637），收函数（NFInst.mo:219）时还在 → 照打 f；标量化（:231）逐元素展开时
+  // 才化简求值（NFExpandExp.mo:486-492）。嵌在运算里的（VQ5）、部分元素求不出的（VQ7 `f(a)` 留调用、`f(3.0)` → 6.0）同。期望 =
+  // omc 1.25.0 实跑（2026-10-16，探针 pk-p27 VQ1 / VQ5 / VQ7）。
+  YMC_CHECK_EQ(flatten_src("model VQ1\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n  end f;\n"
+                           "  parameter Real p[2] = f({1, 2});\n  Real y = p[1] * time;\nend VQ1;\n"),
+               std::string("function VQ1.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend VQ1.f;\n\nclass VQ1\n"
+                           "  parameter Real p[1] = 2.0;\n  parameter Real p[2] = 4.0;\n  Real y = p[1] * time;\nend VQ1;\n"));
+  YMC_CHECK_EQ(flatten_src("model VQ5\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n  end f;\n"
+                           "  parameter Real p[2] = 2 * f({1, 2});\n  Real y = p[1] * time;\nend VQ5;\n"),
+               std::string("function VQ5.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend VQ5.f;\n\nclass VQ5\n"
+                           "  parameter Real p[1] = 4.0;\n  parameter Real p[2] = 8.0;\n  Real y = p[1] * time;\nend VQ5;\n"));
+  YMC_CHECK_EQ(flatten_src("model VQ7\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n  end f;\n"
+                           "  parameter Real a = 2;\n  parameter Real p[2] = f({a, 3});\n  Real y = p[1] * time;\nend VQ7;\n"),
+               std::string("function VQ7.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend VQ7.f;\n\nclass VQ7\n"
+                           "  parameter Real a = 2.0;\n  parameter Real p[1] = VQ7.f(a);\n  parameter Real p[2] = 6.0;\n"
+                           "  Real y = p[1] * time;\nend VQ7;\n"));
+}
+
+YMC_TEST(flatten_vectorized_call_folded_before_collect) {
+  // 收函数之前就化掉的向量化调用不打函数：迭代范围长 1（simplifyArrayConstructor 的 dim_size == 1 支，NFSimplifyExp.mo:609-615
+  // v1.25.0，VQ2）、sum 化简时展开实参（simplifySumProduct :418-454，VQ3 `2.0 + 4.0`）、代入结构参数后以迭代变量作下标的数组
+  // 各元素相同（simplifySubscriptedExp :1346-1379，VQ45 `f({n, 2})`、n = 2）。期望 = omc 1.25.0 实跑（2026-10-16，探针 pk-p27
+  // VQ2 / VQ3 / VQ45）。
+  YMC_CHECK_EQ(flatten_src("model VQ2\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n  end f;\n"
+                           "  parameter Real p[1] = f({3});\n  Real y = p[1] * time;\nend VQ2;\n"),
+               std::string("class VQ2\n  parameter Real p[1] = 6.0;\n  Real y = p[1] * time;\nend VQ2;\n"));
+  YMC_CHECK_EQ(flatten_src("model VQ3\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n  end f;\n"
+                           "  parameter Real s = sum(f({1, 2}));\n  Real y = s * time;\nend VQ3;\n"),
+               std::string("class VQ3\n  parameter Real s = 2.0 + 4.0;\n  Real y = s * time;\nend VQ3;\n"));
+  YMC_CHECK_EQ(flatten_src("model VQ45\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end f;\n  parameter Integer n = 2;\n  Real z[n];\n  parameter Real p[2] = f({n, 2});\n"
+                           "  Real y = p[1] * time;\nequation\n  z = {time, time};\nend VQ45;\n"),
+               std::string("class VQ45\n  final parameter Integer n = 2;\n  Real z[1];\n  Real z[2];\n  parameter Real p[1] = 4.0;\n"
+                           "  parameter Real p[2] = 4.0;\n  Real y = p[1] * time;\nequation\n  z[1] = time;\n  z[2] = time;\n"
+                           "end VQ45;\n"));
+}
+
+YMC_TEST(flatten_vectorized_call_param_evaluated_early) {
+  // 参数数组的绑定在收函数之前被整个求值成字面量 → 不打函数：定型期被读（维，Ceval.evalComponentBinding 存回组件，
+  // NFCeval.mo:382-387 v1.25.0，VQ21）；结构参数且推导式嵌在运算里（EvalConstants，VQ47）或外面包着 Integer → Real 的转型（VQ71）。
+  // 整个绑定就是推导式的结构参数照打（VQ14，同 VE8）。期望 = omc 1.25.0 实跑（2026-10-16，探针 pk-p27 VQ21 / VQ47 / VQ71 / VQ14）。
+  YMC_CHECK_EQ(flatten_src("model VQ21\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end f;\n  parameter Real p[2] = f({1, 2});\n  parameter Integer n = integer(p[1]);\n  Real x[n];\n"
+                           "equation\n  x = fill(time, n);\nend VQ21;\n"),
+               std::string("class VQ21\n  final parameter Real p[1] = 2.0;\n  final parameter Real p[2] = 4.0;\n"
+                           "  final parameter Integer n = 2;\n  Real x[1];\n  Real x[2];\nequation\n  x[1] = time;\n  x[2] = time;\n"
+                           "end VQ21;\n"));
+  YMC_CHECK_EQ(flatten_src("model VQ47\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end f;\n  parameter Real p[2] = 2 * f({1, 2}) annotation(Evaluate = true);\n  Real y = p[1] * time;\n"
+                           "end VQ47;\n"),
+               std::string("class VQ47\n  final parameter Real p[1] = 4.0;\n  final parameter Real p[2] = 8.0;\n"
+                           "  Real y = 4.0 * time;\nend VQ47;\n"));
+  YMC_CHECK_EQ(flatten_src("model VQ71\n  function g\n    input Integer x;\n    output Integer y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end g;\n  parameter Real p[2] = g({1, 2}) annotation(Evaluate = true);\n  Real y = p[1] * time;\n"
+                           "end VQ71;\n"),
+               std::string("class VQ71\n  final parameter Real p[1] = 2.0;\n  final parameter Real p[2] = 4.0;\n"
+                           "  Real y = 2.0 * time;\nend VQ71;\n"));
+  YMC_CHECK_EQ(flatten_src("model VQ14\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end f;\n  parameter Real p[2] = f({1, 2}) annotation(Evaluate = true);\n  Real y = p[1] * time;\n"
+                           "end VQ14;\n"),
+               std::string("function VQ14.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend VQ14.f;\n\n"
+                           "class VQ14\n  final parameter Real p[1] = 2.0;\n  final parameter Real p[2] = 4.0;\n"
+                           "  Real y = 2.0 * time;\nend VQ14;\n"));
+}
+
+YMC_TEST(flatten_vectorized_call_in_attribute) {
+  // 数组属性值里的向量化调用：标量化时逐元素求值（scalarizeTypeAttributes，NFScalarize.mo:245-264 v1.25.0 →
+  // ExpressionIterator.fromBinding / fromExp → ExpandExp.expand），照打函数（VQ4）；代入结构参数后各元素相同的照样在化简期化掉
+  //（VQ74）。期望 = omc 1.25.0 实跑（2026-10-16，探针 pk-p27 VQ4 / VQ74）。
+  YMC_CHECK_EQ(flatten_src("model VQ4\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n  end f;\n"
+                           "  Real x[2](start = f({1, 2}));\nequation\n  der(x) = -x;\nend VQ4;\n"),
+               std::string("function VQ4.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend VQ4.f;\n\nclass VQ4\n"
+                           "  Real x[1](start = 2.0);\n  Real x[2](start = 4.0);\nequation\n  der(x[1]) = -x[1];\n"
+                           "  der(x[2]) = -x[2];\nend VQ4;\n"));
+  YMC_CHECK_EQ(flatten_src("model VQ74\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end f;\n  parameter Integer n = 2;\n  Real z[n];\n  Real x[2](start = f({n, 2}));\nequation\n"
+                           "  der(x) = -x;\n  z = {time, time};\nend VQ74;\n"),
+               std::string("class VQ74\n  final parameter Integer n = 2;\n  Real z[1];\n  Real z[2];\n  Real x[1](start = 4.0);\n"
+                           "  Real x[2](start = 4.0);\nequation\n  der(x[1]) = -x[1];\n  der(x[2]) = -x[2];\n  z[1] = time;\n"
+                           "  z[2] = time;\nend VQ74;\n"));
+}
+
+YMC_TEST(flatten_vectorized_call_structural_args_keep_function) {
+  // 实参在压平末尾代入结构参数后才成字面量的向量化调用（参数本身不是结构参数）：omc 的 EvalConstants 只代入、推导式照留到收
+  // 函数之后 → 照打 f。此前末尾代入求值后把 f 丢了（静默错）。期望 = omc 1.25.0 实跑（2026-10-16，探针 pk-p27 VQ28 / VQ49）。
+  YMC_CHECK_EQ(flatten_src("model VQ28\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end f;\n  parameter Real a = 2 annotation(Evaluate = true);\n"
+                           "  parameter Real b = 3 annotation(Evaluate = true);\n  parameter Real p[2] = f({a, b});\n"
+                           "  Real y = p[1] * time;\nend VQ28;\n"),
+               std::string("function VQ28.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend VQ28.f;\n\n"
+                           "class VQ28\n  final parameter Real a = 2.0;\n  final parameter Real b = 3.0;\n"
+                           "  parameter Real p[1] = 4.0;\n  parameter Real p[2] = 6.0;\n  Real y = p[1] * time;\nend VQ28;\n"));
+  YMC_CHECK_EQ(flatten_src("model VQ49\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end f;\n  parameter Real a[3] = {1, 2, 3};\n  parameter Real p[3] = f(a);\n  Real z[integer(a[1])];\n"
+                           "equation\n  z = {p[2] * time};\nend VQ49;\n"),
+               std::string("function VQ49.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend VQ49.f;\n\n"
+                           "class VQ49\n  final parameter Real a[1] = 1.0;\n  final parameter Real a[2] = 2.0;\n"
+                           "  final parameter Real a[3] = 3.0;\n  parameter Real p[1] = 2.0;\n  parameter Real p[2] = 4.0;\n"
+                           "  parameter Real p[3] = 6.0;\n  Real z[1];\nequation\n  z[1] = p[2] * time;\nend VQ49;\n"));
+}
+
+YMC_TEST(flatten_vectorized_call_unverified_positions_skip) {
+  // 未核实 / 不复刻的位置照旧 SKIP：if 表达式的两支 omc 只取下标、不化简（VQ18 `p[1] = if b then VQ18.f({1.0, 2.0}[1]) else
+  // 0.0`）；常量数组（定型期有没有被求值过 ymc 不记，VQ41 被维读到就不打 f、VQ11 照打）。2026-10-16，探针 pk-p27 VQ18 / VQ11。
+  YMC_CHECK_EQ(flatten_src("model VQ18\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end f;\n  parameter Boolean b = true;\n  parameter Real p[2] = if b then f({1, 2}) else {0, 0};\n"
+                           "  Real y = p[1] * time;\nend VQ18;\n"),
+               std::string("<unsupported:constant user call after structural substitution>"));
+  YMC_CHECK_EQ(flatten_src("model VQ11\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end f;\n  constant Real c[2] = f({1, 2});\n  Real y = c[1] * time;\nend VQ11;\n"),
+               std::string("<unsupported:constant user call after structural substitution>"));
+}
+
+YMC_TEST(flatten_split_modifier_nested_array_call) {
+  // 组件数组的修饰按元素分发、值是嵌着数组值用户函数调用的取负 / 四则运算（MSL PolyphaseTwoLevel 的 `sine[m](phase =
+  // -symmetricOrientation(m))`）：实参会成字面量（m 结构参数）的，omc 化简取元素式时先求值调用、再取负 / 运算、取元素
+  //（simplifySubscriptedExp，NFSimplifyExp.mo:1346-1379 v1.25.0），化简在收函数之前，函数不打；取负不护零（`-0.0`）。期望 =
+  // omc 1.25.0 实跑（2026-10-16，探针 pk-p27 VQS1 / VQS4）。实参不会成字面量的 omc 打 `(-VQS10.so2(k))[1]`（VQS10），不复刻 → SKIP。
+  YMC_CHECK_EQ(flatten_src("model VQS1\n  function so\n    input Integer m;\n    output Real o[m];\n  algorithm\n"
+                           "    o := {(k - 1) * 2 / m for k in 1:m};\n  end so;\n  model S\n    parameter Real phase = 0;\n"
+                           "    Real y = sin(time + phase);\n  end S;\n  parameter Integer m = 3 annotation(Evaluate = true);\n"
+                           "  S s[m](phase = -so(m));\nend VQS1;\n"),
+               std::string("class VQS1\n  final parameter Integer m = 3;\n  parameter Real s[1].phase = -0.0;\n"
+                           "  Real s[1].y = sin(time + s[1].phase);\n  parameter Real s[2].phase = -0.6666666666666666;\n"
+                           "  Real s[2].y = sin(time + s[2].phase);\n  parameter Real s[3].phase = -1.3333333333333333;\n"
+                           "  Real s[3].y = sin(time + s[3].phase);\nend VQS1;\n"));
+  YMC_CHECK_EQ(flatten_src("model VQS4\n  function so\n    input Integer m;\n    output Real o[m];\n  algorithm\n"
+                           "    o := {(k - 1) * 2 / m for k in 1:m};\n  end so;\n  model S\n    parameter Real phase = 0;\n"
+                           "    Real y = sin(time + phase);\n  end S;\n  parameter Integer m = 3 annotation(Evaluate = true);\n"
+                           "  S s[m](phase = 2 * so(m));\nend VQS4;\n"),
+               std::string("class VQS4\n  final parameter Integer m = 3;\n  parameter Real s[1].phase = 0.0;\n"
+                           "  Real s[1].y = sin(time + s[1].phase);\n  parameter Real s[2].phase = 1.3333333333333333;\n"
+                           "  Real s[2].y = sin(time + s[2].phase);\n  parameter Real s[3].phase = 2.6666666666666665;\n"
+                           "  Real s[3].y = sin(time + s[3].phase);\nend VQS4;\n"));
+  YMC_CHECK_EQ(flatten_src("model VQS10\n  function so2\n    input Real x;\n    output Real o[3];\n  algorithm\n"
+                           "    o := {x, 2 * x, 3 * x};\n  end so2;\n  model S\n    parameter Real phase = 0;\n"
+                           "    Real y = sin(time + phase);\n  end S;\n  parameter Real k = 2;\n  S s[3](phase = -so2(k));\n"
+                           "end VQS10;\n"),
+               std::string("<unsupported:function: so2>"));
 }
 
 YMC_TEST_MAIN

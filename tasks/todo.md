@@ -2461,6 +2461,24 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       探针 pk-p26（43）；单测 +7。slice 700 例 FAIL 0（oracle=live 不一致 0）；scodeinst 660、testsuite 1827（均不变）/ FAIL 0；
       **MSL 460→463**（FluxTubes Hysteresis.SinglePhaseTransformerWithHysteresis1、MultiBody Elementary.RollingWheelSetDriving /
       RollingWheelSetPulling）；探针 9871→9914；单测 423→430。
+- [x] (66s) 向量化调用逐元素求值（V4g 规矩落地，2026-10-16）：`parameter Real wtable[:] = from_rpm({1500, …})` 定型成
+      `array(from_rpm({…}[$i1]) for $i1 in 1:n)`（NFCall.vectorizeCall :2851-2907）；化简期推导式原样留着（simplifyArrayConstructor
+      :583-637，范围长 1 的除外）、收函数（NFInst.mo:219）时还在 → 函数照打，标量化（:231）逐元素展开时才求值（expandArrayConstructor2
+      :486-492）→ `wtable[1] = 157.07…`。只在核实过的展开处放开（参数数组的绑定、fixed / stateSelect 以外的数组属性值、sum / product
+      的实参——后者化简期就求值、函数不打），且到推导式的路径只经运算 / 取负 / 转型 / 数组字面量；函数去留在压平末尾定（vec_kept_fns：
+      定型期被读过的参数、嵌在运算里的结构参数被 EvalConstants 整个求值 → 不打；代入结构参数后各元素实参全同 → simplifySubscriptedExp
+      化掉 → 不打；结构参数整个绑定就是推导式的照打——这条只有探针为据，源码里没找到成因）。if 表达式里（omc 只取下标不化简）、
+      常量数组（定型期是否求值过 ymc 不记）照旧 SKIP。顺带修了 3 处结构代入求值后丢函数定义的静默错（VQ28 / VQ49 / VQ81）。
+      另：组件数组修饰按元素分发的基是取负 / 四则运算里的数组调用（MSL PolyphaseTwoLevel 的 `sine[m](phase =
+      -symmetricOrientation(m))`）：实参折得成常量的先求值再取元素（simplifySubscriptedExp :1346-1379）→ `sine[1].phase = -0.0`、
+      函数不打（VQS1-15；实参折不成的 omc 留 `(-f(k))[1]`，照旧 SKIP）。
+      探针 pk-p27（90）、旧组 pk-p20 / v4-c / v4-g / ve-p1 SKIP→PASS 15；单测 +7、改 2（原断言 SKIP 的改成 omc 实跑）。
+      slice 700 例 FAIL 0（oracle=live 不一致 0）；scodeinst 660、testsuite 1827（均不变）/ FAIL 0；**MSL 463→467**（Electrical.
+      Machines / Magnetic.FundamentalWave 的 IMC_withLosses、PowerConverters PolyphaseTwoLevel_R / _RL；QuasiStatic 的 IMC_withLosses
+      卡到下一处 when 体里的 if 方程）；探针 9914→10004；单测 430→437。
+- [ ] (66t 候选) 已有的静默 FAIL（66s 调查时发现）：书写的推导式作参数数组绑定 `parameter Real q[2] = {f(i) for i in 1:2}`——
+      omc 打 `function T4.f` 且 `q[1] = 2.0`，ymc 同值但丢了函数定义（comprehension_elem 逐元素实例化时 call() 就把 `f(1)` 求值了，
+      函数没人引用）。复现 `$S/pkr66s/t/T4.mo`；现有语料没撞上（FAIL 0）。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。
