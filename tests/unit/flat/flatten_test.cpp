@@ -9646,4 +9646,157 @@ YMC_TEST(flatten_if_equation_in_when_mismatch) {
                std::string("<unsupported:if-equation branches in when solve different variables>"));
 }
 
+YMC_TEST(flatten_forward_structural_record_binding) {
+  // Evaluate = true 的记录参数、整体绑定是声明在后的记录参数（MSL Spice3 Spice3Benchmark* 的 `Q1(modelcard = MOD1)`、MOD1 声明
+  // 在后）：omc 先定型全部组件再压平（NFInst.mo:197-200 v1.25.0），压平时 Ceval 整体绑定成记录值、拆字段（flattenComplexComponent，
+  // NFFlatten.mo:961-964）——没有先后问题。记录的常量字段照取（SQ5；markExp 只标 PARAMETER 组件，NFStructural.mo:246-291）；求值
+  // 存回，声明在后的 M.b 打求得的值（SQF1，evalComponentBinding，NFCeval.mo:382-387）；读它的 Evaluate = true 记录绑定、再往下的
+  // final 记录照常求值（SQF8，MSL BJT2 的 p / p1 同构）。期望 = omc 1.25.0 实跑（2026-10-16，探针 pk-p29 SQ5 / SQF1 / SQF8）。
+  YMC_CHECK_EQ(flatten_src("package SQ5P\n  record MC\n    parameter Real a = 1;\n    constant Real c = -1e40;\n"
+                           "    parameter Real b = 2;\n  end MC;\n  record MC2\n    extends MC;\n  end MC2;\n"
+                           "  model Dev\n    parameter MC mc annotation(Evaluate = true);\n"
+                           "    Real x = mc.a * time;\n  end Dev;\nend SQ5P;\nmodel SQ5\n  SQ5P.Dev d(mc = M);\n"
+                           "  parameter SQ5P.MC2 M(a = 3);\nend SQ5;\n"),
+               std::string("class SQ5\n  parameter Real d.mc.a = 3.0;\n  constant Real d.mc.c = -1e40;\n"
+                           "  parameter Real d.mc.b = 2.0;\n  Real d.x = d.mc.a * time;\n"
+                           "  parameter Real M.a = 3.0;\n  constant Real M.c = -1e40;\n  parameter Real M.b = 2.0;\n"
+                           "end SQ5;\n"));
+  YMC_CHECK_EQ(flatten_src("package SQF1P\n  record MC\n    parameter Real a = 1;\n    parameter Real b = 2 * a;\n"
+                           "  end MC;\n  model Dev\n    parameter MC mc annotation(Evaluate = true);\n"
+                           "    Real x = mc.b * time;\n  end Dev;\nend SQF1P;\nmodel SQF1\n  SQF1P.Dev d(mc = M);\n"
+                           "  parameter SQF1P.MC M(a = 3);\nend SQF1;\n"),
+               std::string("class SQF1\n  parameter Real d.mc.a = 3.0;\n  parameter Real d.mc.b = 6.0;\n"
+                           "  Real d.x = d.mc.b * time;\n  parameter Real M.a = 3.0;\n  parameter Real M.b = 6.0;\n"
+                           "end SQF1;\n"));
+  YMC_CHECK_EQ(flatten_src("package SQF8P\n  record MC\n    parameter Real a = 1;\n    constant Real c = -1e40;\n"
+                           "    parameter Real b = 2;\n  end MC;\n  record P\n    Real u;\n    Real v;\n  end P;\n"
+                           "  function ren\n    input MC m;\n    output P p;\n  algorithm\n    p.u := m.a;\n"
+                           "    p.v := m.b + 1;\n  end ren;\n  function g\n    input P p;\n    output P q;\n"
+                           "  algorithm\n    q.u := 2 * p.u;\n    q.v := p.v;\n  end g;\n  model Dev\n"
+                           "    parameter MC mc annotation(Evaluate = true);\n"
+                           "    final parameter P p = ren(mc) annotation(Evaluate = true);\n"
+                           "    final parameter P p1 = g(p);\n    Real x;\n  equation\n    x * p1.u = time;\n"
+                           "  end Dev;\nend SQF8P;\nmodel SQF8\n  SQF8P.Dev d(mc = M);\n"
+                           "  parameter SQF8P.MC M(a = 3);\nend SQF8;\n"),
+               std::string("class SQF8\n  parameter Real d.mc.a = 3.0;\n  constant Real d.mc.c = -1e40;\n"
+                           "  parameter Real d.mc.b = 2.0;\n  final parameter Real d.p.u = 3.0;\n"
+                           "  final parameter Real d.p.v = 3.0;\n  final parameter Real d.p1.u = 6.0;\n"
+                           "  final parameter Real d.p1.v = 3.0;\n  Real d.x;\n  parameter Real M.a = 3.0;\n"
+                           "  constant Real M.c = -1e40;\n  parameter Real M.b = 2.0;\nequation\n"
+                           "  d.x * d.p1.u = time;\nend SQF8;\n"));
+}
+
+YMC_TEST(flatten_record_binding_field_count_mismatch) {
+  // 记录整体绑定求得的记录值与目标记录类的字段个数不同（M 是多一个字段的子记录）：omc 定型报类型不符（matchComplexTypes，
+  // NFTypeCheck.mo:1888-1892 v1.25.0；探针 pk-p29 SQF14b，此前 ymc 照拆字段打出结果，ACCEPTS-INVALID）。
+  YMC_CHECK_EQ(flatten_src("package SQF14bP\n  record MC\n    parameter Real a = 1;\n    parameter Real b = 2;\n"
+                           "  end MC;\n  record MCX\n    extends MC;\n    parameter Real z = 7;\n  end MCX;\n"
+                           "  model Dev\n    parameter MC mc annotation(Evaluate = true);\n"
+                           "    Real x = mc.a * time;\n  end Dev;\nend SQF14bP;\nmodel SQF14b\n"
+                           "  parameter SQF14bP.MCX M(a = 3);\n  SQF14bP.Dev d(mc = M);\nend SQF14b;\n"),
+               std::string("<unsupported:record function fold field>"));
+}
+
+YMC_TEST(flatten_unassigned_record_field_unfixed) {
+  // 记录整体绑定求值成记录值、函数输出里没赋到的字段（buildRecordBinding 填 EMPTY，NFEvalFunction.mo:373-421 v1.25.0）：拆字段时
+  // 给 EMPTY_BINDING（getRecordBindings，NFFlatten.mo:897-900），flattenSimpleComponent 当 unfix——无绑定、parameter 补
+  // fixed = false（按属性序插在 start 之后，SQX1）、不查无绑定（String 没有 fixed 属性照印，SQX3），嵌套记录同样（SQX6），常量实参
+  // 折叠的同样（SQU19）（:690-692 / :737-740 / :747-751；MSL Spice3 Graetz 的 `D1.c2.m_tBrkdwnV`）。SQX1 此前打
+  // `r.y(start = 3.0)`（静默错）。期望 = omc 1.25.0 实跑（2026-10-16，探针 pk-p29 SQX1 / SQX3 / SQX6 / SQU19）。
+  YMC_CHECK_EQ(flatten_src("package SQX1P\n  record R\n    Real x;\n    Real y(start = 3);\n  end R;\n  function f\n"
+                           "    input Real a;\n    output R r;\n  algorithm\n    r.x := a;\n    r.x := 2 * r.x;\n"
+                           "  end f;\nend SQX1P;\nmodel SQX1\n  parameter Real p = 2;\n"
+                           "  final parameter SQX1P.R r = SQX1P.f(p);\n  Real z = r.x * time;\nend SQX1;\n"),
+               std::string("class SQX1\n  parameter Real p = 2.0;\n  final parameter Real r.x = 4.0;\n"
+                           "  final parameter Real r.y(start = 3.0, fixed = false);\n  Real z = r.x * time;\n"
+                           "end SQX1;\n"));
+  YMC_CHECK_EQ(flatten_src("package SQX3P\n  type E = enumeration(a, b);\n  record R\n    Real x;\n    Integer i;\n"
+                           "    Boolean b;\n    String s;\n    E e;\n  end R;\n  function f\n    input Real a;\n"
+                           "    output R r;\n  algorithm\n    r.x := a;\n    r.x := 2 * r.x;\n  end f;\nend SQX3P;\n"
+                           "model SQX3\n  parameter Real p = 2;\n  final parameter SQX3P.R r = SQX3P.f(p);\n"
+                           "  Real z = r.x * time;\nend SQX3;\n"),
+               std::string("class SQX3\n  parameter Real p = 2.0;\n  final parameter Real r.x = 4.0;\n"
+                           "  final parameter Integer r.i(fixed = false);\n"
+                           "  final parameter Boolean r.b(fixed = false);\n  final parameter String r.s;\n"
+                           "  final parameter enumeration(a, b) r.e(fixed = false);\n  Real z = r.x * time;\n"
+                           "end SQX3;\n"));
+  YMC_CHECK_EQ(flatten_src("package SQX6P\n  record R\n    Real x;\n    Real y;\n  end R;\n  record O\n    R r;\n"
+                           "    Real w;\n  end O;\n  function f\n    input Real a;\n    output O o;\n  algorithm\n"
+                           "    o.w := a;\n    o.w := 2 * o.w;\n  end f;\nend SQX6P;\nmodel SQX6\n"
+                           "  parameter Real p = 2;\n  final parameter SQX6P.O o = SQX6P.f(p);\n"
+                           "  Real z = o.w * time;\nend SQX6;\n"),
+               std::string("class SQX6\n  parameter Real p = 2.0;\n  final parameter Real o.r.x(fixed = false);\n"
+                           "  final parameter Real o.r.y(fixed = false);\n  final parameter Real o.w = 4.0;\n"
+                           "  Real z = o.w * time;\nend SQX6;\n"));
+  YMC_CHECK_EQ(flatten_src("package SQU19P\n  record R\n    Real x;\n    Real y;\n  end R;\n  function f\n"
+                           "    input Real a;\n    output R r;\n  algorithm\n    r.x := a;\n  end f;\nend SQU19P;\n"
+                           "model SQU19\n  final parameter SQU19P.R r = SQU19P.f(2);\n  Real z = r.x * time;\n"
+                           "end SQU19;\n"),
+               std::string("class SQU19\n  final parameter Real r.x = 2.0;\n"
+                           "  final parameter Real r.y(fixed = false);\n  Real z = r.x * time;\nend SQU19;\n"));
+}
+
+YMC_TEST(flatten_unassigned_record_field_skip) {
+  // 未复刻的照旧不出结果：下游函数照搬 EMPTY（`s.y := r.y`；NFCeval.evalExp 的 else 支原样返回，NFCeval.mo:240 v1.25.0，omc 打
+  // `s.y(fixed = false)`，ymc 读到即求值失败，SQX15）；读它的 Evaluate = true 参数（omc 定型期顺父记录的绑定判它固定，
+  // isComponentBindingNotFixed，NFStructural.mo:128-158 → 它成结构参数、不补 fixed → 报错，SQX11）。2026-10-16，探针 pk-p29。
+  YMC_CHECK_EQ(flatten_src("package SQX15P\n  record R\n    Real x;\n    Real y;\n  end R;\n  function f\n"
+                           "    input Real a;\n    output R r;\n  algorithm\n    r.x := a;\n    r.x := 2 * r.x;\n"
+                           "  end f;\n  function g\n    input R r;\n    output R s;\n  algorithm\n    s.x := r.x;\n"
+                           "    s.y := r.y;\n  end g;\nend SQX15P;\nmodel SQX15\n  parameter Real p = 2;\n"
+                           "  final parameter SQX15P.R r = SQX15P.f(p);\n"
+                           "  final parameter SQX15P.R s = SQX15P.g(r);\n  Real z = s.x * time;\nend SQX15;\n"),
+               std::string("<unsupported:record binding reads unassigned value>"));
+  YMC_CHECK_EQ(flatten_src("package SQX11P\n  record R\n    Real x;\n    Real y;\n  end R;\n  function f\n"
+                           "    input Real a;\n    output R r;\n  algorithm\n    r.x := a;\n    r.x := 2 * r.x;\n"
+                           "  end f;\nend SQX11P;\nmodel SQX11\n  parameter Real p = 2;\n"
+                           "  final parameter SQX11P.R r = SQX11P.f(p);\n"
+                           "  parameter Real q = r.y * 2 annotation(Evaluate = true);\n  Real z = r.x * time;\n"
+                           "end SQX11;\n"),
+               std::string("<unsupported:Evaluate annotation>"));
+}
+
+YMC_TEST(flatten_record_binding_forced_inline_recursion) {
+  // final parameter 记录的调用绑定、函数唯一的语句给输出的字段赋值（`r.x := a`）：omc 强制内联时 getOutputExp 给回原调用、随即
+  // 又对它 inlineCallExp（NFInline.mo:159-160 / :253-271 v1.25.0）→ 无限递归，崩溃无输出（探针 pk-p29 SQW1；此前 ymc 照
+  // tryEvalExp 打出结果，ACCEPTS-INVALID）。
+  YMC_CHECK_EQ(flatten_src("package SQW1P\n  record R\n    Real x;\n  end R;\n  function f\n    input Real a;\n"
+                           "    output R r;\n  algorithm\n    r.x := a;\n  end f;\nend SQW1P;\nmodel SQW1\n"
+                           "  parameter Real p = 2;\n  final parameter SQW1P.R r = SQW1P.f(p);\n"
+                           "  Real z = r.x * time;\nend SQW1;\n"),
+               std::string("<unsupported:record binding forced inline recursion>"));
+}
+
+YMC_TEST(flatten_tuple_equation_record_first_output) {
+  // 多输出函数、首输出是记录（MSL Spice3 DIODE 的 `(cc, m_dCap) = diodeNoBypassCode(…)`）：同单输出记录调用——元组方程原样
+  // （SQT1），单个目标取首元 `f(time)[1]`（SQT3），参数绑定挪成初始方程同样（SQT7）。期望 = omc 1.25.0 实跑（2026-10-16，探针
+  // pk-p29 SQT1 / SQT3 / SQT7）。
+  YMC_CHECK_EQ(flatten_src("package SQT1P\n  record R\n    Real a;\n  end R;\n  function f\n    input Real x;\n"
+                           "    output R r;\n    output Real y;\n  algorithm\n    r.a := x;\n    y := 2 * x;\n"
+                           "  end f;\nend SQT1P;\nmodel SQT1\n  SQT1P.R r;\n  Real y;\nequation\n"
+                           "  (r, y) = SQT1P.f(time);\nend SQT1;\n"),
+               std::string("function SQT1P.R \"Automatically generated record constructor for SQT1P.R\"\n"
+                           "  input Real a;\n  output R res;\nend SQT1P.R;\n\nfunction SQT1P.f\n  input Real x;\n"
+                           "  output SQT1P.R r;\n  output Real y;\nalgorithm\n  r.a := x;\n  y := 2.0 * x;\n"
+                           "end SQT1P.f;\n\nclass SQT1\n  Real r.a;\n  Real y;\nequation\n  (r, y) = SQT1P.f(time);\n"
+                           "end SQT1;\n"));
+  YMC_CHECK_EQ(flatten_src("package SQT3P\n  record R\n    Real a;\n  end R;\n  function f\n    input Real x;\n"
+                           "    output R r;\n    output Real y;\n  algorithm\n    r.a := x;\n    y := 2 * x;\n"
+                           "  end f;\nend SQT3P;\nmodel SQT3\n  SQT3P.R r;\nequation\n  r = SQT3P.f(time);\n"
+                           "end SQT3;\n"),
+               std::string("function SQT3P.R \"Automatically generated record constructor for SQT3P.R\"\n"
+                           "  input Real a;\n  output R res;\nend SQT3P.R;\n\nfunction SQT3P.f\n  input Real x;\n"
+                           "  output SQT3P.R r;\n  output Real y;\nalgorithm\n  r.a := x;\n  y := 2.0 * x;\n"
+                           "end SQT3P.f;\n\nclass SQT3\n  Real r.a;\nequation\n  r = SQT3P.f(time)[1];\nend SQT3;\n"));
+  YMC_CHECK_EQ(flatten_src("package SQT7P\n  record R\n    Real a;\n  end R;\n  function f\n    input Real x;\n"
+                           "    output R r;\n    output Real y;\n  algorithm\n    r.a := x;\n    y := 2 * x;\n"
+                           "  end f;\nend SQT7P;\nmodel SQT7\n  parameter Real p = 2;\n"
+                           "  parameter SQT7P.R r = SQT7P.f(p);\nend SQT7;\n"),
+               std::string("function SQT7P.R \"Automatically generated record constructor for SQT7P.R\"\n"
+                           "  input Real a;\n  output R res;\nend SQT7P.R;\n\nfunction SQT7P.f\n  input Real x;\n"
+                           "  output SQT7P.R r;\n  output Real y;\nalgorithm\n  r.a := x;\n  y := 2.0 * x;\n"
+                           "end SQT7P.f;\n\nclass SQT7\n  parameter Real p = 2.0;\n"
+                           "  parameter Real r.a(fixed = false);\ninitial equation\n  r = SQT7P.f(p)[1];\nend SQT7;\n"));
+}
+
 YMC_TEST_MAIN

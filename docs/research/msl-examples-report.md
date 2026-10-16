@@ -759,3 +759,10 @@ when 体里的 if 方程照顶层压平（结构条件选支）；书写的推�
 转 PASS：Magnetic.QuasiStatic.FundamentalWave.Examples.BasicMachines.InductionMachines.IMC_withLosses。FluxTubes Hysteresis.
 HysteresisModelComparison 越过 when 里的 if 方程与切片界里的 `end`，卡到下一处：when 里带 cat 支的数组 if 式。
 FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-16 66u 之后：PASS 472（+4）
+
+结构记录参数绑定到声明在后的记录（第一遍推后、第二遍再求）；函数求值出的记录里没赋到的字段照 EMPTY_BINDING 打（fixed = false）；
+首输出是记录的多输出调用。转 PASS：Electrical.Spice3.Examples.Spice3BenchmarkDifferentialPair、Spice3BenchmarkMosfetCharacterization、
+Spice3BenchmarkRtlInverter、Spice3BenchmarkFourBitBinaryAdder。Spice3 Graetz 卡到下一处：记录类型的算法赋值目标（R_SEMI 的
+`vp := resistorInitEquations(…)`）。FAIL / ACCEPTS-INVALID / CRASH 0。

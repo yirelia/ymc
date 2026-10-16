@@ -1,0 +1,2283 @@
+//// set: pk-p29 — Evaluate = true 的记录参数、整体绑定是声明在后的记录参数（MSL Spice3 Spice3Benchmark* 的 `Q1(modelcard = MOD1)`）：第一遍推后、第二遍带值求，记录的常量字段取第一遍的值（SQ1 / SQ5 / SQF*）；函数输出里没赋到的记录字段（EMPTY）→ 无绑定、parameter 补 fixed = false（SQX* / SQU*，MSL Graetz 的 `D1.c2.m_tBrkdwnV`）；omc 强制内联唯一语句给输出字段赋值的函数时无限递归崩溃（SQW* / SQU* / SQV*）；首输出是记录的多输出调用（SQT*，MSL DIODE 的 `(cc, m_dCap) = diodeNoBypassCode(…)`）；记录值字段个数不符照 omc 拒（SQF14 / SQF14b）
+//// model: SQ1
+package SQ1P
+  record MC
+    parameter Real a = 1;
+    parameter Real b = 2;
+  end MC;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    Real x = mc.a * time;
+  end Dev;
+end SQ1P;
+model SQ1
+  SQ1P.Dev d(mc = M);
+  parameter SQ1P.MC M(a = 3);
+end SQ1;
+//// model: SQ2
+package SQ2P
+  record MC
+    parameter Real a = 1;
+    parameter Real b = 2;
+  end MC;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    Real x = mc.a * time;
+  end Dev;
+end SQ2P;
+model SQ2
+  parameter SQ2P.MC M(a = 3);
+  SQ2P.Dev d(mc = M);
+end SQ2;
+//// model: SQ3
+package SQ3P
+  record MC
+    parameter Real a = 1;
+    constant Real c = -1e40;
+    parameter Real b = 2;
+  end MC;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    Real x = mc.a * time;
+  end Dev;
+end SQ3P;
+model SQ3
+  parameter SQ3P.MC M(a = 3);
+  SQ3P.Dev d(mc = M);
+end SQ3;
+//// model: SQ4
+package SQ4P
+  record MC
+    parameter Real a = 1;
+    parameter Real b = 2;
+  end MC;
+  record MC2
+    extends MC;
+  end MC2;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    Real x = mc.a * time;
+  end Dev;
+end SQ4P;
+model SQ4
+  parameter SQ4P.MC2 M(a = 3);
+  SQ4P.Dev d(mc = M);
+end SQ4;
+//// model: SQ5
+package SQ5P
+  record MC
+    parameter Real a = 1;
+    constant Real c = -1e40;
+    parameter Real b = 2;
+  end MC;
+  record MC2
+    extends MC;
+  end MC2;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    Real x = mc.a * time;
+  end Dev;
+end SQ5P;
+model SQ5
+  SQ5P.Dev d(mc = M);
+  parameter SQ5P.MC2 M(a = 3);
+end SQ5;
+//// model: SQF1
+package SQF1P
+  record MC
+    parameter Real a = 1;
+    parameter Real b = 2 * a;
+  end MC;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    Real x = mc.b * time;
+  end Dev;
+end SQF1P;
+model SQF1
+  SQF1P.Dev d(mc = M);
+  parameter SQF1P.MC M(a = 3);
+end SQF1;
+//// model: SQF2
+package SQF2P
+  record MC
+    parameter Real a = 1;
+    parameter Real b = 2 * a;
+  end MC;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    Real x = mc.b * time;
+  end Dev;
+end SQF2P;
+model SQF2
+  parameter SQF2P.MC M(a = 3);
+  SQF2P.Dev d(mc = M);
+end SQF2;
+//// model: SQF3
+package SQF3P
+  record MC
+    parameter Real a = 1;
+    parameter Real b = 2;
+  end MC;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    Real x = mc.a * time;
+  end Dev;
+end SQF3P;
+model SQF3
+  SQF3P.Dev d(mc = M);
+  parameter SQF3P.MC M(a = k);
+  parameter Real k = 3;
+end SQF3;
+//// model: SQF4
+package SQF4P
+  record MC
+    parameter Real a = 1;
+    parameter Real b = 2;
+  end MC;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    Real x = mc.a * time;
+  end Dev;
+end SQF4P;
+model SQF4
+  SQF4P.Dev d(mc = M);
+  parameter SQF4P.MC M = SQF4P.MC(a = 3);
+end SQF4;
+//// model: SQF5
+package SQF5P
+  record MC
+    parameter Real a = 1;
+    parameter Real b = 2;
+  end MC;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    Real x = mc.a * time;
+  end Dev;
+end SQF5P;
+model SQF5
+  SQF5P.Dev d(mc = M);
+  constant SQF5P.MC M(a = 3);
+end SQF5;
+//// model: SQF6
+package SQF6P
+  record MC
+    parameter Real a = 1;
+    parameter Real b = 2;
+  end MC;
+  record R2
+    MC m(a = 5);
+    Real w = 1;
+  end R2;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    Real x = mc.a * time;
+  end Dev;
+end SQF6P;
+model SQF6
+  SQF6P.Dev d(mc = r.m);
+  parameter SQF6P.R2 r;
+end SQF6;
+//// model: SQF7
+package SQF7P
+  record MC
+    parameter Real a = 1;
+    parameter Real b = 2;
+  end MC;
+  model Dev
+    parameter MC mc = M annotation(Evaluate = true);
+    parameter MC M(a = 4);
+    Real x = mc.a * time;
+  end Dev;
+end SQF7P;
+model SQF7
+  SQF7P.Dev d;
+end SQF7;
+//// model: SQF8
+package SQF8P
+  record MC
+    parameter Real a = 1;
+    constant Real c = -1e40;
+    parameter Real b = 2;
+  end MC;
+  record P
+    Real u;
+    Real v;
+  end P;
+  function ren
+    input MC m;
+    output P p;
+  algorithm
+    p.u := m.a;
+    p.v := m.b + 1;
+  end ren;
+  function g
+    input P p;
+    output P q;
+  algorithm
+    q.u := 2 * p.u;
+    q.v := p.v;
+  end g;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    final parameter P p = ren(mc) annotation(Evaluate = true);
+    final parameter P p1 = g(p);
+    Real x;
+  equation
+    x * p1.u = time;
+  end Dev;
+end SQF8P;
+model SQF8
+  SQF8P.Dev d(mc = M);
+  parameter SQF8P.MC M(a = 3);
+end SQF8;
+//// model: SQF9
+package SQF9P
+  record MC
+    parameter Real a = 1;
+    parameter Real b = 2;
+  end MC;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    Real x = mc.a * time;
+  end Dev;
+end SQF9P;
+model SQF9
+  SQF9P.Dev d(mc = Ms[2]);
+  parameter SQF9P.MC Ms[2](a = {3, 4});
+end SQF9;
+//// model: SQF10
+package SQF10P
+  record MC
+    parameter Real a = 1;
+    parameter Real b = 2;
+  end MC;
+  model Dev
+    parameter MC mc;
+    Real x = mc.a * time;
+  end Dev;
+end SQF10P;
+model SQF10
+  SQF10P.Dev d(mc = M) annotation(Evaluate = true);
+  parameter SQF10P.MC M(a = 3);
+end SQF10;
+//// model: SQF11
+package SQF11P
+  record MC
+    parameter Real a = 1;
+    parameter Real y(fixed = false);
+  end MC;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    Real x = mc.a * time;
+  end Dev;
+end SQF11P;
+model SQF11
+  SQF11P.Dev d(mc = M);
+  parameter SQF11P.MC M(a = 3);
+end SQF11;
+//// model: SQF12
+package SQF12P
+  record MC
+    parameter Real a = 1;
+    parameter Real b = 2;
+  end MC;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    Real x = mc.a * time;
+  end Dev;
+  model Base
+    Dev d(mc = M);
+    parameter MC M(a = 1);
+  end Base;
+end SQF12P;
+model SQF12
+  extends SQF12P.Base(M(a = 6));
+end SQF12;
+//// model: SQF13
+package SQF13P
+  record MC
+    parameter Real a = 1;
+    constant Real c = -1e40;
+    parameter Real b = 2;
+  end MC;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    Real x = mc.a * time;
+  end Dev;
+end SQF13P;
+model SQF13
+  SQF13P.Dev d(mc = M);
+  parameter SQF13P.MC M(a = 3, c = 5);
+end SQF13;
+//// model: SQF14
+package SQF14P
+  record MC
+    parameter Real a = 1;
+    parameter Real b = 2;
+  end MC;
+  record MCX
+    extends MC;
+    parameter Real z = 7;
+  end MCX;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    Real x = mc.a * time;
+  end Dev;
+end SQF14P;
+model SQF14
+  SQF14P.Dev d(mc = M);
+  parameter SQF14P.MCX M(a = 3);
+end SQF14;
+//// model: SQF15
+package SQF15P
+  record MC
+    parameter Real a = 1;
+    parameter Real b = 2;
+  end MC;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    Real x = mc.a * time;
+  end Dev;
+end SQF15P;
+model SQF15
+  SQF15P.Dev d1(mc = M);
+  SQF15P.Dev d2(mc = M);
+  parameter SQF15P.MC M(a = 3);
+end SQF15;
+//// model: SQF16
+package SQF16P
+  record MC
+    parameter Real a = 1;
+    parameter Real b = 2;
+  end MC;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    Real x = mc.a * time;
+  end Dev;
+end SQF16P;
+model SQF16
+  SQF16P.Dev d[2](each mc = M);
+  parameter SQF16P.MC M(a = 3);
+end SQF16;
+//// model: SQF17
+package SQF17P
+  record MC
+    parameter Real a = 1;
+    parameter Real b = 2;
+  end MC;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    Real x = mc.a * time;
+  end Dev;
+end SQF17P;
+model SQF17
+  SQF17P.Dev d(mc = M);
+  parameter SQF17P.MC M(a = 3) annotation(Evaluate = true);
+end SQF17;
+//// model: SQF18
+package SQF18P
+  record MC
+    parameter Real a = 1;
+    parameter Real b = 2;
+  end MC;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    Real x = mc.a * time;
+  end Dev;
+end SQF18P;
+model SQF18
+  SQF18P.Dev d(mc = M);
+  parameter SQF18P.MC M(a = 3) annotation(Evaluate = false);
+end SQF18;
+//// model: SQF19
+package SQF19P
+  record MC
+    parameter Real a = 1;
+    parameter Real b = 2;
+  end MC;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    parameter Real n = mc.a;
+    Real x[2] = fill(time, 2) * n;
+  end Dev;
+end SQF19P;
+model SQF19
+  SQF19P.Dev d(mc = M);
+  parameter SQF19P.MC M(a = 3);
+  Real y = d.mc.b * time;
+end SQF19;
+//// model: SQF20
+package SQF20P
+  record MC
+    parameter Real a = 1;
+    parameter Real b = 2;
+  end MC;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    Real x = mc.a * time;
+  end Dev;
+end SQF20P;
+model SQF20
+  SQF20P.Dev d(mc = M);
+  parameter SQF20P.MC M(a = p * 2);
+  parameter Real p = 1.5;
+  Real y = p * time;
+end SQF20;
+//// model: SQF14b
+package SQF14bP
+  record MC
+    parameter Real a = 1;
+    parameter Real b = 2;
+  end MC;
+  record MCX
+    extends MC;
+    parameter Real z = 7;
+  end MCX;
+  model Dev
+    parameter MC mc annotation(Evaluate = true);
+    Real x = mc.a * time;
+  end Dev;
+end SQF14bP;
+model SQF14b
+  parameter SQF14bP.MCX M(a = 3);
+  SQF14bP.Dev d(mc = M);
+end SQF14b;
+//// model: SQB1
+package SQB1P
+  model A
+    constant Real c;
+    Real x = c * time;
+  end A;
+  model B
+    constant Real k = 2;
+  end B;
+end SQB1P;
+model SQB1
+  SQB1P.A a(c = b.k);
+  SQB1P.B b;
+end SQB1;
+//// model: SQB2
+package SQB2P
+  record MC
+    parameter Real a = 1;
+    constant Real c = -1e40;
+    parameter Real b = 2;
+  end MC;
+  model Dev
+    parameter MC mc;
+    Real x = mc.a * time;
+  end Dev;
+end SQB2P;
+model SQB2
+  SQB2P.Dev d(mc = M);
+  parameter SQB2P.MC M(a = 3);
+end SQB2;
+//// model: SQC1
+package SQC1P
+  model B
+    constant Real k = 2;
+  end B;
+end SQC1P;
+model SQC1
+  Real y = if b.k > 1 then time else -time;
+  SQC1P.B b;
+end SQC1;
+//// model: SQC2
+package SQC2P
+  model B
+    parameter Real k = 2;
+  end B;
+end SQC2P;
+model SQC2
+  Real y = if b.k > 1 then time else -time;
+  SQC2P.B b;
+end SQC2;
+//// model: SQC3
+package SQC3P
+  model B
+    constant Integer n = 2;
+  end B;
+end SQC3P;
+model SQC3
+  Real y[b.n] = fill(time, b.n);
+  SQC3P.B b;
+end SQC3;
+//// model: SQC4
+package SQC4P
+  record R
+    constant Integer n = 2;
+    parameter Real a = 1;
+  end R;
+end SQC4P;
+model SQC4
+  Real y[r.n] = fill(time, r.n);
+  parameter SQC4P.R r;
+end SQC4;
+//// model: SQC5
+package SQC5P
+  record R
+    constant Integer n = 2;
+    parameter Real a = 1;
+  end R;
+end SQC5P;
+model SQC5
+  Real y = if r.n > 1 then time else -time;
+  parameter SQC5P.R r;
+end SQC5;
+//// model: SQT1
+package SQT1P
+  record R
+    Real a;
+  end R;
+  function f
+    input Real x;
+    output R r;
+    output Real y;
+  algorithm
+    r.a := x;
+    y := 2 * x;
+  end f;
+end SQT1P;
+model SQT1
+  SQT1P.R r;
+  Real y;
+equation
+  (r, y) = SQT1P.f(time);
+end SQT1;
+//// model: SQT2
+package SQT2P
+  record R
+    Real a;
+  end R;
+  function f
+    input Real x;
+    output Real y;
+    output R r;
+  algorithm
+    r.a := x;
+    y := 2 * x;
+  end f;
+end SQT2P;
+model SQT2
+  SQT2P.R r;
+  Real y;
+equation
+  (y, r) = SQT2P.f(time);
+end SQT2;
+//// model: SQT3
+package SQT3P
+  record R
+    Real a;
+  end R;
+  function f
+    input Real x;
+    output R r;
+    output Real y;
+  algorithm
+    r.a := x;
+    y := 2 * x;
+  end f;
+end SQT3P;
+model SQT3
+  SQT3P.R r;
+equation
+  r = SQT3P.f(time);
+end SQT3;
+//// model: SQT4
+package SQT4P
+  record R
+    Real a;
+  end R;
+  function f
+    input Real x;
+    output R r;
+    output Real y;
+  algorithm
+    r.a := x;
+    y := 2 * x;
+  end f;
+end SQT4P;
+model SQT4
+  SQT4P.R r;
+  Real y;
+algorithm
+  (r, y) := SQT4P.f(time);
+end SQT4;
+//// model: SQT5
+package SQT5P
+  record R
+    Real a;
+  end R;
+  function f
+    input Real x;
+    output R r;
+    output Real y;
+  algorithm
+    r.a := x;
+    y := 2 * x;
+  end f;
+end SQT5P;
+model SQT5
+  SQT5P.R r = SQT5P.f(time);
+end SQT5;
+//// model: SQT6
+package SQT6P
+  record R
+    Real a;
+  end R;
+  function f
+    input Real x;
+    output R r;
+    output Real y;
+  algorithm
+    r.a := x;
+    y := 2 * x;
+  end f;
+  function g
+    input Real x;
+    output Real z;
+  protected
+    R r;
+    Real y;
+  algorithm
+    (r, y) := f(x);
+    z := r.a + y;
+  end g;
+end SQT6P;
+model SQT6
+  Real z = SQT6P.g(time);
+end SQT6;
+//// model: SQT7
+package SQT7P
+  record R
+    Real a;
+  end R;
+  function f
+    input Real x;
+    output R r;
+    output Real y;
+  algorithm
+    r.a := x;
+    y := 2 * x;
+  end f;
+end SQT7P;
+model SQT7
+  parameter Real p = 2;
+  parameter SQT7P.R r = SQT7P.f(p);
+end SQT7;
+//// model: SQT8
+package SQT8P
+  record R
+    Real a;
+  end R;
+  function f
+    input Real x;
+    output R r;
+    output Real y;
+  algorithm
+    r.a := x;
+    y := 2 * x;
+  end f;
+end SQT8P;
+model SQT8
+  parameter SQT8P.R r = SQT8P.f(2);
+  Real z = r.a * time;
+end SQT8;
+//// model: SQT9
+package SQT9P
+  record R
+    Real a;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+    output Real y;
+  algorithm
+    r.a := x;
+    r.b := 3 * x;
+    y := 2 * x;
+  end f;
+end SQT9P;
+model SQT9
+  SQT9P.R r;
+  Real y;
+equation
+  (r, y) = SQT9P.f(time);
+end SQT9;
+//// model: SQT10
+package SQT10P
+  record R
+    Real a;
+  end R;
+  function f
+    input Real x;
+    output R r;
+    output Real y;
+  algorithm
+    r.a := x;
+    y := 2 * x;
+  end f;
+end SQT10P;
+model SQT10
+  SQT10P.R r;
+equation
+  (r, ) = SQT10P.f(time);
+end SQT10;
+//// model: SQT11
+package SQT11P
+  record R
+    Real a;
+  end R;
+  function f
+    input Real x;
+    output R r;
+    output Real y;
+  algorithm
+    r.a := x;
+    y := 2 * x;
+  end f;
+end SQT11P;
+model SQT11
+  Real y;
+  SQT11P.R r;
+equation
+  (r, y) = SQT11P.f(time);
+  r.a = y;
+end SQT11;
+//// model: SQT12
+package SQT12P
+  record R
+    Real a;
+  end R;
+  function f
+    input Real x;
+    output R r;
+    output Real y;
+  algorithm
+    r.a := x;
+    y := 2 * x;
+  end f;
+  model M
+    R r;
+    Real y;
+  equation
+    (r, y) = f(time);
+  end M;
+end SQT12P;
+model SQT12
+  SQT12P.M m[2];
+end SQT12;
+//// model: SQT13
+package SQT13P
+  record R
+    Real a;
+  end R;
+  function f
+    input Real x;
+    output R r;
+    output Real y;
+  algorithm
+    r.a := x;
+    y := 2 * x;
+  end f;
+end SQT13P;
+model SQT13
+  parameter Real p = 2;
+  final parameter SQT13P.R r = SQT13P.f(p);
+end SQT13;
+//// model: SQT14
+package SQT14P
+  record R
+    Real a;
+  end R;
+  function f
+    input Real x;
+    output R r;
+    output Real y;
+  algorithm
+    r.a := x;
+    y := 2 * x;
+  end f;
+  function g
+    input R r;
+    output Real z;
+  algorithm
+    z := 3 * r.a;
+  end g;
+end SQT14P;
+model SQT14
+  Real z = SQT14P.g(SQT14P.f(time));
+end SQT14;
+//// model: SQT15
+package SQT15P
+  record R
+    Real a;
+  end R;
+  function f
+    input Real x;
+    output R r;
+    output Real y;
+  algorithm
+    r.a := x;
+    y := 2 * x;
+  end f;
+  function g
+    input R r;
+    output Real z;
+  algorithm
+    z := 3 * r.a;
+  end g;
+end SQT15P;
+model SQT15
+  parameter Real z = SQT15P.g(SQT15P.f(2));
+  parameter Real p = 3;
+  Real w = SQT15P.g(SQT15P.f(p)) * time;
+end SQT15;
+//// model: SQU1
+package SQU1P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQU1P;
+model SQU1
+  parameter Real p = 2;
+  final parameter SQU1P.R r = SQU1P.f(p);
+  Real z = r.x * time;
+end SQU1;
+//// model: SQU2
+package SQU2P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQU2P;
+model SQU2
+  parameter Real p = 2;
+  parameter SQU2P.R r = SQU2P.f(p);
+  Real z = r.x * time;
+end SQU2;
+//// model: SQU3
+package SQU3P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQU3P;
+model SQU3
+  parameter Real p = 2;
+  parameter SQU3P.R r = SQU3P.f(p) annotation(Evaluate = true);
+  Real z = r.x * time;
+end SQU3;
+//// model: SQU4
+package SQU4P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQU4P;
+model SQU4
+  constant SQU4P.R r = SQU4P.f(2);
+  Real z = r.x * time;
+end SQU4;
+//// model: SQU5
+package SQU5P
+  record R
+    Real x;
+    Real y(start = 3);
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQU5P;
+model SQU5
+  parameter Real p = 2;
+  final parameter SQU5P.R r = SQU5P.f(p);
+  Real z = r.x * time;
+end SQU5;
+//// model: SQU6
+package SQU6P
+  record R
+    Real x;
+    Real y(fixed = true, min = 0, nominal = 2);
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQU6P;
+model SQU6
+  parameter Real p = 2;
+  final parameter SQU6P.R r = SQU6P.f(p);
+  Real z = r.x * time;
+end SQU6;
+//// model: SQU7
+package SQU7P
+  record R
+    Real x;
+    Real y;
+  end R;
+  record O
+    R r;
+    Real w;
+  end O;
+  function f
+    input Real a;
+    output O o;
+  algorithm
+    o.r.x := a;
+    o.w := 2 * a;
+  end f;
+end SQU7P;
+model SQU7
+  parameter Real p = 2;
+  final parameter SQU7P.O o = SQU7P.f(p);
+  Real z = o.w * time;
+end SQU7;
+//// model: SQU8
+package SQU8P
+  record R
+    Real x;
+    Integer i;
+    Boolean b;
+    String s;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQU8P;
+model SQU8
+  parameter Real p = 2;
+  final parameter SQU8P.R r = SQU8P.f(p);
+  Real z = r.x * time;
+end SQU8;
+//// model: SQU9
+package SQU9P
+  record R
+    Real x;
+    Real v[2];
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQU9P;
+model SQU9
+  parameter Real p = 2;
+  final parameter SQU9P.R r = SQU9P.f(p);
+  Real z = r.x * time;
+end SQU9;
+//// model: SQU10
+package SQU10P
+  type E = enumeration(a, b);
+  record R
+    Real x;
+    E e;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQU10P;
+model SQU10
+  parameter Real p = 2;
+  final parameter SQU10P.R r = SQU10P.f(p);
+  Real z = r.x * time;
+end SQU10;
+//// model: SQU11
+package SQU11P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+  function g
+    input R r;
+    output Real y;
+  algorithm
+    y := r.x + r.y;
+  end g;
+end SQU11P;
+model SQU11
+  parameter Real p = 2;
+  final parameter SQU11P.R r = SQU11P.f(p);
+  Real z = SQU11P.g(r) * time;
+end SQU11;
+//// model: SQU12
+package SQU12P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+  function g
+    input R r;
+    output R s;
+  algorithm
+    s.x := r.x;
+    s.y := r.y;
+  end g;
+end SQU12P;
+model SQU12
+  parameter Real p = 2;
+  final parameter SQU12P.R r = SQU12P.f(p);
+  final parameter SQU12P.R s = SQU12P.g(r);
+  Real z = s.x * time;
+end SQU12;
+//// model: SQU13
+package SQU13P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+  model M
+    parameter Real p = 2;
+    final parameter R r = f(p);
+    Real z = r.x * time;
+  end M;
+end SQU13P;
+model SQU13
+  SQU13P.M m(p = 3);
+end SQU13;
+//// model: SQU14
+package SQU14P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    if a > 5 then
+      r.y := a;
+    end if;
+  end f;
+end SQU14P;
+model SQU14
+  parameter Real p = 2;
+  final parameter SQU14P.R r = SQU14P.f(p);
+  final parameter SQU14P.R r2 = SQU14P.f(2 * p + 3);
+  Real z = r.x * time;
+end SQU14;
+//// model: SQU15
+package SQU15P
+  record R
+    parameter Real x;
+    parameter Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQU15P;
+model SQU15
+  parameter Real p = 2;
+  final parameter SQU15P.R r = SQU15P.f(p);
+  Real z = r.x * time;
+end SQU15;
+//// model: SQU16
+package SQU16P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+  model M
+    final parameter R r = f(2);
+  end M;
+end SQU16P;
+model SQU16
+  SQU16P.M m;
+  Real z = m.r.x * time;
+end SQU16;
+//// model: SQU17
+package SQU17P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQU17P;
+model SQU17
+  parameter Real p = 2;
+  final parameter SQU17P.R r(y(start = 1)) = SQU17P.f(p);
+  Real z = r.x * time;
+end SQU17;
+//// model: SQU18
+package SQU18P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQU18P;
+model SQU18
+  parameter Real p = 2 annotation(Evaluate = true);
+  final parameter SQU18P.R r = SQU18P.f(p);
+  Real z = r.x * time;
+end SQU18;
+//// model: SQU19
+package SQU19P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQU19P;
+model SQU19
+  final parameter SQU19P.R r = SQU19P.f(2);
+  Real z = r.x * time;
+end SQU19;
+//// model: SQU20
+package SQU20P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQU20P;
+model SQU20
+  parameter SQU20P.R r = SQU20P.f(2);
+  Real z = r.x * time;
+end SQU20;
+//// model: SQV1
+package SQV1P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := r.x;
+  end f;
+end SQV1P;
+model SQV1
+  parameter Real p = 2;
+  final parameter SQV1P.R r = SQV1P.f(p);
+  Real z = r.x * time;
+end SQV1;
+//// model: SQV2
+package SQV2P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    if a > 5 then
+      r.y := a;
+    end if;
+  end f;
+end SQV2P;
+model SQV2
+  parameter Real p = 2;
+  final parameter SQV2P.R r = SQV2P.f(p);
+  Real z = r.x * time;
+end SQV2;
+//// model: SQV3
+package SQV3P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQV3P;
+model SQV3
+  parameter Real p = 2;
+  final parameter SQV3P.R r = SQV3P.f(p);
+end SQV3;
+//// model: SQV4
+package SQV4P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQV4P;
+model SQV4
+  parameter Real p = 2;
+  final parameter SQV4P.R r = SQV4P.f(p);
+  Real z = r.y * time;
+end SQV4;
+//// model: SQV5
+package SQV5P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  protected
+    Real t;
+  algorithm
+    t := a;
+    r.x := t;
+  end f;
+end SQV5P;
+model SQV5
+  parameter Real p = 2;
+  final parameter SQV5P.R r = SQV5P.f(p);
+  Real z = r.x * time;
+end SQV5;
+//// model: SQV6
+package SQV6P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQV6P;
+model SQV6
+  parameter Real p = 2;
+  final parameter SQV6P.R r = SQV6P.f(p);
+  final parameter SQV6P.R r2 = SQV6P.f(2 * p + 3);
+  Real z = r.x * time;
+end SQV6;
+//// model: SQW1
+package SQW1P
+  record R
+    Real x;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQW1P;
+model SQW1
+  parameter Real p = 2;
+  final parameter SQW1P.R r = SQW1P.f(p);
+  Real z = r.x * time;
+end SQW1;
+//// model: SQW2
+package SQW2P
+  function f
+    input Real a;
+    output Real y[2];
+  algorithm
+    y[1] := a;
+  end f;
+end SQW2P;
+model SQW2
+  parameter Real p = 2;
+  final parameter Real y[2] = SQW2P.f(p);
+end SQW2;
+//// model: SQW3
+package SQW3P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r := R(a, 2 * a);
+  end f;
+end SQW3P;
+model SQW3
+  parameter Real p = 2;
+  final parameter SQW3P.R r = SQW3P.f(p);
+  Real z = r.x * time;
+end SQW3;
+//// model: SQW4
+package SQW4P
+  function f
+    input Real a;
+    output Real y;
+  protected
+    Real t;
+  algorithm
+    y := a;
+  end f;
+end SQW4P;
+model SQW4
+  parameter Real p = 2;
+  final parameter Real y = SQW4P.f(p);
+end SQW4;
+//// model: SQW5
+package SQW5P
+  function f
+    input Real a;
+    output Real y;
+    output Real w;
+  algorithm
+    y := a;
+  end f;
+end SQW5P;
+model SQW5
+  parameter Real p = 2;
+  final parameter Real y = SQW5P.f(p);
+end SQW5;
+//// model: SQW6
+package SQW6P
+  record R
+    Real x;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQW6P;
+model SQW6
+  parameter Real p = 2;
+  parameter SQW6P.R r = SQW6P.f(p);
+  Real z = r.x * time;
+end SQW6;
+//// model: SQW7
+package SQW7P
+  record R
+    Real x;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQW7P;
+model SQW7
+  parameter Real p = 2 annotation(Evaluate = true);
+  final parameter SQW7P.R r = SQW7P.f(p);
+  Real z = r.x * time;
+end SQW7;
+//// model: SQW8
+package SQW8P
+  function f
+    input Real a;
+    output Real y;
+  algorithm
+    y := a;
+  end f;
+end SQW8P;
+model SQW8
+  parameter Real p = 2;
+  final parameter Real y = SQW8P.f(p);
+end SQW8;
+//// model: SQW9
+package SQW9P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQW9P;
+model SQW9
+  parameter Real p = 2;
+  final SQW9P.R r = SQW9P.f(p);
+  Real z = r.x * time;
+end SQW9;
+//// model: SQW10
+package SQW10P
+  record R
+    Real x;
+  end R;
+  function g
+    input Real a;
+    output R r;
+    output Real b;
+  algorithm
+    r := R(a);
+    b := a;
+  end g;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    (r, ) := g(a);
+  end f;
+end SQW10P;
+model SQW10
+  parameter Real p = 2;
+  final parameter SQW10P.R r = SQW10P.f(p);
+  Real z = r.x * time;
+end SQW10;
+//// model: SQW11
+package SQW11P
+  record R
+    Real x;
+  end R;
+  function g
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end g;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r := g(a);
+  end f;
+end SQW11P;
+model SQW11
+  parameter Real p = 2;
+  final parameter SQW11P.R r = SQW11P.f(p);
+  Real z = r.x * time;
+end SQW11;
+//// model: SQW12
+package SQW12P
+  record R
+    Real x;
+  end R;
+  function g
+    input Real a;
+    output Real b;
+  algorithm
+    b := 2 * a;
+  end g;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQW12P;
+model SQW12
+  parameter Real p = 2;
+  final parameter SQW12P.R r = SQW12P.f(SQW12P.g(p));
+  Real z = r.x * time;
+end SQW12;
+//// model: SQW13
+package SQW13P
+  record R
+    Real x;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQW13P;
+model SQW13
+  parameter Real p = 2;
+  final parameter SQW13P.R r = SQW13P.f(sin(p));
+  Real z = r.x * time;
+end SQW13;
+//// model: SQW14
+package SQW14P
+  record R
+    Real x;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+  model M
+    parameter Real p = 2;
+    final parameter R r = f(p);
+  end M;
+end SQW14P;
+model SQW14
+  SQW14P.M m(p = 3);
+end SQW14;
+//// model: SQW15
+package SQW15P
+  record R
+    Real x;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+  end f;
+end SQW15P;
+model SQW15
+  parameter Real p = 2;
+  final parameter SQW15P.R r = if p > 1 then SQW15P.f(p) else SQW15P.f(2 * p);
+  Real z = r.x * time;
+end SQW15;
+//// model: SQX1
+package SQX1P
+  record R
+    Real x;
+    Real y(start = 3);
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+end SQX1P;
+model SQX1
+  parameter Real p = 2;
+  final parameter SQX1P.R r = SQX1P.f(p);
+  Real z = r.x * time;
+end SQX1;
+//// model: SQX2
+package SQX2P
+  record R
+    Real x;
+    Real y(fixed = true, min = 0, nominal = 2);
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+end SQX2P;
+model SQX2
+  parameter Real p = 2;
+  final parameter SQX2P.R r = SQX2P.f(p);
+  Real z = r.x * time;
+end SQX2;
+//// model: SQX3
+package SQX3P
+  type E = enumeration(a, b);
+  record R
+    Real x;
+    Integer i;
+    Boolean b;
+    String s;
+    E e;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+end SQX3P;
+model SQX3
+  parameter Real p = 2;
+  final parameter SQX3P.R r = SQX3P.f(p);
+  Real z = r.x * time;
+end SQX3;
+//// model: SQX4
+package SQX4P
+  record R
+    Real x;
+    Real v[2];
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+end SQX4P;
+model SQX4
+  parameter Real p = 2;
+  final parameter SQX4P.R r = SQX4P.f(p);
+  Real z = r.x * time;
+end SQX4;
+//// model: SQX5
+package SQX5P
+  record R
+    Real x;
+    Real y = 5;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+end SQX5P;
+model SQX5
+  parameter Real p = 2;
+  final parameter SQX5P.R r = SQX5P.f(p);
+  Real z = r.x * time;
+end SQX5;
+//// model: SQX6
+package SQX6P
+  record R
+    Real x;
+    Real y;
+  end R;
+  record O
+    R r;
+    Real w;
+  end O;
+  function f
+    input Real a;
+    output O o;
+  algorithm
+    o.w := a;
+    o.w := 2 * o.w;
+  end f;
+end SQX6P;
+model SQX6
+  parameter Real p = 2;
+  final parameter SQX6P.O o = SQX6P.f(p);
+  Real z = o.w * time;
+end SQX6;
+//// model: SQX7
+package SQX7P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+end SQX7P;
+model SQX7
+  parameter Real p = 2;
+  final parameter SQX7P.R r(y(start = 1)) = SQX7P.f(p);
+  Real z = r.x * time;
+end SQX7;
+//// model: SQX8
+package SQX8P
+  record R
+    Real x;
+    parameter Real y(start = 1, fixed = false);
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+end SQX8P;
+model SQX8
+  parameter Real p = 2;
+  final parameter SQX8P.R r = SQX8P.f(p);
+  Real z = r.x * time;
+end SQX8;
+//// model: SQX9
+package SQX9P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function fa
+    input Real a;
+    output R r[2];
+  algorithm
+    r[1].x := a;
+    r[2].x := 2 * a;
+  end fa;
+end SQX9P;
+model SQX9
+  final parameter SQX9P.R rs[2] = SQX9P.fa(2);
+  Real z = rs[1].x * time;
+end SQX9;
+//// model: SQX10
+package SQX10P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+end SQX10P;
+model SQX10
+  parameter Real p = 2;
+  final parameter SQX10P.R r = SQX10P.f(p);
+  final parameter Real q = r.y * 2;
+  Real z = r.x * time;
+end SQX10;
+//// model: SQX11
+package SQX11P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+end SQX11P;
+model SQX11
+  parameter Real p = 2;
+  final parameter SQX11P.R r = SQX11P.f(p);
+  parameter Real q = r.y * 2 annotation(Evaluate = true);
+  Real z = r.x * time;
+end SQX11;
+//// model: SQX12
+package SQX12P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+  function g
+    input R r;
+    input Real t;
+    output Real y;
+  algorithm
+    y := r.x * t;
+    y := y + r.y;
+  end g;
+end SQX12P;
+model SQX12
+  parameter Real p = 2;
+  final parameter SQX12P.R r = SQX12P.f(p);
+  Real z = SQX12P.g(r, time);
+end SQX12;
+//// model: SQX13
+package SQX13P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+end SQX13P;
+model SQX13
+  parameter Real p = 2;
+  final SQX13P.R r = SQX13P.f(p);
+  Real z = r.x * time;
+end SQX13;
+//// model: SQX14
+package SQX14P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+  function g
+    input R r;
+    output R s;
+  algorithm
+    s.x := r.x;
+    s.y := r.x + 1;
+  end g;
+end SQX14P;
+model SQX14
+  parameter Real p = 2;
+  final parameter SQX14P.R r = SQX14P.f(p);
+  final parameter SQX14P.R s = SQX14P.g(r);
+  Real z = s.y * time;
+end SQX14;
+//// model: SQX15
+package SQX15P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+  function g
+    input R r;
+    output R s;
+  algorithm
+    s.x := r.x;
+    s.y := r.y;
+  end g;
+end SQX15P;
+model SQX15
+  parameter Real p = 2;
+  final parameter SQX15P.R r = SQX15P.f(p);
+  final parameter SQX15P.R s = SQX15P.g(r);
+  Real z = s.x * time;
+end SQX15;
+//// model: SQX16
+package SQX16P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+end SQX16P;
+model SQX16
+  parameter Real p = 2;
+  final parameter SQX16P.R r = SQX16P.f(p) annotation(Evaluate = true);
+  Real z = r.x * time;
+end SQX16;
+//// model: SQX17
+package SQX17P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+  model M
+    parameter Real p = 2;
+    final parameter R r = f(p);
+  end M;
+end SQX17P;
+model SQX17
+  SQX17P.M m[2](p = {2, 3});
+  Real z = m[1].r.x * time;
+end SQX17;
+//// model: SQX18
+package SQX18P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+end SQX18P;
+model SQX18
+  parameter Real p = 2;
+  final parameter SQX18P.R r = if p > 1 then SQX18P.f(p) else SQX18P.f(2 * p);
+  Real z = r.x * time;
+end SQX18;
+//// model: SQY1
+package SQY1P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+  function g
+    input R r;
+    input Real t;
+    output Real y;
+  algorithm
+    y := r.x * t;
+    y := y + 1;
+  end g;
+end SQY1P;
+model SQY1
+  parameter Real p = 2;
+  final parameter SQY1P.R r = SQY1P.f(p) annotation(Evaluate = true);
+  Real z = SQY1P.g(r, time);
+end SQY1;
+//// model: SQY3
+package SQY3P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+end SQY3P;
+model SQY3
+  parameter Real p = 2;
+  final parameter SQY3P.R r = SQY3P.f(p);
+  parameter Real q = r.y * 2;
+  Real z = r.x * time;
+end SQY3;
+//// model: SQY5
+package SQY5P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+end SQY5P;
+model SQY5
+  parameter Real p = 2;
+  final parameter SQY5P.R r = SQY5P.f(p);
+  Real z;
+equation
+  if r.y > 1 then
+    z = time;
+  else
+    z = -time;
+  end if;
+end SQY5;
+//// model: SQY6
+package SQY6P
+  record R
+    Real x;
+    Real y(start = 3);
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+end SQY6P;
+model SQY6
+  parameter Real p = 2;
+  final parameter SQY6P.R r = SQY6P.f(p);
+  parameter Real q = r.y * 2 annotation(Evaluate = true);
+  Real z = r.x * time;
+end SQY6;
+//// model: SQY7
+package SQY7P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+end SQY7P;
+model SQY7
+  parameter Real p = 2;
+  final parameter SQY7P.R r = SQY7P.f(p);
+  Real z = if r.x > 1 then time else r.y;
+end SQY7;
+//// model: SQY8
+package SQY8P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+end SQY8P;
+model SQY8
+  parameter Real p = 2;
+  final parameter SQY8P.R r = SQY8P.f(p);
+  Real z[2] = {r.x, r.y} * time;
+end SQY8;
+//// model: SQY9
+package SQY9P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+end SQY9P;
+model SQY9
+  parameter Real p = 2;
+  final parameter SQY9P.R r = SQY9P.f(p);
+  Real z(start = r.y) = time;
+end SQY9;
+//// model: SQY10
+package SQY10P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+  model M
+    parameter R rr;
+    Real z = rr.x * time;
+  end M;
+end SQY10P;
+model SQY10
+  parameter Real p = 2;
+  final parameter SQY10P.R r = SQY10P.f(p);
+  SQY10P.M m(rr = r);
+end SQY10;
+//// model: SQY11
+package SQY11P
+  record R
+    Real x;
+    Real y(start = 3);
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+end SQY11P;
+model SQY11
+  parameter Real p = 2;
+  final parameter SQY11P.R r = SQY11P.f(p) annotation(Evaluate = true);
+  Real z = r.x * time;
+end SQY11;
+//// model: SQY12
+package SQY12P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+end SQY12P;
+model SQY12
+  parameter Real p = 2;
+  final parameter SQY12P.R r = SQY12P.f(p);
+  Real z[integer(r.y)] = fill(time, integer(r.y));
+end SQY12;
+//// model: SQM1
+package SQM1P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f2
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function id
+    input R r;
+    output R s;
+  algorithm
+    s := r;
+    s.x := s.x;
+  end id;
+end SQM1P;
+model SQM1
+  parameter Real p = 1;
+  parameter SQM1P.R r1 = SQM1P.f2(p);
+  final parameter SQM1P.R r2 = SQM1P.id(r1);
+end SQM1;
+//// model: SQM2
+package SQM2P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f2
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+  function g
+    input R r;
+    output R s;
+  algorithm
+    s.x := r.x + 1;
+    s.y := r.y;
+  end g;
+end SQM2P;
+model SQM2
+  parameter Real p = 1;
+  parameter SQM2P.R r1 = SQM2P.f2(p);
+  final parameter SQM2P.R r2 = SQM2P.g(r1);
+end SQM2;
+//// model: SQM3
+package SQM3P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f2
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * a;
+  end f2;
+end SQM3P;
+model SQM3
+  parameter Real p = 1;
+  parameter SQM3P.R r1 = SQM3P.f2(p);
+  final parameter SQM3P.R r2 = if p > 0 then r1 else SQM3P.R(0, 0);
+  parameter Real q = r1.x * 2;
+end SQM3;
+//// model: SQM4
+package SQM4P
+  record R
+    Real x;
+    Real y(fixed = false);
+  end R;
+  function g
+    input R r;
+    output R s;
+  algorithm
+    s.x := r.x + 1;
+    s.y := 3;
+  end g;
+end SQM4P;
+model SQM4
+  parameter SQM4P.R r1(x = 2);
+  final parameter SQM4P.R r2 = SQM4P.g(r1);
+end SQM4;

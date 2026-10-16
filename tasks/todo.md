@@ -2496,6 +2496,28 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       探针 pk-p28（190），旧组 ap-p5 / sl-s1 / v4-c / wc-c5 各 SKIP→PASS 1；单测 +7。slice 700 例 FAIL 0（oracle=live 不一致 0）；
       scodeinst 660（不变）；testsuite 1827→1829（arrays/ArraySlice2、others/End）/ FAIL 0；**MSL 467→468**（Magnetic.QuasiStatic
       的 IMC_withLosses）；探针 10004→10194；单测 437→444。
+- [x] (66u) Spice3 的记录绑定（2026-10-16）：
+      (1) 结构记录参数绑定到声明在后的记录（`Q_NPNBJT Q1(modelcard = MOD1)`、modelcard 是 Evaluate = true 参数）：omc 先定型全部
+      组件再压平（NFInst.mo:197-200），没有先后问题。ymc 第一遍碰到向前引用 → 这个记录推后不展开（defer_record），读到它字段的
+      记录绑定求值跟着推后，第二遍带第一遍的值再求；声明在后的常量字段（ModelcardBJT2 的 `constant Real C2`）直接取第一遍的值
+      （markExp 只标 PARAMETER，NFStructural.mo:246-291）。
+      (2) 函数求值出的记录里没赋到的字段（`diodeCalcTempDependencies` 没写 `m_tBrkdwnV`）：buildRecordBinding 填 EMPTY
+      （NFEvalFunction.mo:373-421）→ getRecordBindings 给 EMPTY_BINDING（NFFlatten.mo:897-900）→ 当 unfix：无绑定、parameter 补
+      fixed = false、不查无绑定（:690-692 / :737-740 / :747-751）。顺带修了此前少打 `fixed = false` 的静默错（SQX1）。
+      (3) 多输出、首输出是记录的调用（DIODE 的 `(cc, m_dCap) = diodeNoBypassCode(…)`）照标量多输出的通路；算法里的记录目标、嵌在
+      实参里的照旧 SKIP。
+      顺带：omc 强制内联单条赋值左边是字段（`r.x := a`）的函数时无限递归崩溃（getOutputExp 给回原调用，NFInline.mo:253-271 /
+      :160）→ SKIP（此前 ACCEPTS-INVALID）；记录值字段个数与目标记录类不同 omc 报类型错（NFTypeCheck.mo:1888-1892）→ 拒（此前
+      ACCEPTS-INVALID）；读到 EMPTY 往下传的、挪成方程的记录字段的值 → SKIP。
+      下一处：Spice3 Graetz "algorithm assignment to non-continuous variable"（R_SEMI 的 `vp := resistorInitEquations(…)`，
+      记录类型的算法赋值目标）。
+      探针 pk-p29（121；SQ）；单测 +6。slice 700 例 FAIL 0（oracle=live 不一致 0）；scodeinst 660（不变）；testsuite 1829→1830
+      （simulation/…/TupleReturn）/ FAIL 0；**MSL 468→472**（Spice3Benchmark DifferentialPair / MosfetCharacterization /
+      RtlInverter / FourBitBinaryAdder）；探针 10194→10315；单测 444→450。
+- [ ] (66v 候选) 已有的 ACCEPTS-INVALID（66u 调查时发现）：`parameter R r = f(p)` 挪成初始方程、`parameter Real q = r.y * 2
+      annotation(Evaluate = true)` 读它——omc 定型期顺父记录的绑定判 r.y 固定、q 成结构参数，报 "Parameter r.y has neither value
+      nor start value"；ymc 用压平期补的 fixed = false、照出结果。复现 `$S/pkr66u/work/SQY2.mo`（没进探针包）。要在 key_not_fixed
+      里按挪了的记录绑定判固定性。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。
