@@ -13,6 +13,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include "base/diag.h"
 #include "inst/inode.h"
@@ -34,6 +35,9 @@ class Instantiator {
   // 包实例（Inst.instPackage）：查名进实例语境里的类前把它实例化一份，按节点缓存；不能实例化（partial / 带修饰的短类 / 环）→ empty。
   // flatten 经实例链查名时也调（ADR-007 第 2 阶段 65a-3，见 inst.cpp）。
   NodeId inst_package(NodeId cls);
+  // 定义层的类节点：顶层起按类路径逐段找（同类型名的查找）。flatten 在定义层进类查名、要按包实例查时取它（inst_package 对定义节点
+  // 同样适用，见 flatten 的 def_pkg_node）；找不到 → empty。
+  NodeId class_def_node(const std::vector<Symbol>& path) { return lookup_class_name(path, I_.top); }
   // class extends 类节点（`redeclare record extends R … end R;`）的隐式基类（排在 extends 首位，见 partial_inst）：实例类树里的 →
   // 基类实例里的同名原类（inherited_in_bases），定义层的 → class_extends_target；没展开的先展开。不是 class extends / 取不到 →
   // invalid。flatten 按它的作用域解析 class extends 记录继承来的字段（ADR-007 第 2 阶段 66d）。
@@ -99,7 +103,8 @@ class Instantiator {
   // 类节点 cls 自己的 import 里叫 name 的类（见 inst.cpp 的规则说明）；没有 → empty。
   NodeId import_class(Symbol name, NodeId cls);
   NodeId tree_class(ClassTreeId tid, Symbol name);   // 类树里（本地 + 继承来的）名为 name 的类；没有 → empty
-  NodeId class_in(NodeId cls, ClassTreeId tid, Symbol name);   // 同上；定义层不可信的项改取包实例里的（见 inst.cpp）
+  // 同上；定义层不可信的项改取包实例里的。owner：限定名后续段时类树所属的类（见 inst.cpp）。
+  NodeId class_in(NodeId cls, ClassTreeId tid, Symbol name, NodeId owner = NodeId{});
   bool ext_mod_hits_consts(NodeId base, Id<SMod> m);  // extends 修饰改到基类的常量 / 类（见 expand）
   bool body_mentions(Id<SElement> cls, const std::vector<Symbol>& names, int depth) const;   // 类体写到这些名字（见 inst.cpp）
   Id<SElement> member_def(NodeId cls, Symbol name, int depth);   // 类自己的或继承来的元素声明

@@ -254,12 +254,16 @@ NodeId Instantiator::tree_class(ClassTreeId tid, Symbol name) {
 // 类节点 cls（类树 tid）里名为 name 的类。定义的类树里那一项是经改了常量 / 类的 extends 继承来的（classes_via_mod：共享的基类定义
 // 看不到修饰）→ 把 cls 当包实例化（Inst.instPackage：omc 查名进每个类都这样做，NFLookup.lookupLocalName :699-700 v1.25.0），取包
 // 实例里的那份（基类实例里的克隆）——包里经全路径写的 `Modelica.Media.Water.StandardWater.ThermodynamicState`（MSL Fluid）。
-// 不能实例化（partial / 环 / 带修饰的短类）→ 照旧（tree_class 标 SKIP）。
-NodeId Instantiator::class_in(NodeId cls, ClassTreeId tid, Symbol name) {
+// 限定名的后续段（owner = 类树所属的长类）查到继承来的类、或是经短类（cls ≠ owner）进的：同样取包实例里的那份——omc 的类按访问路径
+// 命名（包实例的父亲是 cls，NFInstNode.scopePath :1217-1290），`P.A.R`（R 从 Base 继承来）的记录构造函数叫 `P.A.R`、`P.S.R`（S = A）
+// 叫 `P.S.R`，不是声明处的 `P.Base.R`（XM 探针 XM21 / XM23 / XM45 / XM46 / XM49，此前静默错）。本地的类照旧取定义（与包实例的
+// 同名同值）。不能实例化（partial / 环 / 带修饰的短类）→ 照旧（tree_class 标 SKIP）。
+NodeId Instantiator::class_in(NodeId cls, ClassTreeId tid, Symbol name, NodeId owner) {
   const ClassTree& t = I_.trees[tid];
   const auto it = t.lookup.find(name);
-  if (it != t.lookup.end() && it->second.kind == LEntry::Kind::Class && t.classes_via_mod.count(it->second.index) &&
-      !instances_.count(cls.raw))
+  const bool cls_hit = it != t.lookup.end() && it->second.kind == LEntry::Kind::Class;
+  const bool by_access = cls_hit && owner.is_valid() && (cls != owner || it->second.index >= local_class_count(owner));
+  if (cls_hit && (t.classes_via_mod.count(it->second.index) || by_access) && !instances_.count(cls.raw))
     if (const NodeId pk = inst_package(cls); pk.is_valid() && !I_.nodes[pk].is_empty())
       return tree_class(I_.node_class(pk).tree, name);
   return tree_class(tid, name);
@@ -329,15 +333,37 @@ NodeId Instantiator::inst_package(NodeId cls) {
       I_.scode.elems[I_.nodes[l].def].kind != SElementKind::Class ||
       I_.scode.elems[I_.nodes[l].def].def.kind != SClassDefKind::Parts)
     return Inst::empty_node();
+  // 实例化的类体按限定词核查（instPackage → instantiate → instClass 末尾的 Restriction.checkClass，NFInst.mo:1196、NFRestriction.mo:
+  // 400-497 v1.25.0）：package 的组件须都是常量（assertOnlyConstantComponents :370-387，omc 报 "Variable b in package B is not
+  // constant"——testsuite redeclare/ClassExtends3 / 4 去掉 -d=-newInst 后，经 `B.usePart` 进包 B）、record 只能有 public 段，两者都
+  // 不能有方程 / 算法 → omc 报错 → SKIP。只查这个类自己的元素（基类实例化时不查，instExtends :1475-1517）。
+  {
+    const SElement& le = I_.scode.elems[I_.nodes[l].def];
+    const bool pkg = le.restriction == SRestriction::Package, rec = le.restriction == SRestriction::Record;
+    bool bad = (pkg || rec) && (!le.def.equations.empty() || !le.def.initial_equations.empty() || !le.def.algorithms.empty() ||
+                                !le.def.initial_algorithms.empty());
+    for (Id<SElement> e : le.def.elements) {
+      const SElement& x = I_.scode.elems[e];
+      bad = bad || (pkg && x.kind == SElementKind::Component && x.attr.var != SVariability::Const) ||
+            (rec && x.prefixes.vis == SVisibility::Protected);
+    }
+    if (bad) {
+      mark_unsupported("package / record class restriction", std::string(I_.interner.str(le.name)));
+      return Inst::empty_node();
+    }
+  }
   // 带修饰的短类（`package Medium = MoistAir(extraPropertiesNames = {"CO2"}, C_nominal = {1.519E-3})`，MSL Fluid RoomCO2）：
   // expandClassDerived 把短类的修饰并进基类的实例（NFInst.mo:1012-1068 v1.25.0）——包实例里被修饰的常量取修饰值，依赖它的
   // （`nC = size(extraPropertiesNames, 1)`）随之。ymc 照最外层的 extends 修饰施加到实例的各组件上（内层的短类先施加，外层后
-  // 施加盖过；值在写短类的类里求，见 apply_extends_modifier）。只收对组件的普通绑定修饰；类修饰 / 重声明 / 子修饰 / 改不存在的
-  // 名字 → SKIP。
+  // 施加盖过；值在写短类的类里求，见 apply_extends_modifier）。对组件只收普通绑定修饰；改嵌套类的类修饰（`package Medium =
+  // ConstantPropertyLiquidWater(SpecificEnthalpy(max = 1e6))`，MSL Media.Examples.SimpleLiquidWater）同 extends 修饰里的类修饰
+  // （inst_class）：挂到实例类树里那个类上（最外层，排在各层 extends 的类修饰之前）、补到已实例化的这个类型的组件上——omc 的短类
+  // 修饰就是基类实例的外来修饰（expandClassDerived :1012-1061 → applyModifier :1519-1616 → mergeModifier，NFInst.mo v1.25.0；XM
+  // 探针 XM34-XM43）。重声明 / 带子修饰的组件修饰 / 改不存在的名字 / 不能当类修饰施加的（plain_class_mod）→ SKIP。
   for (const auto& [m, at] : short_mods)
     for (const SSubMod& s : I_.scode.mods[m].subs) {
       const SMod& sm = I_.scode.mods[s.mod];
-      if (sm.kind != SModKind::Mod || !sm.binding.is_valid() || !sm.subs.empty()) {
+      if (sm.kind != SModKind::Mod || (sm.binding.is_valid() && !sm.subs.empty()) || (!sm.binding.is_valid() && sm.subs.empty())) {
         mark_unsupported("lookup into modified short class", std::string(I_.interner.str(s.ident)));
         return Inst::empty_node();
       }
@@ -349,14 +375,28 @@ NodeId Instantiator::inst_package(NodeId cls) {
       for (const SSubMod& s : I_.scode.mods[m].subs) {
         bool hit = false;
         for (NodeId c : comps) hit = hit || (I_.nodes[c].kind == NodeKind::Component && I_.nodes[c].name == s.ident);
-        if (!hit) {
+        // 类修饰：改的须是实例类树里的类（不是组件），且能当类修饰施加。
+        const bool cmod = !I_.scode.mods[s.mod].binding.is_valid();
+        const NodeId k = cmod && !hit ? tree_class(I_.node_class(inst).tree, s.ident) : Inst::empty_node();
+        if (cmod ? (hit || !k.is_valid() || I_.nodes[k].is_empty() || !plain_class_mod(k, s.mod)) : !hit) {
           mark_unsupported("lookup into modified short class", std::string(I_.interner.str(s.ident)));
           return Inst::empty_node();
         }
       }
-    for (auto it = short_mods.rbegin(); it != short_mods.rend(); ++it)
+    for (auto it = short_mods.rbegin(); it != short_mods.rend(); ++it) {
       for (NodeId c : comps)
         if (I_.nodes[c].kind == NodeKind::Component) apply_extends_modifier(c, it->first, it->second);
+      // 类修饰：内层的短类先挂、外层后挂到最前（外层在前，同 inst_class）。
+      const std::vector<SSubMod> subs = I_.scode.mods[it->first].subs;   // 拷贝
+      for (const SSubMod& s : subs) {
+        if (I_.scode.mods[s.mod].binding.is_valid()) continue;
+        const NodeId k = tree_class(I_.node_class(inst).tree, s.ident);
+        std::vector<std::pair<Id<SMod>, NodeId>>& v = I_.class_mods[k.raw];
+        v.insert(v.begin(), {s.mod, it->second});
+        I_.class_modded.insert(k.raw);
+        apply_class_mod(inst, k, s.mod, it->second, 0);
+      }
+    }
   }
   mark_package_instance(inst);
   pkg_cache_[cls.raw] = inst;
@@ -389,12 +429,18 @@ NodeId Instantiator::lookup_class_name(const std::vector<Symbol>& path, NodeId s
   for (std::size_t i = 1; i < path.size() && cur.is_valid() && !I_.nodes[cur].is_empty(); ++i) {
     const NodeId entered = cur;   // 顺短类链之前的那个（包实例按它缓存、按它命名）
     // 进类查名前顺短类链到底（`package Medium = P.Water` 里查 BaseProperties = 查 P.Water 的，见 through_short_classes）。
-    // 带修饰的短类只在实例语境里接（下面按包实例查，修饰由 inst_package 施加）；定义层查不到修饰后的值 → SKIP。
+    // 带修饰的短类按包实例查（修饰由 inst_package 施加）：实例语境的见下；定义层的（`package S = A(T(min = 2))` 写在包里，经
+    // `P.S.T` 查——omc 同样先 instPackage，NFLookup.lookupLocalNames :767；XM 探针 XM58）在这里接，实例化不了 → SKIP。
     bool partial = false;
     std::vector<std::pair<Id<SMod>, NodeId>> smods;
     cur = through_short_classes(cur, partial, &smods);
     if (!cur.is_valid() || I_.nodes[cur].is_empty()) break;
     if (!smods.empty() && !in_instance_context(entered)) {
+      if (const NodeId pk = inst_package(entered); pk.is_valid() && !I_.nodes[pk].is_empty()) {
+        cur = tree_class(I_.node_class(pk).tree, path[i]);
+        if (path_nodes && cur.is_valid() && !I_.nodes[cur].is_empty()) path_nodes->push_back(cur);
+        continue;
+      }
       mark_unsupported("lookup into modified short class", std::string(I_.interner.str(I_.nodes[entered].name)));
       return Inst::empty_node();
     }
@@ -427,7 +473,8 @@ NodeId Instantiator::lookup_class_name(const std::vector<Symbol>& path, NodeId s
       expand(cur);
     }
     const ClassTreeId ct = I_.node_class(cur).tree;
-    cur = ct.is_valid() ? class_in(entered, ct, path[i]) : Inst::empty_node();
+    const NodeId owner = cur;
+    cur = ct.is_valid() ? class_in(entered, ct, path[i], owner) : Inst::empty_node();
     if (path_nodes && cur.is_valid() && !I_.nodes[cur].is_empty()) path_nodes->push_back(cur);
   }
   return (cur.is_valid() && !I_.nodes[cur].is_empty()) ? cur : Inst::empty_node();

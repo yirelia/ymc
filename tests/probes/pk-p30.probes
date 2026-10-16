@@ -1,0 +1,1962 @@
+//// set: pk-p30 — 定义层的包查名经包实例（66v，omc 进类查名前一律 Inst.instPackage，NFLookup.lookupLocalName :699-700 / lookupCrefInNode :976-977）：经带修饰 extends 的包（全路径 / import 别名 / 函数体 / 包常量绑定，XM1-XM15、XM56-XM64）取改过的常量与类型、函数按访问路径命名（XM4 `import M = P.A` → `P.A.f`）；继承来的类（XM16-XM20）、定义层短类（XM24-XM30，记录短类 `record iter = accuracy` 的 `iter.delp`）；class extends 记录在包实例里构造（XM31-XM33，MSL ReferenceAir.MoistAir1）；短类包的类修饰 `package M = A(T(max = 5))`（XM34-XM43、XM58，MSL SimpleLiquidWater）；限定类型路径经继承 / 短类按访问路径命名记录构造函数（XM21 / XM23 / XM45 / XM46 / XM48 / XM49 / XM51 / XM52 / XM55，此前静默错）；包 / 记录的限定词核查（XMR1-XMR6，omc 报 "Variable p in package A is not constant"）；括号单元素元组的赋值目标（XMT*，MSL Air_Utilities.airBaseProp_pT）；integer() 的实参提 Real（XMI*，MSL R134a FindInterval）；照旧 SKIP：经 extends 修饰重声明的记录类型的常量数组（XMM1，MSL MixtureGases）、extends 短类后的 class extends（XMC1，MSL TestTwoPhaseStates）、函数里记录数组局部的绑定（XMC2，MSL MoistAir 一族的 Gibbs）、枚举类型路径（XM44 / XM57）、无修饰继承的函数里的记录（XM50）；挪成初始方程的记录字段被结构用法读到（XMY*，omc 报 "has neither value nor start value"，此前 ACCEPTS-INVALID / 静默错）
+//// model: XM1
+package XM1P
+  package Base
+    constant Integer n = 1;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * n;
+    end f;
+  end Base;
+  package A
+    extends Base(n = 2);
+  end A;
+end XM1P;
+model XM1
+  Real y = XM1P.A.f(time);
+end XM1;
+//// model: XM2
+package XM2P
+  package Base
+    constant Integer n = 1;
+  end Base;
+  package A
+    extends Base(n = 2);
+  end A;
+end XM2P;
+model XM2
+  Real z = XM2P.A.n * time;
+end XM2;
+//// model: XM3
+package XM3P
+  package Base
+    type T = Real(min = 0);
+  end Base;
+  package A
+    extends Base(T(min = 1));
+  end A;
+end XM3P;
+model XM3
+  XM3P.A.T x = time;
+end XM3;
+//// model: XM4
+package XM4P
+  package Base
+    constant Integer n = 1;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * n;
+    end f;
+  end Base;
+  package A
+    extends Base(n = 2);
+  end A;
+end XM4P;
+model XM4
+  import M = XM4P.A;
+  Real y = M.f(time);
+end XM4;
+//// model: XM5
+package XM5P
+  package Base
+    constant Integer n = 1;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * n;
+    end f;
+  end Base;
+  package A
+    extends Base(n = 2);
+  end A;
+end XM5P;
+model XM5
+  package M = XM5P.A;
+  Real y = M.f(time);
+end XM5;
+//// model: XM6
+package XM6P
+  package Base
+    constant Integer n = 1;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * n;
+    end f;
+  end Base;
+  package A
+    extends Base(n = 2);
+  end A;
+  model C
+    replaceable package Medium = Base;
+    Real y = Medium.f(time);
+  end C;
+end XM6P;
+model XM6
+  XM6P.C c(redeclare package Medium = XM6P.A);
+end XM6;
+//// model: XM7
+package XM7P
+  package Base
+    constant Integer n = 1;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * n;
+    end f;
+  end Base;
+  package A
+    extends Base(n = 2);
+  end A;
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := XM7P.A.f(x) + 1;
+  end g;
+end XM7P;
+model XM7
+  Real y = XM7P.g(time);
+end XM7;
+//// model: XM8
+package XM8P
+  package Base
+    constant Integer n = 1;
+  end Base;
+  package A
+    extends Base(n = 2);
+  end A;
+  package Q
+    constant Real c = XM8P.A.n * 1.5;
+  end Q;
+end XM8P;
+model XM8
+  Real z = XM8P.Q.c * time;
+end XM8;
+//// model: XM9
+package XM9P
+  package Base
+    constant Integer n = 1;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * n;
+    end f;
+  end Base;
+  package A
+    extends Base(n = 2);
+  end A;
+  package B
+    extends A(n = 3);
+  end B;
+end XM9P;
+model XM9
+  Real y = XM9P.B.f(time);
+  Real z = XM9P.B.n * time;
+end XM9;
+//// model: XM10
+package XM10P
+  package Base
+    constant Integer n = 1;
+    record R
+      Real a;
+      Real b = n;
+    end R;
+  end Base;
+  package A
+    extends Base(n = 2);
+  end A;
+end XM10P;
+model XM10
+  XM10P.A.R r = XM10P.A.R(a = time);
+end XM10;
+//// model: XM11
+package XM11P
+  package Base
+    constant Integer n = 1;
+    package Inner
+      constant Integer m = n + 1;
+    end Inner;
+  end Base;
+  package A
+    extends Base(n = 2);
+  end A;
+end XM11P;
+model XM11
+  Real z = XM11P.A.Inner.m * time;
+end XM11;
+//// model: XM12
+package XM12P
+  package Base
+    type T = Real(min = 0);
+    function g
+      input T x;
+      output T y;
+    algorithm
+      y := 2 * x;
+    end g;
+  end Base;
+  package A
+    extends Base(T(min = 1));
+  end A;
+end XM12P;
+model XM12
+  Real y = XM12P.A.g(time);
+end XM12;
+//// model: XM13
+package XM13P
+  partial package Base
+    constant Integer n = 1;
+    replaceable partial function f
+      input Real x;
+      output Real y;
+    end f;
+  end Base;
+  package A
+    extends Base(n = 2);
+    redeclare function extends f
+    algorithm
+      y := x * n;
+    end f;
+  end A;
+end XM13P;
+model XM13
+  Real y = XM13P.A.f(time);
+end XM13;
+//// model: XM14
+package XM14P
+  package Base
+    constant Integer n = 1;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * n;
+    end f;
+  end Base;
+  package A
+    extends Base(n = 2);
+  end A;
+end XM14P;
+model XM14
+  parameter Real p = XM14P.A.f(3);
+  Real y = p * time;
+end XM14;
+//// model: XM15
+package XM15P
+  package Base
+    constant Integer n = 1;
+  end Base;
+  package A
+    extends Base(n = 2);
+  end A;
+end XM15P;
+model XM15
+  Real x[XM15P.A.n];
+equation
+  x = fill(time, XM15P.A.n);
+end XM15;
+//// model: XM16
+package XM16P
+  package Base
+    constant Integer n = 1;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * n;
+    end f;
+  end Base;
+  package A
+    extends Base;
+  end A;
+end XM16P;
+model XM16
+  Real y = XM16P.A.f(time);
+end XM16;
+//// model: XM17
+package XM17P
+  package Base
+    constant Integer n = 1;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * n;
+    end f;
+  end Base;
+  package A
+    extends Base;
+  end A;
+end XM17P;
+model XM17
+  import M = XM17P.A;
+  Real y = M.f(time);
+  Real z = M.n * time;
+end XM17;
+//// model: XM18
+package XM18P
+  package Base
+    constant Integer n = 1;
+    record R
+      Real a;
+      Real b = n;
+    end R;
+  end Base;
+  package A
+    extends Base;
+  end A;
+end XM18P;
+model XM18
+  XM18P.A.R r = XM18P.A.R(a = time);
+end XM18;
+//// model: XM19
+package XM19P
+  package Base
+    constant Integer n = 1;
+    record R
+      Real a;
+      Real b = n;
+    end R;
+    function mk
+      input Real a;
+      output R r;
+    algorithm
+      r := R(a = a);
+    end mk;
+  end Base;
+  package A
+    extends Base(n = 2);
+  end A;
+end XM19P;
+model XM19
+  XM19P.A.R r = XM19P.A.mk(time);
+end XM19;
+//// model: XM20
+package XM20P
+  package Base
+    constant Integer n = 1;
+    record R
+      Real a;
+      Real b = n;
+    end R;
+    function mk
+      input Real a;
+      output R r;
+    algorithm
+      r := R(a = a);
+    end mk;
+  end Base;
+  package A
+    extends Base;
+  end A;
+end XM20P;
+model XM20
+  XM20P.A.R r = XM20P.A.mk(time);
+end XM20;
+//// model: XM21
+package XM21P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  package A
+    extends Base;
+  end A;
+end XM21P;
+model XM21
+  XM21P.A.R r;
+  XM21P.A.R s;
+equation
+  r = s;
+  s.a = time;
+end XM21;
+//// model: XM22
+package XM22P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  package A
+    extends Base;
+  end A;
+  function mk
+    input Real a;
+    output A.R r;
+  algorithm
+    r := A.R(a = a);
+  end mk;
+end XM22P;
+model XM22
+  XM22P.A.R r = XM22P.mk(time);
+end XM22;
+//// model: XM23
+package XM23P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  package A
+    extends Base;
+  end A;
+end XM23P;
+model XM23
+  XM23P.Base.R r;
+  XM23P.A.R s;
+equation
+  r = s;
+  s.a = time;
+end XM23;
+//// model: XM24
+package XM24P
+  package Inverses
+    record accuracy
+      constant Real delp = 0.1;
+      constant Real delh = 1e-9;
+    end accuracy;
+    function dofp
+      input Real p;
+      input Real delp;
+      output Real d;
+    algorithm
+      d := p * delp;
+    end dofp;
+  end Inverses;
+  record iter = Inverses.accuracy;
+  function g
+    input Real p;
+    output Real d;
+  algorithm
+    d := Inverses.dofp(p = p, delp = iter.delp);
+  end g;
+end XM24P;
+model XM24
+  Real y = XM24P.g(time);
+end XM24;
+//// model: XM25
+package XM25P
+  record accuracy
+    constant Real delp = 0.1;
+  end accuracy;
+  record iter = accuracy;
+end XM25P;
+model XM25
+  parameter Real d = XM25P.iter.delp;
+end XM25;
+//// model: XM26
+package XM26P
+  package Q
+    constant Integer c = 3;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * c;
+    end f;
+  end Q;
+  package S = Q;
+end XM26P;
+model XM26
+  Real z = XM26P.S.c * time;
+  Real w = XM26P.S.f(time);
+end XM26;
+//// model: XM27
+package XM27P
+  package Q
+    constant Integer c = 3;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * c;
+    end f;
+  end Q;
+  package S = Q(c = 5);
+end XM27P;
+model XM27
+  Real z = XM27P.S.c * time;
+  Real w = XM27P.S.f(time);
+end XM27;
+//// model: XM28
+package XM28P
+  record accuracy
+    constant Real delp = 0.1;
+  end accuracy;
+  record iter = accuracy(delp = 0.5);
+  function g
+    input Real p;
+    output Real d;
+  algorithm
+    d := p * iter.delp;
+  end g;
+end XM28P;
+model XM28
+  Real y = XM28P.g(time);
+end XM28;
+//// model: XM29
+package XM29P
+  package Q
+    constant Integer c = 3;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * c;
+    end f;
+  end Q;
+  package S = Q;
+  package T = S;
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := T.f(x) + T.c;
+  end g;
+end XM29P;
+model XM29
+  Real w = XM29P.g(time);
+end XM29;
+//// model: XM30
+package XM30P
+  package Base
+    constant Integer n = 1;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * n;
+    end f;
+  end Base;
+  package A
+    extends Base(n = 2);
+  end A;
+  package S = A;
+end XM30P;
+model XM30
+  Real w = XM30P.S.f(time);
+  Real z = XM30P.S.n * time;
+end XM30;
+//// model: XM31
+package XM31P
+  partial package PM
+    constant Integer nX = 1;
+    replaceable record State
+      Real p;
+    end State;
+    replaceable function setState
+      input Real p;
+      output State s;
+    end setState;
+    function h
+      input Real p;
+      output Real y;
+    protected
+      State s;
+    algorithm
+      s := setState(p);
+      y := s.p;
+    end h;
+  end PM;
+  partial package PMix
+    extends PM(nX = 2);
+    redeclare replaceable record extends State
+      Real X[nX];
+    end State;
+  end PMix;
+  package Gas
+    extends PMix;
+    redeclare record extends State
+    end State;
+    redeclare function extends setState
+    algorithm
+      s := State(p = p, X = fill(0.5, nX));
+    end setState;
+  end Gas;
+  model C
+    replaceable package Medium = PM;
+    parameter Real p0 = Medium.h(1.0);
+  end C;
+end XM31P;
+model XM31
+  XM31P.C c(redeclare package Medium = XM31P.Gas);
+end XM31;
+//// model: XM32
+package XM32P
+  partial package PM
+    constant Integer nX = 1;
+    replaceable record State
+      Real p;
+    end State;
+    replaceable function setState
+      input Real p;
+      output State s;
+    end setState;
+  end PM;
+  partial package PMix
+    extends PM(nX = 2);
+    redeclare replaceable record extends State
+      Real X[nX];
+    end State;
+  end PMix;
+  package Gas
+    extends PMix;
+    redeclare record extends State
+    end State;
+    redeclare function extends setState
+    algorithm
+      s := State(p = p, X = fill(0.5, nX));
+    end setState;
+  end Gas;
+  model C
+    replaceable package Medium = PM;
+    Medium.State s = Medium.setState(time);
+  end C;
+end XM32P;
+model XM32
+  XM32P.C c(redeclare package Medium = XM32P.Gas);
+end XM32;
+//// model: XM33
+package XM33P
+  partial package PM
+    constant Integer nX = 1;
+    replaceable record State
+      Real p;
+    end State;
+  end PM;
+  partial package PMix
+    extends PM(nX = 2);
+    redeclare replaceable record extends State
+      Real X[nX];
+    end State;
+  end PMix;
+  package Gas
+    extends PMix;
+    redeclare record extends State
+    end State;
+    function h
+      input Real p;
+      output Real y;
+    protected
+      State s;
+    algorithm
+      s := State(p = p, X = fill(0.5, nX));
+      y := s.p + s.X[2];
+    end h;
+  end Gas;
+end XM33P;
+model XM33
+  parameter Real p0 = XM33P.Gas.h(1.0);
+  Real y = XM33P.Gas.h(time);
+end XM33;
+//// model: XM34
+package XM34P
+  package A
+    type T = Real(min = 0, max = 10, nominal = 2);
+    function f
+      input T x;
+      output T y;
+    algorithm
+      y := 2 * x;
+    end f;
+  end A;
+end XM34P;
+model XM34
+  package M = XM34P.A(T(max = 5));
+  M.T z = M.f(time);
+end XM34;
+//// model: XM35
+package XM35P
+  package A
+    type T = Real(min = 0, max = 10);
+    function f
+      input T x;
+      output T y;
+    algorithm
+      y := 2 * x;
+    end f;
+  end A;
+  package S = A(T(min = 2));
+end XM35P;
+model XM35
+  Real z = XM35P.S.f(time);
+end XM35;
+//// model: XM36
+package XM36P
+  package A
+    constant Integer n = 1;
+    type T = Real(min = 0, max = 10);
+    function f
+      input T x;
+      output T y;
+    algorithm
+      y := n * x;
+    end f;
+  end A;
+end XM36P;
+model XM36
+  package M = XM36P.A(n = 3, T(max = 5));
+  Real z = M.f(time);
+end XM36;
+//// model: XM37
+package XM37P
+  package Base
+    type T = Real(min = 0, max = 10, unit = "m");
+    function f
+      input T x;
+      output T y;
+    algorithm
+      y := 2 * x;
+    end f;
+  end Base;
+  package A
+    extends Base(T(min = -1));
+  end A;
+end XM37P;
+model XM37
+  package M = XM37P.A(T(max = 5));
+  Real z = M.f(time);
+end XM37;
+//// model: XM38
+package XM38P
+  package A
+    type T = Real(min = 0, max = 10);
+    function f
+      input T x;
+      output T y;
+    algorithm
+      y := 2 * x;
+    end f;
+  end A;
+  package M1 = A(T(max = 5));
+end XM38P;
+model XM38
+  package M2 = XM38P.M1(T(min = 1));
+  Real z = M2.f(time);
+end XM38;
+//// model: XM39
+package XM39P
+  package A
+    type T = Real(min = 0, max = 10);
+    model Comp
+      T x = time;
+    end Comp;
+  end A;
+end XM39P;
+model XM39
+  package M = XM39P.A(T(max = 5));
+  M.Comp c;
+end XM39;
+//// model: XM40
+package XM40P
+  package A
+    type T = Real(min = 0, max = 10);
+    function f
+      input T x;
+      output T y;
+    algorithm
+      y := 2 * x;
+    end f;
+  end A;
+end XM40P;
+model XM40
+  package M = XM40P.A(final T(max = 5));
+  Real z = M.f(time);
+end XM40;
+//// model: XM41
+package XM41P
+  package A
+    record R
+      Real a(start = 1);
+      Real b = 2;
+    end R;
+    function f
+      input Real x;
+      output R r;
+    algorithm
+      r := R(a = x, b = 3);
+    end f;
+  end A;
+end XM41P;
+model XM41
+  package M = XM41P.A(R(a(start = 5)));
+  M.R r = M.f(time);
+end XM41;
+//// model: XM42
+package XM42P
+  package A
+    type T = Real(min = 0, max = 10);
+    function f
+      input T x;
+      output T y;
+    algorithm
+      y := 2 * x;
+    end f;
+  end A;
+  model C
+    replaceable package Medium = A;
+    Real z = Medium.f(time);
+  end C;
+end XM42P;
+model XM42
+  XM42P.C c(redeclare package Medium = XM42P.A(T(max = 5)));
+end XM42;
+//// model: XM43
+package XM43P
+  package A
+    type T = Real(min = 0, max = 10);
+    function f
+      input T x;
+      output T y;
+    algorithm
+      y := 2 * x;
+    end f;
+  end A;
+end XM43P;
+model XM43
+  import M = XM43P.A;
+  package N = M(T(max = 5));
+  Real z = N.f(time);
+  Real w = M.f(time);
+end XM43;
+//// model: XM44
+package XM44P
+  package Base
+    type E = enumeration(a, b, c);
+  end Base;
+  package A
+    extends Base;
+  end A;
+end XM44P;
+model XM44
+  XM44P.A.E e = XM44P.A.E.b;
+  Boolean t = e == XM44P.A.E.b;
+end XM44;
+//// model: XM45
+package XM45P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  package A
+    extends Base;
+  end A;
+  package S = A;
+end XM45P;
+model XM45
+  XM45P.S.R r;
+  XM45P.S.R s;
+equation
+  r = s;
+  s.a = time;
+end XM45;
+//// model: XM46
+package XM46P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  package A
+    extends Base;
+  end A;
+  model C
+    A.R r;
+    A.R s;
+  equation
+    r = s;
+    s.a = time;
+  end C;
+end XM46P;
+model XM46
+  XM46P.C c;
+end XM46;
+//// model: XM48
+package XM48P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+    model C
+      R r;
+      R s;
+    equation
+      r = s;
+      s.a = time;
+    end C;
+  end Base;
+  package A
+    extends Base;
+  end A;
+end XM48P;
+model XM48
+  XM48P.A.C c;
+end XM48;
+//// model: XM49
+package XM49P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  package A
+    extends Base;
+  end A;
+  package B
+    extends A;
+  end B;
+end XM49P;
+model XM49
+  XM49P.B.R r;
+  XM49P.A.R s;
+equation
+  r = s;
+  s.a = time;
+end XM49;
+//// model: XM50
+package XM50P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  package A
+    extends Base;
+    function mk
+      input Real a;
+      output R r;
+    algorithm
+      r := R(a = a);
+    end mk;
+  end A;
+end XM50P;
+model XM50
+  XM50P.A.R r = XM50P.A.mk(time);
+end XM50;
+//// model: XM51
+package XM51P
+  package Base
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := 2 * x;
+    end f;
+    model C
+      Real z = f(time);
+    end C;
+  end Base;
+  package A
+    extends Base;
+  end A;
+end XM51P;
+model XM51
+  XM51P.A.C c;
+end XM51;
+//// model: XM52
+package XM52P
+  package Base
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := 2 * x;
+    end f;
+    model C
+      Real z = f(time);
+    end C;
+  end Base;
+  package A
+    extends Base;
+  end A;
+end XM52P;
+model XM52
+  extends XM52P.A.C;
+end XM52;
+//// model: XM53
+package XM53P
+  package Base
+    constant Real k = 2;
+    model C
+      Real z = k * time;
+    end C;
+  end Base;
+  package A
+    extends Base(k = 3);
+  end A;
+end XM53P;
+model XM53
+  XM53P.A.C c;
+end XM53;
+//// model: XM54
+package XM54P
+  package Base
+    type T = Real(min = 0, max = 10);
+    model C
+      T z = time;
+    end C;
+  end Base;
+  package A
+    extends Base;
+  end A;
+end XM54P;
+model XM54
+  XM54P.A.C c;
+  XM54P.A.T t = time;
+end XM54;
+//// model: XM55
+package XM55P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  package A
+    extends Base;
+  end A;
+end XM55P;
+model XM55
+  import XM55P.A;
+  A.R r;
+  A.R s;
+equation
+  r = s;
+  s.a = time;
+end XM55;
+//// model: XM56
+package XM56P
+  package Base
+    constant Integer n = 1;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * n;
+    end f;
+  end Base;
+  package A
+    extends Base(n = 2);
+    function g
+      input Real x;
+      output Real y;
+    algorithm
+      y := f(x) + h(x);
+    end g;
+    function h
+      input Real x;
+      output Real y;
+    algorithm
+      y := x + n;
+    end h;
+  end A;
+end XM56P;
+model XM56
+  Real y = XM56P.A.g(time);
+end XM56;
+//// model: XM57
+package XM57P
+  package Base
+    constant Integer n = 1;
+    type E = enumeration(a, b, c);
+  end Base;
+  package A
+    extends Base(n = 2);
+  end A;
+end XM57P;
+model XM57
+  parameter XM57P.A.E e = XM57P.A.E.b;
+  Real z = XM57P.A.n * time;
+end XM57;
+//// model: XM58
+package XM58P
+  package A
+    type T = Real(min = 0, max = 10);
+  end A;
+  package S = A(T(min = 2));
+end XM58P;
+model XM58
+  XM58P.S.T x = time;
+end XM58;
+//// model: XM59
+package XM59P
+  package Base
+    constant Real k = 2;
+    model C
+      Real z = k * time;
+    end C;
+  end Base;
+  package A
+    extends Base(k = 3);
+  end A;
+end XM59P;
+model XM59
+  extends XM59P.A.C;
+end XM59;
+//// model: XM60
+package XM60P
+  record R
+    Real a;
+    Real b;
+  end R;
+  package Base
+    constant Integer n = 1;
+    constant R r = R(a = n, b = 2 * n);
+  end Base;
+  package A
+    extends Base(n = 3);
+  end A;
+end XM60P;
+model XM60
+  Real z = XM60P.A.r.b * time;
+end XM60;
+//// model: XM61
+package XM61P
+  package Base
+    constant Integer n = 1;
+    constant Real c[n] = fill(1.5, n);
+  end Base;
+  package A
+    extends Base(n = 2);
+  end A;
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := x * sum(A.c);
+  end g;
+end XM61P;
+model XM61
+  Real y = XM61P.g(time);
+end XM61;
+//// model: XM62
+package XM62P
+  package Base
+    constant Integer n = 1;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * n;
+    end f;
+  end Base;
+  package A
+    extends Base(n = 2);
+  end A;
+  package B
+    extends Base(n = 3);
+  end B;
+end XM62P;
+model XM62
+  Real y = XM62P.A.f(time) + XM62P.B.f(time) + XM62P.Base.f(time);
+end XM62;
+//// model: XM63
+package XM63P
+  package Base
+    constant Integer n = 1;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * n;
+    end f;
+  end Base;
+  package A
+    extends Base(n = 2);
+  end A;
+  model M
+    Real y = A.f(time);
+  end M;
+end XM63P;
+model XM63
+  XM63P.M m;
+end XM63;
+//// model: XM64
+package XM64P
+  package Base
+    constant Integer n = 1;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * n;
+    end f;
+  end Base;
+  package A
+    extends Base(n = 2);
+  end A;
+end XM64P;
+model XM64
+  parameter Real p = XM64P.A.f(1.5) annotation(Evaluate = true);
+  Real y[integer(p)];
+equation
+  y = fill(time, integer(p));
+end XM64;
+//// model: XMR1
+package XMR1P
+  package Base
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := 2 * x;
+    end f;
+  end Base;
+  package A
+    extends Base;
+    parameter Real p = 1;
+  end A;
+end XMR1P;
+model XMR1
+  Real y = XMR1P.A.f(time);
+end XMR1;
+//// model: XMR2
+package XMR2P
+  package Base
+    constant Integer n = 1;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := n * x;
+    end f;
+  end Base;
+  package A
+    extends Base(n = 2);
+    Real v;
+  equation
+    v = 1;
+  end A;
+end XMR2P;
+model XMR2
+  Real y = XMR2P.A.f(time);
+end XMR2;
+//// model: XMR3
+package XMR3P
+  record accuracy
+    constant Real delp = 0.1;
+  protected
+    constant Real hidden = 0.2;
+  end accuracy;
+  record iter = accuracy;
+  function g
+    input Real p;
+    output Real d;
+  algorithm
+    d := p * iter.delp;
+  end g;
+end XMR3P;
+model XMR3
+  Real y = XMR3P.g(time);
+end XMR3;
+//// model: XMR4
+package XMR4P
+  package Base
+    constant Integer n = 1;
+  end Base;
+  package A
+    extends Base(n = 2);
+    parameter Real p = 1;
+  end A;
+end XMR4P;
+model XMR4
+  import M = XMR4P.A;
+  Real z = M.n * time;
+end XMR4;
+//// model: XMR5
+package XMR5P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  package A
+    extends Base;
+    parameter Real p = 1;
+  end A;
+end XMR5P;
+model XMR5
+  XMR5P.A.R r;
+  XMR5P.A.R s;
+equation
+  r = s;
+  s.a = time;
+end XMR5;
+//// model: XMR6
+package XMR6P
+  package Base
+    constant Integer n = 1;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := n * x;
+    end f;
+  end Base;
+  package A
+    extends Base(n = 2);
+  algorithm
+    assert(true, "x");
+  end A;
+end XMR6P;
+model XMR6
+  package M = XMR6P.A;
+  Real y = M.f(time);
+end XMR6;
+//// model: XMM1
+package XMM1P
+  record FCBase
+    Real Tc;
+  end FCBase;
+  record FCData
+    extends FCBase;
+    Real M;
+  end FCData;
+  partial package Base
+    constant Integer nX = 2;
+    replaceable record FC = FCBase;
+    constant FC[nX] fc;
+    function f
+      input Real x;
+      input Integer i;
+      output Real y;
+    algorithm
+      y := x * fc[i].Tc;
+    end f;
+  end Base;
+  package Gas
+    extends Base(redeclare record FC = FCData, fc = {FCData(Tc = 1.5, M = 2), FCData(Tc = 2.5, M = 3)});
+  end Gas;
+end XMM1P;
+model XMM1
+  package M = XMM1P.Gas;
+  Real y = M.f(time, 1);
+end XMM1;
+//// model: XMM2
+package XMM2P
+  record FCBase
+    Real Tc;
+  end FCBase;
+  partial package Base
+    constant Integer nX = 2;
+    constant FCBase[nX] fc;
+    function f
+      input Real x;
+      input Integer i;
+      output Real y;
+    algorithm
+      y := x * fc[i].Tc;
+    end f;
+  end Base;
+  package Gas
+    extends Base(fc = {FCBase(Tc = 1.5), FCBase(Tc = 2.5)});
+  end Gas;
+end XMM2P;
+model XMM2
+  package M = XMM2P.Gas;
+  Real y = M.f(time, 1);
+end XMM2;
+//// model: XMC1
+package XMC1P
+  package Base
+    constant Integer n = 1;
+    replaceable model M
+      Real x = n * time;
+    end M;
+  end Base;
+  package S = Base;
+  package A
+    extends S;
+    redeclare model extends M
+      Real y = 2 * x;
+    end M;
+  end A;
+end XMC1P;
+model XMC1
+  XMC1P.A.M m;
+end XMC1;
+//// model: XMC2
+record XMC2C
+  Real re;
+  Real im;
+end XMC2C;
+function XMC2F
+  input Real x;
+  output Real y;
+protected
+  XMC2C[2] t = {XMC2C(1, 2), XMC2C(3, 4)};
+algorithm
+  y := x * t[1].re + t[2].im;
+end XMC2F;
+model XMC2
+  Real y = XMC2F(time);
+end XMC2;
+//// model: XMT1
+function XMT1F
+  input Real x;
+  output Real y;
+algorithm
+  (y) := 2 * x;
+end XMT1F;
+model XMT1
+  Real z = XMT1F(time);
+end XMT1;
+//// model: XMT2
+function XMT2G
+  input Real x;
+  output Real a;
+  output Real b;
+algorithm
+  a := x;
+  b := 2 * x;
+end XMT2G;
+function XMT2F
+  input Real x;
+  output Real y;
+algorithm
+  (y) := XMT2G(x);
+end XMT2F;
+model XMT2
+  Real z = XMT2F(time);
+end XMT2;
+//// model: XMT3
+record XMT3R
+  Real a;
+  Real b;
+end XMT3R;
+function XMT3F
+  input Real x;
+  output XMT3R r;
+algorithm
+  (r.a) := sin(x);
+  ((r.b)) := cos(x);
+end XMT3F;
+model XMT3
+  XMT3R z = XMT3F(time);
+end XMT3;
+//// model: XMT4
+model XMT4
+  Real x;
+  Real y;
+equation
+  (x) = time;
+algorithm
+  (y) := 2 * x;
+end XMT4;
+//// model: XMT5
+function XMT5G
+  input Real x;
+  output Real a;
+  output Real b;
+algorithm
+  a := x;
+  b := 2 * x;
+end XMT5G;
+function XMT5F
+  input Real x;
+  output Real y;
+  output Real w;
+algorithm
+  ((y), w) := XMT5G(x);
+end XMT5F;
+model XMT5
+  Real z = XMT5F(time);
+end XMT5;
+//// model: XMT6
+function XMT6F
+  input Real x;
+  output Real y[2];
+algorithm
+  (y[1]) := x;
+  (y[2]) := 2 * x;
+end XMT6F;
+model XMT6
+  Real z[2] = XMT6F(time);
+end XMT6;
+//// model: XMT7
+function XMT7G
+  input Real x;
+  output Real a;
+  output Real b;
+algorithm
+  a := x;
+  b := 2 * x;
+end XMT7G;
+model XMT7
+  Real x;
+  Real y;
+equation
+  (x) = sin(time);
+  (y) = XMT7G(time);
+end XMT7;
+//// model: XMT8
+function XMT8G
+  input Real x;
+  output Real a;
+  output Real b;
+algorithm
+  a := x;
+  b := 2 * x;
+end XMT8G;
+model XMT8
+  Real x;
+  Real y;
+algorithm
+  (x) := sin(time);
+  (y) := XMT8G(time);
+end XMT8;
+//// model: XMT9
+function XMT9G
+  input Real x;
+  output Real a;
+  output Real b;
+algorithm
+  (a) := sin(x);
+  b := 2 * x;
+end XMT9G;
+model XMT9
+  parameter Real p = XMT9G(1.0);
+  Real y = p * time;
+end XMT9;
+//// model: XMT10
+record XMT10R
+  Real a;
+  Real b;
+end XMT10R;
+function XMT10F
+  input Real x;
+  output XMT10R r;
+algorithm
+  (r.a) := sin(x);
+  ((r.b), ) := XMT10H(x);
+end XMT10F;
+function XMT10H
+  input Real x;
+  output Real a;
+  output Real b;
+algorithm
+  a := x;
+  b := 2 * x;
+end XMT10H;
+model XMT10
+  parameter XMT10R z = XMT10F(1.0);
+end XMT10;
+//// model: XMT11
+function XMT11G
+  input Real x;
+  output Real a;
+  output Real b;
+algorithm
+  a := x;
+  b := 2 * x;
+end XMT11G;
+model XMT11
+  Real x;
+  Real y;
+equation
+  when time > 0.5 then
+    (x) = XMT11G(time);
+  end when;
+  y = x;
+end XMT11;
+//// model: XMI1
+function XMI1F
+  input Integer n;
+  input Integer ix;
+  output Integer m;
+algorithm
+  m := integer(div(ix + n, 2));
+end XMI1F;
+model XMI1
+  Integer k = XMI1F(integer(time), 3);
+end XMI1;
+//// model: XMI2
+function XMI2F
+  input Integer n;
+  output Integer m;
+algorithm
+  m := integer(n);
+end XMI2F;
+model XMI2
+  Integer k = XMI2F(integer(time));
+end XMI2;
+//// model: XMI3
+function XMI3F
+  input Integer n;
+  output Integer m;
+algorithm
+  m := integer(n / 2);
+end XMI3F;
+model XMI3
+  Integer k = XMI3F(integer(time));
+end XMI3;
+//// model: XMI4
+model XMI4
+  discrete Integer k(start = 1);
+  Integer m;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  m = integer(div(k, 2));
+end XMI4;
+//// model: XMI5
+model XMI5
+  parameter Integer p = 3;
+  Integer m = integer(p);
+  Integer m2 = integer(div(p, 2));
+end XMI5;
+//// model: XMI7
+model XMI7
+  discrete Integer k(start = 1);
+  Integer m;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  m = integer(k) + integer(k / 2);
+end XMI7;
+//// model: XMN3
+model XMN3
+  discrete Integer k(start = 1);
+  Real r;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  r = sqrt(-(-k));
+end XMN3;
+//// model: XMY1
+package XMY1P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.x := 2 * r.x;
+  end f;
+end XMY1P;
+model XMY1
+  parameter Real p = 2;
+  parameter XMY1P.R r = XMY1P.f(p);
+  parameter Real q = r.y * 2 annotation(Evaluate = true);
+  Real z = r.x * time;
+end XMY1;
+//// model: XMY2
+package XMY2P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * r.x;
+  end f;
+end XMY2P;
+model XMY2
+  parameter Real p = 2;
+  parameter XMY2P.R r = XMY2P.f(p);
+  parameter Real q = r.x * 2 annotation(Evaluate = true);
+  Real z = r.x * time;
+end XMY2;
+//// model: XMY3
+package XMY3P
+  record R
+    Real x;
+    Real y(start = 3);
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * r.x;
+  end f;
+end XMY3P;
+model XMY3
+  parameter Real p = 2;
+  parameter XMY3P.R r = XMY3P.f(p);
+  parameter Real q = r.y * 2 annotation(Evaluate = true);
+  Real z = r.x * time;
+end XMY3;
+//// model: XMY4
+package XMY4P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * r.x;
+  end f;
+end XMY4P;
+model XMY4
+  parameter Real p = 2;
+  parameter XMY4P.R r = XMY4P.f(p);
+  parameter Real q = r.y * 2;
+  Real z = r.x * time;
+end XMY4;
+//// model: XMY5
+package XMY5P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * r.x;
+  end f;
+end XMY5P;
+model XMY5
+  parameter Real p(fixed = false);
+  parameter XMY5P.R r = XMY5P.f(p);
+  parameter Real q = r.y * 2 annotation(Evaluate = true);
+  Real z = r.x * time;
+initial equation
+  p = 2;
+end XMY5;
+//// model: XMY6
+package XMY6P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * r.x;
+  end f;
+end XMY6P;
+model XMY6
+  parameter Real p = 2;
+  parameter XMY6P.R r = XMY6P.f(p);
+  Real a[integer(r.x)] = fill(time, integer(r.x));
+end XMY6;
+//// model: XMY7
+package XMY7P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * r.x;
+  end f;
+end XMY7P;
+model XMY7
+  parameter Real p = 2;
+  parameter XMY7P.R r = XMY7P.f(p);
+  parameter Real q = r.y annotation(Evaluate = true);
+  Real z = q * time;
+end XMY7;
+//// model: XMY8
+package XMY8P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * r.x;
+  end f;
+end XMY8P;
+model XMY8
+  parameter Real p = 2;
+  parameter XMY8P.R r0 = XMY8P.f(p);
+  parameter XMY8P.R r = r0;
+  parameter Real q = r.y * 2 annotation(Evaluate = true);
+  Real z = r.x * time;
+end XMY8;
+//// model: XMY9
+package XMY9P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * r.x;
+  end f;
+  model M
+    parameter Real k annotation(Evaluate = true);
+    Real z = k * time;
+  end M;
+end XMY9P;
+model XMY9
+  parameter Real p = 2;
+  parameter XMY9P.R r = XMY9P.f(p);
+  XMY9P.M m(k = r.y);
+end XMY9;
+//// model: XMY10
+package XMY10P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * r.x;
+  end f;
+end XMY10P;
+model XMY10
+  parameter Real p = 2;
+  parameter XMY10P.R r = XMY10P.f(p);
+  Real z;
+equation
+  if r.x > 1 then
+    z = time;
+  else
+    z = -time;
+  end if;
+end XMY10;
+//// model: XMY11
+package XMY11P
+  record S
+    Real y;
+  end S;
+  record R
+    Real x;
+    S s;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.s.y := 2 * r.x;
+  end f;
+end XMY11P;
+model XMY11
+  parameter Real p = 2;
+  parameter XMY11P.R r = XMY11P.f(p);
+  parameter Real q = r.s.y * 2 annotation(Evaluate = true);
+  Real z = r.x * time;
+end XMY11;
+//// model: XMY12
+package XMY12P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * r.x;
+  end f;
+end XMY12P;
+model XMY12
+  parameter Real p = 2 annotation(Evaluate = false);
+  parameter XMY12P.R r = XMY12P.f(p);
+  parameter Real q = r.y * 2 annotation(Evaluate = true);
+  Real z = r.x * time;
+end XMY12;
+//// model: XMY13
+package XMY13P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * r.x;
+  end f;
+end XMY13P;
+model XMY13
+  parameter Real p = 2;
+  parameter XMY13P.R r = XMY13P.f(p) annotation(Evaluate = false);
+  parameter Real q = r.y * 2 annotation(Evaluate = true);
+  Real z = r.x * time;
+end XMY13;
+//// model: XMY14
+package XMY14P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * r.x;
+  end f;
+end XMY14P;
+model XMY14
+  parameter Real p = 2;
+  parameter Real q = r.y * 2 annotation(Evaluate = true);
+  parameter XMY14P.R r = XMY14P.f(p);
+  Real z = r.x * time;
+end XMY14;
+//// model: XMY15
+package XMY15P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r;
+  algorithm
+    r.x := a;
+    r.y := 2 * r.x;
+  end f;
+end XMY15P;
+model XMY15
+  parameter Real p = 2;
+  parameter XMY15P.R r = XMY15P.f(p);
+  parameter Real q = r.y * 2 annotation(Evaluate = true);
+  parameter Real w = q + 1;
+  Real z = w * time;
+end XMY15;

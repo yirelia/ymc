@@ -2514,10 +2514,37 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       探针 pk-p29（121；SQ）；单测 +6。slice 700 例 FAIL 0（oracle=live 不一致 0）；scodeinst 660（不变）；testsuite 1829→1830
       （simulation/…/TupleReturn）/ FAIL 0；**MSL 468→472**（Spice3Benchmark DifferentialPair / MosfetCharacterization /
       RtlInverter / FourBitBinaryAdder）；探针 10194→10315；单测 444→450。
-- [ ] (66v 候选) 已有的 ACCEPTS-INVALID（66u 调查时发现）：`parameter R r = f(p)` 挪成初始方程、`parameter Real q = r.y * 2
+- [x] (66v 候选，66v 已修) 已有的 ACCEPTS-INVALID（66u 调查时发现）：`parameter R r = f(p)` 挪成初始方程、`parameter Real q = r.y * 2
       annotation(Evaluate = true)` 读它——omc 定型期顺父记录的绑定判 r.y 固定、q 成结构参数，报 "Parameter r.y has neither value
       nor start value"；ymc 用压平期补的 fixed = false、照出结果。复现 `$S/pkr66u/work/SQY2.mo`（没进探针包）。要在 key_not_fixed
       里按挪了的记录绑定判固定性。
+- [x] (66v) 定义层的包经带修饰的 extends / 短类：按包实例查名、按访问路径命名（2026-10-17）：
+      omc 进类查名前一律 Inst.instPackage（NFLookup.lookupLocalName :679-742、lookupCrefInNode :955-1034），ymc 的 SCode 层只在定义层
+      视图与包实例相同时可信。(1) def_pkg_node：SCode 下降进定义层的包 / 记录时，短类、经改了常量 / 类的 extends 继承（def_view_differs，
+      沿基类链）、或要找的类是继承来的 → 切到包实例（定义节点经新的 Instantiator::class_def_node 从顶层找；链上有实例层 / 经继承访问
+      过的类不切）。函数 / 记录按访问路径命名（lookupFunction :318-345；import 别名的找到处 = 目标的父亲 :931-932；scopePath 跳过基类名，
+      NFInstNode.mo:1217-1290）：`import Medium = …Air_pT` → `…Air_pT.specificEnthalpy`、继承来的 `P.A.f` / `P.A.R`、短类 `P.S.f`。
+      (2) inst 的 class_in：限定名后续段查到继承来的类 / 经短类进的 → 取包实例里的那份（此前按声明处 `P.Base.R` 命名，XM21 等一串静默错）。
+      (3) inst_package：短类的类修饰（`package Medium = ConstantPropertyLiquidWater(SpecificEnthalpy(max = 1e6))`）照 extends 的类修饰
+      施加（expandClassDerived :1012-1061 → applyModifier）；实例化的类照 Restriction.checkClass 核查（包只能有常量组件、无方程 / 算法，
+      记录无 protected，NFRestriction.mo:370-387 / :400-497——放开后 redeclare/ClassExtends3 / 4 会成 ACCEPTS-INVALID，随之补上）；定义层
+      带修饰的短类经 inst_package 查。(4) 包实例里找到的 class extends 记录带着类节点（隐式基类在实例类树里，MoistAir1 的 X[nX]）。
+      (5) 括号单元素元组的赋值目标 `(aux.rho) := f(…)`（instExp 的 TUPLE({e})，NFInst.mo:2823）；integer 的实参提 Real
+      （NFModelicaBuiltin.mo:111-118）。
+      顺带（66v 候选）：外层记录整体绑定挪成初始方程的字段，固定性顺父记录的绑定判（isComponentBindingNotFixed，NFStructural.mo
+      :128-158）——父绑定固定 → 不知道（omc 报错或告警后照出），SKIP；修了 SQY2 等 7 例 ACCEPTS-INVALID、2 例静默错。
+      照旧 SKIP / 下一处：ReferenceAir.MoistAir / MoistAir1 / MoistAir2 / Inverse_sh_TX——Ice09 Gibbs 的 `final Complex[2] t = {…}`
+      （函数里带绑定的记录数组局部 + Complex 重载运算，XMC2）；TwoPhaseWater.TestTwoPhaseStates——extends 短类后 class extends
+      （expandClassDerived，XMC1）；MixtureGases——extends 修饰里重声明的记录类型（XMM1）。
+      探针 pk-p30（106；XM / XMR / XMT / XMI / XMY），旧组 pk-p23 SKIP→PASS 4；单测 +10。slice 700→702 例（+ClassExtends4、ClassMod3）
+      FAIL 0（oracle=live 不一致 0）；scodeinst 660→663（ClassExtends4、ClassMod3、ih3）；testsuite 1830→1835（另 redeclare/
+      ClassExtends6、metamodelica ShortPackageDefinition）/ FAIL 0；**MSL 472→478**（R134a1 / R134a2、SimpleLiquidWater、ReferenceAir.
+      DryAir1 / DryAir2 / Inverse_sh_T）；探针 10315→10421；单测 450→460。
+- [ ] (66w 候选) 已有的静默 FAIL（66v 调查时发现，语料没撞上）：
+      (a) Integer 取负后转 Real：`sqrt(-k)`、`2.0 * (-k)`、`integer(-n)`——omc 打 `-/*Real*/(k)`，ymc 把负号推进转型 `/*Real*/(-k)`
+      （negate_expr 仿 Expression.negate，与 1.25.0 实跑不符，要查）。复现 `$S/pkr66v/work/XMN1.mo`、XMN2、XMI6、XMI8-10。
+      (b) 包里继承来的记录被包内本地类不限定引用：`XM47P.A.C c`（R 经无修饰的 extends 继承进 A）——omc 命名 `XM47P.A.R`，ymc
+      `XM47P.Base.R`。复现 `$S/pkr66v/work/XM47.mo`。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

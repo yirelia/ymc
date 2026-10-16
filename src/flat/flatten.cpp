@@ -97,7 +97,8 @@ const BuiltinFn* lookup_builtin(std::string_view name) {
       {"log10", 1, true, BFArg::Real, BFRes::Real},
       {"ceil", 1, true, BFArg::Real, BFRes::Real},
       {"floor", 1, true, BFArg::Real, BFRes::Real},
-      {"integer", 1, true, BFArg::Keep, BFRes::Integer},
+      // integer：`input Real x`（NFModelicaBuiltin.mo:111-118 v1.25.0）→ Integer 实参提 Real（XMI 探针 `integer(/*Real*/(div(k, 2)))`）。
+      {"integer", 1, true, BFArg::Real, BFRes::Integer},
       {"div", 2, true, BFArg::Keep, BFRes::DivType},
       {"mod", 2, true, BFArg::Keep, BFRes::DivType},
       {"rem", 2, true, BFArg::Keep, BFRes::DivType},
@@ -2665,6 +2666,12 @@ class Flattener {
   bool is_tuple_target(Id<Exp> lhs) const {
     return lhs.is_valid() && I_.absyn.exps[lhs].kind == ExpKind::Tuple && I_.absyn.exps[lhs].args.size() >= 2;
   }
+  // 括号 `(e)`（解析成单元素元组，同 omc 的 Modelica.g）拆到里面的式子：omc 实例化时就拆（NFInst.instExp 的 TUPLE({e}) 支，
+  // NFInst.mo:2823 v1.25.0）。
+  Id<Exp> strip_paren(Id<Exp> x) const {
+    while (x.is_valid() && I_.absyn.exps[x].kind == ExpKind::Tuple && I_.absyn.exps[x].args.size() == 1) x = I_.absyn.exps[x].args[0];
+    return x;
+  }
   // 元组赋值 / 元组方程 `(a, , c) := f(…)`、`(a, b) = f(…)`（NFSimplifyModel.simplifyTupleElement :430-464）：实参全常量 →
   // 用户函数求值后按元素拆成 (目标, 值) 对，空位跳过（T1 探针 `(p, q) = f(1.0)` → `p = 2.0; q = 3.0;`、`(, u) := f(2.0)` →
   // `u := 6.0;`）；否则单对 (元组, 调用)，空位打 `_`（T2 探针 `(w, _, k) = f(time)`）。目标是标量 cref 或整个数组的引用，类型
@@ -5155,7 +5162,12 @@ class Flattener {
     // 外层记录整体绑定已挪成初始方程 / 本字段没赋到（empty_outer）：parameter 字段 fixed = false（见 force_unfixed）。
     const bool unfix = (ctx.unbound_fields || empty_outer) &&
                        var_min(var_floor, I_.comps[cid].attributes.variability) == SVariability::Param;
-    if (unfix) force_unfixed(attrs, I_.comps[cid].ty.kind);
+    if (unfix) {
+      if (ctx.unbound_fields)
+        for (const FlatVarAttr& a : attrs)
+          if (in_.str(a.name) == "fixed") moved_own_fixed_.insert(vkey);
+      force_unfixed(attrs, I_.comps[cid].ty.kind);
+    }
     // 没赋到的字段是结构参数（外层 Evaluate = true 下带 start 的字段…）：omc 不当 unfix（var 是 STRUCTURAL_PARAMETER），照
     // verifyBinding 报错 / 拿 start 告警（NFFlatten.mo:690-692、:747-751 v1.25.0），未做 → 不出结果。
     if (empty_outer && struct_final) set_unsupported("structural unassigned record field");
@@ -5817,7 +5829,13 @@ class Flattener {
         v.attributes = attributes_at(aplan, idx, &arr_base);
       }
       if (result_.unsupported) return;
-      if (ctx.unbound_fields && vk == FlatVarKind::Parameter) force_unfixed(v.attributes, cty.kind);
+      if (ctx.unbound_fields && vk == FlatVarKind::Parameter) {   // 同标量字段（见 key_not_fixed）
+        const std::string ek = var_key(v);
+        moved_field_keys_.insert(ek);
+        for (const FlatVarAttr& a : v.attributes)
+          if (in_.str(a.name) == "fixed") moved_own_fixed_.insert(ek);
+        force_unfixed(v.attributes, cty.kind);
+      }
       // 无绑定的 parameter 元素（verifyBinding，同标量规则；YmcUnbArr1 探针、BuiltinAttribute21 `each fixed = false`）。
       if (vk == FlatVarKind::Parameter && !braw.is_valid() && !unbound_param_ok(v.attributes)) return;
       if (spread) {
@@ -7467,6 +7485,7 @@ class Flattener {
       bool fixed_attr = false;    // 自己带 fixed 属性（判 Evaluate 时不论真假都不固定，见 key_not_fixed）
       bool plain = false;         // 有绑定且不是从父记录整体绑定拆来的（那种走记录支，未做）
       bool impure = false;        // 绑定里调了不纯函数
+      bool moved = false;         // 外层记录的整体绑定挪成了初始方程的字段（fixed = false 是补的，见 key_not_fixed）
       std::vector<std::string> deps;   // 绑定（结构折叠之前的）里引用的
     };
     std::unordered_map<std::string, VisitInfo> visit;
@@ -7515,6 +7534,7 @@ class Flattener {
                                                       : PassCarry::VisitInfo::Other;
       vi.fixed_attr = has_fixed_attr(v);
       const std::string k = var_key(v);
+      vi.moved = moved_field_keys_.count(k) > 0;
       const auto pit = param_info_.find(k);
       const Id<Expr> b = visit_binding(k, v.binding);
       vi.plain = b.is_valid() && (pit == param_info_.end() || pit->second.origin != 1);
@@ -7802,6 +7822,9 @@ class Flattener {
     Id<SElement> el = find_scode_element_at(parts[0], leading_dot ? ScodeScope{} : scope, cur, true, &node);
     if (!el.is_valid()) return false;
     for (std::size_t idx = 1; idx < parts.size(); ++idx) {
+      // 定义层的包、定义层视图与包实例不同（短类、经改了常量 / 类的 extends 继承，见 def_pkg_node）：在包实例里查（XM 探针 XM2
+      // `XM2P.A.n` 取 extends 改过的值、XM8 包常量的绑定里、XM11 继承来的嵌套包；MSL Inverse_sh_TX 的 `…ReferenceMoistAir.reference_X`）。
+      if (!node.is_valid()) node = def_pkg_node(el, cur, false);
       if (node.is_valid()) {   // 实例语境里的类：在它的包实例里查（见 resolve_class_path），组件按实例取值（lower_pkg_comp）
         const NodeId pk = pkg_instance(node);
         if (!pk.is_valid()) return false;
@@ -7848,6 +7871,8 @@ class Flattener {
     Id<SElement> el = find_scode_element_at(c.parts[0].name, c.leading_dot ? ScodeScope{} : scope, cur, true, &node);
     std::size_t k = 0;
     while (el.is_valid() && I_.scode.elems[el].kind == SElementKind::Class) {
+      if (!node.is_valid() && k + 1 < c.parts.size() && c.parts[k].subscripts.empty())
+        node = def_pkg_node(el, cur, false);   // 定义层视图与包实例不同的包（见 resolve_qual_const）
       if (node.is_valid()) {   // 实例语境里的类：在它的包实例里查（见 resolve_qual_const）
         if (!c.parts[k].subscripts.empty() || ++k >= c.parts.size()) return std::nullopt;
         const NodeId pk = pkg_instance(node);
@@ -11239,11 +11264,16 @@ class Flattener {
     };
     switch (st.kind) {
       case SStmtKind::Assign: {
+        // 单元素元组（括号）`(aux.rho) := f(…)`：omc 实例化时就拆掉（NFInst.instExp 的 TUPLE({e}) 支，NFInst.mo:2823 v1.25.0），同
+        // `aux.rho := f(…)`，多输出的调用取首输出；元组的元素同理（XMT 探针 XMT2 / XMT3 / XMT5；MSL ReferenceAir.Air_Utilities.
+        // airBaseProp_pT）。
+        const Id<Exp> lhs_x = strip_paren(st.a);
         // 元组赋值 `(a, , c) := g(x)`（MSL Noise 的 `(r, stateOut) := Xorshift64star.random(state)`）：各非空位是输出 / 局部
         //（可带下标），空位打 `_`；右侧须是多输出函数调用，各位类型与对应输出相同——元素类型相同、数组的维数与已知的各维相同
         //（omc 不插转型；FT 探针 t1 / t2）。
-        if (is_tuple_target(st.a)) {
-          const std::vector<Id<Exp>> elems = I_.absyn.exps[st.a].args;   // 拷贝
+        if (is_tuple_target(lhs_x)) {
+          std::vector<Id<Exp>> elems = I_.absyn.exps[lhs_x].args;   // 拷贝
+          for (Id<Exp>& x : elems) x = strip_paren(x);
           std::vector<Id<Expr>> lhs(elems.size());
           for (std::size_t i = 0; i < elems.size(); ++i) {
             const Exp x = I_.absyn.exps[elems[i]];   // 拷贝
@@ -11312,7 +11342,7 @@ class Flattener {
           if (result_.unsupported) return {};
           break;
         }
-        const Exp& le = I_.absyn.exps[st.a];
+        const Exp& le = I_.absyn.exps[lhs_x];
         // 目标：输出 / 局部（可带下标）；或记录输出 / 局部的字段 `r.a`（RF2 探针 `r.a := x`）。
         bool target_ok = false;
         if (le.kind == ExpKind::CrefExp) {
@@ -11331,7 +11361,7 @@ class Flattener {
           }
           return {};
         }
-        const Id<Expr> lhs = inst_exp(st.a, Inst::empty_node(), {});
+        const Id<Expr> lhs = inst_exp(lhs_x, Inst::empty_node(), {});
         if (result_.unsupported) return {};
         const Type lty = result_.model.exprs[lhs].ty;   // 拷贝：fn_exp 会往 arena add（不跨 add 持引用）
         const Id<Expr> rhs = fn_exp(st.b, lty);
@@ -14013,6 +14043,9 @@ class Flattener {
     NodeId node;
     Id<SElement> e = find_scode_element_at(parts[0], leading_dot ? ScodeScope{} : scope, def_scope, inherit0, &node, true);
     for (std::size_t k = 1; k < parts.size() && e.is_valid(); ++k) {
+      // 定义层的包：定义层视图与包实例不同、或要找的类是继承来的 → 在包实例里查（见 def_pkg_node）。extends 名（inherit0 = false：
+      // ext_bases_at 等 SCode 层继承关系自身的解析）不切。
+      if (!node.is_valid() && inherit0) node = def_pkg_node(e, def_scope, inherited_class(e, def_scope, parts[k]));
       // 实例语境里的类：后续段在它的包实例里查（Inst.instPackage，NFLookup.lookupLocalName :699-700 v1.25.0）——继承来的是基类
       // 实例里的那份（`Medium.f`：Medium 包里经 `extends PartialMedium(nX = 2)` 继承的函数，体里读 nX 得 2，PK 探针 PK3）。
       if (node.is_valid()) {
@@ -14057,6 +14090,67 @@ class Flattener {
     }
     return pk.is_valid() && !I_.nodes[pk].is_empty() ? pk : NodeId{};
   }
+  // 定义层的包 e（定义作用域链 ds，内→外）往里查名：omc 进类查名前一律先 Inst.instPackage（NFLookup.lookupLocalName :699-700、
+  // lookupCrefInNode :976-977 v1.25.0），包实例里继承来的元素的父亲是带修饰的 extends 实例，看到的是改过的常量 / 类型；ymc 平常走
+  // SCode 层（与包实例结果相同、省实例化），只在两者会不同时切到包实例：e 是短类（SCode 层进不去）、e 的定义层视图被修饰改过（见
+  // def_view_differs），或 need（要找的是继承来的类：omc 按访问路径命名 `P.A.f`，SCode 层只认本地类）。XM 探针：XM1 / XM9 `P.A.f`
+  // 体里读到 extends 改过的 n、XM4 经 import 别名、XM7 函数体里、XM12 函数变量类型带 extends 改过的 min、XM16 未改的继承；MSL R134a
+  // 的 `Modelica.Media.R134a.R134a_ph.dtofphOnePhase`、Inverse_sh_T 的 `import Medium = …Air_pT` 经它的 `Medium.specificEnthalpy`。
+  // 返回 e 的定义节点（顶层起按类路径找；包实例按它缓存，按它的定义路径命名，同 omc：import / 全路径找到首段处的作用域链 + 名，
+  // NFFunction.lookupFunction :339-344、import 的找到处 = 目标的父亲 NFLookup.lookupLocalSimpleCref :931-932）。不切 / 切不了 → 无效
+  //（调用方照旧走 SCode 层）：
+  // 链上有实例层（实例语境另有通路）、链上有经继承访问过的类（首段是继承来的，访问路径 ≠ 声明链，命名对不上，同 inh_tainted）、
+  // e 不是包 / 记录（记录里只取常量：MSL ReferenceAir.Air_Utilities 的 `record iter = Inverses.accuracy` 与函数体里的 `iter.delp`，
+  // XM 探针 XM24）/ 是 partial（照旧由 enter_partial 拦）。
+  NodeId def_pkg_node(Id<SElement> e, const ScodeScope& ds, bool need) {
+    if (!instr_ || !e.is_valid()) return {};
+    const SElement& el = I_.scode.elems[e];
+    if (el.kind != SElementKind::Class || el.is_partial ||
+        (el.restriction != SRestriction::Package && el.restriction != SRestriction::Record))
+      return {};
+    for (const ScopeLevel& l : ds)
+      if (l.inst.is_valid() || inh_bases_.count(l.cls.raw)) return {};
+    if (!need && !def_view_differs(e, ds, 0)) return {};
+    std::vector<Symbol> path;
+    for (auto it = ds.rbegin(); it != ds.rend(); ++it) path.push_back(I_.scode.elems[*it].name);
+    path.push_back(el.name);
+    const NodeId n = instr_->class_def_node(path);
+    if (instr_->unsupported() && !result_.unsupported) {
+      set_unsupported(instr_->unsupported_reason().c_str());
+      result_.unsupported_detail = instr_->unsupported_detail();
+    }
+    return n.is_valid() && !I_.nodes[n].is_empty() && I_.nodes[n].def == e ? n : NodeId{};
+  }
+  // 类 e（定义作用域链 ds）里的 name 不是本地类、是继承来的类（SCode 层的继承查找，class_member_at）。
+  bool inherited_class(Id<SElement> e, const ScodeScope& ds, Symbol name) {
+    if (!e.is_valid() || I_.scode.elems[e].kind != SElementKind::Class) return false;
+    for (Id<SElement> c : I_.scode.elems[e].def.elements)
+      if (I_.scode.elems[c].name == name) return false;
+    ScodeScope chain = ds;
+    chain.insert(chain.begin(), e);
+    ScodeScope unused;
+    bool via_mod = false;
+    const Id<SElement> m = class_member_at(chain, name, unused, via_mod, 0);
+    return m.is_valid() && I_.scode.elems[m].kind == SElementKind::Class;
+  }
+  // 定义层的类 e 的 SCode 视图与它的包实例不同：短类；某个 extends 的修饰改到了基类的常量 / 类、或本类有元素级重声明
+  //（ext_bases_at 的 mod_hits，SCode 层经它继承的元素看到的是没改的声明，class_member_at 的 via_mod），沿基类链传递。按类元素记忆化。
+  bool def_view_differs(Id<SElement> e, const ScodeScope& ds, int depth) {
+    const SElement& el = I_.scode.elems[e];
+    if (el.kind != SElementKind::Class) return false;
+    if (el.def.kind == SClassDefKind::Derived) return true;
+    if (depth > 30) return true;
+    if (const auto it = view_differs_memo_.find(e.raw); it != view_differs_memo_.end()) return it->second;
+    view_differs_memo_[e.raw] = false;   // 环（extends 自身 / 互相 extends）：先按"相同"占位
+    ScodeScope chain = ds;
+    chain.insert(chain.begin(), e);
+    const std::vector<ExtBase> bases = ext_bases_at(chain, 0);   // 拷贝：下面递归会往记忆表里插
+    bool r = false;
+    for (const ExtBase& b : bases)
+      r = r || b.mod_hits || def_view_differs(b.chain[0], ScodeScope(b.chain.begin() + 1, b.chain.end()), depth + 1);
+    return view_differs_memo_[e.raw] = r;
+  }
+  std::unordered_map<std::uint32_t, bool> view_differs_memo_;   // 类元素 → def_view_differs
   // class extends 类节点的隐式基类（Instantiator::class_extends_base；展开时 inst 判的 SKIP 照传）。
   NodeId ce_base(NodeId cls) {
     if (!instr_) return {};
@@ -14148,6 +14242,13 @@ class Flattener {
     if (r && node.is_valid() &&
         (r->fe == e || (I_.nodes[node].node_type.kind == NodeTypeKind::RedeclaredClass && I_.nodes[node].def == e)))
       r->node = node;
+    // 实例语境里找到的 class extends 记录（`redeclare record extends ThermodynamicState`，包实例里的那份）：作用域首层带上类节点，
+    // 继承来的字段按实例类树里的隐式基类解析（同 record_class_of）——字段的维 / 缺省看得到 extends 修饰改过的常量（MSL ReferenceAir.
+    // MoistAir1：ReferenceMoistAir 的 setState_pTX 求值时构造 ThermodynamicState，PartialMixtureMedium 那层的 `X[nX]` 读 nX；XM 探针
+    // XM31）。此前首层不带节点，隐式基类落在定义层（class_extends_target），nX 撞继承守卫 SKIP。
+    if (r && r->node.is_valid() && want == SRestriction::Record && r->fe == e &&
+        I_.scode.elems[e].def.kind == SClassDefKind::ClassExtends && !r->fscope.empty())
+      r->fscope.front() = ScopeLevel{r->fe, r->node};
     return r;
   }
   // 短类链追到底的长类（定义作用域链随之更新）；链断 / 太长 → invalid。
@@ -15048,8 +15149,11 @@ class Flattener {
       case SStmtKind::Assign: {
         // 元组赋值 `(a, r.x, ) := f(…)`（MSL Spice3 的 `(out_c.m_tCj, …) := Spice3.Internal.Functions.junctionParamDepTempSPICE3(
         // …)`）：调用求值一次、各输出按声明序依次赋给各目标，空位跳过；目标照单个赋值的规则（TF 探针）。
-        if (is_tuple_target(st.a)) {
-          const std::vector<Id<Exp>> elems = I_.absyn.exps[st.a].args;   // 拷贝
+        // 单元素元组（括号）的目标 / 元素先拆掉（同 collect_fn_stmt，NFInst.mo:2823 v1.25.0；XMT 探针 XMT9 / XMT10）。
+        const Id<Exp> lhs_x = strip_paren(st.a);
+        if (is_tuple_target(lhs_x)) {
+          std::vector<Id<Exp>> elems = I_.absyn.exps[lhs_x].args;   // 拷贝
+          for (Id<Exp>& x : elems) x = strip_paren(x);
           for (Id<Exp> x : elems) {
             const Exp& xe = I_.absyn.exps[x];
             if (xe.kind == ExpKind::Tuple && xe.args.empty()) continue;   // 空位
@@ -15066,7 +15170,7 @@ class Flattener {
           }
           return Flow::Normal;
         }
-        const Exp& lhs = I_.absyn.exps[st.a];
+        const Exp& lhs = I_.absyn.exps[lhs_x];
         if (lhs.kind != ExpKind::CrefExp) return Flow::Fail;
         const Cref& lc = I_.absyn.crefs[lhs.cref];
         if (!exec_target_ok(lc)) return Flow::Fail;
@@ -21676,9 +21780,8 @@ class Flattener {
         supported = false;
       }
     }
-    if (supported && bf->argdom == BFArg::Real)
-      for (Id<Expr>& a : args) a = to_real(a);
-    // `/` 的结果域是 Real；任务卡的 integer(r1/r2) 与 FuncBuiltinInteger.mo 要求在调用内保留该强转。
+    // `/` 的结果域是 Real；任务卡的 integer(r1/r2) 与 FuncBuiltinInteger.mo 要求在调用内保留该强转（先于下面的实参提 Real：
+    // 整个商不再套转型，XMI 探针 XMI3 `integer(/*Real*/(n) / 2.0)`）。
     if (supported && builtin_name == "integer" && args.size() == 1 &&
         result_.model.exprs[args[0]].kind == ExprKind::Binary &&
         result_.model.exprs[args[0]].bin == BinOp::Div && result_.model.exprs[args[0]].ty.kind == TypeKind::Integer) {
@@ -21689,6 +21792,8 @@ class Flattener {
       Expr div; div.kind = ExprKind::Binary; div.bin = BinOp::Div; div.a = left; div.b = right; div.ty = Type::real();
       args[0] = add(std::move(div));
     }
+    if (supported && bf->argdom == BFArg::Real)
+      for (Id<Expr>& a : args) a = to_real(a);
     // 二元数值内建按公共数值类型调用；Encapsulated2/FuncBuiltinMax/Min 的 Result 会把混合实参提升到 Real。
     if (supported && (bf->res == BFRes::CommonNum || bf->res == BFRes::DivType)) {
       bool real = false;
@@ -23459,8 +23564,12 @@ class Flattener {
     fe.b = rhs;
     fe.loc = I_.comps[cid].loc;
     const Id<FlatEquation> id = result_.model.add_eq(std::move(fe));
-    if (v == SVariability::Param) result_.model.initial_equations.push_back(id);
-    else result_.model.equations.push_back(id);
+    if (v == SVariability::Param) {
+      result_.model.initial_equations.push_back(id);
+      moved_rec_bind_[int_key(name, psubs)] = rhs;
+    } else {
+      result_.model.equations.push_back(id);
+    }
     return true;
   }
 
@@ -26306,6 +26415,23 @@ class Flattener {
     // 那时还没补，顺父记录的绑定判（isComponentBindingNotFixed，NFStructural.mo:128-158 v1.25.0；pk-p29 探针 SQX11 / SQY6：读到它的
     // Evaluate = true 参数成了结构参数，它随之成结构参数、不补 fixed，omc 报错）。父记录绑定的固定性未细分 → 当不知道。
     if (empty_field_keys_.count(k)) { unknown = true; return false; }
+    // 外层记录的整体绑定挪成了初始方程的字段（它的 fixed = false 也是压平时才补的，见 force_unfixed）：omc 在定型期判，字段没有绑定
+    // → 顺父记录的绑定判（isComponentBindingNotFixed 的父记录支，NFStructural.mo:128-158 v1.25.0）——父记录的绑定固定（或父记录
+    // 自己没有绑定、整体绑定在更外层：isRecord 支当固定）→ 字段固定，读它的结构用法（Evaluate = true 参数、if 条件）把它标成结构
+    // 参数，压平时不再 unfix（NFFlatten.mo:690-692），无绑定无 start 报 "has neither value nor start value"（verifyBinding :853-860）、
+    // 有 start 告警后照出结果（XMY 探针 XMY1 / XMY2 / XMY7 / XMY9 / XMY13-XMY15 两边拒，XMY3 有 start、XMY10 if 条件，此前一律按补上的
+    // fixed = false 当不固定、照出结果）→ 当不知道（调用方 SKIP）。父记录的绑定不固定（XMY5 `p(fixed = false)`）照旧不固定；字段自己
+    // 带 fixed 属性的未细分 → 不知道。
+    if (moved_field_keys_.count(k) && !pi.nonstruct) {
+      if (!moved_own_fixed_.count(k))
+        if (const auto mb = moved_rec_bind_.find(parent_key(k)); mb != moved_rec_bind_.end()) {
+          if (visit_nf_ && depth - 1 == 0) return true;   // isBindingNotFixed(父记录的绑定, 0)
+          bool unk = false;
+          if (exp_not_fixed(mb->second, depth - 1, unk)) return true;
+        }
+      unknown = true;
+      return false;
+    }
     if (pi.nonstruct || has_fixed_false(*v)) return true;   // 判 Evaluate 时：已发射 = 访问过，Evaluate = false 已降成非结构
     // 判 Evaluate 时，带任何 fixed 属性（哪怕 `fixed = true`）的都不固定：那一刻属性绑定还没定型，Component.isFixed 认不出真
     //（NFComponent.mo:896-922 v1.25.0；EV 探针 fx0 / fx1 / fx6：`q(fixed = true) = 3` → `p = q` 不求值）。
@@ -26354,6 +26480,13 @@ class Flattener {
       return false;
     }
     if (vi->second.kind == PassCarry::VisitInfo::Constant) return false;
+    // 挪了绑定的记录字段（见 key_not_fixed）：第一遍末尾判得不固定的照不固定，其余不知道（调用方 SKIP；XMY 探针 XMY14）。
+    if (vi->second.moved) {
+      const auto t = carry_.not_fixed.find(k);
+      if (t != carry_.not_fixed.end() && t->second == std::optional<bool>(true)) return true;
+      unknown = true;
+      return false;
+    }
     if (vi->second.kind != PassCarry::VisitInfo::Parameter || vi->second.fixed_attr || vi->second.impure) return true;
     if (!vi->second.plain) { unknown = true; return false; }
     if (depth - 1 == 0) return true;
@@ -27564,8 +27697,11 @@ class Flattener {
   // 发射的字段（key，见 key_not_fixed）。
   std::unordered_set<std::uint32_t> empty_field_mods_;
   std::unordered_set<std::string> empty_field_keys_;
-  // 外层记录的整体绑定挪成了方程的字段（ModCtx::unbound_fields 下发射的，key；见 record_param_value 的未知值）。
+  // 外层记录的整体绑定挪成了方程的字段（ModCtx::unbound_fields 下发射的，key；见 record_param_value 的未知值、key_not_fixed）。
   std::unordered_set<std::string> moved_field_keys_;
+  std::unordered_set<std::string> moved_own_fixed_;   // 其中自己带 fixed 属性的（unfix 之前就有，见 key_not_fixed）
+  // 整体绑定挪成了初始方程的 parameter 记录实例（key）→ 定型后的绑定（record_binding_equation；判字段固定性用，见 key_not_fixed）。
+  std::unordered_map<std::string, Id<Expr>> moved_rec_bind_;
   // 求值读到了没赋到的值（Undef：EMPTY 字段 / 没赋值的函数变量，见 cval_field / cval_index）——omc 照搬 EMPTY 往下传
   //（NFCeval.evalExp 的 else 支原样返回，:240 v1.25.0；pk-p29 探针 SQX15 `s.y := r.y` → `s.y(fixed = false)`），ymc 读到即
   // 求值失败，二者不等价（见记录绑定求值处）。

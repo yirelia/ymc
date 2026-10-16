@@ -698,5 +698,7 @@
 "FunctionalArg1.mo",
 "FunctionalArg2.mo",
 "FunctionalArgBinary1.mo",
-"PartialApplication3.mo"
+"PartialApplication3.mo",
+"ClassExtends4.mo",
+"ClassMod3.mo"
 ]

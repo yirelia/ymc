@@ -9799,4 +9799,272 @@ YMC_TEST(flatten_tuple_equation_record_first_output) {
                            "  parameter Real r.a(fixed = false);\ninitial equation\n  r = SQT7P.f(p)[1];\nend SQT7;\n"));
 }
 
+YMC_TEST(flatten_def_level_package_modified_extends) {
+  // 定义层的包经带修饰的 extends 继承：omc 进类查名前一律 Inst.instPackage（NFLookup.lookupLocalName :699-700、lookupCrefInNode
+  // :976-977 v1.25.0），全路径 / import 别名进的包按包实例查——函数体读到 extends 改过的 n（XM1）、常量取改过的值（XM2）、import
+  // 别名按目标的定义路径命名 `XM4P.A.f`（找到处 = 目标的父亲，NFLookup.lookupLocalSimpleCref :931-932；NFFunction.lookupFunction
+  // :339-344）、函数变量类型带 extends 的类修饰（XM12）。此前 SCode 层撞继承守卫 / 只认本地类 → SKIP。期望 = omc 1.25.0 实跑
+  // （2026-10-17，探针 pk-p30 XM1 / XM2 / XM4 / XM12）。
+  YMC_CHECK_EQ(flatten_src("package XM1P\n  package Base\n    constant Integer n = 1;\n    function f\n"
+                           "      input Real x;\n      output Real y;\n    algorithm\n      y := x * n;\n    end f;\n"
+                           "  end Base;\n  package A\n    extends Base(n = 2);\n  end A;\nend XM1P;\nmodel XM1\n"
+                           "  Real y = XM1P.A.f(time);\nend XM1;\n"),
+               std::string("function XM1P.A.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := x * 2.0;\n"
+                           "end XM1P.A.f;\n\nclass XM1\n  Real y = XM1P.A.f(time);\nend XM1;\n"));
+  YMC_CHECK_EQ(flatten_src("package XM2P\n  package Base\n    constant Integer n = 1;\n  end Base;\n  package A\n"
+                           "    extends Base(n = 2);\n  end A;\nend XM2P;\nmodel XM2\n  Real z = XM2P.A.n * time;\n"
+                           "end XM2;\n"),
+               std::string("class XM2\n  Real z = 2.0 * time;\nend XM2;\n"));
+  YMC_CHECK_EQ(flatten_src("package XM4P\n  package Base\n    constant Integer n = 1;\n    function f\n"
+                           "      input Real x;\n      output Real y;\n    algorithm\n      y := x * n;\n    end f;\n"
+                           "  end Base;\n  package A\n    extends Base(n = 2);\n  end A;\nend XM4P;\nmodel XM4\n"
+                           "  import M = XM4P.A;\n  Real y = M.f(time);\nend XM4;\n"),
+               std::string("function XM4P.A.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := x * 2.0;\n"
+                           "end XM4P.A.f;\n\nclass XM4\n  Real y = XM4P.A.f(time);\nend XM4;\n"));
+  YMC_CHECK_EQ(flatten_src("package XM12P\n  package Base\n    type T = Real(min = 0);\n    function g\n"
+                           "      input T x;\n      output T y;\n    algorithm\n      y := 2 * x;\n    end g;\n"
+                           "  end Base;\n  package A\n    extends Base(T(min = 1));\n  end A;\nend XM12P;\n"
+                           "model XM12\n  Real y = XM12P.A.g(time);\nend XM12;\n"),
+               std::string("function XM12P.A.g\n  input Real x(min = 1.0);\n  output Real y(min = 1.0);\nalgorithm\n"
+                           "  y := 2.0 * x;\nend XM12P.A.g;\n\nclass XM12\n  Real y = XM12P.A.g(time);\nend XM12;\n"));
+}
+
+YMC_TEST(flatten_def_level_package_inherited_class) {
+  // 定义层的包里继承来的（未改的）函数 / 记录：omc 按访问路径命名 `XM16P.A.f`、`XM20P.A.R`（包实例的父亲是 A，NFInstNode.scopePath
+  // :1217-1290 v1.25.0），SCode 层只认本地类 → 此前 SKIP。期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p30 XM16 / XM20）。
+  YMC_CHECK_EQ(flatten_src("package XM16P\n  package Base\n    constant Integer n = 1;\n    function f\n"
+                           "      input Real x;\n      output Real y;\n    algorithm\n      y := x * n;\n    end f;\n"
+                           "  end Base;\n  package A\n    extends Base;\n  end A;\nend XM16P;\nmodel XM16\n"
+                           "  Real y = XM16P.A.f(time);\nend XM16;\n"),
+               std::string("function XM16P.A.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := x;\n"
+                           "end XM16P.A.f;\n\nclass XM16\n  Real y = XM16P.A.f(time);\nend XM16;\n"));
+  YMC_CHECK_EQ(flatten_src("package XM20P\n  package Base\n    constant Integer n = 1;\n    record R\n      Real a;\n"
+                           "      Real b = n;\n    end R;\n    function mk\n      input Real a;\n      output R r;\n"
+                           "    algorithm\n      r := R(a = a);\n    end mk;\n  end Base;\n  package A\n"
+                           "    extends Base;\n  end A;\nend XM20P;\nmodel XM20\n  XM20P.A.R r = XM20P.A.mk(time);\n"
+                           "end XM20;\n"),
+               std::string("function XM20P.A.R \"Automatically generated record constructor for XM20P.A.R\"\n"
+                           "  input Real a;\n  input Real b = 1.0;\n  output R res;\nend XM20P.A.R;\n\n"
+                           "function XM20P.A.mk\n  input Real a;\n  output XM20P.A.R r;\nalgorithm\n"
+                           "  r := XM20P.A.R(a, 1.0);\nend XM20P.A.mk;\n\nclass XM20\n  Real r.a;\n  Real r.b;\n"
+                           "equation\n  r = XM20P.A.mk(time);\nend XM20;\n"));
+}
+
+YMC_TEST(flatten_record_type_access_path) {
+  // 限定类型路径的后续段查到继承来的类、或经短类进的：omc 先 instPackage 再查（NFLookup.lookupLocalNames :767 v1.25.0），记录构造
+  // 函数 / 函数按访问路径命名（`XM21P.A.R`、`XM45P.S.R`、继承来的模型里的 `XM51P.A.f`）——此前 ymc 取共享的基类定义、按声明路径
+  // 打 `XM21P.Base.R`（静默错）。期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p30 XM21 / XM45 / XM51）。
+  YMC_CHECK_EQ(flatten_src("package XM21P\n  package Base\n    record R\n      Real a;\n      Real b = 1;\n"
+                           "    end R;\n  end Base;\n  package A\n    extends Base;\n  end A;\nend XM21P;\n"
+                           "model XM21\n  XM21P.A.R r;\n  XM21P.A.R s;\nequation\n  r = s;\n  s.a = time;\n"
+                           "end XM21;\n"),
+               std::string("function XM21P.A.R \"Automatically generated record constructor for XM21P.A.R\"\n"
+                           "  input Real a;\n  input Real b = 1.0;\n  output R res;\nend XM21P.A.R;\n\nclass XM21\n"
+                           "  Real r.a;\n  Real r.b = 1.0;\n  Real s.a;\n  Real s.b = 1.0;\nequation\n  r = s;\n"
+                           "  s.a = time;\nend XM21;\n"));
+  YMC_CHECK_EQ(flatten_src("package XM45P\n  package Base\n    record R\n      Real a;\n      Real b = 1;\n"
+                           "    end R;\n  end Base;\n  package A\n    extends Base;\n  end A;\n  package S = A;\n"
+                           "end XM45P;\nmodel XM45\n  XM45P.S.R r;\n  XM45P.S.R s;\nequation\n  r = s;\n"
+                           "  s.a = time;\nend XM45;\n"),
+               std::string("function XM45P.S.R \"Automatically generated record constructor for XM45P.S.R\"\n"
+                           "  input Real a;\n  input Real b = 1.0;\n  output R res;\nend XM45P.S.R;\n\nclass XM45\n"
+                           "  Real r.a;\n  Real r.b = 1.0;\n  Real s.a;\n  Real s.b = 1.0;\nequation\n  r = s;\n"
+                           "  s.a = time;\nend XM45;\n"));
+  YMC_CHECK_EQ(flatten_src("package XM51P\n  package Base\n    function f\n      input Real x;\n"
+                           "      output Real y;\n    algorithm\n      y := 2 * x;\n    end f;\n    model C\n"
+                           "      Real z = f(time);\n    end C;\n  end Base;\n  package A\n    extends Base;\n"
+                           "  end A;\nend XM51P;\nmodel XM51\n  XM51P.A.C c;\nend XM51;\n"),
+               std::string("function XM51P.A.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\n"
+                           "end XM51P.A.f;\n\nclass XM51\n  Real c.z = XM51P.A.f(time);\nend XM51;\n"));
+}
+
+YMC_TEST(flatten_def_level_short_class_package) {
+  // 定义层的短类（`record iter = accuracy`、`package S = Q`、短类链 `T = S`）进去查名同样经包实例（instPackage 展开短类，
+  // NFInst.expandClassDerived :1012-1061 v1.25.0），按短类的路径命名（`XM26P.S.f`、函数体里的 `XM29P.T.f`）。此前 SCode 层进不去
+  // 短类 → SKIP（MSL ReferenceAir.Air_Utilities 的 `iter.delp`）。期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p30 XM25 / XM26 /
+  // XM29）。
+  YMC_CHECK_EQ(flatten_src("package XM25P\n  record accuracy\n    constant Real delp = 0.1;\n  end accuracy;\n"
+                           "  record iter = accuracy;\nend XM25P;\nmodel XM25\n"
+                           "  parameter Real d = XM25P.iter.delp;\nend XM25;\n"),
+               std::string("class XM25\n  parameter Real d = 0.1;\nend XM25;\n"));
+  YMC_CHECK_EQ(flatten_src("package XM26P\n  package Q\n    constant Integer c = 3;\n    function f\n"
+                           "      input Real x;\n      output Real y;\n    algorithm\n      y := x * c;\n    end f;\n"
+                           "  end Q;\n  package S = Q;\nend XM26P;\nmodel XM26\n  Real z = XM26P.S.c * time;\n"
+                           "  Real w = XM26P.S.f(time);\nend XM26;\n"),
+               std::string("function XM26P.S.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := x * 3.0;\n"
+                           "end XM26P.S.f;\n\nclass XM26\n  Real z = 3.0 * time;\n  Real w = XM26P.S.f(time);\n"
+                           "end XM26;\n"));
+  YMC_CHECK_EQ(flatten_src("package XM29P\n  package Q\n    constant Integer c = 3;\n    function f\n"
+                           "      input Real x;\n      output Real y;\n    algorithm\n      y := x * c;\n    end f;\n"
+                           "  end Q;\n  package S = Q;\n  package T = S;\n  function g\n    input Real x;\n"
+                           "    output Real y;\n  algorithm\n    y := T.f(x) + T.c;\n  end g;\nend XM29P;\n"
+                           "model XM29\n  Real w = XM29P.g(time);\nend XM29;\n"),
+               std::string("function XM29P.T.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := x * 3.0;\n"
+                           "end XM29P.T.f;\n\nfunction XM29P.g\n  input Real x;\n  output Real y;\nalgorithm\n"
+                           "  y := XM29P.T.f(x) + 3.0;\nend XM29P.g;\n\nclass XM29\n  Real w = XM29P.g(time);\n"
+                           "end XM29;\n"));
+}
+
+YMC_TEST(flatten_short_class_package_class_modifier) {
+  // 短类包的类修饰 `package M = A(T(max = 5))`（MSL Media.Examples.SimpleLiquidWater 的 `SpecificEnthalpy(max = 1e6)`）：同 extends
+  // 修饰里的类修饰挂到包实例类树里那个类上、外层在前（expandClassDerived :1012-1061 → applyModifier :1519-1616，NFInst.mo
+  // v1.25.0）——函数变量的类型（XM34）、在 extends 的类修饰之外（XM37）、短类链各层（XM38）、定义层短类作组件类型（XM58）。此前
+  // inst_package 只收绑定修饰 → SKIP。期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p30 XM34 / XM37 / XM38 / XM58）。
+  YMC_CHECK_EQ(flatten_src("package XM34P\n  package A\n    type T = Real(min = 0, max = 10, nominal = 2);\n"
+                           "    function f\n      input T x;\n      output T y;\n    algorithm\n      y := 2 * x;\n"
+                           "    end f;\n  end A;\nend XM34P;\nmodel XM34\n  package M = XM34P.A(T(max = 5));\n"
+                           "  M.T z = M.f(time);\nend XM34;\n"),
+               std::string("function XM34.M.f\n  input Real x(min = 0.0, max = 5.0, nominal = 2.0);\n"
+                           "  output Real y(min = 0.0, max = 5.0, nominal = 2.0);\nalgorithm\n  y := 2.0 * x;\n"
+                           "end XM34.M.f;\n\nclass XM34\n"
+                           "  Real z(min = 0.0, max = 5.0, nominal = 2.0) = XM34.M.f(time);\nend XM34;\n"));
+  YMC_CHECK_EQ(flatten_src("package XM37P\n  package Base\n    type T = Real(min = 0, max = 10, unit = \"m\");\n"
+                           "    function f\n      input T x;\n      output T y;\n    algorithm\n      y := 2 * x;\n"
+                           "    end f;\n  end Base;\n  package A\n    extends Base(T(min = -1));\n  end A;\n"
+                           "end XM37P;\nmodel XM37\n  package M = XM37P.A(T(max = 5));\n  Real z = M.f(time);\n"
+                           "end XM37;\n"),
+               std::string("function XM37.M.f\n  input Real x(unit = \"m\", min = -1.0, max = 5.0);\n"
+                           "  output Real y(unit = \"m\", min = -1.0, max = 5.0);\nalgorithm\n  y := 2.0 * x;\n"
+                           "end XM37.M.f;\n\nclass XM37\n  Real z = XM37.M.f(time);\nend XM37;\n"));
+  YMC_CHECK_EQ(flatten_src("package XM38P\n  package A\n    type T = Real(min = 0, max = 10);\n    function f\n"
+                           "      input T x;\n      output T y;\n    algorithm\n      y := 2 * x;\n    end f;\n"
+                           "  end A;\n  package M1 = A(T(max = 5));\nend XM38P;\nmodel XM38\n"
+                           "  package M2 = XM38P.M1(T(min = 1));\n  Real z = M2.f(time);\nend XM38;\n"),
+               std::string("function XM38.M2.f\n  input Real x(min = 1.0, max = 5.0);\n"
+                           "  output Real y(min = 1.0, max = 5.0);\nalgorithm\n  y := 2.0 * x;\nend XM38.M2.f;\n\n"
+                           "class XM38\n  Real z = XM38.M2.f(time);\nend XM38;\n"));
+  YMC_CHECK_EQ(flatten_src("package XM58P\n  package A\n    type T = Real(min = 0, max = 10);\n  end A;\n"
+                           "  package S = A(T(min = 2));\nend XM58P;\nmodel XM58\n  XM58P.S.T x = time;\nend XM58;\n"),
+               std::string("class XM58\n  Real x(min = 2.0, max = 10.0) = time;\nend XM58;\n"));
+}
+
+YMC_TEST(flatten_class_extends_record_in_package_instance) {
+  // 包实例里的 class extends 记录（`redeclare record extends State` 一层层）构造：继承来的字段按实例类树里的隐式基类解析，`X[nX]`
+  // 读到 extends 改过的 nX = 2（MSL ReferenceAir.MoistAir1 求值 setState_pTX；NFInst.redeclareClass :1741 v1.25.0 取实例类树里的
+  // 原类）。此前隐式基类落在定义层 → 撞继承守卫 SKIP。期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p30 XM31 / XM33）。
+  YMC_CHECK_EQ(flatten_src("package XM31P\n  partial package PM\n    constant Integer nX = 1;\n"
+                           "    replaceable record State\n      Real p;\n    end State;\n"
+                           "    replaceable function setState\n      input Real p;\n      output State s;\n"
+                           "    end setState;\n    function h\n      input Real p;\n      output Real y;\n"
+                           "    protected\n      State s;\n    algorithm\n      s := setState(p);\n      y := s.p;\n"
+                           "    end h;\n  end PM;\n  partial package PMix\n    extends PM(nX = 2);\n"
+                           "    redeclare replaceable record extends State\n      Real X[nX];\n    end State;\n"
+                           "  end PMix;\n  package Gas\n    extends PMix;\n    redeclare record extends State\n"
+                           "    end State;\n    redeclare function extends setState\n    algorithm\n"
+                           "      s := State(p = p, X = fill(0.5, nX));\n    end setState;\n  end Gas;\n  model C\n"
+                           "    replaceable package Medium = PM;\n    parameter Real p0 = Medium.h(1.0);\n  end C;\n"
+                           "end XM31P;\nmodel XM31\n  XM31P.C c(redeclare package Medium = XM31P.Gas);\nend XM31;\n"),
+               std::string("class XM31\n  parameter Real c.p0 = 1.0;\nend XM31;\n"));
+  YMC_CHECK_EQ(flatten_src("package XM33P\n  partial package PM\n    constant Integer nX = 1;\n"
+                           "    replaceable record State\n      Real p;\n    end State;\n  end PM;\n"
+                           "  partial package PMix\n    extends PM(nX = 2);\n"
+                           "    redeclare replaceable record extends State\n      Real X[nX];\n    end State;\n"
+                           "  end PMix;\n  package Gas\n    extends PMix;\n    redeclare record extends State\n"
+                           "    end State;\n    function h\n      input Real p;\n      output Real y;\n"
+                           "    protected\n      State s;\n    algorithm\n"
+                           "      s := State(p = p, X = fill(0.5, nX));\n      y := s.p + s.X[2];\n    end h;\n"
+                           "  end Gas;\nend XM33P;\nmodel XM33\n  parameter Real p0 = XM33P.Gas.h(1.0);\n"
+                           "  Real y = XM33P.Gas.h(time);\nend XM33;\n"),
+               std::string("function XM33P.Gas.State \"Automatically generated record constructor for XM33P.Gas.State\"\n"
+                           "  input Real p;\n  input Real[2] X;\n  output State res;\nend XM33P.Gas.State;\n\n"
+                           "function XM33P.Gas.h\n  input Real p;\n  output Real y;\n  protected XM33P.Gas.State s;\n"
+                           "algorithm\n  s := XM33P.Gas.State(p, {0.5, 0.5});\n  y := s.p + s.X[2];\n"
+                           "end XM33P.Gas.h;\n\nclass XM33\n  parameter Real p0 = 1.5;\n"
+                           "  Real y = XM33P.Gas.h(time);\nend XM33;\n"));
+}
+
+YMC_TEST(flatten_package_class_restriction) {
+  // 进包查名时实例化的类按限定词核查（instPackage → instClass 末尾 Restriction.checkClass，NFInst.mo:1196、NFRestriction.mo:400-497
+  // v1.25.0）：package 里的非常量组件 omc 报 "Variable p in package A is not constant"（XMR1；testsuite redeclare/ClassExtends3 /
+  // 4 去掉 -d=-newInst 后）、record 的 protected 段报 "Protected sections are not allowed in record"（XMR3）→ 不出结果。
+  // 2026-10-17，探针 pk-p30。
+  YMC_CHECK_EQ(flatten_src("package XMR1P\n  package Base\n    function f\n      input Real x;\n"
+                           "      output Real y;\n    algorithm\n      y := 2 * x;\n    end f;\n  end Base;\n"
+                           "  package A\n    extends Base;\n    parameter Real p = 1;\n  end A;\nend XMR1P;\n"
+                           "model XMR1\n  Real y = XMR1P.A.f(time);\nend XMR1;\n"),
+               std::string("<unsupported:package / record class restriction>"));
+  YMC_CHECK_EQ(flatten_src("package XMR3P\n  record accuracy\n    constant Real delp = 0.1;\n  protected\n"
+                           "    constant Real hidden = 0.2;\n  end accuracy;\n  record iter = accuracy;\n"
+                           "  function g\n    input Real p;\n    output Real d;\n  algorithm\n"
+                           "    d := p * iter.delp;\n  end g;\nend XMR3P;\nmodel XMR3\n  Real y = XMR3P.g(time);\n"
+                           "end XMR3;\n"),
+               std::string("<unsupported:package / record class restriction>"));
+}
+
+YMC_TEST(flatten_paren_tuple_assignment_target) {
+  // 括号单元素元组的赋值目标 `(y) := g(x)`：omc 实例化时就拆掉（NFInst.instExp 的 TUPLE({e}) 支，NFInst.mo:2823 v1.25.0），多输出
+  // 调用取首输出（XMT2 `y := XMT2G(x)[1]`）、记录字段目标与嵌套括号（XMT3）、编译期求值（XMT9）。MSL ReferenceAir.Air_Utilities.
+  // airBaseProp_pT 的 `(aux.rho) := Inverses.dofpT(…)`。期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p30 XMT2 / XMT3 / XMT9）。
+  YMC_CHECK_EQ(flatten_src("function XMT2G\n  input Real x;\n  output Real a;\n  output Real b;\nalgorithm\n"
+                           "  a := x;\n  b := 2 * x;\nend XMT2G;\nfunction XMT2F\n  input Real x;\n  output Real y;\n"
+                           "algorithm\n  (y) := XMT2G(x);\nend XMT2F;\nmodel XMT2\n  Real z = XMT2F(time);\n"
+                           "end XMT2;\n"),
+               std::string("function XMT2F\n  input Real x;\n  output Real y;\nalgorithm\n  y := XMT2G(x)[1];\n"
+                           "end XMT2F;\n\nfunction XMT2G\n  input Real x;\n  output Real a;\n  output Real b;\n"
+                           "algorithm\n  a := x;\n  b := 2.0 * x;\nend XMT2G;\n\nclass XMT2\n"
+                           "  Real z = XMT2F(time);\nend XMT2;\n"));
+  YMC_CHECK_EQ(flatten_src("record XMT3R\n  Real a;\n  Real b;\nend XMT3R;\nfunction XMT3F\n  input Real x;\n"
+                           "  output XMT3R r;\nalgorithm\n  (r.a) := sin(x);\n  ((r.b)) := cos(x);\nend XMT3F;\n"
+                           "model XMT3\n  XMT3R z = XMT3F(time);\nend XMT3;\n"),
+               std::string("function XMT3F\n  input Real x;\n  output XMT3R r;\nalgorithm\n  r.a := sin(x);\n"
+                           "  r.b := cos(x);\nend XMT3F;\n\n"
+                           "function XMT3R \"Automatically generated record constructor for XMT3R\"\n"
+                           "  input Real a;\n  input Real b;\n  output XMT3R res;\nend XMT3R;\n\nclass XMT3\n"
+                           "  Real z.a;\n  Real z.b;\nequation\n  z = XMT3F(time);\nend XMT3;\n"));
+  YMC_CHECK_EQ(flatten_src("function XMT9G\n  input Real x;\n  output Real a;\n  output Real b;\nalgorithm\n"
+                           "  (a) := sin(x);\n  b := 2 * x;\nend XMT9G;\nmodel XMT9\n"
+                           "  parameter Real p = XMT9G(1.0);\n  Real y = p * time;\nend XMT9;\n"),
+               std::string("class XMT9\n  parameter Real p = 0.8414709848078965;\n  Real y = p * time;\nend XMT9;\n"));
+}
+
+YMC_TEST(flatten_integer_builtin_real_argument) {
+  // integer 的形参是 Real（NFModelicaBuiltin.mo:111-118 v1.25.0）：Integer 实参提 Real，打 `/*Real*/(…)`（函数体 XMI1，MSL R134a
+  // Common.FindInterval 的 `integer(div(ix + n, 2))`；模型语境 XMI5）。此前照原类型留着（静默错）。期望 = omc 1.25.0 实跑（2026-10-17，
+  // 探针 pk-p30 XMI1 / XMI5）。
+  YMC_CHECK_EQ(flatten_src("function XMI1F\n  input Integer n;\n  input Integer ix;\n  output Integer m;\nalgorithm\n"
+                           "  m := integer(div(ix + n, 2));\nend XMI1F;\nmodel XMI1\n"
+                           "  Integer k = XMI1F(integer(time), 3);\nend XMI1;\n"),
+               std::string("function XMI1F\n  input Integer n;\n  input Integer ix;\n  output Integer m;\nalgorithm\n"
+                           "  m := integer(/*Real*/(div(ix + n, 2)));\nend XMI1F;\n\nclass XMI1\n"
+                           "  Integer k = XMI1F(integer(time), 3);\nend XMI1;\n"));
+  YMC_CHECK_EQ(flatten_src("model XMI5\n  parameter Integer p = 3;\n  Integer m = integer(p);\n"
+                           "  Integer m2 = integer(div(p, 2));\nend XMI5;\n"),
+               std::string("class XMI5\n  parameter Integer p = 3;\n  Integer m = integer(/*Real*/(p));\n"
+                           "  Integer m2 = integer(/*Real*/(div(p, 2)));\nend XMI5;\n"));
+}
+
+YMC_TEST(flatten_moved_record_field_structural_use) {
+  // 整体绑定挪成了初始方程的记录字段：omc 在定型期顺父记录的绑定判固定性（isComponentBindingNotFixed，NFStructural.mo:128-158
+  // v1.25.0）——父记录的绑定固定 → 读它的 Evaluate = true 参数 / if 条件把它标成结构参数，压平时不再补 fixed = false
+  // （NFFlatten.mo:692），无绑定报 "has neither value nor start value"（verifyBinding :853-860；XMY1，此前 ACCEPTS-INVALID）、if 条件
+  // 照结构条件选支（XMY10，此前静默错）→ 不出结果；父记录的绑定不固定（XMY5 `p(fixed = false)`）照常。期望 = omc 1.25.0 实跑
+  // （2026-10-17，探针 pk-p30 XMY1 / XMY5 / XMY10）。
+  YMC_CHECK_EQ(flatten_src("package XMY1P\n  record R\n    Real x;\n    Real y;\n  end R;\n  function f\n"
+                           "    input Real a;\n    output R r;\n  algorithm\n    r.x := a;\n    r.x := 2 * r.x;\n"
+                           "  end f;\nend XMY1P;\nmodel XMY1\n  parameter Real p = 2;\n"
+                           "  parameter XMY1P.R r = XMY1P.f(p);\n"
+                           "  parameter Real q = r.y * 2 annotation(Evaluate = true);\n  Real z = r.x * time;\n"
+                           "end XMY1;\n"),
+               std::string("<unsupported:Evaluate annotation>"));
+  YMC_CHECK_EQ(flatten_src("package XMY5P\n  record R\n    Real x;\n    Real y;\n  end R;\n  function f\n"
+                           "    input Real a;\n    output R r;\n  algorithm\n    r.x := a;\n    r.y := 2 * r.x;\n"
+                           "  end f;\nend XMY5P;\nmodel XMY5\n  parameter Real p(fixed = false);\n"
+                           "  parameter XMY5P.R r = XMY5P.f(p);\n"
+                           "  parameter Real q = r.y * 2 annotation(Evaluate = true);\n  Real z = r.x * time;\n"
+                           "initial equation\n  p = 2;\nend XMY5;\n"),
+               std::string("function XMY5P.R \"Automatically generated record constructor for XMY5P.R\"\n"
+                           "  input Real x;\n  input Real y;\n  output R res;\nend XMY5P.R;\n\nfunction XMY5P.f\n"
+                           "  input Real a;\n  output XMY5P.R r;\nalgorithm\n  r.x := a;\n  r.y := 2.0 * r.x;\n"
+                           "end XMY5P.f;\n\nclass XMY5\n  parameter Real p(fixed = false);\n"
+                           "  parameter Real r.x(fixed = false);\n  parameter Real r.y(fixed = false);\n"
+                           "  parameter Real q = r.y * 2.0;\n  Real z = r.x * time;\ninitial equation\n"
+                           "  r = XMY5P.f(p);\n  p = 2.0;\nend XMY5;\n"));
+  YMC_CHECK_EQ(flatten_src("package XMY10P\n  record R\n    Real x;\n    Real y;\n  end R;\n  function f\n"
+                           "    input Real a;\n    output R r;\n  algorithm\n    r.x := a;\n    r.y := 2 * r.x;\n"
+                           "  end f;\nend XMY10P;\nmodel XMY10\n  parameter Real p = 2;\n"
+                           "  parameter XMY10P.R r = XMY10P.f(p);\n  Real z;\nequation\n  if r.x > 1 then\n"
+                           "    z = time;\n  else\n    z = -time;\n  end if;\nend XMY10;\n"),
+               std::string("<unsupported:if condition not evaluable>"));
+}
+
 YMC_TEST_MAIN

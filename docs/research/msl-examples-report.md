@@ -766,3 +766,10 @@ FAIL / ACCEPTS-INVALID / CRASH 0。
 首输出是记录的多输出调用。转 PASS：Electrical.Spice3.Examples.Spice3BenchmarkDifferentialPair、Spice3BenchmarkMosfetCharacterization、
 Spice3BenchmarkRtlInverter、Spice3BenchmarkFourBitBinaryAdder。Spice3 Graetz 卡到下一处：记录类型的算法赋值目标（R_SEMI 的
 `vp := resistorInitEquations(…)`）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-17 66v 之后：PASS 478（+6）
+
+定义层的包经带修饰的 extends / 短类时按包实例查名、函数 / 记录按访问路径命名；短类的类修饰；括号单元素的赋值目标；integer 的实参
+提 Real。转 PASS：Media.Examples.R134a.R134a1 / R134a2、SimpleLiquidWater、ReferenceAir.DryAir1 / DryAir2 / Inverse_sh_T。卡到下一处：
+ReferenceAir.MoistAir / MoistAir1 / MoistAir2 / Inverse_sh_TX——Ice09 Gibbs 里带绑定的 Complex 记录数组局部；TwoPhaseWater.
+TestTwoPhaseStates——extends 短类后的 class extends；MixtureGases——extends 修饰里重声明的记录类型。FAIL / ACCEPTS-INVALID / CRASH 0。
