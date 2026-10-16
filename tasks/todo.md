@@ -2433,6 +2433,20 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       探针 pk-p24（28）；单测 +6。slice 696→700 例 FAIL 0（oracle=live 不一致 0）；scodeinst 656→660（FunctionalArg1 / 2、
       FunctionalArgBinary1、PartialApplication3）；testsuite 1819→1827 / FAIL 0；**MSL 453→455**（Media.Examples.
       SolveOneNonlinearEquation.Inverse_sine、Math.Nonlinear.Examples.QuadratureLobatto3）；探针 9817→9845；单测 410→416。
+- [x] (66q) 模型里不带修饰的本地短类包经包实例查名（2026-10-16）：`package Medium = Modelica.Media.Water.StandardWater;`
+      经它往下的名字一律在包实例里查（omc 进类前 Inst.instPackage，NFLookup.lookupLocalName :699-700），此前只有带修饰的（66n）
+      走包实例；函数 / 记录按实例路径命名（NFFunction.lookupFunction :339-344：`<根>.Medium.f`、组件类里 `<根>.v1.Medium.f`）。
+      模型里没有该记录类型的组件时，返回记录的调用 / 记录构造调用的类型取包实例里的类节点（此前 "record result" SKIP、
+      多打定义路径的构造函数）；经包实例取 protected 元素照拒（NFLookupState.checkProtection）。照旧 SKIP：Inverse_sh_T
+      包常量记录作部分应用实参（PKZ23）、MixtureGases 经 extends 修饰重声明的 FluidConstants、InverseIncompressible_sh_T /
+      IncompressibleFluidNetwork 编译期多项式拟合（Poly.fitting）、ReferenceAir ×3（`import Medium = …Air_pT` 按定义路径命名 +
+      带修饰 extends 的包要定义层 instPackage；DryAir1 的 h_default 经 Helmholtz 状态方程求值）。
+      探针 pk-p25（26）；单测 +7。slice 700 例 FAIL 0（oracle=live 不一致 0）；scodeinst 660、testsuite 1827（均不变）/ FAIL 0；
+      **MSL 455→460**（Media.Examples.IdealGasH2O / WaterIF97 / PsychrometricData / MoistAir、SolveOneNonlinearEquation.
+      Inverse_sh_TX）；探针 9845→9871；单测 416→423。
+- [ ] (66r 候选) 已有的 ACCEPTS-INVALID（66q 调查时发现）：SCode 路径的限定名查找（qual_member）不查 protected——
+      `package T1P protected constant Real secret = 2.5; end T1P; model T1 parameter Real y = T1P.secret; end T1;` ymc 打
+      `parameter Real y = 2.5;`，omc 报 "Illegal access of protected element secret"（NFLookupState.checkProtection :441-466）。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

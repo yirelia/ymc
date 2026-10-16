@@ -8992,4 +8992,186 @@ YMC_TEST(flatten_function_name_as_argument) {
                            "algorithm\n  r := unbox(f(#(x)));\nend PZ8.solve;\n\nclass PKZ8\n  Real r = PZ8.h(time);\nend PKZ8;\n"));
 }
 
+YMC_TEST(flatten_local_short_package_functions) {
+  // 模型里不带修饰的本地短类包 `package Medium = PE1.Gas`（MSL Media 例子）：经它的函数 / 记录在包实例里查、按实例路径命名
+  // `PKE1.Medium.setState_pT`（NFFunction.lookupFunction :339-344 v1.25.0）。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p25 PKE1）。
+  YMC_CHECK_EQ(flatten_src("package PE1\n  partial package PartialMedium \"base\"\n"
+                           "    constant Integer nX = 1 \"Number of mass fractions\";\n"
+                           "    constant String mediumName = \"unusable\";\n    record ThermodynamicState \"state\"\n      Real p;\n"
+                           "      Real T;\n    end ThermodynamicState;\n"
+                           "    replaceable partial function setState_pT \"state from p, T\"\n      input Real p;\n"
+                           "      input Real T;\n      output ThermodynamicState state;\n    end setState_pT;\n"
+                           "    replaceable partial function specificEnthalpy \"h\"\n      input ThermodynamicState state;\n"
+                           "      output Real h;\n    end specificEnthalpy;\n  end PartialMedium;\n  package Gas \"gas\"\n"
+                           "    extends PartialMedium(nX = 2, mediumName = \"gas\");\n"
+                           "    redeclare function extends setState_pT \"gas state\"\n    algorithm\n"
+                           "      state := ThermodynamicState(p = p, T = T);\n    end setState_pT;\n"
+                           "    redeclare function extends specificEnthalpy \"gas h\"\n    algorithm\n"
+                           "      h := 1000.0 * state.T + nX;\n    end specificEnthalpy;\n  end Gas;\nend PE1;\nmodel PKE1\n"
+                           "  package Medium = PE1.Gas;\n  Medium.ThermodynamicState s;\n  Real h;\nequation\n"
+                           "  s = Medium.setState_pT(1e5, 300 + time);\n  h = Medium.specificEnthalpy(s);\nend PKE1;\n"),
+               std::string("function PKE1.Medium.ThermodynamicState \"Automatically generated record constructor for PKE1.Medium.ThermodynamicState\"\n"
+                           "  input Real p;\n  input Real T;\n  output ThermodynamicState res;\nend PKE1.Medium.ThermodynamicState;\n"
+                           "\nfunction PKE1.Medium.setState_pT \"gas state\"\n  input Real p;\n  input Real T;\n"
+                           "  output PKE1.Medium.ThermodynamicState state;\nalgorithm\n"
+                           "  state := PKE1.Medium.ThermodynamicState(p, T);\nend PKE1.Medium.setState_pT;\n\n"
+                           "function PKE1.Medium.specificEnthalpy \"gas h\"\n  input PKE1.Medium.ThermodynamicState state;\n"
+                           "  output Real h;\nalgorithm\n  h := 1000.0 * state.T + 2.0;\nend PKE1.Medium.specificEnthalpy;\n\n"
+                           "class PKE1\n  Real s.p;\n  Real s.T;\n  Real h;\nequation\n"
+                           "  s = PKE1.Medium.setState_pT(1e5, 300.0 + time);\n  h = PKE1.Medium.specificEnthalpy(s);\nend PKE1;\n"));
+}
+
+YMC_TEST(flatten_local_short_package_constants) {
+  // 同上，常量取包实例里的值：经 `extends PartialMedium(nX = 2, …)` 改过的 nX / mediumName / T_default、维里的 Medium.nX。
+  // 期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p25 PKE2）。
+  YMC_CHECK_EQ(flatten_src("package PE2\n  partial package PartialMedium \"base\"\n"
+                           "    constant Integer nX = 1 \"Number of mass fractions\";\n"
+                           "    constant String mediumName = \"unusable\";\n    constant Real T_default = 293.15;\n"
+                           "    constant Real X_default[nX] = fill(1 / nX, nX);\n"
+                           "    type Temperature = Real(min = 1, max = 1e4, unit = \"K\");\n    record ThermodynamicState \"state\"\n"
+                           "      Real p;\n      Real T;\n    end ThermodynamicState;\n"
+                           "    replaceable partial function setState_pT \"state from p, T\"\n      input Real p;\n"
+                           "      input Real T;\n      output ThermodynamicState state;\n    end setState_pT;\n"
+                           "    replaceable partial function specificEnthalpy \"h\"\n      input ThermodynamicState state;\n"
+                           "      output Real h;\n    end specificEnthalpy;\n  end PartialMedium;\n  package Gas \"gas\"\n"
+                           "    extends PartialMedium(nX = 2, mediumName = \"gas\", T_default = 300);\n"
+                           "    constant Temperature T_min = 200;\n    redeclare function extends setState_pT \"gas state\"\n"
+                           "    algorithm\n      state := ThermodynamicState(p = p, T = T);\n    end setState_pT;\n"
+                           "    redeclare function extends specificEnthalpy \"gas h\"\n    algorithm\n"
+                           "      h := 1000.0 * state.T + nX;\n    end specificEnthalpy;\n  end Gas;\nend PE2;\nmodel PKE2\n"
+                           "  package Medium = PE2.Gas;\n  parameter Integer n = Medium.nX;\n"
+                           "  parameter String name = Medium.mediumName;\n  parameter Real T0 = Medium.T_default;\n"
+                           "  parameter Real Tmin = Medium.T_min;\n  Real X[Medium.nX] = Medium.X_default;\nend PKE2;\n"),
+               std::string("class PKE2\n  parameter Integer n = 2;\n  parameter String name = \"gas\";\n  parameter Real T0 = 300.0;\n"
+                           "  parameter Real Tmin = 200.0;\n  Real X[1];\n  Real X[2];\nequation\n  X = {0.5, 0.5};\nend PKE2;\n"));
+}
+
+YMC_TEST(flatten_local_short_package_record_constant_fields) {
+  // 同上，记录常量的字段（MSL MoistAir 的 `{Medium.dryair.MM, Medium.steam.MM}`）与记录数组常量的元素字段。
+  // 期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p25 PKE3）。
+  YMC_CHECK_EQ(flatten_src("package PE3\n  record DataRecord\n    String name;\n    Real MM;\n    Real R;\n  end DataRecord;\n"
+                           "  package Data\n    constant DataRecord H2O(name = \"H2O\", MM = 0.018, R = 461.5);\n"
+                           "    constant DataRecord N2(name = \"N2\", MM = 0.028, R = 296.8);\n  end Data;\n"
+                           "  partial package PartialMixture\n    constant DataRecord[:] data;\n"
+                           "    constant Integer nS = size(data, 1);\n  end PartialMixture;\n  package Moist\n"
+                           "    extends PartialMixture(data = {Data.H2O, Data.N2});\n    constant DataRecord steam = Data.H2O;\n"
+                           "    constant DataRecord dryair = Data.N2;\n  end Moist;\nend PE3;\nmodel PKE3\n"
+                           "  package Medium = PE3.Moist;\n  parameter Real MMx[2] = {Medium.dryair.MM, Medium.steam.MM};\n"
+                           "  parameter Real R1 = Medium.data[1].R;\n  parameter Integer n = Medium.nS;\nend PKE3;\n"),
+               std::string("class PKE3\n  parameter Real MMx[1] = 0.028;\n  parameter Real MMx[2] = 0.018;\n"
+                           "  parameter Real R1 = 461.5;\n  parameter Integer n = 2;\nend PKE3;\n"));
+}
+
+YMC_TEST(flatten_local_short_package_in_component_class) {
+  // 组件的类里的本地短类包：两个组件各一份函数 / 构造函数，按组件的实例路径 `PKE5.v1.Medium.f` / `PKE5.v2.Medium.f`。
+  // 期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p25 PKE5）。
+  YMC_CHECK_EQ(flatten_src("package PE5\n  partial package PartialMedium \"base\"\n"
+                           "    constant Integer nX = 1 \"Number of mass fractions\";\n"
+                           "    constant String mediumName = \"unusable\";\n    constant Real T_default = 293.15;\n"
+                           "    constant Real X_default[nX] = fill(1 / nX, nX);\n"
+                           "    type Temperature = Real(min = 1, max = 1e4, unit = \"K\");\n    record ThermodynamicState \"state\"\n"
+                           "      Real p;\n      Real T;\n    end ThermodynamicState;\n"
+                           "    replaceable partial function setState_pT \"state from p, T\"\n      input Real p;\n"
+                           "      input Real T;\n      output ThermodynamicState state;\n    end setState_pT;\n"
+                           "    replaceable partial function specificEnthalpy \"h\"\n      input ThermodynamicState state;\n"
+                           "      output Real h;\n    end specificEnthalpy;\n  end PartialMedium;\n  package Gas \"gas\"\n"
+                           "    extends PartialMedium(nX = 2, mediumName = \"gas\", T_default = 300);\n"
+                           "    constant Temperature T_min = 200;\n    redeclare function extends setState_pT \"gas state\"\n"
+                           "    algorithm\n      state := ThermodynamicState(p = p, T = T);\n    end setState_pT;\n"
+                           "    redeclare function extends specificEnthalpy \"gas h\"\n    algorithm\n"
+                           "      h := 1000.0 * state.T + nX;\n    end specificEnthalpy;\n  end Gas;\nend PE5;\nmodel Vol5\n"
+                           "  package Medium = PE5.Gas;\n  Medium.ThermodynamicState s = Medium.setState_pT(1e5, 300 + time);\n"
+                           "  Real h = Medium.specificEnthalpy(s);\nend Vol5;\nmodel PKE5\n  Vol5 v1;\n  Vol5 v2;\nend PKE5;\n"),
+               std::string("function PKE5.v1.Medium.ThermodynamicState \"Automatically generated record constructor for PKE5.v1.Medium.ThermodynamicState\"\n"
+                           "  input Real p;\n  input Real T;\n  output ThermodynamicState res;\n"
+                           "end PKE5.v1.Medium.ThermodynamicState;\n\nfunction PKE5.v1.Medium.setState_pT \"gas state\"\n"
+                           "  input Real p;\n  input Real T;\n  output PKE5.v1.Medium.ThermodynamicState state;\nalgorithm\n"
+                           "  state := PKE5.v1.Medium.ThermodynamicState(p, T);\nend PKE5.v1.Medium.setState_pT;\n\n"
+                           "function PKE5.v1.Medium.specificEnthalpy \"gas h\"\n  input PKE5.v1.Medium.ThermodynamicState state;\n"
+                           "  output Real h;\nalgorithm\n  h := 1000.0 * state.T + 2.0;\nend PKE5.v1.Medium.specificEnthalpy;\n\n"
+                           "function PKE5.v2.Medium.ThermodynamicState \"Automatically generated record constructor for PKE5.v2.Medium.ThermodynamicState\"\n"
+                           "  input Real p;\n  input Real T;\n  output ThermodynamicState res;\n"
+                           "end PKE5.v2.Medium.ThermodynamicState;\n\nfunction PKE5.v2.Medium.setState_pT \"gas state\"\n"
+                           "  input Real p;\n  input Real T;\n  output PKE5.v2.Medium.ThermodynamicState state;\nalgorithm\n"
+                           "  state := PKE5.v2.Medium.ThermodynamicState(p, T);\nend PKE5.v2.Medium.setState_pT;\n\n"
+                           "function PKE5.v2.Medium.specificEnthalpy \"gas h\"\n  input PKE5.v2.Medium.ThermodynamicState state;\n"
+                           "  output Real h;\nalgorithm\n  h := 1000.0 * state.T + 2.0;\nend PKE5.v2.Medium.specificEnthalpy;\n\n"
+                           "class PKE5\n  Real v1.s.p;\n  Real v1.s.T;\n  Real v1.h = PKE5.v1.Medium.specificEnthalpy(v1.s);\n"
+                           "  Real v2.s.p;\n  Real v2.s.T;\n  Real v2.h = PKE5.v2.Medium.specificEnthalpy(v2.s);\nequation\n"
+                           "  v1.s = PKE5.v1.Medium.setState_pT(1e5, 300.0 + time);\n"
+                           "  v2.s = PKE5.v2.Medium.setState_pT(1e5, 300.0 + time);\nend PKE5;\n"));
+}
+
+YMC_TEST(flatten_local_short_package_record_result_without_component) {
+  // replaceable 本地短类包；返回记录的调用嵌在调用里、模型里没有这个记录类型的组件（MSL SolveOneNonlinearEquation 例子）：
+  // 类型取包实例里的记录类节点，构造函数 `PKE4.Medium.ThermodynamicState`（此前 "record result" SKIP）。
+  // 期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p25 PKE4）。
+  YMC_CHECK_EQ(flatten_src("package PE4\n  partial package PartialMedium \"base\"\n"
+                           "    constant Integer nX = 1 \"Number of mass fractions\";\n"
+                           "    constant String mediumName = \"unusable\";\n    constant Real T_default = 293.15;\n"
+                           "    constant Real X_default[nX] = fill(1 / nX, nX);\n"
+                           "    type Temperature = Real(min = 1, max = 1e4, unit = \"K\");\n    record ThermodynamicState \"state\"\n"
+                           "      Real p;\n      Real T;\n    end ThermodynamicState;\n"
+                           "    replaceable partial function setState_pT \"state from p, T\"\n      input Real p;\n"
+                           "      input Real T;\n      output ThermodynamicState state;\n    end setState_pT;\n"
+                           "    replaceable partial function specificEnthalpy \"h\"\n      input ThermodynamicState state;\n"
+                           "      output Real h;\n    end specificEnthalpy;\n  end PartialMedium;\n  package Gas \"gas\"\n"
+                           "    extends PartialMedium(nX = 2, mediumName = \"gas\", T_default = 300);\n"
+                           "    constant Temperature T_min = 200;\n    redeclare function extends setState_pT \"gas state\"\n"
+                           "    algorithm\n      state := ThermodynamicState(p = p, T = T);\n    end setState_pT;\n"
+                           "    redeclare function extends specificEnthalpy \"gas h\"\n    algorithm\n"
+                           "      h := 1000.0 * state.T + nX;\n    end specificEnthalpy;\n  end Gas;\nend PE4;\nmodel PKE4\n"
+                           "  replaceable package Medium = PE4.Gas constrainedby PE4.PartialMedium;\n  parameter Real T0 = 300;\n"
+                           "  final parameter Real h0 = Medium.specificEnthalpy(Medium.setState_pT(1e5, T0));\n"
+                           "  Real h = Medium.specificEnthalpy(Medium.setState_pT(1e5, T0 + time));\nend PKE4;\n"),
+               std::string("function PKE4.Medium.ThermodynamicState \"Automatically generated record constructor for PKE4.Medium.ThermodynamicState\"\n"
+                           "  input Real p;\n  input Real T;\n  output ThermodynamicState res;\nend PKE4.Medium.ThermodynamicState;\n"
+                           "\nfunction PKE4.Medium.setState_pT \"gas state\"\n  input Real p;\n  input Real T;\n"
+                           "  output PKE4.Medium.ThermodynamicState state;\nalgorithm\n"
+                           "  state := PKE4.Medium.ThermodynamicState(p, T);\nend PKE4.Medium.setState_pT;\n\n"
+                           "function PKE4.Medium.specificEnthalpy \"gas h\"\n  input PKE4.Medium.ThermodynamicState state;\n"
+                           "  output Real h;\nalgorithm\n  h := 1000.0 * state.T + 2.0;\nend PKE4.Medium.specificEnthalpy;\n\n"
+                           "class PKE4\n  parameter Real T0 = 300.0;\n"
+                           "  final parameter Real h0 = PKE4.Medium.specificEnthalpy(PKE4.Medium.setState_pT(1e5, T0));\n"
+                           "  Real h = PKE4.Medium.specificEnthalpy(PKE4.Medium.setState_pT(1e5, T0 + time));\nend PKE4;\n"));
+}
+
+YMC_TEST(flatten_local_short_package_record_ctor_without_component) {
+  // 经本地短类包的记录构造调用作实参、模型里没有这个记录类型的组件：构造函数只按实例路径打一个（此前多打定义路径的
+  // `PE23.PartialMedium.ThermodynamicState`）。期望 = omc 1.25.0 实跑（2026-10-15，探针 pk-p25 PKE23）。
+  YMC_CHECK_EQ(flatten_src("package PE23\n  partial package PartialMedium \"base\"\n"
+                           "    constant Integer nX = 1 \"Number of mass fractions\";\n"
+                           "    constant String mediumName = \"unusable\";\n    constant Real T_default = 293.15;\n"
+                           "    constant Real X_default[nX] = fill(1 / nX, nX);\n"
+                           "    type Temperature = Real(min = 1, max = 1e4, unit = \"K\");\n    record ThermodynamicState \"state\"\n"
+                           "      Real p;\n      Real T;\n    end ThermodynamicState;\n"
+                           "    replaceable partial function setState_pT \"state from p, T\"\n      input Real p;\n"
+                           "      input Real T;\n      output ThermodynamicState state;\n    end setState_pT;\n"
+                           "    replaceable partial function specificEnthalpy \"h\"\n      input ThermodynamicState state;\n"
+                           "      output Real h;\n    end specificEnthalpy;\n  end PartialMedium;\n  package Gas \"gas\"\n"
+                           "    extends PartialMedium(nX = 2, mediumName = \"gas\", T_default = 300);\n"
+                           "    constant Temperature T_min = 200;\n    redeclare function extends setState_pT \"gas state\"\n"
+                           "    algorithm\n      state := ThermodynamicState(p = p, T = T);\n    end setState_pT;\n"
+                           "    redeclare function extends specificEnthalpy \"gas h\"\n    algorithm\n"
+                           "      h := 1000.0 * state.T + nX;\n    end specificEnthalpy;\n  end Gas;\nend PE23;\nmodel PKE23\n"
+                           "  package Medium = PE23.Gas;\n"
+                           "  Real h = Medium.specificEnthalpy(Medium.ThermodynamicState(p = 1e5, T = 300 + time));\nend PKE23;\n"),
+               std::string("function PKE23.Medium.ThermodynamicState \"Automatically generated record constructor for PKE23.Medium.ThermodynamicState\"\n"
+                           "  input Real p;\n  input Real T;\n  output ThermodynamicState res;\nend PKE23.Medium.ThermodynamicState;\n"
+                           "\nfunction PKE23.Medium.specificEnthalpy \"gas h\"\n  input PKE23.Medium.ThermodynamicState state;\n"
+                           "  output Real h;\nalgorithm\n  h := 1000.0 * state.T + 2.0;\nend PKE23.Medium.specificEnthalpy;\n\n"
+                           "class PKE23\n"
+                           "  Real h = PKE23.Medium.specificEnthalpy(PKE23.Medium.ThermodynamicState(1e5, 300.0 + time));\n"
+                           "end PKE23;\n"));
+}
+
+YMC_TEST(flatten_local_short_package_protected_access) {
+  // 经本地短类包取 protected 常量：omc 报 "Illegal access of protected element secret"（LookupState.checkProtection，
+  // NFLookupState.mo:441-466 v1.25.0）→ SKIP（此前包实例路径不查 protected、静默出值；2026-10-15，探针 pk-p25 PKE13）。
+  YMC_CHECK_EQ(flatten_src("package PE13\n  package Gas\n    constant Real a = 1.5;\n  protected\n    constant Real secret = 2.5;\n"
+                           "  end Gas;\nend PE13;\nmodel PKE13\n  package Medium = PE13.Gas;\n  parameter Real y = Medium.secret;\n"
+                           "end PKE13;\n"),
+               std::string("<unsupported:access of protected element>"));
+}
+
 YMC_TEST_MAIN

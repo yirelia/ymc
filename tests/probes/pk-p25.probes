@@ -1,0 +1,901 @@
+//// set: pk-p25 — 模型（组件类）里不带修饰的本地短类包经包实例查名：函数 / 记录按实例路径命名、常量取包实例的值、没有记录组件时返回记录的调用与记录构造调用、protected / partial 照拒
+//// model: PKE1
+package PE1
+  partial package PartialMedium "base"
+    constant Integer nX = 1 "Number of mass fractions";
+    constant String mediumName = "unusable";
+    record ThermodynamicState "state"
+      Real p;
+      Real T;
+    end ThermodynamicState;
+    replaceable partial function setState_pT "state from p, T"
+      input Real p;
+      input Real T;
+      output ThermodynamicState state;
+    end setState_pT;
+    replaceable partial function specificEnthalpy "h"
+      input ThermodynamicState state;
+      output Real h;
+    end specificEnthalpy;
+  end PartialMedium;
+  package Gas "gas"
+    extends PartialMedium(nX = 2, mediumName = "gas");
+    redeclare function extends setState_pT "gas state"
+    algorithm
+      state := ThermodynamicState(p = p, T = T);
+    end setState_pT;
+    redeclare function extends specificEnthalpy "gas h"
+    algorithm
+      h := 1000.0 * state.T + nX;
+    end specificEnthalpy;
+  end Gas;
+end PE1;
+model PKE1
+  package Medium = PE1.Gas;
+  Medium.ThermodynamicState s;
+  Real h;
+equation
+  s = Medium.setState_pT(1e5, 300 + time);
+  h = Medium.specificEnthalpy(s);
+end PKE1;
+//// model: PKE2
+package PE2
+  partial package PartialMedium "base"
+    constant Integer nX = 1 "Number of mass fractions";
+    constant String mediumName = "unusable";
+    constant Real T_default = 293.15;
+    constant Real X_default[nX] = fill(1 / nX, nX);
+    type Temperature = Real(min = 1, max = 1e4, unit = "K");
+    record ThermodynamicState "state"
+      Real p;
+      Real T;
+    end ThermodynamicState;
+    replaceable partial function setState_pT "state from p, T"
+      input Real p;
+      input Real T;
+      output ThermodynamicState state;
+    end setState_pT;
+    replaceable partial function specificEnthalpy "h"
+      input ThermodynamicState state;
+      output Real h;
+    end specificEnthalpy;
+  end PartialMedium;
+  package Gas "gas"
+    extends PartialMedium(nX = 2, mediumName = "gas", T_default = 300);
+    constant Temperature T_min = 200;
+    redeclare function extends setState_pT "gas state"
+    algorithm
+      state := ThermodynamicState(p = p, T = T);
+    end setState_pT;
+    redeclare function extends specificEnthalpy "gas h"
+    algorithm
+      h := 1000.0 * state.T + nX;
+    end specificEnthalpy;
+  end Gas;
+end PE2;
+model PKE2
+  package Medium = PE2.Gas;
+  parameter Integer n = Medium.nX;
+  parameter String name = Medium.mediumName;
+  parameter Real T0 = Medium.T_default;
+  parameter Real Tmin = Medium.T_min;
+  Real X[Medium.nX] = Medium.X_default;
+end PKE2;
+//// model: PKE3
+package PE3
+  record DataRecord
+    String name;
+    Real MM;
+    Real R;
+  end DataRecord;
+  package Data
+    constant DataRecord H2O(name = "H2O", MM = 0.018, R = 461.5);
+    constant DataRecord N2(name = "N2", MM = 0.028, R = 296.8);
+  end Data;
+  partial package PartialMixture
+    constant DataRecord[:] data;
+    constant Integer nS = size(data, 1);
+  end PartialMixture;
+  package Moist
+    extends PartialMixture(data = {Data.H2O, Data.N2});
+    constant DataRecord steam = Data.H2O;
+    constant DataRecord dryair = Data.N2;
+  end Moist;
+end PE3;
+model PKE3
+  package Medium = PE3.Moist;
+  parameter Real MMx[2] = {Medium.dryair.MM, Medium.steam.MM};
+  parameter Real R1 = Medium.data[1].R;
+  parameter Integer n = Medium.nS;
+end PKE3;
+//// model: PKE4
+package PE4
+  partial package PartialMedium "base"
+    constant Integer nX = 1 "Number of mass fractions";
+    constant String mediumName = "unusable";
+    constant Real T_default = 293.15;
+    constant Real X_default[nX] = fill(1 / nX, nX);
+    type Temperature = Real(min = 1, max = 1e4, unit = "K");
+    record ThermodynamicState "state"
+      Real p;
+      Real T;
+    end ThermodynamicState;
+    replaceable partial function setState_pT "state from p, T"
+      input Real p;
+      input Real T;
+      output ThermodynamicState state;
+    end setState_pT;
+    replaceable partial function specificEnthalpy "h"
+      input ThermodynamicState state;
+      output Real h;
+    end specificEnthalpy;
+  end PartialMedium;
+  package Gas "gas"
+    extends PartialMedium(nX = 2, mediumName = "gas", T_default = 300);
+    constant Temperature T_min = 200;
+    redeclare function extends setState_pT "gas state"
+    algorithm
+      state := ThermodynamicState(p = p, T = T);
+    end setState_pT;
+    redeclare function extends specificEnthalpy "gas h"
+    algorithm
+      h := 1000.0 * state.T + nX;
+    end specificEnthalpy;
+  end Gas;
+end PE4;
+model PKE4
+  replaceable package Medium = PE4.Gas constrainedby PE4.PartialMedium;
+  parameter Real T0 = 300;
+  final parameter Real h0 = Medium.specificEnthalpy(Medium.setState_pT(1e5, T0));
+  Real h = Medium.specificEnthalpy(Medium.setState_pT(1e5, T0 + time));
+end PKE4;
+//// model: PKE5
+package PE5
+  partial package PartialMedium "base"
+    constant Integer nX = 1 "Number of mass fractions";
+    constant String mediumName = "unusable";
+    constant Real T_default = 293.15;
+    constant Real X_default[nX] = fill(1 / nX, nX);
+    type Temperature = Real(min = 1, max = 1e4, unit = "K");
+    record ThermodynamicState "state"
+      Real p;
+      Real T;
+    end ThermodynamicState;
+    replaceable partial function setState_pT "state from p, T"
+      input Real p;
+      input Real T;
+      output ThermodynamicState state;
+    end setState_pT;
+    replaceable partial function specificEnthalpy "h"
+      input ThermodynamicState state;
+      output Real h;
+    end specificEnthalpy;
+  end PartialMedium;
+  package Gas "gas"
+    extends PartialMedium(nX = 2, mediumName = "gas", T_default = 300);
+    constant Temperature T_min = 200;
+    redeclare function extends setState_pT "gas state"
+    algorithm
+      state := ThermodynamicState(p = p, T = T);
+    end setState_pT;
+    redeclare function extends specificEnthalpy "gas h"
+    algorithm
+      h := 1000.0 * state.T + nX;
+    end specificEnthalpy;
+  end Gas;
+end PE5;
+model Vol5
+  package Medium = PE5.Gas;
+  Medium.ThermodynamicState s = Medium.setState_pT(1e5, 300 + time);
+  Real h = Medium.specificEnthalpy(s);
+end Vol5;
+model PKE5
+  Vol5 v1;
+  Vol5 v2;
+end PKE5;
+//// model: PKE6
+package PE6
+  partial package PartialMedium "base"
+    constant Integer nX = 1 "Number of mass fractions";
+    constant String mediumName = "unusable";
+    constant Real T_default = 293.15;
+    constant Real X_default[nX] = fill(1 / nX, nX);
+    type Temperature = Real(min = 1, max = 1e4, unit = "K");
+    record ThermodynamicState "state"
+      Real p;
+      Real T;
+    end ThermodynamicState;
+    replaceable partial function setState_pT "state from p, T"
+      input Real p;
+      input Real T;
+      output ThermodynamicState state;
+    end setState_pT;
+    replaceable partial function specificEnthalpy "h"
+      input ThermodynamicState state;
+      output Real h;
+    end specificEnthalpy;
+  end PartialMedium;
+  package Gas "gas"
+    extends PartialMedium(nX = 2, mediumName = "gas", T_default = 300);
+    constant Temperature T_min = 200;
+    redeclare function extends setState_pT "gas state"
+    algorithm
+      state := ThermodynamicState(p = p, T = T);
+    end setState_pT;
+    redeclare function extends specificEnthalpy "gas h"
+    algorithm
+      h := 1000.0 * state.T + nX;
+    end specificEnthalpy;
+  end Gas;
+end PE6;
+model Base6
+  package Medium = PE6.Gas;
+end Base6;
+model PKE6
+  extends Base6;
+  Medium.ThermodynamicState s = Medium.setState_pT(1e5, 300 + time);
+  Real h = Medium.specificEnthalpy(s);
+  parameter Integer n = Medium.nX;
+end PKE6;
+//// model: PKE7
+package PE7
+  partial package PartialMedium "base"
+    constant Integer nX = 1 "Number of mass fractions";
+    constant String mediumName = "unusable";
+    constant Real T_default = 293.15;
+    constant Real X_default[nX] = fill(1 / nX, nX);
+    type Temperature = Real(min = 1, max = 1e4, unit = "K");
+    record ThermodynamicState "state"
+      Real p;
+      Real T;
+    end ThermodynamicState;
+    replaceable partial function setState_pT "state from p, T"
+      input Real p;
+      input Real T;
+      output ThermodynamicState state;
+    end setState_pT;
+    replaceable partial function specificEnthalpy "h"
+      input ThermodynamicState state;
+      output Real h;
+    end specificEnthalpy;
+  end PartialMedium;
+  package Gas "gas"
+    extends PartialMedium(nX = 2, mediumName = "gas", T_default = 300);
+    constant Temperature T_min = 200;
+    redeclare function extends setState_pT "gas state"
+    algorithm
+      state := ThermodynamicState(p = p, T = T);
+    end setState_pT;
+    redeclare function extends specificEnthalpy "gas h"
+    algorithm
+      h := 1000.0 * state.T + nX;
+    end specificEnthalpy;
+  end Gas;
+  package Gas2 = Gas;
+end PE7;
+model PKE7
+  package M1 = PE7.Gas2;
+  package Medium = M1;
+  Medium.ThermodynamicState s = Medium.setState_pT(1e5, 300 + time);
+  Real h = Medium.specificEnthalpy(s);
+  parameter Integer n = Medium.nX;
+end PKE7;
+//// model: PKE8
+package PE8
+  package Lib
+    constant Real c = 2.5;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := c * x + 1;
+    end f;
+  end Lib;
+end PE8;
+model PKE8
+  package L = PE8.Lib;
+  Real y = L.f(time);
+  parameter Real z = L.c;
+end PKE8;
+//// model: PKE9
+package PE9
+  partial package PartialMedium "base"
+    constant Integer nX = 1 "Number of mass fractions";
+    constant String mediumName = "unusable";
+    constant Real T_default = 293.15;
+    constant Real X_default[nX] = fill(1 / nX, nX);
+    type Temperature = Real(min = 1, max = 1e4, unit = "K");
+    record ThermodynamicState "state"
+      Real p;
+      Real T;
+    end ThermodynamicState;
+    replaceable partial function setState_pT "state from p, T"
+      input Real p;
+      input Real T;
+      output ThermodynamicState state;
+    end setState_pT;
+    replaceable partial function specificEnthalpy "h"
+      input ThermodynamicState state;
+      output Real h;
+    end specificEnthalpy;
+  end PartialMedium;
+  package Gas "gas"
+    extends PartialMedium(nX = 2, mediumName = "gas", T_default = 300);
+    constant Temperature T_min = 200;
+    redeclare function extends setState_pT "gas state"
+    algorithm
+      state := ThermodynamicState(p = p, T = T);
+    end setState_pT;
+    redeclare function extends specificEnthalpy "gas h"
+    algorithm
+      h := 1000.0 * state.T + nX;
+    end specificEnthalpy;
+    model BaseProperties
+      Real T;
+      Real h;
+      ThermodynamicState state;
+    equation
+      state = setState_pT(1e5, T);
+      h = specificEnthalpy(state);
+    end BaseProperties;
+  end Gas;
+end PE9;
+model PKE9
+  package Medium = PE9.Gas;
+  Medium.BaseProperties medium(T(start = 300, fixed = true));
+  Real h2 = Medium.specificEnthalpy(Medium.setState_pT(2e5, medium.T));
+equation
+  der(medium.T) = 1;
+end PKE9;
+//// model: PKE10
+package PE10
+  partial package PartialMedium "base"
+    constant Integer nX = 1 "Number of mass fractions";
+    constant String mediumName = "unusable";
+    constant Real T_default = 293.15;
+    constant Real X_default[nX] = fill(1 / nX, nX);
+    type Temperature = Real(min = 1, max = 1e4, unit = "K");
+    record ThermodynamicState "state"
+      Real p;
+      Real T;
+    end ThermodynamicState;
+    replaceable partial function setState_pT "state from p, T"
+      input Real p;
+      input Real T;
+      output ThermodynamicState state;
+    end setState_pT;
+    replaceable partial function specificEnthalpy "h"
+      input ThermodynamicState state;
+      output Real h;
+    end specificEnthalpy;
+  end PartialMedium;
+  package Gas "gas"
+    extends PartialMedium(nX = 2, mediumName = "gas", T_default = 300);
+    constant Temperature T_min = 200;
+    redeclare function extends setState_pT "gas state"
+    algorithm
+      state := ThermodynamicState(p = p, T = T);
+    end setState_pT;
+    redeclare function extends specificEnthalpy "gas h"
+    algorithm
+      h := 1000.0 * state.T + nX;
+    end specificEnthalpy;
+  end Gas;
+end PE10;
+model PKE10
+  package Medium = PE10.Gas;
+  parameter Real p = 1e5;
+  parameter Real h0 = Medium.specificEnthalpy(Medium.setState_pT(p, 300));
+  Medium.ThermodynamicState s0 = Medium.setState_pT(p, 300);
+end PKE10;
+//// model: PKE11
+package PE11
+  package Lib
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := 2 * x;
+    end f;
+  end Lib;
+end PE11;
+model PKE11
+  function g = PE11.Lib.f;
+  Real y = g(time);
+end PKE11;
+//// model: PKE12
+package PE12
+  partial package PartialMedium "base"
+    constant Integer nX = 1 "Number of mass fractions";
+    constant String mediumName = "unusable";
+    constant Real T_default = 293.15;
+    constant Real X_default[nX] = fill(1 / nX, nX);
+    type Temperature = Real(min = 1, max = 1e4, unit = "K");
+    record ThermodynamicState "state"
+      Real p;
+      Real T;
+    end ThermodynamicState;
+    replaceable partial function setState_pT "state from p, T"
+      input Real p;
+      input Real T;
+      output ThermodynamicState state;
+    end setState_pT;
+    replaceable partial function specificEnthalpy "h"
+      input ThermodynamicState state;
+      output Real h;
+    end specificEnthalpy;
+  end PartialMedium;
+  package Gas "gas"
+    extends PartialMedium(nX = 2, mediumName = "gas", T_default = 300);
+    constant Temperature T_min = 200;
+    redeclare function extends setState_pT "gas state"
+    algorithm
+      state := ThermodynamicState(p = p, T = T);
+    end setState_pT;
+    redeclare function extends specificEnthalpy "gas h"
+    algorithm
+      h := 1000.0 * state.T + nX;
+    end specificEnthalpy;
+  end Gas;
+end PE12;
+model Vol12
+  parameter Real h0 = 0;
+  Real h = h0 + time;
+end Vol12;
+model PKE12
+  package Medium = PE12.Gas;
+  Vol12 v(h0 = Medium.specificEnthalpy(Medium.setState_pT(1e5, Medium.T_default)));
+end PKE12;
+//// model: PKE13
+package PE13
+  package Gas
+    constant Real a = 1.5;
+  protected
+    constant Real secret = 2.5;
+  end Gas;
+end PE13;
+model PKE13
+  package Medium = PE13.Gas;
+  parameter Real y = Medium.secret;
+end PKE13;
+//// model: PKE14
+package PE14
+  partial package Base
+    constant Real k0 = 1;
+    package Utilities
+      constant Real k = 3;
+      function f
+        input Real x;
+        output Real y;
+      algorithm
+        y := k * x + k0;
+      end f;
+    end Utilities;
+  end Base;
+  package Gas
+    extends Base(k0 = 2);
+  end Gas;
+end PE14;
+model PKE14
+  package Medium = PE14.Gas;
+  Real y = Medium.Utilities.f(time);
+  parameter Real k = Medium.Utilities.k;
+end PKE14;
+//// model: PKE15
+package PE15
+  partial package PartialMedium "base"
+    constant Integer nX = 1 "Number of mass fractions";
+    constant String mediumName = "unusable";
+    constant Real T_default = 293.15;
+    constant Real X_default[nX] = fill(1 / nX, nX);
+    type Temperature = Real(min = 1, max = 1e4, unit = "K");
+    record ThermodynamicState "state"
+      Real p;
+      Real T;
+    end ThermodynamicState;
+    replaceable partial function setState_pT "state from p, T"
+      input Real p;
+      input Real T;
+      output ThermodynamicState state;
+    end setState_pT;
+    replaceable partial function specificEnthalpy "h"
+      input ThermodynamicState state;
+      output Real h;
+    end specificEnthalpy;
+  end PartialMedium;
+  package Gas "gas"
+    extends PartialMedium(nX = 2, mediumName = "gas", T_default = 300);
+    constant Temperature T_min = 200;
+    redeclare function extends setState_pT "gas state"
+    algorithm
+      state := ThermodynamicState(p = p, T = T);
+    end setState_pT;
+    redeclare function extends specificEnthalpy "gas h"
+    algorithm
+      h := 1000.0 * state.T + nX;
+    end specificEnthalpy;
+  end Gas;
+end PE15;
+model PKE15
+  package Medium = PE15.Gas;
+  Medium.ThermodynamicState s;
+equation
+  s = Medium.ThermodynamicState(p = 1e5, T = 300 + time);
+end PKE15;
+//// model: PKE16
+package PE16
+  partial package PartialMedium "base"
+    constant Integer nX = 1 "Number of mass fractions";
+    constant String mediumName = "unusable";
+    constant Real T_default = 293.15;
+    constant Real X_default[nX] = fill(1 / nX, nX);
+    type Temperature = Real(min = 1, max = 1e4, unit = "K");
+    record ThermodynamicState "state"
+      Real p;
+      Real T;
+    end ThermodynamicState;
+    replaceable partial function setState_pT "state from p, T"
+      input Real p;
+      input Real T;
+      output ThermodynamicState state;
+    end setState_pT;
+    replaceable partial function specificEnthalpy "h"
+      input ThermodynamicState state;
+      output Real h;
+    end specificEnthalpy;
+  end PartialMedium;
+  package Gas "gas"
+    extends PartialMedium(nX = 2, mediumName = "gas", T_default = 300);
+    constant Temperature T_min = 200;
+    redeclare function extends setState_pT "gas state"
+    algorithm
+      state := ThermodynamicState(p = p, T = T);
+    end setState_pT;
+    redeclare function extends specificEnthalpy "gas h"
+    algorithm
+      h := 1000.0 * state.T + nX;
+    end specificEnthalpy;
+  end Gas;
+  package Gas3 = Gas(T_default = 310, mediumName = "gas3");
+end PE16;
+model PKE16
+  package Medium = PE16.Gas3;
+  parameter Real T0 = Medium.T_default;
+  parameter String name = Medium.mediumName;
+  Real h = Medium.specificEnthalpy(s);
+  Medium.ThermodynamicState s = Medium.setState_pT(1e5, T0 + time);
+end PKE16;
+//// model: PKE17
+package PE17
+  partial package PartialMedium
+    constant Real R = 1;
+    replaceable partial function h_T
+      input Real T;
+      output Real h;
+    end h_T;
+    function h_twice
+      input Real T;
+      output Real h;
+    algorithm
+      h := 2 * h_T(T) + R;
+    end h_twice;
+  end PartialMedium;
+  package Gas
+    extends PartialMedium(R = 287);
+    redeclare function extends h_T
+    algorithm
+      h := R * T;
+    end h_T;
+  end Gas;
+end PE17;
+model PKE17
+  package Medium = PE17.Gas;
+  Real h = Medium.h_twice(time);
+end PKE17;
+//// model: PKE18
+package PE18
+  partial package PartialMedium "base"
+    constant Integer nX = 1 "Number of mass fractions";
+    constant String mediumName = "unusable";
+    constant Real T_default = 293.15;
+    constant Real X_default[nX] = fill(1 / nX, nX);
+    type Temperature = Real(min = 1, max = 1e4, unit = "K");
+    record ThermodynamicState "state"
+      Real p;
+      Real T;
+    end ThermodynamicState;
+    replaceable partial function setState_pT "state from p, T"
+      input Real p;
+      input Real T;
+      output ThermodynamicState state;
+    end setState_pT;
+    replaceable partial function specificEnthalpy "h"
+      input ThermodynamicState state;
+      output Real h;
+    end specificEnthalpy;
+  end PartialMedium;
+  package Gas "gas"
+    extends PartialMedium(nX = 2, mediumName = "gas", T_default = 300);
+    constant Temperature T_min = 200;
+    redeclare function extends setState_pT "gas state"
+    algorithm
+      state := ThermodynamicState(p = p, T = T);
+    end setState_pT;
+    redeclare function extends specificEnthalpy "gas h"
+    algorithm
+      h := 1000.0 * state.T + nX;
+    end specificEnthalpy;
+  end Gas;
+end PE18;
+model PKE18
+  package Medium1 = PE18.Gas;
+  package Medium2 = PE18.Gas;
+  Medium1.ThermodynamicState s1 = Medium1.setState_pT(1e5, 300 + time);
+  Medium2.ThermodynamicState s2 = Medium2.setState_pT(2e5, 300 + time);
+  Real h1 = Medium1.specificEnthalpy(s1);
+  Real h2 = Medium2.specificEnthalpy(s2);
+end PKE18;
+//// model: PKE19
+package PE19
+  partial package PartialMedium
+    replaceable partial function f
+      input Real x;
+      output Real y;
+    end f;
+  end PartialMedium;
+  package Gas
+    extends PartialMedium;
+  end Gas;
+end PE19;
+model PKE19
+  package Medium = PE19.Gas;
+  Real y = Medium.f(time);
+end PKE19;
+//// model: PKE20
+package PE20
+  package Gas
+    function g
+      input Real x;
+      output Real y;
+    algorithm
+      y := hidden(x);
+    end g;
+  protected
+    function hidden
+      input Real x;
+      output Real y;
+    algorithm
+      y := 2 * x;
+    end hidden;
+  end Gas;
+end PE20;
+model PKE20
+  package Medium = PE20.Gas;
+  Real y = Medium.hidden(time);
+end PKE20;
+//// model: PKE21
+package PE21
+  package Gas
+    function g
+      input Real x;
+      output Real y;
+    algorithm
+      y := hidden(x);
+    end g;
+  protected
+    function hidden
+      input Real x;
+      output Real y;
+    algorithm
+      y := 2 * x;
+    end hidden;
+  end Gas;
+end PE21;
+model PKE21
+  package Medium = PE21.Gas;
+  Real y = Medium.g(time);
+end PKE21;
+//// model: PKE22
+package PE22
+  partial package PartialMedium "base"
+    constant Integer nX = 1 "Number of mass fractions";
+    constant String mediumName = "unusable";
+    constant Real T_default = 293.15;
+    constant Real X_default[nX] = fill(1 / nX, nX);
+    type Temperature = Real(min = 1, max = 1e4, unit = "K");
+    record ThermodynamicState "state"
+      Real p;
+      Real T;
+    end ThermodynamicState;
+    replaceable partial function setState_pT "state from p, T"
+      input Real p;
+      input Real T;
+      output ThermodynamicState state;
+    end setState_pT;
+    replaceable partial function specificEnthalpy "h"
+      input ThermodynamicState state;
+      output Real h;
+    end specificEnthalpy;
+  end PartialMedium;
+  package Gas "gas"
+    extends PartialMedium(nX = 2, mediumName = "gas", T_default = 300);
+    constant Temperature T_min = 200;
+    redeclare function extends setState_pT "gas state"
+    algorithm
+      state := ThermodynamicState(p = p, T = T);
+    end setState_pT;
+    redeclare function extends specificEnthalpy "gas h"
+    algorithm
+      h := 1000.0 * state.T + nX;
+    end specificEnthalpy;
+  end Gas;
+end PE22;
+model PKE22
+  package Medium = PE22.Gas;
+  Medium.Temperature T(start = Medium.T_default, fixed = true);
+  parameter Medium.Temperature Tmin = Medium.T_min;
+equation
+  der(T) = Tmin - T;
+end PKE22;
+//// model: PKE23
+package PE23
+  partial package PartialMedium "base"
+    constant Integer nX = 1 "Number of mass fractions";
+    constant String mediumName = "unusable";
+    constant Real T_default = 293.15;
+    constant Real X_default[nX] = fill(1 / nX, nX);
+    type Temperature = Real(min = 1, max = 1e4, unit = "K");
+    record ThermodynamicState "state"
+      Real p;
+      Real T;
+    end ThermodynamicState;
+    replaceable partial function setState_pT "state from p, T"
+      input Real p;
+      input Real T;
+      output ThermodynamicState state;
+    end setState_pT;
+    replaceable partial function specificEnthalpy "h"
+      input ThermodynamicState state;
+      output Real h;
+    end specificEnthalpy;
+  end PartialMedium;
+  package Gas "gas"
+    extends PartialMedium(nX = 2, mediumName = "gas", T_default = 300);
+    constant Temperature T_min = 200;
+    redeclare function extends setState_pT "gas state"
+    algorithm
+      state := ThermodynamicState(p = p, T = T);
+    end setState_pT;
+    redeclare function extends specificEnthalpy "gas h"
+    algorithm
+      h := 1000.0 * state.T + nX;
+    end specificEnthalpy;
+  end Gas;
+end PE23;
+model PKE23
+  package Medium = PE23.Gas;
+  Real h = Medium.specificEnthalpy(Medium.ThermodynamicState(p = 1e5, T = 300 + time));
+end PKE23;
+//// model: PKE24
+package PE24
+  partial package PartialMedium "base"
+    constant Integer nX = 1 "Number of mass fractions";
+    constant String mediumName = "unusable";
+    constant Real T_default = 293.15;
+    constant Real X_default[nX] = fill(1 / nX, nX);
+    type Temperature = Real(min = 1, max = 1e4, unit = "K");
+    record ThermodynamicState "state"
+      Real p;
+      Real T;
+    end ThermodynamicState;
+    replaceable partial function setState_pT "state from p, T"
+      input Real p;
+      input Real T;
+      output ThermodynamicState state;
+    end setState_pT;
+    replaceable partial function specificEnthalpy "h"
+      input ThermodynamicState state;
+      output Real h;
+    end specificEnthalpy;
+  end PartialMedium;
+  package Gas "gas"
+    extends PartialMedium(nX = 2, mediumName = "gas", T_default = 300);
+    constant Temperature T_min = 200;
+    redeclare function extends setState_pT "gas state"
+    algorithm
+      state := ThermodynamicState(p = p, T = T);
+    end setState_pT;
+    redeclare function extends specificEnthalpy "gas h"
+    algorithm
+      h := 1000.0 * state.T + nX;
+    end specificEnthalpy;
+  end Gas;
+end PE24;
+model PKE24
+  package Medium = PE24.Gas;
+  PE24.Gas.ThermodynamicState s = Medium.setState_pT(1e5, 300 + time);
+end PKE24;
+//// model: PKE25
+package PE25
+  partial package PartialMedium "base"
+    constant Integer nX = 1 "Number of mass fractions";
+    constant String mediumName = "unusable";
+    constant Real T_default = 293.15;
+    constant Real X_default[nX] = fill(1 / nX, nX);
+    type Temperature = Real(min = 1, max = 1e4, unit = "K");
+    record ThermodynamicState "state"
+      Real p;
+      Real T;
+    end ThermodynamicState;
+    replaceable partial function setState_pT "state from p, T"
+      input Real p;
+      input Real T;
+      output ThermodynamicState state;
+    end setState_pT;
+    replaceable partial function specificEnthalpy "h"
+      input ThermodynamicState state;
+      output Real h;
+    end specificEnthalpy;
+  end PartialMedium;
+  package Gas "gas"
+    extends PartialMedium(nX = 2, mediumName = "gas", T_default = 300);
+    constant Temperature T_min = 200;
+    redeclare function extends setState_pT "gas state"
+    algorithm
+      state := ThermodynamicState(p = p, T = T);
+    end setState_pT;
+    redeclare function extends specificEnthalpy "gas h"
+    algorithm
+      h := 1000.0 * state.T + nX;
+    end specificEnthalpy;
+  end Gas;
+end PE25;
+model PKE25
+  package Medium1 = PE25.Gas;
+  package Medium2 = PE25.Gas;
+  Medium1.ThermodynamicState s1 = Medium1.setState_pT(1e5, 300 + time);
+  Real h2 = Medium2.specificEnthalpy(Medium2.setState_pT(2e5, 300 + time));
+end PKE25;
+//// model: PKE26
+package PE26
+  partial package PartialMedium "base"
+    constant Integer nX = 1 "Number of mass fractions";
+    constant String mediumName = "unusable";
+    constant Real T_default = 293.15;
+    constant Real X_default[nX] = fill(1 / nX, nX);
+    type Temperature = Real(min = 1, max = 1e4, unit = "K");
+    record ThermodynamicState "state"
+      Real p;
+      Real T;
+    end ThermodynamicState;
+    replaceable partial function setState_pT "state from p, T"
+      input Real p;
+      input Real T;
+      output ThermodynamicState state;
+    end setState_pT;
+    replaceable partial function specificEnthalpy "h"
+      input ThermodynamicState state;
+      output Real h;
+    end specificEnthalpy;
+  end PartialMedium;
+  package Gas "gas"
+    extends PartialMedium(nX = 2, mediumName = "gas", T_default = 300);
+    constant Temperature T_min = 200;
+    redeclare function extends setState_pT "gas state"
+    algorithm
+      state := ThermodynamicState(p = p, T = T);
+    end setState_pT;
+    redeclare function extends specificEnthalpy "gas h"
+    algorithm
+      h := 1000.0 * state.T + nX;
+    end specificEnthalpy;
+  end Gas;
+end PE26;
+model Vol26
+  package Medium = PE26.Gas;
+  Real h = Medium.specificEnthalpy(Medium.setState_pT(1e5, 300 + time));
+end Vol26;
+model PKE26
+  Vol26 v1;
+  Vol26 v2;
+end PKE26;

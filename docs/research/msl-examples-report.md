@@ -729,3 +729,11 @@ BranchingDynamicPipes）与 ReferenceAir ×2——"named function argument [miss
 Modelica.Math.Nonlinear.Examples.QuadratureLobatto3。MoistAir 一族越过部分应用、卡到下一处：Media.Examples.MoistAir——模型语境的
 `Medium.dryair.MM`；RoomCO2 ×2、BranchingDynamicPipes——stream connector；ReferenceAir.MoistAir / MoistAir2——函数里记录局部的
 绑定（Ice09 Gibbs 的 `t`）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-16 66q 之后：PASS 460（+5）
+
+模型里不带修饰的本地短类包（`package Medium = …`）经包实例查名、按实例路径命名。转 PASS：Media.Examples.IdealGasH2O、
+WaterIF97、PsychrometricData、MoistAir、SolveOneNonlinearEquation.Inverse_sh_TX。同簇余下 7 例卡到下一处：Inverse_sh_T——包常量
+记录作部分应用实参（PKZ23）；MixtureGases——经 extends 修饰重声明的 FluidConstants；InverseIncompressible_sh_T、
+Fluid.Examples.IncompressibleFluidNetwork——编译期多项式拟合（Poly.fitting）；ReferenceAir.Inverse_sh_T / Inverse_sh_TX /
+DryAir1——带修饰 extends 的包要定义层 instPackage、h_default 经 Helmholtz 状态方程求值。FAIL / ACCEPTS-INVALID / CRASH 0。

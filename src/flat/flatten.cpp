@@ -7517,14 +7517,16 @@ class Flattener {
       if (node.is_valid()) {   // 实例语境里的类：在它的包实例里查（见 resolve_class_path），组件按实例取值（lower_pkg_comp）
         const NodeId pk = pkg_instance(node);
         if (!pk.is_valid()) return false;
+        // 非首段查到 protected 元素：omc 报错（LookupState.checkProtection，见 protected_access；PKE 探针 PKE13 `Medium.secret`）。
         if (const NodeId cn = find_local(pk, parts[idx]); is_comp_node(cn)) {
           if (idx + 1 != parts.size()) return false;   // 经包常量再往下（记录字段）未做
+          if (protected_access(I_.comps[I_.nodes[cn].comp].def)) return false;
           el = lower_pkg_comp(cn, cur);
           node = NodeId{};
           break;
         }
         const NodeId c = inst_tree_class(pk, parts[idx]);
-        if (!c.is_valid()) return false;
+        if (!c.is_valid() || protected_access(I_.nodes[c].def)) return false;
         node = c;
         el = I_.nodes[c].def;
         cur = scode_scope_of(I_.nodes[c].parent_scope);
@@ -7563,12 +7565,13 @@ class Flattener {
         const NodeId pk = pkg_instance(node);
         if (!pk.is_valid()) return std::nullopt;
         if (const NodeId cn = find_local(pk, c.parts[k].name); is_comp_node(cn)) {
+          if (protected_access(I_.comps[I_.nodes[cn].comp].def)) return std::nullopt;   // 见 resolve_qual_const（PKE13）
           el = lower_pkg_comp(cn, cur);
           node = NodeId{};
           break;
         }
         const NodeId cc = inst_tree_class(pk, c.parts[k].name);
-        if (!cc.is_valid()) return std::nullopt;
+        if (!cc.is_valid() || protected_access(I_.nodes[cc].def)) return std::nullopt;
         node = cc;
         el = I_.nodes[cc].def;
         cur = scode_scope_of(I_.nodes[cc].parent_scope);
@@ -11249,9 +11252,12 @@ class Flattener {
     std::vector<Symbol> path;
     const std::uint32_t root_def = I_.nodes[root_].def.raw;
     // 组件的声明类型是包实例里的类（经重声明的包：`M.ThermodynamicState s`，MSL Media）：压平名按那个类节点的实例路径（同
-    // rec_flat_name；PKG 探针 PKG2 `PKG2.v.M.ThermodynamicState`）。
+    // rec_flat_name；PKG 探针 PKG2 `PKG2.v.M.ThermodynamicState`）。rn 不是组件的记录实例、本身就是包实例里的类节点（模型里没有
+    // 这个记录类型的组件时返回记录的调用 / 记录构造调用的类型，见 try_emit_user_call 的 "record result" 与 record_ctor_call；PKE
+    // 探针 PKE4 / PKE23）：它自己就是那个类节点。
     NodeId tn;
     if (const NodeId ip = I_.nodes[rn].instance_parent; is_comp_node(ip)) tn = I_.comps[I_.nodes[ip].comp].type_node;
+    else if (pkg_class_node(rn)) tn = rn;
     if (named) {
       path = *named;
     } else if (tn.is_valid() && !I_.nodes[tn].is_empty() && I_.nodes[tn].def == rdef && pkg_scope(scode_scope_of(tn))) {
@@ -13222,6 +13228,18 @@ class Flattener {
       // 目标比记录类定义——有类节点（实例的或作用域树里的，record_type_node）就用它，没有就留空（record_def_of 按被调函数的输出
       // 形参取记录类）。
       if (!rn.is_valid() && fn_scope_ && rd != Id<SElement>::kInvalid) rn = record_type_node(Id<SElement>::from_index(rd));
+      // 模型语境里经包实例找到的函数（fr->node，见 resolve_fn），模型里又没有这个记录类型的组件（`Medium.specificEnthalpy(
+      // Medium.setState_pT(p, T))`，MSL SolveOneNonlinearEquation 例子；PKE 探针 PKE4 / PKE26）：类型取被调函数作用域里输出记录类的
+      // 那个类节点（包实例里的，同 emit_function 打输出类型名的 rec_flat_name）——omc 调用的类型就是被调函数的输出类型；构造函数随之
+      // 按它的实例路径命名（`PKE4.Medium.ThermodynamicState`，见 ensure_record_ctor）。
+      if (!rn.is_valid() && !fn_scope_ && rd != Id<SElement>::kInvalid && fr->node.is_valid() && sig.outputs.size() == 1) {
+        const SElement out = I_.scode.elems[sig.outputs[0]];   // 拷贝：查找会扩 arena
+        ScodeScope ods;
+        NodeId onode;
+        const Id<SElement> orec = resolve_class_path(out.type.path, out.type.leading_dot, fr->fscope, ods, true, &onode);
+        if (result_.unsupported) return {};
+        if (orec.is_valid() && orec.raw == rd && onode.is_valid() && pkg_class_node(onode)) rn = onode;
+      }
       if (sig.outputs.size() > 1 || (!rn.is_valid() && !(fn_scope_ && rd != Id<SElement>::kInvalid)))
         return fn_fail<Id<Expr>>("record result");
       if (rn.is_valid()) rty.complex_node = rn.raw;
@@ -13335,9 +13353,8 @@ class Flattener {
     for (std::size_t k = 0; k < scope.size(); ++k) {
       // 实例层：名字查的是实例的类树（NFLookup.lookupLocalSimpleName → Class.lookupElement，NFLookup.mo:422-432 v1.25.0）——类重声明
       // 顶替进来的新类（修饰里的 `redeclare package Medium = P.Water`，PK 探针 PK9）。新类的定义作用域 = 写修饰处（它的节点的词法
-      // 外层，R15 §1）。
-      // ponytail: 只认短类形态的包（Medium 式）：经它再往下的名字（`Medium.nX`、`Medium.f`）在 SCode 上下降不进短类，照旧 SKIP；
-      //   长形态 / 函数 / 模型的类重声明经它查到的成员要按实例路径命名（`X.v.B.f`），待包实例（65a 后续步）。
+      // 外层，R15 §1）。经短类形态的包（Medium 式）再往下的名字走包实例（见下面两支与 resolve_class_path）。
+      // ponytail: 长形态 / 模型的类重声明经它查到的成员要按实例路径命名（`X.v.B.f`），未做。
       const NodeId lin = scope[k].inst;
       const NodeId ic = lin.is_valid() ? inst_tree_class(lin, name) : NodeId{};
       // 挂了类修饰的类（`A a(B(i = 4))`）：报出节点，经它往下的查名走包实例 → inst 拦下（Instantiator::inst_package，未做 → SKIP）。
@@ -13345,12 +13362,16 @@ class Flattener {
       // 函数（`P.Pump pumps(redeclare function flowCharacteristic = quadraticFlow(V_flow_nominal = …))`、派生类体里的长形态
       // `redeclare function flowCharacteristic … end flowCharacteristic;`）：调用经它按实例路径命名（见 resolve_fn），短类修饰在写
       // 重声明的类的实例里定型（见 redecl_mod_scope）。
-      // 实例里的本地短类包带修饰（`package Medium = Air(extraPropertiesNames = {"CO2"}, …)`，MSL Fluid RoomCO2）：经它往下的名字
-      // 按包实例查（Instantiator::inst_package 施加短类修饰；PKN 探针 PKN15 的 `Medium.nC`）——SCode 层下降不进短类。不带修饰的照旧。
+      // 实例里的本地短类包（`package Medium = Water.StandardWater`、replaceable 的、带修饰的 `package Medium = Air(
+      // extraPropertiesNames = {"CO2"}, …)`；MSL Media 例子、Fluid RoomCO2）：经它往下的名字按包实例查——omc 进类查名前先
+      // Inst.instPackage（NFLookup.lookupLocalName :699-700、lookupCrefInNode :976-977 v1.25.0；短类修饰由 Instantiator::inst_package
+      // 施加），SCode 层下降不进短类。函数 / 记录按实例路径命名（NFFunction.lookupFunction :339-344：首段找到处的作用域链含根 + 调用名，
+      // 见 scope_path；PKE 探针 PKE1 `PKE1.Medium.setState_pT`、组件类里的 PKE5 `PKE5.v1.Medium.f`、基类里声明的 PKE6
+      // `PKE6.Medium.f`、短类链 PKE7、普通库包的别名 PKE8 `PKE8.L.f`），常量取包实例里的值（PKE2 经 extends 修饰改过的 nX、PKE3
+      // 记录常量的字段、PKN 探针 PKN15 的 `Medium.nC`）。
       if (ic.is_valid() && I_.nodes[ic].node_type.kind != NodeTypeKind::RedeclaredClass && I_.nodes[ic].def.is_valid()) {
         const SElement& sel = I_.scode.elems[I_.nodes[ic].def];
-        if (sel.kind == SElementKind::Class && sel.restriction == SRestriction::Package && sel.def.kind == SClassDefKind::Derived &&
-            sel.def.derived_mod.is_valid() && !I_.scode.mods[sel.def.derived_mod].subs.empty()) {
+        if (sel.kind == SElementKind::Class && sel.restriction == SRestriction::Package && sel.def.kind == SClassDefKind::Derived) {
           def_scope = scode_scope_of(I_.nodes[ic].parent_scope);
           if (node_out) *node_out = ic;
           return I_.nodes[ic].def;
@@ -13521,6 +13542,11 @@ class Flattener {
     for (const ScopeLevel& l : ds)
       if (l.inst.is_valid() && I_.package_instances.count(l.inst.raw)) return true;
     return false;
+  }
+  // 包实例的类树里的类节点（没被实例化成组件的类：`Medium.ThermodynamicState` 在包实例里的那份）——按实例路径命名（scope_path）。
+  bool pkg_class_node(NodeId n) {
+    return n.is_valid() && !I_.nodes[n].is_empty() && I_.nodes[n].kind == NodeKind::Class && !is_instance(n) &&
+           pkg_scope(scode_scope_of(n));
   }
   // 包实例里的组件 → SCode 元素 + 求值作用域链（ADR-007 第 2 阶段 65a-3a）。值就是 inst 记的绑定：声明的，或 extends 修饰覆盖的
   //（apply_extends_modifier 把覆盖式与写 extends 的实例记进 Component::binding；包实例不在模型实例树里，没有外来修饰）。覆盖过的
@@ -17662,7 +17688,11 @@ class Flattener {
     }
     r.call_name = *path;
     r.ty.kind = TypeKind::Complex;
-    r.ty.complex_node = rn.raw;
+    // 模型语境里在包实例里查到的记录、模型里又没有这个记录类型的组件（PKE 探针 PKE23 `Medium.specificEnthalpy(Medium.
+    // ThermodynamicState(p = 1e5, T = …))`）：类型取查到的那个类节点——rn 只是同定义的某个类节点（定义处的那份按定义路径命名，
+    // collect_record_ctors 收构造函数时会多打一个 `PE23.PartialMedium.ThermodynamicState`）。
+    const bool own = !fn_scope_ && ipath && !record_class_node(rec).is_valid() && pkg_class_node(tnode);
+    r.ty.complex_node = (own ? tnode : rn).raw;
     return add(std::move(r));
   }
   // 求得的记录值 → 字段修饰 `r(x = 1.0, T = {{…}}, b = 10.0)`：记录类实例 rci 的每个字段取值里的同名字段、打成 Absyn
