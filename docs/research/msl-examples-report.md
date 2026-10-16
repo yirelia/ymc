@@ -752,3 +752,10 @@ Electrical.Machines.Examples.InductionMachines.IMC_withLosses、Magnetic.Fundame
 IMC_withLosses、Electrical.PowerConverters.Examples.DCAC.PolyphaseTwoLevel.PolyphaseTwoLevel_R / _RL。Magnetic.QuasiStatic 的
 IMC_withLosses 卡到下一处：MultiDelta 的 `when initial() then if … then print(…); end if; end when;`（omc 打成空的 when）。
 FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-16 66t 之后：PASS 468（+1）
+
+when 体里的 if 方程照顶层压平（结构条件选支）；书写的推导式里的用户函数调用照 omc 的收函数时机留函数定义（修一串语料外的静默错）。
+转 PASS：Magnetic.QuasiStatic.FundamentalWave.Examples.BasicMachines.InductionMachines.IMC_withLosses。FluxTubes Hysteresis.
+HysteresisModelComparison 越过 when 里的 if 方程与切片界里的 `end`，卡到下一处：when 里带 cat 支的数组 if 式。
+FAIL / ACCEPTS-INVALID / CRASH 0。

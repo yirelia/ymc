@@ -2476,9 +2476,26 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       slice 700 例 FAIL 0（oracle=live 不一致 0）；scodeinst 660、testsuite 1827（均不变）/ FAIL 0；**MSL 463→467**（Electrical.
       Machines / Magnetic.FundamentalWave 的 IMC_withLosses、PowerConverters PolyphaseTwoLevel_R / _RL；QuasiStatic 的 IMC_withLosses
       卡到下一处 when 体里的 if 方程）；探针 9914→10004；单测 430→437。
-- [ ] (66t 候选) 已有的静默 FAIL（66s 调查时发现）：书写的推导式作参数数组绑定 `parameter Real q[2] = {f(i) for i in 1:2}`——
+- [x] (66t 候选，66t 已修) 已有的静默 FAIL（66s 调查时发现）：书写的推导式作参数数组绑定 `parameter Real q[2] = {f(i) for i in 1:2}`——
       omc 打 `function T4.f` 且 `q[1] = 2.0`，ymc 同值但丢了函数定义（comprehension_elem 逐元素实例化时 call() 就把 `f(1)` 求值了，
       函数没人引用）。复现 `$S/pkr66s/t/T4.mo`；现有语料没撞上（FAIL 0）。
+- [x] (66t) 书写的推导式里的用户函数调用（修一串静默错）+ when 体里的 if 方程（2026-10-16）：
+      (1) omc 化简期推导式原样留着（simplifyArrayConstructor :583-637，单迭代范围长 ≤ 1 的除外），常量 / 结构参数的整个推导式绑定
+      EvalConstants 也不求值（isKnownSizeFill，NFEvalConstants.mo:129、NFCall.mo:655——补上了 66s 说"源码里没找到成因"的那条），
+      收函数在标量化求值之前 → 函数照打。ymc 逐元素实例化时 call() 当场求值、函数没人引用 → 丢定义（WQ1 等一串静默 FAIL）。改为
+      实参引用迭代变量的调用先发射成调用、记下（comp_hold_），化简时求值，压平末尾定去留（comp_held_fns：定型期读过的参数、CAST 包
+      着的结构参数不打；各元素实参全同 omc 两样都有 → SKIP；常量数组 ymc 不记定型期读取 → SKIP）。嵌在运算 / 属性 / sum 里的书写
+      推导式并入 66s 的向量化路径。用户函数的实参就是推导式的：实参不全是字面量 → 调用不求值、函数照打（此前折成值，WQ21 等静默
+      FAIL）；推导式嵌在实参的别的式子里 → SKIP。函数体里只化简不求值（NFEvalConstants.mo:600-638）：含留着的推导式不整式求值
+      （WQ148 / WQ150 / WQ151 此前丢了 `array(…)` 与函数），函数体里推导式上的 sum / max → SKIP。推导式元素里叶全是字面量的 sum
+      链折成值（WQ138 此前打 `1.0 + 2.0`，静默 FAIL）；fixed / stateSelect 预扫描不算定型期读取（WQ96 此前丢函数）。
+      (2) when 体里的 if 方程：压平同顶层（flattenEqBranch → flattenIfEquation，NFFlatten.mo:1885-1889 / :2052-2066）——结构条件
+      求值选支、运行时条件留 if；顶层 if 方程那段原样挪进 collect_if_equation（三个回调）共用。各分支解出的变量不同只在有 elsewhen
+      时报错（NFVerifyModel.mo:127-150 / :182-205）。顺带：切片界里的 `end`（`x[1:end-1]`，MLS §10.5）。
+      照旧 SKIP / 下一处：FluxTubes HysteresisModelComparison "if-expression array branch"（when 里带 cat 支的数组 if 式）。
+      探针 pk-p28（190），旧组 ap-p5 / sl-s1 / v4-c / wc-c5 各 SKIP→PASS 1；单测 +7。slice 700 例 FAIL 0（oracle=live 不一致 0）；
+      scodeinst 660（不变）；testsuite 1827→1829（arrays/ArraySlice2、others/End）/ FAIL 0；**MSL 467→468**（Magnetic.QuasiStatic
+      的 IMC_withLosses）；探针 10004→10194；单测 437→444。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

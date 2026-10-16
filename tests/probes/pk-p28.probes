@@ -1,0 +1,2450 @@
+//// set: pk-p28 — 书写的推导式里的用户函数调用：参数数组的整个绑定（WQ1 `q = {f(i) for i in 1:2}`）omc 收函数时推导式还在（化简期原样留着，常量 / 结构参数的整个推导式 EvalConstants 也不求，isKnownSizeFill）→ 照打函数、标量化时逐元素求值；收函数之前就化掉的不打（单迭代范围长 1、定型期被读、结构参数嵌在运算或 Integer→Real 转型里、sum / product 化简期展开）；嵌在运算 / 属性 / sum 里的同向量化调用（WQ4 / WQ7 / WQ8）；用户函数实参就是推导式的不求值（WQ21 `g(array(…))`），函数体里推导式照留（WQ148 / WQ150 / WQ151）；推导式元素里 sum 展开的字面量链照折（WQ138）；fixed 属性只打标记、不算定型期读（WQ96）；照旧 SKIP：各元素实参全同（WQ38 / WQ71 …）、常量数组（WQ10 …）、嵌套在实参式子里（WQ105 / WQ156）、函数体里的 sum / max（WQ152 …）、if 表达式（WQ19）；when 体里的 if 方程（HW：结构条件选支、运行时条件照留、带 elsewhen 时各支须解同一组变量，MSL MultiDelta 同构 HW7 / HW20 / HW48）；切片界里的 `end`（HW27）
+//// model: WQ1
+model WQ1
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i) for i in 1:2};
+  Real y = q[1] * time;
+end WQ1;
+//// model: WQ2
+model WQ2
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[1] = {f(i) for i in 1:1};
+  Real y = q[1] * time;
+end WQ2;
+//// model: WQ3
+model WQ3
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2, 3] = {f(i + 10 * j) for i in 1:3, j in 1:2};
+  Real y = q[1, 2] * time;
+end WQ3;
+//// model: WQ4
+model WQ4
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = 2 * {f(i) for i in 1:2};
+  Real y = q[1] * time;
+end WQ4;
+//// model: WQ5
+model WQ5
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i) for i in 1:2} annotation(Evaluate = true);
+  Real y = q[1] * time;
+end WQ5;
+//// model: WQ6
+model WQ6
+  function g
+    input Integer x;
+    output Integer y;
+  algorithm
+    y := 2 * x;
+  end g;
+  parameter Integer n[2] = {g(i) for i in 1:2};
+  Real x[n[1]] = fill(time, n[1]);
+end WQ6;
+//// model: WQ7
+model WQ7
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  Real x[2](start = {f(i) for i in 1:2});
+equation
+  der(x) = -x;
+end WQ7;
+//// model: WQ8
+model WQ8
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real s = sum({f(i) for i in 1:2});
+  Real y = s * time;
+end WQ8;
+//// model: WQ9
+model WQ9
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real s = sum(f(i) for i in 1:2);
+  Real y = s * time;
+end WQ9;
+//// model: WQ10
+model WQ10
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  constant Real q[2] = {f(i) for i in 1:2};
+  Real y = q[1] * time;
+end WQ10;
+//// model: WQ11
+model WQ11
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  Real q[2];
+equation
+  q = {f(i) for i in 1:2};
+end WQ11;
+//// model: WQ12
+model WQ12
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  Real q[2] = {f(i) for i in 1:2};
+end WQ12;
+//// model: WQ13
+model WQ13
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i) for i in 1:2};
+  Real y = f(time) + q[2];
+end WQ13;
+//// model: WQ14
+model WQ14
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(2) for i in 1:2};
+  Real y = q[1] * time;
+end WQ14;
+//// model: WQ15
+model WQ15
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i) * 2 for i in 1:2};
+  Real y = q[1] * time;
+end WQ15;
+//// model: WQ17
+model WQ17
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p = 3;
+  parameter Real q[2] = {f(i * p) for i in 1:2};
+  Real y = q[1] * time;
+end WQ17;
+//// model: WQ18
+model WQ18
+  function g
+    input Integer x;
+    output Integer y;
+  algorithm
+    y := 2 * x;
+  end g;
+  parameter Real q[2] = {g(i) for i in 1:2};
+  Real y = q[1] * time;
+end WQ18;
+//// model: WQ19
+model WQ19
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Boolean b = true;
+  parameter Real q[2] = if b then {f(i) for i in 1:2} else {0, 0};
+  Real y = q[1] * time;
+end WQ19;
+//// model: WQ20
+model WQ20
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  model A
+    parameter Real q[2];
+  end A;
+  A a(q = {f(i) for i in 1:2});
+  Real y = a.q[1] * time;
+end WQ20;
+//// model: WQ21
+model WQ21
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function g
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := sum(x);
+  end g;
+  parameter Real s = g({f(i) for i in 1:2});
+  Real y = s * time;
+end WQ21;
+//// model: WQ22
+model WQ22
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  Real y = sum({f(i) for i in 1:2}) * time;
+end WQ22;
+//// model: WQ23
+model WQ23
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  Real y[2];
+equation
+  for i in 1:2 loop
+    y[i] = f(i);
+  end for;
+end WQ23;
+//// model: WQ24
+model WQ24
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Integer n = 3;
+  parameter Real q[n] = {f(i) for i in 1:n};
+  Real y = q[1] * time;
+end WQ24;
+//// model: WQ25
+model WQ25
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(f(i)) for i in 1:2};
+  Real y = q[1] * time;
+end WQ25;
+//// model: WQ26
+model WQ26
+  function h
+    input Real x;
+    input Real z;
+    output Real y;
+  algorithm
+    y := x + z;
+  end h;
+  parameter Real q[2] = {h(i, 2) for i in 1:2};
+  Real y = q[1] * time;
+end WQ26;
+//// model: WQ27
+model WQ27
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[3] = {f(i) for i in 1:2:5};
+  Real y = q[1] * time;
+end WQ27;
+//// model: WQ28
+model WQ28
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  constant Real c = 1;
+  parameter Real q[2] = {f(c) for i in 1:2};
+  Real y = q[1] * time;
+end WQ28;
+//// model: WQ29
+model WQ29
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i) for i in 1:2};
+  Real y;
+equation
+  if q[1] > 1 then
+    y = time;
+  else
+    y = -time;
+  end if;
+end WQ29;
+//// model: WQ30
+model WQ30
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p[2](min = {f(i) for i in 1:2}) = {5, 6};
+  Real y = p[1] * time;
+end WQ30;
+//// model: WQ31
+model WQ31
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  constant Real c[2] = {f(i) for i in 1:2};
+  parameter Real p = c[1];
+  Real y = p * time;
+end WQ31;
+//// model: WQ32
+model WQ32
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2, 2] = {{f(i), f(i + 1)} for i in 1:2};
+  Real y = q[1, 2] * time;
+end WQ32;
+//// model: WQ33
+model WQ33
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i) for i in 1:2};
+  parameter Real r = q[2];
+  Real y = r * time;
+end WQ33;
+//// model: WQ34
+model WQ34
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i) for i in 1:2};
+  Real y[2](start = q);
+equation
+  der(y) = -y;
+end WQ34;
+//// model: WQ35
+model WQ35
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real s = max({f(i) for i in 1:2});
+  Real y = s * time;
+end WQ35;
+//// model: WQ36
+model WQ36
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real s = sum({f(i) for i in 1:2}) annotation(Evaluate = true);
+  Real y = s * time;
+end WQ36;
+//// model: WQ37
+model WQ37
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real a[2] = {1, 2} annotation(Evaluate = true);
+  parameter Real q[2] = {f(a[i]) for i in 1:2};
+  Real y = q[1] * time;
+end WQ37;
+//// model: WQ38
+model WQ38
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real a[2] = {2, 2} annotation(Evaluate = true);
+  parameter Real q[2] = {f(a[i]) for i in 1:2};
+  Real y = q[1] * time;
+end WQ38;
+//// model: WQ39
+model WQ39
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  constant Real c[2] = {2, 2};
+  parameter Real q[2] = {f(c[i]) for i in 1:2};
+  Real y = q[1] * time;
+end WQ39;
+//// model: WQ40
+model WQ40
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  constant Real c[2] = {1, 2};
+  parameter Real q[2] = {f(c[i]) for i in 1:2};
+  Real y = q[1] * time;
+end WQ40;
+//// model: WQ41
+model WQ41
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[1, 2] = {f(i + 10 * j) for i in 1:2, j in 1:1};
+  Real y = q[1, 2] * time;
+end WQ41;
+//// model: WQ42
+model WQ42
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[1, 1] = {f(i + 10 * j) for i in 1:1, j in 1:1};
+  Real y = q[1, 1] * time;
+end WQ42;
+//// model: WQ43
+model WQ43
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i - i) for i in 1:2};
+  Real y = q[1] * time;
+end WQ43;
+//// model: WQ44
+model WQ44
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(0 * i) for i in 1:2};
+  Real y = q[1] * time;
+end WQ44;
+//// model: WQ45
+model WQ45
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p = 3;
+  parameter Real q[2] = {f(i * p) for i in 1:2};
+  Real y;
+equation
+  if p > 2 then
+    y = q[1] * time;
+  else
+    y = 0;
+  end if;
+end WQ45;
+//// model: WQ46
+model WQ46
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p = 3 annotation(Evaluate = true);
+  parameter Real q[2] = {f(i * p) for i in 1:2};
+  Real y = q[1] * time;
+end WQ46;
+//// model: WQ47
+model WQ47
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Integer p = 2;
+  Real z[p] = fill(time, p);
+  parameter Real q[2] = {f(i * p) for i in 1:2};
+  Real y = q[1] * time;
+end WQ47;
+//// model: WQ48
+model WQ48
+  function g
+    input Integer x;
+    output Integer y;
+  algorithm
+    y := 2 * x;
+  end g;
+  Real z[q[2]] = fill(time, q[2]);
+  parameter Integer q[2] = {g(i) for i in 1:2};
+end WQ48;
+//// model: WQ49
+model WQ49
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i) for i in 1:2};
+  parameter Real r = q[1] annotation(Evaluate = true);
+  Real y = r * time;
+end WQ49;
+//// model: WQ50
+model WQ50
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  model A
+    Real x = time;
+  end A;
+  parameter Real q[2] = {f(i) for i in 1:2};
+  A a if q[1] > 1;
+end WQ50;
+//// model: WQ51
+model WQ51
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  constant Real c[2] = {f(i) for i in 1:2};
+  Real z[integer(c[2])] = fill(time, integer(c[2]));
+end WQ51;
+//// model: WQ52
+model WQ52
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real a[3] = {1, 2, 3};
+  parameter Real q[3] = {f(i) for i in 1:size(a, 1)};
+  Real y = q[1] * time;
+end WQ52;
+//// model: WQ53
+model WQ53
+  function g
+    input Integer x;
+    output Integer y;
+  algorithm
+    y := 2 * x;
+  end g;
+  parameter Real p[2] = {g(i) for i in 1:2} annotation(Evaluate = true);
+  Real y = p[1] * time;
+end WQ53;
+//// model: WQ54
+model WQ54
+  function g
+    input Integer x;
+    output Integer y;
+  algorithm
+    y := 2 * x;
+  end g;
+  constant Real c[2] = {g(i) for i in 1:2};
+  Real y = c[1] * time;
+end WQ54;
+//// model: WQ55
+model WQ55
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(if b then 1.0 else 2.0) for b in {true, false}};
+  Real y = q[1] * time;
+end WQ55;
+//// model: WQ56
+model WQ56
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  model A
+    parameter Real q[2];
+    Real y = q[1] * time;
+  end A;
+  A a[2](each q = {f(i) for i in 1:2});
+end WQ56;
+//// model: WQ57
+model WQ57
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  record R
+    Real q[2];
+  end R;
+  parameter R r(q = {f(i) for i in 1:2});
+  Real y = r.q[1] * time;
+end WQ57;
+//// model: WQ58
+model WQ58
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i) + f(2) for i in 1:2};
+  Real y = q[1] * time;
+end WQ58;
+//// model: WQ59
+model WQ59
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function g
+    input Integer x;
+    output Integer y;
+  algorithm
+    y := 2 * x;
+  end g;
+  parameter Real q[2] = {g(i) + f(2) for i in 1:2};
+  Real y = q[1] * time;
+end WQ59;
+//// model: WQ60
+model WQ60
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2, 3] = {f(i) for i in 1:3, j in 1:2};
+  Real y = q[1, 2] * time;
+end WQ60;
+//// model: WQ61
+model WQ61
+  function h
+    input Real x;
+    input Real z;
+    output Real y;
+  algorithm
+    y := x + z;
+  end h;
+  parameter Real p = 3;
+  parameter Real q[2] = {h(i, p) for i in 1:2};
+  Real y = q[1] * time;
+end WQ61;
+//// model: WQ62
+model WQ62
+  function gs
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := sum(x);
+  end gs;
+  parameter Real s = gs({i * 2.0 for i in 1:2});
+  Real y = s * time;
+end WQ62;
+//// model: WQ63
+model WQ63
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function gs
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := sum(x);
+  end gs;
+  Real y = gs({f(i) for i in 1:2}) * time;
+end WQ63;
+//// model: WQ64
+model WQ64
+  function gi
+    input Integer x[:];
+    output Integer y;
+  algorithm
+    y := sum(x);
+  end gi;
+  parameter Integer n = gi({i for i in 1:2});
+  Real z[n] = fill(time, n);
+end WQ64;
+//// model: WQ65
+model WQ65
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i) for i in 1:2};
+  Real y = f(q[2]) * time;
+end WQ65;
+//// model: WQ66
+model WQ66
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i) for i in 1:2} annotation(Evaluate = false);
+  Real y = q[1] * time;
+end WQ66;
+//// model: WQ67
+model WQ67
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i) for i in 1:2};
+  final parameter Real r[2] = q;
+  Real y = r[1] * time;
+end WQ67;
+//// model: WQ68
+model WQ68
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2](each min = 0) = {f(i) for i in 1:2};
+  Real y = q[1] * time;
+end WQ68;
+//// model: WQ69
+model WQ69
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i) for i in 1:2};
+  Real x[2](start = q, each fixed = true);
+equation
+  der(x) = -x;
+end WQ69;
+//// model: WQ70
+model WQ70
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[3] = {f(i) for i in {1, 3, 5}};
+  Real y = q[1] * time;
+end WQ70;
+//// model: WQ71
+model WQ71
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(sign(i)) for i in 1:2};
+  Real y = q[1] * time;
+end WQ71;
+//// model: WQ72
+model WQ72
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real a[3] = {2, 2, 3} annotation(Evaluate = true);
+  parameter Real q[2] = {f(a[i]) for i in 1:2};
+  Real y = q[1] * time;
+end WQ72;
+//// model: WQ73
+model WQ73
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  constant Real c[3] = {2, 2, 3};
+  parameter Real q[2] = {f(c[i]) for i in 1:2};
+  Real y = q[1] * time;
+end WQ73;
+//// model: WQ74
+model WQ74
+  type E = enumeration(one, two);
+  parameter E v[2] = {E(i) for i in 1:2};
+  Real y = if v[1] == E.one then time else 0;
+end WQ74;
+//// model: WQ75
+model WQ75
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {sum({f(i * j) for j in 1:2}) for i in 1:2};
+  Real y = q[1] * time;
+end WQ75;
+//// model: WQ76
+model WQ76
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {if i > 1 then f(i) else 0 for i in 1:2};
+  Real y = q[1] * time;
+end WQ76;
+//// model: WQ78
+model WQ78
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  Real y = q[1] * time;
+protected
+  parameter Real q[2] = {f(i) for i in 1:2};
+end WQ78;
+//// model: WQ79
+model WQ79
+  function g
+    input Integer x;
+    output Integer y;
+  algorithm
+    y := 2 * x;
+  end g;
+  parameter Integer n[2] = {g(i) for i in 1:2};
+  Real z[n[1]] = fill(time, n[1]);
+  parameter Real q[2] = {g(i) for i in 1:2};
+end WQ79;
+//// model: WQ83
+model WQ83
+  function h
+    input Real x;
+    input Real z;
+    output Real y;
+  algorithm
+    y := x + z;
+  end h;
+  parameter Real q[2] = {h(z = 2, x = i) for i in 1:2};
+  Real y = q[1] * time;
+end WQ83;
+//// model: WQ84
+model WQ84
+  function hd
+    input Real x;
+    input Real z = 2;
+    output Real y;
+  algorithm
+    y := x + z;
+  end hd;
+  parameter Real q[2] = {hd(i) for i in 1:2};
+  Real y = q[1] * time;
+end WQ84;
+//// model: WQ86
+model WQ86
+  function fi
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+    annotation(Inline = true);
+  end fi;
+  parameter Real q[2] = {fi(i) for i in 1:2};
+  Real y = q[1] * time;
+end WQ86;
+//// model: WQ87
+model WQ87
+  impure function fm
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end fm;
+  parameter Real q[2] = {fm(i) for i in 1:2};
+  Real y = q[1] * time;
+end WQ87;
+//// model: WQ89
+model WQ89
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function f2
+    input Real x;
+    output Real y;
+  algorithm
+    y := f(x) + 1;
+  end f2;
+  parameter Real q[2] = {f2(i) for i in 1:2};
+  Real y = q[1] * time;
+end WQ89;
+//// model: WQ90
+model WQ90
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  final parameter Real q[2] = {f(i) for i in 1:2};
+  Real y = q[1] * time;
+end WQ90;
+//// model: WQ91
+model WQ91
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  model B
+    parameter Real q[2];
+    Real y = q[1] * time;
+  end B;
+  extends B(q = {f(i) for i in 1:2});
+end WQ91;
+//// model: WQ92
+model WQ92
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Integer n = 2;
+  parameter Real q[2] = {f(i) for i in 1:n};
+  Real y = q[1] * time;
+end WQ92;
+//// model: WQ93
+model WQ93
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i) for i in 1:2};
+  Real y[2];
+equation
+  for k in 1:2 loop
+    y[k] = q[k] * time;
+  end for;
+end WQ93;
+//// model: WQ94
+model WQ94
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i) for i in 1:2};
+  parameter Integer m = integer(q[2]);
+  Real z[m] = fill(time, m);
+end WQ94;
+//// model: WQ95
+model WQ95
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i) for i in 1:2};
+  parameter Real r[2] = {f(q[i]) for i in 1:2};
+  Real y = r[1] * time;
+end WQ95;
+//// model: WQ96
+model WQ96
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i) for i in 1:2};
+  Real x[2](each start = 1, fixed = {q[i] > 3 for i in 1:2});
+equation
+  der(x) = -x;
+end WQ96;
+//// model: WQ97
+model WQ97
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  model S
+    parameter Real r;
+  end S;
+  S s[2](r = {f(i) for i in 1:2});
+end WQ97;
+//// model: WQ98
+model WQ98
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  model S
+    Real r;
+  end S;
+  S s[2](r = {f(i) for i in 1:2});
+end WQ98;
+//// model: WQ100
+model WQ100
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function gs
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := sum(x);
+  end gs;
+  parameter Real s = gs({f(i) for i in 1:2}) annotation(Evaluate = true);
+  Real y = s * time;
+end WQ100;
+//// model: WQ101
+model WQ101
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function gs
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := sum(x);
+  end gs;
+  constant Real c = gs({f(i) for i in 1:2});
+  Real y = c * time;
+end WQ101;
+//// model: WQ102
+model WQ102
+  function gs
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := sum(x);
+  end gs;
+  function k
+    input Real u;
+    output Real y;
+  algorithm
+    y := u + gs({i * 2.0 for i in 1:2});
+  end k;
+  Real y = k(time);
+end WQ102;
+//// model: WQ103
+model WQ103
+  function gs
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := sum(x);
+  end gs;
+  Real y = gs({i * 2.0 for i in 1:1}) * time;
+end WQ103;
+//// model: WQ104
+model WQ104
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function gs
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := sum(x);
+  end gs;
+  parameter Real s = gs({f(2) for i in 1:2});
+  Real y = s * time;
+end WQ104;
+//// model: WQ105
+model WQ105
+  function gs
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := sum(x);
+  end gs;
+  parameter Real s = gs(2 * {i * 1.0 for i in 1:2});
+  Real y = s * time;
+end WQ105;
+//// model: WQ106
+model WQ106
+  function gi
+    input Integer x[:];
+    output Integer y;
+  algorithm
+    y := sum(x);
+  end gi;
+  parameter Integer m = gi({i for i in 1:2});
+  Real y = m * time;
+end WQ106;
+//// model: WQ108
+model WQ108
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function gs
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := sum(x);
+  end gs;
+  parameter Real s = gs({f(i) for i in 1:2});
+  Real z[integer(s)] = fill(time, integer(s));
+end WQ108;
+//// model: WQ109
+model WQ109
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function gs
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := sum(x);
+  end gs;
+  Real y = gs({f(i) * time for i in 1:2});
+end WQ109;
+//// model: WQ110
+model WQ110
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i) for i in 1:2} * 2;
+  Real y = q[1] * time;
+end WQ110;
+//// model: WQ111
+model WQ111
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = -{f(i) for i in 1:2};
+  Real y = q[1] * time;
+end WQ111;
+//// model: WQ112
+model WQ112
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i) for i in 1:2} + {1, 2};
+  Real y = q[1] * time;
+end WQ112;
+//// model: WQ113
+model WQ113
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = 2 * {f(i) for i in 1:2} annotation(Evaluate = true);
+  Real y = q[1] * time;
+end WQ113;
+//// model: WQ114
+model WQ114
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  Real x[2](start = 2 * {f(i) for i in 1:2});
+equation
+  der(x) = -x;
+end WQ114;
+//// model: WQ115
+model WQ115
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2](start = {f(i) for i in 1:2}, each fixed = false);
+initial equation
+  q = {1, 2};
+end WQ115;
+//// model: WQ116
+model WQ116
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real s = product({f(i) for i in 1:2});
+  Real y = s * time;
+end WQ116;
+//// model: WQ117
+model WQ117
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real p = 3;
+  parameter Real q[2] = 2 * {f(i * p) for i in 1:2};
+  Real y = q[1] * time;
+end WQ117;
+//// model: WQ118
+model WQ118
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = 2 * {f(2) for i in 1:2};
+  Real y = q[1] * time;
+end WQ118;
+//// model: WQ119
+model WQ119
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function gs
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := sum(x);
+  end gs;
+  parameter Real p = 2;
+  parameter Real s = gs({f(i * p) for i in 1:2});
+  Real y = s * time;
+end WQ119;
+//// model: WQ120
+model WQ120
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i) for i in 1:2};
+  parameter Real r[2] = 2 * q;
+  Real y = r[1] * time;
+end WQ120;
+//// model: WQ121
+model WQ121
+  function g
+    input Integer x;
+    output Integer y;
+  algorithm
+    y := 2 * x;
+  end g;
+  parameter Real q[2] = {g(i) for i in 1:2};
+  Real y;
+equation
+  if q[1] > 1 then
+    y = time;
+  else
+    y = 0;
+  end if;
+end WQ121;
+//// model: WQ124
+model WQ124
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  constant Real c[2] = {f(i) for i in 1:2};
+  parameter Integer n = integer(c[2]);
+  Real z[n] = fill(time, n);
+end WQ124;
+//// model: WQ125
+model WQ125
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  constant Real c[2] = {f(i) for i in 1:2};
+  parameter Real p = c[1] annotation(Evaluate = true);
+  Real y = p * time;
+end WQ125;
+//// model: WQ128
+model WQ128
+  function gs
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := sum(x);
+  end gs;
+  parameter Real s = gs(x = {i * 2.0 for i in 1:2});
+  Real y = s * time;
+end WQ128;
+//// model: WQ129
+model WQ129
+  function h2
+    input Real x[:];
+    input Real k;
+    output Real y;
+  algorithm
+    y := k * sum(x);
+  end h2;
+  parameter Real s = h2({i * 1.0 for i in 1:2}, 3);
+  Real y = s * time;
+end WQ129;
+//// model: WQ130
+model WQ130
+  function gs
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := sum(x);
+  end gs;
+  parameter Real s = gs({i * 2.0 for i in 1:1});
+  Real y = s * time;
+end WQ130;
+//// model: WQ131
+model WQ131
+  function gs
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := sum(x);
+  end gs;
+  parameter Real s = gs({i * 2.0 for i in 1:0});
+  Real y = s * time;
+end WQ131;
+//// model: WQ132
+model WQ132
+  function gs
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := sum(x);
+  end gs;
+  parameter Real s = gs({i for i in 1:2});
+  Real y = s * time;
+end WQ132;
+//// model: WQ133
+model WQ133
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function gs
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := sum(x);
+  end gs;
+  parameter Real s = gs({f(i) for i in 1:2}) + 1;
+  Real y = s * time;
+end WQ133;
+//// model: WQ134
+model WQ134
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function gs
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := sum(x);
+  end gs;
+  parameter Real p = 2;
+  parameter Real s = gs({p * i for i in 1:2});
+  Real y = s * time;
+end WQ134;
+//// model: WQ135
+model WQ135
+  function gs
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := sum(x);
+  end gs;
+  Real y;
+algorithm
+  y := gs({i * 2.0 for i in 1:2}) * time;
+end WQ135;
+//// model: WQ136
+model WQ136
+  function gs
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := sum(x);
+  end gs;
+  parameter Real s = gs({i * 2.0 for i in 1:2, j in 1:1});
+  Real y = s * time;
+end WQ136;
+//// model: WQ138
+model WQ138
+  parameter Real q[2] = {sum({i * j * 1.0 for j in 1:2}) for i in 1:2};
+  Real y = q[1] * time;
+end WQ138;
+//// model: WQ139
+model WQ139
+  parameter Real p = 3;
+  parameter Real q[2] = {sum({i * j * p for j in 1:2}) for i in 1:2};
+  Real y = q[1] * time;
+end WQ139;
+//// model: WQ140
+model WQ140
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  Real y[2];
+equation
+  for k in 1:2 loop
+    y[k] = sum({f(i * k) for i in 1:2}) * time;
+  end for;
+end WQ140;
+//// model: WQ141
+model WQ141
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function k
+    input Real u;
+    output Real y;
+  algorithm
+    y := u + sum({f(i) for i in 1:2});
+  end k;
+  Real y = k(time);
+end WQ141;
+//// model: WQ142
+model WQ142
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  Real x[size({f(i) for i in 1:2}, 1)] = fill(time, 2);
+end WQ142;
+//// model: WQ143
+model WQ143
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  Real y;
+equation
+  if sum({f(i) for i in 1:2}) > 3 then
+    y = time;
+  else
+    y = -time;
+  end if;
+end WQ143;
+//// model: WQ144
+model WQ144
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  record R
+    parameter Real q[2] = {f(i) for i in 1:2};
+  end R;
+  R r;
+  Real y = r.q[1] * time;
+end WQ144;
+//// model: WQ145
+model WQ145
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i) for i in 1:2};
+  Real y;
+algorithm
+  y := q[1] * time;
+end WQ145;
+//// model: WQ146
+model WQ146
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  Real y[2];
+equation
+  y = {f(i) * time for i in 1:2};
+end WQ146;
+//// model: WQ147
+model WQ147
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i) for i in 1:2};
+  Real y;
+equation
+  when time > 0.5 then
+    y = q[2];
+  end when;
+end WQ147;
+//// model: WQ148
+model WQ148
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function k
+    input Real u;
+    output Real y;
+  protected
+    Real a[2] = {f(i) for i in 1:2};
+  algorithm
+    y := u + a[1];
+  end k;
+  Real y = k(time);
+end WQ148;
+//// model: WQ149
+model WQ149
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  parameter Real q[2] = {f(i) for i in 1:2};
+  Real y = sum(q) * time;
+end WQ149;
+//// model: WQ150
+model WQ150
+  function k
+    input Real u;
+    output Real y;
+  protected
+    Real a[2] = {i * 2.0 for i in 1:2};
+  algorithm
+    y := u + a[1];
+  end k;
+  Real y = k(time);
+end WQ150;
+//// model: WQ151
+model WQ151
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function k
+    input Real u;
+    output Real y;
+  protected
+    Real a[2];
+  algorithm
+    a := {f(i) for i in 1:2};
+    y := u + a[1];
+  end k;
+  Real y = k(time);
+end WQ151;
+//// model: WQ152
+model WQ152
+  function k
+    input Real u;
+    output Real y;
+  algorithm
+    y := u + sum({i * 2.0 for i in 1:3});
+  end k;
+  Real y = k(time);
+end WQ152;
+//// model: WQ153
+model WQ153
+  function k
+    input Real u;
+    output Real y;
+  algorithm
+    y := u + sum({i * 2.0 for i in 1:1});
+  end k;
+  Real y = k(time);
+end WQ153;
+//// model: WQ154
+model WQ154
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function k
+    input Real u;
+    output Real y;
+  algorithm
+    y := u + max({f(i) for i in 1:2});
+  end k;
+  Real y = k(time);
+end WQ154;
+//// model: WQ155
+model WQ155
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function k
+    input Real u;
+    output Real y;
+  algorithm
+    y := u + sum(f(i) for i in 1:2);
+  end k;
+  Real y = k(time);
+end WQ155;
+//// model: WQ156
+model WQ156
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function g2
+    input Real x;
+    output Real y;
+  algorithm
+    y := x + 1;
+  end g2;
+  parameter Real s = g2(sum({f(i) for i in 1:2}));
+  Real y = s * time;
+end WQ156;
+//// model: WQ157
+model WQ157
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function g2
+    input Real x;
+    output Real y;
+  algorithm
+    y := x + 1;
+  end g2;
+  parameter Real s = g2(sum({i * 1.0 for i in 1:2}));
+  Real y = s * time;
+end WQ157;
+//// model: WQ158
+model WQ158
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function g2
+    input Real x;
+    output Real y;
+  algorithm
+    y := x + 1;
+  end g2;
+  parameter Real s = g2(max({i * 1.0 for i in 1:2}));
+  Real y = s * time;
+end WQ158;
+//// model: WQ159
+model WQ159
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function g2
+    input Real x;
+    output Real y;
+  algorithm
+    y := x + 1;
+  end g2;
+  parameter Real s = g2(sum(i * 1.0 for i in 1:2));
+  Real y = s * time;
+end WQ159;
+//// model: WQ160
+model WQ160
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function g2
+    input Real x;
+    output Real y;
+  algorithm
+    y := x + 1;
+  end g2;
+  function k
+    input Real u;
+    output Real y;
+  algorithm
+    y := u + g2(sum({i * 1.0 for i in 1:2}));
+  end k;
+  Real y = k(time);
+end WQ160;
+//// model: WQ161
+model WQ161
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  function g2
+    input Real x;
+    output Real y;
+  algorithm
+    y := x + 1;
+  end g2;
+  Real y = g2(sum({f(i) for i in 1:2})) * time;
+end WQ161;
+//// model: WQ162
+model WQ162
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  constant Real q[2] = 2 * {f(i) for i in 1:2};
+  Real y = q[1] * time;
+end WQ162;
+//// model: WQ163
+model WQ163
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  constant Real c = f(1);
+  Real y = c * time;
+end WQ163;
+//// model: WQ164
+model WQ164
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  constant Real q[2] = {f(1), f(2)};
+  Real y = q[1] * time;
+end WQ164;
+//// model: WQ165
+model WQ165
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  constant Real q[2] = {f(i) for i in 1:2};
+end WQ165;
+//// model: WQ166
+model WQ166
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  constant Real q[2] = {f(i) for i in 1:2};
+  Real z[2] = q;
+end WQ166;
+//// model: WQ167
+model WQ167
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+  end f;
+  constant Integer n = 2;
+  constant Real q[n] = {f(i) for i in 1:n};
+  Real z[n](each start = 0);
+equation
+  der(z) = q;
+end WQ167;
+//// model: HW1
+model HW1
+  discrete Real x(start = 0, fixed = true);
+  discrete Real z(start = 0, fixed = true);
+equation
+  when time > 0.5 then
+    if time > 0.7 then
+      x = 1;
+      z = 2;
+    else
+      x = 2;
+      z = 3;
+    end if;
+  end when;
+end HW1;
+//// model: HW2
+model HW2
+  parameter Boolean b = true;
+  discrete Real x(start = 0, fixed = true);
+equation
+  when time > 0.5 then
+    if b then
+      x = 1;
+    else
+      x = 2;
+    end if;
+  end when;
+end HW2;
+//// model: HW3
+model HW3
+  parameter Integer k = 1;
+  discrete Real x(start = 0, fixed = true);
+equation
+  when initial() then
+    if k > 2 then
+      x = 1;
+    end if;
+  end when;
+end HW3;
+//// model: HW4
+model HW4
+  constant Boolean c = false;
+  discrete Real x(start = 0, fixed = true);
+equation
+  when time > 0.5 then
+    if c then
+      x = 1;
+    else
+      x = 2;
+    end if;
+  end when;
+end HW4;
+//// model: HW5
+model HW5
+  Real v(start = 1, fixed = true);
+equation
+  der(v) = -1;
+  when v < 0 then
+    if time > 2 then
+      reinit(v, 1);
+    else
+      reinit(v, 2);
+    end if;
+  end when;
+end HW5;
+//// model: HW6
+model HW6
+  Real v(start = 1, fixed = true);
+equation
+  der(v) = -1;
+  when v < 0 then
+    if time > 2 then
+      assert(v > -1, "too low");
+    else
+      terminate("done");
+    end if;
+  end when;
+end HW6;
+//// model: HW7
+model HW7
+  parameter Integer m = 3;
+  parameter Integer k = 1;
+equation
+  when initial() then
+    if m <= 2 or k < 1 then
+      Modelica.Utilities.Streams.print("bad k = " + String(k));
+    end if;
+  end when;
+end HW7;
+//// model: HW8
+model HW8
+  discrete Real x(start = 0, fixed = true);
+equation
+  when time > 0.5 then
+    if time > 0.7 then
+      if time > 0.9 then
+        x = 1;
+      else
+        x = 3;
+      end if;
+    else
+      x = 2;
+    end if;
+  end when;
+end HW8;
+//// model: HW9
+model HW9
+  discrete Real x(start = 0, fixed = true);
+  discrete Real z(start = 0, fixed = true);
+equation
+  when time > 0.5 then
+    if time > 0.7 then
+      x = 1;
+    else
+      z = 2;
+    end if;
+  elsewhen time > 0.9 then
+    x = 3;
+  end when;
+end HW9;
+//// model: HW10
+model HW10
+  discrete Real x(start = 0, fixed = true);
+equation
+  when time > 0.5 then
+    if time > 0.7 then
+      x = 1;
+    else
+      x = 2;
+    end if;
+  elsewhen time > 0.9 then
+    x = 3;
+  end when;
+end HW10;
+//// model: HW11
+model HW11
+  discrete Real x(start = 0, fixed = true);
+  discrete Real z(start = 0, fixed = true);
+equation
+  when time > 0.5 then
+    if time > 0.7 then
+      x = 1;
+    else
+      z = 2;
+    end if;
+  end when;
+end HW11;
+//// model: HW12
+model HW12
+  parameter Integer n = 3;
+  discrete Real a[n](each start = 0, each fixed = true);
+  Boolean e = time > 0.5;
+equation
+  when {e, time > 0.8} then
+    if edge(e) then
+      a = cat(1, {1}, fill(2, n - 1));
+    else
+      a = cat(1, pre(a[2:end]), {5});
+    end if;
+  end when;
+end HW12;
+//// model: HW13
+model HW13
+  discrete Real x(start = 0, fixed = true);
+  Real h = sin(time);
+equation
+  when time > 0.5 then
+    if h < 0.1 then
+      x = 1;
+    elseif h > 0.5 and time > 0.6 then
+      x = 2;
+    elseif not (h > 0.5) then
+      x = 3;
+    else
+      x = 4;
+    end if;
+  end when;
+end HW13;
+//// model: HW14
+model HW14
+  parameter Boolean b = true;
+  discrete Real x(start = 0, fixed = true);
+equation
+  when time > 0.5 then
+    if b and time > 0.7 then
+      x = 1;
+    else
+      x = 2;
+    end if;
+  end when;
+end HW14;
+//// model: HW15
+model HW15
+  parameter Boolean b = true annotation(Evaluate = false);
+  discrete Real x(start = 0, fixed = true);
+equation
+  when time > 0.5 then
+    if b then
+      x = 1;
+    else
+      x = 2;
+    end if;
+  end when;
+end HW15;
+//// model: HW16
+model HW16
+  discrete Real x(start = 0, fixed = true);
+equation
+  when sample(0, 0.1) then
+    if pre(x) > 3 then
+      x = 0;
+    else
+      x = pre(x) + 1;
+    end if;
+  end when;
+end HW16;
+//// model: HW19
+model HW19
+  parameter Boolean b = true;
+  discrete Real x(start = 0, fixed = true);
+equation
+  when time > 0.5 then
+    if time > 0.7 then
+      x = 1;
+    elseif b then
+      x = 2;
+    else
+      x = 3;
+    end if;
+  end when;
+end HW19;
+//// model: HW20
+model HW20
+  parameter Integer m = 3 annotation(Evaluate = true);
+  parameter Integer kPolygon = 1;
+  final parameter Integer mBasic = integer(m / 1);
+equation
+  when initial() then
+    if (mBasic <= 2 or kPolygon < 1 or kPolygon > integer(mBasic - 1) / 2) then
+      Modelica.Utilities.Streams.print("replaced kPolygon = " + String(kPolygon));
+    end if;
+  end when;
+end HW20;
+//// model: HW21
+model HW21
+  parameter Integer k = 1;
+  discrete Real x(start = 0, fixed = true);
+equation
+  when initial() then
+    if k > 0 then
+      x = 1;
+    end if;
+  end when;
+end HW21;
+//// model: HW22
+model HW22
+  parameter Boolean b = false;
+  discrete Real x(start = 0, fixed = true);
+equation
+  when time > 0.5 then
+    if b then
+      x = 1;
+    elseif time > 0.7 then
+      x = 2;
+    else
+      x = 3;
+    end if;
+  end when;
+end HW22;
+//// model: HW23
+model HW23
+  parameter Integer Count = 4;
+  parameter Real Hsat = 2;
+  parameter Real eps = 1e-5;
+  Real alpha = sin(time);
+  Boolean init3 = time > 0.5;
+  Boolean evAsc = time > 0.7;
+  Boolean del = time > 0.9;
+  discrete Real bSavI(start = 0, fixed = true);
+  Real bSav[Count];
+initial equation
+  bSav = fill(-Hsat, Count);
+equation
+  when time > 0.2 then
+    bSavI = alpha;
+  end when;
+  when {init3, evAsc, del} then
+    if init3 then
+      bSav = cat(1, {bSavI}, fill(-Hsat, Count - 1));
+    elseif evAsc then
+      bSav = if (alpha - eps) > pre(bSav[1]) then cat(1, {alpha}, pre(bSav[1:end - 1])) else pre(bSav);
+    elseif del then
+      bSav = cat(1, pre(bSav[2:end]), {-Hsat});
+    else
+      bSav = pre(bSav);
+    end if;
+  end when;
+end HW23;
+//// model: HW24
+model HW24
+  parameter Integer Count = 4;
+  parameter Real Hsat = 2;
+  Boolean del = time > 0.9;
+  Real bSav[Count];
+initial equation
+  bSav = fill(-Hsat, Count);
+equation
+  when del then
+    bSav = cat(1, pre(bSav[2:end]), {-Hsat});
+  end when;
+end HW24;
+//// model: HW26
+model HW26
+  parameter Integer Count = 4;
+  parameter Real Hsat = 2;
+  parameter Real eps = 1e-5;
+  Real alpha = sin(time);
+  Boolean evAsc = time > 0.7;
+  Real bSav[Count];
+initial equation
+  bSav = fill(-Hsat, Count);
+equation
+  when evAsc then
+    bSav = if (alpha - eps) > pre(bSav[1]) then cat(1, {alpha}, pre(bSav[1:end - 1])) else pre(bSav);
+  end when;
+end HW26;
+//// model: HW27
+model HW27
+  parameter Integer Count = 4;
+  parameter Real Hsat = 2;
+  parameter Real eps = 1e-5;
+  Real alpha = sin(time);
+  Boolean evAsc = time > 0.7;
+  Real bSav[Count];
+initial equation
+  bSav = fill(-Hsat, Count);
+equation
+  when evAsc then
+    bSav = cat(1, {alpha}, pre(bSav[1:end - 1]));
+  end when;
+end HW27;
+//// model: HW28
+model HW28
+  parameter Integer Count = 4;
+  parameter Real Hsat = 2;
+  parameter Real eps = 1e-5;
+  Real alpha = sin(time);
+  Boolean evAsc = time > 0.7;
+  Real bSav[Count];
+initial equation
+  bSav = fill(-Hsat, Count);
+equation
+  when evAsc then
+    bSav = cat(1, {alpha}, fill(-Hsat, Count - 1));
+  end when;
+end HW28;
+//// model: HW29
+model HW29
+  parameter Integer Count = 4;
+  parameter Real Hsat = 2;
+  parameter Real eps = 1e-5;
+  Real alpha = sin(time);
+  Boolean evAsc = time > 0.7;
+  Real bSav[Count];
+initial equation
+  bSav = fill(-Hsat, Count);
+equation
+  when evAsc then
+    bSav = pre(bSav);
+  end when;
+end HW29;
+//// model: HW30
+model HW30
+  function f
+    input Real u;
+    output Real a;
+    output Real b;
+  algorithm
+    a := u;
+    b := 2 * u;
+  end f;
+  discrete Real a(start = 0, fixed = true);
+  discrete Real b(start = 0, fixed = true);
+equation
+  when time > 0.5 then
+    if time > 0.7 then
+      (a, b) = f(time);
+    else
+      a = 1;
+      b = 2;
+    end if;
+  end when;
+end HW30;
+//// model: HW31
+model HW31
+  discrete Real x[2](each start = 0, each fixed = true);
+equation
+  when time > 0.5 then
+    if time > 0.7 then
+      for i in 1:2 loop
+        x[i] = i;
+      end for;
+    else
+      x = {3, 4};
+    end if;
+  end when;
+end HW31;
+//// model: HW34
+model HW34
+  discrete Real x(start = 0, fixed = true);
+  discrete Real z(start = 0, fixed = true);
+equation
+  when time > 0.5 then
+    if time > 0.7 then
+      x = 1;
+    else
+      x = 2;
+    end if;
+  elsewhen time > 0.9 then
+    z = 3;
+  end when;
+end HW34;
+//// model: HW39
+model HW39
+  discrete Real x(start = 0, fixed = true);
+  Real v(start = 1, fixed = true);
+equation
+  der(v) = -1;
+  when v < 0 then
+    if time > 2 then
+      x = 1;
+      reinit(v, 1);
+    else
+      x = 2;
+    end if;
+  end when;
+end HW39;
+//// model: HW40
+model HW40
+  discrete Real x(start = 0, fixed = true);
+equation
+  when time > 0.5 then
+    if time > 0.7 then
+      x = 1;
+    end if;
+  elsewhen time > 0.9 then
+    x = 2;
+  end when;
+end HW40;
+//// model: HW43
+model HW43
+  discrete Real x(start = 0, fixed = true);
+equation
+  when time > 0.5 then
+    x = 1;
+    if time > 0.7 then
+      Modelica.Utilities.Streams.print("late");
+    end if;
+  end when;
+end HW43;
+//// model: HW44
+model HW44
+  discrete Real x[2](each start = 0, each fixed = true);
+equation
+  when time > 0.5 then
+    if time > 0.7 then
+      x[1] = 1;
+      x[2] = 2;
+    else
+      x = {3, 4};
+    end if;
+  end when;
+end HW44;
+//// model: HW45
+model HW45
+  parameter Boolean b = true;
+  discrete Real x(start = 0, fixed = true);
+equation
+  when time > 0.5 then
+    if b then
+      x = 1;
+    end if;
+  elsewhen time > 0.9 then
+    x = 2;
+  end when;
+end HW45;
+//// model: HW46
+model HW46
+  parameter Integer n = 2;
+  discrete Real x(start = 0, fixed = true);
+  discrete Real z(start = 0, fixed = true);
+equation
+  when time > 0.5 then
+    if n > 1 then
+      x = 1;
+    else
+      z = 2;
+    end if;
+  elsewhen time > 0.9 then
+    x = 2;
+  end when;
+end HW46;
+//// model: HW47
+model HW47
+  Real x(start = 0, fixed = true);
+equation
+  der(x) = 1;
+  when time > 0.5 then
+    if time > 0.7 then
+      reinit(x, 0);
+    end if;
+  end when;
+end HW47;
+//// model: HW48
+model HW48
+  function pr
+    input String s;
+  algorithm
+    assert(false, s, AssertionLevel.warning);
+  end pr;
+  parameter Integer m = 3 annotation(Evaluate = true);
+  parameter Integer k = 1;
+  final parameter Integer mBasic = integer(m / 1);
+equation
+  when initial() then
+    if mBasic <= 2 or k < 1 then
+      pr("replaced k = " + String(k));
+    end if;
+  end when;
+end HW48;

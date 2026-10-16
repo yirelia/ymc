@@ -9462,4 +9462,188 @@ YMC_TEST(flatten_split_modifier_nested_array_call) {
                std::string("<unsupported:function: so2>"));
 }
 
+YMC_TEST(flatten_written_comprehension_keeps_function) {
+  // 书写的推导式作参数数组的整个绑定、体里调用户函数（实参引用迭代变量）：omc 化简期推导式原样留着（simplifyArrayConstructor，
+  // NFSimplifyExp.mo:583-637 v1.25.0），收函数（NFInst.mo:219）在标量化逐元素求值（:231）之前 → 照打函数、元素是求得的值（WQ1；
+  // 多迭代不展开，WQ3）。单迭代范围长 1 化简期就展开求值（:609-615）、定型期被读（Ceval 存回组件，NFCeval.mo:382-387）的不打
+  // （WQ2 / WQ6）。此前一律丢了函数定义（静默错）。期望 = omc 1.25.0 实跑（2026-10-16，探针 pk-p28 WQ1 / WQ3 / WQ2 / WQ6）。
+  YMC_CHECK_EQ(flatten_src("model WQ1\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end f;\n  parameter Real q[2] = {f(i) for i in 1:2};\n  Real y = q[1] * time;\nend WQ1;\n"),
+               std::string("function WQ1.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend WQ1.f;\n\n"
+                           "class WQ1\n  parameter Real q[1] = 2.0;\n  parameter Real q[2] = 4.0;\n  Real y = q[1] * time;\n"
+                           "end WQ1;\n"));
+  YMC_CHECK_EQ(flatten_src("model WQ3\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end f;\n  parameter Real q[2, 3] = {f(i + 10 * j) for i in 1:3, j in 1:2};\n"
+                           "  Real y = q[1, 2] * time;\nend WQ3;\n"),
+               std::string("function WQ3.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend WQ3.f;\n\n"
+                           "class WQ3\n  parameter Real q[1,1] = 22.0;\n  parameter Real q[1,2] = 24.0;\n"
+                           "  parameter Real q[1,3] = 26.0;\n  parameter Real q[2,1] = 42.0;\n"
+                           "  parameter Real q[2,2] = 44.0;\n  parameter Real q[2,3] = 46.0;\n  Real y = q[1,2] * time;\n"
+                           "end WQ3;\n"));
+  YMC_CHECK_EQ(flatten_src("model WQ2\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end f;\n  parameter Real q[1] = {f(i) for i in 1:1};\n  Real y = q[1] * time;\nend WQ2;\n"),
+               std::string("class WQ2\n  parameter Real q[1] = 2.0;\n  Real y = q[1] * time;\nend WQ2;\n"));
+  YMC_CHECK_EQ(flatten_src("model WQ6\n  function g\n    input Integer x;\n    output Integer y;\n  algorithm\n"
+                           "    y := 2 * x;\n  end g;\n  parameter Integer n[2] = {g(i) for i in 1:2};\n"
+                           "  Real x[n[1]] = fill(time, n[1]);\nend WQ6;\n"),
+               std::string("class WQ6\n  final parameter Integer n[1] = 2;\n  final parameter Integer n[2] = 4;\n"
+                           "  Real x[1];\n  Real x[2];\nequation\n  x = {time, time};\nend WQ6;\n"));
+}
+
+YMC_TEST(flatten_written_comprehension_embedded) {
+  // 书写的推导式嵌在运算里 / 作数组属性值 / 作 sum 的实参：同向量化调用逐元素求值（scalarize 的 vec_eval_），运算里与属性值照打
+  // 函数（WQ4 / WQ7），sum 化简期展开求值、不打（simplifySumProduct，NFSimplifyExp.mo:418-454；WQ8），结构参数嵌在运算里
+  // EvalConstants 整个求值、不打（NFEvalConstants.mo:129；WQ113）。期望 = omc 1.25.0 实跑（2026-10-16，探针 pk-p28 WQ4 / WQ7 /
+  // WQ8 / WQ113）。
+  YMC_CHECK_EQ(flatten_src("model WQ4\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end f;\n  parameter Real q[2] = 2 * {f(i) for i in 1:2};\n  Real y = q[1] * time;\nend WQ4;\n"),
+               std::string("function WQ4.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend WQ4.f;\n\n"
+                           "class WQ4\n  parameter Real q[1] = 4.0;\n  parameter Real q[2] = 8.0;\n  Real y = q[1] * time;\n"
+                           "end WQ4;\n"));
+  YMC_CHECK_EQ(flatten_src("model WQ7\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end f;\n  Real x[2](start = {f(i) for i in 1:2});\nequation\n  der(x) = -x;\nend WQ7;\n"),
+               std::string("function WQ7.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend WQ7.f;\n\n"
+                           "class WQ7\n  Real x[1](start = 2.0);\n  Real x[2](start = 4.0);\nequation\n  der(x[1]) = -x[1];\n"
+                           "  der(x[2]) = -x[2];\nend WQ7;\n"));
+  YMC_CHECK_EQ(flatten_src("model WQ8\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end f;\n  parameter Real s = sum({f(i) for i in 1:2});\n  Real y = s * time;\nend WQ8;\n"),
+               std::string("class WQ8\n  parameter Real s = 2.0 + 4.0;\n  Real y = s * time;\nend WQ8;\n"));
+  YMC_CHECK_EQ(flatten_src("model WQ113\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end f;\n  parameter Real q[2] = 2 * {f(i) for i in 1:2} annotation(Evaluate = true);\n"
+                           "  Real y = q[1] * time;\nend WQ113;\n"),
+               std::string("class WQ113\n  final parameter Real q[1] = 4.0;\n  final parameter Real q[2] = 8.0;\n"
+                           "  Real y = 4.0 * time;\nend WQ113;\n"));
+}
+
+YMC_TEST(flatten_written_comprehension_call_argument) {
+  // 用户函数的实参是书写的推导式：推导式化简后不是字面量，调用不求值（simplifyCall 的 NF_EVAL_CONST_ARG_FUNCS 支只收全字面量
+  // 实参，NFSimplifyExp.mo:200-201 v1.25.0）→ 照留 `g(array(…))`（WQ21 / WQ104，此前求值成 6.0 / 8.0、丢了函数）；函数体只化简
+  // 不求值，局部的绑定 / 赋值右端的推导式照留（WQ148 / WQ151）。期望 = omc 1.25.0 实跑（2026-10-16，探针 pk-p28 WQ21 / WQ104 /
+  // WQ148 / WQ151）。
+  YMC_CHECK_EQ(flatten_src("model WQ21\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end f;\n  function g\n    input Real x[:];\n    output Real y;\n  algorithm\n    y := sum(x);\n"
+                           "  end g;\n  parameter Real s = g({f(i) for i in 1:2});\n  Real y = s * time;\nend WQ21;\n"),
+               std::string("function WQ21.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend WQ21.f;\n\n"
+                           "function WQ21.g\n  input Real[:] x;\n  output Real y;\nalgorithm\n  y := sum(x);\nend WQ21.g;\n\n"
+                           "class WQ21\n  parameter Real s = WQ21.g(array(WQ21.f(/*Real*/(i)) for i in 1:2));\n"
+                           "  Real y = s * time;\nend WQ21;\n"));
+  YMC_CHECK_EQ(flatten_src("model WQ104\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end f;\n  function gs\n    input Real x[:];\n    output Real y;\n  algorithm\n    y := sum(x);\n"
+                           "  end gs;\n  parameter Real s = gs({f(2) for i in 1:2});\n  Real y = s * time;\nend WQ104;\n"),
+               std::string("function WQ104.gs\n  input Real[:] x;\n  output Real y;\nalgorithm\n  y := sum(x);\n"
+                           "end WQ104.gs;\n\nclass WQ104\n  parameter Real s = WQ104.gs(array(4.0 for i in 1:2));\n"
+                           "  Real y = s * time;\nend WQ104;\n"));
+  YMC_CHECK_EQ(flatten_src("model WQ148\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end f;\n  function k\n    input Real u;\n    output Real y;\n  protected\n"
+                           "    Real a[2] = {f(i) for i in 1:2};\n  algorithm\n    y := u + a[1];\n  end k;\n"
+                           "  Real y = k(time);\nend WQ148;\n"),
+               std::string("function WQ148.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend WQ148.f;\n\n"
+                           "function WQ148.k\n  input Real u;\n  output Real y;\n"
+                           "  protected Real[2] a = array(WQ148.f(/*Real*/(i)) for i in 1:2);\nalgorithm\n  y := u + a[1];\n"
+                           "end WQ148.k;\n\nclass WQ148\n  Real y = WQ148.k(time);\nend WQ148;\n"));
+  YMC_CHECK_EQ(flatten_src("model WQ151\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end f;\n  function k\n    input Real u;\n    output Real y;\n  protected\n    Real a[2];\n"
+                           "  algorithm\n    a := {f(i) for i in 1:2};\n    y := u + a[1];\n  end k;\n  Real y = k(time);\n"
+                           "end WQ151;\n"),
+               std::string("function WQ151.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend WQ151.f;\n\n"
+                           "function WQ151.k\n  input Real u;\n  output Real y;\n  protected Real[2] a;\nalgorithm\n"
+                           "  a := array(WQ151.f(/*Real*/(i)) for i in 1:2);\n  y := u + a[1];\nend WQ151.k;\n\nclass WQ151\n"
+                           "  Real y = WQ151.k(time);\nend WQ151;\n"));
+}
+
+YMC_TEST(flatten_written_comprehension_sum_chain_and_fixed) {
+  // 推导式元素里 sum 展开出的元素链：标量化时逐元素整个化简（ExpandExp.expandArrayConstructor2，NFExpandExp.mo:486 v1.25.0）
+  // → 字面量链折成一个值（WQ138，此前打 `1.0 + 2.0`）；fixed 属性里的参数在实例化期只打标记（NFInst.mo:3941-3950）、值在
+  // EvalConstants 才求，不算定型期读取 → q 的推导式里的函数照打（WQ96）。期望 = omc 1.25.0 实跑（2026-10-16，探针 pk-p28 WQ138
+  // / WQ96）。
+  YMC_CHECK_EQ(flatten_src("model WQ138\n  parameter Real q[2] = {sum({i * j * 1.0 for j in 1:2}) for i in 1:2};\n"
+                           "  Real y = q[1] * time;\nend WQ138;\n"),
+               std::string("class WQ138\n  parameter Real q[1] = 3.0;\n  parameter Real q[2] = 6.0;\n  Real y = q[1] * time;\n"
+                           "end WQ138;\n"));
+  YMC_CHECK_EQ(flatten_src("model WQ96\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end f;\n  parameter Real q[2] = {f(i) for i in 1:2};\n"
+                           "  Real x[2](each start = 1, fixed = {q[i] > 3 for i in 1:2});\nequation\n  der(x) = -x;\n"
+                           "end WQ96;\n"),
+               std::string("function WQ96.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend WQ96.f;\n\n"
+                           "class WQ96\n  final parameter Real q[1] = 2.0;\n  final parameter Real q[2] = 4.0;\n"
+                           "  Real x[1](start = 1.0, fixed = false);\n  Real x[2](start = 1.0, fixed = true);\nequation\n"
+                           "  der(x[1]) = -x[1];\n  der(x[2]) = -x[2];\nend WQ96;\n"));
+}
+
+YMC_TEST(flatten_written_comprehension_unverified_skip) {
+  // 未复刻的照旧 SKIP：常量数组（定型期有没有被求值过 ymc 不记，WQ10 照打 / WQ51 不打）、各元素实参全同（`f(sign(i))` omc 照打，
+  // `f(i - i)` 不打，WQ71 / WQ43）、推导式嵌在常量调用实参的式子里（omc 打 `gs(array(…) * 2.0)`，WQ105）、函数体里 sum 推导式
+  // （omc 打不再化简的元素链，WQ152）。2026-10-16，探针 pk-p28。
+  YMC_CHECK_EQ(flatten_src("model WQ10\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end f;\n  constant Real q[2] = {f(i) for i in 1:2};\n  Real y = q[1] * time;\nend WQ10;\n"),
+               std::string("<unsupported:constant array comprehension calling a function>"));
+  YMC_CHECK_EQ(flatten_src("model WQ71\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n    y := 2 * x;\n"
+                           "  end f;\n  parameter Real q[2] = {f(sign(i)) for i in 1:2};\n  Real y = q[1] * time;\nend WQ71;\n"),
+               std::string("<unsupported:comprehension call with element-independent arguments>"));
+  YMC_CHECK_EQ(flatten_src("model WQ105\n  function gs\n    input Real x[:];\n    output Real y;\n  algorithm\n"
+                           "    y := sum(x);\n  end gs;\n  parameter Real s = gs(2 * {i * 1.0 for i in 1:2});\n"
+                           "  Real y = s * time;\nend WQ105;\n"),
+               std::string("<unsupported:array comprehension nested in a constant call argument>"));
+  YMC_CHECK_EQ(flatten_src("model WQ152\n  function k\n    input Real u;\n    output Real y;\n  algorithm\n"
+                           "    y := u + sum({i * 2.0 for i in 1:3});\n  end k;\n  Real y = k(time);\nend WQ152;\n"),
+               std::string("<unsupported:reduction of an array comprehension in a function>"));
+}
+
+YMC_TEST(flatten_if_equation_in_when) {
+  // when 体里的 if 方程（MLS 3.6 §8.3.5.2）：omc 压平 when 体同顶层（flattenEqBranch → flattenIfEquation，NFFlatten.mo:1885-1889
+  // / :2052-2066 v1.25.0）——运行时条件照留（HW1），结构条件求值选支、参数标 final（HW2；MSL MultiDelta 同构的 HW48：条件为假、
+  // 无 else → `when initial() then end when;`）；各分支解出的变量不同只在有 elsewhen 时报错（VerifyModel.verifyWhenEquation
+  // :127-150，HW11 照打）；切片界里的 `end`（MLS §10.5，HW27）。期望 = omc 1.25.0 实跑（2026-10-16，探针 pk-p28 HW1 / HW2 /
+  // HW48 / HW11 / HW27）。
+  YMC_CHECK_EQ(flatten_src("model HW1\n  discrete Real x(start = 0, fixed = true);\n"
+                           "  discrete Real z(start = 0, fixed = true);\nequation\n  when time > 0.5 then\n"
+                           "    if time > 0.7 then\n      x = 1;\n      z = 2;\n    else\n      x = 2;\n      z = 3;\n"
+                           "    end if;\n  end when;\nend HW1;\n"),
+               std::string("class HW1\n  discrete Real x(start = 0.0, fixed = true);\n"
+                           "  discrete Real z(start = 0.0, fixed = true);\nequation\n  when time > 0.5 then\n"
+                           "    if time > 0.7 then\n      x = 1.0;\n      z = 2.0;\n    else\n      x = 2.0;\n      z = 3.0;\n"
+                           "    end if;\n  end when;\nend HW1;\n"));
+  YMC_CHECK_EQ(flatten_src("model HW2\n  parameter Boolean b = true;\n  discrete Real x(start = 0, fixed = true);\nequation\n"
+                           "  when time > 0.5 then\n    if b then\n      x = 1;\n    else\n      x = 2;\n    end if;\n"
+                           "  end when;\nend HW2;\n"),
+               std::string("class HW2\n  final parameter Boolean b = true;\n  discrete Real x(start = 0.0, fixed = true);\n"
+                           "equation\n  when time > 0.5 then\n    x = 1.0;\n  end when;\nend HW2;\n"));
+  YMC_CHECK_EQ(flatten_src("model HW48\n  function pr\n    input String s;\n  algorithm\n"
+                           "    assert(false, s, AssertionLevel.warning);\n  end pr;\n"
+                           "  parameter Integer m = 3 annotation(Evaluate = true);\n  parameter Integer k = 1;\n"
+                           "  final parameter Integer mBasic = integer(m / 1);\nequation\n  when initial() then\n"
+                           "    if mBasic <= 2 or k < 1 then\n      pr(\"replaced k = \" + String(k));\n    end if;\n"
+                           "  end when;\nend HW48;\n"),
+               std::string("class HW48\n  final parameter Integer m = 3;\n  final parameter Integer k = 1;\n"
+                           "  final parameter Integer mBasic = 3;\nequation\n  when initial() then\n  end when;\nend HW48;\n"));
+  YMC_CHECK_EQ(flatten_src("model HW11\n  discrete Real x(start = 0, fixed = true);\n"
+                           "  discrete Real z(start = 0, fixed = true);\nequation\n  when time > 0.5 then\n"
+                           "    if time > 0.7 then\n      x = 1;\n    else\n      z = 2;\n    end if;\n  end when;\n"
+                           "end HW11;\n"),
+               std::string("class HW11\n  discrete Real x(start = 0.0, fixed = true);\n"
+                           "  discrete Real z(start = 0.0, fixed = true);\nequation\n  when time > 0.5 then\n"
+                           "    if time > 0.7 then\n      x = 1.0;\n    else\n      z = 2.0;\n    end if;\n  end when;\n"
+                           "end HW11;\n"));
+  YMC_CHECK_EQ(flatten_src("model HW27\n  parameter Integer Count = 4;\n  parameter Real Hsat = 2;\n"
+                           "  parameter Real eps = 1e-5;\n  Real alpha = sin(time);\n  Boolean evAsc = time > 0.7;\n"
+                           "  Real bSav[Count];\ninitial equation\n  bSav = fill(-Hsat, Count);\nequation\n  when evAsc then\n"
+                           "    bSav = cat(1, {alpha}, pre(bSav[1:end - 1]));\n  end when;\nend HW27;\n"),
+               std::string("class HW27\n  final parameter Integer Count = 4;\n  parameter Real Hsat = 2.0;\n"
+                           "  parameter Real eps = 1e-5;\n  Real alpha = sin(time);\n  Boolean evAsc = time > 0.7;\n"
+                           "  Real bSav[1];\n  Real bSav[2];\n  Real bSav[3];\n  Real bSav[4];\ninitial equation\n"
+                           "  bSav[1] = -Hsat;\n  bSav[2] = -Hsat;\n  bSav[3] = -Hsat;\n  bSav[4] = -Hsat;\nequation\n"
+                           "  when evAsc then\n    bSav[1] = alpha;\n    bSav[2] = pre(bSav[1]);\n"
+                           "    bSav[3] = pre(bSav[2]);\n    bSav[4] = pre(bSav[3]);\n  end when;\nend HW27;\n"));
+}
+
+YMC_TEST(flatten_if_equation_in_when_mismatch) {
+  // 带 elsewhen 的 when 里 if 方程各分支解出的变量不同：omc 报 WHEN_IF_VARIABLE_MISMATCH（NFVerifyModel.mo:182-205 v1.25.0；
+  // 探针 pk-p28 HW9，两边都拒）。
+  YMC_CHECK_EQ(flatten_src("model HW9\n  discrete Real x(start = 0, fixed = true);\n"
+                           "  discrete Real z(start = 0, fixed = true);\nequation\n  when time > 0.5 then\n"
+                           "    if time > 0.7 then\n      x = 1;\n    else\n      z = 2;\n    end if;\n"
+                           "  elsewhen time > 0.9 then\n    x = 3;\n  end when;\nend HW9;\n"),
+               std::string("<unsupported:if-equation branches in when solve different variables>"));
+}
+
 YMC_TEST_MAIN
