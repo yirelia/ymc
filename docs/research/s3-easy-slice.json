@@ -700,5 +700,6 @@
 "FunctionalArgBinary1.mo",
 "PartialApplication3.mo",
 "ClassExtends4.mo",
-"ClassMod3.mo"
+"ClassMod3.mo",
+"RecordBinding13.mo"
 ]

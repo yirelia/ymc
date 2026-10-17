@@ -1242,6 +1242,7 @@ class Flattener {
           std::vector<std::int64_t> adims;
           const ScodeScope adscope = scode_scope_of(dims_lex(cid, inst_node));
           bool okdim = true;
+          const bool saved_dim_fm = std::exchange(forward_miss_, false);
           {
             // `:` 维按整体绑定字面量的形状推（deduceDimensionFromExp，NFTyping.mo:781-826；RecordBinding5 `R1 t[:] = {r1}`）。
             std::optional<std::vector<std::int64_t>> bd;
@@ -1256,6 +1257,14 @@ class Flattener {
                 }
                 ++k;
               }
+          }
+          const bool dim_fwd = forward_miss_;
+          forward_miss_ = saved_dim_fm || dim_fwd;
+          // 第一遍：维里的参数顺绑定读到声明在后的记录（`impedance(cellData = cellData)` 里 `rcData[nRC]`，nRC 的值是声明在后的
+          // `cellData.nRC`——MSL Batteries ShowImpedance；pk-p37 探针 BCT29）→ 这一遍不展开，第二遍用第一遍的值（同上面条件组件）。
+          if ((!okdim || adims.empty()) && lenient_ && dim_fwd && !result_.unsupported) {
+            need_second_pass_ = true;
+            continue;
           }
           if (!okdim || adims.empty()) { set_unsupported("non-literal array dimension"); continue; }
           note_array_shape(name, psubs, adims);
@@ -5072,6 +5081,8 @@ class Flattener {
         defer_bind = needs_forward_shape(I_.comps[cid].binding.raw_exp, bind_lex(cid, enclosing), prefix);
       if (defer_bind) need_second_pass_ = true;
     }
+    // 定型 / 求值绑定时碰到的向前引用（下面 constant 的字面量检查用）：外层的标记先存着、事后并回（同 call() 的做法）。
+    const bool saved_fm = std::exchange(forward_miss_, false);
     if (!defer_bind) {
       const Id<Exp> mraw = mb ? I_.scode.mods[mb->mod].binding : Id<Exp>{};
       // constant 标量：先按值求值（NFCeval；cref 取已发射常量的最终值 → 修饰感知，CevalBinding2；含数组运算如标量积
@@ -5114,6 +5125,8 @@ class Flattener {
                                                                             : inst_exp(raw, bs, prefix);
       }
     }
+    const bool bind_fwd = forward_miss_;
+    forward_miss_ = saved_fm || bind_fwd;
     // 没赋到的字段却另有绑定（omc 的函数输出初值就取声明绑定，不该是 EMPTY）：ymc 的记录值与 omc 不一致，未核实 → 不出结果。
     if (empty_outer && binding.is_valid()) set_unsupported("unassigned record field with binding");
     if (ctx.unbound_fields || empty_outer) binding = {};   // 外层记录整体绑定已挪成方程 / 没赋到：字段无绑定（见 ModCtx::unbound_fields）
@@ -5312,7 +5325,14 @@ class Flattener {
       ExprKind bk = result_.model.exprs[binding].kind;
       bool is_lit = bk == ExprKind::IntLit || bk == ExprKind::RealLit || bk == ExprKind::BoolLit ||
                     bk == ExprKind::StringLit || bk == ExprKind::EnumLit;
-      if (!is_lit && !result_.unsupported) {
+      // 第一遍：求不出是因为读到了声明在后的常量（记录整体绑定拆出的 constant 字段 `impedance.cellData.CellType =
+      // cellData.CellType`，cellData 声明在后——MSL Batteries ShowImpedance；pk-p37 探针 BCT17-BCT26）：omc 先定型全部组件、
+      // 压平后才由 EvalConstants 求常量（NFInst.mo:196-200 v1.25.0），值与先后无关 → 第二遍取第一遍求得的值（carry_.vals，见
+      // const_lookup_val / forward_const_val）。
+      if (!is_lit && !result_.unsupported && lenient_ && bind_fwd) {
+        need_second_pass_ = true;
+        fwd_consts_.insert(vkey);
+      } else if (!is_lit && !result_.unsupported) {
         set_unsupported("constant evaluation");
         for (std::size_t ni = 0; ni < name.size(); ++ni)   // 子原因：哪个常量（排桶用）
           result_.unsupported_detail += (ni ? "." : "") + std::string(in_.str(name[ni]));
@@ -5550,6 +5570,17 @@ class Flattener {
         needs_forward_shape(braw, bscope, bprefix)) {
       need_second_pass_ = true;
       braw = {};
+    }
+    // 第一遍：参数 / 常量数组字段的值来自外层记录整体绑定（`impedance(cellData = cellData)` 拆出的 `impedance.cellData.OCV_SOC =
+    // cellData.OCV_SOC`），源记录声明在后、它的数组维（`OCV_SOC[:, 2]` 由它自己的绑定定）还不知道——MSL Batteries ShowImpedance；
+    // pk-p37 探针 BCT27 / BCT28 → 这一遍不发射（第一遍的输出不用），第二遍用第一遍记下的维（carry_.shapes）。omc 先定型全部组件
+    // 再压平（NFInst.mo:196-200 v1.25.0），没有先后之分。参数的绑定不像变量那样能先丢掉（无绑定的参数会判 unbound）。
+    if (lenient_ && braw.is_valid() && braw_from_record && needs_forward_shape(braw, bscope, bprefix)) {
+      PSubs ws = psubs;
+      ws.resize(name.size());
+      typed_keys_.erase(int_key(name, ws));   // 没发射：这一遍别处读到它照向前引用处理
+      need_second_pass_ = true;
+      return;
     }
     mark_ctor_ranges(braw, bscope);
     // constant 数组绑 ndims(…) / 单实参 size(…)：更高变率的绑定，omc 报错（同标量，见 emit_variable）。
@@ -16420,6 +16451,7 @@ class Flattener {
     if (const_vals_.count(key)) return std::nullopt;   // 已压平（数组 / 记录值，const_lookup_expr 不收的）：照旧
     if (lenient_) {
       need_second_pass_ = true;
+      forward_miss_ = true;   // 调用方据此在第一遍不判 SKIP（emit_variable 的 constant 字面量检查）
       return std::nullopt;
     }
     const auto it = carry_.vals.find(key);
@@ -17512,9 +17544,21 @@ class Flattener {
               if (const Id<Expr> rl = local_oprec_const(leaf); rl.is_valid()) return rl;
               if (const Id<Expr> rl = const_record_literal(prefix, c, leaf); rl.is_valid()) return rl;
             }
-            set_unsupported("constant evaluation");
-            for (std::size_t pi = 0; pi < c.parts.size(); ++pi)   // 子原因：哪个常量（排桶用）
-              result_.unsupported_detail += (pi ? "." : "") + std::string(in_.str(c.parts[pi].name));
+            std::vector<Symbol> cn = prefix;
+            cn.push_back(c.parts[0].name);
+            PSubs cs = cur_psubs_;
+            cs.resize(prefix.size());
+            cs.push_back({});
+            // 第一遍：这个常量的绑定在等声明在后的值（emit_variable 推到第二遍的，见 fwd_consts_；pk-p29 探针 SQB1：`a(c = b.k)`、
+            // b 声明在后、A 里 `x = c * time`）→ 照引用往下走（第一遍的输出不用），第二遍取已发射的字面量。
+            if (lenient_ && fwd_consts_.count(int_key(cn, cs))) {
+              need_second_pass_ = true;
+              forward_miss_ = true;
+            } else {
+              set_unsupported("constant evaluation");
+              for (std::size_t pi = 0; pi < c.parts.size(); ++pi)   // 子原因：哪个常量（排桶用）
+                result_.unsupported_detail += (pi ? "." : "") + std::string(in_.str(c.parts[pi].name));
+            }
           }
         }
         e.ty = lty;
@@ -24437,8 +24481,46 @@ class Flattener {
     }
     return false;
   }
-  // 记录整体绑定是 if 式且条件 ≤ parameter：splitRecordCref 的 IF 分支（NFFlatten.mo:1061-1074）——条件求值成功即标结构参数
-  // （帧求值读参数即记）、选支再拆（RE1 探针 `p3 = if k > 3 then P(1, 2) else P(a = k)` → k final、`p3.a = 2.0`）；条件引用运行时
+  // 记录 if 绑定的条件里有调用（cond_is_runtime 把调用一律当运行时）：splitRecordCref 只看条件的变率 ≤ PARAMETER
+  //（NFFlatten.mo:1064-1065 v1.25.0），调用的变率 = 各实参变率的最大值（NFCall.typeMatchNormalCall，NFCall.mo:385-392；带参数
+  // 实参的 external 函数另降成 NON_STRUCTURAL_PARAMETER，:399-402，`external "builtin"` 的数学内建不算 external，NFClass.mo:699；
+  // initial() / terminal() 恒为离散，NFBuiltinCall.typeDiscreteCall :465-485）。true = 运行时（引用连续 / 离散量，或 initial() 这类
+  // 内建：照旧留 if，随后挪成方程，pk-p37 探针 BRF6 / BRF27-BRF29 / BRG9 / BRG10）；false = 不含运行时量、调用都是 external / 不纯
+  // 以外的用户函数、可折叠的数学内建或 noEvent（omc 求值选支，BRF1 / BRF2 / BRF4 / BRF15 / BRF20 / BRF22 / BRF23 / BRF30）；
+  // nullopt = 其余调用（external、不纯——omc 照样求值，BRF14——等，未核实）。
+  std::optional<bool> record_if_cond_runtime(Id<Expr> ce) {
+    if (refs_runtime_var(ce)) return true;
+    bool rt = false, unk = false;
+    auto walk = [&](auto& self, Id<Expr> id) -> void {
+      if (!id.is_valid()) return;
+      const Expr& e = result_.model.exprs[id];
+      if (e.kind == ExprKind::Unbox || e.kind == ExprKind::FnParamCall || e.kind == ExprKind::PartialApp) unk = true;
+      if (e.kind == ExprKind::Call) {
+        const FlatFunction* uf = nullptr;
+        for (const FlatFunction& f : result_.model.functions)
+          if (f.name == e.call_name) uf = &f;
+        const BuiltinFn* b = !uf && e.call_name.size() == 1 ? lookup_builtin(in_.str(e.call_name[0])) : nullptr;
+        const std::string_view bn = b ? b->name : "";
+        if (uf) unk = unk || uf->is_external || uf->is_impure || uf->is_record_ctor;
+        else if (bn == "initial" || bn == "terminal" || bn == "sample" || bn == "pre" || bn == "edge" || bn == "change" ||
+                 bn == "der")
+          rt = true;
+        else if (!b || (!b->foldable && bn != "noEvent")) unk = true;   // 可折叠的数学内建、noEvent：变率随实参
+      }
+      for (const ExprCrefPart& cp : e.cref.parts)
+        for (Id<Expr> sx : cp.subscripts) self(self, sx);
+      for (Id<Expr> a : e.args) self(self, a);
+      self(self, e.a);
+      self(self, e.b);
+      self(self, e.c);
+    };
+    walk(walk, ce);
+    if (rt) return true;
+    if (unk) return std::nullopt;
+    return false;
+  }
+  // 记录整体绑定是 if 式且条件 ≤ parameter：splitRecordCref 的 IF 分支（NFFlatten.mo:1064-1077 v1.25.0）——条件求值成功即标结构
+  // 参数（帧求值读参数即记）、选支再拆（RE1 探针 `p3 = if k > 3 then P(1, 2) else P(a = k)` → k final、`p3.a = 2.0`）；条件引用运行时
   // 变量 → 原样（随后挪成方程）。条件参数须字面量绑定 / fixed（传递标记依赖 omc 求值次序，同 if 方程，见 cond_params_fixed），
   // 否则 / 求不出 → SKIP。返回选中的分支（可再嵌套）。
   Id<Exp> fold_record_if(Id<Exp> raw, NodeId scope, const std::vector<Symbol>& vpfx) {
@@ -24457,11 +24539,28 @@ class Flattener {
       const StructSnap snap = struct_snap();
       const Id<Expr> ce = simplify_expr(inst_exp(ie.a, scope, vpfx));
       if (result_.unsupported) return raw;
-      if (cond_is_runtime(ce)) { struct_restore(snap); return raw; }
+      if (cond_is_runtime(ce)) {   // 条件里有调用的按调用的变率重判（MSL BaseStackData 的 `if anyTrue({…}) then …`）
+        const std::optional<bool> rt = record_if_cond_runtime(ce);
+        if (!rt) {
+          struct_restore(snap);
+          set_unsupported("record binding if condition");
+          return raw;
+        }
+        if (*rt) { struct_restore(snap); return raw; }
+      }
+      const bool saved_fm = std::exchange(forward_miss_, false);
       const std::optional<CVal> cv = eval_scode(ie.a, scode_scope_of(scope), 0, /*allow_param=*/true, nullptr);
       const std::optional<bool> fx = cond_params_fixed(ce);
+      const bool cond_fwd = forward_miss_;
+      forward_miss_ = saved_fm || cond_fwd;
       if (!cv || cv->k != CVal::K::Bool || !fx || !*fx) {
         struct_restore(snap);
+        // 第一遍：求不出 / 判不了固定与否是因为条件读到声明在后的参数（pk-p37 探针 BRF13 / BRG16）→ 先照原样（第一遍的输出
+        // 不用），第二遍带着第一遍的值与结论再判（omc 先定型全部组件再压平，NFInst.mo:196-200 v1.25.0，没有先后）。
+        if ((!cv || !fx) && lenient_ && cond_fwd) {
+          need_second_pass_ = true;
+          return raw;
+        }
         set_unsupported("record binding if condition");
         return raw;
       }
@@ -24496,6 +24595,13 @@ class Flattener {
     // 绑定变率 ≤ 结构参数（全常量）→ omc Ceval 求值（NFFlatten.mo:958-961）；final parameter 且绑定是参数变率 → 先内联
     // 再求值（:962-983，RecordBinding18 账本）。这两种 ymc 都不复刻（不挪方程）→ false。
     const bool runtime = refs_runtime_var(rhs);
+    // parameter 记录的整体绑定引用连续 / 离散量（`= if time > 1 then a else b`、`= f(time)`）：绑定变率高于组件，omc 报错
+    //（checkComponentBindingVariability，NFTyping.mo:1136-1147 v1.25.0；pk-p37 探针 BRG12 / BRG17 / BRG18 / BRG20 / BRG22，此前照挪成
+    // 初始方程）→ 不出结果。
+    if (runtime && v == SVariability::Param) {
+      set_unsupported("binding of higher variability");
+      return false;
+    }
     if (!runtime && (!refs_param_var(rhs) || is_final)) return false;
     const Type cty = I_.comps[cid].ty;
     if (result_.model.exprs[rhs].ty.kind != TypeKind::Complex || !expr_shape(rhs).empty() ||
@@ -28867,6 +28973,7 @@ class Flattener {
   bool need_second_pass_ = false;
   std::vector<std::string> deferred_recs_;   // 第一遍推后、这一遍不展开的记录组件 key（见 defer_record）
   bool deferred_read_ = false;              // 求值读到了 deferred_recs_ 里的字段（见 note_forward_miss）
+  std::unordered_set<std::string> fwd_consts_;   // 第一遍：绑定在等声明在后的值、这一遍还不是字面量的 constant（见 emit_variable）
   // isExpressionNotFixed 要的组件信息（平坦模型上没有的，emit_variable 记；只记非缺省的）。
   struct ParamInfo {
     bool nonstruct = false;      // 自己带 Evaluate = false（NON_STRUCTURAL_PARAMETER）

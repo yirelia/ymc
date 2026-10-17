@@ -2637,6 +2637,23 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       探针 pk-p36（188；VR*）——基线上 ACCEPTS-INVALID 17，现 PASS 103 / BOTH-REJECT 26 / SKIP 59；单测 +2。
       slice 702 例 FAIL 0（oracle=live 不一致 0）；scodeinst 663、testsuite 1836（均不变）/ FAIL 0；**MSL 484→487**（QuasiStatic
       SynchronousMachines.SMPM_MTPA / SMPM_CurrentSource / SMR_CurrentSource）；探针 11230→11418；单测 489→491。
+- [x] (67c) Batteries 的记录绑定（2026-10-18）：
+      (1) 记录（数组）的 if 整体绑定、条件里有调用（MSL BaseStackData 的 `cellData[Ns, Np] = {{if anyTrue({…}) then cellDataDegraded else
+      cellDataOriginal …}}`）：splitRecordCref 的 IF 支只看条件变率 ≤ PARAMETER（NFFlatten.mo:1064-1077），调用的变率 = 各实参的最大值
+      （NFCall.mo:385-392；带参数实参的 external 降成 NON_STRUCTURAL，:399-402；initial / terminal 恒离散）→ 求值选支、条件参数成结构参数。
+      ymc 此前把调用一律当运行时、挪成 `initial equation r = if f(p) then a else b`（基线上 25 例静默错）；现按 record_if_cond_runtime
+      重判（external / 不纯等未核实的 SKIP）。
+      (2) 记录整体绑定拆出的 constant / 数组字段、复合数组的维读到声明在后的记录（ShowImpedance 的 `impedance(cellData = cellData)`、
+      cellData 在后）：omc 先定型全部组件再压平（NFInst.mo:196-200），没有先后——第一遍推后、第二遍带第一遍的值（fwd_consts_ 等）。
+      (3) parameter 记录的整体绑定引用连续 / 离散量：omc 报 HIGHER_VARIABILITY_BINDING（NFTyping.mo:1136-1147），此前挪成初始方程
+      （ACCEPTS-INVALID）→ 照拒。
+      三个目标越过原卡点、卡到下一处：CCCV_Stack "if condition not evaluable [….ocv_soc.smoothness]"（整体绑定的记录数组元素的字段用于
+      结构求值）、CCCV_StackRC "connect operand shape"（可扩展连接器的数组成员，BusTranscription）、ShowImpedance "comprehension range"
+      （方程里 `for k in 1:cellData.nRC` 的向前引用；其后 ComplexMath.sum 体里 `v[:].re`）。新探针里 BRF8 / BRG4 / BRG7（omc 自己
+      tryEvalExp 失败、留 if）基线碰巧对、现 SKIP——ymc 分不出自己求不出与 omc 求不出。
+      探针 pk-p37（148；BCT / BRA / BRF / BRG / BRS）——基线上 FAIL 28 / ACCEPTS-INVALID 5，现 PASS 109 / SKIP 29 / BOTH-REJECT 10；旧组
+      pk-p29 SKIP→PASS 2；单测 +4。slice 702→703 例（+RecordBinding13）FAIL 0（oracle=live 不一致 0）；scodeinst 663→664、testsuite
+      1836→1837（scodeinst/RecordBinding13）/ FAIL 0；MSL 487（不变）；探针 11418→11566；单测 491→495。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

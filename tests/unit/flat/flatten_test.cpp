@@ -11130,4 +11130,104 @@ YMC_TEST(flatten_elementwise_overloaded_operator_operands) {
                            "  y[2] = VRUC.'*'.multiply(z[2], u);\nend VRU12;\n"));
 }
 
+YMC_TEST(flatten_record_forward_constant_field) {
+  // 记录整体绑定拆出的 constant 字段读声明在后的记录（MSL Batteries ShowImpedance 的 `impedance(cellData = cellData)`，
+  // cellData 声明在后）：omc 先定型全部组件、压平后才由 EvalConstants 求常量（NFInst.mo:196-200 v1.25.0），与先后无关——ymc 第一遍
+  // 不判 SKIP、第二遍取第一遍求得的值。期望 = omc 1.25.0 实跑（2026-10-18，探针 pk-p37 BCT17 / BCT25）。
+  YMC_CHECK_EQ(flatten_src("record BCT17_R\n  constant String s = \"a\";\n  parameter Real x = 1;\nend BCT17_R;\nmodel BCT17\n"
+                           "  parameter BCT17_R r2 = r1;\n  parameter BCT17_R r1(x = 2);\nend BCT17;\n"),
+               std::string("class BCT17\n  constant String r2.s = \"a\";\n  parameter Real r2.x = r1.x;\n"
+                           "  constant String r1.s = \"a\";\n  parameter Real r1.x = 2.0;\nend BCT17;\n"));
+  YMC_CHECK_EQ(flatten_src("record BCT25_R\n  constant String s = \"a\";\n  parameter Real x = 1;\nend BCT25_R;\nmodel BCT25_M\n"
+                           "  parameter BCT25_R r;\n  parameter String t = r.s;\nend BCT25_M;\nmodel BCT25\n"
+                           "  BCT25_M m(r = r1);\n  parameter BCT25_R r1(s = \"z\", x = 2);\nend BCT25;\n"),
+               std::string("class BCT25\n  constant String m.r.s = \"z\";\n  parameter Real m.r.x = r1.x;\n"
+                           "  parameter String m.t = \"z\";\n  constant String r1.s = \"z\";\n  parameter Real r1.x = 2.0;\n"
+                           "end BCT25;\n"));
+}
+
+YMC_TEST(flatten_record_forward_array_field_dims) {
+  // 记录整体绑定的源记录声明在后：数组字段的 `:` 维（BCT28 `t[:]`）、记录数组字段的参数维（BCT30 `c[n]`）第一遍还不知道 → 这一遍
+  // 不展开，第二遍用第一遍记下的维 / 值（同上，NFInst.mo:196-200 v1.25.0）。期望 = omc 1.25.0 实跑（2026-10-18，探针 pk-p37 BCT28 /
+  // BCT30）。
+  YMC_CHECK_EQ(flatten_src("record BCT28_R\n  parameter Real t[:] = {1, 2};\n  parameter Real x = 1;\nend BCT28_R;\n"
+                           "model BCT28\n  parameter BCT28_R r2 = r1;\n  parameter BCT28_R r1(t = {4, 5, 6});\nend BCT28;\n"),
+               std::string("class BCT28\n  parameter Real r2.t[1] = r1.t[1];\n  parameter Real r2.t[2] = r1.t[2];\n"
+                           "  parameter Real r2.t[3] = r1.t[3];\n  parameter Real r2.x = r1.x;\n  parameter Real r1.t[1] = 4.0;\n"
+                           "  parameter Real r1.t[2] = 5.0;\n  parameter Real r1.t[3] = 6.0;\n  parameter Real r1.x = 1.0;\n"
+                           "end BCT28;\n"));
+  YMC_CHECK_EQ(flatten_src("record BCT30_I\n  parameter Real a = 1;\nend BCT30_I;\nrecord BCT30_R\n  parameter Integer n = 1;\n"
+                           "  parameter BCT30_I c[n] = {BCT30_I(a = 2)};\nend BCT30_R;\nmodel BCT30\n"
+                           "  parameter BCT30_R r2 = r1;\n  parameter BCT30_R r1(n = 2, c = {BCT30_I(a = 3), BCT30_I(a = 4)});\n"
+                           "end BCT30;\n"),
+               std::string("class BCT30\n  final parameter Integer r2.n = 2;\n  parameter Real r2.c[1].a = r1.c[1].a;\n"
+                           "  parameter Real r2.c[2].a = r1.c[2].a;\n  final parameter Integer r1.n = 2;\n"
+                           "  parameter Real r1.c[1].a = 3.0;\n  parameter Real r1.c[2].a = 4.0;\nend BCT30;\n"));
+}
+
+YMC_TEST(flatten_record_if_binding_call_condition) {
+  // 记录 if 绑定的条件里有调用（MSL BaseStackData 的 `cellData[Ns, Np] = {{if anyTrue({…}) then cellDataDegraded else
+  // cellDataOriginal for kp in 1:Np} for ks in 1:Ns}`）：splitRecordCref 只看条件变率 ≤ PARAMETER（NFFlatten.mo:1064-1077
+  // v1.25.0），调用的变率 = 实参变率的最大值（NFCall.mo:385-392）→ 求值选支、条件里的参数成结构参数。此前一律当运行时、挪成初始
+  // 方程，静默错。条件读声明在后的参数（BRF13）第二遍再求；引用离散量的（BRF27）照旧挪成方程；不纯函数（BRF14，omc 照样求值）
+  // 未核实 → 不出结果。期望 = omc 1.25.0 实跑（2026-10-18，探针 pk-p37 BRF1 / BRF4 / BRF13 / BRF14 / BRF27 / BRF34）。
+  YMC_CHECK_EQ(flatten_src("record BRF1_R\n  parameter Real x = 1;\n  parameter Real y = 2;\nend BRF1_R;\nfunction BRF1_f\n"
+                           "  input Real u;\n  output Boolean b;\nalgorithm\n  b := u > 1;\nend BRF1_f;\nmodel BRF1\n"
+                           "  parameter Real p = 2;\n  parameter BRF1_R a(x = 3);\n  parameter BRF1_R b(x = 4);\n"
+                           "  parameter BRF1_R r = if BRF1_f(p) then a else b;\nend BRF1;\n"),
+               std::string("class BRF1\n  final parameter Real p = 2.0;\n  parameter Real a.x = 3.0;\n"
+                           "  parameter Real a.y = 2.0;\n  parameter Real b.x = 4.0;\n  parameter Real b.y = 2.0;\n"
+                           "  parameter Real r.x = a.x;\n  parameter Real r.y = a.y;\nend BRF1;\n"));
+  YMC_CHECK_EQ(flatten_src("record BRF4_R\n  parameter Real x = 1;\n  parameter Real y = 2;\nend BRF4_R;\nmodel BRF4\n"
+                           "  parameter Real p = -2;\n  parameter BRF4_R a(x = 3);\n  parameter BRF4_R b(x = 4);\n"
+                           "  parameter BRF4_R r = if abs(p) > 1 then a else b;\nend BRF4;\n"),
+               std::string("class BRF4\n  final parameter Real p = -2.0;\n  parameter Real a.x = 3.0;\n"
+                           "  parameter Real a.y = 2.0;\n  parameter Real b.x = 4.0;\n  parameter Real b.y = 2.0;\n"
+                           "  parameter Real r.x = a.x;\n  parameter Real r.y = a.y;\nend BRF4;\n"));
+  YMC_CHECK_EQ(flatten_src("record BRF13_R\n  parameter Real x = 1;\n  parameter Real y = 2;\nend BRF13_R;\nfunction BRF13_f\n"
+                           "  input Real u;\n  output Boolean b;\nalgorithm\n  b := u > 1;\nend BRF13_f;\nmodel BRF13\n"
+                           "  parameter BRF13_R a(x = 3);\n  parameter BRF13_R b(x = 4);\n"
+                           "  parameter BRF13_R r = if BRF13_f(p) then a else b;\n  parameter Real p = 2;\nend BRF13;\n"),
+               std::string("class BRF13\n  parameter Real a.x = 3.0;\n  parameter Real a.y = 2.0;\n"
+                           "  parameter Real b.x = 4.0;\n  parameter Real b.y = 2.0;\n  parameter Real r.x = a.x;\n"
+                           "  parameter Real r.y = a.y;\n  final parameter Real p = 2.0;\nend BRF13;\n"));
+  YMC_CHECK_EQ(flatten_src("record BRF34_R\n  parameter Real x = 1;\n  parameter Real y = 2;\nend BRF34_R;\nfunction BRF34_f\n"
+                           "  input Real u;\n  output Boolean b;\nalgorithm\n  b := u > 1;\nend BRF34_f;\nmodel BRF34\n"
+                           "  parameter Real p = 2;\n  parameter BRF34_R a(x = 3);\n  parameter BRF34_R b(x = 4);\n"
+                           "  parameter BRF34_R r[2] = {if BRF34_f(p * i) then a else b for i in 1:2};\nend BRF34;\n"),
+               std::string("class BRF34\n  final parameter Real p = 2.0;\n  parameter Real a.x = 3.0;\n"
+                           "  parameter Real a.y = 2.0;\n  parameter Real b.x = 4.0;\n  parameter Real b.y = 2.0;\n"
+                           "  parameter Real r[1].x = a.x;\n  parameter Real r[1].y = a.y;\n  parameter Real r[2].x = a.x;\n"
+                           "  parameter Real r[2].y = a.y;\nend BRF34;\n"));
+  YMC_CHECK_EQ(flatten_src("record BRF27_R\n  Real x = 1;\n  Real y = 2;\nend BRF27_R;\nfunction BRF27_f\n  input Real u;\n"
+                           "  output Boolean b;\nalgorithm\n  b := u > 1;\nend BRF27_f;\nmodel BRF27\n  parameter Real p = 2;\n"
+                           "  Boolean bv = time > 1;\n  BRF27_R a(x = 3);\n  BRF27_R b(x = 4);\n"
+                           "  BRF27_R r = if BRF27_f(p) and bv then a else b;\nend BRF27;\n"),
+               std::string("function BRF27_R \"Automatically generated record constructor for BRF27_R\"\n"
+                           "  input Real x = 1.0;\n  input Real y = 2.0;\n  output BRF27_R res;\nend BRF27_R;\n\n"
+                           "function BRF27_f\n  input Real u;\n  output Boolean b;\nalgorithm\n  b := u > 1.0;\n"
+                           "end BRF27_f;\n\nclass BRF27\n  parameter Real p = 2.0;\n  Boolean bv = time > 1.0;\n"
+                           "  Real a.x = 3.0;\n  Real a.y = 2.0;\n  Real b.x = 4.0;\n  Real b.y = 2.0;\n  Real r.x;\n"
+                           "  Real r.y;\nequation\n  r = if BRF27_f(p) and bv then a else b;\nend BRF27;\n"));
+  YMC_CHECK(flatten_src("record BRF14_R\n  parameter Real x = 1;\n  parameter Real y = 2;\nend BRF14_R;\n"
+                        "impure function BRF14_f\n  input Real u;\n  output Boolean b;\nalgorithm\n  b := u > 1;\n"
+                        "end BRF14_f;\nmodel BRF14\n  parameter Real p = 2;\n  parameter BRF14_R a(x = 3);\n"
+                        "  parameter BRF14_R b(x = 4);\n  parameter BRF14_R r = if BRF14_f(p) then a else b;\nend BRF14;\n")
+                .rfind("<unsupported:", 0) == 0);
+}
+
+YMC_TEST(flatten_record_binding_higher_variability) {
+  // parameter 记录的整体绑定引用连续 / 离散量：omc 报 "Component r of variability parameter has binding … of higher variability"
+  //（checkComponentBindingVariability，NFTyping.mo:1136-1147 v1.25.0）；ymc 此前挪成初始方程照出 → 现不出结果。期望 = omc 1.25.0
+  // 实跑报错（2026-10-18，探针 pk-p37 BRG17 / BRG20）。
+  YMC_CHECK(flatten_src("record BRG17_R\n  parameter Real x = 1;\n  parameter Real y = 2;\nend BRG17_R;\nmodel BRG17\n"
+                        "  parameter BRG17_R a(x = 3);\n  parameter BRG17_R b(x = 4);\n"
+                        "  parameter BRG17_R r = if time > 1 then a else b;\nend BRG17;\n")
+                .rfind("<unsupported:", 0) == 0);
+  YMC_CHECK(flatten_src("record BRG20_R\n  parameter Real x = 1;\n  parameter Real y = 2;\nend BRG20_R;\nmodel BRG20\n"
+                        "  Boolean bv = time > 1;\n  parameter BRG20_R a(x = 3);\n  parameter BRG20_R b(x = 4);\n"
+                        "  parameter BRG20_R r = if bv then a else b;\nend BRG20;\n")
+                .rfind("<unsupported:", 0) == 0);
+}
+
 YMC_TEST_MAIN

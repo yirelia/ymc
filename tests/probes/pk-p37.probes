@@ -1,0 +1,2081 @@
+//// set: pk-p37 — 记录 if 绑定条件里的调用、声明在后的记录（67c：MSL Batteries CCCV_Stack / CCCV_StackRC 越过 "composite array whole binding [stackData.cellData]"、ShowImpedance 越过 "constant evaluation [impedance.cellData.CellType]"，三例仍 SKIP 在后面的卡点）：记录 if 绑定的条件里有调用时 omc 只看变率（splitRecordCref 的 IF 支 variability ≤ PARAMETER，NFFlatten.mo:1064-1077 v1.25.0；调用变率 = 实参变率最大值 NFCall.mo:385-392，带参数实参的 external 降 NON_STRUCTURAL :399-402，`external "builtin"` 不算 external NFClass.mo:699）→ tryEvalExp 选支、条件里的参数成结构参数（BRF1-BRF4 / BRF9 / BRF12 / BRF15 / BRF17-BRF20 / BRF22-BRF25 / BRF30-BRF35 / BRF37-BRF39 / BRA6 / BRA10 / BRG6 / BRG11 / BRG13-BRG16 / BRG25-BRG28；MSL BaseStackData 的 `if anyTrue({…}) then cellDataDegraded else cellDataOriginal`），离散 / 连续的照旧留 if 挪成方程（BRF6 / BRF27-BRF29 / BRG9 / BRG10），不纯 / external / ymc 求不出的（unbound 参数、assert 失败时 omc 留 if）未核实 → SKIP（BRF5 / BRF8 / BRF14 / BRF21 / BRG1-BRG4 / BRG7）；声明在后的记录（omc 先定型全部组件再压平，NFInst.mo:196-200）：拆出的 constant 字段及其在本实例里的引用、数组字段的 `:` 维、复合数组的参数维第一遍不判 SKIP，第二遍取第一遍的值 / 维（BCT5 / BCT17-BCT58）。基线 FAIL（一并修）：条件有调用的记录 if 绑定一律挪成初始方程（BRF1 / BRF2 / BRF4 / BRF12 / BRF13 / BRF15 / BRF17-BRF20 / BRF22 / BRF23 / BRF25 / BRF30-BRF32 / BRF35 / BRF38 / BRG6 / BRG11 / BRG13-BRG15 / BRG27 / BRG28）；基线 ACCEPTS-INVALID：parameter 记录的整体绑定引用连续 / 离散量（checkComponentBindingVariability NFTyping.mo:1136-1147；BRG12 / BRG17 / BRG18 / BRG20 / BRG22）。照旧 SKIP：记录数组元素的字段进结构判定（BRS1-BRS6，CCCV_Stack 的下一个卡点）、向前常量链（BCT24）、常量数组字段（BCT20 / BCT45）、维里的向前常量 / 叶数组的向前维（BCT26 / BCT47 / BCT54）、记录 if 绑定的字段再进结构判定（BRF40-BRF44）
+//// model: BCT1
+record BCT1_R
+  constant String s = "a";
+  parameter Real x = 1;
+end BCT1_R;
+model BCT1
+  parameter BCT1_R r1(x = 2);
+  parameter BCT1_R r2 = r1;
+end BCT1;
+//// model: BCT2
+record BCT2_R
+  constant Real c = 3;
+  parameter Real x = 1;
+end BCT2_R;
+model BCT2
+  parameter BCT2_R r1(x = 2);
+  parameter BCT2_R r2 = r1;
+end BCT2;
+//// model: BCT3
+record BCT3_R
+  constant String s = "a";
+  parameter Real x = 1;
+end BCT3_R;
+record BCT3_R2
+  extends BCT3_R(s = "b");
+end BCT3_R2;
+model BCT3
+  parameter BCT3_R2 r1(x = 2);
+  parameter BCT3_R2 r2 = r1;
+end BCT3;
+//// model: BCT4
+record BCT4_R
+  constant String s = "a";
+  parameter Real x = 1;
+end BCT4_R;
+model BCT4
+  parameter BCT4_R r1(s = "c", x = 2);
+  parameter BCT4_R r2 = r1;
+end BCT4;
+//// model: BCT5
+record BCT5_R
+  constant String s = "a";
+  parameter Real x = 1;
+end BCT5_R;
+model BCT5_M
+  parameter BCT5_R r;
+  Real y = r.x;
+end BCT5_M;
+model BCT5
+  BCT5_M m(r = r1);
+  parameter BCT5_R r1(x = 2);
+end BCT5;
+//// model: BCT6
+record BCT6_R
+  constant Real c[2] = {1, 2};
+  parameter Real x = 1;
+end BCT6_R;
+model BCT6
+  parameter BCT6_R r1(x = 2);
+  parameter BCT6_R r2 = r1;
+end BCT6;
+//// model: BCT7
+record BCT7_R
+  constant Integer k = 4;
+  parameter Real x = 1;
+end BCT7_R;
+model BCT7
+  parameter BCT7_R r1(x = 2);
+  parameter BCT7_R r2 = r1;
+  Real y[r2.k];
+end BCT7;
+//// model: BCT8
+record BCT8_R
+  constant String s = "a";
+  parameter Real x = 1;
+end BCT8_R;
+model BCT8
+  parameter BCT8_R r2 = BCT8_R(x = 3);
+end BCT8;
+//// model: BCT9
+record BCT9_I
+  constant String s = "i";
+  parameter Real y = 5;
+end BCT9_I;
+record BCT9_R
+  parameter Real x = 1;
+  parameter BCT9_I i;
+end BCT9_R;
+model BCT9
+  parameter BCT9_R r1(x = 2);
+  parameter BCT9_R r2 = r1;
+end BCT9;
+//// model: BCT10
+record BCT10_R
+  constant String s = "a";
+  parameter Real x = 1;
+end BCT10_R;
+model BCT10
+  parameter BCT10_R r1(x = 2);
+  parameter BCT10_R r2[2] = {r1, r1};
+end BCT10;
+//// model: BCT11
+record BCT11_R
+  constant String s = "a";
+  parameter Real x = 1;
+end BCT11_R;
+model BCT11
+  parameter BCT11_R r1(x = 2);
+  final parameter BCT11_R r2 = r1;
+end BCT11;
+//// model: BCT12
+record BCT12_R
+  constant String s = "a";
+  parameter Real x = 1;
+end BCT12_R;
+model BCT12
+  constant BCT12_R r1(x = 2);
+  constant BCT12_R r2 = r1;
+end BCT12;
+//// model: BCT13
+record BCT13_R
+  constant String s = "a";
+  parameter Real x = 1;
+end BCT13_R;
+model BCT13
+  parameter BCT13_R r1(x = 2);
+  BCT13_R r2 = r1;
+end BCT13;
+//// model: BCT14
+record BCT14_R
+  constant Real c = 3;
+  parameter Real x = 1;
+end BCT14_R;
+model BCT14
+  parameter BCT14_R r1(x = 2);
+  parameter BCT14_R r2 = r1;
+  Real y = r2.c * time;
+end BCT14;
+//// model: BCT15
+record BCT15_R
+  constant String s = "a";
+  parameter Real x = 1;
+end BCT15_R;
+model BCT15
+  parameter BCT15_R r1(x = 2);
+  parameter BCT15_R r2(x = 4) = r1;
+end BCT15;
+//// model: BCT16
+record BCT16_R
+  constant String s = "a";
+  parameter Real x = 1;
+end BCT16_R;
+model BCT16_M
+  parameter BCT16_R r;
+  Real y = r.x;
+end BCT16_M;
+model BCT16
+  parameter BCT16_R r1(x = 2);
+  BCT16_M m(r = r1);
+end BCT16;
+//// model: BCT17
+record BCT17_R
+  constant String s = "a";
+  parameter Real x = 1;
+end BCT17_R;
+model BCT17
+  parameter BCT17_R r2 = r1;
+  parameter BCT17_R r1(x = 2);
+end BCT17;
+//// model: BCT18
+record BCT18_R
+  constant String s = "a";
+  parameter Real x = 1;
+end BCT18_R;
+record BCT18_R2
+  extends BCT18_R(s = "b");
+end BCT18_R2;
+model BCT18
+  parameter BCT18_R2 r2 = r1;
+  parameter BCT18_R2 r1(x = 2);
+end BCT18;
+//// model: BCT19
+record BCT19_R
+  constant Real c = 3;
+  parameter Real x = 1;
+end BCT19_R;
+model BCT19
+  parameter BCT19_R r2 = r1;
+  parameter BCT19_R r1(x = 2);
+  Real y = r2.c * time;
+end BCT19;
+//// model: BCT20
+record BCT20_R
+  constant Real c[2] = {1, 2};
+  parameter Real x = 1;
+end BCT20_R;
+model BCT20
+  parameter BCT20_R r2 = r1;
+  parameter BCT20_R r1(x = 2);
+end BCT20;
+//// model: BCT21
+record BCT21_I
+  constant String s = "i";
+  parameter Real y = 5;
+end BCT21_I;
+record BCT21_R
+  parameter Real x = 1;
+  parameter BCT21_I i;
+end BCT21_R;
+model BCT21
+  parameter BCT21_R r2 = r1;
+  parameter BCT21_R r1(x = 2);
+end BCT21;
+//// model: BCT22
+record BCT22_R
+  constant String s = "a";
+  parameter Real x = 1;
+end BCT22_R;
+model BCT22_M
+  parameter BCT22_R r;
+end BCT22_M;
+model BCT22_N
+  BCT22_M m(r = r1);
+  parameter BCT22_R r1(x = 2);
+end BCT22_N;
+model BCT22
+  BCT22_N n;
+end BCT22;
+//// model: BCT23
+record BCT23_R
+  constant String s = "a";
+  parameter Real x = 1;
+end BCT23_R;
+model BCT23
+  parameter BCT23_R r2[2] = {r1, r1};
+  parameter BCT23_R r1(x = 2);
+end BCT23;
+//// model: BCT24
+record BCT24_R
+  constant String s = "a";
+  parameter Real x = 1;
+end BCT24_R;
+model BCT24
+  parameter BCT24_R r3 = r2;
+  parameter BCT24_R r2 = r1;
+  parameter BCT24_R r1(s = "q", x = 2);
+end BCT24;
+//// model: BCT25
+record BCT25_R
+  constant String s = "a";
+  parameter Real x = 1;
+end BCT25_R;
+model BCT25_M
+  parameter BCT25_R r;
+  parameter String t = r.s;
+end BCT25_M;
+model BCT25
+  BCT25_M m(r = r1);
+  parameter BCT25_R r1(s = "z", x = 2);
+end BCT25;
+//// model: BCT26
+record BCT26_R
+  constant Integer k = 2;
+  parameter Real x = 1;
+end BCT26_R;
+model BCT26_M
+  parameter BCT26_R r;
+  Real y[r.k];
+end BCT26_M;
+model BCT26
+  BCT26_M m(r = r1);
+  parameter BCT26_R r1(k = 3, x = 2);
+end BCT26;
+//// model: BCT27
+record BCT27_R
+  parameter Real t[:, 2] = [0, 1; 1, 2];
+  parameter Real x = 1;
+end BCT27_R;
+model BCT27_M
+  parameter BCT27_R r;
+end BCT27_M;
+model BCT27
+  BCT27_M m(r = r1);
+  parameter BCT27_R r1(t = [0, 1; 1, 2; 2, 3]);
+end BCT27;
+//// model: BCT28
+record BCT28_R
+  parameter Real t[:] = {1, 2};
+  parameter Real x = 1;
+end BCT28_R;
+model BCT28
+  parameter BCT28_R r2 = r1;
+  parameter BCT28_R r1(t = {4, 5, 6});
+end BCT28;
+//// model: BCT29
+record BCT29_I
+  parameter Real a = 1;
+end BCT29_I;
+record BCT29_R
+  parameter Integer n = 1 annotation(Evaluate = true);
+  parameter BCT29_I c[n] = {BCT29_I(a = 2)};
+end BCT29_R;
+model BCT29
+  parameter BCT29_R r2 = r1;
+  parameter BCT29_R r1(n = 2, c = {BCT29_I(a = 3), BCT29_I(a = 4)});
+end BCT29;
+//// model: BCT30
+record BCT30_I
+  parameter Real a = 1;
+end BCT30_I;
+record BCT30_R
+  parameter Integer n = 1;
+  parameter BCT30_I c[n] = {BCT30_I(a = 2)};
+end BCT30_R;
+model BCT30
+  parameter BCT30_R r2 = r1;
+  parameter BCT30_R r1(n = 2, c = {BCT30_I(a = 3), BCT30_I(a = 4)});
+end BCT30;
+//// model: BCT31
+record BCT31_R
+  parameter Real t[:] = {1, 2};
+  parameter Real x = 1;
+end BCT31_R;
+model BCT31
+  parameter BCT31_R r2 = r1;
+  parameter BCT31_R r1(t = {4, 5, 6});
+  Real y = sum(r2.t) * time;
+end BCT31;
+//// model: BCT32
+record BCT32_R
+  parameter Real t[2] = {1, 2};
+  parameter Real x = 1;
+end BCT32_R;
+model BCT32
+  parameter BCT32_R r2 = r1;
+  parameter BCT32_R r1(t = {4, 5});
+end BCT32;
+//// model: BCT33
+record BCT33_R
+  parameter Integer n = 2;
+  parameter Real t[n] = fill(1, n);
+end BCT33_R;
+model BCT33
+  parameter BCT33_R r2 = r1;
+  parameter BCT33_R r1(n = 3);
+end BCT33;
+//// model: BCT34
+record BCT34_R
+  parameter Real t[:] = {1, 2};
+  parameter Real x = 1;
+end BCT34_R;
+model BCT34
+  parameter BCT34_R r1(t = {4, 5, 6});
+  parameter BCT34_R r2 = r1;
+end BCT34;
+//// model: BCT35
+model BCT35_M
+  constant Real k = 3;
+  Real x = time;
+end BCT35_M;
+model BCT35
+  constant Real c = m.k;
+  BCT35_M m;
+end BCT35;
+//// model: BCT36
+record BCT36_R
+  constant Real k = 3;
+  parameter Real x = 1;
+end BCT36_R;
+model BCT36
+  constant Real c = r.k * 2;
+  parameter BCT36_R r;
+end BCT36;
+//// model: BCT37
+type BCT37_E = enumeration(a, b, c);
+record BCT37_R
+  constant BCT37_E e = BCT37_E.b;
+  parameter Real x = 1;
+end BCT37_R;
+model BCT37
+  parameter BCT37_R r2 = r1;
+  parameter BCT37_R r1(x = 2);
+end BCT37;
+//// model: BCT38
+record BCT38_R
+  constant Boolean b = true;
+  constant Integer i = 7;
+  parameter Real x = 1;
+end BCT38_R;
+model BCT38
+  parameter BCT38_R r2 = r1;
+  parameter BCT38_R r1(x = 2);
+end BCT38;
+//// model: BCT39
+record BCT39_R
+  constant String s = "a";
+  parameter Real x = 1;
+end BCT39_R;
+model BCT39
+  constant BCT39_R r2 = r1;
+  constant BCT39_R r1(x = 2);
+end BCT39;
+//// model: BCT40
+record BCT40_R
+  constant String s = "a";
+  parameter Real x = 1;
+end BCT40_R;
+model BCT40_M
+  parameter BCT40_R r;
+end BCT40_M;
+model BCT40
+  BCT40_M m[2](r = {r1, r1});
+  parameter BCT40_R r1(x = 2);
+end BCT40;
+//// model: BCT41
+record BCT41_R
+  constant String s = "a";
+  parameter Real x = 1;
+end BCT41_R;
+model BCT41
+  parameter BCT41_R r2 = r1;
+  parameter BCT41_R r1(x = 2);
+  constant String t = r2.s;
+end BCT41;
+//// model: BCT42
+record BCT42_R
+  constant Real k = 3;
+  parameter Real x = 1;
+end BCT42_R;
+model BCT42
+  constant Real c = r.k + q;
+  parameter BCT42_R r;
+  parameter Real q = 1;
+end BCT42;
+//// model: BCT43
+model BCT43_M
+  constant Integer n = 2;
+  Real x[n] = fill(time, n);
+end BCT43_M;
+model BCT43
+  constant Integer c = m.n;
+  BCT43_M m;
+end BCT43;
+//// model: BCT44
+record BCT44_R
+  constant String s = "a";
+  parameter Real x = 1;
+end BCT44_R;
+model BCT44
+  parameter BCT44_R r2 = r1;
+  parameter BCT44_R r1(x = 2);
+  String t = r2.s;
+end BCT44;
+//// model: BCT45
+record BCT45_R
+  constant Real t[:] = {1, 2};
+  constant Real x = 1;
+end BCT45_R;
+model BCT45
+  constant BCT45_R r2 = r1;
+  constant BCT45_R r1(t = {4, 5, 6});
+end BCT45;
+//// model: BCT46
+record BCT46_R
+  parameter Integer n = 1;
+end BCT46_R;
+model BCT46_M
+  Real x = time;
+end BCT46_M;
+model BCT46
+  BCT46_M m[r.n];
+  parameter BCT46_R r(n = 2);
+end BCT46;
+//// model: BCT47
+record BCT47_R
+  parameter Integer n = 1;
+end BCT47_R;
+model BCT47
+  Real x[r.n] = fill(time, r.n);
+  parameter BCT47_R r(n = 2);
+end BCT47;
+//// model: BCT48
+model BCT48_M
+  Real x = time;
+end BCT48_M;
+model BCT48
+  BCT48_M m[n];
+  parameter Integer n = 2;
+end BCT48;
+//// model: BCT49
+record BCT49_I
+  parameter Real a = 1;
+end BCT49_I;
+record BCT49_R
+  parameter Integer n = 1;
+  parameter BCT49_I c[n];
+end BCT49_R;
+model BCT49_M
+  parameter BCT49_R r;
+end BCT49_M;
+model BCT49
+  BCT49_M m(r = r1);
+  parameter BCT49_R r1(n = 2);
+end BCT49;
+//// model: BCT50
+record BCT50_I
+  parameter Real a = 1;
+end BCT50_I;
+record BCT50_R
+  parameter Integer n = 1;
+  parameter BCT50_I c[n];
+end BCT50_R;
+model BCT50
+  parameter BCT50_R r2(n = r1.n);
+  parameter BCT50_R r1(n = 2);
+end BCT50;
+//// model: BCT51
+model BCT51_M
+  parameter Integer k = 1;
+  Real x = time;
+end BCT51_M;
+model BCT51
+  BCT51_M m[r.n](each k = 3);
+  parameter BCT51_R r(n = 2);
+  record BCT51_R
+    parameter Integer n = 1;
+  end BCT51_R;
+end BCT51;
+//// model: BCT52
+model BCT52_A
+  constant Real c;
+  parameter Real p = c * 2;
+end BCT52_A;
+model BCT52_B
+  constant Real k = 2;
+end BCT52_B;
+model BCT52
+  BCT52_A a(c = b.k);
+  BCT52_B b;
+end BCT52;
+//// model: BCT53
+model BCT53_A
+  constant Real c;
+  Real x;
+equation
+  x = c * time;
+end BCT53_A;
+model BCT53_B
+  constant Real k = 2;
+end BCT53_B;
+model BCT53
+  BCT53_A a(c = b.k);
+  BCT53_B b;
+end BCT53;
+//// model: BCT54
+model BCT54_A
+  constant Integer n;
+  Real y[n] = fill(time, n);
+end BCT54_A;
+model BCT54_B
+  constant Integer k = 2;
+end BCT54_B;
+model BCT54
+  BCT54_A a(n = b.k);
+  BCT54_B b;
+end BCT54;
+//// model: BCT55
+model BCT55_A
+  constant Real c;
+  Real x;
+equation
+  if c > 1 then
+    x = time;
+  else
+    x = 2 * time;
+  end if;
+end BCT55_A;
+model BCT55_B
+  constant Real k = 2;
+end BCT55_B;
+model BCT55
+  BCT55_A a(c = b.k);
+  BCT55_B b;
+end BCT55;
+//// model: BCT56
+model BCT56_A
+  constant String s;
+  constant String t = s + "x";
+end BCT56_A;
+model BCT56_B
+  constant String k = "q";
+end BCT56_B;
+model BCT56
+  BCT56_A a(s = b.k);
+  BCT56_B b;
+end BCT56;
+//// model: BCT57
+record BCT57_R
+  constant Real c = 3;
+  parameter Real x = 1;
+end BCT57_R;
+model BCT57_A
+  parameter BCT57_R r;
+  Real y = r.c * time;
+  parameter Real q = r.c;
+end BCT57_A;
+model BCT57
+  BCT57_A a(r = r1);
+  parameter BCT57_R r1(x = 2);
+end BCT57;
+//// model: BCT58
+model BCT58_A
+  constant Real c;
+  Real x = c * time;
+end BCT58_A;
+model BCT58
+  BCT58_A a(c = k);
+  constant Real k = 3;
+end BCT58;
+//// model: BRA1
+record BRA1_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRA1_R;
+model BRA1
+  parameter BRA1_R a(x = 3);
+  parameter BRA1_R b(x = 4);
+  parameter BRA1_R c[2] = {a, b};
+end BRA1;
+//// model: BRA2
+record BRA2_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRA2_R;
+model BRA2
+  parameter BRA2_R a(x = 3);
+  parameter BRA2_R c[2] = {a for i in 1:2};
+end BRA2;
+//// model: BRA3
+record BRA3_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRA3_R;
+model BRA3
+  parameter BRA3_R a(x = 3);
+  parameter BRA3_R b(x = 4);
+  parameter BRA3_R c[2] = {if i == 1 then a else b for i in 1:2};
+end BRA3;
+//// model: BRA4
+record BRA4_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRA4_R;
+model BRA4
+  parameter BRA4_R a(x = 3);
+  parameter BRA4_R b(x = 4);
+  parameter BRA4_R c[2, 2] = {{if i == j then a else b for j in 1:2} for i in 1:2};
+end BRA4;
+//// model: BRA5
+record BRA5_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRA5_R;
+model BRA5
+  parameter Integer k[:, 2] = {{1, 2}};
+  parameter BRA5_R a(x = 3);
+  parameter BRA5_R b(x = 4);
+  parameter BRA5_R c[2, 2] = {{if k[1, 1] == i and k[1, 2] == j then a else b for j in 1:2} for i in 1:2};
+end BRA5;
+//// model: BRA6
+record BRA6_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRA6_R;
+model BRA6
+  import Modelica.Math.BooleanVectors.anyTrue;
+  parameter Integer k[:, 2] = {{1, 2}};
+  parameter BRA6_R a(x = 3);
+  parameter BRA6_R b(x = 4);
+  parameter BRA6_R c[2, 2] = {{if anyTrue({i == k[m, 1] and j == k[m, 2] for m in 1:size(k, 1)}) then a else b for j in 1:2} for i in 1:2};
+end BRA6;
+//// model: BRA7
+record BRA7_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRA7_R;
+model BRA7
+  parameter BRA7_R a(x = 3);
+  parameter BRA7_R c[2] = fill(a, 2);
+end BRA7;
+//// model: BRA8
+record BRA8_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRA8_R;
+record BRA8_S
+  parameter Integer n;
+  parameter BRA8_R a;
+  parameter BRA8_R c[n] = {a for i in 1:n};
+end BRA8_S;
+model BRA8
+  parameter BRA8_R a0(x = 5);
+  parameter BRA8_S s(n = 2, a = a0);
+end BRA8;
+//// model: BRA9
+record BRA9_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRA9_R;
+record BRA9_S
+  parameter Integer n;
+  parameter Integer k[:, 2] = {{0, 0}};
+  parameter BRA9_R a;
+  parameter BRA9_R b;
+  parameter BRA9_R c[n, 2] = {{if k[1, 1] == i and k[1, 2] == j then b else a for j in 1:2} for i in 1:n};
+end BRA9_S;
+model BRA9
+  parameter BRA9_R a0(x = 5);
+  parameter BRA9_R b0(x = 6);
+  parameter BRA9_S s(n = 2, k = [1, 1], a = a0, b = b0);
+end BRA9;
+//// model: BRA10
+record BRA10_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRA10_R;
+record BRA10_S
+  import Modelica.Math.BooleanVectors.anyTrue;
+  parameter Integer n;
+  parameter Integer k[:, 2] = {{0, 0}};
+  parameter BRA10_R a;
+  parameter BRA10_R b;
+  parameter BRA10_R c[n, 2] = {{if anyTrue({i == k[m, 1] and j == k[m, 2] for m in 1:size(k, 1)}) then b else a for j in 1:2} for i in 1:n};
+end BRA10_S;
+model BRA10
+  parameter BRA10_R a0(x = 5);
+  parameter BRA10_R b0(x = 6);
+  parameter BRA10_S s(n = 2, k = [1, 1], a = a0, b = b0);
+end BRA10;
+//// model: BRA11
+record BRA11_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRA11_R;
+record BRA11_S
+  parameter Integer n;
+  parameter BRA11_R a;
+  parameter BRA11_R c[n] = {a for i in 1:n};
+end BRA11_S;
+model BRA11_M
+  parameter BRA11_S s;
+  Real z = s.c[1].x;
+end BRA11_M;
+model BRA11
+  parameter BRA11_R a0(x = 5);
+  parameter BRA11_S s(n = 2, a = a0);
+  BRA11_M m(s = s);
+end BRA11;
+//// model: BRF1
+record BRF1_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF1_R;
+function BRF1_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF1_f;
+model BRF1
+  parameter Real p = 2;
+  parameter BRF1_R a(x = 3);
+  parameter BRF1_R b(x = 4);
+  parameter BRF1_R r = if BRF1_f(p) then a else b;
+end BRF1;
+//// model: BRF2
+record BRF2_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF2_R;
+model BRF2
+  import Modelica.Math.BooleanVectors.anyTrue;
+  parameter Real p = 2;
+  parameter BRF2_R a(x = 3);
+  parameter BRF2_R b(x = 4);
+  parameter BRF2_R r = if anyTrue({p > 1, p < 0}) then a else b;
+end BRF2;
+//// model: BRF3
+record BRF3_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF3_R;
+model BRF3
+  parameter Integer k[:] = {1, 2};
+  parameter BRF3_R a(x = 3);
+  parameter BRF3_R b(x = 4);
+  parameter BRF3_R r = if size(k, 1) > 1 then a else b;
+end BRF3;
+//// model: BRF4
+record BRF4_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF4_R;
+model BRF4
+  parameter Real p = -2;
+  parameter BRF4_R a(x = 3);
+  parameter BRF4_R b(x = 4);
+  parameter BRF4_R r = if abs(p) > 1 then a else b;
+end BRF4;
+//// model: BRF5
+record BRF5_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF5_R;
+function BRF5_f
+  input Real u;
+  output Boolean b;
+  external "C" b = BRF5_ext(u);
+end BRF5_f;
+model BRF5
+  parameter Real p = 2;
+  parameter BRF5_R a(x = 3);
+  parameter BRF5_R b(x = 4);
+  parameter BRF5_R r = if BRF5_f(p) then a else b;
+end BRF5;
+//// model: BRF6
+record BRF6_R
+  Real x = 1;
+  Real y = 2;
+end BRF6_R;
+function BRF6_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF6_f;
+model BRF6
+  BRF6_R a(x = 3);
+  BRF6_R b(x = 4);
+  BRF6_R r = if BRF6_f(time) then a else b;
+end BRF6;
+//// model: BRF7
+record BRF7_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF7_R;
+function BRF7_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF7_f;
+model BRF7
+  parameter Real p = 2 annotation(Evaluate = false);
+  parameter BRF7_R a(x = 3);
+  parameter BRF7_R b(x = 4);
+  parameter BRF7_R r = if BRF7_f(p) then a else b;
+end BRF7;
+//// model: BRF8
+record BRF8_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF8_R;
+function BRF8_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF8_f;
+model BRF8
+  parameter Real p(fixed = false);
+  parameter BRF8_R a(x = 3);
+  parameter BRF8_R b(x = 4);
+  parameter BRF8_R r = if BRF8_f(p) then a else b;
+initial equation
+  p = 2;
+end BRF8;
+//// model: BRF9
+record BRF9_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF9_R;
+function BRF9_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF9_f;
+model BRF9
+  parameter Real p = 2;
+  parameter BRF9_R a(x = 3);
+  parameter BRF9_R b(x = 4);
+  parameter BRF9_R r[2] = {if BRF9_f(p) then a else b, if BRF9_f(-p) then a else b};
+end BRF9;
+//// model: BRF10
+record BRF10_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF10_R;
+function BRF10_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF10_f;
+model BRF10
+  parameter Real p = 2;
+  parameter BRF10_R a(x = 3);
+  parameter BRF10_R b(x = 4);
+  parameter BRF10_R r[2] = {if BRF10_f(p * i) then a else b for i in {1, -1}};
+end BRF10;
+//// model: BRF11
+record BRF11_R
+  constant Real x = 1;
+  constant Real y = 2;
+end BRF11_R;
+function BRF11_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF11_f;
+model BRF11
+  constant Real p = 2;
+  constant BRF11_R a(x = 3);
+  constant BRF11_R b(x = 4);
+  constant BRF11_R r = if BRF11_f(p) then a else b;
+end BRF11;
+//// model: BRF12
+record BRF12_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF12_R;
+function BRF12_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF12_f;
+model BRF12
+  parameter Real p = 2;
+  parameter BRF12_R a(x = 3);
+  parameter BRF12_R b(x = 4);
+  parameter BRF12_R r = if BRF12_f(p) then a else b;
+  Real z = p * time;
+end BRF12;
+//// model: BRF13
+record BRF13_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF13_R;
+function BRF13_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF13_f;
+model BRF13
+  parameter BRF13_R a(x = 3);
+  parameter BRF13_R b(x = 4);
+  parameter BRF13_R r = if BRF13_f(p) then a else b;
+  parameter Real p = 2;
+end BRF13;
+//// model: BRF14
+record BRF14_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF14_R;
+impure function BRF14_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF14_f;
+model BRF14
+  parameter Real p = 2;
+  parameter BRF14_R a(x = 3);
+  parameter BRF14_R b(x = 4);
+  parameter BRF14_R r = if BRF14_f(p) then a else b;
+end BRF14;
+//// model: BRF15
+record BRF15_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF15_R;
+model BRF15
+  parameter Real p = 2;
+  parameter BRF15_R a(x = 3);
+  parameter BRF15_R b(x = 4);
+  parameter BRF15_R r = if max(p, 0) > 1 and min(p, 5) < 3 then a else b;
+end BRF15;
+//// model: BRF16
+record BRF16_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF16_R;
+function BRF16_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF16_f;
+model BRF16
+  parameter Real p = 2;
+  parameter BRF16_R a(x = 3);
+  parameter BRF16_R b(x = 4);
+  final parameter BRF16_R r = if BRF16_f(p) then a else b;
+end BRF16;
+//// model: BRF17
+record BRF17_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF17_R;
+function BRF17_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF17_f;
+model BRF17_M
+  parameter BRF17_R r;
+end BRF17_M;
+model BRF17
+  parameter Real p = 2;
+  parameter BRF17_R a(x = 3);
+  parameter BRF17_R b(x = 4);
+  BRF17_M m(r = if BRF17_f(p) then a else b);
+end BRF17;
+//// model: BRF18
+record BRF18_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF18_R;
+function BRF18_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF18_f;
+model BRF18
+  parameter Real p = 2;
+  parameter BRF18_R a(x = 3);
+  parameter BRF18_R b(x = 4);
+  parameter BRF18_R r = if BRF18_f(p) then a elseif p > 0 then b else a;
+end BRF18;
+//// model: BRF19
+record BRF19_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF19_R;
+function BRF19_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF19_f;
+model BRF19
+  parameter Real p = 2;
+  parameter BRF19_R a(x = 3);
+  parameter BRF19_R b(x = 4);
+  parameter BRF19_R r = if BRF19_f(p) then BRF19_R(x = 7) else b;
+end BRF19;
+//// model: BRF20
+record BRF20_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF20_R;
+model BRF20
+  parameter Real p = 2;
+  parameter BRF20_R a(x = 3);
+  parameter BRF20_R b(x = 4);
+  parameter BRF20_R r = if noEvent(p > 1) then a else b;
+end BRF20;
+//// model: BRF21
+record BRF21_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF21_R;
+function BRF21_f
+  input BRF21_R r;
+  output Boolean b;
+algorithm
+  b := r.x > 3.5;
+end BRF21_f;
+model BRF21
+  parameter BRF21_R a(x = 3);
+  parameter BRF21_R b(x = 4);
+  parameter BRF21_R r = if BRF21_f(b) then a else b;
+end BRF21;
+//// model: BRF22
+record BRF22_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF22_R;
+function BRF22_g
+  input Integer n;
+  output Integer m;
+algorithm
+  m := 2 * n;
+end BRF22_g;
+model BRF22
+  parameter Integer k = 2;
+  parameter BRF22_R a(x = 3);
+  parameter BRF22_R b(x = 4);
+  parameter BRF22_R r = if BRF22_g(k) > 3 then a else b;
+end BRF22;
+//// model: BRF23
+record BRF23_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF23_R;
+function BRF23_g
+  input Real u;
+  output Real v;
+algorithm
+  v := u * u;
+end BRF23_g;
+function BRF23_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF23_f;
+model BRF23
+  parameter Real p = 0.5;
+  parameter BRF23_R a(x = 3);
+  parameter BRF23_R b(x = 4);
+  parameter BRF23_R r = if BRF23_f(BRF23_g(p)) then a else b;
+end BRF23;
+//// model: BRF24
+record BRF24_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF24_R;
+model BRF24
+  parameter Real p = 2;
+  parameter BRF24_R a(x = 3);
+  parameter BRF24_R b(x = 4);
+  parameter BRF24_R r = if sum({p, p}) > 1 then a else b;
+end BRF24;
+//// model: BRF25
+record BRF25_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF25_R;
+function BRF25_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF25_f;
+model BRF25
+  parameter Integer k[:] = {1, 2};
+  parameter Real p = 2;
+  parameter BRF25_R a(x = 3);
+  parameter BRF25_R b(x = 4);
+  parameter BRF25_R r = if size(k, 1) > 1 and BRF25_f(p) then a else b;
+end BRF25;
+//// model: BRF26
+record BRF26_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF26_R;
+function BRF26_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF26_f;
+model BRF26
+  parameter BRF26_R a(x = 3);
+  parameter BRF26_R b(x = 4);
+  parameter BRF26_R r = if BRF26_f(2.0) then a else b;
+end BRF26;
+//// model: BRF27
+record BRF27_R
+  Real x = 1;
+  Real y = 2;
+end BRF27_R;
+function BRF27_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF27_f;
+model BRF27
+  parameter Real p = 2;
+  Boolean bv = time > 1;
+  BRF27_R a(x = 3);
+  BRF27_R b(x = 4);
+  BRF27_R r = if BRF27_f(p) and bv then a else b;
+end BRF27;
+//// model: BRF28
+record BRF28_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF28_R;
+model BRF28
+  parameter BRF28_R a(x = 3);
+  parameter BRF28_R b(x = 4);
+  BRF28_R r = if terminal() then a else b;
+end BRF28;
+//// model: BRF29
+record BRF29_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF29_R;
+model BRF29
+  parameter BRF29_R a(x = 3);
+  parameter BRF29_R b(x = 4);
+  BRF29_R r = if sample(0, 1) then a else b;
+end BRF29;
+//// model: BRF30
+record BRF30_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF30_R;
+function BRF30_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF30_f;
+model BRF30
+  parameter Real p = 2;
+  parameter BRF30_R a(x = 3);
+  parameter BRF30_R b(x = 4);
+  parameter BRF30_R r = if noEvent(BRF30_f(p)) then a else b;
+end BRF30;
+//// model: BRF31
+record BRF31_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF31_R;
+function BRF31_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF31_f;
+model BRF31
+  parameter Real p = 2;
+  parameter BRF31_R a(x = 3);
+  parameter BRF31_R b(x = 4);
+  parameter BRF31_R r = if not BRF31_f(p) then a else b;
+  Real z = p * time;
+end BRF31;
+//// model: BRF32
+record BRF32_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF32_R;
+function BRF32_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF32_f;
+model BRF32
+  parameter Real p = 2;
+  parameter BRF32_R a(x = 3);
+  parameter BRF32_R b(x = 4);
+  parameter BRF32_R r = if BRF32_f(p) then BRF32_R(x = p, y = 5) else b;
+end BRF32;
+//// model: BRF33
+record BRF33_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF33_R;
+function BRF33_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF33_f;
+model BRF33
+  constant Real p = 2;
+  parameter BRF33_R a(x = 3);
+  parameter BRF33_R b(x = 4);
+  parameter BRF33_R r = if BRF33_f(p) then a else b;
+end BRF33;
+//// model: BRF34
+record BRF34_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF34_R;
+function BRF34_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF34_f;
+model BRF34
+  parameter Real p = 2;
+  parameter BRF34_R a(x = 3);
+  parameter BRF34_R b(x = 4);
+  parameter BRF34_R r[2] = {if BRF34_f(p * i) then a else b for i in 1:2};
+end BRF34;
+//// model: BRF35
+record BRF35_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF35_R;
+function BRF35_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF35_f;
+model BRF35_M
+  parameter BRF35_R r;
+  Real z = r.x * time;
+end BRF35_M;
+model BRF35
+  parameter Real p = 2;
+  parameter BRF35_R a(x = 3);
+  parameter BRF35_R b(x = 4);
+  BRF35_M m[2](r = {if BRF35_f(p) then a else b, b});
+end BRF35;
+//// model: BRF36
+record BRF36_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF36_R;
+function BRF36_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF36_f;
+model BRF36
+  parameter Real p = 2;
+  parameter BRF36_R a(x = 3);
+  parameter BRF36_R b(x = 4);
+  parameter BRF36_R r = if BRF36_f(p) then a else b annotation(Evaluate = true);
+end BRF36;
+//// model: BRF37
+record BRF37_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF37_R;
+function BRF37_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF37_f;
+model BRF37
+  parameter Real p = 2;
+  parameter BRF37_R a(x = 3);
+  parameter BRF37_R b(x = 4);
+  parameter BRF37_R r = if BRF37_f(p) then a else b;
+  parameter Real q = r.x;
+  Real z[integer(q)];
+end BRF37;
+//// model: BRF38
+record BRF38_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF38_R;
+function BRF38_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF38_f;
+model BRF38
+  parameter Real p = 2;
+  parameter BRF38_R a(x = 3);
+  parameter BRF38_R b(x = 4);
+  parameter BRF38_R r = if BRF38_f(p) then a else b;
+  Real y = if BRF38_f(p) then time else 2 * time;
+end BRF38;
+//// model: BRF39
+record BRF39_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF39_R;
+function BRF39_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF39_f;
+model BRF39
+  parameter Real p = 2;
+  parameter BRF39_R a(x = 3);
+  parameter BRF39_R b(x = 4);
+  parameter BRF39_R r = if BRF39_f(p) then a else b;
+  Real z[integer(r.x)];
+end BRF39;
+//// model: BRF40
+record BRF40_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF40_R;
+function BRF40_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF40_f;
+model BRF40
+  Real z[integer(r.x)];
+  parameter Real p = 2;
+  parameter BRF40_R a(x = 3);
+  parameter BRF40_R b(x = 4);
+  parameter BRF40_R r = if BRF40_f(p) then a else b;
+end BRF40;
+//// model: BRF41
+record BRF41_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF41_R;
+function BRF41_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF41_f;
+model BRF41
+  parameter Real p = 2;
+  parameter BRF41_R a(x = 3);
+  parameter BRF41_R b(x = 4);
+  parameter BRF41_R r = if BRF41_f(p) then a else b;
+  Real y;
+equation
+  if r.x > 3.5 then
+    y = time;
+  else
+    y = 2 * time;
+  end if;
+end BRF41;
+//// model: BRF42
+record BRF42_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF42_R;
+function BRF42_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF42_f;
+function BRF42_g
+  input BRF42_R r;
+  output Real v;
+algorithm
+  v := r.x + r.y;
+end BRF42_g;
+model BRF42
+  parameter Real p = 2;
+  parameter BRF42_R a(x = 3);
+  parameter BRF42_R b(x = 4);
+  parameter BRF42_R r = if BRF42_f(p) then a else b;
+  parameter Real q = BRF42_g(r) annotation(Evaluate = true);
+end BRF42;
+//// model: BRF43
+record BRF43_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF43_R;
+function BRF43_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF43_f;
+model BRF43
+  parameter Real p = 2;
+  parameter BRF43_R a(x = 3);
+  parameter BRF43_R b(x = 4);
+  parameter BRF43_R r = if BRF43_f(p) then a else b;
+  parameter Real q = r.x annotation(Evaluate = true);
+  Real y = q * time;
+end BRF43;
+//// model: BRF44
+record BRF44_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRF44_R;
+function BRF44_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRF44_f;
+model BRF44
+  parameter Real p = 2;
+  parameter BRF44_R a(x = 3);
+  parameter BRF44_R b(x = 4);
+  parameter BRF44_R r[2] = {if BRF44_f(p) then a else b, b};
+  Real z[integer(r[1].x)];
+end BRF44;
+//// model: BRG1
+record BRG1_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRG1_R;
+model BRG1
+  parameter Real p(fixed = false);
+  parameter BRG1_R a(x = 3);
+  parameter BRG1_R b(x = 4);
+  parameter BRG1_R r = if p > 1 then a else b;
+initial equation
+  p = 2;
+end BRG1;
+//// model: BRG2
+record BRG2_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRG2_R;
+model BRG2
+  parameter Real p(fixed = false) = 2;
+  parameter BRG2_R a(x = 3);
+  parameter BRG2_R b(x = 4);
+  parameter BRG2_R r = if p > 1 then a else b;
+end BRG2;
+//// model: BRG3
+record BRG3_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRG3_R;
+function BRG3_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRG3_f;
+model BRG3
+  parameter Real p(fixed = false) = 2;
+  parameter BRG3_R a(x = 3);
+  parameter BRG3_R b(x = 4);
+  parameter BRG3_R r = if BRG3_f(p) then a else b;
+end BRG3;
+//// model: BRG4
+record BRG4_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRG4_R;
+function BRG4_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRG4_f;
+model BRG4
+  parameter Real q(fixed = false);
+  parameter Real p = q;
+  parameter BRG4_R a(x = 3);
+  parameter BRG4_R b(x = 4);
+  parameter BRG4_R r = if BRG4_f(p) then a else b;
+initial equation
+  q = 2;
+end BRG4;
+//// model: BRG5
+record BRG5_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRG5_R;
+function BRG5_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRG5_f;
+model BRG5
+  parameter Real p;
+  parameter BRG5_R a(x = 3);
+  parameter BRG5_R b(x = 4);
+  parameter BRG5_R r = if BRG5_f(p) then a else b;
+end BRG5;
+//// model: BRG6
+record BRG6_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRG6_R;
+function BRG6_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRG6_f;
+model BRG6
+  parameter Real p(start = 2);
+  parameter BRG6_R a(x = 3);
+  parameter BRG6_R b(x = 4);
+  parameter BRG6_R r = if BRG6_f(p) then a else b;
+end BRG6;
+//// model: BRG7
+record BRG7_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRG7_R;
+function BRG7_f
+  input Real u;
+  output Boolean b;
+algorithm
+  assert(u > 10, "too small");
+  b := u > 1;
+end BRG7_f;
+model BRG7
+  parameter Real p = 2;
+  parameter BRG7_R a(x = 3);
+  parameter BRG7_R b(x = 4);
+  parameter BRG7_R r = if BRG7_f(p) then a else b;
+end BRG7;
+//// model: BRG8
+record BRG8_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRG8_R;
+model BRG8
+  parameter Real p = 2 annotation(Evaluate = false);
+  parameter BRG8_R a(x = 3);
+  parameter BRG8_R b(x = 4);
+  parameter BRG8_R r = if p > 1 then a else b;
+end BRG8;
+//// model: BRG9
+record BRG9_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRG9_R;
+model BRG9
+  Real v = time;
+  parameter BRG9_R a(x = 3);
+  parameter BRG9_R b(x = 4);
+  BRG9_R r = if v > 1 then a else b;
+end BRG9;
+//// model: BRG10
+record BRG10_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRG10_R;
+model BRG10
+  parameter BRG10_R a(x = 3);
+  parameter BRG10_R b(x = 4);
+  BRG10_R r = if initial() then a else b;
+end BRG10;
+//// model: BRG11
+record BRG11_R
+  Real x = 1;
+  Real y = 2;
+end BRG11_R;
+function BRG11_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRG11_f;
+model BRG11
+  parameter Real p = 2;
+  BRG11_R a(x = 3);
+  BRG11_R b(x = 4);
+  BRG11_R r = if BRG11_f(p) then a else b;
+end BRG11;
+//// model: BRG12
+record BRG12_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRG12_R;
+function BRG12_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRG12_f;
+model BRG12
+  parameter Real p = 2;
+  parameter BRG12_R a(x = 3);
+  parameter BRG12_R b(x = 4);
+  parameter BRG12_R r = if BRG12_f(p) and time > 1 then a else b;
+end BRG12;
+//// model: BRG13
+record BRG13_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRG13_R;
+function BRG13_f
+  input Real u[:];
+  output Boolean b;
+algorithm
+  b := sum(u) > 1;
+end BRG13_f;
+model BRG13
+  parameter Real p[2] = {1, 2};
+  parameter BRG13_R a(x = 3);
+  parameter BRG13_R b(x = 4);
+  parameter BRG13_R r = if BRG13_f(p) then a else b;
+end BRG13;
+//// model: BRG14
+record BRG14_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRG14_R;
+function BRG14_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRG14_f;
+model BRG14
+  parameter Real p = 2;
+  parameter Real q = p;
+  parameter BRG14_R a(x = 3);
+  parameter BRG14_R b(x = 4);
+  parameter BRG14_R r = if BRG14_f(q) then a else b;
+end BRG14;
+//// model: BRG15
+record BRG15_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRG15_R;
+function BRG15_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRG15_f;
+model BRG15
+  parameter Real p = 2;
+  parameter Real q = 2 * p;
+  parameter BRG15_R a(x = 3);
+  parameter BRG15_R b(x = 4);
+  parameter BRG15_R r = if BRG15_f(q) then a else b;
+end BRG15;
+//// model: BRG16
+record BRG16_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRG16_R;
+model BRG16
+  parameter BRG16_R a(x = 3);
+  parameter BRG16_R b(x = 4);
+  parameter BRG16_R r = if p > 1 then a else b;
+  parameter Real p = 2;
+end BRG16;
+//// model: BRG17
+record BRG17_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRG17_R;
+model BRG17
+  parameter BRG17_R a(x = 3);
+  parameter BRG17_R b(x = 4);
+  parameter BRG17_R r = if time > 1 then a else b;
+end BRG17;
+//// model: BRG18
+record BRG18_R
+  Real x = 1;
+  Real y = 2;
+end BRG18_R;
+function BRG18_f
+  input Real u;
+  output BRG18_R r;
+algorithm
+  r := BRG18_R(u, 2 * u);
+end BRG18_f;
+model BRG18
+  parameter BRG18_R r = BRG18_f(time);
+end BRG18;
+//// model: BRG19
+record BRG19_R
+  Real x = 1;
+  Real y = 2;
+end BRG19_R;
+model BRG19
+  BRG19_R rv(x = time);
+  parameter BRG19_R r = rv;
+end BRG19;
+//// model: BRG20
+record BRG20_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRG20_R;
+model BRG20
+  Boolean bv = time > 1;
+  parameter BRG20_R a(x = 3);
+  parameter BRG20_R b(x = 4);
+  parameter BRG20_R r = if bv then a else b;
+end BRG20;
+//// model: BRG21
+record BRG21_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRG21_R;
+model BRG21
+  Boolean bv = time > 1;
+  parameter BRG21_R a(x = 3);
+  parameter BRG21_R b(x = 4);
+  parameter BRG21_R r[2] = {if bv then a else b, a};
+end BRG21;
+//// model: BRG22
+record BRG22_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRG22_R;
+model BRG22_M
+  parameter BRG22_R r;
+end BRG22_M;
+model BRG22
+  Boolean bv = time > 1;
+  parameter BRG22_R a(x = 3);
+  parameter BRG22_R b(x = 4);
+  BRG22_M m(r = if bv then a else b);
+end BRG22;
+//// model: BRG23
+record BRG23_R
+  Real x = 1;
+  Real y = 2;
+end BRG23_R;
+model BRG23
+  Boolean bv = time > 1;
+  BRG23_R a(x = 3);
+  BRG23_R b(x = 4);
+  BRG23_R r = if bv then a else b;
+end BRG23;
+//// model: BRG24
+record BRG24_R
+  Real x = 1;
+  Real y = 2;
+end BRG24_R;
+model BRG24
+  constant BRG24_R a(x = 3);
+  constant BRG24_R b(x = 4);
+  constant BRG24_R r = if time > 1 then a else b;
+end BRG24;
+//// model: BRG25
+record BRG25_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRG25_R;
+model BRG25
+  parameter BRG25_R a(x = 3);
+  parameter BRG25_R b(x = 4);
+  parameter BRG25_R r[2] = {if p > 1 then a else b, a};
+  parameter Real p = 2;
+end BRG25;
+//// model: BRG26
+record BRG26_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRG26_R;
+function BRG26_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRG26_f;
+model BRG26
+  parameter BRG26_R a(x = 3);
+  parameter BRG26_R b(x = 4);
+  parameter BRG26_R r[2] = {if BRG26_f(p) then a else b, a};
+  parameter Real p = 2;
+end BRG26;
+//// model: BRG27
+record BRG27_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRG27_R;
+function BRG27_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRG27_f;
+model BRG27_M
+  parameter BRG27_R r;
+end BRG27_M;
+model BRG27
+  BRG27_M m(r = if BRG27_f(p) then a else b);
+  parameter BRG27_R a(x = 3);
+  parameter BRG27_R b(x = 4);
+  parameter Real p = 2;
+end BRG27;
+//// model: BRG28
+record BRG28_R
+  parameter Real x = 1;
+  parameter Real y = 2;
+end BRG28_R;
+function BRG28_f
+  input Real u;
+  output Boolean b;
+algorithm
+  b := u > 1;
+end BRG28_f;
+model BRG28
+  parameter BRG28_R a(x = 3);
+  parameter BRG28_R b(x = 4);
+  parameter BRG28_R r = if BRG28_f(q.x) then a else b;
+  parameter BRG28_R q(x = 2);
+end BRG28;
+//// model: BRS1
+package BRS1P
+  type E = enumeration(a, b, c);
+  record R
+    parameter Real x = 1;
+    parameter E e = E.a;
+  end R;
+  record S
+    parameter Integer n = 2;
+    parameter R r1;
+    parameter R r2;
+    parameter R rr[n] = {if i == 1 then r2 else r1 for i in 1:n};
+  end S;
+  model T
+    parameter E e;
+    Real y;
+  equation
+    if e == E.b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+  model C
+    parameter R cd;
+    T t(final e = cd.e);
+  end C;
+  model St
+    parameter S sd;
+    C c[sd.n](cd = sd.rr);
+  end St;
+end BRS1P;
+model BRS1
+  parameter BRS1P.R ra(e = BRS1P.E.b);
+  parameter BRS1P.R rb;
+  parameter BRS1P.S sd(r1 = ra, r2 = rb);
+  BRS1P.St st(sd = sd);
+end BRS1;
+//// model: BRS2
+package BRS2P
+  type E = enumeration(a, b, c);
+  record R
+    parameter Real x = 1;
+    parameter E e = E.a;
+  end R;
+  model T
+    parameter E e;
+    Real y;
+  equation
+    if e == E.b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+  model C
+    parameter R cd;
+    T t(final e = cd.e);
+  end C;
+end BRS2P;
+model BRS2
+  parameter BRS2P.R ra(e = BRS2P.E.b);
+  parameter BRS2P.R rb;
+  parameter BRS2P.R rr[2] = {rb, ra};
+  BRS2P.C c[2](cd = rr);
+end BRS2;
+//// model: BRS3
+package BRS3P
+  type E = enumeration(a, b, c);
+  record R
+    parameter Real x = 1;
+    parameter E e = E.a;
+  end R;
+  model T
+    parameter E e;
+    Real y;
+  equation
+    if e == E.b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+  model C
+    parameter R cd;
+    T t(final e = cd.e);
+  end C;
+end BRS3P;
+model BRS3
+  parameter BRS3P.R ra(e = BRS3P.E.b);
+  parameter BRS3P.R rb;
+  parameter BRS3P.R rr[2] = {if i == 1 then rb else ra for i in 1:2};
+  BRS3P.C c[2](cd = rr);
+end BRS3;
+//// model: BRS4
+package BRS4P
+  type E = enumeration(a, b, c);
+  record R
+    parameter Real x = 1;
+    parameter E e = E.a;
+  end R;
+  model T
+    parameter E e;
+    Real y;
+  equation
+    if e == E.b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+  model C
+    parameter R cd;
+    T t(final e = cd.e);
+  end C;
+end BRS4P;
+model BRS4
+  parameter BRS4P.R ra(e = BRS4P.E.b);
+  parameter BRS4P.R rr[2] = {ra, ra};
+  BRS4P.C c(cd = rr[1]);
+end BRS4;
+//// model: BRS5
+package BRS5P
+  type E = enumeration(a, b, c);
+  record R
+    parameter Real x = 1;
+    parameter E e = E.a;
+  end R;
+  model T
+    parameter E e;
+    Real y;
+  equation
+    if e == E.b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+end BRS5P;
+model BRS5
+  parameter BRS5P.R ra(e = BRS5P.E.b);
+  parameter BRS5P.R rr[2] = {ra, ra};
+  BRS5P.T t(final e = rr[1].e);
+end BRS5;
+//// model: BRS6
+package BRS6P
+  record R
+    parameter Real x = 1;
+    parameter Boolean b = false;
+  end R;
+  model T
+    parameter Boolean b;
+    Real y;
+  equation
+    if b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+end BRS6P;
+model BRS6
+  parameter BRS6P.R ra(b = true);
+  parameter BRS6P.R rr[2] = {ra, ra};
+  BRS6P.T t(final b = rr[1].b);
+end BRS6;
+//// model: BRS7
+package BRS7P
+  record R
+    parameter Real x = 1;
+    parameter Boolean b = false;
+  end R;
+  model T
+    parameter Boolean b;
+    Real y;
+  equation
+    if b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+end BRS7P;
+model BRS7
+  parameter BRS7P.R ra(b = true);
+  parameter BRS7P.R rr = ra;
+  BRS7P.T t(final b = rr.b);
+end BRS7;

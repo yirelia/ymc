@@ -802,3 +802,9 @@ FAIL / ACCEPTS-INVALID / CRASH 0。
 返回记录的向量化调用作重载运算符的运算数随即展开、逐元素化简（SingleToPolyphase 的 `u * fromPolar(fill(1, m), -symmetricOrientation(m))`）。
 转 PASS：Magnetic.QuasiStatic.FundamentalWave.Examples.BasicMachines.SynchronousMachines.SMPM_MTPA / SMPM_CurrentSource /
 SMR_CurrentSource。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-18 67c 之后：PASS 487（不变）
+
+记录 if 绑定的条件里有调用时按调用的变率判（求值选支）、记录整体绑定读到声明在后的记录推到第二遍、parameter 记录绑定的变率检查。
+Electrical.Batteries.Examples.CCCV_Stack / CCCV_StackRC / ShowImpedance 越过原卡点，卡到下一处：整体绑定的记录数组元素的字段用于
+结构求值、可扩展连接器的数组成员（BusTranscription）、方程里 for 范围的向前引用。FAIL / ACCEPTS-INVALID / CRASH 0。
