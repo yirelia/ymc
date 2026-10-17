@@ -10271,4 +10271,194 @@ YMC_TEST(flatten_function_elementwise_negation_real_cast) {
                            "  Real k[2];\nequation\n  k = NGI4F({integer(time), 2});\nend NGI4;\n"));
 }
 
+YMC_TEST(flatten_function_record_binding) {
+  // 函数里记录（数组）变量的绑定：omc 同内建类型照打绑定式（NFConvertDAE.convertFunctionParam :1136-1171 v1.25.0 的
+  // Binding.toDAEExp），定型 / 常量求值 / 化简同函数体（Function.mapExp 映射形参绑定，NFFunction.mo:2105-2185）：字面量实参
+  // 的构造调用求值成记录式 `RBF1C(1.0, 2.0)`、变量实参照留 `RBF4C(x, 2.0)`、`fill(RBB12R(1.0, x), n)`；operator record 的
+  // 构造经 'constructor'（`CXC16C.'constructor'.fromReal(3.0, x)`）、运算符重载 `CXC16C.'+'(t[1], t[2])`（MSL ReferenceAir 的
+  // Ice09 Gibbs）。此前一律 SKIP（record binding in function）。期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p32 RBF1 / RBF4 /
+  // RBB12 / CXC16）。
+  YMC_CHECK_EQ(flatten_src("record RBF1C\n  Real re;\n  Real im;\nend RBF1C;\nfunction RBF1F\n  input Real x;\n"
+                           "  output Real y;\nprotected\n  RBF1C[2] t = {RBF1C(1, 2), RBF1C(3, 4)};\nalgorithm\n"
+                           "  y := x * t[1].re + t[2].im;\nend RBF1F;\nmodel RBF1\n  Real y = RBF1F(time);\n"
+                           "end RBF1;\n"),
+               std::string("function RBF1C \"Automatically generated record constructor for RBF1C\"\n"
+                           "  input Real re;\n  input Real im;\n  output RBF1C res;\nend RBF1C;\n\nfunction RBF1F\n"
+                           "  input Real x;\n  output Real y;\n"
+                           "  protected RBF1C[2] t = {RBF1C(1.0, 2.0), RBF1C(3.0, 4.0)};\nalgorithm\n"
+                           "  y := x * t[1].re + t[2].im;\nend RBF1F;\n\nclass RBF1\n  Real y = RBF1F(time);\n"
+                           "end RBF1;\n"));
+  YMC_CHECK_EQ(flatten_src("record RBF4C\n  Real re;\n  Real im;\nend RBF4C;\nfunction RBF4F\n  input Real x;\n"
+                           "  output Real y;\nprotected\n  RBF4C t = RBF4C(x, 2);\nalgorithm\n"
+                           "  y := x * t.re + t.im;\nend RBF4F;\nmodel RBF4\n  Real y = RBF4F(time);\nend RBF4;\n"),
+               std::string("function RBF4C \"Automatically generated record constructor for RBF4C\"\n"
+                           "  input Real re;\n  input Real im;\n  output RBF4C res;\nend RBF4C;\n\nfunction RBF4F\n"
+                           "  input Real x;\n  output Real y;\n  protected RBF4C t = RBF4C(x, 2.0);\nalgorithm\n"
+                           "  y := x * t.re + t.im;\nend RBF4F;\n\nclass RBF4\n  Real y = RBF4F(time);\nend RBF4;\n"));
+  YMC_CHECK_EQ(flatten_src("record RBB12R\n  Real re;\n  Real im;\nend RBB12R;\nfunction RBB12F\n  input Real x;\n"
+                           "  input Integer n;\n  output Real y;\nprotected\n  RBB12R[n] t = fill(RBB12R(1, x), n);\n"
+                           "algorithm\n  y := x * t[1].re + t[n].im;\nend RBB12F;\nmodel RBB12\n"
+                           "  Real y = RBB12F(time, 3);\nend RBB12;\n"),
+               std::string("function RBB12F\n  input Real x;\n  input Integer n;\n  output Real y;\n"
+                           "  protected RBB12R[n] t = fill(RBB12R(1.0, x), n);\nalgorithm\n"
+                           "  y := x * t[1].re + t[n].im;\nend RBB12F;\n\n"
+                           "function RBB12R \"Automatically generated record constructor for RBB12R\"\n"
+                           "  input Real re;\n  input Real im;\n  output RBB12R res;\nend RBB12R;\n\nclass RBB12\n"
+                           "  Real y = RBB12F(time, 3);\nend RBB12;\n"));
+  YMC_CHECK_EQ(flatten_src("operator record CXC16C\n  Real re;\n  Real im;\n  encapsulated operator 'constructor'\n"
+                           "    function fromReal\n      import CXC16C;\n      input Real re;\n"
+                           "      input Real im = 0;\n      output CXC16C result(re = re, im = im);\n    algorithm\n"
+                           "    end fromReal;\n  end 'constructor';\n  encapsulated operator function '+'\n"
+                           "    import CXC16C;\n    input CXC16C c1;\n    input CXC16C c2;\n    output CXC16C c3;\n"
+                           "  algorithm\n    c3 := CXC16C(c1.re + c2.re, c1.im + c2.im);\n  end '+';\nend CXC16C;\n"
+                           "function CXC16F\n  input Real x;\n  output Real y;\nprotected\n"
+                           "  CXC16C[2] t = {CXC16C(1, 2), CXC16C(3, x)};\n  CXC16C s = t[1] + t[2];\nalgorithm\n"
+                           "  y := s.re + s.im;\nend CXC16F;\nmodel CXC16\n  Real y = CXC16F(time);\nend CXC16;\n"),
+               std::string("function CXC16C \"Automatically generated record constructor for CXC16C\"\n"
+                           "  input Real re;\n  input Real im;\n  output CXC16C res;\nend CXC16C;\n\n"
+                           "function CXC16C.'+'\n  input CXC16C c1;\n  input CXC16C c2;\n  output CXC16C c3;\n"
+                           "algorithm\n  c3 := CXC16C.'constructor'.fromReal(c1.re + c2.re, c1.im + c2.im);\n"
+                           "end CXC16C.'+';\n\nfunction CXC16C.'constructor'.fromReal\n  input Real re;\n"
+                           "  input Real im = 0.0;\n  output CXC16C result;\nalgorithm\n"
+                           "end CXC16C.'constructor'.fromReal;\n\nfunction CXC16F\n  input Real x;\n"
+                           "  output Real y;\n"
+                           "  protected CXC16C[2] t = {CXC16C(1.0, 2.0), CXC16C.'constructor'.fromReal(3.0, x)};\n"
+                           "  protected CXC16C s = CXC16C.'+'(t[1], t[2]);\nalgorithm\n  y := s.re + s.im;\n"
+                           "end CXC16F;\n\nclass CXC16\n  Real y = CXC16F(time);\nend CXC16;\n"));
+  // 'constructor' 输出的绑定又调自己（omc 照打 `output C3 result = C3.'constructor'.fromReal(re, im)`）：ymc 先发射形参再登记
+  // 函数，会无限递归（栈溢出）→ 拦成 SKIP（探针 or-p1 b12）。
+  YMC_CHECK(flatten_src("operator record C3\n  Real re;\n  Real im;\n  encapsulated operator 'constructor'\n"
+                        "    function fromReal\n      import C3;\n      input Real re;\n      input Real im = 0;\n"
+                        "      output C3 result = C3(re = re, im = im);\n    algorithm\n    end fromReal;\n"
+                        "  end 'constructor';\nend C3;\nmodel b12_ctor_ctor_output_binding\n  C3 a, b;\nequation\n"
+                        "  a = C3(time, 2);\n  b = C3(1, 2);\nend b12_ctor_ctor_output_binding;\n")
+                .rfind("<unsupported:", 0) == 0);
+}
+
+YMC_TEST(flatten_function_record_binding_evaluation) {
+  // 函数求值时有声明绑定的记录（数组）输出 / 局部取绑定（NFEvalFunction.getBindingExp :312-332 v1.25.0），此前按字段缺省建
+  // （静默错 40.0 / 30.0）；绑定求得的记录字段不可变——给标量记录整个赋值 / 给字段赋值求值失败、omc 照留调用（assignRecord /
+  // assignVariable :764-810 / :900-958）→ SKIP（RBE26）；记录数组按元素赋值照常（assignArrayElement，RBE27 18.0）。没有绑定的
+  // 记录数组元素是 EMPTY（buildBinding :334-352），全赋过值照常（RBE41），读到没赋过的元素求值失败 → SKIP（RBE39）。
+  // 期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p32 RBE1 / RBE14 / RBE27 / RBE41 / RBE26 / RBE39）。
+  YMC_CHECK_EQ(flatten_src("record RBE1R\n  Real re = 10;\n  Real im = 20;\nend RBE1R;\nfunction RBE1F\n"
+                           "  input Real x;\n  output Real y;\nprotected\n  RBE1R t = RBE1R(1, 2);\nalgorithm\n"
+                           "  y := x * t.re + t.im;\nend RBE1F;\nmodel RBE1\n  parameter Real p = RBE1F(2.0);\n"
+                           "end RBE1;\n"),
+               std::string("class RBE1\n  parameter Real p = 4.0;\nend RBE1;\n"));
+  YMC_CHECK_EQ(flatten_src("record RBE14R\n  Real re = 10;\n  Real im = 20;\nend RBE14R;\nfunction RBE14F\n"
+                           "  input Real x;\n  output Real y;\n  output RBE14R r = RBE14R(x, 2);\nalgorithm\n"
+                           "  y := r.re + r.im;\nend RBE14F;\nmodel RBE14\n  parameter Real p = RBE14F(3.0);\n"
+                           "end RBE14;\n"),
+               std::string("class RBE14\n  parameter Real p = 5.0;\nend RBE14;\n"));
+  YMC_CHECK_EQ(flatten_src("record RBE27R\n  Real re = 10;\n  Real im = 20;\nend RBE27R;\nfunction RBE27F\n"
+                           "  input Real x;\n  output Real y;\nprotected\n"
+                           "  RBE27R[2] t = {RBE27R(1, 2), RBE27R(3, 4)};\nalgorithm\n  t[1] := RBE27R(x, 5);\n"
+                           "  y := t[1].re * t[1].im + t[2].re;\nend RBE27F;\nmodel RBE27\n"
+                           "  parameter Real p = RBE27F(3.0);\nend RBE27;\n"),
+               std::string("class RBE27\n  parameter Real p = 18.0;\nend RBE27;\n"));
+  YMC_CHECK_EQ(flatten_src("record RBE41R\n  Real re = 10;\n  Real im = 20;\nend RBE41R;\nfunction RBE41F\n"
+                           "  input Real x;\n  output Real y;\nprotected\n  RBE41R t[2];\nalgorithm\n"
+                           "  t[1] := RBE41R(x, 1);\n  t[2] := RBE41R(2, x);\n  y := t[1].re + t[2].im;\n"
+                           "end RBE41F;\nmodel RBE41\n  parameter Real p = RBE41F(3.0);\nend RBE41;\n"),
+               std::string("class RBE41\n  parameter Real p = 6.0;\nend RBE41;\n"));
+  YMC_CHECK(flatten_src("record RBE26R\n  Real re = 10;\n  Real im = 20;\nend RBE26R;\nfunction RBE26F\n"
+                        "  input Real x;\n  output Real y;\nprotected\n  RBE26R t = RBE26R(1, 2);\nalgorithm\n"
+                        "  t := RBE26R(x, 5);\n  y := t.re * t.im;\nend RBE26F;\nmodel RBE26\n"
+                        "  parameter Real p = RBE26F(3.0);\nend RBE26;\n")
+                        .rfind("<unsupported:", 0) == 0);
+  YMC_CHECK(flatten_src("record RBE39R\n  Real re = 10;\n  Real im = 20;\nend RBE39R;\nfunction RBE39F\n"
+                        "  input Real x;\n  output Real y;\nprotected\n  RBE39R t[2];\nalgorithm\n"
+                        "  t[1] := RBE39R(x, 2);\n  y := t[1].re * t[1].im + t[2].re;\nend RBE39F;\nmodel RBE39\n"
+                        "  parameter Real p = RBE39F(3.0);\nend RBE39;\n")
+                        .rfind("<unsupported:", 0) == 0);
+}
+
+YMC_TEST(flatten_tuple_element_constant_call) {
+  // 多输出函数的常量调用取首输出 `f(3.0)[1]`（simplifyTupleElement，NFSimplifyExp.mo:1381-1391 v1.25.0：先化简里面的调用、
+  // nfEvalConstArgFuncs 求值后取元素）：求得 → 字面量（MOX6），ymc 的解释器求不出（体里 operator record 运算）→ SKIP，此前
+  // 原样留 `MOX4F(3.0)[1]`（静默错，omc 8.0）。期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p32 MOX6 / MOX4）。
+  YMC_CHECK_EQ(flatten_src("function MOX6F\n  input Real x;\n  output Real y;\n  output Real z;\nalgorithm\n"
+                           "  y := 2 * x;\n  z := 3 * x;\nend MOX6F;\nmodel MOX6\n  parameter Real p = MOX6F(3.0);\n"
+                           "  Real q = MOX6F(2.0) * time;\nend MOX6;\n"),
+               std::string("class MOX6\n  parameter Real p = 6.0;\n  Real q = 4.0 * time;\nend MOX6;\n"));
+  YMC_CHECK(flatten_src("operator record MOX4C\n  Real re;\n  Real im;\n  encapsulated operator function '*'\n"
+                        "    import MOX4C;\n    input MOX4C c1;\n    input MOX4C c2;\n    output MOX4C c3;\n"
+                        "  algorithm\n"
+                        "    c3 := MOX4C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);\n  end '*';\n"
+                        "end MOX4C;\nfunction MOX4F\n  input Real x;\n  output Real y;\n  output Real z;\nprotected\n"
+                        "  MOX4C b;\nalgorithm\n  b := MOX4C(x, 1);\n  b := b * b;\n  y := b.re;\n  z := b.im;\n"
+                        "end MOX4F;\nmodel MOX4\n  parameter Real p = MOX4F(3.0);\nend MOX4;\n")
+                        .rfind("<unsupported:", 0) == 0);
+}
+
+YMC_TEST(flatten_function_alias_literal_modifier) {
+  // 函数别名的修饰（`function g = f(final k = 2)`）：final 修饰使输入成 final（NFInst.instComponentDef :1966-1968 v1.25.0），
+  // 照打 `final input Real k = 2.0`（ALM1 此前漏打）；包里的别名、函数体里调用的，修饰是字面量时照常（调用处补 `g(x, 2.0)`，
+  // MSL ReferenceMoistAir.Utilities.IF97_new.g2 的 `final checkLimits = false`）。期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p32
+  // ALM1 / ALM3 / ALM5）。
+  YMC_CHECK_EQ(flatten_src("function ALM1F\n  input Real x;\n  input Real k = 1;\n  output Real y;\nalgorithm\n"
+                           "  y := k * x;\nend ALM1F;\nmodel ALM1\n  function g = ALM1F(final k = 2);\n"
+                           "  Real y = g(time);\nend ALM1;\n"),
+               std::string("function ALM1.g\n  input Real x;\n  final input Real k = 2.0;\n  output Real y;\n"
+                           "algorithm\n  y := k * x;\nend ALM1.g;\n\nclass ALM1\n  Real y = ALM1.g(time, 2.0);\n"
+                           "end ALM1;\n"));
+  YMC_CHECK_EQ(flatten_src("package ALM3P\n  function f\n    input Real x;\n    input Real k = 1;\n"
+                           "    output Real y;\n  algorithm\n    y := k * x;\n  end f;\n"
+                           "  function g = f(final k = 2);\n  function h\n    input Real x;\n    output Real y;\n"
+                           "  algorithm\n    y := ALM3P.g(x);\n  end h;\nend ALM3P;\nmodel ALM3\n"
+                           "  Real y = ALM3P.h(time);\nend ALM3;\n"),
+               std::string("function ALM3P.g\n  input Real x;\n  final input Real k = 2.0;\n  output Real y;\n"
+                           "algorithm\n  y := k * x;\nend ALM3P.g;\n\nfunction ALM3P.h\n  input Real x;\n"
+                           "  output Real y;\nalgorithm\n  y := ALM3P.g(x, 2.0);\nend ALM3P.h;\n\nclass ALM3\n"
+                           "  Real y = ALM3P.h(time);\nend ALM3;\n"));
+  YMC_CHECK_EQ(flatten_src("package ALM5P\n  function f\n    input Real x;\n    input Boolean check = true;\n"
+                           "    output Real y;\n  algorithm\n    if check then\n"
+                           "      assert(x > 0, \"negative x = \" + String(x));\n    end if;\n    y := 2 * x;\n"
+                           "  end f;\n  function g = f(final check = false) \"alias comment\";\n  function h\n"
+                           "    input Real x;\n    output Real y;\n  algorithm\n    y := ALM5P.g(x);\n  end h;\n"
+                           "end ALM5P;\nmodel ALM5\n  Real y = ALM5P.h(time);\nend ALM5;\n"),
+               std::string("function ALM5P.g \"alias comment\"\n  input Real x;\n"
+                           "  final input Boolean check = false;\n  output Real y;\nalgorithm\n  if check then\n"
+                           "    assert(x > 0.0, \"negative x = \" + String(x, 6, 0, true));\n  end if;\n"
+                           "  y := 2.0 * x;\nend ALM5P.g;\n\nfunction ALM5P.h\n  input Real x;\n  output Real y;\n"
+                           "algorithm\n  y := ALM5P.g(x, false);\nend ALM5P.h;\n\nclass ALM5\n"
+                           "  Real y = ALM5P.h(time);\nend ALM5;\n"));
+}
+
+YMC_TEST(flatten_class_extends_function_in_package_instance) {
+  // 包实例里的 class extends 函数（`redeclare function extends f`）：隐式基类取实例类树里的那份（redeclareClass 取实例类树里
+  // 的原类，NFInst.mo:1742-1771 v1.25.0），基类里写的输入缺省 / 局部绑定读到 extends 修饰改过的常量（`reference_X =
+  // {0.01, 0.99}`、`k = 3`）。此前取定义层的目标（静默错 `{1.0}` / 7.0；MSL ReferenceAir 的 Medium.setState_pTX）。
+  // 期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p32 XDP1 / XDP8 / XDP9）。
+  YMC_CHECK_EQ(flatten_src("package XDP1P\n  partial package PM\n    constant Integer nX = 1;\n"
+                           "    constant Real reference_X[nX] = fill(1 / nX, nX);\n"
+                           "    replaceable partial function f\n      input Real X[:] = reference_X;\n"
+                           "      output Real y;\n    end f;\n  end PM;\n  package M\n"
+                           "    extends PM(nX = 2, reference_X = {0.01, 0.99});\n    redeclare function extends f\n"
+                           "    algorithm\n      y := sum(X);\n    end f;\n  end M;\nend XDP1P;\nmodel XDP1\n"
+                           "  package Medium = XDP1P.M;\n  Real y = Medium.f({time, 1});\nend XDP1;\n"),
+               std::string("function XDP1.Medium.f\n  input Real[:] X = {0.01, 0.99};\n  output Real y;\nalgorithm\n"
+                           "  y := sum(X);\nend XDP1.Medium.f;\n\nclass XDP1\n"
+                           "  Real y = XDP1.Medium.f({time, 1.0});\nend XDP1;\n"));
+  YMC_CHECK_EQ(flatten_src("package XDP8P\n  partial package PM\n    constant Integer nX = 1;\n"
+                           "    constant Real k = 7;\n    replaceable partial function f\n      input Real x;\n"
+                           "      output Real y;\n    protected\n      Real c = k;\n    end f;\n  end PM;\n"
+                           "  package M\n    extends PM(nX = 2, k = 3);\n    redeclare function extends f\n"
+                           "    algorithm\n      y := c * x;\n    end f;\n  end M;\nend XDP8P;\nmodel XDP8\n"
+                           "  package Medium = XDP8P.M;\n  Real y = Medium.f(time);\nend XDP8;\n"),
+               std::string("function XDP8.Medium.f\n  input Real x;\n  output Real y;\n  protected Real c = 3.0;\n"
+                           "algorithm\n  y := c * x;\nend XDP8.Medium.f;\n\nclass XDP8\n"
+                           "  Real y = XDP8.Medium.f(time);\nend XDP8;\n"));
+  YMC_CHECK_EQ(flatten_src("package XDP9P\n  partial package PM\n    constant Real k = 7;\n"
+                           "    replaceable function f\n      input Real x;\n      input Real c = k;\n"
+                           "      output Real y;\n    algorithm\n      y := c * x;\n    end f;\n  end PM;\n"
+                           "  package M\n    extends PM(k = 3);\n    redeclare function extends f\n"
+                           "      annotation(Inline = true);\n    end f;\n  end M;\nend XDP9P;\nmodel XDP9\n"
+                           "  package Medium = XDP9P.M;\n  Real y = Medium.f(time);\nend XDP9;\n"),
+               std::string("function XDP9.Medium.f\n  input Real x;\n  input Real c = 3.0;\n  output Real y;\n"
+                           "algorithm\n  y := c * x;\nend XDP9.Medium.f;\n\nclass XDP9\n"
+                           "  Real y = XDP9.Medium.f(time, 3.0);\nend XDP9;\n"));
+}
+
 YMC_TEST_MAIN

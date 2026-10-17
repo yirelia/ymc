@@ -773,3 +773,8 @@ Spice3BenchmarkRtlInverter、Spice3BenchmarkFourBitBinaryAdder。Spice3 Graetz �
 提 Real。转 PASS：Media.Examples.R134a.R134a1 / R134a2、SimpleLiquidWater、ReferenceAir.DryAir1 / DryAir2 / Inverse_sh_T。卡到下一处：
 ReferenceAir.MoistAir / MoistAir1 / MoistAir2 / Inverse_sh_TX——Ice09 Gibbs 里带绑定的 Complex 记录数组局部；TwoPhaseWater.
 TestTwoPhaseStates——extends 短类后的 class extends；MixtureGases——extends 修饰里重声明的记录类型。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-17 66x 之后：PASS 482（+4）
+
+函数变量的记录（数组）绑定照打并参与求值；多输出常量调用取首输出；函数体里带字面量修饰的函数别名；包实例里 class extends 函数的
+隐式基类。转 PASS：Media.Examples.ReferenceAir.MoistAir / MoistAir1 / MoistAir2 / Inverse_sh_TX。FAIL / ACCEPTS-INVALID / CRASH 0。

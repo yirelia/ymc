@@ -2560,6 +2560,20 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       探针 pk-p31（118；NG / UQR）——基线二进制上 82 例 FAIL，现 PASS 104 / SKIP 13 / BOTH-REJECT 1；单测 +6。
       slice 702 例 FAIL 0（oracle=live 不一致 0）；scodeinst 663、testsuite 1835、MSL 478（均不变）/ FAIL 0；探针 10421→10539；
       单测 460→466。
+- [x] (66x) 函数变量的记录（数组）绑定（2026-10-17）：omc 照打绑定式，定型 / 常量求值 / 化简同函数体（NFConvertDAE.convertFunctionParam
+      :1136-1171；Function.mapExp :2105-2185）——MSL ReferenceMoistAir 的 Ice09 Gibbs `final Complex[2] t = {Complex(…), …}` → 常量实参的
+      构造求成 `Complex(0.0368…, 0.0510…)`，变量实参的留 `Complex.'constructor'.fromReal(x, 2.0)`；记录类须是变量自己的（fn_binding_record_ok）。
+      求值器：有声明绑定的记录（数组）取绑定（getBindingExp :312-332；此前按字段缺省建、丢了绑定，RBE 一串静默错）；给有绑定的标量记录
+      整个 / 字段赋值 omc 求值失败（assignVariable 的 else 支，:764-810 / :900-958）→ SKIP；无绑定的记录数组元素是 EMPTY（buildBinding
+      :334-352）。多输出常量调用取首输出 `f(…)[1]` 照常量调用求值或 SKIP（simplifyTupleElement :1381-1391；此前原样留、静默错）。
+      顺带：包里 / 函数体里调的带修饰函数别名（`function g2 = …g2(final checkLimits = false)`）接字面量修饰，final 照打 `final input`
+      （instComponentDef :1966-1968；ALM1 此前漏打）；包实例里找到的 class extends 函数的隐式基类取实例类树里的（ce_base，redeclareClass
+      :1742-1771；此前 `Medium.setState_pTX` 的缺省 X 打成定义层的 `{1.0}`，静默错）；变量绑定引用正在发射的自己（旧版 Complex 的
+      'constructor'）→ SKIP（防无限递归）。
+      照旧 SKIP：模型语境的 Complex 实参调用（"record result"）、函数里包常量记录绑定、`t[1].re :=` 字段赋值、求值器求不了重载运算的。
+      探针 pk-p32（213；RB* / CX* / MOX / ALM / XDP / GBS）——基线二进制上 40 例 FAIL，现 PASS 169 / SKIP 40 / BOTH-REJECT 4；旧组 pk-p30 /
+      rb-p1 各 SKIP→PASS 1；单测 +5。slice 702 例 FAIL 0（oracle=live 不一致 0）；scodeinst 663、testsuite 1835（均不变）/ FAIL 0；
+      **MSL 478→482**（ReferenceAir.MoistAir / MoistAir1 / MoistAir2 / Inverse_sh_TX）；探针 10539→10752；单测 466→471。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

@@ -1,0 +1,3561 @@
+//// set: pk-p32 — 函数里记录（数组）变量的绑定（66x，MSL ReferenceAir.MoistAir / MoistAir1 / MoistAir2 / Inverse_sh_TX 的 Ice09_Utilities.Basic.Gibbs `final Complex[2] t = {Complex(…), …}`）：omc 同内建类型照打绑定式（NFConvertDAE.convertFunctionParam :1136-1171 v1.25.0 的 Binding.toDAEExp），定型 / 常量求值 / 化简同函数体（Function.mapExp 管形参绑定，NFFunction.mo:2105-2185）——普通记录的局部 / 数组（RBF1-RBF9、RBA*、RBB*：字面量实参求值成记录式、变量实参照留、命名实参、缺省字段、记录 / 记录数组整体引用、返回记录的调用、if、fill、推导式、`[:]` / `t[2]` 写法的维、二维、依赖排序 RBA6 / RBA19、final 不打 RBF2 / RBF7），operator record（CXF*、CXC*、CXD*：构造经 'constructor' 求值成 `Complex(1.0, 2.0)` 或留 `Complex.'constructor'.fromReal(x, 2.0)`，绑定里的运算符重载 `Complex.'+'(a, b)` / '-' / '*' / '/' / '^' / '=='、ComplexMath 函数、别名类型 SI.ComplexVoltage、本地 operator record CXC16 / CXC17），输出 / 输入的记录绑定（RBO*；输出带绑定、没有算法段的函数在 final parameter 记录绑定里强制内联取输出的绑定 INX*，rb-p1 IN2 随之 PASS；'constructor' 输出的绑定又调自己 `output C3 result = C3(re = re, im = im)`：ymc 先发射形参再登记函数会无限递归 → SKIP，or-p1 b12 / testsuite OperatorOverloadComplex 等）；别的记录类（RBA16，omc 字段相同照收）照旧 SKIP、形状不符两边拒（RBB18）。有整体绑定的记录只看绑定的依赖（getLocalDependencies2，NFFunction.mo:2787-2807）。函数求值（RBE*，此前静默错 20 余例）：有绑定的记录（数组）输出 / 局部取绑定（NFEvalFunction.getBindingExp :312-332，此前按字段缺省求：`F(2.0)` 得 40.0、omc 4.0，含结构参数的维 RBE21），绑定求得的记录字段不可变——给标量记录整个赋值 / 给字段赋值 / 元组目标求值失败、omc 照留调用（assignVariable :764-810、assignRecord :915-958）→ SKIP（RBE26 / RBE32 / RBE33 / RBE35 / RBE40），记录数组按元素 / 整个赋值照常（RBE27 / RBE29）；没有绑定的记录数组元素是 EMPTY（buildBinding :334-352），读到没赋过的元素求值失败 → SKIP（RBE39 / RBE44，此前按字段缺省求）、全赋过的照常（RBE41-RBE43）。多输出的常量调用 `f(3.0)[1]`（simplifyTupleElement，NFSimplifyExp.mo:1381-1391）：求得的成字面量（MOX6、结构参数实参 MOX9 此前静默错），ymc 求不出的 SKIP（MOX1 / MOX2 / MOX4 / MOX5 / 函数体里 MOX8，此前原样留调用、omc 求成 8.0；MOX7 两边都求不出也 SKIP，同单输出的常量调用）。直接调 MSL Gibbs（GBS1 / GBS3）。函数别名的修饰（ALM*，目标的下一处阻塞：IF97_new 的 `function g2 = BaseIF97.Basic.g2(final checkLimits = false)`）：final 修饰照打 `final input`（NFInst.instComponentDef :1966-1968；ALM1 / ALM23 此前漏打），包里的 / 函数体里调用的别名修饰是字面量时照常（调用处补 `g(x, 2.0)`），引用常量的（ALM6）、包实例里函数体调别名（ALM18）照旧 SKIP。包实例里的 class extends 函数（XDP*，目标的再下一处：Medium.setState_pTX 的 `X = reference_X`）：隐式基类取实例类树里的那份（NFInst.mo:1742-1771），基类里的输入缺省 / 局部绑定读到 extends 修饰改过的常量（XDP1 / XDP8 / XDP9 / XDP11 / XDP13 / XDP14 此前静默错 `{1.0}` / 7.0）；两层 class extends 各带算法段两边拒（XDP16）
+//// model: RBF1
+record RBF1C
+  Real re;
+  Real im;
+end RBF1C;
+function RBF1F
+  input Real x;
+  output Real y;
+protected
+  RBF1C[2] t = {RBF1C(1, 2), RBF1C(3, 4)};
+algorithm
+  y := x * t[1].re + t[2].im;
+end RBF1F;
+model RBF1
+  Real y = RBF1F(time);
+end RBF1;
+//// model: RBF2
+record RBF2C
+  Real re;
+  Real im;
+end RBF2C;
+function RBF2F
+  input Real x;
+  output Real y;
+protected
+  final RBF2C[2] t = {RBF2C(1, 2), RBF2C(3, 4)};
+algorithm
+  y := x * t[1].re + t[2].im;
+end RBF2F;
+model RBF2
+  Real y = RBF2F(time);
+end RBF2;
+//// model: RBF3
+record RBF3C
+  Real re;
+  Real im;
+end RBF3C;
+function RBF3F
+  input Real x;
+  output Real y;
+protected
+  RBF3C t = RBF3C(1, 2);
+algorithm
+  y := x * t.re + t.im;
+end RBF3F;
+model RBF3
+  Real y = RBF3F(time);
+end RBF3;
+//// model: RBF4
+record RBF4C
+  Real re;
+  Real im;
+end RBF4C;
+function RBF4F
+  input Real x;
+  output Real y;
+protected
+  RBF4C t = RBF4C(x, 2);
+algorithm
+  y := x * t.re + t.im;
+end RBF4F;
+model RBF4
+  Real y = RBF4F(time);
+end RBF4;
+//// model: RBF5
+record RBF5C
+  Real re;
+  Real im;
+end RBF5C;
+function RBF5F
+  input Real x;
+  output Real y;
+protected
+  RBF5C[2] t = {RBF5C(x, 2), RBF5C(3, x)};
+algorithm
+  y := x * t[1].re + t[2].im;
+end RBF5F;
+model RBF5
+  Real y = RBF5F(time);
+end RBF5;
+//// model: RBF6
+record RBF6C
+  Real re;
+  Real im;
+end RBF6C;
+function RBF6F
+  input Real x;
+  output Real y;
+protected
+  constant RBF6C t = RBF6C(1, 2);
+algorithm
+  y := x * t.re + t.im;
+end RBF6F;
+model RBF6
+  Real y = RBF6F(time);
+end RBF6;
+//// model: RBF7
+record RBF7C
+  Real re;
+  Real im;
+end RBF7C;
+function RBF7F
+  input Real x;
+  output Real y;
+protected
+  final constant RBF7C[2] t = {RBF7C(1, 2), RBF7C(3, 4)};
+algorithm
+  y := x * t[1].re + t[2].im;
+end RBF7F;
+model RBF7
+  Real y = RBF7F(time);
+end RBF7;
+//// model: RBF8
+record RBF8C
+  Real re;
+  Real im;
+end RBF8C;
+function RBF8F
+  input Real x;
+  output Real y;
+protected
+  RBF8C[2] t = {RBF8C(1, 2), RBF8C(3, 4)};
+algorithm
+  y := 0;
+  for i in 1:2 loop
+    y := y + x * t[i].re;
+  end for;
+end RBF8F;
+model RBF8
+  Real y = RBF8F(time);
+end RBF8;
+//// model: RBF9
+record RBF9C
+  Real re;
+  Real im;
+end RBF9C;
+function RBF9F
+  input Real x;
+  output Real y;
+protected
+  RBF9C[2] t = {RBF9C(1, 2), RBF9C(3, 4)};
+algorithm
+  y := x * sum(t[i].re for i in 1:2);
+end RBF9F;
+model RBF9
+  Real y = RBF9F(time);
+end RBF9;
+//// model: CXF1
+function CXF1F
+  input Real x;
+  output Real y;
+protected
+  Complex[2] t = {Complex(1, 2), Complex(3, 4)};
+algorithm
+  y := x * t[1].re + t[2].im;
+end CXF1F;
+model CXF1
+  Real y = CXF1F(time);
+end CXF1;
+//// model: CXF2
+function CXF2F
+  input Real x;
+  output Real y;
+protected
+  final Complex[2] t = {Complex(1, 2), Complex(3, 4)};
+algorithm
+  y := x * t[1].re + t[2].im;
+end CXF2F;
+model CXF2
+  Real y = CXF2F(time);
+end CXF2;
+//// model: CXF3
+function CXF3F
+  input Real x;
+  output Real y;
+protected
+  Complex t = Complex(1, 2);
+algorithm
+  y := x * t.re + t.im;
+end CXF3F;
+model CXF3
+  Real y = CXF3F(time);
+end CXF3;
+//// model: CXF4
+function CXF4F
+  input Real x;
+  output Real y;
+protected
+  final constant Complex t = Complex(1, 2);
+algorithm
+  y := x * t.re + t.im;
+end CXF4F;
+model CXF4
+  Real y = CXF4F(time);
+end CXF4;
+//// model: CXF5
+function CXF5F
+  input Real x;
+  output Real y;
+protected
+  Complex t = Complex(x, 2);
+algorithm
+  y := x * t.re + t.im;
+end CXF5F;
+model CXF5
+  Real y = CXF5F(time);
+end CXF5;
+//// model: CXF6
+function CXF6F
+  input Real x;
+  output Real y;
+protected
+  Complex a = Complex(1, 2);
+  Complex b;
+algorithm
+  b := a + Complex(x);
+  y := b.re;
+end CXF6F;
+model CXF6
+  Real y = CXF6F(time);
+end CXF6;
+//// model: CXF7
+function CXF7F
+  input Real x;
+  output Real y;
+protected
+  Complex[2] t = {Complex(1, 2), Complex(3, 4)};
+  Complex b;
+algorithm
+  b := t[1] * t[2] - Complex(x);
+  y := Modelica.ComplexMath.real(b);
+end CXF7F;
+model CXF7
+  Real y = CXF7F(time);
+end CXF7;
+//// model: CXF8
+function CXF8F
+  input Real x;
+  output Real y;
+protected
+  Complex a;
+  Complex b;
+algorithm
+  a := Complex(x, 2);
+  b := a + a;
+  y := b.re;
+end CXF8F;
+model CXF8
+  Real y = CXF8F(time);
+end CXF8;
+//// model: CXF9
+function CXF9F
+  input Real x;
+  output Real y;
+protected
+  Complex[2] t = {Complex(1, 2), Complex(3, 4)};
+  Complex b = Complex(0);
+algorithm
+  for i in 1:2 loop
+    b := b + t[i] * Complex(x);
+  end for;
+  y := b.im;
+end CXF9F;
+model CXF9
+  Real y = CXF9F(time);
+end CXF9;
+//// model: RBA3
+record RBA3R
+  Real re;
+  Real im;
+end RBA3R;
+function RBA3F
+  input Real x;
+  output Real y;
+protected
+  RBA3R t = RBA3R(im = 2, re = x);
+algorithm
+  y := x * t.re + t.im;
+end RBA3F;
+model RBA3
+  Real y = RBA3F(time);
+end RBA3;
+//// model: RBA4
+record RBA4R
+  Real re;
+  Real im = 3;
+end RBA4R;
+function RBA4F
+  input Real x;
+  output Real y;
+protected
+  RBA4R t = RBA4R(x);
+algorithm
+  y := x * t.re + t.im;
+end RBA4F;
+model RBA4
+  Real y = RBA4F(time);
+end RBA4;
+//// model: RBA5
+record RBA5R
+  Real re;
+  Real im;
+end RBA5R;
+function RBA5F
+  input RBA5R r;
+  output Real y;
+protected
+  RBA5R t = r;
+algorithm
+  y := t.re + t.im;
+end RBA5F;
+model RBA5
+  Real y = RBA5F(RBA5R(time, 2));
+end RBA5;
+//// model: RBA6
+record RBA6R
+  Real re;
+  Real im;
+end RBA6R;
+function RBA6F
+  input Real x;
+  output Real y;
+protected
+  RBA6R t2 = t;
+  RBA6R t = RBA6R(x, 2);
+algorithm
+  y := t2.re + t.im;
+end RBA6F;
+model RBA6
+  Real y = RBA6F(time);
+end RBA6;
+//// model: RBA7
+record RBA7R
+  Real re;
+  Real im;
+end RBA7R;
+function RBA7G
+  input Real x;
+  output RBA7R r;
+algorithm
+  r := RBA7R(x, 2 * x);
+end RBA7G;
+function RBA7F
+  input Real x;
+  output Real y;
+protected
+  RBA7R t = RBA7G(x);
+algorithm
+  y := t.re + t.im;
+end RBA7F;
+model RBA7
+  Real y = RBA7F(time);
+end RBA7;
+//// model: RBA8
+record RBA8R
+  Real re;
+  Real im;
+end RBA8R;
+function RBA8F
+  input Real x;
+  output Real y;
+protected
+  RBA8R t = if x > 0 then RBA8R(1, 2) else RBA8R(3, 4);
+algorithm
+  y := t.re + t.im;
+end RBA8F;
+model RBA8
+  Real y = RBA8F(time);
+end RBA8;
+//// model: RBA9
+package RBA9P
+  record R
+    Real re;
+    Real im;
+  end R;
+  constant R r0 = R(5, 6);
+end RBA9P;
+function RBA9F
+  input Real x;
+  output Real y;
+protected
+  RBA9P.R t = RBA9P.r0;
+algorithm
+  y := x * t.re + t.im;
+end RBA9F;
+model RBA9
+  Real y = RBA9F(time);
+end RBA9;
+//// model: RBA10
+record RBA10R
+  Real re;
+  Real im;
+end RBA10R;
+function RBA10F
+  input RBA10R[2] rs;
+  output Real y;
+protected
+  RBA10R t = rs[2];
+algorithm
+  y := t.re + t.im;
+end RBA10F;
+model RBA10
+  Real y = RBA10F({RBA10R(time, 2), RBA10R(3, time)});
+end RBA10;
+//// model: RBA11
+record RBA11R
+  Real re;
+  Real im;
+end RBA11R;
+function RBA11F
+  input Real x;
+  output Real y;
+protected
+  parameter RBA11R t = RBA11R(x, 2);
+algorithm
+  y := t.re + t.im;
+end RBA11F;
+model RBA11
+  Real y = RBA11F(time);
+end RBA11;
+//// model: RBA12
+record RBA12R
+  Real[2] v;
+  Real w;
+end RBA12R;
+function RBA12F
+  input Real x;
+  output Real y;
+protected
+  RBA12R t = RBA12R({1, 2}, x);
+algorithm
+  y := t.v[1] + t.v[2] * t.w;
+end RBA12F;
+model RBA12
+  Real y = RBA12F(time);
+end RBA12;
+//// model: RBA13
+record RBA13A
+  Real re;
+  Real im;
+end RBA13A;
+record RBA13B
+  RBA13A a;
+  Real w;
+end RBA13B;
+function RBA13F
+  input Real x;
+  output Real y;
+protected
+  RBA13B t = RBA13B(RBA13A(1, 2), x);
+algorithm
+  y := t.a.re + t.w;
+end RBA13F;
+model RBA13
+  Real y = RBA13F(time);
+end RBA13;
+//// model: RBA14
+record RBA14R
+  Real re;
+  Real im;
+end RBA14R;
+function RBA14F
+  input RBA14R s;
+  output Real y;
+protected
+  RBA14R t = RBA14R(s.im, s.re);
+algorithm
+  y := t.re + 2 * t.im;
+end RBA14F;
+model RBA14
+  Real y = RBA14F(RBA14R(time, 3));
+end RBA14;
+//// model: RBA15
+record RBA15R
+  Real re;
+  Real im;
+end RBA15R;
+function RBA15F
+  input Real x;
+  output Real y;
+protected
+  RBA15R t(re = 5) = RBA15R(x, 2);
+algorithm
+  y := t.re + t.im;
+end RBA15F;
+model RBA15
+  Real y = RBA15F(time);
+end RBA15;
+//// model: RBA16
+record RBA16R
+  Real re;
+  Real im;
+end RBA16R;
+record RBA16S
+  Real re;
+  Real im;
+end RBA16S;
+function RBA16F
+  input Real x;
+  output Real y;
+protected
+  RBA16R t = RBA16S(x, 2);
+algorithm
+  y := t.re + t.im;
+end RBA16F;
+model RBA16
+  Real y = RBA16F(time);
+end RBA16;
+//// model: RBA17
+record RBA17R
+  Real re;
+  Real im;
+end RBA17R;
+function RBA17F
+  input Real x;
+  output Real y;
+protected
+  RBA17R t = RBA17R(x, 2);
+algorithm
+  y := 2 * x;
+end RBA17F;
+model RBA17
+  Real y = RBA17F(time);
+end RBA17;
+//// model: RBA18
+record RBA18R
+  Real re;
+  Real im;
+end RBA18R;
+function RBA18F
+  input Real x;
+  output Real y;
+protected
+  RBA18R t = RBA18R(x, 2);
+algorithm
+  t.re := t.re + 1;
+  t := RBA18R(t.im, t.re);
+  y := t.re + t.im;
+end RBA18F;
+model RBA18
+  Real y = RBA18F(time);
+end RBA18;
+//// model: RBA19
+record RBA19R
+  Real re;
+  Real im;
+end RBA19R;
+function RBA19F
+  input Real x;
+  output Real y;
+protected
+  Real a = t.re * 2;
+  RBA19R t = RBA19R(x, 2);
+algorithm
+  y := a + t.im;
+end RBA19F;
+model RBA19
+  Real y = RBA19F(time);
+end RBA19;
+//// model: RBA20
+record RBA20R
+  Real re;
+  Integer n;
+end RBA20R;
+function RBA20F
+  input Real x;
+  input Integer k;
+  output Real y;
+protected
+  RBA20R t = RBA20R(k, k);
+algorithm
+  y := x * t.re + t.n;
+end RBA20F;
+model RBA20
+  Real y = RBA20F(time, 3);
+end RBA20;
+//// model: RBA21
+record RBA21R
+  Real re;
+  Real im;
+end RBA21R;
+function RBA21F
+  input Real x;
+  output Real y;
+protected
+  constant Real c = 3;
+  RBA21R t = RBA21R(c, 2 * c);
+algorithm
+  y := x * t.re + t.im;
+end RBA21F;
+model RBA21
+  Real y = RBA21F(time);
+end RBA21;
+//// model: RBA22
+package RBA22P
+  constant Real c = 3;
+  record R
+    Real re;
+    Real im;
+  end R;
+  function F
+    input Real x;
+    output Real y;
+  protected
+    R t = R(c, 2 * c);
+  algorithm
+    y := x * t.re + t.im;
+  end F;
+end RBA22P;
+model RBA22
+  Real y = RBA22P.F(time);
+end RBA22;
+//// model: RBA23
+record RBA23R
+  Real re;
+  Real im;
+end RBA23R;
+function RBA23F
+  input Real x;
+  output Real y;
+protected
+  RBA23R t = RBA23R(sin(x), cos(1.0));
+algorithm
+  y := t.re + t.im;
+end RBA23F;
+model RBA23
+  Real y = RBA23F(time);
+end RBA23;
+//// model: RBA24
+record RBA24R
+  Real re = 1;
+  Real im = 2;
+end RBA24R;
+function RBA24F
+  input Real x;
+  output Real y;
+protected
+  RBA24R t = RBA24R();
+algorithm
+  y := x * t.re + t.im;
+end RBA24F;
+model RBA24
+  Real y = RBA24F(time);
+end RBA24;
+//// model: RBB3
+record RBB3R
+  Real re;
+  Real im;
+end RBB3R;
+function RBB3F
+  input Real x;
+  output Real y;
+protected
+  RBB3R[2] t = fill(RBB3R(1, 2), 2);
+algorithm
+  y := x * t[1].re + t[2].im;
+end RBB3F;
+model RBB3
+  Real y = RBB3F(time);
+end RBB3;
+//// model: RBB4
+record RBB4R
+  Real re;
+  Real im;
+end RBB4R;
+function RBB4F
+  input Real x;
+  output Real y;
+protected
+  RBB4R[2] t = {RBB4R(i, x) for i in 1:2};
+algorithm
+  y := x * t[1].re + t[2].im;
+end RBB4F;
+model RBB4
+  Real y = RBB4F(time);
+end RBB4;
+//// model: RBB5
+record RBB5R
+  Real re;
+  Real im;
+end RBB5R;
+function RBB5F
+  input RBB5R[2] rs;
+  output Real y;
+protected
+  RBB5R[2] t = rs;
+algorithm
+  y := t[1].re + t[2].im;
+end RBB5F;
+model RBB5
+  Real y = RBB5F({RBB5R(time, 2), RBB5R(3, time)});
+end RBB5;
+//// model: RBB6
+record RBB6R
+  Real re;
+  Real im;
+end RBB6R;
+function RBB6F
+  input RBB6R[3] rs;
+  output Real y;
+protected
+  RBB6R[2] t = rs[2:3];
+algorithm
+  y := t[1].re + t[2].im;
+end RBB6F;
+model RBB6
+  Real y = RBB6F({RBB6R(time, 2), RBB6R(3, time), RBB6R(5, 6)});
+end RBB6;
+//// model: RBB7
+record RBB7R
+  Real re;
+  Real im;
+end RBB7R;
+function RBB7G
+  input Real x;
+  output RBB7R[2] r;
+algorithm
+  r := {RBB7R(x, 1), RBB7R(2, x)};
+end RBB7G;
+function RBB7F
+  input Real x;
+  output Real y;
+protected
+  RBB7R[2] t = RBB7G(x);
+algorithm
+  y := t[1].re + t[2].im;
+end RBB7F;
+model RBB7
+  Real y = RBB7F(time);
+end RBB7;
+//// model: RBB8
+record RBB8R
+  Real re;
+  Real im;
+end RBB8R;
+function RBB8F
+  input Real x;
+  output Real y;
+protected
+  RBB8R[:] t = {RBB8R(1, 2), RBB8R(3, 4)};
+algorithm
+  y := x * t[1].re + t[2].im;
+end RBB8F;
+model RBB8
+  Real y = RBB8F(time);
+end RBB8;
+//// model: RBB9
+record RBB9R
+  Real re;
+  Real im;
+end RBB9R;
+function RBB9F
+  input Real x;
+  output Real y;
+protected
+  RBB9R t[2] = {RBB9R(1, 2), RBB9R(3, 4)};
+algorithm
+  y := x * t[1].re + t[2].im;
+end RBB9F;
+model RBB9
+  Real y = RBB9F(time);
+end RBB9;
+//// model: RBB10
+record RBB10R
+  Real re;
+  Real im;
+end RBB10R;
+function RBB10F
+  input Real x;
+  output Real y;
+protected
+  RBB10R[2, 2] t = {{RBB10R(1, 2), RBB10R(3, 4)}, {RBB10R(5, 6), RBB10R(7, x)}};
+algorithm
+  y := x * t[1, 2].re + t[2, 2].im;
+end RBB10F;
+model RBB10
+  Real y = RBB10F(time);
+end RBB10;
+//// model: RBB11
+record RBB11R
+  Real re;
+  Real im;
+end RBB11R;
+function RBB11F
+  input Real x;
+  output Real y;
+protected
+  RBB11R a = RBB11R(x, 1);
+  RBB11R b = RBB11R(2, x);
+  RBB11R[2] t = {a, b};
+algorithm
+  y := t[1].re + t[2].im;
+end RBB11F;
+model RBB11
+  Real y = RBB11F(time);
+end RBB11;
+//// model: RBB12
+record RBB12R
+  Real re;
+  Real im;
+end RBB12R;
+function RBB12F
+  input Real x;
+  input Integer n;
+  output Real y;
+protected
+  RBB12R[n] t = fill(RBB12R(1, x), n);
+algorithm
+  y := x * t[1].re + t[n].im;
+end RBB12F;
+model RBB12
+  Real y = RBB12F(time, 3);
+end RBB12;
+//// model: RBB13
+record RBB13R
+  Real re;
+  Real im;
+end RBB13R;
+function RBB13F
+  input Real x;
+  output Real y;
+protected
+  RBB13R[2] t = {RBB13R(1, 2), RBB13R(3, 4)};
+algorithm
+  for i in 1:2 loop
+    t[i] := RBB13R(t[i].im, x);
+  end for;
+  y := t[1].re + t[2].im;
+end RBB13F;
+model RBB13
+  Real y = RBB13F(time);
+end RBB13;
+//// model: RBB14
+record RBB14R
+  Real re;
+  Real im;
+end RBB14R;
+function RBB14F
+  input Real x;
+  output Real y;
+protected
+  RBB14R[2] t = {RBB14R(1, 2), RBB14R(3, 4)};
+algorithm
+  t[1].re := x;
+  y := t[1].re + t[2].im;
+end RBB14F;
+model RBB14
+  Real y = RBB14F(time);
+end RBB14;
+//// model: RBB15
+record RBB15R
+  Real re;
+  Real im;
+end RBB15R;
+function RBB15F
+  input Real x;
+  output Real y;
+protected
+  RBB15R[2] t = {RBB15R(1, 2), RBB15R(3, 4)};
+  Real[2] w = t.re;
+algorithm
+  y := x * w[1] + w[2];
+end RBB15F;
+model RBB15
+  Real y = RBB15F(time);
+end RBB15;
+//// model: RBB16
+record RBB16R
+  Real re;
+  Real im;
+end RBB16R;
+function RBB16F
+  input Real x;
+  output Real y;
+protected
+  RBB16R[2] t = {RBB16R(1, 2), RBB16R(3, 4)};
+algorithm
+  y := x * size(t, 1) + t[end].im;
+end RBB16F;
+model RBB16
+  Real y = RBB16F(time);
+end RBB16;
+//// model: RBB17
+record RBB17R
+  Real re;
+  Real im;
+end RBB17R;
+function RBB17F
+  input Real x;
+  output Real y;
+protected
+  RBB17R[2] t = {RBB17R(1, 2), RBB17R(3, 4)};
+  RBB17R s = t[2];
+algorithm
+  y := x * s.re + t[1].im;
+end RBB17F;
+model RBB17
+  Real y = RBB17F(time);
+end RBB17;
+//// model: RBB18
+record RBB18R
+  Real re;
+  Real im;
+end RBB18R;
+function RBB18F
+  input Real x;
+  output Real y;
+protected
+  RBB18R[3] t = {RBB18R(1, 2), RBB18R(3, 4)};
+algorithm
+  y := x * t[1].re;
+end RBB18F;
+model RBB18
+  Real y = RBB18F(time);
+end RBB18;
+//// model: RBB19
+record RBB19R
+  Real re;
+  Real im;
+end RBB19R;
+function RBB19F
+  input Real x;
+  output Real y;
+protected
+  RBB19R[2] t = {RBB19R(1, 2), RBB19R(3, 4)};
+algorithm
+  y := 0;
+  for r in t loop
+    y := y + x * r.re;
+  end for;
+end RBB19F;
+model RBB19
+  Real y = RBB19F(time);
+end RBB19;
+//// model: RBB20
+record RBB20R
+  Real re;
+  Real im;
+end RBB20R;
+function RBB20F
+  input Real x;
+  output Real y;
+protected
+  RBB20R[2] t = {RBB20R(1, 2), RBB20R(3, 4)};
+algorithm
+  y := x * sum(t.re);
+end RBB20F;
+model RBB20
+  Real y = RBB20F(time);
+end RBB20;
+//// model: CXC2
+function CXC2F
+  input Real x;
+  output Real y;
+protected
+  Complex t = Complex(x);
+algorithm
+  y := t.re + t.im;
+end CXC2F;
+model CXC2
+  Real y = CXC2F(time);
+end CXC2;
+//// model: CXC3
+function CXC3F
+  input Complex a;
+  input Complex b;
+  output Real y;
+protected
+  Complex t = a + b;
+algorithm
+  y := t.re + t.im;
+end CXC3F;
+model CXC3
+  Real y = CXC3F(Complex(time, 1), Complex(2, time));
+end CXC3;
+//// model: CXC4
+function CXC4F
+  input Complex a;
+  input Complex b;
+  output Real y;
+protected
+  Complex[2] t = {a + b, a * b};
+algorithm
+  y := t[1].re + t[2].im;
+end CXC4F;
+model CXC4
+  Real y = CXC4F(Complex(time, 1), Complex(2, time));
+end CXC4;
+//// model: CXC5
+function CXC5F
+  input Real x;
+  output Real y;
+protected
+  Complex t = Modelica.ComplexMath.j;
+algorithm
+  y := x * t.re + t.im;
+end CXC5F;
+model CXC5
+  Real y = CXC5F(time);
+end CXC5;
+//// model: CXC6
+function CXC6F
+  input Complex a;
+  output Real y;
+protected
+  Complex t = -a;
+algorithm
+  y := t.re + t.im;
+end CXC6F;
+model CXC6
+  Real y = CXC6F(Complex(time, 1));
+end CXC6;
+//// model: CXC7
+function CXC7F
+  input Complex a;
+  output Real y;
+protected
+  Complex t = 2 * a;
+algorithm
+  y := t.re + t.im;
+end CXC7F;
+model CXC7
+  Real y = CXC7F(Complex(time, 1));
+end CXC7;
+//// model: CXC8
+function CXC8F
+  input Real x;
+  output Real y;
+protected
+  Complex[2] t = fill(Complex(1, 2), 2);
+algorithm
+  y := x * t[1].re + t[2].im;
+end CXC8F;
+model CXC8
+  Real y = CXC8F(time);
+end CXC8;
+//// model: CXC9
+function CXC9F
+  input Real x;
+  output Real y;
+protected
+  Complex[2] t = {Complex(i, x) for i in 1:2};
+algorithm
+  y := x * t[1].re + t[2].im;
+end CXC9F;
+model CXC9
+  Real y = CXC9F(time);
+end CXC9;
+//// model: CXC10
+function CXC10F
+  input Real x;
+  output Real y;
+protected
+  Modelica.Units.SI.ComplexVoltage v = Complex(1, 2);
+algorithm
+  y := x * v.re + v.im;
+end CXC10F;
+model CXC10
+  Real y = CXC10F(time);
+end CXC10;
+//// model: CXC11
+function CXC11F
+  input Complex a;
+  output Real y;
+protected
+  Complex t = Modelica.ComplexMath.conj(a);
+algorithm
+  y := t.re + t.im;
+end CXC11F;
+model CXC11
+  Real y = CXC11F(Complex(time, 1));
+end CXC11;
+//// model: CXC12
+function CXC12F
+  input Real x;
+  input Integer n;
+  output Real y;
+protected
+  Complex t = Complex(n);
+algorithm
+  y := x * t.re + t.im;
+end CXC12F;
+model CXC12
+  Real y = CXC12F(time, 3);
+end CXC12;
+//// model: CXC13
+function CXC13F
+  input Real x;
+  output Real y;
+protected
+  Complex t = Complex(re = x, im = 1);
+algorithm
+  y := t.re + t.im;
+end CXC13F;
+model CXC13
+  Real y = CXC13F(time);
+end CXC13;
+//// model: CXC14
+function CXC14F
+  input Complex a;
+  output Real y;
+protected
+  final constant Complex r_1 = Complex(4, 5);
+  Complex b;
+algorithm
+  b := r_1 * a;
+  y := b.re;
+end CXC14F;
+model CXC14
+  Real y = CXC14F(Complex(time, 1));
+end CXC14;
+//// model: CXC15
+function CXC15F
+  input Real x;
+  output Real y;
+protected
+  Complex[2] t = {Complex(1, 2), Complex(3, 4)};
+  Complex s = t[1] + t[2];
+algorithm
+  y := x * s.re + s.im;
+end CXC15F;
+model CXC15
+  Real y = CXC15F(time);
+end CXC15;
+//// model: CXC16
+operator record CXC16C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    function fromReal
+      import CXC16C;
+      input Real re;
+      input Real im = 0;
+      output CXC16C result(re = re, im = im);
+    algorithm
+    end fromReal;
+  end 'constructor';
+  encapsulated operator function '+'
+    import CXC16C;
+    input CXC16C c1;
+    input CXC16C c2;
+    output CXC16C c3;
+  algorithm
+    c3 := CXC16C(c1.re + c2.re, c1.im + c2.im);
+  end '+';
+end CXC16C;
+function CXC16F
+  input Real x;
+  output Real y;
+protected
+  CXC16C[2] t = {CXC16C(1, 2), CXC16C(3, x)};
+  CXC16C s = t[1] + t[2];
+algorithm
+  y := s.re + s.im;
+end CXC16F;
+model CXC16
+  Real y = CXC16F(time);
+end CXC16;
+//// model: CXC17
+operator record CXC17C
+  Real a;
+  Real b;
+end CXC17C;
+function CXC17F
+  input Real x;
+  output Real y;
+protected
+  CXC17C t = CXC17C(x, 2);
+  CXC17C[2] u = {CXC17C(1, 2), CXC17C(3, x)};
+algorithm
+  y := t.a + u[2].b;
+end CXC17F;
+model CXC17
+  Real y = CXC17F(time);
+end CXC17;
+//// model: CXC18
+function CXC18F
+  input Complex a;
+  input Complex b;
+  input Real x;
+  output Real y;
+protected
+  Complex t = if x > 0 then a else b;
+algorithm
+  y := t.re + t.im;
+end CXC18F;
+model CXC18
+  Real y = CXC18F(Complex(time, 1), Complex(2, time), time);
+end CXC18;
+//// model: CXC19
+function CXC19F
+  input Real x;
+  output Real y;
+protected
+  final Complex[3] r_2 = {Complex(-72.597457432922, -78.100842711287), Complex(-5.57107698030123e-5, 4.64578634580806e-5), Complex(2.34801409215913e-11, -2.85651142904972e-11)};
+  Complex r2;
+algorithm
+  r2 := r_2[1];
+  for k in 2:3 loop
+    r2 := r2 + (r_2[k] * Complex((x - 1)^(k - 1)));
+  end for;
+  y := Modelica.ComplexMath.real(r2);
+end CXC19F;
+model CXC19
+  Real y = CXC19F(time);
+end CXC19;
+//// model: CXC20
+function CXC20F
+  input Real x;
+  output Real y;
+protected
+  Complex[2] t = {Complex(1, 2), Complex(3, 4)};
+  Complex[2] o;
+algorithm
+  o[1] := (t[1] - Complex(x)) * Modelica.ComplexMath.log(t[1] - Complex(x));
+  o[2] := Complex(x^2) / t[2] + Complex(2) * t[1];
+  y := Modelica.ComplexMath.real(o[1] + o[2]);
+end CXC20F;
+model CXC20
+  Real y = CXC20F(time);
+end CXC20;
+//// model: CXC21
+function CXC21F
+  input Real x;
+  output Real y;
+protected
+  Complex[2] t = {Complex(1, 2), Complex(3, 4)};
+  Complex s = Complex(0);
+algorithm
+  for i in 1:2 loop
+    s := s + t[i];
+  end for;
+  y := x * s.re;
+end CXC21F;
+model CXC21
+  Real y = CXC21F(time);
+end CXC21;
+//// model: CXC22
+function CXC22F
+  input Real x;
+  output Real y;
+protected
+  Complex t = Complex(1, 2) * Complex(3, 4);
+algorithm
+  y := x * t.re + t.im;
+end CXC22F;
+model CXC22
+  Real y = CXC22F(time);
+end CXC22;
+//// model: CXC23
+function CXC23F
+  input Complex[2] a;
+  output Real y;
+protected
+  Complex[2] t = a;
+algorithm
+  y := t[1].re + t[2].im;
+end CXC23F;
+model CXC23
+  Real y = CXC23F({Complex(time, 1), Complex(2, time)});
+end CXC23;
+//// model: CXC24
+function CXC24F
+  input Real x;
+  output Real y;
+protected
+  Complex t = Complex(1, 2);
+  Complex u = t * Complex(x);
+algorithm
+  y := u.re + u.im;
+end CXC24F;
+model CXC24
+  Real y = CXC24F(time);
+end CXC24;
+//// model: CXC25
+function CXC25F
+  input Real x;
+  output Real y;
+protected
+  Complex t = Complex(2/3, 1/7);
+algorithm
+  y := x * t.re + t.im;
+end CXC25F;
+model CXC25
+  Real y = CXC25F(time);
+end CXC25;
+//// model: CXD3
+function CXD3F
+  input Real x;
+  output Real y;
+protected
+  Complex a = Complex(x, 1);
+  Complex b = Complex(2, x);
+  Complex t = a + b;
+algorithm
+  y := t.re + t.im;
+end CXD3F;
+model CXD3
+  Real y = CXD3F(time);
+end CXD3;
+//// model: CXD4
+function CXD4F
+  input Real x;
+  output Real y;
+protected
+  Complex a = Complex(x, 1);
+  Complex b = Complex(2, x);
+  Complex[2] t = {a + b, a * b};
+algorithm
+  y := t[1].re + t[2].im;
+end CXD4F;
+model CXD4
+  Real y = CXD4F(time);
+end CXD4;
+//// model: CXD6
+function CXD6F
+  input Real x;
+  output Real y;
+protected
+  Complex a = Complex(x, 1);
+  Complex t = -a;
+algorithm
+  y := t.re + t.im;
+end CXD6F;
+model CXD6
+  Real y = CXD6F(time);
+end CXD6;
+//// model: CXD7
+function CXD7F
+  input Real x;
+  output Real y;
+protected
+  Complex a = Complex(x, 1);
+  Complex t = 2 * a;
+algorithm
+  y := t.re + t.im;
+end CXD7F;
+model CXD7
+  Real y = CXD7F(time);
+end CXD7;
+//// model: CXD11
+function CXD11F
+  input Real x;
+  output Real y;
+protected
+  Complex a = Complex(x, 1);
+  Complex t = Modelica.ComplexMath.conj(a);
+algorithm
+  y := t.re + t.im;
+end CXD11F;
+model CXD11
+  Real y = CXD11F(time);
+end CXD11;
+//// model: CXD14
+function CXD14F
+  input Real x;
+  output Real y;
+protected
+  final constant Complex r_1 = Complex(4, 5);
+  Complex a = Complex(x, 1);
+  Complex b;
+algorithm
+  b := r_1 * a;
+  y := b.re;
+end CXD14F;
+model CXD14
+  Real y = CXD14F(time);
+end CXD14;
+//// model: CXD18
+function CXD18F
+  input Real x;
+  output Real y;
+protected
+  Complex a = Complex(x, 1);
+  Complex b = Complex(2, x);
+  Complex t = if x > 0 then a else b;
+algorithm
+  y := t.re + t.im;
+end CXD18F;
+model CXD18
+  Real y = CXD18F(time);
+end CXD18;
+//// model: CXD23
+function CXD23F
+  input Real x;
+  output Real y;
+protected
+  Complex[2] a = {Complex(x, 1), Complex(2, x)};
+  Complex[2] t = a;
+algorithm
+  y := t[1].re + t[2].im;
+end CXD23F;
+model CXD23
+  Real y = CXD23F(time);
+end CXD23;
+//// model: CXD24
+function CXD24F
+  input Real x;
+  output Real y;
+protected
+  Complex a = Complex(x, 1);
+  Complex t = a - Complex(1) / a;
+algorithm
+  y := t.re + t.im;
+end CXD24F;
+model CXD24
+  Real y = CXD24F(time);
+end CXD24;
+//// model: CXD25
+function CXD25F
+  input Real x;
+  output Real y;
+protected
+  Complex a = Complex(x, 1);
+  Complex t = a * a + a;
+  Complex u = Modelica.ComplexMath.log(t);
+algorithm
+  y := Modelica.ComplexMath.real(u);
+end CXD25F;
+model CXD25
+  Real y = CXD25F(time);
+end CXD25;
+//// model: CXD26
+function CXD26F
+  input Real x;
+  output Real y;
+protected
+  Complex[2] t = {Complex(1, 2), Complex(3, 4)};
+  Complex[2] u = {t[1] - Complex(x), t[2] + Complex(x)};
+algorithm
+  y := u[1].re + u[2].im;
+end CXD26F;
+model CXD26
+  Real y = CXD26F(time);
+end CXD26;
+//// model: CXD27
+function CXD27F
+  input Real x;
+  output Real y;
+protected
+  Complex a = Complex(x, 1);
+  Complex t = a ^ 2;
+algorithm
+  y := t.re + t.im;
+end CXD27F;
+model CXD27
+  Real y = CXD27F(time);
+end CXD27;
+//// model: CXD28
+function CXD28F
+  input Real x;
+  output Real y;
+protected
+  Complex a = Complex(x, 1);
+  Boolean t = a == Complex(1, 1);
+algorithm
+  y := if t then 1 else 2;
+end CXD28F;
+model CXD28
+  Real y = CXD28F(time);
+end CXD28;
+//// model: CXD29
+function CXD29F
+  input Real x;
+  output Real y;
+protected
+  Complex a = Complex(x, 1);
+  Real t = Modelica.ComplexMath.abs(a);
+algorithm
+  y := t;
+end CXD29F;
+model CXD29
+  Real y = CXD29F(time);
+end CXD29;
+//// model: CXD30
+function CXD30F
+  input Real x;
+  output Complex y = Complex(x, 2);
+algorithm
+end CXD30F;
+model CXD30
+  Real y = Modelica.ComplexMath.real(CXD30F(time));
+end CXD30;
+//// model: RBO1
+record RBO1R
+  Real re;
+  Real im;
+end RBO1R;
+function RBO1F
+  input Real x;
+  output RBO1R r = RBO1R(x, 2);
+algorithm
+end RBO1F;
+model RBO1
+  RBO1R z = RBO1F(time);
+end RBO1;
+//// model: RBO2
+record RBO2R
+  Real re;
+  Real im;
+end RBO2R;
+function RBO2F
+  input Real x;
+  output Real y;
+  output RBO2R r = RBO2R(x, 2);
+algorithm
+  y := r.re + r.im;
+end RBO2F;
+model RBO2
+  Real z = RBO2F(time);
+end RBO2;
+//// model: RBO3
+record RBO3R
+  Real re;
+  Real im;
+end RBO3R;
+function RBO3F
+  input Real x;
+  output Real y;
+  output RBO3R[2] r = {RBO3R(x, 2), RBO3R(3, 4)};
+algorithm
+  y := r[1].re + r[2].im;
+end RBO3F;
+model RBO3
+  Real z = RBO3F(time);
+end RBO3;
+//// model: RBO4
+record RBO4R
+  Real re;
+  Real im;
+end RBO4R;
+function RBO4F
+  input Real x;
+  input RBO4R r = RBO4R(1, 2);
+  output Real y;
+algorithm
+  y := x * r.re + r.im;
+end RBO4F;
+model RBO4
+  Real z = RBO4F(time);
+end RBO4;
+//// model: RBO6
+function RBO6F
+  input Real x;
+  output Real y;
+  output Complex c = Complex(x, 2);
+algorithm
+  y := c.re * c.im;
+end RBO6F;
+model RBO6
+  Real z = RBO6F(time);
+end RBO6;
+//// model: RBO7
+record RBO7R
+  Real re;
+  Real im;
+end RBO7R;
+function RBO7F
+  input Real x;
+  output Real y;
+  output RBO7R r = RBO7R(x, 2);
+algorithm
+  y := r.re + r.im;
+end RBO7F;
+model RBO7
+  parameter Real p = RBO7F(2.0);
+  Real z = RBO7F(3.0) * time;
+end RBO7;
+//// model: RBO8
+record RBO8R
+  Real re;
+  Real im;
+end RBO8R;
+function RBO8F
+  input Real x;
+  input RBO8R r = RBO8R(x, 2);
+  output Real y;
+algorithm
+  y := r.re + r.im;
+end RBO8F;
+model RBO8
+  Real y = RBO8F(time);
+end RBO8;
+//// model: RBO9
+record RBO9R
+  Real re;
+  Real im;
+end RBO9R;
+function RBO9F
+  input Real x;
+  input RBO9R[2] r = {RBO9R(1, 2), RBO9R(3, 4)};
+  output Real y;
+algorithm
+  y := x * r[1].re + r[2].im;
+end RBO9F;
+model RBO9
+  Real y = RBO9F(time);
+end RBO9;
+//// model: RBO10
+function RBO10F
+  input Real x;
+  input Complex c = Complex(x, 1);
+  output Real y;
+algorithm
+  y := c.re + c.im;
+end RBO10F;
+model RBO10
+  Real y = RBO10F(time);
+end RBO10;
+//// model: RBO11
+record RBO11R
+  Real re;
+  Real im;
+end RBO11R;
+function RBO11F
+  input Real x;
+  input RBO11R r = RBO11R(x, 2);
+  output Real y;
+algorithm
+  y := r.re + r.im;
+end RBO11F;
+function RBO11G
+  input Real x;
+  output Real y;
+algorithm
+  y := RBO11F(2 * x);
+end RBO11G;
+model RBO11
+  Real y = RBO11G(time);
+end RBO11;
+//// model: INX1
+package INX1P
+  record R
+    Real x;
+    Real y[2];
+  end R;
+  function f
+    input Real a;
+    input Real[2] v;
+    output R r = R(a, 2 * v);
+  end f;
+end INX1P;
+model INX1
+  parameter Real p = 1;
+  parameter Real q[2] = {1, 2};
+  final parameter INX1P.R r = INX1P.f(p, q);
+end INX1;
+//// model: INX2
+package INX2P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r = R(a * 1, 2 * a + 0);
+  end f;
+end INX2P;
+model INX2
+  parameter Real p = 1;
+  final parameter INX2P.R r = INX2P.f(p);
+end INX2;
+//// model: INX3
+package INX3P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r = R(a, sin(a));
+  end f;
+end INX3P;
+model INX3
+  parameter Real p = 1;
+  final parameter INX3P.R r = INX3P.f(p);
+end INX3;
+//// model: INX4
+package INX4P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r = R(a, 2 * a);
+  algorithm
+    r.y := 3 * a;
+  end f;
+end INX4P;
+model INX4
+  parameter Real p = 1;
+  final parameter INX4P.R r = INX4P.f(p);
+end INX4;
+//// model: INX5
+package INX5P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r = R(a, 2 * a);
+  end f;
+end INX5P;
+model INX5
+  parameter Real p = 1;
+  parameter INX5P.R r = INX5P.f(p);
+end INX5;
+//// model: INX6
+package INX6P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r = R(a, 2 * a);
+  end f;
+end INX6P;
+model INX6
+  INX6P.R r = INX6P.f(time);
+end INX6;
+//// model: INX7
+package INX7P
+  record R
+    Real x;
+    Real y;
+  end R;
+  function f
+    input Real a;
+    output R r = R(a, 2 * a);
+  end f;
+end INX7P;
+model INX7
+  parameter Real p = 1;
+  final parameter INX7P.R r = INX7P.f(2 * p);
+end INX7;
+//// model: INX8
+operator record INX8C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    function fromReal
+      import INX8C;
+      input Real re;
+      input Real im = 0;
+      output INX8C result(re = re, im = im);
+    algorithm
+    end fromReal;
+  end 'constructor';
+end INX8C;
+function INX8F
+  input Real a;
+  output INX8C c = INX8C(a, 2 * a);
+end INX8F;
+model INX8
+  parameter Real p = 1;
+  final parameter INX8C r = INX8F(p);
+end INX8;
+//// model: RBE1
+record RBE1R
+  Real re = 10;
+  Real im = 20;
+end RBE1R;
+function RBE1F
+  input Real x;
+  output Real y;
+protected
+  RBE1R t = RBE1R(1, 2);
+algorithm
+  y := x * t.re + t.im;
+end RBE1F;
+model RBE1
+  parameter Real p = RBE1F(2.0);
+end RBE1;
+//// model: RBE2
+record RBE2R
+  Real re = 10;
+  Real im = 20;
+end RBE2R;
+function RBE2F
+  input Real x;
+  output Real y;
+protected
+  RBE2R t = RBE2R(1, 2);
+algorithm
+  y := x * t.re + t.im;
+end RBE2F;
+model RBE2
+  Real y = RBE2F(2.0);
+end RBE2;
+//// model: RBE3
+record RBE3R
+  Real re = 10;
+  Real im = 20;
+end RBE3R;
+function RBE3F
+  input Real x;
+  output Real y;
+protected
+  RBE3R t = RBE3R(1, 2);
+algorithm
+  y := x * t.re + t.im;
+end RBE3F;
+model RBE3
+  constant Real c = RBE3F(2.0);
+  Real y = c * time;
+end RBE3;
+//// model: RBE4
+record RBE4R
+  Real re = 10;
+  Real im = 20;
+end RBE4R;
+function RBE4F
+  input Real x;
+  output Real y;
+protected
+  RBE4R[2] t = {RBE4R(1, 2), RBE4R(3, 4)};
+algorithm
+  y := x * t[1].re + t[2].im;
+end RBE4F;
+model RBE4
+  parameter Real p = RBE4F(2.0);
+  Real y = RBE4F(2.0);
+end RBE4;
+//// model: RBE5
+record RBE5R
+  Real re = 10;
+  Real im = 20;
+end RBE5R;
+function RBE5F
+  input Real x;
+  output Real y;
+protected
+  RBE5R t = RBE5R(x, 2);
+algorithm
+  y := x * t.re + t.im;
+end RBE5F;
+model RBE5
+  parameter Real p = RBE5F(2.0);
+  Real y[2] = {RBE5F(3.0), RBE5F(time)};
+end RBE5;
+//// model: RBE6
+function RBE6F
+  input Real x;
+  output Real y;
+protected
+  Complex t = Complex(1, 2);
+algorithm
+  y := x * t.re + t.im;
+end RBE6F;
+model RBE6
+  parameter Real p = RBE6F(2.0);
+  Real y = RBE6F(2.0);
+end RBE6;
+//// model: RBE7
+function RBE7F
+  input Real x;
+  output Real y;
+protected
+  Complex[2] t = {Complex(1, 2), Complex(3, 4)};
+  Complex b;
+algorithm
+  b := t[1] * t[2] + Complex(x);
+  y := b.re;
+end RBE7F;
+model RBE7
+  parameter Real p = RBE7F(2.0);
+  Real y = RBE7F(2.0);
+end RBE7;
+//// model: RBE8
+record RBE8R
+  Real re = 10;
+  Real im = 20;
+end RBE8R;
+function RBE8F
+  input Real x;
+  output Real y;
+protected
+  RBE8R t = RBE8R(1, 2);
+algorithm
+  y := x * t.re + t.im;
+end RBE8F;
+model RBE8
+  parameter Real p(fixed = false);
+  Real y = RBE8F(2.0) * time;
+initial equation
+  p = RBE8F(3.0);
+end RBE8;
+//// model: RBE9
+record RBE9R
+  Real re = 10;
+  Real im = 20;
+end RBE9R;
+function RBE9F
+  input Real x;
+  output Real y;
+protected
+  RBE9R t(re = 5) = RBE9R(x, 2);
+algorithm
+  y := t.re + t.im;
+end RBE9F;
+model RBE9
+  parameter Real p = RBE9F(2.0);
+end RBE9;
+//// model: RBE10
+record RBE10R
+  Real re = 10;
+  Real im = 20;
+end RBE10R;
+function RBE10F
+  input Real x;
+  output Real y;
+protected
+  RBE10R[2] t = fill(RBE10R(1, 2), 2);
+algorithm
+  y := x * t[1].re + t[2].im;
+end RBE10F;
+model RBE10
+  parameter Real p = RBE10F(2.0);
+end RBE10;
+//// model: RBE11
+record RBE11R
+  Real re = 10;
+  Real im = 20;
+end RBE11R;
+function RBE11F
+  input Real x;
+  output Real y;
+protected
+  RBE11R[2] t = {RBE11R(i, x) for i in 1:2};
+algorithm
+  y := x * t[1].re + t[2].im;
+end RBE11F;
+model RBE11
+  parameter Real p = RBE11F(2.0);
+end RBE11;
+//// model: RBE12
+record RBE12R
+  Real re = 10;
+  Real im = 20;
+end RBE12R;
+function RBE12F
+  input Real x;
+  output Real y;
+protected
+  RBE12R t2 = t;
+  RBE12R t = RBE12R(x, 2);
+algorithm
+  y := t2.re + t.im;
+end RBE12F;
+model RBE12
+  parameter Real p = RBE12F(3.0);
+end RBE12;
+//// model: RBE13
+record RBE13R
+  Real re = 10;
+  Real im = 20;
+end RBE13R;
+function RBE13F
+  input Real x;
+  output Real y;
+protected
+  RBE13R t = RBE13R(1, 2);
+algorithm
+  t.re := t.re + x;
+  y := t.re * t.im;
+end RBE13F;
+model RBE13
+  parameter Real p = RBE13F(3.0);
+end RBE13;
+//// model: RBE14
+record RBE14R
+  Real re = 10;
+  Real im = 20;
+end RBE14R;
+function RBE14F
+  input Real x;
+  output Real y;
+  output RBE14R r = RBE14R(x, 2);
+algorithm
+  y := r.re + r.im;
+end RBE14F;
+model RBE14
+  parameter Real p = RBE14F(3.0);
+end RBE14;
+//// model: RBE15
+record RBE15R
+  Real re = 10;
+  Real im = 20;
+end RBE15R;
+function RBE15F
+  input Real x;
+  input RBE15R r = RBE15R(1, 2);
+  output Real y;
+algorithm
+  y := x * r.re + r.im;
+end RBE15F;
+model RBE15
+  parameter Real p = RBE15F(3.0);
+end RBE15;
+//// model: RBE17
+record RBE17R
+  Real re = 10;
+  Real im = 20;
+end RBE17R;
+function RBE17F
+  input RBE17R s;
+  output Real y;
+protected
+  RBE17R t = RBE17R(s.im, s.re);
+algorithm
+  y := t.re + 2 * t.im;
+end RBE17F;
+model RBE17
+  parameter Real p = RBE17F(RBE17R(3, 4));
+end RBE17;
+//// model: RBE18
+record RBE18R
+  Real re = 10;
+  Real im = 20;
+end RBE18R;
+function RBE18F
+  input Real x;
+  output Real y;
+protected
+  RBE18R t = RBE18R(x, 2);
+algorithm
+  y := t.re + t.im;
+end RBE18F;
+model RBE18
+  parameter Real p[2] = {RBE18F(1.0), RBE18F(2.0)};
+end RBE18;
+//// model: RBE19
+record RBE19R
+  Real re = 10;
+  Real im = 20;
+end RBE19R;
+function RBE19F
+  input Real x;
+  output Real y;
+protected
+  RBE19R t = RBE19R(x, 2);
+algorithm
+  y := t.re + t.im;
+end RBE19F;
+function RBE19G
+  input Real x;
+  output Real y;
+algorithm
+  y := RBE19F(2.0) * x;
+end RBE19G;
+model RBE19
+  Real y = RBE19G(time);
+end RBE19;
+//// model: RBE20
+record RBE20R
+  Real re = 10;
+  Real im = 20;
+end RBE20R;
+function RBE20F
+  input Real x;
+  output Real y;
+protected
+  RBE20R t = RBE20R(x, 2);
+algorithm
+  y := t.re + t.im;
+end RBE20F;
+model RBE20
+  parameter Real q = 3;
+  parameter Real p = RBE20F(q);
+  Real z = RBE20F(q) * time;
+end RBE20;
+//// model: RBE21
+record RBE21R
+  Real re = 10;
+  Real im = 20;
+end RBE21R;
+function RBE21F
+  input Real x;
+  output Real y;
+protected
+  RBE21R t = RBE21R(x, 2);
+algorithm
+  y := t.re + t.im;
+end RBE21F;
+model RBE21
+  parameter Integer n = integer(RBE21F(1.0));
+  Real z[n] = fill(time, n);
+end RBE21;
+//// model: RBE22
+function RBE22F
+  input Real x;
+  output Real y;
+protected
+  Complex t = Complex(x, 2);
+algorithm
+  y := t.re + t.im;
+end RBE22F;
+model RBE22
+  parameter Real p = RBE22F(3.0);
+end RBE22;
+//// model: RBE23
+record RBE23R
+  Real re = 10;
+  Real im = 20;
+end RBE23R;
+function RBE23F
+  input Real x;
+  output Real y;
+protected
+  RBE23R[2] t = {RBE23R(1, 2), RBE23R(x, 4)};
+algorithm
+  for i in 1:2 loop
+    y := if i == 1 then t[i].re else y + t[i].re * t[i].im;
+  end for;
+end RBE23F;
+model RBE23
+  parameter Real p = RBE23F(3.0);
+end RBE23;
+//// model: RBE24
+record RBE24R
+  Real re = 10;
+  Real im = 20;
+end RBE24R;
+function RBE24F
+  input Real x;
+  output Real y;
+protected
+  RBE24R t = if x > 0 then RBE24R(1, 2) else RBE24R(3, 4);
+algorithm
+  y := t.re + t.im;
+end RBE24F;
+model RBE24
+  parameter Real p = RBE24F(3.0);
+  parameter Real p2 = RBE24F(-3.0);
+end RBE24;
+//// model: RBE25
+record RBE25R
+  Real re = 10;
+  Real im = 20;
+end RBE25R;
+function RBE25F
+  input Real x;
+  output Real y;
+protected
+  RBE25R t = RBE25R(x, 2);
+algorithm
+  y := t.re + t.im;
+end RBE25F;
+model RBE25
+  constant Real c = RBE25F(1.0);
+  parameter Real p(start = RBE25F(2.0)) = 1;
+  Real z(min = RBE25F(3.0)) = time;
+end RBE25;
+//// model: RBE26
+record RBE26R
+  Real re = 10;
+  Real im = 20;
+end RBE26R;
+function RBE26F
+  input Real x;
+  output Real y;
+protected
+  RBE26R t = RBE26R(1, 2);
+algorithm
+  t := RBE26R(x, 5);
+  y := t.re * t.im;
+end RBE26F;
+model RBE26
+  parameter Real p = RBE26F(3.0);
+end RBE26;
+//// model: RBE27
+record RBE27R
+  Real re = 10;
+  Real im = 20;
+end RBE27R;
+function RBE27F
+  input Real x;
+  output Real y;
+protected
+  RBE27R[2] t = {RBE27R(1, 2), RBE27R(3, 4)};
+algorithm
+  t[1] := RBE27R(x, 5);
+  y := t[1].re * t[1].im + t[2].re;
+end RBE27F;
+model RBE27
+  parameter Real p = RBE27F(3.0);
+end RBE27;
+//// model: RBE28
+record RBE28R
+  Real re = 10;
+  Real im = 20;
+end RBE28R;
+function RBE28F
+  input Real x;
+  output Real y;
+protected
+  RBE28R[2] t = {RBE28R(1, 2), RBE28R(3, 4)};
+algorithm
+  t[1].re := x;
+  y := t[1].re * t[1].im + t[2].re;
+end RBE28F;
+model RBE28
+  parameter Real p = RBE28F(3.0);
+end RBE28;
+//// model: RBE29
+record RBE29R
+  Real re = 10;
+  Real im = 20;
+end RBE29R;
+function RBE29F
+  input Real x;
+  output Real y;
+protected
+  RBE29R[2] t = {RBE29R(1, 2), RBE29R(3, 4)};
+algorithm
+  t := {RBE29R(x, 1), RBE29R(2, 3)};
+  y := t[1].re * t[1].im + t[2].re;
+end RBE29F;
+model RBE29
+  parameter Real p = RBE29F(3.0);
+end RBE29;
+//// model: RBE30
+record RBE30R
+  Real re = 10;
+  Real im = 20;
+end RBE30R;
+function RBE30F
+  input Real x;
+  output Real y;
+protected
+  RBE30R t;
+algorithm
+  t.re := x;
+  y := t.re * t.im;
+end RBE30F;
+model RBE30
+  parameter Real p = RBE30F(3.0);
+end RBE30;
+//// model: RBE31
+record RBE31R
+  Real re = 10;
+  Real im = 20;
+end RBE31R;
+function RBE31F
+  input Real x;
+  output Real y;
+protected
+  RBE31R t;
+algorithm
+  t := RBE31R(x, 2);
+  t.re := 5;
+  y := t.re * t.im;
+end RBE31F;
+model RBE31
+  parameter Real p = RBE31F(3.0);
+end RBE31;
+//// model: RBE32
+record RBE32R
+  Real re = 10;
+  Real im = 20;
+end RBE32R;
+function RBE32F
+  input Real x;
+  output RBE32R r = RBE32R(x, 2);
+algorithm
+  r := RBE32R(1, x);
+end RBE32F;
+function RBE32G
+  input Real x;
+  output Real y;
+protected
+  RBE32R s;
+algorithm
+  s := RBE32F(x);
+  y := s.re + 10 * s.im;
+end RBE32G;
+model RBE32
+  parameter Real p = RBE32G(3.0);
+end RBE32;
+//// model: RBE33
+function RBE33F
+  input Real x;
+  output Real y;
+protected
+  Complex b = Complex(0);
+algorithm
+  b := b + Complex(x);
+  y := b.re;
+end RBE33F;
+model RBE33
+  parameter Real p = RBE33F(3.0);
+end RBE33;
+//// model: RBE34
+function RBE34F
+  input Real x;
+  output Real y;
+protected
+  Complex b;
+algorithm
+  b := Complex(x, 1);
+  b := b * b;
+  y := b.re;
+end RBE34F;
+model RBE34
+  parameter Real p = RBE34F(3.0);
+end RBE34;
+//// model: RBE35
+record RBE35R
+  Real re = 10;
+  Real im = 20;
+end RBE35R;
+function RBE35F
+  input Real x;
+  output Real y;
+  output RBE35R r = RBE35R(x, 2);
+algorithm
+  r.im := 7;
+  y := r.re + r.im;
+end RBE35F;
+model RBE35
+  parameter Real p = RBE35F(3.0);
+end RBE35;
+//// model: RBE36
+record RBE36R
+  Real re = 10;
+  Real im = 20;
+end RBE36R;
+function RBE36F
+  input Real x;
+  output Real y;
+protected
+  RBE36R t(re = 1, im = 2);
+algorithm
+  t.re := t.re + x;
+  y := t.re * t.im;
+end RBE36F;
+model RBE36
+  parameter Real p = RBE36F(3.0);
+end RBE36;
+//// model: RBE37
+function RBE37F
+  input Real x;
+  output Real y;
+protected
+  Complex[2] t = {Complex(1, 2), Complex(3, 4)};
+  Complex s;
+algorithm
+  s := t[1] + t[2];
+  y := x * s.re;
+end RBE37F;
+model RBE37
+  parameter Real p = RBE37F(3.0);
+end RBE37;
+//// model: MOX4
+operator record MOX4C
+  Real re;
+  Real im;
+  encapsulated operator function '*'
+    import MOX4C;
+    input MOX4C c1;
+    input MOX4C c2;
+    output MOX4C c3;
+  algorithm
+    c3 := MOX4C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+  end '*';
+end MOX4C;
+function MOX4F
+  input Real x;
+  output Real y;
+  output Real z;
+protected
+  MOX4C b;
+algorithm
+  b := MOX4C(x, 1);
+  b := b * b;
+  y := b.re;
+  z := b.im;
+end MOX4F;
+model MOX4
+  parameter Real p = MOX4F(3.0);
+end MOX4;
+//// model: MOX5
+record MOX5R
+  Real a;
+  Real b;
+end MOX5R;
+operator record MOX5C
+  Real re;
+  Real im;
+  encapsulated operator function '*'
+    import MOX5C;
+    input MOX5C c1;
+    input MOX5C c2;
+    output MOX5C c3;
+  algorithm
+    c3 := MOX5C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+  end '*';
+end MOX5C;
+function MOX5F
+  input MOX5R r;
+  output Real y;
+  output Real z;
+protected
+  MOX5C b;
+algorithm
+  b := MOX5C(r.a, r.b);
+  b := b * b;
+  y := b.re;
+  z := b.im;
+end MOX5F;
+model MOX5
+  parameter Real p = MOX5F(MOX5R(3.0, 1.0));
+end MOX5;
+//// model: MOX6
+function MOX6F
+  input Real x;
+  output Real y;
+  output Real z;
+algorithm
+  y := 2 * x;
+  z := 3 * x;
+end MOX6F;
+model MOX6
+  parameter Real p = MOX6F(3.0);
+  Real q = MOX6F(2.0) * time;
+end MOX6;
+//// model: MOX7
+function MOX7F
+  input Real x;
+  output Real y;
+  output Real z;
+algorithm
+  assert(x > 0, "neg");
+  y := 2 * x;
+  z := 3 * x;
+end MOX7F;
+model MOX7
+  parameter Real p = MOX7F(-3.0);
+end MOX7;
+//// model: RBE40
+record RBE40R
+  Real re = 10;
+  Real im = 20;
+end RBE40R;
+function RBE40G
+  input Real x;
+  output RBE40R r;
+  output Real w;
+algorithm
+  r := RBE40R(x, 1);
+  w := x;
+end RBE40G;
+function RBE40F
+  input Real x;
+  output Real y;
+protected
+  RBE40R t = RBE40R(1, 2);
+  Real w;
+algorithm
+  (t, w) := RBE40G(x);
+  y := t.re + w;
+end RBE40F;
+model RBE40
+  parameter Real p = RBE40F(3.0);
+end RBE40;
+//// model: RBE41
+record RBE41R
+  Real re = 10;
+  Real im = 20;
+end RBE41R;
+function RBE41F
+  input Real x;
+  output Real y;
+protected
+  RBE41R t[2];
+algorithm
+  t[1] := RBE41R(x, 1);
+  t[2] := RBE41R(2, x);
+  y := t[1].re + t[2].im;
+end RBE41F;
+model RBE41
+  parameter Real p = RBE41F(3.0);
+end RBE41;
+//// model: RBE42
+record RBE42R
+  Real re = 10;
+  Real im = 20;
+end RBE42R;
+function RBE42F
+  input Real x;
+  output Real y;
+protected
+  RBE42R t[2];
+algorithm
+  t := {RBE42R(x, 1), RBE42R(2, x)};
+  y := t[1].re + t[2].im;
+end RBE42F;
+model RBE42
+  parameter Real p = RBE42F(3.0);
+end RBE42;
+//// model: RBE43
+record RBE43R
+  Real re = 10;
+  Real im = 20;
+end RBE43R;
+function RBE43F
+  input Real x;
+  output RBE43R[2] t;
+algorithm
+  t[1] := RBE43R(x, 1);
+  t[2] := RBE43R(2, x);
+end RBE43F;
+function RBE43G
+  input Real x;
+  output Real y;
+protected
+  RBE43R s[2];
+algorithm
+  s := RBE43F(x);
+  y := s[1].re + s[2].im;
+end RBE43G;
+model RBE43
+  parameter Real p = RBE43G(3.0);
+end RBE43;
+//// model: RBE44
+record RBE44R
+  Real re = 10;
+  Real im = 20;
+end RBE44R;
+function RBE44F
+  input Real x;
+  output Real y;
+protected
+  RBE44R t[2](each re = 5);
+algorithm
+  t[1] := RBE44R(x, 1);
+  y := t[1].re + t[2].re;
+end RBE44F;
+model RBE44
+  parameter Real p = RBE44F(3.0);
+end RBE44;
+//// model: RBE45
+record RBE45R
+  Real re = 10;
+  Real im = 20;
+end RBE45R;
+function RBE45F
+  input Real x;
+  output Real y;
+protected
+  RBE45R t;
+  RBE45R s = RBE45R(x, 7);
+algorithm
+  t := s;
+  t.re := 1;
+  y := t.re + t.im + s.re;
+end RBE45F;
+model RBE45
+  parameter Real p = RBE45F(3.0);
+end RBE45;
+//// model: MOX1
+function MOX1F
+  input Real x;
+  output Real y;
+  output Real z;
+protected
+  Complex b;
+algorithm
+  b := Complex(x, 1);
+  b := b * b;
+  y := b.re;
+  z := b.im;
+end MOX1F;
+model MOX1
+  parameter Real p = MOX1F(3.0);
+end MOX1;
+//// model: MOX2
+function MOX2F
+  input Real x;
+  output Real y;
+  output Real z;
+protected
+  Complex b;
+algorithm
+  b := Complex(x, 1);
+  b := b * b;
+  y := b.re;
+  z := b.im;
+end MOX2F;
+model MOX2
+  Real p = MOX2F(3.0) * time;
+end MOX2;
+//// model: MOX3
+function MOX3F
+  input Real x;
+  output Real y;
+protected
+  Complex b;
+algorithm
+  b := Complex(x, 1);
+  b := b * b;
+  y := b.re;
+end MOX3F;
+model MOX3
+  parameter Real p = MOX3F(3.0);
+end MOX3;
+//// model: RBE38
+record RBE38R
+  Real re = 10;
+  Real im = 20;
+end RBE38R;
+function RBE38F
+  input Real x;
+  output Real y;
+protected
+  RBE38R t[2];
+algorithm
+  t[1].re := x;
+  y := t[1].re * t[1].im;
+end RBE38F;
+model RBE38
+  parameter Real p = RBE38F(3.0);
+end RBE38;
+//// model: RBE39
+record RBE39R
+  Real re = 10;
+  Real im = 20;
+end RBE39R;
+function RBE39F
+  input Real x;
+  output Real y;
+protected
+  RBE39R t[2];
+algorithm
+  t[1] := RBE39R(x, 2);
+  y := t[1].re * t[1].im + t[2].re;
+end RBE39F;
+model RBE39
+  parameter Real p = RBE39F(3.0);
+end RBE39;
+//// model: XDP16
+package XDP16P
+  partial package PM
+    constant Integer nX = 1;
+    constant Real reference_X[nX] = fill(1 / nX, nX);
+    replaceable partial function f
+      input Real X[:] = reference_X;
+      output Real y;
+    end f;
+  end PM;
+  package M
+    extends PM(nX = 2, reference_X = {0.01, 0.99});
+    redeclare function extends f
+    algorithm
+      y := sum(X);
+    end f;
+  end M;
+  package M2
+    extends M(reference_X = {0.3, 0.7});
+    redeclare function extends f
+    algorithm
+      y := 2 * sum(X);
+    end f;
+  end M2;
+end XDP16P;
+model XDP16
+  package Medium = XDP16P.M2;
+  Real y = Medium.f({time, 1});
+end XDP16;
+//// model: MOX8
+operator record MOX8C
+  Real re;
+  Real im;
+  encapsulated operator function '*'
+    import MOX8C;
+    input MOX8C c1;
+    input MOX8C c2;
+    output MOX8C c3;
+  algorithm
+    c3 := MOX8C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+  end '*';
+end MOX8C;
+function MOX8G
+  input Real x;
+  output Real y;
+  output Real z;
+protected
+  MOX8C b;
+algorithm
+  b := MOX8C(x, 1);
+  b := b * b;
+  y := b.re;
+  z := b.im;
+end MOX8G;
+function MOX8F
+  input Real x;
+  output Real y;
+algorithm
+  y := MOX8G(3.0) * x;
+end MOX8F;
+model MOX8
+  Real y = MOX8F(time);
+end MOX8;
+//// model: MOX9
+function MOX9F
+  input Integer n;
+  output Real y;
+  output Real z;
+algorithm
+  y := 2 * n;
+  z := 3 * n;
+end MOX9F;
+model MOX9
+  parameter Integer n = 2 annotation(Evaluate = true);
+  Real y = MOX9F(n) * time;
+end MOX9;
+//// model: MOX10
+function MOX10F
+  input Real x;
+  output Real y;
+  output Real z;
+algorithm
+  y := 2 * x;
+  z := 3 * x;
+end MOX10F;
+function MOX10G
+  input Real x;
+  output Real y;
+algorithm
+  y := MOX10F(3.0) * x;
+end MOX10G;
+model MOX10
+  Real y = MOX10G(time);
+end MOX10;
+//// model: MOX11
+function MOX11F
+  input Real x;
+  output Real y;
+  output Real z;
+algorithm
+  y := 2 * x;
+  z := 3 * x;
+end MOX11F;
+model MOX11
+  Real y(start = MOX11F(1.0)) = time;
+  Real w;
+equation
+  if MOX11F(1.0) > 1 then
+    w = time;
+  else
+    w = 0;
+  end if;
+end MOX11;
+//// model: GBS1
+function GBS1F
+  input Real T;
+  output Real y;
+protected
+  Modelica.Media.Common.GibbsDerivs2 g;
+algorithm
+  g := Modelica.Media.Air.ReferenceMoistAir.Utilities.Ice09_Utilities.Basic.Gibbs(1e5, T);
+  y := g.g;
+end GBS1F;
+model GBS1
+  Real y = GBS1F(250 + time);
+end GBS1;
+//// model: GBS3
+function GBS3F
+  input Real T;
+  output Real y;
+protected
+  Modelica.Media.Common.GibbsDerivs2 g;
+algorithm
+  g := Modelica.Media.Air.ReferenceMoistAir.Utilities.Ice09_Utilities.Basic.Gibbs(1e5, T);
+  y := g.g + g.gT;
+end GBS3F;
+model GBS3
+  Real y = GBS3F(250 + time);
+end GBS3;
+//// model: ALM1
+function ALM1F
+  input Real x;
+  input Real k = 1;
+  output Real y;
+algorithm
+  y := k * x;
+end ALM1F;
+model ALM1
+  function g = ALM1F(final k = 2);
+  Real y = g(time);
+end ALM1;
+//// model: ALM2
+package ALM2P
+  function f
+    input Real x;
+    input Real k = 1;
+    output Real y;
+  algorithm
+    y := k * x;
+  end f;
+  function g = f(final k = 2);
+end ALM2P;
+model ALM2
+  Real y = ALM2P.g(time);
+end ALM2;
+//// model: ALM3
+package ALM3P
+  function f
+    input Real x;
+    input Real k = 1;
+    output Real y;
+  algorithm
+    y := k * x;
+  end f;
+  function g = f(final k = 2);
+  function h
+    input Real x;
+    output Real y;
+  algorithm
+    y := ALM3P.g(x);
+  end h;
+end ALM3P;
+model ALM3
+  Real y = ALM3P.h(time);
+end ALM3;
+//// model: ALM4
+package ALM4P
+  function f
+    input Real x;
+    input Real k = 1;
+    output Real y;
+  algorithm
+    y := k * x;
+  end f;
+  function g = f(k = 2);
+  function h
+    input Real x;
+    output Real y;
+  algorithm
+    y := ALM4P.g(x);
+  end h;
+end ALM4P;
+model ALM4
+  Real y = ALM4P.h(time);
+end ALM4;
+//// model: ALM5
+package ALM5P
+  function f
+    input Real x;
+    input Boolean check = true;
+    output Real y;
+  algorithm
+    if check then
+      assert(x > 0, "negative x = " + String(x));
+    end if;
+    y := 2 * x;
+  end f;
+  function g = f(final check = false) "alias comment";
+  function h
+    input Real x;
+    output Real y;
+  algorithm
+    y := ALM5P.g(x);
+  end h;
+end ALM5P;
+model ALM5
+  Real y = ALM5P.h(time);
+end ALM5;
+//// model: ALM6
+package ALM6P
+  constant Real c = 3;
+  function f
+    input Real x;
+    input Real k = 1;
+    output Real y;
+  algorithm
+    y := k * x;
+  end f;
+  function g = f(final k = c);
+  function h
+    input Real x;
+    output Real y;
+  algorithm
+    y := ALM6P.g(x);
+  end h;
+end ALM6P;
+model ALM6
+  Real y = ALM6P.h(time);
+end ALM6;
+//// model: ALM7
+package ALM7P
+  function f
+    input Real x;
+    input Real k = 1;
+    output Real y;
+  algorithm
+    y := k * x;
+  end f;
+  function g = f(final k = 2);
+  function h
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x);
+  end h;
+end ALM7P;
+model ALM7
+  Real y = ALM7P.h(time);
+end ALM7;
+//// model: ALM8
+model ALM8
+  Real y = Modelica.Media.Air.ReferenceMoistAir.Utilities.IF97_new.h_pT(1e5, time + 300);
+end ALM8;
+//// model: ALM9
+package ALM9P
+  function f
+    input Real x;
+    input Real p = 1;
+    input Integer phase = 2;
+    input Boolean industrial = false;
+    input Boolean check = true;
+    output Real y;
+  algorithm
+    y := if industrial and check then p * x else x + phase;
+  end f;
+  function g = f(final p = 0, final phase = 0, final industrial = true, final check = false);
+  function h
+    input Real x;
+    output Real y;
+  algorithm
+    y := ALM9P.g(x);
+  end h;
+end ALM9P;
+model ALM9
+  Real y = ALM9P.h(time);
+end ALM9;
+//// model: ALM10
+package ALM10P
+  function f
+    input Real x;
+    input Real k = 1;
+    output Real y;
+  algorithm
+    y := k * x;
+  end f;
+  function g = f(final k = 2);
+end ALM10P;
+model ALM10
+  Real y = ALM10P.g(time, 3);
+end ALM10;
+//// model: ALM11
+package ALM11P
+  function f
+    input Real x;
+    input Real k = 1;
+    output Real y;
+  algorithm
+    y := k * x;
+  end f;
+  function g = f(final k = 2);
+  function h
+    input Real x;
+    output Real y;
+  algorithm
+    y := ALM11P.g(x) + ALM11P.g(2 * x);
+  end h;
+end ALM11P;
+model ALM11
+  Real y = ALM11P.h(time);
+  Real z = ALM11P.g(time);
+end ALM11;
+//// model: ALM12
+package ALM12P
+  function f
+    input Real x;
+    input Real k = 1;
+    output Real y;
+  algorithm
+    y := k * x;
+  end f;
+  function g = f(final k = -2.5);
+  function h
+    input Real x;
+    output Real y;
+  algorithm
+    y := ALM12P.g(x);
+  end h;
+end ALM12P;
+model ALM12
+  Real y = ALM12P.h(time);
+end ALM12;
+//// model: ALM13
+package ALM13P
+  function f
+    input Real x;
+    input Real k = 1;
+    output Real y;
+  algorithm
+    y := k * x;
+  end f;
+  function g = f(final k = 2);
+  function h
+    input Real x;
+    output Real y;
+  algorithm
+    y := ALM13P.g(x);
+  end h;
+end ALM13P;
+model ALM13
+  parameter Real p = ALM13P.h(3.0);
+  Real y = ALM13P.g(2.0) * time;
+end ALM13;
+//// model: ALM14
+package ALM14P
+  function f
+    input Real x;
+    input Integer k = 1;
+    output Real y;
+  algorithm
+    y := k * x;
+  end f;
+  function g = f(final k = 2);
+  function h
+    input Real x;
+    output Real y;
+  algorithm
+    y := ALM14P.g(x);
+  end h;
+end ALM14P;
+model ALM14
+  Real y = ALM14P.h(time);
+end ALM14;
+//// model: ALM15
+package ALM15P
+  function f
+    input Real x;
+    input Real k = 1;
+    output Real y;
+  algorithm
+    y := k * x;
+  end f;
+  function g = f(final k = 2);
+  function h
+    input Real x;
+    output Real y;
+  algorithm
+    y := ALM15P.g(x, 4);
+  end h;
+end ALM15P;
+model ALM15
+  Real y = ALM15P.h(time);
+end ALM15;
+//// model: ALM16
+package ALM16P
+  function f
+    input Real x;
+    input Real k = 1;
+    output Real y;
+  algorithm
+    y := k * x;
+  end f;
+  package M
+    function g = f(final k = 2);
+  end M;
+end ALM16P;
+model ALM16
+  package Medium = ALM16P.M;
+  Real y = Medium.g(time);
+end ALM16;
+//// model: ALM17
+package ALM17P
+  partial package PM
+    function f
+      input Real x;
+      input Real k = 1;
+      output Real y;
+    algorithm
+      y := k * x;
+    end f;
+    function g = f(final k = 2);
+  end PM;
+  package M
+    extends PM;
+  end M;
+end ALM17P;
+model ALM17
+  package Medium = ALM17P.M;
+  Real y = Medium.g(time);
+end ALM17;
+//// model: ALM18
+package ALM18P
+  function f
+    input Real x;
+    input Real k = 1;
+    output Real y;
+  algorithm
+    y := k * x;
+  end f;
+  package M
+    function g = f(final k = 2);
+    function h
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end h;
+  end M;
+end ALM18P;
+model ALM18
+  package Medium = ALM18P.M;
+  Real y = Medium.h(time);
+end ALM18;
+//// model: ALM19
+package ALM19P
+  function f
+    input Real x;
+    input Real k = 1;
+    output Real y;
+  algorithm
+    y := k * x;
+  end f;
+  function g = f(final k = 2);
+end ALM19P;
+model ALM19
+  Real y = ALM19P.g(k = 5, x = time);
+end ALM19;
+//// model: ALM20
+package ALM20P
+  function f
+    input Real x;
+    input Real k = 1;
+    output Real y;
+  algorithm
+    y := k * x;
+  end f;
+  function g = f(final k = 2);
+  function g2 = g;
+end ALM20P;
+model ALM20
+  Real y = ALM20P.g2(time);
+end ALM20;
+//// model: ALM21
+package ALM21P
+  function f
+    input Real x;
+    input Real k = 1;
+    output Real y;
+  algorithm
+    y := k * x;
+  end f;
+  function g = f(final k = 2);
+  function h
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) * g(1);
+  end h;
+end ALM21P;
+model ALM21
+  Real y = ALM21P.h(time);
+end ALM21;
+//// model: ALM22
+package ALM22P
+  function f
+    input Real x;
+    input String s = "a";
+    output Real y;
+  algorithm
+    y := x;
+  end f;
+  function g = f(final s = "b");
+  function h
+    input Real x;
+    output Real y;
+  algorithm
+    y := ALM22P.g(x);
+  end h;
+end ALM22P;
+model ALM22
+  Real y = ALM22P.h(time);
+end ALM22;
+//// model: ALM23
+package ALM23P
+  function f
+    input Real x;
+    input Real k = 1;
+    output Real y;
+  algorithm
+    y := k * x;
+  end f;
+  function g = f(final k = 2) "g comment";
+end ALM23P;
+model ALM23
+  function g2 = ALM23P.g;
+  Real y = g2(time);
+end ALM23;
+//// model: ALM24
+package ALM24P
+  function f
+    input Real x;
+    input Real k = 1;
+    output Real y;
+  algorithm
+    y := k * x;
+  end f;
+  function g = f(final k = 2);
+end ALM24P;
+model ALM24
+  import ALM24P.g;
+  Real y = g(time);
+end ALM24;
+//// model: ALM25
+package ALM25P
+  function f
+    input Real x;
+    input Real k = 1;
+    output Real y;
+  algorithm
+    y := k * x;
+  end f;
+  function g = f(final k = 2);
+end ALM25P;
+model ALM25
+  Real y[2] = ALM25P.g({time, 2 * time});
+end ALM25;
+//// model: XDP1
+package XDP1P
+  partial package PM
+    constant Integer nX = 1;
+    constant Real reference_X[nX] = fill(1 / nX, nX);
+    replaceable partial function f
+      input Real X[:] = reference_X;
+      output Real y;
+    end f;
+  end PM;
+  package M
+    extends PM(nX = 2, reference_X = {0.01, 0.99});
+    redeclare function extends f
+    algorithm
+      y := sum(X);
+    end f;
+  end M;
+end XDP1P;
+model XDP1
+  package Medium = XDP1P.M;
+  Real y = Medium.f({time, 1});
+end XDP1;
+//// model: XDP2
+package XDP2P
+  partial package PM
+    constant Integer nX = 1;
+    constant Real reference_X[nX] = fill(1 / nX, nX);
+    function f
+      input Real X[:] = reference_X;
+      output Real y;
+    algorithm
+      y := sum(X);
+    end f;
+  end PM;
+  package M
+    extends PM(nX = 2, reference_X = {0.01, 0.99});
+  end M;
+end XDP2P;
+model XDP2
+  package Medium = XDP2P.M;
+  Real y = Medium.f({time, 1});
+end XDP2;
+//// model: XDP3
+package XDP3P
+  partial package PM
+    constant Integer nX = 1;
+    constant Real reference_X[nX] = fill(1 / nX, nX);
+    function f
+      input Real X[:] = reference_X;
+      output Real y;
+    algorithm
+      y := sum(X);
+    end f;
+  end PM;
+  package M
+    extends PM(nX = 2, reference_X = {0.01, 0.99});
+  end M;
+end XDP3P;
+model XDP3
+  Real y = XDP3P.M.f({time, 1});
+end XDP3;
+//// model: XDP4
+package XDP4P
+  partial package PM
+    constant Integer nX = 1;
+    constant Real reference_X[nX] = fill(1 / nX, nX);
+    function f
+      input Real X[:] = reference_X;
+      output Real y;
+    algorithm
+      y := sum(X);
+    end f;
+  end PM;
+  package M
+    extends PM(nX = 2, reference_X = {0.01, 0.99});
+  end M;
+end XDP4P;
+model XDP4
+  package Medium = XDP4P.M;
+  Real y = Medium.f();
+end XDP4;
+//// model: XDP5
+package XDP5P
+  partial package PM
+    constant Integer nX = 1;
+    constant Real k = 7;
+    function f
+      input Real x;
+      input Real c = k;
+      output Real y;
+    algorithm
+      y := c * x;
+    end f;
+  end PM;
+  package M
+    extends PM(k = 3);
+  end M;
+end XDP5P;
+model XDP5
+  package Medium = XDP5P.M;
+  Real y = Medium.f(time);
+end XDP5;
+//// model: XDP6
+package XDP6P
+  partial package PM
+    constant Real k = 7;
+    function f
+      input Real x;
+      input Real c = k;
+      output Real y;
+    algorithm
+      y := c * x;
+    end f;
+  end PM;
+  package M
+    extends PM(k = 3);
+  end M;
+end XDP6P;
+model XDP6
+  Real y = XDP6P.M.f(time);
+end XDP6;
+//// model: XDP7
+package XDP7P
+  partial package PM
+    constant Integer nX = 1;
+    replaceable partial function f
+      input Real X[nX];
+      output Real y;
+    end f;
+  end PM;
+  package M
+    extends PM(nX = 2);
+    redeclare function extends f
+    algorithm
+      y := sum(X);
+    end f;
+  end M;
+end XDP7P;
+model XDP7
+  package Medium = XDP7P.M;
+  Real y = Medium.f({time, 1});
+end XDP7;
+//// model: XDP8
+package XDP8P
+  partial package PM
+    constant Integer nX = 1;
+    constant Real k = 7;
+    replaceable partial function f
+      input Real x;
+      output Real y;
+    protected
+      Real c = k;
+    end f;
+  end PM;
+  package M
+    extends PM(nX = 2, k = 3);
+    redeclare function extends f
+    algorithm
+      y := c * x;
+    end f;
+  end M;
+end XDP8P;
+model XDP8
+  package Medium = XDP8P.M;
+  Real y = Medium.f(time);
+end XDP8;
+//// model: XDP9
+package XDP9P
+  partial package PM
+    constant Real k = 7;
+    replaceable function f
+      input Real x;
+      input Real c = k;
+      output Real y;
+    algorithm
+      y := c * x;
+    end f;
+  end PM;
+  package M
+    extends PM(k = 3);
+    redeclare function extends f
+      annotation(Inline = true);
+    end f;
+  end M;
+end XDP9P;
+model XDP9
+  package Medium = XDP9P.M;
+  Real y = Medium.f(time);
+end XDP9;
+//// model: XDP10
+package XDP10P
+  partial package PM
+    constant Integer nX = 1;
+    constant Real reference_X[nX] = fill(1 / nX, nX);
+    replaceable partial function f
+      input Real X[:] = reference_X;
+      output Real y;
+    end f;
+  end PM;
+  package M
+    extends PM(nX = 2, reference_X = {0.01, 0.99});
+    redeclare function extends f
+    algorithm
+      y := sum(X);
+    end f;
+  end M;
+end XDP10P;
+model XDP10
+  package Medium = XDP10P.M;
+  parameter Real p = Medium.f();
+  Real y = Medium.f() * time;
+end XDP10;
+//// model: XDP11
+package XDP11P
+  partial package PM
+    constant Integer nX = 1;
+    constant Real reference_X[nX] = fill(1 / nX, nX);
+    replaceable partial function f
+      input Real X[:] = reference_X;
+      output Real y;
+    end f;
+  end PM;
+  package M
+    extends PM(nX = 2, reference_X = {0.01, 0.99});
+    redeclare function extends f
+    algorithm
+      y := sum(X);
+    end f;
+  end M;
+end XDP11P;
+model XDP11
+  Real y = XDP11P.M.f({time, 1});
+end XDP11;
+//// model: XDP12
+package XDP12P
+  partial package PM
+    type AbsP = Real(min = 0, max = 1e8, nominal = 1e5);
+    replaceable partial function f
+      input AbsP p;
+      output Real y;
+    end f;
+  end PM;
+  package M
+    extends PM(AbsP(max = 2e8));
+    redeclare function extends f
+    algorithm
+      y := 2 * p;
+    end f;
+  end M;
+end XDP12P;
+model XDP12
+  package Medium = XDP12P.M;
+  Real y = Medium.f(time);
+end XDP12;
+//// model: XDP13
+package XDP13P
+  partial package PM
+    constant Integer nX = 1;
+    constant Real reference_X[nX] = fill(1 / nX, nX);
+    replaceable partial function f
+      input Real X[:] = reference_X;
+      output Real y;
+    end f;
+  end PM;
+  package M
+    extends PM(nX = 2, reference_X = {0.01, 0.99});
+    redeclare function extends f
+    algorithm
+      y := sum(X);
+    end f;
+  end M;
+  model U
+    replaceable package Medium = PM;
+    Real y = Medium.f({time, 1});
+  end U;
+end XDP13P;
+model XDP13
+  XDP13P.U u(redeclare package Medium = XDP13P.M);
+end XDP13;
+//// model: XDP14
+package XDP14P
+  partial package PM
+    constant Integer nX = 1;
+    constant Real reference_X[nX] = fill(1 / nX, nX);
+    replaceable partial function f
+      input Real X[:] = reference_X;
+      output Real y;
+    end f;
+  end PM;
+  package M
+    extends PM(nX = 2, reference_X = {0.01, 0.99});
+    redeclare function extends f
+    algorithm
+      y := sum(X);
+    end f;
+  end M;
+  package M2
+    extends M(reference_X = {0.3, 0.7});
+  end M2;
+end XDP14P;
+model XDP14
+  package Medium = XDP14P.M2;
+  Real y = Medium.f({time, 1});
+end XDP14;
+//// model: XDP15
+package XDP15P
+  partial package PM
+    constant Integer nX = 1;
+    constant Real reference_X[nX] = fill(1 / nX, nX);
+    replaceable partial function f
+      input Real X[:] = reference_X;
+      output Real y;
+    end f;
+  end PM;
+  package M
+    extends PM(nX = 2, reference_X = {0.01, 0.99});
+    redeclare function extends f
+    algorithm
+      y := sum(X);
+    end f;
+    function g
+      input Real x;
+      output Real y;
+    algorithm
+      y := x * f();
+    end g;
+  end M;
+end XDP15P;
+model XDP15
+  package Medium = XDP15P.M;
+  Real y = Medium.g(time);
+end XDP15;
