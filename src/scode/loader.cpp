@@ -329,6 +329,8 @@ Id<ClassDef> Loader::load_library_impl(std::string_view name, std::string_view r
     return cls;
   }
   a_.top.push_back(cls);
+  // 顶层类所在的文件（omc 的 URI 映射取它的目录，见 Absyn::class_files）：目录形式的库是它的 package.mo。
+  a_.class_files[a_.classes[cls].name] = path_str(pick->entry.is_file ? pick->path : pick->path / "package.mo");
   loaded_.push_back(LoadedLibrary{pick->entry.name, pick->entry.has_version, pick->entry.version,
                                   pick->path, cls});
   if (opt_.follow_uses) follow_uses(cls);
@@ -349,7 +351,10 @@ Id<ClassDef> Loader::load_path(const fs::path& path) {
   } else {
     // 显式打开的单文件：MLS A.2.1 允许多个类；这里只把第一个当顶层返回，全部加入 top
     StoredDefinition sd = parse_file(path, static_cast<std::uint32_t>(file_names_.size()));
-    for (Id<ClassDef> id : sd.classes) a_.top.push_back(id);
+    for (Id<ClassDef> id : sd.classes) {
+      a_.top.push_back(id);
+      a_.class_files[a_.classes[id].name] = path_str(path);
+    }
     if (sd.classes.empty()) return Id<ClassDef>{};
     cls = sd.classes[0];
     loaded_.push_back(LoadedLibrary{std::string(a_.interner.str(a_.classes[cls].name)), false, Version{},
@@ -359,6 +364,7 @@ Id<ClassDef> Loader::load_path(const fs::path& path) {
   }
   if (cls.is_valid()) {
     a_.top.push_back(cls);
+    a_.class_files[a_.classes[cls].name] = path_str(path / "package.mo");
     loaded_.push_back(LoadedLibrary{std::string(a_.interner.str(a_.classes[cls].name)), false, Version{},
                                     path, cls});
     if (opt_.follow_uses) follow_uses(cls);

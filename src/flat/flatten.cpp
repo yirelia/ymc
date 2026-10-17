@@ -7,6 +7,7 @@
 #include <climits>
 #include <cmath>
 #include <deque>
+#include <filesystem>
 #include <functional>
 #include <optional>
 #include <cstdlib>
@@ -14,6 +15,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -21,6 +23,7 @@
 #include "absyn/absyn.h"
 #include "absyn/absyn_util.h"
 #include "base/crt_math.h"  // 编译期求值的超越函数走 UCRT（与 omc 1.25.0 逐位一致，见 crt_math.h）
+#include "base/omc_uri.h"   // OpenModelica.Scripting.uriToFilename 的路径规则（omc 运行时 utility.c）
 #include "base/strings.h"   // unescape_modelica_string（字符串字面量；注释在 SCode 里已解过转义，直接用）
 
 namespace ymc {
@@ -234,9 +237,12 @@ class Flattener {
     // 顶层作用域的类树：同名元素 → DOUBLE_DECLARATION_OF_ELEMENTS（NFClassTree.addLocalElementConflict :1653-1676）；
     // 与 NF 顶层内建类型同名（Clock2 的 `model Clock`，NFModelicaBuiltin.mo）同样冲突。
     if (has_duplicate_names(I_.scode.program)) set_unsupported("duplicate element declaration");
+    // 内建包 OpenModelica（NFModelicaBuiltin.mo:987-6580）同理：用户 / 库的顶层 `package OpenModelica` → omc 报 "An element with name
+    // OpenModelica is already declared in this scope"（探针 URZ37；此前 ymc 用了用户的那个，ACCEPTS-INVALID）。
     for (Id<SElement> e : I_.scode.program) {
       const std::string_view n = in_.str(I_.scode.elems[e].name);
-      if (n == "Clock" || n == "StateSelect" || n == "Uncertainty" || n == "AssertionLevel" || n == "Connections")
+      if (n == "Clock" || n == "StateSelect" || n == "Uncertainty" || n == "AssertionLevel" || n == "Connections" ||
+          n == "OpenModelica")
         set_unsupported("class name collides with builtin");
     }
     // 实例化 partial 根类（NFInst.checkPartialClass，PartialClass1）→ omc 报错。别名派生自 partial 类也是 partial
@@ -8419,6 +8425,18 @@ class Flattener {
           return out.empty() ? std::nullopt : std::optional<CVal>(CVal::Arr(std::move(out)));
         }
         if (fn.parts.size() != 1 || in_.str(fn.parts[0].name) != "size" || e.args.size() != 2) {
+          // OpenModelica.Scripting.uriToFilename(uri)（见 is_uri_builtin）：实参求成字符串后按 omc 运行时的规则换成路径
+          //（NFCeval.evalUriToFilename，NFCeval.mo:2932-2947 v1.25.0）；MSL loadResource 的体经 eval_user_call 走到这里（探针 URZ1、
+          // 函数体 / 绑定 / 方程 / 算法 / 修饰 / 数组 / 实参各处 URZ5-URZ32）。omc 求值失败（类没装…）或 ymc 不担保 → 求不出，
+          // 外层调用照 omc 留着、ymc 由"常量调用没求值"那一关 SKIP（URZ18 / URZ22）。
+          if (is_uri_builtin(e, scope)) {
+            if (!uri_builtin_args(e)) return std::nullopt;
+            const std::optional<CVal> u = eval_scode(e.args[0], scope, depth + 1, allow_param, used);
+            if (!u || u->k != CVal::K::Str) return std::nullopt;
+            const std::optional<std::string> fname = uri_to_filename(in_.str(u->s));
+            if (!fname) return std::nullopt;
+            return CVal::S(in_.intern(*fname));
+          }
           // noEvent(e) / smooth(p, e)：求值时就是 e（evalBuiltinCall，NFCeval.mo:1931 / :1942 v1.25.0；实参都先求值）。
           // MSL Vectors.normalize 的 `smooth(0, if length(v) >= eps then v / length(v) else v / eps)`（Frames.from_nxy 里用）。
           if (fn.parts.size() == 1 && fn.parts[0].subscripts.empty() && !find_scode_element(fn.parts[0].name, scope).is_valid()) {
@@ -9628,6 +9646,85 @@ class Flattener {
       return CVal::S(in_.intern(std::string(str.substr(static_cast<std::size_t>(start - 1), static_cast<std::size_t>(stop - start + 1)))));
     }
     return std::nullopt;
+  }
+
+  // `OpenModelica.Scripting.uriToFilename(…)` 指的是 omc 的内建包（NFModelicaBuiltin.mo:987 起的 encapsulated package OpenModelica，
+  // 函数在 :2834-2844）：名字三段照写，首段在词法作用域里查不到（查到了就是别的类；用户的顶层 OpenModelica 在 run() 里已判冲突）。
+  // MSL 的 ModelicaServices.ExternalReferences.loadResource 体里就这一句（Modelica.Utilities.Files.loadResource 继承它）。
+  bool is_uri_builtin(const Exp& e, const ScodeScope& scope) {
+    const Cref& c = I_.absyn.crefs[e.cref];
+    static const char* const kPath[] = {"OpenModelica", "Scripting", "uriToFilename"};
+    if (c.parts.size() != 3) return false;
+    for (std::size_t k = 0; k < 3; ++k)
+      if (!c.parts[k].subscripts.empty() || in_.str(c.parts[k].name) != kPath[k]) return false;
+    return c.leading_dot || !find_scode_element(c.parts[0].name, scope).is_valid();
+  }
+  // 它的实参：恰一个，位置的或按形参名 `uri`（`input String uri`，NFModelicaBuiltin.mo:2836；探针 URZ127）。别的（缺、多、错名）omc 报错。
+  bool uri_builtin_args(const Exp& e) {
+    return e.args.size() == 1 &&
+           (e.arg_names.empty() || !e.arg_names[0].is_valid() || in_.str(e.arg_names[0]) == "uri");
+  }
+  // uriToFilename 的编译期求值（字符串规则见 base/omc_uri.h）：`modelica://类名` 的目录取 Absyn::class_files 里记的文件（omc 的
+  // URI 映射），存在与否 / 是不是目录问文件系统（omc_stat），相对路径按本进程的当前目录（omc 的 realpath("./")）——跑 omc 与 ymc
+  // 的是同一台机器、同一个当前目录时两边一致（探针 / 扫描都这样跑）。nullopt = 求值失败（omc 自己失败，或 ymc 不担保的形态）。
+  std::optional<std::string> uri_to_filename(std::string_view uri) {
+    std::error_code ec;
+    const std::filesystem::path cp = std::filesystem::current_path(ec);
+    if (ec) return std::nullopt;
+    for (const auto ch : cp.native())
+      if (ch < 0x20 || ch > 0x7E) return std::nullopt;   // 非 ASCII 的当前目录：窄串换算未核实
+    const std::string cwd = cp.string();
+    const OmcClassDirFn class_dir = [&](std::string_view name) -> std::optional<std::string> {
+      const auto it = I_.absyn.class_files.find(in_.intern(name));
+      if (it == I_.absyn.class_files.end()) return std::nullopt;
+      return omc_source_dir(it->second, cwd);
+    };
+    const OmcStatFn path_stat = [](const std::string& p) -> std::optional<OmcPathStat> {
+      std::error_code sec;
+      switch (std::filesystem::status(std::filesystem::path(p), sec).type()) {
+        case std::filesystem::file_type::not_found: return OmcPathStat{false, false};
+        case std::filesystem::file_type::directory: return OmcPathStat{true, true};
+        case std::filesystem::file_type::regular: return OmcPathStat{true, false};
+        default: return std::nullopt;   // 出错 / 链接 / 设备…：omc 的 _wstat 怎么判未核实
+      }
+    };
+    return omc_uri_to_filename(uri, class_dir, path_stat, cwd);
+  }
+  // 类型化里的 `OpenModelica.Scripting.uriToFilename(uri)`（`external "builtin" filename = OpenModelica_uriToFilename(uri)`，
+  // NFModelicaBuiltin.mo:2834-2844）。omc 定型后按外部名打（Function.nameConsiderBuiltin，NFFunction.mo:755-767 的 :763；探针 URZ9 / URZ36
+  // 的函数体 `fileReference := OpenModelica_uriToFilename(uri)`），化简时对字面量实参的内建纯函数调用求值（simplifyCall，
+  // NFSimplifyExp.mo:187-196 → NFCeval.evalUriToFilename :2932-2947；URZ34）：
+  //   - 实参求得成字符串常量（字面量、常量引用）→ 路径字面量；omc 求值失败时报错、留调用（URZ3）→ SKIP；
+  //   - 函数体里引用输入 / 局部的 → 照打 `OpenModelica_uriToFilename(u)`；
+  //   - 别的（模型语境里引用参数的、函数体里求不出的非局部）→ SKIP：omc 打 `OpenModelica_uriToFilename(p)`（URZ35），可 p 成了结构
+  //     参数时 omc 代入后再化简会求值，ymc 末尾代入结构参数后不再求这个调用，未做；
+  //   - 方程里 assert / terminate 的消息（omc 不化简，见 raw_message）→ SKIP。
+  Id<Expr> uri_builtin_call(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    if (!uri_builtin_args(e)) {
+      set_unsupported("OpenModelica.Scripting.uriToFilename arguments");
+      return lit_int(0);
+    }
+    if (raw_msg_) {
+      set_unsupported("call in assert/terminate message");
+      return lit_int(0);
+    }
+    if (!(fn_scope_ && exp_refs_fn_locals(e))) {
+      const std::optional<CVal> u = eval_scode(e.args[0], scode_scope_of(enclosing), 0, /*allow_param=*/false);
+      if (u && u->k == CVal::K::Str) {
+        if (const std::optional<std::string> fname = uri_to_filename(in_.str(u->s))) return literal_of(CVal::S(in_.intern(*fname)));
+        set_unsupported("OpenModelica.Scripting.uriToFilename not evaluated");
+        return lit_int(0);
+      }
+      set_unsupported("OpenModelica.Scripting.uriToFilename argument not a string constant");
+      return lit_int(0);
+    }
+    const Id<Expr> a = inst_exp(e.args[0], enclosing, prefix);
+    if (result_.unsupported) return lit_int(0);
+    if (result_.model.exprs[a].ty.kind != TypeKind::String) {
+      set_unsupported("OpenModelica.Scripting.uriToFilename arguments");
+      return lit_int(0);
+    }
+    return call_expr("OpenModelica_uriToFilename", {a}, Type::string());
   }
   std::optional<std::string> builtin_equiv(const FnRef& fr, bool* ext_c = nullptr) {
     const SElement& el = I_.scode.elems[fr.fe];
@@ -18237,6 +18334,8 @@ class Flattener {
     // 部分函数应用（ADR-009）只在函数型输入的实参位置定型（try_emit_user_call 先接走，见 fn_value_arg）；落到这里的在别的位置
     //（当普通值用 / 内建函数的实参），omc 报类型错 → SKIP。
     if (e.partial_fn) { set_unsupported("partial function application outside a functional argument"); return lit_int(0); }
+    // omc 内建的 OpenModelica.Scripting.uriToFilename（见 uri_builtin_call）。先按段数筛，免得每个调用都去建作用域链。
+    if (fn.parts.size() == 3 && is_uri_builtin(e, scode_scope_of(enclosing))) return uri_builtin_call(e, enclosing, prefix);
     // 函数体里经函数型输入的调用 `f(x)`（见 fn_param_call）。
     if (fn_scope_ && fn.parts.size() == 1 && !fn.leading_dot && fn.parts[0].subscripts.empty())
       if (const auto ft = fn_types_.find(fn.parts[0].name.id); ft != fn_types_.end()) {
@@ -18293,7 +18392,9 @@ class Flattener {
       // 函数体里实参引用函数局部量（含局部常量）的调用不求值（YmcFnEmit1：局部常量在函数里保留引用）。impure 的外部函数这里
       // 也不求（这条路对应 omc 化简的常量实参求值，只收纯函数；SX 探针 `parameter String p = substring("Yd01", 2, 2)` 照留
       // 调用）——常量绑定走 Ceval 那条路（emit_variable 的按值求值）照样求。
-      const bool fold = !(fn_scope_ && exp_refs_fn_locals(e)) && !impure_ext;
+      // 方程里 assert / terminate 的消息（raw_msg_，见 raw_message）omc 不化简，常量实参的用户函数调用照留（探针 URZ106 / URZ108 /
+      // URZ116：`assert(x < 10.0, URZ106.f("a"))`；此前 ymc 定型时就折成 "ab"，静默错）→ 不求，留下的调用由 raw_message 判 SKIP。
+      const bool fold = !(fn_scope_ && exp_refs_fn_locals(e)) && !impure_ext && !raw_msg_;
       // 函数语境的 sum / product / min / max(常量数组) 整体求值。模型语境的归约式走上面的 reduction_call，数组实参先定型再定
       // 去留（字面量数组才求值，数组构造子 / 混合字面量展开成不化简的元素链，见 model_reduce_builtin）。
       // 实参是化简期留着的书写推导式的（sum / product 展开成不再化简的元素链、min / max 改写成归约式，见 fn_kept_comprehension）

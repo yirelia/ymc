@@ -10,7 +10,9 @@
 // 尚未覆盖（给诊断）：der 类定义（class X = der(...)）、纯 MetaModelica 语法。
 #pragma once
 #include <cstdint>
+#include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include "base/arena.h"
@@ -308,6 +310,10 @@ struct Absyn {
   bool within_leading_dot = false;
   std::vector<Symbol> within_path;
   std::vector<Id<ClassDef>> top;     // stored_definition 顶层类
+  // 顶层类 → 解析它的那个文件（装载器交给解析器的路径 / 命令行上的文件，原样）。omc 在 Absyn.Class.info.fileName 里记着，
+  // 由它建 URI 映射（SymbolTable.updateUriMapping，SymbolTable.mo:568-599 v1.25.0），OpenModelica.Scripting.uriToFilename 解
+  // `modelica://类名/…` 时查（见 base/omc_uri.h、flatten 的 uri_to_filename）。没记的类 → 那样的 URI 求不出（SKIP）。
+  std::unordered_map<Symbol, std::string> class_files;
 
   explicit Absyn(Interner& in) : interner(in) {}
 

@@ -2,11 +2,17 @@
 // 期望值均已在安装版 omc 1.25.0 上核对（2026-09-18）。
 #include "ymc_test.h"
 
+#include <filesystem>
+#include <fstream>
+#include <optional>
+#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "absyn/absyn.h"
 #include "base/diag.h"
+#include "base/omc_uri.h"
 #include "base/symbol.h"
 #include "flat/flat_dump.h"
 #include "flat/flatten.h"
@@ -21,7 +27,9 @@ using namespace ymc;
 namespace {
 
 // 全流水线（同 driver）：压平文件里最后一个顶层类。unsupported 时返回带标记的空串。
-std::string flatten_src(const char* src, bool* unsupported = nullptr) {
+// files：顶层类 → 来源文件（driver / 装载器记进 Absyn::class_files 的那张表，`modelica://类名/…` 的 URI 按它求目录）。
+std::string flatten_src(const char* src, bool* unsupported = nullptr,
+                        const std::vector<std::pair<std::string, std::string>>* files = nullptr) {
   Interner in;
   Diagnostics d;
   Absyn a(in);
@@ -29,6 +37,8 @@ std::string flatten_src(const char* src, bool* unsupported = nullptr) {
   std::vector<Token> toks = lx.tokenize();
   Parser p(toks, a, d);
   p.parse_program();
+  if (files)
+    for (const auto& [name, file] : *files) a.class_files[in.intern(name)] = file;
   SCode sc(a);
   translate_program(sc, a.top);
   Inst inst(in, a, sc);
@@ -10606,6 +10616,171 @@ YMC_TEST(flatten_smooth_array_operation_skips) {
   YMC_CHECK(flatten_src("model SXK7\n  Real xa[2] = {2 * time, 3 * time};\n  Real r[2];\nequation\n"
                         "  r = noEvent(-xa);\nend SXK7;\n")
                 .rfind("<unsupported:", 0) == 0);
+}
+
+YMC_TEST(omc_uri_to_filename_rules) {
+  // OpenModelica.Scripting.uriToFilename 的字符串规则（base/omc_uri.h ← utility.c :171-402 v1.25.0），文件系统用假的：每条的形态 =
+  // omc 1.25.0 实跑（2026-10-17，探针 pk-p34 URZ*），只把本机的库目录前缀换成 `C:/L`、当前目录换成 `C:\w\o1`（真实前缀随机器变，
+  // 端到端的见下两个测试与探针）。存在的 → GetFullPathName 的反斜杠形态；不存在的绝对路径原样（正斜杠）；不存在的相对路径接在
+  // `cwd\` 后再补 '/'；目录且 URI 以 '/' 结尾补 '/'。
+  const std::set<std::string> dirs = {
+      "C:\\L\\Modelica 4.0.0+maint.om", "C:\\L\\Modelica 4.0.0+maint.om\\Resources",
+      "C:\\L\\Modelica 4.0.0+maint.om\\Resources\\Data", "C:\\L\\Modelica 4.0.0+maint.om\\Resources\\Data\\Utilities",
+      "C:\\L\\Modelica 4.0.0+maint.om\\Utilities", "C:\\L\\Modelica 4.0.0+maint.om\\Blocks",
+      "C:\\L\\ModelicaServices 4.0.0+maint.om", "C:\\Windows", "C:\\w\\o1"};
+  const std::set<std::string> files = {
+      "C:\\L\\Modelica 4.0.0+maint.om\\Resources\\Data\\Utilities\\Test_RealMatrix_v4.mat",
+      "C:\\L\\Modelica 4.0.0+maint.om\\package.mo", "C:\\L\\Modelica 4.0.0+maint.om\\Blocks\\Examples.mo",
+      "C:\\Windows\\win.ini", "C:\\w\\o1\\URZ44.mo"};
+  const OmcClassDirFn class_dir = [](std::string_view n) -> std::optional<std::string> {
+    if (n == "Modelica") return std::string("C:/L/Modelica 4.0.0+maint.om");
+    if (n == "ModelicaServices") return std::string("C:/L/ModelicaServices 4.0.0+maint.om");
+    return std::nullopt;
+  };
+  const OmcStatFn fake_stat = [&](const std::string& p) -> std::optional<OmcPathStat> {
+    if (dirs.count(p)) return OmcPathStat{true, true};
+    if (files.count(p)) return OmcPathStat{true, false};
+    return OmcPathStat{false, false};
+  };
+  auto u = [&](const char* uri) { return omc_uri_to_filename(uri, class_dir, fake_stat, "C:\\w\\o1").value_or("<nullopt>"); };
+  const std::string mat = "C:\\L\\Modelica 4.0.0+maint.om\\Resources\\Data\\Utilities\\Test_RealMatrix_v4.mat";
+  YMC_CHECK_EQ(u("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat"), mat);                 // URZ1
+  YMC_CHECK_EQ(u("Modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat"), mat);                 // URZ17
+  YMC_CHECK_EQ(u("modelica://Modelica/Resources/Data/Utilities/../Utilities/Test_RealMatrix_v4.mat"), mat);    // URZ45
+  YMC_CHECK_EQ(u("modelica://Modelica/Resources//Data/Utilities/Test_RealMatrix_v4.mat"), mat);                // URZ46
+  YMC_CHECK_EQ(u("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat/"), mat + "\\");         // URZ69
+  YMC_CHECK_EQ(u("modelica://Modelica/Resources/Data/NoSuchFile.txt"),
+               std::string("C:/L/Modelica 4.0.0+maint.om/Resources/Data/NoSuchFile.txt"));                     // URZ2
+  YMC_CHECK_EQ(u("modelica://Modelica/Resources/Data/Utilities/"),
+               std::string("C:\\L\\Modelica 4.0.0+maint.om\\Resources\\Data\\Utilities\\/"));                  // URZ23
+  YMC_CHECK_EQ(u("modelica://Modelica/"), std::string("C:\\L\\Modelica 4.0.0+maint.om/"));                     // URZ24
+  YMC_CHECK_EQ(u("modelica://Modelica"), std::string("C:\\L\\Modelica 4.0.0+maint.om"));                       // URZ25
+  YMC_CHECK_EQ(u("modelica://Modelica."), std::string("C:\\L\\Modelica 4.0.0+maint.om"));                      // URZ102
+  YMC_CHECK_EQ(u("modelica://ModelicaServices/"), std::string("C:\\L\\ModelicaServices 4.0.0+maint.om/"));     // URZ47
+  YMC_CHECK_EQ(u("modelica://Modelica/Resources/../package.mo"),
+               std::string("C:\\L\\Modelica 4.0.0+maint.om\\package.mo"));                                     // URZ91
+  YMC_CHECK_EQ(u("modelica://Modelica/Resources/a+b%41c.txt"),
+               std::string("C:/L/Modelica 4.0.0+maint.om/Resources/a bAc.txt"));                               // URZ38
+  YMC_CHECK_EQ(u("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat%"),
+               std::string("C:/L/Modelica 4.0.0+maint.om/Resources/Data/Utilities/Test_RealMatrix_v4.mat%"));  // URZ103
+  YMC_CHECK_EQ(u("modelica://Modelica.Utilities/foo.txt"),
+               std::string("C:/L/Modelica 4.0.0+maint.om/Utilities/foo.txt"));                                 // URZ39
+  YMC_CHECK_EQ(u("modelica://Modelica.Blocks.Examples/x.txt"),
+               std::string("C:/L/Modelica 4.0.0+maint.om/Blocks/x.txt"));                                      // URZ40
+  YMC_CHECK_EQ(u("C:/Windows/win.ini"), std::string("C:\\Windows\\win.ini"));                                  // URZ20
+  YMC_CHECK_EQ(u("file://C:/Windows/win.ini"), std::string("C:\\Windows\\win.ini"));                           // URZ42
+  YMC_CHECK_EQ(u("FILE://C:/Windows/win.ini"), std::string("C:\\Windows\\win.ini"));                           // URZ104
+  YMC_CHECK_EQ(u("URZ44.mo"), std::string("C:\\w\\o1\\URZ44.mo"));                                             // URZ44
+  YMC_CHECK_EQ(u("Resources/x.txt"), std::string("C:\\w\\o1\\/Resources/x.txt"));                              // URZ21
+  // omc 自己求值失败（omc_assert：调用原样留着）：类没装 URZ18、空串 URZ22、`..` 连写 URZ41、不认识的 scheme URZ43。
+  YMC_CHECK_EQ(u("modelica://MODELICA/Resources/Data/Utilities/Test_RealMatrix_v4.mat"), std::string("<nullopt>"));
+  YMC_CHECK_EQ(u(""), std::string("<nullopt>"));
+  YMC_CHECK_EQ(u("modelica://Modelica..Blocks/x.txt"), std::string("<nullopt>"));
+  YMC_CHECK_EQ(u("http://example.com/x"), std::string("<nullopt>"));
+  // ymc 不担保的形态（omc 有结果，ymc SKIP）：根相对 `/C:/…`（URZ19）、段尾的点（URZ100）、`?`（URZ78）、控制字符（URZ97）。
+  YMC_CHECK_EQ(u("file:///C:/Windows/win.ini"), std::string("<nullopt>"));
+  YMC_CHECK_EQ(u("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat."), std::string("<nullopt>"));
+  YMC_CHECK_EQ(u("modelica://Modelica/Resources/x.txt?a=1"), std::string("<nullopt>"));
+  YMC_CHECK_EQ(u("modelica://Modelica/Resources/a\tb.txt"), std::string("<nullopt>"));
+  // URI 映射的目录：System.dirname(GetFullPathName 后 '\\' 换 '/' 的文件名)（URZ2 的 `…/Modelica 4.0.0+maint.om`；单文件库是库根，
+  // OPENMODELICALIBRARY 指向临时库根的手工探针 URZX：`modelica://UrzLib/none.txt` → `<库根>/none.txt`）。
+  YMC_CHECK_EQ(omc_source_dir("C:\\L\\Modelica 4.0.0+maint.om/package.mo", "C:\\w").value_or("<nullopt>"),
+               std::string("C:/L/Modelica 4.0.0+maint.om"));
+  YMC_CHECK_EQ(omc_source_dir("C:/L/UrzLib.mo", "C:\\w").value_or("<nullopt>"), std::string("C:/L"));
+  YMC_CHECK_EQ(omc_source_dir("URZ15.mo", "C:\\w\\o1").value_or("<nullopt>"), std::string("C:/w/o1"));   // URZ15
+}
+
+YMC_TEST(flatten_uri_to_filename_evaluated) {
+  // 常量实参的 uriToFilename 求值成路径字面量（NFCeval.evalUriToFilename，NFCeval.mo:2932-2947 v1.25.0）：`modelica://类名` 的目录取
+  // Absyn::class_files（omc 的 URI 映射）。类映射到一个不存在的目录，结果与机器无关：不存在的文件原样拼（URZ2）、类名后的 `.Sub` 段
+  // 不是目录就丢掉（URZ40 / URZ54）、'+' / "%41" 解码（URZ38）、scheme 不分大小写（URZ17）；经用户函数求值（URZ9 / URZ131 的函数体）
+  // 与直接写在常量绑定里（URZ34）同。期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p34 URZ2 / URZ17 / URZ38 / URZ40 / URZ54）的形态。
+  const std::vector<std::pair<std::string, std::string>> files = {{"URZT", "C:/ymc_66z_no_such_dir/URZT/package.mo"}};
+  YMC_CHECK_EQ(flatten_src("package URZT\n  function load\n    input String uri;\n    output String r;\n  algorithm\n"
+                           "    r := OpenModelica.Scripting.uriToFilename(uri);\n  end load;\nend URZT;\nmodel URZT1\n"
+                           "  parameter String a = URZT.load(\"modelica://URZT/Resources/a.txt\");\n"
+                           "  parameter String b = URZT.load(\"modelica://URZT.Sub.Deeper/x.txt\");\n"
+                           "  parameter String c = URZT.load(\"modelica://URZT/a+b%41c.txt\");\n"
+                           "  constant String d = OpenModelica.Scripting.uriToFilename(\"Modelica://URZT/d.txt\");\nend URZT1;\n",
+                           nullptr, &files),
+               std::string("class URZT1\n  parameter String a = \"C:/ymc_66z_no_such_dir/URZT/Resources/a.txt\";\n"
+                           "  parameter String b = \"C:/ymc_66z_no_such_dir/URZT/x.txt\";\n"
+                           "  parameter String c = \"C:/ymc_66z_no_such_dir/URZT/a bAc.txt\";\n"
+                           "  constant String d = \"C:/ymc_66z_no_such_dir/URZT/d.txt\";\nend URZT1;\n"));
+  // 实参是参数：调用照留，函数体打内建的外部名（Function.nameConsiderBuiltin，NFFunction.mo:755-767；探针 URZ36 / URZ9）。
+  YMC_CHECK_EQ(flatten_src("package URZT\n  function load\n    input String uri;\n    output String r;\n  algorithm\n"
+                           "    r := OpenModelica.Scripting.uriToFilename(uri);\n  end load;\nend URZT;\nmodel URZT2\n"
+                           "  parameter String p = \"modelica://URZT/x.txt\";\n  parameter String f = URZT.load(p);\nend URZT2;\n",
+                           nullptr, &files),
+               std::string("function URZT.load\n  input String uri;\n  output String r;\nalgorithm\n"
+                           "  r := OpenModelica_uriToFilename(uri);\nend URZT.load;\n\nclass URZT2\n"
+                           "  parameter String p = \"modelica://URZT/x.txt\";\n  parameter String f = URZT.load(p);\nend URZT2;\n"));
+}
+
+YMC_TEST(flatten_uri_to_filename_existing_file) {
+  // 存在的文件：GetFullPathName 的反斜杠全路径（realpath = _fullpath，utility.c:202-225 v1.25.0；探针 URZ1 / URZ53 的
+  // `"C:\\Users\\…\\Test_RealMatrix_v4.mat"`）。前缀是本机的临时目录，期望按同一个目录拼（只换分隔符），形态取探针。
+  namespace fs = std::filesystem;
+  const fs::path root = fs::temp_directory_path() / "ymc_66z_uri_test";
+  fs::remove_all(root);
+  fs::create_directories(root / "URZT");
+  { std::ofstream(root / "URZT" / "res.txt") << "x\n"; }
+  std::string win = (root / "URZT" / "res.txt").string();
+  bool ascii = true;
+  for (char& ch : win) {
+    if (ch == '/') ch = '\\';
+    ascii = ascii && static_cast<unsigned char>(ch) >= 0x20 && static_cast<unsigned char>(ch) <= 0x7E;
+  }
+  if (ascii) {   // 非 ASCII 的临时目录 ymc 不求（见 win_full_path），这台机器上就不比
+    std::string esc;   // DAE dump 里字符串的 '\\' 打成 "\\\\"
+    for (char ch : win) esc += ch == '\\' ? std::string("\\\\") : std::string(1, ch);
+    const std::vector<std::pair<std::string, std::string>> files = {{"URZT", (root / "URZT" / "package.mo").generic_string()}};
+    YMC_CHECK_EQ(flatten_src("package URZT\n  function load\n    input String uri;\n    output String r;\n  algorithm\n"
+                             "    r := OpenModelica.Scripting.uriToFilename(uri);\n  end load;\nend URZT;\nmodel URZT3\n"
+                             "  parameter String f = URZT.load(\"modelica://URZT/res.txt\");\nend URZT3;\n",
+                             nullptr, &files),
+                 "class URZT3\n  parameter String f = \"" + esc + "\";\nend URZT3;\n");
+  }
+  fs::remove_all(root);
+}
+
+YMC_TEST(flatten_uri_to_filename_skips) {
+  // 求不出 / 形态未核实的一律不出结果（omc 1.25.0 实跑，2026-10-17，探针 pk-p34）：类没装（URZ18，omc 留调用）、空串（URZ22）、
+  // 模型语境里的参数实参（URZ35，omc 打 `OpenModelica_uriToFilename(p)`，结构参数代入后的求值未做）、没有 URI 映射的类（单测 /
+  // 未记来源的类）、用户的顶层 `package OpenModelica`（URZ37，omc 报 "An element with name OpenModelica is already declared"）。
+  const std::vector<std::pair<std::string, std::string>> files = {{"URZT", "C:/ymc_66z_no_such_dir/URZT/package.mo"}};
+  const char* fn = "package URZT\n  function load\n    input String uri;\n    output String r;\n  algorithm\n"
+                   "    r := OpenModelica.Scripting.uriToFilename(uri);\n  end load;\nend URZT;\n";
+  for (const char* m : {"model URZS1\n  parameter String f = URZT.load(\"modelica://Nope/x.txt\");\nend URZS1;\n",
+                        "model URZS2\n  parameter String f = URZT.load(\"\");\nend URZS2;\n",
+                        "model URZS3\n  parameter String p = \"modelica://URZT/x.txt\";\n"
+                        "  parameter String f = OpenModelica.Scripting.uriToFilename(p);\nend URZS3;\n"}) {
+    const std::string src = std::string(fn) + m;
+    YMC_CHECK(flatten_src(src.c_str(), nullptr, &files).rfind("<unsupported:", 0) == 0);
+  }
+  YMC_CHECK(flatten_src((std::string(fn) + "model URZS4\n  parameter String f = URZT.load(\"modelica://URZT/x.txt\");\n"
+                                           "end URZS4;\n").c_str())
+                .rfind("<unsupported:", 0) == 0);
+  YMC_CHECK(flatten_src("package OpenModelica\n  package Scripting\n    function uriToFilename\n      input String uri;\n"
+                        "      output String r;\n    algorithm\n      r := \"X\" + uri;\n    end uriToFilename;\n"
+                        "  end Scripting;\nend OpenModelica;\nmodel URZS5\n"
+                        "  parameter String f = OpenModelica.Scripting.uriToFilename(\"a\");\nend URZS5;\n")
+                .rfind("<unsupported:", 0) == 0);
+}
+
+YMC_TEST(flatten_assert_message_user_call_not_folded) {
+  // 方程里 assert / terminate 的消息 omc 不化简（simplifyEquation 的 ASSERT 支只动条件 NFSimplifyModel.mo:211-215、TERMINATE 落到
+  // else :234 v1.25.0），常量实参的用户函数调用照留：`assert(x < 10.0, URZ106.f("a"))`（探针 pk-p34 URZ106 / URZ108，omc 1.25.0 实跑
+  // 2026-10-17）——ymc 不出结果（此前定型时折成 "ab"，静默错）；算法里的照常求值（URZ107 → `assert(x < 10.0, "ab")`）。
+  const char* fdef = "  function f\n    input String s;\n    output String r;\n  algorithm\n    r := s + \"b\";\n  end f;\n"
+                     "  Real x = time;\n";
+  YMC_CHECK(flatten_src((std::string("model URZ106\n") + fdef + "equation\n  assert(x < 10, f(\"a\"));\nend URZ106;\n").c_str())
+                .rfind("<unsupported:", 0) == 0);
+  YMC_CHECK(flatten_src((std::string("model URZ108\n") + fdef +
+                         "equation\n  when x > 5 then\n    terminate(f(\"a\"));\n  end when;\nend URZ108;\n").c_str())
+                .rfind("<unsupported:", 0) == 0);
+  YMC_CHECK_EQ(flatten_src((std::string("model URZ107\n") + fdef + "algorithm\n  assert(x < 10, f(\"a\"));\nend URZ107;\n").c_str()),
+               std::string("class URZ107\n  Real x = time;\nalgorithm\n  assert(x < 10.0, \"ab\");\nend URZ107;\n"));
 }
 
 YMC_TEST_MAIN

@@ -552,4 +552,26 @@ YMC_TEST(encrypted_package_moc_is_skipped_with_warning) {
 
 // Case 故意不测：OMC 1.25.0 的 {A,A} 结果依赖 Windows 大小写不敏感文件系统，是已知缺陷。
 
+YMC_TEST(class_files_record_top_level_sources) {
+  // 顶层类的来源文件记进 Absyn::class_files（omc 的 URI 映射取它的目录：SymbolTable.updateUriMapping，SymbolTable.mo:568-599
+  // v1.25.0）：目录形式的库记它的 package.mo、单文件库记 X.mo 本身。omc 1.25.0 实跑的对应形态（2026-10-17，OPENMODELICALIBRARY
+  // 指向临时库根的手工探针 URZX）：`modelica://UrzDir/none.txt` → `<库根>/UrzDir 1.0/none.txt`、`modelica://UrzLib/none.txt` →
+  // `<库根>/none.txt`（目录由 base/omc_uri.h 的 omc_source_dir 从这里记的文件求）。
+  fs::path root = fs::temp_directory_path() / "ymc_loader_class_files";
+  fs::remove_all(root);
+  put(root / "UrzDir 1.0" / "package.mo", "package UrzDir\nend UrzDir;\n");
+  put(root / "UrzLib.mo", "package UrzLib\nend UrzLib;\n");
+  Interner in;
+  Diagnostics d;
+  Absyn a(in);
+  LoaderOptions options;
+  options.roots = {root};
+  Loader loader(a, d, options);
+  YMC_CHECK(loader.load_library("UrzDir").is_valid());
+  YMC_CHECK(loader.load_library("UrzLib").is_valid());
+  YMC_CHECK_EQ(a.class_files[in.intern("UrzDir")], (root / "UrzDir 1.0" / "package.mo").generic_string());
+  YMC_CHECK_EQ(a.class_files[in.intern("UrzLib")], (root / "UrzLib.mo").generic_string());
+  fs::remove_all(root);
+}
+
 YMC_TEST_MAIN

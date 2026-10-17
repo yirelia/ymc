@@ -784,3 +784,10 @@ TestTwoPhaseStates——extends 短类后的 class extends；MixtureGases——e
 非空的 stream 数组成员（逐元素成 stream 集，inStream / actualStream 的数组实参逐元素展开）。Fluid.Examples.BranchingDynamicPipes、
 TraceSubstances.RoomCO2 / RoomCO2WithControls 越过 "stream connector"，卡到下一处：管流模型的 `homotopy(array(…))` 向量化实参；
 FixedBoundary.d 两支调用的求值时机（omc 先代入 Evaluate = true 的 use_T 再化简）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-17 66z 之后：PASS 482（不变）
+
+OpenModelica.Scripting.uriToFilename 的编译期求值（照 omc 运行时 utility.c 的路径规则）。Electrical.Digital.Examples.RAM、
+Utilities.Examples.ReadRealMatrixFromFile / readRealParameterModel 越过它，求得的文件路径与 omc 一致，卡到下一处：函数体里的枚举数组
+包常量与枚举输入（RAM）、经 FFI 读 MAT 文件求维（ReadRealMatrixFromFile）、记录构造函数的枚举字段（readRealParameterModel）。
+FAIL / ACCEPTS-INVALID / CRASH 0。

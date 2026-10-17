@@ -2589,6 +2589,25 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       探针 pk-p33（119；SX*）——基线上 22 例 FAIL（现 19 PASS / 3 SKIP），现 PASS 94 / SKIP 20 / BOTH-REJECT 5；单测 +6。
       slice 702 例 FAIL 0（oracle=live 不一致 0）；scodeinst 663、MSL 482（均不变）；testsuite 1835→1836（connectors/EnumArrayConnector）/
       FAIL 0；探针 10752→10871；单测 471→477。
+- [x] (66z) OpenModelica.Scripting.uriToFilename 的编译期求值（2026-10-17）：它在 omc 内部的顶层包 OpenModelica 里（NFModelicaBuiltin.mo
+      :987-6580，函数 :2834-2844，`external "builtin" filename = OpenModelica_uriToFilename(uri)`），库里没有定义 → ymc 查不到、SKIP。
+      omc：化简时对常量实参求值（NFCeval.evalUriToFilename :2932-2947 → 运行时 utility.c OpenModelica_uriToFilename_impl :307-402），
+      `modelica://类/…` 的目录 = 该类源文件经 GetFullPathName 的目录（SymbolTable.updateUriMapping :568-599）；存在的文件给反斜杠的全路径、
+      不存在的给拼出的正斜杠路径、目录 URI 以 '/' 结尾补 '/'、`.A.B` 逐段进存在的子目录、`+` / `%XY` 解码；函数体里引用局部的照打
+      `OpenModelica_uriToFilename(u)`（nameConsiderBuiltin :755-767）。ymc：src/base/omc_uri.h 照 utility.c 移植（文件系统注入、
+      自带 GetFullPathName 规范化——libstdc++ 的 fs::absolute 对绝对路径原样返回；没核实的形态一律不接）；Absyn::class_files 由装载器 /
+      driver 记顶层类的源文件。omc 与 ymc 在同一台机器、同一当前目录、同一文件路径上跑（探针 / 扫描都如此），输出一致。
+      顺带：方程里 assert / terminate 的消息 omc 不化简（NFSimplifyModel.mo:211-215 / :234），ymc 定型时就把常量实参的用户调用折了
+      （探出 8 例静默错，现 SKIP）；用户顶层 `package OpenModelica` omc 报重名（此前 ACCEPTS-INVALID）。
+      三个目标越过 uriToFilename 卡到下一处：Digital.Examples.RAM——函数体里的枚举数组包常量（`T.X01Table`）+ 枚举类型的函数输入；
+      Utilities.Examples.readRealParameterModel——记录构造函数的枚举字段（Types.TokenValue）；ReadRealMatrixFromFile——omc 经 FFI
+      调 ModelicaIO_readMatrixSizes 读 MAT 文件求 `dim1 = {3, 2}`（要 MAT 读取器）。
+      探针 pk-p34（148；URZ）——基线上 FAIL 8 / ACCEPTS-INVALID 1，现 PASS 111 / SKIP 32 / BOTH-REJECT 5；单测 +5（omc_uri 的假文件系统 /
+      flatten；另 loader_test +1）。slice 702 例 FAIL 0（oracle=live 不一致 0）；scodeinst 663、testsuite 1836、MSL 482（均不变）/ FAIL 0；
+      探针 10871→11019；单测 477→482。
+- [ ] (67a 候选) 已有的 ACCEPTS-INVALID（66z 调查时发现）：用户顶层类与 NFModelicaBuiltin.mo 的其他顶层元素重名（`function delay` →
+      omc 报 "An element with name delay is already declared"，NFModelicaBuiltin.mo:370-373），ymc 照出结果；run() 的重名表只列了
+      Clock / StateSelect / Uncertainty / AssertionLevel / Connections / OpenModelica。复现 `$S/pkr66z/dup/DUP2.mo`。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

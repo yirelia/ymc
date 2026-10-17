@@ -321,6 +321,9 @@ int run_one(const Options& opt, const std::string& path) {
       return 1;
     }
     const ymc::Symbol root_name = absyn.classes[absyn.top.back()].name;   // 装库之前取：文件里最后一个顶层类
+    // 文件里的顶层类记下来源文件（omc 的 URI 映射取它的目录，`modelica://本文件里的类/…` 要用；见 Absyn::class_files）。
+    // 隐式装上的库由装载器自己记。
+    for (ymc::Id<ymc::ClassDef> c : absyn.top) absyn.class_files[absyn.classes[c].name] = path;
     autoload_libraries(absyn, interner, opt);
     return dump_flat_pipeline(absyn, diags, interner, {root_name});
   }

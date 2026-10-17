@@ -1,0 +1,962 @@
+//// set: pk-p34 — OpenModelica.Scripting.uriToFilename 的编译期求值（66z：MSL Files.loadResource 继承 ModelicaServices loadResource，体里一句 `fileReference := OpenModelica.Scripting.uriToFilename(uri)`；MSL RAM / ReadRealMatrixFromFile / readRealParameterModel 此前 SKIP "qualified function call [OpenModelica.Scripting.uriToFilename]"）：常量实参在化简时求值（simplifyCall，NFSimplifyExp.mo:187-201 v1.25.0 → NFCeval.evalUriToFilename :2932-2947 → utility.c OpenModelica_uriToFilename_impl :307-402），结果是本机路径——探针在同一目录里实跑 omc 与 ymc，两边看到同一个文件系统 / 当前目录 / MSL 安装，输出逐字节可比。modelica:// 的目录取 URI 映射（顶层类 → 所在文件的目录，SymbolTable.updateUriMapping :568-599）：MSL / ModelicaServices / Complex / 探针文件里的类（URZ1、URZ14、URZ15、URZ53、URZ54、URZ71）；存在的 → GetFullPathName 的反斜杠形态，不存在的原样（URZ2、URZ79、URZ132）；`.A.B` 段进存在的子目录（URZ16、URZ39、URZ40、URZ70、URZ96）、'+' / %XY 解码（URZ38、URZ77、URZ92、URZ101、URZ103）、`..` / `//` / 结尾 '/'（URZ23-URZ25、URZ45-URZ47、URZ69、URZ91、URZ93、URZ99、URZ102）、scheme 大小写（URZ17、URZ104）、file:// 与普通路径（URZ20、URZ21、URZ42、URZ44、URZ68）；各处的求值：constant / parameter / Evaluate / final / 修饰 / extends / 数组 / 记录字段 / 方程 / 算法 / 初始段 / when / if / for / 实参 / 缺省实参 / 函数体 / 包常量 / 结构参数的维与条件 / 拼接 / 比较 / 向量化 / 别名 / 命名实参；实参是参数时照留调用、函数体打 `OpenModelica_uriToFilename(u)`（URZ9、URZ26、URZ36、URZ67、URZ75、URZ134、URZ152-URZ154）——下列以外的全部 PASS。照旧 SKIP：omc 自己求值失败留调用（类没装 / 空串 / `..` 连写 / 不认识的 scheme / 类名大小写错：URZ3、URZ18、URZ22、URZ41、URZ43、URZ90）、ymc 不担保的路径形态（`/C:/…`、段尾的点、`?`、控制字符、非 ASCII：URZ19、URZ78、URZ97、URZ98、URZ100）、模型语境里的参数实参（URZ35）、早内联的 ModelicaServices loadResource 直接调（URZ4、URZ33、URZ135）、import / 短类别名的内建（URZ130、URZ156）、方程里 assert / terminate 消息里的调用（URZ73、URZ110、URZ112、URZ117、URZ149）、目标的下一处阻塞（URZ8 记录构造的枚举字段）、函数求值里的 String()（URZ141）；两边拒：实参错用（URZ123-URZ126）。基线静默错（一并修）：用户的顶层 `package OpenModelica` 与内建包冲突（URZ37，omc 报重复声明，此前 ACCEPTS-INVALID）；方程里 assert / terminate 的消息 omc 不化简（NFSimplifyModel.mo:211-215 / :234），常量实参的用户函数调用照留（URZ106、URZ108、URZ116、URZ143-URZ146、URZ148，此前定型时就折成字面量 → 现 SKIP；算法里的照常求值 URZ107、URZ109、URZ111）
+//// model: URZ1
+model URZ1
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+end URZ1;
+//// model: URZ2
+model URZ2
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/NoSuchFile.txt");
+end URZ2;
+//// model: URZ3
+model URZ3
+  parameter String f = OpenModelica.Scripting.uriToFilename("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+end URZ3;
+//// model: URZ4
+model URZ4
+  parameter String f = ModelicaServices.ExternalReferences.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+end URZ4;
+//// model: URZ5
+model URZ5
+  constant String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+end URZ5;
+//// model: URZ6
+model URZ6
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat") annotation(Evaluate = true);
+end URZ6;
+//// model: URZ7
+model URZ7
+  final parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+end URZ7;
+//// model: URZ8
+model URZ8
+  parameter Real J = Modelica.Utilities.Examples.readRealParameter(Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Examples_readRealParameters.txt"), "J");
+end URZ8;
+//// model: URZ9
+model URZ9
+  function g
+    input String u;
+    output String r;
+  algorithm
+    r := Modelica.Utilities.Files.loadResource(u);
+  end g;
+  parameter String p = "modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat";
+  parameter String s = g(p);
+end URZ9;
+//// model: URZ10
+model URZ10
+  function g2
+    output String r;
+  algorithm
+    r := Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+  end g2;
+  parameter String s = g2();
+end URZ10;
+//// model: URZ11
+model URZ11
+  String s;
+equation
+  s = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+end URZ11;
+//// model: URZ12
+model URZ12
+  String s;
+algorithm
+  s := Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+end URZ12;
+//// model: URZ13
+model URZ13
+algorithm
+  when initial() then
+    Modelica.Utilities.Streams.print(Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat"));
+  end when;
+end URZ13;
+//// model: URZ14
+model URZ14
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://ModelicaServices/package.mo");
+  parameter String g = Modelica.Utilities.Files.loadResource("modelica://Complex/package.mo");
+end URZ14;
+//// model: URZ15
+package URZ15P
+  constant Integer k = 1;
+end URZ15P;
+model URZ15
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://URZ15P/x.txt");
+end URZ15;
+//// model: URZ16
+model URZ16
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica.Electrical.Digital/foo.txt");
+end URZ16;
+//// model: URZ17
+model URZ17
+  parameter String f = Modelica.Utilities.Files.loadResource("Modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+end URZ17;
+//// model: URZ18
+model URZ18
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://MODELICA/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+end URZ18;
+//// model: URZ19
+model URZ19
+  parameter String f = Modelica.Utilities.Files.loadResource("file:///C:/Windows/win.ini");
+end URZ19;
+//// model: URZ20
+model URZ20
+  parameter String f = Modelica.Utilities.Files.loadResource("C:/Windows/win.ini");
+end URZ20;
+//// model: URZ21
+model URZ21
+  parameter String f = Modelica.Utilities.Files.loadResource("Resources/x.txt");
+end URZ21;
+//// model: URZ22
+model URZ22
+  parameter String f = Modelica.Utilities.Files.loadResource("");
+end URZ22;
+//// model: URZ23
+model URZ23
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/");
+end URZ23;
+//// model: URZ24
+model URZ24
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/");
+end URZ24;
+//// model: URZ25
+model URZ25
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica");
+end URZ25;
+//// model: URZ26
+model URZ26
+  parameter String p = "modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat";
+  parameter String f = Modelica.Utilities.Files.loadResource(p);
+end URZ26;
+//// model: URZ27
+model URZ27
+  constant String p = "modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat";
+  parameter String f = Modelica.Utilities.Files.loadResource(p);
+end URZ27;
+//// model: URZ28
+model URZ28
+  model A
+    parameter String f = "x";
+  end A;
+  A a(f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat"));
+end URZ28;
+//// model: URZ29
+model URZ29
+  parameter String fs[2] = {Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat"), Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v6.mat")};
+end URZ29;
+//// model: URZ30
+model URZ30
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/") + "Test_RealMatrix_v4.mat";
+end URZ30;
+//// model: URZ31
+model URZ31
+  parameter String f = Modelica.Utilities.Files.loadResource(uri = "modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+end URZ31;
+//// model: URZ32
+model URZ32
+  parameter Boolean b = true;
+  parameter String f = if b then Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat") else Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v6.mat");
+end URZ32;
+//// model: URZ33
+model URZ33
+  parameter String p = "modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat";
+  parameter String f = ModelicaServices.ExternalReferences.loadResource(p);
+end URZ33;
+//// model: URZ34
+model URZ34
+  parameter String f = OpenModelica.Scripting.uriToFilename("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+  parameter Real k = Modelica.Constants.pi;
+end URZ34;
+//// model: URZ35
+model URZ35
+  parameter String p = "modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat";
+  parameter String f = OpenModelica.Scripting.uriToFilename(p);
+  parameter Real k = Modelica.Constants.pi;
+end URZ35;
+//// model: URZ36
+model URZ36
+  function g
+    input String u;
+    output String r;
+  algorithm
+    r := OpenModelica.Scripting.uriToFilename(u);
+  end g;
+  parameter String p = "modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat";
+  parameter String f = g(p);
+  parameter Real k = Modelica.Constants.pi;
+end URZ36;
+//// model: URZ37
+package OpenModelica
+  package Scripting
+    function uriToFilename
+      input String uri;
+      output String r;
+    algorithm
+      r := "X" + uri;
+    end uriToFilename;
+  end Scripting;
+end OpenModelica;
+model URZ37
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+end URZ37;
+//// model: URZ38
+model URZ38
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/a+b%41c.txt");
+end URZ38;
+//// model: URZ39
+model URZ39
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica.Utilities/foo.txt");
+end URZ39;
+//// model: URZ40
+model URZ40
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica.Blocks.Examples/x.txt");
+end URZ40;
+//// model: URZ41
+model URZ41
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica..Blocks/x.txt");
+end URZ41;
+//// model: URZ42
+model URZ42
+  parameter String f = Modelica.Utilities.Files.loadResource("file://C:/Windows/win.ini");
+end URZ42;
+//// model: URZ43
+model URZ43
+  parameter String f = Modelica.Utilities.Files.loadResource("http://example.com/x");
+end URZ43;
+//// model: URZ44
+model URZ44
+  parameter String f = Modelica.Utilities.Files.loadResource("URZ44.mo");
+end URZ44;
+//// model: URZ45
+model URZ45
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/../Utilities/Test_RealMatrix_v4.mat");
+end URZ45;
+//// model: URZ46
+model URZ46
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources//Data/Utilities/Test_RealMatrix_v4.mat");
+end URZ46;
+//// model: URZ47
+model URZ47
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://ModelicaServices/");
+end URZ47;
+//// model: URZ48
+model URZ48
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources\\Data\\Utilities\\Test_RealMatrix_v4.mat");
+end URZ48;
+//// model: URZ51
+model URZ51
+  function g3
+    input Real x;
+    output String r;
+  algorithm
+    r := Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat") + String(x);
+  end g3;
+  parameter Real p = 1;
+  parameter String s = g3(p);
+end URZ51;
+//// model: URZ52
+model URZ52
+  record R
+    String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+    Real x = 1;
+  end R;
+  parameter R r;
+end URZ52;
+//// model: URZ53
+model URZ53
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://URZ53/x.txt");
+  parameter String g = Modelica.Utilities.Files.loadResource("modelica://URZ53/URZ53.mo");
+end URZ53;
+//// model: URZ54
+model URZ54
+  model Sub
+  end Sub;
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://URZ54.Sub/x.txt");
+end URZ54;
+//// model: URZ56
+model URZ56
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat") annotation(Evaluate = true);
+  parameter String g = f;
+end URZ56;
+//// model: URZ58
+model URZ58
+  String s;
+initial algorithm
+  s := Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+end URZ58;
+//// model: URZ59
+model URZ59
+  parameter String fs[2] = Modelica.Utilities.Files.loadResource({"modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat", "modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v6.mat"});
+end URZ59;
+//// model: URZ60
+model URZ60
+  String s[2];
+equation
+  for i in 1:2 loop
+    s[i] = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v" + String(2 + 2 * i) + ".mat");
+  end for;
+end URZ60;
+//// model: URZ61
+model URZ61
+  parameter Integer n = Modelica.Utilities.Strings.length(Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat"));
+end URZ61;
+//// model: URZ62
+model URZ62
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+  parameter Integer n = Modelica.Utilities.Strings.length(f);
+end URZ62;
+//// model: URZ63
+model URZ63
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+  Real x[Modelica.Utilities.Strings.length(f)];
+end URZ63;
+//// model: URZ64
+model URZ64
+  constant String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+  parameter String g = f + ".bak";
+end URZ64;
+//// model: URZ65
+model URZ65
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/resources/data/utilities/test_realmatrix_v4.mat");
+end URZ65;
+//// model: URZ66
+model URZ66
+  parameter String p = "modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat" annotation(Evaluate = true);
+  parameter String f = Modelica.Utilities.Files.loadResource(p);
+end URZ66;
+//// model: URZ67
+model URZ67
+  function g
+    input Real x;
+    output String r;
+  algorithm
+    r := OpenModelica.Scripting.uriToFilename("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat") + String(x);
+  end g;
+  parameter Real p = 1;
+  parameter String s = g(p);
+  parameter Real k = Modelica.Constants.pi;
+end URZ67;
+//// model: URZ68
+model URZ68
+  parameter String f = Modelica.Utilities.Files.loadResource("file://URZ68.mo");
+end URZ68;
+//// model: URZ69
+model URZ69
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat/");
+end URZ69;
+//// model: URZ70
+model URZ70
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica.Resources.Data/Utilities/Test_RealMatrix_v4.mat");
+end URZ70;
+//// model: URZ71
+model URZ71
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Complex/package.mo");
+  annotation(uses(Modelica(version = "4.0.0")));
+end URZ71;
+//// model: URZ72
+model URZ72
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/" + "Test_RealMatrix_v4.mat");
+end URZ72;
+//// model: URZ73
+model URZ73
+  Real x = time;
+equation
+  assert(x < 10, Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat"));
+end URZ73;
+//// model: URZ74
+model URZ74
+  function h
+    input String u = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+    output String r;
+  algorithm
+    r := u;
+  end h;
+  parameter String f = h();
+end URZ74;
+//// model: URZ75
+model URZ75
+  function h2
+    input String a;
+    input String b = Modelica.Utilities.Files.loadResource(a);
+    output String r;
+  algorithm
+    r := b;
+  end h2;
+  parameter String p = "modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat";
+  parameter String f = h2(p);
+end URZ75;
+//// model: URZ77
+model URZ77
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources%2FData/Utilities/Test_RealMatrix_v4.mat");
+end URZ77;
+//// model: URZ78
+model URZ78
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/x.txt?a=1");
+end URZ78;
+//// model: URZ79
+model URZ79
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/My File.txt");
+end URZ79;
+//// model: URZ80
+model URZ80
+  record R
+    String f = "x";
+    Real y = 1;
+  end R;
+  parameter R r(f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat"));
+end URZ80;
+//// model: URZ81
+model URZ81
+  parameter Boolean b = true;
+  String s;
+equation
+  if b then
+    s = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+  else
+    s = "";
+  end if;
+end URZ81;
+//// model: URZ82
+model URZ82
+  parameter Boolean b = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat") == "x";
+end URZ82;
+//// model: URZ83
+model URZ83
+protected
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+  constant String g = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v6.mat");
+end URZ83;
+//// model: URZ84
+model URZ84
+  String s;
+initial equation
+  s = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+equation
+  when time > 1 then
+    s = "a";
+  end when;
+end URZ84;
+//// model: URZ85
+model URZ85
+  model A
+    parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+  end A;
+  model B
+    extends A(f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v6.mat"));
+  end B;
+  B b;
+  A a;
+end URZ85;
+//// model: URZ86
+model URZ86
+  model A
+    parameter String f = "x";
+  end A;
+  A a[2](each f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat"));
+end URZ86;
+//// model: URZ87
+model URZ87
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat") annotation(Evaluate = false);
+end URZ87;
+//// model: URZ90
+model URZ90
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+end URZ90;
+//// model: URZ91
+model URZ91
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/../package.mo");
+end URZ91;
+//// model: URZ92
+model URZ92
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/../ModelicaServices 4.0.0+maint.om/package.mo");
+end URZ92;
+//// model: URZ93
+model URZ93
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources");
+end URZ93;
+//// model: URZ96
+model URZ96
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica.Utilities.Examples/x.txt");
+end URZ96;
+//// model: URZ97
+model URZ97
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/a\tb.txt");
+end URZ97;
+//// model: URZ98
+model URZ98
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/ä.txt");
+end URZ98;
+//// model: URZ99
+model URZ99
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica.Resources/Data/");
+end URZ99;
+//// model: URZ100
+model URZ100
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat.");
+end URZ100;
+//// model: URZ101
+model URZ101
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/a%20b%2Ec.txt");
+end URZ101;
+//// model: URZ102
+model URZ102
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica.");
+end URZ102;
+//// model: URZ103
+model URZ103
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat%");
+end URZ103;
+//// model: URZ104
+model URZ104
+  parameter String f = Modelica.Utilities.Files.loadResource("FILE://C:/Windows/win.ini");
+end URZ104;
+//// model: URZ105
+model URZ105
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat") + Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/NoSuchFile.txt");
+  parameter Integer n = 2;
+  Real x[n];
+equation
+  for i in 1:n loop
+    x[i] = i * time;
+  end for;
+end URZ105;
+//// model: URZ106
+model URZ106
+  function f
+    input String s;
+    output String r;
+  algorithm
+    r := s + "b";
+  end f;
+  Real x = time;
+equation
+  assert(x < 10, f("a"));
+end URZ106;
+//// model: URZ107
+model URZ107
+  function f
+    input String s;
+    output String r;
+  algorithm
+    r := s + "b";
+  end f;
+  Real x = time;
+algorithm
+  assert(x < 10, f("a"));
+end URZ107;
+//// model: URZ108
+model URZ108
+  function f
+    input String s;
+    output String r;
+  algorithm
+    r := s + "b";
+  end f;
+  Real x = time;
+equation
+  when x > 5 then
+    terminate(f("a"));
+  end when;
+end URZ108;
+//// model: URZ109
+model URZ109
+  Real x = time;
+algorithm
+  assert(x < 10, Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat"));
+end URZ109;
+//// model: URZ110
+model URZ110
+  Real x = time;
+equation
+  when x > 5 then
+    terminate(Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat"));
+  end when;
+end URZ110;
+//// model: URZ111
+model URZ111
+  Real x = time;
+algorithm
+  when x > 5 then
+    terminate(Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat"));
+  end when;
+end URZ111;
+//// model: URZ112
+model URZ112
+  Real x = time;
+equation
+  assert(x < 10, "file " + Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat"));
+end URZ112;
+//// model: URZ113
+model URZ113
+  function f
+    input Real s;
+    output Real r;
+  algorithm
+    r := s + 1;
+  end f;
+  Real x = time;
+equation
+  assert(x < f(10), "m");
+end URZ113;
+//// model: URZ114
+model URZ114
+  Real x = time;
+equation
+  assert(x < 10, "m" + String(2));
+end URZ114;
+//// model: URZ115
+model URZ115
+  Real x = time;
+equation
+  assert(x < 10, "a" + "b");
+end URZ115;
+//// model: URZ116
+model URZ116
+  function f
+    input String s;
+    output String r;
+  algorithm
+    r := s + "b";
+  end f;
+  Real x = time;
+equation
+  assert(x < 10, f("a"), AssertionLevel.warning);
+end URZ116;
+//// model: URZ117
+model URZ117
+  Real x = time;
+equation
+  assert(x < 10, Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat"));
+end URZ117;
+//// model: URZ118
+model URZ118
+  parameter Integer n = Modelica.Utilities.Strings.length(Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat")) annotation(Evaluate = true);
+end URZ118;
+//// model: URZ119
+model URZ119
+  Real x[Modelica.Utilities.Strings.length(Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat")) - 120];
+equation
+  x = fill(time, size(x, 1));
+end URZ119;
+//// model: URZ120
+model URZ120
+  Real x[3];
+equation
+  for i in 1:Modelica.Utilities.Strings.length(Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat")) - 125 loop
+    x[i] = i * time;
+  end for;
+end URZ120;
+//// model: URZ121
+package URZ121P
+  constant String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+end URZ121P;
+model URZ121
+  parameter String g = URZ121P.f;
+  String h = URZ121P.f;
+end URZ121;
+//// model: URZ122
+package URZ122P
+  constant String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+  function g
+    input Real x;
+    input String s = f;
+    output String r;
+  algorithm
+    r := s + String(x);
+  end g;
+end URZ122P;
+model URZ122
+  parameter Real p = 1;
+  parameter String h = URZ122P.g(p);
+end URZ122;
+//// model: URZ123
+model URZ123
+  parameter String f = Modelica.Utilities.Files.loadResource(1);
+end URZ123;
+//// model: URZ124
+model URZ124
+  parameter String f = Modelica.Utilities.Files.loadResource();
+end URZ124;
+//// model: URZ125
+model URZ125
+  parameter String f = OpenModelica.Scripting.uriToFilename();
+  parameter Real k = Modelica.Constants.pi;
+end URZ125;
+//// model: URZ126
+model URZ126
+  parameter String f = OpenModelica.Scripting.uriToFilename(1);
+  parameter Real k = Modelica.Constants.pi;
+end URZ126;
+//// model: URZ127
+model URZ127
+  parameter String f = OpenModelica.Scripting.uriToFilename(uri = "modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+  parameter Real k = Modelica.Constants.pi;
+end URZ127;
+//// model: URZ128
+model URZ128
+  parameter String f = .OpenModelica.Scripting.uriToFilename("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+  parameter Real k = Modelica.Constants.pi;
+end URZ128;
+//// model: URZ129
+model URZ129
+  package OpenModelica
+    package Scripting
+      function uriToFilename
+        input String uri;
+        output String r;
+      algorithm
+        r := "X" + uri;
+      end uriToFilename;
+    end Scripting;
+  end OpenModelica;
+  parameter String f = OpenModelica.Scripting.uriToFilename("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+end URZ129;
+//// model: URZ130
+model URZ130
+  import S = OpenModelica.Scripting;
+  parameter String f = S.uriToFilename("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+  parameter Real k = Modelica.Constants.pi;
+end URZ130;
+//// model: URZ131
+model URZ131
+  function g
+    input String name;
+    output String r;
+  algorithm
+    r := Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/" + name);
+  end g;
+  parameter String f = g("Test_RealMatrix_v4.mat");
+end URZ131;
+//// model: URZ132
+model URZ132
+  Modelica.Blocks.Tables.CombiTable1Ds t(tableOnFile = true, tableName = "tab1", fileName = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Tables/test.mat"));
+end URZ132;
+//// model: URZ133
+model URZ133
+  function g
+    input String u;
+    output String r;
+  algorithm
+    r := Modelica.Utilities.Files.loadResource(u);
+  end g;
+  String s;
+equation
+  s = g("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+end URZ133;
+//// model: URZ134
+model URZ134
+  parameter String p = "modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat";
+  String s;
+algorithm
+  s := Modelica.Utilities.Files.loadResource(p);
+end URZ134;
+//// model: URZ135
+model URZ135
+  parameter String f = OpenModelica.Scripting.uriToFilename("modelica://ModelicaServices/package.mo");
+  parameter String g = ModelicaServices.ExternalReferences.loadResource("modelica://ModelicaServices/package.mo");
+end URZ135;
+//// model: URZ136
+model URZ136
+  function g
+    input String u;
+    output String r;
+  algorithm
+    r := OpenModelica.Scripting.uriToFilename(u) + OpenModelica.Scripting.uriToFilename("modelica://URZ136/x.txt");
+  end g;
+  parameter String p = "modelica://URZ136/y.txt";
+  parameter String f = g(p);
+end URZ136;
+//// model: URZ137
+model URZ137
+  model A
+    Real y = 1;
+  end A;
+  A a if Modelica.Utilities.Strings.length(Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat")) > 100;
+  A b if Modelica.Utilities.Strings.length(Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat")) > 1000;
+end URZ137;
+//// model: URZ138
+model URZ138
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat") annotation(Evaluate = true);
+  Real x;
+equation
+  if Modelica.Utilities.Strings.length(f) > 100 then
+    x = 1;
+  else
+    x = 2;
+  end if;
+end URZ138;
+//// model: URZ139
+model URZ139
+  constant String d = Modelica.Utilities.Strings.substring(Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat"), 1, 2);
+  parameter String e = d;
+end URZ139;
+//// model: URZ140
+model URZ140
+  discrete String s;
+equation
+  when time > 0.5 then
+    s = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+  end when;
+end URZ140;
+//// model: URZ141
+model URZ141
+  function g
+    input Integer n;
+    output String r = "";
+  algorithm
+    for i in 1:n loop
+      r := r + Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v" + String(2 + 2 * i) + ".mat");
+    end for;
+  end g;
+  parameter String s = g(2);
+end URZ141;
+//// model: URZ142
+model URZ142
+  parameter String p = "modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat";
+  parameter String a = Modelica.Utilities.Files.loadResource(p);
+  parameter String b = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v6.mat");
+end URZ142;
+//// model: URZ143
+model URZ143
+  function f
+    input Real s;
+    output Real r;
+  algorithm
+    r := s + 1;
+  end f;
+  Real x = time;
+equation
+  assert(x < 10, "v" + String(f(2.0)));
+end URZ143;
+//// model: URZ144
+model URZ144
+  function f
+    input String s;
+    output String r;
+  algorithm
+    r := s + "b";
+  end f;
+  Real x = time;
+initial equation
+  assert(x < 10, f("a"));
+end URZ144;
+//// model: URZ145
+model URZ145
+  function f
+    input String s;
+    output String r;
+  algorithm
+    r := s + "b";
+  end f;
+  Real x[2] = {time, time};
+equation
+  for i in 1:2 loop
+    assert(x[i] < 10, f("a"));
+  end for;
+end URZ145;
+//// model: URZ146
+model URZ146
+  function f
+    input String s;
+    output String r;
+  algorithm
+    r := s + "b";
+  end f;
+  parameter Boolean b = true;
+  Real x = time;
+equation
+  if b then
+    assert(x < 10, f("a"));
+  end if;
+end URZ146;
+//// model: URZ147
+model URZ147
+  function f
+    input String s;
+    output String r;
+  algorithm
+    r := s + "b";
+  end f;
+  constant String c = f("a");
+  Real x = time;
+equation
+  assert(x < 10, c);
+end URZ147;
+//// model: URZ148
+model URZ148
+  function f
+    input Integer s;
+    output Integer r;
+  algorithm
+    r := s + 1;
+  end f;
+  Real x = time;
+equation
+  assert(x < f(10), "m" + String(f(1)));
+end URZ148;
+//// model: URZ149
+model URZ149
+  Real x = time;
+equation
+  assert(x < 10, "m" + Modelica.Utilities.Strings.substring("abc", 1, 1));
+end URZ149;
+//// model: URZ150
+model URZ150
+  Real x = time;
+equation
+  assert(x < 10, "m", AssertionLevel.warning);
+  assert(x < 11, "m" + String(1.5));
+end URZ150;
+//// model: URZ151
+package URZ151P
+  constant String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+  function g
+    input Real x;
+    output String r;
+  algorithm
+    r := f + String(x);
+  end g;
+end URZ151P;
+model URZ151
+  parameter Real p = 1;
+  parameter String h = URZ151P.g(p);
+end URZ151;
+//// model: URZ152
+model URZ152
+  function myLoad = Modelica.Utilities.Files.loadResource;
+  parameter String p = "modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat";
+  parameter String f = myLoad("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+  parameter String g = myLoad(p);
+end URZ152;
+//// model: URZ153
+model URZ153
+  final parameter String p = "modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat";
+  parameter String f = Modelica.Utilities.Files.loadResource(p);
+end URZ153;
+//// model: URZ154
+model URZ154
+  model A
+    parameter String uri = "x";
+    parameter String f = Modelica.Utilities.Files.loadResource(uri);
+  end A;
+  A a(uri = "modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+end URZ154;
+//// model: URZ155
+model URZ155
+  model A
+    parameter String uri = "x" annotation(Evaluate = true);
+    parameter String f = Modelica.Utilities.Files.loadResource(uri);
+  end A;
+  A a(uri = "modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+end URZ155;
+//// model: URZ156
+model URZ156
+  function myUri = OpenModelica.Scripting.uriToFilename;
+  parameter String f = myUri("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat");
+  parameter Real k = Modelica.Constants.pi;
+end URZ156;
+//// model: URZ157
+model URZ157
+  parameter String f = Modelica.Utilities.Files.loadResource("modelica://Modelica/Resources/Data/Utilities/Test_RealMatrix_v4.mat") annotation(Evaluate = true);
+  parameter String g = f + "x";
+  final parameter Integer n = Modelica.Utilities.Strings.length(g);
+end URZ157;
