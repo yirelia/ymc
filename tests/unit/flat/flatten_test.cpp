@@ -10783,4 +10783,252 @@ YMC_TEST(flatten_assert_message_user_call_not_folded) {
                std::string("class URZ107\n  Real x = time;\nalgorithm\n  assert(x < 10.0, \"ab\");\nend URZ107;\n"));
 }
 
+YMC_TEST(flatten_enum_record_constructor_field) {
+  // 记录构造函数的枚举字段（MSL Utilities.Types.TokenValue 的 `TokenType tokenType`）：输入打字面量表、缺省打字面量全路径
+  //（DAEDumpTpl.dumpType 的 T_ENUMERATION 支，DAEDumpTpl.tpl:329-331 v1.25.0）；函数里 `t.tokenType` 按字段类型比较。
+  // 期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p35 ENR7）。
+  YMC_CHECK_EQ(flatten_src("package ENR7P\n  type TT = enumeration(RealToken, IntegerToken, NoToken);\n  record TV\n"
+                           "    TT tokenType = TT.NoToken;\n    Real real = 0;\n  end TV;\n  function f\n    input Real u;\n"
+                           "    output Real y;\n  protected\n    TV t;\n  algorithm\n    t.real := u;\n"
+                           "    y := if t.tokenType == TT.NoToken then t.real else -1;\n  end f;\nend ENR7P;\n"
+                           "model ENR7\n  Real y = ENR7P.f(time);\nend ENR7;\n"),
+               std::string("function ENR7P.TV \"Automatically generated record constructor for ENR7P.TV\"\n"
+                           "  input enumeration(RealToken, IntegerToken, NoToken) tokenType = ENR7P.TT.NoToken;\n"
+                           "  input Real real = 0.0;\n"
+                           "  output TV res;\n"
+                           "end ENR7P.TV;\n"
+                           "\n"
+                           "function ENR7P.f\n"
+                           "  input Real u;\n"
+                           "  output Real y;\n"
+                           "  protected ENR7P.TV t;\n"
+                           "algorithm\n"
+                           "  t.real := u;\n"
+                           "  y := if t.tokenType == ENR7P.TT.NoToken then t.real else -1.0;\n"
+                           "end ENR7P.f;\n"
+                           "\n"
+                           "class ENR7\n"
+                           "  Real y = ENR7P.f(time);\n"
+                           "end ENR7;\n"));
+}
+
+YMC_TEST(flatten_enum_table_constant_in_function) {
+  // 函数体里枚举维的包常量表（MSL Digital RAM 的 `T.X01Table[addr[i]]`）：EvalConstants 换成值、下标不求值地应用（NFEvalConstants
+  // .evaluateFuncExpTraverser → NFExpression.applySubscripts）——函数局部的枚举下标留成 `{…}[x]` / `{…}[a, b]`，枚举字面量下标按
+  // 序数取元素（applyIndexExpArray 的 toInteger，NFExpression.mo:1454-1478 / :1876-1885 v1.25.0）。
+  // 期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p35 ENP1 / ENP3 / ENP5）。
+  YMC_CHECK_EQ(flatten_src("package ENP1P\n  type L = enumeration('U', 'X', '0', '1');\n  package T\n"
+                           "    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};\n  end T;\n  function f\n    input L x;\n"
+                           "    output L y;\n  algorithm\n    y := T.X01Table[x];\n  end f;\nend ENP1P;\nmodel ENP1\n"
+                           "  ENP1P.L e = if time > 0.5 then ENP1P.L.'1' else ENP1P.L.'U';\n  ENP1P.L g = ENP1P.f(e);\nend ENP1;\n"),
+               std::string("function ENP1P.f\n"
+                           "  input enumeration('U', 'X', '0', '1') x;\n"
+                           "  output enumeration('U', 'X', '0', '1') y;\n"
+                           "algorithm\n"
+                           "  y := {ENP1P.L.'X', ENP1P.L.'X', ENP1P.L.'0', ENP1P.L.'1'}[x];\n"
+                           "end ENP1P.f;\n"
+                           "\n"
+                           "class ENP1\n"
+                           "  enumeration('U', 'X', '0', '1') e = if time > 0.5 then ENP1P.L.'1' else ENP1P.L.'U';\n"
+                           "  enumeration('U', 'X', '0', '1') g = ENP1P.f(e);\n"
+                           "end ENP1;\n"));
+  YMC_CHECK_EQ(flatten_src("package ENP3P\n  type L = enumeration('U', 'X', '0', '1');\n  package T\n"
+                           "    constant L AndTable[L, L] = [L.'U', L.'U', L.'0', L.'U';\n"
+                           "                                 L.'U', L.'X', L.'0', L.'X';\n"
+                           "                                 L.'0', L.'0', L.'0', L.'0';\n"
+                           "                                 L.'U', L.'X', L.'0', L.'1'];\n  end T;\n  function f\n    input L a;\n"
+                           "    input L b;\n    output L y;\n  algorithm\n    y := T.AndTable[a, b];\n  end f;\nend ENP3P;\n"
+                           "model ENP3\n  ENP3P.L e = if time > 0.5 then ENP3P.L.'1' else ENP3P.L.'U';\n"
+                           "  ENP3P.L g = ENP3P.f(e, ENP3P.L.'1');\nend ENP3;\n"),
+               std::string("function ENP3P.f\n"
+                           "  input enumeration('U', 'X', '0', '1') a;\n"
+                           "  input enumeration('U', 'X', '0', '1') b;\n"
+                           "  output enumeration('U', 'X', '0', '1') y;\n"
+                           "algorithm\n"
+                           "  y := {{ENP3P.L.'U', ENP3P.L.'U', ENP3P.L.'0', ENP3P.L.'U'}, {ENP3P.L.'U', ENP3P.L.'X', ENP3P.L.'0', "
+                           "ENP3P.L.'X'}, {ENP3P.L.'0', ENP3P.L.'0', ENP3P.L.'0', ENP3P.L.'0'}, {ENP3P.L.'U', ENP3P.L.'X', "
+                           "ENP3P.L.'0', ENP3P.L.'1'}}[a, b];\n"
+                           "end ENP3P.f;\n"
+                           "\n"
+                           "class ENP3\n"
+                           "  enumeration('U', 'X', '0', '1') e = if time > 0.5 then ENP3P.L.'1' else ENP3P.L.'U';\n"
+                           "  enumeration('U', 'X', '0', '1') g = ENP3P.f(e, ENP3P.L.'1');\n"
+                           "end ENP3;\n"));
+  YMC_CHECK_EQ(flatten_src("package ENP5P\n  type L = enumeration('U', 'X', '0', '1');\n  package T\n"
+                           "    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};\n  end T;\n  function f\n    input Real u;\n"
+                           "    output L y;\n  algorithm\n    y := T.X01Table[L.'1'];\n    if u > 0 then\n"
+                           "      y := T.X01Table[L.'U'];\n    end if;\n  end f;\nend ENP5P;\n"
+                           "model ENP5\n  ENP5P.L g = ENP5P.f(time);\nend ENP5;\n"),
+               std::string("function ENP5P.f\n"
+                           "  input Real u;\n"
+                           "  output enumeration('U', 'X', '0', '1') y;\n"
+                           "algorithm\n"
+                           "  y := ENP5P.L.'1';\n"
+                           "  if u > 0.0 then\n"
+                           "    y := ENP5P.L.'X';\n"
+                           "  end if;\n"
+                           "end ENP5P.f;\n"
+                           "\n"
+                           "class ENP5\n"
+                           "  enumeration('U', 'X', '0', '1') g = ENP5P.f(time);\n"
+                           "end ENP5;\n"));
+}
+
+YMC_TEST(flatten_enum_constant_call_evaluated) {
+  // 常量实参的枚举函数调用求值成字面量（值路的下标按枚举维的类型取，见 sub_indices；此前求值结果不是 Integer / Real / Boolean / String
+  // 一律不收、发射成调用后 SKIP）。期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p35 ENP7 / ENF35）。
+  YMC_CHECK_EQ(flatten_src("package ENP7P\n  type L = enumeration('U', 'X', '0', '1');\n  package T\n"
+                           "    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};\n  end T;\n  function f\n    input L x;\n"
+                           "    output L y;\n  algorithm\n    y := T.X01Table[x];\n  end f;\nend ENP7P;\n"
+                           "model ENP7\n  ENP7P.L g = ENP7P.f(ENP7P.L.'1');\nend ENP7;\n"),
+               std::string("class ENP7\n  enumeration('U', 'X', '0', '1') g = ENP7P.L.'1';\nend ENP7;\n"));
+  YMC_CHECK_EQ(flatten_src("package ENF35P\n  type E = enumeration(a, b, c);\n  function f\n    input E x;\n    output E y;\n"
+                           "  algorithm\n    y := if x == E.a then E.c else E.b;\n  end f;\nend ENF35P;\nmodel ENF35\n"
+                           "  ENF35P.E g = ENF35P.f(ENF35P.E.a);\n  ENF35P.E h = ENF35P.f(ENF35P.E.c);\nend ENF35;\n"),
+               std::string("class ENF35\n  enumeration(a, b, c) g = ENF35P.E.c;\n  enumeration(a, b, c) h = ENF35P.E.b;\nend ENF35;\n"));
+}
+
+YMC_TEST(flatten_builtin_enum_function_variable) {
+  // 内建枚举 StateSelect 作函数变量的类型：同用户枚举打字面量表，体里的字面量打书写名（NFModelicaBuiltin.mo 的顶层类；
+  // DAEDumpTpl.tpl:329-331 v1.25.0）。期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p35 ENF19 / ENB6）。
+  YMC_CHECK_EQ(flatten_src("function ENF19f\n  input StateSelect s;\n  output Integer y;\nalgorithm\n"
+                           "  y := if s == StateSelect.prefer then 1 else 0;\nend ENF19f;\nmodel ENF19\n"
+                           "  parameter StateSelect s = StateSelect.prefer;\n  Integer k = ENF19f(s);\nend ENF19;\n"),
+               std::string("function ENF19f\n"
+                           "  input enumeration(never, avoid, default, prefer, always) s;\n"
+                           "  output Integer y;\n"
+                           "algorithm\n"
+                           "  y := if s == StateSelect.prefer then 1 else 0;\n"
+                           "end ENF19f;\n"
+                           "\n"
+                           "class ENF19\n"
+                           "  parameter enumeration(never, avoid, default, prefer, always) s = StateSelect.prefer;\n"
+                           "  Integer k = ENF19f(s);\n"
+                           "end ENF19;\n"));
+  YMC_CHECK_EQ(flatten_src("function ENB6f\n  input Real x;\n  output Integer y;\nprotected\n  StateSelect s = StateSelect.never;\n"
+                           "algorithm\n  if x > 0 then\n    s := StateSelect.always;\n  end if;\n  y := Integer(s);\nend ENB6f;\n"
+                           "model ENB6\n  Integer y = ENB6f(time);\nend ENB6;\n"),
+               std::string("function ENB6f\n"
+                           "  input Real x;\n"
+                           "  output Integer y;\n"
+                           "  protected enumeration(never, avoid, default, prefer, always) s = StateSelect.never;\n"
+                           "algorithm\n"
+                           "  if x > 0.0 then\n"
+                           "    s := StateSelect.always;\n"
+                           "  end if;\n"
+                           "  y := Integer(s);\n"
+                           "end ENB6f;\n"
+                           "\n"
+                           "class ENB6\n"
+                           "  Integer y = ENB6f(time);\n"
+                           "end ENB6;\n"));
+}
+
+YMC_TEST(flatten_enum_type_checks) {
+  // omc 1.25.0 实跑报错的（2026-10-17，探针 pk-p35）→ 不出结果：枚举维常量表的 Integer 下标（typeSubscript → checkSubscriptType，
+  // NFTyping.mo:2104-2182 v1.25.0 "Subscript '2' has type Integer, expected type enumeration …"；ENP17 函数体 / ENI4 模型），字面量表
+  // 不同的两个枚举类型互用（matchEnumerationTypes NFTypeCheck.mo:2171-2183 只比字面量表；ENQ1 赋值、ENQ4 关系、ENQ12 方程、ENQ14
+  // 数组字面量、ENQ5 常量实参、ENQ8 枚举值绑给 Integer）——此前都照出（ACCEPTS-INVALID）。字面量表相同、类型名不同的照收（ENQ19）。
+  const char* enq = "package Q\n  type L = enumeration('U', 'X', '0', '1');\n  type S = enumeration(s1, s2, s3, s4);\n"
+                    "  constant Integer D[L, L] = [0, 0, -1, 1; 0, 0, -1, 1; 1, 1, 0, 1; -1, -1, -1, 0];\n";
+  for (const char* m :
+       {"  function f\n    input Real u;\n    output Integer y;\n  algorithm\n    y := D[1, 2];\n  end f;\nend Q;\n"
+        "model ENP17\n  Integer g = Q.f(time);\nend ENP17;\n",
+        "end Q;\nmodel ENI4\n  Integer k = Q.D[2, 1];\nend ENI4;\n",
+        "  function f\n    input S x;\n    output L y;\n  algorithm\n    y := x;\n  end f;\nend Q;\n"
+        "model ENQ1\n  Q.S e = if time > 0.5 then Q.S.s1 else Q.S.s2;\n  Q.L g = Q.f(e);\nend ENQ1;\n",
+        "  function f\n    input L x;\n    output Boolean y;\n  algorithm\n    y := x == S.s1;\n  end f;\nend Q;\n"
+        "model ENQ4\n  Q.L e = if time > 0.5 then Q.L.'1' else Q.L.'0';\n  Boolean g = Q.f(e);\nend ENQ4;\n",
+        "end Q;\nmodel ENQ12\n  Q.L g;\n  Q.S e2 = if time > 0.5 then Q.S.s1 else Q.S.s2;\nequation\n  g = e2;\nend ENQ12;\n",
+        "  function f\n    input Real u;\n    output L y[2];\n  algorithm\n    y := {L.'1', S.s1};\n  end f;\nend Q;\n"
+        "model ENQ14\n  Q.L g[2] = Q.f(time);\nend ENQ14;\n",
+        "  function f\n    input L x;\n    output Integer y;\n  algorithm\n    y := Integer(x);\n  end f;\nend Q;\n"
+        "model ENQ5\n  Integer g = Q.f(Q.S.s2);\nend ENQ5;\n",
+        "  function f\n    input L x;\n    output L y;\n  algorithm\n    y := x;\n  end f;\nend Q;\n"
+        "model ENQ8\n  Integer g = Q.f(Q.L.'1');\nend ENQ8;\n"}) {
+    const std::string src = std::string(enq) + m;
+    YMC_CHECK(flatten_src(src.c_str()).rfind("<unsupported:", 0) == 0);
+  }
+  YMC_CHECK_EQ(flatten_src("package ENQ19P\n  type L = enumeration('U', 'X', '0', '1');\n  type L2 = enumeration('U', 'X', '0', '1');\n"
+                           "  function f\n    input L x;\n    output Boolean y;\n  algorithm\n    y := x == L2.'1';\n  end f;\n"
+                           "end ENQ19P;\nmodel ENQ19\n  ENQ19P.L e = if time > 0.5 then ENQ19P.L.'1' else ENQ19P.L.'0';\n"
+                           "  Boolean g = ENQ19P.f(e);\nend ENQ19;\n"),
+               std::string("function ENQ19P.f\n"
+                           "  input enumeration('U', 'X', '0', '1') x;\n"
+                           "  output Boolean y;\n"
+                           "algorithm\n"
+                           "  y := x == ENQ19P.L2.'1';\n"
+                           "end ENQ19P.f;\n"
+                           "\n"
+                           "class ENQ19\n"
+                           "  enumeration('U', 'X', '0', '1') e = if time > 0.5 then ENQ19P.L.'1' else ENQ19P.L.'0';\n"
+                           "  Boolean g = ENQ19P.f(e);\n"
+                           "end ENQ19;\n"));
+}
+
+YMC_TEST(flatten_impure_multi_output_call) {
+  // 多输出 impure 函数在赋值右侧取首输出：定型成 TUPLE_ELEMENT(调用, 1)（NFTyping.mo:3254-3276 → NFTypeCheck.mo:2562-2579 v1.25.0），
+  // Expression.isImpureCall 不认，调用它的函数照打 `function`（MSL Digital RAM 的 getMemory 体里 `data := Streams.readLine(…)`）；
+  // Integer 首输出提 Real 时转型套在调用上 `/*Real*/(g(u))[1]`。期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p35 IMQ1 / IMQ14）。
+  YMC_CHECK_EQ(flatten_src("package IMQ1P\n  impure function g\n    input Real u;\n    output Real a;\n    output Real b;\n"
+                           "  algorithm\n    a := u;\n    b := 2 * u;\n  end g;\n  function f\n    input Real u;\n"
+                           "    output Real y;\n  algorithm\n    y := g(u);\n  end f;\nend IMQ1P;\n"
+                           "model IMQ1\n  Real y = IMQ1P.f(time);\nend IMQ1;\n"),
+               std::string("function IMQ1P.f\n"
+                           "  input Real u;\n"
+                           "  output Real y;\n"
+                           "algorithm\n"
+                           "  y := IMQ1P.g(u)[1];\n"
+                           "end IMQ1P.f;\n"
+                           "\n"
+                           "impure function IMQ1P.g\n"
+                           "  input Real u;\n"
+                           "  output Real a;\n"
+                           "  output Real b;\n"
+                           "algorithm\n"
+                           "  a := u;\n"
+                           "  b := 2.0 * u;\n"
+                           "end IMQ1P.g;\n"
+                           "\n"
+                           "class IMQ1\n"
+                           "  Real y = IMQ1P.f(time);\n"
+                           "end IMQ1;\n"));
+  YMC_CHECK_EQ(flatten_src("package IMQ14P\n  function g\n    input Integer u;\n    output Integer a;\n    output Integer b;\n"
+                           "  algorithm\n    a := u;\n    b := 2 * u;\n  end g;\n  function f\n    input Integer u;\n"
+                           "    output Real y;\n  algorithm\n    y := g(u);\n  end f;\nend IMQ14P;\n"
+                           "model IMQ14\n  Real y = IMQ14P.f(integer(time));\nend IMQ14;\n"),
+               std::string("function IMQ14P.f\n"
+                           "  input Integer u;\n"
+                           "  output Real y;\n"
+                           "algorithm\n"
+                           "  y := /*Real*/(IMQ14P.g(u))[1];\n"
+                           "end IMQ14P.f;\n"
+                           "\n"
+                           "function IMQ14P.g\n"
+                           "  input Integer u;\n"
+                           "  output Integer a;\n"
+                           "  output Integer b;\n"
+                           "algorithm\n"
+                           "  a := u;\n"
+                           "  b := 2 * u;\n"
+                           "end IMQ14P.g;\n"
+                           "\n"
+                           "class IMQ14\n"
+                           "  Real y = IMQ14P.f(integer(time));\n"
+                           "end IMQ14;\n"));
+}
+
+YMC_TEST(flatten_user_class_named_like_builtin) {
+  // 用户的顶层类与 NFModelicaBuiltin.mo（v1.25.0）的顶层元素重名 → omc 报 "An element with name delay is already declared in this
+  // scope"（顶层作用域 = 内建程序 ++ 用户程序，CevalScriptBackend.mo:3593 → NFClassTree.addLocalElementConflict :1603-1626），不论种类；
+  // 文件里没有的名字照收。期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p35 DUQ1 / DUQ5 / DUQ8 / DUQ18）。
+  for (const char* top : {"function delay\n  input Real x;\n  output Real y = x;\nend delay;\n",
+                          "record Distribution\n  Real a;\nend Distribution;\n", "package OMC_CLOCK\nend OMC_CLOCK;\n"}) {
+    const std::string src = std::string(top) + "model DUQ\n  Real x = time;\nend DUQ;\n";
+    YMC_CHECK(flatten_src(src.c_str()).rfind("<unsupported:", 0) == 0);
+  }
+  YMC_CHECK_EQ(flatten_src("package Real2\nend Real2;\nmodel DUQ18\n  Real x = time;\nend DUQ18;\n"),
+               std::string("class DUQ18\n  Real x = time;\nend DUQ18;\n"));
+}
+
 YMC_TEST_MAIN

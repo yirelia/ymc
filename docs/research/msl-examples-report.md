@@ -791,3 +791,8 @@ OpenModelica.Scripting.uriToFilename 的编译期求值（照 omc 运行时 util
 Utilities.Examples.ReadRealMatrixFromFile / readRealParameterModel 越过它，求得的文件路径与 omc 一致，卡到下一处：函数体里的枚举数组
 包常量与枚举输入（RAM）、经 FFI 读 MAT 文件求维（ReadRealMatrixFromFile）、记录构造函数的枚举字段（readRealParameterModel）。
 FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-17 67a 之后：PASS 484（+2）
+
+函数与记录里的枚举（枚举类型的函数变量 / 记录字段打字面量表、函数体里以枚举为维的包常量表、枚举实参的常量调用）；多输出调用取首输出时
+调用者的纯度。转 PASS：Electrical.Digital.Examples.RAM、Utilities.Examples.readRealParameterModel。FAIL / ACCEPTS-INVALID / CRASH 0。

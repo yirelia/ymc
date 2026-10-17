@@ -1,0 +1,3024 @@
+//// set: pk-p35 — 函数 / 记录里的枚举（67a：MSL Digital.Examples.RAM 此前 SKIP "function body references non-local [T.X01Table]"、Utilities.Examples.readRealParameterModel 此前 SKIP "record constructor [Modelica.Utilities.Types.TokenValue]"，现都 PASS）。记录构造函数的枚举字段打字面量表 `input enumeration(RealToken, …) tokenType`、缺省打字面量全路径、字段的属性修饰不打（DAEDumpTpl.dumpType 的 T_ENUMERATION 支，DAEDumpTpl.tpl:329-331 v1.25.0；ENR1-ENR16）；函数体里枚举维的包常量表换成值、下标不求值地应用：函数局部的枚举下标留成 `{…}[x]` / `{…}[a, b]`、枚举字面量下标按序数取元素（NFExpression.applyIndexExpArray :1454-1478 / toInteger :1876-1885；ENP1-ENP45）；值路的下标按维的类型取，常量实参的枚举函数调用求值成字面量（ENP7、ENP21、ENP22、ENP25-ENP27、ENP43、ENF35、ENF40、ENF41、ENI14）；内建枚举 StateSelect / AssertionLevel 作函数变量 / 记录字段的类型、体里的字面量打书写名（ENF19、ENR14、ENB*）；多输出 impure 函数在赋值右侧 / 条件里取首输出（TUPLE_ELEMENT）不使调用者成 impure，元组赋值 / 无返回值调用 / 绑定里照旧（NFTyping.mo:3254-3276 → NFTypeCheck.mo:2562-2579；IMQ1-IMQ10，RAM 的 getMemory 体里 `data := Streams.readLine(…)`），赋值右侧的 Integer 首输出提 Real 时转型套在调用上 `/*Real*/(g(u))[1]`（IMQ14 / IMQ16；绑定 / 方程 / 运算数照旧先取后转 IMQ11-IMQ13 / IMQ15 / IMQ17）。基线 ACCEPTS-INVALID（一并修）：枚举维常量表 / 局部的 Integer 下标（typeSubscript → checkSubscriptType，NFTyping.mo:2104-2182；ENP17-ENP19、ENI4、ENI6、ENI8、ENI9、ENI12、ENI13、ENF31），字面量表不同的两个枚举类型互用（matchEnumerationTypes NFTypeCheck.mo:2171-2183 只比字面量表：函数赋值 / 实参 / 缺省 / 关系 / 方程 / 绑定 / if 两支 / 数组字面量 / 元组赋值 / 模型算法赋值 / 值路的实参与输出，ENQ1-ENQ5、ENQ9、ENQ11-ENQ15、ENQ18、ENQ22、ENQ23、ENQ25、ENQ28；记录构造函数 / 常量调用放开后随之补的：ENQ6、ENQ8 枚举值绑给 Integer、ENQ21；字面量表相同、类型名不同的照收 ENQ7 / ENQ19 / ENQ20 / ENQ24），用户的顶层类与 NFModelicaBuiltin.mo 的 97 个顶层元素重名（顶层作用域 = 内建程序 ++ 用户程序，CevalScriptBackend.mo:3593 → NFClassTree.addLocalElementConflict :1603-1626 "An element with name delay is already declared in this scope"；DUQ1-DUQ30，此前只认 6 个名字；注释掉的 SimulationResult 与文件里没有的名字照收 DUQ18 / DUQ19 / DUQ28）。基线静默错（一并修）：IMQ1 / IMQ6 / IMQ8 / IMQ9 / IMQ10 多输出 impure 调用误标 impure、IMQ10 / IMQ14 / IMQ16 转型位置。照旧 SKIP：函数变量的类型名维（ENF25-ENF28、ENF32）、`for e in E`（ENF16）、模型里声明的枚举（ENF17、ENF36）、枚举的短类别名（ENF18、ENR15）、构造调用的记录在模型里没有实例（ENR6、ENR9）、向量下标（ENP24）、Boolean 维（ENI7、ENP29）、Evaluate = false 参数作下标（ENM5）、结构代入后的常量调用（ENF34）
+//// model: ENF1
+package ENF1P
+  type E = enumeration(a, b, c);
+  function f
+    input E x;
+    output Integer y;
+  algorithm
+    y := if x == E.b then 1 else 2;
+  end f;
+end ENF1P;
+model ENF1
+  ENF1P.E e = if time > 0.5 then ENF1P.E.b else ENF1P.E.a;
+  Integer k = ENF1P.f(e);
+end ENF1;
+//// model: ENF2
+package ENF2P
+  type E = enumeration(a, b, c);
+  function f
+    input E x;
+    output Integer y;
+  algorithm
+    y := if x == E.b then 1 else 2;
+  end f;
+end ENF2P;
+model ENF2
+  Integer k = ENF2P.f(ENF2P.E.b);
+end ENF2;
+//// model: ENF3
+package ENF3P
+  type E = enumeration(a, b, c);
+  function f
+    input Integer n;
+    input E x[n];
+    output Integer y;
+  algorithm
+    y := 0;
+    for i in 1:n loop
+      if x[i] == E.c then
+        y := y + i;
+      end if;
+    end for;
+  end f;
+end ENF3P;
+model ENF3
+  ENF3P.E e[2] = {ENF3P.E.c, if time > 0.5 then ENF3P.E.b else ENF3P.E.c};
+  Integer k = ENF3P.f(2, e);
+end ENF3;
+//// model: ENF4
+package ENF4P
+  type E = enumeration(a, b, c);
+  function f
+    input E x = E.b;
+    output Integer y;
+  algorithm
+    y := Integer(x);
+  end f;
+end ENF4P;
+model ENF4
+  ENF4P.E e = if time > 0.5 then ENF4P.E.c else ENF4P.E.a;
+  Integer k = ENF4P.f(e);
+end ENF4;
+//// model: ENF5
+package ENF5P
+  type E = enumeration(a, b, c);
+  function f
+    input Real u;
+    output E y;
+  algorithm
+    y := if u > 0 then E.c else E.a;
+  end f;
+end ENF5P;
+model ENF5
+  ENF5P.E e = ENF5P.f(time);
+end ENF5;
+//// model: ENF6
+package ENF6P
+  type E = enumeration(a, b, c);
+  function f
+    input Real u;
+    output Integer y;
+  protected
+    E t;
+  algorithm
+    t := if u > 0 then E.c else E.a;
+    y := Integer(t);
+  end f;
+end ENF6P;
+model ENF6
+  Integer k = ENF6P.f(time);
+end ENF6;
+//// model: ENF7
+package ENF7P
+  type E = enumeration(a, b, c);
+  function f
+    input Real u;
+    output Integer y;
+  protected
+    E t = E.c;
+  algorithm
+    if u > 0 then
+      t := E.a;
+    end if;
+    y := Integer(t);
+  end f;
+end ENF7P;
+model ENF7
+  Integer k = ENF7P.f(time);
+end ENF7;
+//// model: ENF8
+package ENF8P
+  type E = enumeration(a, b, c);
+  function f
+    input Real u;
+    output E y[2];
+  algorithm
+    y := {E.a, if u > 0 then E.b else E.c};
+  end f;
+end ENF8P;
+model ENF8
+  ENF8P.E e[2] = ENF8P.f(time);
+end ENF8;
+//// model: ENF9
+package ENF9P
+  type E = enumeration('U', 'X', '0', '1');
+  function f
+    input E x;
+    output Boolean y;
+  algorithm
+    y := x == E.'1' or x == E.'X';
+  end f;
+end ENF9P;
+model ENF9
+  ENF9P.E e = if time > 0.5 then ENF9P.E.'1' else ENF9P.E.'0';
+  Boolean b = ENF9P.f(e);
+end ENF9;
+//// model: ENF10
+package ENF10P
+  package Interfaces
+    type L = enumeration('U', 'X', '0', '1');
+  end Interfaces;
+  function f
+    import L = ENF10P.Interfaces.L;
+    input L x;
+    output L y;
+  algorithm
+    y := if x == L.'1' then L.'0' else L.'1';
+  end f;
+end ENF10P;
+model ENF10
+  ENF10P.Interfaces.L e = if time > 0.5 then ENF10P.Interfaces.L.'1' else ENF10P.Interfaces.L.'0';
+  ENF10P.Interfaces.L g = ENF10P.f(e);
+end ENF10;
+//// model: ENF11
+package ENF11P
+  type E = enumeration(a, b, c);
+  function f
+    input E x;
+    output Integer y;
+  algorithm
+    y := Integer(x) + Integer(E.c);
+  end f;
+end ENF11P;
+model ENF11
+  ENF11P.E e = if time > 0.5 then ENF11P.E.b else ENF11P.E.a;
+  Integer k = ENF11P.f(e);
+end ENF11;
+//// model: ENF12
+package ENF12P
+  type E = enumeration(a, b, c);
+  function f
+    input E x;
+    output String y;
+  algorithm
+    y := String(x);
+  end f;
+end ENF12P;
+model ENF12
+  ENF12P.E e = if time > 0.5 then ENF12P.E.b else ENF12P.E.a;
+  String s = ENF12P.f(e);
+end ENF12;
+//// model: ENF13
+package ENF13P
+  type E = enumeration(a, b, c);
+  function f
+    input E x;
+    output Boolean y;
+  algorithm
+    y := x > E.a and x <= E.c;
+  end f;
+end ENF13P;
+model ENF13
+  ENF13P.E e = if time > 0.5 then ENF13P.E.b else ENF13P.E.a;
+  Boolean b = ENF13P.f(e);
+end ENF13;
+//// model: ENF14
+package ENF14P
+  type E = enumeration(a, b, c);
+  function f
+    input E x;
+    output E y;
+  algorithm
+    y := max(x, E.b);
+  end f;
+end ENF14P;
+model ENF14
+  ENF14P.E e = if time > 0.5 then ENF14P.E.c else ENF14P.E.a;
+  ENF14P.E g = ENF14P.f(e);
+end ENF14;
+//// model: ENF15
+package ENF15P
+  type E = enumeration(a, b, c);
+  function f
+    input Integer n;
+    output E y[n];
+  algorithm
+    y := fill(E.b, n);
+  end f;
+end ENF15P;
+model ENF15
+  ENF15P.E e[2] = ENF15P.f(2);
+end ENF15;
+//// model: ENF16
+package ENF16P
+  type E = enumeration(a, b, c);
+  function f
+    input E x;
+    output Integer y;
+  algorithm
+    y := 0;
+    for e in E loop
+      if e == x then
+        y := Integer(e);
+      end if;
+    end for;
+  end f;
+end ENF16P;
+model ENF16
+  ENF16P.E e = if time > 0.5 then ENF16P.E.c else ENF16P.E.a;
+  Integer k = ENF16P.f(e);
+end ENF16;
+//// model: ENF17
+model ENF17
+  type E = enumeration(a, b, c);
+  function f
+    input E x;
+    output Integer y;
+  algorithm
+    y := if x == E.b then 1 else 2;
+  end f;
+  E e = if time > 0.5 then E.b else E.a;
+  Integer k = f(e);
+end ENF17;
+//// model: ENF18
+package ENF18P
+  type E = enumeration(a, b, c);
+  type E2 = E;
+  function f
+    input E2 x;
+    output Integer y;
+  algorithm
+    y := if x == E2.b then 1 else 2;
+  end f;
+end ENF18P;
+model ENF18
+  ENF18P.E e = if time > 0.5 then ENF18P.E.b else ENF18P.E.a;
+  Integer k = ENF18P.f(e);
+end ENF18;
+//// model: ENF19
+function ENF19f
+  input StateSelect s;
+  output Integer y;
+algorithm
+  y := if s == StateSelect.prefer then 1 else 0;
+end ENF19f;
+model ENF19
+  parameter StateSelect s = StateSelect.prefer;
+  Integer k = ENF19f(s);
+end ENF19;
+//// model: ENF20
+package ENF20P
+  type E = enumeration(a, b, c);
+  function f
+    input E x;
+    output Integer y;
+  algorithm
+    y := if x == E.b then 1 else 2;
+  end f;
+end ENF20P;
+model ENF20
+  parameter ENF20P.E p = ENF20P.E.c;
+  Integer k = ENF20P.f(p);
+end ENF20;
+//// model: ENF21
+package ENF21P
+  type E = enumeration(a, b, c);
+  function f
+    input E x;
+    output Integer y;
+  algorithm
+    y := if x == E.b then 1 else 2;
+  end f;
+end ENF21P;
+model ENF21
+  constant ENF21P.E p = ENF21P.E.c;
+  Integer k = ENF21P.f(p);
+end ENF21;
+//// model: ENF22
+package ENF22P
+  type E = enumeration(a, b, c) "doc";
+  function f
+    input E x "the x";
+    output Integer y "the y";
+  algorithm
+    y := Integer(x);
+  end f;
+end ENF22P;
+model ENF22
+  ENF22P.E e = if time > 0.5 then ENF22P.E.b else ENF22P.E.a;
+  Integer k = ENF22P.f(e);
+end ENF22;
+//// model: ENF23
+package ENF23P
+  type E = enumeration(a, b, c);
+  function f
+    input E x;
+    output Integer y;
+  algorithm
+    y := match_it(x);
+  end f;
+  function match_it
+    input E x;
+    output Integer y;
+  algorithm
+    if x == E.a then
+      y := 10;
+    elseif x == E.b then
+      y := 20;
+    else
+      y := 30;
+    end if;
+  end match_it;
+end ENF23P;
+model ENF23
+  ENF23P.E e = if time > 0.5 then ENF23P.E.b else ENF23P.E.a;
+  Integer k = ENF23P.f(e);
+end ENF23;
+//// model: ENF24
+package ENF24P
+  type E = enumeration(a, b, c);
+  function f
+    input E x;
+    output Integer y;
+  algorithm
+    y := Integer(x);
+  end f;
+end ENF24P;
+model ENF24
+  Integer k = ENF24P.f(ENF24P.E.c);
+  Integer k2 = ENF24P.f(ENF24P.E.a) + 1;
+end ENF24;
+//// model: ENP1
+package ENP1P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    input L x;
+    output L y;
+  algorithm
+    y := T.X01Table[x];
+  end f;
+end ENP1P;
+model ENP1
+  ENP1P.L e = if time > 0.5 then ENP1P.L.'1' else ENP1P.L.'U';
+  ENP1P.L g = ENP1P.f(e);
+end ENP1;
+//// model: ENP2
+package ENP2P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    input Integer n;
+    input L x[n];
+    output L y[n];
+  algorithm
+    for i in 1:n loop
+      y[i] := T.X01Table[x[i]];
+    end for;
+  end f;
+end ENP2P;
+model ENP2
+  ENP2P.L e[2] = {ENP2P.L.'1', if time > 0.5 then ENP2P.L.'1' else ENP2P.L.'U'};
+  ENP2P.L g[2] = ENP2P.f(2, e);
+end ENP2;
+//// model: ENP3
+package ENP3P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L AndTable[L, L] = [L.'U', L.'U', L.'0', L.'U';
+                                 L.'U', L.'X', L.'0', L.'X';
+                                 L.'0', L.'0', L.'0', L.'0';
+                                 L.'U', L.'X', L.'0', L.'1'];
+  end T;
+  function f
+    input L a;
+    input L b;
+    output L y;
+  algorithm
+    y := T.AndTable[a, b];
+  end f;
+end ENP3P;
+model ENP3
+  ENP3P.L e = if time > 0.5 then ENP3P.L.'1' else ENP3P.L.'U';
+  ENP3P.L g = ENP3P.f(e, ENP3P.L.'1');
+end ENP3;
+//// model: ENP4
+package ENP4P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant Integer DelayTable[L, L] = [0, 0, -1, 1; 0, 0, -1, 1; 1, 1, 0, 1; -1, -1, -1, 0];
+  end T;
+  function f
+    input L a;
+    input L b;
+    output Integer y;
+  algorithm
+    y := T.DelayTable[a, b];
+  end f;
+end ENP4P;
+model ENP4
+  ENP4P.L e = if time > 0.5 then ENP4P.L.'1' else ENP4P.L.'U';
+  Integer g = ENP4P.f(e, ENP4P.L.'1');
+end ENP4;
+//// model: ENP5
+package ENP5P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    input Real u;
+    output L y;
+  algorithm
+    y := T.X01Table[L.'1'];
+    if u > 0 then
+      y := T.X01Table[L.'U'];
+    end if;
+  end f;
+end ENP5P;
+model ENP5
+  ENP5P.L g = ENP5P.f(time);
+end ENP5;
+//// model: ENP6
+package ENP6P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    input Real u;
+    output L y[4];
+  algorithm
+    y := T.X01Table;
+  end f;
+end ENP6P;
+model ENP6
+  ENP6P.L g[4] = ENP6P.f(time);
+end ENP6;
+//// model: ENP7
+package ENP7P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    input L x;
+    output L y;
+  algorithm
+    y := T.X01Table[x];
+  end f;
+end ENP7P;
+model ENP7
+  ENP7P.L g = ENP7P.f(ENP7P.L.'1');
+end ENP7;
+//// model: ENP8
+package ENP8P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  model M
+    input L x;
+    output L y;
+  algorithm
+    y := T.X01Table[x];
+  end M;
+end ENP8P;
+model ENP8
+  ENP8P.M m(x = if time > 0.5 then ENP8P.L.'1' else ENP8P.L.'U');
+end ENP8;
+//// model: ENP9
+package ENP9P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2);
+  package T
+    constant L StrengthMap[L, S] = [L.'U', L.'U'; L.'X', L.'X'; L.'0', L.'0'; L.'1', L.'U'];
+  end T;
+  model M
+    parameter S strength = S.s1;
+    input L x;
+    output L y;
+    L z[2];
+  algorithm
+    y := T.StrengthMap[x, strength];
+    z := fill(T.StrengthMap[L.'X', strength], 2);
+  end M;
+end ENP9P;
+model ENP9
+  ENP9P.M m(x = if time > 0.5 then ENP9P.L.'1' else ENP9P.L.'U');
+end ENP9;
+//// model: ENP10
+package ENP10P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    import T2 = ENP10P.T;
+    input L x;
+    output L y;
+  algorithm
+    y := T2.X01Table[x];
+  end f;
+end ENP10P;
+model ENP10
+  ENP10P.L e = if time > 0.5 then ENP10P.L.'1' else ENP10P.L.'U';
+  ENP10P.L g = ENP10P.f(e);
+end ENP10;
+//// model: ENP11
+package ENP11P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    input Integer n;
+    input L x[n];
+    output Integer y;
+  protected
+    L b;
+  algorithm
+    y := 1;
+    for i in 1:n loop
+      b := T.X01Table[x[i]];
+      if b == L.'1' then
+        y := y + integer(2 ^ (i - 1));
+      elseif b == L.'X' then
+        y := 0;
+        break;
+      end if;
+    end for;
+  end f;
+end ENP11P;
+model ENP11
+  ENP11P.L e[2] = {ENP11P.L.'1', if time > 0.5 then ENP11P.L.'1' else ENP11P.L.'U'};
+  Integer g = ENP11P.f(2, e);
+end ENP11;
+//// model: ENP12
+package ENP12P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[4] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    input Integer i;
+    output L y;
+  algorithm
+    y := T.X01Table[i];
+  end f;
+end ENP12P;
+model ENP12
+  Integer i = if time > 0.5 then 2 else 3;
+  ENP12P.L g = ENP12P.f(i);
+end ENP12;
+//// model: ENP13
+package ENP13P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    input L x;
+    output Integer y;
+  algorithm
+    y := size(T.X01Table, 1) + Integer(T.X01Table[x]);
+  end f;
+end ENP13P;
+model ENP13
+  ENP13P.L e = if time > 0.5 then ENP13P.L.'1' else ENP13P.L.'U';
+  Integer g = ENP13P.f(e);
+end ENP13;
+//// model: ENP14
+package ENP14P
+  type L = enumeration('U', 'X', '0', '1');
+  constant L c = L.'0';
+  function f
+    input L x;
+    output Boolean y;
+  algorithm
+    y := x == c;
+  end f;
+end ENP14P;
+model ENP14
+  ENP14P.L e = if time > 0.5 then ENP14P.L.'1' else ENP14P.L.'0';
+  Boolean g = ENP14P.f(e);
+end ENP14;
+//// model: ENP15
+package ENP15P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    input L x;
+    output L y;
+  algorithm
+    y := T.X01Table[T.X01Table[x]];
+  end f;
+end ENP15P;
+model ENP15
+  ENP15P.L e = if time > 0.5 then ENP15P.L.'1' else ENP15P.L.'U';
+  ENP15P.L g = ENP15P.f(e);
+end ENP15;
+//// model: ENP16
+package ENP16P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    input L x;
+    output L y;
+  algorithm
+    y := T.X01Table[x];
+  end f;
+end ENP16P;
+model ENP16
+  parameter ENP16P.L p = ENP16P.L.'1';
+  ENP16P.L g = ENP16P.f(p);
+end ENP16;
+//// model: ENR1
+package ENR1P
+  type TT = enumeration(RealToken, IntegerToken, NoToken);
+  record TV
+    TT tokenType;
+    Real real;
+  end TV;
+  function f
+    input Real u;
+    output TV t;
+  algorithm
+    t.real := u;
+    t.tokenType := if u > 0 then TT.RealToken else TT.NoToken;
+  end f;
+  function g
+    input Real u;
+    output Real y;
+  protected
+    TV t;
+  algorithm
+    t := f(u);
+    y := if t.tokenType == TT.RealToken then t.real else 0.0;
+  end g;
+end ENR1P;
+model ENR1
+  Real y = ENR1P.g(time);
+end ENR1;
+//// model: ENR2
+package ENR2P
+  type TT = enumeration(RealToken, IntegerToken, NoToken);
+  record TV
+    TT tokenType = TT.IntegerToken;
+    Real real = 1;
+  end TV;
+end ENR2P;
+model ENR2
+  ENR2P.TV t;
+  ENR2P.TV t2(tokenType = ENR2P.TT.NoToken);
+end ENR2;
+//// model: ENR3
+package ENR3P
+  type TT = enumeration(RealToken, IntegerToken, NoToken);
+  record TV
+    TT tokenType;
+    Real real;
+  end TV;
+end ENR3P;
+model ENR3
+  ENR3P.TV t = ENR3P.TV(ENR3P.TT.NoToken, time);
+end ENR3;
+//// model: ENR4
+package ENR4P
+  type TT = enumeration(RealToken, IntegerToken, NoToken);
+  record TV
+    TT tokenType;
+    Real real;
+  end TV;
+  function f
+    input TV t;
+    output Real y;
+  algorithm
+    y := if t.tokenType == TT.RealToken then t.real else -1;
+  end f;
+end ENR4P;
+model ENR4
+  ENR4P.TV t(tokenType = ENR4P.TT.RealToken, real = time);
+  Real y = ENR4P.f(t);
+end ENR4;
+//// model: ENR5
+package ENR5P
+  type TT = enumeration(RealToken, IntegerToken, NoToken);
+  record TV
+    TT tokenType;
+    Real real;
+  end TV;
+  function f
+    input Real u;
+    output Real y;
+  protected
+    TV t;
+  algorithm
+    t.tokenType := TT.RealToken;
+    t.real := u;
+    y := if t.tokenType == TT.RealToken then t.real else -1;
+  end f;
+end ENR5P;
+model ENR5
+  Real y = ENR5P.f(time);
+end ENR5;
+//// model: ENR6
+package ENR6P
+  type TT = enumeration(RealToken, IntegerToken, NoToken);
+  record TV
+    TT tokenType;
+    Real real;
+  end TV;
+  function f
+    input Real u;
+    output Real y;
+  protected
+    TV t = TV(TT.IntegerToken, u);
+  algorithm
+    y := if t.tokenType == TT.RealToken then t.real else -1;
+  end f;
+end ENR6P;
+model ENR6
+  Real y = ENR6P.f(time);
+end ENR6;
+//// model: ENR7
+package ENR7P
+  type TT = enumeration(RealToken, IntegerToken, NoToken);
+  record TV
+    TT tokenType = TT.NoToken;
+    Real real = 0;
+  end TV;
+  function f
+    input Real u;
+    output Real y;
+  protected
+    TV t;
+  algorithm
+    t.real := u;
+    y := if t.tokenType == TT.NoToken then t.real else -1;
+  end f;
+end ENR7P;
+model ENR7
+  Real y = ENR7P.f(time);
+end ENR7;
+//// model: ENR8
+package ENR8P
+  type TT = enumeration(RealToken, IntegerToken, NoToken);
+  record TV
+    TT tokenType;
+    Real real;
+  end TV;
+  constant TV c = TV(TT.IntegerToken, 2.0);
+  function f
+    input Real u;
+    output Real y;
+  algorithm
+    y := if c.tokenType == TT.IntegerToken then u * c.real else u;
+  end f;
+end ENR8P;
+model ENR8
+  Real y = ENR8P.f(time);
+end ENR8;
+//// model: ENR9
+package ENR9P
+  type TT = enumeration(RealToken, IntegerToken, NoToken);
+  record TV
+    TT tokenType;
+    Real real;
+  end TV;
+  function f
+    input Real u;
+    output Real y;
+  protected
+    TV t;
+  algorithm
+    (t, y) := g(u);
+  end f;
+  function g
+    input Real u;
+    output TV t;
+    output Real y;
+  algorithm
+    t := TV(TT.RealToken, u);
+    y := 2 * u;
+  end g;
+end ENR9P;
+model ENR9
+  Real y = ENR9P.f(time);
+end ENR9;
+//// model: ENR10
+package ENR10P
+  type TT = enumeration(RealToken, IntegerToken, NoToken);
+  record TV
+    TT tokenType;
+    Real real;
+  end TV;
+  function f
+    input TT k;
+    input Real u;
+    output TV t;
+  algorithm
+    t := TV(k, u);
+  end f;
+end ENR10P;
+model ENR10
+  ENR10P.TV t = ENR10P.f(ENR10P.TT.RealToken, time);
+end ENR10;
+//// model: ENR11
+package ENR11P
+  type TT = enumeration(RealToken, IntegerToken, NoToken);
+  record TV
+    TT tokenType;
+    Real real;
+  end TV;
+  function f
+    input Real u;
+    output Real y;
+  protected
+    TV t;
+  algorithm
+    t := TV(TT.RealToken, u);
+    y := t.real;
+  end f;
+end ENR11P;
+model ENR11
+  Real y = ENR11P.f(2.0);
+end ENR11;
+//// model: ENR12
+package ENR12P
+  type TT = enumeration(RealToken, IntegerToken, NoToken);
+  record TV
+    TT tokenType;
+    Real real;
+  end TV;
+  function f
+    input Real u;
+    output Integer y;
+  protected
+    TV t;
+  algorithm
+    t := TV(if u > 1 then TT.RealToken else TT.NoToken, u);
+    y := Integer(t.tokenType);
+  end f;
+end ENR12P;
+model ENR12
+  Integer y = ENR12P.f(2.0);
+end ENR12;
+//// model: ENR13
+package ENR13P
+  type TT = enumeration(RealToken, IntegerToken, NoToken);
+  record TV
+    TT tokenType[2];
+    Real real;
+  end TV;
+  function f
+    input Real u;
+    output Real y;
+  protected
+    TV t;
+  algorithm
+    t.tokenType := {TT.RealToken, TT.NoToken};
+    t.real := u;
+    y := if t.tokenType[2] == TT.NoToken then t.real else -1;
+  end f;
+end ENR13P;
+model ENR13
+  Real y = ENR13P.f(time);
+end ENR13;
+//// model: ENR14
+package ENR14P
+  record TV
+    StateSelect s;
+    Real real;
+  end TV;
+  function f
+    input Real u;
+    output Real y;
+  protected
+    TV t;
+  algorithm
+    t.s := StateSelect.prefer;
+    t.real := u;
+    y := if t.s == StateSelect.prefer then t.real else -1;
+  end f;
+end ENR14P;
+model ENR14
+  Real y = ENR14P.f(time);
+end ENR14;
+//// model: ENR15
+package ENR15P
+  type TT = enumeration(RealToken, IntegerToken, NoToken);
+  type TT2 = TT;
+  record TV
+    TT2 tokenType;
+    Real real;
+  end TV;
+  function f
+    input Real u;
+    output Real y;
+  protected
+    TV t;
+  algorithm
+    t.tokenType := TT2.RealToken;
+    t.real := u;
+    y := if t.tokenType == TT.RealToken then t.real else -1;
+  end f;
+end ENR15P;
+model ENR15
+  Real y = ENR15P.f(time);
+end ENR15;
+//// model: ENR16
+package ENR16P
+  type TT = enumeration(RealToken, IntegerToken, NoToken);
+  record TV
+    TT tokenType(start = TT.NoToken);
+    Real real;
+  end TV;
+  function f
+    input Real u;
+    output Real y;
+  protected
+    TV t;
+  algorithm
+    t.tokenType := TT.RealToken;
+    t.real := u;
+    y := t.real;
+  end f;
+end ENR16P;
+model ENR16
+  Real y = ENR16P.f(time);
+end ENR16;
+//// model: ENP17
+package ENP17P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant Integer DelayTable[L, L] = [0, 0, -1, 1; 0, 0, -1, 1; 1, 1, 0, 1; -1, -1, -1, 0];
+  end T;
+  function f
+    input Real u;
+    output Integer y;
+  algorithm
+    y := T.DelayTable[1, 2];
+  end f;
+end ENP17P;
+model ENP17
+  Integer g = ENP17P.f(time);
+end ENP17;
+//// model: ENP18
+package ENP18P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant Integer DelayTable[L, L] = [0, 0, -1, 1; 0, 0, -1, 1; 1, 1, 0, 1; -1, -1, -1, 0];
+  end T;
+end ENP18P;
+model ENP18
+  Integer g = ENP18P.T.DelayTable[1, 2];
+end ENP18;
+//// model: ENP19
+package ENP19P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant Integer DelayTable[L, L] = [0, 0, -1, 1; 0, 0, -1, 1; 1, 1, 0, 1; -1, -1, -1, 0];
+  end T;
+  function f
+    input Integer i;
+    output Integer y;
+  algorithm
+    y := T.DelayTable[i, 2];
+  end f;
+end ENP19P;
+model ENP19
+  Integer g = ENP19P.f(if time > 0.5 then 1 else 2);
+end ENP19;
+//// model: ENP20
+package ENP20P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    input S x;
+    output L y;
+  algorithm
+    y := T.X01Table[x];
+  end f;
+end ENP20P;
+model ENP20
+  ENP20P.S e = if time > 0.5 then ENP20P.S.s1 else ENP20P.S.s2;
+  ENP20P.L g = ENP20P.f(e);
+end ENP20;
+//// model: ENP21
+package ENP21P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    input L x;
+    output Integer y;
+  algorithm
+    y := Integer(T.X01Table[x]) + Integer(T.X01Table[L.'0']);
+  end f;
+end ENP21P;
+model ENP21
+  Integer g = ENP21P.f(ENP21P.L.'1');
+end ENP21;
+//// model: ENP22
+package ENP22P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    input L x;
+    output L y;
+  algorithm
+    y := T.X01Table[x];
+  end f;
+end ENP22P;
+model ENP22
+  parameter ENP22P.L g = ENP22P.f(ENP22P.L.'0');
+end ENP22;
+//// model: ENP23
+package ENP23P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+end ENP23P;
+model ENP23
+  parameter ENP23P.L g = ENP23P.T.X01Table[ENP23P.L.'0'];
+  ENP23P.L e = if time > 0.5 then ENP23P.L.'0' else ENP23P.L.'1';
+  ENP23P.L h = ENP23P.T.X01Table[e];
+end ENP23;
+//// model: ENP24
+package ENP24P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    input Integer n;
+    input L x[n];
+    output L y[n];
+  algorithm
+    y := T.X01Table[x];
+  end f;
+end ENP24P;
+model ENP24
+  ENP24P.L e[2] = {ENP24P.L.'1', if time > 0.5 then ENP24P.L.'1' else ENP24P.L.'U'};
+  ENP24P.L g[2] = ENP24P.f(2, e);
+end ENP24;
+//// model: ENP25
+package ENP25P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    input L x;
+    output L y;
+  algorithm
+    y := T.X01Table[x];
+  end f;
+end ENP25P;
+model ENP25
+  constant ENP25P.L c = ENP25P.f(ENP25P.L.'0');
+end ENP25;
+//// model: ENP26
+package ENP26P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    input L x;
+    output L y;
+  algorithm
+    y := T.X01Table[x];
+  end f;
+end ENP26P;
+model ENP26
+  ENP26P.L g[2] = {ENP26P.f(ENP26P.L.'0'), ENP26P.f(ENP26P.L.'U')};
+end ENP26;
+//// model: ENP27
+package ENP27P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    input L x;
+    output L y;
+  algorithm
+    y := T.X01Table[x];
+  end f;
+end ENP27P;
+model ENP27
+  ENP27P.L g;
+algorithm
+  g := ENP27P.f(ENP27P.L.'0');
+end ENP27;
+//// model: ENP28
+package ENP28P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    input L x;
+    output L y;
+  algorithm
+    y := T.X01Table[x];
+  end f;
+end ENP28P;
+model ENP28
+  ENP28P.L g[4];
+equation
+  for i in 1:4 loop
+    g[i] = ENP28P.f(ENP28P.T.X01Table[i]);
+  end for;
+end ENP28;
+//// model: ENF25
+package ENF25P
+  type E = enumeration(a, b, c);
+  function f
+    input Real t[E];
+    input E x;
+    output Real y;
+  algorithm
+    y := t[x] + t[E.b];
+  end f;
+end ENF25P;
+model ENF25
+  ENF25P.E e = if time > 0.5 then ENF25P.E.b else ENF25P.E.a;
+  Real y = ENF25P.f({1, 2, 3}, e);
+end ENF25;
+//// model: ENF26
+package ENF26P
+  type E = enumeration(a, b, c);
+  function f
+    input E x;
+    output Real y;
+  protected
+    Real t[E] = {1, 2, 3};
+  algorithm
+    y := t[x];
+  end f;
+end ENF26P;
+model ENF26
+  ENF26P.E e = if time > 0.5 then ENF26P.E.b else ENF26P.E.a;
+  Real y = ENF26P.f(e);
+end ENF26;
+//// model: ENF27
+package ENF27P
+  type E = enumeration(a, b, c);
+  function f
+    input Real u;
+    output Real y[E];
+  algorithm
+    y := {u, 2 * u, 3 * u};
+  end f;
+end ENF27P;
+model ENF27
+  Real y[ENF27P.E] = ENF27P.f(time);
+end ENF27;
+//// model: ENF28
+package ENF28P
+  function f
+    input Real t[Boolean];
+    input Boolean b;
+    output Real y;
+  algorithm
+    y := t[b];
+  end f;
+end ENF28P;
+model ENF28
+  Real y = ENF28P.f({1, 2}, time > 0.5);
+end ENF28;
+//// model: ENF29
+package ENF29P
+  type E = enumeration(a, b, c);
+  function f
+    input E x;
+    output Integer y;
+  algorithm
+    y := if x == E.b then 1 else 2;
+  end f;
+end ENF29P;
+model ENF29
+  ENF29P.E e[2] = {ENF29P.E.b, if time > 0.5 then ENF29P.E.b else ENF29P.E.a};
+  Integer k[2] = ENF29P.f(e);
+end ENF29;
+//// model: ENF30
+package ENF30P
+  type E = enumeration(a, b, c);
+  function f
+    input E x;
+    output Integer y;
+  algorithm
+    y := Integer(x);
+  end f;
+end ENF30P;
+model ENF30
+  parameter Integer k = ENF30P.f(ENF30P.E.c);
+  Real z[k];
+equation
+  z = fill(time, k);
+end ENF30;
+//// model: ENI1
+model ENI1
+  type E = enumeration(a, b, c);
+  constant Integer t[E] = {1, 2, 3};
+  Integer k = t[2];
+end ENI1;
+//// model: ENI2
+model ENI2
+  type E = enumeration(a, b, c);
+  parameter Real p[E] = {1, 2, 3};
+  Real y = p[2];
+end ENI2;
+//// model: ENI3
+model ENI3
+  type E = enumeration(a, b, c);
+  Real x[E];
+equation
+  x[1] = time;
+  x[E.b] = 1;
+  x[E.c] = 2;
+end ENI3;
+//// model: ENI4
+package ENI4P
+  type E = enumeration(a, b, c);
+  constant Integer t[E] = {1, 2, 3};
+end ENI4P;
+model ENI4
+  Integer k = ENI4P.t[2];
+end ENI4;
+//// model: ENI5
+package ENI5P
+  type E = enumeration(a, b, c);
+  constant Integer t[E] = {1, 2, 3};
+end ENI5P;
+model ENI5
+  Integer n = if time > 0.5 then 1 else 2;
+  Integer k = ENI5P.t[n];
+end ENI5;
+//// model: ENI6
+package ENI6P
+  constant Integer t[Boolean] = {1, 2};
+end ENI6P;
+model ENI6
+  Integer k = ENI6P.t[2];
+end ENI6;
+//// model: ENI7
+package ENI7P
+  constant Integer t[Boolean] = {1, 2};
+end ENI7P;
+model ENI7
+  Integer k = ENI7P.t[true];
+  Boolean b = time > 0.5;
+  Integer k2 = ENI7P.t[b];
+end ENI7;
+//// model: ENI8
+package ENI8P
+  type E = enumeration(a, b, c);
+  constant Integer t[E] = {1, 2, 3};
+end ENI8P;
+model ENI8
+  parameter Integer k = ENI8P.t[2];
+end ENI8;
+//// model: ENI9
+package ENI9P
+  type E = enumeration(a, b, c);
+  constant Integer t[E] = {1, 2, 3};
+end ENI9P;
+model ENI9
+  Real x[ENI9P.t[2]];
+equation
+  x = fill(time, size(x, 1));
+end ENI9;
+//// model: ENI10
+package ENI10P
+  type E = enumeration(a, b, c);
+  record R
+    Integer t[E] = {1, 2, 3};
+  end R;
+  constant R r;
+end ENI10P;
+model ENI10
+  Integer k = ENI10P.r.t[2];
+end ENI10;
+//// model: ENI11
+package ENI11P
+  type E = enumeration(a, b, c);
+  constant Integer t[E] = {1, 2, 3};
+end ENI11P;
+model ENI11
+  Integer k = ENI11P.t[ENI11P.E.b];
+  Integer s = sum(ENI11P.t);
+end ENI11;
+//// model: ENI12
+package ENI12P
+  type E = enumeration(a, b, c);
+  constant Integer t[E] = {1, 2, 3};
+end ENI12P;
+model ENI12
+  Integer k[2] = ENI12P.t[2:3];
+end ENI12;
+//// model: ENI13
+package ENI13P
+  type E = enumeration(a, b, c);
+  constant Integer t[E] = {1, 2, 3};
+  function f
+    input Real u;
+    output Integer y;
+  algorithm
+    y := t[2];
+  end f;
+end ENI13P;
+model ENI13
+  Integer k = ENI13P.f(1.0);
+end ENI13;
+//// model: ENI14
+package ENI14P
+  type E = enumeration(a, b, c);
+  constant Integer t[E] = {1, 2, 3};
+  function f
+    input Real u;
+    output Integer y;
+  algorithm
+    y := t[E.b];
+  end f;
+end ENI14P;
+model ENI14
+  Integer k = ENI14P.f(1.0);
+  Integer k2 = ENI14P.f(time);
+end ENI14;
+//// model: ENQ1
+package ENQ1P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+  function f
+    input S x;
+    output L y;
+  algorithm
+    y := x;
+  end f;
+end ENQ1P;
+model ENQ1
+  ENQ1P.S e = if time > 0.5 then ENQ1P.S.s1 else ENQ1P.S.s2;
+  ENQ1P.L g = ENQ1P.f(e);
+end ENQ1;
+//// model: ENQ2
+package ENQ2P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+  function f
+    input L x;
+    output Integer y;
+  algorithm
+    y := Integer(x);
+  end f;
+end ENQ2P;
+model ENQ2
+  ENQ2P.S e = if time > 0.5 then ENQ2P.S.s1 else ENQ2P.S.s2;
+  Integer g = ENQ2P.f(e);
+end ENQ2;
+//// model: ENQ3
+package ENQ3P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+  function f
+    input L x;
+    output Integer y;
+  algorithm
+    y := Integer(x);
+  end f;
+  function g
+    input S x;
+    output Integer y;
+  algorithm
+    y := f(x);
+  end g;
+end ENQ3P;
+model ENQ3
+  ENQ3P.S e = if time > 0.5 then ENQ3P.S.s1 else ENQ3P.S.s2;
+  Integer g = ENQ3P.g(e);
+end ENQ3;
+//// model: ENQ4
+package ENQ4P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+  function f
+    input L x;
+    output Boolean y;
+  algorithm
+    y := x == S.s1;
+  end f;
+end ENQ4P;
+model ENQ4
+  ENQ4P.L e = if time > 0.5 then ENQ4P.L.'1' else ENQ4P.L.'0';
+  Boolean g = ENQ4P.f(e);
+end ENQ4;
+//// model: ENQ5
+package ENQ5P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+  function f
+    input L x;
+    output Integer y;
+  algorithm
+    y := Integer(x);
+  end f;
+end ENQ5P;
+model ENQ5
+  Integer g = ENQ5P.f(ENQ5P.S.s2);
+end ENQ5;
+//// model: ENQ6
+package ENQ6P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+  record R
+    L x;
+    Real r;
+  end R;
+  function f
+    input S s;
+    output Real y;
+  protected
+    R t;
+  algorithm
+    t.x := s;
+    t.r := 1;
+    y := t.r;
+  end f;
+end ENQ6P;
+model ENQ6
+  ENQ6P.S e = if time > 0.5 then ENQ6P.S.s1 else ENQ6P.S.s2;
+  Real g = ENQ6P.f(e);
+end ENQ6;
+//// model: ENQ7
+package ENQ7P
+  type L = enumeration('U', 'X', '0', '1');
+  type L2 = enumeration('U', 'X', '0', '1');
+  function f
+    input L x;
+    output Integer y;
+  algorithm
+    y := Integer(x);
+  end f;
+end ENQ7P;
+model ENQ7
+  ENQ7P.L2 e = if time > 0.5 then ENQ7P.L2.'1' else ENQ7P.L2.'0';
+  Integer g = ENQ7P.f(e);
+end ENQ7;
+//// model: ENQ8
+package ENQ8P
+  type L = enumeration('U', 'X', '0', '1');
+  function f
+    input L x;
+    output L y;
+  algorithm
+    y := x;
+  end f;
+end ENQ8P;
+model ENQ8
+  Integer g = ENQ8P.f(ENQ8P.L.'1');
+end ENQ8;
+//// model: ENB1
+function ENB1f
+  input Real x;
+  output Real y;
+algorithm
+  assert(x > 0, "neg", AssertionLevel.warning);
+  y := x;
+end ENB1f;
+model ENB1
+  Real y = ENB1f(time);
+end ENB1;
+//// model: ENB2
+function ENB2f
+  input Real x;
+  output Real y;
+algorithm
+  assert(x > 0, "neg", AssertionLevel.error);
+  y := x;
+end ENB2f;
+model ENB2
+  Real y = ENB2f(time);
+end ENB2;
+//// model: ENB3
+function ENB3f
+  input AssertionLevel l;
+  input Real x;
+  output Real y;
+algorithm
+  assert(x > 0, "neg", l);
+  y := x;
+end ENB3f;
+model ENB3
+  Real y = ENB3f(AssertionLevel.warning, time);
+end ENB3;
+//// model: ENB4
+function ENB4f
+  input Real x;
+  output StateSelect s;
+algorithm
+  s := if x > 0 then StateSelect.prefer else StateSelect.avoid;
+end ENB4f;
+model ENB4
+  parameter StateSelect s0 = ENB4f(1.0);
+  Real x(stateSelect = s0);
+equation
+  der(x) = -x;
+end ENB4;
+//// model: ENB5
+package ENB5P
+  record R
+    StateSelect s = StateSelect.default;
+    Real r = 1;
+  end R;
+end ENB5P;
+model ENB5
+  ENB5P.R r;
+  ENB5P.R r2(s = StateSelect.always);
+end ENB5;
+//// model: ENB6
+function ENB6f
+  input Real x;
+  output Integer y;
+protected
+  StateSelect s = StateSelect.never;
+algorithm
+  if x > 0 then
+    s := StateSelect.always;
+  end if;
+  y := Integer(s);
+end ENB6f;
+model ENB6
+  Integer y = ENB6f(time);
+end ENB6;
+//// model: ENQ9
+package ENQ9P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+end ENQ9P;
+model ENQ9
+  ENQ9P.L e = if time > 0.5 then ENQ9P.L.'1' else ENQ9P.L.'0';
+  Boolean b = e == ENQ9P.S.s1;
+end ENQ9;
+//// model: ENQ10
+package ENQ10P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+end ENQ10P;
+model ENQ10
+  ENQ10P.L g = ENQ10P.S.s1;
+end ENQ10;
+//// model: ENQ11
+package ENQ11P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+end ENQ11P;
+model ENQ11
+  ENQ11P.L g = if time > 0.5 then ENQ11P.S.s1 else ENQ11P.S.s2;
+end ENQ11;
+//// model: ENQ12
+package ENQ12P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+end ENQ12P;
+model ENQ12
+  ENQ12P.L g;
+  ENQ12P.S e2 = if time > 0.5 then ENQ12P.S.s1 else ENQ12P.S.s2;
+equation
+  g = e2;
+end ENQ12;
+//// model: ENQ13
+package ENQ13P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+  function f
+    input Real u;
+    output L y;
+  algorithm
+    y := if u > 0 then L.'1' else S.s1;
+  end f;
+end ENQ13P;
+model ENQ13
+  ENQ13P.L g = ENQ13P.f(time);
+end ENQ13;
+//// model: ENQ14
+package ENQ14P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+  function f
+    input Real u;
+    output L y[2];
+  algorithm
+    y := {L.'1', S.s1};
+  end f;
+end ENQ14P;
+model ENQ14
+  ENQ14P.L g[2] = ENQ14P.f(time);
+end ENQ14;
+//// model: ENQ15
+package ENQ15P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+  function f
+    input L x = S.s1;
+    output Integer y;
+  algorithm
+    y := Integer(x);
+  end f;
+end ENQ15P;
+model ENQ15
+  Integer g = ENQ15P.f();
+end ENQ15;
+//// model: ENQ16
+package ENQ16P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+  record R
+    L x;
+    Real r;
+  end R;
+  function f
+    input R t;
+    output Real y;
+  algorithm
+    y := t.r;
+  end f;
+end ENQ16P;
+model ENQ16
+  Real g = ENQ16P.f(ENQ16P.R(ENQ16P.S.s1, time));
+end ENQ16;
+//// model: ENQ17
+package ENQ17P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+  record R
+    L x;
+    Real r;
+  end R;
+end ENQ17P;
+model ENQ17
+  ENQ17P.R t(x = ENQ17P.S.s1, r = time);
+end ENQ17;
+//// model: ENQ18
+package ENQ18P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+  function f
+    input L x;
+    output Boolean y;
+  algorithm
+    y := x == L.'1';
+  end f;
+end ENQ18P;
+model ENQ18
+  ENQ18P.S e = if time > 0.5 then ENQ18P.S.s1 else ENQ18P.S.s2;
+  Boolean g = ENQ18P.f(x = e);
+end ENQ18;
+//// model: ENQ19
+package ENQ19P
+  type L = enumeration('U', 'X', '0', '1');
+  type L2 = enumeration('U', 'X', '0', '1');
+  function f
+    input L x;
+    output Boolean y;
+  algorithm
+    y := x == L2.'1';
+  end f;
+end ENQ19P;
+model ENQ19
+  ENQ19P.L e = if time > 0.5 then ENQ19P.L.'1' else ENQ19P.L.'0';
+  Boolean g = ENQ19P.f(e);
+end ENQ19;
+//// model: ENQ20
+package ENQ20P
+  type L = enumeration('U', 'X', '0', '1');
+  type L2 = enumeration('U', 'X', '0', '1');
+  function f
+    input L x;
+    output Integer y;
+  algorithm
+    y := Integer(x);
+  end f;
+end ENQ20P;
+model ENQ20
+  Integer g = ENQ20P.f(ENQ20P.L2.'1');
+  ENQ20P.L2 e = if time > 0.5 then ENQ20P.L2.'1' else ENQ20P.L2.'0';
+  Integer g2 = ENQ20P.f(e);
+end ENQ20;
+//// model: ENQ21
+package ENQ21P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+  function f
+    input L x;
+    output S y;
+  algorithm
+    y := x;
+  end f;
+end ENQ21P;
+model ENQ21
+  ENQ21P.S g = ENQ21P.f(ENQ21P.L.'1');
+end ENQ21;
+//// model: ENB7
+function ENB7f
+  input AssertionLevel l;
+  output Integer y;
+algorithm
+  y := if l == AssertionLevel.warning then 1 else 2;
+end ENB7f;
+model ENB7
+  parameter AssertionLevel l = AssertionLevel.error;
+  Integer y = ENB7f(l);
+end ENB7;
+//// model: ENB8
+function ENB8f
+  input StateSelect s;
+  output Boolean y;
+algorithm
+  y := s > StateSelect.default;
+end ENB8f;
+model ENB8
+  parameter StateSelect s = StateSelect.prefer;
+  Boolean y = ENB8f(s);
+end ENB8;
+//// model: ENB9
+function ENB9f
+  input StateSelect s;
+  output Integer y;
+algorithm
+  y := Integer(s);
+end ENB9f;
+model ENB9
+  Integer y = ENB9f(StateSelect.always);
+end ENB9;
+//// model: ENB10
+package ENB10P
+  constant Integer w[StateSelect] = {1, 2, 3, 4, 5};
+  function f
+    input StateSelect s;
+    output Integer y;
+  algorithm
+    y := w[s] + w[StateSelect.always];
+  end f;
+end ENB10P;
+model ENB10
+  parameter StateSelect s = StateSelect.prefer;
+  Integer y = ENB10P.f(s);
+end ENB10;
+//// model: ENB11
+package ENB11P
+  constant Integer w[StateSelect] = {1, 2, 3, 4, 5};
+end ENB11P;
+model ENB11
+  Integer y = ENB11P.w[StateSelect.prefer];
+end ENB11;
+//// model: ENF31
+package ENF31P
+  type E = enumeration(a, b, c);
+  function f
+    input Real u;
+    output Real y;
+  protected
+    Real t[E] = {1, 2, 3};
+  algorithm
+    y := u * t[2];
+  end f;
+end ENF31P;
+model ENF31
+  Real y = ENF31P.f(1.0);
+end ENF31;
+//// model: ENF32
+package ENF32P
+  type E = enumeration(a, b, c);
+  function f
+    input Real u;
+    output Real y;
+  protected
+    Real t[E] = {1, 2, 3};
+  algorithm
+    y := u * t[E.b];
+  end f;
+end ENF32P;
+model ENF32
+  Real y = ENF32P.f(1.0);
+end ENF32;
+//// model: ENF33
+package ENF33P
+  type L = enumeration('U', 'X', '0', '1');
+  function f
+    input Integer n;
+    output L m[n, 2];
+  algorithm
+    for i in 1:n loop
+      for j in 1:2 loop
+        if i == j then
+          m[i, j] := L.'1';
+        else
+          m[i, j] := L.'0';
+        end if;
+      end for;
+    end for;
+  end f;
+end ENF33P;
+model ENF33
+  parameter Integer n = 2;
+  ENF33P.L m[n, 2];
+algorithm
+  m := ENF33P.f(n);
+end ENF33;
+//// model: ENF34
+package ENF34P
+  type L = enumeration('U', 'X', '0', '1');
+  function f
+    input Integer n;
+    output L m[integer(2 ^ n), 2];
+    output Integer k;
+  algorithm
+    k := 0;
+    for i in 1:(2 ^ n) loop
+      k := k + integer(i);
+      m[integer(i), 1] := L.'1';
+      m[integer(i), 2] := L.'0';
+    end for;
+  end f;
+end ENF34P;
+model ENF34
+  parameter Integer n = 1;
+  ENF34P.L m[2, 2];
+algorithm
+  m := ENF34P.f(n);
+end ENF34;
+//// model: ENP29
+package ENP29P
+  package T
+    constant Integer BT[Boolean] = {1, 2};
+  end T;
+  function f
+    input Boolean b;
+    output Integer y;
+  algorithm
+    y := T.BT[b];
+  end f;
+end ENP29P;
+model ENP29
+  Integer y = ENP29P.f(time > 0.5);
+end ENP29;
+//// model: ENP30
+package ENP30P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    input StateSelect s;
+    output L y;
+  algorithm
+    y := T.X01Table[s];
+  end f;
+end ENP30P;
+model ENP30
+  ENP30P.L y = ENP30P.f(StateSelect.prefer);
+end ENP30;
+//// model: ENP33
+package ENP33P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function g
+    input L x;
+    output Integer y;
+  algorithm
+    y := Integer(x);
+  end g;
+  function f
+    input L x;
+    output Integer y;
+  algorithm
+    y := g(T.X01Table[x]);
+  end f;
+end ENP33P;
+model ENP33
+  ENP33P.L e = if time > 0.5 then ENP33P.L.'1' else ENP33P.L.'U';
+  Integer y = ENP33P.f(e);
+end ENP33;
+//// model: ENP34
+package ENP34P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    input L x;
+    output Integer y;
+  algorithm
+    if T.X01Table[x] == L.'1' then
+      y := 1;
+    elseif T.X01Table[x] <> L.'X' then
+      y := 2;
+    else
+      y := 3;
+    end if;
+  end f;
+end ENP34P;
+model ENP34
+  ENP34P.L e = if time > 0.5 then ENP34P.L.'1' else ENP34P.L.'U';
+  Integer y = ENP34P.f(e);
+end ENP34;
+//// model: ENP37
+package ENP37P
+  type L = enumeration('U', 'X', '0', '1');
+  record R
+    L tab[2];
+    Real r;
+  end R;
+  constant R rc = R({L.'X', L.'1'}, 2.0);
+  function f
+    input Real u;
+    output L y;
+  algorithm
+    y := if u > 0 then rc.tab[1] else rc.tab[2];
+  end f;
+end ENP37P;
+model ENP37
+  ENP37P.L y = ENP37P.f(time);
+end ENP37;
+//// model: ENP39
+package ENP39P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  record R
+    L f;
+    Real r;
+  end R;
+  function f
+    input R rr;
+    output L y;
+  algorithm
+    y := T.X01Table[rr.f];
+  end f;
+end ENP39P;
+model ENP39
+  ENP39P.R r(f = if time > 0.5 then ENP39P.L.'1' else ENP39P.L.'U', r = time);
+  ENP39P.L y = ENP39P.f(r);
+end ENP39;
+//// model: ENP40
+package ENP40P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L AndTable[L, L] = [L.'U', L.'U', L.'0', L.'U';
+                                 L.'U', L.'X', L.'0', L.'X';
+                                 L.'0', L.'0', L.'0', L.'0';
+                                 L.'U', L.'X', L.'0', L.'1'];
+  end T;
+  function f
+    input L x;
+    output L y[4];
+  algorithm
+    y := T.AndTable[x, :];
+  end f;
+end ENP40P;
+model ENP40
+  ENP40P.L e = if time > 0.5 then ENP40P.L.'1' else ENP40P.L.'U';
+  ENP40P.L y[4] = ENP40P.f(e);
+end ENP40;
+//// model: ENP41
+package ENP41P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L AndTable[L, L] = [L.'U', L.'U', L.'0', L.'U';
+                                 L.'U', L.'X', L.'0', L.'X';
+                                 L.'0', L.'0', L.'0', L.'0';
+                                 L.'U', L.'X', L.'0', L.'1'];
+  end T;
+  function f
+    input L x;
+    output L y[4];
+  algorithm
+    y := T.AndTable[L.'X', :];
+  end f;
+end ENP41P;
+model ENP41
+  ENP41P.L e = if time > 0.5 then ENP41P.L.'1' else ENP41P.L.'U';
+  ENP41P.L y[4] = ENP41P.f(e);
+end ENP41;
+//// model: ENP42
+package ENP42P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L AndTable[L, L] = [L.'U', L.'U', L.'0', L.'U';
+                                 L.'U', L.'X', L.'0', L.'X';
+                                 L.'0', L.'0', L.'0', L.'0';
+                                 L.'U', L.'X', L.'0', L.'1'];
+  end T;
+  function f
+    input L x;
+    input L z;
+    output L y;
+  algorithm
+    y := T.AndTable[L.'1', z];
+  end f;
+end ENP42P;
+model ENP42
+  ENP42P.L e = if time > 0.5 then ENP42P.L.'1' else ENP42P.L.'U';
+  ENP42P.L y = ENP42P.f(e, e);
+end ENP42;
+//// model: ENP43
+package ENP43P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    input L x;
+    output L y;
+  algorithm
+    y := T.X01Table[T.X01Table[L.'0']];
+  end f;
+end ENP43P;
+model ENP43
+  ENP43P.L e = if time > 0.5 then ENP43P.L.'1' else ENP43P.L.'U';
+  ENP43P.L y = ENP43P.f(e);
+end ENP43;
+//// model: ENP44
+package ENP44P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    input L x;
+    output L y = T.X01Table[x];
+  end f;
+end ENP44P;
+model ENP44
+  ENP44P.L e = if time > 0.5 then ENP44P.L.'1' else ENP44P.L.'U';
+  ENP44P.L y = ENP44P.f(e);
+end ENP44;
+//// model: ENP45
+package ENP45P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  function f
+    input L x;
+    input L z = T.X01Table[L.'1'];
+    output Boolean y;
+  algorithm
+    y := x == z;
+  end f;
+end ENP45P;
+model ENP45
+  ENP45P.L e = if time > 0.5 then ENP45P.L.'1' else ENP45P.L.'U';
+  Boolean y = ENP45P.f(e);
+end ENP45;
+//// model: ENM1
+package ENM1P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2);
+  package T
+    constant L StrengthMap[L, S] = [L.'U', L.'U'; L.'X', L.'X'; L.'0', L.'0'; L.'1', L.'U'];
+  end T;
+  model M
+    parameter S strength = S.s1;
+    L z[2];
+  algorithm
+    z := fill(T.StrengthMap[L.'X', strength], 2);
+  end M;
+end ENM1P;
+model ENM1
+  ENM1P.M m;
+end ENM1;
+//// model: ENM2
+package ENM2P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+end ENM2P;
+model ENM2
+  parameter ENM2P.L p = ENM2P.L.'1';
+  ENM2P.L g = ENM2P.T.X01Table[p];
+end ENM2;
+//// model: ENM3
+package ENM3P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+end ENM3P;
+model ENM3
+  parameter ENM3P.L p = ENM3P.L.'1';
+  Integer n = Integer(ENM3P.T.X01Table[p]);
+end ENM3;
+//// model: ENM4
+package ENM4P
+  constant Integer tab[3] = {4, 5, 6};
+end ENM4P;
+model ENM4
+  parameter Integer k = 2;
+  Integer y = ENM4P.tab[k];
+end ENM4;
+//// model: ENM5
+package ENM5P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+end ENM5P;
+model ENM5
+  parameter ENM5P.L p = ENM5P.L.'1' annotation(Evaluate = false);
+  ENM5P.L g = ENM5P.T.X01Table[p];
+end ENM5;
+//// model: ENM6
+package ENM6P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+end ENM6P;
+model ENM6
+  parameter ENM6P.L p = ENM6P.L.'1';
+  parameter ENM6P.L q = ENM6P.T.X01Table[p];
+end ENM6;
+//// model: ENM7
+package ENM7P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+end ENM7P;
+model ENM7
+  constant ENM7P.L c = ENM7P.T.X01Table[ENM7P.L.'0'];
+  ENM7P.L g = c;
+end ENM7;
+//// model: ENM8
+package ENM8P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant Integer DelayTable[L, L] = [0, 0, -1, 1; 0, 0, -1, 1; 1, 1, 0, 1; -1, -1, -1, 0];
+  end T;
+end ENM8P;
+model ENM8
+  parameter ENM8P.L p = ENM8P.L.'1';
+  Real x[ENM8P.T.DelayTable[p, ENM8P.L.'1'] + 1];
+equation
+  x = fill(time, size(x, 1));
+end ENM8;
+//// model: ENM9
+package ENM9P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+end ENM9P;
+model ENM9
+  parameter ENM9P.L p = ENM9P.L.'1';
+  ENM9P.L g;
+algorithm
+  g := ENM9P.T.X01Table[p];
+end ENM9;
+//// model: ENM10
+package ENM10P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+end ENM10P;
+model ENM10
+  parameter ENM10P.L p = ENM10P.L.'1';
+  ENM10P.L g[2] = fill(ENM10P.T.X01Table[p], 2);
+end ENM10;
+//// model: ENM11
+package ENM11P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+  model M
+    parameter L p = L.'1';
+    L g;
+  equation
+    g = T.X01Table[p];
+  end M;
+end ENM11P;
+model ENM11
+  ENM11P.M m(p = ENM11P.L.'0');
+end ENM11;
+//// model: ENM12
+package ENM12P
+  type L = enumeration('U', 'X', '0', '1');
+  package T
+    constant L X01Table[L] = {L.'X', L.'X', L.'0', L.'1'};
+  end T;
+end ENM12P;
+model ENM12
+  ENM12P.L g = ENM12P.T.X01Table[ENM12P.L.'0'];
+  Integer k = Integer(ENM12P.T.X01Table[ENM12P.L.'1']);
+end ENM12;
+//// model: ENF35
+package ENF35P
+  type E = enumeration(a, b, c);
+  function f
+    input E x;
+    output E y;
+  algorithm
+    y := if x == E.a then E.c else E.b;
+  end f;
+end ENF35P;
+model ENF35
+  ENF35P.E g = ENF35P.f(ENF35P.E.a);
+  ENF35P.E h = ENF35P.f(ENF35P.E.c);
+end ENF35;
+//// model: ENF36
+model ENF36
+  type E = enumeration(a, b, c);
+  function f
+    input Integer x;
+    output E y;
+  algorithm
+    y := if x > 0 then E.c else E.b;
+  end f;
+  E g = f(1);
+end ENF36;
+//// model: ENF37
+package ENF37P
+  type E = enumeration(a, b, c);
+  function f
+    input E x;
+    output Integer y;
+  algorithm
+    y := Integer(x);
+  end f;
+end ENF37P;
+model ENF37
+  parameter ENF37P.E p = ENF37P.E.b;
+  Real x[ENF37P.f(p)];
+equation
+  x = fill(time, size(x, 1));
+end ENF37;
+//// model: ENF38
+package ENF38P
+  type E = enumeration(a, b, c);
+  function f
+    input Integer i;
+    output E y;
+  algorithm
+    y := if i == 1 then E.a elseif i == 2 then E.b else E.c;
+  end f;
+end ENF38P;
+model ENF38
+  constant ENF38P.E c = ENF38P.f(3);
+  parameter ENF38P.E p = ENF38P.f(2);
+  ENF38P.E v = ENF38P.f(1);
+end ENF38;
+//// model: ENF39
+function ENF39f
+  input Integer i;
+  output StateSelect s;
+algorithm
+  s := if i > 0 then StateSelect.prefer else StateSelect.never;
+end ENF39f;
+model ENF39
+  Real x(stateSelect = ENF39f(1));
+equation
+  der(x) = -x;
+end ENF39;
+//// model: ENF40
+package ENF40P
+  type E = enumeration(a, b, c);
+  function f
+    input E x;
+    output E y[2];
+  algorithm
+    y := {x, E.c};
+  end f;
+end ENF40P;
+model ENF40
+  ENF40P.E g[2] = ENF40P.f(ENF40P.E.a);
+end ENF40;
+//// model: ENF41
+package ENF41P
+  type E = enumeration(a, b, c);
+  function f
+    input E x;
+    output E y;
+  algorithm
+    y := x;
+  end f;
+end ENF41P;
+model ENF41
+  ENF41P.E g;
+algorithm
+  g := ENF41P.f(ENF41P.E.b);
+end ENF41;
+//// model: ENF42
+package ENF42P
+  type E = enumeration(a, b, c);
+  function f
+    input E x;
+    output Boolean y;
+  algorithm
+    y := x > E.a;
+  end f;
+end ENF42P;
+model ENF42
+  Boolean g = ENF42P.f(ENF42P.E.b);
+  Boolean h = ENF42P.f(ENF42P.E.a);
+end ENF42;
+//// model: IMQ1
+package IMQ1P
+  impure function g
+    input Real u;
+    output Real a;
+    output Real b;
+  algorithm
+    a := u;
+    b := 2 * u;
+  end g;
+  function f
+    input Real u;
+    output Real y;
+  algorithm
+    y := g(u);
+  end f;
+end IMQ1P;
+model IMQ1
+  Real y = IMQ1P.f(time);
+end IMQ1;
+//// model: IMQ2
+package IMQ2P
+  impure function g
+    input Real u;
+    output Real a;
+    output Real b;
+  algorithm
+    a := u;
+    b := 2 * u;
+  end g;
+  function f
+    input Real u;
+    output Real y;
+  protected
+    Real z;
+  algorithm
+    (y, z) := g(u);
+  end f;
+end IMQ2P;
+model IMQ2
+  Real y = IMQ2P.f(time);
+end IMQ2;
+//// model: IMQ3
+package IMQ3P
+  impure function g
+    input Real u;
+    output Real a;
+    output Real b;
+  algorithm
+    a := u;
+    b := 2 * u;
+  end g;
+  function f
+    input Real u;
+    output Real y;
+  algorithm
+    g(u);
+    y := u;
+  end f;
+end IMQ3P;
+model IMQ3
+  Real y = IMQ3P.f(time);
+end IMQ3;
+//// model: IMQ4
+package IMQ4P
+  impure function g
+    input Real u;
+    output Real a;
+    output Real b;
+  algorithm
+    a := u;
+    b := 2 * u;
+  end g;
+  function f
+    input Real u;
+    output Real y;
+  protected
+    Real z = g(u);
+  algorithm
+    y := z;
+  end f;
+end IMQ4P;
+model IMQ4
+  Real y = IMQ4P.f(time);
+end IMQ4;
+//// model: IMQ5
+package IMQ5P
+  impure function g
+    input Real u;
+    output Real a;
+  algorithm
+    a := u;
+  end g;
+  function f
+    input Real u;
+    output Real y;
+  algorithm
+    y := g(u);
+  end f;
+end IMQ5P;
+model IMQ5
+  Real y = IMQ5P.f(time);
+end IMQ5;
+//// model: IMQ6
+model IMQ6
+  function f
+    input String fn;
+    output String s;
+  algorithm
+    s := Modelica.Utilities.Streams.readLine(fn, 1);
+  end f;
+  parameter String p = "a.txt";
+  String s = f(p);
+end IMQ6;
+//// model: IMQ7
+package IMQ7P
+  impure function g
+    input Real u;
+    output Real a;
+    output Real b;
+  algorithm
+    a := u;
+    b := 2 * u;
+  end g;
+  function f
+    input Real u;
+    output Real y;
+  algorithm
+    y := 0;
+    while g(u) > y loop
+      y := y + 1;
+    end while;
+  end f;
+end IMQ7P;
+model IMQ7
+  Real y = IMQ7P.f(time);
+end IMQ7;
+//// model: IMQ8
+package IMQ8P
+  impure function g
+    input Real u;
+    output Boolean a;
+    output Real b;
+  algorithm
+    a := u > 0;
+    b := 2 * u;
+  end g;
+  function f
+    input Real u;
+    output Real y;
+  algorithm
+    y := 0;
+    if g(u) then
+      y := 1;
+    end if;
+  end f;
+end IMQ8P;
+model IMQ8
+  Real y = IMQ8P.f(time);
+end IMQ8;
+//// model: IMQ9
+package IMQ9P
+  impure function g
+    input Real u;
+    output Real a;
+    output Real b;
+  algorithm
+    a := u;
+    b := 2 * u;
+  end g;
+  function f
+    input Real u;
+    output Real y;
+  algorithm
+    (y) := g(u);
+  end f;
+end IMQ9P;
+model IMQ9
+  Real y = IMQ9P.f(time);
+end IMQ9;
+//// model: IMQ10
+package IMQ10P
+  impure function g
+    input Integer u;
+    output Integer a;
+    output Integer b;
+  algorithm
+    a := u;
+    b := 2 * u;
+  end g;
+  function f
+    input Integer u;
+    output Real y;
+  algorithm
+    y := g(u);
+  end f;
+end IMQ10P;
+model IMQ10
+  Real y = IMQ10P.f(integer(time));
+end IMQ10;
+//// model: IMQ11
+package IMQ11P
+  function g
+    input Integer u;
+    output Integer a;
+    output Integer b;
+  algorithm
+    a := u;
+    b := 2 * u;
+  end g;
+end IMQ11P;
+model IMQ11
+  Integer n = integer(time);
+  Real y = IMQ11P.g(n);
+end IMQ11;
+//// model: IMQ12
+package IMQ12P
+  function g
+    input Integer u;
+    output Integer a;
+    output Integer b;
+  algorithm
+    a := u;
+    b := 2 * u;
+  end g;
+end IMQ12P;
+model IMQ12
+  Integer n = integer(time);
+  Real y;
+equation
+  y = IMQ12P.g(n);
+end IMQ12;
+//// model: IMQ13
+package IMQ13P
+  function g
+    input Integer u;
+    output Integer a;
+    output Integer b;
+  algorithm
+    a := u;
+    b := 2 * u;
+  end g;
+  function f
+    input Integer u;
+    output Real y;
+  protected
+    Real z = g(u);
+  algorithm
+    y := z;
+  end f;
+end IMQ13P;
+model IMQ13
+  Real y = IMQ13P.f(integer(time));
+end IMQ13;
+//// model: IMQ14
+package IMQ14P
+  function g
+    input Integer u;
+    output Integer a;
+    output Integer b;
+  algorithm
+    a := u;
+    b := 2 * u;
+  end g;
+  function f
+    input Integer u;
+    output Real y;
+  algorithm
+    y := g(u);
+  end f;
+end IMQ14P;
+model IMQ14
+  Real y = IMQ14P.f(integer(time));
+end IMQ14;
+//// model: IMQ15
+package IMQ15P
+  function g
+    input Integer u;
+    output Integer a;
+    output Integer b;
+  algorithm
+    a := u;
+    b := 2 * u;
+  end g;
+  function f
+    input Integer u;
+    output Real y;
+  algorithm
+    y := 1.5 * g(u);
+  end f;
+end IMQ15P;
+model IMQ15
+  Real y = IMQ15P.f(integer(time));
+end IMQ15;
+//// model: IMQ16
+package IMQ16P
+  function g
+    input Integer u;
+    output Integer a;
+    output Integer b;
+  algorithm
+    a := u;
+    b := 2 * u;
+  end g;
+end IMQ16P;
+model IMQ16
+  Integer n = integer(time);
+  Real y;
+algorithm
+  y := IMQ16P.g(n);
+end IMQ16;
+//// model: IMQ17
+package IMQ17P
+  function g
+    input Integer u;
+    output Integer a;
+    output Integer b;
+  algorithm
+    a := u;
+    b := 2 * u;
+  end g;
+  function h
+    input Real r;
+    output Real y = 2 * r;
+  end h;
+  function f
+    input Integer u;
+    output Real y;
+  algorithm
+    y := h(g(u));
+  end f;
+end IMQ17P;
+model IMQ17
+  Real y = IMQ17P.f(integer(time));
+end IMQ17;
+//// model: ENQ22
+package ENQ22P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+end ENQ22P;
+model ENQ22
+  ENQ22P.L g;
+algorithm
+  g := ENQ22P.S.s1;
+end ENQ22;
+//// model: ENQ23
+package ENQ23P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+end ENQ23P;
+model ENQ23
+  ENQ23P.L g[2];
+algorithm
+  g := {ENQ23P.S.s1, ENQ23P.S.s2};
+end ENQ23;
+//// model: ENQ24
+package ENQ24P
+  type L = enumeration('U', 'X', '0', '1');
+  type L2 = enumeration('U', 'X', '0', '1');
+end ENQ24P;
+model ENQ24
+  ENQ24P.L g;
+  ENQ24P.L h[2];
+algorithm
+  g := ENQ24P.L2.'1';
+  h := {ENQ24P.L2.'1', ENQ24P.L2.'0'};
+end ENQ24;
+//// model: ENQ25
+package ENQ25P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+  function f
+    input L x;
+    output Integer y;
+  algorithm
+    y := Integer(x);
+  end f;
+end ENQ25P;
+model ENQ25
+  parameter ENQ25P.S p = ENQ25P.S.s2;
+  Integer g = ENQ25P.f(p);
+end ENQ25;
+//// model: ENQ26
+package ENQ26P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+  record R
+    L x;
+    Real r;
+  end R;
+end ENQ26P;
+model ENQ26
+  constant ENQ26P.R c = ENQ26P.R(ENQ26P.S.s1, 1.0);
+  Real y = c.r;
+end ENQ26;
+//// model: ENQ27
+package ENQ27P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+  function f
+    input L x;
+    output L y;
+  algorithm
+    y := x;
+  end f;
+end ENQ27P;
+model ENQ27
+  ENQ27P.S g = ENQ27P.f(ENQ27P.L.'1');
+end ENQ27;
+//// model: ENQ28
+package ENQ28P
+  type L = enumeration('U', 'X', '0', '1');
+  type S = enumeration(s1, s2, s3, s4);
+  function f
+    input Integer i;
+    output L y;
+    output S z;
+  algorithm
+    y := L.'1';
+    z := S.s1;
+  end f;
+  function g
+    input Integer i;
+    output Integer k;
+  protected
+    S a;
+    S b;
+  algorithm
+    (a, b) := f(i);
+    k := Integer(a);
+  end g;
+end ENQ28P;
+model ENQ28
+  Integer k = ENQ28P.g(integer(time));
+end ENQ28;
+//// model: ENQ29
+package ENQ29P
+  type L = enumeration('U', 'X', '0', '1');
+  function f
+    input L x;
+    output Integer y;
+  algorithm
+    y := Integer(x);
+  end f;
+end ENQ29P;
+model ENQ29
+  Integer g = ENQ29P.f(2);
+end ENQ29;
+//// model: DUQ1
+function delay
+  input Real x;
+  output Real y = x;
+end delay;
+model DUQ1
+  Real x = time;
+end DUQ1;
+//// model: DUQ2
+function sin
+  input Real x;
+  output Real y = x;
+end sin;
+model DUQ2
+  Real x = time;
+end DUQ2;
+//// model: DUQ3
+function abs
+  input Real x;
+  output Real y = x;
+end abs;
+model DUQ3
+  Real x = time;
+end DUQ3;
+//// model: DUQ4
+function der
+  input Real x;
+  output Real y = x;
+end der;
+model DUQ4
+  Real x = time;
+end DUQ4;
+//// model: DUQ5
+record Distribution
+  Real a;
+end Distribution;
+model DUQ5
+  Real x = time;
+end DUQ5;
+//// model: DUQ6
+package Subtask
+end Subtask;
+model DUQ6
+  Real x = time;
+end DUQ6;
+//// model: DUQ7
+function print
+  input String s;
+end print;
+model DUQ7
+  Real x = time;
+end DUQ7;
+//// model: DUQ8
+package OMC_CLOCK
+end OMC_CLOCK;
+model DUQ8
+  Real x = time;
+end DUQ8;
+//// model: DUQ9
+function pure
+  input Real x;
+  output Real y = x;
+end pure;
+model DUQ9
+  Real x = time;
+end DUQ9;
+//// model: DUQ10
+function size
+  input Real x;
+  output Real y = x;
+end size;
+model DUQ10
+  Real x = time;
+end DUQ10;
+//// model: DUQ11
+class ExternalObject
+end ExternalObject;
+model DUQ11
+  Real x = time;
+end DUQ11;
+//// model: DUQ12
+function interval
+  input Real x;
+  output Real y = x;
+end interval;
+model DUQ12
+  Real x = time;
+end DUQ12;
+//// model: DUQ13
+function ticksInState
+  output Integer y = 1;
+end ticksInState;
+model DUQ13
+  Real x = time;
+end DUQ13;
+//// model: DUQ14
+function spatialDistribution
+  input Real x;
+  output Real y = x;
+end spatialDistribution;
+model DUQ14
+  Real x = time;
+end DUQ14;
+//// model: DUQ15
+function getInstanceName
+  output String s = "a";
+end getInstanceName;
+model DUQ15
+  Real x = time;
+end DUQ15;
+//// model: DUQ16
+function rooted
+  input Real x;
+  output Boolean y = true;
+end rooted;
+model DUQ16
+  Real x = time;
+end DUQ16;
+//// model: DUQ17
+record Correlation
+  Real a;
+end Correlation;
+model DUQ17
+  Real x = time;
+end DUQ17;
+//// model: DUQ18
+package Real2
+end Real2;
+model DUQ18
+  Real x = time;
+end DUQ18;
+//// model: DUQ19
+function time2
+  output Real y = 1;
+end time2;
+model DUQ19
+  Real x = time;
+end DUQ19;
+//// model: DUQ20
+package OMC_NO_ARGS
+end OMC_NO_ARGS;
+model DUQ20
+  Real x = time;
+end DUQ20;
+//// model: DUQ21
+function identity
+  input Integer n;
+  output Integer y = n;
+end identity;
+model DUQ21
+  Real x = time;
+end DUQ21;
+//// model: DUQ22
+type Uncertainty = enumeration(a, b);
+model DUQ22
+  Real x = time;
+end DUQ22;
+//// model: DUQ23
+function DynamicSelect
+  input Real x;
+  output Real y = x;
+end DynamicSelect;
+model DUQ23
+  Real x = time;
+end DUQ23;
+//// model: DUQ24
+function classDirectory
+  output String s = "a";
+end classDirectory;
+model DUQ24
+  Real x = time;
+end DUQ24;
+//// model: DUQ25
+function noClock
+  input Real x;
+  output Real y = x;
+end noClock;
+model DUQ25
+  Real x = time;
+end DUQ25;
+//// model: DUQ26
+function timeInState
+  output Real y = 1;
+end timeInState;
+model DUQ26
+  Real x = time;
+end DUQ26;
+//// model: DUQ27
+function firstTick
+  output Boolean y = true;
+end firstTick;
+model DUQ27
+  Real x = time;
+end DUQ27;
+//// model: DUQ28
+model SimulationResult
+  Real a;
+end SimulationResult;
+model DUQ28
+  Real x = time;
+end DUQ28;
+//// model: DUQ29
+function cat
+  input Real x;
+  output Real y = x;
+end cat;
+model DUQ29
+  Real x = time;
+end DUQ29;
+//// model: DUQ30
+function semiLinear
+  input Real x;
+  output Real y = x;
+end semiLinear;
+model DUQ30
+  Real x = time;
+end DUQ30;

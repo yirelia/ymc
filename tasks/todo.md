@@ -2605,9 +2605,24 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       探针 pk-p34（148；URZ）——基线上 FAIL 8 / ACCEPTS-INVALID 1，现 PASS 111 / SKIP 32 / BOTH-REJECT 5；单测 +5（omc_uri 的假文件系统 /
       flatten；另 loader_test +1）。slice 702 例 FAIL 0（oracle=live 不一致 0）；scodeinst 663、testsuite 1836、MSL 482（均不变）/ FAIL 0；
       探针 10871→11019；单测 477→482。
-- [ ] (67a 候选) 已有的 ACCEPTS-INVALID（66z 调查时发现）：用户顶层类与 NFModelicaBuiltin.mo 的其他顶层元素重名（`function delay` →
+- [x] (67a 候选，67a 已修) 已有的 ACCEPTS-INVALID（66z 调查时发现）：用户顶层类与 NFModelicaBuiltin.mo 的其他顶层元素重名（`function delay` →
       omc 报 "An element with name delay is already declared"，NFModelicaBuiltin.mo:370-373），ymc 照出结果；run() 的重名表只列了
       Clock / StateSelect / Uncertainty / AssertionLevel / Connections / OpenModelica。复现 `$S/pkr66z/dup/DUP2.mo`。
+- [x] (67a) 函数与记录里的枚举（2026-10-17）：枚举类型的函数变量 / 记录构造函数输入打字面量表 `input enumeration('U', 'X', '0', '1')[n] addr`
+      （DAEDumpTpl.tpl:329-331 的 T_ENUMERATION，属性修饰不打；内建 StateSelect 同），函数体里的枚举字面量打规范全路径；函数体里以枚举为维的
+      包常量表照值换（局部下标留 `{…}[x]`、字面量下标按序号取元素）；枚举实参 / 结果的常量调用求成字面量。顺带（RAM 的下一处）：赋值右端 /
+      条件里的多输出调用定型成 TUPLE_ELEMENT(call, 1)，isImpureCall 不认 → 调用者仍是纯函数（NFFunction.checkPureCall :1643-1681；此前打
+      `impure function`，静默错），Integer 首输出赋给 Real 时转型套在调用上 `/*Real*/(g(u))[1]`。
+      兄弟写法在基线上探出 50 例 ACCEPTS-INVALID、7 例 FAIL：枚举 / Boolean 维的数组用 Integer 下标（omc 报下标类型错，NFTyping.
+      checkSubscriptType :2104-2182）、字面量表不同的枚举类型互用（omc 只比字面量表，NFTypeCheck.matchEnumerationTypes :2171-2183；赋值 /
+      实参 / 缺省 / 关系 / 方程 / 绑定 / if 支 / 数组字面量 / 元组赋值 / 求值路径各处）——都照拒。
+      顺带（67a 候选）：用户顶层类与 NFModelicaBuiltin.mo 的任一顶层元素重名一律 DOUBLE_DECLARATION（顶层 = 内建程序在前、用户程序在后，
+      CevalScriptBackend.mo:3578 / :3593 → NFInst.makeTopNode :443-518 → NFClassTree.addLocalElementConflict :1603-1626）：run() 的表补全为
+      该文件的 97 个顶层名（DUQ 探针）。
+      照旧 SKIP：带类型维的函数变量、`for e in E`、模型里声明的枚举、枚举短类别名、没实例的记录构造调用、向量下标、Boolean 维、经短类链的类型维。
+      探针 pk-p35（211；EN* / IMQ / DUQ）——基线上 ACCEPTS-INVALID 50 / FAIL 7，现 PASS 122 / BOTH-REJECT 72 / SKIP 17；旧组 cf-p3 / pk-p34 /
+      rb-p1 SKIP→PASS 4；单测 +7。slice 702 例 FAIL 0（oracle=live 不一致 0）；scodeinst 663、testsuite 1836（均不变）/ FAIL 0；
+      **MSL 482→484**（Electrical.Digital.Examples.RAM、Utilities.Examples.readRealParameterModel）；探针 11019→11230；单测 482→489。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

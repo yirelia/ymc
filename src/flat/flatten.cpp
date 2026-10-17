@@ -237,12 +237,26 @@ class Flattener {
     // 顶层作用域的类树：同名元素 → DOUBLE_DECLARATION_OF_ELEMENTS（NFClassTree.addLocalElementConflict :1653-1676）；
     // 与 NF 顶层内建类型同名（Clock2 的 `model Clock`，NFModelicaBuiltin.mo）同样冲突。
     if (has_duplicate_names(I_.scode.program)) set_unsupported("duplicate element declaration");
-    // 内建包 OpenModelica（NFModelicaBuiltin.mo:987-6580）同理：用户 / 库的顶层 `package OpenModelica` → omc 报 "An element with name
-    // OpenModelica is already declared in this scope"（探针 URZ37；此前 ymc 用了用户的那个，ACCEPTS-INVALID）。
+    // omc 的顶层作用域 = NFModelicaBuiltin.mo 的全部顶层元素在前、用户 / 库的程序在后（CevalScriptBackend.mo:3578 / :3593 v1.25.0
+    // `scode_p := listAppend(builtin_p, scode_p)` → NFInst.makeTopNode :443-518 的 Class.fromSCode），重名一律 DOUBLE_DECLARATION_OF_ELEMENTS
+    //（NFClassTree.addLocalElementConflict :1603-1626）"An element with name delay is already declared in this scope"——不论种类（函数、
+    // 类型、记录、包；DUQ 探针 DUQ1-DUQ30：delay / sin / abs / size / Distribution / Subtask / OMC_CLOCK / ExternalObject / Uncertainty …
+    // 都报，注释掉的 SimulationResult、文件里没有的 Real2 / time2 照收）。下表 = 该文件（v1.25.0）的 97 个顶层元素（内建包
+    // OpenModelica 即 URZ37）；Real / Integer / Boolean / String / time 不在其中。此前只列了 6 个，其余 ACCEPTS-INVALID。
+    static constexpr std::string_view kBuiltinTop[] = {
+        "StateSelect", "Uncertainty", "Clock", "ExternalObject", "der", "initial", "terminal", "AssertionLevel", "assert",
+        "ceil", "floor", "integer", "sqrt", "sign", "identity", "semiLinear", "edge", "sin", "cos", "tan", "sinh", "cosh",
+        "tanh", "asin", "acos", "atan", "atan2", "exp", "log", "log10", "homotopy", "linspace", "div", "mod", "rem", "abs",
+        "outerProduct", "cross", "skew", "delay", "min", "max", "sum", "product", "promote", "transpose", "symmetric",
+        "smooth", "diagonal", "cardinality", "array", "zeros", "ones", "fill", "noEvent", "pre", "change", "reinit",
+        "sample", "OMC_NO_CLOCK", "OMC_CLOCK", "shiftSample", "backSample", "transition", "initialState", "activeState",
+        "ndims", "size", "DynamicSelect", "scalar", "vector", "matrix", "cat", "actualStream", "inStream", "pure",
+        "Distribution", "Correlation", "rooted", "Connections", "Subtask", "print", "classDirectory", "getInstanceName",
+        "spatialDistribution", "previous", "firstTick", "interval", "OMC_NO_ARGS", "OMC_ARGS", "subSample", "superSample",
+        "hold", "noClock", "ticksInState", "timeInState", "OpenModelica"};
     for (Id<SElement> e : I_.scode.program) {
       const std::string_view n = in_.str(I_.scode.elems[e].name);
-      if (n == "Clock" || n == "StateSelect" || n == "Uncertainty" || n == "AssertionLevel" || n == "Connections" ||
-          n == "OpenModelica")
+      if (std::find(std::begin(kBuiltinTop), std::end(kBuiltinTop), n) != std::end(kBuiltinTop))
         set_unsupported("class name collides with builtin");
     }
     // 实例化 partial 根类（NFInst.checkPartialClass，PartialClass1）→ omc 报错。别名派生自 partial 类也是 partial
@@ -2112,7 +2126,7 @@ class Flattener {
       const ExprKind rk = result_.model.exprs[rhs].kind;
       const bool arr_call = rk == ExprKind::Call || rk == ExprKind::TupleElement;
       const std::vector<std::int64_t> rs = expr_shape(rhs);
-      bool ok = rs.size() == ls.size() && elem_kinds_compat(ta, expr_elem_kind(rhs)) &&
+      bool ok = rs.size() == ls.size() && elem_kinds_compat(ta, expr_elem_kind(rhs)) && !enum_lits_differ(rhs, lty) &&
                 (rk != ExprKind::Array || array_leaves_ok(rhs, ls.size(), ta));
       for (std::size_t k = 0; ok && k < ls.size(); ++k) ok = ls[k] >= 1 && (rs[k] == ls[k] || (arr_call && rs[k] < 0));
       if (!ok) { set_unsupported("algorithm assignment type mismatch"); return {}; }
@@ -2125,9 +2139,13 @@ class Flattener {
         if (re.kind == ExprKind::Array || re.kind == ExprKind::Tuple) { set_unsupported("algorithm array/tuple rhs"); return {}; }
         tb = re.ty.kind;
       }
-      // 整型→实型强制（Comment1 `x:=1`→`x:=1.0`）；其余类型不符 → SKIP（StatementInvalidType1 `Real:=String`）。
-      if (ta == TypeKind::Real && tb == TypeKind::Integer) rhs = to_real(rhs);
-      else if (ta != tb) { set_unsupported("algorithm assignment type mismatch"); return {}; }
+      // 整型→实型强制（Comment1 `x:=1`→`x:=1.0`）；其余类型不符 → SKIP（StatementInvalidType1 `Real:=String`）；枚举比字面量表
+      //（见 enum_lits_differ；ENQ 探针 ENQ22，此前照出）。
+      if (ta == TypeKind::Real && tb == TypeKind::Integer) rhs = assign_cast_tuple(to_real(rhs));
+      else if (ta != tb || (ta == TypeKind::Enumeration && enum_lits_differ(rhs, lty))) {
+        set_unsupported("algorithm assignment type mismatch");
+        return {};
+      }
     }
     FlatStatement fs;
     fs.kind = FlatStmtKind::Assign;
@@ -2672,6 +2690,20 @@ class Flattener {
   bool is_tuple_target(Id<Exp> lhs) const {
     return lhs.is_valid() && I_.absyn.exps[lhs].kind == ExpKind::Tuple && I_.absyn.exps[lhs].args.size() >= 2;
   }
+  // 赋值语句右侧取首输出的多输出调用要从 Integer 提到 Real：omc 定型赋值走 TypeCheck.matchTypes_cast 的 TUPLE 支（NFTyping.mo:
+  // 3254-3276 → NFTypeCheck.mo:2562-2579 v1.25.0），转型套在调用上、再取首输出 `y := /*Real*/(g(u))[1]`（IMQ 探针 IMQ14 / IMQ16，此前
+  // 打 `/*Real*/(g(u)[1])`）；绑定 / 方程 / 运算数里调用先被取首输出（Typing.typeExp 的元组下标、matchExpressions_cast 的 TUPLE 支 :1762-1776）再转型，照旧。数组的未核实，原样。
+  Id<Expr> assign_cast_tuple(Id<Expr> rhs) {
+    if (!rhs.is_valid()) return rhs;
+    const Expr c = result_.model.exprs[rhs];   // 拷贝（下面 add）
+    if (c.kind != ExprKind::Cast || c.ty.is_array() || result_.model.exprs[c.a].kind != ExprKind::TupleElement) return rhs;
+    Expr t = result_.model.exprs[c.a];   // 拷贝
+    Expr inner = c;
+    inner.a = t.a;
+    t.a = add(std::move(inner));
+    t.ty = c.ty;
+    return add(std::move(t));
+  }
   // 括号 `(e)`（解析成单元素元组，同 omc 的 Modelica.g）拆到里面的式子：omc 实例化时就拆（NFInst.instExp 的 TUPLE({e}) 支，
   // NFInst.mo:2823 v1.25.0）。
   Id<Exp> strip_paren(Id<Exp> x) const {
@@ -3003,6 +3035,11 @@ class Flattener {
     // 两侧类型不相容（String = Real、Boolean = Real…，Function7）→ omc "Type mismatch in equation" → SKIP。
     auto num = [](TypeKind k) { return k == TypeKind::Integer || k == TypeKind::Real; };
     if (ta != tb && !(num(ta) && num(tb)) && ta != TypeKind::Unknown && tb != TypeKind::Unknown) {
+      set_unsupported("equation type mismatch");
+      return;
+    }
+    // 两侧枚举的字面量表不同（ENQ 探针 ENQ12，此前照出；见 enum_lits_differ）→ 同上。
+    if (ta == TypeKind::Enumeration && enum_lits_differ(a, b)) {
       set_unsupported("equation type mismatch");
       return;
     }
@@ -5087,6 +5124,11 @@ class Flattener {
       if ((cty.kind == TypeKind::Real || cty.kind == TypeKind::Integer) &&
           (bk == TypeKind::String || bk == TypeKind::Boolean))
         set_unsupported("binding type mismatch");
+      // 枚举值绑给内建标量类型的组件（`Integer g = f(L.'1')`，f 返回枚举、常量调用求值成字面量后此前照出；omc "Type mismatch in
+      // binding"，ENQ 探针 ENQ8）同。
+      if (bk == TypeKind::Enumeration && (cty.kind == TypeKind::Real || cty.kind == TypeKind::Integer ||
+                                          cty.kind == TypeKind::Boolean || cty.kind == TypeKind::String))
+        set_unsupported("binding type mismatch");
       // parameter / constant 绑定引用连续 / 离散变量或 time → omc HIGHER_VARIABILITY_BINDING（DisturbedResistance1
       // `extends Resistor(R = 1.0 + 0.1*sin(time))`）。
       {
@@ -5103,6 +5145,10 @@ class Flattener {
       // 字面量名核对（类型别名写法会被保守 SKIP）。
       if (cty.kind == TypeKind::Enumeration && result_.model.exprs[binding].kind == ExprKind::EnumLit &&
           !enum_value_of(binding, cty))
+        set_unsupported("enumeration binding type mismatch");
+      // 别的绑定式（if 表达式、引用、调用）：字面量表不同（见 enum_lits_differ；ENQ 探针 ENQ11，此前照出）→ 同上。
+      if (cty.kind == TypeKind::Enumeration && result_.model.exprs[binding].kind != ExprKind::EnumLit &&
+          enum_lits_differ(binding, cty))
         set_unsupported("enumeration binding type mismatch");
       if (cty.kind == TypeKind::Real) binding = to_real(binding);   // `= 2` → `= 2.0`
     }
@@ -7086,6 +7132,7 @@ class Flattener {
     Expr r;
     r.kind = ExprKind::EnumLit;
     r.ty = Type::of(TypeKind::Enumeration);
+    r.ty.enum_literals = {in_.intern("warning"), in_.intern("error")};   // 见 enum_lits_of
     r.enum_path = {c.parts[0].name, c.parts[1].name};
     r.enum_index = lit == "warning" ? 1 : 2;
     return add(std::move(r));
@@ -7100,6 +7147,37 @@ class Flattener {
     const std::vector<Symbol>& ep = e.enum_path;
     return ep.size() >= 2 && !cty.enum_path.empty() && ep[ep.size() - 2] == cty.enum_path.back() &&
            std::find(cty.enum_literals.begin(), cty.enum_literals.end(), ep.back()) != cty.enum_literals.end();
+  }
+  // 枚举式的类型的字面量表——omc 判两个枚举类型相容只比字面量表（matchEnumerationTypes，NFTypeCheck.mo:2171-2183 v1.25.0；字面量表
+  // 相同、类型名不同的照收，ENQ 探针 ENQ7 / ENQ19 / ENQ20）。组件 / 函数变量 / 构造函数输入 / 函数输出的类型里有，书写的字面量建时
+  // 带上（make_enum_lit / fn_enum_lit / assertion_level_lit；求值得来的 literal_of 按打印路径查，cval_enum_lits）；if 取知道的那支，
+  // 数组字面量 / 常量表取元素取首个元素的。查不到的（模型里声明的枚举求值得来的）→ 不知道（nullopt，调用方不核）。
+  std::optional<std::vector<Symbol>> enum_lits_of(Id<Expr> id) const {
+    const Expr& x = result_.model.exprs[id];
+    switch (x.kind) {
+      case ExprKind::IfExp: {
+        std::optional<std::vector<Symbol>> b = enum_lits_of(x.b);
+        return b ? b : enum_lits_of(x.c);
+      }
+      case ExprKind::Array: return x.args.empty() ? std::nullopt : enum_lits_of(x.args[0]);
+      case ExprKind::Subscript: return enum_lits_of(x.a);
+      default: break;
+    }
+    const Type et = x.ty.element_type();
+    if (et.kind != TypeKind::Enumeration || et.enum_literals.empty()) return std::nullopt;
+    return et.enum_literals;
+  }
+  // 两个枚举式（或式与目标类型 t）的字面量表都知道且不同 → omc 报类型不符（TypeCheck.matchTypes 的 ENUMERATION 支；ENQ 探针 ENQ1-ENQ6、
+  // ENQ9、ENQ11-ENQ15、ENQ18，此前照出）。
+  bool enum_lits_differ(Id<Expr> a, Id<Expr> b) const {
+    const std::optional<std::vector<Symbol>> la = enum_lits_of(a), lb = enum_lits_of(b);
+    return la && lb && *la != *lb;
+  }
+  bool enum_lits_differ(Id<Expr> a, const Type& t) const {
+    const Type et = t.element_type();
+    if (et.kind != TypeKind::Enumeration || et.enum_literals.empty()) return false;
+    const std::optional<std::vector<Symbol>> la = enum_lits_of(a);
+    return la && *la != et.enum_literals;
   }
   Id<Expr> make_enum_lit(const Cref& c, NodeId scope, const std::vector<Symbol>& prefix) {
     for (const CrefPart& p : c.parts)
@@ -7122,6 +7200,7 @@ class Flattener {
       for (std::size_t i = 0; i < ed->enum_items.size(); ++i)
         if (ed->enum_items[i].literal == lit) { r.enum_index = static_cast<std::int64_t>(i) + 1; break; }
       if (r.enum_index == 0) { set_unsupported("unknown enumeration literal"); return lit_int(0); }
+      for (const SEnumItem& it : ed->enum_items) r.ty.enum_literals.push_back(it.literal);   // 见 enum_lits_of
     }
     return add(std::move(r));
   }
@@ -7515,6 +7594,18 @@ class Flattener {
       rec->push_back({name, std::move(v)});
     }
   };
+  // 类型维（枚举）的声明：类型名 + 字面量表（空 = 整数维），供 const_sub_specs / sub_indices / fn_outer_value 核对下标。type_dim：
+  // 维是类型名（枚举 / Boolean / 别的类，见 scode_dim_type），下标须是该类型的值；字面量表空的（Boolean 等）未做。
+  struct EnumDim {
+    Symbol type_name;
+    std::vector<Symbol> lits;
+    bool type_dim = false;
+  };
+  // 求得的下标值 v 是枚举维 ed 的标签：类型名与序数处的字面量都对上。
+  static bool enum_dim_label(const CVal& v, const EnumDim& ed) {
+    return v.k == CVal::K::Enum && v.epath.size() >= 2 && v.epath[v.epath.size() - 2] == ed.type_name && v.i >= 1 &&
+           static_cast<std::size_t>(v.i) <= ed.lits.size() && ed.lits[static_cast<std::size_t>(v.i) - 1] == v.epath.back();
+  }
 
  public:
   // 两遍压平之间带过去的（第一遍末尾收下，见 flatten() / snapshot_carry）：都是 key 串 → 值，不指向第一遍的 arena。
@@ -7685,6 +7776,81 @@ class Flattener {
     }
     return std::nullopt;
   }
+  // 枚举值 v 的类型的字面量表：打印路径的类型段（scode_enum_value 只给包里 / 顶层的枚举定路径——从顶层查得到；内建的按名）。
+  // 路径空（模型里声明的）/ 查不到 → nullopt。
+  std::optional<std::vector<Symbol>> cval_enum_lits(const CVal& v) {
+    if (v.k != CVal::K::Enum || v.epath.size() < 2) return std::nullopt;
+    const std::vector<Symbol> tparts(v.epath.begin(), v.epath.end() - 1);
+    const std::string key = path_key(tparts);
+    if (const auto c = enum_path_lits_.find(key); c != enum_path_lits_.end()) return c->second;
+    const QuietLookup q(*this, true);
+    ScodeScope ds;
+    const Id<SElement> ec = resolve_class_path(tparts, /*leading_dot=*/true, ScodeScope{}, ds);
+    const SClassDef* ed = nullptr;
+    if (ec.is_valid() && I_.scode.elems[ec].kind == SElementKind::Class &&
+        I_.scode.elems[ec].def.kind == SClassDefKind::Enumeration)
+      ed = &I_.scode.elems[ec].def;
+    else if (!ec.is_valid() && tparts.size() == 1)
+      ed = builtin_enum_def(tparts[0]);
+    std::optional<std::vector<Symbol>> lits;
+    if (ed) {
+      lits.emplace();
+      for (const SEnumItem& it : ed->enum_items) lits->push_back(it.literal);
+    }
+    enum_path_lits_.emplace(key, lits);
+    return lits;
+  }
+  std::unordered_map<std::string, std::optional<std::vector<Symbol>>> enum_path_lits_;   // 见 cval_enum_lits
+  // 数组值的叶里有枚举值时，各叶须都是枚举、字面量表（认得出的）相同：omc 定型数组字面量时报 NF_ARRAY_TYPE_MISMATCH（typeArray，
+  // NFTyping.mo:2184-2249 v1.25.0；ENQ 探针 ENQ14 `{L.'1', S.s1}`，此前值路照求）。
+  bool cval_enum_leaves_ok(const CVal& arr) {
+    bool any_enum = false, any_other = false, ok = true;
+    std::optional<std::vector<Symbol>> first;
+    auto visit = [&](auto& self, const CVal& x) -> void {
+      if (!ok) return;
+      if (x.k == CVal::K::Array) {
+        if (x.arr)
+          for (const CVal& e : *x.arr) self(self, e);
+        return;
+      }
+      if (x.k != CVal::K::Enum) { any_other = true; return; }
+      any_enum = true;
+      if (std::optional<std::vector<Symbol>> l = cval_enum_lits(x)) {
+        if (!first) first = std::move(l);
+        else if (*first != *l) ok = false;
+      }
+    };
+    visit(visit, arr);
+    return ok && !(any_enum && any_other);
+  }
+  // 值 v（标量或数组）的各叶都是字面量表为 lits 的枚举值（omc 判枚举相容只比字面量表，matchEnumerationTypes NFTypeCheck.mo:2171-2183
+  // v1.25.0）；叶的字面量表认不出的不核。不是枚举值（Integer 给枚举输入）= 类型不符。
+  bool cval_enum_ok(const CVal& v, const std::vector<Symbol>& lits) {
+    if (v.k == CVal::K::Array) {
+      if (v.arr)
+        for (const CVal& x : *v.arr)
+          if (!cval_enum_ok(x, lits)) return false;
+      return true;
+    }
+    if (v.k != CVal::K::Enum) return false;
+    const std::optional<std::vector<Symbol>> vl = cval_enum_lits(v);
+    return !vl || *vl == lits;
+  }
+  // 声明 c（类型在 scope 里解析）是枚举类型时其字面量表（见 scode_enum_type，quiet；内建标量类型直接否），否则 nullptr。值路核实参 /
+  // 字段值用（每次求值都问，按声明元素缓存）。
+  const std::vector<Symbol>* decl_enum_lits(Id<SElement> c, const ScodeScope& scope) {
+    auto it = decl_enum_lits_.find(c.raw);
+    if (it == decl_enum_lits_.end()) {
+      std::optional<std::vector<Symbol>> lits;
+      const SElement e = I_.scode.elems[c];   // 拷贝
+      TypeKind tk;
+      if (e.type.leading_dot || !builtin_scalar_type_kind(e.type.path, tk))
+        if (const std::optional<Type> et = scode_enum_type(e, scope, /*quiet=*/true)) lits = et->enum_literals;
+      it = decl_enum_lits_.emplace(c.raw, std::move(lits)).first;
+    }
+    return it->second ? &*it->second : nullptr;
+  }
+  std::unordered_map<std::uint32_t, std::optional<std::vector<Symbol>>> decl_enum_lits_;   // 见 decl_enum_lits
   // 内建枚举的字面量 `StateSelect.default` / `AssertionLevel.warning` 的值：1 基序数 + 打印路径（内建类型在顶层，路径即书写名）。
   // 用户定义的枚举见 scode_enum_value。
   std::optional<CVal> builtin_enum_value(const Cref& c) {
@@ -7942,6 +8108,11 @@ class Flattener {
     if (!el.is_valid() || I_.scode.elems[el].kind != SElementKind::Component) return std::nullopt;
     const SVariability v = I_.scode.elems[el].attr.var;
     if (v != SVariability::Const && !(allow_param && v == SVariability::Param)) return std::nullopt;
+    // 组件段的下标按组件声明的各维的类型取（见 sub_indices）：类型名维（枚举）上的枚举值按序数取；Integer 下标落在类型名维上 omc
+    // 报 "Subscript '2' has type Integer, expected type enumeration …"（typeSubscript → checkSubscriptType，NFTyping.mo:2104-2182
+    // v1.25.0；ENI 探针 ENI4 / ENI8 / ENI9 / ENI12 / ENI13、ENP17 / ENP18 此前照出）→ 求不出，调用方走定型路照维的类型核。
+    std::vector<EnumDim> edims;
+    if (!c.parts[k].subscripts.empty()) edims = elem_dim_types(el, cur);
     if (used && v == SVariability::Param) used->insert(el.raw);
     // 没有整体绑定、按修饰逐字段给值的记录常量，取的是修饰里带绑定的字段（`constant DataRecord H2O(MM = 0.01801528, …,
     // R_s = R_NASA_2002 / H2O.MM)`，MSL IdealGases.Common.SingleGasesData）：直接求那个绑定。omc 的字段是各自带绑定的组件，取
@@ -7962,7 +8133,9 @@ class Flattener {
               !rec_restr(I_.scode.elems[rec].restriction) || !record_fields_ex(rec, rds, rfs, false, 0, true))
             break;
           Id<SElement> fdecl;
-          for (const RecField& f : rfs) if (I_.scode.elems[f.f].name == s.ident) fdecl = f.f;
+          ScodeScope fds;
+          for (const RecField& f : rfs)
+            if (I_.scode.elems[f.f].name == s.ident) { fdecl = f.f; fds = f.fscope; }
           if (!fdecl.is_valid()) break;
           const std::vector<Symbol>* saved = ceval_prefix_;
           const int saved_frame = ceval_frame_;
@@ -7975,7 +8148,8 @@ class Flattener {
           if (!fv) break;
           Cref rest;
           rest.parts.assign(c.parts.begin() + static_cast<std::ptrdiff_t>(k) + 1, c.parts.end());
-          return cval_path(*fv, rest, scope, depth, /*map_arrays=*/true);
+          const std::vector<EnumDim> fdims = rest.parts[0].subscripts.empty() ? std::vector<EnumDim>{} : elem_dim_types(fdecl, fds);
+          return cval_path(*fv, rest, scope, depth, /*map_arrays=*/true, &fdims);
         }
       }
     }
@@ -7983,7 +8157,7 @@ class Flattener {
     if (!root) return std::nullopt;
     Cref rest;
     rest.parts.assign(c.parts.begin() + static_cast<std::ptrdiff_t>(k), c.parts.end());
-    return cval_path(*root, rest, scope, depth, /*map_arrays=*/true);
+    return cval_path(*root, rest, scope, depth, /*map_arrays=*/true, &edims);
   }
   // 包 / 类里 constant 组件的值（被引常量的声明在其自身作用域求值：书写处前缀 / 实例帧不适用）：有绑定 → 求值并按声明
   // 类型强转；无绑定的记录 / 记录数组 → 组件修饰 + 记录字段缺省逐字段构造（evalComponentBinding 对无绑定记录按字段绑定
@@ -8122,6 +8296,7 @@ class Flattener {
           els.push_back(std::move(*v));
         }
         CVal arr = CVal::Arr(std::move(els));
+        if (!cval_enum_leaves_ok(arr)) return std::nullopt;
         // Integer 与 Real 混排：定型时整个数组取 Real、Integer 元素转成 Real 字面量（typeArray → TypeCheck.matchExpressions，
         // Expression.typeCast :1180-1200 v1.25.0）——之后取负逐元素作用在 0.0 上得 -0.0（DZ 探针 DZ22 `-{0, p, 0}` → `-0.0`；MSL
         // CylinderBase 的 `rRod2_ib = -{0, pistonLength, 0}`）。
@@ -9168,8 +9343,12 @@ class Flattener {
     if (tn == "String") return v.k == CVal::K::Str ? std::optional<CVal>(v) : std::nullopt;
     return v;
   }
-  // 下标值：整数 → {i}；`:` → 1..n；范围 / 整数数组 → 其元素。越界 / 非整数 → nullopt。
-  std::optional<std::vector<std::int64_t>> sub_indices(Id<Exp> s, std::int64_t n, const ScodeScope& scope, int depth) {
+  // 下标值：整数 → {i}；`:` → 1..n；范围 / 整数数组 → 其元素。越界 / 非整数 → nullopt。ed：该维的类型（见 scode_dim_type）——类型名
+  // 维的下标须是该枚举类型的值、按序数取（applyIndexExpArray 的 toInteger 认 ENUM_LITERAL，NFExpression.mo:1454-1478 / :1876-1885
+  // v1.25.0；ENP 探针 ENP7 / ENP21 / ENP43 的常量调用、MSL Digital 的 `T.X01Table[x]`），整数下标落在类型名维上 / 字面量表认不出的
+  // 类型维（Boolean 等）→ nullopt（omc 定型报 "Subscript '2' has type Integer, expected type enumeration …"，ENI 探针）。
+  std::optional<std::vector<std::int64_t>> sub_indices(Id<Exp> s, std::int64_t n, const ScodeScope& scope, int depth,
+                                                       const EnumDim* ed = nullptr) {
     std::vector<std::int64_t> out;
     if (I_.absyn.exps[s].kind == ExpKind::Colon) {
       for (std::int64_t i = 1; i <= n; ++i) out.push_back(i);
@@ -9180,6 +9359,11 @@ class Flattener {
     std::optional<CVal> sv = eval_scode(s, scope, depth + 1, true);
     eval_end_ = saved_end;
     if (!sv) return std::nullopt;
+    if (ed && ed->type_dim) {
+      if (ed->lits.empty() || !enum_dim_label(*sv, *ed) || sv->i > n) return std::nullopt;
+      out.push_back(sv->i);
+      return out;
+    }
     std::vector<CVal> flat;
     if (is_arr(*sv)) flatten_cval_array(*sv, flat); else flat.push_back(*sv);
     for (const CVal& c : flat) {
@@ -9189,22 +9373,24 @@ class Flattener {
     return out;
   }
   // 按下标取值（NFCeval evalSubscriptedExp / applySubscripts）：整数下标降一维，`:` / 范围保留该维。未赋值占位 → nullopt。
+  // edims：各维的类型（见 sub_indices；空 / 缺 = 整数维）。
   std::optional<CVal> cval_index(const CVal& v, const std::vector<Id<Exp>>& subs, std::size_t k, const ScodeScope& scope,
-                                 int depth) {
+                                 int depth, const std::vector<EnumDim>* edims = nullptr) {
     if (k == subs.size()) {
       if (v.k != CVal::K::Undef) return v;
       undef_read_ = true;
       return std::nullopt;
     }
     if (!is_arr(v)) return std::nullopt;
-    std::optional<std::vector<std::int64_t>> idx = sub_indices(subs[k], static_cast<std::int64_t>(v.arr->size()), scope, depth);
+    std::optional<std::vector<std::int64_t>> idx = sub_indices(subs[k], static_cast<std::int64_t>(v.arr->size()), scope, depth,
+                                                               edims && k < edims->size() ? &(*edims)[k] : nullptr);
     if (!idx) return std::nullopt;
     const Exp& se = I_.absyn.exps[subs[k]];
     const bool scalar_sub = se.kind != ExpKind::Colon && se.kind != ExpKind::Range && se.kind != ExpKind::Array;
-    if (scalar_sub) return cval_index((*v.arr)[static_cast<std::size_t>(idx->front() - 1)], subs, k + 1, scope, depth);
+    if (scalar_sub) return cval_index((*v.arr)[static_cast<std::size_t>(idx->front() - 1)], subs, k + 1, scope, depth, edims);
     std::vector<CVal> out;
     for (std::int64_t i : *idx) {
-      std::optional<CVal> x = cval_index((*v.arr)[static_cast<std::size_t>(i - 1)], subs, k + 1, scope, depth);
+      std::optional<CVal> x = cval_index((*v.arr)[static_cast<std::size_t>(i - 1)], subs, k + 1, scope, depth, edims);
       if (!x) return std::nullopt;
       out.push_back(std::move(*x));
     }
@@ -10200,7 +10386,7 @@ class Flattener {
     // Real 目标的数组字面量逐叶转（混合 Integer / Real 叶也要转，FuncUnknownDim3 `{time, 1}` → `{time, 1.0}`）。
     if (tk == TypeKind::Real && result_.model.exprs[a].kind == ExprKind::Array && (ak == TypeKind::Real || ak == TypeKind::Integer))
       return coerce_deep(a, TypeKind::Real);
-    if (tk == ak) return a;
+    if (tk == ak) return tk == TypeKind::Enumeration && enum_lits_differ(a, target) ? Id<Expr>{} : a;   // 枚举比字面量表
     if (tk != TypeKind::Real || ak != TypeKind::Integer) return {};
     if (ash.empty()) return to_real(a);
     if (fn_scope_) return fn_real_operand(a);   // fill 调用转填充值；其余 Integer 数组 → invalid
@@ -10496,8 +10682,11 @@ class Flattener {
       std::vector<Id<Exp>> tdims;
       std::vector<std::size_t> tbefore;
       if (!builtin_scalar_type_kind(I_.scode.elems[leaf].type.path, tk) &&
-          !(fn_derived_scalar(I_.scode.elems[leaf], lscope, tk, tchain, tdims, tbefore) && tdims.empty()))
-        return {};
+          !(fn_derived_scalar(I_.scode.elems[leaf], lscope, tk, tchain, tdims, tbefore) && tdims.empty())) {
+        // 枚举类型的常量（MSL Digital Tables 的 `constant Logic X01Table[L]`）：值是枚举字面量（全路径，见 scode_enum_value）。
+        if (!scode_enum_type(I_.scode.elems[leaf], lscope)) return {};
+        tk = TypeKind::Enumeration;
+      }
     } else if (n != 1 || pkg_scope(rscope) || inh_tainted(rscope)) {
       return {};
     }
@@ -10554,13 +10743,42 @@ class Flattener {
     if (!whole.is_valid() || result_.unsupported) return {};
     if (subs.empty()) return whole;
     // 下标：`:` 整维；不引用函数局部的按常量求（`end` = 所在维大小），须是界内的整数；引用函数局部的照定型，须是标量 Integer 式。
+    // 组件段的下标落在组件声明的各维上：类型名维（枚举 / Boolean）的下标须是该类型的值（typeSubscript → checkSubscriptType，
+    // NFTyping.mo:2104-2182 v1.25.0；ENP 探针 ENP17 / ENP19、ENI13 的 Integer 下标 omc 报 "Subscript '2' has type Integer, expected
+    // type enumeration …"，此前照出）：枚举字面量按序数取元素、函数局部的枚举式留成符号（applyIndexExpArray 的 toInteger 认
+    // ENUM_LITERAL，NFExpression.mo:1454-1478 / :1876-1885；MSL Digital RAM 的 `T.X01Table[addr[i]]` → `{…}[addr[i]]`，ENP1-ENP5）。
+    // Boolean 维（字面量表认不出的类型维）未做；记录字段段上的类型维未核（ponytail：按整数维认）。
     const std::vector<std::int64_t> shape = cval_shape(*v);
+    std::vector<EnumDim> edims;
+    {
+      Cref root = base;
+      root.parts.erase(root.parts.begin() + static_cast<std::ptrdiff_t>(ci) + 1, root.parts.end());
+      edims = qual_const_enum_dims(root, Inst::empty_node(), /*quiet=*/true);
+      if (result_.unsupported) return {};
+    }
+    const std::size_t ncomp = c.parts[ci].subscripts.size();
     std::vector<CSub> specs;
     bool symbolic = false;
     for (std::size_t j = 0; j < subs.size(); ++j) {
       CSub cs;
       if (I_.absyn.exps[subs[j]].kind == ExpKind::Colon) {
         cs.k = CSub::K::Whole;
+        specs.push_back(cs);
+        continue;
+      }
+      if (j < ncomp && j < edims.size() && edims[j].type_dim) {
+        const EnumDim& ed = edims[j];
+        if (ed.lits.empty()) return {};
+        if (!exp_refs_fn_locals(subs[j])) {
+          const std::optional<CVal> sv = eval_scode(subs[j], *fn_scope_, 0, /*allow_param=*/false);
+          if (result_.unsupported || !sv || !enum_dim_label(*sv, ed)) return {};
+          cs.e = literal_of(*sv);
+        } else {
+          const Id<Expr> se = simplify_expr(inst_exp(subs[j], Inst::empty_node(), {}));
+          if (result_.unsupported || !has_enum_type(se, ed.type_name, ed.lits)) return {};
+          cs.e = se;
+          symbolic = true;
+        }
         specs.push_back(cs);
         continue;
       }
@@ -10652,14 +10870,50 @@ class Flattener {
     r.ty.kind = TypeKind::Complex;
     return add(std::move(r));
   }
+  // 声明 c 的类型（在 scope 里解析）是枚举 → 函数变量 / 记录构造函数输入的类型：打成字面量表 `enumeration(No, Uni, Point)`
+  //（DAEDumpTpl.dumpType 的 T_ENUMERATION 支只打字面量、不打属性，DAEDumpTpl.tpl:329-331 v1.25.0；EF 探针 q2、ENR 探针 ENR1 记录
+  // 构造函数 `input enumeration(RealToken, …) tokenType`）。enum_path 只记类名：has_enum_type 按类名 + 字面量表认同一个类型（omc 只比
+  // 字面量表，matchEnumerationTypes NFTypeCheck.mo:2171-2183，ymc 更严 → 不一致的 SKIP）。内建枚举 StateSelect / AssertionLevel
+  //（作用域里查不到同名类时，NFBuiltin 的顶层类）同（ENF19 `input enumeration(never, avoid, default, prefer, always) s`）。不是 → nullopt。
+  // quiet：只为分类（见 QuietLookup）。
+  std::optional<Type> scode_enum_type(const SElement& c, const ScodeScope& scope, bool quiet = false) {
+    const QuietLookup q(*this, quiet);
+    ScodeScope es;
+    const Id<SElement> ec = resolve_class_path(c.type.path, c.type.leading_dot, scope, es);
+    const SClassDef* ed = nullptr;
+    if (ec.is_valid() && I_.scode.elems[ec].kind == SElementKind::Class &&
+        I_.scode.elems[ec].def.kind == SClassDefKind::Enumeration)
+      ed = &I_.scode.elems[ec].def;
+    else if (!ec.is_valid() && !result_.unsupported && !c.type.leading_dot && c.type.path.size() == 1)
+      ed = builtin_enum_def(c.type.path[0]);
+    if (!ed) return std::nullopt;
+    Type et;
+    et.kind = TypeKind::Enumeration;
+    et.enum_path = {ec.is_valid() ? I_.scode.elems[ec].name : c.type.path[0]};
+    for (const SEnumItem& it : ed->enum_items) et.enum_literals.push_back(it.literal);
+    return et;
+  }
   // 函数体里的枚举字面量（`P.GT.Uni`、MultiBody 的 `GravityTypes.UniformGravity`）：类型名按函数定义处作用域解析，打印路径 =
   // 枚举类的全路径（包按类名逐段，同 enum_type_path 的包规则；EF 探针 q2 `t == P.GT.Uni`）。枚举类不在包里（模型里声明的）
-  // 的路径未核实 → invalid（调用方 SKIP）。
+  // 的路径未核实 → invalid（调用方 SKIP）。内建枚举（作用域里查不到同名类）打书写名 `StateSelect.prefer`（同模型语境的
+  // make_enum_lit；ENF19 / ENB6 探针）。
   Id<Expr> fn_enum_lit(const std::vector<Symbol>& names, bool leading_dot) {
     if (names.size() < 2) return {};
     const std::vector<Symbol> tparts(names.begin(), names.end() - 1);
     ScodeScope ds;
     const Id<SElement> ec = resolve_class_path(tparts, leading_dot, *fn_scope_, ds);
+    if (!ec.is_valid() && !result_.unsupported && !leading_dot && tparts.size() == 1)
+      if (const SClassDef* bd = builtin_enum_def(tparts[0])) {
+        Expr r;
+        r.kind = ExprKind::EnumLit;
+        r.ty = Type::of(TypeKind::Enumeration);
+        r.enum_path = names;
+        for (std::size_t i = 0; i < bd->enum_items.size(); ++i) {
+          if (bd->enum_items[i].literal == names.back()) r.enum_index = static_cast<std::int64_t>(i) + 1;
+          r.ty.enum_literals.push_back(bd->enum_items[i].literal);   // 见 enum_lits_of
+        }
+        return r.enum_index == 0 ? Id<Expr>{} : add(std::move(r));
+      }
     if (!ec.is_valid() || I_.scode.elems[ec].kind != SElementKind::Class ||
         I_.scode.elems[ec].def.kind != SClassDefKind::Enumeration)
       return {};
@@ -10673,8 +10927,10 @@ class Flattener {
     r.enum_path.push_back(I_.scode.elems[ec].name);
     r.enum_path.push_back(names.back());
     const std::vector<SEnumItem>& items = I_.scode.elems[ec].def.enum_items;
-    for (std::size_t i = 0; i < items.size(); ++i)
+    for (std::size_t i = 0; i < items.size(); ++i) {
       if (items[i].literal == names.back()) r.enum_index = static_cast<std::int64_t>(i) + 1;
+      r.ty.enum_literals.push_back(items[i].literal);   // 见 enum_lits_of
+    }
     if (r.enum_index == 0) return {};
     return add(std::move(r));
   }
@@ -11462,7 +11718,8 @@ class Flattener {
             }
             const Type lt = result_.model.exprs[lhs[i]].ty;
             const Type& ot = otys[i];
-            bool same = lt.element_type().kind == ot.element_type().kind && lt.is_array() == ot.is_array();
+            bool same = lt.element_type().kind == ot.element_type().kind && lt.is_array() == ot.is_array() &&
+                        !enum_lits_differ(lhs[i], ot);   // 枚举比字面量表（见 enum_lits_differ）
             if (same && lt.is_array()) {
               const std::vector<std::int64_t> ls = expr_shape(lhs[i]);
               same = ls.size() == ot.dims.size();
@@ -11500,7 +11757,7 @@ class Flattener {
         const Id<Expr> lhs = inst_exp(lhs_x, Inst::empty_node(), {});
         if (result_.unsupported) return {};
         const Type lty = result_.model.exprs[lhs].ty;   // 拷贝：fn_exp 会往 arena add（不跨 add 持引用）
-        const Id<Expr> rhs = fn_exp(st.b, lty);
+        const Id<Expr> rhs = assign_cast_tuple(fn_exp(st.b, lty));
         if (result_.unsupported) return {};
         if (!rhs.is_valid()) { set_unsupported("function assignment type mismatch"); return {}; }
         // 整记录赋值 `r := R(…)` / `r := r2`：右侧须是同一记录类（构造调用的实例类定义 / 记录局部）——coerce_to_param 只比
@@ -12143,8 +12400,8 @@ class Flattener {
   // ——字段的属性修饰（unit…）、注释、短类型带的属性都不打（RC 探针 r10 / r22 / r30：`L x[2] "pos"` → `input Real[2] x;`、
   // `Real x(unit = "m") = 2` → `input Real x = 2.0;`）；维照函数变量的规则（fn_var_dims：字面量 / 只引常量的求成整数，引用别的
   // 字段的照写，r31 `input Real[n] b`）。constant 字段照样是输入（单测 YmcRec2 `input Real c = 5.0`；RC 探针 r32 的位置实参落到
-  // c 上）；final 字段是构造函数局部（omc 打成 protected，RecordBinding6/7）、嵌套记录 / 枚举
-  // 字段未做 → nullopt。
+  // c 上）；final 字段是构造函数局部（omc 打成 protected，RecordBinding6/7）、嵌套记录字段未做 → nullopt。枚举字段见
+  // scode_enum_type。
   std::optional<std::size_t> emit_record_ctor(Id<SElement> rec, const ScodeScope& rscope, const std::vector<Symbol>& path) {
     for (std::size_t i = 0; i < result_.model.functions.size(); ++i)
       if (result_.model.functions[i].name == path) return i;
@@ -12162,8 +12419,15 @@ class Flattener {
       std::vector<std::pair<Id<SMod>, ScodeScope>> chain;
       std::vector<Id<Exp>> td;
       std::vector<std::size_t> before;
-      if (!builtin_scalar_type_kind(f.type.path, tk) && !fn_derived_scalar(f, rf.fscope, tk, chain, td, before))
-        return std::nullopt;
+      if (!builtin_scalar_type_kind(f.type.path, tk) && !fn_derived_scalar(f, rf.fscope, tk, chain, td, before)) {
+        // 枚举字段（MSL Utilities.Types.TokenValue 的 `TokenType tokenType`）：输入打字面量表（scode_enum_type），缺省打字面量的
+        // 全路径、字段的属性修饰不打（同别的字段；ENR 探针 ENR1 / ENR7 / ENR13 / ENR16）。
+        const std::optional<Type> et = scode_enum_type(f, rf.fscope);
+        if (!et) return std::nullopt;
+        func_params_[f.name.id] = *et;
+        tdims[f.name.id] = {};
+        continue;
+      }
       func_params_[f.name.id] = Type::of(tk);
       tdims[f.name.id] = std::move(td);
     }
@@ -12297,6 +12561,10 @@ class Flattener {
   // 递归）与形参 / 局部的绑定。嵌在运算里的（`y := g(x) + 1`、`assert(g(x) > 0, …)`）、被 Integer → Real 转型包住的（`y :=
   // gi(n)`，y 是 Real：定型后是 CAST）不算；被调函数的不纯含后标的（传递，与声明先后无关）。IP 探针；MSL Random 的
   // initializeImpureRandom（体里 `setInternalState(rngState, id);`）。
+  // 多输出函数的调用在要单个值的位置定型成 TUPLE_ELEMENT(调用, 1)（赋值右侧 Typing 的 ASSIGNMENT 支 → TypeCheck.matchTypes_cast 的
+  // TUPLE 支，NFTyping.mo:3254-3276、NFTypeCheck.mo:2562-2579 v1.25.0；条件 / 实参同理），也不算——只有无返回值调用语句、元组赋值的
+  // 右侧、形参 / 局部的绑定里还是 CALL（IMQ 探针 IMQ1-IMQ9：`y := g(u)`、`(y) := g(u)`、`if g(u) then` 照打 `function`，`(y, z) :=
+  // g(u)`、`g(u);`、`Real z = g(u)` 打 `impure function`；MSL Digital RAM 的 getMemory 体里 `data := Streams.readLine(…)`）。
   bool fn_marked_impure(const FnRef& fr) {
     if (const auto it = fn_marked_impure_.find(fr.fe.raw); it != fn_marked_impure_.end()) return it->second;
     fn_marked_impure_[fr.fe.raw] = false;   // 求的过程中按纯算（自递归 / 互递归）
@@ -12304,12 +12572,18 @@ class Flattener {
     std::unordered_set<std::uint32_t> seen;
     bool marked = false;
     if (collect_fn_sig(fr.fe, fr.fscope, sig, seen, 0) && !sig.external) {
-      // 顶层式子 x：是调用、被调的不纯、且没被转型包住（real_target：赋值左侧 / 绑定的变量是 Real，被调的首输出是 Integer）。
-      auto top = [&](Id<Exp> x, bool real_target) {
+      // 顶层式子 x：是调用、被调的不纯、且没被转型包住（real_target：赋值左侧 / 绑定的变量是 Real，被调的首输出是 Integer）、
+      // 也没被取首输出（whole：x 所在的位置多输出调用照旧是 CALL，见上）。
+      auto top = [&](Id<Exp> x, bool real_target, bool whole) {
         if (marked || !x.is_valid() || I_.absyn.exps[x].kind != ExpKind::Call) return;
         const std::optional<FnRef> cr = resolve_fn(I_.absyn.crefs[I_.absyn.exps[x].cref], fr.fscope);
         if (!cr || builtin_equiv(*cr)) return;
         if (real_target && fn_first_output_int(*cr)) return;
+        if (!whole) {
+          FnSig csig;
+          std::unordered_set<std::uint32_t> cseen;
+          if (collect_fn_sig(cr->fe, cr->fscope, csig, cseen, 0) && csig.outputs.size() > 1) return;
+        }
         marked = fn_impure(*cr);
       };
       auto stmts = [&](auto& self, const std::vector<Id<SStatement>>& body) -> void {
@@ -12321,11 +12595,11 @@ class Flattener {
             const Cref& lc = I_.absyn.crefs[I_.absyn.exps[st.a].cref];
             real_lhs = !lc.parts.empty() && fn_var_is_real(lc.parts[0].name, fr.fscope);
           }
-          top(st.a, false);
-          top(st.b, real_lhs);
-          top(st.c, false);
+          top(st.a, false, st.kind == SStmtKind::NoRetCall);
+          top(st.b, real_lhs, st.kind == SStmtKind::Assign && is_tuple_target(st.a));
+          top(st.c, false, false);
           for (const SStmtBranch& br : st.branches) {
-            top(br.cond, false);
+            top(br.cond, false, false);
             self(self, br.body);
           }
           self(self, st.body);
@@ -12336,7 +12610,7 @@ class Flattener {
       for (const std::vector<Id<SElement>>* vs : {&sig.inputs, &sig.outputs, &sig.locals})
         for (Id<SElement> eid : *vs) {
           const SElement& c = I_.scode.elems[eid];
-          if (c.mod.is_valid()) top(I_.scode.mods[c.mod].binding, fn_var_is_real(c.name, fr.fscope));
+          if (c.mod.is_valid()) top(I_.scode.mods[c.mod].binding, fn_var_is_real(c.name, fr.fscope), true);
         }
     }
     fn_marked_impure_[fr.fe.raw] = marked;
@@ -12473,23 +12747,13 @@ class Flattener {
           continue;
         }
       }
-      // 枚举类型（MultiBody World.gravityAcceleration 的 `input Types.GravityTypes gravityType`）：打成字面量表
-      // `enumeration(No, Uni, Point)`（DAEDump 打枚举类型的声明，EF 探针 q2 `input enumeration(No, Uni, Point) t = P.GT.Uni`）。
-      // 带属性修饰的未核实 → SKIP。
-      {
-        ScodeScope es;
-        const Id<SElement> ec = resolve_class_path(c.type.path, c.type.leading_dot, fr.fscope, es);
-        if (ec.is_valid() && I_.scode.elems[ec].kind == SElementKind::Class &&
-            I_.scode.elems[ec].def.kind == SClassDefKind::Enumeration) {
-          if (c.mod.is_valid() && !I_.scode.mods[c.mod].subs.empty())
-            return fn_fail<std::optional<std::size_t>>("attribute modifier on enumeration function variable");
-          Type et;
-          et.kind = TypeKind::Enumeration;
-          et.enum_path = {I_.scode.elems[ec].name};
-          for (const SEnumItem& it : I_.scode.elems[ec].def.enum_items) et.enum_literals.push_back(it.literal);
-          func_params_[c.name.id] = et;
-          continue;
-        }
+      // 枚举类型（MultiBody World.gravityAcceleration 的 `input Types.GravityTypes gravityType`）：打成字面量表（见
+      // scode_enum_type）。带属性修饰的未核实 → SKIP。
+      if (const std::optional<Type> et = scode_enum_type(c, fr.fscope)) {
+        if (c.mod.is_valid() && !I_.scode.mods[c.mod].subs.empty())
+          return fn_fail<std::optional<std::size_t>>("attribute modifier on enumeration function variable");
+        func_params_[c.name.id] = *et;
+        continue;
       }
       // 记录类型（FunctionRecordArg1 `input R r`、FunctionCompOrder4 `R r(x = lx)`）：按类型名打印，构造函数块随之发射
       //（collectClassFunctions → collectTypeFuncs）；字段修饰不打印（只进依赖）。派生类型形参未做。
@@ -14763,6 +15027,9 @@ class Flattener {
       if (!v) return done(std::nullopt);
       v = coerce_cval(*v, f.type.path);
       if (!v) return done(std::nullopt);
+      // 枚举字段的值类型不符（`R(S.s1, 1.0)`，字段是 L：omc 定型构造调用时报错，值路不定型）→ 求不出（见 cval_enum_ok）。
+      if (v->k != CVal::K::Undef)
+        if (const std::vector<Symbol>* el = decl_enum_lits(fid, fscope); el && !cval_enum_ok(*v, *el)) return done(std::nullopt);
       if (v->k != CVal::K::Undef) {
         const std::vector<std::int64_t> vsh = cval_shape(*v);
         bool fits = vsh.size() == fdims.size();
@@ -14801,9 +15068,10 @@ class Flattener {
   // 没取到元素：`data.MM`）逐元素取（cval_field；evalCref → makeRecordFieldBindingFromParent :673-713 的 recordElement）；之后各段
   // 再带下标的（`data.a[2]`：下标该落在各元素的字段上，omc 落到整体的首维，见 NFCeval.subscriptBinding :438-454 v1.25.0）未核实
   // → nullopt。函数求值里的局部记录数组 `r.x` omc 求不出（PKT 探针 PKT24：`xs := r.x` 的调用照留、打函数定义）→ 不取（nullopt）。
+  // edims0：首段的各维的类型（见 cval_index）。
   std::optional<CVal> cval_path(const CVal& root, const Cref& c, const ScodeScope& scope, int depth,
-                                bool map_arrays = false) {
-    std::optional<CVal> cur = cval_index(root, c.parts[0].subscripts, 0, scope, depth);
+                                bool map_arrays = false, const std::vector<EnumDim>* edims0 = nullptr) {
+    std::optional<CVal> cur = cval_index(root, c.parts[0].subscripts, 0, scope, depth, edims0);
     bool mapped = false;
     for (std::size_t k = 1; k < c.parts.size() && cur; ++k) {
       mapped = mapped || cur->k == CVal::K::Array;
@@ -14863,6 +15131,67 @@ class Flattener {
     return r;
   }
 
+  // 函数的输入 / 输出 / 局部里有类型名维（枚举 / Boolean，`Real t[E]`）且在体 / 绑定里被带非 `:` 下标引用：值路的局部按整数下标取、
+  // 核不了下标的类型（omc 定型时核，Integer 下标报 "Subscript '2' has type Integer, expected type enumeration …"；ENF 探针 ENF31 此前
+  // 求值照出）→ 不求，调用方走定型路（函数变量的类型名维未做 → SKIP）。按函数元素缓存。
+  bool fn_type_dim_subscripted(const FnRef& fr, const FnSig& sig) {
+    if (const auto c = fn_tdim_subs_.find(fr.fe.raw); c != fn_tdim_subs_.end()) return c->second;
+    std::unordered_set<std::uint32_t> names;
+    for (const std::vector<Id<SElement>>* vs : {&sig.inputs, &sig.outputs, &sig.locals})
+      for (Id<SElement> eid : *vs) {
+        const auto dsc = sig.decl_scope.find(eid.raw);
+        for (const EnumDim& ed : elem_dim_types(eid, dsc != sig.decl_scope.end() ? dsc->second : fr.fscope))
+          if (ed.type_dim) names.insert(I_.scode.elems[eid].name.id);
+      }
+    bool hit = false;
+    auto walk = [&](auto& self, Id<Exp> id) -> void {
+      if (hit || !id.is_valid()) return;
+      const Exp& x = I_.absyn.exps[id];   // Absyn 只读（这里不合成节点）
+      if (x.kind == ExpKind::CrefExp) {
+        const Cref& cr = I_.absyn.crefs[x.cref];
+        if (!cr.leading_dot && !cr.parts.empty() && names.count(cr.parts[0].name.id))
+          for (Id<Exp> s : cr.parts[0].subscripts) hit = hit || I_.absyn.exps[s].kind != ExpKind::Colon;
+        for (const CrefPart& p : cr.parts)
+          for (Id<Exp> s : p.subscripts) self(self, s);
+        return;
+      }
+      self(self, x.a);
+      self(self, x.b);
+      self(self, x.c);
+      for (Id<Exp> a : x.args) self(self, a);
+      for (const ForIndex& it : x.iters) self(self, it.range);
+    };
+    auto stmts = [&](auto& self, const std::vector<Id<SStatement>>& body) -> void {
+      for (Id<SStatement> sid : body) {
+        const SStatement& st = I_.scode.stmts[sid];   // SCode 只读（flatten 期不增），引用稳定
+        walk(walk, st.a);
+        walk(walk, st.b);
+        walk(walk, st.c);
+        for (const SStmtBranch& br : st.branches) {
+          walk(walk, br.cond);
+          self(self, br.body);
+        }
+        self(self, st.body);
+        self(self, st.else_body);
+      }
+    };
+    if (!names.empty()) {
+      if (sig.alg) stmts(stmts, sig.alg->stmts);
+      for (const std::vector<Id<SElement>>* vs : {&sig.inputs, &sig.outputs, &sig.locals})
+        for (Id<SElement> eid : *vs)
+          if (const Id<SMod> m = I_.scode.elems[eid].mod; m.is_valid()) walk(walk, I_.scode.mods[m].binding);
+    }
+    fn_tdim_subs_[fr.fe.raw] = hit;
+    return hit;
+  }
+  std::unordered_map<std::uint32_t, bool> fn_tdim_subs_;   // 见 fn_type_dim_subscripted
+  // 值路里函数变量 var（签名 sig 里的输入 / 输出）的值 v 合它的枚举类型（不是枚举类型的变量不核）：omc 定型调用 / 函数体时按字面量表
+  // 核（matchEnumerationTypes），值路不定型，在实参 / 缺省入槽、读输出时补核（见 cval_enum_ok）。
+  bool enum_value_fits(const CVal& v, Id<SElement> var, const FnSig& sig, const ScodeScope& fscope) {
+    const auto dsc = sig.decl_scope.find(var.raw);
+    const std::vector<Symbol>* el = decl_enum_lits(var, dsc != sig.decl_scope.end() ? dsc->second : fscope);
+    return !el || cval_enum_ok(v, *el);
+  }
   // 用户函数常量折叠：解析函数（限定名 / 别名链，见 resolve_fn）+ 签名（extends 展开，见 collect_fn_sig），实参按位置 /
   // 命名绑定输入，缺省取默认（别名修饰优先；记录输入无默认 → 取记录字段默认值，RecordBinding8），protected 局部按依赖序
   // 初始化，解释算法段，返回**首个**输出（多输出函数在表达式里取首输出，FunctionMultiOutput3）。记录类名的调用 = 记录构造
@@ -14940,6 +15269,7 @@ class Flattener {
       return std::nullopt;
     // derivative / inverse 注解形态不在已做范围内（omc 的告警 / 报错，FunctionInverseInvalid1/2）→ 不求值（发射一侧同样拒）。
     if (std::vector<Id<Cref>> refs; !fn_ref_annotations(fel.cmt.annotation, sig, refs)) return std::nullopt;
+    if (fn_type_dim_subscripted(*fr, sig)) return std::nullopt;
     const std::vector<Id<SElement>>& inputs = sig.inputs;
     // 实参匹配输入（位置 + 命名）。
     std::vector<Id<Exp>> bound(inputs.size());   // 每输入的实参 Exp（invalid = 用默认）
@@ -14988,6 +15318,9 @@ class Flattener {
       }
       v = coerce_cval(*v, I_.scode.elems[inputs[i]].type.path);
       if (!v) return std::nullopt;
+      // 枚举类型的输入：实参值须是字面量表相同的枚举（omc 定型调用时核，类型不符报错——值路不定型，见 cval_enum_ok；ENQ 探针 ENQ5
+      // `f(S.s2)`，f 的输入是 L，此前求成字面量照出）。不符 / 认不出 → 不求，调用方走定型路（coerce_to_param 核了 SKIP）。
+      if (!enum_value_fits(*v, inputs[i], sig, fr->fscope)) return std::nullopt;
       if (I_.absyn.exps[bound[i]].kind == ExpKind::CrefExp) watch_arrays(*v);
       env[I_.scode.elems[inputs[i]].name.id] = *v;
     }
@@ -15030,7 +15363,7 @@ class Flattener {
             std::optional<CVal> v = eval_scode(I_.scode.mods[s.mod].binding, scope, depth + 1, allow_param);
             if (!v) return std::nullopt;
             v = coerce_cval(*v, I_.scode.elems[inputs[i]].type.path);
-            if (!v) return std::nullopt;
+            if (!v || !enum_value_fits(*v, inputs[i], sig, fr->fscope)) return std::nullopt;
             env[s.ident.id] = *v;
           }
     // 切到函数局部环境；函数体按定义处作用域求值，调用处前缀只对模型内嵌函数保留（local_to_caller）。
@@ -15063,7 +15396,7 @@ class Flattener {
       }
       if (!v) return fail();   // 无实参无默认
       v = coerce_cval(*v, in.type.path);
-      if (!v) return fail();
+      if (!v || !enum_value_fits(*v, inputs[i], sig, fscope)) return fail();   // ENQ 探针 ENQ15 `input L x = S.s1`
       env[in.name.id] = *v;
     }
     // 输出与 protected 局部的初值（NFEvalFunction.createArgumentMap :280-294：绑定互相代换后求值 → 与声明序无关，
@@ -15146,13 +15479,15 @@ class Flattener {
     auto it = env.find(oel.name.id);
     std::optional<CVal> result;
     if (it != env.end()) result = coerce_cval(it->second, oel.type.path);
+    // 枚举输出的值类型不符（体里 `y := x`、x 是别的枚举：omc 定型函数时报错，值路不定型；ENQ 探针 ENQ21）→ 求不出。
+    if (result && result->k != CVal::K::Undef && !enum_value_fits(*result, sig.outputs[0], sig, fscope)) result.reset();
     if (all_outputs && result) {
       all_outputs->clear();
       for (Id<SElement> o : sig.outputs) {
         const SElement& oe = I_.scode.elems[o];
         auto ot = env.find(oe.name.id);
         std::optional<CVal> ov = ot != env.end() ? coerce_cval(ot->second, oe.type.path) : std::nullopt;
-        if (!ov || ov->k == CVal::K::Undef) { result.reset(); break; }
+        if (!ov || ov->k == CVal::K::Undef || !enum_value_fits(*ov, o, sig, fscope)) { result.reset(); break; }
         all_outputs->push_back(std::move(*ov));
       }
     }
@@ -15176,6 +15511,26 @@ class Flattener {
         // 两边的 sval 都是转义后的原文（求值时再 unescape）。折出来的 getInstanceName()（MSL Random.Utilities.automaticLocalSeed
         // 的实参，HS 探针 `b.localSeed = if b.useAuto then 658610408 else …`）。
         case ExprKind::StringLit: e.kind = ExpKind::StringLit; e.sval = x.sval; break;
+        // 枚举字面量：包里的 / 内建的枚举的打印路径从顶层查得回同一个字面量（见 cval_enum_lits）→ 照全路径写回（内建的不带前导点，
+        // 同书写名）；查不回的（模型里声明的枚举，路径是相对的）不求。
+        case ExprKind::EnumLit: {
+          if (x.enum_path.size() < 2 || x.enum_index < 1) return {};
+          CVal ev;
+          ev.k = CVal::K::Enum;
+          ev.i = x.enum_index;
+          ev.epath = x.enum_path;
+          const std::optional<std::vector<Symbol>> lits = cval_enum_lits(ev);
+          if (!lits || static_cast<std::size_t>(x.enum_index) > lits->size() ||
+              (*lits)[static_cast<std::size_t>(x.enum_index) - 1] != x.enum_path.back() ||
+              (!x.ty.enum_literals.empty() && x.ty.enum_literals != *lits))
+            return {};
+          Cref c;
+          c.leading_dot = !(x.enum_path.size() == 2 && builtin_enum_def(x.enum_path[0]));
+          for (Symbol s : x.enum_path) c.parts.push_back({s, {}});
+          e.kind = ExpKind::CrefExp;
+          e.cref = synth_cref(std::move(c));
+          break;
+        }
         case ExprKind::Array:
           e.kind = ExpKind::Array;
           for (Id<Expr> el : x.args) {
@@ -15459,6 +15814,7 @@ class Flattener {
         Expr e;
         e.kind = ExprKind::EnumLit;
         e.ty = Type::of(TypeKind::Enumeration);
+        if (std::optional<std::vector<Symbol>> l = cval_enum_lits(v)) e.ty.enum_literals = std::move(*l);   // 见 enum_lits_of
         e.enum_path = v.epath;
         e.enum_index = v.i;
         return add(std::move(e));
@@ -16014,11 +16370,6 @@ class Flattener {
     Id<Expr> e;                    // Index：下标（IntLit / 枚举字面量 = 已知，否则留成符号）
     std::vector<Id<Expr>> elems;   // Expanded：展开的切片的各下标（同上）
   };
-  // 类型维（枚举）的声明：类型名 + 字面量表（空 = 整数维），供 const_sub_specs 核对枚举下标。
-  struct EnumDim {
-    Symbol type_name;
-    std::vector<Symbol> lits;
-  };
   // 下标式在大小为 dim 的维上的取值：`end` = dim；常量式（含 for 方程迭代变量的当前值）直接求，含参数的按结构参数求值
   //（typeSubscripts 的 Structural.markSubscript，NFTyping.mo:2122-2127）。整数 → Int，范围 / 下标数组 → Array。求不出 → nullopt。
   std::optional<CVal> eval_subscript(Id<Exp> sx, std::int64_t dim, const ScodeScope& scope, NodeId enclosing) {
@@ -16041,6 +16392,11 @@ class Flattener {
         out.push_back(std::move(cs));
         continue;
       }
+      // 字面量表认不出的类型维（`Boolean`、内建以外的…）：下标的类型核不了（Integer 下标 omc 报错，ENI 探针 ENI6）→ SKIP。
+      if (edims && k < edims->size() && (*edims)[k].type_dim && (*edims)[k].lits.empty()) {
+        set_unsupported("constant array subscript");
+        return false;
+      }
       if (edims && k < edims->size() && !(*edims)[k].lits.empty()) {
         // 枚举维：字面量下标按序数取元素（排在符号下标之后的照写成字面量，见 apply_const_subs），运行时的枚举下标留成符号
         //（DG 探针 q1-q3：`T.OrTable[a, b]` → `{{…}, …}[a, b]`、`Tables.OrTable[L.X, b]` → `{…}[b]`）。类型须是该维的
@@ -16049,8 +16405,7 @@ class Flattener {
         std::optional<CVal> v;
         if (!is_stmt_iter_subscript(subs[k])) v = eval_subscript(subs[k], shape[k], lscope, enclosing);
         if (v) {
-          if (v->k != CVal::K::Enum || v->epath.size() < 2 || v->epath[v->epath.size() - 2] != ed.type_name || v->i < 1 ||
-              static_cast<std::size_t>(v->i) > ed.lits.size() || ed.lits[static_cast<std::size_t>(v->i) - 1] != v->epath.back()) {
+          if (!enum_dim_label(*v, ed)) {
             set_unsupported("constant array subscript");
             return false;
           }
@@ -16216,9 +16571,11 @@ class Flattener {
     }
     if (s[k].k != CSub::K::Index) return {};
     const Expr ie = result_.model.exprs[s[k].e];   // 拷贝
-    if (ie.kind == ExprKind::IntLit) {
-      if (ie.ival < 1 || static_cast<std::size_t>(ie.ival) > ve.args.size()) return {};
-      return fn_apply_subs(ve.args[static_cast<std::size_t>(ie.ival) - 1], s, k + 1);
+    // 已知下标：整数，或枚举维上的枚举字面量（按序数取，toInteger :1876-1885；调用方已核对是该维的标签）。
+    if (ie.kind == ExprKind::IntLit || (ie.kind == ExprKind::EnumLit && ie.enum_index > 0)) {
+      const std::int64_t at = ie.kind == ExprKind::IntLit ? ie.ival : ie.enum_index;
+      if (at < 1 || static_cast<std::size_t>(at) > ve.args.size()) return {};
+      return fn_apply_subs(ve.args[static_cast<std::size_t>(at) - 1], s, k + 1);
     }
     Expr r;
     r.kind = ExprKind::Subscript;
@@ -16245,7 +16602,8 @@ class Flattener {
   }
   // 限定名常量（`T.OrTable`，中间段无下标）声明的各维：类型名维按声明处的作用域解析（import 别名也认，MSL Digital Tables 的
   // `OrTable[L, L]`、L 是 Logic 的别名），枚举类型给类型名 + 字面量表；其余维（整数 / Boolean / 解析不出）为空。
-  std::vector<EnumDim> qual_const_enum_dims(const Cref& wc, NodeId res) {
+  // quiet：各维的分类不留 SKIP 标记（见 scode_dim_type）。
+  std::vector<EnumDim> qual_const_enum_dims(const Cref& wc, NodeId res, bool quiet = false) {
     std::vector<EnumDim> out;
     std::vector<Symbol> names;
     for (const CrefPart& p : wc.parts) {
@@ -16257,19 +16615,73 @@ class Flattener {
     if (!resolve_qual_const(names, wc.leading_dot, scode_scope_of(res), comp, dscope)) return out;
     const SElement de = I_.scode.elems[comp];   // 拷贝（下面的解析不加元素，但不跨调用持引用）
     for (const std::vector<Id<Exp>>* ds : {&de.attr.dims, &de.type.dims})
-      for (Id<Exp> d : *ds) {
-        EnumDim ed;
-        if (I_.absyn.exps[d].kind == ExpKind::CrefExp) {
-          ScodeScope cs;
-          const Id<SElement> tc = resolve_cref_class(I_.absyn.crefs[I_.absyn.exps[d].cref], dscope, cs);
-          if (tc.is_valid() && I_.scode.elems[tc].kind == SElementKind::Class &&
-              I_.scode.elems[tc].def.kind == SClassDefKind::Enumeration) {
-            ed.type_name = I_.scode.elems[tc].name;
-            for (const SEnumItem& it : I_.scode.elems[tc].def.enum_items) ed.lits.push_back(it.literal);
-          }
-        }
-        out.push_back(std::move(ed));
+      for (Id<Exp> d : *ds) out.push_back(scode_dim_type(d, dscope, quiet));
+    return out;
+  }
+  // 声明维 d（在声明处作用域 ds 里解析）是不是类型名维（MLS §10.1：枚举类型 / Boolean 作维，下标须是该类型的值，typeSubscript →
+  // checkSubscriptType，NFTyping.mo:2104-2182 v1.25.0）：枚举类给类型名 + 字面量表（内建 StateSelect 同）；Boolean、别的类（枚举的
+  // 短类别名等）只标 type_dim。不是 → 整数维（空）。quiet：查名途中撞到 partial 类 / protected 元素记下的 SKIP 撤掉——只为分类，
+  // 新加的调用点（函数体的包常量、值路的下标核对）不该因此多出 SKIP。
+  EnumDim scode_dim_type(Id<Exp> d, const ScodeScope& ds, bool quiet) {
+    EnumDim ed;
+    if (I_.absyn.exps[d].kind != ExpKind::CrefExp) return ed;
+    const Cref c = I_.absyn.crefs[I_.absyn.exps[d].cref];   // 拷贝
+    if (!c.leading_dot && c.parts.size() == 1 && c.parts[0].subscripts.empty() && in_.str(c.parts[0].name) == "Boolean") {
+      ed.type_dim = true;   // 同模型语境的 type_labels
+      return ed;
+    }
+    const QuietLookup q(*this, quiet);
+    ScodeScope cs;
+    const Id<SElement> tc = resolve_cref_class(c, ds, cs);
+    const SClassDef* edef = nullptr;
+    if (tc.is_valid() && I_.scode.elems[tc].kind == SElementKind::Class) {
+      ed.type_dim = true;
+      if (I_.scode.elems[tc].def.kind == SClassDefKind::Enumeration) {
+        ed.type_name = I_.scode.elems[tc].name;
+        edef = &I_.scode.elems[tc].def;
       }
+    } else if (!tc.is_valid() && !c.leading_dot && c.parts.size() == 1 && c.parts[0].subscripts.empty()) {
+      if ((edef = builtin_enum_def(c.parts[0].name))) {
+        ed.type_dim = true;
+        ed.type_name = c.parts[0].name;
+      }
+    }
+    if (edef)
+      for (const SEnumItem& it : edef->enum_items) ed.lits.push_back(it.literal);
+    return ed;
+  }
+  // 只为分类的查名：on 时，查的途中（撞到 partial 类 / protected 元素）记下的 SKIP 标记在析构时撤掉。
+  struct QuietLookup {
+    Flattener& f;
+    const bool on;
+    bool unsup = false, frozen = false;
+    std::string reason, detail, fdetail;
+    QuietLookup(Flattener& fl, bool q) : f(fl), on(q) {
+      if (!on) return;
+      unsup = f.result_.unsupported;
+      frozen = f.detail_frozen_;
+      reason = f.result_.unsupported_reason;
+      detail = f.result_.unsupported_detail;
+      fdetail = f.frozen_detail_;
+    }
+    ~QuietLookup() {
+      if (!on) return;
+      f.result_.unsupported = unsup;
+      f.result_.unsupported_reason = reason;
+      f.result_.unsupported_detail = detail;
+      f.detail_frozen_ = frozen;
+      f.frozen_detail_ = fdetail;
+    }
+    QuietLookup(const QuietLookup&) = delete;
+    QuietLookup& operator=(const QuietLookup&) = delete;
+  };
+  // 组件 / 字段声明 comp（在 ds 里）的各维的类型（组件维在前、类型名带的维在后；见 scode_dim_type，quiet）。ponytail：短类链上
+  // 带的维（`type V = Real[E]`）不在其中，按整数维认。
+  std::vector<EnumDim> elem_dim_types(Id<SElement> comp, const ScodeScope& ds) {
+    const SElement de = I_.scode.elems[comp];   // 拷贝
+    std::vector<EnumDim> out;
+    for (const std::vector<Id<Exp>>* dv : {&de.attr.dims, &de.type.dims})
+      for (Id<Exp> d : *dv) out.push_back(scode_dim_type(d, ds, /*quiet=*/true));
     return out;
   }
   // 已发射的 constant 数组（本地 / 子实例里的 / 记录字段）带下标的引用：取 const_vals_ 里的整体值。前面各段的下标须是
@@ -16587,6 +16999,10 @@ class Flattener {
         r.ty = Type::real();   // 元素类型粗略；dump 不看，强转在 emit_array/coerce_deep 里做
         std::vector<Id<Expr>> els;
         for (Id<Exp> a : e.args) els.push_back(inst_exp(a, enclosing, prefix));
+        // 枚举元素的字面量表不同：omc 定型数组时报 NF_ARRAY_TYPE_MISMATCH（typeArray 的 TypeCheck.matchTypes，NFTyping.mo:2184-2249
+        // v1.25.0；ENQ 探针 ENQ14，此前照出）→ SKIP。
+        for (std::size_t i = 1; i < els.size() && !result_.unsupported; ++i)
+          if (enum_lits_differ(els[0], els[i])) { set_unsupported("array element type mismatch"); return lit_int(0); }
         r.args = std::move(els);
         return add(std::move(r));
       }
@@ -17917,6 +18333,9 @@ class Flattener {
       // 普通记录没有运算符函数 → omc 报 "Cannot resolve type of expression"（EO 探针 e41）→ SKIP。
       if (result_.model.exprs[a].ty.kind == TypeKind::Complex || result_.model.exprs[b].ty.kind == TypeKind::Complex)
         return overloaded_binary(e.op, a, b);
+      // 两个枚举运算数的字面量表不同：omc 报 "Cannot resolve type of expression"（checkRelationOperation 的 matchExpressions，
+      // NFTypeCheck.mo:1447-1501 v1.25.0；ENQ 探针 ENQ4 / ENQ9 此前照出）→ SKIP。
+      if (enum_lits_differ(a, b)) { set_unsupported("relation operand type mismatch"); return lit_int(0); }
       bool real = result_.model.exprs[a].ty.kind == TypeKind::Real || result_.model.exprs[b].ty.kind == TypeKind::Real;
       // 函数外 Real 的 == / <>：omc 告警（"... on Real operands is deprecated in non-function contexts"，
       // OperationRelational1），ymc 不产告警文本 → SKIP。
@@ -18264,6 +18683,9 @@ class Flattener {
         t = fn_real_operand(t);
         f = fn_real_operand(f);
         if (!t.is_valid() || !f.is_valid()) { set_unsupported("function array operand cast"); return lit_int(0); }
+      } else if (te == TypeKind::Enumeration && enum_lits_differ(t, f)) {
+        set_unsupported("if-expression branch type mismatch");
+        return lit_int(0);
       }
       Expr r; r.kind = ExprKind::IfExp; r.a = c; r.b = t; r.c = f; r.ty = op_type(t);
       return add(std::move(r));
@@ -18278,6 +18700,8 @@ class Flattener {
     } else if (tk != fk && tk != TypeKind::Unknown && fk != TypeKind::Unknown && !result_.unsupported) {
       // 其余不同类的两支（`if c then 1 else "a"`）= omc 类型错（P2 探针）→ SKIP（此前按第一支的类型放行）。
       set_unsupported("if-expression branch type mismatch");
+    } else if (tk == TypeKind::Enumeration && !result_.unsupported && enum_lits_differ(t, f)) {
+      set_unsupported("if-expression branch type mismatch");   // 两支枚举的字面量表不同（ENQ 探针 ENQ11 / ENQ13）
     }
     Expr r; r.kind = ExprKind::IfExp; r.a = c; r.b = t; r.c = f; r.ty = result_.model.exprs[t].ty;
     return add(std::move(r));
@@ -18367,9 +18791,11 @@ class Flattener {
     }
     // 用户函数常量折叠优先（支持命名/默认实参）：单名解析到 function 类且实参可求常量 → 折成字面量（CevalFunc1/FuncSimple）。
     {
-      // 折叠结果须是标量（数组 / 记录值在此语境无字面量形式，literal_of 会退化成 0）→ 否则不接，落到下面。
+      // 折叠结果须是标量（数组 / 记录值在此语境无字面量形式，literal_of 会退化成 0）→ 否则不接，落到下面。枚举值成字面量（全路径；
+      // 模型里声明的枚举没有路径，literal_of 标 SKIP）——此前不接、发射成调用后在化简处 SKIP（ENP 探针 ENP7 `f(L.'1')` → omc 求成
+      // `ENP7P.L.'1'`）。
       auto scalar = [](const CVal& v) {
-        return v.k == CVal::K::Int || v.k == CVal::K::Real || v.k == CVal::K::Bool || v.k == CVal::K::Str;
+        return v.k == CVal::K::Int || v.k == CVal::K::Real || v.k == CVal::K::Bool || v.k == CVal::K::Str || v.k == CVal::K::Enum;
       };
       // 函数名在书写处的词法作用域里找：继承成员的声明式子由调用方给的就是声明所在的基类实例（YmcFnName2 `A2 a2` 里继承自
       // A 的 `v = h(time)` → `R.a2.h`），与限定常量同理。
@@ -18438,6 +18864,7 @@ class Flattener {
           while (leaf->k == CVal::K::Array && leaf->arr && !leaf->arr->empty()) leaf = &leaf->arr->front();
           const TypeKind lk = leaf->k == CVal::K::Int ? TypeKind::Integer : leaf->k == CVal::K::Real ? TypeKind::Real
                             : leaf->k == CVal::K::Bool ? TypeKind::Boolean : leaf->k == CVal::K::Str ? TypeKind::String
+                            : leaf->k == CVal::K::Enum ? TypeKind::Enumeration   // ENF 探针 ENF40 `g = {P.E.a, P.E.c}`
                             : TypeKind::Unknown;
           if (lk != TypeKind::Unknown)
             if (const Id<Expr> lit = cval_expr(*uv, lk); lit.is_valid()) return lit;
@@ -18535,7 +18962,7 @@ class Flattener {
       }
       const TypeKind ek = pt.element_type().kind;
       const TypeKind vk = result_.model.exprs[v].ty.element_type().kind;
-      bool ok = ek == TypeKind::Real ? (vk == TypeKind::Real || vk == TypeKind::Integer) : vk == ek;
+      bool ok = ek == TypeKind::Real ? (vk == TypeKind::Real || vk == TypeKind::Integer) : (vk == ek && !enum_lits_differ(v, pt));
       // 形状：输入的维是整数的逐维比；是表达式（引用别的字段 `Real[n] b`）的只比维数。
       const std::vector<std::int64_t> vs = expr_shape(v);
       ok = ok && vs.size() == pt.dims.size();
@@ -23267,9 +23694,10 @@ class Flattener {
                (ea.cref.parts.size() == 1 && stmt_iters_.count(ea.cref.parts[0].name.id))))
             return rebuild();
           // 运行时的枚举式（`Integer(pre(x))`、常量表取元素）同样原样留着（MSL Digital TransportDelay 的
-          // `xr = Integer(pre(x))` → `xr = /*Real*/(Integer(pre(x)))`，DG 探针 r1）。
+          // `xr = Integer(pre(x))` → `xr = /*Real*/(Integer(pre(x)))`，DG 探针 r1）。函数体里按函数局部取元素的常量表（字面量
+          // 下标已取成元素，见 fn_outer_value）同（ENP 探针 ENP13 `Integer({…}[x])`）。
           if (ea.kind != ExprKind::Cref && ea.kind != ExprKind::EnumLit && ea.ty.kind == TypeKind::Enumeration &&
-              !ea.ty.is_array() && cond_is_runtime(args[0]))
+              !ea.ty.is_array() && (cond_is_runtime(args[0]) || (fn_scope_ && ea.kind == ExprKind::Subscript)))
             return rebuild();
           set_unsupported("enum ordinal");   // 序数没解析出来（跨包枚举等）→ SKIP
           return rebuild();
