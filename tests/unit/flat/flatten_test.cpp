@@ -10067,4 +10067,208 @@ YMC_TEST(flatten_moved_record_field_structural_use) {
                std::string("<unsupported:if condition not evaluable>"));
 }
 
+YMC_TEST(flatten_negated_integer_real_cast) {
+  // Integer 取负用在 Real 处：定型把转型推进取负（Expression.typeCast 的 UNARY 支，NFExpression.mo:946-951 v1.25.0），化简的
+  // negate 又推回转型里（:5035-5046），simplifyUnary / simplifyBinary 末尾的 ExpandExp.expand（NFSimplifyExp.mo:1135-1137 /
+  // :941-943，nfExpandOperations 缺省开）经 expandCast（NFExpandExp.mo:1020-1036）再推出来——`sqrt(-n)`、`2.0 * (-k)`、`0.0 - k`、
+  // `k / (-1)` 打 `-/*Real*/(k)`；运算数原样返回的 `1.0 * (-k)` 反过来是 `/*Real*/(-k)`。此前照 negate 打 `/*Real*/(-k)`（静默错）。
+  // 期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p31 NGC1 / NGC4 / NGD1 / NGC8）。
+  YMC_CHECK_EQ(flatten_src("model NGC1\n  discrete Integer k(start = 1);\n  Real r;\n  Real r2;\n  Real r3;\n"
+                           "equation\n  when sample(0, 1) then\n    k = pre(k) + 1;\n  end when;\n  r = -k;\n"
+                           "  r2 = 2.0 * (-k);\n  r3 = sin(-k) + abs(-k);\nend NGC1;\n"),
+               std::string("class NGC1\n  discrete Integer k(start = 1);\n  Real r;\n  Real r2;\n  Real r3;\n"
+                           "equation\n  when sample(0.0, 1.0) then\n    k = pre(k) + 1;\n  end when;\n"
+                           "  r = -/*Real*/(k);\n  r2 = 2.0 * (-/*Real*/(k));\n"
+                           "  r3 = sin(-/*Real*/(k)) + /*Real*/(abs(-k));\nend NGC1;\n"));
+  YMC_CHECK_EQ(flatten_src("function NGC4F\n  input Integer n;\n  output Real m;\nalgorithm\n"
+                           "  m := sqrt(-n) + exp(-n);\nend NGC4F;\nmodel NGC4\n  Real k = NGC4F(integer(time));\n"
+                           "end NGC4;\n"),
+               std::string("function NGC4F\n  input Integer n;\n  output Real m;\nalgorithm\n"
+                           "  m := sqrt(-/*Real*/(n)) + exp(-/*Real*/(n));\nend NGC4F;\n\nclass NGC4\n"
+                           "  Real k = NGC4F(integer(time));\nend NGC4;\n"));
+  YMC_CHECK_EQ(flatten_src("model NGD1\n  discrete Integer k(start = 1);\n  Real r1, r2, r3, r4, r5, r6, r7;\n"
+                           "equation\n  when sample(0, 1) then\n    k = pre(k) + 1;\n  end when;\n"
+                           "  r1 = 1.0 * (-k);\n  r2 = (-k) * 1.0;\n  r3 = 0.0 + (-k);\n  r4 = (-k) + 0.0;\n"
+                           "  r5 = (-k) - 0.0;\n  r6 = (-k) / 1;\n  r7 = (-k) ^ 1;\nend NGD1;\n"),
+               std::string("class NGD1\n  discrete Integer k(start = 1);\n  Real r1;\n  Real r2;\n  Real r3;\n"
+                           "  Real r4;\n  Real r5;\n  Real r6;\n  Real r7;\nequation\n  when sample(0.0, 1.0) then\n"
+                           "    k = pre(k) + 1;\n  end when;\n  r1 = /*Real*/(-k);\n  r2 = /*Real*/(-k);\n"
+                           "  r3 = /*Real*/(-k);\n  r4 = /*Real*/(-k);\n  r5 = /*Real*/(-k);\n  r6 = /*Real*/(-k);\n"
+                           "  r7 = /*Real*/(-k);\nend NGD1;\n"));
+  YMC_CHECK_EQ(flatten_src("model NGC8\n  discrete Integer k(start = 1);\n  Real x = time;\n"
+                           "  Real r1, r2, r3, r4, r5, r6;\nequation\n  when sample(0, 1) then\n    k = pre(k) + 1;\n"
+                           "  end when;\n  r1 = (-k) / 2;\n  r2 = 0 - k;\n  r3 = 0.0 - k;\n  r4 = k / (-1);\n"
+                           "  r5 = x / (-k);\n  r6 = (-x) / k;\nend NGC8;\n"),
+               std::string("class NGC8\n  discrete Integer k(start = 1);\n  Real x = time;\n  Real r1;\n  Real r2;\n"
+                           "  Real r3;\n  Real r4;\n  Real r5;\n  Real r6;\nequation\n  when sample(0.0, 1.0) then\n"
+                           "    k = pre(k) + 1;\n  end when;\n  r1 = /*Real*/(k) / (-2.0);\n  r2 = /*Real*/(-k);\n"
+                           "  r3 = -/*Real*/(k);\n  r4 = -/*Real*/(k);\n  r5 = x / (-/*Real*/(k));\n"
+                           "  r6 = x / /*Real*/(-k);\nend NGC8;\n"));
+}
+
+YMC_TEST(flatten_simplified_integer_negation_cast_outside) {
+  // Integer 运算用在 Real 处：定型时 CAST 包住整个式子、化简在后（simplifyCast 不再展开，NFSimplifyExp.mo:1322-1344 v1.25.0），
+  // 化简出的取负留在转型里——`Real y = 0 - k`、`-k - 1`、`0 + (-k)` → `/*Real*/(-k)`、`/*Real*/(-(k + 1))`；取负的运算数含数组
+  // 调用的末尾不展开（:1135-1137 hasArrayCall）→ `/*Real*/(-(…))`；constant 数组取变下标的取负，展开时 typeCast 推进字面量
+  // （NFExpression.mo:970-975）→ `-{3.0, 1.0, 2.0}[n]`。此前转型推进取负（静默错）。期望 = omc 1.25.0 实跑（2026-10-17，探针
+  // pk-p31 NGD2 / NGD8 / NGD6）。
+  YMC_CHECK_EQ(flatten_src("model NGD2\n  discrete Integer k(start = 1);\n  Real y1 = 0 + (-k);\n"
+                           "  Real y2 = (-k) * 1;\n  Real y3 = -k - 1;\n  Real y4 = (-k) + (-k);\n"
+                           "  Real y5 = 0 - k;\n  Real y6 = 1 * (0 - k);\nequation\n  when sample(0, 1) then\n"
+                           "    k = pre(k) + 1;\n  end when;\nend NGD2;\n"),
+               std::string("class NGD2\n  discrete Integer k(start = 1);\n  Real y1 = /*Real*/(-k);\n"
+                           "  Real y2 = /*Real*/(-k);\n  Real y3 = /*Real*/(-(k + 1));\n"
+                           "  Real y4 = /*Real*/(-(k + k));\n  Real y5 = /*Real*/(-k);\n  Real y6 = /*Real*/(-k);\n"
+                           "equation\n  when sample(0.0, 1.0) then\n    k = pre(k) + 1;\n  end when;\nend NGD2;\n"));
+  YMC_CHECK_EQ(flatten_src("function NGD8I\n  input Integer k;\n  output Integer v[2];\nalgorithm\n"
+                           "  v := {k, 2 * k};\nend NGD8I;\nmodel NGD8\n  discrete Integer k(start = 1);\n"
+                           "  Real r1, r2;\nequation\n  when sample(0, 1) then\n    k = pre(k) + 1;\n  end when;\n"
+                           "  r1 = sin(-sum(NGD8I(k)));\n  r2 = -sum(NGD8I(k));\nend NGD8;\n"),
+               std::string("function NGD8I\n  input Integer k;\n  output Integer[2] v;\nalgorithm\n"
+                           "  v := {k, 2 * k};\nend NGD8I;\n\nclass NGD8\n  discrete Integer k(start = 1);\n"
+                           "  Real r1;\n  Real r2;\nequation\n  when sample(0.0, 1.0) then\n    k = pre(k) + 1;\n"
+                           "  end when;\n  r1 = sin(/*Real*/(-(NGD8I(k)[1] + NGD8I(k)[2])));\n"
+                           "  r2 = /*Real*/(-(NGD8I(k)[1] + NGD8I(k)[2]));\nend NGD8;\n"));
+  YMC_CHECK_EQ(flatten_src("model NGD6\n  constant Integer kc[3] = {3, 1, 2};\n  discrete Integer n(start = 1);\n"
+                           "  Real r1, r2;\nequation\n  when sample(0, 1) then\n    n = mod(pre(n), 3) + 1;\n"
+                           "  end when;\n  r1 = -kc[n];\n  r2 = 2.0 * (-kc[n]);\nend NGD6;\n"),
+               std::string("class NGD6\n  constant Integer kc[1] = 3;\n  constant Integer kc[2] = 1;\n"
+                           "  constant Integer kc[3] = 2;\n  discrete Integer n(start = 1);\n  Real r1;\n  Real r2;\n"
+                           "equation\n  when sample(0.0, 1.0) then\n    n = mod(pre(n), 3) + 1;\n  end when;\n"
+                           "  r1 = -{3.0, 1.0, 2.0}[n];\n  r2 = 2.0 * (-{3.0, 1.0, 2.0}[n]);\nend NGD6;\n"));
+}
+
+YMC_TEST(flatten_elementwise_negation_real_cast) {
+  // 逐元素的取负转 Real：整体引用的 `-n` 末尾展开时逐元素重新 typeCast（expandCast，NFExpandExp.mo:1020-1036 v1.25.0）→
+  // `-/*Real*/(n[1])`；字面量 / 运算的 `-{k, k}`、`-(n + n)` 的元素先带转型、逐元素 negate 推进转型（expandUnary :934-952）→
+  // `/*Real*/(-k)`；`{0.0, 0.0} - n` 在数组层化简（simplifyBinarySub，NFSimplifyExp.mo:1008-1037）→ `-/*Real*/(n[1])`；函数体里
+  // 数组字面量的取负同样逐元素展开（NGG1 / NGG2，此前原样打 `-{n, n}`）。期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p31
+  // NGE1 / NGE5 / NGG1 / NGG2）。
+  YMC_CHECK_EQ(flatten_src("model NGE1\n  discrete Integer k(start = 1);\n  Integer n[2] = {k, 2 * k};\n"
+                           "  Real c1[2];\n  Real c2[2];\n  Real c3[2];\nequation\n  when sample(0, 1) then\n"
+                           "    k = pre(k) + 1;\n  end when;\n  c1 = -{k, k};\n  c2 = -{k, 1};\n  c3 = -n;\n"
+                           "end NGE1;\n"),
+               std::string("class NGE1\n  discrete Integer k(start = 1);\n  Integer n[1];\n  Integer n[2];\n"
+                           "  Real c1[1];\n  Real c1[2];\n  Real c2[1];\n  Real c2[2];\n  Real c3[1];\n"
+                           "  Real c3[2];\nequation\n  n = {k, 2 * k};\n  when sample(0.0, 1.0) then\n"
+                           "    k = pre(k) + 1;\n  end when;\n  c1[1] = /*Real*/(-k);\n  c1[2] = /*Real*/(-k);\n"
+                           "  c2[1] = /*Real*/(-k);\n  c2[2] = -1.0;\n  c3[1] = -/*Real*/(n[1]);\n"
+                           "  c3[2] = -/*Real*/(n[2]);\nend NGE1;\n"));
+  YMC_CHECK_EQ(flatten_src("model NGE5\n  discrete Integer k(start = 1);\n  Integer n[2] = {k, 2 * k};\n"
+                           "  Real c1[2];\n  Real c2[2];\n  Real c3[2];\nequation\n  when sample(0, 1) then\n"
+                           "    k = pre(k) + 1;\n  end when;\n  c1 = 2.0 * (-(n + n));\n  c2 = 2.0 * {-k, -k};\n"
+                           "  c3 = {0.0, 0.0} - n;\nend NGE5;\n"),
+               std::string("class NGE5\n  discrete Integer k(start = 1);\n  Integer n[1];\n  Integer n[2];\n"
+                           "  Real c1[1];\n  Real c1[2];\n  Real c2[1];\n  Real c2[2];\n  Real c3[1];\n"
+                           "  Real c3[2];\nequation\n  n = {k, 2 * k};\n  when sample(0.0, 1.0) then\n"
+                           "    k = pre(k) + 1;\n  end when;\n  c1[1] = 2.0 * /*Real*/(-(n[1] + n[1]));\n"
+                           "  c1[2] = 2.0 * /*Real*/(-(n[2] + n[2]));\n  c2[1] = 2.0 * (-/*Real*/(k));\n"
+                           "  c2[2] = 2.0 * (-/*Real*/(k));\n  c3[1] = -/*Real*/(n[1]);\n  c3[2] = -/*Real*/(n[2]);\n"
+                           "end NGE5;\n"));
+  YMC_CHECK_EQ(flatten_src("function NGG1F\n  input Integer n;\n  output Real v[2];\nalgorithm\n  v := -{n, n};\n"
+                           "end NGG1F;\nmodel NGG1\n  Real k[2] = NGG1F(integer(time));\nend NGG1;\n"),
+               std::string("function NGG1F\n  input Integer n;\n  output Real[2] v;\nalgorithm\n"
+                           "  v := {/*Real*/(-n), /*Real*/(-n)};\nend NGG1F;\n\nclass NGG1\n  Real k[1];\n"
+                           "  Real k[2];\nequation\n  k = NGG1F(integer(time));\nend NGG1;\n"));
+  YMC_CHECK_EQ(flatten_src("function NGG2F\n  input Integer n;\n  input Real x;\n  output Real v[2];\n"
+                           "  output Real w[2];\nalgorithm\n  v := -{n, 1.0};\n  w := -{x, 1.0};\nend NGG2F;\n"
+                           "model NGG2\n  Real k[2];\n  Real k2[2];\nequation\n"
+                           "  (k, k2) = NGG2F(integer(time), time);\nend NGG2;\n"),
+               std::string("function NGG2F\n  input Integer n;\n  input Real x;\n  output Real[2] v;\n"
+                           "  output Real[2] w;\nalgorithm\n  v := {/*Real*/(-n), -1.0};\n  w := {-x, -1.0};\n"
+                           "end NGG2F;\n\nclass NGG2\n  Real k[1];\n  Real k[2];\n  Real k2[1];\n  Real k2[2];\n"
+                           "equation\n  (k, k2) = NGG2F(integer(time), time);\nend NGG2;\n"));
+}
+
+YMC_TEST(flatten_record_found_through_inheritance) {
+  // 经继承查到的记录类按查到处的路径命名（scopePath 跳过基类名，NFInstNode.mo:1217-1290 v1.25.0）：外层的包里（查名经
+  // Inst.instPackage，NFLookup.mo:679-742）→ `UQR1P.A.R`（此前按声明处 `UQR1P.Base.R`）；模型实例里 → 实例路径 `UQR22.m.R`、
+  // 继承进根类的 `UQR18.R`；非根模型的本地记录 `UQR20.m.R`（此前 SKIP）。期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p31
+  // UQR1 / UQR22 / UQR18 / UQR20）。
+  YMC_CHECK_EQ(flatten_src("package UQR1P\n  package Base\n    record R\n      Real a;\n      Real b = 1;\n"
+                           "    end R;\n  end Base;\n  package A\n    extends Base;\n    model C\n      R r;\n"
+                           "      R s;\n    equation\n      r = s;\n      s.a = time;\n    end C;\n  end A;\n"
+                           "end UQR1P;\nmodel UQR1\n  UQR1P.A.C c;\nend UQR1;\n"),
+               std::string("function UQR1P.A.R \"Automatically generated record constructor for UQR1P.A.R\"\n"
+                           "  input Real a;\n  input Real b = 1.0;\n  output R res;\nend UQR1P.A.R;\n\nclass UQR1\n"
+                           "  Real c.r.a;\n  Real c.r.b = 1.0;\n  Real c.s.a;\n  Real c.s.b = 1.0;\nequation\n"
+                           "  c.r = c.s;\n  c.s.a = time;\nend UQR1;\n"));
+  YMC_CHECK_EQ(flatten_src("package UQR22P\n  package Base\n    record R\n      Real a;\n      Real b = 1;\n"
+                           "    end R;\n  end Base;\n  model M\n    extends Base;\n    R r;\n    R s;\n  equation\n"
+                           "    r = s;\n    s.a = time;\n  end M;\nend UQR22P;\nmodel UQR22\n  UQR22P.M m;\n"
+                           "end UQR22;\n"),
+               std::string("function UQR22.m.R \"Automatically generated record constructor for UQR22.m.R\"\n"
+                           "  input Real a;\n  input Real b = 1.0;\n  output R res;\nend UQR22.m.R;\n\nclass UQR22\n"
+                           "  Real m.r.a;\n  Real m.r.b = 1.0;\n  Real m.s.a;\n  Real m.s.b = 1.0;\nequation\n"
+                           "  m.r = m.s;\n  m.s.a = time;\nend UQR22;\n"));
+  YMC_CHECK_EQ(flatten_src("package UQR18P\n  package Base\n    record R\n      Real a;\n      Real b = 1;\n"
+                           "    end R;\n  end Base;\nend UQR18P;\nmodel UQR18\n  extends UQR18P.Base;\n  R r;\n"
+                           "  R s;\nequation\n  r = s;\n  s.a = time;\nend UQR18;\n"),
+               std::string("function UQR18.R \"Automatically generated record constructor for UQR18.R\"\n"
+                           "  input Real a;\n  input Real b = 1.0;\n  output R res;\nend UQR18.R;\n\nclass UQR18\n"
+                           "  Real r.a;\n  Real r.b = 1.0;\n  Real s.a;\n  Real s.b = 1.0;\nequation\n  r = s;\n"
+                           "  s.a = time;\nend UQR18;\n"));
+  YMC_CHECK_EQ(flatten_src("package UQR20P\n  model M\n    record R\n      Real a;\n      Real b = 1;\n    end R;\n"
+                           "    model C\n      R r;\n      R s;\n    equation\n      r = s;\n      s.a = time;\n"
+                           "    end C;\n    C c;\n  end M;\nend UQR20P;\nmodel UQR20\n  UQR20P.M m;\nend UQR20;\n"),
+               std::string("function UQR20.m.R \"Automatically generated record constructor for UQR20.m.R\"\n"
+                           "  input Real a;\n  input Real b = 1.0;\n  output R res;\nend UQR20.m.R;\n\nclass UQR20\n"
+                           "  Real m.c.r.a;\n  Real m.c.r.b = 1.0;\n  Real m.c.s.a;\n  Real m.c.s.b = 1.0;\n"
+                           "equation\n  m.c.r = m.c.s;\n  m.c.s.a = time;\nend UQR20;\n"));
+}
+
+YMC_TEST(flatten_negation_after_structural_substitution) {
+  // 结构参数在化简之前代入（EvalConstants.evaluate 在 SimplifyModel.simplify 之前，NFInst.mo:201 / :210 v1.25.0），化简只做
+  // 一次：`q + (-k)`（q = 0.0）取 `-/*Real*/(k)` 再经末尾展开成 `/*Real*/(-k)`（NFSimplifyExp.mo:941-943）。ymc 先化简（负号挪动
+  // 成 `q - /*Real*/(k)`）、压平末尾代入再化简：挪动新建的节点不再做转型与取负的对调（moved_），书写的照做（`p * (-k)`、
+  // `k / (-p)`）。期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p31 NGH1 / NGH2）。
+  YMC_CHECK_EQ(flatten_src("model NGH1\n  discrete Integer k(start = 1);\n"
+                           "  parameter Real p = 1.0 annotation(Evaluate = true);\n"
+                           "  parameter Integer m = 1 annotation(Evaluate = true);\n"
+                           "  parameter Real q = 0.0 annotation(Evaluate = true);\n  Real y1 = p * (-k);\n"
+                           "  Real y2 = m * (-k);\n  Real y3 = q + (-k);\n  Real y4 = sin(-k * m);\n"
+                           "  Real y5 = (-k) / p;\nequation\n  when sample(0, 1) then\n    k = pre(k) + 1;\n"
+                           "  end when;\nend NGH1;\n"),
+               std::string("class NGH1\n  discrete Integer k(start = 1);\n  final parameter Real p = 1.0;\n"
+                           "  final parameter Integer m = 1;\n  final parameter Real q = 0.0;\n"
+                           "  Real y1 = /*Real*/(-k);\n  Real y2 = /*Real*/(-k);\n  Real y3 = /*Real*/(-k);\n"
+                           "  Real y4 = sin(-/*Real*/(k));\n  Real y5 = /*Real*/(-k);\nequation\n"
+                           "  when sample(0.0, 1.0) then\n    k = pre(k) + 1;\n  end when;\nend NGH1;\n"));
+  YMC_CHECK_EQ(flatten_src("model NGH2\n  discrete Integer k(start = 1);\n"
+                           "  parameter Real p = 1.0 annotation(Evaluate = true);\n"
+                           "  parameter Real q = 0.0 annotation(Evaluate = true);\n  Real y1 = (-q) + (-k);\n"
+                           "  Real y2 = (-k) - q;\n  Real y3 = q - (-k);\n  Real y4 = k / (-p);\n"
+                           "  Real y5 = (-p) * k;\nequation\n  when sample(0, 1) then\n    k = pre(k) + 1;\n"
+                           "  end when;\nend NGH2;\n"),
+               std::string("class NGH2\n  discrete Integer k(start = 1);\n  final parameter Real p = 1.0;\n"
+                           "  final parameter Real q = 0.0;\n  Real y1 = /*Real*/(-k);\n  Real y2 = /*Real*/(-k);\n"
+                           "  Real y3 = /*Real*/(k);\n  Real y4 = -/*Real*/(k);\n  Real y5 = (-1.0) * /*Real*/(k);\n"
+                           "equation\n  when sample(0.0, 1.0) then\n    k = pre(k) + 1;\n  end when;\nend NGH2;\n"));
+}
+
+YMC_TEST(flatten_function_elementwise_negation_real_cast) {
+  // 函数体里 Integer 数组运算赋给 Real 数组：omc 整体转型、化简展开后 simplifyCast 逐元素包（NFSimplifyExp.mo:1322-1344 v1.25.0）
+  // → 化简出的取负在转型里 `{/*Real*/(-w[1]), …}`（NGI1 `{0, 0} - w`、NGI3 `{1, 1} .* (-w)`）；Real 的 `{0.0, 0.0} - w` 在数组层
+  // 化简（simplifyBinarySub :1008-1037）、末尾展开逐元素重新 typeCast → `{-/*Real*/(w[1]), …}`（NGI4）。此前都反了（静默错）。
+  // 期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p31 NGI1 / NGI3 / NGI4）。
+  YMC_CHECK_EQ(flatten_src("function NGI1F\n  input Integer w[2];\n  output Real v[2];\nalgorithm\n"
+                           "  v := {0, 0} - w;\nend NGI1F;\nmodel NGI1\n  Real k[2] = NGI1F({integer(time), 2});\n"
+                           "end NGI1;\n"),
+               std::string("function NGI1F\n  input Integer[2] w;\n  output Real[2] v;\nalgorithm\n"
+                           "  v := {/*Real*/(-w[1]), /*Real*/(-w[2])};\nend NGI1F;\n\nclass NGI1\n  Real k[1];\n"
+                           "  Real k[2];\nequation\n  k = NGI1F({integer(time), 2});\nend NGI1;\n"));
+  YMC_CHECK_EQ(flatten_src("function NGI3F\n  input Integer w[2];\n  output Real v[2];\nalgorithm\n"
+                           "  v := {1, 1} .* (-w);\nend NGI3F;\nmodel NGI3\n"
+                           "  Real k[2] = NGI3F({integer(time), 2});\nend NGI3;\n"),
+               std::string("function NGI3F\n  input Integer[2] w;\n  output Real[2] v;\nalgorithm\n"
+                           "  v := {/*Real*/(-w[1]), /*Real*/(-w[2])};\nend NGI3F;\n\nclass NGI3\n  Real k[1];\n"
+                           "  Real k[2];\nequation\n  k = NGI3F({integer(time), 2});\nend NGI3;\n"));
+  YMC_CHECK_EQ(flatten_src("function NGI4F\n  input Integer w[2];\n  output Real v[2];\nalgorithm\n"
+                           "  v := {0.0, 0.0} - w;\nend NGI4F;\nmodel NGI4\n"
+                           "  Real k[2] = NGI4F({integer(time), 2});\nend NGI4;\n"),
+               std::string("function NGI4F\n  input Integer[2] w;\n  output Real[2] v;\nalgorithm\n"
+                           "  v := {-/*Real*/(w[1]), -/*Real*/(w[2])};\nend NGI4F;\n\nclass NGI4\n  Real k[1];\n"
+                           "  Real k[2];\nequation\n  k = NGI4F({integer(time), 2});\nend NGI4;\n"));
+}
+
 YMC_TEST_MAIN

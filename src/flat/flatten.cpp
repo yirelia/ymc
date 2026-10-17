@@ -3123,6 +3123,14 @@ class Flattener {
     const std::string_view n = in_.str(x.call_name[0]);
     return n == "der" || n == "pre" || n == "previous";
   }
+  // 逐元素运算里的整体运算数：数组变量的整取 / 切片、der / pre / previous 的数组调用（可带整体转型）。omc 化简时它们的 CAST 留在
+  // 整个数组上、不展开成字面量（simplifyCast 只拆数组字面量，NFSimplifyExp.mo:1322-1344 v1.25.0），末尾展开才逐元素、并重新
+  // typeCast（expandCast，NFExpandExp.mo:1020-1036；der / pre 经 expandBuiltinGeneric）。见 scalarize 的 Unary / Binary 支。
+  bool whole_array_ref(Id<Expr> e) {
+    const Expr& x = result_.model.exprs[e];
+    const Expr& y = x.kind == ExprKind::Cast ? result_.model.exprs[x.a] : x;
+    return y.kind == ExprKind::Cref || non_vectorizeable_call(y);
+  }
   // 含数组调用的等式整体发射 `lhs = rhs`：同秩、已知维相等、元素类型相同（Integer 一侧对 Real 一侧整体转型，见 real_side）。
   void emit_array_call_equation(Id<Expr> a, Id<Expr> b, SourceLoc loc, const SComment& cmt, bool is_initial) {
     // Integer 一侧对 Real 一侧：照 omc 的等式定型（matchExpressions → Expression.typeCast）整体转——推导式 / 调用 / 运算套 CAST
@@ -3320,7 +3328,14 @@ class Flattener {
         if (real) { sa = to_real(sa); sb = to_real(sb); }
         Expr r; r.kind = ExprKind::Binary; r.bin = x.bin; r.a = sa; r.b = sb;
         r.ty = real ? Type::real() : Type::integer();
-        return add(std::move(r));
+        const Id<Expr> n = add(std::move(r));
+        // 逐元素（expandBinary* 的 simplifyBinaryOp），见 elem_ops_。例外：全零字面量数组 − 整体引用（`{0.0, 0.0} - n`）——两个运算数
+        // 不都是数组字面量，omc 在数组层就按 simplifyBinarySub 的 `0 - e = -e` 化简（NFSimplifyExp.mo:946-978 / :1008-1037 v1.25.0），
+        // 取负推进整体的 CAST、末尾展开时逐元素重新 typeCast → `-/*Real*/(n[1])`（NGE5），与标量的展开同（expand_neg_cast）。
+        if (!(x.bin == BinOp::Sub && real && result_.model.exprs[x.a].kind == ExprKind::Array && all_zero_literal(x.a) &&
+              whole_array_ref(x.b)))
+          elem_ops_.insert(n.raw);
+        return n;
       }
       case ExprKind::Unary: {
         // 取负的是会求值成字面量的用户函数数组调用（实参是字面量 / 结构参数）：omc 先整体化简绑定——调用求值成数组、数组取负
@@ -3336,7 +3351,16 @@ class Flattener {
         }
         Id<Expr> sa = scalarize(x.a, idx);
         Expr r; r.kind = ExprKind::Unary; r.un = x.un; r.a = sa; r.ty = result_.model.exprs[sa].ty;
-        return add(std::move(r));
+        const Id<Expr> n = add(std::move(r));
+        // 逐元素的取负转 Real：运算数是整体引用 / der、pre 调用（`-n`），omc 的 CAST 套在整个运算数上、化简不展开它，末尾展开时逐元素
+        // 取负后重新 typeCast、推回取负里（expandCast，NFExpandExp.mo:1020-1036）→ `-/*Real*/(n[1])`，同书写的标量取负；其余（字面量
+        // `-{k, k}`、运算 `-(n + n)`）化简时先成了带转型的字面量元素，逐元素 negate 把取负推进转型、不再展开（expandUnary :934-952）→
+        // `/*Real*/(-k)`、`/*Real*/(-(n[1] + n[1]))`（NGE 探针）：不走 expand_neg_cast、转 Real 时整个包 CAST。
+        if (x.un == UnOp::Minus && !whole_array_ref(x.a)) {
+          elem_ops_.insert(n.raw);
+          cast_outside_.insert(n.raw);
+        }
+        return n;
       }
       case ExprKind::LogicalNot: {
         Id<Expr> sa = scalarize(x.a, idx);
@@ -11563,9 +11587,9 @@ class Flattener {
 
   // 模型里整记录引用（等式 `a = b`、绑定）的记录类型 → 收其构造函数（NFFlatten.collectExpFuncs CREF → collectTypeFuncs
   // :2690-2730，EquationComponent1-4 / RecordAssignment）。构造函数名 = 记录类的作用域路径（顶层 → 名；包里 → 包路径 + 名；
-  // 根类里 → 根名 + 名）；记录定义在非根的实例类里（实例路径未核实）→ SKIP。
-  // 记录类（实例节点 rn）的构造函数：路径（顶层 → 名；包里 → 包路径 + 名；根类里 → 根名 + 名）+ 登记构造函数块（每个
-  // 路径一次）。记录定义在非根的实例类里（实例路径未核实）/ 构造函数块发射不了 → nullopt（已标 SKIP）。
+  // 根类里 → 根名 + 名；在包实例 / 模型实例的类树里查到的 → 实例路径）；定义作用域链上有非包的类（实例路径未核实）→ SKIP。
+  // 记录类（实例节点 rn）的构造函数：路径（同上）+ 登记构造函数块（每个路径一次）。命名不了 / 构造函数块发射不了 → nullopt
+  //（已标 SKIP）。
   // root = false：只发射、不登记成模型的根（强制内联途中要构造函数的输入表，内联完的式子里不一定还有这个记录类型——omc 收函数
   // 在内联之后，ORU9 / rp62x p02 一个函数都不打）。
   // named：调用方已按实例路径定好的名（见 record_ctor_call）。
@@ -11581,9 +11605,16 @@ class Flattener {
     NodeId tn;
     if (const NodeId ip = I_.nodes[rn].instance_parent; is_comp_node(ip)) tn = I_.comps[I_.nodes[ip].comp].type_node;
     else if (pkg_class_node(rn)) tn = rn;
+    // 记录类是在模型实例的类树里查到的（本地类的克隆、继承来的基类实例里的那份；父亲是实例）：omc 按实例路径命名（scopePath 经组件、
+    // 跳过基类名，NFInstNode.mo:1217-1290 v1.25.0；UQR 探针 UQR22 `M m`、M extends Base → `X.m.R`，UQR17 `X.c.R`，UQR18 继承进根类的
+    // `X.R`，UQR20 模型的本地记录 `X.m.R`，UQR21 两个组件各一份）——此前继承来的按声明处 `P.Base.R`、本地的 SKIP。重声明顶替的类未核实，
+    // 照旧。
+    const bool inst_found = tn.is_valid() && !I_.nodes[tn].is_empty() && I_.nodes[tn].kind == NodeKind::Class &&
+                            I_.nodes[tn].node_type.kind != NodeTypeKind::RedeclaredClass && is_instance(I_.nodes[tn].parent_scope);
     if (named) {
       path = *named;
-    } else if (tn.is_valid() && !I_.nodes[tn].is_empty() && I_.nodes[tn].def == rdef && pkg_scope(scode_scope_of(tn))) {
+    } else if (tn.is_valid() && !I_.nodes[tn].is_empty() && I_.nodes[tn].def == rdef &&
+               (pkg_scope(scode_scope_of(tn)) || inst_found)) {
       std::optional<std::vector<Symbol>> sp = scope_path(tn);   // 含记录名本身
       if (!sp) { set_unsupported("record constructor naming"); return std::nullopt; }
       path = std::move(*sp);
@@ -21845,23 +21876,35 @@ class Flattener {
     return supported && !vd.empty() ? wrap_vectorized(call, vd) : call;
   }
 
-  // 把标量表达式提升到 Real（NFExpression.typeCast :1180-1270）：Integer 字面量 → Real 字面量；一元负号 / if 表达式 /
-  // Cast 把转换推进操作数 / 两支 / 内层（IfExpression2 `if time > 1 then 1 else 2` → `… then 1.0 else 2.0`）；其余包 CAST。
+  // 把标量表达式提升到 Real（Expression.typeCast，NFExpression.mo:890-980 v1.25.0）：Integer 字面量 → Real 字面量；一元负号 /
+  // if 表达式 / Cast 把转换推进操作数 / 两支 / 内层（IfExpression2 `if time > 1 then 1 else 2` → `… then 1.0 else 2.0`）；其余包
+  // CAST。转型留在外面、整个包 CAST 的：
+  //   cast_outside_ 里的——omc 定型时 CAST 包住的是整个没化简的式子，化简在后（simplifyCast 不再展开，NFSimplifyExp.mo:1322-1344），
+  //   化简出来的取负 / if / 取下标就在 CAST 里面（NGD2 `Real y = 0 - k` → `/*Real*/(-k)`、`-k - 1` → `/*Real*/(-(k + 1))`）；
+  //   取负的运算数含数组调用：取负推进转型后 simplifyUnary 末尾不展开（:1135-1137 hasArrayCall），转型就留在外面（NGD8
+  //   `r2 = -sum(f(k))` → `/*Real*/(-(f(k)[1] + f(k)[2]))`）。
   Id<Expr> to_real(Id<Expr> e) {
     const Expr x = result_.model.exprs[e];   // 拷贝：下面会 add
     // 已是 Real（含 Real 数组的整体引用 / 运算：`{x, x}` 里的 x 不需要转，此前被包成 `/*Real*/(x)`）。数组字面量的类型是粗
     // 类型，叶仍可能是 Integer，交给 coerce_deep 逐叶转。
     if (x.ty.kind == TypeKind::Real || (x.kind != ExprKind::Array && x.ty.element_type().kind == TypeKind::Real)) return e;
+    if (cast_outside_.count(e.raw)) {
+      Expr c; c.kind = ExprKind::Cast; c.a = e; c.ty = Type::real();
+      return add(std::move(c));
+    }
     switch (x.kind) {
       case ExprKind::IntLit: return lit_real(static_cast<double>(x.ival));
       case ExprKind::Unary:
         if (x.un == UnOp::Minus) {
           const Expr& inner = result_.model.exprs[x.a];
           if (inner.kind == ExprKind::IntLit) return lit_real(-static_cast<double>(inner.ival));
+          if (!x.ty.is_array() && inner.kind != ExprKind::Array && has_array_call(x.a)) break;
           Expr u = x;
-          u.a = to_real(x.a);
+          u.a = typecast_real(x.a);
           u.ty = Type::real();
-          return add(std::move(u));
+          const Id<Expr> n = add(std::move(u));
+          if (elem_ops_.count(e.raw)) elem_ops_.insert(n.raw);   // 逐元素的取负推了转型仍是逐元素的（见 elem_ops_）
+          return n;
         }
         break;
       case ExprKind::IfExp: {
@@ -21886,6 +21929,74 @@ class Flattener {
     }
     Expr c; c.kind = ExprKind::Cast; c.a = e; c.ty = Type::real();
     return add(std::move(c));
+  }
+  // 书写的取负里的运算数提 Real：constant 引用换出来的 `{…}[n]` 也把转型推进字面量——omc 定型时 CAST 套在引用上（`-/*Real*/(kc[n])`），
+  // 换成值后化简：取负推进转型、末尾展开再 typeCast（见 expand_neg_cast），typeCast 的 SUBSCRIPTED_EXP 支只看形态、推进基
+  //（NFExpression.mo:970-975 v1.25.0；NGD6 `r1 = -kc[n]` → `-{3.0, 1.0, 2.0}[n]`，此前 `-/*Real*/({3, 1, 2}[n])`）。
+  Id<Expr> typecast_real(Id<Expr> z) {
+    const Expr x = result_.model.exprs[z];   // 拷贝
+    if (x.kind == ExprKind::Subscript && x.ty.kind == TypeKind::Integer && result_.model.exprs[x.a].kind == ExprKind::Array) {
+      Expr r = x;
+      r.a = coerce_deep(x.a, TypeKind::Real);
+      r.ty = Type::real();
+      return add(std::move(r));
+    }
+    return to_real(z);
+  }
+  // simplifyUnary / simplifyBinary 末尾的展开（ExpandExp.expand，NFSimplifyExp.mo:1135-1137 / :941-943 v1.25.0；nfExpandOperations
+  // 缺省开 Flags.mo:504-505，结果含数组调用的不展开）在标量结果上只是把转型与取负对调：
+  //   `CAST(-e)` → expandCast（NFExpandExp.mo:1020-1036）展开里面的 `-e`（expandUnary :934-952 重建了取负）后重新 typeCast，UNARY
+  //     支把转型推回运算数（NFExpression.mo:946-951）→ `-CAST(e)`：化简把 `-/*Real*/(k)` 的取负推进转型（negate :5035-5046）后又
+  //     推回来，书写的 `sqrt(-k)`、`2.0 * (-k)`、`0.0 - k`、`k / (-1)` 都打 `-/*Real*/(k)`（NGC / NGD 探针；-d=-nfExpandOperations
+  //     下 omc 打 `/*Real*/(-k)`，此前 ymc 也是）；
+  //   `-CAST(e)`（运算数原样返回的 `1.0 * (-k)`、`(-k) + 0.0`、`(-k) / 1`）→ expandUnary 里 simplifyUnaryOp 把取负推进转型 →
+  //     `CAST(-e)`（NGD1 → `/*Real*/(-k)`）。
+  // e 是字面量 / 取负 / 转型的化简时已折掉，不在此列。逐元素展开出的元素（elem_ops_）omc 用 simplifyUnaryOp / simplifyBinaryOp
+  // 化简、不经这一步，调用方挡掉。
+  Id<Expr> expand_neg_cast(Id<Expr> r) {
+    const Expr x = result_.model.exprs[r];   // 拷贝（下面会 add）
+    if (x.ty.is_array() || (x.kind != ExprKind::Cast && x.kind != ExprKind::Unary)) return r;
+    auto plain = [&](Id<Expr> z) {
+      const ExprKind k = result_.model.exprs[z].kind;
+      return k != ExprKind::IntLit && k != ExprKind::RealLit && k != ExprKind::Unary && k != ExprKind::Cast;
+    };
+    const Expr in = result_.model.exprs[x.a];   // 拷贝
+    if (x.kind == ExprKind::Cast && in.kind == ExprKind::Unary && in.un == UnOp::Minus && plain(in.a) && !has_array_call(r)) {
+      Expr u = in;
+      u.a = typecast_real(in.a);
+      u.ty = x.ty;
+      return add(std::move(u));
+    }
+    if (x.kind == ExprKind::Unary && x.un == UnOp::Minus && in.kind == ExprKind::Cast && !in.ty.is_array() && plain(in.a) &&
+        !has_array_call(r)) {
+      Expr u;
+      u.kind = ExprKind::Unary;
+      u.un = UnOp::Minus;
+      u.a = in.a;
+      u.ty = result_.model.exprs[in.a].ty;
+      Expr c = in;
+      c.a = add(std::move(u));
+      return add(std::move(c));
+    }
+    return r;
+  }
+  // Integer 运算（运算数 a、b）化简成的 r 是取负 / if / 取下标（`0 - k`、`-k - 1`、`0 + (-k)`）：用在 Real 处时 omc 的 CAST 包着
+  // 整个运算（定型在化简之前），化简完转型仍在外面（见 to_real 的 cast_outside_）——标上、返回；不是这种 → invalid。运算数原样
+  // 返回的拷一份再标（带上取下标 / if 的标记），不动别处共用的节点。
+  Id<Expr> int_cast_outside(Id<Expr> r, Id<Expr> a, Id<Expr> b) {
+    const Expr re = result_.model.exprs[r];   // 拷贝（下面会 add）
+    if (re.ty.kind != TypeKind::Integer ||
+        (re.kind != ExprKind::Unary && re.kind != ExprKind::IfExp && re.kind != ExprKind::Subscript))
+      return {};
+    if (r == a || r == b) {
+      const Id<Expr> c = add(Expr(re));
+      if (const_subscripts_.count(r.raw)) const_subscripts_.insert(c.raw);
+      if (const_slices_.count(r.raw)) const_slices_.insert(c.raw);
+      if (split_ifs_.count(r.raw)) split_ifs_.insert(c.raw);
+      r = c;
+    }
+    cast_outside_.insert(r.raw);
+    return r;
   }
 
   // `(e)[i]`（ExpKind::Subscript：任意 primary 后的下标）：基是 cref（含括号分组）→ 下标并进 cref 末段（`(x)[n]` →
@@ -22036,12 +22147,19 @@ class Flattener {
       case ExprKind::RealLit: return lit_real(-e.rval);
       case ExprKind::Cast: { Expr c = e; c.a = negate_expr(e.a); return add(std::move(c)); }
       case ExprKind::Unary: return e.a;
-      default: { Expr u; u.kind = ExprKind::Unary; u.un = UnOp::Minus; u.a = id; u.ty = e.ty; return add(std::move(u)); }
+      default: {
+        Expr u; u.kind = ExprKind::Unary; u.un = UnOp::Minus; u.a = id; u.ty = e.ty;
+        const Id<Expr> n = add(std::move(u));
+        if (moving_) moved_.insert(n.raw);
+        return n;
+      }
     }
   }
   Id<Expr> make_bin(Id<Expr> a, BinOp op, Id<Expr> b, const Type& ty) {
     Expr r; r.kind = ExprKind::Binary; r.bin = op; r.a = a; r.b = b; r.ty = ty;
-    return add(std::move(r));
+    const Id<Expr> n = add(std::move(r));
+    if (moving_) moved_.insert(n.raw);
+    return n;
   }
   Id<Expr> make_zero(const Type& ty) { return ty.kind == TypeKind::Integer ? lit_int(0) : lit_real(0.0); }
   // ---- 函数体里已知维数组运算的展开（SimplifyExp.simplifyBinary :965-967 在 nfExpandOperations（缺省开，Flags.mo:508）
@@ -22155,7 +22273,7 @@ class Flattener {
     return build(build, 0, idx);
   }
   // 展开数组二元运算（expandBinaryElementWise / ScalarArray / ArrayScalar :574-690）；不能展开 → invalid。
-  Id<Expr> fn_expand_binary(Id<Expr> a, BinOp op, Id<Expr> b, const Type& ty, bool product) {
+  Id<Expr> fn_expand_binary(Id<Expr> a, BinOp op, Id<Expr> b, const Type& ty, bool product, bool whole_neg_in = false) {
     const bool aarr = op_type(a).is_array(), barr = op_type(b).is_array();
     if (product) {   // 向量 / 矩阵积：两侧都能展开（维已知）→ 同模型语境展开成积和（FS 探针 t1 / t2：`u[1:2] * w[2:3]` →
       //              `u[1] * w[2] + u[2] * w[3]`、`g * w` → `{g[1,1] * w[1] + …, …}`）；否则保持符号
@@ -22163,6 +22281,17 @@ class Flattener {
       return ea.is_valid() && eb.is_valid() ? model_array_product(ea, eb) : Id<Expr>{};
     }
     const Type et = ty.element_type();
+    // 逐元素的结果（simplifyBinaryOp）：Integer 的化简成取负等，转 Real 时整个包 CAST（omc 整体转型、化简展开后 simplifyCast 逐元素
+    // 包，NFSimplifyExp.mo:1322-1344 v1.25.0；NGI 探针 `v := {0, 0} - w` → `{/*Real*/(-w[1]), …}`，见 int_cast_outside）；全零字面量
+    // 数组 − 整体引用在数组层化简、末尾展开逐元素重新 typeCast（同模型语境，见 scalarize 的 Binary 支；`v := {0.0, 0.0} - w` →
+    // `{-/*Real*/(w[1]), …}`）。
+    const bool whole_neg = whole_neg_in || (op == BinOp::Sub && result_.model.exprs[a].kind == ExprKind::Array &&
+                                            all_zero_literal(a) && whole_array_ref(b));
+    auto elem = [&](Id<Expr> x, Id<Expr> y) {
+      const Id<Expr> r = simplify_binary_op(x, op, y, et);
+      if (const Id<Expr> o = int_cast_outside(r, x, y); o.is_valid()) return o;
+      return whole_neg ? expand_neg_cast(r) : r;
+    };
     if (aarr && barr) {
       const Id<Expr> ea = fn_expand(a), eb = fn_expand(b);
       if (!ea.is_valid() || !eb.is_valid()) return {};
@@ -22175,10 +22304,10 @@ class Flattener {
         if (sub_arr) {
           Type st = op_type(xa[i]);
           st = Type::array_of(et, st.dims);
-          el = fn_expand_binary(xa[i], op, xb[i], st, false);
+          el = fn_expand_binary(xa[i], op, xb[i], st, false, whole_neg);
           if (!el.is_valid()) return {};
         } else {
-          el = simplify_binary_op(xa[i], op, xb[i], et);
+          el = elem(xa[i], xb[i]);
         }
         els.push_back(el);
       }
@@ -22190,7 +22319,7 @@ class Flattener {
     if (!ex.is_valid()) return {};
     auto map_el = [&](auto& self, Id<Expr> node) -> Id<Expr> {
       const Expr n = result_.model.exprs[node];
-      if (n.kind != ExprKind::Array) return aarr ? simplify_binary_op(node, op, b, et) : simplify_binary_op(a, op, node, et);
+      if (n.kind != ExprKind::Array) return aarr ? elem(node, b) : elem(a, node);
       std::vector<Id<Expr>> els;
       for (Id<Expr> c : n.args) els.push_back(self(self, c));
       Expr r = n;
@@ -22350,25 +22479,29 @@ class Flattener {
   Id<Expr> simplify_binary_op(Id<Expr> a, BinOp op, Id<Expr> b, const Type ty) {
     const bool scalar = !ty.is_array();
     switch (op) {
-      case BinOp::Add:
+      case BinOp::Add: {
         if (lit_is(a, 0)) return b;
         if (lit_is(b, 0)) return a;
+        if (!is_negated(a) && !is_negated(b)) return make_bin(a, op, b, ty);
+        const RedScalarize mv(moving_);   // 负号挪动新建的节点（见 moved_）
         if (is_negated(a)) {
           if (is_negated(b)) return negate_expr(make_bin(negate_expr(a), BinOp::Add, negate_expr(b), ty));
           return simplify_binary_op(b, BinOp::Sub, negate_expr(a), ty);
         }
-        if (is_negated(b)) return simplify_binary_op(a, BinOp::Sub, negate_expr(b), ty);
-        return make_bin(a, op, b, ty);
-      case BinOp::Sub:
+        return simplify_binary_op(a, BinOp::Sub, negate_expr(b), ty);
+      }
+      case BinOp::Sub: {
         if (lit_is(a, 0)) return negate_expr(b);
         if (lit_is(b, 0)) return a;
         if (scalar && expr_equal(a, b)) return make_zero(ty);
+        if (!is_negated(a) && !is_negated(b)) return make_bin(a, op, b, ty);
+        const RedScalarize mv(moving_);   // 负号挪动新建的节点（见 moved_）
         if (is_negated(a)) {
           if (is_negated(b)) return make_bin(negate_expr(b), BinOp::Sub, negate_expr(a), ty);
           return negate_expr(simplify_binary_op(negate_expr(a), BinOp::Add, b, ty));
         }
-        if (is_negated(b)) return simplify_binary_op(a, BinOp::Add, negate_expr(b), ty);
-        return make_bin(a, op, b, ty);
+        return simplify_binary_op(a, BinOp::Add, negate_expr(b), ty);
+      }
       case BinOp::Mul:
         if (lit_is(a, 0)) return a;
         if (lit_is(a, 1)) return b;
@@ -22381,7 +22514,10 @@ class Flattener {
         if (lit_is(a, 0) && lit_nonzero(b)) return a;
         // OMC 原样：match (isNegated(exp1), isNegated(exp1)) 两项都看分子，分子带负号时两边同时取负
         //（SimplifyBinary `(-a*x)/x` → `a * x / (-x)`）。
-        if (is_negated(a)) return make_bin(negate_expr(a), op, negate_expr(b), ty);
+        if (is_negated(a)) {
+          const RedScalarize mv(moving_);   // 负号挪动新建的节点（见 moved_）
+          return make_bin(negate_expr(a), op, negate_expr(b), ty);
+        }
         return make_bin(a, op, b, ty);
       case BinOp::Pow:
         if (scalar && lit_is(b, 0)) return ty.kind == TypeKind::Integer ? lit_int(1) : lit_real(1.0);
@@ -22463,24 +22599,40 @@ class Flattener {
         // 模型语境的数组运算不在数组层做恒等化简：omc 先按元素展开、再逐元素化简（WA 探针 w3：`y = z * 1` →
         // `y = {z[1], z[2]}`、`y = 0 * z` → `{0.0, 0.0}`；此前折成 `y = z` / 标量 0）。
         if (ty.is_array()) return a == a0 && b == b0 ? id : make_bin(a, op, b, ty);
-        return simplify_binary_op(a, op, b, ty);
+        const Id<Expr> r = simplify_binary_op(a, op, b, ty);
+        if (const Id<Expr> o = int_cast_outside(r, a, b); o.is_valid()) return o;
+        return elem_ops_.count(id.raw) || moved_.count(id.raw) ? r : expand_neg_cast(r);
       }
       case ExprKind::Unary: {
         const Id<Expr> a0 = result_.model.exprs[id].a;
         const UnOp op = result_.model.exprs[id].un;
         const Type ty = result_.model.exprs[id].ty;
-        // simplifyUnary :1141-1175：`-(-e)` → e；字面量求值；否则 simplifyUnarySign（逐层翻转后 negate，CAST 往里推）。
+        // simplifyUnary（NFSimplifyExp.mo:1116-1160 v1.25.0）：字面量求值；否则 simplifyUnarySign（逐层翻转后 negate，CAST 往里推），
+        // 末尾的展开再把标量上的转型与取负对调（expand_neg_cast）。书写的 `-(-e)` → e：omc 在实例化时就由 makeUnary 的 negate 消掉
+        //（NFInst.mo:2839-2844 → NFExpression.mo:6526-6538），定型、化简都只见 e，不经那一步（NGC11 `-(-(0 - k))` → `/*Real*/(-k)`）。
         if (op == UnOp::Minus && result_.model.exprs[a0].kind == ExprKind::Unary)
           return simplify_expr(result_.model.exprs[a0].a);
         Id<Expr> a = simplify_expr(a0);
-        // 函数体里已知维的数组取负：逐元素展开（FA 探针 f1 `v3 := -w` → `{-w[1], -w[2], -w[3]}`；同二元运算的展开）。
-        if (fn_scope_ && op == UnOp::Minus && ty.is_array())
+        // 函数体里已知维的数组取负：逐元素展开（FA 探针 f1 `v3 := -w` → `{-w[1], -w[2], -w[3]}`；同二元运算的展开）。数组字面量的
+        // 取负（字面量的类型是粗类型，按种类认）同样展开（expandUnary，NFExpandExp.mo:934-952 v1.25.0；NGG 探针 `v := -{n, x}` →
+        // `{/*Real*/(-n), -x}`，此前原样打 `-{n, x}`）；全是数值字面量的留给下面按 Ceval 折（零元素成 -0.0），含数组调用的不展开
+        //（simplifyUnary :1135-1137）。逐元素的取负：运算数是整体引用的同标量书写的取负（展开时重新 typeCast，见 whole_array_ref），
+        // 字面量的元素先各自转型、取负推进转型（cast_outside_）。
+        const bool lit_arr = result_.model.exprs[a].kind == ExprKind::Array && !result_.model.exprs[a].args.empty() &&
+                             !all_numeric_literal(a) && !has_array_call(a);
+        if (fn_scope_ && op == UnOp::Minus && (ty.is_array() || lit_arr))
           if (const Id<Expr> ex = fn_expand(a); ex.is_valid()) {
+            const bool whole = whole_array_ref(a);
             auto neg = [&](auto& self, Id<Expr> node) -> Id<Expr> {
               const Expr n = result_.model.exprs[node];   // 拷贝
               if (n.kind != ExprKind::Array) {
                 Expr u; u.kind = ExprKind::Unary; u.un = UnOp::Minus; u.a = node; u.ty = n.ty;
-                return simplify_expr(add(std::move(u)));
+                const Id<Expr> un = add(std::move(u));
+                if (!whole) {   // 逐元素（expandUnary 的 simplifyUnaryOp），见 elem_ops_ / cast_outside_
+                  elem_ops_.insert(un.raw);
+                  cast_outside_.insert(un.raw);
+                }
+                return simplify_expr(un);
               }
               Expr r = n;
               for (Id<Expr>& c : r.args) c = self(self, c);
@@ -22500,7 +22652,10 @@ class Flattener {
           }
           bool neg = true;
           while (result_.model.exprs[a].kind == ExprKind::Unary) { a = result_.model.exprs[a].a; neg = !neg; }
-          return neg ? negate_expr(a) : a;
+          const Id<Expr> r = neg ? negate_expr(a) : a;
+          // 再化简 cast_outside_ 的取负（Integer）：仍是它（negate 新建的取负节点），标记跟着走。
+          if (cast_outside_.count(id.raw) && result_.model.exprs[r].kind == ExprKind::Unary) cast_outside_.insert(r.raw);
+          return elem_ops_.count(id.raw) || moved_.count(id.raw) ? r : expand_neg_cast(r);
         }
         Expr r; r.kind = ExprKind::Unary; r.un = op; r.a = a; r.ty = ty;
         return add(std::move(r));
@@ -25813,6 +25968,9 @@ class Flattener {
       if (const auto oc = oc_calls_.find(id.raw); oc != oc_calls_.end()) oc_calls_[n.raw] = oc->second;
     if (scalarized_logicals_.count(id.raw)) scalarized_logicals_.insert(n.raw);
     if (split_ifs_.count(id.raw)) split_ifs_.insert(n.raw);
+    if (elem_ops_.count(id.raw)) elem_ops_.insert(n.raw);
+    if (cast_outside_.count(id.raw)) cast_outside_.insert(n.raw);
+    if (moved_.count(id.raw)) moved_.insert(n.raw);
     // 数组运算的打印 / 符号形态标记（点号、积、换位、书写的算符，见 sym_binary / sym_node）也跟着走：结构参数代入后克隆出的
     // 节点丢了标记会打成 `2.0 * f(time)`（omc `f(time) * 2.0`，WR 探针 m1；62f 起有，压平末尾代入结构参数时）。
     if (is_bin) {
@@ -27568,6 +27726,20 @@ class Flattener {
   std::unordered_map<std::uint32_t, NodeId> rec_node_cache_;    // 记录类定义 → 某个实例类节点（record_class_node）
   std::unordered_map<std::uint32_t, Op> fn_array_ops_;          // 函数语境的数组二元运算节点 → 书写的算符（fn_array_form）
   std::unordered_set<std::uint32_t> scalarized_logicals_;       // scalarize 逐元素建的 and / or 节点（simplify 不做吸收律）
+  // 逐元素展开出的取负 / 二元节点（scalarize 的逐元素运算、函数体数组取负的逐元素）：omc 的元素化简是 simplifyUnaryOp /
+  // simplifyBinaryOp，不经 simplifyUnary / simplifyBinary 末尾的展开（expand_neg_cast 不做）。
+  std::unordered_set<std::uint32_t> elem_ops_;
+  // 转 Real 时整个包 CAST、不往里推的 Integer 节点（to_real）：Integer 运算化简出的取负 / if / 取下标（`0 - k` → `-k`），以及
+  // 逐元素取负里运算数不是整体引用的（`-{k, k}` 的元素，见 scalarize）。
+  std::unordered_set<std::uint32_t> cast_outside_;
+  // 化简挪动负号新建的二元 / 取负节点（simplify_binary_op 的 `e1 + (-e2)` → `e1 - e2`、`(-e1) / e2` → `e1 / (-e2)` 一类，moving_
+  // 期间建的）：omc 先代入常量再化简一次（EvalConstants.evaluate 在 SimplifyModel.simplify 之前，NFInst.mo:201 / :210 v1.25.0），
+  // 没有这些中间形态；ymc 化简、压平末尾代入结构参数、再化简，再化简它们时不做 expand_neg_cast——`q + (-k)`、q = 0.0 结构参数：
+  // omc `0.0 + (-/*Real*/(k))` 取 `-/*Real*/(k)` 再展开成 `/*Real*/(-k)`；ymc 的 `q - /*Real*/(k)` 代入成 `0.0 - /*Real*/(k)`、
+  // 取负推进转型就是 `/*Real*/(-k)`，不能再对调（NGH 探针 NGH1 的 y3 / y5）。
+  // ponytail: 只管负号挪动这一种中间形态；要根治得在代入前的式子上化简（同 omc 的先代入后化简）。
+  std::unordered_set<std::uint32_t> moved_;
+  bool moving_ = false;
   bool noret_call_ = false;                                     // 正在定型一条无返回值调用语句的最外层调用（见 noret_call）
   std::unordered_set<std::uint32_t> nofold_bins_;               // sum / product 展开出的元素链的 Binary 节点（simplify 原样留）
   std::unordered_set<std::uint32_t> sum_chain_bins_;            // 其中 sum / product 展开出的（不含 semiLinear 的积，见 clone_subst）

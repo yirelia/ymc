@@ -156,8 +156,15 @@ NodeId Instantiator::lookup_simple_class(Symbol name, NodeId scope) {
   while (cur.is_valid() && !I_.nodes[cur].is_empty()) {
     if (I_.nodes[cur].kind == NodeKind::Class && I_.nodes[cur].cls.is_valid()) {
       const ClassTreeId tid = I_.classes[I_.nodes[cur].cls].tree;
+      // 外层的包里查到继承来的类：omc 往外层走的作用域是包实例（类经 lookupLocalName → Inst.instPackage 查到，其父亲是包实例，
+      // NFLookup.mo:679-742、ClassTree.instantiate NFClassTree.mo:428-660 v1.25.0），继承来的类是基类实例里的那份，按访问它的包
+      // 命名（scopePath 跳过基类名，NFInstNode.mo:1217-1290）——UQR 探针 UQR1 `P.A.C` 里不限定写的 R（A extends Base）→ 记录构造
+      // 函数 `P.A.R`，此前按声明处 `P.Base.R`。同限定名的后续段，取包实例里的那份（class_in 的 owner）。起点（声明所在的类）不在此列。
+      const SElement* pe = I_.nodes[cur].def.is_valid() ? &I_.scode.elems[I_.nodes[cur].def] : nullptr;
+      const NodeId owner = cur != scope && pe && pe->kind == SElementKind::Class && pe->restriction == SRestriction::Package
+                               ? cur : NodeId{};
       if (tid.is_valid())
-        if (const NodeId hit = class_in(cur, tid, name); !I_.nodes[hit].is_empty()) return hit;
+        if (const NodeId hit = class_in(cur, tid, name, owner); !I_.nodes[hit].is_empty()) return hit;
       const NodeId im = import_class(name, cur);   // 可能 partial_inst / expand 别的包 → arena add，上面的引用不再用
       if (im.is_valid() && !I_.nodes[im].is_empty()) return im;
       if (unsupported_) return Inst::empty_node();   // 冲突 / 解析不到的 import：不再往外层找（omc 在这里报错）

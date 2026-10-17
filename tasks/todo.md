@@ -2540,11 +2540,26 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       FAIL 0（oracle=live 不一致 0）；scodeinst 660→663（ClassExtends4、ClassMod3、ih3）；testsuite 1830→1835（另 redeclare/
       ClassExtends6、metamodelica ShortPackageDefinition）/ FAIL 0；**MSL 472→478**（R134a1 / R134a2、SimpleLiquidWater、ReferenceAir.
       DryAir1 / DryAir2 / Inverse_sh_T）；探针 10315→10421；单测 450→460。
-- [ ] (66w 候选) 已有的静默 FAIL（66v 调查时发现，语料没撞上）：
+- [x] (66w 候选，66w 已修) 已有的静默 FAIL（66v 调查时发现，语料没撞上）：
       (a) Integer 取负后转 Real：`sqrt(-k)`、`2.0 * (-k)`、`integer(-n)`——omc 打 `-/*Real*/(k)`，ymc 把负号推进转型 `/*Real*/(-k)`
       （negate_expr 仿 Expression.negate，与 1.25.0 实跑不符，要查）。复现 `$S/pkr66v/work/XMN1.mo`、XMN2、XMI6、XMI8-10。
       (b) 包里继承来的记录被包内本地类不限定引用：`XM47P.A.C c`（R 经无修饰的 extends 继承进 A）——omc 命名 `XM47P.A.R`，ymc
       `XM47P.Base.R`。复现 `$S/pkr66v/work/XM47.mo`。
+- [x] (66w) 两族语料外的静默错（2026-10-17）：
+      (a) Integer 取负转 Real：定型把转型推进取负（typeCast 的 UNARY 支，NFExpression.mo:946-951），化简 negate 又推回转型里
+      （:5035-5046），但 simplifyUnary / simplifyBinary 末尾还有一步 ExpandExp.expand（NFSimplifyExp.mo:1135-1137 / :941-943，
+      nfExpandOperations 缺省开，结果含数组调用的不展开）——标量上就是转型与取负对调（expandCast :1020-1036 → expandUnary :934-952
+      → typeCast）：书写的 `sqrt(-k)` / `2.0 * (-k)` / `0.0 - k` → `-/*Real*/(k)`（-d=-nfExpandOperations 下才是 `/*Real*/(-k)`，
+      ymc 此前就是这个）。expand_neg_cast 照做；Integer 运算化简出的取负 / if / 取下标转型留在外面（定型在化简前，simplifyCast 不展开：
+      `Real y = 0 - k` → `/*Real*/(-k)`，cast_outside_）；逐元素的走 simplifyUnaryOp / simplifyBinaryOp、不经那一步（elem_ops_），
+      整体引用的 `-n` 逐元素重新 typeCast → `-/*Real*/(n[1])`；结构参数先化简后代入的负号挪动中间形态不再对调（moved_，ponytail：
+      根治要先代入后化简）；函数体里数组字面量的取负逐元素展开。
+      (b) 不限定名往外层包查到继承来的类：omc 外层作用域是包实例，继承来的类按访问它的包命名（ClassTree.instantiate NFClassTree.mo
+      :428-660、scopePath NFInstNode.mo:1217-1290）→ inst 的 lookup_simple_class 对外层包同样带 owner 取包实例里的那份（`P.A.R`）；
+      模型实例类树里查到的记录按实例路径命名（`X.m.R`，此前继承来的按声明处、本地的 SKIP）。继承来的函数（inh_tainted）照旧 SKIP。
+      探针 pk-p31（118；NG / UQR）——基线二进制上 82 例 FAIL，现 PASS 104 / SKIP 13 / BOTH-REJECT 1；单测 +6。
+      slice 702 例 FAIL 0（oracle=live 不一致 0）；scodeinst 663、testsuite 1835、MSL 478（均不变）/ FAIL 0；探针 10421→10539；
+      单测 460→466。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

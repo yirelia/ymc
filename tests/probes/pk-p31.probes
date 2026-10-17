@@ -1,0 +1,1822 @@
+//// set: pk-p31 — Integer 取负后转 Real（66w；simplifyUnary / simplifyBinary 末尾的 ExpandExp.expand 把标量上的 CAST 与取负对调，NFSimplifyExp.mo:1135-1137 / :941-943、expandCast NFExpandExp.mo:1020-1036 v1.25.0，-d=-nfExpandOperations 下 omc 打 `/*Real*/(-k)`）：书写的取负进 Real 处 `sqrt(-k)`、`2.0 * (-k)`、`integer(-n)`、关系 / when 条件 / 函数体 → `-/*Real*/(k)`（NGC1-NGC24，NGC1-NGC6 = 66v 的 XMN1 / XMN2 / XMI6 / XMI8-XMI10）；运算数原样返回的 `1.0 * (-k)` → `/*Real*/(-k)`、`0.0 - k` / `k / (-1)` → `-/*Real*/(k)`（NGD1、NGC8）；Integer 运算化简出的取负 / if / 取下标留在 CAST 里（定型在化简之前，simplifyCast 不展开）`Real y = 0 - k` → `/*Real*/(-k)`、`-k - 1` → `/*Real*/(-(k + 1))`（NGD2-NGD5、NGF1）；运算数含数组调用 → `/*Real*/(-(…))`（NGD8）；constant 数组取变下标 `-kc[n]` → `-{3.0, 1.0, 2.0}[n]`（NGD6、NGC24）；逐元素：整体引用 `-n` → `-/*Real*/(n[1])`，字面量 / 运算 `-{k, k}`、`-(n + n)` → `/*Real*/(-k)`，`{0.0, 0.0} - n` 数组层化简 → `-/*Real*/(n[1])`（NGE1-NGE10）；函数体里数组字面量的取负逐元素展开（NGG，此前原样打 `-{n, n}`）、函数体里 Integer 数组运算赋给 Real 的逐元素同模型语境（`{0, 0} - w` → `{/*Real*/(-w[1]), …}`、`{0.0, 0.0} - w` → `{-/*Real*/(w[1]), …}`，NGI）；结构参数代入后再化简：负号挪动出的中间形态不再对调（omc 先代入后化简，NFInst.mo:201 / :210；NGH1-NGH4）；照旧 SKIP：NGC17 / NGD13 / NGG7。记录类经继承查到（UQR，omc 按查到处的路径命名，scopePath 跳过基类名 NFInstNode.mo:1217-1290）：外层包里不限定写的 R（A extends Base）→ `P.A.R`（UQR1 = 66v 的 XM47，UQR6 / UQR7 / UQR9 / UQR10 / UQR26 / UQR29 / UQR32-UQR34）；模型实例里 → 实例路径 `X.m.R`（UQR15 / UQR17-UQR22 / UQR24 / UQR27 / UQR28；UQR20 非根模型的本地记录此前 SKIP）；照旧 SKIP：继承来的函数（UQR2-UQR4 / UQR11）、嵌套记录字段（UQR5）、带修饰的 extends（UQR8 / UQR31）、枚举（UQR12）、重声明的记录类（UQR25）
+//// model: NGC1
+model NGC1
+  discrete Integer k(start = 1);
+  Real r;
+  Real r2;
+  Real r3;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  r = -k;
+  r2 = 2.0 * (-k);
+  r3 = sin(-k) + abs(-k);
+end NGC1;
+//// model: NGC2
+function NGC2F
+  input Integer n;
+  output Real m;
+algorithm
+  m := -n;
+  m := m + sin(-n);
+end NGC2F;
+model NGC2
+  Real k = NGC2F(integer(time));
+end NGC2;
+//// model: NGC3
+function NGC3F
+  input Integer n;
+  output Integer m;
+algorithm
+  m := integer(2) + integer(n * 2) + integer(-n);
+end NGC3F;
+model NGC3
+  Integer k = NGC3F(integer(time));
+end NGC3;
+//// model: NGC4
+function NGC4F
+  input Integer n;
+  output Real m;
+algorithm
+  m := sqrt(-n) + exp(-n);
+end NGC4F;
+model NGC4
+  Real k = NGC4F(integer(time));
+end NGC4;
+//// model: NGC5
+model NGC5
+  discrete Integer k(start = 1);
+  Integer m;
+  Real r;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  m = integer(-k);
+  r = sqrt(-k);
+end NGC5;
+//// model: NGC6
+function NGC6F
+  input Integer n;
+  output Integer m;
+algorithm
+  m := integer(-n);
+end NGC6F;
+model NGC6
+  Integer k = NGC6F(integer(time));
+end NGC6;
+//// model: NGC7
+model NGC7
+  discrete Integer k(start = 1);
+  Real x = time;
+  Real b1 = -k;
+  Real b2 = -k * 2.0;
+  Real b3 = 2.0 * (-k);
+  Real b4 = -(k + 1);
+  Real b5 = -(k * 2);
+  Real b6 = -k + 1.0;
+  Real b7 = 1.0 - (-k);
+  Real b8 = 1.0 + (-k);
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+end NGC7;
+//// model: NGC8
+model NGC8
+  discrete Integer k(start = 1);
+  Real x = time;
+  Real r1, r2, r3, r4, r5, r6;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  r1 = (-k) / 2;
+  r2 = 0 - k;
+  r3 = 0.0 - k;
+  r4 = k / (-1);
+  r5 = x / (-k);
+  r6 = (-x) / k;
+end NGC8;
+//// model: NGC9
+model NGC9
+  discrete Integer k(start = 1);
+  Real x = time;
+  Real r1, r2, r3, r4, r5, r6;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  r1 = x + (-k);
+  r2 = (-k) + x;
+  r3 = x - (-k);
+  r4 = (-k) - x;
+  r5 = x * (-k);
+  r6 = -k * x;
+end NGC9;
+//// model: NGC10
+model NGC10
+  discrete Integer k(start = 1);
+  Real r1, r2;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  r1 = -k ^ 2;
+  r2 = (-k) ^ 2;
+end NGC10;
+//// model: NGC11
+model NGC11
+  discrete Integer k(start = 1);
+  Real r1, r2, r3, r4, r5;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  r1 = -(-k);
+  r2 = -(0 - k);
+  r3 = -(-(0 - k));
+  r4 = 1.0 * (0 - k);
+  r5 = 2.0 * (0 - k);
+end NGC11;
+//// model: NGC12
+model NGC12
+  discrete Integer k(start = 1);
+  Real r1, r2, r3;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  r1 = if k > 1 then -k else 1.0;
+  r2 = -(if k > 1 then k else 2);
+  r3 = 2.0 * (-(if k > 1 then k else 2));
+end NGC12;
+//// model: NGC13
+model NGC13
+  discrete Integer k(start = 1);
+  Real x = time;
+  Real r1, r2, r3, r4, r5;
+  Boolean c;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  r1 = -pre(k);
+  r2 = -abs(k);
+  r3 = -integer(x);
+  r4 = -div(k, 2);
+  r5 = -mod(k, 2);
+  c = x > -k;
+end NGC13;
+//// model: NGC14
+model NGC14
+  discrete Integer k(start = 1);
+  Real r1, r2, r3, r4;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  r1 = max(-k, 1);
+  r2 = max(-k, 1.0);
+  r3 = sin(-(k + 1));
+  r4 = sin(-(-k)) + sin(-(0 - k)) + sin(0 - k);
+end NGC14;
+//// model: NGC15
+model NGC15
+  discrete Integer k(start = 1);
+  Real y(start = 0);
+  Real r1, r2;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  der(y) = -k;
+  r1 = -k * k;
+  r2 = -(k) - 1;
+end NGC15;
+//// model: NGC16
+model NGC16
+  discrete Integer k(start = 1);
+  Real c1[2] = -{k, k};
+  Real c2[2] = {-k, 1.0};
+  Real c3[2] = -{k, 1};
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+end NGC16;
+//// model: NGC17
+model NGC17
+  discrete Integer k(start = 1);
+  Real c4[2] = {-k, -k} * 2.0;
+  Real c5[2] = 2.0 * (-{k, k});
+  Integer n[2] = {k, 2 * k};
+  Real c6[2] = -n;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+end NGC17;
+//// model: NGC18
+function NGC18F
+  input Integer n;
+  input Real x;
+  output Real m;
+algorithm
+  m := 2.0 * (-n);
+  m := m + (0 - n);
+  m := m + (0.0 - n);
+  m := m + n / (-1);
+  m := m + (-(n + 1));
+  m := m + (-(-n));
+  m := m + (if n > 1 then -n else 1.0);
+  m := m * x / (-n);
+end NGC18F;
+model NGC18
+  Real k = NGC18F(integer(time), time);
+end NGC18;
+//// model: NGC19
+function NGC19F
+  input Integer n;
+  output Real v[2];
+algorithm
+  v := -{n, n};
+  v := v + {-n, 1.0};
+end NGC19F;
+model NGC19
+  Real k[2] = NGC19F(integer(time));
+end NGC19;
+//// model: NGC20
+function NGC20F
+  input Integer n;
+  input Real x;
+  output Real m;
+algorithm
+  m := 0;
+  if -n > x then
+    m := sin(-n);
+  end if;
+  for i in 1:2 loop
+    m := m + exp(-i) + (-n) * x;
+  end for;
+end NGC20F;
+model NGC20
+  Real k = NGC20F(integer(time), time);
+end NGC20;
+//// model: NGC21
+model NGC21
+  parameter Integer p = 3;
+  Real y(start = -p);
+  Real z = sin(-p) * time;
+  Real w = -p * time;
+equation
+  der(y) = -p;
+end NGC21;
+//// model: NGC22
+model NGC22
+  Real y = -2;
+  Real z = sin(-2) + 2.0 * (-2);
+  Real w = time * (-2);
+end NGC22;
+//// model: NGC23
+model NGC23
+  discrete Integer k(start = 1);
+  Real x = time;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  assert(-k < x, "neg");
+end NGC23;
+//// model: NGC24
+model NGC24
+  constant Integer kc[3] = {3, 1, 2};
+  discrete Integer n(start = 1);
+  Real y = -kc[n];
+  Real z = sin(-kc[n]);
+equation
+  when sample(0, 1) then
+    n = mod(pre(n), 3) + 1;
+  end when;
+end NGC24;
+//// model: NGD1
+model NGD1
+  discrete Integer k(start = 1);
+  Real r1, r2, r3, r4, r5, r6, r7;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  r1 = 1.0 * (-k);
+  r2 = (-k) * 1.0;
+  r3 = 0.0 + (-k);
+  r4 = (-k) + 0.0;
+  r5 = (-k) - 0.0;
+  r6 = (-k) / 1;
+  r7 = (-k) ^ 1;
+end NGD1;
+//// model: NGD2
+model NGD2
+  discrete Integer k(start = 1);
+  Real y1 = 0 + (-k);
+  Real y2 = (-k) * 1;
+  Real y3 = -k - 1;
+  Real y4 = (-k) + (-k);
+  Real y5 = 0 - k;
+  Real y6 = 1 * (0 - k);
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+end NGD2;
+//// model: NGD3
+function NGD3F
+  input Integer n;
+  output Real m;
+  output Real m2;
+  output Real m3;
+algorithm
+  m := 0 - n;
+  m2 := -n - 1;
+  m3 := 0 + (-n);
+end NGD3F;
+model NGD3
+  Real k;
+  Real k2;
+  Real k3;
+equation
+  (k, k2, k3) = NGD3F(integer(time));
+end NGD3;
+//// model: NGD4
+model NGD4
+  parameter Integer p = 3;
+  Real y(start = 0 - p);
+  Real z(start = -p - 1);
+  Real w(start = -p);
+equation
+  der(y) = 1;
+  der(z) = 1;
+  der(w) = 1;
+end NGD4;
+//// model: NGD5
+model NGD5
+  discrete Integer k(start = 1);
+  Real r1, r2;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  r1 = if k > 2 then 0 - k else 1;
+  r2 = if k > 2 then -k - 1 else 1.5;
+end NGD5;
+//// model: NGD6
+model NGD6
+  constant Integer kc[3] = {3, 1, 2};
+  discrete Integer n(start = 1);
+  Real r1, r2;
+equation
+  when sample(0, 1) then
+    n = mod(pre(n), 3) + 1;
+  end when;
+  r1 = -kc[n];
+  r2 = 2.0 * (-kc[n]);
+end NGD6;
+//// model: NGD7
+function NGD7F
+  input Integer n;
+  output Real m;
+protected
+  constant Integer kc[3] = {3, 1, 2};
+algorithm
+  m := -kc[n];
+  m := m + sin(-kc[n]);
+end NGD7F;
+model NGD7
+  Real k = NGD7F(integer(time));
+end NGD7;
+//// model: NGD8
+function NGD8I
+  input Integer k;
+  output Integer v[2];
+algorithm
+  v := {k, 2 * k};
+end NGD8I;
+model NGD8
+  discrete Integer k(start = 1);
+  Real r1, r2;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  r1 = sin(-sum(NGD8I(k)));
+  r2 = -sum(NGD8I(k));
+end NGD8;
+//// model: NGD9
+model NGD9
+  discrete Integer k(start = 1);
+  Real x = time;
+  Real r1;
+  Boolean b;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  r1 = sin(-pre(k));
+  when -k > x then
+    b = true;
+  end when;
+end NGD9;
+//// model: NGD10
+record NGD10R
+  Real x;
+  Real y;
+end NGD10R;
+model NGD10
+  discrete Integer k(start = 1);
+  NGD10R r(x = -k, y = 2.0 * (-k));
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+end NGD10;
+//// model: NGD11
+model NGD11
+  discrete Integer k(start = 1);
+  Real c1[2] = {1.0, 2.0} .* (-{k, k});
+  Real c2[2] = {-k, 1.0};
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+end NGD11;
+//// model: NGD12
+model NGD12
+  discrete Integer k(start = 1);
+  Integer n[2] = {k, 2 * k};
+  Real c1[2];
+  Real c2[2];
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  c1 = -n;
+  c2 = {1.0, 2.0} .* (-{k, k});
+end NGD12;
+//// model: NGD13
+function NGD13F
+  input Integer w[2];
+  output Real v[2];
+  output Real v2[2];
+algorithm
+  v := -w;
+  v2 := 2.0 * (-w);
+end NGD13F;
+model NGD13
+  Real k[2];
+  Real k2[2];
+equation
+  (k, k2) = NGD13F({integer(time), 2});
+end NGD13;
+//// model: NGD14
+model NGD14
+  discrete Integer k(start = 1);
+  Real r1, r2, r3;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  r1 = sin(-(if k > 1 then k else 2));
+  r2 = -(if k > 1 then k else 2) * 2.0;
+  r3 = 2.0 * (-(k + k));
+end NGD14;
+//// model: NGD15
+model NGD15
+  discrete Integer k(start = 1);
+  parameter Real p = 2;
+  Real r1, r2;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  r1 = p * (-k);
+  r2 = -k / p;
+end NGD15;
+//// model: NGE1
+model NGE1
+  discrete Integer k(start = 1);
+  Integer n[2] = {k, 2 * k};
+  Real c1[2];
+  Real c2[2];
+  Real c3[2];
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  c1 = -{k, k};
+  c2 = -{k, 1};
+  c3 = -n;
+end NGE1;
+//// model: NGE2
+model NGE2
+  discrete Integer k(start = 1);
+  Integer n[2] = {k, 2 * k};
+  Real c1[2];
+  Real c2[2];
+  Real c3[2];
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  c1 = 2.0 * (-n);
+  c2 = {1.0, 2.0} .* (-n);
+  c3 = 1.0 .* (-n);
+end NGE2;
+//// model: NGE3
+model NGE3
+  discrete Integer k(start = 1);
+  Integer n[2] = {k, 2 * k};
+  Real c1[2];
+  Real c2[2];
+  Real c3[2];
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  c1 = {1.0, 2.0} .* (-{k, k});
+  c2 = {0, 0} - n;
+  c3 = -n - {1, 1};
+end NGE3;
+//// model: NGE4
+model NGE4
+  discrete Integer k(start = 1);
+  Integer n[2] = {k, 2 * k};
+  Real c1[2];
+  Real c2[2];
+  Real c3[2];
+  Real c4[2];
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  c1 = -(n + n);
+  c2 = -n * 2;
+  c3 = -n * 2.0;
+  c4 = {1, 1} .* (-n);
+end NGE4;
+//// model: NGE5
+model NGE5
+  discrete Integer k(start = 1);
+  Integer n[2] = {k, 2 * k};
+  Real c1[2];
+  Real c2[2];
+  Real c3[2];
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  c1 = 2.0 * (-(n + n));
+  c2 = 2.0 * {-k, -k};
+  c3 = {0.0, 0.0} - n;
+end NGE5;
+//// model: NGE6
+model NGE6
+  discrete Integer k(start = 1);
+  Integer n[2] = {k, 2 * k};
+  Real c1[2] = -{k, k};
+  Real c2[2] = -n;
+  Real c3[2] = -(n + n);
+  Real c4[2] = 2.0 * (-n);
+  Real c5[2] = {-k, 1};
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+end NGE6;
+//// model: NGE7
+model NGE7
+  discrete Integer k(start = 1);
+  Integer n[2] = {k, 2 * k};
+  Real c1[2];
+  Real c2[2];
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  c1 = -pre(n);
+  c2 = 2.0 * (-pre(n));
+end NGE7;
+//// model: NGE8
+model NGE8
+  discrete Integer k(start = 1);
+  Integer n[3] = {k, 2 * k, 3};
+  Real c1[2];
+  Real c2[2];
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  c1 = -n[1:2];
+  c2 = -n[2:3] * 2;
+end NGE8;
+//// model: NGE9
+model NGE9
+  discrete Integer k(start = 1);
+  Integer m[2, 2] = {{k, 1}, {2, k}};
+  Real c1[2, 2];
+  Real c2[2, 2];
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  c1 = -m;
+  c2 = -{{k, 1}, {2, k}};
+end NGE9;
+//// model: NGE10
+model NGE10
+  discrete Integer k(start = 1);
+  Integer n[2] = {k, 2 * k};
+  Real x[2] = {time, 2 * time};
+  Real c1[2];
+  Real c2[2];
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  c1 = x + (-n);
+  c2 = -n + x;
+end NGE10;
+//// model: NGF1
+model NGF1
+  discrete Integer k(start = 1);
+  Boolean b = time > 0.5;
+  Real y1 = 0 + (if b then k else 2);
+  Real y2 = 0 + ({1, 2, 3})[k];
+  Real y3 = if b then -k else -2 * k;
+  Real y4 = -(if b then k else 2 * k);
+equation
+  when sample(0, 1) then
+    k = mod(pre(k), 3) + 1;
+  end when;
+end NGF1;
+//// model: NGF2
+model NGF2
+  discrete Integer k(start = 1);
+  Real x(start = 1);
+  Real r1, r2, r3, r4;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  der(x) = -k * x;
+  r1 = exp(-k / 2);
+  r2 = exp(-(k / 2));
+  r3 = sin(cos(-k));
+  r4 = noEvent(-k) + smooth(0, -k);
+end NGF2;
+//// model: NGF3
+type NGF3E = enumeration(a, b, c);
+model NGF3
+  discrete NGF3E e(start = NGF3E.a);
+  Real r1;
+  Real x[2] = {time, 2 * time};
+  Real r2;
+equation
+  when sample(0, 1) then
+    e = NGF3E.b;
+  end when;
+  r1 = sin(-Integer(e));
+  r2 = sin(-size(x, 1)) * time;
+end NGF3;
+//// model: NGF4
+model NGF4
+  parameter Integer n = 3;
+  parameter Integer m = 2 annotation(Evaluate = true);
+  Real y1 = sin(-n) * time;
+  Real y2 = sin(-m) * time;
+  Real y3 = (-m) * time;
+  Real y4 = sin(-(n + m)) * time;
+  Real y5 = time * (0 - n);
+end NGF4;
+//// model: NGF5
+model NGF5
+  Real x[3];
+equation
+  for i in 1:3 loop
+    x[i] = sin(-i) * time + 2.0 * (-i) * time;
+  end for;
+end NGF5;
+//// model: NGF6
+function NGF6F
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end NGF6F;
+model NGF6
+  discrete Integer k(start = 1);
+  Real r1, r2, r3;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  r1 = NGF6F(-k);
+  r2 = max(-k, time);
+  r3 = sign(-k) + abs(-k);
+end NGF6;
+//// model: NGF7
+record NGF7R
+  Integer i;
+  Real x;
+end NGF7R;
+model NGF7
+  discrete Integer k(start = 1);
+  NGF7R r(i = k, x = time);
+  Real y = sin(-r.i) + 2.0 * (-r.i);
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+end NGF7;
+//// model: NGF8
+model NGF8
+  discrete Integer k(start = 1);
+  discrete Integer k2(start = 2);
+  Boolean b = time > 0.5;
+  Real y1 = if b then -k else -k2;
+  Real y2 = -(k) + time;
+  Real y3 = time - (-(k));
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+    k2 = pre(k2) + 2;
+  end when;
+end NGF8;
+//// model: NGF9
+model NGF9
+  discrete Integer k(start = 1);
+  Real x(start = 0);
+  Real y;
+algorithm
+  y := 2.0 * (-k);
+  y := y + sin(-k);
+  y := 0 - k;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  der(x) = y;
+end NGF9;
+//// model: NGF10
+model NGF10
+  discrete Integer k(start = 1);
+  Real x(start = 0);
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+    reinit(x, -k);
+  end when;
+  der(x) = 1;
+end NGF10;
+//// model: NGF11
+model NGF11
+  discrete Integer k(start = 1);
+  discrete Real y(start = 0);
+  discrete Real z(start = 0);
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+    y = 2.0 * (-k);
+    z = 0 - k;
+  end when;
+end NGF11;
+//// model: NGF12
+model NGF12
+  parameter Integer p = 2;
+  parameter Real q = 2.0 * (-p);
+  parameter Real q2 = -p;
+  parameter Real q3 = 0 - p;
+  parameter Real q4 = sin(-p);
+end NGF12;
+//// model: NGG1
+function NGG1F
+  input Integer n;
+  output Real v[2];
+algorithm
+  v := -{n, n};
+end NGG1F;
+model NGG1
+  Real k[2] = NGG1F(integer(time));
+end NGG1;
+//// model: NGG2
+function NGG2F
+  input Integer n;
+  input Real x;
+  output Real v[2];
+  output Real w[2];
+algorithm
+  v := -{n, 1.0};
+  w := -{x, 1.0};
+end NGG2F;
+model NGG2
+  Real k[2];
+  Real k2[2];
+equation
+  (k, k2) = NGG2F(integer(time), time);
+end NGG2;
+//// model: NGG3
+function NGG3F
+  input Integer n;
+  input Real x;
+  output Real v[2];
+  output Real w[2];
+algorithm
+  v := -{0.0, 1.0};
+  w := -{x, x};
+end NGG3F;
+model NGG3
+  Real k[2];
+  Real k2[2];
+equation
+  (k, k2) = NGG3F(integer(time), time);
+end NGG3;
+//// model: NGG4
+function NGG4F
+  input Integer w[2];
+  output Real v[2];
+algorithm
+  v := -w;
+end NGG4F;
+model NGG4
+  Real k[2] = NGG4F({integer(time), 2});
+end NGG4;
+//// model: NGG5
+function NGG5F
+  input Integer n;
+  output Real v[2, 2];
+algorithm
+  v := -{{n, 1}, {2, n}};
+end NGG5F;
+model NGG5
+  Real k[2, 2] = NGG5F(integer(time));
+end NGG5;
+//// model: NGG6
+function NGG6F
+  input Integer n;
+  output Integer v[2];
+algorithm
+  v := -{n, 2 * n};
+end NGG6F;
+model NGG6
+  Integer k[2] = NGG6F(integer(time));
+end NGG6;
+//// model: NGG7
+function NGG7F
+  input Real x;
+  output Real v[2];
+algorithm
+  v := -{x, 2 * x} + {1.0, 2.0};
+end NGG7F;
+model NGG7
+  Real k[2] = NGG7F(time);
+end NGG7;
+//// model: NGG8
+model NGG8
+  discrete Integer k(start = 1);
+  Real x = time;
+  Real c1[2];
+  Real c2[2];
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  c1 = -{x, 1.0};
+  c2 = -(-{k, k});
+end NGG8;
+//// model: NGG9
+function NGG9F
+  input Integer n;
+  output Real y;
+protected
+  Real v[2];
+algorithm
+  v := -{n, n};
+  y := v[1] + sin(-n);
+end NGG9F;
+model NGG9
+  Real k = NGG9F(integer(time));
+end NGG9;
+//// model: NGH1
+model NGH1
+  discrete Integer k(start = 1);
+  parameter Real p = 1.0 annotation(Evaluate = true);
+  parameter Integer m = 1 annotation(Evaluate = true);
+  parameter Real q = 0.0 annotation(Evaluate = true);
+  Real y1 = p * (-k);
+  Real y2 = m * (-k);
+  Real y3 = q + (-k);
+  Real y4 = sin(-k * m);
+  Real y5 = (-k) / p;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+end NGH1;
+//// model: NGH2
+model NGH2
+  discrete Integer k(start = 1);
+  parameter Real p = 1.0 annotation(Evaluate = true);
+  parameter Real q = 0.0 annotation(Evaluate = true);
+  Real y1 = (-q) + (-k);
+  Real y2 = (-k) - q;
+  Real y3 = q - (-k);
+  Real y4 = k / (-p);
+  Real y5 = (-p) * k;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+end NGH2;
+//// model: NGH3
+model NGH3
+  discrete Integer k(start = 1);
+  parameter Integer n = 0 annotation(Evaluate = true);
+  parameter Integer m = 1 annotation(Evaluate = true);
+  Real y1 = n + (-k);
+  Real y2 = (-k) * m;
+  Real y3 = sin(n - k);
+  Real y4 = 2.0 * (n - k);
+  Real y5 = (-k) - n;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+end NGH3;
+//// model: NGH4
+model NGH4
+  discrete Integer k(start = 1);
+  parameter Real q = 0.0 annotation(Evaluate = true);
+  parameter Real p = 1.0 annotation(Evaluate = true);
+  Real x = time;
+  Real y1 = x + q * (-k);
+  Real y2 = sin(q + (-k));
+  Real y3 = sin((-k) / p);
+  Real y4 = x / ((-k) / p);
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+end NGH4;
+//// model: NGI1
+function NGI1F
+  input Integer w[2];
+  output Real v[2];
+algorithm
+  v := {0, 0} - w;
+end NGI1F;
+model NGI1
+  Real k[2] = NGI1F({integer(time), 2});
+end NGI1;
+//// model: NGI2
+function NGI2F
+  input Integer w[2];
+  output Real v[2];
+algorithm
+  v := -w - {1, 1};
+end NGI2F;
+model NGI2
+  Real k[2] = NGI2F({integer(time), 2});
+end NGI2;
+//// model: NGI3
+function NGI3F
+  input Integer w[2];
+  output Real v[2];
+algorithm
+  v := {1, 1} .* (-w);
+end NGI3F;
+model NGI3
+  Real k[2] = NGI3F({integer(time), 2});
+end NGI3;
+//// model: NGI4
+function NGI4F
+  input Integer w[2];
+  output Real v[2];
+algorithm
+  v := {0.0, 0.0} - w;
+end NGI4F;
+model NGI4
+  Real k[2] = NGI4F({integer(time), 2});
+end NGI4;
+//// model: NGI5
+function NGI5F
+  input Integer w[2];
+  output Real v[2];
+algorithm
+  v := -(w + w);
+end NGI5F;
+model NGI5
+  Real k[2] = NGI5F({integer(time), 2});
+end NGI5;
+//// model: NGI6
+function NGI6F
+  input Integer w[2];
+  output Real v[2];
+algorithm
+  v := 0.0 - w;
+end NGI6F;
+model NGI6
+  Real k[2] = NGI6F({integer(time), 2});
+end NGI6;
+//// model: NGI7
+function NGI7F
+  input Integer mw[2, 2];
+  output Real m2[2, 2];
+algorithm
+  m2 := {{0.0, 0.0}, {0.0, 0.0}} - mw;
+end NGI7F;
+model NGI7
+  Real k[2, 2] = NGI7F({{integer(time), 2}, {3, 4}});
+end NGI7;
+//// model: NGI8
+function NGI8F
+  input Integer w[2];
+  output Real v[2];
+algorithm
+  v := {0, 0} + (-w);
+end NGI8F;
+model NGI8
+  Real k[2] = NGI8F({integer(time), 2});
+end NGI8;
+//// model: NGI9
+model NGI9
+  discrete Integer k(start = 1);
+  Integer m[2, 2] = {{k, 1}, {2, k}};
+  Real c[2, 2];
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+  c = {{0.0, 0.0}, {0.0, 0.0}} - m;
+end NGI9;
+//// model: NGI10
+function NGI10F
+  input Integer w[2];
+  input Real x[2];
+  output Real v[2];
+algorithm
+  v := {0.0, 0.0} - x;
+  v := v + ({1, 2} - w);
+end NGI10F;
+model NGI10
+  Real k[2] = NGI10F({integer(time), 2}, {time, 2 * time});
+end NGI10;
+//// model: UQR1
+package UQR1P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  package A
+    extends Base;
+    model C
+      R r;
+      R s;
+    equation
+      r = s;
+      s.a = time;
+    end C;
+  end A;
+end UQR1P;
+model UQR1
+  UQR1P.A.C c;
+end UQR1;
+//// model: UQR2
+package UQR2P
+  package Base
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := 2 * x;
+    end f;
+  end Base;
+  package A
+    extends Base;
+    model C
+      Real z = f(time);
+    end C;
+  end A;
+end UQR2P;
+model UQR2
+  UQR2P.A.C c;
+end UQR2;
+//// model: UQR3
+package UQR3P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+    function mk
+      input Real a;
+      output R r;
+    algorithm
+      r := R(a = a, b = 2);
+    end mk;
+  end Base;
+  package A
+    extends Base;
+    model C
+      R r = mk(time);
+    end C;
+  end A;
+end UQR3P;
+model UQR3
+  UQR3P.A.C c;
+end UQR3;
+//// model: UQR4
+package UQR4P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  package A
+    extends Base;
+    function mk
+      input Real a;
+      output R r;
+    algorithm
+      r := R(a = a);
+    end mk;
+    model C
+      R r = mk(time);
+    end C;
+  end A;
+end UQR4P;
+model UQR4
+  UQR4P.A.C c;
+end UQR4;
+//// model: UQR5
+package UQR5P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  package A
+    extends Base;
+    record Q
+      R r1;
+      Real z;
+    end Q;
+    model C
+      Q q;
+      Q p;
+    equation
+      q = p;
+      p.z = time;
+      p.r1.a = time;
+    end C;
+  end A;
+end UQR5P;
+model UQR5
+  UQR5P.A.C c;
+end UQR5;
+//// model: UQR6
+package UQR6P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  package A
+    extends Base;
+    package B
+      model C
+        R r;
+        R s;
+      equation
+        r = s;
+        s.a = time;
+      end C;
+    end B;
+  end A;
+end UQR6P;
+model UQR6
+  UQR6P.A.B.C c;
+end UQR6;
+//// model: UQR7
+package UQR7P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  package Base2
+    extends Base;
+  end Base2;
+  package A
+    extends Base2;
+    model C
+      R r;
+      R s;
+    equation
+      r = s;
+      s.a = time;
+    end C;
+  end A;
+end UQR7P;
+model UQR7
+  UQR7P.A.C c;
+end UQR7;
+//// model: UQR8
+package UQR8P
+  package Base
+    constant Integer n = 1;
+    record R
+      Real a;
+      Real b = n;
+    end R;
+  end Base;
+  package A
+    extends Base(n = 2);
+    model C
+      R r;
+      R s;
+    equation
+      r = s;
+      s.a = time;
+    end C;
+  end A;
+end UQR8P;
+model UQR8
+  UQR8P.A.C c;
+end UQR8;
+//// model: UQR9
+package UQR9P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  package A
+    extends Base;
+    model C
+      R r;
+      UQR9P.A.R s;
+    equation
+      r = s;
+      s.a = time;
+    end C;
+  end A;
+end UQR9P;
+model UQR9
+  UQR9P.A.C c;
+end UQR9;
+//// model: UQR10
+package UQR10P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  package A
+    extends Base;
+    model C
+      R r;
+      R s;
+    equation
+      r = s;
+      s.a = time;
+    end C;
+  end A;
+end UQR10P;
+model UQR10
+  extends UQR10P.A.C;
+end UQR10;
+//// model: UQR11
+package UQR11P
+  package Base
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := 2 * x;
+    end f;
+  end Base;
+  package A
+    extends Base;
+    function g
+      input Real x;
+      output Real y;
+    algorithm
+      y := f(x) + 1;
+    end g;
+  end A;
+end UQR11P;
+model UQR11
+  Real z = UQR11P.A.g(time);
+end UQR11;
+//// model: UQR12
+package UQR12P
+  package Base
+    type E = enumeration(x, y);
+  end Base;
+  package A
+    extends Base;
+    model C
+      E e = if time > 0.5 then E.y else E.x;
+      Boolean b = e == E.y;
+    end C;
+  end A;
+end UQR12P;
+model UQR12
+  UQR12P.A.C c;
+end UQR12;
+//// model: UQR13
+package UQR13P
+  package A
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+    model C
+      R r;
+      R s;
+    equation
+      r = s;
+      s.a = time;
+    end C;
+  end A;
+end UQR13P;
+model UQR13
+  UQR13P.A.C c;
+end UQR13;
+//// model: UQR14
+package UQR14P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+    model C
+      R r;
+      R s;
+    equation
+      r = s;
+      s.a = time;
+    end C;
+  end Base;
+  package A
+    extends Base;
+  end A;
+end UQR14P;
+model UQR14
+  UQR14P.A.C c;
+end UQR14;
+//// model: UQR15
+package UQR15P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  model M
+    extends Base;
+    model C
+      R r;
+      R s;
+    equation
+      r = s;
+      s.a = time;
+    end C;
+    C c;
+  end M;
+end UQR15P;
+model UQR15
+  UQR15P.M m;
+end UQR15;
+//// model: UQR16
+package UQR16P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  package A
+    extends Base;
+    model C
+      Real x = time;
+      R r = R(a = x);
+    end C;
+  end A;
+end UQR16P;
+model UQR16
+  UQR16P.A.C c;
+end UQR16;
+//// model: UQR17
+package UQR17P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  package A
+    model C
+      extends UQR17P.Base;
+      R r;
+      R s;
+    equation
+      r = s;
+      s.a = time;
+    end C;
+  end A;
+end UQR17P;
+model UQR17
+  UQR17P.A.C c;
+end UQR17;
+//// model: UQR18
+package UQR18P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+end UQR18P;
+model UQR18
+  extends UQR18P.Base;
+  R r;
+  R s;
+equation
+  r = s;
+  s.a = time;
+end UQR18;
+//// model: UQR19
+package UQR19P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+end UQR19P;
+model UQR19
+  extends UQR19P.Base;
+  model C
+    R r;
+    R s;
+  equation
+    r = s;
+    s.a = time;
+  end C;
+  C c;
+end UQR19;
+//// model: UQR20
+package UQR20P
+  model M
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+    model C
+      R r;
+      R s;
+    equation
+      r = s;
+      s.a = time;
+    end C;
+    C c;
+  end M;
+end UQR20P;
+model UQR20
+  UQR20P.M m;
+end UQR20;
+//// model: UQR21
+package UQR21P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  model M
+    extends Base;
+    model C
+      R r;
+      R s;
+    equation
+      r = s;
+      s.a = time;
+    end C;
+    C c;
+  end M;
+end UQR21P;
+model UQR21
+  UQR21P.M m1;
+  UQR21P.M m2;
+end UQR21;
+//// model: UQR22
+package UQR22P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  model M
+    extends Base;
+    R r;
+    R s;
+  equation
+    r = s;
+    s.a = time;
+  end M;
+end UQR22P;
+model UQR22
+  UQR22P.M m;
+end UQR22;
+//// model: UQR23
+package UQR23P
+  record R
+    Real a;
+    Real b = 1;
+  end R;
+  model M
+    R r;
+    R s;
+  equation
+    r = s;
+    s.a = time;
+  end M;
+end UQR23P;
+model UQR23
+  UQR23P.M m;
+end UQR23;
+//// model: UQR24
+package UQR24P
+  model Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  model M
+    extends Base;
+    R r;
+    R s;
+  equation
+    r = s;
+    s.a = time;
+  end M;
+end UQR24P;
+model UQR24
+  UQR24P.M m;
+end UQR24;
+//// model: UQR25
+package UQR25P
+  record R1
+    Real a;
+    Real b = 1;
+  end R1;
+  record R2
+    Real a;
+    Real b = 2;
+  end R2;
+  model M
+    replaceable record R = R1;
+    R r;
+    R s;
+  equation
+    r = s;
+    s.a = time;
+  end M;
+end UQR25P;
+model UQR25
+  UQR25P.M m(redeclare record R = UQR25P.R2);
+end UQR25;
+//// model: UQR26
+package UQR26P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  package A
+    extends Base;
+    model C
+      Real x = time;
+      R r;
+    equation
+      r = R(a = x, b = 2 * x);
+    end C;
+  end A;
+end UQR26P;
+model UQR26
+  UQR26P.A.C c;
+end UQR26;
+//// model: UQR27
+package UQR27P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  model M
+    extends Base;
+    R r;
+    R s;
+  equation
+    r = s;
+    s.a = time;
+  end M;
+end UQR27P;
+model UQR27
+  UQR27P.M m[2];
+end UQR27;
+//// model: UQR28
+package UQR28P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  model M
+    extends Base;
+    R r;
+    R s;
+  equation
+    r = s;
+    s.a = time;
+  end M;
+  model Outer
+    M m;
+  end Outer;
+end UQR28P;
+model UQR28
+  UQR28P.Outer o;
+end UQR28;
+//// model: UQR29
+package UQR29P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  package A
+    extends Base;
+    model C
+      R r;
+      R s;
+    equation
+      r = s;
+      s.a = time;
+    end C;
+  end A;
+  package S = A;
+end UQR29P;
+model UQR29
+  UQR29P.S.C c;
+end UQR29;
+//// model: UQR30
+package UQR30P
+  package Base
+    model M2
+      Real x = time;
+      Real y;
+    equation
+      y = 2 * x;
+    end M2;
+    connector Pin
+      Real v;
+      flow Real i;
+    end Pin;
+    type T = Real(unit = "m");
+  end Base;
+  package A
+    extends Base;
+    model C
+      M2 m2;
+      Pin p;
+      T t = time;
+    equation
+      p.v = t;
+    end C;
+  end A;
+end UQR30P;
+model UQR30
+  UQR30P.A.C c;
+end UQR30;
+//// model: UQR31
+package UQR31P
+  package Base
+    constant Real k = 1;
+    type T = Real(start = k);
+    record R
+      Real a = k;
+      Real b = 1;
+    end R;
+  end Base;
+  package A
+    extends Base(k = 2);
+    model C
+      T t(fixed = true);
+      R r;
+    equation
+      der(t) = 1;
+    end C;
+  end A;
+end UQR31P;
+model UQR31
+  UQR31P.A.C c;
+end UQR31;
+//// model: UQR32
+package UQR32P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  package A
+    extends Base;
+    model C
+      parameter R p(a = 2);
+      R s;
+    equation
+      s = p;
+    end C;
+  end A;
+end UQR32P;
+model UQR32
+  UQR32P.A.C c;
+end UQR32;
+//// model: UQR33
+package UQR33P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  package A
+    extends Base;
+    model C
+      R r;
+      R s;
+    equation
+      r = s;
+      s.a = time;
+    end C;
+  end A;
+end UQR33P;
+model UQR33
+  UQR33P.A.C c1;
+  UQR33P.A.C c2;
+end UQR33;
+//// model: UQR34
+package UQR34P
+  package Base
+    record R
+      Real a;
+      Real b = 1;
+    end R;
+  end Base;
+  package A
+    extends Base;
+    model C
+      R r;
+      R s;
+    equation
+      r = s;
+      s.a = time;
+    end C;
+  end A;
+  model D
+    A.C c;
+    A.R q;
+    A.R w;
+  equation
+    q = w;
+    w.a = 2 * time;
+  end D;
+end UQR34P;
+model UQR34
+  UQR34P.D d;
+end UQR34;
