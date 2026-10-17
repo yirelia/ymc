@@ -796,3 +796,9 @@ FAIL / ACCEPTS-INVALID / CRASH 0。
 
 函数与记录里的枚举（枚举类型的函数变量 / 记录字段打字面量表、函数体里以枚举为维的包常量表、枚举实参的常量调用）；多输出调用取首输出时
 调用者的纯度。转 PASS：Electrical.Digital.Examples.RAM、Utilities.Examples.readRealParameterModel。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-18 67b 之后：PASS 487（+3）
+
+返回记录的向量化调用作重载运算符的运算数随即展开、逐元素化简（SingleToPolyphase 的 `u * fromPolar(fill(1, m), -symmetricOrientation(m))`）。
+转 PASS：Magnetic.QuasiStatic.FundamentalWave.Examples.BasicMachines.SynchronousMachines.SMPM_MTPA / SMPM_CurrentSource /
+SMR_CurrentSource。FAIL / ACCEPTS-INVALID / CRASH 0。

@@ -11031,4 +11031,103 @@ YMC_TEST(flatten_user_class_named_like_builtin) {
                std::string("class DUQ18\n  Real x = time;\nend DUQ18;\n"));
 }
 
+YMC_TEST(flatten_vectorized_record_call_operand) {
+  // 返回记录的向量化调用作重载运算符的运算数（MSL QuasiStatic SingleToPolyphase 的 `u*fromPolar(fill(1, m),
+  // -symmetricOrientation(m))`）：omc 定型成数组构造后，重载运算符的数组支随即展开、逐元素化简（NFTypeCheck.mo:504-584 →
+  // NFExpandExp.mo:471-507 v1.25.0），实参全成字面量的元素求值成记录式、函数不打；结构参数 m 的 `-VRU8S(m)` 整体取负不护零
+  //（`VRU8C(1.0, -0.0)`）。期望 = omc 1.25.0 实跑（2026-10-18，探针 pk-p36 VRU8）。
+  YMC_CHECK_EQ(flatten_src("operator record VRU8C \"complex-like\"\n  Real re \"real part\";\n"
+                           "  Real im \"imaginary part\";\n  encapsulated operator 'constructor'\n"
+                           "    function fromReal \"from reals\"\n      import VRU8C;\n"
+                           "      input Real re \"re in\";\n      input Real im = 0 \"im in\";\n"
+                           "      output VRU8C result(re = re, im = im) \"result\";\n    algorithm\n"
+                           "      annotation(Inline = true);\n    end fromReal;\n  end 'constructor';\n"
+                           "  encapsulated operator '*'\n    function multiply \"product\"\n      import VRU8C;\n"
+                           "      input VRU8C c1;\n      input VRU8C c2;\n      output VRU8C c3;\n    algorithm\n"
+                           "      c3 := VRU8C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);\n"
+                           "    end multiply;\n  end '*';\nend VRU8C;\nfunction VRU8F \"from polar\"\n"
+                           "  input Real len;\n  input Real phi;\n  output VRU8C c;\nalgorithm\n"
+                           "  c := VRU8C(len * cos(phi), len * sin(phi));\nend VRU8F;\n"
+                           "function VRU8S \"orientations\"\n  input Integer m;\n  output Real o[m];\nalgorithm\n"
+                           "  o := {(k - 1) * 2.0 for k in 1:m};\nend VRU8S;\nmodel VRU8\n"
+                           "  parameter Integer m = 3 annotation(Evaluate = true);\n  Real r[2] = {1, 2} * time;\n"
+                           "  Real phi[2] = {3, 4} * time;\n  VRU8C u = VRU8C(time, 2);\n  VRU8C y1[3];\n"
+                           "  VRU8C y2[2];\n  VRU8C y3[m];\nequation\n  y1 = u * VRU8F(fill(1, 3), {1, 2, 3});\n"
+                           "  y2 = VRU8F(r, phi) * u;\n  y3 = u * VRU8F(fill(1, m), -VRU8S(m));\nend VRU8;\n"),
+               std::string("function VRU8C \"Automatically generated record constructor for VRU8C\"\n"
+                           "  input Real re;\n  input Real im;\n  output VRU8C res;\nend VRU8C;\n\n"
+                           "function VRU8C.'*'.multiply \"product\"\n  input VRU8C c1;\n  input VRU8C c2;\n"
+                           "  output VRU8C c3;\nalgorithm\n"
+                           "  c3 := VRU8C.'constructor'.fromReal(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);\n"
+                           "end VRU8C.'*'.multiply;\n\nfunction VRU8C.'constructor'.fromReal \"from reals\"\n"
+                           "  input Real re \"re in\";\n  input Real im = 0.0 \"im in\";\n"
+                           "  output VRU8C result \"result\";\nalgorithm\nend VRU8C.'constructor'.fromReal;\n\n"
+                           "function VRU8F \"from polar\"\n  input Real len;\n  input Real phi;\n  output VRU8C c;\n"
+                           "algorithm\n  c := VRU8C.'constructor'.fromReal(len * cos(phi), len * sin(phi));\n"
+                           "end VRU8F;\n\nclass VRU8\n  final parameter Integer m = 3;\n  Real r[1];\n  Real r[2];\n"
+                           "  Real phi[1];\n  Real phi[2];\n  Real u.re \"real part\";\n"
+                           "  Real u.im \"imaginary part\";\n  Real y1[1].re \"real part\";\n"
+                           "  Real y1[1].im \"imaginary part\";\n  Real y1[2].re \"real part\";\n"
+                           "  Real y1[2].im \"imaginary part\";\n  Real y1[3].re \"real part\";\n"
+                           "  Real y1[3].im \"imaginary part\";\n  Real y2[1].re \"real part\";\n"
+                           "  Real y2[1].im \"imaginary part\";\n  Real y2[2].re \"real part\";\n"
+                           "  Real y2[2].im \"imaginary part\";\n  Real y3[1].re \"real part\";\n"
+                           "  Real y3[1].im \"imaginary part\";\n  Real y3[2].re \"real part\";\n"
+                           "  Real y3[2].im \"imaginary part\";\n  Real y3[3].re \"real part\";\n"
+                           "  Real y3[3].im \"imaginary part\";\nequation\n  r = {time, 2.0 * time};\n"
+                           "  phi = {3.0 * time, 4.0 * time};\n  u = VRU8C.'constructor'.fromReal(time, 2.0);\n"
+                           "  y1[1] = VRU8C.'*'.multiply(u, VRU8C(0.5403023058681398, 0.8414709848078965));\n"
+                           "  y1[2] = VRU8C.'*'.multiply(u, VRU8C(-0.4161468365471424, 0.9092974268256817));\n"
+                           "  y1[3] = VRU8C.'*'.multiply(u, VRU8C(-0.9899924966004454, 0.1411200080598672));\n"
+                           "  y2[1] = VRU8C.'*'.multiply(VRU8F(r[1], phi[1]), u);\n"
+                           "  y2[2] = VRU8C.'*'.multiply(VRU8F(r[2], phi[2]), u);\n"
+                           "  y3[1] = VRU8C.'*'.multiply(u, VRU8C(1.0, -0.0));\n"
+                           "  y3[2] = VRU8C.'*'.multiply(u, VRU8C(-0.4161468365471424, -0.9092974268256817));\n"
+                           "  y3[3] = VRU8C.'*'.multiply(u, VRU8C(-0.6536436208636119, 0.7568024953079282));\n"
+                           "end VRU8;\n"));
+}
+
+YMC_TEST(flatten_elementwise_overloaded_operator_operands) {
+  // 记录的元素级运算一律走 checkOverloadedBinaryArrayEW（NFTypeCheck.mo:246-248 v1.25.0）：两个运算数（的元素）类型要相容
+  //（matchExpressions :751-760），记录配 Integer → "Cannot resolve type of expression"（VRU10 `z .* 2`、VRU11 `u .* 2`）；标量在前的
+  // 结果类型取标量的（Type.setArrayElementType(type1, ty) :840）→ "Type mismatch in equation"（VRU9 `u .* z`）——ymc 此前照出，现 SKIP。
+  // 数组在前的照常逐元素（VRU12）。期望 = omc 1.25.0 实跑（2026-10-18，探针 pk-p36 VRU9-VRU12）。
+  const std::string rec =
+      "operator record VRUC \"complex-like\"\n  Real re \"real part\";\n  Real im \"imaginary part\";\n"
+      "  encapsulated operator 'constructor'\n    function fromReal \"from reals\"\n      import VRUC;\n"
+      "      input Real re \"re in\";\n      input Real im = 0 \"im in\";\n"
+      "      output VRUC result(re = re, im = im) \"result\";\n    algorithm\n      annotation(Inline = true);\n"
+      "    end fromReal;\n  end 'constructor';\n  encapsulated operator '*'\n    function multiply \"product\"\n"
+      "      import VRUC;\n      input VRUC c1;\n      input VRUC c2;\n      output VRUC c3;\n    algorithm\n"
+      "      c3 := VRUC(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);\n    end multiply;\n"
+      "  end '*';\nend VRUC;\n";
+  for (const char* m : {"model VRU9\n  VRUC u = VRUC(time, 2);\n  VRUC z[2] = {VRUC(time, 1), VRUC(2, time)};\n  VRUC y[2];\n"
+                        "equation\n  y = u .* z;\nend VRU9;\n",
+                        "model VRU10\n  VRUC z[2] = {VRUC(time, 1), VRUC(2, time)};\n  VRUC y[2];\nequation\n  y = z .* 2;\n"
+                        "end VRU10;\n",
+                        "model VRU11\n  VRUC u = VRUC(time, 2);\n  VRUC y;\nequation\n  y = u .* 2;\nend VRU11;\n"}) {
+    const std::string src = rec + m;
+    YMC_CHECK(flatten_src(src.c_str()).rfind("<unsupported:", 0) == 0);
+  }
+  const std::string src12 = rec + "model VRU12\n  VRUC u = VRUC(time, 2);\n  VRUC z[2] = {VRUC(time, 1), VRUC(2, time)};\n"
+                                  "  VRUC y[2];\nequation\n  y = z .* u;\nend VRU12;\n";
+  YMC_CHECK_EQ(flatten_src(src12.c_str()),
+               std::string("function VRUC \"Automatically generated record constructor for VRUC\"\n  input Real re;\n"
+                           "  input Real im;\n  output VRUC res;\nend VRUC;\n\nfunction VRUC.'*'.multiply \"product\"\n"
+                           "  input VRUC c1;\n  input VRUC c2;\n  output VRUC c3;\nalgorithm\n"
+                           "  c3 := VRUC.'constructor'.fromReal(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);\n"
+                           "end VRUC.'*'.multiply;\n\nfunction VRUC.'constructor'.fromReal \"from reals\"\n"
+                           "  input Real re \"re in\";\n  input Real im = 0.0 \"im in\";\n"
+                           "  output VRUC result \"result\";\nalgorithm\nend VRUC.'constructor'.fromReal;\n\n"
+                           "class VRU12\n  Real u.re \"real part\";\n  Real u.im \"imaginary part\";\n"
+                           "  Real z[1].re \"real part\";\n  Real z[1].im \"imaginary part\";\n"
+                           "  Real z[2].re \"real part\";\n  Real z[2].im \"imaginary part\";\n"
+                           "  Real y[1].re \"real part\";\n  Real y[1].im \"imaginary part\";\n"
+                           "  Real y[2].re \"real part\";\n  Real y[2].im \"imaginary part\";\nequation\n"
+                           "  u = VRUC.'constructor'.fromReal(time, 2.0);\n"
+                           "  z[1] = VRUC.'constructor'.fromReal(time, 1.0);\n"
+                           "  z[2] = VRUC.'constructor'.fromReal(2.0, time);\n  y[1] = VRUC.'*'.multiply(z[1], u);\n"
+                           "  y[2] = VRUC.'*'.multiply(z[2], u);\nend VRU12;\n"));
+}
+
 YMC_TEST_MAIN

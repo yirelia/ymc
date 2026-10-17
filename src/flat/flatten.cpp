@@ -13185,11 +13185,11 @@ class Flattener {
     return add(std::move(c));
   }
   // 向量化调用的结果：末维在最内层，`array(array(f(…) for $i2 in 1:d2) for $i1 in 1:d1)`（T10 探针）。
-  Id<Expr> wrap_vectorized(Id<Expr> call, const std::vector<std::int64_t>& vd) {
+  Id<Expr> wrap_vectorized(Id<Expr> call, const std::vector<std::int64_t>& vd, bool single = true) {
     // 只向量化一维、长 1：omc 的化简把数组构造换成那一个元素的数组字面量（simplifyArrayConstructor 的 dim_size == 1 支，
     // NFSimplifyExp.mo:600-615 v1.25.0），等式里随后逐元素标量化（WA 探针 w60 `y[1] = abs(u[1])`、w61 用户函数同；两维的
-    // `1:1 × 1:1` 不收，w63）。
-    if (vd.size() == 1 && vd[0] == 1) {
+    // `1:1 × 1:1` 不收，w63）。single = false：随即展开的（vec_rec_expand，走 ExpandExp 不走这条化简）照一般形态建。
+    if (single && vd.size() == 1 && vd[0] == 1) {
       ExprCref it;
       it.parts.push_back({in_.intern("$i1"), {}});
       const std::unordered_map<std::string, Id<Expr>> vals{{expr_cref_key(it), lit_int(1)}};
@@ -13225,6 +13225,53 @@ class Flattener {
   }
   // 实参的 Absyn 是书写出来的数组构造子 `{…}`（非推导式）。
   bool written_array_literal(Id<Exp> raw) { return raw.is_valid() && is_array_ctor(raw) && !is_comprehension(raw); }
+  // 实参的 Absyn 是 fill / ones / zeros 调用、定型成了数组字面量（模型语境的内建展开，见 model_array_builtin）。
+  bool fill_like_arg(Id<Exp> raw, Id<Expr> arg) {
+    if (!raw.is_valid() || I_.absyn.exps[raw].kind != ExpKind::Call || is_array_ctor(raw) ||
+        result_.model.exprs[arg].kind != ExprKind::Array)
+      return false;
+    const Cref& fc = I_.absyn.crefs[I_.absyn.exps[raw].cref];
+    if (fc.parts.size() != 1 || fc.leading_dot) return false;
+    const std::string_view n = in_.str(fc.parts[0].name);
+    return n == "fill" || n == "ones" || n == "zeros";
+  }
+  // 返回记录的向量化调用（vec_rec）的实参里，可先求值的数组调用所在的形态：实参整个是调用，或调用取负（见 vec_rec_arg_）。
+  bool vec_rec_arg_form(Id<Exp> raw) {
+    if (!raw.is_valid()) return false;
+    const Exp& x = I_.absyn.exps[raw];
+    if (x.kind == ExpKind::Unary && x.op == Op::UMinus) return vec_rec_arg_form_call(x.a);
+    return vec_rec_arg_form_call(raw);
+  }
+  bool vec_rec_arg_form_call(Id<Exp> raw) {
+    return raw.is_valid() && I_.absyn.exps[raw].kind == ExpKind::Call && !is_array_ctor(raw);
+  }
+  // 返回记录的向量化调用作算术运算数（见 vec_rec_ok_）：omc 重载运算符的数组支先把它展开——迭代变量逐个代入、各元素化简
+  //（ExpandExp.expandArrayConstructor2，NFExpandExp.mo:471-507 v1.25.0；实参全成字面量的随即求值成记录式，SimplifyExp.simplifyCall
+  // :166-219 的 nfEvalConstArgFuncs → Ceval），再逐元素配运算符函数（checkOverloadedBinaryScalarArray2 等，NFTypeCheck.mo:586-638）。
+  // 这里直接交出展开后的数组字面量：元素照 scalarize 的推导式支（vec_eval_ 的两遍化简，同 sum / product 的展开：求值在收函数
+  // 之前，被求值掉的函数不打——VRC4 `u * fromPolar(fill(1, 3), {1, 2, 3})` → `Complex.'*'.multiply(u, Complex(0.54…, 0.84…))`、
+  // fromPolar 不打）。一维以外、元素里还留着数组调用的形态未核实 → SKIP。
+  Id<Expr> vec_rec_expand(Id<Expr> call, const std::vector<std::int64_t>& vd, const Type& rty) {
+    if (vd.size() != 1) { set_unsupported("vectorized record call over several dimensions"); return {}; }
+    const Id<Expr> red = wrap_vectorized(call, vd, /*single=*/false);
+    const RedScalarize rs(red_scalarize_ok_);
+    const VecEval ve(*this, true, nullptr);
+    Expr arr;
+    arr.kind = ExprKind::Array;
+    for (std::int64_t k = 1; k <= vd[0]; ++k) {
+      const Id<Expr> el = scalarize(red, {k});
+      if (result_.unsupported) return {};
+      if (has_array_call(el)) { set_unsupported("vectorized record call element with array call"); return {}; }
+      arr.args.push_back(el);
+    }
+    Dimension d;
+    d.kind = DimKind::Integer;
+    d.size = vd[0];
+    arr.ty = Type::array_of(rty, {d});
+    const Id<Expr> out = add(std::move(arr));
+    vec_rec_arrays_.insert(out.raw);
+    return out;
+  }
   static bool is_scalar_literal(const Expr& x) {
     return x.kind == ExprKind::IntLit || x.kind == ExprKind::RealLit || x.kind == ExprKind::BoolLit ||
            x.kind == ExprKind::StringLit || x.kind == ExprKind::EnumLit;
@@ -13232,11 +13279,11 @@ class Flattener {
   // 表达式里还留着实参全是字面量的调用。向量化调用 / 推导式整体保留时不求值（V4g 探针 `bk = array(F({1.0, 2.0, 3.0}[$i1],
   // 2.0) for $i1 in 1:3)`），逐元素展开时（参数摊分、sum、属性）迭代变量代入后成常量的 `F(1.0, 2.0)` omc 会求值
   //（`bp[1] = 3.0`、`sum(…)` → `3.0 + 4.0 + 5.0`）；内建的已被 simplify 折掉，向量化的用户函数调用在核实过的展开处已求（见
-  // vec_eval_），书写的推导式里的未做。
+  // vec_eval_），书写的推导式里的未做。求值得到的记录式（record_literal，omc 的 Expression.RECORD）是值、不是调用，不算。
   bool has_const_call(Id<Expr> id) {
     if (!id.is_valid()) return false;
     const Expr& x = result_.model.exprs[id];
-    if (x.kind == ExprKind::Call && !x.args.empty()) {
+    if (x.kind == ExprKind::Call && !x.args.empty() && !record_literals_.count(id.raw)) {
       bool all = true;
       for (Id<Expr> a : x.args) all = all && is_scalar_literal(result_.model.exprs[a]);
       if (all) return true;
@@ -13684,6 +13731,8 @@ class Flattener {
     const bool whole = array_call_ok_;   // 本调用是否整个绑定 / 等式一侧（见 array_call_ok_）
     const bool noret = noret_call_;      // 本调用是一条无返回值调用语句（见 noret_call）：可以没有输出、不取首输出
     const bool split_base = std::exchange(split_base_, false);   // 修饰分发合成的取元素式的基里（见 split_base_）
+    const bool vec_rec = std::exchange(vec_rec_ok_, false);      // 本调用整个是算术运算数（见 vec_rec_ok_）
+    const bool vec_arg = std::exchange(vec_rec_arg_, false);     // 本调用（或它取负）整个是上面那种调用的实参（见 vec_rec_arg_）
     struct FlagReset {
       bool& f;
       bool v;
@@ -13803,10 +13852,15 @@ class Flattener {
         return fn_fail<Id<Expr>>("partial application to non-functional input");
     }
     std::vector<Id<Expr>> args(inputs.size());   // 显式实参先在调用处定型（未强转）
+    std::vector<bool> folded(inputs.size(), false);   // 实参里有先求值成字面量的数组调用（见 vec_rec_arg_）
     for (std::size_t i = 0; i < inputs.size(); ++i)
       if (raw[i].is_valid() && fslot[i] == 0) {
+        const std::size_t folds = vec_rec_folds_;
+        vec_rec_arg_ = vec_rec && vec_rec_arg_form(raw[i]);
         args[i] = inst_exp(raw[i], enclosing, prefix);
+        vec_rec_arg_ = false;
         if (result_.unsupported) return {};
+        folded[i] = vec_rec_folds_ != folds;
       }
     const std::optional<std::size_t> fi = emit_function(*fr, sig, *qname, alias_defaults, home);
     if (!fi || result_.unsupported) return fn_fail<Id<Expr>>("function body");
@@ -13846,8 +13900,12 @@ class Flattener {
     // 向量化（模型语境）：实参秩 > 形参秩，多出的前导维 = 向量化维，各向量化实参须相同（T20 `F(w, x)` 维不同 → omc 内部错）、
     // 已知且 ≥ 1。实参换成取了 `[$i1, …]` 的形态后照常按形参强转（`/*Real*/(k[$i1])`）。多输出函数的向量化未核实 → SKIP。
     std::vector<std::int64_t> vd;
+    // 返回记录的向量化调用随即展开（vec_rec，见 vec_rec_ok_ / vec_rec_expand）：只收单输出、输出是记录的。
+    const bool vec_rec_fn = vec_rec && !fn_scope_ && sig.outputs.size() == 1 && !noret &&
+                            params[inputs.size()].ty.kind == TypeKind::Complex &&
+                            params[inputs.size()].record_def != Id<SElement>::kInvalid;
+    std::vector<std::size_t> mvec;   // 向量化的实参（模型语境）
     if (!fn_scope_) {
-      std::vector<std::size_t> vec;
       for (std::size_t i = 0; i < inputs.size(); ++i) {
         // 记录形参：实参是同一记录类的数组（`Modelica.ComplexMath.abs(v)`，`SI.ComplexVoltage v[3]`）→ 照样向量化成
         // `array(Modelica.ComplexMath.abs(v[$i1]) for $i1 in 1:3)`（MSL QuasiStatic Polyphase 的 `abs_v = abs(v)`）；
@@ -13863,19 +13921,38 @@ class Flattener {
         for (std::int64_t n : lead) if (n < 1) return fn_fail<Id<Expr>>("vectorization over unknown / empty dimension");
         if (!vd.empty() && vd != lead) return fn_fail<Id<Expr>>("vectorization dimension mismatch");
         vd = lead;
-        vec.push_back(i);
+        mvec.push_back(i);
       }
       if (!vd.empty()) {
         // 语句位置的向量化调用 omc 打 `array(f(x[$i1]) for $i1 in 1:3);`（N1 探针），未做。
         if (sig.outputs.size() > 1 || noret) return fn_fail<Id<Expr>>("vectorized multi-output / statement call");
         std::vector<Id<Expr>> iters;
         for (std::size_t k = 1; k <= vd.size(); ++k) iters.push_back(vect_iter(k));
-        for (std::size_t i : vec) {
+        for (std::size_t i : mvec) {
+          // 随即展开的（vec_rec_fn）：实参取元素照 Expression.applySubscript 的一般形态 `(a)[$i1]`（makeSubscriptedExp，
+          // NFExpression.mo:1256-1297 / :1586-1615 v1.25.0）、下面强转后化简——各元素都相等的取首元素（simplifySubscriptedExp
+          // :1346-1379：`fill(1, 3)` → `1.0`），先求值成字面量的 `-symmetricOrientation(m)` 整体取负（不护零，`{-0.0, …}`）后
+          // 取元素。只收这两种：fill / ones / zeros 展开出的数组字面量、先求值的数组调用（取负）；别的照 vectorize_arg。
+          if (vec_rec_fn && (folded[i] || fill_like_arg(raw[i], args[i]))) {
+            Expr s;
+            s.kind = ExprKind::Subscript;
+            s.a = args[i];
+            s.args = iters;
+            s.ty = result_.model.exprs[args[i]].ty.element_type();
+            if (s.ty.kind == TypeKind::Complex || expr_shape(args[i]).size() != iters.size())
+              return fn_fail<Id<Expr>>("vectorized argument form");
+            args[i] = add(std::move(s));
+            continue;
+          }
           args[i] = vectorize_arg(args[i], iters, written_array_literal(raw[i]));
           if (!args[i].is_valid()) return fn_fail<Id<Expr>>("vectorized argument form");
         }
       }
     }
+    // 先求值的数组调用（vec_rec_arg_）只该落在随即展开的向量化实参上；别处的形态未核实 → 照旧 SKIP。
+    for (std::size_t i = 0; i < inputs.size(); ++i)
+      if (folded[i] && (!vec_rec_fn || vd.empty() || std::find(mvec.begin(), mvec.end(), i) == mvec.end()))
+        return fn_fail<Id<Expr>>("array-valued call inside an expression");
     // 函数体里的向量化（vectorizeCall 不分语境，NFCall.mo:2851-2907 v1.25.0）：标量记录形参的实参是单迭代变量、范围 `1:E` 的
     // 推导式（MSL QuasiStatic activePower 的 `real({v[k] * conj(i[k]) for k in 1:size(v, 1)})`）→ 迭代变量 `$i1` 走 `1:E`（维的
     // 尺寸式），实参在 `[$i1]` 处取元素（Expression.applySubscript 对数组构造：体里的迭代变量换成 `(1:E)[$i1]`）→
@@ -14023,8 +14100,9 @@ class Flattener {
           if (ok) collect_fn_refs(sub, fn_struct_locals_);
         }
     Type rty = sig.outputs.empty() ? Type{} : params[inputs.size()].ty;   // 首输出类型（无输出的语句调用：Unknown）
-    if ((!vd.empty() || fvec_range.is_valid()) && rty.kind == TypeKind::Complex)
-      return fn_fail<Id<Expr>>("vectorized record result");   // 未核实
+    // 随即展开的（vec_rec_fn，见 vec_rec_expand）之外的未核实。
+    if (((!vd.empty() && !vec_rec_fn) || fvec_range.is_valid()) && rty.kind == TypeKind::Complex)
+      return fn_fail<Id<Expr>>("vectorized record result");
     if (fvec_range.is_valid() && (rty.is_array() || sig.outputs.size() != 1 || noret))
       return fn_fail<Id<Expr>>("vectorized multi-output / statement call");
     if (rty.kind == TypeKind::Complex && params[inputs.size()].record_def == Id<SElement>::kInvalid &&
@@ -14117,7 +14195,21 @@ class Flattener {
     // 嵌在运算里、实参都会成字面量（字面量 / 结构参数）的：omc 化简时先求值成字面量（NF_EVAL_CONST_ARG_FUNCS），式子不再含
     // 数组调用、照常标量化（AX 探针 g2 `y = -so(m) * time` → `y[1] = 0.0; y[2] = -2.094… * time; …`）——逐元素的形态未核实
     // → 照旧 SKIP。
-    if (nested_eq && call_args_fold(call)) return fn_fail<Id<Expr>>("array-valued call inside an expression");
+    // 例外：随即展开的返回记录的向量化调用（vec_rec_arg_）的实参整个是它 / 它取负——omc 展开时逐元素化简，这个调用随之求值（结构
+    // 参数在 EvalConstants 后代入，值相同；VRC12 / VRC13 / VRC17 `u * fromPolar(fill(1, m), -symmetricOrientation(m))` →
+    // `multiply(u, Complex(1.0, -0.0))`、函数都不打）：先按值求成字面量数组，父调用取元素后化简（见 try_emit_user_call 的
+    // vec_rec_fn）；求不出 → 照旧 SKIP。
+    if (nested_eq && call_args_fold(call)) {
+      // 不纯 / 外部函数 omc 不求值（simplifyCall 只求纯函数，NFSimplifyExp.mo:166-219）→ 照旧 SKIP。
+      if (!vec_arg || sig.outputs.size() != 1 || noret || !user_call(call))
+        return fn_fail<Id<Expr>>("array-valued call inside an expression");
+      const std::optional<CVal> v = eval_user_call(e, sc, 0, /*allow_param=*/true);
+      if (result_.unsupported) return {};
+      const Id<Expr> lit = v ? cval_expr(*v, rty.element_type().kind) : Id<Expr>{};
+      if (!lit.is_valid() || expr_shape(lit) != expr_shape(call)) return fn_fail<Id<Expr>>("array-valued call inside an expression");
+      ++vec_rec_folds_;
+      return lit;
+    }
     // 修饰分发的基里的：实参不会成字面量的 omc 取元素后的形态未核实 → SKIP。
     if (split_nested && !call_args_fold(call)) return fn_fail<Id<Expr>>("array-valued call inside an expression");
     if (sig.outputs.size() > 1 && !noret) {   // 语句调用不取首输出（N1 探针：两个输出的 `f(t);` 原样）
@@ -14155,6 +14247,7 @@ class Flattener {
       }
       return wrapped;
     }
+    if (!vd.empty() && vec_rec_fn) return vec_rec_expand(call, vd, rty);
     return vd.empty() ? call : wrap_vectorized(call, vd);
   }
 
@@ -18286,8 +18379,15 @@ class Flattener {
     if (!is_arith) {  // 关系 / 逻辑
       return rel_or_logic(e, enclosing, prefix);
     }
+    // 运算数整个是调用：返回记录的向量化调用随即展开（见 vec_rec_ok_）。参数数组的逐元素摊分里未核实 → 不置。
+    auto whole_call = [&](Id<Exp> x) {
+      return !fn_scope_ && !param_spread_ && I_.absyn.exps[x].kind == ExpKind::Call && !is_array_ctor(x);
+    };
+    vec_rec_ok_ = whole_call(e.a);
     Id<Expr> a = inst_exp(e.a, enclosing, prefix);
+    vec_rec_ok_ = whole_call(e.b);
     Id<Expr> b = inst_exp(e.b, enclosing, prefix);
+    vec_rec_ok_ = false;
     // 记录（含记录数组）作算术运算数：走重载运算符（NFTypeCheck.checkBinaryOperation :175-177 v1.25.0，见 overloaded_binary；
     // 普通记录没有运算符函数 → omc 报错 → SKIP）。
     if (result_.model.exprs[a].ty.element_type().kind == TypeKind::Complex ||
@@ -18752,6 +18852,8 @@ class Flattener {
   Id<Expr> call(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
     fn_why_ = nullptr;   // 子原因按调用清零（见 fn_fail）
     const bool split_top = std::exchange(split_base_, false);   // 只交给本调用（见 split_base_）
+    // 同上，只交给本调用的用户函数那一路（见 vec_rec_ok_ / vec_rec_arg_）。
+    const bool vec_rec_top = std::exchange(vec_rec_ok_, false), vec_arg_top = std::exchange(vec_rec_arg_, false);
     const Cref& fn = I_.absyn.crefs[e.cref];
     // 调用结果的字段访问 `f(i).y`：1.25.0 自己报内部错误（DotOperator），ymc 未做 → SKIP（此前被静默当成 f(i)）。
     if (e.call_suffix.is_valid()) { set_unsupported("field access on call result"); return lit_int(0); }
@@ -18872,6 +18974,8 @@ class Flattener {
       }
       // 折不成常量 → 发射函数定义 + 保留符号调用（加宽(55)-B）。不可发射 → 落到下面 SKIP。
       split_base_ = split_top;
+      vec_rec_ok_ = vec_rec_top;
+      vec_rec_arg_ = vec_arg_top;
       if (Id<Expr> uc = try_emit_user_call(e, enclosing, prefix); uc.is_valid()) {
         if (hold && user_call(uc)) comp_hold_->calls.push_back(uc);
         return uc;
@@ -19101,7 +19205,9 @@ class Flattener {
     r.call_name = *path;
     r.ty.kind = TypeKind::Complex;
     r.ty.complex_node = rn.raw;
-    return add(std::move(r));
+    const Id<Expr> out = add(std::move(r));
+    record_literals_.insert(out.raw);
+    return out;
   }
 
   // 类型化调用 call_name（已发射的函数）求得的记录值 v → 其输出记录类的记录式（同 record_literal_call，按压平名找函数）。
@@ -19800,6 +19906,12 @@ class Flattener {
     const bool arr_operand = op_type(a).is_array() || op_type(b).is_array();
     const char* opname = op_fn_name(op);
     if (!opname) return fail("overloaded operator kind");
+    // 元素级（标量也是）一律走 checkOverloadedBinaryArrayEW（NFTypeCheck.mo:246-248 v1.25.0），先比两个运算数（的元素）类型
+    //（matchExpressions，:751-760）：记录配 Integer / Real 不相容 → "Cannot resolve type"（VRC80-VRC83 `z .* 2`、`z .* {1, 2, 3}`、
+    // VRC88 / VRC90 `u .* 2`、`2.0 ./ u`，此前 ymc 照出）→ SKIP。不同的 Complex 别名之间相容（VRC92 / VRC93）。
+    if ((op == Op::EWAdd || op == Op::EWSub || op == Op::EWMul || op == Op::EWDiv || op == Op::EWPow) &&
+        (expr_elem_kind(a) != TypeKind::Complex || expr_elem_kind(b) != TypeKind::Complex))
+      return fail("elementwise overloaded operator on non-record operand");
     const bool ca = result_.model.exprs[a].ty.element_type().kind == TypeKind::Complex;   // 数组按元素类型找候选（:231-232）
     const bool cb = result_.model.exprs[b].ty.element_type().kind == TypeKind::Complex;
     std::optional<OpType> ta, tb;
@@ -19833,6 +19945,8 @@ class Flattener {
       }
       if (exact.size() > 1) return fail("ambiguous overloaded operator");
       if (exact.size() == 1) {
+        // 随即展开过的向量化调用（vec_rec_expand）：omc 精确匹配时实参是没展开的数组构造（scalarProduct 的实参），未做 → SKIP。
+        if (vec_rec_arrays_.count(a.raw) || vec_rec_arrays_.count(b.raw)) return fail("vectorized record call as array argument");
         const Id<Expr> c = typed_fn_call(cands[exact[0]], {a, b});
         return c.is_valid() ? c : fail("overloaded operator call");
       }
@@ -19895,6 +20009,10 @@ class Flattener {
       if (!(op == Op::Mul || op == Op::Div || ew)) return fail("overloaded operator on record array and scalar");
     } else {                     // 标量 op 数组
       if (!(op == Op::Mul || ew)) return fail("overloaded operator on scalar and record array");
+      // 元素级的标量在前（`u .* z`、`2 .* z`）：omc 逐元素建好数组后结果类型取第一个运算数的（Type.setArrayElementType(type1, ty)，
+      // NFTypeCheck.mo:840 v1.25.0；type1 是标量 → 标量类型，NFType.mo:733-747），数组语境里报 "Type mismatch"（VRC25 / VRC71 /
+      // VRC72 / VRC74-VRC76，此前 ymc 照出），标量语境里留着这个数组值（VRC77 `s = {…}`）——都不跟 → SKIP。
+      if (ew) return fail("elementwise overloaded operator with scalar first operand");
     }
     std::vector<std::int64_t> idx(shape.size(), 1);
     std::function<Id<Expr>(std::size_t)> build = [&](std::size_t k) -> Id<Expr> {
@@ -28652,6 +28770,17 @@ class Flattener {
   // 正在定型修饰分发合成的取元素式 `(…)[k]` 的基（subscripted_exp 的 split）：基里碰到的头一个调用若是用户函数，可以嵌在运算里
   //（见 try_emit_user_call）；call() 进门就清，内建的实参里的调用照常。
   bool split_base_ = false;
+  // 模型语境里算术运算的运算数整个是调用（binary 置位，call() / try_emit_user_call 进门就清，实参里的调用不继承）：这样的调用若是
+  // 返回记录的向量化调用，omc 定型成数组构造（NFCall.vectorizeCall，NFCall.mo:2851-2907 v1.25.0）后重载运算符的数组支随即把它
+  // 展开、逐元素化简（matchOverloadedBinaryOperator :257-336 → checkOverloadedBinaryArrayMul / ScalarArray 等 :504-584 →
+  // ExpandExp.expandArrayConstructor2 的 SimplifyExp.simplify，NFExpandExp.mo:471-507）——见 try_emit_user_call 的 vec_rec 支。
+  bool vec_rec_ok_ = false;
+  // 上面那种调用的实参整个是调用 / 调用取负（`-symmetricOrientation(m)`）：其中实参会成字面量的数组调用先求值（见
+  // try_emit_user_call）；vec_rec_folds_ 数这样求了几个，父调用据此核对它们都落在向量化实参上。
+  bool vec_rec_arg_ = false;
+  std::size_t vec_rec_folds_ = 0;
+  std::unordered_set<std::uint32_t> vec_rec_arrays_;   // vec_rec 支展开出的数组字面量（overloaded_binary 的精确匹配支不收）
+  std::unordered_set<std::uint32_t> record_literals_;  // 求值得到的记录式（record_literal 建的，见 has_const_call）
   // 数组 if 取元素造出的标量 if（scalarize 的 IfExp 支）：omc 取元素是 applySubscriptIf，取完不再化简（NFExpression.mo
   // :1653-1683 v1.25.0；CT 探针 t2：`parameter Real p[2] = if b then {1, 2} else {1, 3}` → `p[1] = if b then 1.0 else 1.0`、
   // `q[1] = if b then true else false`），simplify_expr 对它们不做 simplifyIf 的两条收拢。克隆时标记跟着走（clone_subst）。

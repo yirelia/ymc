@@ -1,0 +1,2105 @@
+//// set: pk-p36 — 返回记录的向量化调用作重载运算符的运算数（67b：MSL QuasiStatic SMPM_MTPA / SMPM_CurrentSource / SMR_CurrentSource 此前 SKIP "qualified function call [….singleToMultiPhase.u]"，现都 PASS——SingleToPolyphase 的 `y = u*fromPolar(fill(1, m), -symmetricOrientation(m))`）：omc 把向量化调用定型成数组构造（NFCall.vectorizeCall :2851-2907 v1.25.0），重载运算符没有精确匹配时数组支随即展开、逐元素化简（matchOverloadedBinaryOperator :257-336 → checkOverloadedBinaryArrayMul / ScalarArray / ArrayScalar / AddSub / Div / EW :417-767 → ExpandExp.expandArrayConstructor2，NFExpandExp.mo:471-507），实参全成字面量的元素求值成记录式、函数不打（VRC4 / VRC12 / VRC13 / VRC15 / VRC17 / VRC32 / VRC34 / VRC38 / VRC53 / VRC54 / VRC56 / VRC57 / VRC62 / VRC63 / VRC95 / VRC96 / VRC98 / VRC99 / VRC106 / VRC118 / VRC120 / VRC130 / VRC144 / VRC146 / VRC147 / VRC149 / VRC150、VRU1 / VRU3 / VRU8），否则逐元素留调用（VRC3 / VRC5 / VRC6 / VRC14 / VRC19 / VRC21 / VRC23 / VRC24 / VRC26 / VRC27 / VRC29-VRC31 / VRC35 / VRC37 / VRC42 / VRC44-VRC48 / VRC50 / VRC60 / VRC61 / VRC64 / VRC65 / VRC68 / VRC70 / VRC97 / VRC102-VRC104 / VRC108-VRC111 / VRC113-VRC115 / VRC119 / VRC127-VRC129 / VRC131 / VRC132 / VRC134 / VRC136 / VRC138-VRC142 / VRC148 / VRC153、VRU2）；实参 fill / ones / zeros 照 simplifySubscriptedExp 取元素（NFSimplifyExp.mo:1346-1379），实参整个是会成字面量的数组调用（或其取负）先求值、整体取负不护零（`{-0.0, …}`；VRC12 / VRC13 / VRC17 / VRC48 / VRC50 / VRC53 / VRC54 / VRC56 / VRC95 / VRC96 / VRC99 / VRC120 / VRC147 / VRC150，不纯的照旧 SKIP VRC152）。基线 ACCEPTS-INVALID（一并修）：记录的元素级运算配 Integer / Real（checkOverloadedBinaryArrayEW 的 matchExpressions，NFTypeCheck.mo:751-760；VRC80-VRC83 / VRC88 / VRC90 / VRU5 / VRU6 / VRU10 / VRU11）、标量在前的元素级运算（结果类型取标量的 setArrayElementType(type1, ty) :840；VRC71 / VRC72 / VRC74-VRC76 / VRU4 / VRU9，标量语境里 omc 留着数组值的 VRC77-VRC79 → SKIP）。照旧 SKIP：整个等式一侧 / 绑定里留整体的向量化记录调用（VRC1 / VRC2 / VRC8 / VRC9 / VRC11 / VRC16 / VRC18 / VRU7，MSL IMC_Conveyor 的 VfController）、参数数组绑定（VRC10 / VRC39）、精确匹配到 scalarProduct（VRC28 / VRC135）、函数体里（VRC121-VRC124）、实参是别的形态的数组调用 / 下标数组切片 / 取负字面量（VRC49 / VRC51 / VRC52 / VRC58 / VRC59 / VRC100 / VRC101 / VRC116 / VRC133 / VRC143）、记录常量 / 记录式参与的常量运算（VRC105 / VRC107 / VRC125）；对照（基线就 PASS）：显式数组字面量 / 逐元素 for / 记录数组的元素级与数组在前的运算（VRC20 / VRC73 / VRC84-VRC87 / VRC89 / VRC91-VRC94 / VRC137 / VRU12），实数向量化调用的 fill / 取负 / 嵌套数组调用实参（VRA / VRB / VRD，照旧 SKIP 或 PASS）
+//// model: VRC1
+model VRC1
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.fromPolar(fill(1, 3), {1, 2, 3});
+end VRC1;
+//// model: VRC2
+model VRC2
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.fromPolar(r, phi);
+end VRC2;
+//// model: VRC3
+model VRC3
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(r, phi);
+end VRC3;
+//// model: VRC4
+model VRC4
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, 3), {1, 2, 3});
+end VRC4;
+//// model: VRC5
+model VRC5
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.fromPolar(r, phi) * u;
+end VRC5;
+//// model: VRC6
+model VRC6
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex z[3] = {Complex(time, 1), Complex(2, time), Complex(time, time)};
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.fromPolar(r, phi) + z;
+end VRC6;
+//// model: VRC7
+model VRC7
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex y[3];
+equation
+  y = -Modelica.ComplexMath.fromPolar(r, phi);
+end VRC7;
+//// model: VRC8
+model VRC8
+  Complex z[3] = {Complex(time, 1), Complex(2, time), Complex(time, time)};
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.conj(z);
+end VRC8;
+//// model: VRC9
+model VRC9
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex y[3] = Modelica.ComplexMath.fromPolar(r, phi);
+end VRC9;
+//// model: VRC10
+model VRC10
+  parameter Complex y[3] = Modelica.ComplexMath.fromPolar(fill(1, 3), {1, 2, 3});
+end VRC10;
+//// model: VRC11
+model VRC11
+  Real phi[3] = {4, 5, 6} * time;
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.fromPolar(1, phi);
+end VRC11;
+//// model: VRC12
+model VRC12
+  parameter Integer m = 3 annotation(Evaluate = true);
+  Complex u = Complex(time, 2);
+  Complex y[m];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, m), -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(m));
+end VRC12;
+//// model: VRC13
+model VRC13
+  parameter Integer m = 3;
+  Complex u = Complex(time, 2);
+  Complex y[m];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, m), -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(m));
+end VRC13;
+//// model: VRC14
+model VRC14
+  parameter Real phi0[3] = {1, 2, 3};
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, 3), phi0);
+end VRC14;
+//// model: VRC15
+model VRC15
+  Modelica.ComplexBlocks.Interfaces.ComplexInput u = Complex(time, 2);
+  Modelica.ComplexBlocks.Interfaces.ComplexOutput y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, 3), {1, 2, 3});
+end VRC15;
+//// model: VRC16
+model VRC16
+  parameter Integer m = 3 annotation(Evaluate = true);
+  Real amplitude = time;
+  parameter Real orientation[m] = -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(m);
+  parameter Real BasePhase = 0;
+  Complex y[m];
+equation
+  y = Modelica.ComplexMath.fromPolar(fill(amplitude, m), orientation + fill(BasePhase - Modelica.Constants.pi/2, m));
+end VRC16;
+//// model: VRC17
+model VRC17
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, 3), -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(3));
+end VRC17;
+//// model: VRC18
+model VRC18
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.fromPolar(fill(1, 3), -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(3));
+end VRC18;
+//// model: VRC19
+model VRC19
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, 3), phi);
+end VRC19;
+//// model: VRC20
+model VRC20
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * {Modelica.ComplexMath.fromPolar(1, 1), Modelica.ComplexMath.fromPolar(1, 2), Modelica.ComplexMath.fromPolar(1, 3)};
+end VRC20;
+//// model: VRC21
+model VRC21
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.fromPolar(r, phi) / u;
+end VRC21;
+//// model: VRC22
+model VRC22
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u / Modelica.ComplexMath.fromPolar(r, phi);
+end VRC22;
+//// model: VRC23
+model VRC23
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex z[3] = {Complex(time, 1), Complex(2, time), Complex(time, time)};
+  Complex y[3];
+equation
+  y = z - Modelica.ComplexMath.fromPolar(r, phi);
+end VRC23;
+//// model: VRC24
+model VRC24
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex z[3] = {Complex(time, 1), Complex(2, time), Complex(time, time)};
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.fromPolar(r, phi) .* z;
+end VRC24;
+//// model: VRC25
+model VRC25
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u .* Modelica.ComplexMath.fromPolar(r, phi);
+end VRC25;
+//// model: VRC26
+model VRC26
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex y[3];
+equation
+  y = 2 * Modelica.ComplexMath.fromPolar(r, phi);
+end VRC26;
+//// model: VRC27
+model VRC27
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.fromPolar(r, phi) * 2.5;
+end VRC27;
+//// model: VRC28
+model VRC28
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex z[3] = {Complex(time, 1), Complex(2, time), Complex(time, time)};
+  Complex y;
+equation
+  y = Modelica.ComplexMath.fromPolar(r, phi) * z;
+end VRC28;
+//// model: VRC29
+model VRC29
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.fromPolar(r, phi) + Modelica.ComplexMath.fromPolar(phi, r);
+end VRC29;
+//// model: VRC30
+model VRC30
+  Complex z[3] = {Complex(time, 1), Complex(2, time), Complex(time, time)};
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.conj(z);
+end VRC30;
+//// model: VRC31
+function VRC31F
+  input Real a;
+  input Real b;
+  output Complex c;
+algorithm
+  c := Complex(a + b, a - b);
+end VRC31F;
+model VRC31
+  Real r[3] = {1, 2, 3} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * VRC31F(r, 2);
+end VRC31;
+//// model: VRC32
+function VRC32F
+  input Real a;
+  input Real b = 3;
+  output Complex c;
+algorithm
+  c := Complex(a + b, a - b);
+end VRC32F;
+model VRC32
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * VRC32F({1, 2, 3});
+end VRC32;
+//// model: VRC33
+record VRC33R
+  Real a;
+  Real b;
+end VRC33R;
+function VRC33F
+  input Real x;
+  output VRC33R r;
+algorithm
+  r := VRC33R(x, 2 * x);
+end VRC33F;
+model VRC33
+  Real x[2] = {time, 2 * time};
+  VRC33R u = VRC33R(1, 2);
+  VRC33R y[2];
+equation
+  y = u * VRC33F(x);
+end VRC33;
+//// model: VRC34
+model VRC34
+  Complex u = Complex(time, 2);
+  Complex y[1];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, 1), {2});
+end VRC34;
+//// model: VRC35
+model VRC35
+  Real phi[1] = {time};
+  Complex u = Complex(time, 2);
+  Complex y[1];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, 1), phi);
+end VRC35;
+//// model: VRC36
+model VRC36
+  Real r[2, 2] = {{1, 2}, {3, 4}} * time;
+  Complex u = Complex(time, 2);
+  Complex y[2, 2];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(r, r);
+end VRC36;
+//// model: VRC37
+model VRC37
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3] = u * Modelica.ComplexMath.fromPolar(r, phi);
+end VRC37;
+//// model: VRC38
+model VRC38
+  Complex u = Complex(time, 2);
+  Complex y[3] = u * Modelica.ComplexMath.fromPolar(fill(1, 3), {1, 2, 3});
+end VRC38;
+//// model: VRC39
+model VRC39
+  parameter Complex u = Complex(1, 2);
+  parameter Complex y[3] = u * Modelica.ComplexMath.fromPolar(fill(1, 3), {1, 2, 3});
+end VRC39;
+//// model: VRC40
+model VRC40
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+algorithm
+  y := u * Modelica.ComplexMath.fromPolar(r, phi);
+end VRC40;
+//// model: VRC41
+model VRC41
+  Real r[3] = {1, 2, 3} * time;
+  Complex u = Complex(time, 2);
+  Complex y[2, 3];
+equation
+  for i in 1:2 loop
+    y[i, :] = u * Modelica.ComplexMath.fromPolar(r, {1, 2, 3} * i);
+  end for;
+end VRC41;
+//// model: VRC42
+model VRC42
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex v = Complex(2, time);
+  Complex y[3];
+equation
+  y = v * (u * Modelica.ComplexMath.fromPolar(r, phi));
+end VRC42;
+//// model: VRC43
+model VRC43
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Real a[3];
+equation
+  a = Modelica.ComplexMath.abs(u * Modelica.ComplexMath.fromPolar(r, phi));
+end VRC43;
+//// model: VRC44
+model VRC44
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(2 * r, -phi);
+end VRC44;
+//// model: VRC45
+model VRC45
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(ones(3), phi);
+end VRC45;
+//// model: VRC46
+model VRC46
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(zeros(3), phi);
+end VRC46;
+//// model: VRC47
+model VRC47
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(time, 3), phi);
+end VRC47;
+//// model: VRC48
+model VRC48
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(Modelica.Electrical.Polyphase.Functions.symmetricOrientation(3), phi);
+end VRC48;
+//// model: VRC49
+model VRC49
+  parameter Integer m = 3;
+  Real phi[m] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[m];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(2, m), phi - Modelica.Electrical.Polyphase.Functions.symmetricOrientation(m));
+end VRC49;
+//// model: VRC50
+model VRC50
+  Real r[3] = {1, 2, 3} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(r, -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(3));
+end VRC50;
+//// model: VRC51
+function VRC51G
+  input Real x[:];
+  output Real y[size(x, 1)];
+algorithm
+  y := 2 * x;
+end VRC51G;
+model VRC51
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, 3), -VRC51G(phi));
+end VRC51;
+//// model: VRC52
+function VRC52G
+  input Real x[:];
+  output Real y[size(x, 1)];
+algorithm
+  y := 2 * x;
+end VRC52G;
+model VRC52
+  parameter Real p[3] = {1, 2, 3};
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, 3), VRC52G(p));
+end VRC52;
+//// model: VRC53
+model VRC53
+  parameter Integer m = 3;
+  Complex u = Complex(time, 2);
+  Complex y[m];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, m), Modelica.Electrical.Polyphase.Functions.symmetricOrientation(m));
+end VRC53;
+//// model: VRC54
+model VRC54
+  parameter Integer m = 3;
+  Complex u = Complex(time, 2);
+  Complex y[m];
+equation
+  y = Modelica.ComplexMath.fromPolar(fill(1, m), -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(m)) * u;
+end VRC54;
+//// model: VRC55
+model VRC55
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, 3), -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(3)) + u;
+end VRC55;
+//// model: VRC56
+model VRC56
+  Complex u = Complex(time, 2);
+  Complex y[2];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, 2), -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(2));
+end VRC56;
+//// model: VRC57
+model VRC57
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar({1, 2, 3}, {0, 0, 0});
+end VRC57;
+//// model: VRC58
+model VRC58
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar({1, 2, 3}, -{0, 0, 0});
+end VRC58;
+//// model: VRC59
+model VRC59
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar({1, 2, 3}, -{0.0, 1.0, 0.0});
+end VRC59;
+//// model: VRC60
+model VRC60
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(1, phi);
+end VRC60;
+//// model: VRC61
+model VRC61
+  parameter Real len = 2;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(len, phi);
+end VRC61;
+//// model: VRC62
+model VRC62
+  parameter Real len = 2 annotation(Evaluate = true);
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(len, {1, 2, 3});
+end VRC62;
+//// model: VRC63
+model VRC63
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Complex.'constructor'.fromReal({1, 2, 3}, 0);
+end VRC63;
+//// model: VRC64
+model VRC64
+  Real r[3] = {1, 2, 3} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Complex(r, 0);
+end VRC64;
+//// model: VRC65
+model VRC65
+  Complex z[3] = {Complex(time, 1), Complex(2, time), Complex(time, time)};
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.exp(z);
+end VRC65;
+//// model: VRC66
+model VRC66
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.exp({Complex(1, 2), Complex(3, 4), Complex(5, 6)});
+end VRC66;
+//// model: VRC67
+model VRC67
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u ^ Modelica.ComplexMath.fromPolar(r, phi);
+end VRC67;
+//// model: VRC68
+model VRC68
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.fromPolar(r, phi) .^ u;
+end VRC68;
+//// model: VRC69
+model VRC69
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.fromPolar(r, phi) + u;
+end VRC69;
+//// model: VRC70
+model VRC70
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.fromPolar(r, phi) .+ u;
+end VRC70;
+//// model: VRC71
+model VRC71
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u .* {Complex(1, 2), Complex(3, 4), Complex(5, 6)};
+end VRC71;
+//// model: VRC72
+model VRC72
+  Complex u = Complex(time, 2);
+  Complex z[3] = {Complex(time, 1), Complex(2, time), Complex(time, time)};
+  Complex y[3];
+equation
+  y = u .* z;
+end VRC72;
+//// model: VRC73
+model VRC73
+  Complex u = Complex(time, 2);
+  Complex z[3] = {Complex(time, 1), Complex(2, time), Complex(time, time)};
+  Complex y[3];
+equation
+  y = z .* u;
+end VRC73;
+//// model: VRC74
+model VRC74
+  Complex u = Complex(time, 2);
+  Complex z[3] = {Complex(time, 1), Complex(2, time), Complex(time, time)};
+  Complex y[3];
+equation
+  y = u .+ z;
+end VRC74;
+//// model: VRC75
+model VRC75
+  Complex z[3] = {Complex(time, 1), Complex(2, time), Complex(time, time)};
+  Complex y[3];
+equation
+  y = 2 .* z;
+end VRC75;
+//// model: VRC76
+model VRC76
+  Complex u = Complex(time, 2);
+  Complex z[3] = {Complex(time, 1), Complex(2, time), Complex(time, time)};
+  Complex y[3] = u .* z;
+end VRC76;
+//// model: VRC77
+model VRC77
+  Complex u = Complex(time, 2);
+  Complex z[3] = {Complex(time, 1), Complex(2, time), Complex(time, time)};
+  Complex s;
+equation
+  s = u .* z;
+end VRC77;
+//// model: VRC78
+model VRC78
+  Complex u = Complex(time, 2);
+  Complex z[3] = {Complex(time, 1), Complex(2, time), Complex(time, time)};
+  Real a;
+equation
+  a = Modelica.ComplexMath.abs(u .* z);
+end VRC78;
+//// model: VRC79
+model VRC79
+  Complex u = Complex(time, 2);
+  Complex z[1] = {Complex(time, 1)};
+  Complex s;
+equation
+  s = u .* z;
+end VRC79;
+//// model: VRC80
+model VRC80
+  Complex z[3] = {Complex(time, 1), Complex(2, time), Complex(time, time)};
+  Complex y[3];
+equation
+  y = z .* 2;
+end VRC80;
+//// model: VRC81
+model VRC81
+  Complex z[3] = {Complex(time, 1), Complex(2, time), Complex(time, time)};
+  Complex y[3];
+equation
+  y = z ./ 2.0;
+end VRC81;
+//// model: VRC82
+model VRC82
+  Complex z[3] = {Complex(time, 1), Complex(2, time), Complex(time, time)};
+  Complex y[3];
+equation
+  y = z .* {1, 2, 3};
+end VRC82;
+//// model: VRC83
+model VRC83
+  Complex z[3] = {Complex(time, 1), Complex(2, time), Complex(time, time)};
+  Complex y[3];
+equation
+  y = {1, 2, 3} .* z;
+end VRC83;
+//// model: VRC84
+model VRC84
+  Complex z[3] = {Complex(time, 1), Complex(2, time), Complex(time, time)};
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = z ./ u;
+end VRC84;
+//// model: VRC85
+model VRC85
+  Complex z[3] = {Complex(time, 1), Complex(2, time), Complex(time, time)};
+  Complex w[3] = {Complex(1, time), Complex(time, 2), Complex(3, time)};
+  Complex y[3];
+equation
+  y = z .* w;
+end VRC85;
+//// model: VRC86
+model VRC86
+  Complex z[3] = {Complex(time, 1), Complex(2, time), Complex(time, time)};
+  Complex y[3];
+equation
+  y = z * 2;
+end VRC86;
+//// model: VRC87
+model VRC87
+  Complex z[3] = {Complex(time, 1), Complex(2, time), Complex(time, time)};
+  Complex y[3];
+equation
+  y = z / 2;
+end VRC87;
+//// model: VRC88
+model VRC88
+  Complex u = Complex(time, 2);
+  Complex y;
+equation
+  y = u .* 2;
+end VRC88;
+//// model: VRC89
+model VRC89
+  Complex u = Complex(time, 2);
+  Complex v = Complex(1, time);
+  Complex y;
+equation
+  y = u .* v;
+end VRC89;
+//// model: VRC90
+model VRC90
+  Complex u = Complex(time, 2);
+  Complex y;
+equation
+  y = 2.0 ./ u;
+end VRC90;
+//// model: VRC91
+model VRC91
+  Complex u = Complex(time, 2);
+  Complex v = Complex(1, time);
+  Complex y;
+equation
+  y = u .- v;
+end VRC91;
+//// model: VRC92
+model VRC92
+  Complex u = Complex(time, 2);
+  Modelica.Units.SI.ComplexVoltage v = Complex(1, time);
+  Complex y;
+equation
+  y = u .+ v;
+end VRC92;
+//// model: VRC93
+model VRC93
+  Modelica.Units.SI.ComplexVoltage z[2] = {Complex(time, 1), Complex(2, time)};
+  Modelica.Units.SI.ComplexCurrent w[2] = {Complex(1, time), Complex(time, 2)};
+  Complex y[2];
+equation
+  y = z .* w;
+end VRC93;
+//// model: VRC94
+function VRC94G
+  input Real x[3];
+  output Complex c;
+algorithm
+  c := Complex(x[1] + x[2], x[3]);
+end VRC94G;
+model VRC94
+  Complex u = Complex(time, 2);
+  Complex y;
+equation
+  y = u * VRC94G(-Modelica.Electrical.Polyphase.Functions.symmetricOrientation(3));
+end VRC94;
+//// model: VRC95
+package VRC95P
+  block B
+    parameter Integer m = 3 annotation(Evaluate = true);
+    Modelica.ComplexBlocks.Interfaces.ComplexInput u;
+    Modelica.ComplexBlocks.Interfaces.ComplexOutput y[m];
+  equation
+    y = u * Modelica.ComplexMath.fromPolar(fill(1, m), -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(m));
+  end B;
+end VRC95P;
+model VRC95
+  parameter Integer n = 3 annotation(Evaluate = true);
+  VRC95P.B b(final m = n);
+equation
+  b.u = Complex(time, 1);
+end VRC95;
+//// model: VRC96
+package VRC96P
+  block B
+    parameter Integer m = 3;
+    Modelica.ComplexBlocks.Interfaces.ComplexInput u;
+    Modelica.ComplexBlocks.Interfaces.ComplexOutput y[m];
+  equation
+    y = u * Modelica.ComplexMath.fromPolar(fill(1, m), -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(m));
+  end B;
+end VRC96P;
+model VRC96
+  VRC96P.B b1(m = 2);
+  VRC96P.B b2(m = 5);
+equation
+  b1.u = Complex(time, 1);
+  b2.u = Complex(1, time);
+end VRC96;
+//// model: VRC97
+model VRC97
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex v = Complex(2, time);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(r, phi) * v;
+end VRC97;
+//// model: VRC98
+function VRC98G
+  input Integer n;
+  output Integer k[n];
+algorithm
+  k := {i for i in 1:n};
+end VRC98G;
+model VRC98
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(VRC98G(3), {0, 0, 0});
+end VRC98;
+//// model: VRC99
+model VRC99
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(-Modelica.Electrical.Polyphase.Functions.symmetricOrientation(3), -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(3));
+end VRC99;
+//// model: VRC100
+model VRC100
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, 3), -(Modelica.Electrical.Polyphase.Functions.symmetricOrientation(3)));
+end VRC100;
+//// model: VRC101
+model VRC101
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, 3), 2 * Modelica.Electrical.Polyphase.Functions.symmetricOrientation(3));
+end VRC101;
+//// model: VRC102
+model VRC102
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+  Boolean b = time > 0.5;
+equation
+  if b then
+    y = u * Modelica.ComplexMath.fromPolar(r, phi);
+  else
+    y = u * Modelica.ComplexMath.fromPolar(phi, r);
+  end if;
+end VRC102;
+//// model: VRC103
+model VRC103
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  u * Modelica.ComplexMath.fromPolar(r, phi) = y;
+end VRC103;
+//// model: VRC104
+model VRC104
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.j * Modelica.ComplexMath.fromPolar(r, phi);
+end VRC104;
+//// model: VRC105
+model VRC105
+  constant Complex c = Complex(1, 2);
+  Complex y[3];
+equation
+  y = c * Modelica.ComplexMath.fromPolar(fill(1, 3), {1, 2, 3});
+end VRC105;
+//// model: VRC106
+model VRC106
+  parameter Complex c = Complex(1, 2);
+  Complex y[3];
+equation
+  y = c * Modelica.ComplexMath.fromPolar(fill(1, 3), {1, 2, 3});
+end VRC106;
+//// model: VRC107
+model VRC107
+  Complex y[3];
+equation
+  y = Complex(1, 2) * Modelica.ComplexMath.fromPolar(fill(1, 3), {1, 2, 3});
+end VRC107;
+//// model: VRC108
+function VRC108G
+  input Complex c;
+  input Real x;
+  output Complex d;
+algorithm
+  d := Complex(c.re * x, c.im);
+end VRC108G;
+model VRC108
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * VRC108G(u, phi);
+end VRC108;
+//// model: VRC109
+model VRC109
+  Complex z[4] = {Complex(time, 1), Complex(2, time), Complex(time, time), Complex(1, 1)};
+  Complex u = Complex(time, 2);
+  Complex y[2];
+equation
+  y = u * Modelica.ComplexMath.conj(z[2:3]);
+end VRC109;
+//// model: VRC110
+model VRC110
+  Complex z[2, 3] = {{Complex(time, 1), Complex(2, time), Complex(time, time)}, {Complex(1, time), Complex(time, 2), Complex(3, 3)}};
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.conj(z[2, :]);
+end VRC110;
+//// model: VRC111
+model VRC111
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  when time > 0.5 then
+    y = u * Modelica.ComplexMath.fromPolar(r, phi);
+  end when;
+end VRC111;
+//// model: VRC112
+model VRC112
+  parameter Real p = Modelica.ComplexMath.real((Complex(1, 2) * Modelica.ComplexMath.fromPolar({1, 1}, {1, 2}))[2]);
+end VRC112;
+//// model: VRC113
+model VRC113
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Real y;
+equation
+  y = Modelica.ComplexMath.real((u * Modelica.ComplexMath.fromPolar(r, phi))[2]);
+end VRC113;
+//// model: VRC114
+package VRC114P
+  model B
+    Real phi[3] = {4, 5, 6} * time;
+    Complex u = Complex(time, 2);
+    Complex y[3];
+  end B;
+end VRC114P;
+model VRC114
+  VRC114P.B b(y = b.u * Modelica.ComplexMath.fromPolar(fill(1, 3), b.phi));
+end VRC114;
+//// model: VRC115
+model VRC115
+  parameter Integer m = 3;
+  Real r[m] = {1, 2, 3} * time;
+  Complex u = Complex(time, 2);
+  Complex y[m];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(r, fill(Modelica.Constants.pi / m, m));
+end VRC115;
+//// model: VRC116
+model VRC116
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, 3), Modelica.Electrical.Polyphase.Functions.symmetricOrientation(3) .* {1, 1, 1});
+end VRC116;
+//// model: VRC117
+function VRC117F
+  input Real x;
+  output Complex c;
+algorithm
+  assert(x < 2.5, "too big");
+  c := Complex(x, 0);
+end VRC117F;
+model VRC117
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * VRC117F({1, 2, 3});
+end VRC117;
+//// model: VRC118
+function VRC118F
+  input Real x;
+  output Complex c;
+algorithm
+  c := Complex(x, 0);
+end VRC118F;
+model VRC118
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * VRC118F({1, 2, 3});
+end VRC118;
+//// model: VRC119
+function VRC119F
+  input Real x;
+  output Complex c;
+algorithm
+  c := Complex(x, 0);
+end VRC119F;
+model VRC119
+  Real r[3] = {1, 2, 3} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * VRC119F(r);
+end VRC119;
+//// model: VRC120
+model VRC120
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, 3), -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(3)) * u;
+end VRC120;
+//// model: VRC121
+function VRC121F
+  input Real x;
+  output Real y;
+protected
+  Complex u = Complex(x, 2);
+  Complex c[3];
+algorithm
+  c := u * Modelica.ComplexMath.fromPolar(fill(1, 3), {1, 2, 3});
+  y := c[2].re + c[3].im;
+end VRC121F;
+model VRC121
+  Real y = VRC121F(time);
+end VRC121;
+//// model: VRC122
+function VRC122F
+  input Real x;
+  output Real y;
+protected
+  Complex u = Complex(x, 2);
+  Complex c[3];
+algorithm
+  c := u * Modelica.ComplexMath.fromPolar(fill(1, 3), {1, 2, 3});
+  y := c[2].re + c[3].im;
+end VRC122F;
+model VRC122
+  Real y = VRC122F(1.5);
+end VRC122;
+//// model: VRC123
+function VRC123F
+  input Real r[3];
+  input Real phi[3];
+  input Complex u;
+  output Complex c[3];
+algorithm
+  c := u * Modelica.ComplexMath.fromPolar(r, phi);
+end VRC123F;
+model VRC123
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = VRC123F(r, phi, u);
+end VRC123;
+//// model: VRC124
+function VRC124F
+  input Real x;
+  output Real y;
+protected
+  Complex c[3];
+algorithm
+  c := Complex(x, 1) * Modelica.ComplexMath.fromPolar(fill(1, 3), -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(3));
+  y := c[1].re + c[2].im;
+end VRC124F;
+model VRC124
+  parameter Real p = VRC124F(2);
+  Real y = VRC124F(time);
+end VRC124;
+//// model: VRC125
+model VRC125
+  parameter Real p = Modelica.ComplexMath.real(Complex(1, 2) * Modelica.ComplexMath.fromPolar(1, 2));
+end VRC125;
+//// model: VRC126
+model VRC126
+  Real r[3] = {1, 2, 3} * time;
+  Complex u = Complex(time, 2);
+  Real y[3];
+equation
+  y = Modelica.ComplexMath.real(u * Modelica.ComplexMath.fromPolar(r, {1, 2, 3}));
+end VRC126;
+//// model: VRC127
+model VRC127
+  parameter Real len = 2;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(len, {1, 2, 3});
+end VRC127;
+//// model: VRC128
+model VRC128
+  parameter Real p = 2;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(p, 3), {1, 2, 3});
+end VRC128;
+//// model: VRC129
+model VRC129
+  parameter Integer m = 3;
+  Real phi[m] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[m];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(ones(m), phi);
+end VRC129;
+//// model: VRC130
+operator record VRC130C "complex-like"
+  Real re "real part";
+  Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import VRC130C;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output VRC130C result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '*'
+    function multiply "product"
+      import VRC130C;
+      input VRC130C c1;
+      input VRC130C c2;
+      output VRC130C c3;
+    algorithm
+      c3 := VRC130C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+    end multiply;
+  end '*';
+end VRC130C;
+connector VRC130CI = input VRC130C "in";
+connector VRC130CO = output VRC130C "out";
+function VRC130F "from polar"
+  input Real len;
+  input Real phi;
+  output VRC130C c;
+algorithm
+  c := VRC130C(len * cos(phi), len * sin(phi));
+end VRC130F;
+model VRC130
+  VRC130CI u;
+  VRC130CO y[2];
+equation
+  u = VRC130C(time, 1);
+  y = u * VRC130F(fill(2, 2), {1, 2});
+end VRC130;
+//// model: VRC131
+function VRC131F
+  input Real a;
+  input Real b;
+  input Real c;
+  output Complex z;
+algorithm
+  z := Complex(a * b, c);
+end VRC131F;
+model VRC131
+  parameter Real k = 3;
+  Real x[3] = {1, 2, 3} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * VRC131F(x, 2, k);
+end VRC131;
+//// model: VRC132
+model VRC132
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[2];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(r[1:2], phi[2:3]);
+end VRC132;
+//// model: VRC133
+model VRC133
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[2];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(r[{1, 3}], phi[1:2]);
+end VRC133;
+//// model: VRC134
+model VRC134
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.fromPolar(r, phi) + {Complex(1, 2), Complex(3, 4), Complex(5, 6)};
+end VRC134;
+//// model: VRC135
+model VRC135
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex y;
+equation
+  y = Modelica.ComplexMath.fromPolar(r, phi) * Modelica.ComplexMath.fromPolar(phi, r);
+end VRC135;
+//// model: VRC136
+model VRC136
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  parameter Complex u = Complex(1, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(r, phi);
+end VRC136;
+//// model: VRC137
+model VRC137
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  for i in 1:3 loop
+    y[i] = u * Modelica.ComplexMath.fromPolar(r[i], phi[i]);
+  end for;
+end VRC137;
+//// model: VRC138
+model VRC138
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(phi = phi, len = r);
+end VRC138;
+//// model: VRC139
+model VRC139
+  Integer k[3] = {1, 2, 3} * integer(time);
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(k, phi);
+end VRC139;
+//// model: VRC140
+model VRC140
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, 3), phi) + u * Modelica.ComplexMath.fromPolar(fill(2, 3), {1, 2, 3});
+end VRC140;
+//// model: VRC141
+model VRC141
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, 3), phi) - Modelica.ComplexMath.fromPolar(phi, fill(-1, 3)) * u;
+end VRC141;
+//// model: VRC142
+model VRC142
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, 3), -phi);
+end VRC142;
+//// model: VRC143
+model VRC143
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, 3), -{0.0, 1.0, 2.0});
+end VRC143;
+//// model: VRC144
+model VRC144
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, 3), {-0.0, 1.0, 2.0});
+end VRC144;
+//// model: VRC145
+model VRC145
+  Complex u = Complex(time, 2);
+  Complex y[0];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, 0), zeros(0));
+end VRC145;
+//// model: VRC146
+function VRC146F
+  input Integer k;
+  output Complex c;
+algorithm
+  c := Complex(k, 2 * k);
+end VRC146F;
+model VRC146
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * VRC146F(fill(2, 3));
+end VRC146;
+//// model: VRC147
+package VRC147P
+  constant Integer m = 3;
+end VRC147P;
+model VRC147
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, VRC147P.m), -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(VRC147P.m));
+end VRC147;
+//// model: VRC148
+model VRC148
+  function fp = Modelica.ComplexMath.fromPolar;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * fp(fill(1, 3), phi);
+end VRC148;
+//// model: VRC149
+model VRC149
+  import Modelica.ComplexMath.fromPolar;
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * fromPolar(fill(1, 3), {1, 2, 3});
+end VRC149;
+//// model: VRC150
+model VRC150
+  constant Integer m = 3;
+  Complex u = Complex(time, 2);
+  Complex y[m];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, m), -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(m));
+end VRC150;
+//// model: VRC151
+model VRC151
+  parameter Integer m = 3 annotation(Evaluate = false);
+  Complex u = Complex(time, 2);
+  Complex y[m];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, m), -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(m));
+end VRC151;
+//// model: VRC152
+impure function VRC152G
+  input Integer n;
+  output Real o[n];
+algorithm
+  o := {i * 1.0 for i in 1:n};
+end VRC152G;
+model VRC152
+  Complex u = Complex(time, 2);
+  Complex y[3];
+equation
+  y = u * Modelica.ComplexMath.fromPolar(fill(1, 3), -VRC152G(3));
+end VRC152;
+//// model: VRC153
+model VRC153
+  Real r[3] = {1, 2, 3} * time;
+  Complex u[3] = {Complex(time, 2), Complex(1, time), Complex(2, 2)};
+  Complex y[3];
+equation
+  y = u .* Modelica.ComplexMath.fromPolar(r, {1, 2, 3});
+end VRC153;
+//// model: VRU1
+operator record VRU1C "complex-like"
+  Real re "real part";
+  Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import VRU1C;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output VRU1C result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '*'
+    function multiply "product"
+      import VRU1C;
+      input VRU1C c1;
+      input VRU1C c2;
+      output VRU1C c3;
+    algorithm
+      c3 := VRU1C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+    end multiply;
+  end '*';
+end VRU1C;
+function VRU1F "from polar"
+  input Real len;
+  input Real phi;
+  output VRU1C c;
+algorithm
+  c := VRU1C(len * cos(phi), len * sin(phi));
+end VRU1F;
+model VRU1
+  VRU1C u = VRU1C(time, 2);
+  VRU1C y[3];
+equation
+  y = u * VRU1F(fill(1, 3), {1, 2, 3});
+end VRU1;
+//// model: VRU2
+operator record VRU2C "complex-like"
+  Real re "real part";
+  Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import VRU2C;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output VRU2C result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '*'
+    function multiply "product"
+      import VRU2C;
+      input VRU2C c1;
+      input VRU2C c2;
+      output VRU2C c3;
+    algorithm
+      c3 := VRU2C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+    end multiply;
+  end '*';
+end VRU2C;
+function VRU2F "from polar"
+  input Real len;
+  input Real phi;
+  output VRU2C c;
+algorithm
+  c := VRU2C(len * cos(phi), len * sin(phi));
+end VRU2F;
+model VRU2
+  Real r[2] = {1, 2} * time;
+  Real phi[2] = {3, 4} * time;
+  VRU2C u = VRU2C(time, 2);
+  VRU2C y[2];
+equation
+  y = VRU2F(r, phi) * u;
+end VRU2;
+//// model: VRU3
+operator record VRU3C "complex-like"
+  Real re "real part";
+  Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import VRU3C;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output VRU3C result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '*'
+    function multiply "product"
+      import VRU3C;
+      input VRU3C c1;
+      input VRU3C c2;
+      output VRU3C c3;
+    algorithm
+      c3 := VRU3C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+    end multiply;
+  end '*';
+end VRU3C;
+function VRU3F "from polar"
+  input Real len;
+  input Real phi;
+  output VRU3C c;
+algorithm
+  c := VRU3C(len * cos(phi), len * sin(phi));
+end VRU3F;
+function VRU3S "orientations"
+  input Integer m;
+  output Real o[m];
+algorithm
+  o := {(k - 1) * 2.0 for k in 1:m};
+end VRU3S;
+model VRU3
+  parameter Integer m = 3 annotation(Evaluate = true);
+  VRU3C u = VRU3C(time, 2);
+  VRU3C y[m];
+equation
+  y = u * VRU3F(fill(1, m), -VRU3S(m));
+end VRU3;
+//// model: VRU4
+operator record VRU4C "complex-like"
+  Real re "real part";
+  Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import VRU4C;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output VRU4C result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '*'
+    function multiply "product"
+      import VRU4C;
+      input VRU4C c1;
+      input VRU4C c2;
+      output VRU4C c3;
+    algorithm
+      c3 := VRU4C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+    end multiply;
+  end '*';
+end VRU4C;
+model VRU4
+  VRU4C u = VRU4C(time, 2);
+  VRU4C z[2] = {VRU4C(time, 1), VRU4C(2, time)};
+  VRU4C y[2];
+equation
+  y = u .* z;
+end VRU4;
+//// model: VRU5
+operator record VRU5C "complex-like"
+  Real re "real part";
+  Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import VRU5C;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output VRU5C result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '*'
+    function multiply "product"
+      import VRU5C;
+      input VRU5C c1;
+      input VRU5C c2;
+      output VRU5C c3;
+    algorithm
+      c3 := VRU5C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+    end multiply;
+  end '*';
+end VRU5C;
+model VRU5
+  VRU5C z[2] = {VRU5C(time, 1), VRU5C(2, time)};
+  VRU5C y[2];
+equation
+  y = z .* 2;
+end VRU5;
+//// model: VRU6
+operator record VRU6C "complex-like"
+  Real re "real part";
+  Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import VRU6C;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output VRU6C result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '*'
+    function multiply "product"
+      import VRU6C;
+      input VRU6C c1;
+      input VRU6C c2;
+      output VRU6C c3;
+    algorithm
+      c3 := VRU6C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+    end multiply;
+  end '*';
+end VRU6C;
+model VRU6
+  VRU6C u = VRU6C(time, 2);
+  VRU6C y;
+equation
+  y = u .* 2;
+end VRU6;
+//// model: VRU7
+operator record VRU7C "complex-like"
+  Real re "real part";
+  Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import VRU7C;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output VRU7C result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '*'
+    function multiply "product"
+      import VRU7C;
+      input VRU7C c1;
+      input VRU7C c2;
+      output VRU7C c3;
+    algorithm
+      c3 := VRU7C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+    end multiply;
+  end '*';
+end VRU7C;
+function VRU7F "from polar"
+  input Real len;
+  input Real phi;
+  output VRU7C c;
+algorithm
+  c := VRU7C(len * cos(phi), len * sin(phi));
+end VRU7F;
+model VRU7
+  Real r[2] = {1, 2} * time;
+  VRU7C y[2];
+equation
+  y = VRU7F(r, {1, 2});
+end VRU7;
+//// model: VRU8
+operator record VRU8C "complex-like"
+  Real re "real part";
+  Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import VRU8C;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output VRU8C result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '*'
+    function multiply "product"
+      import VRU8C;
+      input VRU8C c1;
+      input VRU8C c2;
+      output VRU8C c3;
+    algorithm
+      c3 := VRU8C(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+    end multiply;
+  end '*';
+end VRU8C;
+function VRU8F "from polar"
+  input Real len;
+  input Real phi;
+  output VRU8C c;
+algorithm
+  c := VRU8C(len * cos(phi), len * sin(phi));
+end VRU8F;
+function VRU8S "orientations"
+  input Integer m;
+  output Real o[m];
+algorithm
+  o := {(k - 1) * 2.0 for k in 1:m};
+end VRU8S;
+model VRU8
+  parameter Integer m = 3 annotation(Evaluate = true);
+  Real r[2] = {1, 2} * time;
+  Real phi[2] = {3, 4} * time;
+  VRU8C u = VRU8C(time, 2);
+  VRU8C y1[3];
+  VRU8C y2[2];
+  VRU8C y3[m];
+equation
+  y1 = u * VRU8F(fill(1, 3), {1, 2, 3});
+  y2 = VRU8F(r, phi) * u;
+  y3 = u * VRU8F(fill(1, m), -VRU8S(m));
+end VRU8;
+//// model: VRU9
+operator record VRUC "complex-like"
+  Real re "real part";
+  Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import VRUC;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output VRUC result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '*'
+    function multiply "product"
+      import VRUC;
+      input VRUC c1;
+      input VRUC c2;
+      output VRUC c3;
+    algorithm
+      c3 := VRUC(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+    end multiply;
+  end '*';
+end VRUC;
+model VRU9
+  VRUC u = VRUC(time, 2);
+  VRUC z[2] = {VRUC(time, 1), VRUC(2, time)};
+  VRUC y[2];
+equation
+  y = u .* z;
+end VRU9;
+//// model: VRU10
+operator record VRUC "complex-like"
+  Real re "real part";
+  Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import VRUC;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output VRUC result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '*'
+    function multiply "product"
+      import VRUC;
+      input VRUC c1;
+      input VRUC c2;
+      output VRUC c3;
+    algorithm
+      c3 := VRUC(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+    end multiply;
+  end '*';
+end VRUC;
+model VRU10
+  VRUC z[2] = {VRUC(time, 1), VRUC(2, time)};
+  VRUC y[2];
+equation
+  y = z .* 2;
+end VRU10;
+//// model: VRU11
+operator record VRUC "complex-like"
+  Real re "real part";
+  Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import VRUC;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output VRUC result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '*'
+    function multiply "product"
+      import VRUC;
+      input VRUC c1;
+      input VRUC c2;
+      output VRUC c3;
+    algorithm
+      c3 := VRUC(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+    end multiply;
+  end '*';
+end VRUC;
+model VRU11
+  VRUC u = VRUC(time, 2);
+  VRUC y;
+equation
+  y = u .* 2;
+end VRU11;
+//// model: VRU12
+operator record VRUC "complex-like"
+  Real re "real part";
+  Real im "imaginary part";
+  encapsulated operator 'constructor'
+    function fromReal "from reals"
+      import VRUC;
+      input Real re "re in";
+      input Real im = 0 "im in";
+      output VRUC result(re = re, im = im) "result";
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '*'
+    function multiply "product"
+      import VRUC;
+      input VRUC c1;
+      input VRUC c2;
+      output VRUC c3;
+    algorithm
+      c3 := VRUC(c1.re * c2.re - c1.im * c2.im, c1.re * c2.im + c1.im * c2.re);
+    end multiply;
+  end '*';
+end VRUC;
+model VRU12
+  VRUC u = VRUC(time, 2);
+  VRUC z[2] = {VRUC(time, 1), VRUC(2, time)};
+  VRUC y[2];
+equation
+  y = z .* u;
+end VRU12;
+//// model: VRA1
+function VRA1G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VRA1G;
+model VRA1
+  Real y[3];
+equation
+  y = VRA1G(fill(time, 3));
+end VRA1;
+//// model: VRA2
+function VRA2G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VRA2G;
+model VRA2
+  Real y[3];
+equation
+  y = VRA2G(fill(1, 3));
+end VRA2;
+//// model: VRA3
+function VRA3G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VRA3G;
+model VRA3
+  Real y[3];
+equation
+  y = VRA3G(fill(time, 3), {1, 2, 3});
+end VRA3;
+//// model: VRA4
+function VRA4G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VRA4G;
+model VRA4
+  Real y[3];
+equation
+  y = VRA4G(fill(time, 3), -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(3));
+end VRA4;
+//// model: VRA5
+function VRA5G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VRA5G;
+model VRA5
+  parameter Integer m = 3;
+  Real y[m];
+equation
+  y = VRA5G(fill(time, m), -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(m));
+end VRA5;
+//// model: VRA6
+function VRA6G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VRA6G;
+model VRA6
+  Real y[3];
+equation
+  y = 2 * VRA6G(fill(time, 3), -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(3));
+end VRA6;
+//// model: VRA7
+function VRA7G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VRA7G;
+model VRA7
+  Real y[3];
+equation
+  y = 2 * VRA7G(fill(1, 3), -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(3));
+end VRA7;
+//// model: VRA8
+function VRA8G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VRA8G;
+model VRA8
+  Real y[3];
+equation
+  y = VRA8G(ones(3));
+end VRA8;
+//// model: VRA9
+function VRA9G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VRA9G;
+model VRA9
+  Real y[3];
+  Real phi[3] = {1, 2, 3} * time;
+equation
+  y = VRA9G(fill(1, 3), phi);
+end VRA9;
+//// model: VRA10
+function VRA10G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VRA10G;
+model VRA10
+  Real y[3];
+  Real phi[3] = {1, 2, 3} * time;
+equation
+  y = 2 * VRA10G(fill(1, 3), phi);
+end VRA10;
+//// model: VRA11
+function VRA11G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VRA11G;
+model VRA11
+  Real y[3] = VRA11G(fill(time, 3), {1, 2, 3});
+end VRA11;
+//// model: VRA12
+function VRA12G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VRA12G;
+model VRA12
+  parameter Real y[3] = VRA12G(fill(1, 3), {1, 2, 3});
+end VRA12;
+//// model: VRB2
+function VRB2G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VRB2G;
+model VRB2
+  Real y[2];
+equation
+  y = VRB2G(-{0.0, time});
+end VRB2;
+//// model: VRB3
+function VRB3G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VRB3G;
+model VRB3
+  Real y[2];
+  Real z[2] = {time, 2 * time};
+equation
+  y = VRB3G(-z);
+end VRB3;
+//// model: VRB4
+function VRB4G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VRB4G;
+model VRB4
+  Real y[2];
+equation
+  y = VRB4G(-{0.0, 0.0} + {time, time});
+end VRB4;
+//// model: VRB5
+model VRB5
+  Real y[2];
+equation
+  y = sin(-{0.0, time});
+end VRB5;
+//// model: VRB6
+function VRB6G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VRB6G;
+model VRB6
+  Real y[2];
+equation
+  y = VRB6G(2 * {0.0, -1.0});
+end VRB6;
+//// model: VRB7
+function VRB7G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VRB7G;
+model VRB7
+  parameter Real p[2] = {0, 1};
+  Real y[2];
+equation
+  y = VRB7G(-p);
+end VRB7;
+//// model: VRB11
+function VRB11G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VRB11G;
+model VRB11
+  Real y[2];
+equation
+  y = VRB11G(-{0.0, 1.0}) * time;
+end VRB11;
+//// model: VRB12
+function VRB12G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VRB12G;
+model VRB12
+  Real y[2];
+equation
+  y = VRB12G(-{0.0, 1.0}, {time, time});
+end VRB12;
+//// model: VRB13
+function VRB13G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VRB13G;
+model VRB13
+  Real y[2];
+  Real w[2] = {time, 2 * time};
+equation
+  y = VRB13G(-{0.0, 1.0}, w);
+end VRB13;
+//// model: VRD1
+function VRD1G
+  input Real len;
+  input Real phi;
+  output Real y;
+algorithm
+  y := len * cos(phi);
+end VRD1G;
+model VRD1
+  parameter Integer m = 3 annotation(Evaluate = true);
+  Real amplitude = time;
+  parameter Real orientation[m] = -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(m);
+  parameter Real BasePhase = 0;
+  Real y[m];
+equation
+  y = VRD1G(fill(amplitude, m), orientation + fill(BasePhase - Modelica.Constants.pi/2, m));
+end VRD1;
+//// model: VRD2
+function VRD2G
+  input Real len;
+  input Real phi;
+  output Real y;
+algorithm
+  y := len * cos(phi);
+end VRD2G;
+model VRD2
+  parameter Integer m = 3 annotation(Evaluate = true);
+  Real amplitude = time;
+  parameter Real orientation[m] = -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(m);
+  parameter Real BasePhase = 0;
+  Real y[m];
+equation
+  y = VRD2G(amplitude, orientation + fill(BasePhase - Modelica.Constants.pi/2, m));
+end VRD2;

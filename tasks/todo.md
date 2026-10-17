@@ -2623,6 +2623,20 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       探针 pk-p35（211；EN* / IMQ / DUQ）——基线上 ACCEPTS-INVALID 50 / FAIL 7，现 PASS 122 / BOTH-REJECT 72 / SKIP 17；旧组 cf-p3 / pk-p34 /
       rb-p1 SKIP→PASS 4；单测 +7。slice 702 例 FAIL 0（oracle=live 不一致 0）；scodeinst 663、testsuite 1836（均不变）/ FAIL 0；
       **MSL 482→484**（Electrical.Digital.Examples.RAM、Utilities.Examples.readRealParameterModel）；探针 11019→11230；单测 482→489。
+- [x] (67b) 返回记录的向量化调用作重载运算符的运算数（2026-10-18）：MSL SingleToPolyphase 的 `y = u * fromPolar(fill(1, m),
+      -symmetricOrientation(m))`。omc 把它定型成数组构造（NFCall.vectorizeCall :2851-2907），重载运算符没有精确匹配时数组支随即展开、
+      逐元素化简（matchOverloadedBinaryOperator :257-336 → ExpandExp.expandArrayConstructor2 :471-507），实参全成字面量的元素求值成记录式、
+      函数不打：`y[1] = Complex.'*'.multiply(u, Complex(1.0, -0.0))`；`fill(1, 3)[$i1]` 各元素相同取首元素（simplifySubscriptedExp
+      :1346-1379），`-symmetricOrientation(3)` 整体取负不护零。ymc：binary 对整个是调用的运算数置 vec_rec_ok_，单输出、返回记录的一维
+      向量化调用随即展开（vec_rec_expand，走 scalarize 推导式支的两遍化简）；fill / ones / zeros 实参与可先求值的数组调用（取负）实参按
+      `(a)[$i1]` 取元素；精确匹配（scalarProduct）时 omc 留没展开的数组构造 → SKIP。
+      兄弟写法在基线上探出 17 例 ACCEPTS-INVALID：记录的元素级运算配 Integer / Real（`z .* 2`、`2.0 ./ u`，omc "Cannot resolve type"，
+      NFTypeCheck.mo:246-248 / :751-760）、标量在前的元素级运算（`u .* z`，结果类型取第一个运算数，:840 → "Type mismatch"）——照拒。
+      照旧 SKIP：IMC_Conveyor（VfController 的 `fromPolar(fill(…), …)` omc 整个留成 `array(…)`，要 fill 实参的打印形态）、TestSensors
+      （过约束连接器经组件数组 `pin_p[m]` 的 equalityConstraint）、常量记录式上的重载运算求值（VRC107）、Complex 实参调用（CXC*）。
+      探针 pk-p36（188；VR*）——基线上 ACCEPTS-INVALID 17，现 PASS 103 / BOTH-REJECT 26 / SKIP 59；单测 +2。
+      slice 702 例 FAIL 0（oracle=live 不一致 0）；scodeinst 663、testsuite 1836（均不变）/ FAIL 0；**MSL 484→487**（QuasiStatic
+      SynchronousMachines.SMPM_MTPA / SMPM_CurrentSource / SMR_CurrentSource）；探针 11230→11418；单测 489→491。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。
