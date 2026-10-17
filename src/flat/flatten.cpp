@@ -3108,6 +3108,16 @@ class Flattener {
     for (Id<Expr> a : x.args) if (has_array_call(a)) return true;
     return has_array_call(x.a) || has_array_call(x.b) || has_array_call(x.c);
   }
+  // 式子里（不进调用的实参）有没有 omc 化简末尾会展开成数组字面量的逐元素运算：数组类型的二元 / 一元运算、子式不含数组调用
+  //（simplifyBinary / simplifyUnary 的 ExpandExp.expand，NFSimplifyExp.mo:941-943 / :1135-1137 v1.25.0）。
+  bool expanding_array_op(Id<Expr> id) {
+    if (!id.is_valid()) return false;
+    const Expr& x = result_.model.exprs[id];
+    if (x.kind == ExprKind::Call) return false;
+    if ((x.kind == ExprKind::Binary || x.kind == ExprKind::Unary) && !expr_shape(id).empty() && !has_array_call(id)) return true;
+    for (Id<Expr> a : x.args) if (expanding_array_op(a)) return true;
+    return expanding_array_op(x.a) || expanding_array_op(x.b) || expanding_array_op(x.c);
+  }
   bool is_array_call(Id<Expr> id) {
     const Expr& x = result_.model.exprs[id];
     // 推导式 `array(e for i in r)` 同数组构造调用：等式整体保留（AC3 探针 `x = array(/*Real*/(i) * time for i in 1:3)`）；
@@ -5734,7 +5744,12 @@ class Flattener {
     }
     // 连接器里的数组成员（`flow Real f[2]`）：与 emit_variable 同一套守卫（stream / 成员方向 / 连接器外 flow），
     // flow 元素攒进 flow_vars_（未连接 → `f[k] = 0.0`，collectFlows 按变量声明序，NFConnections.mo:139-166）。
-    if (I_.comps[cid].attributes.connector == SConnectorType::Stream) { set_unsupported("stream connector"); return; }
+    // stream 数组成员（MSL Fluid 端口的 `Xi_outflow[Medium.nXi]` / `C_outflow[Medium.nC]`）同标量：须在恰有一个 flow 的连接器里
+    //（associatedFlowCref，NFConnectEquations.mo:1102-1122 v1.25.0；否则 omc 报错），前缀不打印，逐元素照常发射（SX 探针 SXA1）。
+    if (I_.comps[cid].attributes.connector == SConnectorType::Stream && !(ctx.in_conn && single_flow_name(enclosing))) {
+      set_unsupported("stream connector");
+      return;
+    }
     const bool in_conn = ctx.in_conn;   // 连接器内部（含连接器里的记录字段）
     if (I_.comps[cid].attributes.connector == SConnectorType::Flow && !in_conn) { set_unsupported("flow outside connector"); return; }
     const bool is_flow = in_conn && (I_.comps[cid].attributes.connector == SConnectorType::Flow || ctx.flow_inherited);
@@ -21748,6 +21763,16 @@ class Flattener {
         set_unsupported("array function argument");
         supported = false;
       }
+    // smooth / noEvent 整体保留的数组实参里有逐元素运算（`k * xa`、`-xa`、stream 数组展开出的 `m * actualStream(a.X)`）：omc 化简时
+    // 展开成数组字面量（SX 探针 SXK2 `smooth(0, {k * xa[1], k * xa[2]})`、SXK7 `noEvent({-xa[1], -xa[2]})`、SXK1 / SXJ4）；ymc 不展开，
+    // 此前原样打 `k * xa`（静默错），展开后的数组字面量实参也未做（上一条）→ SKIP。函数体里的不在此列（rv-s1 探针 S10 / S12）。
+    if (supported && !fn_scope_ && (builtin_name == "smooth" || builtin_name == "noEvent"))
+      for (Id<Expr> a : args)
+        if (expanding_array_op(a)) {
+          set_unsupported("array operation in smooth / noEvent argument");
+          supported = false;
+          break;
+        }
     // pre / change：实参须是变量（cref），且在 when 之外不能是连续变量（NFBuiltinCall.typePreChangeCall :578-588；P1 / P5 / P7
     // 探针 omc 报 "must be a discrete expression" / "must be a variable"）——在 when 里被赋值的除外（隐式离散，压平完再查，见
     // check_pre_args）。when 方程 / when 语句体里 1.25.0 接受连续实参（P4 / P8 探针）。
@@ -24469,7 +24494,7 @@ class Flattener {
       if (!record_leaves(sub, p, true, out)) return false;
     }
     // stream 成员（splitImpl :346：flows 之后，按名升序）：关联同层**唯一**标量 flow（associatedFlowCref :1106-1126；
-    // 否则 omc 报错 "must have exactly one flow variable"）。v1：标量 stream、不向外层连接器外溯。
+    // 否则 omc 报错 "must have exactly one flow variable"）。v1：标量 / 数组 stream 成员，不向外层连接器外溯。
     if (!streams.empty()) {
       if (flows.size() != 1) return false;
       const CompId fc = I_.nodes[flows[0]].comp;
@@ -24480,18 +24505,20 @@ class Flattener {
       for (NodeId mn : streams) {
         const CompId mc = I_.nodes[mn].comp;
         const SElement& mcel = I_.scode.elems[I_.comps[mc].def];
-        if (I_.comps[mc].ty.kind == TypeKind::Complex) return false;
+        if (I_.comps[mc].ty.element_type().kind == TypeKind::Complex) return false;
+        // stream 数组成员（MSL Fluid 端口的 `Xi_outflow[Medium.nXi]`）：同 potential / flow 的数组成员保留维、逐元素摊（splitImpl
+        // 的 ARRAY 支，NFConnector.mo:359-362 v1.25.0；Connection.scalarize 行主序，NFConnection.mo:72-94），每个元素各成一个
+        // stream 集、关联同一个 flow（SX 探针 SXA1-SXA12：二维 `X[1,1]` …）。空的（`C_outflow[Medium.nC]`，nC = 0）同上丢掉（PKH3）。
+        std::vector<std::int64_t> sd;
         if (!mcel.attr.dims.empty() || !mcel.type.dims.empty()) {
-          // 空的 stream 数组成员（`C_outflow[Medium.nC]`，nC = 0）同上丢掉；非空的 stream 数组成员未做 → SKIP。
-          std::vector<std::int64_t> sd;
           if (!member_dims(mcel, mscope, inst, I_.nodes[mn].name, sd)) return false;
-          if (std::find(sd.begin(), sd.end(), 0) == sd.end()) return false;
-          continue;
+          if (std::find(sd.begin(), sd.end(), 0) != sd.end()) continue;
+          for (std::int64_t n : sd) if (n < 0) return false;
         }
         if (I_.comps[mc].attributes.variability != SVariability::Var) return false;
         std::vector<Symbol> p = mpath;
         p.push_back(I_.nodes[mn].name);
-        out.push_back({std::move(p), false, I_.comps[mc].ty, {}, true, fpath, {}, 0});
+        out.push_back({std::move(p), false, I_.comps[mc].ty.element_type(), std::move(sd), true, fpath, {}, 0});
       }
     }
     return true;
@@ -25795,7 +25822,14 @@ class Flattener {
         // 逐个相等断言（makeEqualityAssert，见 emit_equality_assert）。变率只看集首（YmcCCMix1 探针：parameter 集首连
         // 连续变量也出断言）。
         const FlatVariable* hv = set_var(head.name_key);
-        const bool as_assert = hv && (hv->var_kind == FlatVarKind::Parameter || hv->var_kind == FlatVarKind::Constant);
+        // 集首是 Evaluate = false 的参数：变率 NON_STRUCTURAL_PARAMETER（> PARAMETER），照连续变量出等式（:211 比的是集首组件的
+        // 变率，Connector.variability，NFConnector.mo:133-137 v1.25.0；SX 探针 SXI1 / SXI5 / SXI6 `c2.n = c3.n`，此前出断言，
+        // 静默错；集首是普通参数的 SXI4 照旧断言）。
+        bool nonstruct_head = false;
+        if (hv && hv->var_kind == FlatVarKind::Parameter)
+          if (const auto pit = param_info_.find(head.name_key); pit != param_info_.end()) nonstruct_head = pit->second.nonstruct;
+        const bool as_assert =
+            hv && (hv->var_kind == FlatVarKind::Parameter || hv->var_kind == FlatVarKind::Constant) && !nonstruct_head;
         for (std::size_t k = 1; k < s.size(); ++k) {
           if (as_assert) { emit_equality_assert(head, nodes[s[k]], conn_eqs); continue; }
           FlatEquation fe;
@@ -25910,6 +25944,9 @@ class Flattener {
     // ActualStreamVariability2）；变量下标（omc 报错 *Variability1）等其余 → SKIP。每段须逐维选出标量元素。
     std::vector<Symbol> path;
     std::vector<std::vector<Id<Expr>>> subs;
+    PSubs isubs = cur_psubs_;   // 全名（书写处前缀 + path）除末段外的逐段整数下标：查实例的数组形状（emitted_shape）
+    isubs.resize(prefix.size());
+    std::vector<std::int64_t> edims;   // 末段是不带下标的非空 stream 数组成员：逐元素展开的各维（见下）
     NodeId cur = find_local(enclosing, c.parts[0].name);
     NodeId decl = enclosing;
     for (std::size_t i = 0; i < c.parts.size(); ++i) {
@@ -25921,32 +25958,53 @@ class Flattener {
       if (!cur.is_valid() || I_.nodes[cur].is_empty() || !I_.nodes[cur].comp.is_valid()) return bad("stream operator argument");
       const SElement& sel = I_.scode.elems[I_.comps[I_.nodes[cur].comp].def];
       if (c.parts[i].subscripts.size() != sel.attr.dims.size() + sel.type.dims.size()) {
-        // 末段是空的 stream 数组成员、不带下标（`actualStream(ports[i].Xi_outflow)`，水 nXi = 0；MSL Fluid 容器的
-        // `ports_mXi_flow[i, :] = ports[i].m_flow * actualStream(ports[i].Xi_outflow)`）：结果是空数组（变量引用，不算字面量实参），
-        // 所在等式不产生方程（PKH 探针 PKH7，omc 同）。维按成员在连接器实例里的声明求。非空的 stream 数组实参未做 → SKIP。
+        // 末段是不带下标的 stream 数组成员：定型时实参先展开（ExpandExp.expand），数组的每个元素各包一个调用
+        //（typeActualInStreamCall / typeActualInStreamCall2 的 ARRAY 支，NFBuiltinCall.mo:2019-2100 v1.25.0）。维取本实例已发射的
+        // 元素变量（按实例修饰定，emitted_shape；连接器参数维 `C a(n = k)`，SXC5）；还没发射（绑定写在连接器声明之前，SXB28）
+        // 退到 deep_dims（字面量维 / 第二遍带来的）；都没有时才按声明在连接器实例的作用域里求（只认空的，原先的做法）。
+        // - 空的（`actualStream(ports[i].Xi_outflow)`，水 nXi = 0；MSL Fluid 容器的 `ports_mXi_flow[i, :] = ports[i].m_flow *
+        //   actualStream(ports[i].Xi_outflow)`）：结果是空数组（变量引用，不算字面量实参），所在等式不产生方程（PKH 探针 PKH7）。
+        // - 非空的（MoistAir 的 `inStream(port.Xi_outflow)`、trace substance 的 `inStream(port.C_outflow)`）→ `{inStream(a.X[1]),
+        //   inStream(a.X[2])}`，各元素按标量求值（SX 探针 SXA1 / SXA5 / SXA7 / SXA12 / SXB12）。
         if (i > 0 && i + 1 == c.parts.size() && c.parts[i].subscripts.empty()) {
-          std::vector<std::int64_t> ed;
-          bool ok = true;
-          for (const std::vector<Id<Exp>>* ds : {&sel.attr.dims, &sel.type.dims})
-            for (Id<Exp> d : *ds) ok = ok && eval_dim(d, ed, scode_scope_of(decl));
-          if (result_.unsupported) return lit_real(0.0);
-          if (ok && std::find(ed.begin(), ed.end(), 0) != ed.end()) {
-            const Id<Expr> ea = empty_array_lit(I_.comps[I_.nodes[cur].comp].ty.element_type(), ed);
+          std::vector<Symbol> chain = prefix;
+          for (std::size_t k = 0; k <= i; ++k) chain.push_back(c.parts[k].name);
+          std::optional<std::vector<std::int64_t>> sh = emitted_shape(chain, isubs);
+          if (!sh) sh = deep_dims(sel, chain);
+          if (!sh) {
+            std::vector<std::int64_t> ed;
+            bool ok = true;
+            for (const std::vector<Id<Exp>>* ds : {&sel.attr.dims, &sel.type.dims})
+              for (Id<Exp> d : *ds) ok = ok && eval_dim(d, ed, scode_scope_of(decl));
+            if (result_.unsupported) return lit_real(0.0);
+            if (ok && std::find(ed.begin(), ed.end(), 0) != ed.end()) sh = std::move(ed);
+          }
+          if (sh && std::find(sh->begin(), sh->end(), 0) != sh->end()) {
+            const Id<Expr> ea = empty_array_lit(I_.comps[I_.nodes[cur].comp].ty.element_type(), *sh);
             var_empty_arrays_.insert(ea.raw);
             return ea;
+          }
+          if (sh && !sh->empty()) {
+            edims = *sh;
+            path.push_back(c.parts[i].name);
+            subs.emplace_back();
+            break;
           }
         }
         return bad("stream operator subscript");
       }
       std::vector<Id<Expr>> seg;
+      std::vector<std::int64_t> iseg;
       for (Id<Exp> sub : c.parts[i].subscripts) {
         std::optional<std::int64_t> iv = subscript_int(sub);
         if (!iv) iv = structural_subscript(sub, enclosing, prefix);
         if (!iv) return bad("stream operator subscript");
         seg.push_back(lit_int(*iv));
+        iseg.push_back(*iv);
       }
       path.push_back(c.parts[i].name);
       subs.push_back(std::move(seg));
+      isubs.push_back(std::move(iseg));
     }
     if (I_.comps[I_.nodes[cur].comp].attributes.connector != SConnectorType::Stream) return bad("stream operator argument");
     const std::optional<Symbol> fname = single_flow_name(decl);
@@ -25960,14 +26018,43 @@ class Flattener {
       path = std::move(p);
       subs = std::move(ps);
     }
-    const Id<Expr> s = member_cref(path, subs, {}, {}, Type::real());
     std::vector<Symbol> fpath = path;
     fpath.back() = *fname;
     std::vector<std::vector<Id<Expr>>> fsubs = subs;
     fsubs.back().clear();
     const Id<Expr> f = member_cref(fpath, fsubs, {}, {}, Type::real());
     uses_stream_ops_ = true;
-    return call_expr(name == "inStream" ? "inStream" : "actualStream", {s, f}, Type::real());
+    const char* fn = name == "inStream" ? "inStream" : "actualStream";
+    if (edims.empty()) return call_expr(fn, {member_cref(path, subs, {}, {}, Type::real()), f}, Type::real());
+    // 展开出的元素调用带第三个实参（标记）：omc 求值时它们是数组的元素、不是 `cref * actualStream(…)` 的直接运算数，不走
+    // evaluateActualStreamMul（不包 smooth、不换位，NFConnectEquations.mo:172-182 v1.25.0 的 BINARY 支要求运算数是 CALL；
+    // SXA4 `mX = a.m_flow * actualStream(a.X)` → `mX[1] = a.m_flow * (if …)`，对照书写的 `a.m_flow * actualStream(a.X[1])` 包
+    // smooth）。ymc 的数组等式在连接解析前就逐元素标量化了，只好把"来自展开"记在调用自身上（克隆 / 化简重建都带着实参走）。
+    std::vector<std::int64_t> idx(edims.size(), 1);
+    std::function<Id<Expr>(std::size_t)> rec = [&](std::size_t k) -> Id<Expr> {
+      if (k == edims.size()) {
+        std::vector<std::vector<Id<Expr>>> es = subs;
+        for (std::int64_t v : idx) es.back().push_back(lit_int(v));
+        return call_expr(fn, {member_cref(path, es, {}, {}, Type::real()), f, lit_int(1)}, Type::real());
+      }
+      Expr arr;
+      arr.kind = ExprKind::Array;
+      std::vector<Dimension> rest;
+      for (std::size_t j = k; j < edims.size(); ++j) {
+        Dimension d;
+        d.kind = DimKind::Integer;
+        d.size = edims[j];
+        rest.push_back(d);
+      }
+      arr.ty = Type::array_of(Type::real(), std::move(rest));
+      for (std::int64_t v = 1; v <= edims[k]; ++v) {
+        idx[k] = v;
+        const Id<Expr> el = rec(k + 1);
+        arr.args.push_back(el);
+      }
+      return add(std::move(arr));
+    };
+    return rec(0);
   }
   // 变量身份 key（与 conn_key / leaf_key 同一编码；末段下标 = FlatVariable.subscripts）。
   std::string var_key(const FlatVariable& v) {
@@ -26115,6 +26202,11 @@ class Flattener {
       if (it == var_index_.end()) { ok = false; return; }
       const FlatVariable& v = result_.model.variables[it->second];
       if (v.var_kind != FlatVarKind::Parameter && v.var_kind != FlatVarKind::Constant) { ok = false; return; }
+      // Evaluate = false 的参数是 NON_STRUCTURAL_PARAMETER：isNoFlow 只对变率恰是 PARAMETER 的式子标记、求值，否则 pred(原式) 为假、
+      // 不标（NFConnectEquations.mo:934-972 v1.25.0；SX 探针 SXH3：omc 照留 `min = if v.ports[1].allow then -1.0 else 0.0`、不 final，
+      // 此前当结构参数折了，静默错）。
+      if (v.var_kind == FlatVarKind::Parameter)
+        if (const auto pit = param_info_.find(k); pit != param_info_.end() && pit->second.nonstruct) { ok = false; return; }
       if (!v.binding.is_valid() || !is_lit(v.binding)) { set_unsupported("structural parameter binding"); ok = false; return; }
       const Symbol fixed = in_.intern("fixed");
       for (const FlatVarAttr& a : v.attributes)
@@ -26145,8 +26237,30 @@ class Flattener {
     const Id<Expr> y = simplify_expr(clone_subst(av.expr, vals));
     const Expr& ey = result_.model.exprs[y];
     if (ey.kind != ExprKind::RealLit && ey.kind != ExprKind::IntLit) { set_unsupported("structural attribute evaluation"); return std::nullopt; }
-    for (const std::string& p : params) record_structural(p);
+    for (const std::string& p : params) record_structural_node(p);
     return ey.kind == ExprKind::RealLit ? ey.rval : static_cast<double>(ey.ival);
+  }
+  // Structural.markExp 标的是 cref 指向的组件节点（markComponent，NFStructural.mo:246-326 v1.25.0）：数组组件只实例化一次，组件
+  // 数组的各元素、参数数组的各元素共用一个节点——标一个元素就是标全部。连接集里只有连上的元素会被 isNoFlow 求值，没连的同节点
+  // 元素照样成结构参数（SX 探针 SXG1-SXG6：只连 `vol.ports[1]`，`vol.ports[2].allowFlowReversal` 一样 final、它的 m_flow 的 min
+  // 跟着折；模型数组 `pipes[2].allow`、参数数组 `mins[2]`、两层数组 `v[2].ports[2].allow` 同；此前只标连上的那个，静默错）。
+  // 节点 key = 变量 key 去掉全部下标（同 add_dist_alias）。
+  void record_structural_node(const std::string& k) {
+    if (k.find('[') == std::string::npos) { record_structural(k); return; }
+    auto strip = [](const std::string& s) {
+      std::string n;
+      bool in_sub = false;
+      for (char ch : s) {
+        if (ch == '[') in_sub = true;
+        else if (ch == ']') in_sub = false;
+        else if (!in_sub) n.push_back(ch);
+      }
+      return n;
+    };
+    record_structural(k);
+    const std::string node = strip(k);
+    for (const FlatVariable& v : result_.model.variables)   // record_structural 不动变量表，边扫边标
+      if (const std::string vk = var_key(v); vk != k && strip(vk) == node) record_structural(vk);
   }
   // isNoFlowInside / isNoFlowOutside（:918-936）：inside 的 flow min ≥ 0、outside 的 flow max ≤ 0 → 无流。
   bool no_flow_inside(const SetNode& n) { const std::optional<double> v = noflow_attr(n.flow_key, "min"); return v && *v >= 0; }
@@ -27487,7 +27601,9 @@ class Flattener {
   // 就地把 inStream/actualStream 调用改写成求值结果（evaluateOperators :130-191）；返回是否有替换。
   bool subst_stream(Id<Expr> id) {
     const Expr e = result_.model.exprs[id];   // 拷贝：求值会 add，不跨 add 持引用
-    if (e.kind == ExprKind::Call && e.args.size() == 2 && (is_stream_call(id, "inStream") || is_stream_call(id, "actualStream"))) {
+    // 2 个实参 = 书写的标量调用；3 个 = 数组实参展开出的元素调用（见 stream_op_call），求值相同。
+    if (e.kind == ExprKind::Call && (e.args.size() == 2 || e.args.size() == 3) &&
+        (is_stream_call(id, "inStream") || is_stream_call(id, "actualStream"))) {
       const bool ins = is_stream_call(id, "inStream");
       const Id<Expr> r = ins ? eval_instream(expr_cref_key(result_.model.exprs[e.args[0]].cref), e.args[0], 0)
                              : eval_actualstream(e.args[0], e.args[1]);
@@ -27498,7 +27614,7 @@ class Flattener {
     // `cref * actualStream(s)` / `actualStream(s) * cref`（evaluateOperators 的 BINARY 支 → evaluateActualStreamMul，
     // NFConnectEquations.mo:126-185 / :1014-1038 v1.25.0）：写成 `cref * 求值结果`（cref 换到前面）；求值结果是 if 式、且 cref 就是
     // 关联的 flow 时包 smooth(0, …)——按化简前的 if 定（PKH 探针 PKH7：未连接的端口两支相同，化简后成 `smooth(0, m_flow *
-    // h_outflow)`）。另一因子不是 cref 的照常逐个求值（mapShallow）。
+    // h_outflow)`）。另一因子不是 cref 的照常逐个求值（mapShallow）。数组实参展开出的元素调用（3 个实参，见 stream_op_call）不走这一支。
     if (e.kind == ExprKind::Binary && e.bin == BinOp::Mul) {
       const bool a_call = is_stream_call(e.a, "actualStream");
       const Id<Expr> cr = a_call ? e.b : e.a;

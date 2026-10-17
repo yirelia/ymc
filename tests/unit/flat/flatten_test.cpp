@@ -10461,4 +10461,151 @@ YMC_TEST(flatten_class_extends_function_in_package_instance) {
                            "  Real y = XDP9.Medium.f(time, 3.0);\nend XDP9;\n"));
 }
 
+YMC_TEST(flatten_stream_array_member_elementwise) {
+  // stream 数组成员（MSL Fluid 端口的 `Xi_outflow[Medium.nXi]`，MoistAir nXi = 1）：连接集逐元素摊（splitImpl 的 ARRAY 支，
+  // NFConnector.mo:359-362 v1.25.0），一内一外 → `m.a.X[k] = c.X[k]`；`a.X = inStream(b.X)` 的实参定型时展开成元素调用
+  //（typeActualInStreamCall2 的 ARRAY 支，NFBuiltinCall.mo:2052-2100），各元素按标量求值。此前一律 SKIP（"stream connector"）。
+  // 期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p33 SXA2）。
+  YMC_CHECK_EQ(flatten_src("package SXA2P\n  connector C\n    Real p;\n    flow Real m_flow;\n    stream Real h;\n"
+                           "    stream Real X[2];\n  end C;\n  model M\n    C a, b;\n  equation\n    a.m_flow + b.m_flow = 0;\n"
+                           "    a.p = b.p;\n    a.h = inStream(b.h);\n    b.h = inStream(a.h);\n    a.X = inStream(b.X);\n"
+                           "    b.X = inStream(a.X);\n  end M;\nend SXA2P;\nmodel SXA2\n  SXA2P.C c;\n  SXA2P.M m;\nequation\n"
+                           "  connect(c, m.a);\nend SXA2;\n"),
+               std::string("class SXA2\n  Real c.p;\n  Real c.m_flow;\n  Real c.h;\n  Real c.X[1];\n  Real c.X[2];\n"
+                           "  Real m.a.p;\n  Real m.a.m_flow;\n  Real m.a.h;\n  Real m.a.X[1];\n  Real m.a.X[2];\n"
+                           "  Real m.b.p;\n  Real m.b.m_flow;\n  Real m.b.h;\n  Real m.b.X[1];\n  Real m.b.X[2];\nequation\n"
+                           "  c.p = m.a.p;\n  m.a.m_flow - c.m_flow = 0.0;\n  m.a.X[1] = c.X[1];\n  m.a.X[2] = c.X[2];\n"
+                           "  m.a.h = c.h;\n  c.m_flow = 0.0;\n  m.b.m_flow = 0.0;\n  m.a.m_flow + m.b.m_flow = 0.0;\n"
+                           "  m.a.p = m.b.p;\n  m.a.h = m.b.h;\n  m.b.h = c.h;\n  m.a.X[1] = m.b.X[1];\n  m.a.X[2] = m.b.X[2];\n"
+                           "  m.b.X[1] = c.X[1];\n  m.b.X[2] = c.X[2];\nend SXA2;\n"));
+}
+
+YMC_TEST(flatten_stream_array_actualstream_mul_no_smooth) {
+  // `cref * actualStream(a.X)`：展开后调用是数组的元素、不是二元乘的直接运算数，不走 evaluateActualStreamMul（不包 smooth、
+  // 不换位，NFConnectEquations.mo:172-182 v1.25.0）；书写的 `a.m_flow * actualStream(a.X[1])` / `actualStream(a.X[2]) * a.m_flow`
+  // 照旧包 smooth、换位。数组实参在 Var 数组绑定里留成数组等式 `v.z = {…}`、在函数实参里是数组字面量。
+  // 期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p33 SXA4 / SXA5）。
+  YMC_CHECK_EQ(flatten_src("package SXA4P\n  connector C\n    Real p;\n    flow Real m_flow;\n    stream Real h;\n"
+                           "    stream Real X[2];\n  end C;\n  model V\n    C a;\n    Real H;\n    Real mX[2];\n    Real mX1;\n"
+                           "    Real mX2;\n  equation\n    H = a.m_flow * actualStream(a.h);\n"
+                           "    mX = a.m_flow * actualStream(a.X);\n    mX1 = a.m_flow * actualStream(a.X[1]);\n"
+                           "    mX2 = actualStream(a.X[2]) * a.m_flow;\n    a.h = 1;\n    a.X = {0.2, 0.8};\n  end V;\n"
+                           "  model S\n    C c;\n  equation\n    c.p = 1;\n    c.h = 2;\n    c.X = {0.1, 0.9};\n  end S;\n"
+                           "end SXA4P;\nmodel SXA4\n  SXA4P.S s;\n  SXA4P.V v;\nequation\n  connect(s.c, v.a);\nend SXA4;\n"),
+               std::string("class SXA4\n  Real s.c.p;\n  Real s.c.m_flow;\n  Real s.c.h;\n  Real s.c.X[1];\n  Real s.c.X[2];\n"
+                           "  Real v.a.p;\n  Real v.a.m_flow;\n  Real v.a.h;\n  Real v.a.X[1];\n  Real v.a.X[2];\n  Real v.H;\n"
+                           "  Real v.mX[1];\n  Real v.mX[2];\n  Real v.mX1;\n  Real v.mX2;\nequation\n  s.c.p = v.a.p;\n"
+                           "  v.a.m_flow + s.c.m_flow = 0.0;\n  s.c.p = 1.0;\n  s.c.h = 2.0;\n  s.c.X[1] = 0.1;\n"
+                           "  s.c.X[2] = 0.9;\n  v.H = smooth(0, v.a.m_flow * (if v.a.m_flow > 0.0 then s.c.h else v.a.h));\n"
+                           "  v.mX[1] = v.a.m_flow * (if v.a.m_flow > 0.0 then s.c.X[1] else v.a.X[1]);\n"
+                           "  v.mX[2] = v.a.m_flow * (if v.a.m_flow > 0.0 then s.c.X[2] else v.a.X[2]);\n"
+                           "  v.mX1 = smooth(0, v.a.m_flow * (if v.a.m_flow > 0.0 then s.c.X[1] else v.a.X[1]));\n"
+                           "  v.mX2 = smooth(0, v.a.m_flow * (if v.a.m_flow > 0.0 then s.c.X[2] else v.a.X[2]));\n"
+                           "  v.a.h = 1.0;\n  v.a.X[1] = 0.2;\n  v.a.X[2] = 0.8;\nend SXA4;\n"));
+  YMC_CHECK_EQ(flatten_src("package SXA5P\n  connector C\n    Real p;\n    flow Real m_flow;\n    stream Real h;\n"
+                           "    stream Real X[2];\n  end C;\n  function f\n    input Real p;\n    input Real h;\n"
+                           "    input Real X[:];\n    output Real y;\n  algorithm\n    y := p + h + sum(X);\n  end f;\n"
+                           "  model V\n    C a;\n    Real d;\n    Real z[2] = inStream(a.X);\n"
+                           "    Real w[2] = actualStream(a.X);\n  equation\n    d = f(a.p, inStream(a.h), inStream(a.X));\n"
+                           "    a.h = 1;\n    a.X = {0.2, 0.8};\n  end V;\n  model S\n    C c;\n  equation\n    c.p = 1;\n"
+                           "    c.h = 2;\n    c.X = {0.1, 0.9};\n  end S;\nend SXA5P;\nmodel SXA5\n  SXA5P.S s;\n  SXA5P.V v;\n"
+                           "equation\n  connect(s.c, v.a);\nend SXA5;\n"),
+               std::string("function SXA5P.f\n  input Real p;\n  input Real h;\n  input Real[:] X;\n  output Real y;\n"
+                           "algorithm\n  y := p + h + sum(X);\nend SXA5P.f;\n\nclass SXA5\n  Real s.c.p;\n  Real s.c.m_flow;\n"
+                           "  Real s.c.h;\n  Real s.c.X[1];\n  Real s.c.X[2];\n  Real v.a.p;\n  Real v.a.m_flow;\n"
+                           "  Real v.a.h;\n  Real v.a.X[1];\n  Real v.a.X[2];\n  Real v.d;\n  Real v.z[1];\n  Real v.z[2];\n"
+                           "  Real v.w[1];\n  Real v.w[2];\nequation\n  s.c.p = v.a.p;\n  v.a.m_flow + s.c.m_flow = 0.0;\n"
+                           "  s.c.p = 1.0;\n  s.c.h = 2.0;\n  s.c.X[1] = 0.1;\n  s.c.X[2] = 0.9;\n"
+                           "  v.z = {s.c.X[1], s.c.X[2]};\n"
+                           "  v.w = {if v.a.m_flow > 0.0 then s.c.X[1] else v.a.X[1], if v.a.m_flow > 0.0 then s.c.X[2] else v.a.X[2]};\n"
+                           "  v.d = SXA5P.f(v.a.p, s.c.h, {s.c.X[1], s.c.X[2]});\n  v.a.h = 1.0;\n  v.a.X[1] = 0.2;\n"
+                           "  v.a.X[2] = 0.8;\nend SXA5;\n"));
+}
+
+YMC_TEST(flatten_stream_array_instance_dims) {
+  // 维随实例修饰的 stream 数组（连接器参数 `C a(n = k)`，同一类的实例取 2 / 3）：inStream 的展开按本实例已发射的元素变量，
+  // 不按声明在类作用域求的缺省值。期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p33 SXC5）。
+  YMC_CHECK_EQ(flatten_src("package SXC5P\n  connector C\n    parameter Integer n = 1;\n    Real p;\n    flow Real m_flow;\n"
+                           "    stream Real X[n];\n  end C;\n  model V\n    parameter Integer k = 1;\n    C a(n = k);\n"
+                           "    Real y[k];\n  equation\n    y = inStream(a.X);\n    a.X = fill(0.5, k);\n  end V;\nend SXC5P;\n"
+                           "model SXC5\n  SXC5P.V v1(k = 2), v2(k = 2), w(k = 3);\nequation\n  connect(v1.a, v2.a);\nend SXC5;\n"),
+               std::string("class SXC5\n  final parameter Integer v1.k = 2;\n  final parameter Integer v1.a.n = 2;\n"
+                           "  Real v1.a.p;\n  Real v1.a.m_flow;\n  Real v1.a.X[1];\n  Real v1.a.X[2];\n  Real v1.y[1];\n"
+                           "  Real v1.y[2];\n  final parameter Integer v2.k = 2;\n  final parameter Integer v2.a.n = 2;\n"
+                           "  Real v2.a.p;\n  Real v2.a.m_flow;\n  Real v2.a.X[1];\n  Real v2.a.X[2];\n  Real v2.y[1];\n"
+                           "  Real v2.y[2];\n  final parameter Integer w.k = 3;\n  final parameter Integer w.a.n = 3;\n"
+                           "  Real w.a.p;\n  Real w.a.m_flow;\n  Real w.a.X[1];\n  Real w.a.X[2];\n  Real w.a.X[3];\n"
+                           "  Real w.y[1];\n  Real w.y[2];\n  Real w.y[3];\nequation\n  v1.a.p = v2.a.p;\n"
+                           "  v2.a.m_flow + v1.a.m_flow = 0.0;\n  w.a.m_flow = 0.0;\n  v1.y[1] = v2.a.X[1];\n"
+                           "  v1.y[2] = v2.a.X[2];\n  v1.a.X[1] = 0.5;\n  v1.a.X[2] = 0.5;\n  v2.y[1] = v1.a.X[1];\n"
+                           "  v2.y[2] = v1.a.X[2];\n  v2.a.X[1] = 0.5;\n  v2.a.X[2] = 0.5;\n  w.y[1] = w.a.X[1];\n"
+                           "  w.y[2] = w.a.X[2];\n  w.y[3] = w.a.X[3];\n  w.a.X[1] = 0.5;\n  w.a.X[2] = 0.5;\n"
+                           "  w.a.X[3] = 0.5;\nend SXC5;\n"));
+}
+
+YMC_TEST(flatten_noflow_structural_marks_component_node) {
+  // isNoFlow 对参数式的 flow min 做结构化求值，Structural.markExp 标的是组件节点（NFConnectEquations.mo:934-972、
+  // NFStructural.mo:246-326 v1.25.0）：连接器数组 ports[2] 共用一个节点，只连 ports[1]，ports[2].allow 一样 final、min 折成
+  // -1.0（SXH10，此前只标连上的元素，静默错）；Evaluate = false 的参数是 NON_STRUCTURAL_PARAMETER，不标不求、min 照留，连接集
+  // 里出等式不出断言（SXH9，此前当结构参数折了）。期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p33 SXH10 / SXH9）。
+  YMC_CHECK_EQ(flatten_src("package SXH10P\n  connector C\n    flow Real m_flow(min = if allow then -1 else 0);\n    Real p;\n"
+                           "    stream Real h;\n    parameter Boolean allow = true;\n  end C;\n  model V\n    C ports[2];\n"
+                           "  equation\n    ports[1].h = 1;\n    ports[2].h = 2;\n  end V;\nend SXH10P;\nmodel SXH10\n"
+                           "  SXH10P.V v1, v2;\nequation\n  connect(v1.ports[1], v2.ports[1]);\nend SXH10;\n"),
+               std::string("class SXH10\n  Real v1.ports[1].m_flow(min = -1.0);\n  Real v1.ports[1].p;\n  Real v1.ports[1].h;\n"
+                           "  final parameter Boolean v1.ports[1].allow = true;\n  Real v1.ports[2].m_flow(min = -1.0);\n"
+                           "  Real v1.ports[2].p;\n  Real v1.ports[2].h;\n  final parameter Boolean v1.ports[2].allow = true;\n"
+                           "  Real v2.ports[1].m_flow(min = -1.0);\n  Real v2.ports[1].p;\n  Real v2.ports[1].h;\n"
+                           "  final parameter Boolean v2.ports[1].allow = true;\n  Real v2.ports[2].m_flow(min = -1.0);\n"
+                           "  Real v2.ports[2].p;\n  Real v2.ports[2].h;\n  final parameter Boolean v2.ports[2].allow = true;\n"
+                           "equation\n  v1.ports[1].p = v2.ports[1].p;\n  v2.ports[1].m_flow + v1.ports[1].m_flow = 0.0;\n"
+                           "  v1.ports[2].m_flow = 0.0;\n  v2.ports[2].m_flow = 0.0;\n  v1.ports[1].h = 1.0;\n"
+                           "  v1.ports[2].h = 2.0;\n  v2.ports[1].h = 1.0;\n  v2.ports[2].h = 2.0;\nend SXH10;\n"));
+  YMC_CHECK_EQ(flatten_src("package SXH9P\n  connector C\n    flow Real m_flow(min = if allow then -1 else 0);\n    Real p;\n"
+                           "    stream Real h;\n    parameter Boolean allow = true annotation(Evaluate = false);\n  end C;\n"
+                           "  model V\n    C a;\n  equation\n    a.h = 1;\n  end V;\nend SXH9P;\nmodel SXH9\n  SXH9P.V v1, v2;\n"
+                           "equation\n  connect(v1.a, v2.a);\nend SXH9;\n"),
+               std::string("class SXH9\n  Real v1.a.m_flow(min = if v1.a.allow then -1.0 else 0.0);\n  Real v1.a.p;\n"
+                           "  Real v1.a.h;\n  parameter Boolean v1.a.allow = true;\n"
+                           "  Real v2.a.m_flow(min = if v2.a.allow then -1.0 else 0.0);\n  Real v2.a.p;\n  Real v2.a.h;\n"
+                           "  parameter Boolean v2.a.allow = true;\nequation\n  v1.a.allow = v2.a.allow;\n  v1.a.p = v2.a.p;\n"
+                           "  v2.a.m_flow + v1.a.m_flow = 0.0;\n  v1.a.h = 1.0;\n  v2.a.h = 1.0;\nend SXH9;\n"));
+}
+
+YMC_TEST(flatten_connect_evaluate_false_parameter_head) {
+  // 参数的连接集：集首组件的变率 > PARAMETER（Evaluate = false → NON_STRUCTURAL_PARAMETER）出等式，否则出相等断言
+  //（generatePotentialEquations，NFConnectEquations.mo:198-232 v1.25.0 的 :211；Connector.variability，NFConnector.mo:133-137）。
+  // 只看集首：SXI4 集首是普通参数 → 断言；SXI5 集首是 Evaluate = false 的 → `b.d.k = a.c.k`（此前一律断言，静默错）。
+  // 期望 = omc 1.25.0 实跑（2026-10-17，探针 pk-p33 SXI4 / SXI5）。
+  YMC_CHECK_EQ(flatten_src("package SXI4P\n  connector C\n    Real p;\n    flow Real f;\n    parameter Real k = 1;\n  end C;\n"
+                           "  connector D\n    Real p;\n    flow Real f;\n"
+                           "    parameter Real k = 1 annotation(Evaluate = false);\n  end D;\n  model M\n    C c;\n  end M;\n"
+                           "  model N\n    D d;\n  end N;\nend SXI4P;\nmodel SXI4\n  SXI4P.M a;\n  SXI4P.N b;\nequation\n"
+                           "  connect(a.c, b.d);\nend SXI4;\n"),
+               std::string("class SXI4\n  Real a.c.p;\n  Real a.c.f;\n  parameter Real a.c.k = 1.0;\n  Real b.d.p;\n"
+                           "  Real b.d.f;\n  parameter Real b.d.k = 1.0;\nequation\n"
+                           "  assert(abs(a.c.k - b.d.k) <= 0.0, \"Connected constants/parameters must be equal\");\n"
+                           "  a.c.p = b.d.p;\n  b.d.f + a.c.f = 0.0;\nend SXI4;\n"));
+  YMC_CHECK_EQ(flatten_src("package SXI5P\n  connector C\n    Real p;\n    flow Real f;\n    parameter Real k = 1;\n  end C;\n"
+                           "  connector D\n    Real p;\n    flow Real f;\n"
+                           "    parameter Real k = 1 annotation(Evaluate = false);\n  end D;\n  model M\n    C c;\n  end M;\n"
+                           "  model N\n    D d;\n  end N;\nend SXI5P;\nmodel SXI5\n  SXI5P.N b;\n  SXI5P.M a;\nequation\n"
+                           "  connect(b.d, a.c);\nend SXI5;\n"),
+               std::string("class SXI5\n  Real b.d.p;\n  Real b.d.f;\n  parameter Real b.d.k = 1.0;\n  Real a.c.p;\n"
+                           "  Real a.c.f;\n  parameter Real a.c.k = 1.0;\nequation\n  b.d.k = a.c.k;\n  b.d.p = a.c.p;\n"
+                           "  a.c.f + b.d.f = 0.0;\nend SXI5;\n"));
+}
+
+YMC_TEST(flatten_smooth_array_operation_skips) {
+  // smooth / noEvent 的数组实参是逐元素运算：omc 化简末尾展开成 `smooth(0, {k * xa[1], k * xa[2]})` / `noEvent({-xa[1], -xa[2]})`
+  //（simplifyBinary / simplifyUnary 的 ExpandExp.expand，NFSimplifyExp.mo:941-943 / :1135-1137 v1.25.0；探针 pk-p33 SXK2 / SXK7，
+  // omc 1.25.0 实跑 2026-10-17），ymc 不展开 → 不出结果（此前原样打 `k * xa` / `-xa`，静默错）。
+  YMC_CHECK(flatten_src("model SXK2\n  Real k = time;\n  Real xa[2] = {2 * time, 3 * time};\n  Real z[2];\nequation\n"
+                        "  z = smooth(0, k * xa);\nend SXK2;\n")
+                .rfind("<unsupported:", 0) == 0);
+  YMC_CHECK(flatten_src("model SXK7\n  Real xa[2] = {2 * time, 3 * time};\n  Real r[2];\nequation\n"
+                        "  r = noEvent(-xa);\nend SXK7;\n")
+                .rfind("<unsupported:", 0) == 0);
+}
+
 YMC_TEST_MAIN

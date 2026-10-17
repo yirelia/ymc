@@ -2574,6 +2574,21 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       探针 pk-p32（213；RB* / CX* / MOX / ALM / XDP / GBS）——基线二进制上 40 例 FAIL，现 PASS 169 / SKIP 40 / BOTH-REJECT 4；旧组 pk-p30 /
       rb-p1 各 SKIP→PASS 1；单测 +5。slice 702 例 FAIL 0（oracle=live 不一致 0）；scodeinst 663、testsuite 1835（均不变）/ FAIL 0；
       **MSL 478→482**（ReferenceAir.MoistAir / MoistAir1 / MoistAir2 / Inverse_sh_TX）；探针 10539→10752；单测 466→471。
+- [x] (66y) 非空的 stream 数组成员（2026-10-17）：MSL Fluid 端口的 `Xi_outflow[Medium.nXi]` / `C_outflow[Medium.nC]`（MoistAir nXi = 1、
+      trace substance nC = 1）此前三处一律拒（emit_array、connector_leaves、stream_op_call 只认空数组）。omc：逐元素发射、每个元素各成一个
+      stream 集（splitImpl 的 ARRAY 支 NFConnector.mo:359-362、Connection.scalarize NFConnection.mo:72-94）；inStream / actualStream 的数组
+      实参定型时先展开、每个元素各包一个调用（typeActualInStreamCall :2019-2100）；`m * actualStream(a.X)` 展开出的元素不是 BINARY 的直接
+      CALL 运算数，不走 evaluateActualStreamMul（不包 smooth、不换位，NFConnectEquations.mo:172-182）——展开的元素调用带第三个实参作标记。
+      顺带修了基线上的静默错（兄弟写法探出 22 例）：isNoFlow 求值 flow 的 min 时 Structural.markExp 标的是组件节点、组件数组 / 参数数组的各元素
+      共用（NFStructural.mo:246-326），没连的同节点元素一样成结构参数；Evaluate = false 的参数（NON_STRUCTURAL）isNoFlow 不标不求（:934-972）；
+      集首是 Evaluate = false 参数的参数连接集出等式、不出断言（:211 比集首变率）；smooth / noEvent 的数组实参里有逐元素运算（omc 展开成数组
+      字面量，ymc 原样打）→ SKIP。
+      三个目标越过 stream 卡到下一处：BranchingDynamicPipes "vectorized call argument [homotopy]"（管流模型的大 `homotopy(array(…))`）；
+      RoomCO2 ×2 "constant user call not evaluated [….density_phX]"——FixedBoundary.d 的 `if use_T then density_pTX(…) else density_phX(…)`，
+      omc 先代入 Evaluate = true 的 use_T 再化简、else 支不求，ymc 两支都先求（MoistAir 的 T_phX 求不出），其后还有 fill 数组值、`CVec[ind]`。
+      探针 pk-p33（119；SX*）——基线上 22 例 FAIL（现 19 PASS / 3 SKIP），现 PASS 94 / SKIP 20 / BOTH-REJECT 5；单测 +6。
+      slice 702 例 FAIL 0（oracle=live 不一致 0）；scodeinst 663、MSL 482（均不变）；testsuite 1835→1836（connectors/EnumArrayConnector）/
+      FAIL 0；探针 10752→10871；单测 471→477。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

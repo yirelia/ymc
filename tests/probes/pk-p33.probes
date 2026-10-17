@@ -1,0 +1,2721 @@
+//// set: pk-p33 — 非空的 stream 数组成员（66y，MSL Fluid MoistAir 的 `Xi_outflow[nXi]`、trace substance 的 `C_outflow[nC]`；BranchingDynamicPipes / RoomCO2 / RoomCO2WithControls 此前 SKIP "stream connector"）：变量逐元素发射（须在恰有一个 flow 的连接器里，associatedFlowCref，NFConnectEquations.mo:1102-1122 v1.25.0），连接集逐元素摊（splitImpl 的 ARRAY 支，NFConnector.mo:359-362）——两 inside / 一内一外 / 两 outside / 三路 / 连接器数组 / 嵌套连接器 / 继承的连接器 / 模型数组 / 二维 / 类型维 / 枚举维 / 空与非空混合 / 属性（SXA1-SXA12、SXB1、SXB2、SXB6-SXB8、SXB10、SXB11、SXB19-SXB22、SXC3、SXC4、SXC9-SXC12、SXD12、SXD13、SXE3-SXE5、SXE11）；inStream / actualStream 的数组实参定型时展开成元素调用（typeActualInStreamCall2 的 ARRAY 支，NFBuiltinCall.mo:2052-2100）：等式 / for / 初始方程 / when / if 方程 / if 表达式 / Var 数组绑定 `v.z = {…}` / 函数实参 `{…}` / 修饰绑定 / 记录函数 / 归约 / 推导式 / 算术（SXA5-SXA7、SXB12、SXB13、SXB15-SXB17、SXC1、SXC6、SXC14、SXD4、SXD5、SXD8、SXD10、SXE9、SXE10、SXE12）；`cref * actualStream(a.X)` 不包 smooth、不换位（evaluateActualStreamMul 只认 BINARY 的直接运算数是 CALL，NFConnectEquations.mo:172-182；SXA4、SXA8、SXA9、SXB18、SXC8、SXC13、SXD9、SXD11），书写的 `a.m_flow * actualStream(a.X[1])` 照旧包 smooth（SXA4 / SXA6 / SXE10）；维取本实例已发射的元素（连接器参数维随实例修饰 SXC5 / SXD1 / SXD3 / SXF1、重声明的包 SXD2、绑定写在连接器声明前 SXB28、第二遍 SXB27）；MSL 形 FluidPort / 两端口 / 源 / 容器 / 传感器（SXF2）。照旧 SKIP：实参是连接器数组整体 / 切片 / 二维取行（SXB3-SXB5，ExpandExp.expandCref 一般形未做）、算法段（SXB14，omc 不求值照留调用）、向量化内建 abs / semiLinear（SXC2 / SXD7）、子连接器数组的连接（SXE6）、expandable（SXE7）、关联 flow 在外层连接器（SXE8）、stream 不在连接器里（SXB25）、同一模型两实例取不同重声明包（SXB9，与 stream 无关的旧限制）；两边拒：两个 / 没有 flow（SXB23 / SXB24）、成员维不符（SXB26）、参数绑定 inStream（SXE1 / SXE2）。isNoFlow 的结构标记（基线静默错）：Structural.markExp 标的是组件节点（NFStructural.mo:246-326），组件数组 / 参数数组的元素共用一个节点——只连 ports[1]，没连的 ports[2] 的参数一样 final、属性跟着折（SXG1-SXG6、SXH1、SXH2、SXH4、SXH5、SXH7、SXH8、SXH10，基线 FAIL / SKIP）；Evaluate = false 的参数不标不求（NON_STRUCTURAL_PARAMETER，isNoFlow，NFConnectEquations.mo:934-972；SXH3 / SXH9，基线 FAIL）；参数连接集的集首是 Evaluate = false 的出等式不出断言（generatePotentialEquations :211；SXI1、SXI5-SXI9，基线 FAIL），集首是普通参数照旧断言（SXI4）；连接器参数的绑定不是字面量照旧 SKIP（SXH6）；标量绑定 / der / assert 里的元素调用（SXJ1 / SXJ2）。smooth / noEvent 整体保留的数组实参里有逐元素运算（`k * xa`、`-xa`、`m * actualStream(a.X)`）：omc 化简末尾展开成数组字面量（simplifyBinary / simplifyUnary 的 ExpandExp.expand，NFSimplifyExp.mo:941-943 / :1135-1137），ymc 不展开 → SKIP（SXJ4，SXK1 / SXK2 / SXK7 基线静默错）；if 支里已展开的（SXK4）、裸 cref（SXK5）照旧 PASS；min / max 的数组实参（SXJ3）、noEvent 整个 stream 数组（SXJ5）、数组字面量 / 矩阵积实参（SXK3 / SXK6）照旧 SKIP
+//// model: SXA1
+package SXA1P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real h;
+    stream Real X[2];
+  end C;
+  model M
+    C a, b;
+  equation
+    a.m_flow + b.m_flow = 0;
+    a.p = b.p;
+    a.h = inStream(b.h);
+    b.h = inStream(a.h);
+    a.X = inStream(b.X);
+    b.X = inStream(a.X);
+  end M;
+  model S
+    C c;
+    parameter Real X0[2] = {0.1, 0.9};
+  equation
+    c.p = 1;
+    c.h = 2;
+    c.X = X0;
+  end S;
+end SXA1P;
+model SXA1
+  SXA1P.S s1, s2;
+  SXA1P.M m;
+equation
+  connect(s1.c, m.a);
+  connect(m.b, s2.c);
+end SXA1;
+//// model: SXA2
+package SXA2P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real h;
+    stream Real X[2];
+  end C;
+  model M
+    C a, b;
+  equation
+    a.m_flow + b.m_flow = 0;
+    a.p = b.p;
+    a.h = inStream(b.h);
+    b.h = inStream(a.h);
+    a.X = inStream(b.X);
+    b.X = inStream(a.X);
+  end M;
+end SXA2P;
+model SXA2
+  SXA2P.C c;
+  SXA2P.M m;
+equation
+  connect(c, m.a);
+end SXA2;
+//// model: SXA3
+package SXA3P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real h;
+    stream Real X[2];
+  end C;
+  model M
+    C a, b;
+  equation
+    a.m_flow + b.m_flow = 0;
+    a.p = b.p;
+    a.h = inStream(b.h);
+    b.h = inStream(a.h);
+    a.X = inStream(b.X);
+    b.X = inStream(a.X);
+  end M;
+  model S
+    C c;
+  equation
+    c.p = 1;
+    c.h = 2;
+    c.X = {0.1, 0.9};
+  end S;
+end SXA3P;
+model SXA3
+  SXA3P.S s1;
+  SXA3P.M m1, m2;
+equation
+  connect(s1.c, m1.a);
+  connect(s1.c, m2.a);
+end SXA3;
+//// model: SXA4
+package SXA4P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real h;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real H;
+    Real mX[2];
+    Real mX1;
+    Real mX2;
+  equation
+    H = a.m_flow * actualStream(a.h);
+    mX = a.m_flow * actualStream(a.X);
+    mX1 = a.m_flow * actualStream(a.X[1]);
+    mX2 = actualStream(a.X[2]) * a.m_flow;
+    a.h = 1;
+    a.X = {0.2, 0.8};
+  end V;
+  model S
+    C c;
+  equation
+    c.p = 1;
+    c.h = 2;
+    c.X = {0.1, 0.9};
+  end S;
+end SXA4P;
+model SXA4
+  SXA4P.S s;
+  SXA4P.V v;
+equation
+  connect(s.c, v.a);
+end SXA4;
+//// model: SXA5
+package SXA5P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real h;
+    stream Real X[2];
+  end C;
+  function f
+    input Real p;
+    input Real h;
+    input Real X[:];
+    output Real y;
+  algorithm
+    y := p + h + sum(X);
+  end f;
+  model V
+    C a;
+    Real d;
+    Real z[2] = inStream(a.X);
+    Real w[2] = actualStream(a.X);
+  equation
+    d = f(a.p, inStream(a.h), inStream(a.X));
+    a.h = 1;
+    a.X = {0.2, 0.8};
+  end V;
+  model S
+    C c;
+  equation
+    c.p = 1;
+    c.h = 2;
+    c.X = {0.1, 0.9};
+  end S;
+end SXA5P;
+model SXA5
+  SXA5P.S s;
+  SXA5P.V v;
+equation
+  connect(s.c, v.a);
+end SXA5;
+//// model: SXA6
+package SXA6P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real h;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real y[2];
+    Real w[2];
+  equation
+    for i in 1:2 loop
+      y[i] = inStream(a.X[i]);
+      w[i] = a.m_flow * actualStream(a.X[i]);
+    end for;
+    a.h = 1;
+    a.X = {0.2, 0.8};
+  end V;
+  model S
+    C c;
+  equation
+    c.p = 1;
+    c.h = 2;
+    c.X = {0.1, 0.9};
+  end S;
+end SXA6P;
+model SXA6
+  SXA6P.S s;
+  SXA6P.V v;
+equation
+  connect(s.c, v.a);
+end SXA6;
+//// model: SXA7
+package SXA7P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real h;
+    stream Real X[2];
+  end C;
+end SXA7P;
+model SXA7
+  SXA7P.C c;
+  Real y[2];
+equation
+  y = inStream(c.X);
+end SXA7;
+//// model: SXA8
+package SXA8P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real mX[2];
+  equation
+    mX = a.m_flow * actualStream(a.X);
+    a.X = {0.2, 0.8};
+  end V;
+end SXA8P;
+model SXA8
+  SXA8P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXA8;
+//// model: SXA9
+package SXA9P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real mX[2];
+  equation
+    mX = a.m_flow * actualStream(a.X);
+    a.X = {0.2, 0.8};
+  end V;
+end SXA9P;
+model SXA9
+  SXA9P.V v1, v2, v3;
+equation
+  connect(v1.a, v2.a);
+  connect(v1.a, v3.a);
+end SXA9;
+//// model: SXA10
+package SXA10P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+  equation
+    a.X = {0.2, 0.8};
+  end V;
+end SXA10P;
+model SXA10
+  SXA10P.C c1, c2;
+  SXA10P.V v;
+equation
+  connect(c1, v.a);
+  connect(c2, v.a);
+end SXA10;
+//// model: SXA11
+package SXA11P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+end SXA11P;
+model SXA11
+  SXA11P.C c1, c2;
+equation
+  connect(c1, c2);
+end SXA11;
+//// model: SXA12
+package SXA12P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2, 2];
+  end C;
+  model V
+    C a;
+    Real y[2, 2];
+  equation
+    y = inStream(a.X);
+    a.X = {{1, 2}, {3, 4}};
+  end V;
+end SXA12P;
+model SXA12
+  SXA12P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXA12;
+//// model: SXB1
+package SXB1P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real h;
+    stream Real X[2];
+  end C;
+  model V
+    C ports[2];
+    Real y[2, 2];
+    Real w[2, 2];
+  equation
+    for i in 1:2 loop
+      y[i, :] = inStream(ports[i].X);
+      w[i, :] = ports[i].m_flow * actualStream(ports[i].X);
+      ports[i].X = {0.3, 0.7};
+      ports[i].h = 1;
+    end for;
+  end V;
+  model S
+    C c;
+  equation
+    c.p = 1;
+    c.h = 2;
+    c.X = {0.1, 0.9};
+  end S;
+end SXB1P;
+model SXB1
+  SXB1P.S s1, s2;
+  SXB1P.V v;
+equation
+  connect(s1.c, v.ports[1]);
+  connect(s2.c, v.ports[2]);
+end SXB1;
+//// model: SXB2
+package SXB2P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C ports[2];
+    Real y[2, 2];
+  equation
+    for i in 1:2 loop
+      y[i, :] = inStream(ports[i].X);
+      ports[i].X = {0.3, 0.7};
+    end for;
+  end V;
+end SXB2P;
+model SXB2
+  SXB2P.V a, b;
+equation
+  connect(a.ports, b.ports);
+end SXB2;
+//// model: SXB3
+package SXB3P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real h;
+    stream Real X[2];
+  end C;
+  model V
+    C ports[2];
+    Real y[2];
+  equation
+    y = inStream(ports.h);
+    for i in 1:2 loop
+      ports[i].X = {0.3, 0.7};
+      ports[i].h = 1;
+    end for;
+  end V;
+  model S
+    C c;
+  equation
+    c.p = 1;
+    c.h = 2;
+    c.X = {0.1, 0.9};
+  end S;
+end SXB3P;
+model SXB3
+  SXB3P.S s1, s2;
+  SXB3P.V v;
+equation
+  connect(s1.c, v.ports[1]);
+  connect(s2.c, v.ports[2]);
+end SXB3;
+//// model: SXB4
+package SXB4P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[3];
+  end C;
+  model V
+    C a;
+    Real y[2];
+    Real z[3];
+  equation
+    y = inStream(a.X[1:2]);
+    z = inStream(a.X[:]);
+    a.X = {0.3, 0.6, 0.1};
+  end V;
+  model S
+    C c;
+  equation
+    c.p = 1;
+    c.X = {0.1, 0.8, 0.1};
+  end S;
+end SXB4P;
+model SXB4
+  SXB4P.S s;
+  SXB4P.V v;
+equation
+  connect(s.c, v.a);
+end SXB4;
+//// model: SXB5
+package SXB5P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real Z[2, 2];
+  end C;
+  model V
+    C a;
+    Real y[2];
+  equation
+    y = inStream(a.Z[1]);
+    a.Z = {{1, 2}, {3, 4}};
+  end V;
+end SXB5P;
+model SXB5
+  SXB5P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXB5;
+//// model: SXB6
+package SXB6P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    parameter Integer n = 2;
+    C ports[2];
+    Real y[2];
+  equation
+    y = inStream(ports[n].X);
+    for i in 1:2 loop
+      ports[i].X = {0.3, 0.7};
+    end for;
+  end V;
+end SXB6P;
+model SXB6
+  SXB6P.V a, b;
+equation
+  connect(a.ports, b.ports);
+end SXB6;
+//// model: SXB7
+package SXB7P
+  connector C
+    Real p;
+    flow Real m_flow(min = 0);
+    stream Real X[2];
+  end C;
+  connector D
+    Real p;
+    flow Real m_flow(max = 0);
+    stream Real X[2];
+  end D;
+  model V
+    C a;
+    D b;
+    Real ya[2];
+    Real yb[2];
+  equation
+    ya = a.m_flow * actualStream(a.X);
+    yb = b.m_flow * actualStream(b.X);
+    a.X = {0.3, 0.7};
+    b.X = {0.4, 0.6};
+  end V;
+  model S
+    C c;
+    D d;
+  equation
+    c.X = {0.1, 0.9};
+    d.X = {0.2, 0.8};
+  end S;
+end SXB7P;
+model SXB7
+  SXB7P.S s;
+  SXB7P.V v;
+equation
+  connect(s.c, v.a);
+  connect(s.d, v.b);
+end SXB7;
+//// model: SXB8
+package SXB8P
+  connector C
+    Real p;
+    flow Real m_flow(nominal = 10);
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real y[2];
+  equation
+    y = inStream(a.X);
+    a.X = {0.3, 0.7};
+  end V;
+end SXB8P;
+model SXB8
+  SXB8P.V v1, v2, v3;
+equation
+  connect(v1.a, v2.a);
+  connect(v1.a, v3.a);
+end SXB8;
+//// model: SXB9
+package SXB9P
+  package M1
+    constant Integer nX = 2;
+  end M1;
+  package M2
+    constant Integer nX = 3;
+  end M2;
+  connector C
+    replaceable package Medium = M1;
+    Real p;
+    flow Real m_flow;
+    stream Real X[Medium.nX];
+  end C;
+  model V
+    replaceable package Medium = M1;
+    C a(redeclare package Medium = Medium);
+    Real y[Medium.nX];
+  equation
+    y = inStream(a.X);
+    a.X = fill(0.5, Medium.nX);
+  end V;
+end SXB9P;
+model SXB9
+  SXB9P.V v1(redeclare package Medium = SXB9P.M2);
+  SXB9P.V v2(redeclare package Medium = SXB9P.M2);
+  SXB9P.V w;
+equation
+  connect(v1.a, v2.a);
+end SXB9;
+//// model: SXB10
+package SXB10P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[0];
+    stream Real Y[1];
+  end C;
+  model V
+    C a;
+    Real y[1];
+    Real z[0];
+  equation
+    y = inStream(a.Y);
+    z = inStream(a.X);
+    a.Y = {0.3};
+  end V;
+end SXB10P;
+model SXB10
+  SXB10P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXB10;
+//// model: SXB11
+package SXB11P
+  connector In
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end In;
+  connector Out
+    In i;
+    Real v;
+  end Out;
+  model V
+    Out o;
+    Real y[2];
+  equation
+    y = inStream(o.i.X);
+    o.i.X = {0.3, 0.7};
+  end V;
+end SXB11P;
+model SXB11
+  SXB11P.V v1, v2;
+equation
+  connect(v1.o, v2.o);
+end SXB11;
+//// model: SXB12
+package SXB12P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real w[2] = a.m_flow * actualStream(a.X);
+    Real z[2] = 2 * inStream(a.X);
+    Real u[2] = {a.m_flow * actualStream(a.X[1]), a.m_flow * actualStream(a.X[2])};
+  equation
+    a.X = {0.3, 0.7};
+  end V;
+end SXB12P;
+model SXB12
+  SXB12P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXB12;
+//// model: SXB13
+package SXB13P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real y[2];
+  initial equation
+    y = inStream(a.X);
+  equation
+    der(y) = {1, 2};
+    a.X = {0.3, 0.7};
+  end V;
+end SXB13P;
+model SXB13
+  SXB13P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXB13;
+//// model: SXB14
+package SXB14P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real y[2];
+  algorithm
+    y := inStream(a.X);
+  equation
+    a.X = {0.3, 0.7};
+  end V;
+end SXB14P;
+model SXB14
+  SXB14P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXB14;
+//// model: SXB15
+package SXB15P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    parameter Boolean b = true;
+    C a;
+    Real y[2];
+  equation
+    if b then
+      y = inStream(a.X);
+    else
+      y = a.X;
+    end if;
+    a.X = {0.3, 0.7};
+  end V;
+end SXB15P;
+model SXB15
+  SXB15P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXB15;
+//// model: SXB16
+package SXB16P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real s1;
+    Real s2;
+  equation
+    s1 = sum(inStream(a.X));
+    s2 = sum(a.m_flow * actualStream(a.X));
+    a.X = {0.3, 0.7};
+  end V;
+end SXB16P;
+model SXB16
+  SXB16P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXB16;
+//// model: SXB17
+package SXB17P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real y[2];
+    Real w[2];
+  equation
+    y = {inStream(a.X[i]) for i in 1:2};
+    w = {a.m_flow * actualStream(a.X[i]) for i in 1:2};
+    a.X = {0.3, 0.7};
+  end V;
+end SXB17P;
+model SXB17
+  SXB17P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXB17;
+//// model: SXB18
+package SXB18P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real h;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    C b;
+    Real w1[2];
+    Real w2[2];
+    Real w3[2];
+    Real w4[2];
+    Real h1;
+    Real h2;
+  equation
+    w1 = actualStream(a.X) * a.m_flow;
+    w2 = actualStream(a.X) / a.m_flow;
+    w3 = b.m_flow * actualStream(a.X);
+    w4 = -a.m_flow * actualStream(a.X);
+    h1 = b.m_flow * actualStream(a.h);
+    h2 = actualStream(a.h) * b.m_flow;
+    a.X = {0.3, 0.7};
+    a.h = 1;
+    b.X = {0.4, 0.6};
+    b.h = 2;
+  end V;
+end SXB18P;
+model SXB18
+  SXB18P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+  connect(v1.b, v2.b);
+end SXB18;
+//// model: SXB19
+package SXB19P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+  equation
+    a.X = {0.3, 0.7};
+  end V;
+end SXB19P;
+model SXB19
+  SXB19P.C c;
+  SXB19P.V v1, v2;
+  Real y[2];
+equation
+  connect(c, v1.a);
+  connect(c, v2.a);
+  y = inStream(c.X);
+end SXB19;
+//// model: SXB20
+package SXB20P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2](each start = 0.5, each nominal = 0.1, min = {0, 0}, max = {1, 2});
+  end C;
+  model V
+    C a;
+    Real y[2];
+  equation
+    y = inStream(a.X);
+    a.X = {0.3, 0.7};
+  end V;
+end SXB20P;
+model SXB20
+  SXB20P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXB20;
+//// model: SXB21
+package SXB21P
+  type V2 = Real[2];
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream V2 X;
+  end C;
+  model V
+    C a;
+    Real y[2];
+  equation
+    y = inStream(a.X);
+    a.X = {0.3, 0.7};
+  end V;
+end SXB21P;
+model SXB21
+  SXB21P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXB21;
+//// model: SXB22
+package SXB22P
+  type E = enumeration(a, b);
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real s[E];
+  end C;
+  model V
+    C c;
+    Real y[E];
+  equation
+    y = inStream(c.s);
+    c.s = {1, 2};
+  end V;
+end SXB22P;
+model SXB22
+  SXB22P.V v1, v2;
+equation
+  connect(v1.c, v2.c);
+end SXB22;
+//// model: SXB23
+package SXB23P
+  connector C
+    Real p;
+    flow Real m_flow;
+    flow Real n_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+  equation
+    a.X = {0.3, 0.7};
+  end V;
+end SXB23P;
+model SXB23
+  SXB23P.V v;
+end SXB23;
+//// model: SXB24
+package SXB24P
+  connector C
+    Real p;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+  equation
+    a.X = {0.3, 0.7};
+  end V;
+end SXB24P;
+model SXB24
+  SXB24P.V v;
+end SXB24;
+//// model: SXB25
+model SXB25
+  stream Real x[2];
+equation
+  x = {1, 2};
+end SXB25;
+//// model: SXB26
+package SXB26P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  connector D
+    Real p;
+    flow Real m_flow;
+    stream Real X[3];
+  end D;
+end SXB26P;
+model SXB26
+  SXB26P.C c;
+  SXB26P.D d;
+equation
+  connect(c, d);
+end SXB26;
+//// model: SXB27
+package SXB27P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real y[2] = inStream(a.X);
+    parameter Real k = q;
+    parameter Real q = 2;
+  equation
+    a.X = {0.3, 0.7} * k;
+  end V;
+end SXB27P;
+model SXB27
+  SXB27P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXB27;
+//// model: SXB28
+package SXB28P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    Real y[2] = inStream(a.X);
+    C a;
+  equation
+    a.X = {0.3, 0.7};
+  end V;
+end SXB28P;
+model SXB28
+  SXB28P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXB28;
+//// model: SXC1
+package SXC1P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real y[2];
+  equation
+    y = if a.m_flow > 0 then inStream(a.X) else a.X;
+    a.X = {0.3, 0.7};
+  end V;
+end SXC1P;
+model SXC1
+  SXC1P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXC1;
+//// model: SXC2
+package SXC2P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  function f
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := sum(x);
+  end f;
+  model V
+    C a;
+    Real d;
+    Real e[2];
+    Real g[2];
+  equation
+    d = f(2 * inStream(a.X));
+    e = abs(inStream(a.X));
+    g = inStream(a.X) + actualStream(a.X);
+    a.X = {0.3, 0.7};
+  end V;
+end SXC2P;
+model SXC2
+  SXC2P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXC2;
+//// model: SXC3
+package SXC3P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C ports[2];
+  equation
+    for i in 1:2 loop
+      ports[i].X = {0.3, 0.7};
+    end for;
+  end V;
+end SXC3P;
+model SXC3
+  SXC3P.C c[2];
+  SXC3P.V v;
+  Real y[2, 2];
+equation
+  connect(c, v.ports);
+  for i in 1:2 loop
+    y[i, :] = inStream(c[i].X);
+  end for;
+end SXC3;
+//// model: SXC4
+package SXC4P
+  connector Base
+    Real p;
+    flow Real m_flow;
+  end Base;
+  connector C
+    extends Base;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real y[2];
+  equation
+    y = inStream(a.X);
+    a.X = {0.3, 0.7};
+  end V;
+end SXC4P;
+model SXC4
+  SXC4P.V v1, v2, v3;
+equation
+  connect(v1.a, v2.a);
+  connect(v2.a, v3.a);
+end SXC4;
+//// model: SXC5
+package SXC5P
+  connector C
+    parameter Integer n = 1;
+    Real p;
+    flow Real m_flow;
+    stream Real X[n];
+  end C;
+  model V
+    parameter Integer k = 1;
+    C a(n = k);
+    Real y[k];
+  equation
+    y = inStream(a.X);
+    a.X = fill(0.5, k);
+  end V;
+end SXC5P;
+model SXC5
+  SXC5P.V v1(k = 2), v2(k = 2), w(k = 3);
+equation
+  connect(v1.a, v2.a);
+end SXC5;
+//// model: SXC6
+package SXC6P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    discrete Real z[2];
+  equation
+    when time > 0.5 then
+      z = inStream(a.X);
+    end when;
+    a.X = {0.3, 0.7};
+  end V;
+end SXC6P;
+model SXC6
+  SXC6P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXC6;
+//// model: SXC7
+package SXC7P
+  connector C
+    Real p;
+    flow Real m_flow(min = mmin);
+    stream Real X[2];
+    parameter Real mmin = 0;
+  end C;
+  model V
+    C a;
+    Real y[2];
+  equation
+    y = inStream(a.X);
+    a.X = {0.3, 0.7};
+  end V;
+end SXC7P;
+model SXC7
+  SXC7P.V v1, v2, v3;
+equation
+  connect(v1.a, v2.a);
+  connect(v1.a, v3.a);
+end SXC7;
+//// model: SXC8
+package SXC8P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real y[2];
+    Real w[2];
+  equation
+    y = a.m_flow * actualStream(a.X) + {1, 2};
+    w = 3 * (a.m_flow * actualStream(a.X));
+    a.X = {0.3, 0.7};
+  end V;
+end SXC8P;
+model SXC8
+  SXC8P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXC8;
+//// model: SXC9
+package SXC9P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real y[2];
+  equation
+    y = inStream(a.X);
+    a.X = {0.3, 0.7};
+  end V;
+end SXC9P;
+model SXC9
+  SXC9P.C c1, c2;
+  SXC9P.V v1, v2;
+equation
+  connect(c1, v1.a);
+  connect(c2, v2.a);
+  connect(c1, c2);
+end SXC9;
+//// model: SXC10
+package SXC10P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real y[2];
+    Real s;
+  equation
+    y = inStream(a.X);
+    s = inStream(a.X[2]);
+    a.X = {0.3, 0.7};
+  end V;
+end SXC10P;
+model SXC10
+  SXC10P.V v[3];
+equation
+  connect(v[1].a, v[2].a);
+  connect(v[1].a, v[3].a);
+end SXC10;
+//// model: SXC11
+package SXC11P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    parameter Integer j = 2;
+    Real y;
+    Real w;
+  equation
+    y = inStream(a.X[j]);
+    w = a.m_flow * actualStream(a.X[j]);
+    a.X = {0.3, 0.7};
+  end V;
+end SXC11P;
+model SXC11
+  SXC11P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXC11;
+//// model: SXC12
+package SXC12P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real y[2];
+  equation
+    y = inStream(a.X);
+    a.X = {0.3, 0.7};
+  end V;
+  model W
+    V v;
+    C b;
+  equation
+    connect(b, v.a);
+  end W;
+end SXC12P;
+model SXC12
+  SXC12P.W w1, w2;
+  SXC12P.V u;
+equation
+  connect(w1.b, w2.b);
+  connect(w1.b, u.a);
+end SXC12;
+//// model: SXC13
+package SXC13P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real y[2];
+  equation
+    y = actualStream(a.X) .* {a.m_flow, a.m_flow};
+    a.X = {0.3, 0.7};
+  end V;
+end SXC13P;
+model SXC13
+  SXC13P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXC13;
+//// model: SXC14
+package SXC14P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real y[2];
+    Real z[2];
+  equation
+    y = a.m_flow * actualStream(a.X);
+    z = a.m_flow * actualStream(a.X);
+    a.X = {0.3, 0.7};
+  end V;
+  model U
+    C a;
+  equation
+    a.X = {0.2, 0.8};
+  end U;
+end SXC14P;
+model SXC14
+  SXC14P.V v;
+  SXC14P.U u;
+equation
+  connect(v.a, u.a);
+end SXC14;
+//// model: SXD1
+package SXD1P
+  connector C
+    parameter Integer n = 0;
+    Real p;
+    flow Real m_flow;
+    stream Real X[n];
+  end C;
+  model V
+    parameter Integer k = 0;
+    C a(n = k);
+    Real y[k];
+  equation
+    y = inStream(a.X);
+    a.X = fill(0.5, k);
+  end V;
+end SXD1P;
+model SXD1
+  SXD1P.V v1(k = 2), v2(k = 2);
+equation
+  connect(v1.a, v2.a);
+end SXD1;
+//// model: SXD2
+package SXD2P
+  package M0
+    constant Integer nX = 0;
+  end M0;
+  package M2
+    constant Integer nX = 2;
+  end M2;
+  connector C
+    replaceable package Medium = M0;
+    Real p;
+    flow Real m_flow;
+    stream Real X[Medium.nX];
+  end C;
+end SXD2P;
+model SXD2
+  SXD2P.C a(redeclare package Medium = SXD2P.M2);
+  SXD2P.C b(redeclare package Medium = SXD2P.M2);
+  Real y[2];
+equation
+  y = inStream(a.X);
+  connect(a, b);
+end SXD2;
+//// model: SXD3
+package SXD3P
+  connector C
+    parameter Integer n = 2;
+    Real p;
+    flow Real m_flow;
+    stream Real X[n];
+  end C;
+  model V
+    parameter Integer k = 2;
+    C a(n = k);
+    Real y[k];
+  equation
+    y = inStream(a.X);
+    a.X = fill(0.5, k);
+  end V;
+end SXD3P;
+model SXD3
+  SXD3P.V v1(k = 0), v2(k = 0);
+equation
+  connect(v1.a, v2.a);
+end SXD3;
+//// model: SXD4
+package SXD4P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  function f
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := sum(x);
+  end f;
+  model V
+    C a;
+    Real d;
+  equation
+    d = f(2 * inStream(a.X));
+    a.X = {0.3, 0.7};
+  end V;
+end SXD4P;
+model SXD4
+  SXD4P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXD4;
+//// model: SXD5
+package SXD5P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real g[2];
+  equation
+    g = inStream(a.X) + actualStream(a.X);
+    a.X = {0.3, 0.7};
+  end V;
+end SXD5P;
+model SXD5
+  SXD5P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXD5;
+//// model: SXD6
+package SXD6P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    parameter Boolean use = true;
+    C a if use;
+    C b;
+    Real y[2];
+  equation
+    y = inStream(b.X);
+    b.X = {0.3, 0.7};
+    if use then
+      a.X = {0.1, 0.9};
+    end if;
+  end V;
+end SXD6P;
+model SXD6
+  SXD6P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+  connect(v1.b, v2.b);
+end SXD6;
+//// model: SXD7
+package SXD7P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real y[2];
+    Real z[2];
+  equation
+    y = semiLinear(a.m_flow, inStream(a.X), z);
+    z = {0.3, 0.7};
+    a.X = {0.3, 0.7};
+  end V;
+end SXD7P;
+model SXD7
+  SXD7P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXD7;
+//// model: SXD8
+package SXD8P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model F
+    Real s[2];
+    Real t;
+  end F;
+  function g
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := sum(x);
+  end g;
+  model V
+    C a;
+    F f(s = inStream(a.X), t = g(inStream(a.X)));
+  equation
+    a.X = {0.3, 0.7};
+  end V;
+end SXD8P;
+model SXD8
+  SXD8P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXD8;
+//// model: SXD9
+package SXD9P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C port_1, port_2, port_3;
+    Real mb[2];
+  equation
+    mb = port_1.m_flow * actualStream(port_1.X) + port_2.m_flow * actualStream(port_2.X) + port_3.m_flow * actualStream(port_3.X);
+    port_1.X = {0.3, 0.7};
+    port_2.X = {0.3, 0.7};
+    port_3.X = {0.3, 0.7};
+  end V;
+  model S
+    C c;
+  equation
+    c.X = {0.1, 0.9};
+  end S;
+end SXD9P;
+model SXD9
+  SXD9P.V v;
+  SXD9P.S s1, s2, s3;
+equation
+  connect(v.port_1, s1.c);
+  connect(v.port_2, s2.c);
+  connect(v.port_3, s3.c);
+end SXD9;
+//// model: SXD10
+package SXD10P
+  record St
+    Real p;
+    Real X[2];
+  end St;
+  function mk
+    input Real p;
+    input Real X[2];
+    output St s;
+  algorithm
+    s := St(p = p, X = X);
+  end mk;
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    St st;
+  equation
+    st = mk(a.p, inStream(a.X));
+    a.X = {0.3, 0.7};
+  end V;
+end SXD10P;
+model SXD10
+  SXD10P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXD10;
+//// model: SXD11
+package SXD11P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real y[2];
+    Real w[2];
+  equation
+    y = a.m_flow * inStream(a.X);
+    w = (a.m_flow) * actualStream(a.X);
+    a.X = {0.3, 0.7};
+  end V;
+end SXD11P;
+model SXD11
+  SXD11P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXD11;
+//// model: SXD12
+package SXD12P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real y[2];
+  equation
+    y = inStream(a.X);
+    a.X = {0.3, 0.7};
+  end V;
+end SXD12P;
+model SXD12
+  SXD12P.V v;
+end SXD12;
+//// model: SXD13
+package SXD13P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+    stream Real h;
+  end C;
+  model V
+    C a;
+  equation
+    a.X = {0.3, 0.7};
+    a.h = 1;
+  end V;
+end SXD13P;
+model SXD13
+  SXD13P.V v1, v2;
+  SXD13P.C c;
+equation
+  connect(v1.a, v2.a);
+  connect(c, v1.a);
+end SXD13;
+//// model: SXE1
+package SXE1P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real h;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    parameter Real q[2] = inStream(a.X);
+  equation
+    a.X = {0.3, 0.7};
+    a.h = 1;
+  end V;
+end SXE1P;
+model SXE1
+  SXE1P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXE1;
+//// model: SXE2
+package SXE2P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real h;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    parameter Real q = inStream(a.h);
+  equation
+    a.X = {0.3, 0.7};
+    a.h = 1;
+  end V;
+end SXE2P;
+model SXE2
+  SXE2P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXE2;
+//// model: SXE3
+package SXE3P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real y[2];
+  equation
+    y = inStream(a.X);
+    a.X = {0.3, 0.7};
+  end V;
+end SXE3P;
+model SXE3
+  SXE3P.V v[2], w[2];
+equation
+  for i in 1:2 loop
+    connect(v[i].a, w[i].a);
+  end for;
+end SXE3;
+//// model: SXE4
+package SXE4P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    parameter Integer n = 2;
+    C ports[3];
+    C b;
+    Real y[2];
+  equation
+    connect(b, ports[n]);
+    y = inStream(b.X);
+    for i in 1:3 loop
+      ports[i].X = {0.3, 0.7};
+    end for;
+    b.X = {0.2, 0.8};
+  end V;
+end SXE4P;
+model SXE4
+  SXE4P.V v;
+end SXE4;
+//// model: SXE5
+package SXE5P
+  connector In
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end In;
+  connector Out
+    In i[2];
+  end Out;
+  model V
+    Out o;
+    Real y[2];
+  equation
+    y = inStream(o.i[1].X);
+    o.i[1].X = {0.3, 0.7};
+    o.i[2].X = {0.3, 0.7};
+  end V;
+end SXE5P;
+model SXE5
+  SXE5P.V v1;
+end SXE5;
+//// model: SXE6
+package SXE6P
+  connector In
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end In;
+  connector Out
+    In i[2];
+  end Out;
+  model V
+    Out o;
+  equation
+    o.i[1].X = {0.3, 0.7};
+    o.i[2].X = {0.3, 0.7};
+  end V;
+end SXE6P;
+model SXE6
+  SXE6P.V v1, v2;
+equation
+  connect(v1.o, v2.o);
+end SXE6;
+//// model: SXE7
+package SXE7P
+  expandable connector Bus
+  end Bus;
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+  equation
+    a.X = {0.3, 0.7};
+  end V;
+end SXE7P;
+model SXE7
+  SXE7P.Bus bus;
+  SXE7P.V v;
+equation
+  connect(v.a, bus.a);
+end SXE7;
+//// model: SXE8
+package SXE8P
+  connector In
+    Real p;
+    stream Real X[2];
+  end In;
+  connector Out
+    flow Real f;
+    In i;
+  end Out;
+  model V
+    Out o;
+    Real y[2];
+  equation
+    y = inStream(o.i.X);
+    o.i.X = {0.3, 0.7};
+  end V;
+end SXE8P;
+model SXE8
+  SXE8P.V v1, v2;
+equation
+  connect(v1.o, v2.o);
+end SXE8;
+//// model: SXE9
+package SXE9P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    discrete Real z[2](each start = 0);
+  equation
+    when sample(0, 0.1) then
+      z = pre(z) + inStream(a.X);
+    end when;
+    a.X = {0.3, 0.7};
+  end V;
+end SXE9P;
+model SXE9
+  SXE9P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXE9;
+//// model: SXE10
+package SXE10P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real y[2];
+    Real w[2];
+  equation
+    y = {inStream(a.X[1]), inStream(a.X[2])};
+    w = {a.m_flow * actualStream(a.X[1]), actualStream(a.X[2]) * a.m_flow};
+    a.X = {0.3, 0.7};
+  end V;
+end SXE10P;
+model SXE10
+  SXE10P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXE10;
+//// model: SXE11
+package SXE11P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real y[2];
+  equation
+    y = inStream(a.X);
+    a.X = {0.3, 0.7};
+  end V;
+end SXE11P;
+model SXE11
+  SXE11P.V v1, v2;
+  SXE11P.C c[2];
+equation
+  connect(v1.a, c[1]);
+  connect(v2.a, c[2]);
+  connect(c[1], c[2]);
+end SXE11;
+//// model: SXE12
+package SXE12P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real y[2];
+    Real z;
+  equation
+    y = inStream(a.X) * 2 - inStream(a.X) / 4;
+    z = inStream(a.X) * {1, 1};
+    a.X = {0.3, 0.7};
+  end V;
+end SXE12P;
+model SXE12
+  SXE12P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXE12;
+//// model: SXF1
+package SXF1P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    parameter Integer nPorts = 2;
+    C ports[nPorts];
+    Real y[nPorts, 2];
+    Real w[nPorts, 2];
+  equation
+    for i in 1:nPorts loop
+      y[i, :] = inStream(ports[i].X);
+      w[i, :] = ports[i].m_flow * actualStream(ports[i].X);
+      ports[i].X = {0.3, 0.7};
+    end for;
+  end V;
+end SXF1P;
+model SXF1
+  SXF1P.V v(nPorts = 3);
+  SXF1P.V u(nPorts = 1);
+equation
+  connect(v.ports[1], u.ports[1]);
+  connect(v.ports[2], v.ports[3]);
+end SXF1;
+//// model: SXF2
+package SXF2P
+  package Medium
+    constant Integer nXi = 1;
+    constant Integer nC = 1;
+  end Medium;
+  connector FluidPort
+    replaceable package Medium = SXF2P.Medium;
+    flow Real m_flow(min = if allowFlowReversal then -1e60 else 0);
+    Real p;
+    stream Real h_outflow;
+    stream Real Xi_outflow[Medium.nXi];
+    stream Real C_outflow[Medium.nC];
+    parameter Boolean allowFlowReversal = true;
+  end FluidPort;
+  model Transport
+    replaceable package Medium = SXF2P.Medium;
+    FluidPort port_a(redeclare package Medium = Medium);
+    FluidPort port_b(redeclare package Medium = Medium);
+  equation
+    port_a.m_flow + port_b.m_flow = 0;
+    port_a.p - port_b.p = port_a.m_flow;
+    port_a.h_outflow = inStream(port_b.h_outflow);
+    port_b.h_outflow = inStream(port_a.h_outflow);
+    port_a.Xi_outflow = inStream(port_b.Xi_outflow);
+    port_b.Xi_outflow = inStream(port_a.Xi_outflow);
+    port_a.C_outflow = inStream(port_b.C_outflow);
+    port_b.C_outflow = inStream(port_a.C_outflow);
+  end Transport;
+  model Source
+    replaceable package Medium = SXF2P.Medium;
+    parameter Integer nPorts = 1;
+    FluidPort ports[nPorts](redeclare each package Medium = Medium);
+    Real Xi[Medium.nXi] = {0.01};
+    Real C[Medium.nC] = {1e-3};
+  equation
+    for i in 1:nPorts loop
+      ports[i].p = 1e5;
+      ports[i].h_outflow = 1;
+      ports[i].Xi_outflow = Xi;
+      ports[i].C_outflow = C;
+    end for;
+  end Source;
+  model Volume
+    replaceable package Medium = SXF2P.Medium;
+    parameter Integer nPorts = 2;
+    FluidPort ports[nPorts](redeclare each package Medium = Medium);
+    Real mXi[nPorts, Medium.nXi];
+    Real mC[nPorts, Medium.nC];
+    Real H[nPorts];
+  equation
+    for i in 1:nPorts loop
+      H[i] = ports[i].m_flow * actualStream(ports[i].h_outflow);
+      mXi[i, :] = ports[i].m_flow * actualStream(ports[i].Xi_outflow);
+      mC[i, :] = ports[i].m_flow * actualStream(ports[i].C_outflow);
+      ports[i].p = 1e5;
+      ports[i].h_outflow = 2;
+      ports[i].Xi_outflow = {0.02};
+      ports[i].C_outflow = {2e-3};
+    end for;
+  end Volume;
+  model Sensor
+    replaceable package Medium = SXF2P.Medium;
+    FluidPort port(redeclare package Medium = Medium);
+    Real CVec[Medium.nC];
+    Real C;
+  equation
+    CVec = inStream(port.C_outflow);
+    C = CVec[1];
+    port.m_flow = 0;
+    port.h_outflow = 0;
+    port.Xi_outflow = {0.01};
+    port.C_outflow = zeros(Medium.nC);
+  end Sensor;
+end SXF2P;
+model SXF2
+  SXF2P.Source src(nPorts = 1);
+  SXF2P.Transport t;
+  SXF2P.Volume vol(nPorts = 2);
+  SXF2P.Sensor sen;
+equation
+  connect(src.ports[1], t.port_a);
+  connect(t.port_b, vol.ports[1]);
+  connect(t.port_b, sen.port);
+end SXF2;
+//// model: SXF3
+package SXF3P
+  connector C
+    Real p;
+    flow Real m_flow(min = mmin);
+    stream Real X[2];
+    parameter Real mmin = -1;
+  end C;
+  model V
+    C a;
+    Real y[2];
+    Real w[2];
+  equation
+    y = inStream(a.X);
+    w = a.m_flow * actualStream(a.X);
+    a.X = {0.3, 0.7};
+  end V;
+end SXF3P;
+model SXF3
+  SXF3P.V v1(a(mmin = 0)), v2, v3;
+equation
+  connect(v1.a, v2.a);
+  connect(v1.a, v3.a);
+end SXF3;
+//// model: SXG1
+package SXG1P
+  connector FluidPort
+    flow Real m_flow(min = if allowFlowReversal then -1e60 else 0);
+    Real p;
+    stream Real h_outflow;
+    parameter Boolean allowFlowReversal = true;
+  end FluidPort;
+  model Transport
+    FluidPort port_a;
+    FluidPort port_b;
+  equation
+    port_a.m_flow + port_b.m_flow = 0;
+    port_a.p - port_b.p = port_a.m_flow;
+    port_a.h_outflow = inStream(port_b.h_outflow);
+    port_b.h_outflow = inStream(port_a.h_outflow);
+  end Transport;
+  model Volume
+    parameter Integer nPorts = 2;
+    FluidPort ports[nPorts];
+    Real H[nPorts];
+  equation
+    for i in 1:nPorts loop
+      H[i] = ports[i].m_flow * actualStream(ports[i].h_outflow);
+      ports[i].p = 1e5;
+      ports[i].h_outflow = 2;
+    end for;
+  end Volume;
+  model Sensor
+    FluidPort port;
+  equation
+    port.m_flow = 0;
+    port.h_outflow = 0;
+  end Sensor;
+end SXG1P;
+model SXG1
+  SXG1P.Transport t;
+  SXG1P.Volume vol(nPorts = 2);
+  SXG1P.Sensor sen;
+equation
+  connect(t.port_b, vol.ports[1]);
+  connect(t.port_b, sen.port);
+end SXG1;
+//// model: SXG2
+package SXG2P
+  connector C
+    flow Real m_flow;
+    Real p;
+    stream Real h;
+  end C;
+  model Pipe
+    parameter Boolean allow = true;
+    C port(m_flow(min = if allow then -1 else 0));
+  equation
+    port.h = 1;
+  end Pipe;
+end SXG2P;
+model SXG2
+  SXG2P.Pipe pipes[2];
+  SXG2P.Pipe p1, p2;
+equation
+  connect(pipes[1].port, p1.port);
+  connect(pipes[1].port, p2.port);
+end SXG2;
+//// model: SXG3
+package SXG3P
+  connector C
+    flow Real m_flow(min = mins[1]);
+    Real p;
+    stream Real h;
+    parameter Real mins[2] = {0, -1};
+  end C;
+  model V
+    C a;
+  equation
+    a.h = 1;
+  end V;
+end SXG3P;
+model SXG3
+  SXG3P.V v1, v2, v3;
+equation
+  connect(v1.a, v2.a);
+  connect(v1.a, v3.a);
+end SXG3;
+//// model: SXG4
+package SXG4P
+  connector C
+    flow Real m_flow(min = if allow then -1 else 0);
+    Real p;
+    stream Real h;
+    parameter Boolean allow = true;
+  end C;
+  model V
+    C ports[2];
+  equation
+    ports[1].h = 1;
+    ports[2].h = 2;
+  end V;
+end SXG4P;
+model SXG4
+  SXG4P.V v[2];
+  SXG4P.V u1, u2;
+equation
+  connect(v[1].ports[1], u1.ports[1]);
+  connect(v[1].ports[1], u2.ports[1]);
+end SXG4;
+//// model: SXG5
+package SXG5P
+  connector C
+    flow Real m_flow(min = if allow then -1 else 0);
+    Real p;
+    stream Real h;
+    stream Real X[2];
+    parameter Boolean allow = true;
+  end C;
+  model V
+    C ports[2];
+    Real y[2];
+  equation
+    y = inStream(ports[2].X);
+    ports[1].h = 1;
+    ports[2].h = 2;
+    ports[1].X = {0.1, 0.9};
+    ports[2].X = {0.2, 0.8};
+  end V;
+end SXG5P;
+model SXG5
+  SXG5P.V v;
+  SXG5P.V u1, u2;
+equation
+  connect(v.ports[1], u1.ports[1]);
+  connect(v.ports[1], u2.ports[1]);
+end SXG5;
+//// model: SXG6
+package SXG6P
+  connector C
+    flow Real m_flow(min = if allow then -1 else 0);
+    Real p;
+    stream Real h;
+    parameter Boolean allow = true;
+  end C;
+  model V
+    C ports[2];
+    Boolean b = ports[2].allow;
+  equation
+    ports[1].h = 1;
+    ports[2].h = 2;
+  end V;
+end SXG6P;
+model SXG6
+  SXG6P.V v;
+  SXG6P.V u1, u2;
+equation
+  connect(v.ports[1], u1.ports[1]);
+  connect(v.ports[1], u2.ports[1]);
+end SXG6;
+//// model: SXH1
+package SXH1P
+  connector C
+    flow Real m_flow(min = if allow then -1 else 0);
+    Real p;
+    stream Real h;
+    parameter Boolean allow = true;
+  end C;
+  model V
+    C ports[2];
+    Real y;
+  equation
+    y = if ports[2].allow then 1 else 2;
+    ports[1].h = 1;
+    ports[2].h = 2;
+  end V;
+end SXH1P;
+model SXH1
+  SXH1P.V v;
+  SXH1P.V u1, u2;
+equation
+  connect(v.ports[1], u1.ports[1]);
+  connect(v.ports[1], u2.ports[1]);
+end SXH1;
+//// model: SXH2
+package SXH2P
+  connector C
+    flow Real m_flow(min = if allow then -1 else 0);
+    Real p;
+    stream Real h;
+    parameter Boolean allow = true;
+  end C;
+  model V
+    C ports[2](allow = {true, false});
+  equation
+    ports[1].h = 1;
+    ports[2].h = 2;
+  end V;
+end SXH2P;
+model SXH2
+  SXH2P.V v;
+  SXH2P.V u1, u2;
+equation
+  connect(v.ports[1], u1.ports[1]);
+  connect(v.ports[1], u2.ports[1]);
+end SXH2;
+//// model: SXH3
+package SXH3P
+  connector C
+    flow Real m_flow(min = if allow then -1 else 0);
+    Real p;
+    stream Real h;
+    parameter Boolean allow = true annotation(Evaluate = false);
+  end C;
+  model V
+    C ports[2];
+  equation
+    ports[1].h = 1;
+    ports[2].h = 2;
+  end V;
+end SXH3P;
+model SXH3
+  SXH3P.V v;
+  SXH3P.V u1, u2;
+equation
+  connect(v.ports[1], u1.ports[1]);
+  connect(v.ports[1], u2.ports[1]);
+end SXH3;
+//// model: SXH4
+package SXH4P
+  connector C
+    flow Real m_flow(min = if allow then -1 else 0, start = if allow then 1 else 2);
+    Real p;
+    stream Real h;
+    parameter Boolean allow = true;
+  end C;
+  model V
+    C ports[2];
+    Real s(start = if ports[2].allow then 3 else 4);
+  equation
+    der(s) = 1;
+    ports[1].h = 1;
+    ports[2].h = 2;
+  end V;
+end SXH4P;
+model SXH4
+  SXH4P.V v;
+  SXH4P.V u1, u2;
+equation
+  connect(v.ports[1], u1.ports[1]);
+  connect(v.ports[1], u2.ports[1]);
+end SXH4;
+//// model: SXH5
+package SXH5P
+  connector C
+    flow Real m_flow(min = mins[1]);
+    Real p;
+    stream Real h;
+    parameter Real mins[2] = {0, -1};
+  end C;
+  model V
+    C a;
+    Real y = sum(a.mins);
+  equation
+    a.h = 1;
+  end V;
+end SXH5P;
+model SXH5
+  SXH5P.V v1, v2, v3;
+equation
+  connect(v1.a, v2.a);
+  connect(v1.a, v3.a);
+end SXH5;
+//// model: SXH6
+package SXH6P
+  connector C
+    flow Real m_flow(min = if allow then -1 else 0);
+    Real p;
+    stream Real h;
+    parameter Boolean allow = flag;
+    parameter Boolean flag = true;
+  end C;
+  model V
+    C ports[2];
+  equation
+    ports[1].h = 1;
+    ports[2].h = 2;
+  end V;
+end SXH6P;
+model SXH6
+  SXH6P.V v;
+  SXH6P.V u1, u2;
+equation
+  connect(v.ports[1], u1.ports[1]);
+  connect(v.ports[1], u2.ports[1]);
+end SXH6;
+//// model: SXH7
+package SXH7P
+  connector C
+    flow Real m_flow(min = if allow then -1 else 0);
+    Real p;
+    stream Real h;
+    parameter Boolean allow = true;
+  end C;
+  model V
+    C ports[2];
+    Real y = actualStream(ports[2].h);
+  equation
+    ports[1].h = 1;
+    ports[2].h = 2;
+  end V;
+end SXH7P;
+model SXH7
+  SXH7P.V v;
+  SXH7P.V u1, u2;
+equation
+  connect(v.ports[1], u1.ports[1]);
+  connect(v.ports[1], u2.ports[1]);
+end SXH7;
+//// model: SXH8
+package SXH8P
+  connector C
+    flow Real m_flow(min = if allow then -1 else 0);
+    Real p;
+    stream Real h;
+    parameter Boolean allow = true;
+  end C;
+  model V
+    C ports[2];
+  equation
+    ports[1].h = 1;
+    ports[2].h = 2;
+  end V;
+end SXH8P;
+model SXH8
+  SXH8P.V v;
+  SXH8P.V u1;
+equation
+  connect(v.ports[1], u1.ports[1]);
+end SXH8;
+//// model: SXH9
+package SXH9P
+  connector C
+    flow Real m_flow(min = if allow then -1 else 0);
+    Real p;
+    stream Real h;
+    parameter Boolean allow = true annotation(Evaluate = false);
+  end C;
+  model V
+    C a;
+  equation
+    a.h = 1;
+  end V;
+end SXH9P;
+model SXH9
+  SXH9P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXH9;
+//// model: SXH10
+package SXH10P
+  connector C
+    flow Real m_flow(min = if allow then -1 else 0);
+    Real p;
+    stream Real h;
+    parameter Boolean allow = true;
+  end C;
+  model V
+    C ports[2];
+  equation
+    ports[1].h = 1;
+    ports[2].h = 2;
+  end V;
+end SXH10P;
+model SXH10
+  SXH10P.V v1, v2;
+equation
+  connect(v1.ports[1], v2.ports[1]);
+end SXH10;
+//// model: SXI1
+package SXI1P
+  connector C
+    Real p;
+    flow Real f;
+    parameter Real k = 1 annotation(Evaluate = false);
+  end C;
+  model M
+    C c;
+  end M;
+end SXI1P;
+model SXI1
+  SXI1P.M a, b;
+equation
+  connect(a.c, b.c);
+end SXI1;
+//// model: SXI2
+package SXI2P
+  connector C
+    Real p;
+    flow Real f;
+    parameter Real k = 1 annotation(Evaluate = true);
+  end C;
+  model M
+    C c;
+  end M;
+end SXI2P;
+model SXI2
+  SXI2P.M a, b;
+equation
+  connect(a.c, b.c);
+end SXI2;
+//// model: SXI3
+package SXI3P
+  connector C
+    Real p;
+    flow Real f;
+    parameter Real k = 1;
+  end C;
+  model M
+    C c;
+  end M;
+end SXI3P;
+model SXI3
+  SXI3P.M a, b;
+equation
+  connect(a.c, b.c);
+end SXI3;
+//// model: SXI4
+package SXI4P
+  connector C
+    Real p;
+    flow Real f;
+    parameter Real k = 1;
+  end C;
+  connector D
+    Real p;
+    flow Real f;
+    parameter Real k = 1 annotation(Evaluate = false);
+  end D;
+  model M
+    C c;
+  end M;
+  model N
+    D d;
+  end N;
+end SXI4P;
+model SXI4
+  SXI4P.M a;
+  SXI4P.N b;
+equation
+  connect(a.c, b.d);
+end SXI4;
+//// model: SXI5
+package SXI5P
+  connector C
+    Real p;
+    flow Real f;
+    parameter Real k = 1;
+  end C;
+  connector D
+    Real p;
+    flow Real f;
+    parameter Real k = 1 annotation(Evaluate = false);
+  end D;
+  model M
+    C c;
+  end M;
+  model N
+    D d;
+  end N;
+end SXI5P;
+model SXI5
+  SXI5P.N b;
+  SXI5P.M a;
+equation
+  connect(b.d, a.c);
+end SXI5;
+//// model: SXI6
+package SXI6P
+  connector C
+    Real p;
+    flow Real f;
+    parameter Integer n = 1 annotation(Evaluate = false);
+    constant Integer m = 2;
+  end C;
+end SXI6P;
+model SXI6
+  SXI6P.C c1, c2, c3;
+equation
+  connect(c1, c2);
+  connect(c2, c3);
+end SXI6;
+//// model: SXI7
+package SXI7P
+  connector C
+    Real p;
+    flow Real f;
+    parameter Real k[2] = {1, 2} annotation(Evaluate = false);
+  end C;
+  model M
+    C c;
+  end M;
+end SXI7P;
+model SXI7
+  SXI7P.M a, b;
+equation
+  connect(a.c, b.c);
+end SXI7;
+//// model: SXI8
+package SXI8P
+  record R
+    parameter Real k = 1 annotation(Evaluate = false);
+    parameter Real j = 2;
+  end R;
+  connector C
+    Real p;
+    flow Real f;
+    R r;
+  end C;
+  model M
+    C c;
+  end M;
+end SXI8P;
+model SXI8
+  SXI8P.M a, b;
+equation
+  connect(a.c, b.c);
+end SXI8;
+//// model: SXI9
+package SXI9P
+  connector C
+    Real p;
+    flow Real f;
+    parameter Real k = 1 annotation(Evaluate = false);
+  end C;
+  model M
+    C c;
+  end M;
+end SXI9P;
+model SXI9
+  SXI9P.M a, b;
+  SXI9P.C c;
+equation
+  connect(a.c, b.c);
+  connect(c, a.c);
+end SXI9;
+//// model: SXJ1
+package SXJ1P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real d = sum(inStream(a.X));
+    Real e = a.m_flow * actualStream(a.X[1]);
+    Real f = inStream(a.X) * {1, 2};
+  equation
+    a.X = {0.3, 0.7};
+  end V;
+end SXJ1P;
+model SXJ1
+  SXJ1P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXJ1;
+//// model: SXJ2
+package SXJ2P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real y[2](each start = 0);
+  equation
+    der(y) = inStream(a.X) - y;
+    assert(inStream(a.X[1]) >= 0, "neg");
+    a.X = {0.3, 0.7};
+  end V;
+end SXJ2P;
+model SXJ2
+  SXJ2P.V v1, v2, v3;
+equation
+  connect(v1.a, v2.a);
+  connect(v1.a, v3.a);
+end SXJ2;
+//// model: SXJ3
+package SXJ3P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real g = max(actualStream(a.X));
+  equation
+    a.X = {0.3, 0.7};
+  end V;
+end SXJ3P;
+model SXJ3
+  SXJ3P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXJ3;
+//// model: SXJ4
+package SXJ4P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real z[2];
+  equation
+    z = smooth(0, a.m_flow * actualStream(a.X));
+    a.X = {0.3, 0.7};
+  end V;
+end SXJ4P;
+model SXJ4
+  SXJ4P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXJ4;
+//// model: SXJ5
+package SXJ5P
+  connector C
+    Real p;
+    flow Real m_flow;
+    stream Real X[2];
+  end C;
+  model V
+    C a;
+    Real y[2];
+  equation
+    y = noEvent(actualStream(a.X));
+    a.X = {0.3, 0.7};
+  end V;
+end SXJ5P;
+model SXJ5
+  SXJ5P.V v1, v2;
+equation
+  connect(v1.a, v2.a);
+end SXJ5;
+//// model: SXK1
+model SXK1
+  Real k = time;
+  Real x = 2 * time;
+  Real y = 3 * time;
+  Real z[2];
+  Real w[2];
+  Real u[2];
+equation
+  z = smooth(0, k * {x, y});
+  w = k * {x, y};
+  u = noEvent(k * {x, y});
+end SXK1;
+//// model: SXK2
+model SXK2
+  Real k = time;
+  Real xa[2] = {2 * time, 3 * time};
+  Real z[2];
+  Real u[2];
+  Real s[2];
+  Real r[2];
+equation
+  z = smooth(0, k * xa);
+  u = noEvent(k * xa);
+  s = smooth(0, xa);
+  r = smooth(0, -xa);
+end SXK2;
+//// model: SXK3
+model SXK3
+  Real x = time;
+  Real y = 2 * time;
+  Real z[2];
+  Real u[2];
+  Real v[2];
+equation
+  z = smooth(0, {x, y});
+  u = smooth(0, -{x, y});
+  v = smooth(0, {x, y} + {y, x});
+end SXK3;
+//// model: SXK4
+model SXK4
+  parameter Boolean c = true;
+  Real xa[2] = {2 * time, 3 * time};
+  Real z[2];
+equation
+  z = smooth(0, if time > 0.5 then xa else -xa);
+end SXK4;
+//// model: SXK5
+model SXK5
+  Real xa[2] = {2 * time, 3 * time};
+  Real z[2];
+  Real s;
+equation
+  z = noEvent(xa);
+  s = noEvent(xa[1] * 2) + smooth(0, sum(xa * 2));
+end SXK5;
+//// model: SXK6
+model SXK6
+  Real A[2, 2] = {{1, 2}, {3, 4}} * time;
+  Real xa[2] = {2 * time, 3 * time};
+  Real z[2];
+equation
+  z = smooth(0, A * xa);
+end SXK6;
+//// model: SXK7
+model SXK7
+  Real xa[2] = {2 * time, 3 * time};
+  Real r[2];
+equation
+  r = noEvent(-xa);
+end SXK7;
