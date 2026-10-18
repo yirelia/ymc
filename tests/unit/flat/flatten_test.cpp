@@ -11572,7 +11572,8 @@ YMC_TEST(flatten_param_subscript_unsupported) {
   // omc 照标 final、下标留符号 / 调用不求值 / 目标不求值，或此刻定不了的：不出结果（SKIP）。fixed = false（PXS32：`final parameter
   // Integer n(fixed = false)` + `{4.0, 5.0, 6.0}[n]`）、for 语句迭代变量 + 参数（PXS102：`{…}[i + 1]`）、不纯函数调用（PXS142：
   // `{…}[PXS142F(1)]`）、声明在后的 Evaluate = false 参数作变量数组的下标（PXS191：omc 那时已降成 NON_STRUCTURAL、留 `x[n]`，此前
-  // 求值标 final 静默错）、越界（PXS56：omc 照留 `{…}[5]`）、when 方程左侧下标里参数与离散量混着（markSubscriptsInExp，
+  // 求值标 final 静默错；67f 起同声明在前的一样认成 NON_STRUCTURAL，卡在变量数组的符号下标）、越界（PXS56：omc 照留 `{…}[5]`）、
+  // when 方程左侧下标里参数与离散量混着（markSubscriptsInExp，
   // NFTyping.mo:3451-3454 v1.25.0；PXS237：`z[1 + k]`）、reinit 目标的参数下标（EvalConstants 不求目标，NFEvalConstants.mo:414-418；
   // PXS249：`reinit(x[n - 1], 0.0)`）。omc 1.25.0 实跑（2026-10-18，探针 pk-p39）。
   for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
@@ -11584,7 +11585,7 @@ YMC_TEST(flatten_param_subscript_unsupported) {
             "model PXS142\n  parameter Integer n = 1;\n  Real y = ({4, 5, 6})[PXS142F(n)] * time;\nend PXS142;\n",
             "parameter in symbolic subscript"},
            {"model PXS191\n  Real x[3] = {1, 2, 3} * time;\n  Real y = x[n];\n"
-            "  parameter Integer n = 2 annotation(Evaluate = false);\nend PXS191;\n", "parameter in symbolic subscript"},
+            "  parameter Integer n = 2 annotation(Evaluate = false);\nend PXS191;\n", "array subscript out of range"},
            {"model PXS56\n  parameter Integer n = 5;\n  Real y = ({4, 5, 6})[n] * time;\nend PXS56;\n",
             "array subscript out of range"},
            {"model PXS237\n  parameter Integer n = 1;\n  discrete Integer k(start = 0, fixed = true);\n"
@@ -11645,6 +11646,96 @@ YMC_TEST(flatten_subscripted_literal_compile_time_eval) {
                            "  Real y = x[({1, 2, 3})[n]];\nend PXS48;\n"),
                std::string("class PXS48\n  final parameter Integer n = 2;\n  Real x[1];\n  Real x[2];\n  Real x[3];\n"
                            "  Real y = x[2];\nequation\n  x = {time, 2.0 * time, 3.0 * time};\nend PXS48;\n"));
+}
+
+YMC_TEST(flatten_evaluate_false_forward) {
+  // 定型 / 压平期读到声明在后的 Evaluate = false 参数：omc 先访问完全部组件再定型（NFInst.mo:193-197 v1.25.0），它已降成
+  // NON_STRUCTURAL（updateImplicitVariabilityComp :3909-3912），Ceval 不求（evalCref 的守卫，NFCeval.mo:311-314）→ 下标照留符号、
+  // 不 final（EFQ1074、参数数组 EFQ1103；此前按"还没访问"照常求值标 final，再 SKIP）。访问它之前被实例化期的标记标成结构参数的
+  // 照常求值（EFQ1091：声明在中间的 Evaluate = true 参数 Q 的连带，第二遍按第一遍访问时记下的结论；连接器里的 EFQ2924 照结构参数
+  // 连接，此前出了等式）。cat 的维号直接 Ceval、不标结构参数（typeCatCall，NFBuiltinCall.mo:1228-1231；EFQ840 / EFQ843，此前 P 标了
+  // final）。期望 = omc 1.25.0 实跑（2026-10-18，探针 pk-p40 EFQ1074 / EFQ1103 / EFQ1091 / EFQ2924 / EFQ840 / EFQ843）。
+  YMC_CHECK_EQ(flatten_src("model EFQ1074\n  Real y = ({4, 5, 6})[P] * time;\n"
+                           "  parameter Integer P = 2 annotation(Evaluate = false);\nend EFQ1074;\n"),
+               std::string("class EFQ1074\n  Real y = {4.0, 5.0, 6.0}[P] * time;\n  parameter Integer P = 2;\n"
+                           "end EFQ1074;\n"));
+  YMC_CHECK_EQ(flatten_src("model EFQ1103\n  Real y = ({4, 5, 6})[P[2]] * time;\n"
+                           "  parameter Integer P[2] = {1, 2} annotation(Evaluate = false);\nend EFQ1103;\n"),
+               std::string("class EFQ1103\n  Real y = {4.0, 5.0, 6.0}[P[2]] * time;\n  parameter Integer P[1] = 1;\n"
+                           "  parameter Integer P[2] = 2;\nend EFQ1103;\n"));
+  YMC_CHECK_EQ(flatten_src("model EFQ1091\n  Real y = ({4, 5, 6})[P] * time;\n"
+                           "  parameter Integer Q = P annotation(Evaluate = true);\n"
+                           "  parameter Integer P = 2 annotation(Evaluate = false);\nend EFQ1091;\n"),
+               std::string("class EFQ1091\n  Real y = 5.0 * time;\n  final parameter Integer Q = 2;\n"
+                           "  final parameter Integer P = 2;\nend EFQ1091;\n"));
+  YMC_CHECK_EQ(flatten_src("connector EFQ2924C\n  Real e;\n  flow Real f;\n"
+                           "  parameter Integer Q = P annotation(Evaluate = true);\n"
+                           "  parameter Integer P = 2 annotation(Evaluate = false);\nend EFQ2924C;\nmodel EFQ2924\n"
+                           "  EFQ2924C a, b;\nequation\n  connect(a, b);\nend EFQ2924;\n"),
+               std::string("class EFQ2924\n  Real a.e;\n  Real a.f;\n  final parameter Integer a.Q = 2;\n"
+                           "  final parameter Integer a.P = 2;\n  Real b.e;\n  Real b.f;\n"
+                           "  final parameter Integer b.Q = 2;\n  final parameter Integer b.P = 2;\nequation\n"
+                           "  a.e = b.e;\n  -(a.f + b.f) = 0.0;\n  a.f = 0.0;\n  b.f = 0.0;\nend EFQ2924;\n"));
+  YMC_CHECK_EQ(flatten_src("model EFQ840\n  Real y[4] = cat(P - 1, {1, 2}, {3, 4}) * time;\n  parameter Integer P = 2;\n"
+                           "end EFQ840;\n"),
+               std::string("class EFQ840\n  Real y[1];\n  Real y[2];\n  Real y[3];\n  Real y[4];\n"
+                           "  parameter Integer P = 2;\nequation\n  y = {time, 2.0 * time, 3.0 * time, 4.0 * time};\n"
+                           "end EFQ840;\n"));
+  YMC_CHECK_EQ(flatten_src("model EFQ843\n  Real y[4] = cat(P - 1, {1, 2}, {3, 4}) * time;\n"
+                           "  parameter Integer P(fixed = false) = 2;\nend EFQ843;\n"),
+               std::string("class EFQ843\n  Real y[1];\n  Real y[2];\n  Real y[3];\n  Real y[4];\n"
+                           "  parameter Integer P(fixed = false) = 2;\nequation\n"
+                           "  y = {time, 2.0 * time, 3.0 * time, 4.0 * time};\nend EFQ843;\n"));
+}
+
+YMC_TEST(flatten_evaluate_false_forward_unsupported) {
+  // omc 照留 / 报错、ymc 未做的：不出结果（SKIP）。声明在后的 Evaluate = false 参数作归约范围（EFQ189：omc 照留 `sum(… for i in 1:P)`、
+  // P 不 final，此前折成 `time + 2.0 * time` 静默错）、fill 的维（EFQ751：omc 报 "not an evaluable parameter expression"，此前照出）；
+  // 子实例里经绑定链读到的（EFQ26 / EFQ1097：S 里 `P = E`、E 带 Evaluate = false → omc `Real[a.E] x` / `{…}[a.E]`，此前顺链求值）；
+  // 留着的 size 维号里的参数成了结构参数（EFQ723：omc 定型时求成 `3.0 * time`，此前代成 `size(x, 2)`）；fill 维读到 fixed = false
+  // 的参数（EFQ756：omc 照留 `fill(time, P)`，此前求值标 final）；连接器里绑定读到 Evaluate = false 参数的参数（EFQ2925：omc 随绑定
+  // 降成 NON_STRUCTURAL、出等式，此前出断言）。omc 1.25.0 实跑（2026-10-18，探针 pk-p40）。
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           {"model EFQ189\n  Real y = sum(i * time for i in 1:P);\n"
+            "  parameter Integer P = 2 annotation(Evaluate = false);\nend EFQ189;\n", "reduction range"},
+           {"model EFQ751\n  Real y[2] = fill(time, P);\n  parameter Integer P = 2 annotation(Evaluate = false);\n"
+            "end EFQ751;\n", "non-constant fill dimension"},
+           {"model EFQ26S\n  parameter Integer P = E;\n  parameter Integer E = 2 annotation(Evaluate = false);\n"
+            "end EFQ26S;\nmodel EFQ26\n  EFQ26S a;\n  Real x[a.P];\nend EFQ26;\n", "non-literal array dimension"},
+           {"model EFQ1097S\n  parameter Integer P = E;\n  parameter Integer E = 2 annotation(Evaluate = false);\n"
+            "end EFQ1097S;\nmodel EFQ1097\n  Real y = ({4, 5, 6})[a.P] * time;\n  EFQ1097S a;\nend EFQ1097;\n",
+            "parameter in symbolic subscript"},
+           {"model EFQ723\n  Real x[2, 3];\n  Real y = size(x, P) * time;\n"
+            "  parameter Integer P = 2 annotation(Evaluate = true);\nend EFQ723;\n", "size index parameter made structural"},
+           {"model EFQ756\n  Real y[2] = fill(time, P);\n  parameter Integer P(fixed = false) = 2;\nend EFQ756;\n",
+            "fill dimension not fixed"},
+           {"connector EFQ2925C\n  Real e;\n  flow Real f;\n  parameter Integer P = 2 annotation(Evaluate = false);\n"
+            "  parameter Integer Q = P annotation(Evaluate = true);\nend EFQ2925C;\nmodel EFQ2925\n  EFQ2925C a, b;\n"
+            "equation\n  connect(a, b);\nend EFQ2925;\n", "connected parameter bound to Evaluate = false parameter"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
+YMC_TEST(flatten_pre_change_enum_literal) {
+  // pre / change 的实参是书写的枚举字面量：定型成 ENUM_LITERAL、不是 cref，omc 报 "First argument to pre … must be a variable"
+  //（typePreChangeCall 的 isCref，NFBuiltinCall.mo:575-579 v1.25.0；PVQ1 / PVQ34，此前折成 `E.a` / 照出）。值是枚举字面量的常量
+  // 引用照收、求成字面量（PVQ12）。omc 1.25.0 实跑（2026-10-18，探针 pk-p40 PVQ1 / PVQ34 / PVQ12）。
+  for (const char* src : {"type PVQ1E = enumeration(a, b);\nmodel PVQ1\n  PVQ1E z;\nequation\n"
+                          "  z = pre(PVQ1E.a);\nend PVQ1;\n",
+                          "type PVQ34E = enumeration(a, b);\nmodel PVQ34\n  Boolean b;\nequation\n"
+                          "  b = change(PVQ34E.a);\nend PVQ34;\n"}) {
+    bool uns = false;
+    const std::string out = flatten_src(src, &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, std::string("<unsupported:pre/change argument must be a variable>"));
+  }
+  YMC_CHECK_EQ(flatten_src("type PVQ12E = enumeration(a, b);\nmodel PVQ12\n  constant PVQ12E c = PVQ12E.b;\n  PVQ12E z;\n"
+                           "equation\n  z = pre(c);\nend PVQ12;\n"),
+               std::string("class PVQ12\n  constant enumeration(a, b) c = PVQ12E.b;\n  enumeration(a, b) z;\nequation\n"
+                           "  z = PVQ12E.b;\nend PVQ12;\n"));
 }
 
 YMC_TEST_MAIN

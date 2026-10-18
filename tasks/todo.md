@@ -2689,10 +2689,27 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       探针 pk-p39（253；PXS）——基线上 FAIL 120 / ACCEPTS-INVALID 8，现 PASS 182 / SKIP 48 / BOTH-REJECT 23；旧组 md-m4 SKIP→PASS 1；
       单测 +5。slice 703 例 FAIL 0（oracle=live 不一致 0）；scodeinst 664、MSL 490（均不变）；testsuite 1838→1839（arrays/Array9）/ FAIL 0；
       探针 11839→12092；单测 504→509。
-- [ ] (67f 候选) 已有的 ACCEPTS-INVALID（67e 调查时发现）：`pre(E.a)`（枚举字面量）——omc 报 "must be a variable"（NFBuiltinCall.mo
+- [x] (67f 候选，67f 已修) 已有的 ACCEPTS-INVALID（67e 调查时发现）：`pre(E.a)`（枚举字面量）——omc 报 "must be a variable"（NFBuiltinCall.mo
       :573-579），ymc 折成 `E.a`。复现 `$S/pkr67e/prebugs/PE1.mo`。另：frame_value 按发射顺序（typed_keys_）判 Evaluate = false 参数
       是不是 NON_STRUCTURAL，定型期的向前引用会判错——67e 只在下标里挡住了，维 / 范围 / 条件等定型期求值处可能照旧把声明在后的
       Evaluate = false 参数当结构参数求值（未探）。
+- [x] (67f) 声明在后的 Evaluate = false 参数与 pre / change 的枚举字面量（2026-10-18，纠错桶，无 MSL 目标）：
+      (A) omc 先对整个模型 updateImplicitVariability（NFInst.mo:193，:3847-4025）：按声明序深度优先访问组件，Evaluate = false 的参数只在访问
+      它那一刻、且变率还是 PARAMETER 时降成 NON_STRUCTURAL（:3909-3912）；访问前被实例化期的标记（Evaluate = true 连带 :3916、维 :3922、
+      绑定里构造的范围 :3927、条件 :3932、fixed / stateSelect :3947、connect 下标 :3984-3985）标成结构参数的不降。之后才定型（:197）——
+      定型 / 压平期它们都已是 NON_STRUCTURAL（预标的除外），不论声明先后，Ceval 不求（NFCeval.mo:311-314）。ymc 的 frame_value 此前按
+      发射序判，声明在后的在归约 / product / linspace / identity / 子实例修饰里被当结构参数折了（静默错），fill / zeros / ones / cat /
+      for 范围里照出（omc 报错）；经子实例的链 `a.P`（P = E）约 35 种语境同错。现：实例化期语境按声明序判访问，其余一律当已访问、未预标
+      即 NON_STRUCTURAL；声明在后的预标靠第一遍记录、发射时核对（check_evf_visit），对不上走第二遍、第二遍还对不上 → SKIP。
+      顺带：cat 的维求值不标结构参数（typeCatCall :1228-1231，读到非字面量绑定的参数 omc 把求得的值存回 → SKIP）；fill 维读到 fixed =
+      false（typeFillCall2 :973-977 → isExpressionNotFixed）→ SKIP；留着的 `size(x, k)` 里 k 成了结构参数（EvalConstants 不代 SIZE 的
+      下标，NFEvalConstants.mo:227-240）→ SKIP；连接集首是读 Evaluate = false 参数的参数（依定型序级联）→ SKIP。
+      (B) pre / change 的实参是书写的枚举字面量：定型后是 ENUM_LITERAL 不是 cref，omc 报 "must be a variable"（typePreChangeCall
+      NFBuiltinCall.mo:575-579）→ 照拒（此前折成 `E.a`，18 种写法 ACCEPTS-INVALID）。
+      照旧 SKIP：omc 留的符号形态（`fill(time, P)`、`sum(… for i in 1:P)`、`Real[P] x`、经未定型参数的链里代 E 的引用）。
+      探针 pk-p40（2101；EFQ / PVQ）——基线上 FAIL 102 / ACCEPTS-INVALID 84，现 PASS 1028 / SKIP 650 / BOTH-REJECT 423（无 PASS→别的）；
+      旧组 pk-p39 SKIP→PASS 1；单测 +3、改 1（PXS191 的 SKIP 原因）。slice 703 例 FAIL 0（oracle=live 不一致 0）；scodeinst 664、testsuite
+      1839、MSL 490（均不变）/ FAIL 0；探针 12092→14193；单测 509→512。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

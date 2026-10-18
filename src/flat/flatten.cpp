@@ -287,6 +287,7 @@ class Flattener {
     // 连接解析后才能求 inStream/actualStream 与 cardinality（evaluateConnectionOperators，NFFlatten.mo:2565-2576），
     // 随后按 SimplifyModel 折叠。
     evaluate_stream_ops();
+    check_late_struct();         // 末尾才判得清的结构参数用法（留着的 size 维号、fill 维实参的固定性）
     apply_structural_params();   // 连接算子求值中结构化的参数：final + 属性折叠（NFEvalConstants 效果，受限）
     apply_structural_records();  // 结构记录参数的整体引用代成记录式（见 struct_records_）
     simplify_model();            // cardinality 求值 + 方程 / 语句的收尾折叠
@@ -5057,6 +5058,8 @@ class Flattener {
     vsubs.push_back({});
     const std::string vkey = int_key(name, vsubs);
     typed_keys_.insert(vkey);
+    if (own_eval == std::optional<bool>(false) && var_min(var_floor, I_.comps[cid].attributes.variability) == SVariability::Param)
+      check_evf_visit(vkey);
     if (empty_outer) empty_field_keys_.insert(vkey);
     if (ctx.unbound_fields) moved_field_keys_.insert(vkey);
     const bool struct_early = eval_true || final_params.count(I_.comps[cid].def.raw) > 0;   // 实例化期就是结构参数
@@ -5114,8 +5117,10 @@ class Flattener {
     }
     {   // isExpressionNotFixed 要的信息（见 key_not_fixed）
       ParamInfo pi;
+      // 访问之前被实例化期的标记标过的不降级（STRUCTURAL，见 check_evf_visit；EFQ 探针 noflow：连接器里 `q = allow
+      // (Evaluate = true)` 在 `allow (Evaluate = false)` 之前 → allow 照结构参数连接、isNoFlow 求值，此前出了 `true = true`）。
       pi.nonstruct = own_eval == std::optional<bool>(false) &&
-                     var_min(var_floor, I_.comps[cid].attributes.variability) == SVariability::Param;
+                     var_min(var_floor, I_.comps[cid].attributes.variability) == SVariability::Param && !early_structural(vkey);
       pi.origin = static_cast<std::uint8_t>(origin);
       pi.rec_bind = ctx.rec_bind;
       pi.by_cref = origin == 1 && derived_cref_mods_.count(mb->mod.raw) > 0;
@@ -5557,12 +5562,15 @@ class Flattener {
     bool colon_dim = false;
     for (Id<Exp> d : cel.attr.dims) colon_dim = colon_dim || I_.absyn.exps[d].kind == ExpKind::Colon;
     for (Id<Exp> d : cel.type.dims) colon_dim = colon_dim || I_.absyn.exps[d].kind == ExpKind::Colon;
-    const PhaseScope bind_phase(*this, colon_dim ? MarkPhase::Early : MarkPhase::Binding);
+    const PhaseScope bind_phase(*this, colon_dim ? MarkPhase::Early : MarkPhase::Binding, /*typing=*/colon_dim);
     ++bind_clock_;
     {
       PSubs ws = psubs;
       ws.resize(name.size());   // 末段（叶）无下标 = 整体键
       typed_keys_.insert(int_key(name, ws));
+      if (evaluate_annotation(I_.comps[cid].def) == std::optional<bool>(false) &&
+          var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Param)
+        check_evf_visit(int_key(name, ws));
     }
     // 外层记录整体绑定挪成方程后的数组字段：同标量字段——无绑定，parameter 元素 fixed = false（rp62r 探针 FD4
     // `r.w[1](quantity = "AngularVelocity", unit = "rad/s", fixed = false)`；MSL FixedRotation 的 `R_rel_inv`）。
@@ -7716,6 +7724,7 @@ class Flattener {
       std::vector<std::string> fields;    // Ctor：各叶字段 key（实参拆到了它们的绑定上）
     };
     std::unordered_map<std::string, RecVisit> rec_visit;
+    std::unordered_map<std::string, bool> evf_marked;   // Evaluate = false 参数访问时被实例化期标记标过没有（check_evf_visit）
   };
   void set_carry(PassCarry c) { carry_ = std::move(c); }
   PassCarry take_carry() { return std::move(pass_out_); }
@@ -7726,6 +7735,7 @@ class Flattener {
   // 第一遍末尾（全部变量已发射，查得全）给第二遍备好向前引用要的东西。
   void snapshot_carry() {
     pass_out_.vals = param_values();
+    pass_out_.evf_marked = evf_marked_;
     for (const auto& [k, b] : param_exprs_) {
       std::vector<std::string>& d = pass_out_.deps[k];
       auto walk = [&](auto& self, Id<Expr> id) -> void {
@@ -7825,8 +7835,11 @@ class Flattener {
     for (const auto& [k, v] : param_lits_) out.emplace(k, v);
     std::vector<std::string> keys;
     for (const auto& kv : param_exprs_) keys.push_back(kv.first);
+    // 带去第二遍的是值本身：读它的语境是不是结构的、顺链有没有 NON_STRUCTURAL 参数，第二遍在读处按语境判（见 const_lookup_val）。
+    const bool saved_raw = std::exchange(evf_raw_, true);
     for (const std::string& k : keys)
       if (std::optional<CVal> v = flat_param_value(k, 0)) out.emplace(k, *v);
+    evf_raw_ = saved_raw;
     return out;
   }
   // 用户定义的枚举字面量 `E.b` / `P.E.c` / `Modelica.Blocks.Types.Init.NoInit` 的值（求值器语境，只有 SCode 作用域）：类型名
@@ -9612,24 +9625,23 @@ class Flattener {
     isubs.resize(F.prefix.size());
     isubs.push_back({});
     const std::string key = int_key(names, isubs);
-    // `Evaluate = false` 的参数是 NON_STRUCTURAL_PARAMETER（updateImplicitVariability，NFInst.mo:3906-3912 v1.25.0），Ceval
+    // `Evaluate = false` 的参数是 NON_STRUCTURAL_PARAMETER（updateImplicitVariabilityComp，NFInst.mo:3909-3912 v1.25.0），Ceval
     // 不求它（evalCref 的守卫，NFCeval.mo:311-314）：维留成 `Real[p] z`、下标留 `y[p]`，for 方程范围 / 条件组件 / fixed
-    // 报错（ND 探针 p1；此前照常求值 → `Real z[1]; Real z[2]` 与 `final parameter`）。降级只发生在访问它（发射）那一刻、
-    // 且那时变率还是 PARAMETER：还没发射的（声明在前的 Evaluate 参数判成结构参数后连带求值，EV 探针 u10）、发射前已被实例化期
-    // 标成结构参数的，照常求。
-    if (var == SVariability::Param && evaluate_annotation(I_.comps[cid].def) == std::optional<bool>(false) &&
-        (typed_keys_.count(key) || prescan_visited_.count(key)) && !early_structural(key)) {
-      // 调用方据此认出"非结构参数"（if 方程原样保留条件）；预扫的 used 是结构参数集（final_params），不记。
-      if (used && !in_prescan_) used->insert(I_.comps[cid].def.raw);
-      if (eval_probe_) eval_probe_->nonstruct = true;
-      r.kind = FrameHit::Fail;
-      return r;
+    // 报错（ND 探针 p1；此前照常求值 → `Real z[1]; Real z[2]` 与 `final parameter`）。降级只发生在访问它那一刻、且那时变率还是
+    // PARAMETER：访问之前被实例化期的标记标成结构参数的（early_structural）照常求。访问按声明序，只在实例化期的标记语境里有先后
+    //（inst_ctx：还没访问的照常求、标结构参数——声明在前的 Evaluate 参数判成结构参数后连带求值，EV 探针 u10）；定型 / 压平期
+    // omc 已访问完全部组件（NFInst.mo:193-197），声明在后的也已降级（EFQ 探针：`Real y = sum(i * time for i in 1:P)`、P 声明在后
+    // → omc 照留 `1:P`、P 不 final，此前当结构参数折了；`fill(time, P)` omc 报错，此前照出）——还没发射的见 evf_premarked。
+    if (var == SVariability::Param && evaluate_annotation(I_.comps[cid].def) == std::optional<bool>(false)) {
+      const bool visited = typed_keys_.count(key) || prescan_visited_.count(key);
+      if (inst_ctx() ? visited && !early_structural(key) : !evf_premarked(key, visited)) {
+        // 调用方据此认出"非结构参数"（if 方程原样保留条件）；预扫的 used 是结构参数集（final_params），不记。
+        if (used && !in_prescan_) used->insert(I_.comps[cid].def.raw);
+        if (eval_probe_) eval_probe_->nonstruct = true;
+        r.kind = FrameHit::Fail;
+        return r;
+      }
     }
-    // 还没发射的照常求（见上）。定型期（绑定 / 方程段）的 omc 已访问完全部组件、它此时是 NON_STRUCTURAL，除非之前被连带标了
-    // 结构——ymc 的 Evaluate = true 连带在发射时才做，此刻定不了：只给探针记下，由调用方取舍（param_subscript）。
-    if (eval_probe_ && var == SVariability::Param && evaluate_annotation(I_.comps[cid].def) == std::optional<bool>(false) &&
-        !early_structural(key))
-      eval_probe_->fwd_nonstruct = true;
     const bool arr = !cel.attr.dims.empty() || !cel.type.dims.empty();
     const TypeKind tk = I_.comps[cid].ty.kind;
     // 枚举参数也走这里：求得出值的只有内建枚举（`parameter StateSelect s = StateSelect.default`，builtin_enum_value）；用户
@@ -11113,6 +11125,7 @@ class Flattener {
         bool plain = ae.kind == ExprKind::Cref && result_.model.exprs[k].ty.kind == TypeKind::Integer;
         for (const ExprCrefPart& cp : ae.cref.parts) plain = plain && cp.subscripts.empty();
         if (!plain) { set_unsupported("size index not constant"); return lit_int(0); }
+        if (!fn_scope_) size_idx_exprs_.push_back(k);   // 维号里的参数后来成了结构参数的另判（check_late_struct）
         return size_expr({a, k}, Type::integer());
       }
       const std::int64_t ki = result_.model.exprs[k].ival;
@@ -16538,6 +16551,12 @@ class Flattener {
         if (const auto fw = carry_.vals.find(key);
             fw != carry_.vals.end() && !typed_keys_.count(key) &&
             (mark_phase_ == MarkPhase::Late || forward_chain(key, chain, 0))) {
+          // 链上有 NON_STRUCTURAL 参数：Ceval 不求（见 evf_nonstruct）。它还没定型——omc 照标它结构参数、代进链上那个参数的引用
+          //（EFQ 探针 SCa `{…}[a.E]`），记进探针的 keys 让调用方认出"经未定型参数读到的"（见 param_subscript）。
+          if (fwd_evf_nonstruct(key, 0)) {
+            if (eval_probe_) eval_probe_->keys.push_back({key, false});
+            return std::nullopt;
+          }
           if (!use_forward(key)) return std::nullopt;
           if (dep_mark_) {
             record_structural(key);
@@ -16593,6 +16612,7 @@ class Flattener {
   // 的 Ceval 顺绑定求值）。引用到变量 / 函数局部 / 求不出、成环 → nullopt。只出标量值。
   std::optional<CVal> flat_param_value(const std::string& key, int depth) {
     if (depth > 50) return std::nullopt;
+    if (evf_nonstruct(key)) return std::nullopt;   // NON_STRUCTURAL 的 Evaluate = false 参数 Ceval 不求（见 evf_nonstruct）
     if (auto it = const_vals_.find(key); it != const_vals_.end()) return is_arr(it->second) ? std::nullopt : std::optional<CVal>(it->second);
     if (auto it = param_lits_.find(key); it != param_lits_.end()) return it->second;
     const auto pe = param_exprs_.find(key);
@@ -16600,6 +16620,10 @@ class Flattener {
       // 顺绑定链走到的（不打标记，见 const_lookup_val）不限阶段：定型期（Evaluate / 维）从记录字段一路走到声明在后的参数，
       // omc 同样求得出（EV 探针 e12）。
       if (const auto fw = carry_.vals.find(key); fw != carry_.vals.end() && !typed_keys_.count(key)) {
+        if (fwd_evf_nonstruct(key, 0)) {   // 第一遍的值顺的链上有 NON_STRUCTURAL 参数（见 param_values、const_lookup_val）
+          if (eval_probe_) eval_probe_->keys.push_back({key, false});
+          return std::nullopt;
+        }
         if (fn_default_eval_) return carry_.deep.count(key) ? std::nullopt : std::optional<CVal>(fw->second);   // 见 fn_eval_default
         if (!use_forward(key)) return std::nullopt;
         return fw->second;
@@ -18011,7 +18035,11 @@ class Flattener {
         if (plain && enum_type_path(tparts, enclosing, prefix, ed)) {
           if (ed) {
             for (const SEnumItem& it : ed->enum_items)
-              if (it.literal == c.parts.back().name) return make_enum_lit(c, enclosing, prefix);
+              if (it.literal == c.parts.back().name) {
+                const Id<Expr> el = make_enum_lit(c, enclosing, prefix);
+                enum_cref_lits_.insert(el.raw);   // 书写的就是枚举字面量、不是常量引用（pre / change 的实参，见 call）
+                return el;
+              }
           } else if (const Id<Expr> lv = assertion_level_lit(c); lv.is_valid()) {
             return lv;
           }
@@ -21851,7 +21879,23 @@ class Flattener {
         // n 不 final（AP ff 探针 FF2 / FF3 / FF9、FuncBuiltinFill3）。保留 fill 的数组方程未做 → SKIP；引用的参数在此之前
         // 已是结构参数的照常求值。
         if (iter_blocks_structural(args[i], enclosing, prefix)) { set_unsupported("fill dimension depends on iterator"); return lit_int(0); }
+        // 维实参不固定（Structural.isExpressionNotFixed：读到带 fixed 属性、又不是字面量 true 的参数，NFStructural.mo:160-224 /
+        // Component.isFixed NFComponent.mo:896-922 v1.25.0）：omc 不标记、不求值，fill 照留（typeFillCall2，NFBuiltinCall.mo:973-977；
+        // EFQ 探针 Nfa：`fill(time, P)`、`P(fixed = false) = 2` → omc `y = fill(time, P)`、P 不 final，此前求值标了 final）。保留 fill
+        // 的形态未做 → SKIP。此刻已是结构参数的固定（变率 ≤ STRUCTURAL，:182-183；dimb 探针 `Real x[P] = fill(time, P)`、
+        // `P(fixed = false)`：维先把 P 标了结构）；其余读到的（含绑定链上的）记进 fill_dim_keys_，全部发射后再查（声明在后的此刻
+        // 还没有属性，见 check_late_struct）。
+        EvalProbe probe;
+        EvalProbe* const saved_probe = std::exchange(eval_probe_, &probe);
+        const StructSnap before = struct_snap();
         const std::optional<CVal> v = eval_scode(args[i], scope, 0, /*allow_param=*/true, nullptr);
+        eval_probe_ = saved_probe;
+        if (saved_probe) {   // 外层的探针照样要知道读到了什么
+          saved_probe->keys.insert(saved_probe->keys.end(), probe.keys.begin(), probe.keys.end());
+          saved_probe->nonstruct = saved_probe->nonstruct || probe.nonstruct;
+        }
+        for (const auto& kk : probe.keys)
+          if (!structural_at(before, kk.first, kk.second)) fill_dim_keys_.push_back(kk.first);
         if (!v || v->k != CVal::K::Int) { set_unsupported("non-constant fill dimension"); return lit_int(0); }
         if (v->i < 0) { set_unsupported("negative fill dimension"); return lit_int(0); }
         dims.push_back(v->i);   // 0 → 空数组字面量（类型带全维，EmptyArray1 `ones(size(x, 1))`、Array13 `fill(0.0, 0, 2)`）
@@ -21882,7 +21926,22 @@ class Flattener {
       // cat(k, A1, A2, …)（MLS §10.4.2）：维已知时展开成数组字面量（CT1 探针：`cat(1, x, {7, 8})` → `{x[1], x[2], x[3], 7.0, 8.0}`、
       // `cat(2, {{1}, {2}}, {{3, 4}, {5, 6}})` → `{{1.0, 3.0, 4.0}, {2.0, 5.0, 6.0}}`）。k 须常量整数 1..秩；各实参同秩、除第
       // k 维外同形（否则 omc 报错 → SKIP）；有 Real 实参则元素提 Real。
-      const std::optional<CVal> kv = eval_scode(args[0], scope, 0, /*allow_param=*/true, nullptr);
+      // k 直接 Ceval，不标结构参数（typeCatCall，NFBuiltinCall.mo:1228-1231 v1.25.0：变率 > PARAMETER 报错，否则 evalExp，没有
+      // Structural.markExp；EFQ 探针 cat Na / Nb：`cat(P - 1, …)` 的 P 照打 `parameter Integer P = 2`，此前标了 final）。求值把读到的
+      // 参数的绑定存回成值（evalComponentBinding，NFCeval.mo:382-387）——绑定不是字面量的那就打值了，未做 → 记进 cat_dim_keys_，
+      // 全部发射后查（check_late_struct）。
+      std::optional<CVal> kv;
+      {
+        EvalProbe probe;
+        EvalProbe* const saved_probe = std::exchange(eval_probe_, &probe);
+        const StructSnap snap = struct_snap();
+        CvTrial cv_trial(*this);
+        kv = eval_scode(args[0], scope, 0, /*allow_param=*/true, nullptr);
+        eval_probe_ = saved_probe;
+        struct_restore(snap);
+        cv_trial.rollback();
+        for (const auto& kk : probe.keys) cat_dim_keys_.push_back(kk.first);
+      }
       if (!kv || kv->k != CVal::K::Int) { set_unsupported("non-constant cat dimension"); return lit_int(0); }
       std::vector<Id<Expr>> parts;
       std::vector<std::vector<std::int64_t>> shapes;
@@ -22722,7 +22781,13 @@ class Flattener {
     }
     if (supported && !fn_scope_ && args.size() == 1 && (builtin_name == "pre" || builtin_name == "change")) {
       const Expr& ax = result_.model.exprs[args[0]];
-      if (is_literal(args[0]) && written_cref(e.args[0])) {
+      if (enum_cref_lits_.count(args[0].raw)) {
+        // 书写的枚举字面量 `E.a`：定型成 ENUM_LITERAL、不是 cref，omc 报 "First argument to pre … must be a variable"
+        //（typePreChangeCall 的 isCref，NFBuiltinCall.mo:575-579 v1.25.0；PVQ 探针：方程 / when / 算法 / 绑定 / 初始方程里的
+        // `pre(E.a)`、`change(E.a)`，此前折成 `E.a`）。常量引用 `pre(c)`（c 的值是枚举字面量）照收（下一支）。
+        set_unsupported("pre/change argument must be a variable");
+        supported = false;
+      } else if (is_literal(args[0]) && written_cref(e.args[0])) {
         // 常量引用（已内联成字面量）：pre(c) 求值成该常量（Ceval 的 pre 支取实参，NFCeval.mo:1933 v1.25.0）；change 没有求值
         // 支 → 留调用、实参是内联后的字面量（`change(true)`，ES 探针 e9）。
         if (builtin_name == "pre") return args[0];
@@ -23077,9 +23142,10 @@ class Flattener {
   // 的绑定读到的同样——checkComponentBindingVariability 把那个参数也降成 NON_STRUCTURAL，NFTyping.mo:1153-1159）/ 参数只在 external
   // 调用的实参里（调用降成 NON_STRUCTURAL，NFCall.mo:399-402）。其余求不出的 omc 照标 final、下标留符号或报错，不跟 →
   // set_unsupported：迭代变量 + 参数（`{…}[i + 1]`）、fixed = false、不纯调用（`x[f(1)]`，调用不求值）、external 与别的参数混着、
-  // 经未定型参数的绑定读到 Evaluate = false 的（evalBinaryAdd 失败报错）、读到还没发射的 Evaluate = false 参数（见 fwd_nonstruct）。
-  // PXS 探针（pk-p39）。ponytail: "只标 final、下标留符号"的那几种（fixed = false、迭代变量 + 参数、不纯调用）要能标记却不求值的
-  // 结构参数（apply_structural_params 现只收字面量绑定、引用处一律代值），做了再放开。
+  // 经未定型参数的绑定读到 Evaluate = false 的（evalBinaryAdd 失败报错）。声明在后的 Evaluate = false 参数同已访问的（omc 定型时
+  // 已访问完全部组件，见 frame_value / evf_premarked）。PXS 探针（pk-p39）、EFQ 探针（pk-p40）。ponytail: "只标 final、下标留
+  // 符号"的那几种（fixed = false、迭代变量 + 参数、不纯调用）要能标记却不求值的结构参数（apply_structural_params 现只收字面量
+  // 绑定、引用处一律代值），做了再放开。
   std::optional<CVal> param_subscript(Id<Exp> sx, std::int64_t dim, const ScodeScope& sc, NodeId enclosing) {
     if (!absyn_refs_param(sx, enclosing, /*skip_size=*/true) ||
         absyn_refs_param(sx, enclosing, /*skip_size=*/true, /*runtime=*/true))
@@ -23129,14 +23195,14 @@ class Flattener {
     forward_miss_ = forward_miss_ || saved_miss;
     eval_probe_ = saved_probe;
     // NON_STRUCTURAL：只认读到的参数都已定型（经未定型参数的绑定读到的，omc 照标那个参数、随后求值失败报错）。
-    bool keep = probe.nonstruct && !probe.fwd_nonstruct;
+    bool keep = probe.nonstruct;
     for (const auto& kv : probe.keys) keep = keep && typed_keys_.count(kv.first) > 0;
     if (keep) {
       struct_restore(snap);
       cv_trial.rollback();
       return std::nullopt;
     }
-    if (v && !probe.nonstruct && !probe.fwd_nonstruct) return v;
+    if (v && !probe.nonstruct) return v;
     if (!v && lenient_ && fwd) {   // 第一遍：读到还没发射的（向前引用）——先照符号放过，第二遍带着第一遍的值再求（PXS121）
       need_second_pass_ = true;
       return std::nullopt;
@@ -24464,7 +24530,6 @@ class Flattener {
   struct EvalProbe {
     std::vector<std::pair<std::string, bool>> keys;   // (实例 key, 是否数组参数)
     bool nonstruct = false;
-    bool fwd_nonstruct = false;   // 读到还没发射、照常求了的 Evaluate = false 参数（见 frame_value）
   };
   // 参数（实例 key）此刻已是结构参数；数组参数的标记打在各元素的 key 上（`a[1].`，见 frame_value），标记是组件级的、有一个
   // 就算。
@@ -27001,6 +27066,15 @@ class Flattener {
         bool nonstruct_head = false;
         if (hv && hv->var_kind == FlatVarKind::Parameter)
           if (const auto pit = param_info_.find(head.name_key); pit != param_info_.end()) nonstruct_head = pit->second.nonstruct;
+        // 集首参数的绑定读到 NON_STRUCTURAL 参数：定型时随绑定降成 NON_STRUCTURAL（checkComponentBindingVariability，NFTyping.mo:
+        // 1153-1159 v1.25.0；EFQ 探针 noflow：连接器里 `allow (Evaluate = false)` 在前、`q = allow (Evaluate = true)` → omc 出
+        // `v.ports[1].q = u2.ports[1].q` 等式，此前出断言）。降不降还看定型的先后（绑定里的参数自己是否已随链降级、此前是否已被
+        // 标成结构参数），未细分 → SKIP。
+        if (hv && hv->var_kind == FlatVarKind::Parameter && !nonstruct_head && hv->binding.is_valid() &&
+            binding_reads_nonstruct(hv->binding, 0)) {
+          set_unsupported("connected parameter bound to Evaluate = false parameter");
+          return;
+        }
         const bool as_assert =
             hv && (hv->var_kind == FlatVarKind::Parameter || hv->var_kind == FlatVarKind::Constant) && !nonstruct_head;
         for (std::size_t k = 1; k < s.size(); ++k) {
@@ -27450,15 +27524,29 @@ class Flattener {
   //   Late    方程 / 算法段的定型（在全部绑定之后）与压平期（if 表达式选支 NFFlatten.mo:1736、if 方程条件 :1984、for 范围
   //           :2086、stream 属性 NFConnectEquations.mo:960），时刻 INT_MAX。
   // 时刻用在两处：别名连带（apply_structural_params）与依赖连带（frame_value）。同一参数多次标记取最早的。
+  // Early 里只有 `:` 维的那一处是定型期（typing = true）：Evaluate = false 参数的访问序只在实例化期的标记里有先后（见 inst_ctx）。
   enum class MarkPhase : std::uint8_t { Early, Binding, Late };
   struct PhaseScope {
     MarkPhase& ref;
     MarkPhase saved;
-    PhaseScope(Flattener& f, MarkPhase p) : ref(f.mark_phase_), saved(f.mark_phase_) { ref = p; }
-    ~PhaseScope() { ref = saved; }
+    bool& tref;
+    bool tsaved;
+    PhaseScope(Flattener& f, MarkPhase p, bool typing = false)
+        : ref(f.mark_phase_), saved(f.mark_phase_), tref(f.early_typing_), tsaved(f.early_typing_) {
+      ref = p;
+      tref = typing;
+    }
+    ~PhaseScope() {
+      ref = saved;
+      tref = tsaved;
+    }
     PhaseScope(const PhaseScope&) = delete;
     PhaseScope& operator=(const PhaseScope&) = delete;
   };
+  // 当前求值是不是实例化期的标记语境（updateImplicitVariability，NFInst.mo:3847-4025 v1.25.0：维、条件、fixed / stateSelect、
+  // Evaluate = true 的连带、绑定里数组构造的范围、connect 的下标）——那时组件按声明序逐个访问，Evaluate = false 的参数访问到才降级
+  //（见 frame_value）。其余（定型 / 压平期）都在全部组件访问完之后（NFInst.mo:193-197）。
+  bool inst_ctx() const { return mark_phase_ == MarkPhase::Early && !early_typing_; }
   int mark_time() const {
     return mark_phase_ == MarkPhase::Early ? 0 : mark_phase_ == MarkPhase::Binding ? bind_clock_ : INT_MAX;
   }
@@ -27581,6 +27669,60 @@ class Flattener {
   bool early_structural(const std::string& k) const {   // 实例化期（时刻 0）就被标成结构参数
     const auto st = structural_set_.find(k);
     return st != structural_set_.end() && st->second == 0;
+  }
+  // 定型 / 压平期读到 Evaluate = false 的参数 k（见 frame_value）：它访问之前有没有被实例化期的标记标成结构参数。已访问（发射过）
+  // 的看 early_structural；还没发射的，从此刻到访问它之间还可能有实例化期的标记（声明在中间的 Evaluate = true 参数的连带、子实例
+  // 的维 / 条件 …）——第二遍取第一遍在它访问时记下的（carry_.evf_marked），第一遍先按此刻的 early_structural，都记进 evf_fwd_，
+  // 发射它时核对（check_evf_visit）。
+  bool evf_premarked(const std::string& k, bool visited) {
+    const bool now = early_structural(k);
+    if (visited || now) return now;
+    const auto it = carry_.evf_marked.find(k);
+    const bool pre = it != carry_.evf_marked.end() && it->second;
+    evf_fwd_.emplace(k, pre);
+    return pre;
+  }
+  // 多段名顺绑定链读到的参数 k（子实例 / 记录里的，flat_param_value）是不是 NON_STRUCTURAL 的 Evaluate = false 参数：同 frame_value
+  // 的判法（Ceval 不求它，evalCref 的守卫 NFCeval.mo:311-314 v1.25.0）。已发射的看 param_info_；还没发射的只有第二遍知道它带不带
+  // Evaluate = false（carry_.evf_marked）。读到了就给探针记下（调用方据此照非结构参数处理或 SKIP，见 param_subscript）。EFQ 探针
+  // SCa / SCb：`S a; Real x[a.P]`、S 里 `P = E; E = 2 (Evaluate = false)` → omc `final parameter Integer a.P = a.E`、`Real[a.E] x`，
+  // 此前顺链把 a.E 当结构参数求了。
+  bool evf_nonstruct(const std::string& k) {
+    if (evf_raw_) return false;
+    const bool visited = typed_keys_.count(k) > 0;
+    bool evf = false;
+    if (visited) {
+      const auto pit = param_info_.find(k);
+      evf = pit != param_info_.end() && pit->second.nonstruct;
+    } else {
+      evf = carry_.evf_marked.count(k) > 0;
+    }
+    if (!evf) return false;
+    const bool ns = inst_ctx() ? visited && !early_structural(k) : !evf_premarked(k, visited);
+    if (ns && eval_probe_) eval_probe_->nonstruct = true;
+    return ns;
+  }
+  // 向前读到的 k（第一遍的值，见 const_lookup_val）与它绑定链上（第一遍记下的依赖 carry_.visit）有没有 NON_STRUCTURAL 的
+  // Evaluate = false 参数（evf_nonstruct；EFQ 探针 SCa：`Real y = x[a.P]; S a;`、S 里 `P = E`、E 带 Evaluate = false）。
+  bool fwd_evf_nonstruct(const std::string& k, int depth) {
+    if (depth > 16) return false;
+    if (evf_nonstruct(k)) return true;
+    const auto vi = carry_.visit.find(k);
+    if (vi == carry_.visit.end()) return false;
+    for (const std::string& d : vi->second.deps)
+      if (fwd_evf_nonstruct(d, depth + 1)) return true;
+    return false;
+  }
+  // 访问（发射）Evaluate = false 的参数 k：此刻有没有被实例化期的标记标过定下它是不是结构参数（updateImplicitVariabilityComp，
+  // NFInst.mo:3909-3912 v1.25.0）。此前向前读到它时按的结论（evf_premarked）对不上——第一遍：第二遍按这里记下的重来；第二遍：
+  // 未做的次序 → SKIP。
+  void check_evf_visit(const std::string& k) {
+    const bool pre = early_structural(k);
+    evf_marked_[k] = pre;
+    const auto it = evf_fwd_.find(k);
+    if (it == evf_fwd_.end() || it->second == pre) return;
+    if (lenient_) need_second_pass_ = true;
+    else set_unsupported("Evaluate = false parameter marked before its visit");
   }
   void untouch(std::size_t n) {   // 撤掉 touched_log_ 第 n 条之后的"发射前被求值"
     while (touched_log_.size() > n) {
@@ -28267,6 +28409,85 @@ class Flattener {
     for (Id<FlatEquation> b : fe.body) if (eq_refs_keys(b, vals)) return true;
     for (Id<FlatEquation> b : fe.else_body) if (eq_refs_keys(b, vals)) return true;
     return false;
+  }
+  // 已发射参数的绑定 b（顺参数绑定链）读不读得到 NON_STRUCTURAL 的 Evaluate = false 参数（param_info_ 的 nonstruct）。
+  bool binding_reads_nonstruct(Id<Expr> b, int depth) {
+    if (!b.is_valid() || depth > 16) return false;
+    const Expr& e = result_.model.exprs[b];
+    if (e.kind == ExprKind::Cref && e.cref.resolved_node != kFnLocal) {
+      const std::string k = expr_cref_key(e.cref);
+      if (const auto pit = param_info_.find(k); pit != param_info_.end() && pit->second.nonstruct) return true;
+      if (const FlatVariable* v = emitted_var(k); v && v->var_kind == FlatVarKind::Parameter && v->binding.is_valid() &&
+                                                   binding_reads_nonstruct(v->binding, depth + 1))
+        return true;
+      for (const ExprCrefPart& cp : e.cref.parts)
+        for (Id<Expr> s : cp.subscripts)
+          if (binding_reads_nonstruct(s, depth + 1)) return true;
+      return false;
+    }
+    for (Id<Expr> a : e.args)
+      if (binding_reads_nonstruct(a, depth + 1)) return true;
+    return binding_reads_nonstruct(e.a, depth + 1) || binding_reads_nonstruct(e.b, depth + 1) ||
+           binding_reads_nonstruct(e.c, depth + 1);
+  }
+  // 全部变量发射之后才判得清的（apply_structural_params 之前）：
+  // - 留着的 `size(a, k)`，k 里的参数后来成了结构参数：omc 定型时 k 的变率已 ≤ STRUCTURAL 就求值成维长（typeSize，NFTyping.mo:
+  //   2508-2521 v1.25.0），否则留着、EvalConstants 只代 k 的子式（SIZE 支 mapFoldShallow，NFEvalConstants.mo:227-240：k 恰是
+  //   参数引用 `size(x, P)` 时 P 照留、只 final）；ymc 末尾一律代值（`size(x, 2)`，EFQ 探针 sizei Ta / Mab、SZ 探针，此前静默错）
+  //   → SKIP。
+  // - fill / zeros / ones 的维实参读到带 fixed 属性（不是字面量 true）的参数：见 model_array_builtin → SKIP。
+  // - cat 的维号读到的参数（不标结构，见 model_array_builtin）：绑定不是字面量、又不是结构参数的，omc 打求得的值 → SKIP。
+  void check_late_struct() {
+    for (Id<Expr> k : size_idx_exprs_) {
+      bool hit = false;
+      auto walk = [&](auto& self, Id<Expr> id) -> void {
+        if (hit || !id.is_valid()) return;
+        const Expr& e = result_.model.exprs[id];
+        if (e.kind == ExprKind::Cref && e.cref.resolved_node != kFnLocal) {
+          const std::string ck = expr_cref_key(e.cref);
+          hit = structural_set_.count(ck) > 0 || struct_bases_.count(ck) > 0;
+          for (const ExprCrefPart& cp : e.cref.parts)
+            for (Id<Expr> s : cp.subscripts) self(self, s);
+          return;
+        }
+        for (Id<Expr> a : e.args) self(self, a);
+        self(self, e.a);
+        self(self, e.b);
+        self(self, e.c);
+      };
+      walk(walk, k);
+      if (hit) { set_unsupported("size index parameter made structural"); return; }
+    }
+    const Symbol fixed = in_.intern("fixed");
+    auto not_fixed_attr = [&](const FlatVariable& v) {   // Component.isFixed：有 fixed 属性就得是字面量 true
+      for (const FlatVarAttr& a : v.attributes) {
+        const Expr& av = result_.model.exprs[a.value];
+        if (a.name == fixed && !(av.kind == ExprKind::BoolLit && av.bval)) return true;
+      }
+      return false;
+    };
+    for (const std::string& k : fill_dim_keys_) {
+      std::vector<std::string> ks{k};
+      if (!emitted_var(k)) ks = array_elem_keys(k);
+      for (const std::string& ek : ks)
+        if (const FlatVariable* v = emitted_var(ek);
+            v && v->var_kind == FlatVarKind::Parameter && !early_structural(ek) && not_fixed_attr(*v)) {   // 实例化期标的在定型前
+          set_unsupported("fill dimension not fixed");
+          return;
+        }
+    }
+    for (const std::string& k : cat_dim_keys_) {
+      std::vector<std::string> ks{k};
+      if (!emitted_var(k)) ks = array_elem_keys(k);
+      if (ks.empty()) { set_unsupported("cat dimension through a parameter binding"); return; }
+      for (const std::string& ek : ks)
+        if (const FlatVariable* v = emitted_var(ek);
+            !v || (v->var_kind == FlatVarKind::Parameter && !structural_set_.count(ek) &&
+                   !(v->binding.is_valid() && is_lit(v->binding)))) {
+          set_unsupported("cat dimension through a parameter binding");
+          return;
+        }
+    }
   }
   void apply_structural_params() {
     if (result_.unsupported) return;
@@ -29356,6 +29577,7 @@ class Flattener {
   std::vector<std::string> structural_keys_;   // 结构参数（变量 key，标记序；Structural.markExp）：apply_structural_params 统一处理
   std::unordered_map<std::string, int> structural_set_;   // key → 标记时刻（见 MarkPhase）
   MarkPhase mark_phase_ = MarkPhase::Late;
+  bool early_typing_ = false;                             // Early 是 `:` 维的定型（不是实例化期的标记，见 inst_ctx）
   int bind_clock_ = 0;                                    // 已开始定型绑定的变量数（标量 / 数组各算一拍）
   bool dep_mark_ = true;                                  // frame_value：当前求值层的参数是否打结构标记
   EvalProbe* eval_probe_ = nullptr;                       // 记录绑定的试探求值收集读到的参数（见 EvalProbe）
@@ -29417,6 +29639,12 @@ class Flattener {
   std::unordered_map<std::string, Id<Expr>> raw_bindings_;   // 参数结构折叠之前的绑定（visit_binding）
   // 类入口预扫维 / 条件时已"访问"过的组件（声明在被扫组件之前的，含它自己）：Evaluate = false 的到这一刻已降级（frame_value）。
   std::unordered_set<std::string> prescan_visited_;
+  std::unordered_map<std::string, bool> evf_fwd_;      // 定型期向前读到的 Evaluate = false 参数 → 当时按的"访问前被标过"（evf_premarked）
+  std::unordered_map<std::string, bool> evf_marked_;   // 已访问的 Evaluate = false 参数 → 访问时被标过没有（check_evf_visit）
+  bool evf_raw_ = false;                               // 只求值、不判 NON_STRUCTURAL（param_values，见 evf_nonstruct）
+  std::vector<Id<Expr>> size_idx_exprs_;               // 留着的 size(a, k) 的非字面量维号 k（check_late_struct）
+  std::vector<std::string> fill_dim_keys_;             // fill / zeros / ones 的维实参求值读到的参数（check_late_struct）
+  std::vector<std::string> cat_dim_keys_;              // cat 的维号求值读到的参数（check_late_struct）
   bool in_prescan_ = false;
   struct PrescanVisit {   // 预扫结束即清：发射期按 typed_keys_ 认
     Flattener& f;
@@ -29468,6 +29696,7 @@ class Flattener {
   };
   std::vector<ConnectStmt> connects_;            // 攒下的 connect()，run() 末尾展开
   std::unordered_set<std::string> removed_;             // 条件为假被移除的组件路径 key（引用它的 connect 整条删）
+  std::unordered_set<std::uint32_t> enum_cref_lits_;    // 书写的枚举字面量 cref 定型出的 EnumLit 节点（pre / change 的实参校验）
 };
 
 }  // namespace
