@@ -1,0 +1,1852 @@
+//// set: pk-p39 — 下标里的参数成结构参数（67e：67d 撞到的 VKB20 `({4, 5, 6})[n - 1]` 此前静默错——omc 打 `final parameter Integer n` + `y = 5.0 * time`，ymc 留着 `{4.0, 5.0, 6.0}[n - 1]`）：typeSubscripts 在下标变率恰为 PARAMETER 时 Structural.markSubscript（NFTyping.mo:2093-2098 v1.25.0；cref 的下标与取下标式 typeSubscriptedExp :1571-1575 同走这里）→ markExp / markComponent（NFStructural.mo:246-326，未定型的绑定里的参数连带），EvalConstants 代成值、化简取元素（NFEvalConstants.mo:189-210、simplifySubscriptedExp NFSimplifyExp.mo:1346-1379）。取下标式的各种基（字面量数组的元素是字面量 / 变量 / 参数 / 时间式、二维 / 矩阵取尽各维、运算式、调用结果、fill / ones / zeros / cat / linspace、范围、if 式、嵌套的取下标式）、各种语境（绑定 / 方程两侧 / 算法 / 属性 / 修饰 / 记录字段修饰 / 函数实参 / if 式与 if 方程条件 / when 条件与体 / 初始方程 / assert / der / delay / noEvent / homotopy / for 方程与归约里代入迭代变量）、各种参数（声明在前后的依赖连带 PXS34 / PXS35、别名 PXS127 / PXS128、调用 / if 式绑定、记录字段、子组件、组件数组、参数数组元素、extends 修饰、final 修饰、protected、start 当绑定、声明在后的子组件走第二遍 PXS121、`end - n` PXS14 / PXS224）都照 omc 求值标 final；编译期求值路照 Ceval.evalSubscriptedExp（NFCeval.mo:3239-3259）求书写的数组 / 矩阵构造取下标——维、Evaluate = true、for 范围、if 方程条件、条件组件、fixed、常量绑定、被求值的函数体（PXS263-PXS284，此前一律 SKIP）。不标、照旧当符号的（变率不是 PARAMETER）：含连续 / 离散变量（PXS27 / PXS28）、Evaluate = false（PXS31 / PXS96，经已定型参数绑定读到的 PXS126 —— checkComponentBindingVariability NFTyping.mo:1153-1159）、参数只在 external 调用实参里（NFCall.mo:399-402；PXS125 / PXS143 / PXS148）。cref 下标同一条规则（变量 / 常量 / 参数 / 复合数组）。基线静默错（一并修成 SKIP）：声明在后的 Evaluate = false 参数作下标被求值标 final（PXS191-PXS193 / PXS199 / PXS203，omc 那时已降成 NON_STRUCTURAL）、if 式下标未选支里有 Evaluate = false 参数（PXS194 / PXS195）、不纯函数调用在下标里被求值或参数漏标（PXS196-PXS198 / PXS142，omc 标 final、调用照留）、external 调用与参数混着（PXS200 / PXS145）、when 方程左侧下标里参数与离散量混着（markSubscriptsInExp 不看变率 NFTyping.mo:3451-3454；PXS237）、reinit 目标的下标 omc 不求值不化简（NFEvalConstants.mo:414-418；`reinit(x[n - 1], 0.0)`、`x[c]`、`x[1 + 1]`，PXS244-PXS246 / PXS249-PXS252）。基线 ACCEPTS-INVALID（一并修）：书写的取下标式定型后不是 cref（NFInst.mo:2893-2899 → typeSubscriptedExp），作 pre / change 实参（typePreChangeCall NFBuiltinCall.mo:573-579；PXS163 / PXS172）、when 方程左侧（checkLhsInWhen NFTyping.mo:3178-3193；PXS168 / PXS174）、reinit 目标（typeReinit NFTyping.mo:3687-3704；PXS169 / PXS173）omc 都报错；经未定型参数的绑定读到 Evaluate = false 参数 omc 求值失败报错（PXS141 / PXS202）。照旧 SKIP：fixed = false（PXS32 / PXS98，omc 打 final、下标留符号）、越界（PXS56 / PXS57，omc 照留 `{…}[5]`）、迭代变量 + 参数的符号下标（PXS87 / PXS101-PXS103 / PXS108 / PXS111 / PXS112 / PXS114，omc 代成 `{…}[i + 1]`）、outer 参数（PXS90）、用户枚举参数（PXS218）、声明在后的 Evaluate = false 参数（PXS97，可能被之前的 Evaluate = true 连带标了结构，ymc 此刻定不了）、external 与别的参数混着（PXS144）、单独的 `end`（PXS13）、推导式基（PXS15 / PXS138）、二维取一维（PXS8）、常量绑定的变率（PXS262：typeSubscriptedExp 的变率只看基，omc 收）
+//// model: PXS1
+model PXS1
+  parameter Integer n = 3;
+  Real y = ({4, 5, 6})[n - 1] * time;
+end PXS1;
+//// model: PXS2
+model PXS2
+  parameter Integer n = 2;
+  Real y = ({4, 5, 6})[n] * time;
+end PXS2;
+//// model: PXS3
+model PXS3
+  Real y = ({4, 5, 6})[n] * time;
+  parameter Integer n = 2;
+end PXS3;
+//// model: PXS4
+model PXS4
+  parameter Integer n = 2;
+  Real y = ({4.5, 5.5, 6.5})[n];
+end PXS4;
+//// model: PXS5
+model PXS5
+  parameter Integer n = 2;
+  Boolean b = ({true, false, true})[n];
+end PXS5;
+//// model: PXS6
+model PXS6
+  parameter Integer n = 2;
+  String s = ({"a", "b", "c"})[n];
+end PXS6;
+//// model: PXS7
+model PXS7
+  type E = enumeration(a, b, c);
+  parameter Integer n = 2;
+  E e = ({E.a, E.b, E.c})[n];
+end PXS7;
+//// model: PXS8
+model PXS8
+  parameter Integer n = 2;
+  Real y[2] = ({{1, 2}, {3, 4}})[n];
+end PXS8;
+//// model: PXS9
+model PXS9
+  parameter Integer n = 2;
+  Real y = ({{1, 2}, {3, 4}})[n, 1];
+end PXS9;
+//// model: PXS10
+model PXS10
+  parameter Integer n = 2;
+  Real y = ([1, 2; 3, 4])[n, 1];
+end PXS10;
+//// model: PXS11
+model PXS11
+  parameter Integer n = 2;
+  Real y[2] = ({4, 5, 6})[n:n + 1];
+end PXS11;
+//// model: PXS12
+model PXS12
+  parameter Integer n = 2;
+  Real y[2] = ({4, 5, 6})[{n, 1}];
+end PXS12;
+//// model: PXS13
+model PXS13
+  Real y = ({4, 5, 6})[end] * time;
+end PXS13;
+//// model: PXS14
+model PXS14
+  parameter Integer n = 1;
+  Real y = ({4, 5, 6})[end - n] * time;
+end PXS14;
+//// model: PXS15
+model PXS15
+  parameter Integer n = 2;
+  Real y = ({i * 2 for i in 1:3})[n];
+end PXS15;
+//// model: PXS16
+model PXS16
+  parameter Integer n = 2;
+  Real y = (1:3)[n];
+end PXS16;
+//// model: PXS17
+model PXS17
+  parameter Integer n = 2;
+  Real y = (fill(2, 3))[n] * time;
+end PXS17;
+//// model: PXS18
+function PXS18F
+  input Real x;
+  output Real y[3];
+algorithm
+  y := {x, 2 * x, 3 * x};
+end PXS18F;
+model PXS18
+  parameter Integer n = 2;
+  Real y = (PXS18F(time))[n];
+end PXS18;
+//// model: PXS19
+model PXS19
+  parameter Integer n = 2;
+  Real x[3] = {1, 2, 3} * time;
+  Real y = (2 * x)[n];
+end PXS19;
+//// model: PXS20
+model PXS20
+  parameter Integer n = 2;
+  Real x[3] = {1, 2, 3} * time;
+  Real y = (x)[n];
+end PXS20;
+//// model: PXS21
+model PXS21
+  parameter Integer n = 2;
+  parameter Real p[3] = {1, 2, 3};
+  Real y = (p)[n] * time;
+end PXS21;
+//// model: PXS22
+model PXS22
+  parameter Integer n = 2;
+  constant Real c[3] = {1, 2, 3};
+  Real y = (c)[n] * time;
+end PXS22;
+//// model: PXS23
+model PXS23
+  parameter Integer n = 2;
+  Real x1 = time, x2 = 2 * time, x3 = 3 * time;
+  Real y = ({x1, x2, x3})[n];
+end PXS23;
+//// model: PXS24
+model PXS24
+  parameter Integer n = 2;
+  parameter Real p1 = 1, p2 = 2, p3 = 3;
+  Real y = ({p1, p2, p3})[n] * time;
+end PXS24;
+//// model: PXS25
+model PXS25
+  parameter Integer n = 2;
+  Real y = ({time, 2 * time, 3 * time})[n];
+end PXS25;
+//// model: PXS26
+model PXS26
+  parameter Integer n = 2;
+  parameter Boolean b = true;
+  Real y = (if b then {1, 2, 3} else {4, 5, 6})[n];
+end PXS26;
+//// model: PXS27
+model PXS27
+  discrete Integer k(start = 1, fixed = true);
+  Real y = ({4, 5, 6})[k] * time;
+equation
+  when sample(0, 1) then
+    k = pre(k) + 1;
+  end when;
+end PXS27;
+//// model: PXS28
+model PXS28
+  parameter Integer n = 1;
+  discrete Integer k(start = 1, fixed = true);
+  Real y = ({4, 5, 6})[n + k] * time;
+equation
+  when sample(0, 1) then
+    k = 1 - pre(k);
+  end when;
+end PXS28;
+//// model: PXS29
+model PXS29
+  Real y = ({4, 5, 6})[integer(time) + 1];
+end PXS29;
+//// model: PXS30
+model PXS30
+  parameter Integer n = 2 annotation(Evaluate = true);
+  Real y = ({4, 5, 6})[n] * time;
+end PXS30;
+//// model: PXS31
+model PXS31
+  parameter Integer n = 2 annotation(Evaluate = false);
+  Real y = ({4, 5, 6})[n] * time;
+end PXS31;
+//// model: PXS32
+model PXS32
+  parameter Integer n(fixed = false);
+  Real y = ({4, 5, 6})[n] * time;
+initial equation
+  n = 2;
+end PXS32;
+//// model: PXS33
+model PXS33
+  parameter Integer n;
+  Real y = ({4, 5, 6})[n] * time;
+end PXS33;
+//// model: PXS34
+model PXS34
+  parameter Integer m = 1;
+  parameter Integer n = m + 1;
+  Real y = ({4, 5, 6})[n] * time;
+end PXS34;
+//// model: PXS35
+model PXS35
+  Real y = ({4, 5, 6})[n] * time;
+  parameter Integer m = 1;
+  parameter Integer n = m + 1;
+end PXS35;
+//// model: PXS36
+model PXS36
+  parameter Integer n = integer(2.7);
+  Real y = ({4, 5, 6})[n] * time;
+end PXS36;
+//// model: PXS37
+function PXS37F
+  input Integer a;
+  output Integer b;
+algorithm
+  b := a + 1;
+end PXS37F;
+model PXS37
+  parameter Integer n = PXS37F(1);
+  Real y = ({4, 5, 6})[n] * time;
+end PXS37;
+//// model: PXS38
+record PXS38R
+  Integer n;
+  Real v;
+end PXS38R;
+model PXS38
+  parameter PXS38R r(n = 2, v = 1.5);
+  Real y = ({4, 5, 6})[r.n] * time;
+end PXS38;
+//// model: PXS39
+model PXS39A
+  parameter Integer n = 2;
+end PXS39A;
+model PXS39
+  PXS39A a;
+  Real y = ({4, 5, 6})[a.n] * time;
+end PXS39;
+//// model: PXS40
+model PXS40
+  parameter Integer k[2] = {2, 3};
+  Real y = ({4, 5, 6})[k[1]] * time;
+end PXS40;
+//// model: PXS41
+model PXS41A
+  parameter Integer n = 1;
+end PXS41A;
+model PXS41
+  PXS41A a(n = 3);
+  Real y = ({4, 5, 6})[a.n] * time;
+end PXS41;
+//// model: PXS42
+model PXS42A
+  parameter Integer n = 1;
+  Real y = ({4, 5, 6})[n] * time;
+end PXS42A;
+model PXS42
+  PXS42A a(n = 2);
+end PXS42;
+//// model: PXS43
+model PXS43A
+  parameter Integer n = 1;
+  Real y = ({4, 5, 6})[n] * time;
+end PXS43A;
+model PXS43
+  PXS43A a[2](n = {1, 2});
+end PXS43;
+//// model: PXS44
+model PXS44
+  parameter Integer n = 2;
+  Integer i = ({4, 5, 6})[n];
+end PXS44;
+//// model: PXS45
+model PXS45
+  constant Integer c = 2;
+  Real y = ({4, 5, 6})[c] * time;
+end PXS45;
+//// model: PXS46
+model PXS46
+  parameter Integer n = 2;
+  Real y = ({4, 5, 6})[n] * time + ({7, 8, 9})[n];
+end PXS46;
+//// model: PXS47
+model PXS47
+  parameter Integer n = 2;
+  Real y = ({4, 5, 6})[({1, 2, 3})[n]] * time;
+end PXS47;
+//// model: PXS48
+model PXS48
+  parameter Integer n = 2;
+  Real x[3] = {1, 2, 3} * time;
+  Real y = x[({1, 2, 3})[n]];
+end PXS48;
+//// model: PXS49
+model PXS49
+  parameter Integer n = 2;
+  Real x[n] = {1, 2} * time;
+  Real y = ({4, 5, 6})[size(x, 1)] * time;
+end PXS49;
+//// model: PXS50
+model PXS50
+  parameter Integer n = 2;
+  Real y = ({4, 5, 6})[2 * n - 3] * time;
+end PXS50;
+//// model: PXS51
+model PXS51
+  parameter Integer n = 5;
+  Real y = ({4, 5, 6})[mod(n, 3) + 1] * time;
+end PXS51;
+//// model: PXS52
+model PXS52
+  parameter Real p = 2.5;
+  Real y = ({4, 5, 6})[integer(p)] * time;
+end PXS52;
+//// model: PXS53
+model PXS53
+  parameter Boolean b = true;
+  Real y = ({4, 5, 6})[if b then 1 else 2] * time;
+end PXS53;
+//// model: PXS54
+model PXS54
+  Real x[2] = {1, 2} * time;
+  parameter Integer n = size(x, 1);
+  Real y = ({4, 5, 6})[n] * time;
+end PXS54;
+//// model: PXS55
+model PXS55
+  parameter Integer n = 2;
+  Real z = n * time;
+  Real y = ({4, 5, 6})[n] * time;
+end PXS55;
+//// model: PXS56
+model PXS56
+  parameter Integer n = 5;
+  Real y = ({4, 5, 6})[n] * time;
+end PXS56;
+//// model: PXS57
+model PXS57
+  parameter Integer n = 0;
+  Real y = ({4, 5, 6})[n] * time;
+end PXS57;
+//// model: PXS58
+model PXS58
+  parameter Integer n = 2;
+  Real y = ({5, 5, 5})[n] * time;
+end PXS58;
+//// model: PXS59
+model PXS59
+  discrete Integer k(start = 1, fixed = true);
+  Real y = ({5, 5, 5})[k] * time;
+equation
+  when sample(0, 1) then
+    k = 1 + pre(k);
+  end when;
+end PXS59;
+//// model: PXS60
+model PXS60
+  parameter Integer n = 2;
+  Real y = -({4, 5, 6})[n] * time;
+end PXS60;
+//// model: PXS61
+model PXS61
+  parameter Integer n = 2;
+  Real y;
+equation
+  y = ({4, 5, 6})[n] * time;
+end PXS61;
+//// model: PXS62
+model PXS62
+  parameter Integer n = 2;
+  Real y;
+equation
+  ({4, 5, 6})[n] = y;
+end PXS62;
+//// model: PXS63
+model PXS63
+  parameter Integer n = 2;
+  Real y;
+algorithm
+  y := ({4, 5, 6})[n] * time;
+end PXS63;
+//// model: PXS64
+model PXS64
+  parameter Integer n = 2;
+  Real y = sin(({4, 5, 6})[n] * time);
+end PXS64;
+//// model: PXS65
+model PXS65
+  parameter Integer n = 2;
+  Real y(start = ({4, 5, 6})[n]);
+equation
+  der(y) = 1;
+end PXS65;
+//// model: PXS66
+model PXS66
+  parameter Integer n = 2;
+  Real y(start = ({4, 5, 6})[n], fixed = true);
+equation
+  der(y) = 1;
+end PXS66;
+//// model: PXS67
+model PXS67A
+  parameter Real p = 1;
+  Real y = p * time;
+end PXS67A;
+model PXS67
+  parameter Integer n = 2;
+  PXS67A a(p = ({4, 5, 6})[n]);
+end PXS67;
+//// model: PXS68
+model PXS68
+  parameter Integer n = 2;
+  parameter Real p = ({4, 5, 6})[n];
+  Real y = p * time;
+end PXS68;
+//// model: PXS69
+model PXS69
+  parameter Integer n = 2;
+  Real y;
+equation
+  if ({true, false, true})[n] then
+    y = 1;
+  else
+    y = 2;
+  end if;
+end PXS69;
+//// model: PXS70
+model PXS70
+  parameter Integer n = 2;
+  Real y = if ({true, false, true})[n] then time else 2 * time;
+end PXS70;
+//// model: PXS71
+model PXS71
+  parameter Integer n = 2;
+  discrete Real z(start = 0, fixed = true);
+equation
+  when time > ({1, 2, 3})[n] then
+    z = 1;
+  end when;
+end PXS71;
+//// model: PXS72
+model PXS72
+  parameter Integer n = 2;
+  Real y[3];
+equation
+  for i in 1:({1, 2, 3})[n] loop
+    y[i] = i * time;
+  end for;
+  y[3] = 0;
+end PXS72;
+//// model: PXS73
+model PXS73
+  parameter Integer n = 2;
+  Real x[({1, 2, 3})[n]] = ones(2) * time;
+end PXS73;
+//// model: PXS74
+model PXS74
+  parameter Integer n = 2;
+  Real z = time if ({true, false, true})[n];
+end PXS74;
+//// model: PXS75
+function PXS75F
+  input Integer n;
+  output Real y;
+algorithm
+  y := ({4, 5, 6})[n];
+end PXS75F;
+model PXS75
+  parameter Integer n = 2;
+  Real y = PXS75F(n) * time;
+end PXS75;
+//// model: PXS76
+function PXS76F
+  input Real x;
+  output Real y;
+protected
+  constant Integer c = 2;
+algorithm
+  y := ({4, 5, 6})[c] * x;
+end PXS76F;
+model PXS76
+  Real y = PXS76F(time);
+end PXS76;
+//// model: PXS77
+model PXS77
+  parameter Integer n = 2;
+  discrete Real z(start = 0, fixed = true);
+equation
+  when sample(0, 1) then
+    z = ({4, 5, 6})[n];
+  end when;
+end PXS77;
+//// model: PXS78
+model PXS78
+  parameter Integer n = 2;
+  Real y;
+initial equation
+  y = ({4, 5, 6})[n];
+equation
+  der(y) = 1;
+end PXS78;
+//// model: PXS79
+model PXS79
+  parameter Integer n = 2;
+  Real y = time;
+equation
+  assert(y < ({4, 5, 6})[n], "too big");
+end PXS79;
+//// model: PXS80
+model PXS80
+  parameter Integer n = 2;
+  Real y[2] = {({4, 5, 6})[n], 1} * time;
+end PXS80;
+//// model: PXS81
+model PXS81
+  parameter Integer n = 2;
+  parameter Integer m = ({1, 2, 3})[n];
+  Real x[m] = ones(2) * time;
+end PXS81;
+//// model: PXS82
+model PXS82
+  parameter Integer n = 2;
+  parameter Integer m = ({1, 2, 3})[n];
+  Real y = m * time;
+end PXS82;
+//// model: PXS83
+model PXS83
+  parameter Integer n = 2;
+  parameter Integer m = ({1, 2, 3})[n] annotation(Evaluate = true);
+  Real y = m * time;
+end PXS83;
+//// model: PXS84
+record PXS84R
+  Real v;
+end PXS84R;
+model PXS84
+  parameter Integer n = 2;
+  PXS84R r(v = ({4, 5, 6})[n] * time);
+end PXS84;
+//// model: PXS85
+model PXS85
+  parameter Integer n = 2;
+  discrete Integer k1(start = 1, fixed = true), k2(start = 2, fixed = true);
+  Integer z;
+equation
+  when sample(0, 1) then
+    k1 = pre(k1) + 1;
+    k2 = pre(k2) + 1;
+  end when;
+  z = pre(({k1, k2})[n - 1]);
+end PXS85;
+//// model: PXS86
+model PXS86
+  parameter Integer n = 1;
+  Real y[2];
+equation
+  for i in 1:2 loop
+    y[i] = ({4, 5, 6})[i + n] * time;
+  end for;
+end PXS86;
+//// model: PXS87
+model PXS87
+  parameter Integer n = 1;
+  Real y[2] = {({4, 5, 6})[i + n] for i in 1:2} * time;
+end PXS87;
+//// model: PXS88
+model PXS88
+  parameter Integer n = 1;
+  Real y = sum(({4, 5, 6})[i + n] for i in 1:2) * time;
+end PXS88;
+//// model: PXS89
+function PXS89F
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end PXS89F;
+model PXS89
+  parameter Integer n = 2;
+  Real y = PXS89F(({4, 5, 6})[n] * time);
+end PXS89;
+//// model: PXS90
+model PXS90A
+  outer parameter Integer n;
+  Real y = ({4, 5, 6})[n] * time;
+end PXS90A;
+model PXS90
+  inner parameter Integer n = 2;
+  PXS90A a;
+end PXS90;
+//// model: PXS91
+model PXS91
+protected
+  parameter Integer n = 2;
+public
+  Real y = ({4, 5, 6})[n] * time;
+end PXS91;
+//// model: PXS92
+model PXS92
+  final parameter Integer n = 2;
+  Real y = ({4, 5, 6})[n] * time;
+end PXS92;
+//// model: PXS93
+model PXS93B
+  parameter Integer n = 1;
+end PXS93B;
+model PXS93
+  extends PXS93B(n = 2);
+  Real y = ({4, 5, 6})[n] * time;
+end PXS93;
+//// model: PXS94
+model PXS94
+  parameter Integer n = 2;
+  Real x[3] = {1, 2, 3} * time;
+  Real y = x[n] + ({4, 5, 6})[n];
+end PXS94;
+//// model: PXS95
+model PXS95
+  parameter Integer n(start = 2);
+  Real y = ({4, 5, 6})[n] * time;
+end PXS95;
+//// model: PXS96
+model PXS96
+  parameter Integer n = 2 annotation(Evaluate = false);
+  parameter Integer m = 1;
+  Real y = ({4, 5, 6})[n + m - 1] * time;
+end PXS96;
+//// model: PXS97
+model PXS97
+  Real y = ({4, 5, 6})[n] * time;
+  parameter Integer n = 2 annotation(Evaluate = false);
+end PXS97;
+//// model: PXS98
+model PXS98
+  parameter Integer n(fixed = false);
+  Real x[3] = {1, 2, 3} * time;
+  Real y = x[n];
+initial equation
+  n = 2;
+end PXS98;
+//// model: PXS99
+model PXS99
+  parameter Integer n = 2;
+  Real y;
+equation
+  y = if ({true, false, true})[n] then time else 2 * time;
+end PXS99;
+//// model: PXS100
+model PXS100
+  parameter Integer n = 2;
+  Real z = n * time;
+  Real y;
+equation
+  y = ({4, 5, 6})[n] * time;
+end PXS100;
+//// model: PXS101
+model PXS101
+  parameter Integer n = 1;
+  Real x[3] = {1, 2, 3} * time;
+  Real y[2] = {x[i + n] for i in 1:2};
+end PXS101;
+//// model: PXS102
+model PXS102
+  parameter Integer n = 1;
+  Real y[2];
+algorithm
+  for i in 1:2 loop
+    y[i] := ({4, 5, 6})[i + n] * time;
+  end for;
+end PXS102;
+//// model: PXS103
+model PXS103
+  parameter Integer n = 1;
+  Real x[3] = {1, 2, 3} * time;
+  Real y[2];
+algorithm
+  for i in 1:2 loop
+    y[i] := x[i + n];
+  end for;
+end PXS103;
+//// model: PXS104
+model PXS104
+  parameter Integer n = 1;
+  Real x[3] = {1, 2, 3} * time;
+  Real y = sum(x[i + n] for i in 1:2);
+end PXS104;
+//// model: PXS105
+model PXS105
+  Real y[2] = {({4, 5, 6})[i] for i in 1:2} * time;
+end PXS105;
+//// model: PXS106
+model PXS106
+  parameter Integer n = 2;
+  Real y[2] = {({4, 5, 6})[i] for i in 1:n} * time;
+end PXS106;
+//// model: PXS107
+model PXS107
+  parameter Integer n = 2;
+  Real y[2];
+equation
+  for i in 1:n loop
+    y[i] = ({4, 5, 6})[i] * time;
+  end for;
+end PXS107;
+//// model: PXS108
+model PXS108
+  parameter Integer n = 1;
+  Real y[2] = {({4, 5, 6})[i + n] for i in 1:2};
+end PXS108;
+//// model: PXS109
+model PXS109
+  parameter Integer n = 1;
+  Real y = sum(({4, 5, 6})[i + n] for i in 1:2);
+end PXS109;
+//// model: PXS110
+model PXS110
+  parameter Integer n = 1;
+  Real y = sum(({4, 5, 6})[i] * time for i in 1:2) + n;
+end PXS110;
+//// model: PXS111
+model PXS111
+  parameter Integer n = 1;
+  Real y[2];
+equation
+  y = {({4, 5, 6})[i + n] for i in 1:2} * time;
+end PXS111;
+//// model: PXS112
+model PXS112
+  parameter Integer n = 1;
+  Real y;
+algorithm
+  y := 0;
+  for i in 1:2 loop
+    y := y + ({4, 5, 6})[i + n];
+  end for;
+end PXS112;
+//// model: PXS113
+model PXS113
+  parameter Integer n = 1;
+  Real y;
+algorithm
+  y := ({4, 5, 6})[n + 1] * time;
+end PXS113;
+//// model: PXS114
+model PXS114
+  parameter Integer n = 1;
+  Real y[2] = {({4, 5, 6})[i + n] * time for i in 1:2};
+end PXS114;
+//// model: PXS115
+model PXS115
+  parameter Integer n = 1;
+  Real x[3] = {1, 2, 3} * time;
+  Real y[2];
+equation
+  for i in 1:2 loop
+    y[i] = x[i + n];
+  end for;
+end PXS115;
+//// model: PXS116
+model PXS116
+  parameter Integer n = 1;
+  Real y[2];
+equation
+  for i in 1:2 loop
+    y[i] = ({4, 5, 6})[i + n] * time;
+  end for;
+end PXS116;
+//// model: PXS121
+model PXS121A
+  parameter Integer n = 2;
+end PXS121A;
+model PXS121
+  Real y = ({4, 5, 6})[a.n] * time;
+  PXS121A a;
+end PXS121;
+//// model: PXS122
+model PXS122A
+  parameter Integer n = 2;
+end PXS122A;
+model PXS122
+  Real x[3] = {1, 2, 3} * time;
+  Real y = x[a.n];
+  PXS122A a;
+end PXS122;
+//// model: PXS123
+model PXS123
+  parameter Boolean b = true;
+  parameter Integer m = 2 annotation(Evaluate = false);
+  Real y = ({4, 5, 6})[if b then 1 else m] * time;
+end PXS123;
+//// model: PXS124
+function PXS124F
+  input Integer a;
+  output Integer b;
+algorithm
+  b := a + 1;
+end PXS124F;
+model PXS124
+  parameter Integer n = 1;
+  Real y = ({4, 5, 6})[PXS124F(n)] * time;
+end PXS124;
+//// model: PXS125
+function PXS125F
+  input Integer a;
+  output Integer b;
+external "C" b = abs(a);
+end PXS125F;
+model PXS125
+  parameter Integer n = 2;
+  Real y = ({4, 5, 6})[PXS125F(n)] * time;
+end PXS125;
+//// model: PXS126
+model PXS126
+  parameter Integer m = 1 annotation(Evaluate = false);
+  parameter Integer n = m + 1;
+  Real y = ({4, 5, 6})[n] * time;
+end PXS126;
+//// model: PXS127
+model PXS127
+  parameter Integer k = 2;
+  parameter Integer n = k;
+  Real y = ({4, 5, 6})[n] * time;
+end PXS127;
+//// model: PXS128
+model PXS128
+  Real y = ({4, 5, 6})[n] * time;
+  parameter Integer k = 2;
+  parameter Integer n = k;
+end PXS128;
+//// model: PXS129
+record PXS129R
+  Integer n;
+end PXS129R;
+model PXS129
+  parameter PXS129R r = PXS129R(n = 2);
+  Real y = ({4, 5, 6})[r.n] * time;
+end PXS129;
+//// model: PXS130
+model PXS130
+  parameter Integer n = 2;
+  Real y = ({4, 5, 6})[n] * time;
+  Real z = ({7, 8, 9})[n] * time;
+  Real w = n * time;
+end PXS130;
+//// model: PXS131
+model PXS131
+  parameter Integer n = 2;
+  parameter Integer k = n + 1;
+  Real y = ({4, 5, 6})[n] * time;
+  Real z = k * time;
+end PXS131;
+//// model: PXS132
+model PXS132
+  parameter Integer n = 2;
+  parameter Real p = n * 1.5;
+  Real y = ({4, 5, 6})[n] * time + p;
+end PXS132;
+//// model: PXS133
+model PXS133
+  parameter Integer n = 2 annotation(Evaluate = true);
+  parameter Integer m = 1;
+  Real y = ({4, 5, 6})[n + m - 1] * time;
+end PXS133;
+//// model: PXS134
+model PXS134
+  parameter Integer n = 2;
+  Real x[3] = {1, 2, 3} * time;
+  Real y = (x * 2)[n];
+end PXS134;
+//// model: PXS135
+model PXS135
+  parameter Integer n = 2;
+  Real y = (fill(time, 3))[n];
+end PXS135;
+//// model: PXS136
+model PXS136
+  parameter Integer n = 2;
+  Real y = ({{1, 2}, {3, 4}})[n, n] * time;
+end PXS136;
+//// model: PXS137
+model PXS137
+  parameter Integer n = 2;
+  Real x[3] = {1, 2, 3} * time;
+  Real y = (x)[n] + (2 * x)[1];
+end PXS137;
+//// model: PXS138
+model PXS138
+  parameter Integer n = 3;
+  Real y = (linspace(1, 3, 3))[n] * time;
+end PXS138;
+//// model: PXS139
+model PXS139
+  parameter Integer n = 2;
+  Real x[3] = {1, 2, 3} * time;
+  Real y = (-x)[n];
+end PXS139;
+//// model: PXS140
+model PXS140
+  parameter Integer n = 2;
+  Real x[3] = {1, 2, 3} * time;
+  Real y = (x[{3, 1, 2}])[n];
+end PXS140;
+//// model: PXS141
+model PXS141
+  Real y = ({4, 5, 6})[n] * time;
+  parameter Integer m = 1 annotation(Evaluate = false);
+  parameter Integer n = m + 1;
+end PXS141;
+//// model: PXS142
+impure function PXS142F
+  input Integer a;
+  output Integer b;
+algorithm
+  b := a + 1;
+end PXS142F;
+model PXS142
+  parameter Integer n = 1;
+  Real y = ({4, 5, 6})[PXS142F(n)] * time;
+end PXS142;
+//// model: PXS143
+function PXS143F
+  input Integer a;
+  output Integer b;
+external "C" b = abs(a);
+end PXS143F;
+model PXS143
+  parameter Integer s = 2 annotation(Evaluate = true);
+  Real y = ({4, 5, 6})[PXS143F(s)] * time;
+end PXS143;
+//// model: PXS144
+function PXS144F
+  input Integer a;
+  output Integer b;
+external "C" b = abs(a);
+end PXS144F;
+model PXS144
+  parameter Integer n = 1;
+  parameter Integer m = 1;
+  Real y = ({4, 5, 6})[PXS144F(n) + m] * time;
+end PXS144;
+//// model: PXS145
+function PXS145F
+  input Integer a;
+  output Integer b;
+external "C" b = abs(a);
+end PXS145F;
+model PXS145
+  parameter Integer n = 1;
+  Real y = ({4, 5, 6})[PXS145F(1) + n] * time;
+end PXS145;
+//// model: PXS146
+function PXS146F
+  input Integer a;
+  output Integer b;
+external "C" b = abs(a);
+end PXS146F;
+model PXS146
+  parameter Integer n = 2;
+  Real x[3] = {1, 2, 3} * time;
+  Real y = x[PXS146F(n)];
+end PXS146;
+//// model: PXS147
+model PXS147
+  parameter Integer n = 2;
+  parameter Integer m = 1 annotation(Evaluate = false);
+  Real y = ({4, 5, 6})[if n > 1 then 2 else m] * time;
+end PXS147;
+//// model: PXS148
+pure function PXS148F
+  input Integer a;
+  output Integer b;
+external "C" b = abs(a);
+end PXS148F;
+model PXS148
+  parameter Integer n = 2;
+  Real y = ({4, 5, 6})[PXS148F(n)] * time;
+end PXS148;
+//// model: PXS149
+model PXS149
+  parameter Integer n = 2;
+  Real y = ({4, 5, 6})[max(n, 1)] * time;
+end PXS149;
+//// model: PXS150
+model PXS150
+  parameter Real p = 2.2;
+  Real y = ({4, 5, 6})[integer(floor(p))] * time;
+end PXS150;
+//// model: PXS161
+model PXS161
+  parameter Integer n = 2;
+  discrete Real z1(start = 0, fixed = true), z2(start = 0, fixed = true);
+equation
+  when sample(0, 1) then
+    ({z1, z2})[n] = 1;
+    z1 = 2;
+  end when;
+end PXS161;
+//// model: PXS162
+model PXS162
+  parameter Integer n = 2;
+  Real x1(start = 1, fixed = true), x2(start = 1, fixed = true);
+equation
+  der(x1) = -1;
+  der(x2) = -1;
+  when x2 < 0 then
+    reinit(({x1, x2})[n], 1);
+  end when;
+end PXS162;
+//// model: PXS163
+model PXS163
+  discrete Integer k[2](each start = 1, each fixed = true);
+  Integer z;
+equation
+  when sample(0, 1) then
+    k = pre(k) + {1, 2};
+  end when;
+  z = pre((k)[1]);
+end PXS163;
+//// model: PXS164
+model PXS164
+  parameter Integer n = 2;
+  Real y1, y2;
+algorithm
+  ({y1, y2})[n] := time;
+  y1 := 2 * time;
+end PXS164;
+//// model: PXS165
+model PXS165
+  parameter Integer n = 2;
+  Real x1(start = 1, fixed = true), x2(start = 1, fixed = true);
+equation
+  der(({x1, x2})[n]) = -1;
+  der(x1) = 1;
+end PXS165;
+//// model: PXS166
+model PXS166
+  parameter Integer n = 2;
+  discrete Integer k1(start = 1, fixed = true), k2(start = 2, fixed = true);
+  Boolean c;
+equation
+  when sample(0, 1) then
+    k1 = pre(k1) + 1;
+    k2 = pre(k2) + 1;
+  end when;
+  c = change(({k1, k2})[n]);
+end PXS166;
+//// model: PXS167
+model PXS167
+  parameter Integer n = 2;
+  Boolean b1 = time > 0.5, b2 = time > 0.7;
+  Boolean c = edge(({b1, b2})[n]);
+end PXS167;
+//// model: PXS168
+model PXS168
+  parameter Integer n = 2;
+  discrete Real z1(start = 0, fixed = true), z2(start = 0, fixed = true);
+equation
+  when sample(0, 1) then
+    ({z1, z2})[2] = 1;
+    z1 = 2;
+  end when;
+end PXS168;
+//// model: PXS169
+model PXS169
+  Real x1(start = 1, fixed = true), x2(start = 1, fixed = true);
+equation
+  der(x1) = -1;
+  der(x2) = -1;
+  when x2 < 0 then
+    reinit(({x1, x2})[2], 1);
+  end when;
+end PXS169;
+//// model: PXS170
+model PXS170
+  Real y1, y2;
+algorithm
+  ({y1, y2})[2] := time;
+  y1 := 2 * time;
+end PXS170;
+//// model: PXS171
+model PXS171
+  Real x1(start = 1, fixed = true), x2(start = 1, fixed = true);
+equation
+  der(({x1, x2})[2]) = -1;
+  der(x1) = 1;
+end PXS171;
+//// model: PXS172
+model PXS172
+  discrete Integer k1(start = 1, fixed = true), k2(start = 2, fixed = true);
+  Integer z;
+equation
+  when sample(0, 1) then
+    k1 = pre(k1) + 1;
+    k2 = pre(k2) + 1;
+  end when;
+  z = pre(({k1, k2})[1]);
+end PXS172;
+//// model: PXS173
+model PXS173
+  parameter Integer n = 2;
+  Real x[2](each start = 1, each fixed = true);
+equation
+  der(x) = {-1, -1};
+  when x[2] < 0 then
+    reinit((x)[n], 1);
+  end when;
+end PXS173;
+//// model: PXS174
+model PXS174
+  parameter Integer n = 2;
+  discrete Real z[2](each start = 0, each fixed = true);
+equation
+  when sample(0, 1) then
+    (z)[n] = 1;
+    z[1] = 2;
+  end when;
+end PXS174;
+//// model: PXS175
+model PXS175
+  parameter Integer n = 2;
+  Real y[2];
+algorithm
+  (y)[n] := time;
+  y[1] := 2 * time;
+end PXS175;
+//// model: PXS176
+connector PXS176C
+  Real e;
+  flow Real f;
+end PXS176C;
+model PXS176
+  parameter Integer n = 2;
+  PXS176C c1, c2;
+  Integer k = cardinality(({c1, c2})[n]);
+equation
+  c1.e = time;
+  c2.e = time;
+end PXS176;
+//// model: PXS177
+connector PXS177C
+  Real p;
+  flow Real m;
+  stream Real h;
+end PXS177C;
+model PXS177
+  parameter Integer n = 2;
+  PXS177C a, b;
+  Real y = inStream(({a.h, b.h})[n]);
+equation
+  a.p = time;
+  b.p = time;
+  a.h = 1;
+  b.h = 2;
+end PXS177;
+//// model: PXS178
+connector PXS178C
+  Real p;
+  flow Real m;
+  stream Real h;
+end PXS178C;
+model PXS178
+  parameter Integer n = 2;
+  PXS178C a, b;
+  Real y = actualStream(({a.h, b.h})[n]);
+equation
+  a.p = time;
+  b.p = time;
+  a.h = 1;
+  b.h = 2;
+end PXS178;
+//// model: PXS179
+model PXS179
+  parameter Integer n = 2;
+  Real x1 = time, x2 = 2 * time;
+  Real y = delay(({x1, x2})[n], 0.1);
+end PXS179;
+//// model: PXS180
+model PXS180
+  parameter Integer n = 2;
+  Boolean b1 = time > 0.5, b2 = time > 0.7;
+  discrete Real z(start = 0, fixed = true);
+equation
+  when pre(({b1, b2})[n]) then
+    z = 1;
+  end when;
+end PXS180;
+//// model: PXS181
+model PXS181
+  parameter Integer n = 2;
+  Real x1 = time, x2 = 2 * time;
+  Real y = homotopy(({x1, x2})[n], 0);
+end PXS181;
+//// model: PXS182
+model PXS182
+  parameter Integer n = 2;
+  Boolean b1 = time > 0.5, b2 = time > 0.7;
+equation
+  assert(({b1, b2})[n], "msg");
+end PXS182;
+//// model: PXS183
+model PXS183
+  parameter Integer n = 2;
+  Real x1 = time, x2 = 2 * time;
+  Real y = noEvent(({x1, x2})[n]) + smooth(1, ({x1, x2})[n]);
+end PXS183;
+//// model: PXS184
+model PXS184
+  parameter Integer n = 2;
+  Real x1(start = 0, fixed = true), x2(start = 0, fixed = true);
+  Real y = der(({x1, x2})[n]);
+equation
+  der(x1) = 1;
+  der(x2) = 2;
+end PXS184;
+//// model: PXS191
+model PXS191
+  Real x[3] = {1, 2, 3} * time;
+  Real y = x[n];
+  parameter Integer n = 2 annotation(Evaluate = false);
+end PXS191;
+//// model: PXS192
+model PXS192
+  constant Real c[3] = {1, 2, 3};
+  Real y = c[n] * time;
+  parameter Integer n = 2 annotation(Evaluate = false);
+end PXS192;
+//// model: PXS193
+model PXS193
+  parameter Real p[3] = {1, 2, 3};
+  Real y = p[n] * time;
+  parameter Integer n = 2 annotation(Evaluate = false);
+end PXS193;
+//// model: PXS194
+model PXS194
+  parameter Boolean b = true;
+  parameter Integer m = 2 annotation(Evaluate = false);
+  Real x[3] = {1, 2, 3} * time;
+  Real y = x[if b then 1 else m];
+end PXS194;
+//// model: PXS195
+model PXS195
+  parameter Boolean b = true;
+  parameter Integer m = 2 annotation(Evaluate = false);
+  constant Real c[3] = {1, 2, 3};
+  Real y = c[if b then 1 else m] * time;
+end PXS195;
+//// model: PXS196
+impure function PXS196F
+  input Integer a;
+  output Integer b;
+algorithm
+  b := a + 1;
+end PXS196F;
+model PXS196
+  parameter Integer n = 1;
+  Real x[3] = {1, 2, 3} * time;
+  Real y = x[PXS196F(n) + 1];
+end PXS196;
+//// model: PXS197
+impure function PXS197F
+  input Integer a;
+  output Integer b;
+algorithm
+  b := a + 1;
+end PXS197F;
+model PXS197
+  parameter Integer n = 1;
+  constant Real c[3] = {1, 2, 3};
+  Real y = c[PXS197F(n) + 1] * time;
+end PXS197;
+//// model: PXS198
+impure function PXS198F
+  input Integer a;
+  output Integer b;
+algorithm
+  b := a + 1;
+end PXS198F;
+model PXS198
+  parameter Integer n = 1;
+  Real x[3] = {1, 2, 3} * time;
+  Real y = x[PXS198F(n)];
+end PXS198;
+//// model: PXS199
+record PXS199R
+  Real v;
+end PXS199R;
+model PXS199
+  PXS199R a[3](v = {1, 2, 3});
+  Real y = a[n].v * time;
+  parameter Integer n = 2 annotation(Evaluate = false);
+end PXS199;
+//// model: PXS200
+function PXS200F
+  input Integer a;
+  output Integer b;
+external "C" b = abs(a);
+end PXS200F;
+model PXS200
+  parameter Integer n = 1;
+  Real x[3] = {1, 2, 3} * time;
+  Real y = x[PXS200F(1) + n];
+end PXS200;
+//// model: PXS201
+model PXS201
+  parameter Integer m = 1 annotation(Evaluate = false);
+  parameter Integer n = m + 1;
+  Real x[3] = {1, 2, 3} * time;
+  Real y = x[n];
+end PXS201;
+//// model: PXS202
+model PXS202
+  Real x[3] = {1, 2, 3} * time;
+  Real y = x[n];
+  parameter Integer m = 1 annotation(Evaluate = false);
+  parameter Integer n = m + 1;
+end PXS202;
+//// model: PXS203
+model PXS203
+  constant Real c[3] = {1, 2, 3};
+  parameter Real p = c[n];
+  parameter Integer n = 2 annotation(Evaluate = false);
+  Real y = p * time;
+end PXS203;
+//// model: PXS204
+model PXS204
+  Real x[3] = {1, 2, 3} * time;
+  Real y;
+equation
+  y = x[n];
+public
+  parameter Integer n = 2 annotation(Evaluate = false);
+end PXS204;
+//// model: PXS205
+model PXS205
+  Real x[3] = {1, 2, 3} * time;
+  parameter Integer n = 2 annotation(Evaluate = false);
+  Real y;
+equation
+  y = x[n];
+end PXS205;
+//// model: PXS211
+record PXS211R
+  Real v;
+end PXS211R;
+model PXS211
+  parameter Integer n = 2;
+  PXS211R a[3](v = {1, 2, 3});
+  Real y = a[n].v * time;
+end PXS211;
+//// model: PXS212
+model PXS212B
+  Real x[2] = {1, 2} * time;
+end PXS212B;
+model PXS212
+  parameter Integer n = 2;
+  parameter Integer m = 1;
+  PXS212B b[2];
+  Real y = b[n].x[m];
+end PXS212;
+//// model: PXS213
+model PXS213
+  parameter Integer n = 1;
+  constant Real c[3] = {1, 2, 3};
+  Real y = c[n + 1] * time;
+end PXS213;
+//// model: PXS214
+model PXS214
+  parameter Integer n = 2;
+  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  Real y = m[n, 1] * time;
+end PXS214;
+//// model: PXS215
+model PXS215
+  parameter Integer k[2] = {3, 1};
+  constant Real c[3] = {1, 2, 3};
+  Real y[2] = c[k] * time;
+end PXS215;
+//// model: PXS216
+model PXS216
+  parameter Integer k[2] = {3, 1};
+  Real x[3] = {1, 2, 3} * time;
+  Real y[2] = x[k];
+end PXS216;
+//// model: PXS217
+model PXS217
+  parameter Integer k[2] = {3, 1};
+  parameter Integer m = 1;
+  Real y = ({4, 5, 6})[k[m]] * time;
+end PXS217;
+//// model: PXS218
+model PXS218
+  type E = enumeration(a, b, c);
+  parameter E e = E.b;
+  Real y = ({4, 5, 6})[Integer(e)] * time;
+end PXS218;
+//// model: PXS219
+model PXS219
+  parameter Boolean b = false;
+  parameter Integer n = if b then 1 else 2;
+  Real y = ({4, 5, 6})[n] * time;
+end PXS219;
+//// model: PXS220
+model PXS220
+  Real y = ({4, 5, 6})[n] * time;
+  parameter Boolean b = false;
+  parameter Integer n = if b then 1 else 2;
+end PXS220;
+//// model: PXS221
+model PXS221A
+  parameter Integer n = 1;
+  Real y = ({4, 5, 6})[n] * time;
+end PXS221A;
+model PXS221
+  PXS221A a(final n = 3);
+end PXS221;
+//// model: PXS222
+model PXS222
+  parameter Integer n = 2;
+  Real y;
+equation
+  if time > 1 then
+    y = ({4, 5, 6})[n];
+  else
+    y = 0;
+  end if;
+end PXS222;
+//// model: PXS223
+model PXS223
+  parameter Integer n = 2;
+  Real y[2] = ({4, 5, 6})[n] * {1, 2} * time;
+end PXS223;
+//// model: PXS224
+model PXS224
+  parameter Integer n = 2;
+  Real x[3] = {1, 2, 3} * time;
+  Real y = x[end - n];
+end PXS224;
+//// model: PXS225
+model PXS225
+  parameter Integer n = 1;
+  constant Real c[3] = {1, 2, 3};
+  Real y = c[end - n] * time;
+end PXS225;
+//// model: PXS226
+record PXS226R
+  Integer n;
+end PXS226R;
+model PXS226
+  parameter PXS226R r[2](n = {1, 3});
+  Real y = ({4, 5, 6})[r[2].n] * time;
+end PXS226;
+//// model: PXS227
+model PXS227
+  parameter Integer n = 2;
+  Real x[3] = {1, 2, 3} * time;
+  Real y;
+equation
+  y = x[n] + ({4, 5, 6})[n - 1];
+end PXS227;
+//// model: PXS228
+model PXS228
+  parameter Integer n = 1;
+  Real y[3];
+equation
+  for i in 1:3 loop
+    y[i] = ({4, 5, 6, 7})[i + n] * time;
+  end for;
+end PXS228;
+//// model: PXS229
+model PXS229
+  parameter Integer n = 3;
+  Real x[3] = {1, 2, 3} * time;
+  Real y = x[n] + x[({1, 2, 3})[n - 1]];
+end PXS229;
+//// model: PXS230
+model PXS230
+  parameter Integer n = 2;
+  Real y = (({4, 5, 6}))[n] * time;
+end PXS230;
+//// model: PXS231
+model PXS231
+  parameter Integer n = 2;
+  Real y = ({4, 5, 6} * 2)[n] * time;
+end PXS231;
+//// model: PXS232
+model PXS232
+  parameter Integer n = 2;
+  Real y = (cat(1, {4, 5}, {6}))[n] * time;
+end PXS232;
+//// model: PXS233
+model PXS233
+  parameter Integer n = 2;
+  Real y = (ones(3))[n] * time;
+end PXS233;
+//// model: PXS234
+model PXS234
+  parameter Integer n = 2;
+  Real y = (zeros(3))[n] + time;
+end PXS234;
+//// model: PXS235
+model PXS235
+  parameter Integer n = 2;
+  Real y = ({4, 5, 6})[n] * time;
+  Real z = ({4, 5, 6})[2] * time;
+end PXS235;
+//// model: PXS236
+model PXS236
+  parameter Integer n = 2;
+  parameter Integer p = 1;
+  Real y = ({4, 5, 6})[n] * time + p;
+end PXS236;
+//// model: PXS237
+model PXS237
+  parameter Integer n = 1;
+  discrete Integer k(start = 0, fixed = true);
+  discrete Real z[3](each start = 0, each fixed = true);
+equation
+  when sample(0, 1) then
+    k = 1 - pre(k);
+    z[n + k] = 1;
+  end when;
+end PXS237;
+//// model: PXS238
+model PXS238
+  parameter Integer n = 2;
+  discrete Real z[3](each start = 0, each fixed = true);
+equation
+  when sample(0, 1) then
+    z[n] = 1;
+  end when;
+end PXS238;
+//// model: PXS239
+model PXS239
+  parameter Integer n = 2 annotation(Evaluate = false);
+  discrete Real z[3](each start = 0, each fixed = true);
+equation
+  when sample(0, 1) then
+    z[n] = 1;
+  end when;
+end PXS239;
+//// model: PXS240
+model PXS240
+  parameter Integer n = 2;
+  discrete Real z[3](each start = 0, each fixed = true);
+algorithm
+  when sample(0, 1) then
+    z[n] := 1;
+  end when;
+end PXS240;
+//// model: PXS241
+model PXS241
+  parameter Integer n = 2;
+  Real x[3] = {1, 2, 3} * time;
+  Real y[2];
+equation
+  y = x[1:n];
+end PXS241;
+//// model: PXS242
+model PXS242
+  parameter Integer n = 2;
+  Real x[3] = {1, 2, 3} * time;
+  Real y[2] = x[n - 1:n];
+end PXS242;
+//// model: PXS243
+model PXS243
+  parameter Integer n = 2;
+  discrete Integer k(start = 1, fixed = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y = x[k + n];
+equation
+  when sample(0, 1) then
+    k = 1 - pre(k);
+  end when;
+end PXS243;
+//// model: PXS244
+model PXS244
+  parameter Integer n = 1;
+  Real x[3](each start = 1, each fixed = true);
+equation
+  der(x) = {1, 2, 3};
+  when x[n + 1] > 2 then
+    reinit(x[n], 0);
+  end when;
+end PXS244;
+//// model: PXS245
+model PXS245
+  constant Integer c = 2;
+  Real x[3](each start = 1, each fixed = true);
+equation
+  der(x) = {1, 2, 3};
+  when time > 0.5 then
+    reinit(x[c], 0);
+  end when;
+end PXS245;
+//// model: PXS246
+model PXS246
+  parameter Integer n = 2 annotation(Evaluate = true);
+  Real x[3](each start = 1, each fixed = true);
+equation
+  der(x) = {1, 2, 3};
+  when time > 0.5 then
+    reinit(x[n], 0);
+  end when;
+end PXS246;
+//// model: PXS247
+model PXS247
+  Real x[3](each start = 1, each fixed = true);
+equation
+  der(x) = {1, 2, 3};
+  for i in 1:3 loop
+    when time > 0.5 then
+      reinit(x[i], 0);
+    end when;
+  end for;
+end PXS247;
+//// model: PXS248
+model PXS248
+  Real x[3](each start = 1, each fixed = true);
+equation
+  der(x) = {1, 2, 3};
+  when time > 0.5 then
+    reinit(x[end], 0);
+  end when;
+end PXS248;
+//// model: PXS249
+model PXS249
+  parameter Integer n = 2;
+  Real x[3](each start = 1, each fixed = true);
+equation
+  der(x) = {1, 2, 3};
+  when time > 0.5 then
+    reinit(x[n - 1], 0);
+  end when;
+end PXS249;
+//// model: PXS250
+model PXS250
+  parameter Integer n = 2;
+  Real x[3](each start = 1, each fixed = true);
+equation
+  der(x) = {1, 2, 3};
+  when time > 0.5 then
+    reinit(x[n], x[n] + 1);
+  end when;
+end PXS250;
+//// model: PXS251
+model PXS251
+  Real x[3](each start = 1, each fixed = true);
+equation
+  der(x) = {1, 2, 3};
+  when time > 0.5 then
+    reinit(x[1 + 1], 0);
+  end when;
+end PXS251;
+//// model: PXS252
+record PXS252R
+  Real v(start = 1, fixed = true);
+end PXS252R;
+model PXS252
+  parameter Integer n = 2;
+  PXS252R r[2];
+equation
+  der(r[1].v) = 1;
+  der(r[2].v) = 1;
+  when time > 0.5 then
+    reinit(r[n].v, 0);
+  end when;
+end PXS252;
+//// model: PXS253
+model PXS253
+  type E = enumeration(one, two, three);
+  parameter Integer n = 2;
+  Real y[E](each start = 1, each fixed = true);
+equation
+  for i in E loop
+    der(y[i]) = n;
+  end for;
+  when time > 0.5 then
+    reinit(y[E.two], 0);
+  end when;
+end PXS253;
+//// model: PXS254
+model PXS254
+  Real y[Boolean](each start = 1, each fixed = true);
+equation
+  der(y[false]) = 1;
+  der(y[true]) = 2;
+  when time > 0.5 then
+    reinit(y[true], 0);
+  end when;
+end PXS254;
+//// model: PXS261
+model PXS261
+  constant Integer c = ({1, 2, 3})[2];
+  Real y = c * time;
+end PXS261;
+//// model: PXS262
+model PXS262
+  parameter Integer n = 2;
+  constant Integer c = ({1, 2, 3})[n];
+  Real y = c * time;
+end PXS262;
+//// model: PXS263
+model PXS263
+  Real x[({1, 2, 3})[2]] = ones(2) * time;
+end PXS263;
+//// model: PXS264
+model PXS264
+  parameter Integer n = 2;
+  Real x[({1, 2, 3})[n] + 1] = ones(3) * time;
+end PXS264;
+//// model: PXS265
+model PXS265
+  parameter Integer n = 2;
+  parameter Integer m = ({1, 2, 3})[n] annotation(Evaluate = true);
+  Real y = m * time;
+end PXS265;
+//// model: PXS266
+model PXS266
+  parameter Integer m = ({1, 2, 3})[2] annotation(Evaluate = true);
+  Real y = m * time;
+end PXS266;
+//// model: PXS267
+function PXS267F
+  input Integer k;
+  output Real y;
+algorithm
+  y := ({4, 5, 6})[k] * 2;
+end PXS267F;
+model PXS267
+  parameter Real p = PXS267F(2);
+  Real y = p * time;
+end PXS267;
+//// model: PXS268
+function PXS268F
+  input Integer k;
+  output Real y;
+algorithm
+  y := ({4, 5, 6})[k] * 2;
+end PXS268F;
+model PXS268
+  constant Real c = PXS268F(2);
+  Real y = c * time;
+end PXS268;
+//// model: PXS269
+function PXS269F
+  input Integer k;
+  output Integer y;
+algorithm
+  y := ({1, 2, 3})[k];
+end PXS269F;
+model PXS269
+  Real x[PXS269F(2)] = ones(2) * time;
+end PXS269;
+//// model: PXS270
+model PXS270
+  parameter Integer n = 2;
+  Real y;
+equation
+  if ({true, false, true})[n] then
+    y = 1;
+  else
+    y = 2;
+  end if;
+end PXS270;
+//// model: PXS271
+model PXS271
+  parameter Integer n = 2;
+  Real y[3];
+equation
+  for i in 1:({1, 2, 3})[n] loop
+    y[i] = i * time;
+  end for;
+  y[3] = 0;
+end PXS271;
+//// model: PXS272
+model PXS272
+  parameter Integer n = 3;
+  Real z = time if ({true, false, true})[n];
+end PXS272;
+//// model: PXS273
+model PXS273
+  parameter Integer n = 2;
+  Real y(fixed = ({true, false})[n], start = 1);
+equation
+  der(y) = 1;
+end PXS273;
+//// model: PXS274
+model PXS274
+  parameter Integer n = 2;
+  Real y = sum(({1, 2, 3})[i] for i in 1:n) * time;
+end PXS274;
+//// model: PXS275
+model PXS275
+  parameter Integer n = 2;
+  parameter Real p = ([1, 2; 3, 4])[n, 1];
+  Real y = p * time;
+end PXS275;
+//// model: PXS276
+model PXS276
+  parameter Integer n = 2;
+  Real x[([1, 2; 3, 4])[n, 1]] = ones(3) * time;
+end PXS276;
+//// model: PXS277
+model PXS277
+  parameter Integer n = 2;
+  constant Real c[3] = {1, 2, 3};
+  Real x[integer(({1, 2, 3})[n] * 1.0)] = ones(2) * time;
+end PXS277;
+//// model: PXS278
+model PXS278
+  parameter Integer n = 2 annotation(Evaluate = false);
+  Real x[({1, 2, 3})[n]] = ones(2) * time;
+end PXS278;
+//// model: PXS279
+model PXS279
+  parameter Integer n = 2;
+  Real x[({i for i in 1:3})[n]] = ones(2) * time;
+end PXS279;
+//// model: PXS280
+model PXS280
+  parameter Integer n = 2;
+  Real x[3] = {1, 2, 3} * time;
+  Real y = x[({1, 2, 3})[n]];
+end PXS280;
+//// model: PXS281
+model PXS281
+  parameter Integer n = 2;
+  constant Real c[3] = {1, 2, 3};
+  Real y = c[({1, 2, 3})[n]] * time;
+end PXS281;
+//// model: PXS282
+model PXS282
+  parameter Integer n = 2;
+  Real y = ({4, 5, 6})[({1, 2, 3})[n]] * time;
+end PXS282;
+//// model: PXS283
+function PXS283F
+  input Integer k;
+  output Real y;
+algorithm
+  y := ({4, 5, 6})[k] * 2;
+end PXS283F;
+model PXS283
+  parameter Integer n = 2;
+  Real y = PXS283F(n) * time;
+end PXS283;
+//// model: PXS284
+function PXS284F
+  input Integer k;
+  output Real y;
+algorithm
+  y := ({4, 5, 6})[k] * 2;
+end PXS284F;
+model PXS284
+  Real y = PXS284F(2) * time;
+end PXS284;

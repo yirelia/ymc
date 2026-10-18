@@ -11498,4 +11498,153 @@ YMC_TEST(flatten_vectorized_nested_iterator_scalarize_unsupported) {
                 .rfind("<unsupported:", 0) == 0);
 }
 
+YMC_TEST(flatten_param_subscript_on_subscripted_exp) {
+  // 取下标式的参数下标：下标变率恰为 PARAMETER → typeSubscripts 的 Structural.markSubscript（NFTyping.mo:2093-2098 v1.25.0，
+  // typeSubscriptedExp :1571-1575 调它）→ 参数 final，EvalConstants 代成值（NFEvalConstants.mo:189-210）、化简取元素
+  //（simplifySubscriptedExp NFSimplifyExp.mo:1346-1379）。markComponent 连带未定型绑定里的参数（NFStructural.mo:311-326：y 在 n
+  // 之前 → m 也 final，PXS35；n 在 y 之前 → 只 n final、绑定求成 2，PXS34）；算法 / 属性 / 修饰同样；运算式基取元素
+  //（`(2 * x)[n]` → `2.0 * x[2]`）、二维取尽各维、if 式条件；声明在后的子组件参数走第二遍（PXS121）。此前留着 `{…}[n - 1]`
+  //（67d 撞到的 VKB20）。期望 = omc 1.25.0 实跑（2026-10-18，探针 pk-p39 PXS1 / PXS35 / PXS34 / PXS63 / PXS65 / PXS67 / PXS19 /
+  // PXS9 / PXS70 / PXS121）。
+  YMC_CHECK_EQ(flatten_src("model PXS1\n  parameter Integer n = 3;\n  Real y = ({4, 5, 6})[n - 1] * time;\nend PXS1;\n"),
+               std::string("class PXS1\n  final parameter Integer n = 3;\n  Real y = 5.0 * time;\nend PXS1;\n"));
+  YMC_CHECK_EQ(flatten_src("model PXS35\n  Real y = ({4, 5, 6})[n] * time;\n  parameter Integer m = 1;\n"
+                           "  parameter Integer n = m + 1;\nend PXS35;\n"),
+               std::string("class PXS35\n  Real y = 5.0 * time;\n  final parameter Integer m = 1;\n"
+                           "  final parameter Integer n = 2;\nend PXS35;\n"));
+  YMC_CHECK_EQ(flatten_src("model PXS34\n  parameter Integer m = 1;\n  parameter Integer n = m + 1;\n"
+                           "  Real y = ({4, 5, 6})[n] * time;\nend PXS34;\n"),
+               std::string("class PXS34\n  parameter Integer m = 1;\n  final parameter Integer n = 2;\n"
+                           "  Real y = 5.0 * time;\nend PXS34;\n"));
+  YMC_CHECK_EQ(flatten_src("model PXS63\n  parameter Integer n = 2;\n  Real y;\nalgorithm\n"
+                           "  y := ({4, 5, 6})[n] * time;\nend PXS63;\n"),
+               std::string("class PXS63\n  final parameter Integer n = 2;\n  Real y;\nalgorithm\n  y := 5.0 * time;\n"
+                           "end PXS63;\n"));
+  YMC_CHECK_EQ(flatten_src("model PXS65\n  parameter Integer n = 2;\n  Real y(start = ({4, 5, 6})[n]);\nequation\n"
+                           "  der(y) = 1;\nend PXS65;\n"),
+               std::string("class PXS65\n  final parameter Integer n = 2;\n  Real y(start = 5.0);\nequation\n"
+                           "  der(y) = 1.0;\nend PXS65;\n"));
+  YMC_CHECK_EQ(flatten_src("model PXS67A\n  parameter Real p = 1;\n  Real y = p * time;\nend PXS67A;\nmodel PXS67\n"
+                           "  parameter Integer n = 2;\n  PXS67A a(p = ({4, 5, 6})[n]);\nend PXS67;\n"),
+               std::string("class PXS67\n  final parameter Integer n = 2;\n  parameter Real a.p = 5.0;\n"
+                           "  Real a.y = a.p * time;\nend PXS67;\n"));
+  YMC_CHECK_EQ(flatten_src("model PXS19\n  parameter Integer n = 2;\n  Real x[3] = {1, 2, 3} * time;\n"
+                           "  Real y = (2 * x)[n];\nend PXS19;\n"),
+               std::string("class PXS19\n  final parameter Integer n = 2;\n  Real x[1];\n  Real x[2];\n  Real x[3];\n"
+                           "  Real y = 2.0 * x[2];\nequation\n  x = {time, 2.0 * time, 3.0 * time};\nend PXS19;\n"));
+  YMC_CHECK_EQ(flatten_src("model PXS9\n  parameter Integer n = 2;\n  Real y = ({{1, 2}, {3, 4}})[n, 1];\nend PXS9;\n"),
+               std::string("class PXS9\n  final parameter Integer n = 2;\n  Real y = 3.0;\nend PXS9;\n"));
+  YMC_CHECK_EQ(flatten_src("model PXS70\n  parameter Integer n = 2;\n"
+                           "  Real y = if ({true, false, true})[n] then time else 2 * time;\nend PXS70;\n"),
+               std::string("class PXS70\n  final parameter Integer n = 2;\n  Real y = 2.0 * time;\nend PXS70;\n"));
+  YMC_CHECK_EQ(flatten_src("model PXS121A\n  parameter Integer n = 2;\nend PXS121A;\nmodel PXS121\n"
+                           "  Real y = ({4, 5, 6})[a.n] * time;\n  PXS121A a;\nend PXS121;\n"),
+               std::string("class PXS121\n  Real y = 5.0 * time;\n  final parameter Integer a.n = 2;\nend PXS121;\n"));
+}
+
+YMC_TEST(flatten_param_subscript_kept_symbolic) {
+  // 下标变率不是 PARAMETER 的不标、照旧打符号下标：Evaluate = false 的参数（NON_STRUCTURAL_PARAMETER，NFInst.mo:3909-3912
+  // v1.25.0；经已定型参数的绑定读到的同样，checkComponentBindingVariability NFTyping.mo:1153-1159）、含离散变量的、参数只在
+  // external 调用实参里的（调用降成 NON_STRUCTURAL，NFCall.mo:399-402）。期望 = omc 1.25.0 实跑（2026-10-18，探针 pk-p39 PXS31 /
+  // PXS28 / PXS125 / PXS126）。
+  YMC_CHECK_EQ(flatten_src("model PXS31\n  parameter Integer n = 2 annotation(Evaluate = false);\n"
+                           "  Real y = ({4, 5, 6})[n] * time;\nend PXS31;\n"),
+               std::string("class PXS31\n  parameter Integer n = 2;\n  Real y = {4.0, 5.0, 6.0}[n] * time;\nend PXS31;\n"));
+  YMC_CHECK_EQ(flatten_src("model PXS28\n  parameter Integer n = 1;\n  discrete Integer k(start = 1, fixed = true);\n"
+                           "  Real y = ({4, 5, 6})[n + k] * time;\nequation\n  when sample(0, 1) then\n"
+                           "    k = 1 - pre(k);\n  end when;\nend PXS28;\n"),
+               std::string("class PXS28\n  parameter Integer n = 1;\n  discrete Integer k(start = 1, fixed = true);\n"
+                           "  Real y = {4.0, 5.0, 6.0}[n + k] * time;\nequation\n  when sample(0.0, 1.0) then\n"
+                           "    k = 1 - pre(k);\n  end when;\nend PXS28;\n"));
+  YMC_CHECK_EQ(flatten_src("function PXS125F\n  input Integer a;\n  output Integer b;\nexternal \"C\" b = abs(a);\n"
+                           "end PXS125F;\nmodel PXS125\n  parameter Integer n = 2;\n"
+                           "  Real y = ({4, 5, 6})[PXS125F(n)] * time;\nend PXS125;\n"),
+               std::string("impure function PXS125F\n  input Integer a;\n  output Integer b;\n\n"
+                           "  external \"C\" b = abs(a);\nend PXS125F;\n\nclass PXS125\n  parameter Integer n = 2;\n"
+                           "  Real y = {4.0, 5.0, 6.0}[PXS125F(n)] * time;\nend PXS125;\n"));
+  YMC_CHECK_EQ(flatten_src("model PXS126\n  parameter Integer m = 1 annotation(Evaluate = false);\n"
+                           "  parameter Integer n = m + 1;\n  Real y = ({4, 5, 6})[n] * time;\nend PXS126;\n"),
+               std::string("class PXS126\n  parameter Integer m = 1;\n  parameter Integer n = m + 1;\n"
+                           "  Real y = {4.0, 5.0, 6.0}[n] * time;\nend PXS126;\n"));
+}
+
+YMC_TEST(flatten_param_subscript_unsupported) {
+  // omc 照标 final、下标留符号 / 调用不求值 / 目标不求值，或此刻定不了的：不出结果（SKIP）。fixed = false（PXS32：`final parameter
+  // Integer n(fixed = false)` + `{4.0, 5.0, 6.0}[n]`）、for 语句迭代变量 + 参数（PXS102：`{…}[i + 1]`）、不纯函数调用（PXS142：
+  // `{…}[PXS142F(1)]`）、声明在后的 Evaluate = false 参数作变量数组的下标（PXS191：omc 那时已降成 NON_STRUCTURAL、留 `x[n]`，此前
+  // 求值标 final 静默错）、越界（PXS56：omc 照留 `{…}[5]`）、when 方程左侧下标里参数与离散量混着（markSubscriptsInExp，
+  // NFTyping.mo:3451-3454 v1.25.0；PXS237：`z[1 + k]`）、reinit 目标的参数下标（EvalConstants 不求目标，NFEvalConstants.mo:414-418；
+  // PXS249：`reinit(x[n - 1], 0.0)`）。omc 1.25.0 实跑（2026-10-18，探针 pk-p39）。
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           {"model PXS32\n  parameter Integer n(fixed = false);\n  Real y = ({4, 5, 6})[n] * time;\n"
+            "initial equation\n  n = 2;\nend PXS32;\n", "parameter in symbolic subscript"},
+           {"model PXS102\n  parameter Integer n = 1;\n  Real y[2];\nalgorithm\n  for i in 1:2 loop\n"
+            "    y[i] := ({4, 5, 6})[i + n] * time;\n  end for;\nend PXS102;\n", "parameter in symbolic subscript"},
+           {"impure function PXS142F\n  input Integer a;\n  output Integer b;\nalgorithm\n  b := a + 1;\nend PXS142F;\n"
+            "model PXS142\n  parameter Integer n = 1;\n  Real y = ({4, 5, 6})[PXS142F(n)] * time;\nend PXS142;\n",
+            "parameter in symbolic subscript"},
+           {"model PXS191\n  Real x[3] = {1, 2, 3} * time;\n  Real y = x[n];\n"
+            "  parameter Integer n = 2 annotation(Evaluate = false);\nend PXS191;\n", "parameter in symbolic subscript"},
+           {"model PXS56\n  parameter Integer n = 5;\n  Real y = ({4, 5, 6})[n] * time;\nend PXS56;\n",
+            "array subscript out of range"},
+           {"model PXS237\n  parameter Integer n = 1;\n  discrete Integer k(start = 0, fixed = true);\n"
+            "  discrete Real z[3](each start = 0, each fixed = true);\nequation\n  when sample(0, 1) then\n"
+            "    k = 1 - pre(k);\n    z[n + k] = 1;\n  end when;\nend PXS237;\n",
+            "parameter in when-equation left-hand side subscript"},
+           {"model PXS249\n  parameter Integer n = 2;\n  Real x[3](each start = 1, each fixed = true);\nequation\n"
+            "  der(x) = {1, 2, 3};\n  when time > 0.5 then\n    reinit(x[n - 1], 0);\n  end when;\nend PXS249;\n",
+            "reinit target subscript"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
+YMC_TEST(flatten_written_subscripted_exp_not_cref) {
+  // 书写的取下标式定型后仍是 SUBSCRIPTED_EXP、不是 cref（NFInst.mo:2893-2899 → typeSubscriptedExp NFTyping.mo:1571-1575 v1.25.0）：
+  // 作 pre 的实参（typePreChangeCall NFBuiltinCall.mo:573-579）、when 方程左侧（checkLhsInWhen NFTyping.mo:3178-3193）、reinit 的
+  // 目标（typeReinit NFTyping.mo:3687-3704）omc 都报错；ymc 取了元素成 cref 而放行（此前 ACCEPTS-INVALID）。omc 1.25.0 实跑
+  //（2026-10-18，探针 pk-p39 PXS172 / PXS168 / PXS169）。
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           {"model PXS172\n  discrete Integer k1(start = 1, fixed = true), k2(start = 2, fixed = true);\n  Integer z;\n"
+            "equation\n  when sample(0, 1) then\n    k1 = pre(k1) + 1;\n    k2 = pre(k2) + 1;\n  end when;\n"
+            "  z = pre(({k1, k2})[1]);\nend PXS172;\n", "pre/change argument must be a variable"},
+           {"model PXS168\n  parameter Integer n = 2;\n"
+            "  discrete Real z1(start = 0, fixed = true), z2(start = 0, fixed = true);\nequation\n"
+            "  when sample(0, 1) then\n    ({z1, z2})[2] = 1;\n    z1 = 2;\n  end when;\nend PXS168;\n",
+            "when-eq LHS not cref"},
+           {"model PXS169\n  Real x1(start = 1, fixed = true), x2(start = 1, fixed = true);\nequation\n  der(x1) = -1;\n"
+            "  der(x2) = -1;\n  when x2 < 0 then\n    reinit(({x1, x2})[2], 1);\n  end when;\nend PXS169;\n",
+            "reinit arg0 not cref"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
+YMC_TEST(flatten_subscripted_literal_compile_time_eval) {
+  // 编译期求值路上书写的数组构造取下标照 Ceval 求（evalSubscriptedExp，NFCeval.mo:3239-3259 v1.25.0），下标里的参数随之标结构：
+  // 维（PXS264）、Evaluate = true 的绑定（PXS265）、if 方程条件（PXS270），cref 下标里嵌着的（PXS48）。此前一律 SKIP。
+  // 期望 = omc 1.25.0 实跑（2026-10-18，探针 pk-p39 PXS264 / PXS265 / PXS270 / PXS48）。
+  YMC_CHECK_EQ(flatten_src("model PXS264\n  parameter Integer n = 2;\n  Real x[({1, 2, 3})[n] + 1] = ones(3) * time;\n"
+                           "end PXS264;\n"),
+               std::string("class PXS264\n  final parameter Integer n = 2;\n  Real x[1];\n  Real x[2];\n  Real x[3];\n"
+                           "equation\n  x = {time, time, time};\nend PXS264;\n"));
+  YMC_CHECK_EQ(flatten_src("model PXS265\n  parameter Integer n = 2;\n"
+                           "  parameter Integer m = ({1, 2, 3})[n] annotation(Evaluate = true);\n  Real y = m * time;\n"
+                           "end PXS265;\n"),
+               std::string("class PXS265\n  final parameter Integer n = 2;\n  final parameter Integer m = 2;\n"
+                           "  Real y = 2.0 * time;\nend PXS265;\n"));
+  YMC_CHECK_EQ(flatten_src("model PXS270\n  parameter Integer n = 2;\n  Real y;\nequation\n"
+                           "  if ({true, false, true})[n] then\n    y = 1;\n  else\n    y = 2;\n  end if;\nend PXS270;\n"),
+               std::string("class PXS270\n  final parameter Integer n = 2;\n  Real y;\nequation\n  y = 2.0;\n"
+                           "end PXS270;\n"));
+  YMC_CHECK_EQ(flatten_src("model PXS48\n  parameter Integer n = 2;\n  Real x[3] = {1, 2, 3} * time;\n"
+                           "  Real y = x[({1, 2, 3})[n]];\nend PXS48;\n"),
+               std::string("class PXS48\n  final parameter Integer n = 2;\n  Real x[1];\n  Real x[2];\n  Real x[3];\n"
+                           "  Real y = x[2];\nequation\n  x = {time, 2.0 * time, 3.0 * time};\nend PXS48;\n"));
+}
+
 YMC_TEST_MAIN

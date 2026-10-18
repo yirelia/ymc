@@ -2672,8 +2672,27 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       vx-p1 SKIP→PASS 29；单测 +9、改 1（VU5 原断言 SKIP，改为 omc 实跑）。slice 703 例 FAIL 0（oracle=live 不一致 0）；scodeinst 664（不变）；
       testsuite 1837→1838（interactive-API/Ticket6406）/ FAIL 0；**MSL 487→490**（QuasiStatic IMC_Conveyor、Fluid.Examples.
       BranchingDynamicPipes、HeatExchanger.HeatExchangerSimulation）；探针 11566→11839；单测 495→504。
-- [ ] (67e 候选) 已有的静默 FAIL（67d 调查时发现，语料没撞上）：`parameter Integer n = 3; Real y = ({4, 5, 6})[n - 1] * time;`——omc 把 n
+- [x] (67e 候选，67e 已修) 已有的静默 FAIL（67d 调查时发现，语料没撞上）：`parameter Integer n = 3; Real y = ({4, 5, 6})[n - 1] * time;`——omc 把 n
       标成 final、打 `5.0 * time`，ymc 留普通参数与取下标的数组（机制未查明）。复现 `$S/pkr67d/prebugs/VKB20.mo`。
+- [x] (67e) 下标里的参数成结构参数（2026-10-18）：typeSubscripts 在下标变率恰为 PARAMETER 时 Structural.markSubscript（NFTyping.mo
+      :2093-2098 → markExp / markComponent NFStructural.mo:246-326 / :367-376），cref 的下标与书写的取下标式 `({4, 5, 6})[n - 1]`
+      （typeSubscriptedExp 的非拆分支 :1571-1575）同走这里，EvalConstants 再代值（NFEvalConstants.mo:189-210）→ `y = 5.0 * time`、n final。
+      变率序 CONSTANT < STRUCTURAL < PARAMETER < NON_STRUCTURAL < DISCRETE（NFPrefixes.mo:281-289）：含离散 / 连续量、Evaluate = false 参数
+      （NFInst.mo:3909-3912）、经已定型绑定读到 Evaluate = false 的（:1153-1159）、external 调用的参数实参（NFCall.mo:399-402）都不标。
+      ymc 的 cref 路此前已标、取下标式路从不标；param_subscript 统一各处（常量数组、cref 末段 / 中段、复合路径、取下标式一维 / 一般路），
+      求值路径 eval_scode 也求书写的数组 / 矩阵构造取下标（Ceval.evalSubscriptedExp，NFCeval.mo:3239-3259）。基线上的静默错还有：读到
+      声明在后的 Evaluate = false 参数被当结构参数折了、if 式下标里没走到的支有 Evaluate = false、下标里的不纯调用、external 与别的参数
+      混着、when 左侧参数与离散量混着（markSubscriptsInExp 不看变率，:3451-3454）、reinit 目标 omc 从不求值（NFEvalConstants.mo:414-418）。
+      ACCEPTS-INVALID：pre / change 的实参、when 左侧、reinit 目标是书写的取下标式（定型后不是 cref，omc 报错）→ 照拒。
+      照旧 SKIP：迭代变量 + 参数、fixed = false、不纯调用（omc 只标 final、下标留符号）、经未定型绑定读到 Evaluate = false、读到还没发射的
+      Evaluate = false 参数（PXS97 基线碰巧对、现 SKIP）。
+      探针 pk-p39（253；PXS）——基线上 FAIL 120 / ACCEPTS-INVALID 8，现 PASS 182 / SKIP 48 / BOTH-REJECT 23；旧组 md-m4 SKIP→PASS 1；
+      单测 +5。slice 703 例 FAIL 0（oracle=live 不一致 0）；scodeinst 664、MSL 490（均不变）；testsuite 1838→1839（arrays/Array9）/ FAIL 0；
+      探针 11839→12092；单测 504→509。
+- [ ] (67f 候选) 已有的 ACCEPTS-INVALID（67e 调查时发现）：`pre(E.a)`（枚举字面量）——omc 报 "must be a variable"（NFBuiltinCall.mo
+      :573-579），ymc 折成 `E.a`。复现 `$S/pkr67e/prebugs/PE1.mo`。另：frame_value 按发射顺序（typed_keys_）判 Evaluate = false 参数
+      是不是 NON_STRUCTURAL，定型期的向前引用会判错——67e 只在下标里挡住了，维 / 范围 / 条件等定型期求值处可能照旧把声明在后的
+      Evaluate = false 参数当结构参数求值（未探）。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

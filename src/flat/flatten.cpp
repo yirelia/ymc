@@ -2719,6 +2719,13 @@ class Flattener {
     while (x.is_valid() && I_.absyn.exps[x].kind == ExpKind::Tuple && I_.absyn.exps[x].args.size() == 1) x = I_.absyn.exps[x].args[0];
     return x;
   }
+  // 书写的取下标式 `(e)[i]`（外层括号不算，修饰分发合成的不算）：omc 定型后仍是 SUBSCRIPTED_EXP、不是 cref（NFInst.mo:2893-2899 →
+  // typeSubscriptedExp NFTyping.mo:1571-1575 v1.25.0），ymc 却已取了元素（`({k1, k2})[n]` → `k2`）/ 并进了 cref（`(x)[1]` →
+  // `x[1]`）——要 cref 的位置（pre / change 的实参、when 方程左侧、reinit 的目标）按书写形态认。PXS 探针（pk-p39）。
+  bool written_subscripted(Id<Exp> x) const {
+    x = strip_paren(x);
+    return x.is_valid() && I_.absyn.exps[x].kind == ExpKind::Subscript && !split_subscripts_.count(x.raw);
+  }
   // 元组赋值 / 元组方程 `(a, , c) := f(…)`、`(a, b) = f(…)`（NFSimplifyModel.simplifyTupleElement :430-464）：实参全常量 →
   // 用户函数求值后按元素拆成 (目标, 值) 对，空位跳过（T1 探针 `(p, q) = f(1.0)` → `p = 2.0; q = 3.0;`、`(, u) := f(2.0)` →
   // `u := 6.0;`）；否则单对 (元组, 调用)，空位打 `_`（T2 探针 `(w, _, k) = f(time)`）。目标是标量 cref 或整个数组的引用，类型
@@ -3863,6 +3870,20 @@ class Flattener {
         continue;
       }
       if (b.kind == SEqKind::Equals) {
+        // 左侧是书写的取下标式（`({z1, z2})[n] = 1`、`(z)[n] = 1`）：omc 按未定型的左侧查，只认 CREF / TUPLE（checkLhsInWhen，
+        // NFTyping.mo:3178-3193 / :3451-3457 v1.25.0）→ 报错；ymc 会取元素 / 并进 cref（见 written_subscripted；PXS161 / PXS168）。
+        if (written_subscripted(b.a)) { set_unsupported("when-eq LHS not cref"); return false; }
+        // 左侧 cref 下标里的参数 omc 一律标结构（markSubscriptsInExp，NFTyping.mo:3451-3454 v1.25.0），不看下标的变率：`z[n + k]`
+        // 的 n 照样 final、代成 `z[1 + k]`。ymc 只按 typeSubscripts 的变率规则标（见 param_subscript）→ 下标里参数与连续 / 离散
+        // 变量混着的不跟（PXS237）。ponytail: 逐个参数标记（不求整个下标）未做。
+        if (const Id<Exp> la = strip_paren(b.a); I_.absyn.exps[la].kind == ExpKind::CrefExp)
+          for (const CrefPart& p : I_.absyn.crefs[I_.absyn.exps[la].cref].parts)
+            for (Id<Exp> s : p.subscripts)
+              if (absyn_refs_param(s, enclosing, /*skip_size=*/true) &&
+                  absyn_refs_param(s, enclosing, /*skip_size=*/true, /*runtime=*/true)) {
+                set_unsupported("parameter in when-equation left-hand side subscript");
+                return false;
+              }
         Id<Expr> a = inst_exp(b.a, enclosing, prefix);
         Id<Expr> rhs = inst_exp(b.b, enclosing, prefix);
         if (result_.unsupported) return false;
@@ -3900,6 +3921,32 @@ class Flattener {
         out.push_back(result_.model.add_eq(std::move(fe)));
         if (!solve(lhs)) return false;
       } else if (b.kind == SEqKind::Reinit) {
+        // 目标是书写的取下标式（`reinit(({x1, x2})[n], 1)`、`reinit((x)[n], 1)`）：定型后不是 CREF，omc 报错（typeReinit，
+        // NFTyping.mo:3687-3704 v1.25.0；见 written_subscripted，PXS162 / PXS169 / PXS173）。
+        if (written_subscripted(b.a)) { set_unsupported("reinit arg0 not cref"); return false; }
+        // 目标的下标 omc 不求值也不化简（EvalConstants 只求 reinitExp，NFEvalConstants.mo:414-418 v1.25.0；for 方程展开只代换迭代
+        // 变量）：照书写打 `reinit(x[n - 1], 0.0)`、`x[c]`、`x[1 + 1]`，里面的参数照样随 typeSubscripts 标 final——ymc 的目标已求成
+        // 字面量，只认书写就是整数 / Boolean / 枚举字面量（en-t5 T55 `reinit(y[E.two], 0.0)`）/ 单独的 `end`（定型时换成维大小）/ `:` /
+        // 字面量范围 / for 方程迭代变量的（PXS245-PXS252）。ponytail: 照书写打目标要定型留原式、apply_structural_params 跳过 reinit
+        // 目标，未做。
+        if (const Id<Exp> ta = strip_paren(b.a); I_.absyn.exps[ta].kind == ExpKind::CrefExp) {
+          const ScodeScope tsc = scode_scope_of(enclosing);
+          auto lit = [&](Id<Exp> x) { return x.is_valid() && I_.absyn.exps[x].kind == ExpKind::IntLit; };
+          auto plain_sub = [&](Id<Exp> s) {
+            const Exp& se = I_.absyn.exps[s];
+            if (se.kind == ExpKind::IntLit || se.kind == ExpKind::BoolLit || se.kind == ExpKind::End || se.kind == ExpKind::Colon)
+              return true;
+            if (se.kind == ExpKind::Range) return lit(se.a) && lit(se.b) && (!se.c.is_valid() || lit(se.c));
+            if (se.kind != ExpKind::CrefExp) return false;
+            const Cref sc = I_.absyn.crefs[se.cref];   // 拷贝（下面按名解析）
+            if (builtin_enum_value(sc) || scode_enum_value(sc, tsc)) return true;
+            return !sc.leading_dot && sc.parts.size() == 1 && sc.parts[0].subscripts.empty() &&
+                   loop_vars_.count(sc.parts[0].name.id) > 0;
+          };
+          for (const CrefPart& p : I_.absyn.crefs[I_.absyn.exps[ta].cref].parts)
+            for (Id<Exp> s : p.subscripts)
+              if (!plain_sub(s)) { set_unsupported("reinit target subscript"); return false; }
+        }
         Id<Expr> tgt = simplify_expr(inst_exp(b.a, enclosing, prefix));
         Id<Expr> val = simplify_expr(inst_exp(b.b, enclosing, prefix));
         if (result_.unsupported) return false;
@@ -8343,9 +8390,11 @@ class Flattener {
       }
       case ExpKind::Subscript: {
         // `(E)[i, j]`：基求值后按下标取（修饰分发合成的，或基只可能来自带括号写法的——见 subscripted_exp；IfEquation9
-        // `A a[4](b = barr[1:4])` 里 if 方程的条件 `a[i].b`）。
+        // `A a[4](b = barr[1:4])` 里 if 方程的条件 `a[i].b`）。书写的数组 / 矩阵构造取下标（`({1, 2, 3})[n]`，解析器只收带括号的
+        // 写法，见 Parser::parse_postfix）照 Ceval 求（evalSubscriptedExp，NFCeval.mo:3239-3259 v1.25.0；下标里的参数随之标结构，
+        // 同 typeSubscripts）：维 / Evaluate / for 范围 / 条件里的（PXS 探针 PXS69 / PXS72-PXS74 / PXS81 / PXS83）。基是调用的未核实 → 不求。
         const ExpKind bk = I_.absyn.exps[e.a].kind;
-        if (!split_subscripts_.count(exp.raw) && (bk == ExpKind::Call || bk == ExpKind::Matrix || bk == ExpKind::Array)) return std::nullopt;
+        if (!split_subscripts_.count(exp.raw) && bk == ExpKind::Call) return std::nullopt;
         const std::vector<Id<Exp>> subs = e.args;   // 拷贝
         std::optional<CVal> bv = eval_scode(e.a, scope, depth + 1, allow_param, used);
         if (!bv) return std::nullopt;
@@ -9576,6 +9625,11 @@ class Flattener {
       r.kind = FrameHit::Fail;
       return r;
     }
+    // 还没发射的照常求（见上）。定型期（绑定 / 方程段）的 omc 已访问完全部组件、它此时是 NON_STRUCTURAL，除非之前被连带标了
+    // 结构——ymc 的 Evaluate = true 连带在发射时才做，此刻定不了：只给探针记下，由调用方取舍（param_subscript）。
+    if (eval_probe_ && var == SVariability::Param && evaluate_annotation(I_.comps[cid].def) == std::optional<bool>(false) &&
+        !early_structural(key))
+      eval_probe_->fwd_nonstruct = true;
     const bool arr = !cel.attr.dims.empty() || !cel.type.dims.empty();
     const TypeKind tk = I_.comps[cid].ty.kind;
     // 枚举参数也走这里：求得出值的只有内建枚举（`parameter StateSelect s = StateSelect.default`，builtin_enum_value）；用户
@@ -16663,7 +16717,7 @@ class Flattener {
     std::vector<Id<Expr>> elems;   // Expanded：展开的切片的各下标（同上）
   };
   // 下标式在大小为 dim 的维上的取值：`end` = dim；常量式（含 for 方程迭代变量的当前值）直接求，含参数的按结构参数求值
-  //（typeSubscripts 的 Structural.markSubscript，NFTyping.mo:2122-2127）。整数 → Int，范围 / 下标数组 → Array。求不出 → nullopt。
+  //（typeSubscripts 的 Structural.markSubscript，NFTyping.mo:2093-2098 v1.25.0）。整数 → Int，范围 / 下标数组 → Array。求不出 → nullopt。
   std::optional<CVal> eval_subscript(Id<Exp> sx, std::int64_t dim, const ScodeScope& scope, NodeId enclosing) {
     const std::optional<std::int64_t> saved_end = eval_end_;
     eval_end_ = dim;
@@ -16672,7 +16726,8 @@ class Flattener {
     return v;
   }
   // 书写的各下标 → CSub。shape = 整体值的各维。求得出值的（常量；含参数的按结构参数求值，同变量数组的下标——typeSubscripts
-  // 标 Structural.markSubscript，NFTyping.mo:2122-2127）成字面量；其余定型后留成符号（运行时整型量、保留着的迭代变量）。
+  // 标 Structural.markSubscript，NFTyping.mo:2093-2098 v1.25.0；变率不是 PARAMETER 的不标，见 param_subscript）成字面量；其余定型后
+  // 留成符号（运行时整型量、保留着的迭代变量）。
   // 越界的字面量 omc 照样留成 `{…}[7]`（applyIndexExpArray "that's someone else's problem"），不跟。失败 → unsupported。
   bool const_sub_specs(const std::vector<Id<Exp>>& subs, const std::vector<std::int64_t>& shape, NodeId enclosing,
                        const std::vector<Symbol>& prefix, std::vector<CSub>& out, const std::vector<EnumDim>* edims = nullptr) {
@@ -16715,7 +16770,12 @@ class Flattener {
         continue;
       }
       std::optional<CVal> v;
-      if (!is_stmt_iter_subscript(subs[k])) v = eval_subscript(subs[k], shape[k], lscope, enclosing);
+      if (absyn_refs_param(subs[k], enclosing, /*skip_size=*/true)) {   // 含参数的：变率 PARAMETER 才标，见 param_subscript
+        v = param_subscript(subs[k], shape[k], lscope, enclosing);
+        if (result_.unsupported) return false;
+      } else if (!is_stmt_iter_subscript(subs[k])) {
+        v = eval_subscript(subs[k], shape[k], lscope, enclosing);
+      }
       std::vector<Id<Expr>> ix;
       bool scalar = true;
       if (v && v->k == CVal::K::Int) {
@@ -17466,9 +17526,10 @@ class Flattener {
       std::optional<std::int64_t> iv = I_.absyn.exps[sx].kind == ExpKind::End ? std::optional<std::int64_t>(dim)
                                                                               : subscript_int(sx, &sc);
       const bool sym = !iv && is_stmt_iter_subscript(sx);
-      if (!iv && !sym && absyn_refs_param(sx, enclosing))
-        if (std::optional<CVal> pv = eval_scode(sx, sc, 0, /*allow_param=*/true, nullptr); pv && pv->k == CVal::K::Int)
-          iv = pv->i;
+      if (!iv && !sym) {   // 含参数的：同末段（param_subscript）
+        if (const std::optional<CVal> pv = param_subscript(sx, dim, sc, enclosing); pv && pv->k == CVal::K::Int) iv = pv->i;
+        if (result_.unsupported) return {};
+      }
       if (iv && (*iv < 1 || *iv > dim) && dead_branch_ > 0 && dim >= 1) iv = 1;   // 剪掉的 if 分支（见 dead_branch_）
       if (iv) return *iv >= 1 && *iv <= dim ? lit_int(*iv) : Id<Expr>{};
       const ExpKind sk = I_.absyn.exps[sx].kind;
@@ -17856,9 +17917,17 @@ class Flattener {
                 }
                 // 下标是 Integer 数组的参数 / 常量（`table[1, columns]`，MSL CombiTable1Ds 的 `columns = 2:size(table, 2)`）：
                 // 同下标数组 `{i, j}`，下标表取它的值——参数同标量下标成结构参数（typeSubscripts 的 Structural.markSubscript，
-                // NFTyping.mo:2122-2127 v1.25.0；BT 探针 BT2d：`y = table[1, c]` → `y[1] = table[1,2]`、c final）。
+                // NFTyping.mo:2093-2098 v1.25.0；BT 探针 BT2d：`y = table[1, c]` → `y[1] = table[1,2]`、c final）。含参数的下标
+                //（数组值的、标量的）照 param_subscript 求一次：变率不是 PARAMETER 的不标，omc 不跟的形态在那里 SKIP。
+                std::optional<CVal> pv;
+                const bool pref = absyn_refs_param(subs[k], enclosing, /*skip_size=*/true);
+                if (pref) {
+                  pv = param_subscript(subs[k], ldims[k], lscope, enclosing);
+                  if (result_.unsupported) break;
+                }
                 if (sk == ExpKind::CrefExp) {
-                  if (std::optional<CVal> av = eval_scode(subs[k], lscope, 0, /*allow_param=*/true, nullptr); av && is_arr(*av)) {
+                  if (std::optional<CVal> av = pref ? pv : eval_scode(subs[k], lscope, 0, /*allow_param=*/true, nullptr);
+                      av && is_arr(*av)) {
                     std::vector<std::int64_t> sel;
                     bool okv = av->arr && !av->arr->empty();
                     if (okv)
@@ -17876,13 +17945,10 @@ class Flattener {
                   }
                 }
                 // `end` = 该维大小；常量下标求值；参数变率的下标是结构参数（typeSubscripts 标 Structural.markSubscript，
-                // NFTyping.mo:2122-2127）→ 带参数求值（frame_value 记结构参数，post-pass 打 final）。都打印成字面量。
+                // NFTyping.mo:2093-2098 v1.25.0）→ 带参数求值（上面的 pv；frame_value 记结构参数，post-pass 打 final）。都打印成字面量。
                 std::optional<std::int64_t> iv = sk == ExpKind::End ? std::optional<std::int64_t>(ldims[k])
                                                                     : subscript_int(subs[k], &lscope);
-                if (!iv && absyn_refs_param(subs[k], enclosing))
-                  if (std::optional<CVal> pv = eval_scode(subs[k], lscope, 0, /*allow_param=*/true, nullptr);
-                      pv && pv->k == CVal::K::Int)
-                    iv = pv->i;
+                if (!iv && pv && pv->k == CVal::K::Int) iv = pv->i;
                 // 运行时整型下标（引用离散 / 连续变量，`x[n]`、`m[1,n]`、`x[n + 1]`）：omc 保留符号下标、不做静态越界检查
                 //（VS1 探针）。
                 if (!iv) {
@@ -18401,9 +18467,11 @@ class Flattener {
           sel = *sl;
         } else {
           std::optional<std::int64_t> iv = sk == ExpKind::End ? std::optional<std::int64_t>(dims[k]) : subscript_int(subs[k], &scope);
-          if (!iv && absyn_refs_param(subs[k], enclosing))
-            if (std::optional<CVal> pv = eval_scode(subs[k], scope, 0, /*allow_param=*/true, nullptr); pv && pv->k == CVal::K::Int)
+          if (!iv) {   // 含参数的：同 cref 末段（param_subscript）
+            if (const std::optional<CVal> pv = param_subscript(subs[k], dims[k], scope, enclosing); pv && pv->k == CVal::K::Int)
               iv = pv->i;
+            if (result_.unsupported) return unsupported();
+          }
           // 求不出的（运行时下标 `a[i].x`）/ 越界的：有洞时未做；没洞的留给照常解析。
           if (!iv || *iv < 1 || *iv > dims[k]) return any_hole ? unsupported() : std::nullopt;
           sel.push_back(*iv);
@@ -22658,7 +22726,9 @@ class Flattener {
         // 常量引用（已内联成字面量）：pre(c) 求值成该常量（Ceval 的 pre 支取实参，NFCeval.mo:1933 v1.25.0）；change 没有求值
         // 支 → 留调用、实参是内联后的字面量（`change(true)`，ES 探针 e9）。
         if (builtin_name == "pre") return args[0];
-      } else if (ax.kind != ExprKind::Cref) {
+      } else if (ax.kind != ExprKind::Cref || written_subscripted(e.args[0])) {
+        // 书写的取下标式（`pre(({k1, k2})[n])`、`pre((x)[1])`）omc 同报（typePreChangeCall 的 isCref，NFBuiltinCall.mo:573-579
+        // v1.25.0；PXS 探针 PXS85 / PXS163 / PXS166 / PXS172）。
         set_unsupported("pre/change argument must be a variable");
         supported = false;
       } else if (alg_in_when_ == 0 && eq_in_when_ == 0 && cref_is_continuous(ax, prefix.size())) {
@@ -22999,10 +23069,87 @@ class Flattener {
     return r;
   }
 
+  // 下标 sx（所在维大小 dim，书写处作用域 sc）里的参数：下标变率恰为 PARAMETER 时 omc 把其中的参数标成结构参数（typeSubscripts 的
+  // Structural.markSubscript，NFTyping.mo:2093-2098 v1.25.0——cref 的下标与取下标式 `({4, 5, 6})[n - 1]`（typeSubscriptedExp
+  // :1571-1575）同走这里；markExp / markComponent NFStructural.mo:246-326），EvalConstants 再代成值（NFEvalConstants.mo:189-210）。
+  // 照结构参数求值（frame_value 打标记、连带），求得出 → 值。变率不是 PARAMETER 的不标、照旧当符号（nullopt，result_ 不动）：不含
+  // 参数 / 含连续离散变量（≥ DISCRETE）/ 读到 Evaluate = false 的参数（NON_STRUCTURAL_PARAMETER，NFInst.mo:3909-3912；经已定型参数
+  // 的绑定读到的同样——checkComponentBindingVariability 把那个参数也降成 NON_STRUCTURAL，NFTyping.mo:1153-1159）/ 参数只在 external
+  // 调用的实参里（调用降成 NON_STRUCTURAL，NFCall.mo:399-402）。其余求不出的 omc 照标 final、下标留符号或报错，不跟 →
+  // set_unsupported：迭代变量 + 参数（`{…}[i + 1]`）、fixed = false、不纯调用（`x[f(1)]`，调用不求值）、external 与别的参数混着、
+  // 经未定型参数的绑定读到 Evaluate = false 的（evalBinaryAdd 失败报错）、读到还没发射的 Evaluate = false 参数（见 fwd_nonstruct）。
+  // PXS 探针（pk-p39）。ponytail: "只标 final、下标留符号"的那几种（fixed = false、迭代变量 + 参数、不纯调用）要能标记却不求值的
+  // 结构参数（apply_structural_params 现只收字面量绑定、引用处一律代值），做了再放开。
+  std::optional<CVal> param_subscript(Id<Exp> sx, std::int64_t dim, const ScodeScope& sc, NodeId enclosing) {
+    if (!absyn_refs_param(sx, enclosing, /*skip_size=*/true) ||
+        absyn_refs_param(sx, enclosing, /*skip_size=*/true, /*runtime=*/true))
+      return std::nullopt;
+    if (is_stmt_iter_subscript(sx)) {
+      set_unsupported("parameter in symbolic subscript");
+      return std::nullopt;
+    }
+    bool ext_param = false, other_param = false, impure = false;
+    auto calls = [&](auto& self, Id<Exp> x) -> void {
+      if (!x.is_valid()) return;
+      const Exp e = I_.absyn.exps[x];   // 拷贝（解析函数时不持 arena 引用）
+      if (e.kind == ExpKind::CrefExp) {
+        other_param = other_param || absyn_refs_param(x, enclosing, /*skip_size=*/true);
+        return;
+      }
+      if (e.kind == ExpKind::Call)
+        if (const std::optional<FnRef> fr = resolve_fn(I_.absyn.crefs[e.cref], sc); fr && !builtin_equiv(*fr)) {
+          FnSig sig;
+          std::unordered_set<std::uint32_t> seen;
+          if (collect_fn_sig(fr->fe, fr->fscope, sig, seen, 0) && sig.external) {
+            for (Id<Exp> a : e.args) ext_param = ext_param || absyn_refs_param(a, enclosing, /*skip_size=*/true);
+            return;
+          }
+          impure = impure || fn_impure(*fr);
+        }
+      self(self, e.a);
+      self(self, e.b);
+      self(self, e.c);
+      for (Id<Exp> a : e.args) self(self, a);
+      for (const ForIndex& it : e.iters) self(self, it.range);
+    };
+    calls(calls, sx);
+    if (impure || (ext_param && other_param)) {
+      set_unsupported("parameter in symbolic subscript");
+      return std::nullopt;
+    }
+    if (ext_param) return std::nullopt;
+    EvalProbe probe;
+    EvalProbe* const saved_probe = eval_probe_;
+    eval_probe_ = &probe;
+    const StructSnap snap = struct_snap();
+    CvTrial cv_trial(*this);
+    const bool saved_miss = std::exchange(forward_miss_, false);
+    const std::optional<CVal> v = eval_subscript(sx, dim, sc, enclosing);
+    const bool fwd = forward_miss_;
+    forward_miss_ = forward_miss_ || saved_miss;
+    eval_probe_ = saved_probe;
+    // NON_STRUCTURAL：只认读到的参数都已定型（经未定型参数的绑定读到的，omc 照标那个参数、随后求值失败报错）。
+    bool keep = probe.nonstruct && !probe.fwd_nonstruct;
+    for (const auto& kv : probe.keys) keep = keep && typed_keys_.count(kv.first) > 0;
+    if (keep) {
+      struct_restore(snap);
+      cv_trial.rollback();
+      return std::nullopt;
+    }
+    if (v && !probe.nonstruct && !probe.fwd_nonstruct) return v;
+    if (!v && lenient_ && fwd) {   // 第一遍：读到还没发射的（向前引用）——先照符号放过，第二遍带着第一遍的值再求（PXS121）
+      need_second_pass_ = true;
+      return std::nullopt;
+    }
+    set_unsupported("parameter in symbolic subscript");
+    return std::nullopt;
+  }
+
   // `(e)[i]`（ExpKind::Subscript：任意 primary 后的下标）：基是 cref（含括号分组）→ 下标并进 cref 末段（`(x)[n]` →
   // `x[n]`）；基是一维数组字面量：字面量下标 → 取元素（`({1, 2, 3})[2]` → `2`，越界 SKIP），否则保留 ASUB
   // `{1, 2, 3}[n]`（ExpressionDumpTpl 的 ASUB 打印）。SubscriptedExp1/3/4。其它基（运算式、切片引用、if 式、调用、
-  // 推导式）带整数字面量下标 → 基整体定型后取元素（见函数体里的注释）；切片下标 → SKIP。
+  // 推导式）带整数字面量下标 → 基整体定型后取元素（见函数体里的注释）；切片下标 → SKIP。下标里的参数先照结构参数求值
+  //（param_subscript）：求得出的同字面量下标。
   // split = 这个节点是修饰分发合成的（split_subscripts_），不是源码里书写的。
   Id<Expr> subscripted_exp(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix, bool split = false) {
     Id<Exp> base = e.a;
@@ -23036,10 +23183,19 @@ class Flattener {
       // 取尽各维 → 标量化取元素；只取了前几维的（数组字段的修饰）只做到基定型成数组字面量的情形。
       // 书写的下标只可能来自带括号的写法（`(f(x))[1]`、`([1, 2; 3, 4])[1, 2]`；`f(x)[1]` 这类在解析器就是语法错，见
       // Parser::parse_postfix），与合成的同路处理。
+      // 含参数的下标先记下位置，基定型后照结构参数求值（param_subscript；omc 先定型基、再定型下标）。
       std::vector<std::int64_t> idx;
-      for (Id<Exp> sx : subs) {
-        if (I_.absyn.exps[sx].kind != ExpKind::IntLit) { set_unsupported("subscripted expression"); return lit_int(0); }
-        idx.push_back(I_.absyn.exps[sx].ival);
+      std::vector<std::size_t> pk;
+      for (std::size_t k = 0; k < subs.size(); ++k) {
+        if (I_.absyn.exps[subs[k]].kind == ExpKind::IntLit) {
+          idx.push_back(I_.absyn.exps[subs[k]].ival);
+        } else if (absyn_refs_param(subs[k], enclosing, /*skip_size=*/true)) {
+          idx.push_back(0);
+          pk.push_back(k);
+        } else {
+          set_unsupported("subscripted expression");
+          return lit_int(0);
+        }
       }
       const bool saved_call = array_call_ok_, saved_if = if_top_;
       array_call_ok_ = I_.absyn.exps[base].kind == ExpKind::Call;
@@ -23052,6 +23208,11 @@ class Flattener {
       if (result_.unsupported) return lit_int(0);
       const std::vector<std::int64_t> sh = expr_shape(b);
       if (idx.empty() || sh.size() < idx.size()) { set_unsupported("subscripted expression"); return lit_int(0); }
+      for (std::size_t k : pk) {   // 照旧当符号的（运行时下标…）这里本就不收
+        const std::optional<CVal> pv = param_subscript(subs[k], sh[k], scode_scope_of(enclosing), enclosing);
+        if (!pv || pv->k != CVal::K::Int) { set_unsupported("subscripted expression"); return lit_int(0); }
+        idx[k] = pv->i;
+      }
       for (std::size_t k = 0; k < idx.size(); ++k)
         if (sh[k] < 0 || idx[k] < 1 || idx[k] > sh[k]) { set_unsupported("array subscript out of range"); return lit_int(0); }
       if (sh.size() == idx.size()) {
@@ -23090,12 +23251,18 @@ class Flattener {
       return cur;
     }
     const Id<Expr> b = inst_exp(base, enclosing, prefix);
+    const Expr be = result_.model.exprs[b];   // 拷贝
+    const bool flat_lit = be.kind == ExprKind::Array && !be.args.empty() && expr_shape(be.args[0]).empty();
+    if (!result_.unsupported && flat_lit)   // 下标里的参数照结构参数求值（param_subscript），求得出 → 取元素
+      if (const std::optional<CVal> pv =
+              param_subscript(subs[0], static_cast<std::int64_t>(be.args.size()), scode_scope_of(enclosing), enclosing)) {
+        if (pv->k != CVal::K::Int) { set_unsupported("subscripted expression"); return lit_int(0); }
+        if (pv->i < 1 || static_cast<std::size_t>(pv->i) > be.args.size()) { set_unsupported("array subscript out of range"); return lit_int(0); }
+        return be.args[static_cast<std::size_t>(pv->i) - 1];
+      }
     const Id<Expr> s = simplify_expr(inst_exp(subs[0], enclosing, prefix));
     if (result_.unsupported) return lit_int(0);
-    const Expr be = result_.model.exprs[b];   // 拷贝
-    if (be.kind != ExprKind::Array || be.args.empty() || !expr_shape(be.args[0]).empty()) {
-      set_unsupported("subscripted expression"); return lit_int(0);
-    }
+    if (!flat_lit) { set_unsupported("subscripted expression"); return lit_int(0); }
     const Expr se = result_.model.exprs[s];
     if (se.kind == ExprKind::IntLit) {
       if (se.ival < 1 || static_cast<std::size_t>(se.ival) > be.args.size()) { set_unsupported("array subscript out of range"); return lit_int(0); }
@@ -24297,6 +24464,7 @@ class Flattener {
   struct EvalProbe {
     std::vector<std::pair<std::string, bool>> keys;   // (实例 key, 是否数组参数)
     bool nonstruct = false;
+    bool fwd_nonstruct = false;   // 读到还没发射、照常求了的 Evaluate = false 参数（见 frame_value）
   };
   // 参数（实例 key）此刻已是结构参数；数组参数的标记打在各元素的 key 上（`a[1].`，见 frame_value），标记是组件级的、有一个
   // 就算。
