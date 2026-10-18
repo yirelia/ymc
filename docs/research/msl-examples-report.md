@@ -808,3 +808,9 @@ SMR_CurrentSource。FAIL / ACCEPTS-INVALID / CRASH 0。
 记录 if 绑定的条件里有调用时按调用的变率判（求值选支）、记录整体绑定读到声明在后的记录推到第二遍、parameter 记录绑定的变率检查。
 Electrical.Batteries.Examples.CCCV_Stack / CCCV_StackRC / ShowImpedance 越过原卡点，卡到下一处：整体绑定的记录数组元素的字段用于
 结构求值、可扩展连接器的数组成员（BusTranscription）、方程里 for 范围的向前引用。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-18 67d 之后：PASS 490（+3）
+
+omc 整体保留的向量化调用：fill / 含数组调用的运算式 / 推导式 / if 式实参的取下标形态，体照 simplifyArrayConstructor 化简（收函数之前）；
+书写的推导式在结构参数代入后化简。转 PASS：Magnetic.QuasiStatic…InductionMachines.IMC_Conveyor、Fluid.Examples.BranchingDynamicPipes、
+Fluid.Examples.HeatExchanger.HeatExchangerSimulation。FAIL / ACCEPTS-INVALID / CRASH 0。

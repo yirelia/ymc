@@ -6004,7 +6004,8 @@ YMC_TEST(flatten_class_comment_escapes_follow_class_annotation) {
 YMC_TEST(flatten_vectorized_call_with_operation_argument) {
   // 向量化调用的实参是不含数组调用的运算式（MultiBody Parts 的 `to_unit1(r - r_shape)`）：omc 化简时先按元素展开成字面量再取
   // `[$i1]`（等式里 `array(to_unit1({…}[$i1]) for $i1 in 1:3)`），参数数组绑定逐元素摊开后 `to_unit1(r[1] - r_shape[1])`。
-  // 含数组调用的（omc 打 `(g(time) - r)[$i1]`）未做 → SKIP。期望值为 omc 1.25.0 对原文实跑的 stdout（VU 探针 1 / 5，2026-10-08）。
+  // 含数组调用的不展开、整个取下标（makeSubscriptedExp，NFExpression.mo:1685-1719 v1.25.0）→ `(g(time) - r)[$i1]`（67d 起做；此前
+  // SKIP）。期望值为 omc 1.25.0 对原文实跑的 stdout（VU 探针 1 / 5，2026-10-08；VU5 2026-10-18 重跑同）。
   YMC_CHECK_EQ(flatten_src("function to_unit1 \"Change the unit of a Real number to unit=\\\"1\\\"\"\n  input Real r;\n"
                            "  output Real result(unit = \"1\");\nalgorithm\n  result := r;\n  annotation(Inline = true);\n"
                            "end to_unit1;\nmodel VU1\n  parameter Real r[3] = {1, 0, 0};\n"
@@ -6025,7 +6026,11 @@ YMC_TEST(flatten_vectorized_call_with_operation_argument) {
   YMC_CHECK_EQ(flatten_src("function g\n  input Real t;\n  output Real v[3];\nalgorithm\n  v := {t, 2 * t, 3 * t};\nend g;\n"
                            "function f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2 * x;\nend f;\nmodel VU5\n"
                            "  parameter Real r[3] = {1, 0, 0};\n  Real y[3] = f(g(time) - r);\nend VU5;\n"),
-               std::string("<unsupported:function: f>"));
+               std::string("function f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend f;\n\n"
+                           "function g\n  input Real t;\n  output Real[3] v;\nalgorithm\n  v := {t, 2.0 * t, 3.0 * t};\n"
+                           "end g;\n\nclass VU5\n  parameter Real r[1] = 1.0;\n  parameter Real r[2] = 0.0;\n"
+                           "  parameter Real r[3] = 0.0;\n  Real y[1];\n  Real y[2];\n  Real y[3];\nequation\n"
+                           "  y = array(f((g(time) - r)[$i1]) for $i1 in 1:3);\nend VU5;\n"));
 }
 
 YMC_TEST(flatten_tuple_equation_array_and_empty_targets) {
@@ -11227,6 +11232,269 @@ YMC_TEST(flatten_record_binding_higher_variability) {
   YMC_CHECK(flatten_src("record BRG20_R\n  parameter Real x = 1;\n  parameter Real y = 2;\nend BRG20_R;\nmodel BRG20\n"
                         "  Boolean bv = time > 1;\n  parameter BRG20_R a(x = 3);\n  parameter BRG20_R b(x = 4);\n"
                         "  parameter BRG20_R r = if bv then a else b;\nend BRG20;\n")
+                .rfind("<unsupported:", 0) == 0);
+}
+
+YMC_TEST(flatten_vectorized_fill_argument) {
+  // 向量化调用的 fill / ones / zeros 实参：omc 取下标成 `fill(x, 3)[$i1]`（applySubscriptCall 的 else 支，NFExpression.mo:1586-1615
+  // v1.25.0），化简时 fill 展成 `{x, x, x}`（simplifyFill，NFSimplifyExp.mo:524-536），各元素相同取成 x（simplifySubscriptedExp
+  // :1346-1379）；Integer 填充值配 Real 形参转型推进 fill 的首实参（Call.typeCast，NFCall.mo:1288-1334）→ `/*Real*/(k)`；两维的
+  // 两个下标都丢掉。此前 SKIP "vectorized argument form"（MSL QuasiStatic VfController）。期望 = omc 1.25.0 实跑（2026-10-18，探针
+  // pk-p36 VRA1、pk-p38 VKF15 / VKF7）。
+  YMC_CHECK_EQ(flatten_src("function VRA1G\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2 * x;\nend VRA1G;\n"
+                           "model VRA1\n  Real y[3];\nequation\n  y = VRA1G(fill(time, 3));\nend VRA1;\n"),
+               std::string("function VRA1G\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend VRA1G;\n"
+                           "\nclass VRA1\n  Real y[1];\n  Real y[2];\n  Real y[3];\nequation\n"
+                           "  y = array(VRA1G(time) for $i1 in 1:3);\nend VRA1;\n"));
+  YMC_CHECK_EQ(flatten_src("function VKF15G\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2 * x;\nend VKF15G;\n"
+                           "model VKF15\n  Integer k = integer(time);\n  Real y[3];\nequation\n"
+                           "  y = VKF15G(fill(k, 3));\nend VKF15;\n"),
+               std::string("function VKF15G\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\n"
+                           "end VKF15G;\n\nclass VKF15\n  Integer k = integer(time);\n  Real y[1];\n  Real y[2];\n"
+                           "  Real y[3];\nequation\n  y = array(VKF15G(/*Real*/(k)) for $i1 in 1:3);\nend VKF15;\n"));
+  YMC_CHECK_EQ(flatten_src("function VKF7G\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2 * x;\nend VKF7G;\n"
+                           "model VKF7\n  Real y[3, 2];\nequation\n  y = VKF7G(fill(time, 3, 2));\nend VKF7;\n"),
+               std::string("function VKF7G\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend VKF7G;\n"
+                           "\nclass VKF7\n  Real y[1,1];\n  Real y[1,2];\n  Real y[2,1];\n  Real y[2,2];\n"
+                           "  Real y[3,1];\n  Real y[3,2];\nequation\n"
+                           "  y = array(array(VKF7G(time) for $i2 in 1:2) for $i1 in 1:3);\nend VKF7;\n"));
+}
+
+YMC_TEST(flatten_vectorized_body_simplified) {
+  // 向量化调用的体照常化简（simplifyArrayConstructor 的 else 支 `exp := simplify(exp)`，NFSimplifyExp.mo:583-637 v1.25.0）：取了
+  // 下标的数组字面量各元素相同取成那个元素（:1346-1379），实参全成字面量的纯调用求值（simplifyCall :166-219）、化简在收函数之前
+  //（NFInst.mo:210-219）→ 函数不打；homotopy 没有 Ceval 支，求值失败照留（NFCeval.evalBuiltinCall）；外部函数只化简实参
+  //（simplifyCall :208-213）；结构参数数组代入后同。此前体不化简，打 `VKL2G(1.0)` / `sin({1.0, 1.0, 1.0}[$i1])`（静默错）。
+  // 期望 = omc 1.25.0 实跑（2026-10-18，探针 pk-p38 VKL2 / VKB2 / VKB5 / VKS13 / VKS4）。
+  YMC_CHECK_EQ(flatten_src("function VKL2G\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2 * x;\nend VKL2G;\n"
+                           "model VKL2\n  Real y[3];\nequation\n  y = VKL2G({1, 1, 1});\nend VKL2;\n"),
+               std::string("class VKL2\n  Real y[1];\n  Real y[2];\n  Real y[3];\nequation\n"
+                           "  y = array(2.0 for $i1 in 1:3);\nend VKL2;\n"));
+  YMC_CHECK_EQ(flatten_src("model VKB2\n  Real y[3];\nequation\n  y = sin({1, 1, 1});\nend VKB2;\n"),
+               std::string("class VKB2\n  Real y[1];\n  Real y[2];\n  Real y[3];\nequation\n"
+                           "  y = array(0.8414709848078965 for $i1 in 1:3);\nend VKB2;\n"));
+  YMC_CHECK_EQ(flatten_src("model VKB5\n  Real y[3];\nequation\n  y = homotopy({1, 1, 1}, {2, 2, 2});\nend VKB5;\n"),
+               std::string("class VKB5\n  Real y[1];\n  Real y[2];\n  Real y[3];\nequation\n"
+                           "  y = array(homotopy(1.0, 2.0) for $i1 in 1:3);\nend VKB5;\n"));
+  YMC_CHECK_EQ(flatten_src("function VKS13G\n  input Real x;\n  output Real y;\nexternal \"C\" y = sin(x);\n"
+                           "end VKS13G;\nmodel VKS13\n  Real y[3];\nequation\n  y = VKS13G({1, 1, 1});\nend VKS13;\n"),
+               std::string("class VKS13\n  Real y[1];\n  Real y[2];\n  Real y[3];\nequation\n"
+                           "  y = array(sin(1.0) for $i1 in 1:3);\nend VKS13;\n"));
+  // 只向量化一个元素的同样不折（此前 wrap_vectorized 的单元素化简先折成 0.84…，静默错；探针 pk-p38 VKS16）。
+  YMC_CHECK_EQ(flatten_src("function VKS16G\n  input Real x;\n  output Real y;\nexternal \"C\" y = sin(x);\n"
+                           "end VKS16G;\nmodel VKS16\n  Real y[1];\nequation\n  y = VKS16G({1});\nend VKS16;\n"),
+               std::string("class VKS16\n  Real y[1];\nequation\n  y[1] = sin(1.0);\nend VKS16;\n"));
+  YMC_CHECK_EQ(flatten_src("function VKS4G\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2 * x;\nend VKS4G;\n"
+                           "model VKS4\n  parameter Real p[3] = {1, 1, 1} annotation(Evaluate = true);\n  Real y[3];\n"
+                           "equation\n  y = VKS4G(p);\nend VKS4;\n"),
+               std::string("class VKS4\n  final parameter Real p[1] = 1.0;\n  final parameter Real p[2] = 1.0;\n"
+                           "  final parameter Real p[3] = 1.0;\n  Real y[1];\n  Real y[2];\n  Real y[3];\nequation\n"
+                           "  y = array(2.0 for $i1 in 1:3);\nend VKS4;\n"));
+}
+
+YMC_TEST(flatten_vectorized_array_call_operation_argument) {
+  // 含数组调用的运算式实参：化简不展开含数组调用的运算（simplifyBinary / simplifyUnary，NFSimplifyExp.mo:941-943 / :1135-1137
+  // v1.25.0），取下标整个包一层（makeSubscriptedExp，NFExpression.mo:1685-1719）→ `(array(…) * p)[$i1]`；标量在前的 `p * f(x)`
+  // 照数组乘标量换位打印。MSL Fluid 管道流动模型的 `m_flows = homotopy(actual = …massFlowRate_dp_staticHead(…) * nParallel, …)`
+  // 此前 SKIP "vectorized call argument [homotopy]"。期望 = omc 1.25.0 实跑（2026-10-18，探针 pk-p38 VKH2 / VKH12 / VKA4）。
+  YMC_CHECK_EQ(flatten_src("function VKH2G\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2 * x;\nend VKH2G;\n"
+                           "model VKH2\n  Real x[3] = {1, 2, 3} * time;\n  parameter Real p = 2;\n  Real y[3];\n"
+                           "equation\n  y = homotopy(VKH2G(x) * p, 2 * x);\nend VKH2;\n"),
+               std::string("function VKH2G\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend VKH2G;\n"
+                           "\nclass VKH2\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  parameter Real p = 2.0;\n"
+                           "  Real y[1];\n  Real y[2];\n  Real y[3];\nequation\n  x = {time, 2.0 * time, 3.0 * time};\n"
+                           "  y = array(homotopy((array(VKH2G(x[$i1]) for $i1 in 1:3) * p)[$i1], {2.0 * x[1], 2.0 *"
+                           " x[2], 2.0 * x[3]}[$i1]) for $i1 in 1:3);\nend VKH2;\n"));
+  YMC_CHECK_EQ(flatten_src("function VKH12G\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2 * x;\nend VKH12G;\n"
+                           "model VKH12\n  Real x[3] = {1, 2, 3} * time;\n  parameter Real p = 2;\n  Real y[3];\n"
+                           "equation\n  y = homotopy(p * VKH12G(x), x);\nend VKH12;\n"),
+               std::string("function VKH12G\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\n"
+                           "end VKH12G;\n\nclass VKH12\n  Real x[1];\n  Real x[2];\n  Real x[3];\n"
+                           "  parameter Real p = 2.0;\n  Real y[1];\n  Real y[2];\n  Real y[3];\nequation\n"
+                           "  x = {time, 2.0 * time, 3.0 * time};\n"
+                           "  y = array(homotopy((array(VKH12G(x[$i1]) for $i1 in 1:3) * p)[$i1], x[$i1]) for $i1 in"
+                           " 1:3);\nend VKH12;\n"));
+  YMC_CHECK_EQ(flatten_src("function VKA4G\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2 * x;\nend VKA4G;\n"
+                           "function VKA4H\n  input Real x;\n  output Real y;\nalgorithm\n  y := x + 1;\nend VKA4H;\n"
+                           "model VKA4\n  Real x[3] = {1, 2, 3} * time;\n  Real y[3];\nequation\n"
+                           "  y = VKA4G(-VKA4H(x));\nend VKA4;\n"),
+               std::string("function VKA4G\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend VKA4G;\n"
+                           "\nfunction VKA4H\n  input Real x;\n  output Real y;\nalgorithm\n  y := x + 1.0;\n"
+                           "end VKA4H;\n\nclass VKA4\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real y[1];\n"
+                           "  Real y[2];\n  Real y[3];\nequation\n  x = {time, 2.0 * time, 3.0 * time};\n"
+                           "  y = array(VKA4G((-array(VKA4H(x[$i1]) for $i1 in 1:3))[$i1]) for $i1 in 1:3);\n"
+                           "end VKA4;\n"));
+}
+
+YMC_TEST(flatten_vectorized_comprehension_and_if_argument) {
+  // 推导式实参（嵌套的向量化调用、书写的推导式）：体里的迭代变量换成"范围取下标"（applyIndexSubscriptArrayConstructor，
+  // NFExpression.mo:1631-1651 v1.25.0；范围的非字面量下标留 SUBSCRIPTED_EXP，:1528-1549）；if 实参两支各取下标（applySubscriptIf
+  // :1653-1683）。此前 SKIP "vectorized argument form"。期望 = omc 1.25.0 实跑（2026-10-18，探针 pk-p38 VKN1 / VKC1 / VKI1）。
+  YMC_CHECK_EQ(flatten_src("function VKN1G\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2 * x;\nend VKN1G;\n"
+                           "model VKN1\n  Real x[3] = {1, 2, 3} * time;\n  Real y[3];\nequation\n  y = VKN1G(sin(x));\n"
+                           "end VKN1;\n"),
+               std::string("function VKN1G\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend VKN1G;\n"
+                           "\nclass VKN1\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real y[1];\n  Real y[2];\n"
+                           "  Real y[3];\nequation\n  x = {time, 2.0 * time, 3.0 * time};\n"
+                           "  y = array(VKN1G(sin(x[(1:3)[$i1]])) for $i1 in 1:3);\nend VKN1;\n"));
+  YMC_CHECK_EQ(flatten_src("function VKC1G\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2 * x;\nend VKC1G;\n"
+                           "model VKC1\n  Real y[3];\nequation\n  y = VKC1G({time * i for i in 1:3});\nend VKC1;\n"),
+               std::string("function VKC1G\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend VKC1G;\n"
+                           "\nclass VKC1\n  Real y[1];\n  Real y[2];\n  Real y[3];\nequation\n"
+                           "  y = array(VKC1G(time * /*Real*/((1:3)[$i1])) for $i1 in 1:3);\nend VKC1;\n"));
+  YMC_CHECK_EQ(flatten_src("function VKI1G\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2 * x;\nend VKI1G;\n"
+                           "model VKI1\n  parameter Boolean b = true;\n  Real x[3] = {1, 2, 3} * time;\n"
+                           "  Real z[3] = {4, 5, 6} * time;\n  Real y[3];\nequation\n  y = VKI1G(if b then x else z);\n"
+                           "end VKI1;\n"),
+               std::string("function VKI1G\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend VKI1G;\n"
+                           "\nclass VKI1\n  parameter Boolean b = true;\n  Real x[1];\n  Real x[2];\n  Real x[3];\n"
+                           "  Real z[1];\n  Real z[2];\n  Real z[3];\n  Real y[1];\n  Real y[2];\n  Real y[3];\n"
+                           "equation\n  x = {time, 2.0 * time, 3.0 * time};\n"
+                           "  z = {4.0 * time, 5.0 * time, 6.0 * time};\n"
+                           "  y = array(VKI1G(if b then x[$i1] else z[$i1]) for $i1 in 1:3);\nend VKI1;\n"));
+}
+
+YMC_TEST(flatten_vectorized_nested_argument_keeps_inner_function) {
+  // 嵌套的向量化调用作参数数组的绑定（逐元素摊开求值）：omc 收函数（NFInst.mo:219 v1.25.0）时整个推导式
+  // `array(f(g({1.0, 2.0}[(1:2)[$i1]])) for $i1 in 1:2)` 还在（标量化在 :231），里层的 g 与外层的 f 都照打；代入迭代变量后的下标
+  // `{1.0, 2.0}[(1:2)[1]]` 照 Subscript.simplify 先化简再取元素（NFSimplifyExp.mo:1356 / NFSubscript.mo:881-891）。里层实参是结构
+  // 参数数组的同。期望 = omc 1.25.0 实跑（2026-10-18，探针 pk-p27 VQ9、pk-p38 VKN28）。
+  YMC_CHECK_EQ(flatten_src("model VQ9\n  function f\n    input Real x;\n    output Real y;\n  algorithm\n"
+                           "    y := 2 * x;\n  end f;\n  function g\n    input Real x;\n    output Real y;\n"
+                           "  algorithm\n    y := x + 1;\n  end g;\n  parameter Real p[2] = f(g({1, 2}));\n"
+                           "  Real y = p[1] * time;\nend VQ9;\n"),
+               std::string("function VQ9.f\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\nend VQ9.f;\n"
+                           "\nfunction VQ9.g\n  input Real x;\n  output Real y;\nalgorithm\n  y := x + 1.0;\n"
+                           "end VQ9.g;\n\nclass VQ9\n  parameter Real p[1] = 4.0;\n  parameter Real p[2] = 6.0;\n"
+                           "  Real y = p[1] * time;\nend VQ9;\n"));
+  YMC_CHECK_EQ(flatten_src("function VKN28F\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2 * x;\nend VKN28F;\n"
+                           "function VKN28G\n  input Real x;\n  output Real y;\nalgorithm\n  y := x + 1;\nend VKN28G;\n"
+                           "model VKN28\n  parameter Real q[2] = {1, 2} annotation(Evaluate = true);\n"
+                           "  parameter Real p[2] = VKN28F(VKN28G(q));\nend VKN28;\n"),
+               std::string("function VKN28F\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2.0 * x;\n"
+                           "end VKN28F;\n\nfunction VKN28G\n  input Real x;\n  output Real y;\nalgorithm\n"
+                           "  y := x + 1.0;\nend VKN28G;\n\nclass VKN28\n  final parameter Real q[1] = 1.0;\n"
+                           "  final parameter Real q[2] = 2.0;\n  parameter Real p[1] = 4.0;\n"
+                           "  parameter Real p[2] = 6.0;\nend VKN28;\n"));
+}
+
+YMC_TEST(flatten_vectorized_record_result_equation) {
+  // 返回记录的向量化调用作等式的一整侧：omc 整个留成数组构造（NFScalarize.scalarizeEquation 对含数组调用的等式整体保留，
+  // NFScalarize.mo:336-338 v1.25.0），记录构造函数随记录类型收。此前 SKIP "vectorized record result"（MSL QuasiStatic VfController
+  // 的 `y = fromPolar(fill(amplitude, m), …)`）。期望 = omc 1.25.0 实跑（2026-10-18，探针 pk-p38 VKQ12）。
+  YMC_CHECK_EQ(flatten_src("record VKQ12R\n  Real a;\n  Real b;\nend VKQ12R;\nfunction VKQ12F\n  input Real x;\n"
+                           "  output VKQ12R r;\nalgorithm\n  r := VKQ12R(x, 2 * x);\nend VKQ12F;\nmodel VKQ12\n"
+                           "  Real x[3] = {1, 2, 3} * time;\n  VKQ12R y[3];\nequation\n  y = VKQ12F(x);\nend VKQ12;\n"),
+               std::string("function VKQ12F\n  input Real x;\n  output VKQ12R r;\nalgorithm\n"
+                           "  r := VKQ12R(x, 2.0 * x);\nend VKQ12F;\n\n"
+                           "function VKQ12R \"Automatically generated record constructor for VKQ12R\"\n  input Real a;\n"
+                           "  input Real b;\n  output VKQ12R res;\nend VKQ12R;\n\nclass VKQ12\n  Real x[1];\n"
+                           "  Real x[2];\n  Real x[3];\n  Real y[1].a;\n  Real y[1].b;\n  Real y[2].a;\n  Real y[2].b;\n"
+                           "  Real y[3].a;\n  Real y[3].b;\nequation\n  x = {time, 2.0 * time, 3.0 * time};\n"
+                           "  y = array(VKQ12F(x[$i1]) for $i1 in 1:3);\nend VKQ12;\n"));
+}
+
+YMC_TEST(flatten_vectorized_stream_argument_expanded) {
+  // 实参里有流算子的向量化调用：omc 求连接方程里的流算子时把含流算子的数组构造整个展开（evaluateOperators 的
+  // TYPED_ARRAY_CONSTRUCTOR 支，NFConnectEquations.mo:164-166 v1.25.0 → evaluateOperatorArrayConstructorExp :789-808 →
+  // ExpandExp.expandArrayConstructor2，NFExpandExp.mo:471-507），等式随后逐元素（MSL DynamicPipe 的
+  // `mXi_flows[n + 1, :] = -semiLinear(port_b.m_flow, inStream(port_b.Xi_outflow), mediums[n].Xi)`）。此前 SKIP "vectorized call
+  // argument [semiLinear]"。期望 = omc 1.25.0 实跑（2026-10-18，探针 pk-p38 VKT2 / VKT1）。
+  YMC_CHECK_EQ(flatten_src("connector VKT2P\n  flow Real m_flow;\n  stream Real Xi_outflow[1];\n  Real p;\nend VKT2P;\n"
+                           "model VKT2C\n  VKT2P port;\n  Real Xi[1] = {time};\n  Real mXi[1];\nequation\n"
+                           "  mXi = -semiLinear(port.m_flow, inStream(port.Xi_outflow), Xi);\n  port.Xi_outflow = Xi;\n"
+                           "end VKT2C;\nmodel VKT2\n  VKT2C a, b;\nequation\n  connect(a.port, b.port);\n"
+                           "  a.port.m_flow = time;\n  a.port.p = 1;\nend VKT2;\n"),
+               std::string("class VKT2\n  Real a.port.m_flow;\n  Real a.port.Xi_outflow[1];\n  Real a.port.p;\n"
+                           "  Real a.Xi[1];\n  Real a.mXi[1];\n  Real b.port.m_flow;\n  Real b.port.Xi_outflow[1];\n"
+                           "  Real b.port.p;\n  Real b.Xi[1];\n  Real b.mXi[1];\nequation\n  a.port.p = b.port.p;\n"
+                           "  b.port.m_flow + a.port.m_flow = 0.0;\n  a.Xi = {time};\n"
+                           "  a.mXi[1] = -semiLinear(a.port.m_flow, b.port.Xi_outflow[1], a.Xi[1]);\n"
+                           "  a.port.Xi_outflow[1] = a.Xi[1];\n  b.Xi = {time};\n"
+                           "  b.mXi[1] = -semiLinear(b.port.m_flow, a.port.Xi_outflow[1], b.Xi[1]);\n"
+                           "  b.port.Xi_outflow[1] = b.Xi[1];\n  a.port.m_flow = time;\n  a.port.p = 1.0;\nend VKT2;\n"));
+  YMC_CHECK_EQ(flatten_src("connector VKT1P\n  flow Real m_flow;\n  stream Real Xi_outflow[1];\n  Real p;\nend VKT1P;\n"
+                           "model VKT1C\n  VKT1P port;\n  Real Xi[1] = {time};\n  Real mXi[1];\nequation\n"
+                           "  mXi = -semiLinear(port.m_flow, inStream(port.Xi_outflow), Xi);\n  port.Xi_outflow = Xi;\n"
+                           "end VKT1C;\nmodel VKT1\n  VKT1C a, b, c;\nequation\n  connect(a.port, b.port);\n"
+                           "  connect(a.port, c.port);\n  a.port.m_flow = time;\n  b.port.m_flow = 2 * time;\n"
+                           "  a.port.p = 1;\nend VKT1;\n"),
+               std::string("class VKT1\n  Real a.port.m_flow;\n  Real a.port.Xi_outflow[1];\n  Real a.port.p;\n"
+                           "  Real a.Xi[1];\n  Real a.mXi[1];\n  Real b.port.m_flow;\n  Real b.port.Xi_outflow[1];\n"
+                           "  Real b.port.p;\n  Real b.Xi[1];\n  Real b.mXi[1];\n  Real c.port.m_flow;\n"
+                           "  Real c.port.Xi_outflow[1];\n  Real c.port.p;\n  Real c.Xi[1];\n  Real c.mXi[1];\n"
+                           "equation\n  a.port.p = c.port.p;\n  a.port.p = b.port.p;\n"
+                           "  c.port.m_flow + b.port.m_flow + a.port.m_flow = 0.0;\n  a.Xi = {time};\n"
+                           "  a.mXi[1] = -semiLinear(a.port.m_flow, $OMC$inStreamDiv(($OMC$PositiveMax(-b.port.m_flow,"
+                           " 1e-7) * b.port.Xi_outflow[1] + $OMC$PositiveMax(-c.port.m_flow, 1e-7) *"
+                           " c.port.Xi_outflow[1]) / ($OMC$PositiveMax(-b.port.m_flow, 1e-7) +"
+                           " $OMC$PositiveMax(-c.port.m_flow, 1e-7)), a.port.Xi_outflow[1]), a.Xi[1]);\n"
+                           "  a.port.Xi_outflow[1] = a.Xi[1];\n  b.Xi = {time};\n"
+                           "  b.mXi[1] = -semiLinear(b.port.m_flow, $OMC$inStreamDiv(($OMC$PositiveMax(-c.port.m_flow,"
+                           " 1e-7) * c.port.Xi_outflow[1] + $OMC$PositiveMax(-a.port.m_flow, 1e-7) *"
+                           " a.port.Xi_outflow[1]) / ($OMC$PositiveMax(-c.port.m_flow, 1e-7) +"
+                           " $OMC$PositiveMax(-a.port.m_flow, 1e-7)), b.port.Xi_outflow[1]), b.Xi[1]);\n"
+                           "  b.port.Xi_outflow[1] = b.Xi[1];\n  c.Xi = {time};\n"
+                           "  c.mXi[1] = -semiLinear(c.port.m_flow, $OMC$inStreamDiv(($OMC$PositiveMax(-b.port.m_flow,"
+                           " 1e-7) * b.port.Xi_outflow[1] + $OMC$PositiveMax(-a.port.m_flow, 1e-7) *"
+                           " a.port.Xi_outflow[1]) / ($OMC$PositiveMax(-b.port.m_flow, 1e-7) +"
+                           " $OMC$PositiveMax(-a.port.m_flow, 1e-7)), c.port.Xi_outflow[1]), c.Xi[1]);\n"
+                           "  c.port.Xi_outflow[1] = c.Xi[1];\n  a.port.m_flow = time;\n  b.port.m_flow = 2.0 * time;\n"
+                           "  a.port.p = 1.0;\nend VKT1;\n"));
+}
+
+YMC_TEST(flatten_comprehension_simplified_after_structural) {
+  // 书写的推导式在结构参数代入后照常化简（simplifyArrayConstructor 的 else 支，NFSimplifyExp.mo:583-637 v1.25.0；EvalConstants 在
+  // SimplifyModel 之前，NFInst.mo:200-210）：`{k * x[i] …}`、k = 0 → `array(0.0 for i in 1:3)`；体恰是"数组字面量取迭代变量作
+  // 下标"的整个展开（isIteratorSubscriptedArray 支 :616-623），等式随后逐元素；体里的调用代入后实参全成字面量的求值、函数不打。
+  // 此前代入后不化简（静默错；MSL Fluid PartialHeatTransfer 的 `use_k` 支）。期望 = omc 1.25.0 实跑（2026-10-18，探针 pk-p38
+  // VKW2 / VKW10 / VKW12）。
+  YMC_CHECK_EQ(flatten_src("model VKW2\n  parameter Real k = 0 annotation(Evaluate = true);\n"
+                           "  Real x[3] = {1, 2, 3} * time;\n  Real y[3];\nequation\n"
+                           "  y = x + {k * x[i] for i in 1:3};\nend VKW2;\n"),
+               std::string("class VKW2\n  final parameter Real k = 0.0;\n  Real x[1];\n  Real x[2];\n  Real x[3];\n"
+                           "  Real y[1];\n  Real y[2];\n  Real y[3];\nequation\n  x = {time, 2.0 * time, 3.0 * time};\n"
+                           "  y = x + array(0.0 for i in 1:3);\nend VKW2;\n"));
+  YMC_CHECK_EQ(flatten_src("model VKW10\n  parameter Real p[3] = {1, 2, 3} annotation(Evaluate = true);\n"
+                           "  Real x[3] = {1, 2, 3} * time;\n  Real y[3];\nequation\n  y = x + {p[i] for i in 1:3};\n"
+                           "end VKW10;\n"),
+               std::string("class VKW10\n  final parameter Real p[1] = 1.0;\n  final parameter Real p[2] = 2.0;\n"
+                           "  final parameter Real p[3] = 3.0;\n  Real x[1];\n  Real x[2];\n  Real x[3];\n  Real y[1];\n"
+                           "  Real y[2];\n  Real y[3];\nequation\n  x = {time, 2.0 * time, 3.0 * time};\n"
+                           "  y[1] = x[1] + 1.0;\n  y[2] = x[2] + 2.0;\n  y[3] = x[3] + 3.0;\nend VKW10;\n"));
+  YMC_CHECK_EQ(flatten_src("function VKW12G\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2 * x;\nend VKW12G;\n"
+                           "model VKW12\n  parameter Real k = 3 annotation(Evaluate = true);\n"
+                           "  Real x[3] = {1, 2, 3} * time;\n  Real y[3];\nequation\n"
+                           "  y = x + {VKW12G(k) * x[i] for i in 1:3};\nend VKW12;\n"),
+               std::string("class VKW12\n  final parameter Real k = 3.0;\n  Real x[1];\n  Real x[2];\n  Real x[3];\n"
+                           "  Real y[1];\n  Real y[2];\n  Real y[3];\nequation\n  x = {time, 2.0 * time, 3.0 * time};\n"
+                           "  y = x + array(6.0 * x[i] for i in 1:3);\nend VKW12;\n"));
+  // 迭代范围是整数字面量数组的同样展开（isLiteral(range) 照样成立；探针 pk-p38 VKW32）；结构参数代入后的标量下标先化简再取
+  // 元素（Subscript.simplify，NFSubscript.mo:881-891；VKB19 `({4, 5, 6})[n - 1]` → 5.0）。
+  YMC_CHECK_EQ(flatten_src("model VKW32\n  parameter Real p[3] = {1, 2, 3} annotation(Evaluate = true);\n"
+                           "  Real x[2] = {1, 2} * time;\n  Real y[2];\nequation\n  y = x + {p[i] for i in {1, 3}};\n"
+                           "end VKW32;\n"),
+               std::string("class VKW32\n  final parameter Real p[1] = 1.0;\n  final parameter Real p[2] = 2.0;\n"
+                           "  final parameter Real p[3] = 3.0;\n  Real x[1];\n  Real x[2];\n  Real y[1];\n  Real y[2];\n"
+                           "equation\n  x = {time, 2.0 * time};\n  y[1] = x[1] + 1.0;\n  y[2] = x[2] + 3.0;\n"
+                           "end VKW32;\n"));
+  YMC_CHECK_EQ(flatten_src("model VKB19\n  parameter Integer n = 3 annotation(Evaluate = true);\n"
+                           "  Real y = ({4, 5, 6})[n - 1] * time;\nend VKB19;\n"),
+               std::string("class VKB19\n  final parameter Integer n = 3;\n  Real y = 5.0 * time;\nend VKB19;\n"));
+}
+
+YMC_TEST(flatten_vectorized_nested_iterator_scalarize_unsupported) {
+  // 体里嵌着同名迭代变量 `$i1` 的推导式（运算式实参 `(array(f(x[$i1]) for $i1 in 1:3) * p)[$i1]`）在逐元素展开处：omc 只换外层的
+  // 迭代变量节点，打 `homotopy((array(…) * p)[1], x[1]) + …`（sum）、`VKA7G((array(…) * 2.0)[1])`（参数数组摊分）；ymc 按名代换
+  // 分不开 → 不出结果（SKIP）。omc 1.25.0 实跑（2026-10-18，探针 pk-p38 VKH19 / VKA7）。
+  YMC_CHECK(flatten_src("function VKH19G\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2 * x;\nend VKH19G;\n"
+                        "model VKH19\n  Real x[3] = {1, 2, 3} * time;\n  parameter Real p = 2;\n  Real s;\nequation\n"
+                        "  s = sum(homotopy(VKH19G(x) * p, x));\nend VKH19;\n")
+                .rfind("<unsupported:", 0) == 0);
+  YMC_CHECK(flatten_src("function VKA7G\n  input Real x;\n  output Real y;\nalgorithm\n  y := 2 * x;\nend VKA7G;\n"
+                        "function VKA7H\n  input Real x;\n  output Real y;\nalgorithm\n  y := x + 1;\nend VKA7H;\n"
+                        "model VKA7\n  parameter Real p[3] = {1, 2, 3};\n  parameter Real y[3] = VKA7G(VKA7H(p) * 2);\n"
+                        "end VKA7;\n")
                 .rfind("<unsupported:", 0) == 0);
 }
 

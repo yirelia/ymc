@@ -1,0 +1,3516 @@
+//// set: pk-p38 — 向量化调用整体保留时的实参形态（67d：MSL QuasiStatic IMC_Conveyor 此前 SKIP "qualified function call [vectorized argument form]"、Fluid BranchingDynamicPipes 此前 SKIP "vectorized call argument [homotopy]"，现都 PASS）：omc 把向量化调用定型成数组构造（NFCall.vectorizeCall :2851-2907 v1.25.0），实参按 Expression.applySubscript 取下标（NFExpression.mo:1256-1297），化简时体照常化简（simplifyArrayConstructor 的 else 支，NFSimplifyExp.mo:583-637）——fill / ones / zeros 实参取成填充值（simplifyFill :524-536 + simplifySubscriptedExp :1346-1379；VKF / pk-p36 VRA）、实参全成字面量的纯调用求值、函数不打（simplifyCall :166-219，homotopy / 外部函数照留；VKL / VKB / VKS）、含数组调用的运算式实参整个取下标 `(array(…) * p)[$i1]`（makeSubscriptedExp :1685-1719；VKA / VKH / VKG5，MSL 管道流动模型的 homotopy）、推导式 / 嵌套向量化调用实参的迭代变量换成 `(1:3)[$i1]`（applyIndexSubscriptArrayConstructor :1631-1651；VKN / VKC；参数数组摊分 / 属性里逐元素求值时下标先化简（Subscript.simplify NFSubscript.mo:881-891）、里层函数照打——收函数在标量化之前 NFInst.mo:219 / :231：pk-p27 VQ9、VKN27-VKN37）、if 实参两支各取下标（applySubscriptIf :1653-1683；VKI）、返回记录的向量化调用在等式一侧整体保留（VKQ，pk-p36 VRC1 / VRC2，MSL VfController 的 `y = fromPolar(fill(amplitude, m), …)`）、实参含流算子的随连接方程求值整个展开（NFConnectEquations.mo:164-166 / :789-808 → ExpandExp.expandArrayConstructor2 NFExpandExp.mo:471-507；VKT / VKU，MSL DynamicPipe 的 `-semiLinear(port_b.m_flow, inStream(port_b.Xi_outflow), mediums[n].Xi)`）。基线静默错（一并修）：向量化调用的体不化简（VKL2 / VKL7 / VKL9-VKL14 / VKP15 / VKB1 / VKB2 / VKB5-VKB7 / VKB11 / VKB13 / VKB14 / VKS4 / VKS8 / VKS13 / VKS14 / VKU3 / VKU4）、只向量化一个元素的 external "C" 内建等价函数被折成数值（VKS16）、书写的推导式代入结构参数后不再化简（VKW2 / VKW6-VKW8 / VKW10 / VKW12-VKW19 / VKW21 / VKW25 / VKW27-VKW29 / VKW31-VKW34；MSL PartialHeatTransfer 的 `use_k` 支）、代入结构参数后取下标式的标量下标不化简（VKB19 `({4, 5, 6})[n - 1]`，Subscript.simplify NFSubscript.mo:881-891）；VKL15 此前 FAIL、现 SKIP（ymc 求不出 String 结果）。照旧 SKIP：逐元素展开处（参数摊分 / 属性 / sum）嵌着同名迭代变量的（VKH19 / VKH21 / VKA7 / VKA8 / VKA23）、记录数组的绑定（pk-p36 VRC9）、嵌套的记录调用（VKQ20）、算法里的记录（VKQ7）、范围 / cat / 返回数组的调用实参（VKR / VKG1-VKG4 / VKG6 / VKG7 / VKG10-VKG12 / VKH6）、常量数组实参（VKS5 / VKS6）、函数体里的（VKP9）、多维 / 一元素的嵌套实参（VKN14 / VKN25）、Integer 运算式实参（VKA16）、if 的字面量 / 运算支（VKI6 / VKI10）、when 里的数组调用（VKL8 / VKW23）、多输出（VKS15）、数组值的 fill（VKF8）、参数绑定里的 homotopy（VKH20）、常量数组绑定里的嵌套调用（VKN38）、ymc 求不出的常量调用（VKS12 / VKL15 / VKQ13）
+//// model: VKF1
+function VKF1G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKF1G;
+model VKF1
+  parameter Real p = 2;
+  Real y[3];
+equation
+  y = VKF1G(fill(p, 3));
+end VKF1;
+//// model: VKF2
+function VKF2G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKF2G;
+model VKF2
+  Real x[2] = {time, 2 * time};
+  Real y[3];
+equation
+  y = VKF2G(fill(x[1], 3));
+end VKF2;
+//// model: VKF3
+function VKF3G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKF3G;
+model VKF3
+  Real y[3];
+equation
+  y = VKF3G(fill(2 * time, 3));
+end VKF3;
+//// model: VKF4
+function VKF4G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKF4G;
+model VKF4
+  Real y[3];
+equation
+  y = VKF4G(zeros(3));
+end VKF4;
+//// model: VKF5
+function VKF5G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VKF5G;
+model VKF5
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = VKF5G(fill(time, 3), x);
+end VKF5;
+//// model: VKF6
+function VKF6G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VKF6G;
+model VKF6
+  Real y[3];
+equation
+  y = VKF6G(fill(time, 3), 2);
+end VKF6;
+//// model: VKF7
+function VKF7G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKF7G;
+model VKF7
+  Real y[3, 2];
+equation
+  y = VKF7G(fill(time, 3, 2));
+end VKF7;
+//// model: VKF8
+function VKF8G
+  input Real x[2];
+  output Real y;
+algorithm
+  y := x[1] + x[2];
+end VKF8G;
+model VKF8
+  Real y[3];
+equation
+  y = VKF8G(fill({time, 2 * time}, 3));
+end VKF8;
+//// model: VKF9
+function VKF9G
+  input Integer x;
+  output Integer y;
+algorithm
+  y := 2 * x;
+end VKF9G;
+model VKF9
+  Integer y[3];
+equation
+  y = VKF9G(fill(2, 3));
+end VKF9;
+//// model: VKF10
+function VKF10G
+  input Boolean x;
+  output Real y;
+algorithm
+  y := if x then 1 else 2;
+end VKF10G;
+model VKF10
+  Real y[3];
+  Boolean b = time > 0.5;
+equation
+  y = VKF10G(fill(b, 3));
+end VKF10;
+//// model: VKF11
+function VKF11G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKF11G;
+model VKF11
+  parameter Integer m = 3;
+  Real y[m];
+equation
+  y = VKF11G(fill(time, m));
+end VKF11;
+//// model: VKF12
+function VKF12G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKF12G;
+model VKF12
+  Real y[3];
+equation
+  y = VKF12G(fill(sin(time), 3));
+end VKF12;
+//// model: VKF13
+function VKF13G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKF13G;
+model VKF13
+  Real y[3];
+equation
+  y = VKF13G(ones(3) * time);
+end VKF13;
+//// model: VKF14
+function VKF14G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKF14G;
+model VKF14
+  Real y[3];
+equation
+  y = VKF14G(-fill(time, 3));
+end VKF14;
+//// model: VKF15
+function VKF15G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKF15G;
+model VKF15
+  Integer k = integer(time);
+  Real y[3];
+equation
+  y = VKF15G(fill(k, 3));
+end VKF15;
+//// model: VKF16
+function VKF16G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VKF16G;
+model VKF16
+  Real y[3];
+equation
+  y = VKF16G(fill(1, 3), fill(2, 3));
+end VKF16;
+//// model: VKF17
+function VKF17G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VKF17G;
+model VKF17
+  Real y[3];
+equation
+  y = VKF17G(fill(1, 3), time);
+end VKF17;
+//// model: VKF18
+function VKF18G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VKF18G;
+model VKF18
+  parameter Real p = 3;
+  Real y[3];
+equation
+  y = VKF18G(fill(1, 3), p);
+end VKF18;
+//// model: VKL1
+function VKL1G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKL1G;
+model VKL1
+  Real y[3];
+equation
+  y = VKL1G({time, time, time});
+end VKL1;
+//// model: VKL2
+function VKL2G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKL2G;
+model VKL2
+  Real y[3];
+equation
+  y = VKL2G({1, 1, 1});
+end VKL2;
+//// model: VKL3
+function VKL3G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKL3G;
+model VKL3
+  Real y[2, 2];
+equation
+  y = VKL3G({{1, 2}, {3, 4}});
+end VKL3;
+//// model: VKL4
+function VKL4G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKL4G;
+model VKL4
+  Real y[2, 2];
+equation
+  y = VKL4G({{time, time}, {time, time}});
+end VKL4;
+//// model: VKL5
+function VKL5G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKL5G;
+model VKL5
+  Real y[2, 2];
+equation
+  y = VKL5G({{time, 2 * time}, {time, 2 * time}});
+end VKL5;
+//// model: VKL6
+function VKL6G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VKL6G;
+model VKL6
+  Real y[3];
+equation
+  y = VKL6G({1, 1, 1}, {1, 2, 3});
+end VKL6;
+//// model: VKL7
+function VKL7G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VKL7G;
+model VKL7
+  Real y[3];
+equation
+  y = VKL7G({1, 1, 1}, {2, 2, 2});
+end VKL7;
+//// model: VKR1
+function VKR1G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKR1G;
+model VKR1
+  Real y[3];
+equation
+  y = VKR1G(1:3);
+end VKR1;
+//// model: VKR2
+function VKR2G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKR2G;
+model VKR2
+  Real y[3];
+equation
+  y = VKR2G(1.0:3.0);
+end VKR2;
+//// model: VKR3
+function VKR3G
+  input Integer x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKR3G;
+model VKR3
+  Real y[3];
+equation
+  y = VKR3G(1:3);
+end VKR3;
+//// model: VKR4
+function VKR4G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VKR4G;
+model VKR4
+  Real y[3];
+equation
+  y = VKR4G(1:3, time);
+end VKR4;
+//// model: VKC1
+function VKC1G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKC1G;
+model VKC1
+  Real y[3];
+equation
+  y = VKC1G({time * i for i in 1:3});
+end VKC1;
+//// model: VKC2
+function VKC2G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKC2G;
+model VKC2
+  Real y[3];
+equation
+  y = VKC2G({i for i in 1:3});
+end VKC2;
+//// model: VKC3
+function VKC3G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKC3G;
+model VKC3
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = VKC3G({x[i] for i in 1:3});
+end VKC3;
+//// model: VKN1
+function VKN1G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN1G;
+model VKN1
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = VKN1G(sin(x));
+end VKN1;
+//// model: VKN2
+function VKN2G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN2G;
+function VKN2H
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKN2H;
+model VKN2
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = VKN2G(VKN2H(x));
+end VKN2;
+//// model: VKN3
+function VKN3G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN3G;
+model VKN3
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = sin(VKN3G(x));
+end VKN3;
+//// model: VKN4
+function VKN4G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN4G;
+model VKN4
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = VKN4G(abs(x));
+end VKN4;
+//// model: VKA1
+function VKA1G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKA1G;
+model VKA1
+  Real y[3];
+equation
+  y = VKA1G(2 * fill(time, 3));
+end VKA1;
+//// model: VKA2
+function VKA2G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKA2G;
+function VKA2H
+  input Real x;
+  output Real y[3];
+algorithm
+  y := {x, 2 * x, 3 * x};
+end VKA2H;
+model VKA2
+  Real y[3];
+equation
+  y = VKA2G(VKA2H(time) * 2);
+end VKA2;
+//// model: VKA3
+function VKA3G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKA3G;
+function VKA3H
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKA3H;
+model VKA3
+  Real x[3] = {1, 2, 3} * time;
+  parameter Real p = 2;
+  Real y[3];
+equation
+  y = VKA3G(VKA3H(x) * p);
+end VKA3;
+//// model: VKA4
+function VKA4G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKA4G;
+function VKA4H
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKA4H;
+model VKA4
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = VKA4G(-VKA4H(x));
+end VKA4;
+//// model: VKA5
+function VKA5G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKA5G;
+function VKA5H
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKA5H;
+model VKA5
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = VKA5G(VKA5H(x) + x);
+end VKA5;
+//// model: VKA6
+function VKA6G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKA6G;
+model VKA6
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = VKA6G(sin(x) * 2);
+end VKA6;
+//// model: VKG1
+function VKG1G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKG1G;
+function VKG1H
+  input Real x;
+  output Real y[3];
+algorithm
+  y := {x, 2 * x, 3 * x};
+end VKG1H;
+model VKG1
+  Real y[3];
+equation
+  y = VKG1G(VKG1H(time));
+end VKG1;
+//// model: VKG2
+function VKG2G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKG2G;
+function VKG2H
+  input Real x;
+  output Real y[3];
+algorithm
+  y := {x, 2 * x, 3 * x};
+end VKG2H;
+model VKG2
+  Real y[3];
+equation
+  y = VKG2G(VKG2H(1));
+end VKG2;
+//// model: VKG3
+function VKG3G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKG3G;
+function VKG3H
+  input Real x;
+  output Real y[3];
+algorithm
+  y := {x, x, x};
+end VKG3H;
+model VKG3
+  Real y[3];
+equation
+  y = VKG3G(VKG3H(1));
+end VKG3;
+//// model: VKG4
+function VKG4G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKG4G;
+model VKG4
+  Real y[2];
+equation
+  y = VKG4G(cat(1, {time}, {2 * time}));
+end VKG4;
+//// model: VKI1
+function VKI1G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKI1G;
+model VKI1
+  parameter Boolean b = true;
+  Real x[3] = {1, 2, 3} * time;
+  Real z[3] = {4, 5, 6} * time;
+  Real y[3];
+equation
+  y = VKI1G(if b then x else z);
+end VKI1;
+//// model: VKI2
+function VKI2G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKI2G;
+model VKI2
+  Boolean b = time > 0.5;
+  Real x[3] = {1, 2, 3} * time;
+  Real z[3] = {4, 5, 6} * time;
+  Real y[3];
+equation
+  y = VKI2G(if b then x else z);
+end VKI2;
+//// model: VKP1
+function VKP1G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKP1G;
+model VKP1
+  Real y[3] = VKP1G(fill(1, 3));
+end VKP1;
+//// model: VKP2
+function VKP2G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKP2G;
+model VKP2
+  parameter Real p = 2;
+  parameter Real y[3] = VKP2G(fill(p, 3));
+end VKP2;
+//// model: VKP3
+function VKP3G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKP3G;
+model VKP3
+  parameter Real y[3] = VKP3G(fill(1, 3));
+end VKP3;
+//// model: VKP4
+function VKP4G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKP4G;
+model VKP4
+  Real y[3];
+equation
+  y = 2 * VKP4G(fill(1, 3));
+end VKP4;
+//// model: VKP5
+function VKP5G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKP5G;
+model VKP5
+  Real s;
+equation
+  s = sum(VKP5G(fill(time, 3)));
+end VKP5;
+//// model: VKP6
+function VKP6G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKP6G;
+model VKP6
+  Real s;
+equation
+  s = sum(VKP6G(fill(1, 3)));
+end VKP6;
+//// model: VKP7
+function VKP7G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKP7G;
+model VKP7
+  Real y[3](start = VKP7G(fill(1, 3)));
+equation
+  der(y) = -y;
+end VKP7;
+//// model: VKP8
+function VKP8G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKP8G;
+model VKP8
+  parameter Real p = 2;
+  Real y[3](start = VKP8G(fill(p, 3)));
+equation
+  der(y) = -y;
+end VKP8;
+//// model: VKP9
+function VKP9G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKP9G;
+function VKP9H
+  input Real x;
+  output Real y[3];
+algorithm
+  y := VKP9G(fill(x, 3));
+end VKP9H;
+model VKP9
+  Real y[3];
+equation
+  y = VKP9H(time);
+end VKP9;
+//// model: VKP10
+function VKP10G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKP10G;
+model VKP10
+  Real y[3];
+algorithm
+  y := VKP10G(fill(time, 3));
+end VKP10;
+//// model: VKP11
+function VKP11G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKP11G;
+model VKP11
+  Real y[3];
+algorithm
+  y := VKP11G(fill(1, 3));
+end VKP11;
+//// model: VKP12
+function VKP12G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKP12G;
+model VKP12
+  Real y[2, 3];
+equation
+  for i in 1:2 loop
+    y[i, :] = VKP12G(fill(i * time, 3));
+  end for;
+end VKP12;
+//// model: VKP13
+function VKP13G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKP13G;
+model VKP13
+  Real y[3];
+equation
+  y = VKP13G(fill(time, 3)) + {1, 2, 3};
+end VKP13;
+//// model: VKP14
+function VKP14G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKP14G;
+model VKP14
+  Real y[3];
+  Real z[3];
+equation
+  y = VKP14G(fill(time, 3));
+  z = VKP14G({1, 1, 1});
+end VKP14;
+//// model: VKP15
+function VKP15G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKP15G;
+model VKP15
+  Real y[3];
+  Real z[3];
+equation
+  y = VKP15G({1, 1, 1});
+  z = VKP15G({1, 2, 3});
+end VKP15;
+//// model: VKP16
+function VKP16G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKP16G;
+model VKP16
+  Real y[3];
+initial equation
+  y = VKP16G(fill(time, 3));
+equation
+  der(y) = -y;
+end VKP16;
+//// model: VKP17
+function VKP17G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKP17G;
+model VKP17
+  Real y[3];
+equation
+  if time > 0.5 then
+    y = VKP17G(fill(time, 3));
+  else
+    y = VKP17G(fill(1, 3));
+  end if;
+end VKP17;
+//// model: VKP18
+function VKP18G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKP18G;
+model VKP18
+  Real y[3];
+equation
+  y = VKP18G(fill(1, 3)) * time;
+end VKP18;
+//// model: VKP19
+function VKP19G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKP19G;
+model VKP19
+  constant Real c[3] = VKP19G(fill(1, 3));
+  Real y[3] = c * time;
+end VKP19;
+//// model: VKP20
+function VKP20G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKP20G;
+model VKP20
+  Real y[3] = VKP20G(fill(time, 3));
+end VKP20;
+//// model: VKH1
+model VKH1
+  Real x[3] = {1, 2, 3} * time;
+  Real z[3] = {4, 5, 6} * time;
+  Real y[3];
+equation
+  y = homotopy(x, z);
+end VKH1;
+//// model: VKH2
+function VKH2G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKH2G;
+model VKH2
+  Real x[3] = {1, 2, 3} * time;
+  parameter Real p = 2;
+  Real y[3];
+equation
+  y = homotopy(VKH2G(x) * p, 2 * x);
+end VKH2;
+//// model: VKH3
+model VKH3
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = homotopy(fill(time, 3), x);
+end VKH3;
+//// model: VKH4
+function VKH4G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKH4G;
+model VKH4
+  Real x[3] = {1, 2, 3} * time;
+  parameter Real p = 2;
+  Real y[3];
+equation
+  y = homotopy(actual = VKH4G(x) * p, simplified = p * x);
+end VKH4;
+//// model: VKH5
+function VKH5G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKH5G;
+model VKH5
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = homotopy(VKH5G(x), x);
+end VKH5;
+//// model: VKH6
+function VKH6H
+  input Real x;
+  output Real y[3];
+algorithm
+  y := {x, 2 * x, 3 * x};
+end VKH6H;
+model VKH6
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = homotopy(VKH6H(time), x);
+end VKH6;
+//// model: VKH7
+model VKH7
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = homotopy(1.0, x);
+end VKH7;
+//// model: VKH8
+function VKH8G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKH8G;
+model VKH8
+  Real x[3] = {1, 2, 3} * time;
+  parameter Real p = 2;
+  Real y[3] = homotopy(VKH8G(x) * p, x);
+end VKH8;
+//// model: VKH9
+function VKH9G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKH9G;
+model VKH9
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = homotopy(-VKH9G(x), x);
+end VKH9;
+//// model: VKH10
+function VKH10G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKH10G;
+model VKH10
+  Real x[3] = {1, 2, 3} * time;
+  parameter Real p = 2;
+  Real y[3];
+equation
+  y = homotopy(VKH10G(x) * p + x, x);
+end VKH10;
+//// model: VKH11
+function VKH11G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKH11G;
+model VKH11
+  Real x[3] = {1, 2, 3} * time;
+  parameter Real p = 2;
+  Real y[3];
+equation
+  y = homotopy(VKH11G(x) / p, x);
+end VKH11;
+//// model: VKH12
+function VKH12G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKH12G;
+model VKH12
+  Real x[3] = {1, 2, 3} * time;
+  parameter Real p = 2;
+  Real y[3];
+equation
+  y = homotopy(p * VKH12G(x), x);
+end VKH12;
+//// model: VKH13
+function VKH13G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKH13G;
+model VKH13
+  Real x[3] = {1, 2, 3} * time;
+  parameter Real p = 2;
+  Real y[3];
+equation
+  y = homotopy(VKH13G(x) * p, VKH13G(x));
+end VKH13;
+//// model: VKH14
+model VKH14
+  Real y[3];
+equation
+  y = homotopy(fill(1, 3), {2, 2, 2});
+end VKH14;
+//// model: VKH15
+function VKH15G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VKH15G;
+model VKH15
+  Real x[3] = {1, 2, 3} * time;
+  parameter Real p = 2;
+  Real y[3];
+equation
+  y = homotopy(VKH15G(x, p) * p, p * x);
+end VKH15;
+//// model: VKH16
+function VKH16G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKH16G;
+model VKH16
+  Real x[2, 3] = {{1, 2, 3}, {4, 5, 6}} * time;
+  parameter Real p = 2;
+  Real y[2, 3];
+equation
+  y = homotopy(VKH16G(x) * p, x);
+end VKH16;
+//// model: VKH17
+function VKH17G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKH17G;
+model VKH17
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = homotopy(VKH17G(x) * time, x);
+end VKH17;
+//// model: VKH18
+function VKH18G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKH18G;
+model VKH18
+  Real x[3] = {1, 2, 3} * time;
+  parameter Real p = 2;
+  Real y[3];
+equation
+  y = 2 * homotopy(VKH18G(x) * p, x);
+end VKH18;
+//// model: VKH19
+function VKH19G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKH19G;
+model VKH19
+  Real x[3] = {1, 2, 3} * time;
+  parameter Real p = 2;
+  Real s;
+equation
+  s = sum(homotopy(VKH19G(x) * p, x));
+end VKH19;
+//// model: VKQ1
+model VKQ1
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.fromPolar(fill(1, 3), fill(2, 3));
+end VKQ1;
+//// model: VKQ2
+model VKQ2
+  parameter Integer m = 3 annotation(Evaluate = true);
+  Real amplitude = time;
+  parameter Real orientation[m] = -Modelica.Electrical.Polyphase.Functions.symmetricOrientation(m);
+  parameter Real BasePhase = 0;
+  Complex y[m];
+equation
+  y = Modelica.ComplexMath.fromPolar(fill(amplitude, m), orientation + fill(BasePhase - Modelica.Constants.pi/2, m));
+end VKQ2;
+//// model: VKQ3
+model VKQ3
+  Real r[3] = {1, 2, 3} * time;
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.fromPolar(r, fill(2, 3));
+end VKQ3;
+//// model: VKQ4
+model VKQ4
+  Real r[3] = {1, 2, 3} * time;
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.fromPolar(r, 2.0);
+end VKQ4;
+//// model: VKQ5
+model VKQ5
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.fromPolar(fill(time, 3), {1, 2, 3});
+end VKQ5;
+//// model: VKQ6
+model VKQ6
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.fromPolar({1, 1, 1}, {2, 2, 2});
+end VKQ6;
+//// model: VKB1
+model VKB1
+  Real y[3];
+equation
+  y = sin({time, time, time});
+end VKB1;
+//// model: VKB2
+model VKB2
+  Real y[3];
+equation
+  y = sin({1, 1, 1});
+end VKB2;
+//// model: VKB3
+model VKB3
+  Real y[3];
+equation
+  y = sin({1, 2, 3});
+end VKB3;
+//// model: VKB4
+model VKB4
+  Real y[3];
+equation
+  y = abs({-1, -1, -1} * time);
+end VKB4;
+//// model: VKB5
+model VKB5
+  Real y[3];
+equation
+  y = homotopy({1, 1, 1}, {2, 2, 2});
+end VKB5;
+//// model: VKB6
+model VKB6
+  Real y[3];
+equation
+  y = homotopy({time, time, time}, {2, 2, 2});
+end VKB6;
+//// model: VKB7
+model VKB7
+  Real y[3];
+equation
+  y = atan2({1, 1, 1}, time);
+end VKB7;
+//// model: VKB8
+model VKB8
+  Real y[3];
+equation
+  y = sin(fill(time, 3));
+end VKB8;
+//// model: VKB9
+model VKB9
+  Real y[3];
+equation
+  y = sin(fill(1, 3));
+end VKB9;
+//// model: VKB10
+model VKB10
+  Real y[3];
+equation
+  y = atan2(fill(time, 3), {1, 2, 3});
+end VKB10;
+//// model: VKB11
+model VKB11
+  Real y[3];
+equation
+  y = sin({1, 1, 1}) * time;
+end VKB11;
+//// model: VKB12
+model VKB12
+  parameter Real y[3] = sin({1, 1, 1});
+end VKB12;
+//// model: VKB13
+model VKB13
+  Real y[3] = sin({time, time, time});
+end VKB13;
+//// model: VKB14
+model VKB14
+  Integer y[3];
+equation
+  y = abs({-1, -1, -1});
+end VKB14;
+//// model: VKB15
+model VKB15
+  Real s;
+equation
+  s = sum(sin({time, time, time}));
+end VKB15;
+//// model: VKB16
+model VKB16
+  Real y[3];
+equation
+  y = homotopy(fill(1, 3), fill(time, 3));
+end VKB16;
+//// model: VKS1
+function VKS1G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKS1G;
+model VKS1
+  parameter Real p = 2 annotation(Evaluate = true);
+  Real y[3];
+equation
+  y = VKS1G(fill(p, 3));
+end VKS1;
+//// model: VKS2
+function VKS2G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKS2G;
+model VKS2
+  final parameter Real p = 2;
+  Real y[3];
+equation
+  y = VKS2G(fill(p, 3));
+end VKS2;
+//// model: VKS3
+function VKS3G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKS3G;
+model VKS3
+  constant Real c = 2;
+  Real y[3];
+equation
+  y = VKS3G(fill(c, 3));
+end VKS3;
+//// model: VKS4
+function VKS4G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKS4G;
+model VKS4
+  parameter Real p[3] = {1, 1, 1} annotation(Evaluate = true);
+  Real y[3];
+equation
+  y = VKS4G(p);
+end VKS4;
+//// model: VKS5
+function VKS5G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKS5G;
+model VKS5
+  constant Real c[3] = {1, 1, 1};
+  Real y[3];
+equation
+  y = VKS5G(c);
+end VKS5;
+//// model: VKS6
+function VKS6G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKS6G;
+model VKS6
+  constant Real c[3] = {1, 2, 3};
+  Real y[3];
+equation
+  y = VKS6G(c);
+end VKS6;
+//// model: VKS7
+function VKS7G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKS7G;
+model VKS7
+  parameter Real p[3] = {1, 2, 3} annotation(Evaluate = true);
+  Real y[3];
+equation
+  y = VKS7G(p);
+end VKS7;
+//// model: VKS8
+function VKS8G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKS8G;
+model VKS8
+  parameter Real p = 2 annotation(Evaluate = true);
+  Real y[3];
+equation
+  y = VKS8G({p, p, p});
+end VKS8;
+//// model: VKS9
+function VKS9G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VKS9G;
+model VKS9
+  parameter Real p = 2 annotation(Evaluate = true);
+  Real y[3];
+equation
+  y = VKS9G(fill(p, 3), {1, 2, 3});
+end VKS9;
+//// model: VKS10
+function VKS10G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKS10G;
+model VKS10
+  parameter Real p = 2;
+  Real y[3];
+equation
+  y = VKS10G({p, p, p});
+end VKS10;
+//// model: VKS11
+impure function VKS11G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKS11G;
+model VKS11
+  Real y[3];
+equation
+  y = VKS11G({1, 1, 1});
+end VKS11;
+//// model: VKS12
+function VKS12G
+  input Real x;
+  output Real y;
+algorithm
+  assert(x < 0, "x must be negative");
+  y := 2 * x;
+end VKS12G;
+model VKS12
+  Real y[3];
+equation
+  y = VKS12G({1, 1, 1});
+end VKS12;
+//// model: VKS13
+function VKS13G
+  input Real x;
+  output Real y;
+external "C" y = sin(x);
+end VKS13G;
+model VKS13
+  Real y[3];
+equation
+  y = VKS13G({1, 1, 1});
+end VKS13;
+//// model: VKS14
+function VKS14G
+  input Real x;
+  output Real y[2];
+algorithm
+  y := {x, 2 * x};
+end VKS14G;
+model VKS14
+  Real y[3, 2];
+equation
+  y = VKS14G({1, 1, 1});
+end VKS14;
+//// model: VKS15
+function VKS15G
+  input Real x;
+  output Real y;
+  output Real z;
+algorithm
+  y := 2 * x;
+  z := 3 * x;
+end VKS15G;
+model VKS15
+  Real y[3];
+equation
+  y = VKS15G({1, 1, 1});
+end VKS15;
+//// model: VKT1
+connector VKT1P
+  flow Real m_flow;
+  stream Real Xi_outflow[1];
+  Real p;
+end VKT1P;
+model VKT1C
+  VKT1P port;
+  Real Xi[1] = {time};
+  Real mXi[1];
+equation
+  mXi = -semiLinear(port.m_flow, inStream(port.Xi_outflow), Xi);
+  port.Xi_outflow = Xi;
+end VKT1C;
+model VKT1
+  VKT1C a, b, c;
+equation
+  connect(a.port, b.port);
+  connect(a.port, c.port);
+  a.port.m_flow = time;
+  b.port.m_flow = 2 * time;
+  a.port.p = 1;
+end VKT1;
+//// model: VKT2
+connector VKT2P
+  flow Real m_flow;
+  stream Real Xi_outflow[1];
+  Real p;
+end VKT2P;
+model VKT2C
+  VKT2P port;
+  Real Xi[1] = {time};
+  Real mXi[1];
+equation
+  mXi = -semiLinear(port.m_flow, inStream(port.Xi_outflow), Xi);
+  port.Xi_outflow = Xi;
+end VKT2C;
+model VKT2
+  VKT2C a, b;
+equation
+  connect(a.port, b.port);
+  a.port.m_flow = time;
+  a.port.p = 1;
+end VKT2;
+//// model: VKT3
+connector VKT3P
+  flow Real m_flow;
+  stream Real Xi_outflow[2];
+  Real p;
+end VKT3P;
+model VKT3C
+  VKT3P port;
+  Real Xi[2] = {time, 2 * time};
+  Real mXi[2];
+equation
+  mXi = -semiLinear(port.m_flow, inStream(port.Xi_outflow), Xi);
+  port.Xi_outflow = Xi;
+end VKT3C;
+model VKT3
+  VKT3C a, b, c;
+equation
+  connect(a.port, b.port);
+  connect(a.port, c.port);
+  a.port.m_flow = time;
+  b.port.m_flow = 2 * time;
+  a.port.p = 1;
+end VKT3;
+//// model: VKT4
+connector VKT4P
+  flow Real m_flow;
+  stream Real Xi_outflow[2];
+  Real p;
+end VKT4P;
+model VKT4C
+  VKT4P port;
+  Real Xi[2] = {time, 2 * time};
+  Real mXi[2];
+equation
+  mXi = -semiLinear(port.m_flow, inStream(port.Xi_outflow), Xi);
+  port.Xi_outflow = Xi;
+end VKT4C;
+model VKT4
+  VKT4C a, b;
+equation
+  connect(a.port, b.port);
+  a.port.m_flow = time;
+  a.port.p = 1;
+end VKT4;
+//// model: VKT5
+connector VKT5P
+  flow Real m_flow;
+  stream Real Xi_outflow[1];
+  Real p;
+end VKT5P;
+model VKT5C
+  VKT5P port;
+  Real Xi[1] = {time};
+  Real mXi[1];
+equation
+  mXi = semiLinear(port.m_flow, inStream(port.Xi_outflow), Xi);
+  port.Xi_outflow = Xi;
+end VKT5C;
+model VKT5
+  VKT5C a, b, c;
+equation
+  connect(a.port, b.port);
+  connect(a.port, c.port);
+  a.port.m_flow = time;
+  b.port.m_flow = 2 * time;
+  a.port.p = 1;
+end VKT5;
+//// model: VKT6
+connector VKT6P
+  flow Real m_flow;
+  stream Real Xi_outflow[1];
+  Real p;
+end VKT6P;
+model VKT6C
+  VKT6P port;
+  Real Xi[1] = {time};
+  Real mXi[1];
+equation
+  mXi = abs(inStream(port.Xi_outflow));
+  port.Xi_outflow = Xi;
+end VKT6C;
+model VKT6
+  VKT6C a, b, c;
+equation
+  connect(a.port, b.port);
+  connect(a.port, c.port);
+  a.port.m_flow = time;
+  b.port.m_flow = 2 * time;
+  a.port.p = 1;
+end VKT6;
+//// model: VKT7
+connector VKT7P
+  flow Real m_flow;
+  stream Real Xi_outflow[2];
+  Real p;
+end VKT7P;
+model VKT7C
+  VKT7P port;
+  Real Xi[2] = {time, 2 * time};
+  Real mXi[2];
+equation
+  mXi = abs(inStream(port.Xi_outflow));
+  port.Xi_outflow = Xi;
+end VKT7C;
+model VKT7
+  VKT7C a, b, c;
+equation
+  connect(a.port, b.port);
+  connect(a.port, c.port);
+  a.port.m_flow = time;
+  b.port.m_flow = 2 * time;
+  a.port.p = 1;
+end VKT7;
+//// model: VKU1
+connector VKU1P
+  flow Real m_flow;
+  stream Real Xi_outflow[2];
+  Real p;
+end VKU1P;
+function VKU1G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VKU1G;
+model VKU1C
+  VKU1P port;
+  Real Xi[2] = {time, 2 * time};
+  Real mXi[2];
+equation
+  mXi = VKU1G(inStream(port.Xi_outflow), Xi);
+  port.Xi_outflow = Xi;
+end VKU1C;
+model VKU1
+  VKU1C a, b, c;
+equation
+  connect(a.port, b.port);
+  connect(a.port, c.port);
+  a.port.m_flow = time;
+  b.port.m_flow = 2 * time;
+  a.port.p = 1;
+end VKU1;
+//// model: VKU2
+connector VKU2P
+  flow Real m_flow;
+  stream Real Xi_outflow[2];
+  Real p;
+end VKU2P;
+function VKU2G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VKU2G;
+model VKU2C
+  VKU2P port;
+  Real Xi[2] = {time, 2 * time};
+  Real mXi[2];
+equation
+  mXi = VKU2G(inStream(port.Xi_outflow), Xi);
+  port.Xi_outflow = Xi;
+end VKU2C;
+model VKU2
+  VKU2C a, b;
+equation
+  connect(a.port, b.port);
+  a.port.m_flow = time;
+  a.port.p = 1;
+end VKU2;
+//// model: VKU3
+connector VKU3P
+  flow Real m_flow;
+  stream Real h_outflow;
+  Real p;
+end VKU3P;
+model VKU3C
+  VKU3P port;
+  Real h = time;
+  Real y[2];
+equation
+  y = sin({inStream(port.h_outflow), 2 * inStream(port.h_outflow)});
+  port.h_outflow = h;
+end VKU3C;
+model VKU3
+  VKU3C a, b, c;
+equation
+  connect(a.port, b.port);
+  connect(a.port, c.port);
+  a.port.m_flow = time;
+  b.port.m_flow = 2 * time;
+  a.port.p = 1;
+end VKU3;
+//// model: VKU4
+connector VKU4P
+  flow Real m_flow;
+  stream Real h_outflow;
+  Real p;
+end VKU4P;
+function VKU4G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKU4G;
+model VKU4C
+  VKU4P port;
+  Real h = time;
+  Real y[2];
+equation
+  y = VKU4G({inStream(port.h_outflow), 2 * inStream(port.h_outflow)});
+  port.h_outflow = h;
+end VKU4C;
+model VKU4
+  VKU4C a, b, c;
+equation
+  connect(a.port, b.port);
+  connect(a.port, c.port);
+  a.port.m_flow = time;
+  b.port.m_flow = 2 * time;
+  a.port.p = 1;
+end VKU4;
+//// model: VKU5
+connector VKU5P
+  flow Real m_flow;
+  stream Real Xi_outflow[2];
+  Real p;
+end VKU5P;
+model VKU5C
+  VKU5P port;
+  Real Xi[2] = {time, 2 * time};
+  Real mXi[2];
+equation
+  mXi = abs(actualStream(port.Xi_outflow));
+  port.Xi_outflow = Xi;
+end VKU5C;
+model VKU5
+  VKU5C a, b, c;
+equation
+  connect(a.port, b.port);
+  connect(a.port, c.port);
+  a.port.m_flow = time;
+  b.port.m_flow = 2 * time;
+  a.port.p = 1;
+end VKU5;
+//// model: VKU6
+connector VKU6P
+  flow Real m_flow;
+  stream Real Xi_outflow[2];
+  Real p;
+end VKU6P;
+model VKU6C
+  VKU6P port;
+  Real Xi[2] = {time, 2 * time};
+  Real mXi[2] = semiLinear(port.m_flow, inStream(port.Xi_outflow), Xi);
+equation
+  port.Xi_outflow = Xi;
+end VKU6C;
+model VKU6
+  VKU6C a, b, c;
+equation
+  connect(a.port, b.port);
+  connect(a.port, c.port);
+  a.port.m_flow = time;
+  b.port.m_flow = 2 * time;
+  a.port.p = 1;
+end VKU6;
+//// model: VKU7
+connector VKU7P
+  flow Real m_flow;
+  stream Real Xi_outflow[2];
+  Real p;
+end VKU7P;
+model VKU7C
+  VKU7P port;
+  Real Xi[2] = {time, 2 * time};
+  Real mXi[2];
+equation
+  mXi = 2 * semiLinear(port.m_flow, inStream(port.Xi_outflow), Xi);
+  port.Xi_outflow = Xi;
+end VKU7C;
+model VKU7
+  VKU7C a, b, c;
+equation
+  connect(a.port, b.port);
+  connect(a.port, c.port);
+  a.port.m_flow = time;
+  b.port.m_flow = 2 * time;
+  a.port.p = 1;
+end VKU7;
+//// model: VKU8
+connector VKU8P
+  flow Real m_flow;
+  stream Real Xi_outflow[2];
+  Real p;
+end VKU8P;
+model VKU8C
+  VKU8P port;
+  Real Xi[2] = {time, 2 * time};
+  Real s;
+equation
+  s = sum(semiLinear(port.m_flow, inStream(port.Xi_outflow), Xi));
+  port.Xi_outflow = Xi;
+end VKU8C;
+model VKU8
+  VKU8C a, b, c;
+equation
+  connect(a.port, b.port);
+  connect(a.port, c.port);
+  a.port.m_flow = time;
+  b.port.m_flow = 2 * time;
+  a.port.p = 1;
+end VKU8;
+//// model: VKU9
+connector VKU9P
+  flow Real m_flow;
+  stream Real Xi_outflow[2];
+  Real p;
+end VKU9P;
+model VKU9C
+  VKU9P port;
+  Real Xi[2] = {time, 2 * time};
+  Real mXi[2];
+equation
+  mXi = semiLinear(port.m_flow, inStream(port.Xi_outflow), fill(1, 2));
+  port.Xi_outflow = Xi;
+end VKU9C;
+model VKU9
+  VKU9C a, b, c;
+equation
+  connect(a.port, b.port);
+  connect(a.port, c.port);
+  a.port.m_flow = time;
+  b.port.m_flow = 2 * time;
+  a.port.p = 1;
+end VKU9;
+//// model: VKU10
+connector VKU10P
+  flow Real m_flow;
+  stream Real Xi_outflow[2];
+  Real p;
+end VKU10P;
+model VKU10C
+  VKU10P port;
+  Real Xi[2] = {time, 2 * time};
+  Real mXi[2];
+initial equation
+  mXi = semiLinear(port.m_flow, inStream(port.Xi_outflow), Xi);
+equation
+  der(mXi) = Xi;
+  port.Xi_outflow = Xi;
+end VKU10C;
+model VKU10
+  VKU10C a, b, c;
+equation
+  connect(a.port, b.port);
+  connect(a.port, c.port);
+  a.port.m_flow = time;
+  b.port.m_flow = 2 * time;
+  a.port.p = 1;
+end VKU10;
+//// model: VKW1
+model VKW1
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = x + {0.0 * x[i] for i in 1:3};
+end VKW1;
+//// model: VKW2
+model VKW2
+  parameter Real k = 0 annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = x + {k * x[i] for i in 1:3};
+end VKW2;
+//// model: VKW3
+model VKW3
+  parameter Real k = 2 annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = x + {k * x[i] for i in 1:3};
+end VKW3;
+//// model: VKW4
+model VKW4
+  parameter Real k = 0;
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = x + {k * x[i] for i in 1:3};
+end VKW4;
+//// model: VKW5
+model VKW5
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = {2 * 3 * x[i] for i in 1:3};
+end VKW5;
+//// model: VKW6
+model VKW6
+  parameter Real k = 0 annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = {k * x[i] for i in 1:3};
+end VKW6;
+//// model: VKW7
+model VKW7
+  parameter Real k = 1 annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = x + {k * x[i] * time for i in 1:3};
+end VKW7;
+//// model: VKW8
+model VKW8
+  parameter Boolean use_k = true;
+  parameter Real k = 0 annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  if use_k then
+    y = x + {k * x[i] * (time - x[i]) for i in 1:3};
+  else
+    y = x;
+  end if;
+end VKW8;
+//// model: VKW9
+model VKW9
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = x + {1.0 * x[i] for i in 1:3};
+end VKW9;
+//// model: VKW10
+model VKW10
+  parameter Real p[3] = {1, 2, 3} annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = x + {p[i] for i in 1:3};
+end VKW10;
+//// model: VKW11
+model VKW11
+  parameter Real p[3] = {1, 2, 3} annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = x + {p[i] * x[i] for i in 1:3};
+end VKW11;
+//// model: VKW12
+function VKW12G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKW12G;
+model VKW12
+  parameter Real k = 3 annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = x + {VKW12G(k) * x[i] for i in 1:3};
+end VKW12;
+//// model: VKW13
+model VKW13
+  parameter Integer n = 3 annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = x + {n * x[i] for i in 1:3};
+end VKW13;
+//// model: VKW14
+model VKW14
+  parameter Real k = 0 annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3] = x + {k * x[i] for i in 1:3};
+end VKW14;
+//// model: VKW15
+model VKW15
+  parameter Real k = 0 annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = x + {k + x[i] for i in 1:3};
+end VKW15;
+//// model: VKW16
+model VKW16
+  parameter Real k = 1 annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = x + {x[i] / k for i in 1:3};
+end VKW16;
+//// model: VKW17
+model VKW17
+  parameter Real k = 0 annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+algorithm
+  y := x + {k * x[i] for i in 1:3};
+end VKW17;
+//// model: VKW18
+model VKW18
+  parameter Real k = 0 annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+initial equation
+  y = x + {k * x[i] for i in 1:3};
+equation
+  der(y) = x;
+end VKW18;
+//// model: VKW19
+model VKW19
+  parameter Real k = 0 annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = x + {k * x[i] for i in 1:3} + {{k * x[i] * x[j] for j in 1:3} for i in 1:3} * x;
+end VKW19;
+//// model: VKW20
+model VKW20
+  parameter Real k = 0 annotation(Evaluate = true);
+  parameter Real q[3] = {k * i for i in 1:3};
+  Real x[3] = {1, 2, 3} * time;
+end VKW20;
+//// model: VKA7
+function VKA7G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKA7G;
+function VKA7H
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKA7H;
+model VKA7
+  parameter Real p[3] = {1, 2, 3};
+  parameter Real y[3] = VKA7G(VKA7H(p) * 2);
+end VKA7;
+//// model: VKA8
+function VKA8G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKA8G;
+function VKA8H
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKA8H;
+model VKA8
+  parameter Real x0[3] = {1, 2, 3};
+  Real y[3](start = VKA8G(VKA8H(x0) * 2));
+equation
+  der(y) = -y;
+end VKA8;
+//// model: VKA9
+function VKA9G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKA9G;
+function VKA9H
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKA9H;
+model VKA9
+  Real x[3] = {1, 2, 3} * time;
+  parameter Real p = 2;
+  Real y[3];
+algorithm
+  y := VKA9G(VKA9H(x) * p);
+end VKA9;
+//// model: VKA10
+function VKA10G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKA10G;
+function VKA10H
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKA10H;
+model VKA10
+  parameter Real p = 2;
+  Real y[3];
+equation
+  y = VKA10G(VKA10H({1, 1, 1}) * p);
+end VKA10;
+//// model: VKA11
+function VKA11G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKA11G;
+model VKA11
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = VKA11G(-sin(x));
+end VKA11;
+//// model: VKA12
+function VKA12G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKA12G;
+function VKA12H
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKA12H;
+model VKA12
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = VKA12G(VKA12H(x) .* x);
+end VKA12;
+//// model: VKA13
+function VKA13G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VKA13G;
+function VKA13H
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKA13H;
+model VKA13
+  Real x[3] = {1, 2, 3} * time;
+  parameter Real p = 2;
+  Real y[3];
+equation
+  y = VKA13G(VKA13H(x) * p, x);
+end VKA13;
+//// model: VKA14
+function VKA14G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKA14G;
+function VKA14H
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKA14H;
+model VKA14
+  Real x[3] = {1, 2, 3} * time;
+  parameter Real p = 2 annotation(Evaluate = true);
+  Real y[3];
+equation
+  y = VKA14G(VKA14H(x) * p);
+end VKA14;
+//// model: VKA15
+function VKA15G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKA15G;
+function VKA15H
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKA15H;
+model VKA15
+  Real x[3] = {1, 2, 3} * time;
+  parameter Real p = 2;
+  Real y[3] = VKA15G(VKA15H(x) * p);
+end VKA15;
+//// model: VKA16
+function VKA16G
+  input Integer x;
+  output Integer y;
+algorithm
+  y := 2 * x;
+end VKA16G;
+function VKA16H
+  input Integer x;
+  output Integer y;
+algorithm
+  y := x + 1;
+end VKA16H;
+model VKA16
+  Integer k[3] = {1, 2, 3};
+  Integer y[3];
+equation
+  y = VKA16G(VKA16H(k) * 2);
+end VKA16;
+//// model: VKA17
+function VKA17H
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKA17H;
+model VKA17
+  Real x[3] = {1, 2, 3} * time;
+  parameter Real p = 2;
+  Real y[3];
+equation
+  y = sin(VKA17H(x) * p);
+end VKA17;
+//// model: VKA18
+function VKA18H
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKA18H;
+model VKA18
+  Real x[3] = {1, 2, 3} * time;
+  parameter Real p = 2;
+  Real y[3];
+equation
+  y = homotopy(VKA18H(x) * p, VKA18H(x) * p);
+end VKA18;
+//// model: VKA19
+function VKA19G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKA19G;
+function VKA19H
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKA19H;
+model VKA19
+  Real x[3] = {1, 2, 3} * time;
+  parameter Real p = 2;
+  Real y[3];
+equation
+  y = VKA19G(p * VKA19H(x) + x);
+end VKA19;
+//// model: VKA22
+function VKA22G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKA22G;
+function VKA22H
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKA22H;
+model VKA22
+  Real x[3] = {1, 2, 3} * time;
+  parameter Real p = 2;
+  Real y[3];
+equation
+  y = VKA22G(VKA22H(x) * p) * 2;
+end VKA22;
+//// model: VKA23
+function VKA23G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKA23G;
+function VKA23H
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKA23H;
+model VKA23
+  Real x[3] = {1, 2, 3} * time;
+  parameter Real p = 2;
+  Real s;
+equation
+  s = sum(VKA23G(VKA23H(x) * p));
+end VKA23;
+//// model: VKL8
+function VKL8G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKL8G;
+model VKL8
+  discrete Real y[3];
+equation
+  when time > 0.5 then
+    y = VKL8G({1, 1, 1});
+  end when;
+end VKL8;
+//// model: VKL9
+function VKL9G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKL9G;
+function VKL9H
+  input Real x[3];
+  output Real y;
+algorithm
+  y := x[1] + x[2] + x[3];
+end VKL9H;
+model VKL9
+  Real z;
+equation
+  z = VKL9H(VKL9G({1, 1, 1})) * time;
+end VKL9;
+//// model: VKL10
+model VKL10
+  Real y[3];
+equation
+  y = Modelica.Math.sin({1, 1, 1});
+end VKL10;
+//// model: VKL11
+function VKL11G
+  input Real x;
+  output Boolean y;
+algorithm
+  y := x > 0;
+end VKL11G;
+model VKL11
+  Boolean y[3];
+equation
+  y = VKL11G({1, 1, 1});
+end VKL11;
+//// model: VKL12
+function VKL12G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKL12G;
+model VKL12
+  Real y[2, 3];
+equation
+  for i in 1:2 loop
+    y[i, :] = VKL12G({i, i, i});
+  end for;
+end VKL12;
+//// model: VKL13
+function VKL13G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKL13G;
+model VKL13
+  Real y[3];
+equation
+  y = VKL13G({1, 1, 1}) + VKL13G({time, time, time});
+end VKL13;
+//// model: VKL14
+model VKL14
+  Real y[3];
+equation
+  y = sin({1, 1, 1}) + cos({time, time, time});
+end VKL14;
+//// model: VKL15
+function VKL15G
+  input Real x;
+  output String y;
+algorithm
+  y := String(x);
+end VKL15G;
+model VKL15
+  String y[3];
+equation
+  y = VKL15G({1, 1, 1});
+end VKL15;
+//// model: VKW21
+function VKW21H
+  input Real x[3];
+  output Real y;
+algorithm
+  y := x[1] + x[2] + x[3];
+end VKW21H;
+model VKW21
+  parameter Real k = 0 annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real z;
+equation
+  z = VKW21H({k * x[i] for i in 1:3});
+end VKW21;
+//// model: VKW22
+model VKW22
+  parameter Real k = 0 annotation(Evaluate = true);
+  Real y[3](start = {k * i for i in 1:3});
+equation
+  der(y) = -y;
+end VKW22;
+//// model: VKW23
+model VKW23
+  parameter Real k = 0 annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  discrete Real y[3];
+equation
+  when time > 0.5 then
+    y = x + {k * x[i] for i in 1:3};
+  end when;
+end VKW23;
+//// model: VKW25
+model VKW25
+  parameter Real k = 0 annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = x + {sin(k) * x[i] for i in 1:3};
+end VKW25;
+//// model: VKW27
+model VKW27
+  parameter Real p[3] = {1, 2, 3} annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3] = x + {p[i] for i in 1:3};
+end VKW27;
+//// model: VKW28
+model VKW28
+  parameter Real p[3] = {1, 2, 3} annotation(Evaluate = true);
+  Real y[3];
+equation
+  y = {p[i] for i in 1:3};
+end VKW28;
+//// model: VKW29
+model VKW29
+  parameter Real p[3] = {1, 2, 3} annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  {p[i] for i in 1:3} + x = y;
+end VKW29;
+//// model: VKW30
+model VKW30
+  parameter Real p[3] = {1, 2, 3} annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = x + {p[4 - i] for i in 1:3};
+end VKW30;
+//// model: VKW31
+model VKW31
+  parameter Real p[3] = {1, 1, 1} annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = x + {p[i] * x[i] for i in 1:3};
+end VKW31;
+//// model: VKQ7
+model VKQ7
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex y[3];
+algorithm
+  y := Modelica.ComplexMath.fromPolar(r, phi);
+end VKQ7;
+//// model: VKQ8
+model VKQ8
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  discrete Complex y[3];
+equation
+  when time > 0.5 then
+    y = Modelica.ComplexMath.fromPolar(r, phi);
+  end when;
+end VKQ8;
+//// model: VKQ9
+model VKQ9
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex y[3];
+equation
+  if time > 0.5 then
+    y = Modelica.ComplexMath.fromPolar(r, phi);
+  else
+    y = Modelica.ComplexMath.fromPolar(phi, r);
+  end if;
+end VKQ9;
+//// model: VKQ10
+model VKQ10
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex y[2, 3];
+equation
+  for i in 1:2 loop
+    y[i, :] = Modelica.ComplexMath.fromPolar(r * i, phi);
+  end for;
+end VKQ10;
+//// model: VKQ11
+model VKQ11
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex y[3];
+equation
+  Modelica.ComplexMath.fromPolar(r, phi) = y;
+end VKQ11;
+//// model: VKQ12
+record VKQ12R
+  Real a;
+  Real b;
+end VKQ12R;
+function VKQ12F
+  input Real x;
+  output VKQ12R r;
+algorithm
+  r := VKQ12R(x, 2 * x);
+end VKQ12F;
+model VKQ12
+  Real x[3] = {1, 2, 3} * time;
+  VKQ12R y[3];
+equation
+  y = VKQ12F(x);
+end VKQ12;
+//// model: VKQ13
+record VKQ13R
+  Real a;
+  Real b;
+end VKQ13R;
+function VKQ13F
+  input Real x;
+  output VKQ13R r;
+algorithm
+  r := VKQ13R(x, 2 * x);
+end VKQ13F;
+model VKQ13
+  VKQ13R y[3];
+equation
+  y = VKQ13F({1, 1, 1});
+end VKQ13;
+//// model: VKQ14
+model VKQ14
+  Real r[2, 3] = {{1, 2, 3}, {4, 5, 6}} * time;
+  Real phi[2, 3] = {{4, 5, 6}, {1, 2, 3}} * time;
+  Complex y[2, 3];
+equation
+  y = Modelica.ComplexMath.fromPolar(r, phi);
+end VKQ14;
+//// model: VKQ15
+model VKQ15
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex y[3];
+initial equation
+  y = Modelica.ComplexMath.fromPolar(r, phi);
+equation
+  der(y[1].re) = 1;
+  der(y[2].re) = 1;
+  der(y[3].re) = 1;
+  der(y[1].im) = 1;
+  der(y[2].im) = 1;
+  der(y[3].im) = 1;
+end VKQ15;
+//// model: VKQ16
+model VKQ16
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex y[3];
+equation
+  y[1:2] = Modelica.ComplexMath.fromPolar(r[1:2], phi[1:2]);
+  y[3] = Modelica.ComplexMath.fromPolar(r[3], phi[3]);
+end VKQ16;
+//// model: VKQ17
+model VKQ17
+  Real phi[3] = {4, 5, 6} * time;
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.fromPolar({1, 2, 3}, phi);
+end VKQ17;
+//// model: VKQ18
+model VKQ18
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex y[3];
+equation
+  y = Complex(r, phi);
+end VKQ18;
+//// model: VKQ19
+model VKQ19
+  Complex c[3] = {Complex(time, 1), Complex(2 * time, 2), Complex(3 * time, 3)};
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.conj(c);
+end VKQ19;
+//// model: VKQ20
+model VKQ20
+  Real r[3] = {1, 2, 3} * time;
+  Real phi[3] = {4, 5, 6} * time;
+  Complex y[3];
+equation
+  y = Modelica.ComplexMath.conj(Modelica.ComplexMath.fromPolar(r, phi));
+end VKQ20;
+//// model: VKH20
+function VKH20G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKH20G;
+model VKH20
+  parameter Real p0[3] = {1, 2, 3};
+  parameter Real y[3] = homotopy(VKH20G(p0) * 2, p0);
+end VKH20;
+//// model: VKH21
+function VKH21G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKH21G;
+model VKH21
+  parameter Real p0[3] = {1, 2, 3};
+  Real y[3](start = homotopy(VKH21G(p0) * 2, p0));
+equation
+  der(y) = -y;
+end VKH21;
+//// model: VKH22
+function VKH22G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKH22G;
+model VKH22
+  Real x[3] = {1, 2, 3} * time;
+  parameter Real p = 2;
+  Real y[3];
+algorithm
+  y := homotopy(VKH22G(x) * p, x);
+end VKH22;
+//// model: VKH23
+function VKH23G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKH23G;
+model VKH23
+  Real x[1] = {time};
+  parameter Real p = 2;
+  Real y[1];
+equation
+  y = homotopy(VKH23G(x) * p, x);
+end VKH23;
+//// model: VKN5
+function VKN5G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN5G;
+model VKN5
+  parameter Real p[3] = {1, 2, 3};
+  parameter Real y[3] = VKN5G(sin(p));
+end VKN5;
+//// model: VKN6
+function VKN6G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN6G;
+model VKN6
+  parameter Real x0[3] = {1, 2, 3};
+  Real y[3](start = VKN6G(sin(x0)));
+equation
+  der(y) = -y;
+end VKN6;
+//// model: VKN7
+function VKN7G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN7G;
+model VKN7
+  Real x[3] = {1, 2, 3} * time;
+  Real s;
+equation
+  s = sum(VKN7G(sin(x)));
+end VKN7;
+//// model: VKN8
+function VKN8G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN8G;
+model VKN8
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = 2 * VKN8G(sin(x));
+end VKN8;
+//// model: VKN9
+function VKN9G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN9G;
+model VKN9
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3] = VKN9G(sin(x));
+end VKN9;
+//// model: VKN10
+function VKN10G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN10G;
+model VKN10
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+algorithm
+  y := VKN10G(sin(x));
+end VKN10;
+//// model: VKN11
+function VKN11G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN11G;
+model VKN11
+  Real y[3];
+equation
+  y = VKN11G(sin({1, 1, 1}));
+end VKN11;
+//// model: VKN12
+function VKN12G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN12G;
+model VKN12
+  Real x[5] = {1, 2, 3, 4, 5} * time;
+  Real y[3];
+equation
+  y = VKN12G({x[i] for i in 1:2:5});
+end VKN12;
+//// model: VKN13
+function VKN13G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN13G;
+model VKN13
+  Real y[3];
+equation
+  y = VKN13G({({1, 2, 3})[i] * time for i in 1:3});
+end VKN13;
+//// model: VKN14
+function VKN14G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN14G;
+model VKN14
+  Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}} * time;
+  Real y[2, 3];
+equation
+  y = VKN14G(sin(m));
+end VKN14;
+//// model: VKN15
+function VKN15G
+  input Integer x;
+  output Integer y;
+algorithm
+  y := 2 * x;
+end VKN15G;
+model VKN15
+  Integer y[3];
+equation
+  y = VKN15G({i for i in 1:3});
+end VKN15;
+//// model: VKN18
+model VKN18
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = sin({x[i] for i in 1:3});
+end VKN18;
+//// model: VKN19
+function VKN19G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN19G;
+model VKN19
+  Real x[3] = {1, 2, 3} * time;
+  Real y[2, 3];
+equation
+  for j in 1:2 loop
+    y[j, :] = VKN19G({x[i] * j for i in 1:3});
+  end for;
+end VKN19;
+//// model: VKN20
+function VKN20G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN20G;
+model VKN20
+  parameter Integer n = 3;
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = VKN20G({x[i] for i in 1:n});
+end VKN20;
+//// model: VKN21
+function VKN21G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN21G;
+model VKN21
+  Real y[3];
+equation
+  y = VKN21G(sin(fill(time, 3)));
+end VKN21;
+//// model: VKN22
+function VKN22G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN22G;
+function VKN22H
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := x + z;
+end VKN22H;
+model VKN22
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = VKN22G(VKN22H(x, 2));
+end VKN22;
+//// model: VKN23
+function VKN23G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN23G;
+model VKN23
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = VKN23G({x[4 - i] for i in 1:3});
+end VKN23;
+//// model: VKN24
+function VKN24G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VKN24G;
+model VKN24
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = VKN24G({x[i] for i in 1:3}, {x[i] for i in 1:3});
+end VKN24;
+//// model: VKN25
+function VKN25G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN25G;
+model VKN25
+  Real x[1] = {time};
+  Real y[1];
+equation
+  y = VKN25G(sin(x));
+end VKN25;
+//// model: VKI3
+function VKI3G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKI3G;
+model VKI3
+  parameter Boolean b = true annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real z[3] = {4, 5, 6} * time;
+  Real y[3];
+equation
+  y = VKI3G(if b then x else z);
+end VKI3;
+//// model: VKI4
+function VKI4G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKI4G;
+model VKI4
+  parameter Boolean b = true;
+  parameter Real p[3] = {1, 2, 3};
+  parameter Real q[3] = {4, 5, 6};
+  parameter Real y[3] = VKI4G(if b then p else q);
+end VKI4;
+//// model: VKI5
+function VKI5G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKI5G;
+model VKI5
+  Boolean b = time > 0.5;
+  Integer k[3] = {1, 2, 3};
+  Integer k2[3] = {4, 5, 6};
+  Real y[3];
+equation
+  y = VKI5G(if b then k else k2);
+end VKI5;
+//// model: VKI6
+function VKI6G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKI6G;
+model VKI6
+  Boolean b = time > 0.5;
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = VKI6G(if b then 2 * x else x);
+end VKI6;
+//// model: VKI7
+function VKI7G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKI7G;
+model VKI7
+  Boolean b = time > 0.5;
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = VKI7G(if b then x else x);
+end VKI7;
+//// model: VKI8
+function VKI8G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKI8G;
+model VKI8
+  Boolean b = time > 0.5;
+  Real x[3] = {1, 2, 3} * time;
+  Real z[3] = {4, 5, 6} * time;
+  Real s;
+equation
+  s = sum(VKI8G(if b then x else z));
+end VKI8;
+//// model: VKI9
+model VKI9
+  Boolean b = time > 0.5;
+  Real x[3] = {1, 2, 3} * time;
+  Real z[3] = {4, 5, 6} * time;
+  Real y[3];
+equation
+  y = sin(if b then x else z);
+end VKI9;
+//// model: VKI10
+function VKI10G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKI10G;
+model VKI10
+  Boolean b = time > 0.5;
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = VKI10G(if b then x else {1, 2, 3});
+end VKI10;
+//// model: VKI11
+function VKI11G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKI11G;
+model VKI11
+  Boolean b = time > 0.5;
+  Real x[3] = {1, 2, 3} * time;
+  Real z[3] = {4, 5, 6} * time;
+  Real y[3] = VKI11G(if b then x else z);
+end VKI11;
+//// model: VKG5
+function VKG5H
+  input Real t;
+  output Real v[3];
+algorithm
+  v := {t, 2 * t, 3 * t};
+end VKG5H;
+function VKG5G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKG5G;
+model VKG5
+  parameter Real r[3] = {1, 0, 0};
+  parameter Real q = 2;
+  parameter Real y[3] = VKG5G(VKG5H(q) - r);
+end VKG5;
+//// model: VKG6
+function VKG6H
+  input Real t;
+  output Real v[3];
+algorithm
+  v := {t, 2 * t, 3 * t};
+end VKG6H;
+function VKG6G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKG6G;
+model VKG6
+  parameter Real r[3] = {1, 0, 0};
+  Real y[3];
+equation
+  y = VKG6G(VKG6H(2) - r);
+end VKG6;
+//// model: VKG7
+function VKG7H
+  input Real t;
+  output Real v[3];
+algorithm
+  v := {t, 2 * t, 3 * t};
+end VKG7H;
+function VKG7G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKG7G;
+model VKG7
+  parameter Real r[3] = {1, 0, 0};
+  Real s;
+equation
+  s = sum(VKG7G(VKG7H(time) - r));
+end VKG7;
+//// model: VKG8
+function VKG8H
+  input Real t;
+  output Real v[3];
+algorithm
+  v := {t, 2 * t, 3 * t};
+end VKG8H;
+function VKG8G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKG8G;
+model VKG8
+  parameter Real r[3] = {1, 0, 0};
+  parameter Real q = 2;
+  Real y[3](start = VKG8G(VKG8H(q) - r));
+equation
+  der(y) = -y;
+end VKG8;
+//// model: VKG9
+function VKG9H
+  input Real t;
+  output Real v[3];
+algorithm
+  v := {t, 2 * t, 3 * t};
+end VKG9H;
+function VKG9G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKG9G;
+model VKG9
+  parameter Real r[3] = {1, 0, 0};
+  Real y[3];
+equation
+  y = 2 * VKG9G(VKG9H(time) - r);
+end VKG9;
+//// model: VKG10
+function VKG10H
+  input Real t;
+  output Real v[3];
+algorithm
+  v := {t, 2 * t, 3 * t};
+end VKG10H;
+model VKG10
+  parameter Real r[3] = {1, 0, 0};
+  Real y[3];
+equation
+  y = sin(VKG10H(time) - r);
+end VKG10;
+//// model: VKG11
+function VKG11H
+  input Real t;
+  output Real v[3];
+algorithm
+  v := {t, 2 * t, 3 * t};
+end VKG11H;
+function VKG11G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKG11G;
+model VKG11
+  parameter Real r[3] = {1, 0, 0};
+  Real y[3];
+algorithm
+  y := VKG11G(VKG11H(time) - r);
+end VKG11;
+//// model: VKG12
+function VKG12H
+  input Real t;
+  output Real v[3];
+algorithm
+  v := {t, 2 * t, 3 * t};
+end VKG12H;
+function VKG12G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKG12G;
+model VKG12
+  parameter Real r[3] = {1, 0, 0};
+  parameter Real q = 2 annotation(Evaluate = true);
+  Real y[3];
+equation
+  y = VKG12G(VKG12H(q) - r);
+end VKG12;
+//// model: VKG13
+function VKG13H
+  input Real t;
+  output Real v[3];
+algorithm
+  v := {t, 2 * t, 3 * t};
+end VKG13H;
+function VKG13G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKG13G;
+model VKG13
+  Real y[3];
+equation
+  y = VKG13G(-VKG13H(time));
+end VKG13;
+//// model: VKN27
+function VKN27F
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN27F;
+function VKN27G
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKN27G;
+model VKN27
+  Real y[2](start = VKN27F(VKN27G({1, 2})));
+equation
+  der(y) = -y;
+end VKN27;
+//// model: VKN28
+function VKN28F
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN28F;
+function VKN28G
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKN28G;
+model VKN28
+  parameter Real q[2] = {1, 2} annotation(Evaluate = true);
+  parameter Real p[2] = VKN28F(VKN28G(q));
+end VKN28;
+//// model: VKN29
+function VKN29F
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN29F;
+model VKN29
+  parameter Real p[2] = VKN29F(sin({1, 2}));
+end VKN29;
+//// model: VKN30
+function VKN30F
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN30F;
+function VKN30G
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKN30G;
+model VKN30
+  parameter Real p[2] = VKN30F(VKN30G({1, 1}));
+end VKN30;
+//// model: VKN31
+function VKN31F
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN31F;
+function VKN31G
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKN31G;
+model VKN31
+  parameter Real p[2] = VKN31F({VKN31G(i) for i in 1:2});
+end VKN31;
+//// model: VKN32
+function VKN32F
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN32F;
+function VKN32G
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKN32G;
+function VKN32H
+  input Real x;
+  output Real y;
+algorithm
+  y := x * x;
+end VKN32H;
+model VKN32
+  parameter Real p[2] = VKN32F(VKN32G(VKN32H({1, 2})));
+end VKN32;
+//// model: VKN33
+function VKN33F
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN33F;
+function VKN33G
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKN33G;
+model VKN33
+  Real y[2] = VKN33F(VKN33G({1, 2}));
+end VKN33;
+//// model: VKN34
+function VKN34F
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN34F;
+function VKN34G
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKN34G;
+model VKN34
+  Real y[2];
+equation
+  y = VKN34F(VKN34G({1, 2}));
+end VKN34;
+//// model: VKN35
+function VKN35F
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN35F;
+function VKN35G
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKN35G;
+model VKN35
+  Real s;
+equation
+  s = sum(VKN35F(VKN35G({1, 2})));
+end VKN35;
+//// model: VKN36
+function VKN36F
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := 2 * x + z;
+end VKN36F;
+function VKN36G
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKN36G;
+model VKN36
+  parameter Real q = 3;
+  parameter Real p[2] = VKN36F(VKN36G({1, 2}), q);
+end VKN36;
+//// model: VKN37
+function VKN37F
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN37F;
+function VKN37G
+  input Real x;
+  input Real z;
+  output Real y;
+algorithm
+  y := x + z;
+end VKN37G;
+model VKN37
+  parameter Integer n = 2 annotation(Evaluate = true);
+  parameter Real p[2] = VKN37F(VKN37G({1, 2}, n));
+end VKN37;
+//// model: VKN38
+function VKN38F
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKN38F;
+function VKN38G
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end VKN38G;
+model VKN38
+  constant Real c[2] = VKN38F(VKN38G({1, 2}));
+  Real y = c[1] * time;
+end VKN38;
+//// model: VKS16
+function VKS16G
+  input Real x;
+  output Real y;
+external "C" y = sin(x);
+end VKS16G;
+model VKS16
+  Real y[1];
+equation
+  y = VKS16G({1});
+end VKS16;
+//// model: VKS17
+function VKS17G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKS17G;
+model VKS17
+  Real y[1];
+equation
+  y = VKS17G({1});
+end VKS17;
+//// model: VKS18
+model VKS18
+  Real y[1];
+equation
+  y = sin({1});
+end VKS18;
+//// model: VKS19
+function VKS19G
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end VKS19G;
+model VKS19
+  Real y[1];
+equation
+  y = VKS19G(fill(time, 1));
+end VKS19;
+//// model: VKW32
+model VKW32
+  parameter Real p[3] = {1, 2, 3} annotation(Evaluate = true);
+  Real x[2] = {1, 2} * time;
+  Real y[2];
+equation
+  y = x + {p[i] for i in {1, 3}};
+end VKW32;
+//// model: VKW33
+model VKW33
+  parameter Real p[3] = {1, 2, 3} annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = x + {p[i] for i in 3:-1:1};
+end VKW33;
+//// model: VKW34
+model VKW34
+  parameter Integer k[3] = {1, 2, 3} annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = x + {k[i] for i in 1:3};
+end VKW34;
+//// model: VKW35
+model VKW35
+  parameter Real p[3] = {1, 2, 3} annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y[3];
+equation
+  y = x + {p[i] * time for i in 1:3};
+end VKW35;
+//// model: VKW36
+model VKW36
+  parameter Real p[2, 2] = {{1, 2}, {3, 4}} annotation(Evaluate = true);
+  Real x[2, 2] = {{1, 2}, {3, 4}} * time;
+  Real y[2, 2];
+equation
+  y = x + {{p[i, j] for j in 1:2} for i in 1:2};
+end VKW36;
+//// model: VKW37
+model VKW37
+  parameter Real p[3] = {1, 2, 3} annotation(Evaluate = true);
+  parameter Real q[3] = {p[i] for i in 1:3};
+  Real y = q[1] * time;
+end VKW37;
+//// model: VKB17
+model VKB17
+  parameter Integer n = 3 annotation(Evaluate = true);
+  constant Real c[3] = {4, 5, 6};
+  Real y = c[n - 1] * time;
+end VKB17;
+//// model: VKB18
+model VKB18
+  parameter Integer n = 3 annotation(Evaluate = true);
+  Real x[3] = {1, 2, 3} * time;
+  Real y = x[n - 1];
+end VKB18;
+//// model: VKB19
+model VKB19
+  parameter Integer n = 3 annotation(Evaluate = true);
+  Real y = ({4, 5, 6})[n - 1] * time;
+end VKB19;

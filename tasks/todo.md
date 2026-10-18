@@ -2654,6 +2654,26 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       探针 pk-p37（148；BCT / BRA / BRF / BRG / BRS）——基线上 FAIL 28 / ACCEPTS-INVALID 5，现 PASS 109 / SKIP 29 / BOTH-REJECT 10；旧组
       pk-p29 SKIP→PASS 2；单测 +4。slice 702→703 例（+RecordBinding13）FAIL 0（oracle=live 不一致 0）；scodeinst 663→664、testsuite
       1836→1837（scodeinst/RecordBinding13）/ FAIL 0；MSL 487（不变）；探针 11418→11566；单测 491→495。
+- [x] (67d) omc 整体保留的向量化调用的实参形态与体的化简（2026-10-18）：
+      (1) 实参形态：fill / ones / zeros 照书写的字面量（`fill(x, 3)[$i1]` → simplifyFill → 各元素相同取 `x`，NFSimplifyExp.mo:524-536 /
+      :1346-1379）；含数组调用的运算式整个包一层取下标 `(array(…) * p)[$i1]`（不含数组调用才展开，:941-943 / :1135-1137；MSL Fluid 管流
+      模型的 `homotopy(actual = massFlowRate_dp_staticHead(…) * nParallel, …)`）；单层推导式 / 嵌套向量化的迭代变量代成 `(range)[$i1]`；
+      if 式逐支取下标（applySubscriptIf :1653-1683）；返回记录的向量化调用整个是等式一侧时整体保留（VfController 的 `y = fromPolar(
+      fill(amplitude, m), …)` → `y = array(fromPolar(amplitude, {…}[$i1]) for $i1 in 1:3)`）；含流算子的实参逐元素展开
+      （evaluateOperatorArrayConstructorExp，NFConnectEquations.mo:789-808）。
+      (2) 体的化简（基线上 48 例静默错）：simplifyArrayConstructor 的 else 支化简体（:583-637），在收函数之前——`sin({time, time, time})` →
+      `array(sin(time) for …)`、`f({1, 1, 1})` → `array(2.0 for …)` 且 f 不打、external "C" 只化简实参；书写的推导式在结构参数代入后
+      照样化简（`{k * x[i] for i in 1:3}`、k = 0 → `array(0.0 for i in 1:3)`，MSL PartialHeatTransfer 的 use_k 支），体恰是
+      `{…}[i]`、范围是字面量的整个展开（isIteratorSubscriptedArray :616-623 / :639-650）；取下标先化简标量下标（Subscript.simplify，
+      NFSubscript.mo:881-891）。外层 `$i1` 代进嵌套的 `$i1`（参数摊分 / sum / 属性）→ SKIP（binds_iter）。
+      照旧 SKIP：范围 / cat / 返回数组的调用作实参、常量数组实参、函数体里的 fill、嵌套同名迭代变量的标量化。新探针 VKS12（omc 求值
+      时 assert 失败、留调用）基线碰巧对、现 SKIP。
+      探针 pk-p38（273；VK*）——基线上 FAIL 48，现 PASS 234 / SKIP 38 / BOTH-REJECT 1；旧组 ax-f1 / pk-p27 / pk-p33 / pk-p36 / v4-a / v4-c /
+      vx-p1 SKIP→PASS 29；单测 +9、改 1（VU5 原断言 SKIP，改为 omc 实跑）。slice 703 例 FAIL 0（oracle=live 不一致 0）；scodeinst 664（不变）；
+      testsuite 1837→1838（interactive-API/Ticket6406）/ FAIL 0；**MSL 487→490**（QuasiStatic IMC_Conveyor、Fluid.Examples.
+      BranchingDynamicPipes、HeatExchanger.HeatExchangerSimulation）；探针 11566→11839；单测 495→504。
+- [ ] (67e 候选) 已有的静默 FAIL（67d 调查时发现，语料没撞上）：`parameter Integer n = 3; Real y = ({4, 5, 6})[n - 1] * time;`——omc 把 n
+      标成 final、打 `5.0 * time`，ymc 留普通参数与取下标的数组（机制未查明）。复现 `$S/pkr67d/prebugs/VKB20.mo`。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。
