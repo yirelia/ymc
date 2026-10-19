@@ -821,3 +821,10 @@ Evaluate = true 只对 `each fixed = true` 或无 fixed 属性的参数生效；
 数组字面量逐元素合并；stateSelect 只标合并后胜出来源里的参数。转 PASS：Mechanics.MultiBody.Examples.Elementary.RollingWheel、
 Loops.PlanarLoops_analytic。Fluid.Examples.Explanatory.MomentumBalanceFittings 卡到下一处（class extends 记录类型的参数记录绑定），
 Electrical.Machines…PositionControlledDCPM 照旧（记录值实参的编译期求值）。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-19 67h 之后：PASS 495（+3）
+
+记录目标的算法赋值、class extends 记录的参数记录、记录值实参的编译期求值与结构记录（整体绑定是结构记录引用的连带、整记录引用代值）、
+整体绑定的记录数组元素字段的结构求值。转 PASS：Electrical.Spice3.Examples.Graetz、Fluid.Examples.Explanatory.MomentumBalanceFittings、
+Electrical.Machines.Examples.ControlledDCDrives.PositionControlledDCPM。Batteries CCCV_Stack 卡到下一处（可扩展连接器的数组成员）。
+FAIL / ACCEPTS-INVALID / CRASH 0。

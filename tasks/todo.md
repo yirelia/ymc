@@ -2730,6 +2730,25 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       探针 pk-p41（170；SG*）——基线上 FAIL 25，现 PASS 142 / SKIP 19 / BOTH-REJECT 9；旧组 ev-m1 / md-m3 / rf-ev / ss-s1 / ss-ut / vo-fx /
       vo-u2 SKIP→PASS 9；单测 +6、改 3（原断言 SKIP 的改为 omc 实跑）。slice 703 例 FAIL 0（oracle=live 不一致 0）；scodeinst 664（不变）；
       testsuite 1839→1840（simulation/modelica/parameters/revoluteConstraint）/ FAIL 0；**MSL 490→492**（MultiBody Elementary.RollingWheel、Loops.PlanarLoops_analytic）；探针 14193→14363；单测 512→518。
+- [x] (67h) 四个记录相关的 MSL 卡点（2026-10-19）：
+      (1) Graetz：记录目标的算法赋值 `vp := resistorInitEquations(rp, lp)`（Spice3 R_SEMI）omc 整条照写、不拆字段（simplifyAssignment 只拆
+      元组，NFSimplifyModel.mo:382-409），只看记录组件本身的变率（checkAssignment NFTyping.mo:3381-3436）→ record_assign：各叶可赋值、右侧同类
+      或字段同名同序同型。
+      (2) MomentumBalanceFittings：class extends 记录（WaterIF97 的 ThermodynamicState）的隐式基类是普通数据记录时照收（is_plain_data_record）。
+      (3) PositionControlledDCPM：`nout = max([size(qd_max, 1); …])` 的求值链经记录值实参 `brushVoltageDrop(brushParameters, …)`——第一遍因
+      未发射而求不出的推到第二遍；flat_param_value 能由直属字段建记录值（flat_record_literal），标记打在记录节点上；整体绑定恰是结构记录
+      引用的记录成结构参数（checkComponentBindingVariability 的 isCrefExp 支，NFTyping.mo:1150-1159），压平时绑定求值（NFFlatten.mo:961-963）、
+      字段打字面量，EvalConstants 把整记录引用代成记录值（structural_records）。
+      (4) CCCV_Stack：整体绑定的记录数组元素的字段用于结构求值——值取父绑定（makeRecordFieldBindingFromParent，NFCeval.mo:673-713），固定性
+      按整个数组绑定判（isComponentBindingNotFixed 的父记录支，NFStructural.mo:128-158）；下一处 "connect operand shape"（可扩展连接器的
+      数组成员，同 CCCV_StackRC）。
+      顺带修了基线上的静默错：结构记录的整记录引用在 struct_records_ 为空时从不代值（`drop(bp, time)`，omc `drop(BP(1.0, 4.0), time)`）、
+      结构记录的向前别名。照旧 SKIP：带 parameter 字段的记录目标（HRA9，omc 收）、when 里离散记录的整体赋值、整组元素都要标结构的、
+      经声明在后 / 带整体绑定记录的 size 链、Evaluate = true 带记录实参、定型期求值后字段的存回（HSB3 / HSB4 / SGE11-16）。
+      探针 pk-p42（124；HR* / HCX / HSB）——基线上 FAIL 3，现 PASS 100 / SKIP 21 / BOTH-REJECT 3；旧组 or-p1 / pk-p37 / pk-p41 SKIP→PASS 10；
+      单测 +5。slice 703→704 例（+RecordConstructor1）FAIL 0（oracle=live 不一致 0）；scodeinst 664→665；testsuite 1840→1842
+      （scodeinst/RecordConstructor1、simulation/…/ComplexAlgebraicLoop）/ FAIL 0；**MSL 492→495**（Spice3.Examples.Graetz、Fluid.Examples.
+      Explanatory.MomentumBalanceFittings、Machines…ControlledDCDrives.PositionControlledDCPM）；探针 14363→14487；单测 518→523。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

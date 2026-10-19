@@ -11906,4 +11906,169 @@ YMC_TEST(flatten_record_evaluated_at_typing_time) {
                            "  parameter Real w = drop(bp, 100.0);\n  Real y = w * time;\nend SGE20;\n"));
 }
 
+YMC_TEST(flatten_record_algorithm_target) {
+  // 算法里赋值给整个记录（`r := f(…)` / `r := r2`；MSL Spice3 R_SEMI 的 `vp := resistorInitEquations(rp, lp)`）：omc 整条照写、不拆
+  // 字段（simplifyAssignment 只拆元组，NFSimplifyModel.mo:382-409 v1.25.0），目标变率只看记录组件本身（checkAssignment，NFTyping.mo:
+  // 3381-3436）。带 parameter 字段的变量记录 omc 照收，ymc 按叶判 → SKIP（HRA9）。期望 = omc 1.25.0 实跑（2026-10-19，探针 pk-p42
+  // HRA1 / HRA3 / HRA9）。
+  YMC_CHECK_EQ(flatten_src("package HRA1P\n  record R\n    Real a;\n    Real b;\n  end R;\n  function f\n"
+                           "    input Real x;\n    output R r;\n  algorithm\n    r.a := x;\n    r.b := 2 * x;\n"
+                           "  end f;\nend HRA1P;\nmodel HRA1\n  HRA1P.R r;\nalgorithm\n  r := HRA1P.f(time);\n"
+                           "end HRA1;\n"),
+               std::string("function HRA1P.R \"Automatically generated record constructor for HRA1P.R\"\n"
+                           "  input Real a;\n  input Real b;\n  output R res;\nend HRA1P.R;\n\nfunction HRA1P.f\n"
+                           "  input Real x;\n  output HRA1P.R r;\nalgorithm\n  r.a := x;\n  r.b := 2.0 * x;\n"
+                           "end HRA1P.f;\n\nclass HRA1\n  Real r.a;\n  Real r.b;\nalgorithm\n  r := HRA1P.f(time);\n"
+                           "end HRA1;\n"));
+  YMC_CHECK_EQ(flatten_src("package HRA3P\n  record R\n    Real a;\n    Real b;\n  end R;\nend HRA3P;\nmodel HRA3\n"
+                           "  HRA3P.R r;\n  HRA3P.R r2(a = time, b = 2);\nalgorithm\n  r := r2;\nend HRA3;\n"),
+               std::string("function HRA3P.R \"Automatically generated record constructor for HRA3P.R\"\n"
+                           "  input Real a;\n  input Real b;\n  output R res;\nend HRA3P.R;\n\nclass HRA3\n"
+                           "  Real r.a;\n  Real r.b;\n  Real r2.a = time;\n  Real r2.b = 2.0;\nalgorithm\n"
+                           "  r := r2;\nend HRA3;\n"));
+  bool uns = false;
+  const std::string out = flatten_src("package HRA9P\n  record R\n    Real a;\n    parameter Real p = 1;\n  end R;\n"
+                                      "  function f\n    input Real x;\n    output R r;\n  algorithm\n    r.a := x;\n"
+                                      "    r.p := 2;\n  end f;\nend HRA9P;\nmodel HRA9\n  HRA9P.R r;\nalgorithm\n"
+                                      "  r := HRA9P.f(time);\nend HRA9;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(out, std::string("<unsupported:algorithm assignment to non-continuous variable>"));
+}
+
+YMC_TEST(flatten_class_extends_record_variability) {
+  // class extends 的记录（MSL Media 的 `redeclare record extends ThermodynamicState`）带 parameter 前缀：变率同样下沉到全部字段，
+  // 隐式基类的字段在前（NFClassTree.mo:139-160 v1.25.0），函数调用绑定照常量实参求值拆字段（MSL Fluid MomentumBalanceFittings 的
+  // `parameter Medium.ThermodynamicState state_nominal = Medium.setState_pTX(…)`，此前 SKIP）。期望 = omc 1.25.0 实跑（2026-10-19，
+  // 探针 pk-p42 HCX3 / HCX9）。
+  YMC_CHECK_EQ(flatten_src("package HCX3P\n  partial package PM\n    replaceable record State\n      Real p;\n"
+                           "    end State;\n    replaceable partial function setState\n      input Real p;\n"
+                           "      input Real T;\n      output State s;\n    end setState;\n  end PM;\n  package M\n"
+                           "    extends PM;\n    redeclare record extends State\n      Real T;\n    end State;\n"
+                           "    redeclare function extends setState\n    algorithm\n      s := State(p = p, T = T);\n"
+                           "    end setState;\n  end M;\nend HCX3P;\nmodel HCX3\n"
+                           "  parameter HCX3P.M.State s = HCX3P.M.setState(1, 2);\n  Real y = s.T * time;\n"
+                           "end HCX3;\n"),
+               std::string("class HCX3\n  parameter Real s.p = 1.0;\n  parameter Real s.T = 2.0;\n"
+                           "  Real y = s.T * time;\nend HCX3;\n"));
+  YMC_CHECK_EQ(flatten_src("package HCX9P\n  partial package PM\n    replaceable record State\n    end State;\n"
+                           "  end PM;\n  partial package PM2\n    extends PM;\n"
+                           "    redeclare replaceable record extends State\n"
+                           "      Integer phase(min = 0, max = 2) = 1;\n    end State;\n  end PM2;\n  package M\n"
+                           "    extends PM2;\n    redeclare record extends State\n      Real T = 1;\n"
+                           "      Real p = 2;\n    end State;\n  end M;\nend HCX9P;\nmodel HCX9\n"
+                           "  parameter HCX9P.M.State s;\n  Real y = s.T * time;\nend HCX9;\n"),
+               std::string("class HCX9\n  parameter Integer s.phase(min = 0, max = 2) = 1;\n"
+                           "  parameter Real s.T = 1.0;\n  parameter Real s.p = 2.0;\n  Real y = s.T * time;\n"
+                           "end HCX9;\n"));
+}
+
+YMC_TEST(flatten_record_argument_in_size_matrix) {
+  // 矩阵构造里的 size(q, 1)（MSL KinematicPTP2 的 `nout = max([size(q_begin, 1); …])`）连带的 q 元素 `{wMax}`、wMax 读到记录参数
+  // 作实参 `drop(bp, 100)`：实例化期按声明序访问维时 bp 的字段还没发射 → 第二遍取第一遍的值；这条路 omc 定型期只标记、不求值，
+  // 没有存回（HSB5：`bp.IL = 2.0 * c`、`c = d + 1.0` 照打）。期望 = omc 1.25.0 实跑（2026-10-19，探针 pk-p42 HRF1 / HSB5）。
+  YMC_CHECK_EQ(flatten_src("record BP\n  parameter Real V = 0;\n  parameter Real IL = 1;\nend BP;\nfunction drop\n"
+                           "  input BP bp;\n  input Real i;\n  output Real v;\nalgorithm\n  v := bp.V * i / bp.IL;\n"
+                           "end drop;\nmodel HRF1\n  parameter BP bp(V = 1, IL = 4);\n"
+                           "  parameter Real wMax = 3 - drop(bp, 100);\n  parameter Real q[:] = {wMax};\n"
+                           "  final parameter Integer n = max([size(q, 1); 1]);\n  Real y[n] = fill(time, n);\n"
+                           "end HRF1;\n"),
+               std::string("class HRF1\n  parameter Real bp.V = 1.0;\n  parameter Real bp.IL = 4.0;\n"
+                           "  final parameter Real wMax = -22.0;\n  final parameter Real q[1] = -22.0;\n"
+                           "  final parameter Integer n = 1;\n  Real y[1];\nequation\n  y = {time};\nend HRF1;\n"));
+  YMC_CHECK_EQ(flatten_src("record BP\n  parameter Real V = 0;\n  parameter Real IL = 1;\nend BP;\nfunction drop\n"
+                           "  input BP bp;\n  input Real i;\n  output Real v;\nalgorithm\n  v := bp.V * i / bp.IL;\n"
+                           "end drop;\nmodel HSB5\n  parameter Real d = 1;\n  parameter Real c = d + 1;\n"
+                           "  parameter BP bp(IL = 2 * c, V = d);\n  parameter Real wMax = 3 - drop(bp, 100);\n"
+                           "  parameter Real q[:] = {wMax};\n  final parameter Integer n = max([size(q, 1); 1]);\n"
+                           "  Real y[n] = fill(time, n);\nend HSB5;\n"),
+               std::string("class HSB5\n  parameter Real d = 1.0;\n  parameter Real c = d + 1.0;\n"
+                           "  parameter Real bp.V = d;\n  parameter Real bp.IL = 2.0 * c;\n"
+                           "  final parameter Real wMax = -22.0;\n  final parameter Real q[1] = -22.0;\n"
+                           "  final parameter Integer n = 1;\n  Real y[1];\nequation\n  y = {time};\nend HSB5;\n"));
+}
+
+YMC_TEST(flatten_structural_record_alias) {
+  // 结构记录（记录节点被结构语境整体读过）：EvalConstants 把它的整体引用代成记录式（HRK5 `drop(bp, time)` → `drop(BP(1.0, 4.0),
+  // time)`，此前静默照打 `drop(bp, time)`）；整体绑定恰是它的引用的记录参数连带成结构参数（checkComponentBindingVariability 的
+  // isCrefExp 支，NFTyping.mo:1150-1159 v1.25.0），压平时绑定被求值、字段打字面量（flattenComplexComponent，NFFlatten.mo:961-963；
+  // HRK3 的 bp2 / b.bp，MSL PositionControlledDCPM 的 dcpm.brushParameters）；写在目标别名之前的不连带（HRK8 的 bp3，此前同样
+  // 静默错）。期望 = omc 1.25.0 实跑（2026-10-19，探针 pk-p42 HRK3 / HRK5 / HRK8）。
+  YMC_CHECK_EQ(flatten_src("package HRK3P\n  record BP\n    parameter Real V = 0;\n    parameter Real IL = 1;\n"
+                           "  end BP;\n  function drop\n    input BP bp;\n    input Real i;\n    output Real v;\n"
+                           "  algorithm\n    v := bp.V * i / bp.IL;\n  end drop;\n  model B\n    parameter BP bp;\n"
+                           "    Real y = bp.V * time;\n  end B;\nend HRK3P;\nmodel HRK3\n"
+                           "  parameter HRK3P.BP bp(V = 1, IL = 4);\n  parameter HRK3P.BP bp2 = bp;\n"
+                           "  HRK3P.B b(bp = bp2);\n  parameter Real wMax = 3 - HRK3P.drop(bp, 100);\n"
+                           "  parameter Real q[:] = {wMax};\n  final parameter Integer n = max([size(q, 1); 1]);\n"
+                           "  Real y[n] = fill(time, n);\n  Real z = HRK3P.drop(bp2, time);\nend HRK3;\n"),
+               std::string("function HRK3P.BP \"Automatically generated record constructor for HRK3P.BP\"\n"
+                           "  input Real V = 0.0;\n  input Real IL = 1.0;\n  output BP res;\nend HRK3P.BP;\n\n"
+                           "function HRK3P.drop\n  input HRK3P.BP bp;\n  input Real i;\n  output Real v;\nalgorithm\n"
+                           "  v := bp.V * i / bp.IL;\nend HRK3P.drop;\n\nclass HRK3\n  parameter Real bp.V = 1.0;\n"
+                           "  parameter Real bp.IL = 4.0;\n  parameter Real bp2.V = 1.0;\n"
+                           "  parameter Real bp2.IL = 4.0;\n  parameter Real b.bp.V = 1.0;\n"
+                           "  parameter Real b.bp.IL = 4.0;\n  Real b.y = b.bp.V * time;\n"
+                           "  final parameter Real wMax = -22.0;\n  final parameter Real q[1] = -22.0;\n"
+                           "  final parameter Integer n = 1;\n  Real y[1];\n"
+                           "  Real z = HRK3P.drop(HRK3P.BP(1.0, 4.0), time);\nequation\n  y = {time};\nend HRK3;\n"));
+  YMC_CHECK_EQ(flatten_src("package HRK5P\n  record BP\n    parameter Real V = 0;\n    parameter Real IL = 1;\n"
+                           "  end BP;\n  function drop\n    input BP bp;\n    input Real i;\n    output Real v;\n"
+                           "  algorithm\n    v := bp.V * i / bp.IL;\n  end drop;\nend HRK5P;\nmodel HRK5\n"
+                           "  parameter HRK5P.BP bp(V = 1, IL = 4);\n"
+                           "  parameter Real wMax = 3 - HRK5P.drop(bp, 100);\n"
+                           "  Real y[if wMax > 2 then 1 else 2] = fill(time, if wMax > 2 then 1 else 2);\n"
+                           "  Real z = HRK5P.drop(bp, time);\nend HRK5;\n"),
+               std::string("function HRK5P.BP \"Automatically generated record constructor for HRK5P.BP\"\n"
+                           "  input Real V = 0.0;\n  input Real IL = 1.0;\n  output BP res;\nend HRK5P.BP;\n\n"
+                           "function HRK5P.drop\n  input HRK5P.BP bp;\n  input Real i;\n  output Real v;\nalgorithm\n"
+                           "  v := bp.V * i / bp.IL;\nend HRK5P.drop;\n\nclass HRK5\n  parameter Real bp.V = 1.0;\n"
+                           "  parameter Real bp.IL = 4.0;\n  final parameter Real wMax = -22.0;\n  Real y[1];\n"
+                           "  Real y[2];\n  Real z = HRK5P.drop(HRK5P.BP(1.0, 4.0), time);\nequation\n"
+                           "  y = {time, time};\nend HRK5;\n"));
+  YMC_CHECK_EQ(flatten_src("package HRK8P\n  record BP\n    parameter Real V = 0;\n    parameter Real IL = 1;\n"
+                           "  end BP;\n  function drop\n    input BP bp;\n    input Real i;\n    output Real v;\n"
+                           "  algorithm\n    v := bp.V * i / bp.IL;\n  end drop;\nend HRK8P;\nmodel HRK8\n"
+                           "  parameter HRK8P.BP bp3 = bp2;\n  parameter HRK8P.BP bp(V = 1, IL = 4);\n"
+                           "  parameter HRK8P.BP bp2 = bp;\n  parameter Real wMax = 3 - HRK8P.drop(bp, 100);\n"
+                           "  Real y[if wMax > 2 then 1 else 2] = fill(time, if wMax > 2 then 1 else 2);\n"
+                           "  Real z = HRK8P.drop(bp3, time);\nend HRK8;\n"),
+               std::string("function HRK8P.BP \"Automatically generated record constructor for HRK8P.BP\"\n"
+                           "  input Real V = 0.0;\n  input Real IL = 1.0;\n  output BP res;\nend HRK8P.BP;\n\n"
+                           "function HRK8P.drop\n  input HRK8P.BP bp;\n  input Real i;\n  output Real v;\nalgorithm\n"
+                           "  v := bp.V * i / bp.IL;\nend HRK8P.drop;\n\nclass HRK8\n"
+                           "  parameter Real bp3.V = bp2.V;\n  parameter Real bp3.IL = bp2.IL;\n"
+                           "  parameter Real bp.V = 1.0;\n  parameter Real bp.IL = 4.0;\n"
+                           "  parameter Real bp2.V = 1.0;\n  parameter Real bp2.IL = 4.0;\n"
+                           "  final parameter Real wMax = -22.0;\n  Real y[1];\n  Real y[2];\n"
+                           "  Real z = HRK8P.drop(bp3, time);\nequation\n  y = {time, time};\nend HRK8;\n"));
+}
+
+YMC_TEST(flatten_record_array_element_field_condition) {
+  // if 方程条件经记录数组元素的字段（`rr[1].b`，rr 带整体绑定；MSL CCCV_Stack 的 `ocv_soc.smoothness` 经 `stackData.cellData[1, 1]`）：
+  // 求值顺父记录的绑定（makeRecordFieldBindingFromParent，NFCeval.mo:673-713 v1.25.0），固定与否查整个数组组件的绑定
+  //（isComponentBindingNotFixed 的父记录支，NFStructural.mo:128-158；绑定里有 fixed = false 的 bb → 不固定、if 照留，HRE15）。期望 =
+  // omc 1.25.0 实跑（2026-10-19，探针 pk-p42 HRE1 / HRE15）。
+  YMC_CHECK_EQ(flatten_src("package HRE1P\n  record R\n    parameter Real x = 1;\n    parameter Boolean b = false;\n"
+                           "  end R;\n  model T\n    parameter Boolean b;\n    Real y;\n  equation\n    if b then\n"
+                           "      y = 1;\n    else\n      y = 2;\n    end if;\n  end T;\nend HRE1P;\nmodel HRE1\n"
+                           "  parameter HRE1P.R ra(b = true);\n  parameter HRE1P.R rr[2] = {ra, ra};\n"
+                           "  HRE1P.T t(final b = rr[1].b);\nend HRE1;\n"),
+               std::string("class HRE1\n  parameter Real ra.x = 1.0;\n  parameter Boolean ra.b = true;\n"
+                           "  parameter Real rr[1].x = ra.x;\n  parameter Boolean rr[1].b = ra.b;\n"
+                           "  parameter Real rr[2].x = ra.x;\n  parameter Boolean rr[2].b = ra.b;\n"
+                           "  final parameter Boolean t.b = true;\n  Real t.y;\nequation\n  t.y = 1.0;\nend HRE1;\n"));
+  YMC_CHECK_EQ(flatten_src("package HRE15P\n  record R\n    parameter Real x = 1;\n    parameter Boolean b = false;\n"
+                           "  end R;\n  model T\n    parameter Boolean b;\n    Real y;\n  equation\n    if b then\n"
+                           "      y = 1;\n    else\n      y = 2;\n    end if;\n  end T;\nend HRE15P;\nmodel HRE15\n"
+                           "  parameter Boolean bb(fixed = false);\n  parameter HRE15P.R ra(b = true);\n"
+                           "  parameter HRE15P.R rr[2] = {HRE15P.R(x = 1, b = bb), ra};\n"
+                           "  HRE15P.T t(final b = rr[2].b);\ninitial equation\n  bb = true;\nend HRE15;\n"),
+               std::string("class HRE15\n  parameter Boolean bb(fixed = false);\n  parameter Real ra.x = 1.0;\n"
+                           "  parameter Boolean ra.b = true;\n  parameter Real rr[1].x = 1.0;\n"
+                           "  parameter Boolean rr[1].b = bb;\n  parameter Real rr[2].x = ra.x;\n"
+                           "  parameter Boolean rr[2].b = ra.b;\n  final parameter Boolean t.b = rr[2].b;\n"
+                           "  Real t.y;\ninitial equation\n  bb = true;\nequation\n  if t.b then\n    t.y = 1.0;\n"
+                           "  else\n    t.y = 2.0;\n  end if;\nend HRE15;\n"));
+}
+
 YMC_TEST_MAIN

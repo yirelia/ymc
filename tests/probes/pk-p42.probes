@@ -1,0 +1,2523 @@
+//// set: pk-p42 — 67h：四个 MSL 例子卡在记录相关的构造上，及其兄弟写法。HRA：算法里赋值给整个记录（`r := f(…)` / `R(…)` / `r2` / if 式 / 记录数组元素 / 嵌套字段 / when / 初始算法 / operator record），omc 整条照写、不拆字段（simplifyAssignment 只拆元组，NFSimplifyModel.mo:382-409 v1.25.0），目标变率只看记录组件本身（checkAssignment NFTyping.mo:3381-3436；ComponentRef.variability NFComponentRef.mo:544-607）；带 parameter 字段的变量记录（HRA9）、for 体里的 `ra[i] :=`（HRA12）、元组里的记录（HRA13）、when 里的 discrete 记录（HRA31）、要转型的记录（HRA25）照旧 SKIP（MSL Spice3 Graetz 的 R_SEMI `vp := resistorInitEquations(rp, lp)`）。HCX：class extends 的记录带 parameter / constant 前缀：变率下沉到全部字段，隐式基类字段在前（NFClassTree.mo:139-160）（MSL Fluid MomentumBalanceFittings 的 `parameter Medium.ThermodynamicState state_nominal = Medium.setState_pTX(…)`）。HRF / HRG / HRH / HSB：记录参数作函数实参的结构求值（makeComponentBinding → makeRecordBindingExp，NFCeval.mo:621-671 / :715-757）：矩阵构造里的 size() 连带（MSL KinematicPTP2 的 `nout = max([size(qd_max, 1); …])`、`qd_max = {driveData.wMax}`）实例化期按声明序访问维时字段还没发射 → 第二遍取第一遍的值，这条路定型期只标记、不求值，没有存回（HSB5 / HRF12 的 `bp.IL = 2.0 * c` 照打）；压平后的绑定链里整个记录作实参（`Vi = Va - drop(bp, Ia)`）取各字段的值拼成记录式求值，记录节点本身标结构（markComponent 只顺它自己的绑定，NFStructural.mo:311-326）；HRH5 的 `w0 = 1.0` 是 EvalConstants 代入结构参数（不是存回）。HRK：结构记录（记录节点被结构语境整体读过）的整体引用被 EvalConstants 代成记录式（HRK5 / HRK7 `drop(bp, time)` → `drop(BP(1.0, 4.0), time)`，基线静默 FAIL）；整体绑定恰是结构记录引用的记录参数连带成结构参数（checkComponentBindingVariability 的 isCrefExp 支，NFTyping.mo:1150-1159），压平时绑定被求值、字段打字面量（flattenComplexComponent NFFlatten.mo:961-963；MSL PositionControlledDCPM 的 `dcpm.brushParameters`、`dcpm.ViNominal = 95.0`）；写在目标别名之前的不连带（HRK8，基线静默 FAIL）、压平期才标的不改字段（HRK7）。HRE：记录数组元素字段（`rr[1].b`，rr 带整体绑定）进 if 方程条件：求值顺父记录的绑定（makeRecordFieldBindingFromParent NFCeval.mo:673-713），固定与否查整个数组组件的绑定（isComponentBindingNotFixed 的父记录支 NFStructural.mo:128-158；HRE15 绑定里有 fixed = false 的 bb → if 照留）；要标记的组元素（维 HRE6、Evaluate HRE9、直接读组件数组元素的 HRE10 / HRE11）照旧 SKIP（MSL CCCV_Stack 越过 `if condition not evaluable`，停在 `connect operand shape`）。
+//// model: HRA1
+package HRA1P
+  record R
+    Real a;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end f;
+end HRA1P;
+model HRA1
+  HRA1P.R r;
+algorithm
+  r := HRA1P.f(time);
+end HRA1;
+//// model: HRA2
+package HRA2P
+  record R
+    Real a;
+    Real b;
+  end R;
+end HRA2P;
+model HRA2
+  HRA2P.R r;
+algorithm
+  r := HRA2P.R(time, 2 * time);
+end HRA2;
+//// model: HRA3
+package HRA3P
+  record R
+    Real a;
+    Real b;
+  end R;
+end HRA3P;
+model HRA3
+  HRA3P.R r;
+  HRA3P.R r2(a = time, b = 2);
+algorithm
+  r := r2;
+end HRA3;
+//// model: HRA4
+package HRA4P
+  record R
+    Real a;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end f;
+end HRA4P;
+model HRA4
+  HRA4P.R r;
+algorithm
+  r := if time > 0.5 then HRA4P.f(time) else HRA4P.f(2 * time);
+end HRA4;
+//// model: HRA5
+package HRA5P
+  record R
+    Real a[2];
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := {x, x};
+    r.b := 2 * x;
+  end f;
+end HRA5P;
+model HRA5
+  HRA5P.R r;
+algorithm
+  r := HRA5P.f(time);
+end HRA5;
+//// model: HRA6
+package HRA6P
+  record S
+    Real c;
+  end S;
+  record R
+    Real a;
+    S s;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.s.c := 2 * x;
+  end f;
+end HRA6P;
+model HRA6
+  HRA6P.R r;
+algorithm
+  r := HRA6P.f(time);
+end HRA6;
+//// model: HRA7
+package HRA7P
+  record S
+    Real c;
+    Real d;
+  end S;
+  record R
+    Real a;
+    S s;
+  end R;
+  function g
+    input Real x;
+    output S s;
+  algorithm
+    s.c := x;
+    s.d := 2 * x;
+  end g;
+end HRA7P;
+model HRA7
+  HRA7P.R r;
+algorithm
+  r.a := time;
+  r.s := HRA7P.g(time);
+end HRA7;
+//// model: HRA8
+package HRA8P
+  record R
+    Real a;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end f;
+end HRA8P;
+model HRA8
+  HRA8P.R r;
+algorithm
+  when time > 0.5 then
+    r := HRA8P.f(time);
+  end when;
+end HRA8;
+//// model: HRA9
+package HRA9P
+  record R
+    Real a;
+    parameter Real p = 1;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.p := 2;
+  end f;
+end HRA9P;
+model HRA9
+  HRA9P.R r;
+algorithm
+  r := HRA9P.f(time);
+end HRA9;
+//// model: HRA10
+package HRA10P
+  record R
+    Real a;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end f;
+end HRA10P;
+model HRA10
+  HRA10P.R ra[2];
+algorithm
+  ra[1] := HRA10P.f(time);
+  ra[2] := HRA10P.f(2 * time);
+end HRA10;
+//// model: HRA11
+package HRA11P
+  record R
+    Real a;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end f;
+end HRA11P;
+model HRA11
+  parameter Real k = 2;
+  parameter HRA11P.R r(a(fixed = false), b(fixed = false));
+initial algorithm
+  r := HRA11P.f(k);
+end HRA11;
+//// model: HRA12
+package HRA12P
+  record R
+    Real a;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end f;
+end HRA12P;
+model HRA12
+  HRA12P.R ra[2];
+algorithm
+  for i in 1:2 loop
+    ra[i] := HRA12P.f(i * time);
+  end for;
+end HRA12;
+//// model: HRA13
+package HRA13P
+  record R
+    Real a;
+    Real b;
+  end R;
+  function g
+    input Real x;
+    output R r;
+    output Real y;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+    y := 3 * x;
+  end g;
+end HRA13P;
+model HRA13
+  HRA13P.R r;
+  Real y;
+algorithm
+  (r, y) := HRA13P.g(time);
+end HRA13;
+//// model: HRA14
+package HRA14P
+  record R
+    Real a;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end f;
+  function h
+    input Real x;
+    output Real y;
+  protected
+    R r;
+  algorithm
+    r := f(x);
+    y := r.a + r.b;
+  end h;
+end HRA14P;
+model HRA14
+  Real y;
+algorithm
+  y := HRA14P.h(time);
+end HRA14;
+//// model: HRA15
+package HRA15P
+  record R
+    Real a;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end f;
+end HRA15P;
+model HRA15
+  input HRA15P.R r;
+algorithm
+  r := HRA15P.f(time);
+end HRA15;
+//// model: HRA16
+package HRA16P
+  record R
+    Real a = 1;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end f;
+end HRA16P;
+model HRA16
+  HRA16P.R r;
+algorithm
+  r := HRA16P.f(time);
+end HRA16;
+//// model: HRA17
+model HRA17
+  Complex c;
+  Complex c1(re = time, im = 1);
+algorithm
+  c := c1 * c1;
+end HRA17;
+//// model: HRA18
+package HRA18P
+  record R
+    Integer n;
+    Boolean b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.n := integer(x);
+    r.b := x > 1;
+  end f;
+end HRA18P;
+model HRA18
+  HRA18P.R r;
+algorithm
+  r := HRA18P.f(time);
+end HRA18;
+//// model: HRA19
+package HRA19P
+  record R
+    Real a;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end f;
+end HRA19P;
+model HRA19
+  parameter HRA19P.R r = HRA19P.f(1);
+algorithm
+  r := HRA19P.f(time);
+end HRA19;
+//// model: HRA20
+package HRA20P
+  record R
+    Real a;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end f;
+end HRA20P;
+model HRA20
+  HRA20P.R r;
+  Real z;
+algorithm
+  r := HRA20P.f(time);
+  z := r.a + r.b;
+end HRA20;
+//// model: HRA21
+package HRA21P
+  record R
+    Real a;
+    Real b;
+  end R;
+end HRA21P;
+model HRA21
+  constant HRA21P.R c = HRA21P.R(1, 2);
+  HRA21P.R r;
+algorithm
+  r := c;
+end HRA21;
+//// model: HRA22
+package HRA22P
+  record R
+    Real a;
+    Real b;
+  end R;
+end HRA22P;
+model HRA22
+  parameter HRA22P.R p(a = 1, b = 2);
+  HRA22P.R r;
+algorithm
+  r := p;
+end HRA22;
+//// model: HRA23
+package HRA23P
+  record R
+    Real a;
+    Real b;
+  end R;
+end HRA23P;
+model HRA23
+  HRA23P.R r;
+algorithm
+  r := HRA23P.R(1, 2);
+end HRA23;
+//// model: HRA24
+package HRA24P
+  record R
+    Real a;
+    Real b;
+  end R;
+  record R2
+    Real a;
+    Real b;
+  end R2;
+end HRA24P;
+model HRA24
+  HRA24P.R r;
+  HRA24P.R2 r2(a = time, b = 1);
+algorithm
+  r := r2;
+end HRA24;
+//// model: HRA25
+package HRA25P
+  record R
+    Real a;
+    Real b;
+  end R;
+  record R2
+    Real b;
+    Real a;
+  end R2;
+end HRA25P;
+model HRA25
+  HRA25P.R r;
+  HRA25P.R2 r2(a = time, b = 1);
+algorithm
+  r := r2;
+end HRA25;
+//// model: HRA26
+model HRA26
+  Complex c;
+algorithm
+  c := Complex(time, 2);
+end HRA26;
+//// model: HRA27
+package HRA27P
+  record R
+    Real a;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end f;
+end HRA27P;
+model HRA27
+  HRA27P.R r;
+algorithm
+  if time > 0.5 then
+    r := HRA27P.f(time);
+  else
+    r := HRA27P.f(-time);
+  end if;
+end HRA27;
+//// model: HRA29
+package HRA29P
+  record R
+    Real a;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end f;
+  model B
+    R r;
+    parameter Real k = 1;
+  algorithm
+    r := f(k * time);
+  end B;
+end HRA29P;
+model HRA29
+  HRA29P.B b[2](k = {1, 2});
+end HRA29;
+//// model: HRA30
+package HRA30P
+  record R
+    Real a;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end f;
+end HRA30P;
+model HRA30
+  HRA30P.R r(final a = 1);
+algorithm
+  r := HRA30P.f(time);
+end HRA30;
+//// model: HRA31
+package HRA31P
+  record R
+    Real a;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end f;
+end HRA31P;
+model HRA31
+  discrete HRA31P.R r;
+algorithm
+  when sample(0, 0.1) then
+    r := HRA31P.f(time);
+  end when;
+end HRA31;
+//// model: HRA32
+package HRA32P
+  record S
+    Real c;
+    Real d;
+  end S;
+  record R
+    Real a;
+    S s;
+  end R;
+  function g
+    input Real x;
+    output S s;
+  algorithm
+    s.c := x;
+    s.d := 2 * x;
+  end g;
+end HRA32P;
+model HRA32
+  HRA32P.R ra[2];
+algorithm
+  ra[1].a := time;
+  ra[2].a := time;
+  ra[1].s := HRA32P.g(time);
+  ra[2].s := HRA32P.g(2 * time);
+end HRA32;
+//// model: HRA34
+package HRA34P
+  record R
+    Real a;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end f;
+end HRA34P;
+model HRA34
+  discrete HRA34P.R r;
+algorithm
+  r := HRA34P.f(time);
+end HRA34;
+//// model: HRA36
+package HRA36P
+  record R
+    Real a;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end f;
+end HRA36P;
+model HRA36
+  Real y;
+protected
+  HRA36P.R r;
+algorithm
+  r := HRA36P.f(time);
+  y := r.a;
+end HRA36;
+//// model: HRA37
+package HRA37P
+  record R
+    Real a;
+    Real b;
+  end R;
+  function f
+    input R x;
+    output R r;
+  algorithm
+    r.a := x.b;
+    r.b := x.a;
+  end f;
+end HRA37P;
+model HRA37
+  HRA37P.R r0(a = time, b = 1);
+  HRA37P.R r;
+algorithm
+  r := HRA37P.f(r0);
+end HRA37;
+//// model: HRA38
+model HRA38
+  replaceable package Medium = Modelica.Media.Water.StandardWater;
+  Medium.ThermodynamicState state;
+  Real p = 1e5 + time;
+algorithm
+  state := Medium.setState_pT(p, 300);
+  annotation(uses(Modelica(version = "4.0.0")));
+end HRA38;
+//// model: HRA39
+package HRA39P
+  record R
+    Real a;
+    Real b;
+  end R;
+end HRA39P;
+model HRA39
+  parameter Boolean bb = true;
+  HRA39P.R r1(a = time, b = 1);
+  HRA39P.R r2(a = 2 * time, b = 2);
+  HRA39P.R r;
+algorithm
+  r := if bb then r1 else r2;
+end HRA39;
+//// model: HRA40
+package HRA40P
+  record R
+    Real a = time;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end f;
+end HRA40P;
+model HRA40
+  HRA40P.R r;
+algorithm
+  when time > 0.5 then
+    r := HRA40P.f(time);
+  end when;
+end HRA40;
+//// model: HRA41
+package HRA41P
+  record R
+    Real a;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end f;
+end HRA41P;
+model HRA41
+  HRA41P.R r;
+equation
+  r = HRA41P.f(time);
+algorithm
+  r := HRA41P.f(time);
+end HRA41;
+//// model: HRA42
+package HRA42P
+  record R
+    Real a;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end f;
+end HRA42P;
+model HRA42
+  HRA42P.R r;
+algorithm
+  r := HRA42P.f(time) "a comment";
+end HRA42;
+//// model: HRA43
+package HRA43P
+  record R
+    Real a;
+    Integer n;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.n := 1;
+  end f;
+end HRA43P;
+model HRA43
+  HRA43P.R r;
+algorithm
+  when time > 0.5 then
+    r := HRA43P.f(time);
+  end when;
+end HRA43;
+//// model: HRA44
+package HRA44P
+  record R
+    Real a;
+    Real b;
+  end R;
+end HRA44P;
+model HRA44
+  HRA44P.R r;
+  HRA44P.R r2(a = time, b = 2);
+algorithm
+  r := r2;
+  r.a := 3;
+end HRA44;
+//// model: HRA45
+package HRA45P
+  record R
+    Real a;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+    r.b := 2 * x;
+  end f;
+end HRA45P;
+model HRA45
+  HRA45P.R r;
+initial algorithm
+  r := HRA45P.f(1);
+end HRA45;
+//// model: HRA46
+model HRA46
+  Modelica.Electrical.Spice3.Semiconductors.R_Resistor r(R = 10);
+  Modelica.Electrical.Analog.Basic.Ground g;
+  Modelica.Electrical.Analog.Sources.SineVoltage s(V = 1, f = 1);
+equation
+  connect(s.p, r.p);
+  connect(r.n, g.p);
+  connect(s.n, g.p);
+  annotation(uses(Modelica(version = "4.0.0")));
+end HRA46;
+//// model: HCX1
+package HCX1P
+  partial package PM
+    replaceable record State
+      Real p = 1;
+    end State;
+  end PM;
+  package M
+    extends PM;
+    redeclare record extends State
+      Real T = 2;
+    end State;
+  end M;
+end HCX1P;
+model HCX1
+  parameter HCX1P.M.State s;
+  Real y = s.p * time;
+end HCX1;
+//// model: HCX2
+package HCX2P
+  partial package PM
+    replaceable record State
+      Real p = 1;
+    end State;
+  end PM;
+  package M
+    extends PM;
+    redeclare record extends State
+      Real T = 2;
+    end State;
+  end M;
+end HCX2P;
+model HCX2
+  parameter HCX2P.M.State s(p = 3, T = 4);
+  Real y = s.T * time;
+end HCX2;
+//// model: HCX3
+package HCX3P
+  partial package PM
+    replaceable record State
+      Real p;
+    end State;
+    replaceable partial function setState
+      input Real p;
+      input Real T;
+      output State s;
+    end setState;
+  end PM;
+  package M
+    extends PM;
+    redeclare record extends State
+      Real T;
+    end State;
+    redeclare function extends setState
+    algorithm
+      s := State(p = p, T = T);
+    end setState;
+  end M;
+end HCX3P;
+model HCX3
+  parameter HCX3P.M.State s = HCX3P.M.setState(1, 2);
+  Real y = s.T * time;
+end HCX3;
+//// model: HCX4
+package HCX4P
+  partial package PM
+    replaceable record State
+      Real p;
+    end State;
+  end PM;
+  package M
+    extends PM;
+    redeclare record extends State
+      Real T;
+    end State;
+  end M;
+end HCX4P;
+model HCX4
+  parameter HCX4P.M.State s = HCX4P.M.State(p = 1, T = 2);
+  Real y = s.T * time;
+end HCX4;
+//// model: HCX5
+package HCX5P
+  partial package PM
+    replaceable record State
+      Real p;
+    end State;
+  end PM;
+  package M
+    extends PM;
+    redeclare record extends State
+      Real T;
+    end State;
+  end M;
+end HCX5P;
+model HCX5
+  constant HCX5P.M.State s = HCX5P.M.State(p = 1, T = 2);
+  Real y = s.T * time;
+end HCX5;
+//// model: HCX6
+package HCX6P
+  partial package PM
+    replaceable record State
+      Real p;
+    end State;
+    replaceable partial function setState
+      input Real p;
+      input Real T;
+      output State s;
+    end setState;
+  end PM;
+  package M
+    extends PM;
+    redeclare record extends State
+      Real T;
+    end State;
+    redeclare function extends setState
+    algorithm
+      s := State(p = p, T = T);
+    end setState;
+  end M;
+end HCX6P;
+model HCX6
+  parameter Real pp = 2;
+  parameter HCX6P.M.State s = HCX6P.M.setState(pp, 3);
+  Real y = s.T * time;
+end HCX6;
+//// model: HCX7
+package HCX7P
+  partial package PM
+    replaceable record State
+      Real p;
+    end State;
+    replaceable partial function setState
+      input Real p;
+      input Real T;
+      output State s;
+    end setState;
+    constant Real p_default = 1e5;
+    constant Real T_default = 300;
+  end PM;
+  package M
+    extends PM;
+    redeclare record extends State
+      Real T;
+    end State;
+    redeclare function extends setState
+    algorithm
+      s := State(p = p, T = T);
+    end setState;
+  end M;
+  model B
+    replaceable package Medium = PM;
+  protected
+    parameter Medium.State state_nominal = Medium.setState(Medium.p_default, Medium.T_default);
+  public
+    Real y = state_nominal.p * time;
+  end B;
+end HCX7P;
+model HCX7
+  HCX7P.B b(redeclare package Medium = HCX7P.M);
+end HCX7;
+//// model: HCX8
+package HCX8P
+  record Icon
+  end Icon;
+  partial package PM
+    replaceable record State
+      extends Icon;
+    end State;
+  end PM;
+  package M
+    extends PM;
+    redeclare record extends State
+      Real T = 1;
+      Real p = 2;
+    end State;
+  end M;
+end HCX8P;
+model HCX8
+  parameter HCX8P.M.State s;
+  Real y = s.T * time;
+end HCX8;
+//// model: HCX9
+package HCX9P
+  partial package PM
+    replaceable record State
+    end State;
+  end PM;
+  partial package PM2
+    extends PM;
+    redeclare replaceable record extends State
+      Integer phase(min = 0, max = 2) = 1;
+    end State;
+  end PM2;
+  package M
+    extends PM2;
+    redeclare record extends State
+      Real T = 1;
+      Real p = 2;
+    end State;
+  end M;
+end HCX9P;
+model HCX9
+  parameter HCX9P.M.State s;
+  Real y = s.T * time;
+end HCX9;
+//// model: HCX10
+package HCX10P
+  partial package PM
+    replaceable record State
+      Real p = 1;
+    end State;
+  end PM;
+  package M
+    extends PM;
+    redeclare record extends State
+      Real T = 2;
+    end State;
+  end M;
+end HCX10P;
+model HCX10
+  Real y = s.p * time;
+protected
+  parameter HCX10P.M.State s;
+end HCX10;
+//// model: HCX11
+package HCX11P
+  partial package PM
+    replaceable record State
+      Real p;
+    end State;
+    replaceable partial function setState
+      input Real p;
+      input Real T;
+      output State s;
+    end setState;
+  end PM;
+  package M
+    extends PM;
+    redeclare record extends State
+      Real T;
+    end State;
+    redeclare function extends setState
+    algorithm
+      s := State(p = p, T = T);
+    end setState;
+  end M;
+end HCX11P;
+model HCX11
+  parameter Real pp = 2;
+  final parameter HCX11P.M.State s = HCX11P.M.setState(pp, 3);
+  Real y = s.T * time;
+end HCX11;
+//// model: HCX12
+package HCX12P
+  partial package PM
+    replaceable record State
+      Real p = 1;
+    end State;
+  end PM;
+  package M
+    extends PM;
+    redeclare record extends State
+      Real T = 2;
+    end State;
+  end M;
+end HCX12P;
+model HCX12
+  parameter HCX12P.M.State s[2];
+  Real y = s[2].T * time;
+end HCX12;
+//// model: HCX13
+package HCX13P
+  partial package PM
+    replaceable record State
+      Real p = 1;
+    end State;
+  end PM;
+  package M
+    extends PM;
+    redeclare record extends State(p(start = 5))
+      Real T = 2;
+    end State;
+  end M;
+end HCX13P;
+model HCX13
+  parameter HCX13P.M.State s;
+  Real y = s.p * time;
+end HCX13;
+//// model: HCX15
+package HCX15P
+  partial package PM
+    replaceable record State
+      Real p;
+    end State;
+    replaceable partial function setState
+      input Real p;
+      input Real T;
+      output State s;
+    end setState;
+  end PM;
+  package M
+    extends PM;
+    redeclare record extends State
+      Real T;
+    end State;
+    redeclare function extends setState
+    algorithm
+      s := State(p = p, T = T);
+    end setState;
+  end M;
+end HCX15P;
+model HCX15
+  HCX15P.M.State s = HCX15P.M.setState(time, 3);
+end HCX15;
+//// model: HCX16
+package HCX16P
+  partial package PM
+    replaceable record State
+      Real p;
+    end State;
+  end PM;
+  package M
+    extends PM;
+    redeclare record extends State
+      Integer n;
+    end State;
+  end M;
+end HCX16P;
+model HCX16
+  constant HCX16P.M.State s = HCX16P.M.State(p = 1, n = 2);
+  Real x[s.n] = fill(time, s.n);
+end HCX16;
+//// model: HCX17
+package HCX17P
+  partial package PM
+    replaceable record State
+      Real p = 1;
+    end State;
+  end PM;
+  package M
+    extends PM;
+    redeclare record extends State
+      Real T = 2;
+    end State;
+  end M;
+end HCX17P;
+model HCX17
+  parameter HCX17P.M.State s;
+  parameter Integer n = integer(s.T);
+  Real x[n] = fill(time, n);
+end HCX17;
+//// model: HCX18
+package HCX18P
+  partial package PM
+    replaceable record State
+      Real p = 1;
+    end State;
+    replaceable partial function f
+      input State s;
+      output Real y;
+    end f;
+  end PM;
+  package M
+    extends PM;
+    redeclare record extends State
+      Real T = 2;
+    end State;
+    redeclare function extends f
+    algorithm
+      y := s.p + s.T;
+    end f;
+  end M;
+end HCX18P;
+model HCX18
+  parameter HCX18P.M.State s;
+  parameter Real d = HCX18P.M.f(s);
+  Real y = d * time;
+end HCX18;
+//// model: HCX19
+package HCX19P
+  partial package PM
+    replaceable record State
+      Real p = 1;
+    end State;
+  end PM;
+  package M
+    extends PM;
+    redeclare record extends State
+      Real T = 2;
+    end State;
+  end M;
+end HCX19P;
+model HCX19
+  constant HCX19P.M.State s;
+  Real y = s.T * time;
+end HCX19;
+//// model: HCX20
+model HCX20
+  Modelica.Fluid.Fittings.AbruptAdaptor a(redeclare package Medium = Modelica.Media.Water.StandardWaterOnePhase, diameter_a = 0.1, diameter_b = 0.2);
+  inner Modelica.Fluid.System system;
+  annotation(uses(Modelica(version = "4.0.0")));
+end HCX20;
+//// model: HRF1
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model HRF1
+  parameter BP bp(V = 1, IL = 4);
+  parameter Real wMax = 3 - drop(bp, 100);
+  parameter Real q[:] = {wMax};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+end HRF1;
+//// model: HRF2
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model HRF2
+  parameter Real q[:] = {wMax};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+  parameter Real wMax = 3 - drop(bp, 100);
+  parameter BP bp(V = 1, IL = 4);
+end HRF2;
+//// model: HRF3
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model HRF3
+  constant BP bp(V = 1, IL = 4);
+  parameter Real wMax = 3 - drop(bp, 100);
+  parameter Real q[:] = {wMax};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+end HRF3;
+//// model: HRF4
+package HRF4P
+  record BP
+    parameter Real V = 0;
+    parameter Real IL = 1;
+  end BP;
+  function drop
+    input BP bp;
+    input Real i;
+    output Real v;
+  algorithm
+    v := bp.V * i / bp.IL;
+  end drop;
+  constant BP bpc(V = 1, IL = 4);
+end HRF4P;
+model HRF4
+  parameter Real wMax = 3 - HRF4P.drop(HRF4P.bpc, 100);
+  parameter Real q[:] = {wMax};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+end HRF4;
+//// model: HRF5
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+function mk
+  input Real x;
+  output BP bp;
+algorithm
+  bp.V := x;
+  bp.IL := 4;
+end mk;
+model HRF5
+  parameter BP bp = mk(1);
+  parameter Real wMax = 3 - drop(bp, 100);
+  parameter Real q[:] = {wMax};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+end HRF5;
+//// model: HRF6
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model HRF6
+  parameter BP bp = BP(V = 1, IL = 4);
+  parameter Real wMax = 3 - drop(bp, 100);
+  parameter Real q[:] = {wMax};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+end HRF6;
+//// model: HRF7
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model HRF7
+  parameter BP bpa[2](each V = 1, IL = {4, 5});
+  parameter Real wMax = 3 - drop(bpa[2], 100);
+  parameter Real q[:] = {wMax};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+end HRF7;
+//// model: HRF8
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+record DD
+  parameter BP bp(V = 1, IL = 4);
+  parameter Real wMax = 3 - drop(bp, 100);
+end DD;
+model HRF8
+  parameter DD dd;
+  parameter Real q[:] = {dd.wMax};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+end HRF8;
+//// model: HRF9
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+record DD
+  parameter BP bp(V = 1, IL = 4);
+  parameter Real wMax = 3 - drop(bp, 100);
+end DD;
+block K
+  parameter Real q[:] = {1};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+end K;
+model HRF9
+  parameter DD dd;
+  K k(q = {dd.wMax});
+end HRF9;
+//// model: HRF10
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model HRF10
+  parameter BP bp(V = 1, IL = 4);
+  parameter Real wMax = 3 - drop(bp, 100) annotation(Evaluate = true);
+  Real y = wMax * time;
+end HRF10;
+//// model: HRF11
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model HRF11
+  parameter Real c = 2;
+  parameter BP bp(V = 1, IL = 2 * c);
+  parameter Real wMax = 3 - drop(bp, 100) annotation(Evaluate = true);
+  Real y = wMax * time;
+end HRF11;
+//// model: HRF12
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model HRF12
+  parameter Real c = 2;
+  parameter BP bp(V = 1, IL = 2 * c);
+  parameter Real q[:] = {3 - drop(bp, 100)};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+end HRF12;
+//// model: HRF13
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model HRF13
+  parameter BP bp(V = 1, IL = 4);
+  parameter Real wMax = 3 - drop(bp, 100);
+  parameter Real q[:] = {wMax, 2 * wMax};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+end HRF13;
+//// model: HRF14
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model HRF14
+  parameter BP bp(V = 1, IL = 4);
+  parameter Real wMax = 3 - drop(bp, 100);
+  parameter Real q[:] = {wMax};
+  final parameter Integer n = max(size(q, 1), 1);
+  Real y[n] = fill(time, n);
+end HRF14;
+//// model: HRF15
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model HRF15
+  parameter BP bp(V = 1, IL = 4);
+  parameter Real wMax = 3 - drop(bp, 100);
+  parameter Real q[:] = {wMax};
+  parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+end HRF15;
+//// model: HRG1
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+record MD
+  parameter Real Va = 100;
+  parameter Real Ia = 100;
+  parameter BP bp(V = 0, IL = 0.01 * Ia);
+  parameter Real Vi = Va - drop(bp, Ia);
+end MD;
+record DD
+  parameter MD md;
+  parameter Real w0 = md.Va / md.Vi;
+  parameter Real wMax = md.Va / md.Vi;
+end DD;
+block K
+  parameter Real q[:] = {1};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+end K;
+model HRG1
+  parameter DD dd;
+  K k(q = {dd.wMax});
+end HRG1;
+//// model: HRG2
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+record MD
+  parameter Real Va = 100;
+  parameter Real Ia = 100;
+  parameter BP bp(V = 0, IL = 0.01 * Ia);
+  parameter Real Vi = Va - drop(bp, Ia);
+end MD;
+record DD
+  parameter MD md;
+  parameter Real w0 = md.Va / md.Vi;
+  parameter Real wMax = md.Va / md.Vi;
+end DD;
+model HRG2
+  parameter DD dd;
+  parameter Real q[:] = {dd.wMax};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+end HRG2;
+//// model: HRG3
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+record MD
+  parameter Real Va = 100;
+  parameter Real Ia = 100;
+  parameter BP bp(V = 0, IL = 0.01 * Ia);
+  parameter Real Vi = Va - drop(bp, Ia);
+end MD;
+record DD
+  parameter MD md;
+  parameter Real w0 = md.Va / md.Vi;
+  parameter Real wMax = md.Va / md.Vi;
+end DD;
+model HRG3
+  parameter DD dd;
+  Real y[if dd.wMax > 0.5 then 1 else 2] = fill(time, if dd.wMax > 0.5 then 1 else 2);
+end HRG3;
+//// model: HRG4
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+record MD
+  parameter Real Va = 100;
+  parameter Real Ia = 100;
+  parameter BP bp(V = 0, IL = 0.01 * Ia);
+  parameter Real Vi = Va - drop(bp, Ia);
+end MD;
+model HRG4
+  parameter MD md;
+  parameter Real wMax = md.Va / md.Vi;
+  parameter Real q[:] = {wMax};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+end HRG4;
+//// model: HRH1
+record DD
+  parameter Real Va = 100;
+  parameter Real Vi = 50;
+  parameter Real w0 = Va / Vi;
+  parameter Real wMax = Va / Vi;
+end DD;
+model HRH1
+  parameter DD dd;
+  parameter Real q[:] = {dd.wMax};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+end HRH1;
+//// model: HRH2
+record MD
+  parameter Real Va = 100;
+  parameter Real Ia = 100;
+  parameter Real Vi = Va - Ia / 100;
+end MD;
+record DD
+  parameter MD md;
+  parameter Real w0 = md.Va / md.Vi;
+  parameter Real wMax = md.Va / md.Vi;
+end DD;
+model HRH2
+  parameter DD dd;
+  parameter Real q[:] = {dd.wMax};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+end HRH2;
+//// model: HRH3
+record DD
+  parameter Real Va = 100;
+  parameter Real Vi = 50;
+  parameter Real w0 = Va / Vi;
+  parameter Real wMax = Va / Vi;
+end DD;
+model HRH3
+  parameter DD dd;
+  Real y[if dd.wMax > 1 then 1 else 2] = fill(time, if dd.wMax > 1 then 1 else 2);
+end HRH3;
+//// model: HRH4
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+record DD
+  parameter Real Va = 100;
+  parameter Real Ia = 100;
+  parameter BP bp(V = 0, IL = 0.01 * Ia);
+  parameter Real Vi = Va - drop(bp, Ia);
+  parameter Real w0 = Va / Vi;
+  parameter Real wMax = Va / Vi;
+end DD;
+model HRH4
+  parameter DD dd;
+  parameter Real q[:] = {dd.wMax};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+end HRH4;
+//// model: HRH5
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model HRH5
+  parameter Real Va = 100;
+  parameter Real Ia = 100;
+  parameter BP bp(V = 0, IL = 0.01 * Ia);
+  parameter Real Vi = Va - drop(bp, Ia);
+  parameter Real w0 = Va / Vi;
+  parameter Real wMax = Va / Vi;
+  parameter Real q[:] = {wMax};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+end HRH5;
+//// model: HRH6
+record DD
+  parameter Real Va = 100;
+  parameter Real Vi = 50;
+  parameter Real w0 = Va / Vi;
+  parameter Real wMax = Va / Vi;
+end DD;
+model HRH6
+  parameter DD dd;
+  parameter Real q[:] = {dd.wMax};
+  final parameter Integer n = max(size(q, 1), 1);
+  Real y[n] = fill(time, n);
+end HRH6;
+//// model: HRH7
+record DD
+  parameter Real Va = 100;
+  parameter Real Vi = 50;
+  parameter Real w0 = Va / Vi;
+  parameter Real wMax = Va / Vi;
+end DD;
+model HRH7
+  parameter DD dd;
+  parameter Real p = dd.wMax annotation(Evaluate = true);
+  Real y = p * time;
+end HRH7;
+//// model: HSB1
+model HSB1
+  parameter Real d = 1;
+  parameter Real c = d + 1;
+  parameter Real b = c + 1;
+  Real y;
+equation
+  if b > 2 then
+    y = time;
+  else
+    y = 2 * time;
+  end if;
+end HSB1;
+//// model: HSB2
+model HSB2
+  parameter Real d = 1;
+  parameter Real c = d + 1;
+  parameter Real b = c + 1;
+  Real y[integer(b)] = fill(time, integer(b));
+end HSB2;
+//// model: HSB3
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model HSB3
+  parameter Real d = 1;
+  parameter Real c = d + 1;
+  parameter BP bp(IL = 2 * c);
+  parameter Real wMax = 3 - drop(bp, 100);
+  Real y;
+equation
+  if wMax > 2 then
+    y = time;
+  else
+    y = 2 * time;
+  end if;
+end HSB3;
+//// model: HSB4
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model HSB4
+  parameter Real d = 1;
+  parameter Real c = d + 1;
+  parameter BP bp(IL = 2 * c);
+  parameter Real wMax = 3 - drop(bp, 100);
+  Real y[if wMax > 2 then 1 else 2] = fill(time, if wMax > 2 then 1 else 2);
+end HSB4;
+//// model: HSB5
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model HSB5
+  parameter Real d = 1;
+  parameter Real c = d + 1;
+  parameter BP bp(IL = 2 * c, V = d);
+  parameter Real wMax = 3 - drop(bp, 100);
+  parameter Real q[:] = {wMax};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+end HSB5;
+//// model: HRK1
+package HRK1P
+  record BP
+    parameter Real V = 0;
+    parameter Real IL = 1;
+  end BP;
+  function drop
+    input BP bp;
+    input Real i;
+    output Real v;
+  algorithm
+    v := bp.V * i / bp.IL;
+  end drop;
+  record MD
+    parameter Real Va = 100;
+    parameter Real Ia = 100;
+    parameter BP bp(V = 0, IL = 0.01 * Ia);
+    parameter Real Vi = Va - drop(bp, Ia);
+  end MD;
+  model B
+    parameter BP bp;
+    Real y = bp.V * time;
+  end B;
+  model M
+    parameter Real Va = 100;
+    parameter Real Ia = 100;
+    parameter BP bp;
+    final parameter Real Vi = Va - drop(bp, Ia);
+    B b(final bp = bp);
+  end M;
+end HRK1P;
+model HRK1
+  parameter HRK1P.MD md;
+  HRK1P.M m(Va = md.Va, Ia = md.Ia, bp = md.bp);
+  parameter Real q[:] = {md.Vi};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+end HRK1;
+//// model: HRK2
+package HRK2P
+  record BP
+    parameter Real V = 0;
+    parameter Real IL = 1;
+  end BP;
+  function drop
+    input BP bp;
+    input Real i;
+    output Real v;
+  algorithm
+    v := bp.V * i / bp.IL;
+  end drop;
+  record MD
+    parameter Real Va = 100;
+    parameter Real Ia = 100;
+    parameter BP bp(V = 0, IL = 0.01 * Ia);
+    parameter Real Vi = Va - drop(bp, Ia);
+  end MD;
+  model B
+    parameter BP bp;
+    Real y = bp.V * time;
+  end B;
+  model M
+    parameter Real Va = 100;
+    parameter Real Ia = 100;
+    parameter BP bp;
+    final parameter Real Vi = Va - drop(bp, Ia);
+    B b(final bp = bp);
+    Real z = drop(bp, time);
+  end M;
+end HRK2P;
+model HRK2
+  parameter HRK2P.MD md;
+  HRK2P.M m(Va = md.Va, Ia = md.Ia, bp = md.bp);
+  Real y[if md.Vi > 50 then 1 else 2] = fill(time, if md.Vi > 50 then 1 else 2);
+end HRK2;
+//// model: HRK3
+package HRK3P
+  record BP
+    parameter Real V = 0;
+    parameter Real IL = 1;
+  end BP;
+  function drop
+    input BP bp;
+    input Real i;
+    output Real v;
+  algorithm
+    v := bp.V * i / bp.IL;
+  end drop;
+  model B
+    parameter BP bp;
+    Real y = bp.V * time;
+  end B;
+end HRK3P;
+model HRK3
+  parameter HRK3P.BP bp(V = 1, IL = 4);
+  parameter HRK3P.BP bp2 = bp;
+  HRK3P.B b(bp = bp2);
+  parameter Real wMax = 3 - HRK3P.drop(bp, 100);
+  parameter Real q[:] = {wMax};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+  Real z = HRK3P.drop(bp2, time);
+end HRK3;
+//// model: HRK4
+package HRK4P
+  record BP
+    parameter Real V = 0;
+    parameter Real IL = 1;
+  end BP;
+  function drop
+    input BP bp;
+    input Real i;
+    output Real v;
+  algorithm
+    v := bp.V * i / bp.IL;
+  end drop;
+end HRK4P;
+model HRK4
+  parameter HRK4P.BP bp(V = 1, IL = 4);
+  parameter HRK4P.BP bp2 = bp;
+  parameter Real wMax = 3 - HRK4P.drop(bp, 100);
+  Real y;
+equation
+  if wMax > 2 then
+    y = time;
+  else
+    y = 2 * time;
+  end if;
+end HRK4;
+//// model: HRK5
+package HRK5P
+  record BP
+    parameter Real V = 0;
+    parameter Real IL = 1;
+  end BP;
+  function drop
+    input BP bp;
+    input Real i;
+    output Real v;
+  algorithm
+    v := bp.V * i / bp.IL;
+  end drop;
+end HRK5P;
+model HRK5
+  parameter HRK5P.BP bp(V = 1, IL = 4);
+  parameter Real wMax = 3 - HRK5P.drop(bp, 100);
+  Real y[if wMax > 2 then 1 else 2] = fill(time, if wMax > 2 then 1 else 2);
+  Real z = HRK5P.drop(bp, time);
+end HRK5;
+//// model: HRK6
+package HRK6P
+  record BP
+    parameter Real V = 0;
+    parameter Real IL = 1;
+  end BP;
+  function drop
+    input BP bp;
+    input Real i;
+    output Real v;
+  algorithm
+    v := bp.V * i / bp.IL;
+  end drop;
+end HRK6P;
+model HRK6
+  parameter HRK6P.BP bp(V = 1, IL = 4);
+  parameter HRK6P.BP bp2 = bp;
+  parameter Real wMax = 3 - HRK6P.drop(bp2, 100);
+  parameter Real q[:] = {wMax};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+  Real z = HRK6P.drop(bp, time);
+end HRK6;
+//// model: HRK7
+package HRK7P
+  record BP
+    parameter Real V = 0;
+    parameter Real IL = 1;
+  end BP;
+  function drop
+    input BP bp;
+    input Real i;
+    output Real v;
+  algorithm
+    v := bp.V * i / bp.IL;
+  end drop;
+end HRK7P;
+model HRK7
+  parameter HRK7P.BP bp(V = 1, IL = 4);
+  parameter HRK7P.BP bp2 = bp;
+  Real y;
+  Real z = HRK7P.drop(bp2, time);
+equation
+  if HRK7P.drop(bp2, 100) > 1 then
+    y = time;
+  else
+    y = 2 * time;
+  end if;
+end HRK7;
+//// model: HRK8
+package HRK8P
+  record BP
+    parameter Real V = 0;
+    parameter Real IL = 1;
+  end BP;
+  function drop
+    input BP bp;
+    input Real i;
+    output Real v;
+  algorithm
+    v := bp.V * i / bp.IL;
+  end drop;
+end HRK8P;
+model HRK8
+  parameter HRK8P.BP bp3 = bp2;
+  parameter HRK8P.BP bp(V = 1, IL = 4);
+  parameter HRK8P.BP bp2 = bp;
+  parameter Real wMax = 3 - HRK8P.drop(bp, 100);
+  Real y[if wMax > 2 then 1 else 2] = fill(time, if wMax > 2 then 1 else 2);
+  Real z = HRK8P.drop(bp3, time);
+end HRK8;
+//// model: HRK9
+package HRK9P
+  record BP
+    parameter Real V = 0;
+    parameter Real IL = 1;
+  end BP;
+  function drop
+    input BP bp;
+    input Real i;
+    output Real v;
+  algorithm
+    v := bp.V * i / bp.IL;
+  end drop;
+end HRK9P;
+model HRK9
+  parameter HRK9P.BP bp(V = 1, IL = 4);
+  parameter HRK9P.BP bp2 = bp;
+  Real y[integer(HRK9P.drop(bp2, 8))] = fill(time, integer(HRK9P.drop(bp2, 8)));
+  Real z = HRK9P.drop(bp, time);
+end HRK9;
+//// model: HRK10
+package HRK10P
+  record BP
+    parameter Real V = 0;
+    parameter Real IL = 1;
+  end BP;
+  function drop
+    input BP bp;
+    input Real i;
+    output Real v;
+  algorithm
+    v := bp.V * i / bp.IL;
+  end drop;
+end HRK10P;
+model HRK10
+  parameter Real c = 2;
+  parameter HRK10P.BP bp(V = 1, IL = 2 * c);
+  parameter HRK10P.BP bp2 = bp;
+  parameter Real wMax = 3 - HRK10P.drop(bp, 100);
+  parameter Real q[:] = {wMax};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n] = fill(time, n);
+  Real z = HRK10P.drop(bp2, time);
+end HRK10;
+//// model: HRK11
+model HRK11
+  parameter Modelica.Electrical.Machines.Examples.ControlledDCDrives.Utilities.DriveDataDCPM driveData;
+  Modelica.Blocks.Sources.KinematicPTP2 kinematicPTP(qd_max = {driveData.wMax}, qdd_max = {driveData.aMax}, q_end = {200}, startTime = 0.2);
+  annotation(uses(Modelica(version = "4.0.0")));
+end HRK11;
+//// model: HRE1
+package HRE1P
+  record R
+    parameter Real x = 1;
+    parameter Boolean b = false;
+  end R;
+  model T
+    parameter Boolean b;
+    Real y;
+  equation
+    if b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+end HRE1P;
+model HRE1
+  parameter HRE1P.R ra(b = true);
+  parameter HRE1P.R rr[2] = {ra, ra};
+  HRE1P.T t(final b = rr[1].b);
+end HRE1;
+//// model: HRE2
+package HRE2P
+  record R
+    parameter Real x = 1;
+    parameter Boolean b = false;
+  end R;
+  model T
+    parameter Boolean b;
+    Real y;
+  equation
+    if b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+end HRE2P;
+model HRE2
+  parameter Integer k = 1;
+  parameter HRE2P.R ra(b = true);
+  parameter HRE2P.R rb;
+  parameter HRE2P.R rr[2] = {if k > 0 then ra else rb, rb};
+  HRE2P.T t(final b = rr[1].b);
+end HRE2;
+//// model: HRE3
+package HRE3P
+  record R
+    parameter Real x = 1;
+    parameter Boolean b = false;
+  end R;
+  model T
+    parameter Boolean b;
+    Real y;
+  equation
+    if b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+end HRE3P;
+model HRE3
+  parameter HRE3P.R rr[2](each b = true);
+  HRE3P.T t(final b = rr[1].b);
+end HRE3;
+//// model: HRE4
+package HRE4P
+  record R
+    parameter Real x = 1;
+    parameter Boolean b = false;
+  end R;
+  model T
+    parameter Boolean b;
+    Real y;
+  equation
+    if b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+  model S
+    parameter R rd[2];
+    T t(final b = rd[1].b);
+  end S;
+end HRE4P;
+model HRE4
+  parameter HRE4P.R ra(b = true);
+  parameter HRE4P.R rr[2] = {ra, ra};
+  HRE4P.S s(rd = rr);
+end HRE4;
+//// model: HRE5
+package HRE5P
+  record R
+    parameter Real x = 1;
+    parameter Boolean b = false;
+  end R;
+  model T
+    parameter Boolean b;
+    Real y;
+  equation
+    if b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+end HRE5P;
+model HRE5
+  parameter HRE5P.R ra(b = true);
+  parameter HRE5P.R rr[2] = {ra for i in 1:2};
+  HRE5P.T t(final b = rr[1].b);
+end HRE5;
+//// model: HRE6
+package HRE6P
+  record R
+    parameter Real x = 1;
+    parameter Boolean b = false;
+  end R;
+end HRE6P;
+model HRE6
+  parameter HRE6P.R ra(b = true);
+  parameter HRE6P.R rr[2] = {ra, ra};
+  Real y[if rr[1].b then 1 else 2] = fill(time, if rr[1].b then 1 else 2);
+end HRE6;
+//// model: HRE7
+package HRE7P
+  record R
+    parameter Real x = 1;
+    parameter Boolean b = false;
+  end R;
+  model T
+    parameter Real x;
+    Real y;
+  equation
+    if x > 1.5 then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+end HRE7P;
+model HRE7
+  parameter HRE7P.R ra(x = 2);
+  parameter HRE7P.R rb;
+  parameter HRE7P.R rr[2] = {ra, rb};
+  HRE7P.T t1(final x = rr[1].x);
+  HRE7P.T t2(final x = rr[2].x);
+end HRE7;
+//// model: HRE8
+package HRE8P
+  record R
+    parameter Real x = 1;
+    parameter Boolean b = false;
+  end R;
+  model T
+    parameter Boolean b;
+    Real y;
+  equation
+    if b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+end HRE8P;
+model HRE8
+  parameter HRE8P.R ra(b = true);
+  parameter HRE8P.R rb;
+  parameter HRE8P.R rr[2, 2] = {{if i == 1 and j == 1 then ra else rb for j in 1:2} for i in 1:2};
+  HRE8P.T t(final b = rr[1, 1].b);
+  HRE8P.T t2(final b = rr[2, 1].b);
+end HRE8;
+//// model: HRE9
+package HRE9P
+  record R
+    parameter Real x = 1;
+    parameter Boolean b = false;
+  end R;
+end HRE9P;
+model HRE9
+  parameter HRE9P.R ra(x = 2);
+  parameter HRE9P.R rr[2] = {ra, ra};
+  parameter Real p = rr[1].x annotation(Evaluate = true);
+  Real y = p * time;
+end HRE9;
+//// model: HRE10
+package HRE10P
+  record R
+    parameter Real x = 1;
+    parameter Boolean b = false;
+  end R;
+  model T
+    parameter R r;
+    Real y;
+  equation
+    if r.b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+end HRE10P;
+model HRE10
+  parameter HRE10P.R ra(b = true);
+  parameter HRE10P.R rr[2] = {ra, ra};
+  HRE10P.T t[2](r = rr);
+end HRE10;
+//// model: HRE11
+package HRE11P
+  record R
+    parameter Real x = 1;
+    parameter Boolean b = false;
+  end R;
+  model T
+    parameter R r;
+    Real y;
+  equation
+    if r.b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+  model U
+    parameter R r;
+    T t(r = r);
+  end U;
+end HRE11P;
+model HRE11
+  parameter HRE11P.R ra(b = true);
+  parameter HRE11P.R rr[2] = {ra, ra};
+  HRE11P.U u[2](r = rr);
+end HRE11;
+//// model: HRE12
+package HRE12P
+  record R
+    parameter Real x = 1;
+    parameter Boolean b = false;
+  end R;
+  model T
+    parameter Boolean b;
+    Real y;
+  equation
+    if b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+end HRE12P;
+model HRE12
+  parameter HRE12P.R ra(b = true);
+  parameter HRE12P.R rr[2] = {ra, ra};
+  HRE12P.T t(b = rr[1].b);
+end HRE12;
+//// model: HRE13
+package HRE13P
+  record R
+    parameter Real x = 1;
+    parameter Boolean b = false;
+  end R;
+  model T
+    parameter Boolean b;
+    Real y;
+  equation
+    if b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+end HRE13P;
+model HRE13
+  parameter Boolean bb = true;
+  parameter HRE13P.R ra(b = bb);
+  parameter HRE13P.R rr[2] = {ra, ra};
+  HRE13P.T t(final b = rr[1].b);
+end HRE13;
+//// model: HRE14
+package HRE14P
+  record R
+    parameter Real x = 1;
+    parameter Boolean b = false;
+  end R;
+  model T
+    parameter Boolean b;
+    Real y;
+  equation
+    if b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+end HRE14P;
+model HRE14
+  parameter Boolean bb(fixed = false);
+  parameter HRE14P.R ra(b = bb);
+  parameter HRE14P.R rr[2] = {ra, ra};
+  HRE14P.T t(final b = rr[1].b);
+initial equation
+  bb = true;
+end HRE14;
+//// model: HRE15
+package HRE15P
+  record R
+    parameter Real x = 1;
+    parameter Boolean b = false;
+  end R;
+  model T
+    parameter Boolean b;
+    Real y;
+  equation
+    if b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+end HRE15P;
+model HRE15
+  parameter Boolean bb(fixed = false);
+  parameter HRE15P.R ra(b = true);
+  parameter HRE15P.R rr[2] = {HRE15P.R(x = 1, b = bb), ra};
+  HRE15P.T t(final b = rr[2].b);
+initial equation
+  bb = true;
+end HRE15;
+//// model: HRE16
+package HRE16P
+  record R
+    parameter Real x = 1;
+    parameter Boolean b = false;
+  end R;
+  model T
+    parameter Boolean b;
+    Real y;
+  equation
+    if b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+end HRE16P;
+model HRE16
+  parameter HRE16P.R ra(b = true);
+  parameter HRE16P.R rr[2] = {HRE16P.R(x = 1, b = false), ra};
+  HRE16P.T t(final b = rr[2].b);
+  HRE16P.T t2(final b = rr[1].b);
+end HRE16;
+//// model: HRE17
+package HRE17P
+  record R
+    parameter Real x = 1;
+    parameter Boolean b = false;
+  end R;
+  function mk
+    input Boolean b;
+    output R r[2];
+  algorithm
+    r[1] := R(x = 1, b = b);
+    r[2] := R(x = 2, b = not b);
+  end mk;
+  model T
+    parameter Boolean b;
+    Real y;
+  equation
+    if b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+end HRE17P;
+model HRE17
+  parameter HRE17P.R rr[2] = HRE17P.mk(true);
+  HRE17P.T t(final b = rr[1].b);
+end HRE17;
+//// model: HRE18
+package HRE18P
+  record R
+    parameter Real x = 1;
+    parameter Boolean b = false;
+  end R;
+  model T
+    parameter Boolean b;
+    Real y;
+  equation
+    if b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+end HRE18P;
+model HRE18
+  parameter Boolean bb = true annotation(Evaluate = false);
+  parameter HRE18P.R ra(b = true);
+  parameter HRE18P.R rr[2] = {HRE18P.R(x = 1, b = bb), ra};
+  HRE18P.T t(final b = rr[2].b);
+end HRE18;
+//// model: HRE19
+package HRE19P
+  record R
+    parameter Real x = 1;
+    parameter Boolean b = false;
+  end R;
+  model T
+    parameter Boolean b;
+    Real y;
+  equation
+    if b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+end HRE19P;
+model HRE19
+  parameter HRE19P.R ra(b = true);
+  parameter HRE19P.R rr[2] = fill(ra, 2);
+  HRE19P.T t(final b = rr[2].b);
+end HRE19;
+//// model: HRE20
+package HRE20P
+  record R
+    parameter Real x = 1;
+    parameter Boolean b = false;
+  end R;
+  model T
+    parameter Boolean b;
+    Real y;
+  equation
+    if b then
+      y = 1;
+    else
+      y = 2;
+    end if;
+  end T;
+end HRE20P;
+model HRE20
+  parameter Integer k = 1;
+  parameter HRE20P.R ra(b = true);
+  parameter HRE20P.R rb;
+  parameter HRE20P.R rr[2] = {if k > 0 then ra else rb, rb};
+  HRE20P.T t(final b = rr[2].b);
+end HRE20;
