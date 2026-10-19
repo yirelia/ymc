@@ -290,6 +290,7 @@ class Flattener {
     check_late_struct();         // 末尾才判得清的结构参数用法（留着的 size 维号、fill 维实参的固定性）
     apply_structural_params();   // 连接算子求值中结构化的参数：final + 属性折叠（NFEvalConstants 效果，受限）
     apply_structural_records();  // 结构记录参数的整体引用代成记录式（见 struct_records_）
+    check_record_store_back();   // 定型期整个被求值的记录：字段的存回未做（见 record_param_value）
     simplify_model();            // cardinality 求值 + 方程 / 语句的收尾折叠
     drop_empty_model_args();     // 调用的空数组实参换成 `{}`（removeEmptyFunctionArguments）
     if (oc_missing_branch_) set_unsupported("Connections.rooted without branch (warning)");
@@ -901,24 +902,48 @@ class Flattener {
       const ScodeScope fscope = scode_scope_of(inst_node);
       const Symbol fixed_sym = in_.intern("fixed");
       const Symbol state_sym = in_.intern("stateSelect");
-      // stateSelect 属性里的参数（NFInst.mo:3941-3949：TYPE_ATTRIBUTE 的 fixed / stateSelect 绑定 Structural.markExp）——本组件
-      // 的、嵌套修饰里子组件的（`Inertia J(phi(stateSelect = s))`）、本类 extends 修饰里的：值都写在本类里，按本类作用域求。
+      // stateSelect 属性里的参数（NFInst.mo:3941-3949：TYPE_ATTRIBUTE 的 fixed / stateSelect 绑定 Structural.markExp）：标的是
+      // 合并后修饰里的值（Modifier.binding(c.modifier)），只有胜出的那个来源里的参数成结构参数——外来修饰 > extends 修饰（外层在前）>
+      // 组件声明（同 plan_attributes 的来源序），被盖掉的值不用、参数不标（testsuite mosfiles/Model2：`inertia1(phi.stateSelect =
+      // StateSelect.always, …)` 盖过 Inertia 里的 `phi(stateSelect = stateSelect)`，omc 的 inertia1.stateSelect 不 final；盖过嵌套
+      // 修饰、extends 修饰、组件数组修饰里的同理，pk-p41 探针 SGB5 / SGB9 / SGB17 / SGB20，此前这几种照标 final）。本层写的
+      // 来源——组件声明（含嵌套修饰里子组件的，`Inertia J(phi(stateSelect = s))`）、各层 extends 修饰（Component::extends_mods，
+      // 含更深一层基类里的：MSL Fluid AbruptAdaptor 的
+      // `extends PartialTwoPortTransport(m_flow(stateSelect = if momentumDynamics == …))` 写在基类的基类里，pk-p41 探针 SGB1；
+      // class extends 的修饰也是合成的 extends，PKS 探针 PKS1）——按书写处的作用域求；外来修饰由写它的那一层扫。
+      // 时刻：访问到该组件时（updateImplicitVariabilityComp 先本组件、再进类实例里的类型属性，NFInst.mo:3890-3950）——声明在后、
+      // Evaluate = false 的参数那时还没降级，照常成结构参数（pk-p41 探针 SGB21 / SGB24；此前本类 extends 修饰在全部组件访问完之后
+      // 才扫，它已降级、求不出 → SKIP）。
       // 扫过的修饰记进 state_scanned_：plan_attributes 只认这些来源里的参数引用（别处的参数没打上 final → SKIP）。
-      // skip_top：本组件自己的 stateSelect 被外来 / extends 修饰盖掉了（同下面 fixed 的 fixed_overridden）——声明里那个值不用、
-      // 参数不标（testsuite mosfiles/Model2：`inertia1(phi.stateSelect = StateSelect.always, …)` 盖过 Inertia 里的
-      // `phi(stateSelect = stateSelect)`，omc 的 inertia1.stateSelect 不 final）。
       // fixed / stateSelect 里的参数这时只打标记（Structural.markExp），值在 EvalConstants 才求（evaluateTypeAttribute，
       // NFEvalConstants.mo:148-164 v1.25.0）——求值存回的是组件、不碰已压平的变量，不算定型期读取（EvalRoot，见 comp_bound_；WQ 探针
       // WQ96 `fixed = {q[i] > 3 for i in 1:2}`、q 的绑定是推导式 → 照打推导式里的函数）。维 / 条件在定型期求值，照旧算。
-      auto scan_state = [&](auto& self, Id<SMod> m, const ScodeScope& sc, bool skip_top) -> void {
-        for (const SSubMod& s : I_.scode.mods[m].subs) {
+      // sets_state：给某组件的修饰 m 里，沿 path 的子修饰链末端有带值的 stateSelect（同名子修饰可以有几个：同层合并，mergeLocal）。
+      auto sets_state = [&](auto& self, Id<SMod> m, const std::vector<Symbol>& path, std::size_t k) -> bool {
+        for (const SSubMod& s : I_.scode.mods[m].subs)
+          if (k == path.size() ? s.ident == state_sym && I_.scode.mods[s.mod].binding.is_valid()
+                               : s.ident == path[k] && self(self, s.mod, path, k + 1))
+            return true;
+        return false;
+      };
+      // over：本组件更高优先的修饰来源；同一路径上它们给了 stateSelect → 本来源的值被盖掉。
+      auto scan_state = [&](auto& self, Id<SMod> m, const ScodeScope& sc, std::vector<Symbol>& path,
+                            const std::vector<Id<SMod>>& over) -> void {
+        const std::vector<SSubMod> subs = I_.scode.mods[m].subs;   // 拷贝（下面求值，不跨 arena 持引用）
+        for (const SSubMod& s : subs) {
           const Id<Exp> sv = I_.scode.mods[s.mod].binding;
-          if (s.ident == state_sym && !skip_top && sv.is_valid() && !is_qualified_cref(I_.absyn.exps[sv], I_.absyn)) {
-            const EvalRoot attr_root(*this, "@attr");
-            eval_scode(sv, sc, 0, /*allow_param=*/true, &final_params);
-            state_scanned_.insert(m.raw);
+          if (s.ident == state_sym && sv.is_valid() && !is_qualified_cref(I_.absyn.exps[sv], I_.absyn)) {
+            bool hidden = false;
+            for (Id<SMod> o : over) hidden = hidden || sets_state(sets_state, o, path, 0);
+            if (!hidden) {
+              const EvalRoot attr_root(*this, "@attr");
+              eval_scode(sv, sc, 0, /*allow_param=*/true, &final_params);
+              state_scanned_.insert(m.raw);
+            }
           }
-          self(self, s.mod, sc, false);
+          path.push_back(s.ident);
+          self(self, s.mod, sc, path, over);
+          path.pop_back();
         }
       };
       std::vector<std::int64_t> tmp;
@@ -948,27 +973,27 @@ class Flattener {
           cond_v = eval_scode(fel.condition, scope_at(cond_lex(I_.nodes[cn].comp, inst_node)), 0, /*allow_param=*/true,
                               &final_params);
         if (cond_v && cond_v->k == CVal::K::Bool && !cond_v->b) mark_removed_dims(cn, inst_node, dsc, ctx, final_params);
+        // 本组件的修饰来源（优先级序）：外来的（写在外层，这里只拿来判盖没盖掉）、各层 extends 修饰（外层在前）、组件声明。
+        const CompId ccid = I_.nodes[cn].comp;
+        const std::vector<Id<SMod>> ems = I_.comps[ccid].extends_mods;   // 拷贝（下面求值）
+        std::vector<Id<SMod>> over;
+        for (const ModSource& m : ctx.mods)
+          for (const SSubMod& s : I_.scode.mods[m.mod].subs)
+            if (s.ident == I_.nodes[cn].name) over.push_back(s.mod);
+        for (std::size_t i = 0; i < ems.size(); ++i) {
+          std::vector<Symbol> path;
+          scan_state(scan_state, ems[i], scode_scope_of(ext_lex(ccid, i, inst_node)), path, over);
+          over.push_back(ems[i]);
+        }
         // fixed 属性里的参数（ceval3）。外来修饰 / extends 修饰给了本组件的 fixed（`cylinder2(T(fixed = true))` 盖过类里的
         // `T(fixed = T0fixed)`）→ 声明的值不用、参数不标：omc 标的是合并后修饰的值（updateImplicitVariabilityComp 的
         // TYPE_ATTRIBUTE 支，NFInst.mo:3941-3950 v1.25.0；MSL FluidHeatFlow TestCylinder 的 cylinder2.T0fixed 不是 final）。
         const Id<SMod> fm = fel.mod;
         if (!fm.is_valid()) continue;
-        auto sets_attr = [&](Id<SMod> m, Symbol attr) {
-          for (const SSubMod& s : I_.scode.mods[m].subs)
-            if (s.ident == attr && I_.scode.mods[s.mod].binding.is_valid()) return true;
-          return false;
-        };
-        bool fixed_overridden = false, state_overridden = false;
-        for (const ModSource& m : ctx.mods)
-          for (const SSubMod& s : I_.scode.mods[m.mod].subs)
-            if (s.ident == I_.nodes[cn].name) {
-              fixed_overridden = fixed_overridden || sets_attr(s.mod, fixed_sym);
-              state_overridden = state_overridden || sets_attr(s.mod, state_sym);
-            }
-        for (Id<SMod> em : I_.comps[I_.nodes[cn].comp].extends_mods) {
-          fixed_overridden = fixed_overridden || sets_attr(em, fixed_sym);
-          state_overridden = state_overridden || sets_attr(em, state_sym);
-        }
+        bool fixed_overridden = false;
+        for (Id<SMod> o : over)
+          for (const SSubMod& s : I_.scode.mods[o].subs)
+            fixed_overridden = fixed_overridden || (s.ident == fixed_sym && I_.scode.mods[s.mod].binding.is_valid());
         for (const SSubMod& s : I_.scode.mods[fm].subs)
           if (s.ident == fixed_sym && !fixed_overridden) {
             const Id<Exp> fv = I_.scode.mods[s.mod].binding;
@@ -977,18 +1002,9 @@ class Flattener {
               eval_scode(fv, dsc, 0, /*allow_param=*/true, &final_params);
             }
           }
-        scan_state(scan_state, fm, dsc, state_overridden);
+        std::vector<Symbol> path;
+        scan_state(scan_state, fm, dsc, path, over);
       }
-      // 本类 extends 子句里的修饰（`extends PartialRigid(s(stateSelect = stateSelect))`，Translational.Components.Mass）：
-      // 值同样写在本类里。
-      for (Id<SElement> eid : def.def.elements)
-        if (I_.scode.elems[eid].kind == SElementKind::Extends && I_.scode.elems[eid].mod.is_valid())
-          scan_state(scan_state, I_.scode.elems[eid].mod, fscope, false);
-      // class extends 的修饰（MSL Media WaterIF97_base 的 `redeclare model extends BaseProperties(h(stateSelect = if ph_explicit and
-      // preferredMediumStates then …))`）：是隐式 extends 的修饰（Instantiator::partial_inst 合成的 extends 元素），值同样写在本类
-      // 里（PKS 探针 PKS1：omc 把 preferredMediumStates 标 final）。此前没扫 → "stateSelect parameter not pre-scanned"。
-      if (def.def.kind == SClassDefKind::ClassExtends && def.def.class_extends_mod.is_valid())
-        scan_state(scan_state, def.def.class_extends_mod, fscope, false);
     }
     // inner 作用域（R11 §5）：外层可见 inner + 本层 inner，供本层及子层的 outer 按名连接。
     std::vector<InnerVar> inners = outer_inners;
@@ -4792,6 +4808,33 @@ class Flattener {
     for (Id<SMod> cc : I_.comps[cid].cc_mods) if (has(cc)) return true;
     return false;
   }
+  // Evaluate = true（自己的或外层组件的）只对"固定"的参数生效（isStructuralComponent 的 Component.isFixed 支，NFStructural.mo:74-76
+  // v1.25.0；顺依赖判 isExpressionNotFixed 用的同一个 isFixed，:184-188）。判在 updateImplicitVariability 访问组件时：没有 fixed
+  // 属性 → 固定；有 → 只认 `each fixed = true`——非 each 的子修饰在实例化组件时都被 Modifier.propagate 加了切分占位下标
+  //（NFInst.mo:1981、propagateSubMod NFModifier.mo:486-509；短类的修饰同，NFInst.mo:1155-1158 / :1208-1210），instBinding 把它包成
+  // SUBSCRIPTED_EXP（NFInst.mo:2744-2752），isFixed 的 Expression.isTrue 认不出（NFComponent.mo:896-922）。所以字面量 `fixed =
+  // true` 也当不固定（vo-fx 探针 FX4、pk-p41 探针 SGA22 / SGA29），`each fixed = true` 才固定（SGA6 / SGA26 / SGF1）。来源序同
+  // plan_attributes：外来 > extends（外层在前）> 声明 > 约束 > 短类链，取第一个给了 fixed 值的（fixed_mod_of；没有 → 无效）。
+  Id<SMod> fixed_mod_of(CompId cid, const std::vector<ModSource>& outer) {
+    std::vector<Id<SMod>> srcs;
+    for (const ModSource& m : outer) srcs.push_back(m.mod);
+    const Component& c = I_.comps[cid];
+    srcs.insert(srcs.end(), c.extends_mods.begin(), c.extends_mods.end());
+    if (const Id<SMod> dm = I_.scode.elems[c.def].mod; dm.is_valid()) srcs.push_back(dm);
+    srcs.insert(srcs.end(), c.cc_mods.begin(), c.cc_mods.end());
+    srcs.insert(srcs.end(), c.derived_mods.begin(), c.derived_mods.end());
+    const Symbol fixed = in_.intern("fixed");
+    for (Id<SMod> m : srcs)
+      for (const SSubMod& s : I_.scode.mods[m].subs)
+        if (s.ident == fixed && I_.scode.mods[s.mod].binding.is_valid()) return s.mod;
+    return {};
+  }
+  bool eval_fixed(CompId cid, const std::vector<ModSource>& outer) {
+    const Id<SMod> f = fixed_mod_of(cid, outer);
+    if (!f.is_valid()) return true;
+    const Exp& fx = I_.absyn.exps[I_.scode.mods[f].binding];
+    return I_.scode.mods[f].is_each && fx.kind == ExpKind::BoolLit && fx.bval;
+  }
   // 无绑定的固定参数拿 start 当绑定（updateParameterBinding，NFInst.mo:2351-2387 v1.25.0；instComponentDef 在合并完修饰后
   // 对无绑定的内建类型参数调用，:2014-2017）：组件自己的 start 修饰（外来 > extends > 声明 > 约束，优先级最高的那个）的式子
   // 当绑定，书写处照旧；类型定义带的 start 不算（hasTypeOrigin，US 探针 s111）；`fixed = false` 不做（Component.isFixed），
@@ -4825,6 +4868,16 @@ class Flattener {
           out = {s.mod, m.scope, m.vprefix};
         }
       }
+    // 短类链上的 fixed（`type FT = Real(fixed = false)`）同样算：isFixed 看的是组件类实例里合并后的属性（NFComponent.mo:896-922
+    // v1.25.0），上面的来源都没给 fixed 时轮到它（pk-p41 探针 SGD1-SGD3 / SGD8：此前不看，打出 `= 1.0`；`fixed = true` 照做，
+    // SGD5）。start 只取组件自己的（类型链上的是 hasTypeOrigin，见上）。
+    if (!fixed_seen)
+      for (Id<SMod> dm : I_.comps[cid].derived_mods)
+        for (const SSubMod& s : I_.scode.mods[dm].subs)
+          if (s.ident == fixed && I_.scode.mods[s.mod].binding.is_valid()) {
+            const Exp& fx = I_.absyn.exps[I_.scode.mods[s.mod].binding];
+            return fx.kind == ExpKind::BoolLit && fx.bval && out.mod.is_valid();
+          }
     return out.mod.is_valid();
   }
 
@@ -5039,8 +5092,9 @@ class Flattener {
     ++bind_clock_;        // 本变量的绑定 / 属性定型序号（见 MarkPhase）
     // `annotation(Evaluate = true)` 的参数：omc 当结构参数（EV0–EV14 探针：`final parameter Real p = 2.0`、绑定求值成字面量、
     // 绑定里用到的参数连带 final、引用处代入并化简 `Real x = 2.0 * time`）——走下面 struct_final 的既有通路。求不出值（外部函数
-    // 求值失败 omc 报错，CevalBinding10 账本；无绑定只有 start 的 omc 取 start 并告警，EV2）、带 fixed 属性（fixed = false 时
-    // omc 忽略 Evaluate，EV3）→ SKIP。
+    // 求值失败 omc 报错，CevalBinding10 账本；无绑定只有 start 的 omc 取 start 并告警，EV2）→ SKIP。带 fixed 属性的只有
+    // `each fixed = true` 算固定（见 eval_fixed），别的（`fixed = false` / `fixed = true` / 参数、短类链上的）omc 忽略 Evaluate、
+    // 照普通参数打（EV3、vo-fx 探针 FX4、pk-p41 探针 SGA3 / SGA4 / SGA7 / SGA8 / SGA16 / SGA22 / SGA29）。
     // 外层组件的 Evaluate = true 同样算（ctx.eval_parent），本参数自己写了 Evaluate = false 的除外；变率看下沉后的（记录字段）。
     const std::optional<bool> own_eval = evaluate_annotation(I_.comps[cid].def);
     // 外层记录有整体绑定（ModCtx::eval_start_only）：字段自己的 Evaluate = true 同样只剩 start 可当绑定（omc 实例化子树时
@@ -5049,7 +5103,7 @@ class Flattener {
     const bool eval_true = var_min(var_floor, I_.comps[cid].attributes.variability) == SVariability::Param &&
                            (own_eval == std::optional<bool>(true) ||
                             (ctx.eval_parent && own_eval != std::optional<bool>(false))) &&
-                           (!ctx.eval_start_only || comp_has_start(cid, mod_subs));
+                           (!ctx.eval_start_only || comp_has_start(cid, mod_subs)) && eval_fixed(cid, mod_subs);
     // 先算绑定/属性（会往 model.exprs add），再取组件字段——不跨 add 持组件引用（arena 纪律）。
     const Type cty = I_.comps[cid].ty;   // 拷贝，跨 add 稳定
     // 结构 final（ceval3）：本参数被某 fixed 用到 → final parameter + 绑定求值成字面量。
@@ -5058,6 +5112,7 @@ class Flattener {
     vsubs.push_back({});
     const std::string vkey = int_key(name, vsubs);
     typed_keys_.insert(vkey);
+    if (fixed_mod_of(cid, mod_subs).is_valid() && eval_fixed(cid, mod_subs)) each_fixed_true_.insert(vkey);
     if (own_eval == std::optional<bool>(false) && var_min(var_floor, I_.comps[cid].attributes.variability) == SVariability::Param)
       check_evf_visit(vkey);
     if (empty_outer) empty_field_keys_.insert(vkey);
@@ -5311,7 +5366,8 @@ class Flattener {
     for (Id<SMod> cc : I_.comps[cid].cc_mods) asrc.push_back({cc, enclosing, prefix});   // 重声明的约束修饰
     if (!leaf_derived_sources(cid, enclosing, prefix, /*arr=*/false, asrc)) return;
     std::vector<FlatVarAttr> attrs = collect_attributes(cid, asrc);
-    if (eval_true && struct_final)   // fixed = false 时 omc 忽略 Evaluate（EV3 探针）；带 fixed 属性的组合未逐一核实 → SKIP
+    // 带 fixed 属性还当结构参数的只剩 `each fixed = true`（见 eval_fixed）：照打的形态未逐一核实 → SKIP。
+    if (eval_true && struct_final)
       for (const FlatVarAttr& a : attrs)
         if (in_.str(a.name) == "fixed") {
           set_unsupported("Evaluate annotation");
@@ -5568,6 +5624,7 @@ class Flattener {
       PSubs ws = psubs;
       ws.resize(name.size());   // 末段（叶）无下标 = 整体键
       typed_keys_.insert(int_key(name, ws));
+      if (fixed_mod_of(cid, mod_subs).is_valid() && eval_fixed(cid, mod_subs)) each_fixed_true_.insert(int_key(name, ws));
       if (evaluate_annotation(I_.comps[cid].def) == std::optional<bool>(false) &&
           var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Param)
         check_evf_visit(int_key(name, ws));
@@ -5576,10 +5633,13 @@ class Flattener {
     // `r.w[1](quantity = "AngularVelocity", unit = "rad/s", fixed = false)`；MSL FixedRotation 的 `R_rel_inv`）。
     // `annotation(Evaluate = true)` 的参数数组（自己的或外层组件的，本数组写了 Evaluate = false 的除外）：同标量，见下面绑定
     // 选定之后的 eval_arr 一段。
+    // 带 fixed 属性的同标量（见 eval_fixed）：只有 `each fixed = true` 算固定，别的忽略 Evaluate、照普通参数数组打（MSL MultiBody
+    // JointRRR 的 `final parameter Real n_b[3](each final unit = "1", each fixed = false, start = {0, 0, 1}) annotation(Evaluate = true)`，
+    // 无绑定；pk-p41 探针 SGA1 / SGA2 / SGA5 / SGA11 / SGA12 / SGA14 / SGA15 / SGA17 / SGA18）。
     const bool eval_arr = var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Param &&
                           (evaluate_true(I_.comps[cid].def) ||
                            (ctx.eval_parent && evaluate_annotation(I_.comps[cid].def) != std::optional<bool>(false))) &&
-                          (!ctx.eval_start_only || comp_has_start(cid, mod_subs));
+                          (!ctx.eval_start_only || comp_has_start(cid, mod_subs)) && eval_fixed(cid, mod_subs);
     // 维度：组件维在前、类型维在后（R13 §3）。字面量 + 参数/常量/size()/算术求值。
     const NodeId dlex = dims_lex(cid, enclosing);   // 维写在声明里：在声明所在类的作用域求（重声明取原声明的：原处）
     const ScodeScope dscope = scode_scope_of(dlex);
@@ -5731,7 +5791,8 @@ class Flattener {
     // 实例化期求值，各元素 final + 字面量，绑定里用到的参数连带 final，引用处代入（EA 探针 e10-e19、e30-e314、e40-e49：
     // `final parameter Real n[2] = -1.0;`、`Real y = (-1.0) * time;`）。这里只打标记、记下各元素的值（frame_value 对数组的
     // 命中把全部元素记成结构参数，见 hit），final 与字面量照旧由 apply_structural_params 统一落。依赖 Evaluate = false / fixed =
-    // false 的参数 → 不固定、照常打印（e38 / e39）。无绑定（omc 报错或拿 start，e16 / e46 / e47）、带 fixed 属性（e310）未做 → SKIP。
+    // false 的参数 → 不固定、照常打印（e38 / e39）。无绑定（omc 报错或拿 start，e16 / e46 / e47）、带 `each fixed = true`（e310，
+    // 别的 fixed 属性在 eval_arr 里就排除了）未做 → SKIP。
     if (eval_arr) {
       auto skip = [&](const char* why) {
         set_unsupported("Evaluate annotation");
@@ -6699,6 +6760,7 @@ class Flattener {
     Id<Expr> value;
     Type cty;   // 组件类型（枚举属性值核类型用）
     bool lift = false;   // 数组组件上类型链派生、不带 each 的标量属性（见 emit_whole_array_var）
+    bool uncast = false;   // Literal：混型字面量、末叶是 Real——各叶照自己的类型打，Integer 叶不转 Real（见 plan_attributes）
   };
   // 不标量化的数组变量（见 emit_array 里的判定）：一行、类型带维（`Real[3, 3] m`）、绑定是整个调用；属性：each / 标量的打一个值，
   // 字面量摊分的打整个数组字面量（Real 属性提 Real），定型过的数组值照打（PA 探针 a3：`(quantity = {"a", "b", "c"},
@@ -6728,6 +6790,8 @@ class Flattener {
     for (const AttrPlan& p : aplan) {
       Id<Expr> x = p.value;
       if (p.mode == AttrPlan::Mode::Literal) {
+        // 混型字面量（p.uncast）整个打成一行的形态没核实 → SKIP。
+        if (p.uncast) { set_unsupported("mixed-type split modifier literal"); return; }
         x = simplify_expr(inst_exp(p.raw, p.scope, p.vprefix));
         if (result_.unsupported) return;
         if (p.spec->vk == AttrVK::Real) x = coerce_deep(x, TypeKind::Real);
@@ -6845,8 +6909,18 @@ class Flattener {
         const std::optional<std::vector<std::int64_t>> ld = lit_dims(sm.binding);
         if (!ld || *ld != dims) { set_unsupported("array attribute shape mismatch"); return out; }
         const bool numeric = a.vk == AttrVK::Real || a.vk == AttrVK::Int;   // 强转分歧只在数值目标上
-        if (!matrix && numeric && !split_leaves_uniform(sm.binding, src->scope, src->vprefix)) {
-          set_unsupported("mixed-type split modifier literal"); return out;
+        bool last_real = false;
+        if (!matrix && numeric &&
+            !split_leaves_uniform(sm.binding, src->scope, src->vprefix, static_cast<std::size_t>(-1), &last_real)) {
+          // 末叶是 Real 的 Integer / Real 混排：切分后各叶各自定型、数组类型取末元素的 → Real，与 Real 属性相容、不转型
+          //（typeSubscriptedExp2，NFTyping.mo:1646-1679 v1.25.0），各叶照自己的类型打——`start = {0, 0, -r}` → `start = 0`、
+          // `start = 0`、`start = -r`（MSL MultiBody Joints.RollingWheel 的 `delta_0[3](start = {0, 0, -radius})`；pk-p41 探针
+          // SGC1-SGC10 / SGC31 / SGC33 / SGC34）。Integer 属性上的混排 omc 报错；切分前就合成的（组件数组修饰分发出来的，末叶要看
+          // 分发前的整个字面量，SGC41）未做 → 照旧 SKIP。
+          if (!last_real || a.vk != AttrVK::Real || smid.raw >= synth_mod_floor_) {
+            set_unsupported("mixed-type split modifier literal"); return out;
+          }
+          p.uncast = true;
         }
         p.mode = AttrPlan::Mode::Literal;
       } else {
@@ -6881,7 +6955,7 @@ class Flattener {
       if (p.mode == AttrPlan::Mode::Literal) {
         const Id<Exp> el = array_scalar_elem(p.raw, idx, 0);
         if (!el.is_valid()) { set_unsupported("array attribute element"); return out; }
-        v = attr_value(p.spec->vk, el, p.scope, p.vprefix);
+        v = p.uncast ? simplify_expr(inst_exp(el, p.scope, p.vprefix)) : attr_value(p.spec->vk, el, p.scope, p.vprefix);
         if (!finish_attr(*p.spec, p.name, v, el, p.scope, p.cty)) return out;
       } else if (p.mode == AttrPlan::Mode::Typed) {
         // 属性的数组值逐元素摊分；推导式值同样逐元素代入（S16 探针 `Real t[3](start = {i for i in 1:3})` → `t[2](start = 2.0)`）。
@@ -7078,15 +7152,16 @@ class Flattener {
   }
 
   // 被切分的字面量数组修饰值的叶类型。omc 对切分绑定逐元素各自类型化、数组类型取**末元素**的类型
-  //（typeSubscriptedExp2，NFTyping.mo:1655-1688），叶类型混杂时不统一强转——`start = {1, 2.0}` 打出 `start = 1`、
+  //（typeSubscriptedExp2，NFTyping.mo:1646-1679 v1.25.0），叶类型混杂时不统一强转——`start = {1, 2.0}` 打出 `start = 1`、
   // `p = {sin(1), 2}` 打出 `/*Real*/(0.84…)`（分歧账本「切分修饰的混型字面量」），这两种不复刻 → 返回 false（SKIP）。
   // Integer 与 Real 混排（MD 探针 m2）：切分到第 depth 层，那一层的各元素（标量叶，或还没切到的子数组——子数组自己照常
   // 统一类型，里面有 Real 就是 Real）各按自己的类型定型，而数组的类型取的是**末**元素的。末元素是 Integer 时照常转型
   //（`k = {p[1], 2, 3}` → `p[1]`、`2.0`、`3.0`；`x = {tt, 1, 2}`、`start = {1, 2.0, 3}`、`v = {{tt, 1}, {2, 3}}`），可以
   // 收；末元素是 Real 时前面的 Integer 元素不转型（`{1, 2, 3.0}` → `a[1].k = 1`、`v = {{1, 2}, {tt, 3}}` → `a[1].v =
   // {1, 2}`），不复刻。Real 元素里带调用的（`{sin(1), 2, 3}` → `/*Real*/(0.84…)`，多打一层转型）同样不复刻。
+  // last_real：返回 false 时另报"叶都是数值、末元素是 Real"（属性上的这种照各叶类型打，见 plan_attributes）。
   bool split_leaves_uniform(Id<Exp> root, NodeId scope, const std::vector<Symbol>& prefix,
-                            std::size_t depth = static_cast<std::size_t>(-1)) {
+                            std::size_t depth = static_cast<std::size_t>(-1), bool* last_real = nullptr) {
     std::vector<std::pair<TypeKind, bool>> elems;   // 第 depth 层各元素的（类型, Real 元素不带调用）
     if (!split_elems(root, scope, prefix, depth, elems) || elems.empty()) return false;
     bool uniform = true, numeric = true, real_plain = true;
@@ -7096,6 +7171,7 @@ class Flattener {
       real_plain = real_plain && (k != TypeKind::Real || plain);
     }
     if (uniform) return true;
+    if (last_real) *last_real = numeric && elems.back().first == TypeKind::Real;
     return numeric && elems.back().first == TypeKind::Integer && real_plain;
   }
   bool split_elems(Id<Exp> e, NodeId scope, const std::vector<Symbol>& prefix, std::size_t depth,
@@ -7763,8 +7839,8 @@ class Flattener {
       vi.kind = v.var_kind == FlatVarKind::Parameter  ? PassCarry::VisitInfo::Parameter
                 : v.var_kind == FlatVarKind::Constant ? PassCarry::VisitInfo::Constant
                                                       : PassCarry::VisitInfo::Other;
-      vi.fixed_attr = has_fixed_attr(v);
       const std::string k = var_key(v);
+      vi.fixed_attr = has_fixed_attr(v) && !each_fixed_true(k);
       vi.moved = moved_field_keys_.count(k) > 0;
       const auto pit = param_info_.find(k);
       const Id<Expr> b = visit_binding(k, v.binding);
@@ -16483,9 +16559,36 @@ class Flattener {
       const std::string rk = int_key(rnames, rsubs);
       // 同 frame_value：试探求值的探针记下读到的参数（Evaluate = true 的记录绑定据此保留标记，见压平处的 EvalProbe）。
       if (eval_probe_) eval_probe_->keys.push_back({rk, false});
-      if (mark) mark_record(rk);
+      if (mark) {
+        mark_record(rk);
+        // 整个记录被定型期的求值读到（这里直接、或经 root_reads_ 在之后的定型期读取里传过去，见 note_read）：omc 的 Ceval 给无绑定
+        // 的记录现建绑定、把各字段的绑定逐个求值并存回（makeComponentBinding → makeRecordBindingExp → evalComponentBinding，
+        // NFCeval.mo:621-671 / :715-757 / :320-436 v1.25.0），字段照打求得的字面量（pk-p41 探针 SGE11 / SGE12 / SGE14-SGE16：
+        // `parameter BP bp(IL = 2 * b)` 经维的求值 → `bp.IL = 4.0`，此前照打 `2.0 * b`）。未做：先记下，收尾时这种字段打出来
+        // 不是字面量的 → SKIP（check_record_store_back）。
+        note_read(std::string(kRecReadTag) + rk);
+      }
     }
     return r;
+  }
+  static constexpr std::string_view kRecReadTag = "@rec:";   // note_read 里"整个记录被读到"的标记前缀（见 record_param_value）
+  // 见 record_param_value 的定型期整记录读取：其直属参数字段打出来不是字面量（omc 存回成字面量）或是 Evaluate = false 的
+  //（omc 不求它、记录值里留引用）→ SKIP。
+  void check_record_store_back() {
+    std::unordered_set<std::string> recs;
+    for (const std::string& r : typing_reads_)
+      if (r.compare(0, kRecReadTag.size(), kRecReadTag) == 0) recs.insert(r.substr(kRecReadTag.size()));
+    if (recs.empty()) return;
+    for (const FlatVariable& v : result_.model.variables) {
+      if (v.var_kind != FlatVarKind::Parameter) continue;
+      const std::string k = var_key(v);
+      if (!recs.count(parent_key(k))) continue;
+      const auto pit = param_info_.find(k);
+      if ((v.binding.is_valid() && !is_lit(v.binding)) || (pit != param_info_.end() && pit->second.nonstruct)) {
+        set_unsupported("record evaluated at typing time");
+        return;
+      }
+    }
   }
   // 值求值路（eval_scode）：书写处前缀（含逐段下标）+ cref 各段（常量整数下标）→ const_vals_ 里的值。
   std::optional<CVal> const_lookup_val(const std::vector<Symbol>& prefix, const PSubs& psubs, const Cref& c,
@@ -23642,6 +23745,11 @@ class Flattener {
       if (all_zero_literal(a)) return op == BinOp::Add ? b : negate_expr(b);
       if (all_zero_literal(b)) return a;
       if (op == BinOp::Sub && expr_equal(a, b)) { set_unsupported("array call minus itself"); return id; }
+      // 两侧都是数组字面量（运算数展开后，或结构参数代入后 `cross(r, f(b))` 展成的 `{0.5 * f(b)[3], …}`）：omc 逐元素合并、各元素
+      // 照标量化简（simplifyBinaryOp 的 isArray 支 → simplifyBinaryEW，NFSimplifyExp.mo:946-978 / :1105-1114 v1.25.0），不看数组调用
+      //（MSL JointUSR 的 `revolute.e * (frame_ib.t + frame_im.t + cross(rRod2_ib, frame_im.f) - cross(rRod2_ib, Frames.resolveRelative(…)))`
+      // → `revolute.e * {… - 0.5 * resolveRelative(…)[3], …}`；pk-p41 探针 SGF17 / SGF24 / SGF26 / SGF32 / SGF34 / SGF35，此前留成 `({…} - {…})`）。
+      if (const Id<Expr> ew = array_literal_ew(a, op, b, ty); ew.is_valid()) return ew;
       // 负号挪动（零元已在上面；数组上 lit_is 恒假）。结果仍登记成 sym 节点：压平末尾代入结构参数后再化简还走这里——一侧代成了
       // 全零字面量的照 simplifyBinarySub 消掉（ZS 探针 ZS2：`ta + rot(R, tb) - cross(r, f)`、r = 0 → `ta + rot(R, tb)`；MSL
       // FixedRotation 的 `zeros(3) = frame_a.t + resolve1(R_rel, frame_b.t) - cross(r, frame_a.f)`），此前留成 `- {0.0, 0.0, 0.0}`。
@@ -23653,6 +23761,24 @@ class Flattener {
     if (aarr && barr && op == BinOp::Div && is_negated(a)) return sym_node(negate_expr(a), orig, op, negate_expr(b), ty);
     if (aarr && barr && op == BinOp::Pow && all_zero_literal(b)) { set_unsupported("array call power by zero array"); return id; }
     return sym_node(a, orig, op, b, ty);
+  }
+  // 两个等长数组字面量逐元素做 op（Add / Sub，见 sym_binary）：各元素照 simplifyBinaryOp 化简，元素也是数组字面量的再逐元素
+  //（simplifyBinaryEW 套 simplifyBinaryOp，NFSimplifyExp.mo:1105-1114 v1.25.0）。不是两个字面量 / 不等长 → 无效。
+  Id<Expr> array_literal_ew(Id<Expr> a, BinOp op, Id<Expr> b, const Type& ty) {
+    if (result_.model.exprs[a].kind != ExprKind::Array || result_.model.exprs[b].kind != ExprKind::Array) return {};
+    const std::vector<Id<Expr>> ae = result_.model.exprs[a].args, be = result_.model.exprs[b].args;   // 拷贝（下面 add）
+    if (ae.empty() || ae.size() != be.size() || ty.dims.empty()) return {};
+    const std::vector<Dimension> tail(ty.dims.begin() + 1, ty.dims.end());
+    const Type et = tail.empty() ? ty.element_type() : Type::array_of(ty.element_type(), tail);
+    Expr arr;
+    arr.kind = ExprKind::Array;
+    arr.ty = ty;
+    for (std::size_t i = 0; i < ae.size(); ++i) {
+      Id<Expr> e = array_literal_ew(ae[i], op, be[i], et);
+      if (!e.is_valid()) e = simplify_binary_op(ae[i], op, be[i], et);
+      arr.args.push_back(e);
+    }
+    return add(std::move(arr));
   }
   // sym_binary 化简后的节点：仍登记书写的算符（再化简时还是 sym 节点），打印形态照 NFOperator.toDAE（:333-380 v1.25.0；同函数
   // 语境的 fn_array_form）记在节点上——点号（ew_binaries）、标量在前的 `*` / `.+` 换位打印（swapped_binaries，节点里不换：
@@ -28142,9 +28268,10 @@ class Flattener {
       return false;
     }
     if (pi.nonstruct || has_fixed_false(*v)) return true;   // 判 Evaluate 时：已发射 = 访问过，Evaluate = false 已降成非结构
-    // 判 Evaluate 时，带任何 fixed 属性（哪怕 `fixed = true`）的都不固定：那一刻属性绑定还没定型，Component.isFixed 认不出真
-    //（NFComponent.mo:896-922 v1.25.0；EV 探针 fx0 / fx1 / fx6：`q(fixed = true) = 3` → `p = q` 不求值）。
-    if (visit_nf_ && has_fixed_attr(*v)) return true;
+    // 判 Evaluate 时，带 fixed 属性（哪怕 `fixed = true`）的都不固定：那一刻非 each 的属性绑定带着切分占位下标，Component.isFixed
+    // 认不出真（见 eval_fixed；NFComponent.mo:896-922 v1.25.0；EV 探针 fx0 / fx1 / fx6：`q(fixed = true) = 3` → `p = q` 不求值）。
+    // `each fixed = true` 除外——固定（pk-p41 探针 SGF1-SGF3 / SGF5：`q(each fixed = true) = 3` → `final p = 3.0`，此前当不固定）。
+    if (visit_nf_ && has_fixed_attr(*v) && !each_fixed_true(k)) return true;
     if (pi.origin == 1) {
       // 继承来的字段：omc 取父节点时拿到的是 extends 节点、不是记录组件（isComponentBindingNotFixed 的 InstNode.parent，
       // NFStructural.mo v1.25.0），只看自己的 start 属性——字面量 start 固定，没有 start（无绑定）不固定（RS 探针 T9 / T11 /
@@ -28301,6 +28428,9 @@ class Flattener {
     ensure_var_index();
     const auto it = var_index_.find(k);
     return it == var_index_.end() ? nullptr : &result_.model.variables[it->second];
+  }
+  bool each_fixed_true(const std::string& k) const {   // 见 each_fixed_true_（数组元素看整体 key）
+    return each_fixed_true_.count(k) > 0 || each_fixed_true_.count(leaf_base(k)) > 0;
   }
   bool has_fixed_attr(const FlatVariable& v) {
     const Symbol fixed = in_.intern("fixed");
@@ -29611,6 +29741,7 @@ class Flattener {
     EvalRoot& operator=(const EvalRoot&) = delete;
   };
   std::unordered_set<std::string> typed_keys_;            // 绑定已定型（已发射）的参数（数组记整体 key）
+  std::unordered_set<std::string> each_fixed_true_;       // 合并后的 fixed 是 `each fixed = true` 的（数组记整体 key，见 eval_fixed）
   std::unordered_map<std::string, CVal> param_lits_;      // 已发射的字面量绑定参数（标量叶）key → 值（record_const）
   std::unordered_map<std::string, Id<Expr>> param_exprs_;  // 已发射的、绑定不是字面量的标量参数 key → 绑定（flat_param_value）
   // 两遍压平（见 flatten()）：lenient_ = 第一遍——结构求值缺的是还没发射的参数（forward_miss_）时不判 SKIP、记下 need_second_pass_；

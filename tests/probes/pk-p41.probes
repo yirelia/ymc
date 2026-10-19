@@ -1,0 +1,1838 @@
+//// set: pk-p41 — 67g：四个 MSL 例子各自卡住的构造及兄弟写法。SGA：Evaluate = true 只对“固定”参数生效——isStructuralComponent 的 Component.isFixed（NFStructural.mo:74-76 v1.25.0），那一刻非 each 的属性子修饰带着 Modifier.propagate 加的切分占位下标（NFInst.mo:1981、propagateSubMod NFModifier.mo:486-509，instBinding 包成 SUBSCRIPTED_EXP NFInst.mo:2744-2752），isFixed 认不出 `fixed = true`（NFComponent.mo:896-922），只认 `each fixed = true`；带别的 fixed 属性（false / true / 参数 / 数组 / 短类链）照普通参数（数组）打（MSL JointRRR 的 n_b）。SGD：无绑定参数拿 start 当绑定时短类链上的 fixed 也算（updateParameterBinding NFInst.mo:2351-2388）。SGF1-SGF7：顺依赖判固定时 `each fixed = true` 固定。SGB：stateSelect 属性里的参数只标合并后胜出来源里的（外来 > extends 外层在前 > 声明；更深一层基类 extends 修饰里的也扫，MSL Fluid AbruptAdaptor），访问到组件时标（声明在后的 Evaluate = false 参数照成结构参数）。SGC：切分修饰的 Integer / Real 混型字面量、末叶是 Real：各叶照自己的类型打（typeSubscriptedExp2 NFTyping.mo:1646-1679；MSL Joints.RollingWheel 的 delta_0）。SGE：记录作函数实参的结构求值（size() 矩阵链里的仍 SKIP；定型期整个求值的记录 omc 把字段存回成字面量，makeRecordBindingExp NFCeval.mo:715-757，ymc 未做 → SKIP）。SGF11-SGF36：含数组调用的数组字面量相加减 omc 逐元素合并（simplifyBinaryEW NFSimplifyExp.mo:1105-1114；MSL JointUSR 的 f_rod）。
+//// model: SGA1
+model SGA1
+  parameter Real n[3](each fixed = false, start = {0, 0, 1}) annotation(Evaluate = true);
+  Real y = n[1] * time;
+initial equation
+  n = {0, 0, 1};
+end SGA1;
+//// model: SGA2
+model B
+  parameter Real m[3] = {1, 2, 3};
+  Real y = m[1] * time;
+end B;
+model SGA2
+  final parameter Real n[3](each final unit = "1", each fixed = false, start = {0, 0, 1}) annotation(Evaluate = true);
+  B b(m = n);
+initial equation
+  n = {0, 0, 1};
+end SGA2;
+//// model: SGA3
+model SGA3
+  parameter Real p(fixed = false, start = 1) annotation(Evaluate = true);
+  Real y = p * time;
+initial equation
+  p = 2;
+end SGA3;
+//// model: SGA4
+model SGA4
+  parameter Real p(fixed = false) = 2 annotation(Evaluate = true);
+  Real y = p * time;
+end SGA4;
+//// model: SGA5
+model SGA5
+  parameter Real p[2](each fixed = false) = {1, 2} annotation(Evaluate = true);
+  Real y = p[1] * time;
+end SGA5;
+//// model: SGA6
+model SGA6
+  parameter Real p[2](each fixed = true) = {1, 2} annotation(Evaluate = true);
+  Real y = p[1] * time;
+end SGA6;
+//// model: SGA7
+model SGA7
+  parameter Boolean f = false;
+  parameter Real p(fixed = f) = 2 annotation(Evaluate = true);
+  Real y = p * time;
+end SGA7;
+//// model: SGA8
+model SGA8
+  parameter Boolean f = true;
+  parameter Real p(fixed = f) = 2 annotation(Evaluate = true);
+  Real y = p * time;
+end SGA8;
+//// model: SGA9
+model SGA9
+  parameter Real p[2](start = {1, 2}) annotation(Evaluate = true);
+  Real y = p[1] * time;
+end SGA9;
+//// model: SGA10
+model SGA10
+  parameter Real p[2] annotation(Evaluate = true);
+  Real y = p[1] * time;
+end SGA10;
+//// model: SGA11
+model SGA11
+  parameter Real p[2](fixed = {false, false}) = {1, 2} annotation(Evaluate = true);
+  Real y = p[1] * time;
+end SGA11;
+//// model: SGA12
+model SGA12
+  parameter Real p[2](fixed = {true, true}) = {1, 2} annotation(Evaluate = true);
+  Real y = p[1] * time;
+end SGA12;
+//// model: SGA13
+model SGA13
+  parameter Real p[2](each fixed = true, start = {1, 2}) annotation(Evaluate = true);
+  Real y = p[1] * time;
+end SGA13;
+//// model: SGA14
+model SGA14
+  parameter Real p[2](each fixed = false) annotation(Evaluate = true);
+  Real y = p[1] * time;
+initial equation
+  p = {1, 2};
+end SGA14;
+//// model: SGA15
+type FT = Real(fixed = false);
+model SGA15
+  parameter FT p[2](start = {1, 2}) annotation(Evaluate = true);
+  Real y = p[1] * time;
+initial equation
+  p = {1, 2};
+end SGA15;
+//// model: SGA16
+type FT = Real(fixed = false);
+model SGA16
+  parameter FT p = 3 annotation(Evaluate = true);
+  Real y = p * time;
+end SGA16;
+//// model: SGA17
+model B
+  parameter Real n[3](each fixed = false, start = {0, 0, 1});
+  Real y = n[1] * time;
+initial equation
+  n = {0, 0, 1};
+end B;
+model SGA17
+  B b annotation(Evaluate = true);
+end SGA17;
+//// model: SGA18
+model B
+  parameter Real n[3](start = {0, 0, 1}) annotation(Evaluate = true);
+  Real y = n[1] * time;
+end B;
+model SGA18
+  B b(n(each fixed = false));
+initial equation
+  b.n = {0, 0, 1};
+end SGA18;
+//// model: SGA19
+model SGA19
+  parameter Real n[3](each fixed = false, start = {0, 0, 1}) annotation(Evaluate = true);
+  Real y[3] = n * time;
+initial equation
+  n = {0, 0, 1};
+end SGA19;
+//// model: SGA20
+model SGA20
+  parameter Real n[2](each fixed = false, start = {0, 1.5}) annotation(Evaluate = true);
+  parameter Real m[2] = n;
+  Real y = m[1] * time;
+initial equation
+  n = {0, 1};
+end SGA20;
+//// model: SGA21
+model SGA21
+  parameter Integer k[2](each fixed = false, start = {1, 2}) annotation(Evaluate = true);
+  Real y = k[1] * time;
+initial equation
+  k = {1, 2};
+end SGA21;
+//// model: SGA22
+model SGA22
+  parameter Real p(fixed = true) = 3 annotation(Evaluate = true);
+  Real y = p * time;
+end SGA22;
+//// model: SGA23
+model SGA23
+  parameter Real p[2](each fixed = false, start = {1, 2}) = {3, 4} annotation(Evaluate = true);
+  Real y = p[1] * time;
+end SGA23;
+//// model: SGA24
+model SGA24
+  parameter Real n[3](each fixed = false, start = {0, 0, 1}) annotation(Evaluate = true);
+  Real x[2];
+equation
+  x = {n[1], n[2]} * time;
+initial equation
+  n = {0, 0, 1};
+end SGA24;
+//// model: SGA25
+model SGA25
+  parameter Real p[2](fixed = true) = {1, 2} annotation(Evaluate = true);
+  Real y = p[1] * time;
+end SGA25;
+//// model: SGA26
+model SGA26
+  parameter Real p(each fixed = true) = 3 annotation(Evaluate = true);
+  Real y = p * time;
+end SGA26;
+//// model: SGA27
+model SGA27
+  parameter Boolean f = true;
+  parameter Real p[2](each fixed = f) = {1, 2} annotation(Evaluate = true);
+  Real y = p[1] * time;
+end SGA27;
+//// model: SGA28
+type FT2 = Real(fixed = true);
+model SGA28
+  parameter FT2 p[2] = {1, 2} annotation(Evaluate = true);
+  Real y = p[1] * time;
+end SGA28;
+//// model: SGA29
+type FT2 = Real(fixed = true);
+model SGA29
+  parameter FT2 p = 3 annotation(Evaluate = true);
+  Real y = p * time;
+end SGA29;
+//// model: SGA30
+model SGA30
+  parameter Real p[2](each fixed = true, each start = 1) annotation(Evaluate = true);
+  Real y = p[1] * time;
+end SGA30;
+//// model: SGA31
+model SGA31
+  parameter Real p[2](each fixed = false, each start = 1) annotation(Evaluate = true);
+  Real y = p[1] * time;
+initial equation
+  p = {1, 2};
+end SGA31;
+//// model: SGA32
+model B
+  parameter Real n[3](each fixed = false, start = {0, 0, 1}) annotation(Evaluate = true);
+  Real y = n[1] * time;
+initial equation
+  n = {0, 0, 1};
+end B;
+model SGA32
+  B b1, b2;
+end SGA32;
+//// model: SGA33
+model B
+  parameter Real n[3](start = {0, 0, 1}) annotation(Evaluate = true);
+  Real y = n[1] * time;
+end B;
+model SGA33
+  extends B(n(each fixed = false));
+initial equation
+  n = {0, 0, 1};
+end SGA33;
+//// model: SGA34
+model SGA34
+  parameter Real n[2](each fixed = false, start = {0, 1}) annotation(Evaluate = true);
+  parameter Real m[2] = n annotation(Evaluate = true);
+  Real y = m[1] * time;
+initial equation
+  n = {0, 1};
+end SGA34;
+//// model: SGA35
+model SGA35
+  parameter Real n[2](each fixed = false, start = {0, 1}) annotation(Evaluate = true);
+  Real z[2];
+equation
+  for i in 1:2 loop
+    z[i] = n[i] * time;
+  end for;
+initial equation
+  n = {0, 1};
+end SGA35;
+//// model: SGA36
+model SGA36
+  parameter Real n[2](each fixed = false, start = {0, 1}) annotation(Evaluate = false);
+  Real y = n[1] * time;
+initial equation
+  n = {0, 1};
+end SGA36;
+//// model: SGA37
+model SGA37
+  parameter Real n[2](each fixed = false) = {1, 2} annotation(Evaluate = true);
+  parameter Integer k = 2;
+  Real x[k] = n * time;
+end SGA37;
+//// model: SGD1
+type FT = Real(fixed = false);
+model SGD1
+  parameter FT p(start = 1);
+  Real y = p * time;
+initial equation
+  p = 2;
+end SGD1;
+//// model: SGD2
+type FT = Real(fixed = false);
+model SGD2
+  parameter FT p[2](start = {1, 2});
+  Real y = p[1] * time;
+initial equation
+  p = {1, 2};
+end SGD2;
+//// model: SGD3
+type FT = Real(fixed = false);
+type FT3 = FT(unit = "m");
+model SGD3
+  parameter FT3 p(start = 1);
+  Real y = p * time;
+initial equation
+  p = 2;
+end SGD3;
+//// model: SGD4
+type FT = Real(fixed = false);
+model SGD4
+  parameter FT p(fixed = true, start = 1);
+  Real y = p * time;
+end SGD4;
+//// model: SGD5
+type FT4 = Real(fixed = true);
+model SGD5
+  parameter FT4 p(start = 1);
+  Real y = p * time;
+end SGD5;
+//// model: SGD6
+type FS = Real(start = 3);
+model SGD6
+  parameter FS p;
+  Real y = p * time;
+end SGD6;
+//// model: SGD7
+model SGD7
+  parameter Real p(fixed = true, start = 1);
+  Real y = p * time;
+end SGD7;
+//// model: SGD8
+type FT = Real(fixed = false);
+model B
+  parameter FT p(start = 1);
+  Real y = p * time;
+end B;
+model SGD8
+  B b(p(start = 4));
+initial equation
+  b.p = 2;
+end SGD8;
+//// model: SGD9
+type FT = Real(fixed = false);
+model B
+  parameter Real p(start = 1);
+  Real y = p * time;
+end B;
+model SGD9
+  B b(redeclare FT p);
+end SGD9;
+//// model: SGD10
+type FT = Real(fixed = false);
+model SGD10
+  parameter FT p[2](start = {1, 2});
+  Real y = p[1] * time;
+initial equation
+  p = {1, 2};
+end SGD10;
+//// model: SGC45
+model SGC45
+  parameter Real n[2](each fixed = false, start = {0, 1.5});
+  parameter Real m[2] = n;
+  Real y = m[1] * time;
+initial equation
+  n = {0, 1};
+end SGC45;
+//// model: SGF1
+model SGF1
+  parameter Real q(each fixed = true) = 3;
+  parameter Real p = q annotation(Evaluate = true);
+  Real y = p * time;
+end SGF1;
+//// model: SGF2
+model SGF2
+  parameter Real q[2](each fixed = true) = {3, 4};
+  parameter Real p = q[1] annotation(Evaluate = true);
+  Real y = p * time;
+end SGF2;
+//// model: SGF3
+model SGF3
+  parameter Real p = q annotation(Evaluate = true);
+  parameter Real q(each fixed = true) = 3;
+  Real y = p * time;
+end SGF3;
+//// model: SGF4
+model SGF4
+  parameter Real q(each fixed = false) = 3;
+  parameter Real p = q annotation(Evaluate = true);
+  Real y = p * time;
+end SGF4;
+//// model: SGF5
+model B
+  parameter Real q = 3;
+end B;
+model SGF5
+  B b(q(each fixed = true));
+  parameter Real p = b.q annotation(Evaluate = true);
+  Real y = p * time;
+end SGF5;
+//// model: SGF6
+model SGF6
+  parameter Real q(each fixed = true) = 3;
+  Real x[integer(q)];
+  Real y = q * time;
+end SGF6;
+//// model: SGF7
+model SGF7
+  parameter Real q(fixed = true, each min = 0) = 3;
+  parameter Real p = q annotation(Evaluate = true);
+  Real y = p * time;
+end SGF7;
+//// model: SGB1
+model PT
+  Real m_flow(start = 0);
+equation
+  der(m_flow) = 1;
+end PT;
+model PL
+  parameter Integer md = 1;
+end PL;
+model BM
+  extends PT(m_flow(stateSelect = if md == 1 then StateSelect.default else StateSelect.prefer));
+  extends PL(md = 1);
+end BM;
+model AA
+  extends BM;
+end AA;
+model SGB1
+  AA a;
+end SGB1;
+//// model: SGB2
+model PT
+  Real m_flow(start = 0);
+equation
+  der(m_flow) = 1;
+end PT;
+model BM
+  parameter StateSelect s = StateSelect.prefer;
+  extends PT(m_flow(stateSelect = s));
+end BM;
+model AA
+  extends BM;
+end AA;
+model SGB2
+  AA a;
+end SGB2;
+//// model: SGB3
+model PT
+  Real m_flow(start = 0);
+equation
+  der(m_flow) = 1;
+end PT;
+model BM
+  parameter StateSelect s = StateSelect.prefer;
+  extends PT(m_flow(stateSelect = s));
+end BM;
+model AA
+  extends BM;
+end AA;
+model SGB3
+  AA a(m_flow(stateSelect = StateSelect.always));
+end SGB3;
+//// model: SGB4
+model PT
+  Real m_flow(start = 0);
+equation
+  der(m_flow) = 1;
+end PT;
+model BM
+  parameter StateSelect s = StateSelect.prefer;
+  extends PT(m_flow(stateSelect = s));
+end BM;
+model AA
+  extends BM(m_flow(stateSelect = StateSelect.never));
+end AA;
+model SGB4
+  AA a;
+end SGB4;
+//// model: SGB5
+model PT
+  Real m_flow(start = 0);
+equation
+  der(m_flow) = 1;
+end PT;
+model BM
+  parameter StateSelect s = StateSelect.prefer;
+  extends PT(m_flow(stateSelect = s));
+end BM;
+model SGB5
+  BM b(m_flow(stateSelect = StateSelect.never));
+end SGB5;
+//// model: SGB6
+model PT
+  Real m_flow(start = 0);
+equation
+  der(m_flow) = 1;
+end PT;
+model BM
+  parameter StateSelect s = StateSelect.prefer;
+  extends PT(m_flow(stateSelect = s));
+end BM;
+model SGB6
+  extends BM(m_flow(stateSelect = StateSelect.never));
+end SGB6;
+//// model: SGB7
+model PT
+  Real m_flow(start = 0);
+equation
+  der(m_flow) = 1;
+end PT;
+model BM
+  parameter StateSelect s = StateSelect.prefer;
+  extends PT(m_flow(stateSelect = s));
+end BM;
+model B2
+  extends BM;
+end B2;
+model B3
+  extends B2;
+end B3;
+model SGB7
+  B3 b;
+end SGB7;
+//// model: SGB8
+model C
+  Real x(start = 0);
+equation
+  der(x) = 1;
+end C;
+model PT
+  C c;
+end PT;
+model BM
+  parameter StateSelect s = StateSelect.prefer;
+  extends PT(c(x(stateSelect = s)));
+end BM;
+model AA
+  extends BM;
+end AA;
+model SGB8
+  AA a;
+end SGB8;
+//// model: SGB9
+model C
+  Real x(start = 0);
+equation
+  der(x) = 1;
+end C;
+model M
+  parameter StateSelect s = StateSelect.prefer;
+  C c(x(stateSelect = s));
+end M;
+model SGB9
+  M m(c(x(stateSelect = StateSelect.never)));
+end SGB9;
+//// model: SGB10
+model PT
+  Real m_flow(start = 0);
+equation
+  der(m_flow) = 1;
+end PT;
+model BM
+  parameter Boolean f = true;
+  extends PT(m_flow(fixed = f));
+end BM;
+model AA
+  extends BM;
+end AA;
+model SGB10
+  AA a;
+end SGB10;
+//// model: SGB11
+model PT
+  Real m_flow(start = 0);
+equation
+  der(m_flow) = 1;
+end PT;
+model BM
+  parameter StateSelect s = StateSelect.prefer;
+  parameter StateSelect s2 = StateSelect.avoid;
+  extends PT(m_flow(stateSelect = s));
+end BM;
+model AA
+  extends BM(m_flow(stateSelect = s2));
+end AA;
+model SGB11
+  AA a;
+end SGB11;
+//// model: SGB12
+model PT
+  Real m_flow(start = 0);
+equation
+  der(m_flow) = 1;
+end PT;
+model BM
+  extends PT(m_flow(stateSelect = s));
+  parameter StateSelect s = StateSelect.prefer;
+end BM;
+model AA
+  extends BM;
+  Real z = m_flow;
+end AA;
+model SGB12
+  AA a;
+end SGB12;
+//// model: SGB13
+model PT
+  Real m_flow(start = 0, stateSelect = sp);
+  parameter StateSelect sp = StateSelect.default;
+equation
+  der(m_flow) = 1;
+end PT;
+model BM
+  parameter StateSelect s = StateSelect.prefer;
+  extends PT(m_flow(stateSelect = s));
+end BM;
+model AA
+  extends BM;
+end AA;
+model SGB13
+  AA a;
+end SGB13;
+//// model: SGB14
+model PT
+  Real m_flow(start = 0);
+equation
+  der(m_flow) = 1;
+end PT;
+model BM
+  parameter Integer md = 1;
+  extends PT(m_flow(stateSelect = if md == 1 then StateSelect.default else StateSelect.prefer));
+end BM;
+model AA
+  extends BM(md = 2);
+end AA;
+model SGB14
+  AA a;
+end SGB14;
+//// model: SGB15
+model PT
+  Real m_flow(start = 0);
+equation
+  der(m_flow) = 1;
+end PT;
+model BM
+  parameter StateSelect s = StateSelect.prefer;
+  extends PT(m_flow(stateSelect = s));
+end BM;
+model AA
+  extends BM;
+end AA;
+model SGB15
+  AA a[2];
+end SGB15;
+//// model: SGB16
+model M
+  parameter StateSelect s = StateSelect.prefer;
+  Real x(start = 0, stateSelect = s);
+equation
+  der(x) = 1;
+end M;
+model SGB16
+  M m(x(stateSelect = StateSelect.never));
+end SGB16;
+//// model: SGB17
+model PT
+  Real m_flow(start = 0);
+equation
+  der(m_flow) = 1;
+end PT;
+model BM
+  parameter StateSelect s = StateSelect.prefer;
+  extends PT(m_flow(stateSelect = s));
+end BM;
+model SGB17
+  BM b[2](each m_flow(stateSelect = StateSelect.never));
+end SGB17;
+//// model: SGB18
+model PT
+  Real m_flow(start = 0);
+equation
+  der(m_flow) = 1;
+end PT;
+model BM
+  parameter StateSelect s = StateSelect.prefer;
+  extends PT(m_flow(stateSelect = s));
+end BM;
+model SGB18
+  BM b[2](m_flow(stateSelect = {StateSelect.never, StateSelect.always}));
+end SGB18;
+//// model: SGB19
+model PT
+  Real m_flow(start = 0);
+equation
+  der(m_flow) = 1;
+end PT;
+model BM
+  parameter StateSelect s = StateSelect.prefer;
+  parameter StateSelect s2 = StateSelect.avoid;
+  extends PT(m_flow(stateSelect = s));
+end BM;
+model SGB19
+  BM b(m_flow(stateSelect = b.s2));
+end SGB19;
+//// model: SGB20
+model PT
+  Real m_flow(start = 0);
+equation
+  der(m_flow) = 1;
+end PT;
+model BM
+  parameter StateSelect s = StateSelect.prefer;
+  extends PT(m_flow(stateSelect = s));
+end BM;
+model AA
+  parameter StateSelect s3 = StateSelect.always;
+  BM b(m_flow(stateSelect = s3));
+end AA;
+model SGB20
+  AA a;
+end SGB20;
+//// model: SGB21
+model PT
+  Real m_flow(start = 0);
+equation
+  der(m_flow) = 1;
+end PT;
+model SGB21
+  extends PT(m_flow(stateSelect = s));
+  parameter StateSelect s = StateSelect.prefer annotation(Evaluate = false);
+end SGB21;
+//// model: SGB22
+model PT
+  Real m_flow(start = 0);
+equation
+  der(m_flow) = 1;
+end PT;
+model SGB22
+  parameter StateSelect s = StateSelect.prefer annotation(Evaluate = false);
+  extends PT(m_flow(stateSelect = s));
+end SGB22;
+//// model: SGB23
+model PT
+  Real m_flow(start = 0);
+equation
+  der(m_flow) = 1;
+end PT;
+model BM
+  extends PT(m_flow(stateSelect = s));
+end BM;
+model SGB23
+  extends BM;
+  parameter StateSelect s = StateSelect.prefer annotation(Evaluate = false);
+end SGB23;
+//// model: SGB24
+model PT
+  Real m_flow(start = 0);
+equation
+  der(m_flow) = 1;
+end PT;
+model PS
+  parameter StateSelect s = StateSelect.prefer annotation(Evaluate = false);
+end PS;
+model BM
+  extends PT(m_flow(stateSelect = s));
+  extends PS;
+end BM;
+model SGB24
+  BM b;
+end SGB24;
+//// model: SGB25
+model PT
+  Real m_flow(start = 0);
+equation
+  der(m_flow) = 1;
+end PT;
+model PS
+  parameter StateSelect s = StateSelect.prefer annotation(Evaluate = false);
+end PS;
+model BM
+  extends PS;
+  extends PT(m_flow(stateSelect = s));
+end BM;
+model SGB25
+  BM b;
+end SGB25;
+//// model: SGB26
+model PT
+  Real m_flow(start = 0);
+equation
+  der(m_flow) = 1;
+end PT;
+model PS
+  parameter StateSelect s = StateSelect.prefer annotation(Evaluate = false);
+end PS;
+model BM
+  extends PT(m_flow(stateSelect = s));
+  extends PS;
+end BM;
+model AA
+  extends BM;
+end AA;
+model SGB26
+  AA a;
+end SGB26;
+//// model: SGB27
+model PT
+  Real m_flow(start = 0);
+equation
+  der(m_flow) = 1;
+end PT;
+model PS
+  parameter StateSelect s = StateSelect.prefer annotation(Evaluate = false);
+end PS;
+model BM
+  extends PS;
+  extends PT(m_flow(stateSelect = s));
+end BM;
+model AA
+  extends BM;
+end AA;
+model SGB27
+  AA a;
+end SGB27;
+//// model: SGC1
+model SGC1
+  parameter Real r = 0.3;
+  Real x[3](start = {0, 0, -r});
+equation
+  x = {time, 2 * time, 3 * time};
+end SGC1;
+//// model: SGC2
+model SGC2
+  Real x[2](start = {0, 1.5});
+equation
+  x = {time, 2 * time};
+end SGC2;
+//// model: SGC3
+model SGC3
+  Real x[3](start = {1, 2, 3.0});
+equation
+  x = {time, 2 * time, 3 * time};
+end SGC3;
+//// model: SGC4
+model SGC4
+  Real x[3](start = {1.0, 2, 3});
+equation
+  x = {time, 2 * time, 3 * time};
+end SGC4;
+//// model: SGC5
+model SGC5
+  parameter Integer n = 2;
+  Real x[2](start = {n, 2.5});
+equation
+  x = {time, 2 * time};
+end SGC5;
+//// model: SGC6
+model SGC6
+  parameter Integer n = 2;
+  Real x[2](start = {2 * n, 2.5});
+equation
+  x = {time, 2 * time};
+end SGC6;
+//// model: SGC7
+model SGC7
+  Real x[2](start = {-1, 2.5});
+equation
+  x = {time, 2 * time};
+end SGC7;
+//// model: SGC8
+model SGC8
+  Real x[2](start = {0, sin(1)});
+equation
+  x = {time, 2 * time};
+end SGC8;
+//// model: SGC9
+model SGC9
+  parameter Real r = 0.3;
+  Real x[2](start = {0, r});
+equation
+  x = {time, 2 * time};
+end SGC9;
+//// model: SGC10
+model SGC10
+  parameter Real r = 0.3;
+  Real x[2](start = {1, 2 * r});
+equation
+  x = {time, 2 * time};
+end SGC10;
+//// model: SGC11
+model SGC11
+  Integer k[2](start = {1, 2.5});
+equation
+  k = {1, 2};
+end SGC11;
+//// model: SGC12
+model SGC12
+  Real m[2, 2](start = {{1, 2}, {3.0, 4}});
+equation
+  m = {{time, time}, {time, time}};
+end SGC12;
+//// model: SGC13
+model SGC13
+  Real m[2, 2](start = {{1.0, 2}, {3, 4}});
+equation
+  m = {{time, time}, {time, time}};
+end SGC13;
+//// model: SGC14
+model SGC14
+  Real m[2, 2](start = [1, 2; 3.0, 4]);
+equation
+  m = {{time, time}, {time, time}};
+end SGC14;
+//// model: SGC15
+model SGC15
+  Real x[2](min = {0, 1.5});
+equation
+  x = {time, 2 * time};
+end SGC15;
+//// model: SGC16
+model SGC16
+  Real x[2](nominal = {1, 2.5});
+equation
+  x = {time, 2 * time};
+end SGC16;
+//// model: SGC17
+model SGC17
+  parameter Real p[2](start = {0, 1.5}) = {1, 2};
+  Real y = p[1] * time;
+end SGC17;
+//// model: SGC18
+model B
+  Real x[2];
+equation
+  x = {time, 2 * time};
+end B;
+model SGC18
+  B b(x(start = {0, 1.5}));
+end SGC18;
+//// model: SGC19
+model B
+  Real x[2];
+equation
+  x = {time, 2 * time};
+end B;
+model SGC19
+  extends B(x(start = {0, 1.5}));
+end SGC19;
+//// model: SGC20
+model A
+  parameter Real p = 1;
+  Real y = p * time;
+end A;
+model SGC20
+  A a[2](p = {1, 2.5});
+end SGC20;
+//// model: SGC21
+model SGC21
+  constant Integer c = 2;
+  Real x[2](start = {c, 2.5});
+equation
+  x = {time, 2 * time};
+end SGC21;
+//// model: SGC22
+model SGC22
+  Real x[3](start = {0, 1.5, 2});
+equation
+  x = {time, 2 * time, 3 * time};
+end SGC22;
+//// model: SGC23
+model SGC23
+  Real x[3](start = {0.5, 1, 2.5}, each fixed = true);
+equation
+  der(x) = {1, 2, 3};
+end SGC23;
+//// model: SGC24
+model SGC24
+  parameter Real r = 0.3;
+  Real x[3](start = {0, 0, -r}, each stateSelect = StateSelect.prefer);
+equation
+  der(x) = {1, 2, 3};
+end SGC24;
+//// model: SGC25
+model SGC25
+  Real x[2](start = {integer(2.5), 1.5});
+equation
+  x = {time, 2 * time};
+end SGC25;
+//// model: SGC26
+model SGC26
+  Real x[2](start = {1 + 1, 1.5});
+equation
+  x = {time, 2 * time};
+end SGC26;
+//// model: SGC27
+model SGC27
+  Real x[2](start = {div(5, 2), 1.5});
+equation
+  x = {time, 2 * time};
+end SGC27;
+//// model: SGC28
+model SGC28
+  parameter Integer n = 2;
+  Real x[2](start = {if n > 1 then 1 else 2, 1.5});
+equation
+  x = {time, 2 * time};
+end SGC28;
+//// model: SGC29
+model SGC29
+  type Len = Real(unit = "m");
+  Len x[2](start = {0, 1.5});
+equation
+  x = {time, 2 * time};
+end SGC29;
+//// model: SGC30
+model SGC30
+  Real x[2](start = {(1), 1.5});
+equation
+  x = {time, 2 * time};
+end SGC30;
+//// model: SGC31
+model SGC31
+  Real m[2, 2](start = {{1, 2}, {3, 4.5}});
+equation
+  m = {{time, time}, {time, time}};
+end SGC31;
+//// model: SGC32
+function f
+  input Real t;
+  output Real y[2];
+algorithm
+  y := {t, 2 * t};
+end f;
+model SGC32
+  Real x[2](start = {0, 1.5}) = f(time);
+end SGC32;
+//// model: SGC33
+type V3 = Real[3](start = {0, 0, 1.5});
+model SGC33
+  V3 v;
+equation
+  v = {time, time, time};
+end SGC33;
+//// model: SGC34
+record R
+  Real x[2];
+end R;
+model SGC34
+  R r(x(start = {0, 1.5}));
+equation
+  r.x = {time, time};
+end SGC34;
+//// model: SGC35
+model SGC35
+  Real m[2, 2](start = {{1, 2.5}, {3, 4}});
+equation
+  m = {{time, time}, {time, time}};
+end SGC35;
+//// model: SGC36
+model SGC36
+  Real m[2, 2](start = {{1, 2.5}, {3, 4.5}});
+equation
+  m = {{time, time}, {time, time}};
+end SGC36;
+//// model: SGC37
+model SGC37
+  parameter Real r = 0.3;
+  Real x[3](start = {0, 0, -r}) = {time, 2 * time, 3 * time};
+end SGC37;
+//// model: SGC38
+model SGC38
+  Real x[2](start = {0, 1.5}, nominal = {1, 2});
+equation
+  x = {time, 2 * time};
+end SGC38;
+//// model: SGC39
+model SGC39
+  Real x[2](start = {false, 1.5});
+equation
+  x = {time, 2 * time};
+end SGC39;
+//// model: SGC40
+model SGC40
+  parameter Real x[2](start = {0, 1.5}, each fixed = false);
+initial equation
+  x = {1, 2};
+end SGC40;
+//// model: SGC41
+model B
+  Real x[3];
+equation
+  x = {time, 2 * time, 3 * time};
+end B;
+model SGC41
+  parameter Real r = 0.3;
+  B b[2](x(start = {{0, 0, -r}, {1, 1, r}}));
+end SGC41;
+//// model: SGC42
+model SGC42
+  Real x[2](start = {0, 1.5});
+  Real z[2](start = x);
+equation
+  x = {time, 2 * time};
+  z = x;
+end SGC42;
+//// model: SGC43
+model SGC43
+  parameter Integer n = 3;
+  Real x[n](start = {0, 0, 1.5});
+equation
+  x = {time, 2 * time, 3 * time};
+end SGC43;
+//// model: SGC44
+model SGC44
+  Real x[2](start = {0, 1.5}, min = {0, -1});
+equation
+  x = {time, 2 * time};
+end SGC44;
+//// model: SGE1
+block K
+  parameter Real q[:] = {1};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n];
+equation
+  for i in 1:n loop
+    y[i] = q[i] * time;
+  end for;
+end K;
+model SGE1
+  parameter Real w = 2;
+  K k(q = {w});
+end SGE1;
+//// model: SGE2
+record DD
+  parameter Real a = 3;
+  parameter Real wMax = a * 2;
+end DD;
+block K
+  parameter Real q[:] = {1};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n];
+equation
+  for i in 1:n loop
+    y[i] = q[i] * time;
+  end for;
+end K;
+model SGE2
+  parameter DD dd;
+  K k(q = {dd.wMax});
+end SGE2;
+//// model: SGE3
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end f;
+record DD
+  parameter Real a = 3;
+  parameter Real wMax = f(a);
+end DD;
+block K
+  parameter Real q[:] = {1};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n];
+equation
+  for i in 1:n loop
+    y[i] = q[i] * time;
+  end for;
+end K;
+model SGE3
+  parameter DD dd;
+  K k(q = {dd.wMax});
+end SGE3;
+//// model: SGE4
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+record DD
+  parameter Real a = 3;
+  parameter BP bp;
+  parameter Real wMax = a - drop(bp, 100);
+end DD;
+block K
+  parameter Real q[:] = {1};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n];
+equation
+  for i in 1:n loop
+    y[i] = q[i] * time;
+  end for;
+end K;
+model SGE4
+  parameter DD dd;
+  K k(q = {dd.wMax});
+end SGE4;
+//// model: SGE5
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model SGE5
+  parameter Real a = 3;
+  parameter BP bp;
+  parameter Real wMax = a - drop(bp, 100);
+  parameter Real q[:] = {wMax};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n];
+equation
+  for i in 1:n loop
+    y[i] = q[i] * time;
+  end for;
+end SGE5;
+//// model: SGE6
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model SGE6
+  parameter Real a = 3;
+  parameter BP bp;
+  parameter Real wMax = a - drop(bp, 100);
+  Real y[n];
+  final parameter Integer n = if wMax > 0 then 1 else 2;
+equation
+  for i in 1:n loop
+    y[i] = wMax * time;
+  end for;
+end SGE6;
+//// model: SGE11
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model SGE11
+  parameter Real b = 2;
+  parameter Real a = 3;
+  parameter BP bp(IL = 2 * b);
+  parameter Real wMax = a - drop(bp, 100);
+  Real y[n];
+  final parameter Integer n = if wMax > 0 then 1 else 2;
+equation
+  for i in 1:n loop
+    y[i] = wMax * time;
+  end for;
+end SGE11;
+//// model: SGE12
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 2 * V + 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model SGE12
+  parameter Real a = 3;
+  parameter BP bp;
+  parameter Real wMax = a - drop(bp, 100);
+  Real y[n];
+  final parameter Integer n = if wMax > 0 then 1 else 2;
+equation
+  for i in 1:n loop
+    y[i] = wMax * time;
+  end for;
+end SGE12;
+//// model: SGE13
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model SGE13
+  parameter Real b = 2;
+  parameter Real a = 3;
+  parameter BP bp(IL = 2 * b);
+  parameter Real wMax = a - drop(bp, 100) annotation(Evaluate = true);
+  Real y = wMax * time;
+end SGE13;
+//// model: SGE14
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model SGE14
+  parameter Real b = 2;
+  parameter Real a = 3;
+  parameter BP bp(IL = 2 * b);
+  parameter Real wMax = a - drop(bp, 100);
+  Real y[n];
+  final parameter Integer n = if wMax > 0 then 1 else 2;
+equation
+  for i in 1:n loop
+    y[i] = wMax * time;
+  end for;
+end SGE14;
+//// model: SGE15
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model SGE15
+  parameter Real b = 2;
+  parameter BP bp(IL = 2 * b);
+  Real y[n];
+  final parameter Integer n = if drop(bp, 100) >= 0 then 1 else 2;
+equation
+  for i in 1:n loop
+    y[i] = time;
+  end for;
+end SGE15;
+//// model: SGE16
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model SGE16
+  parameter Real b = 2;
+  parameter BP bp(IL = 2 * b);
+  Real y = time if drop(bp, 100) >= 0;
+end SGE16;
+//// model: SGE17
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model SGE17
+  parameter Real b = 2;
+  parameter BP bp(IL = 2 * b);
+  Real y;
+equation
+  if drop(bp, 100) >= 0 then
+    y = time;
+  else
+    y = 2 * time;
+  end if;
+end SGE17;
+//// model: SGE18
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model SGE18
+  parameter Real b = 2;
+  parameter BP bp(IL = 2 * b);
+  Real y[2];
+equation
+  for i in 1:integer(drop(bp, 100) + 2) loop
+    y[i] = i * time;
+  end for;
+end SGE18;
+//// model: SGE19
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model SGE19
+  parameter BP bp(IL = 4);
+  Real y[n];
+  final parameter Integer n = if drop(bp, 100) >= 0 then 1 else 2;
+equation
+  for i in 1:n loop
+    y[i] = time;
+  end for;
+end SGE19;
+//// model: SGE20
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model SGE20
+  parameter Real b = 2;
+  parameter BP bp(IL = 2 * b);
+  parameter Real w = drop(bp, 100);
+  Real y = w * time;
+end SGE20;
+//// model: SGE21
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model SGE21
+  parameter Real b = 2;
+  parameter Real a = 3;
+  parameter BP bp(IL = 2 * b);
+  parameter Real wMax = a - drop(bp, 100);
+  parameter Real q[:] = {wMax};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n];
+equation
+  for i in 1:n loop
+    y[i] = q[i] * time;
+  end for;
+end SGE21;
+//// model: SGE22
+model SGE22
+  parameter Real b = 2;
+  parameter Real a = 3 * b;
+  parameter Real wMax = a - 1;
+  parameter Real q[:] = {wMax};
+  final parameter Integer n = max([size(q, 1); 1]);
+  Real y[n];
+equation
+  for i in 1:n loop
+    y[i] = q[i] * time;
+  end for;
+end SGE22;
+//// model: SGE23
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model SGE23
+  parameter Real b = 2;
+  parameter BP bp(IL = 2 * b);
+  parameter Real wMax = 3 - drop(bp, 100);
+  Real y[n];
+  final parameter Integer n = max([size({wMax}, 1); 1]);
+equation
+  for i in 1:n loop
+    y[i] = time;
+  end for;
+end SGE23;
+//// model: SGE24
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model SGE24
+  parameter Real b = 2;
+  parameter BP bp(IL = 2 * b);
+  parameter Real wMax = 3 - drop(bp, 100);
+  Real y = wMax * time;
+end SGE24;
+//// model: SGF11
+model SGF11
+  parameter Real r[3] = {0.1, 0.5, 0} annotation(Evaluate = true);
+  Real a[3], b[3], c[3], e[3];
+  Real y;
+equation
+  a = {time, 2 * time, 3 * time};
+  b = a;
+  c = a;
+  e = a;
+  y = e * (a + b + cross(r, c) - cross(r, b));
+end SGF11;
+//// model: SGF12
+model SGF12
+  parameter Real r[3] = {0.1, 0.5, 0} annotation(Evaluate = true);
+  Real b[3], c[3], e[3];
+  Real y;
+equation
+  b = {time, 2 * time, 3 * time};
+  c = b;
+  e = b;
+  y = e * (cross(r, c) - cross(r, b));
+end SGF12;
+//// model: SGF13
+model SGF13
+  parameter Real r[3] = {0.1, 0.5, 0} annotation(Evaluate = true);
+  Real a[3], b[3], c[3], e[3];
+  Real y;
+equation
+  a = {time, 2 * time, 3 * time};
+  b = a;
+  c = a;
+  e = a;
+  y = e * (a + cross(r, c) - cross(r, b));
+end SGF13;
+//// model: SGF14
+model SGF14
+  parameter Real r[3] = {0.1, 0.5, 0} annotation(Evaluate = true);
+  Real a[3], b[3], e[3];
+  Real y;
+equation
+  a = {time, 2 * time, 3 * time};
+  b = a;
+  e = a;
+  y = e * (a - cross(r, b));
+end SGF14;
+//// model: SGF15
+model SGF15
+  parameter Real r[3] = {0.1, 0.5, 0} annotation(Evaluate = true);
+  Real a[3], b[3], c[3], e[3];
+  Real y;
+equation
+  a = {time, 2 * time, 3 * time};
+  b = a;
+  c = a;
+  e = a;
+  y = (a + cross(r, c) - cross(r, b)) * e;
+end SGF15;
+//// model: SGF16
+model SGF16
+  parameter Real r[3] = {0.1, 0.5, 0} annotation(Evaluate = true);
+  Real a[3], b[3], c[3], x[3];
+equation
+  a = {time, 2 * time, 3 * time};
+  b = a;
+  c = a;
+  x = a + cross(r, c) - cross(r, b);
+end SGF16;
+//// model: SGF17
+function f
+  input Real u[3];
+  output Real v[3];
+algorithm
+  v := 2 * u;
+end f;
+model SGF17
+  parameter Real r[3] = {0.1, 0.5, 0} annotation(Evaluate = true);
+  Real a[3], b[3], c[3], e[3];
+  Real y;
+equation
+  a = {time, 2 * time, 3 * time};
+  b = a;
+  c = a;
+  e = a;
+  y = e * (a + b + cross(r, c) - cross(r, f(b)));
+end SGF17;
+//// model: SGF18
+model SGF18
+  parameter Real r[3] = {0.1, 0.5, 0} annotation(Evaluate = true);
+  Real a[3], b[3], c[3], e[3];
+  Real y;
+equation
+  a = {time, 2 * time, 3 * time};
+  b = a;
+  c = a;
+  e = a;
+  y = e * (cross(r, c) + cross(r, b));
+end SGF18;
+//// model: SGF19
+model SGF19
+  Real a[3], b[3], e[3];
+  Real y;
+equation
+  a = {time, 2 * time, 3 * time};
+  b = a;
+  e = a;
+  y = e * ({a[1], a[2], a[3]} - {b[1], b[2], b[3]});
+end SGF19;
+//// model: SGF20
+model SGF20
+  Real a[3], b[3], e[3];
+  Real y;
+equation
+  a = {time, 2 * time, 3 * time};
+  b = a;
+  e = a;
+  y = e * ({a[1] + 1, a[2], a[3]} - {b[1] * 2, b[2], b[3]});
+end SGF20;
+//// model: SGF21
+model SGF21
+  parameter Real r[3] = {0.1, 0.5, 0} annotation(Evaluate = true);
+  Real a[3], b[3], e[3];
+  Real y;
+equation
+  a = {time, 2 * time, 3 * time};
+  b = a;
+  e = a;
+  y = e * (cross(r, a) .- cross(r, b));
+end SGF21;
+//// model: SGF22
+model SGF22
+  parameter Real r[3] = {0.1, 0.5, 0} annotation(Evaluate = true);
+  Real a[3], b[3], e[3];
+  Real y;
+equation
+  a = {time, 2 * time, 3 * time};
+  b = a;
+  e = a;
+  y = e * (2 * cross(r, a) - cross(r, b));
+end SGF22;
+//// model: SGF23
+function f
+  input Real u[3];
+  output Real v[3];
+algorithm
+  v := 2 * u;
+end f;
+model SGF23
+  Real a[3], b[3], e[3];
+  Real y;
+equation
+  a = {time, 2 * time, 3 * time};
+  b = a;
+  e = a;
+  y = e * ({a[1], a[2], a[3]} - f(b));
+end SGF23;
+//// model: SGF24
+function f
+  input Real u[3];
+  output Real v[3];
+algorithm
+  v := 2 * u;
+end f;
+model SGF24
+  parameter Real r[3] = {0.1, 0.5, 0} annotation(Evaluate = true);
+  Real b[3], c[3], x[3];
+equation
+  b = {time, 2 * time, 3 * time};
+  c = b;
+  x = cross(r, f(b)) - cross(r, f(c));
+end SGF24;
+//// model: SGF25
+function f
+  input Real u[3];
+  output Real v[3];
+algorithm
+  v := 2 * u;
+end f;
+model SGF25
+  parameter Real r[3] = {0.1, 0.5, 0} annotation(Evaluate = true);
+  Real a[3], b[3], x[3];
+equation
+  a = {time, 2 * time, 3 * time};
+  b = a;
+  x = a + cross(r, f(b));
+end SGF25;
+//// model: SGF26
+function f
+  input Real u[3];
+  output Real v[3];
+algorithm
+  v := 2 * u;
+end f;
+model SGF26
+  parameter Real r[3] = {0.1, 0.5, 0} annotation(Evaluate = true);
+  Real a[3], b[3], e[3];
+  Real y;
+equation
+  a = {time, 2 * time, 3 * time};
+  b = a;
+  e = a;
+  y = e * ({a[1], a[2], a[3]} + cross(r, f(b)));
+end SGF26;
+//// model: SGF27
+function f
+  input Real u[3];
+  output Real v[3];
+algorithm
+  v := 2 * u;
+end f;
+model SGF27
+  parameter Real r[3] = {0.1, 0.5, 0} annotation(Evaluate = true);
+  Real b[3], c[3], x[3];
+equation
+  b = {time, 2 * time, 3 * time};
+  c = b;
+  x = 2 * cross(r, f(b)) - cross(r, f(c));
+end SGF27;
+//// model: SGF29
+function f
+  input Real u[3];
+  output Real v[3];
+algorithm
+  v := 2 * u;
+end f;
+model SGF29
+  parameter Real r[3] = {0.1, 0.5, 0} annotation(Evaluate = true);
+  Real b[3], c[3], x[3];
+equation
+  b = {time, 2 * time, 3 * time};
+  c = b;
+  x = -cross(r, f(b)) - cross(r, f(c));
+end SGF29;
+//// model: SGF31
+function f
+  input Real u[3];
+  output Real v[3];
+algorithm
+  v := 2 * u;
+end f;
+model SGF31
+  parameter Real r[3] = {0.1, 0.5, 0} annotation(Evaluate = true);
+  Real a[3], b[3], e[3];
+  Real y;
+equation
+  a = {time, 2 * time, 3 * time};
+  b = a;
+  e = a;
+  y = e * ({a[1], a[2], a[3]} .* cross(r, f(b)));
+end SGF31;
+//// model: SGF32
+function f
+  input Real u[3];
+  output Real v[3];
+algorithm
+  v := 2 * u;
+end f;
+model SGF32
+  parameter Real r[3] = {0.1, 0.5, 0} annotation(Evaluate = true);
+  Real a[3], b[3], x[3];
+equation
+  a = {time, 2 * time, 3 * time};
+  b = a;
+  x = {a[1], 0, a[3]} - cross(r, f(b));
+end SGF32;
+//// model: SGF33
+function f
+  input Real u[3];
+  output Real v[3];
+algorithm
+  v := 2 * u;
+end f;
+model SGF33
+  parameter Real r[3] = {0, 0, 0} annotation(Evaluate = true);
+  Real a[3], b[3], x[3];
+equation
+  a = {time, 2 * time, 3 * time};
+  b = a;
+  x = a + cross(r, a) - cross(r, f(b));
+end SGF33;
+//// model: SGF34
+function f
+  input Real u[3];
+  output Real v[3];
+algorithm
+  v := 2 * u;
+end f;
+model SGF34
+  parameter Real r[3] = {0.1, 0.5, 0};
+  Real a[3], b[3], x[3];
+equation
+  a = {time, 2 * time, 3 * time};
+  b = a;
+  x = a + cross(r, a) - cross(r, f(b));
+end SGF34;
+//// model: SGF35
+function f
+  input Real u[3];
+  output Real v[3];
+algorithm
+  v := 2 * u;
+end f;
+model SGF35
+  parameter Real r[3] = {0.1, 0.5, 0} annotation(Evaluate = true);
+  Real a[3], b[3];
+  Real x[3] = a + cross(r, a) - cross(r, f(b));
+equation
+  a = {time, 2 * time, 3 * time};
+  b = a;
+end SGF35;
+//// model: SGF36
+function f
+  input Real u[3];
+  output Real v[3];
+algorithm
+  v := 2 * u;
+end f;
+model SGF36
+  parameter Real r[3] = {0.1, 0.5, 0} annotation(Evaluate = true);
+  Real a[3], b[3], x[3];
+algorithm
+  x := a + cross(r, a) - cross(r, f(b));
+equation
+  a = {time, 2 * time, 3 * time};
+  b = a;
+end SGF36;

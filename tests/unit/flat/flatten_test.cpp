@@ -2011,8 +2011,9 @@ YMC_TEST(flatten_array_attribute_split) {
 YMC_TEST(flatten_array_attribute_split_rejects) {
   // omc 报错的切分形态（BuiltinAttribute24 维不符、Each3 缺 each、标量组件给数组值、多余元素）、无绑定参数缺省取 start
   //（omc 告警，UnboundParameter6）、以及 1.25.0 的两处求值分歧（分歧账本）：切分字面量叶类型混杂时 omc 逐元素各自类型化
-  //（`{1, 2.0}` → `start = 1`、`p = {1, 2, 3.0}` → `a[1].p = 1`，typeSubscriptedExp2 NFTyping.mo:1655-1688）；函数求值把 cref
-  // 实参的数组原地改写（`y := x; y[1] := 0` 改掉调用者的 constant，P8 探针）。都须干净 SKIP。
+  //（`p = {1, 2, 3.0}` → `a[1].p = 1`，typeSubscriptedExp2 NFTyping.mo:1646-1679 v1.25.0；属性上末叶是 Real 的 `{1, 2.0}` 现照
+  // 各叶类型打，见 flatten_split_literal_last_real）；函数求值把 cref 实参的数组原地改写（`y := x; y[1] := 0` 改掉调用者的
+  // constant，P8 探针）。都须干净 SKIP。
   const char* cases[] = {
       "model M\n  Real x[2,2](start = {3, 1});\nend M;\n",
       "model M\n  Real x[3](start = 1);\nend M;\n",
@@ -2020,7 +2021,6 @@ YMC_TEST(flatten_array_attribute_split_rejects) {
       "model M\n  Real x[2](start = {1, 2, 3});\nend M;\n",
       "model A\n  Real n[2];\nend A;\nmodel M\n  A a(each n(fixed = true));\nend M;\n",
       "model M\n  parameter Real x[3](each start = 1.0);\nend M;\n",
-      "model M\n  Real g[2](start = {1, 2.0});\nend M;\n",
       "model A\n  Real p;\nend A;\nmodel M\n  A a[3](p = {1, 2, 3.0});\nend M;\n",
       "function f\n  input Real x[3];\n  output Real y[3];\nalgorithm\n  y := x;\n  y[1] := 0;\nend f;\n"
       "model M\n  constant Real a[3] = {1, 2, 3};\n  Real b[3] = f(a);\nend M;\n",
@@ -2996,12 +2996,12 @@ YMC_TEST(flatten_evaluate_annotation_and_structural_alias) {
   YMC_CHECK_EQ(flatten_src("model E7\n  parameter Real x[3] = {1, 2, 3} annotation(Evaluate = true);\n  Real y = x[2] * time;\nend E7;\n"),
                std::string("class E7\n  final parameter Real x[1] = 1.0;\n  final parameter Real x[2] = 2.0;\n"
                            "  final parameter Real x[3] = 3.0;\n  Real y = 2.0 * time;\nend E7;\n"));
-  // 未做的形态 → SKIP（EV 探针）：fixed = false（omc 忽略 Evaluate）。
-  bool uns = false;
-  const std::string out = flatten_src("model E3\n  parameter Real p(fixed = false) annotation(Evaluate = true);\n  Real x = p * time;\n"
-                                      "initial equation\n  p = 3;\nend E3;\n", &uns);
-  YMC_CHECK(uns);
-  YMC_CHECK_EQ(out, std::string("<unsupported:Evaluate annotation>"));
+  // fixed = false：omc 忽略 Evaluate（isStructuralComponent 的 Component.isFixed 支，NFStructural.mo:74-76 v1.25.0），照普通参数打
+  //（EV 探针 EV3；此前 SKIP，见 flatten_evaluate_true_with_fixed_attribute）。期望 = omc 1.25.0 实跑（2026-10-19）。
+  YMC_CHECK_EQ(flatten_src("model E3\n  parameter Real p(fixed = false) annotation(Evaluate = true);\n  Real x = p * time;\n"
+                           "initial equation\n  p = 3;\nend E3;\n"),
+               std::string("class E3\n  parameter Real p(fixed = false);\n  Real x = p * time;\ninitial equation\n"
+                           "  p = 3.0;\nend E3;\n"));
 }
 
 YMC_TEST(flatten_pre_change_argument_rules) {
@@ -4833,11 +4833,15 @@ YMC_TEST(flatten_builtin_enums_and_library_connectors) {
                            "  final parameter enumeration(never, avoid, default, prefer, always) s = StateSelect.prefer;\n"
                            "  Real x(stateSelect = StateSelect.prefer) = time;\n  Real src.y;\n  input Real u;\nequation\n"
                            "  src.y = u;\n  src.y = time;\nend SST1;\n"));
+  // 更深一层基类 extends 修饰里的 stateSelect 参数：预扫按组件的各层 extends 修饰扫到，参数打 final（SSS1，此前 "stateSelect
+  // parameter not pre-scanned" SKIP）。期望 = omc 1.25.0 实跑（2026-10-19）。
+  YMC_CHECK_EQ(flatten_src("model A\n  Real x = time;\nend A;\nmodel B\n  parameter StateSelect s = StateSelect.prefer;\n"
+                           "  extends A(x(stateSelect = s));\nend B;\nmodel C\n  extends B;\nend C;\nmodel SSS1\n  C c;\n"
+                           "end SSS1;\n"),
+               std::string("class SSS1\n"
+                           "  final parameter enumeration(never, avoid, default, prefer, always) c.s = StateSelect.prefer;\n"
+                           "  Real c.x(stateSelect = StateSelect.prefer) = time;\nend SSS1;\n"));
   for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
-           // 更深一层基类 extends 修饰里的 stateSelect 参数：预扫没扫到（omc 能过，参数打 final），保守 SKIP（SSS1）。
-           {"model A\n  Real x = time;\nend A;\nmodel B\n  parameter StateSelect s = StateSelect.prefer;\n"
-            "  extends A(x(stateSelect = s));\nend B;\nmodel C\n  extends B;\nend C;\nmodel SSS1\n  C c;\n"
-            "end SSS1;\n", "stateSelect parameter not pre-scanned"},
            // 不存在的字面量：omc "Variable StateSelect.foo not found"（SSS2）。
            {"model SSS2\n  parameter StateSelect s = StateSelect.foo;\nend SSS2;\n", "unknown enumeration literal"}}) {
     bool uns = false;
@@ -11736,6 +11740,170 @@ YMC_TEST(flatten_pre_change_enum_literal) {
                            "equation\n  z = pre(c);\nend PVQ12;\n"),
                std::string("class PVQ12\n  constant enumeration(a, b) c = PVQ12E.b;\n  enumeration(a, b) z;\nequation\n"
                            "  z = PVQ12E.b;\nend PVQ12;\n"));
+}
+
+YMC_TEST(flatten_evaluate_true_with_fixed_attribute) {
+  // Evaluate = true 只对"固定"的参数生效（isStructuralComponent 的 Component.isFixed，NFStructural.mo:74-76 v1.25.0）：那一刻
+  // 非 each 的属性子修饰带着 Modifier.propagate 加的切分占位下标（NFInst.mo:1981、NFModifier.mo:486-509；instBinding 包成
+  // SUBSCRIPTED_EXP，NFInst.mo:2744-2752），isFixed（NFComponent.mo:896-922）只认 `each fixed = true`。带别的 fixed 属性的照普通
+  // 参数（数组）打：无绑定的 `each fixed = false` 数组（SGA1；MSL JointRRR 的 n_b，SGA2）、字面量 `fixed = true`（SGA22）；顺依赖判
+  // 固定时 `each fixed = true` 的依赖固定（SGF1，此前当不固定、照打 `p = q`）。期望 = omc 1.25.0 实跑（2026-10-19，探针 pk-p41
+  // SGA1 / SGA2 / SGA22 / SGF1）。
+  YMC_CHECK_EQ(flatten_src("model SGA1\n"
+                           "  parameter Real n[3](each fixed = false, start = {0, 0, 1}) annotation(Evaluate = true);\n"
+                           "  Real y = n[1] * time;\ninitial equation\n  n = {0, 0, 1};\nend SGA1;\n"),
+               std::string("class SGA1\n  parameter Real n[1](start = 0.0, fixed = false);\n"
+                           "  parameter Real n[2](start = 0.0, fixed = false);\n"
+                           "  parameter Real n[3](start = 1.0, fixed = false);\n  Real y = n[1] * time;\n"
+                           "initial equation\n  n[1] = 0.0;\n  n[2] = 0.0;\n  n[3] = 1.0;\nend SGA1;\n"));
+  YMC_CHECK_EQ(flatten_src("model B\n  parameter Real m[3] = {1, 2, 3};\n  Real y = m[1] * time;\nend B;\n"
+                           "model SGA2\n"
+                           "  final parameter Real n[3](each final unit = \"1\", each fixed = false, start = {0, 0, 1})"
+                           " annotation(Evaluate = true);\n"
+                           "  B b(m = n);\ninitial equation\n  n = {0, 0, 1};\nend SGA2;\n"),
+               std::string("class SGA2\n  final parameter Real n[1](unit = \"1\", start = 0.0, fixed = false);\n"
+                           "  final parameter Real n[2](unit = \"1\", start = 0.0, fixed = false);\n"
+                           "  final parameter Real n[3](unit = \"1\", start = 1.0, fixed = false);\n"
+                           "  parameter Real b.m[1] = n[1];\n  parameter Real b.m[2] = n[2];\n"
+                           "  parameter Real b.m[3] = n[3];\n  Real b.y = b.m[1] * time;\ninitial equation\n"
+                           "  n[1] = 0.0;\n  n[2] = 0.0;\n  n[3] = 1.0;\nend SGA2;\n"));
+  YMC_CHECK_EQ(flatten_src("model SGA22\n  parameter Real p(fixed = true) = 3 annotation(Evaluate = true);\n"
+                           "  Real y = p * time;\nend SGA22;\n"),
+               std::string("class SGA22\n  parameter Real p(fixed = true) = 3.0;\n  Real y = p * time;\nend SGA22;\n"));
+  YMC_CHECK_EQ(flatten_src("model SGF1\n  parameter Real q(each fixed = true) = 3;\n"
+                           "  parameter Real p = q annotation(Evaluate = true);\n  Real y = p * time;\nend SGF1;\n"),
+               std::string("class SGF1\n  final parameter Real q(fixed = true) = 3.0;\n"
+                           "  final parameter Real p = 3.0;\n  Real y = 3.0 * time;\nend SGF1;\n"));
+}
+
+YMC_TEST(flatten_start_binding_type_chain_fixed) {
+  // 无绑定参数拿 start 当绑定（updateParameterBinding，NFInst.mo:2351-2388 v1.25.0）：短类链上的 fixed 同样算（isFixed 看组件类实例
+  // 里合并后的属性，NFComponent.mo:896-922）——`fixed = false` 不拿（SGD1 / SGD2，此前打出 `= 1.0`），`fixed = true` 照拿（SGD5）。
+  // 期望 = omc 1.25.0 实跑（2026-10-19，探针 pk-p41 SGD1 / SGD2 / SGD5）。
+  YMC_CHECK_EQ(flatten_src("type FT = Real(fixed = false);\nmodel SGD1\n  parameter FT p(start = 1);\n"
+                           "  Real y = p * time;\ninitial equation\n  p = 2;\nend SGD1;\n"),
+               std::string("class SGD1\n  parameter Real p(start = 1.0, fixed = false);\n  Real y = p * time;\n"
+                           "initial equation\n  p = 2.0;\nend SGD1;\n"));
+  YMC_CHECK_EQ(flatten_src("type FT = Real(fixed = false);\nmodel SGD2\n  parameter FT p[2](start = {1, 2});\n"
+                           "  Real y = p[1] * time;\ninitial equation\n  p = {1, 2};\nend SGD2;\n"),
+               std::string("class SGD2\n  parameter Real p[1](start = 1.0, fixed = false);\n"
+                           "  parameter Real p[2](start = 2.0, fixed = false);\n  Real y = p[1] * time;\n"
+                           "initial equation\n  p[1] = 1.0;\n  p[2] = 2.0;\nend SGD2;\n"));
+  YMC_CHECK_EQ(flatten_src("type FT4 = Real(fixed = true);\nmodel SGD5\n  parameter FT4 p(start = 1);\n"
+                           "  Real y = p * time;\nend SGD5;\n"),
+               std::string("class SGD5\n  parameter Real p(start = 1.0, fixed = true) = 1.0;\n  Real y = p * time;\n"
+                           "end SGD5;\n"));
+}
+
+YMC_TEST(flatten_split_literal_last_real) {
+  // 切分修饰的 Integer / Real 混型字面量、末叶是 Real：各叶各自定型、数组类型取末元素的（typeSubscriptedExp2，NFTyping.mo:1646-1679
+  // v1.25.0）→ 与 Real 属性相容不转型，Integer 叶照打 Integer（SGC1：MSL Joints.RollingWheel 的 `delta_0[3](start = {0, 0,
+  // -radius})`；SGC3；二维 SGC31——首行 {1, 2} 不随末行转）。组件数组修饰分发出来的（末叶要看分发前的整个字面量）未做 → SKIP（SGC41）。
+  // 期望 = omc 1.25.0 实跑（2026-10-19，探针 pk-p41 SGC1 / SGC3 / SGC31 / SGC41）。
+  YMC_CHECK_EQ(flatten_src("model SGC1\n  parameter Real r = 0.3;\n  Real x[3](start = {0, 0, -r});\nequation\n"
+                           "  x = {time, 2 * time, 3 * time};\nend SGC1;\n"),
+               std::string("class SGC1\n  parameter Real r = 0.3;\n  Real x[1](start = 0);\n  Real x[2](start = 0);\n"
+                           "  Real x[3](start = -r);\nequation\n  x[1] = time;\n  x[2] = 2.0 * time;\n"
+                           "  x[3] = 3.0 * time;\nend SGC1;\n"));
+  YMC_CHECK_EQ(flatten_src("model SGC3\n  Real x[3](start = {1, 2, 3.0});\nequation\n"
+                           "  x = {time, 2 * time, 3 * time};\nend SGC3;\n"),
+               std::string("class SGC3\n  Real x[1](start = 1);\n  Real x[2](start = 2);\n  Real x[3](start = 3.0);\n"
+                           "equation\n  x[1] = time;\n  x[2] = 2.0 * time;\n  x[3] = 3.0 * time;\nend SGC3;\n"));
+  YMC_CHECK_EQ(flatten_src("model SGC31\n  Real m[2, 2](start = {{1, 2}, {3, 4.5}});\nequation\n"
+                           "  m = {{time, time}, {time, time}};\nend SGC31;\n"),
+               std::string("class SGC31\n  Real m[1,1](start = 1);\n  Real m[1,2](start = 2);\n"
+                           "  Real m[2,1](start = 3);\n  Real m[2,2](start = 4.5);\nequation\n  m[1,1] = time;\n"
+                           "  m[1,2] = time;\n  m[2,1] = time;\n  m[2,2] = time;\nend SGC31;\n"));
+  bool uns = false;
+  const std::string out = flatten_src("model B\n  Real x[3];\nequation\n  x = {time, 2 * time, 3 * time};\nend B;\n"
+                                      "model SGC41\n  parameter Real r = 0.3;\n  B b[2](x(start = {{0, 0, -r}, {1, 1, r}}));\n"
+                                      "end SGC41;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(out, std::string("<unsupported:mixed-type split modifier literal>"));
+}
+
+YMC_TEST(flatten_state_select_merged_sources) {
+  // stateSelect 属性里的参数只标合并后胜出那个来源里的（Structural.markExp 进 Modifier.binding(c.modifier)，NFInst.mo:3941-3949
+  // v1.25.0）：更深一层基类 extends 修饰里的也扫（SGB1：MSL Fluid AbruptAdaptor 的 m_flow，此前 "not pre-scanned" SKIP）；被外来修饰
+  // 盖掉的（SGB5 extends 修饰、SGB9 嵌套修饰）不标（此前照标 final）；访问组件时标，声明在后的 Evaluate = false 参数那时还没降级
+  //（SGB21）。期望 = omc 1.25.0 实跑（2026-10-19，探针 pk-p41 SGB1 / SGB5 / SGB9 / SGB21）。
+  YMC_CHECK_EQ(flatten_src("model PT\n  Real m_flow(start = 0);\nequation\n  der(m_flow) = 1;\nend PT;\nmodel PL\n"
+                           "  parameter Integer md = 1;\nend PL;\nmodel BM\n"
+                           "  extends PT(m_flow(stateSelect = if md == 1 then StateSelect.default"
+                           " else StateSelect.prefer));\n"
+                           "  extends PL(md = 1);\nend BM;\nmodel AA\n  extends BM;\nend AA;\nmodel SGB1\n  AA a;\n"
+                           "end SGB1;\n"),
+               std::string("class SGB1\n  Real a.m_flow(start = 0.0, stateSelect = StateSelect.default);\n"
+                           "  final parameter Integer a.md = 1;\nequation\n  der(a.m_flow) = 1.0;\nend SGB1;\n"));
+  YMC_CHECK_EQ(flatten_src("model PT\n  Real m_flow(start = 0);\nequation\n  der(m_flow) = 1;\nend PT;\nmodel BM\n"
+                           "  parameter StateSelect s = StateSelect.prefer;\n  extends PT(m_flow(stateSelect = s));\n"
+                           "end BM;\nmodel SGB5\n  BM b(m_flow(stateSelect = StateSelect.never));\nend SGB5;\n"),
+               std::string("class SGB5\n"
+                           "  parameter enumeration(never, avoid, default, prefer, always) b.s = StateSelect.prefer;\n"
+                           "  Real b.m_flow(start = 0.0, stateSelect = StateSelect.never);\nequation\n"
+                           "  der(b.m_flow) = 1.0;\nend SGB5;\n"));
+  YMC_CHECK_EQ(flatten_src("model C\n  Real x(start = 0);\nequation\n  der(x) = 1;\nend C;\nmodel M\n"
+                           "  parameter StateSelect s = StateSelect.prefer;\n  C c(x(stateSelect = s));\nend M;\n"
+                           "model SGB9\n  M m(c(x(stateSelect = StateSelect.never)));\nend SGB9;\n"),
+               std::string("class SGB9\n"
+                           "  parameter enumeration(never, avoid, default, prefer, always) m.s = StateSelect.prefer;\n"
+                           "  Real m.c.x(start = 0.0, stateSelect = StateSelect.never);\nequation\n"
+                           "  der(m.c.x) = 1.0;\nend SGB9;\n"));
+  YMC_CHECK_EQ(flatten_src("model PT\n  Real m_flow(start = 0);\nequation\n  der(m_flow) = 1;\nend PT;\nmodel SGB21\n"
+                           "  extends PT(m_flow(stateSelect = s));\n"
+                           "  parameter StateSelect s = StateSelect.prefer annotation(Evaluate = false);\n"
+                           "end SGB21;\n"),
+               std::string("class SGB21\n  Real m_flow(start = 0.0, stateSelect = StateSelect.prefer);\n"
+                           "  final parameter enumeration(never, avoid, default, prefer, always) s = StateSelect.prefer;\n"
+                           "equation\n  der(m_flow) = 1.0;\nend SGB21;\n"));
+}
+
+YMC_TEST(flatten_array_literal_ew_with_array_calls) {
+  // 含数组调用的两个数组字面量相加减：omc 逐元素合并、各元素照标量化简（simplifyBinaryOp 的 isArray 支 → simplifyBinaryEW，
+  // NFSimplifyExp.mo:946-978 / :1105-1114 v1.25.0；MSL JointUSR 的 f_rod，此前留成 `({…} - {…})`）。期望 = omc 1.25.0 实跑
+  //（2026-10-19，探针 pk-p41 SGF17）。
+  YMC_CHECK_EQ(flatten_src("function f\n  input Real u[3];\n  output Real v[3];\nalgorithm\n  v := 2 * u;\nend f;\n"
+                           "model SGF17\n  parameter Real r[3] = {0.1, 0.5, 0} annotation(Evaluate = true);\n"
+                           "  Real a[3], b[3], c[3], e[3];\n  Real y;\nequation\n  a = {time, 2 * time, 3 * time};\n"
+                           "  b = a;\n  c = a;\n  e = a;\n  y = e * (a + b + cross(r, c) - cross(r, f(b)));\n"
+                           "end SGF17;\n"),
+               std::string("function f\n  input Real[3] u;\n  output Real[3] v;\nalgorithm\n"
+                           "  v := {2.0 * u[1], 2.0 * u[2], 2.0 * u[3]};\nend f;\n\nclass SGF17\n"
+                           "  final parameter Real r[1] = 0.1;\n  final parameter Real r[2] = 0.5;\n"
+                           "  final parameter Real r[3] = 0.0;\n  Real a[1];\n  Real a[2];\n  Real a[3];\n"
+                           "  Real b[1];\n  Real b[2];\n  Real b[3];\n  Real c[1];\n  Real c[2];\n  Real c[3];\n"
+                           "  Real e[1];\n  Real e[2];\n  Real e[3];\n  Real y;\nequation\n  a[1] = time;\n"
+                           "  a[2] = 2.0 * time;\n  a[3] = 3.0 * time;\n  b[1] = a[1];\n  b[2] = a[2];\n"
+                           "  b[3] = a[3];\n  c[1] = a[1];\n  c[2] = a[2];\n  c[3] = a[3];\n  e[1] = a[1];\n"
+                           "  e[2] = a[2];\n  e[3] = a[3];\n"
+                           "  y = e * {a[1] + b[1] + 0.5 * c[3] - 0.5 * f(b)[3], a[2] + b[2] - 0.1 * c[3] + 0.1 * f(b)[3],"
+                           " a[3] + b[3] + 0.1 * c[2] - 0.5 * c[1] - (0.1 * f(b)[2] - 0.5 * f(b)[1])};\n"
+                           "end SGF17;\n"));
+}
+
+YMC_TEST(flatten_record_evaluated_at_typing_time) {
+  // 无绑定的记录参数整个被定型期的求值读到（维里的 `drop(bp, 100)`）：omc 现建记录绑定、把各字段的绑定求值并存回（makeRecordBindingExp
+  // → evalComponentBinding，NFCeval.mo:715-757 / :320-436 v1.25.0），`bp.IL = 2 * b` 打成 `4.0`；未做 → SKIP（SGE11，此前照打
+  // `2.0 * b`）。只在绑定里调用（不进定型期求值）的照常（SGE20）。期望 = omc 1.25.0 实跑（2026-10-19，探针 pk-p41 SGE11 / SGE20）。
+  bool uns = false;
+  const std::string out = flatten_src("record BP\n  parameter Real V = 0;\n  parameter Real IL = 1;\nend BP;\nfunction drop\n"
+                                      "  input BP bp;\n  input Real i;\n  output Real v;\nalgorithm\n  v := bp.V * i / bp.IL;\n"
+                                      "end drop;\nmodel SGE11\n  parameter Real b = 2;\n  parameter Real a = 3;\n"
+                                      "  parameter BP bp(IL = 2 * b);\n  parameter Real wMax = a - drop(bp, 100);\n"
+                                      "  Real y[n];\n  final parameter Integer n = if wMax > 0 then 1 else 2;\nequation\n"
+                                      "  for i in 1:n loop\n    y[i] = wMax * time;\n  end for;\nend SGE11;\n", &uns);
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(out, std::string("<unsupported:record evaluated at typing time>"));
+  YMC_CHECK_EQ(flatten_src("record BP\n  parameter Real V = 0;\n  parameter Real IL = 1;\nend BP;\nfunction drop\n"
+                           "  input BP bp;\n  input Real i;\n  output Real v;\nalgorithm\n  v := bp.V * i / bp.IL;\n"
+                           "end drop;\nmodel SGE20\n  parameter Real b = 2;\n  parameter BP bp(IL = 2 * b);\n"
+                           "  parameter Real w = drop(bp, 100);\n  Real y = w * time;\nend SGE20;\n"),
+               std::string("function BP \"Automatically generated record constructor for BP\"\n"
+                           "  input Real V = 0.0;\n  input Real IL = 1.0;\n  output BP res;\nend BP;\n\n"
+                           "function drop\n  input BP bp;\n  input Real i;\n  output Real v;\nalgorithm\n"
+                           "  v := bp.V * i / bp.IL;\nend drop;\n\nclass SGE20\n  parameter Real b = 2.0;\n"
+                           "  parameter Real bp.V = 0.0;\n  parameter Real bp.IL = 2.0 * b;\n"
+                           "  parameter Real w = drop(bp, 100.0);\n  Real y = w * time;\nend SGE20;\n"));
 }
 
 YMC_TEST_MAIN

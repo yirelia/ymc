@@ -2710,6 +2710,26 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       探针 pk-p40（2101；EFQ / PVQ）——基线上 FAIL 102 / ACCEPTS-INVALID 84，现 PASS 1028 / SKIP 650 / BOTH-REJECT 423（无 PASS→别的）；
       旧组 pk-p39 SKIP→PASS 1；单测 +3、改 1（PXS191 的 SKIP 原因）。slice 703 例 FAIL 0（oracle=live 不一致 0）；scodeinst 664、testsuite
       1839、MSL 490（均不变）/ FAIL 0；探针 12092→14193；单测 509→512。
+- [x] (67g) 四个 MSL 单例卡点（2026-10-19）：
+      (1) PlanarLoops_analytic：Evaluate = true 只对"固定"的参数生效（isStructuralComponent 的 isFixed 支，NFStructural.mo:74-76），判在
+      updateImplicitVariability 访问组件时——非 each 的子修饰在实例化组件时都被 Modifier.propagate 加了切分占位下标（NFInst.mo:1981、
+      propagateSubMod NFModifier.mo:486-509），instBinding 包成 SUBSCRIPTED_EXP（NFInst.mo:2744-2752），isFixed 的 Expression.isTrue 认不出
+      （NFComponent.mo:896-922）：只有 `each fixed = true` 算固定，字面量 `fixed = true` / `fixed = false` / 参数 / 短类链上的都忽略 Evaluate、
+      照普通参数打（MSL JointRRR 的 `final parameter Real n_b[3](each final unit = "1", each fixed = false, start = {0, 0, 1})
+      annotation(Evaluate = true)`）。其后的静默错：两个含数组调用的数组字面量相加减 omc 逐元素合并（simplifyBinaryOp → simplifyBinaryEW，
+      NFSimplifyExp.mo:946-978 / :1105-1114；JointUSR 的 f_rod），ymc 留 `({…} - {…})`——已修。
+      (2) RollingWheel：切分修饰的 Integer / Real 混排字面量末叶是 Real 时各叶照自己的类型打（typeSubscriptedExp2，NFTyping.mo:1646-1679）：
+      `delta_0[3](start = {0, 0, -radius})` → `start = 0`、`start = 0`、`start = -….radius`（只收书写的 Real 属性修饰）。
+      (3) MomentumBalanceFittings：stateSelect 里的参数只标合并后胜出来源里的（外来 > extends 修饰外层在前 > 声明），访问组件时标——预扫描
+      改为逐组件扫 Component::extends_mods 各层（基类的基类里写的也收）与声明、带覆盖判断（此前被盖掉的照标 final，SGB5 等静默错）。下一处：
+      class extends 记录类型（WaterIF97 的 ThermodynamicState）的参数记录绑定（is_plain_data_record 不收）。
+      (4) PositionControlledDCPM：`nout = max([size(q_begin, 1); …])` 的求值链要求记录值实参（`brushVoltageDrop(brushParameters, …)`）的
+      编译期求值，未做 → 照旧 SKIP。
+      顺带：短类链上的 fixed 也算进"无绑定参数拿 start 当绑定"（SGD 静默错）；`each fixed = true` 依赖的固定性；定型期整个被求值的记录
+      （omc 把字段的绑定求值存回）字段打出来不是字面量的 → SKIP（check_record_store_back）。分歧账本「切分修饰的混型字面量」一行随之更新。
+      探针 pk-p41（170；SG*）——基线上 FAIL 25，现 PASS 142 / SKIP 19 / BOTH-REJECT 9；旧组 ev-m1 / md-m3 / rf-ev / ss-s1 / ss-ut / vo-fx /
+      vo-u2 SKIP→PASS 9；单测 +6、改 3（原断言 SKIP 的改为 omc 实跑）。slice 703 例 FAIL 0（oracle=live 不一致 0）；scodeinst 664（不变）；
+      testsuite 1839→1840（simulation/modelica/parameters/revoluteConstraint）/ FAIL 0；**MSL 490→492**（MultiBody Elementary.RollingWheel、Loops.PlanarLoops_analytic）；探针 14193→14363；单测 512→518。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

@@ -814,3 +814,10 @@ Electrical.Batteries.Examples.CCCV_Stack / CCCV_StackRC / ShowImpedance 越过�
 omc 整体保留的向量化调用：fill / 含数组调用的运算式 / 推导式 / if 式实参的取下标形态，体照 simplifyArrayConstructor 化简（收函数之前）；
 书写的推导式在结构参数代入后化简。转 PASS：Magnetic.QuasiStatic…InductionMachines.IMC_Conveyor、Fluid.Examples.BranchingDynamicPipes、
 Fluid.Examples.HeatExchanger.HeatExchangerSimulation。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-19 67g 之后：PASS 492（+2）
+
+Evaluate = true 只对 `each fixed = true` 或无 fixed 属性的参数生效；切分修饰里末叶是 Real 的混排字面量各叶照自己的类型打；两个含数组调用的
+数组字面量逐元素合并；stateSelect 只标合并后胜出来源里的参数。转 PASS：Mechanics.MultiBody.Examples.Elementary.RollingWheel、
+Loops.PlanarLoops_analytic。Fluid.Examples.Explanatory.MomentumBalanceFittings 卡到下一处（class extends 记录类型的参数记录绑定），
+Electrical.Machines…PositionControlledDCPM 照旧（记录值实参的编译期求值）。FAIL / ACCEPTS-INVALID / CRASH 0。
