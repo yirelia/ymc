@@ -828,3 +828,9 @@ Electrical.Machines…PositionControlledDCPM 照旧（记录值实参的编译�
 整体绑定的记录数组元素字段的结构求值。转 PASS：Electrical.Spice3.Examples.Graetz、Fluid.Examples.Explanatory.MomentumBalanceFittings、
 Electrical.Machines.Examples.ControlledDCDrives.PositionControlledDCPM。Batteries CCCV_Stack 卡到下一处（可扩展连接器的数组成员）。
 FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-24 67i 之后：PASS 496（+1）
+
+可扩展连接器里声明的数组成员作 potentially present 连接、嵌套 expandable 数组的 E–E 连接、被删 pp 结构参数照代值。转 PASS：
+Electrical.Batteries.Examples.CCCV_Stack。CCCV_StackRC 卡到下一处：记录数组整体绑定的定型期求值存回（旧静默错，挡成 SKIP）。
+FAIL / ACCEPTS-INVALID / CRASH 0。

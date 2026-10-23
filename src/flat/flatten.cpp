@@ -1393,6 +1393,19 @@ class Flattener {
           // 整体绑定是返回记录数组的用户函数调用、绑定变率 ≤ 结构参数 → 先求值（见 eval_record_array_call），各元素按求得的
           // 记录值拆字段。
           std::optional<CVal> wval;
+          // 元素字段的维读同一元素的兄弟字段（MSL Batteries TransientData.CellData 的 `rcData[nRC]`）、整体绑定又不是逐元素写出的
+          // 数组字面量（推导式 / fill / 别的记录数组 cref …）：omc 定型这个维时字段自身无绑定 → makeRecordFieldBindingFromParent
+          // 把父的整个绑定拿来求值（NFCeval.mo:673-713 v1.25.0），绑定里引到的整个记录随之求值、各字段求得的值存回绑定
+          // （evalComponentBinding，NFCeval.mo:362-389）→ 那些记录的字段打成字面量、if 条件不再标结构参数（RCV 探针 RCV2 / RCV8 /
+          // RCV9；MSL Batteries CCCV_StackRC 的 `cellData[Ns, Np] = {{if … then cellDataDegraded else cellDataOriginal …}}`，
+          // 此前被连接挡住、没露出来的静默错）。存回未做 → SKIP；逐元素写出的字面量 `{c1, c1}` 只取各元素的字段（RCV10，照常）。
+          if (wraw.is_valid() && r == SRestriction::Record) {
+            const Exp& we = I_.absyn.exps[wraw];
+            const bool elem_lit = we.kind == ExpKind::Matrix ||
+                                  (we.kind == ExpKind::Array &&
+                                   !(we.args.size() == 1 && I_.absyn.exps[we.args[0]].kind == ExpKind::Reduction));
+            if (!elem_lit && sibling_dim_field(ci)) { set_unsupported("record array binding evaluated at typing time"); continue; }
+          }
           if (wraw.is_valid() && I_.absyn.exps[wraw].kind == ExpKind::Call &&
               var_min(ctx.var_floor, I_.comps[cid].attributes.variability) != SVariability::Var &&
               var_min(ctx.var_floor, I_.comps[cid].attributes.variability) != SVariability::Discrete &&
@@ -26060,16 +26073,7 @@ class Flattener {
       if (sr == SRestriction::Record && oc_class(sub))   // 离叶最近的超定记录（内层已标的不覆盖）
         for (std::size_t k = before; k < out.size(); ++k)
           if (out[k].oc_len == 0) out[k].oc_len = p.size();
-      if (!sdims.empty())
-        for (std::size_t k = before; k < out.size(); ++k) {
-          ConnMember& m = out[k];
-          if (m.is_stream) return false;   // 数组里的 stream 成员（关联 flow 要带下标）未做
-          std::vector<std::size_t> seg(sdims.size(), mpath.size());   // 子连接器那一段在成员路径里的位置
-          if (m.dim_seg.empty()) seg.insert(seg.end(), m.dims.size(), m.path.size() - 1);
-          else seg.insert(seg.end(), m.dim_seg.begin(), m.dim_seg.end());
-          m.dims.insert(m.dims.begin(), sdims.begin(), sdims.end());
-          m.dim_seg = std::move(seg);
-        }
+      if (!lift_leaf_dims(out, before, sdims, mpath.size())) return false;
     }
     for (NodeId mn : flows) {
       const CompId mc = I_.nodes[mn].comp;
@@ -26112,6 +26116,23 @@ class Flattener {
         p.push_back(I_.nodes[mn].name);
         out.push_back({std::move(p), false, I_.comps[mc].ty.element_type(), std::move(sd), true, fpath, {}, 0});
       }
+    }
+    return true;
+  }
+  // 子连接器数组 / 嵌套 expandable 数组那一段（成员路径第 seg 段）的维 sdims 挂到它递归出的叶 out[before..] 上：维排在前面、
+  // 落在第 seg 段（splitImpl 的 ARRAY 支把维传给元素类型的各叶，NFConnector.mo:359-360 v1.25.0）。数组里的 stream 叶（关联
+  // flow 要带下标）未做 → false。
+  static bool lift_leaf_dims(std::vector<ConnMember>& out, std::size_t before, const std::vector<std::int64_t>& sdims,
+                             std::size_t seg) {
+    if (sdims.empty()) return true;
+    for (std::size_t k = before; k < out.size(); ++k) {
+      ConnMember& m = out[k];
+      if (m.is_stream) return false;
+      std::vector<std::size_t> ds(sdims.size(), seg);
+      if (m.dim_seg.empty()) ds.insert(ds.end(), m.dims.size(), m.path.size() - 1);
+      else ds.insert(ds.end(), m.dim_seg.begin(), m.dim_seg.end());
+      m.dims.insert(m.dims.begin(), sdims.begin(), sdims.end());
+      m.dim_seg = std::move(ds);
     }
     return true;
   }
@@ -26234,6 +26255,29 @@ class Flattener {
     return el.kind == SElementKind::Class && rec_restr(el.restriction) &&
            (el.def.kind == SClassDefKind::Parts ||
             (el.def.kind == SClassDefKind::ClassExtends && I_.class_extends_target.count(e.raw)));
+  }
+  // 类实例 cls 里有没有组件的维引用同类的兄弟组件（`parameter Integer nRC; RCData rcData[nRC]`）：按维式里各 cref 的首段在
+  // cls 里找组件。
+  bool sibling_dim_field(NodeId cls) {
+    auto refs_sibling = [&](auto& self, Id<Exp> e) -> bool {
+      if (!e.is_valid()) return false;
+      const Exp& x = I_.absyn.exps[e];
+      if (x.kind == ExpKind::CrefExp) {
+        const Cref& c = I_.absyn.crefs[x.cref];
+        if (c.leading_dot || c.parts.empty()) return false;
+        const NodeId n = find_local(cls, c.parts[0].name);
+        return n.is_valid() && !I_.nodes[n].is_empty() && I_.nodes[n].kind == NodeKind::Component;
+      }
+      for (Id<Exp> a : x.args) if (self(self, a)) return true;
+      return self(self, x.a) || self(self, x.b) || self(self, x.c);
+    };
+    for (NodeId mn : I_.trees[I_.node_class(cls).tree].components) {
+      if (I_.nodes[mn].kind != NodeKind::Component) continue;
+      const SElement& el = I_.scode.elems[I_.comps[I_.nodes[mn].comp].def];
+      for (const std::vector<Id<Exp>>* ds : {&el.attr.dims, &el.type.dims})
+        for (Id<Exp> d : *ds) if (refs_sibling(refs_sibling, d)) return true;
+    }
+    return false;
   }
   // 记录组件 cid（在类实例 inst_node 里）的实例类登记进 rec_seen_：声明类型是短类定义的——operator record 的短类别名
   //（SI.ComplexVoltage、ComplexOutput）记录类型就是这个最外层短类（makeRecordComplexType，NFInst.mo:2580-2591 v1.25.0），
@@ -26395,8 +26439,15 @@ class Flattener {
       if (pp) {
         kind = EndKind::Declared;
         parent = segs[segs.size() - 2].comp;   // pp 只能在第二段起成立
+        // pp 数组成员（MSL Batteries BusTranscription 的 `connect(gainV.y, stackBusArrays.v)`，`SI.Voltage v[Ns, Np]`）：
+        // makeConnectors 把 cref 展开成逐元素连接器（ExpandExp.expand → Connector.fromExp，NFConnections.mo:207-233 v1.25.0），
+        // 各元素的 cty 取组件节点的、带 POTENTIALLY_PRESENT（fromFacedCref，NFConnector.mo:74-95）→ 逐元素的未声明连接，父 =
+        // ComponentRef.rest（NFExpandableConnectors.mo:262）；exp_set 按节点名去重、markComponentPresent 标的是整个组件节点
+        // （:314-320 / :330-351）→ 整个数组变量都留下（EAM 探针 EAM3：只连 `b.v[1]`，`b.v[2]` 照打）。元素是复合的（连接器 /
+        // 记录数组成员）omc 内部错（Connection.checkBalance 拆出空表，EAM9 / EAM15）→ SKIP。
         const SElement& sel = I_.scode.elems[I_.comps[ccid].def];
-        if (!sel.attr.dims.empty() || !sel.type.dims.empty()) return std::nullopt;   // pp 数组成员属增量 B
+        if ((!sel.attr.dims.empty() || !sel.type.dims.empty()) && I_.comps[ccid].ty.kind == TypeKind::Complex)
+          return std::nullopt;
       }
       if (I_.comps[ccid].ty.kind == TypeKind::Complex) {
         const NodeId conn = class_of(end_node);
@@ -26657,7 +26708,9 @@ class Flattener {
   // 增广后 expandable 连接器的叶成员（Connection.split 对增广类型：makeConnectorType(isExpandable=false) 全在 potentials、
   // 按名升序，splitImpl2 跳过仍 potentially present 的成员，NFConnector.mo:383-392）。未增广过的（不在任何 expandable 集里的
   // 嵌套 expandable）类型仍是 EXPANDABLE_CONNECTOR → splitImpl 记录分支，按组件声明序（:355-360）。
-  bool expandable_leaves(NodeId exp, const std::vector<Symbol>& mpath, std::vector<ConnMember>& out) {
+  // inst：本 expandable 实例的全名链（不带下标），数组成员的参数维按它取发射时记下的实际维（member_dims，同 connector_leaves）。
+  bool expandable_leaves(NodeId exp, const std::vector<Symbol>& mpath, std::vector<ConnMember>& out,
+                         const std::vector<Symbol>& inst) {
     const NodeId cls = class_of(exp);
     if (!cls.is_valid()) return false;
     std::vector<AugMember> mem;
@@ -26681,9 +26734,24 @@ class Flattener {
       if (!sub_exp && !marked_.count(mn.raw)) continue;   // 仍 potentially present → 不拆
       const CompId mc = I_.nodes[mn].comp;
       const SElement& mcel = I_.scode.elems[I_.comps[mc].def];
-      if (!mcel.attr.dims.empty() || !mcel.type.dims.empty()) return false;   // 数组成员属增量 B
       if (I_.comps[mc].attributes.variability != SVariability::Var) return false;
-      if (sub_exp) { if (!expandable_leaves(mn, p, out)) return false; continue; }
+      // 数组成员：splitImpl 的 ARRAY 支把维留在叶上，Connection.scalarize 再行主序摊开（NFConnector.mo:359-360 /
+      // NFConnection.mo:72-94 v1.25.0）——内建元素的 pp 数组成员（EAM 探针 EAM14：`b1.v[1] = b2.v[1]`），嵌套 expandable 数组
+      // （MSL Batteries StackBus 的 `CellBus cellBus[Ns, Np]`：增广后的类型 liftArrayLeftList 到组件维，NFExpandableConnectors.mo:
+      // 418-424，递归出的叶都带上这一段的维）。复合元素的数组成员（连接器 / 记录）omc 拆不平（EAM9 / EAM15）→ SKIP。
+      std::vector<std::int64_t> mdims;
+      if (!mcel.attr.dims.empty() || !mcel.type.dims.empty()) {
+        if (!sub_exp && I_.comps[mc].ty.kind == TypeKind::Complex) return false;
+        if (!member_dims(mcel, scode_scope_of(cls), &inst, I_.nodes[mn].name, mdims)) return false;
+        for (std::int64_t n : mdims) if (n <= 0) return false;
+      }
+      if (sub_exp) {
+        std::vector<Symbol> sub_inst = inst;
+        sub_inst.push_back(I_.nodes[mn].name);
+        const std::size_t before = out.size();
+        if (!expandable_leaves(mn, p, out, sub_inst) || !lift_leaf_dims(out, before, mdims, mpath.size())) return false;
+        continue;
+      }
       if (I_.comps[mc].ty.kind == TypeKind::Complex) {
         const NodeId sub = class_of(mn);
         if (!sub.is_valid()) return false;
@@ -26694,7 +26762,7 @@ class Flattener {
         continue;
       }
       if (I_.comps[mc].attributes.connector != SConnectorType::Potential) return false;
-      out.push_back({std::move(p), false, I_.comps[mc].ty, {}, false, {}, {}, 0});
+      out.push_back({std::move(p), false, I_.comps[mc].ty, std::move(mdims), false, {}, {}, 0});
     }
     return true;
   }
@@ -26758,25 +26826,30 @@ class Flattener {
         return r;
       };
       // getExpandableConnectorsInConnector 前插成降序、配对再前插回升序 → 同名嵌套对按名升序、逐对深度优先并入。
-      auto add_exp = [&](auto& self, XNode a, XNode b) -> void {
+      // 嵌套 expandable 数组（MSL Batteries StackBus 的 `CellBus cellBus[Ns, Np]`）：配对的是整个数组的 cref（prefixCref 不带
+      // 下标，:223-226），其类型是 ARRAY，getExpandableConnectorsInConnector 只认 COMPLEX（:217-231）→ arr：并入后不再往下配。
+      // 一边数组一边标量的同名对未核实 → SKIP。
+      auto add_exp = [&](auto& self, XNode a, XNode b, bool arr) -> void {
         const NodeId na = a.node, nb = b.node;
         const std::vector<Symbol> pa = a.path, pb = b.path;
         const std::vector<std::vector<Id<Expr>>> sa = a.subs, sb = b.subs;
         xmerge(std::move(a), std::move(b));
+        if (arr) return;
         const std::vector<NodeId> la = nested(na), lb = nested(nb);
+        auto is_arr = [&](NodeId m) {
+          const SElement& sel = I_.scode.elems[I_.comps[I_.nodes[m].comp].def];
+          return !sel.attr.dims.empty() || !sel.type.dims.empty();
+        };
         for (NodeId m1 : la)
           for (NodeId m2 : lb) {
             if (I_.nodes[m1].name != I_.nodes[m2].name) continue;
-            for (NodeId m : {m1, m2}) {
-              const SElement& sel = I_.scode.elems[I_.comps[I_.nodes[m].comp].def];
-              if (!sel.attr.dims.empty() || !sel.type.dims.empty()) { set_unsupported("nested expandable connector array"); return; }
-            }
+            if (is_arr(m1) != is_arr(m2)) { set_unsupported("nested expandable connector array"); return; }
             XNode x1{pa, sa, true, m1, nullptr, nullptr}, x2{pb, sb, true, m2, nullptr, nullptr};
             x1.path.push_back(I_.nodes[m1].name);
             x1.subs.resize(x1.path.size());
             x2.path.push_back(I_.nodes[m2].name);
             x2.subs.resize(x2.path.size());
-            self(self, std::move(x1), std::move(x2));
+            self(self, std::move(x1), std::move(x2), is_arr(m1));
             if (result_.unsupported) return;
             break;
           }
@@ -26785,7 +26858,7 @@ class Flattener {
         const ConnInfo& a = rs[i].a;
         const ConnInfo& b = rs[i].b;
         add_exp(add_exp, XNode{a.path, a.subs, true, a.node, nullptr, nullptr},
-                XNode{b.path, b.subs, true, b.node, nullptr, nullptr});
+                XNode{b.path, b.subs, true, b.node, nullptr, nullptr}, false);
         if (result_.unsupported) return;
       }
       for (std::size_t i : U) {
@@ -26886,7 +26959,7 @@ class Flattener {
       }
       for (std::size_t i : E)
         for (ConnInfo* ci : {&rs[i].a, &rs[i].b})
-          if (!expandable_leaves(ci->node, {}, ci->members)) { set_unsupported("expandable connector member"); return; }
+          if (!expandable_leaves(ci->node, {}, ci->members, ci->path)) { set_unsupported("expandable connector member"); return; }
       // 6. 连接表重排（:113-115）：表序 [expandable…, 未声明…, 普通…] → 自然序（合并按其逆）= 普通、未声明、expandable。
       std::vector<Resolved> ordered;
       ordered.reserve(rs.size());
@@ -26908,8 +26981,11 @@ class Flattener {
     std::vector<std::size_t> remap(vars.size(), kGone);
     for (std::size_t i = 0; i < vars.size(); ++i) {
       if (auto pit = var_pp_.find(i); pit != var_pp_.end() &&
-          std::none_of(pit->second.begin(), pit->second.end(), [&](std::uint32_t r) { return marked_.count(r) > 0; }))
+          std::none_of(pit->second.begin(), pit->second.end(), [&](std::uint32_t r) { return marked_.count(r) > 0; })) {
+        if (vars[i].var_kind == FlatVarKind::Parameter || vars[i].var_kind == FlatVarKind::Constant)
+          pp_removed_.emplace(var_key(vars[i]), std::move(vars[i]));   // 结构参数代值用（apply_structural_params）
         continue;
+      }
       remap[i] = nv.size();
       nv.push_back(std::move(vars[i]));
     }
@@ -28999,17 +29075,23 @@ class Flattener {
     std::unordered_map<std::string, Id<Expr>> vals;
     for (const std::string& k : structural_keys_) {
       auto it = var_index_.find(k);
-      if (it == var_index_.end()) { set_unsupported("structural parameter"); return; }   // 未落成标量变量（数组 / 记录）
-      const std::size_t vi = it->second;
-      const TypeKind vk = result_.model.variables[vi].ty.kind;
+      // 不在场被删掉的 pp 参数（expandable 里没连上的 `parameter Integer n`，维 `Real v[n]` 用到；Variable.isPresent 过滤，
+      // NFFlatten.mo:2394-2395 v1.25.0）：变量不打，引用照样代成值（EvalConstants 按组件节点求值，不看压平变量表；EAM 探针
+      // EAM46 `Real z = 2.0`、EAM52 `time > 2.0`、EAM47 的别名 `final parameter Integer m = 2`）。
+      const auto pr = it == var_index_.end() ? pp_removed_.find(k) : pp_removed_.end();
+      if (it == var_index_.end() && pr == pp_removed_.end()) { set_unsupported("structural parameter"); return; }   // 未落成标量变量（数组 / 记录）
+      const FlatVariable& sv = it != var_index_.end() ? result_.model.variables[it->second] : pr->second;
+      const TypeKind vk = sv.ty.kind;
       Id<Expr> lit;
       if (auto cv = const_vals_.find(k); cv != const_vals_.end()) {
         if (std::optional<CVal> c = coerce_to_kind(cv->second, vk)) lit = literal_of(*c);
-      } else if (result_.model.variables[vi].binding.is_valid() && is_lit(result_.model.variables[vi].binding)) {
-        lit = result_.model.variables[vi].binding;
+      } else if (sv.binding.is_valid() && is_lit(sv.binding)) {
+        lit = sv.binding;
       }
       if (!lit.is_valid()) { set_unsupported("structural parameter binding"); return; }
       if (vk == TypeKind::Real) lit = to_real(lit);
+      if (it == var_index_.end()) { vals.emplace(k, lit); continue; }
+      const std::size_t vi = it->second;
       FlatVariable& v = result_.model.variables[vi];
       if (v.var_kind != FlatVarKind::Parameter && v.var_kind != FlatVarKind::Constant) { set_unsupported("structural parameter"); return; }
       if (v.var_kind == FlatVarKind::Parameter) v.is_final = true;
@@ -30004,6 +30086,8 @@ class Flattener {
   std::vector<std::uint32_t> cur_pp_chain_;   // 正在发射的叶组件的 pp 链（flatten_class 设、emit_* 读）
   std::unordered_map<std::size_t, std::vector<std::uint32_t>> var_pp_;   // pp 变量下标 → pp 链
   std::unordered_set<std::uint32_t> marked_;  // markComponentPresent 过的组件节点 raw
+  // 因不在场被删掉的 pp 参数 / 常量（var_key → 原变量）：作结构参数时引用照样代成值（apply_structural_params）。
+  std::unordered_map<std::string, FlatVariable> pp_removed_;
   // 增广成员：decl 有效 = 已声明成员；否则虚成员，vmembers = 其类型的叶表（取自类型来源端，makeVirtualConnector）。
   struct AugMember { Symbol name; NodeId decl; std::vector<ConnMember> vmembers; };
   // expandable 组件节点 → 最后一次增广后的成员表（按名升序，makeConnectorType；节点被数组元素共用，:417-428）。

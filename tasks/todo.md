@@ -2749,6 +2749,23 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       单测 +5。slice 703→704 例（+RecordConstructor1）FAIL 0（oracle=live 不一致 0）；scodeinst 664→665；testsuite 1840→1842
       （scodeinst/RecordConstructor1、simulation/…/ComplexAlgebraicLoop）/ FAIL 0；**MSL 492→495**（Spice3.Examples.Graetz、Fluid.Examples.
       Explanatory.MomentumBalanceFittings、Machines…ControlledDCDrives.PositionControlledDCPM）；探针 14363→14487；单测 518→523。
+- [x] (67i) 可扩展连接器的数组成员（2026-10-24）：
+      (1) expandable 里声明的数组成员（StackBusArrays 的 `SI.Voltage v[Ns, Np]`）作 potentially present 连接：omc 先把 cref 展开成逐元素
+      连接器（makeConnectors NFConnections.mo:207-233），各元素各成一条未声明连接、父 = ComponentRef.rest；markComponentPresent 标整个组件
+      节点（NFExpandableConnectors.mo:330-351），只连了 `b.v[1]` 时 `b.v[2]` 照打。复合元素的数组成员 omc 内部错（checkBalance）→ 两边都拒。
+      (2) 嵌套 expandable 数组（StackBus 的 `CellBus cellBus[Ns, Np]`）参与 E–E 连接：按增广后的类型拆分，数组成员 / 嵌套数组的维挂到叶上
+      按行主序摊（splitImpl 的 ARRAY 支，NFConnector.mo:359-360；Connection.scalarize NFConnection.mo:72-94），嵌套数组整体配对、不再往下
+      （getExpandableConnectorsInConnector 只认 COMPLEX，:217-231）。
+      (3) 没连上的 pp 参数被 isPresent 删掉（NFFlatten.mo:2394-2395），作结构参数时引用处照样代值、不打 final（pp_removed_）。
+      越过连接后 CCCV_StackRC 露出一个与连接无关的旧静默错：记录数组的整体绑定不是逐元素字面量（推导式 / fill / 记录数组 cref）、元素
+      字段的维读同元素的兄弟字段（TransientData 的 `rcData[nRC]`）时，omc 定型期 makeRecordFieldBindingFromParent 求值整个父绑定、存回各
+      字段（NFCeval.mo:673-713 / :362-389）——存回未做，窄门 SKIP "record array binding evaluated at typing time"。
+      照旧 SKIP：EAM20（数组虚元素）、EAM28（omc 打标量虚变量、方程却连 `b2.v[1]`）、EAM56（参差实例）、EAN6。
+      探针 pk-p43（96；EAM / EAN / RCV）——基线上 FAIL 5，现 PASS 80 / SKIP 10 / BOTH-REJECT 6；旧组 cn-n4 SKIP→PASS 1；单测 +3。
+      slice 704 例 FAIL 0（oracle=live 不一致 0）；scodeinst 665、testsuite 1842（均不变）/ FAIL 0；**MSL 495→496**（Batteries.Examples.
+      CCCV_Stack）；探针 14487→14583；单测 523→526。
+- [ ] (67j 候选) 记录数组整体绑定的定型期求值存回（evalComponentBinding 存回语义）：CCCV_StackRC 要它；复现 `$S/pkr67i/rc/RC3.mo` /
+      `RC9.mo` / `RC12.mo`、`rcv.probes` / `rcv2.probes`。标量记录走 if 式 / 推导式绑定触发 makeRecordFieldBindingFromParent 的形态未核实。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

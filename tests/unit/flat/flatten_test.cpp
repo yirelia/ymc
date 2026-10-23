@@ -12071,4 +12071,101 @@ YMC_TEST(flatten_record_array_element_field_condition) {
                            "  else\n    t.y = 2.0;\n  end if;\nend HRE15;\n"));
 }
 
+YMC_TEST(flatten_expandable_declared_array_member) {
+  // expandable 里声明的数组成员（MSL Batteries BusTranscription 的 `connect(gainV.y, stackBusArrays.v)`）：makeConnectors 把 cref
+  // 展开成逐元素的未声明连接（NFConnections.mo:207-233 v1.25.0），markComponentPresent 标整个组件节点（NFExpandableConnectors.mo:
+  // 330-351）→ 只连 `b.v[1]` 时 `b.v[2]` 也留下（EAM3）；E–E 连接按增广后的类型拆，数组成员行主序摊开（EAM14）；没连上的 pp 参数
+  // `b.n` 被删（NFFlatten.mo:2394-2395），作结构参数时引用照样代成值（EAM1 / EAM46 `z = 2.0`）。期望 = omc 1.25.0 实跑
+  //（2026-10-24，探针 pk-p43 EAM3 / EAM1 / EAM14 / EAM46）。
+  YMC_CHECK_EQ(flatten_src("connector EAM3_RO = output Real;\nexpandable connector EAM3_B\n  Real v[2];\n"
+                           "end EAM3_B;\nmodel EAM3\n  EAM3_B b;\n  EAM3_RO y;\nequation\n  connect(y, b.v[1]);\n"
+                           "  y = time;\nend EAM3;\n"),
+               std::string("class EAM3\n  Real b.v[1];\n  Real b.v[2];\n  output Real y;\nequation\n  y = b.v[1];\n"
+                           "  y = time;\nend EAM3;\n"));
+  YMC_CHECK_EQ(flatten_src("connector EAM1_RO = output Real;\nexpandable connector EAM1_B\n"
+                           "  parameter Integer n = 1;\n  Real v[n];\nend EAM1_B;\nblock EAM1_G\n"
+                           "  EAM1_RO y = time;\nend EAM1_G;\nmodel EAM1\n  parameter Integer n = 2;\n"
+                           "  EAM1_B b(n = n);\n  EAM1_G g[n];\nequation\n  connect(g.y, b.v);\nend EAM1;\n"),
+               std::string("class EAM1\n  final parameter Integer n = 2;\n  Real b.v[1];\n  Real b.v[2];\n"
+                           "  Real g[1].y = time;\n  Real g[2].y = time;\nequation\n  g[1].y = b.v[1];\n"
+                           "  g[2].y = b.v[2];\nend EAM1;\n"));
+  YMC_CHECK_EQ(flatten_src("connector EAM14_RO = output Real;\nexpandable connector EAM14_B\n  Real v[2];\n"
+                           "end EAM14_B;\nmodel EAM14\n  EAM14_B b1, b2;\n  EAM14_RO y[2];\nequation\n"
+                           "  connect(b1, b2);\n  connect(y, b1.v);\n  y = {time, 2 * time};\nend EAM14;\n"),
+               std::string("class EAM14\n  Real b1.v[1];\n  Real b1.v[2];\n  Real b2.v[1];\n  Real b2.v[2];\n"
+                           "  output Real y[1];\n  output Real y[2];\nequation\n  b1.v[1] = b2.v[1];\n"
+                           "  b1.v[1] = y[1];\n  b1.v[2] = b2.v[2];\n  b1.v[2] = y[2];\n  y[1] = time;\n"
+                           "  y[2] = 2.0 * time;\nend EAM14;\n"));
+  YMC_CHECK_EQ(flatten_src("connector EAM46_RO = output Real;\nexpandable connector EAM46_B\n"
+                           "  parameter Integer n = 1;\n  Real v[n];\nend EAM46_B;\nmodel EAM46\n"
+                           "  EAM46_B b(n = 2);\n  EAM46_RO y[2];\n  Real z = b.n;\nequation\n  connect(y, b.v);\n"
+                           "  y = {time, 2 * time};\nend EAM46;\n"),
+               std::string("class EAM46\n  Real b.v[1];\n  Real b.v[2];\n  output Real y[1];\n  output Real y[2];\n"
+                           "  Real z = 2.0;\nequation\n  y[1] = b.v[1];\n  y[2] = b.v[2];\n  y[1] = time;\n"
+                           "  y[2] = 2.0 * time;\nend EAM46;\n"));
+}
+
+YMC_TEST(flatten_expandable_nested_array) {
+  // 嵌套 expandable 数组（MSL Batteries StackBus 的 `CellBus cellBus[Ns, Np]`）：E–E 连接配对的是整个数组的 cref、不再往下配
+  //（getExpandableConnectorsInConnector 只认 COMPLEX，NFExpandableConnectors.mo:217-231 v1.25.0）；拆分时数组那一段的维挂到
+  // 递归出的叶上，行主序摊开（splitImpl 的 ARRAY 支，NFConnector.mo:359-360）。EAN4 是 CCCV_Stack 的缩影（单元总线逐元素 E–E、
+  // 嵌套数组成员逐元素未声明连接、声明的数组成员、顶层 E–E）。期望 = omc 1.25.0 实跑（2026-10-24，探针 pk-p43 EAN7 / EAN4）。
+  YMC_CHECK_EQ(flatten_src("connector EAN7_RO = output Real;\nconnector EAN7_RI = input Real;\n"
+                           "expandable connector EAN7_C\n  Real v;\nend EAN7_C;\nexpandable connector EAN7_S\n"
+                           "  EAN7_C c[2];\nend EAN7_S;\nmodel EAN7\n  EAN7_S s1, s2;\n  EAN7_RO y[2];\n"
+                           "  EAN7_RI u[2];\nequation\n  connect(s1, s2);\n  connect(y, s1.c.v);\n"
+                           "  connect(u, s2.c.v);\n  y = {time, 2 * time};\nend EAN7;\n"),
+               std::string("class EAN7\n  Real s1.c[1].v;\n  Real s1.c[2].v;\n  Real s2.c[1].v;\n  Real s2.c[2].v;\n"
+                           "  output Real y[1];\n  output Real y[2];\n  input Real u[1];\n  input Real u[2];\n"
+                           "equation\n  s1.c[1].v = s2.c[1].v;\n  s1.c[1].v = u[1];\n  s1.c[1].v = y[1];\n"
+                           "  s1.c[2].v = s2.c[2].v;\n  s1.c[2].v = u[2];\n  s1.c[2].v = y[2];\n  y[1] = time;\n"
+                           "  y[2] = 2.0 * time;\nend EAN7;\n"));
+  YMC_CHECK_EQ(flatten_src("connector EAN4_RO = output Real;\nconnector EAN4_RI = input Real;\n"
+                           "expandable connector EAN4_C\n  Real v;\n  Real w;\nend EAN4_C;\n"
+                           "expandable connector EAN4_S\n  parameter Integer n = 1;\n  EAN4_C c[n];\nend EAN4_S;\n"
+                           "expandable connector EAN4_A\n  parameter Integer n = 1;\n  Real v[n];\n  Real w[n];\n"
+                           "end EAN4_A;\nmodel EAN4_Cell\n  EAN4_C cb;\n  EAN4_RO y = time;\nequation\n"
+                           "  connect(y, cb.v);\nend EAN4_Cell;\nmodel EAN4_Stack\n  parameter Integer n = 1;\n"
+                           "  EAN4_S s(n = n);\n  EAN4_Cell cell[n];\nequation\n  connect(cell.cb, s.c);\n"
+                           "end EAN4_Stack;\nblock EAN4_Gain\n  EAN4_RI u;\n  EAN4_RO y = u;\nend EAN4_Gain;\n"
+                           "model EAN4_BT\n  parameter Integer n = 1;\n  EAN4_S s(n = n);\n  EAN4_A a(n = n);\n"
+                           "  EAN4_Gain g[n];\nequation\n  connect(g.u, s.c.v);\n  connect(g.y, a.v);\nend EAN4_BT;\n"
+                           "model EAN4\n  EAN4_Stack st(n = 2);\n  EAN4_BT bt(n = 2);\nequation\n"
+                           "  connect(st.s, bt.s);\nend EAN4;\n"),
+               std::string("class EAN4\n  final parameter Integer st.n = 2;\n  Real st.s.c[1].v;\n"
+                           "  Real st.s.c[2].v;\n  Real st.cell[1].cb.v;\n  Real st.cell[1].y = time;\n"
+                           "  Real st.cell[2].cb.v;\n  Real st.cell[2].y = time;\n"
+                           "  final parameter Integer bt.n = 2;\n  Real bt.s.c[1].v;\n  Real bt.s.c[2].v;\n"
+                           "  Real bt.a.v[1];\n  Real bt.a.v[2];\n  Real bt.g[1].u;\n  Real bt.g[1].y = bt.g[1].u;\n"
+                           "  Real bt.g[2].u;\n  Real bt.g[2].y = bt.g[2].u;\nequation\n"
+                           "  st.cell[1].y = st.cell[1].cb.v;\n  st.cell[2].y = st.cell[2].cb.v;\n"
+                           "  bt.g[1].u = bt.s.c[1].v;\n  bt.g[2].u = bt.s.c[2].v;\n  bt.g[1].y = bt.a.v[1];\n"
+                           "  bt.g[2].y = bt.a.v[2];\n  st.cell[1].cb.v = st.s.c[1].v;\n"
+                           "  st.cell[2].cb.v = st.s.c[2].v;\n  st.s.c[1].v = bt.s.c[1].v;\n"
+                           "  st.s.c[2].v = bt.s.c[2].v;\nend EAN4;\n"));
+}
+
+YMC_TEST(flatten_expandable_array_member_skips) {
+  // 复合元素的 pp 数组成员（`Pin p[2]` 在 expandable 里）：omc 内部错（Connection.checkBalance 拆出空表，EAM9）→ SKIP。
+  // 记录数组的整体绑定是推导式、元素字段的维读兄弟字段（`rd[nRC]`，MSL Batteries TransientData 的 `rcData[nRC]`）：omc 定型这个维时
+  // 把父的整个绑定求值（makeRecordFieldBindingFromParent，NFCeval.mo:673-713 v1.25.0），引到的整个记录各字段求得的值存回绑定
+  //（evalComponentBinding，NFCeval.mo:362-389）——存回未做 → SKIP（RCV2，基线静默 FAIL：omc 是 `a.Ti[1,1] = 0.0`、`a.u` 不 final）。
+  // 探针 pk-p43 EAM9 / RCV2（2026-10-24）。
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           {"connector EAM9_P\n  Real v;\n  flow Real i;\nend EAM9_P;\nexpandable connector EAM9_B\n  EAM9_P p[2];\n"
+            "end EAM9_B;\nmodel EAM9\n  EAM9_B b;\n  EAM9_P q[2];\nequation\n  connect(q, b.p);\n  q[1].v = time;\n"
+            "  q[2].v = 2 * time;\nend EAM9;\n", "connect operand shape"},
+           {"package RCV2P\n  record CD\n    parameter Boolean u = true;\n    parameter Real T[:, 2] = [0, 1; 1, 1];\n"
+            "    final parameter Real Ti[:, 2] = if u then [0, 1; 1, 1] else T;\n    parameter Integer nRC = 1;\n"
+            "    parameter Real rd[nRC] = {0};\n  end CD;\n  record SD\n    parameter Integer Ns;\n    parameter CD c1;\n"
+            "    parameter CD cd[Ns] = {c1 for k in 1:Ns};\n  end SD;\nend RCV2P;\nmodel RCV2\n"
+            "  parameter RCV2P.CD a(u = false, T = [0, 0.5; 0.5, 0.7; 1, 1]);\n  parameter RCV2P.SD s(Ns = 1, c1 = a);\n"
+            "end RCV2;\n", "record array binding evaluated at typing time"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
 YMC_TEST_MAIN

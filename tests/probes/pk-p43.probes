@@ -1,0 +1,1564 @@
+//// set: pk-p43 — 67i：MSL Batteries CCCV_Stack / CCCV_StackRC 卡在 expandable 连接器的数组成员上，及其兄弟写法。EAM：expandable 里声明的数组成员（potentially present，`Real v[n]`）作 connect 端：makeConnectors 把 cref 展开成逐元素连接器（ExpandExp.expand → Connector.fromExp，NFConnections.mo:207-233 v1.25.0），各元素 cty 带 POTENTIALLY_PRESENT（fromFacedCref，NFConnector.mo:74-95）→ 逐元素的未声明连接、父 = ComponentRef.rest（NFExpandableConnectors.mo:262）；markComponentPresent 标整个组件节点（:330-351）→ 只连一个元素整个数组也留下（EAM3 / EAM18 / EAM40）；整体 / 切片 / 二维 / for / 组件数组 / 从里从外 / 多处连 / Integer / Boolean / input 前缀 / 带绑定（挪成方程 EAM30 / EAM42）/ 带属性；E–E 连接按增广后类型拆，数组成员行主序摊开（splitImpl 的 ARRAY 支，NFConnector.mo:359-360；EAM14 / EAM25-27 / EAM55 / EAM59 / EAM60）；复合元素的数组成员 omc 内部错（EAM9 / EAM15，BOTH-REJECT）；数组型虚元素（EAM20）、虚成员取自声明的数组成员（EAM28，omc 打标量虚变量却连 `b2.v[1]`）、参差实例（EAM56）照旧 SKIP。没连上的 pp 参数被删（Variable.isPresent，NFFlatten.mo:2394-2395），作结构参数（维 `v[n]`）时引用照样代成值（EAM46 `z = 2.0`、EAM52 `time > 2.0`、EAM47 别名 `final parameter Integer m = 2`；此前 SKIP structural parameter）。EAN：嵌套 expandable 数组（MSL StackBus 的 `CellBus cellBus[Ns, Np]`）：E–E 连接配对整个数组 cref、不再往下配（getExpandableConnectorsInConnector 只认 COMPLEX，NFExpandableConnectors.mo:217-231），拆分时数组段的维挂到递归出的叶上（EAN4 = CCCV_Stack 缩影、EAN7-EAN25：参数维、二维、两层嵌套、三个总线链、嵌套数组里的数组成员、虚成员 EAN8 / EAN24 / EAN25 照 omc 引不存在的 `s1.c[2].x`）；只一边连上（EAN3）/ 一边数组一边标量（EAN17）omc 报错。RCV：越过连接后 CCCV_StackRC 露出的、与连接无关的静默错（基线照样 FAIL）：记录数组的整体绑定不是逐元素字面量（推导式 / fill / 记录数组 cref）、元素字段的维读兄弟字段（`rd[nRC]`，MSL TransientData 的 `rcData[nRC]`）→ omc 定型这个维时把父的整个绑定求值（makeRecordFieldBindingFromParent，NFCeval.mo:673-713），引到的整个记录各字段求得的值存回绑定（evalComponentBinding，NFCeval.mo:362-389；`a.Ti[1,1] = 0.0`、`a.u` 不 final）——存回未做 → SKIP（RCV1 / RCV2 / RCV8 / RCV9 / RCV11），逐元素字面量 `{c1, c1}` 照常（RCV10）。
+//// model: EAM1
+connector EAM1_RO = output Real;
+expandable connector EAM1_B
+  parameter Integer n = 1;
+  Real v[n];
+end EAM1_B;
+block EAM1_G
+  EAM1_RO y = time;
+end EAM1_G;
+model EAM1
+  parameter Integer n = 2;
+  EAM1_B b(n = n);
+  EAM1_G g[n];
+equation
+  connect(g.y, b.v);
+end EAM1;
+//// model: EAM2
+connector EAM2_RO = output Real;
+expandable connector EAM2_B
+  Real v[2];
+end EAM2_B;
+model EAM2
+  EAM2_B b;
+  EAM2_RO y[2];
+equation
+  connect(y, b.v);
+  y = {time, 2 * time};
+end EAM2;
+//// model: EAM3
+connector EAM3_RO = output Real;
+expandable connector EAM3_B
+  Real v[2];
+end EAM3_B;
+model EAM3
+  EAM3_B b;
+  EAM3_RO y;
+equation
+  connect(y, b.v[1]);
+  y = time;
+end EAM3;
+//// model: EAM4
+connector EAM4_RO = output Real;
+expandable connector EAM4_B
+  Real v[2];
+end EAM4_B;
+model EAM4
+  EAM4_B b;
+  EAM4_RO y[2];
+equation
+  connect(y[1], b.v[2]);
+  connect(y[2], b.v[1]);
+  y = {time, 2 * time};
+end EAM4;
+//// model: EAM5
+connector EAM5_RO = output Real;
+expandable connector EAM5_B
+  Real v[3];
+end EAM5_B;
+model EAM5
+  EAM5_B b;
+  EAM5_RO y[2];
+equation
+  connect(y[1:2], b.v[2:3]);
+  y = {time, 2 * time};
+end EAM5;
+//// model: EAM6
+connector EAM6_RO = output Real;
+expandable connector EAM6_B
+  Real v[2];
+  Real w[2];
+end EAM6_B;
+model EAM6
+  EAM6_B b;
+  EAM6_RO y[2];
+equation
+  connect(y, b.v);
+  y = {time, 2 * time};
+end EAM6;
+//// model: EAM7
+connector EAM7_RO = output Real;
+expandable connector EAM7_B
+  Real v[2];
+  Real w[2];
+end EAM7_B;
+model EAM7
+  EAM7_B b;
+  EAM7_RO y[2];
+  Real z = b.v[1];
+equation
+  connect(y, b.w);
+  y = {time, 2 * time};
+end EAM7;
+//// model: EAM8
+connector EAM8_RO = output Real;
+connector EAM8_RI = input Real;
+expandable connector EAM8_B
+  Real v[2];
+end EAM8_B;
+model EAM8
+  EAM8_B b;
+  EAM8_RO y[2];
+  EAM8_RI u[2];
+equation
+  connect(y, b.v);
+  connect(u, b.v);
+  y = {time, 2 * time};
+end EAM8;
+//// model: EAM9
+connector EAM9_P
+  Real v;
+  flow Real i;
+end EAM9_P;
+expandable connector EAM9_B
+  EAM9_P p[2];
+end EAM9_B;
+model EAM9
+  EAM9_B b;
+  EAM9_P q[2];
+equation
+  connect(q, b.p);
+  q[1].v = time;
+  q[2].v = 2 * time;
+end EAM9;
+//// model: EAM10
+connector EAM10_RO = output Real;
+expandable connector EAM10_B
+  input Real v[2];
+end EAM10_B;
+model EAM10
+  EAM10_B b;
+  EAM10_RO y[2];
+equation
+  connect(y, b.v);
+  y = {time, 2 * time};
+end EAM10;
+//// model: EAM11
+connector EAM11_RO = output Real;
+expandable connector EAM11_B
+  Real v[2];
+end EAM11_B;
+model EAM11
+  EAM11_B b[2];
+  EAM11_RO y[2];
+equation
+  connect(y, b[1].v);
+  y = {time, 2 * time};
+end EAM11;
+//// model: EAM12
+connector EAM12_RO = output Real;
+expandable connector EAM12_B
+  Real v[2];
+end EAM12_B;
+expandable connector EAM12_B2
+  EAM12_B sub;
+end EAM12_B2;
+model EAM12
+  EAM12_B2 b;
+  EAM12_RO y[2];
+equation
+  connect(y, b.sub.v);
+  y = {time, 2 * time};
+end EAM12;
+//// model: EAM13
+connector EAM13_RO = output Real;
+expandable connector EAM13_B
+  Real v[2];
+end EAM13_B;
+model EAM13_M
+  EAM13_B b;
+end EAM13_M;
+model EAM13
+  EAM13_M m;
+  EAM13_RO y[2];
+equation
+  connect(y, m.b.v);
+  y = {time, 2 * time};
+end EAM13;
+//// model: EAM14
+connector EAM14_RO = output Real;
+expandable connector EAM14_B
+  Real v[2];
+end EAM14_B;
+model EAM14
+  EAM14_B b1, b2;
+  EAM14_RO y[2];
+equation
+  connect(b1, b2);
+  connect(y, b1.v);
+  y = {time, 2 * time};
+end EAM14;
+//// model: EAM15
+record EAM15_R
+  Real a;
+  Real b;
+end EAM15_R;
+connector EAM15_RC = output EAM15_R;
+expandable connector EAM15_B
+  EAM15_R r[2];
+end EAM15_B;
+model EAM15
+  EAM15_B b;
+  EAM15_RC y[2];
+equation
+  connect(y, b.r);
+  y[1] = EAM15_R(time, 1);
+  y[2] = EAM15_R(2 * time, 2);
+end EAM15;
+//// model: EAM16
+connector EAM16_RO = output Real;
+expandable connector EAM16_B
+  Real v[2, 2];
+end EAM16_B;
+model EAM16
+  EAM16_B b;
+  EAM16_RO y[2, 2];
+equation
+  connect(y, b.v);
+  y = {{time, 2 * time}, {3 * time, 4 * time}};
+end EAM16;
+//// model: EAM17
+connector EAM17_RO = output Real;
+expandable connector EAM17_B
+  Real v[2];
+end EAM17_B;
+model EAM17
+  EAM17_B b;
+  EAM17_RO y[2];
+equation
+  connect(b.v, y);
+  y = {time, 2 * time};
+end EAM17;
+//// model: EAM18
+connector EAM18_RO = output Real;
+expandable connector EAM18_B
+  Real v[2];
+end EAM18_B;
+model EAM18
+  EAM18_B b;
+  EAM18_RO y;
+  Real z = b.v[2];
+equation
+  connect(y, b.v[1]);
+  y = time;
+end EAM18;
+//// model: EAM19
+connector EAM19_RO = output Real;
+expandable connector EAM19_B
+  Real v[2];
+end EAM19_B;
+model EAM19
+  EAM19_B b;
+  EAM19_RO y[2];
+equation
+  for i in 1:2 loop
+    connect(y[i], b.v[i]);
+  end for;
+  y = {time, 2 * time};
+end EAM19;
+//// model: EAM20
+connector EAM20_RO = output Real;
+expandable connector EAM20_B
+  Real v[2];
+end EAM20_B;
+model EAM20
+  EAM20_B b;
+  EAM20_RO y[2];
+equation
+  connect(y, b.w);
+  y = {time, 2 * time};
+end EAM20;
+//// model: EAM21
+connector EAM21_IO = output Integer;
+expandable connector EAM21_B
+  Integer k[2];
+end EAM21_B;
+model EAM21
+  EAM21_B b;
+  EAM21_IO y[2];
+equation
+  connect(y, b.k);
+  y = {1, 2};
+end EAM21;
+//// model: EAM22
+connector EAM22_BO = output Boolean;
+expandable connector EAM22_B
+  Boolean k[2];
+end EAM22_B;
+model EAM22
+  EAM22_B b;
+  EAM22_BO y[2];
+equation
+  connect(y, b.k);
+  y = {time > 0.5, time > 0.7};
+end EAM22;
+//// model: EAM23
+connector EAM23_RO = output Real;
+expandable connector EAM23_B
+  Real v[2];
+  Real s;
+end EAM23_B;
+model EAM23
+  EAM23_B b;
+  EAM23_RO y;
+  Real z = b.v[1];
+equation
+  connect(y, b.s);
+  y = time;
+end EAM23;
+//// model: EAM24
+connector EAM24_RO = output Real;
+expandable connector EAM24_B
+  Real v[2];
+end EAM24_B;
+model EAM24_M
+  EAM24_B b;
+  EAM24_RO y[2];
+equation
+  connect(y, b.v);
+  y = {time, 2 * time};
+end EAM24_M;
+model EAM24
+  EAM24_M m;
+end EAM24;
+//// model: EAM25
+connector EAM25_RO = output Real;
+expandable connector EAM25_B
+  Real v[2];
+end EAM25_B;
+model EAM25_M
+  EAM25_B b;
+  EAM25_RO y[2];
+equation
+  connect(y, b.v);
+  y = {time, 2 * time};
+end EAM25_M;
+model EAM25_N
+  EAM25_B b;
+end EAM25_N;
+model EAM25
+  EAM25_M m1;
+  EAM25_N m2;
+equation
+  connect(m1.b, m2.b);
+end EAM25;
+//// model: EAM26
+connector EAM26_RO = output Real;
+connector EAM26_RI = input Real;
+expandable connector EAM26_B
+  Real v[2];
+end EAM26_B;
+model EAM26
+  EAM26_B b1, b2;
+  EAM26_RO y[2];
+  EAM26_RI u[2];
+equation
+  connect(y, b1.v);
+  connect(u, b2.v);
+  connect(b1, b2);
+  y = {time, 2 * time};
+end EAM26;
+//// model: EAM27
+connector EAM27_RO = output Real;
+expandable connector EAM27_B
+  Real v[2];
+  Real w;
+end EAM27_B;
+model EAM27
+  EAM27_B b1, b2;
+  EAM27_RO y[2];
+  EAM27_RO z;
+equation
+  connect(b1, b2);
+  connect(y, b1.v);
+  connect(z, b2.w);
+  y = {time, 2 * time};
+  z = 3 * time;
+end EAM27;
+//// model: EAM28
+connector EAM28_RO = output Real;
+expandable connector EAM28_B
+  Real v[2];
+end EAM28_B;
+expandable connector EAM28_E
+end EAM28_E;
+model EAM28
+  EAM28_B b1;
+  EAM28_E b2;
+  EAM28_RO y[2];
+equation
+  connect(b1, b2);
+  connect(y, b1.v);
+  y = {time, 2 * time};
+end EAM28;
+//// model: EAM29
+connector EAM29_RO = output Real;
+expandable connector EAM29_B
+  Real v[2](each start = 1, each fixed = true);
+end EAM29_B;
+model EAM29
+  EAM29_B b;
+  EAM29_RO y[2];
+equation
+  connect(y, b.v);
+  y = {time, 2 * time};
+end EAM29;
+//// model: EAM30
+connector EAM30_RO = output Real;
+expandable connector EAM30_B
+  Real v[2] = {1, 2};
+end EAM30_B;
+model EAM30
+  EAM30_B b;
+  EAM30_RO y[2];
+equation
+  connect(y, b.v);
+end EAM30;
+//// model: EAM31
+connector EAM31_RO = output Real;
+expandable connector EAM31_B
+  Real v[2, 2];
+end EAM31_B;
+model EAM31
+  EAM31_B b;
+  EAM31_RO y[2];
+equation
+  connect(y, b.v[1, :]);
+  y = {time, 2 * time};
+end EAM31;
+//// model: EAM32
+connector EAM32_RO = output Real;
+expandable connector EAM32_B
+  Real v[2];
+end EAM32_B;
+model EAM32
+  EAM32_B b;
+  EAM32_RO y[2];
+equation
+  connect(y, b.v[:]);
+  y = {time, 2 * time};
+end EAM32;
+//// model: EAM33
+connector EAM33_RO = output Real;
+expandable connector EAM33_B
+  Real v[2];
+end EAM33_B;
+model EAM33
+  EAM33_B b[2];
+  EAM33_RO y[2];
+equation
+  for i in 1:2 loop
+    connect(y[i], b[i].v[1]);
+  end for;
+  y = {time, 2 * time};
+end EAM33;
+//// model: EAM34
+connector EAM34_RO = output Real;
+expandable connector EAM34_B
+  Real v[2];
+end EAM34_B;
+block EAM34_G
+  EAM34_RO y = time;
+end EAM34_G;
+model EAM34
+  parameter Boolean use = false;
+  EAM34_B b;
+  EAM34_G g[2] if use;
+equation
+  connect(g.y, b.v);
+end EAM34;
+//// model: EAM35
+connector EAM35_RO = output Real;
+expandable connector EAM35_B
+  Real v[2];
+end EAM35_B;
+model EAM35
+  EAM35_B b;
+  EAM35_RO y[3];
+equation
+  connect(y[2:3], b.v);
+  y = {time, 2 * time, 3 * time};
+end EAM35;
+//// model: EAM36
+connector EAM36_RO = output Real;
+expandable connector EAM36_B
+  Real v[2];
+end EAM36_B;
+model EAM36
+protected
+  EAM36_B b;
+public
+  EAM36_RO y[2];
+equation
+  connect(y, b.v);
+  y = {time, 2 * time};
+end EAM36;
+//// model: EAM37
+connector EAM37_RI = input Real;
+expandable connector EAM37_B
+  Real v[2];
+end EAM37_B;
+block EAM37_G
+  EAM37_RI u;
+  Real z = 2 * u;
+end EAM37_G;
+model EAM37
+  EAM37_B b;
+  EAM37_G g[2];
+equation
+  connect(b.v, g.u);
+  b.v = {time, 2 * time};
+end EAM37;
+//// model: EAM38
+connector EAM38_RO = output Real;
+expandable connector EAM38_B
+  parameter Integer n = 1;
+  Real v[n];
+end EAM38_B;
+model EAM38_M
+  parameter Integer n = 1;
+  EAM38_B b(n = n);
+  EAM38_RO y[n];
+equation
+  connect(y, b.v);
+  y = fill(time, n);
+end EAM38_M;
+model EAM38
+  EAM38_M m1(n = 2);
+  EAM38_M m2(n = 3);
+end EAM38;
+//// model: EAM39
+connector EAM39_RO = output Real;
+expandable connector EAM39_B
+  Real v[2];
+end EAM39_B;
+model EAM39
+  EAM39_B b;
+  EAM39_RO y[2];
+  Real s = sum(b.v);
+equation
+  connect(y, b.v);
+  y = {time, 2 * time};
+end EAM39;
+//// model: EAM40
+connector EAM40_RO = output Real;
+expandable connector EAM40_B
+  Real v[2];
+end EAM40_B;
+model EAM40
+  EAM40_B b;
+  EAM40_RO y[2];
+equation
+  connect(y[1], b.v[1]);
+  connect(y[2], b.v[1]);
+  y = {time, 2 * time};
+end EAM40;
+//// model: EAM41
+connector EAM41_RO = output Real;
+expandable connector EAM41_B
+  Real v = 1;
+end EAM41_B;
+model EAM41
+  EAM41_B b;
+  EAM41_RO y;
+equation
+  connect(y, b.v);
+end EAM41;
+//// model: EAM42
+connector EAM42_RO = output Real;
+expandable connector EAM42_B
+  Real v[2] = {1, 2};
+  Real w = 3;
+end EAM42_B;
+model EAM42
+  EAM42_B b;
+  EAM42_RO y[2];
+  EAM42_RO z;
+equation
+  connect(y, b.v);
+  connect(z, b.w);
+end EAM42;
+//// model: EAM43
+connector EAM43_RO = output Real;
+expandable connector EAM43_B
+  Real v[2](start = {1, 2});
+end EAM43_B;
+model EAM43
+  EAM43_B b;
+  EAM43_RO y[2];
+equation
+  connect(y, b.v);
+  y = {time, 2 * time};
+end EAM43;
+//// model: EAM44
+connector EAM44_RO = output Real;
+expandable connector EAM44_B
+  Real v[2];
+end EAM44_B;
+model EAM44
+  EAM44_B b(v(each start = 3));
+  EAM44_RO y[2];
+equation
+  connect(y, b.v);
+  y = {time, 2 * time};
+end EAM44;
+//// model: EAM45
+connector EAM45_RO = output Real;
+expandable connector EAM45_B
+  Real v[2];
+end EAM45_B;
+model EAM45
+  EAM45_B b;
+  EAM45_RO y[2];
+equation
+  connect(y, b.v);
+  b.v[1] = time;
+  b.v[2] = 2 * time;
+end EAM45;
+//// model: EAM46
+connector EAM46_RO = output Real;
+expandable connector EAM46_B
+  parameter Integer n = 1;
+  Real v[n];
+end EAM46_B;
+model EAM46
+  EAM46_B b(n = 2);
+  EAM46_RO y[2];
+  Real z = b.n;
+equation
+  connect(y, b.v);
+  y = {time, 2 * time};
+end EAM46;
+//// model: EAM47
+connector EAM47_RO = output Real;
+expandable connector EAM47_B
+  parameter Integer n = 1;
+  Real v[n];
+end EAM47_B;
+model EAM47
+  EAM47_B b(n = 2);
+  EAM47_RO y[2];
+  parameter Integer m = b.n;
+equation
+  connect(y, b.v);
+  y = {time, 2 * time};
+end EAM47;
+//// model: EAM48
+expandable connector EAM48_B
+  parameter Integer n = 1;
+  Real v[n];
+end EAM48_B;
+model EAM48
+  EAM48_B b(n = 2);
+  Real w[b.n];
+equation
+  w = {time, 2 * time};
+end EAM48;
+//// model: EAM49
+connector EAM49_RO = output Real;
+expandable connector EAM49_B
+  parameter Integer n = 1;
+  Real v[n];
+end EAM49_B;
+model EAM49
+  parameter Integer k = 2;
+  EAM49_B b(n = k);
+  EAM49_RO y[k];
+equation
+  connect(y, b.v);
+  y = fill(time, k);
+end EAM49;
+//// model: EAM50
+connector EAM50_RO = output Real;
+expandable connector EAM50_B
+  parameter Integer n = 1;
+  Real v[n];
+end EAM50_B;
+model EAM50
+  EAM50_B b(n = 2);
+  EAM50_RO y[2];
+equation
+  connect(y, b.v);
+  y = {time, 2 * time};
+end EAM50;
+//// model: EAM51
+connector EAM51_RO = output Real;
+expandable connector EAM51_B
+  parameter Integer n = 2;
+  Real v[n];
+end EAM51_B;
+model EAM51
+  EAM51_B b;
+  EAM51_RO y[2];
+equation
+  connect(y, b.v);
+  y = {time, 2 * time};
+end EAM51;
+//// model: EAM52
+connector EAM52_RO = output Real;
+connector EAM52_IO = output Integer;
+expandable connector EAM52_B
+  parameter Integer n = 2;
+  Real v[n];
+end EAM52_B;
+model EAM52
+  EAM52_B b;
+  EAM52_RO y[2];
+equation
+  connect(y, b.v);
+  y = {time, 2 * time};
+  when time > b.n then
+    reinit(y[1], 0);
+  end when;
+end EAM52;
+//// model: EAM53
+connector EAM53_RO = output Real;
+expandable connector EAM53_B
+  parameter Real g = 3;
+  Real v[2];
+end EAM53_B;
+model EAM53
+  EAM53_B b;
+  EAM53_RO y[2];
+  Real z = b.g * time;
+equation
+  connect(y, b.v);
+  y = {time, 2 * time};
+end EAM53;
+//// model: EAM54
+connector EAM54_RO = output Real;
+expandable connector EAM54_B
+  Real v[2];
+end EAM54_B;
+model EAM54
+  EAM54_B b[2];
+  EAM54_RO y[2, 2];
+equation
+  connect(y, b.v);
+  y = {{time, 2 * time}, {3 * time, 4 * time}};
+end EAM54;
+//// model: EAM55
+connector EAM55_RO = output Real;
+expandable connector EAM55_B
+  Real v[2];
+end EAM55_B;
+model EAM55
+  EAM55_B b1[2], b2[2];
+  EAM55_RO y[2];
+equation
+  connect(b1, b2);
+  connect(y, b1[1].v);
+  y = {time, 2 * time};
+end EAM55;
+//// model: EAM56
+connector EAM56_RO = output Real;
+expandable connector EAM56_B
+  parameter Integer n = 1;
+  Real v[n];
+end EAM56_B;
+model EAM56_M
+  parameter Integer n = 1;
+  EAM56_B b(n = n);
+  EAM56_RO y[n];
+equation
+  connect(y, b.v);
+  y = fill(time, n);
+end EAM56_M;
+model EAM56
+  EAM56_M m[2](n = {2, 3});
+end EAM56;
+//// model: EAM57
+connector EAM57_RO = output Real;
+expandable connector EAM57_B
+  parameter Integer n = 1;
+  Real v[n];
+end EAM57_B;
+model EAM57_M
+  parameter Integer n = 1;
+  EAM57_B b1(n = n), b2(n = n);
+  EAM57_RO y[n];
+equation
+  connect(b1, b2);
+  connect(y, b1.v);
+  y = fill(time, n);
+end EAM57_M;
+model EAM57
+  EAM57_M m[2](n = {2, 3});
+end EAM57;
+//// model: EAM58
+connector EAM58_RO = output Real;
+expandable connector EAM58_B
+  parameter Integer n = 1;
+  Real v[n];
+end EAM58_B;
+model EAM58_M
+  parameter Integer n = 1;
+  EAM58_B b1(n = n), b2(n = n);
+  EAM58_RO y[n];
+equation
+  connect(b1, b2);
+  connect(y, b1.v);
+  y = fill(time, n);
+end EAM58_M;
+model EAM58
+  EAM58_M m[2](each n = 2);
+end EAM58;
+//// model: EAM59
+connector EAM59_RO = output Real;
+expandable connector EAM59_B
+  Real v[2];
+end EAM59_B;
+model EAM59
+  EAM59_B b1, b2, b3;
+  EAM59_RO y[2];
+equation
+  connect(b1, b2);
+  connect(b3, b2);
+  connect(y, b3.v);
+  y = {time, 2 * time};
+end EAM59;
+//// model: EAM60
+connector EAM60_RO = output Real;
+connector EAM60_RI = input Real;
+expandable connector EAM60_B
+  Real v[2];
+end EAM60_B;
+model EAM60_Src
+  EAM60_B bus;
+  EAM60_RO y[2];
+equation
+  connect(y, bus.v);
+  y = {time, 2 * time};
+end EAM60_Src;
+model EAM60_Snk
+  EAM60_B bus;
+  EAM60_RI u[2];
+  Real s = u[1] + u[2];
+equation
+  connect(bus.v, u);
+end EAM60_Snk;
+model EAM60
+  EAM60_Src src;
+  EAM60_Snk snk;
+  EAM60_B b;
+equation
+  connect(src.bus, b);
+  connect(b, snk.bus);
+end EAM60;
+//// model: EAN1
+connector EAN1_RO = output Real;
+expandable connector EAN1_C
+  Real v;
+end EAN1_C;
+expandable connector EAN1_S
+  EAN1_C c[2];
+end EAN1_S;
+model EAN1
+  EAN1_S s;
+  EAN1_RO y[2];
+equation
+  connect(y, s.c.v);
+  y = {time, 2 * time};
+end EAN1;
+//// model: EAN2
+connector EAN2_RO = output Real;
+expandable connector EAN2_C
+  Real v;
+end EAN2_C;
+expandable connector EAN2_S
+  EAN2_C c[2];
+end EAN2_S;
+model EAN2_M
+  EAN2_C cb;
+  EAN2_RO y = time;
+equation
+  connect(y, cb.v);
+end EAN2_M;
+model EAN2
+  EAN2_S s;
+  EAN2_M m[2];
+equation
+  connect(m.cb, s.c);
+end EAN2;
+//// model: EAN3
+connector EAN3_RO = output Real;
+expandable connector EAN3_C
+  Real v;
+end EAN3_C;
+expandable connector EAN3_S
+  EAN3_C c[2];
+end EAN3_S;
+model EAN3
+  EAN3_S s1, s2;
+  EAN3_RO y[2];
+equation
+  connect(s1, s2);
+  connect(y, s1.c.v);
+  y = {time, 2 * time};
+end EAN3;
+//// model: EAN4
+connector EAN4_RO = output Real;
+connector EAN4_RI = input Real;
+expandable connector EAN4_C
+  Real v;
+  Real w;
+end EAN4_C;
+expandable connector EAN4_S
+  parameter Integer n = 1;
+  EAN4_C c[n];
+end EAN4_S;
+expandable connector EAN4_A
+  parameter Integer n = 1;
+  Real v[n];
+  Real w[n];
+end EAN4_A;
+model EAN4_Cell
+  EAN4_C cb;
+  EAN4_RO y = time;
+equation
+  connect(y, cb.v);
+end EAN4_Cell;
+model EAN4_Stack
+  parameter Integer n = 1;
+  EAN4_S s(n = n);
+  EAN4_Cell cell[n];
+equation
+  connect(cell.cb, s.c);
+end EAN4_Stack;
+block EAN4_Gain
+  EAN4_RI u;
+  EAN4_RO y = u;
+end EAN4_Gain;
+model EAN4_BT
+  parameter Integer n = 1;
+  EAN4_S s(n = n);
+  EAN4_A a(n = n);
+  EAN4_Gain g[n];
+equation
+  connect(g.u, s.c.v);
+  connect(g.y, a.v);
+end EAN4_BT;
+model EAN4
+  EAN4_Stack st(n = 2);
+  EAN4_BT bt(n = 2);
+equation
+  connect(st.s, bt.s);
+end EAN4;
+//// model: EAN5
+connector EAN5_RO = output Real;
+expandable connector EAN5_C
+  Real v;
+end EAN5_C;
+expandable connector EAN5_S
+  EAN5_C c[2];
+end EAN5_S;
+model EAN5
+  EAN5_S s;
+  EAN5_RO y;
+equation
+  connect(y, s.c[1].v);
+  y = time;
+end EAN5;
+//// model: EAN6
+connector EAN6_RO = output Real;
+expandable connector EAN6_C
+  Real v;
+end EAN6_C;
+expandable connector EAN6_S
+  EAN6_C c[2];
+end EAN6_S;
+model EAN6
+  EAN6_S s;
+  EAN6_RO y[2];
+equation
+  connect(y, s.c.x);
+  y = {time, 2 * time};
+end EAN6;
+//// model: EAN7
+connector EAN7_RO = output Real;
+connector EAN7_RI = input Real;
+expandable connector EAN7_C
+  Real v;
+end EAN7_C;
+expandable connector EAN7_S
+  EAN7_C c[2];
+end EAN7_S;
+model EAN7
+  EAN7_S s1, s2;
+  EAN7_RO y[2];
+  EAN7_RI u[2];
+equation
+  connect(s1, s2);
+  connect(y, s1.c.v);
+  connect(u, s2.c.v);
+  y = {time, 2 * time};
+end EAN7;
+//// model: EAN8
+connector EAN8_RO = output Real;
+connector EAN8_RI = input Real;
+expandable connector EAN8_C
+end EAN8_C;
+expandable connector EAN8_S
+  EAN8_C c[2];
+end EAN8_S;
+model EAN8
+  EAN8_S s1, s2;
+  EAN8_RO y;
+  EAN8_RI u;
+equation
+  connect(s1, s2);
+  connect(y, s1.c[1].x);
+  connect(u, s2.c[1].x);
+  y = time;
+end EAN8;
+//// model: EAN9
+connector EAN9_RO = output Real;
+connector EAN9_RI = input Real;
+expandable connector EAN9_C
+  Real v;
+end EAN9_C;
+expandable connector EAN9_S
+  parameter Integer n = 1;
+  EAN9_C c[n];
+end EAN9_S;
+model EAN9
+  EAN9_S s1(n = 3), s2(n = 3);
+  EAN9_RO y[3];
+  EAN9_RI u[3];
+equation
+  connect(s1, s2);
+  connect(y, s1.c.v);
+  connect(u, s2.c.v);
+  y = {time, 2 * time, 3 * time};
+end EAN9;
+//// model: EAN10
+connector EAN10_RO = output Real;
+connector EAN10_RI = input Real;
+expandable connector EAN10_C
+  Real v;
+end EAN10_C;
+expandable connector EAN10_M
+  EAN10_C c[2];
+end EAN10_M;
+expandable connector EAN10_S
+  EAN10_M m[2];
+end EAN10_S;
+model EAN10
+  EAN10_S s1, s2;
+  EAN10_RO y[2, 2];
+  EAN10_RI u[2, 2];
+equation
+  connect(s1, s2);
+  connect(y, s1.m.c.v);
+  connect(u, s2.m.c.v);
+  y = {{time, 2 * time}, {3 * time, 4 * time}};
+end EAN10;
+//// model: EAN11
+connector EAN11_RO = output Real;
+connector EAN11_RI = input Real;
+expandable connector EAN11_C
+  Real v;
+end EAN11_C;
+expandable connector EAN11_S
+  EAN11_C c[2];
+end EAN11_S;
+model EAN11
+  EAN11_S s1, s2;
+  EAN11_RO y;
+  EAN11_RI u;
+equation
+  connect(s1.c[1], s2.c[1]);
+  connect(y, s1.c[1].v);
+  connect(u, s2.c[1].v);
+  y = time;
+end EAN11;
+//// model: EAN12
+connector EAN12_RO = output Real;
+connector EAN12_RI = input Real;
+expandable connector EAN12_C
+  Real v;
+end EAN12_C;
+expandable connector EAN12_S
+  EAN12_C c[2, 2];
+end EAN12_S;
+model EAN12
+  EAN12_S s1, s2;
+  EAN12_RO y[2, 2];
+  EAN12_RI u[2, 2];
+equation
+  connect(s1, s2);
+  connect(y, s1.c.v);
+  connect(u, s2.c.v);
+  y = {{time, 2 * time}, {3 * time, 4 * time}};
+end EAN12;
+//// model: EAN13
+connector EAN13_RO = output Real;
+expandable connector EAN13_C
+  Real v;
+end EAN13_C;
+expandable connector EAN13_S
+  EAN13_C c[2];
+end EAN13_S;
+model EAN13
+  EAN13_S s;
+  EAN13_C cb;
+  EAN13_RO y;
+equation
+  connect(s.c[1], cb);
+  connect(y, cb.v);
+  y = time;
+end EAN13;
+//// model: EAN14
+connector EAN14_RO = output Real;
+connector EAN14_RI = input Real;
+expandable connector EAN14_C
+  Real v;
+  Real w;
+end EAN14_C;
+expandable connector EAN14_S
+  EAN14_C c[2];
+end EAN14_S;
+model EAN14
+  EAN14_S s1, s2;
+  EAN14_RO y[2];
+  EAN14_RI u[2];
+  EAN14_RO z;
+  EAN14_RI q;
+equation
+  connect(s1, s2);
+  connect(y, s1.c.v);
+  connect(u, s2.c.v);
+  connect(z, s1.c[2].w);
+  connect(q, s2.c[2].w);
+  y = {time, 2 * time};
+  z = 3 * time;
+end EAN14;
+//// model: EAN15
+connector EAN15_RO = output Real;
+connector EAN15_RI = input Real;
+expandable connector EAN15_C
+  Real v;
+end EAN15_C;
+expandable connector EAN15_S
+  EAN15_C c[2];
+  Real k[2];
+end EAN15_S;
+model EAN15
+  EAN15_S s1, s2;
+  EAN15_RO y[2];
+  EAN15_RI u[2];
+  EAN15_RO z[2];
+equation
+  connect(s1, s2);
+  connect(y, s1.c.v);
+  connect(u, s2.c.v);
+  connect(z, s1.k);
+  y = {time, 2 * time};
+  z = {3 * time, 4 * time};
+end EAN15;
+//// model: EAN16
+connector EAN16_RO = output Real;
+connector EAN16_RI = input Real;
+expandable connector EAN16_C
+  Real v;
+end EAN16_C;
+expandable connector EAN16_S
+  EAN16_C c[2];
+end EAN16_S;
+model EAN16
+  EAN16_S s1, s2, s3;
+  EAN16_RO y[2];
+  EAN16_RI u[2];
+  EAN16_RI q[2];
+equation
+  connect(s1, s2);
+  connect(s2, s3);
+  connect(y, s1.c.v);
+  connect(u, s2.c.v);
+  connect(q, s3.c.v);
+  y = {time, 2 * time};
+end EAN16;
+//// model: EAN17
+connector EAN17_RO = output Real;
+connector EAN17_RI = input Real;
+expandable connector EAN17_C
+  Real v;
+end EAN17_C;
+expandable connector EAN17_S
+  EAN17_C c[2];
+end EAN17_S;
+expandable connector EAN17_T
+  EAN17_C c;
+end EAN17_T;
+model EAN17
+  EAN17_S s1;
+  EAN17_T s2;
+  EAN17_RO y[2];
+  EAN17_RI u;
+equation
+  connect(s1, s2);
+  connect(y, s1.c.v);
+  connect(u, s2.c.v);
+  y = {time, 2 * time};
+end EAN17;
+//// model: EAN18
+connector EAN18_RO = output Real;
+expandable connector EAN18_C
+  Real v[3];
+end EAN18_C;
+expandable connector EAN18_S
+  EAN18_C c[2];
+end EAN18_S;
+model EAN18
+  EAN18_S s;
+  EAN18_RO y[2, 3];
+equation
+  connect(y, s.c.v);
+  y = {{time, 2 * time, 3 * time}, {4 * time, 5 * time, 6 * time}};
+end EAN18;
+//// model: EAN19
+connector EAN19_RO = output Real;
+connector EAN19_RI = input Real;
+expandable connector EAN19_C
+  Real v[3];
+end EAN19_C;
+expandable connector EAN19_S
+  EAN19_C c[2];
+end EAN19_S;
+model EAN19
+  EAN19_S s1, s2;
+  EAN19_RO y[2, 3];
+  EAN19_RI u[2, 3];
+equation
+  connect(s1, s2);
+  connect(y, s1.c.v);
+  connect(u, s2.c.v);
+  y = {{time, 2 * time, 3 * time}, {4 * time, 5 * time, 6 * time}};
+end EAN19;
+//// model: EAN20
+connector EAN20_RO = output Real;
+connector EAN20_RI = input Real;
+expandable connector EAN20_C
+  Real v;
+end EAN20_C;
+expandable connector EAN20_S
+  parameter Integer n = 1;
+  EAN20_C c[n];
+end EAN20_S;
+model EAN20_M
+  parameter Integer n = 1;
+  EAN20_S s1(n = n), s2(n = n);
+  EAN20_RO y[n];
+  EAN20_RI u[n];
+equation
+  connect(s1, s2);
+  connect(y, s1.c.v);
+  connect(u, s2.c.v);
+  y = fill(time, n);
+end EAN20_M;
+model EAN20
+  EAN20_M m1(n = 2), m2(n = 3);
+end EAN20;
+//// model: EAN21
+connector EAN21_RO = output Real;
+connector EAN21_RI = input Real;
+expandable connector EAN21_C
+  Real v;
+end EAN21_C;
+expandable connector EAN21_S
+  parameter Integer n = 1;
+  EAN21_C c[n];
+end EAN21_S;
+model EAN21_M
+  parameter Integer n = 1;
+  EAN21_S s1(n = n), s2(n = n);
+  EAN21_RO y[n];
+  EAN21_RI u[n];
+equation
+  connect(s1, s2);
+  connect(y, s1.c.v);
+  connect(u, s2.c.v);
+  y = fill(time, n);
+end EAN21_M;
+model EAN21
+  EAN21_M m[2](n = {2, 3});
+end EAN21;
+//// model: EAN22
+connector EAN22_RO = output Real;
+connector EAN22_RI = input Real;
+expandable connector EAN22_C
+  Real v;
+end EAN22_C;
+expandable connector EAN22_S
+  EAN22_C c[2];
+end EAN22_S;
+model EAN22
+  EAN22_S s1, s2;
+  EAN22_RO y[2];
+  EAN22_RI u[2];
+  Real z = s2.c[1].v + s2.c[2].v;
+equation
+  connect(s1, s2);
+  connect(y, s1.c.v);
+  connect(u, s2.c.v);
+  y = {time, 2 * time};
+end EAN22;
+//// model: EAN23
+connector EAN23_RO = output Real;
+connector EAN23_RI = input Real;
+expandable connector EAN23_C
+  Real v;
+end EAN23_C;
+expandable connector EAN23_S
+  EAN23_C c[2];
+end EAN23_S;
+model EAN23
+  EAN23_S s1, s2;
+  EAN23_C x[2];
+  EAN23_RO y[2];
+  EAN23_RI u[2];
+equation
+  connect(x, s1.c);
+  connect(s1, s2);
+  connect(y, x.v);
+  connect(u, s2.c.v);
+  y = {time, 2 * time};
+end EAN23;
+//// model: EAN24
+connector EAN24_RO = output Real;
+connector EAN24_RI = input Real;
+expandable connector EAN24_C
+end EAN24_C;
+expandable connector EAN24_S
+  EAN24_C c[2];
+end EAN24_S;
+model EAN24
+  EAN24_S s1, s2;
+  EAN24_RO y[2];
+  EAN24_RI u[2];
+equation
+  connect(s1, s2);
+  connect(y[1], s1.c[1].x);
+  connect(y[2], s1.c[2].x);
+  connect(u[1], s2.c[1].x);
+  connect(u[2], s2.c[2].x);
+  y = {time, 2 * time};
+end EAN24;
+//// model: EAN25
+connector EAN25_RO = output Real;
+connector EAN25_RI = input Real;
+expandable connector EAN25_C
+end EAN25_C;
+expandable connector EAN25_S
+  EAN25_C c[2];
+end EAN25_S;
+model EAN25
+  EAN25_S s1, s2;
+  EAN25_RO y;
+  EAN25_RI u;
+equation
+  connect(s1, s2);
+  connect(y, s1.c[2].x);
+  connect(u, s2.c[1].x);
+  y = time;
+end EAN25;
+//// model: RCV1
+package RCV1P
+  record RD
+    parameter Real R;
+  end RD;
+  record CD
+    parameter Boolean u = true;
+    parameter Real T[:, 2] = [0, 1; 1, 1];
+    final parameter Real Ti[:, 2] = if u then [0, 1; 1, 1] else T;
+    parameter Integer nRC = 1;
+    parameter RD rd[nRC] = {RD(R = 0)};
+  end CD;
+  record SD
+    parameter Integer Ns;
+    parameter CD c1;
+    parameter CD cd[Ns] = {c1 for k in 1:Ns};
+  end SD;
+end RCV1P;
+model RCV1
+  parameter RCV1P.CD a(u = false, T = [0, 0.5; 0.5, 0.7; 1, 1]);
+  parameter RCV1P.SD s(Ns = 1, c1 = a);
+end RCV1;
+//// model: RCV2
+package RCV2P
+  record CD
+    parameter Boolean u = true;
+    parameter Real T[:, 2] = [0, 1; 1, 1];
+    final parameter Real Ti[:, 2] = if u then [0, 1; 1, 1] else T;
+    parameter Integer nRC = 1;
+    parameter Real rd[nRC] = {0};
+  end CD;
+  record SD
+    parameter Integer Ns;
+    parameter CD c1;
+    parameter CD cd[Ns] = {c1 for k in 1:Ns};
+  end SD;
+end RCV2P;
+model RCV2
+  parameter RCV2P.CD a(u = false, T = [0, 0.5; 0.5, 0.7; 1, 1]);
+  parameter RCV2P.SD s(Ns = 1, c1 = a);
+end RCV2;
+//// model: RCV3
+package RCV3P
+  record CD
+    parameter Boolean u = true;
+    parameter Real T[:, 2] = [0, 1; 1, 1];
+    final parameter Real Ti[:, 2] = if u then [0, 1; 1, 1] else T;
+    parameter Integer nRC = 1;
+    parameter Real rd[nRC] = {0};
+  end CD;
+  record SD
+    parameter CD c1;
+    parameter CD cd[1] = {c1};
+  end SD;
+end RCV3P;
+model RCV3
+  parameter RCV3P.CD a(u = false, T = [0, 0.5; 0.5, 0.7; 1, 1]);
+  parameter RCV3P.SD s(c1 = a);
+end RCV3;
+//// model: RCV4
+package RCV4P
+  record CD
+    parameter Boolean u = true;
+    parameter Real T[:, 2] = [0, 1; 1, 1];
+    final parameter Real Ti[:, 2] = if u then [0, 1; 1, 1] else T;
+    parameter Integer nRC = 1;
+    parameter Real rd[nRC] = {0};
+  end CD;
+end RCV4P;
+model RCV4
+  parameter RCV4P.CD a(u = false, T = [0, 0.5; 0.5, 0.7; 1, 1]);
+  parameter RCV4P.CD cd[1] = {a};
+end RCV4;
+//// model: RCV5
+package RCV5P
+  record CD
+    parameter Boolean u = true;
+    parameter Real T[:, 2] = [0, 1; 1, 1];
+    final parameter Real Ti[:, 2] = if u then [0, 1; 1, 1] else T;
+    parameter Integer nRC = 1;
+  end CD;
+end RCV5P;
+model RCV5
+  parameter RCV5P.CD a(u = false, T = [0, 0.5; 0.5, 0.7; 1, 1]);
+  parameter RCV5P.CD cd[1] = {a};
+  Real x[cd[1].nRC];
+equation
+  x = fill(time, cd[1].nRC);
+end RCV5;
+//// model: RCV6
+package RCV6P
+  record CD
+    parameter Boolean u = true;
+    parameter Real T[:, 2] = [0, 1; 1, 1];
+    final parameter Real Ti[:, 2] = if u then [0, 1; 1, 1] else T;
+    parameter Integer nRC = 1;
+  end CD;
+end RCV6P;
+model RCV6
+  parameter RCV6P.CD a(u = false, T = [0, 0.5; 0.5, 0.7; 1, 1]);
+  parameter RCV6P.CD cd = a;
+  Real x[cd.nRC];
+equation
+  x = fill(time, cd.nRC);
+end RCV6;
+//// model: RCV7
+package RCV7P
+  record CD
+    parameter Boolean u = true;
+    parameter Real T[:, 2] = [0, 1; 1, 1];
+    final parameter Real Ti[:, 2] = if u then [0, 1; 1, 1] else T;
+    parameter Integer nRC = 1;
+    parameter Real rd[nRC] = {0};
+  end CD;
+  record SD
+    parameter Integer Ns;
+    parameter CD cd[Ns] = {CD(u = false, T = [0, 0.5; 1, 1]) for k in 1:Ns};
+  end SD;
+end RCV7P;
+model RCV7
+  parameter RCV7P.SD s(Ns = 1);
+end RCV7;
+//// model: RCV8
+package RCV8P
+  record CD
+    parameter Boolean u = true;
+    parameter Real T[:, 2] = [0, 1; 1, 1];
+    final parameter Real Ti[:, 2] = if u then [0, 1; 1, 1] else T;
+    parameter Integer nRC = 1;
+    parameter Real rd[nRC] = {0};
+  end CD;
+  record SD
+    parameter Integer Ns;
+    parameter CD c1;
+    parameter CD cd[Ns] = fill(c1, Ns);
+  end SD;
+end RCV8P;
+model RCV8
+  parameter RCV8P.CD a(u = false, T = [0, 0.5; 0.5, 0.7; 1, 1]);
+  parameter RCV8P.SD s(Ns = 1, c1 = a);
+end RCV8;
+//// model: RCV9
+package RCV9P
+  record CD
+    parameter Boolean u = true;
+    parameter Real T[:, 2] = [0, 1; 1, 1];
+    final parameter Real Ti[:, 2] = if u then [0, 1; 1, 1] else T;
+    parameter Integer nRC = 1;
+    parameter Real rd[nRC] = {0};
+  end CD;
+  record SD
+    parameter Integer Ns;
+    parameter CD c1;
+    parameter CD cs[Ns] = {c1 for k in 1:Ns};
+    parameter CD cd[Ns] = cs;
+  end SD;
+end RCV9P;
+model RCV9
+  parameter RCV9P.CD a(u = false, T = [0, 0.5; 0.5, 0.7; 1, 1]);
+  parameter RCV9P.SD s(Ns = 1, c1 = a);
+end RCV9;
+//// model: RCV10
+package RCV10P
+  record CD
+    parameter Boolean u = true;
+    parameter Real T[:, 2] = [0, 1; 1, 1];
+    final parameter Real Ti[:, 2] = if u then [0, 1; 1, 1] else T;
+    parameter Integer nRC = 1;
+    parameter Real rd[nRC] = {0};
+  end CD;
+  record SD
+    parameter Integer Ns;
+    parameter CD c1;
+    parameter CD cd[2] = {c1, c1};
+  end SD;
+end RCV10P;
+model RCV10
+  parameter RCV10P.CD a(u = false, T = [0, 0.5; 0.5, 0.7; 1, 1]);
+  parameter RCV10P.SD s(Ns = 1, c1 = a);
+end RCV10;
+//// model: RCV11
+package RCV11P
+  record CD
+    parameter Boolean u = true;
+    parameter Real T[:, 2] = [0, 1; 1, 1];
+    final parameter Real Ti[:, 2] = if u then [0, 1; 1, 1] else T;
+    parameter Integer nRC = 1;
+    parameter Real rd[nRC] = {0};
+  end CD;
+  record SD
+    parameter Integer Ns;
+    parameter CD c1;
+    parameter CD cd[Ns] = {c1 for k in 1:Ns};
+  end SD;
+end RCV11P;
+model RCV11
+  parameter RCV11P.CD a(u = false, T = [0, 0.5; 0.5, 0.7; 1, 1], nRC = 2, rd = {1, 2});
+  parameter RCV11P.SD s(Ns = 2, c1 = a);
+end RCV11;
