@@ -1,0 +1,1252 @@
+//// set: pk-p44 — 67j：定型期求值的存回（Ceval.evalComponentBinding 把求得的值存回组件绑定，NFCeval.mo:362-389 v1.25.0），压平在定型之后 → 定型期（维、条件组件的条件，及方程 / 绑定里同样在定型期求值的 fill / zeros / ones 维实参 NFBuiltinCall.mo:973-977、数组构造子范围 NFCall.mo:2510-2515、`:` 维要的数组 if 选支 NFTyping.mo:1744-1771）被求值、又没被标结构的参数照打求得的字面量、不 final；Evaluate = true（SBK31）、if 方程条件（SBK32）、for 范围（SBK33）在压平期求、看不出。SBK1-SBK30：经父记录整体绑定取值的字段（makeRecordFieldBindingFromParent NFCeval.mo:673-713；子组件不要绑定 NFInst.mo:1982-1983）——父是记录引用只求 `src.f`（SBK1 / SBK2 链上 `c = 2 * d` 一路存回）、构造只取那个实参（SBK3 / SBK20，NFExpression.mo:5638-5643）、if 整个求选中的支（SBK4 / SBK15）、隔层的整个求 `src.p1`（SBK5 / SBK6 / SBK9-SBK12 / SBK16）、条件组件（SBK7）、子模型修饰（SBK21）、枚举 / Boolean / Integer / String 字段（SBK22）、函数（SBK23）、protected（SBK24）、final 字段（SBK25）、outer（SBK26）；基线静默 FAIL 25 个。SBK38-SBK44：整个记录（函数实参 `drop(bp, 100)`）——无绑定的逐字段求（makeRecordBindingExp :715-757，SBK38）、有整体绑定的整个存回（SBK41）。SBK45-SBK59：非记录的同一机制（fill / zeros / 推导式范围 / `:` 维的数组 if），基线静默 FAIL 9 个（`m = integer(c)` 的 c 照打 `2.0`）。SBK60 / SBK61：算法段里 fill 的维实参 omc 不标不求（inAlgorithm 守卫 NFBuiltinCall.mo:965）、`fill(time, m)` 照留 → SKIP（基线静默 FAIL）。SBK62-SBK64：外层记录有整体绑定时重声明的记录字段带自己的缺省绑定定型（redeclareComponent 用 useBinding = true，NFInst.mo:2186-2187；`s2.c.T` 只有缺省的 2 个元素、`s2.c.k` 经自己的 `m = 2 * k` 成了 final）→ SKIP（基线静默 FAIL；MSL CCCV_StackRC 的 `stack.stackData.cellDataOriginal.OCV_SOC` 2×2 即此）。SBK65-SBK69：两支不相容的数组 if 的条件压平时才标结构（flattenConditionalArrayIfExp NFFlatten.mo:1733-1737），绑定已在定型期存回的不再标（`a.u` 不 final；别处也标过的照 final，SBK68）。SBK70-SBK82：记录数组——元素字段的维读兄弟字段时下标是切分占位，推导式 / fill 整个求值（applySubscriptArrayConstructor 只认单个下标 NFExpression.mo:1617-1629），逐元素字面量 / 构造只取字段（SBK73 / SBK78），值拆自外层整体绑定的求 `s.cd` 整个（SBK70）。基线 FAIL 43 → 0（39 PASS、4 SKIP），SKIP→PASS 8
+//// model: SBK1
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK1
+  parameter Real c = 2;
+  parameter BP bp(IL = 2 * c);
+  parameter BP bp2 = bp;
+  Real y[n];
+  final parameter Integer n = if bp2.IL > 2 then 1 else 2;
+equation
+  y = fill(time, n);
+end SBK1;
+//// model: SBK2
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK2
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter BP bp(IL = 2 * c);
+  parameter BP bp2 = bp;
+  Real y[n];
+  final parameter Integer n = if bp2.IL > 2 then 1 else 2;
+equation
+  y = fill(time, n);
+end SBK2;
+//// model: SBK3
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK3
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter BP bp2 = BP(IL = 2 * c);
+  Real y[n];
+  final parameter Integer n = if bp2.IL > 2 then 1 else 2;
+equation
+  y = fill(time, n);
+end SBK3;
+//// model: SBK4
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK4
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter Boolean p = true;
+  parameter BP bpa(IL = 2 * c);
+  parameter BP bpb(V = d + 1);
+  parameter BP bp2 = if p then bpa else bpb;
+  Real y[n];
+  final parameter Integer n = if bp2.IL > 2 then 1 else 2;
+equation
+  y = fill(time, n);
+end SBK4;
+//// model: SBK5
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+record SD
+  parameter BP c;
+end SD;
+model SBK5
+  parameter Real d = 1;
+  parameter Real c0 = 2 * d;
+  parameter BP a(IL = 2 * c0);
+  parameter SD s(c = a);
+  parameter SD s2 = s;
+  Real y[n];
+  final parameter Integer n = if s2.c.IL > 2 then 1 else 2;
+equation
+  y = fill(time, n);
+end SBK5;
+//// model: SBK6
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+record SD
+  parameter BP c;
+end SD;
+model SBK6
+  parameter Real d = 1;
+  parameter Real c0 = 2 * d;
+  parameter SD s(c = BP(IL = 2 * c0, V = d));
+  parameter SD s2 = s;
+  Real y[n];
+  final parameter Integer n = if s2.c.IL > 2 then 1 else 2;
+equation
+  y = fill(time, n);
+end SBK6;
+//// model: SBK7
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK7
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter BP bp(IL = 2 * c);
+  parameter BP bp2 = bp;
+  Real z = time if bp2.IL > 2;
+end SBK7;
+//// model: SBK8
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK8
+  Real y[n];
+  final parameter Integer n = if bp2.IL > 2 then 1 else 2;
+  parameter BP bp2 = bp;
+  parameter BP bp(IL = 2 * c);
+  parameter Real c = 2 * d;
+  parameter Real d = 1;
+equation
+  y = fill(time, n);
+end SBK8;
+//// model: SBK9
+package SBK9P
+  record CD
+    parameter Real T[:, 2] = [0, 1; 1, 1];
+    parameter Integer n = 1;
+    parameter Real r[n] = fill(0, n);
+  end CD;
+  record SD
+    parameter CD c;
+  end SD;
+end SBK9P;
+model SBK9
+  parameter SBK9P.CD a(T = [0, 1; 0.5, 0.7; 1, 1], n = 2, r = {1, 2});
+  parameter SBK9P.SD s(c = a);
+  parameter SBK9P.SD s2 = s;
+end SBK9;
+//// model: SBK10
+package SBK10P
+  record CD
+    parameter Real T[:] = {1, 2};
+    parameter Integer n = 1;
+    parameter Real r[n] = fill(0, n);
+  end CD;
+  record SD
+    parameter CD c;
+  end SD;
+end SBK10P;
+model SBK10
+  parameter SBK10P.CD a(T = {1, 2, 3}, n = 2, r = {1, 2});
+  parameter SBK10P.SD s(c = a);
+  parameter SBK10P.SD s2 = s;
+end SBK10;
+//// model: SBK11
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+record SD
+  parameter BP c;
+end SD;
+model SBK11
+  parameter Real d = 1;
+  parameter Real c0 = 2 * d;
+  parameter BP a(IL = 2 * c0);
+  parameter SD s(c = a);
+  parameter SD s2 = s;
+  parameter SD s3 = s2;
+  Real y[n];
+  final parameter Integer n = if s3.c.IL > 2 then 1 else 2;
+equation
+  y = fill(time, n);
+end SBK11;
+//// model: SBK12
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+record SD
+  parameter BP c;
+  parameter Real z = 1;
+end SD;
+model SBK12
+  parameter Real d = 1;
+  parameter Real c0 = 2 * d;
+  parameter Real q = 3 * d;
+  parameter BP a(IL = 2 * c0);
+  parameter SD s2 = SD(c = a, z = q);
+  Real y[n];
+  final parameter Integer n = if s2.c.IL > 2 then 1 else 2;
+equation
+  y = fill(time, n);
+end SBK12;
+//// model: SBK13
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK13
+  parameter Real e = 2 annotation(Evaluate = false);
+  parameter Real d = 1;
+  parameter BP bp(IL = 2 * e, V = d * 2);
+  parameter BP bp2 = bp;
+  Real y[n];
+  final parameter Integer n = if bp2.V > 1 then 1 else 2;
+equation
+  y = fill(time, n);
+end SBK13;
+//// model: SBK14
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK14
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter BP bp(IL = 2 * c);
+  parameter BP bp2 = bp;
+  Real y[n];
+  Real z = bp2.IL * time + bp.IL + c;
+  final parameter Integer n = if bp2.IL > 2 then 1 else 2;
+equation
+  y = fill(time, n);
+end SBK14;
+//// model: SBK15
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK15
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter Boolean p = false;
+  parameter BP bpa(IL = 2 * c);
+  parameter BP bpb(V = d + 1, IL = 3 * c);
+  parameter BP bp2 = if p then bpa else bpb;
+  Real z = time if bp2.IL > 2;
+end SBK15;
+//// model: SBK16
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+record SD
+  parameter BP c;
+  parameter Real z = 1;
+end SD;
+model SBK16
+  parameter Real d = 1;
+  parameter Real q = 2 * d;
+  parameter SD s(c(IL = 2 * q), z = 3 * q);
+  parameter SD s2 = s;
+  Real y[n];
+  final parameter Integer n = if s2.c.IL > 2 then 1 else 2;
+equation
+  y = fill(time, n);
+end SBK16;
+//// model: SBK17
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK17
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter BP bp(IL = 2 * c);
+  parameter BP bp2 = bp;
+  parameter Integer n = if bp2.IL > 2 then 1 else 2;
+  Real y[n];
+equation
+  y = fill(time, n);
+end SBK17;
+//// model: SBK18
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK18
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter BP bp(IL = 2 * c);
+  parameter BP bp2 = bp;
+  Real y[if bp2.IL > 2 then 1 else 2];
+equation
+  y = fill(time, size(y, 1));
+end SBK18;
+//// model: SBK19
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK19
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter BP bp(IL = 2 * c);
+  parameter BP bp2 = bp;
+  parameter Real w = bp2.IL;
+  Real y[integer(w)];
+equation
+  y = fill(time, integer(w));
+end SBK19;
+//// model: SBK20
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK20
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter BP bp2 = BP(IL = 3, V = 2 * c);
+  Real y[n];
+  final parameter Integer n = if bp2.IL > 2 then 1 else 2;
+equation
+  y = fill(time, n);
+end SBK20;
+//// model: SBK21
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model Sub
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter BP bp(IL = 2 * c);
+  parameter BP bp2 = bp;
+  Real y[n];
+  final parameter Integer n = if bp2.IL > 2 then 1 else 2;
+equation
+  y = fill(time, n);
+end Sub;
+model SBK21
+  Sub s(d = 3);
+end SBK21;
+//// model: SBK22
+type E = enumeration(a, b, c);
+record BP
+  parameter Integer k = 1;
+  parameter Boolean f = false;
+  parameter E e = E.a;
+  parameter String s = "x";
+  parameter Real IL = 1;
+end BP;
+model SBK22
+  parameter Integer m = 2;
+  parameter Boolean g = true;
+  parameter BP bp(k = m + 1, f = not g, e = if g then E.b else E.c, IL = m * 1.5);
+  parameter BP bp2 = bp;
+  Real y[n];
+  final parameter Integer n = if bp2.k > 2 then 1 else 2;
+  Real z[n2];
+  final parameter Integer n2 = if bp2.f or bp2.e == E.c then 1 else 2;
+equation
+  y = fill(time, n);
+  z = fill(time, n2);
+end SBK22;
+//// model: SBK23
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function g
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x + 1;
+end g;
+model SBK23
+  parameter Real d = 1;
+  parameter Real c = g(d);
+  parameter BP bp(IL = g(c));
+  parameter BP bp2 = bp;
+  Real y[n];
+  final parameter Integer n = if bp2.IL > 2 then 1 else 2;
+equation
+  y = fill(time, n);
+end SBK23;
+//// model: SBK24
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK24
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter BP bp(IL = 2 * c);
+  parameter BP bp2 = bp;
+  Real y[n];
+  final parameter Integer n = if bp2.IL > 2 then 1 else 2;
+  Real w = bp2.V * time;
+protected
+  parameter Real hidden = 3 * c;
+equation
+  y = fill(time, n);
+end SBK24;
+//// model: SBK25
+record BP
+  parameter Real V = 0;
+  final parameter Real IL = 1;
+end BP;
+model SBK25
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter BP bp(V = 2 * c);
+  parameter BP bp2 = bp;
+  Real y[n];
+  final parameter Integer n = if bp2.V > 2 then 1 else 2;
+equation
+  y = fill(time, n);
+end SBK25;
+//// model: SBK26
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK26I
+  outer parameter BP bpo;
+  parameter BP bp2 = bpo;
+  Real y[n];
+  final parameter Integer n = if bp2.IL > 2 then 1 else 2;
+equation
+  y = fill(time, n);
+end SBK26I;
+model SBK26
+  inner parameter BP bpo(IL = 2 * c);
+  parameter Real c = 2;
+  SBK26I i;
+end SBK26;
+//// model: SBK27
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK27
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter BP bp(IL = 2 * c);
+  parameter BP bp2 = bp;
+  parameter Integer n = if bp2.IL > 2 then 1 else 2;
+  Real y[n] = fill(time, n);
+  Real z[if bp2.V > 0 then 1 else 2] = fill(time, 2);
+end SBK27;
+//// model: SBK28
+record BP
+  parameter Real V = 0;
+  parameter Real T[2] = {1, 2};
+end BP;
+model SBK28
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter BP bp(T = {c, 2 * c});
+  parameter BP bp2 = bp;
+  Real y[n];
+  final parameter Integer n = if bp2.T[2] > 3 then 1 else 2;
+equation
+  y = fill(time, n);
+end SBK28;
+//// model: SBK29
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK29
+  parameter Real e = 2 annotation(Evaluate = false);
+  parameter BP bp(IL = 2 * e);
+  parameter BP bp2 = bp;
+  Real y[n];
+  final parameter Integer n = if bp2.IL > 2 then 1 else 2;
+equation
+  y = fill(time, n);
+end SBK29;
+//// model: SBK30
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model Sub
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter BP bp(IL = 2 * c);
+  parameter BP bp2 = bp;
+  Real y[n];
+  final parameter Integer n = if bp2.IL > 2 then 1 else 2;
+equation
+  y = fill(time, n);
+end Sub;
+model SBK30
+  Sub s[2];
+end SBK30;
+//// model: SBK31
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK31
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter BP bp(IL = 2 * c);
+  parameter BP bp2 = bp;
+  parameter Real w = bp2.IL annotation(Evaluate = true);
+  Real y = w * time;
+end SBK31;
+//// model: SBK32
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK32
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter BP bp(IL = 2 * c);
+  parameter BP bp2 = bp;
+  Real y;
+equation
+  if bp2.IL > 2 then
+    y = time;
+  else
+    y = 2 * time;
+  end if;
+end SBK32;
+//// model: SBK33
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK33
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter BP bp(IL = 2 * c);
+  parameter BP bp2 = bp;
+  Real y[2];
+equation
+  for i in 1:integer(bp2.IL) - 2 loop
+    y[i] = time;
+  end for;
+end SBK33;
+//// model: SBK34
+model SBK34
+  final parameter Real w = p + 1;
+  parameter Real p = 2 * q;
+  parameter Real q = 1;
+end SBK34;
+//// model: SBK35
+model SBK35
+  parameter Real p = 2 * q;
+  parameter Real q = 1;
+  final parameter Real w = p + 1;
+end SBK35;
+//// model: SBK36
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model SBK36
+  parameter Real c = 2;
+  parameter Real wMax = 3 - drop(bp, 100);
+  parameter BP bp(IL = 2 * c);
+  Real y;
+equation
+  if wMax > 2 then
+    y = time;
+  else
+    y = 2 * time;
+  end if;
+end SBK36;
+//// model: SBK37
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK37
+  parameter Real c = 2;
+  parameter BP bp(IL = 2 * c);
+  Real y[n];
+  final parameter Integer n = if bp.IL > 2 then 1 else 2;
+equation
+  y = fill(time, n);
+end SBK37;
+//// model: SBK38
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model SBK38
+  parameter Real d = 1;
+  parameter Real b = 2 * d;
+  parameter Real a = 3;
+  parameter BP bp(IL = 2 * b);
+  parameter Real wMax = a - drop(bp, 100);
+  Real y[n];
+  final parameter Integer n = if wMax > 0 then 1 else 2;
+equation
+  y = fill(time, n);
+end SBK38;
+//// model: SBK39
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model SBK39
+  parameter Real d = 1;
+  parameter Real b = 2 * d;
+  parameter BP bp(IL = 2 * b);
+  Real y = time if drop(bp, 100) >= 0;
+end SBK39;
+//// model: SBK40
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model SBK40
+  parameter Real d = 1;
+  parameter Real b = 2 * d;
+  parameter BP bp(IL = 2 * b);
+  Real y[1];
+equation
+  y = fill(time, integer(drop(bp, 100)) + 1);
+end SBK40;
+//// model: SBK41
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model SBK41
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter BP bp(IL = 2 * c);
+  parameter BP bp2 = bp;
+  Real y[integer(drop(bp2, 1)) + 1] = fill(time, 1);
+end SBK41;
+//// model: SBK42
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+function drop
+  input BP bp;
+  input Real i;
+  output Real v;
+algorithm
+  v := bp.V * i / bp.IL;
+end drop;
+model SBK42
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter Real e = 3 * d;
+  parameter BP bp2 = BP(IL = 2 * c, V = e);
+  Real y[integer(drop(bp2, 0)) + 1] = fill(time, 1);
+end SBK42;
+//// model: SBK43
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+record SD
+  parameter BP c;
+  parameter Real z = 1;
+end SD;
+function f
+  input SD s;
+  output Real v;
+algorithm
+  v := s.c.IL + s.z;
+end f;
+model SBK43
+  parameter Real d = 1;
+  parameter Real q = 2 * d;
+  parameter SD s(c(IL = 2 * q), z = 3 * q);
+  Real y[integer(f(s)) - 9] = fill(time, 1);
+end SBK43;
+//// model: SBK44
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+record SD
+  parameter BP c;
+  parameter Real z = 1;
+end SD;
+function f
+  input SD s;
+  output Real v;
+algorithm
+  v := s.c.IL + s.z;
+end f;
+model SBK44
+  parameter Real d = 1;
+  parameter Real q = 2 * d;
+  parameter BP a(IL = 2 * q);
+  parameter SD s(c = a, z = 3 * q);
+  Real y[integer(f(s)) - 9] = fill(time, 1);
+end SBK44;
+//// model: SBK45
+model SBK45
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter Integer m = integer(c);
+  Real y[2];
+equation
+  y = fill(time, m);
+end SBK45;
+//// model: SBK46
+model SBK46
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter Integer m = integer(c);
+  Real y[2];
+equation
+  y = zeros(m) + {time, time};
+end SBK46;
+//// model: SBK47
+model SBK47
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter Integer m = integer(c);
+  Real x[2] = fill(time, m);
+end SBK47;
+//// model: SBK48
+model SBK48
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter Integer m = integer(c);
+  Real z[:] = if m > 1 then {time, 2} else {1};
+end SBK48;
+//// model: SBK49
+model SBK49
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter Integer m = integer(c);
+  parameter Real z[:] = if m > 1 then {1, 2} else {1};
+end SBK49;
+//// model: SBK50
+model SBK50
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter Integer m = integer(c);
+  Real y[3];
+equation
+  y = {time for i in 1:m + 1};
+end SBK50;
+//// model: SBK51
+model SBK51
+  parameter Integer m = integer(c);
+  parameter Real c = 2 * d;
+  parameter Real d = 1;
+  Real y[2];
+equation
+  y = fill(time, m);
+end SBK51;
+//// model: SBK52
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK52
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter BP bp(IL = 2 * c);
+  parameter BP bp2 = bp;
+  Real y[2];
+equation
+  y = fill(time, if bp2.IL > 2 then 2 else 2);
+end SBK52;
+//// model: SBK53
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK53
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter BP bp(IL = 2 * c);
+  parameter BP bp2 = bp;
+  Real y[2] = fill(time, integer(bp2.IL) - 2);
+end SBK53;
+//// model: SBK54
+model SBK54
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter Integer m = integer(c);
+  parameter Real z[2] = if m > 1 then {1, 2} else {1};
+end SBK54;
+//// model: SBK55
+model SBK55
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter Integer m = integer(c);
+  Real z[2];
+equation
+  z = if m > 1 then {time, 2} else {1};
+end SBK55;
+//// model: SBK56
+model SBK56
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter Integer m = integer(c);
+  Real y[2] = {time, time};
+  Real z = size(y, m - 1);
+end SBK56;
+//// model: SBK57
+model SBK57
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter Integer m = integer(c);
+  Real x[:] = fill(time, m);
+end SBK57;
+//// model: SBK58
+model SBK58
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter Integer m = integer(c);
+  Real x = time if m > 1;
+end SBK58;
+//// model: SBK59
+model SBK59
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter Integer m = integer(c);
+  Real y[2];
+equation
+  y = cat(m - 1, {time}, {time});
+end SBK59;
+//// model: SBK60
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK60
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter BP bp(IL = 2 * c);
+  parameter BP bp2 = bp;
+  Real y[2];
+algorithm
+  y := fill(time, integer(bp2.IL) - 2);
+end SBK60;
+//// model: SBK61
+model SBK61
+  parameter Integer m = 2;
+  Real y[2];
+  Real z[2];
+algorithm
+  y := fill(time, 2);
+  z := fill(time, m);
+end SBK61;
+//// model: SBK62
+package SBK62P
+  record CD
+    parameter Real T[:] = {1, 2};
+    parameter Integer n = 1;
+    parameter Real r[n] = fill(0, n);
+  end CD;
+  record BSD
+    replaceable parameter CD c;
+  end BSD;
+  record SD
+    extends BSD(redeclare CD c);
+  end SD;
+end SBK62P;
+model SBK62
+  parameter SBK62P.CD a(T = {1, 2, 3}, n = 2, r = {1, 2});
+  parameter SBK62P.SD s(c = a);
+  parameter SBK62P.SD s2 = s;
+end SBK62;
+//// model: SBK63
+package SBK63P
+  record CD
+    parameter Real k = 1;
+    parameter Real m = 2 * k;
+  end CD;
+  record BSD
+    replaceable parameter CD c;
+  end BSD;
+  record SD
+    extends BSD(redeclare CD c);
+  end SD;
+end SBK63P;
+model SBK63
+  parameter SBK63P.CD a(k = 3);
+  parameter SBK63P.SD s(c = a);
+  parameter SBK63P.SD s2 = s;
+  Real y[integer(s2.c.m)] = fill(time, integer(s2.c.m));
+end SBK63;
+//// model: SBK64
+package SBK64P
+  record CD
+    parameter Real T[:] = {1, 2};
+    parameter Real k = 1;
+  end CD;
+  record BSD
+    replaceable parameter CD c;
+  end BSD;
+  record SD
+    extends BSD(redeclare CD c);
+  end SD;
+  model St
+    replaceable parameter BSD sd;
+  end St;
+end SBK64P;
+model SBK64
+  parameter SBK64P.CD a(T = {1, 2, 3}, k = 2);
+  parameter SBK64P.SD s(c = a);
+  SBK64P.St st(redeclare SBK64P.SD sd = s);
+end SBK64;
+//// model: SBK65
+package SBK65P
+  record CD
+    parameter Boolean u = true;
+    parameter Real T[:] = {1, 2};
+    final parameter Real Ti[:] = if u then {1, 2} else T;
+    parameter Integer n = 1;
+  end CD;
+  record SD
+    parameter CD c;
+  end SD;
+end SBK65P;
+model SBK65
+  parameter SBK65P.CD a(u = false, T = {3, 4, 5}, n = 2);
+  parameter SBK65P.SD s(c = a);
+  parameter SBK65P.SD s2 = s;
+  Real y[s2.c.n] = fill(time, s2.c.n);
+end SBK65;
+//// model: SBK66
+package SBK66P
+  record CD
+    parameter Boolean u = true;
+    parameter Real T[:] = {1, 2};
+    final parameter Real Ti[:] = if u then {1, 2} else T;
+    parameter Integer n = 1;
+  end CD;
+end SBK66P;
+model SBK66
+  parameter SBK66P.CD a(u = false, T = {3, 4, 5}, n = 2);
+  parameter SBK66P.CD b = a;
+  Real y[b.n] = fill(time, b.n);
+end SBK66;
+//// model: SBK67
+package SBK67P
+  record CD
+    parameter Boolean u = true;
+    parameter Real T[:] = {1, 2};
+    final parameter Real Ti[:] = if u then {1, 2} else T;
+    parameter Integer n = 1;
+  end CD;
+  record SD
+    parameter CD c;
+  end SD;
+end SBK67P;
+model SBK67
+  parameter SBK67P.CD a(u = false, T = {3, 4, 5}, n = 2);
+  parameter SBK67P.SD s(c = a);
+  parameter SBK67P.SD s2 = s;
+  Real y[s2.c.n] = fill(time, s2.c.n);
+  Real z = if a.u then 1 else 2;
+end SBK67;
+//// model: SBK68
+package SBK68P
+  record CD
+    parameter Boolean u = true;
+    parameter Real T[:] = {1, 2};
+    final parameter Real Ti[:] = if u then {1, 2} else T;
+    parameter Integer n = 1;
+  end CD;
+  record SD
+    parameter CD c;
+  end SD;
+end SBK68P;
+model SBK68
+  parameter SBK68P.CD a(u = false, T = {3, 4, 5}, n = 2);
+  parameter SBK68P.SD s(c = a);
+  parameter SBK68P.SD s2 = s;
+  Real y[s2.c.n] = fill(time, s2.c.n);
+  Real w[if a.u then 1 else 2] = fill(time, 2);
+end SBK68;
+//// model: SBK69
+package SBK69P
+  record CD
+    parameter Boolean u = true;
+    parameter Real T[:] = {1, 2};
+    final parameter Real Ti[:] = if u then {1, 2} else T;
+    parameter Integer n = 1;
+  end CD;
+  function f
+    input CD c;
+    output Integer k;
+  algorithm
+    k := c.n;
+  end f;
+end SBK69P;
+model SBK69
+  parameter SBK69P.CD a(u = false, T = {3, 4, 5}, n = 2);
+  Real y[SBK69P.f(a)] = fill(time, SBK69P.f(a));
+end SBK69;
+//// model: SBK70
+package SBK70P
+  record CD
+    parameter Integer nRC = 1;
+    parameter Real rd[nRC] = fill(0, nRC);
+    parameter Real k = 1;
+  end CD;
+  record SD
+    parameter Integer Ns;
+    parameter CD c1;
+    parameter CD cd[Ns] = {c1 for i in 1:Ns};
+  end SD;
+end SBK70P;
+model SBK70
+  parameter Real q = 2;
+  parameter Real p = 2 * q;
+  parameter SBK70P.CD a(nRC = 2, rd = {1, 2}, k = 2 * p);
+  parameter SBK70P.SD s(Ns = 1, c1 = a);
+  parameter SBK70P.SD s2 = s;
+end SBK70;
+//// model: SBK71
+package SBK71P
+  record CD
+    parameter Integer nRC = 1;
+    parameter Real rd[nRC] = fill(0, nRC);
+    parameter Real k = 1;
+  end CD;
+  record SD
+    parameter Integer Ns;
+    parameter CD c1;
+    parameter CD cd[Ns] = fill(c1, Ns);
+  end SD;
+end SBK71P;
+model SBK71
+  parameter Real q = 2;
+  parameter Real p = 2 * q;
+  parameter SBK71P.CD a(nRC = 2, rd = {1, 2}, k = 2 * p);
+  parameter SBK71P.SD s(Ns = 2, c1 = a);
+end SBK71;
+//// model: SBK72
+package SBK72P
+  record CD
+    parameter Integer nRC = 1;
+    parameter Real rd[nRC] = fill(0, nRC);
+    parameter Real k = 1;
+  end CD;
+end SBK72P;
+model SBK72
+  parameter Real q = 2;
+  parameter Real p = 2 * q;
+  parameter SBK72P.CD a(nRC = 2, rd = {1, 2}, k = 2 * p);
+  parameter SBK72P.CD cds[2] = {a, a};
+  parameter SBK72P.CD cd2[2] = cds;
+end SBK72;
+//// model: SBK73
+package SBK73P
+  record CD
+    parameter Integer nRC = 1;
+    parameter Real rd[nRC] = fill(0, nRC);
+    parameter Real k = 1;
+  end CD;
+end SBK73P;
+model SBK73
+  parameter Real q = 2;
+  parameter Real p = 2 * q;
+  parameter SBK73P.CD a(nRC = 2, rd = {1, 2}, k = 2 * p);
+  parameter SBK73P.CD cds[2] = {a, SBK73P.CD(nRC = 2, rd = {3, 4}, k = 3 * p)};
+end SBK73;
+//// model: SBK74
+package SBK74P
+  record CD
+    parameter Integer nRC = 1;
+    parameter Real rd[nRC] = fill(0, nRC);
+    parameter Real k = 1;
+  end CD;
+  record SD
+    parameter Integer Ns;
+    parameter CD c1;
+    parameter CD c2;
+    parameter CD cd[Ns] = {if i == 1 then c2 else c1 for i in 1:Ns};
+  end SD;
+end SBK74P;
+model SBK74
+  parameter Real q = 2;
+  parameter Real p = 2 * q;
+  parameter SBK74P.CD a(nRC = 2, rd = {1, 2}, k = 2 * p);
+  parameter SBK74P.CD b(nRC = 2, rd = {5, 6}, k = 3 * p);
+  parameter SBK74P.SD s(Ns = 2, c1 = a, c2 = b);
+end SBK74;
+//// model: SBK75
+package SBK75P
+  record CD
+    parameter Integer nRC = 1;
+    parameter Real k = 1;
+  end CD;
+  function f
+    input CD c;
+    output Integer n;
+  algorithm
+    n := c.nRC;
+  end f;
+end SBK75P;
+model SBK75
+  parameter Real q = 2;
+  parameter Real p = 2 * q;
+  parameter SBK75P.CD a(nRC = 2, k = 2 * p);
+  parameter SBK75P.CD cds[2] = {a, a};
+  Real y[SBK75P.f(cds[1])] = fill(time, 2);
+end SBK75;
+//// model: SBK76
+package SBK76P
+  record CD
+    parameter Boolean u = true;
+    parameter Real T[:] = {1, 2};
+    final parameter Real Ti[:] = if u then {1, 2} else T;
+    parameter Integer nRC = 1;
+    parameter Real rd[nRC] = fill(0, nRC);
+  end CD;
+  record SD
+    parameter Integer Ns;
+    parameter CD c1;
+    parameter CD c2;
+    parameter CD cd[Ns] = {if i == 1 then c2 else c1 for i in 1:Ns};
+  end SD;
+end SBK76P;
+model SBK76
+  parameter SBK76P.CD a(u = false, T = {3, 4, 5}, nRC = 2, rd = {1, 2});
+  parameter SBK76P.CD b(u = false, T = {6, 7, 8}, nRC = 2, rd = {5, 6});
+  parameter SBK76P.SD s(Ns = 2, c1 = a, c2 = b);
+end SBK76;
+//// model: SBK77
+package SBK77P
+  record CD
+    parameter Integer nRC = 1;
+    parameter Real rd[nRC] = fill(0, nRC);
+    parameter Real k = 1;
+  end CD;
+  record SD
+    parameter Integer Ns;
+    parameter CD cd[Ns];
+  end SD;
+end SBK77P;
+model SBK77
+  parameter Real q = 2;
+  parameter Real p = 2 * q;
+  parameter SBK77P.SD s(Ns = 2, cd(each nRC = 2, each k = 2 * p));
+  parameter SBK77P.SD s2 = s;
+end SBK77;
+//// model: SBK78
+package SBK78P
+  record CD
+    parameter Integer nRC = 1;
+    parameter Real rd[nRC] = fill(0, nRC);
+    parameter Real k = 1;
+  end CD;
+end SBK78P;
+model SBK78
+  parameter Real q = 2;
+  parameter Real p = 2 * q;
+  parameter SBK78P.CD c2 = SBK78P.CD(nRC = 2, rd = {3, 4}, k = 3 * p);
+end SBK78;
+//// model: SBK79
+package SBK79P
+  record CD
+    parameter Integer nRC = 1;
+    parameter Real rd[nRC] = fill(0, nRC);
+    parameter Real k = 1;
+  end CD;
+end SBK79P;
+model SBK79
+  parameter Real q = 2;
+  parameter Real p = 2 * q;
+  parameter SBK79P.CD a(nRC = 2, rd = {1, 2}, k = 2 * p);
+  parameter SBK79P.CD cds[2] = {a, a};
+end SBK79;
+//// model: SBK80
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK80
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter BP bpa(IL = 3, V = 2 * c);
+  parameter BP bps[2] = {bpa, BP(IL = 3, V = 3 * c)};
+  Real y[n];
+  final parameter Integer n = if bps[2].IL > 2 then 1 else 2;
+equation
+  y = fill(time, n);
+end SBK80;
+//// model: SBK81
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK81
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter BP bpa(IL = 3, V = 2 * c);
+  parameter BP bps[2] = {bpa, bpa};
+  Real y[n];
+  final parameter Integer n = if bps[2].IL > 2 then 1 else 2;
+equation
+  y = fill(time, n);
+end SBK81;
+//// model: SBK82
+record BP
+  parameter Real V = 0;
+  parameter Real IL = 1;
+end BP;
+model SBK82
+  parameter Real d = 1;
+  parameter Real c = 2 * d;
+  parameter Real e = 3 * d;
+  parameter BP bpa(IL = 2 * e, V = 2 * c);
+  parameter BP bps[2] = {bpa for i in 1:2};
+  Real y[n];
+  final parameter Integer n = if bps[2].IL > 2 then 1 else 2;
+equation
+  y = fill(time, n);
+end SBK82;

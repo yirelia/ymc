@@ -11883,17 +11883,17 @@ YMC_TEST(flatten_array_literal_ew_with_array_calls) {
 
 YMC_TEST(flatten_record_evaluated_at_typing_time) {
   // 无绑定的记录参数整个被定型期的求值读到（维里的 `drop(bp, 100)`）：omc 现建记录绑定、把各字段的绑定求值并存回（makeRecordBindingExp
-  // → evalComponentBinding，NFCeval.mo:715-757 / :320-436 v1.25.0），`bp.IL = 2 * b` 打成 `4.0`；未做 → SKIP（SGE11，此前照打
-  // `2.0 * b`）。只在绑定里调用（不进定型期求值）的照常（SGE20）。期望 = omc 1.25.0 实跑（2026-10-19，探针 pk-p41 SGE11 / SGE20）。
-  bool uns = false;
-  const std::string out = flatten_src("record BP\n  parameter Real V = 0;\n  parameter Real IL = 1;\nend BP;\nfunction drop\n"
-                                      "  input BP bp;\n  input Real i;\n  output Real v;\nalgorithm\n  v := bp.V * i / bp.IL;\n"
-                                      "end drop;\nmodel SGE11\n  parameter Real b = 2;\n  parameter Real a = 3;\n"
-                                      "  parameter BP bp(IL = 2 * b);\n  parameter Real wMax = a - drop(bp, 100);\n"
-                                      "  Real y[n];\n  final parameter Integer n = if wMax > 0 then 1 else 2;\nequation\n"
-                                      "  for i in 1:n loop\n    y[i] = wMax * time;\n  end for;\nend SGE11;\n", &uns);
-  YMC_CHECK(uns);
-  YMC_CHECK_EQ(out, std::string("<unsupported:record evaluated at typing time>"));
+  // → evalComponentBinding，NFCeval.mo:715-757 / :362-389 v1.25.0），`bp.IL = 2 * b` 打成 `4.0`（SGE11，67j 起照做，此前 SKIP）。
+  // 只在绑定里调用（不进定型期求值）的照常（SGE20）。期望 = omc 1.25.0 实跑（2026-10-19 / 2026-10-24，探针 pk-p41 SGE11 / SGE20）。
+  YMC_CHECK_EQ(flatten_src("record BP\n  parameter Real V = 0;\n  parameter Real IL = 1;\nend BP;\nfunction drop\n"
+                           "  input BP bp;\n  input Real i;\n  output Real v;\nalgorithm\n  v := bp.V * i / bp.IL;\n"
+                           "end drop;\nmodel SGE11\n  parameter Real b = 2;\n  parameter Real a = 3;\n"
+                           "  parameter BP bp(IL = 2 * b);\n  parameter Real wMax = a - drop(bp, 100);\n"
+                           "  Real y[n];\n  final parameter Integer n = if wMax > 0 then 1 else 2;\nequation\n"
+                           "  for i in 1:n loop\n    y[i] = wMax * time;\n  end for;\nend SGE11;\n"),
+               std::string("class SGE11\n  parameter Real b = 2.0;\n  final parameter Real a = 3.0;\n"
+                           "  parameter Real bp.V = 0.0;\n  parameter Real bp.IL = 4.0;\n  final parameter Real wMax = 3.0;\n"
+                           "  Real y[1];\n  final parameter Integer n = 1;\nequation\n  y[1] = 3.0 * time;\nend SGE11;\n"));
   YMC_CHECK_EQ(flatten_src("record BP\n  parameter Real V = 0;\n  parameter Real IL = 1;\nend BP;\nfunction drop\n"
                            "  input BP bp;\n  input Real i;\n  output Real v;\nalgorithm\n  v := bp.V * i / bp.IL;\n"
                            "end drop;\nmodel SGE20\n  parameter Real b = 2;\n  parameter BP bp(IL = 2 * b);\n"
@@ -12147,20 +12147,209 @@ YMC_TEST(flatten_expandable_nested_array) {
 
 YMC_TEST(flatten_expandable_array_member_skips) {
   // 复合元素的 pp 数组成员（`Pin p[2]` 在 expandable 里）：omc 内部错（Connection.checkBalance 拆出空表，EAM9）→ SKIP。
-  // 记录数组的整体绑定是推导式、元素字段的维读兄弟字段（`rd[nRC]`，MSL Batteries TransientData 的 `rcData[nRC]`）：omc 定型这个维时
-  // 把父的整个绑定求值（makeRecordFieldBindingFromParent，NFCeval.mo:673-713 v1.25.0），引到的整个记录各字段求得的值存回绑定
-  //（evalComponentBinding，NFCeval.mo:362-389）——存回未做 → SKIP（RCV2，基线静默 FAIL：omc 是 `a.Ti[1,1] = 0.0`、`a.u` 不 final）。
-  // 探针 pk-p43 EAM9 / RCV2（2026-10-24）。
+  // 探针 pk-p43 EAM9（2026-10-24）。（RCV2 自 67j 起照做，见 flatten_store_back_record_array。）
   for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
            {"connector EAM9_P\n  Real v;\n  flow Real i;\nend EAM9_P;\nexpandable connector EAM9_B\n  EAM9_P p[2];\n"
             "end EAM9_B;\nmodel EAM9\n  EAM9_B b;\n  EAM9_P q[2];\nequation\n  connect(q, b.p);\n  q[1].v = time;\n"
-            "  q[2].v = 2 * time;\nend EAM9;\n", "connect operand shape"},
-           {"package RCV2P\n  record CD\n    parameter Boolean u = true;\n    parameter Real T[:, 2] = [0, 1; 1, 1];\n"
-            "    final parameter Real Ti[:, 2] = if u then [0, 1; 1, 1] else T;\n    parameter Integer nRC = 1;\n"
-            "    parameter Real rd[nRC] = {0};\n  end CD;\n  record SD\n    parameter Integer Ns;\n    parameter CD c1;\n"
-            "    parameter CD cd[Ns] = {c1 for k in 1:Ns};\n  end SD;\nend RCV2P;\nmodel RCV2\n"
-            "  parameter RCV2P.CD a(u = false, T = [0, 0.5; 0.5, 0.7; 1, 1]);\n  parameter RCV2P.SD s(Ns = 1, c1 = a);\n"
-            "end RCV2;\n", "record array binding evaluated at typing time"}}) {
+            "  q[2].v = 2 * time;\nend EAM9;\n", "connect operand shape"}}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
+  }
+}
+
+YMC_TEST(flatten_store_back_record_field) {
+  // 定型期（维里的 `n = if bp2.IL > 2 …`）读到的字段自己没有绑定（bp2 有整体绑定，子组件不要绑定，NFInst.mo:1982-1983 v1.25.0）：
+  // makeRecordFieldBindingFromParent（NFCeval.mo:673-713）——父的绑定是记录引用 `bp`：只求 `bp.IL`，求值碰到的参数一路存回
+  //（evalComponentBinding，NFCeval.mo:362-389）→ `bp.IL = 4.0`、`c = 2.0`、不 final（SBK2）；隔层的 `s2.c.IL`（s2 = s、s.c = a）整个求
+  // `s.c`、存回全部字段，a 无绑定逐字段求（makeRecordBindingExp :715-757，SBK5）；构造绑定定型后是 RECORD，只取读到的那个实参
+  //（NFExpression.mo:5638-5643；SBK20 的 `V = 2 * c` 不碰，c 照旧）。期望 = omc 1.25.0 实跑（2026-10-24，探针 pk-p44 SBK2 / SBK5 / SBK20）。
+  YMC_CHECK_EQ(flatten_src("record BP\n  parameter Real V = 0;\n  parameter Real IL = 1;\nend BP;\n"
+                           "model SBK2\n  parameter Real d = 1;\n  parameter Real c = 2 * d;\n"
+                           "  parameter BP bp(IL = 2 * c);\n  parameter BP bp2 = bp;\n  Real y[n];\n"
+                           "  final parameter Integer n = if bp2.IL > 2 then 1 else 2;\nequation\n"
+                           "  y = fill(time, n);\nend SBK2;\n"),
+               std::string("class SBK2\n  parameter Real d = 1.0;\n  parameter Real c = 2.0;\n"
+                           "  parameter Real bp.V = 0.0;\n  parameter Real bp.IL = 4.0;\n"
+                           "  parameter Real bp2.V = bp.V;\n  final parameter Real bp2.IL = 4.0;\n"
+                           "  Real y[1];\n  final parameter Integer n = 1;\nequation\n  y[1] = time;\n"
+                           "end SBK2;\n"));
+  YMC_CHECK_EQ(flatten_src("record BP\n  parameter Real V = 0;\n  parameter Real IL = 1;\nend BP;\n"
+                           "record SD\n  parameter BP c;\nend SD;\nmodel SBK5\n"
+                           "  parameter Real d = 1;\n  parameter Real c0 = 2 * d;\n"
+                           "  parameter BP a(IL = 2 * c0);\n  parameter SD s(c = a);\n"
+                           "  parameter SD s2 = s;\n  Real y[n];\n"
+                           "  final parameter Integer n = if s2.c.IL > 2 then 1 else 2;\nequation\n"
+                           "  y = fill(time, n);\nend SBK5;\n"),
+               std::string("class SBK5\n  parameter Real d = 1.0;\n  parameter Real c0 = 2.0;\n"
+                           "  parameter Real a.V = 0.0;\n  parameter Real a.IL = 4.0;\n"
+                           "  parameter Real s.c.V = 0.0;\n  parameter Real s.c.IL = 4.0;\n"
+                           "  parameter Real s2.c.V = s.c.V;\n  final parameter Real s2.c.IL = 4.0;\n"
+                           "  Real y[1];\n  final parameter Integer n = 1;\nequation\n  y[1] = time;\n"
+                           "end SBK5;\n"));
+  YMC_CHECK_EQ(flatten_src("record BP\n  parameter Real V = 0;\n  parameter Real IL = 1;\nend BP;\n"
+                           "model SBK20\n  parameter Real d = 1;\n  parameter Real c = 2 * d;\n"
+                           "  parameter BP bp2 = BP(IL = 3, V = 2 * c);\n  Real y[n];\n"
+                           "  final parameter Integer n = if bp2.IL > 2 then 1 else 2;\nequation\n"
+                           "  y = fill(time, n);\nend SBK20;\n"),
+               std::string("class SBK20\n  parameter Real d = 1.0;\n  parameter Real c = 2.0 * d;\n"
+                           "  parameter Real bp2.V = 2.0 * c;\n  final parameter Real bp2.IL = 3.0;\n"
+                           "  Real y[1];\n  final parameter Integer n = 1;\nequation\n  y[1] = time;\n"
+                           "end SBK20;\n"));
+}
+
+YMC_TEST(flatten_store_back_record_array) {
+  // 记录数组元素字段的维读兄弟字段（`rd[nRC]`）：定型时下标是切分占位，推导式绑定整个求值（applySubscriptArrayConstructor 只认单个
+  // 下标 NFExpression.mo:1617-1629，recordElement 落到 RECORD_ELEMENT :5683-5694）——`c1` 整个求、存回（s.c1 全部字段），a 逐字段求
+  //（a.Ti 存回字面量），a.Ti 的数组 if 压平时不再选支，`a.u` 不 final（RCV2，此前 SKIP）；值拆自外层整体绑定的记录数组（s2 = s）
+  // 求的是 `s.cd` 整个（存回，SBK70）。期望 = omc 1.25.0 实跑（2026-10-24，探针 pk-p43 RCV2 / pk-p44 SBK70）。
+  YMC_CHECK_EQ(flatten_src("package RCV2P\n  record CD\n    parameter Boolean u = true;\n"
+                           "    parameter Real T[:, 2] = [0, 1; 1, 1];\n"
+                           "    final parameter Real Ti[:, 2] = if u then [0, 1; 1, 1] else T;\n"
+                           "    parameter Integer nRC = 1;\n    parameter Real rd[nRC] = {0};\n"
+                           "  end CD;\n  record SD\n    parameter Integer Ns;\n    parameter CD c1;\n"
+                           "    parameter CD cd[Ns] = {c1 for k in 1:Ns};\n  end SD;\nend RCV2P;\n"
+                           "model RCV2\n"
+                           "  parameter RCV2P.CD a(u = false, T = [0, 0.5; 0.5, 0.7; 1, 1]);\n"
+                           "  parameter RCV2P.SD s(Ns = 1, c1 = a);\nend RCV2;\n"),
+               std::string("class RCV2\n  parameter Boolean a.u = false;\n"
+                           "  parameter Real a.T[1,1] = 0.0;\n  parameter Real a.T[1,2] = 0.5;\n"
+                           "  parameter Real a.T[2,1] = 0.5;\n  parameter Real a.T[2,2] = 0.7;\n"
+                           "  parameter Real a.T[3,1] = 1.0;\n  parameter Real a.T[3,2] = 1.0;\n"
+                           "  final parameter Real a.Ti[1,1] = 0.0;\n"
+                           "  final parameter Real a.Ti[1,2] = 0.5;\n"
+                           "  final parameter Real a.Ti[2,1] = 0.5;\n"
+                           "  final parameter Real a.Ti[2,2] = 0.7;\n"
+                           "  final parameter Real a.Ti[3,1] = 1.0;\n"
+                           "  final parameter Real a.Ti[3,2] = 1.0;\n"
+                           "  final parameter Integer a.nRC = 1;\n  parameter Real a.rd[1] = 0.0;\n"
+                           "  final parameter Integer s.Ns = 1;\n  parameter Boolean s.c1.u = false;\n"
+                           "  parameter Real s.c1.T[1,1] = 0.0;\n  parameter Real s.c1.T[1,2] = 0.5;\n"
+                           "  parameter Real s.c1.T[2,1] = 0.5;\n  parameter Real s.c1.T[2,2] = 0.7;\n"
+                           "  parameter Real s.c1.T[3,1] = 1.0;\n  parameter Real s.c1.T[3,2] = 1.0;\n"
+                           "  final parameter Real s.c1.Ti[1,1] = 0.0;\n"
+                           "  final parameter Real s.c1.Ti[1,2] = 0.5;\n"
+                           "  final parameter Real s.c1.Ti[2,1] = 0.5;\n"
+                           "  final parameter Real s.c1.Ti[2,2] = 0.7;\n"
+                           "  final parameter Real s.c1.Ti[3,1] = 1.0;\n"
+                           "  final parameter Real s.c1.Ti[3,2] = 1.0;\n"
+                           "  final parameter Integer s.c1.nRC = 1;\n"
+                           "  parameter Real s.c1.rd[1] = 0.0;\n"
+                           "  parameter Boolean s.cd[1].u = s.c1.u;\n"
+                           "  parameter Real s.cd[1].T[1,1] = s.c1.T[1,1];\n"
+                           "  parameter Real s.cd[1].T[1,2] = s.c1.T[1,2];\n"
+                           "  parameter Real s.cd[1].T[2,1] = s.c1.T[2,1];\n"
+                           "  parameter Real s.cd[1].T[2,2] = s.c1.T[2,2];\n"
+                           "  parameter Real s.cd[1].T[3,1] = s.c1.T[3,1];\n"
+                           "  parameter Real s.cd[1].T[3,2] = s.c1.T[3,2];\n"
+                           "  final parameter Real s.cd[1].Ti[1,1] = s.c1.Ti[1,1];\n"
+                           "  final parameter Real s.cd[1].Ti[1,2] = s.c1.Ti[1,2];\n"
+                           "  final parameter Real s.cd[1].Ti[2,1] = s.c1.Ti[2,1];\n"
+                           "  final parameter Real s.cd[1].Ti[2,2] = s.c1.Ti[2,2];\n"
+                           "  final parameter Real s.cd[1].Ti[3,1] = s.c1.Ti[3,1];\n"
+                           "  final parameter Real s.cd[1].Ti[3,2] = s.c1.Ti[3,2];\n"
+                           "  final parameter Integer s.cd[1].nRC = 1;\n"
+                           "  parameter Real s.cd[1].rd[1] = s.c1.rd[1];\nend RCV2;\n"));
+  YMC_CHECK_EQ(flatten_src("package SBK70P\n  record CD\n    parameter Integer nRC = 1;\n"
+                           "    parameter Real rd[nRC] = fill(0, nRC);\n    parameter Real k = 1;\n"
+                           "  end CD;\n  record SD\n    parameter Integer Ns;\n    parameter CD c1;\n"
+                           "    parameter CD cd[Ns] = {c1 for i in 1:Ns};\n  end SD;\nend SBK70P;\n"
+                           "model SBK70\n  parameter Real q = 2;\n  parameter Real p = 2 * q;\n"
+                           "  parameter SBK70P.CD a(nRC = 2, rd = {1, 2}, k = 2 * p);\n"
+                           "  parameter SBK70P.SD s(Ns = 1, c1 = a);\n  parameter SBK70P.SD s2 = s;\n"
+                           "end SBK70;\n"),
+               std::string("class SBK70\n  parameter Real q = 2.0;\n  parameter Real p = 4.0;\n"
+                           "  final parameter Integer a.nRC = 2;\n  parameter Real a.rd[1] = 1.0;\n"
+                           "  parameter Real a.rd[2] = 2.0;\n  parameter Real a.k = 8.0;\n"
+                           "  final parameter Integer s.Ns = 1;\n"
+                           "  final parameter Integer s.c1.nRC = 2;\n"
+                           "  parameter Real s.c1.rd[1] = 1.0;\n  parameter Real s.c1.rd[2] = 2.0;\n"
+                           "  parameter Real s.c1.k = 8.0;\n"
+                           "  final parameter Integer s.cd[1].nRC = 2;\n"
+                           "  parameter Real s.cd[1].rd[1] = 1.0;\n"
+                           "  parameter Real s.cd[1].rd[2] = 2.0;\n  parameter Real s.cd[1].k = 8.0;\n"
+                           "  final parameter Integer s2.Ns = 1;\n"
+                           "  final parameter Integer s2.c1.nRC = 2;\n"
+                           "  parameter Real s2.c1.rd[1] = s.c1.rd[1];\n"
+                           "  parameter Real s2.c1.rd[2] = s.c1.rd[2];\n"
+                           "  parameter Real s2.c1.k = s.c1.k;\n"
+                           "  final parameter Integer s2.cd[1].nRC = 2;\n"
+                           "  parameter Real s2.cd[1].rd[1] = s.cd[1].rd[1];\n"
+                           "  parameter Real s2.cd[1].rd[2] = s.cd[1].rd[2];\n"
+                           "  parameter Real s2.cd[1].k = s.cd[1].k;\nend SBK70;\n"));
+}
+
+YMC_TEST(flatten_store_back_conditional_array_if) {
+  // 两支不相容的数组 if 的条件 omc 在压平时才标结构参数（flattenConditionalArrayIfExp，NFFlatten.mo:1733-1737 v1.25.0）：绑定在定型期
+  // 已被求值存回的（s2.c.n 的读取整个求 s.c、a 逐字段求，a.Ti 存回字面量），压平时只剩字面量，`a.u` 不 final。期望 = omc 1.25.0
+  // 实跑（2026-10-24，探针 pk-p44 SBK65）。
+  YMC_CHECK_EQ(flatten_src("package SBK65P\n  record CD\n    parameter Boolean u = true;\n"
+                           "    parameter Real T[:] = {1, 2};\n"
+                           "    final parameter Real Ti[:] = if u then {1, 2} else T;\n"
+                           "    parameter Integer n = 1;\n  end CD;\n  record SD\n    parameter CD c;\n"
+                           "  end SD;\nend SBK65P;\nmodel SBK65\n"
+                           "  parameter SBK65P.CD a(u = false, T = {3, 4, 5}, n = 2);\n"
+                           "  parameter SBK65P.SD s(c = a);\n  parameter SBK65P.SD s2 = s;\n"
+                           "  Real y[s2.c.n] = fill(time, s2.c.n);\nend SBK65;\n"),
+               std::string("class SBK65\n  parameter Boolean a.u = false;\n"
+                           "  parameter Real a.T[1] = 3.0;\n  parameter Real a.T[2] = 4.0;\n"
+                           "  parameter Real a.T[3] = 5.0;\n  final parameter Real a.Ti[1] = 3.0;\n"
+                           "  final parameter Real a.Ti[2] = 4.0;\n"
+                           "  final parameter Real a.Ti[3] = 5.0;\n  parameter Integer a.n = 2;\n"
+                           "  parameter Boolean s.c.u = false;\n  parameter Real s.c.T[1] = 3.0;\n"
+                           "  parameter Real s.c.T[2] = 4.0;\n  parameter Real s.c.T[3] = 5.0;\n"
+                           "  final parameter Real s.c.Ti[1] = 3.0;\n"
+                           "  final parameter Real s.c.Ti[2] = 4.0;\n"
+                           "  final parameter Real s.c.Ti[3] = 5.0;\n  parameter Integer s.c.n = 2;\n"
+                           "  parameter Boolean s2.c.u = s.c.u;\n"
+                           "  parameter Real s2.c.T[1] = s.c.T[1];\n"
+                           "  parameter Real s2.c.T[2] = s.c.T[2];\n"
+                           "  parameter Real s2.c.T[3] = s.c.T[3];\n"
+                           "  final parameter Real s2.c.Ti[1] = s.c.Ti[1];\n"
+                           "  final parameter Real s2.c.Ti[2] = s.c.Ti[2];\n"
+                           "  final parameter Real s2.c.Ti[3] = s.c.Ti[3];\n"
+                           "  final parameter Integer s2.c.n = 2;\n  Real y[1];\n  Real y[2];\n"
+                           "equation\n  y = {time, time};\nend SBK65;\n"));
+}
+
+YMC_TEST(flatten_store_back_typing_contexts) {
+  // 方程 / 绑定里也在定型期求值的语境，读到的参数照样存回（不 final）：fill 的维实参（typeFillCall2，NFBuiltinCall.mo:973-977 v1.25.0；
+  // SBK45）、数组构造子的范围（NFCall.mo:2510-2515；SBK50）、`:` 维要的数组 if 选支（typeExpDim → evaluateArrayIf，NFTyping.mo:
+  // 1744-1771；SBK48）——`m = integer(c)` 的 c 打 `2.0`。期望 = omc 1.25.0 实跑（2026-10-24，探针 pk-p44 SBK45 / SBK50 / SBK48）。
+  YMC_CHECK_EQ(flatten_src("model SBK45\n  parameter Real d = 1;\n  parameter Real c = 2 * d;\n"
+                           "  parameter Integer m = integer(c);\n  Real y[2];\nequation\n"
+                           "  y = fill(time, m);\nend SBK45;\n"),
+               std::string("class SBK45\n  parameter Real d = 1.0;\n  parameter Real c = 2.0;\n"
+                           "  final parameter Integer m = 2;\n  Real y[1];\n  Real y[2];\nequation\n"
+                           "  y[1] = time;\n  y[2] = time;\nend SBK45;\n"));
+  YMC_CHECK_EQ(flatten_src("model SBK50\n  parameter Real d = 1;\n  parameter Real c = 2 * d;\n"
+                           "  parameter Integer m = integer(c);\n  Real y[3];\nequation\n"
+                           "  y = {time for i in 1:m + 1};\nend SBK50;\n"),
+               std::string("class SBK50\n  parameter Real d = 1.0;\n  parameter Real c = 2.0;\n"
+                           "  final parameter Integer m = 2;\n  Real y[1];\n  Real y[2];\n"
+                           "  Real y[3];\nequation\n  y = array(time for i in 1:3);\nend SBK50;\n"));
+  YMC_CHECK_EQ(flatten_src("model SBK48\n  parameter Real d = 1;\n  parameter Real c = 2 * d;\n"
+                           "  parameter Integer m = integer(c);\n"
+                           "  Real z[:] = if m > 1 then {time, 2} else {1};\nend SBK48;\n"),
+               std::string("class SBK48\n  parameter Real d = 1.0;\n  parameter Real c = 2.0;\n"
+                           "  final parameter Integer m = 2;\n  Real z[1];\n  Real z[2];\nequation\n"
+                           "  z = {time, 2.0};\nend SBK48;\n"));
+}
+
+YMC_TEST(flatten_store_back_skips) {
+  // 外层记录有整体绑定时重声明的记录字段：redeclareComponent 照 useBinding = true 实例化（NFInst.mo:2186-2187 v1.25.0），字段带着
+  // 自己的缺省绑定定型（`s2.c.T` 只有 2 个元素、`s2.c.r` 1 个），打印的绑定拆自外层——未做 → SKIP（SBK62，基线静默 FAIL）。
+  // 算法段里 fill 的维实参 omc 不标、不求（typeFillCall2 的 inAlgorithm 守卫，NFBuiltinCall.mo:965），`fill(time, m)` 照留、m 不
+  // final——未做 → SKIP（SBK61，基线静默 FAIL）。探针 pk-p44 SBK62 / SBK61（2026-10-24）。
+  for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           {"package SBK62P\n  record CD\n    parameter Real T[:] = {1, 2};\n    parameter Integer n = 1;\n"
+            "    parameter Real r[n] = fill(0, n);\n  end CD;\n  record BSD\n    replaceable parameter CD c;\n"
+            "  end BSD;\n  record SD\n    extends BSD(redeclare CD c);\n  end SD;\nend SBK62P;\nmodel SBK62\n"
+            "  parameter SBK62P.CD a(T = {1, 2, 3}, n = 2, r = {1, 2});\n  parameter SBK62P.SD s(c = a);\n"
+            "  parameter SBK62P.SD s2 = s;\nend SBK62;\n", "redeclared record field under a bound record"},
+           {"model SBK61\n  parameter Integer m = 2;\n  Real y[2];\n  Real z[2];\nalgorithm\n  y := fill(time, 2);\n"
+            "  z := fill(time, m);\nend SBK61;\n", "fill dimension in algorithm"}}) {
     bool uns = false;
     const std::string out = flatten_src(src.c_str(), &uns);
     YMC_CHECK(uns);

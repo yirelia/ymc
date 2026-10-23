@@ -288,9 +288,11 @@ class Flattener {
     // 随后按 SimplifyModel 折叠。
     evaluate_stream_ops();
     check_late_struct();         // 末尾才判得清的结构参数用法（留着的 size 维号、fill 维实参的固定性）
+    check_redecl_bound();        // 外层记录有整体绑定时重声明的记录字段（见 note_redecl_bound）
+    const std::vector<std::string> sb_keys = sb_plan();   // 定型期经记录求值存回的参数（见 sb_plan）
     apply_structural_params();   // 连接算子求值中结构化的参数：final + 属性折叠（NFEvalConstants 效果，受限）
     apply_structural_records();  // 结构记录参数的整体引用代成记录式（见 struct_records_）
-    check_record_store_back();   // 定型期整个被求值的记录：字段的存回未做（见 record_param_value）
+    sb_apply(sb_keys);           // 存回的参数打求得的字面量
     simplify_model();            // cardinality 求值 + 方程 / 语句的收尾折叠
     drop_empty_model_args();     // 调用的空数组实参换成 `{}`（removeEmptyFunctionArguments）
     if (oc_missing_branch_) set_unsupported("Connections.rooted without branch (warning)");
@@ -1278,8 +1280,13 @@ class Flattener {
           Id<Exp> wraw;
           NodeId wscope = inst_node;
           std::vector<Symbol> wvpfx = prefix;
+          bool wderived = false;   // 整体绑定拆自外层记录的整体绑定（omc 里本数组没有绑定，见 RecArrayBind）
           for (const ModSource& m : matched)
-            if (I_.scode.mods[m.mod].binding.is_valid()) { wraw = I_.scode.mods[m.mod].binding; wscope = m.scope; wvpfx = m.vprefix; break; }
+            if (I_.scode.mods[m.mod].binding.is_valid()) {
+              wraw = I_.scode.mods[m.mod].binding; wscope = m.scope; wvpfx = m.vprefix;
+              wderived = derived_mods_.count(m.mod.raw) > 0;
+              break;
+            }
           if (!wraw.is_valid() && I_.comps[cid].binding.kind == BindingKind::Raw && I_.comps[cid].binding.raw_exp.is_valid()) {
             wraw = I_.comps[cid].binding.raw_exp;
             wscope = bind_lex(cid, inst_node);
@@ -1295,6 +1302,14 @@ class Flattener {
             rb.raw = wraw;
             rb.scope = wscope;
             rb.vprefix = wvpfx;
+            rb.derived = wderived;
+            if (wraw.is_valid()) {   // 逐元素写出的数组字面量（`{c1, c1}` / 矩阵），推导式写法除外
+              const Exp& we = I_.absyn.exps[wraw];
+              rb.elem_lit = we.kind == ExpKind::Matrix ||
+                            (we.kind == ExpKind::Array &&
+                             !(we.args.size() == 1 && I_.absyn.exps[we.args[0]].kind == ExpKind::Reduction));
+              rb.by_cref = we.kind == ExpKind::CrefExp;
+            }
             rb.psubs_ok = wvpfx.size() <= prefix.size() && std::equal(wvpfx.begin(), wvpfx.end(), prefix.begin());
             if (rb.psubs_ok) {
               rb.psubs = psubs;
@@ -1303,6 +1318,7 @@ class Flattener {
             PSubs ak = psubs;
             ak.resize(name.size() - 1);
             ak.push_back({});
+            note_redecl_bound(cid, ctx, int_key(name, ak));
             rec_array_binds_[int_key(name, ak)] = std::move(rb);
           }
           // 第一遍：整体绑定引用了还没发射的子实例里的参数维数组（MSL QuasiStatic 电机 `vs[m] = plug_sp.pin.v - plug_sn.pin.v`，
@@ -1393,19 +1409,6 @@ class Flattener {
           // 整体绑定是返回记录数组的用户函数调用、绑定变率 ≤ 结构参数 → 先求值（见 eval_record_array_call），各元素按求得的
           // 记录值拆字段。
           std::optional<CVal> wval;
-          // 元素字段的维读同一元素的兄弟字段（MSL Batteries TransientData.CellData 的 `rcData[nRC]`）、整体绑定又不是逐元素写出的
-          // 数组字面量（推导式 / fill / 别的记录数组 cref …）：omc 定型这个维时字段自身无绑定 → makeRecordFieldBindingFromParent
-          // 把父的整个绑定拿来求值（NFCeval.mo:673-713 v1.25.0），绑定里引到的整个记录随之求值、各字段求得的值存回绑定
-          // （evalComponentBinding，NFCeval.mo:362-389）→ 那些记录的字段打成字面量、if 条件不再标结构参数（RCV 探针 RCV2 / RCV8 /
-          // RCV9；MSL Batteries CCCV_StackRC 的 `cellData[Ns, Np] = {{if … then cellDataDegraded else cellDataOriginal …}}`，
-          // 此前被连接挡住、没露出来的静默错）。存回未做 → SKIP；逐元素写出的字面量 `{c1, c1}` 只取各元素的字段（RCV10，照常）。
-          if (wraw.is_valid() && r == SRestriction::Record) {
-            const Exp& we = I_.absyn.exps[wraw];
-            const bool elem_lit = we.kind == ExpKind::Matrix ||
-                                  (we.kind == ExpKind::Array &&
-                                   !(we.args.size() == 1 && I_.absyn.exps[we.args[0]].kind == ExpKind::Reduction));
-            if (!elem_lit && sibling_dim_field(ci)) { set_unsupported("record array binding evaluated at typing time"); continue; }
-          }
           if (wraw.is_valid() && I_.absyn.exps[wraw].kind == ExpKind::Call &&
               var_min(ctx.var_floor, I_.comps[cid].attributes.variability) != SVariability::Var &&
               var_min(ctx.var_floor, I_.comps[cid].attributes.variability) != SVariability::Discrete &&
@@ -1506,7 +1509,10 @@ class Flattener {
             }
             achild.mods.insert(achild.mods.end(), dvmods.begin(), dvmods.end());
             if (result_.unsupported) break;
-            if (r == SRestriction::Record) note_rec_nonstruct(cid, name, cps);
+            if (r == SRestriction::Record) {
+              note_rec_nonstruct(cid, name, cps);
+              rec_insts_[int_key(name, cps)] = RecInst{achild.rec_bind, false, achild.unbound_fields, true};
+            }
             flatten_class(ci, name, cps, is_prot, achild, inners);
             std::size_t k = adims.size();
             while (k > 0) { --k; if (++aidx[k] <= adims[k]) break; aidx[k] = 1; if (k == 0) more = false; }
@@ -1818,12 +1824,16 @@ class Flattener {
           whole_kind = folded_kind;
         }
         if (ctx.unbound_fields) whole_raw = {};   // 上层记录的整体绑定已挪成方程：本层（嵌套记录）的整体绑定一并丢
+        bool sel_own = false;   // 选过支的 if 绑定原是自己的（见 RecInst）
         if (whole_raw.is_valid() && r == SRestriction::Record) {
           cur_psubs_ = psubs;
           const Id<Exp> unfolded = whole_raw;
           whole_raw = fold_record_if(whole_raw, whole_scope, whole_vpfx);
           if (result_.unsupported) continue;
-          if (whole_raw.raw != unfolded.raw) whole_kind = 3;
+          if (whole_raw.raw != unfolded.raw) {
+            sel_own = whole_kind == 1;
+            whole_kind = 3;
+          }
         }
         Id<SMod> ctor_mod = folded_mod;
         // final parameter 记录的整体绑定（求值 / 折叠都没收）：强制内联（见 forced_inline_mod；绑定是运算式 `a * b`、
@@ -1931,7 +1941,11 @@ class Flattener {
         }
         PSubs cps = psubs;
         cps.push_back({});   // 标量复合段无下标
-        if (r == SRestriction::Record) note_rec_nonstruct(cid, name, cps);
+        if (r == SRestriction::Record) {
+          note_rec_nonstruct(cid, name, cps);
+          rec_insts_[int_key(name, cps)] = RecInst{child.rec_bind, sel_own, moved_binding || ctx.unbound_fields, false};
+          note_redecl_bound(cid, ctx, int_key(name, cps));
+        }
         flatten_class(ci, name, cps, is_prot, child, inners);
         continue;
       }
@@ -1981,8 +1995,10 @@ class Flattener {
     FlatAlgorithm fa;
     fa.is_initial = is_initial;
     alg_initial_ = is_initial;
+    ++in_alg_;
     for (Id<SStatement> sid : alg.stmts)
-      if (!append_statement(sid, enclosing, prefix, fa.stmts)) return;   // 有语句未做 → 放弃整模型（保 FAIL=0）
+      if (!append_statement(sid, enclosing, prefix, fa.stmts)) { --in_alg_; return; }   // 有语句未做 → 放弃整模型（保 FAIL=0）
+    --in_alg_;
     alg_initial_ = false;
     if (fa.stmts.empty()) return;   // 空段不产关键字（dumper flat_dump.cpp:129 也跳空段）
     if (is_initial) result_.model.initial_algorithms.push_back(std::move(fa));
@@ -5266,6 +5282,7 @@ class Flattener {
     vsubs.resize(prefix.size());
     vsubs.push_back({});
     const std::string vkey = int_key(name, vsubs);
+    const EmitKey emit_key(emit_key_, vkey);
     typed_keys_.insert(vkey);
     if (fixed_mod_of(cid, mod_subs).is_valid() && eval_fixed(cid, mod_subs)) each_fixed_true_.insert(vkey);
     if (own_eval == std::optional<bool>(false) && var_min(var_floor, I_.comps[cid].attributes.variability) == SVariability::Param)
@@ -5775,6 +5792,9 @@ class Flattener {
     for (Id<Exp> d : cel.type.dims) colon_dim = colon_dim || I_.absyn.exps[d].kind == ExpKind::Colon;
     const PhaseScope bind_phase(*this, colon_dim ? MarkPhase::Early : MarkPhase::Binding, /*typing=*/colon_dim);
     ++bind_clock_;
+    PSubs wsk = psubs;
+    wsk.resize(name.size());   // 末段（叶）无下标 = 整体键
+    const EmitKey emit_key(emit_key_, int_key(name, wsk));
     {
       PSubs ws = psubs;
       ws.resize(name.size());   // 末段（叶）无下标 = 整体键
@@ -9894,6 +9914,7 @@ class Flattener {
     if (cel.condition.is_valid()) { r.kind = FrameHit::Fail; return r; }   // 引用条件组件（存在性未定，CyclicBindingConditional）
     if (used && var == SVariability::Param) used->insert(I_.comps[cid].def.raw);
     if (eval_probe_ && var == SVariability::Param) eval_probe_->keys.push_back({key, arr_param});
+    if (!in_select_ && cond_keys_.count(key)) cond_other_.insert(key);   // 见 cond_other_
     // 结构标记（Structural.markExp / markComponent，v1.25.0 NFStructural.mo:246-326）：被求值式直接引用的参数打标记；它
     // 绑定里的参数（依赖）只在该绑定**尚未定型**时连带（markComponent 只进 Binding.untypedExp，:322-325）——Early 时全都
     // 未定型 → 一路连带；Binding 时看该参数发射了没有（AO 探针 a3：`n = k; s = x[n]` → 只 n final，n 声明在 s 之后则 k 也
@@ -16734,30 +16755,479 @@ class Flattener {
         // 整个记录被定型期的求值读到（这里直接、或经 root_reads_ 在之后的定型期读取里传过去，见 note_read）：omc 的 Ceval 给无绑定
         // 的记录现建绑定、把各字段的绑定逐个求值并存回（makeComponentBinding → makeRecordBindingExp → evalComponentBinding，
         // NFCeval.mo:621-671 / :715-757 / :320-436 v1.25.0），字段照打求得的字面量（pk-p41 探针 SGE11 / SGE12 / SGE14-SGE16：
-        // `parameter BP bp(IL = 2 * b)` 经维的求值 → `bp.IL = 4.0`，此前照打 `2.0 * b`）。未做：先记下，收尾时这种字段打出来
-        // 不是字面量的 → SKIP（check_record_store_back）。
+        // `parameter BP bp(IL = 2 * b)` 经维的求值 → `bp.IL = 4.0`，此前照打 `2.0 * b`）。先记下，收尾时照 omc 的规则模拟存回
+        //（sb_plan）。
         note_read(std::string(kRecReadTag) + rk);
       }
     }
     return r;
   }
   static constexpr std::string_view kRecReadTag = "@rec:";   // note_read 里"整个记录被读到"的标记前缀（见 record_param_value）
-  // 见 record_param_value 的定型期整记录读取：其直属参数字段打出来不是字面量（omc 存回成字面量）或是 Evaluate = false 的
-  //（omc 不求它、记录值里留引用）→ SKIP。
-  void check_record_store_back() {
-    std::unordered_set<std::string> recs;
-    for (const std::string& r : typing_reads_)
-      if (r.compare(0, kRecReadTag.size(), kRecReadTag) == 0) recs.insert(r.substr(kRecReadTag.size()));
-    if (recs.empty()) return;
-    for (const FlatVariable& v : result_.model.variables) {
+
+  // 外层记录有整体绑定时重声明的记录字段：redeclareComponent 照 useBinding = true 实例化重声明的组件（NFInst.mo:2186-2187
+  // v1.25.0），不像别的子组件那样丢掉绑定（instComponentDef :1982-1983）——它的字段带着自己的绑定定型：`:` 维、读兄弟字段的维、
+  // 定型期读到的值都按自己的绑定（缺省值）来，打印的绑定却拆自外层整体绑定（pk-p44 探针 SBK62 / SBK63：`s2.c.T` 只有缺省的 2 个元素、
+  // `s2.c.k` 经自己的 `m = 2 * k` 成了 final；MSL Batteries CCCV_StackRC 的 `stack.stackData.cellDataOriginal.OCV_SOC` 2×2、
+  // `rcData` 1 个）。未做：这种记录（数组）之下有数组字段、结构参数或定型期读到的 → SKIP。
+  void note_redecl_bound(CompId cid, const ModCtx& ctx, const std::string& k) {
+    if ((I_.comps[cid].orig_def.is_valid() || I_.comps[cid].redecl_home.is_valid()) && (ctx.rec_bind != 0 || ctx.unbound_fields))
+      redecl_bound_.push_back(k);
+  }
+  std::vector<std::string> redecl_bound_;
+  void check_redecl_bound() {
+    if (redecl_bound_.empty() || result_.unsupported) return;
+    for (const std::string& R : redecl_bound_) {
+      const std::string ap = R.substr(0, R.size() - 1) + "[";
+      for (const FlatVariable& v : result_.model.variables) {
+        const std::string k = var_key(v);
+        if (k.size() <= R.size() || (k.compare(0, R.size(), R) != 0 && k.compare(0, ap.size(), ap) != 0)) continue;
+        if (k.find('[', R.size() - 1) != std::string::npos || structural_set_.count(k) || typing_reads_.count(leaf_base(k))) {
+          set_unsupported("redeclared record field under a bound record");
+          return;
+        }
+      }
+    }
+  }
+
+  // ---- 定型期求值的存回（Ceval.evalComponentBinding，NFCeval.mo:362-389 v1.25.0）----
+  // omc 在定型期（维 NFTyping.mo:642-657 / :746-750 / :813-815、条件组件的条件 :1236）对参数求值时，把求得的值存回组件的绑定
+  //（TYPED_BINDING 求一次即换成求得的式子），压平在定型之后 → 这些参数照打求得的字面量（不 final；pk-p44 探针 SBK1-SBK59）。结构参数
+  // 本来就打求得的值；看得出差别的是求值顺带求到、却没被标结构的——经记录读到的：
+  //  - 字段自己没有绑定（父记录有整体绑定：instComponentDef 让子组件一律不要绑定，NFInst.mo:1982-1983）：makeRecordFieldBinding-
+  //    FromParent（NFCeval.mo:673-713）沿父链找到有绑定的那层 A，取 recordElement 后求值，字段本身不存回（makeComponentBinding 的
+  //    CEVAL_BINDING :635-639）。A 的绑定是记录引用 `src`：直属字段只求 `src.f`，隔层的（中间层没有绑定，:707-711）整个求
+  //    `src.p1`；构造定型后是 RECORD，只取那个实参（NFExpression.mo:5638-5643）；if / 推导式 / fill：recordElement 落到
+  //    RECORD_ELEMENT（:5683-5694），整个绑定求值；逐元素写出的数组字面量先取下标（NFCeval.mo:701）、再按元素取字段。
+  //  - 整个记录（函数实参 `drop(bp, 100)`、上面隔层求的 `src.p1`、if 选中的支）：有自己的整体绑定 → 整个求值、存回（全部字段
+  //    照打字面量）；没有 → makeRecordBindingExp（:715-757）逐字段求值、各自存回；记录数组的元素 `a[i]` 求的是整个数组组件的绑定。
+  //  - 组件数组 / 记录数组各元素的同名字段共用一个组件节点：存回一个即全部元素（scodeinst CevalBinding8 同理）。
+  // 求值碰到的参数一路照此存回（`bp(IL = 2 * b)`、`b = 2 * d` → `b = 2.0`）。ymc 的压平是一趟发射、定型期的读取发生在发射途中，
+  // 这里收尾时照 omc 的规则模拟一遍：根是定型期读到的（typing_reads_）经父记录整体绑定取值的字段、整个记录（kRecReadTag），
+  // 要存回的参数绑定换成求得的字面量（已是结构参数 / 字面量的不变）。形态认不全、求不出 → SKIP。
+  struct SbSim {
+    std::vector<std::string> keys;            // 各变量的 key（与 result_.model.variables 同序）
+    std::unordered_set<std::string> seen;     // 已模拟求值的（防环、去重；整体求值的记 "W:" 前缀）
+    std::vector<std::string> store;           // 要存回的参数 key
+    std::unordered_set<std::string> evald;    // 绑定被求值（存回）的叶参数 key 及其整体 key（不论打出来变不变）
+    std::unordered_map<std::string, std::vector<std::size_t>> by_node;   // 组件节点 key（见 sb_node）→ 变量下标
+    bool fail = false;
+  };
+  // R（记录实例 `r.` / 记录数组或参数数组的整体 key `a.`）之下已发射的变量（下标）。
+  static std::vector<std::size_t> sb_under(const SbSim& s, const std::string& R) {
+    std::vector<std::size_t> out;
+    const std::string ap = R.substr(0, R.size() - 1) + "[";
+    for (std::size_t i = 0; i < s.keys.size(); ++i) {
+      const std::string& k = s.keys[i];
+      if (k.size() > R.size() && (k.compare(0, R.size(), R) == 0 || k.compare(0, ap.size(), ap) == 0)) out.push_back(i);
+    }
+    return out;
+  }
+  // 绑定（结构折叠之前的）里各 cref 的 key（含下标里的）。
+  void sb_crefs(Id<Expr> x, std::vector<std::string>& out) {
+    if (!x.is_valid()) return;
+    const Expr& e = result_.model.exprs[x];
+    if (e.kind == ExprKind::Cref) {
+      if (e.cref.resolved_node == kFnLocal) return;
+      out.push_back(expr_cref_key(e.cref));
+      for (const ExprCrefPart& p : e.cref.parts)
+        for (Id<Expr> s : p.subscripts) sb_crefs(s, out);
+      return;
+    }
+    const std::vector<Id<Expr>> args = e.args;   // 拷贝：递归里不改 arena，但不持引用跨调用
+    const Id<Expr> a = e.a, b = e.b, c = e.c;
+    for (Id<Expr> y : args) sb_crefs(y, out);
+    sb_crefs(a, out);
+    sb_crefs(b, out);
+    sb_crefs(c, out);
+  }
+  Id<Expr> sb_binding(const std::string& k, const FlatVariable& v) const {
+    const auto rb = raw_bindings_.find(k);
+    return rb != raw_bindings_.end() ? rb->second : v.binding;
+  }
+  // 记录实例 R（或记录数组的整体 key）各字段的值都拆自同一个记录（数组）引用 `src`（记录引用的整体绑定、选中的支是引用）→ src 的
+  // key；否则空。常量字段不看。
+  std::string sb_rec_src(SbSim& s, const std::string& R) {
+    std::string src;
+    bool any = false;
+    const std::string stem = R.substr(0, R.size() - 1);   // 记录数组：元素 key 是 `stem[i].…`
+    for (std::size_t i : sb_under(s, R)) {
+      const FlatVariable& v = result_.model.variables[i];
       if (v.var_kind != FlatVarKind::Parameter) continue;
-      const std::string k = var_key(v);
-      if (!recs.count(parent_key(k))) continue;
-      const auto pit = param_info_.find(k);
-      if ((v.binding.is_valid() && !is_lit(v.binding)) || (pit != param_info_.end() && pit->second.nonstruct)) {
+      const std::string& k = s.keys[i];
+      const bool elem = k.compare(0, R.size(), R) != 0;
+      const Id<Expr> b = sb_binding(k, v);
+      if (!b.is_valid() || result_.model.exprs[b].kind != ExprKind::Cref || result_.model.exprs[b].cref.resolved_node == kFnLocal)
+        return {};
+      const std::string bk = expr_cref_key(result_.model.exprs[b].cref);
+      const std::string rel = k.substr(elem ? stem.size() : R.size());
+      if (bk.size() <= rel.size() || bk.compare(bk.size() - rel.size(), rel.size(), rel) != 0) return {};
+      const std::string sk = bk.substr(0, bk.size() - rel.size()) + (elem ? "." : "");
+      if (any && sk != src) return {};
+      src = sk;
+      any = true;
+    }
+    return any ? src : std::string();
+  }
+  // 去掉全部下标的组件节点 key（组件数组 / 记录数组 / 参数数组的各元素共用一个节点）。
+  static std::string sb_node(const std::string& k) {
+    std::string node;
+    bool in_sub = false;
+    for (char ch : k) {
+      if (ch == '[') in_sub = true;
+      if (!in_sub) node.push_back(ch);
+      if (ch == ']') in_sub = false;
+    }
+    return node;
+  }
+  // 存回参数 k（及同一组件节点的各元素，见上）：已是结构参数 / 字面量 / 无绑定的不必；Evaluate = false 的 omc 不求 → SKIP。
+  void sb_store(SbSim& s, const std::string& k) {
+    const auto it = s.by_node.find(sb_node(k));
+    if (it == s.by_node.end()) return;
+    for (std::size_t i : it->second) {
+      const std::string& vk = s.keys[i];
+      const FlatVariable& v = result_.model.variables[i];
+      if (v.var_kind != FlatVarKind::Parameter || !v.binding.is_valid() || is_lit(v.binding) || structural_set_.count(vk))
+        continue;
+      if (const auto pit = param_info_.find(vk); pit != param_info_.end() && pit->second.nonstruct) { s.fail = true; return; }
+      s.store.push_back(vk);
+    }
+  }
+  // 绑定 b 求值：里面的引用逐个求（evalCref）。
+  void sb_deps(SbSim& s, Id<Expr> b) {
+    std::vector<std::string> cs;
+    sb_crefs(b, cs);
+    for (const std::string& c : cs) sb_any(s, c);
+  }
+  // 引用 C 的求值（evalCref）：叶参数 / 参数数组（整体或带下标）/ 记录实例 / 记录数组。
+  void sb_any(SbSim& s, const std::string& C) {
+    if (s.fail || !s.seen.insert(C).second) return;
+    if (const FlatVariable* v = emitted_var(C)) {
+      const FlatVariable copy = *v;   // 拷贝：sb_leaf 里不加变量，但不持指针跨调用
+      sb_leaf(s, C, copy);
+      return;
+    }
+    if (rec_insts_.count(C)) { sb_record(s, C); return; }
+    if (const auto ra = rec_array_binds_.find(C); ra != rec_array_binds_.end()) { sb_rec_array(s, C); return; }
+    // 参数数组的整体引用 `a`：各元素（带下标的 `a[2]` 的 key 带下标，上面已按元素走）。
+    for (std::size_t i : sb_under(s, C)) {
+      const std::string& k = s.keys[i];
+      if (k.compare(0, C.size(), C) == 0 || parent_key(k) != parent_key(C)) continue;   // 只要直属元素 `a[i]`
+      sb_any(s, k);
+    }
+  }
+  // 叶参数 K（标量或数组元素）的求值：值拆自父记录的整体绑定 → 照 makeRecordFieldBindingFromParent 求父的绑定；否则是它所在组件
+  // 节点自己的绑定（声明 / 修饰，组件数组的修饰分发也是那个节点上的一个绑定）→ 求值、存回整个节点（参数数组、组件数组的各元素，
+  // 见 sb_store），各元素绑定里的引用逐个求。Evaluate = false 的 omc 不求（evalCref 的守卫，NFCeval.mo:311-314）。
+  void sb_leaf(SbSim& s, const std::string& K, const FlatVariable& v) {
+    if (v.var_kind != FlatVarKind::Parameter) return;   // 常量照打值；变量不会被求值
+    ParamInfo pi;
+    if (const auto pit = param_info_.find(K); pit != param_info_.end()) pi = pit->second;
+    if (pi.origin == 1) { sb_from_parent(s, K, v, pi.by_cref); return; }
+    if (pi.nonstruct) {
+      if (const Id<Expr> b = sb_binding(K, v); b.is_valid() && !is_lit(b)) s.fail = true;
+      return;
+    }
+    const auto node = s.by_node.find(sb_node(K));
+    if (node == s.by_node.end()) return;
+    const std::vector<std::size_t> elems = node->second;   // 拷贝：下面递归不改表，但不持引用跨调用
+    sb_store(s, K);
+    for (std::size_t i : elems) {
+      const FlatVariable& ev = result_.model.variables[i];
+      if (ev.var_kind != FlatVarKind::Parameter) continue;
+      const Id<Expr> b = sb_binding(s.keys[i], ev);
+      if (!b.is_valid()) continue;
+      s.evald.insert(s.keys[i]);
+      s.evald.insert(leaf_base(s.keys[i]));
+      if (!is_lit(b)) sb_deps(s, b);
+    }
+  }
+  // 字段 K 的值拆自父记录（链）的整体绑定（makeRecordFieldBindingFromParent）。
+  void sb_from_parent(SbSim& s, const std::string& K, const FlatVariable& v, bool by_cref) {
+    const std::string R = parent_key(K);
+    const auto ri = rec_insts_.find(R);
+    if (ri == rec_insts_.end() || ri->second.moved) { s.fail = true; return; }
+    const RecInst inst = ri->second;
+    const Id<Expr> b = sb_binding(K, v);
+    auto field_wise = [&]() {   // recordElement 取到 `src.f`：只求这个引用
+      if (!b.is_valid() || result_.model.exprs[b].kind != ExprKind::Cref) { s.fail = true; return; }
+      sb_any(s, expr_cref_key(result_.model.exprs[b].cref));
+    };
+    // 记录引用 `src`：recordElement 取到 `src.f`；构造：定型后是 RECORD，取到的是那个实参（NFExpression.mo:5638-5643），也只求它
+    //（pk-p44 探针 SBK20 `bp2 = BP(IL = 3, V = 2 * c)` 读 bp2.IL → c 照旧）。
+    if (inst.bind == 1) {
+      if (by_cref) field_wise();
+      else sb_deps(s, b);
+      return;
+    }
+    if (inst.bind == 3 && !inst.elem) {   // 选过支的 if：整个 if 求值 → 选中的支整个求
+      if (!inst.sel_own) { s.fail = true; return; }
+      const std::string src = sb_rec_src(s, R);
+      if (!src.empty()) sb_any(s, src);
+      else sb_whole(s, R);
+      return;
+    }
+    if (inst.bind == 2) { sb_up(s, R); return; }
+    if (inst.bind == 3 && inst.elem) {
+      const std::string A = leaf_base(R);
+      const auto ra = rec_array_binds_.find(A);
+      if (ra != rec_array_binds_.end() && ra->second.derived) { sb_up(s, A); return; }   // 数组的值拆自外层整体绑定
+      if (ra == rec_array_binds_.end() || !ra->second.raw.is_valid()) { s.fail = true; return; }
+      // 逐元素写出的字面量：取到元素后同标量（引用 / 构造都只求那个字段，NFExpression.mo:5656-5673 的 nthRecordElement）；整个是
+      // 记录数组引用：`cds[i].f`。其余（推导式 / fill / 调用）：定型元素字段的维时下标是切分占位，applySubscripts 落成
+      // SUBSCRIPTED_EXP（:1617-1629 只认单个下标），recordElement 再落到 RECORD_ELEMENT → 整个绑定求值。
+      if (ra->second.by_cref || (ra->second.elem_lit && by_cref)) { field_wise(); return; }
+      if (ra->second.elem_lit) { sb_deps(s, b); return; }
+      sb_array_whole(s, A);
+      return;
+    }
+    s.fail = true;
+  }
+  // 值拆自外层整体绑定的记录实例 R（omc 里 R 没有绑定）：往上找到有绑定的那层 A，R 在 A 之下的那一层 `A.p1` 整个求值
+  //（makeRecordFieldBindingFromParent 递归到 A 时整个求 recordElement(p1, A 的绑定)，:693-706）。
+  void sb_up(SbSim& s, const std::string& R) {
+    const std::string P = parent_key(R);
+    const auto pi = rec_insts_.find(P);
+    if (pi == rec_insts_.end() || pi->second.moved) { s.fail = true; return; }
+    const RecInst inst = pi->second;
+    if (inst.bind == 2) { sb_up(s, P); return; }
+    if (inst.bind == 1 || (inst.bind == 3 && !inst.elem && inst.sel_own)) {
+      const std::string src = sb_rec_src(s, R);   // 记录引用：`src.p1` 整个求
+      if (!src.empty() && inst.bind == 1) { sb_any(s, src); return; }
+      if (inst.bind == 3) {                         // if：选中的支整个求
+        const std::string psrc = sb_rec_src(s, P);
+        if (!psrc.empty()) sb_any(s, psrc);
+        else sb_whole(s, P);
+        return;
+      }
+      sb_whole(s, R);   // 构造（RECORD）：取到 p1 那个实参、整个求
+      return;
+    }
+    s.fail = true;
+  }
+  // 记录实例 R 自己的整体绑定（构造 / 选中的支）整个求值、不存回 R：各字段的式子里的引用逐个求，嵌套记录字段的值是记录引用的
+  // 整个求那个记录。
+  void sb_whole(SbSim& s, const std::string& R) {
+    if (s.fail || !s.seen.insert("W:" + R).second) return;
+    std::unordered_set<std::string> done;
+    for (std::size_t i : sb_under(s, R)) {
+      const std::string& k = s.keys[i];
+      if (k.compare(0, R.size(), R) != 0) { s.fail = true; return; }
+      const std::size_t dot = k.find('.', R.size());
+      const std::string seg = k.substr(R.size(), dot - R.size() + 1);
+      const std::string child = R + seg;
+      if (child == k) {   // 直属叶
+        const FlatVariable& v = result_.model.variables[i];
+        if (v.var_kind == FlatVarKind::Parameter) sb_deps(s, sb_binding(k, v));
+        continue;
+      }
+      if (!done.insert(child).second) continue;
+      // 嵌套记录（或记录数组字段的元素 `rd[1].`）：值拆自 R 的绑定，是记录引用的整个求那个记录。
+      if (!rec_insts_.count(child)) { s.fail = true; return; }
+      const std::string src = sb_rec_src(s, child);
+      if (!src.empty()) sb_any(s, src);
+      else sb_whole(s, child);
+    }
+  }
+  // 整个记录 R 的求值（evalCref 一个记录）。
+  void sb_record(SbSim& s, const std::string& R) {
+    const RecInst inst = rec_insts_.at(R);
+    if (inst.moved) { s.fail = true; return; }
+    if (inst.bind == 1 || (inst.bind == 3 && !inst.elem && inst.sel_own)) {   // 自己的整体绑定：整个求值、存回
+      for (std::size_t i : sb_under(s, R)) {
+        s.evald.insert(s.keys[i]);
+        s.evald.insert(leaf_base(s.keys[i]));
+        sb_store(s, s.keys[i]);
+      }
+      const std::string src = sb_rec_src(s, R);
+      if (!src.empty()) sb_any(s, src);
+      else sb_whole(s, R);
+      return;
+    }
+    if (inst.bind == 2) { sb_up(s, R); return; }
+    if (inst.bind == 3 && inst.elem) {   // 记录数组的元素 `a[i]`：求的是整个数组组件的绑定
+      sb_any(s, leaf_base(R));
+      return;
+    }
+    if (inst.bind != 0) { s.fail = true; return; }
+    // 没有绑定、外层也没有：makeRecordBindingExp 逐字段求值（直属字段；数组字段按整个数组）。
+    std::unordered_set<std::string> done;
+    for (std::size_t i : sb_under(s, R)) {
+      const std::string& k = s.keys[i];
+      if (k.compare(0, R.size(), R) != 0) { s.fail = true; return; }
+      const std::size_t dot = k.find('.', R.size());
+      std::string seg = k.substr(R.size(), dot - R.size() + 1);
+      if (const std::size_t q = seg.find('['); q != std::string::npos) seg = seg.substr(0, q) + ".";
+      if (done.insert(R + seg).second) sb_any(s, R + seg);
+    }
+  }
+  // 整个记录数组 A 的求值：有自己的绑定 → 求值、存回整个数组；没有 → 各元素逐字段（mapCrefScalars + makeRecordBindingExp，
+  // NFCeval.mo:653-667）。
+  void sb_rec_array(SbSim& s, const std::string& A) {
+    const RecArrayBind rb = rec_array_binds_.at(A);
+    if (rb.raw.is_valid() && rb.derived) { sb_up(s, A); return; }   // 值拆自外层整体绑定（omc 里本数组没有绑定）
+    std::vector<std::string> elems;
+    for (std::size_t i : sb_under(s, A)) {
+      const std::string& k = s.keys[i];
+      const std::size_t dot = k.find('.', A.size() - 1);
+      const std::string e = k.substr(0, dot + 1);
+      if (std::find(elems.begin(), elems.end(), e) == elems.end()) elems.push_back(e);
+    }
+    if (!rb.raw.is_valid()) {
+      for (const std::string& e : elems)
+        if (rec_insts_.count(e)) sb_record(s, e);
+        else { s.fail = true; return; }
+      return;
+    }
+    for (std::size_t i : sb_under(s, A)) {
+      s.evald.insert(s.keys[i]);
+      s.evald.insert(leaf_base(s.keys[i]));
+      sb_store(s, s.keys[i]);
+    }
+    sb_array_whole(s, A);
+  }
+  // 记录数组 A 自己的整体绑定整个求值（不存回）：各元素选中的值逐个求（元素是记录引用的整个求那个记录）。
+  void sb_array_whole(SbSim& s, const std::string& A) {
+    if (s.fail || !s.seen.insert("W:" + A).second) return;
+    std::vector<std::string> elems;
+    for (std::size_t i : sb_under(s, A)) {
+      const std::string& k = s.keys[i];
+      const std::size_t dot = k.find('.', A.size() - 1);
+      const std::string e = k.substr(0, dot + 1);
+      if (std::find(elems.begin(), elems.end(), e) == elems.end()) elems.push_back(e);
+    }
+    for (const std::string& e : elems) {
+      if (!rec_insts_.count(e)) { s.fail = true; return; }
+      const std::string src = sb_rec_src(s, e);
+      if (!src.empty()) sb_any(s, src);
+      else sb_whole(s, e);
+    }
+  }
+  // 存回的参数 k 求得的值（标量走 flat_param_value；参数数组的元素顺它的绑定求）。
+  std::optional<CVal> sb_value(const std::string& k, int depth) {
+    if (depth > 50) return std::nullopt;
+    if (std::optional<CVal> v = flat_param_value(k, depth)) return v;
+    const FlatVariable* fv = emitted_var(k);
+    if (!fv || fv->subscripts.empty() || !fv->binding.is_valid() || evf_nonstruct(k)) return std::nullopt;
+    const Id<Expr> b = fv->binding;
+    std::vector<std::string> cs;
+    sb_crefs(b, cs);
+    std::unordered_map<std::string, Id<Expr>> sub;
+    for (const std::string& c : cs) {
+      if (sub.count(c)) continue;
+      const std::optional<CVal> cv = sb_value(c, depth + 1);
+      if (!cv || is_arr(*cv) || cv->k == CVal::K::Record || cv->k == CVal::K::Undef ||
+          (cv->k == CVal::K::Enum && cv->epath.empty()))
+        return std::nullopt;
+      sub.emplace(c, literal_of(*cv));
+    }
+    const bool saved_ss = struct_subst_;
+    struct_subst_ = true;
+    const Id<Expr> sv = simplify_expr(clone_subst(b, sub));
+    struct_subst_ = saved_ss;
+    return cval_of(sv);
+  }
+  // 模拟（见上）：定型期读到的根逐个求，定出要存回的参数（在 apply_structural_params 之前，store 留到之后换绑定）。
+  std::vector<std::string> sb_plan() {
+    if (result_.unsupported || (lenient_ && need_second_pass_)) return {};
+    std::vector<std::string> roots;
+    bool any_field = false;
+    std::unordered_set<std::string> treads = typing_reads_;   // 定型期的读取（缓存命中的一并，见 sb_cached_read）
+    treads.insert(sb_cache_reads_.begin(), sb_cache_reads_.end());
+    for (const std::string& r : treads)
+      if (r.compare(0, kRecReadTag.size(), kRecReadTag) == 0) roots.push_back(r);
+      else any_field = any_field || param_info_.count(r) || !emitted_var(r);
+    if (roots.empty() && !any_field && sb_roots_.empty()) return {};
+    SbSim s;
+    for (const FlatVariable& v : result_.model.variables) {
+      s.keys.push_back(var_key(v));
+      s.by_node[sb_node(s.keys.back())].push_back(s.keys.size() - 1);
+    }
+    // 经父记录整体绑定取值的字段（数组字段读到的是整体 key `a.T.`，看它的元素）。
+    for (const std::string& r : treads) {
+      if (r.compare(0, kRecReadTag.size(), kRecReadTag) == 0) continue;
+      bool field = false;
+      if (emitted_var(r)) {
+        const auto pit = param_info_.find(r);
+        field = pit != param_info_.end() && pit->second.origin == 1;
+      } else {
+        for (std::size_t i : sb_under(s, r)) {
+          const auto pit = param_info_.find(s.keys[i]);
+          field = field || (pit != param_info_.end() && pit->second.origin == 1 && parent_key(s.keys[i]) == parent_key(r));
+        }
+      }
+      if (field) roots.push_back(r);
+    }
+    // 压平期语境里的定型期求值（fill 的维实参、数组构造子范围、`:` 维的数组 if，见 sb_roots_）：读到的参数都是根（整个记录的读取
+    // 同 kRecReadTag）。
+    for (const std::string& r : sb_roots_) roots.push_back(rec_insts_.count(r) ? std::string(kRecReadTag) + r : r);
+    if (roots.empty()) return {};
+    std::sort(roots.begin(), roots.end());   // typing_reads_ 是无序集合：定序（结果与次序无关，只为可复现）
+    roots.erase(std::unique(roots.begin(), roots.end()), roots.end());
+    for (const std::string& r : roots) {
+      if (r.compare(0, kRecReadTag.size(), kRecReadTag) == 0) {
+        const std::string R = r.substr(kRecReadTag.size());
+        if (!rec_insts_.count(R)) {   // 没记下来历的记录实例（不经 flatten_class 的复合组件）：照旧只核直属字段
+          for (std::size_t i = 0; i < s.keys.size(); ++i) {
+            const FlatVariable& v = result_.model.variables[i];
+            if (v.var_kind != FlatVarKind::Parameter || parent_key(s.keys[i]) != R) continue;
+            const auto pit = param_info_.find(s.keys[i]);
+            if ((v.binding.is_valid() && !is_lit(v.binding)) || (pit != param_info_.end() && pit->second.nonstruct)) s.fail = true;
+          }
+        } else if (s.seen.insert(R).second) {
+          sb_record(s, R);
+        }
+      } else {
+        sb_any(s, r);
+      }
+      if (s.fail) break;
+    }
+    if (s.fail) {
+      set_unsupported("record evaluated at typing time");
+      return {};
+    }
+    // 只因定型期已被求值存回的绑定里的数组 if 选支而标的条件参数：omc 压平时那里只剩字面量、不再标（见 emit_key_）→ 撤掉结构
+    // 标记（别处也标过的、标它的变量没被存回的照旧）。
+    std::unordered_map<std::string, bool> only;   // 条件参数 → 标记全来自被存回的变量
+    for (const auto& [k, src] : sb_mark_log_) {
+      const bool ok = !src.empty() && s.evald.count(src);
+      const auto [it, fresh] = only.emplace(k, ok);
+      if (!fresh && !ok) it->second = false;
+    }
+    for (const auto& [k, ok] : only) {
+      if (!ok || !structural_set_.count(k)) continue;
+      // 别处（含撤销了的试探）也读过它：此刻的结构身份也许已被别的式子用过（按结构参数折掉），撤不干净 → SKIP。
+      if (cond_other_.count(k)) {
+        set_unsupported("record evaluated at typing time");
+        if (result_.unsupported_detail.empty()) result_.unsupported_detail = "conditional array if condition";
+        return {};
+      }
+      if (structural_set_.erase(k)) {
+        structural_keys_.erase(std::remove(structural_keys_.begin(), structural_keys_.end(), k), structural_keys_.end());
+        if (const auto b = struct_bases_.find(leaf_base(k)); b != struct_bases_.end() && --b->second == 0) struct_bases_.erase(b);
+      }
+    }
+    return s.store;
+  }
+  // 换绑定：存回的参数打求得的字面量。
+  void sb_apply(const std::vector<std::string>& store) {
+    if (store.empty() || result_.unsupported) return;
+    std::unordered_set<std::string> done;
+    for (const std::string& k : store) {
+      if (!done.insert(k).second) continue;
+      const FlatVariable* fv = emitted_var(k);
+      if (!fv || !fv->binding.is_valid() || is_lit(fv->binding) || structural_set_.count(k)) continue;
+      const TypeKind tk = fv->ty.kind;
+      const std::optional<CVal> v = sb_value(k, 0);
+      const std::optional<CVal> c = v && !is_arr(*v) && v->k != CVal::K::Record && v->k != CVal::K::Undef
+                                        ? coerce_to_kind(*v, tk) : std::nullopt;
+      if (!c) {
         set_unsupported("record evaluated at typing time");
         return;
       }
+      Id<Expr> lit = literal_of(*c);
+      if (tk == TypeKind::Real) lit = to_real(lit);
+      ensure_var_index();
+      result_.model.variables[var_index_.at(k)].binding = lit;
     }
   }
   // 值求值路（eval_scode）：书写处前缀（含逐段下标）+ cref 各段（常量整数下标）→ const_vals_ 里的值。
@@ -16779,7 +17249,10 @@ class Flattener {
     redirect_outer_path(names, isubs, prefix.size());
     const std::string key = int_key(names, isubs);
     auto it = const_vals_.find(key);
-    if (it != const_vals_.end()) return it->second;
+    if (it != const_vals_.end()) {
+      if (dep_mark_) sb_cached_read(key);
+      return it->second;
+    }
     // 已发射的字面量绑定参数（子实例 / 记录参数的字段 `a.p`、`r.n`；本实例的单段参数走 frame_value）：编译期求值用到它
     // → 结构参数（同 frame_value 的标记规则：dep_mark_ 时才标）。
     if (!allow_param || c.parts.size() < 2) return std::nullopt;
@@ -16943,7 +17416,7 @@ class Flattener {
         // IaNominal)`）：omc 的 Ceval 给无绑定的记录现建绑定、逐字段求值（makeComponentBinding → makeRecordBindingExp，NFCeval.mo:
         // 621-671 / :715-757 v1.25.0）——取各直属字段的值拼成记录式（flat_record_literal），代入后由 simplify_expr 连调用一起求值。
         // 读到的记录同 record_param_value：记录节点本身标结构（实例化期的连带，见 const_lookup_val），定型期的整记录读取记下
-        //（check_record_store_back）。
+        //（存回见 sb_plan）。
         if (record_value_type(e.ty)) {
           const Id<Expr> rl = flat_record_literal(k, e.ty, depth);
           if (!rl.is_valid()) { ok = false; return; }
@@ -19306,12 +19779,38 @@ class Flattener {
     }
   }
   Id<Expr> select_if_branch(Id<Exp> craw, Id<Expr> c, Id<Expr> t, Id<Expr> f, NodeId enclosing) {
+    struct InSelect {   // 条件参数的标记记到正在发射的变量名下（见 emit_key_）
+      bool& ref;
+      bool saved;
+      explicit InSelect(bool& r) : ref(r), saved(r) { ref = true; }
+      ~InSelect() { ref = saved; }
+      InSelect(const InSelect&) = delete;
+      InSelect& operator=(const InSelect&) = delete;
+    } in_select(in_select_);
     const StructSnap snap = struct_snap();
+    // `:` 维要这个绑定的形状：定型期就求了条件（typeExpDim → evaluateArrayIf，NFTyping.mo:1744-1771 v1.25.0），读到的参数照存回
+    //（见 sb_roots_；pk-p44 探针 SBK48 `Real z[:] = if m > 1 then {time, 2} else {1}` → `c = 2.0`）。
+    const bool dim_typing = mark_phase_ == MarkPhase::Early && early_typing_ && eval_root_.empty();
     // 条件是在压平期才标的（flattenConditionalArrayIfExp，NFFlatten.mo:1733-1737，v1.25.0）：哪怕 if 写在绑定里，声明在后的
     // 别名也不连带（AO 探针 a1：`a1 = if pt …; parameter Boolean pd = pt` → pd 不 final）。
     const PhaseScope late(*this, MarkPhase::Late);
     std::unordered_set<std::uint32_t> used;
+    std::vector<std::string> creads;   // 读到的（见 sb_collect_）
+    std::vector<std::string>* const saved_collect = std::exchange(sb_collect_, &creads);
+    EvalProbe cprobe;
+    EvalProbe* const saved_cprobe = std::exchange(eval_probe_, &cprobe);
     const std::optional<CVal> cv = eval_scode(craw, scode_scope_of(enclosing), 0, /*allow_param=*/true, &used);
+    eval_probe_ = saved_cprobe;
+    sb_collect_ = saved_collect;
+    if (saved_collect) saved_collect->insert(saved_collect->end(), creads.begin(), creads.end());
+    if (saved_cprobe) {
+      saved_cprobe->keys.insert(saved_cprobe->keys.end(), cprobe.keys.begin(), cprobe.keys.end());
+      saved_cprobe->nonstruct = saved_cprobe->nonstruct || cprobe.nonstruct;
+    }
+    if (dim_typing) {
+      sb_roots_.insert(sb_roots_.end(), creads.begin(), creads.end());
+      for (const auto& kk : cprobe.keys) sb_roots_.push_back(kk.first);
+    }
     bool ok = cv && cv->k == CVal::K::Bool;
     for (std::uint32_t d : used)
       if (evaluate_annotation(Id<SElement>::from_index(d)) == std::optional<bool>(false)) ok = false;
@@ -21187,7 +21686,24 @@ class Flattener {
       if (result_.unsupported) return lit_int(0);
       ilabels.emplace_back();
       std::pair<std::int64_t, std::int64_t> written{1, 0};
+      // 数组构造子的范围在定型期求值（NFCall.mo:2510-2515 v1.25.0，函数里除外）：读到的参数照存回（见 sb_roots_；pk-p44 探针
+      // SBK50 `{time for i in 1:m + 1}`、`m = integer(c)` → `c = 2.0`）。
+      std::vector<std::string> rreads;   // 读到的（见 sb_collect_）
+      std::vector<std::string>* const saved_collect = std::exchange(sb_collect_, &rreads);
+      EvalProbe rprobe;
+      EvalProbe* const saved_rprobe = std::exchange(eval_probe_, &rprobe);
       const std::optional<std::vector<std::int64_t>> seq = eval_range(it.range, scode_scope_of(scope), 0, &written);
+      eval_probe_ = saved_rprobe;
+      sb_collect_ = saved_collect;
+      if (saved_collect) saved_collect->insert(saved_collect->end(), rreads.begin(), rreads.end());
+      if (saved_rprobe) {
+        saved_rprobe->keys.insert(saved_rprobe->keys.end(), rprobe.keys.begin(), rprobe.keys.end());
+        saved_rprobe->nonstruct = saved_rprobe->nonstruct || rprobe.nonstruct;
+      }
+      if (!fn_scope_ && eval_root_.empty()) {
+        sb_roots_.insert(sb_roots_.end(), rreads.begin(), rreads.end());
+        for (const auto& kk : rprobe.keys) sb_roots_.push_back(kk.first);
+      }
       // 单迭代、范围为空：结果是 T[0] 的空数组字面量（simplifyArrayConstructor 的 dim_size == 0 支 → Expression.makeEmptyArray，
       // NFSimplifyExp.mo:606-608 v1.25.0；PKL 探针 PKL1-3：MSL Fluid DynamicPipe n = 2 的 `Wb_flows[2:n-1] = {… for i in 2:n-1} *
       // nParallel` 整条方程消失、`sum({…})` → 0）。元素类型照体定型（迭代变量作符号引用，同下）；体是数组的未核实 → SKIP。
@@ -22222,7 +22738,12 @@ class Flattener {
         EvalProbe probe;
         EvalProbe* const saved_probe = std::exchange(eval_probe_, &probe);
         const StructSnap before = struct_snap();
+        std::vector<std::string> reads;   // 读到的（见 sb_collect_）
+        std::vector<std::string>* const saved_collect = std::exchange(sb_collect_, &reads);
         const std::optional<CVal> v = eval_scode(args[i], scope, 0, /*allow_param=*/true, nullptr);
+        sb_collect_ = saved_collect;
+        if (saved_collect) saved_collect->insert(saved_collect->end(), reads.begin(), reads.end());
+        for (const auto& kk : probe.keys) reads.push_back(kk.first);
         eval_probe_ = saved_probe;
         if (saved_probe) {   // 外层的探针照样要知道读到了什么
           saved_probe->keys.insert(saved_probe->keys.end(), probe.keys.begin(), probe.keys.end());
@@ -22230,6 +22751,16 @@ class Flattener {
         }
         for (const auto& kk : probe.keys)
           if (!structural_at(before, kk.first, kk.second)) fill_dim_keys_.push_back(kk.first);
+        // 算法段里 omc 不标、不求维实参（typeFillCall2 的 inAlgorithm 守卫，NFBuiltinCall.mo:965），fill 照留（`z := fill(time, m)`、
+        // m 不 final；字面量维化简时展开）。保留 fill 的形态未做：读到此前还不是结构参数的 → SKIP（pk-p44 探针 SBK60 / SBK61）。
+        if (in_alg_ > 0)
+          for (const std::string& rk : reads)
+            if (rk.compare(0, kRecReadTag.size(), kRecReadTag) == 0 || !structural_at(before, rk, false)) {
+              set_unsupported("fill dimension in algorithm");
+              return lit_int(0);
+            }
+        // 别处是定型期的求值（:973-977）：读到的参数照存回（见 sb_plan）。
+        if (in_alg_ == 0 && eval_root_.empty()) sb_roots_.insert(sb_roots_.end(), reads.begin(), reads.end());
         if (!v || v->k != CVal::K::Int) { set_unsupported("non-constant fill dimension"); return lit_int(0); }
         if (v->i < 0) { set_unsupported("negative fill dimension"); return lit_int(0); }
         dims.push_back(v->i);   // 0 → 空数组字面量（类型带全维，EmptyArray1 `ones(size(x, 1))`、Array13 `fill(0.0, 0, 2)`）
@@ -26256,29 +26787,6 @@ class Flattener {
            (el.def.kind == SClassDefKind::Parts ||
             (el.def.kind == SClassDefKind::ClassExtends && I_.class_extends_target.count(e.raw)));
   }
-  // 类实例 cls 里有没有组件的维引用同类的兄弟组件（`parameter Integer nRC; RCData rcData[nRC]`）：按维式里各 cref 的首段在
-  // cls 里找组件。
-  bool sibling_dim_field(NodeId cls) {
-    auto refs_sibling = [&](auto& self, Id<Exp> e) -> bool {
-      if (!e.is_valid()) return false;
-      const Exp& x = I_.absyn.exps[e];
-      if (x.kind == ExpKind::CrefExp) {
-        const Cref& c = I_.absyn.crefs[x.cref];
-        if (c.leading_dot || c.parts.empty()) return false;
-        const NodeId n = find_local(cls, c.parts[0].name);
-        return n.is_valid() && !I_.nodes[n].is_empty() && I_.nodes[n].kind == NodeKind::Component;
-      }
-      for (Id<Exp> a : x.args) if (self(self, a)) return true;
-      return self(self, x.a) || self(self, x.b) || self(self, x.c);
-    };
-    for (NodeId mn : I_.trees[I_.node_class(cls).tree].components) {
-      if (I_.nodes[mn].kind != NodeKind::Component) continue;
-      const SElement& el = I_.scode.elems[I_.comps[I_.nodes[mn].comp].def];
-      for (const std::vector<Id<Exp>>* ds : {&el.attr.dims, &el.type.dims})
-        for (Id<Exp> d : *ds) if (refs_sibling(refs_sibling, d)) return true;
-    }
-    return false;
-  }
   // 记录组件 cid（在类实例 inst_node 里）的实例类登记进 rec_seen_：声明类型是短类定义的——operator record 的短类别名
   //（SI.ComplexVoltage、ComplexOutput）记录类型就是这个最外层短类（makeRecordComplexType，NFInst.mo:2580-2591 v1.25.0），
   // 构造函数 / 'constructor' / 运算符函数按它的路径命名（rp62x SPEC OR1 / OR2 / OR7）→ rec_alias_；普通记录的短类别名
@@ -27991,6 +28499,17 @@ class Flattener {
   }
   void record_structural(const std::string& k) {
     note_read(k);
+    // 两支不相容的数组 if 选支时标的条件参数（见 select_if_branch）记下标它的变量；别处的标记一并记（只记这些参数的），收尾时
+    // 看它是不是只因被存回了的绑定里的 if 而标（见 sb_plan）。
+    if (sb_collect_) sb_collect_->push_back(k);   // 见 sb_collect_
+    if (in_select_ && !emit_key_.empty()) {
+      if (structural_set_.count(k) && !cond_keys_.count(k)) sb_mark_log_.push_back({k, std::string()});   // 此前已被别处标过
+      cond_keys_.insert(k);
+      sb_mark_log_.push_back({k, emit_key_});
+    } else if (cond_keys_.count(k)) {
+      sb_mark_log_.push_back({k, std::string()});
+      cond_other_.insert(k);
+    }
     const int t = mark_time();
     const auto it = structural_set_.find(k);
     if (it == structural_set_.end()) {
@@ -28014,11 +28533,13 @@ class Flattener {
   struct StructSnap {
     std::size_t log_n = 0;       // mark_log_ 的长度
     std::size_t touched_n = 0;   // touched_log_ 的长度
+    std::size_t sbm_n = 0;       // sb_mark_log_ 的长度
   };
-  StructSnap struct_snap() const { return {mark_log_.size(), touched_log_.size()}; }
+  StructSnap struct_snap() const { return {mark_log_.size(), touched_log_.size(), sb_mark_log_.size()}; }
   // 整个记录参数被结构语境读到（record_param_value）：omc 的 Structural.markExp 标的是记录组件节点本身（字段节点照旧），式子里
   // 对它的整体引用随后代成记录式（apply_structural_params 的 structural_records）。同结构标记一起记进 mark_log_，试探求值撤销时一并退回。
   void mark_record(const std::string& k) {
+    if (sb_collect_) sb_collect_->push_back(std::string(kRecReadTag) + k);   // 见 sb_collect_
     const int t = mark_time();   // 标记时刻（见 MarkPhase）：整体绑定引用它的记录参数连带与否看它（见 structural_records）
     if (record_marks_.insert(k).second) {
       mark_log_.push_back({MarkUndo::RecNew, k, 0});
@@ -28049,6 +28570,7 @@ class Flattener {
       }
     }
     untouch(s.touched_n);
+    sb_mark_log_.resize(std::min(sb_mark_log_.size(), s.sbm_n));
   }
   // const_vals_ 的写入一律经这里：试探求值期间（CvTrial 活着）记撤销日志，撤销时倒着退回去（此前每次试探整份拷贝值缓存）。
   void cv_set(const std::string& k, CVal v) {
@@ -28713,7 +29235,20 @@ class Flattener {
     std::vector<Symbol> vprefix; // 书写处的变量前缀
     PSubs psubs;                 // vprefix 各段的下标
     bool psubs_ok = false;       // 书写处是本组件的外层实例（前缀的下标取得到）
+    bool derived = false;        // 拆自外层记录的整体绑定（omc 里本数组没有绑定；见 sb_plan）
+    bool elem_lit = false;       // 逐元素写出的数组字面量（见 sb_plan）
+    bool by_cref = false;        // 整个绑定是（记录数组的）引用（见 sb_plan）
   };
+  // 记录实例（标量记录 / 记录数组的元素）的整体绑定来历，定型期求值存回的模拟用（见 sb_plan）：bind 同 ModCtx::rec_bind
+  //（0 无 / 1 自己的 / 2 拆自外层记录的整体绑定 / 3 选过支的 if 或记录数组的元素）；sel_own：选过支的 if 原是自己的整体绑定；
+  // moved：整体绑定挪成了方程（字段无绑定）；elem：记录数组的元素。
+  struct RecInst {
+    std::uint8_t bind = 0;
+    bool sel_own = false;
+    bool moved = false;
+    bool elem = false;
+  };
+  std::unordered_map<std::string, RecInst> rec_insts_;
   bool rec_array_not_fixed(const std::string& ak, int depth, bool& unknown) {
     if (depth <= 0) { unknown = true; return false; }
     const auto it = rec_array_binds_.find(ak);
@@ -29915,6 +30450,7 @@ class Flattener {
   int alg_in_when_ = 0;
   int eq_in_when_ = 0;   // when 方程体内（collect_when_body 置）
   bool alg_initial_ = false;
+  int in_alg_ = 0;   // 正在压平算法段（见 fill 的维实参）
   std::unordered_map<std::uint32_t, TypeKind> stmt_iters_;      // for **语句**（KEPT loop）的迭代变量→元素类型（符号，不内联）
   std::unordered_map<std::uint32_t, Id<Expr>> stmt_iter_labels_;   // 其中取 Boolean / 枚举值的 → 该类型的一个标签
   // 函数体发射语境（FnCtxGuard 设 / 恢复；fn_scope_ 非空 = 正在发射函数体）。
@@ -30209,6 +30745,39 @@ class Flattener {
   std::string eval_root_;                                                         // 见上；空 = 定型期
   std::unordered_map<std::string, std::unordered_set<std::string>> root_reads_;
   std::unordered_set<std::string> typing_reads_;
+  // 两支不相容的数组 if 在压平期选支、条件参数标结构（flattenConditionalArrayIfExp，NFFlatten.mo:1733-1737 v1.25.0）——绑定在定型期
+  // 已被求值存回的，压平时只剩字面量、不再标（pk-p44 探针 SBK65：`Ti[:] = if u then {1, 2} else T` 存回后 u 不 final）。emit_key_ =
+  // 正在发射的变量（整体 key），in_select_ = 正在选支；sb_mark_log_：条件参数 → 标它的变量（空 = 别处的标记），进求值事务。
+  std::string emit_key_;
+  struct EmitKey {   // 发射一个变量期间的 emit_key_
+    std::string& ref;
+    std::string saved;
+    EmitKey(std::string& r, std::string k) : ref(r), saved(std::move(r)) { ref = std::move(k); }
+    ~EmitKey() { ref = std::move(saved); }
+    EmitKey(const EmitKey&) = delete;
+    EmitKey& operator=(const EmitKey&) = delete;
+  };
+  bool in_select_ = false;
+  std::unordered_set<std::string> cond_keys_;   // 选支标过的参数（只增：之后别处的标记据此才记）
+  // 选支标过的参数在别处被标（读）过——含之后撤销了的试探求值（不进事务：撤掉的试探也许已按它是结构参数折了别的式子，
+  // 见 sb_plan 的撤标）。
+  std::unordered_set<std::string> cond_other_;
+  std::vector<std::pair<std::string, std::string>> sb_mark_log_;
+  // 定型期求值的根里 typing_reads_ 记不下的（压平期语境里也在定型期求值的：fill / zeros / ones 的维实参、数组构造子的范围、
+  // `:` 维要的数组 if 选支），见 sb_plan。sb_collect_：这些语境求值期间收读到的（record_structural / mark_record / 缓存命中）。
+  std::vector<std::string> sb_roots_;
+  std::vector<std::string>* sb_collect_ = nullptr;
+  // 值已缓存（const_vals_）的读取不再走标记：照样是一次读取——定型期的（经父记录取值的字段 / 整个记录才算根，同 typing_reads_，
+  // 进 sb_cache_reads_）、选支标过的条件参数在别处的标记（见 cond_other_）。
+  std::unordered_set<std::string> sb_cache_reads_;
+  void sb_cached_read(const std::string& k) {
+    if (sb_collect_) sb_collect_->push_back(k);
+    else if (mark_phase_ != MarkPhase::Late && eval_root_.empty()) sb_cache_reads_.insert(k);
+    if (!in_select_ && cond_keys_.count(k)) {
+      sb_mark_log_.push_back({k, std::string()});
+      cond_other_.insert(k);
+    }
+  }
   struct EvalRoot {   // EvalConstants 时刻的求值（见 comp_bound_）
     Flattener& f;
     std::string saved;

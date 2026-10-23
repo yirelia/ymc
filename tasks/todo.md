@@ -2764,8 +2764,23 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       探针 pk-p43（96；EAM / EAN / RCV）——基线上 FAIL 5，现 PASS 80 / SKIP 10 / BOTH-REJECT 6；旧组 cn-n4 SKIP→PASS 1；单测 +3。
       slice 704 例 FAIL 0（oracle=live 不一致 0）；scodeinst 665、testsuite 1842（均不变）/ FAIL 0；**MSL 495→496**（Batteries.Examples.
       CCCV_Stack）；探针 14487→14583；单测 523→526。
-- [ ] (67j 候选) 记录数组整体绑定的定型期求值存回（evalComponentBinding 存回语义）：CCCV_StackRC 要它；复现 `$S/pkr67i/rc/RC3.mo` /
+- [x] (67j 候选，67j 已做) 记录数组整体绑定的定型期求值存回（evalComponentBinding 存回语义）：CCCV_StackRC 要它；复现 `$S/pkr67i/rc/RC3.mo` /
       `RC9.mo` / `RC12.mo`、`rcv.probes` / `rcv2.probes`。标量记录走 if 式 / 推导式绑定触发 makeRecordFieldBindingFromParent 的形态未核实。
+- [x] (67j) 定型期求值的存回（evalComponentBinding，2026-10-24）：定型期求值时 TYPED_BINDING 求一次就把值写回组件绑定（NFCeval.mo
+      :320-436 / :362-389），压平在后 → 这些参数打字面量、不带 final。定型期语境：维、条件组件的条件、fill / zeros / ones 的维实参、数组构造子
+      范围、`:` 维要形状时的数组 if 选支；Evaluate = true / if 方程条件 / for 范围在压平期求、看不出存回。存回是传递的。记录字段没有自己的
+      绑定时按 makeRecordFieldBindingFromParent（:673-713）：父是记录引用只求 `src.f`、构造只取被读的那个实参、if 整个求、隔一层的整个求
+      `src.p1` 并存回其全部字段；记录数组定型元素字段的维时下标是切分占位（推导式 / fill 整个求，逐元素字面量只取那个字段）。整个记录被读到：
+      有整体绑定的整个求值存回、没有的 makeRecordBindingExp 逐字段（:715-757）；组件 / 记录数组的元素共用一个节点。两支形状不相容的数组 if
+      的条件在压平时才标结构，绑定已在定型期存回的就不再标（RCV2 的 `a.u`、CCCV 的 useLinearSOCDependency）。
+      实现：收尾时照这些规则模拟（sb_plan）、换成求得的字面量（sb_apply），只因被存回的数组 if 而标的条件参数撤掉结构标记；形态认不全 /
+      值求不出 → SKIP。删掉 67i 的记录数组窄门与 67g 的 check_record_store_back（由模拟接管）。
+      新挡成 SKIP 的 omc 怪相：外层记录有整体绑定时重声明的记录字段按自己的缺省绑定定型（redeclareComponent 的 useBinding = true；
+      CCCV_StackRC 的 stack.stackData 里的 cellData，下一处卡点）；算法段里 fill 的维实参 omc 不标不求（NFBuiltinCall.mo:965）。
+      照旧 SKIP：cat 维号经参数绑定、按下标显式读记录数组元素的字段（`bps[2].IL`）、维里的记录函数实参。
+      探针 pk-p44（82；SBK）——基线上 FAIL 43，现 PASS 63 / SKIP 18 / BOTH-REJECT 1；旧组 pk-p41 / pk-p42 / pk-p43 SKIP→PASS 11；单测 +5、
+      改 2。slice 704 例 FAIL 0（oracle=live 不一致 0）；scodeinst 665、testsuite 1842、MSL 496（均不变）/ FAIL 0；探针 14583→14665；
+      单测 526→531。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。
