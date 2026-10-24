@@ -2781,6 +2781,23 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       探针 pk-p44（82；SBK）——基线上 FAIL 43，现 PASS 63 / SKIP 18 / BOTH-REJECT 1；旧组 pk-p41 / pk-p42 / pk-p43 SKIP→PASS 11；单测 +5、
       改 2。slice 704 例 FAIL 0（oracle=live 不一致 0）；scodeinst 665、testsuite 1842、MSL 496（均不变）/ FAIL 0；探针 14583→14665；
       单测 526→531。
+- [x] (67k) RoomCO2 / RoomCO2WithControls 的三处卡点（2026-10-24）：
+      (1) if 式未选支里求不出的常量调用：EvalConstants 的 evaluateIfExp（NFEvalConstants.mo:307-347）先代入条件里的常量 / 结构参数再化简
+      条件，成布尔字面量的只留选中支、另一支里的调用从不求值、函数不打；否则两支留到 SimplifyModel 的 simplifyIf（NFSimplifyExp.mo
+      :1286-1320）再试，求不出照留调用。ymc 先化简后代结构参数，两支一起化简、当场 SKIP → 条件不是字面量时缓下这种 SKIP（deferred_fns_ /
+      if_defer_），prune_functions 之后函数还在 = 调用没随选支丢掉 → 照原因 SKIP（FixedBoundary.d 的 `if use_T then density_pTX(…) else
+      density_phX(…)`）。ponytail：按"函数还在不在"判，函数另有调用时多 SKIP（IFD35）。
+      (2) fill 的数组值：维实参都是字面量时 simplifyFill → fillArgs 化成以整个值为元素的数组字面量（NFSimplifyExp.mo:524-537、NFExpression.mo
+      :4772-4786）→ 放开非空数组值（`ports.C_outflow = fill(C_in_internal, nPorts)`）。
+      (3) 无绑定 fixed = false 的参数作下标（`C = CVec[ind]`）：markSubscript 把它标成结构参数打 final（NFStructural.mo:311-326），EvalConstants
+      求不出（evalComponentBinding 无绑定、fixed = false 不取 start，NFCeval.mo:344-360 / :580-585 / :408-412）→ 引用照留 `y = c[ind]`
+      （novalue_keys_，只收单参数 + 整数字面量 + - * 的下标）；别名的连带按定型时序（:1150-1159），连带成结构参数的 omc 报错 → SKIP。
+      照旧 SKIP：条件是普通参数时 omc 留 `if b then 2.0 else g(-1.0)`（IFD3）、函数体里 fill 的数组值、`c[ind + n]`、声明在后 / 子实例里的
+      novalue 参数。
+      探针 pk-p45（157；IFD）——基线 PASS 10 / SKIP 138，现 PASS 126 / SKIP 22 / BOTH-REJECT 9；旧组 cx-c9 / cx-ut / md-m1 / pk-p38 / pk-p39
+      SKIP→PASS 8；单测 +4、改 2。slice 704→705 例（+BindingArray9）FAIL 0（oracle=live 不一致 0）；scodeinst 665→666；testsuite 1842→1844
+      （others/NonfixedParamSubscript、scodeinst/BindingArray9）/ FAIL 0；**MSL 496→498**（Fluid.Examples.TraceSubstances.RoomCO2 /
+      RoomCO2WithControls）；探针 14665→14822；单测 531→535。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

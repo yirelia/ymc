@@ -290,6 +290,7 @@ class Flattener {
     check_late_struct();         // 末尾才判得清的结构参数用法（留着的 size 维号、fill 维实参的固定性）
     check_redecl_bound();        // 外层记录有整体绑定时重声明的记录字段（见 note_redecl_bound）
     const std::vector<std::string> sb_keys = sb_plan();   // 定型期经记录求值存回的参数（见 sb_plan）
+    mark_novalue_params();       // 只标 final、引用照留的结构参数（见 novalue_keys_）
     apply_structural_params();   // 连接算子求值中结构化的参数：final + 属性折叠（NFEvalConstants 效果，受限）
     apply_structural_records();  // 结构记录参数的整体引用代成记录式（见 struct_records_）
     sb_apply(sb_keys);           // 存回的参数打求得的字面量
@@ -315,6 +316,15 @@ class Flattener {
     check_pre_args();
     check_const_slices();
     prune_functions();
+    for (const auto& [fn, why] : deferred_fns_) {   // 缓下的常量调用（见 deferred_fns_）：函数还在 = 调用没随选支丢掉
+      if (result_.unsupported) break;
+      for (const FlatFunction& f : result_.model.functions)
+        if (f.name == fn) {
+          set_unsupported(why);
+          for (std::size_t ci = 0; ci < fn.size(); ++ci) result_.unsupported_detail += (ci ? "." : "") + std::string(in_.str(fn[ci]));
+          break;
+        }
+    }
     relabel_type_dims();
     // 第一遍要重来时先把第二遍要的收下（result_ 马上要搬走，param_exprs_ 等指着它的 exprs）。
     if (lenient_ && need_second_pass_) snapshot_carry();
@@ -4461,6 +4471,14 @@ class Flattener {
     return v == SVariability::Var;
   }
 
+  // 式子里引用的参数是否全是只标 final、照留引用的结构参数（novalue_keys_，见 unbound_unfixed_sub）。
+  bool refs_novalue_only(Id<Expr> id) {
+    if (!id.is_valid()) return true;
+    const Expr& e = result_.model.exprs[id];
+    if (e.kind == ExprKind::Cref) return (!e.cref.parts.empty() && novalue_keys_.count(expr_cref_key(e.cref))) || !refs_param_var(id);
+    for (Id<Expr> a : e.args) if (!refs_novalue_only(a)) return false;
+    return refs_novalue_only(e.a) && refs_novalue_only(e.b) && refs_novalue_only(e.c);
+  }
   // 是否引用 parameter 变量（同 refs_runtime_var 按 cref 首段所指组件的声明变率判）。
   bool refs_param_var(Id<Expr> id) {
     if (!id.is_valid()) return false;
@@ -17645,7 +17663,7 @@ class Flattener {
           set_unsupported("array subscript out of range");
           return false;
         }
-        if (ie.kind != ExprKind::IntLit && refs_param_var(i) && !cond_is_runtime(i)) {
+        if (ie.kind != ExprKind::IntLit && refs_param_var(i) && !cond_is_runtime(i) && !refs_novalue_only(i)) {
           set_unsupported("parameter in symbolic subscript");
           return false;
         }
@@ -18785,7 +18803,9 @@ class Flattener {
                 if (!iv) {
                   const Id<Expr> se = simplify_expr(inst_exp(subs[k], enclosing, prefix));
                   if (result_.unsupported) break;
-                  if (result_.model.exprs[se].ty.kind == TypeKind::Integer && cond_is_runtime(se)) {
+                  // 只标 final、值求不出的结构参数（`CVec[ind]`，见 unbound_unfixed_sub）同样留符号。
+                  if (result_.model.exprs[se].ty.kind == TypeKind::Integer &&
+                      (cond_is_runtime(se) || (refs_param_var(se) && refs_novalue_only(se)))) {
                     leaf_subs[k] = se;
                     continue;
                   }
@@ -22768,9 +22788,15 @@ class Flattener {
       const Id<Expr> val = fill ? inst_exp(args[0], enclosing, prefix) : lit_int(name == "ones" ? 1 : 0);
       if (result_.unsupported) return lit_int(0);
       if (const std::vector<std::int64_t> vsh = expr_shape(val); !vsh.empty()) {
-        // 值是空数组（MSL Fluid Sources 的 `ports.Xi_outflow = fill(X, nPorts)`，X[nXi] 而 nXi = 0）：结果也是空数组，形状 = 维实参
-        // ++ 值的形状（fill 的类型，MLS §10.3.3）；所在等式两边都空，不产生标量方程（PKH 探针 PKH2）。非空的数组值未做 → SKIP。
-        if (std::find(vsh.begin(), vsh.end(), 0) == vsh.end()) { set_unsupported("fill of array value"); return lit_int(0); }
+        // 值是数组：结果形状 = 维实参 ++ 值的形状（fill 的类型，MLS §10.3.3），维实参全是字面量时 omc 化简成以整个值为元素的
+        // 数组字面量（simplifyFill → Expression.fillArgs，NFSimplifyExp.mo:524-537、NFExpression.mo:4772-4786 v1.25.0：
+        // `fill(x, 3)` → `{x, x, x}`，随后照常逐元素；IFD 探针 pk-p45 IFD101-IFD168：绑定方程整体留 `y = {x, x, x}`、MSL
+        // TraceSubstances 的 `ports.C_outflow = fill(C_in_internal, nPorts)`）。空数组值同（MSL Fluid Sources 的
+        // `ports.Xi_outflow = fill(X, nPorts)`，nXi = 0：两边都空，不产生标量方程，PKH 探针 PKH2）。值的维未知 → SKIP。
+        if (std::any_of(vsh.begin(), vsh.end(), [](std::int64_t n) { return n < 0; })) {
+          set_unsupported("fill of array value");
+          return lit_int(0);
+        }
         const Type et = result_.model.exprs[val].ty.element_type();
         auto rec = [&](auto& self, std::size_t k) -> Id<Expr> {
           if (k == dims.size()) return val;
@@ -24072,8 +24098,72 @@ class Flattener {
       need_second_pass_ = true;
       return std::nullopt;
     }
+    // 读到的是没有绑定、fixed = false 的标量参数（MSL Fluid Sensors.TraceSubstances 的 `C = CVec[ind]`，`parameter Integer
+    // ind(fixed = false)` 由初始算法赋值）：markSubscript → markComponent 照样把它标成结构参数、打 final（NFStructural.mo:311-326
+    // v1.25.0），EvalConstants 的 evalCref（NFEvalConstants.mo:189-210）→ evalComponentBinding 无绑定（NFCeval.mo:344-360）、
+    // 不固定不取 start（:580-585）→ UNBOUND 支返回原引用（:408-412），noTarget 下不报错（printUnboundError :3301-3303）：
+    // `y = c[ind]`、`final parameter Integer ind(fixed = false)`（IFD 探针 pk-p45 IFD201-IFD245）。只认下标里就这一个参数（与整数
+    // 字面量的算术），见 unbound_unfixed_sub。
+    if (!v && !probe.nonstruct && unbound_unfixed_sub(sx, probe.keys)) {
+      struct_restore(snap);
+      cv_trial.rollback();
+      const auto nv = novalue_keys_.emplace(probe.keys.front().first, mark_time()).first;   // 最早的标记时刻（同 structural_set_）
+      nv->second = std::min(nv->second, mark_time());
+      return std::nullopt;
+    }
     set_unsupported("parameter in symbolic subscript");
     return std::nullopt;
+  }
+  // param_subscript 求不出的下标 sx 是不是只读到一个"没有绑定、fixed = false"的已发射标量 Integer 参数（keys = 求值读到的）：
+  // sx 只由这个参数的引用（单段、不带下标）、整数字面量、算术（`ind`、`ind + 1`、`2 * ind`）组成——别的参数 / 迭代变量 / 调用
+  // 混在里面时 omc 代入它们的值（`c[ind + n]` → `c[ind + 1]`），未做。外层记录整体绑定挪成方程补的 fixed = false（moved_field_keys_）、
+  // 没赋到的字段不算（omc 那边字段有父记录给的绑定）。
+  bool unbound_unfixed_sub(Id<Exp> sx, const std::vector<std::pair<std::string, bool>>& keys) {
+    if (keys.empty()) return false;
+    const std::string k = keys.front().first;
+    for (const auto& kk : keys) if (kk.first != k || kk.second) return false;
+    if (moved_field_keys_.count(k) || empty_field_keys_.count(k)) return false;
+    const FlatVariable* fv = emitted_var(k);
+    if (!fv || fv->var_kind != FlatVarKind::Parameter || fv->binding.is_valid() || fv->ty.kind != TypeKind::Integer ||
+        fv->ty.is_array() || !fv->subscripts.empty() || fv->name.empty())
+      return false;
+    bool unfixed = false;
+    for (const FlatVarAttr& a : fv->attributes)
+      if (in_.str(a.name) == "fixed")
+        unfixed = result_.model.exprs[a.value].kind == ExprKind::BoolLit && !result_.model.exprs[a.value].bval;
+    if (!unfixed) return false;
+    const Symbol pn = fv->name.back();
+    bool ok = true;
+    auto walk = [&](auto& self, Id<Exp> x) -> void {
+      if (!ok || !x.is_valid()) return;
+      const Exp& e = I_.absyn.exps[x];
+      switch (e.kind) {
+        case ExpKind::IntLit: return;
+        case ExpKind::CrefExp: {
+          const Cref& c = I_.absyn.crefs[e.cref];
+          ok = !c.leading_dot && c.parts.size() == 1 && c.parts[0].subscripts.empty() && c.parts[0].name == pn;
+          return;
+        }
+        case ExpKind::Binary:
+          ok = e.op == Op::Add || e.op == Op::Sub || e.op == Op::Mul;
+          self(self, e.a);
+          self(self, e.b);
+          return;
+        case ExpKind::Unary:
+          ok = e.op == Op::UMinus;
+          self(self, e.a);
+          return;
+        case ExpKind::Tuple:
+          ok = e.args.size() == 1;
+          if (ok) self(self, e.args[0]);
+          return;
+        default:
+          ok = false;
+          return;
+      }
+    };
+    walk(walk, sx);
+    return ok;
   }
 
   // `(e)[i]`（ExpKind::Subscript：任意 primary 后的下标）：基是 cref（含括号分组）→ 下标并进 cref 末段（`(x)[n]` →
@@ -24944,7 +25034,9 @@ class Flattener {
         Id<Expr> cc = simplify_expr(c0);
         const Expr& ec = result_.model.exprs[cc];
         if (ec.kind == ExprKind::BoolLit) return simplify_expr(ec.bval ? t0 : e0);
+        ++if_defer_;   // 两支里求不出的常量调用先不 SKIP（见 deferred_fns_）
         Id<Expr> tt = simplify_expr(t0), ee = simplify_expr(e0);
+        --if_defer_;
         // simplifyIf（NFSimplifyExp.mo:1330-1337）：两支相等 → 该支；两支是（不等的）布尔字面量 → cond / not cond
         //（logicNegate：not 的 not 抵消，否则包一层 not，NFExpression.mo:5334-5344）。数组 if 取元素造出的不收拢（split_ifs_）。
         const bool split = split_ifs_.count(id.raw) > 0;
@@ -25013,10 +25105,15 @@ class Flattener {
               }
             }
           if (user && !result_.unsupported) {
-            set_unsupported(subst_calls_.count(id.raw) ? "constant user call after structural substitution"
-                                                       : "constant user call not evaluated");
-            for (std::size_t ci = 0; ci < call_name.size(); ++ci)   // 子原因：哪个函数（排桶用）
-              result_.unsupported_detail += (ci ? "." : "") + std::string(in_.str(call_name[ci]));
+            const char* const why = subst_calls_.count(id.raw) ? "constant user call after structural substitution"
+                                                               : "constant user call not evaluated";
+            if (if_defer_ > 0) {
+              deferred_fns_.emplace_back(call_name, why);   // 条件还不是字面量的 if 的一支里：调用照留，压平末尾再判（见 deferred_fns_）
+            } else {
+              set_unsupported(why);
+              for (std::size_t ci = 0; ci < call_name.size(); ++ci)   // 子原因：哪个函数（排桶用）
+                result_.unsupported_detail += (ci ? "." : "") + std::string(in_.str(call_name[ci]));
+            }
           }
         }
 
@@ -29599,6 +29696,39 @@ class Flattener {
         }
     }
   }
+  // novalue_keys_ 的参数打 final（markComponent 的 setFinal，NFStructural.mo:311-326 v1.25.0）。绑定恰是它的裸引用的参数：
+  // 定型在标记之后的 omc 连带成结构参数（checkComponentBindingVariability NFTyping.mo:1150-1159），EvalConstants 照结构参数
+  // 求值它的绑定（evaluateBinding NFEvalConstants.mo:112-146）→ 无值报错（printUnboundError NFCeval.mo:3321-3339）→ SKIP；
+  // 定型在标记之前的照普通参数。修饰分发 / 记录绑定拆来的裸 cref 未细分 → SKIP。
+  void mark_novalue_params() {
+    if (novalue_keys_.empty() || result_.unsupported) return;
+    ensure_var_index();
+    for (const auto& kt : novalue_keys_)
+      if (const auto it = var_index_.find(kt.first); it != var_index_.end()) result_.model.variables[it->second].is_final = true;
+    for (const FlatVariable& v : result_.model.variables) {
+      if (v.var_kind != FlatVarKind::Parameter || !v.binding.is_valid()) continue;
+      Id<Expr> bid = v.binding;
+      if (const auto rb = raw_bindings_.find(var_key(v)); result_.model.exprs[bid].kind != ExprKind::Cref && rb != raw_bindings_.end())
+        bid = rb->second;
+      if (result_.model.exprs[bid].kind != ExprKind::Cref) continue;
+      const auto nv = novalue_keys_.find(expr_cref_key(result_.model.exprs[bid].cref));
+      if (nv == novalue_keys_.end()) continue;
+      // 同 apply_structural_params 的别名支：Evaluate = false 的不连带；定型在标记之前的（方程段里的下标标的）不连带、照普通参数
+      //（IFD 探针 IFD231 `k = ind` 照打；IFD232 绑定 `y = c[ind]` 写在 k 之前 → omc 报 "Constant ind is used without having been
+      // given a value"）。
+      const std::string vk = var_key(v);
+      if (const auto pit = param_info_.find(vk); pit != param_info_.end() && pit->second.nonstruct) continue;
+      const auto at = alias_keys_.find(vk);
+      if (at != alias_keys_.end() && nv->second >= at->second) continue;
+      // 书写的不是裸 cref（`k = ind + 0` 化简成了 `ind`）：定型出的绑定不是 cref，不连带（IFD245）；修饰分发 / 记录绑定拆来的未细分。
+      if (at == alias_keys_.end()) {
+        const auto pit = param_info_.find(vk);
+        if (!alias_unknown_keys_.count(vk) && (pit == param_info_.end() || pit->second.origin == 0)) continue;
+      }
+      set_unsupported("alias of unbound structural parameter");
+      return;
+    }
+  }
   void apply_structural_params() {
     if (result_.unsupported) return;
     if (structural_keys_.empty() && record_marks_.empty()) {   // 向量化调用 / 书写的推导式里调用的函数去留照样要定（见 vec_kept_fns / comp_held_fns）
@@ -30513,6 +30643,20 @@ class Flattener {
   // ponytail: 只管负号挪动这一种中间形态；要根治得在代入前的式子上化简（同 omc 的先代入后化简）。
   std::unordered_set<std::uint32_t> moved_;
   bool moving_ = false;
+  // 条件还不是字面量的 if 式两支里求不出的常量用户调用（simplify_expr 的 Call 支）：omc 先代入结构参数 / 常量再化简
+  //（NFInst.mo:200-201 Flatten → EvalConstants、:210 SimplifyModel，v1.25.0），EvalConstants.evaluateIfExp（NFEvalConstants.mo:
+  // 307-347）先求条件、化简成布尔字面量就只留那一支，另一支里的调用压根不求值；ymc 在代入之前就化简了一遍，条件 `use_T`
+  //（Evaluate = true，或被 if 方程条件标成结构参数）这时还是引用。故此时不 SKIP、调用照留，记下函数名：代入后选支丢掉了
+  // 的，函数随之不再被引用、prune_functions 删掉；压平末尾函数还在 = 调用（或同名的别处调用）留了下来，omc 那边会试求值
+  //（simplifyCall2 :221-240，失败才照留），ymc 分不清 → 照原原因 SKIP（IFD 探针 pk-p45；MSL TraceSubstances.RoomCO2 的
+  // FixedBoundary `d = if use_T then density_pTX(…) else density_phX(…)`）。if_defer_ > 0 = 正在化简这样的支。
+  // ponytail: 只缓这一种 SKIP；被丢的支里别的未做形态照旧当场 SKIP（根治同 moved_：先代入后化简）。按函数去留判：同名函数在别处
+  // 另有调用的照 SKIP（IFD35），要细到调用节点得让各处克隆都带上标记。
+  std::vector<std::pair<std::vector<Symbol>, const char*>> deferred_fns_;
+  int if_defer_ = 0;
+  // 下标里读到的、没有绑定且 fixed = false 的参数（见 unbound_unfixed_sub）：omc 标结构参数、打 final，值求不出、引用照留；
+  // 不进 structural_keys_（apply_structural_params 只代入有字面量的），由 mark_novalue_params 打 final。值 = 最早标记时刻（mark_time）。
+  std::unordered_map<std::string, int> novalue_keys_;
   bool noret_call_ = false;                                     // 正在定型一条无返回值调用语句的最外层调用（见 noret_call）
   std::unordered_set<std::uint32_t> nofold_bins_;               // sum / product 展开出的元素链的 Binary 节点（simplify 原样留）
   std::unordered_set<std::uint32_t> sum_chain_bins_;            // 其中 sum / product 展开出的（不含 semiLinear 的积，见 clone_subst）

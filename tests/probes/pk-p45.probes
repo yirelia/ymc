@@ -1,0 +1,1368 @@
+//// set: pk-p45 — 67k：MSL Fluid TraceSubstances.RoomCO2 / RoomCO2WithControls 的三处卡点及兄弟写法。IFD1-IFD50：if 式的条件是（将成）结构参数时 omc 先代入再化简（NFInst.mo:200-210 v1.25.0），EvalConstants.evaluateIfExp 把条件化简成布尔字面量就只留那一支（NFEvalConstants.mo:307-347），另一支里求不出的常量调用不求值、函数不打印（FixedBoundary 的 `d = if use_T then density_pTX(…) else density_phX(…)`）——条件是 Evaluate = true（声明在前 / 在后）、被 if 方程条件 / 维标的、常量、表达式（`n > 1`、`not b`、`b or p`、elseif、嵌套）、外层组件的 Evaluate、修饰给的；绑定 / 方程 / if 方程 / 函数实参 / 属性 / 算法 / 初始方程 / when 条件 / assert / 记录 / 数组绑定 / for 方程。条件不是结构参数（IFD3 / IFD9 / IFD22 / IFD34：omc 求值失败照留调用）、函数在别处另有调用（IFD35）、函数体里（IFD14）照旧 SKIP。IFD101-IFD168：fill 的值是数组（simplifyFill → Expression.fillArgs NFSimplifyExp.mo:524-537、NFExpression.mo:4772-4786：`{x, x, x}`，绑定方程整体留、方程逐元素；`ports.C_outflow = fill(C_in_internal, nPorts)`）——方程 / 绑定 / 参数 / 属性 / 算法 / when / if 方程 / 初始方程 / 嵌套 fill / 切片 / 多维 / 记录 / Boolean / String / 枚举 / Integer 转 Real / 运算与 cat / transpose / sum；函数体里（IFD139）、数组值调用（IFD151 / IFD152）照旧 SKIP。IFD201-IFD245：没有绑定、fixed = false 的 Integer 参数作下标（Sensors.TraceSubstances 的 `C = CVec[ind]`）——markSubscript → markComponent 标结构参数、打 final（NFStructural.mo:311-326），EvalConstants 求不出值、引用照留（evalComponentBinding NFCeval.mo:344-360 / :580-585 / :408-412）：`ind + 1`、多维、参数 / 常量数组、if 式 / if 方程、der、when、assert、算法、子实例、外来修饰给的 fixed = false、Evaluate = true；裸 cref 别名定型在标记之后的 omc 报错（IFD243 "used without having been given a value"），之前的照普通参数（IFD231 / IFD244 / IFD245）；声明在后的参数（IFD221）、子实例引用（IFD222）、混着别的参数（IFD237）、Evaluate = false（IFD225）、记录 / 连接器数组元素（IFD233 / IFD241）照旧 SKIP。基线 PASS 10 / SKIP 138 → PASS 126 / SKIP 22（SKIP→PASS 116），BOTH-REJECT 9，无 FAIL；两个 MSL 例子 PASS
+//// model: IFD1
+model IFD1
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Real d = if b then f(1.0) else g(-1.0);
+  parameter Boolean b = true annotation(Evaluate = true);
+end IFD1;
+//// model: IFD2
+model IFD2
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  parameter Real d = if b then f(1.0) else g(-1.0);
+end IFD2;
+//// model: IFD3
+model IFD3
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true;
+  parameter Real d = if b then f(1.0) else g(-1.0);
+end IFD3;
+//// model: IFD4
+model IFD4
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = false annotation(Evaluate = true);
+  parameter Real d = if b then f(1.0) else g(-1.0);
+end IFD4;
+//// model: IFD5
+model IFD5
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Real d = if b then f(1.0) else g(-1.0);
+  parameter Boolean b = true;
+  Real x;
+equation
+  if b then x = time; else x = 2*time; end if;
+end IFD5;
+//// model: IFD6
+model IFD6
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Real d = if b then f(1.0) else g(-1.0);
+  constant Boolean b = true;
+end IFD6;
+//// model: IFD7
+model IFD7
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Real d = if n > 1 then f(1.0) else g(-1.0);
+  parameter Integer n = 2 annotation(Evaluate = true);
+end IFD7;
+//// model: IFD8
+model IFD8
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Real d = if b1 then (if b2 then f(1.0) else g(-1.0)) else g(-2.0);
+  parameter Boolean b1 = true annotation(Evaluate = true);
+  parameter Boolean b2 = true annotation(Evaluate = true);
+end IFD8;
+//// model: IFD9
+model IFD9
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  Real d = if time > 1 then f(1.0) else g(-1.0);
+end IFD9;
+//// model: IFD10
+model IFD10
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  Real x;
+equation
+  x = if b then f(1.0) else g(-1.0);
+end IFD10;
+//// model: IFD11
+model IFD11
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  Real x;
+equation
+  if b then x = f(1.0); else x = g(-1.0); end if;
+end IFD11;
+//// model: IFD12
+model IFD12
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  Real x;
+equation
+  x = f(if b then 1.0 else g(-1.0)) * time;
+end IFD12;
+//// model: IFD13
+model IFD13
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  Real x(start = if b then f(1.0) else g(-1.0));
+equation
+  der(x) = -x;
+end IFD13;
+//// model: IFD14
+model IFD14
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function h input Real x; output Real y; algorithm y := if x > 0 then x else g(-1.0); end h;
+  Real x = h(time);
+end IFD14;
+//// model: IFD15
+model IFD15
+  impure function g input Real x; output Real y; algorithm y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  parameter Real d = if b then f(1.0) else g(-1.0);
+end IFD15;
+//// model: IFD16
+model IFD16
+  function g input Real x; output Real y; external "C" y = sin(x); end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  parameter Real d = if b then f(1.0) else g(-1.0);
+end IFD16;
+//// model: IFD17
+model IFD17
+  function g input Real x; output Real y; algorithm y := 3*x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  parameter Real d = if b then f(1.0) else g(-1.0);
+end IFD17;
+//// model: IFD18
+model IFD18
+  model A
+    function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+    function f input Real x; output Real y; algorithm y := 2*x; end f;
+    parameter Boolean b = false;
+    parameter Real d = if b then f(1.0) else g(-1.0);
+  end A;
+  A a(b = true) annotation(Evaluate = true);
+end IFD18;
+//// model: IFD19
+model IFD19
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = false annotation(Evaluate = true);
+  parameter Boolean c = true annotation(Evaluate = true);
+  parameter Real d = if b then g(-3.0) elseif c then f(1.0) else g(-2.0);
+end IFD19;
+//// model: IFD20
+model IFD20
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = false annotation(Evaluate = true);
+  parameter Real d = if not b then f(1.0) else g(-1.0);
+end IFD20;
+//// model: IFD21
+model IFD21
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Real d = if b then f(1.0) else g(-1.0);
+  parameter Boolean b = true;
+  Real y[if b then 1 else 2] = fill(time, if b then 1 else 2);
+end IFD21;
+//// model: IFD22
+model IFD22
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  parameter Boolean p = true;
+  parameter Real d = if b and p then f(1.0) else g(-1.0);
+end IFD22;
+//// model: IFD23
+model IFD23
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  parameter Boolean p = true;
+  parameter Real d = if b or p then f(1.0) else g(-1.0);
+end IFD23;
+//// model: IFD24
+model IFD24
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  Real z = if b then f(1.0) else g(-1.0);
+end IFD24;
+//// model: IFD25
+model IFD25
+  model A
+    function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+    function f input Real x; output Real y; algorithm y := 2*x; end f;
+    parameter Real d = if b then f(1.0) else g(-1.0);
+    parameter Boolean b = false annotation(Evaluate = true);
+  end A;
+  A a(b = true);
+end IFD25;
+//// model: IFD26
+model IFD26
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  record R Real a; end R;
+  parameter Boolean b = true annotation(Evaluate = true);
+  parameter R r = if b then R(f(1.0)) else R(g(-1.0));
+end IFD26;
+//// model: IFD27
+model IFD27
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  parameter Real a[2] = if b then {f(1.0), 2} else {g(-1.0), 3};
+end IFD27;
+//// model: IFD28
+model IFD28
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  Real x;
+equation
+  x = sin(if b then f(1.0) else g(-1.0)) * time;
+end IFD28;
+//// model: IFD29
+model IFD29
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  Real x[2];
+equation
+  for i in 1:2 loop
+    x[i] = if b then f(i) else g(-i);
+  end for;
+end IFD29;
+//// model: IFD30
+model IFD30
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  Real x;
+algorithm
+  x := if b then f(1.0) else g(-1.0);
+end IFD30;
+//// model: IFD31
+model IFD31
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  parameter Boolean p = true;
+  Real x;
+equation
+  if p then
+    x = if b then f(1.0) else g(-1.0);
+  else
+    x = 0;
+  end if;
+end IFD31;
+//// model: IFD32
+model IFD32
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  parameter Boolean b2 = b;
+  parameter Real d = if b2 then f(1.0) else g(-1.0);
+end IFD32;
+//// model: IFD33
+model IFD33
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Integer n = 2;
+  Real z[n] = fill(time, n);
+  parameter Real d = if n == 2 then f(1.0) else g(-1.0);
+end IFD33;
+//// model: IFD34
+model IFD34
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = false annotation(Evaluate = true);
+  parameter Boolean p = true;
+  parameter Real d = if b then g(-3.0) elseif p then f(1.0) else g(-2.0);
+end IFD34;
+//// model: IFD35
+model IFD35
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  parameter Real d = if b then f(1.0) else g(-1.0);
+  Real z = g(time);
+end IFD35;
+//// model: IFD36
+model IFD36
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  parameter Integer n = 2 annotation(Evaluate = true);
+  parameter Boolean p = true;
+  parameter Real d = if p then g(-n) else 1.0;
+end IFD36;
+//// model: IFD37
+model IFD37
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  Real x;
+initial equation
+  x = if b then f(1.0) else g(-1.0);
+equation
+  der(x) = -x;
+end IFD37;
+//// model: IFD38
+model IFD38
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  Real x;
+equation
+  when time > (if b then f(1.0) else g(-1.0)) then
+    x = pre(x) + 1;
+  end when;
+end IFD38;
+//// model: IFD39
+model IFD39
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  Real x;
+equation
+  x = if b then f(1.0) else g(-1.0) + time;
+  assert(x > (if b then 0.0 else g(-2.0)), "msg");
+end IFD39;
+//// model: IFD40
+model IFD40
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  model A
+    parameter Boolean b = false annotation(Evaluate = true);
+    parameter Real d = 1;
+  end A;
+  A a(b = true, d = if a.b then f(1.0) else g(-1.0));
+end IFD40;
+//// model: IFD41
+model IFD41
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  parameter Real d = if b then (if time > 1 then f(1.0) else g(-1.0)) else 0;
+end IFD41;
+//// model: IFD42
+model IFD42
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  Real d = if b then (if time > 1 then f(1.0) else 2.0) else g(-1.0);
+end IFD42;
+//// model: IFD43
+model IFD43
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  parameter Real d = if not b or false then g(-1.0) else f(1.0);
+end IFD43;
+//// model: IFD44
+model IFD44
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  type E = enumeration(a, b);
+  parameter E e = E.a annotation(Evaluate = true);
+  parameter Real d = if e == E.a then f(1.0) else g(-1.0);
+end IFD44;
+//// model: IFD45
+model IFD45
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  parameter Real p = 3;
+  parameter Real d = if b then f(p) else g(-1.0);
+end IFD45;
+//// model: IFD46
+model IFD46
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  Real x[2] = {1, 2} * (if b then f(1.0) else g(-1.0));
+end IFD46;
+//// model: IFD47
+model IFD47
+  function g input Real x; output Real y[2]; algorithm assert(x > 0, "neg"); y := {x, x}; end g;
+  function f input Real x; output Real y[2]; algorithm y := {x, 2*x}; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  parameter Real a[2] = if b then f(1.0) else g(-1.0);
+end IFD47;
+//// model: IFD48
+model IFD48
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  parameter Real d(min = if b then f(1.0) else g(-1.0)) = 5;
+end IFD48;
+//// model: IFD49
+model IFD49
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  Real x;
+equation
+  if b then
+    x = if b then f(1.0) else g(-1.0);
+  else
+    x = g(-2.0);
+  end if;
+end IFD49;
+//// model: IFD50
+model IFD50
+  function g input Real x; output Real y; algorithm assert(x > 0, "neg"); y := x; end g;
+  function f input Real x; output Real y; algorithm y := 2*x; end f;
+  parameter Boolean b = true annotation(Evaluate = true);
+  parameter Real d = if b then f(1.0) else g(-1.0);
+  parameter Real e = d + 1;
+  Real y[integer(e)] = fill(time, integer(e));
+end IFD50;
+//// model: IFD101
+model IFD101
+  Real x[2] = {time, 2*time};
+  Real y[3, 2];
+equation
+  y = fill(x, 3);
+end IFD101;
+//// model: IFD102
+model IFD102
+  Real x[2] = {time, 2*time};
+  Real y[3, 2] = fill(x, 3);
+end IFD102;
+//// model: IFD103
+model IFD103
+  parameter Real p[2] = {1, 2};
+  parameter Real q[3, 2] = fill(p, 3);
+end IFD103;
+//// model: IFD104
+model IFD104
+  Real x[2] = {time, 2*time};
+  Real y[3, 2];
+equation
+  y = 2 * fill(x, 3);
+end IFD104;
+//// model: IFD105
+model IFD105
+  parameter Integer n = 2;
+  Real x[2] = {time, 2*time};
+  Real y[n, 2];
+equation
+  y = fill(x, n);
+end IFD105;
+//// model: IFD106
+model IFD106
+  Real y[2, 2];
+equation
+  y = fill({1, 2}, 2);
+end IFD106;
+//// model: IFD107
+model IFD107
+  Real x[3] = {time, 2*time, 3*time};
+  Real y[2, 2];
+equation
+  y = fill(x[1:2], 2);
+end IFD107;
+//// model: IFD108
+model IFD108
+  Real x[2] = {time, 2*time};
+  Real y[2, 3, 2];
+equation
+  y = fill(x, 2, 3);
+end IFD108;
+//// model: IFD109
+connector C
+  Real p;
+  flow Real f;
+  Real c[1];
+end C;
+model IFD109
+  parameter Integer n = 2;
+  parameter Real cc[1] = {0.5};
+  C ports[n];
+equation
+  ports.c = fill(cc, n);
+  ports.p = fill(1.0, n);
+end IFD109;
+//// model: IFD110
+model IFD110
+  Real m[2, 2] = {{time, 1}, {2, time}};
+  Real y[2, 2, 2];
+equation
+  y = fill(m, 2);
+end IFD110;
+//// model: IFD111
+model IFD111
+  Real x[2] = {time, 2*time};
+  Real y[3, 2];
+algorithm
+  y := fill(x, 3);
+end IFD111;
+//// model: IFD113
+model IFD113
+  Real x[2] = {time, 2*time};
+  Real s;
+equation
+  s = sum(fill(x, 3));
+end IFD113;
+//// model: IFD114
+model IFD114
+  constant Real c[2] = {1, 2};
+  Real y[2, 2];
+equation
+  y = fill(c, 2);
+end IFD114;
+//// model: IFD115
+model IFD115
+  Real x[2] = {time, 2*time};
+  Real y[0, 2];
+equation
+  y = fill(x, 0);
+end IFD115;
+//// model: IFD116
+model IFD116
+  Real x[2] = {time, 2*time};
+  Real y[3, 2];
+equation
+  y = fill(x, 3) + fill(x, 3);
+end IFD116;
+//// model: IFD117
+model IFD117
+  Real x[2] = {time, 2*time};
+  Real y[3, 2];
+equation
+  when time > 1 then
+    y = fill(x, 3);
+  end when;
+end IFD117;
+//// model: IFD118
+model IFD118
+  parameter Boolean b = true;
+  Real x[2] = {time, 2*time};
+  Real y[3, 2];
+equation
+  if b then
+    y = fill(x, 3);
+  else
+    y = fill(-x, 3);
+  end if;
+end IFD118;
+//// model: IFD120
+model IFD120
+  Real x[2] = {time, 2*time};
+  Real y[3, 2];
+equation
+  y = fill(-x, 3);
+end IFD120;
+//// model: IFD121
+model IFD121
+  Integer k[2] = {1, 2};
+  Real y[3, 2];
+equation
+  y = fill(k, 3);
+end IFD121;
+//// model: IFD122
+model IFD122
+  Real x[2] = {time, 2*time};
+  Real y[3, 2];
+equation
+  y = fill(x + {1, 1}, 3);
+end IFD122;
+//// model: IFD123
+model IFD123
+  Real x[2] = {time, 2*time};
+  Real y[2, 3, 2];
+equation
+  y = fill(fill(x, 3), 2);
+end IFD123;
+//// model: IFD124
+model IFD124
+  Real x[2] = {time, 2*time};
+  Real y[3, 2];
+equation
+  y = ones(3, 2) .* fill(x, 3);
+end IFD124;
+//// model: IFD125
+model IFD125
+  parameter Real p[2] = {1, 2};
+  Real y[3, 2](start = fill(p, 3));
+equation
+  der(y) = -y;
+end IFD125;
+//// model: IFD130
+model IFD130
+  Real x[2] = {time, 2*time};
+  Real y[3, 2];
+equation
+  for i in 1:3 loop
+    y[i, :] = (fill(x, 3))[i, :];
+  end for;
+end IFD130;
+//// model: IFD131
+model IFD131
+  function f input Real u[:, :]; output Real v = sum(u); algorithm end f;
+  Real x[2] = {time, 2*time};
+  Real s;
+equation
+  s = f(fill(x, 2));
+end IFD131;
+//// model: IFD132
+model IFD132
+  Real x[2] = {time, 2*time};
+  Integer n = size(fill(x, 3), 1);
+end IFD132;
+//// model: IFD133
+model IFD133
+  parameter Real p[2] = {1, 2} annotation(Evaluate = true);
+  Real y[3, 2];
+equation
+  y = fill(p, 3);
+end IFD133;
+//// model: IFD134
+model IFD134
+  Boolean b[2] = {time > 1, time > 2};
+  Boolean y[2, 2];
+equation
+  y = fill(b, 2);
+end IFD134;
+//// model: IFD135
+model IFD135
+  parameter String s[2] = {"a", "b"};
+  parameter String t[2, 2] = fill(s, 2);
+end IFD135;
+//// model: IFD136
+model IFD136
+  Real y[2, 2];
+equation
+  y = fill({time, 1}, 2);
+end IFD136;
+//// model: IFD137
+model IFD137
+  Real x[2] = {time, 2*time};
+  Real y[2, 2];
+equation
+  y = fill({x[i] for i in 1:2}, 2);
+end IFD137;
+//// model: IFD138
+model IFD138
+  type E = enumeration(a, b);
+  parameter E e[2] = {E.a, E.b};
+  parameter E f[2, 2] = fill(e, 2);
+end IFD138;
+//// model: IFD139
+model IFD139
+  function g input Real x[2]; input Integer n; output Real y[n, 2]; algorithm y := fill(x, n); end g;
+  Real x[2] = {time, 2*time};
+  Real y[3, 2];
+equation
+  y = g(x, 3);
+end IFD139;
+//// model: IFD140
+model IFD140
+  Real x[2] = {time, 2*time};
+  Real y[3, 2];
+  Real z[3, 2];
+equation
+  y = fill(x, 3);
+  z = transpose(fill({1, 2, 3}, 2));
+end IFD140;
+//// model: IFD141
+model IFD141
+  Real x[2] = {time, 2*time};
+  Real y[3, 2];
+equation
+  y = fill(x, 3) * 2;
+end IFD141;
+//// model: IFD142
+model IFD142
+  Real x[2] = {time, 2*time};
+  Real y[2];
+equation
+  y = fill(x, 3) * {1, 1, 1} * 0 + x;
+end IFD142;
+//// model: IFD143
+model IFD143
+  Real x[2] = {time, 2*time};
+  Real y[3, 2];
+equation
+  y = if time > 1 then fill(x, 3) else fill(-x, 3);
+end IFD143;
+//// model: IFD144
+model IFD144
+  Real x[2](each start = 1);
+  Real y[3, 2];
+equation
+  der(x) = -x;
+  der(y) = fill(der(x), 3);
+end IFD144;
+//// model: IFD145
+model IFD145
+  parameter Real p[2] = {1, 2};
+  parameter Real q[3, 2] = fill(p, 3);
+  Real y[3, 2] = q * time;
+end IFD145;
+//// model: IFD146
+model IFD146
+  model A
+    parameter Integer n = 1;
+    Real c[n] = fill(time, n);
+  end A;
+  model B
+    parameter Integer m = 2;
+    A a(n = 1);
+    Real out[m, 1];
+  equation
+    out = fill(a.c, m);
+  end B;
+  B b;
+end IFD146;
+//// model: IFD147
+model IFD147
+  Real x[2] = {time, 2*time};
+  Real y[3, 2];
+initial equation
+  y = fill(x, 3);
+equation
+  der(y) = zeros(3, 2);
+end IFD147;
+//// model: IFD148
+model IFD148
+  Real x[2] = {time, 2*time};
+  Real y[1, 2];
+equation
+  y = fill(x, 1);
+end IFD148;
+//// model: IFD149
+model IFD149
+  Real x[1] = {time};
+  Real y[2, 1];
+equation
+  y = fill(x, 2);
+end IFD149;
+//// model: IFD150
+model IFD150
+  record R Real a; Real b; end R;
+  R r(a = time, b = 1);
+  R rs[2];
+equation
+  rs = fill(r, 2);
+end IFD150;
+//// model: IFD151
+model IFD151
+  function f2 input Real t; output Real y[2]; algorithm y := {t, 2*t}; end f2;
+  Real y[3, 2];
+equation
+  y = fill(f2(time), 3);
+end IFD151;
+//// model: IFD152
+model IFD152
+  function f2 input Real t; output Real y[2]; algorithm y := {t, 2*t}; end f2;
+  Real y[3, 2] = fill(f2(time), 3);
+end IFD152;
+//// model: IFD153
+model IFD153
+  record R Real a; Real b; end R;
+  R r1(a = time, b = 1);
+  R r2(a = 2, b = time);
+  R rs[2, 2];
+equation
+  rs = fill({r1, r2}, 2);
+end IFD153;
+//// model: IFD154
+model IFD154
+  parameter Real p[2] = {1, 2};
+  parameter Real q[2, 2] = fill(p, 2) annotation(Evaluate = true);
+  Real y = q[1, 2] * time;
+end IFD154;
+//// model: IFD155
+model IFD155
+  Real x[2] = {time, 2*time};
+  Real y[5, 2];
+equation
+  y = cat(1, fill(x, 2), fill(x, 3));
+end IFD155;
+//// model: IFD156
+model IFD156
+  Real x[2] = {time, 2*time};
+  Real y[2, 3];
+equation
+  y = transpose(fill(x, 3));
+end IFD156;
+//// model: IFD157
+model IFD157
+  Real y[3, 2];
+equation
+  y = fill(fill(1, 2), 3);
+end IFD157;
+//// model: IFD158
+model IFD158
+  parameter Integer n = 2;
+  Real x[n] = fill(time, n);
+  Real y[3, n];
+equation
+  y = fill(x, 3);
+end IFD158;
+//// model: IFD159
+model IFD159
+  Real x[2] = {time, 2*time};
+  Real y[3, 2];
+  Real z[2];
+equation
+  y = fill(x, 3);
+  z = y[2, :];
+end IFD159;
+//// model: IFD160
+model IFD160
+  Real x[2] = {time, 2*time};
+  Real y[3, 2](each start = 0);
+equation
+  der(y) = fill(x, 3);
+end IFD160;
+//// model: IFD161
+model IFD161
+  Real x[2] = {time, 2*time};
+  Real y[3];
+equation
+  y = fill(x, 3) * {1, 1};
+end IFD161;
+//// model: IFD162
+model IFD162
+  Real x[2] = {time, 2*time};
+  Real y[3, 2];
+equation
+  y = fill(x, 3) .* fill(x, 3);
+end IFD162;
+//// model: IFD163
+model IFD163
+  Real x[2] = {time, 2*time};
+  Real y[2, 2];
+equation
+  y = fill(x, 2) * fill(x, 2);
+end IFD163;
+//// model: IFD164
+model IFD164
+  Real x[2] = {time, 2*time};
+  Real y[3, 2];
+equation
+  y = fill(noEvent(x), 3);
+end IFD164;
+//// model: IFD165
+model IFD165
+  Real x[2] = {time, 2*time};
+  Real y[3, 2];
+equation
+  y = fill(pre(x), 3);
+end IFD165;
+//// model: IFD166
+model IFD166
+  parameter Boolean b = true;
+  Real x[2] = {time, 2*time};
+  Real y[3, 2];
+equation
+  y = fill(if b then x else -x, 3);
+end IFD166;
+//// model: IFD167
+model IFD167
+  Real x[2] = {time, 2*time};
+  Real y[3, 2];
+equation
+  y = -fill(x, 3);
+end IFD167;
+//// model: IFD168
+model IFD168
+  Real x[2] = {time, 2*time};
+  Real y[3, 2];
+equation
+  y = fill(x, 3) / 2;
+end IFD168;
+//// model: IFD201
+model IFD201
+  parameter Integer ind(fixed = false);
+  Real c[2];
+  Real y;
+initial algorithm
+  ind := 1;
+equation
+  c = {time, 2*time};
+  y = c[ind];
+end IFD201;
+//// model: IFD202
+model IFD202
+  parameter Integer ind(fixed = false) = 1;
+  Real c[2];
+  Real y;
+equation
+  c = {time, 2*time};
+  y = c[ind];
+end IFD202;
+//// model: IFD203
+model IFD203
+  parameter Integer ind(fixed = false, start = 2);
+  Real c[2];
+  Real y;
+initial equation
+  ind = 1;
+equation
+  c = {time, 2*time};
+  y = c[ind];
+end IFD203;
+//// model: IFD204
+model IFD204
+  parameter Integer ind;
+  Real c[2];
+  Real y;
+equation
+  c = {time, 2*time};
+  y = c[ind];
+end IFD204;
+//// model: IFD205
+model IFD205
+  parameter Integer ind(start = 2);
+  Real c[2];
+  Real y;
+equation
+  c = {time, 2*time};
+  y = c[ind];
+end IFD205;
+//// model: IFD206
+model IFD206
+  parameter Integer ind(fixed = false);
+  Real c[3];
+  Real y;
+initial algorithm
+  ind := 1;
+equation
+  c = {time, 2*time, 3*time};
+  y = c[ind + 1];
+end IFD206;
+//// model: IFD207
+model IFD207
+  parameter Integer ind(fixed = false);
+  Real c[2];
+  Real y;
+  Real y2;
+initial algorithm
+  ind := 1;
+equation
+  c = {time, 2*time};
+  y = c[ind];
+  y2 = ind * time;
+end IFD207;
+//// model: IFD208
+model IFD208
+  parameter Integer ind(fixed = false);
+  Real c[2] = {time, 2*time};
+  Real y = c[ind];
+initial algorithm
+  ind := 1;
+end IFD208;
+//// model: IFD209
+model IFD209
+  parameter Integer ind(fixed = false);
+  Real c[2];
+  Real y;
+initial algorithm
+  ind := 1;
+equation
+  c = {time, 2*time};
+algorithm
+  y := c[ind];
+end IFD209;
+//// model: IFD210
+model IFD210
+  parameter Integer ind(fixed = false);
+  parameter Integer k = ind;
+  Real c[2];
+  Real y;
+initial algorithm
+  ind := 1;
+equation
+  c = {time, 2*time};
+  y = c[k];
+end IFD210;
+//// model: IFD211
+model IFD211
+  parameter Integer ind(fixed = false);
+  Real c[2];
+  Real y;
+initial algorithm
+  ind := 1;
+  assert(ind > 0, "bad");
+equation
+  c = {time, 2*time};
+  y = c[ind];
+end IFD211;
+//// model: IFD212
+model IFD212
+  model S
+    parameter Integer ind(fixed = false);
+    Real c[2];
+    Real y;
+  initial algorithm
+    ind := -1;
+    for i in 1:2 loop
+      if i == 2 then ind := i; end if;
+    end for;
+  equation
+    c = {time, 2*time};
+    y = c[ind];
+  end S;
+  S s1, s2;
+end IFD212;
+//// model: IFD213
+model IFD213
+  parameter Integer ind(fixed = false);
+  Real c[2, 2];
+  Real y;
+initial algorithm
+  ind := 1;
+equation
+  c = {{time, 2*time}, {3*time, 4*time}};
+  y = c[ind, 2];
+end IFD213;
+//// model: IFD214
+model IFD214
+  parameter Integer ind(fixed = false);
+  Real c[2];
+  Real y[1];
+initial algorithm
+  ind := 1;
+equation
+  c = {time, 2*time};
+  y = c[{ind}];
+end IFD214;
+//// model: IFD215
+model IFD215
+  parameter Integer ind(fixed = false);
+  parameter Real p[2] = {1, 2};
+  Real y;
+initial algorithm
+  ind := 1;
+equation
+  y = p[ind] * time;
+end IFD215;
+//// model: IFD216
+model IFD216
+  parameter Integer ind(fixed = false);
+  Real c[2];
+  Real y;
+initial algorithm
+  ind := 1;
+equation
+  c = {time, 2*time};
+  y = ({time, 2*time})[ind];
+end IFD216;
+//// model: IFD217
+model IFD217
+  parameter Integer ind(fixed = false) annotation(Evaluate = true);
+  Real c[2];
+  Real y;
+initial algorithm
+  ind := 1;
+equation
+  c = {time, 2*time};
+  y = c[ind];
+end IFD217;
+//// model: IFD218
+model IFD218
+  parameter Integer ind(fixed = false);
+  Real c[2];
+  Real y;
+initial algorithm
+  ind := 1;
+equation
+  c = {time, 2*time};
+  y = if ind > 1 then c[ind] else 0;
+end IFD218;
+//// model: IFD219
+model IFD219
+  parameter Integer ind(fixed = false);
+  Real c[2];
+  Real y;
+initial algorithm
+  ind := 1;
+equation
+  c = {time, 2*time};
+  y = c[ind];
+  when time > 1 then
+    reinit(c[1], 0);
+  end when;
+end IFD219;
+//// model: IFD220
+model IFD220
+  parameter Boolean b(fixed = false);
+  Real c[2];
+  Real y;
+initial equation
+  b = true;
+equation
+  c = {time, 2*time};
+  y = c[if b then 1 else 2];
+end IFD220;
+//// model: IFD221
+model IFD221
+  Real c[2] = {time, 2*time};
+  Real y = c[ind];
+  parameter Integer ind(fixed = false);
+initial algorithm
+  ind := 1;
+end IFD221;
+//// model: IFD222
+model IFD222
+  model S
+    parameter Integer ind(fixed = false);
+    Real c[2] = {time, 2*time};
+  initial algorithm
+    ind := 2;
+  end S;
+  S s;
+  Real y;
+equation
+  y = s.c[s.ind];
+end IFD222;
+//// model: IFD223
+model IFD223
+  model S
+    parameter Integer ind;
+    Real c[2] = {time, 2*time};
+    Real y;
+  initial algorithm
+    ind := 2;
+  equation
+    y = c[ind];
+  end S;
+  S s(ind(fixed = false));
+end IFD223;
+//// model: IFD224
+model IFD224
+  model S
+    parameter Integer ind(fixed = false);
+    Real c[2] = {time, 2*time};
+    Real y;
+  equation
+    y = c[ind];
+  end S;
+  S s(ind(fixed = true));
+end IFD224;
+//// model: IFD225
+model IFD225
+  parameter Integer ind(fixed = false) annotation(Evaluate = false);
+  Real c[2] = {time, 2*time};
+  Real y;
+initial algorithm
+  ind := 1;
+equation
+  y = c[ind];
+end IFD225;
+//// model: IFD226
+model IFD226
+  parameter Integer ind(fixed = false);
+  Real c[2] = {time, 2*time};
+  Real y;
+initial algorithm
+  ind := 1;
+equation
+  if ind > 1 then
+    y = c[ind];
+  else
+    y = 0;
+  end if;
+end IFD226;
+//// model: IFD227
+model IFD227
+  parameter Integer ind(fixed = false);
+  Real c[2];
+initial algorithm
+  ind := 1;
+equation
+  c[ind] = time;
+  c[3 - ind] = 2 * time;
+end IFD227;
+//// model: IFD228
+model IFD228
+  parameter Integer ind(fixed = false);
+  Real c[2](each start = 1);
+  Real y;
+initial algorithm
+  ind := 1;
+equation
+  der(c) = -c;
+  y = der(c[ind]);
+end IFD228;
+//// model: IFD229
+model IFD229
+  function f input Real u; output Real v; algorithm v := 2*u; end f;
+  parameter Integer ind(fixed = false);
+  Real c[2] = {time, 2*time};
+  Real y;
+initial algorithm
+  ind := 1;
+equation
+  y = f(c[ind]);
+end IFD229;
+//// model: IFD230
+model IFD230
+  parameter Integer ind(fixed = false, min = 1, max = 2);
+  Real c[2] = {time, 2*time};
+  Real y;
+initial algorithm
+  ind := 1;
+equation
+  y = c[ind];
+end IFD230;
+//// model: IFD231
+model IFD231
+  parameter Integer ind(fixed = false);
+  parameter Integer k = ind;
+  Real c[2] = {time, 2*time};
+  Real y;
+initial algorithm
+  ind := 1;
+equation
+  y = c[ind];
+end IFD231;
+//// model: IFD232
+model IFD232
+  Real c[2] = {time, 2*time};
+  Real y = c[ind];
+  parameter Integer ind(fixed = false);
+  parameter Integer k = ind;
+initial algorithm
+  ind := 1;
+end IFD232;
+//// model: IFD233
+model IFD233
+  record R Real a; end R;
+  parameter Integer ind(fixed = false);
+  R rs[2](a = {time, 2*time});
+  Real y;
+initial algorithm
+  ind := 1;
+equation
+  y = rs[ind].a;
+end IFD233;
+//// model: IFD234
+model IFD234
+  parameter Integer ind(fixed = false);
+  Real c[2] = {time, 2*time};
+  Real y;
+initial algorithm
+  ind := 1;
+equation
+  for i in 1:2 loop
+  end for;
+  y = c[ind] + c[ind];
+end IFD234;
+//// model: IFD235
+model IFD235
+  parameter Integer ind(fixed = false);
+  Real c[2] = {time, 2*time};
+  Real y;
+  Real z[ind];
+initial algorithm
+  ind := 1;
+equation
+  y = c[ind];
+end IFD235;
+//// model: IFD236
+model IFD236
+  parameter Integer ind(fixed = false);
+  Real c[2] = {time, 2*time};
+  Real y;
+initial algorithm
+  ind := 1;
+equation
+  y = sum(c[i] for i in 1:ind);
+end IFD236;
+//// model: IFD237
+model IFD237
+  parameter Integer ind(fixed = false);
+  parameter Integer n = 1;
+  Real c[3] = {time, 2*time, 3*time};
+  Real y;
+initial algorithm
+  ind := 1;
+equation
+  y = c[ind + n];
+end IFD237;
+//// model: IFD238
+model IFD238
+  parameter Integer ind(fixed = false);
+  Real c[2] = {time, 2*time};
+  discrete Real y;
+initial algorithm
+  ind := 1;
+equation
+  when time > 1 then
+    y = c[ind];
+  end when;
+end IFD238;
+//// model: IFD239
+model IFD239
+  parameter Integer ind(fixed = false);
+  Real c[2] = {time, 2*time};
+  Real y;
+initial algorithm
+  ind := 1;
+equation
+  y = c[ind];
+  assert(ind > 0, "ind");
+end IFD239;
+//// model: IFD240
+model IFD240
+  parameter Integer ind(fixed = false);
+  parameter Real p = 2;
+  Real c[2] = {time, 2*time};
+  Real y;
+initial algorithm
+  ind := 1;
+equation
+  y = c[ind] * p;
+end IFD240;
+//// model: IFD241
+connector C
+  Real e;
+  flow Real f;
+end C;
+model IFD241
+  parameter Integer ind(fixed = false);
+  C cs[2];
+  Real y;
+initial algorithm
+  ind := 1;
+equation
+  cs.e = {time, 2*time};
+  y = cs[ind].f;
+end IFD241;
+//// model: IFD242
+model IFD242
+  parameter Integer ind(fixed = false);
+  Real c[2, 2] = {{time, 2*time}, {3*time, 4*time}};
+  Real y[2];
+initial algorithm
+  ind := 1;
+equation
+  y = c[ind, :];
+end IFD242;
+//// model: IFD243
+model IFD243
+  parameter Integer ind(fixed = false);
+  Real c[2] = {time, 2*time};
+  Real y = c[ind];
+  parameter Integer k = ind;
+initial algorithm
+  ind := 1;
+end IFD243;
+//// model: IFD244
+model IFD244
+  parameter Integer ind(fixed = false);
+  Real c[2] = {time, 2*time};
+  Real y = c[ind];
+  parameter Integer k = ind annotation(Evaluate = false);
+initial algorithm
+  ind := 1;
+end IFD244;
+//// model: IFD245
+model IFD245
+  parameter Integer ind(fixed = false);
+  parameter Integer k = ind + 0;
+  Real c[2] = {time, 2*time};
+  Real y = c[ind];
+initial algorithm
+  ind := 1;
+end IFD245;

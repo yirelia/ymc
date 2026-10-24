@@ -4614,11 +4614,6 @@ YMC_TEST(flatten_constant_array_subscripts) {
            {"model CXS3\n  constant Real x[5] = {1, 2, 3, 4, 5};\n"
             "  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};\n  Integer n = integer(time) + 1;\n"
             "  Real tt = time;\n  Real y = x[7];\nend CXS3;\n", "array subscript out of range"},
-           // fixed = false 的参数作下标：omc 把它标成结构参数（打 final）而下标仍是符号，不跟（CXS7）。
-           {"model CXS7\n  constant Real x[5] = {1, 2, 3, 4, 5};\n"
-            "  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};\n  Integer n = integer(time) + 1;\n"
-            "  Real tt = time;\n  parameter Integer q(fixed = false);\n  Real y = x[q];\ninitial equation\n"
-            "  q = 2;\nend CXS7;\n", "parameter in symbolic subscript"},
            // 符号下标后面跟 `:`、整条留在绑定里：omc 内部错（NFSubscript.toDAEExp failed on unknown subscript ':'，2026-10-11
            // 复核），CXS8。64d 起等式里逐元素展开的照做（ks 探针），这里在绑定处就 SKIP。
            {"model CXS8\n  constant Real x[5] = {1, 2, 3, 4, 5};\n"
@@ -4629,6 +4624,20 @@ YMC_TEST(flatten_constant_array_subscripts) {
     YMC_CHECK(uns);
     YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
   }
+  // 没有绑定、fixed = false 的参数作下标：omc 把它标成结构参数（打 final）、值求不出、下标照留符号（markComponent
+  // NFStructural.mo:311-326、evalComponentBinding NFCeval.mo:344-360 / :580-585 v1.25.0），67k 起照做（CXS7，此前 SKIP）。
+  // 期望 = omc 1.25.0 实跑（2026-10-24）。
+  YMC_CHECK_EQ(flatten_src("model CXS7\n  constant Real x[5] = {1, 2, 3, 4, 5};\n"
+                           "  constant Real m[2, 3] = {{1, 2, 3}, {4, 5, 6}};\n  Integer n = integer(time) + 1;\n"
+                           "  Real tt = time;\n  parameter Integer q(fixed = false);\n  Real y = x[q];\ninitial equation\n"
+                           "  q = 2;\nend CXS7;\n"),
+               std::string("class CXS7\n  constant Real x[1] = 1.0;\n  constant Real x[2] = 2.0;\n"
+                           "  constant Real x[3] = 3.0;\n  constant Real x[4] = 4.0;\n  constant Real x[5] = 5.0;\n"
+                           "  constant Real m[1,1] = 1.0;\n  constant Real m[1,2] = 2.0;\n  constant Real m[1,3] = 3.0;\n"
+                           "  constant Real m[2,1] = 4.0;\n  constant Real m[2,2] = 5.0;\n  constant Real m[2,3] = 6.0;\n"
+                           "  Integer n = integer(time) + 1;\n  Real tt = time;\n"
+                           "  final parameter Integer q(fixed = false);\n  Real y = {1.0, 2.0, 3.0, 4.0, 5.0}[q];\n"
+                           "initial equation\n  q = 2;\nend CXS7;\n"));
 }
 
 YMC_TEST(flatten_binding_variability_on_written_expression) {
@@ -11573,16 +11582,14 @@ YMC_TEST(flatten_param_subscript_kept_symbolic) {
 }
 
 YMC_TEST(flatten_param_subscript_unsupported) {
-  // omc 照标 final、下标留符号 / 调用不求值 / 目标不求值，或此刻定不了的：不出结果（SKIP）。fixed = false（PXS32：`final parameter
-  // Integer n(fixed = false)` + `{4.0, 5.0, 6.0}[n]`）、for 语句迭代变量 + 参数（PXS102：`{…}[i + 1]`）、不纯函数调用（PXS142：
+  // omc 照标 final、下标留符号 / 调用不求值 / 目标不求值，或此刻定不了的：不出结果（SKIP）。for 语句迭代变量 + 参数（PXS102：
+  // `{…}[i + 1]`）、不纯函数调用（PXS142：
   // `{…}[PXS142F(1)]`）、声明在后的 Evaluate = false 参数作变量数组的下标（PXS191：omc 那时已降成 NON_STRUCTURAL、留 `x[n]`，此前
   // 求值标 final 静默错；67f 起同声明在前的一样认成 NON_STRUCTURAL，卡在变量数组的符号下标）、越界（PXS56：omc 照留 `{…}[5]`）、
   // when 方程左侧下标里参数与离散量混着（markSubscriptsInExp，
   // NFTyping.mo:3451-3454 v1.25.0；PXS237：`z[1 + k]`）、reinit 目标的参数下标（EvalConstants 不求目标，NFEvalConstants.mo:414-418；
   // PXS249：`reinit(x[n - 1], 0.0)`）。omc 1.25.0 实跑（2026-10-18，探针 pk-p39）。
   for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
-           {"model PXS32\n  parameter Integer n(fixed = false);\n  Real y = ({4, 5, 6})[n] * time;\n"
-            "initial equation\n  n = 2;\nend PXS32;\n", "parameter in symbolic subscript"},
            {"model PXS102\n  parameter Integer n = 1;\n  Real y[2];\nalgorithm\n  for i in 1:2 loop\n"
             "    y[i] := ({4, 5, 6})[i + n] * time;\n  end for;\nend PXS102;\n", "parameter in symbolic subscript"},
            {"impure function PXS142F\n  input Integer a;\n  output Integer b;\nalgorithm\n  b := a + 1;\nend PXS142F;\n"
@@ -11604,6 +11611,12 @@ YMC_TEST(flatten_param_subscript_unsupported) {
     YMC_CHECK(uns);
     YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
   }
+  // 没有绑定的 fixed = false 参数（PXS32）：omc 标 final、值求不出、下标照留（markComponent NFStructural.mo:311-326、
+  // evalComponentBinding NFCeval.mo:344-360 / :580-585 v1.25.0），67k 起照做（此前 SKIP）。期望 = omc 1.25.0 实跑（2026-10-24）。
+  YMC_CHECK_EQ(flatten_src("model PXS32\n  parameter Integer n(fixed = false);\n  Real y = ({4, 5, 6})[n] * time;\n"
+                           "initial equation\n  n = 2;\nend PXS32;\n"),
+               std::string("class PXS32\n  final parameter Integer n(fixed = false);\n"
+                           "  Real y = {4.0, 5.0, 6.0}[n] * time;\ninitial equation\n  n = 2;\nend PXS32;\n"));
 }
 
 YMC_TEST(flatten_written_subscripted_exp_not_cref) {
@@ -12355,6 +12368,101 @@ YMC_TEST(flatten_store_back_skips) {
     YMC_CHECK(uns);
     YMC_CHECK_EQ(out, "<unsupported:" + why + ">");
   }
+}
+
+YMC_TEST(flatten_if_untaken_branch_call) {
+  // if 式的条件是结构参数（Evaluate = true，声明在后 / 被 if 方程条件标的）：omc 先代入再化简（NFInst.mo:200-210 v1.25.0），
+  // EvalConstants.evaluateIfExp 只留选中的支（NFEvalConstants.mo:307-347），另一支里求不出的 `g(-1.0)` 不求值、g 不打印——
+  // ymc 先化简时不 SKIP、调用照留，代入选支后 g 被删（deferred_fns_）。绑定 / if 方程连带标的条件 / 属性。期望 = omc 1.25.0 实跑
+  //（2026-10-24，探针 pk-p45 IFD1 / IFD5 / IFD13）。
+  const char* fns = "  function g input Real x; output Real y; algorithm assert(x > 0, \"neg\"); y := x; end g;\n"
+                    "  function f input Real x; output Real y; algorithm y := 2*x; end f;\n";
+  YMC_CHECK_EQ(flatten_src((std::string("model IFD1\n") + fns +
+                            "  parameter Real d = if b then f(1.0) else g(-1.0);\n"
+                            "  parameter Boolean b = true annotation(Evaluate = true);\nend IFD1;\n").c_str()),
+               std::string("class IFD1\n  parameter Real d = 2.0;\n  final parameter Boolean b = true;\nend IFD1;\n"));
+  YMC_CHECK_EQ(flatten_src((std::string("model IFD5\n") + fns +
+                            "  parameter Real d = if b then f(1.0) else g(-1.0);\n  parameter Boolean b = true;\n"
+                            "  Real x;\nequation\n  if b then x = time; else x = 2*time; end if;\nend IFD5;\n").c_str()),
+               std::string("class IFD5\n  parameter Real d = 2.0;\n  final parameter Boolean b = true;\n  Real x;\n"
+                           "equation\n  x = time;\nend IFD5;\n"));
+  YMC_CHECK_EQ(flatten_src((std::string("model IFD13\n") + fns +
+                            "  parameter Boolean b = true annotation(Evaluate = true);\n"
+                            "  Real x(start = if b then f(1.0) else g(-1.0));\nequation\n  der(x) = -x;\nend IFD13;\n")
+                               .c_str()),
+               std::string("class IFD13\n  final parameter Boolean b = true;\n  Real x(start = 2.0);\nequation\n"
+                           "  der(x) = -x;\nend IFD13;\n"));
+}
+
+YMC_TEST(flatten_if_untaken_branch_call_skips) {
+  // 条件不是结构参数（IFD3：omc `d = if b then 2.0 else IFD3.g(-1.0)`，g 求值失败照留）、g 在别处另有调用（IFD35：omc 求值成
+  // `d = 2.0`、`z = IFD35.g(time)`，ymc 按函数去留判、分不清）→ 照旧 SKIP。探针 pk-p45 IFD3 / IFD35（2026-10-24）。
+  const char* fns = "  function g input Real x; output Real y; algorithm assert(x > 0, \"neg\"); y := x; end g;\n"
+                    "  function f input Real x; output Real y; algorithm y := 2*x; end f;\n";
+  for (const std::string& src :
+       {std::string("model IFD3\n") + fns + "  parameter Boolean b = true;\n"
+            "  parameter Real d = if b then f(1.0) else g(-1.0);\nend IFD3;\n",
+        std::string("model IFD35\n") + fns + "  parameter Boolean b = true annotation(Evaluate = true);\n"
+            "  parameter Real d = if b then f(1.0) else g(-1.0);\n  Real z = g(time);\nend IFD35;\n"}) {
+    bool uns = false;
+    const std::string out = flatten_src(src.c_str(), &uns);
+    YMC_CHECK(uns);
+    YMC_CHECK_EQ(out, std::string("<unsupported:constant user call not evaluated>"));
+  }
+}
+
+YMC_TEST(flatten_fill_array_value) {
+  // fill 的值是数组、维实参是字面量：simplifyFill → Expression.fillArgs 化简成以整个值为元素的数组字面量（NFSimplifyExp.mo:
+  // 524-537、NFExpression.mo:4772-4786 v1.25.0），方程随后逐元素、绑定方程整体留 `y = {x, x, x}`、参数数组的绑定逐元素。
+  // 期望 = omc 1.25.0 实跑（2026-10-24，探针 pk-p45 IFD101 / IFD102 / IFD103）。
+  YMC_CHECK_EQ(flatten_src("model IFD101\n  Real x[2] = {time, 2*time};\n  Real y[3, 2];\nequation\n"
+                           "  y = fill(x, 3);\nend IFD101;\n"),
+               std::string("class IFD101\n  Real x[1];\n  Real x[2];\n  Real y[1,1];\n  Real y[1,2];\n  Real y[2,1];\n"
+                           "  Real y[2,2];\n  Real y[3,1];\n  Real y[3,2];\nequation\n  x = {time, 2.0 * time};\n"
+                           "  y[1,1] = x[1];\n  y[1,2] = x[2];\n  y[2,1] = x[1];\n  y[2,2] = x[2];\n  y[3,1] = x[1];\n"
+                           "  y[3,2] = x[2];\nend IFD101;\n"));
+  YMC_CHECK_EQ(flatten_src("model IFD102\n  Real x[2] = {time, 2*time};\n  Real y[3, 2] = fill(x, 3);\nend IFD102;\n"),
+               std::string("class IFD102\n  Real x[1];\n  Real x[2];\n  Real y[1,1];\n  Real y[1,2];\n  Real y[2,1];\n"
+                           "  Real y[2,2];\n  Real y[3,1];\n  Real y[3,2];\nequation\n  x = {time, 2.0 * time};\n"
+                           "  y = {x, x, x};\nend IFD102;\n"));
+  YMC_CHECK_EQ(flatten_src("model IFD103\n  parameter Real p[2] = {1, 2};\n  parameter Real q[3, 2] = fill(p, 3);\n"
+                           "end IFD103;\n"),
+               std::string("class IFD103\n  parameter Real p[1] = 1.0;\n  parameter Real p[2] = 2.0;\n"
+                           "  parameter Real q[1,1] = p[1];\n  parameter Real q[1,2] = p[2];\n"
+                           "  parameter Real q[2,1] = p[1];\n  parameter Real q[2,2] = p[2];\n"
+                           "  parameter Real q[3,1] = p[1];\n  parameter Real q[3,2] = p[2];\nend IFD103;\n"));
+}
+
+YMC_TEST(flatten_unbound_unfixed_subscript) {
+  // 下标里没有绑定、fixed = false 的参数：markSubscript → markComponent 标结构参数、打 final（NFStructural.mo:311-326 v1.25.0），
+  // EvalConstants 求不出值（evalComponentBinding 无绑定、不固定不取 start，NFCeval.mo:344-360 / :580-585）、引用照留——别处的
+  // 引用同样不代入（IFD207 `/*Real*/(ind) * time`）；裸 cref 别名 `k = ind` 定型在方程段的标记之前、不连带（IFD231）。期望 = omc
+  // 1.25.0 实跑（2026-10-24，探针 pk-p45 IFD201 / IFD207 / IFD231）。
+  YMC_CHECK_EQ(flatten_src("model IFD201\n  parameter Integer ind(fixed = false);\n  Real c[2];\n  Real y;\n"
+                           "initial algorithm\n  ind := 1;\nequation\n  c = {time, 2*time};\n  y = c[ind];\nend IFD201;\n"),
+               std::string("class IFD201\n  final parameter Integer ind(fixed = false);\n  Real c[1];\n  Real c[2];\n"
+                           "  Real y;\ninitial algorithm\n  ind := 1;\nequation\n  c[1] = time;\n  c[2] = 2.0 * time;\n"
+                           "  y = c[ind];\nend IFD201;\n"));
+  YMC_CHECK_EQ(flatten_src("model IFD207\n  parameter Integer ind(fixed = false);\n  Real c[2];\n  Real y;\n  Real y2;\n"
+                           "initial algorithm\n  ind := 1;\nequation\n  c = {time, 2*time};\n  y = c[ind];\n"
+                           "  y2 = ind * time;\nend IFD207;\n"),
+               std::string("class IFD207\n  final parameter Integer ind(fixed = false);\n  Real c[1];\n  Real c[2];\n"
+                           "  Real y;\n  Real y2;\ninitial algorithm\n  ind := 1;\nequation\n  c[1] = time;\n"
+                           "  c[2] = 2.0 * time;\n  y = c[ind];\n  y2 = /*Real*/(ind) * time;\nend IFD207;\n"));
+  YMC_CHECK_EQ(flatten_src("model IFD231\n  parameter Integer ind(fixed = false);\n  parameter Integer k = ind;\n"
+                           "  Real c[2] = {time, 2*time};\n  Real y;\ninitial algorithm\n  ind := 1;\nequation\n"
+                           "  y = c[ind];\nend IFD231;\n"),
+               std::string("class IFD231\n  final parameter Integer ind(fixed = false);\n  parameter Integer k = ind;\n"
+                           "  Real c[1];\n  Real c[2];\n  Real y;\ninitial algorithm\n  ind := 1;\nequation\n"
+                           "  c = {time, 2.0 * time};\n  y = c[ind];\nend IFD231;\n"));
+  // 绑定 `y = c[ind]` 在别名 `k = ind` 之前定型：k 连带成结构参数、EvalConstants 照结构参数求它的绑定 → omc 报 "Constant ind
+  // is used without having been given a value"（printUnboundError NFCeval.mo:3321-3339）→ SKIP（探针 pk-p45 IFD243）。
+  bool uns = false;
+  YMC_CHECK_EQ(flatten_src("model IFD243\n  parameter Integer ind(fixed = false);\n  Real c[2] = {time, 2*time};\n"
+                           "  Real y = c[ind];\n  parameter Integer k = ind;\ninitial algorithm\n  ind := 1;\nend IFD243;\n",
+                           &uns),
+               std::string("<unsupported:alias of unbound structural parameter>"));
+  YMC_CHECK(uns);
 }
 
 YMC_TEST_MAIN

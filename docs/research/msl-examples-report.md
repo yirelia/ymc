@@ -834,3 +834,8 @@ FAIL / ACCEPTS-INVALID / CRASH 0。
 可扩展连接器里声明的数组成员作 potentially present 连接、嵌套 expandable 数组的 E–E 连接、被删 pp 结构参数照代值。转 PASS：
 Electrical.Batteries.Examples.CCCV_Stack。CCCV_StackRC 卡到下一处：记录数组整体绑定的定型期求值存回（旧静默错，挡成 SKIP）。
 FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-24 67k 之后：PASS 498（+2）
+
+if 式未选支里求不出的常量调用照 omc 的先代入后化简（选支丢掉的不判 SKIP）、fill 的数组值、无绑定 fixed = false 参数作下标照留。
+转 PASS：Fluid.Examples.TraceSubstances.RoomCO2 / RoomCO2WithControls。FAIL / ACCEPTS-INVALID / CRASH 0。
