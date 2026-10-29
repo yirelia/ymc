@@ -1,0 +1,3498 @@
+//// set: pk-p46 — 67l：MSL MultiBody UserDefinedGravityField / Media MixtureGases 的卡点及兄弟写法（TwoPhaseWater.TestTwoPhaseStates、Fluid HeatingSystem 未做，见 XSB）。CFR1-CFR40：组件修饰里重声明的函数（`inner World world(redeclare function gravityAcceleration = …(phi = geodeticLatitude))`）——inst 在组件的类实例树里顶替成 REDECLARED_CLASS，函数名照组件的实例路径（NFFunction.lookupFunction :318-345 v1.25.0），实例化时不以组件为父（instFunctionRef 的 isRedeclare → EMPTY_NODE :380-381），短类修饰在写重声明处定型：outer / 直接组件、写在子实例里（CFR27 / CFR37 `m.lat`）、遮蔽（CFR8）、组件自己体里也调（CFR9）、变量修饰（CFR11 定义里原样 `v`）、长函数原声明、多组件、模型内函数、命名实参、算法段、组件数组里的 body、数组修饰、final、常量求值（CFR20 / CFR29）；嵌套组件修饰（CFR6 / CFR7）、Evaluate（CFR21）照旧 SKIP。别名修饰不在调用的那层短类上（`acc = alt2`、包里的 `alt2 = alt(phi = c)`，CFR31 / CFR65 / CFR73 / CFR85-CFR92 / UCF4）：修饰按词法在它自己的定义处解析，包里的常量引用求成值（此前在组件 / 写重声明处 / 调用实例里解析，CFR31 / CFR65 / CFR73 静默错）；两层都在同一个类里照常（CFR80 / CFR81）。原声明不带 constrainedby 的带修饰短类：它的修饰作约束修饰并进新类（SCodeUtil.getConstrainingMod :5273-5286、NFInst.redeclareClass ccMod :1768 / :1788、Modifier.merge 新类修饰在前 NFModifier.mo:386-409）——每项都被新类链头的修饰盖住的照常（CFR95 / CFR97），没盖住的（CFR82 / CFR83 / CFR96 / UCF3 omc 打 `w.kk` / `4.0`）→ SKIP（CFR83 此前静默错），final 的被覆盖 omc 报错（CFR98）。实例语境里找到的短类别名按定义作用域拼的名与实例路径不一致 → SKIP（CFR86 / CFR93，此前 `CFR93.Medium.alt2` 静默错）。CFR42-CFR64：函数定义里别名缺省的值（EvalConstants.evaluateFuncExpTraverser 逐个 cref 试 Ceval，NFEvalConstants.mo:599-634）——经子组件的参数 `s.k` / `s.t.k` / `s[2].k` / `s.arr[2]` / 整个数组 / Integer 转型求成值（此前按首段变率当变量，十几个静默错），没有绑定、fixed = false 的参数照留原引用（NFCeval.mo:344-360 / :580-585 / :408-412）；参数与变量混着（CFR46）照旧 SKIP。XRF1-XRF20：函数体里包常量记录（数组）的记录类型是短类别名（`replaceable record FC = FCBase`、extends 修饰里重声明成 FCData，MSL PartialMixtureMedium 的 fluidConstants）：字段同链底的长类（MLS §4.5.1）；带修饰的别名（XRF4 / XRF18）照旧 SKIP。XSB1 / XSB2：extends 短类（TwoPhaseWater 的 `extends StandardWater` 同构）未做 → SKIP。UCF1-UCF6 为单测同构。基线 PASS 14 / SKIP 85 / FAIL 18 / BOTH-REJECT 4 → PASS 97 / SKIP 20 / BOTH-REJECT 4，无 FAIL；两个 MSL 例子 PASS
+//// model: CFR1
+package CFR1P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+end CFR1P;
+model CFR1
+  parameter Real lat = 3;
+  inner CFR1P.World world(redeclare function acc = CFR1P.alt(phi = lat));
+  CFR1P.Body body;
+end CFR1;
+//// model: CFR2
+package CFR2P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+end CFR2P;
+model CFR2
+  parameter Real lat = 3;
+  CFR2P.World w(redeclare function acc = CFR2P.alt(phi = lat));
+  Real y = w.acc(time);
+end CFR2;
+//// model: CFR3
+package CFR3P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi = 5;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+end CFR3P;
+model CFR3
+  inner CFR3P.World world(redeclare function acc = CFR3P.alt);
+  CFR3P.Body body;
+end CFR3;
+//// model: CFR4
+package CFR4P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+end CFR4P;
+model CFR4
+  inner CFR4P.World world(redeclare function acc = CFR4P.alt(phi = 7));
+  CFR4P.Body body;
+end CFR4;
+//// model: CFR5
+package CFR5P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  function alt2 = alt(phi = 7);
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+end CFR5P;
+model CFR5
+  inner CFR5P.World world(redeclare function acc = CFR5P.alt2);
+  CFR5P.Body body;
+end CFR5;
+//// model: CFR6
+package CFR6P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+  model M
+    inner World world;
+    Body body;
+  end M;
+end CFR6P;
+model CFR6
+  parameter Real lat = 3;
+  CFR6P.M m(world(redeclare function acc = CFR6P.alt(phi = lat)));
+end CFR6;
+//// model: CFR7
+package CFR7P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+  model M
+    parameter Real lat = 3;
+    inner World world;
+    Body body;
+  end M;
+end CFR7P;
+model CFR7
+  extends CFR7P.M(world(redeclare function acc = CFR7P.alt(phi = lat)));
+end CFR7;
+//// model: CFR8
+package CFR8P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    parameter Real lat = 9;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+end CFR8P;
+model CFR8
+  parameter Real lat = 3;
+  inner CFR8P.World world(redeclare function acc = CFR8P.alt(phi = lat));
+  CFR8P.Body body;
+end CFR8;
+//// model: CFR9
+package CFR9P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+    Real gw = acc(2 * time);
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+end CFR9P;
+model CFR9
+  parameter Real lat = 3;
+  inner CFR9P.World world(redeclare function acc = CFR9P.alt(phi = lat));
+  CFR9P.Body body;
+end CFR9;
+//// model: CFR10
+package CFR10P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi = 4;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+end CFR10P;
+model CFR10
+  CFR10P.World w[2](redeclare each function acc = CFR10P.alt);
+  Real y = w[1].acc(time);
+end CFR10;
+//// model: CFR11
+package CFR11P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+end CFR11P;
+model CFR11
+  Real v = sin(time);
+  inner CFR11P.World world(redeclare function acc = CFR11P.alt(phi = v));
+  CFR11P.Body body;
+end CFR11;
+//// model: CFR12
+package CFR12P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc
+      extends base;
+    algorithm
+      g := kk * r;
+    end acc;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+end CFR12P;
+model CFR12
+  parameter Real lat = 3;
+  inner CFR12P.World world(redeclare function acc = CFR12P.alt(phi = lat));
+  CFR12P.Body body;
+end CFR12;
+//// model: CFR13
+package CFR13P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function std2
+    extends base;
+    input Real k = 10;
+  algorithm
+    g := k - r;
+  end std2;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+end CFR13P;
+model CFR13
+  inner CFR13P.World world(redeclare function acc = CFR13P.std2);
+  CFR13P.Body body;
+end CFR13;
+//// model: CFR14
+package CFR14P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+end CFR14P;
+model CFR14
+  CFR14P.World w1(redeclare function acc = CFR14P.alt(phi = 1));
+  CFR14P.World w2;
+  Real y = w1.acc(time) + w2.acc(time);
+end CFR14;
+//// model: CFR15
+package CFR15P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+end CFR15P;
+model CFR15
+  function myacc
+    extends CFR15P.base;
+  algorithm
+    g := 3 * r;
+  end myacc;
+  inner CFR15P.World world(redeclare function acc = myacc);
+  CFR15P.Body body;
+end CFR15;
+//// model: CFR16
+package CFR16P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+end CFR16P;
+model CFR16
+  inner CFR16P.World world(kk = 5, redeclare function acc = CFR16P.alt(phi = world.kk));
+  CFR16P.Body body;
+end CFR16;
+//// model: CFR17
+package CFR17P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+  model Sys
+    Body body;
+  end Sys;
+end CFR17P;
+model CFR17
+  parameter Real lat = 3;
+  inner CFR17P.World world(redeclare function acc = CFR17P.alt(phi = lat));
+  CFR17P.Sys s;
+end CFR17;
+//// model: CFR18
+package CFR18P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(r = time, phi = 2);
+  end Body;
+end CFR18P;
+model CFR18
+  parameter Real lat = 3;
+  inner CFR18P.World world(redeclare function acc = CFR18P.alt(phi = lat));
+  CFR18P.Body body;
+end CFR18;
+//// model: CFR19
+package CFR19P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+end CFR19P;
+model CFR19
+  parameter Real lat = 3;
+  inner CFR19P.World world(redeclare function acc = CFR19P.alt(phi = 2 * lat + 1));
+  CFR19P.Body body;
+end CFR19;
+//// model: CFR20
+package CFR20P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+end CFR20P;
+model CFR20
+  CFR20P.World w(redeclare function acc = CFR20P.alt(phi = 7));
+  constant Real c = w.acc(1.0);
+  parameter Real p = w.acc(2.0);
+  Real y = c + p;
+end CFR20;
+//// model: CFR21
+package CFR21P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+end CFR21P;
+model CFR21
+  CFR21P.World w(redeclare function acc = CFR21P.alt(phi = 7));
+  parameter Real p = w.acc(2.0) annotation(Evaluate = true);
+  Real x[2];
+equation
+  for i in 1:2 loop
+    x[i] = w.acc(i * time);
+  end for;
+end CFR21;
+//// model: CFR22
+package CFR22P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+    function acc2 = std(k = 4);
+  end World;
+end CFR22P;
+model CFR22
+  CFR22P.World w(redeclare function acc = CFR22P.alt(phi = 7));
+  Real y = w.acc2(time);
+end CFR22;
+//// model: CFR23
+package CFR23P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model Body
+    outer World world;
+    Real g;
+  algorithm
+    g := world.acc(time);
+  end Body;
+end CFR23P;
+model CFR23
+  parameter Real lat = 3;
+  inner CFR23P.World world(redeclare function acc = CFR23P.alt(phi = lat));
+  CFR23P.Body body;
+end CFR23;
+//// model: CFR24
+package CFR24P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+end CFR24P;
+model CFR24
+  parameter Real lat = 3;
+  inner CFR24P.World world(redeclare function acc = CFR24P.alt(phi = lat));
+  CFR24P.Body body[2];
+end CFR24;
+//// model: CFR25
+package CFR25P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+    input Real[2] v = {1, 2};
+  algorithm
+    g := phi + r + v[1];
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+end CFR25P;
+model CFR25
+  parameter Real lat = 3;
+  inner CFR25P.World world(redeclare function acc = CFR25P.alt(phi = lat, v = {lat, 2 * lat}));
+  CFR25P.Body body;
+end CFR25;
+//// model: CFR26
+package CFR26P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+end CFR26P;
+model CFR26
+  inner CFR26P.World world(redeclare function acc = CFR26P.alt(phi = lat));
+  CFR26P.Body body;
+  parameter Real lat = 3;
+end CFR26;
+//// model: CFR27
+package CFR27P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+  model M
+    parameter Real lat = 5;
+    World world(redeclare function acc = alt(phi = lat));
+    Real y = world.acc(time);
+  end M;
+end CFR27P;
+model CFR27
+  CFR27P.M m(lat = 6);
+end CFR27;
+//// model: CFR28
+package CFR28P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+end CFR28P;
+model CFR28
+  CFR28P.World w(redeclare function acc = CFR28P.alt(phi = 7));
+  Real y = w.acc(time, 2);
+end CFR28;
+//// model: CFR29
+package CFR29P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = 3) constrainedby base;
+  end World;
+end CFR29P;
+model CFR29
+  CFR29P.World w(redeclare function acc = CFR29P.alt(phi = 7));
+  constant Real c = w.acc(1.0);
+  Real y = c * time;
+end CFR29;
+//// model: CFR30
+package CFR30P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model W2
+    extends World;
+    redeclare function acc = alt(phi = 4);
+  end W2;
+end CFR30P;
+model CFR30
+  CFR30P.W2 w;
+  Real y = w.acc(time);
+end CFR30;
+//// model: CFR31
+package CFR31P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    parameter Real c = 3;
+    replaceable function acc = alt2 constrainedby base;
+  end World;
+  constant Real c = 7;
+  function alt2 = alt(phi = c);
+end CFR31P;
+model CFR31
+  CFR31P.World w;
+  Real y = w.acc(time);
+end CFR31;
+//// model: CFR32
+package CFR32P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  constant Real c = 7;
+  function alt2 = alt(phi = c);
+end CFR32P;
+model CFR32
+  parameter Real c = 3;
+  CFR32P.World w(redeclare function acc = CFR32P.alt2);
+  Real y = w.acc(time);
+end CFR32;
+//// model: CFR33
+package CFR33P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    parameter Real c = 3;
+    replaceable function acc = std(k = kk) constrainedby base;
+    Real gw = acc(time);
+  end World;
+  constant Real c = 7;
+  function alt2 = alt(phi = c);
+end CFR33P;
+model CFR33
+  CFR33P.World w(redeclare function acc = CFR33P.alt2);
+end CFR33;
+//// model: CFR34
+package CFR34P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+end CFR34P;
+model CFR34
+  parameter Real lat = 3;
+  CFR34P.World w(redeclare function acc = CFR34P.alt(final phi = lat));
+  Real y = w.acc(time);
+end CFR34;
+//// model: CFR35
+package CFR35P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model M
+    parameter Real lat = 1;
+    World world(redeclare function acc = alt(phi = lat));
+    Real y = world.acc(time);
+  end M;
+end CFR35P;
+model CFR35
+  CFR35P.M m[2](lat = {1, 2});
+end CFR35;
+//// model: CFR36
+package CFR36P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+end CFR36P;
+model CFR36
+  CFR36P.World w(redeclare function acc = CFR36P.std(k = 5));
+  Real y = w.acc(time);
+end CFR36;
+//// model: CFR37
+package CFR37P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model M
+    parameter Real lat = 1;
+    World w(redeclare function acc = alt(phi = lat));
+  end M;
+end CFR37P;
+model CFR37
+  CFR37P.M m(lat = 4);
+  Real y = m.w.acc(time);
+end CFR37;
+//// model: CFR38
+package CFR38P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+end CFR38P;
+model CFR38
+  parameter Real lat = 3;
+  CFR38P.World w(redeclare function acc = CFR38P.alt(phi = lat));
+  Real y = w.acc(time) + w.acc(2 * time, 1);
+end CFR38;
+//// model: CFR39
+package CFR39P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+end CFR39P;
+model CFR39
+  parameter Real lat = 3;
+  replaceable function myalt = CFR39P.alt(phi = 2 * lat);
+  CFR39P.World w(redeclare function acc = myalt);
+  Real y = w.acc(time);
+end CFR39;
+//// model: CFR40
+package CFR40P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+end CFR40P;
+model CFR40
+  parameter Real lat = 3;
+  CFR40P.World w(redeclare function acc = CFR40P.alt(phi = lat));
+  Real y = w.acc(time);
+  Real z = w.acc(r = time);
+end CFR40;
+//// model: CFR42
+package CFR42P
+  function accBase
+    input Real r;
+    input Real gg = 1;
+    output Real a;
+  algorithm
+    a := gg * r;
+  end accBase;
+  model Sub
+    parameter Real k = 4;
+  end Sub;
+  model W
+    Sub s(k = 6);
+    replaceable function acc = accBase(gg = s.k);
+  end W;
+end CFR42P;
+model CFR42
+  CFR42P.W w;
+  Real y = w.acc(time);
+end CFR42;
+//// model: CFR43
+package CFR43P
+  function accBase
+    input Real r;
+    input Real gg = 1;
+    output Real a;
+  algorithm
+    a := gg * r;
+  end accBase;
+  model Sub
+    parameter Real k = 4;
+  end Sub;
+end CFR43P;
+model CFR43
+  CFR43P.Sub s(k = 6);
+  function acc = CFR43P.accBase(gg = s.k);
+  Real y = acc(time);
+end CFR43;
+//// model: CFR44
+package CFR44P
+  function accBase
+    input Real r;
+    input Real gg = 1;
+    output Real a;
+  algorithm
+    a := gg * r;
+  end accBase;
+  function accArr
+    input Real r;
+    input Real gg[2] = {1, 1};
+    output Real a;
+  algorithm
+    a := gg[1] * r + gg[2];
+  end accArr;
+  model T
+    parameter Real k = 8;
+  end T;
+  model Sub
+    parameter Real k = 4;
+    parameter Integer n = 3;
+    constant Real c = 2;
+    parameter Real arr[2] = {5, 6};
+    parameter Real nb;
+    Real v = time;
+    T t(k = 9);
+  end Sub;
+  record R
+    Real x = 1;
+  end R;
+end CFR44P;
+model CFR44
+  CFR44P.Sub s(nb = 1);
+  function acc = CFR44P.accBase(gg = s.v);
+  Real y = acc(time);
+end CFR44;
+//// model: CFR45
+package CFR45P
+  function accBase
+    input Real r;
+    input Real gg = 1;
+    output Real a;
+  algorithm
+    a := gg * r;
+  end accBase;
+  function accArr
+    input Real r;
+    input Real gg[2] = {1, 1};
+    output Real a;
+  algorithm
+    a := gg[1] * r + gg[2];
+  end accArr;
+  model T
+    parameter Real k = 8;
+  end T;
+  model Sub
+    parameter Real k = 4;
+    parameter Integer n = 3;
+    constant Real c = 2;
+    parameter Real arr[2] = {5, 6};
+    parameter Real nb;
+    Real v = time;
+    T t(k = 9);
+  end Sub;
+  record R
+    Real x = 1;
+  end R;
+end CFR45P;
+model CFR45
+  CFR45P.Sub s(nb = 1, k = 6);
+  function acc = CFR45P.accBase(gg = s.k + 1);
+  Real y = acc(time);
+end CFR45;
+//// model: CFR46
+package CFR46P
+  function accBase
+    input Real r;
+    input Real gg = 1;
+    output Real a;
+  algorithm
+    a := gg * r;
+  end accBase;
+  function accArr
+    input Real r;
+    input Real gg[2] = {1, 1};
+    output Real a;
+  algorithm
+    a := gg[1] * r + gg[2];
+  end accArr;
+  model T
+    parameter Real k = 8;
+  end T;
+  model Sub
+    parameter Real k = 4;
+    parameter Integer n = 3;
+    constant Real c = 2;
+    parameter Real arr[2] = {5, 6};
+    parameter Real nb;
+    Real v = time;
+    T t(k = 9);
+  end Sub;
+  record R
+    Real x = 1;
+  end R;
+end CFR46P;
+model CFR46
+  CFR46P.Sub s(nb = 1);
+  Real v = time;
+  function acc = CFR46P.accBase(gg = s.k + v);
+  Real y = acc(time);
+end CFR46;
+//// model: CFR47
+package CFR47P
+  function accBase
+    input Real r;
+    input Real gg = 1;
+    output Real a;
+  algorithm
+    a := gg * r;
+  end accBase;
+  function accArr
+    input Real r;
+    input Real gg[2] = {1, 1};
+    output Real a;
+  algorithm
+    a := gg[1] * r + gg[2];
+  end accArr;
+  model T
+    parameter Real k = 8;
+  end T;
+  model Sub
+    parameter Real k = 4;
+    parameter Integer n = 3;
+    constant Real c = 2;
+    parameter Real arr[2] = {5, 6};
+    parameter Real nb;
+    Real v = time;
+    T t(k = 9);
+  end Sub;
+  record R
+    Real x = 1;
+  end R;
+end CFR47P;
+model CFR47
+  parameter CFR47P.R r(x = 3);
+  function acc = CFR47P.accBase(gg = r.x);
+  Real y = acc(time);
+end CFR47;
+//// model: CFR48
+package CFR48P
+  function accBase
+    input Real r;
+    input Real gg = 1;
+    output Real a;
+  algorithm
+    a := gg * r;
+  end accBase;
+  function accArr
+    input Real r;
+    input Real gg[2] = {1, 1};
+    output Real a;
+  algorithm
+    a := gg[1] * r + gg[2];
+  end accArr;
+  model T
+    parameter Real k = 8;
+  end T;
+  model Sub
+    parameter Real k = 4;
+    parameter Integer n = 3;
+    constant Real c = 2;
+    parameter Real arr[2] = {5, 6};
+    parameter Real nb;
+    Real v = time;
+    T t(k = 9);
+  end Sub;
+  record R
+    Real x = 1;
+  end R;
+end CFR48P;
+model CFR48
+  CFR48P.Sub s(nb = 1);
+  function acc = CFR48P.accBase(gg = s.t.k);
+  Real y = acc(time);
+end CFR48;
+//// model: CFR49
+package CFR49P
+  function accBase
+    input Real r;
+    input Real gg = 1;
+    output Real a;
+  algorithm
+    a := gg * r;
+  end accBase;
+  function accArr
+    input Real r;
+    input Real gg[2] = {1, 1};
+    output Real a;
+  algorithm
+    a := gg[1] * r + gg[2];
+  end accArr;
+  model T
+    parameter Real k = 8;
+  end T;
+  model Sub
+    parameter Real k = 4;
+    parameter Integer n = 3;
+    constant Real c = 2;
+    parameter Real arr[2] = {5, 6};
+    parameter Real nb;
+    Real v = time;
+    T t(k = 9);
+  end Sub;
+  record R
+    Real x = 1;
+  end R;
+end CFR49P;
+model CFR49
+  CFR49P.Sub s(nb = 1);
+  function acc = CFR49P.accBase(gg = s.c);
+  Real y = acc(time);
+end CFR49;
+//// model: CFR50
+package CFR50P
+  function accBase
+    input Real r;
+    input Real gg = 1;
+    output Real a;
+  algorithm
+    a := gg * r;
+  end accBase;
+  function accArr
+    input Real r;
+    input Real gg[2] = {1, 1};
+    output Real a;
+  algorithm
+    a := gg[1] * r + gg[2];
+  end accArr;
+  model T
+    parameter Real k = 8;
+  end T;
+  model Sub
+    parameter Real k = 4;
+    parameter Integer n = 3;
+    constant Real c = 2;
+    parameter Real arr[2] = {5, 6};
+    parameter Real nb;
+    Real v = time;
+    T t(k = 9);
+  end Sub;
+  record R
+    Real x = 1;
+  end R;
+end CFR50P;
+model CFR50
+  CFR50P.Sub s(nb = 1);
+  function acc = CFR50P.accBase(gg = s.arr[2]);
+  Real y = acc(time);
+end CFR50;
+//// model: CFR51
+package CFR51P
+  function accBase
+    input Real r;
+    input Real gg = 1;
+    output Real a;
+  algorithm
+    a := gg * r;
+  end accBase;
+  function accArr
+    input Real r;
+    input Real gg[2] = {1, 1};
+    output Real a;
+  algorithm
+    a := gg[1] * r + gg[2];
+  end accArr;
+  model T
+    parameter Real k = 8;
+  end T;
+  model Sub
+    parameter Real k = 4;
+    parameter Integer n = 3;
+    constant Real c = 2;
+    parameter Real arr[2] = {5, 6};
+    parameter Real nb;
+    Real v = time;
+    T t(k = 9);
+  end Sub;
+  record R
+    Real x = 1;
+  end R;
+end CFR51P;
+model CFR51
+  CFR51P.Sub s(nb = 1);
+  function acc = CFR51P.accArr(gg = s.arr);
+  Real y = acc(time);
+end CFR51;
+//// model: CFR53
+package CFR53P
+  function accBase
+    input Real r;
+    input Real gg = 1;
+    output Real a;
+  algorithm
+    a := gg * r;
+  end accBase;
+  function accArr
+    input Real r;
+    input Real gg[2] = {1, 1};
+    output Real a;
+  algorithm
+    a := gg[1] * r + gg[2];
+  end accArr;
+  model T
+    parameter Real k = 8;
+  end T;
+  model Sub
+    parameter Real k = 4;
+    parameter Integer n = 3;
+    constant Real c = 2;
+    parameter Real arr[2] = {5, 6};
+    parameter Real nb;
+    Real v = time;
+    T t(k = 9);
+  end Sub;
+  record R
+    Real x = 1;
+  end R;
+end CFR53P;
+model CFR53
+  CFR53P.Sub s(nb(fixed = false));
+  function acc = CFR53P.accBase(gg = s.nb);
+  Real y = acc(time);
+initial equation
+  s.nb = 1;
+end CFR53;
+//// model: CFR54
+package CFR54P
+  function accBase
+    input Real r;
+    input Real gg = 1;
+    output Real a;
+  algorithm
+    a := gg * r;
+  end accBase;
+  function accArr
+    input Real r;
+    input Real gg[2] = {1, 1};
+    output Real a;
+  algorithm
+    a := gg[1] * r + gg[2];
+  end accArr;
+  model T
+    parameter Real k = 8;
+  end T;
+  model Sub
+    parameter Real k = 4;
+    parameter Integer n = 3;
+    constant Real c = 2;
+    parameter Real arr[2] = {5, 6};
+    parameter Real nb;
+    Real v = time;
+    T t(k = 9);
+  end Sub;
+  record R
+    Real x = 1;
+  end R;
+end CFR54P;
+model CFR54
+  CFR54P.Sub s[2](each nb = 1, k = {1, 2});
+  function acc = CFR54P.accBase(gg = s[2].k);
+  Real y = acc(time);
+end CFR54;
+//// model: CFR55
+package CFR55P
+  function accBase
+    input Real r;
+    input Real gg = 1;
+    output Real a;
+  algorithm
+    a := gg * r;
+  end accBase;
+  function accArr
+    input Real r;
+    input Real gg[2] = {1, 1};
+    output Real a;
+  algorithm
+    a := gg[1] * r + gg[2];
+  end accArr;
+  model T
+    parameter Real k = 8;
+  end T;
+  model Sub
+    parameter Real k = 4;
+    parameter Integer n = 3;
+    constant Real c = 2;
+    parameter Real arr[2] = {5, 6};
+    parameter Real nb;
+    Real v = time;
+    T t(k = 9);
+  end Sub;
+  record R
+    Real x = 1;
+  end R;
+end CFR55P;
+model CFR55
+  CFR55P.Sub s(nb = 1, n = 7);
+  function acc = CFR55P.accBase(gg = s.n);
+  Real y = acc(time);
+end CFR55;
+//// model: CFR56
+package CFR56P
+  function accBase
+    input Real r;
+    input Real gg = 1;
+    output Real a;
+  algorithm
+    a := gg * r;
+  end accBase;
+  function accArr
+    input Real r;
+    input Real gg[2] = {1, 1};
+    output Real a;
+  algorithm
+    a := gg[1] * r + gg[2];
+  end accArr;
+  model T
+    parameter Real k = 8;
+  end T;
+  model Sub
+    parameter Real k = 4;
+    parameter Integer n = 3;
+    constant Real c = 2;
+    parameter Real arr[2] = {5, 6};
+    parameter Real nb;
+    Real v = time;
+    T t(k = 9);
+  end Sub;
+  record R
+    Real x = 1;
+  end R;
+end CFR56P;
+model CFR56
+  CFR56P.Sub s(nb = 1, k = 6);
+  function acc = CFR56P.accBase(gg = 2 * s.k);
+  Real y = acc(time) + acc(2 * time, 3);
+end CFR56;
+//// model: CFR52
+package CFR52P
+  function accBase
+    input Real r;
+    input Real gg = 1;
+    output Real a;
+  algorithm
+    a := gg * r;
+  end accBase;
+  model Sub
+    parameter Real k = 4;
+  end Sub;
+  model World
+    Sub s(k = 6);
+    replaceable function acc = accBase(gg = s.k);
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+end CFR52P;
+model CFR52
+  inner CFR52P.World world;
+  CFR52P.Body body;
+end CFR52;
+//// model: CFR57
+package CFR57P
+  function accBase
+    input Real r;
+    input Real gg = 1;
+    output Real a;
+  algorithm
+    a := gg * r;
+  end accBase;
+  model Sub
+    parameter Real nb(fixed = false);
+    parameter Real k = 4;
+  end Sub;
+end CFR57P;
+model CFR57
+  parameter Real nb(fixed = false);
+  function acc = CFR57P.accBase(gg = nb);
+  Real y = acc(time);
+initial equation
+  nb = 1;
+end CFR57;
+//// model: CFR59
+package CFR59P
+  function accBase
+    input Real r;
+    input Real gg = 1;
+    output Real a;
+  algorithm
+    a := gg * r;
+  end accBase;
+  model Sub
+    parameter Real nb(fixed = false);
+    parameter Real k = 4;
+  end Sub;
+end CFR59P;
+model CFR59
+  parameter Real nb;
+  function acc = CFR59P.accBase(gg = nb);
+  Real y = acc(time);
+end CFR59;
+//// model: CFR60
+package CFR60P
+  function accBase
+    input Real r;
+    input Real gg = 1;
+    output Real a;
+  algorithm
+    a := gg * r;
+  end accBase;
+  model Sub
+    parameter Real nb(fixed = false);
+    parameter Real k = 4;
+  end Sub;
+end CFR60P;
+model CFR60
+  parameter Real nb(fixed = false);
+  function acc = CFR60P.accBase(gg = 2 * nb);
+  Real y = acc(time);
+initial equation
+  nb = 1;
+end CFR60;
+//// model: CFR61
+package CFR61P
+  function accBase
+    input Real r;
+    input Real gg = 1;
+    output Real a;
+  algorithm
+    a := gg * r;
+  end accBase;
+  model Sub
+    parameter Real nb(fixed = false);
+    parameter Real k = 4;
+  end Sub;
+end CFR61P;
+model CFR61
+  parameter Integer nb(fixed = false);
+  function acc = CFR61P.accBase(gg = nb);
+  Real y = acc(time);
+initial equation
+  nb = 1;
+end CFR61;
+//// model: CFR62
+package CFR62P
+  function accBase
+    input Real r;
+    input Real gg = 1;
+    output Real a;
+  algorithm
+    a := gg * r;
+  end accBase;
+  model Sub
+    parameter Real nb(fixed = false);
+    parameter Real k = 4;
+  end Sub;
+end CFR62P;
+model CFR62
+  CFR62P.Sub s;
+  function acc = CFR62P.accBase(gg = s.nb + s.k);
+  Real y = acc(time);
+initial equation
+  s.nb = 1;
+end CFR62;
+//// model: CFR63
+package CFR63P
+  function accBase
+    input Real r;
+    input Real gg = 1;
+    output Real a;
+  algorithm
+    a := gg * r;
+  end accBase;
+  model Sub
+    parameter Real nb(fixed = false);
+    parameter Real k = 4;
+  end Sub;
+end CFR63P;
+model CFR63
+  CFR63P.Sub s;
+  Real y2 = acc(2 * time, 1);
+  function acc = CFR63P.accBase(gg = s.nb);
+  Real y = acc(time);
+initial equation
+  s.nb = 1;
+end CFR63;
+//// model: CFR64
+package CFR64P
+  function accBase
+    input Real r;
+    input Real gg = 1;
+    output Real a;
+  algorithm
+    a := gg * r;
+  end accBase;
+  model Sub
+    parameter Real nb(fixed = false);
+    parameter Real k = 4;
+  end Sub;
+end CFR64P;
+model CFR64
+  parameter Real nb(fixed = false, start = 3);
+  function acc = CFR64P.accBase(gg = nb);
+  Real y = acc(time);
+initial equation
+  nb = 1;
+end CFR64;
+//// model: CFR65
+package CFR65P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  constant Real c = 7;
+  function alt2 = alt(phi = c);
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+    Real gw = acc(time);
+  end World;
+end CFR65P;
+model CFR65
+  parameter Real c = 3;
+  CFR65P.World w(redeclare function acc = CFR65P.alt2);
+end CFR65;
+//// model: CFR66
+package CFR66P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  function alt2 = alt(phi = 7);
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+    Real gw = acc(time);
+  end World;
+end CFR66P;
+model CFR66
+  CFR66P.World w(redeclare function acc = CFR66P.alt2);
+  Real y = w.acc(2 * time);
+end CFR66;
+//// model: CFR67
+package CFR67P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = alt(phi = kk) constrainedby base;
+    Real gw = acc(time);
+  end World;
+end CFR67P;
+model CFR67
+  parameter Real kk = 5;
+  CFR67P.World w(redeclare function acc = CFR67P.alt(phi = kk));
+  Real y = w.acc(2 * time);
+end CFR67;
+//// model: CFR68
+package CFR68P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = alt(phi = kk) constrainedby base;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+  model Sys
+    inner World world(redeclare function acc = alt(phi = 9));
+    Body b;
+  end Sys;
+end CFR68P;
+model CFR68
+  CFR68P.Sys s;
+  CFR68P.Body b2;
+  inner CFR68P.World world;
+end CFR68;
+//// model: CFR69
+package CFR69P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = alt(phi = kk) constrainedby base;
+  end World;
+  model World2
+    extends World(redeclare function acc = alt(phi = 2 * kk));
+  end World2;
+end CFR69P;
+model CFR69
+  CFR69P.World2 w;
+  Real y = w.acc(time);
+end CFR69;
+//// model: CFR70
+package CFR70P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = alt(phi = kk) constrainedby base;
+  end World;
+  model Holder
+    parameter Real lat = 3;
+    World w(redeclare function acc = alt(phi = lat));
+  end Holder;
+end CFR70P;
+model CFR70
+  extends CFR70P.Holder(lat = 4);
+  Real y = w.acc(time);
+end CFR70;
+//// model: CFR71
+package CFR71P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = alt(phi = kk) constrainedby base;
+  end World;
+end CFR71P;
+model CFR71
+  parameter Real lat = 3;
+  CFR71P.World w(redeclare replaceable function acc = CFR71P.alt(phi = lat));
+  Real y = w.acc(time);
+end CFR71;
+//// model: CFR72
+package CFR72P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = alt(phi = kk) constrainedby base;
+  end World;
+end CFR72P;
+model CFR72
+  parameter Real lat = 3;
+  CFR72P.World w(redeclare function acc = CFR72P.alt(phi = lat));
+  Real y = w.acc(time) annotation(Evaluate = true);
+  parameter Real p = w.acc(1.0);
+end CFR72;
+//// model: CFR73
+package CFR73P
+  function alt
+    input Real r;
+    input Real phi;
+    output Real g;
+  algorithm
+    g := phi + r;
+  end alt;
+  constant Real c = 7;
+  function alt2 = alt(phi = c);
+end CFR73P;
+model CFR73
+  parameter Real c = 3;
+  function acc = CFR73P.alt2;
+  Real y = acc(time);
+end CFR73;
+//// model: CFR74
+package CFR74P
+  function alt
+    input Real r;
+    input Real phi;
+    output Real g;
+  algorithm
+    g := phi + r;
+  end alt;
+  function alt2 = alt(phi = 7);
+end CFR74P;
+model CFR74
+  parameter Real c = 3;
+  function acc = CFR74P.alt2;
+  Real y = acc(time);
+end CFR74;
+//// model: CFR75
+package CFR75P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 3;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    replaceable function acc = std constrainedby base;
+  end World;
+end CFR75P;
+model CFR75
+  CFR75P.World w(redeclare function acc = CFR75P.alt(phi = 1));
+  parameter Integer n = integer(w.acc(1.0));
+  Real x[n] = fill(time, n);
+end CFR75;
+//// model: CFR76
+package CFR76P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 3;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    replaceable function acc = std constrainedby base;
+  end World;
+end CFR76P;
+model CFR76
+  CFR76P.World w(redeclare function acc = CFR76P.alt(phi = 1));
+  parameter Real p = w.acc(1.0) annotation(Evaluate = true);
+  Real y = if p > 2.5 then time else 2 * time;
+end CFR76;
+//// model: CFR77
+package CFR77P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 3;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    replaceable function acc = std constrainedby base;
+  end World;
+end CFR77P;
+model CFR77
+  CFR77P.World w(redeclare function acc = CFR77P.alt(phi = 1));
+  constant Real c = w.acc(1.0);
+  Real x[integer(c)] = fill(time, integer(c));
+end CFR77;
+//// model: CFR78
+package CFR78P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 3;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    replaceable function acc = std constrainedby base;
+  end World;
+end CFR78P;
+model CFR78
+  CFR78P.World w(redeclare function acc = CFR78P.alt(phi = 1));
+  parameter Boolean b = w.acc(1.0) > 2.5;
+  Real y if b;
+end CFR78;
+//// model: CFR80
+package CFR80P
+  function alt
+    input Real r;
+    input Real phi;
+    output Real g;
+  algorithm
+    g := phi + r;
+  end alt;
+end CFR80P;
+model CFR80
+  parameter Real lat = 3;
+  function myalt = CFR80P.alt(phi = 2 * lat);
+  function acc = myalt;
+  Real y = acc(time);
+end CFR80;
+//// model: CFR81
+package CFR81P
+  function alt
+    input Real r;
+    input Real phi;
+    output Real g;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    function alt2 = alt(phi = kk);
+    replaceable function acc = alt2;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+end CFR81P;
+model CFR81
+  inner CFR81P.World world(kk = 4);
+  CFR81P.Body body;
+end CFR81;
+//// model: CFR82
+package CFR82P
+  function alt
+    input Real r;
+    input Real phi;
+    output Real g;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = alt(phi = kk);
+  end World;
+end CFR82P;
+model CFR82
+  parameter Real lat = 3;
+  function myalt = CFR82P.alt(phi = 2 * lat);
+  CFR82P.World w(redeclare function acc = myalt);
+  Real y = w.acc(time);
+end CFR82;
+//// model: CFR83
+package CFR83P
+  function alt
+    input Real r;
+    input Real phi;
+    output Real g;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    function alt2 = alt(phi = kk);
+    replaceable function acc = alt(phi = kk);
+    Real gw = acc(time);
+  end World;
+end CFR83P;
+model CFR83
+  parameter Real lat = 3;
+  function myalt = CFR83P.alt(phi = 2 * lat);
+  CFR83P.World w(redeclare function acc = myalt);
+end CFR83;
+//// model: CFR84
+package CFR84P
+  function alt
+    input Real r;
+    input Real phi;
+    output Real g;
+  algorithm
+    g := phi + r;
+  end alt;
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function integ
+    input Real x;
+    input base f;
+    output Real y;
+  algorithm
+    y := f(x) + 1;
+  end integ;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = alt(phi = kk);
+  end World;
+end CFR84P;
+model CFR84
+  parameter Real lat = 3;
+  CFR84P.World w(redeclare function acc = CFR84P.alt(phi = lat));
+  Real y = CFR84P.integ(time, w.acc);
+end CFR84;
+//// model: CFR85
+package CFR85P
+  function alt
+    input Real r;
+    input Real phi;
+    output Real g;
+  algorithm
+    g := phi + r;
+  end alt;
+  package Base
+    constant Real c = 7;
+    function alt2 = alt(phi = c);
+  end Base;
+  package Gas
+    extends Base(c = 9);
+  end Gas;
+end CFR85P;
+model CFR85
+  package M = CFR85P.Gas;
+  Real y = M.alt2(time);
+end CFR85;
+//// model: CFR86
+package CFR86P
+  function alt
+    input Real r;
+    input Real phi;
+    output Real g;
+  algorithm
+    g := phi + r;
+  end alt;
+  package Base
+    constant Real c = 7;
+    function alt2 = alt(phi = c);
+  end Base;
+  package Gas
+    extends Base(c = 9);
+  end Gas;
+  model C
+    replaceable package Medium = Base;
+    Real y = Medium.alt2(time);
+  end C;
+end CFR86P;
+model CFR86
+  CFR86P.C c(redeclare package Medium = CFR86P.Gas);
+end CFR86;
+//// model: CFR87
+package CFR87P
+  function alt
+    input Real r;
+    input Real phi;
+    output Real g;
+  algorithm
+    g := phi + r;
+  end alt;
+  package Base
+    constant Real c = 7;
+    function alt2 = alt(phi = c);
+  end Base;
+  package Gas
+    extends Base(c = 9);
+  end Gas;
+end CFR87P;
+model CFR87
+  Real y = CFR87P.Gas.alt2(time);
+end CFR87;
+//// model: CFR88
+package CFR88P
+  function alt
+    input Real r;
+    input Real phi;
+    output Real g;
+  algorithm
+    g := phi + r;
+  end alt;
+  package Base
+    constant Real c = 7;
+    function alt2 = alt(phi = c);
+    function h
+      input Real x;
+      output Real y;
+    algorithm
+      y := alt2(x);
+    end h;
+  end Base;
+  package Gas
+    extends Base(c = 9);
+  end Gas;
+end CFR88P;
+model CFR88
+  package M = CFR88P.Gas;
+  Real y = M.h(time);
+end CFR88;
+//// model: CFR89
+package CFR89P
+  function alt
+    input Real r;
+    input Real phi;
+    output Real g;
+  algorithm
+    g := phi + r;
+  end alt;
+  package Base
+    constant Real c = 7;
+    function alt2 = alt(phi = c);
+  end Base;
+end CFR89P;
+model CFR89
+  Real y = CFR89P.Base.alt2(time);
+end CFR89;
+//// model: CFR90
+package CFR90P
+  function alt
+    input Real r;
+    input Real phi;
+    output Real g;
+  algorithm
+    g := phi + r;
+  end alt;
+  package Base
+    constant Real c = 7;
+    function alt2 = alt(phi = c);
+  end Base;
+  model World
+    replaceable function acc = Base.alt2;
+  end World;
+end CFR90P;
+model CFR90
+  CFR90P.World w;
+  Real y = w.acc(time);
+end CFR90;
+//// model: CFR91
+package CFR91P
+  function alt
+    input Real r;
+    input Real phi;
+    input Integer n;
+    output Real g;
+  algorithm
+    g := phi + r + n;
+  end alt;
+  constant Integer m = 2;
+  constant Real c = 7;
+  function alt2 = alt(phi = 2 * c, n = m);
+end CFR91P;
+model CFR91
+  parameter Real c = 3;
+  function acc = CFR91P.alt2;
+  Real y = acc(time);
+end CFR91;
+//// model: CFR92
+package CFR92P
+  function alt
+    input Real r;
+    input Real phi[2];
+    output Real g;
+  algorithm
+    g := phi[1] + r;
+  end alt;
+  constant Real c[2] = {7, 8};
+  function alt2 = alt(phi = c);
+end CFR92P;
+model CFR92
+  function acc = CFR92P.alt2;
+  Real y = acc(time);
+end CFR92;
+//// model: CFR93
+package CFR93P
+  function alt
+    input Real r;
+    input Real phi;
+    output Real g;
+  algorithm
+    g := phi + r;
+  end alt;
+  package Base
+    constant Real c = 7;
+    function alt2 = alt(phi = 7);
+  end Base;
+  package Gas
+    extends Base(c = 9);
+  end Gas;
+  model C
+    replaceable package Medium = Base;
+    Real y = Medium.alt2(time);
+  end C;
+end CFR93P;
+model CFR93
+  CFR93P.C c(redeclare package Medium = CFR93P.Gas);
+end CFR93;
+//// model: CFR95
+package CFR95P
+  function alt
+    input Real r;
+    input Real phi;
+    output Real g;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = alt(phi = kk);
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+end CFR95P;
+model CFR95
+  parameter Real lat = 3;
+  inner CFR95P.World world(redeclare function acc = CFR95P.alt(phi = lat));
+  CFR95P.Body body;
+end CFR95;
+//// model: CFR96
+package CFR96P
+  function alt
+    input Real r;
+    input Real phi;
+    input Real k = 1;
+    output Real g;
+  algorithm
+    g := k * phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = alt(phi = kk, k = 4);
+  end World;
+end CFR96P;
+model CFR96
+  parameter Real lat = 3;
+  CFR96P.World w(redeclare function acc = CFR96P.alt(phi = lat));
+  Real y = w.acc(time);
+end CFR96;
+//// model: CFR97
+package CFR97P
+  function alt
+    input Real r;
+    input Real phi;
+    output Real g;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = alt(phi = kk);
+    Real gw = acc(time);
+  end World;
+end CFR97P;
+model CFR97
+  parameter Real lat = 3;
+  CFR97P.World w(redeclare function acc = CFR97P.alt(phi = lat));
+end CFR97;
+//// model: CFR98
+package CFR98P
+  function alt
+    input Real r;
+    input Real phi;
+    output Real g;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = alt(final phi = kk);
+  end World;
+end CFR98P;
+model CFR98
+  parameter Real lat = 3;
+  CFR98P.World w(redeclare function acc = CFR98P.alt(phi = lat));
+  Real y = w.acc(time);
+end CFR98;
+//// model: UCF1
+package UCF1P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+end UCF1P;
+model UCF1
+  parameter Real lat = 3;
+  inner UCF1P.World world(redeclare function acc = UCF1P.alt(phi = lat));
+  UCF1P.Body body;
+end UCF1;
+//// model: UCF2
+package UCF2P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = std(k = kk) constrainedby base;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+end UCF2P;
+model UCF2
+  model M
+    parameter Real lat = 5;
+    UCF2P.World w(redeclare function acc = UCF2P.alt(phi = lat));
+    Real y = w.acc(time);
+  end M;
+  M m(lat = 6);
+end UCF2;
+//// model: UCF3
+package UCF3P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = alt(phi = kk);
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+end UCF3P;
+model UCF3
+  parameter Real lat = 3;
+  function myalt = UCF3P.alt(phi = 2 * lat);
+  UCF3P.World w(redeclare function acc = myalt);
+  Real y = w.acc(time);
+end UCF3;
+//// model: UCF4
+package UCF4P
+  partial function base
+    input Real r;
+    output Real g;
+  end base;
+  function std
+    extends base;
+    input Real k = 1;
+  algorithm
+    g := k * r;
+  end std;
+  function alt
+    extends base;
+    input Real phi;
+  algorithm
+    g := phi + r;
+  end alt;
+  constant Real c = 7;
+  function alt2 = alt(phi = c);
+  model World
+    parameter Real kk = 2;
+    replaceable function acc = alt2 constrainedby base;
+  end World;
+  model Body
+    outer World world;
+    Real g = world.acc(time);
+  end Body;
+end UCF4P;
+model UCF4
+  parameter Real c = 3;
+  UCF4P.World w;
+  Real y = w.acc(time);
+end UCF4;
+//// model: UCF5
+package UCF5P
+  function accBase
+    input Real r;
+    input Real gg = 1;
+    output Real a;
+  algorithm
+    a := gg * r;
+  end accBase;
+  model Sub
+    parameter Real k = 4;
+    parameter Real nb(fixed = false);
+  end Sub;
+end UCF5P;
+model UCF5
+  UCF5P.Sub s(k = 6);
+  function acc = UCF5P.accBase(gg = s.k);
+  function acc2 = UCF5P.accBase(gg = s.nb + s.k);
+  Real y = acc(time) + acc2(time);
+initial equation
+  s.nb = 1;
+end UCF5;
+//// model: UCF6
+package UCF6P
+  record FCBase
+    Real Tc;
+  end FCBase;
+  record FCData
+    extends FCBase;
+    Real M;
+  end FCData;
+  partial package Base
+    constant Integer nX = 2;
+    replaceable record FC = FCBase;
+    constant FC[nX] fc;
+    function f
+      input Real x;
+      input Integer i;
+      output Real y;
+    algorithm
+      y := x * fc[i].Tc + fc[i].M;
+    end f;
+  end Base;
+  package Gas
+    extends Base(redeclare record FC = FCData, fc = {FCData(Tc = 1.5, M = 2), FCData(Tc = 2.5, M = 3)});
+  end Gas;
+end UCF6P;
+model UCF6
+  package M = UCF6P.Gas;
+  Real y = M.f(time, 1);
+end UCF6;
+//// model: XRF1
+package XRF1P
+  record S
+    Real v = 1;
+  end S;
+  record FCBase
+    Real Tc;
+    String name = "x";
+    Boolean has = true;
+    S s;
+  end FCBase;
+  record FCData
+    extends FCBase;
+    Real M;
+  end FCData;
+  partial package Base
+    constant Integer nX = 2;
+    replaceable record FC = FCBase;
+    constant FC[nX] fc;
+    function f
+      input Real x;
+      input Integer i;
+      output Real y;
+    algorithm
+      y := x * fc[i].Tc;
+    end f;
+  end Base;
+  package Gas
+    extends Base(fc = {FCBase(Tc = 1.5, s = S(v = 3)), FCBase(Tc = 2.5, s = S(v = 4), has = false, name = "b")});
+  end Gas;
+end XRF1P;
+model XRF1
+  package M = XRF1P.Gas;
+  Real y = M.f(time, 1);
+end XRF1;
+//// model: XRF2
+package XRF2P
+  record S
+    Real v = 1;
+  end S;
+  record FCBase
+    Real Tc;
+    String name = "x";
+    Boolean has = true;
+    S s;
+  end FCBase;
+  record FCData
+    extends FCBase;
+    Real M;
+  end FCData;
+  partial package Base
+    constant Integer nX = 2;
+    replaceable record FC = FCBase;
+    constant FC[nX] fc;
+    function f
+      input Real x;
+      input Integer i;
+      output Real y;
+    algorithm
+      y := x * fc[i].Tc;
+    end f;
+  end Base;
+  package Gas
+    extends Base(redeclare record FC = FCData, fc = {FCData(Tc = 1.5, M = 2, s = S(v = 3)), FCData(Tc = 2.5, M = 3, s = S(v = 4), has = false, name = "b")});
+  end Gas;
+end XRF2P;
+model XRF2
+  package M = XRF2P.Gas;
+  Real y = M.f(time, 1);
+end XRF2;
+//// model: XRF3
+package XRF3P
+  record S
+    Real v = 1;
+  end S;
+  record FCBase
+    Real Tc;
+    String name = "x";
+    Boolean has = true;
+    S s;
+  end FCBase;
+  record FCData
+    extends FCBase;
+    Real M;
+  end FCData;
+  partial package Base
+    constant Integer nX = 2;
+    replaceable record FC = FCBase;
+    constant FC[nX] fc;
+    function f
+      input Real x;
+      input Integer i;
+      output Real y;
+    algorithm
+      y := x * fc[i].M;
+    end f;
+  end Base;
+  package Gas
+    extends Base(redeclare record FC = FCData, fc = {FCData(Tc = 1.5, M = 2, s = S(v = 3)), FCData(Tc = 2.5, M = 3, s = S(v = 4), has = false, name = "b")});
+  end Gas;
+end XRF3P;
+model XRF3
+  package M = XRF3P.Gas;
+  Real y = M.f(time, 1);
+end XRF3;
+//// model: XRF4
+package XRF4P
+  record S
+    Real v = 1;
+  end S;
+  record FCBase
+    Real Tc;
+    String name = "x";
+    Boolean has = true;
+    S s;
+  end FCBase;
+  record FCData
+    extends FCBase;
+    Real M;
+  end FCData;
+  partial package Base
+    constant Integer nX = 2;
+    replaceable record FC = FCBase(Tc = 9);
+    constant FC[nX] fc;
+    function f
+      input Real x;
+      input Integer i;
+      output Real y;
+    algorithm
+      y := x * fc[i].Tc;
+    end f;
+  end Base;
+  package Gas
+    extends Base(fc = {FCBase(Tc = 1.5, s = S(v = 3)), FCBase(Tc = 2.5, s = S(v = 4), has = false, name = "b")});
+  end Gas;
+end XRF4P;
+model XRF4
+  package M = XRF4P.Gas;
+  Real y = M.f(time, 1);
+end XRF4;
+//// model: XRF5
+package XRF5P
+  record S
+    Real v = 1;
+  end S;
+  record FCBase
+    Real Tc;
+    String name = "x";
+    Boolean has = true;
+    S s;
+  end FCBase;
+  record FCData
+    extends FCBase;
+    Real M;
+  end FCData;
+  partial package Base
+    constant Integer nX = 2;
+    record FC1 = FCBase;
+    replaceable record FC = FC1;
+    constant FC[nX] fc;
+    function f
+      input Real x;
+      input Integer i;
+      output Real y;
+    algorithm
+      y := x * fc[i].Tc;
+    end f;
+  end Base;
+  package Gas
+    extends Base(fc = {FCBase(Tc = 1.5, s = S(v = 3)), FCBase(Tc = 2.5, s = S(v = 4), has = false, name = "b")});
+  end Gas;
+end XRF5P;
+model XRF5
+  package M = XRF5P.Gas;
+  Real y = M.f(time, 1);
+end XRF5;
+//// model: XRF6
+package XRF6P
+  record S
+    Real v = 1;
+  end S;
+  record FCBase
+    Real Tc;
+    String name = "x";
+    Boolean has = true;
+    S s;
+  end FCBase;
+  record FCData
+    extends FCBase;
+    Real M;
+  end FCData;
+  partial package Base
+    constant Integer nX = 2;
+    replaceable record FC = FCBase;
+    constant FC c;
+    function f
+      input Real x;
+      input Integer i;
+      output Real y;
+    algorithm
+      y := x * c.Tc;
+    end f;
+  end Base;
+  package Gas
+    extends Base(c = FCBase(Tc = 2, s = S(v = 3)));
+  end Gas;
+end XRF6P;
+model XRF6
+  package M = XRF6P.Gas;
+  Real y = M.f(time, 1);
+end XRF6;
+//// model: XRF7
+package XRF7P
+  record S
+    Real v = 1;
+  end S;
+  record FCBase
+    Real Tc;
+    String name = "x";
+    Boolean has = true;
+    S s;
+  end FCBase;
+  record FCData
+    extends FCBase;
+    Real M;
+  end FCData;
+  partial package Base
+    constant Integer nX = 2;
+    replaceable record FC = FCBase;
+    constant FC[nX] fc;
+    function f
+      input Real x;
+      input Integer i;
+      output Real y;
+    algorithm
+      y := x * sum(fc[:].Tc);
+    end f;
+  end Base;
+  package Gas
+    extends Base(redeclare record FC = FCData, fc = {FCData(Tc = 1.5, M = 2, s = S(v = 3)), FCData(Tc = 2.5, M = 3, s = S(v = 4), has = false, name = "b")});
+  end Gas;
+end XRF7P;
+model XRF7
+  package M = XRF7P.Gas;
+  Real y = M.f(time, 1);
+end XRF7;
+//// model: XRF8
+package XRF8P
+  record S
+    Real v = 1;
+  end S;
+  record FCBase
+    Real Tc;
+    String name = "x";
+    Boolean has = true;
+    S s;
+  end FCBase;
+  record FCData
+    extends FCBase;
+    Real M;
+  end FCData;
+  partial package Base
+    constant Integer nX = 2;
+    replaceable record FC = FCBase;
+    constant FC[nX] fc;
+    function f
+      input Real x;
+      input Integer i;
+      output Real y;
+    algorithm
+      y := x * fc[i].s.v;
+    end f;
+  end Base;
+  package Gas
+    extends Base(redeclare record FC = FCData, fc = {FCData(Tc = 1.5, M = 2, s = S(v = 3)), FCData(Tc = 2.5, M = 3, s = S(v = 4), has = false, name = "b")});
+  end Gas;
+end XRF8P;
+model XRF8
+  package M = XRF8P.Gas;
+  Real y = M.f(time, 1);
+end XRF8;
+//// model: XRF9
+package XRF9P
+  record S
+    Real v = 1;
+  end S;
+  record FCBase
+    Real Tc;
+    String name = "x";
+    Boolean has = true;
+    S s;
+  end FCBase;
+  record FCData
+    extends FCBase;
+    Real M;
+  end FCData;
+  partial package Base
+    constant Integer nX = 2;
+    replaceable record FC = FCBase;
+    constant FC[nX] fc;
+    function f
+      input Real x;
+      input Integer i;
+      output Real y;
+    algorithm
+      y := x;
+    end f;
+  end Base;
+  package Gas
+    extends Base(redeclare record FC = FCData, fc = {FCData(Tc = 1.5, M = 2, s = S(v = 3)), FCData(Tc = 2.5, M = 3, s = S(v = 4), has = false, name = "b")});
+  end Gas;
+end XRF9P;
+model XRF9
+  package M = XRF9P.Gas;
+  Real y = M.f(time, 1) + M.fc[2].Tc;
+end XRF9;
+//// model: XRF11
+package XRF11P
+  record S
+    Real v = 1;
+  end S;
+  record FCBase
+    Real Tc;
+    String name = "x";
+    Boolean has = true;
+    S s;
+  end FCBase;
+  record FCData
+    extends FCBase;
+    Real M;
+  end FCData;
+  package P
+    record FC = FCBase;
+    constant FC fc[2] = {FC(Tc = 1.5, s = S(v = 3)), FC(Tc = 2.5, s = S(v = 4))};
+    function f
+      input Real x;
+      input Integer i;
+      output Real y;
+    algorithm
+      y := x * fc[i].Tc;
+    end f;
+  end P;
+end XRF11P;
+model XRF11
+  Real y = XRF11P.P.f(time, 1);
+end XRF11;
+//// model: XRF12
+package XRF12P
+  record S
+    Real v = 1;
+  end S;
+  record FCBase
+    Real Tc;
+    String name = "x";
+    Boolean has = true;
+    S s;
+  end FCBase;
+  record FCData
+    extends FCBase;
+    Real M;
+  end FCData;
+  partial package Base
+    constant Integer nX = 2;
+    replaceable record FC = FCBase;
+    constant FC[nX] fc;
+    function f
+      input Real x;
+      input Integer i;
+      output Real y;
+    algorithm
+      y := 0;
+      for j in 1:nX loop
+        y := y + x * fc[j].Tc;
+      end for;
+    end f;
+  end Base;
+  package Gas
+    extends Base(redeclare record FC = FCData, fc = {FCData(Tc = 1.5, M = 2, s = S(v = 3)), FCData(Tc = 2.5, M = 3, s = S(v = 4), has = false, name = "b")});
+  end Gas;
+end XRF12P;
+model XRF12
+  package M = XRF12P.Gas;
+  Real y = M.f(time, 1);
+end XRF12;
+//// model: XRF13
+package XRF13P
+  record S
+    Real v = 1;
+  end S;
+  record FCBase
+    Real Tc;
+    String name = "x";
+    Boolean has = true;
+    S s;
+  end FCBase;
+  record FCData
+    extends FCBase;
+    Real M;
+  end FCData;
+  partial package Base
+    constant Integer nX = 2;
+    replaceable record FC = FCBase;
+    constant FC[nX] fc;
+    function f
+      input Real x;
+      input Integer i;
+      output Real y;
+    algorithm
+      y := if fc[i].has then x else -x;
+    end f;
+  end Base;
+  package Gas
+    extends Base(redeclare record FC = FCData, fc = {FCData(Tc = 1.5, M = 2, s = S(v = 3)), FCData(Tc = 2.5, M = 3, s = S(v = 4), has = false, name = "b")});
+  end Gas;
+end XRF13P;
+model XRF13
+  package M = XRF13P.Gas;
+  Real y = M.f(time, 1);
+end XRF13;
+//// model: XRF14
+package XRF14P
+  record S
+    Real v = 1;
+  end S;
+  record FCBase
+    Real Tc;
+    String name = "x";
+    Boolean has = true;
+    S s;
+  end FCBase;
+  record FCData
+    extends FCBase;
+    Real M;
+  end FCData;
+  partial package Base
+    constant Integer nX = 2;
+    replaceable record FC = FCBase;
+    constant FC[nX] fc;
+    function f
+      input Real x;
+      input Integer i;
+      output Real y;
+    algorithm
+      y := x * fc[2].Tc;
+    end f;
+  end Base;
+  package Gas
+    extends Base(redeclare record FC = FCData, fc = {FCData(Tc = 1.5, M = 2, s = S(v = 3)), FCData(Tc = 2.5, M = 3, s = S(v = 4), has = false, name = "b")});
+  end Gas;
+end XRF14P;
+model XRF14
+  package M = XRF14P.Gas;
+  Real y = M.f(time, 1);
+end XRF14;
+//// model: XRF15
+package XRF15P
+  record S
+    Real v = 1;
+  end S;
+  record FCBase
+    Real Tc;
+    String name = "x";
+    Boolean has = true;
+    S s;
+  end FCBase;
+  record FCData
+    extends FCBase;
+    Real M;
+  end FCData;
+  partial package Base
+    constant Integer nX = 2;
+    replaceable record FC = FCBase;
+    constant FC[nX] fc;
+    function f
+      input Real x;
+      input Integer i;
+      output Real y;
+    algorithm
+      assert(fc[i].name <> "", "named " + fc[i].name);
+      y := x;
+    end f;
+  end Base;
+  package Gas
+    extends Base(redeclare record FC = FCData, fc = {FCData(Tc = 1.5, M = 2, s = S(v = 3)), FCData(Tc = 2.5, M = 3, s = S(v = 4), has = false, name = "b")});
+  end Gas;
+end XRF15P;
+model XRF15
+  package M = XRF15P.Gas;
+  Real y = M.f(time, 1);
+end XRF15;
+//// model: XRF16
+package XRF16P
+  record S
+    Real v = 1;
+  end S;
+  record FCBase
+    Real Tc;
+    String name = "x";
+    Boolean has = true;
+    S s;
+  end FCBase;
+  record FCData
+    extends FCBase;
+    Real M;
+  end FCData;
+  partial package Base
+    constant Integer nX = 2;
+    replaceable record FC = FCBase;
+    constant FC[nX] fc;
+    function f
+      input Real x;
+      input Integer i;
+      output Real y;
+    algorithm
+      y := x * fc[i].Tc;
+    end f;
+  end Base;
+  package Gas
+    extends Base(redeclare record FC = FCData, fc = {FCData(Tc = 1.5, M = 2, s = S(v = 3)), FCData(Tc = 2.5, M = 3, s = S(v = 4), has = false, name = "b")});
+  end Gas;
+end XRF16P;
+model XRF16
+  model C
+    replaceable package Medium = XRF16P.Base;
+    Real y = Medium.f(time, 2);
+  end C;
+  C c(redeclare package Medium = XRF16P.Gas);
+end XRF16;
+//// model: XRF17
+package XRF17P
+  record S
+    Real v = 1;
+  end S;
+  record FCBase
+    Real Tc;
+    String name = "x";
+    Boolean has = true;
+    S s;
+  end FCBase;
+  record FCData
+    extends FCBase;
+    Real M;
+  end FCData;
+  partial package Base
+    constant Integer nX = 2;
+    replaceable record FC = FCBase;
+    constant FC[nX] fc;
+    function f
+      input Real x;
+      input Integer i;
+      output Real y;
+    algorithm
+      y := x * fc[i].Tc;
+    end f;
+  end Base;
+  package Gas
+    extends Base(redeclare record FC = FCBase, fc = {FCBase(Tc = 1.5, s = S(v = 3)), FCBase(Tc = 2.5, s = S(v = 4), has = false, name = "b")});
+  end Gas;
+end XRF17P;
+model XRF17
+  package M = XRF17P.Gas;
+  Real y = M.f(time, 1);
+end XRF17;
+//// model: XRF18
+package XRF18P
+  record S
+    Real v = 1;
+  end S;
+  record FCBase
+    Real Tc;
+    String name = "x";
+    Boolean has = true;
+    S s;
+  end FCBase;
+  record FCData
+    extends FCBase;
+    Real M;
+  end FCData;
+  partial package Base
+    constant Integer nX = 2;
+    replaceable record FC = FCBase;
+    constant FC[nX] fc;
+    function f
+      input Real x;
+      input Integer i;
+      output Real y;
+    algorithm
+      y := x * fc[i].M;
+    end f;
+  end Base;
+  package Gas
+    extends Base(redeclare record FC = FCData(M = 7), fc = {FCData(Tc = 1.5, s = S(v = 3)), FCData(Tc = 2.5, s = S(v = 4))});
+  end Gas;
+end XRF18P;
+model XRF18
+  package M = XRF18P.Gas;
+  Real y = M.f(time, 1);
+end XRF18;
+//// model: XRF19
+package XRF19P
+  record S
+    Real v = 1;
+  end S;
+  record FCBase
+    Real Tc;
+    String name = "x";
+    Boolean has = true;
+    S s;
+  end FCBase;
+  record FCData
+    extends FCBase;
+    Real M;
+  end FCData;
+  partial package Base
+    constant Integer nX = 2;
+    replaceable record FC = FCBase;
+    constant FC[nX] fc;
+    function f
+      input Real x;
+      input Integer i;
+      output Real y;
+    algorithm
+      y := x * fc[i].s.v + fc[i].Tc;
+    end f;
+  end Base;
+  package Gas
+    extends Base(redeclare record FC = FCData, fc = {FCData(Tc = 1.5, M = 2, s = S(v = 3)), FCData(Tc = 2.5, M = 3, s = S(v = 4), has = false, name = "b")});
+  end Gas;
+end XRF19P;
+model XRF19
+  package M = XRF19P.Gas;
+  Real y = M.f(time, 1);
+end XRF19;
+//// model: XRF20
+package XRF20P
+  record FCBase
+    Real Tc;
+  end FCBase;
+  record FCData
+    extends FCBase;
+    Real M;
+  end FCData;
+  partial package Base
+    constant Integer nX = 2;
+    replaceable record FC = FCBase;
+    constant FC[nX] fc;
+    function f
+      input Real x;
+      input Integer i;
+      output Real y;
+    algorithm
+      y := x * fc[i].Tc;
+    end f;
+  end Base;
+  package Gas
+    extends Base(fc = {FCBase(Tc = 1.5), FCBase(Tc = 2.5)});
+  end Gas;
+end XRF20P;
+model XRF20
+  package M = XRF20P.Gas;
+  Real y = M.f(time, 1);
+end XRF20;
+//// model: XSB1
+model XSB1
+  model A
+    Real x = time;
+    model N
+      Real z = 2;
+    end N;
+  end A;
+  model B = A;
+  model C
+    extends B;
+    N n;
+  end C;
+  C c;
+end XSB1;
+//// model: XSB2
+package XSB2P
+  package Base
+    constant Integer n = 1;
+    replaceable model M
+      Real x = n * time;
+    end M;
+  end Base;
+  package S = Base;
+  package A
+    extends S;
+    redeclare model extends M
+      Real y = 2 * x;
+    end M;
+  end A;
+end XSB2P;
+model XSB2
+  XSB2P.A.M m;
+end XSB2;

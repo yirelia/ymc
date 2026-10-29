@@ -2798,6 +2798,22 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       SKIP→PASS 8；单测 +4、改 2。slice 704→705 例（+BindingArray9）FAIL 0（oracle=live 不一致 0）；scodeinst 665→666；testsuite 1842→1844
       （others/NonfixedParamSubscript、scodeinst/BindingArray9）/ FAIL 0；**MSL 496→498**（Fluid.Examples.TraceSubstances.RoomCO2 /
       RoomCO2WithControls）；探针 14665→14822；单测 531→535。
+- [x] (67l) 四个 MSL 单例卡点（2026-10-30）：
+      (1) UserDefinedGravityField：组件修饰里重声明的函数（`world(redeclare function gravityAcceleration = …(…))`）——inst 已在组件类树里
+      顶替成 REDECLARED_CLASS 节点，component_fn 取它、修饰在写重声明的那层实例里定型（redecl_mod_scope）；函数按组件实例路径命名
+      （NFFunction.lookupFunction :318-345）。兄弟写法顺带：别名修饰不在调用那层短类上（写在包里的常量修饰在声明处求成字面量，其余只接字面量；
+      CFR31 / CFR65 / CFR73 此前静默错）；原声明不带 constrainedby 的带修饰短类，omc 把它的修饰并进新类（getConstrainingMod，SCodeUtil.mo
+      :5273-5286；redeclareClass 记 ccMod，NFInst.mo:1768 / :1788 / :1156）——被新类链头修饰以绑定盖住的照常，没盖住的 → SKIP（has_cc_mod）；
+      函数别名缺省值里经子组件的参数按各段下沉判变率（CFR42 等十几个此前静默错）、无绑定 fixed = false 的留原引用；经包实例找到的短类别名
+      两种拼名不一致 → SKIP（CFR93 此前静默错）。
+      (2) MixtureGases：包常量记录数组的类型是短类别名（extends 修饰里 `redeclare record FluidConstants = IdealGas.FluidConstants`）：
+      fn_outer_value 按字段下降时顺不带修饰 / 维的短类别名找到底层长类（record_class_thru_alias，MLS §4.5.1）。
+      (3) TestTwoPhaseStates 照旧 SKIP：要 extends 短类（inst 的 expand / inst_class）+ 经带修饰 extends 继承来的 class extends 目标，两层。
+      (4) HeatingSystem 照旧 SKIP：`h_default` 链里 PartialLinearFluid 的 ThermodynamicState 字段类型经带修饰 extends 继承（SCode 守卫），其后
+      还有函数语境经包实例求 extends 修饰里的函数调用，至少两层。
+      探针 pk-p46（121；CFR / XRF / XSB / UCF）——基线上 FAIL 18，现 PASS 97 / SKIP 20 / BOTH-REJECT 4；旧组 cf-p1 / pk-p30 / pk-p32 SKIP→PASS 3；
+      单测 +4。slice 705 例 FAIL 0（oracle=live 不一致 0）；scodeinst 666、testsuite 1844（均不变）/ FAIL 0；**MSL 498→500**（MultiBody
+      Elementary.UserDefinedGravityField、Media.Examples.MixtureGases）；探针 14822→14943；单测 535→539。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

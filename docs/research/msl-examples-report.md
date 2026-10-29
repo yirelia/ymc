@@ -839,3 +839,9 @@ FAIL / ACCEPTS-INVALID / CRASH 0。
 
 if 式未选支里求不出的常量调用照 omc 的先代入后化简（选支丢掉的不判 SKIP）、fill 的数组值、无绑定 fixed = false 参数作下标照留。
 转 PASS：Fluid.Examples.TraceSubstances.RoomCO2 / RoomCO2WithControls。FAIL / ACCEPTS-INVALID / CRASH 0。
+
+## 2026-10-30 67l 之后：PASS 500（+2）
+
+组件修饰里重声明的函数（按组件实例路径命名、短类修饰在写重声明处定型）、包常量记录数组的类型是短类别名。转 PASS：Mechanics.MultiBody.
+Examples.Elementary.UserDefinedGravityField、Media.Examples.MixtureGases。TestTwoPhaseStates / HeatingSystem 照旧（各要两层新特性）。
+FAIL / ACCEPTS-INVALID / CRASH 0。

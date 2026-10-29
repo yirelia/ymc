@@ -10127,9 +10127,11 @@ class Flattener {
     Id<SElement> named;   // 调用里写的那个类（别名链的头；不是别名时 = fe）
     ScodeScope fscope;
     std::vector<Id<SMod>> alias_mods;
+    ScodeScope alias_scope;    // 带 alias_mods[0] 的那层短类的定义作用域（[0] = 声明它的类；修饰按词法在那里解析，见 try_emit_user_call）
     bool local_to_caller = false;
     std::vector<Symbol> ctor_name;   // operator record 的构造调用 `C(…)`：所调 'constructor' 函数的压平名（见 oprec_ctor）
     NodeId node;                     // 实例语境里找到的函数类节点（压平名按实例路径，见 scope_path）；无效 = 照定义作用域
+    NodeId alias_node;               // 实例语境里找到、却没记进 node 的短类别名节点（见 resolve_fn）
   };
   struct FnSig {
     std::vector<Id<SElement>> inputs, outputs, locals;
@@ -11051,7 +11053,8 @@ class Flattener {
     ScodeScope lscope = cscope;
     for (std::size_t k = ci + 1; k < n; ++k) {
       ScodeScope rs;
-      const Id<SElement> rec = record_class_of(I_.scode.elems[leaf], lscope, rs);
+      Id<SElement> rec = record_class_of(I_.scode.elems[leaf], lscope, rs);
+      if (!rec.is_valid() && !result_.unsupported) rec = record_class_thru_alias(I_.scode.elems[leaf], lscope, rs);
       std::vector<RecField> rfs;
       if (!rec.is_valid() || !record_fields_ex(rec, rs, rfs, false, 0, /*any_base=*/true)) return {};
       Id<SElement> hit;
@@ -11903,7 +11906,9 @@ class Flattener {
       if (e.kind == ExprKind::Cref && e.cref.resolved_node != kFnLocal) {
         const NodeId n = NodeId::from_index(e.cref.resolved_node);
         if (e.cref.resolved_node == Id<INode>::kInvalid || !I_.nodes.contains(n) || !is_comp_node(n)) { ok = false; return; }
-        const SVariability var = I_.comps[I_.nodes[n].comp].attributes.variability;
+        // resolved_node 是首个本地段：变率沿后续各段下沉（`s.k` 的 s 是 Var、k 是参数；CFR 探针 CFR42 / CFR43 此前把
+        // `gg = s.k` 当变量原样打 `= w.s.k`，omc 求成 6.0）。
+        const SVariability var = cref_path_var(e.cref, n, I_.comps[I_.nodes[n].comp].attributes.variability);
         (var == SVariability::Param || var == SVariability::Const ? params : runtime) = true;
         return;
       }
@@ -11940,6 +11945,9 @@ class Flattener {
         // 整个参数数组（调用的实参，MultiBody World 的 `normalizeWithAssert(n)`）：代成整个数组的字面量，调用随即常量求值。
         if (const Id<Expr> al = param_array_literal(e.cref, nullptr); al.is_valid()) { sub.emplace(k, al); return; }
         const std::optional<CVal> cv = flat_param_value(k, 0);
+        // 没有绑定、fixed = false 的参数：evalComponentBinding 无绑定、不固定不取 start → UNBOUND 支返回原引用（NFCeval.mo:
+        // 344-360 / :580-585 / :408-412 v1.25.0），这里照留（CFR 探针 CFR57 `gg = nb`、CFR62 `gg = s.nb + 4.0`）。
+        if (!cv && unbound_unfixed_var(k)) return;
         if (!cv || is_arr(*cv) || cv->k == CVal::K::Record || cv->k == CVal::K::Undef) { ok = false; return; }
         sub.emplace(k, literal_of(*cv));
         return;
@@ -13874,7 +13882,7 @@ class Flattener {
     // 调用按实例路径命名（`RoomCO2.boundary1.Medium.saturationPressureLiquid_der`，omc 同）。
     const std::optional<std::vector<Symbol>> qname =
         fr->node.is_valid() ? scope_path(fr->node) : fn_flat_name(fn, sc, Inst::empty_node(), {}, home);
-    if (!qname) return std::nullopt;
+    if (!qname || !alias_name_agrees(*fr, *qname)) return std::nullopt;
     const std::optional<std::size_t> li = emit_function(*fr, sig, *qname, {}, home);
     return result_.unsupported ? std::nullopt : li;
   }
@@ -14055,7 +14063,7 @@ class Flattener {
     Id<SElement> home;
     const std::optional<std::vector<Symbol>> qname =
         fr->node.is_valid() ? scope_path(fr->node) : fn_flat_name(fn, sc, enclosing, prefix, home);
-    if (!qname) return fn_fail<std::optional<FnTarget>>("flattened function name");
+    if (!qname || !alias_name_agrees(*fr, *qname)) return fn_fail<std::optional<FnTarget>>("flattened function name");
     const std::optional<std::size_t> fi = emit_function(*fr, sig, *qname, {}, home);
     if (!fi || result_.unsupported) return fn_fail<std::optional<FnTarget>>("function body");
     return FnTarget{*fi, sig.inputs.size(), *qname};
@@ -14240,6 +14248,20 @@ class Flattener {
     CompFn cfn;   // 组件里的函数（见 component_fn）；cls 无效 = 不是
     if (!fr && !fn_scope_) fr = component_fn(fn, enclosing, prefix, cfn);
     if (!fr) return {};   // 不是用户函数（内建 / 查不到）：无子原因
+    // 实例里类重声明顶替进来的函数（`P.Pump pumps(redeclare function flowCharacteristic = …)`，体里直接调）：被顶替的原声明（实例
+    // 类定义里的同名类，本地或继承来的）的约束修饰没被新类自身的修饰盖住的未做（见 has_cc_mod）。
+    if (fr->node.is_valid() && I_.nodes[fr->node].node_type.kind == NodeTypeKind::RedeclaredClass) {
+      const NodeId pi = I_.nodes[fr->node].node_type.parent;
+      ScodeScope ods;
+      bool ovm = false;
+      const Id<SElement> orig = pi.is_valid() && !I_.nodes[pi].is_empty() && I_.nodes[pi].def.is_valid()
+                                    ? class_member_at(scode_scope_of(pi), I_.nodes[fr->node].name, ods, ovm, 0)
+                                    : Id<SElement>{};
+      if (result_.unsupported) return {};
+      if (!orig.is_valid() || I_.scode.elems[orig].kind != SElementKind::Class ||
+          has_cc_mod(orig, I_.nodes[fr->node].def))
+        return fn_fail<Id<Expr>>("redeclared function over constraining modifier");
+    }
     // 外部对象的构造 / 析构不能直接调（类树是空的，omc 报 "Function ExtObj.constructor not found"，ExternalObjectStructorCall1/2）。
     if (!ext_structor_ok_ && fr->fscope.size() >= 2 &&
         scode_ext_object(fr->fscope[1], ScodeScope(fr->fscope.begin() + 2, fr->fscope.end())))
@@ -14263,6 +14285,7 @@ class Flattener {
       qname = scope_path(fr->node);   // 实例语境里找到的函数（经重声明的包 / 包实例）：实例路径（NFInstNode.scopePath）
     } else {
       qname = fn_flat_name(fn, sc, enclosing, prefix, home);
+      if (qname && !alias_name_agrees(*fr, *qname)) return fn_fail<Id<Expr>>("function alias found in instance");
     }
     if (!qname) return fn_fail<Id<Expr>>("flattened function name");
     // 别名修饰（`function g = f(r = x)`）在别名定义处定型：只做单层别名；模型语境里别名定义在调用实例自身类里或调用名经过的
@@ -14272,7 +14295,6 @@ class Flattener {
     // 引用常量的修饰（ALM6 `k = c`，omc 求成 3.0）未做 → SKIP。
     std::unordered_map<std::uint32_t, Id<Expr>> alias_defaults;
     if (!fr->alias_mods.empty()) {
-      ScodeScope ads;
       const bool comp = cfn.cls.is_valid();
       // 类重声明顶替进来的短类（`redeclare function flowCharacteristic = quadraticFlow(V_flow_nominal = …)`）：修饰在写重声明的类
       // 的实例里定型（见 redecl_mod_scope）。函数名不带下标（PKK 探针 PKK9 `pumps[2]` 也调 `PKK9.pumps.flowCharacteristic`），
@@ -14288,31 +14310,58 @@ class Flattener {
       }
       if (fr->alias_mods.size() != 1 || (fn_scope_ && (comp || redecl)))
         return fn_fail<Id<Expr>>("function alias with modifiers");
-      if (fn_scope_ || (!comp && !redecl &&
-                        (fn.parts.size() != 1 || sc.empty() || !find_scode_element_at(fn.parts[0].name, sc, ads).is_valid() ||
-                         ads.empty() || ads[0].cls.raw != sc[0].cls.raw)))
+      // 修饰在下面的 menc 里定型，前提是写这条修饰的那层短类就声明在 menc 的类里（alias_scope[0]）：组件类里的 `replaceable function
+      // acc = alt(phi = kk)`、写重声明处的、调用实例自身类里的（简单名调用）。写在别处的（包里的 `function alt2 = alt(phi = c)`，
+      // 经 `function acc = alt2` 用到）在它自己的定义处解析：字面量照常；声明在包里的（包里只有常量，MLS §4.7）引用常量的修饰
+      // 在那里求成值——EvalConstants 把常量引用换成值，函数定义与调用处都打字面量（CFR 探针 CFR31 / CFR65 / CFR73：`phi = 7.0`、
+      // `w.acc(time, 7.0)`；此前在组件 / 写重声明处 / 调用实例里解析出 `w.c` / `c`，静默错）。两层都写在同一个类里的照常在 menc 定型
+      //（CFR80 / CFR81）。
+      const bool here =
+          !fn_scope_ && !fr->alias_scope.empty() &&
+          (comp     ? fr->alias_scope[0].cls == I_.nodes[cfn.mod_cls].def
+           : redecl ? fr->alias_scope[0].cls == I_.nodes[renc].def
+                    : fn.parts.size() == 1 && !sc.empty() && fr->alias_scope[0].cls == sc[0].cls);
+      std::unordered_map<std::uint32_t, Id<Expr>> const_mods;   // 在定义处求成值的修饰（见上）
+      if (!here) {
+        bool in_pkg = true;
+        for (const ScopeLevel& l : fr->alias_scope)
+          in_pkg = in_pkg && I_.scode.elems[l].restriction == SRestriction::Package;
         for (const SSubMod& s : I_.scode.mods[fr->alias_mods[0]].subs) {
           const Id<Exp> b = I_.scode.mods[s.mod].binding;
           if (!b.is_valid()) return fn_fail<Id<Expr>>("function alias with modifiers");
           const Exp& x = I_.absyn.exps[b];
           auto num = [](const Exp& n) { return n.kind == ExpKind::IntLit || n.kind == ExpKind::RealLit; };
-          if (!num(x) && x.kind != ExpKind::BoolLit && x.kind != ExpKind::StringLit &&
-              !(x.kind == ExpKind::Unary && x.op == Op::UMinus && num(I_.absyn.exps[x.a])))
-            return fn_fail<Id<Expr>>("function alias with modifiers");
+          if (num(x) || x.kind == ExpKind::BoolLit || x.kind == ExpKind::StringLit ||
+              (x.kind == ExpKind::Unary && x.op == Op::UMinus && num(I_.absyn.exps[x.a])))
+            continue;
+          const int saved_frame = ceval_frame_;   // 值按常量的声明处求（不看调用实例的帧：UCF4 根类的同名参数 c 不相干）
+          ceval_frame_ = -1;
+          const std::optional<CVal> v =
+              in_pkg && !fr->alias_scope.empty() ? eval_scode(b, fr->alias_scope, 0) : std::nullopt;
+          ceval_frame_ = saved_frame;
+          if (result_.unsupported) return {};
+          const Id<Expr> lit = v && v->k != CVal::K::Record && v->k != CVal::K::Undef ? literal_any(*v) : Id<Expr>{};
+          if (!lit.is_valid() || result_.unsupported) return fn_fail<Id<Expr>>("function alias with modifiers");
+          const_mods[s.ident.id] = lit;
         }
-      // 组件里的函数：短类修饰在该组件（inner）的实例里定型（CF 探针 p20 / p23：`gg = g` → 调用处补 `w.g`）；组件路径上没有
-      // 数组下标（component_fn 已拦）。
+      }
+      // 组件里的函数：短类修饰在该组件（inner）的实例里定型（CF 探针 p20 / p23：`gg = g` → 调用处补 `w.g`），组件修饰里重声明的
+      // 在写重声明处（见 component_fn）；组件路径上没有数组下标（component_fn 已拦）。
       const std::vector<Symbol> rpre(prefix.begin(), prefix.begin() + static_cast<std::ptrdiff_t>(std::min(rlen, prefix.size())));
-      const NodeId menc = comp ? cfn.cls : redecl ? renc : enclosing;
-      const std::vector<Symbol>& mpre = comp ? cfn.path : redecl ? rpre : prefix;
+      const NodeId menc = comp ? cfn.mod_cls : redecl ? renc : enclosing;
+      const std::vector<Symbol>& mpre = comp ? cfn.mod_path : redecl ? rpre : prefix;
       const PSubs saved_psubs = cur_psubs_;
-      if (comp) cur_psubs_ = PSubs(cfn.path.size());
+      if (comp) cur_psubs_ = PSubs(cfn.mod_path.size());
       else if (redecl) cur_psubs_ = PSubs(rpre.size());
       for (const SSubMod& s : I_.scode.mods[fr->alias_mods[0]].subs) {
         const SMod& sm = I_.scode.mods[s.mod];
         if (!sm.binding.is_valid() || !sm.subs.empty()) {
           cur_psubs_ = saved_psubs;
           return fn_fail<Id<Expr>>("function alias with modifiers");
+        }
+        if (const auto cm = const_mods.find(s.ident.id); cm != const_mods.end()) {
+          alias_defaults[s.ident.id] = cm->second;
+          continue;
         }
         const Id<Expr> x = simplify_expr(inst_exp(sm.binding, menc, mpre));
         if (result_.unsupported) { cur_psubs_ = saved_psubs; return {}; }
@@ -15288,6 +15337,8 @@ class Flattener {
     if (r && node.is_valid() &&
         (r->fe == e || (I_.nodes[node].node_type.kind == NodeTypeKind::RedeclaredClass && I_.nodes[node].def == e)))
       r->node = node;
+    else if (r && node.is_valid() && I_.nodes[node].def == e)
+      r->alias_node = node;   // 不记的短类别名：调用方核对按定义作用域拼的名（见 try_emit_user_call）
     // 实例语境里找到的 class extends 记录（`redeclare record extends ThermodynamicState`，包实例里的那份）：作用域首层带上类节点，
     // 继承来的字段按实例类树里的隐式基类解析（同 record_class_of）——字段的维 / 缺省看得到 extends 修饰改过的常量（MSL ReferenceAir.
     // MoistAir1：ReferenceMoistAir 的 setState_pTX 求值时构造 ThermodynamicState，PartialMixtureMedium 那层的 `X[nX]` 读 nX；XM 探针
@@ -15430,7 +15481,10 @@ class Flattener {
         return r;
       }
       if (el.def.kind != SClassDefKind::Derived) return std::nullopt;
-      if (el.def.derived_mod.is_valid()) r.alias_mods.push_back(el.def.derived_mod);
+      if (el.def.derived_mod.is_valid()) {
+        if (r.alias_mods.empty()) r.alias_scope = ds;
+        r.alias_mods.push_back(el.def.derived_mod);
+      }
       ScodeScope nds;
       e = resolve_class_path(el.def.derived_type.path, el.def.derived_type.leading_dot, ds, nds);
       ds = std::move(nds);
@@ -15442,12 +15496,47 @@ class Flattener {
   //（NFFunction.mo:318-345 v1.25.0），实例化时以该组件为父（instFunctionRef :362-389，instFunction2 的 ROOT_CLASS(parent)）——
   // 函数名 = 根类名 + 组件（inner）的实例路径 + 函数名（CF 探针 p10 `P10.w.acc`、p18 / p23 outer 取 inner 的路径），短类修饰
   // 在组件里解析（`gg = g` → `w.g`，见 try_emit_user_call）。调用名带下标（omc 报 "contains subscripts"，p11）/ 组件数组 /
-  // 组件在数组实例里 / 函数类是继承来的 / 组件的修饰里改了这个函数（redeclare）→ nullopt（调用方照旧 SKIP）。
+  // 组件在数组实例里 / 函数类是继承来的 → nullopt（调用方照旧 SKIP）。组件的修饰里重声明了这个函数的见下。
   struct CompFn {
-    NodeId cls;                 // 组件（outer 换成 inner）的类实例节点：短类修饰在这里定型
+    NodeId cls;                 // 组件（outer 换成 inner）的类实例节点
     std::vector<Symbol> path;   // 该组件的压平路径（不含根类名）
     Id<SElement> cls_def;       // 组件的类定义（函数类就声明在它里面）
+    NodeId mod_cls;             // 短类修饰在这个实例里定型（不是重声明的 = cls）
+    std::vector<Symbol> mod_path;   // 它的压平路径
   };
+  // 实例语境里找到的短类别名（resolve_fn 不记 node，压平名按定义作用域拼成 qname）：omc 按找到处的实例路径命名（NFFunction.
+  // lookupFunction :339-344 v1.25.0；CFR 探针 CFR86 / CFR93：组件里的 `Medium.alt2` → `CFR86.c.Medium.alt2`）——两者不一致 →
+  // false（调用方 SKIP；此前静默打成 `CFR93.Medium.alt2`）。
+  bool alias_name_agrees(const FnRef& fr, const std::vector<Symbol>& qname) {
+    if (fr.node.is_valid() || !fr.alias_node.is_valid()) return true;
+    const std::optional<std::vector<Symbol>> sp = scope_path(fr.alias_node);
+    return sp && *sp == qname;
+  }
+  // 被类重声明顶替掉的原声明 orig 带约束修饰（SCodeUtil.getConstrainingMod，SCodeUtil.mo:5273-5286 v1.25.0：有 constrainedby 取
+  // 它的修饰，否则短类取自身的修饰）：omc 把它并进新类（redeclareClass 记成 ccMod，NFInst.mo:1768 / :1788；实例化时
+  // `Modifier.merge(mod, cls.ccMod)`，:1156）——新类自身没写的输入缺省由原声明给（CFR 探针 CFR82 / CFR83：原声明 `acc = alt(phi =
+  // kk)`、重声明成 `acc = myalt` 后 omc 打 `phi = 2.0`、调用处 `w.kk`）。合并时新类自身的修饰在前（Modifier.merge 的 outer 优先，
+  // NFModifier.mo:386-409）：原声明修饰的每一项都被新类链头（head）的修饰以绑定盖住时没有影响（scodeinst ConstrainingClassFunc2
+  // `f2 = f(x = 0)` 重声明成 `f(x = 1)` → `x = 1.0`）；还有没盖住的（或带 final，checkFinalOverride）→ true，未做 → 调用方 SKIP。
+  bool has_cc_mod(Id<SElement> orig, Id<SElement> head) const {
+    const SElement& o = I_.scode.elems[orig];
+    const Id<SMod> m = o.prefixes.has_cc                        ? o.prefixes.cc.mod
+                       : o.def.kind == SClassDefKind::Derived ? o.def.derived_mod
+                                                              : Id<SMod>{};
+    if (!m.is_valid()) return false;
+    if (I_.scode.mods[m].binding.is_valid()) return true;
+    const SElement& h = I_.scode.elems[head];
+    const Id<SMod> hm = h.kind == SElementKind::Class && h.def.kind == SClassDefKind::Derived ? h.def.derived_mod : Id<SMod>{};
+    for (const SSubMod& s : I_.scode.mods[m].subs) {
+      if (I_.scode.mods[s.mod].is_final) return true;
+      bool covered = false;
+      if (hm.is_valid())
+        for (const SSubMod& t : I_.scode.mods[hm].subs)
+          covered = covered || (t.ident == s.ident && I_.scode.mods[t.mod].binding.is_valid());
+      if (!covered) return true;
+    }
+    return false;
+  }
   std::optional<FnRef> component_fn(const Cref& fn, NodeId enclosing, const std::vector<Symbol>& prefix, CompFn& out) {
     if (fn.parts.size() < 2 || fn.leading_dot) return std::nullopt;
     for (const CrefPart& p : fn.parts)
@@ -15488,12 +15577,30 @@ class Flattener {
     for (Id<SElement> c : I_.scode.elems[cdef].def.elements)
       if (I_.scode.elems[c].kind == SElementKind::Class && I_.scode.elems[c].name == fname) fe = c;
     if (!fe.is_valid() || I_.scode.elems[fe].prefixes.vis == SVisibility::Protected) return std::nullopt;
-    if (const Id<SMod> cm = I_.scode.elems[I_.comps[I_.nodes[node].comp].def].mod; cm.is_valid())
+    // 组件的修饰里重声明了这个函数（MSL UserDefinedGravityField 的 `inner World world(redeclare function gravityAcceleration =
+    // …theoreticalNormalGravityWGS84(phi = geodeticLatitude))`）：inst 已在组件的类实例树里顶替成新类节点（REDECLARED_CLASS，词法
+    // 外层 = 写修饰处）。函数名照旧（组件的实例路径 + 函数名）；实例化时不以组件为父（instFunctionRef：`InstNode.isRedeclare(…)`
+    // → parent = EMPTY_NODE，NFFunction.mo:380-381 v1.25.0）——新类的短类修饰在写重声明的类的实例里定型（同 redecl_mod_scope 的
+    // 类重声明；CFR 探针 CFR1 `CFR1.world.acc(time, lat)`、CFR27 / CFR37 写在子实例里的 `m.lat`）。组件修饰里改了这个函数、却没
+    // 顶替成新类的（类修饰 `acc(k = 1)` 等）→ nullopt。
+    Id<SElement> head = fe;   // 别名链的头
+    ScodeScope hscope = scode_scope_of(cls);
+    NodeId mcls = cls;
+    std::size_t mlen = path.size();
+    if (const NodeId ic = inst_tree_class(cls, fname);
+        ic.is_valid() && I_.nodes[ic].node_type.kind == NodeTypeKind::RedeclaredClass && I_.nodes[ic].def.is_valid()) {
+      if (has_cc_mod(fe, I_.nodes[ic].def) || !redecl_mod_scope(ic, node, path.size(), mcls, mlen)) return std::nullopt;
+      head = I_.nodes[ic].def;
+      hscope = scode_scope_of(I_.nodes[ic].parent_scope);
+    } else if (const Id<SMod> cm = I_.scode.elems[I_.comps[I_.nodes[node].comp].def].mod; cm.is_valid()) {
       for (const SSubMod& s : I_.scode.mods[cm].subs)
         if (s.ident == fname) return std::nullopt;
-    std::optional<FnRef> r = resolve_fn_from(fe, scode_scope_of(cls), ScodeScope{}, SRestriction::Function);
+    }
+    std::optional<FnRef> r = resolve_fn_from(head, hscope, ScodeScope{}, SRestriction::Function);
     if (!r) return std::nullopt;
     out.cls = cls;
+    out.mod_cls = mcls;
+    out.mod_path.assign(path.begin(), path.begin() + static_cast<std::ptrdiff_t>(std::min(mlen, path.size())));
     out.path = std::move(path);
     out.cls_def = cdef;
     return r;
@@ -15578,6 +15685,27 @@ class Flattener {
     // 的 `setState_pTX` 等）。
     const bool ce = node.is_valid() && I_.scode.elems[e].def.kind == SClassDefKind::ClassExtends;
     rscope.insert(rscope.begin(), ce ? ScopeLevel{e, node} : ScopeLevel{e});
+    return e;
+  }
+  // 记录类型是不带修饰 / 维的短类别名（`replaceable record FC = FCBase`；包实例里类重声明顶替进来的 `redeclare record
+  // FluidConstants = IdealGas.FluidConstants`，MSL PartialMixtureMedium）：字段同链底的长类（MLS §4.5.1：短类定义 = 基类 + 修饰，
+  // 这里没有修饰）。只供按字段名下降取值用（函数体里的 `fc[i].Tc`，见 fn_outer_value）——别名的记录构造函数按别名自己命名（见
+  // note_rec_class），record_class_of 不放开。链上带修饰 / 维、链断 → invalid。
+  Id<SElement> record_class_thru_alias(const SElement& c, const ScodeScope& scope, ScodeScope& rscope) {
+    ScodeScope ds;
+    Id<SElement> e = resolve_class_path(c.type.path, c.type.leading_dot, scope, ds, true);
+    for (int guard = 0; e.is_valid() && guard < 20; ++guard) {
+      const SElement& el = I_.scode.elems[e];
+      if (el.kind != SElementKind::Class || !rec_restr(el.restriction) || el.def.kind != SClassDefKind::Derived) break;
+      if (el.def.derived_mod.is_valid() || !el.def.derived_type.dims.empty() || !el.def.derived_attr.dims.empty())
+        return {};
+      ScodeScope nds;
+      e = resolve_class_path(el.def.derived_type.path, el.def.derived_type.leading_dot, ds, nds);
+      ds = std::move(nds);
+    }
+    if (!rec_long(e) || I_.scode.elems[e].def.kind != SClassDefKind::Parts) return {};
+    rscope = std::move(ds);
+    rscope.insert(rscope.begin(), ScopeLevel{e});
     return e;
   }
   // 记录值（NFEvalFunction.buildRecordBinding :386-434）：字段声明序；显式给定（构造实参）> 修饰（`R r(x = x)`，在 mod_scope
@@ -24114,24 +24242,29 @@ class Flattener {
     set_unsupported("parameter in symbolic subscript");
     return std::nullopt;
   }
-  // param_subscript 求不出的下标 sx 是不是只读到一个"没有绑定、fixed = false"的已发射标量 Integer 参数（keys = 求值读到的）：
-  // sx 只由这个参数的引用（单段、不带下标）、整数字面量、算术（`ind`、`ind + 1`、`2 * ind`）组成——别的参数 / 迭代变量 / 调用
-  // 混在里面时 omc 代入它们的值（`c[ind + n]` → `c[ind + 1]`），未做。外层记录整体绑定挪成方程补的 fixed = false（moved_field_keys_）、
-  // 没赋到的字段不算（omc 那边字段有父记录给的绑定）。
-  bool unbound_unfixed_sub(Id<Exp> sx, const std::vector<std::pair<std::string, bool>>& keys) {
-    if (keys.empty()) return false;
-    const std::string k = keys.front().first;
-    for (const auto& kk : keys) if (kk.first != k || kk.second) return false;
-    if (moved_field_keys_.count(k) || empty_field_keys_.count(k)) return false;
+  // 已发射的、没有绑定、fixed = false 的标量参数 k（omc 的 Ceval 求它得原引用，见 param_subscript）→ 它的变量；否则 nullptr。
+  // 外层记录整体绑定挪成方程补的 fixed = false（moved_field_keys_）、没赋到的字段不算（omc 那边字段有父记录给的绑定）。
+  const FlatVariable* unbound_unfixed_var(const std::string& k) {
+    if (moved_field_keys_.count(k) || empty_field_keys_.count(k)) return nullptr;
     const FlatVariable* fv = emitted_var(k);
-    if (!fv || fv->var_kind != FlatVarKind::Parameter || fv->binding.is_valid() || fv->ty.kind != TypeKind::Integer ||
-        fv->ty.is_array() || !fv->subscripts.empty() || fv->name.empty())
-      return false;
+    if (!fv || fv->var_kind != FlatVarKind::Parameter || fv->binding.is_valid() || fv->ty.is_array() ||
+        !fv->subscripts.empty())
+      return nullptr;
     bool unfixed = false;
     for (const FlatVarAttr& a : fv->attributes)
       if (in_.str(a.name) == "fixed")
         unfixed = result_.model.exprs[a.value].kind == ExprKind::BoolLit && !result_.model.exprs[a.value].bval;
-    if (!unfixed) return false;
+    return unfixed ? fv : nullptr;
+  }
+  // param_subscript 求不出的下标 sx 是不是只读到一个"没有绑定、fixed = false"的已发射标量 Integer 参数（keys = 求值读到的）：
+  // sx 只由这个参数的引用（单段、不带下标）、整数字面量、算术（`ind`、`ind + 1`、`2 * ind`）组成——别的参数 / 迭代变量 / 调用
+  // 混在里面时 omc 代入它们的值（`c[ind + n]` → `c[ind + 1]`），未做。
+  bool unbound_unfixed_sub(Id<Exp> sx, const std::vector<std::pair<std::string, bool>>& keys) {
+    if (keys.empty()) return false;
+    const std::string k = keys.front().first;
+    for (const auto& kk : keys) if (kk.first != k || kk.second) return false;
+    const FlatVariable* fv = unbound_unfixed_var(k);
+    if (!fv || fv->ty.kind != TypeKind::Integer || fv->name.empty()) return false;
     const Symbol pn = fv->name.back();
     bool ok = true;
     auto walk = [&](auto& self, Id<Exp> x) -> void {

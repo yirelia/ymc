@@ -12465,4 +12465,98 @@ YMC_TEST(flatten_unbound_unfixed_subscript) {
   YMC_CHECK(uns);
 }
 
+namespace {
+// 组件里的函数探针共用的包（pk-p46 的 CFR 系列同构）：World 里 replaceable 的函数别名 acc，Body 经 outer 调 world.acc。
+std::string cfr_pkg(const std::string& n, const std::string& acc, const std::string& extra) {
+  return "package " + n + "P\n  partial function base\n    input Real r;\n    output Real g;\n  end base;\n"
+         "  function std\n    extends base;\n    input Real k = 1;\n  algorithm\n    g := k * r;\n  end std;\n"
+         "  function alt\n    extends base;\n    input Real phi;\n  algorithm\n    g := phi + r;\n  end alt;\n" + extra +
+         "  model World\n    parameter Real kk = 2;\n    replaceable function acc = " + acc + ";\n  end World;\n"
+         "  model Body\n    outer World world;\n    Real g = world.acc(time);\n  end Body;\nend " + n + "P;\n";
+}
+}  // namespace
+
+YMC_TEST(flatten_component_fn_redeclared) {
+  // 组件修饰里重声明的函数（MSL UserDefinedGravityField 的 `redeclare function gravityAcceleration = …(phi = geodeticLatitude)`）：
+  // 函数名照组件的实例路径（lookupFunction），实例化时不以组件为父（instFunctionRef 的 isRedeclare → EMPTY_NODE，NFFunction.mo:
+  // 380-381 v1.25.0）——短类修饰在写重声明的类的实例里定型：调用处补 `lat` / `m.lat`、定义里打求得的值。期望 = omc 1.25.0 实跑
+  //（2026-10-24，探针 pk-p46 CFR1 / CFR27 同构的 UCF1 / UCF2）。
+  YMC_CHECK_EQ(flatten_src((cfr_pkg("UCF1", "std(k = kk) constrainedby base", "") +
+                            "model UCF1\n  parameter Real lat = 3;\n"
+                            "  inner UCF1P.World world(redeclare function acc = UCF1P.alt(phi = lat));\n"
+                            "  UCF1P.Body body;\nend UCF1;\n").c_str()),
+               std::string("function UCF1.world.acc\n  input Real r;\n  input Real phi = 3.0;\n  output Real g;\n"
+                           "algorithm\n  g := phi + r;\nend UCF1.world.acc;\n\nclass UCF1\n  parameter Real lat = 3.0;\n"
+                           "  parameter Real world.kk = 2.0;\n  Real body.g = UCF1.world.acc(time, lat);\nend UCF1;\n"));
+  YMC_CHECK_EQ(flatten_src((cfr_pkg("UCF2", "std(k = kk) constrainedby base", "") +
+                            "model UCF2\n  model M\n    parameter Real lat = 5;\n"
+                            "    UCF2P.World w(redeclare function acc = UCF2P.alt(phi = lat));\n"
+                            "    Real y = w.acc(time);\n  end M;\n  M m(lat = 6);\nend UCF2;\n").c_str()),
+               std::string("function UCF2.m.w.acc\n  input Real r;\n  input Real phi = 6.0;\n  output Real g;\n"
+                           "algorithm\n  g := phi + r;\nend UCF2.m.w.acc;\n\nclass UCF2\n  parameter Real m.lat = 6.0;\n"
+                           "  parameter Real m.w.kk = 2.0;\n  Real m.y = UCF2.m.w.acc(time, m.lat);\nend UCF2;\n"));
+  // 原声明不带 constrainedby、自身是带修饰的短类 `acc = alt(phi = kk)`：它的修饰作约束修饰并进新类（SCodeUtil.getConstrainingMod
+  // SCodeUtil.mo:5273-5286、redeclareClass 的 ccMod NFInst.mo:1768 / :1788），omc 打 `phi = 2.0`、调用处 `w.kk`（UCF3，同 pk-p46
+  // CFR82）——未做 → SKIP。
+  bool uns = false;
+  YMC_CHECK_EQ(flatten_src((cfr_pkg("UCF3", "alt(phi = kk)", "") +
+                            "model UCF3\n  parameter Real lat = 3;\n  function myalt = UCF3P.alt(phi = 2 * lat);\n"
+                            "  UCF3P.World w(redeclare function acc = myalt);\n  Real y = w.acc(time);\nend UCF3;\n")
+                               .c_str(),
+                           &uns),
+               std::string("<unsupported:qualified function call>"));
+  YMC_CHECK(uns);
+}
+
+YMC_TEST(flatten_fn_alias_mod_declared_elsewhere) {
+  // 别名修饰不在调用的那层短类上（`acc = alt2`、包里的 `alt2 = alt(phi = c)`）：修饰按词法在包里解析，引用的包常量由 EvalConstants
+  // 换成值——定义与调用处都打 7.0；组件 World 外层的同名参数 c 不相干。此前在组件实例里解析（World 里有同名参数时静默取到它，pk-p46
+  // CFR31）。期望 = omc 1.25.0 实跑（2026-10-24，探针 pk-p46 CFR31 同构的 UCF4）。
+  const std::string pkg4 =
+      cfr_pkg("UCF4", "alt2 constrainedby base", "  constant Real c = 7;\n  function alt2 = alt(phi = c);\n");
+  YMC_CHECK_EQ(flatten_src((pkg4 + "model UCF4\n  parameter Real c = 3;\n  UCF4P.World w;\n  Real y = w.acc(time);\n"
+                                   "end UCF4;\n").c_str()),
+               std::string("function UCF4.w.acc\n  input Real r;\n  input Real phi = 7.0;\n  output Real g;\n"
+                           "algorithm\n  g := phi + r;\nend UCF4.w.acc;\n\nclass UCF4\n  parameter Real c = 3.0;\n"
+                           "  parameter Real w.kk = 2.0;\n  Real y = UCF4.w.acc(time, 7.0);\nend UCF4;\n"));
+}
+
+YMC_TEST(flatten_fn_alias_default_qualified_param) {
+  // 函数定义里别名缺省的值（EvalConstants.evaluateFuncExpTraverser 逐个 cref 试 Ceval，NFEvalConstants.mo:599-634 v1.25.0）：子组件
+  // 的参数 `s.k` 求成 6.0（此前按首段 s 的变率当变量、原样打 `s.k`），没有绑定、fixed = false 的 `s.nb` 求值得原引用（UNBOUND 支，
+  // NFCeval.mo:344-360 / :580-585 / :408-412）。期望 = omc 1.25.0 实跑（2026-10-24，探针 pk-p46 CFR43 / CFR62 同构的 UCF5）。
+  YMC_CHECK_EQ(flatten_src("package UCF5P\n  function accBase\n    input Real r;\n    input Real gg = 1;\n"
+                           "    output Real a;\n  algorithm\n    a := gg * r;\n  end accBase;\n  model Sub\n"
+                           "    parameter Real k = 4;\n"
+                           "    parameter Real nb(fixed = false);\n  end Sub;\nend UCF5P;\n"
+                           "model UCF5\n  UCF5P.Sub s(k = 6);\n  function acc = UCF5P.accBase(gg = s.k);\n"
+                           "  function acc2 = UCF5P.accBase(gg = s.nb + s.k);\n  Real y = acc(time) + acc2(time);\n"
+                           "initial equation\n  s.nb = 1;\nend UCF5;\n"),
+               std::string("function UCF5.acc\n  input Real r;\n  input Real gg = 6.0;\n  output Real a;\nalgorithm\n"
+                           "  a := gg * r;\nend UCF5.acc;\n\nfunction UCF5.acc2\n  input Real r;\n"
+                           "  input Real gg = s.nb + 6.0;\n  output Real a;\nalgorithm\n  a := gg * r;\n"
+                           "end UCF5.acc2;\n\n"
+                           "class UCF5\n  parameter Real s.k = 6.0;\n  parameter Real s.nb(fixed = false);\n"
+                           "  Real y = UCF5.acc(time, s.k) + UCF5.acc2(time, s.nb + s.k);\ninitial equation\n"
+                           "  s.nb = 1.0;\nend UCF5;\n"));
+}
+
+YMC_TEST(flatten_fn_record_alias_constant_field) {
+  // 函数体里的包常量记录数组 `fc[i].Tc`，记录类型是短类别名（`replaceable record FC = FCBase`，extends 修饰里重声明成 FCData；MSL
+  // PartialMixtureMedium 的 fluidConstants）：字段同链底的长类（MLS §4.5.1），取值照旧打成字段值数组再取下标。期望 = omc 1.25.0
+  // 实跑（2026-10-24，探针 pk-p46 XRF2 / XRF3 同构的 UCF6）。
+  YMC_CHECK_EQ(flatten_src("package UCF6P\n  record FCBase\n    Real Tc;\n  end FCBase;\n  record FCData\n"
+                           "    extends FCBase;\n    Real M;\n  end FCData;\n  partial package Base\n"
+                           "    constant Integer nX = 2;\n    replaceable record FC = FCBase;\n    constant FC[nX] fc;\n"
+                           "    function f\n      input Real x;\n      input Integer i;\n      output Real y;\n"
+                           "    algorithm\n      y := x * fc[i].Tc + fc[i].M;\n    end f;\n  end Base;\n  package Gas\n"
+                           "    extends Base(redeclare record FC = FCData, fc = {FCData(Tc = 1.5, M = 2), "
+                           "FCData(Tc = 2.5, M = 3)});\n"
+                           "  end Gas;\nend UCF6P;\nmodel UCF6\n  package M = UCF6P.Gas;\n  Real y = M.f(time, 1);\n"
+                           "end UCF6;\n"),
+               std::string("function UCF6.M.f\n  input Real x;\n  input Integer i;\n  output Real y;\nalgorithm\n"
+                           "  y := x * {1.5, 2.5}[i] + {2.0, 3.0}[i];\nend UCF6.M.f;\n\nclass UCF6\n"
+                           "  Real y = UCF6.M.f(time, 1);\nend UCF6;\n"));
+}
+
 YMC_TEST_MAIN
