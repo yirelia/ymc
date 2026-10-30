@@ -1,0 +1,2824 @@
+//// set: pk-p48 — 67n：67m 留下的两个旧错及 testsuite 里 "non-literal array dimension" 的余量（redeclare/Bug2695、enums/EnumArrayMod1、records/RecordEnumBinding、scodeinst/RecordBinding5、scodeinst/Size6）及兄弟写法。ECR1-ECR99：外层作用域里查到的非常量组件，omc 报 "Component 'n' was found in an enclosing scope but is not a constant."（NFLookup.lookupSimpleCref :838-908 + LookupState.checkCrefVariability，NFLookupState.mo:649-672 v1.25.0）——维 / 绑定 / 方程 / 下标 / 属性 / 条件 / for 范围 / extends 修饰 / 短类的修饰与维 / 函数体 / 函数形参缺省；条件为假的组件、零长数组、if false 分支里、被折叠的函数调用的体里同样报（ECR42-44 / ECR28 / ECR94 / ECR95）；只看末段（`c.k` 常量成员读得，ECR19 / ECR21），变率下沉（`constant R r` 的 `r.y`，ECR18）；此前维 / 条件 / 范围 / 函数体 ACCEPTS-INVALID 共 25 例。NCR1-NCR25：修饰里的类重声明（`A a(redeclare type T = T)`）右边的名字在写修饰的那个实例里解析，类节点此前只按元素缓存（b2 取到 b1 那份，TDN13 一族 15 例静默错），extends 修饰里的新类词法作用域同样是实例（NCR20）。FWD1-FWD55：维读到声明在后的子实例 / 记录参数（`Real x[a.p]; A a(p = 2);`、`size(a.y, 1)`，含 Size6）走第二遍；读的是数组元素或依赖链上有数组元素（FWD6 / FWD12 / FWD13 / FWD47-FWD50）标记是组件级的，照旧 SKIP（FWD13 / FWD50 omc 内部错）。CCB1-CCB28：复合组件的 `:` 维由绑定引用的记录数组定（deduceDimensionFromExp，NFTyping.mo:776-821），`:` 维的数组再被引用取发射时记下的维；别的式子（`fill(R(), 3)` 定型留下构造函数）、推导式照旧 SKIP。ETD1-ETD30：复合数组的类型名维（`R re[E]`、`M m[Boolean]`），元素下标打标签；写了下标的引用（ETD7 / ETD19）照旧 SKIP，Integer 下标 omc 报类型错（ETD8）。CSX1-CSX18：常量数组带切片取已发射的整体值（看得到 extends 修饰）、非字面量维的常量数组记形状、空常量数组经子实例引用。UEN1-UEN15 单测同构。基线 PASS 49 / FAIL 17 / ACCEPTS-INVALID 28 / SKIP 126 / BOTH-REJECT 50 → PASS 152 / SKIP 40 / BOTH-REJECT 78，无 FAIL
+//// model: ECR1
+model ECR1
+  parameter Integer n = 2;
+  model A
+    Real x[n];
+  end A;
+  A a;
+end ECR1;
+//// model: ECR2
+model ECR2
+  model A
+    parameter Integer n = 2;
+    model B
+      Real x[n];
+    end B;
+    B b;
+  end A;
+  A a(n = 3);
+end ECR2;
+//// model: ECR3
+model ECR3
+  parameter Real p = 2;
+  model A
+    Real x = p;
+  end A;
+  A a;
+end ECR3;
+//// model: ECR4
+model ECR4
+  parameter Real p = 2;
+  model A
+    Real x;
+  equation
+    x = p;
+  end A;
+  A a;
+end ECR4;
+//// model: ECR5
+model ECR5
+  parameter Integer n = 2;
+  model A
+    Real y[3];
+    Real x = y[n];
+  end A;
+  A a;
+end ECR5;
+//// model: ECR6
+model ECR6
+  parameter Real p = 2;
+  model A
+    Real x(start = p);
+  end A;
+  A a;
+end ECR6;
+//// model: ECR7
+model ECR7
+  parameter Real p = 2;
+  model B
+    parameter Real k = 1;
+  end B;
+  model A
+    B b(k = p);
+  end A;
+  A a;
+end ECR7;
+//// model: ECR8
+model ECR8
+  parameter Boolean c = true;
+  model A
+    Real x if c;
+  end A;
+  A a;
+end ECR8;
+//// model: ECR9
+model ECR9
+  parameter Boolean c = true;
+  model A
+    Real x;
+  equation
+    if c then
+      x = 1;
+    else
+      x = 2;
+    end if;
+  end A;
+  A a;
+end ECR9;
+//// model: ECR10
+model ECR10
+  parameter Integer n = 2;
+  model A
+    Real x[2];
+  equation
+    for i in 1:n loop
+      x[i] = i;
+    end for;
+  end A;
+  A a;
+end ECR10;
+//// model: ECR11
+model ECR11
+  parameter Real p = 2;
+  model A
+    Real x;
+  algorithm
+    x := p;
+  end A;
+  A a;
+end ECR11;
+//// model: ECR12
+model ECR12
+  parameter Real p = 2;
+  model B
+    parameter Real k = 1;
+  end B;
+  model A
+    extends B(k = p);
+  end A;
+  A a;
+end ECR12;
+//// model: ECR13
+model ECR13
+  Real v = 1;
+  model A
+    Real x = v;
+  end A;
+  A a;
+end ECR13;
+//// model: ECR14
+model ECR14
+  discrete Integer v;
+  model A
+    Integer x = v;
+  end A;
+  A a;
+end ECR14;
+//// model: ECR15
+model ECR15
+  constant Integer n = 2;
+  model A
+    Real x[n];
+  end A;
+  A a;
+end ECR15;
+//// model: ECR16
+model ECR16
+  constant Real p = 2;
+  model A
+    Real x = p;
+    Real y(start = p);
+  equation
+    y = p;
+  end A;
+  A a;
+end ECR16;
+//// model: ECR17
+model ECR17
+  record R
+    Real y = 1;
+  end R;
+  parameter R r;
+  model A
+    Real x = r.y;
+  end A;
+  A a;
+end ECR17;
+//// model: ECR18
+model ECR18
+  record R
+    Real y = 1;
+  end R;
+  constant R r;
+  model A
+    Real x = r.y;
+  end A;
+  A a;
+end ECR18;
+//// model: ECR19
+model ECR19
+  model C
+    constant Integer k = 2;
+    parameter Integer q = 3;
+  end C;
+  C c;
+  model A
+    Real x[c.k];
+  end A;
+  A a;
+end ECR19;
+//// model: ECR20
+model ECR20
+  model C
+    constant Integer k = 2;
+    parameter Integer q = 3;
+  end C;
+  C c;
+  model A
+    Real x[c.q];
+  end A;
+  A a;
+end ECR20;
+//// model: ECR21
+model ECR21
+  model C
+    constant Real k = 2;
+    parameter Real q = 3;
+  end C;
+  C c;
+  model A
+    Real x = c.k;
+  end A;
+  A a;
+end ECR21;
+//// model: ECR22
+model ECR22
+  model C
+    constant Real k = 2;
+    parameter Real q = 3;
+  end C;
+  C c;
+  model A
+    Real x = c.q;
+  end A;
+  A a;
+end ECR22;
+//// model: ECR23
+model ECR23
+  model B
+    parameter Integer n = 1;
+    model A
+      Real x[n];
+    end A;
+  end B;
+  model C
+    extends B;
+    A a;
+  end C;
+  C c;
+end ECR23;
+//// model: ECR24
+model ECR24
+  model Base
+    parameter Integer n = 1;
+  end Base;
+  parameter Integer n = 2;
+  model A
+    extends Base;
+    Real x[n];
+  end A;
+  A a;
+end ECR24;
+//// model: ECR25
+model ECR25
+  parameter Integer n = 2;
+  model Base
+    Real x[n];
+  end Base;
+  model C
+    extends Base;
+  end C;
+  C c;
+end ECR25;
+//// model: ECR26
+package ECR26P
+  constant Integer n = 2;
+  model A
+    Real x[n];
+  end A;
+end ECR26P;
+model ECR26
+  ECR26P.A a;
+end ECR26;
+//// model: ECR27
+package ECR27P
+  parameter Integer n = 2;
+  model A
+    Real x[n];
+  end A;
+end ECR27P;
+model ECR27
+  ECR27P.A a;
+end ECR27;
+//// model: ECR28
+model ECR28
+  parameter Real p = 2;
+  function f
+    input Real u;
+    output Real y;
+  algorithm
+    y := u * p;
+  end f;
+  Real x = f(1);
+end ECR28;
+//// model: ECR29
+model ECR29
+  constant Real p = 2;
+  function f
+    input Real u;
+    output Real y;
+  algorithm
+    y := u * p;
+  end f;
+  Real x = f(1);
+end ECR29;
+//// model: ECR30
+model ECR30
+  parameter Real p = 2;
+  record R
+    Real x = p;
+  end R;
+  R r;
+end ECR30;
+//// model: ECR31
+model ECR31
+  parameter Real p = 2;
+  record R
+    Real x = p;
+  end R;
+  R r = R();
+end ECR31;
+//// model: ECR32
+model ECR32
+  parameter Real p = 2;
+  model B
+    parameter Real k = 1;
+  end B;
+  model C = B(k = p);
+  C c;
+end ECR32;
+//// model: ECR33
+model ECR33
+  parameter Real p = 2;
+  model B
+    parameter Real k = 1;
+  end B;
+  model A
+    model C = B(k = p);
+    C c;
+  end A;
+  A a;
+end ECR33;
+//// model: ECR34
+model ECR34
+  parameter Real p = 2;
+  type T = Real(start = p);
+  T x;
+end ECR34;
+//// model: ECR35
+model ECR35
+  parameter Real p = 2;
+  model A
+    type T = Real(start = p);
+    T x;
+  end A;
+  A a;
+end ECR35;
+//// model: ECR36
+model ECR36
+  parameter Integer n = 2;
+  model A
+    type T = Real[n];
+    T x;
+  end A;
+  A a;
+end ECR36;
+//// model: ECR37
+model ECR37
+  parameter Integer n = 2;
+  model A
+    Real x[2];
+  equation
+    for n in 1:2 loop
+      x[n] = n;
+    end for;
+  end A;
+  A a;
+end ECR37;
+//// model: ECR38
+model ECR38
+  parameter Integer n = 2;
+  model A
+    Real x[2] = {n for n in 1:2};
+  end A;
+  A a;
+end ECR38;
+//// model: ECR39
+model ECR39
+  parameter Integer n = 2;
+  model A
+    Real x[2];
+    Integer n = 1;
+  end A;
+  A a;
+end ECR39;
+//// model: ECR40
+model ECR40
+  parameter Integer n = 2;
+  model M2
+    Real x[n];
+  end M2;
+end ECR40;
+//// model: ECR41
+package ECR41P
+  model M
+    parameter Integer n = 2;
+    model A
+      Real x[n];
+    end A;
+  end M;
+end ECR41P;
+model ECR41
+  ECR41P.M.A a;
+end ECR41;
+//// model: ECR42
+model ECR42
+  parameter Integer n = 2;
+  model A
+    Real x[n];
+  end A;
+  A a if false;
+end ECR42;
+//// model: ECR43
+model ECR43
+  parameter Integer n = 2;
+  model A
+    Real x[n];
+  end A;
+  A a[0];
+end ECR43;
+//// model: ECR44
+model ECR44
+  parameter Boolean b = true;
+  model A
+    Real x;
+  equation
+    if false then
+      x = if b then 1 else 2;
+    else
+      x = 3;
+    end if;
+  end A;
+  A a;
+end ECR44;
+//// model: ECR45
+model ECR45
+  inner parameter Integer n = 2;
+  model A
+    Real x[n];
+  end A;
+  A a;
+end ECR45;
+//// model: ECR46
+model ECR46
+  inner parameter Integer n = 2;
+  model A
+    outer parameter Integer n;
+    Real x[n];
+  end A;
+  A a;
+end ECR46;
+//// model: ECR47
+model ECR47
+  connector C
+    Real e;
+    flow Real f;
+  end C;
+  C c;
+  model A
+    C d;
+  equation
+    connect(c, d);
+  end A;
+  A a;
+end ECR47;
+//// model: ECR48
+model ECR48
+  parameter Real p = 1;
+  model A
+    Real x;
+  equation
+    when x > p then
+      reinit(x, 0);
+    end when;
+    der(x) = 1;
+  end A;
+  A a;
+end ECR48;
+//// model: ECR49
+model ECR49
+  parameter Real p = 1;
+  model A
+    Real x = 1;
+  equation
+    assert(x > p, "bad");
+  end A;
+  A a;
+end ECR49;
+//// model: ECR50
+model ECR50
+  Real y[3];
+  model A
+    Real z[size(y, 1)];
+  end A;
+  A a;
+end ECR50;
+//// model: ECR51
+model ECR51
+  parameter Boolean b = true;
+  model A
+    Real x annotation(Evaluate = b);
+  end A;
+  A a;
+end ECR51;
+//// model: ECR52
+model ECR52
+  parameter Integer n = 2;
+  model A
+    model B
+      Real x[n];
+    end B;
+    B b;
+  end A;
+  A a;
+end ECR52;
+//// model: ECR53
+model ECR53
+  parameter Integer n = 2;
+  model A
+  equation
+    for i in 1:2 loop
+      assert(i < n, "x");
+    end for;
+  end A;
+  A a;
+end ECR53;
+//// model: ECR54
+model ECR54
+  parameter Integer n = 2;
+  model A
+    parameter Integer m = 1;
+  end A;
+  A a(m = n);
+end ECR54;
+//// model: ECR55
+model ECR55
+  parameter Integer n = 2;
+  model A
+    replaceable model B
+      Real y;
+    end B;
+    B b;
+  end A;
+  model C
+    Real z = n;
+  end C;
+  A a(redeclare model B = C);
+end ECR55;
+//// model: ECR56
+model ECR56
+  parameter Real p = 3;
+  model B
+    Real y;
+  end B;
+  model A
+    replaceable B b;
+  end A;
+  A a(redeclare B b(y = p));
+end ECR56;
+//// model: ECR57
+model ECR57
+  parameter Real p = 3;
+  model B
+    Real y;
+  end B;
+  model A
+    replaceable model C = B;
+    C c;
+  end A;
+  A a(redeclare model C = B(y = p));
+end ECR57;
+//// model: ECR58
+model ECR58
+  parameter Integer n = 2;
+  function f
+    input Real u[n];
+    output Real y;
+  algorithm
+    y := sum(u);
+  end f;
+  Real x = f({1, 2});
+end ECR58;
+//// model: ECR59
+model ECR59
+  parameter Real p = 2;
+  encapsulated model A
+    Real x = p;
+  end A;
+  A a;
+end ECR59;
+//// model: ECR60
+model ECR60
+  parameter Real p = 2;
+  model A
+    Real x = time + p;
+  end A;
+  Real z;
+end ECR60;
+//// model: ECR61
+model ECR61
+  parameter Real p = 2;
+  model A
+    Real x;
+  initial equation
+    x = p;
+  equation
+    der(x) = 1;
+  end A;
+  A a;
+end ECR61;
+//// model: ECR62
+model ECR62
+  parameter Real p[2] = {1, 2};
+  model A
+    Real x = p[1];
+  end A;
+  A a;
+end ECR62;
+//// model: ECR63
+model ECR63
+  parameter Integer n = 2;
+  model A
+    Real x[if n > 1 then 2 else 1];
+  end A;
+  A a;
+end ECR63;
+//// model: ECR64
+model ECR64
+  parameter Integer n = 2;
+  model A
+    Real x = n;
+  end A;
+  model B
+    extends A;
+  end B;
+  B b;
+end ECR64;
+//// model: ECR65
+model ECR65
+  parameter Real p = 2;
+  model A
+    Real v;
+    connector C
+      Real e;
+    end C;
+    C c(e = p);
+  end A;
+  A a;
+end ECR65;
+//// model: ECR66
+model ECR66
+  type E = enumeration(a, b);
+  model A
+    E x = E.a;
+  end A;
+  A a;
+end ECR66;
+//// model: ECR67
+model ECR67
+  model B
+    parameter Real k = 1;
+  end B;
+  parameter B b;
+  model A
+    Real x = b.k;
+  end A;
+  A a;
+end ECR67;
+//// model: ECR68
+model ECR68
+  parameter Real p = 2;
+  model A
+    function f
+      input Real u;
+      output Real y = u * p;
+    end f;
+    Real x = f(1);
+  end A;
+  A a;
+end ECR68;
+//// model: ECR69
+model ECR69
+  parameter Integer p = 2;
+  model A
+    record R
+      Real x = p;
+    end R;
+    R r;
+  end A;
+  A a;
+end ECR69;
+//// model: ECR70
+model ECR70
+  parameter Real p = 2;
+  model A
+    Real x = g(p);
+    function g
+      input Real u;
+      output Real y = u;
+    end g;
+  end A;
+  A a;
+end ECR70;
+//// model: ECR71
+model ECR71
+  parameter Real p = 2;
+  record R
+    Real x = p;
+  end R;
+  Real y = R().x;
+end ECR71;
+//// model: ECR72
+model ECR72
+  type CT = constant Real;
+  CT c = 1;
+  model A
+    Real x = c;
+  end A;
+  A a;
+end ECR72;
+//// model: ECR73
+model ECR73
+  parameter Real p = 2;
+  model B
+    parameter Real k = 1;
+  end B;
+  model A
+    replaceable B b(k = p);
+  end A;
+  model C
+    Real z;
+  end C;
+  A a(redeclare C b);
+end ECR73;
+//// model: ECR74
+model ECR74
+  parameter Real p = 2;
+  model B
+    parameter Real k = 1;
+  end B;
+  model A
+    replaceable B b constrainedby B(k = p);
+  end A;
+  A a;
+end ECR74;
+//// model: ECR75
+model ECR75
+  parameter Real p = 2;
+  model A
+    replaceable model M
+      Real z = p;
+    end M;
+    M m;
+  end A;
+  model D
+    Real z = 1;
+  end D;
+  model E
+    A a(redeclare model M = D);
+  end E;
+  E e;
+end ECR75;
+//// model: ECR76
+model ECR76
+  parameter Real p = 2;
+  model A
+    Real x;
+    function f
+      input Real u = p;
+      output Real y = u;
+    end f;
+  equation
+    x = f();
+  end A;
+  A a;
+end ECR76;
+//// model: ECR77
+model ECR77
+  parameter Boolean b = true;
+  model A
+    Real x annotation(Dialog(enable = b));
+  end A;
+  A a;
+end ECR77;
+//// model: ECR78
+model ECR78
+  parameter Real p = 2;
+  model A
+    replaceable model M
+      Real z = 1;
+    end M;
+    M m;
+  end A;
+  model E
+    A a(redeclare model extends M
+      Real w = p;
+    end M);
+  end E;
+  E e;
+end ECR78;
+//// model: ECR79
+package ECR79P
+  constant Real c = 3;
+  function f
+    input Real u;
+    output Real y = u * c;
+  end f;
+end ECR79P;
+model ECR79
+  Real x = ECR79P.f(time);
+end ECR79;
+//// model: ECR80
+model ECR80
+  constant Real p = 2;
+  model A
+    Real x = ECR80.p;
+  end A;
+  A a;
+end ECR80;
+//// model: ECR81
+model ECR81
+  parameter Real p = 2;
+  model A
+    Real x = ECR81.p;
+  end A;
+  A a;
+end ECR81;
+//// model: ECR82
+model ECR82
+  parameter Integer n = 2;
+  model A
+    Real x[3] = {i for i in 1:n, j in 1:1};
+  end A;
+  A a;
+end ECR82;
+//// model: ECR83
+model ECR83
+  parameter Integer n = 2;
+  model A
+    Real x;
+  algorithm
+    for n in 1:2 loop
+      x := n;
+    end for;
+  end A;
+  A a;
+end ECR83;
+//// model: ECR84
+model ECR84
+  parameter Integer n = 2;
+  model A
+    Real x[2] = {n for n in 1:n};
+  end A;
+  A a;
+end ECR84;
+//// model: ECR85
+model ECR85
+  parameter Integer n = 2;
+  model B
+    Real x[n];
+  end B;
+  extends B;
+end ECR85;
+//// model: ECR86
+model ECR86
+  parameter Real p = 2;
+  model B
+    Real x = p;
+  end B;
+  extends B;
+end ECR86;
+//// model: ECR87
+model ECR87
+  parameter Real p = 2;
+  function f
+    input Real u;
+    output Real y;
+  protected
+    Real p = 3;
+  algorithm
+    y := u * p;
+  end f;
+  Real x = f(1);
+end ECR87;
+//// model: ECR88
+model ECR88
+  parameter Real p = 2;
+  function f
+    input Real u;
+    output Real y;
+  algorithm
+    y := u * p;
+  end f;
+  function g
+    extends f;
+  end g;
+  Real x = g(time);
+end ECR88;
+//// model: ECR89
+model ECR89
+  parameter Real p = 2;
+  function f
+    input Real u;
+    output Real y;
+  algorithm
+    y := u * p;
+  end f;
+  function g = f;
+  Real x = g(time);
+end ECR89;
+//// model: ECR90
+model ECR90
+  constant Real p = 2;
+  function f
+    input Real u;
+    output Real y;
+  algorithm
+    y := if u > 0 then f(u - 1) * p else 1;
+  end f;
+  Real x = f(2);
+end ECR90;
+//// model: ECR91
+model ECR91
+  model B
+    constant Integer n = 1;
+    model A
+      Real x[n];
+    end A;
+  end B;
+  model C
+    extends B;
+    A a;
+  end C;
+  C c;
+end ECR91;
+//// model: ECR92
+model ECR92
+  parameter Real p = 2;
+  function f
+    input Real u;
+    output Real y = u;
+  end f;
+  function g = f(u = p);
+  Real x = g();
+end ECR92;
+//// model: ECR93
+model ECR93
+  parameter Real p = 2;
+  model A
+    function f
+      input Real u;
+      output Real y = u;
+    end f;
+    Real x = f(u = p);
+  end A;
+  A a;
+end ECR93;
+//// model: ECR94
+model ECR94
+  parameter Real p = 2;
+  function f
+    input Real u;
+    output Real y;
+  algorithm
+    y := u * p;
+  end f;
+  Real x = if false then f(1) else 2;
+end ECR94;
+//// model: ECR95
+model ECR95
+  parameter Real p = 2;
+  function f
+    input Real u;
+    output Real y;
+  algorithm
+    y := u * p;
+  end f;
+  model A
+    Real x = f(time);
+  end A;
+  A a if false;
+end ECR95;
+//// model: ECR96
+model ECR96
+  parameter Real p = 2;
+  function f
+    input Real u;
+    output Real y;
+  algorithm
+    y := u * p;
+  end f;
+end ECR96;
+//// model: ECR97
+package ECR97P
+  parameter Real p = 2;
+  function f
+    input Real u;
+    output Real y;
+  algorithm
+    y := u * p;
+  end f;
+end ECR97P;
+model ECR97
+  Real x = ECR97P.f(time);
+end ECR97;
+//// model: ECR98
+package ECR98P
+  parameter Real p = 2;
+  function f
+    input Real u;
+    output Real y;
+  algorithm
+    y := u * p;
+  end f;
+  constant Real c = f(1);
+end ECR98P;
+model ECR98
+  Real x = ECR98P.c;
+end ECR98;
+//// model: ECR99
+model ECR99
+  parameter Real p = 2;
+  model A
+    Real x;
+  equation
+    connect(x, x);
+  end A;
+  Real y;
+end ECR99;
+//// model: NCR1
+model NCR1
+  model A
+    replaceable type T = Real[2];
+    T x;
+  end A;
+  model B
+    replaceable type T = Real[2];
+    A a(redeclare type T = T);
+  end B;
+  B b1;
+  B b2(redeclare type T = Real[3]);
+end NCR1;
+//// model: NCR2
+model NCR2
+  model X
+    Real p = 1;
+  end X;
+  model Y
+    Real q = 2;
+  end Y;
+  model A
+    replaceable model M = X;
+    M m;
+  end A;
+  model B
+    replaceable model M = X;
+    A a(redeclare model M = M);
+  end B;
+  B b1;
+  B b2(redeclare model M = Y);
+end NCR2;
+//// model: NCR3
+model NCR3
+  package P1
+    constant Integer n = 1;
+  end P1;
+  package P2
+    constant Integer n = 2;
+  end P2;
+  model A
+    replaceable package P = P1;
+    Real x[P.n];
+  end A;
+  model B
+    replaceable package P = P1;
+    A a(redeclare package P = P);
+  end B;
+  B b1;
+  B b2(redeclare package P = P2);
+end NCR3;
+//// model: NCR4
+model NCR4
+  function f1
+    input Real u;
+    output Real y = u;
+  end f1;
+  function f2
+    input Real u;
+    output Real y = 2 * u;
+  end f2;
+  model A
+    replaceable function f = f1;
+    Real x = f(time);
+  end A;
+  model B
+    replaceable function f = f1;
+    A a(redeclare function f = f);
+  end B;
+  B b1;
+  B b2(redeclare function f = f2);
+end NCR4;
+//// model: NCR5
+model NCR5
+  model A
+    replaceable type T = Real[2];
+    T x;
+  end A;
+  model B
+    replaceable type T = Real[2];
+    A a(redeclare type T = T);
+  end B;
+  model C
+    replaceable type T = Real[2];
+    B b(redeclare type T = T);
+  end C;
+  C c1;
+  C c2(redeclare type T = Real[3]);
+  C c3(redeclare type T = Real[4]);
+end NCR5;
+//// model: NCR6
+model NCR6
+  model A
+    replaceable type T = Real[2];
+    T x;
+  end A;
+  model B
+    replaceable type T = Real[2];
+    extends A(redeclare type T = T);
+  end B;
+  B b1;
+  B b2(redeclare type T = Real[3]);
+end NCR6;
+//// model: NCR7
+model NCR7
+  model A
+    replaceable type T = Real;
+    T x;
+  end A;
+  model B
+    replaceable type T = Real;
+    A a(redeclare type T = T(start = 1));
+  end B;
+  B b1;
+  B b2(redeclare type T = Real(min = 0));
+end NCR7;
+//// model: NCR8
+model NCR8
+  record R1
+    Real a = 1;
+  end R1;
+  record R2
+    Real b = 2;
+  end R2;
+  model A
+    replaceable record R = R1;
+    R r;
+  end A;
+  model B
+    replaceable record R = R1;
+    A a(redeclare record R = R);
+  end B;
+  B b1;
+  B b2(redeclare record R = R2);
+end NCR8;
+//// model: NCR9
+model NCR9
+  model A
+    replaceable type T = Real[2];
+    T x;
+  end A;
+  model B
+    replaceable type T = Real[2];
+    A a1(redeclare type T = T);
+    A a2(redeclare type T = T);
+  end B;
+  B b1;
+  B b2(redeclare type T = Real[3]);
+end NCR9;
+//// model: NCR10
+model NCR10
+  model A
+    replaceable type T = Real[2];
+    T x;
+  end A;
+  model B
+    replaceable type T = Real[2];
+    A a(redeclare type T = T);
+  end B;
+  B b[2];
+  B c[2](redeclare each type T = Real[3]);
+end NCR10;
+//// model: NCR11
+model NCR11
+  model X
+    parameter Real p = 0;
+  end X;
+  model A
+    replaceable model M = X;
+    M m;
+  end A;
+  model B
+    parameter Real q = 1;
+    A a(redeclare model M = X(p = q));
+  end B;
+  B b1(q = 2);
+  B b2(q = 3);
+end NCR11;
+//// model: NCR12
+model NCR12
+  model X
+    parameter Real p = 0;
+  end X;
+  model A
+    replaceable model M = X;
+    M m;
+  end A;
+  model B
+    constant Real q = 1;
+    A a(redeclare model M = X(p = q));
+  end B;
+  B b1(q = 2);
+  B b2(q = 3);
+end NCR12;
+//// model: NCR13
+model NCR13
+  model A
+    replaceable model M
+      Real y = 0;
+    end M;
+    M m;
+  end A;
+  model B
+    constant Real k = 1;
+    A a(redeclare model M
+      Real y = k;
+    end M);
+  end B;
+  B b1(k = 2);
+  B b2(k = 3);
+end NCR13;
+//// model: NCR14
+model NCR14
+  model A
+    replaceable model M
+      Real y = 0;
+    end M;
+    M m;
+  end A;
+  model B
+    parameter Real k = 1;
+    A a(redeclare model M
+      Real y = k;
+    end M);
+  end B;
+  B b1;
+end NCR14;
+//// model: NCR15
+model NCR15
+  model A
+    replaceable type T = Real[2];
+    T x;
+  end A;
+  model B
+    replaceable type T = Real[2];
+    model C
+      A a(redeclare type T = T);
+    end C;
+    C c;
+  end B;
+  B b1;
+  B b2(redeclare type T = Real[3]);
+end NCR15;
+//// model: NCR16
+model NCR16
+  model X
+    Real p = 1;
+  end X;
+  model A
+    replaceable model M = X;
+    M m;
+  end A;
+  model Y
+    Real q = 2;
+  end Y;
+  model B
+    replaceable model M = X;
+    A a(redeclare model M = M);
+    A c(redeclare model M = Y);
+  end B;
+  B b1;
+  B b2(redeclare model M = Y);
+end NCR16;
+//// model: NCR17
+model NCR17
+  model A
+    replaceable type T = Real[2];
+    T x;
+  end A;
+  model B
+    replaceable type U = Real[2];
+    A a(redeclare type T = U);
+  end B;
+  B b1;
+  B b2(redeclare type U = Real[3]);
+end NCR17;
+//// model: NCR18
+model NCR18
+  model A
+    replaceable type T = Real;
+    T x;
+  end A;
+  model B
+    replaceable type T = Real;
+    A a(redeclare type T = T);
+  end B;
+  B b1;
+  B b2(redeclare type T = Integer);
+end NCR18;
+//// model: NCR19
+model NCR19
+  model A
+    replaceable type T = Real;
+    T x;
+  end A;
+  model B
+    type T = Real(unit = "m");
+    A a(redeclare type T = T);
+  end B;
+  B b1;
+  B b2;
+end NCR19;
+//// model: NCR20
+model NCR20
+  model A
+    replaceable type T = Real;
+    T x;
+  end A;
+  model B
+    extends A(redeclare type T = U);
+    replaceable type U = Real;
+  end B;
+  B b1;
+  B b2(redeclare type U = Real(unit = "m"));
+end NCR20;
+//// model: NCR21
+model NCR21
+  model A
+    replaceable type T = Real;
+    T x;
+  end A;
+  model B
+    replaceable type U = Real;
+    replaceable A a(redeclare type T = U);
+  end B;
+  B b1;
+  B b2(redeclare type U = Real(unit = "m"));
+end NCR21;
+//// model: NCR22
+package NCR22P
+  model A
+    replaceable type T = Real[2];
+    T x;
+  end A;
+  model B
+    replaceable type T = Real[2];
+    A a(redeclare type T = T);
+  end B;
+end NCR22P;
+model NCR22
+  NCR22P.B b1;
+  NCR22P.B b2(redeclare type T = Real[3]);
+end NCR22;
+//// model: NCR23
+model NCR23
+  model X
+    parameter Real p = 0;
+    Real z = p;
+  end X;
+  model A
+    replaceable X m;
+  end A;
+  model B
+    parameter Real q = 1;
+    A a(redeclare X m(p = q));
+  end B;
+  B b1(q = 2);
+  B b2(q = 3);
+end NCR23;
+//// model: NCR24
+model NCR24
+  model A
+    replaceable type T = Real[2];
+    T x;
+  end A;
+  model B
+    replaceable type T = Real[2];
+    extends A;
+    A a(redeclare type T = T);
+  end B;
+  B b1;
+  B b2(redeclare type T = Real[3]);
+end NCR24;
+//// model: NCR25
+model NCR25
+  type E1 = enumeration(a, b);
+  type E2 = enumeration(a, b, c);
+  model A
+    replaceable type T = E1;
+    Real x[T];
+  end A;
+  model B
+    replaceable type T = E1;
+    A a(redeclare type T = T);
+  end B;
+  B b1;
+  B b2(redeclare type T = E2);
+end NCR25;
+//// model: FWD1
+model FWD1
+  model A
+    parameter Integer p = 1;
+  end A;
+  Real x[a.p];
+  A a(p = 2);
+end FWD1;
+//// model: FWD2
+model FWD2
+  record R
+    constant Integer n = 2;
+  end R;
+  record A
+    Real x[c.n];
+    parameter R c;
+  end A;
+  A a;
+end FWD2;
+//// model: FWD3
+model FWD3
+  record R
+    parameter Integer n = 2;
+  end R;
+  Real x[c.n];
+  parameter R c(n = 3);
+end FWD3;
+//// model: FWD4
+model FWD4
+  model B
+    parameter Integer p = 1;
+  end B;
+  model A
+    B b(p = 3);
+  end A;
+  Real x[a.b.p];
+  A a;
+end FWD4;
+//// model: FWD5
+model FWD5
+  model A
+    parameter Integer p = 1;
+  end A;
+  Real x[a.p] = fill(1, a.p);
+  A a(p = 2);
+end FWD5;
+//// model: FWD6
+model FWD6
+  model A
+    parameter Integer q[2] = {1, 2};
+  end A;
+  Real x[a.q[1]];
+  A a(q = {2, 3});
+end FWD6;
+//// model: FWD7
+model FWD7
+  model A
+    parameter Integer p = 1;
+  end A;
+  Real x[a.p];
+  A a(p = 2);
+equation
+  x = {1, 2};
+end FWD7;
+//// model: FWD8
+model FWD8
+  model A
+    parameter Integer p = 1;
+  end A;
+  Real x[a.p];
+  A a(p = 2);
+equation
+  for i in 1:a.p loop
+    x[i] = i;
+  end for;
+end FWD8;
+//// model: FWD9
+model FWD9
+  model A
+    parameter Integer p = 1;
+  end A;
+  Real x[a.p + 1];
+  A a(p = 2);
+end FWD9;
+//// model: FWD10
+model FWD10
+  record R
+    parameter Integer n = 2;
+  end R;
+  Real x[c.n];
+  parameter R c = R(n = 3);
+end FWD10;
+//// model: FWD11
+model FWD11
+  record R_base
+    parameter Integer n;
+  end R_base;
+  record R
+    extends R_base(final n = 2);
+  end R;
+  record A
+    Real[c.n] x;
+    parameter R_base c;
+  end A;
+  A a(c = R());
+end FWD11;
+//// model: FWD12
+model FWD12
+  model A
+    parameter Integer p = 1;
+  end A;
+  Real x[a[1].p];
+  A a[2](each p = 2);
+end FWD12;
+//// model: FWD13
+model FWD13
+  model A
+    parameter Integer p = 1;
+  end A;
+  Real x[a[2].p];
+  A a[2](p = {2, 3});
+end FWD13;
+//// model: FWD14
+model FWD14
+  model A
+    parameter Integer p = 2 annotation(Evaluate = false);
+  end A;
+  Real x[a.p];
+  A a;
+end FWD14;
+//// model: FWD15
+model FWD15
+  model A
+    parameter Integer p = 1;
+  end A;
+  Real x[a.p];
+  A a(p = q);
+  parameter Integer q = 2;
+end FWD15;
+//// model: FWD16
+model FWD16
+  model A
+    parameter Integer p = 1;
+  end A;
+  model B
+    Real x[a.p];
+    A a(p = m);
+    parameter Integer m = 2;
+  end B;
+  B b(m = 3);
+end FWD16;
+//// model: FWD17
+model FWD17
+  model A
+    parameter Integer p = 1;
+  end A;
+  model C
+    Real z;
+  end C;
+  C c[a.p];
+  A a(p = 2);
+end FWD17;
+//// model: FWD18
+model FWD18
+  model A
+    parameter Integer p = 1;
+  end A;
+  parameter Integer n = a.p;
+  Real x[n];
+  A a(p = 2);
+end FWD18;
+//// model: FWD19
+model FWD19
+  model A
+    Integer v = 2;
+  end A;
+  Real x[a.v];
+  A a;
+end FWD19;
+//// model: FWD20
+model FWD20
+  model A
+    parameter Integer p = 1;
+  end A;
+  Real x[a.p];
+  A a(p = 2) if true;
+end FWD20;
+//// model: FWD21
+model FWD21
+  model A
+    parameter Integer p;
+  end A;
+  Real x[a.p];
+  A a;
+end FWD21;
+//// model: FWD22
+model FWD22
+  model A
+  protected
+    parameter Integer p = 2;
+  end A;
+  Real x[a.p];
+  A a;
+end FWD22;
+//// model: FWD23
+model FWD23
+  model A
+    parameter Integer p = 2;
+  end A;
+  model B
+    outer A a;
+    Real x[a.p];
+  end B;
+  B b;
+  inner A a(p = 3);
+end FWD23;
+//// model: FWD24
+model FWD24
+  model A
+    parameter Integer p = 1;
+  end A;
+  parameter Real x[a.p] = {1, 2};
+  A a(p = 2);
+end FWD24;
+//// model: FWD25
+model FWD25
+  model A
+    parameter Boolean b = false;
+  end A;
+  Real x[if a.b then 2 else 3];
+  A a(b = true);
+end FWD25;
+//// model: FWD26
+model FWD26
+  type E = enumeration(u, v, w);
+  model A
+    parameter E e = E.u;
+  end A;
+  Real x[Integer(a.e)];
+  A a(e = E.w);
+end FWD26;
+//// model: FWD27
+model FWD27
+  model A
+    Real y[4];
+  end A;
+  Real x[size(a.y, 1)];
+  A a;
+end FWD27;
+//// model: FWD28
+model FWD28
+  model A
+    parameter Integer m = 2;
+    Real y[m];
+  end A;
+  Real x[size(a.y, 1)];
+  A a(m = 3);
+end FWD28;
+//// model: FWD29
+model FWD29
+  type T = Real[4];
+  model A
+    T y[2];
+  end A;
+  Real x[size(a.y, 1)];
+  Real z[size(a.y, 2)];
+  A a;
+end FWD29;
+//// model: FWD30
+model FWD30
+  model A
+    Real y[2, 3];
+  end A;
+  Integer s[2] = size(a.y);
+  A a;
+end FWD30;
+//// model: FWD31
+model FWD31
+  model A
+    Real y[2, 3];
+  end A;
+  Real x[ndims(a.y)];
+  A a;
+end FWD31;
+//// model: FWD32
+model FWD32
+  model A
+    Real y[3];
+  end A;
+  Real x[size(a.y, 1)];
+  A a[2];
+end FWD32;
+//// model: FWD33
+model FWD33
+  model A
+    Real y[3];
+  end A;
+  Real x[size(a.y, 2)];
+  A a[2];
+end FWD33;
+//// model: FWD34
+model FWD34
+  model B
+    Real y[3];
+  end B;
+  model A
+    B b;
+  end A;
+  Real x[size(a.b.y, 1)];
+  A a;
+end FWD34;
+//// model: FWD35
+model FWD35
+  model A
+    Real y[3];
+  end A;
+  Integer k = size(a.y, 1);
+  A a;
+end FWD35;
+//// model: FWD36
+model FWD36
+  model A
+    Real y[3];
+  end A;
+  parameter Integer n = size(a.y, 1);
+  A a;
+  Real x;
+equation
+  for i in 1:n loop
+    a.y[i] = i;
+  end for;
+  x = n;
+end FWD36;
+//// model: FWD37
+model FWD37
+  model A
+    parameter Boolean b = true;
+    Real y[3] if b;
+  end A;
+  Real x[size(a.y, 1)];
+  A a;
+end FWD37;
+//// model: FWD38
+model FWD38
+  model A
+    replaceable Real y[3];
+  end A;
+  Real x[size(a.y, 1)];
+  A a(redeclare Real y[4]);
+end FWD38;
+//// model: FWD39
+model FWD39
+  model A
+    parameter Integer n = 2;
+    type T = Real[n];
+    T y;
+  end A;
+  Real x[size(a.y, 1)];
+  A a(n = 5);
+end FWD39;
+//// model: FWD40
+model FWD40
+  model A
+    Real y[:] = {1, 2, 3};
+  end A;
+  Real x[size(a.y, 1)];
+  A a;
+end FWD40;
+//// model: FWD41
+model FWD41
+  record R
+    Real y[3];
+  end R;
+  Real x[size(r.y, 1)];
+  R r;
+end FWD41;
+//// model: FWD42
+model FWD42
+  record R
+    parameter Integer n = 3;
+    Real y[n];
+  end R;
+  Real x[size(r.y, 1)];
+  R r(n = 2);
+end FWD42;
+//// model: FWD43
+model FWD43
+  model A
+    parameter Integer p = 1;
+  end A;
+  model B
+    A a(p = 4);
+  end B;
+  B b;
+  Real x[b.a.p];
+  Real y[c.a.p];
+  B c;
+end FWD43;
+//// model: FWD44
+model FWD44
+  model A
+    parameter Integer p = 1;
+    parameter Integer q = p + 1;
+  end A;
+  Real x[a.q];
+  A a(p = 2);
+end FWD44;
+//// model: FWD45
+model FWD45
+  model A
+    constant Integer p = 1;
+  end A;
+  Real x[a.p];
+  A a(p = 2);
+end FWD45;
+//// model: FWD46
+model FWD46
+  model A
+    parameter Real p = 1;
+  end A;
+  Real x[integer(a.p)];
+  A a(p = 2.5);
+end FWD46;
+//// model: FWD47
+model FWD47
+  model A
+    parameter Integer p = 1;
+  end A;
+  Real x[a.p];
+  A a(p = q[1]);
+  parameter Integer q[2] = {2, 3};
+end FWD47;
+//// model: FWD48
+model FWD48
+  model A
+    parameter Integer q[2] = {1, 2};
+  end A;
+  parameter Integer n = a.q[1];
+  Real x[n];
+  A a(q = {2, 3});
+end FWD48;
+//// model: FWD49
+model FWD49
+  model A
+    parameter Integer p = 1;
+  end A;
+  parameter Integer n = a[1].p;
+  Real x[n];
+  A a[2](each p = 2);
+end FWD49;
+//// model: FWD50
+model FWD50
+  model A
+    parameter Integer p = 1;
+  end A;
+  Real x[a[2].p];
+  A a[2](p = {2, 2});
+end FWD50;
+//// model: FWD51
+model FWD51
+  record R
+    parameter Integer n = 2;
+  end R;
+  parameter R c = R(n = 3);
+  Real x[c.n];
+end FWD51;
+//// model: FWD52
+model FWD52
+  record R
+    parameter Integer n = 2;
+  end R;
+  model B
+    parameter R c;
+    Real x[c.n];
+  end B;
+  B b(c = R(n = 3));
+end FWD52;
+//// model: FWD53
+model FWD53
+  record R
+    constant Integer n = 2;
+  end R;
+  model B
+    Real x[c.n];
+    parameter R c;
+  end B;
+  B b(c = R());
+end FWD53;
+//// model: FWD54
+model FWD54
+  model A
+    parameter Integer p = 1;
+    Real y[p];
+  end A;
+  Real x[size(a.y, 1)] = a.y;
+  A a(p = 3);
+end FWD54;
+//// model: FWD55
+model FWD55
+  model A
+    parameter Integer p = 1;
+    Real y[p];
+  end A;
+  parameter Integer n = size(a.y, 1);
+  Real x[n];
+  A a(p = 3);
+end FWD55;
+//// model: CCB1
+model CCB1
+  record R
+    parameter Real v = 1;
+  end R;
+  model C
+    parameter R s[:] = {R()};
+  end C;
+  parameter R s[:] = {R(), R(v = 2)};
+  C c(s = s);
+end CCB1;
+//// model: CCB2
+model CCB2
+  record R
+    Real v;
+  end R;
+  R y[2];
+  R x[:] = y;
+end CCB2;
+//// model: CCB3
+model CCB3
+  record R
+    Real v;
+  end R;
+  R x[:] = y;
+  R y[2];
+end CCB3;
+//// model: CCB4
+model CCB4
+  record R
+    parameter Real v = 1;
+  end R;
+  parameter R x[:] = y;
+  parameter R y[2] = {R(v = 1), R(v = 2)};
+end CCB4;
+//// model: CCB5
+model CCB5
+  record R
+    parameter Real v = 1;
+  end R;
+  model C
+    parameter R s[:];
+  end C;
+  model D
+    parameter R t[:];
+    C c(s = t);
+  end D;
+  D d(t = {R(v = 3), R(v = 4), R(v = 5)});
+end CCB5;
+//// model: CCB6
+model CCB6
+  record R
+    Real v;
+  end R;
+  model A
+    R y[2];
+  end A;
+  A a;
+  R x[:] = a.y;
+end CCB6;
+//// model: CCB7
+package CCB7P
+  record R
+    Real v;
+  end R;
+  constant R y[2] = {R(v = 1), R(v = 2)};
+end CCB7P;
+model CCB7
+  CCB7P.R x[:] = CCB7P.y;
+end CCB7;
+//// model: CCB8
+model CCB8
+  record R
+    Real v;
+  end R;
+  R y[3];
+  R x[:] = y[1:2];
+end CCB8;
+//// model: CCB9
+model CCB9
+  record R
+    Real v;
+  end R;
+  function f
+    output R r[2];
+  algorithm
+    r[1] := R(1);
+    r[2] := R(2);
+  end f;
+  R x[:] = f();
+end CCB9;
+//// model: CCB10
+model CCB10
+  record R
+    Real v;
+  end R;
+  parameter Boolean b = true;
+  R y[2];
+  R z[2];
+  R x[:] = if b then y else z;
+end CCB10;
+//// model: CCB11
+model CCB11
+  record R
+    Real v;
+  end R;
+  R m[2, 3];
+  R x[:, :] = m;
+end CCB11;
+//// model: CCB12
+model CCB12
+  record R
+    parameter Real v = 1;
+  end R;
+  parameter R x[:] = fill(R(v = 2), 3);
+end CCB12;
+//// model: CCB13
+model CCB13
+  record R
+    Real v;
+  end R;
+  R m[2, 3];
+  R x[2, :] = m;
+end CCB13;
+//// model: CCB14
+model CCB14
+  record R
+    Real v;
+  end R;
+  R y[2];
+  R x[:] = {y[2], y[1]};
+end CCB14;
+//// model: CCB15
+model CCB15
+  record R1
+    Real v;
+  end R1;
+  record R2
+    R1 a[:];
+  end R2;
+  parameter R1 y[2](each v = 1);
+  parameter R2 r(a = y);
+end CCB15;
+//// model: CCB16
+model CCB16
+  record R
+    Real v;
+  end R;
+  R y[0];
+  R x[:] = y;
+end CCB16;
+//// model: CCB17
+model CCB17
+  record R
+    parameter Integer n = 2;
+    Real v[n];
+  end R;
+  R y[2](each n = 3);
+  R x[:] = y;
+end CCB17;
+//// model: CCB18
+model CCB18
+  type E = enumeration(a, b);
+  record R
+    parameter Real v = 1;
+  end R;
+  parameter R y[E];
+  parameter R x[:] = y;
+end CCB18;
+//// model: CCB19
+model CCB19
+  record R
+    parameter Real v = 1;
+  end R;
+  constant R y[2] = {R(v = 1), R(v = 2)};
+  constant R x[:] = y;
+  Real z = x[2].v;
+end CCB19;
+//// model: CCB20
+model CCB20
+  record R
+    parameter Real v = 1;
+  end R;
+  parameter R x[:] = {R(v = i) for i in 1:3};
+end CCB20;
+//// model: CCB21
+model CCB21
+  record R1
+    Real t[:, :];
+  end R1;
+  record R2
+    R1 a[:];
+  end R2;
+  parameter R1 r1(t = {{1, 2}, {3, 4}});
+  parameter R2 r2(a = {r1, r1});
+  parameter R2 r3 = r2;
+end CCB21;
+//// model: CCB22
+model CCB22
+  record R
+    parameter Real v = 1;
+  end R;
+  model C
+    parameter R s[:] = {R()};
+    Real z[size(s, 1)];
+  end C;
+  parameter R s[:] = {R(), R(v = 2)};
+  C c(s = s);
+end CCB22;
+//// model: CCB23
+model CCB23
+  record R
+    parameter Real v = 1;
+  end R;
+  model C
+    parameter R s[:] = {R()};
+    Real z = s[1].v;
+  end C;
+  C c(s = s);
+  parameter R s[:] = {R(), R(v = 2)};
+end CCB23;
+//// model: CCB24
+model CCB24
+  record R
+    Real v;
+  end R;
+  R y[2];
+  R x[:](v = {1, 2}) = y;
+end CCB24;
+//// model: CCB25
+model CCB25
+  record R
+    Real v;
+  end R;
+  parameter Integer n = 2;
+  R y[n];
+  R x[:] = y;
+end CCB25;
+//// model: CCB26
+model CCB26
+  record R
+    Real v;
+  end R;
+  R y[2];
+  R x[:] = y;
+equation
+  x[1].v = 1;
+  y[2].v = 2;
+end CCB26;
+//// model: CCB27
+model CCB27
+  record R
+    String s;
+    Real y;
+  end R;
+  package P
+    constant R c[2] = R(s = {"a", "b"}, y = {1, 2});
+  end P;
+  R w[:] = P.c;
+end CCB27;
+//// model: CCB28
+model CCB28
+  record R
+    Real v;
+  end R;
+  model M
+    R z;
+  end M;
+  M m[2];
+  R x[:] = m.z;
+end CCB28;
+//// model: ETD1
+model ETD1
+  record R
+    E e;
+  end R;
+  type E = enumeration(a, b, c);
+  R[E] re(e = {i for i in E});
+end ETD1;
+//// model: ETD2
+model ETD2
+  type E = enumeration(a, b);
+  record R
+    Real x;
+  end R;
+  R re[E];
+end ETD2;
+//// model: ETD3
+model ETD3
+  type E = enumeration(a, b);
+  model M
+    Real x;
+  equation
+    x = 1;
+  end M;
+  M m[E];
+end ETD3;
+//// model: ETD4
+model ETD4
+  record R
+    Real x;
+  end R;
+  R r[Boolean];
+end ETD4;
+//// model: ETD5
+model ETD5
+  type E = enumeration(a, b);
+  model M
+    parameter Real p = 1;
+    Real x = p;
+  end M;
+  M m[E](p = {1, 2});
+end ETD5;
+//// model: ETD6
+model ETD6
+  type E = enumeration(a, b);
+  model M
+    parameter Real p = 1;
+    Real x = p;
+  end M;
+  M m[E](each p = 3);
+end ETD6;
+//// model: ETD7
+model ETD7
+  type E = enumeration(a, b);
+  record R
+    Real x;
+  end R;
+  R re[E];
+  Real z = re[E.a].x;
+end ETD7;
+//// model: ETD8
+model ETD8
+  type E = enumeration(a, b);
+  record R
+    Real x;
+  end R;
+  R re[E];
+  Real z = re[1].x;
+end ETD8;
+//// model: ETD9
+model ETD9
+  type E = enumeration(a, b);
+  record R
+    Real x;
+  end R;
+  R re[E];
+  Real z[2] = re.x;
+end ETD9;
+//// model: ETD10
+model ETD10
+  type E = enumeration(a, b);
+  model M
+    Real x;
+  end M;
+  M m[E, 2];
+end ETD10;
+//// model: ETD11
+model ETD11
+  type E = enumeration(a, b);
+  model M
+    Real x[E];
+  end M;
+  M m[E];
+end ETD11;
+//// model: ETD12
+model ETD12
+  type E = enumeration(a, b);
+  model N
+    Real y;
+  end N;
+  model M
+    N n[Boolean];
+  end M;
+  M m[E];
+end ETD12;
+//// model: ETD13
+model ETD13
+  type E = enumeration(a, b);
+  connector C
+    Real e;
+    flow Real f;
+  end C;
+  C c[E];
+end ETD13;
+//// model: ETD14
+model ETD14
+  type E = enumeration(a, b);
+  record R
+    Real x;
+  end R;
+  R re[E];
+  Integer n = size(re, 1);
+end ETD14;
+//// model: ETD15
+model ETD15
+  type E = enumeration(a, b);
+  record R
+    Real x;
+  end R;
+  R re[E] = {R(1), R(2)};
+end ETD15;
+//// model: ETD16
+model ETD16
+  type E = enumeration(a, b);
+  record R
+    parameter Real x = 1;
+  end R;
+  parameter R re[E] = {R(1), R(2)};
+end ETD16;
+//// model: ETD17
+package ETD17P
+  type E = enumeration(a, b);
+  record R
+    Real x;
+  end R;
+end ETD17P;
+model ETD17
+  ETD17P.R re[ETD17P.E];
+end ETD17;
+//// model: ETD18
+model ETD18
+  type E = enumeration(a, b);
+  type F = E;
+  record R
+    Real x;
+  end R;
+  R re[F];
+end ETD18;
+//// model: ETD19
+model ETD19
+  type E = enumeration(a, b);
+  model M
+    Real x;
+  end M;
+  M m[E];
+equation
+  m[E.a].x = 1;
+  m[E.b].x = 2;
+end ETD19;
+//// model: ETD20
+model ETD20
+  type E = enumeration(a, b);
+  model M
+    Real x;
+  end M;
+  M m[E];
+equation
+  for i in E loop
+    m[i].x = 1;
+  end for;
+end ETD20;
+//// model: ETD21
+model ETD21
+  type E = enumeration(a, b);
+  model M
+    Real x;
+    Real y = x;
+  end M;
+  M m[E];
+end ETD21;
+//// model: ETD22
+model ETD22
+  type E = enumeration(a, b);
+  model M
+    parameter Real p = 1;
+    parameter Real q = p;
+  end M;
+  M m[E];
+end ETD22;
+//// model: ETD23
+model ETD23
+  type E = enumeration(a, b);
+  model M
+    connector C
+      Real e;
+      flow Real f;
+    end C;
+    C c1;
+    C c2;
+  equation
+    connect(c1, c2);
+  end M;
+  M m[E];
+end ETD23;
+//// model: ETD24
+model ETD24
+  type E = enumeration(a, b);
+  type T = Real[E];
+  record R
+    T x;
+  end R;
+  R r[E];
+end ETD24;
+//// model: ETD25
+model ETD25
+  type E = enumeration(a, b);
+  record R
+    Real x;
+  end R;
+  type RA = R[E];
+  RA r;
+end ETD25;
+//// model: ETD26
+model ETD26
+  type E = enumeration(a, b);
+  model M
+    outer Real o;
+    Real x = o;
+  end M;
+  inner Real o = 1;
+  M m[E];
+end ETD26;
+//// model: ETD27
+model ETD27
+  type E = enumeration(a, b);
+  model M
+    Real x;
+  equation
+    when time > 1 then
+      x = 1;
+    end when;
+  end M;
+  M m[E];
+end ETD27;
+//// model: ETD28
+model ETD28
+  type E = enumeration(a, b);
+  model M
+    Real x(start = 1);
+  equation
+    der(x) = -x;
+  end M;
+  M m[E];
+end ETD28;
+//// model: ETD29
+model ETD29
+  type E = enumeration(a, b);
+  model M
+    parameter Integer n = 2;
+    Real x[n];
+  end M;
+  M m[E](n = {1, 2});
+end ETD29;
+//// model: ETD30
+model ETD30
+  record R
+    Boolean b;
+  end R;
+  R r[Boolean](b = {false, true});
+end ETD30;
+//// model: CSX1
+model CSX1
+  record B
+    constant Boolean f;
+    constant Real m[2];
+    constant Real d[2] = if f then {1, 2} else m;
+    constant Real e[1] = d[1:1];
+  end B;
+  record D
+    extends B(final f = false, final m = {3, 4});
+  end D;
+  D r;
+end CSX1;
+//// model: CSX2
+model CSX2
+  record B
+    constant Boolean f;
+    constant Real m[2];
+    constant Real d[2] = if f then {1, 2} else m;
+    constant Real e[1] = d[1:end - 1] / sum(d);
+  end B;
+  record D
+    extends B(final f = false, final m = {3, 4});
+  end D;
+  D r;
+end CSX2;
+//// model: CSX3
+model CSX3
+  model A
+    constant Real m[2] = {1, 2};
+    constant Real d[2] = m;
+    constant Real e[1] = d[2:2];
+  end A;
+  A a(m = {3, 4});
+end CSX3;
+//// model: CSX4
+model CSX4
+  model A
+    constant Real m[2] = {1, 2};
+    constant Real d[2] = m;
+    constant Real e = d[2];
+  end A;
+  A a(m = {3, 4});
+end CSX4;
+//// model: CSX5
+model CSX5
+  model A
+    parameter Integer k = 1;
+    constant Real m[2] = {1, 2};
+    constant Real e = m[k];
+  end A;
+  A a(m = {3, 4}, k = 2);
+end CSX5;
+//// model: CSX6
+package CSX6P
+  constant Real d[3] = {1, 2, 3};
+end CSX6P;
+model CSX6
+  constant Real e[2] = CSX6P.d[2:3];
+end CSX6;
+//// model: CSX7
+model CSX7
+  constant Real d[3] = {1, 2, 3};
+  model A
+    constant Real e[2] = d[2:3];
+  end A;
+  A a;
+end CSX7;
+//// model: CSX8
+model CSX8
+  model A
+    constant Real d[3] = {1, 2, 3};
+    constant Real e = d[end];
+  end A;
+  A a(d = {4, 5, 6});
+end CSX8;
+//// model: CSX9
+model CSX9
+  model A
+    constant Real d[3] = {1, 2, 3};
+    constant Real e[2] = d[{1, 3}];
+  end A;
+  A a(d = {4, 5, 6});
+end CSX9;
+//// model: CSX10
+model CSX10
+  model A
+    constant Real d[2, 2] = {{1, 2}, {3, 4}};
+    constant Real e[2] = d[2, :];
+    constant Real g[2] = d[:, 1];
+  end A;
+  A a;
+end CSX10;
+//// model: CSX11
+model CSX11
+  model A
+    constant Integer n = 2;
+    constant Real c[n] = fill(1, n);
+  end A;
+  A a(n = 3);
+  Real x[size(a.c, 1)];
+end CSX11;
+//// model: CSX12
+model CSX12
+  model A
+    constant Integer n = 2;
+    constant Real c[n] = fill(1, n);
+  end A;
+  Real x[size(a.c, 1)];
+  A a(n = 3);
+end CSX12;
+//// model: CSX13
+model CSX13
+  model A
+    constant Integer n = 2;
+    constant Real c[n] = fill(1, n);
+  end A;
+  A a(n = 3);
+  Real x[3] = a.c;
+end CSX13;
+//// model: CSX14
+model CSX14
+  model A
+    constant Integer n = 0;
+    constant Real c[n] = fill(1, n);
+  end A;
+  A a;
+  Real x[0] = a.c;
+end CSX14;
+//// model: CSX15
+model CSX15
+  record B
+    constant Integer n;
+    constant Real c[n - 1] = fill(2, n - 1);
+  end B;
+  record D
+    extends B(final n = 1);
+  end D;
+  model G
+    replaceable parameter B g constrainedby B;
+    input Real y[g.n - 1] = g.c;
+  end G;
+  G a(redeclare D g);
+end CSX15;
+//// model: CSX16
+model CSX16
+  record B
+    constant Integer n;
+    constant Real c[n - 1] = fill(2, n - 1);
+  end B;
+  record D
+    extends B(final n = 3);
+  end D;
+  model G
+    replaceable parameter B g constrainedby B;
+    input Real y[g.n - 1] = g.c;
+  end G;
+  G a(redeclare D g);
+end CSX16;
+//// model: CSX17
+model CSX17
+  model A
+    constant Real d[3] = {1, 2, 3};
+  end A;
+  A a;
+  constant Real e[2] = a.d[2:3];
+end CSX17;
+//// model: CSX18
+model CSX18
+  model A
+    constant Real d[3] = {1, 2, 3};
+    Real v = d[2];
+    Real w[2] = d[1:2];
+  end A;
+  A a(d = {4, 5, 6});
+end CSX18;
+//// model: UEN1
+model UEN1
+  model A
+    replaceable type T = Real[2];
+    T x;
+  end A;
+  model B
+    replaceable type T = Real[2];
+    A a(redeclare type T = T);
+  end B;
+  B b1;
+  B b2(redeclare type T = Real[3]);
+end UEN1;
+//// model: UEN2
+model UEN2
+  model A
+    replaceable type T = Real;
+    T x;
+  end A;
+  model B
+    extends A(redeclare type T = U);
+    replaceable type U = Real;
+  end B;
+  B b1;
+  B b2(redeclare type U = Real(unit = "m"));
+end UEN2;
+//// model: UEN3
+model UEN3
+  parameter Integer n = 2;
+  model A
+    Real x[n];
+  end A;
+  A a;
+end UEN3;
+//// model: UEN4
+model UEN4
+  parameter Integer n = 2;
+  model A
+    Real x[n];
+  end A;
+  A a if false;
+end UEN4;
+//// model: UEN5
+model UEN5
+  parameter Real p = 2;
+  function f
+    input Real u;
+    output Real y;
+  algorithm
+    y := u * p;
+  end f;
+  Real x = f(1);
+end UEN5;
+//// model: UEN6
+model UEN6
+  record R
+    Real y = 1;
+  end R;
+  constant R r;
+  constant Integer n = 2;
+  model A
+    Real x = r.y;
+    Real z[n];
+  end A;
+  A a;
+end UEN6;
+//// model: UEN7
+model UEN7
+  model A
+    parameter Integer p = 1;
+  end A;
+  Real x[a.p];
+  A a(p = 2);
+end UEN7;
+//// model: UEN8
+model UEN8
+  type T = Real[4];
+  model A
+    T x;
+  end A;
+  Real y[n];
+  A a;
+  parameter Integer n = size(a.x, 1);
+end UEN8;
+//// model: UEN9
+model UEN9
+  record R
+    Real v;
+  end R;
+  R y[2];
+  R x[:] = y;
+end UEN9;
+//// model: UEN10
+model UEN10
+  record R
+    parameter Real v = 1;
+  end R;
+  model C
+    parameter R s[:] = {R()};
+  end C;
+  parameter R s[:] = {R(), R(v = 2)};
+  C c(s = s);
+end UEN10;
+//// model: UEN11
+model UEN11
+  model A
+    parameter Integer q[2] = {1, 2};
+  end A;
+  parameter Integer n = a.q[1];
+  Real x[n];
+  A a(q = {2, 3});
+end UEN11;
+//// model: UEN12
+model UEN12
+  type E = enumeration(a, b);
+  record R
+    E e;
+  end R;
+  model M
+    Real x;
+  equation
+    x = 1;
+  end M;
+  R re[E](e = {i for i in E});
+  M m[Boolean];
+end UEN12;
+//// model: UEN13
+model UEN13
+  type E = enumeration(a, b);
+  record R
+    Real x;
+  end R;
+  R re[E];
+  Real z = re[1].x;
+end UEN13;
+//// model: UEN14
+model UEN14
+  record B
+    constant Boolean f;
+    constant Real m[2];
+    constant Real d[2] = if f then {1, 2} else m;
+    constant Real e[1] = d[1:end - 1] / sum(d);
+  end B;
+  record D
+    extends B(final f = false, final m = {3, 1});
+  end D;
+  D r;
+end UEN14;
+//// model: UEN15
+model UEN15
+  record B
+    constant Integer n;
+    constant Real c[n - 1] = fill(2, n - 1);
+  end B;
+  record D
+    extends B(final n = 1);
+  end D;
+  model G
+    replaceable parameter B g constrainedby B;
+    input Real y[g.n - 1] = g.c;
+  end G;
+  G a(redeclare D g);
+end UEN15;

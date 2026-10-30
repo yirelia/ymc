@@ -142,7 +142,7 @@ class Instantiator {
   std::unordered_map<std::uint32_t, NodeId> pkg_cache_;   // 类节点 → 它的包实例（见 inst_package）
   std::unordered_map<std::uint32_t, NodeId> redecl_orig_;   // 实例类树里顶替进来的新类节点 → 顶替前的原类（见 instantiate）
   std::unordered_set<std::uint32_t> instances_;   // instantiate 建的实例节点（父亲是实例的类 = 克隆，见 inst_component）
-  std::unordered_map<std::uint32_t, NodeId> redecl_class_nodes_;   // 修饰里的类重声明元素 → 它的类节点
+  std::unordered_map<std::uint64_t, NodeId> redecl_class_nodes_;   // (修饰里的类重声明元素 << 32 | 写修饰的类实例) → 它的类节点
   // class extends 类合成的隐式 extends 元素（class extends 的 SCode 元素 raw → 合成的 Extends 元素）与合成元素的集合（见 partial_inst）。
   std::unordered_map<std::uint32_t, Id<SElement>> ce_ext_elem_;
   std::unordered_set<std::uint32_t> ce_ext_elems_;

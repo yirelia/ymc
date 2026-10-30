@@ -12629,4 +12629,112 @@ YMC_TEST(flatten_type_dim_scope_mismatch_skips) {
                            "  parameter Real x[3,1] = 5.0;\n  parameter Real x[3,2] = 6.0;\nend UTD8;\n"));
 }
 
+YMC_TEST(flatten_nested_class_redeclare_per_instance) {
+  // 修饰里的类重声明写在类 B 里、右边的名字在 B 的这个实例里解析（重声明元素的父亲是写修饰处）：`A a(redeclare type T = T)` 的 T 是 b2 里
+  // 被顶替过的 `Real[3]`，extends 修饰里的同理。此前重声明的类节点只按元素缓存，b2 取到 b1 那份（静默错）。期望 = omc 1.25.0 实跑
+  //（2026-10-30，探针 pk-p48 NCR1 / NCR20 同构的 UEN1 / UEN2）。
+  YMC_CHECK_EQ(flatten_src("model UEN1\n  model A\n    replaceable type T = Real[2];\n    T x;\n  end A;\n  model B\n"
+                           "    replaceable type T = Real[2];\n    A a(redeclare type T = T);\n  end B;\n  B b1;\n"
+                           "  B b2(redeclare type T = Real[3]);\nend UEN1;\n"),
+               std::string("class UEN1\n  Real b1.a.x[1];\n  Real b1.a.x[2];\n  Real b2.a.x[1];\n  Real b2.a.x[2];\n"
+                           "  Real b2.a.x[3];\nend UEN1;\n"));
+  YMC_CHECK_EQ(flatten_src("model UEN2\n  model A\n    replaceable type T = Real;\n    T x;\n  end A;\n  model B\n"
+                           "    extends A(redeclare type T = U);\n    replaceable type U = Real;\n  end B;\n  B b1;\n"
+                           "  B b2(redeclare type U = Real(unit = \"m\"));\nend UEN2;\n"),
+               std::string("class UEN2\n  Real b1.x;\n  Real b2.x(unit = \"m\");\nend UEN2;\n"));
+}
+
+YMC_TEST(flatten_enclosing_nonconst_rejected) {
+  // 外层作用域里查到的非常量组件：omc 报 "Component 'n' was found in an enclosing scope but is not a constant."（NFLookup.lookupSimpleCref
+  // :838-908 + LookupState.checkCrefVariability，NFLookupState.mo:649-672 v1.25.0）——条件为假的组件里、被折叠掉的函数调用的体里也算（1.25.0
+  // 实跑：UEN3 / UEN4 / UEN5 均报错，2026-10-30，探针 pk-p48）。外层的常量、常量记录的字段读得（UEN6，期望 = omc 1.25.0 实跑）。
+  bool uns = false;
+  YMC_CHECK_EQ(flatten_src("model UEN3\n  parameter Integer n = 2;\n  model A\n    Real x[n];\n  end A;\n  A a;\nend UEN3;\n",
+                           &uns),
+               std::string("<unsupported:non-constant component found in enclosing scope>"));
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(flatten_src("model UEN4\n  parameter Integer n = 2;\n  model A\n    Real x[n];\n  end A;\n  A a if false;\n"
+                           "end UEN4;\n",
+                           &uns),
+               std::string("<unsupported:non-constant component found in enclosing scope>"));
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(flatten_src("model UEN5\n  parameter Real p = 2;\n  function f\n    input Real u;\n    output Real y;\n"
+                           "  algorithm\n    y := u * p;\n  end f;\n  Real x = f(1);\nend UEN5;\n",
+                           &uns),
+               std::string("<unsupported:non-constant component found in enclosing scope>"));
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(flatten_src("model UEN6\n  record R\n    Real y = 1;\n  end R;\n  constant R r;\n  constant Integer n = 2;\n"
+                           "  model A\n    Real x = r.y;\n    Real z[n];\n  end A;\n  A a;\nend UEN6;\n"),
+               std::string("class UEN6\n  constant Real r.y = 1.0;\n  constant Integer n = 2;\n  Real a.x = 1.0;\n"
+                           "  Real a.z[1];\n  Real a.z[2];\nend UEN6;\n"));
+}
+
+YMC_TEST(flatten_forward_dimension_second_pass) {
+  // 维读到声明在后的子实例参数：omc 先定型全部组件再压平（NFInst.mo:196-200 v1.25.0），与声明先后无关，参数成结构参数（UEN7）；size 读声明在后
+  // 的、类型带维的组件（UEN8，scodeinst Size6）。读的是数组的元素且声明在后（UEN11）：标记是组件级的，第二遍标不到别的元素 → SKIP。期望 = omc
+  // 1.25.0 实跑（2026-10-30，探针 pk-p48 FWD1 / FWD29 同构的 UEN7 / UEN8）。
+  YMC_CHECK_EQ(flatten_src("model UEN7\n  model A\n    parameter Integer p = 1;\n  end A;\n  Real x[a.p];\n  A a(p = 2);\n"
+                           "end UEN7;\n"),
+               std::string("class UEN7\n  Real x[1];\n  Real x[2];\n  final parameter Integer a.p = 2;\nend UEN7;\n"));
+  YMC_CHECK_EQ(flatten_src("model UEN8\n  type T = Real[4];\n  model A\n    T x;\n  end A;\n  Real y[n];\n  A a;\n"
+                           "  parameter Integer n = size(a.x, 1);\nend UEN8;\n"),
+               std::string("class UEN8\n  Real y[1];\n  Real y[2];\n  Real y[3];\n  Real y[4];\n  Real a.x[1];\n"
+                           "  Real a.x[2];\n  Real a.x[3];\n  Real a.x[4];\n  final parameter Integer n = 4;\nend UEN8;\n"));
+  bool uns = false;
+  YMC_CHECK_EQ(flatten_src("model UEN11\n  model A\n    parameter Integer q[2] = {1, 2};\n  end A;\n"
+                           "  parameter Integer n = a.q[1];\n  Real x[n];\n  A a(q = {2, 3});\nend UEN11;\n",
+                           &uns),
+               std::string("<unsupported:non-literal array dimension>"));
+  YMC_CHECK(uns);
+}
+
+YMC_TEST(flatten_composite_colon_dim_from_cref) {
+  // 复合组件的 `:` 维由绑定引用的记录数组定（deduceDimensionFromExp，NFTyping.mo:776-821 v1.25.0；records/RecordEnumBinding、scodeinst/
+  // RecordBinding5）。`:` 维的数组再被引用时取发射时记下的维（UEN10）。期望 = omc 1.25.0 实跑（2026-10-30，探针 pk-p48 CCB2 / CCB1 同构的
+  // UEN9 / UEN10）。
+  YMC_CHECK_EQ(flatten_src("model UEN9\n  record R\n    Real v;\n  end R;\n  R y[2];\n  R x[:] = y;\nend UEN9;\n"),
+               std::string("class UEN9\n  Real y[1].v;\n  Real y[2].v;\n  Real x[1].v = y[1].v;\n  Real x[2].v = y[2].v;\n"
+                           "end UEN9;\n"));
+  YMC_CHECK_EQ(flatten_src("model UEN10\n  record R\n    parameter Real v = 1;\n  end R;\n  model C\n"
+                           "    parameter R s[:] = {R()};\n  end C;\n  parameter R s[:] = {R(), R(v = 2)};\n  C c(s = s);\n"
+                           "end UEN10;\n"),
+               std::string("class UEN10\n  parameter Real s[1].v = 1.0;\n  parameter Real s[2].v = 2.0;\n"
+                           "  parameter Real c.s[1].v = s[1].v;\n  parameter Real c.s[2].v = s[2].v;\nend UEN10;\n"));
+}
+
+YMC_TEST(flatten_composite_type_dim_labels) {
+  // 复合数组的类型名维（`R re[E]`、`M m[Boolean]`，NFDimension.fromExp）：元素下标打标签，方程 / 绑定里的名字同（enums/EnumArrayMod1）。写了
+  // 下标的引用未做 → SKIP（Integer 下标 omc 报类型错，UEN13）。期望 = omc 1.25.0 实跑（2026-10-30，探针 pk-p48 ETD1 / ETD8 同构的 UEN12 / UEN13）。
+  YMC_CHECK_EQ(flatten_src("model UEN12\n  type E = enumeration(a, b);\n  record R\n    E e;\n  end R;\n  model M\n"
+                           "    Real x;\n  equation\n    x = 1;\n  end M;\n  R re[E](e = {i for i in E});\n  M m[Boolean];\n"
+                           "end UEN12;\n"),
+               std::string("class UEN12\n  enumeration(a, b) re[E.a].e = E.a;\n  enumeration(a, b) re[E.b].e = E.b;\n"
+                           "  Real m[false].x;\n  Real m[true].x;\nequation\n  m[false].x = 1.0;\n  m[true].x = 1.0;\n"
+                           "end UEN12;\n"));
+  bool uns = false;
+  YMC_CHECK_EQ(flatten_src("model UEN13\n  type E = enumeration(a, b);\n  record R\n    Real x;\n  end R;\n  R re[E];\n"
+                           "  Real z = re[1].x;\nend UEN13;\n",
+                           &uns),
+               std::string("<unsupported:composite array element reference>"));
+  YMC_CHECK(uns);
+}
+
+YMC_TEST(flatten_const_array_through_modified_base) {
+  // 记录里的常量数组读被 extends 修饰改过的常量：带切片的引用取已发射的整体值（`d[1:end - 1]`，此前顺声明绑定求撞守卫）；经子实例引用
+  // 非字面量维的空常量数组（`g.c`，维 `n - 1` = 0）。redeclare/Bug2695 的两个卡点。期望 = omc 1.25.0 实跑（2026-10-30，探针 pk-p48 CSX2 / CSX15
+  // 同构的 UEN14 / UEN15）。
+  YMC_CHECK_EQ(flatten_src("model UEN14\n  record B\n    constant Boolean f;\n    constant Real m[2];\n"
+                           "    constant Real d[2] = if f then {1, 2} else m;\n"
+                           "    constant Real e[1] = d[1:end - 1] / sum(d);\n  end B;\n  record D\n"
+                           "    extends B(final f = false, final m = {3, 1});\n  end D;\n  D r;\nend UEN14;\n"),
+               std::string("class UEN14\n  final constant Boolean r.f = false;\n  final constant Real r.m[1] = 3.0;\n"
+                           "  final constant Real r.m[2] = 1.0;\n  constant Real r.d[1] = 3.0;\n"
+                           "  constant Real r.d[2] = 1.0;\n  constant Real r.e[1] = 0.75;\nend UEN14;\n"));
+  YMC_CHECK_EQ(flatten_src("model UEN15\n  record B\n    constant Integer n;\n    constant Real c[n - 1] = fill(2, n - 1);\n"
+                           "  end B;\n  record D\n    extends B(final n = 1);\n  end D;\n  model G\n"
+                           "    replaceable parameter B g constrainedby B;\n    input Real y[g.n - 1] = g.c;\n  end G;\n"
+                           "  G a(redeclare D g);\nend UEN15;\n"),
+               std::string("class UEN15\n  final constant Integer a.g.n = 1;\nend UEN15;\n"));
+}
+
 YMC_TEST_MAIN

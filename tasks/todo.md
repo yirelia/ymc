@@ -2835,6 +2835,27 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       TypeDim4）FAIL 0（oracle=live 不一致 0）；scodeinst 666→668；testsuite 1844→1851（arrays/Array5 / Array6 / UnknownDimensionMod、
       enums/DerivedEnumDim、modification/UsertypeArrayMod、scodeinst/TypeDim3 / TypeDim4）/ FAIL 0；MSL 500（不变）；探针 14943→15123；
       单测 539→544。
+- [x] (67n) 两个旧错 + 记录 / 复合组件的维（2026-10-31）：
+      (1) 嵌套类重声明的静默错（TDN13）：redecl_class_node 只按元素缓存类节点，`A a(redeclare type T = T)` 写在 B 里、`B b2(redeclare type T =
+      Real[3])` 取到 b1 那份的 parent_scope → 键改 (元素, 写修饰的类实例)；extends 修饰里类重声明的作用域同样改成实例（NCR20）。规则来自
+      探针实跑（NCR1-25：基线 FAIL 15，现 PASS 20 / SKIP 4 / BOTH-REJECT 1）。
+      (2) 外层非常量组件（TDX1 / TDX2 ACCEPTS-INVALID）：omc 首段不在本类、在外层找到且末段组件不是常量 → NON_CONSTANT_IN_ENCLOSING_SCOPE
+      （lookupCref，NFLookup.mo:304-344；lookupSimpleCref :838-908；LookupState.checkCrefVariability + isNonConstantComponent，NFLookupState.mo
+      :649-672；Error.mo:882-883；MLS §5.3.1），实例化时全查（条件为假 / 零长数组 / if false 分支里也报）。新增收尾走查 check_enclosing_refs：
+      实例树全部类、组件类型的短类链、用到的函数；只认确认的（import 可能引进、经实例走不通后续段的不判）。命中 → set_unsupported（退出码
+      66：不出结果，文案未对拍；判宽的最坏多一个 SKIP，不会静默错）。ECR1-99：基线 ACCEPTS-INVALID 25，现 0（探针工具把"ymc 66 + omc 报错"计
+      BOTH-REJECT，nf_live_sweep 计 SKIP）。ponytail：短类带 constant 前缀的外层组件未单独处理（ECR72），单段 cref 只看 SCode 声明的变率。
+      (3) 维：向前的非 `:` 维走第二遍（emit_array，FWD1 / FWD2；读数组元素的不走，标记是组件级的，FWD6）、向前的 size 取声明维（Size6）、
+      复合组件的 `:` 维由 cref 绑定的定型形状定并记下供引用（RecordEnumBinding、RecordBinding5；comp_decl_dims）、复合数组的类型名维收尾
+      换标签（EnumArrayMod1；relabel_comp_type_dims）、常量数组带下标时取已发射的整体值（看得到 extends 修饰改过的常量）+ 空常量数组的引用
+      （Bug2695）。
+      照旧 SKIP：RecordBinding9（维的卡点已过，`c` 声明为 R_base、绑定是另一记录类，要类型转换）、DimUnknown14（`:` 维来自函数输出修饰）、
+      CevalRecordArray6 / 9（维经记录数组层层修饰 / 数组实例里的复合维）、RecordConstructorVectorization（包常量记录数组的向量化构造，omc 行为
+      未核实）；NCR8 / NCR25（实例语境里重声明的记录 / 枚举类型）、ETD7 / ETD19 / ETD20（`m[E.a].x`）、FWD10 / FWD32 / FWD33 / FWD37 / CCB23。
+      探针 pk-p48（270；ECR / NCR / FWD / CCB / ETD / CSX / UEN）——基线 PASS 49 / FAIL 17 / ACCEPTS-INVALID 28 / SKIP 126 / BOTH-REJECT 50，现
+      PASS 152 / SKIP 40 / BOTH-REJECT 78；旧组 SKIP→PASS 46；单测 +6。slice 707→709 例（+RecordBinding5 / Size6）FAIL 0（oracle=live 不一致 0）；
+      scodeinst 668→670；testsuite 1851→1857（EnumArrayMod1、RecordEnumBinding、Bug2695、RecordBinding5、Size6、inheritances/Ticket4258b）/
+      FAIL 0；MSL 500（不变）；探针 15123→15393；单测 544→550。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

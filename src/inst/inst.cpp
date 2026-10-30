@@ -1184,9 +1184,12 @@ bool Instantiator::class_redeclare_ok(NodeId orig, NodeId repl) {
 }
 
 // 修饰里的类重声明元素（`redeclare model B = X(p = 4)`、长形态 `redeclare model B … end B`）的类节点：词法作用域 = 写修饰的类
-//（R15 §1：重声明元素的父亲是写修饰处；新类的修饰 `p = 4` 在那里解析），按元素缓存（同一元素总写在同一处）。
+//（R15 §1：重声明元素的父亲是写修饰处；新类的修饰 `p = 4` 在那里解析），按 (元素, 写修饰的类实例) 缓存：同一元素写在同一个类里，但那个
+// 类的各实例可以不同（TDN13：`A a(redeclare type T = T)` 写在 B 里，`B b2(redeclare type T = Real[3])` 的右边 T 是 b2 这份实例里被
+// 顶替过的 T；只按元素缓存时 b2 取到 b1 那份的 `Real[2]`，静默错）。
 NodeId Instantiator::redecl_class_node(Id<SElement> rel, NodeId scope) {
-  if (const auto it = redecl_class_nodes_.find(rel.raw); it != redecl_class_nodes_.end()) return it->second;
+  const std::uint64_t key = (static_cast<std::uint64_t>(rel.raw) << 32) | scope.raw;
+  if (const auto it = redecl_class_nodes_.find(key); it != redecl_class_nodes_.end()) return it->second;
   INode cn;
   cn.kind = NodeKind::Class;
   cn.name = I_.scode.elems[rel].name;
@@ -1196,7 +1199,7 @@ NodeId Instantiator::redecl_class_node(Id<SElement> rel, NodeId scope) {
   cn.node_type = InstNodeType::normal_class();
   cn.cls = I_.classes.add(Class{});
   const NodeId n = I_.nodes.add(std::move(cn));
-  redecl_class_nodes_[rel.raw] = n;
+  redecl_class_nodes_[key] = n;
   return n;
 }
 
@@ -1288,9 +1291,10 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node, const ClassRede
       }
       const Id<SMod> ext_mod = ee.mod;   // extends 修饰（在 base_def lookup 之后取，避免跨 add 持 SElement 引用）
       // extends 修饰里的类重声明（`extends A(redeclare model B = X)`）：施加到这个基类实例的类树（排在本类的元素级重声明之后——
-      // 同名的照那个），新类的词法作用域 = 本类（写修饰处）。
+      // 同名的照那个），新类的词法作用域 = 本类的这个实例（写修饰处；右边的名字读到实例上顶替过的类，NCR 探针 NCR20
+      // `extends A(redeclare type T = U)` 里 `B b2(redeclare type U = …)`）。
       ClassRedecls ext_redecls = base_redecls;
-      collect_class_redecls(ext_mod, def_node, base_def, ext_redecls);
+      collect_class_redecls(ext_mod, inst_node, base_def, ext_redecls);
       NodeId base_inst = instantiate(base_def, inst_node, ext_redecls.empty() ? nullptr : &ext_redecls);
       adopt_inherited_classes(inst_node, base_inst, nlocal_classes, adopted);
       // 基类实例按 extends 出现序记进本实例的类树：基类的方程 / 算法段由 flatten 的 collect_inherited_sections 收
@@ -2122,7 +2126,7 @@ Id<Exp> Instantiator::portable_type_dim(Id<Exp> d, NodeId tscope, NodeId dlex, c
         const NodeId a = name_entry(c.parts[0].name, tscope);
         same = same && a.is_valid() && !I_.nodes[a].is_empty() && a == name_entry(c.parts[0].name, dlex, &where);
         // 找到的是组件、又不在声明所在的类自己里（外层类实例的参数 / 常量）：flatten 从嵌套类实例里求外层实例的参数不对（TDN 探针
-        // TDN62 / TDN63：不打 final、取不到 `A a(n = 3)` 的修饰值；直接写 `Real x[n]` 时 omc 报错、ymc 照出，见 TDX1 / TDX2）→ 只收
+        // TDN62 / TDN63：不打 final、取不到 `A a(n = 3)` 的修饰值；直接写 `Real x[n]` 时 omc 报错，见 flatten 的 check_enclosing_refs）→ 只收
         // 包里的（包常量与实例无关）。
         if (same && I_.nodes[a].kind == NodeKind::Component && where != dlex &&
             (!I_.nodes[where].def.is_valid() || I_.scode.elems[I_.nodes[where].def].kind != SElementKind::Class ||
