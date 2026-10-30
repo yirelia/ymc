@@ -1394,7 +1394,7 @@ void Instantiator::apply_class_mod(NodeId inst, NodeId cls, Id<SMod> m, NodeId s
     if (cp.type_node == cls) {
       cp.derived_mods.insert(cp.derived_mods.begin(), m);
       cp.derived_scopes.insert(cp.derived_scopes.begin(), scope);
-      cp.derived_split.insert(cp.derived_split.begin(), false);
+      cp.derived_cover.insert(cp.derived_cover.begin(), 0);
       cp.derived_type = true;
     }
     if (cp.class_inst.is_valid() && cp.class_inst != inst && instances_.count(cp.class_inst.raw))
@@ -1774,6 +1774,8 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing, bool gener
   // 链上短类带的维（`type Axis = Real[3](…)`，外层在前）：拼在组件自己的维后面（MLS §10.1；XB 探针 x2：`Axis n` → n[3]、
   // `V3 x[2]` → x[2, 3]）。mod_dims_at[i] = derived_mods[i] 那一层开始时 type_dims 的长度——之后的维就是那层类型的形状。
   std::vector<Id<Exp>> type_dims;
+  std::vector<NodeId> type_dim_scopes;   // 与 type_dims 平行：那一维写在的短类的词法外层（omc 在那里解析，见 portable_type_dim）
+  std::vector<std::size_t> type_dim_layer;   // 与 type_dims 平行：那一维所在的短类的维从 type_dims 第几个起
   std::vector<std::size_t> mod_dims_at;
   NodeId base = ty_node;
   bool past_extends_type = false;   // 链上已经过一个"只 extends 的长类型"（见下：其后短类的修饰 1.25.0 会丢）
@@ -1840,11 +1842,13 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing, bool gener
         mod_dims_at.push_back(type_dims.size());
       }
     }
-    // 派生类型带维（`type V = Real[3]`，维在 derived_attr.dims）：只收字面量维——维式在短类定义处求值，搬到组件上会换作用域
-    //（`type V = Real[n]` 的 n 在别处可能是另一个量）→ 非字面量 SKIP。
+    // 派生类型带维（`type V = Real[3]`，维在 derived_attr.dims）：维式在短类定义处求值，搬到组件上会换作用域（`type V = Real[n]`
+    // 的 n 在别处可能是另一个量）——链走完后按 portable_type_dim 核，同义的才收。
+    const std::size_t layer_at = type_dims.size();
     for (Id<Exp> d : cd.derived_attr.dims) {
-      if (I_.absyn.exps[d].kind != ExpKind::IntLit) mark_unsupported("derived-type array dimension");
       type_dims.push_back(d);
+      type_dim_scopes.push_back(I_.nodes[base].parent_scope);
+      type_dim_layer.push_back(layer_at);
     }
     if (mvar == SVariability::Var && cd.derived_attr.var != SVariability::Var) mvar = cd.derived_attr.var;
     if (mdir == SDirection::Bidir && cd.derived_attr.dir != SDirection::Bidir) mdir = cd.derived_attr.dir;
@@ -2005,30 +2009,62 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing, bool gener
     }
   }
   Id<Exp> bind = el.mod.is_valid() ? I_.scode.mods[el.mod].binding : Id<Exp>{};
-  // 类型带维：类型修饰按那层类型的形状切分（`type V3 = Real[3](start = {1, 2, 3})` → x[j].start = 第 j 个，x25），不再按组件
-  // 维铺开；组件自己也有维时（`V3 x[2]`）要"组件维铺开 + 类型维切分"，未做 → 有不带 each 的值就 SKIP。合成一个维拼好的
-  // 元素当组件定义（同 redeclare_component 的做法），flatten 按元素读维。
-  std::vector<bool> derived_split(derived_mods.size(), false);
+  const bool own_dims = !el.attr.dims.empty() || !el.type.dims.empty();
+  // 链上短类的非字面量维（`type Reals = Real[n]`、`type A = Real[E]`、`type T = Real[:, :]`）：拼到组件定义上之前核它在组件声明处
+  //（flatten 读维的作用域 = 重声明取原处的 dims_scope，否则声明所在的类）与在短类定义处同义（portable_type_dim）。声明类型写成限定名
+  // `Q.T` 时 Q 当改写的前缀（qual / qcls）。
+  if (!unsupported_) {
+    const NodeId dsc = I_.comps[cid].dims_scope;
+    const NodeId dlex = dsc.is_valid() && !I_.nodes[dsc].is_empty() ? dsc : enclosing;
+    std::vector<Symbol> qual;
+    NodeId qcls;
+    for (std::size_t i = 0; i < type_dims.size() && !unsupported_; ++i) {
+      if (I_.absyn.exps[type_dims[i]].kind == ExpKind::IntLit) continue;
+      // `:` 维前面还有维（组件自己的、更外层短类的）：1.25.0 按它在那层类型里的序号取绑定的维（TDN 探针 TDN10：`type T = Real[:];
+      // parameter T x[2] = {{1, 2, 3}, {4, 5, 6}}` → "expected array dimensions [2, 2], got [2, 3]"），未复刻 → SKIP。
+      if (I_.absyn.exps[type_dims[i]].kind == ExpKind::Colon && (own_dims || type_dim_layer[i] != 0)) {
+        mark_unsupported("derived-type array dimension", "colon dimension after other dimensions");
+        break;
+      }
+      if (!qcls.is_valid() && el.type.path.size() >= 2 && !el.type.leading_dot) {
+        qual.assign(el.type.path.begin(), el.type.path.end() - 1);
+        qcls = lookup_class_name(qual, enclosing);   // 同声明类型的查找路径
+      }
+      const Id<Exp> d = portable_type_dim(type_dims[i], type_dim_scopes[i], dlex, qual, qcls);
+      if (!d.is_valid()) mark_unsupported("derived-type array dimension");
+      else type_dims[i] = d;
+    }
+  }
+  // 类型带维：类型修饰按那层类型的形状切分（`type V3 = Real[3](start = {1, 2, 3})` → x[j].start = 第 j 个，x25），只覆盖组件
+  // 末尾的类型维（Component::derived_cover）；组件自己也有维时（`V3 x[2]`）前面的维照 fill 铺开：修饰带 SPLIT_PROXY(origin = 那层
+  // 类型, parent = 组件)，定型时 parent 比 origin 多出的维用 fill 补上（expandProxySubscripts，NFTyping.mo:1579-1644 v1.25.0；
+  // TDM 探针 TDM1 / TDM7：`T x[2]` → `x[2, 3](start = 3.0)`），叶组件的 flatten 照做（leaf_derived_sources）。复合组件的数组
+  // 短类（`record RA = R[3](x = {1, 2, 3}); RA r[2]`）未做 → 有不带 each 的值就 SKIP。合成一个维拼好的元素当组件定义（同
+  // redeclare_component 的做法），flatten 按元素读维。
+  std::vector<std::size_t> derived_cover(derived_mods.size(), 0);
   Id<SElement> dims_def;
   if (!type_dims.empty() && !unsupported_) {
-    const bool own_dims = !el.attr.dims.empty() || !el.type.dims.empty();
     for (std::size_t i = 0; i < derived_mods.size(); ++i) {
-      derived_split[i] = mod_dims_at[i] < type_dims.size();
-      if (!derived_split[i] || !own_dims) continue;
+      derived_cover[i] = type_dims.size() - mod_dims_at[i];
+      if (derived_cover[i] == 0 || !own_dims || leaf) continue;
       for (const SSubMod& s : I_.scode.mods[derived_mods[i]].subs)
         if (!I_.scode.mods[s.mod].is_each && I_.scode.mods[s.mod].binding.is_valid())
           mark_unsupported("derived-type array dimension", "type modifier over component dimensions");
     }
-    const std::uint64_t key = (static_cast<std::uint64_t>(0xFFFFFFFFu) << 32) | def_id.raw;   // 与重声明的键不撞（od 不会是全 1）
-    if (auto it = redecl_elems_.find(key); it != redecl_elems_.end()) {
-      dims_def = it->second;
-    } else if (I_.scode.elems.size() >= synth_cap_) {
-      mark_unsupported("derived-type array dimension", "synthesized element budget");
-    } else {
-      SElement m = I_.scode.elems[def_id];   // 拷贝后再 add（预留容量内不搬家）
-      m.type.dims.insert(m.type.dims.end(), type_dims.begin(), type_dims.end());
-      dims_def = I_.scode.elems.add(std::move(m));
-      redecl_elems_.emplace(key, dims_def);
+    std::vector<Id<Exp>> all_dims = el.type.dims;
+    all_dims.insert(all_dims.end(), type_dims.begin(), type_dims.end());
+    std::vector<Id<SElement>>& made = dims_elems_[def_id.raw];
+    for (Id<SElement> e : made)
+      if (I_.scode.elems[e].type.dims == all_dims) dims_def = e;
+    if (!dims_def.is_valid()) {
+      if (I_.scode.elems.size() >= synth_cap_) {
+        mark_unsupported("derived-type array dimension", "synthesized element budget");
+      } else {
+        SElement m = I_.scode.elems[def_id];   // 拷贝后再 add（预留容量内不搬家）
+        m.type.dims = std::move(all_dims);
+        dims_def = I_.scode.elems.add(std::move(m));
+        made.push_back(dims_def);
+      }
     }
   }
 
@@ -2039,7 +2075,7 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing, bool gener
   comp.type_node = ty_node;
   comp.derived_mods = std::move(derived_mods);
   comp.derived_scopes = std::move(derived_scopes);
-  comp.derived_split = std::move(derived_split);
+  comp.derived_cover = std::move(derived_cover);
   if (dims_def.is_valid()) comp.def = dims_def;   // 维拼好的合成元素（见上）
   comp.derived_type = derived_type;
   comp.derived_attrs = derived_attrs;
@@ -2053,6 +2089,146 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing, bool gener
     comp.binding.loc = el.loc;
   }
   comp.state = CompState::FullyInstantiated;
+}
+
+// 短类链上带的维 d 写在短类定义处（tscope = 短类的词法外层），omc 在那里解析：expandClassDerived 建 RAW_DIM(d, InstNode.parent(node))
+//（NFInst.mo:1054 v1.25.0），instDimension 在这个作用域 instExp（:2399-2409）。ymc 把它拼到组件定义上，flatten 各处读维都在组件
+// 声明处（dlex）求——只收两处同义的写法，返回可拼的维式（可能改写过）；不同义 / 判不了 → invalid（调用方 SKIP）：
+//   - 字面量、`:`（由绑定定，与作用域无关；arrays/UnknownDimensionMod 的 `type T = Real[:, :]`）；
+//   - 短类定义在组件声明所在的类里（tscope == dlex）：同一处解析，原样（TDN 探针 TDN3 `type T = Real[n]; T x;`）；
+//   - 维式只由整数字面量、运算和不带下标的名字组成，各名字首段从两处找到同一个类树项（name_entry）：原样（enums/DerivedEnumDim
+//     顶层的 `type A = Real[E]`）；
+//   - 声明类型写成限定名 `Q.T`、这一层短类就在 Q 里（tscope 的定义 = Q 顺短类链到底的定义）、Q 是包、名字首段是 Q 自己的元素：
+//     改写成 `Q.名字`，经声明类型的同一条路径找到（qualify_dim_names；scodeinst TypeDim3 `P.Reals x` → `P.n`，TypeDim4
+//     `P2.Reals x`、`package P2 = P(n = 1)` → `P2.n`，取包实例里改过的 1）。
+Id<Exp> Instantiator::portable_type_dim(Id<Exp> d, NodeId tscope, NodeId dlex, const std::vector<Symbol>& qual, NodeId qcls) {
+  const ExpKind k = I_.absyn.exps[d].kind;
+  if (k == ExpKind::IntLit || k == ExpKind::Colon || tscope == dlex) return d;
+  bool same = true;
+  auto walk = [&](auto& self, Id<Exp> x) -> bool {   // false = 形态不收
+    if (!x.is_valid()) return true;
+    const Exp& e = I_.absyn.exps[x];
+    switch (e.kind) {
+      case ExpKind::IntLit: return true;
+      case ExpKind::Binary: case ExpKind::Unary: return self(self, e.a) && self(self, e.b);
+      case ExpKind::Tuple: return e.args.size() == 1 && self(self, e.args[0]);
+      case ExpKind::CrefExp: {
+        const Cref& c = I_.absyn.crefs[e.cref];
+        if (c.parts.empty()) return false;
+        for (const CrefPart& p : c.parts)
+          if (!p.subscripts.empty()) return false;
+        if (c.leading_dot) return true;   // 从顶层找，哪里都一样
+        NodeId where;
+        const NodeId a = name_entry(c.parts[0].name, tscope);
+        same = same && a.is_valid() && !I_.nodes[a].is_empty() && a == name_entry(c.parts[0].name, dlex, &where);
+        // 找到的是组件、又不在声明所在的类自己里（外层类实例的参数 / 常量）：flatten 从嵌套类实例里求外层实例的参数不对（TDN 探针
+        // TDN62 / TDN63：不打 final、取不到 `A a(n = 3)` 的修饰值；直接写 `Real x[n]` 时 omc 报错、ymc 照出，见 TDX1 / TDX2）→ 只收
+        // 包里的（包常量与实例无关）。
+        if (same && I_.nodes[a].kind == NodeKind::Component && where != dlex &&
+            (!I_.nodes[where].def.is_valid() || I_.scode.elems[I_.nodes[where].def].kind != SElementKind::Class ||
+             I_.scode.elems[I_.nodes[where].def].restriction != SRestriction::Package))
+          same = false;
+        return true;
+      }
+      default: return false;
+    }
+  };
+  if (!walk(walk, d)) return {};
+  if (same) return d;
+  if (qual.empty() || !qcls.is_valid() || I_.nodes[qcls].is_empty() || !I_.nodes[qcls].def.is_valid() ||
+      I_.scode.elems[I_.nodes[qcls].def].kind != SElementKind::Class ||
+      I_.scode.elems[I_.nodes[qcls].def].restriction != SRestriction::Package || !tscope.is_valid() ||
+      I_.nodes[tscope].is_empty())
+    return {};
+  bool partial = false;
+  std::vector<std::pair<Id<SMod>, NodeId>> smods;
+  const NodeId ql = through_short_classes(qcls, partial, &smods);
+  if (!ql.is_valid() || I_.nodes[ql].is_empty() || I_.nodes[ql].def != I_.nodes[tscope].def) return {};
+  // 同一维式经同一前缀改写的结果按 (维式, tscope, 前缀) 缓存：组件每个实例都走这里，每次新建维式会让 dims_elems_ 每实例合成一份。
+  std::string key = std::to_string(d.raw) + "@" + std::to_string(tscope.raw);
+  for (Symbol q : qual) key += "." + std::string(I_.interner.str(q));
+  if (const auto it = qual_dims_.find(key); it != qual_dims_.end()) return it->second;
+  const Id<Exp> r = qualify_dim_names(d, tscope, qual);
+  qual_dims_.emplace(std::move(key), r);
+  return r;
+}
+
+// 维式 d 里的名字前面拼上限定前缀 qual（见 portable_type_dim）；名字首段须是 tscope 自己类树里的元素（本地或继承来的类 / 组件），
+// 否则（Q 外层的名字、import 进来的）改写会变义 → invalid。d 只含 portable_type_dim 收的形态。
+Id<Exp> Instantiator::qualify_dim_names(Id<Exp> d, NodeId tscope, const std::vector<Symbol>& qual) {
+  if (!d.is_valid()) return d;
+  Exp e = I_.absyn.exps[d];   // 拷贝
+  switch (e.kind) {
+    case ExpKind::IntLit: return d;
+    case ExpKind::Binary: case ExpKind::Unary:
+      for (Id<Exp>* k : {&e.a, &e.b})
+        if (k->is_valid()) {
+          *k = qualify_dim_names(*k, tscope, qual);
+          if (!k->is_valid()) return {};
+        }
+      return I_.absyn.exps.add(std::move(e));
+    case ExpKind::Tuple:
+      e.args[0] = qualify_dim_names(e.args[0], tscope, qual);
+      return e.args[0].is_valid() ? I_.absyn.exps.add(std::move(e)) : Id<Exp>{};
+    case ExpKind::CrefExp: {
+      Cref c = I_.absyn.crefs[e.cref];   // 拷贝
+      if (c.leading_dot) return d;
+      const NodeId hit = tree_entry(tscope, c.parts[0].name);
+      if (!hit.is_valid() || I_.nodes[hit].is_empty()) return {};
+      std::vector<CrefPart> parts;
+      for (Symbol q : qual) parts.push_back({q, {}});
+      parts.insert(parts.end(), c.parts.begin(), c.parts.end());
+      c.parts = std::move(parts);
+      e.cref = I_.absyn.crefs.add(std::move(c));
+      return I_.absyn.exps.add(std::move(e));
+    }
+    default: return {};
+  }
+}
+
+// 名字从作用域 scope 起沿词法外层链找到的类树项（tree_entry：本地 / 继承来的类或组件节点；内建类名短路，同 lookup_simple_class），
+// where 记找到它的那个类。
+// 经过的类里有可能引进这个名字的 import（同名的、`.*`、组导入）、过了 encapsulated 边界、找不到 → empty——只供 portable_type_dim
+// 判两处是不是同一个东西，判不了的一律当不同。
+NodeId Instantiator::name_entry(Symbol name, NodeId scope, NodeId* where) {
+  for (int i = 0; i < kShortCircuitCount; ++i)
+    if (I_.nodes[builtin_[i]].name == name) return builtin_[i];
+  for (NodeId cur = scope; cur.is_valid() && !I_.nodes[cur].is_empty(); cur = I_.nodes[cur].parent_scope) {
+    if (I_.nodes[cur].kind != NodeKind::Class || !I_.nodes[cur].cls.is_valid()) continue;
+    if (const NodeId hit = tree_entry(cur, name); hit.is_valid()) {
+      if (where) *where = cur;
+      return hit;
+    }
+    const Id<SElement> cd = I_.nodes[cur].def;
+    if (!cd.is_valid() || I_.scode.elems[cd].kind != SElementKind::Class) continue;
+    for (Id<SElement> e : I_.scode.elems[cd].def.elements) {
+      const SElement& im = I_.scode.elems[e];
+      if (im.kind != SElementKind::Import) continue;
+      if (im.imp.wildcard || !im.imp.multi.empty() || im.imp.alias == name || (!im.imp.path.empty() && im.imp.path.back() == name))
+        return Inst::empty_node();
+    }
+    if (I_.scode.elems[cd].is_encapsulated) return Inst::empty_node();
+  }
+  return Inst::empty_node();
+}
+
+// 类节点 cls 自己类树里（本地 + 继承来的）名为 name 的类 / 组件节点；没有、或是 import 项 → invalid。实例的类树（FlatTree）查找表
+// 只留类项（见 inst_class），组件按名在 components 里找。
+NodeId Instantiator::tree_entry(NodeId cls, Symbol name) {
+  if (!cls.is_valid() || I_.nodes[cls].is_empty() || I_.nodes[cls].kind != NodeKind::Class || !I_.nodes[cls].cls.is_valid())
+    return {};
+  const ClassTreeId tid = I_.node_class(cls).tree;
+  if (!tid.is_valid()) return {};
+  const ClassTree& t = I_.trees[tid];
+  if (const auto it = t.lookup.find(name); it != t.lookup.end()) {
+    if (it->second.kind == LEntry::Kind::Class) return t.classes[it->second.index];
+    if (it->second.kind == LEntry::Kind::Component) return t.components[it->second.index];
+    return {};
+  }
+  if (I_.node_class(cls).state == ClassState::InstancedClass)
+    for (NodeId c : t.components)
+      if (I_.nodes[c].name == name) return c;
+  return {};
 }
 
 // -------------------------------------------------------------- 根类实例化

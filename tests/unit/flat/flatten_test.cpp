@@ -5061,11 +5061,11 @@ YMC_TEST(inst_extends_builtin_types_and_type_dimensions) {
                            "  Real v[2](start = 2.0);\n  Real v[3](start = 3.0);\n  Real w[1];\n  Real w[2];\n  Real w[3];\n"
                            "equation\n  w = f(n, 2.0);\n  der(v[1]) = -v[1];\n  der(v[2]) = -v[2];\n  der(v[3]) = -v[3];\n"
                            "end XBT1;\n"));
-  // 短类的维不是字面量（`type V = Real[n]`，n 在包里）：维式搬到组件上会换作用域，未做（XBS1，omc 能过）。
-  bool uns = false;
+  // 短类的维不是字面量（`type V = Real[n]`，n 在包里）：维式在短类定义处解析（NFInst.mo:1054 v1.25.0），经声明类型的限定路径
+  // 改写成 `P.n` 搬到组件上（见 Instantiator::portable_type_dim）。期望 = omc 1.25.0 实跑 XBS1（2026-10-30，67m 起支持）。
   YMC_CHECK_EQ(flatten_src("package P\n  constant Integer n = 2;\n  type V = Real[n];\nend P;\nmodel XBS1\n"
-                           "  P.V x = {time, 1};\nend XBS1;\n", &uns), "<unsupported:derived-type array dimension>");
-  YMC_CHECK(uns);
+                           "  P.V x = {time, 1};\nend XBS1;\n"),
+               std::string("class XBS1\n  Real x[1];\n  Real x[2];\nequation\n  x = {time, 1.0};\nend XBS1;\n"));
 }
 
 YMC_TEST(flatten_structural_parameter_binding_chains) {
@@ -12557,6 +12557,76 @@ YMC_TEST(flatten_fn_record_alias_constant_field) {
                std::string("function UCF6.M.f\n  input Real x;\n  input Integer i;\n  output Real y;\nalgorithm\n"
                            "  y := x * {1.5, 2.5}[i] + {2.0, 3.0}[i];\nend UCF6.M.f;\n\nclass UCF6\n"
                            "  Real y = UCF6.M.f(time, 1);\nend UCF6;\n"));
+}
+
+YMC_TEST(flatten_type_dim_modifier_fill) {
+  // 类型带维的修饰落到组件上：修饰带 SPLIT_PROXY(origin = 那层类型, parent = 组件)，组件比那层类型多出的前几维用 fill 补
+  //（expandProxySubscripts，NFTyping.mo:1579-1644 v1.25.0）——元素 [i, j, k] 的 start 取 p 的第 k 个、nominal 取 T2 修饰的
+  // [j, k]（T2 = T1[2] 覆盖末两维）。期望 = omc 1.25.0 实跑（2026-10-30，探针 pk-p47 TDM1 / TDM2 / TDM16 同构的 UTD1）。
+  YMC_CHECK_EQ(flatten_src("model UTD1\n  parameter Real p[2] = {1, 2};\n  type T1 = Real[2](start = p);\n"
+                           "  type T2 = T1[2](nominal = {{3, 4}, {5, 6}});\n  T2 x[2];\nend UTD1;\n"),
+               std::string("class UTD1\n  parameter Real p[1] = 1.0;\n  parameter Real p[2] = 2.0;\n"
+                           "  Real x[1,1,1](start = p[1], nominal = 3.0);\n  Real x[1,1,2](start = p[2], nominal = 4.0);\n"
+                           "  Real x[1,2,1](start = p[1], nominal = 5.0);\n  Real x[1,2,2](start = p[2], nominal = 6.0);\n"
+                           "  Real x[2,1,1](start = p[1], nominal = 3.0);\n  Real x[2,1,2](start = p[2], nominal = 4.0);\n"
+                           "  Real x[2,2,1](start = p[1], nominal = 5.0);\n  Real x[2,2,2](start = p[2], nominal = 6.0);\n"
+                           "end UTD1;\n"));
+}
+
+YMC_TEST(flatten_type_dim_modifier_fill_whole_array) {
+  // 不标量化的参数数组（绑定是整个用户函数调用）上的类型修饰：fill 化简成数组字面量整个打（simplifyFill → Expression.fillArgs，
+  // NFSimplifyExp.mo:524-536 v1.25.0）。期望 = omc 1.25.0 实跑（2026-10-30，探针 pk-p47 TDM38 同构的 UTD2）。
+  YMC_CHECK_EQ(flatten_src("model UTD2\n  type T = Real[2](start = {1, 2});\n  function f\n    input Real u;\n"
+                           "    output Real y[2, 2] = {{u, u}, {u, u}};\n  end f;\n  parameter Real q = 1;\n"
+                           "  parameter T x[2] = f(q);\nend UTD2;\n"),
+               std::string("function UTD2.f\n  input Real u;\n  output Real[2, 2] y = {{u, u}, {u, u}};\nend UTD2.f;\n\n"
+                           "class UTD2\n  parameter Real q = 1.0;\n"
+                           "  parameter Real[2, 2] x(start = {{1.0, 2.0}, {1.0, 2.0}}) = UTD2.f(q);\nend UTD2;\n"));
+}
+
+YMC_TEST(flatten_type_dim_package_names) {
+  // 短类的维写在短类定义处、omc 在那里解析（expandClassDerived 的 RAW_DIM(d, InstNode.parent(node))，NFInst.mo:1054 v1.25.0）：
+  // 包里的 `Real[n]` 经声明类型的限定路径取包常量（`P2 = UTD3P(n = 2)` 取包实例里的 2），`Real[E]` 是包里的枚举。期望 = omc 1.25.0
+  // 实跑（2026-10-30，探针 pk-p47 TDN23 / TDN40 同构的 UTD3；scodeinst TypeDim3 / TypeDim4）。
+  YMC_CHECK_EQ(flatten_src("package UTD3P\n  constant Integer n = 3;\n  type E = enumeration(a, b);\n  type T = Real[n];\n"
+                           "  type TE = Real[E];\nend UTD3P;\nmodel UTD3\n  package P2 = UTD3P(n = 2);\n  P2.T x;\n"
+                           "  UTD3P.T y;\n  UTD3P.TE z;\nend UTD3;\n"),
+               std::string("class UTD3\n  Real x[1];\n  Real x[2];\n  Real y[1];\n  Real y[2];\n  Real y[3];\n"
+                           "  Real z[UTD3P.E.a];\n  Real z[UTD3P.E.b];\nend UTD3;\n"));
+}
+
+YMC_TEST(flatten_type_dim_redeclared_type) {
+  // 同一声明经不同的类型（重声明换掉的类型）拼出不同的维：合成的维拼好的元素按拼上的维认，不能只按声明缓存（此前 a2.x 取了 a1 的
+  // [2]，静默错）。期望 = omc 1.25.0 实跑（2026-10-30，探针 pk-p47 TDN1 同构的 UTD4）。
+  YMC_CHECK_EQ(flatten_src("model UTD4\n  model A\n    replaceable type T = Real[2];\n    T x;\n  end A;\n  A a1;\n"
+                           "  A a2(redeclare type T = Real[3]);\nend UTD4;\n"),
+               std::string("class UTD4\n  Real a1.x[1];\n  Real a1.x[2];\n  Real a2.x[1];\n  Real a2.x[2];\n  Real a2.x[3];\n"
+                           "end UTD4;\n"));
+}
+
+YMC_TEST(flatten_type_dim_scope_mismatch_skips) {
+  // 维式在组件声明处与在短类定义处不同义的 → SKIP：顶层 `type UTD5T = Real[UTD5E]` 的 UTD5E 被模型里同名枚举遮住（omc 取顶层的，
+  // `x[UTD5E.a]`、`x[UTD5E.b]`）；外层模型实例的参数（omc 打 final、两个元素，ymc 从嵌套实例求外层参数不对）；`:` 维前面还有组件
+  // 自己的维（1.25.0 按类型里的序号取绑定维，UTD7 omc 报 "expected array dimensions [2, 2], got [2, 3]"）。前面的 `:` 照常（UTD8）。
+  // 期望 = omc 1.25.0 实跑（2026-10-30，探针 pk-p47 TDN41 / TDN62 / TDN10 / TDN11 同构的 UTD5-UTD8）。
+  bool uns = false;
+  YMC_CHECK_EQ(flatten_src("type UTD5E = enumeration(a, b);\ntype UTD5T = Real[UTD5E];\nmodel UTD5\n"
+                           "  type UTD5E = enumeration(c, d, e);\n  UTD5T x;\nend UTD5;\n",
+                           &uns),
+               std::string("<unsupported:derived-type array dimension>"));
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(flatten_src("model UTD6\n  parameter Integer n = 2;\n  type T = Real[n];\n  model A\n    T x;\n  end A;\n"
+                           "  A a;\nend UTD6;\n",
+                           &uns),
+               std::string("<unsupported:derived-type array dimension>"));
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(flatten_src("model UTD7\n  type T = Real[:];\n  parameter T x[2] = {{1, 2, 3}, {4, 5, 6}};\nend UTD7;\n", &uns),
+               std::string("<unsupported:derived-type array dimension>"));
+  YMC_CHECK(uns);
+  YMC_CHECK_EQ(flatten_src("model UTD8\n  type T = Real[:, 2];\n  parameter T x = [1, 2; 3, 4; 5, 6];\nend UTD8;\n"),
+               std::string("class UTD8\n  parameter Real x[1,1] = 1.0;\n  parameter Real x[1,2] = 2.0;\n"
+                           "  parameter Real x[2,1] = 3.0;\n  parameter Real x[2,2] = 4.0;\n"
+                           "  parameter Real x[3,1] = 5.0;\n  parameter Real x[3,2] = 6.0;\nend UTD8;\n"));
 }
 
 YMC_TEST_MAIN

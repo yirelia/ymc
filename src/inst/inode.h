@@ -202,9 +202,10 @@ struct Component {
   Type ty;
   std::vector<Id<SMod>> derived_mods;        // 短类链上的属性修饰（`type V=Real(unit=…)`），外层派生在前（优先级高）
   std::vector<NodeId> derived_scopes;        // 与 derived_mods 平行：各短类定义所在的类（修饰值在那里解析）
-  // 与 derived_mods 平行：那层类型本身带维（`type V3 = Real[3](start = {1, 2, 3})`）→ 修饰按类型形状切分；否则（标量类型的
-  // 修饰落到数组组件上）按组件维铺开（each_all）。
-  std::vector<bool> derived_split;
+  // 与 derived_mods 平行：那层类型本身带的维数（含更内层短类的，`type V3 = Real[3](start = {1, 2, 3})` → 1）。非 0 → 修饰按
+  // 类型形状切分、只覆盖组件末尾这几维，前面的维（组件自己的、更外层短类的）照 fill 铺开（`V3 x[2]` → x[i, j].start = 第 j 个，
+  // expandProxySubscripts，NFTyping.mo:1579-1644 v1.25.0）；0（标量类型的修饰落到数组组件上）→ 按组件维铺开（each_all）。
+  std::vector<std::size_t> derived_cover;
   std::vector<Id<SMod>> extends_mods;        // extends 修饰里改本组件的子修饰（`extends A(x(start = 2))`、`extends A(c(x = 2))`），外层在前
   std::vector<NodeId> extends_scopes;        // 与 extends_mods 平行：写这条 extends 子句的类实例（修饰值在那里解析）
   // 声明（def）写在哪个类实例：声明自己的修饰 / 维 / 条件在这里解析——继承来的组件 = 声明它的基类实例（名字按基类的词法作用域

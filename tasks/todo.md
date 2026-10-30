@@ -2814,6 +2814,27 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       探针 pk-p46（121；CFR / XRF / XSB / UCF）——基线上 FAIL 18，现 PASS 97 / SKIP 20 / BOTH-REJECT 4；旧组 cf-p1 / pk-p30 / pk-p32 SKIP→PASS 3；
       单测 +4。slice 705 例 FAIL 0（oracle=live 不一致 0）；scodeinst 666、testsuite 1844（均不变）/ FAIL 0；**MSL 498→500**（MultiBody
       Elementary.UserDefinedGravityField、Media.Examples.MixtureGases）；探针 14822→14943；单测 535→539。
+- [x] (67m) 类型带维的派生类型（2026-10-30；testsuite 里 omc 能压平、ymc SKIP 的真余量 315 例中按维分的桶）：
+      (1) 类型自带维的修饰落到也有维的组件上（`type T1 = Real[3](start = {1, 0, 0}); T1[4] z[5]`）：修饰带 SPLIT_PROXY(origin = 那层
+      类型, parent = 组件)，parent 多出的前几维由 fill 补（expandProxySubscripts，NFTyping.mo:1579-1644）→ 元素只取值的末尾几维
+      （Component::derived_cover / AttrPlan::lead）；整个数组不标量化时 fill 化简成数组（simplifyFill，NFSimplifyExp.mo:524-536）。
+      复合组件的数组短类（`record RA = R[3](x = …); RA r[2]`）照旧 SKIP。
+      (2) 类型的非字面量维（`Real[n]` / `Real[E]` / `Real[:, :]`）：omc 在短类定义处解析（expandClassDerived 的 RAW_DIM，NFInst.mo:1054；
+      instDimension :2399-2409）——只收在组件声明处与定义处同义的写法（portable_type_dim：字面量 / `:`、定义就在组件所在类里、两处
+      找到同一类树项、`Q.T` 且名字是包 Q 自己的元素 → 改写成 `Q.n`）；遮蔽、外层模型实例的参数、import、`:` 前有别的维 → SKIP。
+      合成元素按"声明 + 拼上的维"缓存（此前只按声明，TDN1 同一声明经重声明换成别的维的类型时取了第一个的维，静默错）。
+      照旧 SKIP：redeclare/TestRedeclareTypeWithArrayDimensions（重声明类型 `Real[size(x, 1), 2]` 写在别的类里）。
+      次要 16 例（"non-literal array dimension"）分诊、未做：Size6（对类型带维的组件 `size(a.x, 1)`，eval_scode 看不到类型维）、
+      EnumArrayMod1（记录数组 `R[E]`）、RecordConstructorVectorization / RecordEnumBinding / RecordBinding5（复合组件 `:` 维由绑定推）、
+      ArrayConstructorRecord1/2 / Subscript7（`:` 维来自推导式）、DimUnknown14 / RecordBinding9 / Bug2695 / CevalRecordArray6/9（维来自
+      记录参数字段）、DimUnknown16（外部函数调用定维）、PackageConstant6（嵌套类引外层组件的常量）、gc.mo（编译期读文件，不做）。
+      已知旧错（基线同样，未修）：TDN13 静默 FAIL（嵌套类型重声明 `A a(redeclare type T = T)` 在 `B b2(redeclare type T = Real[3])`
+      里，ymc 给 a.x 两个元素、omc 三个）；TDX1 / TDX2 ACCEPTS-INVALID（嵌套类里直接写 `Real x[n]`、n 是外层模型的参数，omc 报错）。
+      探针 pk-p47（180；TDM / TDN / UTD）——基线 PASS 12 / FAIL 2 / SKIP 151 / BOTH-REJECT 15，现 PASS 133 / SKIP 32 / BOTH-REJECT 15；
+      旧组 misc / pk-p40 / xb-ut / xb-x2 SKIP→PASS 21；单测 +5、XBS1 由断言 SKIP 改为 omc 1.25.0 实跑输出。slice 705→707 例（+TypeDim3 /
+      TypeDim4）FAIL 0（oracle=live 不一致 0）；scodeinst 666→668；testsuite 1844→1851（arrays/Array5 / Array6 / UnknownDimensionMod、
+      enums/DerivedEnumDim、modification/UsertypeArrayMod、scodeinst/TypeDim3 / TypeDim4）/ FAIL 0；MSL 500（不变）；探针 14943→15123；
+      单测 539→544。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

@@ -135,6 +135,8 @@ struct ModSource {
   NodeId scope;
   std::vector<Symbol> vprefix;
   bool each_all = false;   // 短类链派生修饰：数组组件的每个元素取同一个值（见 emit_array）
+  // 短类链派生修饰、那层类型本身带维（Component::derived_cover）：值只覆盖组件末尾这几维，前面的维照 fill 铺开（见 plan_attributes）。
+  std::size_t cover = 0;
 };
 
 // 修饰传播上下文（R15 §3.3：没有全局修饰环境，每层 instClassDef 只把 mod 按名拆成子修饰传给下一层）。
@@ -5850,7 +5852,7 @@ class Flattener {
       asrc.push_back({I_.comps[cid].extends_mods[i], ext_lex(cid, i, enclosing), prefix});
     if (cel.mod.is_valid()) asrc.push_back({cel.mod, dlex, prefix});
     for (Id<SMod> cc : I_.comps[cid].cc_mods) asrc.push_back({cc, enclosing, prefix});   // 重声明的约束修饰
-    // 类型本身带维的那层修饰按类型形状切分（Component::derived_split，XB 探针 x25），其余按组件维铺开。
+    // 类型本身带维的那层修饰按类型形状切分（Component::derived_cover，XB 探针 x25），其余按组件维铺开。
     if (!leaf_derived_sources(cid, enclosing, prefix, /*arr=*/true, asrc)) return;
     // 绑定：外来修饰优先，否则声明绑定。要求是数组构造子 `{…}` / `array(…)`，否则 SKIP。
     Id<Exp> braw;
@@ -6954,6 +6956,7 @@ class Flattener {
     Type cty;   // 组件类型（枚举属性值核类型用）
     bool lift = false;   // 数组组件上类型链派生、不带 each 的标量属性（见 emit_whole_array_var）
     bool uncast = false;   // Literal：混型字面量、末叶是 Real——各叶照自己的类型打，Integer 叶不转 Real（见 plan_attributes）
+    std::size_t lead = 0;  // Literal / Typed：值只按末尾的维切分，前 lead 维 fill 铺开（类型带维的修饰，ModSource::cover）
   };
   // 不标量化的数组变量（见 emit_array 里的判定）：一行、类型带维（`Real[3, 3] m`）、绑定是整个调用；属性：each / 标量的打一个值，
   // 字面量摊分的打整个数组字面量（Real 属性提 Real），定型过的数组值照打（PA 探针 a3：`(quantity = {"a", "b", "c"},
@@ -6982,6 +6985,9 @@ class Flattener {
     v.loc = I_.comps[cid].loc;
     for (const AttrPlan& p : aplan) {
       Id<Expr> x = p.value;
+      // 类型带维的修饰（AttrPlan::lead）：值是末尾几维的形状，前几维照 fill 铺开（见下面的 lift）。
+      const std::size_t lead = p.mode == AttrPlan::Mode::Whole ? 0 : p.lead;
+      const std::vector<std::int64_t> sdims(dims.begin() + static_cast<std::ptrdiff_t>(lead), dims.end());
       if (p.mode == AttrPlan::Mode::Literal) {
         // 混型字面量（p.uncast）整个打成一行的形态没核实 → SKIP。
         if (p.uncast) { set_unsupported("mixed-type split modifier literal"); return; }
@@ -6993,21 +6999,24 @@ class Flattener {
         // `start = -n` → `{-n[1], -n[2], -n[3]}`、7g `n .* n`）。要强转元素类型的（Integer 数组引用 / 推导式给 Real 属性，omc
         // 打 `/*Real*/(ni)`、`/*Real[3]*/(array(…))`，7c / 7b）和含数组调用的未核实 → SKIP。
         x = has_array_call(x) ? Id<Expr>{}
-                              : kept_array_form(x, dims, p.spec->vk == AttrVK::Real ? TypeKind::Real : expr_elem_kind(x));
+                              : kept_array_form(x, sdims, p.spec->vk == AttrVK::Real ? TypeKind::Real : expr_elem_kind(x));
         if (result_.unsupported) return;
       }
       if (!x.is_valid()) { set_unsupported("whole array attribute"); return; }
       // 类型链派生、不带 each 的标量属性（SI 类型的 quantity / unit …）：omc 按元素抬成同形数组（testsuite SingularPlanarLoop /
       // VTT FreeBody18 里 MSL 3.2.3 Body 的 `z_a_start(quantity = {"AngularAcceleration", …}, unit = {"rad/s2", …})`）；带 each
-      // 的（MultiBody.Types.Axis 的 `each final unit = "1"`）打一个值（PA 探针）。
-      if (p.mode == AttrPlan::Mode::Whole && p.lift) {
+      // 的（MultiBody.Types.Axis 的 `each final unit = "1"`）打一个值（PA 探针）。类型带维的修饰同样抬到前 lead 维：fill 化简
+      // 成数组（simplifyFill → Expression.fillArgs，NFSimplifyExp.mo:524-536 v1.25.0；TDM 探针 TDM38 `parameter T x[2] = f(p)` →
+      // `x(start = {{1.0, 2.0, 3.0}, {1.0, 2.0, 3.0}})`）。
+      const std::size_t stop = p.mode == AttrPlan::Mode::Whole ? (p.lift ? dims.size() : 0) : lead;
+      if (stop > 0) {
         auto lift = [&](auto& self, std::size_t k) -> Id<Expr> {
-          if (k == dims.size()) return x;
+          if (k == stop) return x;
           Expr arr;
           arr.kind = ExprKind::Array;
           for (std::int64_t i = 0; i < dims[k]; ++i) arr.args.push_back(self(self, k + 1));
-          std::vector<Dimension> tail;   // 这一层及以下的维
-          for (std::size_t j = k; j < dims.size(); ++j) {
+          std::vector<Dimension> tail;   // 这一层及以下的维（x 自己的维由 array_of 接在后面）
+          for (std::size_t j = k; j < stop; ++j) {
             Dimension d;
             d.kind = DimKind::Integer;
             d.size = dims[j];
@@ -7092,6 +7101,14 @@ class Flattener {
       const bool each = sm.is_each || src->each_all;
       if (!dims.empty() && each_unbound && !each) { set_unsupported("each without value over attribute"); return out; }
       AttrPlan p{&a, an, AttrPlan::Mode::Whole, sm.binding, src->scope, src->vprefix, {}, ty};
+      // 类型带维的那层修饰（`type T = Real[3](start = {1, 2, 3}); T x[2]`）：值是那层类型的形状，组件多出的前几维由 fill 补
+      //（expandProxySubscripts，NFTyping.mo:1579-1644 v1.25.0：origin ≠ parent 时 fill 维 = parent 维数 − origin 维数，取 parent
+      // 的前几维），元素 [i, j] 取值的第 j 个（TDM 探针 TDM1 / TDM2 / TDM9）。下面的切分只看末尾这几维。
+      if (!each && src->cover > 0) {
+        if (src->cover > dims.size()) { set_unsupported("type modifier dimensions"); return out; }
+        p.lead = dims.size() - src->cover;
+      }
+      const std::vector<std::int64_t> sdims(dims.begin() + static_cast<std::ptrdiff_t>(p.lead), dims.end());
       const bool matrix = I_.absyn.exps[sm.binding].kind == ExpKind::Matrix;
       if (dims.empty() || each) {
         Id<Expr> v = attr_value(a.vk, sm.binding, src->scope, src->vprefix);
@@ -7100,7 +7117,7 @@ class Flattener {
         p.lift = !dims.empty() && !sm.is_each && src->each_all;
       } else if ((is_array_ctor(sm.binding) && !is_comprehension(sm.binding)) || matrix) {
         const std::optional<std::vector<std::int64_t>> ld = lit_dims(sm.binding);
-        if (!ld || *ld != dims) { set_unsupported("array attribute shape mismatch"); return out; }
+        if (!ld || *ld != sdims) { set_unsupported("array attribute shape mismatch"); return out; }
         const bool numeric = a.vk == AttrVK::Real || a.vk == AttrVK::Int;   // 强转分歧只在数值目标上
         bool last_real = false;
         if (!matrix && numeric &&
@@ -7130,7 +7147,7 @@ class Flattener {
         param_spread_ = saved_spread;
         array_call_ok_ = saved_ok;
         if (result_.unsupported) return out;
-        if (expr_shape(t) != dims) { set_unsupported("array attribute shape mismatch"); return out; }
+        if (expr_shape(t) != sdims) { set_unsupported("array attribute shape mismatch"); return out; }
         p.mode = AttrPlan::Mode::Typed;
         p.value = t;
       }
@@ -7145,8 +7162,12 @@ class Flattener {
     std::vector<FlatVarAttr> out;
     for (const AttrPlan& p : plans) {
       Id<Expr> v = p.value;
+      // 值只按末尾的维切分（AttrPlan::lead，fill 铺开的前几维不取下标）。
+      const std::size_t lead = p.mode == AttrPlan::Mode::Whole ? 0 : p.lead;
+      if (lead > idx.size()) { set_unsupported("type modifier dimensions"); return out; }
+      const std::vector<std::int64_t> sidx(idx.begin() + static_cast<std::ptrdiff_t>(lead), idx.end());
       if (p.mode == AttrPlan::Mode::Literal) {
-        const Id<Exp> el = array_scalar_elem(p.raw, idx, 0);
+        const Id<Exp> el = array_scalar_elem(p.raw, sidx, 0);
         if (!el.is_valid()) { set_unsupported("array attribute element"); return out; }
         v = p.uncast ? simplify_expr(inst_exp(el, p.scope, p.vprefix)) : attr_value(p.spec->vk, el, p.scope, p.vprefix);
         if (!finish_attr(*p.spec, p.name, v, el, p.scope, p.cty)) return out;
@@ -7162,7 +7183,7 @@ class Flattener {
         std::vector<VecHeld> held;
         {
           const VecEval ve(*this, vbase != nullptr && an != "fixed" && an != "stateSelect", &held);
-          v = simplify_expr(scalarize(p.value, idx));
+          v = simplify_expr(scalarize(p.value, sidx));
         }
         if (result_.unsupported) return out;
         if (!held.empty()) {
@@ -7182,7 +7203,7 @@ class Flattener {
             cv = eval_scode(p.raw, scode_scope_of(p.scope), 0, true, nullptr);
           }
           const CVal* el = cv ? &*cv : nullptr;
-          for (std::int64_t k : idx) {
+          for (std::int64_t k : sidx) {
             if (!el || !is_arr(*el) || k < 1 || static_cast<std::size_t>(k) > el->arr->size()) { el = nullptr; break; }
             el = &(*el->arr)[static_cast<std::size_t>(k) - 1];
           }
@@ -26389,7 +26410,8 @@ class Flattener {
   // 叶组件（标量 / 数组）短类链修饰（类型定义上的、类修饰）的属性来源：求值处同 derived_mod_sources——修饰写在的类实例在组件的
   // 实例链上（它本身或它的基类实例）→ 那个实例 + 它的前缀；写在包里 / 顶层 → 那里（只引常量）；都不是 → SKIP。此前一律在组件所在的类
   // 里求（PKD 探针 PKD1：`package P constant Real Tmin = 5; type T = Real(min = Tmin); end P;` 被模型自己的 `Tmin = 7` 遮住、打成
-  // 7.0，omc 5.0；类修饰写在包实例里，PKC5）。arr：数组组件——类型本身带维的那层按类型形状切分（derived_split），其余每个元素取同值。
+  // 7.0，omc 5.0；类修饰写在包实例里，PKC5）。arr：数组组件——类型本身带维的那层按类型形状切分、只覆盖末尾的类型维（derived_cover），
+  // 其余每个元素取同值。
   bool leaf_derived_sources(CompId cid, NodeId enclosing, const std::vector<Symbol>& prefix, bool arr,
                             std::vector<ModSource>& asrc) {
     const std::vector<Id<SMod>> dmods = I_.comps[cid].derived_mods;   // 拷贝
@@ -26405,8 +26427,8 @@ class Flattener {
         set_unsupported("short class modifier scope");
         return false;
       }
-      const bool split = arr && i < I_.comps[cid].derived_split.size() && I_.comps[cid].derived_split[i];
-      asrc.push_back({dmods[i], sc, vp, /*each_all=*/arr && !split});
+      const std::size_t cover = arr && i < I_.comps[cid].derived_cover.size() ? I_.comps[cid].derived_cover[i] : 0;
+      asrc.push_back({dmods[i], sc, vp, /*each_all=*/arr && cover == 0, cover});
     }
     return true;
   }

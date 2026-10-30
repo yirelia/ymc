@@ -1,0 +1,1401 @@
+//// set: pk-p47 — 67m：testsuite 里类型带维的派生类型（arrays/Array5 / Array6、modification/UsertypeArrayMod、arrays/UnknownDimensionMod、enums/DerivedEnumDim、scodeinst/TypeDim3 / TypeDim4）及兄弟写法。TDM1-TDM95：类型带维的修饰落到还有别的维的组件上（`type T = Real[3](start = {1, 2, 3}); T x[2]`、`T1[4] z[5]`、`type T2 = T1[2]`）——修饰带 SPLIT_PROXY(origin = 那层类型, parent = 组件)，parent 比 origin 多出的前几维用 fill 补（expandProxySubscripts，NFTyping.mo:1579-1644 v1.25.0），元素取值的末尾几维；参数引用 / 算术 / 调用 / 推导式 / 矩阵 / 枚举 / Boolean / fixed / nominal、组件修饰盖过、each、记录字段、连接器、模型数组里、重声明、空数组、不标量化的整个参数数组（fill 化简成字面量整个打，TDM38 / TDM39）；复合组件的数组短类（TDM32）照旧 SKIP，函数变量上的属性修饰（TDM91 / TDM92 / TDM95）照旧 SKIP。TDN1-TDN93：短类的非字面量维（`type Reals = Real[n]`、`Real[E]`、`Real[:]`）在短类定义处解析（expandClassDerived 的 RAW_DIM(d, InstNode.parent(node))，NFInst.mo:1054）——同一个类里、两处找到同一项（顶层 / 包里的类名、包常量）原样，限定声明类型 `P.T` / `P2.T`（P2 = P(n = 1)）改写成 `P.n` / `P2.n`；遮蔽（TDN41 / TDN64 / TDN85）、外层模型实例的参数 / 常量（TDN62 / TDN63 / TDN69 / TDN88）、import / protected / 继承来的类型（TDN30 / TDN49 / TDN53 / TDN4 / TDN28 / TDN91）→ SKIP；`:` 前面还有维的 1.25.0 按类型里的序号取绑定维（TDN10 / TDN58 omc 报错），TDN57 照旧 SKIP。TDN1 / UTD4：同一声明经重声明换成不同维的类型，此前按声明缓存合成元素取错维（静默错）。UTD1-UTD8 为单测同构。基线 PASS 12 / FAIL 2 / SKIP 151 / BOTH-REJECT 15 → PASS 133 / SKIP 32 / BOTH-REJECT 15，无 FAIL
+//// model: TDM1
+model TDM1
+  type T = Real[3](start = {1, 2, 3});
+  T x[2];
+end TDM1;
+//// model: TDM2
+model TDM2
+  parameter Real p[3] = {1, 2, 3};
+  type T = Real[3](start = p);
+  T x[2];
+end TDM2;
+//// model: TDM3
+model TDM3
+  type T = Real[3](each start = 1);
+  T x[2];
+end TDM3;
+//// model: TDM4
+model TDM4
+  type T = Real[3](start = {1, 2, 3});
+  T x[2](start = {{4, 5, 6}, {7, 8, 9}});
+end TDM4;
+//// model: TDM5
+model TDM5
+  type T = Real[3](start = {1, 2, 3});
+  T x[2](each start = {4, 5, 6});
+end TDM5;
+//// model: TDM6
+model TDM6
+  type T = Real[3](start = {1, 2, 3});
+  parameter T x[2](each fixed = false);
+end TDM6;
+//// model: TDM7
+model TDM7
+  type T1 = Real[3](start = {1, 2, 3});
+  type T2 = T1[2];
+  T2 x[4];
+end TDM7;
+//// model: TDM8
+model TDM8
+  parameter Real a = 2;
+  type T = Real[3](start = {a, 2 * a, 3});
+  T x[2];
+end TDM8;
+//// model: TDM9
+model TDM9
+  type T = Real[2, 3](start = [1, 2, 3; 4, 5, 6]);
+  T x[2];
+end TDM9;
+//// model: TDM10
+model TDM10
+  type T = Real[3](start = fill(1.5, 3));
+  T x[2];
+end TDM10;
+//// model: TDM11
+model TDM11
+  type T = Real[3](start = {1, 2, 3}, nominal = {4, 5, 6}, fixed = {true, false, true});
+  T x[2];
+end TDM11;
+//// model: TDM12
+model TDM12
+  type T = Real[3](start = {1, 2, 3});
+  model M
+    T y[2];
+  end M;
+  M m[2];
+end TDM12;
+//// model: TDM13
+model TDM13
+  type T = Integer[3](start = {1, 2, 3});
+  T x[2];
+end TDM13;
+//// model: TDM14
+model TDM14
+  type T = Boolean[2](start = {true, false});
+  T x[2];
+end TDM14;
+//// model: TDM15
+model TDM15
+  type T = Real[3](start = {1, 2, 3});
+  T x[2, 2];
+end TDM15;
+//// model: TDM16
+model TDM16
+  type T1 = Real[3](start = {1, 2, 3});
+  type T2 = T1[2](start = {{4, 5, 6}, {7, 8, 9}});
+  T2 x[2];
+end TDM16;
+//// model: TDM17
+model TDM17
+  type T = Real[3](start = {1, 2, 3});
+  T x[2];
+equation
+  x = {{1, 2, 3}, {4, 5, 6}};
+end TDM17;
+//// model: TDM18
+model TDM18
+  type T = Real[3](start = {1, 2, 3});
+  parameter T x[2] = {{1, 2, 3}, {4, 5, 6}};
+end TDM18;
+//// model: TDM19
+package TDM19P
+  type T = Real[3](start = {1, 2, 3});
+end TDM19P;
+model TDM19
+  TDM19P.T x[2];
+end TDM19;
+//// model: TDM20
+package TDM20P
+  constant Real c[3] = {1, 2, 3};
+  type T = Real[3](start = c);
+end TDM20P;
+model TDM20
+  TDM20P.T x[2];
+end TDM20;
+//// model: TDM21
+model TDM21
+  type T = Real[3](start = {1, 2, 3});
+  T x[2];
+  T y;
+end TDM21;
+//// model: TDM22
+model TDM22
+  type T = Real[3](start = {1, 2, 3}, unit = "m");
+  T x[2];
+end TDM22;
+//// model: TDM23
+model TDM23
+  type T = Real[3](start = {1, 2, 3});
+  T x[0];
+end TDM23;
+//// model: TDM24
+model TDM24
+  parameter Integer n = 2;
+  type T = Real[3](start = {1, 2, 3});
+  T x[n];
+end TDM24;
+//// model: TDM25
+model TDM25
+  type T = Real[3](start = {1, 2});
+  T x[2];
+end TDM25;
+//// model: TDM26
+model TDM26
+  type T = Real[3](start = {1, 2, 3});
+  T x[2](start = {1, 2, 3});
+end TDM26;
+//// model: TDM27
+model TDM27
+  type T = Real[3](start = {1, 2, 3});
+  record R
+    T y[2];
+  end R;
+  R r;
+end TDM27;
+//// model: TDM28
+model TDM28
+  function f
+    input Real u;
+    output Real y[3] = {u, 2 * u, 3 * u};
+  end f;
+  type T = Real[3](start = f(1));
+  T x[2];
+end TDM28;
+//// model: TDM29
+model TDM29
+  type T = Real[3](start = {1, 2, 3});
+  input T x[2];
+end TDM29;
+//// model: TDM30
+model TDM30
+  type T = Real[3](start = {1, 2, 3});
+  T x[2];
+  Real z[2, 3](start = {{1, 2, 3}, {1, 2, 3}});
+end TDM30;
+//// model: TDM31
+model TDM31
+  record R
+    Real x;
+  end R;
+  record RA = R[3](x = {1, 2, 3});
+  RA r;
+end TDM31;
+//// model: TDM32
+model TDM32
+  record R
+    Real x;
+  end R;
+  record RA = R[3](x = {1, 2, 3});
+  RA r[2];
+end TDM32;
+//// model: TDM33
+model TDM33
+  model M
+    Real x;
+  end M;
+  model MA = M[3](x(start = {1, 2, 3}));
+  MA m[2];
+end TDM33;
+//// model: TDM34
+model TDM34
+  model M
+    Real x;
+  end M;
+  model MA = M[3](x(start = {1, 2, 3}));
+  MA m;
+end TDM34;
+//// model: TDM35
+model TDM35
+  record R
+    Real x;
+  end R;
+  record RA = R[3](each x = 1);
+  RA r[2];
+end TDM35;
+//// model: TDM36
+model TDM36
+  type E = enumeration(a, b);
+  type T = E[2](start = {E.a, E.b});
+  T x[2];
+end TDM36;
+//// model: TDM37
+model TDM37
+  type T = Real[3](start = {1, 2, 3});
+  function f
+    input Real u;
+    output Real y[2, 3] = {{u, u, u}, {u, u, u}};
+  end f;
+  parameter T x[2] = f(time);
+end TDM37;
+//// model: TDM38
+model TDM38
+  type T = Real[3](start = {1, 2, 3});
+  function f
+    input Real u;
+    output Real y[2, 3] = {{u, u, u}, {u, u, u}};
+  end f;
+  parameter Real p = 1;
+  parameter T x[2] = f(p);
+end TDM38;
+//// model: TDM39
+model TDM39
+  type T = Real[3](start = {1, 2, 3}, min = {0, 0, 0});
+  function f
+    input Real u;
+    output Real y[2, 3] = {{u, u, u}, {u, u, u}};
+  end f;
+  parameter Real p = 1;
+  parameter T x[2] = f(p);
+end TDM39;
+//// model: TDM40
+model TDM40
+  type T = Real[3](start = {1, 2, 3});
+  parameter T x[2];
+end TDM40;
+//// model: TDM41
+model TDM41
+  type T = Real[3](start = {1, 2, 3}, fixed = {false, false, false});
+  parameter T x[2];
+end TDM41;
+//// model: TDM42
+model TDM42
+  type T = Real[3](fixed = {false, false, false});
+  parameter T x[2](start = {{1, 2, 3}, {4, 5, 6}});
+end TDM42;
+//// model: TDM43
+model TDM43
+  type T = Real[3](start = {1, 2, 3});
+  model M
+    T y;
+  end M;
+  M m[2];
+end TDM43;
+//// model: TDM44
+model TDM44
+  type T = Real[3](start = {1, 2, 3});
+  model M
+    T y[2];
+  end M;
+  M m(y(start = {{4, 5, 6}, {7, 8, 9}}));
+end TDM44;
+//// model: TDM45
+model TDM45
+  type T = Real[3](start = {1, 2, 3});
+  model M
+    T y[2];
+  end M;
+  M m(y(each start = 2));
+end TDM45;
+//// model: TDM46
+model TDM46
+  type T = Real[3](start = {1, 2, 3});
+  model M
+    T y[2];
+  end M;
+  extends M(y(start = {{4, 5, 6}, {7, 8, 9}}));
+end TDM46;
+//// model: TDM47
+model TDM47
+  type T = Real[3](start = {1, 2, 3});
+  T x[2] annotation(Evaluate = true);
+  parameter T p[2] = {{1, 2, 3}, {4, 5, 6}} annotation(Evaluate = true);
+end TDM47;
+//// model: TDM48
+model TDM48
+  type T = Real[3](start = {1, 2, 3});
+  discrete T x[2];
+end TDM48;
+//// model: TDM49
+model TDM49
+  type T = Real[3](start = {1, 2, 3});
+  constant T x[2] = {{1, 2, 3}, {4, 5, 6}};
+end TDM49;
+//// model: TDM50
+model TDM50
+  type T = Real[3](start = {1, 2, 3});
+  T x[2](each fixed = true);
+end TDM50;
+//// model: TDM51
+model TDM51
+  type T = Real[3](start = {1, 2, 3});
+  type T2 = T(nominal = {1, 1, 1});
+  T2 x[2];
+end TDM51;
+//// model: TDM52
+model TDM52
+  type T = Real(start = 1);
+  type T2 = T[3](nominal = {1, 2, 3});
+  T2 x[2];
+end TDM52;
+//// model: TDM53
+model TDM53
+  parameter Real p[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  type T = Real[3](start = p[2]);
+  T x[2];
+end TDM53;
+//// model: TDM54
+model TDM54
+  parameter Real p[3] = {1, 2, 3};
+  type T = Real[3](start = -p);
+  T x[2];
+end TDM54;
+//// model: TDM55
+model TDM55
+  parameter Real p[3] = {1, 2, 3};
+  type T = Real[3](start = p * 2);
+  T x[2];
+end TDM55;
+//// model: TDM56
+model TDM56
+  parameter Real p[3] = {1, 2, 3};
+  type T = Real[3](start = {p[3], p[2], p[1]});
+  T x[2];
+end TDM56;
+//// model: TDM57
+model TDM57
+  type T = Real[3](start = {i for i in 1:3});
+  T x[2];
+end TDM57;
+//// model: TDM58
+model TDM58
+  type T = Real[3](start = 1:3);
+  T x[2];
+end TDM58;
+//// model: TDM59
+model TDM59
+  type T = Real[2, 2](start = identity(2));
+  T x[2];
+end TDM59;
+//// model: TDM60
+model TDM60
+  parameter Real p[3] = {1, 2, 3};
+  type T = Real[3](start = p);
+  parameter T x[2] = {p, p};
+end TDM60;
+//// model: TDM61
+model TDM61
+  parameter Real p[3] = {1, 2, 3};
+  type T = Real[3](start = sin(p));
+  T x[2];
+end TDM61;
+//// model: TDM62
+model TDM62
+  function f
+    input Real u[3];
+    output Real y[3] = 2 * u;
+  end f;
+  parameter Real p[3] = {1, 2, 3};
+  type T = Real[3](start = f(p));
+  T x[2];
+end TDM62;
+//// model: TDM63
+model TDM63
+  parameter Boolean b[3] = {true, false, true};
+  type T = Real[3](fixed = b);
+  T x[2];
+end TDM63;
+//// model: TDM64
+model TDM64
+  type T = Real[3](start = {1, 2, 3});
+  T x[2] = fill(time, 2, 3);
+end TDM64;
+//// model: TDM65
+model TDM65
+  type T = Real[3](start = {1, 2, 3});
+  T x[2] = {{1, 2, 3}, {4, 5, 6}} * time;
+end TDM65;
+//// model: TDM66
+model TDM66
+  type T = Real[3](start = {1, 2, 3});
+  connector C
+    T x[2];
+    flow Real f;
+  end C;
+  C c;
+end TDM66;
+//// model: TDM67
+model TDM67
+  type T = Real[3](start = {1, 2, 3});
+  T[2] x;
+end TDM67;
+//// model: TDM68
+model TDM68
+  type T = Real[3](start = {1, 2, 3});
+  T[2] x[4];
+end TDM68;
+//// model: TDM69
+model TDM69
+  type T = Real[3](start = {1, 2, 3});
+  model M
+    replaceable T y[2];
+  end M;
+  M m;
+end TDM69;
+//// model: TDM70
+model TDM70
+  type T = Real[3](start = {1, 2, 3});
+  type T2 = Real[3](start = {4, 5, 6});
+  model M
+    replaceable Real y[2, 3];
+  end M;
+  M m(redeclare T y[2]);
+end TDM70;
+//// model: TDM71
+model TDM71
+  type T = Real[3](start = {1, 2, 3});
+  model M
+    T y[2];
+  end M;
+  model N
+    extends M;
+  end N;
+  N n;
+end TDM71;
+//// model: TDM72
+model TDM72
+  type T = Real[3](start = {1, 2, 3});
+  model M
+    T y[2];
+  end M;
+  M m[2](y(start = {{{1, 1, 1}, {2, 2, 2}}, {{3, 3, 3}, {4, 4, 4}}}));
+end TDM72;
+//// model: TDM73
+model TDM73
+  type T = Real[3](start = {1, 2, 3});
+  model M
+    T y[2];
+  end M;
+  M m[2](y(each start = {{1, 1, 1}, {2, 2, 2}}));
+end TDM73;
+//// model: TDM74
+model TDM74
+  type T = Real[3](start = {1, 2, 3}, each nominal = 2);
+  T x[2];
+end TDM74;
+//// model: TDM75
+model TDM75
+  type T = Real[3](start = {1, 2, 3});
+  T x[2](nominal = {{1, 2, 3}, {4, 5, 6}});
+end TDM75;
+//// model: TDM76
+model TDM76
+  type T = Real[3](final start = {1, 2, 3});
+  T x[2];
+end TDM76;
+//// model: TDM77
+model TDM77
+  type T = Real[3](final start = {1, 2, 3});
+  T x[2](start = {{1, 2, 3}, {4, 5, 6}});
+end TDM77;
+//// model: TDM78
+model TDM78
+  type T = Real[3](start = {1, 2, 3});
+  parameter Integer n = 0;
+  T x[n];
+end TDM78;
+//// model: TDM79
+model TDM79
+  type T = Real[3](start = {1, 2, 3});
+  T x[2](each stateSelect = StateSelect.prefer);
+end TDM79;
+//// model: TDM80
+model TDM80
+  type T = Real[3](stateSelect = {StateSelect.prefer, StateSelect.never, StateSelect.default});
+  T x[2];
+end TDM80;
+//// model: TDM81
+model TDM81
+  type T = Real[2](start = {1, 2});
+  record R
+    T y;
+    Real z;
+  end R;
+  R r[2];
+end TDM81;
+//// model: TDM82
+model TDM82
+  type T = Real[2](start = {1, 2});
+  record R
+    T y[2];
+  end R;
+  parameter R r = R(y = {{1, 2}, {3, 4}});
+end TDM82;
+//// model: TDM83
+model TDM83
+  type T = Real[3](start = {1, 2, 3});
+  T x[2];
+  T y[2](start = x[1, :]);
+end TDM83;
+//// model: TDM84
+model TDM84
+  type T = Real[3](start = {1, 2, 3});
+  parameter Real q[2, 3] = {{1, 2, 3}, {4, 5, 6}};
+  T y[2](start = q);
+end TDM84;
+//// model: TDM85
+model TDM85
+  type T = Real[3](start = {1, 2, 3});
+  T x[2] annotation(HideResult = true);
+  protected T z[2];
+end TDM85;
+//// model: TDM86
+model TDM86
+  type T = Real[3](start = {1, 2, 3}, quantity = {"a", "b", "c"});
+  T x[2];
+end TDM86;
+//// model: TDM87
+model TDM87
+  type T = Real[3](unit = {"m", "s", "K"});
+  T x[2];
+end TDM87;
+//// model: TDM88
+model TDM88
+  type T = Real[3](start = {1, 2, 3});
+  outer T x[2];
+end TDM88;
+//// model: TDM89
+model TDM89
+  type T = Real[3](start = {1, 2, 3});
+  model A
+    outer T x[2];
+    Real y = x[1, 1];
+  end A;
+  inner T x[2];
+  A a;
+end TDM89;
+//// model: TDM90
+model TDM90
+  type T = Real[3](start = {1, 2, 3});
+  model A
+    parameter Integer n = 1;
+    T x[n];
+  end A;
+  A a(n = 2);
+end TDM90;
+//// model: TDM91
+model TDM91
+  type T = Real[3](start = {1, 2, 3});
+  function f
+    input Real u;
+    output Real y;
+  protected
+    T z[2];
+  algorithm
+    z := fill(u, 2, 3);
+    y := sum(z);
+  end f;
+  Real y = f(time);
+end TDM91;
+//// model: TDM92
+model TDM92
+  type T = Real[3](start = {1, 2, 3});
+  function f
+    input T u[2];
+    output Real y;
+  algorithm
+    y := sum(u);
+  end f;
+  Real y = f(fill(time, 2, 3));
+end TDM92;
+//// model: TDM93
+model TDM93
+  type T = Real[3](start = {1, 2, 3});
+  record R
+    T y[2];
+    Real z;
+  end R;
+  R r = R(fill(time, 2, 3), 1);
+end TDM93;
+//// model: TDM94
+model TDM94
+  type T = Real[3](start = {1, 2, 3});
+  record R
+    T y[2];
+  end R;
+  parameter R r = R({{1, 2, 3}, {4, 5, 6}});
+  Real x = r.y[1, 2];
+end TDM94;
+//// model: TDM95
+model TDM95
+  type T = Real[3](start = {1, 2, 3});
+  function f
+    input Real u;
+    output T y[2];
+  algorithm
+    y := fill(u, 2, 3);
+  end f;
+  Real y[2, 3] = f(time);
+end TDM95;
+//// model: TDN1
+model TDN1
+  model A
+    replaceable type T = Real[2];
+    T x;
+  end A;
+  A a1;
+  A a2(redeclare type T = Real[3]);
+end TDN1;
+//// model: TDN2
+package TDN2P
+  constant Integer n = 3;
+end TDN2P;
+model TDN2
+  package P2 = TDN2P(n = 1);
+  Real x[P2.n];
+end TDN2;
+//// model: TDN3
+model TDN3
+  parameter Integer n = 3;
+  type T = Real[n];
+  T x;
+end TDN3;
+//// model: TDN4
+model TDN4
+  model A
+    parameter Integer n = 2;
+    type T = Real[n];
+  end A;
+  model B
+    extends A;
+    T x;
+  end B;
+  B b;
+end TDN4;
+//// model: TDN5
+model TDN5
+  model A
+    replaceable type T = Real[2](start = {1, 2});
+    T x[2];
+  end A;
+  A a1;
+  A a2(redeclare type T = Real[2](start = {3, 4}));
+end TDN5;
+//// model: TDN6
+model TDN6
+  type E = enumeration(a, b);
+  type T = Real[E];
+  T x;
+end TDN6;
+//// model: TDN7
+model TDN7
+  type E = enumeration(a, b);
+  type T = Real[E];
+  T x[2];
+end TDN7;
+//// model: TDN8
+model TDN8
+  type T = Real[:];
+  T x = {1, 2, 3};
+end TDN8;
+//// model: TDN9
+model TDN9
+  type T = Real[:];
+  parameter T x = {1, 2, 3};
+end TDN9;
+//// model: TDN10
+model TDN10
+  type T = Real[:];
+  parameter T x[2] = {{1, 2, 3}, {4, 5, 6}};
+end TDN10;
+//// model: TDN11
+model TDN11
+  type T = Real[:, 2];
+  parameter T x = [1, 2; 3, 4];
+end TDN11;
+//// model: TDN12
+model TDN12
+  type T = Boolean[2];
+  T x;
+end TDN12;
+//// model: TDN14
+model TDN14
+  model A
+    type T = Real[2];
+    T x;
+  end A;
+  A a1;
+  A a2;
+end TDN14;
+//// model: TDN20
+package TDN20P
+  constant Real Tmin = 5;
+  type T = Real(min = Tmin);
+end TDN20P;
+model TDN20
+  package P2 = TDN20P(Tmin = 7);
+  P2.T x;
+end TDN20;
+//// model: TDN21
+package TDN21P
+  constant Real Tmin = 5;
+  type T = Real(min = Tmin);
+end TDN21P;
+model TDN21
+  TDN21P.T x;
+end TDN21;
+//// model: TDN22
+package TDN22P
+  constant Integer n = 3;
+  type T = Real[n];
+end TDN22P;
+model TDN22
+  constant Integer n = 2;
+  TDN22P.T x;
+end TDN22;
+//// model: TDN23
+package TDN23P
+  constant Integer n = 3;
+  type T = Real[n];
+end TDN23P;
+model TDN23
+  package P2 = TDN23P(n = 1);
+  P2.T x;
+  P2.T y[2];
+end TDN23;
+//// model: TDN24
+package TDN24P
+  constant Integer n = 3;
+  type T = Real[n](start = fill(1, n));
+end TDN24P;
+model TDN24
+  TDN24P.T x[2];
+end TDN24;
+//// model: TDN25
+model TDN25
+  parameter Integer n = 3;
+  type T = Real[n];
+  T x;
+  Real y[size(x, 1)];
+equation
+  x = y;
+end TDN25;
+//// model: TDN26
+model TDN26
+  model A
+    parameter Integer n = 2;
+    type T = Real[n];
+    T x;
+  end A;
+  A a1;
+  A a2(n = 3);
+end TDN26;
+//// model: TDN27
+model TDN27
+  constant Integer n = 2;
+  model A
+    type T = Real[n];
+    T x;
+  end A;
+  A a;
+end TDN27;
+//// model: TDN28
+model TDN28
+  model A
+    parameter Integer n = 2;
+    type T = Real[n];
+  end A;
+  model B
+    extends A(n = 4);
+    T x;
+  end B;
+  B b;
+end TDN28;
+//// model: TDN29
+package TDN29P
+  constant Integer n = 3;
+  type T = Real[n];
+  model M
+    T x;
+  end M;
+end TDN29P;
+model TDN29
+  TDN29P.M m;
+end TDN29;
+//// model: TDN30
+package TDN30P
+  constant Integer n = 3;
+  type T = Real[n];
+end TDN30P;
+model TDN30
+  import TDN30P.T;
+  T x;
+end TDN30;
+//// model: TDN31
+package TDN31P
+  constant Integer n = 3;
+  type T = Real[n + 1];
+end TDN31P;
+model TDN31
+  TDN31P.T x;
+end TDN31;
+//// model: TDN32
+package TDN32P
+  package Q
+    constant Integer n = 2;
+  end Q;
+  type T = Real[Q.n];
+end TDN32P;
+model TDN32
+  TDN32P.T x;
+end TDN32;
+//// model: TDN33
+package TDN33P
+  constant Integer n = 3;
+  type T = Real[n];
+end TDN33P;
+model TDN33
+  model TDN33P
+    constant Integer n = 5;
+  end TDN33P;
+  .TDN33P.T x;
+end TDN33;
+//// model: TDN40
+package TDN40P
+  type E = enumeration(a, b);
+  type T = Real[E];
+end TDN40P;
+model TDN40
+  TDN40P.T x;
+end TDN40;
+//// model: TDN41
+type TDN41E = enumeration(a, b);
+type TDN41T = Real[TDN41E];
+model TDN41
+  type TDN41E = enumeration(c, d, e);
+  TDN41T x;
+end TDN41;
+//// model: TDN42
+package TDN42P
+  constant Integer n = 3;
+  type T = Real[n];
+end TDN42P;
+model TDN42
+  import TDN42P.n;
+  TDN42P.T x;
+end TDN42;
+//// model: TDN43
+package TDN43P
+  constant Integer n = 3;
+  type T = Real[n];
+end TDN43P;
+model TDN43
+  model M
+    TDN43P.T x;
+  end M;
+  M m[2];
+end TDN43;
+//// model: TDN44
+package TDN44P
+  constant Integer n = 3;
+  type T = Real[n];
+  function f
+    input T u;
+    output Real y = sum(u);
+  end f;
+end TDN44P;
+model TDN44
+  Real y = TDN44P.f({1, 2, 3});
+end TDN44;
+//// model: TDN45
+package TDN45P
+  constant Integer n = 3;
+  type T = Real[n];
+end TDN45P;
+model TDN45
+  function f
+    input TDN45P.T u;
+    output Real y = sum(u);
+  end f;
+  Real y = f({1, 2, 3});
+end TDN45;
+//// model: TDN46
+package TDN46P
+  constant Integer n = 3;
+  type T = Real[n];
+end TDN46P;
+model TDN46
+  record R
+    TDN46P.T x;
+  end R;
+  R r;
+end TDN46;
+//// model: TDN47
+model TDN47
+  parameter Real p[3] = {1, 2, 3};
+  type T = Real[size(p, 1)];
+  T x;
+end TDN47;
+//// model: TDN48
+package TDN48P
+  constant Integer n = 3;
+  type T = Real[n];
+end TDN48P;
+model TDN48
+  TDN48P.T x[2];
+  Real y = x[2, 3];
+end TDN48;
+//// model: TDN49
+package TDN49P
+  protected
+  constant Integer n = 3;
+  public
+  type T = Real[n];
+end TDN49P;
+model TDN49
+  TDN49P.T x;
+end TDN49;
+//// model: TDN50
+package TDN50A
+  package B
+    constant Integer n = 2;
+    type T = Real[n];
+  end B;
+end TDN50A;
+model TDN50
+  TDN50A.B.T x;
+end TDN50;
+//// model: TDN51
+package TDN51P
+  constant Integer n = 3;
+  type T = Real[n];
+  type T2 = T[2];
+end TDN51P;
+model TDN51
+  TDN51P.T2 x;
+end TDN51;
+//// model: TDN52
+package TDN52P
+  constant Integer n = 3;
+  type T = Real[n];
+end TDN52P;
+package TDN52Q
+  type T2 = TDN52P.T[2];
+end TDN52Q;
+model TDN52
+  TDN52Q.T2 x;
+end TDN52;
+//// model: TDN53
+package TDN53P
+  constant Integer n = 3;
+end TDN53P;
+package TDN53Q
+  import TDN53P.n;
+  type T = Real[n];
+end TDN53Q;
+model TDN53
+  TDN53Q.T x;
+end TDN53;
+//// model: TDN54
+model TDN54
+  type E = enumeration(a, b);
+  type T = Real[E](start = {1, 2});
+  T x[2];
+end TDN54;
+//// model: TDN55
+model TDN55
+  type T = Real[Boolean];
+  T x;
+end TDN55;
+//// model: TDN56
+model TDN56
+  type T = Real[:](start = {1, 2, 3});
+  T x = {4, 5, 6};
+end TDN56;
+//// model: TDN57
+model TDN57
+  type T = Real[:];
+  parameter T x[2] = {{1, 2}, {3, 4}};
+end TDN57;
+//// model: TDN58
+model TDN58
+  type T1 = Real[:];
+  type T2 = T1[2];
+  parameter T2 x = {{1, 2, 3}, {4, 5, 6}};
+end TDN58;
+//// model: TDN59
+model TDN59
+  type T = Real[:, 2];
+  T x = {{1, 2}, {3, 4}, {5, 6}} * time;
+end TDN59;
+//// model: TDN60
+package TDN60P
+  constant Integer n = 3;
+  type T = Real[n];
+end TDN60P;
+model TDN60
+  package P2 = TDN60P(n = 2);
+  model M
+    P2.T x;
+  end M;
+  M m;
+end TDN60;
+//// model: TDN61
+package TDN61P
+  replaceable constant Integer n = 3;
+  type T = Real[n];
+end TDN61P;
+model TDN61
+  TDN61P.T x;
+  Real y[size(x, 1)];
+equation
+  y = x;
+end TDN61;
+//// model: TDN62
+model TDN62
+  parameter Integer n = 2;
+  type T = Real[n];
+  model A
+    T x;
+  end A;
+  A a;
+end TDN62;
+//// model: TDN63
+model TDN63
+  model A
+    parameter Integer n = 2;
+    type T = Real[n];
+    model B
+      T x;
+    end B;
+    B b;
+  end A;
+  A a(n = 3);
+end TDN63;
+//// model: TDN64
+package TDN64P
+  constant Integer n = 2;
+  type T = Real[n];
+  model M
+    constant Integer n = 5;
+    T x;
+  end M;
+end TDN64P;
+model TDN64
+  TDN64P.M m;
+end TDN64;
+//// model: TDN65
+model TDN65
+  type E = enumeration(a, b, c);
+  type T = Real[E];
+  T x;
+equation
+  x[E.a] = 1;
+  x[E.b] = 2;
+  x[E.c] = time;
+end TDN65;
+//// model: TDN66
+package TDN66P
+  constant Integer n = 3;
+  type T = Real[n];
+end TDN66P;
+model TDN66
+  connector C
+    TDN66P.T v;
+    flow Real f;
+  end C;
+  C c1, c2;
+equation
+  connect(c1, c2);
+end TDN66;
+//// model: TDN67
+package TDN67P
+  constant Integer n = 2;
+  type T = Real[n](each start = 1);
+end TDN67P;
+model TDN67
+  TDN67P.T x[2](start = {{1, 2}, {3, 4}});
+end TDN67;
+//// model: TDN68
+package TDN68P
+  constant Integer n = 2;
+  type T = Real[n](start = fill(3, n));
+end TDN68P;
+model TDN68
+  package P2 = TDN68P(n = 3);
+  P2.T x[2];
+end TDN68;
+//// model: TDN69
+model TDN69
+  constant Integer n = 2;
+  type T = Real[n + 1];
+  T x;
+  model A
+    T y;
+  end A;
+  A a;
+end TDN69;
+//// model: TDN70
+package TDN70P
+  constant Integer n = 2;
+  type T = Real[n];
+end TDN70P;
+model TDN70
+  TDN70P.T x;
+  parameter TDN70P.T p = {1, 2};
+  Real z = p * x;
+end TDN70;
+//// model: TDN71
+package TDN71P
+  constant Integer n = 3;
+  type T = Real[n];
+end TDN71P;
+model TDN71
+  function f
+    input Real u;
+    output TDN71P.T y;
+  algorithm
+    y := fill(u, TDN71P.n);
+  end f;
+  Real y[3] = f(time);
+end TDN71;
+//// model: TDN72
+model TDN72
+  constant Integer n = 3;
+  type T = Real[n];
+  function f
+    input Real u;
+    output T y;
+  algorithm
+    y := fill(u, n);
+  end f;
+  Real y[3] = f(time);
+end TDN72;
+//// model: TDN73
+package TDN73P
+  constant Integer n = 2;
+  type T = Real[n];
+end TDN73P;
+model TDN73
+  record R
+    TDN73P.T x;
+    Real z;
+  end R;
+  R r = R({1, 2}, 3);
+end TDN73;
+//// model: TDN74
+model TDN74
+  type E = enumeration(a, b);
+  type T = Real[E];
+  function f
+    input T u;
+    output Real y = u[E.a];
+  end f;
+  Real y = f({1, 2});
+end TDN74;
+//// model: TDN75
+model TDN75
+  type T = Real[:];
+  function f
+    input T u;
+    output Real y = sum(u);
+  end f;
+  Real y = f({1, 2, 3});
+end TDN75;
+//// model: TDN80
+model TDN80
+  package P
+    constant Integer n = 2;
+    type T = Real[n];
+  end P;
+  P.T x;
+end TDN80;
+//// model: TDN81
+model TDN81
+  type E = enumeration(a, b);
+  type T = Real[E];
+  model A
+    T x;
+  end A;
+  A a;
+end TDN81;
+//// model: TDN82
+package TDN82P
+  constant Integer n = 3;
+  type T = Real[n];
+end TDN82P;
+model TDN82
+  TDN82P.T x;
+  Real y[size(x, 1)];
+equation
+  y = x;
+end TDN82;
+//// model: TDN83
+package TDN83P
+  constant Integer n = 3;
+  type T = Real[n];
+end TDN83P;
+model TDN83
+  TDN83P.T x;
+equation
+  for i in 1:3 loop
+    x[i] = i * time;
+  end for;
+end TDN83;
+//// model: TDN84
+package TDN84P
+  constant Integer n = 2;
+  type T = Real[n];
+end TDN84P;
+model TDN84
+  model A
+    constant Integer n = 7;
+    TDN84P.T x;
+  end A;
+  A a;
+end TDN84;
+//// model: TDN85
+package TDN85P
+  constant Integer n = 2;
+  type T = Real[n];
+end TDN85P;
+model TDN85
+  model TDN85P
+    constant Integer n = 5;
+    type T = Real[n];
+  end TDN85P;
+  TDN85P.T x;
+end TDN85;
+//// model: TDN86
+package TDN86P
+  constant Integer n = 2;
+  type T = Real[n];
+end TDN86P;
+model TDN86
+  parameter TDN86P.T p = {1, 2};
+  TDN86P.T x(start = p);
+end TDN86;
+//// model: TDN87
+package TDN87P
+  constant Integer n = 2;
+  type T = Real[2 * n];
+end TDN87P;
+model TDN87
+  TDN87P.T x[2](each start = 1);
+end TDN87;
+//// model: TDN88
+model TDN88
+  constant Integer n = 2;
+  type T = Real[n];
+  model A
+    T x;
+  end A;
+  A a;
+end TDN88;
+//// model: TDN89
+package TDN89P
+  constant Integer m = 3;
+  package Q
+    type T = Real[m];
+  end Q;
+end TDN89P;
+model TDN89
+  TDN89P.Q.T x;
+end TDN89;
+//// model: TDN90
+package TDN90P
+  constant Integer n = 3;
+  type T = Real[n];
+end TDN90P;
+model TDN90
+  package P2 = TDN90P(n = 2);
+  package P3 = P2;
+  P3.T x;
+end TDN90;
+//// model: TDN91
+package TDN91P
+  constant Integer n = 3;
+  type T = Real[n];
+end TDN91P;
+package TDN91Q
+  extends TDN91P(n = 4);
+end TDN91Q;
+model TDN91
+  TDN91Q.T x;
+end TDN91;
+//// model: TDN92
+package TDN92P
+  constant Integer n = 3;
+  type T = Real[n];
+end TDN92P;
+model TDN92
+  replaceable package P = TDN92P;
+  P.T x;
+end TDN92;
+//// model: TDN93
+package TDN93P
+  constant Integer n = 3;
+  type T = Real[n];
+end TDN93P;
+model TDN93
+  model A
+    replaceable package P = TDN93P;
+    P.T x;
+  end A;
+  A a(redeclare package P = TDN93P(n = 1));
+end TDN93;
+//// model: UTD1
+model UTD1
+  parameter Real p[2] = {1, 2};
+  type T1 = Real[2](start = p);
+  type T2 = T1[2](nominal = {{3, 4}, {5, 6}});
+  T2 x[2];
+end UTD1;
+//// model: UTD2
+model UTD2
+  type T = Real[2](start = {1, 2});
+  function f
+    input Real u;
+    output Real y[2, 2] = {{u, u}, {u, u}};
+  end f;
+  parameter Real q = 1;
+  parameter T x[2] = f(q);
+end UTD2;
+//// model: UTD3
+package UTD3P
+  constant Integer n = 3;
+  type E = enumeration(a, b);
+  type T = Real[n];
+  type TE = Real[E];
+end UTD3P;
+model UTD3
+  package P2 = UTD3P(n = 2);
+  P2.T x;
+  UTD3P.T y;
+  UTD3P.TE z;
+end UTD3;
+//// model: UTD4
+model UTD4
+  model A
+    replaceable type T = Real[2];
+    T x;
+  end A;
+  A a1;
+  A a2(redeclare type T = Real[3]);
+end UTD4;
+//// model: UTD5
+type UTD5E = enumeration(a, b);
+type UTD5T = Real[UTD5E];
+model UTD5
+  type UTD5E = enumeration(c, d, e);
+  UTD5T x;
+end UTD5;
+//// model: UTD6
+model UTD6
+  parameter Integer n = 2;
+  type T = Real[n];
+  model A
+    T x;
+  end A;
+  A a;
+end UTD6;
+//// model: UTD7
+model UTD7
+  type T = Real[:];
+  parameter T x[2] = {{1, 2, 3}, {4, 5, 6}};
+end UTD7;
+//// model: UTD8
+model UTD8
+  type T = Real[:, 2];
+  parameter T x = [1, 2; 3, 4; 5, 6];
+end UTD8;

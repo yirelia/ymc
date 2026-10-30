@@ -108,6 +108,11 @@ class Instantiator {
   bool ext_mod_hits_consts(NodeId base, Id<SMod> m);  // extends 修饰改到基类的常量 / 类（见 expand）
   bool body_mentions(Id<SElement> cls, const std::vector<Symbol>& names, int depth) const;   // 类体写到这些名字（见 inst.cpp）
   Id<SElement> member_def(NodeId cls, Symbol name, int depth);   // 类自己的或继承来的元素声明
+  // 短类链上的维式搬到组件声明处（同义才收，可能改写成限定名；见 inst.cpp）；name_entry：名字从 scope 起找到的类树项。
+  Id<Exp> portable_type_dim(Id<Exp> d, NodeId tscope, NodeId dlex, const std::vector<Symbol>& qual, NodeId qcls);
+  Id<Exp> qualify_dim_names(Id<Exp> d, NodeId tscope, const std::vector<Symbol>& qual);
+  NodeId name_entry(Symbol name, NodeId scope, NodeId* where = nullptr);
+  NodeId tree_entry(NodeId cls, Symbol name);   // 类节点自己类树里的类 / 组件项（见 inst.cpp）
 
   // ---- 内建 ----
   void make_builtin_types();
@@ -129,6 +134,10 @@ class Instantiator {
   std::vector<std::uint32_t> short_active_;   // through_short_classes 正在解析的短类节点（递归定义的守卫）
   // redeclare_component 合成的组件元素：(原声明 << 32 | 重声明元素) → 合成元素；elems 的预留上限（见 make_top_node）。
   std::unordered_map<std::uint64_t, Id<SElement>> redecl_elems_;
+  // 类型带维的组件合成的维拼好的元素（见 inst_component）：组件声明 → 各份。同一声明经不同的类型（重声明换掉的类型）拼出的维
+  // 不同，按拼上的维式认，不能只按声明缓存（TDN 探针 TDN1：`A a2(redeclare type T = Real[3])` 此前取了 a1 的 [2]）。
+  std::unordered_map<std::uint32_t, std::vector<Id<SElement>>> dims_elems_;
+  std::unordered_map<std::string, Id<Exp>> qual_dims_;   // portable_type_dim 改写过的维式（见 inst.cpp）
   std::unordered_map<std::uint32_t, ClassRedecls> inst_redecls_;   // 实例节点 → 施加在它类树上的类重声明集
   std::unordered_map<std::uint32_t, NodeId> pkg_cache_;   // 类节点 → 它的包实例（见 inst_package）
   std::unordered_map<std::uint32_t, NodeId> redecl_orig_;   // 实例类树里顶替进来的新类节点 → 顶替前的原类（见 instantiate）
