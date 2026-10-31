@@ -165,6 +165,18 @@ def pre_stage_bodies(sections):
     return out
 
 
+def after_lowering_text(text):
+    """`(After Lowering)` 段的原文 = 头线（headline_1，StringUtil.mo:52）+ split_bdae_sections 给的段体；没有这一段返回 None。
+
+    这就是 `ymc --dump-after=lower` 要打的字节范围：从头线第一个 `#` 到下一段头线之前（段体末尾带 EqData 的空行）。"""
+    secs, _ = split_bdae_sections(text)
+    for s in secs:
+        if s["tag"] is None and s["name"] == "BackendDAE" and s["module"] == "After Lowering":
+            bar = "#" * (len(s["title"]) + 8)
+            return bar + "\n\n    " + s["title"] + "\n\n" + bar + "\n" + s["body"]
+    return None
+
+
 def var_decl_name(decl):
     """从 Variable.toString 的声明串取名字（NFVariable.mo:527 toStream：前缀 + 类型 + ' ' + cref）。
 

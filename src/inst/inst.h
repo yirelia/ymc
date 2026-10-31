@@ -43,6 +43,9 @@ class Instantiator {
   // invalid。flatten 按它的作用域解析 class extends 记录继承来的字段（ADR-007 第 2 阶段 66d）。
   NodeId class_extends_base(NodeId cls);
 
+  // 类节点的 InstNode.scopePath（NFInstNode.mo:1217-1290 v1.25.0，ScopeType.RELATIVE）。见 inst.cpp。
+  [[nodiscard]] std::vector<Symbol> scope_path(NodeId cls) const;
+
   // v1 还没做的构造（内建枚举/时钟类型、extends 内建类型…）在实例化阶段就撞上时标记，
   // driver 据此退 66（记 SKIP，不是 FAIL）。与 flatten 的 unsupported 合并判断。
   [[nodiscard]] bool unsupported() const noexcept { return unsupported_; }

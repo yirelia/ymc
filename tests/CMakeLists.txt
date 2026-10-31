@@ -80,3 +80,10 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/src/flat/flatten.h" AND EXISTS "${CMAKE_SOURCE_DI
     target_link_libraries(flatten_test PRIVATE ymc_frontend)
   endif()
 endif()
+# S5：lower 端到端（对拍 omc --newBackend 的 (After Lowering) 段）。
+if(EXISTS "${CMAKE_SOURCE_DIR}/src/bdae/lower.h" AND EXISTS "${CMAKE_SOURCE_DIR}/tests/unit/bdae/lower_test.cpp")
+  ymc_add_test(lower_test unit/bdae/lower_test.cpp)
+  if(TARGET ymc_frontend)
+    target_link_libraries(lower_test PRIVATE ymc_frontend)
+  endif()
+endif()

@@ -11,8 +11,6 @@
 
 namespace ymc {
 
-namespace {
-
 // Real 字面量。次正规数的精度不足 15 位有效数字，最短往返串比 real_literal_text 试的 15 位更短——omc 的 Ryu 把最小的次正规
 // 数打成 `5e-324`（testsuite openmodelica/parser/RealLiterals1）→ 从 1 位有效数字起逐位试到能往返。
 std::string real_lit(double v) {
@@ -24,6 +22,8 @@ std::string real_lit(double v) {
   }
   return buf;
 }
+
+namespace {
 
 class ExprDumper {
  public:
@@ -278,6 +278,7 @@ class ExprDumper {
         }
         out_ += ')';
         break;
+      case ExprKind::Multary: YMC_UNREACHABLE("Multary only exists in the backend");
       case ExprKind::Wild: out_ += '_'; break;
       case ExprKind::End: out_ += "end"; break;
       case ExprKind::Size:

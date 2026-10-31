@@ -303,6 +303,12 @@ Bindings（`Modules/2_Pre/NBBindings.mo:50`）、FunctionAlias（`NBFunctionAlia
 - **F3 补充**：`resetGlobalFlags` 还关了 `NF_EXPAND_OPERATIONS`、`NF_EXPAND_FUNC_ARGS`（`NFInst.mo:332-333`）。
 - **F6 补充**：哈希序在 lowering 就起作用（when 拆分 `NBEquation.mo:3151`、`:3173-3174`），S5b-0 提前到多赋值 when 进门之前。
 - **附录 A3 的 1265 行**是 stdout 1236 + stderr 29，`Number of …` 走 stderr。
+- **D1 `Var` 补充（S5a-1a）**：`Variable.toStream` 打声明前缀（`NFVariable.mo:536-540`、`NFAttributes.mo:619-632`），`Var` 要有 protected、final、redeclare、
+  inner / outer、connector、variability、direction；`attrs` 存 `FlatVarAttr`，`tearing_select` 单放。
+- **A5 补充（S5a-1a）**：推导式同属这一类（`sum(i * p for i in 1:3)`，默认路径展开）。A5 现在按参考文本判，偏保守：`when {a, b}` 和 algorithm 里的 `for` 不算路径差异，
+  放开 when、algorithm 时要收窄。ymc 自己不知道模型在 A5 之外：`--dump-after=lower` 打的是默认路径展开后的式子，和 NB 路径文本不同，门靠参考判 NOT-ADMITTED。
+- **A2' 挡不住的两处路径差异（S5a-1a）**，都在 `bdae::lower` 里 SKIP：方程段的 `for`（NB 不展开，`NFFlatten.mo:1868-1872`；`for i in 1:1` 打 `x = 1` 不带 cast，范围标记还影响
+  `final`）、expandable 连接器（NB 把成员放进 Artificial 桶，方程也少一条）。
 - **待定**：D3 回读里 MULTARY 与嵌套 BINARY 文本相同，parser 的还原规则到写回读时再定。
 
 ## 附录 A 实跑记录

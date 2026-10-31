@@ -15,6 +15,10 @@
 //       与 OMC getClassNames(P, recursive=true, qualified=true, showProtected=true) 同序。
 //   ymc --dump-after=scode [--class=Q.N] (<file.mo> | --load-model=P ...)
 //       Absyn → SCode 后按 OMC list(X, exportKind=SCode) 的格式打印；--class 只打印该类（全限定名）。
+// S5：
+//   ymc --dump-after=lower (<file.mo> | --load-model=P --class=Q.N)
+//       压平 + lower，打印的字节 = `omc --newBackend -s --simCodeTarget=None -d=optdaedump` 的 `BackendDAE: (After Lowering)` 一段
+//       （从头线第一个 `#` 到下一段头线之前，tools/structcompare.py after_lowering_text）。没做的构造退 66、不打印。
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -33,6 +37,8 @@
 #include "absyn/unparse.h"
 #include "base/diag.h"
 #include "base/symbol.h"
+#include "bdae/bdae_dump.h"
+#include "bdae/lower.h"
 #include "parse/lexer.h"
 #include "parse/parser.h"
 #include "flat/flat_dump.h"
@@ -64,6 +70,7 @@ void print_help() {
       "  ymc <file.mo>...               instantiate + flatten last class (= omc X.mo)\n"
       "  ymc --dump-after=parse <f>...  parse and unparse (S1)\n"
       "  ymc --dump-after=flat <f>...   instantiate + flatten (S3, default)\n"
+      "  ymc --dump-after=lower <f>     flatten + lower, print the (After Lowering) section (S5)\n"
       "  ymc --check-syntax <f>...      syntax check only\n"
       "  ymc --dump-tokens <f>          print token stream\n"
       "  ymc --log=parse                trace parser rule entries to stderr\n"
@@ -231,7 +238,7 @@ void autoload_libraries(ymc::Absyn& absyn, ymc::Interner& interner, const Option
 // v1 未实现的构造 → 退出码 66 + `ymc: not implemented: <原因>`（运行器据此记 SKIP）。
 // root_name：文件里最后一个顶层类（同 omc）——隐式装上的库排在它后面，不能再取 program 的末项。
 int dump_flat_pipeline(ymc::Absyn& absyn, ymc::Diagnostics& diags, ymc::Interner& interner,
-                       const std::vector<ymc::Symbol>& root_path) {
+                       const std::vector<ymc::Symbol>& root_path, bool lower) {
   ymc::SCode scode(absyn);
   ymc::translate_program(scode, absyn.top);
   if (scode.program.empty()) {
@@ -259,7 +266,18 @@ int dump_flat_pipeline(ymc::Absyn& absyn, ymc::Diagnostics& diags, ymc::Interner
     else std::fprintf(stderr, "ymc: not implemented: %s [%s]\n", fr.unsupported_reason.c_str(), fr.unsupported_detail.c_str());
     return 66;
   }
-  std::string text = ymc::dump_flat(fr.model, interner);
+  std::string text;
+  if (lower) {
+    if (diags.has_errors()) return 1;
+    ymc::bdae::LowerResult lr = ymc::bdae::lower(std::move(fr.model), interner);
+    if (lr.unsupported) {
+      std::fprintf(stderr, "ymc: not implemented: lower: %s\n", lr.unsupported_reason.c_str());
+      return 66;
+    }
+    text = ymc::bdae::dump_after_lowering(lr.dae, interner);
+  } else {
+    text = ymc::dump_flat(fr.model, interner);
+  }
   std::fputs(text.c_str(), stdout);
   return diags.has_errors() ? 1 : 0;
 }
@@ -305,7 +323,8 @@ int run_one(const Options& opt, const std::string& path) {
     int rc = dump_scode(absyn, opt.dump_class);
     return rc != 0 ? rc : (diags.has_errors() ? 1 : 0);
   }
-  if (std::strcmp(opt.mode, "dump-after=flat") == 0) {
+  const bool lower = std::strcmp(opt.mode, "dump-after=lower") == 0;
+  if (lower || std::strcmp(opt.mode, "dump-after=flat") == 0) {
     if (diags.has_errors()) return 1;   // 解析出错先退（不进实例化）
     // `within P;`（P 非空）的文件只能插进已装载的包 P（MLS §13.4.3）；单文件压平时没有别的类可插 → omc 报
     // "Failed to insert class M within P"（testsuite openmodelica/interactive-API/ReadOnlyPkg/M.mo）。
@@ -325,7 +344,7 @@ int run_one(const Options& opt, const std::string& path) {
     // 隐式装上的库由装载器自己记。
     for (ymc::Id<ymc::ClassDef> c : absyn.top) absyn.class_files[absyn.classes[c].name] = path;
     autoload_libraries(absyn, interner, opt);
-    return dump_flat_pipeline(absyn, diags, interner, {root_name});
+    return dump_flat_pipeline(absyn, diags, interner, {root_name}, lower);
   }
   std::string text = ymc::unparse(absyn);
   std::fputs(text.c_str(), stdout);
@@ -354,7 +373,8 @@ int run_load_model(const Options& opt) {
   }
   // S3 3g：从库里按全限定名压平一个类（`ymc --load-model=Modelica --class=Modelica.Blocks.Examples.PID_Controller`，
   // 对齐 `omc -i=<类> <库>/package.mo`）。MSL 示例模型的通过率报告见 tools/msl_sweep.py。
-  if (std::strcmp(opt.mode, "dump-after=flat") == 0 && !opt.dump_class.empty()) {
+  const bool lower = std::strcmp(opt.mode, "dump-after=lower") == 0;
+  if ((lower || std::strcmp(opt.mode, "dump-after=flat") == 0) && !opt.dump_class.empty()) {
     if (diags.has_errors()) return 1;
     std::vector<ymc::Symbol> path;
     for (std::size_t b = 0; b <= opt.dump_class.size();) {
@@ -363,7 +383,7 @@ int run_load_model(const Options& opt) {
       path.push_back(interner.intern(std::string_view(opt.dump_class).substr(b, e - b)));
       b = e + 1;
     }
-    return dump_flat_pipeline(absyn, diags, interner, path);
+    return dump_flat_pipeline(absyn, diags, interner, path, lower);
   }
   if (opt.dump_class_names) {
     // OMC getClassNames() 的顶层顺序是"装载顺序的逆序"（每装一个库就前插；探针 2026-09-16：
@@ -409,6 +429,7 @@ int main(int argc, char** argv) {
     const char* a = argv[i];
     if (std::strcmp(a, "--dump-after=parse") == 0) opt.mode = "dump-after=parse";
     else if (std::strcmp(a, "--dump-after=flat") == 0) opt.mode = "dump-after=flat";
+    else if (std::strcmp(a, "--dump-after=lower") == 0) opt.mode = "dump-after=lower";
     else if (std::strcmp(a, "--dump-after=scode") == 0) opt.mode = "dump-after=scode";
     else if (std::strncmp(a, "--class=", 8) == 0) opt.dump_class = a + 8;
     else if (std::strcmp(a, "--check-syntax") == 0) opt.mode = "check-syntax";

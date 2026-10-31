@@ -15,6 +15,9 @@
 
 namespace ymc {
 
+// Real 字面量文本（realString 的版式）：DAE dump 与后端的 Expression.toString 同用。
+[[nodiscard]] std::string real_lit(double v);
+
 // 打印一个类型化表达式（顶层上下文，不加外围括号）。interner 用于取名字/字符串内容。
 // ew / product / swapped：打点号的数组二元运算节点、向量 / 矩阵积节点、打印时运算数换位的节点（见 FlatModel::ew_binaries /
 // product_binaries / swapped_binaries；可空）。

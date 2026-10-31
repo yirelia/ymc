@@ -103,7 +103,7 @@ combineBinaries 与 `Expression.toString`，拼出整段 `(After Lowering)` 与�
 | 1 | `a + b + c` → `b + a + c`；`a - b + c` → `(a + c) - b`；`(a + p) * q / 2` → `(q * (a + p)) / 2` | combineBinaries 是纯函数。`+ *` 链最后一项不动、前缀反序。只有 ADD/SUB 互相合并，MUL 与 DIV 不合并。`^` 不下探。String 的 `+` 不可交换 | `NFInst.mo:249`；`NFSimplifyModel.mo:644`；`NFSimplifyExp.mo:1481`、`:1573`、`:1628`、`:1781-1786`；`NFOperator.mo:879`、`:956` |
 | 2 | 同一表达式在方程和绑定里形状不同：`sqrt(a * b)` 绑定变 `sqrt(b * a)`，方程不变 | 方程浅映射（每个顶层式调一次）；绑定和属性深映射，自底向上每节点调一次 | `NFEquation.mo:707`；`NFVariable.mo:490`；`NFBinding.mo:573-586` |
 | 3 | 打印版式：cast 不打印，MULTARY 打括号 | `Expression.toString` 版式与 DAEDump 不同，需新打印器 | `Flags.mo:506`、`CevalScriptBackend.mo:3611`、`NFExpression.mo:1967`、`:1936-1947` |
-| 4 | 变量声明行 | 打 `redeclare final inner outer flow`，打类型全名 `enumeration M.Enum(e1, e2)`。Integer / Boolean 上的 `discrete` 不打；结构参数的 `final` 不打（只打声明的）。属性只打 fixed、start、min、max、nominal、StateSelect、TearingSelect。parameter 和外部对象补 `fixed = true` | `NFAttributes.mo` toString；`NFBackendExtension.mo:396-420`、`:1003`；`NBackendDAE.mo:774`。`src/flat/flat.h:47` 这些前缀不存 |
+| 4 | 变量声明行 | 打 `redeclare final inner outer flow`，打类型全名 `enumeration M.Enum(e1, e2)`。Integer / Boolean 上的 `discrete` 不打。`final` 打的是 `Attributes.isFinal`（S5a-1a 修正）：声明或修饰的，加上压平之前被 `Structural.markComponent` 标过的（它同时 setFinal，`NFStructural.mo:318-319`）；别名连带只改变率（`NFTyping.mo:1150-1155`），压平之后只由 `Flatten.updateVariability` 补变率（`NFFlatten.mo:3101-3113`），都不打。属性只打 fixed、start、min、max、nominal、StateSelect、TearingSelect。parameter 和外部对象补 `fixed = true` | `NFAttributes.mo` toString；`NFBackendExtension.mo:396-420`、`:1003`；`NBackendDAE.mo:774`。`src/flat/flat.h:47` 这些前缀不存 |
 | 5 | 变量种类 | when 里赋值的 Real 是 `[DISC]`。顶层 input 优先于种类进 Top Level Input。Clock → `[CLCK]`，外部对象 → `[EXTO]` | `NBackendDAE.mo:549-555`、`:700-777`；`NFVariable.mo:316` |
 | 6 | 绑定不下沉 | `(After Lowering)` 里绑定还在变量上，Bindings 模块才造方程 | `NBBindings.mo:68-81` |
 | 7 | 方程编号 | `$RES_SIM_n` 对头插列表逐个编号，最后一条是 0。if 方程外层先、内层前序。`$RES_BND / _AUX / _EVT` 共用 uniqueIndex 继续往上 | `NBackendDAE.mo:836`；`NBEquation.mo:1769`、`:2771`；`NBBindings.mo:68-81` |
@@ -126,7 +126,7 @@ census 里 112 个有 Record 桶的模型 A3 全部失败，靠 A3 才挡住，A
 
 - A3 过不代表结构对：探针 Sing（`der(x) = y; der(y) = -x; x + y = time`，`3 (3)` / `2 (2)`）exit 0，Alias 消掉 x 后留下 2 条方程对 `$DER.y`，NB 没报错。建议加平衡检查（769 里 2 个不等）。
 - 79 个模型 NB 打完统计后才失败（推测在 SimCode 阶段，未查）。
-- `redeclare6.mo` 的 `redeclare Real x = 3.0` 为什么是 `[DISC]`，没查。
+- ~~`redeclare6.mo` 的 `redeclare Real x = 3.0` 为什么是 `[DISC]`~~ 已答（S5a-1a）：redeclare 不写变率就留原声明的（`mergeRedeclaredComponentAttributes`，`NFAttributes.mo:322-328`）。
 - A4 的 identity 比打印文本，dump 看不到的字段判不出来。
 - Simplify / Alias 的逐字节可达性未测。原型基于压平文本，树形信息有损，换成内存 Expr 后还没在 C++ 里验证。
 - D3 回读：`a + b + c` 的文本分不清 MULTARY 和嵌套 BINARY，后续 pass 可能依赖树形，这是读代码的推断，没有实测。

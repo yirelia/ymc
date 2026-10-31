@@ -13,6 +13,8 @@
 
   run       按 cases.json 跑。--raw 时把 model.mo / out.txt / err.txt 存到 <refs>/<id>/（语料 a）；不带 --raw 只留签名
             （语料 b，防磁盘膨胀；每条记录有 out_bytes，可算原文总量）。结果逐条追加到 --out（JSONL），重跑自动跳过已完成的。
+            --keep-lowering 另把 `(After Lowering)` 一段的原文存到 <refs>/after_lowering/<id>.txt（S5a-1 的逐字节门，
+            tools/bdae_sweep.py 读它；语料 b 全文 272 MB，这一段只占很小一部分）。
 
 成败判据（`.mo` + `-s` 路线，Main.mo translateFile）：这条路线丢弃 translateModel 的 success 返回值，失败走 fail()，
 落到 matchcontinue 的 "Error processing file: " 分支后 exit 1；所以 a3 = exit 0 且 stderr 无 `Error:` / `Internal error`。
@@ -20,7 +22,7 @@
 用法：
   python -I tools/bdae_refgen.py extract --cases <cases.json>
   python -I tools/bdae_refgen.py sweep --from <ts_cur.json> --cases <cases.json>
-  python -I tools/bdae_refgen.py run --cases <cases.json> --out <sig.jsonl> [--raw] [--jobs 8] [--limit N] [--ids a,b]
+  python -I tools/bdae_refgen.py run --cases <cases.json> --out <sig.jsonl> [--raw] [--keep-lowering] [--jobs 8] [--limit N] [--ids a,b]
   python -I tools/bdae_refgen.py a1 --cases <cases.json> --out <a1.jsonl> --ymc <ymc.exe>     # 语料 a 的 A1
 
 基建工具，Claude 提供。
@@ -221,7 +223,8 @@ def run_omc(args, cwd, timeout, max_out):
 
 
 def _read(path):
-    with open(path, encoding="utf-8", errors="replace") as f:
+    # newline=""：字符串字面量里的裸 \r 要原样留着（默认的通用换行会把它变成 \n）；\r\n 由 structcompare 统一换。
+    with open(path, encoding="utf-8", errors="replace", newline="") as f:
         return f.read()
 
 
@@ -300,6 +303,11 @@ def summarize(c, rc, status, secs, out, err):
 _lock = threading.Lock()
 
 
+def safe_id(cid):
+    """用例 id → 目录 / 文件名（--raw 的子目录、--keep-lowering 的文件名共用）。"""
+    return re.sub(r"[^\w.#-]", "_", cid.replace("/", "__").replace("#", "__"))
+
+
 def one(c, a):
     text = case_text(c)
     if text is None:
@@ -314,7 +322,7 @@ def one(c, a):
         out, err = _read(os.path.join(tmp, "out.txt")), _read(os.path.join(tmp, "err.txt"))
         rec = summarize(c, rc, status, secs, out, err)
         if a.raw:
-            d = os.path.join(a.raw_root, re.sub(r"[^\w.#-]", "_", c["id"].replace("/", "__").replace("#", "__")))
+            d = os.path.join(a.raw_root, safe_id(c["id"]))
             os.makedirs(d, exist_ok=True)
             for n in (name, "out.txt", "err.txt"):
                 shutil.copyfile(os.path.join(tmp, n), os.path.join(d, n))
@@ -322,6 +330,13 @@ def one(c, a):
                 json.dump(rec, f, ensure_ascii=False, indent=1)
             rec["raw_dir"] = os.path.basename(d)
             rec["model_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        if a.keep_lowering:
+            sec = sc.after_lowering_text(out)
+            if sec is not None:
+                d = os.path.join(a.raw_root, "after_lowering")
+                os.makedirs(d, exist_ok=True)
+                with open(os.path.join(d, safe_id(c["id"]) + ".txt"), "w", encoding="utf-8", newline="\n") as f:
+                    f.write(sec)
         return rec
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -456,6 +471,7 @@ def main():
     p.add_argument("--cases", required=True)
     p.add_argument("--out", required=True)
     p.add_argument("--raw", action="store_true", help="存原文（语料 a）")
+    p.add_argument("--keep-lowering", action="store_true", help="只存 (After Lowering) 一段（语料 b）")
     p.add_argument("--raw-root", default=REFS)
     p.add_argument("--jobs", type=int, default=8)
     p.add_argument("--timeout", type=int, default=120)

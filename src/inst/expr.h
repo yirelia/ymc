@@ -70,6 +70,9 @@ enum class ExprKind : std::uint8_t {
   FnRef,        // F：函数名当值（NFInst.instCrefFunction 的函数引用 cref）。call_name = 压平名；ty.kind = Function
   FnParamCall,  // f(#(a1), …)：经函数型形参 f 的调用（NFFunction.lookupFunction 找到的是组件 → 名字不带前缀）。
                 // call_name = {f}，args = 已装箱的实参；ty = 输出类型（外面套 Unbox）。与 Call 分开：名字不是函数，不进按名找函数的各处
+  // —— 后端（ADR-008 §6）——
+  Multary,      // 多元和 / 积（NFExpression.MULTARY，NFExpression.mo:1936-1945 的打印；只由 bdae::combine_binaries 产出，前端不见）。
+                // args = 正项 / 因子，inv_args = 取反 / 取倒数的项，bin = 运算（只会是 Add 或 Mul，inv_args 用它的逆），ty = 运算的类型
 };
 
 struct Expr {
@@ -95,7 +98,8 @@ struct Expr {
 
   // 调用
   std::vector<Symbol> call_name;   // Call / PartialApp / FnRef / FnParamCall：函数全限定名（点分；打印去前导点）
-  std::vector<Id<Expr>> args;      // Call / PartialApp / FnParamCall 实参；Array / Tuple 元素
+  std::vector<Id<Expr>> args;      // Call / PartialApp / FnParamCall 实参；Array / Tuple 元素；Multary 正项
+  std::vector<Id<Expr>> inv_args;  // Multary 的逆项（NFExpression.MULTARY.inv_arguments）
 };
 
 // 表达式变率（R14 §2；不常驻 Expr 节点，定型时算、只存到需要检查处：组件、绑定）。

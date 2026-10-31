@@ -81,15 +81,16 @@ else()
   target_link_libraries(ymc_base INTERFACE ymc_warnings)
 endif()
 
-# ---- 前端库 src/parse + src/absyn + src/scode + src/inst + src/flat
-#      （S1：词法/语法/Absyn/unparse；S2：SCode/包加载；S3：实例化/压平）----
+# ---- 前端库 src/parse + src/absyn + src/scode + src/inst + src/flat + src/bdae
+#      （S1：词法/语法/Absyn/unparse；S2：SCode/包加载；S3：实例化/压平；S5：后端）----
 # 有源码时编成 ymc_frontend；没有时不建，由 if(TARGET) 门控链接。
 file(GLOB YMC_FRONTEND_SOURCES CONFIGURE_DEPENDS
   "${CMAKE_SOURCE_DIR}/src/parse/*.cpp"
   "${CMAKE_SOURCE_DIR}/src/absyn/*.cpp"
   "${CMAKE_SOURCE_DIR}/src/scode/*.cpp"
   "${CMAKE_SOURCE_DIR}/src/inst/*.cpp"
-  "${CMAKE_SOURCE_DIR}/src/flat/*.cpp")
+  "${CMAKE_SOURCE_DIR}/src/flat/*.cpp"
+  "${CMAKE_SOURCE_DIR}/src/bdae/*.cpp")
 if(YMC_FRONTEND_SOURCES)
   add_library(ymc_frontend STATIC ${YMC_FRONTEND_SOURCES})
   target_link_libraries(ymc_frontend PUBLIC ymc_base ymc_warnings)

@@ -3102,6 +3102,7 @@ class Flattener {
       }
       const std::optional<IterVals> vals = iter_values(range, enclosing, prefix);
       if (!vals) { set_unsupported("for equation (non-constant range)"); return; }
+      result_.model.unrolled_for = true;
       for (std::size_t j = 0; j < vals->ords.size(); ++j) {   // 同名外层迭代变量已在上面 SKIP：退出时擦掉即可
         loop_vars_[eq.index.id] = vals->ords[j];
         if (vals->type_label.is_valid()) loop_labels_[eq.index.id] = vals->labels[j];
@@ -5651,6 +5652,20 @@ class Flattener {
     v.ty = comp.ty;
     v.is_protected = is_protected;
     v.is_final = ((comp.attributes.is_final || force_final) && !attr_final_dropped(cid, ctx)) || struct_final;
+    v.attr_final = v.is_final;   // 发射时已是结构参数的都经过 markComponent；发射之后才标的见 note_attr_final
+    v.is_redeclare = comp.attributes.is_redeclare;
+    v.is_inner = comp.attributes.is_inner;
+    v.is_outer = comp.attributes.is_outer;
+    v.connector = is_flow ? SConnectorType::Flow : comp.attributes.connector;
+    v.in_record = ctx.in_record;
+    v.in_expandable = !cur_pp_chain_.empty();
+    if (comp.orig_def.is_valid() && cty.kind == TypeKind::Real) {
+      const std::vector<Symbol>& op = I_.scode.elems[comp.orig_def].type.path;
+      v.redeclared_from_other_type = op.size() != 1 || in_.str(op[0]) != "Real";
+    }
+    if (cty.kind == TypeKind::Enumeration && instr_) v.enum_type_path = instr_->scope_path(comp.class_inst);
+    if (cty.kind == TypeKind::String) string_fixed_attr(v, asrc);
+    backend_annotations(v, comp.def);
     switch (var_min(var_floor, comp.attributes.variability)) {   // 复合组件变率下沉（Half A）
       case SVariability::Var: v.var_kind = FlatVarKind::Var; break;
       case SVariability::Discrete: v.var_kind = FlatVarKind::Discrete; break;
@@ -7520,6 +7535,42 @@ class Flattener {
   bool attr_final_dropped(CompId cid, const ModCtx& ctx) {
     const Component& c = I_.comps[cid];
     return c.derived_type && (c.derived_attrs || ctx.in_conn || c.attributes.connector != SConnectorType::Potential);
+  }
+  // String 的 fixed：按属性来源的优先级取第一个带值的（同 plan_attributes）。求值和结构标记都不碰：NB 只打印它，DAE 这边丢弃。
+  void string_fixed_attr(FlatVariable& v, const std::vector<ModSource>& sources) {
+    const Symbol fixed = in_.intern("fixed");
+    for (const ModSource& m : sources) {
+      if (!m.mod.is_valid()) continue;
+      for (const SSubMod& sm : I_.scode.mods[m.mod].subs) {
+        if (sm.ident != fixed || !sm.mod.is_valid() || !I_.scode.mods[sm.mod].binding.is_valid()) continue;
+        const Exp& val = I_.absyn.exps[I_.scode.mods[sm.mod].binding];
+        if (val.kind == ExpKind::BoolLit) v.string_fixed = lit_bool(val.bval);
+        else v.string_fixed_opaque = true;
+        return;
+      }
+    }
+  }
+  // 只有后端看的两个组件注解（NFBackendExtension.mo v1.25.0）：__OpenModelica_resizable = 布尔字面量（Annotations.create :1497-1525），
+  // __OpenModelica_tearingSelect / 过时的 tearingSelect = `TearingSelect.成员` 或裸成员名（createTearingSelect :1383-1453）。
+  void backend_annotations(FlatVariable& v, Id<SElement> def) {
+    const Id<SMod> ann = I_.scode.elems[def].cmt.annotation;
+    if (!ann.is_valid()) return;
+    Id<Exp> tearing, tearing_old;
+    for (const SSubMod& sm : I_.scode.mods[ann].subs) {
+      if (!sm.mod.is_valid()) continue;
+      const Id<Exp> val = I_.scode.mods[sm.mod].binding;
+      const std::string_view id = in_.str(sm.ident);
+      if (id == "__OpenModelica_resizable" && val.is_valid() && I_.absyn.exps[val].kind == ExpKind::BoolLit)
+        v.resizable = I_.absyn.exps[val].bval;
+      if (id == "__OpenModelica_tearingSelect") tearing = val;
+      if (id == "tearingSelect") tearing_old = val;
+    }
+    if (!tearing.is_valid()) tearing = tearing_old;
+    if (!tearing.is_valid() || I_.absyn.exps[tearing].kind != ExpKind::CrefExp) return;
+    const Cref& c = I_.absyn.crefs[I_.absyn.exps[tearing].cref];
+    if (c.parts.size() != 1 && !(c.parts.size() == 2 && in_.str(c.parts[0].name) == "TearingSelect")) return;
+    const std::string_view m = in_.str(c.parts.back().name);
+    if (m == "never" || m == "avoid" || m == "default" || m == "prefer" || m == "always") v.tearing_select = c.parts.back().name;
   }
   // 内建枚举（StateSelect / AssertionLevel，inst 在顶层合成的枚举类，见 Instantiator::make_top_node）的定义；不是 → nullptr。
   const SClassDef* builtin_enum_def(Symbol type_name) {
@@ -30174,7 +30225,10 @@ class Flattener {
     if (novalue_keys_.empty() || result_.unsupported) return;
     ensure_var_index();
     for (const auto& kt : novalue_keys_)
-      if (const auto it = var_index_.find(kt.first); it != var_index_.end()) result_.model.variables[it->second].is_final = true;
+      if (const auto it = var_index_.find(kt.first); it != var_index_.end()) {
+        result_.model.variables[it->second].is_final = true;
+        if (kt.second != INT_MAX) result_.model.variables[it->second].attr_final = true;   // 见 note_attr_final
+      }
     for (const FlatVariable& v : result_.model.variables) {
       if (v.var_kind != FlatVarKind::Parameter || !v.binding.is_valid()) continue;
       Id<Expr> bid = v.binding;
@@ -30198,6 +30252,15 @@ class Flattener {
       set_unsupported("alias of unbound structural parameter");
       return;
     }
+  }
+  // 压平期之前的标记（Early / Binding）在 omc 里都早于 flattenSimpleComponent 读组件属性，isFinal 已带上；压平期的（Late）晚于已发射的变量，不算，
+  // 发射之前就标过的已由发射时的 attr_final 带上。
+  // ponytail: Late 里还混着方程段定型的标记（NFTyping 的下标 / 范围 / assert 级别、NFBuiltinCall 的 fill 维与 Clock 实参），它们早于压平，按这里的
+  // 算法会漏 final。现在这些全和数组、assert、Clock 有关，lower 都 SKIP；放开时要把 Late 拆成"定型"和"压平"两段。
+  void note_attr_final(FlatVariable& v, const std::string& k) {
+    if (v.var_kind != FlatVarKind::Parameter) return;
+    const auto it = structural_set_.find(k);
+    if (it != structural_set_.end() && it->second != INT_MAX) v.attr_final = true;
   }
   void apply_structural_params() {
     if (result_.unsupported) return;
@@ -30230,6 +30293,7 @@ class Flattener {
       FlatVariable& v = result_.model.variables[vi];
       if (v.var_kind != FlatVarKind::Parameter && v.var_kind != FlatVarKind::Constant) { set_unsupported("structural parameter"); return; }
       if (v.var_kind == FlatVarKind::Parameter) v.is_final = true;
+      note_attr_final(v, k);
       vals.emplace(k, lit);
       // 推导式绑定的参数数组（见 comp_bound_）：压平期才标的元素绑定照旧（符号式）；打成字面量的、没在定型期被求值过的，
       // 推导式里调的函数照打。

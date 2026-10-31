@@ -321,6 +321,29 @@ bool Instantiator::in_instance_context(NodeId cls) const {
          (I_.nodes[cls].node_type.kind == NodeTypeKind::RedeclaredClass || instances_.count(I_.nodes[cls].parent_scope.raw) > 0);
 }
 
+// 从类节点往外走：组件的类实例算一段组件名（类名不计），基类实例跳过，定义层的类算一段类名，根实例和 <top> 到头（RELATIVE 不含根类）。
+// 所以 `n.F`（F 写在 n 的类里）、`P.N.F`（从包里取的定义）、根类里的 `T` 都是这个规则（probe：n.d.f2 的类型 F 写在 n 的类里 → n.F）。
+std::vector<Symbol> Instantiator::scope_path(NodeId cls) const {
+  std::vector<Symbol> rev{I_.nodes[cls].name};
+  for (NodeId n = I_.nodes[cls].parent_scope; n.is_valid() && !I_.nodes[n].is_empty();) {
+    const INode& x = I_.nodes[n];
+    if (x.kind == NodeKind::Component) {
+      rev.push_back(x.name);
+      n = x.instance_parent;
+    } else if (x.node_type.kind == NodeTypeKind::TopScope) {
+      break;
+    } else if (x.node_type.kind == NodeTypeKind::BaseClass) {
+      n = x.node_type.parent;
+    } else if (instances_.count(n.raw)) {
+      n = x.instance_parent;   // 根实例没有实例父亲，循环到此结束
+    } else {
+      rev.push_back(x.name);
+      n = x.parent_scope;
+    }
+  }
+  return {rev.rbegin(), rev.rend()};
+}
+
 // 包实例（Inst.instPackage，NFInst.mo:1312-1369 v1.25.0）：查名进类前把它实例化一份，按节点缓存（PackageCache）。短类先顺链到长类
 //（带修饰的短类 SKIP，见 through_short_classes），实例 = 长类的实例、实例父亲记成这个类节点（命名时同 BASE_CLASS 跳过，
 // NFInstNode.scopePath :1217-1290）。partial 的不实例化（instantiate 只 expand，NFInst.mo:428-433）、正在实例化的（环；omc 的

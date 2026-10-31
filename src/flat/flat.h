@@ -44,7 +44,25 @@ struct FlatVariable {
   bool is_final = false;                 // 结构参数强制 final（R13：final parameter）
   FlatVarKind var_kind = FlatVarKind::Var;
   FlatDirection direction = FlatDirection::None;
-  // flow/stream/inner/outer/each：R13 §3.1 明确**不打印**，故不存
+  // —— 下面这几项 DAE dump 不打（R13 §3.1），只有后端要：NB 的 Variable.toStream 打 Attributes.toString（NFAttributes.mo:619-632 v1.25.0）。
+  //    标量叶组件才填（数组、外部对象在 bdae::lower 里 SKIP）。——
+  // Attributes.isFinal：声明 / 修饰的 final，加上变量压平之前被 Structural.markComponent 标过的（它同时 setFinal，NFStructural.mo:318-319）。
+  // is_final 还多出压平之后才标的、别名连带的（DAE 转换按变率补 final，NFConvertDAE.mo:226-227，变率由 Flatten.updateVariability
+  // :3101-3113 补上，isFinal 没人补）。
+  bool attr_final = false;
+  bool is_redeclare = false;             // Attributes.isRedeclare（只看叶组件自己，mergeComponentAttributes :241）
+  bool is_inner = false, is_outer = false;
+  SConnectorType connector = SConnectorType::Potential;  // flow / stream（连接器里的记录字段继承，ConnectorType.merge）
+  bool in_record = false;                // 记录组件的字段：NB 有整个记录的变量（NFFlatten.getComponentType :648-649），这里拆开了 → lower SKIP
+  bool in_expandable = false;            // expandable 连接器的成员（pp 链非空）：NB 路径的变量表和方程都不同 → lower SKIP
+  bool resizable = false;                // 注解 __OpenModelica_resizable = true：只有 NB 路径才算（NFAttributes.mo:548-552） → lower SKIP
+  // 重声明成 Real，原声明的类型不是字面的 Real：redeclare 不写变率就留原声明的（mergeRedeclaredComponentAttributes :322-328），原声明若是离散类，
+  // 这个 Real 是 IMPLICITLY_DISCRETE（testsuite redeclare6），这里判不出来 → lower SKIP。
+  bool redeclared_from_other_type = false;
+  std::vector<Symbol> enum_type_path;    // 枚举类型的 InstNode.scopePath（Type::enum_path 只有简名，NB 打全名）
+  Id<Expr> string_fixed;                 // String 的 fixed 字面量：DAE 转换丢它，属性表（attr_table）里没有；NB 打（createString :1237）
+  bool string_fixed_opaque = false;      // String 的 fixed 不是字面量 → lower SKIP
+  Symbol tearing_select;                 // 注解 __OpenModelica_tearingSelect 的成员名（never / avoid / …，createTearingSelect :1383-1430）；无 = invalid
   std::vector<FlatVarAttr> attributes;   // 已按类型顺序排好
   Id<Expr> binding;                      // ` = expr`，无则 invalid
   Symbol comment;                        // 保留（R13 §3.6）
@@ -155,6 +173,8 @@ struct FlatModel {
   std::vector<FlatAlgorithm> initial_algorithms;
   std::vector<FlatAlgorithm> algorithms;
   std::vector<FlatFunction> functions;   // 被模型调用的用户函数（发射序；dump 时按压平名字节序排，class 之前打印）
+  // 方程段的 for 循环已展开（unrollForLoop）。NB 路径不展开（splitForLoop，NFFlatten.mo:1868-1872），展开后看不出原样 → bdae::lower SKIP。
+  bool unrolled_for = false;
 
   ExprArena exprs;
   Arena<FlatEquation> eqs;

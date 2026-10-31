@@ -2872,8 +2872,10 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
 - [x] (S5a-0) 准入普查与结构对拍工具（2026-10-31；不动 `src/`）：`tools/bdae_refgen.py`、`tools/bdae_census.py`、`structcompare.py` 的逐模块解析与 5a / 5b 签名。
       语料 a 109 / 语料 b 1857 实跑，A2' + A1 + A3 准入 59 / 769；`(After Lowering)` 原型 741 个里 615 逐字节、94 规范化后相同，真差异 2 个（数组）。
       ADR-008 §6 修订 A2 / A3、加 A5。数据：`docs/research/s5a0-admission-census.md`。
-- [ ] (S5a-1a) IR + lowering 骨架，门 = `(After Lowering)` 逐字节：`src/bdae/`、`--dump-after=lower`、Multary + combineBinaries、NF 版 `Expression.toString`、
-      FlatVariable 补前缀、无方程 + 纯 `[SCAL]` 模型；其余 SKIP。
+- [x] (S5a-1a) IR + lowering 骨架（2026-10-31），门 = `(After Lowering)` 逐字节：`src/bdae/`、`--dump-after=lower`、Multary + combineBinaries、NF 版 `Expression.toString`、
+      FlatVariable 补前缀、无方程 + 纯 `[SCAL]` 模型，其余 SKIP；`tools/bdae_sweep.py`。语料 a PASS 44 / 109（首批门集 32 / 49，余 17 是 when 9、algorithm 3、if 3、assert 2），
+      语料 b PASS 845 / 1857，探针 2820 个（评审手写的 520 个单成 `s5a1a-adv`），FAIL 0、CRASH 0；前端三个门 changed 0。
+      留账：`note_attr_final` 的 Late 标记混着定型和压平两种，放开数组、assert、Clock 时要拆（代码里标了 `ponytail:`）；`parglobal` / `parlocal` 前缀没有探针（解析器没这两个词）。
 - [ ] (S5a-1b) `[WHEN]`（单赋值）+ assert 入 Removed；(S5a-1c) `[-IF-]`、`[ALGO]`；(S5b-0) 哈希容器 → 多赋值 when。
 - [ ] (S5a-2…) pre 模块，序按语料 a：Detect States → Events → Simplify → Alias → FunctionAlias → Early Inline → Bindings（Bindings 在语料 b 影响 218 个，可提前）。
 - [ ] (S5a) lower + NB 九个 pre 模块，按模块增量（Bindings → FunctionAlias → Early Inline → Simplify 1 → Alias → Simplify 2 →
