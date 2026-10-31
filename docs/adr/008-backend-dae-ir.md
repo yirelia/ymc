@@ -1,7 +1,7 @@
 # ADR-008 S5 后端：BackendDAE IR、`.bdae` 文本格式与结构对拍口径
 
 - 日期：2026-10-12（提议）；2026-10-13（用户裁定，见 §3）
-- 状态：**已决定**（§3 七条照草稿接受，其中第 3 条块序改为与 OMC 逐位同序；Q1 / Q2 按 §4 的裁定）
+- 状态：**已决定**（§3 七条照草稿接受，其中第 3 条块序改为与 OMC 逐位同序；Q1 / Q2 按 §4 的裁定）；2026-10-31 按 S5a-0 实测修订判据，见 §6
 - 依据：OMC **v1.25.0 tag** 源码（`git -C C:/dev/OpenModelica show v1.25.0:<path>`；下文路径相对 `OMCompiler/Compiler/`，
   行号均为该 tag，不引工作区 HEAD）；安装版 omc 1.25.0 实跑（附录 A，均套 `timeout 120`）；方案 §2.1 / §4.2 / §5 S5–S6；
   spec FR-015 / FR-053；研究底稿 R6（R6 的行号是 HEAD `3ceb0c9d06` 的，本文已按 v1.25.0 重新定位）。
@@ -288,6 +288,22 @@ Bindings（`Modules/2_Pre/NBBindings.mo:50`）、FunctionAlias（`NBFunctionAlia
 - 风险：NB 1.25.0 是实验性后端（"[WIP]"），与 omc 默认路径（旧后端）结构不同。S5 结构一致不等于和默认 omc 仿真一致，最终靠 S6 的
   L2 数值验收兜底。
 - 何时重看：用户裁定 Q1 / Q2 后；开始做保持数组的后端时；oracle 换成更高版本 omc 时。
+
+## 6 修订（2026-10-31，S5a-0 实测，数据见 `docs/research/s5a0-admission-census.md`）
+§3 的七条裁定不变（结构 oracle、逐位同序、按模块增量）。下面改的是草稿里被实测推翻的事实与判据，优先于 D1 / D2 / D4 的相应文字。
+- **A2 → A2'**：`VarData.size` 只数 unknowns，N == n 放进 133 个带数组的模型（数组在 Constant / Parameter 桶），又误挡 33 个标量多输出
+  algorithm，也挡不住记录（Q6）。A2' = `(After Lowering)` 无数组型变量、Record 桶空、无 `[ARRY] [FOR-] [RECD] [TUPL]`。
+- **A3 分层**：`.mo` + `-s` 路线没有 `translateModel` 返回值（`Main.mo:444`），判据改为 exit 0 且无 `Error` / `Internal error`。5a 门只要 `(Events)`
+  段在手，5b 门只要第一个 Causalize 段在手，A3 留给 S6。
+- **加 A5**：`(After Lowering)` 无数组型子表达式。NB 路径关了展开（`NFInst.mo:324-333`），数组实参的调用不求值，ymc 默认路径求了（`Scalar.mo`、
+  `ArrayVectorVectorMul4.mo`）。
+- **Q3 已答一半**：`(After Lowering)` 可从 ymc 默认 FlatModel 逐字节复现，门设在这里。combineBinaries 不是障碍，它是纯函数。Simplify 之后的模块未测。
+- **Q6 已答**：A2 挡不住记录，A2' 直接挡。
+- **D1 第 4 条补充**：`ExprKind` 没有 Multary，NB 的打印和后续模块都带 MULTARY，要加这个节点。5a–5b 的 VarKind 再加 Clock、ExtObj。
+- **F3 补充**：`resetGlobalFlags` 还关了 `NF_EXPAND_OPERATIONS`、`NF_EXPAND_FUNC_ARGS`（`NFInst.mo:332-333`）。
+- **F6 补充**：哈希序在 lowering 就起作用（when 拆分 `NBEquation.mo:3151`、`:3173-3174`），S5b-0 提前到多赋值 when 进门之前。
+- **附录 A3 的 1265 行**是 stdout 1236 + stderr 29，`Number of …` 走 stderr。
+- **待定**：D3 回读里 MULTARY 与嵌套 BINARY 文本相同，parser 的还原规则到写回读时再定。
 
 ## 附录 A 实跑记录
 安装版 `omc --version` = `OpenModelica v1.25.0 (64-bit)`；cwd 为会话 scratch（探针与原始输出未入库，入库时建议放 `tools/probe/s5/`）；

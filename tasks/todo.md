@@ -2869,6 +2869,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       输入 = ymc 内存 FlatModel + 准入 A1–A4（与 omc 逐字节一致、无数组 / 记录、NB 跑得通、所需 pre 模块已实现）；结构 oracle =
       1.25.0 NB（`--newBackend -s --simCodeTarget=None -d=optdaedump,bltdump,backenddaeinfo`），旧后端只作旁证；**块序与分区内各序
       与 OMC 逐位同序**（用户裁定）；NB 1.25.0 无指标约简、不撕裂连续环 → 5a / 5b 之后尽早接 S6，5c / 5e 以 L2 数值为准。
+- [x] (S5a-0) 准入普查与结构对拍工具（2026-10-31；不动 `src/`）：`tools/bdae_refgen.py`、`tools/bdae_census.py`、`structcompare.py` 的逐模块解析与 5a / 5b 签名。
+      语料 a 109 / 语料 b 1857 实跑，A2' + A1 + A3 准入 59 / 769；`(After Lowering)` 原型 741 个里 615 逐字节、94 规范化后相同，真差异 2 个（数组）。
+      ADR-008 §6 修订 A2 / A3、加 A5。数据：`docs/research/s5a0-admission-census.md`。
+- [ ] (S5a-1a) IR + lowering 骨架，门 = `(After Lowering)` 逐字节：`src/bdae/`、`--dump-after=lower`、Multary + combineBinaries、NF 版 `Expression.toString`、
+      FlatVariable 补前缀、无方程 + 纯 `[SCAL]` 模型；其余 SKIP。
+- [ ] (S5a-1b) `[WHEN]`（单赋值）+ assert 入 Removed；(S5a-1c) `[-IF-]`、`[ALGO]`；(S5b-0) 哈希容器 → 多赋值 when。
+- [ ] (S5a-2…) pre 模块，序按语料 a：Detect States → Events → Simplify → Alias → FunctionAlias → Early Inline → Bindings（Bindings 在语料 b 影响 218 个，可提前）。
 - [ ] (S5a) lower + NB 九个 pre 模块，按模块增量（Bindings → FunctionAlias → Early Inline → Simplify 1 → Alias → Simplify 2 →
       Remove Stream → Detect States → Events）；首批子集 `simulation/modelica/NBackend/{basics,alias,event_handling}` + equations /
       parameters 的准入模型；验收见 ADR-008 D5（签名一致、`.bdae` 回读逐字节、单测期望来自 oracle、四套构建零警告）。

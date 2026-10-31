@@ -34,8 +34,13 @@ python tools/matcompare.py --algo=tube --ref a.mat --actual b.mat     # = OMC di
 python tools/matcompare.py --algo=classic ...                        # = OMC compareSimulationResults
 python tools/matcompare.py --algo=csvtube --ref-source=dymola ...    # csv-compare（Dymola/MAP-LIB）
 python tools/resultio.py <file>.mat        # 读结果文件；val() 与 OMC 一致
-python tools/structcompare.py --selftest   # 解析 checkModel/backenddaeinfo/bltdump/Base Modelica
+python tools/structcompare.py --selftest   # 解析 checkModel/backenddaeinfo/bltdump/Base Modelica，及 NB 逐模块 dump（ADR-008 D4）
 python tools/varnorm.py                    # 变量名归一化与交集
+python -I tools/bdae_refgen.py extract --cases cases_a.json                    # S5 语料 a：NBackend/{basics,alias,event_handling} + equations/parameters
+python -I tools/bdae_refgen.py sweep --from ts_cur.json --cases cases_b.json   # S5 语料 b：nf_live_sweep 的 PASS 记录（A1 证据）
+python -I tools/bdae_refgen.py run --cases cases_a.json --out sig_a.jsonl --raw   # 跑 omc 1.25.0 新后端，存原文 + manifest 到 ymc-refs；不带 --raw 只留签名
+python -I tools/bdae_refgen.py a1 --cases cases_a.json --out a1_a.jsonl --ymc <ymc.exe>   # 语料 a 的 A1
+python -I tools/bdae_census.py sig.jsonl [--a1 a1.jsonl] [--strict]            # 准入普查：A2 / A3 / A4 表、累计准入表、(After Lowering) 直方图
 ```
 
 ## Dymola / 参考 / 报告
