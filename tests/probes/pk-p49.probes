@@ -1,0 +1,3536 @@
+//// set: pk-p49 — 68a：带修饰的短类。ESC1-ESC116：extends 短类，元素取链底长类（expandExtends、Class.classTree 顺 baseClass，NFInst.mo:750-800 / NFClass.mo:337-350 v1.25.0；ClassTree.instantiate 的 EXPANDED_DERIVED 支，NFClassTree.mo:614-621），记录 / 连接器 / 函数 / 包的 extends 同；链在定义层解析一次（ESC15 / ESC115），omc 展开过的短类克隆后看不到实例上的类重声明（ESC16 / ESC108 / ESC115 → SKIP，check_short_settled）；短类写的修饰 / 重声明 / 前缀 1.25.0 丢掉（instExtends 不读定义的修饰，ESC4 / ESC5 / ESC29 / ESC30 / ESC46-ESC48），MLS §7.1 说该继承 → 不复刻，SKIP；字面量维丢掉与文件 Result 一致（ESC14，arrays/ArrayExtend），收；class extends 内建类型类体为空（ESC74-ESC77，redeclareClass 的 isBuiltin 支）。LMS1-LMS36 / LMX1-LMX38：带类重声明的短类，进类查名走包实例，redeclareClasses 顶替实例类树（scodeinst ModClass2 / RedeclareDim2 / RedeclareFunction1，redeclare/Dependency / ModifiersPriority / RedeclareFunctionSameType）；同一声明的第二个实例（LMS2 / LMS3 / LMX27）；定义节点上 ymc 自己展开过的类克隆进有重声明的实例要重新展开（LMX25 / LMX31 / LMX35，基线静默错）。CMR1-CMR48：类的约束修饰（redeclareClasses / getConstrainingMod，NFInst.mo:1618-1646 / :2064-2081；instElementModifier 的 instConstrainingMod，:2025-2062），比这层自身的修饰低、比链下一层高，基线整个没做、20 多例静默错；函数 / 记录构造带约束修饰、重声明链上内层 constrainedby → SKIP。LDD1-LDD15：全限定类名的前导点（FULLYQUALIFIED → topScope，NFLookup.lookupNames :653-655），inst 此前一律忽略，10 例静默错。
+//// model: ESC1
+model A
+  Real x;
+end A;
+model B = A;
+model ESC1
+  extends B;
+equation
+  x = 1;
+end ESC1;
+//// model: ESC2
+model A
+  Real x = 1;
+end A;
+model B1 = A;
+model B2 = B1;
+model ESC2
+  extends B2;
+end ESC2;
+//// model: ESC3
+model A
+  parameter Real x = 1;
+  Real y(start = 2);
+end A;
+model B = A;
+model ESC3
+  extends B(x = 3, y(start = 4));
+end ESC3;
+//// model: ESC4
+model A
+  Real x;
+end A;
+model B = A(x(start = 2));
+model ESC4
+  extends B;
+end ESC4;
+//// model: ESC5
+model A
+  parameter Real p = 1;
+  Real x = p;
+end A;
+model B = A;
+model C = B(p = 2);
+model ESC5
+  extends C;
+end ESC5;
+//// model: ESC6
+model A
+  Real x;
+end A;
+model B = A;
+model ESC6
+protected
+  extends B;
+end ESC6;
+//// model: ESC7
+package P
+  model A
+    Real x = c;
+  end A;
+  constant Real c = 3;
+  model B = A;
+end P;
+model ESC7
+  extends P.B;
+  parameter Real q = c2;
+  constant Real c2 = 1;
+end ESC7;
+//// model: ESC8
+package P
+  model A
+    Real x = c;
+    constant Real c = 3;
+  end A;
+  model B = A;
+end P;
+model ESC8
+  extends P.B;
+  Real y = c + x;
+end ESC8;
+//// model: ESC9
+model A
+  model N
+    Real z = 2;
+  end N;
+  Real x = time;
+end A;
+model B = A;
+model C
+  extends B;
+  N n;
+end C;
+model ESC9
+  C c;
+end ESC9;
+//// model: ESC10
+record R
+  Real a = 1;
+  Real b = 2;
+end R;
+record S = R;
+record T
+  extends S;
+  Real c = 3;
+end T;
+model ESC10
+  T t;
+  T u = T(a = 5, b = 6, c = 7);
+end ESC10;
+//// model: ESC11
+connector C
+  Real v;
+  flow Real i;
+end C;
+connector D = C;
+connector E
+  extends D;
+end E;
+model ESC11
+  E e1, e2;
+equation
+  connect(e1, e2);
+  e1.v = 1;
+end ESC11;
+//// model: ESC12
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end f;
+function g = f;
+function h
+  extends g;
+end h;
+model ESC12
+  Real x = h(time);
+end ESC12;
+//// model: ESC13
+package P
+  constant Real c = 3;
+  type T = Real(unit = "m");
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := x + c;
+  end f;
+end P;
+package Q = P;
+package R
+  extends Q;
+end R;
+model ESC13
+  R.T x = R.c;
+  Real y = R.f(time);
+end ESC13;
+//// model: ESC14
+model A
+  Real r;
+end A;
+model B = A[3];
+model ESC14
+  extends B;
+  Real y;
+end ESC14;
+//// model: ESC15
+model A
+  Real x = 1;
+end A;
+model X
+  Real y = 2;
+end X;
+model M
+  replaceable model T = A;
+  model B = T;
+  extends B;
+end M;
+model ESC15
+  M m1;
+  M m2(redeclare model T = X);
+end ESC15;
+//// model: ESC16
+model A
+  Real x = 1;
+end A;
+model X
+  Real y = 2;
+end X;
+model M
+  replaceable model T = A;
+  model B = T;
+  extends B;
+  B b;
+end M;
+model ESC16
+  M m1;
+  M m2(redeclare model T = X);
+end ESC16;
+//// model: ESC17
+model A
+  Real x = 1;
+end A;
+model X
+  Real y = 2;
+end X;
+model M
+  replaceable model T = A;
+  model B = T;
+  B b;
+end M;
+model ESC17
+  M m1;
+  M m2(redeclare model T = X);
+end ESC17;
+//// model: ESC18
+partial model A
+  Real x = 1;
+end A;
+model B = A;
+model ESC18
+  extends B;
+end ESC18;
+//// model: ESC19
+model A
+  Real x = 1;
+end A;
+partial model B = A;
+model ESC19
+  extends B;
+end ESC19;
+//// model: ESC20
+model ESC20
+  extends B;
+  model A
+    Real x;
+  end A;
+  model B = A;
+end ESC20;
+//// model: ESC21
+model ESC21
+  extends B;
+protected
+  model A
+    Real x;
+  end A;
+  model B = A;
+end ESC21;
+//// model: ESC22
+model ESC22
+  replaceable class A
+    Real x;
+  end A;
+  class B = A;
+  extends B;
+end ESC22;
+//// model: ESC23
+model ESC23
+  replaceable class A
+    Real x;
+  end A;
+  extends A;
+end ESC23;
+//// model: ESC24
+type E = enumeration(a, b);
+type F = E;
+type G
+  extends F;
+end G;
+model ESC24
+  G x = E.a;
+end ESC24;
+//// model: ESC25
+type E = enumeration(a, b);
+model ESC25
+  extends E;
+end ESC25;
+//// model: ESC26
+type T = Real;
+model ESC26
+  extends T;
+end ESC26;
+//// model: ESC27
+type T = Real;
+type U = T;
+model ESC27
+  extends U;
+end ESC27;
+//// model: ESC28
+model B = A;
+model A
+  extends B;
+  Real x;
+end A;
+model ESC28
+  A a;
+end ESC28;
+//// model: ESC29
+model A
+  replaceable model C
+    Real c = 1;
+  end C;
+  C c;
+end A;
+model X
+  Real d = 2;
+end X;
+model B = A(redeclare model C = X);
+model ESC29
+  extends B;
+end ESC29;
+//// model: ESC30
+model A
+  replaceable Real x = 1;
+end A;
+model B = A(redeclare Integer x = 2);
+model ESC30
+  extends B;
+end ESC30;
+//// model: ESC31
+model A
+  Real x = 1;
+end A;
+model B = A;
+model ESC31
+  extends B;
+  extends A;
+end ESC31;
+//// model: ESC32
+model A
+  Real x = 1;
+end A;
+model B = A;
+model ESC32
+  extends A;
+  extends B;
+  Real y = x;
+end ESC32;
+//// model: ESC33
+model A
+  model N
+    Real z = 2;
+  end N;
+end A;
+model B = A;
+model M
+  extends B;
+  redeclare model extends N
+    Real w = 3;
+  end N;
+  N n;
+end M;
+model ESC33
+  M m;
+end ESC33;
+//// model: ESC34
+model A
+  replaceable model N
+    Real z = 2;
+  end N;
+  N n;
+end A;
+model B = A;
+model X
+  Real w = 3;
+end X;
+model ESC34
+  extends B(redeclare model N = X);
+end ESC34;
+//// model: ESC35
+model A
+  parameter Integer n = 2;
+  Real x[n];
+end A;
+model B = A;
+model C
+  extends B(n = 3);
+end C;
+model ESC35
+  C c;
+  B b;
+  A a(n = 1);
+end ESC35;
+//// model: ESC36
+model A
+  Real x;
+equation
+  x = 1;
+initial equation
+  der(x) = 0;
+end A;
+model B = A;
+model ESC36
+  extends B;
+  Real y;
+algorithm
+  y := 2;
+end ESC36;
+//// model: ESC37
+model A
+  inner Real x = 1;
+end A;
+model I
+  outer Real x;
+  Real y = x;
+end I;
+model B = A;
+model ESC37
+  extends B;
+  I i;
+end ESC37;
+//// model: ESC38
+package P
+  constant Integer n = 2;
+  model A
+    Real x[n];
+  end A;
+end P;
+package Q
+  extends P(n = 3);
+  model B = A;
+end Q;
+model ESC38
+  extends Q.B;
+end ESC38;
+//// model: ESC39
+package P
+  constant Integer n = 2;
+  model A
+    Real x[n];
+  end A;
+end P;
+package Q = P(n = 3);
+model ESC39
+  extends Q.A;
+end ESC39;
+//// model: ESC40
+model A
+  Real x;
+end A;
+class B = A;
+model ESC40
+  extends B;
+end ESC40;
+//// model: ESC41
+model A
+  Real x;
+end A;
+block B = A;
+model ESC41
+  extends B;
+end ESC41;
+//// model: ESC42
+model A
+  Real x;
+end A;
+record B = A;
+model ESC42
+  extends B;
+end ESC42;
+//// model: ESC43
+record A
+  Real x;
+end A;
+model B = A;
+model ESC43
+  extends B;
+end ESC43;
+//// model: ESC44
+connector A
+  Real x;
+end A;
+model B = A;
+model ESC44
+  extends B;
+end ESC44;
+//// model: ESC45
+record A
+  Real x;
+end A;
+connector B = A;
+model ESC45
+  extends B;
+end ESC45;
+//// model: ESC46
+record A
+  Real x;
+end A;
+connector B = input A;
+connector C
+  extends B;
+end C;
+model ESC46
+  C c;
+end ESC46;
+//// model: ESC47
+record A
+  Real x;
+end A;
+record B = parameter A;
+model ESC47
+  extends B;
+end ESC47;
+//// model: ESC48
+connector A
+  Real x;
+end A;
+connector B = input A;
+model ESC48
+  extends B;
+end ESC48;
+//// model: ESC49
+model A
+  Real x;
+end A;
+model B = A "comment";
+model ESC49
+  extends B "cmt";
+end ESC49;
+//// model: ESC50
+model A
+  Real x "desc";
+  annotation(Documentation(info = "x"));
+end A;
+model B = A annotation(Documentation(info = "y"));
+model ESC50
+  extends B annotation(IconMap(primitivesVisible = false));
+end ESC50;
+//// model: ESC51
+model ESC51
+  model A
+    Real x;
+  end A;
+  model B = A;
+  model C
+    extends B;
+    Real y = x;
+  end C;
+  C c1, c2;
+end ESC51;
+//// model: ESC52
+model A
+  parameter Real p = 1;
+  Real x = p;
+end A;
+model B = A;
+model C
+  extends B;
+end C;
+model ESC52
+  C c1(p = 2);
+  C c2(p = 3);
+end ESC52;
+//// model: ESC53
+model ESC53
+  model A
+    parameter Real p = q;
+    constant Real q = 2;
+  end A;
+  model B = A;
+  extends B;
+  Real y = q;
+end ESC53;
+//// model: ESC54
+package P
+  model A
+    parameter Real p = 1;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := x + 1;
+    end f;
+    Real x = f(time);
+  end A;
+  model B = A;
+end P;
+model ESC54
+  extends P.B;
+  Real y = f(x);
+end ESC54;
+//// model: ESC55
+package P
+  model A
+    type T = Real(unit = "m");
+    T t;
+  end A;
+  model B = A;
+end P;
+model ESC55
+  extends P.B;
+  T u;
+end ESC55;
+//// model: ESC56
+package P
+  model A
+    type T = enumeration(a, b);
+    T t = T.a;
+  end A;
+  model B = A;
+end P;
+model ESC56
+  extends P.B;
+  T u = T.b;
+end ESC56;
+//// model: ESC57
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end f;
+function g = f;
+function h
+  extends g;
+protected
+  Real z;
+end h;
+function i
+  extends h;
+end i;
+model ESC57
+  Real x = i(time);
+end ESC57;
+//// model: ESC58
+record R
+  Real a = 1;
+end R;
+record S = R;
+function f
+  extends S;
+  output Real y;
+algorithm
+  y := a;
+end f;
+model ESC58
+  Real x = f(2);
+end ESC58;
+//// model: ESC59
+partial function pf
+  input Real x;
+  output Real y;
+end pf;
+function g = pf;
+function h
+  extends g;
+algorithm
+  y := x;
+end h;
+model ESC59
+  Real x = h(time);
+end ESC59;
+//// model: ESC60
+partial model P
+  Real x;
+end P;
+model B = P;
+model ESC60
+  extends B;
+equation
+  x = 1;
+end ESC60;
+//// model: ESC61
+model ESC61
+  model O
+    model B = O;
+    model C
+      extends B;
+    end C;
+    Real x = 1;
+  end O;
+  O.C c;
+end ESC61;
+//// model: ESC62
+package P
+  model A
+    Real x = 1;
+  end A;
+end P;
+model ESC62
+  import P.*;
+  model B = A;
+  extends B;
+end ESC62;
+//// model: ESC63
+package P
+  model A
+    Real x = 1;
+  end A;
+end P;
+model ESC63
+  import Q = P;
+  model B = Q.A;
+  extends B;
+end ESC63;
+//// model: ESC64
+model Base
+  model A
+    Real x = 1;
+  end A;
+  model B = A;
+end Base;
+model ESC64
+  extends Base;
+  extends B;
+end ESC64;
+//// model: ESC65
+model A
+  model B
+    Real z;
+  end B;
+  Real x = 1;
+end A;
+model B = A;
+model ESC65
+  extends B;
+end ESC65;
+//// model: ESC66
+encapsulated package P
+  model A
+    Real x = 1;
+  end A;
+  model B = A;
+end P;
+model ESC66
+  extends P.B;
+end ESC66;
+//// model: ESC67
+model A
+  replaceable Real x = 1;
+end A;
+model B = A;
+model ESC67
+  extends B(redeclare Integer x = 2);
+end ESC67;
+//// model: ESC68
+model A
+  parameter Real x = 1;
+end A;
+model B = A;
+model ESC68
+  extends B(final x = 2);
+end ESC68;
+//// model: ESC69
+record R
+  Real a;
+  Real b;
+end R;
+record S = R;
+record T
+  extends S;
+  Real c;
+end T;
+function f
+  input T t;
+  output Real y;
+algorithm
+  y := t.a + t.c;
+end f;
+model ESC69
+  Real x = f(T(1, 2, time));
+end ESC69;
+//// model: ESC70
+record R
+  Real a = 1;
+end R;
+record S = R(a = 5);
+record T
+  extends S;
+end T;
+function f
+  input T t;
+  output Real y;
+algorithm
+  y := t.a;
+end f;
+model ESC70
+  Real x = f(T());
+end ESC70;
+//// model: ESC71
+model M0
+  Real z = 1;
+end M0;
+model A
+  replaceable model N = M0;
+  N n;
+end A;
+model B
+  extends A;
+  redeclare model extends N
+    Real w = 3;
+  end N;
+end B;
+model ESC71
+  B b;
+end ESC71;
+//// model: ESC72
+model M0
+  parameter Real p = 2;
+  Real z = 1;
+end M0;
+model A
+  replaceable model N = M0(p = 1);
+  N n;
+end A;
+model B
+  extends A;
+  redeclare model extends N
+    Real w = 3;
+  end N;
+end B;
+model ESC72
+  B b;
+end ESC72;
+//// model: ESC73
+model A
+  type MyReal = Real;
+end A;
+model ESC73
+  extends A;
+  redeclare model extends MyReal
+    Real y;
+  end MyReal;
+  MyReal x;
+end ESC73;
+//// model: ESC74
+model A
+  type MyReal = Real(unit = "m");
+end A;
+model ESC74
+  extends A;
+  redeclare type extends MyReal
+  end MyReal;
+  MyReal x;
+end ESC74;
+//// model: ESC75
+model A
+  type MyReal = Real[3];
+end A;
+model ESC75
+  extends A;
+  redeclare type extends MyReal
+  end MyReal;
+  MyReal x;
+end ESC75;
+//// model: ESC76
+model A
+  type E = enumeration(a, b);
+end A;
+model ESC76
+  extends A;
+  redeclare type extends E
+  end E;
+  E x = E.a;
+end ESC76;
+//// model: ESC77
+model A
+  type MyReal = Real;
+end A;
+model ESC77
+  extends A;
+  redeclare type extends MyReal(unit = "m")
+  end MyReal;
+  MyReal x;
+end ESC77;
+//// model: ESC78
+model A
+  type MyReal = Real;
+end A;
+type R2 = Real;
+model ESC78
+  extends A(redeclare type MyReal = R2(unit = "m"));
+  MyReal x;
+end ESC78;
+//// model: ESC79
+connector C
+  Real v;
+  flow Real i;
+end C;
+model A
+  C p, n;
+equation
+  connect(p, n);
+end A;
+model B = A;
+model D
+  extends B;
+  C q;
+equation
+  connect(p, q);
+end D;
+model ESC79
+  D d[2];
+end ESC79;
+//// model: ESC80
+model A
+  Real x;
+end A;
+model B = A;
+model ESC80
+  Real y;
+  extends B;
+  Real z;
+end ESC80;
+//// model: ESC81
+function f
+  input Real x;
+  output Real y;
+  external "C" y = sin(x);
+end f;
+function g = f;
+function h
+  extends g;
+end h;
+model ESC81
+  Real x = h(time);
+end ESC81;
+//// model: ESC82
+function f
+  input Real x = 2;
+  output Real y;
+algorithm
+  y := x + 1;
+end f;
+function g = f(x = 3);
+function h
+  extends g;
+end h;
+model ESC82
+  Real x = h();
+end ESC82;
+//// model: ESC83
+function f
+  input Real x = 2;
+  input Real z = x;
+  output Real y;
+algorithm
+  y := x + z;
+end f;
+function g = f;
+function h
+  extends g;
+protected
+  Real w;
+algorithm
+  w := 1;
+end h;
+model ESC83
+  Real x = h(time);
+end ESC83;
+//// model: ESC84
+partial function pf
+  input Real x;
+  output Real y;
+end pf;
+function g = pf;
+function h
+  extends g;
+algorithm
+  y := x;
+end h;
+function k
+  input g fn;
+  input Real x;
+  output Real y;
+algorithm
+  y := fn(x);
+end k;
+model ESC84
+  Real x = k(h, time);
+end ESC84;
+//// model: ESC85
+package P
+  constant Integer n = 3;
+  model A
+    Real x[n];
+    function f
+      input Real u;
+      output Real y;
+    algorithm
+      y := u * n;
+    end f;
+  end A;
+end P;
+package Q
+  extends P(n = 4);
+  model B = A;
+end Q;
+model ESC85
+  extends Q.B;
+  Real y = f(time);
+end ESC85;
+//// model: ESC86
+package P
+  type T = Real(unit = "m");
+  model A
+    T x;
+  end A;
+  model B = A;
+end P;
+model ESC86
+  extends P.B(x(start = 1));
+end ESC86;
+//// model: ESC87
+package P
+  model A
+    parameter Real p = 1;
+    Real x(start = p);
+  end A;
+  model B = A;
+end P;
+model ESC87
+  extends P.B(p = q);
+  parameter Real q = 3;
+end ESC87;
+//// model: ESC88
+model A
+  parameter Real p;
+end A;
+model B = A;
+model C
+  extends B;
+end C;
+model ESC88
+  extends C(p = 2);
+end ESC88;
+//// model: ESC89
+model A
+  model X
+    Real x = 1;
+  end X;
+  X y;
+end A;
+model B = A;
+model ESC89
+  extends B(X(x = 3));
+end ESC89;
+//// model: ESC90
+package P1
+  model A
+    Real x = 1;
+  end A;
+end P1;
+package Q = P1;
+model ESC90
+  extends Q.A;
+end ESC90;
+//// model: ESC91
+package P1
+  model A
+    Real x = 1;
+  end A;
+end P1;
+package Q
+  extends P1;
+end Q;
+package R = Q;
+model ESC91
+  extends R.A;
+end ESC91;
+//// model: ESC92
+model ESC92
+  model A
+    Real x = 1;
+  end A;
+  model B = A;
+  block C
+    extends B;
+  end C;
+  C c;
+end ESC92;
+//// model: ESC93
+block A
+  input Real u;
+  output Real y;
+end A;
+model B = A;
+model C
+  extends B;
+equation
+  y = u;
+end C;
+model ESC93
+  C c(u = 1);
+end ESC93;
+//// model: ESC94
+partial model A
+  Real x;
+end A;
+model B = A;
+model C
+  B b;
+end C;
+model ESC94
+  extends B;
+  x = 1;
+end ESC94;
+//// model: ESC95
+model A
+  Real x = 1;
+end A;
+model B = A;
+model ESC95
+  model C
+    extends B;
+  end C;
+  model D
+    extends C;
+    Real y = x;
+  end D;
+  D d;
+  C c;
+end ESC95;
+//// model: ESC96
+model A
+  Real x = 1;
+end A;
+type T = A;
+model ESC96
+  extends T;
+end ESC96;
+//// model: ESC97
+model A
+  Real x = 1;
+end A;
+function T = A;
+model ESC97
+  extends T;
+end ESC97;
+//// model: ESC98
+model A
+  Real x = 1;
+end A;
+package T = A;
+model ESC98
+  extends T;
+end ESC98;
+//// model: ESC99
+model A
+  Real x[2];
+end A;
+model B = A[:];
+model ESC99
+  extends B;
+end ESC99;
+//// model: ESC100
+model A
+  Real x;
+end A;
+model ESC100
+  parameter Integer n = 2;
+  model B = A[n];
+  extends B;
+end ESC100;
+//// model: ESC101
+record R
+  Real a = 1;
+end R;
+record S = R;
+model ESC101
+  extends S;
+  Real y = a;
+end ESC101;
+//// model: ESC102
+model A
+  replaceable model N
+    Real z = 2;
+  end N;
+  N n;
+end A;
+model B = A;
+model C
+  replaceable model K
+    Real k = 3;
+  end K;
+  extends B(redeclare model N = K);
+end C;
+model ESC102
+  C c1;
+  C c2(redeclare model K
+         Real k2 = 4;
+       end K);
+end ESC102;
+//// model: ESC103
+model A
+  parameter Real p = 1;
+  Real x = p;
+end A;
+model B = A;
+model C
+  extends B;
+end C;
+model ESC103
+  C c1(p = 2);
+  C c2[2](p = {3, 4});
+end ESC103;
+//// model: ESC104
+connector C
+  input Real u;
+end C;
+model A
+  C c;
+end A;
+model B = A;
+model D
+  extends B;
+end D;
+model ESC104
+  D d;
+end ESC104;
+//// model: ESC105
+type T = Real;
+type U = T;
+record ESC105R
+  U u = 1;
+end ESC105R;
+record S = ESC105R;
+model ESC105
+  S s;
+end ESC105;
+//// model: ESC106
+model A
+  Real x = 1;
+end A;
+model X
+  Real y = 2;
+end X;
+model M
+  replaceable model T = A;
+  model B2 = T;
+  model C
+    extends B2;
+  end C;
+  C c;
+end M;
+model ESC106
+  M m1;
+  M m2(redeclare model T = X);
+end ESC106;
+//// model: ESC107
+model A
+  Real x = 1;
+end A;
+model X
+  Real y = 2;
+end X;
+model M
+  replaceable model T = A;
+  model B2 = T;
+  model C
+    extends B2;
+  end C;
+  extends C;
+  C c;
+end M;
+model ESC107
+  M m1;
+  M m2(redeclare model T = X);
+end ESC107;
+//// model: ESC108
+model A
+  Real x = 1;
+end A;
+model X
+  Real y = 2;
+end X;
+model M
+  replaceable model T = A;
+  model B = T;
+  extends B;
+end M;
+model N
+  extends M(redeclare model T = X);
+  T t;
+  B b;
+end N;
+model ESC108
+  N n;
+end ESC108;
+//// model: ESC109
+package P
+  replaceable package Q = Q0;
+  package Q0
+    constant Real c = 1;
+  end Q0;
+  package S = Q;
+  model A
+    Real x = S.c;
+  end A;
+end P;
+package Q1
+  constant Real c = 2;
+end Q1;
+package P2 = P(redeclare package Q = Q1);
+model ESC109
+  extends P2.A;
+end ESC109;
+//// model: ESC110
+package P
+  constant Real c = 1;
+  model A
+    Real x = c;
+  end A;
+  model B = A;
+end P;
+package P2
+  extends P(c = 2);
+end P2;
+model ESC110
+  extends P2.B;
+  P.B b;
+end ESC110;
+//// model: ESC111
+record R
+  Real a = 1;
+  Real b = 2;
+end R;
+record S = R;
+record T
+  extends S;
+end T;
+model ESC111
+  parameter T t1;
+  parameter T t2(a = 3);
+  Real x = t2.a;
+  T t3[2];
+end ESC111;
+//// model: ESC112
+package P
+  record R
+    constant Real a = 1;
+    Real b = a;
+  end R;
+  record S = R;
+end P;
+record T
+  extends P.S;
+end T;
+model ESC112
+  T t;
+end ESC112;
+//// model: ESC113
+operator record C
+  Real re;
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C c;
+  algorithm
+    c := C(a.re + b.re);
+  end '+';
+end C;
+record D = C;
+model ESC113
+  D a = D(1);
+  D b = a + a;
+end ESC113;
+//// model: ESC115
+package P
+  model A
+    Real x = 1;
+  end A;
+  model X
+    Real y = 2;
+  end X;
+  model M
+    replaceable model T = A;
+    model B = T;
+    extends B;
+    B b;
+  end M;
+end P;
+model ESC115
+  P.M m1;
+  P.M m2(redeclare model T = P.X);
+end ESC115;
+//// model: ESC116
+package P
+  model A
+    Real x = 1;
+  end A;
+  model X
+    Real y = 2;
+  end X;
+  model M
+    replaceable model T = A;
+    model B = T;
+    extends B;
+  end M;
+end P;
+model ESC116
+  P.M m1;
+  P.M m2(redeclare model T = P.X);
+end ESC116;
+//// model: ESC114
+connector C
+  Real v;
+  flow Real i;
+end C;
+connector D = C;
+connector E
+  extends D;
+  Real w;
+end E;
+model ESC114
+  E e1, e2;
+equation
+  connect(e1, e2);
+end ESC114;
+//// model: LMS1
+package A
+  replaceable model B
+    Real x;
+  end B;
+  model C
+    B b;
+  end C;
+end A;
+model LMS1
+  model D
+    Real x = 1.0;
+  end D;
+  model E
+    Real y = 2.0;
+  end E;
+  package A2 = A(redeclare model B = D);
+  package A3 = A(redeclare model B = E);
+  A.C c1;
+  A2.C c2;
+  A3.C c3;
+end LMS1;
+//// model: LMS2
+package A
+  replaceable model B
+    Real x;
+  end B;
+  model C
+    B b;
+  end C;
+end A;
+model D
+  Real x = 1.0;
+end D;
+model E
+  Real y = 2.0;
+end E;
+model M
+  replaceable model R = D;
+  package A2 = A(redeclare model B = R);
+  A2.C c;
+end M;
+model LMS2
+  M m1;
+  M m2(redeclare model R = E);
+end LMS2;
+//// model: LMS3
+package A
+  replaceable function f
+    input Real a;
+    output Real c;
+  end f;
+end A;
+package P
+  constant Integer n = 2;
+  function f1
+    input Real a;
+    output Real c;
+  algorithm
+    c := a + n;
+  end f1;
+  function f2
+    input Real a;
+    output Real c;
+  algorithm
+    c := a * n;
+  end f2;
+end P;
+model C
+  replaceable function fredecl = A.f;
+  package Z = A(redeclare function f = fredecl);
+  Real x = Z.f(time);
+  Real y = Z.f(2);
+end C;
+model LMS3
+  C c1(redeclare function fredecl = P.f1);
+  C c2(redeclare function fredecl = P.f2);
+end LMS3;
+//// model: LMS4
+package R1
+  constant Real c = 1;
+  type T = Real(unit = "m");
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := x + c;
+  end f;
+end R1;
+partial package RP
+  constant Real c;
+  type T = Real;
+end RP;
+package M
+  replaceable package Medium = RP;
+  constant Real u = Medium.f(10);
+  constant Real v = Medium.c;
+end M;
+model LMS4
+  package B = M(redeclare package Medium = R1);
+  Real x = B.u;
+  Real y = B.v;
+  Real z = B.Medium.c;
+  B.Medium.T t;
+end LMS4;
+//// model: LMS5
+package P
+  replaceable type T = Real;
+  model M
+    T t;
+  end M;
+end P;
+model LMS5
+  package P2 = P(redeclare type T = Real(unit = "m"));
+  P2.T x;
+  P2.M m;
+end LMS5;
+//// model: LMS6
+class X
+  parameter Real x = 1;
+end X;
+class Y
+  parameter Real x = 2;
+  parameter Real y = 3;
+end Y;
+package P
+  constant Real u = 500;
+  replaceable class A = X(x = u);
+end P;
+package P2 = P(redeclare class A = Y(x = 7), u = 10);
+package P3 = P(redeclare class A = Y(y = 7), u = 10);
+package P4 = P(redeclare class A = Y);
+model LMS6
+  P2.A a;
+  P3.A b;
+  P4.A c;
+end LMS6;
+//// model: LMS7
+class X
+  parameter Real x = 1;
+end X;
+class Y
+  parameter Real x = 2;
+  parameter Real y = 3;
+end Y;
+package P
+  replaceable class A = X constrainedby X(x = 5);
+end P;
+package P2 = P(redeclare class A = Y);
+model LMS7
+  P2.A a;
+  P.A b;
+end LMS7;
+//// model: LMS8
+package A
+  constant Real c = 1;
+  replaceable model B
+    Real x = c;
+  end B;
+  model C
+    B b;
+  end C;
+end A;
+model D
+  Real y = 2;
+end D;
+model E
+  Real z = 3;
+end E;
+package P1 = A(redeclare model B = D);
+package P2 = P1(redeclare model B = E);
+package P3 = P1(c = 2);
+model LMS8
+  P1.C c1;
+  P2.C c2;
+  P3.C c3;
+end LMS8;
+//// model: LMS9
+package A
+  replaceable model B
+    Real x;
+  end B;
+  model C
+    B b;
+  end C;
+end A;
+package Lib
+  model D
+    Real x = 1.0;
+  end D;
+  package A2 = A(redeclare model B = D);
+end Lib;
+model LMS9
+  Lib.A2.C c;
+  Lib.A2.B b;
+end LMS9;
+//// model: LMS10
+package Base
+  replaceable model B
+    Real x;
+  end B;
+  model C
+    B b;
+  end C;
+end Base;
+package A
+  extends Base;
+end A;
+model D
+  Real y = 1;
+end D;
+package A2 = A(redeclare model B = D);
+model LMS10
+  A2.C c;
+end LMS10;
+//// model: LMS11
+package Q0
+  constant Real c = 1;
+  type T = Real(unit = "a");
+end Q0;
+package Q1
+  constant Real c = 2;
+  type T = Real(unit = "b");
+end Q1;
+package P
+  replaceable package Q = Q0;
+  model Z
+    Q.T t = Q.c;
+  end Z;
+end P;
+package P2 = P(redeclare package Q = Q1);
+model LMS11
+  Real a = P2.Q.c;
+  P2.Q.T b;
+  P2.Z z;
+  P.Z y;
+end LMS11;
+//// model: LMS12
+package P
+  replaceable function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := x;
+  end f;
+  model M
+    Real a = f(time);
+  end M;
+end P;
+function g
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end g;
+package P2 = P(redeclare function f = g);
+model LMS12
+  P2.M m;
+  Real b = P2.f(time);
+end LMS12;
+//// model: LMS13
+package P
+  replaceable model B
+    Real x;
+  end B;
+end P;
+package P2 = P(redeclare model B
+                 Real y = 3;
+               end B);
+model LMS13
+  P2.B b;
+end LMS13;
+//// model: LMS14
+package P
+  replaceable model B
+    Real x;
+  end B;
+end P;
+package P2 = P(redeclare model extends B
+                 Real y = 3;
+               end B);
+model LMS14
+  P2.B b;
+end LMS14;
+//// model: LMS15
+package P
+  replaceable constant Real c = 1;
+end P;
+package P2 = P(redeclare constant Real c = 3);
+model LMS15
+  Real x = P2.c;
+end LMS15;
+//// model: LMS16
+package P
+  constant Real c = 1;
+  replaceable model B
+    Real x = c;
+  end B;
+end P;
+model D
+  Real y = 2;
+end D;
+package P2 = P(redeclare model B = D);
+package Q
+  extends P2;
+end Q;
+model LMS16
+  Q.B b;
+end LMS16;
+//// model: LMS17
+model Y
+  replaceable model B
+    Real x = 1;
+  end B;
+  model C
+    B b;
+  end C;
+end Y;
+model D
+  Real y = 2;
+end D;
+model X = Y(redeclare model B = D);
+model LMS17
+  X.C c;
+end LMS17;
+//// model: LMS18
+package P
+  model B
+    Real x = 1;
+  end B;
+end P;
+model D
+  Real y = 2;
+end D;
+package P2 = P(redeclare model B = D);
+model LMS18
+  P2.B b;
+end LMS18;
+//// model: LMS19
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+end P;
+model D
+  Real y = 2;
+end D;
+package P2 = P(redeclare model Nope = D);
+model LMS19
+  P2.B b;
+end LMS19;
+//// model: LMS20
+package P
+  replaceable type E = enumeration(a, b);
+  constant E e = E.a;
+end P;
+package P2 = P(redeclare type E = enumeration(a, b));
+package P3 = P(redeclare type E = enumeration(a, b, c));
+model LMS20
+  P2.E x = P2.E.b;
+end LMS20;
+//// model: LMS21
+package P
+  replaceable type E = enumeration(:);
+end P;
+type F = enumeration(u, v);
+package P2 = P(redeclare type E = F);
+model LMS21
+  P2.E x = P2.E.v;
+end LMS21;
+//// model: LMS22
+partial package A
+  replaceable partial model B
+  end B;
+  model C
+    B b;
+  end C;
+end A;
+model D
+  Real y = 2;
+end D;
+package A2 = A(redeclare model B = D);
+model LMS22
+  A2.C c;
+end LMS22;
+//// model: LMS23
+partial package A
+  replaceable partial model B
+  end B;
+  model C
+    B b;
+  end C;
+end A;
+model D
+  Real y = 2;
+end D;
+package A2
+  extends A(redeclare model B = D);
+end A2;
+model LMS23
+  A2.C c;
+end LMS23;
+//// model: LMS24
+package RefAir
+  constant Real c = 1;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := x + c;
+  end f;
+end RefAir;
+partial package RefAirPartial
+  constant Real c;
+  partial function f
+    input Real x;
+    output Real y;
+  end f;
+end RefAirPartial;
+package M
+  replaceable package Medium = RefAirPartial;
+  constant Real u = Medium.f(10);
+end M;
+model U
+  replaceable package Medium = RefAirPartial;
+  package B = M(redeclare package Medium = Medium);
+  Real x = B.u;
+end U;
+model LMS24
+  U u(redeclare package Medium = RefAir);
+end LMS24;
+//// model: LMS25
+package A
+  replaceable function f
+    input Real a;
+    output Real c;
+  end f;
+  constant Integer k = 1;
+end A;
+function g
+  input Real a;
+  output Real c;
+algorithm
+  c := a + 1;
+end g;
+package Z = A(redeclare function f = g, k = 3);
+model LMS25
+  parameter Integer n = Z.k;
+  Real x[Z.k] = fill(Z.f(1), Z.k);
+end LMS25;
+//// model: LMS26
+record R0
+  Real a = 1;
+end R0;
+record R1
+  Real a = 2;
+  Real b = 3;
+end R1;
+package P
+  replaceable record R = R0;
+  function f
+    input R r;
+    output Real y;
+  algorithm
+    y := r.a;
+  end f;
+  constant R c;
+end P;
+package P2 = P(redeclare record R = R1);
+model LMS26
+  P2.R r;
+  Real x = P2.f(P2.R(time, 1));
+  Real y = P2.c.a;
+end LMS26;
+//// model: LMS27
+connector C0
+  Real v;
+end C0;
+connector C1
+  Real v;
+  flow Real i;
+end C1;
+package P
+  replaceable connector K = C0;
+  model M
+    K k;
+  end M;
+end P;
+package P2 = P(redeclare connector K = C1);
+model LMS27
+  P2.M m1, m2;
+equation
+  connect(m1.k, m2.k);
+end LMS27;
+//// model: LMS28
+package P
+  replaceable model B
+    parameter Real p = 1;
+  end B;
+  model C
+    B b(p = 2);
+  end C;
+end P;
+model D
+  parameter Real p = 5;
+  parameter Real q = 6;
+end D;
+package P2 = P(redeclare model B = D(q = 7));
+model LMS28
+  P2.C c;
+end LMS28;
+//// model: LMS29
+package P
+  constant Integer n = 2;
+  replaceable model B
+    Real x[n];
+  end B;
+end P;
+model LMS29
+  constant Integer m = 3;
+  model D
+    Real y[m];
+  end D;
+  package P2 = P(redeclare model B = D, n = 4);
+  P2.B b;
+end LMS29;
+//// model: LMS30
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+end P;
+model D
+  Real y = 2;
+end D;
+model LMS30
+  package P2 = P(redeclare model B = D);
+  model N
+    package P3 = P2;
+    P3.B b;
+  end N;
+  N n;
+end LMS30;
+//// model: LMS31
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+end P;
+model D
+  Real y = 2;
+end D;
+model X
+  Real z = 3;
+end X;
+model LMS31
+  extends X;
+  package P2 = P(redeclare model B = D);
+  P2.B b;
+end LMS31;
+//// model: LMS32
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+end P;
+model D
+  Real y = 2;
+end D;
+package P2 = P(redeclare replaceable model B = D);
+package P3 = P2(redeclare model B
+                  Real w = 3;
+                end B);
+model LMS32
+  P2.B b;
+  P3.B c;
+end LMS32;
+//// model: LMS33
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+end P;
+model D
+  Real y = 2;
+end D;
+package P2 = P(redeclare final model B = D);
+model LMS33
+  P2.B b;
+end LMS33;
+//// model: LMS34
+package P
+  final model B
+    Real x = 1;
+  end B;
+end P;
+model D
+  Real y = 2;
+end D;
+package P2 = P(redeclare model B = D);
+model LMS34
+  P2.B b;
+end LMS34;
+//// model: LMS35
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+  constant Real c = 1;
+end P;
+model D
+  Real y = c;
+  constant Real c = 9;
+end D;
+model LMS35
+  constant Real c = 8;
+  model E
+    Real y = c;
+  end E;
+  package P2 = P(redeclare model B = E);
+  P2.B b;
+end LMS35;
+//// model: LMS36
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+end P;
+model E
+  Real y = 7;
+end E;
+model LMS36
+  model E
+    Real y = 8;
+  end E;
+  package P2 = P(redeclare model B = E);
+  package P3 = P(redeclare model B = .E);
+  P2.B b;
+  P3.B c;
+end LMS36;
+//// model: LMX1
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+end P;
+model D
+  Real y = 2;
+end D;
+package P2 = P(redeclare model B = D);
+model LMX1
+  extends P2.B;
+end LMX1;
+//// model: LMX2
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+  model C
+    B b;
+    Real z = 3;
+  end C;
+end P;
+model D
+  Real y = 2;
+end D;
+package P2 = P(redeclare model B = D);
+model LMX2
+  extends P2.C;
+end LMX2;
+//// model: LMX3
+package A
+  replaceable model B
+    Real x;
+  end B;
+  model C
+    B b;
+  end C;
+end A;
+package Lib
+  model D
+    Real x = 1.0;
+  end D;
+  package A2 = A(redeclare model B = D);
+end Lib;
+model LMX3
+  import A3 = Lib.A2;
+  A3.C c;
+end LMX3;
+//// model: LMX4
+package Q0
+  constant Integer n = 1;
+end Q0;
+package Q1
+  constant Integer n = 2;
+end Q1;
+package P
+  replaceable package Q = Q0;
+  model M
+    Real x[Q.n];
+  end M;
+end P;
+package P2 = P(redeclare package Q = Q1);
+model LMX4
+  Real y[P2.Q.n];
+  P2.M m;
+end LMX4;
+//// model: LMX5
+package P
+  type T = Real(min = 0);
+  replaceable model B
+    T x;
+  end B;
+  constant Real c = 1;
+end P;
+model D
+  Real y = 2;
+end D;
+package P2 = P(redeclare model B = D, c = 3, T(max = 1));
+model LMX5
+  P2.B b;
+  P2.T t;
+  Real z = P2.c;
+end LMX5;
+//// model: LMX6
+package P
+  replaceable type T = Real;
+  function f
+    input T x;
+    output T y;
+  algorithm
+    y := x + 1;
+  end f;
+end P;
+package P2 = P(redeclare type T = Real(unit = "m"));
+model LMX6
+  Real x = P2.f(time);
+end LMX6;
+//// model: LMX7
+package Q0
+  constant Real c = 1;
+end Q0;
+package Q1
+  constant Real c = 2;
+end Q1;
+package P
+  replaceable package Q = Q0;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := x + Q.c;
+  end f;
+end P;
+package P2 = P(redeclare package Q = Q1);
+model LMX7
+  Real x = P2.f(time);
+  Real y = P.f(time);
+  Real z = P2.f(1);
+end LMX7;
+//// model: LMX8
+package P
+  constant Real c = 1;
+  replaceable model B
+    parameter Real p = c;
+  end B;
+  model M
+    B b;
+    parameter Real q = c;
+  end M;
+end P;
+model D
+  parameter Real p = 2;
+end D;
+package P2 = P(redeclare model B = D, c = 5);
+model LMX8
+  P2.M m;
+end LMX8;
+//// model: LMX9
+package P
+  replaceable model B
+    parameter Real p = 1;
+  end B;
+  model M
+    B b;
+    parameter Real x = 0;
+  end M;
+end P;
+model D
+  parameter Real p = 2;
+end D;
+package P2 = P(redeclare model B = D);
+model LMX9
+  P2.M m1(x = 1, b(p = 3));
+  P2.M m2(x = 2);
+  P.M m3;
+end LMX9;
+//// model: LMX11
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+  model C
+    B b;
+  end C;
+end P;
+model D
+  Real y = 2;
+end D;
+package P2 = P(redeclare model B = D);
+package P3 = P2;
+model LMX11
+  P3.C c;
+  P3.B b;
+end LMX11;
+//// model: LMX12
+package P
+  constant Real c = 1;
+  replaceable model B
+    Real x = c;
+  end B;
+  model C
+    B b;
+  end C;
+end P;
+model D
+  Real y = 2;
+end D;
+package P2 = P(redeclare model B = D);
+package P3 = P2(c = 5);
+model LMX12
+  P3.C c;
+  Real z = P3.c;
+end LMX12;
+//// model: LMX13
+package P
+  package Q
+    replaceable model B
+      Real x = 1;
+    end B;
+  end Q;
+end P;
+model D
+  Real y = 2;
+end D;
+package P2 = P(Q(redeclare model B = D));
+model LMX13
+  P2.Q.B b;
+end LMX13;
+//// model: LMX15
+record R0
+  Real a = 1;
+end R0;
+record R1
+  Real a = 2;
+end R1;
+package P
+  replaceable record R = R0;
+  constant R r;
+end P;
+package P2 = P(redeclare record R = R1);
+model LMX15
+  Real x = P2.r.a;
+  Real y = P.r.a;
+end LMX15;
+//// model: LMX16
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+end P;
+partial model PM
+  Real y = 2;
+end PM;
+package P2 = P(redeclare model B = PM);
+model LMX16
+  P2.B b;
+end LMX16;
+//// model: LMX18
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+end P;
+encapsulated package W
+  model D
+    Real y = 2;
+  end D;
+  package P2 = .P(redeclare model B = D);
+end W;
+model LMX18
+  W.P2.B b;
+end LMX18;
+//// model: LMX19
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+  model X
+    Real y = 2;
+  end X;
+end P;
+package P2 = P(redeclare model B = P.X);
+model LMX19
+  P2.B b;
+end LMX19;
+//// model: LMX20
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+  model X
+    B b;
+    Real y = 2;
+  end X;
+end P;
+package P2 = P(redeclare model B = P2.X);
+model LMX20
+  P2.B b;
+end LMX20;
+//// model: LMX21
+class X
+  parameter Real x = 1;
+end X;
+model LMX21
+  replaceable class A = X constrainedby X(x = 5);
+  class B = A;
+  B b;
+end LMX21;
+//// model: LMX22
+class X
+  parameter Real x = 1;
+end X;
+model LMX22
+  replaceable class A = X constrainedby X(x = 5);
+  class B = A;
+  extends B;
+end LMX22;
+//// model: LMX23
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+  model C
+    extends B;
+  end C;
+end P;
+model D
+  Real y = 2;
+end D;
+package P2 = P(redeclare model B = D);
+model LMX23
+  P2.C c;
+end LMX23;
+//// model: LMX24
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+  model S = B;
+  model C
+    extends S;
+  end C;
+end P;
+model D
+  Real y = 2;
+end D;
+package P2 = P(redeclare model B = D);
+model LMX24
+  P2.C c;
+end LMX24;
+//// model: LMX25
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+  model S = B;
+  model C
+    extends S;
+  end C;
+end P;
+model D
+  Real y = 2;
+end D;
+package P2 = P(redeclare model B = D);
+model LMX25
+  P.C c0;
+  P2.C c;
+end LMX25;
+//// model: LMX31
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+  model Base
+    B b;
+  end Base;
+  model C
+    extends Base;
+  end C;
+end P;
+model D
+  Real y = 2;
+end D;
+package P2
+  extends P(redeclare model B = D);
+end P2;
+model LMX31
+  P.C c0;
+  P2.C c;
+end LMX31;
+//// model: LMX32
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+  model Base
+    B b;
+  end Base;
+  model C
+    extends Base;
+  end C;
+end P;
+model D
+  Real y = 2;
+end D;
+package P2 = P(redeclare model B = D);
+model LMX32
+  P.C c0;
+  P2.C c;
+end LMX32;
+//// model: LMX33
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+  model Base
+    B b;
+  end Base;
+  model C
+    extends Base;
+  end C;
+end P;
+model D
+  Real y = 2;
+end D;
+package P2 = P(redeclare model B = D);
+model LMX33
+  P2.C c;
+  P.C c0;
+end LMX33;
+//// model: LMX34
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+  model C
+    B b;
+  end C;
+end P;
+model D
+  Real y = 2;
+end D;
+package P2
+  extends P(redeclare model B = D);
+end P2;
+model LMX34
+  P.C c0;
+  P2.C c;
+end LMX34;
+//// model: LMX35
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+  model Base
+    B b;
+  end Base;
+  model C
+    extends Base;
+  end C;
+  model E
+    extends C;
+  end E;
+end P;
+model D
+  Real y = 2;
+end D;
+package P2 = P(redeclare model B = D);
+model LMX35
+  P.E e0;
+  P2.C c;
+  P2.E e;
+end LMX35;
+//// model: LMX36
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+  model Base
+    B b;
+  end Base;
+end P;
+model C
+  extends P.Base;
+end C;
+model LMX36
+  P.Base b0;
+  C c;
+end LMX36;
+//// model: LMX37
+model M
+  replaceable model B
+    Real x = 1;
+  end B;
+  model Base
+    B b;
+  end Base;
+  model C
+    extends Base;
+  end C;
+  C c;
+end M;
+model D
+  Real y = 2;
+end D;
+model LMX37
+  M m1;
+  M m2(redeclare model B = D);
+end LMX37;
+//// model: LMX38
+model M
+  replaceable model B
+    Real x = 1;
+  end B;
+  model Base
+    B b;
+  end Base;
+  model C
+    extends Base;
+  end C;
+  extends C;
+  C c;
+end M;
+model D
+  Real y = 2;
+end D;
+model LMX38
+  M m1;
+  M m2(redeclare model B = D);
+end LMX38;
+//// model: LMX26
+package P
+  replaceable function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := x;
+  end f;
+end P;
+function g
+  input Real x;
+  output Real y;
+algorithm
+  y := 2 * x;
+end g;
+model LMX26
+  package Z = P(redeclare function f = g);
+  function h = Z.f;
+  Real a = h(time);
+  Real b = Z.f(2);
+end LMX26;
+//// model: LMX27
+package P
+  replaceable function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := x;
+  end f;
+end P;
+model C
+  replaceable function g = P.f;
+  package Z = P(redeclare function f = g);
+  Real a = Z.f(time);
+end C;
+function k
+  input Real x;
+  output Real y;
+algorithm
+  y := 3 * x;
+end k;
+model LMX27
+  C c1;
+  C c2(redeclare function g = k);
+  C c3[2](redeclare each function g = k);
+end LMX27;
+//// model: LMX28
+package P
+  replaceable model B
+    Real x = 1;
+  end B;
+end P;
+model D
+  Real y = 2;
+end D;
+model M
+  package P2 = P(redeclare model B = D);
+  P2.B b;
+end M;
+model LMX28
+  M m[2];
+end LMX28;
+//// model: LMX29
+package P
+  replaceable model B
+    outer Real g;
+    Real x = g;
+  end B;
+end P;
+model D
+  outer Real g;
+  Real y = 2 * g;
+end D;
+package P2 = P(redeclare model B = D);
+model LMX29
+  inner Real g = 1;
+  P2.B b;
+end LMX29;
+//// model: LMX30
+connector C
+  Real v;
+  flow Real i;
+end C;
+package P
+  replaceable model B
+    C c;
+  end B;
+end P;
+model D
+  C c;
+equation
+  c.v = 1;
+end D;
+package P2 = P(redeclare model B = D);
+model LMX30
+  P2.B b1, b2;
+equation
+  connect(b1.c, b2.c);
+end LMX30;
+//// model: CMR1
+class X
+  parameter Real x = 1;
+end X;
+class Y
+  parameter Real x = 2;
+  parameter Real y = 3;
+end Y;
+model M
+  replaceable class A = X(x = 5);
+  A a;
+end M;
+model CMR1
+  M m(redeclare class A = Y);
+end CMR1;
+//// model: CMR2
+class X
+  parameter Real x = 1;
+end X;
+class Y
+  parameter Real x = 2;
+  parameter Real y = 3;
+end Y;
+model M
+  replaceable class A = X constrainedby X(x = 5);
+  A a;
+end M;
+model CMR2
+  M m(redeclare class A = Y);
+end CMR2;
+//// model: CMR3
+class X
+  parameter Real x = 1;
+end X;
+class Y
+  parameter Real x = 2;
+  parameter Real y = 3;
+end Y;
+model M
+  replaceable class A = X(x = 5);
+  A a;
+end M;
+model N
+  extends M(redeclare class A = Y);
+end N;
+model CMR3
+  N n;
+end CMR3;
+//// model: CMR4
+class X
+  parameter Real x = 1;
+end X;
+class Y
+  parameter Real x = 2;
+  parameter Real y = 3;
+end Y;
+model M
+  replaceable class A = X(x = 5);
+  A a;
+end M;
+model CMR4
+  extends M;
+  redeclare class A = Y;
+end CMR4;
+//// model: CMR5
+class X
+  parameter Real x = 1;
+end X;
+class Y
+  parameter Real x = 2;
+  parameter Real y = 3;
+end Y;
+model M
+  replaceable class A = X(x = 5);
+  A a;
+end M;
+model CMR5
+  M m(redeclare class A = Y(x = 6));
+end CMR5;
+//// model: CMR6
+class X
+  parameter Real x = 1;
+end X;
+class Y
+  parameter Real x = 2;
+  parameter Real y = 3;
+end Y;
+model M
+  replaceable class A = X(x = 5);
+  A a;
+end M;
+model CMR6
+  M m(redeclare class A
+        parameter Real x = 7;
+      end A);
+end CMR6;
+//// model: CMR7
+model M
+  replaceable type T = Real(unit = "m");
+  T a;
+end M;
+type U = Real(start = 1);
+model CMR7
+  M m(redeclare type T = U);
+end CMR7;
+//// model: CMR8
+model M
+  replaceable type T = Real(unit = "m");
+  T a;
+end M;
+type U = Real(unit = "s");
+model CMR8
+  M m(redeclare type T = U);
+end CMR8;
+//// model: CMR9
+model M
+  parameter Real p = 5;
+  replaceable class A = X(x = p);
+  class X
+    parameter Real x = 1;
+  end X;
+  A a;
+end M;
+class Y
+  parameter Real x = 2;
+end Y;
+model CMR9
+  M m1(p = 6, redeclare class A = Y);
+  M m2(p = 7, redeclare class A = Y);
+end CMR9;
+//// model: CMR10
+class X
+  parameter Real x = 1;
+end X;
+class Y
+  parameter Real x = 2;
+end Y;
+class Z
+  parameter Real x = 3;
+end Z;
+model M
+  replaceable class A = X(x = 5);
+  A a;
+end M;
+model N
+  extends M(redeclare replaceable class A = Y);
+end N;
+model CMR10
+  N n(redeclare class A = Z);
+end CMR10;
+//// model: CMR11
+record X
+  Real x = 1;
+end X;
+record Y
+  Real x = 2;
+  Real y = 3;
+end Y;
+model M
+  replaceable record A = X(x = 5);
+  A a;
+  A b = A(x = 9);
+end M;
+model CMR11
+  M m(redeclare record A = Y);
+end CMR11;
+//// model: CMR12
+package P
+  replaceable package Q = Q0(c = 5);
+  package Q0
+    constant Real c = 1;
+  end Q0;
+  constant Real d = Q.c;
+end P;
+package Q1
+  constant Real c = 2;
+end Q1;
+package P2 = P(redeclare package Q = Q1);
+model CMR12
+  Real x = P2.d;
+end CMR12;
+//// model: CMR13
+package P
+  package Q0
+    constant Real c = 1;
+  end Q0;
+  replaceable package Q = Q0(c = 5);
+end P;
+package Q1
+  constant Real c = 2;
+end Q1;
+model N
+  extends P(redeclare package Q = Q1);
+  Real x = Q.c;
+end N;
+model CMR13
+  N n;
+end CMR13;
+//// model: CMR14
+package Q0
+  constant Real c = 1;
+end Q0;
+package Q1
+  constant Real c = 2;
+end Q1;
+model M
+  replaceable package Q = Q0(c = 5);
+  Real x = Q.c;
+end M;
+model CMR14
+  M m(redeclare package Q = Q1);
+end CMR14;
+//// model: CMR15
+function f
+  input Real x;
+  input Real k = 1;
+  output Real y;
+algorithm
+  y := x * k;
+end f;
+function g
+  input Real x;
+  input Real k = 2;
+  output Real y;
+algorithm
+  y := x + k;
+end g;
+package P
+  replaceable function h = f(k = 5);
+end P;
+package P2 = P(redeclare function h = g);
+model CMR15
+  Real x = P2.h(time);
+end CMR15;
+//// model: CMR16
+class X
+  parameter Real x = 1;
+end X;
+class Y
+  parameter Real x = 2;
+  parameter Real y = 3;
+end Y;
+package P
+  constant Real u = 500;
+  replaceable class A = X(x = u, y = 1);
+end P;
+package P2 = P(redeclare class A = Y);
+model CMR16
+  P2.A a;
+end CMR16;
+//// model: CMR17
+class X
+  parameter Real x = 1;
+end X;
+class Y
+  parameter Real y = 3;
+end Y;
+package P
+  replaceable class A = X(x = 2);
+end P;
+package P2 = P(redeclare class A = Y);
+model CMR17
+  P2.A a;
+end CMR17;
+//// model: CMR18
+class X
+  Real x(start = 1);
+end X;
+class Y
+  Real x(min = 2);
+end Y;
+package P
+  replaceable class A = X(x(start = 2));
+end P;
+package P2 = P(redeclare class A = Y);
+model CMR18
+  P2.A a;
+end CMR18;
+//// model: CMR20
+package Q0
+  constant Real c = 1;
+end Q0;
+model M
+  replaceable package Q = Q0(c = 5);
+  Real x = Q.c;
+end M;
+model CMR20
+  M m(redeclare package Q
+        constant Real c = 2;
+      end Q);
+end CMR20;
+//// model: CMR21
+package P
+  replaceable type T = Real(unit = "m");
+  function f
+    input T x;
+    output T y;
+  algorithm
+    y := x;
+  end f;
+end P;
+package P2 = P(redeclare type T = Real(min = 0));
+model CMR21
+  Real x = P2.f(time);
+end CMR21;
+//// model: CMR22
+class X
+  parameter Real x = 1;
+end X;
+class Y
+  parameter Real x = 2;
+end Y;
+class Z
+  parameter Real x = 3;
+end Z;
+model M
+  replaceable class A = X(x = 5);
+  A a;
+end M;
+model N
+  extends M;
+  redeclare replaceable class A = Y(x = 6);
+end N;
+model CMR22
+  N n(redeclare class A = Z);
+end CMR22;
+//// model: CMR23
+class X
+  parameter Real x = 1;
+end X;
+class Y
+  parameter Real x = 2;
+end Y;
+class Z
+  parameter Real x = 3;
+end Z;
+model M
+  replaceable class A = X(x = 5);
+  A a;
+end M;
+model N
+  extends M(redeclare replaceable class A = Y constrainedby Y(x = 6));
+end N;
+model CMR23
+  N n(redeclare class A = Z);
+  N k;
+end CMR23;
+//// model: CMR24
+class X
+  parameter Real x = 1;
+end X;
+class Y
+  parameter Real x = 2;
+end Y;
+model M
+  replaceable class A = X(x = 5);
+  A a;
+end M;
+model CMR24
+  M m(redeclare replaceable class A = Y constrainedby Y(x = 6));
+end CMR24;
+//// model: CMR25
+model M
+  replaceable type T = Real(unit = "m") constrainedby Real(unit = "s");
+  T a;
+end M;
+model CMR25
+  M m(redeclare type T = Real);
+end CMR25;
+//// model: CMR26
+model M
+  replaceable type T = Real(unit = "m");
+  T a;
+end M;
+type E = enumeration(u, v);
+model CMR26
+  M m(redeclare type T = Real(start = 1));
+  M n(redeclare type T = Real(unit = "k"));
+end CMR26;
+//// model: CMR27
+model X
+  replaceable model C
+    Real c = 1;
+  end C;
+  C k;
+end X;
+model D
+  Real d = 2;
+end D;
+model Y
+  extends X;
+end Y;
+model M
+  replaceable model A = X(redeclare model C = D);
+  A a;
+end M;
+model CMR27
+  M m(redeclare model A = Y);
+end CMR27;
+//// model: CMR28
+model X
+  Real x;
+  Real y;
+end X;
+model Y
+  Real x;
+  Real y;
+end Y;
+model M
+  replaceable model A = X(x = 1, y(start = 2));
+  A a[2];
+end M;
+model CMR28
+  M m(redeclare model A = Y);
+end CMR28;
+//// model: CMR29
+class X
+  parameter Real x = 1;
+end X;
+class Y
+  parameter Real x = 2;
+end Y;
+model M
+  replaceable class A = X;
+  A a;
+end M;
+model CMR29
+  extends M;
+  redeclare replaceable class A = Y constrainedby Y(x = 6);
+end CMR29;
+//// model: CMR30
+class X
+  parameter Real x = 1;
+end X;
+model CMR30
+  replaceable model A = X constrainedby X(x = 5);
+  A a;
+end CMR30;
+//// model: CMR31
+record X
+  Real x = 1;
+end X;
+model CMR31
+  replaceable record A = X constrainedby X(x = 5);
+  A a;
+  A b = A();
+end CMR31;
+//// model: CMR32
+model CMR32
+  replaceable type T = Real constrainedby Real(unit = "m");
+  T x;
+end CMR32;
+//// model: CMR33
+package P
+  replaceable type T = Real constrainedby Real(unit = "m");
+  function f
+    input T x;
+    output T y;
+  algorithm
+    y := x;
+  end f;
+end P;
+model CMR33
+  Real x = P.f(time);
+end CMR33;
+//// model: CMR34
+function g
+  input Real x;
+  input Real k = 1;
+  output Real y;
+algorithm
+  y := x * k;
+end g;
+package P
+  replaceable function f = g constrainedby g(k = 5);
+end P;
+model CMR34
+  Real x = P.f(time);
+end CMR34;
+//// model: CMR35
+package Q0
+  constant Real c = 1;
+end Q0;
+model CMR35
+  replaceable package Q = Q0 constrainedby Q0(c = 5);
+  Real x = Q.c;
+end CMR35;
+//// model: CMR36
+class A0
+  parameter Real x = 1;
+end A0;
+model CMR36
+  replaceable class A
+    parameter Real x = 2;
+  end A constrainedby A0(x = 5);
+  A a;
+end CMR36;
+//// model: CMR37
+model M
+  parameter Real p = 1;
+  replaceable class A = X constrainedby X(x = p);
+  class X
+    parameter Real x = 1;
+  end X;
+  A a;
+end M;
+model CMR37
+  M m1(p = 2);
+  M m2(p = 3);
+end CMR37;
+//// model: CMR38
+package Q0
+  constant Real c = 1;
+  constant Real d = c;
+end Q0;
+package P
+  replaceable package Q = Q0 constrainedby Q0(c = 5);
+  constant Real e = Q.d;
+end P;
+model CMR38
+  Real x = P.e;
+  Real y = P.Q.c;
+end CMR38;
+//// model: CMR39
+class X
+  parameter Real x = 1;
+end X;
+class Z = X(x = 4);
+model CMR39
+  replaceable class A = Z constrainedby X(x = 5);
+  A a;
+end CMR39;
+//// model: CMR40
+type U = Real(unit = "s");
+model CMR40
+  replaceable type T = U(start = 1) constrainedby U(unit = "m", start = 2, min = 3);
+  T x;
+end CMR40;
+//// model: CMR41
+class X
+  parameter Real x = 1;
+end X;
+class Y
+  parameter Real x = 2;
+end Y;
+model M
+  replaceable class A = X;
+  A a;
+end M;
+model CMR41
+  extends M;
+  redeclare replaceable class A
+    parameter Real x = 7;
+  end A constrainedby Y(x = 6);
+end CMR41;
+//// model: CMR42
+class X
+  parameter Real x = 1;
+end X;
+class Y
+  parameter Real x = 2;
+end Y;
+model M
+  replaceable class A = X;
+  A a;
+end M;
+model CMR42
+  M m(redeclare replaceable class A
+        parameter Real x = 7;
+      end A constrainedby Y(x = 6));
+end CMR42;
+//// model: CMR43
+class X
+  Real x;
+end X;
+package P
+  replaceable class A = X constrainedby X(x = c);
+  constant Real c = 3;
+end P;
+package P2 = P(c = 4);
+model CMR43
+  P.A a;
+  P2.A b;
+end CMR43;
+//// model: CMR44
+package Q0
+  constant Real c = 1;
+end Q0;
+package Q1
+  constant Real c = 2;
+end Q1;
+package P
+  replaceable package Q = Q0 constrainedby Q0(c = 5);
+  constant Real d = Q.c;
+end P;
+package P2 = P(redeclare package Q = Q1);
+model CMR44
+  Real x = P2.d;
+  Real y = P2.Q.c;
+end CMR44;
+//// model: CMR45
+connector C
+  Real v;
+  flow Real i;
+end C;
+connector D
+  extends C;
+end D;
+model CMR45
+  replaceable connector K = D constrainedby C(v(start = 1));
+  K k;
+end CMR45;
+//// model: CMR46
+model X
+  parameter Integer n = 1;
+  Real y[n];
+end X;
+model Y
+  parameter Integer n = 2;
+  Real z[n];
+end Y;
+model M
+  replaceable model A = X(n = 3);
+  A a;
+end M;
+model CMR46
+  M m(redeclare model A = Y);
+  M k;
+end CMR46;
+//// model: CMR47
+class X
+  parameter Real x = 1;
+end X;
+class Y
+  parameter Real x = 2;
+end Y;
+class Z
+  parameter Real x = 3;
+end Z;
+model M
+  replaceable class A = X(x = 5);
+  A a;
+end M;
+model N
+  extends M(redeclare replaceable class A = Y constrainedby Y);
+end N;
+model CMR47
+  N n(redeclare class A = Z);
+end CMR47;
+//// model: CMR48
+package Q0
+  constant Real c = 1;
+end Q0;
+package Q1
+  constant Real c = 2;
+end Q1;
+package Q2
+  constant Real c = 3;
+end Q2;
+model M
+  replaceable package Q = Q0 constrainedby Q0;
+  Real x = Q.c;
+end M;
+model N
+  extends M(redeclare replaceable package Q = Q1 constrainedby Q0);
+end N;
+model CMR48
+  N n(redeclare package Q = Q2);
+end CMR48;
+//// model: CMR19
+class X
+  parameter Real x = 1;
+end X;
+class Y
+  parameter Real x = 2;
+end Y;
+model CMR19
+  package P
+    constant Real u = 500;
+    replaceable class A = X(x = u);
+  end P;
+  constant Real u = 3;
+  package P2 = P(redeclare class A = Y);
+  P2.A a;
+end CMR19;
+//// model: LDD1
+model E
+  Real y = 7;
+end E;
+model LDD1
+  model E
+    Real y = 8;
+  end E;
+  .E a;
+  E b;
+end LDD1;
+//// model: LDD2
+model E
+  Real y = 7;
+end E;
+model LDD2
+  model E
+    Real z = 8;
+  end E;
+  extends .E;
+end LDD2;
+//// model: LDD3
+model E
+  Real y = 7;
+end E;
+model LDD3
+  model E
+    Real y = 8;
+  end E;
+  model B = .E;
+  B b;
+end LDD3;
+//// model: LDD4
+type U = Real(unit = "a");
+model LDD4
+  type U = Real(unit = "b");
+  type T = .U;
+  T t;
+  U u;
+end LDD4;
+//// model: LDD5
+model E
+  Real y = 7;
+end E;
+package P
+  model E
+    Real y = 8;
+  end E;
+  model L = .E;
+end P;
+model LDD5
+  P.L a;
+end LDD5;
+//// model: LDD6
+model E
+  Real y = 7;
+end E;
+package P
+  model E
+    Real y = 8;
+  end E;
+  model L = .E;
+end P;
+model LDD6
+  extends P.L;
+end LDD6;
+//// model: LDD7
+package Q
+  constant Real c = 1;
+  model A
+    Real x = c;
+  end A;
+end Q;
+model LDD7
+  package Q
+    constant Real c = 2;
+    model A
+      Real x = c;
+    end A;
+  end Q;
+  extends .Q.A;
+end LDD7;
+//// model: LDD8
+package Q
+  model A
+    Real x = 1;
+  end A;
+end Q;
+model LDD8
+  package Q
+    model A
+      Real x = 2;
+    end A;
+  end Q;
+  .Q.A a;
+  Q.A b;
+end LDD8;
+//// model: LDD9
+model E
+  Real y = 7;
+end E;
+model A
+  replaceable model C
+    Real c = 1;
+  end C;
+  C c;
+end A;
+model LDD9
+  model E
+    Real y = 8;
+  end E;
+  A a(redeclare model C = .E);
+  A b(redeclare model C = E);
+end LDD9;
+//// model: LDD10
+model E
+  Real y = 7;
+end E;
+model F
+  extends E;
+end F;
+model A
+  replaceable E e;
+end A;
+model LDD10
+  model F
+    Real y = 8;
+  end F;
+  A a(redeclare .F e);
+end LDD10;
+//// model: LDD11
+model E
+  Real y = 7;
+end E;
+model R = .E;
+model LDD11
+  extends R;
+end LDD11;
+//// model: LDD12
+model E
+  Real y = 7;
+end E;
+partial model B
+  replaceable model K = .E;
+  K k;
+end B;
+model LDD12
+  model E
+    Real y = 8;
+  end E;
+  extends B;
+end LDD12;
+//// model: LDD13
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := x + 1;
+end f;
+model LDD13
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := x + 2;
+  end f;
+  function g = .f;
+  Real a = .f(time);
+  Real b = f(time);
+  Real c = g(time);
+end LDD13;
+//// model: LDD14
+record R
+  Real a = 1;
+end R;
+model LDD14
+  record R
+    Real a = 2;
+  end R;
+  .R x;
+  .R y = .R(3);
+  R z;
+end LDD14;
+//// model: LDD15
+type E = enumeration(a, b);
+model LDD15
+  type E = enumeration(c, d);
+  .E x = .E.a;
+  E y = E.c;
+end LDD15;

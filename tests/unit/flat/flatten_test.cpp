@@ -12737,4 +12737,127 @@ YMC_TEST(flatten_const_array_through_modified_base) {
                std::string("class UEN15\n  final constant Integer a.g.n = 1;\nend UEN15;\n"));
 }
 
+YMC_TEST(flatten_extends_short_class) {
+  // extends 短类：元素取链底长类的，extends 自己的修饰照用（expandExtends、Class.classTree 顺 baseClass，NFInst.mo:750-800 / NFClass.mo:337-350
+  // v1.25.0）；链在定义层解析一次，实例上的类重声明看不到（ESC15）。期望 = omc 1.25.0 实跑（`omc ESC3.mo` 等，2026-11-02，探针 pk-p49 同名模型）。
+  YMC_CHECK_EQ(flatten_src("model A\n  parameter Real x = 1;\n  Real y(start = 2);\nend A;\nmodel B = A;\nmodel ESC3\n"
+                           "  extends B(x = 3, y(start = 4));\nend ESC3;\n"),
+               std::string("class ESC3\n  parameter Real x = 3.0;\n  Real y(start = 4.0);\nend ESC3;\n"));
+  YMC_CHECK_EQ(flatten_src("model A\n  Real x;\nend A;\nmodel B = A;\nmodel ESC6\nprotected\n  extends B;\nend ESC6;\n"),
+               std::string("class ESC6\n  protected Real x;\nend ESC6;\n"));
+  YMC_CHECK_EQ(flatten_src("model A\n  Real x = 1;\nend A;\nmodel X\n  Real y = 2;\nend X;\nmodel M\n  replaceable model T = A;\n"
+                           "  model B = T;\n  extends B;\nend M;\nmodel ESC15\n  M m1;\n  M m2(redeclare model T = X);\nend ESC15;\n"),
+               std::string("class ESC15\n  Real m1.x = 1.0;\n  Real m2.x = 1.0;\nend ESC15;\n"));
+  // 字面量维 1.25.0 丢掉，与文件 Result 一致（arrays/ArrayExtend）。
+  YMC_CHECK_EQ(flatten_src("model A\n  Real r;\nend A;\nmodel B = A[3];\nmodel ESC14\n  extends B;\n  Real y;\nend ESC14;\n"),
+               std::string("class ESC14\n  Real r;\n  Real y;\nend ESC14;\n"));
+  // 短类写的修饰 / 前缀 1.25.0 丢掉（ESC4 omc `Real x;`、ESC47 omc `Real x;`），MLS §7.1 说该继承 → 不复刻（docs/open-questions.md 分歧账本）。
+  bool uns = false;
+  YMC_CHECK_EQ(flatten_src("model A\n  Real x;\nend A;\nmodel B = A(x(start = 2));\nmodel ESC4\n  extends B;\nend ESC4;\n", &uns),
+               std::string("<unsupported:extends of short class with modifiers>"));
+  YMC_CHECK(uns);
+  uns = false;
+  YMC_CHECK_EQ(flatten_src("record A\n  Real x;\nend A;\nrecord B = parameter A;\nmodel ESC47\n  extends B;\nend ESC47;\n", &uns),
+               std::string("<unsupported:extends of short class with prefixes>"));
+  YMC_CHECK(uns);
+  // 短类被 extends 在定义层展开后，克隆带着原来的基类：`B b` 也看不到实例上的重声明（ESC16 omc `Real m2.b.x = 1.0;`，ESC17 没有 extends 才是 y）。
+  uns = false;
+  YMC_CHECK_EQ(flatten_src("model A\n  Real x = 1;\nend A;\nmodel X\n  Real y = 2;\nend X;\nmodel M\n  replaceable model T = A;\n"
+                           "  model B = T;\n  extends B;\n  B b;\nend M;\nmodel ESC16\n  M m1;\n  M m2(redeclare model T = X);\nend ESC16;\n",
+                           &uns),
+               std::string("<unsupported:short class settled by extends before redeclare>"));
+  YMC_CHECK(uns);
+}
+
+YMC_TEST(flatten_class_extends_builtin_short) {
+  // class extends 一个内建类型的短类：类体为空时新类就是原类（redeclareClass 的 isBuiltin 支，NFInst.mo:1749-1759 v1.25.0；scodeinst
+  // ClassExtendsBuiltin3），class extends 自己的修饰照用（ESC77）。期望 = omc 1.25.0 实跑（2026-11-02，探针 pk-p49）。
+  YMC_CHECK_EQ(flatten_src("model A\n  type MyReal = Real;\nend A;\nmodel ESC77\n  extends A;\n"
+                           "  redeclare type extends MyReal(unit = \"m\")\n  end MyReal;\n  MyReal x;\nend ESC77;\n"),
+               std::string("class ESC77\n  Real x(unit = \"m\");\nend ESC77;\n"));
+  YMC_CHECK_EQ(flatten_src("model A\n  type MyReal = Real[3];\nend A;\nmodel ESC75\n  extends A;\n"
+                           "  redeclare type extends MyReal\n  end MyReal;\n  MyReal x;\nend ESC75;\n"),
+               std::string("class ESC75\n  Real x[1];\n  Real x[2];\n  Real x[3];\nend ESC75;\n"));
+  // 原短类自己的修饰 1.25.0 丢掉（ESC74 omc `Real x;`）→ 不复刻。
+  bool uns = false;
+  YMC_CHECK_EQ(flatten_src("model A\n  type MyReal = Real(unit = \"m\");\nend A;\nmodel ESC74\n  extends A;\n"
+                           "  redeclare type extends MyReal\n  end MyReal;\n  MyReal x;\nend ESC74;\n",
+                           &uns),
+               std::string("<unsupported:extends of short class with modifiers>"));
+  YMC_CHECK(uns);
+}
+
+YMC_TEST(flatten_lookup_short_class_with_class_redeclare) {
+  // 带类重声明的短类：进类查名先实例化成包，修饰并进基类实例、顶替实例类树里的类（instPackage、expandClassDerived、redeclareClasses，NFInst.mo:
+  // 1312-1372 / :1012-1061 / :1618-1646 v1.25.0；scodeinst ModClass2）。同一声明的第二个实例取自己的（LMS2）。
+  // 期望 = omc 1.25.0 实跑（2026-11-02，探针 pk-p49 同名模型）。
+  YMC_CHECK_EQ(flatten_src("package A\n  replaceable model B\n    Real x;\n  end B;\n  model C\n    B b;\n  end C;\nend A;\nmodel LMS1\n"
+                           "  model D\n    Real x = 1.0;\n  end D;\n  model E\n    Real y = 2.0;\n  end E;\n"
+                           "  package A2 = A(redeclare model B = D);\n  package A3 = A(redeclare model B = E);\n  A.C c1;\n  A2.C c2;\n"
+                           "  A3.C c3;\nend LMS1;\n"),
+               std::string("class LMS1\n  Real c1.b.x;\n  Real c2.b.x = 1.0;\n  Real c3.b.y = 2.0;\nend LMS1;\n"));
+  YMC_CHECK_EQ(flatten_src("package A\n  replaceable model B\n    Real x;\n  end B;\n  model C\n    B b;\n  end C;\nend A;\nmodel D\n"
+                           "  Real x = 1.0;\nend D;\nmodel E\n  Real y = 2.0;\nend E;\nmodel M\n  replaceable model R = D;\n"
+                           "  package A2 = A(redeclare model B = R);\n  A2.C c;\nend M;\nmodel LMS2\n  M m1;\n"
+                           "  M m2(redeclare model R = E);\nend LMS2;\n"),
+               std::string("class LMS2\n  Real m1.c.b.x = 1.0;\n  Real m2.c.b.y = 2.0;\nend LMS2;\n"));
+}
+
+YMC_TEST(flatten_class_redeclare_constraining_mod) {
+  // 修饰里的类重声明带约束修饰：原声明 constrainedby 的修饰，否则短类自身的修饰（redeclareClasses / getConstrainingMod，NFInst.mo:1618-1646 /
+  // :2064-2081、SCodeUtil.getConstrainingMod :5273-5286 v1.25.0），比新类自身的修饰低、比链下一层高（instClassDef :1156 / :1209）；元素级重声明
+  // 没有（CMR4）。此前整个没做，静默取新类的值。期望 = omc 1.25.0 实跑（2026-11-02，探针 pk-p49 同名模型）。
+  const std::string xy = "class X\n  parameter Real x = 1;\nend X;\nclass Y\n  parameter Real x = 2;\n  parameter Real y = 3;\nend Y;\n"
+                         "model M\n  replaceable class A = X(x = 5);\n  A a;\nend M;\n";
+  YMC_CHECK_EQ(flatten_src((xy + "model CMR1\n  M m(redeclare class A = Y);\nend CMR1;\n").c_str()),
+               std::string("class CMR1\n  parameter Real m.a.x = 5.0;\n  parameter Real m.a.y = 3.0;\nend CMR1;\n"));
+  YMC_CHECK_EQ(flatten_src((xy + "model CMR4\n  extends M;\n  redeclare class A = Y;\nend CMR4;\n").c_str()),
+               std::string("class CMR4\n  parameter Real a.x = 2.0;\n  parameter Real a.y = 3.0;\nend CMR4;\n"));
+  YMC_CHECK_EQ(flatten_src((xy + "model CMR5\n  M m(redeclare class A = Y(x = 6));\nend CMR5;\n").c_str()),
+               std::string("class CMR5\n  parameter Real m.a.x = 6.0;\n  parameter Real m.a.y = 3.0;\nend CMR5;\n"));
+  YMC_CHECK_EQ(flatten_src((xy + "model CMR6\n  M m(redeclare class A\n        parameter Real x = 7;\n      end A);\nend CMR6;\n").c_str()),
+               std::string("class CMR6\n  parameter Real m.a.x = 5.0;\nend CMR6;\n"));
+  // 约束修饰在被顶替的那个实例里求值：同一声明的两个实例各读各的（CMR9）。
+  YMC_CHECK_EQ(flatten_src("model M\n  parameter Real p = 5;\n  replaceable class A = X(x = p);\n  class X\n    parameter Real x = 1;\n  end X;\n"
+                           "  A a;\nend M;\nclass Y\n  parameter Real x = 2;\nend Y;\nmodel CMR9\n  M m1(p = 6, redeclare class A = Y);\n"
+                           "  M m2(p = 7, redeclare class A = Y);\nend CMR9;\n"),
+               std::string("class CMR9\n  parameter Real m1.p = 6.0;\n  parameter Real m1.a.x = m1.p;\n  parameter Real m2.p = 7.0;\n"
+                           "  parameter Real m2.a.x = m2.p;\nend CMR9;\n"));
+  // 叶组件：夹在新类的修饰与链下一层之间（CMR8：`unit = "m"` 盖过 U 的 "s"）。
+  YMC_CHECK_EQ(flatten_src("model M\n  replaceable type T = Real(unit = \"m\");\n  T a;\nend M;\ntype U = Real(unit = \"s\");\nmodel CMR8\n"
+                           "  M m(redeclare type T = U);\nend CMR8;\n"),
+               std::string("class CMR8\n  Real m.a(unit = \"m\");\nend CMR8;\n"));
+  // 没被重声明的类同样取自己 constrainedby 的修饰（instElementModifier 的 instConstrainingMod，NFInst.mo:2025-2062）；两个实例各读各的（CMR37）。
+  YMC_CHECK_EQ(flatten_src("model CMR32\n  replaceable type T = Real constrainedby Real(unit = \"m\");\n  T x;\nend CMR32;\n"),
+               std::string("class CMR32\n  Real x(unit = \"m\");\nend CMR32;\n"));
+  YMC_CHECK_EQ(flatten_src("model M\n  parameter Real p = 1;\n  replaceable class A = X constrainedby X(x = p);\n  class X\n"
+                           "    parameter Real x = 1;\n  end X;\n  A a;\nend M;\nmodel CMR37\n  M m1(p = 2);\n  M m2(p = 3);\nend CMR37;\n"),
+               std::string("class CMR37\n  parameter Real m1.p = 2.0;\n  parameter Real m1.a.x = m1.p;\n  parameter Real m2.p = 3.0;\n"
+                           "  parameter Real m2.a.x = m2.p;\nend CMR37;\n"));
+}
+
+YMC_TEST(flatten_redeclare_after_definition_expansion) {
+  // ymc 对限定类型名 `P.C` 直接实例化定义节点、展开在定义节点上，omc 走包实例里的克隆：之后 `P2.C` 不能共用那棵树，否则基类是定义层的、看不到 P2 的
+  // 重声明（lookupLocalNames → instPackage，NFLookup.mo:766-767 v1.25.0）。基线 c.b.x 静默错，换个声明次序才对。期望 = omc 1.25.0 实跑（2026-11-02，
+  // 探针 pk-p49 LMX31）。
+  YMC_CHECK_EQ(flatten_src("package P\n  replaceable model B\n    Real x = 1;\n  end B;\n  model Base\n    B b;\n  end Base;\n  model C\n"
+                           "    extends Base;\n  end C;\nend P;\nmodel D\n  Real y = 2;\nend D;\npackage P2\n"
+                           "  extends P(redeclare model B = D);\nend P2;\nmodel LMX31\n  P.C c0;\n  P2.C c;\nend LMX31;\n"),
+               std::string("class LMX31\n  Real c0.b.x = 1.0;\n  Real c.b.y = 2.0;\nend LMX31;\n"));
+}
+
+YMC_TEST(flatten_fully_qualified_class_names) {
+  // 全限定类名从顶层查（Absyn.Path.FULLYQUALIFIED → topScope，NFLookup.lookupNames :653-655 v1.25.0）：组件类型、extends、短类、重声明。基线一律
+  // 按相对名查，遇同名的局部类静默错。期望 = omc 1.25.0 实跑（2026-11-02，探针 pk-p49 LDD1 / LDD2 / LDD3 / LDD9）。
+  YMC_CHECK_EQ(flatten_src("model E\n  Real y = 7;\nend E;\nmodel LDD1\n  model E\n    Real y = 8;\n  end E;\n  .E a;\n  E b;\nend LDD1;\n"),
+               std::string("class LDD1\n  Real a.y = 7.0;\n  Real b.y = 8.0;\nend LDD1;\n"));
+  YMC_CHECK_EQ(flatten_src("model E\n  Real y = 7;\nend E;\nmodel LDD2\n  model E\n    Real z = 8;\n  end E;\n  extends .E;\nend LDD2;\n"),
+               std::string("class LDD2\n  Real y = 7.0;\nend LDD2;\n"));
+  YMC_CHECK_EQ(flatten_src("model E\n  Real y = 7;\nend E;\nmodel LDD3\n  model E\n    Real y = 8;\n  end E;\n  model B = .E;\n  B b;\nend LDD3;\n"),
+               std::string("class LDD3\n  Real b.y = 7.0;\nend LDD3;\n"));
+  YMC_CHECK_EQ(flatten_src("model E\n  Real y = 7;\nend E;\nmodel A\n  replaceable model C\n    Real c = 1;\n  end C;\n  C c;\nend A;\nmodel LDD9\n"
+                           "  model E\n    Real y = 8;\n  end E;\n  A a(redeclare model C = .E);\n  A b(redeclare model C = E);\nend LDD9;\n"),
+               std::string("class LDD9\n  Real a.c.y = 7.0;\n  Real b.c.y = 8.0;\nend LDD9;\n"));
+}
+
 YMC_TEST_MAIN

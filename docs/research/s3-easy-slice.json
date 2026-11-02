@@ -707,5 +707,11 @@
 "TypeDim3.mo",
 "TypeDim4.mo",
 "RecordBinding5.mo",
-"Size6.mo"
+"Size6.mo",
+"ClassExtends9.mo",
+"ClassExtendsBuiltin3.mo",
+"ExtendReplaceable4.mo",
+"ModClass2.mo",
+"RedeclareDim2.mo",
+"RedeclareFunction1.mo"
 ]

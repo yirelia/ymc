@@ -45,6 +45,8 @@ class Instantiator {
 
   // 类节点的 InstNode.scopePath（NFInstNode.mo:1217-1290 v1.25.0，ScopeType.RELATIVE）。见 inst.cpp。
   [[nodiscard]] std::vector<Symbol> scope_path(NodeId cls) const;
+  // 类节点这一层的约束修饰（修饰, 求值的类实例），外层在前；没有 → 空。flatten 给函数变量的类型并进同样的修饰。见 inst.cpp。
+  [[nodiscard]] std::vector<std::pair<Id<SMod>, NodeId>> class_cc_mods(NodeId n) const;
 
   // v1 还没做的构造（内建枚举/时钟类型、extends 内建类型…）在实例化阶段就撞上时标记，
   // driver 据此退 66（记 SKIP，不是 FAIL）。与 flatten 的 unsupported 合并判断。
@@ -69,7 +71,8 @@ class Instantiator {
   NodeId instantiate(NodeId def_node, NodeId parent, const ClassRedecls* redecls = nullptr,
                      const std::vector<ClassMod>* cmods = nullptr);
   std::size_t local_class_count(NodeId def) const;          // 定义类树里本地类的个数（排在继承来的之前）
-  NodeId instance_class(NodeId c, NodeId inst, bool typish);   // 实例类树里的本地类：克隆 / 改父亲（见 inst.cpp）
+  // 实例类树里的本地类：克隆 / 改父亲；refresh：这个实例有类重声明（见 inst.cpp）。
+  NodeId instance_class(NodeId c, NodeId inst, bool typish, bool refresh);
   void adopt_inherited_classes(NodeId inst, NodeId base, std::size_t nlocal, std::unordered_set<std::uint32_t>& taken);
   NodeId instantiate_root_class(NodeId def_node);      // 根类：短类别名顺链到长类、补生成的 inner（见 inst.cpp）
   void inst_class(NodeId inst_node, NodeId def_node, const ClassRedecls* redecls = nullptr);  // 建 FlatTree：递归组件 + extends 就地展开
@@ -97,12 +100,19 @@ class Instantiator {
   // ---- 查找（最小版，只够 v1：内建类型 + 本类/嵌套类 + 顶层）----
   // path_nodes 非空：顺路记下路径各段解析到的类节点（基类名的 replaceable 检查用）。
   NodeId lookup_class_name(const std::vector<Symbol>& path, NodeId scope, std::vector<NodeId>* path_nodes = nullptr);
+  // 类名的查找起点：全限定名（`.E`）从顶层查（Absyn.Path.FULLYQUALIFIED → topScope，NFLookup.lookupNames :653-655 v1.25.0）。
+  [[nodiscard]] NodeId name_scope(bool leading_dot, NodeId scope) const noexcept { return leading_dot ? I_.top : scope; }
   NodeId lookup_simple_class(Symbol name, NodeId scope);
   bool in_instance_context(NodeId cls) const;   // 重声明顶替进来的 / 实例类树里克隆的类（见 inst_package）
   void mark_package_instance(NodeId inst);
   NodeId inherited_in_bases(NodeId inst, Symbol name, int depth) const;   // class extends 的目标（见 inst.cpp）
   // 进类查名前顺短类链到底；partial：链上有 partial 的；mods：给了就收链上短类的修饰（外层在前，各带写处）而不当 SKIP（见 inst.cpp）。
   NodeId through_short_classes(NodeId cls, bool& partial, std::vector<std::pair<Id<SMod>, NodeId>>* mods = nullptr);
+  // extends 的基类 cls 顺短类链到底的类；gap：链上有 1.25.0 与 MLS 结果不同的形态（见 inst.cpp）。
+  NodeId extends_long_class(NodeId cls, const char*& gap, bool settle);
+  void check_short_settled(Id<SElement> short_def, NodeId next);   // 见 inst.cpp
+  NodeId class_extends_builtin(NodeId cls);                        // 见 inst.cpp
+  [[nodiscard]] Id<SMod> own_cc_mod(Id<SElement> d) const;         // 见 inst.cpp
   // 类节点 cls 自己的 import 里叫 name 的类（见 inst.cpp 的规则说明）；没有 → empty。
   NodeId import_class(Symbol name, NodeId cls);
   NodeId tree_class(ClassTreeId tid, Symbol name);   // 类树里（本地 + 继承来的）名为 name 的类；没有 → empty
@@ -135,6 +145,12 @@ class Instantiator {
   std::string unsupported_detail_;
   int depth_ = 0;   // instantiate 递归深度（防无限递归栈溢出）
   std::vector<std::uint32_t> short_active_;   // through_short_classes 正在解析的短类节点（递归定义的守卫）
+  // 经 extends 在定义层展开过的短类：短类定义元素 → 下一跳的类定义元素（见 check_short_settled）。按定义元素是有意的：omc 的展开结果
+  // 存在定义节点的类单元上，随后的克隆都带着，与实例无关。
+  std::unordered_map<std::uint32_t, std::uint32_t> short_settled_;
+  // 定义节点上的类单元（ClassId raw）：omc 同样在定义节点上展开过——根类、单段类型名查到的、它们经单段基类名 extends 到的（见 expand）。别的
+  // 定义层展开是 ymc 自己的走法（omc 经包实例里的克隆），克隆进有类重声明的实例时要重新展开（见 instance_class）。
+  std::unordered_set<std::uint32_t> settled_classes_;
   // redeclare_component 合成的组件元素：(原声明 << 32 | 重声明元素) → 合成元素；elems 的预留上限（见 make_top_node）。
   std::unordered_map<std::uint64_t, Id<SElement>> redecl_elems_;
   // 类型带维的组件合成的维拼好的元素（见 inst_component）：组件声明 → 各份。同一声明经不同的类型（重声明换掉的类型）拼出的维
@@ -146,6 +162,7 @@ class Instantiator {
   std::unordered_map<std::uint32_t, NodeId> redecl_orig_;   // 实例类树里顶替进来的新类节点 → 顶替前的原类（见 instantiate）
   std::unordered_set<std::uint32_t> instances_;   // instantiate 建的实例节点（父亲是实例的类 = 克隆，见 inst_component）
   std::unordered_map<std::uint64_t, NodeId> redecl_class_nodes_;   // (修饰里的类重声明元素 << 32 | 写修饰的类实例) → 它的类节点
+  std::unordered_set<std::uint32_t> mod_redecl_nodes_;             // 上表的类节点（修饰里来的，元素级重声明没有约束修饰，见 instantiate）
   // class extends 类合成的隐式 extends 元素（class extends 的 SCode 元素 raw → 合成的 Extends 元素）与合成元素的集合（见 partial_inst）。
   std::unordered_map<std::uint32_t, Id<SElement>> ce_ext_elem_;
   std::unordered_set<std::uint32_t> ce_ext_elems_;

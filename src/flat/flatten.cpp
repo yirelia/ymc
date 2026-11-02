@@ -719,9 +719,13 @@ class Flattener {
       Id<SElement> nxt;
       for (Id<SElement> m : el.def.elements)
         if (I_.scode.elems[m].name == x.base_path[k + 1] && I_.scode.elems[m].kind == SElementKind::Class) { nxt = m; break; }
+      if (nxt.is_valid()) ds.insert(ds.begin(), e);
       e = nxt;
       if (e.is_valid() && I_.scode.elems[e].prefixes.is_replaceable) return true;
     }
+    // 基类是短类：看链底长类的元素（modifyExtends 在继承后重查基类名，NFInst.mo:1400-1411 v1.25.0）。
+    if (e.is_valid() && I_.scode.elems[e].kind == SElementKind::Class && I_.scode.elems[e].def.kind == SClassDefKind::Derived)
+      e = long_class_of(e, ds);
     if (e.is_valid() && I_.scode.elems[e].kind == SElementKind::Class)
       for (Id<SElement> m : I_.scode.elems[e].def.elements)
         if (I_.scode.elems[m].kind == SElementKind::Class && I_.scode.elems[m].name == x.base_path[0]) return true;
@@ -10542,12 +10546,30 @@ class Flattener {
       if (!lead && builtin_scalar_type_kind(path, tk)) return true;
       ScodeScope ds;
       NodeId tn;
-      const Id<SElement> e = resolve_class_path(path, lead, sc, ds, true, guard == 0 ? &tn : nullptr);
+      const Id<SElement> e = resolve_class_path(path, lead, sc, ds, true, &tn);
       if (!e.is_valid()) return false;
+      // 这一层的约束修饰（Instantiator::class_cc_mods）：比这层自身的修饰低、比链下一层高，同组件的短类链（CMR 探针 CMR21 / CMR33）。
+      auto push_cc = [&]() -> bool {
+        std::vector<std::pair<Id<SMod>, ScodeScope>> ccs;
+        if (tn.is_valid() && instr_) {
+          for (const auto& [m, at] : instr_->class_cc_mods(tn)) ccs.push_back({m, scode_scope_of(at)});
+        } else if (const SElement& ce = I_.scode.elems[e];
+                   ce.kind == SElementKind::Class && ce.prefixes.has_cc && ce.prefixes.cc.mod.is_valid() &&
+                   (!ce.prefixes.is_redeclare || ce.def.kind == SClassDefKind::Derived)) {
+          ccs.push_back({ce.prefixes.cc.mod, ds});
+        }
+        for (auto& cc : ccs) {
+          if (I_.scode.mods[cc.first].binding.is_valid()) return false;
+          if (I_.scode.mods[cc.first].subs.empty()) continue;
+          chain.push_back(std::move(cc));
+          before.push_back(tdims.size());
+        }
+        return true;
+      };
       // 声明类型在实例语境里查到、那个类节点挂着 extends 的类修饰（MSL Media `extends PartialTwoPhaseMedium(AbsolutePressure(min =
       // 611.657, …))` 后 Medium 函数的 `input AbsolutePressure p`）：类修饰并在链最前（外层优先，同组件的 apply_class_mod；PKG 探针
       // PKG4 `input Real p(min = 611.657, max = 1e8, start = 5e6, nominal = 1e5)`），值在写 extends 的类里求。
-      if (tn.is_valid())
+      if (guard == 0 && tn.is_valid())
         if (const auto cm = I_.class_mods.find(tn.raw); cm != I_.class_mods.end())
           for (const auto& [m, at] : cm->second) {
             if (I_.scode.mods[m].binding.is_valid()) return false;
@@ -10578,6 +10600,7 @@ class Flattener {
             before.push_back(tdims.size());
           }
         }
+        if (!push_cc()) return false;
         path = xe.base_path;
         lead = false;
         ScodeScope inner = ds;
@@ -10599,6 +10622,7 @@ class Flattener {
           before.push_back(tdims.size());
         }
       }
+      if (!push_cc()) return false;
       // 类型带维（`type V3 = Real[3]`，XB 探针 x30-x34 `input Real[3] a`）：只收字面量维（维式换作用域会变义）。
       for (Id<Exp> d : da.dims) {
         if (I_.absyn.exps[d].kind != ExpKind::IntLit) return false;
@@ -12919,7 +12943,9 @@ class Flattener {
       const SElement& f = I_.scode.elems[fid];
       if (f.kind == SElementKind::Extends) {
         ScodeScope bds;
-        const Id<SElement> b = resolve_class_path(f.base_path, f.base_leading_dot, inner, bds, /*inherit0=*/false);
+        Id<SElement> b = resolve_class_path(f.base_path, f.base_leading_dot, inner, bds, /*inherit0=*/false);
+        if (b.is_valid() && I_.scode.elems[b].kind == SElementKind::Class && I_.scode.elems[b].def.kind == SClassDefKind::Derived)
+          b = extends_long_of(b, bds);   // extends 短类（同 ext_bases_at）
         if (!b.is_valid() || I_.scode.elems[b].kind != SElementKind::Class || !rec_restr(I_.scode.elems[b].restriction) ||
             I_.scode.elems[b].def.kind != SClassDefKind::Parts)
           return false;
@@ -15121,7 +15147,10 @@ class Flattener {
         const bool lead = I_.scode.elems[x].base_leading_dot;
         const Id<SMod> xm = I_.scode.elems[x].mod;
         ScodeScope bds;
-        const Id<SElement> b = resolve_class_path(bp, lead, self, bds, /*inherit0=*/false);
+        Id<SElement> b = resolve_class_path(bp, lead, self, bds, /*inherit0=*/false);
+        // 基类是短类：继承元素取链底长类的（Class.classTree 顺 baseClass，NFClass.mo:337-350 v1.25.0；同 Instantiator::extends_long_class）。
+        if (b.is_valid() && I_.scode.elems[b].kind == SElementKind::Class && I_.scode.elems[b].def.kind == SClassDefKind::Derived)
+          b = long_class_of(b, bds);
         if (!b.is_valid() || I_.scode.elems[b].kind != SElementKind::Class || I_.scode.elems[b].def.kind != SClassDefKind::Parts)
           continue;
         ExtBase eb;
@@ -15736,6 +15765,28 @@ class Flattener {
     }
     return {};
   }
+  // 同 long_class_of，用于 extends 的基类：链上有 1.25.0 与 MLS 结果不同的形态（修饰 / 前缀 / 非字面量维，Instantiator::extends_long_class）→
+  // invalid。记录字段、函数签名走 SCode 层，不经 inst 的实例化，要在这里同样拦下，否则 omc 的丢修饰在这条路上被无意照抄。
+  Id<SElement> extends_long_of(Id<SElement> e, ScodeScope& ds) {
+    ScodeScope cs = ds;
+    Id<SElement> c = e;
+    for (int guard = 0; c.is_valid() && guard < 20; ++guard) {
+      const SElement& el = I_.scode.elems[c];
+      if (el.kind != SElementKind::Class || el.def.kind != SClassDefKind::Derived) break;
+      const SAttributes& da = el.def.derived_attr;
+      if (el.def.derived_mod.is_valid() &&
+          (!I_.scode.mods[el.def.derived_mod].subs.empty() || I_.scode.mods[el.def.derived_mod].binding.is_valid()))
+        return {};
+      if (da.var != SVariability::Var || da.dir != SDirection::Bidir || da.ct != SConnectorType::Potential) return {};
+      for (const std::vector<Id<Exp>>* ks : {&da.dims, &el.def.derived_type.dims})
+        for (Id<Exp> d : *ks)
+          if (I_.absyn.exps[d].kind != ExpKind::IntLit) return {};
+      ScodeScope nds;
+      c = resolve_class_path(el.def.derived_type.path, el.def.derived_type.leading_dot, cs, nds);
+      cs = std::move(nds);
+    }
+    return long_class_of(e, ds);
+  }
   // operator record 的 'constructor'（NFOperatorOverloading.instConstructor :52-84 v1.25.0）：长定义的记录类 base（定义作用域链
   // bs）里名为 'constructor' 的类——`operator 'constructor'` 里的各函数（名字后缀 'constructor'.f），或 `operator function
   // 'constructor'` 本身（后缀 'constructor'）。没有 → true、out 空；别的形态（不是函数的成员、继承来的 'constructor'）→ false。
@@ -15842,6 +15893,11 @@ class Flattener {
                        (want == SRestriction::Record && el.restriction == SRestriction::OperatorRecord &&
                         el.def.kind == SClassDefKind::Parts && !oprec_has_ctor(e, ds));
       if (el.kind != SElementKind::Class || !rok) return std::nullopt;
+      // 这一层带 constrainedby 的修饰：omc 并进函数的输入缺省 / 记录字段的缺省（instElementModifier，NFInst.mo:2025-2041 v1.25.0；CMR 探针 CMR34 /
+      // CMR31），这里只看短类自身的修饰，未做 → 不认（调用方 SKIP）。
+      if (el.prefixes.has_cc && el.prefixes.cc.mod.is_valid() &&
+          (!I_.scode.mods[el.prefixes.cc.mod].subs.empty() || I_.scode.mods[el.prefixes.cc.mod].binding.is_valid()))
+        return std::nullopt;
       // `redeclare function extends f … end f;`（MSL Media 的 Medium 函数）：隐式基类 = 外层类继承来的同名原函数（class_extends_target，
       // 见 collect_fn_sig）。目标经改了常量 / 类型的 extends 继承来、体里写到被改名字的（`input AbsolutePressure p`，类型被
       // `extends PartialTwoPhaseMedium(AbsolutePressure(min = …))` 改过）：函数在包实例里找到的，变量类型 / 常量都按实例查（类修饰见
@@ -16024,7 +16080,9 @@ class Flattener {
       if (c.kind == SElementKind::Extends) {
         if (c.mod.is_valid() && !I_.scode.mods[c.mod].subs.empty()) return false;   // extends 修饰未做
         ScodeScope bds;
-        const Id<SElement> b = resolve_class_path(c.base_path, c.base_leading_dot, fscope, bds, /*inherit0=*/false);
+        Id<SElement> b = resolve_class_path(c.base_path, c.base_leading_dot, fscope, bds, /*inherit0=*/false);
+        if (b.is_valid() && I_.scode.elems[b].kind == SElementKind::Class && I_.scode.elems[b].def.kind == SClassDefKind::Derived)
+          b = extends_long_of(b, bds);   // extends 短类（同 ext_bases_at）
         if (!b.is_valid() || I_.scode.elems[b].kind != SElementKind::Class) return false;
         bds.insert(bds.begin(), b);
         if (!collect_fn_sig(b, bds, sig, seen, depth + 1)) return false;

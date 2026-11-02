@@ -1,0 +1,476 @@
+//// set: pk-p49a — 68a 评审时主代理手写的对抗形状（不来自代理的生成器）。EA：extends 短类；LB：带类重声明的短类；CC：约束修饰与约束子句的语法位置；LD：前导点；OR：声明次序；CE：class extends 内建类型。
+//// model: A68EA1
+model A Real x = 1; end A;
+model B = A;
+model C extends B; Real y = x + 1; end C;
+//// model: A68EA2
+model A Real x = 1; end A;
+model B1 = A; model B2 = B1;
+model C extends B2; end C;
+//// model: A68EA3
+package P model A Real x = 1; end A; model B = A; end P;
+model C extends P.B; end C;
+//// model: A68EA4
+package P constant Real k = 3; model A Real x = k; end A; model B = A; end P;
+model C extends P.B; end C;
+//// model: A68EA5
+model A Real x = 1; end A;
+model B = A;
+model C extends B(x = 5); end C;
+//// model: A68EA6
+model A Real x = 1; end A;
+model B = A;
+model C extends B; extends A; end C;
+//// model: A68EA7
+connector K Real e; flow Real f; end K; connector L = K; connector L2 extends L; end L2;
+model C L2 a, b; equation connect(a, b); end C;
+//// model: A68EA8
+function f input Real u; output Real y; algorithm y := u + 1; end f; function g = f; function h extends g; end h;
+model C Real x = h(time); end C;
+//// model: A68EA9
+record R Real a = 1; end R; record S = R; record T extends S; Real b = 2; end T;
+model C T t; Real y = t.a; end C;
+//// model: A68EA10
+model A Real x; equation x = time; end A; model B = A;
+model C extends B; Real y; equation y = x; end C;
+//// model: A68EA11
+model A Real x = 1; end A;
+model B = A;
+model C protected extends B; public Real y = x; end C;
+//// model: A68EA12
+partial model A Real x; end A; model B = A;
+model C extends B; equation x = 1; end C;
+//// model: A68EA13
+package P1 model A Real x = 1; end A; end P1; package P2 extends P1; model B = A; end P2;
+model C extends P2.B; end C;
+//// model: A68EA14
+model A Real x = 1; end A;
+model B = A;
+model M model B Real q = 2; end B; model C extends .B; end C; C c; end M;
+//// model: A68EA15
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+model W replaceable model T = X; T t; end W; model B = W;
+model C extends B(redeclare model T = Y); end C;
+//// model: A68EA16
+model A Real x = 1; end A;
+model B = A(x = 2);
+model C extends B; end C;
+//// model: A68EA17
+model A Real x = 1; model I = J; model J Real p = 2; end J; I i; end A; model B = A;
+model C extends B; end C;
+//// model: A68EA18
+model A Real x = 1; end A;
+model B = A; model C extends B; end C; model D = C;
+model M D d; D e(x = 3); end M;
+//// model: A68EA19
+model A Real x = 1; end A;
+model B = A[2];
+model C extends B; end C;
+//// model: A68EA20
+type V = Real[3]; type W extends V; end W;
+model C W w = {1, 2, 3}; end C;
+//// model: A68EA21
+model A Real x = 1; end A;
+model C extends B; model B = A; end C;
+//// model: A68EA22
+model A Real x = 1; end A;
+model C1 model B = A; end C1;
+model C2 extends C1; extends B; end C2;
+//// model: A68EA23
+model A Real x = 1; end A;
+model C replaceable model B = A; extends B; end C;
+//// model: A68EA24
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+package P replaceable model T = A; model B = T; end P; package P2 = P(redeclare model T = X);
+model C extends P2.B; end C;
+//// model: A68EA25
+model A Real x = 1; end A;
+model B = A; model C extends B; end C;
+model M C c1(x = 2), c2(x = 3); end M;
+//// model: A68EA26
+model A parameter Real p = 1; Real x = p; end A; model B = A;
+model C parameter Real q = 2; extends B(p = q); end C;
+//// model: A68EA27
+model A parameter Integer n = 2; Real x[n]; equation x = fill(1.0, n); end A; model B = A;
+model C extends B(n = 3); end C;
+//// model: A68EA28
+model A model N Real x = 1; end N; end A; model B = A;
+model C extends B; N n; end C;
+//// model: A68EA29
+model A constant Real k = 1; end A; model B = A;
+model C extends B; Real y = k; end C;
+//// model: A68EA30
+package A constant Real k = 1; model N Real x = k; end N; end A; package B = A;
+package C extends B; end C;
+model M C.N n; Real y = C.k; end M;
+//// model: A68EA31
+model A end A; model B = A;
+model C extends B; Real x = 1; end C;
+//// model: A68EA32
+type T = Real(unit = "m"); type U = T;
+model C U u = 1; end C;
+//// model: A68EA33
+operator record R Real a; end R; operator record S = R;
+model C S s(a = 1); end C;
+//// model: A68EA34
+block A input Real u; output Real y = u; end A; block B = A;
+block C extends B; end C;
+model M C c(u = 1); end M;
+//// model: A68EA35
+model A Real x = 1; end A; class B = A;
+model C extends B; end C;
+//// model: A68EA36
+class A Real x = 1; end A; model B = A; block K = B;
+model C extends K; end C;
+//// model: A68LB1
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+package P replaceable model T = A; model Q T t; end Q; end P;
+package P2 = P(redeclare model T = X);
+model C P2.T t; end C;
+//// model: A68LB2
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+package P replaceable model T = A; model Q T t; end Q; end P;
+package P2 = P(redeclare model T = X);
+model C P.T s; P2.T t; end C;
+//// model: A68LB3
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+package P replaceable model T = A; model Q T t; end Q; end P;
+package P2 = P(redeclare model T = X);
+model C P2.T t; P.T s; end C;
+//// model: A68LB4
+function g input Real u; output Real y; algorithm y := u; end g; function h input Real u; output Real y; algorithm y := 2 * u; end h;
+package P replaceable function f = g; end P; package P2 = P(redeclare function f = h);
+model C Real x = P2.f(time); Real y = P.f(time); end C;
+//// model: A68LB5
+package A constant Real k = 1; end A; package B constant Real k = 2; end B;
+package P replaceable package M = A; constant Real c = M.k; end P; package P2 = P(redeclare package M = B);
+model C Real x = P2.c; Real y = P.c; end C;
+//// model: A68LB6
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+package P replaceable model T = A; model Q T t; end Q; end P;
+package P2 = P(redeclare model T = X); package P3 = P2;
+model C P3.T t; end C;
+//// model: A68LB7
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+package P replaceable model T = A; model Q T t; end Q; end P;
+package P2 extends P(redeclare model T = X); end P2;
+model C P2.T t; end C;
+//// model: A68LB8
+model A Real x = 1; end A;
+package P replaceable model T = A; model Q T t; end Q; end P;
+model M model X2 Real w = 9; end X2; package P2 = P(redeclare model T = X2); P2.T t; end M;
+//// model: A68LB9
+package P replaceable type T = Real; end P; package P2 = P(redeclare type T = Integer);
+model C P2.T t = 1; end C;
+//// model: A68LB10
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+package P replaceable model T = A; model Q T t; end Q; end P;
+package P2 = P(redeclare model T = X); package P3 = P(redeclare model T = Y);
+model C P2.T a; P3.T b; end C;
+//// model: A68LB11
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+package P replaceable model T = A; model Q T t; end Q; end P;
+package P2 = P(redeclare model T = X); model M2 = P2.T;
+model C M2 m; end C;
+//// model: A68LB12
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+package P replaceable model T = A; model Q T t; end Q; end P;
+package P2 = P(redeclare model T = X);
+model C P2.Q q; P.Q r; end C;
+//// model: A68LB13
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+package P replaceable model T = A; model Q T t; end Q; end P;
+package P2 = P(redeclare model T = X);
+model C P.Q r; P2.Q q; end C;
+//// model: A68LB14
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+package P replaceable model T = A; model Q T t; end Q; end P;
+package P2 = P(redeclare model T = X); package P3 = P2(redeclare model T = Y);
+model C P3.T t; end C;
+//// model: A68LB15
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+package P replaceable model T = A; model Q T t; end Q; end P;
+package P2 = P(redeclare model T = X);
+model C extends P2.Q; end C;
+//// model: A68LB16
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+package P replaceable model T = A; model Q T t; end Q; end P;
+package P2 = P(redeclare model T = X); model R = P2.Q;
+model C extends R; end C;
+//// model: A68LB17
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+package P replaceable package I model T = A; end I; end P;
+package J model T = X; end J; package P2 = P(redeclare package I = J);
+model C P2.I.T t; end C;
+//// model: A68LB18
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+package P replaceable model T = A; model Q T t; end Q; end P;
+package P2 = P(redeclare model T = X(x = 7));
+model C P2.T t; end C;
+//// model: A68LB19
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+package P replaceable model T = A; model Q T t; end Q; end P;
+package P2 = P(redeclare model T = X);
+model C P2.T t(x = 8); P2.T u(x = 9); end C;
+//// model: A68LB20
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+package P replaceable model T = A; constant Real c = 1; end P; package P2 = P(redeclare model T = X, c = 2);
+model C P2.T t; Real y = P2.c; end C;
+//// model: A68CC1
+model A Real x = 1; end A;
+model C replaceable model T = A constrainedby A(x = 5); T t; end C;
+//// model: A68CC2
+model A Real x = 1; end A;
+model C replaceable model T = A constrainedby A(x = 5); T t(x = 6); end C;
+//// model: A68CC3
+model A Real x = 1; end A;
+model C replaceable model T = A(x = 4) constrainedby A(x = 5); T t; end C;
+//// model: A68CC4
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+model M replaceable model T = A constrainedby A(x = 5); T t; end M;
+model C M m(redeclare model T = X); end C;
+//// model: A68CC5
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+model M replaceable model T = A constrainedby A(x = 5); T t; end M;
+model C M m(redeclare model T = X(x = 7)); end C;
+//// model: A68CC6
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+model M replaceable model T = A constrainedby A(x = 5); T t; end M;
+model C M m(redeclare model T = X constrainedby X(x = 8)); end C;
+//// model: A68CC7
+model A Real x = 1; end A;
+model C replaceable model T Real x = 1; end T constrainedby A(x = 5); T t; end C;
+//// model: A68CC8
+model C replaceable type T = Real constrainedby Real(min = 0); T t = 1; end C;
+//// model: A68CC9
+record Q Real a = 1; end Q;
+model C replaceable record R = Q constrainedby Q(a = 2); R r; end C;
+//// model: A68CC10
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+model N replaceable model T = A constrainedby A(x = 5); T t; end N;
+model C extends N(redeclare model T = X); end C;
+//// model: A68CC11
+model A Real x = 1; end A;
+model C replaceable model T = A constrainedby A(x = 5); T t[2]; end C;
+//// model: A68CC12
+model A Real x = 1; end A;
+model C replaceable A a constrainedby A(x = 5); end C;
+//// model: A68CC13
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+model M replaceable A a constrainedby A(x = 5); end M;
+model C M m(redeclare X a); end C;
+//// model: A68CC14
+model A Real x = 1; end A;
+model M parameter Real p = 2; replaceable model T = A constrainedby A(x = p); T t; end M;
+model C M m1(p = 3), m2(p = 4); end C;
+//// model: A68CC15
+function g input Real u; input Real k = 1; output Real y; algorithm y := u * k; end g;
+model C replaceable function f = g constrainedby g(k = 2); Real x = f(time); end C;
+//// model: A68CC16
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+package P replaceable model T = A constrainedby A(x = 5); end P; package P2 = P(redeclare model T = X);
+model C P.T a; P2.T b; end C;
+//// model: A68CC17
+model A Real x = 1; end A;
+package P replaceable model T = A constrainedby A(x = 5); end P;
+model C extends P.T; end C;
+//// model: A68CC18
+model A Real x = 1; end A;
+model C replaceable model T = A constrainedby A; T t; end C;
+//// model: A68CC19
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+model M replaceable model T = A constrainedby A; T t; end M;
+model C M m(redeclare model T = X constrainedby A); end C;
+//// model: A68CC20
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+model N replaceable model T = A constrainedby A(x = 5); T t; end N;
+model O extends N(redeclare replaceable model T = X constrainedby X(x = 6)); end O;
+model C O o(redeclare model T = Y); end C;
+//// model: A68CC21
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+model N replaceable model T = A constrainedby A(x = 5); end N;
+model C extends N; T t; T u(x = 2); end C;
+//// model: A68CC22
+model A Real x = 1; end A;
+model N replaceable model T = A; T t; end N;
+model C extends N; redeclare model T = A constrainedby A; end C;
+//// model: A68CC23
+model C Real x constrainedby Real; end C;
+//// model: A68CC24
+model A Real x = 1; end A;
+model C model T = A constrainedby A; T t; end C;
+//// model: A68CC25
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+model M replaceable model T = A constrainedby A(x = 5); T t; end M;
+model C M m(redeclare replaceable model T = X constrainedby X(x = 8)); end C;
+//// model: A68CC26
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+model M replaceable model T = A; T t; end M;
+model C M m(replaceable model T = X constrainedby A); end C;
+//// model: A68CC27
+model A Real x = 1; end A;
+model C replaceable model T = A extends A; T t; end C;
+//// model: A68CC28
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+model M replaceable A a constrainedby A; end M;
+model C M m(redeclare X a constrainedby A); end C;
+//// model: A68CC29
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+model M replaceable A a constrainedby A; end M;
+model C M m(redeclare replaceable X a constrainedby A); end C;
+//// model: A68LD1
+type T = Integer;
+model M type T = Real; .T a = 1; T b = 1; end M;
+//// model: A68LD2
+model A Real x = 1; end A;
+model M model A Real y = 2; end A; extends .A; end M;
+//// model: A68LD3
+model A Real x = 1; end A;
+model M model A Real y = 2; end A; model B = .A; B b; end M;
+//// model: A68LD4
+package P package Q model R Real x = 1; end R; end Q; end P;
+model M package P package Q model R Real y = 2; end R; end Q; end P; .P.Q.R r1; P.Q.R r2; end M;
+//// model: A68LD5
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+model W replaceable model T = A; T t; end W;
+model M model X Real y = 2; end X; W w(redeclare model T = .X); end M;
+//// model: A68LD6
+model M .Real x = 1; end M;
+//// model: A68LD7
+model A Real x = 1; end A;
+model M model A Real y = 2; end A; .A e(x = 3); end M;
+//// model: A68LD8
+function f input Real u; output Real y; algorithm y := u; end f;
+model M function f input Real u; output Real y; algorithm y := 2 * u; end f; Real a = .f(time); Real b = f(time); end M;
+//// model: A68LD9
+model M model N type T = Integer; end N; replaceable N.T a = 1; end M;
+//// model: A68LD10
+type E = enumeration(a, b);
+model M type E = enumeration(c, d); .E x = .E.a; E y = E.c; end M;
+//// model: A68LD11
+package P constant Real k = 1; end P;
+model M package P constant Real k = 2; end P; Real a = .P.k; Real b = P.k; end M;
+//// model: A68OR1
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+package P replaceable model T = A; model U extends T; end U; end P; package P2 = P(redeclare model T = X);
+model C P.U a; P2.U b; end C;
+//// model: A68OR2
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+package P replaceable model T = A; model U extends T; end U; end P; package P2 = P(redeclare model T = X);
+model C P2.U b; P.U a; end C;
+//// model: A68OR3
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+package P replaceable model T = A; model V = T; model U extends V; end U; end P; package P2 = P(redeclare model T = X);
+model C P.U a; P2.U b; end C;
+//// model: A68OR4
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+package P replaceable model T = A; model V = T; model U extends V; end U; end P; package P2 = P(redeclare model T = X);
+model C P2.U b; P.U a; end C;
+//// model: A68OR5
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+model W replaceable model T = A; model U extends T; end U; U u; end W;
+model C W a; W b(redeclare model T = X); W c(redeclare model T = Y); end C;
+//// model: A68OR6
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+model W replaceable model T = A; model U extends T; end U; U u; end W;
+model C W b(redeclare model T = X); W a; end C;
+//// model: A68OR7
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+model W replaceable model T = A; model V = T; model U extends V; end U; U u; end W;
+model C W b(redeclare model T = X); W a; end C;
+//// model: A68OR8
+model A Real x = 1; end A;
+model X Real x = 10; Real w = 2; end X;
+model Y Real x = 20; Real z = 3; end Y;
+model W replaceable model T = A; model V = T; V v; end W;
+model C W b(redeclare model T = X); W a; end C;
+//// model: A68CE1
+package A replaceable type M = Real; end A; package B extends A; redeclare type extends M end M; end B;
+model C B.M x = 1; end C;
+//// model: A68CE2
+package A replaceable type M = Real(unit = "m"); end A; package B extends A; redeclare type extends M end M; end B;
+model C B.M x = 1; end C;
+//// model: A68CE3
+package A replaceable type M = Real; end A; package B extends A; redeclare type extends M(unit = "s") end M; end B;
+model C B.M x = 1; end C;
+//// model: A68CE4
+package A type E = enumeration(a, b); replaceable type M = E; end A; package B extends A; redeclare type extends M end M; end B;
+model C B.M x = A.E.a; end C;

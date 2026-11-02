@@ -438,6 +438,8 @@ void Parser::parse_element(ClassDef& cls, bool is_protected) {
 void Parser::parse_constraining_clause_opt(Element& el) {
   // Modelica 2.x 用 `extends` 写约束子句（如 `replaceable type T = R extends TwoPin;`），
   // OMC 兼容之；此处（元素末尾、';' 之前）`extends` 不可能是别的东西。unparse 统一成 constrainedby。
+  // 约束子句只跟在 replaceable 后面（MLS §B.2.2 element-replaceable；Modelica.g:586、:944 v1.25.0），否则留给调用方按语法错报。
+  if (!el.is_replaceable) return;
   if (!match(TokenKind::Kw_constrainedby) && !match(TokenKind::Kw_extends)) return;
   el.has_constrainedby = true;
   el.cb_path = parse_name_path(el.cb_leading_dot);

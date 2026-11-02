@@ -2856,6 +2856,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       PASS 152 / SKIP 40 / BOTH-REJECT 78；旧组 SKIP→PASS 46；单测 +6。slice 707→709 例（+RecordBinding5 / Size6）FAIL 0（oracle=live 不一致 0）；
       scodeinst 668→670；testsuite 1851→1857（EnumArrayMod1、RecordEnumBinding、Bug2695、RecordBinding5、Size6、inheritances/Ticket4258b）/
       FAIL 0；MSL 500（不变）；探针 15123→15393；单测 544→550。
+- [x] (68a) 带修饰的短类（2026-11-03）：18 个目标 11 个 PASS。extends 短类取链底长类（`extends_long_class`），修饰 / 重声明 / 前缀 / 非字面量维的形态记成 gap，真实例化这条 extends 才 SKIP；
+      带类重声明的短类走包实例（`inst_package`）；类的约束修饰（基线整个没做，静默错）；inst 读全限定类名的前导点（基线解析了没用，静默错）；实例有类重声明时重新展开定义层的类单元（`settled_classes_`，基线随声明次序变）。
+      评审探针另发现解析器放行不跟在 `replaceable` 后面的 `constrainedby`（基线 ACCEPTS-INVALID），已修。
+      照旧 SKIP：ExtendsDerived、UsertypeModifications（短类修饰丢失，账本）、ArrayAsAliasInExtends、Bug3817、Rectifier、NetworkLoop_total、Breaker_total（放开后撞 function variable type、composite array element reference、Connections operator argument）；
+      omc 能过、ymc 未做的：extends 的基类经改了常量的 extends 继承来（ESC38 / ESC85）、短类修饰里的组件重声明（LMS15）、class extends 形态的重声明（LMS14）、嵌套类修饰里的重声明（LMX13）、重声明链上内层才有约束修饰（CMR23 / A68CC20）、class extends 的目标是带修饰的短类（ESC72）。ponytail：`check_short_settled` 按定义元素记，偏保守；`settled_classes_` 是对 omc 展开时机的近似，已知形态由探针覆盖。
+      探针 pk-p49（250）、pk-p49a（108，评审手写）；slice 708→714；scodeinst 670→678；testsuite 1857→1870 / FAIL 0；MSL 500（不变）；探针 15393→15751；单测 +7。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

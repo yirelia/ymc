@@ -304,6 +304,23 @@ YMC_TEST(roundtrip_redeclare_annotation_external) {
   YMC_CHECK(u.find("external \"C\" y = foo(x) annotation(Library = \"m\")") != std::string::npos);
 }
 
+// 约束子句只跟在 replaceable 后面：omc 1.25.0 实跑（探针 pk-p49a A68CC6 / CC22-CC24）前四条 Failed to parse file，后两条照收。
+YMC_TEST(constrainedby_needs_replaceable) {
+  bool err = false;
+  once("model C M m(redeclare model T = X constrainedby X(x = 8)); end C;", &err);
+  YMC_CHECK(err);
+  once("model C extends N; redeclare model T = A constrainedby A; end C;", &err);
+  YMC_CHECK(err);
+  once("model C Real x constrainedby Real; end C;", &err);
+  YMC_CHECK(err);
+  once("model C model T = A constrainedby A; end C;", &err);
+  YMC_CHECK(err);
+  once("model C M m(redeclare replaceable model T = X constrainedby X(x = 8)); end C;", &err);
+  YMC_CHECK(!err);
+  once("model C replaceable model T = A extends A; T t; end C;", &err);
+  YMC_CHECK(!err);
+}
+
 // ---- S1 验收 ③：语法错误的位置与 OMC 对齐（位置一致即可，措辞不要求）----
 // 返回第一条 Error 的 (line, col)；无错误返回 (0, 0)。
 static std::pair<unsigned, unsigned> first_error(const char* src, std::string* msg = nullptr) {
