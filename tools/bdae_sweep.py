@@ -17,8 +17,9 @@
                   NOT-ADMITTED 的模型 ymc 照样跑，只看是否崩溃（崩溃 = CRASH）；打出来的文本不比，no-section 而 ymc 退 0 的单列一行。
 
 A5 按文本判（表达式里去掉字符串字面量后）：`{` `[`（数组构造、矩阵、下标）、` for `（推导式）、`$i<数字>`（绑定迭代量）、整型范围、
-点号运算符、数组型内建调用（A5_CALLS）。例外只有一个位置：[WHEN] 的 when / elsewhen 条件顶层的数组字面量 `when {a, b} then`（含
-split 拼出来的 `not {a, b} and c`）不是路径差异，去掉这对括号，元素照旧查（ADR-008 §6 A5 补充）。
+点号运算符、数组型内建调用（A5_CALLS）。两个位置例外，都不是路径差异（ADR-008 §6 A5 补充）：
+  [WHEN] 和 [ALGO] 的 when / elsewhen 条件顶层的数组字面量 `when {a, b} then`（含 split 拼出来的 `not {a, b} and c`）：去掉这对括号，元素照旧查。
+  [ALGO] 的 for 语句头 `for i in <范围> loop`：语句不展开（NFFlatten.flattenStatement），范围里的 `:` 不算，数字字面量的数组不算；范围里别的东西照旧查。
 
 JSON 与 tools/nf_live_sweep.py 同形（{"total", "records": [{path, status, verdict, …}]}），两次结果可用 vdiff 逐用例比。
 
@@ -64,6 +65,8 @@ _A5 = [("array-literal", re.compile(r"\{")), ("subscript", re.compile(r"\[")), (
        ("range", re.compile(r"(?<![\w.])-?\w[\w.]*:\w"))]
 _A5_CALL = re.compile(r"(?<![\w.$'])(" + "|".join(A5_CALLS) + r")\(")
 _WHEN_HEAD = re.compile(r"^((?:else)?when )(.*)( then)$", re.M)
+_FOR_HEAD = re.compile(r"^ *for (?:'[^']*'|\w+) in (.*) loop$", re.M)
+_NUM_ARRAY = re.compile(r"^\{[-+0-9., e]*\}$")
 _TOP_L = re.compile(r"(?:^|(?:not|and) )\(*$")
 _TOP_R = re.compile(r"\)*(?: and |$)")
 
@@ -92,6 +95,12 @@ def _strip_top_braces(cond):
     return "".join(c for k, c in enumerate(cond) if k not in drop)
 
 
+def _for_range(m):
+    """for 语句头换成范围里还要查的部分。"""
+    r = m.group(1)
+    return "" if _NUM_ARRAY.match(r) else r.replace(":", " ")
+
+
 def admission(section):
     """(通过?, 原因)。原因是 A2':xxx / A5:xxx。"""
     if section is None:
@@ -111,8 +120,10 @@ def admission(section):
     for bk in e["buckets"].values():
         for i in bk["items"]:
             t = _STR.sub('""', i["text"])
-            if i["tag"] == "[WHEN]":
+            if i["tag"] in ("[WHEN]", "[ALGO]"):
                 t = _WHEN_HEAD.sub(lambda m: m.group(1) + _strip_top_braces(m.group(2)) + m.group(3), t)
+            if i["tag"] == "[ALGO]":
+                t = _FOR_HEAD.sub(_for_range, t)
             texts.append(t)
     for t in texts:
         t = _TAG.sub("", _STR.sub('""', t))

@@ -1,0 +1,1788 @@
+//// set: s5a1c-adv — S5a-1c 评审时主代理手写的对抗形状（不来自 s5a1c 的生成器）。Ita：迭代量（和变量同名、重名嵌套、只在范围里用、跨 rehash、类型不同）；Out：算法输出与入桶；Pr：语句打印；If：if 方程的排序、拆分、编号；Wm：多赋值 when。比对走 tools/bdae_sweep.py --probes。
+//// model: Ita1
+model Ita1
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real i, x;
+algorithm
+  for i in 1:3 loop
+    x := i;
+  end for;
+equation
+  i = 1;
+end Ita1;
+//// model: Ita2
+model Ita2
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+  Integer i;
+algorithm
+  for i in 1:3 loop
+    x := i;
+  end for;
+  i := 2;
+end Ita2;
+//// model: Ita3
+model Ita3
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  for i in 1:3 loop
+    for i in {1.5, 2.5} loop
+      x := i;
+    end for;
+  end for;
+end Ita3;
+//// model: Ita4
+model Ita4
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  for i in {1.5, 2.5} loop
+    for i in 1:3 loop
+      x := i;
+    end for;
+  end for;
+end Ita4;
+//// model: Ita5
+model Ita5
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  for i in {1.5, 2.5} loop
+    x := i;
+  end for;
+  for i in 1:3 loop
+    x := i;
+  end for;
+end Ita5;
+//// model: Ita6
+model Ita6
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  for i in 1:3 loop
+    for j in 1:i loop
+      x := 1;
+    end for;
+  end for;
+end Ita6;
+//// model: Ita7
+model Ita7
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  for i in 1:3 loop
+    for j in i:3 loop
+      x := j;
+    end for;
+  end for;
+end Ita7;
+//// model: Ita8
+model Ita8
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := 0;
+  for a in 1:2 loop x := x + a; end for;
+  for b in 1:2 loop x := x + b; end for;
+  for c in 1:2 loop x := x + c; end for;
+  for d in 1:2 loop x := x + d; end for;
+end Ita8;
+//// model: Ita9
+model Ita9
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  for ab in 1:2 loop
+    for ba in 1:2 loop
+      for abc in 1:2 loop
+        for cba in 1:2 loop
+          x := ab + ba + abc + cba;
+        end for;
+      end for;
+    end for;
+  end for;
+end Ita9;
+//// model: Ita10
+model Ita10
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x, y;
+algorithm
+  for k in 1:2 loop
+    x := k;
+  end for;
+algorithm
+  for k in 1:2 loop
+    y := k;
+  end for;
+end Ita10;
+//// model: Ita11
+model Ita11
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x, y;
+algorithm
+  for k in 1:2 loop
+    x := k;
+  end for;
+initial algorithm
+  for k in {1.5} loop
+    y := k;
+  end for;
+end Ita11;
+//// model: Ita12
+model Ita12
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  for i0 in 1:2 loop x := i0; end for;
+  for i1 in 1:2 loop x := i1; end for;
+  for i2 in 1:2 loop x := i2; end for;
+  for i3 in 1:2 loop x := i3; end for;
+  for i4 in 1:2 loop x := i4; end for;
+  for i5 in 1:2 loop x := i5; end for;
+  for i6 in 1:2 loop x := i6; end for;
+  for i7 in 1:2 loop x := i7; end for;
+  for i8 in 1:2 loop x := i8; end for;
+  for i9 in 1:2 loop x := i9; end for;
+  for i10 in 1:2 loop x := i10; end for;
+  for i11 in 1:2 loop x := i11; end for;
+  for i12 in 1:2 loop x := i12; end for;
+  for i13 in 1:2 loop x := i13; end for;
+  for i14 in 1:2 loop x := i14; end for;
+end Ita12;
+//// model: Ita13
+model Ita13
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  for 'a b' in 1:2 loop
+    x := 'a b';
+  end for;
+end Ita13;
+//// model: Ita14
+model Ita14
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  for i in 1:2 loop
+    if i > 1 then
+      x := i;
+    else
+      x := -i;
+    end if;
+  end for;
+end Ita14;
+//// model: Ita15
+model Ita15
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := 0;
+  for i in 1:2 loop
+    while x < i loop
+      x := x + 1;
+    end while;
+  end for;
+end Ita15;
+//// model: Ita16
+model Ita16
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  for i in 1:2 loop
+    assert(i > 0, "m");
+  end for;
+  x := 1;
+end Ita16;
+//// model: Ita18
+model Ita18
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  for b in false:true loop
+    x := if b then 1 else 2;
+  end for;
+end Ita18;
+//// model: Ita19
+model Ita19
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  type E = enumeration(e1, e2);
+  Real x;
+algorithm
+  for e in E.e1:E.e2 loop
+    x := if e == E.e1 then 1 else 2;
+  end for;
+end Ita19;
+//// model: Ita20
+model Ita20
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  for r in 1.0:0.5:2.0 loop
+    x := r;
+  end for;
+end Ita20;
+//// model: Ita21
+model Ita21
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  parameter Integer n = 3;
+  Real x;
+algorithm
+  for i in (n + 1):2 * n loop
+    x := i;
+  end for;
+end Ita21;
+//// model: Ita22
+model Ita22
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  parameter Integer n = 3;
+  Real x;
+algorithm
+  for i in n:-1:1 loop
+    x := i;
+  end for;
+end Ita22;
+//// model: Ita23
+model Ita23
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  constant Integer n = 2;
+  Real x;
+algorithm
+  for i in 1:n loop
+    x := i;
+  end for;
+end Ita23;
+//// model: Ita24
+model Ita24
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  parameter Integer n = 0;
+  Real x;
+algorithm
+  for i in 1:n loop
+    x := i;
+  end for;
+end Ita24;
+//// model: Ita25
+model Ita25
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := 1;
+  for i in 3:1 loop
+    x := i;
+  end for;
+end Ita25;
+//// model: Ita26
+model Ita26
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x, y;
+algorithm
+  x := 1;
+  for i in 3:1 loop
+    y := i;
+  end for;
+equation
+  y = 2;
+end Ita26;
+//// model: Ita27
+model Ita27
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  model A
+    Real x;
+  algorithm
+    for i in 1:2 loop
+      x := i;
+    end for;
+  end A;
+  A a, b;
+end Ita27;
+//// model: Ita28
+model Ita28
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  model A
+    parameter Integer n = 2;
+    Real x;
+  algorithm
+    for i in 1:n loop
+      x := i;
+    end for;
+  end A;
+  A a(n = 3), b;
+end Ita28;
+//// model: Ita29
+model Ita29
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  for time in 1:2 loop
+    x := time;
+  end for;
+end Ita29;
+//// model: Out1
+model Out1
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+  Integer n;
+  Boolean q;
+  String t;
+algorithm
+  x := 1;
+  n := 2;
+  q := true;
+  t := "a";
+end Out1;
+//// model: Out2
+model Out2
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+  discrete Real e;
+algorithm
+  when time > 1 then
+    e := 1;
+  end when;
+  x := e;
+end Out2;
+//// model: Out3
+model Out3
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  discrete Real e;
+algorithm
+  when time > 1 then
+    e := 1;
+  end when;
+end Out3;
+//// model: Out4
+model Out4
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Integer n;
+algorithm
+  when time > 1 then
+    n := 1;
+  end when;
+end Out4;
+//// model: Out5
+model Out5
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  assert(time < 10, "m");
+equation
+  x = 1;
+end Out5;
+//// model: Out6
+model Out6
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  terminate("m");
+equation
+  x = 1;
+end Out6;
+//// model: Out7
+model Out7
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  h(x);
+equation
+  x = 1;
+end Out7;
+//// model: Out8
+model Out8
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x, y;
+algorithm
+  (x, y) := g(time);
+end Out8;
+//// model: Out11
+model Out11
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x, y;
+algorithm
+  (x, y) := g(time);
+  (y, x) := g(y);
+end Out11;
+//// model: Out12
+model Out12
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x, y;
+algorithm
+  if false then
+    y := 1;
+  end if;
+  x := 2;
+equation
+  y = 3;
+end Out12;
+//// model: Out13
+model Out13
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x, y;
+algorithm
+  if true then
+    x := 1;
+  else
+    y := 1;
+  end if;
+equation
+  y = 3;
+end Out13;
+//// model: Out14
+model Out14
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+  Integer n;
+algorithm
+  x := 1;
+  if false then
+    n := 1;
+  end if;
+equation
+  n = 3;
+end Out14;
+//// model: Out15
+model Out15
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  parameter Boolean p = false;
+  Real x, y;
+algorithm
+  if p then
+    y := 1;
+  end if;
+  x := 2;
+equation
+  y = 3;
+end Out15;
+//// model: Out16
+model Out16
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  parameter Boolean p = false annotation(Evaluate = true);
+  Real x, y;
+algorithm
+  if p then
+    y := 1;
+  end if;
+  x := 2;
+equation
+  y = 3;
+end Out16;
+//// model: Out17
+model Out17
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  constant Boolean p = false;
+  Real x, y;
+algorithm
+  if p then
+    y := 1;
+  end if;
+  x := 2;
+equation
+  y = 3;
+end Out17;
+//// model: Out18
+model Out18
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x, y;
+algorithm
+  x := 1;
+  when false then
+    y := 1;
+  end when;
+equation
+  y = 3;
+end Out18;
+//// model: Out19
+model Out19
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x, y;
+algorithm
+  x := 1;
+  while false loop
+    y := 1;
+  end while;
+equation
+  y = 3;
+end Out19;
+//// model: Out20
+model Out20
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := 1;
+  x := x + 1;
+  x := 2 * x;
+end Out20;
+//// model: Out21
+model Out21
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+initial algorithm
+  x := 1;
+equation
+  der(x) = 1;
+end Out21;
+//// model: Out22
+model Out22
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+  discrete Real e;
+initial algorithm
+  e := 1;
+  x := 2;
+equation
+  der(x) = 1;
+  when time > 1 then
+    e = 2;
+  end when;
+end Out22;
+//// model: Out23
+model Out23
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+initial algorithm
+  assert(x > 0, "m");
+equation
+  der(x) = 1;
+end Out23;
+//// model: Out24
+model Out24
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x(start = 1, fixed = true);
+initial equation
+  h(x);
+equation
+  der(x) = 1;
+end Out24;
+//// model: Out25
+model Out25
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x(start = 1, fixed = true);
+equation
+  der(x) = 1;
+  h(x);
+  h(2 * x);
+end Out25;
+//// model: Out26
+model Out26
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+equation
+  x = 1;
+  print("a");
+end Out26;
+//// model: Out27
+model Out27
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real y;
+  Real x;
+algorithm
+  x := der(y);
+equation
+  der(y) = 1;
+end Out27;
+//// model: Out29
+model Out29
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := if time > 1 then f(time) else -f(2 * time);
+end Out29;
+//// model: Out30
+model Out30
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := time + 1 + 2 + time;
+end Out30;
+//// model: Out31
+model Out31
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := time - 1 - 2 - time;
+end Out31;
+//// model: Out32
+model Out32
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := time * 2 / 3 * time;
+end Out32;
+//// model: Out33
+model Out33
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+  Boolean q;
+algorithm
+  q := time > 1 and time > 2 and time > 3;
+  x := 1;
+end Out33;
+//// model: Pr1
+model Pr1
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := 1;
+  if time > 1 then
+    x := 2;
+  end if;
+  x := 3;
+  x := 4;
+  while x < 0 loop
+    x := 0;
+  end while;
+  x := 5;
+end Pr1;
+//// model: Pr2
+model Pr2
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  if time > 1 then
+    x := 2;
+  elseif time > 2 then
+    x := 3;
+  else
+    x := 4;
+  end if;
+end Pr2;
+//// model: Pr3
+model Pr3
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  if time > 1 then
+    if time > 2 then
+      x := 2;
+    end if;
+    if time > 3 then
+      x := 3;
+    end if;
+  end if;
+end Pr3;
+//// model: Pr4
+model Pr4
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := 0;
+  for k in 1:2 loop
+    x := x + 1;
+    if x > 1 then
+      break;
+    end if;
+    x := x + 2;
+  end for;
+end Pr4;
+//// model: Pr5
+model Pr5
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := 0;
+  while x < 1 loop
+    x := x + 1;
+    break;
+  end while;
+end Pr5;
+//// model: Pr6
+model Pr6
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := 0;
+  when time > 1 then
+    x := 1;
+  elsewhen time > 2 then
+    x := 2;
+  end when;
+end Pr6;
+//// model: Pr7
+model Pr7
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  discrete Real e;
+  Integer n;
+algorithm
+  when {time > 1, time > 2} then
+    e := 1;
+    n := 2;
+  elsewhen initial() then
+    n := 3;
+  end when;
+end Pr7;
+//// model: Pr8
+model Pr8
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := 0;
+  when time > 1 then
+    terminate("t");
+  end when;
+end Pr8;
+//// model: Pr9
+model Pr9
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  when time > 1 then
+    x := 1;
+    assert(x > 0, "a");
+    h(x);
+  end when;
+end Pr9;
+//// model: Pr10
+model Pr10
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  assert(x > 0, "a", AssertionLevel.warning);
+  assert(x > 1, "b", AssertionLevel.error);
+  x := 1;
+end Pr10;
+//// model: Pr11
+model Pr11
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := 1;
+  if time > 1 then
+  end if;
+end Pr11;
+//// model: Pr12
+model Pr12
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := 1;
+  if time > 1 then
+    x := 2;
+  else
+  end if;
+end Pr12;
+//// model: Pr13
+model Pr13
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := 1;
+  if time > 1 then
+  else
+    x := 2;
+  end if;
+end Pr13;
+//// model: Pr14
+model Pr14
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := 1;
+  if time > 1 then
+  elseif time > 2 then
+    x := 2;
+  end if;
+end Pr14;
+//// model: Pr15
+model Pr15
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := 1;
+  for k in 1:2 loop
+  end for;
+end Pr15;
+//// model: Pr16
+model Pr16
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := 1;
+  while time < 0 loop
+  end while;
+end Pr16;
+//// model: Pr17
+model Pr17
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := 1;
+  when time > 1 then
+  end when;
+end Pr17;
+//// model: Pr20
+model Pr20
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := 1;
+  if time > 1 then
+    assert(true, "a");
+  end if;
+end Pr20;
+//// model: Pr21
+model Pr21
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := 1;
+  assert(true, "a");
+  assert(false, "b");
+end Pr21;
+//// model: Pr22
+model Pr22
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := 1;
+  if time > 1 then
+    if false then
+      x := 2;
+    end if;
+  end if;
+end Pr22;
+//// model: Pr23
+model Pr23
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := 1;
+  if time > 1 then
+    for k in 3:1 loop
+      x := 2;
+    end for;
+  else
+    x := 3;
+  end if;
+end Pr23;
+//// model: Pr24
+model Pr24
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  String t;
+algorithm
+  t := "a\nb" + "c\"d";
+end Pr24;
+//// model: Pr25
+model Pr25
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := 1e30;
+  x := 1.5e-7;
+  x := 0.1;
+  x := 100000.0;
+end Pr25;
+//// model: Pr26
+model Pr26
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  when sample(0, 1) then
+    x := time;
+  end when;
+end Pr26;
+//// model: Pr28
+model Pr28
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := delay(time, 1);
+end Pr28;
+//// model: Pr29
+model Pr29
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  x := min(time, 1);
+  x := max(time, 2);
+  x := abs(time);
+  x := sign(time);
+  x := integer(time);
+end Pr29;
+//// model: If1
+model If1
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x, y;
+equation
+  if time > 1 then
+    x = 1;
+    y = 2;
+  else
+    y = 3;
+    x = 4;
+  end if;
+end If1;
+//// model: If2
+model If2
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x, y;
+equation
+  if time > 1 then
+    y = 1;
+    x = 2;
+  else
+    x = 3;
+    y = 4;
+  end if;
+end If2;
+//// model: If3
+model If3
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x, y;
+equation
+  if time > 1 then
+    x + y = 1;
+    x - y = 2;
+  else
+    x = 3;
+    y = 4;
+  end if;
+end If3;
+//// model: If4
+model If4
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x, y;
+equation
+  if time > 1 then
+    x = 1;
+    x = 2;
+  else
+    y = 3;
+    y = 4;
+  end if;
+end If4;
+//// model: If5
+model If5
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x, y;
+  Integer n;
+equation
+  if time > 1 then
+    n = 1;
+    x = 2;
+  else
+    x = 3;
+    n = 4;
+  end if;
+  y = x;
+end If5;
+//// model: If6
+model If6
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+  Integer n, k;
+equation
+  if time > 1 then
+    n = 1;
+    k = 2;
+    x = 2;
+  else
+    k = 5;
+    x = 3;
+    n = 4;
+  end if;
+end If6;
+//// model: If7
+model If7
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+equation
+  if time > 1 then
+    if time > 2 then
+      x = 1;
+    else
+      x = 2;
+    end if;
+  else
+    x = 3;
+  end if;
+end If7;
+//// model: If8
+model If8
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x, y;
+equation
+  if time > 1 then
+    if time > 2 then
+      x = 1;
+      y = 1;
+    else
+      y = 2;
+      x = 2;
+    end if;
+  else
+    x = 3;
+    y = 3;
+  end if;
+end If8;
+//// model: If9
+model If9
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+equation
+  if time > 1 then
+    x = 1;
+  elseif time > 2 then
+    x = 2;
+  elseif time > 3 then
+    x = 3;
+  else
+    x = 4;
+  end if;
+end If9;
+//// model: If11
+model If11
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+initial equation
+  if time > 1 then
+    x = 1;
+  end if;
+equation
+  der(x) = 1;
+end If11;
+//// model: If12
+model If12
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+initial equation
+  if time > 1 then
+    x = 1;
+  elseif time > 2 then
+    x = 2;
+  end if;
+equation
+  der(x) = 1;
+end If12;
+//// model: If13
+model If13
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+initial equation
+  if time > 1 then
+    x = 1;
+  else
+    x = 2;
+  end if;
+equation
+  der(x) = 1;
+end If13;
+//// model: If16
+model If16
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+equation
+  x = 1;
+  if time > 1 then
+    assert(x > 0, "a");
+  else
+    assert(x > 1, "b");
+  end if;
+end If16;
+//// model: If17
+model If17
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+equation
+  x = 1;
+  if time > 1 then
+    h(x);
+  else
+    h(2 * x);
+  end if;
+end If17;
+//// model: If22
+model If22
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  parameter Boolean p = true;
+  Real x;
+equation
+  if p then
+    x = 1;
+  else
+    x = 2;
+  end if;
+end If22;
+//// model: If23
+model If23
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  parameter Boolean p(fixed = false);
+  Real x;
+initial equation
+  p = true;
+equation
+  if p then
+    x = 1;
+  else
+    x = 2;
+  end if;
+end If23;
+//// model: If24
+model If24
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  parameter Real p = 1;
+  Real x;
+equation
+  if p > 0 then
+    x = 1;
+  else
+    x = 2;
+  end if;
+end If24;
+//// model: If25
+model If25
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  parameter Real p = 1;
+  Real x, y;
+equation
+  if p > 0 then
+    x = 1;
+  else
+    x = 2;
+    y = 2;
+  end if;
+  y = 3;
+end If25;
+//// model: If26
+model If26
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+equation
+  if initial() then
+    x = 1;
+  else
+    x = 2;
+  end if;
+end If26;
+//// model: If27
+model If27
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+equation
+  if noEvent(time > 1) then
+    x = 1;
+  else
+    x = 2;
+  end if;
+end If27;
+//// model: If29
+model If29
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+equation
+  if time > 1 then
+    x = 1;
+  elseif false then
+    x = 2;
+  elseif true then
+    x = 3;
+  else
+    x = 4;
+  end if;
+end If29;
+//// model: If31
+model If31
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x, y, z;
+equation
+  if time > 1 then
+    z = 1;
+    y = 2;
+    x = 3;
+  else
+    x = 4;
+    z = 5;
+    y = 6;
+  end if;
+end If31;
+//// model: If32
+model If32
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real a, B, c;
+equation
+  if time > 1 then
+    c = 1;
+    B = 2;
+    a = 3;
+  else
+    a = 4;
+    c = 5;
+    B = 6;
+  end if;
+end If32;
+//// model: If33
+model If33
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  model A
+    Real x;
+  end A;
+  A p, q;
+  Real x;
+equation
+  if time > 1 then
+    x = 1;
+    q.x = 2;
+    p.x = 3;
+  else
+    p.x = 4;
+    x = 5;
+    q.x = 6;
+  end if;
+end If33;
+//// model: If34
+model If34
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x, y;
+equation
+  if time > 1 then
+    2 * x = 1;
+    time = y;
+  else
+    time = x;
+    3 * y = 1;
+  end if;
+end If34;
+//// model: If35
+model If35
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x, y;
+equation
+  if time > 1 then
+    1 = x;
+    2 = y;
+  else
+    x = 1;
+    y = 2;
+  end if;
+end If35;
+//// model: If37
+model If37
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x, y;
+  Boolean q, r;
+equation
+  if time > 1 then
+    q = time > 2;
+    r = time > 3;
+    x = 1;
+    y = 2;
+  else
+    r = false;
+    q = true;
+    y = 3;
+    x = 4;
+  end if;
+end If37;
+//// model: If38
+model If38
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+  String t;
+equation
+  if time > 1 then
+    t = "b";
+    x = 1;
+  else
+    x = 2;
+    t = "a";
+  end if;
+end If38;
+//// model: If39
+model If39
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  type E = enumeration(e1, e2);
+  E e;
+  Real x;
+equation
+  if time > 1 then
+    e = E.e1;
+    x = 1;
+  else
+    x = 2;
+    e = E.e2;
+  end if;
+end If39;
+//// model: If40
+model If40
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+equation
+  if time > 1 then
+    der(x) = 1;
+  else
+    der(x) = 2;
+  end if;
+initial equation
+  x = 0;
+end If40;
+//// model: If41
+model If41
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x, y;
+equation
+  if time > 1 then
+    der(y) = 1;
+    der(x) = 1;
+  else
+    der(x) = 2;
+    der(y) = 2;
+  end if;
+end If41;
+//// model: Wm1
+model Wm1
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  discrete Real a, b, e;
+equation
+  when time > 1 then
+    b = 1;
+    a = 2;
+    e = 3;
+  end when;
+end Wm1;
+//// model: Wm2
+model Wm2
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  discrete Real a, b;
+equation
+  when time > 1 then
+    a = 1;
+    b = 2;
+  elsewhen time > 2 then
+    b = 3;
+    a = 4;
+  end when;
+end Wm2;
+//// model: Wm4
+model Wm4
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  discrete Real a, b;
+equation
+  when {time > 1, time > 3} then
+    b = 1;
+    a = 2;
+  elsewhen time > 2 then
+    a = 4;
+    b = 3;
+  end when;
+end Wm4;
+//// model: Wm5
+model Wm5
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  discrete Real a;
+  Real p(start = 1, fixed = true), q(start = 2, fixed = true);
+equation
+  der(p) = 1;
+  der(q) = 1;
+  when time > 1 then
+    a = 1;
+    reinit(q, 2);
+    reinit(p, 3);
+  end when;
+end Wm5;
+//// model: Wm6
+model Wm6
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real p(start = 1, fixed = true), q(start = 2, fixed = true), r(start = 3, fixed = true);
+equation
+  der(p) = 1;
+  der(q) = 1;
+  der(r) = 1;
+  when time > 1 then
+    reinit(r, 2);
+    reinit(q, 2);
+    reinit(p, 3);
+  end when;
+end Wm6;
+//// model: Wm7
+model Wm7
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real p(start = 1, fixed = true), q(start = 2, fixed = true);
+equation
+  der(p) = 1;
+  der(q) = 1;
+  when time > 1 then
+    reinit(p, 3);
+  elsewhen time > 2 then
+    reinit(q, 2);
+  end when;
+end Wm7;
+//// model: Wm8
+model Wm8
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  model A
+    Real v(start = 1, fixed = true);
+  equation
+    der(v) = 1;
+  end A;
+  A p, q, r, t;
+equation
+  when time > 1 then
+    reinit(t.v, 1);
+    reinit(p.v, 2);
+    reinit(r.v, 3);
+    reinit(q.v, 4);
+  end when;
+end Wm8;
+//// model: Wm9
+model Wm9
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  discrete Real a, b;
+  Integer n;
+  Boolean q;
+equation
+  when time > 1 then
+    q = true;
+    n = 1;
+    b = 1;
+    a = 2;
+  end when;
+  when time > 2 then
+    terminate("t");
+  end when;
+end Wm9;
+//// model: Wm11
+model Wm11
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  discrete Real a, b;
+equation
+  when time > 1 then
+    (a, b) = g(time);
+  end when;
+end Wm11;
+//// model: Wm12
+model Wm12
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  discrete Real a, b;
+equation
+  when time > 1 then
+    a = pre(b);
+    b = pre(a);
+  end when;
+end Wm12;
+//// model: Wm13
+model Wm13
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  discrete Real a, b;
+initial equation
+  pre(a) = 0;
+  pre(b) = 0;
+equation
+  when time > 1 then
+    a = 1;
+    b = 2;
+  end when;
+end Wm13;
+//// model: Wm14
+model Wm14
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  discrete Real a, b;
+equation
+  when initial() then
+    a = 1;
+    b = 2;
+  end when;
+end Wm14;
+//// model: Bad15
+model Bad15
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  (x) := f(1);
+end Bad15;
+//// model: Bad16
+model Bad16
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  (x, x) := g(1);
+end Bad16;
+//// model: Out9b
+model Out9b
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real x;
+algorithm
+  (x, ) := g(time);
+end Out9b;
+//// model: Out10b
+model Out10b
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real y;
+algorithm
+  (, y) := g(time);
+end Out10b;
+//// model: Out10c
+model Out10c
+  function f input Real u; output Real v; algorithm v := u + 1; end f;
+  function g input Real u; output Real v1; output Real v2; algorithm v1 := u; v2 := u + 1; end g;
+  function h input Real u; algorithm assert(u > 0, "h"); end h;
+  Real y;
+  Integer n;
+algorithm
+  if false then
+    (y, ) := g(time);
+  end if;
+  n := 1;
+equation
+  y = 1;
+end Out10c;

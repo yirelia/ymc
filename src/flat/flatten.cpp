@@ -2066,15 +2066,69 @@ class Flattener {
     FlatAlgorithm fa;
     fa.is_initial = is_initial;
     alg_initial_ = is_initial;
+    cur_dropped_ = &fa.dropped_outputs;
     ++in_alg_;
     for (Id<SStatement> sid : alg.stmts)
-      if (!append_statement(sid, enclosing, prefix, fa.stmts)) { --in_alg_; return; }   // 有语句未做 → 放弃整模型（保 FAIL=0）
+      if (!append_statement(sid, enclosing, prefix, fa.stmts)) { --in_alg_; cur_dropped_ = nullptr; return; }   // 有语句未做 → 放弃整模型（保 FAIL=0）
     --in_alg_;
+    cur_dropped_ = nullptr;
     alg_initial_ = false;
     if (fa.stmts.empty()) return;   // 空段不产关键字（dumper flat_dump.cpp:129 也跳空段）
     if (is_initial) result_.model.initial_algorithms.push_back(std::move(fa));
     else result_.model.algorithms.push_back(std::move(fa));
   }
+
+  // 删掉的语句里赋值的变量（见 FlatAlgorithm::dropped_outputs）。走 SCode，不翻译：真分支后面的分支这里本来就不翻译，翻译了可能多出 SKIP。
+  // when 语句里的同时算隐式离散：omc 走的是实例化时的语句（updateImplicitVariabilityStmt，NFInst.mo:4003-4075 v1.25.0），这时还没化简。
+  void note_dropped_stmts(const std::vector<Id<SStatement>>& body, const std::vector<Symbol>& prefix) {
+    for (Id<SStatement> id : body) {
+      const SStatement& st = I_.scode.stmts[id];
+      if (st.kind == SStmtKind::Assign) note_dropped_target(st.a, prefix);
+      for (const SStmtBranch& br : st.branches) note_dropped_stmts(br.body, prefix);
+      note_dropped_stmts(st.body, prefix);
+      note_dropped_stmts(st.else_body, prefix);
+    }
+  }
+  void note_dropped_target(Id<Exp> target, const std::vector<Symbol>& prefix) {
+    const Exp& x = I_.absyn.exps[target];
+    if (x.kind == ExpKind::Tuple) {
+      for (Id<Exp> a : x.args) note_dropped_target(a, prefix);
+      return;
+    }
+    if (x.kind != ExpKind::CrefExp) return;   // 元组的空位
+    std::vector<Symbol> name = prefix;
+    for (const auto& part : I_.absyn.crefs[x.cref].parts) {
+      if (!part.subscripts.empty()) { result_.model.alg_outputs_unknown = true; return; }
+      name.push_back(part.name);
+    }
+    if (alg_in_when_ > 0) when_assigned_.insert(path_key(name));
+    if (cur_dropped_) cur_dropped_->push_back(std::move(name));
+  }
+  // 同上，收尾折叠时删的，这时只有压平后的语句。
+  void note_dropped_flat(const std::vector<Id<FlatStatement>>& body) {
+    const auto target = [&](auto& self, Id<Expr> id) -> void {
+      const Expr& x = result_.model.exprs[id];
+      if (x.kind == ExprKind::Tuple) {
+        for (Id<Expr> a : x.args) self(self, a);
+        return;
+      }
+      if (x.kind != ExprKind::Cref) return;
+      std::vector<Symbol> name;
+      for (const ExprCrefPart& part : x.cref.parts) {
+        if (!part.subscripts.empty()) { result_.model.alg_outputs_unknown = true; return; }
+        name.push_back(part.name);
+      }
+      if (cur_dropped_) cur_dropped_->push_back(std::move(name));
+    };
+    for (Id<FlatStatement> id : body) {
+      const FlatStatement& st = result_.model.stmts[id];
+      if (st.kind == FlatStmtKind::Assign) target(target, st.a);
+      for (const FlatStmtBranch& br : st.branches) note_dropped_flat(br.body);
+      note_dropped_flat(st.body);
+      note_dropped_flat(st.else_body);
+    }
+  }
+  std::vector<std::vector<Symbol>>* cur_dropped_ = nullptr;   // 正在收的算法段的 dropped_outputs
 
   // 追加一条算法语句的压平结果（0..n 条，NFSimplifyModel.simplifyStatement :304-382）：if 语句化简常量条件（可能整条消失
   // 或只剩某分支体），体为空的 for 删去；其余语句一条。失败 → unsupported，返回 false。
@@ -2106,7 +2160,10 @@ class Flattener {
     if (result_.model.stmts[s].kind == FlatStmtKind::For && result_.model.stmts[s].body.empty()) return true;
     // 范围的类型是空数组的 for 语句整条删去（simplifyStatement 的 FOR 支：Dimension.isZero，NFSimplifyModel.mo:315-333
     // v1.25.0；EN 探针 t3：`for i in 3:1 loop`、`for i in E.three:E.one loop`；此前照打）。
-    if (result_.model.stmts[s].kind == FlatStmtKind::For && range_known_empty(result_.model.stmts[s].a)) return true;
+    if (result_.model.stmts[s].kind == FlatStmtKind::For && range_known_empty(result_.model.stmts[s].a)) {
+      note_dropped_stmts(st.body, prefix);
+      return true;
+    }
     out.push_back(s);
     return true;
   }
@@ -2191,6 +2248,7 @@ class Flattener {
       set_unsupported("algorithm assignment to non-continuous variable");
       return false;
     }
+    if (alg_in_when_ > 0) when_assigned_.insert(path_key(nm));
     return true;
   }
   // if 语句（simplifyIfStmtBranches，NFSimplifyModel.mo:575-616；else 按条件 true 的末分支处理）：条件化简后为 false 的
@@ -2211,16 +2269,20 @@ class Flattener {
       return ok;
     };
     bool closed = false;   // 遇到条件 true 的分支（其后全丢）
-    for (const SStmtBranch& br : st.branches) {
+    for (std::size_t i = 0; i < st.branches.size(); ++i) {
+      const SStmtBranch& br = st.branches[i];
       const Id<Expr> c = simplify_expr(inst_exp(br.cond, enclosing, prefix));
       if (result_.unsupported) return false;
       if (result_.model.exprs[c].ty.kind != TypeKind::Boolean) { set_unsupported("algorithm condition type"); return false; }
       std::vector<Id<FlatStatement>> b;
       if (!body(br.body, b)) return false;
       const Expr& ce = result_.model.exprs[c];
-      if (ce.kind == ExprKind::BoolLit && !ce.bval) continue;
+      if (ce.kind == ExprKind::BoolLit && !ce.bval) { note_dropped_stmts(br.body, prefix); continue; }
       if (ce.kind == ExprKind::BoolLit && ce.bval) {
+        for (std::size_t k = i + 1; k < st.branches.size(); ++k) note_dropped_stmts(st.branches[k].body, prefix);
+        note_dropped_stmts(st.else_body, prefix);
         if (fs.branches.empty()) { out.insert(out.end(), b.begin(), b.end()); return true; }
+        if (b.empty() && !br.body.empty()) result_.model.stmt_branch_emptied = true;
         fs.else_body = std::move(b);
         closed = true;
         break;
@@ -2230,6 +2292,7 @@ class Flattener {
     if (!closed) {   // 原 else = 条件 true 的末分支
       std::vector<Id<FlatStatement>> b;
       if (!body(st.else_body, b)) return false;
+      if (b.empty() && !st.else_body.empty() && !fs.branches.empty()) result_.model.stmt_branch_emptied = true;
       if (fs.branches.empty()) { out.insert(out.end(), b.begin(), b.end()); return true; }
       fs.else_body = std::move(b);
     }
@@ -2328,6 +2391,7 @@ class Flattener {
       set_unsupported("when-solved variable with non-constant binding");
       return {};
     }
+    if (alg_in_when_ > 0) when_assigned_.insert(path_key(lname));   // 隐式离散（markImplicitWhenExp，见 when_assigned_）
     const Type lty = lv->ty;   // 先取（下面 inst_exp/to_real 会往 arena add，勿跨调用持引用）
     const TypeKind ta = lty.kind;
     array_call_ok_ = whole && I_.absyn.exps[st.b].kind == ExpKind::Call;   // 右侧整个是数组调用（`x := f(a, b)`）
@@ -2480,10 +2544,11 @@ class Flattener {
     // 迭代变量的变率 = 范围定型时的变率：范围里的参数若此前还不是结构参数，就是 PARAMETER（高于结构参数；CX 探针 c13
     // `for i in 1:p loop y[i] := sum(i * j for j in 1:3)` 照常展开）——在求范围（会标结构参数）之前看。
     const bool plain_range = absyn_refs_plain_param(ra, enclosing, prefix);
+    range_typing_ = true;   // 见 note_attr_final
     const std::optional<IterVals> lv = label_iter_values(ra, enclosing, prefix);
-    if (result_.unsupported) return {};
+    if (result_.unsupported) { range_typing_ = false; return {}; }
     Id<Expr> range = lv ? lv->kept : simplify_expr(inst_exp(ra, enclosing, prefix));
-    if (result_.unsupported) return {};
+    if (result_.unsupported) { range_typing_ = false; return {}; }
     // 参数变率的范围是结构的（typeRange 对 ≤ PARAMETER 的范围调 Structural.markExp，NFTyping.mo:2455-2460）：参数打 final、
     // 范围代入值（SumVectorForIf `for i in 1:n` → `1:5`）。
     if (!lv && absyn_refs_param(ra, enclosing)) {
@@ -2493,7 +2558,7 @@ class Flattener {
         std::optional<CVal> v = eval_scode(x, sc, 0, /*allow_param=*/true, nullptr);
         return v && v->k == CVal::K::Int ? lit_int(v->i) : Id<Expr>{};
       };
-      if (re.kind != ExpKind::Range) { set_unsupported("parameter for-statement range"); return {}; }
+      if (re.kind != ExpKind::Range) { set_unsupported("parameter for-statement range"); range_typing_ = false; return {}; }
       Expr r;
       r.kind = ExprKind::Range;
       r.ty = Type::integer();
@@ -2502,10 +2567,12 @@ class Flattener {
       if (re.c.is_valid()) r.c = ival(re.c);
       if (!r.a.is_valid() || !r.b.is_valid() || (re.c.is_valid() && !r.c.is_valid())) {
         set_unsupported("parameter for-statement range");
+        range_typing_ = false;
         return {};
       }
       range = add(std::move(r));
     }
+    range_typing_ = false;
     TypeKind ek;   // 迭代变量类型 = 范围元素类型（数组范围取首元素类型；Range 的 ty 已是元素类型）
     {
       const Expr& re = result_.model.exprs[range];
@@ -4343,6 +4410,9 @@ class Flattener {
       // 子实例 / 记录字段 `fp.a` 走 const_lookup_val，从定型后的条件里认）。
       bool saw = !used.empty(), nf_unknown = false;
       const bool nf = !cond_is_runtime(ce) && exp_not_fixed(ce, kFixedDepth, nf_unknown, &saw);
+      // 用户函数实参里的参数：cond_is_runtime 把调用都算运行时，帧求值也不记 used，上面两处看不到。前面有运行时分支时这个条件不是结构条件
+      //（typeIfEquation NFTyping.mo:3526-3536 v1.25.0），omc 原样留着（探针 LwcP028b `elseif b2(p) then`，此前静默选支）。
+      if (cv && !saw && !out_branches.empty()) saw = cond_refs_param(ce);
       bool keep_param = false;
       if (cv && cv->k == CVal::K::Bool && saw) {
         bool structural = out_branches.empty();
@@ -4742,6 +4812,21 @@ class Flattener {
       case ExprKind::FnRef: return false;
       default: return false;
     }
+  }
+
+  // 式子里有没有参数引用（任意深度，含调用实参）。
+  bool cond_refs_param(Id<Expr> id) {
+    if (!id.is_valid()) return false;
+    const Expr& e = result_.model.exprs[id];
+    if (e.kind == ExprKind::Cref) {
+      const std::uint32_t raw = e.cref.resolved_node;
+      if (raw == Id<INode>::kInvalid) return false;
+      const NodeId n = NodeId::from_index(raw);
+      return I_.nodes.contains(n) && !I_.nodes[n].is_empty() && I_.nodes[n].comp.is_valid() &&
+             cref_path_var(e.cref, n, I_.comps[I_.nodes[n].comp].attributes.variability) == SVariability::Param;
+    }
+    if (cond_refs_param(e.a) || cond_refs_param(e.b) || cond_refs_param(e.c)) return true;
+    return std::any_of(e.args.begin(), e.args.end(), [&](Id<Expr> a) { return cond_refs_param(a); });
   }
 
   // ---- FlatVariable 子下标（类型化 Expr）转换 + 结构比较（对标 NFSubscript：下标是表达式）----
@@ -16820,9 +16905,11 @@ class Flattener {
     }
     if (e.kind != ExpKind::Range || !e.a.is_valid() || !e.b.is_valid()) return std::nullopt;
     const bool has_step = e.c.is_valid();   // a:step:b（c 为终点）；否则 a:b
+    const bool outer_typing = std::exchange(range_typing_, true);   // typeRange 标的，见 note_attr_final
     auto sv = eval_scode(e.a, fscope, depth + 1, true);
     auto ev = eval_scode(has_step ? e.c : e.b, fscope, depth + 1, true);
     std::optional<CVal> stv = has_step ? eval_scode(e.b, fscope, depth + 1, true) : std::optional<CVal>(CVal::I(1));
+    range_typing_ = outer_typing;
     if (!sv || !ev || !stv || sv->k != CVal::K::Int || ev->k != CVal::K::Int || stv->k != CVal::K::Int) return std::nullopt;
     const std::int64_t a = sv->i, b = ev->i, step = stv->i;
     if (step == 0) return std::nullopt;
@@ -29187,6 +29274,7 @@ class Flattener {
   }
   void record_structural(const std::string& k) {
     note_read(k);
+    if (range_typing_) typed_marks_.insert(k);
     // 两支不相容的数组 if 选支时标的条件参数（见 select_if_branch）记下标它的变量；别处的标记一并记（只记这些参数的），收尾时
     // 看它是不是只因被存回了的绑定里的 if 而标（见 sb_plan）。
     if (sb_collect_) sb_collect_->push_back(k);   // 见 sb_collect_
@@ -30326,14 +30414,17 @@ class Flattener {
     }
   }
   // 压平期之前的标记（Early / Binding）在 omc 里都早于 flattenSimpleComponent 读组件属性，isFinal 已带上；压平期的（Late）晚于已发射的变量，不算，
-  // 发射之前就标过的已由发射时的 attr_final 带上。
-  // ponytail: Late 里还混着方程段定型的标记（NFTyping 的下标 / 范围 / assert 级别、NFBuiltinCall 的 fill 维与 Clock 实参），它们早于压平，按这里的
-  // 算法会漏 final。现在这些全和数组、assert、Clock 有关，lower 都 SKIP；放开时要把 Late 拆成"定型"和"压平"两段。
+  // 发射之前就标过的已由发射时的 attr_final 带上。Late 里的范围（for 语句、推导式）是定型期标的（typeRange，NFTyping.mo:2415-2418 v1.25.0），早于压平，
+  // 算（typed_marks_，探针 LwcR00a、LwcR22d）。
+  // ponytail: Late 里还混着方程段定型的别的标记（NFTyping 的下标 / assert 级别、NFBuiltinCall 的 fill 维与 Clock 实参），也早于压平，按这里的
+  // 算法会漏 final。现在这些全和数组、Clock 有关，lower 都 SKIP；放开数组时把它们也记进 typed_marks_。
   void note_attr_final(FlatVariable& v, const std::string& k) {
     if (v.var_kind != FlatVarKind::Parameter) return;
     const auto it = structural_set_.find(k);
-    if (it != structural_set_.end() && it->second != INT_MAX) v.attr_final = true;
+    if ((it != structural_set_.end() && it->second != INT_MAX) || typed_marks_.count(k)) v.attr_final = true;
   }
+  bool range_typing_ = false;                      // 正在定型范围（for 语句、推导式）
+  std::unordered_set<std::string> typed_marks_;    // Late 里其实是定型期标的结构参数（见 note_attr_final）
   void apply_structural_params() {
     if (result_.unsupported) return;
     if (structural_keys_.empty() && record_marks_.empty()) {   // 向量化调用 / 书写的推导式里调用的函数去留照样要定（见 vec_kept_fns / comp_held_fns）
@@ -31075,18 +31166,23 @@ class Flattener {
     result_.model.equations = fold_eqs(result_.model.equations);
     result_.model.initial_equations = fold_eqs(result_.model.initial_equations);
     for (std::vector<FlatAlgorithm>* algs : {&result_.model.algorithms, &result_.model.initial_algorithms}) {
-      for (FlatAlgorithm& alg : *algs) alg.stmts = fold_stmts(alg.stmts);
+      for (FlatAlgorithm& alg : *algs) {
+        cur_dropped_ = &alg.dropped_outputs;
+        alg.stmts = fold_stmts(alg.stmts);
+      }
+      cur_dropped_ = nullptr;
       std::erase_if(*algs, [](const FlatAlgorithm& a) { return a.stmts.empty(); });
     }
   }
-  // if 的分支整形（方程 / 语句共用）：kept = 留下的条件分支，els = else 体。返回 false = 整条消失（els 并入外层）。
+  // if 的分支整形（方程 / 语句共用）：kept = 留下的条件分支，els = else 体。返回 false = 整条消失（els 并入外层）。had_else = 化简前有 else。
   template <class Branch, class Item>
-  bool fold_if_branches(std::vector<Branch>& branches, std::vector<Item>& els, bool is_stmt) {
+  bool fold_if_branches(std::vector<Branch>& branches, std::vector<Item>& els, bool is_stmt, bool had_else) {
     std::vector<Branch> kept;
     for (Branch& br : branches) {
       const Expr& c = result_.model.exprs[br.cond];
       if (c.kind != ExprKind::BoolLit) { kept.push_back(std::move(br)); continue; }
       if (!c.bval) continue;        // 假 → 丢弃
+      had_else = true;
       els = std::move(br.body);     // 真 → 成为 else，截断其余
       break;
     }
@@ -31096,10 +31192,16 @@ class Flattener {
     for (const Branch& br : branches) any = any || !br.body.empty();
     if (!any) {
       if (is_stmt) set_unsupported("if statement with only empty branches");
+      // 带 else 的全空：simplifyIfEqBranches 的 true 支 trim 完再 makeIf（NFSimplifyModel.mo:517-522 v1.25.0），留下一个没有分支的 if。默认路径的标量化
+      // 删掉它，NB 路径 lower 报内部错（lowerIfEquationBody），没有这一段（探针 LwcIAssertTrueOnly）。
+      if (!is_stmt && had_else) result_.model.if_eq_emptied = true;
       els.clear();
       return false;
     }
-    while (els.empty() && branches.back().body.empty()) branches.pop_back();
+    while (els.empty() && branches.back().body.empty()) {
+      if (is_stmt) result_.model.stmt_branch_emptied = true;
+      branches.pop_back();
+    }
     for (const Branch& br : branches)
       if (br.body.empty()) { set_unsupported("empty if branch before a non-empty one (omc drops it)"); break; }
     return true;
@@ -31117,12 +31219,13 @@ class Flattener {
       subst(fe.a); subst(fe.b); subst(fe.c);
       for (FlatEqBranch& br : fe.branches) { subst(br.cond); br.body = fold_eqs(br.body); }
       fe.body = fold_eqs(fe.body);
+      const bool had_else = !fe.else_body.empty();
       fe.else_body = fold_eqs(fe.else_body);
       if (fe.kind == FlatEqKind::Assert) {
         const Expr& c = result_.model.exprs[fe.a];
         if (c.kind == ExprKind::BoolLit && c.bval) continue;   // assert(true, …) → 删除
       }
-      if (fe.kind == FlatEqKind::If && !fold_if_branches(fe.branches, fe.else_body, /*is_stmt=*/false)) {
+      if (fe.kind == FlatEqKind::If && !fold_if_branches(fe.branches, fe.else_body, /*is_stmt=*/false, had_else)) {
         out.insert(out.end(), fe.else_body.begin(), fe.else_body.end());
         continue;
       }
@@ -31136,9 +31239,20 @@ class Flattener {
       FlatStatement& fs = result_.model.stmts[id];   // 本趟不新增语句节点，引用稳定
       for (FlatStmtBranch& br : fs.branches) br.body = fold_stmts(br.body);
       fs.body = fold_stmts(fs.body);
+      const bool had_else = !fs.else_body.empty();
       fs.else_body = fold_stmts(fs.else_body);
+      if (had_else && fs.else_body.empty()) result_.model.stmt_branch_emptied = true;
+      if (fs.kind == FlatStmtKind::If) {   // 字面量条件要删的分支（见 fold_if_branches）：输出照算
+        bool closed = false;
+        for (const FlatStmtBranch& br : fs.branches) {
+          const Expr& c = result_.model.exprs[br.cond];
+          if (closed || (c.kind == ExprKind::BoolLit && !c.bval)) note_dropped_flat(br.body);
+          closed = closed || (c.kind == ExprKind::BoolLit && c.bval);
+        }
+        if (closed) note_dropped_flat(fs.else_body);
+      }
       if (fs.kind == FlatStmtKind::For && fs.body.empty()) continue;
-      if (fs.kind == FlatStmtKind::If && !fold_if_branches(fs.branches, fs.else_body, /*is_stmt=*/true)) {
+      if (fs.kind == FlatStmtKind::If && !fold_if_branches(fs.branches, fs.else_body, /*is_stmt=*/true, had_else)) {
         out.insert(out.end(), fs.else_body.begin(), fs.else_body.end());
         continue;
       }

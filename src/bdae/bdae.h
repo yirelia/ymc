@@ -4,7 +4,7 @@
 // VariablePointers 共享同一个 `Pointer<Variable>`：一个变量可以同时在 unknowns 和 algebraics 里，改种类只改 arena 里那一格。
 // 表达式从 FlatModel 整个搬过来（ExprArena 的所有权移交），Id<Expr> 原样有效，不用深拷贝。
 //
-// 这里只有 S5a-1a / 1b（lower：[SCAL]、结果不依赖哈希序的 [WHEN]）用到的那部分：D1 列的其余种类、桶、字段等用到它们的桶再加，
+// 这里只有 S5a-1a / 1b / 1c（lower：[SCAL] [WHEN] [-IF-] [ALGO]）用到的那部分：D1 列的其余种类、桶、字段等用到它们的桶再加，
 // 靠 -Werror=switch 保证不漏。
 #pragma once
 #include <cstdint>
@@ -17,8 +17,9 @@
 
 namespace ymc::bdae {
 
-// 变量种类（NFBackendExtension.mo VariableKind :179-236；打印标签 :238-274）。Dummy 是 `$ANY$`（FRONTEND_DUMMY → [DMMY]）。
-enum class VarKind : std::uint8_t { Dummy, Time, Algebraic, State, Discrete, Parameter, Constant };
+// 变量种类（NFBackendExtension.mo VariableKind :179-236；打印标签 :238-274）。Dummy 是 `$ANY$`（FRONTEND_DUMMY → [DMMY]）；
+// Iterator 是算法里 for 的迭代量（collectIterators NBackendDAE.mo:1393-1427，进 Artificial 桶）。
+enum class VarKind : std::uint8_t { Dummy, Time, Algebraic, State, Discrete, Parameter, Constant, Iterator };
 
 struct Var {
   ExprCref name;
@@ -42,7 +43,7 @@ struct VarData {
 };
 
 enum class EqnTime : std::uint8_t { Continuous, Discrete, Empty };      // EquationKind（NBEquation.mo:3790）的子集
-enum class EqnKind : std::uint8_t { Scalar, When };                     // Equation（NBEquation.mo:899-966）的子集
+enum class EqnKind : std::uint8_t { Scalar, When, If, Algorithm };      // Equation（NBEquation.mo:899-966）的子集
 
 // WhenStatement（NBEquation.mo:3459-3491）。没有 TERMINATE、NORETCALL：WhenEquationBody.split 把它们丢了（见 lower.cpp when_equation）。
 enum class WhenStmtKind : std::uint8_t { Assign, Reinit, Assert };
@@ -56,12 +57,36 @@ struct WhenBranch {
   std::vector<WhenStmt> stmts;
 };
 
+// Statement（NFStatement.mo:54-135）的子集。Break 单列是因为打印：Statement.toStream 没有 BREAK 支（:961-963 写成了两个 RETURN），打 `#UNKNOWN STATEMENT#`。
+enum class StmtKind : std::uint8_t { Assign, For, If, When, While, Assert, Terminate, NoRetCall, Break };
+struct Stmt;
+struct StmtBranch {
+  Id<Expr> condition;
+  std::vector<Stmt> body;
+};
+struct Stmt {
+  StmtKind kind = StmtKind::Assign;
+  Id<Expr> a, b, c;                 // Assign：lhs、rhs；For：范围；While：条件；Assert：条件、消息、级别；Terminate：消息；NoRetCall：调用
+  Symbol index;                     // For 的迭代量
+  std::vector<StmtBranch> branches; // If / When。If 的 else 是条件为字面量 true 的末分支（NF 的表示，打印成 `elseif true then`）
+  std::vector<Stmt> body;           // For / While
+};
+
+struct Eqn;
+// IF_EQUATION_BODY（NBEquation.mo:2611-2615）铺平：一个 Eqn 是 split 之后的一条，所以每支恰好一条方程。condition 无效 = Expression.END（`else`）。
+struct IfBranch {
+  Id<Expr> condition;
+  Id<Eqn> eqn;
+};
+
 // exclusively_initial 由所在的桶表达：initials 里的就是。
 struct Eqn {
   EqnKind kind = EqnKind::Scalar;
   ExprCref name;                    // $RES_SIM_n（EquationAttributes.residualVar）
   Id<Expr> lhs, rhs;                // Scalar
   std::vector<WhenBranch> when;     // When
+  std::vector<IfBranch> if_branches;   // If
+  std::vector<Stmt> alg;            // Algorithm
   int size = 1;
   EqnTime time = EqnTime::Continuous;
 };

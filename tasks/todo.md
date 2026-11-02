@@ -2884,8 +2884,11 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       留账：`note_attr_final` 的 Late 标记混着定型和压平两种，放开数组、assert、Clock 时要拆（代码里标了 `ponytail:`）；`parglobal` / `parlocal` 前缀没有探针（解析器没这两个词）。
 - [x] (S5a-1b) `[WHEN]`（离散量、状态各至多一个）+ reinit + assert 入 Removed + `when {a, b}`（2026-11-02）。语料 a PASS 58 / 109（首批门集 42 / 49，余 7 是 algorithm 3、if 4），语料 b PASS 928 / 1857。
       留账：`unseen_when_assign` 判得偏宽（dropped branch 里任何 when 赋值都退出）；放开 algorithm 时 `when_assigned_` 要记语句 when（`updateImplicitVariabilityStmt`）。
-- [ ] (S5a-1c) `[-IF-]`、`[ALGO]`、顶层 no-return call；多赋值 when（离散量走插入序，不依赖哈希；多 reinit 用 `omc_unordered.h`）。
-- [ ] (S5a-2…) pre 模块，序按语料 a：Detect States → Events → Simplify → Alias → FunctionAlias → Early Inline → Bindings（Bindings 在语料 b 影响 218 个，可提前）。
+- [x] (S5a-1c) `[-IF-]`、`[ALGO]`、顶层 no-return call、多赋值 when（2026-11-03）。语料 a PASS 74 / 109（SKIP 0，其余 35 个 NOT-ADMITTED），语料 b PASS 1016 / 1857（SKIP 51：Clock 17、状态机等 reference to a non-variable 9、expandable 8、external object 6、clocked when 4、redeclared 3、record 2、function-typed 2），探针 10232 个 FAIL 0、CRASH 0。
+      if 按 `sortForSplit` 拆（`List.sort` 平局反序，不能用 `std::stable_sort`），`$RES_SIM` 外层先编号；算法输出含被化简删掉的语句（`dropped_outputs`）；迭代量进 Artificial 走桶序；多 reinit 接 `omc_unordered.h`。
+      前端顺手修：`elseif b2(p)` 前面有运行时分支时 ymc 静默选支（`cond_refs_param`，探针 pk-p51 7 个基线 FAIL）；`note_attr_final` 把范围的标记拆出来（`typed_marks_`），其余 Late 留 `ponytail:`。
+      留 SKIP：when 里的元组方程（omc 有输出，语料 0 个）、状态机 `initialState(aState)`（要类路径，7 个）、`for e in E` 和枚举迭代量、if 语句空分支、`dropped_comp_` 偏保守。A5:subscript 的 `x := f(x)[1]` 没收窄（语料 5 个）。
+- [ ] (S5a-2…) pre 模块按 NB 运行序一个个做（2026-11-03 改定，原计划按语料 a 跳着做）：Bindings → FunctionAlias → Early Inline → Simplify 1 → Alias → Simplify 2 → Remove Stream → Detect States → Events。每个模块的输入都是上一段逐字节验证过的输出，门设在每一段上。
 - [ ] (S5a) lower + NB 九个 pre 模块，按模块增量（Bindings → FunctionAlias → Early Inline → Simplify 1 → Alias → Simplify 2 →
       Remove Stream → Detect States → Events）；首批子集 `simulation/modelica/NBackend/{basics,alias,event_handling}` + equations /
       parameters 的准入模型；验收见 ADR-008 D5（签名一致、`.bdae` 回读逐字节、单测期望来自 oracle、四套构建零警告）。

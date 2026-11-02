@@ -1,8 +1,9 @@
 // 版式来源（OMC v1.25.0）：Expression.toString NFExpression.mo:1894-2225；Operator.priority / symbol NFOperator.mo:408-523；
 // Variable.toStream NFVariable.mo:527-578；Attributes.toString NFAttributes.mo:619-632；VariableAttributes.toString
 // NFBackendExtension.mo:393-423；VariablePointers.toString NBVariable.mo:1575-1609；VarData.toStringVerbose NBVariable.mo:2187-2223；
-// Equation.toString NBEquation.mo:968-989；WhenEquationBody.toString :3020-3041；WhenStatement.toString :3493-3508；
-// EquationPointers.toString :3847-3899；EqData.toString :4416-4440；headline StringUtil.mo:52-78。
+// Equation.toString NBEquation.mo:968-989；IfEquationBody.toString :2688-2713；WhenEquationBody.toString :3020-3041；
+// WhenStatement.toString :3493-3508；EquationPointers.toString :3847-3899；EqData.toString :4416-4440；
+// Statement.toStream NFStatement.mo:846-971、toStreamList :973-997；headline StringUtil.mo:52-78。
 #include "bdae/bdae_dump.h"
 
 #include <string_view>
@@ -63,6 +64,12 @@ class ExpPrinter {
         return dotted(e.call_name) + "(" + list(e.args) + ")";
       case ExprKind::Array:
         return "{" + list(e.args) + "}";
+      case ExprKind::Range:   // :1917-1922：先起点、步长，再终点。Expr 里有步长时 b 是步长，c 是终点
+        return operand(e.a, id, false) + ":" + operand(e.b, id, false) + (e.c.is_valid() ? ":" + operand(e.c, id, false) : "");
+      case ExprKind::Tuple:
+        return "(" + list(e.args) + ")";
+      case ExprKind::Wild:    // ComponentRef.WILD
+        return "_";
       default:
         YMC_UNREACHABLE("bdae::exp_string: expression kind rejected by lower");
     }
@@ -116,6 +123,7 @@ class ExpPrinter {
       case ExprKind::Logical: return e.log == LogOp::And ? 8 : 9;
       case ExprKind::LogicalNot: return 7;
       case ExprKind::Relation: return 6;
+      case ExprKind::Range: return 10;
       case ExprKind::IfExp: return 11;
       case ExprKind::Cast: return priority(e.a, lhs);
       default: return 0;
@@ -224,6 +232,7 @@ class Dumper {
       case VarKind::Discrete: return "[DISC]";
       case VarKind::Parameter: return "[PRMT]";
       case VarKind::Constant: return "[CNST]";
+      case VarKind::Iterator: return "[ITER]";
     }
     YMC_UNREACHABLE("VarKind");
   }
@@ -310,15 +319,68 @@ class Dumper {
   }
   std::string eq_text(const Eqn& q, const std::string& row) {
     const std::string size = "(" + std::to_string(q.size) + ")", name = " (" + cref_string(q.name, in_) + ")";
-    if (q.kind == EqnKind::Scalar) return row + "[SCAL] " + size + " " + exp_.str(q.lhs) + " = " + exp_.str(q.rhs) + name;
     // 续行也带序号：Equation.toString 把序号列接在 "[----] " 前面当 indent。
     const std::string indent = row + "[----] ";
-    std::string out = row + "[WHEN] " + size + name + "\n";
-    for (std::size_t i = 0; i < q.when.size(); ++i) {
-      out += indent + (i ? "elsewhen " : "when ") + exp_.str(q.when[i].condition) + " then\n";
-      for (const WhenStmt& st : q.when[i].stmts) out += indent + "  " + when_stmt(st) + "\n";
+    switch (q.kind) {
+      case EqnKind::Scalar:
+        return row + "[SCAL] " + size + " " + exp_.str(q.lhs) + " = " + exp_.str(q.rhs) + name;
+      case EqnKind::When: {
+        std::string out = row + "[WHEN] " + size + name + "\n";
+        for (std::size_t i = 0; i < q.when.size(); ++i) {
+          out += indent + (i ? "elsewhen " : "when ") + exp_.str(q.when[i].condition) + " then\n";
+          for (const WhenStmt& st : q.when[i].stmts) out += indent + "  " + when_stmt(st) + "\n";
+        }
+        return out + indent + "end when;";
+      }
+      case EqnKind::If: {
+        std::string out = row + "[-IF-] " + size + name + "\n";
+        for (std::size_t i = 0; i < q.if_branches.size(); ++i) {
+          const IfBranch& br = q.if_branches[i];
+          out += indent + (i ? "else" : "") + (br.condition.is_valid() ? "if " + exp_.str(br.condition) + " then\n" : "\n");
+          out += eq_text(d_.eqn_arena[br.eqn], indent + "  ") + "\n";
+        }
+        return out + indent + "end if;";
+      }
+      case EqnKind::Algorithm:   // 语句串自己以 ";\n" 结尾，桶那层再加一个换行，所以每条 [ALGO] 后面空一行
+        return row + "[ALGO] " + size + name + "\n" + stmt_list(q.alg, indent);
     }
-    return out + indent + "end when;";
+    YMC_UNREACHABLE("EqnKind");
+  }
+  // toStreamList：多行语句（for / if / when / while）的前后空一行，空行不带缩进。
+  std::string stmt_list(const std::vector<Stmt>& stmts, const std::string& indent) {
+    std::string out;
+    bool first = true, prev_multi = false;
+    for (const Stmt& st : stmts) {
+      const bool multi = st.kind == StmtKind::For || st.kind == StmtKind::If || st.kind == StmtKind::When || st.kind == StmtKind::While;
+      if (!first && (prev_multi || multi)) out += "\n";
+      first = false;
+      prev_multi = multi;
+      out += stmt_text(st, indent) + ";\n";
+    }
+    return out;
+  }
+  std::string stmt_text(const Stmt& st, const std::string& indent) {
+    switch (st.kind) {
+      case StmtKind::Assign: return indent + exp_.str(st.a) + " := " + exp_.str(st.b);
+      case StmtKind::For:
+        return indent + "for " + std::string(in_.str(st.index)) + " in " + exp_.str(st.a) + " loop\n" + stmt_list(st.body, indent + "  ") + indent + "end for";
+      case StmtKind::If: return branches(st, indent, "if ", "elseif ", "end if");
+      case StmtKind::When: return branches(st, indent, "when ", "elsewhen ", "end when");
+      case StmtKind::While:   // 真是 `then`，不是 `loop`（:949）
+        return indent + "while " + exp_.str(st.a) + " then\n" + stmt_list(st.body, indent + "  ") + indent + "end while";
+      case StmtKind::Assert: return indent + "assert(" + exp_.str(st.a) + ", " + exp_.str(st.b) + ", " + exp_.str(st.c) + ")";
+      case StmtKind::Terminate: return indent + "terminate(" + exp_.str(st.a) + ")";
+      case StmtKind::NoRetCall: return indent + exp_.str(st.a);
+      case StmtKind::Break: return indent + "#UNKNOWN STATEMENT#";
+    }
+    YMC_UNREACHABLE("StmtKind");
+  }
+  std::string branches(const Stmt& st, const std::string& indent, const char* first, const char* next, const char* end) {
+    std::string out = indent;
+    for (std::size_t i = 0; i < st.branches.size(); ++i) {
+      out += (i ? next : first) + exp_.str(st.branches[i].condition) + " then\n" + stmt_list(st.branches[i].body, indent + "  ") + indent;
+    }
+    return out + end;
   }
   std::string when_stmt(const WhenStmt& st) {
     switch (st.kind) {

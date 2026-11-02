@@ -107,12 +107,14 @@ combineBinaries 与 `Expression.toString`，拼出整段 `(After Lowering)` 与�
 | 5 | 变量种类 | when 里赋值的 Real 是 `[DISC]`（S5a-1b 补充：`updateImplicitVariability` 在实例化时走全类树，`NFInst.mo:193`、`:3847-4097`，所以结构 if 没选中的分支、移除的条件组件、零长度组件数组里的 when 也算；打印不带 `discrete`，stateSelect = always 和顶层 input 也变 `[DISC]`）。顶层 input 优先于种类进 Top Level Input。Clock → `[CLCK]`，外部对象 → `[EXTO]` | `NBackendDAE.mo:549-555`、`:700-777`；`NFVariable.mo:316` |
 | 6 | 绑定不下沉 | `(After Lowering)` 里绑定还在变量上，Bindings 模块才造方程 | `NBBindings.mo:68-81` |
 | 7 | 方程编号 | `$RES_SIM_n` 对头插列表逐个编号，最后一条是 0。if 方程外层先、内层前序。`$RES_BND / _AUX / _EVT` 共用 uniqueIndex 继续往上 | `NBackendDAE.mo:836`；`NBEquation.mo:1769`、`:2771`；`NBBindings.mo:68-81` |
-| 8 | 方程入桶 | 看类型不看变量：Real 输出的 algorithm 进 Continuous，即使输出变量是 `[DISC]` | `NBackendDAE.mo:1290`；`NFComponentRef.mo:2173`；`NBEquation.mo:4661` |
+| 8 | 方程入桶 | 看类型不看变量：Real 输出的 algorithm 进 Continuous，即使输出变量是 `[DISC]`。输出压平时就定了，含被化简删掉的语句（S5a-1c，`NFFlatten.mo:387`） | `NBackendDAE.mo:1290`；`NFComponentRef.mo:2173`；`NBEquation.mo:4661` |
 | 9 | assert | 变成 `[WHEN] (0)`，进 Removed，打默认 `AssertionLevel.error`。initial 段的进 Initial 桶；when 体里的 assert、if、for 和顶层 terminate 在 lower 报内部错（S5a-1b 实跑，`NBackendDAE.mo:1284-1286`、`:1003-1005`）；when 里的 terminate、无返回值调用被 `split` 丢弃（`NBEquation.mo:3241-3254`） | `NBackendDAE.mo:1167` |
 | 10 | when 拆分 | 一个 when 赋多个变量时拆成多条。多赋值走 `UnorderedMap.keyList`，是插入序，打印回到源序；只有多个 reinit 走 `Set.toList` 的桶序（S5b-0 更正，原文写的"走哈希"不准确）。741 个里 19 个涉及，2 个与源序不同，这 2 个没有定位 | `NBEquation.mo:3151`、`:3173-3174`；`UnorderedMap.mo:429-433`；打印反序 `NBEquation.mo:4661` |
-| 11 | 人工变量 | `$ANY$`（`[DMMY] (0)`）、`time` 恒在 Artificial 桶，计数 `(2/1)`。绑定里的迭代量（`$i1`）追加到这里 | `NBackendDAE.mo:533-537`、`:649-654` |
+| 11 | 人工变量 | `$ANY$`（`[DMMY] (0)`）、`time` 恒在 Artificial 桶，计数 `(2/1)`。绑定里的迭代量（`$i1`）、算法里用到的 for 迭代量（`[ITER]`，桶序，S5a-1c，`NBackendDAE.mo:1393-1427`、`:1476-1494`）追加到这里 | `NBackendDAE.mo:533-537`、`:649-654` |
 | 12 | 打印怪癖 | 块语句后空行、`while … then`、`elseif true then`、`#UNKNOWN STATEMENT#`（break） | 实跑 |
 | 13 | 路径差异 | NB 路径不展开、不对数组实参的调用求值（`NF_EXPAND_OPERATIONS` / 标量化关闭） | `NFInst.mo:324-333`；`NFSimplifyExp.mo:189-198`、`:941`、`:1135` |
+| 14 | 顶层无返回值调用 | 包成一条语句的 `[ALGO] (0)`，EMPTY 进 Removed，初始方程里的进 Initial（S5a-1c 实跑） | `NBackendDAE.mo:995-999` |
+| 15 | 空分支 | if 语句分支被化简成空：默认路径的标量化删掉，NB 路径留着。带 else 的 if 方程全空：默认路径整条删，NB 路径 lower 报内部错，没有这一段（S5a-1c 实跑） | `NFScalarize.mo:461-488`；`NFSimplifyModel.mo:517-522` |
 
 主 agent 另用探针 `Chk1`（一个数组常量 + 标量方程）独立复核了 #1、#2、#11 与"数组常量时 N == n 仍成立"：方程 `y = b + a + s`、绑定 `sqrt(b * a)`、方程里 `sqrt(a * b)`、`5 (5)`。
 

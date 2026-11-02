@@ -116,6 +116,9 @@ struct FlatStatement {
 struct FlatAlgorithm {
   bool is_initial = false;
   std::vector<Id<FlatStatement>> stmts;
+  // 被化简删掉的语句（字面量条件的 if 分支、空范围的 for）里赋值的变量。omc 在压平时就定了算法段的输出（setInputsOutputs NFFlatten.mo:387 v1.25.0），
+  // 早于 SimplifyModel，所以这些变量照算输出：影响 [ALGO] 的 size 和入桶。DAE dump 不打，只有 bdae::lower 读。
+  std::vector<std::vector<Symbol>> dropped_outputs;
 };
 
 // ---- 压平函数（S3.e：发射被调用户函数；DAEDump 函数块）----
@@ -180,6 +183,13 @@ struct FlatModel {
   // omc 在实例化时走完全部类树标隐式离散（updateImplicitVariability，NFInst.mo:193、:3847-4097），结构 if 没选中的分支、移除的条件组件也算。
   // 这些 when 方程 ymc 没收，标不全 → bdae::lower SKIP。
   bool unseen_when_assign = false;
+  // if 语句有分支因为化简变空。默认路径的标量化把空分支删掉（scalarizeIfStatement，NFScalarize.mo:461-488），NB 路径没有标量化，留着
+  //（`if c then end if`、`elseif c then` 后面没有语句）；这里看到的是删过的 → bdae::lower SKIP。if 方程不用：SimplifyModel 两条路径都 trim。
+  bool stmt_branch_emptied = false;
+  // 带 else 的 if 方程全部分支化简成空：默认路径整条删了，NB 路径 lower 报内部错（见 flatten 的 fold_if_branches）→ bdae::lower SKIP。
+  bool if_eq_emptied = false;
+  // 删掉的语句里赋值给数组元素：名字解不到一个标量，dropped_outputs 记不下 → bdae::lower SKIP。
+  bool alg_outputs_unknown = false;
 
   ExprArena exprs;
   Arena<FlatEquation> eqs;

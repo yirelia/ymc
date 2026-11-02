@@ -1,19 +1,165 @@
 // 变量：lowerVariableData NBackendDAE.mo:505-667、lowerVariableKind :700-777；方程：lowerEquationData :815-862、
-// lowerEquationsAndAlgorithms :864-902、lowerEquation :904-1014、lowerWhenEquation :1141-1288（均 OMC v1.25.0）。
+// lowerEquationsAndAlgorithms :864-902、lowerEquation :904-1014、lowerIfEquation :1016-1139、lowerWhenEquation :1141-1288、
+// lowerAlgorithm :1290-1309（均 OMC v1.25.0）。
 //
 // 输入是默认路径的 FlatModel，不是 NB 路径的（ADR-008 F3）。标量范围内两者只差 combineBinaries，这一步在这里补。
 #include "bdae/lower.h"
 
 #include <algorithm>
 #include <string>
+#include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
 #include "bdae/combine_binaries.h"
+#include "bdae/omc_unordered.h"
 
 namespace ymc::bdae {
 
 namespace {
+
+// Util.intCompare / realCompare / boolCompare（Util/Util.mo:757、:786、:794）。
+template <class T>
+int three_way(T a, T b) { return a == b ? 0 : (a > b ? 1 : -1); }
+// stringCompare（SimulationRuntime/c/util/modelica_string.c:359-369）：strcmp 归一到 -1 / 0 / 1。
+int str_compare(std::string_view a, std::string_view b) { return three_way(a.compare(b), 0); }
+
+// List.sort（Util/List.mo:780-817 + merge :962-1000），不用 std::stable_sort：相等的元素它是**反着**排的（两个元素时 gt(e2, e1) 为假就交换，
+// 归并时 gt(r, l) 为假就先取右边）。if 方程一个分支里左边相同的方程，先后就看这个。
+template <class T, class Gt>
+std::vector<T> omc_list_sort(const std::vector<T>& in, const Gt& gt) {
+  if (in.size() < 2) return in;
+  if (in.size() == 2) return gt(in[1], in[0]) ? in : std::vector<T>{in[1], in[0]};
+  const auto middle = in.begin() + static_cast<std::ptrdiff_t>(in.size() / 2);
+  const std::vector<T> left = omc_list_sort(std::vector<T>(in.begin(), middle), gt), right = omc_list_sort(std::vector<T>(middle, in.end()), gt);
+  std::vector<T> out;
+  std::size_t l = 0, r = 0;
+  while (l < left.size() && r < right.size()) out.push_back(gt(right[r], left[l]) ? left[l++] : right[r++]);
+  out.insert(out.end(), left.begin() + static_cast<std::ptrdiff_t>(l), left.end());
+  out.insert(out.end(), right.begin() + static_cast<std::ptrdiff_t>(r), right.end());
+  return out;
+}
+
+// Expression.compare（NFExpression.mo:426-748）。sortForSplit 按它排 if 方程各分支的方程，排序决定拆分后的序和 $RES_SIM 编号。
+// 只收 lower 放行的那些节点（expr_ok）；Multary 之外的后端节点、数组这里都到不了。
+class ExpCompare {
+ public:
+  ExpCompare(const ExprArena& a, const Interner& in) : a_(a), in_(in) {}
+
+  [[nodiscard]] int operator()(Id<Expr> x, Id<Expr> y) const {
+    if (x == y) return 0;                  // referenceEq
+    const Expr& p = a_[x];
+    const Expr& q = a_[y];
+    if (const int c = three_way(rank(p.kind), rank(q.kind))) return c;
+    switch (p.kind) {
+      case ExprKind::IntLit: return three_way(p.ival, q.ival);
+      case ExprKind::RealLit: return three_way(p.rval, q.rval);
+      case ExprKind::StringLit: return str_compare(in_.str(p.sval), in_.str(q.sval));
+      case ExprKind::BoolLit: return three_way(p.bval, q.bval);
+      case ExprKind::EnumLit: {            // 先比类型名（字面量全名去掉末段），再比序数
+        const std::vector<Symbol> t1(p.enum_path.begin(), p.enum_path.end() - 1), t2(q.enum_path.begin(), q.enum_path.end() - 1);
+        if (const int c = path_compare(t1, t2)) return c;
+        return three_way(p.enum_index, q.enum_index);
+      }
+      case ExprKind::Cref: return cref_compare(p.cref, q.cref);
+      case ExprKind::Call:                 // Call.compare NFCall.mo:541-555；迭代量只有推导式有，这里没有
+        if (const int c = path_compare(p.call_name, q.call_name)) return c;
+        return list_compare(p.args, q.args);
+      case ExprKind::Multary:
+        if (const int c = three_way(op_rank(p.bin), op_rank(q.bin))) return c;
+        if (const int c = list_compare(p.args, q.args)) return c;
+        return list_compare(p.inv_args, q.inv_args);
+      case ExprKind::Binary:
+        if (const int c = three_way(op_rank(p.bin), op_rank(q.bin))) return c;
+        return pair_compare(p, q);
+      case ExprKind::Unary:
+        return (*this)(p.a, q.a);          // 只有 UMINUS，运算符相同
+      case ExprKind::Logical:
+        if (const int c = three_way(static_cast<int>(p.log), static_cast<int>(q.log))) return c;   // AND(27) < OR(28)，同 LogOp 序
+        return pair_compare(p, q);
+      case ExprKind::LogicalNot:
+        return (*this)(p.a, q.a);
+      case ExprKind::Relation:
+        if (const int c = three_way(static_cast<int>(p.rel), static_cast<int>(q.rel))) return c;   // LESS..NEQUAL（NFOperator.mo:80-85），同 RelOp 序
+        return pair_compare(p, q);
+      case ExprKind::IfExp:
+        if (const int c = pair_compare(p, q)) return c;
+        return (*this)(p.c, q.c);
+      case ExprKind::Cast:
+        return (*this)(p.a, q.a);
+      default:
+        YMC_UNREACHABLE("ExpCompare: expression kind rejected by lower");
+    }
+  }
+
+ private:
+  // valueConstructor：record 在 uniontype 里的序（NFExpression.mo:83-256）。只比大小，用不到的 record 不占名字，序号照原文跳开。
+  static int rank(ExprKind k) {
+    switch (k) {
+      case ExprKind::IntLit: return 0;
+      case ExprKind::RealLit: return 1;
+      case ExprKind::StringLit: return 2;
+      case ExprKind::BoolLit: return 3;
+      case ExprKind::EnumLit: return 4;
+      case ExprKind::Cref: return 6;
+      case ExprKind::Call: return 13;
+      case ExprKind::Binary: return 16;
+      case ExprKind::Unary: return 17;
+      case ExprKind::Logical: return 18;
+      case ExprKind::LogicalNot: return 19;
+      case ExprKind::Relation: return 20;
+      case ExprKind::Multary: return 21;
+      case ExprKind::IfExp: return 22;
+      case ExprKind::Cast: return 23;
+      default: YMC_UNREACHABLE("ExpCompare: expression kind rejected by lower");
+    }
+  }
+  static int op_rank(BinOp op) { return static_cast<int>(op); }   // ADD..POW（NFOperator.mo:45-49），同 BinOp 序
+  int pair_compare(const Expr& p, const Expr& q) const {
+    if (const int c = (*this)(p.a, q.a)) return c;
+    return (*this)(p.b, q.b);
+  }
+  // List.compare（List.mo:307-340）：先比长度。
+  int list_compare(const std::vector<Id<Expr>>& x, const std::vector<Id<Expr>>& y) const {
+    if (x.size() != y.size()) return x.size() < y.size() ? -1 : 1;
+    for (std::size_t i = 0; i < x.size(); ++i)
+      if (const int c = (*this)(x[i], y[i])) return c;
+    return 0;
+  }
+  // ComponentRef.compare（NFComponentRef.mo:1100-1125）：从末段往前比，短的小。下标只有数组有，lower 挡住了。
+  int cref_compare(const ExprCref& x, const ExprCref& y) const {
+    std::size_t i = x.parts.size(), j = y.parts.size();
+    while (i > 0 && j > 0)
+      if (const int c = str_compare(in_.str(x.parts[--i].name), in_.str(y.parts[--j].name))) return c;
+    return i == 0 && j == 0 ? 0 : (j == 0 ? 1 : -1);
+  }
+  // AbsynUtil.pathCompare（FrontEnd/AbsynUtil.mo:1266-1288）：限定名比标识符大，不看内容。
+  int path_compare(const std::vector<Symbol>& x, const std::vector<Symbol>& y) const {
+    for (std::size_t i = 0;; ++i) {
+      const bool qx = i + 1 < x.size(), qy = i + 1 < y.size();
+      if (!qx && !qy) return str_compare(in_.str(x[i]), in_.str(y[i]));
+      if (!qx || !qy) return qx ? 1 : -1;
+      if (const int c = str_compare(in_.str(x[i]), in_.str(y[i]))) return c;
+    }
+  }
+
+  const ExprArena& a_;
+  const Interner& in_;
+};
+
+// ComponentRef.hash / isEqual，给 when 拆分的 state_set 和迭代量集合用。这里的 cref 都没有下标（lower 挡了数组）。
+struct CrefHash {
+  const Interner* in;
+  [[nodiscard]] OmcInt operator()(const ExprCref& c) const { return cref_hash(c, *in, [](Id<Expr>) { return std::string_view{}; }); }
+};
+struct CrefEq {
+  [[nodiscard]] bool operator()(const ExprCref& a, const ExprCref& b) const {
+    return std::equal(a.parts.begin(), a.parts.end(), b.parts.begin(), b.parts.end(),
+                      [](const ExprCrefPart& p, const ExprCrefPart& q) { return p.name == q.name; });
+  }
+};
+using CrefSet = UnorderedSet<ExprCref, CrefHash, CrefEq>;
 
 class Lowerer {
  public:
@@ -21,12 +167,14 @@ class Lowerer {
 
   LowerResult run() {
     r_.dae.exprs = std::move(m_.exprs);
-    if (!m_.algorithms.empty() || !m_.initial_algorithms.empty()) stop("algorithm section");
     if (m_.unrolled_for) stop("for equation");
     if (m_.unseen_when_assign) stop("when equation in a dropped branch or removed component");
+    if (m_.stmt_branch_emptied) stop("if statement branch emptied by simplification");
+    if (m_.if_eq_emptied) stop("if equation emptied by simplification");
+    if (m_.alg_outputs_unknown) stop("array element assigned in a dropped statement");
     artificials();
-    known_.insert("time");
-    for (const FlatVariable& v : m_.variables) known_.insert(dotted(v.name, [](Symbol x) { return x; }));
+    known_.emplace("time", TypeKind::Real);
+    for (const FlatVariable& v : m_.variables) known_.emplace(dotted(v.name, [](Symbol x) { return x; }), v.ty.element_type().kind);
     for (const FlatVariable& v : m_.variables) variable(v);
     if (!r_.unsupported) equations();
     return std::move(r_);
@@ -148,7 +296,8 @@ class Lowerer {
       case VarKind::Parameter: vd.parameters.items.push_back(id); break;
       case VarKind::Constant: vd.constants.items.push_back(id); break;
       case VarKind::Dummy:
-      case VarKind::Time: YMC_UNREACHABLE("artificial kind from a flat variable");
+      case VarKind::Time:
+      case VarKind::Iterator: YMC_UNREACHABLE("artificial kind from a flat variable");
     }
   }
 
@@ -164,12 +313,15 @@ class Lowerer {
       case ExprKind::StringLit:
       case ExprKind::EnumLit:
         return true;
-      case ExprKind::Cref:
+      case ExprKind::Cref: {
         for (const ExprCrefPart& p : e.cref.parts)
           if (!p.subscripts.empty()) { stop("subscripted reference"); return false; }
         // 指向变量表以外的名字：OMC 把它当迭代量追加到 Artificial 桶（collectIterators :1393-1427；状态机的 `activeState(aState)`）。
-        if (!known_.count(dotted(e.cref.parts, [](const ExprCrefPart& p) { return p.name; }))) { stop("reference to a non-variable"); return false; }
+        // 算法里 for 的迭代量正是这样进去的（见 collect_iterators），别的情形没有参考。
+        const std::string name = dotted(e.cref.parts, [](const ExprCrefPart& p) { return p.name; });
+        if (!known_.count(name) && std::find(iters_.begin(), iters_.end(), name) == iters_.end()) { stop("reference to a non-variable"); return false; }
         return true;
+      }
       case ExprKind::Binary:
         if (e.ty.kind == TypeKind::Unknown) { stop("untyped binary expression"); return false; }
         return expr_ok(e.a) && expr_ok(e.b);
@@ -221,17 +373,17 @@ class Lowerer {
   }
 
   // 一条 FlatEquation → 零到多条 Eqn，按源序接到 out 后面。方程式左右各调一次 combineBinaries（Equation.mapExp NFEquation.mo:716-722）。
-  void equation(Id<FlatEquation> id, std::vector<Id<Eqn>>& out) {
+  void equation(Id<FlatEquation> id, std::vector<Id<Eqn>>& out, bool init) {
     const FlatEquation& q = m_.eqs[id];
     switch (q.kind) {
       case FlatEqKind::Equality: break;
-      case FlatEqKind::If: return stop("if equation");
+      case FlatEqKind::If: return if_equation(q, out, init);
       case FlatEqKind::For: return stop("for equation");
       case FlatEqKind::When: return when_equation(q, out);
       case FlatEqKind::Assert: return assert_equation(q, out);
       case FlatEqKind::Terminate: return stop("terminate outside when");   // lowerEquation :1003-1005 报内部错，omc 没有这一段
       case FlatEqKind::Reinit: return stop("reinit outside when");         // 同上 :1006-1008
-      case FlatEqKind::NoRetCall: return stop("no-return call");
+      case FlatEqKind::NoRetCall: return no_return_call(q, out);
     }
     if (!expr_ok(q.a) || !expr_ok(q.b)) return;
     Eqn e;
@@ -260,6 +412,104 @@ class Lowerer {
     e.kind = ExprKind::EnumLit;
     e.enum_path = {in_.intern("AssertionLevel"), in_.intern("error")};
     return r_.dae.exprs.add(std::move(e));
+  }
+
+  // lowerEquation 的 NORETCALL 支（:995-999）：包成一条语句的算法。没有输出，所以 EMPTY，进 Removed；初始方程里的进 Initial。
+  void no_return_call(const FlatEquation& q, std::vector<Id<Eqn>>& out) {
+    if (!expr_ok(q.a)) return;
+    Eqn e;
+    e.kind = EqnKind::Algorithm;
+    e.size = 0;
+    e.time = EqnTime::Empty;
+    Stmt s;
+    s.kind = StmtKind::NoRetCall;
+    s.a = combine_binaries(r_.dae.exprs, q.a);
+    e.alg.push_back(std::move(s));
+    out.push_back(r_.dae.eqn_arena.add(std::move(e)));
+  }
+
+  // lowerIfEquation（:1016-1053）+ IfEquationBody.split（NBEquation.mo:2890-2910）：一个 if 拆成每条方程一个 if，条件链不变。
+  // - 字面量条件 lower 看不到：前端已折叠（fold_if_branches 和 lowerIfEquationBody :1073-1081 是同一组规则）。
+  // - 分支体的序：lowerIfBranchBody（:1137）头插，then_eqns 是 out 的反序，再由 sortForSplit 重排。
+  // - 没有 else 时只有初始方程或 for 里能过（:1083），否则 "invalid missing else case"，omc 没有这一段。
+  // - 各分支方程数要相同：多了 splitCollect 越界，少了 List.zip 失败（NBEquation.mo:2990、:2904），都没有这一段。
+  // - 拆出来的先后：bodies 头插（:2908），所以 equation_lst 里 n 在前，打印时反回来，排序靠前的在前、编号大。out 是源序，按 1..n 接。
+  // - 种类只看第一支（IfEquationBody.toEquation :2626-2638）：DISCRETE 或 CONTINUOUS，then 里是 EMPTY 的也算 CONTINUOUS。
+  void if_equation(const FlatEquation& q, std::vector<Id<Eqn>>& out, bool init) {
+    struct Body {
+      Id<Expr> condition;              // 无效 = END
+      std::vector<Id<Eqn>> eqns;       // 排好的 then_eqns
+    };
+    std::vector<Body> chain;
+    const auto add_body = [&](Id<Expr> condition, const std::vector<Id<FlatEquation>>& body) {
+      std::vector<Id<Eqn>> lowered;
+      for (Id<FlatEquation> id : body) {
+        equation(id, lowered, init);
+        if (r_.unsupported) return;
+      }
+      std::reverse(lowered.begin(), lowered.end());
+      chain.push_back({condition, sort_for_split(lowered)});
+    };
+    for (const FlatEqBranch& br : q.branches) {
+      if (!expr_ok(br.cond)) return;
+      // combineBinaries 在 lower 之前：条件和体里的式子各调一次（Branch.mapExp NFEquation.mo:65-90 → Equation.mapExp）。
+      add_body(combine_binaries(r_.dae.exprs, br.cond), br.body);
+      if (r_.unsupported) return;
+    }
+    if (!q.else_body.empty()) {
+      add_body({}, q.else_body);
+      if (r_.unsupported) return;
+    } else if (!init) {
+      return stop("if equation without else");
+    }
+    const std::size_t n = chain.front().eqns.size();
+    for (const Body& b : chain)
+      if (b.eqns.size() != n) return stop("if branches with different equation counts");
+    for (std::size_t i = 0; i < n; ++i) {
+      Eqn e;
+      e.kind = EqnKind::If;
+      const Eqn& first = r_.dae.eqn_arena[chain.front().eqns[i]];
+      e.size = first.size;
+      e.time = first.time == EqnTime::Discrete ? EqnTime::Discrete : EqnTime::Continuous;
+      for (const Body& b : chain) e.if_branches.push_back({b.condition, b.eqns[i]});
+      out.push_back(r_.dae.eqn_arena.add(std::move(e)));
+    }
+  }
+
+  // sortForSplit（NBEquation.mo:2958-2978）：离散的在前，两组各按左边排。一组不到两条时不比较，getLHS 也就不调，没有左边的方程（when、算法）不出错。
+  std::vector<Id<Eqn>> sort_for_split(const std::vector<Id<Eqn>>& eqns) {
+    std::vector<Id<Eqn>> discretes, continuous;
+    for (Id<Eqn> id : eqns) (r_.dae.eqn_arena[id].time == EqnTime::Discrete ? discretes : continuous).push_back(id);
+    const ExpCompare compare(r_.dae.exprs, in_);
+    const auto sorted = [&](const std::vector<Id<Eqn>>& group) {
+      std::unordered_map<std::uint32_t, Id<Expr>> lhs;
+      if (group.size() > 1) {
+        for (Id<Eqn> id : group) {
+          const Id<Expr> l = lhs_of(id, compare);
+          if (!l.is_valid()) { stop("if branch equation without a unique left side"); return group; }   // getLHS 报内部错，omc 没有这一段
+          lhs[id.raw] = l;
+        }
+      }
+      return omc_list_sort(group, [&](Id<Eqn> x, Id<Eqn> y) { return compare(lhs.at(x.raw), lhs.at(y.raw)) > 0; });
+    };
+    std::vector<Id<Eqn>> out = sorted(discretes);
+    if (r_.unsupported) return out;
+    const std::vector<Id<Eqn>> rest = sorted(continuous);
+    out.insert(out.end(), rest.begin(), rest.end());
+    return out;
+  }
+  // Equation.getLHS（NBEquation.mo:1522-1545）。if 要各支左边相同（IfEquationBody.getLHS :2840-2867）；when、算法没有左边，返回无效。
+  Id<Expr> lhs_of(Id<Eqn> id, const ExpCompare& compare) {
+    const Eqn& e = r_.dae.eqn_arena[id];
+    if (e.kind == EqnKind::Scalar) return e.lhs;
+    if (e.kind != EqnKind::If) return {};
+    Id<Expr> lhs;
+    for (const IfBranch& br : e.if_branches) {
+      const Id<Expr> l = lhs_of(br.eqn, compare);
+      if (!l.is_valid() || (lhs.is_valid() && compare(lhs, l) != 0)) return {};
+      lhs = l;
+    }
+    return lhs;
   }
 
   // when 条件：标量式，或标量元素的数组字面量 `{a, b}`。只有这个位置收数组：别处的数组式 NB 路径不展开，这里两条路径相同（ADR-008 §6 A5）。
@@ -300,20 +550,18 @@ class Lowerer {
   }
 
   // lowerWhenEquation + WhenEquationBody.split（NBEquation.mo:3151-3257）。split 给每个被赋值的离散量、每个被 reinit 的状态各造一条 when：
-  // - 条目的先后：离散量走 UnorderedMap.keyList（:3173），是插入序，语句先被头插成反序，所以打印回到源序；状态走 UnorderedSet.toList（:3174），是
-  //   ComponentRef.hash 的桶序（S5b-0 实测）。这里只做离散量、状态各至多一个的情形，顺序是定的：[离散, 状态]；其余退出，放开时用 omc_unordered.h。
+  // - 条目的先后：collectForSplit（:3337-3375）逐分支走语句，语句先被 lowerWhenBranchBody（:1243）头插成反序。离散量走 UnorderedMap.keyList（:3173），
+  //   是插入序（重复的键不动位置，UnorderedMap.add :161-177）；状态走 UnorderedSet.toList（:3174），是 ComponentRef.hash 的桶序（S5b-0 实测）。
+  //   结果是 [离散 1, 离散 2, …, 状态 1, …]，编号从小到大（:3256 listReverse 把头插反回来）。打印再反一次（typeList），离散量就回到源序。
   // - 第三段（:3241-3254）把 terminate、无返回值调用收进 flat_new，之后没人用：这些语句就此消失。全是这类语句的 when 整条消失，也不占 $RES_SIM 编号。
-  // - acc_condition 不随条目清零：离散量那一轮没用完的取反条件会漏到状态那一轮（:3195、:3226），所以 reinit 只出现在 elsewhen 里时条件是
-  //   `not c1 and c2`。这里照做，两轮共用一个 acc。
+  // - acc_condition 不随条目清零：上一条没用完的取反条件会漏到下一条（:3195、:3226），所以 reinit 只出现在 elsewhen 里时条件是
+  //   `not c1 and c2`。这里照做，各条共用一个 acc。
   void when_equation(const FlatEquation& q, std::vector<Id<Eqn>>& out) {
     std::vector<WhenBranch> flat;
-    std::vector<std::string> discretes, states;
-    const auto target = [&](Id<Expr> id, std::vector<std::string>& seen) {
-      const Expr& t = r_.dae.exprs[id];
-      if (t.kind != ExprKind::Cref) { stop("when target is not a reference"); return false; }
-      std::string name = dotted(t.cref.parts, [](const ExprCrefPart& p) { return p.name; });
-      if (std::find(seen.begin(), seen.end(), name) == seen.end()) seen.push_back(std::move(name));
-      return true;
+    const auto is_target = [&](Id<Expr> id) {
+      if (r_.dae.exprs[id].kind == ExprKind::Cref) return true;
+      stop("when target is not a reference");
+      return false;
     };
     for (const FlatEqBranch& br : q.branches) {
       if (!when_condition_ok(br.cond)) return;
@@ -323,11 +571,11 @@ class Lowerer {
         const FlatEquation& s = m_.eqs[id];
         switch (s.kind) {
           case FlatEqKind::Equality:
-            if (!expr_ok(s.a) || !expr_ok(s.b) || !target(s.a, discretes)) return;
+            if (!expr_ok(s.a) || !expr_ok(s.b) || !is_target(s.a)) return;
             b.stmts.push_back({WhenStmtKind::Assign, s.a, combine_binaries(r_.dae.exprs, s.b), {}});
             break;
           case FlatEqKind::Reinit:
-            if (!expr_ok(s.a) || !expr_ok(s.b) || !target(s.a, states)) return;
+            if (!expr_ok(s.a) || !expr_ok(s.b) || !is_target(s.a)) return;
             b.stmts.push_back({WhenStmtKind::Reinit, s.a, combine_binaries(r_.dae.exprs, s.b), {}});
             break;
           case FlatEqKind::Terminate:
@@ -342,17 +590,25 @@ class Lowerer {
       }
       flat.push_back(std::move(b));
     }
-    if (discretes.size() > 1 || states.size() > 1) return stop("multi-assign when");
+    std::vector<ExprCref> discretes;
+    CrefSet state_set{CrefHash{&in_}};
+    for (const WhenBranch& b : flat) {
+      for (auto s = b.stmts.rbegin(); s != b.stmts.rend(); ++s) {
+        const ExprCref& c = r_.dae.exprs[s->a].cref;
+        if (s->kind == WhenStmtKind::Reinit) state_set.add(c);
+        else if (std::none_of(discretes.begin(), discretes.end(), [&](const ExprCref& d) { return CrefEq{}(c, d); })) discretes.push_back(c);
+      }
+    }
 
     Id<Expr> acc;
     std::vector<Id<Eqn>> bodies;
-    const auto round = [&](WhenStmtKind kind) {
+    const auto entry = [&](WhenStmtKind kind, const ExprCref& target) {
       Eqn e;
       e.kind = EqnKind::When;
       for (const WhenBranch& b : flat) {
         std::vector<WhenStmt> picked;
         for (const WhenStmt& s : b.stmts)
-          if (s.kind == kind) picked.push_back(s);
+          if (s.kind == kind && CrefEq{}(r_.dae.exprs[s.a].cref, target)) picked.push_back(s);
         // 同一分支几个 reinit 指同一状态时取源序第一个（实跑，探针 LwbReinitTwice；getFirstReinit :3426-3441 的 break 写在 match 里，
         // 跳不出 for，取到的是反序的 when_stmts 里最后一个）。
         if (kind == WhenStmtKind::Reinit && picked.size() > 1) picked.resize(1);
@@ -369,10 +625,224 @@ class Lowerer {
       e.time = e.size > 0 ? EqnTime::Discrete : EqnTime::Empty;
       bodies.push_back(r_.dae.eqn_arena.add(std::move(e)));
     };
-    if (!discretes.empty()) round(WhenStmtKind::Assign);
-    if (!states.empty() && !r_.unsupported) round(WhenStmtKind::Reinit);
+    for (const ExprCref& d : discretes) {
+      entry(WhenStmtKind::Assign, d);
+      if (r_.unsupported) return;
+    }
+    for (const ExprCref& s : state_set.to_list()) {
+      entry(WhenStmtKind::Reinit, s);
+      if (r_.unsupported) return;
+    }
     // listAppend(lowerEquation(…), equations)（:878）：离散条目在表头一侧、编号小。out 是源序，表头在尾巴上，所以反着接。
     out.insert(out.end(), bodies.rbegin(), bodies.rend());
+  }
+
+  // lowerAlgorithm（:1290-1309）。alg.outputs 是压平时定的（NFFlatten.mo:387），早于 SimplifyModel，所以被化简删掉的语句里赋值的变量照算，
+  // 见 FlatAlgorithm::dropped_outputs。入桶看输出变量的类型，不看种类（ComponentRef.listHasDiscrete NFComponentRef.mo:2173-2185）。
+  void algorithm(const FlatAlgorithm& a, std::vector<Id<Eqn>>& out) {
+    Eqn e;
+    e.kind = EqnKind::Algorithm;
+    for (Id<FlatStatement> id : a.stmts) {
+      if (!statement(id, e.alg)) return;
+    }
+    std::unordered_set<std::string> outputs;
+    collect_outputs(a.stmts, outputs);
+    for (const std::vector<Symbol>& name : a.dropped_outputs) outputs.insert(dotted(name, [](Symbol x) { return x; }));
+    bool discrete = false;
+    for (const std::string& name : outputs) {
+      const auto v = known_.find(name);
+      if (v == known_.end()) return stop("algorithm output is not a variable");
+      discrete = discrete || v->second == TypeKind::Integer || v->second == TypeKind::Boolean || v->second == TypeKind::String ||
+                 v->second == TypeKind::Enumeration;   // Type.isDiscrete NFType.mo:1254-1268
+    }
+    e.size = static_cast<int>(outputs.size());   // 都是标量：ComponentRef.size 是 1
+    e.time = outputs.empty() ? EqnTime::Empty : (discrete ? EqnTime::Discrete : EqnTime::Continuous);
+    out.push_back(r_.dae.eqn_arena.add(std::move(e)));
+  }
+  // statementInputsOutputs（NFAlgorithm.mo:214-308）的输出部分：赋值左边，for / if / when / while 往里走，`_` 不算。
+  void collect_outputs(const std::vector<Id<FlatStatement>>& stmts, std::unordered_set<std::string>& out) {
+    const auto target = [&](Id<Expr> id) {
+      const Expr& e = r_.dae.exprs[id];
+      if (e.kind == ExprKind::Cref) out.insert(dotted(e.cref.parts, [](const ExprCrefPart& p) { return p.name; }));
+    };
+    for (Id<FlatStatement> id : stmts) {
+      const FlatStatement& s = m_.stmts[id];
+      if (s.kind == FlatStmtKind::Assign) {
+        if (r_.dae.exprs[s.a].kind == ExprKind::Tuple) {
+          for (Id<Expr> x : r_.dae.exprs[s.a].args) target(x);
+        } else {
+          target(s.a);
+        }
+      }
+      for (const FlatStmtBranch& br : s.branches) collect_outputs(br.body, out);
+      collect_outputs(s.body, out);
+      collect_outputs(s.else_body, out);
+    }
+  }
+
+  // 一条 FlatStatement → 一条 Stmt。combineBinaries 按 Statement.mapExp（NFStatement.mo:559-634）：每个顶层式调一次，for 的范围也算。
+  bool statement(Id<FlatStatement> id, std::vector<Stmt>& out) {
+    const FlatStatement& s = m_.stmts[id];
+    Stmt st;
+    const auto combined = [&](Id<Expr> e) { return combine_binaries(r_.dae.exprs, e); };
+    const auto block = [&](const std::vector<Id<FlatStatement>>& in, std::vector<Stmt>& to) {
+      return std::all_of(in.begin(), in.end(), [&](Id<FlatStatement> x) { return statement(x, to); });
+    };
+    switch (s.kind) {
+      case FlatStmtKind::Assign:
+        st.kind = StmtKind::Assign;
+        if (!assign_target_ok(s.a) || !expr_ok(s.b)) return false;
+        st.a = s.a;
+        st.b = combined(s.b);
+        break;
+      case FlatStmtKind::For: {
+        st.kind = StmtKind::For;
+        st.index = s.index;
+        if (!for_range_ok(s.a)) return false;
+        st.a = combined(s.a);
+        iters_.emplace_back(in_.str(s.index));
+        const bool ok = block(s.body, st.body);
+        iters_.pop_back();
+        if (!ok) return false;
+        break;
+      }
+      case FlatStmtKind::If:
+      case FlatStmtKind::When:
+        st.kind = s.kind == FlatStmtKind::If ? StmtKind::If : StmtKind::When;
+        for (const FlatStmtBranch& br : s.branches) {
+          if (!(s.kind == FlatStmtKind::If ? expr_ok(br.cond) : when_condition_ok(br.cond))) return false;
+          StmtBranch b;
+          b.condition = combined(br.cond);
+          if (!block(br.body, b.body)) return false;
+          st.branches.push_back(std::move(b));
+        }
+        if (!s.else_body.empty()) {          // NF 的 else 就是条件为 true 的末分支（toStream 打 `elseif true then`）
+          StmtBranch b;
+          Expr t;
+          t.kind = ExprKind::BoolLit;
+          t.ty = Type::boolean();
+          t.bval = true;
+          b.condition = r_.dae.exprs.add(std::move(t));
+          if (!block(s.else_body, b.body)) return false;
+          st.branches.push_back(std::move(b));
+        }
+        break;
+      case FlatStmtKind::While:
+        st.kind = StmtKind::While;
+        if (!expr_ok(s.a)) return false;
+        st.a = combined(s.a);
+        if (!block(s.body, st.body)) return false;
+        break;
+      case FlatStmtKind::Assert:
+        st.kind = StmtKind::Assert;
+        if (!expr_ok(s.a) || !expr_ok(s.b)) return false;
+        st.a = combined(s.a);
+        st.b = combined(s.b);
+        st.c = s.c.is_valid() ? s.c : default_assert_level();
+        break;
+      case FlatStmtKind::Terminate:
+        st.kind = StmtKind::Terminate;
+        if (!expr_ok(s.a)) return false;
+        st.a = combined(s.a);
+        break;
+      case FlatStmtKind::NoRetCall:
+        st.kind = StmtKind::NoRetCall;
+        if (!expr_ok(s.a)) return false;
+        st.a = combined(s.a);
+        break;
+      case FlatStmtKind::Break:
+        st.kind = StmtKind::Break;
+        break;
+      case FlatStmtKind::Reinit:
+      case FlatStmtKind::Return:
+        stop("statement kind");
+        return false;
+    }
+    out.push_back(std::move(st));
+    return true;
+  }
+  // 赋值的左边：标量 cref，或元组里的 cref 和 `_`。
+  bool assign_target_ok(Id<Expr> id) {
+    const Expr& e = r_.dae.exprs[id];
+    if (e.kind == ExprKind::Cref) return expr_ok(id);
+    if (e.kind != ExprKind::Tuple) { stop("algorithm assignment target"); return false; }
+    for (Id<Expr> x : e.args)
+      if (r_.dae.exprs[x].kind != ExprKind::Wild && !assign_target_ok(x)) return false;
+    return true;
+  }
+  // for 的范围：a:b、a:s:b，或数字字面量组成的数组。Boolean、枚举的数组不收：`for e in E` 默认路径展开成 `{E.a, E.b}`，NB 路径留 `E`（实跑 B1），
+  // 这里分不清是写成数组的还是展开的。
+  bool for_range_ok(Id<Expr> id) {
+    const Expr& e = r_.dae.exprs[id];
+    if (e.kind == ExprKind::Range) return expr_ok(e.a) && expr_ok(e.b) && (!e.c.is_valid() || expr_ok(e.c));
+    if (e.kind != ExprKind::Array) { stop("for range"); return false; }
+    for (Id<Expr> x : e.args) {
+      const ExprKind k = r_.dae.exprs[x].kind;
+      if (k != ExprKind::IntLit && k != ExprKind::RealLit) { stop("for range"); return false; }
+    }
+    return true;
+  }
+
+  // lowerEquationIterators（:1476-1494，lowerEquationData :839）：算法里引用到、又不是变量的名字收进集合，再按 UnorderedSet.toList 的桶序追加到 Artificial 桶
+  //（:841，VarData.addTypedList :2340-2344）。只有用到的迭代量才进去（实跑 B3ForNoUse）。走的序照 Equation.map：表头（最后一条方程）先，
+  // 语句内 Statement.mapExp 的序（for 先体后范围），表达式 Expression.map 的后序。序只影响同桶的先后和 rehash。
+  void collect_iterators(const std::vector<Id<Eqn>>& inits, const std::vector<Id<Eqn>>& eqs) {
+    CrefSet set{CrefHash{&in_}};
+    std::unordered_map<std::string, Type> types;
+    const auto visit = [&](const std::vector<Id<Eqn>>& v) {
+      for (std::size_t i = v.size(); i-- > 0;) {
+        const Eqn& e = r_.dae.eqn_arena[v[i]];
+        if (e.kind == EqnKind::Algorithm) iter_stmts(e.alg, set, types);
+      }
+    };
+    visit(inits);
+    visit(eqs);
+    for (const ExprCref& c : set.to_list()) {
+      const std::string name(in_.str(c.parts[0].name));
+      const Type ty = types.at(name);
+      // 枚举要打类型全名（InstNode.scopePath），Type::enum_path 只有简名；变量那边单有 FlatVariable::enum_type_path，迭代量没有。
+      if (ty.kind == TypeKind::Enumeration) return stop("enumeration iterator");
+      Var it;
+      it.kind = VarKind::Iterator;
+      it.name = c;
+      it.ty = ty;
+      r_.dae.vars.artificials.items.push_back(r_.dae.var_arena.add(std::move(it)));
+    }
+  }
+  void iter_stmts(const std::vector<Stmt>& stmts, CrefSet& set, std::unordered_map<std::string, Type>& types) {
+    for (const Stmt& s : stmts) {
+      if (s.kind == StmtKind::For) iter_stmts(s.body, set, types);
+      iter_exp(s.a, set, types);
+      iter_exp(s.b, set, types);
+      iter_exp(s.c, set, types);
+      for (const StmtBranch& br : s.branches) {
+        iter_exp(br.condition, set, types);
+        iter_stmts(br.body, set, types);
+      }
+      if (s.kind != StmtKind::For) iter_stmts(s.body, set, types);
+    }
+  }
+  void iter_exp(Id<Expr> id, CrefSet& set, std::unordered_map<std::string, Type>& types) {
+    if (!id.is_valid()) return;
+    const Expr& e = r_.dae.exprs[id];
+    if (e.kind == ExprKind::Cref) {
+      if (!known_.count(dotted(e.cref.parts, [](const ExprCrefPart& p) { return p.name; }))) {
+        set.add(e.cref);
+        types.emplace(std::string(in_.str(e.cref.parts[0].name)), e.ty);
+      }
+      return;
+    }
+    iter_exp(e.a, set, types);
+    iter_exp(e.b, set, types);
+    iter_exp(e.c, set, types);
+    for (Id<Expr> x : e.args) iter_exp(x, set, types);
+    for (Id<Expr> x : e.inv_args) iter_exp(x, set, types);
+  }
+
+  // createName（NBEquation.mo:1769-1795）：if 先给外层编号，再逐支给体里的方程（IfEquationBody.createNames :2771-2782）。
+  void name_equation(Id<Eqn> id) {
+    r_.dae.eqn_arena[id].name = cref_of("$RES_SIM_" + std::to_string(r_.dae.eqns.unique_index++));
+    for (const IfBranch& br : r_.dae.eqn_arena[id].if_branches) name_equation(br.eqn);
   }
 
   void equations() {
@@ -381,19 +851,27 @@ class Lowerer {
     EqnData& ed = r_.dae.eqns;
     std::vector<Id<Eqn>> eqs, inits;
     for (Id<FlatEquation> id : m_.equations) {
-      equation(id, eqs);
+      equation(id, eqs, false);
+      if (r_.unsupported) return;
+    }
+    for (const FlatAlgorithm& a : m_.algorithms) {
+      algorithm(a, eqs);
       if (r_.unsupported) return;
     }
     for (Id<FlatEquation> id : m_.initial_equations) {
-      equation(id, inits);
+      equation(id, inits, true);
+      if (r_.unsupported) return;
+    }
+    for (const FlatAlgorithm& a : m_.initial_algorithms) {
+      algorithm(a, inits);
       if (r_.unsupported) return;
     }
     auto name_reversed = [&](const std::vector<Id<Eqn>>& v) {
-      for (std::size_t i = v.size(); i-- > 0;)
-        r_.dae.eqn_arena[v[i]].name = cref_of("$RES_SIM_" + std::to_string(ed.unique_index++));
+      for (std::size_t i = v.size(); i-- > 0;) name_equation(v[i]);
     };
     name_reversed(inits);
     name_reversed(eqs);
+    collect_iterators(inits, eqs);
     for (Id<Eqn> id : eqs) {
       switch (r_.dae.eqn_arena[id].time) {
         case EqnTime::Continuous: ed.continuous.items.push_back(id); ed.simulation.items.push_back(id); break;
@@ -407,7 +885,8 @@ class Lowerer {
   FlatModel m_;
   Interner& in_;
   LowerResult r_;
-  std::unordered_set<std::string> known_;   // 变量名（点分）+ time
+  std::unordered_map<std::string, TypeKind> known_;   // 变量名（点分）+ time → 元素类型
+  std::vector<std::string> iters_;                    // 正在 lower 的语句外层的 for 迭代量
 };
 
 }  // namespace

@@ -1,7 +1,7 @@
 // FlatModel → BackendDAE（NBackendDAE.lower，NBackendDAE.mo:228-243 v1.25.0）。
 //
-// 现在做：标量等式、结果不依赖哈希序的 when（S5a-1b，判据见 lower.cpp when_equation）、assert。其余构造一律退出，不猜：多赋值 when / if /
-// algorithm / 顶层无返回值调用 / for / Clock / 外部对象 / 元组 / 记录 / 数组。契约同 flatten：`unsupported` 置位时 dae 不可用，driver 退 66。
+// 现在做：标量等式、when、assert、if 方程、算法段、顶层无返回值调用。其余构造一律退出，不猜：方程段的 for / Clock / 外部对象 / 元组方程 / 记录 / 数组。
+// 契约同 flatten：`unsupported` 置位时 dae 不可用，driver 退 66。
 #pragma once
 #include <string>
 

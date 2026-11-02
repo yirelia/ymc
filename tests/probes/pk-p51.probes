@@ -1,0 +1,195 @@
+//// set: pk-p51 — S5a-1c 修的前端静默错：if 方程里运行时分支后面的条件是用户函数调参数（`elseif b2(p)`），omc 留着这一支，此前 ymc 按求值结果选支。压平门的覆盖，bdae 那边是 LwcP027b、LwcP028b。
+//// model: P51A
+model P51A
+  function b2 input Real u; output Boolean v; algorithm v := u > 0; end b2;
+  function b3 input Real u; input Real w; output Boolean v; algorithm v := u > w; end b3;
+  parameter Real p = 1, q = -1;
+  constant Real k = 2;
+  Real x;
+equation
+  if time > 1 then
+    x = 1;
+  elseif b2(p) then
+    x = 2;
+  else
+    x = 3;
+  end if;
+end P51A;
+//// model: P51B
+model P51B
+  function b2 input Real u; output Boolean v; algorithm v := u > 0; end b2;
+  function b3 input Real u; input Real w; output Boolean v; algorithm v := u > w; end b3;
+  parameter Real p = 1, q = -1;
+  constant Real k = 2;
+  Real x;
+equation
+  if time > 1 then
+    x = 1;
+  elseif b2(q) then
+    x = 2;
+  else
+    x = 3;
+  end if;
+end P51B;
+//// model: P51C
+model P51C
+  function b2 input Real u; output Boolean v; algorithm v := u > 0; end b2;
+  function b3 input Real u; input Real w; output Boolean v; algorithm v := u > w; end b3;
+  parameter Real p = 1, q = -1;
+  constant Real k = 2;
+  Real x;
+equation
+  if b2(p) then
+    x = 1;
+  else
+    x = 2;
+  end if;
+end P51C;
+//// model: P51D
+model P51D
+  function b2 input Real u; output Boolean v; algorithm v := u > 0; end b2;
+  function b3 input Real u; input Real w; output Boolean v; algorithm v := u > w; end b3;
+  parameter Real p = 1, q = -1;
+  constant Real k = 2;
+  Real x;
+equation
+  if b2(q) then
+    x = 1;
+  elseif time > 1 then
+    x = 2;
+  else
+    x = 3;
+  end if;
+end P51D;
+//// model: P51E
+model P51E
+  function b2 input Real u; output Boolean v; algorithm v := u > 0; end b2;
+  function b3 input Real u; input Real w; output Boolean v; algorithm v := u > w; end b3;
+  parameter Real p = 1, q = -1;
+  constant Real k = 2;
+  Real x;
+equation
+  if time > 1 then
+    x = 1;
+  elseif b2(k) then
+    x = 2;
+  else
+    x = 3;
+  end if;
+end P51E;
+//// model: P51F
+model P51F
+  function b2 input Real u; output Boolean v; algorithm v := u > 0; end b2;
+  function b3 input Real u; input Real w; output Boolean v; algorithm v := u > w; end b3;
+  parameter Real p = 1, q = -1;
+  constant Real k = 2;
+  Real x;
+equation
+  if time > 1 then
+    x = 1;
+  elseif b2(1) then
+    x = 2;
+  else
+    x = 3;
+  end if;
+end P51F;
+//// model: P51G
+model P51G
+  function b2 input Real u; output Boolean v; algorithm v := u > 0; end b2;
+  function b3 input Real u; input Real w; output Boolean v; algorithm v := u > w; end b3;
+  parameter Real p = 1, q = -1;
+  constant Real k = 2;
+  Real x;
+equation
+  if time > 1 then
+    x = 1;
+  elseif b3(p, q) then
+    x = 2;
+  else
+    x = 3;
+  end if;
+end P51G;
+//// model: P51H
+model P51H
+  function b2 input Real u; output Boolean v; algorithm v := u > 0; end b2;
+  function b3 input Real u; input Real w; output Boolean v; algorithm v := u > w; end b3;
+  parameter Real p = 1, q = -1;
+  constant Real k = 2;
+  Real x;
+equation
+  if time > 1 then
+    x = 1;
+  elseif b3(p, 1) and p > 0 then
+    x = 2;
+  else
+    x = 3;
+  end if;
+end P51H;
+//// model: P51I
+model P51I
+  function b2 input Real u; output Boolean v; algorithm v := u > 0; end b2;
+  function b3 input Real u; input Real w; output Boolean v; algorithm v := u > w; end b3;
+  parameter Real p = 1, q = -1;
+  constant Real k = 2;
+  Real x;
+equation
+  if time > 1 then
+    x = 1;
+  elseif not b2(p) then
+    x = 2;
+  else
+    x = 3;
+  end if;
+end P51I;
+//// model: P51J
+model P51J
+  function b2 input Real u; output Boolean v; algorithm v := u > 0; end b2;
+  function b3 input Real u; input Real w; output Boolean v; algorithm v := u > w; end b3;
+  parameter Real p = 1, q = -1;
+  constant Real k = 2;
+  Real x;
+equation
+  if time > 1 then
+    x = 1;
+  elseif b2(p + q) then
+    x = 2;
+  elseif b2(p) then
+    x = 3;
+  else
+    x = 4;
+  end if;
+end P51J;
+//// model: P51K
+model P51K
+  function b2 input Real u; output Boolean v; algorithm v := u > 0; end b2;
+  function b3 input Real u; input Real w; output Boolean v; algorithm v := u > w; end b3;
+  parameter Real p = 1, q = -1;
+  constant Real k = 2;
+  Real x;
+equation
+  if time > 1 then
+    x = 1;
+  elseif b2(p) then
+    x = 2;
+  elseif false then
+    x = 3;
+  else
+    x = 4;
+  end if;
+end P51K;
+//// model: P51L
+model P51L
+  function b2 input Real u; output Boolean v; algorithm v := u > 0; end b2;
+  function b3 input Real u; input Real w; output Boolean v; algorithm v := u > w; end b3;
+  parameter Real p = 1, q = -1;
+  constant Real k = 2;
+  Real x;
+equation
+  if time > 1 then
+    x = 1;
+  elseif b2(sin(p)) then
+    x = 2;
+  else
+    x = 3;
+  end if;
+end P51L;

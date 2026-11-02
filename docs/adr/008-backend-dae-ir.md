@@ -314,7 +314,10 @@ Bindings（`Modules/2_Pre/NBBindings.mo:50`）、FunctionAlias（`NBFunctionAlia
 - **A2' 挡不住的两处路径差异（S5a-1a）**，都在 `bdae::lower` 里 SKIP：方程段的 `for`（NB 不展开，`NFFlatten.mo:1868-1872`；`for i in 1:1` 打 `x = 1` 不带 cast，范围标记还影响
   `final`）、expandable 连接器（NB 把成员放进 Artificial 桶，方程也少一条）。
 - **A5 收窄（S5a-1b）**：`[WHEN]` 的 when / elsewhen 条件顶层的数组字面量不算路径差异，含 split 拼出来的 `not {a, b} and c`；调用实参里的数组、`{a, b}[1]`、推导式仍 NOT-ADMITTED。
-  algorithm 里的 `for` 还没收窄，留给放开 algorithm 时做。
+  algorithm 里的 `for` 见 S5a-1c。
+- **A5 收窄（S5a-1c）**：`[ALGO]` 的 when / elsewhen 条件顶层数组字面量同上；`for` 语句头的 `:` 和数字字面量的数组不算路径差异，语句不展开（`NFFlatten.flattenStatement`，`NFFlatten.mo:2219`），范围里别的东西照旧查。`for e in E`、Boolean 数组留在 A5 之外或 SKIP：默认路径展开成 `{E.a, E.b}`，NB 路径留 `E`。`x := f(x)[1]`（TupleElement）没收窄，语料 5 个。
+- **D1 补充（S5a-1c）**：`Eqn` 加 If、Algorithm。If 铺平成 `IfBranch`，一个 `Eqn` 是 split 之后的一条，每支恰好一条方程；Algorithm 存 `Stmt` 树。`VarKind` 加 Iterator（`[ITER]`），算法里用到的迭代量进 Artificial 桶，走桶序。
+- **D2 补充（S5a-1c）**：算法段的输出压平时就定了（`NFFlatten.mo:387`），早于 SimplifyModel，默认路径化简删掉的语句里赋值的变量照算 size 和入桶，`FlatAlgorithm::dropped_outputs` 记下。默认路径的标量化还会删 if 语句的空分支（`NFScalarize.mo:461-488`），NB 路径留着，这里分不出来，`bdae::lower` SKIP。
 - **待定**：D3 回读里 MULTARY 与嵌套 BINARY 文本相同，parser 的还原规则到写回读时再定。
 
 ## 附录 A 实跑记录

@@ -74,13 +74,18 @@ class Combiner {
         const Id<Expr> x = combine(e.a), y = combine(e.b);
         return with_children(id, x, y, combine(e.c), nullptr);
       }
+      case ExprKind::Range: {                // :1657-1663。Expr 的 Range 是 a:b 或 a:步长(b):终点(c)，这里不分
+        const Id<Expr> x = combine(e.a), y = combine(e.b);
+        return with_children(id, x, y, e.c.is_valid() ? combine(e.c) : Id<Expr>{}, nullptr);
+      }
       case ExprKind::Call:                   // :1673-1676
-      case ExprKind::Array: {                // :1649-1655（literal 的数组里没有可并的式子，不用判）。现在只有 when 条件走到这里
+      case ExprKind::Array:                  // :1649-1655（literal 的数组里没有可并的式子，不用判）。现在只有 when 条件和 for 的范围走到这里
+      case ExprKind::Tuple: {                // :1665-1667，元组赋值的左边
         std::vector<Id<Expr>> args;
         for (Id<Expr> arg : e.args) args.push_back(combine(arg));
         return with_children(id, {}, {}, {}, &args);
       }
-      // ponytail: Cref 的下标、元组、Range、记录……（:1644-1742）都走不到：bdae::lower 在这之前 SKIP 掉了。放开数组时照原文补。
+      // ponytail: Cref 的下标、记录……（:1644-1742）都走不到：bdae::lower 在这之前 SKIP 掉了。放开数组时照原文补。
       default:
         return id;
     }
