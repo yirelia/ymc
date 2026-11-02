@@ -63,6 +63,8 @@ struct FlatVariable {
   Id<Expr> string_fixed;                 // String 的 fixed 字面量：DAE 转换丢它，属性表（attr_table）里没有；NB 打（createString :1237）
   bool string_fixed_opaque = false;      // String 的 fixed 不是字面量 → lower SKIP
   Symbol tearing_select;                 // 注解 __OpenModelica_tearingSelect 的成员名（never / avoid / …，createTearingSelect :1383-1430）；无 = invalid
+  // 声明为连续、在 when 方程体里被赋值：变率是 IMPLICITLY_DISCRETE（markImplicitWhenExp，NFInst.mo:4099-4128）。Real 因此是 [DISC]，打印不带 discrete。
+  bool implicit_discrete = false;
   std::vector<FlatVarAttr> attributes;   // 已按类型顺序排好
   Id<Expr> binding;                      // ` = expr`，无则 invalid
   Symbol comment;                        // 保留（R13 §3.6）
@@ -175,6 +177,9 @@ struct FlatModel {
   std::vector<FlatFunction> functions;   // 被模型调用的用户函数（发射序；dump 时按压平名字节序排，class 之前打印）
   // 方程段的 for 循环已展开（unrollForLoop）。NB 路径不展开（splitForLoop，NFFlatten.mo:1868-1872），展开后看不出原样 → bdae::lower SKIP。
   bool unrolled_for = false;
+  // omc 在实例化时走完全部类树标隐式离散（updateImplicitVariability，NFInst.mo:193、:3847-4097），结构 if 没选中的分支、移除的条件组件也算。
+  // 这些 when 方程 ymc 没收，标不全 → bdae::lower SKIP。
+  bool unseen_when_assign = false;
 
   ExprArena exprs;
   Arena<FlatEquation> eqs;

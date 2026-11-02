@@ -309,6 +309,8 @@ Bindings（`Modules/2_Pre/NBBindings.mo:50`）、FunctionAlias（`NBFunctionAlia
   放开 when、algorithm 时要收窄。ymc 自己不知道模型在 A5 之外：`--dump-after=lower` 打的是默认路径展开后的式子，和 NB 路径文本不同，门靠参考判 NOT-ADMITTED。
 - **A2' 挡不住的两处路径差异（S5a-1a）**，都在 `bdae::lower` 里 SKIP：方程段的 `for`（NB 不展开，`NFFlatten.mo:1868-1872`；`for i in 1:1` 打 `x = 1` 不带 cast，范围标记还影响
   `final`）、expandable 连接器（NB 把成员放进 Artificial 桶，方程也少一条）。
+- **A5 收窄（S5a-1b）**：`[WHEN]` 的 when / elsewhen 条件顶层的数组字面量不算路径差异，含 split 拼出来的 `not {a, b} and c`；调用实参里的数组、`{a, b}[1]`、推导式仍 NOT-ADMITTED。
+  algorithm 里的 `for` 还没收窄，留给放开 algorithm 时做。
 - **待定**：D3 回读里 MULTARY 与嵌套 BINARY 文本相同，parser 的还原规则到写回读时再定。
 
 ## 附录 A 实跑记录

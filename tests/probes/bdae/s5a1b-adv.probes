@@ -1,0 +1,4473 @@
+//// set: s5a1b-adv — S5a-1b 评审时主代理手写的对抗形状（不来自 s5a1b 的生成器）。Wc / Wr / Wv：when 条件与赋值右端；WB：elsewhen、reinit、terminate 混排；Wa / Wi：assert；WM：编号与入桶混排；Wt：变量种类与层次；Wq：每支都赋值、reinit 只在部分分支，专测 acc_condition 泄漏。比对走 tools/bdae_sweep.py --probes。
+//// model: Wc0
+model Wc0
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when time > 1 then
+    w = 1;
+  end when;
+end Wc0;
+//// model: Wr0
+model Wr0
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when time > 1 then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr0;
+//// model: Wc1
+model Wc1
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when x > 1 and y < 2 then
+    w = 1;
+  end when;
+end Wc1;
+//// model: Wr1
+model Wr1
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when x > 1 and y < 2 then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr1;
+//// model: Wc2
+model Wc2
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not b then
+    w = 1;
+  end when;
+end Wc2;
+//// model: Wr2
+model Wr2
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not b then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr2;
+//// model: Wc3
+model Wc3
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b or c then
+    w = 1;
+  end when;
+end Wc3;
+//// model: Wr3
+model Wr3
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b or c then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr3;
+//// model: Wc4
+model Wc4
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when sample(0, 0.1) then
+    w = 1;
+  end when;
+end Wc4;
+//// model: Wr4
+model Wr4
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when sample(0, 0.1) then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr4;
+//// model: Wc5
+model Wc5
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when initial() then
+    w = 1;
+  end when;
+end Wc5;
+//// model: Wr5
+model Wr5
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when initial() then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr5;
+//// model: Wc6
+model Wc6
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when terminal() then
+    w = 1;
+  end when;
+end Wc6;
+//// model: Wr6
+model Wr6
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when terminal() then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr6;
+//// model: Wc7
+model Wc7
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when pre(b) then
+    w = 1;
+  end when;
+end Wc7;
+//// model: Wr7
+model Wr7
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when pre(b) then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr7;
+//// model: Wc8
+model Wc8
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when edge(b) then
+    w = 1;
+  end when;
+end Wc8;
+//// model: Wr8
+model Wr8
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when edge(b) then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr8;
+//// model: Wc9
+model Wc9
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when change(i) then
+    w = 1;
+  end when;
+end Wc9;
+//// model: Wr9
+model Wr9
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when change(i) then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr9;
+//// model: Wc10
+model Wc10
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when change(b) then
+    w = 1;
+  end when;
+end Wc10;
+//// model: Wr10
+model Wr10
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when change(b) then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr10;
+//// model: Wc11
+model Wc11
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {time > 1, time > 2} then
+    w = 1;
+  end when;
+end Wc11;
+//// model: Wr11
+model Wr11
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {time > 1, time > 2} then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr11;
+//// model: Wc12
+model Wc12
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {b, c} then
+    w = 1;
+  end when;
+end Wc12;
+//// model: Wr12
+model Wr12
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {b, c} then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr12;
+//// model: Wc13
+model Wc13
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {initial(), time > 1} then
+    w = 1;
+  end when;
+end Wc13;
+//// model: Wr13
+model Wr13
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {initial(), time > 1} then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr13;
+//// model: Wc14
+model Wc14
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {time > 1} then
+    w = 1;
+  end when;
+end Wc14;
+//// model: Wr14
+model Wr14
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {time > 1} then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr14;
+//// model: Wc15
+model Wc15
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {b, c, e} then
+    w = 1;
+  end when;
+end Wc15;
+//// model: Wr15
+model Wr15
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {b, c, e} then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr15;
+//// model: Wc16
+model Wc16
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {sample(0, 1), edge(b)} then
+    w = 1;
+  end when;
+end Wc16;
+//// model: Wr16
+model Wr16
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {sample(0, 1), edge(b)} then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr16;
+//// model: Wc17
+model Wc17
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {x + y + z > 1, x * y * z < 2} then
+    w = 1;
+  end when;
+end Wc17;
+//// model: Wr17
+model Wr17
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {x + y + z > 1, x * y * z < 2} then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr17;
+//// model: Wc18
+model Wc18
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when time > 1 + 2 + p then
+    w = 1;
+  end when;
+end Wc18;
+//// model: Wr18
+model Wr18
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when time > 1 + 2 + p then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr18;
+//// model: Wc19
+model Wc19
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when time > p * q * 2 then
+    w = 1;
+  end when;
+end Wc19;
+//// model: Wr19
+model Wr19
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when time > p * q * 2 then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr19;
+//// model: Wc20
+model Wc20
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when time + x + y > 1 then
+    w = 1;
+  end when;
+end Wc20;
+//// model: Wr20
+model Wr20
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when time + x + y > 1 then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr20;
+//// model: Wc21
+model Wc21
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when x * y * z > 1 then
+    w = 1;
+  end when;
+end Wc21;
+//// model: Wr21
+model Wr21
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when x * y * z > 1 then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr21;
+//// model: Wc23
+model Wc23
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b and c and e then
+    w = 1;
+  end when;
+end Wc23;
+//// model: Wr23
+model Wr23
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b and c and e then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr23;
+//// model: Wc24
+model Wc24
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b or c or e then
+    w = 1;
+  end when;
+end Wc24;
+//// model: Wr24
+model Wr24
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b or c or e then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr24;
+//// model: Wc25
+model Wc25
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not (b and c) then
+    w = 1;
+  end when;
+end Wc25;
+//// model: Wr25
+model Wr25
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not (b and c) then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr25;
+//// model: Wc26
+model Wc26
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when (b or c) and e then
+    w = 1;
+  end when;
+end Wc26;
+//// model: Wr26
+model Wr26
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when (b or c) and e then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr26;
+//// model: Wc27
+model Wc27
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when i > 1 then
+    w = 1;
+  end when;
+end Wc27;
+//// model: Wr27
+model Wr27
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when i > 1 then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr27;
+//// model: Wc28
+model Wc28
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when i == 2 then
+    w = 1;
+  end when;
+end Wc28;
+//// model: Wr28
+model Wr28
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when i == 2 then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr28;
+//// model: Wc29
+model Wc29
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when true then
+    w = 1;
+  end when;
+end Wc29;
+//// model: Wr29
+model Wr29
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when true then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr29;
+//// model: Wc30
+model Wc30
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when false then
+    w = 1;
+  end when;
+end Wc30;
+//// model: Wr30
+model Wr30
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when false then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr30;
+//// model: Wc31
+model Wc31
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when time > p then
+    w = 1;
+  end when;
+end Wc31;
+//// model: Wr31
+model Wr31
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when time > p then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end Wr31;
+//// model: Wv0
+model Wv0
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = pre(w) + 1;
+  end when;
+end Wv0;
+//// model: Wv1
+model Wv1
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = x + y + z;
+  end when;
+end Wv1;
+//// model: Wv2
+model Wv2
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = x * y * z;
+  end when;
+end Wv2;
+//// model: Wv3
+model Wv3
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = x - y - z;
+  end when;
+end Wv3;
+//// model: Wv4
+model Wv4
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = x / y / z;
+  end when;
+end Wv4;
+//// model: Wv5
+model Wv5
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = if b then 1 else 2;
+  end when;
+end Wv5;
+//// model: Wv6
+model Wv6
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = if b then x + y + z else x * y * z;
+  end when;
+end Wv6;
+//// model: Wv7
+model Wv7
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = -pre(w);
+  end when;
+end Wv7;
+//// model: Wv8
+model Wv8
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = sin(x + y + z);
+  end when;
+end Wv8;
+//// model: Wv9
+model Wv9
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = sqrt(x * y) + sqrt(y * z);
+  end when;
+end Wv9;
+//// model: Wv10
+model Wv10
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = time;
+  end when;
+end Wv10;
+//// model: Wv11
+model Wv11
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = p + q + 1;
+  end when;
+end Wv11;
+//// model: Wv12
+model Wv12
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = 1;
+  end when;
+end Wv12;
+//// model: Wv13
+model Wv13
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = 1.5;
+  end when;
+end Wv13;
+//// model: Wv14
+model Wv14
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = pre(w) * pre(w);
+  end when;
+end Wv14;
+//// model: Wv15
+model Wv15
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = abs(x - y);
+  end when;
+end Wv15;
+//// model: WB01
+model WB01
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = 1;
+  elsewhen c then
+    w = 2;
+  end when;
+end WB01;
+//// model: WB02
+model WB02
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = 1;
+  elsewhen c then
+    w = 2;
+  elsewhen e then
+    w = 3;
+  end when;
+end WB02;
+//// model: WB03
+model WB03
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {b, c} then
+    w = 1;
+  elsewhen e then
+    w = 2;
+  end when;
+end WB03;
+//// model: WB04
+model WB04
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = 1;
+  elsewhen {c, e} then
+    w = 2;
+  end when;
+end WB04;
+//// model: WB05
+model WB05
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = 1;
+    reinit(s, 0);
+  end when;
+end WB05;
+//// model: WB06
+model WB06
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    reinit(s, 0);
+    w = 1;
+  end when;
+end WB06;
+//// model: WB09
+model WB09
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = 1;
+    reinit(s, 0);
+  elsewhen c then
+    w = 2;
+  end when;
+end WB09;
+//// model: WB16
+model WB16
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    terminate("x");
+    w = 1;
+  end when;
+end WB16;
+//// model: WB17
+model WB17
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = 1;
+    terminate("x");
+  end when;
+end WB17;
+//// model: WB20
+model WB20
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    terminate("a");
+    reinit(s, 1);
+  end when;
+end WB20;
+//// model: WB21
+model WB21
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    terminate("a");
+  end when;
+  w = 1;
+end WB21;
+//// model: WB22
+model WB22
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    terminate("a");
+  elsewhen c then
+    terminate("b");
+  end when;
+  w = 1;
+end WB22;
+//// model: WB23
+model WB23
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    reinit(s, -pre(s));
+  end when;
+  w = 1;
+end WB23;
+//// model: WB24
+model WB24
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    reinit(s, x + y + z);
+  end when;
+  w = 1;
+end WB24;
+//// model: WB25
+model WB25
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    reinit(s, x * y * z);
+  elsewhen c then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end WB25;
+//// model: WB26
+model WB26
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {b, c} then
+    reinit(s, 0);
+  end when;
+  w = 1;
+end WB26;
+//// model: WB27
+model WB27
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    reinit(s, 1);
+    reinit(s, 2);
+  end when;
+  w = 1;
+end WB27;
+//// model: WB29
+model WB29
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = 1;
+  elsewhen c then
+    w = 2;
+    w = 3;
+  end when;
+end WB29;
+//// model: WB30
+model WB30
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = x;
+  when b then
+    reinit(s, 1);
+  end when;
+end WB30;
+//// model: Wa0
+model Wa0
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+  assert(x > 0, "m");
+end Wa0;
+//// model: Wi0
+model Wi0
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+initial equation
+  assert(x > 0, "m");
+end Wi0;
+//// model: Wa1
+model Wa1
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+  assert(x > 0, "a" + "b");
+end Wa1;
+//// model: Wi1
+model Wi1
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+initial equation
+  assert(x > 0, "a" + "b");
+end Wi1;
+//// model: Wa2
+model Wa2
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+  assert(x > 0, "a" + String(x) + "b");
+end Wa2;
+//// model: Wi2
+model Wi2
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+initial equation
+  assert(x > 0, "a" + String(x) + "b");
+end Wi2;
+//// model: Wa3
+model Wa3
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+  assert(x > 0, String(x));
+end Wa3;
+//// model: Wi3
+model Wi3
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+initial equation
+  assert(x > 0, String(x));
+end Wi3;
+//// model: Wa4
+model Wa4
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+  assert(x > 0, String(i));
+end Wa4;
+//// model: Wi4
+model Wi4
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+initial equation
+  assert(x > 0, String(i));
+end Wi4;
+//// model: Wa5
+model Wa5
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+  assert(x > 0, String(b));
+end Wa5;
+//// model: Wi5
+model Wi5
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+initial equation
+  assert(x > 0, String(b));
+end Wi5;
+//// model: Wa6
+model Wa6
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+  assert(x > 0, String(x, significantDigits = 3));
+end Wa6;
+//// model: Wi6
+model Wi6
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+initial equation
+  assert(x > 0, String(x, significantDigits = 3));
+end Wi6;
+//// model: Wa7
+model Wa7
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+  assert(x > 0, "m", AssertionLevel.warning);
+end Wa7;
+//// model: Wi7
+model Wi7
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+initial equation
+  assert(x > 0, "m", AssertionLevel.warning);
+end Wi7;
+//// model: Wa8
+model Wa8
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+  assert(x > 0, "m", AssertionLevel.error);
+end Wa8;
+//// model: Wi8
+model Wi8
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+initial equation
+  assert(x > 0, "m", AssertionLevel.error);
+end Wi8;
+//// model: Wa9
+model Wa9
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+  assert(x > 0, "m", level = AssertionLevel.warning);
+end Wa9;
+//// model: Wi9
+model Wi9
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+initial equation
+  assert(x > 0, "m", level = AssertionLevel.warning);
+end Wi9;
+//// model: Wa10
+model Wa10
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+  assert(p > 0, "m");
+end Wa10;
+//// model: Wi10
+model Wi10
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+initial equation
+  assert(p > 0, "m");
+end Wi10;
+//// model: Wa11
+model Wa11
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+  assert(true, "m");
+end Wa11;
+//// model: Wi11
+model Wi11
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+initial equation
+  assert(true, "m");
+end Wi11;
+//// model: Wa12
+model Wa12
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+  assert(false, "m");
+end Wa12;
+//// model: Wi12
+model Wi12
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+initial equation
+  assert(false, "m");
+end Wi12;
+//// model: Wa13
+model Wa13
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+  assert(b, "m");
+end Wa13;
+//// model: Wi13
+model Wi13
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+initial equation
+  assert(b, "m");
+end Wi13;
+//// model: Wa14
+model Wa14
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+  assert(not b, "m");
+end Wa14;
+//// model: Wi14
+model Wi14
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+initial equation
+  assert(not b, "m");
+end Wi14;
+//// model: Wa15
+model Wa15
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+  assert(x > 0 and y > 0, "m");
+end Wa15;
+//// model: Wi15
+model Wi15
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+initial equation
+  assert(x > 0 and y > 0, "m");
+end Wi15;
+//// model: Wa16
+model Wa16
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+  assert(x + y + z > 0, "m");
+end Wa16;
+//// model: Wi16
+model Wi16
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+initial equation
+  assert(x + y + z > 0, "m");
+end Wi16;
+//// model: Wa17
+model Wa17
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+  assert(x * y * z > 0, "m");
+end Wa17;
+//// model: Wi17
+model Wi17
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+initial equation
+  assert(x * y * z > 0, "m");
+end Wi17;
+//// model: Wa18
+model Wa18
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+  assert(x > 0 or y > 0 or z > 0, "line1\nline2");
+end Wa18;
+//// model: Wi18
+model Wi18
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+initial equation
+  assert(x > 0 or y > 0 or z > 0, "line1\nline2");
+end Wi18;
+//// model: Wa19
+model Wa19
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+  assert(i > 0, "q\"r");
+end Wa19;
+//// model: Wi19
+model Wi19
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+initial equation
+  assert(i > 0, "q\"r");
+end Wi19;
+//// model: Wa20
+model Wa20
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+  assert(sin(x + y + z) > 0, "m");
+end Wa20;
+//// model: Wi20
+model Wi20
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+initial equation
+  assert(sin(x + y + z) > 0, "m");
+end Wi20;
+//// model: Wa21
+model Wa21
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+  assert(noEvent(x > 0), "m");
+end Wa21;
+//// model: Wi21
+model Wi21
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  w = 1;
+initial equation
+  assert(noEvent(x > 0), "m");
+end Wi21;
+//// model: WM1
+model WM1
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+  Integer i2, k;
+  Real r2;
+equation
+  der(s) = 1;
+  w = x;
+  when b then
+    i2 = 1;
+  end when;
+  assert(x > 0, "a");
+  k = 1;
+  when c then
+    r2 = 2;
+  end when;
+  assert(y > 0, "b");
+end WM1;
+//// model: WM1i
+model WM1i
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+  Integer i2, k;
+  Real r2;
+equation
+  der(s) = 1;
+  w = x;
+  when b then
+    i2 = 1;
+  end when;
+  assert(x > 0, "a");
+  k = 1;
+  when c then
+    r2 = 2;
+  end when;
+  assert(y > 0, "b");
+initial equation
+  assert(p > 0, "i");
+  r2 = 1;
+end WM1i;
+//// model: WM2
+model WM2
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+  Integer i2, k;
+  Real r2;
+equation
+  der(s) = 1;
+  assert(x > 0, "a");
+  when b then
+    i2 = 1;
+    reinit(s, 0);
+  end when;
+  w = x;
+  k = 1;
+  assert(y > 0, "b");
+  r2 = y;
+end WM2;
+//// model: WM2i
+model WM2i
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+  Integer i2, k;
+  Real r2;
+equation
+  der(s) = 1;
+  assert(x > 0, "a");
+  when b then
+    i2 = 1;
+    reinit(s, 0);
+  end when;
+  w = x;
+  k = 1;
+  assert(y > 0, "b");
+  r2 = y;
+initial equation
+  assert(p > 0, "i");
+  r2 = 1;
+end WM2i;
+//// model: WM3
+model WM3
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+  Integer i2, k;
+  Real r2;
+equation
+  der(s) = 1;
+  when b then
+    r2 = 2;
+  end when;
+  when c then
+    i2 = 2;
+  end when;
+  when e then
+    k = 2;
+  end when;
+  w = x;
+end WM3;
+//// model: WM3i
+model WM3i
+  parameter Real p = 1, q = 2;
+  Real x = time, y = 2 * time, z = 3 * time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Integer i = integer(time);
+  Real s(start = 1, fixed = true);
+  Real w;
+  Integer i2, k;
+  Real r2;
+equation
+  der(s) = 1;
+  when b then
+    r2 = 2;
+  end when;
+  when c then
+    i2 = 2;
+  end when;
+  when e then
+    k = 2;
+  end when;
+  w = x;
+initial equation
+  assert(p > 0, "i");
+  r2 = 1;
+end WM3i;
+//// model: WtT1
+model WtT1
+  Integer g; equation when time > 1 then g = 1; end when;
+end WtT1;
+//// model: WtT2
+model WtT2
+  Boolean g; equation when time > 1 then g = true; end when;
+end WtT2;
+//// model: WtT3
+model WtT3
+  String g; equation when time > 1 then g = "a"; end when;
+end WtT3;
+//// model: WtT4
+model WtT4
+  type E = enumeration(u, v); E g; equation when time > 1 then g = E.v; end when;
+end WtT4;
+//// model: WtT5
+model WtT5
+  Real g(start = 1); equation when time > 1 then g = 1; end when;
+end WtT5;
+//// model: WtT6
+model WtT6
+  Real g(start = 1, fixed = true); equation when time > 1 then g = pre(g) + 1; end when;
+end WtT6;
+//// model: WtT7
+model WtT7
+  Real g(min = 0, max = 1, nominal = 2); equation when time > 1 then g = 1; end when;
+end WtT7;
+//// model: WtT8
+model WtT8
+  output Real g; equation when time > 1 then g = 1; end when;
+end WtT8;
+//// model: WtT9
+model WtT9
+  protected Real g; equation when time > 1 then g = 1; end when;
+end WtT9;
+//// model: WtT10
+model WtT10
+  discrete Real g; equation when time > 1 then g = 1; end when;
+end WtT10;
+//// model: WtT11
+model WtT11
+  discrete Real g(start = 2); equation when time > 1 then g = pre(g); end when;
+end WtT11;
+//// model: WtT12
+model WtT12
+  Real g(stateSelect = StateSelect.always); equation when time > 1 then g = 1; end when;
+end WtT12;
+//// model: WtT13
+model WtT13
+  Real g(stateSelect = StateSelect.prefer); equation when time > 1 then g = 1; end when;
+end WtT13;
+//// model: WtT14
+model WtT14
+  final Real g; equation when time > 1 then g = 1; end when;
+end WtT14;
+//// model: WtT15
+model WtT15
+  model S Real g; Boolean t = time > 1; equation when t then g = 1; end when; end S; S a, b;
+end WtT15;
+//// model: WtT16
+model WtT16
+  model B Real g; equation when time > 1 then g = 1; end when; end B; model D extends B; Real h = g; end D; D d;
+end WtT16;
+//// model: WtT17
+model WtT17
+  connector P Real v; flow Real f; end P; P a; Real g; equation a.f = 1; when time > 1 then a.v = 1; end when;
+end WtT17;
+//// model: WtT18
+model WtT18
+  Real g, h; equation h = g + 1; when time > 1 then g = 1; end when;
+end WtT18;
+//// model: WtT19
+model WtT19
+  Real g; Real h(start = 1); equation der(h) = g; when h > 2 then g = 1; end when;
+end WtT19;
+//// model: WtT20
+model WtT20
+  Real h(start = 1); Real v(start = 0); equation der(h) = v; der(v) = -9.81; when h < 0 then reinit(v, -0.9 * pre(v)); end when;
+end WtT20;
+//// model: WtT21
+model WtT21
+  function f input Real u; algorithm assert(u > 0, "z"); end f; Real g; equation when time > 1 then g = 1; f(g); end when;
+end WtT21;
+//// model: WtT22
+model WtT22
+  function f input Real u; algorithm assert(u > 0, "z"); end f; Real g = 1; equation when time > 1 then f(g); end when;
+end WtT22;
+//// model: WtT23
+model WtT23
+  parameter Boolean f = false; Real g; equation if f then when time > 1 then g = 1; end when; else g = 2; end if;
+end WtT23;
+//// model: WtT24
+model WtT24
+  parameter Boolean f = true; Real g; equation if f then when time > 1 then g = 1; end when; else g = 2; end if;
+end WtT24;
+//// model: WqS100
+model WqS100
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = 1;
+  elsewhen e then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS100;
+//// model: WqS101
+model WqS101
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS101;
+//// model: WqS102
+model WqS102
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS102;
+//// model: WqS110
+model WqS110
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not b then
+    w = 1;
+  elsewhen e then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS110;
+//// model: WqS111
+model WqS111
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not b then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS111;
+//// model: WqS112
+model WqS112
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not b then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS112;
+//// model: WqS120
+model WqS120
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {b, c} then
+    w = 1;
+  elsewhen e then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS120;
+//// model: WqS121
+model WqS121
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {b, c} then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS121;
+//// model: WqS122
+model WqS122
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {b, c} then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS122;
+//// model: WqS130
+model WqS130
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when true then
+    w = 1;
+  elsewhen e then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS130;
+//// model: WqS131
+model WqS131
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when true then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS131;
+//// model: WqS132
+model WqS132
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when true then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS132;
+//// model: WqS140
+model WqS140
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when false then
+    w = 1;
+  elsewhen e then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS140;
+//// model: WqS141
+model WqS141
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when false then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS141;
+//// model: WqS142
+model WqS142
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when false then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS142;
+//// model: WqS150
+model WqS150
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when x > 1 then
+    w = 1;
+  elsewhen e then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS150;
+//// model: WqS151
+model WqS151
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when x > 1 then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS151;
+//// model: WqS152
+model WqS152
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when x > 1 then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS152;
+//// model: WqS160
+model WqS160
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b and c then
+    w = 1;
+  elsewhen e then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS160;
+//// model: WqS161
+model WqS161
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b and c then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS161;
+//// model: WqS162
+model WqS162
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b and c then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS162;
+//// model: WqS170
+model WqS170
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not (b or c) then
+    w = 1;
+  elsewhen e then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS170;
+//// model: WqS171
+model WqS171
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not (b or c) then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS171;
+//// model: WqS172
+model WqS172
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not (b or c) then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS172;
+//// model: WqS190
+model WqS190
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when initial() then
+    w = 1;
+  elsewhen e then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS190;
+//// model: WqS191
+model WqS191
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when initial() then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS191;
+//// model: WqS192
+model WqS192
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when initial() then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+    reinit(s, 0);
+  end when;
+end WqS192;
+//// model: WqS200
+model WqS200
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = 1;
+  elsewhen e then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS200;
+//// model: WqS201
+model WqS201
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS201;
+//// model: WqS202
+model WqS202
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS202;
+//// model: WqS210
+model WqS210
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not b then
+    w = 1;
+  elsewhen e then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS210;
+//// model: WqS211
+model WqS211
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not b then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS211;
+//// model: WqS212
+model WqS212
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not b then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS212;
+//// model: WqS220
+model WqS220
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {b, c} then
+    w = 1;
+  elsewhen e then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS220;
+//// model: WqS221
+model WqS221
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {b, c} then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS221;
+//// model: WqS222
+model WqS222
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {b, c} then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS222;
+//// model: WqS230
+model WqS230
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when true then
+    w = 1;
+  elsewhen e then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS230;
+//// model: WqS231
+model WqS231
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when true then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS231;
+//// model: WqS232
+model WqS232
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when true then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS232;
+//// model: WqS240
+model WqS240
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when false then
+    w = 1;
+  elsewhen e then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS240;
+//// model: WqS241
+model WqS241
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when false then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS241;
+//// model: WqS242
+model WqS242
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when false then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS242;
+//// model: WqS250
+model WqS250
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when x > 1 then
+    w = 1;
+  elsewhen e then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS250;
+//// model: WqS251
+model WqS251
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when x > 1 then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS251;
+//// model: WqS252
+model WqS252
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when x > 1 then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS252;
+//// model: WqS260
+model WqS260
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b and c then
+    w = 1;
+  elsewhen e then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS260;
+//// model: WqS261
+model WqS261
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b and c then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS261;
+//// model: WqS262
+model WqS262
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b and c then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS262;
+//// model: WqS270
+model WqS270
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not (b or c) then
+    w = 1;
+  elsewhen e then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS270;
+//// model: WqS271
+model WqS271
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not (b or c) then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS271;
+//// model: WqS272
+model WqS272
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not (b or c) then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS272;
+//// model: WqS290
+model WqS290
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when initial() then
+    w = 1;
+  elsewhen e then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS290;
+//// model: WqS291
+model WqS291
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when initial() then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS291;
+//// model: WqS292
+model WqS292
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when initial() then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS292;
+//// model: WqS300
+model WqS300
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = 1;
+    reinit(s, 1);
+  elsewhen e then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS300;
+//// model: WqS301
+model WqS301
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = 1;
+    reinit(s, 1);
+  elsewhen x > 2 then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS301;
+//// model: WqS302
+model WqS302
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = 1;
+    reinit(s, 1);
+  elsewhen {e, b} then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS302;
+//// model: WqS310
+model WqS310
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not b then
+    w = 1;
+    reinit(s, 1);
+  elsewhen e then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS310;
+//// model: WqS311
+model WqS311
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not b then
+    w = 1;
+    reinit(s, 1);
+  elsewhen x > 2 then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS311;
+//// model: WqS312
+model WqS312
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not b then
+    w = 1;
+    reinit(s, 1);
+  elsewhen {e, b} then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS312;
+//// model: WqS320
+model WqS320
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {b, c} then
+    w = 1;
+    reinit(s, 1);
+  elsewhen e then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS320;
+//// model: WqS321
+model WqS321
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {b, c} then
+    w = 1;
+    reinit(s, 1);
+  elsewhen x > 2 then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS321;
+//// model: WqS322
+model WqS322
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {b, c} then
+    w = 1;
+    reinit(s, 1);
+  elsewhen {e, b} then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS322;
+//// model: WqS330
+model WqS330
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when true then
+    w = 1;
+    reinit(s, 1);
+  elsewhen e then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS330;
+//// model: WqS331
+model WqS331
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when true then
+    w = 1;
+    reinit(s, 1);
+  elsewhen x > 2 then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS331;
+//// model: WqS332
+model WqS332
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when true then
+    w = 1;
+    reinit(s, 1);
+  elsewhen {e, b} then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS332;
+//// model: WqS340
+model WqS340
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when false then
+    w = 1;
+    reinit(s, 1);
+  elsewhen e then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS340;
+//// model: WqS341
+model WqS341
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when false then
+    w = 1;
+    reinit(s, 1);
+  elsewhen x > 2 then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS341;
+//// model: WqS342
+model WqS342
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when false then
+    w = 1;
+    reinit(s, 1);
+  elsewhen {e, b} then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS342;
+//// model: WqS350
+model WqS350
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when x > 1 then
+    w = 1;
+    reinit(s, 1);
+  elsewhen e then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS350;
+//// model: WqS351
+model WqS351
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when x > 1 then
+    w = 1;
+    reinit(s, 1);
+  elsewhen x > 2 then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS351;
+//// model: WqS352
+model WqS352
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when x > 1 then
+    w = 1;
+    reinit(s, 1);
+  elsewhen {e, b} then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS352;
+//// model: WqS360
+model WqS360
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b and c then
+    w = 1;
+    reinit(s, 1);
+  elsewhen e then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS360;
+//// model: WqS361
+model WqS361
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b and c then
+    w = 1;
+    reinit(s, 1);
+  elsewhen x > 2 then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS361;
+//// model: WqS362
+model WqS362
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b and c then
+    w = 1;
+    reinit(s, 1);
+  elsewhen {e, b} then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS362;
+//// model: WqS370
+model WqS370
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not (b or c) then
+    w = 1;
+    reinit(s, 1);
+  elsewhen e then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS370;
+//// model: WqS371
+model WqS371
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not (b or c) then
+    w = 1;
+    reinit(s, 1);
+  elsewhen x > 2 then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS371;
+//// model: WqS372
+model WqS372
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not (b or c) then
+    w = 1;
+    reinit(s, 1);
+  elsewhen {e, b} then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS372;
+//// model: WqS390
+model WqS390
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when initial() then
+    w = 1;
+    reinit(s, 1);
+  elsewhen e then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS390;
+//// model: WqS391
+model WqS391
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when initial() then
+    w = 1;
+    reinit(s, 1);
+  elsewhen x > 2 then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS391;
+//// model: WqS392
+model WqS392
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when initial() then
+    w = 1;
+    reinit(s, 1);
+  elsewhen {e, b} then
+    w = 2;
+  elsewhen c then
+    w = 3;
+    reinit(s, 0);
+  end when;
+end WqS392;
+//// model: WqS400
+model WqS400
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = 1;
+  elsewhen e then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS400;
+//// model: WqS401
+model WqS401
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS401;
+//// model: WqS402
+model WqS402
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS402;
+//// model: WqS410
+model WqS410
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not b then
+    w = 1;
+  elsewhen e then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS410;
+//// model: WqS411
+model WqS411
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not b then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS411;
+//// model: WqS412
+model WqS412
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not b then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS412;
+//// model: WqS420
+model WqS420
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {b, c} then
+    w = 1;
+  elsewhen e then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS420;
+//// model: WqS421
+model WqS421
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {b, c} then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS421;
+//// model: WqS422
+model WqS422
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {b, c} then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS422;
+//// model: WqS430
+model WqS430
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when true then
+    w = 1;
+  elsewhen e then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS430;
+//// model: WqS431
+model WqS431
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when true then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS431;
+//// model: WqS432
+model WqS432
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when true then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS432;
+//// model: WqS440
+model WqS440
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when false then
+    w = 1;
+  elsewhen e then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS440;
+//// model: WqS441
+model WqS441
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when false then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS441;
+//// model: WqS442
+model WqS442
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when false then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS442;
+//// model: WqS450
+model WqS450
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when x > 1 then
+    w = 1;
+  elsewhen e then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS450;
+//// model: WqS451
+model WqS451
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when x > 1 then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS451;
+//// model: WqS452
+model WqS452
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when x > 1 then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS452;
+//// model: WqS460
+model WqS460
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b and c then
+    w = 1;
+  elsewhen e then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS460;
+//// model: WqS461
+model WqS461
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b and c then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS461;
+//// model: WqS462
+model WqS462
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b and c then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS462;
+//// model: WqS470
+model WqS470
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not (b or c) then
+    w = 1;
+  elsewhen e then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS470;
+//// model: WqS471
+model WqS471
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not (b or c) then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS471;
+//// model: WqS472
+model WqS472
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not (b or c) then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS472;
+//// model: WqS490
+model WqS490
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when initial() then
+    w = 1;
+  elsewhen e then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS490;
+//// model: WqS491
+model WqS491
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when initial() then
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS491;
+//// model: WqS492
+model WqS492
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when initial() then
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+    reinit(s, 1);
+  elsewhen c then
+    w = 3;
+  end when;
+end WqS492;
+//// model: WqS500
+model WqS500
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    reinit(s, 1);
+    w = 1;
+  elsewhen e then
+    w = 2;
+  end when;
+end WqS500;
+//// model: WqS501
+model WqS501
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    reinit(s, 1);
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+  end when;
+end WqS501;
+//// model: WqS502
+model WqS502
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b then
+    reinit(s, 1);
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+  end when;
+end WqS502;
+//// model: WqS510
+model WqS510
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not b then
+    reinit(s, 1);
+    w = 1;
+  elsewhen e then
+    w = 2;
+  end when;
+end WqS510;
+//// model: WqS511
+model WqS511
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not b then
+    reinit(s, 1);
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+  end when;
+end WqS511;
+//// model: WqS512
+model WqS512
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not b then
+    reinit(s, 1);
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+  end when;
+end WqS512;
+//// model: WqS520
+model WqS520
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {b, c} then
+    reinit(s, 1);
+    w = 1;
+  elsewhen e then
+    w = 2;
+  end when;
+end WqS520;
+//// model: WqS521
+model WqS521
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {b, c} then
+    reinit(s, 1);
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+  end when;
+end WqS521;
+//// model: WqS522
+model WqS522
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when {b, c} then
+    reinit(s, 1);
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+  end when;
+end WqS522;
+//// model: WqS530
+model WqS530
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when true then
+    reinit(s, 1);
+    w = 1;
+  elsewhen e then
+    w = 2;
+  end when;
+end WqS530;
+//// model: WqS531
+model WqS531
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when true then
+    reinit(s, 1);
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+  end when;
+end WqS531;
+//// model: WqS532
+model WqS532
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when true then
+    reinit(s, 1);
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+  end when;
+end WqS532;
+//// model: WqS540
+model WqS540
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when false then
+    reinit(s, 1);
+    w = 1;
+  elsewhen e then
+    w = 2;
+  end when;
+end WqS540;
+//// model: WqS541
+model WqS541
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when false then
+    reinit(s, 1);
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+  end when;
+end WqS541;
+//// model: WqS542
+model WqS542
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when false then
+    reinit(s, 1);
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+  end when;
+end WqS542;
+//// model: WqS550
+model WqS550
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when x > 1 then
+    reinit(s, 1);
+    w = 1;
+  elsewhen e then
+    w = 2;
+  end when;
+end WqS550;
+//// model: WqS551
+model WqS551
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when x > 1 then
+    reinit(s, 1);
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+  end when;
+end WqS551;
+//// model: WqS552
+model WqS552
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when x > 1 then
+    reinit(s, 1);
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+  end when;
+end WqS552;
+//// model: WqS560
+model WqS560
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b and c then
+    reinit(s, 1);
+    w = 1;
+  elsewhen e then
+    w = 2;
+  end when;
+end WqS560;
+//// model: WqS561
+model WqS561
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b and c then
+    reinit(s, 1);
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+  end when;
+end WqS561;
+//// model: WqS562
+model WqS562
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when b and c then
+    reinit(s, 1);
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+  end when;
+end WqS562;
+//// model: WqS570
+model WqS570
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not (b or c) then
+    reinit(s, 1);
+    w = 1;
+  elsewhen e then
+    w = 2;
+  end when;
+end WqS570;
+//// model: WqS571
+model WqS571
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not (b or c) then
+    reinit(s, 1);
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+  end when;
+end WqS571;
+//// model: WqS572
+model WqS572
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when not (b or c) then
+    reinit(s, 1);
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+  end when;
+end WqS572;
+//// model: WqS590
+model WqS590
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when initial() then
+    reinit(s, 1);
+    w = 1;
+  elsewhen e then
+    w = 2;
+  end when;
+end WqS590;
+//// model: WqS591
+model WqS591
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when initial() then
+    reinit(s, 1);
+    w = 1;
+  elsewhen x > 2 then
+    w = 2;
+  end when;
+end WqS591;
+//// model: WqS592
+model WqS592
+  Real x = time;
+  Boolean b = time > 1, c = time > 2, e = time > 3;
+  Real s(start = 1, fixed = true);
+  Real w;
+equation
+  der(s) = 1;
+  when initial() then
+    reinit(s, 1);
+    w = 1;
+  elsewhen {e, b} then
+    w = 2;
+  end when;
+end WqS592;

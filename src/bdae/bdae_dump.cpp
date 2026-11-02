@@ -1,7 +1,8 @@
 // 版式来源（OMC v1.25.0）：Expression.toString NFExpression.mo:1894-2225；Operator.priority / symbol NFOperator.mo:408-523；
 // Variable.toStream NFVariable.mo:527-578；Attributes.toString NFAttributes.mo:619-632；VariableAttributes.toString
 // NFBackendExtension.mo:393-423；VariablePointers.toString NBVariable.mo:1575-1609；VarData.toStringVerbose NBVariable.mo:2187-2223；
-// Equation.toString NBEquation.mo:968-989；EquationPointers.toString :3847-3899；EqData.toString :4416-4440；headline StringUtil.mo:52-78。
+// Equation.toString NBEquation.mo:968-989；WhenEquationBody.toString :3020-3041；WhenStatement.toString :3493-3508；
+// EquationPointers.toString :3847-3899；EqData.toString :4416-4440；headline StringUtil.mo:52-78。
 #include "bdae/bdae_dump.h"
 
 #include <string_view>
@@ -58,14 +59,10 @@ class ExpPrinter {
         return "if " + str(e.a) + " then " + str(e.b) + " else " + str(e.c);
       case ExprKind::Cast:   // NF_API 缺省开（Flags.mo:506），只在跑前端时关（CevalScriptBackend.mo:3601、:3611），打印时 cast 不打（:1967-1970）
         return str(e.a);
-      case ExprKind::Call: {
-        std::string s = dotted(e.call_name) + "(";
-        for (std::size_t i = 0; i < e.args.size(); ++i) {
-          if (i) s += ", ";
-          s += str(e.args[i]);
-        }
-        return s + ")";
-      }
+      case ExprKind::Call:
+        return dotted(e.call_name) + "(" + list(e.args) + ")";
+      case ExprKind::Array:
+        return "{" + list(e.args) + "}";
       default:
         YMC_UNREACHABLE("bdae::exp_string: expression kind rejected by lower");
     }
@@ -77,6 +74,14 @@ class ExpPrinter {
     for (std::size_t i = 0; i < parts.size(); ++i) {
       if (i) s += '.';
       s += in_.str(parts[i]);
+    }
+    return s;
+  }
+  std::string list(const std::vector<Id<Expr>>& items) {
+    std::string s;
+    for (std::size_t i = 0; i < items.size(); ++i) {
+      if (i) s += ", ";
+      s += str(items[i]);
     }
     return s;
   }
@@ -291,6 +296,7 @@ class Dumper {
     out += eq_bucket("Continuous", ed.continuous);
     out += eq_bucket("Discrete", ed.discretes);
     out += eq_bucket("(Exclusively) Initial", ed.initials);
+    out += eq_bucket("Removed", ed.removed);
     return out;
   }
   std::string eq_bucket(std::string_view name, const EqnSet& s) {
@@ -299,12 +305,28 @@ class Dumper {
     for (Id<Eqn> id : s.items) scal += d_.eqn_arena[id].size;
     std::string out = headline_4(std::string(name) + " Equations (" + std::to_string(s.items.size()) + "/" +
                                  std::to_string(scal) + ")");
-    for (std::size_t i = 0; i < s.items.size(); ++i) {
-      const Eqn& q = d_.eqn_arena[s.items[i]];
-      out += row_index(i + 1) + "[SCAL] (" + std::to_string(q.size) + ") " + exp_.str(q.lhs) + " = " + exp_.str(q.rhs) +
-             " (" + cref_string(q.name, in_) + ")\n";
-    }
+    for (std::size_t i = 0; i < s.items.size(); ++i) out += eq_text(d_.eqn_arena[s.items[i]], row_index(i + 1)) + "\n";
     return out + "\n";
+  }
+  std::string eq_text(const Eqn& q, const std::string& row) {
+    const std::string size = "(" + std::to_string(q.size) + ")", name = " (" + cref_string(q.name, in_) + ")";
+    if (q.kind == EqnKind::Scalar) return row + "[SCAL] " + size + " " + exp_.str(q.lhs) + " = " + exp_.str(q.rhs) + name;
+    // 续行也带序号：Equation.toString 把序号列接在 "[----] " 前面当 indent。
+    const std::string indent = row + "[----] ";
+    std::string out = row + "[WHEN] " + size + name + "\n";
+    for (std::size_t i = 0; i < q.when.size(); ++i) {
+      out += indent + (i ? "elsewhen " : "when ") + exp_.str(q.when[i].condition) + " then\n";
+      for (const WhenStmt& st : q.when[i].stmts) out += indent + "  " + when_stmt(st) + "\n";
+    }
+    return out + indent + "end when;";
+  }
+  std::string when_stmt(const WhenStmt& st) {
+    switch (st.kind) {
+      case WhenStmtKind::Assign: return exp_.str(st.a) + " := " + exp_.str(st.b);
+      case WhenStmtKind::Reinit: return "reinit(" + exp_.str(st.a) + ", " + exp_.str(st.b) + ")";
+      case WhenStmtKind::Assert: return "assert(" + exp_.str(st.a) + ", " + exp_.str(st.b) + ", " + exp_.str(st.c) + ")";
+    }
+    YMC_UNREACHABLE("WhenStmtKind");
   }
 
   const BackendDAE& d_;

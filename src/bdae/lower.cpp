@@ -1,9 +1,10 @@
 // 变量：lowerVariableData NBackendDAE.mo:505-667、lowerVariableKind :700-777；方程：lowerEquationData :815-862、
-// lowerEquationsAndAlgorithms :864-902、lowerEquation :904-1014（均 OMC v1.25.0）。
+// lowerEquationsAndAlgorithms :864-902、lowerEquation :904-1014、lowerWhenEquation :1141-1288（均 OMC v1.25.0）。
 //
 // 输入是默认路径的 FlatModel，不是 NB 路径的（ADR-008 F3）。标量范围内两者只差 combineBinaries，这一步在这里补。
 #include "bdae/lower.h"
 
+#include <algorithm>
 #include <string>
 #include <unordered_set>
 #include <utility>
@@ -22,6 +23,7 @@ class Lowerer {
     r_.dae.exprs = std::move(m_.exprs);
     if (!m_.algorithms.empty() || !m_.initial_algorithms.empty()) stop("algorithm section");
     if (m_.unrolled_for) stop("for equation");
+    if (m_.unseen_when_assign) stop("when equation in a dropped branch or removed component");
     artificials();
     known_.insert("time");
     for (const FlatVariable& v : m_.variables) known_.insert(dotted(v.name, [](Symbol x) { return x; }));
@@ -72,6 +74,7 @@ class Lowerer {
       case FlatVarKind::Var: break;
     }
     if (v.ty.kind != TypeKind::Real) return VarKind::Discrete;   // Integer / Boolean / 枚举 :754-756；String 是 IMPLICITLY_DISCRETE（NFAttributes.mo:539-540）
+    if (v.implicit_discrete) return VarKind::Discrete;           // :760，变率已不是 CONTINUOUS，stateSelect = always 那一支也进不去
     return always_state ? VarKind::State : VarKind::Algebraic;   // stateSelect = always → 人工状态 :736-738
   }
 
@@ -217,25 +220,159 @@ class Lowerer {
     }
   }
 
-  // 一条 FlatEquation → Eqn；方程式左右各调一次 combineBinaries（Equation.mapExp NFEquation.mo:716-722）。
-  Id<Eqn> equation(Id<FlatEquation> id) {
+  // 一条 FlatEquation → 零到多条 Eqn，按源序接到 out 后面。方程式左右各调一次 combineBinaries（Equation.mapExp NFEquation.mo:716-722）。
+  void equation(Id<FlatEquation> id, std::vector<Id<Eqn>>& out) {
     const FlatEquation& q = m_.eqs[id];
     switch (q.kind) {
       case FlatEqKind::Equality: break;
-      case FlatEqKind::If: stop("if equation"); return {};
-      case FlatEqKind::For: stop("for equation"); return {};
-      case FlatEqKind::When: stop("when equation"); return {};
-      case FlatEqKind::Assert: stop("assert"); return {};
-      case FlatEqKind::Terminate: stop("terminate"); return {};
-      case FlatEqKind::Reinit: stop("reinit"); return {};
-      case FlatEqKind::NoRetCall: stop("no-return call"); return {};
+      case FlatEqKind::If: return stop("if equation");
+      case FlatEqKind::For: return stop("for equation");
+      case FlatEqKind::When: return when_equation(q, out);
+      case FlatEqKind::Assert: return assert_equation(q, out);
+      case FlatEqKind::Terminate: return stop("terminate outside when");   // lowerEquation :1003-1005 报内部错，omc 没有这一段
+      case FlatEqKind::Reinit: return stop("reinit outside when");         // 同上 :1006-1008
+      case FlatEqKind::NoRetCall: return stop("no-return call");
     }
-    if (!expr_ok(q.a) || !expr_ok(q.b)) return {};
-    Eqn out;
-    if (!eqn_time(q.a, q.b, out.time)) return {};
-    out.lhs = combine_binaries(r_.dae.exprs, q.a);
-    out.rhs = combine_binaries(r_.dae.exprs, q.b);
-    return r_.dae.eqn_arena.add(std::move(out));
+    if (!expr_ok(q.a) || !expr_ok(q.b)) return;
+    Eqn e;
+    if (!eqn_time(q.a, q.b, e.time)) return;
+    e.lhs = combine_binaries(r_.dae.exprs, q.a);
+    e.rhs = combine_binaries(r_.dae.exprs, q.b);
+    out.push_back(r_.dae.eqn_arena.add(std::move(e)));
+  }
+
+  // lowerWhenEquation 的 ASSERT 支（:1167-1171）：条件同时当 when 条件，种类 EMPTY，所以进 Removed；初始方程里的进 Initial（typeList 先看 init）。
+  // 消息走 combineBinaries 的顶层：String 的 `+` 不可交换，也不往下探（Equation.mapExp 的 ASSERT 支 NFEquation.mo:766-772）。
+  void assert_equation(const FlatEquation& q, std::vector<Id<Eqn>>& out) {
+    if (!expr_ok(q.a) || !expr_ok(q.b)) return;
+    Eqn e;
+    e.kind = EqnKind::When;
+    e.size = 0;
+    e.time = EqnTime::Empty;
+    const Id<Expr> cond = combine_binaries(r_.dae.exprs, q.a);
+    const Id<Expr> msg = combine_binaries(r_.dae.exprs, q.b);
+    e.when.push_back({cond, {{WhenStmtKind::Assert, cond, msg, q.c.is_valid() ? q.c : default_assert_level()}}});
+    out.push_back(r_.dae.eqn_arena.add(std::move(e)));
+  }
+  // 两参 assert 的 AssertionLevel.error（AbsynToSCode.mo:64-65、:1597）：FlatEquation 里是空的，DAE dump 不打。
+  Id<Expr> default_assert_level() {
+    Expr e;
+    e.kind = ExprKind::EnumLit;
+    e.enum_path = {in_.intern("AssertionLevel"), in_.intern("error")};
+    return r_.dae.exprs.add(std::move(e));
+  }
+
+  // when 条件：标量式，或标量元素的数组字面量 `{a, b}`。只有这个位置收数组：别处的数组式 NB 路径不展开，这里两条路径相同（ADR-008 §6 A5）。
+  bool when_condition_ok(Id<Expr> id) {
+    const Expr& e = r_.dae.exprs[id];
+    if (e.ty.kind == TypeKind::Clock) { stop("clocked when"); return false; }
+    if (e.kind != ExprKind::Array) return expr_ok(id);
+    for (Id<Expr> x : e.args)
+      if (!expr_ok(x)) return false;
+    return true;
+  }
+
+  // Expression.logicNegate NFExpression.mo:5048-5058。
+  Id<Expr> logic_negate(Id<Expr> id) {
+    Expr e = r_.dae.exprs[id];
+    if (e.kind == ExprKind::BoolLit) {
+      e.bval = !e.bval;
+      return r_.dae.exprs.add(std::move(e));
+    }
+    if (e.kind == ExprKind::LogicalNot) return e.a;
+    Expr n;
+    n.kind = ExprKind::LogicalNot;
+    n.ty = e.ty;
+    n.a = id;
+    return r_.dae.exprs.add(std::move(n));
+  }
+  // combineConditions NBEquation.mo:3443-3456。acc 无效 = Expression.EMPTY。
+  Id<Expr> combine_conditions(Id<Expr> acc, Id<Expr> cond, bool invert) {
+    if (invert) cond = logic_negate(cond);
+    if (!acc.is_valid()) return cond;
+    Expr e;
+    e.kind = ExprKind::Logical;
+    e.ty = Type::boolean();
+    e.log = LogOp::And;
+    e.a = acc;
+    e.b = cond;
+    return r_.dae.exprs.add(std::move(e));
+  }
+
+  // lowerWhenEquation + WhenEquationBody.split（NBEquation.mo:3151-3257）。split 给每个被赋值的离散量、每个被 reinit 的状态各造一条 when：
+  // - 条目的先后：离散量走 UnorderedMap.keyList（:3173），是插入序，语句先被头插成反序，所以打印回到源序；状态走 UnorderedSet.toList（:3174），是
+  //   ComponentRef.hash 的桶序（S5b-0 实测）。这里只做离散量、状态各至多一个的情形，顺序是定的：[离散, 状态]；其余退出，放开时用 omc_unordered.h。
+  // - 第三段（:3241-3254）把 terminate、无返回值调用收进 flat_new，之后没人用：这些语句就此消失。全是这类语句的 when 整条消失，也不占 $RES_SIM 编号。
+  // - acc_condition 不随条目清零：离散量那一轮没用完的取反条件会漏到状态那一轮（:3195、:3226），所以 reinit 只出现在 elsewhen 里时条件是
+  //   `not c1 and c2`。这里照做，两轮共用一个 acc。
+  void when_equation(const FlatEquation& q, std::vector<Id<Eqn>>& out) {
+    std::vector<WhenBranch> flat;
+    std::vector<std::string> discretes, states;
+    const auto target = [&](Id<Expr> id, std::vector<std::string>& seen) {
+      const Expr& t = r_.dae.exprs[id];
+      if (t.kind != ExprKind::Cref) { stop("when target is not a reference"); return false; }
+      std::string name = dotted(t.cref.parts, [](const ExprCrefPart& p) { return p.name; });
+      if (std::find(seen.begin(), seen.end(), name) == seen.end()) seen.push_back(std::move(name));
+      return true;
+    };
+    for (const FlatEqBranch& br : q.branches) {
+      if (!when_condition_ok(br.cond)) return;
+      WhenBranch b;
+      b.condition = combine_binaries(r_.dae.exprs, br.cond);   // 前端先 combine，lower 才拆：拼出来的 not / and 不再 combine
+      for (Id<FlatEquation> id : br.body) {
+        const FlatEquation& s = m_.eqs[id];
+        switch (s.kind) {
+          case FlatEqKind::Equality:
+            if (!expr_ok(s.a) || !expr_ok(s.b) || !target(s.a, discretes)) return;
+            b.stmts.push_back({WhenStmtKind::Assign, s.a, combine_binaries(r_.dae.exprs, s.b), {}});
+            break;
+          case FlatEqKind::Reinit:
+            if (!expr_ok(s.a) || !expr_ok(s.b) || !target(s.a, states)) return;
+            b.stmts.push_back({WhenStmtKind::Reinit, s.a, combine_binaries(r_.dae.exprs, s.b), {}});
+            break;
+          case FlatEqKind::Terminate:
+          case FlatEqKind::NoRetCall:
+            break;
+          // lowerWhenBranchStatement 只认上面几种（:1262-1277），其余报内部错，omc 没有这一段。
+          case FlatEqKind::Assert: return stop("assert in when");
+          case FlatEqKind::If: return stop("if in when");
+          case FlatEqKind::For:
+          case FlatEqKind::When: return stop("nested equation in when");
+        }
+      }
+      flat.push_back(std::move(b));
+    }
+    if (discretes.size() > 1 || states.size() > 1) return stop("multi-assign when");
+
+    Id<Expr> acc;
+    std::vector<Id<Eqn>> bodies;
+    const auto round = [&](WhenStmtKind kind) {
+      Eqn e;
+      e.kind = EqnKind::When;
+      for (const WhenBranch& b : flat) {
+        std::vector<WhenStmt> picked;
+        for (const WhenStmt& s : b.stmts)
+          if (s.kind == kind) picked.push_back(s);
+        // 同一分支几个 reinit 指同一状态时取源序第一个（实跑，探针 LwbReinitTwice；getFirstReinit :3426-3441 的 break 写在 match 里，
+        // 跳不出 for，取到的是反序的 when_stmts 里最后一个）。
+        if (kind == WhenStmtKind::Reinit && picked.size() > 1) picked.resize(1);
+        if (picked.empty()) {
+          acc = combine_conditions(acc, b.condition, true);
+        } else {
+          e.when.push_back({combine_conditions(acc, b.condition, false), std::move(picked)});
+          acc = {};
+        }
+      }
+      // getType 要第一支恰好一条语句（:3055-3062，createName 用它），后面的支不管（size 也只看第一支，:3043-3048）。
+      if (e.when.front().stmts.size() != 1) return stop("when branch assigns a variable twice");
+      e.size = kind == WhenStmtKind::Assign ? 1 : 0;
+      e.time = e.size > 0 ? EqnTime::Discrete : EqnTime::Empty;
+      bodies.push_back(r_.dae.eqn_arena.add(std::move(e)));
+    };
+    if (!discretes.empty()) round(WhenStmtKind::Assign);
+    if (!states.empty() && !r_.unsupported) round(WhenStmtKind::Reinit);
+    // listAppend(lowerEquation(…), equations)（:878）：离散条目在表头一侧、编号小。out 是源序，表头在尾巴上，所以反着接。
+    out.insert(out.end(), bodies.rbegin(), bodies.rend());
   }
 
   void equations() {
@@ -244,11 +381,11 @@ class Lowerer {
     EqnData& ed = r_.dae.eqns;
     std::vector<Id<Eqn>> eqs, inits;
     for (Id<FlatEquation> id : m_.equations) {
-      eqs.push_back(equation(id));
+      equation(id, eqs);
       if (r_.unsupported) return;
     }
     for (Id<FlatEquation> id : m_.initial_equations) {
-      inits.push_back(equation(id));
+      equation(id, inits);
       if (r_.unsupported) return;
     }
     auto name_reversed = [&](const std::vector<Id<Eqn>>& v) {
@@ -258,8 +395,11 @@ class Lowerer {
     name_reversed(inits);
     name_reversed(eqs);
     for (Id<Eqn> id : eqs) {
-      (r_.dae.eqn_arena[id].time == EqnTime::Continuous ? ed.continuous : ed.discretes).items.push_back(id);
-      ed.simulation.items.push_back(id);
+      switch (r_.dae.eqn_arena[id].time) {
+        case EqnTime::Continuous: ed.continuous.items.push_back(id); ed.simulation.items.push_back(id); break;
+        case EqnTime::Discrete: ed.discretes.items.push_back(id); ed.simulation.items.push_back(id); break;
+        case EqnTime::Empty: ed.removed.items.push_back(id); break;
+      }
     }
     ed.initials.items = std::move(inits);
   }

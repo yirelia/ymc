@@ -306,6 +306,282 @@ Continuous Equations (1/1)
   YMC_CHECK_EQ(lower_src(src), std::string(omc));
 }
 
+// 一个 when 同时赋值和 reinit：拆成 [离散, 状态]，离散编号小；reinit 进 Removed；状态那一轮的条件带上取反的前一支（WhenEquationBody.split 不清 acc_condition）。
+// 期望值：`omc --newBackend -s --simCodeTarget=None -d=optdaedump,bltdump,backenddaeinfo LowerWhenSplit.mo` 的 (After Lowering) 段，omc 1.25.0 实跑。
+YMC_TEST(when_reinit_split) {
+  const char* src = R"omc(model LowerWhenSplit
+  Real x(start = 1, fixed = true);
+  discrete Real y;
+  Real w;
+equation
+  der(x) = 1;
+  w = 1;
+  when x > 1 then
+    y = 1;
+  elsewhen x + w + 1 > 2 then
+    y = 2;
+  elsewhen {x < 0, w > 3} then
+    y = pre(y) + w + 1;
+    reinit(x, -0.8 * pre(x));
+  end when;
+  w = 2;
+end LowerWhenSplit;
+)omc";
+  const char* omc = R"omc(####################################
+
+    BackendDAE: (After Lowering)
+
+####################################
+
+=================================================
+  Variable Data Simulation (scalar unknowns: 3)
+=================================================
+
+Algebraic Variables (2/2)
+***************************
+(1)       [ALGB] (1) Real x (fixed = true, start = 1.0)
+(2)       [ALGB] (1) Real w
+
+Discrete Variables (1/1)
+**************************
+(1)       [DISC] (1) discrete Real y
+
+Artificial Variables (2/1)
+****************************
+(1)       [DMMY] (0) $ANY$ 
+(2)       [TIME] (1) Real time
+
+
+=============================================================
+  Equation Data Simulation (scalar simulation equations: 4)
+=============================================================
+
+Continuous Equations (3/3)
+****************************
+(1)       [SCAL] (1) der(x) = 1.0 ($RES_SIM_4)
+(2)       [SCAL] (1) w = 1.0 ($RES_SIM_3)
+(3)       [SCAL] (1) w = 2.0 ($RES_SIM_0)
+
+Discrete Equations (1/1)
+**************************
+(1)       [WHEN] (1) ($RES_SIM_1)
+(1)       [----] when x > 1.0 then
+(1)       [----]   y := 1.0
+(1)       [----] elsewhen w + x + 1.0 > 2.0 then
+(1)       [----]   y := 2.0
+(1)       [----] elsewhen {x < 0.0, w > 3.0} then
+(1)       [----]   y := w + pre(y) + 1.0
+(1)       [----] end when;
+
+Removed Equations (1/0)
+*************************
+(1)       [WHEN] (0) ($RES_SIM_2)
+(1)       [----] when (not x > 1.0 and not w + x + 1.0 > 2.0) and {x < 0.0, w > 3.0} then
+(1)       [----]   reinit(x, -0.8 * pre(x))
+(1)       [----] end when;
+
+)omc";
+  YMC_CHECK_EQ(lower_src(src), std::string(omc));
+}
+
+// when 里赋值的 Real 是 [DISC]，不打 discrete；各类型的目标；只有 terminate / 无返回值调用的 when 整条消失、不占编号。
+// 期望值：`omc --newBackend -s --simCodeTarget=None -d=optdaedump,bltdump,backenddaeinfo LowerWhenKinds.mo` 的 (After Lowering) 段，omc 1.25.0 实跑。
+YMC_TEST(when_implicit_discrete) {
+  const char* src = R"omc(model LowerWhenKinds
+  type E = enumeration(one, two);
+  function report
+    input Real u;
+  algorithm
+    assert(u > 0, "h");
+  end report;
+  Real y(start = 1, fixed = true);
+  Real z = 3;
+  input Real u;
+  Integer n;
+  Boolean b;
+  String s;
+  E e;
+protected
+  Real h;
+equation
+  when {time > 1, b} then
+    y = pre(y) + 1;
+  end when;
+  when time > 2 then
+    terminate("stop");
+  end when;
+  when sample(0, 1) then
+    z = 1;
+  end when;
+  when edge(b) then
+    u = 2;
+  end when;
+  when change(n) then
+    n = pre(n) + 1;
+  end when;
+  when time > 3 then
+    b = not pre(b);
+    report(time);
+  end when;
+  when initial() then
+    s = "a" + "b";
+  end when;
+  when time > 4 then
+    e = E.two;
+  end when;
+  when time > 5 then
+    h = 1;
+  end when;
+end LowerWhenKinds;
+)omc";
+  const char* omc = R"omc(####################################
+
+    BackendDAE: (After Lowering)
+
+####################################
+
+=================================================
+  Variable Data Simulation (scalar unknowns: 7)
+=================================================
+
+Discrete Variables (7/7)
+**************************
+(1)       [DISC] (1) Real y (fixed = true, start = 1.0)
+(2)       [DISC] (1) Real z = 3.0
+(3)       [DISC] (1) Integer n
+(4)       [DISC] (1) Boolean b
+(5)       [DISC] (1) String s
+(6)       [DISC] (1) enumeration E(one, two) e
+(7)       [DISC] (1) protected Real h
+
+Top Level Input Variables (1/1)
+*********************************
+(1)       [DISC] (1) input Real u
+
+Artificial Variables (2/1)
+****************************
+(1)       [DMMY] (0) $ANY$ 
+(2)       [TIME] (1) Real time
+
+
+=============================================================
+  Equation Data Simulation (scalar simulation equations: 8)
+=============================================================
+
+Discrete Equations (8/8)
+**************************
+(1)       [WHEN] (1) ($RES_SIM_7)
+(1)       [----] when {time > 1.0, b} then
+(1)       [----]   y := pre(y) + 1.0
+(1)       [----] end when;
+(2)       [WHEN] (1) ($RES_SIM_6)
+(2)       [----] when sample(0.0, 1.0) then
+(2)       [----]   z := 1.0
+(2)       [----] end when;
+(3)       [WHEN] (1) ($RES_SIM_5)
+(3)       [----] when edge(b) then
+(3)       [----]   u := 2.0
+(3)       [----] end when;
+(4)       [WHEN] (1) ($RES_SIM_4)
+(4)       [----] when change(n) then
+(4)       [----]   n := pre(n) + 1
+(4)       [----] end when;
+(5)       [WHEN] (1) ($RES_SIM_3)
+(5)       [----] when time > 3.0 then
+(5)       [----]   b := not pre(b)
+(5)       [----] end when;
+(6)       [WHEN] (1) ($RES_SIM_2)
+(6)       [----] when initial() then
+(6)       [----]   s := "ab"
+(6)       [----] end when;
+(7)       [WHEN] (1) ($RES_SIM_1)
+(7)       [----] when time > 4.0 then
+(7)       [----]   e := E.two
+(7)       [----] end when;
+(8)       [WHEN] (1) ($RES_SIM_0)
+(8)       [----] when time > 5.0 then
+(8)       [----]   h := 1.0
+(8)       [----] end when;
+
+)omc";
+  YMC_CHECK_EQ(lower_src(src), std::string(omc));
+}
+
+// assert 成 [WHEN] (0)：默认 AssertionLevel.error；进 Removed，初始方程里的进 Initial；消息的 + 不交换、不下探，条件走 combineBinaries；占编号。
+// 期望值：`omc --newBackend -s --simCodeTarget=None -d=optdaedump,bltdump,backenddaeinfo LowerAssert.mo` 的 (After Lowering) 段，omc 1.25.0 实跑。
+YMC_TEST(assert_removed) {
+  const char* src = R"omc(model LowerAssert
+  parameter Real p = 1;
+  Real x;
+initial equation
+  x = 1;
+  assert(p > 0, "ini");
+equation
+  x = time;
+  assert(x > p, "a" + String(x), AssertionLevel.warning);
+  assert(x + p + 1 > 0, "b" + "c" + String(x + p + 1));
+  assert(x > 0, String(x + p, significantDigits = 3), AssertionLevel.error);
+end LowerAssert;
+)omc";
+  const char* omc = R"omc(####################################
+
+    BackendDAE: (After Lowering)
+
+####################################
+
+=================================================
+  Variable Data Simulation (scalar unknowns: 1)
+=================================================
+
+Algebraic Variables (1/1)
+***************************
+(1)       [ALGB] (1) Real x
+
+Parameter Variables (1/1)
+***************************
+(1)       [PRMT] (1) parameter Real p = 1.0 (fixed = true)
+
+Artificial Variables (2/1)
+****************************
+(1)       [DMMY] (0) $ANY$ 
+(2)       [TIME] (1) Real time
+
+
+=============================================================
+  Equation Data Simulation (scalar simulation equations: 1)
+=============================================================
+
+Continuous Equations (1/1)
+****************************
+(1)       [SCAL] (1) x = time ($RES_SIM_5)
+
+(Exclusively) Initial Equations (2/1)
+***************************************
+(1)       [SCAL] (1) x = 1.0 ($RES_SIM_1)
+(2)       [WHEN] (0) ($RES_SIM_0)
+(2)       [----] when p > 0.0 then
+(2)       [----]   assert(p > 0.0, "ini", AssertionLevel.error)
+(2)       [----] end when;
+
+Removed Equations (3/0)
+*************************
+(1)       [WHEN] (0) ($RES_SIM_4)
+(1)       [----] when x > p then
+(1)       [----]   assert(x > p, "a" + String(x, 6, 0, true), AssertionLevel.warning)
+(1)       [----] end when;
+(2)       [WHEN] (0) ($RES_SIM_3)
+(2)       [----] when p + x + 1.0 > 0.0 then
+(2)       [----]   assert(p + x + 1.0 > 0.0, "b" + "c" + String(x + p + 1.0, 6, 0, true), AssertionLevel.error)
+(2)       [----] end when;
+(3)       [WHEN] (0) ($RES_SIM_2)
+(3)       [----] when x > 0.0 then
+(3)       [----]   assert(x > 0.0, String(x + p, 3, 0, true), AssertionLevel.error)
+(3)       [----] end when;
+
+)omc";
+  YMC_CHECK_EQ(lower_src(src), std::string(omc));
+}
+
 // 同一棵 a + b + c + d：浅映射只收一次 → c + b + a + d；深映射逐层收 → c + a + b + d（NFSimplifyExp.combineBinaries 与
 // Expression.map 的组合，手推见 combine_binaries.cpp 头注；两个结果 omc 1.25.0 探针 LwaC02n 的方程 / 绑定行实跑一致）。
 YMC_TEST(combine_shallow_vs_deep) {
@@ -332,7 +608,14 @@ YMC_TEST(combine_string_add_is_not_commutative) {
 // 没做的构造不打印：退回原因（driver 据此退 66）。
 YMC_TEST(lower_stops_on_unsupported) {
   YMC_CHECK_EQ(lower_src("model M Real x; algorithm x := 1; end M;"), std::string("unsupported: algorithm section"));
-  YMC_CHECK_EQ(lower_src("model M Real x; equation when time > 1 then x = 1; end when; end M;"), std::string("unsupported: when equation"));
+  YMC_CHECK_EQ(lower_src("model M Real x, y; equation when time > 1 then x = 1; y = 2; end when; end M;"), std::string("unsupported: multi-assign when"));
+  // omc 在 lower 里报内部错的三种，ymc 不出文本（实跑 omc 1.25.0：lowerWhenBranchStatement、lowerEquation 的 TERMINATE 支）。
+  YMC_CHECK_EQ(lower_src("model M Real x; equation when time > 1 then assert(x > 1, \"m\"); end when; end M;"), std::string("unsupported: assert in when"));
+  YMC_CHECK_EQ(lower_src("model M Real x, y; equation when time > 1 then if x > 1 then y = 1; else y = 2; end if; end when; end M;"), std::string("unsupported: if in when"));
+  YMC_CHECK_EQ(lower_src("model M equation terminate(\"a\"); end M;"), std::string("unsupported: terminate outside when"));
+  // 没选中的分支里的 when 也把 y 标成隐式离散（实跑 omc 1.25.0：`[DISC] (1) Real y`），ymc 没收这条方程，不猜。
+  YMC_CHECK_EQ(lower_src("model M parameter Boolean p = false; Real y; equation if p then when time > 1 then y = 1; end when; else y = 2; end if; end M;"),
+               std::string("unsupported: when equation in a dropped branch or removed component"));
   YMC_CHECK_EQ(lower_src("model M Real x[2]; end M;"), std::string("unsupported: array variable"));
   YMC_CHECK_EQ(lower_src("model M record R Real x; end R; R r; end M;"), std::string("unsupported: record variable"));
 }

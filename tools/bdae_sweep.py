@@ -17,7 +17,8 @@
                   NOT-ADMITTED 的模型 ymc 照样跑，只看是否崩溃（崩溃 = CRASH）；打出来的文本不比，no-section 而 ymc 退 0 的单列一行。
 
 A5 按文本判（表达式里去掉字符串字面量后）：`{` `[`（数组构造、矩阵、下标）、` for `（推导式）、`$i<数字>`（绑定迭代量）、整型范围、
-点号运算符、数组型内建调用（A5_CALLS）。
+点号运算符、数组型内建调用（A5_CALLS）。例外只有一个位置：[WHEN] 的 when / elsewhen 条件顶层的数组字面量 `when {a, b} then`（含
+split 拼出来的 `not {a, b} and c`）不是路径差异，去掉这对括号，元素照旧查（ADR-008 §6 A5 补充）。
 
 JSON 与 tools/nf_live_sweep.py 同形（{"total", "records": [{path, status, verdict, …}]}），两次结果可用 vdiff 逐用例比。
 
@@ -62,11 +63,33 @@ _A5 = [("array-literal", re.compile(r"\{")), ("subscript", re.compile(r"\[")), (
        ("binding-iterator", re.compile(r"\$i\d")), ("elementwise-op", re.compile(r" \.[-+*/^] ")),
        ("range", re.compile(r"(?<![\w.])-?\w[\w.]*:\w"))]
 _A5_CALL = re.compile(r"(?<![\w.$'])(" + "|".join(A5_CALLS) + r")\(")
+_WHEN_HEAD = re.compile(r"^((?:else)?when )(.*)( then)$", re.M)
+_TOP_L = re.compile(r"(?:^|(?:not|and) )\(*$")
+_TOP_R = re.compile(r"\)*(?: and |$)")
 
 
 def body_of(section):
     """段文本去掉 headline_1 那五行。"""
     return section.split("\n", 5)[5]
+
+
+def _strip_top_braces(cond):
+    """去掉 when 条件顶层的数组字面量外壳：`{` 不在调用的括号里、前面是条件开头或 `not ` / `and `，配对的 `}` 后面是结尾或 ` and `。
+    别的位置（`sum({a, b}) > 1`、`{a, b}[1]`）不动，留给 A5 判。"""
+    drop, braces, calls = set(), [], []
+    for i, ch in enumerate(cond):
+        if ch == "(":
+            calls.append(i > 0 and (cond[i - 1].isalnum() or cond[i - 1] in "_'"))
+        elif ch == ")":
+            calls.pop()
+        elif ch == "{":
+            top = not braces and not any(calls) and _TOP_L.search(cond[:i])
+            braces.append(i if top else None)
+        elif ch == "}":
+            j = braces.pop()
+            if j is not None and _TOP_R.match(cond[i + 1:]):
+                drop.update((i, j))
+    return "".join(c for k, c in enumerate(cond) if k not in drop)
 
 
 def admission(section):
@@ -85,7 +108,12 @@ def admission(section):
         return False, "A2':record-equation"
     v, e = sc.parse_var_data(b), sc.parse_eq_data(b)
     texts = [i["decl"] for k, bk in v["buckets"].items() if k != "Artificial" for i in bk["items"]]
-    texts += [i["text"] for bk in e["buckets"].values() for i in bk["items"]]
+    for bk in e["buckets"].values():
+        for i in bk["items"]:
+            t = _STR.sub('""', i["text"])
+            if i["tag"] == "[WHEN]":
+                t = _WHEN_HEAD.sub(lambda m: m.group(1) + _strip_top_braces(m.group(2)) + m.group(3), t)
+            texts.append(t)
     for t in texts:
         t = _TAG.sub("", _STR.sub('""', t))
         for name, pat in _A5:

@@ -104,11 +104,11 @@ combineBinaries 与 `Expression.toString`，拼出整段 `(After Lowering)` 与�
 | 2 | 同一表达式在方程和绑定里形状不同：`sqrt(a * b)` 绑定变 `sqrt(b * a)`，方程不变 | 方程浅映射（每个顶层式调一次）；绑定和属性深映射，自底向上每节点调一次 | `NFEquation.mo:707`；`NFVariable.mo:490`；`NFBinding.mo:573-586` |
 | 3 | 打印版式：cast 不打印，MULTARY 打括号 | `Expression.toString` 版式与 DAEDump 不同，需新打印器 | `Flags.mo:506`、`CevalScriptBackend.mo:3611`、`NFExpression.mo:1967`、`:1936-1947` |
 | 4 | 变量声明行 | 打 `redeclare final inner outer flow`，打类型全名 `enumeration M.Enum(e1, e2)`。Integer / Boolean 上的 `discrete` 不打。`final` 打的是 `Attributes.isFinal`（S5a-1a 修正）：声明或修饰的，加上压平之前被 `Structural.markComponent` 标过的（它同时 setFinal，`NFStructural.mo:318-319`）；别名连带只改变率（`NFTyping.mo:1150-1155`），压平之后只由 `Flatten.updateVariability` 补变率（`NFFlatten.mo:3101-3113`），都不打。属性只打 fixed、start、min、max、nominal、StateSelect、TearingSelect。parameter 和外部对象补 `fixed = true` | `NFAttributes.mo` toString；`NFBackendExtension.mo:396-420`、`:1003`；`NBackendDAE.mo:774`。`src/flat/flat.h:47` 这些前缀不存 |
-| 5 | 变量种类 | when 里赋值的 Real 是 `[DISC]`。顶层 input 优先于种类进 Top Level Input。Clock → `[CLCK]`，外部对象 → `[EXTO]` | `NBackendDAE.mo:549-555`、`:700-777`；`NFVariable.mo:316` |
+| 5 | 变量种类 | when 里赋值的 Real 是 `[DISC]`（S5a-1b 补充：`updateImplicitVariability` 在实例化时走全类树，`NFInst.mo:193`、`:3847-4097`，所以结构 if 没选中的分支、移除的条件组件、零长度组件数组里的 when 也算；打印不带 `discrete`，stateSelect = always 和顶层 input 也变 `[DISC]`）。顶层 input 优先于种类进 Top Level Input。Clock → `[CLCK]`，外部对象 → `[EXTO]` | `NBackendDAE.mo:549-555`、`:700-777`；`NFVariable.mo:316` |
 | 6 | 绑定不下沉 | `(After Lowering)` 里绑定还在变量上，Bindings 模块才造方程 | `NBBindings.mo:68-81` |
 | 7 | 方程编号 | `$RES_SIM_n` 对头插列表逐个编号，最后一条是 0。if 方程外层先、内层前序。`$RES_BND / _AUX / _EVT` 共用 uniqueIndex 继续往上 | `NBackendDAE.mo:836`；`NBEquation.mo:1769`、`:2771`；`NBBindings.mo:68-81` |
 | 8 | 方程入桶 | 看类型不看变量：Real 输出的 algorithm 进 Continuous，即使输出变量是 `[DISC]` | `NBackendDAE.mo:1290`；`NFComponentRef.mo:2173`；`NBEquation.mo:4661` |
-| 9 | assert | 变成 `[WHEN] (0)`，进 Removed，打默认 `AssertionLevel.error` | `NBackendDAE.mo:1167` |
+| 9 | assert | 变成 `[WHEN] (0)`，进 Removed，打默认 `AssertionLevel.error`。initial 段的进 Initial 桶；when 体里的 assert、if、for 和顶层 terminate 在 lower 报内部错（S5a-1b 实跑，`NBackendDAE.mo:1284-1286`、`:1003-1005`）；when 里的 terminate、无返回值调用被 `split` 丢弃（`NBEquation.mo:3241-3254`） | `NBackendDAE.mo:1167` |
 | 10 | when 拆分 | 一个 when 赋多个变量时拆成多条，顺序走哈希（`UnorderedMap.keyList`）。741 个里 19 个涉及，2 个与源序不同 | `NBEquation.mo:3151`、`:3173-3174` |
 | 11 | 人工变量 | `$ANY$`（`[DMMY] (0)`）、`time` 恒在 Artificial 桶，计数 `(2/1)`。绑定里的迭代量（`$i1`）追加到这里 | `NBackendDAE.mo:533-537`、`:649-654` |
 | 12 | 打印怪癖 | 块语句后空行、`while … then`、`elseif true then`、`#UNKNOWN STATEMENT#`（break） | 实跑 |

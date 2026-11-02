@@ -317,6 +317,11 @@ class Flattener {
     check_discrete_reals();
     check_pre_args();
     check_const_slices();
+    for (FlatVariable& v : result_.model.variables) {
+      v.implicit_discrete = when_assigned_.count(path_key(v.name)) > 0;
+      // 没展开的组件（移除的条件组件、零长度数组）里的 when，能赋到组件外面的只有 outer → 外层的 inner。
+      if (dropped_comp_ && v.is_inner) result_.model.unseen_when_assign = true;
+    }
     prune_functions();
     for (const auto& [fn, why] : deferred_fns_) {   // 缓下的常量调用（见 deferred_fns_）：函数还在 = 调用没随选支丢掉
       if (result_.unsupported) break;
@@ -1225,6 +1230,7 @@ class Flattener {
           rs.resize(prefix.size());
           rs.push_back({});
           removed_.insert(int_key(rn, rs));
+          dropped_comp_ = true;
           continue;
         }
       }
@@ -1451,7 +1457,10 @@ class Flattener {
           std::int64_t total = 1;
           for (std::int64_t d : adims) total *= (d > 0 ? d : 0);
           if (total > 1024) { set_unsupported("composite array too large"); continue; }
-          if (total == 0) continue;   // 零长度复合数组：没有元素（ZeroDimUnconnectedFlow1/2）
+          if (total == 0) {           // 零长度复合数组：没有元素（ZeroDimUnconnectedFlow1/2）
+            dropped_comp_ = true;
+            continue;
+          }
           bool shape_ok = true;
           for (const ModSource& m : dmods)
             if (!split_mod_ok(m.mod, ci, TypeKind::Unknown, adims, m.scope, m.vprefix)) shape_ok = false;
@@ -4089,6 +4098,7 @@ class Flattener {
         return false;
       }
       solved.insert(expr_cref_key(result_.model.exprs[lhs].cref));
+      when_assigned_.insert(path_key(lname));
       return true;
     };
     for (Id<SEquation> beid : body) {
@@ -4283,6 +4293,8 @@ class Flattener {
     return true;
   }
   bool when_if_mismatch_ = false;   // 正在收的 when 方程体里有 if 方程的各分支解出的变量不同（见 collect_when_body）
+  std::unordered_set<std::string> when_assigned_;   // 收过的 when 方程体解出的变量（path_key）。收尾折叠掉的 if 分支里的也算，所以不从压平结果里扫
+  bool dropped_comp_ = false;                       // 有没展开的复合组件（见 flatten() 收尾的 unseen_when_assign）
 
   // if 方程（flattenIfEquation，NFFlatten.mo:1922-2050 v1.25.0；定型 typeIfEquation，NFTyping.mo:3507-3558）：顶层与 when 体里
   // 同一套（when 体的方程照样经 flattenEquation 进来，NFFlatten.mo:1885-1889 / flattenEqBranch :2052-2066）。体怎么收由调用方定：
@@ -23600,22 +23612,24 @@ class Flattener {
       self(self, e.b);
       self(self, e.c);
     };
-    auto walk = [&](auto& self, const std::vector<Id<SEquation>>& eqs) -> void {
+    auto walk = [&](auto& self, const std::vector<Id<SEquation>>& eqs, bool in_when) -> void {
       for (Id<SEquation> id : eqs) {
         if (result_.unsupported) return;
         const SEquation q = I_.scode.eqs[id];   // 拷贝
         scan(scan, q.a);
         scan(scan, q.b);
         scan(scan, q.c);
+        if (in_when && q.kind == SEqKind::Equals) result_.model.unseen_when_assign = true;
+        const bool w = in_when || q.kind == SEqKind::When;
         for (const SEqBranch& b : q.branches) {
           scan(scan, b.cond);
-          self(self, b.body);
+          self(self, b.body, w);
         }
-        self(self, q.body);
-        self(self, q.else_body);
+        self(self, q.body, w);
+        self(self, q.else_body, w);
       }
     };
-    walk(walk, body);
+    walk(walk, body, eq_in_when_ > 0);
   }
   // 已发射的标量参数 / 常量 names 的绑定换成求得的值 v（omc 求值存回组件，见 clock_ctor）；绑定是对另一参数的（无下标）
   // 引用 → 沿链继续存回；已是字面量 → 到头。找不到 / 别的绑定式 / 无绑定 → false（调用方 SKIP）。

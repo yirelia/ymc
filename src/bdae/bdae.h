@@ -4,7 +4,8 @@
 // VariablePointers 共享同一个 `Pointer<Variable>`：一个变量可以同时在 unknowns 和 algebraics 里，改种类只改 arena 里那一格。
 // 表达式从 FlatModel 整个搬过来（ExprArena 的所有权移交），Id<Expr> 原样有效，不用深拷贝。
 //
-// 这里只有 S5a-1a（lower + 全 [SCAL] 方程）用到的那部分：D1 列的其余种类、桶、字段等用到它们的桶再加，靠 -Werror=switch 保证不漏。
+// 这里只有 S5a-1a / 1b（lower：[SCAL]、结果不依赖哈希序的 [WHEN]）用到的那部分：D1 列的其余种类、桶、字段等用到它们的桶再加，
+// 靠 -Werror=switch 保证不漏。
 #pragma once
 #include <cstdint>
 #include <vector>
@@ -40,22 +41,37 @@ struct VarData {
   VarSet unknowns, states, algebraics, discretes, top_level_inputs, parameters, constants, artificials;
 };
 
-enum class EqnTime : std::uint8_t { Continuous, Discrete };      // EquationKind（NBEquation.mo:3790）的子集
+enum class EqnTime : std::uint8_t { Continuous, Discrete, Empty };      // EquationKind（NBEquation.mo:3790）的子集
+enum class EqnKind : std::uint8_t { Scalar, When };                     // Equation（NBEquation.mo:899-966）的子集
 
-// 现在只有 SCALAR_EQUATION（NBEquation.mo:899 起）。exclusively_initial 由所在的桶表达：initials 里的就是。
+// WhenStatement（NBEquation.mo:3459-3491）。没有 TERMINATE、NORETCALL：WhenEquationBody.split 把它们丢了（见 lower.cpp when_equation）。
+enum class WhenStmtKind : std::uint8_t { Assign, Reinit, Assert };
+struct WhenStmt {
+  WhenStmtKind kind = WhenStmtKind::Assign;
+  Id<Expr> a, b, c;                 // Assign：lhs、rhs；Reinit：状态、值；Assert：条件、消息、级别
+};
+// WHEN_EQUATION_BODY（:3000-3004）。else_when 链铺平：第一支是 when，其余是 elsewhen。
+struct WhenBranch {
+  Id<Expr> condition;
+  std::vector<WhenStmt> stmts;
+};
+
+// exclusively_initial 由所在的桶表达：initials 里的就是。
 struct Eqn {
+  EqnKind kind = EqnKind::Scalar;
   ExprCref name;                    // $RES_SIM_n（EquationAttributes.residualVar）
-  Id<Expr> lhs, rhs;
+  Id<Expr> lhs, rhs;                // Scalar
+  std::vector<WhenBranch> when;     // When
   int size = 1;
   EqnTime time = EqnTime::Continuous;
 };
 
 struct EqnSet { std::vector<Id<Eqn>> items; };
 
-// EQ_DATA_SIM（NBEquation.mo:4303-4313）的子集。simulation = continuous + discretes，打印时只用它算 `scalar simulation equations`。
+// EQ_DATA_SIM（NBEquation.mo:4303-4313）的子集。simulation = continuous + discretes，打印时只用它算 `scalar simulation equations`；removed 不算。
 struct EqnData {
   int unique_index = 0;             // 下一个可用的 $RES_… 序号（Bindings 等模块接着往上编，NBBindings.mo:68-81）
-  EqnSet simulation, continuous, discretes, initials;
+  EqnSet simulation, continuous, discretes, initials, removed;
 };
 
 struct BackendDAE {

@@ -74,12 +74,13 @@ class Combiner {
         const Id<Expr> x = combine(e.a), y = combine(e.b);
         return with_children(id, x, y, combine(e.c), nullptr);
       }
-      case ExprKind::Call: {                 // :1673-1676
+      case ExprKind::Call:                   // :1673-1676
+      case ExprKind::Array: {                // :1649-1655（literal 的数组里没有可并的式子，不用判）。现在只有 when 条件走到这里
         std::vector<Id<Expr>> args;
         for (Id<Expr> arg : e.args) args.push_back(combine(arg));
         return with_children(id, {}, {}, {}, &args);
       }
-      // ponytail: Cref 的下标、数组、元组、Range、记录……（:1644-1742）都走不到：bdae::lower 在这之前 SKIP 掉了。放开数组时照原文补。
+      // ponytail: Cref 的下标、元组、Range、记录……（:1644-1742）都走不到：bdae::lower 在这之前 SKIP 掉了。放开数组时照原文补。
       default:
         return id;
     }

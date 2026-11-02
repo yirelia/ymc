@@ -2876,7 +2876,9 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       FlatVariable 补前缀、无方程 + 纯 `[SCAL]` 模型，其余 SKIP；`tools/bdae_sweep.py`。语料 a PASS 44 / 109（首批门集 32 / 49，余 17 是 when 9、algorithm 3、if 3、assert 2），
       语料 b PASS 845 / 1857，探针 2820 个（评审手写的 520 个单成 `s5a1a-adv`），FAIL 0、CRASH 0；前端三个门 changed 0。
       留账：`note_attr_final` 的 Late 标记混着定型和压平两种，放开数组、assert、Clock 时要拆（代码里标了 `ponytail:`）；`parglobal` / `parlocal` 前缀没有探针（解析器没这两个词）。
-- [ ] (S5a-1b) `[WHEN]`（单赋值）+ assert 入 Removed；(S5a-1c) `[-IF-]`、`[ALGO]`；(S5b-0) 哈希容器 → 多赋值 when。
+- [x] (S5a-1b) `[WHEN]`（离散量、状态各至多一个）+ reinit + assert 入 Removed + `when {a, b}`（2026-11-02）。语料 a PASS 58 / 109（首批门集 42 / 49，余 7 是 algorithm 3、if 4），语料 b PASS 928 / 1857。
+      留账：`unseen_when_assign` 判得偏宽（dropped branch 里任何 when 赋值都退出）；放开 algorithm 时 `when_assigned_` 要记语句 when（`updateImplicitVariabilityStmt`）。
+- [ ] (S5a-1c) `[-IF-]`、`[ALGO]`、顶层 no-return call；多赋值 when（离散量走插入序，不依赖哈希；多 reinit 用 `omc_unordered.h`）。
 - [ ] (S5a-2…) pre 模块，序按语料 a：Detect States → Events → Simplify → Alias → FunctionAlias → Early Inline → Bindings（Bindings 在语料 b 影响 218 个，可提前）。
 - [ ] (S5a) lower + NB 九个 pre 模块，按模块增量（Bindings → FunctionAlias → Early Inline → Simplify 1 → Alias → Simplify 2 →
       Remove Stream → Detect States → Events）；首批子集 `simulation/modelica/NBackend/{basics,alias,event_handling}` + equations /
