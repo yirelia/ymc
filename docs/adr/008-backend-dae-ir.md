@@ -301,7 +301,11 @@ Bindings（`Modules/2_Pre/NBBindings.mo:50`）、FunctionAlias（`NBFunctionAlia
 - **Q6 已答**：A2 挡不住记录，A2' 直接挡。
 - **D1 第 4 条补充**：`ExprKind` 没有 Multary，NB 的打印和后续模块都带 MULTARY，要加这个节点。5a–5b 的 VarKind 再加 Clock、ExtObj。
 - **F3 补充**：`resetGlobalFlags` 还关了 `NF_EXPAND_OPERATIONS`、`NF_EXPAND_FUNC_ARGS`（`NFInst.mo:332-333`）。
-- **F6 补充**：哈希序在 lowering 就起作用（when 拆分 `NBEquation.mo:3151`、`:3173-3174`），S5b-0 提前到多赋值 when 进门之前。
+- **F6 补充（S5b-0 更正）**：lowering 里只有多个 reinit 的拆分走桶序（`Set.toList(state_set)`，`NBEquation.mo:3174`）。多赋值走 `UnorderedMap.keyList`，是插入序，与哈希无关
+  （`Util/UnorderedMap.mo:429-433` → `Vector.toList`），不用等哈希容器。F6 把分区列表 `valueList(cluster_map)` 列在桶序下也不对，它同样是插入序，Map 的桶只用来查找。
+- **F6 漏项（S5b-0）**：`mergeRows` 走 `UnorderedSet.unique_list`，是整数键桶序（`Modules/1_Main/NBSorting.mo:591`）；`tarjan` 无条件进 phase 2（`:263`），标量模型只要有环，块序就依赖它。
+- **D4 补全（S5b-0）**：`ComponentRef.hash` 末段先，段内先名字后逐个下标文本，段间和下标间无分隔符，每步都 `labs`，所以分段算不等于拼接后算（`NFComponentRef.mo:1448-1487`、
+  `meta_modelica_builtin.c:156-173`）。Map 的桶数扩容只影响查找，不影响序。复刻在 `src/bdae/omc_unordered.h`，差分工具在 `tools/omc_hash/`。
 - **附录 A3 的 1265 行**是 stdout 1236 + stderr 29，`Number of …` 走 stderr。
 - **D1 `Var` 补充（S5a-1a）**：`Variable.toStream` 打声明前缀（`NFVariable.mo:536-540`、`NFAttributes.mo:619-632`），`Var` 要有 protected、final、redeclare、
   inner / outer、connector、variability、direction；`attrs` 存 `FlatVarAttr`，`tearing_select` 单放。

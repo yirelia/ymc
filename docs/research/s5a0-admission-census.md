@@ -109,7 +109,7 @@ combineBinaries 与 `Expression.toString`，拼出整段 `(After Lowering)` 与�
 | 7 | 方程编号 | `$RES_SIM_n` 对头插列表逐个编号，最后一条是 0。if 方程外层先、内层前序。`$RES_BND / _AUX / _EVT` 共用 uniqueIndex 继续往上 | `NBackendDAE.mo:836`；`NBEquation.mo:1769`、`:2771`；`NBBindings.mo:68-81` |
 | 8 | 方程入桶 | 看类型不看变量：Real 输出的 algorithm 进 Continuous，即使输出变量是 `[DISC]` | `NBackendDAE.mo:1290`；`NFComponentRef.mo:2173`；`NBEquation.mo:4661` |
 | 9 | assert | 变成 `[WHEN] (0)`，进 Removed，打默认 `AssertionLevel.error`。initial 段的进 Initial 桶；when 体里的 assert、if、for 和顶层 terminate 在 lower 报内部错（S5a-1b 实跑，`NBackendDAE.mo:1284-1286`、`:1003-1005`）；when 里的 terminate、无返回值调用被 `split` 丢弃（`NBEquation.mo:3241-3254`） | `NBackendDAE.mo:1167` |
-| 10 | when 拆分 | 一个 when 赋多个变量时拆成多条，顺序走哈希（`UnorderedMap.keyList`）。741 个里 19 个涉及，2 个与源序不同 | `NBEquation.mo:3151`、`:3173-3174` |
+| 10 | when 拆分 | 一个 when 赋多个变量时拆成多条。多赋值走 `UnorderedMap.keyList`，是插入序，打印回到源序；只有多个 reinit 走 `Set.toList` 的桶序（S5b-0 更正，原文写的"走哈希"不准确）。741 个里 19 个涉及，2 个与源序不同，这 2 个没有定位 | `NBEquation.mo:3151`、`:3173-3174`；`UnorderedMap.mo:429-433`；打印反序 `NBEquation.mo:4661` |
 | 11 | 人工变量 | `$ANY$`（`[DMMY] (0)`）、`time` 恒在 Artificial 桶，计数 `(2/1)`。绑定里的迭代量（`$i1`）追加到这里 | `NBackendDAE.mo:533-537`、`:649-654` |
 | 12 | 打印怪癖 | 块语句后空行、`while … then`、`elseif true then`、`#UNKNOWN STATEMENT#`（break） | 实跑 |
 | 13 | 路径差异 | NB 路径不展开、不对数组实参的调用求值（`NF_EXPAND_OPERATIONS` / 标量化关闭） | `NFInst.mo:324-333`；`NFSimplifyExp.mo:189-198`、`:941`、`:1135` |

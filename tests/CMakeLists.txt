@@ -87,3 +87,12 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/src/bdae/lower.h" AND EXISTS "${CMAKE_SOURCE_DIR}
     target_link_libraries(lower_test PRIVATE ymc_frontend)
   endif()
 endif()
+# S5b-0：OMC 哈希容器复刻（只依赖 ymc_base，不链前端）。
+if(EXISTS "${CMAKE_SOURCE_DIR}/src/bdae/omc_unordered.h" AND EXISTS "${CMAKE_SOURCE_DIR}/tests/unit/bdae/omc_unordered_test.cpp")
+  ymc_add_test(omc_unordered_test unit/bdae/omc_unordered_test.cpp)
+endif()
+# tools/omc_hash 的差分驱动：工具不是测试，不进 ctest，也不进默认构建（EXCLUDE_FROM_ALL），要用时 --target omc_hash_drv。
+if(EXISTS "${CMAKE_SOURCE_DIR}/tools/omc_hash/hsh_drv.cpp")
+  add_executable(omc_hash_drv EXCLUDE_FROM_ALL "${CMAKE_SOURCE_DIR}/tools/omc_hash/hsh_drv.cpp")
+  target_link_libraries(omc_hash_drv PRIVATE ymc_base ymc_warnings)
+endif()

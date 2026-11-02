@@ -94,7 +94,7 @@ ymc 以 **omc 1.25.0 实测**为准；这些用例从 `docs/research/s3-easy-sli
 `stringHashDjb2`（`SimulationRuntime/c/meta/meta_modelica_builtin.c:119-157`，在 C `long` 上累乘后 `labs`）。安装版 1.25.0
 是 Windows 构建（LLP64，long 32 位），testsuite 的 `// Result:` 多在 Linux（long 64 位）生成：成员名 ≥ 4 字符时两者可能
 给出不同的虚变量序（YmcExpHash2 探针：speed/torque/temp 实测 = 32 位序）。ymc 按 32 位（1.25.0 实测）；将来若有用例文件
-与实跑在虚变量序上分歧，按本条记账。
+与实跑在虚变量序上分歧，按本条记账。S5b-0 补全：`labs` 每一步都做，`labs(LONG_MIN)` 实测是 +2147483648；cref 末段先、段间无分隔符（`NFComponentRef.mo:1448-1487`）；实现在 `src/bdae/omc_unordered.h`。
 
 **编译期求值的超越函数（已处理）**：omc 1.25.0 的编译期求值用 UCRT 的 sin / cos / exp / pow …（libOpenModelicaCompiler.dll 从
 api-ms-win-crt-math 导入），各家 libm 末位常差一个 ulp：TDM-GCC 链进的 libmingwex 抽样 1.1 万点 78 个与 UCRT 不同
@@ -263,7 +263,7 @@ String(Real) 的指数位数（2026-10-14，跟实跑）：编译期求值 `Stri
 ConnectDiffOrder1/BothInside/ThreeWay（探针在 scratchpad）。
 
 **数据结构**：`DisjointSets` = 并查集，元素 = **标量连接器变量**，键 = `(flat cref, face)`，face ∈ {INSIDE, OUTSIDE}。
-`UnorderedMap` 的 `toArray` 按**插入序**返回键（非哈希序，可复刻，UnorderedMap.mo:494-510）。
+`UnorderedMap` 的 `toArray` 按**插入序**返回键（非哈希序，可复刻，UnorderedMap.mo:441-457）。
 
 **建集 `NFConnectionSets.fromConnections`（NFConnectionSets.mo:77-82）**：
 1. **seed（`collectFlows`, NFConnections.mo:151-156）**：把**每个 flow 变量**当 **INSIDE** 单元素集加入，`addFlow`

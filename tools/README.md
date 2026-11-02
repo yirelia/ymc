@@ -46,6 +46,21 @@ python -I tools/bdae_sweep.py --corpus a --ymc <ymc.exe> [--json out.json]     #
 python -I tools/bdae_sweep.py --probes --ymc <ymc.exe>                         # 同上，tests/probes/bdae/*.probes 现跑 omc
 ```
 
+## OMC 哈希容器差分（S5b-0）
+
+`src/bdae/omc_unordered.h` 与 omc 1.25.0 的三层对拍。OMC 源码固定读 tag v1.25.0，`--omc-src` 缺省 `C:/dev/OpenModelica`；oracle 只用 PATH 上的安装版 omc。
+
+```
+cmake --build <构建目录> -j 3 --target omc_hash_drv             # C++ 侧的驱动，不进默认构建和 ctest
+python -I tools/omc_hash/diff.py --work <工作目录> --drv <构建目录>/tests/omc_hash_drv --hash   # L0：裸运行时的整数值（真 stringHashDjb2）
+python -I tools/omc_hash/diff.py --work <工作目录> --drv <…> --seed 1 [--seed 2 …]              # L1：真容器（v1.25.0 原文由 omc 编译）差分，dump 带桶数
+python -I tools/omc_hash/diff.py --work <工作目录> --drv <…> --ut                               # 单测 omc_unordered_test [容器] 用例的期望值来源
+python -I tools/omc_hash/chk.py --drv <…> --run-dir <目录> --probes tests/probes/bdae/s5b0.probes   # L2：预测 vs NB 实跑（分区序、Full 邻接行、when 拆分）
+python -I tools/omc_hash/chk.py --drv <…> --run-dir <目录> --list corpus.txt                    # 同上，语料；每行 名字<TAB>model.mo[<TAB>额外 omc 参数…]
+```
+`mkhsh.py` 备 oracle 目录，`gen_ops.py` 写操作脚本，都由 `diff.py` 调用，用法见各自文件头。`chk.py` 的 `Emit` / `scalar_row_ops` 是 `collectDependencies` union 树的已验证参考（只覆盖 SCALAR 方程），接 S5b 邻接时照它。
+when 拆分有两种序：`split` 返回序（`$RES_SIM_k` 的 k 升序）和 dump 的打印序（再反一次，`typeList` 头插），说明在 `chk.py` 的 `check_when`。
+
 ## Dymola / 参考 / 报告
 
 ```

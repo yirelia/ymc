@@ -2883,8 +2883,8 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
 - [ ] (S5a) lower + NB 九个 pre 模块，按模块增量（Bindings → FunctionAlias → Early Inline → Simplify 1 → Alias → Simplify 2 →
       Remove Stream → Detect States → Events）；首批子集 `simulation/modelica/NBackend/{basics,alias,event_handling}` + equations /
       parameters 的准入模型；验收见 ADR-008 D5（签名一致、`.bdae` 回读逐字节、单测期望来自 oracle、四套构建零警告）。
-- [ ] (S5b-0) OMC 哈希容器复刻：`UnorderedSet` / `UnorderedMap` 的桶数 / 扩容 / 插入 / 遍历序 + `ComponentRef.hash`（djb2，Windows
-      32 位 long）；探针核实遍历序与 OMC 逐位一致（块序逐位同序的前置）。
+- [x] (S5b-0) OMC 哈希容器复刻：`src/bdae/omc_unordered.h`（`UnorderedSet` / `UnorderedMap` 的桶数、扩容、插入、遍历序，`ComponentRef.hash` 的 djb2 与 Windows 32 位 long），`tools/omc_hash/` 差分（2026-11-03）。
+      接入留给 S5b-1：占用集要逐步跟 `collectDependencies` 的 union 树，`Solvability.filter` 的反序与 `upgradeRow` 未核实，对 `Normal Adjacency Matrix` 查。
 - [ ] (S5b) 邻接 / 匹配 / 排序 / 分区（块与各序逐位同 NB）。
 - [ ] (S6 提前) 生成 C + 借 OMC 运行时仿真（5a / 5b 落地后即开），之后 5c 指标约简、5d 初始化、5e 撕裂 / 雅可比以 L2 数值验收。
 
