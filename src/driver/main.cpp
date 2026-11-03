@@ -21,6 +21,8 @@
 //       （从头线第一个 `#` 到下一段头线之前，tools/structcompare.py stage_section_texts）。没做的构造退 66、不打印。
 //   ymc --dump-after=bindings (<file.mo> | --load-model=P --class=Q.N)
 //       同上，再跑 pre 模块 Bindings，打 `BackendDAE: (Bindings)` 一段。
+//   ymc --dump-after=functionalias (<file.mo> | --load-model=P --class=Q.N)
+//       同上，Bindings 之后再跑 FunctionAlias，打 `BackendDAE: (FunctionAlias)` 一段。
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -41,6 +43,7 @@
 #include "base/symbol.h"
 #include "bdae/bdae_dump.h"
 #include "bdae/bindings.h"
+#include "bdae/function_alias.h"
 #include "bdae/lower.h"
 #include "parse/lexer.h"
 #include "parse/parser.h"
@@ -75,6 +78,7 @@ void print_help() {
       "  ymc --dump-after=flat <f>...   instantiate + flatten (S3, default)\n"
       "  ymc --dump-after=lower <f>     flatten + lower, print the (After Lowering) section (S5)\n"
       "  ymc --dump-after=bindings <f>  lower + the Bindings module, print the (Bindings) section (S5)\n"
+      "  ymc --dump-after=functionalias <f>  ... + the FunctionAlias module, print the (FunctionAlias) section (S5)\n"
       "  ymc --check-syntax <f>...      syntax check only\n"
       "  ymc --dump-tokens <f>          print token stream\n"
       "  ymc --log=parse                trace parser rule entries to stderr\n"
@@ -242,6 +246,7 @@ void autoload_libraries(ymc::Absyn& absyn, ymc::Interner& interner, const Option
 const char* backend_stage(const char* mode) {
   if (std::strcmp(mode, "dump-after=lower") == 0) return "After Lowering";
   if (std::strcmp(mode, "dump-after=bindings") == 0) return "Bindings";
+  if (std::strcmp(mode, "dump-after=functionalias") == 0) return "FunctionAlias";
   return nullptr;
 }
 
@@ -286,11 +291,23 @@ int dump_flat_pipeline(ymc::Absyn& absyn, ymc::Diagnostics& diags, ymc::Interner
       return 66;
     }
     // pre 模块按 NBackendDAE.mo:268-278 的运行序往后接，跑到 stage 为止：每个模块的输入都是上一段验证过的输出。
-    if (std::strcmp(stage, "Bindings") == 0) {
-      const ymc::bdae::ModuleResult r = ymc::bdae::bindings(lr.dae, interner);
-      if (r.unsupported) {
-        std::fprintf(stderr, "ymc: not implemented: bindings: %s\n", r.unsupported_reason.c_str());
-        return 66;
+    struct PreModule {
+      const char* stage;   // = omc 的段名
+      const char* tag;     // SKIP 原因的前缀
+      ymc::bdae::ModuleResult (*run)(ymc::bdae::BackendDAE&, ymc::Interner&);
+    };
+    static constexpr PreModule kPre[] = {
+        {"Bindings", "bindings", &ymc::bdae::bindings},
+        {"FunctionAlias", "function alias", &ymc::bdae::function_alias},
+    };
+    if (std::strcmp(stage, "After Lowering") != 0) {
+      for (const PreModule& m : kPre) {
+        const ymc::bdae::ModuleResult r = m.run(lr.dae, interner);
+        if (r.unsupported) {
+          std::fprintf(stderr, "ymc: not implemented: %s: %s\n", m.tag, r.unsupported_reason.c_str());
+          return 66;
+        }
+        if (std::strcmp(stage, m.stage) == 0) break;
       }
     }
     text = ymc::bdae::dump_stage(lr.dae, interner, stage);
@@ -450,6 +467,7 @@ int main(int argc, char** argv) {
     else if (std::strcmp(a, "--dump-after=flat") == 0) opt.mode = "dump-after=flat";
     else if (std::strcmp(a, "--dump-after=lower") == 0) opt.mode = "dump-after=lower";
     else if (std::strcmp(a, "--dump-after=bindings") == 0) opt.mode = "dump-after=bindings";
+    else if (std::strcmp(a, "--dump-after=functionalias") == 0) opt.mode = "dump-after=functionalias";
     else if (std::strcmp(a, "--dump-after=scode") == 0) opt.mode = "dump-after=scode";
     else if (std::strncmp(a, "--class=", 8) == 0) opt.dump_class = a + 8;
     else if (std::strcmp(a, "--check-syntax") == 0) opt.mode = "check-syntax";

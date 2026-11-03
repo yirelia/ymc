@@ -190,6 +190,9 @@ struct FlatModel {
   bool if_eq_emptied = false;
   // 删掉的语句里赋值给数组元素：名字解不到一个标量，dropped_outputs 记不下 → bdae::lower SKIP。
   bool alg_outputs_unknown = false;
+  // 调了声明为 impure、按内建打印的 external "C" 函数（`impure function f … external "C" v = sin(u)` 打 `sin(time)`）：调用上没留纯度，
+  // FunctionAlias 分不出它和真的 sin（omc 不换它，NBFunctionAlias.replaceException :498）→ bdae::function_alias SKIP。
+  bool impure_builtin_equiv = false;
 
   ExprArena exprs;
   Arena<FlatEquation> eqs;

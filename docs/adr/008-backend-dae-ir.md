@@ -319,6 +319,8 @@ Bindings（`Modules/2_Pre/NBBindings.mo:50`）、FunctionAlias（`NBFunctionAlia
 - **D1 补充（S5a-1c）**：`Eqn` 加 If、Algorithm。If 铺平成 `IfBranch`，一个 `Eqn` 是 split 之后的一条，每支恰好一条方程；Algorithm 存 `Stmt` 树。`VarKind` 加 Iterator（`[ITER]`），算法里用到的迭代量进 Artificial 桶，走桶序。
 - **D2 补充（S5a-1c）**：算法段的输出压平时就定了（`NFFlatten.mo:387`），早于 SimplifyModel，默认路径化简删掉的语句里赋值的变量照算 size 和入桶，`FlatAlgorithm::dropped_outputs` 记下。默认路径的标量化还会删 if 语句的空分支（`NFScalarize.mo:461-488`），NB 路径留着，这里分不出来，`bdae::lower` SKIP。
 - **Q3 再答一段（S5a-2a）**：`(Bindings)` 段也逐字节复现。绑定方程的 rhs 不是变量上的式子，`generateBindingEquation` 还调一遍 `SimplifyExp.simplify`（`NBEquation.mo:2226`），比如变量行 `p + 2.0 * time + 3.0`、方程 `3.0 + p + 2.0 * time`。标量部分在 `src/bdae/simplify.cpp`，数值 BINARY 只有方程的浅映射才有，Simplify 1 时补。
+- **Q3 再答一段（S5a-2b）**：`(FunctionAlias)` 段也逐字节复现。`$FUN_n` 按 `Expression.map` 的后序遍历从 1 编号；`$RES_AUX` 按 Map 插入序倒着分，最后提的调用号最小；新变量、新方程按插入序接在桶尾，先连续后离散，Integer / Boolean / String 结果进离散桶。simulation 里提过、初值方程里又遇到的调用，`introduceAlias` 把 parsed 重置为假，初值一轮再造一条方程、给同一变量加 `fixed = false` 并挂进 Parameter 桶（`NBFunctionAlias.mo:426-476`、:278-293）。内建换不换看各自声明（纯度、有无输出），分三张表，表外的 SKIP。
+- **D1 补充（S5a-2b）**：`BackendDAE::functions` 记被调用户函数的 impure、记录构造、无输出、可内联（体恰是一条赋值），lower 从 `FlatModel::functions` 填。
 - **待定**：D3 回读里 MULTARY 与嵌套 BINARY 文本相同，parser 的还原规则到写回读时再定。
 
 ## 附录 A 实跑记录

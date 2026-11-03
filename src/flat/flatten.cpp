@@ -21240,6 +21240,7 @@ class Flattener {
         if (std::optional<std::string> bn = builtin_equiv(*bfr, &ext_c)) {
           array_call_ok_ = false;
           ext_c_call_ = ext_c;   // 向量化的体在 builtin_call 里就标不折叠（见 ext_c_call_）
+          if (I_.scode.elems[bfr->fe].purity == Purity::Impure) result_.model.impure_builtin_equiv = true;   // 见 FlatModel
           const Id<Expr> r = builtin_call(e, enclosing, prefix, in_.intern(*bn));
           if (ext_c && result_.model.exprs[r].kind == ExprKind::Call) nofold_calls_.insert(r.raw);
           return r;

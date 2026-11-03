@@ -618,3 +618,15 @@
 ## 2026-11-03 — 上层探针挖到下层的错，藏在 NOT-ADMITTED 里
 - 模式：`--stage bindings` 把 lower 段不过的模型记 `lower:FAIL`，算 NOT-ADMITTED。`der(p + 1)` 和 63 位字面量就在这里，FAIL 0 看不出来。`Boolean z = 1` 是 `no-section` 且 ymc 退 0。
 - 规则：评审探针逐条看非 PASS 的原因和 ymc 退出码，不只看 FAIL 数。
+
+## 2026-11-03 — 一个构建目录一次只跑一个 build
+- 模式：FunctionAlias 时同一构建目录两个 build 并发，旧 obj 和改了布局的 bdae.h 混在一起，ymc 运行时堆损坏（0xC0000374）。
+- 规则：一个构建目录一次只跑一个 build；改了公共头的布局后怀疑一切运行时怪错先全量重编。
+
+## 2026-11-03 — 内建函数的性质看声明，不看名字
+- 模式：FunctionAlias 换不换取决于纯度和有无输出。`Integer(e)` 定型成没有输出的 INTEGER_FUNCTION 不换；`delay`、`homotopy`、`ticksInState` 是 impure 不换；`previous`、`hold` 是泛型的 external "builtin" 要换。按内建打印的 external "C" 函数带着自己的 impure，ymc 压平时丢了。
+- 规则：内建逐个查 NFModelicaBuiltin.mo / NFBuiltinFuncs.mo 的声明并实跑，表外的 SKIP；前端把用户函数映成内建时，后端要用的性质得留下来。
+
+## 2026-11-03 — 段尾的换行数不规整
+- 模式：段尾一般两个换行，最后一条是 `[ALGO]` 时是三个。
+- 规则：生成期望值、比对段文本都不要规范化行尾。

@@ -100,9 +100,21 @@ struct EqnData {
   EqnSet simulation, continuous, discretes, initials, removed;
 };
 
+// 被调用户函数里 FunctionAlias 判"换不换"要看的性质（checkCallReplacement / replaceException NBFunctionAlias.mo:478-520 v1.25.0），lower 从
+// FlatModel::functions 抄过来。内建函数不在这里（DAE dump 不打印它们，FlatModel 也就没有），按调用名判。
+struct UserFunction {
+  std::vector<Symbol> name;   // 压平名，= 调用的 call_name
+  bool impure = false;        // Function.isImpure：声明的，加上体里顶层调 impure 函数后标的（同 DAE dump 的 `impure function`）
+  bool record_ctor = false;   // Function.isDefaultRecordConstructor
+  bool no_output = false;     // listEmpty(fn.outputs)
+  bool inlineable = false;    // Inline.functionInlineable（NBInline.mo:145-158）：不是外部函数，体恰是一条赋值语句
+};
+
 struct BackendDAE {
   VarData vars;
   EqnData eqns;
+  std::vector<UserFunction> functions;
+  bool impure_builtin_equiv = false;   // 同 FlatModel::impure_builtin_equiv
   Arena<Var> var_arena;
   Arena<Eqn> eqn_arena;
   ExprArena exprs;

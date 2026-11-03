@@ -2899,6 +2899,10 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       前端顺手修：`real_text` 的 `Inf` 改 `inf` / `-inf`（`Real e = 1e308 * 10`，realString.c:79-88）。评审把 `continuous` 改成照 isContinuous 列排除项，原来写死 `Algebraic`。
       评审探针 s5a2a-adv（530，手写）落点：PASS 484、SKIP 6、准入外 40，FAIL 0。挖出三个前端旧错，转 68c：`der(p + 1)` 不折成 0.0、63 位字面量不截断、`Boolean z = 1` 不报错。
       留 SKIP：调用实参这一遍才变字面量（要 `Ceval.evalCall`）、semiLinear 改写、Integer 常数超 2^53。数值 BINARY 走不到，Simplify 1 照原文补（`simplify.cpp` 的 `ponytail:`）。
+- [x] (S5a-2b) 第二个 pre 模块 FunctionAlias（2026-11-03），门 = `(FunctionAlias)` 段逐字节，`--dump-after=functionalias`、`bdae_sweep.py --stage functionalias`（前提递归到上一段 PASS）。语料 a PASS 74 / 109，语料 b PASS 1015 / 1857（Bindings 段 1016，差的 ClockedSource 是时钟常量 SKIP），探针 15286 个 PASS 14686、SKIP 10，全部 FAIL 0、CRASH 0。lower 段探针 14559→15286（新增 s5a2b 653、s5a2b-adv 74）；单测 function_alias_test 5 个，ctest 13→14。
+      哈希容器用 S5b-0 的 `omc_unordered.h`：键 = `stringHashDjb2(Expression.toString)`，判等 = `Expression.isEqual`，序是插入序。driver 的 pre 模块改成 `kPre` 表按运行序接。
+      评审：外部函数声明 impure、按内建打印的（`impure function f … external "C" v = sin(u)`）会被当成 sin 换，FAIL，加 `impure_builtin_equiv` 整模型 SKIP（`ponytail:`）。评审探针 s5a2b-adv（74 个，PASS 66、SKIP 3、FAIL 0）。
+      留 SKIP：时钟常量 `$CLK_n`（ClockedSource 等）、枚举结果（`$FUN` 要打类型全名，Type::enum_path 只有简名）、三张表外的内建。
 - [ ] (S5a-2…) pre 模块按 NB 运行序一个个做（2026-11-03 改定，原计划按语料 a 跳着做）：Bindings → FunctionAlias → Early Inline → Simplify 1 → Alias → Simplify 2 → Remove Stream → Detect States → Events。每个模块的输入都是上一段逐字节验证过的输出，门设在每一段上。
 - [ ] (S5a) lower + NB 九个 pre 模块，按模块增量（Bindings → FunctionAlias → Early Inline → Simplify 1 → Alias → Simplify 2 →
       Remove Stream → Detect States → Events）；首批子集 `simulation/modelica/NBackend/{basics,alias,event_handling}` + equations /

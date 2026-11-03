@@ -61,6 +61,7 @@ class Lowerer {
     if (m_.if_eq_emptied) stop("if equation emptied by simplification");
     if (m_.alg_outputs_unknown) stop("array element assigned in a dropped statement");
     artificials();
+    functions();
     known_.emplace("time", TypeKind::Real);
     for (const FlatVariable& v : m_.variables) known_.emplace(dotted(v.name, [](Symbol x) { return x; }), v.ty.element_type().kind);
     for (const FlatVariable& v : m_.variables) variable(v);
@@ -99,6 +100,22 @@ class Lowerer {
     t.name = cref_of("time");
     t.ty = Type::real();
     r_.dae.vars.artificials.items.push_back(r_.dae.var_arena.add(std::move(t)));
+  }
+
+  // 被调用户函数的性质，给 FunctionAlias 用（见 UserFunction）。函数至多一个算法段（多个时 omc 报错，见 flatten 的 collect_fn_sig），
+  // 所以 hasSingleOrEmptyBody 对非外部函数恒真，只剩"体恰是一条 ASSIGNMENT"（getBody NFFunction.mo:2078-2081、:2656-2681）；
+  // 元组赋值在 NF 里也是 ASSIGNMENT，FlatStmtKind::Assign 同样包含它。
+  void functions() {
+    for (const FlatFunction& f : m_.functions) {
+      UserFunction u;
+      u.name = f.name;
+      u.impure = f.is_impure;
+      u.record_ctor = f.is_record_ctor;
+      u.no_output = std::none_of(f.params.begin(), f.params.end(), [](const FlatFuncParam& p) { return p.direction == FlatDirection::Output; });
+      u.inlineable = !f.is_external && f.body.size() == 1 && m_.stmts[f.body[0]].kind == FlatStmtKind::Assign;
+      r_.dae.functions.push_back(std::move(u));
+    }
+    r_.dae.impure_builtin_equiv = m_.impure_builtin_equiv;
   }
 
   // lowerVariableKind :728-770。Clock、外部对象、记录走不到这里（variable() 先拦），数组同。

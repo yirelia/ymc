@@ -14,7 +14,8 @@
                     A2'          (After Lowering) 有数组型变量、Record 桶非空、或有 [ARRY] [FOR-] [RECD] [TUPL]
                     A5           表达式里有数组型子表达式或推导式：NB 路径不展开（NFInst.mo:324-333），默认路径展开了
                     A1           该模型压平和 omc 不一致（语料 a 的 a1_a.jsonl）
-                    lower:<判定>  --stage 不是 lower 时：该模型在 lower 段不是 PASS，这一段的输入就没验证过，不比。判定是 NOT-ADMITTED 时带上原因
+                    <上一段>:<判定>  --stage 不是 lower 时：该模型在上一段（NB 运行序，lower → bindings → functionalias）不是 PASS，
+                                 这一段的输入就没验证过，不比。判定是 NOT-ADMITTED 时带上原因，所以会一层层套（bindings:NOT-ADMITTED:lower:FAIL）
                   NOT-ADMITTED 的模型 ymc 照样跑，只看是否崩溃（崩溃 = CRASH）；打出来的文本不比，no-section 而 ymc 退 0 的单列一行。
                   A2' / A5 按这一段自己的文本判（--stage bindings 时绑定方程形如数组、记录的归 A2'）；A3 不要求，这一段在手就行。
 
@@ -30,7 +31,7 @@ JSON 与 tools/nf_live_sweep.py 同形（{"total", "records": [{path, status, ve
   python -I tools/bdae_sweep.py --corpus b --ymc <ymc.exe>
   python -I tools/bdae_sweep.py --cases <cases.json> [--a1 <a1.jsonl>] --ymc <ymc.exe>
   python -I tools/bdae_sweep.py --probes [集名…] --ymc <ymc.exe>     # tests/probes/bdae/*.probes，现跑 omc
-  以上都可加 --stage lower|bindings
+  以上都可加 --stage lower|bindings|functionalias
 
 基建工具，Claude 提供。
 """
@@ -72,7 +73,9 @@ _FOR_HEAD = re.compile(r"^ *for (?:'[^']*'|\w+) in (.*) loop$", re.M)
 _NUM_ARRAY = re.compile(r"^\{[-+0-9., e]*\}$")
 _TOP_L = re.compile(r"(?:^|(?:not|and) )\(*$")
 _TOP_R = re.compile(r"\)*(?: and |$)")
-STAGES = {"lower": "After Lowering", "bindings": "Bindings"}      # --stage 的值 = ymc --dump-after 的值 → omc 的段名
+# --stage 的值 = ymc --dump-after 的值 → omc 的段名。按 NB 的运行序排（NBackendDAE.mo:268-278 v1.25.0），stage_why 靠这个序找上一段。
+STAGES = {"lower": "After Lowering", "bindings": "Bindings", "functionalias": "FunctionAlias"}
+ORDER = list(STAGES)
 
 
 def body_of(section):
@@ -195,13 +198,19 @@ def judge(rec, section, why_not, rc, out, err):
     return rec
 
 
-def lower_gate(section, why, text, cls, d, a):
-    """--stage 不是 lower 时，这一段的前提：lower 段是 PASS。返回 NOT-ADMITTED 的原因，过了返回 ""。"""
-    rc, out, err = run_ymc(a.ymc, text, cls, d, a.timeout, "lower")
-    r = judge({}, section, why, rc, out, err)
-    if r["verdict"] == "PASS":
-        return ""
-    return "lower:" + r["verdict"] + (":" + r["reason"] if r["verdict"] == "NOT-ADMITTED" else "")
+def stage_why(stage, sec, why_lower, text, cls, d, a):
+    """这一段的 NOT-ADMITTED 原因，在门内返回 ""。sec(段) 给参考段文本，why_lower 是 lower 段自己的准入原因。
+    不是 lower 时前提是上一段（STAGES 的序 = NB 的运行序）PASS，上一段又有它自己的前提，递归下去：
+    上一段不是 PASS 就判 <上一段>:<判定>，NOT-ADMITTED 再带上原因（`bindings:NOT-ADMITTED:lower:FAIL`）。"""
+    if stage == "lower":
+        return why_lower
+    prev = ORDER[ORDER.index(stage) - 1]
+    pwhy = stage_why(prev, sec, why_lower, text, cls, d, a)
+    rc, out, err = run_ymc(a.ymc, text, cls, d, a.timeout, prev)
+    r = judge({}, sec(prev), pwhy, rc, out, err)
+    if r["verdict"] != "PASS":
+        return prev + ":" + r["verdict"] + (":" + r["reason"] if r["verdict"] == "NOT-ADMITTED" else "")
+    return admission(sec(stage))[1]
 
 
 def one_case(c, a, a1):
@@ -216,12 +225,9 @@ def one_case(c, a, a1):
     cls = c.get("cls", "")
     d = tempfile.mkdtemp(prefix="bs_", dir=a.tmp)
     try:
-        if a.stage == "lower":
-            section, why = lsec, why_l
-        else:
-            why = lower_gate(lsec, why_l, text, cls, d, a)
-            section = ref_section(c, a.stage)
-            why = why or admission(section)[1]
+        sec = lambda s: lsec if s == "lower" else ref_section(c, s)  # noqa: E731
+        section = sec(a.stage)
+        why = stage_why(a.stage, sec, why_l, text, cls, d, a)
         rc, out, err = run_ymc(a.ymc, text, cls, d, a.timeout, a.stage)
     finally:
         shutil.rmtree(d, ignore_errors=True)
@@ -237,11 +243,9 @@ def one_probe(job, a):
         if status != "done":
             return dict(rec, verdict="NOT-ADMITTED", reason="omc-" + status)
         texts = rg.complete_sections(rg._read(os.path.join(d, "out.txt")), rc, status)
-        section = texts.get(STAGES[a.stage])
-        why = admission(section)[1]
-        if a.stage != "lower":
-            lsec = texts.get(STAGES["lower"])
-            why = lower_gate(lsec, admission(lsec)[1], src, "", d, a) or why
+        sec = lambda s: texts.get(STAGES[s])  # noqa: E731
+        section = sec(a.stage)
+        why = stage_why(a.stage, sec, admission(sec("lower"))[1], src, "", d, a)
         rc, out, err = run_ymc(a.ymc, src, "", d, a.timeout, a.stage)
         rec = judge(rec, section, why, rc, out, err)
         if rec["verdict"] == "FAIL" and a.keep_fail:
