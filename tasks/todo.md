@@ -2862,6 +2862,12 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       照旧 SKIP：ExtendsDerived、UsertypeModifications（短类修饰丢失，账本）、ArrayAsAliasInExtends、Bug3817、Rectifier、NetworkLoop_total、Breaker_total（放开后撞 function variable type、composite array element reference、Connections operator argument）；
       omc 能过、ymc 未做的：extends 的基类经改了常量的 extends 继承来（ESC38 / ESC85）、短类修饰里的组件重声明（LMS15）、class extends 形态的重声明（LMS14）、嵌套类修饰里的重声明（LMX13）、重声明链上内层才有约束修饰（CMR23 / A68CC20）、class extends 的目标是带修饰的短类（ESC72）。ponytail：`check_short_settled` 按定义元素记，偏保守；`settled_classes_` 是对 omc 展开时机的近似，已知形态由探针覆盖。
       探针 pk-p49（250）、pk-p49a（108，评审手写）；slice 708→714；scodeinst 670→678；testsuite 1857→1870 / FAIL 0；MSL 500（不变）；探针 15393→15751；单测 +7。
+- [x] (68b) 限定名和调用（2026-11-03）：28 个目标 PASS 21、omc 自己报错 6、仍 SKIP 1（RecordConstructorVectorization：字段全 EMPTY 的向量化构造，要值带 Undef 再走数组组件路径）。
+      构造函数输出绑定里的自调用是记录式（`ctor_patch_`，patchOperatorRecordConstructorBinding）；external "C" 内建等价函数只在 Ceval 语境求（`ceval_ext_` opt-in，输入缺省随调用处，`no_ext_eval_`）；约束修饰并入函数（`with_cc`）；组件里继承来的函数；class extends 的短类基类；'not' / 'String' / sum 重载；无绑定包常量收成变量；包和函数里的 getInstanceName；记录短类构造；spatialDistribution；空数组等式。
+      类体限定词核查收成一份 `class_body_illegal`，`inst_package` 和压平的 `cannot_enter` 共用，后者顺带修掉基线放行的有绑定常量、函数、维、import、operator record、operator。
+      评审探针修的：68a 的函数约束修饰 SKIP 盖住了合并后的 ConstrainingClassFunc1；`g()` 的 external 缺省被求值（EX7，本桶引入）；if 方程条件里的无绑定常量 ACCEPTS-INVALID（UC5 / UC54）；`package Q = P` 下 getInstanceName 取了 "P"（GI9，本桶引入，短类保守 SKIP，`ponytail:` 记了上限）、继承同（GI19）；`Q.func` 求值漏了被顶替声明的约束修饰（CC15，68a 就有）；短类 / 约束修饰改函数里没有的元素静默忽略（CC8，基线就有）；`C d = +c` / `-(-c)` 绑定没拆字段（OP23 / OP29，基线就有）；`P.R()` 丢约束修饰（CC33，基线就有）；class extends 的带修饰短类基类在包实例那支看不见修饰（CE9，本桶引入）；`input Real w = mysin(u)` 代换后丢不折叠标记（EX40，基线就有）。
+      探针 pk-p50（1030）、pk-p50a（356，评审手写）；slice 714→724；scodeinst 678→689（FAIL 53→54，就是 ConstantMissingBinding2）；testsuite 1870→1894 / FAIL 0；MSL 500（不变）；探针 15763→17149；单测 556→571。
+      决定：`extends` 带修饰的短类继续 SKIP，沿用账本的"ymc 不复刻"（1.25.0 丢修饰，MLS §7.1 和文件 Result 都保留；放开也只多 UsertypeModifications、ExtendsDerived 两个 PASS，另外 5 个撞别的 SKIP）。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

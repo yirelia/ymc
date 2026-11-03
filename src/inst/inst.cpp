@@ -415,6 +415,22 @@ std::vector<Symbol> Instantiator::scope_path(NodeId cls) const {
   return {rev.rbegin(), rev.rend()};
 }
 
+bool class_body_illegal(const Inst& I, const SElement& c) {
+  const bool pkg = c.restriction == SRestriction::Package,
+             rec = c.restriction == SRestriction::Record || c.restriction == SRestriction::OperatorRecord;
+  if (!pkg && !rec && c.restriction != SRestriction::Operator) return false;
+  const auto any_stmt = [](const std::vector<SAlgorithm>& v) {
+    return std::any_of(v.begin(), v.end(), [](const SAlgorithm& a) { return !a.stmts.empty(); });
+  };
+  if (!c.def.equations.empty() || !c.def.initial_equations.empty() || any_stmt(c.def.algorithms) || any_stmt(c.def.initial_algorithms))
+    return true;
+  return std::any_of(c.def.elements.begin(), c.def.elements.end(), [&](Id<SElement> id) {
+    const SElement& x = I.scode.elems[id];
+    return (pkg && x.kind == SElementKind::Component && x.attr.var != SVariability::Const) ||
+           (rec && x.prefixes.vis == SVisibility::Protected);
+  });
+}
+
 // 包实例（Inst.instPackage，NFInst.mo:1312-1369 v1.25.0）：查名进类前把它实例化一份，按节点缓存（PackageCache）。短类先顺链到长类
 //（带修饰的短类 SKIP，见 through_short_classes），实例 = 长类的实例、实例父亲记成这个类节点（命名时同 BASE_CLASS 跳过，
 // NFInstNode.scopePath :1217-1290）。partial 的不实例化（instantiate 只 expand，NFInst.mo:428-433）、正在实例化的（环；omc 的
@@ -434,24 +450,11 @@ NodeId Instantiator::inst_package(NodeId cls) {
       I_.scode.elems[I_.nodes[l].def].kind != SElementKind::Class ||
       I_.scode.elems[I_.nodes[l].def].def.kind != SClassDefKind::Parts)
     return Inst::empty_node();
-  // 实例化的类体按限定词核查（instPackage → instantiate → instClass 末尾的 Restriction.checkClass，NFInst.mo:1196、NFRestriction.mo:
-  // 400-497 v1.25.0）：package 的组件须都是常量（assertOnlyConstantComponents :370-387，omc 报 "Variable b in package B is not
-  // constant"——testsuite redeclare/ClassExtends3 / 4 去掉 -d=-newInst 后，经 `B.usePart` 进包 B）、record 只能有 public 段，两者都
-  // 不能有方程 / 算法 → omc 报错 → SKIP。只查这个类自己的元素（基类实例化时不查，instExtends :1475-1517）。
-  {
-    const SElement& le = I_.scode.elems[I_.nodes[l].def];
-    const bool pkg = le.restriction == SRestriction::Package, rec = le.restriction == SRestriction::Record;
-    bool bad = (pkg || rec) && (!le.def.equations.empty() || !le.def.initial_equations.empty() || !le.def.algorithms.empty() ||
-                                !le.def.initial_algorithms.empty());
-    for (Id<SElement> e : le.def.elements) {
-      const SElement& x = I_.scode.elems[e];
-      bad = bad || (pkg && x.kind == SElementKind::Component && x.attr.var != SVariability::Const) ||
-            (rec && x.prefixes.vis == SVisibility::Protected);
-    }
-    if (bad) {
-      mark_unsupported("package / record class restriction", std::string(I_.interner.str(le.name)));
-      return Inst::empty_node();
-    }
+  // 实例化的类体按限定词核查（instPackage → instantiate → instClass 末尾的 Restriction.checkClass，NFInst.mo:1196 v1.25.0；omc 报 "Variable b in
+  // package B is not constant"——testsuite redeclare/ClassExtends3 / 4 去掉 -d=-newInst 后，经 `B.usePart` 进包 B）。
+  if (const SElement& le = I_.scode.elems[I_.nodes[l].def]; class_body_illegal(I_, le)) {
+    mark_unsupported("package / record class restriction", std::string(I_.interner.str(le.name)));
+    return Inst::empty_node();
   }
   // 带修饰的短类（`package Medium = MoistAir(extraPropertiesNames = {"CO2"}, C_nominal = {1.519E-3})`，MSL Fluid RoomCO2）：
   // expandClassDerived 把短类的修饰并进基类的实例（NFInst.mo:1012-1068 v1.25.0）——包实例里被修饰的常量取修饰值，依赖它的

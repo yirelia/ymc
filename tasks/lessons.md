@@ -582,3 +582,27 @@
 ## 2026-11-03 — 探针写法要先确认 omc 认
 - 模式：元组赋值的空位我写成 `(x, _) := g(time)`，omc 报 `Variable _ not found`，全落 no-section，Wild 分支等于没测到。omc 的写法是 `(x, ) := g(time)`。
 - 规则：写探针时看 no-section 的原因，语法写错的要改对重跑，别当成"omc 不支持"放过去。
+
+## 2026-11-03 — 并行桶的"放开了"要在合并后的构建上重看
+- 模式：68b 在 worktree 里 ConstrainingClassFunc1 是 PASS，合并到含 68a 的 master 后被 68a 的约束修饰 SKIP 盖住，一个 SKIP 不报错，代理的 precheck 也看不到。主代理的探针全落 SKIP 才发现。
+- 规则：评审探针跑合并后的构建。看 SKIP 的原因，意图放开的形状落在 SKIP 上要追到底，不是只数 FAIL。
+
+## 2026-11-03 — 放宽求值的语境要跟到补上的实参
+- 模式：external "C" 的内建等价函数放开成 Ceval 语境求，代理守住了直接写的实参（`g(mysin(1.0))`），没守住定型时补的缺省（`g()`，`input Real u = mysin(1.0)`）。`subst_slots` 代换缺省时还丢了不折叠标记。
+- 规则：放宽求值器用 opt-in，再把"实参"的四种来源过一遍：书写的、缺省的、缺省里引用前面输入的、别名修饰给的。
+
+## 2026-11-03 — 定义作用域链不等于书写路径
+- 模式：`package Q = P; Q.s`、`B extends A; B.a.s`，getInstanceName 按声明处拼出 "P"、"A.a"，omc 是 "Q"、"B.a"。值取自声明处，名字取自到达路径，两者分开算。
+- 规则：结果依赖"怎么找到的"的（实例路径、压平名），要带着短类和继承两种到达方式写探针。
+
+## 2026-11-03 — 判 SKIP 之后压平还在走
+- 模式：`x.is_valid() || result_.unsupported) return x` 只在 `call()` 下安全，别的 `inst_exp` 分支交回 invalid，运算符再拿它当运算数，Arena 断言崩溃（68b 第一次 precheck 5 个 CRASH）。
+- 规则：表达式分支判了 SKIP 也返回有效的占位（`lit_int(0)`）。
+
+## 2026-11-03 — 给压平加放开路径，看定义层下降是否绕过 inst 的核查
+- 模式：无绑定常量放开后，定义层下降不经过 `inst_package`，类体限定词核查漏了（2 个 ACCEPTS-INVALID），同一个洞基线就放行有绑定常量和函数。
+- 规则：同一条核查只留一份，两条路都调它。
+
+## 2026-11-03 — 代理转述的"和文件分歧"要实跑核一次
+- 模式：68b 的报告说 Constant12、RecordConstructorVectorization 与文件 Result 分歧，要记账本。逐字节 diff 实跑 omc 和文件 Result，两个都一致，只有 ConstantMissingBinding2 真分歧。
+- 规则：写进账本前主代理自己 diff 一次。

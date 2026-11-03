@@ -713,5 +713,15 @@
 "ExtendReplaceable4.mo",
 "ModClass2.mo",
 "RedeclareDim2.mo",
-"RedeclareFunction1.mo"
+"RedeclareFunction1.mo",
+"CevalRecord7.mo",
+"ConstrainingClassFunc1.mo",
+"ExtendsVisibility5.mo",
+"FuncBuiltinGetInstanceName.mo",
+"OperatorOverloadArrayOp1.mo",
+"OperatorOverloadArrayOp4.mo",
+"OperatorOverloadComplex.mo",
+"OperatorOverloadSum1.mo",
+"RecordBinding11.mo",
+"const12.mo"
 ]

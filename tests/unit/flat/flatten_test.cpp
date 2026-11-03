@@ -10353,14 +10353,18 @@ YMC_TEST(flatten_function_record_binding) {
                            "  protected CXC16C[2] t = {CXC16C(1.0, 2.0), CXC16C.'constructor'.fromReal(3.0, x)};\n"
                            "  protected CXC16C s = CXC16C.'+'(t[1], t[2]);\nalgorithm\n  y := s.re + s.im;\n"
                            "end CXC16F;\n\nclass CXC16\n  Real y = CXC16F(time);\nend CXC16;\n"));
-  // 'constructor' 输出的绑定又调自己（omc 照打 `output C3 result = C3.'constructor'.fromReal(re, im)`）：ymc 先发射形参再登记
-  // 函数，会无限递归（栈溢出）→ 拦成 SKIP（探针 or-p1 b12）。
-  YMC_CHECK(flatten_src("operator record C3\n  Real re;\n  Real im;\n  encapsulated operator 'constructor'\n"
-                        "    function fromReal\n      import C3;\n      input Real re;\n      input Real im = 0;\n"
-                        "      output C3 result = C3(re = re, im = im);\n    algorithm\n    end fromReal;\n"
-                        "  end 'constructor';\nend C3;\nmodel b12_ctor_ctor_output_binding\n  C3 a, b;\nequation\n"
-                        "  a = C3(time, 2);\n  b = C3(1, 2);\nend b12_ctor_ctor_output_binding;\n")
-                .rfind("<unsupported:", 0) == 0);
+  // 'constructor' 输出的绑定又调自己：omc 改写成记录式、打印同调用（探针 or-p1 b12；期望 = omc 1.25.0 实跑 b12，2026-11-03）。
+  YMC_CHECK_EQ(flatten_src("operator record C3\n  Real re;\n  Real im;\n  encapsulated operator 'constructor'\n"
+                           "    function fromReal\n      import C3;\n      input Real re;\n      input Real im = 0;\n"
+                           "      output C3 result = C3(re = re, im = im);\n    algorithm\n    end fromReal;\n"
+                           "  end 'constructor';\nend C3;\nmodel b12_ctor_ctor_output_binding\n  C3 a, b;\nequation\n"
+                           "  a = C3(time, 2);\n  b = C3(1, 2);\nend b12_ctor_ctor_output_binding;\n"),
+               std::string("function C3 \"Automatically generated record constructor for C3\"\n  input Real re;\n  input Real im;\n"
+                           "  output C3 res;\nend C3;\n\nfunction C3.'constructor'.fromReal\n  input Real re;\n  input Real im = 0.0;\n"
+                           "  output C3 result = C3.'constructor'.fromReal(re, im);\nalgorithm\nend C3.'constructor'.fromReal;\n\n"
+                           "class b12_ctor_ctor_output_binding\n  Real a.re;\n  Real a.im;\n  Real b.re;\n  Real b.im;\nequation\n"
+                           "  a = C3.'constructor'.fromReal(time, 2.0);\n  b = C3.'constructor'.fromReal(1.0, 2.0);\n"
+                           "end b12_ctor_ctor_output_binding;\n"));
 }
 
 YMC_TEST(flatten_function_record_binding_evaluation) {
@@ -12858,6 +12862,614 @@ YMC_TEST(flatten_fully_qualified_class_names) {
   YMC_CHECK_EQ(flatten_src("model E\n  Real y = 7;\nend E;\nmodel A\n  replaceable model C\n    Real c = 1;\n  end C;\n  C c;\nend A;\nmodel LDD9\n"
                            "  model E\n    Real y = 8;\n  end E;\n  A a(redeclare model C = .E);\n  A b(redeclare model C = E);\nend LDD9;\n"),
                std::string("class LDD9\n  Real a.c.y = 7.0;\n  Real b.c.y = 8.0;\nend LDD9;\n"));
+}
+
+// 桶 68b（S3）：期望全部来自 omc 1.25.0 实跑（`omc <模型>.mo`，模型即 tests/probes/pk-p50.probes 里的同名探针）。
+YMC_TEST(flatten_ctor_self_binding) {
+  // 构造函数输出绑定里的自调用是记录式（patchOperatorRecordConstructorBinding，NFOperatorOverloading.mo:164-198 v1.25.0）：打印同调用，求值不递归、实参按位置当字段。
+  YMC_CHECK_EQ(flatten_src("operator record C1\n  Real re;\n  Real im;\n\n  encapsulated operator 'constructor'\n"
+                           "    function fromReal\n      import C1;\n      input Real re;\n"
+                           "      input Real im = 0.0;\n      output C1 result = C1(re = re, im = im);\n"
+                           "    algorithm\n    end fromReal;\n  end 'constructor';\n\nend C1;\nmodel OBAstd_v\n"
+                           "  C1 c = C1(time);\nend OBAstd_v;\n"),
+               std::string("function C1 \"Automatically generated record constructor for C1\"\n  input Real re;\n"
+                           "  input Real im;\n  output C1 res;\nend C1;\n\nfunction C1.'constructor'.fromReal\n"
+                           "  input Real re;\n  input Real im = 0.0;\n"
+                           "  output C1 result = C1.'constructor'.fromReal(re, im);\nalgorithm\n"
+                           "end C1.'constructor'.fromReal;\n\nclass OBAstd_v\n  Real c.re;\n  Real c.im;\n"
+                           "equation\n  c = C1.'constructor'.fromReal(time, 0.0);\nend OBAstd_v;\n"));
+  YMC_CHECK_EQ(flatten_src("operator record C1\n  Real re;\n  Real im;\n\n  encapsulated operator 'constructor'\n"
+                           "    function fromReal\n      import C1;\n      input Real re;\n"
+                           "      input Real im = 0.0;\n      output C1 result = C1(re = re, im = im);\n"
+                           "    algorithm\n    end fromReal;\n  end 'constructor';\n\nend C1;\nmodel OBAstd_l\n"
+                           "  C1 c = C1(1.0);\nend OBAstd_l;\n"),
+               std::string("class OBAstd_l\n  Real c.re = 1.0;\n  Real c.im = 0.0;\nend OBAstd_l;\n"));
+  YMC_CHECK_EQ(flatten_src("operator record C1\n  Real re;\n  Real im;\n\n  encapsulated operator 'constructor'\n"
+                           "    function fromReal\n      import C1;\n      input Real re;\n"
+                           "      input Real im = 0.0;\n      output C1 result = C1(re = re + 1, im = 2 * im);\n"
+                           "    algorithm\n    end fromReal;\n  end 'constructor';\n\nend C1;\nmodel OBAadd_l\n"
+                           "  C1 c = C1(1.0);\nend OBAadd_l;\n"),
+               std::string("class OBAadd_l\n  Real c.re = 2.0;\n  Real c.im = 0.0;\nend OBAadd_l;\n"));
+  YMC_CHECK_EQ(flatten_src("operator record C1\n  Real re;\n  Real im;\n\n  encapsulated operator 'constructor'\n"
+                           "    function fromReal\n      import C1;\n      input Real im;\n"
+                           "      input Real re = 0.0;\n      output C1 result = C1(re = re, im = im);\n"
+                           "    algorithm\n    end fromReal;\n  end 'constructor';\n\nend C1;\nmodel OBAswap_l\n"
+                           "  C1 c = C1(1.0);\nend OBAswap_l;\n"),
+               std::string("class OBAswap_l\n  Real c.re = 1.0;\n  Real c.im = 0.0;\nend OBAswap_l;\n"));
+  YMC_CHECK_EQ(flatten_src("operator record C1\n  Real re;\n  Real im;\n\n  encapsulated operator 'constructor'\n"
+                           "    function fromReal\n      import C1;\n      input Real re;\n"
+                           "      input Real im = 0.0;\n      output C1 result = C1(1.0, 2.0);\n    algorithm\n"
+                           "    end fromReal;\n  end 'constructor';\n\nend C1;\nmodel OBAcst_v\n"
+                           "  C1 c = C1(time);\nend OBAcst_v;\n"),
+               std::string("function C1 \"Automatically generated record constructor for C1\"\n  input Real re;\n"
+                           "  input Real im;\n  output C1 res;\nend C1;\n\nfunction C1.'constructor'.fromReal\n"
+                           "  input Real re;\n  input Real im = 0.0;\n"
+                           "  output C1 result = C1.'constructor'.fromReal(1.0, 2.0);\nalgorithm\n"
+                           "end C1.'constructor'.fromReal;\n\nclass OBAcst_v\n  Real c.re;\n  Real c.im;\n"
+                           "equation\n  c = C1.'constructor'.fromReal(time, 0.0);\nend OBAcst_v;\n"));
+  YMC_CHECK_EQ(flatten_src("operator record C1\n  Real re;\n  Real im;\n\n  encapsulated operator 'constructor'\n"
+                           "    function fromReal\n      import C1;\n      input Real re;\n"
+                           "      input Real im = 0.0;\n      output C1 result = C1(re = re, im = im);\n"
+                           "    algorithm\n    end fromReal;\n  end 'constructor';\n\nend C1;\nmodel OBAstd_arr\n"
+                           "  C1 c[2] = {C1(time), C1(1.0, 2.0)};\nend OBAstd_arr;\n"),
+               std::string("function C1 \"Automatically generated record constructor for C1\"\n  input Real re;\n"
+                           "  input Real im;\n  output C1 res;\nend C1;\n\nfunction C1.'constructor'.fromReal\n"
+                           "  input Real re;\n  input Real im = 0.0;\n"
+                           "  output C1 result = C1.'constructor'.fromReal(re, im);\nalgorithm\n"
+                           "end C1.'constructor'.fromReal;\n\nclass OBAstd_arr\n  Real c[1].re;\n"
+                           "  Real c[1].im;\n  Real c[2].re;\n  Real c[2].im;\nequation\n"
+                           "  c[1] = C1.'constructor'.fromReal(time, 0.0);\n"
+                           "  c[2] = C1.'constructor'.fromReal(1.0, 2.0);\nend OBAstd_arr;\n"));
+  YMC_CHECK_EQ(flatten_src("operator record C1\n  Real re;\n  Real im;\n\n  encapsulated operator 'constructor'\n"
+                           "    function fromReal\n      import C1;\n      input Real re;\n"
+                           "      input Real im = 0.0;\n      output C1 result = C1(re = re + 1, im = 2 * im);\n"
+                           "    algorithm\n    end fromReal;\n  end 'constructor';\n\nend C1;\nfunction g\n"
+                           "  input C1 c;\n  output Real y = c.re + c.im;\nend g;\nfunction gt\n  input C1 c;\n"
+                           "  input Real t;\n  output Real y = c.re * t;\nend gt;\nfunction ge\n  input C1 c;\n"
+                           "  output Real y;\nexternal \"C\" y = ext1(c);\nend ge;\nimpure function gi\n"
+                           "  input C1 c;\n  output Real y = c.re;\nend gi;\nfunction gf\n  input Real t;\n"
+                           "  output Real y;\nprotected\n  C1 u = C1(3.0, 4.0);\n  C1 w = C1(t);\nalgorithm\n"
+                           "  w := C1(5.0);\n  y := u.re * w.im * t;\nend gf;\nfunction gg\n  input Real t;\n"
+                           "  output C1 y = C1(t, 3.0);\n  output C1 z = C1(4.0);\nend gg;\nmodel OBAadd_fn\n"
+                           "  Real x = gf(time);\nend OBAadd_fn;\n"),
+               std::string("function C1 \"Automatically generated record constructor for C1\"\n  input Real re;\n"
+                           "  input Real im;\n  output C1 res;\nend C1;\n\nfunction C1.'constructor'.fromReal\n"
+                           "  input Real re;\n  input Real im = 0.0;\n"
+                           "  output C1 result = C1.'constructor'.fromReal(re + 1.0, 2.0 * im);\nalgorithm\n"
+                           "end C1.'constructor'.fromReal;\n\nfunction gf\n  input Real t;\n  output Real y;\n"
+                           "  protected C1 u = C1.'constructor'.fromReal(4.0, 8.0);\n"
+                           "  protected C1 w = C1.'constructor'.fromReal(t, 0.0);\nalgorithm\n"
+                           "  w := C1.'constructor'.fromReal(6.0, 0.0);\n  y := u.re * w.im * t;\nend gf;\n\n"
+                           "class OBAadd_fn\n  Real x = gf(time);\nend OBAadd_fn;\n"));
+}
+
+YMC_TEST(flatten_external_c_constant) {
+  // external "C" 的内建等价函数：常量绑定求值（evalBuiltinCall），化简 / 缺省不求。
+  YMC_CHECK_EQ(flatten_src("function myasin\n  input Real u;\n  output Real y;\nexternal \"C\" y = asin(u);\n"
+                           "end myasin;\nmodel XEaasin\n  constant Real c = 2 * myasin(1.0);\n  Real x = c;\n"
+                           "end XEaasin;\n"),
+               std::string("class XEaasin\n  constant Real c = 3.141592653589793;\n"
+                           "  Real x = 3.141592653589793;\nend XEaasin;\n"));
+  YMC_CHECK_EQ(flatten_src("function myasin\n  input Real u;\n  output Real y;\nexternal \"C\" y = asin(u);\n"
+                           "end myasin;\npackage P\n  constant Real c = myasin(1.0);\nend P;\nmodel XEbasin\n"
+                           "  Real x = P.c;\nend XEbasin;\n"),
+               std::string("class XEbasin\n  Real x = 1.5707963267948966;\nend XEbasin;\n"));
+  YMC_CHECK_EQ(flatten_src("function myasin\n  input Real u;\n  output Real y;\nexternal \"C\" y = asin(u);\n"
+                           "end myasin;\nmodel XEcasin\n  parameter Real p = myasin(1.0);\n"
+                           "  Real x = myasin(1.0);\nend XEcasin;\n"),
+               std::string("class XEcasin\n  parameter Real p = asin(1.0);\n  Real x = asin(1.0);\nend XEcasin;\n"));
+  YMC_CHECK_EQ(flatten_src("function myasin\n  input Real u;\n  output Real y;\nexternal \"C\" y = asin(u);\n"
+                           "end myasin;\nfunction g\n  input Real v;\n  output Real w = v;\nend g;\n"
+                           "model XEeasin\n  Real x = g(myasin(1.0));\nend XEeasin;\n"),
+               std::string("function g\n  input Real v;\n  output Real w = v;\nend g;\n\nclass XEeasin\n"
+                           "  Real x = g(asin(1.0));\nend XEeasin;\n"));
+  YMC_CHECK_EQ(flatten_src("function mysin\n  input Real u;\n  output Real y;\nexternal \"C\" y = sin(u);\n"
+                           "end mysin;\nfunction g\n  input Real a;\n  input Real b = mysin(1.0);\n"
+                           "  output Real y = a + b;\nend g;\nmodel XEt9\n  Real x = g(time);\nend XEt9;\n"),
+               std::string("function g\n  input Real a;\n  input Real b = sin(1.0);\n  output Real y = a + b;\n"
+                           "end g;\n\nclass XEt9\n  Real x = g(time, sin(1.0));\nend XEt9;\n"));
+}
+
+YMC_TEST(flatten_constrainedby_function_mod) {
+  // constrainedby 的修饰并进函数（Modifier.merge(mod, cls.ccMod)，NFInst.mo:1156 / :1209 v1.25.0）。
+  YMC_CHECK_EQ(flatten_src("package P\n  partial function f\n    input Real a;\n    input Real b;\n"
+                           "    output Real c;\n  end f;\n  function fun\n    extends f;\n  algorithm\n"
+                           "    c := a + b;\n  end fun;\n"
+                           "  replaceable function func = fun constrainedby f(b = 1);\n"
+                           "  function fun2 = fun(b = 2);\n"
+                           "  replaceable function func2 = fun(a = 3) constrainedby f(b = 1);\n"
+                           "  replaceable function func3 = fun(b = 3) constrainedby f(b = 1);\n"
+                           "  function func4 = func;\n  replaceable function func5\n    extends f;\n  algorithm\n"
+                           "    c := a * b;\n  end func5 constrainedby f(b = 4);\n  constant Real k = 7;\n"
+                           "  replaceable function func6 = fun constrainedby f(b = k);\nend P;\nmodel QXC1\n"
+                           "  parameter Real x = P.func(15);\nend QXC1;\n"),
+               std::string("class QXC1\n  parameter Real x = 16.0;\nend QXC1;\n"));
+  YMC_CHECK_EQ(flatten_src("package P\n  partial function f\n    input Real a;\n    input Real b;\n"
+                           "    output Real c;\n  end f;\n  function fun\n    extends f;\n  algorithm\n"
+                           "    c := a + b;\n  end fun;\n"
+                           "  replaceable function func = fun constrainedby f(b = 1);\n"
+                           "  function fun2 = fun(b = 2);\n"
+                           "  replaceable function func2 = fun(a = 3) constrainedby f(b = 1);\n"
+                           "  replaceable function func3 = fun(b = 3) constrainedby f(b = 1);\n"
+                           "  function func4 = func;\n  replaceable function func5\n    extends f;\n  algorithm\n"
+                           "    c := a * b;\n  end func5 constrainedby f(b = 4);\n  constant Real k = 7;\n"
+                           "  replaceable function func6 = fun constrainedby f(b = k);\nend P;\nmodel QXC2\n"
+                           "  Real x = P.func(time);\nend QXC2;\n"),
+               std::string("function P.func\n  input Real a;\n  input Real b = 1.0;\n  output Real c;\n"
+                           "algorithm\n  c := a + b;\nend P.func;\n\nclass QXC2\n  Real x = P.func(time, 1.0);\n"
+                           "end QXC2;\n"));
+  YMC_CHECK_EQ(flatten_src("package P\n  partial function f\n    input Real a;\n    input Real b;\n"
+                           "    output Real c;\n  end f;\n  function fun\n    extends f;\n  algorithm\n"
+                           "    c := a + b;\n  end fun;\n"
+                           "  replaceable function func = fun constrainedby f(b = 1);\n"
+                           "  function fun2 = fun(b = 2);\n"
+                           "  replaceable function func2 = fun(a = 3) constrainedby f(b = 1);\n"
+                           "  replaceable function func3 = fun(b = 3) constrainedby f(b = 1);\n"
+                           "  function func4 = func;\n  replaceable function func5\n    extends f;\n  algorithm\n"
+                           "    c := a * b;\n  end func5 constrainedby f(b = 4);\n  constant Real k = 7;\n"
+                           "  replaceable function func6 = fun constrainedby f(b = k);\nend P;\nmodel QXC4\n"
+                           "  Real x = P.func(b = 2, a = time);\nend QXC4;\n"),
+               std::string("function P.func\n  input Real a;\n  input Real b = 1.0;\n  output Real c;\n"
+                           "algorithm\n  c := a + b;\nend P.func;\n\nclass QXC4\n  Real x = P.func(time, 2.0);\n"
+                           "end QXC4;\n"));
+  YMC_CHECK_EQ(flatten_src("package P\n  partial function f\n    input Real a;\n    input Real b;\n"
+                           "    output Real c;\n  end f;\n  function fun\n    extends f;\n  algorithm\n"
+                           "    c := a + b;\n  end fun;\n"
+                           "  replaceable function func = fun constrainedby f(b = 1);\n"
+                           "  function fun2 = fun(b = 2);\n"
+                           "  replaceable function func2 = fun(a = 3) constrainedby f(b = 1);\n"
+                           "  replaceable function func3 = fun(b = 3) constrainedby f(b = 1);\n"
+                           "  function func4 = func;\n  replaceable function func5\n    extends f;\n  algorithm\n"
+                           "    c := a * b;\n  end func5 constrainedby f(b = 4);\n  constant Real k = 7;\n"
+                           "  replaceable function func6 = fun constrainedby f(b = k);\nend P;\nmodel QXC12\n"
+                           "  Real x = P.func5(time);\nend QXC12;\n"),
+               std::string("function P.func5\n  input Real a;\n  input Real b = 4.0;\n  output Real c;\n"
+                           "algorithm\n  c := a * b;\nend P.func5;\n\nclass QXC12\n"
+                           "  Real x = P.func5(time, 4.0);\nend QXC12;\n"));
+}
+
+YMC_TEST(flatten_inherited_function_in_component) {
+  // 组件里继承来的函数：名字按组件路径；protected extends 不可访问见探针 XF3。
+  YMC_CHECK_EQ(flatten_src("model A\n  function f\n    input Real u = 1;\n    output Real x = u;\n  end f;\n"
+                           "  parameter Real p = 2;\nend A;\nmodel C\n  extends A;\nend C;\nmodel B\nprotected\n"
+                           "  extends A;\nend B;\nmodel XF1\n  Real x = c.f();\n  C c;\nend XF1;\n"),
+               std::string("class XF1\n  Real x = 1.0;\n  parameter Real c.p = 2.0;\nend XF1;\n"));
+  YMC_CHECK_EQ(flatten_src("model A\n  function f\n    input Real u = 1;\n    output Real x = u;\n  end f;\n"
+                           "  parameter Real p = 2;\nend A;\nmodel C\n  extends A;\nend C;\nmodel B\nprotected\n"
+                           "  extends A;\nend B;\nmodel XF2\n  Real x = c.f(time);\n  C c;\nend XF2;\n"),
+               std::string("function XF2.c.f\n  input Real u = 1.0;\n  output Real x = u;\nend XF2.c.f;\n\n"
+                           "class XF2\n  Real x = XF2.c.f(time);\n  parameter Real c.p = 2.0;\nend XF2;\n"));
+  YMC_CHECK_EQ(flatten_src("model A\n  function f\n    input Real u = 1;\n    output Real x = u;\n  end f;\n"
+                           "  parameter Real p = 2;\nend A;\nmodel C\n  extends A;\nend C;\nmodel B\nprotected\n"
+                           "  extends A;\nend B;\nmodel XF4\n  Real x = a.f(time);\n  A a;\nend XF4;\n"),
+               std::string("function XF4.a.f\n  input Real u = 1.0;\n  output Real x = u;\nend XF4.a.f;\n\n"
+                           "class XF4\n  Real x = XF4.a.f(time);\n  parameter Real a.p = 2.0;\nend XF4;\n"));
+}
+
+YMC_TEST(flatten_class_extends_short_base) {
+  // class extends 的隐式基类是不带修饰的短类。
+  YMC_CHECK_EQ(flatten_src("partial function f\nend f;\npackage P1\n  replaceable function f = .f;\nend P1;\n"
+                           "package P2\n  extends P1;\n  redeclare function extends f\n    input Real x;\n"
+                           "    output Real y = x;\n  end f;\nend P2;\nmodel XD1\nequation\n  P2.f(time);\n"
+                           "end XD1;\n"),
+               std::string("function P2.f\n  input Real x;\n  output Real y = x;\nend P2.f;\n\nclass XD1\n"
+                           "equation\n  P2.f(time);\nend XD1;\n"));
+  YMC_CHECK_EQ(flatten_src("partial function f\n  input Real x;\nend f;\npackage P1\n"
+                           "  replaceable function f = .f;\nend P1;\npackage P2\n  extends P1;\n"
+                           "  redeclare function extends f\n    output Real y = x;\n  end f;\nend P2;\n"
+                           "model XD2\n  Real z = P2.f(time);\nend XD2;\n"),
+               std::string("function P2.f\n  input Real x;\n  output Real y = x;\nend P2.f;\n\nclass XD2\n"
+                           "  Real z = P2.f(time);\nend XD2;\n"));
+}
+
+YMC_TEST(flatten_overloaded_not_string) {
+  // 'not' / 'String' 重载，数组运算数只配输入是数组的函数。
+  YMC_CHECK_EQ(flatten_src("operator record C\n  Real a;\n  encapsulated operator function 'not'\n    import C;\n"
+                           "    input C c;\n    output C r;\n  algorithm\n    r := C(-c.a);\n  end 'not';\n"
+                           "  encapsulated operator function 'String'\n    import C;\n    input C c;\n"
+                           "    input String n = \"j\";\n    input Integer d = 6;\n    output String s = n;\n"
+                           "  algorithm\n    s := s + String(c.a, significantDigits = d);\n  end 'String';\n"
+                           "  encapsulated operator '-'\n    function neg\n      import C;\n      input C c[:];\n"
+                           "      output C r[size(c, 1)];\n    algorithm\n      for i in 1:size(c, 1) loop\n"
+                           "        r[i] := C(-c[i].a);\n      end for;\n    end neg;\n  end '-';\nend C;\n"
+                           "model XN2\n  C a;\n  C b;\nequation\n  b = not a;\nend XN2;\n"),
+               std::string("function C \"Automatically generated record constructor for C\"\n  input Real a;\n"
+                           "  output C res;\nend C;\n\nfunction C.'not'\n  input C c;\n  output C r;\nalgorithm\n"
+                           "  r := C(-c.a);\nend C.'not';\n\nclass XN2\n  Real a.a;\n  Real b.a;\nequation\n"
+                           "  b = C.'not'(a);\nend XN2;\n"));
+  YMC_CHECK_EQ(flatten_src("operator record C\n  Real a;\n  encapsulated operator 'constructor'\n"
+                           "    function fromR\n      import C;\n      input Real a;\n      output C r(a = a);\n"
+                           "    algorithm\n    end fromR;\n  end 'constructor';\n"
+                           "  encapsulated operator function '0'\n    import C;\n    output C c;\n  algorithm\n"
+                           "    c := C(0);\n  end '0';\n  encapsulated operator function '+'\n    import C;\n"
+                           "    input C x;\n    input C y;\n    output C z;\n  algorithm\n"
+                           "    z := C(x.a + y.a);\n  end '+';\n  encapsulated operator '-'\n    function neg\n"
+                           "      import C;\n      input C c;\n      output C r;\n    algorithm\n"
+                           "      r := C(-c.a);\n    end neg;\n    function negA\n      import C;\n"
+                           "      input C c[:];\n      output C r[size(c, 1)];\n    algorithm\n      r := c;\n"
+                           "    end negA;\n  end '-';\n  encapsulated operator function 'not'\n    import C;\n"
+                           "    input C c;\n    output C r;\n  algorithm\n    r := C(-c.a);\n  end 'not';\n"
+                           "  encapsulated operator function 'and'\n    import C;\n    input C x;\n"
+                           "    input C y;\n    output Boolean r = x.a > y.a;\n  end 'and';\n"
+                           "  encapsulated operator function 'or'\n    import C;\n    input C x;\n"
+                           "    input C y;\n    output C r = x;\n  end 'or';\n"
+                           "  encapsulated operator function 'String'\n    import C;\n    input C c;\n"
+                           "    input String n = \"j\";\n    output String s = n;\n  end 'String';\nend C;\n"
+                           "model XOa1\n  C a[2];\n  C b[2];\nequation\n  b = -a;\nend XOa1;\n"),
+               std::string("function C \"Automatically generated record constructor for C\"\n  input Real a;\n"
+                           "  output C res;\nend C;\n\nfunction C.'-'.negA\n  input C[:] c;\n"
+                           "  output C[size(c, 1)] r;\nalgorithm\n  r := c;\nend C.'-'.negA;\n\n"
+                           "function C.'constructor'.fromR\n  input Real a;\n  output C r;\nalgorithm\n"
+                           "end C.'constructor'.fromR;\n\nclass XOa1\n  Real a[1].a;\n  Real a[2].a;\n"
+                           "  Real b[1].a;\n  Real b[2].a;\nequation\n  b = C.'-'.negA(a);\nend XOa1;\n"));
+  YMC_CHECK_EQ(flatten_src("operator record C\n  Real a;\n  encapsulated operator 'constructor'\n"
+                           "    function fromR\n      import C;\n      input Real a;\n      output C r(a = a);\n"
+                           "    algorithm\n    end fromR;\n  end 'constructor';\n"
+                           "  encapsulated operator function '0'\n    import C;\n    output C c;\n  algorithm\n"
+                           "    c := C(0);\n  end '0';\n  encapsulated operator function '+'\n    import C;\n"
+                           "    input C x;\n    input C y;\n    output C z;\n  algorithm\n"
+                           "    z := C(x.a + y.a);\n  end '+';\n  encapsulated operator '-'\n    function neg\n"
+                           "      import C;\n      input C c;\n      output C r;\n    algorithm\n"
+                           "      r := C(-c.a);\n    end neg;\n    function negA\n      import C;\n"
+                           "      input C c[:];\n      output C r[size(c, 1)];\n    algorithm\n      r := c;\n"
+                           "    end negA;\n  end '-';\n  encapsulated operator function 'not'\n    import C;\n"
+                           "    input C c;\n    output C r;\n  algorithm\n    r := C(-c.a);\n  end 'not';\n"
+                           "  encapsulated operator function 'and'\n    import C;\n    input C x;\n"
+                           "    input C y;\n    output Boolean r = x.a > y.a;\n  end 'and';\n"
+                           "  encapsulated operator function 'or'\n    import C;\n    input C x;\n"
+                           "    input C y;\n    output C r = x;\n  end 'or';\n"
+                           "  encapsulated operator function 'String'\n    import C;\n    input C c;\n"
+                           "    input String n = \"j\";\n    output String s = n;\n  end 'String';\nend C;\n"
+                           "model XOp1\n  C a = C.'0'();\nend XOp1;\n"),
+               std::string("class XOp1\n  Real a.a = 0.0;\nend XOp1;\n"));
+  YMC_CHECK_EQ(flatten_src("operator record C\n  Real a;\n  encapsulated operator 'constructor'\n"
+                           "    function fromR\n      import C;\n      input Real a;\n      output C r(a = a);\n"
+                           "    algorithm\n    end fromR;\n  end 'constructor';\n"
+                           "  encapsulated operator function '0'\n    import C;\n    output C c;\n  algorithm\n"
+                           "    c := C(0);\n  end '0';\n  encapsulated operator function '+'\n    import C;\n"
+                           "    input C x;\n    input C y;\n    output C z;\n  algorithm\n"
+                           "    z := C(x.a + y.a);\n  end '+';\n  encapsulated operator '-'\n    function neg\n"
+                           "      import C;\n      input C c;\n      output C r;\n    algorithm\n"
+                           "      r := C(-c.a);\n    end neg;\n    function negA\n      import C;\n"
+                           "      input C c[:];\n      output C r[size(c, 1)];\n    algorithm\n      r := c;\n"
+                           "    end negA;\n  end '-';\n  encapsulated operator function 'not'\n    import C;\n"
+                           "    input C c;\n    output C r;\n  algorithm\n    r := C(-c.a);\n  end 'not';\n"
+                           "  encapsulated operator function 'and'\n    import C;\n    input C x;\n"
+                           "    input C y;\n    output Boolean r = x.a > y.a;\n  end 'and';\n"
+                           "  encapsulated operator function 'or'\n    import C;\n    input C x;\n"
+                           "    input C y;\n    output C r = x;\n  end 'or';\n"
+                           "  encapsulated operator function 'String'\n    import C;\n    input C c;\n"
+                           "    input String n = \"j\";\n    output String s = n;\n  end 'String';\nend C;\n"
+                           "model XOp5\n  C a;\nequation\n  a = C.'0'();\nend XOp5;\n"),
+               std::string("function C \"Automatically generated record constructor for C\"\n  input Real a;\n"
+                           "  output C res;\nend C;\n\nfunction C.'constructor'.fromR\n  input Real a;\n"
+                           "  output C r;\nalgorithm\nend C.'constructor'.fromR;\n\nclass XOp5\n  Real a.a;\n"
+                           "equation\n  a = C(0.0);\nend XOp5;\n"));
+}
+
+YMC_TEST(flatten_unbound_package_constant) {
+  // 无绑定的包常量：引用留着，收成压平变量（NFPackage.collectConstants）。属性里的不收。
+  YMC_CHECK_EQ(flatten_src("package P\n  constant Real c;\nend P;\nmodel QCS1\n  Real x = P.c;\nend QCS1;\n"),
+               std::string("class QCS1\n  constant Real P.c;\n  Real x = P.c;\nend QCS1;\n"));
+  YMC_CHECK_EQ(flatten_src("class A\n  class B\n    Real z = A.y;\n  end B;\n  constant Real y;\n  B b;\nend A;\n"
+                           "model QCS3\n  A a(y = 1);\nend QCS3;\n"),
+               std::string("class QCS3\n  constant Real A.y;\n  constant Real a.y = 1.0;\n  Real a.b.z = A.y;\n"
+                           "end QCS3;\n"));
+  YMC_CHECK_EQ(flatten_src("package P\n  constant Real c;\n  constant Integer n;\n  constant Boolean b;\n"
+                           "  constant String s;\n  constant Real d = 2;\n  package Q\n    constant Real e;\n"
+                           "  end Q;\nend P;\nmodel XU11\n  Real x(start = P.c);\nend XU11;\n"),
+               std::string("class XU11\n  Real x(start = P.c);\nend XU11;\n"));
+  YMC_CHECK_EQ(flatten_src("package P\n  partial package B\n    constant Real c;\n  end B;\n  package C\n"
+                           "    extends B;\n  end C;\nend P;\nmodel XU35\n  Real x = P.C.c;\nend XU35;\n"),
+               std::string("class XU35\n  constant Real P.C.c;\n  Real x = P.C.c;\nend XU35;\n"));
+  YMC_CHECK_EQ(flatten_src("package P\n  constant Real c;\nend P;\npackage Q = P;\nmodel XU37\n  Real x = Q.c;\n"
+                           "end XU37;\n"),
+               std::string("class XU37\n  constant Real Q.c;\n  Real x = Q.c;\nend XU37;\n"));
+  YMC_CHECK_EQ(flatten_src("model XU46\n  package L\n    constant Real c;\n  end L;\n  Real x = L.c;\nend XU46;\n"),
+               std::string("class XU46\n  constant Real L.c;\n  Real x = L.c;\nend XU46;\n"));
+}
+
+YMC_TEST(flatten_package_constant_record_value) {
+  // 包里的记录 / 模型常量的值：字段修饰、extends final、`:` 维、size 穿过记录。
+  YMC_CHECK_EQ(flatten_src("package P\n  record R\n    Real a = 1;\n  end R;\n  constant R g;\nend P;\n"
+                           "model QXR1\n  P.R r = P.g;\nend QXR1;\n"),
+               std::string("class QXR1\n  Real r.a = 1.0;\nend QXR1;\n"));
+  YMC_CHECK_EQ(flatten_src("package PB\n  record RB\n    constant Integer n;\n"
+                           "    parameter Real a[n] = ones(n);\n  end RB;\nend PB;\npackage P\n  record R\n"
+                           "    extends PB.RB(final n = 1);\n  end R;\n  replaceable constant R g;\nend P;\n"
+                           "model QXR6\n  PB.RB r = P.g;\nend QXR6;\n"),
+               std::string("class QXR6\n  constant Integer r.n = 1;\n  parameter Real r.a[1] = 1.0;\nend QXR6;\n"));
+  YMC_CHECK_EQ(flatten_src("package PB\n  record RB\n    constant Integer n;\n"
+                           "    parameter Real a[n] = ones(n);\n  end RB;\nend PB;\npackage P\n  record R\n"
+                           "    extends PB.RB(final n = 2);\n  end R;\n  replaceable constant R g;\nend P;\n"
+                           "model QXR7\n  P.R r = P.g;\nend QXR7;\n"),
+               std::string("class QXR7\n  final constant Integer r.n = 2;\n  parameter Real r.a[1] = 1.0;\n"
+                           "  parameter Real r.a[2] = 1.0;\nend QXR7;\n"));
+  YMC_CHECK_EQ(flatten_src("package A\n  model M\n    constant Integer i[3] = {1, 2, 3};\n  end M;\n"
+                           "  constant M m[3];\nend A;\nmodel QXR10\n  constant Integer j = A.m[2].i[3];\n"
+                           "  Real x = j;\n  Integer y = A.m[1].i[1];\nend QXR10;\n"),
+               std::string("class QXR10\n  constant Integer j = 3;\n  Real x = 3.0;\n  Integer y = 1;\nend QXR10;\n"));
+  YMC_CHECK_EQ(flatten_src("package A\n  model M\n    constant Integer i;\n  end M;\n"
+                           "  constant M m[2](i = {3, 4});\nend A;\nmodel QXR15\n  Integer y = A.m[2].i;\n"
+                           "end QXR15;\n"),
+               std::string("class QXR15\n  Integer y = 4;\nend QXR15;\n"));
+  YMC_CHECK_EQ(flatten_src("package P\n  record R\n    constant Real[:, 4] res = ones(3, 4);\n  end R;\n"
+                           "  constant R c;\n  function f\n    output Real d;\n  protected\n"
+                           "    final constant Integer n = size(c.res, 1);\n"
+                           "    final constant Real[n, 4] b = c.res;\n  algorithm\n"
+                           "    d := sum(b[1, i] for i in 1:n);\n  end f;\n  constant Real h = f();\nend P;\n"
+                           "model XS1\n  parameter Real p = P.h;\nend XS1;\n"),
+               std::string("class XS1\n  parameter Real p = 3.0;\nend XS1;\n"));
+  YMC_CHECK_EQ(flatten_src("package P\n  record R\n    constant Real[:, 4] res = ones(3, 4);\n  end R;\n"
+                           "  constant R c;\nend P;\nmodel XS2\n  constant Integer n = size(P.c.res, 1);\n"
+                           "  Real x[size(P.c.res, 2)];\nend XS2;\n"),
+               std::string("class XS2\n  constant Integer n = 3;\n  Real x[1];\n  Real x[2];\n  Real x[3];\n"
+                           "  Real x[4];\nend XS2;\n"));
+}
+
+YMC_TEST(flatten_get_instance_name_package) {
+  // getInstanceName() 在包 / 函数里按作用域根路径（evalGetInstanceName，NFCeval.mo:3091-3102 v1.25.0）。
+  YMC_CHECK_EQ(flatten_src("package P\n  constant String s = getInstanceName();\nend P;\nmodel XG1\n"
+                           "  String t = P.s;\nend XG1;\n"),
+               std::string("class XG1\n  String t = \"P\";\nend XG1;\n"));
+  YMC_CHECK_EQ(flatten_src("package P\n  package Q\n    constant String s = getInstanceName();\n  end Q;\n"
+                           "end P;\nmodel XG2\n  String t = P.Q.s;\nend XG2;\n"),
+               std::string("class XG2\n  String t = \"P.Q\";\nend XG2;\n"));
+  YMC_CHECK_EQ(flatten_src("model A\n  String s = getInstanceName();\nend A;\npackage P\n  constant A a;\n"
+                           "end P;\nmodel XG4\n  String t = P.a.s;\nend XG4;\n"),
+               std::string("class XG4\n  String t = \"P.a\";\nend XG4;\n"));
+  YMC_CHECK_EQ(flatten_src("model B\n  String s = getInstanceName();\nend B;\nmodel A\n  B b;\nend A;\n"
+                           "package P\n  constant A a;\nend P;\nmodel XG5\n  String t = P.a.b.s;\nend XG5;\n"),
+               std::string("class XG5\n  String t = \"P.a.b\";\nend XG5;\n"));
+  YMC_CHECK_EQ(flatten_src("function f\n  output String s = getInstanceName();\nend f;\nmodel XG6\n"
+                           "  constant String t = f();\nend XG6;\n"),
+               std::string("class XG6\n  constant String t = \"f\";\nend XG6;\n"));
+  YMC_CHECK_EQ(flatten_src("model XG8\n  function f\n    output String s = getInstanceName();\n  end f;\n"
+                           "  constant String t = f();\n  String u = f();\nend XG8;\n"),
+               std::string("class XG8\n  constant String t = \"XG8.f\";\n  String u = \"XG8.f\";\nend XG8;\n"));
+  YMC_CHECK_EQ(flatten_src("package P\n  constant String s = getInstanceName();\n  model M\n    String t = s;\n"
+                           "  end M;\nend P;\nmodel XG15\n  P.M m;\nend XG15;\n"),
+               std::string("class XG15\n  String m.t = \"P\";\nend XG15;\n"));
+}
+
+YMC_TEST(flatten_external_object_forwarded) {
+  // 外部对象形参再传给别的函数；前导点短类连接器的 connect。
+  YMC_CHECK_EQ(flatten_src("package P\n  class Ext\n    extends ExternalObject;\n    function constructor\n"
+                           "      input Integer n = 1;\n      output Ext e;\n      external \"C\" e = mk(n);\n"
+                           "    end constructor;\n    function destructor\n      input Ext e;\n"
+                           "      external \"C\" rm(e);\n    end destructor;\n  end Ext;\n  class Ext2\n"
+                           "    extends ExternalObject;\n    function constructor\n      output Ext2 e;\n"
+                           "      external \"C\" e = mk2();\n    end constructor;\n    function destructor\n"
+                           "      input Ext2 e;\n      external \"C\" rm2(e);\n    end destructor;\n  end Ext2;\n"
+                           "  function rd\n    input Ext e;\n    output Real v;\n    external \"C\" v = ff(e);\n"
+                           "  end rd;\n  function wrap\n    input Ext e;\n    input Real t;\n    output Real v;\n"
+                           "  algorithm\n    v := rd(e) + t;\n  end wrap;\n  function wrap2\n    input Ext e;\n"
+                           "    output Real v;\n  algorithm\n    v := wrap(e, 1.0);\n  end wrap2;\n"
+                           "  function bad\n    input Ext2 e;\n    output Real v;\n  algorithm\n    v := rd(e);\n"
+                           "  end bad;\n  function noret\n    input Ext e;\n    external \"C\" sink(e);\n"
+                           "  end noret;\n  function st\n    input Ext e;\n    output Real v = 1;\n  algorithm\n"
+                           "    noret(e);\n  end st;\nend P;\nmodel QXO1\n  P.Ext e = P.Ext(1);\n"
+                           "  Real x = P.wrap(e, time);\nend QXO1;\n"),
+               std::string("impure function P.Ext.constructor\n  input Integer n = 1;\n  output P.Ext e;\n\n"
+                           "  external \"C\" e = mk(n);\nend P.Ext.constructor;\n\n"
+                           "impure function P.Ext.destructor\n  input P.Ext e;\n\n  external \"C\" rm(e);\n"
+                           "end P.Ext.destructor;\n\nimpure function P.rd\n  input P.Ext e;\n  output Real v;\n\n"
+                           "  external \"C\" v = ff(e);\nend P.rd;\n\nfunction P.wrap\n  input P.Ext e;\n"
+                           "  input Real t;\n  output Real v;\nalgorithm\n  v := P.rd(e) + t;\nend P.wrap;\n\n"
+                           "class QXO1\n  P.Ext e = P.Ext.constructor(1);\n  Real x = P.wrap(e, time);\nend QXO1;\n"));
+  YMC_CHECK_EQ(flatten_src("package P\n  class Ext\n    extends ExternalObject;\n    function constructor\n"
+                           "      input Integer n = 1;\n      output Ext e;\n      external \"C\" e = mk(n);\n"
+                           "    end constructor;\n    function destructor\n      input Ext e;\n"
+                           "      external \"C\" rm(e);\n    end destructor;\n  end Ext;\n  class Ext2\n"
+                           "    extends ExternalObject;\n    function constructor\n      output Ext2 e;\n"
+                           "      external \"C\" e = mk2();\n    end constructor;\n    function destructor\n"
+                           "      input Ext2 e;\n      external \"C\" rm2(e);\n    end destructor;\n  end Ext2;\n"
+                           "  function rd\n    input Ext e;\n    output Real v;\n    external \"C\" v = ff(e);\n"
+                           "  end rd;\n  function wrap\n    input Ext e;\n    input Real t;\n    output Real v;\n"
+                           "  algorithm\n    v := rd(e) + t;\n  end wrap;\n  function wrap2\n    input Ext e;\n"
+                           "    output Real v;\n  algorithm\n    v := wrap(e, 1.0);\n  end wrap2;\n"
+                           "  function bad\n    input Ext2 e;\n    output Real v;\n  algorithm\n    v := rd(e);\n"
+                           "  end bad;\n  function noret\n    input Ext e;\n    external \"C\" sink(e);\n"
+                           "  end noret;\n  function st\n    input Ext e;\n    output Real v = 1;\n  algorithm\n"
+                           "    noret(e);\n  end st;\nend P;\nmodel QXO2\n  P.Ext e = P.Ext(1);\n"
+                           "  Real x = P.wrap2(e);\nend QXO2;\n"),
+               std::string("impure function P.Ext.constructor\n  input Integer n = 1;\n  output P.Ext e;\n\n"
+                           "  external \"C\" e = mk(n);\nend P.Ext.constructor;\n\n"
+                           "impure function P.Ext.destructor\n  input P.Ext e;\n\n  external \"C\" rm(e);\n"
+                           "end P.Ext.destructor;\n\nimpure function P.rd\n  input P.Ext e;\n  output Real v;\n\n"
+                           "  external \"C\" v = ff(e);\nend P.rd;\n\nfunction P.wrap\n  input P.Ext e;\n"
+                           "  input Real t;\n  output Real v;\nalgorithm\n  v := P.rd(e) + t;\nend P.wrap;\n\n"
+                           "function P.wrap2\n  input P.Ext e;\n  output Real v;\nalgorithm\n"
+                           "  v := P.wrap(e, 1.0);\nend P.wrap2;\n\nclass QXO2\n"
+                           "  P.Ext e = P.Ext.constructor(1);\n  Real x = P.wrap2(e);\nend QXO2;\n"));
+  YMC_CHECK_EQ(flatten_src("package B\n  connector IO = output Integer;\n  connector II = input Integer;\n"
+                           "  connector RO = output Real;\n  connector RI = input Real;\n  block A\n"
+                           "    IO y(start = 0, fixed = true);\n  equation\n    when sample(0, 1) then\n"
+                           "      y = pre(y) + 1;\n    end when;\n  end A;\n  block C\n    .B.II u;\n"
+                           "    .B.RO y;\n  equation\n    y = u;\n  end C;\nend B;\nmodel XI1\n  B.A a;\n"
+                           "  B.C c;\nequation\n  connect(a.y, c.u);\nend XI1;\n"),
+               std::string("class XI1\n  Integer a.y(start = 0, fixed = true);\n  Integer c.u;\n  Real c.y;\n"
+                           "equation\n  a.y = c.u;\n  when sample(0.0, 1.0) then\n    a.y = pre(a.y) + 1;\n"
+                           "  end when;\n  c.y = /*Real*/(c.u);\nend XI1;\n"));
+}
+
+YMC_TEST(flatten_when_composite_section_dead_branch) {
+  // when 体里复合数组段作左侧；空数组等式删掉；结构参数条件剪掉的分支里的越界下标。
+  YMC_CHECK_EQ(flatten_src("connector K\n  Real d;\n  Integer n;\nend K;\nmodel XWa1\n  K c[2];\n"
+                           "  Real y(start = 0, fixed = true);\nequation\n  c.n = {1, 2};\n"
+                           "  when sample(0, 1) then\n    c.d = fill(y, 2);\n  end when;\n  y = time;\n"
+                           "end XWa1;\n"),
+               std::string("class XWa1\n  Real c[1].d;\n  Integer c[1].n;\n  Real c[2].d;\n  Integer c[2].n;\n"
+                           "  Real y(start = 0.0, fixed = true);\nequation\n  c[1].n = 1;\n  c[2].n = 2;\n"
+                           "  when sample(0.0, 1.0) then\n    c[1].d = y;\n    c[2].d = y;\n  end when;\n"
+                           "  y = time;\nend XWa1;\n"));
+  YMC_CHECK_EQ(flatten_src("connector K\n  Real d;\n  Integer n;\nend K;\nmodel XWa2\n"
+                           "  parameter Integer nu = 1;\n  K c[nu];\n  Real y;\nequation\n  y = time;\n"
+                           "  c.n = fill(2, nu);\n  when sample(0, 1) then\n    c.d = fill(y, nu);\n  end when;\n"
+                           "end XWa2;\n"),
+               std::string("class XWa2\n  final parameter Integer nu = 1;\n  Real c[1].d;\n  Integer c[1].n;\n"
+                           "  Real y;\nequation\n  y = time;\n  c[1].n = 2;\n  when sample(0.0, 1.0) then\n"
+                           "    c[1].d = y;\n  end when;\nend XWa2;\n"));
+  YMC_CHECK_EQ(flatten_src("connector K\n  Real d;\n  Integer n;\nend K;\nmodel XWa3\n"
+                           "  parameter Integer nu = 0;\n  K c[nu];\n  Real y;\nequation\n  y = time;\n"
+                           "  c.n = fill(2, nu);\n  when sample(0, 1) then\n    c.d = fill(y, nu);\n  end when;\n"
+                           "end XWa3;\n"),
+               std::string("class XWa3\n  final parameter Integer nu = 0;\n  Real y;\nequation\n  y = time;\n"
+                           "  when sample(0.0, 1.0) then\n  end when;\nend XWa3;\n"));
+  YMC_CHECK_EQ(flatten_src("connector K\n  Real d;\n  Integer n;\nend K;\nmodel XWb1\n"
+                           "  parameter Integer nu = 0;\n  K c[nu];\n  Integer m;\nequation\n"
+                           "  m = if nu == 1 then c[1].n + 2 else 2;\nend XWb1;\n"),
+               std::string("class XWb1\n  final parameter Integer nu = 0;\n  Integer m;\nequation\n  m = 2;\n"
+                           "end XWb1;\n"));
+  YMC_CHECK_EQ(flatten_src("connector K\n  Real d;\n  Integer n;\nend K;\nmodel XWb2\n"
+                           "  parameter Integer nu = 2;\n  K c[nu];\n  Integer m;\nequation\n"
+                           "  m = if nu == 1 then c[3].n + 2 else 2;\nend XWb2;\n"),
+               std::string("class XWb2\n  final parameter Integer nu = 2;\n  Real c[1].d;\n  Integer c[1].n;\n"
+                           "  Real c[2].d;\n  Integer c[2].n;\n  Integer m;\nequation\n  m = 2;\nend XWb2;\n"));
+  YMC_CHECK_EQ(flatten_src("connector K\n  Real d;\n  Integer n;\nend K;\nmodel XWb3\n"
+                           "  parameter Integer nu = 0;\n  K c[nu];\n  Integer m;\nequation\n"
+                           "  when initial() then\n    m = if nu == 1 then c[1].n + 2 else 2;\n  end when;\n"
+                           "end XWb3;\n"),
+               std::string("class XWb3\n  final parameter Integer nu = 0;\n  Integer m;\nequation\n"
+                           "  when initial() then\n    m = 2;\n  end when;\nend XWb3;\n"));
+}
+
+YMC_TEST(flatten_record_short_class_ctor) {
+  // 纯重声明的记录短类的构造。
+  YMC_CHECK_EQ(flatten_src("model XPa1\n  record R\n    replaceable Real x;\n  end R;\n"
+                           "  type M = Real(quantity = \"fish\");\n  record R2 = R(redeclare M x);\n"
+                           "  R2 r = R2(x = 1.0);\nend XPa1;\n"),
+               std::string("class XPa1\n  Real r.x(quantity = \"fish\") = 1.0;\nend XPa1;\n"));
+  YMC_CHECK_EQ(flatten_src("model XPa2\n  record R\n    replaceable Real x;\n  end R;\n"
+                           "  type M = Real(quantity = \"fish\");\n  record R2 = R(redeclare M x);\n"
+                           "  R2 r = R2(1.0);\nend XPa2;\n"),
+               std::string("class XPa2\n  Real r.x(quantity = \"fish\") = 1.0;\nend XPa2;\n"));
+  YMC_CHECK_EQ(flatten_src("model XPa4\n  record R\n    replaceable Real x;\n  end R;\n"
+                           "  type M = Real(quantity = \"fish\");\n  record R2 = R(redeclare M x);\n"
+                           "  R2 r = R2(time);\nend XPa4;\n"),
+               std::string("class XPa4\n  Real r.x(quantity = \"fish\") = time;\nend XPa4;\n"));
+}
+
+YMC_TEST(flatten_spatial_distribution) {
+  // spatialDistribution：实参按形参配、缺省补齐。
+  YMC_CHECK_EQ(flatten_src("model XY1\n  Real in0 = time;\n  Real in1 = 2 * time;\n  Real a;\n  Real b;\n"
+                           "  Real x = time;\n  Boolean v = true;\nequation\n"
+                           "  (a, b) = spatialDistribution(in0, in1, x, v);\nend XY1;\n"),
+               std::string("class XY1\n  Real in0 = time;\n  Real in1 = 2.0 * time;\n  Real a;\n  Real b;\n"
+                           "  Real x = time;\n  Boolean v = true;\nequation\n"
+                           "  (a, b) = spatialDistribution(in0, in1, x, v, {0.0, 1.0}, {0.0, 0.0});\nend XY1;\n"));
+  YMC_CHECK_EQ(flatten_src("model XY3\n  Real in0 = time;\n  Real in1 = 2 * time;\n  Real a;\n  Real b;\n"
+                           "  Real x = time;\n  Boolean v = true;\nequation\n"
+                           "  (a, b) = spatialDistribution(in0, in1, x, v, initialPoints = {0.0, 0.5, 1.0}, initi"
+                           "alValues = {1.0, 2.0, 3.0});\nend XY3;\n"),
+               std::string("class XY3\n  Real in0 = time;\n  Real in1 = 2.0 * time;\n  Real a;\n  Real b;\n"
+                           "  Real x = time;\n  Boolean v = true;\nequation\n"
+                           "  (a, b) = spatialDistribution(in0, in1, x, v, {0.0, 0.5, 1.0}, {1.0, 2.0, 3.0});\n"
+                           "end XY3;\n"));
+  YMC_CHECK_EQ(flatten_src("model XY8\n  Real in0 = time;\n  Real in1 = 2 * time;\n  Real a;\n  Real b;\n"
+                           "  Real x = time;\n  Boolean v = true;\nequation\n"
+                           "  (a, b) = spatialDistribution(in1 = in1, in0 = in0, positiveVelocity = v, x = x);\n"
+                           "end XY8;\n"),
+               std::string("class XY8\n  Real in0 = time;\n  Real in1 = 2.0 * time;\n  Real a;\n  Real b;\n"
+                           "  Real x = time;\n  Boolean v = true;\nequation\n"
+                           "  (a, b) = spatialDistribution(in0, in1, x, v, {0.0, 1.0}, {0.0, 0.0});\nend XY8;\n"));
+  YMC_CHECK_EQ(flatten_src("model XY11\n  Real in0 = time;\n  Real in1 = 2 * time;\n  Real a;\n  Real b;\n"
+                           "  Real x = time;\n  Boolean v = true;\nequation\n"
+                           "  (a, ) = spatialDistribution(in0, in1, x, v);\n  b = 1;\nend XY11;\n"),
+               std::string("class XY11\n  Real in0 = time;\n  Real in1 = 2.0 * time;\n  Real a;\n  Real b;\n"
+                           "  Real x = time;\n  Boolean v = true;\nequation\n"
+                           "  (a, _) = spatialDistribution(in0, in1, x, v, {0.0, 1.0}, {0.0, 0.0});\n  b = 1.0;\n"
+                           "end XY11;\n"));
+}
+
+YMC_TEST(flatten_record_sum_reduction) {
+  // 记录元素的 sum：归约留着，'+' 随它留下。
+  YMC_CHECK_EQ(flatten_src("operator record C\n  Real re;\n  encapsulated operator 'constructor'\n"
+                           "    function fromReal\n      import C;\n      input Real re;\n"
+                           "      output C r(re = re);\n    algorithm\n    end fromReal;\n  end 'constructor';\n"
+                           "  encapsulated operator function '+'\n    import C;\n    input C a;\n    input C b;\n"
+                           "    output C c;\n  algorithm\n    c := C(a.re + b.re);\n  end '+';\n"
+                           "  encapsulated operator function '0'\n    import C;\n    output C c;\n  algorithm\n"
+                           "    c := C(0);\n  end '0';\nend C;\nmodel QXM1\n"
+                           "  C a[3] = {C(time), C(time), C(time)};\n  C b;\nequation\n"
+                           "  b = sum(a[i] for i in 1:3);\nend QXM1;\n"),
+               std::string("function C \"Automatically generated record constructor for C\"\n  input Real re;\n"
+                           "  output C res;\nend C;\n\nfunction C.'+'\n  input C a;\n  input C b;\n"
+                           "  output C c;\nalgorithm\n  c := C.'constructor'.fromReal(a.re + b.re);\nend C.'+';\n"
+                           "\nfunction C.'constructor'.fromReal\n  input Real re;\n  output C r;\nalgorithm\n"
+                           "end C.'constructor'.fromReal;\n\nclass QXM1\n  Real a[1].re;\n  Real a[2].re;\n"
+                           "  Real a[3].re;\n  Real b.re;\nequation\n  a[1] = C.'constructor'.fromReal(time);\n"
+                           "  a[2] = C.'constructor'.fromReal(time);\n  a[3] = C.'constructor'.fromReal(time);\n"
+                           "  b = sum(a[i] for i in 1:3);\nend QXM1;\n"));
+  YMC_CHECK_EQ(flatten_src("operator record C\n  Real re;\n  encapsulated operator 'constructor'\n"
+                           "    function fromReal\n      import C;\n      input Real re;\n"
+                           "      output C r(re = re);\n    algorithm\n    end fromReal;\n  end 'constructor';\n"
+                           "  encapsulated operator function '+'\n    import C;\n    input C a;\n    input C b;\n"
+                           "    output C c;\n  algorithm\n    c := C(a.re + b.re);\n  end '+';\n"
+                           "  encapsulated operator function '0'\n    import C;\n    output C c;\n  algorithm\n"
+                           "    c := C(0);\n  end '0';\nend C;\nmodel QXM5\n  C a[2];\n  C b;\nequation\n"
+                           "  b = sum(a[i] for i in {1, 2});\nend QXM5;\n"),
+               std::string("function C \"Automatically generated record constructor for C\"\n  input Real re;\n"
+                           "  output C res;\nend C;\n\nfunction C.'+'\n  input C a;\n  input C b;\n"
+                           "  output C c;\nalgorithm\n  c := C.'constructor'.fromReal(a.re + b.re);\nend C.'+';\n"
+                           "\nfunction C.'constructor'.fromReal\n  input Real re;\n  output C r;\nalgorithm\n"
+                           "end C.'constructor'.fromReal;\n\nclass QXM5\n  Real a[1].re;\n  Real a[2].re;\n"
+                           "  Real b.re;\nequation\n  b = sum(a[i] for i in {1, 2});\nend QXM5;\n"));
+}
+
+YMC_TEST(flatten_class_restriction_on_lookup) {
+  // 限定名、函数、import 穿过的类按限定词核查类体（instPackage → NFRestriction.checkClass :400-497 v1.25.0）：omc 报错的一律 SKIP；
+  // 空段、基类、没穿过的类不查，照常出。期望取 omc 1.25.0 实跑（`omc <模型>.mo`，模型即 pk-p50 的同名探针）。
+  YMC_CHECK_EQ(flatten_src("package P\n  function f\n    input Real x;\n  end f;\n  constant Real x;\nequation\n"
+                           "end P;\nmodel XPkuee\n  Real y = P.x;\nend XPkuee;\n"),
+               std::string("class XPkuee\n  constant Real P.x;\n  Real y = P.x;\nend XPkuee;\n"));
+  YMC_CHECK_EQ(flatten_src("package P\n  function f\n    input Real x;\n  end f;\n  constant Real x;\nalgorithm\n"
+                           "end P;\nmodel XPkuea\n  Real y = P.x;\nend XPkuea;\n"),
+               std::string("class XPkuea\n  constant Real P.x;\n  Real y = P.x;\nend XPkuea;\n"));
+  YMC_CHECK_EQ(flatten_src("package B\n  function f\n    input Real x;\n  end f;\n  constant Real x;\nequation\n"
+                           "  f(x);\nend B;\npackage P\n  extends B;\nend P;\nmodel XPuext1\n  Real y = P.x;\n"
+                           "end XPuext1;\n"),
+               std::string("class XPuext1\n  constant Real P.x;\n  Real y = P.x;\nend XPuext1;\n"));
+  YMC_CHECK_EQ(flatten_src("package P\n  package Q\n  function f\n    input Real x;\n  end f;\n"
+                           "    constant Real x = 1;\n  equation\n    f(x);\n  end Q;\n  constant Real z;\n"
+                           "end P;\nmodel XPunest4\n  Real y = P.z;\nend XPunest4;\n"),
+               std::string("class XPunest4\n  constant Real P.z;\n  Real y = P.z;\nend XPunest4;\n"));
+  YMC_CHECK_EQ(flatten_src("package P\n  package Q\n  function f\n    input Real x;\n  end f;\n  function g\n"
+                           "    input Real u;\n    output Real v = u;\n  end g;\n    constant Real x = 1;\n"
+                           "  equation\n    f(x);\n  end Q;\n  constant Real w = 2;\nend P;\nmodel XPi9\n"
+                           "  import P.*;\n  Real y = w;\nend XPi9;\n"),
+               std::string("class XPi9\n  Real y = 2.0;\nend XPi9;\n"));
+  YMC_CHECK(flatten_src("package P\n  function f\n    input Real x;\n  end f;\n  constant Real x;\nequation\n"
+                        "  f(x);\nend P;\nmodel XPkue\n  Real y = P.x;\nend XPkue;\n").rfind("<unsupported:", 0) == 0);   // omc 拒绝
+  YMC_CHECK(flatten_src("package P\n  function f\n    input Real x;\n  end f;\n  constant Real x;\nalgorithm\n"
+                        "  f(x);\nend P;\nmodel XPkua\n  Real y = P.x;\nend XPkua;\n").rfind("<unsupported:", 0) == 0);   // omc 拒绝
+  YMC_CHECK(flatten_src("package P\n  function f\n    input Real x;\n  end f;\n  constant Real x = 1;\nequation\n"
+                        "  f(x);\nend P;\nmodel XPkve\n  Real y = P.x;\nend XPkve;\n").rfind("<unsupported:", 0) == 0);   // omc 拒绝
+  YMC_CHECK(flatten_src("package P\n  function f\n    input Real x;\n  end f;\n  function g\n    input Real u;\n"
+                        "    output Real v = u;\n  end g;\n  constant Real x = 1;\nequation\n  f(x);\nend P;\n"
+                        "model XPufn\n  Real y = P.g(time);\nend XPufn;\n").rfind("<unsupported:", 0) == 0);   // omc 拒绝
+  YMC_CHECK(flatten_src("package P\n  function f\n    input Real x;\n  end f;\n  function g\n    input Real u;\n"
+                        "    output Real v = u;\n  end g;\n  constant Real x = 1;\nequation\n  f(x);\nend P;\n"
+                        "model XPufn2\n  Real y = 1;\n  import P.g;\n  Real z = g(2);\nend XPufn2;\n").rfind("<unsupported:", 0) == 0);   // omc 拒绝
+  YMC_CHECK(flatten_src("package P\n  package Q\n  function f\n    input Real x;\n  end f;\n"
+                        "    constant Real x;\n  equation\n    f(x);\n  end Q;\nend P;\nmodel XPunest3\n"
+                        "  Real y = P.Q.x;\nend XPunest3;\n").rfind("<unsupported:", 0) == 0);   // omc 拒绝
+  YMC_CHECK(flatten_src("package P\n  constant Real x;\n  parameter Real z = 2;\nend P;\nmodel XPn5\n"
+                        "  Real y = P.x;\nend XPn5;\n").rfind("<unsupported:", 0) == 0);   // omc 拒绝
+  YMC_CHECK(flatten_src("record A\n  constant Real x = 1;\nprotected\n  Real z;\nend A;\nmodel XPr1\n"
+                        "  Real y = A.x;\nend XPr1;\n").rfind("<unsupported:", 0) == 0);   // omc 拒绝
+  YMC_CHECK(flatten_src("operator record A\n  constant Real x = 1;\nprotected\n  Real z;\nend A;\nmodel XPr6\n"
+                        "  Real y = A.x;\nend XPr6;\n").rfind("<unsupported:", 0) == 0);   // omc 拒绝
+  YMC_CHECK(flatten_src("operator A\n  constant Real x = 1;\nequation\n  x = 1;\nend A;\nmodel XPr8\n"
+                        "  Real y = A.x;\nend XPr8;\n").rfind("<unsupported:", 0) == 0);   // omc 拒绝
+  YMC_CHECK(flatten_src("package P\n  function f\n    input Real x;\n  end f;\n  function g\n    input Real u;\n"
+                        "    output Real v = u;\n  end g;\n  constant Real x = 1;\n  package Q\n"
+                        "    constant Real z = 1;\n  end Q;\nequation\n  f(x);\nend P;\nmodel XPi1\n"
+                        "  import P.*;\n  Real y = x;\nend XPi1;\n").rfind("<unsupported:", 0) == 0);   // omc 拒绝
+  YMC_CHECK(flatten_src("package P\n  package Q\n  function f\n    input Real x;\n  end f;\n  function g\n"
+                        "    input Real u;\n    output Real v = u;\n  end g;\n    constant Real x = 1;\n"
+                        "  equation\n    f(x);\n  end Q;\n  constant Real w = 2;\nend P;\nmodel XPi7\n"
+                        "  import P.Q.*;\n  Real y = x;\nend XPi7;\n").rfind("<unsupported:", 0) == 0);   // omc 拒绝
 }
 
 YMC_TEST_MAIN

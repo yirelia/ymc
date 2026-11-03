@@ -20,6 +20,12 @@
 
 namespace ymc {
 
+// 类体违反限定词（NFRestriction.checkClass :400-497 v1.25.0）：package 只能有常量组件（assertOnlyConstantComponents :370-387），record（含
+// operator record，fromSCode :82）只能有 public 段，这两种和 operator 都不能有方程段或非空的算法段（assertNoEquations :276-298、
+// assertNoAlgorithms :300-330 只认 isNonEmptyAlgorithm，XPk 探针 XPkuea / XPkueia 空段照过）。只看这个类自己的元素：基类不查（instExtends
+// :1475-1517，XPu 探针 ext1-3）。包实例（inst_package）和 flatten 定义层下降（cannot_enter）共用。
+bool class_body_illegal(const Inst& I, const SElement& c);
+
 class Instantiator {
  public:
   Instantiator(Inst& inst, Diagnostics& diags) : I_(inst), diags_(diags) {}

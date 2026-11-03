@@ -1,0 +1,4004 @@
+//// set: pk-p50a — 68b 评审时主代理手写的对抗形状（不来自代理的生成器）。OB：构造函数输出绑定里的自调用；EX：external "C" 内建等价函数的常量求值；UC：无绑定包常量；GI：包和函数里的 getInstanceName；OP：'not' / 'String' / sum 重载、`+r`、`-(-r)`；CC：约束修饰并入函数、重声明、构造调用；CF：组件里继承来的函数；CE：class extends 短类基类；RC：记录短类构造；SD：spatialDistribution；EM：空数组与结构条件；RS：类体限定词；IN：语法错的变体。
+//// model: A68bOB1
+operator record C1
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    function fromReal
+      import C1;
+      input Real re;
+      input Real im = 0.0;
+      output C1 result = C1(re = re, im = im);
+    algorithm
+    end fromReal;
+  end 'constructor';
+end C1;
+model M parameter C1 c = C1(1.0, 2.0); end M;
+//// model: A68bOB2
+operator record C1
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    function fromReal
+      import C1;
+      input Real re;
+      input Real im = 0.0;
+      output C1 result = C1(re = re, im = im);
+    algorithm
+    end fromReal;
+  end 'constructor';
+end C1;
+model M C1 c = C1(time); end M;
+//// model: A68bOB3
+operator record C1
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    function fromReal
+      import C1;
+      input Real re;
+      input Real im = 0.0;
+      output C1 result = C1(re = re, im = im);
+    algorithm
+    end fromReal;
+  end 'constructor';
+end C1;
+model M constant C1 c = C1(1.0); Real y = c.re + c.im; end M;
+//// model: A68bOB4
+operator record C1
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    function fromReal
+      import C1;
+      input Real re;
+      input Real im = 0.0;
+      output C1 result = C1(re = re, im = im);
+    algorithm
+    end fromReal;
+  end 'constructor';
+end C1;
+model M C1 a[2] = {C1(1.0), C1(time)}; end M;
+//// model: A68bOB5
+operator record C1
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    function fromReal
+      import C1;
+      input Real re;
+      input Real im = 0.0;
+      output C1 result = C1(re = re, im = im);
+    algorithm
+    end fromReal;
+  end 'constructor';
+end C1;
+function g input C1 c; output Real y; algorithm y := c.re; end g;
+model M Real y = g(C1(time)); end M;
+//// model: A68bOB6
+operator record C1
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    function fromReal
+      import C1;
+      input Real re;
+      input Real im = 0.0;
+      output C1 result = C1(re = re, im = im);
+    algorithm
+    end fromReal;
+  end 'constructor';
+end C1;
+function g input C1 c; output Real y; algorithm y := c.re; end g;
+model M Real y = g(C1(2.0)); end M;
+//// model: A68bOB7
+operator record C1
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    function fromReal
+      import C1;
+      input Real re;
+      input Real im = 0.0;
+      output C1 result = C1(re = re, im = im);
+    algorithm
+    end fromReal;
+  end 'constructor';
+end C1;
+model M parameter Real p = 2; C1 c = C1(p, p + 1); end M;
+//// model: A68bOB8
+operator record C1
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    function fromReal
+      import C1;
+      input Real re;
+      input Real im = 0.0;
+      output C1 result = C1(re = re, im = im);
+    algorithm
+    end fromReal;
+  end 'constructor';
+end C1;
+model M parameter Real p = 2; final parameter C1 c = C1(p); end M;
+//// model: A68bOB9
+operator record C1
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    function fromReal
+      import C1;
+      input Real re;
+      input Real im = 0.0;
+      output C1 result = C1(re = re, im = im);
+    algorithm
+    end fromReal;
+  end 'constructor';
+end C1;
+model M Real x = C1(2.0).re; end M;
+//// model: A68bOB10
+operator record C2 Real re; Real im; encapsulated operator 'constructor' function fromReal import C2; input Real re; input Real im = 0.0; output C2 result = C2(im = im, re = re); algorithm end fromReal; end 'constructor'; end C2;
+model M C2 c = C2(1.0, 2.0); end M;
+//// model: A68bOB11
+operator record C2 Real re; Real im; encapsulated operator 'constructor' function fromReal import C2; input Real im; input Real re = 0.0; output C2 result = C2(re = re, im = im); algorithm end fromReal; end 'constructor'; end C2;
+model M C2 c = C2(1.0, 2.0); C2 d = C2(time); end M;
+//// model: A68bOB12
+operator record C2 Real re; Real im; encapsulated operator 'constructor' function fromReal import C2; input Real re; input Real im = 0.0; output C2 result = if re > 0 then C2(re, im) else C2(-re, im); algorithm end fromReal; end 'constructor'; end C2;
+model M C2 c = C2(1.0, 2.0); C2 d = C2(-1.0); end M;
+//// model: A68bOB13
+operator record C2 Real re; Real im; Real k = 1; encapsulated operator 'constructor' function fromReal import C2; input Real re; input Real im = 0.0; output C2 result = C2(re = re, im = im, k = 1); algorithm end fromReal; end 'constructor'; end C2;
+model M C2 c = C2(1.0, 2.0); end M;
+//// model: A68bOB14
+operator record C2 Real v[2]; encapsulated operator 'constructor' function fromArr import C2; input Real v[2]; output C2 result = C2(v = v); algorithm end fromArr; end 'constructor'; end C2;
+model M C2 c = C2({1.0, 2.0}); end M;
+//// model: A68bOB15
+operator record C2 Real re; encapsulated operator function 'constructor' import C2; input Real re; output C2 result = C2(re = re); algorithm end 'constructor'; end C2;
+model M C2 c = C2(1.0); C2 d = C2(time); end M;
+//// model: A68bOB16
+operator record C2 Real re; encapsulated operator 'constructor' function a import C2; input Real re; output C2 result = C2(re = re); algorithm end a; function b import C2; input Integer i; output C2 result = C2(re = i * 2.0); algorithm end b; end 'constructor'; end C2;
+model M C2 c = C2(1.0); C2 d = C2(1); end M;
+//// model: A68bOB17
+operator record C2 Real re; encapsulated operator 'constructor' function a import C2; input Real re; output C2 result; protected C2 t = C2(re = re); algorithm result := t; end a; end 'constructor'; end C2;
+model M C2 c = C2(1.0); end M;
+//// model: A68bOB18
+operator record C2 Real re; encapsulated operator 'constructor' function a import C2; input Real re; output C2 result = C2(re = re + 1); algorithm result := C2(re = 9); end a; end 'constructor'; end C2;
+model M C2 c = C2(1.0); end M;
+//// model: A68bOB19
+operator record C1
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    function fromReal
+      import C1;
+      input Real re;
+      input Real im = 0.0;
+      output C1 result = C1(re = re, im = im);
+    algorithm
+    end fromReal;
+  end 'constructor';
+end C1;
+model M C1 c(re(start = 1)) = C1(time); end M;
+//// model: A68bOB20
+operator record C1
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    function fromReal
+      import C1;
+      input Real re;
+      input Real im = 0.0;
+      output C1 result = C1(re = re, im = im);
+    algorithm
+    end fromReal;
+  end 'constructor';
+end C1;
+model M input C1 c; output C1 d = C1(c.re, c.im); end M;
+//// model: A68bOB21
+operator record C1
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    function fromReal
+      import C1;
+      input Real re;
+      input Real im = 0.0;
+      output C1 result = C1(re = re, im = im);
+    algorithm
+    end fromReal;
+  end 'constructor';
+end C1;
+model M C1 c; equation c = C1(time, 2.0); end M;
+//// model: A68bOB22
+operator record C1
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    function fromReal
+      import C1;
+      input Real re;
+      input Real im = 0.0;
+      output C1 result = C1(re = re, im = im);
+    algorithm
+    end fromReal;
+  end 'constructor';
+end C1;
+model M C1 c = if time > 1 then C1(1.0) else C1(2.0); end M;
+//// model: A68bOB23
+operator record C1
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    function fromReal
+      import C1;
+      input Real re;
+      input Real im = 0.0;
+      output C1 result = C1(re = re, im = im);
+    algorithm
+    end fromReal;
+  end 'constructor';
+end C1;
+package Q constant C1 k = C1(1.0, 2.0); end Q;
+model M Real y = Q.k.im; end M;
+//// model: A68bOB24
+operator record C1
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    function fromReal
+      import C1;
+      input Real re;
+      input Real im = 0.0;
+      output C1 result = C1(re = re, im = im);
+    algorithm
+    end fromReal;
+  end 'constructor';
+end C1;
+record S C1 c = C1(1.0); Real z = 1; end S;
+model M S s; end M;
+//// model: A68bOB25
+operator record C1
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    function fromReal
+      import C1;
+      input Real re;
+      input Real im = 0.0;
+      output C1 result = C1(re = re, im = im);
+    algorithm
+    end fromReal;
+  end 'constructor';
+end C1;
+function h output C1 c = C1(1.0, 2.0); algorithm end h;
+model M C1 c = h(); end M;
+//// model: A68bOB26
+operator record C1
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    function fromReal
+      import C1;
+      input Real re;
+      input Real im = 0.0;
+      output C1 result = C1(re = re, im = im);
+    algorithm
+    end fromReal;
+  end 'constructor';
+end C1;
+function h input Real u; output C1 c; algorithm c := C1(u, 2.0); end h;
+model M C1 c = h(time); C1 d = h(1.0); end M;
+//// model: A68bOB27
+operator record C2 Real re; encapsulated operator 'constructor' function a import C2; input Integer re; output C2 result = C2(re = re); algorithm end a; end 'constructor'; end C2;
+model M C2 c = C2(1); end M;
+//// model: A68bEX1
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+model M constant Real c = mysin(1.0); end M;
+//// model: A68bEX2
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+model M parameter Real p = mysin(1.0); end M;
+//// model: A68bEX3
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+model M Real x = mysin(1.0); end M;
+//// model: A68bEX4
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+model M constant Real c = 2 * mysin(0.5); Real x = c; end M;
+//// model: A68bEX5
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+model M parameter Integer n = integer(mysin(1.0) * 3); Real x[n]; end M;
+//// model: A68bEX6
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+model M Real x; equation if mysin(1.0) > 0 then x = 1; else x = 2; end if; end M;
+//// model: A68bEX7
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+function g input Real u = mysin(1.0); output Real y; algorithm y := u; end g;
+model M Real x = g(); end M;
+//// model: A68bEX8
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+function g input Real u; output Real y; protected constant Real k = mysin(1.0); algorithm y := u * k; end g;
+model M Real x = g(time); end M;
+//// model: A68bEX9
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+package Q constant Real pi = 2 * mysin(1.0); end Q;
+model M Real x = Q.pi; end M;
+//// model: A68bEX10
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+package Q constant Real pi = 2 * mysin(1.0); end Q;
+model M parameter Real q = Q.pi * 2; end M;
+//// model: A68bEX11
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+model M constant Real c = mysin(mysin(0.5)); end M;
+//// model: A68bEX12
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+model M constant Real c[2] = {mysin(0.5), 1}; end M;
+//// model: A68bEX13
+function mypow input Real u; input Real v; output Real y; external "C" y = pow(u, v); end mypow;
+model M constant Real c = mypow(2.0, 3.0); parameter Real p = mypow(2.0, 3.0); end M;
+//// model: A68bEX14
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+model M Real x(start = mysin(1.0)); equation der(x) = 1; end M;
+//// model: A68bEX15
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+model M constant Real c = mysin(1.0); Real x(start = c); equation der(x) = 1; end M;
+//// model: A68bEX16
+function myasin input Real u; output Real y; external "C" y = asin(u); end myasin;
+model M constant Real c = myasin(2.0); end M;
+//// model: A68bEX17
+function mylog input Real u; output Real y; external "C" y = log(u); end mylog;
+model M constant Real c = mylog(-1.0); end M;
+//// model: A68bEX18
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+record R Real a = mysin(1.0); end R;
+model M constant R r; end M;
+//// model: A68bEX19
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+model M Real y = sin(mysin(1.0)); end M;
+//// model: A68bEX20
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+model M parameter Real p = 1; parameter Real q = mysin(p); end M;
+//// model: A68bEX21
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+function fw input Real u; output Real y; algorithm y := mysin(u) + 1; end fw;
+model M constant Real c = fw(1.0); end M;
+//// model: A68bEX22
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+function fw input Real u; output Real y; algorithm y := mysin(u) + 1; end fw;
+model M parameter Real c = fw(1.0); Real z = fw(1.0); end M;
+//// model: A68bEX23
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+function h input Real u; output Real y; protected Real k = mysin(1.0); algorithm y := k * u; end h;
+model M constant Real c = h(2.0); end M;
+//// model: A68bEX24
+impure function imp input Real u; output Real y; external "C" y = sin(u); end imp;
+model M constant Real c = imp(1.0); end M;
+//// model: A68bEX25
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+model M parameter Real p = mysin(1.0) annotation(Evaluate = true); Real x[if p > 0 then 2 else 3]; end M;
+//// model: A68bEX26
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+model M final parameter Real p = mysin(1.0); Real x = p; end M;
+//// model: A68bEX27
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+model M constant Real c = mysin(1.0) + time; end M;
+//// model: A68bEX28
+function other input Real u; output Real y; external "C" y = myfn(u); end other;
+model M constant Real c = other(1.0); end M;
+//// model: A68bEX29
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+model M constant Integer n = if mysin(1.0) > 0 then 2 else 3; Real x[n]; end M;
+//// model: A68bEX30
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+model M Real x[2]; equation for i in 1:2 loop x[i] = mysin(1.0) * i; end for; end M;
+//// model: A68bEX31
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+model M constant Real c = 1; parameter Real d = mysin(c); end M;
+//// model: A68bEX32
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+model M Real x; algorithm x := mysin(1.0); end M;
+//// model: A68bEX33
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+model M Real x; equation assert(mysin(1.0) > 0, "m"); x = 1; end M;
+//// model: A68bEX34
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+package Q constant Real a = mysin(1.0); constant Real b = a + 1; end Q;
+model M Real y[integer(Q.b)]; end M;
+//// model: A68bUC1
+package P constant Real c; end P;
+model M Real x = P.c; end M;
+//// model: A68bUC2
+package P constant Real c; end P;
+model M parameter Real p = P.c; end M;
+//// model: A68bUC3
+package P constant Real c; end P;
+model M constant Real k = P.c; end M;
+//// model: A68bUC4
+package P constant Real c; end P;
+model M Real x[integer(P.c)]; end M;
+//// model: A68bUC5
+package P constant Real c; end P;
+model M Real x; equation if P.c > 0 then x = 1; else x = 2; end if; end M;
+//// model: A68bUC6
+package P constant Real c; end P;
+model M Real x; equation x = P.c; end M;
+//// model: A68bUC7
+package P constant Real c; end P;
+model M Real x; algorithm x := P.c; end M;
+//// model: A68bUC8
+package P constant Real c; end P;
+model M Real x; initial equation x = P.c; equation der(x) = 1; end M;
+//// model: A68bUC9
+package P constant Real c; end P;
+model M Real x(start = P.c); equation der(x) = 1; end M;
+//// model: A68bUC10
+package P constant Integer n; end P;
+model M Real x[P.n]; end M;
+//// model: A68bUC11
+package P constant Boolean b; end P;
+model M Boolean y = P.b; end M;
+//// model: A68bUC12
+package P constant String s; end P;
+model M String y = P.s; end M;
+//// model: A68bUC13
+type E = enumeration(a, b);
+package P constant E e; end P;
+model M E x = P.e; end M;
+//// model: A68bUC14
+package P constant Real c(unit = "m", start = 1); end P;
+model M Real x = P.c; end M;
+//// model: A68bUC15
+package P constant Real c "a comment"; end P;
+model M Real x = P.c; end M;
+//// model: A68bUC16
+package P constant Real a; constant Real b; end P;
+model M Real x = P.a; Real y = P.b; end M;
+//// model: A68bUC17
+package P constant Real c[2]; end P;
+model M Real x = P.c[1]; end M;
+//// model: A68bUC18
+package P constant Real c; end P;
+function f input Real u; output Real y; algorithm y := u + P.c; end f;
+model M Real x = f(time); end M;
+//// model: A68bUC19
+package P package Q constant Real c; end Q; end P;
+model M Real x = P.Q.c; end M;
+//// model: A68bUC20
+package P constant Real c; model A Real x = c; end A; end P;
+model M P.A a; end M;
+//// model: A68bUC21
+package P constant Real c; end P;
+model M import P.c; Real x = c; end M;
+//// model: A68bUC22
+package P constant Real c; end P;
+model M import P.*; Real x = c; end M;
+//// model: A68bUC23
+model A constant Real c; end A;
+model M A a; Real x = a.c; end M;
+//// model: A68bUC24
+package P constant Real c; end P;
+package Q extends P; end Q;
+model M Real x = Q.c; end M;
+//// model: A68bUC25
+package P constant Real c; end P;
+model M Real x = P.c * 2 + 1; Real y = sin(P.c); Real z; equation der(z) = P.c; end M;
+//// model: A68bUC26
+package P constant Real c; end P;
+model M Real x; equation when time > P.c then x = 1; end when; end M;
+//// model: A68bUC27
+package P constant Real c; end P;
+function f input Real u; output Real y; algorithm y := u + 1; end f;
+model M Real x = f(P.c); end M;
+//// model: A68bUC28
+package P constant Real a; constant Real b = a + 1; end P;
+model M Real x = P.b; end M;
+//// model: A68bUC29
+package P constant Real c; end P;
+model M Real x = if false then P.c else 1; end M;
+//// model: A68bUC30
+package P constant Real c; end P;
+model M Real x = P.c; Real y = P.c + P.c; end M;
+//// model: A68bUC31
+partial package P constant Real c; end P;
+model M Real x = P.c; end M;
+//// model: A68bUC32
+package P replaceable constant Real c; end P;
+model M Real x = P.c; end M;
+//// model: A68bUC33
+package P constant Real c; end P;
+package P2 = P(c = 3);
+model M Real x = P2.c; end M;
+//// model: A68bUC34
+package P protected constant Real c; end P;
+model M Real x = P.c; end M;
+//// model: A68bUC35
+package P final constant Real c; end P;
+model M Real x = P.c; end M;
+//// model: A68bUC36
+type T = Real(unit = "m");
+package P constant T c; end P;
+model M Real x = P.c; end M;
+//// model: A68bUC37
+package P constant Real c; end P;
+model M Real x = 1; equation assert(P.c > 0, "x"); end M;
+//// model: A68bUC38
+package P constant Real c; end P;
+model M Real x = if P.c > 0 then 1 else 2; end M;
+//// model: A68bUC39
+package P constant Real c; end P;
+model M Real x = .P.c; end M;
+//// model: A68bUC40
+model M package Q constant Real c; end Q; Real x = Q.c; end M;
+//// model: A68bUC41
+model M constant Real c; Real x = c; end M;
+//// model: A68bUC42
+package P constant Real c; end P;
+package Q constant Real d = 1; end Q;
+model M Real x = P.c + Q.d; end M;
+//// model: A68bUC43
+package P constant Real c; end P;
+model M Real x = P.c; annotation(experiment(StopTime = 1)); end M;
+//// model: A68bUC44
+package P constant Integer n; end P;
+model M Integer y = P.n; Real x[3]; equation x[P.n] = 1; x[1] = 1; x[2] = 1; x[3] = 1; end M;
+//// model: A68bUC45
+package P constant Real c; end P;
+record R Real a = P.c; end R;
+model M R r; end M;
+//// model: A68bUC46
+package P constant Real c; end P;
+model A parameter Real q = 1; end A;
+model M A a(q = P.c); end M;
+//// model: A68bUC47
+package P constant Real c; end P;
+model M Real x[2] = {P.c, 1}; end M;
+//// model: A68bUC48
+package P constant Real c; end P;
+model M Real x = sum({P.c, 1}); end M;
+//// model: A68bGI1
+package P constant String s = getInstanceName(); end P;
+model M String t = P.s; end M;
+//// model: A68bGI2
+package P package Q constant String s = getInstanceName(); end Q; end P;
+model M String t = P.Q.s; end M;
+//// model: A68bGI3
+package P function f output String s; algorithm s := getInstanceName(); end f; end P;
+model M String t = P.f(); end M;
+//// model: A68bGI4
+function f input String a = getInstanceName(); output String s = a; algorithm end f;
+model M String t = f(); end M;
+//// model: A68bGI5
+model M function f output String s; algorithm s := getInstanceName(); end f; String t = f(); end M;
+//// model: A68bGI6
+function f input Real u; output Real y; algorithm assert(u > 0, getInstanceName()); y := u; end f;
+model M Real t = f(time); end M;
+//// model: A68bGI7
+package A constant String s = getInstanceName(); end A;
+package B extends A; end B;
+model M String t = B.s; end M;
+//// model: A68bGI8
+model M parameter String s = getInstanceName(); end M;
+//// model: A68bGI9
+package P constant String s = getInstanceName(); end P;
+package Q = P;
+model M String t = Q.s; end M;
+//// model: A68bGI10
+record R String s = getInstanceName(); end R;
+model M R r; end M;
+//// model: A68bGI11
+package P constant String s = getInstanceName(); end P;
+model M import P.s; String t = s; end M;
+//// model: A68bGI12
+package P model A constant String s = getInstanceName(); end A; constant A a; end P;
+model M String t = P.a.s; end M;
+//// model: A68bGI13
+model A String s = getInstanceName(); end A;
+model M A a[2]; A b; end M;
+//// model: A68bGI14
+package P constant String s = getInstanceName(); model A String t = s; end A; end P;
+model M P.A a; end M;
+//// model: A68bGI15
+function f output String s = getInstanceName(); algorithm end f;
+model M String t = f(); end M;
+//// model: A68bGI16
+package P function f output String s = getInstanceName(); algorithm end f; constant String k = f(); end P;
+model M String t = P.k; end M;
+//// model: A68bGI17
+model M String s = getInstanceName(1); end M;
+//// model: A68bGI18
+model M constant String s = getInstanceName(); String t = s; end M;
+//// model: A68bOP1
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C c = C(1, 2); C d = not c; end M;
+//// model: A68bOP2
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C c = C(1, 2); Boolean b = not c; end M;
+//// model: A68bOP3
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C c = C(1, 2); String s = String(c); end M;
+//// model: A68bOP4
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C c = C(1, 2); String s = String(c, "i"); String t = String(c, j = "k"); end M;
+//// model: A68bOP5
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C c = C(1, 2); String s = String(c, minimumLength = 3); end M;
+//// model: A68bOP6
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C a[2] = {C(1, 2), C(3, 4)}; C s = sum(a); end M;
+//// model: A68bOP7
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C a[2] = {C(1, 2), C(3, 4)}; C s = sum(a[i] for i in 1:2); end M;
+//// model: A68bOP8
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C a[2] = {C(1, 2), C(3, 4)}; C s = sum(a[i] + a[i] for i in 1:2); end M;
+//// model: A68bOP9
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C a[2] = {C(1, 2), C(3, 4)}; C s = product(a[i] for i in 1:2); end M;
+//// model: A68bOP10
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C a[2] = {C(1, 2), C(3, 4)}; C s[2] = -a; end M;
+//// model: A68bOP11
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C a[2] = {C(1, 2), C(3, 4)}; C s[2] = -{a[1], a[2]}; end M;
+//// model: A68bOP12
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C a[2] = {C(1, 2), C(3, 4)}; C s[2] = not a; end M;
+//// model: A68bOP13
+operator record D Real a; end D;
+model M D d = D(1); D e = not d; end M;
+//// model: A68bOP14
+operator record D Real a; end D;
+model M D d = D(1); String e = String(d); end M;
+//// model: A68bOP15
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M constant C c = C(1, 2); constant C d = not c; end M;
+//// model: A68bOP16
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M parameter C c = C(1, 2); parameter String s = String(c); end M;
+//// model: A68bOP17
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C a[2] = {C(1, 2), C(3, 4)}; C s = sum(a[i] for i in 1:0); end M;
+//// model: A68bOP18
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C a[2] = {C(1, 2), C(3, 4)}; C s = sum(a[i] for i in {1, 2}); end M;
+//// model: A68bOP19
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M parameter Integer n = 2; C a[n] = {C(1, 2), C(3, 4)}; C s = sum(a[i] for i in 1:n); end M;
+//// model: A68bOP20
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C a[2, 2]; C s = sum(a[i, j] for i in 1:2, j in 1:2); end M;
+//// model: A68bOP21
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M Real x = time; C c = C(x, 2); String s = String(c); end M;
+//// model: A68bOP22
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M Real x = time; C c = C(x, 2); Real y; equation y = if String(c) == "a" then 1 else 2; end M;
+//// model: A68bOP23
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M Real x = time; C c = C(x, 2); C d = -(-c); C e = -(not c); end M;
+//// model: A68bOP24
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C c = C(time, 2); C d = c + (-c); C e = c - c; end M;
+//// model: A68bOP25
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+function f input C c; output C d; algorithm d := not c; end f;
+model M C c = f(C(time)); end M;
+//// model: A68bOP26
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+function f input C c; output String s; algorithm s := String(c); end f;
+model M String s = f(C(1)); end M;
+//// model: A68bOP27
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+function f input C a[2]; output C s; algorithm s := sum(a[i] for i in 1:2); end f;
+model M C c = f({C(1), C(2)}); end M;
+//// model: A68bOP28
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C a[3]; C s = sum(a[i] for i in 1:3); equation for i in 1:3 loop a[i] = C(i * time); end for; end M;
+//// model: A68bCC1
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f constrainedby f(b = 1); end P;
+model M Real x = P.func(15.0); end M;
+//// model: A68bCC2
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func input Real a; input Real b = 2; output Real y; algorithm y := a + b; end func constrainedby f(b = 1); end P;
+model M Real x = P.func(15.0); end M;
+//// model: A68bCC3
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f(b = 3) constrainedby f(b = 1); end P;
+model M Real x = P.func(15.0); end M;
+//// model: A68bCC4
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+model M replaceable function h = f constrainedby f(b = 5); Real x = h(time); end M;
+//// model: A68bCC5
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+model A replaceable function h = f constrainedby f(b = 5); Real x = h(time); end A;
+model M extends A(redeclare function h = g); end M;
+//// model: A68bCC6
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+model M parameter Real p = 3; replaceable function h = f constrainedby f(b = p); Real x = h(time); end M;
+//// model: A68bCC7
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f constrainedby f(b = 1); function a2 = func; end P;
+model M Real x = P.a2(15.0); end M;
+//// model: A68bCC8
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f constrainedby f(c = 1); end P;
+model M Real x = P.func(15.0); end M;
+//// model: A68bCC9
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f constrainedby f(final b = 1); end P;
+model M Real x = P.func(15.0); end M;
+//// model: A68bCC10
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f constrainedby g(b = 1); end P;
+model M Real x = P.func(15.0); end M;
+//// model: A68bCC11
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P constant Real k = 4; replaceable function func = f constrainedby f(b = k); end P;
+model M Real x = P.func(15.0); end M;
+//// model: A68bCC12
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f constrainedby f(b = 1); end P;
+model M constant Real x = P.func(15.0); end M;
+//// model: A68bCC13
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f constrainedby f(b = 1); end P;
+model M Real x = P.func(15.0, 9.0); end M;
+//// model: A68bCC14
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f constrainedby f(b = 1); end P;
+package Q extends P; end Q;
+model M Real x = Q.func(15.0); end M;
+//// model: A68bCC15
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f constrainedby f(b = 1); end P;
+package Q = P(redeclare function func = g);
+model M Real x = Q.func(15.0); end M;
+//// model: A68bCC16
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f constrainedby f(a = 1); end P;
+model M Real x = P.func(); end M;
+//// model: A68bCF1
+model A constant Real k = 1; function f input Real u; output Real y; algorithm y := u + k; end f; end A;
+model B extends A; end B;
+model M B b; Real x = b.f(time); end M;
+//// model: A68bCF2
+model A constant Real k = 1; function f input Real u; output Real y; algorithm y := u + k; end f; end A;
+model B extends A; end B;
+model M B b[2]; Real x = b[1].f(time); end M;
+//// model: A68bCF3
+model A constant Real k = 1; function f input Real u; output Real y; algorithm y := u + k; end f; end A;
+model B extends A; end B;
+model N B b; end N;
+model M N n; Real x = n.b.f(time); end M;
+//// model: A68bCF4
+model A constant Real k = 1; function f input Real u; output Real y; algorithm y := u + k; end f; end A;
+model B protected extends A; end B;
+model M B b; Real x = b.f(time); end M;
+//// model: A68bCF5
+model A constant Real k = 1; function f input Real u; output Real y; algorithm y := u + k; end f; end A;
+model B extends A; end B;
+model M B b(k = 3); Real x = b.f(time); end M;
+//// model: A68bCF6
+model A constant Real k = 1; function f input Real u; output Real y; algorithm y := u + k; end f; end A;
+model B extends A(k = 3); end B;
+model M B b; Real x = b.f(time); end M;
+//// model: A68bCF7
+model A constant Real k = 1; function f input Real u; output Real y; algorithm y := u + k; end f; end A;
+model B extends A; end B;
+model C extends B; end C;
+model M C c; Real x = c.f(time); end M;
+//// model: A68bCF8
+model A constant Real k = 1; function f input Real u; output Real y; algorithm y := u + k; end f; end A;
+model B extends A; function g = f; end B;
+model M B b; Real x = b.g(time); end M;
+//// model: A68bCF9
+model A function f input Real u; output Real y; algorithm y := u; end f; end A;
+model B extends A; end B;
+model M B b; Real x = b.f(1.0); end M;
+//// model: A68bCF10
+model A protected function f input Real u; output Real y; algorithm y := u; end f; end A;
+model B extends A; end B;
+model M B b; Real x = b.f(1.0); end M;
+//// model: A68bCF11
+model A constant Real k = 1; function f input Real u; output Real y; algorithm y := u + k; end f; end A;
+model M A a; A b(k = 2); Real x = a.f(time); Real y = b.f(time); end M;
+//// model: A68bCE1
+function g input Real u; output Real y; algorithm y := u; end g;
+package A replaceable function f = .g; end A;
+package B extends A; redeclare function extends f algorithm y := 2 * u; end f; end B;
+model M Real x = B.f(time); end M;
+//// model: A68bCE2
+function g input Real u; output Real y; algorithm y := u; end g;
+function h = g;
+package A replaceable function f = h; end A;
+package B extends A; redeclare function extends f algorithm y := 3 * u; end f; end B;
+model M Real x = B.f(time); end M;
+//// model: A68bCE3
+function g input Real u; input Real v = 1; output Real y; algorithm y := u + v; end g;
+package A replaceable function f = g(v = 2); end A;
+package B extends A; redeclare function extends f algorithm y := u * v; end f; end B;
+model M Real x = B.f(time); end M;
+//// model: A68bCE4
+function g input Real u; output Real y; algorithm y := u; end g;
+model A replaceable function f = g; Real z = f(time); end A;
+model M extends A; redeclare function extends f algorithm y := 2 * u; end f; end M;
+//// model: A68bCE5
+function g input Real u; output Real y; algorithm y := u; end g;
+model A replaceable function f = g; end A;
+model B extends A; redeclare function extends f input Real w = 1; algorithm y := w * u; end f; end B;
+model M B b; Real z = b.f(time); end M;
+//// model: A68bRC1
+type MyReal = Real(quantity = "fish");
+record R replaceable Real x; Real z = 3; end R;
+record R2 = R(redeclare MyReal x);
+model M R2 r = R2(x = 1.0); end M;
+//// model: A68bRC2
+type MyReal = Real(quantity = "fish");
+record R replaceable Real x; Real z = 3; end R;
+record R2 = R(redeclare MyReal x);
+model M R2 r = R2(1.0); end M;
+//// model: A68bRC3
+type MyReal = Real(quantity = "fish");
+record R replaceable Real x; Real z = 3; end R;
+record R2 = R(redeclare MyReal x);
+model M R2 r(x = 1.0); end M;
+//// model: A68bRC4
+type MyReal = Real(quantity = "fish");
+record R replaceable Real x; Real z = 3; end R;
+record R2 = R(redeclare MyReal x);
+model M R2 r = R2(x = 1.0, z = 4); end M;
+//// model: A68bRC5
+type MyReal = Real(quantity = "fish");
+record R replaceable Real x; Real z = 3; end R;
+record R2 = R(redeclare MyReal x);
+model M R r = R2(x = 1.0); end M;
+//// model: A68bRC6
+type MyReal = Real(quantity = "fish");
+record R replaceable Real x; Real z = 3; end R;
+record R2 = R(redeclare MyReal x);
+model M R2 r = R(x = 1.0); end M;
+//// model: A68bRC7
+type MyReal = Real(quantity = "fish");
+record R replaceable Real x; Real z = 3; end R;
+record R2 = R(redeclare MyReal x);
+record R3 = R2;
+model M R3 r = R3(x = 1.0); end M;
+//// model: A68bRC8
+type MyReal = Real(quantity = "fish");
+record R replaceable Real x; Real z = 3; end R;
+record R2 = R(redeclare MyReal x);
+model M R2 r = R2(x = time); end M;
+//// model: A68bRC9
+type MyReal = Real(quantity = "fish");
+record R replaceable Real x; Real z = 3; end R;
+record R2 = R(redeclare MyReal x);
+model M R2 a[2] = {R2(x = 1), R2(x = 2)}; end M;
+//// model: A68bRC10
+record S Real a; Real b = 1; end S;
+record T = S(a = 5);
+model M T t = T(); end M;
+//// model: A68bRC11
+record S Real a; Real b = 1; end S;
+record T = S(b = 5);
+model M T t = T(a = 2); end M;
+//// model: A68bRC12
+type MyReal = Real(quantity = "fish");
+record R replaceable Real x; Real z = 3; end R;
+record R2 = R(redeclare MyReal x);
+function f input R2 r; output Real y; algorithm y := r.x; end f;
+model M Real y = f(R2(x = time)); end M;
+//// model: A68bRC13
+type MyReal = Real(quantity = "fish");
+record R replaceable Real x; Real z = 3; end R;
+record R2 = R(redeclare MyReal x);
+model M parameter R2 r = R2(x = 1.0); end M;
+//// model: A68bRC14
+type MyReal = Real(quantity = "fish");
+record R replaceable Real x; Real z = 3; end R;
+record R2 = R(redeclare MyReal x);
+model M constant R2 r = R2(x = 1.0); Real y = r.x; end M;
+//// model: A68bRC15
+type MyReal = Real(quantity = "fish");
+record R replaceable Real x; Real z = 3; end R;
+record R2 = R(redeclare MyReal x);
+model N R2 r = R2(x = 1.0); end N;
+model M N n; end M;
+//// model: A68bSD1
+model M
+  Real u = sin(time), v = cos(time), x = time, y1, y2;
+equation
+  (y1, y2) = spatialDistribution(u, v, x, true);
+end M;
+//// model: A68bSD2
+model M
+  Real u = sin(time), v = cos(time), x = time, y1, y2;
+equation
+  (y1, y2) = spatialDistribution(in0 = u, in1 = v, x = x, positiveVelocity = true);
+end M;
+//// model: A68bSD3
+model M
+  Real u = sin(time), v = cos(time), x = time, y1, y2;
+equation
+  (y1, y2) = spatialDistribution(u, v, x, true, {0, 0.5, 1}, {1, 2, 3});
+end M;
+//// model: A68bSD4
+model M
+  Real u = sin(time), v = cos(time), x = time, y1, y2;
+equation
+  (y1, y2) = spatialDistribution(u, v, x, true, {0, 0.5, 1}, {1, 2});
+end M;
+//// model: A68bSD5
+model M
+  Real u = sin(time), v = cos(time), x = time, y1, y2;
+equation
+  (y1, y2) = spatialDistribution(u, v, x, time > 1);
+end M;
+//// model: A68bSD6
+model M
+  Real u = sin(time), v = cos(time), x = time, y1, y2;
+  parameter Real p[2] = {0, 1};
+equation
+  (y1, y2) = spatialDistribution(u, v, x, true, p);
+end M;
+//// model: A68bSD7
+model M
+  Real u = sin(time), v = cos(time), x = time, y1, y2;
+equation
+  y1 = spatialDistribution(u, v, x, true);
+  y2 = 1;
+end M;
+//// model: A68bSD8
+model M
+  Real u = sin(time), v = cos(time), x = time, y1, y2;
+algorithm
+  (y1, y2) := spatialDistribution(u, v, x, true);
+end M;
+//// model: A68bSD9
+model M
+  Real u = sin(time), v = cos(time), x = time, y1, y2;
+equation
+  (y1, y2) = spatialDistribution(u, v, x);
+end M;
+//// model: A68bSD10
+model M
+  Real u = sin(time), v = cos(time), x = time, y1, y2;
+equation
+  (y1, y2) = spatialDistribution(1, 2, x, true);
+end M;
+//// model: A68bSD11
+model M
+  Real u = sin(time), v = cos(time), x = time, y1, y2;
+equation
+  (y1, y2) = spatialDistribution(u, v, x, true, initialValues = {1, 2});
+end M;
+//// model: A68bSD12
+model M
+  Real u = sin(time), v = cos(time), x = time, y1, y2;
+equation
+  (y1, ) = spatialDistribution(u, v, x, true);
+  y2 = 1;
+end M;
+//// model: A68bSD13
+function spatialDistribution input Real a; input Real b; output Real c = a; output Real d = b; algorithm end spatialDistribution;
+model M Real y1, y2;
+equation
+  (y1, y2) = spatialDistribution(time, 2);
+end M;
+//// model: A68bSD14
+model M
+  Real u = sin(time), v = cos(time), x = time, y1, y2;
+equation
+  (y1, y2) = spatialDistribution(u, v, x, true, {0, 1}, {1, 2}, 5);
+end M;
+//// model: A68bSD15
+model M
+  Real u = sin(time), v = cos(time), x = time, y1, y2;
+  Real z[2];
+equation
+  (y1, y2) = spatialDistribution(z, v, x, true);
+end M;
+//// model: A68bEM1
+model M parameter Integer n = 0; Real x[n]; equation x = fill(1.0, n); end M;
+//// model: A68bEM2
+model M parameter Integer n = 0; Real x[n]; equation when time > 1 then x = fill(1.0, n); end when; end M;
+//// model: A68bEM3
+record R Real a; end R;
+model M R r[2]; equation when time > 1 then r.a = fill(1.0, 2); end when; end M;
+//// model: A68bEM4
+model M Real x, y; equation when time > 1 then {x, y} = {1, 2}; end when; end M;
+//// model: A68bEM5
+record R Real a; end R;
+model M parameter Integer n = 0; R r[n]; Real k = 1; Real y = if n == 1 then r[1].a + k else k; end M;
+//// model: A68bEM6
+model M parameter Integer n = 0; Real a[n]; Real y = if n > 0 then a[n] else 0; end M;
+//// model: A68bEM7
+model M parameter Integer n = 2; parameter Integer m = 2; Real a[n]; Real y = if m == n then a[1] else a[2]; end M;
+//// model: A68bEM8
+model M parameter Integer n = 2; parameter Real q = 1; Real a[n]; Real y = if q > 0 then a[1] else a[2]; end M;
+//// model: A68bEM9
+model M parameter Integer n = 0; parameter Real q = 1; Real a[n]; Real y = if n == 0 and q > 0 then 0 else a[1]; end M;
+//// model: A68bEM10
+model M parameter Integer n = 0; Real a[n]; Real y = if n == 1 then a[2] else 1; end M;
+//// model: A68bEM11
+model M parameter Integer n = 1; Real a[n]; Real y = if n == 1 then 1 else a[2]; end M;
+//// model: A68bEM12
+model M parameter Integer n = 2; Real a[n]; Real y = if n == 1 then a[3] else a[1]; end M;
+//// model: A68bEM13
+record R Real a; Real b; end R;
+model M parameter Integer n = 0; R r[n]; equation when time > 1 then r.a = fill(1.0, n); end when; end M;
+//// model: A68bEM14
+model M parameter Integer n = 0; Real x[n, 2]; equation x = fill(1.0, n, 2); end M;
+//// model: A68bEM15
+model M parameter Integer n = 0; Real x[n], y[n]; equation x = y; x = -y; end M;
+//// model: A68bRS1
+package P parameter Real a = 1; constant Real c = 2; end P;
+model M Real x = P.c; end M;
+//// model: A68bRS2
+package P constant Real c = 2; equation end P;
+model M Real x = P.c; end M;
+//// model: A68bRS3
+package P constant Real c = 2; algorithm end P;
+model M Real x = P.c; end M;
+//// model: A68bRS4
+record R Real a = 1; protected Real b = 2; end R;
+model M R r; end M;
+//// model: A68bRS5
+record R constant Real a = 1; protected constant Real b = 2; end R;
+model M Real x = R.a; end M;
+//// model: A68bRS6
+package P parameter Real a = 1; function f input Real u; output Real y = u; algorithm end f; end P;
+model M Real x = P.f(time); end M;
+//// model: A68bRS7
+package A parameter Real a = 1; end A;
+package P extends A; constant Real c = 2; end P;
+model M Real x = P.c; end M;
+//// model: A68bRS8
+package P parameter Real a = 1; constant Real c = 2; end P;
+model M import P.c; Real x = c; end M;
+//// model: A68bRS9
+package P parameter Real a = 1; constant Real c = 2; end P;
+model M import P.*; Real x = c; end M;
+//// model: A68bRS10
+package P parameter Real a = 1; model A Real x = 1; end A; end P;
+model M P.A a; end M;
+//// model: A68bRS11
+package P parameter Real a = 1; constant Real c = 2; end P;
+model M end M;
+//// model: A68bRS12
+package P parameter Real a = 1; type T = Real; end P;
+model M P.T t = 1; end M;
+//// model: A68bRS13
+operator record R Real a; protected Real b; end R;
+model M R r(a = 1, b = 2); end M;
+//// model: A68bRS14
+model A constant Real c = 2; equation end A;
+model M Real x = A.c; end M;
+//// model: A68bRS15
+operator O constant Real c = 2; end O;
+model M Real x = O.c; end M;
+//// model: A68bRS16
+package P package Q parameter Real a = 1; constant Real c = 2; end Q; end P;
+model M Real x = P.Q.c; end M;
+//// model: A68bRS17
+package P Real a; constant Real c = 2; end P;
+model M Real x = P.c; end M;
+//// model: A68bRS18
+record R constant Real a = 1; equation end R;
+model M Real x = R.a; end M;
+//// model: A68bRS19
+record R constant Real a = 1; algorithm a := 1; end R;
+model M Real x = R.a; end M;
+//// model: A68bRS20
+package P constant Real c = 2; initial equation end P;
+model M Real x = P.c; end M;
+//// model: A68bIN1
+package P constant Real c = ; end P;
+model M Real x = P.c; end M;
+//// model: A68bIN2
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C c = C(1, 2); String s = String(c,); end M;
+//// model: A68bIN3
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C a[2]; C s = sum(a[i] for); end M;
+//// model: A68bIN4
+model M
+  Real u = sin(time), v = cos(time), x = time, y1, y2;
+equation
+  (y1, y2) = spatialDistribution(u, v, x, true;
+end M;
+//// model: A68bIN5
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f constrainedby; end P;
+model M Real x = P.func(15.0); end M;
+//// model: A68bIN6
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f constrainedby f(b = 1) constrainedby g; end P;
+model M Real x = P.func(15.0); end M;
+//// model: A68bIN7
+operator record R Real a; encapsulated operator 'constructor' function f input Real a; output R r; algorithm end f end 'constructor'; end R;
+model M R r = R(1); end M;
+//// model: A68bIN8
+function g input Real u; output Real y; algorithm y := u; end g;
+package A replaceable function f = g; end A;
+package B extends A; redeclare function extends algorithm y := u; end f; end B;
+model M Real x = B.f(time); end M;
+//// model: A68bIN9
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C c = C(1, 2); C d = -not c; end M;
+//// model: A68bIN10
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C c = C(1, 2); C d = not -c; end M;
+//// model: A68bIN11
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C c = C(1, 2); C d = not not c; end M;
+//// model: A68bIN12
+package P constant Real c; end P;
+model M import P.*.c; Real x = c; end M;
+//// model: A68bIN13
+package P constant Real c; end P;
+model M Real x = P..c; end M;
+//// model: A68bIN14
+package P constant Real c; end P;
+model M Real x = P.c.; end M;
+//// model: A68bIN15
+model M String s = getInstanceName(; end M;
+//// model: A68bIN16
+model M String s = String(); end M;
+//// model: A68bIN17
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C c = C(1, 2); String s = String(j = "i"); end M;
+//// model: A68bIN18
+operator record R Real a; operator function 'not' input R a; output R r; algorithm r := a; end 'not'; end R;
+model M R r = R(1); R s = not r; end M;
+//// model: A68bIN19
+operator record R Real a; operator 'not' function f input R a; output R r; algorithm r := a; end f; end 'not'; end R;
+model M R r = R(1); R s = not r; end M;
+//// model: A68bIN20
+package P constant Real c; end P;
+model M Real x = .P.c[; end M;
+//// model: A68bIN21
+package P constant Real c end P;
+model M Real x = P.c; end M;
+//// model: A68bIN22
+package P constant Real; end P;
+model M end M;
+//// model: A68bCC17
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f constrainedby f(b = 1); end P;
+package Q = P(redeclare function func = g);
+model M Real x = Q.func(time); end M;
+//// model: A68bCC18
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f constrainedby f(b = 1); end P;
+package Q = P(redeclare function func = g(b = 4));
+model M Real x = Q.func(15.0); end M;
+//// model: A68bCC19
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f(b = 1); end P;
+package Q = P(redeclare function func = g);
+model M Real x = Q.func(15.0); end M;
+//// model: A68bCC20
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f; end P;
+package Q = P(redeclare function func = g);
+model M Real x = Q.func(15.0); end M;
+//// model: A68bCC21
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f constrainedby f; end P;
+package Q = P(redeclare function func = g);
+model M Real x = Q.func(15.0); end M;
+//// model: A68bCC22
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f constrainedby f(b = 1); end P;
+package Q extends P(redeclare function func = g); end Q;
+model M Real x = Q.func(15.0); end M;
+//// model: A68bCC23
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f constrainedby f(b = 1); end P;
+package Q extends P; redeclare function func = g; end Q;
+model M Real x = Q.func(15.0); end M;
+//// model: A68bCC24
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f constrainedby f(b = 1); end P;
+package Q extends P; redeclare function func input Real a; input Real b = 8; output Real y; algorithm y := a - b; end func; end Q;
+model M Real x = Q.func(15.0); end M;
+//// model: A68bCC25
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f; end P;
+package Q extends P; redeclare replaceable function func input Real a; input Real b = 8; output Real y; algorithm y := a - b; end func constrainedby f(b = 9); end Q;
+model M Real x = Q.func(15.0); end M;
+//// model: A68bCC26
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f; end P;
+package Q extends P; redeclare replaceable function func = g constrainedby f(b = 9); end Q;
+model M Real x = Q.func(15.0); end M;
+//// model: A68bCC27
+package P partial function f input Real a; input Real b; output Real c; end f; function fun extends f; algorithm c := a + b; end fun; replaceable function func = fun constrainedby f(b = 1); end P;
+model M parameter Real p = 2; Real x = P.func(p); end M;
+//// model: A68bCC28
+package P partial function f input Real a; input Real b; output Real c; end f; function fun extends f; algorithm c := a + b; end fun; replaceable function func = fun constrainedby f(b = 1); end P;
+model M Real x = P.func(time); Real y = P.func(time, 2); Real z = P.func(a = 3); end M;
+//// model: A68bCC29
+package P partial function f input Real a; input Real b; output Real c; end f; function fun extends f; algorithm c := a + b; end fun; replaceable function func = fun constrainedby f(b = 1); end P;
+model M Real x = P.func(b = 3, a = 4); end M;
+//// model: A68bCC30
+package P partial function f input Real a; input Real b; output Real c; end f; function fun extends f; algorithm c := a + b; end fun; replaceable function func = fun constrainedby f(b = 1); end P;
+function g input Real u; output Real y; algorithm y := P.func(u); end g;
+model M Real x = g(time); end M;
+//// model: A68bCC31
+model A replaceable record R Real a = 1; end R constrainedby R; R r; end A;
+model M extends A; end M;
+//// model: A68bCC32
+record S Real a = 1; end S;
+package P replaceable record R = S constrainedby S(a = 3); end P;
+model M P.R r; end M;
+//// model: A68bCC33
+record S Real a = 1; end S;
+package P replaceable record R = S constrainedby S(a = 3); end P;
+model M P.R r = P.R(); end M;
+//// model: A68bUC49
+package P constant Integer n; end P;
+model M Real x[3]; equation for i in 1:P.n loop x[i] = i; end for; end M;
+//// model: A68bUC50
+package P constant Integer n; end P;
+model M Real x[3]; algorithm for i in 1:P.n loop x[i] := i; end for; end M;
+//// model: A68bUC51
+package P constant Real c; end P;
+model M Real x; algorithm if P.c > 0 then x := 1; else x := 2; end if; end M;
+//// model: A68bUC52
+package P constant Real c; end P;
+model M Real x; equation when time > 1 then if P.c > 0 then x = 1; else x = 2; end if; end when; end M;
+//// model: A68bUC53
+package P constant Real c; end P;
+model M Real x; equation if P.c > time then x = 1; else x = 2; end if; end M;
+//// model: A68bUC54
+package P constant Real c; end P;
+model M parameter Real p = 1; Real x; equation if P.c > p then x = 1; else x = 2; end if; end M;
+//// model: A68bUC55
+package P constant Boolean b; end P;
+model M Real x; equation if P.b then x = 1; else x = 2; end if; end M;
+//// model: A68bUC56
+package P constant Boolean b; end P;
+model M Real x = if P.b then 1 else 2; end M;
+//// model: A68bUC57
+package P constant Real c; end P;
+model M parameter Integer n = 2; Real a[n]; Real x; equation if P.c > n then x = 1; else x = 2; end if; a = {1, 2}; end M;
+//// model: A68bUC58
+package P constant Real c; end P;
+model M Real x; initial equation if P.c > 0 then x = 1; else x = 2; end if; equation der(x) = 1; end M;
+//// model: A68bUC59
+package P constant Real c; end P;
+model M Real x; equation if time > 1 then x = 1; elseif P.c > 0 then x = 2; else x = 3; end if; end M;
+//// model: A68bUC60
+package P constant Real c; end P;
+model M Boolean b = P.c > 0; end M;
+//// model: A68bUC61
+package P constant Real c; end P;
+model M constant Boolean b = P.c > 0; end M;
+//// model: A68bUC62
+package P final constant Real c "doc"; end P;
+model M Real x = P.c; end M;
+//// model: A68bUC63
+package P constant Real c; package Q constant Real d = 1; end Q; end P;
+model M Real x = P.Q.d; end M;
+//// model: A68bGI19
+package A model K constant String s = getInstanceName(); end K; constant K a; end A;
+package B extends A; end B;
+model M String t = B.a.s; end M;
+//// model: A68bGI20
+package P model K constant String s = getInstanceName(); end K; constant K a; end P;
+package Q = P;
+model M String t = Q.a.s; end M;
+//// model: A68bGI21
+package P function f output String s; algorithm s := getInstanceName(); end f; end P;
+package Q = P;
+model M String t = Q.f(); end M;
+//// model: A68bGI22
+package P function f output String s; algorithm s := getInstanceName(); end f; end P;
+model M import Q = P; String t = Q.f(); end M;
+//// model: A68bGI23
+package P constant String s = getInstanceName(); end P;
+model M import Q = P; String t = Q.s; end M;
+//// model: A68bGI24
+package P constant String s = getInstanceName(); end P;
+package R = P;
+model M String t = P.s; end M;
+//// model: A68bGI25
+package P package N constant String s = getInstanceName(); end N; end P;
+package R = P.N;
+model M String t = R.s; end M;
+//// model: A68bGI26
+package P package N constant String s = getInstanceName(); end N; end P;
+package R = P;
+model M String t = R.N.s; end M;
+//// model: A68bEX35
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+function g input Real u = mysin(1.0); output Real y; algorithm y := u; end g;
+model M constant Real x = g(); end M;
+//// model: A68bEX36
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+function g input Real u = mysin(1.0); output Real y; algorithm y := u; end g;
+model M parameter Integer n = integer(g() * 3); Real a[n]; end M;
+//// model: A68bEX37
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+function g input Real u = mysin(1.0); output Real y; algorithm y := u; end g;
+model M parameter Real x = g(); end M;
+//// model: A68bEX38
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+function g input Real u = mysin(1.0); output Real y; algorithm y := u; end g;
+function h input Real v = g(); output Real y; algorithm y := v; end h;
+model M Real x = h(); end M;
+//// model: A68bEX39
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+function g input Real u = mysin(1.0); output Real y; algorithm y := u; end g;
+function h input Real v; output Real y; algorithm y := g() + v; end h;
+model M Real x = h(1.0); end M;
+//// model: A68bEX40
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+function g input Real u; input Real w = mysin(u); output Real y; algorithm y := u + w; end g;
+model M Real x = g(1.0); end M;
+//// model: A68bEX41
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+function g input Real u = sin(1.0); output Real y; algorithm y := u; end g;
+model M Real x = g(); end M;
+//// model: A68bEX42
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+function g input Real u = 1.0; input Real v = mysin(u); output Real y; algorithm y := u; end g;
+model M constant Real x = g(); end M;
+//// model: A68bEX43
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+function p input Real u; output Real y; algorithm y := u; end p;
+function g input Real u = p(mysin(1.0)); output Real y; algorithm y := u; end g;
+model M Real x = g(); end M;
+//// model: A68bOP29
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C c = C(time, 2); C d = +c; end M;
+//// model: A68bOP30
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C c = C(time, 2); C d = -(-(-c)); end M;
+//// model: A68bOP31
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M parameter C c = C(1, 2); parameter C d = -(-c); end M;
+//// model: A68bOP32
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C c = C(time, 2); C d = -((-c)); end M;
+//// model: A68bOP33
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C c = C(time, 2); C d; equation d = -(-c); end M;
+//// model: A68bOP34
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C c[2]; C d[2] = -(-c); end M;
+//// model: A68bOP35
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model N C c = C(time, 2); end N;
+model M N n; C d = -(-n.c); end M;
+//// model: A68bCE6
+partial function f end f;
+package P1 replaceable function f = .f; end P1;
+package P2 extends P1; redeclare function extends f input Real x; output Real y = 2 * x; end f; end P2;
+model M Real x = P2.f(time); end M;
+//// model: A68bCE7
+partial function f end f;
+function h = .f;
+package P1 replaceable function f = h; end P1;
+package P2 extends P1; redeclare function extends f input Real x; output Real y = x; end f; end P2;
+model M Real x = P2.f(time); end M;
+//// model: A68bCE8
+partial function f input Real u; end f;
+package P1 replaceable function f = .f; end P1;
+package P2 extends P1; redeclare function extends f output Real y = u; end f; end P2;
+model M Real x = P2.f(time); end M;
+//// model: A68bCE9
+partial function f input Real u = 1; end f;
+package P1 replaceable function f = .f(u = 3); end P1;
+package P2 extends P1; redeclare function extends f output Real y = u; end f; end P2;
+model M Real x = P2.f(); end M;
+//// model: A68bCE10
+partial function f end f;
+model A replaceable function f = .f; end A;
+model B extends A; redeclare function extends f input Real x; output Real y = x; end f; end B;
+model M B b; Real z = b.f(time); end M;
+//// model: A68bCE12
+function g input Real u; output Real y = u; end g;
+package P1 replaceable function f = g; end P1;
+package P2 extends P1; redeclare function extends f input Real v; end f; end P2;
+model M Real x = P2.f(time, 2); end M;
+//// model: A68bCC34
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f; end P;
+package Q = P(redeclare replaceable function func input Real a; input Real b = 8; output Real y; algorithm y := a - b; end func constrainedby f(b = 9));
+model M Real x = Q.func(15.0); end M;
+//// model: A68bCC35
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function g input Real a; input Real b = 7; output Real y; algorithm y := a * b; end g;
+package P replaceable function func = f; end P;
+package Q extends P; redeclare replaceable function func input Real a; input Real b = 8; output Real y; algorithm y := a - b; end func constrainedby f(b = 9); end Q;
+model M Real x = Q.func(time); end M;
+//// model: A68bCC36
+record S Real a = 1; end S;
+package P replaceable record R Real a = 1; end R constrainedby S(a = 3); end P;
+model M P.R r = P.R(); end M;
+//// model: A68bCC37
+record S Real a = 1; end S;
+package P replaceable record R = S constrainedby S(a = 3); record T = R; end P;
+model M P.T r = P.T(); end M;
+//// model: A68bCC38
+record S Real a = 1; end S;
+package P replaceable record R = S constrainedby S(a = 3); end P;
+model M P.R r = P.R(a = 4); end M;
+//// model: A68bCC39
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function h = f(c = 1);
+model M Real x = h(time); end M;
+//// model: A68bCC40
+function f input Real a; input Real b = 2; output Real y; algorithm y := a + b; end f;
+function h = f(y = 1);
+model M Real x = h(1.0); end M;
+//// model: A68bCE13
+partial function f input Real u = 1; end f;
+function h = f(u = 3);
+package P1 replaceable function f = h; end P1;
+package P2 extends P1; redeclare function extends f output Real y = u; end f; end P2;
+model M Real x = P2.f(); end M;
+//// model: A68bCE14
+partial function f input Real u = 1; end f;
+package P1 replaceable function f = .f; end P1;
+package P2 extends P1; redeclare function extends f output Real y = u; end f; end P2;
+model M Real x = P2.f(); end M;
+//// model: A68bEX44
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+function g input Real u; input Real w = mysin(u) + 1; output Real y; algorithm y := u + w; end g;
+model M parameter Real p = 1; Real x = g(p); Real z = g(time); end M;
+//// model: A68bEX45
+function mysin input Real u; output Real y; external "C" y = sin(u); end mysin;
+function g input Real u; input Real w = mysin(u); output Real y; algorithm y := u + w; end g;
+model M constant Real x = g(1.0); end M;
+//// model: A68bOP36
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C c = C(time, 2); C d = (c); end M;
+//// model: A68bOP37
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C c = C(time, 2); C d = +(+c); end M;
+//// model: A68bOP38
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C c = C(time, 2); C d = +(-(-c)); end M;
+//// model: A68bOP39
+operator record C
+  Real re;
+  Real im;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      input Real im = 0.0;
+      output C result(re = re, im = im);
+    algorithm
+      annotation(Inline = true);
+    end fromReal;
+  end 'constructor';
+  encapsulated operator '-'
+    import C;
+    function neg
+      input C a;
+      output C r;
+    algorithm
+      r := C(-a.re, -a.im);
+    end neg;
+    function sub
+      input C a;
+      input C b;
+      output C r;
+    algorithm
+      r := C(a.re - b.re, a.im - b.im);
+    end sub;
+  end '-';
+  encapsulated operator function '+'
+    import C;
+    input C a;
+    input C b;
+    output C r;
+  algorithm
+    r := C(a.re + b.re, a.im + b.im);
+  end '+';
+  encapsulated operator function '0'
+    import C;
+    output C r;
+  algorithm
+    r := C(0, 0);
+  end '0';
+  encapsulated operator function 'not'
+    import C;
+    input C a;
+    output C r;
+  algorithm
+    r := C(a.im, a.re);
+  end 'not';
+  encapsulated operator function 'String'
+    import C;
+    input C a;
+    input String j = "j";
+    output String s;
+  algorithm
+    s := String(a.re) + j;
+  end 'String';
+end C;
+model M C c = C(time, 2); C d = -(+(-c)); end M;
+//// model: A68bOP40
+record R Real a; end R;
+model M R c(a = time); R d = (c); end M;
+//// model: A68bOP41
+record R Real a; end R;
+model M R c(a = time); R d = +c; end M;
+//// model: A68bUC64
+package P constant Real c; end P;
+model M parameter Real p = 1; parameter Real q = 2; Real x; equation if P.c > p + q then x = 1; else x = 2; end if; end M;
+//// model: A68bUC65
+package P constant Real c; end P;
+model M Real y = 1; Real x; equation if P.c > y then x = 1; else x = 2; end if; end M;
+//// model: A68bGI27
+package A constant String s = getInstanceName(); end A;
+package B extends A; constant String t = s; end B;
+model M String u = B.t; end M;

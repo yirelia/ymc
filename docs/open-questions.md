@@ -42,6 +42,7 @@ ymc 以 **omc 1.25.0 实测**为准；这些用例从 `docs/research/s3-easy-sli
 |---|---|---|---|
 | flattening/.../FinalParameter1.mo | `Real y = 3.0;`（final 参数内联） | `Real y = x;`（不内联） | 同下：1.25.0 不内联 final parameter，ymc 与 1.25.0 一致。 |
 | flattening/.../FinalParameter2.mo | `Real y = 3.0;`（final 参数内联） | `Real y = a.x;`（不内联） | 1.25.0 默认 DAE dump 不内联 final parameter；ymc 与 1.25.0 逐字一致。较新 OMC 才内联。 |
+| flattening/.../scodeinst/ConstantMissingBinding2.mo | 报错（`constant Real x` 没有绑定） | 接受：`constant Real P.x;`、`y = P.x * der(y)` | ymc 跟 1.25.0（68b 放开无绑定包常量后 `SKIP -> FAIL`），不进 slice，scodeinst 的文件 Result 口径 FAIL 53→54 就是这一个。 |
 | flattening/.../FinalParameter3.mo | `Real y = 3.0;` | `Real y = a.x;` | 同上。 |
 | flattening/.../OperationRelational1.mo | class 体 + 2 行 `Warning: … == on Real operands is deprecated …` | 仅 class 体（告警走 stderr） | flat 模型逐字一致；ymc 尚无诊断/告警（S 级诊断另做）。文件 Result 含 omc 告警文本。 |
 | flattening/.../scodeinst/IfExpression13.mo（反向） | `class IfExpression13`：`constant Real r.a[…]`、`r.b[…]` 逐元素（构造调用 `R()` 成功） | **报错退出**：`No matching function found for R()`（1.25.0 更严） | 罕见反向：1.25.0 拒绝、文件+较新 OMC 接受。记录字段 `a` 的缺省是两支长短不一的 if 式（`if cond then {1.0} else {1.0, 2.0, 3.0}`），另一字段 `b = a[1:end-1]` 用到 `end`——单拿掉其一 1.25.0 都接受（IE 探针 i1 / i2），像是 1.25.0 给构造函数的缺省定型时 `end` 取了 if 式的未知维。ymc 不复刻这个定型怪癖：2026-10-07 加宽(62e) 记录值的常量调用能求值后与文件 / 较新 OMC 一致（nf-live 记 ACCEPTS-INVALID，在账）。 |
