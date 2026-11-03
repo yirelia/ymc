@@ -87,6 +87,13 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/src/bdae/lower.h" AND EXISTS "${CMAKE_SOURCE_DIR}
     target_link_libraries(lower_test PRIVATE ymc_frontend)
   endif()
 endif()
+# S5a-2a：pre 模块 Bindings 端到端（对拍 omc --newBackend 的 (Bindings) 段）。
+if(EXISTS "${CMAKE_SOURCE_DIR}/src/bdae/bindings.h" AND EXISTS "${CMAKE_SOURCE_DIR}/tests/unit/bdae/bindings_test.cpp")
+  ymc_add_test(bindings_test unit/bdae/bindings_test.cpp)
+  if(TARGET ymc_frontend)
+    target_link_libraries(bindings_test PRIVATE ymc_frontend)
+  endif()
+endif()
 # S5b-0：OMC 哈希容器复刻（只依赖 ymc_base，不链前端）。
 if(EXISTS "${CMAKE_SOURCE_DIR}/src/bdae/omc_unordered.h" AND EXISTS "${CMAKE_SOURCE_DIR}/tests/unit/bdae/omc_unordered_test.cpp")
   ymc_add_test(omc_unordered_test unit/bdae/omc_unordered_test.cpp)

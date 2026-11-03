@@ -8,6 +8,7 @@
 // 靠 -Werror=switch 保证不漏。
 #pragma once
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "base/arena.h"
@@ -105,6 +106,12 @@ struct BackendDAE {
   Arena<Var> var_arena;
   Arena<Eqn> eqn_arena;
   ExprArena exprs;
+};
+
+// 一个 pre 模块的结果。模块原地改 BackendDAE（Module.wrapper：BackendDAE → BackendDAE，NBModule.mo），契约同 LowerResult：unsupported 置位时 dae 不可用，driver 退 66。
+struct ModuleResult {
+  bool unsupported = false;
+  std::string unsupported_reason;
 };
 
 }  // namespace ymc::bdae

@@ -132,6 +132,11 @@ PRE_STAGES = ("After Lowering", "Bindings", "FunctionAlias", "Early Inline", "Si
               "Simplify 2", "Remove Stream", "Detect States", "Events")
 
 
+def stage_dir(module):
+    """模块名 → 目录名：`Simplify 1` → `simplify_1`。"""
+    return module.lower().replace(" ", "_")
+
+
 def split_bdae_sections(text):
     """把 `-d=optdaedump,bltdump` 的 stdout 切成段。返回 (sections, tail)。
 
@@ -165,16 +170,21 @@ def pre_stage_bodies(sections):
     return out
 
 
-def after_lowering_text(text):
-    """`(After Lowering)` 段的原文 = 头线（headline_1，StringUtil.mo:52）+ split_bdae_sections 给的段体；没有这一段返回 None。
+def stage_section_texts(text):
+    """{模块名: 段原文}，模块取自 PRE_STAGES，同名段只留第一次。段原文 = 头线（headline_1，StringUtil.mo:52）+ split_bdae_sections 给的段体。
 
-    这就是 `ymc --dump-after=lower` 要打的字节范围：从头线第一个 `#` 到下一段头线之前（段体末尾带 EqData 的空行）。"""
-    secs, _ = split_bdae_sections(text)
-    for s in secs:
-        if s["tag"] is None and s["name"] == "BackendDAE" and s["module"] == "After Lowering":
+    这就是 `ymc --dump-after=<模块>` 要打的字节范围：从头线第一个 `#` 到下一段头线之前（段体末尾带 EqData 的空行）。"""
+    out = {}
+    for s in split_bdae_sections(text)[0]:
+        if s["tag"] is None and s["name"] == "BackendDAE" and s["module"] in PRE_STAGES and s["module"] not in out:
             bar = "#" * (len(s["title"]) + 8)
-            return bar + "\n\n    " + s["title"] + "\n\n" + bar + "\n" + s["body"]
-    return None
+            out[s["module"]] = bar + "\n\n    " + s["title"] + "\n\n" + bar + "\n" + s["body"]
+    return out
+
+
+def after_lowering_text(text):
+    """`(After Lowering)` 段的原文；没有这一段返回 None。"""
+    return stage_section_texts(text).get("After Lowering")
 
 
 def var_decl_name(decl):

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""S5a-1 门：`ymc --dump-after=lower` 与 omc 1.25.0 新后端的 `BackendDAE: (After Lowering)` 段逐字节比（ADR-008 §6）。
+"""S5a 门：`ymc --dump-after=<段>` 与 omc 1.25.0 新后端的 `BackendDAE: (<段>)` 逐字节比（ADR-008 §6）。--stage 选段，缺省 lower = (After Lowering)。
 
-参考：语料 b 读 <refs>/after_lowering/<id>.txt（tools/bdae_refgen.py run --keep-lowering 生成），语料 a 退回 <refs>/<id>/out.txt。
+参考：读 <refs>/sections/<段>/<id>.txt（tools/bdae_refgen.py run --keep-sections / sections 生成），语料 a 没有时退回 <refs>/<id>/out.txt。
 --probes 不读参考，现跑 omc（命令同 bdae_refgen.FLAGS）。参考文本是唯一的准入依据，所以判定不依赖 ymc 自己的看法。
 
 判定：
@@ -14,7 +14,9 @@
                     A2'          (After Lowering) 有数组型变量、Record 桶非空、或有 [ARRY] [FOR-] [RECD] [TUPL]
                     A5           表达式里有数组型子表达式或推导式：NB 路径不展开（NFInst.mo:324-333），默认路径展开了
                     A1           该模型压平和 omc 不一致（语料 a 的 a1_a.jsonl）
+                    lower:<判定>  --stage 不是 lower 时：该模型在 lower 段不是 PASS，这一段的输入就没验证过，不比。判定是 NOT-ADMITTED 时带上原因
                   NOT-ADMITTED 的模型 ymc 照样跑，只看是否崩溃（崩溃 = CRASH）；打出来的文本不比，no-section 而 ymc 退 0 的单列一行。
+                  A2' / A5 按这一段自己的文本判（--stage bindings 时绑定方程形如数组、记录的归 A2'）；A3 不要求，这一段在手就行。
 
 A5 按文本判（表达式里去掉字符串字面量后）：`{` `[`（数组构造、矩阵、下标）、` for `（推导式）、`$i<数字>`（绑定迭代量）、整型范围、
 点号运算符、数组型内建调用（A5_CALLS）。两个位置例外，都不是路径差异（ADR-008 §6 A5 补充）：
@@ -28,6 +30,7 @@ JSON 与 tools/nf_live_sweep.py 同形（{"total", "records": [{path, status, ve
   python -I tools/bdae_sweep.py --corpus b --ymc <ymc.exe>
   python -I tools/bdae_sweep.py --cases <cases.json> [--a1 <a1.jsonl>] --ymc <ymc.exe>
   python -I tools/bdae_sweep.py --probes [集名…] --ymc <ymc.exe>     # tests/probes/bdae/*.probes，现跑 omc
+  以上都可加 --stage lower|bindings
 
 基建工具，Claude 提供。
 """
@@ -69,6 +72,7 @@ _FOR_HEAD = re.compile(r"^ *for (?:'[^']*'|\w+) in (.*) loop$", re.M)
 _NUM_ARRAY = re.compile(r"^\{[-+0-9., e]*\}$")
 _TOP_L = re.compile(r"(?:^|(?:not|and) )\(*$")
 _TOP_R = re.compile(r"\)*(?: and |$)")
+STAGES = {"lower": "After Lowering", "bindings": "Bindings"}      # --stage 的值 = ymc --dump-after 的值 → omc 的段名
 
 
 def body_of(section):
@@ -137,25 +141,28 @@ def admission(section):
     return True, ""
 
 
-def ref_section(c):
-    p = os.path.join(rg.REFS, "after_lowering", rg.safe_id(c["id"]) + ".txt")
-    if os.path.exists(p):
-        with open(p, encoding="utf-8", newline="\n") as f:
-            return f.read()
+def ref_section(c, stage):
+    # 第二处是 --keep-sections 之前的老位置：语料 b 的 sections/ 重跑完之前，lower 段还读它。
+    for p in (rg.section_path(rg.REFS, STAGES[stage], c["id"]),
+              os.path.join(rg.REFS, "after_lowering", rg.safe_id(c["id"]) + ".txt") if stage == "lower" else ""):
+        if os.path.exists(p):
+            with open(p, encoding="utf-8", newline="\n") as f:
+                return f.read()
     p = os.path.join(rg.REFS, rg.safe_id(c["id"]), "out.txt")
     if os.path.exists(p):
-        return sc.after_lowering_text(rg._read(p))
+        return sc.stage_section_texts(rg._read(p)).get(STAGES[stage])
     return None
 
 
-def run_ymc(ymc, text, cls, d, timeout):
+def run_ymc(ymc, text, cls, d, timeout, stage):
     """同 bdae_refgen.a1_one 的选类办法。返回 (rc 或 None, stdout, stderr)。"""
-    cmd = [ymc, "--dump-after=lower", "model.mo"]
+    dump = "--dump-after=" + stage
+    cmd = [ymc, dump, "model.mo"]
     if "." in cls:           # 限定名目标：ymc 只有 --load-model 路线能选类
         top = cls.split(".")[0]
         with open(os.path.join(d, top + ".mo"), "w", encoding="utf-8", newline="\n") as f:
             f.write(text)
-        cmd = [ymc, "--dump-after=lower", f"--modelica-path={d}", f"--load-model={top}", f"--class={cls}"]
+        cmd = [ymc, dump, f"--modelica-path={d}", f"--load-model={top}", f"--class={cls}"]
     elif cls:
         text = rg.move_class_last(text, cls) or text
     with open(os.path.join(d, "model.mo"), "w", encoding="utf-8", newline="\n") as f:
@@ -188,18 +195,34 @@ def judge(rec, section, why_not, rc, out, err):
     return rec
 
 
+def lower_gate(section, why, text, cls, d, a):
+    """--stage 不是 lower 时，这一段的前提：lower 段是 PASS。返回 NOT-ADMITTED 的原因，过了返回 ""。"""
+    rc, out, err = run_ymc(a.ymc, text, cls, d, a.timeout, "lower")
+    r = judge({}, section, why, rc, out, err)
+    if r["verdict"] == "PASS":
+        return ""
+    return "lower:" + r["verdict"] + (":" + r["reason"] if r["verdict"] == "NOT-ADMITTED" else "")
+
+
 def one_case(c, a, a1):
     rec = {"path": c["id"], "status": "correct"}
-    section = ref_section(c)
-    ok, why = admission(section)
-    if ok and a1 is not None and not a1.get(c["id"], {}).get("a1"):
-        ok, why = False, "A1:" + a1.get(c["id"], {}).get("why", "?")
+    lsec = ref_section(c, "lower")
+    _, why_l = admission(lsec)
+    if not why_l and a1 is not None and not a1.get(c["id"], {}).get("a1"):
+        why_l = "A1:" + a1.get(c["id"], {}).get("why", "?")
     text = rg.case_text(c)
     if text is None:
         return dict(rec, verdict="NOT-ADMITTED", reason="annotation")
+    cls = c.get("cls", "")
     d = tempfile.mkdtemp(prefix="bs_", dir=a.tmp)
     try:
-        rc, out, err = run_ymc(a.ymc, text, c.get("cls", ""), d, a.timeout)
+        if a.stage == "lower":
+            section, why = lsec, why_l
+        else:
+            why = lower_gate(lsec, why_l, text, cls, d, a)
+            section = ref_section(c, a.stage)
+            why = why or admission(section)[1]
+        rc, out, err = run_ymc(a.ymc, text, cls, d, a.timeout, a.stage)
     finally:
         shutil.rmtree(d, ignore_errors=True)
     return judge(rec, section, why, rc, out, err)
@@ -213,9 +236,13 @@ def one_probe(job, a):
         rc, status, _ = rg.run_omc([rg.OMC] + rg.FLAGS + ["model.mo"], _write(d, src), a.omc_timeout, 512 * 1024 * 1024)
         if status != "done":
             return dict(rec, verdict="NOT-ADMITTED", reason="omc-" + status)
-        section = sc.after_lowering_text(rg._read(os.path.join(d, "out.txt")))
-        ok, why = admission(section)
-        rc, out, err = run_ymc(a.ymc, src, "", d, a.timeout)
+        texts = rg.complete_sections(rg._read(os.path.join(d, "out.txt")), rc, status)
+        section = texts.get(STAGES[a.stage])
+        why = admission(section)[1]
+        if a.stage != "lower":
+            lsec = texts.get(STAGES["lower"])
+            why = lower_gate(lsec, admission(lsec)[1], src, "", d, a) or why
+        rc, out, err = run_ymc(a.ymc, src, "", d, a.timeout, a.stage)
         rec = judge(rec, section, why, rc, out, err)
         if rec["verdict"] == "FAIL" and a.keep_fail:
             os.makedirs(a.keep_fail, exist_ok=True)
@@ -234,7 +261,8 @@ def _write(d, src):
 
 def report(records, a, what):
     tot = collections.Counter(r["verdict"] for r in records)
-    print(f"== bdae-sweep {what}: {len(records)} | " +
+    stage = "" if a.stage == "lower" else " " + a.stage
+    print(f"== bdae-sweep {what}{stage}: {len(records)} | " +
           " ".join(f"{k} {tot[k]}" for k in ("PASS", "FAIL", "SKIP", "CRASH", "NOT-ADMITTED")) + " ==")
     for label, verdict in (("SKIP 原因", "SKIP"), ("NOT-ADMITTED 原因", "NOT-ADMITTED")):
         c = collections.Counter(r["reason"] for r in records if r["verdict"] == verdict)
@@ -243,7 +271,7 @@ def report(records, a, what):
             for k, v in c.most_common():
                 print(f"  {v:5d}  {k}")
     # 不算 FAIL：omc 没这段可能只是 NB 自己 lower 失败。但 ymc 打了文本，得看得见（语义上可能是 ymc 漏了 omc 的报错）。
-    leak = [r["path"] for r in records if r.get("reason") == "no-section" and r.get("ymc_rc") == 0]
+    leak = [r["path"] for r in records if r.get("reason", "").endswith("no-section") and r.get("ymc_rc") == 0]
     if leak:
         print(f"\nomc 没有这一段、ymc 打了：{len(leak)}  {leak[: a.show]}")
     bad = [r for r in records if r["verdict"] in ("FAIL", "CRASH")]
@@ -268,6 +296,7 @@ def main():
     ap.add_argument("--cases")
     ap.add_argument("--a1")
     ap.add_argument("--probes", action="store_true")
+    ap.add_argument("--stage", choices=sorted(STAGES), default="lower")
     ap.add_argument("--ymc", default=os.path.join(REPO, "build", "gcc-debug", "ymc.exe"))
     ap.add_argument("--jobs", type=int, default=8)
     ap.add_argument("--timeout", type=int, default=60)

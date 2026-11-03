@@ -606,3 +606,15 @@
 ## 2026-11-03 — 代理转述的"和文件分歧"要实跑核一次
 - 模式：68b 的报告说 Constant12、RecordConstructorVectorization 与文件 Result 分歧，要记账本。逐字节 diff 实跑 omc 和文件 Result，两个都一致，只有 ConstantMissingBinding2 真分歧。
 - 规则：写进账本前主代理自己 diff 一次。
+
+## 2026-11-03 — 模块的函数体要读到底
+- 模式：Bindings 看着只是把绑定搬成方程，任务卡也这么写。`generateBindingEquation` 中间藏了一遍 `SimplifyExp.simplify`，不移植过不了门，这一桶的工作量主要在这里。
+- 规则：写后端任务卡前把入口函数和它调的辅助函数读完，别从函数名猜。
+
+## 2026-11-03 — omc 崩溃或超时时最后一段参考不可信
+- 模式：stdout 缓冲丢失，最后一段断在任意字节。语料 b 的 9 个崩溃和 1 个超时都这样，断在 Bindings 之后的段，这次没影响门，后面的模块会出假 FAIL。
+- 规则：`bdae_refgen.py` 自动丢末段。比对哪段都先看这段完整不完整。
+
+## 2026-11-03 — 上层探针挖到下层的错，藏在 NOT-ADMITTED 里
+- 模式：`--stage bindings` 把 lower 段不过的模型记 `lower:FAIL`，算 NOT-ADMITTED。`der(p + 1)` 和 63 位字面量就在这里，FAIL 0 看不出来。`Boolean z = 1` 是 `no-section` 且 ymc 退 0。
+- 规则：评审探针逐条看非 PASS 的原因和 ymc 退出码，不只看 FAIL 数。

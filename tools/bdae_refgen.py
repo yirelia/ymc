@@ -13,8 +13,10 @@
 
   run       按 cases.json 跑。--raw 时把 model.mo / out.txt / err.txt 存到 <refs>/<id>/（语料 a）；不带 --raw 只留签名
             （语料 b，防磁盘膨胀；每条记录有 out_bytes，可算原文总量）。结果逐条追加到 --out（JSONL），重跑自动跳过已完成的。
-            --keep-lowering 另把 `(After Lowering)` 一段的原文存到 <refs>/after_lowering/<id>.txt（S5a-1 的逐字节门，
-            tools/bdae_sweep.py 读它；语料 b 全文 272 MB，这一段只占很小一部分）。
+            --keep-sections 另把 lowering 和九个 pre 模块每一段的原文存到 <refs>/sections/<模块>/<id>.txt（S5a 各模块的逐字节门，
+            tools/bdae_sweep.py 读它；语料 b 全文 272 MB，这十段只占一小部分），跑完写 <refs>/sections/manifest.json。
+
+  sections  不跑 omc：从 <refs>/<id>/out.txt 现成的全文切段，写到同一处（语料 a，全文已在手）。
 
 成败判据（`.mo` + `-s` 路线，Main.mo translateFile）：这条路线丢弃 translateModel 的 success 返回值，失败走 fail()，
 落到 matchcontinue 的 "Error processing file: " 分支后 exit 1；所以 a3 = exit 0 且 stderr 无 `Error:` / `Internal error`。
@@ -22,7 +24,8 @@
 用法：
   python -I tools/bdae_refgen.py extract --cases <cases.json>
   python -I tools/bdae_refgen.py sweep --from <ts_cur.json> --cases <cases.json>
-  python -I tools/bdae_refgen.py run --cases <cases.json> --out <sig.jsonl> [--raw] [--keep-lowering] [--jobs 8] [--limit N] [--ids a,b]
+  python -I tools/bdae_refgen.py run --cases <cases.json> --out <sig.jsonl> [--raw] [--keep-sections] [--jobs 8] [--limit N] [--ids a,b]
+  python -I tools/bdae_refgen.py sections --cases <cases.json>
   python -I tools/bdae_refgen.py a1 --cases <cases.json> --out <a1.jsonl> --ymc <ymc.exe>     # 语料 a 的 A1
 
 基建工具，Claude 提供。
@@ -304,8 +307,41 @@ _lock = threading.Lock()
 
 
 def safe_id(cid):
-    """用例 id → 目录 / 文件名（--raw 的子目录、--keep-lowering 的文件名共用）。"""
+    """用例 id → 目录 / 文件名（--raw 的子目录、--keep-sections 的文件名共用）。"""
     return re.sub(r"[^\w.#-]", "_", cid.replace("/", "__").replace("#", "__"))
+
+
+def section_path(root, module, cid):
+    """一段参考的位置；bdae_sweep 从这里读。"""
+    return os.path.join(root, "sections", sc.stage_dir(module), safe_id(cid) + ".txt")
+
+
+def complete_sections(text, rc, status):
+    """sc.stage_section_texts 去掉可能不完整的末段：omc 崩溃或被杀时 stdout 缓冲丢了，最后一段断在任意字节（语料 b 的 9 个崩溃、1 个超时全是这样）。"""
+    secs = sc.stage_section_texts(text)
+    if secs and (status != "done" or rc not in (0, 1)):
+        del secs[list(secs)[-1]]
+    return secs
+
+
+def write_sections(root, cid, text, rc, status):
+    """text 是 omc 的 stdout 原文。写定 newline="\\n"：段文本的换行 split_bdae_sections 已归一，字符串字面量里的裸 \\r 要原样留着。"""
+    for module, sec in complete_sections(text, rc, status).items():
+        p = section_path(root, module, cid)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "w", encoding="utf-8", newline="\n") as f:
+            f.write(sec)
+
+
+def write_sections_manifest(root, ver):
+    d = os.path.join(root, "sections")
+    stages = {sc.stage_dir(m): len(os.listdir(os.path.join(d, sc.stage_dir(m))))
+              for m in sc.PRE_STAGES if os.path.isdir(os.path.join(d, sc.stage_dir(m)))}
+    man = {"schema_version": 1, "oracle": "omc-installed", "oracle_version": ver,
+           "command": ["omc"] + FLAGS + ["[-i=<cls>]", "model.mo", "[libs]"],
+           "gen_at": time.strftime("%Y-%m-%dT%H:%M:%S"), "stages": stages}
+    with open(os.path.join(d, "manifest.json"), "w", encoding="utf-8") as f:
+        json.dump(man, f, ensure_ascii=False, indent=1, sort_keys=True)
 
 
 def one(c, a):
@@ -330,13 +366,8 @@ def one(c, a):
                 json.dump(rec, f, ensure_ascii=False, indent=1)
             rec["raw_dir"] = os.path.basename(d)
             rec["model_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
-        if a.keep_lowering:
-            sec = sc.after_lowering_text(out)
-            if sec is not None:
-                d = os.path.join(a.raw_root, "after_lowering")
-                os.makedirs(d, exist_ok=True)
-                with open(os.path.join(d, safe_id(c["id"]) + ".txt"), "w", encoding="utf-8", newline="\n") as f:
-                    f.write(sec)
+        if a.keep_sections:
+            write_sections(a.raw_root, c["id"], out, rc, status)
         return rec
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -455,7 +486,26 @@ def cmd_run(a):
         list(ex.map(job, todo))
     if a.raw:
         write_manifest(a, list(done.values()), ver)
+    if a.keep_sections:
+        write_sections_manifest(a.raw_root, ver)
     print("finished:", collections.Counter(r.get("status") for r in done.values()), flush=True)
+    return 0
+
+
+def cmd_sections(a):
+    with open(a.cases, encoding="utf-8") as f:
+        cases = json.load(f)
+    n = 0
+    for c in cases:
+        p = os.path.join(a.raw_root, safe_id(c["id"]), "out.txt")
+        if os.path.exists(p):
+            with open(os.path.join(os.path.dirname(p), "sig.json"), encoding="utf-8") as f:
+                sig = json.load(f)
+            write_sections(a.raw_root, c["id"], _read(p), sig["rc"], sig["status"])
+            n += 1
+    ver = subprocess.run([OMC, "--version"], capture_output=True, text=True, timeout=30).stdout.strip()
+    write_sections_manifest(a.raw_root, ver)
+    print(f"{n} / {len(cases)} cases -> {os.path.join(a.raw_root, 'sections')}")
     return 0
 
 
@@ -471,7 +521,7 @@ def main():
     p.add_argument("--cases", required=True)
     p.add_argument("--out", required=True)
     p.add_argument("--raw", action="store_true", help="存原文（语料 a）")
-    p.add_argument("--keep-lowering", action="store_true", help="只存 (After Lowering) 一段（语料 b）")
+    p.add_argument("--keep-sections", action="store_true", help="存 lowering 和九个 pre 模块的段（语料 b）")
     p.add_argument("--raw-root", default=REFS)
     p.add_argument("--jobs", type=int, default=8)
     p.add_argument("--timeout", type=int, default=120)
@@ -479,6 +529,9 @@ def main():
     p.add_argument("--limit", type=int, default=0)
     p.add_argument("--ids", default="")
     p.add_argument("--tmp", default=os.path.join(tempfile.gettempdir(), "ymc_bdae"))
+    p = sub.add_parser("sections")
+    p.add_argument("--cases", required=True)
+    p.add_argument("--raw-root", default=REFS)
     p = sub.add_parser("a1")
     p.add_argument("--cases", required=True)
     p.add_argument("--out", required=True)
@@ -491,6 +544,8 @@ def main():
         return cmd_run(a)
     if a.cmd == "a1":
         return cmd_a1(a)
+    if a.cmd == "sections":
+        return cmd_sections(a)
     cases = extract_cases() if a.cmd == "extract" else sweep_cases(a.src)
     with open(a.cases, "w", encoding="utf-8") as f:
         json.dump(cases, f, ensure_ascii=False, indent=1)

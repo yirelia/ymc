@@ -17,8 +17,9 @@ namespace {
 // `%.17g` 会把 9.81 打成 9.8100000000000005。GCC 10 没有浮点 std::to_chars，最短数字串用
 // %.14e/%.15e/%.16e 逐级试 strtod 往返代替（≤15 位时与 Ryu 相同：15 位十进制网格比 double 的 ulp 粗）。
 std::string real_text(double v) {
+  // realString（SimulationRuntime/c/meta/realString.c:79-88 v1.25.0）：小写的 inf，NaN 是这个写法。
   if (std::isnan(v)) return "NaN";
-  if (std::isinf(v)) return v < 0 ? "-Inf" : "Inf";
+  if (std::isinf(v)) return v < 0 ? "-inf" : "inf";
   char sci[40];
   for (int prec = 14; prec <= 16; ++prec) {
     std::snprintf(sci, sizeof sci, "%.*e", prec, v);

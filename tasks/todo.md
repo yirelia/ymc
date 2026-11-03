@@ -2894,6 +2894,11 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       if 按 `sortForSplit` 拆（`List.sort` 平局反序，不能用 `std::stable_sort`），`$RES_SIM` 外层先编号；算法输出含被化简删掉的语句（`dropped_outputs`）；迭代量进 Artificial 走桶序；多 reinit 接 `omc_unordered.h`。
       前端顺手修：`elseif b2(p)` 前面有运行时分支时 ymc 静默选支（`cond_refs_param`，探针 pk-p51 7 个基线 FAIL）；`note_attr_final` 把范围的标记拆出来（`typed_marks_`），其余 Late 留 `ponytail:`。
       留 SKIP：when 里的元组方程（omc 有输出，语料 0 个）、状态机 `initialState(aState)`（要类路径，7 个）、`for e in E` 和枚举迭代量、if 语句空分支、`dropped_comp_` 偏保守。A5:subscript 的 `x := f(x)[1]` 没收窄（语料 5 个）。
+- [x] (S5a-2a) 第一个 pre 模块 Bindings（2026-11-03），门 = `(Bindings)` 段逐字节，`--dump-after=bindings`、`bdae_sweep.py --stage bindings`。语料 a PASS 74 / 109，语料 b PASS 1016 / 1857，探针 14559 个 PASS 13984、SKIP 17，全部 FAIL 0、CRASH 0；lower 段 PASS 的模型一个没掉。lower 段探针 10232→14559（新增 s5a2a 3797、s5a2a-adv 530）；单测 bindings_test 6 个，ctest 12→13。
+      绑定方程的 rhs 再化简一遍（`NBEquation.mo:2226`），所以这桶移植了 `SimplifyExp.simplify` 的标量部分（`src/bdae/simplify.cpp`）；`exp_compare` 从 lower 搬出来共用；`dump_stage` 打任意段；`bdae_refgen.py --keep-sections` 存九个 pre 模块段（`C:\dev\ymc-refs`，307 MB，语料 b 里 omc 崩溃或超时的 10 个模型末段丢弃）。
+      前端顺手修：`real_text` 的 `Inf` 改 `inf` / `-inf`（`Real e = 1e308 * 10`，realString.c:79-88）。评审把 `continuous` 改成照 isContinuous 列排除项，原来写死 `Algebraic`。
+      评审探针 s5a2a-adv（530，手写）落点：PASS 484、SKIP 6、准入外 40，FAIL 0。挖出三个前端旧错，转 68c：`der(p + 1)` 不折成 0.0、63 位字面量不截断、`Boolean z = 1` 不报错。
+      留 SKIP：调用实参这一遍才变字面量（要 `Ceval.evalCall`）、semiLinear 改写、Integer 常数超 2^53。数值 BINARY 走不到，Simplify 1 照原文补（`simplify.cpp` 的 `ponytail:`）。
 - [ ] (S5a-2…) pre 模块按 NB 运行序一个个做（2026-11-03 改定，原计划按语料 a 跳着做）：Bindings → FunctionAlias → Early Inline → Simplify 1 → Alias → Simplify 2 → Remove Stream → Detect States → Events。每个模块的输入都是上一段逐字节验证过的输出，门设在每一段上。
 - [ ] (S5a) lower + NB 九个 pre 模块，按模块增量（Bindings → FunctionAlias → Early Inline → Simplify 1 → Alias → Simplify 2 →
       Remove Stream → Detect States → Events）；首批子集 `simulation/modelica/NBackend/{basics,alias,event_handling}` + equations /

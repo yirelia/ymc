@@ -191,8 +191,8 @@ class Dumper {
  public:
   Dumper(const BackendDAE& d, const Interner& in) : d_(d), in_(in), exp_(d.exprs, in) {}
 
-  std::string run() {
-    return headline_1("BackendDAE: (After Lowering)") + "\n" + var_data() + "\n" + eq_data();
+  std::string run(std::string_view stage) {
+    return headline_1("BackendDAE: (" + std::string(stage) + ")") + "\n" + var_data() + "\n" + eq_data();
   }
 
  private:
@@ -400,6 +400,6 @@ class Dumper {
 
 std::string exp_string(const ExprArena& a, const Interner& in, Id<Expr> e) { return ExpPrinter(a, in).str(e); }
 
-std::string dump_after_lowering(const BackendDAE& dae, const Interner& in) { return Dumper(dae, in).run(); }
+std::string dump_stage(const BackendDAE& dae, const Interner& in, std::string_view stage) { return Dumper(dae, in).run(stage); }
 
 }  // namespace ymc::bdae

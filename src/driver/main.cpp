@@ -18,7 +18,9 @@
 // S5：
 //   ymc --dump-after=lower (<file.mo> | --load-model=P --class=Q.N)
 //       压平 + lower，打印的字节 = `omc --newBackend -s --simCodeTarget=None -d=optdaedump` 的 `BackendDAE: (After Lowering)` 一段
-//       （从头线第一个 `#` 到下一段头线之前，tools/structcompare.py after_lowering_text）。没做的构造退 66、不打印。
+//       （从头线第一个 `#` 到下一段头线之前，tools/structcompare.py stage_section_texts）。没做的构造退 66、不打印。
+//   ymc --dump-after=bindings (<file.mo> | --load-model=P --class=Q.N)
+//       同上，再跑 pre 模块 Bindings，打 `BackendDAE: (Bindings)` 一段。
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -38,6 +40,7 @@
 #include "base/diag.h"
 #include "base/symbol.h"
 #include "bdae/bdae_dump.h"
+#include "bdae/bindings.h"
 #include "bdae/lower.h"
 #include "parse/lexer.h"
 #include "parse/parser.h"
@@ -71,6 +74,7 @@ void print_help() {
       "  ymc --dump-after=parse <f>...  parse and unparse (S1)\n"
       "  ymc --dump-after=flat <f>...   instantiate + flatten (S3, default)\n"
       "  ymc --dump-after=lower <f>     flatten + lower, print the (After Lowering) section (S5)\n"
+      "  ymc --dump-after=bindings <f>  lower + the Bindings module, print the (Bindings) section (S5)\n"
       "  ymc --check-syntax <f>...      syntax check only\n"
       "  ymc --dump-tokens <f>          print token stream\n"
       "  ymc --log=parse                trace parser rule entries to stderr\n"
@@ -234,11 +238,18 @@ void autoload_libraries(ymc::Absyn& absyn, ymc::Interner& interner, const Option
   }
 }
 
+// --dump-after 停在后端哪一段：段名 = omc 的 `BackendDAE: (<段>)`。不进后端返回 nullptr。
+const char* backend_stage(const char* mode) {
+  if (std::strcmp(mode, "dump-after=lower") == 0) return "After Lowering";
+  if (std::strcmp(mode, "dump-after=bindings") == 0) return "Bindings";
+  return nullptr;
+}
+
 // S3：实例化 + 压平 + dump（默认 `ymc X.mo`，对齐 `omc X.mo`：压平文件里最后一个顶层类）。
 // v1 未实现的构造 → 退出码 66 + `ymc: not implemented: <原因>`（运行器据此记 SKIP）。
-// root_name：文件里最后一个顶层类（同 omc）——隐式装上的库排在它后面，不能再取 program 的末项。
+// root_name：文件里最后一个顶层类（同 omc）——隐式装上的库排在它后面，不能再取 program 的末项。stage 见 backend_stage，nullptr = 压平。
 int dump_flat_pipeline(ymc::Absyn& absyn, ymc::Diagnostics& diags, ymc::Interner& interner,
-                       const std::vector<ymc::Symbol>& root_path, bool lower) {
+                       const std::vector<ymc::Symbol>& root_path, const char* stage) {
   ymc::SCode scode(absyn);
   ymc::translate_program(scode, absyn.top);
   if (scode.program.empty()) {
@@ -267,14 +278,22 @@ int dump_flat_pipeline(ymc::Absyn& absyn, ymc::Diagnostics& diags, ymc::Interner
     return 66;
   }
   std::string text;
-  if (lower) {
+  if (stage != nullptr) {
     if (diags.has_errors()) return 1;
     ymc::bdae::LowerResult lr = ymc::bdae::lower(std::move(fr.model), interner);
     if (lr.unsupported) {
       std::fprintf(stderr, "ymc: not implemented: lower: %s\n", lr.unsupported_reason.c_str());
       return 66;
     }
-    text = ymc::bdae::dump_after_lowering(lr.dae, interner);
+    // pre 模块按 NBackendDAE.mo:268-278 的运行序往后接，跑到 stage 为止：每个模块的输入都是上一段验证过的输出。
+    if (std::strcmp(stage, "Bindings") == 0) {
+      const ymc::bdae::ModuleResult r = ymc::bdae::bindings(lr.dae, interner);
+      if (r.unsupported) {
+        std::fprintf(stderr, "ymc: not implemented: bindings: %s\n", r.unsupported_reason.c_str());
+        return 66;
+      }
+    }
+    text = ymc::bdae::dump_stage(lr.dae, interner, stage);
   } else {
     text = ymc::dump_flat(fr.model, interner);
   }
@@ -323,8 +342,8 @@ int run_one(const Options& opt, const std::string& path) {
     int rc = dump_scode(absyn, opt.dump_class);
     return rc != 0 ? rc : (diags.has_errors() ? 1 : 0);
   }
-  const bool lower = std::strcmp(opt.mode, "dump-after=lower") == 0;
-  if (lower || std::strcmp(opt.mode, "dump-after=flat") == 0) {
+  const char* stage = backend_stage(opt.mode);
+  if (stage != nullptr || std::strcmp(opt.mode, "dump-after=flat") == 0) {
     if (diags.has_errors()) return 1;   // 解析出错先退（不进实例化）
     // `within P;`（P 非空）的文件只能插进已装载的包 P（MLS §13.4.3）；单文件压平时没有别的类可插 → omc 报
     // "Failed to insert class M within P"（testsuite openmodelica/interactive-API/ReadOnlyPkg/M.mo）。
@@ -344,7 +363,7 @@ int run_one(const Options& opt, const std::string& path) {
     // 隐式装上的库由装载器自己记。
     for (ymc::Id<ymc::ClassDef> c : absyn.top) absyn.class_files[absyn.classes[c].name] = path;
     autoload_libraries(absyn, interner, opt);
-    return dump_flat_pipeline(absyn, diags, interner, {root_name}, lower);
+    return dump_flat_pipeline(absyn, diags, interner, {root_name}, stage);
   }
   std::string text = ymc::unparse(absyn);
   std::fputs(text.c_str(), stdout);
@@ -373,8 +392,8 @@ int run_load_model(const Options& opt) {
   }
   // S3 3g：从库里按全限定名压平一个类（`ymc --load-model=Modelica --class=Modelica.Blocks.Examples.PID_Controller`，
   // 对齐 `omc -i=<类> <库>/package.mo`）。MSL 示例模型的通过率报告见 tools/msl_sweep.py。
-  const bool lower = std::strcmp(opt.mode, "dump-after=lower") == 0;
-  if ((lower || std::strcmp(opt.mode, "dump-after=flat") == 0) && !opt.dump_class.empty()) {
+  const char* stage = backend_stage(opt.mode);
+  if ((stage != nullptr || std::strcmp(opt.mode, "dump-after=flat") == 0) && !opt.dump_class.empty()) {
     if (diags.has_errors()) return 1;
     std::vector<ymc::Symbol> path;
     for (std::size_t b = 0; b <= opt.dump_class.size();) {
@@ -383,7 +402,7 @@ int run_load_model(const Options& opt) {
       path.push_back(interner.intern(std::string_view(opt.dump_class).substr(b, e - b)));
       b = e + 1;
     }
-    return dump_flat_pipeline(absyn, diags, interner, path, lower);
+    return dump_flat_pipeline(absyn, diags, interner, path, stage);
   }
   if (opt.dump_class_names) {
     // OMC getClassNames() 的顶层顺序是"装载顺序的逆序"（每装一个库就前插；探针 2026-09-16：
@@ -430,6 +449,7 @@ int main(int argc, char** argv) {
     if (std::strcmp(a, "--dump-after=parse") == 0) opt.mode = "dump-after=parse";
     else if (std::strcmp(a, "--dump-after=flat") == 0) opt.mode = "dump-after=flat";
     else if (std::strcmp(a, "--dump-after=lower") == 0) opt.mode = "dump-after=lower";
+    else if (std::strcmp(a, "--dump-after=bindings") == 0) opt.mode = "dump-after=bindings";
     else if (std::strcmp(a, "--dump-after=scode") == 0) opt.mode = "dump-after=scode";
     else if (std::strncmp(a, "--class=", 8) == 0) opt.dump_class = a + 8;
     else if (std::strcmp(a, "--check-syntax") == 0) opt.mode = "check-syntax";

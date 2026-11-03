@@ -41,9 +41,11 @@ python -I tools/bdae_refgen.py sweep --from ts_cur.json --cases cases_b.json   #
 python -I tools/bdae_refgen.py run --cases cases_a.json --out sig_a.jsonl --raw   # 跑 omc 1.25.0 新后端，存原文 + manifest 到 ymc-refs；不带 --raw 只留签名
 python -I tools/bdae_refgen.py a1 --cases cases_a.json --out a1_a.jsonl --ymc <ymc.exe>   # 语料 a 的 A1
 python -I tools/bdae_census.py sig.jsonl [--a1 a1.jsonl] [--strict]            # 准入普查：A2 / A3 / A4 表、累计准入表、(After Lowering) 直方图
-python -I tools/bdae_refgen.py run --cases cases_b.json --out sig.jsonl --keep-lowering   # 另把 (After Lowering) 一段存到 ymc-refs 的 after_lowering/
-python -I tools/bdae_sweep.py --corpus a --ymc <ymc.exe> [--json out.json]     # S5a-1 门：ymc --dump-after=lower 与 (After Lowering) 逐字节比（语料 a / b）
+python -I tools/bdae_refgen.py run --cases cases_b.json --out sig.jsonl --keep-sections   # 另把 lowering 和九个 pre 模块的段存到 ymc-refs 的 sections/<模块>/<id>.txt（语料 b 1857 个模型重跑 omc，在扫描锁下跑）
+python -I tools/bdae_refgen.py sections --cases cases_a.json                   # 不跑 omc，从 <refs>/<id>/out.txt 切段写到同一处（语料 a）
+python -I tools/bdae_sweep.py --corpus a --ymc <ymc.exe> [--json out.json]     # S5a 门：ymc --dump-after=lower 与 (After Lowering) 逐字节比（语料 a / b）
 python -I tools/bdae_sweep.py --probes --ymc <ymc.exe>                         # 同上，tests/probes/bdae/*.probes 现跑 omc
+python -I tools/bdae_sweep.py --corpus a --stage bindings --ymc <ymc.exe>      # --stage 选段（lower | bindings），语料和 --probes 都能加；前提是 lower 段 PASS，否则 NOT-ADMITTED lower:<判定>
 ```
 
 ## OMC 哈希容器差分（S5b-0）

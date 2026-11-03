@@ -318,6 +318,7 @@ Bindings（`Modules/2_Pre/NBBindings.mo:50`）、FunctionAlias（`NBFunctionAlia
 - **A5 收窄（S5a-1c）**：`[ALGO]` 的 when / elsewhen 条件顶层数组字面量同上；`for` 语句头的 `:` 和数字字面量的数组不算路径差异，语句不展开（`NFFlatten.flattenStatement`，`NFFlatten.mo:2219`），范围里别的东西照旧查。`for e in E`、Boolean 数组留在 A5 之外或 SKIP：默认路径展开成 `{E.a, E.b}`，NB 路径留 `E`。`x := f(x)[1]`（TupleElement）没收窄，语料 5 个。
 - **D1 补充（S5a-1c）**：`Eqn` 加 If、Algorithm。If 铺平成 `IfBranch`，一个 `Eqn` 是 split 之后的一条，每支恰好一条方程；Algorithm 存 `Stmt` 树。`VarKind` 加 Iterator（`[ITER]`），算法里用到的迭代量进 Artificial 桶，走桶序。
 - **D2 补充（S5a-1c）**：算法段的输出压平时就定了（`NFFlatten.mo:387`），早于 SimplifyModel，默认路径化简删掉的语句里赋值的变量照算 size 和入桶，`FlatAlgorithm::dropped_outputs` 记下。默认路径的标量化还会删 if 语句的空分支（`NFScalarize.mo:461-488`），NB 路径留着，这里分不出来，`bdae::lower` SKIP。
+- **Q3 再答一段（S5a-2a）**：`(Bindings)` 段也逐字节复现。绑定方程的 rhs 不是变量上的式子，`generateBindingEquation` 还调一遍 `SimplifyExp.simplify`（`NBEquation.mo:2226`），比如变量行 `p + 2.0 * time + 3.0`、方程 `3.0 + p + 2.0 * time`。标量部分在 `src/bdae/simplify.cpp`，数值 BINARY 只有方程的浅映射才有，Simplify 1 时补。
 - **待定**：D3 回读里 MULTARY 与嵌套 BINARY 文本相同，parser 的还原规则到写回读时再定。
 
 ## 附录 A 实跑记录
