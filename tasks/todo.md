@@ -2868,6 +2868,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       评审探针修的：68a 的函数约束修饰 SKIP 盖住了合并后的 ConstrainingClassFunc1；`g()` 的 external 缺省被求值（EX7，本桶引入）；if 方程条件里的无绑定常量 ACCEPTS-INVALID（UC5 / UC54）；`package Q = P` 下 getInstanceName 取了 "P"（GI9，本桶引入，短类保守 SKIP，`ponytail:` 记了上限）、继承同（GI19）；`Q.func` 求值漏了被顶替声明的约束修饰（CC15，68a 就有）；短类 / 约束修饰改函数里没有的元素静默忽略（CC8，基线就有）；`C d = +c` / `-(-c)` 绑定没拆字段（OP23 / OP29，基线就有）；`P.R()` 丢约束修饰（CC33，基线就有）；class extends 的带修饰短类基类在包实例那支看不见修饰（CE9，本桶引入）；`input Real w = mysin(u)` 代换后丢不折叠标记（EX40，基线就有）。
       探针 pk-p50（1030）、pk-p50a（356，评审手写）；slice 714→724；scodeinst 678→689（FAIL 53→54，就是 ConstantMissingBinding2）；testsuite 1870→1894 / FAIL 0；MSL 500（不变）；探针 15763→17149；单测 556→571。
       决定：`extends` 带修饰的短类继续 SKIP，沿用账本的"ymc 不复刻"（1.25.0 丢修饰，MLS §7.1 和文件 Result 都保留；放开也只多 UsertypeModifications、ExtendsDerived 两个 PASS，另外 5 个撞别的 SKIP）。
+- [x] (68c) 变率核查与剩余 SKIP（2026-11-03）：testsuite 里 omc 能压平的 SKIP 只剩 265 个，其中 217 个放开不会 FAIL（另 48 个文件 Result 带告警行，ymc 不产告警）。
+      挑三条根因 16 个目标：继承来的类经 extends 修饰改过（取实例类树里那份，NFLookup.mo:422-432）、矩阵幂 `A ^ n`（expandBinaryPowMatrix）、参数 / 常量的非记录复合组件（只收纯声明的类）。
+      顺带清掉四类旧错（基线上 18 个 FAIL、28 个 noEvent ACCEPTS-INVALID、279 个绑定类型 ACCEPTS-INVALID、80 个整数 FAIL 加 27 个 ACCEPTS-INVALID）：
+      离散组件绑定和离散形参的变率按 omc 分档算（`omc_var`，判在折叠之前，when / initial / 函数里降 discrete）；`der` 的实参低于 discrete 折成 0.0、恰是 DISCRETE 才拒；整数字面量按 omc 的 63 位截断或转 Real（Modelica.g:1724-1760），常量 Add / Sub / Mul 按 63 位环绕；绑定类型核查内建标量之间只许 Integer→Real。
+      评审探针挖出 `A ^ 1` 没展开（expandBinaryPowMatrix 先 expand 再求幂），已修，补 26 个同类探针。
+      探针 pk-p52（1217）、pk-p52a（168，评审手写）；slice 724→725（PASS 690）；scodeinst PASS 689→691、FAIL 54 不变；testsuite PASS 1894→1902、FAIL 0；MSL 500（不变）；探针 17149→18534 干净；单测 571→578。
+      留 SKIP：R1 剩 const15、ArrayExtendsUnknown、ConstrainedByMods（"constant of modified enclosing instance" 一条下层根因同时挡 eq5 和几个探针，排下一桶）、定义层查名的 BaseClass1 / System2；R2 带 flow 成员的参数 / 常量连接器；数组组件修饰分发的 noEvent 绑定（omc 接受，机制没读到，保守 SKIP）。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

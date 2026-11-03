@@ -188,6 +188,27 @@ inline SVariability var_min(SVariability a, SVariability b) {
   return static_cast<std::uint8_t>(a) >= static_cast<std::uint8_t>(b) ? a : b;
 }
 
+// 常量整数运算（Add / Sub / Mul）。omc 的 Expression.INTEGER 存在带标记的 fixnum 里（值左移一位，见 Modelica.g:1747 的 MMC_TAGFIXNUM），
+// 求值写的是普通的 `+`（NFCeval.evalBinaryAdd :971-972 v1.25.0），存回时丢掉最高位 = 按 63 位环绕：IL 探针 ov1
+// `4611686018427387903 + 1` → -4611686018427387904、ov5 `3037000500 * 3037000500` → 145474192；Real 目标是环绕之后才转型（ov8）。
+// 用无符号算，有符号溢出是未定义行为。
+inline std::int64_t omc_int_op(BinOp op, std::int64_t a, std::int64_t b) {
+  const auto x = static_cast<std::uint64_t>(a), y = static_cast<std::uint64_t>(b);
+  const std::uint64_t r = op == BinOp::Add ? x + y : op == BinOp::Sub ? x - y : x * y;
+  return static_cast<std::int64_t>(r << 1) >> 1;
+}
+
+// 作用域内临时改一个成员，离开时还原（中途 return 也还原）。
+template <class T>
+struct ScopedSet {
+  T& slot;
+  T saved;
+  ScopedSet(T& s, T v) : slot(s), saved(std::exchange(s, v)) {}
+  ~ScopedSet() { slot = saved; }
+  ScopedSet(const ScopedSet&) = delete;
+  ScopedSet& operator=(const ScopedSet&) = delete;
+};
+
 class Flattener {
  public:
   Flattener(Inst& inst, Interner& in, Instantiator* instr) : I_(inst), in_(in), instr_(instr) {
@@ -1396,9 +1417,10 @@ class Flattener {
             mod_hit = mod_hit || !derived_mods_.count(s.mod.raw);
           }
       }
-      // 外来修饰改 final 元素（NFModifier.checkFinalOverride :697-713，FinalMod1 / ModifyConstant6）、改 protected 元素
-      //（PROTECTED_MODIFICATION，ProtectedAccess / Protected1）→ omc 报错 → SKIP。
-      if (mod_hit && (I_.comps[cid].attributes.is_final || vis == Visibility::Protected)) {
+      // 外来修饰改 final 元素（NFModifier.checkFinalOverride :697-713，FinalMod1 / ModifyConstant6；按带 final 的类修饰的类声明的组件
+      // 同样是 final，A68cXF05）、改 protected 元素（PROTECTED_MODIFICATION，ProtectedAccess / Protected1）→ omc 报错 → SKIP。
+      if (mod_hit && (I_.comps[cid].attributes.is_final || I_.final_class_mod_comps.count(cid.raw) > 0 ||
+                      vis == Visibility::Protected)) {
         final_override(vis == Visibility::Protected ? "modification of protected element" : "final element override");
         continue;
       }
@@ -1934,7 +1956,10 @@ class Flattener {
         }
         // `constant/parameter R r`：变率前缀下沉到每个成员（Half A），常量记录字段引用 `r.x` 折叠（Half B）。
         // 只对**纯数据记录**放行（排除 final 字段/数组字段/嵌套记录/extends 等会 FAIL 的形态，见 is_plain_data_record）。
-        if (I_.comps[cid].attributes.variability != SVariability::Var && !is_plain_data_record(ci, cdef))
+        // 非记录的复合组件见 plain_decl_class（只收 parameter / constant；`discrete M m` omc 要求成员在 when 里赋值，VC10）。
+        if (const SVariability cv = I_.comps[cid].attributes.variability;
+            cv != SVariability::Var && !is_plain_data_record(ci, cdef) &&
+            !((cv == SVariability::Param || cv == SVariability::Const) && plain_decl_class(ci, 0)))
           set_unsupported("variability on composite component");
         // 整体绑定 `A a = A(...)`（外来修饰或组件自身声明）。记录构造 `R r = R(4,5)` 翻成类修饰 `R r(x=4,y=5)`
         // 走既有修饰机制摊到字段（RecordBinding1）；其余整体绑定（记录构造以外的复合绑定，Clock6）仍 SKIP。
@@ -3256,6 +3281,7 @@ class Flattener {
   void collect_equation(Id<SEquation> eid, NodeId enclosing, const std::vector<Symbol>& prefix, const PSubs& psubs,
                         bool is_initial) {
     cur_psubs_ = psubs;   // cref 前缀改写用（本类方程里的引用带 `a[i]` 段下标）
+    const ScopedSet<bool> in_initial(eq_initial_, is_initial);
     const SEquation& eq = I_.scode.eqs[eid];
     if (eq.kind == SEqKind::Connect) {
       // connect 攒起来在 run() 末尾按连接集展开（potential 相等 + flow 求和）。initial 段里的 connect 罕见 → SKIP。
@@ -3840,6 +3866,15 @@ class Flattener {
       case ExprKind::Binary: {
         // 留了符号形态的向量 / 矩阵积（array_binary 的 sym 支）不是逐元素运算，取元素要按积展开，未做 → SKIP。
         if (result_.model.product_binaries.count(e.raw) > 0) { set_unsupported("array product scalarization"); return lit_int(0); }
+        // 指数未知的矩阵幂：整体取下标（expandGeneric，见 matrix_pow）。
+        if (matrix_pow_bins_.count(e.raw) > 0) {
+          Expr s;
+          s.kind = ExprKind::Subscript;
+          s.a = e;
+          for (std::int64_t i : idx) s.args.push_back(lit_int(i));
+          s.ty = Type::real();
+          return add(std::move(s));
+        }
         Id<Expr> sa = scalarize(x.a, idx), sb = scalarize(x.b, idx);
         // `/`、`^` 的结果恒为 Real、两侧都提 Real（同标量 binary()；WA 探针 w5 `y := m .^ 2` →
         // `{/*Real*/(m[1]) ^ 2.0, …}`，此前幂漏了、打成 `/*Real*/(m[1] ^ 2)`）。
@@ -4052,8 +4087,7 @@ class Flattener {
     auto numeric = [](TypeKind k) { return k == TypeKind::Integer || k == TypeKind::Real; };
     // 非内建数值元素（记录数组 + 运算符重载 OperatorOverloadArrayOp*）→ 需重载算子展开，未做 → SKIP。
     if (!numeric(ea) || !numeric(eb)) { set_unsupported("non-numeric array operand"); return lit_int(0); }
-    // 非逐元素 / 暂缓：矩阵乘（* 两侧皆数组）、矩阵幂（^ 含数组，OperationPow2/3）、除法（/ ./ 需操作数提实型，Tier C 暂缓）。
-    if (orig == Op::Pow) { set_unsupported("array matrix power"); return lit_int(0); }
+    if (orig == Op::Pow) return matrix_pow(a, b);
     // 函数语境：符号形态（不标量化）。Integer 运算数提实型；`*` 两侧皆数组 = 向量 / 矩阵积（NFTypeCheck.checkBinaryOperationMul
     // :1019-1093，未知 / 表达式维与任何维相等，Dimension.isEqual :294-307；ImplicitRangeExp3 `x * y` → Real）；逐元素运算
     // 同秩相容维。
@@ -4710,6 +4744,103 @@ class Flattener {
     return refs_runtime_var(e.a, floor_scope, floor) || refs_runtime_var(e.b, floor_scope, floor) ||
            refs_runtime_var(e.c, floor_scope, floor);
   }
+
+  // 式子定型后的变率（NFTyping.typeExp v1.25.0），只分这里用得上的几档，序同 NFPrefixes.Variability：Below = 低于 discrete（constant /
+  // 各种 parameter）；Discrete = 显式的 discrete 前缀、关系、pre 这类；ImplDiscrete = Integer / Boolean 等离散类型的变量（NFAttributes.mo:
+  // 537-540）、返回离散类型的调用（NFCall.mo:403-406），有效变率同 discrete，但 der 只拒 Discrete（A68cDY05 `der(if b then 1.0 else 2.0)`
+  // omc 接受）；Unknown = 没核实的形态，调用方保持 SKIP。when 里赋值的 Real 变量 omc 也算 ImplDiscrete（NFInst.mo:4119），这里当
+  // Continuous——只会多拒（SKIP），不会多收。和 refs_runtime_var 的差别：那个只问"引用了运行时量"，这里关系运算和调用的返回类型会把
+  // 变率降下来，不能靠看引用判断（`b = y > 1` 合法，`b = noEvent(y > 1)` 非法）。
+  enum class OmcVar : std::uint8_t { Below, Discrete, ImplDiscrete, Continuous, Unknown };
+  static OmcVar omc_var_max(OmcVar a, OmcVar b) { return a > b ? a : b; }   // Unknown 压过一切（Variability 的序同 NFPrefixes）
+  // no_event：在 noEvent 的实参里（typeNoEventCall，NFBuiltinCall.mo:1846；InstContext.set 是按位或，语境位传给所有子式）。
+  OmcVar omc_var(Id<Expr> id, bool no_event) {
+    if (!id.is_valid()) return OmcVar::Below;
+    const Expr x = result_.model.exprs[id];   // 拷贝
+    auto all = [&](const std::vector<Id<Expr>>& v, OmcVar acc) {
+      for (Id<Expr> a : v) acc = omc_var_max(acc, omc_var(a, no_event));
+      return acc;
+    };
+    switch (x.kind) {
+      case ExprKind::IntLit: case ExprKind::RealLit: case ExprKind::BoolLit: case ExprKind::StringLit: case ExprKind::EnumLit:
+      case ExprKind::Size:
+        return OmcVar::Below;
+      case ExprKind::Cref: {
+        const std::uint32_t raw = x.cref.resolved_node;
+        if (raw == Id<INode>::kInvalid)
+          return x.cref.parts.size() == 1 && in_.str(x.cref.parts[0].name) == "time" ? OmcVar::Continuous : OmcVar::Unknown;
+        if (raw == kFnLocal) return OmcVar::Unknown;
+        const NodeId n = NodeId::from_index(raw);
+        if (!I_.nodes.contains(n) || I_.nodes[n].is_empty() || !I_.nodes[n].comp.is_valid()) return OmcVar::Unknown;
+        const SVariability v = cref_path_var(x.cref, n, I_.comps[I_.nodes[n].comp].attributes.variability);
+        OmcVar r = OmcVar::Below;
+        if (v == SVariability::Discrete) {
+          r = OmcVar::Discrete;
+        } else if (v == SVariability::Var) {   // Integer / Boolean / String / 枚举的组件是隐式离散
+          const TypeKind k = x.ty.element_type().kind;
+          r = k == TypeKind::Real || k == TypeKind::Complex ? OmcVar::Continuous : OmcVar::ImplDiscrete;
+        }
+        for (const ExprCrefPart& cp : x.cref.parts) r = all(cp.subscripts, r);
+        return r;
+      }
+      case ExprKind::Binary: case ExprKind::Logical:
+        return omc_var_max(omc_var(x.a, no_event), omc_var(x.b, no_event));
+      case ExprKind::Unary: case ExprKind::LogicalNot: case ExprKind::Cast:
+        return omc_var(x.a, no_event);
+      case ExprKind::Relation: {   // 连续的关系只有在 noEvent 外才降成 discrete（typeExp :1403-1407）
+        const OmcVar v = omc_var_max(omc_var(x.a, no_event), omc_var(x.b, no_event));
+        return v == OmcVar::Continuous && !no_event ? OmcVar::Discrete : v;
+      }
+      case ExprKind::IfExp:   // 条件和两支取最大，没选中的分支也算（typeIfExpression :2672；NE48、NF22）
+        return omc_var_max(omc_var(x.a, no_event), omc_var_max(omc_var(x.b, no_event), omc_var(x.c, no_event)));
+      case ExprKind::Array: case ExprKind::Tuple:
+        return all(x.args, OmcVar::Below);
+      case ExprKind::Range:
+        return omc_var_max(omc_var(x.a, no_event), omc_var_max(omc_var(x.b, no_event), omc_var(x.c, no_event)));
+      case ExprKind::Subscript:
+        return all(x.args, omc_var(x.a, no_event));
+      case ExprKind::Call: {
+        if (x.call_name.size() == 1) {
+          const std::string_view n = in_.str(x.call_name[0]);
+          if (n == "noEvent" && x.args.size() == 1) return omc_var(x.args[0], true);
+          if (n == "smooth" && x.args.size() == 2) return omc_var(x.args[1], no_event);   // typeSmoothCall :873
+          // 恒 discrete：typeDiscreteCall :465-485、typePreChangeCall :548、typeEdgeCall。ndims / cardinality 是参数：Call.variability :502-503。
+          if (n == "pre" || n == "change" || n == "edge" || n == "initial" || n == "terminal") return OmcVar::Discrete;
+          if (n == "ndims" || n == "cardinality") return OmcVar::Below;
+        }
+        // 重载运算符不按返回类型封顶（见 has_runtime_op_call），这里没核实。
+        for (Symbol s : x.call_name)
+          if (in_.str(s).front() == '\'') return OmcVar::Unknown;
+        const OmcVar v = all(x.args, OmcVar::Below);
+        // 返回离散类型、实参连续：IMPLICITLY_DISCRETE（NFCall.typeMatchNormalCall :403-406），有效变率是 discrete（effectiveVariability，
+        // NFPrefixes.mo:507）。NE20 `noEvent(h(y))`、NE23 `noEvent(integer(y) > 1)` 能过，NE19 `noEvent(f(y) > 1)` 不能。
+        const TypeKind k = x.ty.element_type().kind;
+        const bool discrete_ty = k == TypeKind::Integer || k == TypeKind::Boolean || k == TypeKind::String || k == TypeKind::Enumeration;
+        return v == OmcVar::Continuous && discrete_ty ? OmcVar::ImplDiscrete : v;
+      }
+      default:
+        return OmcVar::Unknown;
+    }
+  }
+  // 式子里有 noEvent 调用。离散类型的式子要变成连续只有这一条路（重载运算符另算），没有 noEvent 的不走 omc_var，免得没核实的形态新增 SKIP。
+  bool has_no_event(Id<Expr> id) {
+    if (!id.is_valid()) return false;
+    const Expr x = result_.model.exprs[id];   // 拷贝
+    if (x.kind == ExprKind::Call && x.call_name.size() == 1 && in_.str(x.call_name[0]) == "noEvent") return true;
+    for (Id<Expr> a : x.args) if (has_no_event(a)) return true;
+    return has_no_event(x.a) || has_no_event(x.b) || has_no_event(x.c);
+  }
+  // 离散类型组件（元素类型 Integer / Boolean / String / 枚举）的绑定变率过高（checkComponentBindingVariability，NFTyping.mo:1136-1147
+  // v1.25.0）。b 要是化简之前的式子：omc 在定型时判，`noEvent(y > 1) or true` 折叠了也照报（NE13、NE14）。false = 已 set_unsupported。
+  bool discrete_binding_var_ok(Id<Expr> b, TypeKind elem) {
+    if (elem == TypeKind::Real || elem == TypeKind::Complex || !has_no_event(b)) return true;
+    const OmcVar bv = omc_var(b, false);
+    if (bv == OmcVar::Continuous) set_unsupported("binding of higher variability");
+    else if (bv == OmcVar::Unknown) set_unsupported("noEvent in binding of discrete variable");
+    return bv != OmcVar::Continuous && bv != OmcVar::Unknown;
+  }
+  // when / initial / 函数里连续一律降成 discrete（typeExp 末尾 :1459，DISCRETE_SCOPE = WHEN | INITIAL | FUNCTION）。
+  bool in_discrete_scope() const { return fn_scope_ || alg_in_when_ > 0 || eq_in_when_ > 0 || alg_initial_ || eq_initial_; }
 
   // 类型化 cref 所指变量是否连续：Real，且沿本地各段（前缀之后）逐段下沉的变率仍是 Var（`parameter R r` 的 `r.x` 是参数）；
   // `time` 连续；函数局部 / 迭代变量不是。段解析不到（outer 改写等）→ 保守当连续。
@@ -5717,17 +5848,23 @@ class Flattener {
     if (empty_outer && binding.is_valid()) set_unsupported("unassigned record field with binding");
     if (ctx.unbound_fields || empty_outer) binding = {};   // 外层记录整体绑定已挪成方程 / 没赋到：字段无绑定（见 ModCtx::unbound_fields）
     if (binding.is_valid()) {
+      // 离散组件的绑定变率过高（见 discrete_binding_var_ok）。整体绑定拆到字段的不在此列（NF17 `R a = R(noEvent(y > 1), 1)` omc 接受，
+      // 那里绑定挂在记录上），顶层就是 noEvent 的那种照旧 SKIP，没核实。
+      if (ctx.rec_bind == 0) {
+        discrete_binding_var_ok(binding, cty.kind);
+      } else if (const Expr& be = result_.model.exprs[binding];
+                 cty.kind != TypeKind::Real && be.kind == ExprKind::Call && be.call_name.size() == 1 && in_.str(be.call_name[0]) == "noEvent") {
+        set_unsupported("noEvent bound to discrete variable");
+      }
       binding = simplify_expr(binding);   // 折叠常量子表达式（`1+2`→`3.0`）+ 已在 cref 内联的常量
-      // 数值组件绑定成 String/Bool 是类型错误（omc 报错，ConditionInvalidBinding1）——ymc 无绑定 typing → SKIP。
+      // 内建标量类型之间只有 Integer → Real 一种隐式转换，其余一律 "Type mismatch in binding"（TypeCheck.matchBinding，NFTypeCheck；
+      // A68cBT 探针：Real / Integer / Boolean / String / 枚举 × 字面量、引用、式子，声明、修饰、extends、记录字段逐格实跑；
+      // ConditionInvalidBinding1、ENQ8、IntDiv、Real2Integer1）。枚举之间的比较在下面。
       const TypeKind bk = result_.model.exprs[binding].ty.kind;
-      if ((cty.kind == TypeKind::Real || cty.kind == TypeKind::Integer) &&
-          (bk == TypeKind::String || bk == TypeKind::Boolean))
-        set_unsupported("binding type mismatch");
-      // 枚举值绑给内建标量类型的组件（`Integer g = f(L.'1')`，f 返回枚举、常量调用求值成字面量后此前照出；omc "Type mismatch in
-      // binding"，ENQ 探针 ENQ8）同。
-      if (bk == TypeKind::Enumeration && (cty.kind == TypeKind::Real || cty.kind == TypeKind::Integer ||
-                                          cty.kind == TypeKind::Boolean || cty.kind == TypeKind::String))
-        set_unsupported("binding type mismatch");
+      auto scalar_kind = [](TypeKind k) {
+        return k == TypeKind::Real || k == TypeKind::Integer || k == TypeKind::Boolean || k == TypeKind::String || k == TypeKind::Enumeration;
+      };
+      if (scalar_kind(cty.kind) && scalar_kind(bk) && !elem_kinds_compat(cty.kind, bk)) set_unsupported("binding type mismatch");
       // parameter / constant 绑定引用连续 / 离散变量或 time → omc HIGHER_VARIABILITY_BINDING（DisturbedResistance1
       // `extends Resistor(R = 1.0 + 0.1*sin(time))`）。
       {
@@ -5747,8 +5884,6 @@ class Flattener {
       // 标量组件绑数组（BindingInvalidType2 `Real x = {1, 2, 3}`）→ omc 维度不符报错。
       if (!cty.is_array() && (result_.model.exprs[binding].ty.is_array() || result_.model.exprs[binding].kind == ExprKind::Array))
         set_unsupported("binding type mismatch");
-      // Real 绑定给 Integer 变量：TypeCheck 不做 Real→Integer（IntDiv `4000 / 100`、IntPow、Real2Integer1）→ omc 报错。
-      if (cty.kind == TypeKind::Integer && bk == TypeKind::Real) set_unsupported("binding type mismatch");
       // 枚举绑定须是本枚举类型的字面量（Enum12 `E1 e = E2.B` → omc "Type mismatch in binding"）：按字面量路径的类型段与
       // 字面量名核对（类型别名写法会被保守 SKIP）。
       if (cty.kind == TypeKind::Enumeration && result_.model.exprs[binding].kind == ExprKind::EnumLit &&
@@ -5947,13 +6082,6 @@ class Flattener {
         for (std::size_t ni = 0; ni < name.size(); ++ni)   // 子原因：哪个常量（排桶用）
           result_.unsupported_detail += (ni ? "." : "") + std::string(in_.str(name[ni]));
       }
-    }
-    // Boolean 变量绑定到（未折叠的）noEvent(…)：noEvent 抑制事件 → 连续，绑到离散 Boolean 是错误（omc 报错，NoEvent1）→ SKIP。
-    // 普通关系 `b = x > 1` 会产生事件→离散，合法，不在此列。
-    if (binding.is_valid() && cty.kind == TypeKind::Boolean &&
-        result_.model.exprs[binding].kind == ExprKind::Call) {
-      const std::vector<Symbol>& cn = result_.model.exprs[binding].call_name;
-      if (cn.size() == 1 && in_.str(cn[0]) == "noEvent") set_unsupported("noEvent bound to discrete variable");
     }
     v.binding = binding;
     v.attributes = std::move(attrs);
@@ -6520,6 +6648,17 @@ class Flattener {
         if (rsh[k] != dims[k] && !(arr_call && rsh[k] < 0)) shape_ok = false;
       if (!shape_ok) { set_unsupported("non-literal array binding shape"); return; }
       if (vk == FlatVarKind::Discrete) { set_unsupported("discrete array binding"); return; }   // omc 报错（需 when）
+      // 离散元素类型的数组绑定变率过高（NF25 `fill(noEvent(y > 1), 2)`），字面量数组的在下面发射处查。
+      if (!discrete_binding_var_ok(rhsE, cty.element_type().kind)) return;
+      // 元素类型不相容（NG17 `Boolean z[2] = fill(1, 2)`，omc "Type mismatch in binding"，同 emit_variable 的标量绑定）。值的元素类型
+      // 不是内建标量（调用的类型没定出来等）不判。
+      if (const TypeKind vk2 = expr_elem_kind(rhsE);
+          (vk2 == TypeKind::Real || vk2 == TypeKind::Integer || vk2 == TypeKind::Boolean || vk2 == TypeKind::String ||
+           vk2 == TypeKind::Enumeration) &&
+          !elem_kinds_compat(cty.element_type().kind, vk2)) {
+        set_unsupported("binding type mismatch");
+        return;
+      }
       if (vk != FlatVarKind::Var && binding_runtime(rhsE)) {   // param/const 绑更高变率 = omc 报错（B3/C3）
         set_unsupported("array binding higher variability"); return;
       }
@@ -6738,7 +6877,11 @@ class Flattener {
         rhs = whole_array_value(rhsE, dims, cty);
         if (!rhs.is_valid()) return;
       } else {
-        rhs = simplify_expr(inst_exp(braw, bscope, bprefix));
+        const Id<Expr> lit = inst_exp(braw, bscope, bprefix);
+        if (result_.unsupported) return;
+        // 离散元素类型的字面量数组绑定变率过高（NE15 `{noEvent(y > 1), b}`、NF26、NG07 / NG08 修饰来的）。化简之前查。
+        if (!discrete_binding_var_ok(lit, cty.element_type().kind)) return;
+        rhs = simplify_expr(lit);
         if (result_.unsupported) return;
         if (!array_leaves_ok(rhs, dims.size(), cty.kind)) { set_unsupported("array binding shape/type mismatch"); return; }
         rhs = whole_array_value(rhs, dims, cty);   // 字面量里的数组值元素各自规整（`{m, m}` → `{/*Real[2]*/(m), …}`，w5）
@@ -9794,9 +9937,7 @@ class Flattener {
     }
     if ((a.k != CVal::K::Int && a.k != CVal::K::Real) || (b.k != CVal::K::Int && b.k != CVal::K::Real)) return std::nullopt;
     if (a.k == CVal::K::Int && b.k == CVal::K::Int && op != BinOp::Div && op != BinOp::Pow) switch (op) {
-      case BinOp::Add: return CVal::I(a.i + b.i);
-      case BinOp::Sub: return CVal::I(a.i - b.i);
-      case BinOp::Mul: return CVal::I(a.i * b.i);
+      case BinOp::Add: case BinOp::Sub: case BinOp::Mul: return CVal::I(omc_int_op(op, a.i, b.i));
       default: break;
     }
     const double x = a.as_r(), y = b.as_r();
@@ -15160,6 +15301,14 @@ class Flattener {
       if (params[i].record_def == Id<SElement>::kInvalid && !params[i].type_path.empty() &&
           ext_type_of(args[i]) != params[i].type_path)
         return fn_fail<Id<Expr>>("external object argument type");
+      // 离散类型的形参接连续的实参：omc 报 "Function argument … is not a discrete expression"（matchArgs，NFFunction.mo:1342 v1.25.0，
+      // 比的是 arg_var > 形参变率，方程、算法、绑定里都报）。这类实参只能经 noEvent 得到：实参里有 noEvent，或者调用本身在 noEvent 的
+      // 实参里（NE18 `noEvent(g(y > 1))`）。实参是返回离散类型的调用不算（IMPLICITLY_DISCRETE，NF09、NF10）。when / initial / 函数体里
+      // 连续已降成 discrete（NF07）。
+      if (const TypeKind pk = params[i].ty.element_type().kind;
+          pk != TypeKind::Real && pk != TypeKind::Complex && !in_discrete_scope() &&
+          (no_event_depth_ > 0 || has_no_event(args[i])) && omc_var(args[i], no_event_depth_ > 0) >= OmcVar::Continuous)
+        return fn_fail<Id<Expr>>("argument of higher variability");
       const Id<Expr> a = coerce_to_param(args[i], params[i].ty);
       if (!a.is_valid()) return fn_fail<Id<Expr>>("argument type / shape");   // 实参类型 / 维不符（omc 报错）→ SKIP
       // 留给强制内联的那遍定型（见 raw_typing_）：引用函数局部的实参不化简（不引用的照常，见 record_ctor_call）；其中要按元素
@@ -15463,6 +15612,15 @@ class Flattener {
             // 类路径的首段查到的是组件：类路径走不通组件，当没找到（MSL Fluid DetailedPipeFlow 的 if 条件里 `system.…`，求值器先试
             // 当枚举字面量 `T.lit` 解析 → 撞守卫误 SKIP；PKI 探针 PKI4）。
             if (class_path && I_.scode.elems[ie].kind == SElementKind::Component) return {};
+            // 实例层上继承来的类：实例的类树里就是改过的那份（基类实例里的克隆，extends 的类修饰、元素级重声明都已施加），omc 查的正是
+            // 它（lookupLocalSimpleName → Class.lookupElement，NFLookup.mo:422-432 v1.25.0；IC11 探针：继承来的类读到 extends 改过的常量）。
+            // 和上面包实例那支一样取它的定义、词法外层是实例（ClassMod2 `extends A(B(x = 2.0)); B b2;`、const15、ArrayExtendsUnknown、
+            // ConstrainedByMods、RedeclareBaseClass1；IH 探针）。定义层（没有实例）的照旧 SKIP。
+            if (I_.scode.elems[ie].kind == SElementKind::Class && ic.is_valid() && I_.nodes[ic].def.is_valid()) {
+              def_scope = scode_scope_of(I_.nodes[ic].parent_scope);
+              if (node_out) *node_out = ic;
+              return I_.nodes[ic].def;
+            }
             set_unsupported("inherited element seen through modifier / redeclare");
             result_.unsupported_detail = std::string(in_.str(name));
             return {};
@@ -22756,6 +22914,87 @@ class Flattener {
     }
   }
 
+  // 不带点的 `A ^ n`：只有 Real[k, k] ^ Integer 合法（checkBinaryOperationPow，NFTypeCheck.mo:1149-1186 v1.25.0），A 先转 Real，n 不能
+  // 是已知的负数，其余 omc 报类型错。模型语境里展开（NFExpandExp.expandBinaryPowMatrix :869-932）：n 是字面量 0 → 单位阵；正的字面量
+  // → 二分递归成矩阵积（A^1 = A，A^2 = A * A，偶数 A^m * A^m，奇数 A * A^(n-1)，expandBinaryPowMatrix2）；n 不是字面量 → 整式留着、按
+  // 下标取元素 `(A ^ i)[1, 1]`（expandGeneric :1038-1064）。OperationPow2、MatrixPow、ArrayExponentiation；MP 探针。
+  // 函数体里、含数组调用的符号形态、非正的字面量指数没核实 → SKIP。
+  Id<Expr> matrix_pow(Id<Expr> a, Id<Expr> b) {
+    auto fail = [&]() { set_unsupported("array matrix power"); return lit_int(0); };
+    const std::vector<std::int64_t> sa = expr_shape(a);
+    const Type tb = op_type(b);
+    if (fn_scope_ || has_array_call(a) || has_array_call(b) || tb.is_array() || tb.kind != TypeKind::Integer || sa.size() != 2 ||
+        sa[0] < 0 || sa[0] != sa[1])
+      return fail();
+    a = whole_real_operand(a);
+    if (!a.is_valid()) return fail();
+    a = simplify_expr(a);
+    b = simplify_expr(b);
+    const Expr be = result_.model.exprs[b];   // 拷贝
+    if (be.kind == ExprKind::IntLit && be.ival == 0) {   // 单位阵（Expression.makeIdentityMatrix，Real）
+      Dimension d;
+      d.kind = DimKind::Integer;
+      d.size = sa[0];
+      std::vector<Id<Expr>> rows;
+      for (std::int64_t i = 1; i <= sa[0]; ++i) {
+        Expr row;
+        row.kind = ExprKind::Array;
+        row.ty = Type::array_of(Type::real(), {d});
+        for (std::int64_t j = 1; j <= sa[0]; ++j) row.args.push_back(lit_real(i == j ? 1.0 : 0.0));
+        rows.push_back(add(std::move(row)));
+      }
+      Expr m;
+      m.kind = ExprKind::Array;
+      m.ty = Type::array_of(Type::real(), {d, d});
+      m.args = std::move(rows);
+      return add(std::move(m));
+    }
+    if (be.kind == ExprKind::IntLit && be.ival > 0) {
+      // A^1 是展开后的 A：expandBinaryPowMatrix 先 `expand(exp1)`（:893，cref 走 expandCref 成逐元素下标的数组，:70）再 expandBinaryPowMatrix2，
+      // n = 1 原样返回它（R68cMP2 `Real B[2, 2] = A ^ 1` → `B = {{A[1,1], A[1,2]}, {A[2,1], A[2,2]}}`，此前打成 `B = A`）。n ≥ 2 的矩阵积
+      // （model_array_product）本来就逐元素取 scalarize，与先展开再乘相同。展不开时 omc 留原式（expandBinary :562-564），这里维已知才走到。
+      auto expanded = [&]() {
+        Dimension d;
+        d.kind = DimKind::Integer;
+        d.size = sa[0];
+        std::vector<Id<Expr>> rows;
+        for (std::int64_t i = 1; i <= sa[0]; ++i) {
+          Expr row;
+          row.kind = ExprKind::Array;
+          row.ty = Type::array_of(Type::real(), {d});
+          for (std::int64_t j = 1; j <= sa[0]; ++j) row.args.push_back(to_real(scalarize(a, {i, j})));
+          rows.push_back(add(std::move(row)));
+        }
+        Expr m;
+        m.kind = ExprKind::Array;
+        m.ty = Type::array_of(Type::real(), {d, d});
+        m.args = std::move(rows);
+        return add(std::move(m));
+      };
+      auto pow = [&](auto& self, std::int64_t n) -> Id<Expr> {
+        if (n == 1) return expanded();
+        if (n == 2) return model_array_product(a, a);
+        if (n % 2 == 0) {
+          const Id<Expr> h = self(self, n / 2);
+          return model_array_product(h, h);
+        }
+        return model_array_product(a, self(self, n - 1));
+      };
+      return pow(pow, be.ival);
+    }
+    if (be.kind == ExprKind::IntLit) return fail();
+    Expr r;
+    r.kind = ExprKind::Binary;
+    r.bin = BinOp::Pow;
+    r.a = a;
+    r.b = b;
+    r.ty = Type::array_of(Type::real(), op_type(a).dims);
+    const Id<Expr> id = add(std::move(r));
+    matrix_pow_bins_.insert(id.raw);
+    nofold_bins_.insert(id.raw);   // 两侧已化简；数组层不再动它（simplify_expr 的 Binary 支见 nofold_bins_）
+    return id;
+  }
+
   // 模型语境的向量 / 矩阵积（形状规则 NFTypeCheck.checkBinaryOperationMul :1019-1093）：维已知时 omc 展开成积和（C1 探针：
   // `A * v` → `{A[1,1] * v[1] + A[1,2] * v[2], …}`、`v * v` → `v[1] * v[1] + v[2] * v[2]`），求和下标 k 升序、左结合。
   // 形状不符（omc 报错）/ 维未知 → SKIP。
@@ -24791,6 +25030,11 @@ class Flattener {
     const Cref& fn = I_.absyn.crefs[e.cref];
     const std::string_view builtin_name = as_builtin.is_valid() ? in_.str(as_builtin)
                                         : fn.parts.size() == 1 ? in_.str(fn.parts[0].name) : std::string_view{};
+    // 函数里不许用 der（typeDerCall :608，NFBuiltinCall.mo v1.25.0；DY37）。
+    if (fn_scope_ && builtin_name == "der") {
+      set_unsupported("der in function");
+      return lit_int(0);
+    }
     // 实参里嵌着的数组调用（array_call_eq_ 放行的）只在核实过的内建里收：cross 展开成元素式（AX 探针 a17
     // `{f(time)[2], -f(time)[1], 0.0}`）；向量化的 abs / sin 等 omc 打成 `array(abs(f(time)[$i1]) for $i1 in 1:3)`（c10-c12），
     // 其余未核实 → 实参里照旧 SKIP。
@@ -24934,6 +25178,8 @@ class Flattener {
 
     std::vector<Id<Expr>> args;
     args.reserve(e.args.size());
+    // noEvent 的实参里，用户函数调用的实参核查要知道自己在 noEvent 语境里（NE18 `noEvent(g(y > 1))`：g 的实参 `y > 1` 是连续的）。
+    const ScopedSet<int> in_no_event(no_event_depth_, no_event_depth_ + (builtin_name == "noEvent" ? 1 : 0));
     for (Id<Exp> arg : e.args) {
       // 大写 Integer 只接枚举；先建 EnumLit，避免通用 cref 把 E.two 误记成跨作用域引用。
       // 枚举范围上的 for 方程迭代变量（`Integer(i)`）不是书写的字面量：照常定型，取当前的标签。
@@ -26165,9 +26411,7 @@ class Flattener {
           if (both_int) {
             std::int64_t x = result_.model.exprs[a].ival, y = result_.model.exprs[b].ival;
             switch (op) {
-              case BinOp::Add: return lit_int(x + y);
-              case BinOp::Sub: return lit_int(x - y);
-              case BinOp::Mul: return lit_int(x * y);
+              case BinOp::Add: case BinOp::Sub: case BinOp::Mul: return lit_int(omc_int_op(op, x, y));
               default: break;
             }
           }
@@ -26632,24 +26876,18 @@ class Flattener {
         const BuiltinFn* bf = lookup_builtin(name);
         if (!bf) return rebuild();
         if (bf->arity >= 0 && static_cast<std::size_t>(bf->arity) != args.size()) return rebuild();
-        // ParameterDer.mo：常量/参数的导数为 0；普通变量仍保持 der(x) 符号形式。
+        // der 的变率在定型时定（typeDerCall，NFBuiltinCall.mo:591-650 v1.25.0），化简只看这个结果：低于 discrete 归零（simplifyDer，
+        // NFSimplifyExp.mo:571-581；ParameterDer.mo、`der(p + 1)`、`der(2 * p)`、`der(f(p))`，DZ 探针）。所以看化简之前的实参 args0。
         if (name == "der" && args.size() == 1) {
-          // der 实参须 Real：非 Real 原实参会被插 Cast（如 der(Integer)）→ omc 报错（DerInvalid2）→ SKIP。
-          if (result_.model.exprs[args[0]].kind == ExprKind::Cast) set_unsupported("der of non-Real argument");
-          bool zero = is_num_lit(result_.model.exprs[args[0]]);
-          if (!zero && result_.model.exprs[args[0]].kind == ExprKind::Cref) {
-            const std::uint32_t raw = result_.model.exprs[args[0]].cref.resolved_node;
-            if (raw != Id<INode>::kInvalid) {
-              const NodeId node = NodeId::from_index(raw);
-              if (I_.nodes.contains(node) && !I_.nodes[node].is_empty() && I_.nodes[node].comp.is_valid()) {
-                const SVariability var = I_.comps[I_.nodes[node].comp].attributes.variability;
-                zero = var == SVariability::Param || var == SVariability::Const;
-                // der 作用于离散变量是错误（omc 报错，FuncBuiltinDerInvalid1/2）→ SKIP。
-                if (var == SVariability::Discrete) set_unsupported("der of discrete variable");
-              }
-            }
-          }
-          if (zero) return lit_real(0.0);
+          const OmcVar dv = omc_var(args0[0], false);
+          // Integer 实参（定型时插了 Cast，看化简前的 args0：`der(i * 1.0)` 化简后也是 Cast，但它是 Real 实参，A68cDY08）：只有低于
+          // discrete 才转 Real，否则 omc 报错（typeDerCall :627-634；DerInvalid2、A68cDZ04）。
+          if (result_.model.exprs[args0[0]].kind == ExprKind::Cast && dv != OmcVar::Below) set_unsupported("der of non-Real argument");
+          // 变率恰是 DISCRETE 的不可导，除非所在语境全是离散（typeDerCall :643，比的是相等，隐式离散的不算；FuncBuiltinDerInvalid1/2、
+          // A68cDY03）。离散语境里的 `der(d)` 没核实 → 同样 SKIP。
+          if (dv == OmcVar::Discrete && (!in_discrete_scope() || result_.model.exprs[args[0]].kind == ExprKind::Cref))
+            set_unsupported("der of discrete variable");
+          if (is_num_lit(result_.model.exprs[args[0]]) || dv == OmcVar::Below) return lit_real(0.0);
         }
         // noEvent(const) → 脱壳折叠成字面量；符号参数保留 `noEvent(...)`（CevalNoEvent1）。
         if (name == "noEvent" && args.size() == 1) return is_literal(args[0]) ? args[0] : rebuild();
@@ -27015,6 +27253,32 @@ class Flattener {
     if (cd.restriction == SRestriction::OperatorRecord) return true;
     for (Id<SElement> e : cd.def.elements)
       if (I_.scode.elems[e].kind == SElementKind::Class && I_.scode.elems[e].restriction == SRestriction::Operator) return false;
+    return true;
+  }
+
+  // 带 parameter / constant 前缀的非记录复合组件（模型、类、块、连接器）：变率同样下沉到每个成员（variabilityMin，NFAttributes.mo:236
+  // v1.25.0；ConnectorVariability1 `parameter C c` → `parameter input Real c.x = 1.0`、Bug2784、eq5）。只收纯声明的类：本类、各基类、
+  // 嵌套组件的类都没有方程 / 算法段，也没有 flow / stream 成员。带这些的 omc 另有处理，没做：`der(m.x) = 1` 折成 `0.0 = 1.0`、when 里
+  // 给参数赋值、参数 / 常量连接器的连接方程与 assert、常量连接器 flow 成员的 `cc.f = 0.0`（VC 探针 VC08 / VC09 / VC38-VC40）。
+  bool plain_decl_class(NodeId ci, int depth) {
+    if (depth > 20 || !is_class_inst(ci) || !I_.nodes[ci].def.is_valid()) return false;
+    const SElement& cd = I_.scode.elems[I_.nodes[ci].def];
+    if (cd.kind != SElementKind::Class || cd.def.kind != SClassDefKind::Parts) return false;
+    const SRestriction r = cd.restriction;
+    if (r != SRestriction::Class && r != SRestriction::Model && r != SRestriction::Block && r != SRestriction::Connector)
+      return false;
+    if (!cd.def.equations.empty() || !cd.def.initial_equations.empty() || !cd.def.algorithms.empty() ||
+        !cd.def.initial_algorithms.empty())
+      return false;
+    const ClassTree& t = I_.trees[I_.node_class(ci).tree];
+    for (NodeId b : t.exts)
+      if (!plain_decl_class(b, depth + 1)) return false;
+    for (NodeId c : t.components) {
+      if (!is_comp_node(c)) continue;
+      const Component& cp = I_.comps[I_.nodes[c].comp];
+      if (cp.attributes.connector != SConnectorType::Potential) return false;
+      if (cp.ty.element_type().kind == TypeKind::Complex && !plain_decl_class(cp.class_inst, depth + 1)) return false;
+    }
     return true;
   }
 
@@ -29967,6 +30231,7 @@ class Flattener {
     if (is_bin) {
       if (result_.model.ew_binaries.count(id.raw)) result_.model.ew_binaries.insert(n.raw);
       if (result_.model.product_binaries.count(id.raw)) result_.model.product_binaries.insert(n.raw);
+      if (matrix_pow_bins_.count(id.raw)) matrix_pow_bins_.insert(n.raw);
       if (result_.model.swapped_binaries.count(id.raw)) result_.model.swapped_binaries.insert(n.raw);
       if (const auto oit = fn_array_ops_.find(id.raw); oit != fn_array_ops_.end()) fn_array_ops_[n.raw] = oit->second;
     }
@@ -32121,6 +32386,9 @@ class Flattener {
   int alg_depth_ = 0;
   int alg_in_when_ = 0;
   int eq_in_when_ = 0;   // when 方程体内（collect_when_body 置）
+  bool eq_initial_ = false;   // initial equation 段内（collect_equation 置）
+  int no_event_depth_ = 0;    // 正在实例化 noEvent 的实参（builtin_call 置）
+  std::unordered_set<std::uint32_t> matrix_pow_bins_;   // 指数不是字面量的矩阵幂 `A ^ i`：取元素是整体下标（见 matrix_pow）
   bool alg_initial_ = false;
   int in_alg_ = 0;   // 正在压平算法段（见 fill 的维实参）
   std::unordered_map<std::uint32_t, TypeKind> stmt_iters_;      // for **语句**（KEPT loop）的迭代变量→元素类型（符号，不内联）

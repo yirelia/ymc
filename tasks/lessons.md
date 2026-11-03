@@ -630,3 +630,23 @@
 ## 2026-11-03 — 段尾的换行数不规整
 - 模式：段尾一般两个换行，最后一条是 `[ALGO]` 时是三个。
 - 规则：生成期望值、比对段文本都不要规范化行尾。
+
+## 2026-11-03 — 模仿 omc 的枚举量要保留完整档位
+- 模式：typeDerCall 用 `== DISCRETE` 判，Boolean / Integer 变量是 IMPLICITLY_DISCRETE，不等于 DISCRETE。68c 起初把两档合成一档，`der(if b then 1.0 else 2.0)` 多拒，探针落 SKIP 才看出。
+- 规则：照抄 omc 的枚举序，判等的地方逐档对。
+
+## 2026-11-03 — 放开一条 SKIP 时，新加的拒绝条件写在调用点
+- 模式：68c 把 final 类修饰的拒绝写进共用的 `plain_class_mod`，误伤了短类包那条路（pk-p30 XM40 PASS→SKIP），precheck 的逐组探针比对才抓到。
+- 规则：拒绝条件写在放开它的那个调用点，共用判定函数不加语境相关的条件。
+
+## 2026-11-03 — omc 能压平不等于能放开
+- 模式：scodeinst 按文件 Result 比，Result 带 Warning 行的放开就是 SKIP→FAIL。68c 筛出 omc 能压平的 265 个，只有 217 个放开不 FAIL。
+- 规则：排桶前先算"假如 stdout 和 omc 一致，门会怎么判"。
+
+## 2026-11-03 — worktree 从 origin/master 建
+- 模式：本地 master 领先 origin 时，代理的 worktree 落在旧提交上，68c 开工时 HEAD 是 af314ce 不是任务卡写的 5f12cd1。
+- 规则：任务卡第一步授权 `git merge --ff-only <基线>` 并核 HEAD；本地有未推送提交时尤其要写。
+
+## 2026-11-03 — omc 的展开先作用于运算数
+- 模式：expandBinaryPowMatrix 先 `expand(exp1)` 再求幂，n = 1 时返回展开后的矩阵；68c 的 matrix_pow 在 n = 1 直接返回原式，评审探针 `A ^ 1` 抓到。
+- 规则：照 omc 递归写的特例（n = 0、n = 1、空表）逐个看它返回的是展开前还是展开后的东西。

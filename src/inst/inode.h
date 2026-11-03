@@ -286,6 +286,9 @@ struct Inst {
   std::unordered_map<std::uint32_t, std::vector<std::pair<Id<SMod>, NodeId>>> class_mods;
   // 挂了类修饰的类节点（class_mods 的键）：经它往下查名（`B.C`、`B.i`）要按带修饰的包实例查，未做 → SKIP。
   std::unordered_set<std::uint32_t> class_modded;
+  // 按带 final 的类修饰的类声明的组件（CompId raw，`package M = A(final T(max = 5)); M.T t;`）：整个组件是 final，flatten 拦外来修饰
+  //（见 Instantiator::inst_component）。
+  std::unordered_set<std::uint32_t> final_class_mod_comps;
   // 修饰里的类重声明顶替进来的类节点（RedeclaredClass）→ 约束修饰（修饰, 求值的类实例），外层在前（见 Instantiator::instantiate）。
   std::unordered_map<std::uint32_t, std::vector<std::pair<Id<SMod>, NodeId>>> redecl_cc;
   struct RootAlias {

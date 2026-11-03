@@ -1565,7 +1565,12 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node, const ClassRede
             if (const auto it = bt.lookup.find(s.ident); it != bt.lookup.end() && it->second.kind == LEntry::Kind::Class)
               cls = bt.classes[it->second.index];
           }
-          if (!cls.is_valid() || !plain_class_mod(cls, s.mod)) {
+          // final 的类修饰（`extends A(final B(x = 2))` 之后 `B b2(x = 3)`，omc "Trying to override final element b2"；`B(final x = 2)`
+          // 同理，IH 探针 A68cIH21 / A68cIH30）：final 没有传给按这个类声明的组件 → 不收。短类上的类修饰（`package M = A(final T(…))`，
+          // pk-p30 XM40）不走这里，照常。
+          bool fin = I_.scode.mods[s.mod].is_final;
+          for (const SSubMod& cs : I_.scode.mods[s.mod].subs) fin = fin || I_.scode.mods[cs.mod].is_final;
+          if (!cls.is_valid() || !plain_class_mod(cls, s.mod) || fin) {
             mark_unsupported("extends modifier names non-component (nested class)");
             continue;
           }
@@ -2031,6 +2036,14 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing, bool gener
     // PKC 探针 PKC1：`Temperature(min = 273.15)` 盖过类型定义的 min = 1）。
     if (const auto cm = I_.class_mods.find(base.raw); cm != I_.class_mods.end())
       for (const auto& [m, sc] : cm->second) {
+        // final 的类修饰（`package M = A(final T(max = 5))`）：按这个类声明的组件整个成了 final，自己再带修饰或绑定 omc 报 "Trying to
+        // override final element t"（修饰合并时 checkFinalOverride，NFModifier.mo:399 / :691-709 v1.25.0；XF 探针 A68cXF02 / A68cXF04，
+        // 此前照出）。外来修饰改它的（A68cXF05 `B b(t = 2)`）由 flatten 拦，见 final_class_mod_comps。
+        if (I_.scode.mods[m].is_final) {
+          I_.final_class_mod_comps.insert(cid.raw);
+          if (el.mod.is_valid())   // 不中途返回：整个结果作废，组件照常走完免得留半截状态
+            mark_unsupported("final element override", std::string(I_.interner.str(I_.nodes[comp_node].name)));
+        }
         derived_mods.push_back(m);
         derived_scopes.push_back(sc);
         mod_dims_at.push_back(type_dims.size());

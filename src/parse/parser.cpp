@@ -1,6 +1,7 @@
 // 递归下降解析器实现（方案 §5 S1，v2）。
 #include "parse/parser.h"
 
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -1134,10 +1135,27 @@ Id<Exp> Parser::parse_primary() {
   SourceLoc loc = peek().loc;
   switch (kind()) {
     case TokenKind::IntLit: {
-      std::string s(out_.interner.str(peek().text));
+      Symbol text = peek().text;
+      std::string s(out_.interner.str(text));
+      // omc 的整数只有 63 位（值存在带标记的 fixnum 里），语法层就分三段（Modelica.g:1724-1760 v1.25.0；IL 探针）：放不进 64 位 →
+      // 转 Real，保留源码拼写；放得进 64 位但超过 2^62 - 1 → 截断成 2^62 - 1；其余原样。前两段 omc 都告警，ymc 不产告警。
+      errno = 0;
+      const long long l = std::strtoll(s.c_str(), nullptr, 10);
+      if (errno == ERANGE) {
+        errno = 0;
+        const double d = std::strtod(s.c_str(), nullptr);
+        // 连 double 都放不下：omc 是语法错（modelicaParserAssert，Modelica.g:1740）
+        if (errno == ERANGE) error_here("Number is too large to be represented by a double on this machine");
+        advance();
+        Exp e{}; e.kind = ExpKind::RealLit; e.loc = loc;
+        e.rval = d;
+        e.sval = text;
+        return mk(std::move(e));
+      }
       advance();
+      constexpr long long kOmcIntMax = (1LL << 62) - 1;
       Exp e{}; e.kind = ExpKind::IntLit; e.loc = loc;
-      e.ival = std::strtoll(s.c_str(), nullptr, 10);
+      e.ival = l > kOmcIntMax ? kOmcIntMax : l;
       return mk(std::move(e));
     }
     case TokenKind::RealLit: {

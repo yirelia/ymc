@@ -13472,4 +13472,116 @@ YMC_TEST(flatten_class_restriction_on_lookup) {
                         "  import P.Q.*;\n  Real y = x;\nend XPi7;\n").rfind("<unsupported:", 0) == 0);   // omc 拒绝
 }
 
+// 68c 起的单测期望值都取 omc 1.25.0 实跑（`omc <模型>.mo`），模型即 tests/probes/pk-p52.probes 里的同名探针。
+
+YMC_TEST(flatten_no_event_variability) {
+  // noEvent 实参里的关系不降成 discrete（NFTyping.typeExp :1403-1407 v1.25.0），离散组件的绑定变率过高就报错（checkComponentBindingVariability
+  // :1136-1147），离散形参接连续实参也报错（NFFunction.matchArgs :1342）。noEvent 外的关系、参数的关系、离散变量照常。
+  YMC_CHECK_EQ(flatten_src("model A68cNE06\n  parameter Real p = 2;\n  Boolean b = time > 0.5;\n"
+                           "  Boolean z = noEvent(p > 1) and b;\nend A68cNE06;\n"),
+               std::string("class A68cNE06\n  parameter Real p = 2.0;\n  Boolean b = time > 0.5;\n"
+                           "  Boolean z = noEvent(p > 1.0) and b;\nend A68cNE06;\n"));
+  YMC_CHECK_EQ(flatten_src("model A68cNE21\n  Real y = time;\n  Boolean b = time > 0.5;\n  Boolean z = noEvent(y > 1) == b;\n"
+                           "end A68cNE21;\n"),
+               std::string("class A68cNE21\n  Real y = time;\n  Boolean b = time > 0.5;\n  Boolean z = noEvent(y > 1.0) == b;\n"
+                           "end A68cNE21;\n"));
+  YMC_CHECK_EQ(flatten_src("model A68cNE04\n  Real y = time;\n  Boolean b = time > 0.5;\n  Boolean z = noEvent(b);\nend A68cNE04;\n"),
+               std::string("class A68cNE04\n  Real y = time;\n  Boolean b = time > 0.5;\n  Boolean z = noEvent(b);\nend A68cNE04;\n"));
+  YMC_CHECK(flatten_src("model A68cNE01\n  Real y = time;\n  Boolean b = time > 0.5;\n  Boolean z = noEvent(y > 1) and b;\n"
+                        "end A68cNE01;\n").rfind("<unsupported:", 0) == 0);   // omc 拒绝（Bindings 探针 LbnB069b 的形状）
+  YMC_CHECK(flatten_src("model A68cNE13\n  Real y = time;\n  Boolean z = noEvent(y > 1) or true;\nend A68cNE13;\n")
+                .rfind("<unsupported:", 0) == 0);   // omc 拒绝：折叠之前判
+  YMC_CHECK(flatten_src("model A68cNF01\n  function g input Boolean u; output Boolean v; algorithm v := not u; end g;\n"
+                        "  Real y = time;\n  Boolean z;\nequation\n  z = g(noEvent(y > 1));\nend A68cNF01;\n")
+                .rfind("<unsupported:", 0) == 0);   // omc 拒绝：离散形参
+}
+
+YMC_TEST(flatten_der_by_variability) {
+  // der 的实参低于 discrete 就化简成零（NFSimplifyExp.simplifyDer :571-581 v1.25.0），只拒恰是 DISCRETE 的（typeDerCall :643），
+  // 隐式离散（Boolean 变量）不拒。
+  YMC_CHECK_EQ(flatten_src("model A68cDZ01\n  parameter Real p = 2;\n  Real z = der(p + 1);\nend A68cDZ01;\n"),
+               std::string("class A68cDZ01\n  parameter Real p = 2.0;\n  Real z = 0.0;\nend A68cDZ01;\n"));
+  YMC_CHECK_EQ(flatten_src("model A68cDZ21\n  function f input Real u; output Real v; algorithm v := 2 * u; end f;\n"
+                           "  parameter Real p = 2;\n  Real z = der(f(p));\nend A68cDZ21;\n"),
+               std::string("class A68cDZ21\n  parameter Real p = 2.0;\n  Real z = 0.0;\nend A68cDZ21;\n"));
+  YMC_CHECK_EQ(flatten_src("model A68cDY05\n  Boolean b = time > 1;\n  Real z = der(if b then 1.0 else 2.0);\nend A68cDY05;\n"),
+               std::string("class A68cDY05\n  Boolean b = time > 1.0;\n  Real z = der(if b then 1.0 else 2.0);\nend A68cDY05;\n"));
+  YMC_CHECK(flatten_src("model A68cDY03\n  discrete Real d(start = 0);\n  Real z = der(d + 1);\nequation\n"
+                        "  when time > 1 then d = 1; end when;\nend A68cDY03;\n").rfind("<unsupported:", 0) == 0);   // omc 拒绝
+  YMC_CHECK(flatten_src("model A68cDY37\n  function f input Real u; output Real v; algorithm v := der(u + 1); end f;\n"
+                        "  Real z = f(time);\nend A68cDY37;\n").rfind("<unsupported:", 0) == 0);   // omc 拒绝：函数里的 der
+}
+
+YMC_TEST(flatten_int_literal_63bit) {
+  // omc 的整数 63 位：2^62 起的字面量截断成 2^62 - 1，放不进 64 位的转 Real（Modelica.g:1724-1760 v1.25.0）；常量运算按 63 位环绕。
+  YMC_CHECK_EQ(flatten_src("model A68cILbbi\n  Integer j = integer(time);\n  Integer z = 4611686018427387904 + j;\nend A68cILbbi;\n"),
+               std::string("class A68cILbbi\n  Integer j = integer(time);\n  Integer z = 4611686018427387903 + j;\nend A68cILbbi;\n"));
+  YMC_CHECK_EQ(flatten_src("model A68cILdbr\n  Real c = 9223372036854775807;\nend A68cILdbr;\n"),
+               std::string("class A68cILdbr\n  Real c = 4.611686018427388e18;\nend A68cILdbr;\n"));
+  YMC_CHECK_EQ(flatten_src("model A68cILebr\n  Real c = 9223372036854775808;\nend A68cILebr;\n"),
+               std::string("class A68cILebr\n  Real c = 9.223372036854776e18;\nend A68cILebr;\n"));
+  YMC_CHECK_EQ(flatten_src("model A68cILov1\n  Integer z = 4611686018427387903 + 1;\nend A68cILov1;\n"),
+               std::string("class A68cILov1\n  Integer z = -4611686018427387904;\nend A68cILov1;\n"));
+  YMC_CHECK_EQ(flatten_src("model A68cILov5\n  Integer z = 3037000500 * 3037000500;\nend A68cILov5;\n"),
+               std::string("class A68cILov5\n  Integer z = 145474192;\nend A68cILov5;\n"));
+}
+
+YMC_TEST(flatten_binding_scalar_type_mismatch) {
+  // 内建标量类型之间只有 Integer → Real（TypeCheck.matchBinding）；其余组合 omc 报 "Type mismatch in binding"。
+  const char* const rejected[] = {
+      "model A68cBTBid\n  Boolean z = 1;\nend A68cBTBid;\n",
+      "model A68cBTSbd\n  String z = true;\nend A68cBTSbd;\n",
+      "type E = enumeration(a, b);\nmodel A68cBTEid\n  E z = 1;\nend A68cBTEid;\n",
+      "model A68cBTBim\n  model A Boolean x; end A;\n  A a(x = 1);\nend A68cBTBim;\n",
+      "model A68cNG17\n  Boolean z[2] = fill(1, 2);\nend A68cNG17;\n",
+  };
+  for (const char* s : rejected) YMC_CHECK(flatten_src(s).rfind("<unsupported:", 0) == 0);   // omc 拒绝
+  YMC_CHECK_EQ(flatten_src("model A68cBTRvid\n  Integer vi = 1 + integer(time);\n  Real z = vi;\nend A68cBTRvid;\n"),
+               std::string("class A68cBTRvid\n  Integer vi = 1 + integer(time);\n  Real z = /*Real*/(vi);\nend A68cBTRvid;\n"));
+}
+
+YMC_TEST(flatten_matrix_power) {
+  // `A ^ n`：字面量指数展开成矩阵积、0 次幂是单位阵、指数未知整体取下标（NFExpandExp.expandBinaryPowMatrix :869-932 v1.25.0）。
+  const std::string vars = "  Real a[1,1];\n  Real a[1,2];\n  Real a[2,1];\n  Real a[2,2];\n  Real b[1,1];\n  Real b[1,2];\n"
+                           "  Real b[2,1];\n  Real b[2,2];\n";
+  YMC_CHECK_EQ(flatten_src("model A68cMP01\n  Real a[2,2] = {{time, 1}, {2, time}};\n  Real b[2,2];\nequation\n  b = a ^ 2;\n"
+                           "end A68cMP01;\n"),
+               "class A68cMP01\n" + vars + "equation\n  a = {{time, 1.0}, {2.0, time}};\n"
+               "  b[1,1] = a[1,1] * a[1,1] + a[1,2] * a[2,1];\n  b[1,2] = a[1,1] * a[1,2] + a[1,2] * a[2,2];\n"
+               "  b[2,1] = a[2,1] * a[1,1] + a[2,2] * a[2,1];\n  b[2,2] = a[2,1] * a[1,2] + a[2,2] * a[2,2];\nend A68cMP01;\n");
+  YMC_CHECK_EQ(flatten_src("model A68cMP03\n  Real a[2,2] = {{time, 1}, {2, time}};\n  Real b[2,2];\nequation\n  b = a ^ 0;\n"
+                           "end A68cMP03;\n"),
+               "class A68cMP03\n" + vars + "equation\n  a = {{time, 1.0}, {2.0, time}};\n"
+               "  b[1,1] = 1.0;\n  b[1,2] = 0.0;\n  b[2,1] = 0.0;\n  b[2,2] = 1.0;\nend A68cMP03;\n");
+  YMC_CHECK_EQ(flatten_src("model A68cMP06\n  Real a[2,2] = {{time, 1}, {2, time}};\n  Real b[2,2];\n"
+                           "  Integer i = 1 + integer(time);\nequation\n  b = a ^ i;\nend A68cMP06;\n"),
+               "class A68cMP06\n" + vars + "  Integer i = 1 + integer(time);\nequation\n  a = {{time, 1.0}, {2.0, time}};\n"
+               "  b[1,1] = (a ^ i)[1, 1];\n  b[1,2] = (a ^ i)[1, 2];\n  b[2,1] = (a ^ i)[2, 1];\n  b[2,2] = (a ^ i)[2, 2];\n"
+               "end A68cMP06;\n");
+  YMC_CHECK(flatten_src("model A68cMP10\n  Real a[2,2] = {{time, 1}, {2, time}};\n  Real b[2,2];\nequation\n  b = a ^ (-1);\n"
+                        "end A68cMP10;\n").rfind("<unsupported:", 0) == 0);   // omc 拒绝
+}
+
+YMC_TEST(flatten_inherited_class_through_extends_mod) {
+  // 经改过的 extends 继承来的类：查实例类树里的那份（NFLookup.lookupLocalSimpleName → Class.lookupElement :422-432 v1.25.0）。
+  YMC_CHECK_EQ(flatten_src("model A68cIH01\n  model A model B Real x = 1.0; end B; B b; end A;\n  extends A(B(x = 2.0));\n"
+                           "  B b2;\nend A68cIH01;\n"),
+               std::string("class A68cIH01\n  Real b.x = 2.0;\n  Real b2.x = 2.0;\nend A68cIH01;\n"));
+  YMC_CHECK_EQ(flatten_src("model A\n  model B Real x = 1.0; end B;\nend A;\nmodel M1 extends A(B(x = 2.0)); B b; end M1;\n"
+                           "model M2 extends A(B(x = 5.0)); B b; end M2;\nmodel A68cIH09\n  M1 m1;\n  M2 m2;\nend A68cIH09;\n"),
+               std::string("class A68cIH09\n  Real m1.b.x = 2.0;\n  Real m2.b.x = 5.0;\nend A68cIH09;\n"));
+  YMC_CHECK(flatten_src("model A\n  model B Real x = 1.0; end B;\nend A;\nmodel A68cIH21\n  extends A(final B(x = 2.0));\n"
+                        "  B b2(x = 3.0);\nend A68cIH21;\n").rfind("<unsupported:", 0) == 0);   // omc 拒绝：final 类修饰
+}
+
+YMC_TEST(flatten_variability_on_plain_composite) {
+  // parameter / constant 前缀下沉到纯声明的模型 / 连接器的成员（variabilityMin，NFAttributes.mo:236 v1.25.0）；带方程的仍 SKIP。
+  YMC_CHECK_EQ(flatten_src("model A68cVC01\n  model M Real x = 1; end M;\n  parameter M m;\nend A68cVC01;\n"),
+               std::string("class A68cVC01\n  parameter Real m.x = 1.0;\nend A68cVC01;\n"));
+  YMC_CHECK_EQ(flatten_src("model A68cVC32\n  model M input Real x = 1; output Real y = 2; end M;\n  parameter M m;\nend A68cVC32;\n"),
+               std::string("class A68cVC32\n  parameter Real m.x = 1.0;\n  parameter Real m.y = 2.0;\nend A68cVC32;\n"));
+  YMC_CHECK(flatten_src("model A68cVC08\n  model M Real x(start = 0); equation der(x) = 1; end M;\n  parameter M m;\nend A68cVC08;\n")
+                .rfind("<unsupported:", 0) == 0);   // omc 接受但另有处理（`0.0 = 1.0`），没做
+}
+
 YMC_TEST_MAIN

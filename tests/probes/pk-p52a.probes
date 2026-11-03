@@ -1,0 +1,3317 @@
+//// set: pk-p52a — 68c 评审时主代理手写的对抗形状（不来自代理的生成器）。NE：noEvent 的变率（绑定、方程、when、算法、初值、函数实参、记录、数组）；DZ：der 的变率与折叠；IL：63 位整数字面量与常量运算；BT：绑定类型核查；MP：矩阵幂；IH：继承来的类经 extends 修饰；VC：参数 / 常量复合组件；XF：final 类修饰。
+//// model: R68cNE0
+model R68cNE0
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z = noEvent(y > 1);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE0;
+//// model: R68cNE1
+model R68cNE1
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z = noEvent(y > 1) and b;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE1;
+//// model: R68cNE2
+model R68cNE2
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z = b or noEvent(y > 1);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE2;
+//// model: R68cNE3
+model R68cNE3
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z = not noEvent(y > 1);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE3;
+//// model: R68cNE4
+model R68cNE4
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z = noEvent(y > 1) or true;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE4;
+//// model: R68cNE5
+model R68cNE5
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z = false and noEvent(y > 1);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE5;
+//// model: R68cNE6
+model R68cNE6
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z = noEvent(b);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE6;
+//// model: R68cNE7
+model R68cNE7
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z = noEvent(b and pb);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE7;
+//// model: R68cNE8
+model R68cNE8
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z = noEvent(j > 1);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE8;
+//// model: R68cNE9
+model R68cNE9
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z = noEvent(p > 1);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE9;
+//// model: R68cNE10
+model R68cNE10
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z = noEvent(n > 1) and b;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE10;
+//// model: R68cNE11
+model R68cNE11
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z = noEvent(integer(y));
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE11;
+//// model: R68cNE12
+model R68cNE12
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z = integer(noEvent(y));
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE12;
+//// model: R68cNE13
+model R68cNE13
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z = noEvent(j) + 1;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE13;
+//// model: R68cNE14
+model R68cNE14
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z = noEvent(y > 1) == b;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE14;
+//// model: R68cNE15
+model R68cNE15
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z = if noEvent(y > 1) then true else false;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE15;
+//// model: R68cNE16
+model R68cNE16
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z = if b then noEvent(y > 1) else true;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE16;
+//// model: R68cNE17
+model R68cNE17
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z = if pb then true else noEvent(y > 1);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE17;
+//// model: R68cNE18
+model R68cNE18
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+  z = noEvent(y > 1);
+end R68cNE18;
+//// model: R68cNE19
+model R68cNE19
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+  z = noEvent(y > 1) and b;
+end R68cNE19;
+//// model: R68cNE20
+model R68cNE20
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+  when time > 0.5 then z = noEvent(y > 1); end when;
+end R68cNE20;
+//// model: R68cNE21
+model R68cNE21
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z(start = false, fixed = true);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+  when time > 0.5 then z = noEvent(y > 1) and b; end when;
+end R68cNE21;
+//// model: R68cNE22
+model R68cNE22
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  parameter Boolean z = noEvent(p > 1);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE22;
+//// model: R68cNE23
+model R68cNE23
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  discrete Real z = noEvent(y);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE23;
+//// model: R68cNE24
+model R68cNE24
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = noEvent(y);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE24;
+//// model: R68cNE25
+model R68cNE25
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = if noEvent(y > 1) then 1 else 2;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE25;
+//// model: R68cNE26
+model R68cNE26
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = g(noEvent(y > 1));
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE26;
+//// model: R68cNE27
+model R68cNE27
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = noEvent(g(y > 1));
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE27;
+//// model: R68cNE28
+model R68cNE28
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = g(y > 1);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE28;
+//// model: R68cNE29
+model R68cNE29
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = g(b);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE29;
+//// model: R68cNE30
+model R68cNE30
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = g(noEvent(b));
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE30;
+//// model: R68cNE31
+model R68cNE31
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = gi(noEvent(integer(y)));
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE31;
+//// model: R68cNE32
+model R68cNE32
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = noEvent(gi(j));
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE32;
+//// model: R68cNE33
+model R68cNE33
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+  z = g(noEvent(y > 1));
+end R68cNE33;
+//// model: R68cNE34
+model R68cNE34
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+  when time > 0.5 then z = g(noEvent(y > 1)); end when;
+end R68cNE34;
+//// model: R68cNE35
+model R68cNE35
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z; Real z2;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+  z = time; z2 = noEvent(h(y));
+end R68cNE35;
+//// model: R68cNE36
+model R68cNE36
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+algorithm
+  z := g(noEvent(y > 1));
+end R68cNE36;
+//// model: R68cNE37
+model R68cNE37
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+algorithm
+  when time > 0.5 then z := g(noEvent(y > 1)); end when;
+end R68cNE37;
+//// model: R68cNE38
+model R68cNE38
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z(start = 0, fixed = false);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+  z = time;
+initial equation
+  z = g(noEvent(y > 1));
+end R68cNE38;
+//// model: R68cNE39
+model R68cNE39
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  record R Boolean f; Real r; end R; R a = R(noEvent(y > 1), 1);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE39;
+//// model: R68cNE40
+model R68cNE40
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z[2] = {noEvent(y > 1), b};
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE40;
+//// model: R68cNE41
+model R68cNE41
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z[2] = fill(noEvent(y > 1), 2);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE41;
+//// model: R68cNE42
+model R68cNE42
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z[2] = {b, true};
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE42;
+//// model: R68cNE43
+model R68cNE43
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z = noEvent(noEvent(y > 1));
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE43;
+//// model: R68cNE44
+model R68cNE44
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z = noEvent(y > 1 and b);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE44;
+//// model: R68cNE45
+model R68cNE45
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z = smooth(1, noEvent(y > 1));
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cNE45;
+//// model: R68cDZ0
+model R68cDZ0
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = der(p + 1);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cDZ0;
+//// model: R68cDZ1
+model R68cDZ1
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = der(2 * p);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cDZ1;
+//// model: R68cDZ2
+model R68cDZ2
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = der(p - p);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cDZ2;
+//// model: R68cDZ3
+model R68cDZ3
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = der(h(p));
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cDZ3;
+//// model: R68cDZ4
+model R68cDZ4
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = der(sin(p));
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cDZ4;
+//// model: R68cDZ5
+model R68cDZ5
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = der(n);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cDZ5;
+//// model: R68cDZ6
+model R68cDZ6
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = der(n + 1);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cDZ6;
+//// model: R68cDZ7
+model R68cDZ7
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = der(time);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cDZ7;
+//// model: R68cDZ8
+model R68cDZ8
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = der(y + p);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cDZ8;
+//// model: R68cDZ9
+model R68cDZ9
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = der(p * y);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cDZ9;
+//// model: R68cDZ10
+model R68cDZ10
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = der(j);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cDZ10;
+//// model: R68cDZ11
+model R68cDZ11
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = der(d);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cDZ11;
+//// model: R68cDZ12
+model R68cDZ12
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = der(pre(y));
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cDZ12;
+//// model: R68cDZ13
+model R68cDZ13
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = der(if b then 1.0 else 2.0);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cDZ13;
+//// model: R68cDZ14
+model R68cDZ14
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = der(if pb then 1.0 else 2.0);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cDZ14;
+//// model: R68cDZ15
+model R68cDZ15
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = der(if b then y else 2.0);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cDZ15;
+//// model: R68cDZ16
+model R68cDZ16
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = der(noEvent(y));
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cDZ16;
+//// model: R68cDZ17
+model R68cDZ17
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = der(smooth(1, y));
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cDZ17;
+//// model: R68cDZ18
+model R68cDZ18
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  parameter Real q(fixed = false); Real z = der(q);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+initial equation
+  q = 1;
+end R68cDZ18;
+//// model: R68cDZ19
+model R68cDZ19
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  parameter Real q(fixed = false); Real z = der(q + p);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+initial equation
+  q = 1;
+end R68cDZ19;
+//// model: R68cDZ20
+model R68cDZ20
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  constant Real c = 3; Real z = der(c * 2);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cDZ20;
+//// model: R68cDZ21
+model R68cDZ21
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+  z = der(p + 1);
+end R68cDZ21;
+//// model: R68cDZ22
+model R68cDZ22
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+  der(z) = der(p * 3) + 1;
+end R68cDZ22;
+//// model: R68cDZ23
+model R68cDZ23
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+algorithm
+  z := der(p + 1);
+end R68cDZ23;
+//// model: R68cDZ24
+model R68cDZ24
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+  when time > 0.5 then z = der(p + 1); end when;
+end R68cDZ24;
+//// model: R68cDZ25
+model R68cDZ25
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = der(E.b < pe2); parameter E pe2 = E.a;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cDZ25;
+//// model: R68cIL0
+model R68cIL0
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z = 4611686018427387903 + 1;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL0;
+//// model: R68cIL1
+model R68cIL1
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z = -4611686018427387904;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL1;
+//// model: R68cIL2
+model R68cIL2
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z = -4611686018427387903 - 2;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL2;
+//// model: R68cIL3
+model R68cIL3
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z = 2 * 2305843009213693952;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL3;
+//// model: R68cIL4
+model R68cIL4
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z = 3037000500 * 3037000500;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL4;
+//// model: R68cIL5
+model R68cIL5
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z = 4611686018427387903 + j;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL5;
+//// model: R68cIL6
+model R68cIL6
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z = 4611686018427387904;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL6;
+//// model: R68cIL7
+model R68cIL7
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z = 9223372036854775807;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL7;
+//// model: R68cIL8
+model R68cIL8
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z = 9223372036854775808;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL8;
+//// model: R68cIL9
+model R68cIL9
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = 4611686018427387904;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL9;
+//// model: R68cIL10
+model R68cIL10
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = 9223372036854775808;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL10;
+//// model: R68cIL11
+model R68cIL11
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = 18446744073709551616;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL11;
+//// model: R68cIL12
+model R68cIL12
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = 4611686018427387903 + 1;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL12;
+//// model: R68cIL13
+model R68cIL13
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = 4611686018427387903 + 1.0;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL13;
+//// model: R68cIL14
+model R68cIL14
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z = div(4611686018427387903, 1) + 1;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL14;
+//// model: R68cIL15
+model R68cIL15
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  parameter Integer m = 4611686018427387903; Integer z = m + 1;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL15;
+//// model: R68cIL16
+model R68cIL16
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  constant Integer m = 4611686018427387903; Integer z = m + 1;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL16;
+//// model: R68cIL17
+model R68cIL17
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z = 2147483647 + 1;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL17;
+//// model: R68cIL18
+model R68cIL18
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z = 2147483648 * 2147483648;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL18;
+//// model: R68cIL19
+model R68cIL19
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  function hi output Integer v; algorithm v := 4611686018427387904; end hi; Integer z = hi();
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL19;
+//// model: R68cIL20
+model R68cIL20
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  function hj input Integer u; output Integer v; algorithm v := u + 4611686018427387903; end hj; Integer z = hj(j);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL20;
+//// model: R68cIL21
+model R68cIL21
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z[2] = {1, 2}; Real z2 = z[4611686018427387904];
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL21;
+//// model: R68cIL22
+model R68cIL22
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z = 99999999999999999999;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL22;
+//// model: R68cIL23
+model R68cIL23
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z = 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cIL23;
+//// model: R68cBT0
+model R68cBT0
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z = 1;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT0;
+//// model: R68cBT1
+model R68cBT1
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z = 1.0;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT1;
+//// model: R68cBT2
+model R68cBT2
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z = "a";
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT2;
+//// model: R68cBT3
+model R68cBT3
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z = true;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT3;
+//// model: R68cBT4
+model R68cBT4
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z = 1.0;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT4;
+//// model: R68cBT5
+model R68cBT5
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z = "1";
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT5;
+//// model: R68cBT6
+model R68cBT6
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = true;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT6;
+//// model: R68cBT7
+model R68cBT7
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = "a";
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT7;
+//// model: R68cBT8
+model R68cBT8
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = 1;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT8;
+//// model: R68cBT9
+model R68cBT9
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = j;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT9;
+//// model: R68cBT10
+model R68cBT10
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  String z = 1;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT10;
+//// model: R68cBT11
+model R68cBT11
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  String z = b;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT11;
+//// model: R68cBT12
+model R68cBT12
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  E z = 1;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT12;
+//// model: R68cBT13
+model R68cBT13
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z = E.a;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT13;
+//// model: R68cBT14
+model R68cBT14
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z = E.a;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT14;
+//// model: R68cBT15
+model R68cBT15
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  parameter Boolean z = 0;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT15;
+//// model: R68cBT16
+model R68cBT16
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  parameter Integer z = pb;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT16;
+//// model: R68cBT17
+model R68cBT17
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  model A Real x = 1; end A; A a(x = true);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT17;
+//// model: R68cBT18
+model R68cBT18
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  model A Boolean x = false; end A; A a(x = 1);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT18;
+//// model: R68cBT19
+model R68cBT19
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  model A Integer x = 1; end A; A a(x = 2.5);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT19;
+//// model: R68cBT20
+model R68cBT20
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  model A Real x = 1; end A; A a(x = 2);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT20;
+//// model: R68cBT21
+model R68cBT21
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  model A Real x = 1; end A; model B extends A(x = "s"); end B; B bb;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT21;
+//// model: R68cBT22
+model R68cBT22
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  record R Real x; Boolean f; end R; R r(x = 1, f = 0);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT22;
+//// model: R68cBT23
+model R68cBT23
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  record R Real x; Boolean f; end R; R r(x = 1, f = true);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT23;
+//// model: R68cBT24
+model R68cBT24
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z[2] = {1, 0};
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT24;
+//// model: R68cBT25
+model R68cBT25
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z[2] = {true, false};
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT25;
+//// model: R68cBT26
+model R68cBT26
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z[2] = {1.5, 2};
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT26;
+//// model: R68cBT27
+model R68cBT27
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z[2] = fill(1.0, 2);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT27;
+//// model: R68cBT28
+model R68cBT28
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real z[2] = fill(1, 2);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT28;
+//// model: R68cBT29
+model R68cBT29
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z = j;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT29;
+//// model: R68cBT30
+model R68cBT30
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z = b;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT30;
+//// model: R68cBT31
+model R68cBT31
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Boolean z = if b then 1 else 0;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT31;
+//// model: R68cBT32
+model R68cBT32
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer z = if b then true else false;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cBT32;
+//// model: R68cMP0
+model R68cMP0
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real A[2, 2] = [1, 2; 3, 4]; Real B[2, 2] = A ^ 2;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cMP0;
+//// model: R68cMP1
+model R68cMP1
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real A[2, 2] = [1, 2; 3, 4]; Real B[2, 2] = A ^ 0;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cMP1;
+//// model: R68cMP2
+model R68cMP2
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real A[2, 2] = [1, 2; 3, 4]; Real B[2, 2] = A ^ 1;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cMP2;
+//// model: R68cMP3
+model R68cMP3
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real A[2, 2] = [1, 2; 3, 4]; Real B[2, 2] = A ^ 3;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cMP3;
+//// model: R68cMP4
+model R68cMP4
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real A[2, 2] = [1, 2; 3, 4]; Real B[2, 2] = A ^ 5;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cMP4;
+//// model: R68cMP5
+model R68cMP5
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real A[2, 2] = [1, 2; 3, 4]; Real B[2, 2] = A ^ n;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cMP5;
+//// model: R68cMP6
+model R68cMP6
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real A[2, 2] = [1, 2; 3, 4]; Real B[2, 2] = A ^ j;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cMP6;
+//// model: R68cMP7
+model R68cMP7
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real A[2, 2] = [1, 2; 3, 4]; Real B[2, 2] = A ^ (-1);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cMP7;
+//// model: R68cMP8
+model R68cMP8
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real A[2, 2] = [1, 2; 3, 4]; Real B[2, 2] = A ^ 2.0;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cMP8;
+//// model: R68cMP9
+model R68cMP9
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real A[2, 3] = [1, 2, 3; 4, 5, 6]; Real B[2, 3] = A ^ 2;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cMP9;
+//// model: R68cMP10
+model R68cMP10
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer A[2, 2] = [1, 2; 3, 4]; Real B[2, 2] = A ^ 2;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cMP10;
+//// model: R68cMP11
+model R68cMP11
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Integer A[2, 2] = [1, 2; 3, 4]; Integer B[2, 2] = A ^ 2;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cMP11;
+//// model: R68cMP12
+model R68cMP12
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real A[2, 2] = [y, 2; 3, y]; Real B[2, 2] = A ^ 2;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cMP12;
+//// model: R68cMP13
+model R68cMP13
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real A[3, 3] = [1, 0, 0; 0, 2, 0; 0, 0, 3]; Real B[3, 3] = A ^ 4;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cMP13;
+//// model: R68cMP14
+model R68cMP14
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real v[2] = {1, 2}; Real B[2] = v ^ 2;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cMP14;
+//// model: R68cMP15
+model R68cMP15
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real A[2, 2] = [1, 2; 3, 4]; Real B[2, 2] = A .^ 2;
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cMP15;
+//// model: R68cMP16
+model R68cMP16
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real A[2, 2] = [1, 2; 3, 4]; Real s = (A ^ 2)[1, 2];
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cMP16;
+//// model: R68cMP17
+model R68cMP17
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real A[2, 2] = [1, 2; 3, 4]; Real B[2, 2];
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+  B = A ^ 2;
+end R68cMP17;
+//// model: R68cMP18
+model R68cMP18
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  Real A[2, 2] = [1, 2; 3, 4]; Real B[2, 2];
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+algorithm
+  B := A ^ 2;
+end R68cMP18;
+//// model: R68cMP19
+model R68cMP19
+  function g input Boolean u; output Real v; algorithm v := if u then 1 else 0; end g;
+  function gi input Integer u; output Real v; algorithm v := u; end gi;
+  function h input Real u; output Real v; algorithm v := u * 2; end h;
+  type E = enumeration(a, b, c);
+  parameter Real p = 2;
+  parameter Integer n = 3;
+  parameter Boolean pb = true;
+  Real y(start = 1, fixed = true);
+  Integer j;
+  Boolean b;
+  discrete Real d(start = 0, fixed = true);
+  function mp input Real m[2, 2]; output Real r[2, 2]; algorithm r := m ^ 2; end mp; Real A[2, 2] = [1, 2; 3, 4]; Real B[2, 2] = mp(A);
+equation
+  der(y) = 1 - y;
+  j = integer(time);
+  b = time > 0.5;
+  when time > 0.9 then d = time; end when;
+
+end R68cMP19;
+//// model: R68cIH1
+model R68cIH1
+  model A
+    model B
+      Real x = 1.0;
+    end B;
+  end A;
+  extends A(B(x = 2.0));
+  B b2;
+end R68cIH1;
+//// model: R68cIH2
+model R68cIH2
+  model A
+    model B
+      Real x = 1.0;
+    end B;
+  end A;
+  B b2;
+  B b3(x = 4.0);
+  extends A(B(x = 2.0));
+end R68cIH2;
+//// model: R68cIH3
+model R68cIH3
+  model A
+    model B
+      Real x = 1.0;
+      Real w = 2 * x;
+    end B;
+  end A;
+  model C
+    extends A(B(x = 3.0));
+    B b;
+  end C;
+  C c1;
+  C c2;
+end R68cIH3;
+//// model: R68cIH4
+model R68cIH4
+  model A
+    model B
+      parameter Real x = 1.0;
+    end B;
+    B bi;
+  end A;
+  extends A(B(x = 2.0));
+  B b2;
+end R68cIH4;
+//// model: R68cIH5
+model R68cIH5
+  model A
+    model B
+      Real x = 1.0;
+    end B;
+  end A;
+  extends A(B(x = 2.0, y = 1));
+  B b2;
+end R68cIH5;
+//// model: R68cIH6
+model R68cIH6
+  model A
+    replaceable model B
+      Real x = 1.0;
+    end B;
+  end A;
+  model B2
+    Real x = 5.0;
+  end B2;
+  extends A(redeclare model B = B2);
+  B b2;
+end R68cIH6;
+//// model: R68cIH7
+model R68cIH7
+  model A
+    model B
+      Real x = 1.0;
+    end B;
+  end A;
+  extends A(final B(x = 2.0));
+  B b2;
+end R68cIH7;
+//// model: R68cIH8
+model R68cIH8
+  model A
+    model B
+      Real x = 1.0;
+    end B;
+  end A;
+  extends A(final B(x = 2.0));
+  B b2(x = 3.0);
+end R68cIH8;
+//// model: R68cVC1
+model R68cVC1
+  connector C
+    Real x = 1;
+  end C;
+  parameter C c;
+end R68cVC1;
+//// model: R68cVC2
+model R68cVC2
+  model M
+    Real x = 1;
+    Integer i = 2;
+  end M;
+  constant M m;
+  Real z = m.x;
+end R68cVC2;
+//// model: R68cVC3
+model R68cVC3
+  model M
+    Real x = 1;
+  end M;
+  parameter M m(x = 2);
+end R68cVC3;
+//// model: R68cVC4
+model R68cVC4
+  connector C
+    Real e = 1;
+    flow Real f;
+  end C;
+  parameter C c;
+end R68cVC4;
+//// model: R68cVC5
+model R68cVC5
+  model M
+    Real x;
+  equation
+    x = 1;
+  end M;
+  parameter M m;
+end R68cVC5;
+//// model: R68cVC6
+model R68cVC6
+  model M
+    Real x = 1;
+  end M;
+  discrete M m;
+end R68cVC6;
+//// model: R68cVC7
+model R68cVC7
+  model M
+    Real x = time;
+  end M;
+  parameter M m;
+end R68cVC7;
+//// model: R68cVC8
+model R68cVC8
+  model M0
+    Real x = 1;
+  end M0;
+  model M
+    extends M0;
+    M0 inner0;
+  end M;
+  parameter M m;
+end R68cVC8;
+//// model: R68cXF1
+model R68cXF1
+  package A
+    type T = Real(max = 10);
+  end A;
+  package P = A(final T(max = 5));
+  P.T t;
+end R68cXF1;
+//// model: R68cXF2
+model R68cXF2
+  package A
+    type T = Real(max = 10);
+  end A;
+  package P = A(final T(max = 5));
+  P.T t(max = 6);
+end R68cXF2;
+//// model: R68cXF3
+model R68cXF3
+  package A
+    type T = Real(max = 10);
+  end A;
+  package P = A(final T(max = 5));
+  P.T t = 1;
+end R68cXF3;

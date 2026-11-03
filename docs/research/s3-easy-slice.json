@@ -723,5 +723,6 @@
 "OperatorOverloadComplex.mo",
 "OperatorOverloadSum1.mo",
 "RecordBinding11.mo",
-"const12.mo"
+"const12.mo",
+"OperationPow2.mo"
 ]
