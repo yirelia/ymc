@@ -252,6 +252,8 @@ Integer 的极值（待用户定，2026-10-02）：`max` / `min` 作用在空的
 
 String(Real) 的指数位数（2026-10-14，跟实跑）：编译期求值 `String(r, …)` 按 C 的 sprintf 打（evalBuiltinString，v1.25.0 NFCeval.mo:2748-2793），本机 Windows 版 omc 1.25.0 的指数至少 3 位（`String(1e-5)` → `"1e-005"`、`String(1.5e10)` → `"1.5e+010"`，PKM 探针 PKM4），glibc 构建的 omc 是 2 位（C 标准只要求至少 2 位）。testsuite 文件里没有这种结果（全库 grep 无），与文件不冲突 → ymc 跟实跑：补零到 3 位。带宽度的 format（`String(x, format = "10.3e")`）补零后宽度要重算，未做 → SKIP（`String exponent format`）。换 Linux 版 omc 当 oracle 时这里要改回。
 
+参数区间绑定的维不符（2026-11-04，68d，pk-p53 A68dPR17）：`parameter Integer n = 3; parameter Integer p[2] = 1:n;`，1.25.0 不报维不符，直接截成两个元素（`final parameter Integer n = 3; parameter Integer p[1] = 1; parameter Integer p[2] = 2;`）。typeRange 把区间标结构、求值后代入，维的核查似乎在那之前就过了。ymc 不跟，SKIP（`non-literal array binding shape`）。
+
 ## 已研究待实现：多条 connect 连接集（union-find）
 
 **状态**：算法已从 OMC 新前端源码 + 实跑 omc 1.25.0 探针完整摸清，暂不实现——理由是当前 testsuite 里

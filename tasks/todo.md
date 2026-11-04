@@ -2875,6 +2875,11 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       评审探针挖出 `A ^ 1` 没展开（expandBinaryPowMatrix 先 expand 再求幂），已修，补 26 个同类探针。
       探针 pk-p52（1217）、pk-p52a（168，评审手写）；slice 724→725（PASS 690）；scodeinst PASS 689→691、FAIL 54 不变；testsuite PASS 1894→1902、FAIL 0；MSL 500（不变）；探针 17149→18534 干净；单测 571→578。
       留 SKIP：R1 剩 const15、ArrayExtendsUnknown、ConstrainedByMods（"constant of modified enclosing instance" 一条下层根因同时挡 eq5 和几个探针，排下一桶）、定义层查名的 BaseClass1 / System2；R2 带 flow 成员的参数 / 常量连接器；数组组件修饰分发的 noEvent 绑定（omc 接受，机制没读到，保守 SKIP）。
+- [x] (68d) 数组维度与形状（2026-11-04）：testsuite 25 个目标放开 16 个，与 omc 1.25.0 实跑逐字节一致。
+      scalar 先展开再取唯一元素（typeScalarCall）；der 的数组实参填零（makeZero）；枚举区间的长度、元素类型、整条保留和 min / max；矩阵拼接 `[x, y]` 的 `:` 维取类型化形状；类型维上的标签区间切片成整数维；推导式的体是数组值的式子；声明在后的参数数组走第二遍；互相推 `:` 维（typeExpDim）；嵌套类读外层组件的常量取实例上改过的值（65e 的一部分）；算法里的运行时切片和维未知的 fill；参数 Integer 区间绑定标结构。
+      顺带修了一个基线就有的静默错：`vector(引用)` omc 留调用（simplifyVector），ymc 原来一律展开；3 维以上非字面量的 `matrix(A)` 同样留调用。
+      探针 pk-p53（248）、pk-p53a（110，评审手写）；slice 731 例 PASS 697；scodeinst PASS 691→698；testsuite PASS 1902→1918；探针 18892 个 干净；单测 578→585。
+      留 SKIP：Bug3187 下一层（初始算法给 discrete 赋值，checkAssignment NFTyping.mo:3381-3436）、Size7（枚举类型转换函数）、ArrayConstructorRecord1 / 2（推导式范围是记录数组引用，定型期 Ceval）、CevalRecordArray6 / 9 和 DimUnknown14（记录绑定链求值）、DimUnknown16 / gc（维要经 FFI 实调外部函数）；vector / matrix 用在运算数、内建和函数实参里，参数数组上的 matrix；方程里的运行时切片；推导式的体是引用 / 调用；声明在后的变量数组（非参数）。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

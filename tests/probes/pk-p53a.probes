@@ -1,0 +1,715 @@
+//// set: pk-p53a — 68d 评审时主代理手写的对抗形状（不来自代理的生成器）：MV vector / matrix 留调用的各种位置与实参形态；SC scalar 的实参形态；DA der 的数组实参；ER 枚举区间；MC 矩阵拼接；PR 参数区间绑定；RS 算法里的运行时切片与 fill；OC 外层组件常量；DU 互推 `:` 维；TS 类型维切片；CB 推导式的体是数组；FW 声明在后的参数数组。含 omc 拒绝的变体。
+//// model: A68dXMV01
+model A68dXMV01
+  Real m1[4, 1] = {{time}, {2}, {3}, {4}};
+  Real s = sum(vector(m1));
+end A68dXMV01;
+//// model: A68dXMV02
+model A68dXMV02
+  Real m1[4, 1] = {{time}, {2}, {3}, {4}};
+  Real s = max(vector(m1));
+end A68dXMV02;
+//// model: A68dXMV03
+model A68dXMV03
+  Real m1[4, 1] = {{time}, {2}, {3}, {4}};
+  Real v[4] = vector(m1) + {1, 2, 3, 4};
+end A68dXMV03;
+//// model: A68dXMV04
+model A68dXMV04
+  Real m1[4, 1] = {{time}, {2}, {3}, {4}};
+  Real v[4];
+equation
+  v = vector(m1);
+end A68dXMV04;
+//// model: A68dXMV05
+model A68dXMV05
+  Real m1[4, 1] = {{time}, {2}, {3}, {4}};
+  Real v[4];
+algorithm
+  v := vector(m1);
+end A68dXMV05;
+//// model: A68dXMV06
+model A68dXMV06
+  Real m1[4, 1] = {{time}, {2}, {3}, {4}};
+  Real v[4] = vector(m1[:, 1:1]);
+end A68dXMV06;
+//// model: A68dXMV07
+model A68dXMV07
+  parameter Real m[1, 4] = {{1, 2, 3, 4}};
+  Real v[4] = vector(m);
+end A68dXMV07;
+//// model: A68dXMV08
+model A68dXMV08
+  constant Real m[1, 4] = {{1, 2, 3, 4}};
+  Real v[4] = vector(m);
+end A68dXMV08;
+//// model: A68dXMV09
+model A68dXMV09
+  Integer m1[4, 1] = {{1}, {2}, {3}, {4}};
+  Real v[4] = vector(m1);
+end A68dXMV09;
+//// model: A68dXMV10
+model A68dXMV10
+  Real a[3] = {time, 2, 3};
+  Real v[3] = vector(a);
+end A68dXMV10;
+//// model: A68dXMV11
+model A68dXMV11
+  Real x = time;
+  Real v[1] = vector(x);
+end A68dXMV11;
+//// model: A68dXMV12
+model A68dXMV12
+  Real m3[2, 1, 1] = {{{time}}, {{2}}};
+  Real v[2] = vector(m3);
+end A68dXMV12;
+//// model: A68dXMV13
+model A68dXMV13
+  Real m1[4, 1] = {{time}, {2}, {3}, {4}};
+  Real m2[4, 1] = {{1}, {2}, {3}, {time}};
+  Real v[4] = if time > 1 then vector(m1) else vector(m2);
+end A68dXMV13;
+//// model: A68dXMV14
+model A68dXMV14
+  Boolean b[2, 1] = {{time > 1}, {time > 2}};
+  Boolean bv[2] = vector(b);
+end A68dXMV14;
+//// model: A68dXMV15
+model A68dXMV15
+  Integer m3[2, 2, 1] = {{{1}, {2}}, {{3}, {4}}};
+  Real m4[2, 2] = matrix(m3);
+end A68dXMV15;
+//// model: A68dXMV16
+model A68dXMV16
+  Real m3[2, 2, 1] = {{{time}, {2}}, {{3}, {4}}};
+  Real m4[2, 2];
+equation
+  m4 = matrix(m3);
+end A68dXMV16;
+//// model: A68dXMV17
+model A68dXMV17
+  Real m3[2, 2, 1] = {{{time}, {2}}, {{3}, {4}}};
+  Real m4[2, 2];
+algorithm
+  m4 := matrix(m3);
+end A68dXMV17;
+//// model: A68dXMV18
+model A68dXMV18
+  Real m3[2, 2, 1] = {{{time}, {2}}, {{3}, {4}}};
+  Real s = sum(matrix(m3));
+end A68dXMV18;
+//// model: A68dXMV19
+model A68dXMV19
+  Real m3[2, 2, 2] = fill(time, 2, 2, 2);
+  Real m4[2, 2] = matrix(m3);
+end A68dXMV19;
+//// model: A68dXMV20
+model A68dXMV20
+  function f
+    input Real u[:];
+    output Real y;
+  algorithm
+    y := sum(u);
+  end f;
+  Real m1[4, 1] = {{time}, {2}, {3}, {4}};
+  Real s = f(vector(m1));
+end A68dXMV20;
+//// model: A68dXMV21
+model A68dXMV21
+  Real m1[4, 1] = {{time}, {2}, {3}, {4}};
+  Real s = vector(m1) * {1, 1, 1, 1};
+end A68dXMV21;
+//// model: A68dXMV22
+model A68dXMV22
+  Real m1[4, 1] = {{time}, {2}, {3}, {4}};
+  Real v[4] = -vector(m1);
+end A68dXMV22;
+//// model: A68dXSC01
+model A68dXSC01
+  Real m[2, 2] = {{time, 2}, {3, 4}};
+  Real s = scalar(m[1:1, 2:2]);
+end A68dXSC01;
+//// model: A68dXSC02
+model A68dXSC02
+  Real v[1] = {time};
+  Real s = scalar(-v);
+end A68dXSC02;
+//// model: A68dXSC03
+model A68dXSC03
+  Real v[1] = {time};
+  Real w[1] = {2};
+  Real s = scalar(v .* w);
+end A68dXSC03;
+//// model: A68dXSC04
+model A68dXSC04
+  Integer v[1] = {integer(time)};
+  Real s = scalar(v);
+end A68dXSC04;
+//// model: A68dXSC05
+model A68dXSC05
+  parameter Real p[1, 1] = {{3}};
+  parameter Real q = scalar(p);
+end A68dXSC05;
+//// model: A68dXSC06
+model A68dXSC06
+  Real m[1, 1] = {{time}};
+  Real s = scalar(transpose(m));
+end A68dXSC06;
+//// model: A68dXSC07
+model A68dXSC07
+  Real v[2] = {time, 2};
+  Real s = scalar(v);
+end A68dXSC07;
+//// model: A68dXSC08
+model A68dXSC08
+  Real m2[1, 1, 1] = {{{time}}};
+  Real s = scalar(2 * m2 + m2);
+end A68dXSC08;
+//// model: A68dXSC09
+model A68dXSC09
+  Real v[1] = {time};
+  Real s;
+equation
+  s = 2 * scalar(v);
+end A68dXSC09;
+//// model: A68dXDA01
+model A68dXDA01
+  Real x[2];
+equation
+  x = der({1, 2});
+end A68dXDA01;
+//// model: A68dXDA02
+model A68dXDA02
+  parameter Integer p[2] = {1, 2};
+  Real y[2] = der(p);
+end A68dXDA02;
+//// model: A68dXDA03
+model A68dXDA03
+  parameter Real p[2] = {1, 2};
+  parameter Real q[2] = {3, 4};
+  Real y[2] = der(2 * p + q);
+end A68dXDA03;
+//// model: A68dXDA04
+model A68dXDA04
+  constant Real c[2, 2] = {{1, 2}, {3, 4}};
+  Real y[2, 2] = der(c);
+end A68dXDA04;
+//// model: A68dXDA05
+model A68dXDA05
+  parameter Real p[2] = {1, 2};
+  Real y[2];
+algorithm
+  y := der(p);
+end A68dXDA05;
+//// model: A68dXDA06
+model A68dXDA06
+  parameter Real p[2] = {1, 2};
+  Real y = der(p[1]);
+end A68dXDA06;
+//// model: A68dXDA07
+model A68dXDA07
+  parameter Real p[2] = {1, 2};
+  Real y[2] = der(p) + {time, time};
+end A68dXDA07;
+//// model: A68dXER01
+model A68dXER01
+  type E = enumeration(a, b, c, d);
+  E e[3] = E.b:E.d;
+end A68dXER01;
+//// model: A68dXER02
+model A68dXER02
+  type E = enumeration(a, b, c, d);
+  E e[:] = E.d:E.a;
+  Integer n = size(e, 1);
+end A68dXER02;
+//// model: A68dXER03
+model A68dXER03
+  type E = enumeration(a, b, c, d);
+  parameter Integer n = size(E.a:E.c, 1);
+end A68dXER03;
+//// model: A68dXER04
+model A68dXER04
+  type E = enumeration(a, b, c, d);
+  type F = enumeration(a, b, c, d);
+  E e[:] = E.a:F.c;
+end A68dXER04;
+//// model: A68dXER05
+model A68dXER05
+  type E = enumeration(a, b, c, d);
+  E m = min(e for e in E.b:E.d);
+  E x = max(e for e in E.b:E.d);
+end A68dXER05;
+//// model: A68dXER06
+model A68dXER06
+  type E = enumeration(a, b, c, d);
+  E e[2];
+equation
+  e = E.b:E.c;
+end A68dXER06;
+//// model: A68dXER07
+model A68dXER07
+  type E = enumeration(a, b, c, d);
+  constant E ea[3] = E.b:E.d;
+  E y = ea[2];
+end A68dXER07;
+//// model: A68dXER08
+model A68dXER08
+  type E = enumeration(a, b, c, d);
+  Real x[:] = {Integer(e) for e in E.b:E.c};
+end A68dXER08;
+//// model: A68dXMC01
+model A68dXMC01
+  Real x[2] = {time, 2};
+  Real y[2] = {3, 4};
+  Real z[:, :] = [x; y];
+end A68dXMC01;
+//// model: A68dXMC02
+model A68dXMC02
+  Real m[2, 2] = {{time, 2}, {3, 4}};
+  Real z[:, :] = [m, m];
+end A68dXMC02;
+//// model: A68dXMC03
+model A68dXMC03
+  Real x = time;
+  Real z[:, :] = [1, x];
+end A68dXMC03;
+//// model: A68dXMC04
+model A68dXMC04
+  Real x[2] = {time, 2};
+  Real z[:, :] = [x, {1, 2}];
+end A68dXMC04;
+//// model: A68dXMC05
+model A68dXMC05
+  Real x[2] = {time, 2};
+  Real z[:, :] = [x, 1];
+end A68dXMC05;
+//// model: A68dXMC06
+model A68dXMC06
+  Real x[2] = {time, 2};
+  Real z[2, :] = [x, x];
+end A68dXMC06;
+//// model: A68dXMC07
+model A68dXMC07
+  Real z[:, :] = [-1, 2; 3, -4];
+end A68dXMC07;
+//// model: A68dXPR01
+model A68dXPR01
+  parameter Integer n = 3;
+  parameter Real p[n] = 1:n;
+end A68dXPR01;
+//// model: A68dXPR02
+model A68dXPR02
+  parameter Integer n = 3;
+  parameter Integer p[:] = 1:n;
+end A68dXPR02;
+//// model: A68dXPR03
+model A68dXPR03
+  parameter Integer n = 3;
+  parameter Integer p[n] = n:-1:1;
+end A68dXPR03;
+//// model: A68dXPR04
+model A68dXPR04
+  parameter Integer n = 3;
+  parameter Integer m = n + 1;
+  parameter Integer p[m] = 1:m;
+end A68dXPR04;
+//// model: A68dXPR05
+model A68dXPR05
+  parameter Integer n = 3;
+  Integer p[n] = 1:n;
+end A68dXPR05;
+//// model: A68dXPR06
+model A68dXPR06
+  parameter Integer n = 3;
+  parameter Integer p[n] = 1:n;
+  parameter Integer q = p[2];
+  Real x[n];
+equation
+  for i in p loop
+    x[i] = i * time;
+  end for;
+end A68dXPR06;
+//// model: A68dXPR07
+model A68dXPR07
+  parameter Integer n = 3;
+  parameter Integer p[n] = (1:n);
+end A68dXPR07;
+//// model: A68dXPR08
+model A68dXPR08
+  parameter Integer n = 3;
+  parameter Integer p[n] = 2:2:2 * n;
+end A68dXPR08;
+//// model: A68dXPR09
+model A68dXPR09
+  parameter Integer n = 3;
+  parameter Integer p[n] = 1:n annotation(Evaluate = false);
+end A68dXPR09;
+//// model: A68dXPR10
+model A68dXPR10
+  model A
+    parameter Integer n = 2;
+    parameter Integer p[n] = 1:n;
+  end A;
+  A a(n = 4);
+end A68dXPR10;
+//// model: A68dXPR11
+model A68dXPR11
+  parameter Integer n = 3;
+  parameter Integer k = 1;
+  parameter Integer p[n - k + 1] = k:n;
+end A68dXPR11;
+//// model: A68dXRS01
+model A68dXRS01
+  Real x[5] = {time, 2, 3, 4, 5};
+  Real y[5];
+  Integer n;
+algorithm
+  n := 3;
+  y := zeros(5);
+  y[1:n] := x[1:n];
+end A68dXRS01;
+//// model: A68dXRS02
+model A68dXRS02
+  Real x[6] = {time, 2, 3, 4, 5, 6};
+  Real y[5];
+  Integer n;
+algorithm
+  n := 3;
+  y := zeros(5);
+  y[1:n] := x[2:n + 1];
+end A68dXRS02;
+//// model: A68dXRS03
+model A68dXRS03
+  Real y[5];
+  Integer n;
+algorithm
+  n := 3;
+  y := zeros(5);
+  y[{1, n}] := {1, 2};
+end A68dXRS03;
+//// model: A68dXRS04
+model A68dXRS04
+  Real y[5];
+  Integer n;
+algorithm
+  n := 3;
+  y := zeros(5);
+  y[1:n] := ones(n) * 2;
+end A68dXRS04;
+//// model: A68dXRS05
+model A68dXRS05
+  Real z[3];
+  Integer n;
+algorithm
+  n := 3;
+  z := fill(1.0, n);
+end A68dXRS05;
+//// model: A68dXRS06
+model A68dXRS06
+  Real y[5];
+  Integer n = integer(time) + 1;
+algorithm
+  y := zeros(5);
+  y[n:end] := fill(1.0, 6 - n);
+end A68dXRS06;
+//// model: A68dXRS07
+model A68dXRS07
+  Integer y[5];
+  Integer n;
+algorithm
+  n := 3;
+  y := zeros(5);
+  y[1:n] := fill(2.0, n);
+end A68dXRS07;
+//// model: A68dXRS08
+model A68dXRS08
+  Real y[5];
+  Integer n;
+equation
+  n = 3;
+  y[1:n] = fill(2.0, n);
+  y[n + 1:5] = fill(1.0, 5 - n);
+end A68dXRS08;
+//// model: A68dXRS09
+model A68dXRS09
+  Real y[6];
+  Integer n;
+algorithm
+  n := 3;
+  y := zeros(6);
+  y[1:2 * n] := fill(3.0, 2 * n);
+end A68dXRS09;
+//// model: A68dXRS10
+model A68dXRS10
+  Real y[5];
+  Integer n;
+algorithm
+  when time > 0.5 then
+    n := 2;
+    y[1:n] := fill(2.0, n);
+  end when;
+end A68dXRS10;
+//// model: A68dXRS11
+model A68dXRS11
+  Real y[5];
+  Real s;
+  Integer n;
+algorithm
+  n := 3;
+  y := zeros(5);
+  s := sum(y[1:n]);
+end A68dXRS11;
+//// model: A68dXRS12
+model A68dXRS12
+  Real m[3, 3] = fill(time, 3, 3);
+  Real y[3];
+  Integer n;
+algorithm
+  n := 2;
+  y := zeros(3);
+  y[1:n] := m[1, 1:n];
+end A68dXRS12;
+//// model: A68dXRS13
+model A68dXRS13
+  Real m[3, 3];
+  Integer n;
+algorithm
+  n := 2;
+  m := zeros(3, 3);
+  m[1:n, 1] := fill(1.0, n);
+end A68dXRS13;
+//// model: A68dXRS14
+model A68dXRS14
+  Real y[5];
+  Integer n;
+algorithm
+  n := 3;
+  y := zeros(5);
+  y[1:n] := fill(2, n);
+  y[n] := 7;
+end A68dXRS14;
+//// model: A68dXOC01
+model A68dXOC01
+  model A
+    constant Integer n = 2;
+  end A;
+  model B
+    Real x[a.n];
+  end B;
+  A a(n = 3);
+  B b[2];
+end A68dXOC01;
+//// model: A68dXOC02
+model A68dXOC02
+  model A
+    constant Integer n = 2;
+  end A;
+  model B
+    Real x[a.n] = fill(time, a.n);
+  end B;
+  A a(n = 3);
+  B b;
+end A68dXOC02;
+//// model: A68dXOC03
+model A68dXOC03
+  model A
+    constant Integer n = 2;
+  end A;
+  model B
+    Real x[a.n];
+  end B;
+  A a;
+  B b;
+end A68dXOC03;
+//// model: A68dXOC04
+model A68dXOC04
+  model A
+    constant Integer n = 2;
+    constant Integer m = n + 1;
+  end A;
+  model B
+    Real x[a.m];
+  end B;
+  A a(n = 3);
+  B b;
+end A68dXOC04;
+//// model: A68dXOC05
+model A68dXOC05
+  model A
+    constant Integer n = 2;
+  end A;
+  model B
+    Real x[a.n];
+  end B;
+  model C
+    extends B;
+  end C;
+  A a(n = 3);
+  C c;
+end A68dXOC05;
+//// model: A68dXDU01
+model A68dXDU01
+  Real x[:] = y;
+  Real y[:] = {time, 2, 3};
+end A68dXDU01;
+//// model: A68dXDU02
+model A68dXDU02
+  Real x[:] = y .* 2;
+  Real y[:] = {time, 2};
+end A68dXDU02;
+//// model: A68dXDU03
+model A68dXDU03
+  Real x[:] = y;
+  Real y[:] = x;
+end A68dXDU03;
+//// model: A68dXDU04
+model A68dXDU04
+  parameter Real x[:] = y;
+  parameter Real y[:] = {1, 2};
+end A68dXDU04;
+//// model: A68dXDU05
+model A68dXDU05
+  Real x[:] = y;
+  Real y[:] = z;
+  Real z[:] = {time, 2};
+end A68dXDU05;
+//// model: A68dXDU06
+model A68dXDU06
+  Real x[:] = y;
+  Real y[:] = {{time, 2}};
+end A68dXDU06;
+//// model: A68dXDU07
+model A68dXDU07
+  Real x[:, :] = y;
+  Real y[2, :] = {{time, 2, 3}, {4, 5, 6}};
+end A68dXDU07;
+//// model: A68dXDU08
+model A68dXDU08
+  Real x[:] = y;
+  Real y[:](each start = 1) = {time, 2};
+end A68dXDU08;
+//// model: A68dXTS01
+model A68dXTS01
+  Real ba[Boolean] = {1, time};
+  Real bs[:] = ba[true:true];
+end A68dXTS01;
+//// model: A68dXTS02
+model A68dXTS02
+  type E = enumeration(a, b, c);
+  Real m[E, 2] = {{1, 2}, {3, 4}, {5, time}};
+  Real s[:] = m[E.a:E.b, 1];
+end A68dXTS02;
+//// model: A68dXTS03
+model A68dXTS03
+  type E = enumeration(a, b, c);
+  Real m[2, E] = {{1, 2, 3}, {4, 5, time}};
+  Real s[:, :] = m[:, E.a:E.b];
+end A68dXTS03;
+//// model: A68dXTS04
+model A68dXTS04
+  type E = enumeration(a, b, c);
+  Real ea[E] = {1, 2, time};
+  Real s[:] = ea[{E.a, E.c}];
+end A68dXTS04;
+//// model: A68dXTS05
+model A68dXTS05
+  type E = enumeration(a, b, c);
+  Real ea[E] = {1, 2, time};
+  Real eb[E] = {3, 4, 5};
+  Real s[:] = ea[E.a:E.b] + eb[E.b:E.c];
+end A68dXTS05;
+//// model: A68dXTS06
+model A68dXTS06
+  type E = enumeration(a, b, c);
+  Real ea[E] = {1, 2, time};
+  Real s[:] = ea[E.c:E.a];
+end A68dXTS06;
+//// model: A68dXTS07
+model A68dXTS07
+  Real ba[Boolean] = {1, time};
+  Real bs[:] = ba[{true, false}];
+end A68dXTS07;
+//// model: A68dXCB01
+model A68dXCB01
+  Real x[3, 2] = {{time, 2}, {3, 4}, {5, 6}};
+  Real y[:, :] = {x[:, i] for i in 1:2};
+end A68dXCB01;
+//// model: A68dXCB02
+model A68dXCB02
+  Real x[3, 2] = {{time, 2}, {3, 4}, {5, 6}};
+  Real y[2, 3] = {x[:, i] for i in 1:2};
+end A68dXCB02;
+//// model: A68dXCB03
+model A68dXCB03
+  Real x[3] = {time, 2, 3};
+  Real y[:, :] = {x * i for i in 1:2};
+end A68dXCB03;
+//// model: A68dXCB04
+model A68dXCB04
+  Real y[:, :] = {fill(i, 3) for i in 1:2};
+end A68dXCB04;
+//// model: A68dXCB05
+model A68dXCB05
+  Real x[3] = {time, 2, 3};
+  Real y[:, :] = {x[1:i] for i in 1:2};
+end A68dXCB05;
+//// model: A68dXCB06
+model A68dXCB06
+  Real x[4] = {time, 2, 3, 4};
+  Real y[:, :] = {x[i:i + 1] for i in 1:3};
+end A68dXCB06;
+//// model: A68dXCB07
+model A68dXCB07
+  parameter Integer n = 2;
+  Real x[3, n] = fill(time, 3, n);
+  Real y[:, :] = {x[:, i] for i in 1:n};
+end A68dXCB07;
+//// model: A68dXCB08
+model A68dXCB08
+  Real x[2, 2, 2] = fill(time, 2, 2, 2);
+  Real y[:, :, :] = {x[:, :, i] for i in 1:2};
+end A68dXCB08;
+//// model: A68dXFW01
+model A68dXFW01
+  model A
+    parameter Real y[:];
+  end A;
+  model B
+    parameter Real y[:] = {1, 2};
+  end B;
+  A a(y = b.y);
+  B b;
+end A68dXFW01;
+//// model: A68dXFW02
+model A68dXFW02
+  model A
+    Real y[:];
+  end A;
+  model B
+    Real y[:] = {time, 2};
+  end B;
+  A a(y = b.y);
+  B b;
+end A68dXFW02;
+//// model: A68dXFW03
+model A68dXFW03
+  model A
+    parameter Real y[:];
+  end A;
+  model B
+    parameter Real y[:] = {1, 2};
+  end B;
+  A a(y = 2 * b.y);
+  B b;
+end A68dXFW03;
+//// model: A68dXFW04
+model A68dXFW04
+  model A
+    parameter Real y[:];
+  end A;
+  model B
+    parameter Real y[:] = {1, 2};
+  end B;
+  A a[2](each y = b.y);
+  B b;
+end A68dXFW04;

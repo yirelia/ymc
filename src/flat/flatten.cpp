@@ -2464,8 +2464,17 @@ class Flattener {
     if (st.kind == SStmtKind::For) return collect_for_statement(st, enclosing, prefix);
     if (st.kind != SStmtKind::Assign) return collect_control_statement(st, enclosing, prefix);
     // LHS 解析成 flat cref。常量目标已被 cref() 内联成字面量 → 非 Cref → 落到下面的目标校验 SKIP。
+    const int rt0 = runtime_slices_;
     Id<Expr> lhs = simplify_expr(inst_exp(st.a, enclosing, prefix));
     if (result_.unsupported) return {};
+    // 两侧的形状里，运行时切片（runtime_slice）留下的未知维（-1）与任何大小相容（TypeCheck.matchDimensions：未知维与任何维相容，
+    // NFTypeCheck.mo:2267-2288 v1.25.0）；别处来的未知维照旧不放。
+    auto dims_match = [&](const std::vector<std::int64_t>& l, const std::vector<std::int64_t>& r, bool rt) {
+      if (l.size() != r.size()) return false;
+      for (std::size_t k = 0; k < l.size(); ++k)
+        if (l[k] != r[k] && !(rt && (l[k] < 0 || r[k] < 0))) return false;
+      return true;
+    };
     // 空数组赋值（目标某维为 0）：整条删去（NFSimplifyModel.simplifyAssignment :413；EmptyArrayAlgorithm `r2 := r1`），返回无效
     // id。目标须是本层的连续变量（when 体内另可 discrete）、右侧同形同类。
     if (const std::vector<std::int64_t> ls = expr_shape(lhs); std::find(ls.begin(), ls.end(), 0) != ls.end()) {
@@ -2485,10 +2494,14 @@ class Flattener {
       if (!target_ok) { set_unsupported("algorithm assignment to non-continuous variable"); return {}; }
       const TypeKind lk = expr_elem_kind(lhs);
       array_call_ok_ = I_.absyn.exps[st.b].kind == ExpKind::Call;   // 右侧整个是数组调用（ArrayAssignEmpty `r := f(time)`）
+      // 右侧只为核类型、随整条删掉：空数组上的运行时切片（EmptyAsubSliceSubscript `arr := arr[arr[1:n]]`）照类型留占位（见 cref）。
+      const bool saved_esr = std::exchange(empty_stmt_rhs_, true);
+      const int rt1 = runtime_slices_;
       const Id<Expr> r = simplify_expr(inst_exp(st.b, enclosing, prefix));
+      empty_stmt_rhs_ = saved_esr;
       array_call_ok_ = false;
       if (result_.unsupported) return {};
-      if (expr_shape(r) != ls || !elem_kinds_compat(lk, expr_elem_kind(r)))
+      if (!dims_match(ls, expr_shape(r), runtime_slices_ != rt1) || !elem_kinds_compat(lk, expr_elem_kind(r)))
         set_unsupported("algorithm assignment type mismatch");
       return {};   // 被删赋值里登记过的函数由 prune_functions 收走
     }
@@ -2543,8 +2556,17 @@ class Flattener {
       const std::vector<std::int64_t> rs = expr_shape(rhs);
       bool ok = rs.size() == ls.size() && elem_kinds_compat(ta, expr_elem_kind(rhs)) && !enum_lits_differ(rhs, lty) &&
                 (rk != ExprKind::Array || array_leaves_ok(rhs, ls.size(), ta));
-      for (std::size_t k = 0; ok && k < ls.size(); ++k) ok = ls[k] >= 1 && (rs[k] == ls[k] || (arr_call && rs[k] < 0));
+      // 有运行时切片（见 runtime_slice）的一侧维未知：与另一侧任何大小相容；右侧只收同元素类型的整取 / 切片引用、数组字面量
+      //（逐叶转型）、维未知的 fill（见 kept_fill）——别的式子（逐元素运算、Integer 引用进 Real 目标的整体转型等）未核实 → SKIP。
+      const bool rt = runtime_slices_ != rt0;
+      for (std::size_t k = 0; ok && k < ls.size(); ++k)
+        ok = (ls[k] >= 1 || (rt && ls[k] < 0)) && (rs[k] == ls[k] || (arr_call && rs[k] < 0) || (rt && (ls[k] < 0 || rs[k] < 0)));
       if (!ok) { set_unsupported("algorithm assignment type mismatch"); return {}; }
+      if (rt && (std::find(ls.begin(), ls.end(), -1) != ls.end() || std::find(rs.begin(), rs.end(), -1) != rs.end())) {
+        const TypeKind rek = expr_elem_kind(rhs);
+        const bool form_ok = (rk == ExprKind::Cref && rek == ta) || rk == ExprKind::Array || kept_fill(rhs);
+        if (!form_ok) { set_unsupported("runtime slice assignment form"); return {}; }
+      }
       rhs = whole_array_value(rhs, ls, lty);
       if (!rhs.is_valid()) return {};
     } else {
@@ -2889,6 +2911,78 @@ class Flattener {
     for (std::int64_t i : out)
       if (i < 1 || i > dim) return std::nullopt;
     return out;
+  }
+  // 算法段里边界含变量的切片下标（TestFill `y[1:n] := fill(2, n)`、`y[n:end]`、`y[{1, n}]`）：omc 定型成 Subscript.SLICE，不求值
+  // 也不标结构（typeSubscript 只在方程语境 Structural.markExp，NFTyping.mo:2126-2131 v1.25.0），这一维大小未知；化简后照写
+  //（simplifySlice 不是 1:size 的原样，NFSubscript.mo:893-913），`end` 换成这一维的大小（evaluateEnd，NFTyping.mo:2122；
+  // `y[n:end]` → `y[n:5]`）。只认：模型的算法段、两端 / 各元素都是 Integer 标量、至少一处引用运行时变量、不引用参数（参数式的
+  // 走 slice_indices 求值）。不符 → invalid（调用方照旧 SKIP）。
+  Id<Expr> runtime_slice(Id<Exp> s, std::int64_t dim, NodeId enclosing, const std::vector<Symbol>& prefix) {
+    if (in_alg_ == 0 || fn_scope_) return {};
+    const ExpKind sk = I_.absyn.exps[s].kind;
+    const bool range = sk == ExpKind::Range;
+    if (!range && !(is_array_ctor(s) && !is_comprehension(s))) return {};
+    const Id<Expr> saved_end = std::exchange(fn_end_, lit_int(dim));
+    const Id<Expr> x = simplify_expr(inst_exp(s, enclosing, prefix));
+    fn_end_ = saved_end;
+    if (result_.unsupported) return {};
+    const Expr xe = result_.model.exprs[x];   // 拷贝
+    if (xe.kind != (range ? ExprKind::Range : ExprKind::Array)) return {};
+    const std::vector<Id<Expr>> parts = range ? std::vector<Id<Expr>>{xe.a, xe.b, xe.c} : xe.args;
+    bool runtime = false;
+    for (Id<Expr> p : parts) {
+      if (!p.is_valid()) continue;
+      const Type& t = result_.model.exprs[p].ty;
+      if (t.kind != TypeKind::Integer || t.is_array() || refs_param_var(p)) return {};
+      runtime = runtime || cond_is_runtime(p);
+    }
+    if (!runtime) return {};
+    ++runtime_slices_;
+    if (range) return x;
+    // 下标数组的类型定成 Integer 向量（inst_exp 给数组字面量的是粗类型 Real，下标处会当成 Real 下标拒掉）。
+    Expr arr = xe;
+    Dimension d;
+    d.kind = DimKind::Integer;
+    d.size = static_cast<std::int64_t>(xe.args.size());
+    arr.ty = Type::array_of(Type::integer(), {d});
+    return add(std::move(arr));
+  }
+  // 整个绑定是参数变率的 Integer 区间（Bug3187 `final parameter Integer[m] pgt = 1:2:2 * m - 1`、pk-p53 A68dPR01 `parameter Integer
+  // p[n] = 1:n`）：typeRange 对 ≤ PARAMETER 的区间调 Structural.markExp（NFTyping.mo:2414-2418 v1.25.0），参数成结构参数、区间里代入值
+  //（A68dPR05 `Real x[3] = 1:n` → `x = 1.0:3.0`，n final）——同 for 语句的参数范围（collect_for_statement）。各界求成整数才收，
+  // 不引用参数 / 引用运行时量 / 空区间 → invalid（调用方照常定型）。
+  Id<Expr> param_range_binding(Id<Exp> raw, NodeId scope, const std::vector<Symbol>& vprefix, const PSubs& psubs) {
+    Id<Exp> rg = raw;
+    while (I_.absyn.exps[rg].kind == ExpKind::Tuple && I_.absyn.exps[rg].args.size() == 1) rg = I_.absyn.exps[rg].args[0];
+    if (fn_scope_ || I_.absyn.exps[rg].kind != ExpKind::Range) return {};
+    if (!absyn_refs_param(rg, scope) || absyn_refs_param(rg, scope, false, /*runtime=*/true)) return {};
+    std::pair<std::int64_t, std::int64_t> written{1, 0};
+    std::optional<std::vector<std::int64_t>> seq;
+    {
+      const FrameAt frame_at(*this, scope);
+      CevalCtx guard(*this, vprefix, psubs);
+      seq = eval_range(rg, scode_scope_of(scope), 0, &written);
+    }
+    if (!seq || seq->empty()) return {};
+    Expr r;
+    r.kind = ExprKind::Range;
+    r.ty = Type::integer();
+    r.a = lit_int(seq->front());
+    if (I_.absyn.exps[rg].c.is_valid()) {   // 带步长：步长、终点照求出的值写（`1:2:3`）
+      r.b = lit_int(written.first);
+      r.c = lit_int(written.second);
+    } else {
+      r.b = lit_int(written.second);
+    }
+    return add(std::move(r));
+  }
+  int runtime_slices_ = 0;   // 造过的运行时切片个数（见 runtime_slice；算法赋值据此放行未知维，见 collect_statement）
+  bool empty_stmt_rhs_ = false;   // 正在定型目标为空数组、要整条删去的赋值的右侧（见 collect_statement）
+  // 算法段里维有运行时量、整个留着的 fill 调用（见 model_array_builtin）：类型里有未知维的 `fill(…)`。
+  bool kept_fill(Id<Expr> x) {
+    const Expr& e = result_.model.exprs[x];
+    if (e.kind != ExprKind::Call || e.call_name.size() != 1 || in_.str(e.call_name[0]) != "fill") return false;
+    return std::any_of(e.ty.dims.begin(), e.ty.dims.end(), [](const Dimension& d) { return d.kind == DimKind::Unknown; });
   }
   // 切片下标的打印形：`:` → Wild（下标位置打印成 `:`，对标 Subscript.WHOLE）；范围 → 求值后的 `a:b` / `a:s:b`；下标数组 →
   // 整数字面量数组。标量化（scalarize）按同一形式把第 i 个元素映射回原下标。
@@ -3817,6 +3911,15 @@ class Flattener {
       return scalarize(el, std::vector<std::int64_t>(idx.begin() + 1, idx.end()));
     }
     if (x.kind == ExprKind::Range) {   // 字面量范围的第 i 个元素 = 起 + (i - 1)·步（RG2 探针 `q = 1:3` → `q[2] = 2.0`）
+      // 枚举区间的第 i 个元素：序数为起点 + (i - 1) 的字面量（RangeIterator 的枚举支逐个取，NFRangeIterator.mo:123-153 v1.25.0；
+      // MinMaxEnum `constant E earr[E] = E.a:E.d` → `earr[E.b] = E.b`）。
+      if (const std::optional<std::int64_t> en = enum_range_len(x)) {
+        if (idx.size() != 1 || idx[0] < 1 || idx[0] > *en) { set_unsupported("range scalarization"); return lit_int(0); }
+        Expr lit = result_.model.exprs[x.a];   // 拷贝
+        lit.enum_index += idx[0] - 1;
+        lit.enum_path.back() = lit.ty.enum_literals[static_cast<std::size_t>(lit.enum_index) - 1];
+        return add(std::move(lit));
+      }
       const std::optional<RangeLit> l = range_lit(x);
       if (!l || idx.size() != 1 || idx[0] < 1 || idx[0] > l->n) { set_unsupported("range scalarization"); return lit_int(0); }
       const double v = l->start + static_cast<double>(idx[0] - 1) * l->step;
@@ -3838,6 +3941,14 @@ class Flattener {
           for (Id<Expr> s : orig) {
             const Expr se = result_.model.exprs[s];
             const bool slice = se.kind == ExprKind::Wild || se.kind == ExprKind::Range || se.kind == ExprKind::Array;
+            // 运行时切片（runtime_slice：边界 / 元素不是字面量，或拿 Integer 向量作下标）没有静态的下标表：omc 在算法里整条
+            // 留着不展开，这里取不出元素 → SKIP，不按字面量范围去算。
+            auto lit = [&](Id<Expr> b) { return !b.is_valid() || result_.model.exprs[b].kind == ExprKind::IntLit; };
+            if ((!slice && se.ty.is_array()) || (se.kind == ExprKind::Range && !(lit(se.a) && lit(se.b) && lit(se.c))) ||
+                (se.kind == ExprKind::Array && !std::all_of(se.args.begin(), se.args.end(), lit))) {
+              set_unsupported("runtime slice scalarization");
+              return lit_int(0);
+            }
             if (!slice) { subs.push_back(s); continue; }
             if (used >= idx.size()) { set_unsupported("slice scalarization"); return lit_int(0); }
             const std::int64_t i = idx[used++];
@@ -6324,7 +6435,11 @@ class Flattener {
     // cellData.OCV_SOC`），源记录声明在后、它的数组维（`OCV_SOC[:, 2]` 由它自己的绑定定）还不知道——MSL Batteries ShowImpedance；
     // pk-p37 探针 BCT27 / BCT28 → 这一遍不发射（第一遍的输出不用），第二遍用第一遍记下的维（carry_.shapes）。omc 先定型全部组件
     // 再压平（NFInst.mo:196-200 v1.25.0），没有先后之分。参数的绑定不像变量那样能先丢掉（无绑定的参数会判 unbound）。
-    if (lenient_ && braw.is_valid() && braw_from_record && needs_forward_shape(braw, bscope, bprefix)) {
+    // 书写的绑定同样（RecordBinding10 `A a(y = b.data.y); B b;`，a 里 `parameter Real[:] y`、b.data.y 的维由记录字段的绑定定）：
+    // 第一遍不发射，第二遍取记下的维（pk-p53 A68dFW01-A68dFW07；声明在前的同形本来就照常）。
+    if (lenient_ && braw.is_valid() &&
+        (braw_from_record || var_min(ctx.var_floor, I_.comps[cid].attributes.variability) == SVariability::Param) &&
+        needs_forward_shape(braw, bscope, bprefix)) {
       PSubs ws = psubs;
       ws.resize(name.size());
       typed_keys_.erase(int_key(name, ws));   // 没发射：这一遍别处读到它照向前引用处理
@@ -6362,7 +6477,7 @@ class Flattener {
       if (has_colon && braw.is_valid()) {
         bool typed_dim = false;
         if (!comprehension) {
-          typed_dim = absyn_refs_type_dim(braw, bscope, bprefix);
+          typed_dim = binding_keeps_type_dim(braw, bscope, bprefix);
         } else {
           const std::vector<ForIndex> its = I_.absyn.exps[I_.absyn.exps[braw].args[0]].iters;   // 拷贝
           for (const ForIndex& it : its)
@@ -6394,7 +6509,8 @@ class Flattener {
         const SVariability bv = var_min(ctx.var_floor, I_.comps[cid].attributes.variability);
         param_spread_ = bv == SVariability::Param || bv == SVariability::Const;   // 逐元素摊开的绑定（见 param_spread_）
         array_call_eq_ = !param_spread_;   // Var 数组的绑定成整条等式（whole_array_value），嵌着的数组调用也收
-        Id<Expr> ie = inst_exp(braw, bscope, bprefix);
+        Id<Expr> ie = param_range_binding(braw, bscope, bprefix, psubs);
+        if (!ie.is_valid()) ie = inst_exp(braw, bscope, bprefix);
         // Real 目标的 `-{…}`：定型时转型就推进一元负号与数组字面量（Expression.typeCast 的 UNARY / ARRAY 支，NFExpression.mo
         // v1.25.0），化简在后——`-{0, 1}` 成 `-{0.0, 1.0}`、整个数组取负得 `{-0.0, -1.0}`（DZ 探针 DZ24 的 r8）；此前先按 Integer
         // 折成 `{0, -1}` 再逐元素转型，零丢了符号。
@@ -6477,14 +6593,20 @@ class Flattener {
         return;
       } else if (I_.absyn.exps[dim_exps[di]].kind == ExpKind::Colon) {
         // 无绑定时改用 start 属性的值推断（NFTyping.typeDimension :705-711；DimUnknown7/10/11）。
-        std::optional<std::int64_t> n = binding_dim_size(braw.is_valid() ? braw : start_value(asrc), di);
+        // 矩阵构造 `[x, y]` 的元素不全是标量字面量时，书写的行 / 列数不是形状（元素是向量 / 矩阵时按块拼，typeMatrix /
+        // typeMatrixComma，NFTyping.mo:2251-2350 v1.25.0；Concatenation2 `z[:, :] = [x, y]`、x / y 是向量 → 2×2）：交给下面的类型化形状。
+        const Id<Exp> bsrc = braw.is_valid() ? braw : start_value(asrc);
+        std::optional<std::int64_t> n =
+            bsrc.is_valid() && I_.absyn.exps[bsrc].kind == ExpKind::Matrix && !matrix_of_scalar_literals(bsrc)
+                ? std::nullopt
+                : binding_dim_size(bsrc, di);
         // 非字面量绑定：取类型化绑定的第 di 维（deduceDimensionFromExp，NFTyping.mo:781-826）；该维未知时 omc 再对绑定求值，
         // 未做 → SKIP。
         // 推导式 `{e for i in r, …}`：各维 = 对应范围的长度（comprehension_shape；迭代变量个数须等于维数）；范围写的是
         // 类型名的那一维是类型维，下标标签取该类型的。
         if (!n && comprehension) {
           std::vector<std::vector<Id<Expr>>> cl;
-          if (const std::optional<std::vector<std::int64_t>> csh = comprehension_shape(braw, bscope, bprefix, &cl);
+          if (const std::optional<std::vector<std::int64_t>> csh = comprehension_shape(braw, bscope, bprefix, &cl, dim_exps.size());
               csh && csh->size() == dim_exps.size()) {
             n = (*csh)[di];
             if (!cl[di].empty()) labels = cl[di];
@@ -6630,7 +6752,7 @@ class Flattener {
     const bool comp_spread = comprehension && spread;
     if (comp_spread) {
       // 推导式的形状须与声明维一致（omc 类型错；ND 探针 c2：`parameter Integer s[2] = {i for i in 1:3}` 此前放行）。
-      const std::optional<std::vector<std::int64_t>> csh = comprehension_shape(braw, bscope, bprefix);
+      const std::optional<std::vector<std::int64_t>> csh = comprehension_shape(braw, bscope, bprefix, nullptr, dims.size());
       if (result_.unsupported) return;
       if (!csh) { set_unsupported("comprehension range"); return; }
       if (*csh != dims) { set_unsupported("array binding shape/type mismatch"); return; }
@@ -6934,6 +7056,13 @@ class Flattener {
       rhs = rhsE;   // x = y、y = x[2:3]、w = z[1,:]（整取 / 切片同元素类型保持整体，A1/A5/A9/I1、SL1 探针）
     } else if (rk == ExprKind::Cref && relem == TypeKind::Integer && cty.kind == TypeKind::Real) {
       rhs = array_real_cast(rhsE);   // Integer 整取 / 切片进 Real 数组：整体转型 `/*Real[2]*/(n)`、`/*Real[2]*/(n[1:2])`（WA 探针 w2）
+    } else if (kept_fill(rhsE) && relem == TypeKind::Integer && cty.kind == TypeKind::Real) {
+      // 留着的 fill 给 Real 数组：转型推进填充值（Call.typeCast 的 fill 支，NFCall.mo:1303-1310 v1.25.0；TestFill `fill(2, n)` →
+      // `fill(2.0, n)`）。
+      Expr fc = re;
+      fc.args[0] = to_real(fc.args[0]);
+      fc.ty = Type::array_of(Type::real(), re.ty.dims);
+      rhs = add(std::move(fc));
     } else if ((rk == ExprKind::Call || rk == ExprKind::TupleElement) && relem == cty.kind) {
       rhs = rhsE;   // x = f(n)：含数组调用的等式整体保留（NFScalarize :343-346；IfExpression11 / FuncUnknownDim3）
     } else if (rk == ExprKind::Call && user_call(rhsE) && relem == TypeKind::Integer && cty.kind == TypeKind::Real) {
@@ -6971,6 +7100,11 @@ class Flattener {
         set_unsupported("non-literal array binding"); return {};
       }
       rhs = add(std::move(r));
+    } else if (rk == ExprKind::Range && enum_range_len(re)) {
+      // 枚举区间整体保留（EnumRangeBinding1 `E e1[E] = E.one:E.four` → `e1 = E.one:E.four`）；元素须是同一枚举（字面量表相同，
+      // 别的类型 omc 类型错）。
+      if (cty.kind != TypeKind::Enumeration || enum_lits_differ(re.a, cty)) { set_unsupported("non-literal array binding"); return {}; }
+      rhs = rhsE;
     } else if (rk == ExprKind::IfExp && re.ty.is_array()) {
       // 数组 if 绑定整体保留（V4r 探针 `i2 = if time > 1.0 then x else {1.0, 2.0, 3.0}`）；Integer 元素配 Real 数组：字面量支
       // 逐叶转（`j2 = if time > 1.0 then {1.0, 2.0} else {3.0, 4.0}`），其余支的整体转型形态未核实 → SKIP。
@@ -7231,6 +7365,19 @@ class Flattener {
     return false;
   }
 
+  // 矩阵构造 `[…]` 的元素都是标量字面量（数值 / Boolean / 字符串，可带一元负号）：书写的行列数就是形状。
+  bool matrix_of_scalar_literals(Id<Exp> m) {
+    const Exp& x = I_.absyn.exps[m];
+    if (x.kind != ExpKind::Matrix) return false;
+    for (Id<Exp> row : x.args)
+      for (Id<Exp> el : I_.absyn.exps[row].args) {
+        Id<Exp> v = el;
+        if (I_.absyn.exps[v].kind == ExpKind::Unary) v = I_.absyn.exps[v].a;
+        const ExpKind k = I_.absyn.exps[v].kind;
+        if (k != ExpKind::IntLit && k != ExpKind::RealLit && k != ExpKind::BoolLit && k != ExpKind::StringLit) return false;
+      }
+    return true;
+  }
   // 绑定字面量（构造子 / 矩阵）第 di 维的大小；供 `:` 维从绑定推断形状（NFTyping.typeDimension :692-730）。
   std::optional<std::int64_t> binding_dim_size(Id<Exp> b, std::size_t di) {
     if (!b.is_valid()) return std::nullopt;
@@ -9410,6 +9557,8 @@ class Flattener {
               // `system.allowFlowReversal`）：第一遍到此为止，第二遍带着第一遍的值再求（见 forward_miss_）——别落到下面 SCode 层的
               // 限定常量查找（按声明求值、忽略修饰；经带修饰的 extends 继承来的还撞守卫；PKI 探针 PKI4）。
               if (fwd && lenient_) return std::nullopt;
+            } else if (std::optional<CVal> ov = outer_frame_const(c, scope, depth)) {
+              return ov;
             }
           }
           if (c.parts.size() == 1 && c.parts[0].subscripts.empty())
@@ -11384,10 +11533,27 @@ class Flattener {
     return l;
   }
 
+  // 枚举区间 `E.a:E.d`（两端是同一枚举类型的字面量、不带步长，MLS §3.7.3.1）的长度 = 终点序数 − 起点序数 + 1（反向为空，
+  // 同 cval_range 的枚举支；TypeCheck.getRangeTypeEnum 的 max(stop.index - start.index + 1, 0)，NFTypeCheck.mo:2900-2911 v1.25.0）。
+  // 两端不是带字面量表的枚举字面量 → nullopt。
+  std::optional<std::int64_t> enum_range_len(const Expr& r) {
+    if (r.kind != ExprKind::Range || r.c.is_valid() || !r.a.is_valid() || !r.b.is_valid()) return std::nullopt;
+    const Expr& a = result_.model.exprs[r.a];
+    const Expr& b = result_.model.exprs[r.b];
+    if (a.kind != ExprKind::EnumLit || b.kind != ExprKind::EnumLit || a.enum_index < 1 || b.enum_index < 1) return std::nullopt;
+    if (a.ty.enum_literals.empty() || a.ty.enum_literals != b.ty.enum_literals || a.enum_path.size() != b.enum_path.size() ||
+        a.enum_path.empty() || !std::equal(a.enum_path.begin(), a.enum_path.end() - 1, b.enum_path.begin()))
+      return std::nullopt;
+    if (static_cast<std::size_t>(b.enum_index) > a.ty.enum_literals.size()) return std::nullopt;
+    return std::max<std::int64_t>(b.enum_index - a.enum_index + 1, 0);
+  }
+
   std::vector<std::int64_t> expr_shape(Id<Expr> id) {
     const Expr& e = result_.model.exprs[id];
     if (e.kind == ExprKind::Range) {   // Range 的 ty 是元素类型（迭代变量用），形状另算
       const std::optional<RangeLit> l = range_lit(e);
+      if (!l)
+        if (const std::optional<std::int64_t> en = enum_range_len(e)) return {*en};
       return {l ? l->n : -1};
     }
     if (e.kind == ExprKind::Array) {
@@ -12129,6 +12295,28 @@ class Flattener {
       sx.args = {ax.args[0], lit_int(1)};
       sx.ty = Type::integer();
       return add(std::move(sx));
+    }
+    // 标量实参：ExpandExp.expand 对标量原样返回、算"已展开"（NFExpandExp.mo:64-68 / expandGeneric :1060-1063），唯一的元素就是它
+    //（FuncBuiltinScalar `scalar(4)` → `4.0`）。
+    const std::vector<std::int64_t> ash = expr_shape(a);
+    if (ash.empty()) return a;
+    // 维全已知（上面已核都为 1）的整体引用 / 逐元素运算 / 整体转型：omc 展开成嵌套字面量取唯一元素（expandCref / expandBinary /
+    // expandUnary / expandCast，NFExpandExp.mo:70-92）= 下标全 1 的那个元素（DimConvert `scalar(m2)` → `m2[1,1,1]`、
+    // `scalar(2 * v)` → `2.0 * v[1]`）。调用（用户函数走 expandGeneric 打 `f(x)[1]`、内建各有展开）、推导式等未核实 → 下面 SKIP。
+    // 留成符号的矩阵幂（matrix_pow_bins_，omc 另走 expandBinaryPowMatrix）不在此列。
+    auto has_mpow = [&](auto& self, Id<Expr> x) -> bool {
+      if (!x.is_valid()) return false;
+      if (matrix_pow_bins_.count(x.raw) > 0) return true;
+      const Expr xe = result_.model.exprs[x];   // 拷贝（递归里不持引用）
+      if (xe.kind == ExprKind::Call) return false;
+      return self(self, xe.a) || self(self, xe.b);
+    };
+    if (const ExprKind ak = result_.model.exprs[a].kind;
+        (ak == ExprKind::Cref || ak == ExprKind::Binary || ak == ExprKind::Unary || ak == ExprKind::Cast) &&
+        std::find(ash.begin(), ash.end(), -1) == ash.end() && !has_mpow(has_mpow, a)) {
+      const Id<Expr> el = scalarize(a, std::vector<std::int64_t>(ash.size(), 1));
+      if (result_.unsupported) return lit_int(0);
+      return el;
     }
     if (result_.model.exprs[a].kind != ExprKind::Array) { set_unsupported("scalar of unexpanded array"); return lit_int(0); }
     while (result_.model.exprs[a].kind == ExprKind::Array && result_.model.exprs[a].args.size() == 1)
@@ -18509,6 +18697,22 @@ class Flattener {
     }
   }
   // 值求值路（eval_scode）：书写处前缀（含逐段下标）+ cref 各段（常量整数下标）→ const_vals_ 里的值。
+  // 嵌套类里引用外层类组件的常量（PackageConstant6：`model B Real x[a.n]; end B;`，a 是外层类的组件）：omc 沿实例树的父作用域
+  // 找到外层实例上的 a（NFLookup.lookupSimpleCref 顺 InstNode.parentScope 往外找，NFLookup.mo:838-905 / :896-898 v1.25.0），取实例上改过的
+  // 值（pk-p53 A68dOC02 `A a(n = 3)` → b.x 有 3 个元素）；叶是参数 omc 报错（A68dOC03）。只认：书写处的直接外层类恰是父帧实例的
+  // 类、首段是那个实例的组件、叶是常量、值已发射（声明在后的 A68dOC04、隔一层实例的 A68dOC09 求不出 → 调用方照旧 SKIP）。
+  std::optional<CVal> outer_frame_const(const Cref& c, const ScodeScope& scope, int depth) {
+    if (ceval_frame_ < 1 || scope.size() < 2 || c.leading_dot || c.parts.size() < 2) return std::nullopt;
+    const Frame& G = frames_[static_cast<std::size_t>(ceval_frame_ - 1)];
+    if (!is_class_inst(G.inst) || !(I_.nodes[G.inst].def == scope[1].cls)) return std::nullopt;
+    if (!is_comp_node(find_local(G.inst, c.parts[0].name))) return std::nullopt;
+    bool prot = false;
+    const NodeId leaf = inst_path_leaf(G.inst, c, prot);
+    if (!leaf.is_valid() || prot || !is_comp_node(leaf) ||
+        I_.comps[I_.nodes[leaf].comp].attributes.variability != SVariability::Const)
+      return std::nullopt;
+    return const_lookup_val(G.prefix, G.psubs, c, scope, depth);
+  }
   std::optional<CVal> const_lookup_val(const std::vector<Symbol>& prefix, const PSubs& psubs, const Cref& c,
                                        const ScodeScope& scope, int depth, bool allow_param = false) {
     std::vector<Symbol> names = prefix;
@@ -19310,6 +19514,18 @@ class Flattener {
     std::vector<CVal> flat;
     flatten_cval_array(*av, flat);
     if (flat.empty()) return std::nullopt;
+    // 枚举元素的 min / max：按序数比、相等取先到的，同一枚举类型（字面量路径的类型部分相同）才收（evalReduction 的 min / max 用
+    // evalBuiltinMin2 / Max2 的 ENUM_LITERAL 支，NFCeval.mo:3164-3189 / :2508-2525 v1.25.0；MinMaxEnum `min(e for e in earr)` → `E.a`）。
+    if ((is_min || is_max) && flat[0].k == CVal::K::Enum) {
+      CVal best = flat[0];
+      for (const CVal& c : flat) {
+        if (c.k != CVal::K::Enum || c.epath.empty() || c.epath.size() != best.epath.size() ||
+            !std::equal(c.epath.begin(), c.epath.end() - 1, best.epath.begin()))
+          return std::nullopt;
+        if (is_min ? c.i < best.i : c.i > best.i) best = c;
+      }
+      return best;
+    }
     bool all_int = true;
     for (const CVal& c : flat) {
       if (c.k != CVal::K::Int && c.k != CVal::K::Real) return std::nullopt;   // 只规约数值
@@ -19499,7 +19715,11 @@ class Flattener {
           return add(std::move(r));
         }
         const bool allbool = !has_step && ks == TypeKind::Boolean && ik(r.b) == TypeKind::Boolean;
-        r.ty = allbool ? Type::boolean() : Type::real();
+        // 枚举区间 `E.a:E.d`：元素类型就是这个枚举（TypeCheck.getRangeType 的 ENUMERATION 支，NFTypeCheck.mo:2714-2720 v1.25.0；MinMaxEnum、
+        // EnumRangeBinding1）；两端不是同一枚举 omc 类型错（留 Real，下游按类型不符 SKIP）。
+        const bool allenum = !has_step && ks == TypeKind::Enumeration && ik(r.b) == TypeKind::Enumeration &&
+                             !enum_lits_differ(r.a, r.b);
+        r.ty = allbool ? Type::boolean() : allenum ? result_.model.exprs[r.a].ty : Type::real();
         return add(std::move(r));
       }
       default: {
@@ -19984,7 +20204,9 @@ class Flattener {
                   if (tk == ExpKind::Range || (is_array_ctor(subs[k]) && !is_comprehension(subs[k]))) {
                     const std::optional<IterVals> lv = label_iter_values(subs[k], enclosing, prefix);
                     if (result_.unsupported) break;
-                    if (!lv || lv->ords.empty() || !same_label_type(lv->type_label, llabels[k][0])) {
+                    // 空的标签区间（`ba[true:false]`）同整数的空切片（slice_indices 的空表）：零长，引用它的绑定 / 方程整个不出
+                    //（RangeSlicing `bs1[:] = ba[true:false]`，omc 不打 bs1）；标签数组不会空（`{}` 定不了类型）。
+                    if (!lv || (lv->ords.empty() && tk != ExpKind::Range) || !same_label_type(lv->type_label, llabels[k][0])) {
                       set_unsupported("type-dimension subscript");
                       break;
                     }
@@ -20018,7 +20240,16 @@ class Flattener {
                 if (sk == ExpKind::Colon || sk == ExpKind::Range || (is_array_ctor(subs[k]) && !is_comprehension(subs[k]))) {
                   std::pair<std::int64_t, std::int64_t> written{1, 0};
                   const std::optional<std::vector<std::int64_t>> sel = slice_indices(subs[k], ldims[k], lscope, enclosing, &written);
-                  if (!sel) { set_unsupported("array slice"); break; }
+                  if (!sel) {
+                    const Id<Expr> rs = sk == ExpKind::Colon ? Id<Expr>{} : runtime_slice(subs[k], ldims[k], enclosing, prefix);
+                    if (result_.unsupported) break;
+                    if (!rs.is_valid()) { set_unsupported("array slice"); break; }
+                    leaf_subs[k] = rs;
+                    Dimension sd;   // 大小未知（Dimension.UNKNOWN 同义：expr_shape 记 -1，要已知形状的地方照旧 SKIP）
+                    sd.kind = DimKind::Unknown;
+                    sdims.push_back(sd);
+                    continue;
+                  }
                   leaf_subs[k] = slice_subscript(sk, *sel, I_.absyn.exps[subs[k]].c.is_valid(), ldims[k],
                                                  ldims[ldims.size() - subs.size() + k], written);
                   Dimension sd;
@@ -20066,6 +20297,16 @@ class Flattener {
                 if (!iv) {
                   const Id<Expr> se = simplify_expr(inst_exp(subs[k], enclosing, prefix));
                   if (result_.unsupported) break;
+                  // 算法段里拿运行时的 Integer 向量作下标（VariableRangeSubscript `c := b[a[1:n]]`）：同 runtime_slice，是切片、不求值
+                  // 不标结构，这一维取下标向量的维（Subscript.SLICE，NFTyping.typeSubscript :2126-2128 v1.25.0）。
+                  if (const Type st = result_.model.exprs[se].ty;
+                      in_alg_ > 0 && !fn_scope_ && st.is_array() && st.dims.size() == 1 &&
+                      st.element_type().kind == TypeKind::Integer && cond_is_runtime(se) && !refs_param_var(se)) {
+                    leaf_subs[k] = se;
+                    sdims.push_back(st.dims[0]);
+                    ++runtime_slices_;
+                    continue;
+                  }
                   // 只标 final、值求不出的结构参数（`CVec[ind]`，见 unbound_unfixed_sub）同样留符号。
                   if (result_.model.exprs[se].ty.kind == TypeKind::Integer &&
                       (cond_is_runtime(se) || (refs_param_var(se) && refs_novalue_only(se)))) {
@@ -20259,7 +20500,15 @@ class Flattener {
         const ExprKind k = result_.model.exprs[s].kind;
         simple = simple && k != ExprKind::Wild && k != ExprKind::Range && k != ExprKind::Array;
       }
-      if (!simple) { set_unsupported("subscripted reference to empty array"); return lit_int(0); }
+      if (!simple) {
+        // 只为核类型、随整条删去的赋值右侧（empty_stmt_rhs_，见 collect_statement）：带运行时切片的引用不必换成缺省值，按类型留
+        // 引用本身（EmptyAsubSliceSubscript `arr := arr[arr[1:n]]`，arr: Integer[0]，omc 整条删、不打）。
+        bool rt_slice = false;
+        for (const Dimension& d : e.ty.dims) rt_slice = rt_slice || d.kind == DimKind::Unknown;
+        if (empty_stmt_rhs_ && rt_slice) return add(std::move(e));
+        set_unsupported("subscripted reference to empty array");
+        return lit_int(0);
+      }
       Expr s;
       s.kind = ExprKind::Subscript;
       s.a = empty_array_lit(e.ty.element_type(), empty_dims);
@@ -20378,6 +20627,7 @@ class Flattener {
     ps.resize(prefix.size());
     std::optional<std::vector<std::int64_t>> sh = emitted_shape(names, ps);
     if (const auto as = array_shapes_.find(int_key(names, ps)); !sh && as != array_shapes_.end()) sh = as->second;   // 复合数组（元素是字段变量）
+    if (!sh) sh = deduce_local_colon_dims(c.parts[0].name, enclosing, prefix, out);
     if (!sh || sh->size() != out.size()) return false;
     const std::vector<std::vector<Id<Expr>>> el = labels ? emitted_labels(names, ps) : std::vector<std::vector<Id<Expr>>>{};
     for (std::size_t k = 0; k < out.size(); ++k) {
@@ -20387,6 +20637,50 @@ class Flattener {
       out[k] = (*sh)[k];
     }
     return true;
+  }
+  // 引用的本地数组的 `:` 维还没定（它声明在后，DimUnknown5 `Real x[2, :] = y; Real y[:, 3] = x;`）：omc 定型 x 的维时把 y 的类型只
+  // 定型到要的那一维，y 的 `:` 维再从 y 的绑定推（typeExpDim → typeDimension 的 UNKNOWN 支，NFTyping.mo:687-769 / :776-821 v1.25.0），
+  // 不按声明先后。这里只做：根实例的组件（没有外来修饰）、没有 extends 修饰、绑定是字面量构造子（取书写形状）或另一个本地数组的
+  // 整体引用（那个数组对应的维是字面量，或它已发射）。out = 已知的各维（`:` 处 -1）；推不出 → nullopt（调用方照旧 SKIP）。
+  std::optional<std::vector<std::int64_t>> deduce_local_colon_dims(Symbol name, NodeId enclosing, const std::vector<Symbol>& prefix,
+                                                                   const std::vector<std::int64_t>& out) {
+    if (!prefix.empty() || fn_scope_) return std::nullopt;
+    const NodeId n = find_local(enclosing, name);
+    if (!is_comp_node(n)) return std::nullopt;
+    const Component& comp = I_.comps[I_.nodes[n].comp];
+    if (!comp.extends_mods.empty() || comp.binding.kind != BindingKind::Raw || !comp.binding.raw_exp.is_valid()) return std::nullopt;
+    const Id<Exp> b = comp.binding.raw_exp;
+    std::vector<std::int64_t> res = out;
+    if (is_array_ctor(b) && !is_comprehension(b)) {
+      const std::optional<std::vector<std::int64_t>> ld = lit_dims(b);
+      if (!ld || ld->size() != res.size()) return std::nullopt;
+      for (std::size_t k = 0; k < res.size(); ++k) {
+        if (res[k] >= 0 && res[k] != (*ld)[k]) return std::nullopt;
+        res[k] = (*ld)[k];
+      }
+      return res;
+    }
+    if (I_.absyn.exps[b].kind != ExpKind::CrefExp) return std::nullopt;
+    const Cref bc = I_.absyn.crefs[I_.absyn.exps[b].cref];   // 拷贝
+    if (bc.leading_dot || bc.parts.size() != 1 || !bc.parts[0].subscripts.empty()) return std::nullopt;
+    const NodeId zn = find_local(enclosing, bc.parts[0].name);
+    if (!is_comp_node(zn) || zn == n) return std::nullopt;
+    const SElement& zel = I_.scode.elems[I_.comps[I_.nodes[zn].comp].def];
+    std::vector<Id<Exp>> zds = zel.attr.dims;
+    zds.insert(zds.end(), zel.type.dims.begin(), zel.type.dims.end());
+    if (zds.size() != res.size()) return std::nullopt;
+    const std::optional<std::vector<std::int64_t>> zsh = emitted_shape({bc.parts[0].name}, PSubs{});
+    // 已发射的那个数组的 `:` 维推出来是类型维（带标签）：经它推出的维也该是类型维，这里给不出标签 → 不推。
+    const std::vector<std::vector<Id<Expr>>> zl = emitted_labels({bc.parts[0].name}, PSubs{});
+    for (std::size_t k = 0; k < res.size(); ++k) {
+      if (res[k] >= 0) continue;
+      const Exp& zd = I_.absyn.exps[zds[k]];
+      if (zd.kind == ExpKind::IntLit && zd.ival >= 0) res[k] = zd.ival;
+      else if (zd.kind == ExpKind::Colon && zsh && zsh->size() == res.size() && (*zsh)[k] >= 0 && (k >= zl.size() || zl[k].empty()))
+        res[k] = (*zsh)[k];
+      else return std::nullopt;
+    }
+    return res;
   }
   // 已发射的数组变量 names 各维的标签（按序数排；整数维为空）：`:` 维推出来是类型维的数组（`Real z[:] = {… for i in E}`）
   // 声明里看不出来，只能看发射出来的元素。
@@ -21331,6 +21625,7 @@ class Flattener {
 
   Id<Expr> call(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix) {
     fn_why_ = nullptr;   // 子原因按调用清零（见 fn_fail）
+    const bool whole_top = array_call_ok_;   // 本调用是整个绑定 / 等式一侧 / 赋值右侧（交给内建，见 builtin_whole_）
     const bool split_top = std::exchange(split_base_, false);   // 只交给本调用（见 split_base_）
     // 同上，只交给本调用的用户函数那一路（见 vec_rec_ok_ / vec_rec_arg_ / eq_side_call_）。
     const bool vec_rec_top = std::exchange(vec_rec_ok_, false), vec_arg_top = std::exchange(vec_rec_arg_, false);
@@ -21483,8 +21778,12 @@ class Flattener {
         if (Id<Expr> r = sync_call(e, in_.str(fc.parts[0].name), enclosing, prefix, top); r.is_valid() || result_.unsupported)
           return r;
     }
-    return builtin_call(e, enclosing, prefix, Symbol{});
+    const bool saved_whole = std::exchange(builtin_whole_, whole_top);
+    const Id<Expr> br = builtin_call(e, enclosing, prefix, Symbol{});
+    builtin_whole_ = saved_whole;
+    return br;
   }
+  bool builtin_whole_ = false;   // 正在定型的内建调用是整个绑定 / 等式一侧 / 赋值右侧（见 call 的 whole_top；matrix 留调用用）
 
   // 记录构造调用 `R(a, b)` / `R(x = a)`（Record.instDefaultConstructor：输入 = 记录字段，声明序，缺省 = 字段声明绑定）：
   // 打成对构造函数的调用，缺省实参补齐（RC1 探针 `R(x = time)` → `R(time, 2.0, 3)`、`R(p, n = 4)` → `R(p, 2.0, 4)`），
@@ -23067,7 +23366,8 @@ class Flattener {
   // dim_labels：回报各维的标签——范围写的是类型名（`for i in E` / `Boolean`）的那一维是类型维（EN 探针 t3：
   // `Real z[:] = {y[i] * 2 for i in E}` → `z[E.one]`…；标签范围 `E.one:E.two`、`false:true` 给的是整数维），其余为空。
   std::optional<std::vector<std::int64_t>> comprehension_shape(Id<Exp> braw, NodeId scope, const std::vector<Symbol>& prefix,
-                                                               std::vector<std::vector<Id<Expr>>>* dim_labels = nullptr) {
+                                                               std::vector<std::vector<Id<Expr>>>* dim_labels = nullptr,
+                                                               std::size_t want_rank = 0) {
     Exp red = I_.absyn.exps[I_.absyn.exps[braw].args[0]];   // 拷贝
     if (red.iters.empty() || !fill_implicit_ranges(red, scope, prefix)) return std::nullopt;
     const FrameAt frame_at(*this, scope);
@@ -23084,6 +23384,21 @@ class Flattener {
       sh.push_back(d);
       if (dim_labels) dim_labels->push_back({});
     }
+    // 元素是别的数组值的式子（Subscript7 `y[:, :] = {x[:, i + 1] - x[:, i] for i in 1:2}`）：结果的维 = 迭代的各维 + 体的类型维
+    //（typeArrayConstructor 的 Type.liftArrayLeftList(体类型, 迭代维)，NFCall.mo:2525-2532 v1.25.0）。体的维取迭代变量都取首值时
+    // 定型出的形状（体的维不随迭代变量变：模型语境里维须是参数式）；只在调用方要的秩比迭代维多时才试，求不出 / 维未知 → nullopt。
+    if (want_rank > sh.size() && sh.size() == red.iters.size()) {
+      for (std::int64_t n : sh)
+        if (n < 1) return std::nullopt;
+      const Id<Expr> b0 = comprehension_elem(braw, std::vector<std::int64_t>(red.iters.size(), 1), scope, prefix, /*whole_body=*/true);
+      if (result_.unsupported) return std::nullopt;
+      const std::vector<std::int64_t> bsh = expr_shape(b0);
+      for (std::int64_t d : bsh) {
+        if (d < 0) return std::nullopt;
+        sh.push_back(d);
+        if (dim_labels) dim_labels->push_back({});
+      }
+    }
     return sh;
   }
   // 书写的数组构造子 `{…}` 的形状（各层元素个数，须规整）；不是构造子（标量式 / 其它数组值的式子）/ 不规整 → 空。
@@ -23097,6 +23412,47 @@ class Flattener {
     std::vector<std::int64_t> sh{static_cast<std::int64_t>(args.size())};
     sh.insert(sh.end(), sub.begin(), sub.end());
     return sh;
+  }
+  // `:` 维由绑定定时，绑定的值还带不带类型维（Boolean / 枚举维）。被引用数组的类型维上写了标签区间 / 标签数组 / 单个下标的，
+  // 这一维成了整数维或消失：区间、数组下标的维取下标式自己的类型（Subscript.SLICE，NFTyping.typeSubscript :2126-2131 v1.25.0；
+  // RangeSlicing `bs2[:] = ba[false:true]` → `bs2[1]`、`bs2[2]`，`es2[:] = ea[E.two:E.three]` → `es2[1]`、`es2[2]`）；写 `:` 或
+  // 没写下标的类型维照带（`z[:] = ba[:]`、`z[:] = ba`）。只细看本实例直接组件、各维都是书写维（不含 `:`）的单段引用，其余照
+  // absyn_refs_type_dim 保守算"带"。
+  bool binding_keeps_type_dim(Id<Exp> id, NodeId scope, const std::vector<Symbol>& prefix) {
+    if (!id.is_valid()) return false;
+    const Exp e = I_.absyn.exps[id];   // 拷贝
+    if (e.kind == ExpKind::CrefExp) {
+      const Cref c = I_.absyn.crefs[e.cref];   // 拷贝
+      if (!c.leading_dot && c.parts.size() == 1 && !loop_vars_.count(c.parts[0].name.id) &&
+          !stmt_iters_.count(c.parts[0].name.id)) {
+        const NodeId n = find_local(scope, c.parts[0].name);
+        if (is_comp_node(n)) {
+          const SElement& el = I_.scode.elems[I_.comps[I_.nodes[n].comp].def];
+          std::vector<Id<Exp>> ds = el.attr.dims;   // 拷贝：组件维在前、类型维在后，下标按这个次序对位
+          ds.insert(ds.end(), el.type.dims.begin(), el.type.dims.end());
+          std::vector<Symbol> names = prefix;
+          names.push_back(c.parts[0].name);
+          const std::vector<Id<Exp>>& subs = c.parts[0].subscripts;
+          bool plain = true, keeps = false;
+          for (std::size_t k = 0; k < ds.size(); ++k) {
+            if (I_.absyn.exps[ds[k]].kind == ExpKind::Colon) { plain = false; break; }
+            if (classify_type_dim(ds[k], scope, names) && (k >= subs.size() || I_.absyn.exps[subs[k]].kind == ExpKind::Colon))
+              keeps = true;
+            if (result_.unsupported) return false;
+          }
+          if (plain) {
+            if (keeps) return true;
+            for (Id<Exp> sx : subs) if (absyn_refs_type_dim(sx, scope, prefix)) return true;
+            return false;
+          }
+        }
+      }
+      return absyn_refs_type_dim(id, scope, prefix);
+    }
+    for (Id<Exp> a : e.args) if (binding_keeps_type_dim(a, scope, prefix)) return true;
+    for (const ForIndex& it : e.iters) if (absyn_refs_type_dim(it.range, scope, prefix)) return true;
+    return binding_keeps_type_dim(e.a, scope, prefix) || binding_keeps_type_dim(e.b, scope, prefix) ||
+           binding_keeps_type_dim(e.c, scope, prefix);
   }
   // 书写式里引用了带类型维的数组（声明维是类型名，或 `:` 维推出来是类型维）：它参与的数组值的维也是类型维。
   bool absyn_refs_type_dim(Id<Exp> id, NodeId scope, const std::vector<Symbol>& prefix) {
@@ -23178,7 +23534,10 @@ class Flattener {
     const std::size_t n = red.iters.size();
     // idx 超出迭代维的部分是元素构造子里的下标（见 comprehension_shape）。
     const std::size_t m = whole_body ? 0 : ctor_shape(red.a).size();
-    if (n == 0 || idx.size() != n + m || !fill_implicit_ranges(red, scope, prefix)) {
+    // 体不是构造子、idx 比迭代维多：多出的是体（别的数组值的式子）的维，见 comprehension_shape 的 want_rank——代入后的体照
+    // 标量化取元素（expandArrayConstructor2 先化简体再 ExpandExp.expand，NFExpandExp.mo:486-492 v1.25.0；Subscript7）。
+    const std::size_t extra = !whole_body && m == 0 && idx.size() > n ? idx.size() - n : 0;
+    if (n == 0 || idx.size() != n + m + extra || !fill_implicit_ranges(red, scope, prefix)) {
       set_unsupported("comprehension shape");
       return lit_int(0);
     }
@@ -23234,6 +23593,17 @@ class Flattener {
     // for j in 1:2}) for i in 1:2}` → `q[1] = 3.0`，此前打 `1.0 + 2.0`；WQ75；叶有符号的照留，WQ139 `p + 2.0 * p`）。修饰分发的
     //（whole_body）omc 不在标量化时化简，照旧。
     if (!whole_body && !result_.unsupported) x = fold_lit_chains(x);
+    if (extra > 0 && !result_.unsupported) {
+      const std::vector<std::int64_t> bsh = expr_shape(x);
+      bool ok = bsh.size() == extra;
+      for (std::size_t k = 0; ok && k < extra; ++k) ok = idx[n + k] >= 1 && idx[n + k] <= bsh[k];
+      if (!ok) {
+        set_unsupported("comprehension shape");
+      } else {
+        x = simplify_expr(scalarize(x, std::vector<std::int64_t>(idx.begin() + static_cast<std::ptrdiff_t>(n), idx.end())));
+        if (!result_.unsupported) x = fold_lit_chains(x);
+      }
+    }
     for (std::size_t k = 0; k < n; ++k) {
       loop_vars_.erase(red.iters[k].name.id);
       loop_labels_.erase(red.iters[k].name.id);
@@ -23682,6 +24052,26 @@ class Flattener {
     if (result_.unsupported) return false;
     const std::vector<std::int64_t> sh = expr_shape(a);
     r.kind = expr_elem_kind(a);
+    // 常量枚举数组（MinMaxEnum `min(e for e in earr)`，earr 已内联成字面量）：同书写的标签数组（label_iter_values 的数组支）——
+    // EvalConstants 把常量引用换成值，omc 的范围同样是字面量 `{E.a, …}`。元素须都是同一枚举类型的字面量。
+    if (const Expr ax = result_.model.exprs[a]; r.kind == TypeKind::Enumeration && ax.kind == ExprKind::Array && !ax.args.empty()) {
+      bool labels = true;
+      for (Id<Expr> el : ax.args)
+        labels = labels && result_.model.exprs[el].kind == ExprKind::EnumLit && sub_ordinal(el) &&
+                 !enum_lits_differ(el, ax.args[0]) && same_label_type(el, ax.args[0]);
+      if (labels) {
+        Dimension d;
+        d.kind = DimKind::Integer;
+        d.size = static_cast<std::int64_t>(ax.args.size());
+        Expr kept = ax;
+        kept.ty = Type::array_of(label_type(ax.args[0]), {d});
+        r.range = add(std::move(kept));
+        r.label = ax.args[0];
+        r.known = true;
+        r.elems = ax.args;
+        return true;
+      }
+    }
     if (sh.size() != 1 || (r.kind != TypeKind::Integer && r.kind != TypeKind::Real && r.kind != TypeKind::Boolean)) {
       set_unsupported("reduction range");
       return false;
@@ -24167,7 +24557,25 @@ class Flattener {
     for (std::int64_t n : s0) if (n < 1) { set_unsupported("matrix argument shape"); return lit_int(0); }
     if (s0.empty()) return arr({arr({args[0]}, ek, {dim(1)})}, ek, {dim(1), dim(1)});
     if (s0.size() == 2) return args[0];
-    if (s0.size() > 2 && !all_lit(all_lit, args[0])) { set_unsupported("matrix of non-literal"); return lit_int(0); }
+    if (s0.size() > 2 && !all_lit(all_lit, args[0])) {
+      // 3 维以上的非字面量实参：omc 定型成 `matrix(A)` 调用、类型取前两维（typeMatrixCall，NFBuiltinCall.mo:1176-1191 v1.25.0），
+      // 化简不展开（simplifyBuiltinCall 没有 matrix 支，实参不全是字面量不走 Ceval，NFSimplifyExp.mo:187-196 / :242-271）——整个
+      // 绑定 / 等式一侧 / 赋值右侧留调用（DimConvert `m4 = matrix(m3)`，pk-p53 A68dMV02 / MV03 / MV07）。只收整体引用的实参；参数
+      // 数组的绑定 omc 整个变量一行（A68dMV04）、在运算里（A68dMV05 `matrix(m3) * 2.0`）未做 → SKIP。
+      const Expr ax = result_.model.exprs[args[0]];   // 拷贝
+      bool rest_one = true;
+      for (std::size_t k = 2; k < s0.size(); ++k) rest_one = rest_one && s0[k] == 1;
+      if (builtin_whole_ && !param_spread_ && !fn_scope_ && ax.kind == ExprKind::Cref && ax.ty.is_array() && rest_one) {
+        Expr c;
+        c.kind = ExprKind::Call;
+        c.call_name = {in_.intern("matrix")};
+        c.args = {args[0]};
+        c.ty = Type::array_of(Type::of(ek), {dim(s0[0]), dim(s0[1])});
+        return add(std::move(c));
+      }
+      set_unsupported("matrix of non-literal");
+      return lit_int(0);
+    }
     for (std::size_t k = 2; k < s0.size(); ++k)
       if (s0[k] != 1) { set_unsupported("matrix argument shape"); return lit_int(0); }
     const std::int64_t cols = s0.size() == 1 ? 1 : s0[1];
@@ -24376,7 +24784,25 @@ class Flattener {
     };
     if (fill || zo) {
       std::vector<std::int64_t> dims;
+      std::vector<Id<Expr>> kept_dims(args.size());   // 维实参是运行时量的（见下）
       for (std::size_t i = first_dim; i < args.size(); ++i) {
+        // 算法段里维实参引用运行时变量（TestFill `y[1:n] := fill(2, n)`）：omc 不求值不标（typeFillCall2 的 inAlgorithm 守卫，
+        // NFBuiltinCall.mo:965 v1.25.0），这一维大小未知、fill 整个留着（simplifyFill 只在维全是字面量时展开，NFSimplifyExp.mo:
+        // 524-537）；zeros / ones 定型就是 fill(0 / 1, …)（typeZerosOnesCall → typeFillCall2，NFBuiltinCall.mo:1004-1030 v1.25.0；A68dRS30
+        // `zeros(n)` → `fill(0.0, n)`）。维实参须是不引用参数的 Integer 标量式；赋值处的转型见 whole_array_value。
+        if (in_alg_ > 0 && !fn_scope_ && absyn_refs_param(args[i], enclosing, false, /*runtime=*/true) &&
+            !absyn_refs_param(args[i], enclosing)) {
+          const Id<Expr> dx = simplify_expr(inst_exp(args[i], enclosing, prefix));
+          if (result_.unsupported) return lit_int(0);
+          const Type& dt = result_.model.exprs[dx].ty;
+          if (dt.kind != TypeKind::Integer || dt.is_array() || !cond_is_runtime(dx) || refs_param_var(dx)) {
+            set_unsupported("fill dimension in algorithm");
+            return lit_int(0);
+          }
+          kept_dims[i] = dx;
+          dims.push_back(-1);
+          continue;
+        }
         // 维实参里有迭代变量时 1.25.0 在定型期不求值、也不标结构参数（循环还没展开）：`x[:,1:1] = fill(0.0, 3, n + 1 - 1)`、
         // n 不 final（AP ff 探针 FF2 / FF3 / FF9、FuncBuiltinFill3）。保留 fill 的数组方程未做 → SKIP；引用的参数在此之前
         // 已是结构参数的照常求值。
@@ -24419,6 +24845,29 @@ class Flattener {
       }
       const Id<Expr> val = fill ? inst_exp(args[0], enclosing, prefix) : lit_int(name == "ones" ? 1 : 0);
       if (result_.unsupported) return lit_int(0);
+      // 留着的 fill（维实参有运行时量，见上）：`fill(值, 维…)`，类型 = 值的类型 + 各维（运行时的维未知）；值是数组的未核实 → SKIP。
+      if (std::any_of(kept_dims.begin(), kept_dims.end(), [](Id<Expr> d) { return d.is_valid(); })) {
+        if (!expr_shape(val).empty()) { set_unsupported("fill of array value"); return lit_int(0); }
+        Expr fc;
+        fc.kind = ExprKind::Call;
+        fc.call_name = {in_.intern("fill")};
+        fc.args.push_back(simplify_expr(val));
+        std::vector<Dimension> fds;
+        for (std::size_t i = first_dim; i < args.size(); ++i) {
+          Dimension d;
+          if (kept_dims[i].is_valid()) {
+            fc.args.push_back(kept_dims[i]);
+            d.kind = DimKind::Unknown;
+          } else {
+            fc.args.push_back(lit_int(dims[i - first_dim]));
+            d.kind = DimKind::Integer;
+            d.size = dims[i - first_dim];
+          }
+          fds.push_back(d);
+        }
+        fc.ty = Type::array_of(result_.model.exprs[fc.args[0]].ty, std::move(fds));
+        return add(std::move(fc));
+      }
       if (const std::vector<std::int64_t> vsh = expr_shape(val); !vsh.empty()) {
         // 值是数组：结果形状 = 维实参 ++ 值的形状（fill 的类型，MLS §10.3.3），维实参全是字面量时 omc 化简成以整个值为元素的
         // 数组字面量（simplifyFill → Expression.fillArgs，NFSimplifyExp.mo:524-537、NFExpression.mo:4772-4786 v1.25.0：
@@ -24564,6 +25013,27 @@ class Flattener {
     int big = 0;
     for (std::int64_t n : sh) big += n > 1 ? 1 : 0;
     if (big > 1) { set_unsupported("vector of matrix"); return lit_int(0); }
+    // omc 的化简只在实参化简后是数组字面量（arrayScalarElements 全是标量）时摊平，否则留 `vector(A)` 调用（simplifyVector，
+    // NFSimplifyExp.mo:499-522 v1.25.0；DimConvert `v2 = vector(m1)`，A68dMV01 / A68dMV06——此前一律展开，静默错）。数组字面量、
+    // 不含数组调用的逐元素运算（化简时展开成字面量）照旧摊平；整体 / 切片引用在整个绑定 / 等式一侧 / 赋值右侧留调用，别处（运算数、
+    // 参数数组逐元素摊分）与别的实参形态（调用、if 式等）未核实 → SKIP。
+    if (const ExprKind ak = result_.model.exprs[a].kind;
+        !(ak == ExprKind::Array || ((ak == ExprKind::Binary || ak == ExprKind::Unary) && !has_array_call(a)))) {
+      if (ak == ExprKind::Cref && builtin_whole_ && !param_spread_ && !fn_scope_) {
+        Dimension vd;
+        vd.kind = DimKind::Integer;
+        vd.size = 1;
+        for (std::int64_t d : sh) vd.size *= d;
+        Expr c;
+        c.kind = ExprKind::Call;
+        c.call_name = {in_.intern("vector")};
+        c.args = {a};
+        c.ty = Type::array_of(Type::of(expr_elem_kind(a)), {vd});
+        return add(std::move(c));
+      }
+      set_unsupported("vector argument kept as call by omc");
+      return lit_int(0);
+    }
     return build({static_cast<std::int64_t>(all.size())},
                  [&](const std::vector<std::int64_t>& ix) { return scalarize(a, all[static_cast<std::size_t>(ix[0]) - 1]); });
   }
@@ -25294,8 +25764,13 @@ class Flattener {
     const bool der_empty = supported && !fn_scope_ && builtin_name == "der" && args.size() == 1 && zero_len(args[0]) &&
                            expr_elem_kind(args[0]) == TypeKind::Real;
     if (der_empty) return args[0];
+    // der 的数组实参变率低于 discrete（字面量、参数数组的运算 `der(2 * p)`）：定型成数组类型的 der 调用，化简时 simplifyDer 按实参类型
+    // 填零（NFSimplifyExp.mo:571-581、Expression.makeZero :4844 v1.25.0；DerConstant1 `der({{{{1.0, 2.0}}, …}})`）。见下面 der 的数组实参。
+    const bool der_const_arr = supported && !fn_scope_ && builtin_name == "der" && args.size() == 1 &&
+                               !expr_shape(args[0]).empty() && omc_var(args[0], false) == OmcVar::Below &&
+                               (expr_elem_kind(args[0]) == TypeKind::Real || expr_elem_kind(args[0]) == TypeKind::Integer);
     for (Id<Expr> a : args)
-      if (result_.model.exprs[a].kind == ExprKind::Array && !der_xfield) {
+      if (result_.model.exprs[a].kind == ExprKind::Array && !der_xfield && !der_const_arr) {
         set_unsupported("array function argument");
         supported = false;
       }
@@ -25361,7 +25836,8 @@ class Flattener {
           return true;
         };
         const bool xf = der_xfield && expr_elem_kind(args[0]) == TypeKind::Real && all_vars(all_vars, args[0]);
-        ok = ok || xf;
+        const bool real_cref = ok;
+        ok = ok || xf || der_const_arr;
         // 零长的（空切片 `der(x_scaled[2:nx])`，nx = 1）照收：所在方程两边零长、一个标量方程都不出（ESL 探针 ESL7）。
         for (std::int64_t n : sh) ok = ok && n >= 0;
         if (!ok) {
@@ -25373,7 +25849,7 @@ class Flattener {
           r.call_name = {in_.intern("der")};
           r.args = {args[0]};
           r.ty = ax.ty;
-          if (xf) {
+          if (xf || (der_const_arr && !real_cref)) {   // 字面量 / 运算 / Integer 数组：结果类型是 Real 的同形数组
             std::vector<Dimension> ds;
             for (std::int64_t n : sh) {
               Dimension d;
@@ -26007,6 +26483,23 @@ class Flattener {
     return n;
   }
   Id<Expr> make_zero(const Type& ty) { return ty.kind == TypeKind::Integer ? lit_int(0) : lit_real(0.0); }
+  // Expression.makeZero 的数组支（fillType(ty, makeZero(元素类型))，NFExpression.mo:4836-4850 v1.25.0）：各维已知时的嵌套零字面量，
+  // 叶是 Real 的 0.0（调用方只给 Real 结果用：der 的数组实参）。
+  Id<Expr> make_zero_real_array(const std::vector<std::int64_t>& dims, std::size_t k = 0) {
+    if (k == dims.size()) return lit_real(0.0);
+    Expr arr;
+    arr.kind = ExprKind::Array;
+    std::vector<Dimension> rest;
+    for (std::size_t j = k; j < dims.size(); ++j) {
+      Dimension d;
+      d.kind = DimKind::Integer;
+      d.size = dims[j];
+      rest.push_back(d);
+    }
+    arr.ty = Type::array_of(Type::real(), std::move(rest));
+    for (std::int64_t i = 0; i < dims[k]; ++i) arr.args.push_back(make_zero_real_array(dims, k + 1));
+    return add(std::move(arr));
+  }
   // ---- 函数体里已知维数组运算的展开（SimplifyExp.simplifyBinary :965-967 在 nfExpandOperations（缺省开，Flags.mo:508）
   // 下调 ExpandExp.expand；ElementWiseMultiplication `positionvector * 2` → `{positionvector[1] * 2.0, …}`）----
   // 能展开的：全整数维的 cref（逐元素下标）、数组字面量。其余（`:` / 表达式维、调用）→ invalid（整式不展开）。
@@ -26887,6 +27380,15 @@ class Flattener {
           // A68cDY03）。离散语境里的 `der(d)` 没核实 → 同样 SKIP。
           if (dv == OmcVar::Discrete && (!in_discrete_scope() || result_.model.exprs[args[0]].kind == ExprKind::Cref))
             set_unsupported("der of discrete variable");
+          // 数组实参（`der(pc)`，pc 是参数数组）：makeZero 按实参的数组类型填零（NFExpression.mo:4844；DerConstant1 → `c = {{{{0.0,
+          // 0.0}}, {{0.0, 0.0}}}}`），不是标量 0.0。维未知的未核实 → SKIP。
+          if (const std::vector<std::int64_t> dsh = expr_shape(args0[0]); !dsh.empty() && dv == OmcVar::Below) {
+            if (std::find(dsh.begin(), dsh.end(), -1) != dsh.end()) {
+              set_unsupported("der of array with unknown dimension");
+              return rebuild();
+            }
+            return make_zero_real_array(dsh);
+          }
           if (is_num_lit(result_.model.exprs[args[0]]) || dv == OmcVar::Below) return lit_real(0.0);
         }
         // noEvent(const) → 脱壳折叠成字面量；符号参数保留 `noEvent(...)`（CevalNoEvent1）。

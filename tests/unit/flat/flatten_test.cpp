@@ -3306,8 +3306,9 @@ YMC_TEST(flatten_min_max_forms) {
   for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
            {"model RDS1\n  Integer y = max(zeros(0));\nend RDS1;\n",
             "Integer extreme of empty min/max (platform-dependent in omc)"},
+           // 68d 起 vector(x) 留成调用（simplifyVector），min / max 见到的是数组调用，子原因随之变。
            {"model RDS2\n  Real x[3] = {time, 1, 2};\n  Real y = max(vector(x));\nend RDS2;\n",
-            "min/max array argument form"},
+            "min/max of array constructor"},
            {"record R\n  parameter Real a;\n  parameter Real b = 2 * a;\nend R;\nmodel RDS3\n"
             "  parameter Real p = 4;\n  parameter R t = R(a = p);\nend RDS3;\n",
             "record constructor default depends on other fields"},
@@ -3619,9 +3620,10 @@ YMC_TEST(flatten_array_expression_call_arguments) {
   // `vector(x)` 作实参 omc 留成调用（GAS1 `g(vector(x))`）；实参全是字面量的纯函数调用 ymc 的解释器没求出来（循环超
   // 上限，GAS2）——omc 那边要么求值、要么求值失败照留，分不清 → SKIP。
   for (const auto& [src, why] : std::vector<std::pair<std::string, std::string>>{
+           // 68d 起 vector(引用) 在实参位置自己就 SKIP（simplifyVector 留调用，见 model_array_builtin），子原因随之变。
            {"function g\n  input Real u[3];\n  output Real v;\nalgorithm\n  v := u[1];\nend g;\nmodel GAS1\n"
             "  Real x[3] = {time, 1, 2};\n  Real y = g(vector(x));\nend GAS1;\n",
-            "array builtin kept as call by omc"},
+            "vector argument kept as call by omc"},
            {"function g\n  input Real u;\n  output Real v;\nalgorithm\n  v := u;\n  while v < 200000 loop\n"
             "    v := v + 1;\n  end while;\nend g;\nmodel GAS2\n  Real y = g(1);\nend GAS2;\n",
             "constant user call not evaluated"}}) {
@@ -13582,6 +13584,115 @@ YMC_TEST(flatten_variability_on_plain_composite) {
                std::string("class A68cVC32\n  parameter Real m.x = 1.0;\n  parameter Real m.y = 2.0;\nend A68cVC32;\n"));
   YMC_CHECK(flatten_src("model A68cVC08\n  model M Real x(start = 0); equation der(x) = 1; end M;\n  parameter M m;\nend A68cVC08;\n")
                 .rfind("<unsupported:", 0) == 0);   // omc 接受但另有处理（`0.0 = 1.0`），没做
+}
+
+// 68d 的单测期望值同样取 omc 1.25.0 实跑（`omc <模型>.mo`），模型即 tests/probes/pk-p53.probes 里的同名探针。
+
+YMC_TEST(flatten_scalar_expands_argument) {
+  // scalar(a)：先 ExpandExp.expand 再取唯一元素（typeScalarCall，NFBuiltinCall.mo:1033-1083 v1.25.0）——标量原样、整体引用与逐元素
+  // 运算取下标全 1 的元素。
+  YMC_CHECK_EQ(flatten_src("model A68dSC02\n  Real r1 = scalar({{1}});\n  Real r2 = scalar(4);\n  Real r3 = scalar({{{{5}}}});\n"
+                           "end A68dSC02;\n"),
+               std::string("class A68dSC02\n  Real r1 = 1.0;\n  Real r2 = 4.0;\n  Real r3 = 5.0;\nend A68dSC02;\n"));
+  YMC_CHECK_EQ(flatten_src("model A68dSC08\n  Real v[1] = {time};\n  Real s = scalar(2 * v);\nend A68dSC08;\n"),
+               std::string("class A68dSC08\n  Real v[1];\n  Real s = 2.0 * v[1];\nequation\n  v = {time};\nend A68dSC08;\n"));
+  YMC_CHECK(flatten_src("model A68dSC07\n  Real v[2] = {time, 1};\n  Real s = scalar(v);\nend A68dSC07;\n")
+                .rfind("<unsupported:", 0) == 0);   // omc 拒绝：维不是 1
+}
+
+YMC_TEST(flatten_der_of_array_is_zero_array) {
+  // der 的数组实参变率低于 discrete：makeZero 按实参的数组类型填零（NFSimplifyExp.simplifyDer :571-581、NFExpression.makeZero :4844）。
+  YMC_CHECK_EQ(flatten_src("model A68dDA02\n  Real[1,2,1,2] d = der({{{{1.0,2.0}},{{3.0,4.0}}}});\nend A68dDA02;\n"),
+               std::string("class A68dDA02\n  Real d[1,1,1,1];\n  Real d[1,1,1,2];\n  Real d[1,2,1,1];\n  Real d[1,2,1,2];\n"
+                           "equation\n  d = {{{{0.0, 0.0}}, {{0.0, 0.0}}}};\nend A68dDA02;\n"));
+  YMC_CHECK_EQ(flatten_src("model A68dDA05\n  parameter Real p[2] = {1, 2};\n  Real c[2] = der(2 * p);\nend A68dDA05;\n"),
+               std::string("class A68dDA05\n  parameter Real p[1] = 1.0;\n  parameter Real p[2] = 2.0;\n  Real c[1];\n  Real c[2];\n"
+                           "equation\n  c = {0.0, 0.0};\nend A68dDA05;\n"));
+}
+
+YMC_TEST(flatten_enum_range_binding) {
+  // 枚举区间的长度按序数（typeRange），常量数组逐元素取字面量，变量数组整条保留。
+  YMC_CHECK_EQ(flatten_src("model A68dER02\n  type E = enumeration(a, b, c, d);\n  constant E earr[4] = E.a:E.d;\nend A68dER02;\n"),
+               std::string("class A68dER02\n  constant enumeration(a, b, c, d) earr[1] = E.a;\n"
+                           "  constant enumeration(a, b, c, d) earr[2] = E.b;\n  constant enumeration(a, b, c, d) earr[3] = E.c;\n"
+                           "  constant enumeration(a, b, c, d) earr[4] = E.d;\nend A68dER02;\n"));
+  YMC_CHECK_EQ(flatten_src("model A68dER04\n  type E = enumeration(one, two, three, four);\n  E e1[E] = E.one:E.four;\n"
+                           "  E e2[2] = E.two:E.three;\nend A68dER04;\n"),
+               std::string("class A68dER04\n  enumeration(one, two, three, four) e1[E.one];\n"
+                           "  enumeration(one, two, three, four) e1[E.two];\n  enumeration(one, two, three, four) e1[E.three];\n"
+                           "  enumeration(one, two, three, four) e1[E.four];\n  enumeration(one, two, three, four) e2[1];\n"
+                           "  enumeration(one, two, three, four) e2[2];\nequation\n  e1 = E.one:E.four;\n  e2 = E.two:E.three;\n"
+                           "end A68dER04;\n"));
+}
+
+YMC_TEST(flatten_colon_dims_of_shaped_bindings) {
+  // `:` 维取类型化绑定的形状（deduceDimensionFromExp，NFTyping.mo:776-821）：矩阵拼接按块、类型维上的区间切片成整数维、推导式加上
+  // 体的维、声明在后的记录字段数组走第二遍。
+  YMC_CHECK_EQ(flatten_src("model A68dMC03\n  parameter Real x[:] = {1, 2};\n  parameter Real z[:, :] = [x, x];\nend A68dMC03;\n"),
+               std::string("class A68dMC03\n  parameter Real x[1] = 1.0;\n  parameter Real x[2] = 2.0;\n"
+                           "  parameter Real z[1,1] = x[1];\n  parameter Real z[1,2] = x[1];\n  parameter Real z[2,1] = x[2];\n"
+                           "  parameter Real z[2,2] = x[2];\nend A68dMC03;\n"));
+  YMC_CHECK_EQ(flatten_src("model A68dTS03\n  type E = enumeration(one, two, three, four);\n  Real ea[E] = {1.0, 2.0, 3.0, 4.0};\n"
+                           "  Real es1[:] = ea[E.one:E.four];\n  Real es2[:] = ea[E.two:E.three];\nend A68dTS03;\n"),
+               std::string("class A68dTS03\n  Real ea[E.one];\n  Real ea[E.two];\n  Real ea[E.three];\n  Real ea[E.four];\n"
+                           "  Real es1[1];\n  Real es1[2];\n  Real es1[3];\n  Real es1[4];\n  Real es2[1];\n  Real es2[2];\nequation\n"
+                           "  ea = {1.0, 2.0, 3.0, 4.0};\n  es1 = ea[:];\n  es2 = ea[E.two:E.three];\nend A68dTS03;\n"));
+  YMC_CHECK_EQ(flatten_src("model A68dTS01\n  Real ba[Boolean] = {1.0, 2.0};\n  Real bs1[:] = ba[true:false];\nend A68dTS01;\n"),
+               std::string("class A68dTS01\n  Real ba[false];\n  Real ba[true];\nequation\n  ba = {1.0, 2.0};\nend A68dTS01;\n"));
+  YMC_CHECK_EQ(flatten_src("model A68dCB04\n  parameter Real[3] x = {1, 2, 3};\n  parameter Real[:, :] y = {x * i for i in 1:2};\n"
+                           "end A68dCB04;\n"),
+               std::string("class A68dCB04\n  parameter Real x[1] = 1.0;\n  parameter Real x[2] = 2.0;\n  parameter Real x[3] = 3.0;\n"
+                           "  parameter Real y[1,1] = x[1];\n  parameter Real y[1,2] = x[2];\n  parameter Real y[1,3] = x[3];\n"
+                           "  parameter Real y[2,1] = x[1] * 2.0;\n  parameter Real y[2,2] = x[2] * 2.0;\n"
+                           "  parameter Real y[2,3] = x[3] * 2.0;\nend A68dCB04;\n"));
+  YMC_CHECK_EQ(flatten_src("model A\n  parameter Real[:] y = {1};\nend A;\nmodel B\n  parameter Real q[:] = {4, 5};\nend B;\n"
+                           "model A68dFW02\n  A a(y = b.q);\n  B b;\nend A68dFW02;\n"),
+               std::string("class A68dFW02\n  parameter Real a.y[1] = b.q[1];\n  parameter Real a.y[2] = b.q[2];\n"
+                           "  parameter Real b.q[1] = 4.0;\n  parameter Real b.q[2] = 5.0;\nend A68dFW02;\n"));
+  YMC_CHECK(flatten_src("model A68dTS05\n  Real ba[Boolean] = {1.0, 2.0};\n  Real bs[:] = ba;\nend A68dTS05;\n")
+                .rfind("<unsupported:", 0) == 0);   // omc 接受（bs 取 Boolean 维），没做
+}
+
+YMC_TEST(flatten_outer_component_constant_dim) {
+  // 嵌套类里引用外层类组件的常量：取外层实例上改过的值（NFLookup 顺 parentScope）；参数 omc 报错。
+  YMC_CHECK_EQ(flatten_src("model A68dOC02\n  model A\n    constant Integer n = 2;\n  end A;\n  A a(n = 3);\n  model B\n"
+                           "    Real x[a.n];\n  end B;\n  B b;\nend A68dOC02;\n"),
+               std::string("class A68dOC02\n  constant Integer a.n = 3;\n  Real b.x[1];\n  Real b.x[2];\n  Real b.x[3];\n"
+                           "end A68dOC02;\n"));
+  YMC_CHECK(flatten_src("model A68dOC03\n  model A\n    parameter Integer n = 2;\n  end A;\n  A a;\n  model B\n"
+                        "    Real x[a.n];\n  end B;\n  B b;\nend A68dOC03;\n").rfind("<unsupported:", 0) == 0);   // omc 拒绝
+}
+
+YMC_TEST(flatten_runtime_slice_in_algorithm) {
+  // 算法段里边界含变量的切片：不求值不标结构、维未知、照写（typeSubscript 只在方程里 markExp，NFTyping.mo:2126-2131）；fill 的维
+  // 实参在算法里同样不求（typeFillCall2 :965）。
+  YMC_CHECK_EQ(flatten_src("model A68dRS01\n  Real y[5];\n  Integer n;\nalgorithm\n  n := 0;\n  y := fill(1, 5);\n  n := n + 2;\n"
+                           "  y[1:n] := fill(2, n);\nend A68dRS01;\n"),
+               std::string("class A68dRS01\n  Real y[1];\n  Real y[2];\n  Real y[3];\n  Real y[4];\n  Real y[5];\n  Integer n;\n"
+                           "algorithm\n  n := 0;\n  y := {1.0, 1.0, 1.0, 1.0, 1.0};\n  n := n + 2;\n  y[1:n] := fill(2.0, n);\n"
+                           "end A68dRS01;\n"));
+  YMC_CHECK_EQ(flatten_src("model A68dRS02\n  Integer a[3];\n  Real b[3];\n  Real c[2];\n  Integer n;\nequation\n  n = 2;\n"
+                           "algorithm\n  a := {1, 2, 3};\n  b := {1.1, 2.1, 3.1};\n  c := b[a[1:n]];\nend A68dRS02;\n"),
+               std::string("class A68dRS02\n  Integer a[1];\n  Integer a[2];\n  Integer a[3];\n  Real b[1];\n  Real b[2];\n"
+                           "  Real b[3];\n  Real c[1];\n  Real c[2];\n  Integer n;\nequation\n  n = 2;\nalgorithm\n  a := {1, 2, 3};\n"
+                           "  b := {1.1, 2.1, 3.1};\n  c := b[a[1:n]];\nend A68dRS02;\n"));
+  YMC_CHECK_EQ(flatten_src("model A68dRS03\n  Integer arr[0] = zeros(0);\n  Integer n = 0;\nalgorithm\n  arr := arr[arr[1:n]];\n"
+                           "end A68dRS03;\n"),
+               std::string("class A68dRS03\n  Integer n = 0;\nend A68dRS03;\n"));
+  YMC_CHECK(flatten_src("model A68dRS10\n  Real y[5];\n  Integer n = 2;\nequation\n  y[1:n] = fill(2, n);\nend A68dRS10;\n")
+                .rfind("<unsupported:", 0) == 0);   // omc 拒绝：方程里
+}
+
+YMC_TEST(flatten_vector_matrix_kept_as_call) {
+  // vector(引用) / 3 维以上非字面量的 matrix(A) omc 留调用（simplifyVector :499-522、typeMatrixCall :1176-1191）。
+  YMC_CHECK_EQ(flatten_src("model A68dMV01\n  Real m1[3, 1] = {{1}, {2}, {3}};\n  Real v2[3] = vector(m1);\nend A68dMV01;\n"),
+               std::string("class A68dMV01\n  Real m1[1,1];\n  Real m1[2,1];\n  Real m1[3,1];\n  Real v2[1];\n  Real v2[2];\n"
+                           "  Real v2[3];\nequation\n  m1 = {{1.0}, {2.0}, {3.0}};\n  v2 = vector(m1);\nend A68dMV01;\n"));
+  YMC_CHECK_EQ(flatten_src("model A68dMV03\n  Real m3[2, 2, 1] = {{{1.0}, {2.0}}, {{3.0}, {4.0}}};\n  Real m4[2, 2];\nequation\n"
+                           "  m4 = matrix(m3);\nend A68dMV03;\n"),
+               std::string("class A68dMV03\n  Real m3[1,1,1];\n  Real m3[1,2,1];\n  Real m3[2,1,1];\n  Real m3[2,2,1];\n"
+                           "  Real m4[1,1];\n  Real m4[1,2];\n  Real m4[2,1];\n  Real m4[2,2];\nequation\n"
+                           "  m3 = {{{1.0}, {2.0}}, {{3.0}, {4.0}}};\n  m4 = matrix(m3);\nend A68dMV03;\n"));
 }
 
 YMC_TEST_MAIN
