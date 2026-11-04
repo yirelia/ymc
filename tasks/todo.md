@@ -2910,6 +2910,11 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       哈希容器用 S5b-0 的 `omc_unordered.h`：键 = `stringHashDjb2(Expression.toString)`，判等 = `Expression.isEqual`，序是插入序。driver 的 pre 模块改成 `kPre` 表按运行序接。
       评审：外部函数声明 impure、按内建打印的（`impure function f … external "C" v = sin(u)`）会被当成 sin 换，FAIL，加 `impure_builtin_equiv` 整模型 SKIP（`ponytail:`）。评审探针 s5a2b-adv（74 个，PASS 66、SKIP 3、FAIL 0）。
       留 SKIP：时钟常量 `$CLK_n`（ClockedSource 等）、枚举结果（`$FUN` 要打类型全名，Type::enum_path 只有简名）、三张表外的内建。
+- [x] (S5a-2c) 第三个 pre 模块 Early Inline（2026-11-04），门 = `(Early Inline)` 段逐字节，`--dump-after=earlyinline`、`bdae_sweep.py --stage earlyinline`。语料 a PASS 74，语料 b PASS 1008，探针 16573 个 PASS 15907，全部 FAIL 0、CRASH 0。lower 段探针 16573 个 PASS 16008；单测 inline_test 5 个，ctest 14→15。
+      内联（applyFuncExp）：实参代形参、局部按依赖序代绑定，再 combineBinaries + simplify；simplify 补了 simplifyBinaryAdd / Sub / Mul / Div 和字面量的四则。sim 方程映射两遍、初值一遍；每条 if 方程都重造起新名（isRecordOrTupleEquation 恒真）。
+      评审探针 s5a2c-adv（64 个，PASS 61、SKIP 2、FAIL 0）。
+      留 SKIP：代进字面量后要 Ceval 的调用、形参是数组 / 记录 / 函数型、体引用输出、局部无绑定、字面量除以 0；只在初值里提 `$FUN` 的模型（omc 本身不打这段）。
+      欠账：前端给 FlatFunction 记内联类型（Function.inlineBuiltin，随 extends 合并注解），删掉 driver 的 `inline_annotation_seen` 整体扫描，放开带 `Inline = false` / `LateInline` 的模型（s5b0 HshF* 11 个、LbnP036、LeiA 系）。
 - [ ] (S5a-2…) pre 模块按 NB 运行序一个个做（2026-11-03 改定，原计划按语料 a 跳着做）：Bindings → FunctionAlias → Early Inline → Simplify 1 → Alias → Simplify 2 → Remove Stream → Detect States → Events。每个模块的输入都是上一段逐字节验证过的输出，门设在每一段上。
 - [ ] (S5a) lower + NB 九个 pre 模块，按模块增量（Bindings → FunctionAlias → Early Inline → Simplify 1 → Alias → Simplify 2 →
       Remove Stream → Detect States → Events）；首批子集 `simulation/modelica/NBackend/{basics,alias,event_handling}` + equations /

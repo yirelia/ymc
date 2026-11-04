@@ -14,7 +14,7 @@
                     A2'          (After Lowering) 有数组型变量、Record 桶非空、或有 [ARRY] [FOR-] [RECD] [TUPL]
                     A5           表达式里有数组型子表达式或推导式：NB 路径不展开（NFInst.mo:324-333），默认路径展开了
                     A1           该模型压平和 omc 不一致（语料 a 的 a1_a.jsonl）
-                    <上一段>:<判定>  --stage 不是 lower 时：该模型在上一段（NB 运行序，lower → bindings → functionalias）不是 PASS，
+                    <上一段>:<判定>  --stage 不是 lower 时：该模型在上一段（NB 运行序，lower → bindings → functionalias → earlyinline）不是 PASS，
                                  这一段的输入就没验证过，不比。判定是 NOT-ADMITTED 时带上原因，所以会一层层套（bindings:NOT-ADMITTED:lower:FAIL）
                   NOT-ADMITTED 的模型 ymc 照样跑，只看是否崩溃（崩溃 = CRASH）；打出来的文本不比，no-section 而 ymc 退 0 的单列一行。
                   A2' / A5 按这一段自己的文本判（--stage bindings 时绑定方程形如数组、记录的归 A2'）；A3 不要求，这一段在手就行。
@@ -31,7 +31,7 @@ JSON 与 tools/nf_live_sweep.py 同形（{"total", "records": [{path, status, ve
   python -I tools/bdae_sweep.py --corpus b --ymc <ymc.exe>
   python -I tools/bdae_sweep.py --cases <cases.json> [--a1 <a1.jsonl>] --ymc <ymc.exe>
   python -I tools/bdae_sweep.py --probes [集名…] --ymc <ymc.exe>     # tests/probes/bdae/*.probes，现跑 omc
-  以上都可加 --stage lower|bindings|functionalias
+  以上都可加 --stage lower|bindings|functionalias|earlyinline
 
 基建工具，Claude 提供。
 """
@@ -74,7 +74,7 @@ _NUM_ARRAY = re.compile(r"^\{[-+0-9., e]*\}$")
 _TOP_L = re.compile(r"(?:^|(?:not|and) )\(*$")
 _TOP_R = re.compile(r"\)*(?: and |$)")
 # --stage 的值 = ymc --dump-after 的值 → omc 的段名。按 NB 的运行序排（NBackendDAE.mo:268-278 v1.25.0），stage_why 靠这个序找上一段。
-STAGES = {"lower": "After Lowering", "bindings": "Bindings", "functionalias": "FunctionAlias"}
+STAGES = {"lower": "After Lowering", "bindings": "Bindings", "functionalias": "FunctionAlias", "earlyinline": "Early Inline"}
 ORDER = list(STAGES)
 
 

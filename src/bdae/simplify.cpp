@@ -1,6 +1,6 @@
 // 函数名、case 顺序照 NFSimplifyExp.mo（v1.25.0），字面量运算照 NFCeval.mo。走不到的支不写，留 stop：
-//   - 数值的 BINARY：绑定走深映射 combineBinaries，+ - * / 全成了 Multary，能留下的 BINARY 只有 `^` 和 String 的 `+`（combine_binaries.cpp case 3.0 / 4.0）。
-//     ponytail: 方程是浅映射，Simplify 1 模块会看到数值 BINARY，到时候照 simplifyBinaryAdd / Sub / Mul / Div（:980-1088）补。
+//   - 数值的 BINARY：绑定走深映射 combineBinaries，+ - * / 全成了 Multary。浅映射（Early Inline 的函数体）不进 `^` 的操作数，那里留着
+//     BINARY（`(x + 1) ^ 2`），照 simplifyBinaryAdd / Sub / Mul / Div（:980-1088）移植了。两边都是字面量的只做了 `^`。
 //   - 数组、记录、Range、Size、推导式、元组：lower 的 expr_ok 挡住了。
 #include "bdae/simplify.h"
 
@@ -319,20 +319,92 @@ class Simplifier {
     return 0.0;
   }
 
-  // ---- simplifyBinary :929-978：绑定里只有 `^` 和 String 的 `+`，见文件头。
+  // ---- simplifyBinary :929-944 → simplifyBinaryOp :946-978（标量支）
 
   Id<Expr> binary(Id<Expr> id) {
     const Expr& e = a_[id];
     const Id<Expr> x = simplify(e.a), y = simplify(e.b);
     if (!stop_.empty()) return id;
     if (is_literal(x) && is_literal(y)) return eval_binary(e, x, y, id);
-    if (e.bin == BinOp::Pow) {               // simplifyBinaryPow :1090-1103
-      if (is_zero(y)) return make_number(e.ty, 1, id);
-      if (is_one(y)) return x;
-    } else if (e.bin != BinOp::Add || e.ty.kind != TypeKind::String) {
-      return stop("numeric binary expression", id);
+    switch (e.bin) {
+      case BinOp::Add: return binary_add(id, x, e.bin, y);
+      case BinOp::Sub: return binary_sub(id, x, e.bin, y);
+      case BinOp::Mul: return binary_mul(id, x, y, false);
+      case BinOp::Div: return binary_div(id, x, y);
+      case BinOp::Pow:                       // simplifyBinaryPow :1090-1103
+        if (is_zero(y)) return make_number(e.ty, 1, id);
+        if (is_one(y)) return x;
+        return make_binary(id, x, e.bin, y);
     }
-    return x == e.a && y == e.b ? id : with_operands(id, x, y);   // simplifyBinaryAdd 对 String：isZero、isNegated 都假，落到末支
+    YMC_UNREACHABLE("BinOp");
+  }
+  // BINARY(exp1, op, exp2)：运算的类型就是 at 那个节点的。没变就沿用原节点（节点可能被共用，不改）。
+  Id<Expr> make_binary(Id<Expr> at, Id<Expr> x, BinOp op, Id<Expr> y) {
+    const Expr& e = a_[at];
+    if (e.kind == ExprKind::Binary && e.bin == op && e.a == x && e.b == y) return at;
+    Expr out = e;
+    out.kind = ExprKind::Binary;
+    out.bin = op;
+    out.a = x;
+    out.b = y;
+    return a_.add(std::move(out));
+  }
+  static BinOp invert(BinOp op) { return op == BinOp::Add ? BinOp::Sub : BinOp::Add; }   // Operator.invert，只用在加减上
+  // simplifyBinaryAdd :980-1006。String 的 `+`：isZero、isNegated 都假，落到末支。
+  Id<Expr> binary_add(Id<Expr> at, Id<Expr> x, BinOp op, Id<Expr> y) {
+    if (is_zero(x)) return y;
+    if (is_zero(y)) return x;
+    if (is_negated(x)) {
+      if (is_negated(y)) return negate(make_binary(at, negate(x), op, negate(y)));   // (-e1) + (-e2) = -(e1 + e2)
+      return binary_sub(at, y, invert(op), negate(x));                               // (-e1) + e2 = e2 - e1
+    }
+    if (is_negated(y)) return binary_sub(at, x, invert(op), negate(y));             // e1 + (-e2) = e1 - e2
+    return make_binary(at, x, op, y);
+  }
+  // simplifyBinarySub :1008-1037。
+  Id<Expr> binary_sub(Id<Expr> at, Id<Expr> x, BinOp op, Id<Expr> y) {
+    if (is_zero(x)) return negate(y);
+    if (is_zero(y)) return x;
+    if (is_equal(x, y)) return make_number(a_[at].ty, 0, at);                     // makeZero(Operator.typeOf(op))
+    if (is_negated(x)) {
+      if (is_negated(y)) return make_binary(at, negate(y), op, negate(x));          // (-e1) - (-e2) = e2 - e1
+      return negate(binary_add(at, negate(x), invert(op), y));                      // (-e1) - e2 = -(e1 + e2)
+    }
+    if (is_negated(y)) return binary_add(at, x, invert(op), negate(y));             // e1 - (-e2) = e1 + e2
+    return make_binary(at, x, op, y);
+  }
+  // simplifyBinaryMul :1039-1061：只认直接的字面量 0 / 1（不看 CAST、UNARY），左边不是就换过来再看一次。
+  Id<Expr> binary_mul(Id<Expr> at, Id<Expr> x, Id<Expr> y, bool switched) {
+    const Expr& p = a_[x];
+    if ((p.kind == ExprKind::IntLit && p.ival == 0) || (p.kind == ExprKind::RealLit && p.rval == 0.0)) return x;
+    if ((p.kind == ExprKind::IntLit && p.ival == 1) || (p.kind == ExprKind::RealLit && p.rval == 1.0)) return y;
+    return switched ? make_binary(at, y, BinOp::Mul, x) : binary_mul(at, y, x, true);
+  }
+  // simplifyBinaryDiv :1063-1088。原文的符号判断两次都看 exp1（`match (isNegated(exp1), isNegated(exp1))`），照抄：只走 (true, true) 和
+  // (false, false) 两支，分子带负号时分母也被取负。
+  Id<Expr> binary_div(Id<Expr> at, Id<Expr> x, Id<Expr> y) {
+    if (is_one(y)) return x;
+    if (is_one(y, -1)) return negate(x);
+    if (is_zero(x)) {
+      // isNonZero = isPositive or isNegative（NFExpression.mo:4518-4585）：cref 要查变量的 min / max 属性，没接。
+      bool nonzero = false;
+      if (!sign_known(y, nonzero)) return stop("0 / reference", at);
+      if (nonzero) return x;
+    }
+    if (is_negated(x)) return make_binary(at, negate(x), BinOp::Div, negate(y));
+    return make_binary(at, x, BinOp::Div, y);
+  }
+  // isPositive / isNegative 不查属性的部分：字面量（经 CAST、UNARY）。碰到别的返回 false（那两个函数在 else 支也是假，只有 CREF 不是）。
+  bool sign_known(Id<Expr> id, bool& nonzero) const {
+    const Expr& e = a_[id];
+    switch (e.kind) {
+      case ExprKind::IntLit: nonzero = e.ival != 0; return true;
+      case ExprKind::RealLit: nonzero = e.rval != 0.0; return true;
+      case ExprKind::Cast:
+      case ExprKind::Unary: return sign_known(e.a, nonzero);
+      case ExprKind::Cref: return false;
+      default: nonzero = false; return true;
+    }
   }
   Id<Expr> with_operands(Id<Expr> id, Id<Expr> x, Id<Expr> y) {
     Expr out = a_[id];
@@ -340,13 +412,32 @@ class Simplifier {
     out.b = y;
     return a_.add(std::move(out));
   }
-  // Ceval.evalBinaryOp NFCeval.mo:903-1125 的标量支：默认路径折过的这里不会再来，能来的是这一遍才变成字面量的操作数。
+  // Ceval.evalBinaryOp NFCeval.mo:903-1125 的标量支：默认路径折过的这里不会再来，能来的是这一遍才变成字面量的操作数（Early Inline 代进字面量
+  // 实参，`x ^ (z / z)`）。evalBinaryAdd / Sub / Mul :965-1056、Div :1058-1093、Pow :1095-1129。Integer 照原文是 Integer 运算，溢出没核过，SKIP；
+  // 除以 0.0 在无 EvalTarget 时留成 BINARY（:1065-1075），没核过，SKIP；String 的 `+` 没用到，SKIP。
   Id<Expr> eval_binary(const Expr& e, Id<Expr> x, Id<Expr> y, Id<Expr> at) {
     const Expr& p = a_[x];
     const Expr& q = a_[y];
-    if (e.bin == BinOp::Pow && p.kind == ExprKind::RealLit && q.kind == ExprKind::RealLit) {
-      if (p.rval < 0 && std::trunc(q.rval) != q.rval) return with_operands(at, x, y);   // :1103 负底非整指数，留着
-      return real(std::pow(p.rval, q.rval));
+    if (p.kind == ExprKind::RealLit && q.kind == ExprKind::RealLit) {
+      switch (e.bin) {
+        case BinOp::Add: return real(p.rval + q.rval);
+        case BinOp::Sub: return real(p.rval - q.rval);
+        case BinOp::Mul: return real(p.rval * q.rval);
+        case BinOp::Div:
+          if (q.rval == 0.0) return stop("literal division by zero", at);
+          return real(p.rval / q.rval);
+        case BinOp::Pow:
+          if (p.rval < 0 && std::trunc(q.rval) != q.rval) return with_operands(at, x, y);   // :1103 负底非整指数，留着
+          return real(std::pow(p.rval, q.rval));
+      }
+    }
+    if (p.kind == ExprKind::IntLit && q.kind == ExprKind::IntLit && e.bin != BinOp::Div && e.bin != BinOp::Pow) {
+      // 结果落在 2^53 以内才算：这个范围里没有溢出，和 Real 上算的也一致（同 combine_constants）。
+      const double v = e.bin == BinOp::Add   ? static_cast<double>(p.ival) + static_cast<double>(q.ival)
+                       : e.bin == BinOp::Sub ? static_cast<double>(p.ival) - static_cast<double>(q.ival)
+                                             : static_cast<double>(p.ival) * static_cast<double>(q.ival);
+      if (std::abs(v) >= kMaxExactInt) return stop("integer constant out of the exact Real range", at);
+      return integer(e.bin == BinOp::Add ? p.ival + q.ival : e.bin == BinOp::Sub ? p.ival - q.ival : p.ival * q.ival);
     }
     return stop("literal binary expression", at);
   }

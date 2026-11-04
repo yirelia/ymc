@@ -51,7 +51,7 @@ ADR-008 的 S5a 按模块增量推进，动手前用实跑数据回答：哪些�
 |---|---|---|
 | Bindings | 2 / 2 | 218 / 218 |
 | FunctionAlias | 16 / 16（S5a-2b 实测非恒等 PASS 22） | 101 / 101（实测 105） |
-| Early Inline | 6 / 0 | 52 / 1 |
+| Early Inline | 6 / 0（S5a-2c 实测非恒等 PASS 6） | 52 / 1（实测 56） |
 | Simplify 1 | 18 / 0 | 88 / 3 |
 | Alias | 26 / 26 | 398 / 397 |
 | Simplify 2 | 0 / 0 | 58 / 1 |

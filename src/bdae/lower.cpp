@@ -105,6 +105,9 @@ class Lowerer {
   // 被调用户函数的性质，给 FunctionAlias 用（见 UserFunction）。函数至多一个算法段（多个时 omc 报错，见 flatten 的 collect_fn_sig），
   // 所以 hasSingleOrEmptyBody 对非外部函数恒真，只剩"体恰是一条 ASSIGNMENT"（getBody NFFunction.mo:2078-2081、:2656-2681）；
   // 元组赋值在 NF 里也是 ASSIGNMENT，FlatStmtKind::Assign 同样包含它。
+  //
+  // Early Inline 还要形参、局部和体（applyFuncExp NBReplacements.mo:296-331）：输入按 fn.inputs 的序、局部按 fn.locals 的序（sortLocals 排过，
+  // params 里就是这个序），体是那条赋值的右边。函数体的式子和模型的在同一个 arena 里，Id 原样有效。
   void functions() {
     for (const FlatFunction& f : m_.functions) {
       UserFunction u;
@@ -113,9 +116,34 @@ class Lowerer {
       u.record_ctor = f.is_record_ctor;
       u.no_output = std::none_of(f.params.begin(), f.params.end(), [](const FlatFuncParam& p) { return p.direction == FlatDirection::Output; });
       u.inlineable = !f.is_external && f.body.size() == 1 && m_.stmts[f.body[0]].kind == FlatStmtKind::Assign;
+      if (u.inlineable) inline_shape(f, u);
       r_.dae.functions.push_back(std::move(u));
     }
     r_.dae.impure_builtin_equiv = m_.impure_builtin_equiv;
+  }
+  // 能内联的函数：抄形参、局部、体；形状超出标量的记在 not_inlinable（只有真要内联它时才 SKIP，FunctionAlias 只看 inlineable）。
+  // - 数组形参要重新定型（applyFuncExp :327-329），记录形参还要配子量（addInputArgTpl :343-397），函数型形参、外部对象都走不到标量门里。
+  // - 元组赋值（多输出）在单值位置是 TUPLE_ELEMENT，lower 本来就挡；这里一并不收。
+  // ponytail: 放开数组、记录时照 :327-329、:343-397 补。
+  void inline_shape(const FlatFunction& f, UserFunction& u) {
+    int outputs = 0;
+    for (const FlatFuncParam& p : f.params) {
+      const TypeKind k = p.ty.kind;
+      if (p.ty.is_array() || !p.type_path.empty() ||
+          (k != TypeKind::Real && k != TypeKind::Integer && k != TypeKind::Boolean && k != TypeKind::String)) {
+        u.not_inlinable = "function parameter type";
+        return;
+      }
+      if (p.direction == FlatDirection::Input) u.inputs.push_back(p.name);
+      else if (p.direction == FlatDirection::Output) ++outputs;
+      else u.locals.push_back({p.name, p.binding});
+    }
+    const FlatStatement& s = m_.stmts[f.body[0]];
+    if (outputs != 1 || r_.dae.exprs[s.a].kind != ExprKind::Cref) {
+      u.not_inlinable = "function with several outputs";
+      return;
+    }
+    u.body = s.b;
   }
 
   // lowerVariableKind :728-770。Clock、外部对象、记录走不到这里（variable() 先拦），数组同。

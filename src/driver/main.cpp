@@ -23,6 +23,8 @@
 //       同上，再跑 pre 模块 Bindings，打 `BackendDAE: (Bindings)` 一段。
 //   ymc --dump-after=functionalias (<file.mo> | --load-model=P --class=Q.N)
 //       同上，Bindings 之后再跑 FunctionAlias，打 `BackendDAE: (FunctionAlias)` 一段。
+//   ymc --dump-after=earlyinline (<file.mo> | --load-model=P --class=Q.N)
+//       同上，FunctionAlias 之后再跑 Early Inline，打 `BackendDAE: (Early Inline)` 一段。
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -44,6 +46,7 @@
 #include "bdae/bdae_dump.h"
 #include "bdae/bindings.h"
 #include "bdae/function_alias.h"
+#include "bdae/inline.h"
 #include "bdae/lower.h"
 #include "parse/lexer.h"
 #include "parse/parser.h"
@@ -79,6 +82,7 @@ void print_help() {
       "  ymc --dump-after=lower <f>     flatten + lower, print the (After Lowering) section (S5)\n"
       "  ymc --dump-after=bindings <f>  lower + the Bindings module, print the (Bindings) section (S5)\n"
       "  ymc --dump-after=functionalias <f>  ... + the FunctionAlias module, print the (FunctionAlias) section (S5)\n"
+      "  ymc --dump-after=earlyinline <f>    ... + the Early Inline module, print the (Early Inline) section (S5)\n"
       "  ymc --check-syntax <f>...      syntax check only\n"
       "  ymc --dump-tokens <f>          print token stream\n"
       "  ymc --log=parse                trace parser rule entries to stderr\n"
@@ -247,7 +251,33 @@ const char* backend_stage(const char* mode) {
   if (std::strcmp(mode, "dump-after=lower") == 0) return "After Lowering";
   if (std::strcmp(mode, "dump-after=bindings") == 0) return "Bindings";
   if (std::strcmp(mode, "dump-after=functionalias") == 0) return "FunctionAlias";
+  if (std::strcmp(mode, "dump-after=earlyinline") == 0) return "Early Inline";
   return nullptr;
+}
+
+// 载入的类里有没有函数带改内联类型的注解（InstUtil.isInlineFunc2 InstUtil.mo:4681-4736 v1.25.0）：Inline 不是字面量 true（false → NO_INLINE），
+// 或者 LateInline / InlineAfterIndexReduction 一类（→ AFTER_INDEX_RED_INLINE）。这两类函数 Early Inline 不内联（实跑探针 LeiA 系），
+// FlatFunction 不带内联类型，只好整个扫一遍：注解随 extends 合并（mergeFunctionAnnotations NFFunction.mo:2494），按类名对不上，扫全部最稳。
+// `__OpenModelica_EarlyInline` 前端已经挡了（fn_annotation_blocks）。ponytail: 前端给 FlatFunction 记上内联类型后删掉。
+bool inline_annotation_seen(const ymc::SCode& sc, const ymc::Interner& in) {
+  for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(sc.elems.size()); ++i) {
+    const ymc::SElement& e = sc.elems[ymc::Id<ymc::SElement>::from_index(i)];
+    if (e.kind != ymc::SElementKind::Class || !e.cmt.annotation.is_valid()) continue;
+    if (e.restriction != ymc::SRestriction::Function && e.restriction != ymc::SRestriction::ExternalFunction &&
+        e.restriction != ymc::SRestriction::OperatorFunction)
+      continue;
+    for (const ymc::SSubMod& sm : sc.mods[e.cmt.annotation].subs) {
+      const std::string_view n = in.str(sm.ident);
+      if (n == "Inline") {
+        const ymc::Id<ymc::Exp> b = sm.mod.is_valid() ? sc.mods[sm.mod].binding : ymc::Id<ymc::Exp>{};
+        if (!b.is_valid() || sc.absyn.exps[b].kind != ymc::ExpKind::BoolLit || !sc.absyn.exps[b].bval) return true;
+      } else if (n == "LateInline" || n == "InlineAfterIndexReduction" || n == "__MathCore_InlineAfterIndexReduction" ||
+                 n == "__Dymola_InlineAfterIndexReduction") {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 // S3：实例化 + 压平 + dump（默认 `ymc X.mo`，对齐 `omc X.mo`：压平文件里最后一个顶层类）。
@@ -299,7 +329,9 @@ int dump_flat_pipeline(ymc::Absyn& absyn, ymc::Diagnostics& diags, ymc::Interner
     static constexpr PreModule kPre[] = {
         {"Bindings", "bindings", &ymc::bdae::bindings},
         {"FunctionAlias", "function alias", &ymc::bdae::function_alias},
+        {"Early Inline", "early inline", &ymc::bdae::early_inline},
     };
+    lr.dae.inline_annotation_seen = inline_annotation_seen(scode, interner);
     if (std::strcmp(stage, "After Lowering") != 0) {
       for (const PreModule& m : kPre) {
         const ymc::bdae::ModuleResult r = m.run(lr.dae, interner);
@@ -468,6 +500,7 @@ int main(int argc, char** argv) {
     else if (std::strcmp(a, "--dump-after=lower") == 0) opt.mode = "dump-after=lower";
     else if (std::strcmp(a, "--dump-after=bindings") == 0) opt.mode = "dump-after=bindings";
     else if (std::strcmp(a, "--dump-after=functionalias") == 0) opt.mode = "dump-after=functionalias";
+    else if (std::strcmp(a, "--dump-after=earlyinline") == 0) opt.mode = "dump-after=earlyinline";
     else if (std::strcmp(a, "--dump-after=scode") == 0) opt.mode = "dump-after=scode";
     else if (std::strncmp(a, "--class=", 8) == 0) opt.dump_class = a + 8;
     else if (std::strcmp(a, "--check-syntax") == 0) opt.mode = "check-syntax";

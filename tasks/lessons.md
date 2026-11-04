@@ -650,3 +650,19 @@
 ## 2026-11-03 — omc 的展开先作用于运算数
 - 模式：expandBinaryPowMatrix 先 `expand(exp1)` 再求幂，n = 1 时返回展开后的矩阵；68c 的 matrix_pow 在 n = 1 直接返回原式，评审探针 `A ^ 1` 抓到。
 - 规则：照 omc 递归写的特例（n = 0、n = 1、空表）逐个看它返回的是展开前还是展开后的东西。
+
+## 2026-11-04 — 门里 grep 中文行要 UTF-8
+- 模式：bdae_sweep 打的"omc 没有这一段、ymc 打了"在 GBK 控制台下经管道成了乱码，gate.sh / precheck.sh 的 `grep "ymc 打了"` 抓不到它，gatem5a2a / m5a2b / m68c 的输出里都没有这一行（S5a-2c 代理发现）。从 JSON 数回去，历来基线都是 0，没有漏掉的问题。
+- 规则：门里经管道 grep 中文的 python 一律加 `-X utf8`；关键计数从 JSON 数，不靠 stdout。
+
+## 2026-11-04 — 下游段的 no-section 要逐族核
+- 模式：上一段 PASS 的模型到 Early Inline 没了这一段：FunctionAlias 只在初值里提的 `$FUN` 是 PARAMETER、不进 variables，omc 在这个模块失败。门只数 FAIL 的话，这类模型 ymc 照打就是"omc 没有、ymc 打了"。
+- 规则：每加一个下游段，把"上一段 PASS、这一段 no-section"的逐族实跑核原因，ymc 照 omc 不打。
+
+## 2026-11-04 — 按 omc 的行为，不按函数名
+- 模式：`IfEquationBody.isRecordOrTupleEquation` 第二支 `_ :: _` 对任何非空体都成立，所以每条 if 方程都被重造、改名；看名字会以为只碰记录和元组。
+- 规则：判定函数逐支读完，再用实跑确认。
+
+## 2026-11-04 — 构建期间不改头
+- 模式：构建中途改了 bdae.h，正在编的 TU 用旧布局编完，obj 的时间戳反而比头新，下一次构建不重编，运行时 Symbol 断言。
+- 规则：构建跑着时不改头；改了就 touch 所有包含它的 TU 再编。

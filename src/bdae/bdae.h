@@ -100,14 +100,26 @@ struct EqnData {
   EqnSet simulation, continuous, discretes, initials, removed;
 };
 
-// 被调用户函数里 FunctionAlias 判"换不换"要看的性质（checkCallReplacement / replaceException NBFunctionAlias.mo:478-520 v1.25.0），lower 从
-// FlatModel::functions 抄过来。内建函数不在这里（DAE dump 不打印它们，FlatModel 也就没有），按调用名判。
+// 函数的 protected 局部（Function.locals，NFFunction.sortLocals 排过的依赖序，FlatFunction::params 里同序）。
+struct FunctionLocal {
+  Symbol name;
+  Id<Expr> binding;           // 无 = invalid（Early Inline 代成 WILD，NBReplacements.mo:315-318）
+};
+
+// 被调用户函数里 FunctionAlias 判"换不换"、Early Inline 内联要看的东西（checkCallReplacement / replaceException NBFunctionAlias.mo:478-520、
+// NBReplacements.applyFuncExp NBReplacements.mo:280-341 v1.25.0），lower 从 FlatModel::functions 抄过来。内建函数不在这里（DAE dump 不打印它们，
+// FlatModel 也就没有），按调用名判。
 struct UserFunction {
   std::vector<Symbol> name;   // 压平名，= 调用的 call_name
   bool impure = false;        // Function.isImpure：声明的，加上体里顶层调 impure 函数后标的（同 DAE dump 的 `impure function`）
   bool record_ctor = false;   // Function.isDefaultRecordConstructor
   bool no_output = false;     // listEmpty(fn.outputs)
   bool inlineable = false;    // Inline.functionInlineable（NBInline.mo:145-158）：不是外部函数，体恰是一条赋值语句
+  // 以下只在 inlineable 时有意义。
+  std::vector<Symbol> inputs;          // fn.inputs 的序（= 调用实参的序：定型后的调用补齐了缺省实参）
+  std::vector<FunctionLocal> locals;
+  Id<Expr> body;                       // 那条赋值的右边（getFunctionBody NBReplacements.mo:399-419）
+  std::string not_inlinable;           // 非空 = 形参 / 局部有数组、记录、函数型，体不能代：内联到它就 SKIP，值是原因
 };
 
 struct BackendDAE {
@@ -115,6 +127,10 @@ struct BackendDAE {
   EqnData eqns;
   std::vector<UserFunction> functions;
   bool impure_builtin_equiv = false;   // 同 FlatModel::impure_builtin_equiv
+  // 载入的类里有函数写了 Inline = false / LateInline / InlineAfterIndexReduction 一类注解（driver 扫 SCode 置位）。FlatFunction 不带
+  // 内联类型（Function.inlineBuiltin NFFunction.mo:1990-1999、InstUtil.commentIsInlineFunc InstUtil.mo:4666-4736），哪个函数带分不出，
+  // 置位时 Early Inline 遇到要内联的调用就 SKIP。ponytail: 前端给 FlatFunction 记上内联类型后删掉，按函数判。
+  bool inline_annotation_seen = false;
   Arena<Var> var_arena;
   Arena<Eqn> eqn_arena;
   ExprArena exprs;

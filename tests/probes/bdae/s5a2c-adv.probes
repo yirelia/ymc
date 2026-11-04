@@ -1,0 +1,642 @@
+//// set: s5a2c-adv — S5a-2c 评审时主代理手写的对抗形状（不来自 s5a2c 的生成器）。Eia 前缀：命名实参乱序、缺省实参引用别的输入、局部依赖序与声明序不同、包里的函数、外部包常量、内建里套、FunctionAlias 先提再内联、两个函数互调、递归的 sim / 初值层数、各类方程位置、if 方程每支多条、嵌套 if、初值 if、整数 / 布尔 / 字符串体、化简特例（u - u、0 / u、负号）、注解组合（Inline = true + smoothOrder、只别的函数带 Inline = false）、impure 单赋值、零实参。比对走 tools/bdae_sweep.py --probes s5a2c-adv --stage earlyinline。
+//// model: EiaNamed1
+model EiaNamed1
+  function f input Real a; input Real b; output Real c; algorithm c := a - 2 * b; end f;
+  Real x, y;
+equation
+  x = f(b = time, a = 1.5);
+  y = f(b = x, a = time);
+end EiaNamed1;
+//// model: EiaDefault1
+model EiaDefault1
+  function f input Real a; input Real b = a * 3; output Real c; algorithm c := a + b; end f;
+  Real x, y;
+equation
+  x = f(time);
+  y = f(time, x);
+end EiaDefault1;
+//// model: EiaDefault2
+model EiaDefault2
+  function f input Real a; input Real b = 2; input Real k = b + 1; output Real c; algorithm c := a * k + b; end f;
+  Real x, y;
+equation
+  x = f(time);
+  y = f(time, k = 4);
+end EiaDefault2;
+//// model: EiaLocalOrder1
+model EiaLocalOrder1
+  function f input Real a; output Real c; protected Real w = v + 1; Real v = a * 2; algorithm c := w * v; end f;
+  Real x;
+equation
+  x = f(time);
+end EiaLocalOrder1;
+//// model: EiaLocalOrder2
+model EiaLocalOrder2
+  function f input Real a; output Real c; protected Real v = a * 2; Real w = v + a; Real z = w - v; algorithm c := z / a; end f;
+  Real x;
+equation
+  x = f(time + 1);
+end EiaLocalOrder2;
+//// model: EiaPkg1
+package EiaPkg1P
+  constant Real k = 2.5;
+  function f input Real a; output Real c; algorithm c := a * k; end f;
+end EiaPkg1P;
+model EiaPkg1
+  Real x, y;
+equation
+  x = EiaPkg1P.f(time);
+  y = EiaPkg1P.f(x) + EiaPkg1P.k;
+end EiaPkg1;
+//// model: EiaPkg2
+model EiaPkg2
+  package Q
+    constant Integer n = 3;
+    function g input Real a; output Real c; algorithm c := a ^ n; end g;
+  end Q;
+  Real x;
+equation
+  x = Q.g(time);
+end EiaPkg2;
+//// model: EiaBuiltin1
+model EiaBuiltin1
+  function f input Real a; output Real c; algorithm c := a * a - 1; end f;
+  Real x, y, z, w;
+equation
+  x = abs(f(time));
+  y = noEvent(f(time));
+  z = smooth(1, f(time));
+  w = homotopy(f(time), time);
+end EiaBuiltin1;
+//// model: EiaBuiltin2
+model EiaBuiltin2
+  function f input Real a; output Real c; algorithm c := sin(a) + cos(2 * a); end f;
+  Real x, y;
+equation
+  x = f(time);
+  y = f(sin(time));
+end EiaBuiltin2;
+//// model: EiaBuiltin3
+model EiaBuiltin3
+  function f input Real a; output Real c; algorithm c := max(a, 0.0) + min(a, 1.0); end f;
+  Real x;
+equation
+  x = f(time - 0.5);
+end EiaBuiltin3;
+//// model: EiaMutual1
+model EiaMutual1
+  function g input Real a; output Real c; algorithm c := a + 1; end g;
+  function f input Real a; output Real c; algorithm c := 2 * g(a); end f;
+  Real x;
+equation
+  x = f(time);
+end EiaMutual1;
+//// model: EiaMutual2
+model EiaMutual2
+  function g input Real a; output Real c; algorithm c := a + 1; end g;
+  function f input Real a; output Real c; algorithm c := g(g(a)); end f;
+  Real x;
+initial equation
+  x = f(1.0 * time);
+equation
+  der(x) = f(x);
+end EiaMutual2;
+//// model: EiaMutual3
+model EiaMutual3
+  function h input Real a; output Real c; algorithm c := a * 3; end h;
+  function g input Real a; output Real c; algorithm c := h(a) + 1; end g;
+  function f input Real a; output Real c; algorithm c := g(a) - 1; end f;
+  Real x;
+equation
+  x = f(time);
+end EiaMutual3;
+//// model: EiaRec1
+model EiaRec1
+  function fac input Integer n; output Integer r; algorithm r := if n <= 1 then 1 else n * fac(n - 1); end fac;
+  Integer k(start = 0, fixed = true);
+  Integer m;
+equation
+  when sample(0, 0.1) then k = pre(k) + 1; end when;
+  m = fac(k);
+end EiaRec1;
+//// model: EiaRec2
+model EiaRec2
+  function s input Real a; input Integer n; output Real r; algorithm r := if n <= 0 then a else a + s(a, n - 1); end s;
+  Real x(start = 1, fixed = false);
+initial equation
+  x = s(time + 1, 3);
+equation
+  der(x) = -s(x, 2);
+end EiaRec2;
+//// model: EiaPos1
+model EiaPos1
+  function f input Real a; output Real c; algorithm c := a + 2; end f;
+  Real x, y;
+equation
+  f(x) = time;
+  0 = f(y) - x;
+end EiaPos1;
+//// model: EiaPos2
+model EiaPos2
+  function f input Real a; output Real c; algorithm c := a * 0.5; end f;
+  Real x(start = 0, fixed = true);
+  discrete Real d(start = 0, fixed = true);
+equation
+  der(x) = 1;
+  when f(x) > 0.2 then
+    d = f(pre(d)) + f(x);
+  end when;
+end EiaPos2;
+//// model: EiaPos3
+model EiaPos3
+  function f input Real a; output Real c; algorithm c := a * 0.5; end f;
+  Real x(start = 1, fixed = true);
+equation
+  der(x) = -x;
+  when x < f(0.8) then
+    reinit(x, f(x) + 1);
+  end when;
+end EiaPos3;
+//// model: EiaPos4
+model EiaPos4
+  function f input Real a; output Real c; algorithm c := a - 1; end f;
+  Real x, y;
+algorithm
+  x := f(time);
+  y := 0;
+  for i in 1:3 loop
+    y := y + f(i * x);
+  end for;
+  while f(y) > 10 loop
+    y := y - 1;
+  end while;
+  assert(f(x) < 100, "big");
+end EiaPos4;
+//// model: EiaPos5
+model EiaPos5
+  function f input Real a; output Real c; algorithm c := a * a; end f;
+  Real x, y;
+equation
+  x = time;
+  if f(x) > 0.25 then
+    y = f(x) + 1;
+  else
+    y = f(-x);
+  end if;
+end EiaPos5;
+//// model: EiaPos6
+model EiaPos6
+  function f input Real a; output Real c; algorithm c := a + 10; end f;
+  parameter Real p = 2;
+  Real x(start = f(p), fixed = true);
+  Real y = f(time);
+equation
+  der(x) = -f(x) * p;
+end EiaPos6;
+//// model: EiaPos7
+model EiaPos7
+  function f input Real a; output Real c; algorithm c := a + 10; end f;
+  Real x;
+  Boolean b;
+equation
+  x = if f(time) > 10.5 then f(time) else -f(time);
+  b = f(x) > 11 and time > 0.2;
+end EiaPos7;
+//// model: EiaFA1
+model EiaFA1
+  function f input Real a; output Real c; algorithm c := a * 2 + 1; end f;
+  Real x, y;
+equation
+  x = f(sin(time)) + sin(time);
+  y = f(cos(time) * 2);
+end EiaFA1;
+//// model: EiaFA2
+model EiaFA2
+  function f input Real a; output Real c; algorithm c := sin(a) * 2; end f;
+  Real x, y;
+equation
+  x = f(time) + sin(time);
+  y = sin(time) * f(x);
+end EiaFA2;
+//// model: EiaFA3
+model EiaFA3
+  function f input Real a; output Real c; algorithm c := a + 1; end f;
+  function g input Real a; output Real c; algorithm c := a; c := c + 1; end g;
+  Real x, y;
+equation
+  x = f(g(time));
+  y = g(f(time));
+end EiaFA3;
+//// model: EiaIf1
+model EiaIf1
+  Real x, y, z;
+equation
+  z = time;
+  if time > 0.5 then
+    x = 1;
+    y = 2;
+  else
+    x = 3;
+    y = time;
+  end if;
+end EiaIf1;
+//// model: EiaIf2
+model EiaIf2
+  Real x, y;
+equation
+  if time > 0.5 then
+    x = 1;
+  elseif time > 0.2 then
+    x = 2;
+  else
+    x = 3;
+  end if;
+  if time < 0.1 then
+    y = x;
+  else
+    y = -x;
+  end if;
+end EiaIf2;
+//// model: EiaIf3
+model EiaIf3
+  Real x, y;
+equation
+  if time > 0.5 then
+    if time > 0.7 then
+      x = 1;
+    else
+      x = 2;
+    end if;
+    y = 0;
+  else
+    x = 3;
+    y = 1;
+  end if;
+end EiaIf3;
+//// model: EiaIf4
+model EiaIf4
+  parameter Boolean b = true;
+  Real x(start = 0, fixed = false);
+initial equation
+  if b then
+    x = 1;
+  else
+    x = 2;
+  end if;
+equation
+  der(x) = if time > 0.5 then 1 else -1;
+end EiaIf4;
+//// model: EiaIf5
+model EiaIf5
+  function f input Real a; output Real c; algorithm c := a * 3; end f;
+  Real x(start = 0, fixed = false), y;
+initial equation
+  if time > 0 then
+    x = f(1);
+  else
+    x = f(time);
+  end if;
+equation
+  der(x) = 1;
+  if x > 1 then
+    y = f(x);
+  else
+    y = f(-x);
+  end if;
+end EiaIf5;
+//// model: EiaIf6
+model EiaIf6
+  Real x, y;
+  Integer k;
+equation
+  x = time;
+  if x > 0.5 then
+    k = 1;
+    y = 2;
+  else
+    k = 0;
+    y = 3;
+  end if;
+end EiaIf6;
+//// model: EiaIf7
+model EiaIf7
+  Real x, y, z;
+equation
+  if time > 0.5 then
+    x = 1;
+  else
+    x = 2;
+  end if;
+  y = x + 1;
+  if time > 0.3 then
+    z = 1;
+  else
+    z = y;
+  end if;
+end EiaIf7;
+//// model: EiaT1
+model EiaT1
+  function fi input Integer a; output Integer c; algorithm c := 2 * a + 1; end fi;
+  function fb input Real a; output Boolean c; algorithm c := a > 0.5 or a < -0.5; end fb;
+  Integer j, k(start = 0, fixed = true);
+  Boolean b;
+equation
+  when sample(0, 0.1) then k = pre(k) + 1; end when;
+  j = fi(k);
+  b = fb(time);
+end EiaT1;
+//// model: EiaT2
+model EiaT2
+  function fs input Real a; output String c; algorithm c := "v" + String(a); end fs;
+  function fd input Integer a; output Integer c; algorithm c := div(a, 2) + mod(a, 3); end fd;
+  Integer k(start = 0, fixed = true), m;
+equation
+  when sample(0, 0.1) then k = pre(k) + 1; end when;
+  m = fd(k);
+  assert(time < 2, fs(time));
+end EiaT2;
+//// model: EiaT3
+model EiaT3
+  function fr input Integer a; output Real c; algorithm c := a / 2; end fr;
+  Integer k(start = 0, fixed = true);
+  Real x;
+equation
+  when sample(0, 0.1) then k = pre(k) + 1; end when;
+  x = fr(k) + time;
+end EiaT3;
+//// model: EiaS1
+model EiaS1
+  function f input Real a; input Real b; output Real c; algorithm c := a - b; end f;
+  Real x, y;
+equation
+  x = f(time, time);
+  y = f(x, 0);
+end EiaS1;
+//// model: EiaS2
+model EiaS2
+  function f input Real a; input Real b; output Real c; algorithm c := a / b; end f;
+  Real x, y, z;
+equation
+  x = f(time, 1);
+  y = f(time, -1);
+  z = f(0, time + 1);
+end EiaS2;
+//// model: EiaS3
+model EiaS3
+  function f input Real a; input Real b; output Real c; algorithm c := a * b; end f;
+  Real x, y, z;
+equation
+  x = f(time, 0);
+  y = f(1, time);
+  z = f(-time, -x);
+end EiaS3;
+//// model: EiaS4
+model EiaS4
+  function f input Real a; input Real b; output Real c; algorithm c := a + b; end f;
+  Real x, y, z;
+equation
+  x = f(-time, -1);
+  y = f(-time, 2);
+  z = f(time, -x);
+end EiaS4;
+//// model: EiaS5
+model EiaS5
+  function f input Real a; output Real c; algorithm c := a ^ 2 + a ^ 0 + a ^ 1; end f;
+  Real x, y;
+equation
+  x = f(time);
+  y = f(2.0);
+end EiaS5;
+//// model: EiaS6
+model EiaS6
+  function f input Real a; input Real b; output Real c; algorithm c := (a + 1) * (b - 1) / (a - b); end f;
+  Real x;
+equation
+  x = f(time, 3);
+end EiaS6;
+//// model: EiaS7
+model EiaS7
+  function f input Real a; output Real c; algorithm c := -a; end f;
+  Real x, y;
+equation
+  x = f(-time);
+  y = f(f(time)) + f(x);
+end EiaS7;
+//// model: EiaS8
+model EiaS8
+  function f input Integer a; input Integer b; output Integer c; algorithm c := a * b - a + b; end f;
+  Integer k(start = 0, fixed = true), m, n;
+equation
+  when sample(0, 0.1) then k = pre(k) + 1; end when;
+  m = f(k, 3);
+  n = f(2, 5);
+end EiaS8;
+//// model: EiaA1
+model EiaA1
+  function f input Real a; output Real c; algorithm c := a + 1; annotation(Inline = true, smoothOrder = 2); end f;
+  Real x;
+equation
+  x = f(time);
+end EiaA1;
+//// model: EiaA2
+model EiaA2
+  function f input Real a; output Real c; algorithm c := a + 1; end f;
+  function g input Real a; output Real c; algorithm c := a + 2; annotation(Inline = false); end g;
+  Real x, y;
+equation
+  x = f(time);
+  y = g(time);
+end EiaA2;
+//// model: EiaA3
+model EiaA3
+  function f input Real a; output Real c; algorithm c := a + 1; annotation(LateInline = true); end f;
+  Real x;
+equation
+  x = f(time);
+end EiaA3;
+//// model: EiaA4
+model EiaA4
+  function f input Real a; output Real c; algorithm c := a + 1; annotation(smoothOrder = 1); end f;
+  function g input Real a; output Real c; algorithm c := a * 2; annotation(derivative = gd); end g;
+  function gd input Real a; input Real da; output Real c; algorithm c := 2 * da; end gd;
+  Real x, y;
+equation
+  x = f(time);
+  y = g(time);
+end EiaA4;
+//// model: EiaImp1
+model EiaImp1
+  impure function f input Real a; output Real c; algorithm c := a + 1; end f;
+  Real x;
+equation
+  x = f(time);
+end EiaImp1;
+//// model: EiaZero1
+model EiaZero1
+  function f output Real c; algorithm c := 4.5; end f;
+  function g output Real c; protected Real w = 2; algorithm c := w * 3; end g;
+  Real x, y;
+equation
+  x = f() * time;
+  y = g() + time;
+end EiaZero1;
+//// model: EiaCast1
+model EiaCast1
+  function f input Real a; output Real c; algorithm c := a * 2; end f;
+  Integer k(start = 0, fixed = true);
+  Real x;
+equation
+  when sample(0, 0.1) then k = pre(k) + 1; end when;
+  x = f(k);
+end EiaCast1;
+//// model: EiaNoFun1
+model EiaNoFun1
+  Real x, y;
+  discrete Real d(start = 0, fixed = true);
+equation
+  x = time;
+  when x > 0.5 then
+    d = x;
+  end when;
+  if d > 0 then
+    y = d;
+  else
+    y = x;
+  end if;
+end EiaNoFun1;
+//// model: EiaDiscIf1
+model EiaDiscIf1
+  Integer k(start = 0, fixed = true), m;
+  Real x;
+equation
+  when sample(0, 0.1) then k = pre(k) + 1; end when;
+  if k > 3 then
+    m = 1;
+  else
+    m = 2;
+  end if;
+  x = m * time;
+end EiaDiscIf1;
+//// model: EiaParamIf1
+model EiaParamIf1
+  parameter Real p = 1;
+  Real x;
+equation
+  if p > 0 then
+    x = time;
+  else
+    x = -time;
+  end if;
+end EiaParamIf1;
+//// model: EiaStatePar1
+model EiaStatePar1
+  function f input Real a; input Real b; output Real c; algorithm c := a * b; end f;
+  parameter Real p = 3;
+  parameter Real q = f(p, 2);
+  Real x(start = 1, fixed = true);
+equation
+  der(x) = f(x, p) + f(q, time);
+end EiaStatePar1;
+//// model: EiaIfExp1
+model EiaIfExp1
+  function f input Real a; output Real c; algorithm c := if a > 0 then a else -a; end f;
+  Real x, y;
+equation
+  x = f(time - 0.5);
+  y = f(x) * f(-x);
+end EiaIfExp1;
+//// model: EiaNoEvt1
+model EiaNoEvt1
+  function f input Real a; output Real c; algorithm c := noEvent(if a > 0 then sqrt(a) else 0); end f;
+  Real x;
+equation
+  x = f(time - 0.5);
+end EiaNoEvt1;
+//// model: EiaBool1
+model EiaBool1
+  function f input Boolean a; input Real b; output Real c; algorithm c := if a then b else 2 * b; end f;
+  Boolean u;
+  Real x;
+equation
+  u = time > 0.5;
+  x = f(u, time) + f(true, time) + f(not u, 1);
+end EiaBool1;
+//// model: EiaStr1
+model EiaStr1
+  function f input String s; input Real a; output Real c; algorithm c := a + 1; end f;
+  Real x;
+equation
+  x = f("abc", time);
+end EiaStr1;
+//// model: EiaWhenInit1
+model EiaWhenInit1
+  function f input Real a; output Real c; algorithm c := a + 1; end f;
+  discrete Real d;
+equation
+  when initial() then
+    d = f(time);
+  elsewhen time > 0.5 then
+    d = f(pre(d));
+  end when;
+end EiaWhenInit1;
+//// model: EiaAlgWhen1
+model EiaAlgWhen1
+  function f input Real a; output Real c; algorithm c := a * 2; end f;
+  discrete Real d(start = 0, fixed = true);
+  Real x;
+equation
+  x = time;
+algorithm
+  when x > f(0.2) then
+    d := f(x);
+  end when;
+end EiaAlgWhen1;
+//// model: EiaAlgIf1
+model EiaAlgIf1
+  function f input Real a; output Real c; algorithm c := a - 3; end f;
+  Real y;
+algorithm
+  if f(time) > -2.5 then
+    y := f(time);
+  elseif time > 0.1 then
+    y := 0;
+  else
+    y := f(-time);
+  end if;
+end EiaAlgIf1;
+//// model: EiaIfMix1
+model EiaIfMix1
+  function f input Real a; output Real c; algorithm c := a * a; end f;
+  Real x(start = 0, fixed = false), y;
+initial equation
+  if time >= 0 then
+    x = 0.5;
+  else
+    x = f(time);
+  end if;
+equation
+  der(x) = 0.1;
+  if f(x) > 1 then
+    y = 1;
+  elseif x > 0.2 then
+    y = f(x);
+  else
+    y = 0;
+  end if;
+end EiaIfMix1;
+//// model: EiaDeep1
+model EiaDeep1
+  function f input Real a; output Real c; algorithm c := a + 1; end f;
+  Real x;
+equation
+  x = f(f(f(f(time))));
+end EiaDeep1;
+//// model: EiaDeep2
+model EiaDeep2
+  function f input Real a; output Real c; algorithm c := a + 1; end f;
+  Real x(start = 0, fixed = false);
+initial equation
+  x = f(f(f(time)));
+equation
+  der(x) = f(f(f(x)));
+end EiaDeep2;

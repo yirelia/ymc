@@ -321,6 +321,8 @@ Bindings（`Modules/2_Pre/NBBindings.mo:50`）、FunctionAlias（`NBFunctionAlia
 - **Q3 再答一段（S5a-2a）**：`(Bindings)` 段也逐字节复现。绑定方程的 rhs 不是变量上的式子，`generateBindingEquation` 还调一遍 `SimplifyExp.simplify`（`NBEquation.mo:2226`），比如变量行 `p + 2.0 * time + 3.0`、方程 `3.0 + p + 2.0 * time`。标量部分在 `src/bdae/simplify.cpp`，数值 BINARY 只有方程的浅映射才有，Simplify 1 时补。
 - **Q3 再答一段（S5a-2b）**：`(FunctionAlias)` 段也逐字节复现。`$FUN_n` 按 `Expression.map` 的后序遍历从 1 编号；`$RES_AUX` 按 Map 插入序倒着分，最后提的调用号最小；新变量、新方程按插入序接在桶尾，先连续后离散，Integer / Boolean / String 结果进离散桶。simulation 里提过、初值方程里又遇到的调用，`introduceAlias` 把 parsed 重置为假，初值一轮再造一条方程、给同一变量加 `fixed = false` 并挂进 Parameter 桶（`NBFunctionAlias.mo:426-476`、:278-293）。内建换不换看各自声明（纯度、有无输出），分三张表，表外的 SKIP。
 - **D1 补充（S5a-2b）**：`BackendDAE::functions` 记被调用户函数的 impure、记录构造、无输出、可内联（体恰是一条赋值），lower 从 `FlatModel::functions` 填。
+- **Q3 再答一段（S5a-2c）**：`(Early Inline)` 段也逐字节复现。`EqData.mapExp` 走 simulation、continuous、discretes、initials，simulation 与 continuous / discretes 是同一批方程指针，所以 simulation 里的方程映射两遍、初值方程一遍，体里再调的可内联函数 sim 展开两层、初值一层；换上的体先 combineBinaries 再 simplify（`NBReplacements.mo:280-341`）。`IfEquationBody.isRecordOrTupleEquation` 的 `_ :: _` 支对任何 if 都成立，所以每条 if 方程都重造、按 unique_index 重新起名、挪到桶尾，有没有函数都一样（`NBInline.mo:264-408`）。FunctionAlias 只在初值方程里提的 `$FUN` 是 PARAMETER、不进 variables，omc 在这个模块失败、不打这一段，ymc 照此 SKIP。
+- **D1 补充（S5a-2c）**：`UserFunction` 带上可内联函数的输入序、局部（名字 + 绑定，sortLocals 序）和体（那条赋值的右边），lower 的 `inline_shape` 抄；形参超出标量的记在 `not_inlinable`，真要内联它时才 SKIP。函数的内联类型 FlatFunction 还没带，driver 扫 SCode 置 `inline_annotation_seen`，置位时遇到内联整模型 SKIP（`ponytail:`，前端记上内联类型后按函数判）。
 - **待定**：D3 回读里 MULTARY 与嵌套 BINARY 文本相同，parser 的还原规则到写回读时再定。
 
 ## 附录 A 实跑记录

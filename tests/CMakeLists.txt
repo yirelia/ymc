@@ -101,6 +101,13 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/src/bdae/function_alias.h" AND EXISTS "${CMAKE_SO
     target_link_libraries(function_alias_test PRIVATE ymc_frontend)
   endif()
 endif()
+# S5a-2c：pre 模块 Early Inline 端到端（对拍 omc --newBackend 的 (Early Inline) 段）。
+if(EXISTS "${CMAKE_SOURCE_DIR}/src/bdae/inline.h" AND EXISTS "${CMAKE_SOURCE_DIR}/tests/unit/bdae/inline_test.cpp")
+  ymc_add_test(inline_test unit/bdae/inline_test.cpp)
+  if(TARGET ymc_frontend)
+    target_link_libraries(inline_test PRIVATE ymc_frontend)
+  endif()
+endif()
 # S5b-0：OMC 哈希容器复刻（只依赖 ymc_base，不链前端）。
 if(EXISTS "${CMAKE_SOURCE_DIR}/src/bdae/omc_unordered.h" AND EXISTS "${CMAKE_SOURCE_DIR}/tests/unit/bdae/omc_unordered_test.cpp")
   ymc_add_test(omc_unordered_test unit/bdae/omc_unordered_test.cpp)
