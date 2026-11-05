@@ -1,0 +1,372 @@
+//// model: S1aIf1
+model S1aIf1
+  parameter Boolean b = true;
+  Real x;
+equation
+  if b then x = 1; else x = 2; end if;
+end S1aIf1;
+//// model: S1aIf2
+model S1aIf2
+  Real x;
+equation
+  if time > 1 then x = 1; elseif false then x = 2; else x = 3; end if;
+end S1aIf2;
+//// model: S1aIf3
+model S1aIf3
+  Real x;
+equation
+  if time > 1 then x = 1; elseif true then x = 2; else x = 3; end if;
+end S1aIf3;
+//// model: S1aIf4
+model S1aIf4
+  Real x;
+equation
+  if false then x = 1; elseif time > 1 then x = 2; else x = 3; end if;
+end S1aIf4;
+//// model: S1aIf5
+model S1aIf5
+  Real x;
+equation
+  if false then x = 1; elseif false then x = 2; else x = 3; end if;
+end S1aIf5;
+//// model: S1aIf6
+model S1aIf6
+  Real x;
+equation
+  if time > 1 then x = time; elseif time > 2 then x = 2 * time; else x = 0; end if;
+end S1aIf6;
+//// model: S1aIf7
+model S1aIf7
+  Real x;
+equation
+  if time > 1 then x = 1; else 1 = x; end if;
+end S1aIf7;
+//// model: S1aIf8
+model S1aIf8
+  Real x, y;
+equation
+  if time > 1 then x = 1; y = 2; else x = 3; y = 4; end if;
+end S1aIf8;
+//// model: S1aIf9
+model S1aIf9
+  Real x(start = 0);
+equation
+  if time > 1 then der(x) = 1; else der(x) = -1; end if;
+end S1aIf9;
+//// model: S1aIf10
+model S1aIf10
+  Real x;
+equation
+  if time > 1 then
+    if time > 2 then x = 1; else x = 2; end if;
+  else
+    x = 3;
+  end if;
+end S1aIf10;
+//// model: S1aIf11
+model S1aIf11
+  Real x;
+equation
+  if true then x = time + 0; else x = 1; end if;
+end S1aIf11;
+//// model: S1aIf12
+model S1aIf12
+  Real x;
+equation
+  if time > 1 then x = time * 1; else x = time; end if;
+end S1aIf12;
+//// model: S1aIf13
+model S1aIf13
+  Integer i;
+equation
+  if time > 1 then i = 1; else i = 2; end if;
+end S1aIf13;
+//// model: S1aIf14
+model S1aIf14
+  Boolean c;
+equation
+  if time > 1 then c = true; else c = false; end if;
+end S1aIf14;
+//// model: S1aIf15
+model S1aIf15
+  Real x(start = 0);
+equation
+  der(x) = 1;
+initial equation
+  if false then x = 1; else x = 2; end if;
+end S1aIf15;
+//// model: S1aIf16
+model S1aIf16
+  Real x(start = 0);
+equation
+  der(x) = 1;
+initial equation
+  if time > 0 then x = 1; elseif true then x = 2; end if;
+end S1aIf16;
+//// model: S1aWh1
+model S1aWh1
+  Real z;
+equation
+  when false then z = 1; elsewhen time > 1 then z = 2; end when;
+end S1aWh1;
+//// model: S1aWh2
+model S1aWh2
+  Real z;
+equation
+  when time > 1 then z = 1; elsewhen false then z = 2; end when;
+end S1aWh2;
+//// model: S1aWh3
+model S1aWh3
+  Real z;
+equation
+  when {false, time > 1} then z = 1; end when;
+end S1aWh3;
+//// model: S1aWh4
+model S1aWh4
+  Real z;
+equation
+  when {time > 1, false, time > 2} then z = 1; end when;
+end S1aWh4;
+//// model: S1aWh5
+model S1aWh5
+  Real z;
+equation
+  when {time > 1, false} then z = 1; elsewhen time > 3 then z = 2; end when;
+end S1aWh5;
+//// model: S1aWh6
+model S1aWh6
+  Real x(start = 1);
+equation
+  der(x) = -x;
+  when false then reinit(x, 2); end when;
+end S1aWh6;
+//// model: S1aWh7
+model S1aWh7
+  Real x(start = 1);
+equation
+  der(x) = -x;
+  when false then assert(x > 0, "neg"); end when;
+end S1aWh7;
+//// model: S1aWh8
+model S1aWh8
+  Integer k;
+  Boolean c;
+equation
+  when false then k = 1; c = true; end when;
+end S1aWh8;
+//// model: S1aWh9
+model S1aWh9
+  Real v, z;
+equation
+  when time > 1 then v = 2; end when;
+  when false then z = 1; end when;
+end S1aWh9;
+//// model: S1aWh10
+model S1aWh10
+  Real z, w;
+equation
+  when false then z = 1; end when;
+  when false then w = 2; end when;
+end S1aWh10;
+//// model: S1aWh11
+model S1aWh11
+  Real z;
+equation
+  when false then z = 1; elsewhen false then z = 2; end when;
+end S1aWh11;
+//// model: S1aWh12
+model S1aWh12
+  Real z;
+equation
+  when time > 1 + 0 then z = 1 * 2; end when;
+end S1aWh12;
+//// model: S1aEq1
+model S1aEq1
+  Real x;
+equation
+  x + 0 = x;
+end S1aEq1;
+//// model: S1aEq2
+model S1aEq2
+  Integer i;
+equation
+  i = i;
+end S1aEq2;
+//// model: S1aEq3
+model S1aEq3
+  Boolean c;
+equation
+  c = c;
+end S1aEq3;
+//// model: S1aEq4
+model S1aEq4
+  Real x, y;
+equation
+  x = time;
+  y * 1 = y;
+end S1aEq4;
+//// model: S1aEq5
+model S1aEq5
+  Real x;
+equation
+  x = time - time;
+end S1aEq5;
+//// model: S1aEq6
+model S1aEq6
+  Real x;
+  parameter Real p = 2;
+equation
+  x = p * 0 + time;
+end S1aEq6;
+//// model: S1aAl1
+model S1aAl1
+  Real x;
+algorithm
+  if true then x := 1; else x := 2; end if;
+end S1aAl1;
+//// model: S1aAl2
+model S1aAl2
+  Real x;
+algorithm
+  x := 0;
+  if false then x := 1; end if;
+end S1aAl2;
+//// model: S1aAl3
+model S1aAl3
+  Real x;
+algorithm
+  if time > 1 then x := 1; elseif true then x := 2; else x := 3; end if;
+end S1aAl3;
+//// model: S1aAl4
+model S1aAl4
+  Real x;
+algorithm
+  x := 0;
+  for i in 1:0 loop x := x + i; end for;
+end S1aAl4;
+//// model: S1aAl5
+model S1aAl5
+  Real x;
+algorithm
+  x := 0;
+  for i in 3:-1:1 loop x := x + i; end for;
+end S1aAl5;
+//// model: S1aAl6
+model S1aAl6
+  Real x;
+algorithm
+  x := 0;
+  for i in 1:-1:3 loop x := x + i; end for;
+end S1aAl6;
+//// model: S1aAl7
+model S1aAl7
+  Real x;
+algorithm
+  x := time + 0;
+  x := x * 1;
+end S1aAl7;
+//// model: S1aAl8
+model S1aAl8
+  Real x;
+algorithm
+  x := 0;
+  while false loop x := x + 1; end while;
+end S1aAl8;
+//// model: S1aAl9
+model S1aAl9
+  Real x;
+algorithm
+  x := time;
+  if time > 1 then
+    if true then x := 2; end if;
+  end if;
+end S1aAl9;
+//// model: S1aAl10
+model S1aAl10
+  Real x;
+algorithm
+  x := time;
+  assert(true, "a" + "b");
+end S1aAl10;
+//// model: S1aAs1
+model S1aAs1
+  Real x;
+equation
+  x = time;
+  assert(x > 0, "a" + "b" + "c");
+end S1aAs1;
+//// model: S1aAs2
+model S1aAs2
+  Real x;
+equation
+  x = time;
+  assert(x >= 0 and true, "neg");
+end S1aAs2;
+//// model: S1aSl1
+model S1aSl1
+  Real y;
+equation
+  y = semiLinear(time, 2, 2);
+end S1aSl1;
+//// model: S1aSl2
+model S1aSl2
+  Real y;
+  parameter Real p = 3;
+equation
+  y = semiLinear(time, p, p);
+end S1aSl2;
+//// model: S1aSl3
+model S1aSl3
+  Real y;
+equation
+  y = semiLinear(time, 0, 0);
+end S1aSl3;
+//// model: S1aSl4
+model S1aSl4
+  Real y;
+equation
+  y = semiLinear(0, time, 1);
+end S1aSl4;
+//// model: S1aSl5
+model S1aSl5
+  Real y;
+  parameter Real p = 3;
+equation
+  y = semiLinear(time, p * 2, 2 * p);
+end S1aSl5;
+//// model: S1aIn1
+model S1aIn1
+  function f
+    input Real u;
+    output Real v;
+  algorithm
+    v := u - u;
+  end f;
+  Real y;
+equation
+  y = f(time);
+end S1aIn1;
+//// model: S1aIn2
+model S1aIn2
+  function f
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 1 + 0;
+  end f;
+  Real y;
+equation
+  y = f(time);
+end S1aIn2;
+//// model: S1aIn3
+model S1aIn3
+  function f
+    input Real u;
+    output Real v;
+  algorithm
+    v := u;
+  end f;
+  Real y;
+equation
+  f(y) = f(y);
+end S1aIn3;

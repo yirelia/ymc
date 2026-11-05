@@ -2920,6 +2920,11 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       评审探针 s5a2c-adv（64 个，PASS 61、SKIP 2、FAIL 0）。
       留 SKIP：代进字面量后要 Ceval 的调用、形参是数组 / 记录 / 函数型、体引用输出、局部无绑定、字面量除以 0；只在初值里提 `$FUN` 的模型（omc 本身不打这段）。
       欠账：前端给 FlatFunction 记内联类型（Function.inlineBuiltin，随 extends 合并注解），删掉 driver 的 `inline_annotation_seen` 整体扫描，放开带 `Inline = false` / `LateInline` 的模型（s5b0 HshF* 11 个、LbnP036、LeiA 系）。
+- [x] (S5a-2d) 第四个 pre 模块 Simplify 1（2026-11-05），门 = `(Simplify 1)` 段逐字节，`--dump-after=simplify1`、`bdae_sweep.py --stage simplify1`。语料 a PASS 74（非恒等 24），语料 b PASS 1007（非恒等 87），探针 16379（omc 无段 10、omc 崩溃缺段 4），全部 FAIL 0、CRASH 0；单测 simplify_module_test 5 个、bindings_test 改 1 个，ctest 15→16。
+      模块 src/bdae/simplify_module.cpp：方程式子化简一遍再看结构（自等 → 0 = 0、when 去 false 支 / 整条删并改参数、if 剪支 / 换成体 / 并成一条、算法 simplifyStatements）。simplify.cpp 补了 Array / Range、semiLinear 改写（实参全字面量时不改，走 Ceval 失败原样留）、除以 0.0 留 BINARY、字符串字面量相加、`not` 字面量数组。
+      评审探针 s5a2d-adv（54 个，PASS 53（非恒等 30）、omc 报错 1、FAIL 0）。bdae_sweep 的探针：omc 自己崩溃（退出码 3221225477 = 0xC0000005）时缺的段记 `omc-exit=…`，不算"ymc 打了"（LbnW008 等 4 个）。
+      留 SKIP：删掉的 when 变量不在 Discrete 桶末尾（omc 打印失败）、枚举 / String 自等、$OMC$PositiveMax / inStreamDiv 实参变形、两个数组的 and / or。
+      欠账（Simplify 2 前要做）：真正的 eqData.equations 视图（Alias 的别名绑定方程只进 removed）、Discrete 桶空位往后带。
 - [ ] (S5a-2…) pre 模块按 NB 运行序一个个做（2026-11-03 改定，原计划按语料 a 跳着做）：Bindings → FunctionAlias → Early Inline → Simplify 1 → Alias → Simplify 2 → Remove Stream → Detect States → Events。每个模块的输入都是上一段逐字节验证过的输出，门设在每一段上。
 - [ ] (S5a) lower + NB 九个 pre 模块，按模块增量（Bindings → FunctionAlias → Early Inline → Simplify 1 → Alias → Simplify 2 →
       Remove Stream → Detect States → Events）；首批子集 `simulation/modelica/NBackend/{basics,alias,event_handling}` + equations /

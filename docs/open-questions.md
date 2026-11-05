@@ -254,6 +254,8 @@ String(Real) 的指数位数（2026-10-14，跟实跑）：编译期求值 `Stri
 
 参数区间绑定的维不符（2026-11-04，68d，pk-p53 A68dPR17）：`parameter Integer n = 3; parameter Integer p[2] = 1:n;`，1.25.0 不报维不符，直接截成两个元素（`final parameter Integer n = 3; parameter Integer p[1] = 1; parameter Integer p[2] = 2;`）。typeRange 把区间标结构、求值后代入，维的核查似乎在那之前就过了。ymc 不跟，SKIP（`non-literal array binding shape`）。
 
+omc 新后端段错误截断（2026-11-05，S5a-2d，探针 bdae/s5a2a 的 LbnW008 / 018 / 019 / 020）：模型带算法（`a := 2; a := a + 1;` 或算法里的 when），1.25.0 `--newBackend` 在 Detect States 之后访问违例崩溃（退出码 3221225477 = 0xC0000005），stdout 缓冲断在 Simplify 1 段中间。加 failtrace 能拿到完整的 Simplify 1 段，ymc 与它逐字节相同（failtrace 自己插的日志行除外）。ymc 不跟崩溃、照常打这一段；bdae_sweep 的探针把这种缺段记成 `omc-exit=3221225477`。
+
 ## 已研究待实现：多条 connect 连接集（union-find）
 
 **状态**：算法已从 OMC 新前端源码 + 实跑 omc 1.25.0 探针完整摸清，暂不实现——理由是当前 testsuite 里

@@ -25,6 +25,8 @@
 //       同上，Bindings 之后再跑 FunctionAlias，打 `BackendDAE: (FunctionAlias)` 一段。
 //   ymc --dump-after=earlyinline (<file.mo> | --load-model=P --class=Q.N)
 //       同上，FunctionAlias 之后再跑 Early Inline，打 `BackendDAE: (Early Inline)` 一段。
+//   ymc --dump-after=simplify1 (<file.mo> | --load-model=P --class=Q.N)
+//       同上，Early Inline 之后再跑第一次 Simplify，打 `BackendDAE: (Simplify 1)` 一段。
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -48,6 +50,7 @@
 #include "bdae/function_alias.h"
 #include "bdae/inline.h"
 #include "bdae/lower.h"
+#include "bdae/simplify_module.h"
 #include "parse/lexer.h"
 #include "parse/parser.h"
 #include "flat/flat_dump.h"
@@ -252,6 +255,7 @@ const char* backend_stage(const char* mode) {
   if (std::strcmp(mode, "dump-after=bindings") == 0) return "Bindings";
   if (std::strcmp(mode, "dump-after=functionalias") == 0) return "FunctionAlias";
   if (std::strcmp(mode, "dump-after=earlyinline") == 0) return "Early Inline";
+  if (std::strcmp(mode, "dump-after=simplify1") == 0) return "Simplify 1";
   return nullptr;
 }
 
@@ -330,6 +334,7 @@ int dump_flat_pipeline(ymc::Absyn& absyn, ymc::Diagnostics& diags, ymc::Interner
         {"Bindings", "bindings", &ymc::bdae::bindings},
         {"FunctionAlias", "function alias", &ymc::bdae::function_alias},
         {"Early Inline", "early inline", &ymc::bdae::early_inline},
+        {"Simplify 1", "simplify 1", &ymc::bdae::simplify_module},
     };
     lr.dae.inline_annotation_seen = inline_annotation_seen(scode, interner);
     if (std::strcmp(stage, "After Lowering") != 0) {
@@ -501,6 +506,7 @@ int main(int argc, char** argv) {
     else if (std::strcmp(a, "--dump-after=bindings") == 0) opt.mode = "dump-after=bindings";
     else if (std::strcmp(a, "--dump-after=functionalias") == 0) opt.mode = "dump-after=functionalias";
     else if (std::strcmp(a, "--dump-after=earlyinline") == 0) opt.mode = "dump-after=earlyinline";
+    else if (std::strcmp(a, "--dump-after=simplify1") == 0) opt.mode = "dump-after=simplify1";
     else if (std::strcmp(a, "--dump-after=scode") == 0) opt.mode = "dump-after=scode";
     else if (std::strncmp(a, "--class=", 8) == 0) opt.dump_class = a + 8;
     else if (std::strcmp(a, "--check-syntax") == 0) opt.mode = "check-syntax";

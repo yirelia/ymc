@@ -292,13 +292,50 @@ Continuous Equations (12/12)
   YMC_CHECK_EQ(eq_data(src), std::string(omc));
 }
 
+// 常数并完两个斜率才相等，simplifySemiLinear（NFSimplifyExp.mo:283-303）改写成 BINARY(x, *, m1)，这个 BINARY 不再化简（S5a-2d 放开，
+// 原来 SKIP）。期望值是 omc 实跑：`omc --newBackend -s --simCodeTarget=None -d=optdaedump,bltdump,backenddaeinfo M.mo` 的 (Bindings) 段。
+YMC_TEST(semilinear_rewrite) {
+  const char* omc = R"omc(##############################
+
+    BackendDAE: (Bindings)
+
+##############################
+
+=================================================
+  Variable Data Simulation (scalar unknowns: 3)
+=================================================
+
+Algebraic Variables (3/3)
+***************************
+(1)       [ALGB] (1) Real y = time
+(2)       [ALGB] (1) Real w = 2.0 * time
+(3)       [ALGB] (1) Real a = semiLinear(y, 2.0 + 1.0 + w, 3.0 + w)
+
+Artificial Variables (2/1)
+****************************
+(1)       [DMMY] (0) $ANY$ 
+(2)       [TIME] (1) Real time
+
+
+=============================================================
+  Equation Data Simulation (scalar simulation equations: 3)
+=============================================================
+
+Continuous Equations (3/3)
+****************************
+(1)       [SCAL] (1) a = y * (3.0 + w) ($RES_BND_2)
+(2)       [SCAL] (1) w = 2.0 * time ($RES_BND_1)
+(3)       [SCAL] (1) y = time ($RES_BND_0)
+
+)omc";
+  YMC_CHECK_EQ(bindings_src("model M Real y = time; Real w = 2 * time; Real a = semiLinear(y, 1 + w + 2, w + 3); end M;"), std::string(omc));
+}
+
 // 没做的形态不打印。
 YMC_TEST(bindings_stops_on_unsupported) {
   // 非零常数除以 0：omc 的 Bindings 模块失败，实跑 exit 1，只有 (After Lowering) 段。
   YMC_CHECK_EQ(bindings_src("model M Real a = 1.0 / 0.0; end M;"), std::string("unsupported: simplify: constant division by zero"));
   YMC_CHECK_EQ(bindings_src("model M Real y = time; Real a = (y + 1) / 0.0; end M;"), std::string("unsupported: simplify: constant division by zero"));
-  // 常数并完两个斜率才相等，simplifySemiLinear 要改写；只有这种第一遍没改写过的形态走到这里。
-  YMC_CHECK_EQ(bindings_src("model M Real y = time; Real w = 2 * time; Real a = semiLinear(y, 1 + w + 2, w + 3); end M;"), std::string("unsupported: simplify: semiLinear rewrite"));
   // combineConstantNumbers 在 Real 上算再 realInt，超过 2^53 的值没核实。
   YMC_CHECK_EQ(bindings_src("model M Integer n = integer(time); Integer a = n * 2147483647 * 2147483647; end M;"),
                std::string("unsupported: simplify: integer constant out of the exact Real range"));

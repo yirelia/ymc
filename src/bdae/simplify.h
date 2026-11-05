@@ -12,6 +12,7 @@
 namespace ymc::bdae {
 
 // 不改已有节点，只往 arena 里加新节点（同 combine_binaries，节点可能被共用）。遇到没移植的形状时把原因写进 unsupported 并返回入参，调用方退 66。
-[[nodiscard]] Id<Expr> simplify(ExprArena& a, const Interner& in, Id<Expr> e, std::string& unsupported);
+// interner 要写：字符串字面量相加折成新串（Ceval.evalBinaryAdd 的 STRING 支）。
+[[nodiscard]] Id<Expr> simplify(ExprArena& a, Interner& in, Id<Expr> e, std::string& unsupported);
 
 }  // namespace ymc::bdae

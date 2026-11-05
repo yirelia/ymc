@@ -1,7 +1,8 @@
 // 函数名、case 顺序照 NFSimplifyExp.mo（v1.25.0），字面量运算照 NFCeval.mo。走不到的支不写，留 stop：
 //   - 数值的 BINARY：绑定走深映射 combineBinaries，+ - * / 全成了 Multary。浅映射（Early Inline 的函数体）不进 `^` 的操作数，那里留着
 //     BINARY（`(x + 1) ^ 2`），照 simplifyBinaryAdd / Sub / Mul / Div（:980-1088）移植了。两边都是字面量的只做了 `^`。
-//   - 数组、记录、Range、Size、推导式、元组：lower 的 expr_ok 挡住了。
+//   - 数组、记录、Range、Size、推导式、元组：lower 的 expr_ok 挡住了。只有方程里的几个位置放行（when 条件顶层的数组、算法 for 的范围、
+//     元组赋值的左边），Simplify 模块会走到，那里收了 ARRAY / RANGE 两支，元组照原文不走。
 #include "bdae/simplify.h"
 
 #include <algorithm>
@@ -20,7 +21,7 @@ constexpr double kMaxExactInt = 9007199254740992.0;   // 2^53
 
 class Simplifier {
  public:
-  Simplifier(ExprArena& a, const Interner& in, std::string& stop) : a_(a), in_(in), compare_(a, in), stop_(stop) {}
+  Simplifier(ExprArena& a, Interner& in, std::string& stop) : a_(a), in_(in), compare_(a, in), stop_(stop) {}
 
   Id<Expr> simplify(Id<Expr> id) {
     if (!stop_.empty()) return id;
@@ -41,6 +42,12 @@ class Simplifier {
       case ExprKind::Relation: return relation(id);
       case ExprKind::IfExp: return if_exp(id);
       case ExprKind::Cast: return cast(id);
+      // 只在方程里有（Simplify 模块，when 条件顶层的 `{a, b}`、算法 for 的范围、元组赋值的左边）；绑定和内联的函数体里 lower 挡了。
+      case ExprKind::Array: return array(id);
+      case ExprKind::Range: return range(id);
+      case ExprKind::Tuple:              // :124 else 支，元素不走
+      case ExprKind::Wild:
+        return id;
       default: return stop("expression kind", id);
     }
   }
@@ -194,7 +201,7 @@ class Simplifier {
   //   simplifyBuiltinCall 里，delay、der、homotopy、min、max 走的判断第一遍也走过：延迟时间照样求值（:559-560）、变率不变（:576）、
   //   replaceHomotopy 缺省 none（Flags.mo:872-873），两个实参的 min / max 直接留调用（:325）。$OMC$PositiveMax 看流量变量的 min / max 属性（:340-343），
   //   $OMC$inStreamDiv 看 0 / 0（:361），第一遍同样判过，实参还是那个 cref 和阈值（探针 LbnXS04-LbnXS07）。cat、fill、sum 这些只吃数组，lower 挡了。
-  //   semiLinear 看实参形状，第一遍不等的 m1、m2 这一遍可能相等（常数并完），改写时 SKIP。
+  //   semiLinear 看实参形状，第一遍不等的 m1、m2 这一遍可能相等（常数并完），照 simplifySemiLinear 改写。
   Id<Expr> call(Id<Expr> id) {
     const Expr& e = a_[id];
     std::vector<Id<Expr>> args;
@@ -202,9 +209,29 @@ class Simplifier {
     if (!stop_.empty()) return id;
     if (all_literal(args) && !all_literal(e.args)) return stop("call whose arguments became literals", id);
     const std::string_view name = e.call_name.size() == 1 ? in_.str(e.call_name[0]) : std::string_view{};
-    if (name == "semiLinear" && args.size() == 3 &&
-        (is_zero(args[0]) || (is_zero(args[1]) && is_zero(args[2])) || is_equal(args[1], args[2])))
-      return stop("semiLinear rewrite", id);
+    // simplifyPositiveMax / simplifyInStreamDiv :330-370 看实参的形状（isNonPositive、isGreaterOrEqual 只认字面量、cref 的 min / max、一元负号，isNaN 认
+    // `0 / 0`）。实参和第一遍一样时判得也一样，留着调用；这一遍把实参化简成了别的样子（方程里 combineBinaries 之后常数并完），判断可能变，没移植，SKIP。
+    if (name == "$OMC$PositiveMax" || name == "$OMC$inStreamDiv") {
+      for (std::size_t i = 0; i < args.size(); ++i)
+        if (!is_equal(args[i], e.args[i])) return stop("stream helper call whose arguments changed", id);
+    }
+    // 实参全是字面量时走的是 Ceval.evalCall（:191-196），不进 simplifyBuiltinCall；第一遍留下来的就是求值失败的，原样留着
+    //（实跑 BdaR202：`semiLinear(0.0, 1.0, 2.0)` 不变成 0.0）。
+    if (name == "semiLinear" && args.size() == 3 && !all_literal(args)) {
+      // simplifySemiLinear :283-303：x 或两个斜率是 0 → makeZero(typeOf(x))；两个斜率相等 → BINARY(x, *, m1)，这个 BINARY 不再化简
+      //（实跑 Ls1C_semi1：`semiLinear(time, p * 2.0 * 3.0, 6.0 * p)` 化简后两个斜率都是 `6.0 * p`，变成 `time * (6.0 * p)`）。
+      const Type ty = a_[args[0]].ty;
+      if (is_zero(args[0]) || (is_zero(args[1]) && is_zero(args[2]))) return make_number(ty, 0, id);
+      if (is_equal(args[1], args[2])) {
+        Expr out;
+        out.kind = ExprKind::Binary;
+        out.ty = ty;
+        out.bin = BinOp::Mul;
+        out.a = args[0];
+        out.b = args[1];
+        return a_.add(std::move(out));
+      }
+    }
     return args == e.args ? id : with_args(id, std::move(args));
   }
   Id<Expr> with_args(Id<Expr> id, std::vector<Id<Expr>> args) {
@@ -412,20 +439,31 @@ class Simplifier {
     out.b = y;
     return a_.add(std::move(out));
   }
-  // Ceval.evalBinaryOp NFCeval.mo:903-1125 的标量支：默认路径折过的这里不会再来，能来的是这一遍才变成字面量的操作数（Early Inline 代进字面量
-  // 实参，`x ^ (z / z)`）。evalBinaryAdd / Sub / Mul :965-1056、Div :1058-1093、Pow :1095-1129。Integer 照原文是 Integer 运算，溢出没核过，SKIP；
-  // 除以 0.0 在无 EvalTarget 时留成 BINARY（:1065-1075），没核过，SKIP；String 的 `+` 没用到，SKIP。
+  // Ceval.evalBinaryOp NFCeval.mo:903-1125 的标量支：默认路径折过的这里一般不会再来，能来的是这一遍才变成字面量的操作数（Early Inline 代进字面量
+  // 实参，`x ^ (z / z)`），和默认路径不化简的位置（方程里 assert 的消息、Bindings 造的 NaN）。evalBinaryAdd / Sub / Mul :965-1056、Div :1058-1093、
+  // Pow :1095-1129。Integer 照原文是 Integer 运算，结果超出 2^53 的没核过，SKIP。
+  // 两边都是字面量时 simplifyBinaryOp 直接调 Ceval，没有 try（:954-955）：Ceval 接不住的组合（Integer 的 / 和 ^、Integer 混 Real、String 的 - * /）
+  // 让整个模块失败，omc 没有这一段，这里 SKIP 正合适。接得住的：
+  //   - evalBinaryDiv 的第一支 `(_, REAL(0.0))`（:1065-1075）：无 EvalTarget 时原样留 BINARY(e1, /, 0.0)，被除数是什么都行（实跑 LbnW040：
+  //     Bindings 造的 NaN `0.0 / 0.0` 到 Simplify 1 不变）；
+  //   - evalBinaryAdd 的 STRING 支（:977-978）：拼接（实跑 Wa1：assert 消息 `"a" + "b"` 前端不化简，这里成 "ab"）。
   Id<Expr> eval_binary(const Expr& e, Id<Expr> x, Id<Expr> y, Id<Expr> at) {
     const Expr& p = a_[x];
     const Expr& q = a_[y];
+    if (e.bin == BinOp::Div && q.kind == ExprKind::RealLit && q.rval == 0.0) return make_binary(at, x, BinOp::Div, y);
+    if (e.bin == BinOp::Add && p.kind == ExprKind::StringLit && q.kind == ExprKind::StringLit) {
+      Expr out;
+      out.kind = ExprKind::StringLit;
+      out.ty = Type::string();
+      out.sval = in_.intern(std::string(in_.str(p.sval)) + std::string(in_.str(q.sval)));
+      return a_.add(std::move(out));
+    }
     if (p.kind == ExprKind::RealLit && q.kind == ExprKind::RealLit) {
       switch (e.bin) {
         case BinOp::Add: return real(p.rval + q.rval);
         case BinOp::Sub: return real(p.rval - q.rval);
         case BinOp::Mul: return real(p.rval * q.rval);
-        case BinOp::Div:
-          if (q.rval == 0.0) return stop("literal division by zero", at);
-          return real(p.rval / q.rval);
+        case BinOp::Div: return real(p.rval / q.rval);
         case BinOp::Pow:
           if (p.rval < 0 && std::trunc(q.rval) != q.rval) return with_operands(at, x, y);   // :1103 负底非整指数，留着
           return real(std::pow(p.rval, q.rval));
@@ -465,6 +503,8 @@ class Simplifier {
     if (!stop_.empty()) return id;
     const Expr& p = a_[x];
     const Expr& q = a_[y];
+    // (ARRAY, ARRAY) 支逐元素算（:1199-1205）：when 拆分拼出来的 `not {a, b} and {c, d}` 才会有，没核过。
+    if (p.kind == ExprKind::Array && q.kind == ExprKind::Array) return stop("logical operation on two arrays", id);
     const bool absorbing = e.log == LogOp::Or;      // and：false 吸收、true 消去；or 反过来
     if (p.kind == ExprKind::BoolLit) return p.bval == absorbing ? x : y;
     if (q.kind == ExprKind::BoolLit) return q.bval == absorbing ? y : x;
@@ -477,6 +517,16 @@ class Simplifier {
     if (!stop_.empty()) return id;
     if (a_[se].kind == ExprKind::BoolLit) return boolean(!a_[se].bval);   // Ceval.evalLogicUnaryNot :1520-1535
     if (is_literal(se)) return stop("not of a non-Boolean literal", id);
+    // isLiteral 的 ARRAY 支（NFExpression.mo:4660）：元素全是字面量的数组也算，evalLogicUnaryNot 逐元素取反（:1528）。when 拆分把前一支的
+    // 条件取反拼进后一支（`not {false, false} and x > 9.0`），实跑 LwbC089l 成 `{true, true} and x > 9.0`。
+    if (a_[se].kind == ExprKind::Array && all_literal(a_[se].args)) {
+      std::vector<Id<Expr>> elems;
+      for (Id<Expr> x : a_[se].args) {
+        if (a_[x].kind != ExprKind::BoolLit) return stop("not of a non-Boolean literal array", id);
+        elems.push_back(boolean(!a_[x].bval));
+      }
+      return with_args(se, std::move(elems));
+    }
     if (se == e.a) return id;
     Expr out = e;
     out.a = se;
@@ -535,6 +585,26 @@ class Simplifier {
     return a_.add(std::move(out));
   }
 
+  // ARRAY 支 :92-97：非 literal 的数组逐元素化简（literal 的元素都是字面量，化简也不变，不用分）。Type.simplify 只动维的式子，标量元素的数组不变。
+  Id<Expr> array(Id<Expr> id) {
+    std::vector<Id<Expr>> elems;
+    for (Id<Expr> x : a_[id].args) elems.push_back(simplify(x));
+    if (!stop_.empty() || elems == a_[id].args) return id;
+    return with_args(id, std::move(elems));
+  }
+  // simplifyRange :135-164：起点、步长、终点各化简；变了就重新定型（类型不打印）。Expr 的 Range：a 起点，有步长时 b 步长、c 终点，否则 b 终点。
+  Id<Expr> range(Id<Expr> id) {
+    const Expr& e = a_[id];
+    const Id<Expr> x = simplify(e.a), y = simplify(e.b), z = e.c.is_valid() ? simplify(e.c) : e.c;
+    if (!stop_.empty()) return id;
+    if (x == e.a && y == e.b && z == e.c) return id;
+    Expr out = e;
+    out.a = x;
+    out.b = y;
+    out.c = z;
+    return a_.add(std::move(out));
+  }
+
   // simplifyCast :1322-1344
   Id<Expr> cast(Id<Expr> id) {
     const Expr& e = a_[id];
@@ -548,14 +618,14 @@ class Simplifier {
   }
 
   ExprArena& a_;
-  const Interner& in_;
+  Interner& in_;
   ExpCompare compare_;
   std::string& stop_;
 };
 
 }  // namespace
 
-Id<Expr> simplify(ExprArena& a, const Interner& in, Id<Expr> e, std::string& unsupported) {
+Id<Expr> simplify(ExprArena& a, Interner& in, Id<Expr> e, std::string& unsupported) {
   return Simplifier(a, in, unsupported).simplify(e);
 }
 

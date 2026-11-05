@@ -45,7 +45,7 @@ python -I tools/bdae_refgen.py run --cases cases_b.json --out sig.jsonl --keep-s
 python -I tools/bdae_refgen.py sections --cases cases_a.json                   # 不跑 omc，从 <refs>/<id>/out.txt 切段写到同一处（语料 a）
 python -I tools/bdae_sweep.py --corpus a --ymc <ymc.exe> [--json out.json]     # S5a 门：ymc --dump-after=lower 与 (After Lowering) 逐字节比（语料 a / b）
 python -I tools/bdae_sweep.py --probes --ymc <ymc.exe>                         # 同上，tests/probes/bdae/*.probes 现跑 omc
-python -I tools/bdae_sweep.py --corpus a --stage bindings --ymc <ymc.exe>      # --stage 选段（lower | bindings | functionalias | earlyinline），语料和 --probes 都能加；前提是上一段（NB 运行序）PASS，否则 NOT-ADMITTED <上一段>:<判定>，逐层套（functionalias 的 bindings:NOT-ADMITTED:lower:FAIL）
+python -I tools/bdae_sweep.py --corpus a --stage bindings --ymc <ymc.exe>      # --stage 选段（lower | bindings | functionalias | earlyinline | simplify1，段名 `Simplify 1`、参考目录 sections/simplify_1；第二次 Simplify 以后是 simplify2），语料和 --probes 都能加；前提是上一段（NB 运行序）PASS，否则 NOT-ADMITTED <上一段>:<判定>，逐层套（functionalias 的 bindings:NOT-ADMITTED:lower:FAIL）
 ```
 
 ## OMC 哈希容器差分（S5b-0）

@@ -678,3 +678,19 @@
 ## 2026-11-04 — for 语句早有的机制，数组绑定漏了
 - 模式：typeRange 对参数变率的区间标结构，for 语句早就照做，数组绑定 `p[n] = 1:n` 没做，挡住了 Bug3187 和 pk-p40 的 8 个探针。又一个"兄弟位置"（2026-10-16）。
 - 规则：做一个 omc 机制时，把同一个 omc 函数的全部调用语境列出来，逐个对 ymc。
+
+## 2026-11-05 — omc 不接返回值时，分清哪些是原地改的
+- 模式：NBackendDAE.simplify 调 `VariablePointers.removeList` / `addList` 当语句用，返回值没接。底下的 ExpandableArray、UnorderedMap 是原地改的，删除生效；removeList 末尾的压紧结果丢了，桶里留空位，打印按下标取到空位就失败，表现成"omc 没有这一段"（S5a-2d Ls1W_order2）。
+- 规则：遇到 `input output` 的函数被当语句调，逐个看它改的容器是值还是可变结构，按实际生效的部分照做。
+
+## 2026-11-05 — 放开共用化简规则，三段一起扫
+- 模式：S5a-2d 放开 simplify 的 semiLinear 改写，Bindings 段的 BdaR202 / R203 从 SKIP 变 FAIL：实参全是字面量时 omc 走 Ceval，求值失败就原样留着，根本不进 simplifyBuiltinCall。
+- 规则：改 src/bdae/simplify.cpp 时，Bindings、Early Inline 和新段一起在锁下扫；内建改写前先看"实参全字面量 → Ceval"那一路。
+
+## 2026-11-05 — omc 段错误截断的 no-section 不是模块失败
+- 模式：LbnW008 等 4 个探针 omc 在 Detect States 之后访问违例崩溃（退出码 3221225477 = 0xC0000005），stdout 正好断在 4096 字节、Simplify 1 段中间，complete_sections 丢掉末段，看起来像"omc 没有这一段、ymc 打了"。加 failtrace 跑，完整段与 ymc 逐字节相同。
+- 规则：no-section 先看 omc 的退出码；崩溃的用 failtrace 拿完整段核，工具里单列（`omc-exit=…`），不给 ymc 加没有来源的 SKIP。
+
+## 2026-11-05 — 默认路径不化简的位置，新规则都出在那里
+- 模式：assert 消息的字符串相加、Bindings 造的 `0.0 / 0.0`、when 拆分拼出的 `not {false, false}`，默认路径不化简，到 NB 的 Simplify 才第一次化简。S5a-2d 新补的规则全出在这些位置。
+- 规则：做后端的化简类模块时，先列出前端没化简过的式子来源（lower 拼的、pre 模块造的、前端跳过的），探针专门造它们。
