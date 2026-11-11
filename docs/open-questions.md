@@ -12,6 +12,7 @@
 | TBD-11 | Dymola 语料优先级 | 默认 C-MSL-EX→C-MAPLIB→提取 .mo | 默认执行 |
 | TBD-12 | erroneous 错误文本对齐深度 | 默认位置一致 Must、文本一致 Should | 默认执行 |
 | TBD-10 | 里程碑时间估算 | 用户告知每周投入 | 待定 |
+| TBD-13 | 组件 / connect 位置的 `break` 写法：omc 1.25.0 语法层拒，ymc 现在收（testsuite 27 个文件，parse_error_align 记 KNOWN） | A 照 omc 1.25.0 拒；B 继续支持，27 个文件记分歧账 | 待定（现状保持） |
 
 ## 需探针/实跑验证
 
@@ -19,6 +20,8 @@
 |---|---|---|---|
 | TBD-02 | Dymola getLastError 统计文本格式（仅有 CoupledClutches 一例，R3§4） | 对若干 MSL 模型实跑 Dymola 取样，固化 parse_translation_stats 正则 | S3/S5 Dymola 结构对比 |
 | TBD-03 | Dymola `Advanced.*`（EliminateAliasVariables/OutputModelicaCode）是否存在 | 在 Dymola 里 `list(variables={"Advanced.*"})` | S3/S5 |
+| TBD-14 | s1fix 留下的语法层老差异（9bd9f02 就有，testsuite 无用例）：文件开头 BOM、只用 CR 换行、`function der` 当类名（DUQ4）、`--std=3.2` 不带 --strict 时 pure 的处理 | 各写探针对 omc 1.25.0 实跑，按 Modelica.g / BaseModelica_Lexer.g 行号定 | S1 |
+| TBD-15 | Alias：按 VariablePointers.fromList 去重后方程多于变量，omc 走 PFPlusExternal / match_pf_fair 匹配（NBAlias.mo、NBMatching），ymc SKIP | 移植前先读 v1.25.0 的匹配实现，造方程多于变量的探针 | S5a Alias |
 | TBD-07 | dsmodel.mof 能否经 Dymola Python 接口取得（文档未暴露，R3§7） | runTestCases(generateReferenceTranslationStructure=True) 或读 User Manual 2C | S3 结构对比来源 |
 | TBD-09 | 1.25.0 libSimulationRuntimeC 头/ABI 是否够（方案 §8 #7） | 用 OMC 生成的 Demo.c 手工 clang 链接一次 | S6 |
 | TBD-13 | 工作区 omc 与安装版在比对/读取源码是否一致（R1§未找到1） | 需要时 diff 两版对应 .c | S6/S7 |

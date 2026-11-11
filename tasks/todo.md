@@ -84,6 +84,10 @@
 - [x] 修正：`assert` 不是保留字（MLS B.1 / OMC 词法器均无），改为普通标识符——Buildings 里 `Assert assert(...)` 组件名曾报错；保留字表已与 OMC `BaseModelica_Lexer.g` 逐词对比
 - 语言版本：解析器实现 MLS 3.6 文法（3.x 的超集）；`--std=<3.3` 时 pure/impure 退回标识符；老库（MSL 3.2.3、msl22 用例）解析正常
 - 已知不做：PDEModelica / MetaModelica 扩展；`--std` 除 pure/impure 外的版本差异
+- [x] (s1fix，2026-11-11) 语法错误位置补齐：修饰名带下标（ArrayModification1 / 2，Modelica.g:908-922）报在名字起点；未闭合记号报 EOF 位置（antlr3lexer.c:258-264）；
+      外部函数调用照 Modelica.g:484-489；修饰名前导点（:910）；引号名转义（BaseModelica_Lexer.g:389-405）；实数上溢 / 指数不完整（:1779-1782、:447-449）；部分应用只收命名实参（:1558-1565）；词法错只报第一条。
+      `parse_error_align.py --testsuite-scan [--all]` 把错误位置对拍扩到整个 testsuite（omc 结果缓存 .cache/parse_scan_omc.json），接进门（s12.sh gate）。
+      对抗评审探针 pk-s1a（52，PASS 24 / 两拒 28）；全扫 MISMATCH / SPURIOUS / MISSING 0（KNOWN 27 个 break 写法，去留待用户定，见 open-questions TBD-13）；parse_sweep 1843/1843、MSL 2508/2508。
 
 ## S2 第一个版本（完成，2026-09-16 ~ 09-17）——方案 §5 S2
 
@@ -2880,6 +2884,41 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       顺带修了一个基线就有的静默错：`vector(引用)` omc 留调用（simplifyVector），ymc 原来一律展开；3 维以上非字面量的 `matrix(A)` 同样留调用。
       探针 pk-p53（248）、pk-p53a（110，评审手写）；slice 731 例 PASS 697；scodeinst PASS 691→698；testsuite PASS 1902→1918；探针 18892 个 干净；单测 578→585。
       留 SKIP：Bug3187 下一层（初始算法给 discrete 赋值，checkAssignment NFTyping.mo:3381-3436）、Size7（枚举类型转换函数）、ArrayConstructorRecord1 / 2（推导式范围是记录数组引用，定型期 Ceval）、CevalRecordArray6 / 9 和 DimUnknown14（记录绑定链求值）、DimUnknown16 / gc（维要经 FFI 实调外部函数）；vector / matrix 用在运算数、内建和函数实参里，参数数组上的 matrix；方程里的运行时切片；推导式的体是引用 / 调用；声明在后的变量数组（非参数）。
+- [ ] (68e / 68f 收敛方案，2026-11-11 用户纠正"方案总是在反复"后重定；根因见 lessons 同日条)
+      规则，定一次，之后不改，要改先问用户：
+      (a) 底线：9bd9f02 有输出（退出 0）的用例，输出逐字节不变。
+          例外（用户 2026-11-11 定"变成与 omc 一致的都允许"）：照 OMC v1.25.0 文件:行移植、变化后与 omc 逐字节一致的（FAIL→PASS、ACCEPTS-INVALID→两拒），逐个列名记账；
+          FAIL→SKIP（错输出变成如实未实现）按评审一向的口径算进步，也逐个列名（主代理补注，用户可否决）；开工时点名、经用户同意的碰巧对的个例。其它任何变化都算退步。
+          检查方法：全部探针 + scodeinst / testsuite / MSL 对 9bd9f02 做机械差分，每个"旧输出被改"的用例逐个对 omc 核。
+      (b) 范围：新代码只挂在 9bd9f02 以本桶原因 SKIP（退出 66）的点之后；共用查找 / 实例化函数不为本桶加新判定。
+      (c) 评审结果的处理：
+          - 本桶引入的 FAIL / AI / CRASH → 在新路线入口收窄为 SKIP，不写新的识别逻辑；
+          - 放开后原先 SKIP 的模型出错、根因是方案漏考虑的老路线（用户 2026-11-11 补充："如果是之前未考虑到的，将之前漏掉的内容都补充上"）
+            → 照 OMC 把漏掉的处理补齐：回第 1–3 步补学 OMC 逻辑、补任务卡、方案再评审后再实现，仍受 (a) 约束；不收窄成 SKIP，也不只登记 KNOWN；
+          - 9bd9f02 PASS → 非 PASS → 撤掉造成它的改动；
+          - 9bd9f02 老错 → 一律登记 KNOWN + open-questions。
+          每桶探索评审一轮 + 核对评审一轮（只核收窄点与 (a) 的差分）即收口。
+  用户选定（2026-11-11）：两桶都从 9bd9f02 重做，现有返工代码（W1 agent-a31f1c44ca4d7e1b0、W2 agent-a50f554362667d4c5）只作参考、不删。
+  佐证：68e 第一版就拿到的 10 个 testsuite PASS，六轮返工后一个没多；第六 / 七轮复评仍查出本桶退步 11（68e）与本桶 FAIL 26 / AI 2（68f）。
+  - [ ] 先把已完成的 s1fix、Alias 单独过门、提交、推送（两者不碰 flatten / inst）。重做以新 HEAD 为底线 (a)。
+  - [ ] 目标定死，只做这些（来自单桶全语料扫，SKIP→PASS 且与 omc 逐字节一致）：
+        - 68e（11）：内建 print（AlgorithmNoRetCall、AssertTest4-7、IntegerTest），函数变量类型（FunctionTupleRecord、RecordMemberArguments、Ticket5134、ExtRecordMemberArguments）；MSL GenerationOfFMUs（用户 11-11 改归 68e）。
+        - 68f（11）：BreakModifier1-3、ModClass4、ModClass6、RedeclareClass2、RedeclareMod11、RedeclareMod12、const15、Bug2727、RedeclareInClassModification。
+        其余写法一律保持底线行为（SKIP 就 SKIP），规则 (c) 补齐的老路线除外。
+  - 用户已批准的越界改动与范围决定（2026-11-11，评审以本节为准）：
+        - 68e：AlgorithmNoRetCall 的两处共用纯度路径（纯度判定、常量求值前的纯度检查）。
+        - 68f：RICM 的新代码放在 SKIP 点之前（门控与原 SKIP 条件等价）；partial 组改共用 inst_component（组件栈记账、撞 partial 由停改挂起）；两项各带退路——机械比对里底线有输出的用例变一个就整项放弃。
+        - 68f：PP 族本桶做（经限定名进类建包实例、包实例化查 partial、补 instExpressions 等价遍历），作最后阶段，退路同上。
+        - 老路线补齐范围：只补消费本桶放开数据的路线；同一模型里无关的底线老错仍 KNOWN。
+        - 主代理按上面规则定的：68f 非 partial 的 instPackage 错误不进本桶；检查实例化用确定性预算、宁漏报不误报；照 OMC 移植的判定报真错误。
+  按 §7.4 五步走（2026-11-11 用户定），两桶并行，各自一张任务卡：
+  - [ ] 第 1 步 学 OMC 逻辑：沿 22 个目标在 omc v1.25.0 里走的路径读到底（文件:行）+ 探针实跑；标出 9bd9f02 对每个目标的 not_implemented 点；读相关 lessons。
+  - [ ] 第 2 步 任务卡（docs/tasks/T-S3-68e-*.md、T-S3-68f-*.md）：方案逐条对到第 1 步来源，放开条件收到目标需要的最窄；验收 a–e 照 §7.4（例外按规则 (a)：照 OMC 移植、变化后与 omc 一致的逐个列名）。
+        旧评审探针（pk-p54..54h、pk-p55..55g）当回归床：重做版与底线输出相同的老错不入库，转交 65b / 65c；入库的只要 PASS / 两拒 / SKIP。
+  - [ ] 第 3 步 独立 agent 评审两张任务卡，通过才开工。
+  - [ ] 第 4 步 实现（新 worktree，从提交 s1fix / Alias 后的 HEAD 起）→ 自检 a–c → 对抗评审一轮 + 核对评审一轮（按 e 处理）→ 集成 → 正式门 → 2 个提交 → 推送。
+  - [ ] 第 5 步 经验写进 lessons；老错族归到 65b / 65c（查找迁移到实例树）：DUP 留存（W1 的 OmcTree 可复用）、经限定名进包时 instPackage 的 partial 检查、记录构造器按实例命名、包常量 break 后的引用。
+- [ ] (纯度桶，68e 重做后) 照 omc 的纯度语义收尾：声明为 impure 的函数在 Ceval 语境 omc 照求值、ymc SKIP（68e 探针 U16）；flatten.cpp:31691 与 visit_nf_ 看了后标纯度，omc 实例化期只看声明纯度（NFCall.mo:591、NFStructural.mo:212）。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。
@@ -2925,6 +2964,9 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       评审探针 s5a2d-adv（54 个，PASS 53（非恒等 30）、omc 报错 1、FAIL 0）。bdae_sweep 的探针：omc 自己崩溃（退出码 3221225477 = 0xC0000005）时缺的段记 `omc-exit=…`，不算"ymc 打了"（LbnW008 等 4 个）。
       留 SKIP：删掉的 when 变量不在 Discrete 桶末尾（omc 打印失败）、枚举 / String 自等、$OMC$PositiveMax / inStreamDiv 实参变形、两个数组的 and / or。
       欠账（Simplify 2 前要做）：真正的 eqData.equations 视图（Alias 的别名绑定方程只进 removed）、Discrete 桶空位往后带。
+- [x] (S5a-2e) 第五个 pre 模块 Alias（2026-11-11），门 = `(Alias)` 段逐字节，`bdae_sweep.py --stage alias`（gate.sh 加 gcc + ASan 两段）。NBAlias.aliasDefault 11 块全移植，src/bdae/alias.{h,cpp}；
+      语料 a PASS 69（非恒等 30）、b PASS 960（非恒等 477），bdae 探针全集 FAIL / CRASH / leak 0；新探针 s5a2e（589，PASS 573）、对抗评审 s5a2e-adv（60，PASS 28 / omc 无段 20 / SKIP 12）；alias_test 8 个。
+      留 SKIP：String 拼接集合（omc makeOne 失败无段）、去重后方程多于变量（PFPlusExternal 没移植）。细节见 ADR-008 §6 Q3（S5a-2e）。
 - [ ] (S5a-2…) pre 模块按 NB 运行序一个个做（2026-11-03 改定，原计划按语料 a 跳着做）：Bindings → FunctionAlias → Early Inline → Simplify 1 → Alias → Simplify 2 → Remove Stream → Detect States → Events。每个模块的输入都是上一段逐字节验证过的输出，门设在每一段上。
 - [ ] (S5a) lower + NB 九个 pre 模块，按模块增量（Bindings → FunctionAlias → Early Inline → Simplify 1 → Alias → Simplify 2 →
       Remove Stream → Detect States → Events）；首批子集 `simulation/modelica/NBackend/{basics,alias,event_handling}` + equations /
