@@ -29,15 +29,10 @@ class EqnSimplifier {
   EqnSimplifier(BackendDAE& d, Interner& in) : d_(d), in_(in), compare_(d.exprs, in) {}
 
   ModuleResult run() {
-    // EquationPointers.map(eqData.equations, func)（:414）。eqData.equations 是"全部方程"：lower 的 addUntypedList、Bindings / FunctionAlias
-    // 的 addList / addTypedList、Early Inline 的 addUntypedList 都往里加（NBEquation.mo:4512、:4543、:4571，NBBindings.mo:100-110），初值和
-    // removed 的也在里面。ymc 没有这个视图，取 simulation、initials、removed 的并：每条方程恰好化简一遍（不像 EqData.mapExp 那样 simulation
-    // 和 continuous / discretes 各走一遍）。这里的先后只影响改成参数的变量的序，那个序在 vars() 里按 omc 的走法单独算。
-    std::vector<Id<Eqn>> all;
-    std::unordered_set<std::uint32_t> seen;
-    for (const EqnSet* set : {&d_.eqns.simulation, &d_.eqns.initials, &d_.eqns.removed})
-      for (Id<Eqn> id : set->items)
-        if (seen.insert(id.raw).second) all.push_back(id);
+    // EquationPointers.map(eqData.equations, func)（:414）。eqData.equations 是"全部方程"（见 EqnData::equations），初值和 removed 的也在里面，
+    // 但 Alias 的非平凡别名绑定方程不在（它们只进 removed），所以第二次 Simplify 不碰它们。每条方程恰好化简一遍（不像 EqData.mapExp 那样
+    // simulation 和 continuous / discretes 各走一遍）。这里的先后只影响改成参数的变量的序，那个序在 vars() 里按 omc 的走法单独算。
+    const std::vector<Id<Eqn>> all = d_.eqns.equations.items;
     for (Id<Eqn> id : all) {
       equation(id);
       if (r_.unsupported) return r_;
@@ -419,7 +414,7 @@ class EqnSimplifier {
 
   void compress() {
     EqnData& ed = d_.eqns;
-    for (EqnSet* set : {&ed.simulation, &ed.continuous, &ed.discretes, &ed.initials, &ed.removed}) {
+    for (EqnSet* set : {&ed.equations, &ed.simulation, &ed.continuous, &ed.discretes, &ed.initials, &ed.removed}) {
       std::vector<Id<Eqn>> keep;
       for (Id<Eqn> id : set->items)
         if (!dummies_.count(id.raw)) keep.push_back(id);

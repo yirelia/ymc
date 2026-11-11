@@ -337,11 +337,15 @@ class Simplifier {
     if (std::abs(result) >= kMaxExactInt) return stop("integer constant out of the exact Real range", at);
     return integer(static_cast<std::int64_t>(result));   // realInt 截断
   }
-  // getConstantValue :1470-1479。化简过的实参里 const number 只剩字面量：CAST 和 UNARY 包着字面量的都折掉了（simplifyCast、simplifyUnaryOp）。
+  // getConstantValue :1470-1479 = realValue(Ceval.evalExp(exp))。化简过的实参里 UNARY 包字面量的都折掉了（simplifyUnaryOp），CAST 包 Integer 字面量
+  // 的也折掉了；剩下的是 CAST(Real, Real 字面量)：simplifyCast 只折 (REAL, INTEGER)（:1322-1344），别的原样包着。Alias 对 CAST(Real, x) 求导就造出
+  // 这种（`CAST(1.0 - z)` 的导数是 CAST(Real, -1.0)，实跑探针 LwaTCast2），Ceval 把它求成那个 Real。CAST 到别的类型没核过。
   double number(Id<Expr> id) {
     const Expr& e = a_[id];
     if (e.kind == ExprKind::IntLit) return static_cast<double>(e.ival);
     if (e.kind == ExprKind::RealLit) return e.rval;
+    if (e.kind == ExprKind::Cast && e.ty.kind == TypeKind::Real) return number(e.a);
+    if (e.kind == ExprKind::Unary) return -number(e.a);
     stop("constant number that is not a literal", id);
     return 0.0;
   }

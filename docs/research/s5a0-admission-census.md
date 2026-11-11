@@ -53,7 +53,7 @@ ADR-008 的 S5a 按模块增量推进，动手前用实跑数据回答：哪些�
 | FunctionAlias | 16 / 16（S5a-2b 实测非恒等 PASS 22） | 101 / 101（实测 105） |
 | Early Inline | 6 / 0（S5a-2c 实测非恒等 PASS 6） | 52 / 1（实测 56） |
 | Simplify 1 | 18 / 0（S5a-2d 实测非恒等 PASS 24） | 88 / 3（实测 87，另 1 个 omc 无段） |
-| Alias | 26 / 26 | 398 / 397 |
+| Alias | 26 / 26（S5a-2e 实测非恒等 PASS 30） | 398 / 397（实测 477） |
 | Simplify 2 | 0 / 0 | 58 / 1 |
 | Remove Stream | 0 / 0 | 0 / 0 |
 | Detect States | 33 / 33 | 174 / 174 |

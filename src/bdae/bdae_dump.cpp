@@ -208,6 +208,8 @@ class Dumper {
     out += bucket("Parameter", vd.parameters);
     out += bucket("Constant", vd.constants);
     out += bucket("Artificial", vd.artificials);
+    // full 分支之后无条件再打 auxiliaries、aliasVars（:2221-2222）；auxiliaries 这里恒空。nonTrivialAlias 不在表里，不打。
+    out += bucket("Alias", vd.alias_vars);
     return out;
   }
   int scalar_size(const VarSet& s) const {

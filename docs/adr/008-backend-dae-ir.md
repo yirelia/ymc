@@ -324,6 +324,12 @@ Bindings（`Modules/2_Pre/NBBindings.mo:50`）、FunctionAlias（`NBFunctionAlia
 - **Q3 再答一段（S5a-2c）**：`(Early Inline)` 段也逐字节复现。`EqData.mapExp` 走 simulation、continuous、discretes、initials，simulation 与 continuous / discretes 是同一批方程指针，所以 simulation 里的方程映射两遍、初值方程一遍，体里再调的可内联函数 sim 展开两层、初值一层；换上的体先 combineBinaries 再 simplify（`NBReplacements.mo:280-341`）。`IfEquationBody.isRecordOrTupleEquation` 的 `_ :: _` 支对任何 if 都成立，所以每条 if 方程都重造、按 unique_index 重新起名、挪到桶尾，有没有函数都一样（`NBInline.mo:264-408`）。FunctionAlias 只在初值方程里提的 `$FUN` 是 PARAMETER、不进 variables，omc 在这个模块失败、不打这一段，ymc 照此 SKIP。
 - **D1 补充（S5a-2c）**：`UserFunction` 带上可内联函数的输入序、局部（名字 + 绑定，sortLocals 序）和体（那条赋值的右边），lower 的 `inline_shape` 抄；形参超出标量的记在 `not_inlinable`，真要内联它时才 SKIP。函数的内联类型 FlatFunction 还没带，driver 扫 SCode 置 `inline_annotation_seen`，置位时遇到内联整模型 SKIP（`ponytail:`，前端记上内联类型后按函数判）。
 - **Q3 再答一段（S5a-2d）**：`(Simplify 1)` 段也逐字节复现。NBackendDAE.simplify（`NBackendDAE.mo:386-444`）映射的是 `eqData.equations`（sim、初值、removed 全部方程），每条一遍，不像 EqData.mapExp 那样 sim 走两遍；Equation.simplify（`NBEquation.mo:1652-1767`）先把每个顶层式子化简一遍，再看结构：两边相等成 `0 = 0`（makeZero 只有 Real / Integer / Boolean，枚举、String omc 报错无段）；when 去掉 false 条件的支，整条没了就删，第一支赋值的变量改 PARAMETER；if 方程剪 true / false 支，只剩一支换成体里那条（不看条件，无 else 的初值 if 也这样），各支左边相等并成 `lhs = if …`；算法再走一遍 simplifyStatements。绑定不化简（源码 ToDo）。removeList / addList 的返回值没接：删除原地生效但桶里留空位，删掉的变量不在 Discrete 桶末尾时打印失败、omc 无段，ymc 照此 SKIP。Simplify 2 是同一个函数同一参数，差别全在 Alias 之后的输入（Alias 的别名绑定方程只进 removed、不进 equations，`NBAlias.mo:275-277`），到时要真正维护 equations 视图。
+- **Q3 再答一段（S5a-2e）**：`(Alias)` 段也逐字节复现。NBAlias.aliasDefault（`NBAlias.mo:209-284`）的 11 块全移植：找简单方程、建集合、按 Tarjan 第三遍的序因果化、solveLinear 加线性求导、选代表、属性合并（AttributeCollector `:837-1445`，fixed 让出、min 取大 max 取小、参数取 `max(…)` 等怪癖照抄）、pre 例外、Replacements.applySimple（`NBReplacements.mo:99-234`）、收尾、打印。别名绑定方程只进 removed、不进 equations（`:275-277`）。
+  - fixValues 里 Solve.solveBody 导数为 0 不算失败（`NBSolve.mo:604-606`），而 `NBAlias.mo:820` 根本不看 status，所以 ymc 只在 fix_values 用 solve(strict = false)。
+  - String 拼接的集合在 createReplacementRules 里也无条件 solve / 求导（`:817-821`、`:1414-1420`），makeOne(String) 失败、omc 无段，ymc 照此 SKIP。
+  - 按 VariablePointers.fromList（`NBVariable.mo:1738-1784`）去重后，方程多于变量时 omc 走 PFPlusExternal 匹配，没移植，ymc SKIP。
+  - omc 在后面的模块崩溃（0xC0000005）时 stdout 断在 4096 字节，参考段不全：探针加长输出把 Alias 段推过边界，再拿完整段。
+  - 语料 a 非恒等 PASS 30、b 非恒等 PASS 477，FAIL / CRASH / leak 0。
 - **待定**：D3 回读里 MULTARY 与嵌套 BINARY 文本相同，parser 的还原规则到写回读时再定。
 
 ## 附录 A 实跑记录

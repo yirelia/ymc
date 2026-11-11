@@ -27,6 +27,8 @@
 //       同上，FunctionAlias 之后再跑 Early Inline，打 `BackendDAE: (Early Inline)` 一段。
 //   ymc --dump-after=simplify1 (<file.mo> | --load-model=P --class=Q.N)
 //       同上，Early Inline 之后再跑第一次 Simplify，打 `BackendDAE: (Simplify 1)` 一段。
+//   ymc --dump-after=alias (<file.mo> | --load-model=P --class=Q.N)
+//       同上，Simplify 1 之后再跑 Alias，打 `BackendDAE: (Alias)` 一段。
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -45,6 +47,7 @@
 #include "absyn/unparse.h"
 #include "base/diag.h"
 #include "base/symbol.h"
+#include "bdae/alias.h"
 #include "bdae/bdae_dump.h"
 #include "bdae/bindings.h"
 #include "bdae/function_alias.h"
@@ -86,6 +89,8 @@ void print_help() {
       "  ymc --dump-after=bindings <f>  lower + the Bindings module, print the (Bindings) section (S5)\n"
       "  ymc --dump-after=functionalias <f>  ... + the FunctionAlias module, print the (FunctionAlias) section (S5)\n"
       "  ymc --dump-after=earlyinline <f>    ... + the Early Inline module, print the (Early Inline) section (S5)\n"
+      "  ymc --dump-after=simplify1 <f>      ... + the first Simplify module, print the (Simplify 1) section (S5)\n"
+      "  ymc --dump-after=alias <f>          ... + the Alias module, print the (Alias) section (S5)\n"
       "  ymc --check-syntax <f>...      syntax check only\n"
       "  ymc --dump-tokens <f>          print token stream\n"
       "  ymc --log=parse                trace parser rule entries to stderr\n"
@@ -256,6 +261,7 @@ const char* backend_stage(const char* mode) {
   if (std::strcmp(mode, "dump-after=functionalias") == 0) return "FunctionAlias";
   if (std::strcmp(mode, "dump-after=earlyinline") == 0) return "Early Inline";
   if (std::strcmp(mode, "dump-after=simplify1") == 0) return "Simplify 1";
+  if (std::strcmp(mode, "dump-after=alias") == 0) return "Alias";
   return nullptr;
 }
 
@@ -335,6 +341,7 @@ int dump_flat_pipeline(ymc::Absyn& absyn, ymc::Diagnostics& diags, ymc::Interner
         {"FunctionAlias", "function alias", &ymc::bdae::function_alias},
         {"Early Inline", "early inline", &ymc::bdae::early_inline},
         {"Simplify 1", "simplify 1", &ymc::bdae::simplify_module},
+        {"Alias", "alias", &ymc::bdae::alias},
     };
     lr.dae.inline_annotation_seen = inline_annotation_seen(scode, interner);
     if (std::strcmp(stage, "After Lowering") != 0) {
@@ -507,6 +514,7 @@ int main(int argc, char** argv) {
     else if (std::strcmp(a, "--dump-after=functionalias") == 0) opt.mode = "dump-after=functionalias";
     else if (std::strcmp(a, "--dump-after=earlyinline") == 0) opt.mode = "dump-after=earlyinline";
     else if (std::strcmp(a, "--dump-after=simplify1") == 0) opt.mode = "dump-after=simplify1";
+    else if (std::strcmp(a, "--dump-after=alias") == 0) opt.mode = "dump-after=alias";
     else if (std::strcmp(a, "--dump-after=scode") == 0) opt.mode = "dump-after=scode";
     else if (std::strncmp(a, "--class=", 8) == 0) opt.dump_class = a + 8;
     else if (std::strcmp(a, "--check-syntax") == 0) opt.mode = "check-syntax";

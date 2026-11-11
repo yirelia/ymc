@@ -364,16 +364,20 @@ class FunctionAlias {
     }
     for (std::size_t i = 0; i < init_eqns_.size(); ++i)
       if (init_eqns_[i].is_valid()) vd.parameters.items.push_back(map_.values()[i].var);
-    // 新方程表也是头插（:259-263），回到插入序；连续的先加（:307-308）。
+    // 新方程表也是头插（:259-263），回到插入序；连续的先加（:307-308）。三种都同时进 equations（addTypedList NBEquation.mo:4512、:4523、:4543）。
     for (EqnTime t : {EqnTime::Continuous, EqnTime::Discrete}) {
       for (Id<Eqn> q : sim_eqns_) {
         if (d_.eqn_arena[q].time != t) continue;
         (t == EqnTime::Continuous ? ed.continuous : ed.discretes).items.push_back(q);
         ed.simulation.items.push_back(q);
+        ed.equations.items.push_back(q);
       }
     }
-    for (Id<Eqn> q : init_eqns_)
-      if (q.is_valid()) ed.initials.items.push_back(q);
+    for (Id<Eqn> q : init_eqns_) {
+      if (!q.is_valid()) continue;
+      ed.initials.items.push_back(q);
+      ed.equations.items.push_back(q);
+    }
   }
 
   BackendDAE& d_;

@@ -14,7 +14,7 @@
                     A2'          (After Lowering) 有数组型变量、Record 桶非空、或有 [ARRY] [FOR-] [RECD] [TUPL]
                     A5           表达式里有数组型子表达式或推导式：NB 路径不展开（NFInst.mo:324-333），默认路径展开了
                     A1           该模型压平和 omc 不一致（语料 a 的 a1_a.jsonl）
-                    <上一段>:<判定>  --stage 不是 lower 时：该模型在上一段（NB 运行序，lower → bindings → functionalias → earlyinline → simplify1）不是 PASS，
+                    <上一段>:<判定>  --stage 不是 lower 时：该模型在上一段（NB 运行序，lower → bindings → functionalias → earlyinline → simplify1 → alias）不是 PASS，
                                  这一段的输入就没验证过，不比。判定是 NOT-ADMITTED 时带上原因，所以会一层层套（bindings:NOT-ADMITTED:lower:FAIL）
                   NOT-ADMITTED 的模型 ymc 照样跑，只看是否崩溃（崩溃 = CRASH）；打出来的文本不比，no-section 而 ymc 退 0 的单列一行。
                   A2' / A5 按这一段自己的文本判（--stage bindings 时绑定方程形如数组、记录的归 A2'）；A3 不要求，这一段在手就行。
@@ -31,7 +31,7 @@ JSON 与 tools/nf_live_sweep.py 同形（{"total", "records": [{path, status, ve
   python -I tools/bdae_sweep.py --corpus b --ymc <ymc.exe>
   python -I tools/bdae_sweep.py --cases <cases.json> [--a1 <a1.jsonl>] --ymc <ymc.exe>
   python -I tools/bdae_sweep.py --probes [集名…] --ymc <ymc.exe>     # tests/probes/bdae/*.probes，现跑 omc
-  以上都可加 --stage lower|bindings|functionalias|earlyinline|simplify1
+  以上都可加 --stage lower|bindings|functionalias|earlyinline|simplify1|alias
 
 基建工具，Claude 提供。
 """
@@ -76,7 +76,7 @@ _TOP_R = re.compile(r"\)*(?: and |$)")
 # --stage 的值 = ymc --dump-after 的值 → omc 的段名。按 NB 的运行序排（NBackendDAE.mo:268-278 v1.25.0），stage_why 靠这个序找上一段。
 # Simplify 在 NB 里跑两次（:272、:274），段名带序号，参考目录跟着段名走（sections/simplify_1、simplify_2，structcompare.stage_dir）。
 STAGES = {"lower": "After Lowering", "bindings": "Bindings", "functionalias": "FunctionAlias", "earlyinline": "Early Inline",
-          "simplify1": "Simplify 1"}
+          "simplify1": "Simplify 1", "alias": "Alias"}
 ORDER = list(STAGES)
 
 
@@ -215,7 +215,9 @@ def stage_why(stage, sec, why_lower, text, cls, d, a):
     return admission(sec(stage))[1]
 
 
-def one_case(c, a, a1):
+def one_case(c, a, a1, omc_rc=None):
+    """omc_rc：参考生成时 omc 的退出码（census 的 sig_<语料>.jsonl）。崩溃时（Windows 0xC0000005）末段被 complete_sections 丢掉，之后的段本来
+    就没有，这一段缺了不是 omc 不打，同 one_probe 记成 omc-exit=…（语料 b 的 ClassRestriction1：Alias 段的头已经印出、整段在丢掉的缓冲里）。"""
     rec = {"path": c["id"], "status": "correct"}
     lsec = ref_section(c, "lower")
     _, why_l = admission(lsec)
@@ -233,7 +235,10 @@ def one_case(c, a, a1):
         rc, out, err = run_ymc(a.ymc, text, cls, d, a.timeout, a.stage)
     finally:
         shutil.rmtree(d, ignore_errors=True)
-    return judge(rec, section, why, rc, out, err)
+    rec = judge(rec, section, why, rc, out, err)
+    if rec["verdict"] == "NOT-ADMITTED" and section is None and omc_rc not in (None, 0, 1):
+        rec["reason"] = f"omc-exit={omc_rc}"
+    return rec
 
 
 def one_probe(job, a):
@@ -340,8 +345,13 @@ def main():
     if a.a1:
         with open(a.a1, encoding="utf-8") as f:
             a1 = {r["id"]: r for r in (json.loads(x) for x in f if x.strip())}
+    omc_rc = {}
+    sig = os.path.join(CENSUS, f"sig_{a.corpus}.jsonl") if a.corpus else ""
+    if os.path.exists(sig):
+        with open(sig, encoding="utf-8") as f:
+            omc_rc = {r["id"]: r.get("rc") for r in (json.loads(x) for x in f if x.strip())}
     with ThreadPoolExecutor(a.jobs) as ex:
-        return report(list(ex.map(lambda c: one_case(c, a, a1), cases)), a, a.corpus or "cases")
+        return report(list(ex.map(lambda c: one_case(c, a, a1, omc_rc.get(c["id"])), cases)), a, a.corpus or "cases")
 
 
 if __name__ == "__main__":

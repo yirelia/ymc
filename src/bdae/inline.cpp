@@ -342,6 +342,11 @@ class Inliner {
     rebuild(out.continuous, sim, false, EqnTime::Continuous);
     rebuild(out.discretes, sim, false, EqnTime::Discrete);
     rebuild(out.initials, init, true, EqnTime::Continuous);
+    // equations 不经 typeList，直接 addList(eq_lst)（NBEquation.mo:4571）：new_eqns 是头插攒的，所以重造的 if 按重造的反序接在尾巴上。
+    std::vector<Id<Eqn>> made = sim;
+    made.insert(made.end(), init.begin(), init.end());
+    rebuild(out.equations, {}, true, EqnTime::Continuous);
+    out.equations.items.insert(out.equations.items.end(), made.rbegin(), made.rend());
   }
 
   // inlineRecordTupleArrayIfEquation :366-389：体先过一遍（嵌着的 if 重造），再 makeIfEquation 起名。体里的方程是同一批指针，留在原处。

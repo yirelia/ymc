@@ -39,8 +39,10 @@ struct Var {
 struct VarSet { std::vector<Id<Var>> items; };   // VariablePointers（NBVariable.mo:1568-1573）的视图部分
 
 // VAR_DATA_SIM（NBVariable.mo:2053-2084）的子集。unknowns 是 algebraics + discretes，打印时只用它算 `scalar unknowns`。
+// alias_vars / non_trivial_alias 由 Alias 模块填（NBAlias.mo:271-272）：前者打在 Artificial 之后（toStringVerbose NBVariable.mo:2221-2222），
+// 后者不打（不在 toStringVerbose 的桶表里），只留着给后面的模块。
 struct VarData {
-  VarSet unknowns, states, algebraics, discretes, top_level_inputs, parameters, constants, artificials;
+  VarSet unknowns, states, algebraics, discretes, top_level_inputs, parameters, constants, artificials, alias_vars, non_trivial_alias;
 };
 
 enum class EqnTime : std::uint8_t { Continuous, Discrete, Empty };      // EquationKind（NBEquation.mo:3790）的子集
@@ -95,9 +97,12 @@ struct Eqn {
 struct EqnSet { std::vector<Id<Eqn>> items; };
 
 // EQ_DATA_SIM（NBEquation.mo:4303-4313）的子集。simulation = continuous + discretes，打印时只用它算 `scalar simulation equations`；removed 不算。
+// equations 是"全部方程"（不打印）：lower 的全部（含初值和 removed，NBackendDAE.mo:841-844），之后各模块的 addList / addTypedList /
+// addUntypedList 往里加（NBEquation.mo:4512-4578），compress 删 DUMMY。它和 simulation + initials + removed 的并只在 Alias 之后不同：
+// Alias 的非平凡别名绑定方程只进 removed、不进 equations（NBAlias.mo:275-277），Simplify 2 映射的是 equations（NBackendDAE.mo:414）。
 struct EqnData {
   int unique_index = 0;             // 下一个可用的 $RES_… 序号（Bindings 等模块接着往上编，NBBindings.mo:68-81）
-  EqnSet simulation, continuous, discretes, initials, removed;
+  EqnSet equations, simulation, continuous, discretes, initials, removed;
 };
 
 // 函数的 protected 局部（Function.locals，NFFunction.sortLocals 排过的依赖序，FlatFunction::params 里同序）。

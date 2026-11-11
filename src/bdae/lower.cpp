@@ -804,6 +804,10 @@ class Lowerer {
     };
     name_reversed(inits);
     name_reversed(eqs);
+    // eqData.equations = EquationPointers.fromList(equation_lst)（:842）：equation_lst 的表头是 $RES_SIM_0，所以按编号从小到大，初值方程在前；
+    // removed（EMPTY）的也在里面，只去掉 clocked（:847，这里没有）。
+    ed.equations.items.assign(inits.rbegin(), inits.rend());
+    ed.equations.items.insert(ed.equations.items.end(), eqs.rbegin(), eqs.rend());
     collect_iterators(inits, eqs);
     for (Id<Eqn> id : eqs) {
       switch (r_.dae.eqn_arena[id].time) {

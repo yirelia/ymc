@@ -46,10 +46,12 @@ ModuleResult bindings(BackendDAE& dae, Interner& in) {
   // 打印按数组序（EquationPointers.toString :3879-3894），不走 typeList，原有方程的序不动。
   EqnData& ed = dae.eqns;
   for (auto it = cont.rbegin(); it != cont.rend(); ++it) {
+    ed.equations.items.push_back(*it);
     ed.continuous.items.push_back(*it);
     ed.simulation.items.push_back(*it);
   }
   for (auto it = disc.rbegin(); it != disc.rend(); ++it) {
+    ed.equations.items.push_back(*it);
     ed.discretes.items.push_back(*it);
     ed.simulation.items.push_back(*it);
   }

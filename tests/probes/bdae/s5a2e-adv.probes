@@ -1,0 +1,582 @@
+//// set: s5a2e-adv — S5a-2e Alias 对抗评审（rv2/al）。LalX 前缀，走 tools/bdae_sweep.py --probes --stage alias 的判定。String 拼接的别名集合（omc 在 createReplacementRules 的 fixValues 循环里 Solve.solveBody → 求导 makeOne(String) 失败、没有 Alias 段，NBAlias.mo:817-822）：LalX_str1/4/5/6/8/9/10、LalX_inl12；对照 str2 / inl11（要严格解，两边都没段）、str3（常量集合）、str7（成环）、str11（平凡）。自指方程（a = 17 + 2 * a、a + a = 2、a = 1 - a）之后再被别的简单方程接上、重复变量不是代表且带 min / max / start / nominal：LalX_selfattr2、selfext1/2/3/6/8/10、dupmerge2、duppre（omc 有段）；对照 selfext0 / 7、dupconst（无属性或常量集合）、selfext4 / 5、dupmerge（重复变量是代表）、selfattr1 / 3。omc 在 Alias 里失败的非法变体：fx2q / fx2ir / fx2sum（两个 fixed 的 start 不等，含 Integer 2 与 Real 2.0）、alwaysin / alwaysonly / in0（0 个 unknowns）、unconn（两个常量）、mix5（nominal 折成 0）。其余是核过的通过形态：引号名、input 进常量集合、edge / pre 各位置、Real / Integer 混合属性、nominal 偏移与参数 nominal、Simplify 1 改成参数的 when 变量、电路连接、inline 后才变简单。
+//// model: LalX_str1
+model LalX_str1
+  String s1, s2;
+equation
+  s2 + "x" = s1;
+  s2 = String(time);
+end LalX_str1;
+//// model: LalX_str4
+model LalX_str4
+  String s1, s2;
+equation
+  "p" + s2 + "q" = s1;
+  s2 = String(time);
+end LalX_str4;
+//// model: LalX_str5
+model LalX_str5
+  String s1, s2, s3;
+equation
+  s2 = s1;
+  s3 + "y" = s2;
+  s3 = String(time);
+end LalX_str5;
+//// model: LalX_str6
+model LalX_str6
+  String s1(start = "u"), s2(start = "v");
+equation
+  s2 + "x" = s1;
+  s2 = String(time);
+end LalX_str6;
+//// model: LalX_str8
+model LalX_str8
+  model M
+    String t;
+  end M;
+  M m;
+  String s;
+equation
+  m.t = s + "!";
+  s = String(time);
+end LalX_str8;
+//// model: LalX_str9
+model LalX_str9
+  String s1, s2, s3;
+equation
+  s3 + "z" = s1;
+  s2 = s3;
+  s2 = String(time);
+end LalX_str9;
+//// model: LalX_str10
+model LalX_str10
+  String s1, s2;
+  Real x;
+equation
+  s2 + "x" = s1;
+  s2 = String(x);
+  x = time;
+end LalX_str10;
+//// model: LalX_inl12
+model LalX_inl12
+  function f
+    input String x;
+    output String y;
+  algorithm
+    y := x + "!";
+    annotation(Inline = true);
+  end f;
+  String s1, s2;
+equation
+  f(s2) = s1;
+  s2 = String(time);
+end LalX_inl12;
+//// model: LalX_str2
+model LalX_str2
+  String s1, s2;
+equation
+  s1 = s2 + "x";
+  s2 = String(time);
+end LalX_str2;
+//// model: LalX_str3
+model LalX_str3
+  String s1, s2;
+equation
+  s1 = s2 + "x";
+  s2 = "a";
+end LalX_str3;
+//// model: LalX_str7
+model LalX_str7
+  String s1, s2;
+equation
+  s1 = "a" + s2;
+  s2 = String(time);
+  s1 = s2 + "";
+end LalX_str7;
+//// model: LalX_str11
+model LalX_str11
+  String s1, s2;
+equation
+  s1 = s2;
+  s2 = String(time);
+end LalX_str11;
+//// model: LalX_inl11
+model LalX_inl11
+  function f
+    input String x;
+    output String y;
+  algorithm
+    y := x + "";
+    annotation(Inline = true);
+  end f;
+  String s1, s2;
+equation
+  s1 = f(s2);
+  s2 = String(time);
+end LalX_inl11;
+//// model: LalX_selfattr2
+model LalX_selfattr2
+  Real a(min = 0, nominal = 4), b(start = 2);
+equation
+  a = 17 + 2 * a;
+  b = a;
+end LalX_selfattr2;
+//// model: LalX_selfext1
+model LalX_selfext1
+  Real a(min = 0), b;
+equation
+  a = 17 + 2 * a;
+  b = a;
+end LalX_selfext1;
+//// model: LalX_selfext2
+model LalX_selfext2
+  Real a(start = 1), b;
+equation
+  a + a = 2;
+  b = -a;
+end LalX_selfext2;
+//// model: LalX_selfext3
+model LalX_selfext3
+  Real a(start = 1, fixed = true), b;
+equation
+  a + a = 2;
+  b = -a;
+end LalX_selfext3;
+//// model: LalX_selfext6
+model LalX_selfext6
+  Real a(nominal = 3), b, c;
+equation
+  a = -a;
+  b = a;
+  c = 2 * b;
+end LalX_selfext6;
+//// model: LalX_selfext8
+model LalX_selfext8
+  Real a(min = -1), b;
+  Integer i;
+equation
+  a = 3 - a;
+  b = a;
+  i = integer(time);
+end LalX_selfext8;
+//// model: LalX_selfext10
+model LalX_selfext10
+  Real a(start = 1), b;
+  Real x(start = 1, fixed = true);
+equation
+  a = 3 - a;
+  b = a;
+  der(x) = -x;
+end LalX_selfext10;
+//// model: LalX_dupmerge2
+model LalX_dupmerge2
+  Real a(start = 2), c, d;
+equation
+  a = 1 - a;
+  c = d;
+  a = c;
+end LalX_dupmerge2;
+//// model: LalX_duppre
+model LalX_duppre
+  Real a(start = 2), b;
+  discrete Real d(start = 0, fixed = true);
+equation
+  a = 1 - a;
+  b = a;
+  when time > 0.5 then
+    d = pre(a);
+  end when;
+end LalX_duppre;
+//// model: LalX_selfext0
+model LalX_selfext0
+  Real a, b;
+equation
+  a = 17 + 2 * a;
+  b = a;
+end LalX_selfext0;
+//// model: LalX_selfext7
+model LalX_selfext7
+  Real a, b, c(max = 4);
+equation
+  a = 1 - a;
+  b = a;
+  c = b;
+end LalX_selfext7;
+//// model: LalX_selfext4
+model LalX_selfext4
+  model M
+    Real b;
+  end M;
+  M m;
+  Real a;
+equation
+  a = 17 + 2 * a;
+  m.b = a;
+end LalX_selfext4;
+//// model: LalX_selfext5
+model LalX_selfext5
+  model M
+    Real b(min = 1, start = 2);
+  end M;
+  M m;
+  Real a(max = 9);
+equation
+  a = 17 + 2 * a;
+  m.b = a;
+end LalX_selfext5;
+//// model: LalX_dupmerge
+model LalX_dupmerge
+  Real a(min = 0), c, d;
+equation
+  a = 1 - a;
+  c = d;
+  c = a;
+end LalX_dupmerge;
+//// model: LalX_dupconst
+model LalX_dupconst
+  Real a(min = 0, start = 1), b;
+equation
+  a = 1 - a;
+  b = a;
+  b = 2;
+end LalX_dupconst;
+//// model: LalX_selfattr1
+model LalX_selfattr1
+  Real a(min = 5, max = 7, start = 3, fixed = true);
+equation
+  a + a = 2;
+end LalX_selfattr1;
+//// model: LalX_selfattr3
+model LalX_selfattr3
+  Real a(nominal = 4);
+  Real y;
+equation
+  a = -a;
+  y = sin(time);
+end LalX_selfattr3;
+//// model: LalX_fx2q
+model LalX_fx2q
+  parameter Real p = 1.5;
+  Real a(start = p + 1, fixed = true), b(start = p, fixed = true);
+equation
+  a = b + 1;
+  der(b) = -b;
+end LalX_fx2q;
+//// model: LalX_fx2ir
+model LalX_fx2ir
+  Real r(start = 2, fixed = true);
+  Integer i(start = 2, fixed = true);
+equation
+  r = i;
+  i = integer(time);
+end LalX_fx2ir;
+//// model: LalX_fx2sum
+model LalX_fx2sum
+  parameter Real p = 1.5;
+  Real a(start = p - 1, fixed = true), b(start = 1 - p, fixed = true);
+equation
+  a + b = 0;
+  der(b) = -b;
+end LalX_fx2sum;
+//// model: LalX_alwaysin
+model LalX_alwaysin
+  input Real u;
+  Real x(stateSelect = StateSelect.always);
+equation
+  x = u;
+end LalX_alwaysin;
+//// model: LalX_alwaysonly
+model LalX_alwaysonly
+  Real x(stateSelect = StateSelect.always, start = 0), y(stateSelect = StateSelect.always, start = 0);
+equation
+  x = y;
+  der(x) = 1;
+end LalX_alwaysonly;
+//// model: LalX_in0
+model LalX_in0
+  input Real u;
+equation
+  u = 3;
+end LalX_in0;
+//// model: LalX_unconn
+model LalX_unconn
+  connector Pin
+    Real v;
+    flow Real i;
+  end Pin;
+  model R
+    Pin p, n;
+    Real v, i;
+  equation
+    v = p.v - n.v;
+    0 = p.i + n.i;
+    i = p.i;
+    v = 2 * i;
+  end R;
+  R r;
+equation
+  r.p.v = sin(time);
+end LalX_unconn;
+//// model: LalX_mix5
+model LalX_mix5
+  model M
+    Real r(min = 0, max = 10, start = 3, fixed = true, nominal = 2);
+  end M;
+  M m;
+  Integer i;
+equation
+  m.r = 2 * i;
+  i = integer(time);
+end LalX_mix5;
+//// model: LalX_qid1
+model LalX_qid1
+  model S
+    Real b;
+  end S;
+  S a;
+  Real 'a.b';
+equation
+  'a.b' = a.b;
+  a.b = sin(time);
+end LalX_qid1;
+//// model: LalX_inconst1
+model LalX_inconst1
+  input Real u;
+  Real y;
+equation
+  y = u;
+  y = 2;
+end LalX_inconst1;
+//// model: LalX_edge1
+model LalX_edge1
+  Boolean a, b;
+  Integer n(start = 0, fixed = true);
+equation
+  a = b;
+  b = time > 0.5;
+  when edge(a) then
+    n = pre(n) + 1;
+  end when;
+end LalX_edge1;
+//// model: LalX_preif
+model LalX_preif
+  Boolean b, c;
+  Real y;
+equation
+  b = c;
+  c = time > 0.5;
+  y = if pre(b) then 1 else 2;
+end LalX_preif;
+//// model: LalX_prebind
+model LalX_prebind
+  Boolean b, c;
+  Boolean d = pre(c);
+equation
+  c = b;
+  b = time > 0.5;
+end LalX_prebind;
+//// model: LalX_prerem
+model LalX_prerem
+  Boolean b, c;
+equation
+  c = b;
+  b = time > 0.5;
+  assert(not pre(c) or b, "m");
+end LalX_prerem;
+//// model: LalX_premix
+model LalX_premix
+  Real x, y;
+  Integer i, j;
+  Boolean b, c;
+  discrete Real d(start = 0, fixed = true);
+equation
+  y = 2 * x;
+  x = sin(time);
+  j = -i;
+  i = integer(time);
+  c = not b;
+  b = time > 0.5;
+  when time > 0.3 then
+    d = pre(y) + pre(j) + (if pre(c) then 1 else 0);
+  end when;
+end LalX_premix;
+//// model: LalX_premix2
+model LalX_premix2
+  Real x, y;
+  Integer i, j;
+  discrete Real d(start = 0, fixed = true);
+equation
+  x = y;
+  j = i;
+  x = sin(time);
+  i = integer(time);
+  when time > 0.3 then
+    d = pre(x) + pre(y) + pre(i) + pre(j);
+  end when;
+end LalX_premix2;
+//// model: LalX_castmin
+model LalX_castmin
+  model M
+    Real r(min = 0.5, max = 2.5);
+  end M;
+  M m;
+  Integer i;
+equation
+  m.r = i;
+  i = integer(time);
+end LalX_castmin;
+//// model: LalX_castfix
+model LalX_castfix
+  model M
+    Real r(start = 1.5, fixed = true);
+  end M;
+  M m;
+  Integer i;
+equation
+  m.r = i;
+  i = integer(time);
+end LalX_castfix;
+//// model: LalX_intkeepreal
+model LalX_intkeepreal
+  Real r;
+  Integer i(start = 2, fixed = true, min = 1, max = 4);
+equation
+  r = i;
+  i = integer(time);
+end LalX_intkeepreal;
+//// model: LalX_nomoff
+model LalX_nomoff
+  Real a(nominal = 10), b;
+equation
+  a = 1 - b;
+  b = sin(time);
+end LalX_nomoff;
+//// model: LalX_mmswap
+model LalX_mmswap
+  Real a(min = -1, max = 3), b(min = -5, max = 5);
+equation
+  a = -2 * b;
+  b = sin(time);
+end LalX_mmswap;
+//// model: LalX_pnom
+model LalX_pnom
+  parameter Real p(nominal = 7) = 3;
+  Real a(nominal = p), b;
+equation
+  b = -a;
+  b = sin(time);
+end LalX_pnom;
+//// model: LalX_s1par1
+model LalX_s1par1
+  Real y;
+  discrete Real d(start = 1);
+equation
+  when false then
+    d = 2;
+  end when;
+  y = d;
+end LalX_s1par1;
+//// model: LalX_s1par3
+model LalX_s1par3
+  Real y, z;
+  discrete Real d(start = 1);
+equation
+  when false then
+    d = 2;
+  end when;
+  y = d + time;
+  z = y;
+end LalX_s1par3;
+//// model: LalX_circ3
+model LalX_circ3
+  connector Pin
+    Real v;
+    flow Real i;
+  end Pin;
+  model L
+    parameter Real l = 1;
+    Pin p, n;
+    Real v, i(start = 0, fixed = true, stateSelect = StateSelect.prefer);
+  equation
+    v = p.v - n.v;
+    0 = p.i + n.i;
+    i = p.i;
+    l * der(i) = v;
+  end L;
+  model R
+    parameter Real r = 1;
+    Pin p, n;
+    Real v, i(nominal = 2);
+  equation
+    v = p.v - n.v;
+    0 = p.i + n.i;
+    i = p.i;
+    v = r * i;
+  end R;
+  model G
+    Pin p;
+  equation
+    p.v = 0;
+  end G;
+  L l1;
+  R r1, r2;
+  G g;
+equation
+  connect(l1.p, r1.p);
+  connect(r1.n, r2.p);
+  connect(r2.n, l1.n);
+  connect(l1.n, g.p);
+end LalX_circ3;
+//// model: LalX_mix6
+model LalX_mix6
+  model M
+    Real r(min = 0, max = 10, start = 3);
+  end M;
+  M m;
+  Integer i(min = -2);
+equation
+  m.r = -i / 4;
+  i = integer(time);
+end LalX_mix6;
+//// model: LalX_inl3
+model LalX_inl3
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 1 * x + 0;
+    annotation(Inline = true);
+  end f;
+  Real a(min = -1), b;
+equation
+  a = f(b);
+  b = sin(time);
+end LalX_inl3;
+//// model: LalX_inl9
+model LalX_inl9
+  function f
+    input Integer x;
+    output Integer y;
+  algorithm
+    y := x + 1 - 1;
+    annotation(Inline = true);
+  end f;
+  Integer i(min = 0), j;
+equation
+  i = f(j);
+  j = integer(time);
+end LalX_inl9;
+//// model: LalX_fa3
+model LalX_fa3
+  Real x;
+equation
+  x = time;
+  sin(x) = cos(x);
+end LalX_fa3;
+//// model: LalX_fx2p
+model LalX_fx2p
+  parameter Real p = 1.5;
+  Real a(start = 2 * p, fixed = true), b(start = p, fixed = true);
+equation
+  a = 2 * b;
+  der(b) = -b;
+end LalX_fx2p;
