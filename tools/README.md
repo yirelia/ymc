@@ -14,6 +14,21 @@ python tests/omc/run.py --print-cflags-histogram --dir <testsuite根>
 - `omc_diff.py`：omc-diff 复刻（token 级）。`--tool` 切 ymc/omc；`--omc` 切 installed/workspace（工作区版带超时）。
 - `cflags_map.json`：cflags→ymc 映射/skip 原因码。`stages.json`：阶段→语料→对比类型。
 
+## S1 语法门
+
+```
+python -I -X utf8 tools/parse_sweep.py --ymc <ymc.exe> --dir <目录> --roundtrip --jobs 3   # 按 status 分桶 + parse→unparse 幂等
+python -I -X utf8 tools/parse_error_align.py --ymc <ymc.exe>                              # 语法错位置 vs Result 文本（默认语料，不跑 omc）
+python -I -X utf8 tools/parse_error_align.py --testsuite-scan --ymc <ymc.exe> [--json out.json]   # 门：整个 testsuite，语法层首错起点 vs 实跑 omc 1.25.0
+python -I -X utf8 tools/parse_error_align.py --testsuite-scan --all --ymc <ymc.exe>              # 同上，ymc 接受的也全交给 omc（找 ymc 宽于 omc 的）
+```
+- `--testsuite-scan`：ymc 拒绝的 ∪ Result 记着语法错而 ymc 接受的（`--all`：全部），逐个拷到临时目录用 omc 实跑
+  `parseFile` + `getMessagesStringInternal`（并发 ≤ 3、每例 120 s；只认 kind = syntax 的 Error），比第一条 Error 的起点。
+  末行 `parse-scan: …` 一行汇总；MISMATCH / SPURIOUS / MISSING / TIMEOUT / CRASH 非 0 退出码 1。
+  omc 结果按文件内容缓存在 `.cache/parse_scan_omc.json`：冷缓存默认约 30 s、`--all` 约 12 min；热缓存只跑 ymc，约 1 min。
+  MetaModelica / ParModelica / PDEModelica / Optimica 方言（文件标记、目录、或被带 `-g=` 的 .mos 装载）跳过。
+  修不了的分歧判 KNOWN、按原因汇总一行（`known_reason`：`KNOWN_DIVERGENCES` 表 + 规则，目前一条：omc 1.25.0 没有 break 修饰）。
+
 ## S3 压平门
 
 ```

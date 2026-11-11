@@ -2,6 +2,7 @@
 #include "parse/parser.h"
 
 #include <cerrno>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -79,12 +80,28 @@ bool Parser::match(TokenKind k) {
   return false;
 }
 
+// 两个出口的分工见 parser.h 里 omc_lexer_error_ / omc_aborted_ 的注释；位置都按 omc 的语法错打法换算
+//（第 1 行左移一列，见 token.h omc_syntax_diag_loc）。
+void Parser::error_at(SourceLoc loc, std::string msg) {
+  if (omc_aborted_) return;
+  omc_aborted_ = true;              // 这类错在 omc 里抛异常、退出整份解析
+  if (omc_lexer_error_) return;     // 已置 lexerError：异常照抛，但不报（parse.c:193）
+  diags_.error(omc_syntax_diag_loc(loc), std::move(msg));
+}
+
+void Parser::error_unconditional(SourceLoc loc, std::string msg) {
+  if (omc_aborted_) return;
+  diags_.error(omc_syntax_diag_loc(loc), std::move(msg));
+  omc_lexer_error_ = true;
+}
+
 void Parser::error_here(const char* msg) {
-  diags_.error(peek().loc, std::string(msg) + "，实际遇到 '" + token_kind_name(kind()) + "'");
+  error_at(peek().loc, std::string(msg) + "，实际遇到 '" + token_kind_name(kind()) + "'");
 }
 
 void Parser::warn_here(const char* msg) {
-  diags_.report(DiagLevel::Warning, peek().loc, msg);
+  if (omc_aborted_) return;
+  diags_.report(DiagLevel::Warning, omc_syntax_diag_loc(peek().loc), msg);
 }
 
 bool Parser::expect(TokenKind k, const char* what) {
@@ -235,12 +252,12 @@ void Parser::parse_class_end(Symbol name, SourceLoc name_loc) {
   SourceLoc end_loc = peek().loc;
   if (!expect(TokenKind::Kw_end, "类体后应为 'end'")) return;
   if (!at(TokenKind::Ident)) {
-    diags_.error(end_loc, "end 后应为类名");
+    error_at(end_loc, "end 后应为类名");
     return;
   }
   Symbol end_name = advance().text;
   if (!(end_name == name))
-    diags_.error(name_loc, "The identifier at start and end are different");
+    error_at(name_loc, "The identifier at start and end are different");
 }
 
 void Parser::parse_short_class_body(ClassDef& cls) {
@@ -368,14 +385,34 @@ void Parser::parse_external(ClassDef& cls) {
   advance();  // external
   cls.has_external = true;
   if (at(TokenKind::StringLit)) cls.ext_lang = advance().text;
-  if (at_name() || at(TokenKind::Dot)) {
-    Id<Exp> e = parse_cref_or_call();
-    if (match(TokenKind::Equal)) {
-      cls.ext_lhs = e;
-      cls.ext_call = parse_cref_or_call();
-    } else {
-      cls.ext_call = e;
+  // external_clause（Modelica.g:484-489 v1.25.0）：( (component_reference EQUALS)? funcname=IDENT LPAR expression_list? RPAR )?
+  // 不是普通函数调用：函数名只能是一个 IDENT，实参是 expression_list（expression[0]）。所以 `y = Mod.sin(x)` omc 在 '.'
+  // 处报 "Missing token: '('"、`sin(x = x)` 报在 '='、`sin(x for i in 1:2)` 报在 for，实参里的部分函数应用按"非实参
+  // 位置"报（s1fix 对抗评审 E03 5:21 / E02 5:24 / E04 5:24 / E01 5:22）。不复用 parse_cref_or_call：它全收。
+  // 这一段只能以 IDENT 或 '.' 开头（der / initial / pure 是关键字记号）：`external "C" der(x);` omc 整段跳过、在 der 处报
+  // 缺分号（s1fix 探针 w09 4:14）；`Mod.sin(x)` 不带输出时走 component_reference，在 '(' 处报缺 '='（w01 4:21）。
+  if (at(TokenKind::Ident) || at(TokenKind::Dot)) {
+    if (!(at(TokenKind::Ident) && peek(1).kind == TokenKind::LParen)) {   // 带输出：component_reference '='
+      Exp lhs{}; lhs.kind = ExpKind::CrefExp; lhs.loc = peek().loc;
+      lhs.cref = parse_cref();
+      cls.ext_lhs = mk(std::move(lhs));
+      expect(TokenKind::Equal, "external 子句的输出后应为 '='");
     }
+    Exp call{}; call.kind = ExpKind::Call; call.loc = peek().loc;
+    Cref fn;
+    CrefPart part;
+    if (at(TokenKind::Ident)) part.name = advance().text;
+    else error_here("期望外部函数名");
+    fn.parts.push_back(std::move(part));
+    call.cref = out_.add_cref(std::move(fn));
+    if (expect(TokenKind::LParen, "外部函数名后应为 '('")) {
+      if (!at(TokenKind::RParen)) {
+        call.args = parse_expression_list();
+        call.arg_names.resize(call.args.size());   // 全是位置实参（parse_function_args 也给位置实参放空名）
+      }
+      expect(TokenKind::RParen, "外部函数调用应以 ')' 结束");
+    }
+    cls.ext_call = mk(std::move(call));
   }
   cls.ext_annotation = parse_annotation_opt();
   expect(TokenKind::Semicolon, "external 子句后应有 ';'");
@@ -522,7 +559,14 @@ ComponentClause Parser::parse_component_clause(bool single_decl) {
   SourceLoc start = peek().loc;
   bool had_prefix = parse_type_prefix(cc.prefix);
   cc.type_path = parse_name_path(cc.type_leading_dot);
-  if (at(TokenKind::LBracket)) cc.type_subscripts = parse_array_subscripts();
+  if (at(TokenKind::LBracket)) {
+    // 修饰里的 redeclare / replaceable 组件是 component_clause1，类型走 type_specifier_no_dims（Modelica.g:956-958、
+    // :768 v1.25.0），类型后不许带维：omc 在 '[' 处报 "No viable alternative near token: ["
+    //（RedeclareComponentInvalidDims1.mo 14:24；s1fix 探针 r01-r04 / r07 / r08）。类体里的 replaceable / redeclare 走
+    // component_clause，可以带（r06）；维写在组件名后面也可以（r05）。报完照常吃掉下标，免得连带报错。
+    if (single_decl) error_here("修饰里 redeclare / replaceable 的组件类型后不能带维");
+    cc.type_subscripts = parse_array_subscripts();
+  }
   bool first = true;
   for (;;) {
     std::size_t before = pos_;
@@ -532,7 +576,7 @@ ComponentClause Parser::parse_component_clause(bool single_decl) {
       // 都"无可行分支"，报在元素起点（Identifier.mo / ParseError2.mo）；带前缀或后续组件缺名则报在
       // 出错记号处（ConstructParameters1.mo / ParseError1.mo）。
       if (first && !had_prefix) {
-        diags_.error(start, std::string("无法识别的元素，实际遇到 '") + token_kind_name(kind()) + "'");
+        error_at(start, std::string("无法识别的元素，实际遇到 '") + token_kind_name(kind()) + "'");
       } else {
         error_here("期望组件名");
       }
@@ -650,8 +694,13 @@ Id<Modification> Parser::parse_class_modification() {
       } else {
         arg.each_ = match(TokenKind::Kw_each);
         arg.final_ = match(TokenKind::Kw_final);
+        // element_modification 的名字是 name_path2，不带前导点（Modelica.g:910、1889-1893 v1.25.0）：`A a(.y = 1)` omc 在 '.'
+        // 处报 "Missing token: ')'"（s1fix 对抗评审 S19 7:7）。报完照常吃下去（AST 完整）。
+        if (at(TokenKind::Dot)) error_here("修饰名不能以 '.' 开头");
         bool ld = false;
+        const SourceLoc name_loc = peek().loc;
         arg.path = parse_name_path(ld);
+        if (at(TokenKind::LBracket) && !arg.path.empty()) reject_subscripted_modifier(name_loc);
         if (at(TokenKind::LParen)) arg.sub = parse_class_modification();
         if (match(TokenKind::Equal)) {
           arg.binding = parse_modification_expression();
@@ -671,6 +720,31 @@ Id<Modification> Parser::parse_class_modification() {
   }
   expect(TokenKind::RParen, "修饰应以 ')' 结束");
   return out_.add_mod(std::move(m));
+}
+
+// 修饰名后紧跟 '['（`A a(x[2] = 1.0)`）：omc 在语法层拒绝。Modelica.g:908-922（v1.25.0）element_modification 是
+// `name_path2 (LBRACK | modification? string_comment)`，吃到 LBRACK 就报下面这条，位置从本规则首记号（修饰名的第一段；
+// each / final 已被外层 element_modification_or_replaceable 吃掉，不算）到 LT(1)->charPosition——'[' 后那个记号的
+// 0 起列，即它的 1 起列减 1。各种出现位置（组件 / extends / 短类 / 嵌套 / redeclare / constrainedby / 注解）都走同一条
+// 规则；s1fix 探针 p01-p35 在 omc 1.25.0 上实跑，起点、终点全部如此。
+// 这条不抛异常（直接 c_add_source_message 再置 lexerError），规则吃完 '[' 就正常返回，omc 接着拿 '[' 后的记号往下走：
+//  - 是 ',' 或 ')'：正好接得上 argument_list / class_modification，解析继续（`A a(x[);`、`A a(x[, y = 1);`），后面无条件
+//    报的错照报（对抗评审 T02 的元组下标、T05 的第二个下标修饰、T06 的上溢），抛异常的那类则吞掉并终止（T01、T03）；
+//  - 别的（常见的 `x[2] = 1`）：接不上，抛异常——因 lexerError 已置而不报，整份解析就此结束，之后什么都不报
+//   （探针 p19 的缺表达式、p27 的第二个下标修饰、p33 的元组下标）。ymc 吃掉整段下标照常往下解析（AST 完整），只是不再报错。
+void Parser::reject_subscripted_modifier(SourceLoc name_start) {
+  SourceLoc loc = name_start;
+  const Token& after = peek(1);  // '[' 后的记号 = 吃掉 '[' 后 omc 的 LT(1)
+  // ymc 的诊断只表示同一行内的终点（打印 col + len）；'[' 后换行时（p16，omc 报 8:7-9:6）只保住起点，终点用名字本身。
+  if (after.loc.line == loc.line && after.loc.col > loc.col + 1) loc.len = after.loc.col - 1 - loc.col;
+  error_unconditional(loc, "Subscripting modifiers is not allowed. Apply the modification on the whole identifier "
+                           "using an array-expression or an each-modifier.");
+  if (after.kind == TokenKind::Comma || after.kind == TokenKind::RParen) {
+    advance();  // 只吃 '['，调用方接着看 ',' / ')'
+    return;
+  }
+  omc_aborted_ = true;
+  (void)parse_array_subscripts();
 }
 
 Symbol Parser::parse_string_comment_opt() {
@@ -752,9 +826,9 @@ Id<Equation> Parser::parse_equation() {
           bool nested_else_if = !eq.branches.empty() && !eq.branches.back().cond.is_valid() &&
                                 !eq.branches.back().body.empty() &&
                                 out_.eqs[eq.branches.back().body.back()].kind == EqKind::If;
-          diags_.error(end_loc, nested_else_if
-                                    ? "Expected 'end if'; did you use a nested 'else if' instead of 'elseif'?"
-                                    : "Expected 'end if'");
+          error_at(end_loc, nested_else_if
+                                ? "Expected 'end if'; did you use a nested 'else if' instead of 'elseif'?"
+                                : "Expected 'end if'");
         }
       }
       break;
@@ -814,7 +888,7 @@ Id<Equation> Parser::parse_equation() {
         eq.kind = EqKind::FunctionCall;  // assert(...)、Connections.branch(...) 等
         eq.lhs = lhs;
         if (out_.exps[lhs].kind != ExpKind::Call)  // ParseError3.mo：`assert;`
-          diags_.error(eq.loc, "A singleton expression in an equation section is required to be a function call");
+          error_at(eq.loc, "A singleton expression in an equation section is required to be a function call");
       }
       break;
     }
@@ -882,9 +956,9 @@ Id<Statement> Parser::parse_statement() {
           bool nested_else_if = !st.branches.empty() && !st.branches.back().cond.is_valid() &&
                                 !st.branches.back().body.empty() &&
                                 out_.stmts[st.branches.back().body.back()].kind == StmtKind::If;
-          diags_.error(end_loc, nested_else_if
-                                    ? "Expected 'end if'; did you use a nested 'else if' instead of 'elseif'?"
-                                    : "Expected 'end if'");
+          error_at(end_loc, nested_else_if
+                                ? "Expected 'end if'; did you use a nested 'else if' instead of 'elseif'?"
+                                : "Expected 'end if'");
         }
       }
       break;
@@ -944,8 +1018,8 @@ Id<Statement> Parser::parse_statement() {
       expect(TokenKind::Assign, "元组左值后应为 ':='");
       st.rhs = parse_expression();
       if (out_.exps[st.rhs].kind != ExpKind::Call)  // Assign3.mo：`(x,y,z) := res;`，报在语句起点
-        diags_.error(st.loc, "Modelica assignment statements are either on the form "
-                             "'component_reference := expression' or '( output_expression_list ) := function_call'");
+        error_at(st.loc, "Modelica assignment statements are either on the form "
+                         "'component_reference := expression' or '( output_expression_list ) := function_call'");
       break;
     }
     default: {
@@ -977,6 +1051,17 @@ Id<Statement> Parser::parse_statement() {
 
 // -------------------------------------------------------------- 表达式
 Id<Exp> Parser::parse_expression() {
+  if (at(TokenKind::Kw_function)) {
+    // OMC 的 expression 规则把部分函数应用列为与 if / simple_expression 并列的一支（Modelica.g:1527-1536 v1.25.0）：
+    // 只能整条出现。到这里的都是 expression[0] 的位置（绑定、修饰值、方程右边、if 分支、括号、矩阵……；函数实参与数组
+    // 构造的元素由 parse_argument_expression 先接走），规则吃完后的动作里报下面这条、不抛异常（error_unconditional）。
+    // InvalidPartialFunction.mo 5:18，s1fix 探针 q01 / q02 / q07 / q08 / q12 / q14 / q15。function 后面不成形（`function f;`）
+    // 时规则先失配，omc 只报里面那处（q11）——那处的 error_here 已置 omc_aborted_，这条自然不出。
+    const SourceLoc loc = peek().loc;
+    Id<Exp> e = parse_partial_application();
+    error_unconditional(loc, "Function partial application expressions are only allowed as inputs to functions.");
+    return e;
+  }
   if (!at(TokenKind::Kw_if)) return parse_simple_expression();
   // if c1 then t1 (elseif ci then ti)* else e  → 右嵌套 IfExp
   std::vector<std::pair<Id<Exp>, Id<Exp>>> clauses;
@@ -1163,8 +1248,16 @@ Id<Exp> Parser::parse_primary() {
       std::string s(out_.interner.str(text));
       advance();
       Exp e{}; e.kind = ExpKind::RealLit; e.loc = loc;
+      errno = 0;
       e.rval = std::strtod(s.c_str(), nullptr);
       e.sval = text;  // 源码拼写（OMC Absyn.REAL 存 String，Absyn.mo:713-715：unparse 不改用户写法）
+      // 上溢（strtod 报 ERANGE 且得 ±HUGE_VAL）是语法错，位置在这个数上；动作里直接报并置 lexerError、不抛异常
+      //（Modelica.g:1779-1782 v1.25.0；s1fix 对抗评审 Q11 `x = 1e999` 报 3:12，T10 之后的缺表达式不报）。
+      if (errno == ERANGE && std::isinf(e.rval))
+        error_unconditional(loc, "Overflow: " + s + " cannot be represented by a double on this machine");
+      // 下溢到 0：omc 只告警，Absyn 里换成 "0.0"（Modelica.g:1783-1785），压平就打 0.0（s1fix 探针 x01 `1e-999`）；
+      // 次正规数（非 0）原样保留（:1777-1778，x02 `1e-310`）。ymc 不产这条告警。
+      if (errno == ERANGE && e.rval == 0.0) e.sval = out_.interner.intern("0.0");
       return mk(std::move(e));
     }
     case TokenKind::StringLit: {
@@ -1217,7 +1310,7 @@ Id<Exp> Parser::parse_primary() {
       advance();
       Exp e{}; e.kind = ExpKind::Array; e.loc = loc;
       if (at(TokenKind::RBrace)) {  // OMC 在语法层拒绝 `{}`（EmptyArray.mo），位置在 '{'
-        diags_.error(loc, "Empty array constructors are not valid in Modelica.");
+        error_at(loc, "Empty array constructors are not valid in Modelica.");
       } else {
         std::vector<Symbol> names;
         parse_function_args(e.args, names);
@@ -1248,12 +1341,12 @@ Id<Exp> Parser::parse_primary() {
     case TokenKind::Kw_initial:
     case TokenKind::Kw_pure:
       return parse_cref_or_call();
-    case TokenKind::Kw_function: {  // 部分函数应用 function f(a = 1)（MLS §12.4.2）
-      advance();
-      Id<Exp> e = parse_cref_or_call();
-      if (out_.exps[e].kind != ExpKind::Call) error_here("function 后应为函数调用");
-      out_.exps[e].partial_fn = true;
-      return e;
+    case TokenKind::Kw_function: {
+      // 整条的部分函数应用在 parse_expression / parse_argument_expression 就接走了；走到 primary 的是嵌在更大式子里的
+      //（`g(1 + function f(x = 1))`、方程左边）。OMC 的 primary 没有 FUNCTION 这一支，这是 function 处的"无可行分支"
+      //（抛异常的那类，s1fix 探针 q06 13:18；对抗评审 T01 里它被 lexerError 吞掉并终止解析）。照常吃下去保 AST 完整。
+      error_here("部分函数应用只能整条作为一个表达式");
+      return parse_partial_application();
     }
     default:
       error_here("期望表达式");
@@ -1294,10 +1387,11 @@ Id<Exp> Parser::parse_postfix(Id<Exp> base) {
 }
 
 // 元组 `(a, b)[1]` / `()[1]`：omc 报 "Tuple expression can not be subscripted."，位置从 '(' 起（Modelica.g:1802-1806）。
-// 下标照常吃掉，免得外层再报一条缺分号。
+// 文法已经吃下了这段下标，动作里直接报并置 lexerError、不抛异常，解析继续（error_unconditional；对抗评审 T09：之后的
+// 缺表达式不报）。下标照常吃掉，免得外层再报一条缺分号。
 Id<Exp> Parser::reject_tuple_subscript(Id<Exp> tup, SourceLoc lparen) {
   if (at(TokenKind::LBracket)) {
-    diags_.error(lparen, "Tuple expression can not be subscripted.");
+    error_unconditional(lparen, "Tuple expression can not be subscripted.");
     (void)parse_array_subscripts();
   }
   return tup;
@@ -1344,15 +1438,50 @@ std::vector<Id<Exp>> Parser::parse_array_subscripts() {
   return subs;
 }
 
+// 部分函数应用 `function f(a = 1)`（MLS §12.4.2），从 function 处开始。omc 文法：FUNCTION component_reference LPAR
+// named_arguments? RPAR（Modelica.g:1558-1565 v1.25.0），named_argument = IDENT EQUALS expression[1]（:2017-2020）——
+// 只收命名实参，')' 后也不接 `.y`。位置实参 omc 报在那个实参上（s1fix 对抗评审 P07 `function f(2)` 报在 '2'、P12
+// `function f(a = 2, 3)` 报在 '3'）；`.y` 后缀留给外层报（P14 报在 '.'）。不复用 parse_cref_or_call：它收位置实参和后缀。
+Id<Exp> Parser::parse_partial_application() {
+  advance();  // function
+  Exp e{}; e.kind = ExpKind::Call; e.loc = peek().loc; e.partial_fn = true;
+  e.cref = parse_cref();
+  if (expect(TokenKind::LParen, "function 后应为函数调用")) {
+    if (!at(TokenKind::RParen)) {
+      // 照 ANTLR 的走法报位置：以 IDENT 开头就进 named_argument、吃下名字再要 '='（`function g(a)` 报在 ')'，pk-p24 PKZ9
+      // omc 23:28）；不是 IDENT 就在这个记号上报（P07 的 '2'、P12 逗号后的 '3'）。
+      for (;;) {
+        if (!at(TokenKind::Ident)) {
+          error_here("部分函数应用只收命名实参");
+          break;
+        }
+        const Symbol name = advance().text;
+        if (!expect(TokenKind::Equal, "部分函数应用只收命名实参，名字后应为 '='")) break;
+        e.arg_names.push_back(name);
+        e.args.push_back(parse_argument_expression());
+        if (!match(TokenKind::Comma)) break;
+      }
+    }
+    expect(TokenKind::RParen, "部分函数应用应以 ')' 结束");
+  }
+  return mk(std::move(e));
+}
+
+// 函数实参（位置 / 命名）与数组构造 `{…}` 的元素：omc 以 expression[1] 解析（Modelica.g:1983、2007、2019 v1.25.0），
+// 只有在这里整条实参可以是部分函数应用（s1fix 探针 q03 / q04 / q05 / q13 / q16 omc 都解析通过）。
+Id<Exp> Parser::parse_argument_expression() {
+  return at(TokenKind::Kw_function) ? parse_partial_application() : parse_expression();
+}
+
 void Parser::parse_function_args(std::vector<Id<Exp>>& args, std::vector<Symbol>& names) {
   for (;;) {
     std::size_t before = pos_;
     if (at(TokenKind::Ident) && peek(1).kind == TokenKind::Equal) {  // 命名实参
       names.push_back(advance().text);
       advance();  // =
-      args.push_back(parse_expression());
+      args.push_back(parse_argument_expression());
     } else {
-      Id<Exp> a = parse_expression();
+      Id<Exp> a = parse_argument_expression();
       if (at(TokenKind::Kw_for)) {  // 归约：expr for iters —— 是唯一实参
         Exp r{}; r.kind = ExpKind::Reduction; r.loc = peek().loc; r.a = a;
         advance();  // for

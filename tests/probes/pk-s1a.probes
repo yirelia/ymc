@@ -1,0 +1,539 @@
+//// set: pk-s1a — s1fix 对抗评审（评审代理手写，均已核 omc 1.25.0）：A 本桶新加的语法层拒绝（修饰里 redeclare / replaceable / redeclare each|final|replaceable 的组件类型后带维 Modelica.g:956-958/768；注解修饰值里的部分函数应用 Modelica.g:1527-1536），9bd9f02 上是 ACCEPTS-INVALID；B 合法对照（下标形状的合法修饰、名后带维的 redeclare、短类带维、类体 replaceable 带维、注解里函数实参的部分应用、第 1 行整份模型、:= 修饰）；C 下标修饰（组件 / 短类 / 注解 / constrainedby / redeclare 内 / 短类 extends）与非实参位置的部分应用，两边都拒；D 9bd9f02 就有的 ACCEPTS-INVALID：修饰名前导点 `A a(.y = 1)`（Modelica.g:902-908 element_modification 用 name_path2，无 DOT）、外部函数调用的命名实参 / 带点函数名（Modelica.g:488-489 funcname=IDENT LPAR expression_list）、引号名里 `\` 后跟非 QCHAR（BaseModelica_Lexer.g:389-405 非法转义只吃反斜杠）、实数字面量溢出 1e999（Modelica.g:1780 Overflow）、指数不完整的实数 `1e` / `1.5e+`（omc 词法错 Lexer got '1e'，ymc 当 1.0 / 1.5 收）。
+//// model: AS1X01
+
+model AR
+  replaceable Real x[2];
+  replaceable type T = Real;
+end AR;
+model AS1X01
+  AR a(redeclare Real[2] x);
+end AS1X01;
+//// model: AS1X02
+
+model AR
+  replaceable Real x[2];
+  replaceable type T = Real;
+end AR;
+model AS1X02
+  extends AR(redeclare Real[2] x);
+end AS1X02;
+//// model: AS1X03
+
+model AR
+  replaceable Real x[2];
+  replaceable type T = Real;
+end AR;
+model AS1X03
+  AR a(replaceable Real[2] x);
+end AS1X03;
+//// model: AS1X04
+
+model AR
+  replaceable Real x[2];
+  replaceable type T = Real;
+end AR;
+model AS1X04
+  AR a(redeclare replaceable Real[2] x);
+end AS1X04;
+//// model: AS1X05
+
+model AR
+  replaceable Real x[2];
+  replaceable type T = Real;
+end AR;
+model AS1X05
+  AR a(redeclare each Real[2] x);
+end AS1X05;
+//// model: AS1X06
+
+model AR
+  replaceable Real x[2];
+  replaceable type T = Real;
+end AR;
+model AS1X06
+  AR a(redeclare final Real[2] x);
+end AS1X06;
+//// model: AS1X07
+
+model AR
+  replaceable Real x[2];
+  replaceable type T = Real;
+end AR;
+model AS1X07
+  AR a(each final replaceable Real[2] x);
+end AS1X07;
+//// model: AS1X08
+model A Real x; end A; model AS1X08 A a(redeclare Real[2] x); end AS1X08;
+//// model: AS1X09
+
+partial function PF
+  input Real x;
+  output Real y;
+end PF;
+function f
+  input Real x;
+  input Real a;
+  output Real y = a * x;
+end f;
+function f0
+  input Real x;
+  output Real y = 2 * x;
+end f0;
+function g
+  input PF h;
+  input Real u;
+  output Real y = h(u);
+end g;
+model AS1X09
+  Real y = 1;
+  annotation(__X = function f(a = 1));
+end AS1X09;
+//// model: AS1X10
+
+model A
+  Real x[2];
+  Real y;
+end A;
+model AS1X10
+  A a(x(start = {1, 2}));
+end AS1X10;
+//// model: AS1X11
+
+model A
+  Real x[2];
+  Real y;
+end A;
+model AS1X11
+  A a(x(each start = 1));
+end AS1X11;
+//// model: AS1X12
+
+model AR
+  replaceable Real x[2];
+  replaceable type T = Real;
+end AR;
+model AS1X12
+  AR a(redeclare Real x[2]);
+end AS1X12;
+//// model: AS1X13
+
+model AS1X13
+  replaceable Real[2] x;
+end AS1X13;
+//// model: AS1X14
+
+model AR
+  replaceable Real x[2];
+  replaceable type T = Real;
+end AR;
+model AS1X14
+  AR a(redeclare type T = Real[2]);
+end AS1X14;
+//// model: AS1X15
+
+model AR
+  replaceable Real x[2];
+  replaceable type T = Real;
+end AR;
+model AS1X15
+  extends AR;
+  redeclare Real[2] x;
+end AS1X15;
+//// model: AS1X16
+
+type T = Real[2](start = {1, 2});
+model AS1X16
+  T t;
+end AS1X16;
+//// model: AS1X17
+
+model AR
+  replaceable Real x[2];
+  replaceable type T = Real;
+end AR;
+model AS1X17
+  AR a(redeclare Real x[2] = {1, 2});
+end AS1X17;
+//// model: AS1X18
+
+model AR
+  replaceable Real x[2];
+  replaceable type T = Real;
+end AR;
+model AS1X18
+  extends AR(redeclare replaceable Real x[2]);
+end AS1X18;
+//// model: AS1X19
+
+model AR
+  replaceable Real x[2];
+  replaceable type T = Real;
+end AR;
+model AS1X19
+  AR a(redeclare input Real x[2]);
+end AS1X19;
+//// model: AS1X20
+
+partial function PF
+  input Real x;
+  output Real y;
+end PF;
+function f
+  input Real x;
+  input Real a;
+  output Real y = a * x;
+end f;
+function f0
+  input Real x;
+  output Real y = 2 * x;
+end f0;
+function g
+  input PF h;
+  input Real u;
+  output Real y = h(u);
+end g;
+model AS1X20
+  Real y = 1;
+  annotation(__X(z = g(function f(a = 1), 1)));
+end AS1X20;
+//// model: AS1X21
+
+model A
+  Real x[2];
+  Real y;
+end A;
+model AS1X21
+  A a(x = {1, 2});
+end AS1X21;
+//// model: AS1X22
+
+model AS1X22
+  Real x[2](each start = 1);
+end AS1X22;
+//// model: AS1X23
+
+model AS1X23
+  Real x[2](start = {1, 2}, each fixed = true);
+equation
+  der(x) = -x;
+end AS1X23;
+//// model: AS1X24
+
+model AS1X24
+  Real x = 1;
+  annotation(Icon(coordinateSystem(extent = {{-100, -100}, {100, 100}})));
+end AS1X24;
+//// model: AS1X25
+
+model A
+  Real x[2];
+  Real y;
+end A;
+model AS1X25
+  A a(final x = {1, 2}, each y = 3);
+end AS1X25;
+//// model: AS1X26
+
+model A
+  Real x[2];
+  Real y;
+end A;
+model AS1X26
+  extends A(x = {1, 2});
+end AS1X26;
+//// model: AS1X27
+model AS1X27 Real x[2](start = {1, 2}); equation der(x) = -x; end AS1X27;
+//// model: AS1X28
+model AS1X28 Real x(start = 1); equation der(x) = -x; end AS1X28;
+//// model: AS1X29
+model AS1X29 Real x; equation assert(x > 0, "neg"); x = time; end AS1X29;
+//// model: AS1X30
+
+model A
+  Real x[2];
+  Real y = 1;
+end A;
+model AS1X30
+  A a(y := 2);
+end AS1X30;
+//// model: AS1X31
+model AS1X31 Real y(start := 2) = 1; end AS1X31;
+//// model: AS1X32
+
+function e
+  input Real x;
+  output Real y;
+external "C" y = sin(x);
+end e;
+partial function PF
+  input Real x;
+  output Real y;
+end PF;
+function f
+  input Real x;
+  input Real a;
+  output Real y = a * x;
+end f;
+function f0
+  input Real x;
+  output Real y = 2 * x;
+end f0;
+function g
+  input PF h;
+  input Real u;
+  output Real y = h(u);
+end g;
+model AS1X32
+  Real y = e(time);
+end AS1X32;
+//// model: AS1X33
+
+model AS1X33
+  Real 'a$b' = 1;
+end AS1X33;
+//// model: AS1X34
+
+model AS1X34
+  Real x[2](start[1] = 1);
+end AS1X34;
+//// model: AS1X35
+
+type T = Real[2](start[1] = 1);
+model AS1X35
+  T t;
+end AS1X35;
+//// model: AS1X36
+
+model AS1X36
+  Real x = 1;
+  annotation(experiment(StopTime[1] = 1));
+end AS1X36;
+//// model: AS1X37
+
+model A
+  Real x[2];
+  Real y;
+end A;
+model AS1X37
+  replaceable A a constrainedby A(x[1] = 1);
+end AS1X37;
+//// model: AS1X38
+
+model A
+  Real x[2];
+  Real y;
+end A;
+model B
+  A b;
+  Real z[2];
+end B;
+model AS1X38
+  B c(redeclare A b(x[1] = 1));
+end AS1X38;
+//// model: AS1X39
+
+model A
+  Real x[2];
+  Real y;
+end A;
+model M2 = A(x[1] = 1);
+model AS1X39
+  M2 q;
+end AS1X39;
+//// model: AS1X40
+
+model A
+  Real x[2];
+  Real y;
+end A;
+model AS1X40
+  A a(x[);
+  Real r;
+equation
+  (r, r)[1] = 1;
+end AS1X40;
+//// model: AS1X41
+
+partial function PF
+  input Real x;
+  output Real y;
+end PF;
+function f
+  input Real x;
+  input Real a;
+  output Real y = a * x;
+end f;
+function f0
+  input Real x;
+  output Real y = 2 * x;
+end f0;
+function g
+  input PF h;
+  input Real u;
+  output Real y = h(u);
+end g;
+model A
+  Real x[2];
+  Real y;
+end A;
+model AS1X41
+  A a(x[);
+  Real p = function f0();
+end AS1X41;
+//// model: AS1X42
+
+partial function PF
+  input Real x;
+  output Real y;
+end PF;
+function f
+  input Real x;
+  input Real a;
+  output Real y = a * x;
+end f;
+function f0
+  input Real x;
+  output Real y = 2 * x;
+end f0;
+function g
+  input PF h;
+  input Real u;
+  output Real y = h(u);
+end g;
+model AS1X42
+  Real y = function f(a = 2);
+end AS1X42;
+//// model: AS1X43
+
+partial function PF
+  input Real x;
+  output Real y;
+end PF;
+function f
+  input Real x;
+  input Real a;
+  output Real y = a * x;
+end f;
+function f0
+  input Real x;
+  output Real y = 2 * x;
+end f0;
+function g
+  input PF h;
+  input Real u;
+  output Real y = h(u);
+end g;
+model AS1X43
+  Real y = g(if time > 1 then function f(a = 1) else function f(a = 2), time);
+end AS1X43;
+//// model: AS1X44
+
+partial function PF
+  input Real x;
+  output Real y;
+end PF;
+function f
+  input Real x;
+  input Real a;
+  output Real y = a * x;
+end f;
+function f0
+  input Real x;
+  output Real y = 2 * x;
+end f0;
+function g
+  input PF h;
+  input Real u;
+  output Real y = h(u);
+end g;
+model AS1X44
+  Real y;
+equation
+  y = if function f0() then 1 else 2;
+end AS1X44;
+//// model: AS1X45
+
+model A
+  Real x[2];
+  Real y;
+end A;
+model AS1X45
+  A a(.y = 1);
+end AS1X45;
+//// model: AS1X46
+
+function e
+  input Real x;
+  output Real y;
+external "C" y = sin(x = x);
+end e;
+partial function PF
+  input Real x;
+  output Real y;
+end PF;
+function f
+  input Real x;
+  input Real a;
+  output Real y = a * x;
+end f;
+function f0
+  input Real x;
+  output Real y = 2 * x;
+end f0;
+function g
+  input PF h;
+  input Real u;
+  output Real y = h(u);
+end g;
+model AS1X46
+  Real y = e(time);
+end AS1X46;
+//// model: AS1X47
+
+function e
+  input Real x;
+  output Real y;
+external "C" y = Mod.sin(x);
+end e;
+partial function PF
+  input Real x;
+  output Real y;
+end PF;
+function f
+  input Real x;
+  input Real a;
+  output Real y = a * x;
+end f;
+function f0
+  input Real x;
+  output Real y = 2 * x;
+end f0;
+function g
+  input PF h;
+  input Real u;
+  output Real y = h(u);
+end g;
+model AS1X47
+  Real y = e(time);
+end AS1X47;
+//// model: AS1X48
+
+model AS1X48
+  Real 'a\`b' = 1;
+end AS1X48;
+//// model: AS1X49
+
+model AS1X49
+  Real '\`' = 1;
+end AS1X49;
+//// model: AS1X50
+
+model AS1X50
+  Real x = 1e999;
+end AS1X50;
+//// model: AS1X51
+
+model AS1X51 Real x = 1e; end AS1X51;
+//// model: AS1X52
+
+model AS1X52 Real x = 1.5e+; end AS1X52;

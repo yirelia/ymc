@@ -83,6 +83,15 @@ char Lexer::advance() noexcept {
   return c;
 }
 
+// omc 的词法错只报第一条：handleLexerError 只在 lexerError 未置时报、报完置上（parse.c:168-173 v1.25.0）。置上的
+// lexerError 也让解析器随后那条抛异常的语法错不报（parse.c:193）——经 Eof 记号的 text 交给 Parser（见 tokenize 末尾）。
+// s1fix 对抗评审 U01 等：未闭合的记号报一条后，omc 不再报 EOF 处缺 end 之类。
+void Lexer::error_at(SourceLoc loc, std::string msg) {
+  if (had_error_) return;
+  had_error_ = true;
+  diags_.error(omc_syntax_diag_loc(loc), std::move(msg));
+}
+
 void Lexer::skip_trivia() {
   for (;;) {
     char c = peek();
@@ -91,7 +100,6 @@ void Lexer::skip_trivia() {
     } else if (c == '/' && peek(1) == '/') {
       while (!at_end() && peek() != '\n' && peek() != '\r') advance();
     } else if (c == '/' && peek(1) == '*') {
-      SourceLoc start{file_, line_, col_, 2};
       advance();
       advance();  // 吃 /*
       bool closed = false;
@@ -104,7 +112,8 @@ void Lexer::skip_trivia() {
         }
         advance();
       }
-      if (!closed) diags_.error(start, "unterminated block comment");
+      // 未闭合：ML_COMMENT 的 '*/' 在 EOF 处失配，报在 EOF（见 eof_loc）。
+      if (!closed) error_at(eof_loc(), "unterminated block comment");
     } else {
       return;
     }
@@ -113,6 +122,14 @@ void Lexer::skip_trivia() {
 
 SourceLoc Lexer::loc_from(std::size_t start, std::uint32_t sl, std::uint32_t sc) const {
   return SourceLoc{file_, sl, sc, static_cast<std::uint32_t>(pos_ - start)};
+}
+
+// 吃到 EOF 才失败的记号（未闭合的引号名 / 字符串 / 块注释）：omc 报在词法器出错时所在的位置，也就是 EOF，不是记号
+// 起点——收尾的 MATCHC 在 EOF 失配，matchc 的 recover 在 EOF 不前进（antlr3inputstream.c:249 到尾即止，
+// 3rdParty 520663f5），nextTokenStr 随即报错（antlr3lexer.c:258-264）。s1fix 对抗评审 U01-U06 / U10 / U11 / L1x05 / L1x06：
+// `model U03 Real '` 报 1:16（EOF 在第 17 列，第 1 行左移一列），文件以换行结尾时报在下一行第 1 列（L1x05 2:1）。
+SourceLoc Lexer::eof_loc() const {
+  return SourceLoc{file_, line_, col_, 0};
 }
 
 Token Lexer::lex_number(std::size_t start, std::uint32_t sl, std::uint32_t sc) {
@@ -127,6 +144,11 @@ Token Lexer::lex_number(std::size_t start, std::uint32_t sl, std::uint32_t sc) {
     is_real = true;
     advance();
     if (peek() == '+' || peek() == '-') advance();
+    // EXPONENT : ('e'|'E') ('+'|'-')? (DIGIT)+（BaseModelica_Lexer.g:447-449 v1.25.0）：一个数字都没有是词法错，omc 报
+    // "Lexer got '1e' but failed to recognize the rest"，位置在已吃掉的 e / 符号之后那一列（(DIGIT)+ 早退、不 recover，
+    // nextTokenStr 先报后 recover，antlr3lexer.c:258-264）。s1fix 对抗评审 LX21 `x = 1e;` 报 2:23、LX25 `1.5e+;` 报 2:26
+    //（都是 ';' 那一列；第 1 行再左移一列，LX11 1:22）。
+    if (!is_digit(peek())) error_at(SourceLoc{file_, line_, col_, 1}, "incomplete exponent in real literal");
     while (is_digit(peek())) advance();
   }
   std::string_view lex = src_.substr(start, pos_ - start);
@@ -145,28 +167,42 @@ Token Lexer::lex_ident(std::size_t start, std::uint32_t sl, std::uint32_t sc) {
 
 Token Lexer::lex_qident(std::size_t start, std::uint32_t sl, std::uint32_t sc) {
   advance();  // 开头的 '
-  // `''`：Q-IDENT 至少一个字符（BaseModelica_Lexer.g:430-431）。omc 报在第二个引号处（PS 探针 Q2 `2:9`）。
-  if (peek() == '\'') diags_.error(SourceLoc{file_, line_, col_, 1}, "empty quoted identifier");
-  bool bad = false;   // 一个词素只报一条（一个汉字是 3 个字节）
+  // QIDENT = '\'' (QCHAR | SESCAPE) (QCHAR | SESCAPE)* '\''（BaseModelica_Lexer.g:430-431 v1.25.0）。坏字符报在哪一列，
+  // 取决于它卡在哪个元素上：
+  //  - 紧跟开引号的必选元素 (QCHAR | SESCAPE)：生成的 mQIDENT 在这里构造"无可行分支"异常后直接 goto 出规则、不 recover
+  //   （ANTLR 生成的 Modelica_3_Lexer_BaseModelica_Lexer.c，QIDENT 规则自 v1.25.0 未改），antlr3lexer.c:258-264 的
+  //    nextTokenStr 先 reportError 再 recover——报错时输入还停在坏字符上 → 报在坏字符本身那一列。`''` 的第二个引号（Q2 报 2:9）、`'跳…'`（JBouncingBall.mo 5:8）、
+  //    `'`b'`、`'\tb'`、`'` 后直接换行（s1fix 探针 s01-s03 / s07）都是这一支。
+  //  - 之后的循环 (QCHAR | SESCAPE)*：碰到坏字符就退出循环，接着 MATCHC('\'') 失配；antlr3 运行时的 matchc 先 recover
+  //    再返回（antlr3lexer.c:777，3rdParty 520663f5），OMC 的 lexNoRecover 吃掉一个字符（parse.c:58-65）——报错时已越过
+  //    坏字符 → 报在它的下一列（`'a`b'` 报 2:11、`'höhe'` 的 ö 首字节在 2:10 报 2:11，PS 探针 Q1 / Q3，s1fix s04 / s05）。
+  // 报完照旧吃到收尾的引号（错误恢复），一个词素只报一条（一个汉字是 3 个字节）。
+  if (peek() == '\'') error_at(SourceLoc{file_, line_, col_, 1}, "empty quoted identifier");
+  bool bad = false;
+  bool first = true;   // 正看着紧跟开引号的那个必选元素
   while (!at_end() && peek() != '\'') {
-    if (peek() == '\\') {   // 转义：反斜杠连同下一个字符一起吃。`\q` 这类非法转义 omc 只告警、照收（PS 探针 L14）。
+    if (peek() == '\\') {
+      // SESCAPE（BaseModelica_Lexer.g:389-405 v1.25.0）：合法转义 \' \" \\ \? \a \b \f \n \r \t \v 连同反斜杠吃两个字符；
+      // 别的只吃反斜杠（omc 告警 "Lexer treating \ as \\"），下一个字符照常按 QCHAR 判——`\q` 照收（PS 探针 L14），
+      // `'a\`b'` 的反引号照样是坏字符（s1fix 对抗评审 Q03 报 3:12、Q06 `'\`'` 报 3:11，都是反引号的下一列）。
       advance();
-      if (!at_end()) advance();
+      if (!at_end() && std::string_view("'\"\\?abfnrtv").find(peek()) != std::string_view::npos) advance();
+      first = false;
       continue;
     }
-    // 不在 Q-CHAR 里的字符 → 词法错，照旧吃到收尾的引号（错误恢复）。omc 报在坏字符的下一列（吃掉它之后才失败：
-    // `'a`b'` 报 2:11，坏字符在 2:10；`'höhe'` 的 ö 首字节在 2:10，也报 2:11，PS 探针 Q1 / Q3）。
     const bool ok = is_qchar(peek());
+    const SourceLoc at_bad{file_, line_, col_, 1};
     advance();
     if (!ok && !bad) {
-      diags_.error(SourceLoc{file_, line_, col_, 1}, "invalid character in quoted identifier");
+      error_at(first ? at_bad : SourceLoc{file_, line_, col_, 1}, "invalid character in quoted identifier");
       bad = true;
     }
+    first = false;
   }
   if (peek() == '\'') {
     advance();
   } else {
-    diags_.error(loc_from(start, sl, sc), "unterminated quoted identifier");
+    error_at(eof_loc(), "unterminated quoted identifier");
   }
   // Q-IDENT 词素连同两侧引号一起 intern（unparse 原样输出 'x'）。
   std::string_view lex = src_.substr(start, pos_ - start);
@@ -186,7 +222,7 @@ Token Lexer::lex_string(std::size_t start, std::uint32_t sl, std::uint32_t sc) {
   if (peek() == '"') {
     advance();
   } else {
-    diags_.error(loc_from(start, sl, sc), "unterminated string literal");
+    error_at(eof_loc(), "unterminated string literal");
   }
   return Token{TokenKind::StringLit, loc_from(start, sl, sc), interner_.intern(content)};
 }
@@ -204,7 +240,8 @@ std::vector<Token> Lexer::tokenize() {
     if (at_end()) {
       // EOF 的列记 0：对齐 OMC 报 "<EOF>" 时的 `line:0`（如 MissingSemicolon.mo 期望 20:0）
       (void)sc;
-      toks.push_back(Token{TokenKind::Eof, SourceLoc{file_, sl, 0, 0}, Symbol{}});
+      toks.push_back(Token{TokenKind::Eof, SourceLoc{file_, sl, 0, 0},
+                           had_error_ ? interner_.intern(kLexerErrorMark) : Symbol{}});
       return toks;
     }
     char c = peek();
@@ -266,8 +303,7 @@ std::vector<Token> Lexer::tokenize() {
         }
         break;
       default:
-        diags_.error(SourceLoc{file_, sl, sc, 1},
-                     std::string("unexpected character '") + c + "'");
+        error_at(SourceLoc{file_, sl, sc, 1}, std::string("unexpected character '") + c + "'");
         advance();
         break;
     }

@@ -4,6 +4,7 @@
 // 从文本转换（v1 够用即止）。关键字用独立的 TokenKind（配 -Werror=switch 得到穷尽检查）。
 #pragma once
 #include <cstdint>
+#include <string_view>
 
 #include "base/loc.h"
 #include "base/symbol.h"
@@ -43,8 +44,12 @@ enum class TokenKind : std::uint8_t {
 struct Token {
   TokenKind kind = TokenKind::Eof;
   SourceLoc loc;
-  Symbol text;   // 词素（idents/keywords 原文；string 为解码后内容；数字为原文）
+  Symbol text;   // 词素（idents/keywords 原文；string 为解码后内容；数字为原文）；Eof 见 kLexerErrorMark
 };
+
+// Eof 记号没有词素；本文件词法阶段报过错时，词法器把它的 text 置成这个记号，解析器据此照 omc 置 lexerError
+//（omc 里词法错与解析器共用 ModelicaParser_lexerError 一个全局旗，parse.c:168-173 / 193 v1.25.0）。
+inline constexpr std::string_view kLexerErrorMark = "<lexer-error>";
 
 // 判断一个 TokenKind 是否是关键字（关键字也可当普通标识符用的场合极少，v1 不处理）。
 [[nodiscard]] inline bool is_keyword(TokenKind k) noexcept {
@@ -56,5 +61,16 @@ struct Token {
 
 // TokenKind 的可读名字（诊断/dump 用）。定义在 lexer.cpp。
 [[nodiscard]] const char* token_kind_name(TokenKind k) noexcept;
+
+// 语法层诊断（词法错、语法错）的位置照 omc 的打法换算。omc 的 ANTLR 输入流开头把列号置成 -1
+//（antlr3inputstream.c:222，OMC 3rdParty 子模块 520663f5 = v1.25.0 所钉的版本），每吃一个字符 +1、遇换行归 0——
+// 于是第 1 行的列号比别的行小 1，语法错拿它直接 +1 打，第 1 行就整体左移一列（行首记号报成 1:0）。
+// 语义位置（SourceInfo）omc 在 PARSER_INFO 里对第 1 行补成 +2（Modelica.g:121），不受影响；所以只在
+// 词法器 / 解析器的诊断出口换算，记号自己的位置不动。探针（s1fix probes3 / probes4，omc 1.25.0 实跑）：
+// `model Q Real x = ; end Q;` 报 1:17（';' 在第 18 列），同样写在第 2 行报 2:10（';' 在第 10 列）。
+[[nodiscard]] inline SourceLoc omc_syntax_diag_loc(SourceLoc loc) noexcept {
+  if (loc.line == 1 && loc.col > 0) --loc.col;
+  return loc;
+}
 
 }  // namespace ymc

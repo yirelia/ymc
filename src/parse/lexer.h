@@ -7,6 +7,7 @@
 // 处理：空白、行注释 //、块注释 /* */（MLS 不允许嵌套）、标识符、Q-IDENT '...'、
 // 整数/实数、字符串（含转义）、全部运算符与标点（最大匹配）。位置从 1 起。
 #pragma once
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -33,8 +34,10 @@ class Lexer {
     return (pos_ + k < src_.size()) ? src_[pos_ + k] : '\0';
   }
   char advance() noexcept;
+  void error_at(SourceLoc loc, std::string msg);   // 所有词法错的出口（位置按 omc_syntax_diag_loc 换算）
   void skip_trivia();                       // 空白 + 注释
   [[nodiscard]] SourceLoc loc_from(std::size_t start, std::uint32_t sl, std::uint32_t sc) const;
+  [[nodiscard]] SourceLoc eof_loc() const;  // 当前位置（吃到 EOF 才失败的记号报在这里）
 
   Token lex_number(std::size_t start, std::uint32_t sl, std::uint32_t sc);
   Token lex_ident(std::size_t start, std::uint32_t sl, std::uint32_t sc);
@@ -49,6 +52,7 @@ class Lexer {
   std::uint32_t line_ = 1;
   std::uint32_t col_ = 1;
   bool pure_impure_keywords_ = true;
+  bool had_error_ = false;   // 已报过一条词法错（= omc 的 lexerError；见 error_at）
 };
 
 }  // namespace ymc

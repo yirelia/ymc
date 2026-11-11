@@ -4,9 +4,11 @@
 //   Parser p(tokens, absyn, diags);
 //   p.parse_program();   // 结果写进 absyn.top
 //
-// 错误处理走 Diagnostics（不抛异常，方案 §3.4 第 6 条）；出错后同步到 ; 或 end 继续，
-// 尽量多报几个错。所有列表循环都有"进度保证"（一轮没消费记号就强制前进），杜绝死循环。
+// 错误处理走 Diagnostics（不抛异常，方案 §3.4 第 6 条）；出错后同步到 ; 或 end 继续解析（AST 尽量完整），
+// 但报哪些错照 omc：见下面 omc_lexer_error_ / omc_aborted_。所有列表循环都有"进度保证"（一轮没消费记号就强制前进），
+// 杜绝死循环。
 #pragma once
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -18,8 +20,10 @@ namespace ymc {
 
 class Parser {
  public:
+  // 词法阶段报过错（Eof 记号带 kLexerErrorMark）就从置上 lexerError 开始，同 omc 共用的那个全局旗。
   Parser(const std::vector<Token>& toks, Absyn& out, Diagnostics& diags)
-      : toks_(toks), out_(out), diags_(diags) {}
+      : toks_(toks), out_(out), diags_(diags),
+        omc_lexer_error_(!toks.empty() && toks.back().kind == TokenKind::Eof && toks.back().text.is_valid()) {}
 
   // 单文件模式：解析后把 within/顶层类写进 Absyn（unparse/driver 用）。
   void parse_program();
@@ -37,6 +41,8 @@ class Parser {
   const Token& advance();
   bool match(TokenKind k);
   bool expect(TokenKind k, const char* what);
+  void error_at(SourceLoc loc, std::string msg);   // ANTLR 失配 / modelicaParserAssert 类语法错的出口
+  void error_unconditional(SourceLoc loc, std::string msg);   // 文法动作里直接 c_add_source_message 并置 lexerError 的那几条
   void error_here(const char* msg);
   void warn_here(const char* msg);
   void sync_to_semicolon();
@@ -59,6 +65,7 @@ class Parser {
   std::vector<Symbol> parse_name_path(bool& leading_dot);
   Id<Modification> parse_modification_opt();
   Id<Modification> parse_class_modification();     // 从 '(' 开始
+  void reject_subscripted_modifier(SourceLoc name_start);   // 修饰名后跟 '['：报错并吃掉下标（在 '[' 处调用）
   void parse_redeclare_in_modification(ModArg& arg);   // 从 redeclare/each/final/replaceable 处开始
   Import parse_import();
   Extends parse_extends();
@@ -93,6 +100,8 @@ class Parser {
   Id<Cref> parse_cref();
   std::vector<Id<Exp>> parse_array_subscripts();   // 从 '[' 开始
   void parse_function_args(std::vector<Id<Exp>>& args, std::vector<Symbol>& names);
+  Id<Exp> parse_argument_expression();             // 一个实参：只有这里允许整条是部分函数应用
+  Id<Exp> parse_partial_application();             // function f(a = 1)，从 function 开始
   std::vector<Id<Exp>> parse_expression_list();    // expr (, expr)*
 
   Id<Exp> mk(Exp e) { return out_.add_exp(std::move(e)); }
@@ -102,6 +111,16 @@ class Parser {
   Diagnostics& diags_;
   std::size_t pos_ = 0;
   bool trace_ = false;
+  // omc 报语法错的两种方式（OMC v1.25.0），ymc 用这两个旗照着报，解析本身照常往下走（AST 完整）：
+  //  - ANTLR 失配 / 无可行分支、modelicaParserAssert：抛异常。解析器装的是 noRecover（parse.c:320-321），异常一路退出
+  //    整份解析，此后的规则动作都不再执行——所以 omc 每份文件至多报一条这类错（error_at；之后置 omc_aborted_，什么都不报）。
+  //    若此前已置 lexerError，这条也不报（parse.c:193 handleParseError 见 lexerError 即返回），照样终止。
+  //  - 文法动作里直接 c_add_source_message 再置 lexerError、不抛异常的四处：下标修饰（Modelica.g:908-922）、部分函数应用
+  //   （:1527-1536）、元组下标（:1802-1806）、实数上溢（:1779-1788）。报这条不看 lexerError，解析继续（error_unconditional）。
+  // 实证（s1fix 对抗评审 T01-T10，omc 实跑全部报错逐条比）：`A a(x[);` 后的元组下标照报（T02）、部分函数应用后的缺表达式
+  // 不报（T07）、元组下标后的缺表达式不报（T09）。下标修饰之后 omc 是否终止取决于 '[' 后那个记号，见 reject_subscripted_modifier。
+  bool omc_lexer_error_ = false;   // = ModelicaParser_lexerError（词法错经 Eof 记号带过来，见构造函数）
+  bool omc_aborted_ = false;       // omc 的解析已经因异常退出
 };
 
 }  // namespace ymc
