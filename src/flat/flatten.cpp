@@ -354,6 +354,11 @@ class Flattener {
           break;
         }
     }
+    // G0（见 scan_program_print）：只在走过 68e 放开点的模型、最后一遍才扫（两遍压平的第一遍要重来时不扫，见 flatten()）。放在
+    // check_enclosing_refs 之前：它开头见 SKIP 就返回，后面会清掉并重设 SKIP 状态。只读 SCode，不改别的状态。
+    if (released_68e_ && !result_.unsupported && !(lenient_ && need_second_pass_)) scan_program_print();
+    // G1（A3 卡 §6.4，见 scan_deep_impure）：同 G0 的位置与条件。
+    if (released_68e_ && !result_.unsupported && !(lenient_ && need_second_pass_)) scan_deep_impure();
     check_enclosing_refs();
     check_comp_fn_consts();
     collect_unbound_consts();
@@ -11538,9 +11543,1118 @@ class Flattener {
       for (const auto& c : chain) if (c.first == d.raw) return std::nullopt;
     }
     if (inh_tainted(ds)) return std::nullopt;
+    // A3（docs/tasks/T-S3-68e-redo-A3.md §6.2，见 a3_classify）：底线在这里拼类路径名。"被实例化的外层"形态（X）与组件路线继承来的
+    // 函数调基类兄弟（Y，原 A2）只在本次压平已放开时改名（门控 R，见 release_gate_open）：放开前照底线拼类路径并置 blocked_（之后的
+    // 放开点不放 = 底线 SKIP）；放开后 Rename 返回实例路径名，U 硬 SKIP（置 unsupported 再返回 nullopt，不让 fn_fail 走回落）。
+    const A3Result a3 = a3_classify(fn, parts, scope, enclosing, first, ds);
+    if (a3.kind != A3Result::Kind::N) {
+      if (!released_68e_) {
+        blocked_ = true;
+      } else if (a3.kind == A3Result::Kind::Rename) {
+        YMC_ASSERT(released_68e_ && !a3.name.empty(), "A3 renames only after a 68e release point");
+        home = a3.home;
+        return a3.name;
+      } else {
+        set_unsupported("A3: instance-scope function name not computed");
+        return std::nullopt;
+      }
+    }
     std::vector<Symbol> head;
     for (auto it = ds.rbegin(); it != ds.rend(); ++it) head.push_back(I_.scode.elems[*it].name);
     return qualified(std::move(head));
+  }
+
+  // ==== 68e A3 统一判定（docs/tasks/T-S3-68e-redo-A3.md v2.1 §6.2）====
+  // 函数体里经词法查到"被实例化的外层"的名字：omc 的函数名 = found_scope 的 scopeList + 调用名（NFFunction.lookupFunction :317-345，
+  // prefix :343）；found_scope = 调用名首段找到处（NFLookup.lookupCref :323-333），逐层 lookupLocalSimpleCref、不中经 parentScope 到外层
+  //（:898；组件节点的 parentScope = 其类实例的，NFInstNode.mo:714）。非 typish 的本地类克隆后父节点是实例（NFClassTree.instantiate
+  // :517-524），组件的类在组件下实例化（NFInst.mo:2276-2283）→ 在被实例化的外层 S 里找到 h 时 found_scope = S 的实例，scopeList 给实例
+  // 路径（NFInstNode.mo:1118-1170：组件加名、BASE_CLASS 换 ty.parent 不加名、根带根名）：`M.s.h`（XE01）、根的基类 `M.h`（XE12）。
+  // ymc 的作用域层本来就带着对应的实例（scode_scope_of / find_scode_element_at 的 def_scope），fn_flat_name 的类路径支却不看
+  //（函数体语境没有 chain）。这里只在类路径支末尾（底线本来就要返回类路径名的地方）判定，三值：Rename（名 + home）/ U（A3 形态但算不准）
+  // / N（照底线）。只读 SCode 元素表、Inst 实例树、comp_fn_uses_ / fn_emit_names_ / fn_scope_ / fn_home_：不查名（不调
+  // find_scode_element_at / resolve_* / class_member_at / ext_bases_at / collect_fn_sig）、不求值、不碰 Instantiator、不写成员。
+  // fn：书写的调用名；parts：调用名各段（首段已换成元素真名）；first / ds：底线在 scope 里解析首段的结果。
+  struct A3Result {
+    enum class Kind : std::uint8_t { N, Rename, U };
+    Kind kind = Kind::N;
+    std::vector<Symbol> name;
+    Id<SElement> home;
+  };
+  A3Result a3_classify(const Cref& fn, const std::vector<Symbol>& parts, const ScodeScope& scope, NodeId enclosing,
+                       Id<SElement> first, const ScodeScope& ds) {
+    using K = A3Result::Kind;
+    A3Result r;
+    bool ds_inst = false;   // ds 本身有一层是 ymc 的类实例（is_instance）
+    for (const ScopeLevel& l : ds) ds_inst = ds_inst || is_instance(l.inst);
+    const bool fn_body = fn_scope_ && !fn_scope_->empty();
+    // X0 语境：正在发射函数 E 的体（enclosing 为空、传入 scope 就是 E 的作用域链），fn_emit_names_ 末项就是 E。
+    bool x0 = fn_body && (!enclosing.is_valid() || I_.nodes[enclosing].is_empty()) && !fn_emit_names_.empty();
+    if (x0) {
+      const ScodeScope& fs = *fn_scope_;
+      x0 = scope.size() == fs.size() && fn_emit_names_.back().first == fs[0].cls.raw;
+      for (std::size_t i = 0; x0 && i < fs.size(); ++i) x0 = scope[i].cls == fs[i].cls;
+    }
+    // X0 不成立（卡 v2.1）：函数体语境且 ds 本身带实例层 → U（继承来的函数成员在基函数的定义链里定型：RVL01 / RVL02，omc 仍落到
+    // 实例 `M.s.h`）；其余照底线（模型语境的传入 scope 至少带根实例层，不看它：根在包 Pk 里调 Pk.g 这类类路径名本来就对）。
+    if (!x0) {
+      if (fn_body && ds_inst) r.kind = K::U;
+      return r;
+    }
+    const ScodeScope& fs = *fn_scope_;
+    const std::pair<std::uint32_t, std::vector<Symbol>>& en = fn_emit_names_.back();
+    const std::vector<Symbol>& model = result_.model.name;
+    const std::size_t mlen = model.size();
+    if (ds_inst) {
+      // ---- X 支（XE01 族：首段落在带实例节点的外层）：X1-X8 全满足 → Rename，任一不满足 → U ----
+      r.kind = K::U;
+      // X1 ds 是 E 的作用域链 fs 的真后缀（逐层类与实例都同；ScopeLevel::operator== 只比类）：首段在 E 自己的词法链上找到，
+      //    import / 继承改道的 ds 不是后缀〔NFLookup.mo:838-908〕
+      if (ds.size() >= fs.size()) return r;
+      const std::size_t off = fs.size() - ds.size();
+      for (std::size_t k = 0; k < ds.size(); ++k)
+        if (ds[k].cls != fs[off + k].cls || ds[k].inst != fs[off + k].inst) return r;
+      // X2 首段是 ds[0] 的直接本地元素（import 命中 omc 打定义层类路径 NFLookup.mo:932-933，A3X10；继承来的由 inh_tainted 先挡）
+      const SElement& dcl = I_.scode.elems[ds[0].cls];
+      if (std::find(dcl.def.elements.begin(), dcl.def.elements.end(), first) == dcl.def.elements.end()) return r;
+      // X3 首段所在层本身是这个类的实例（ds[0] 无实例而更深层有的——包内包 A3X16 `Q.k`——U）〔NFInstNode.mo:714〕
+      const NodeId si = ds[0].inst;
+      if (!is_instance(si) || I_.nodes[si].def != ds[0].cls || !I_.node_class(si).tree.is_valid()) return r;
+      // X4 实例类树里就是它：类项、没经改过的 extends 继承来、没被重声明顶替〔omc 在实例类树里查，NFLookup.mo:926〕
+      {
+        const ClassTree& t = I_.trees[I_.node_class(si).tree];
+        const auto it = t.lookup.find(parts[0]);
+        if (it == t.lookup.end() || it->second.kind != LEntry::Kind::Class || it->second.index >= t.classes.size() ||
+            t.classes_via_mod.count(it->second.index))
+          return r;
+        const NodeId cn = t.classes[it->second.index];
+        if (!cn.is_valid() || I_.nodes[cn].is_empty() || I_.nodes[cn].node_type.kind == NodeTypeKind::RedeclaredClass ||
+            I_.nodes[cn].def != first)
+          return r;
+      }
+      // X5 不重名：沿"instance_parent 是类实例"的基类链上到最派生的实例 D，D 与它递归的全部基类实例里叫 parts[0] 的本地元素恰好 1 个
+      //    且是 first（派生层顶替 / DUP 由 NFClassTree.replaceDuplicates 取舍，:724-739 / :2301-2316，A3X07 → U，留 65b）
+      {
+        NodeId d = si;
+        for (int guard = 0; guard < 64; ++guard) {
+          const NodeId ip = I_.nodes[d].instance_parent;
+          if (!ip.is_valid() || I_.nodes[ip].is_empty() || I_.nodes[ip].kind != NodeKind::Class || !is_instance(ip)) break;
+          d = ip;
+        }
+        std::vector<NodeId> todo{d};
+        std::size_t hits = 0;
+        while (!todo.empty()) {
+          const NodeId n = todo.back();
+          todo.pop_back();
+          if (!n.is_valid() || I_.nodes[n].is_empty() || !I_.nodes[n].cls.is_valid() || !I_.node_class(n).tree.is_valid() ||
+              !I_.nodes[n].def.is_valid() || I_.scode.elems[I_.nodes[n].def].kind != SElementKind::Class)
+            return r;
+          for (Id<SElement> x : I_.scode.elems[I_.nodes[n].def].def.elements) {
+            const SElement& el = I_.scode.elems[x];
+            if ((el.kind != SElementKind::Class && el.kind != SElementKind::Component) || el.name != parts[0]) continue;
+            if (x != first) return r;
+            ++hits;
+          }
+          for (NodeId b : I_.trees[I_.node_class(n).tree].exts) todo.push_back(b);
+        }
+        if (hits != 1) return r;
+      }
+      // X6 首段形态：单段 → 长定义函数（非 replaceable / partial / redeclare；replaceable A3X05 → U）；两段 → 长定义包（非 replaceable /
+      //    redeclare / partial，无 extends / import），次段是它的直接本地长定义函数、非 replaceable（XE01h）；更长 → U
+      auto plain_fn = [&](const SElement& el) {
+        return el.kind == SElementKind::Class && el.def.kind == SClassDefKind::Parts &&
+               (el.restriction == SRestriction::Function || el.restriction == SRestriction::ExternalFunction) &&
+               !el.prefixes.is_replaceable && !el.is_partial && !el.prefixes.is_redeclare;
+      };
+      const SElement& fel = I_.scode.elems[first];
+      if (parts.size() == 1) {
+        if (!plain_fn(fel)) return r;
+      } else if (parts.size() == 2) {
+        if (fel.kind != SElementKind::Class || fel.def.kind != SClassDefKind::Parts || fel.restriction != SRestriction::Package ||
+            fel.prefixes.is_replaceable || fel.prefixes.is_redeclare || fel.is_partial)
+          return r;
+        bool found = false;
+        for (Id<SElement> x : fel.def.elements) {
+          const SElement& el = I_.scode.elems[x];
+          if (el.kind == SElementKind::Extends || el.kind == SElementKind::Import) return r;
+          if (el.kind == SElementKind::Class && el.name == parts[1]) {
+            if (!plain_fn(el)) return r;
+            found = true;
+          }
+        }
+        if (!found) return r;
+      } else {
+        return r;
+      }
+      // X7 名字特例（书写名与真名都看）：omc 不按词法调用户的（见 fb_special）
+      if (fb_special(parts[0]) || (!fn.parts.empty() && fb_special(fn.parts[0].name))) return r;
+      // X8 实例路径：scope_path 以模型名开头；沿途组件声明不带维（A3X17 `S s[2]` → U）、非 inner / outer、非重声明组件；沿途类节点都是
+      //    实例或根，无重声明的类、无包实例〔NFInstNode.mo:1118-1170；NFComponentRef.fromNodeList 不带下标 :1534-1541 未核实 ymc 侧〕
+      const std::optional<std::vector<Symbol>> w = scope_path(si);
+      if (!w || w->size() < mlen || !std::equal(model.begin(), model.end(), w->begin())) return r;
+      {
+        NodeId n = si;
+        bool ok = false;
+        for (int guard = 0; guard < 256; ++guard) {
+          if (n == root_) {
+            ok = true;
+            break;
+          }
+          if (!n.is_valid() || I_.nodes[n].is_empty()) break;
+          const INode& nd = I_.nodes[n];
+          if (nd.kind == NodeKind::Component) {
+            if (!nd.comp.is_valid() || !I_.comps[nd.comp].def.is_valid() || nd.node_type.kind == NodeTypeKind::RedeclaredComp) break;
+            const SElement& ce = I_.scode.elems[I_.comps[nd.comp].def];
+            if (!ce.attr.dims.empty() || !ce.type.dims.empty() || ce.prefixes.io != SInnerOuter::None || ce.prefixes.is_redeclare) break;
+            n = nd.instance_parent;
+          } else if (nd.kind == NodeKind::Class) {
+            if (nd.node_type.kind == NodeTypeKind::RedeclaredClass || !is_instance(n) || I_.package_instances.count(n.raw) ||
+                !nd.instance_parent.is_valid() || I_.nodes[nd.instance_parent].is_empty())
+              break;
+            n = nd.instance_parent;
+          } else {
+            break;
+          }
+        }
+        if (!ok) return r;
+      }
+      r.kind = K::Rename;
+      r.name = *w;
+      r.name.insert(r.name.end(), parts.begin(), parts.end());
+      r.home = ds[0].cls;   // 同 chain 支：体里再调 S 的兄弟走放开点 A（sibling_fn_name）
+      YMC_ASSERT(r.name.size() > mlen && std::equal(model.begin(), model.end(), r.name.begin()),
+                 "A3 instance-scope function name must start with the model name");
+      return r;
+    }
+    // ---- Y 支（A2 形：组件路线调继承来的 E，体里调同一基类 B 的兄弟）：形态成立 → A2 卡 §4 的 C0-C8（inherited_sibling_name）全满足
+    //      → Rename，否则 U。名字同 X 的公式：组件类实例里 def == B 的基类实例 Bb，scope_path(Bb) = 模型名 + 组件路径
+    //     （基类实例跳过不加名、组件加名，NFClassTree.mo:498 / NFInstNode.mo:1148-1149）= E 的压平名去末段 ----
+    if (fs.size() < 2 || !fn_home_.is_valid() || ds.empty() || ds[0].cls != fs[1].cls ||
+        (fs[1].inst.is_valid() && !I_.nodes[fs[1].inst].is_empty()))
+      return r;
+    for (const ScopeLevel& lv : fs)
+      if (lv.cls == fn_home_) return r;   // A2 C5：E 声明在组件类里是放开点 A 的地盘
+    if (en.second.size() < mlen + 2 || !std::equal(model.begin(), model.end(), en.second.begin())) return r;
+    const std::vector<Symbol> cpath(en.second.begin() + static_cast<std::ptrdiff_t>(mlen), en.second.end() - 1);
+    bool comp_route = false;
+    for (const auto& [upath, ucls] : comp_fn_uses_)
+      comp_route = comp_route ||
+                   (upath == cpath && ucls.is_valid() && !I_.nodes[ucls].is_empty() && I_.nodes[ucls].def == fn_home_);
+    if (!comp_route) return r;
+    if (std::optional<std::vector<Symbol>> an = inherited_sibling_name(fn, scope, enclosing, first, ds)) {
+      r.kind = K::Rename;
+      r.name = std::move(*an);
+      r.home = fn_home_;   // 被调函数照样按组件路线的家发射，它体里再调兄弟（f→g→h）同样走这里
+      return r;
+    }
+    r.kind = K::U;
+    return r;
+  }
+
+  // ==== 68e：函数调用的压平名与模型语境的内建 print（docs/tasks/T-S3-68e-redo.md v6）====
+  // 新判定（print_kind、sibling_fn_name、scan_program_print、root_record_type）只读 SCode 元素表与 Inst 已建好的实例树：不查名
+  //（不调 find_scode_element_at / inherited_member_at / resolve_fn / resolve_class_path / collect_fn_sig）、不求值、不碰 Instantiator
+  //（它的 mark_unsupported 是粘的、没有复原接口，inst.h:140-151），所以"放不放"的判定本身不改变任何底线有输出的用例。
+
+  // 词法走查（print_kind 的四步抽出来，A3 卡 §6.4 / §6.8；G1 复用）：名字 n 在作用域链 chain（内→外的 SCode 类元素）里按 omc 的
+  // lookupSimpleCref（NFLookup.mo:838-908）逐层找——本层本地的类 / 组件（lookupLocalSimpleCref :910-938）→ 本层的改名 / 限定 import
+  //（导入名就是 n）→ `.*` 导入的包不解析（Unknown）→ 外层。callee 模式（被调名，print_kind 同）：继承来的元素（extends 子句、短类 /
+  // class extends 层）不解析 → Unknown；encapsulated 层 omc 转顶层且只认内建（:876-878 / :885-888）→ Unknown。type 模式（G1 的类型名，
+  // 卡 §6.4）：extends / 短类层对类型名透明（MSL 函数多 `extends Modelica.Icons.Function`）；encapsulated 层之后只看顶层。走完各层
+  // 再看顶层 program：有 → Top，没有 → Builtin（落到内建）。只读 SCode。
+  struct LexHit {
+    enum class Kind : std::uint8_t { Local, Import, Unknown, Top, Builtin };
+    Kind kind = Kind::Builtin;
+    Id<SElement> el;        // Local / Top：找到的元素；Import：命中的那条 import 元素
+    std::size_t layer = 0;  // Local：在 chain 的第几层
+  };
+  LexHit lexical_find(Symbol n, const ScodeScope& chain, bool type_mode) {
+    using K = LexHit::Kind;
+    LexHit h;
+    for (std::size_t k = 0; k < chain.size(); ++k) {
+      const SElement& cl = I_.scode.elems[chain[k].cls];
+      // 1. 本层本地的类 / 组件叫 n
+      for (Id<SElement> x : cl.def.elements) {
+        const SElement& el = I_.scode.elems[x];
+        if ((el.kind == SElementKind::Class || el.kind == SElementKind::Component) && el.name == n) {
+          h.kind = K::Local;
+          h.el = x;
+          h.layer = k;
+          return h;
+        }
+      }
+      // 2. 本层的 import（SCode 已把组导入拆成单条，absyn_to_scode.cpp）：导入名是 n → Import；`.*` 导入的包不解析 → Unknown
+      bool wildcard = false;
+      for (Id<SElement> x : cl.def.elements) {
+        const SElement& el = I_.scode.elems[x];
+        if (el.kind != SElementKind::Import) continue;
+        if (el.imp.wildcard) {
+          wildcard = true;
+          continue;
+        }
+        bool named = false;
+        if (!el.imp.multi.empty()) {   // 未拆的组导入（防御）：path 是前缀，名字在 multi / multi_alias
+          for (std::size_t m = 0; m < el.imp.multi.size(); ++m) {
+            const bool aliased = m < el.imp.multi_alias.size() && el.imp.multi_alias[m].is_valid();
+            named = named || (aliased ? el.imp.multi_alias[m] : el.imp.multi[m]) == n;
+          }
+        } else {
+          named = el.imp.alias.is_valid() ? el.imp.alias == n : (!el.imp.path.empty() && el.imp.path.back() == n);
+        }
+        if (named) {
+          h.kind = K::Import;
+          h.el = x;
+          return h;
+        }
+      }
+      if (wildcard) {
+        h.kind = K::Unknown;
+        return h;
+      }
+      // 3. 继承来的元素不解析：extends 子句，短类定义 / class extends（元素来自基类）
+      bool inherits = cl.def.kind != SClassDefKind::Parts;
+      for (Id<SElement> x : cl.def.elements) inherits = inherits || I_.scode.elems[x].kind == SElementKind::Extends;
+      if (inherits && !type_mode) {
+        h.kind = K::Unknown;
+        return h;
+      }
+      // 4. encapsulated 层
+      if (cl.is_encapsulated) {
+        if (!type_mode) {
+          h.kind = K::Unknown;
+          return h;
+        }
+        break;
+      }
+    }
+    for (Id<SElement> x : I_.scode.program)
+      if (I_.scode.elems[x].name == n) {
+        h.kind = K::Top;
+        h.el = x;
+        return h;
+      }
+    h.kind = K::Builtin;
+    return h;
+  }
+
+  enum class PrintKind : std::uint8_t { Builtin, NotBuiltin, Unknown };
+  // 调用 e 的 `print` 是不是内建的 `impure function print(input String str)`（NFModelicaBuiltin.mo:804-808 v1.25.0，顶层作用域）。
+  // omc 查名（NFLookup.lookupSimpleCref :838-908）从书写处逐层先找本地元素与 import（lookupLocalSimpleCref :910-938），没有才到
+  // 外层（parentScope :898），走完各层才落到顶层的内建；encapsulated 层直接转顶层且只认 isBuiltin 节点（:876-878 / :885-888，
+  // NFInstNode.mo:1889-1897），print 是普通函数、不满足 → "Function print not found"（RVEP1 / RVEP2 / RVEP4、RVAO1 / RVAO2）。
+  // chain：内→外的 SCode 类元素。继承来的元素（extends / 短类 / class extends）、`.*` 导入的包、encapsulated 层这里不解析 →
+  // Unknown，由调用方定保守方向（放开点 P 只认 Builtin；G0 把 Unknown 也算命中）。
+  // allow_dot：认不认 `.print`（CREF_FULLYQUALIFIED 直接从顶层查，NFLookup.mo:335-336；RV8G3、RVAD1）。
+  PrintKind print_kind(const Exp& e, const ScodeScope& chain, bool allow_dot) {
+    if (e.kind != ExpKind::Call || !e.cref.is_valid()) return PrintKind::NotBuiltin;
+    const Cref& c = I_.absyn.crefs[e.cref];
+    if (c.parts.size() != 1 || !c.parts[0].subscripts.empty() || in_.str(c.parts[0].name) != "print")
+      return PrintKind::NotBuiltin;
+    const Symbol pn = c.parts[0].name;
+    auto top_has_print = [&] {
+      for (Id<SElement> x : I_.scode.program)
+        if (I_.scode.elems[x].name == pn) return true;
+      return false;
+    };
+    if (c.leading_dot) return allow_dot && !top_has_print() ? PrintKind::Builtin : PrintKind::NotBuiltin;
+    // 逐层的四步见 lexical_find（callee 模式，行为与抽出前相同）
+    switch (lexical_find(pn, chain, /*type_mode=*/false).kind) {
+      case LexHit::Kind::Unknown: return PrintKind::Unknown;
+      case LexHit::Kind::Builtin: return PrintKind::Builtin;
+      default: return PrintKind::NotBuiltin;   // 本层本地的类 / 组件、导入名、顶层有同名：都不是内建
+    }
+  }
+
+  // Absyn 式子 x 里的全部调用节点（含 x 自己；深遍历：运算数、实参、迭代范围、cref 与调用名的下标、调用结果字段访问的下标）。
+  // 只读（absyn 不增，引用稳定）。
+  void collect_calls(Id<Exp> x, std::vector<Id<Exp>>& out) {
+    if (!x.is_valid()) return;
+    const Exp& e = I_.absyn.exps[x];
+    if (e.kind == ExpKind::Call) out.push_back(x);
+    for (const Id<Cref> cr : {e.cref, e.call_suffix})
+      if (cr.is_valid())
+        for (const CrefPart& p : I_.absyn.crefs[cr].parts)
+          for (Id<Exp> s : p.subscripts) collect_calls(s, out);
+    collect_calls(e.a, out);
+    collect_calls(e.b, out);
+    collect_calls(e.c, out);
+    for (Id<Exp> a : e.args) collect_calls(a, out);
+    for (const ForIndex& it : e.iters) collect_calls(it.range, out);
+  }
+  // 修饰 m（绑定 + 各层子修饰的绑定）里的全部调用节点。
+  void collect_mod_calls(Id<SMod> m, std::vector<Id<Exp>>& out) {
+    if (!m.is_valid()) return;
+    const SMod& sm = I_.scode.mods[m];
+    collect_calls(sm.binding, out);
+    for (const SSubMod& s : sm.subs) collect_mod_calls(s.mod, out);
+  }
+  // 语句体里的全部调用节点（任意深度，各分支都看，不管走不走得到）。
+  void collect_stmt_calls(const std::vector<Id<SStatement>>& body, std::vector<Id<Exp>>& out) {
+    for (Id<SStatement> sid : body) {
+      const SStatement& st = I_.scode.stmts[sid];
+      collect_calls(st.a, out);
+      collect_calls(st.b, out);
+      collect_calls(st.c, out);
+      for (const SStmtBranch& br : st.branches) {
+        collect_calls(br.cond, out);
+        collect_stmt_calls(br.body, out);
+      }
+      collect_stmt_calls(st.body, out);
+      collect_stmt_calls(st.else_body, out);
+    }
+  }
+
+  // G0（卡「G0」）：放开过的模型，已加载程序里任何函数（用户文件 + 已装载的库；含没用到的、嵌套的、encapsulated 的、operator /
+  // operator record 里的、`redeclare function extends` 的）有内建 print 调用（print_kind 为 Builtin，或判不清的 Unknown）→ SKIP。
+  // 68e 不认"内建 print 让外层函数后标 impure"（NFFunction.mo:1645-1682 v1.25.0；化简不折 impure，NFSimplifyExp.mo:204-206），
+  // 这样的函数被常量折掉时 ymc 与 omc 不同（底线老错，p1 P09 / P10），放开点不该把这样的模型打开（RV4P10、RV8G1 / G3-G5、
+  // RV9G6、RVAD1、RVAO1 / RVAO2、RVEP4）。偏保守，只少 PASS。只读 SCode：从 program 的顶层类起一次 DFS，带着词法外层链（库在
+  // SCode 里按目录嵌套装载，Loader::load_dir，外层链是完整的包链）给 print_kind。看的位置：函数的算法段全部语句（含没走到的分支）、
+  // external 段的实参、各组件的绑定 / 维 / 修饰、extends 修饰；函数里嵌套的类（局部记录）的组件。短类定义没有体，不看。
+  void scan_program_print() {
+    ScodeScope chain;            // 内→外
+    std::vector<Symbol> names;   // 外→内（命中时 = 子原因：哪个函数）
+    std::vector<Id<Exp>> calls;
+    bool hit = false;
+    std::function<void(Id<SElement>, bool)> visit = [&](Id<SElement> ce, bool in_fn) {
+      const SElement& cl = I_.scode.elems[ce];
+      if (hit || cl.kind != SElementKind::Class) return;
+      const bool fn = cl.restriction == SRestriction::Function || cl.restriction == SRestriction::ExternalFunction ||
+                      cl.restriction == SRestriction::OperatorFunction;
+      chain.insert(chain.begin(), ScopeLevel{ce});
+      names.push_back(cl.name);
+      if (fn || in_fn) {
+        calls.clear();
+        for (Id<SElement> x : cl.def.elements) {
+          const SElement& el = I_.scode.elems[x];
+          if (el.kind == SElementKind::Component) {
+            collect_mod_calls(el.mod, calls);
+            for (Id<Exp> d : el.attr.dims) collect_calls(d, calls);
+            for (Id<Exp> d : el.type.dims) collect_calls(d, calls);
+          } else if (el.kind == SElementKind::Extends) {
+            collect_mod_calls(el.mod, calls);
+          }
+        }
+        for (const SAlgorithm& a : cl.def.algorithms) collect_stmt_calls(a.stmts, calls);
+        for (const SAlgorithm& a : cl.def.initial_algorithms) collect_stmt_calls(a.stmts, calls);
+        collect_calls(cl.def.external.output, calls);
+        for (Id<Exp> a : cl.def.external.args) collect_calls(a, calls);
+        for (Id<Exp> k : calls)
+          if (print_kind(I_.absyn.exps[k], chain, /*allow_dot=*/true) != PrintKind::NotBuiltin) {
+            hit = true;
+            return;   // chain / names 留着：names 是子原因
+          }
+      }
+      for (Id<SElement> x : cl.def.elements) {
+        visit(x, in_fn || fn);
+        if (hit) return;
+      }
+      chain.erase(chain.begin());
+      names.pop_back();
+    };
+    for (Id<SElement> t : I_.scode.program) {
+      visit(t, false);
+      if (hit) break;
+    }
+    if (!hit) return;
+    set_unsupported("builtin print in a function of a released model");
+    std::string d;
+    for (Symbol n : names) d += (d.empty() ? "" : ".") + std::string(in_.str(n));
+    result_.unsupported_detail = d;
+  }
+
+  // ==== 68e A3 G1（docs/tasks/T-S3-68e-redo-A3.md v2.1 §6.4，XE08 收窄）====
+  // omc 对函数形参 / 局部深遍历标 impure（NFFunction.foldExpParameter :2230-2257：绑定、维、递归进组件的类树——记录字段的绑定与修饰、
+  // 短类型 / 内建类型的属性），ymc 只看绑定顶层（fn_marked_impure，TBD-19 ③）。放开把底线 SKIP 的模型打开就露出来（XE08、A3X20 /
+  // A3X33、RVI01 / RVI03 / RVI04、RVJ02，final2 都 FAIL）。照 omc 补要改纯度路径（用户已排除），按规则 (c) 第一条在放开模型上收窄：
+  // 本次解析到的函数（enc_fns_）的形参 / 局部深处调了"可能不纯"的函数 → SKIP。与 G0 同位、同门控；只读 SCode，不查名（不调
+  // resolve_fn / find_scode_element_at / inherited_member_at / collect_fn_sig）、不碰 Instantiator、不改状态。偏保守，只少 PASS。
+  void scan_deep_impure() {
+    std::unordered_set<std::uint32_t> seen;   // 已看过的类型类（记录 / 短类 / 函数类型；递归记录防环）
+    for (const ScodeScope& c : enc_fns_) {
+      if (c.empty() || !deep_fn_bad(c, seen, 0)) continue;
+      set_unsupported("deep impure call in a function of a released model");
+      std::string d;
+      for (auto it = c.rbegin(); it != c.rend(); ++it) d += (d.empty() ? "" : ".") + std::string(in_.str(I_.scode.elems[*it].name));
+      result_.unsupported_detail = d;   // 子原因：哪个函数（定义链）
+      return;
+    }
+  }
+  // 函数 fc[0]（fc = 它的定义链，内→外）的形参 / 局部有没有深处的坏调用：(a) 修饰里除整个绑定式本身之外的全部式子（属性 / 记录字段修饰、
+  // 嵌套子修饰）；(b) 整个绑定式是坏调用而旧口径不算的（见 deep_whole_bad）；(c) 维；(d) 类型（见 deep_type_bad）。extends 的基函数
+  //（omc 的类树含继承来的组件）照同样的规则看，基类解析不了 → 坏。
+  bool deep_fn_bad(const ScodeScope& fc, std::unordered_set<std::uint32_t>& seen, int depth) {
+    if (depth > 20) return true;
+    const SElement& fe = I_.scode.elems[fc[0].cls];
+    for (Id<SElement> x : fe.def.elements) {
+      const SElement& el = I_.scode.elems[x];
+      if (el.kind == SElementKind::Component) {
+        if (deep_comp_bad(el, fc, /*whole=*/false, seen, depth)) return true;
+      } else if (el.kind == SElementKind::Extends) {
+        std::vector<Id<Exp>> calls;
+        collect_mod_calls(el.mod, calls);
+        for (Id<Exp> k : calls)
+          if (deep_call_bad(k, fc)) return true;
+        ScodeScope bc;
+        const Id<SElement> b = deep_class_path(el.base_leading_dot, el.base_path, fc, bc);
+        if (!b.is_valid() || I_.scode.elems[b].def.kind != SClassDefKind::Parts) return true;
+        if (!seen.insert(b.raw).second) continue;
+        bc.insert(bc.begin(), ScopeLevel{b});
+        if (deep_fn_bad(bc, seen, depth + 1)) return true;
+      }
+    }
+    return false;
+  }
+  // 组件 el（所在类的定义链 cc，cc[0] = 那个类）：whole = 整个绑定式也算（记录字段、函数类型的形参：旧口径从不看它们）。
+  bool deep_comp_bad(const SElement& el, const ScodeScope& cc, bool whole, std::unordered_set<std::uint32_t>& seen, int depth) {
+    const Id<Exp> b = el.mod.is_valid() ? I_.scode.mods[el.mod].binding : Id<Exp>{};
+    std::vector<Id<Exp>> calls;
+    collect_mod_calls(el.mod, calls);
+    for (Id<Exp> d : el.attr.dims) collect_calls(d, calls);
+    for (Id<Exp> d : el.type.dims) collect_calls(d, calls);
+    for (Id<Exp> k : calls)
+      if ((whole || k != b) && deep_call_bad(k, cc)) return true;
+    if (!whole && b.is_valid() && I_.absyn.exps[b].kind == ExpKind::Call && deep_whole_bad(el, b, cc)) return true;
+    return deep_type_bad(el.type, cc, seen, depth);
+  }
+  // (b)：整个绑定式就是调用、旧口径（fn_marked_impure 的绑定顶层）不算的——被调的是内建（旧口径只认用户函数），或被调的用户函数首输出
+  // 书写类型不是 `Real` 而变量可能是 Real（"Real 目标 + 首输出 Integer"不算，见 fn_marked_impure；同原卡条件 7(b)，派生 Integer 判不出，
+  // 偏保守）——且这个调用本身是坏的（见 deep_call_bad）。
+  bool deep_whole_bad(const SElement& el, Id<Exp> b, const ScodeScope& cc) {
+    if (!deep_call_bad(b, cc)) return false;
+    auto is = [&](const STypeSpec& t, std::string_view n) { return !t.leading_dot && t.path.size() == 1 && in_.str(t.path[0]) == n; };
+    const Id<SElement> f = deep_callee(I_.absyn.crefs[I_.absyn.exps[b].cref], cc);
+    if (!f.is_valid()) return true;   // 内建（或认不清）：旧口径不看
+    const bool maybe_real = !is(el.type, "Integer") && !is(el.type, "Boolean") && !is(el.type, "String");
+    const SElement& fe = I_.scode.elems[f];
+    bool out_real = false;
+    if (fe.def.kind == SClassDefKind::Parts)
+      for (Id<SElement> y : fe.def.elements) {
+        const SElement& o = I_.scode.elems[y];
+        if (o.kind != SElementKind::Component || o.attr.dir != SDirection::Output) continue;
+        out_real = is(o.type, "Real");
+        break;
+      }
+    return maybe_real && !out_real;
+  }
+  // 调用 k（写在类 cc[0] 里，名字按 cc 解析）是不是"可能不纯"：size / array / String / Integer / Boolean / time 不走查（omc 特名，fb_special）；
+  // 其余按 lexical_find（callee 模式，print_kind 的四步）找——函数类 → maybe_impure_fn；记录类 → 不坏；别的元素 / Unknown → 坏；落到内建
+  // → 名字是顶层 impure 内建（NFModelicaBuiltin.mo v1.25.0：initial :64、terminal :72、homotopy :291、sample :537 / :549、DynamicSelect
+  // :629、print :804、firstTick / interval :894-:924、ticksInState :965、timeInState :973）才坏。多段名：首段同上找到类元素，之后只沿本地类
+  // 元素逐段下降（RVI04 `P.ti`），下不去 → 坏。改名 / 限定 import 命中按目标从顶层下降。
+  bool deep_call_bad(Id<Exp> k, const ScodeScope& cc) {
+    const Cref& c = I_.absyn.crefs[I_.absyn.exps[k].cref];
+    if (c.parts.empty()) return true;
+    const std::string_view n0 = in_.str(c.parts[0].name);
+    if (!c.leading_dot && c.parts.size() == 1 && fb_special(c.parts[0].name)) return false;
+    if (!c.leading_dot && c.parts.size() == 1) {
+      const LexHit h = lexical_find(c.parts[0].name, cc, /*type_mode=*/false);
+      if (h.kind == LexHit::Kind::Unknown) return true;
+      if (h.kind == LexHit::Kind::Builtin) {
+        static constexpr std::string_view kImpure[] = {"initial", "terminal", "homotopy", "sample", "DynamicSelect", "print",
+                                                       "firstTick", "interval", "ticksInState", "timeInState"};
+        for (std::string_view s : kImpure)
+          if (n0 == s) return true;
+        return false;
+      }
+    }
+    const Id<SElement> f = deep_callee(c, cc);
+    if (!f.is_valid()) return true;
+    const SElement& fe = I_.scode.elems[f];
+    if (fe.restriction == SRestriction::Record || fe.restriction == SRestriction::OperatorRecord) return false;
+    const bool is_fn = fe.restriction == SRestriction::Function || fe.restriction == SRestriction::ExternalFunction ||
+                       fe.restriction == SRestriction::OperatorFunction;
+    return !is_fn || maybe_impure_fn(fe);
+  }
+  // 被调名 c 落到的类元素（找不到 / 不是类 / 下不去 → invalid）：首段按 lexical_find（callee 模式）或前导点从顶层，之后沿本地类元素下降。
+  Id<SElement> deep_callee(const Cref& c, const ScodeScope& cc) {
+    std::vector<Symbol> path;
+    for (const CrefPart& p : c.parts) path.push_back(p.name);
+    ScodeScope unused;
+    return deep_resolve(c.leading_dot, path, cc, /*type_mode=*/false, unused);
+  }
+  // 类型名（extends 基类名同）path 在 cc 里落到的类元素 + 它的定义链（内→外，不含它自己）：lexical_find 的 type 模式（extends / 短类层
+  // 透明）。
+  Id<SElement> deep_class_path(bool leading_dot, const std::vector<Symbol>& path, const ScodeScope& cc, ScodeScope& out) {
+    return deep_resolve(leading_dot, path, cc, /*type_mode=*/true, out);
+  }
+  Id<SElement> deep_resolve(bool leading_dot, const std::vector<Symbol>& path, const ScodeScope& cc, bool type_mode, ScodeScope& out) {
+    out.clear();
+    if (path.empty()) return {};
+    Id<SElement> e;
+    std::vector<Symbol> rest(path.begin() + 1, path.end());
+    if (leading_dot) {
+      e = top_class(path[0]);
+    } else {
+      const LexHit h = lexical_find(path[0], cc, type_mode);
+      if (h.kind == LexHit::Kind::Local) {
+        e = h.el;
+        out.assign(cc.begin() + static_cast<std::ptrdiff_t>(h.layer), cc.end());
+      } else if (h.kind == LexHit::Kind::Top) {
+        e = h.el;
+      } else if (h.kind == LexHit::Kind::Import) {
+        // import 目标一律从顶层按定义解析（NFLookup.lookupImport :276-287）：组导入（防御）的名字接在 path 后
+        const Import& im = I_.scode.elems[h.el].imp;
+        std::vector<Symbol> tp = im.path;
+        if (!im.multi.empty())
+          for (std::size_t m = 0; m < im.multi.size(); ++m) {
+            const bool aliased = m < im.multi_alias.size() && im.multi_alias[m].is_valid();
+            if ((aliased ? im.multi_alias[m] : im.multi[m]) == path[0]) tp.push_back(im.multi[m]);
+          }
+        if (tp.empty()) return {};
+        e = top_class(tp[0]);
+        rest.insert(rest.begin(), tp.begin() + 1, tp.end());
+      } else {
+        return {};
+      }
+    }
+    for (Symbol s : rest) {
+      if (!e.is_valid() || I_.scode.elems[e].kind != SElementKind::Class) return {};
+      out.insert(out.begin(), ScopeLevel{e});
+      Id<SElement> nx;
+      for (Id<SElement> x : I_.scode.elems[e].def.elements)
+        if (I_.scode.elems[x].kind == SElementKind::Class && I_.scode.elems[x].name == s) nx = x;
+      e = nx;
+    }
+    if (!e.is_valid() || I_.scode.elems[e].kind != SElementKind::Class) return {};
+    return e;
+  }
+  Id<SElement> top_class(Symbol n) {
+    for (Id<SElement> x : I_.scode.program)
+      if (I_.scode.elems[x].name == n) return x;
+    return {};
+  }
+  // (d) 类型 t（写在 cc[0] 里）：内建标量 / 枚举 → 不坏；长定义类（记录、函数类型等：omc 递归进组件的类树）→ 它每个组件的修饰（整个绑定
+  // 也算）/ 维 / 类型，带 extends → 坏；短类 → 它的修饰与维，再沿 derived_type 往下（≤ 20 层），落到内建标量停；下不去 → 坏。
+  bool deep_type_bad(const STypeSpec& t, const ScodeScope& cc, std::unordered_set<std::uint32_t>& seen, int depth) {
+    auto builtin = [&](const STypeSpec& s) {
+      if (s.leading_dot || s.path.size() != 1) return false;
+      const std::string_view n = in_.str(s.path[0]);
+      return n == "Real" || n == "Integer" || n == "Boolean" || n == "String";
+    };
+    if (builtin(t)) return false;
+    ScodeScope ds;
+    Id<SElement> e = deep_class_path(t.leading_dot, t.path, cc, ds);
+    for (int layer = 0; layer < 20; ++layer) {
+      if (!e.is_valid()) return true;
+      const SElement& ce = I_.scode.elems[e];
+      if (ce.def.kind == SClassDefKind::Enumeration) return false;
+      if (ce.def.kind == SClassDefKind::Parts) {
+        if (!seen.insert(e.raw).second) return false;
+        ScodeScope rc = ds;
+        rc.insert(rc.begin(), ScopeLevel{e});
+        for (Id<SElement> x : ce.def.elements) {
+          const SElement& f = I_.scode.elems[x];
+          if (f.kind == SElementKind::Extends) return true;
+          if (f.kind == SElementKind::Component && deep_comp_bad(f, rc, /*whole=*/true, seen, depth + 1)) return true;
+        }
+        return false;
+      }
+      if (ce.def.kind != SClassDefKind::Derived) return true;
+      // 短类：修饰与维的式子在短类的定义处（它的外层，ds）解析
+      std::vector<Id<Exp>> calls;
+      collect_mod_calls(ce.def.derived_mod, calls);
+      for (Id<Exp> d : ce.def.derived_attr.dims) collect_calls(d, calls);
+      for (Id<Exp> d : ce.def.derived_type.dims) collect_calls(d, calls);
+      for (Id<Exp> k : calls)
+        if (deep_call_bad(k, ds)) return true;
+      if (builtin(ce.def.derived_type)) return false;
+      ScodeScope nds;
+      e = deep_class_path(ce.def.derived_type.leading_dot, ce.def.derived_type.path, ds, nds);
+      ds = std::move(nds);
+    }
+    return true;
+  }
+  // sibling_fn_name 条件 7 用的"可能不纯"（只读语法，偏保守，不去求 fn_marked_impure）：声明 impure；带 external 段而未声明 pure；
+  // 未声明 pure 且算法段 / 组件绑定里有任何调用（可能被旧口径后标）；体看不全的（短类 / class extends / 带 extends）未声明 pure。
+  bool maybe_impure_fn(const SElement& s) {
+    if (s.purity == Purity::Impure) return true;
+    if (s.purity == Purity::Pure) return false;
+    if (s.def.kind != SClassDefKind::Parts || s.def.external.present || s.restriction == SRestriction::ExternalFunction) return true;
+    std::vector<Id<Exp>> calls;
+    for (Id<SElement> x : s.def.elements) {
+      const SElement& el = I_.scode.elems[x];
+      if (el.kind == SElementKind::Extends) return true;
+      if (el.kind == SElementKind::Component && el.mod.is_valid()) collect_calls(I_.scode.mods[el.mod].binding, calls);
+    }
+    for (const SAlgorithm& a : s.def.algorithms) collect_stmt_calls(a.stmts, calls);
+    return !calls.empty();
+  }
+  // 类元素 owner 里名为 n 的本地类：fn = 找函数（Function / ExternalFunction / OperatorFunction），否则找记录（Record /
+  // OperatorRecord）。没有 → invalid。
+  Id<SElement> local_class_of(const SElement& owner, Symbol n, bool fn) {
+    for (Id<SElement> x : owner.def.elements) {
+      const SElement& el = I_.scode.elems[x];
+      if (el.kind != SElementKind::Class || el.name != n) continue;
+      const bool is_fn = el.restriction == SRestriction::Function || el.restriction == SRestriction::ExternalFunction ||
+                         el.restriction == SRestriction::OperatorFunction;
+      const bool is_rec = el.restriction == SRestriction::Record || el.restriction == SRestriction::OperatorRecord;
+      if (fn ? is_fn : is_rec) return x;
+    }
+    return {};
+  }
+  // sibling_fn_name 条件 7（卡 v6，RV8G2）：E（esel）的形参 / 局部里，旧口径（fn_marked_impure 只看语句顶层与绑定顶层，:13877）
+  // 看不到、omc 深遍历看得到的位置（foldExpParameter NFFunction.mo:2230-2257：Binding.foldExp NFBinding.mo:683-697、
+  // Dimension.foldExp NFDimension.mo:637-654、递归进组件的类树）调了 H（hel）里可能不纯的兄弟函数 → false（不放）。照 omc 补齐
+  // 要改纯度路径（用户已排除），所以在放开点入口收窄。兄弟按名字在 H 的元素表里比，不查名、不管 E 层是否遮蔽（偏保守）。
+  //   (a) 绑定里不是整个绑定式本身的调用；修饰里属性的式子（实现补：omc 递归进组件的类树，内建类型的属性组件也在里面）；
+  //   (b) 整个绑定式就是调用、旧口径因"Real 目标 + 被调首输出是 Integer"而不算的（:13845）：目标可能是 Real（书写类型不是
+  //       Integer / Boolean / String）且兄弟首输出的书写类型不是 `Real`（主代理定：派生 Integer 类型判不出，偏保守）；
+  //   (c) 维式子；
+  //   (d) 类型是 H 的本地记录的形参 / 局部：记录各字段的绑定 / 修饰 / 维，递归进 H 本地记录类型的字段；记录带 extends 的直接
+  //       不放。H 外声明的记录类在词法上看不到 H 的兄弟，不用看（E 自己的本地记录作类型时 rec_flat_name 已给 nullopt → SKIP）。
+  //   E 有 extends 指向 H 的本地类（单段名，或经 H 的类名的限定路径）→ 直接不放；指向别处的基函数在词法上看不到 H 的兄弟。
+  bool sibling_calls_visible(const SElement& esel, const SElement& hel) {
+    auto bad_call = [&](Id<Exp> k) {
+      const Cref& c = I_.absyn.crefs[I_.absyn.exps[k].cref];
+      if (c.leading_dot || c.parts.size() != 1) return false;
+      const Id<SElement> s = local_class_of(hel, c.parts[0].name, true);
+      return s.is_valid() && maybe_impure_fn(I_.scode.elems[s]);
+    };
+    std::unordered_set<std::uint32_t> seen_rec;
+    // 组件 c 的修饰（skip 这个调用节点不算）/ 维 / 本地记录类型的字段里有没有可能不纯兄弟的调用。
+    std::function<bool(const SElement&, Id<Exp>)> comp_bad = [&](const SElement& c, Id<Exp> skip) -> bool {
+      std::vector<Id<Exp>> calls;
+      collect_mod_calls(c.mod, calls);
+      for (Id<Exp> d : c.attr.dims) collect_calls(d, calls);
+      for (Id<Exp> d : c.type.dims) collect_calls(d, calls);
+      for (Id<Exp> k : calls)
+        if (k != skip && bad_call(k)) return true;
+      if (c.type.leading_dot || c.type.path.size() != 1) return false;
+      const Id<SElement> r = local_class_of(hel, c.type.path[0], false);
+      if (!r.is_valid() || !seen_rec.insert(r.raw).second) return false;
+      for (Id<SElement> x : I_.scode.elems[r].def.elements) {
+        const SElement& f = I_.scode.elems[x];
+        if (f.kind == SElementKind::Extends) return true;
+        if (f.kind == SElementKind::Component && comp_bad(f, Id<Exp>{})) return true;
+      }
+      return false;
+    };
+    for (Id<SElement> x : esel.def.elements) {
+      const SElement& el = I_.scode.elems[x];
+      if (el.kind == SElementKind::Extends) {
+        // 基函数是 H 的本地类：单段名（卡），或经 H 的类名走的限定路径（实现补：`extends C.g` / `extends Pk.C.g`，omc 经类名查到
+        // 的是定义层的 C.g，继承来的体里的调用按类路径命名 `C.m`——oldhit A68eY29 / Y30、v1 R68eV04 / V05）。末段是 H 的本地类名、
+        // 或路径里有 H 的名字，都不放。
+        if (el.base_path.empty() || std::find(el.base_path.begin(), el.base_path.end(), hel.name) != el.base_path.end())
+          return false;
+        for (Id<SElement> h : hel.def.elements)
+          if (I_.scode.elems[h].kind == SElementKind::Class && I_.scode.elems[h].name == el.base_path.back()) return false;
+        continue;
+      }
+      if (el.kind != SElementKind::Component) continue;
+      // (a)(c)(d)：除整个绑定式本身之外的全部位置
+      const Id<Exp> b = el.mod.is_valid() ? I_.scode.mods[el.mod].binding : Id<Exp>{};
+      if (comp_bad(el, b)) return false;
+      // (b)：整个绑定式是对可能不纯兄弟的调用
+      if (b.is_valid() && I_.absyn.exps[b].kind == ExpKind::Call && bad_call(b)) {
+        auto is = [&](const STypeSpec& t, std::string_view n) {
+          return !t.leading_dot && t.path.size() == 1 && in_.str(t.path[0]) == n;
+        };
+        const bool maybe_real = !is(el.type, "Integer") && !is(el.type, "Boolean") && !is(el.type, "String");
+        const SElement& sib = I_.scode.elems[local_class_of(hel, I_.absyn.crefs[I_.absyn.exps[b].cref].parts[0].name, true)];
+        bool out_real = false;
+        if (sib.def.kind == SClassDefKind::Parts)
+          for (Id<SElement> y : sib.def.elements) {
+            const SElement& o = I_.scode.elems[y];
+            if (o.kind != SElementKind::Component || o.attr.dir != SDirection::Output) continue;
+            out_real = is(o.type, "Real");
+            break;
+          }
+        if (maybe_real && !out_real) return false;
+      }
+    }
+    return true;
+  }
+  // 实例类里函数体调兄弟函数的压平名（放开点 A / G，卡「sibling_fn_name」）。omc：非类型类的本地类 clone 后父节点是组件实例
+  //（NFClassTree.instantiate :472-475 / :521-523 v1.25.0），f 体里查不到的名字经 parentScope（NFLookup.mo:898）到组件、在组件的
+  // 整棵实例类树里找（:926），lookupFunction 的 prefix 取找到处的 scopeList（NFFunction.mo:343）→ 与正在发射的 f 同前缀
+  //（AssertTest4 `Test4.assertTest.print`）；函数缓存按节点（instFunctionRef :362-389），两实例各一份、数组实例不带下标
+  //（NFComponentRef.fromNodeList :1534-1541）。fn_flat_name 在"与正在发射的函数同出一个实例类"处给 nullopt，这里只在下面七条
+  // 都满足时补上；不满足 → nullopt（与底线相同）。fr：底线已在函数体作用域里解析好的被调函数。
+  std::optional<std::vector<Symbol>> sibling_fn_name(const FnRef& fr, Symbol name) {
+    // 1. 在发射函数体（E）且 E 的名字出自实例类 H
+    if (!fn_scope_ || !fn_home_.is_valid() || fn_emit_names_.empty()) return std::nullopt;
+    // 2. 名字特例：size / array 只按首段名特判（NFCall.mo:2321 / :2325），time / Boolean / Integer / String 先找内建
+    //   （NFLookup.mo:815-836 / :855）——不按词法调用户的（A15 / A16）
+    const std::string_view nm = in_.str(name);
+    if (nm == "size" || nm == "array" || nm == "time" || nm == "Boolean" || nm == "Integer" || nm == "String") return std::nullopt;
+    // 3. E 就是作用域首层、H 是第二层且带 H 的实例节点；E 的压平名以 E 名结尾
+    const ScodeScope& fs = *fn_scope_;
+    const std::pair<std::uint32_t, std::vector<Symbol>>& en = fn_emit_names_.back();
+    if (fs.size() < 2 || en.first != fs[0].cls.raw || fs[1].cls != fn_home_) return std::nullopt;
+    const NodeId inst = fs[1].inst;
+    if (!inst.is_valid() || I_.nodes[inst].is_empty() || I_.nodes[inst].def != fn_home_) return std::nullopt;
+    const SElement& esel = I_.scode.elems[fs[0].cls];
+    if (en.second.size() < 2 || en.second.back() != esel.name) return std::nullopt;
+    // 3'. H 那层是组件自己的类实例（inst.cpp:2217 instance_parent = 组件），不是基类实例（inst.cpp:1533）或根：派生类顶替兄弟时
+    //    omc 在组件的实例类树里取派生类那份（A7；RV3A1 / A6 / G1、C08），这里不解
+    const NodeId ip = I_.nodes[inst].instance_parent;
+    if (!ip.is_valid() || I_.nodes[ip].is_empty() || I_.nodes[ip].kind != NodeKind::Component) return std::nullopt;
+    // 4. 被调的是 H 自己声明的长定义函数，与 E 同一条作用域链（逐层类与实例节点都同；ScopeLevel::operator== 只比类）
+    if (fr.fe != fr.named || !fr.alias_mods.empty() || fr.node.is_valid() || fr.fscope.size() != fs.size()) return std::nullopt;
+    for (std::size_t i = 1; i < fs.size(); ++i)
+      if (fr.fscope[i].cls != fs[i].cls || fr.fscope[i].inst != fs[i].inst) return std::nullopt;
+    const SElement& hel = I_.scode.elems[fn_home_];
+    if (std::find(hel.def.elements.begin(), hel.def.elements.end(), fr.fe) == hel.def.elements.end()) return std::nullopt;
+    const SElement& sib = I_.scode.elems[fr.fe];
+    if (sib.prefixes.is_replaceable || sib.def.kind != SClassDefKind::Parts ||
+        (sib.restriction != SRestriction::Function && sib.restriction != SRestriction::ExternalFunction))
+      return std::nullopt;
+    // 5. 不重复：H 的各层基类实例（Inst 已建好的类树）都不声明 name、也不声明 E 的名字（避开 A7 / DUP 的实例树取舍，65b）
+    {
+      std::vector<NodeId> todo;
+      if (!I_.nodes[inst].cls.is_valid() || !I_.node_class(inst).tree.is_valid()) return std::nullopt;
+      for (NodeId x : I_.trees[I_.node_class(inst).tree].exts) todo.push_back(x);
+      while (!todo.empty()) {
+        const NodeId b = todo.back();
+        todo.pop_back();
+        if (!b.is_valid() || I_.nodes[b].is_empty() || !I_.nodes[b].cls.is_valid() || !I_.node_class(b).tree.is_valid())
+          return std::nullopt;
+        const ClassTree& t = I_.trees[I_.node_class(b).tree];
+        if (t.lookup.count(name) || t.lookup.count(esel.name)) return std::nullopt;
+        for (NodeId x : t.exts) todo.push_back(x);
+      }
+    }
+    // 6. 不经重声明、不经 import
+    if (I_.redeclared_classes.count(fn_home_.raw) || I_.redeclared_classes.count(fr.fe.raw)) return std::nullopt;
+    for (const SElement* k : {&hel, &esel})
+      for (Id<SElement> x : k->def.elements)
+        if (I_.scode.elems[x].kind == SElementKind::Import) return std::nullopt;
+    // 7. E 的形参 / 局部深处没有旧口径看不到的不纯兄弟调用（见 sibling_calls_visible）
+    if (!sibling_calls_visible(esel, hel)) return std::nullopt;
+    std::vector<Symbol> q(en.second.begin(), en.second.end() - 1);
+    q.push_back(name);
+    YMC_ASSERT(q.size() >= 2 && q.size() > result_.model.name.size() &&
+                   std::equal(result_.model.name.begin(), result_.model.name.end(), q.begin()),
+               "sibling function name must start with the model name");
+    return q;
+  }
+  // A3 的 Y 支（原补充卡 A2 的 C0-C8，T-S3-68e-redo-A2 v2 §4；A2 作为共用路径改动已撤，只由 a3_classify 在已放开的压平里调用，
+  // T-S3-68e-redo-A3 §6.2 / §6.5）：组件路线调的 f 是组件类从基类 B 继承来的，f 体里调 B 的兄弟 g。omc：组件类在组件下实例化，
+  // extends 节点成 BASE_CLASS(instance = 组件)（NFClassTree.mo:498），基类的本地类克隆后父节点是基类节点（:474 / :523），g 的
+  // found_scope = 基类节点 → scopeListClass 的 BASE_CLASS 支换成 ty.parent（NFInstNode.mo:1148-1149）→ 组件 → `M.c.g`（NFFunction.mo:343）；
+  // 多级 extends 经各层基类节点同样落到组件。derivative（NFFunctionDerivative.mo:77）/ inverse（NFFunctionInverse.mo:182）/ 函数值同一套。
+  // 底线在 fn_flat_name 的类路径支打 `B.g`。只在那一支的最后一步问（底线本来就要返回类路径名的地方），下面 C0-C8 全部满足才返回
+  // "正在发射的函数的压平名去掉末段 + 调用名"，否则 nullopt（调用方照旧拼类路径）。只读 SCode 元素表、Inst 实例树、comp_fn_uses_ /
+  // fn_emit_names_ / fn_scope_ / fn_home_；不查名、不求值、不写成员，不置 released_68e_（只改名，不打开底线 SKIP 的模型）。
+  // first / ds：底线在 scope 里解析调用名首段的结果（被调者与它的定义作用域链）。
+  std::optional<std::vector<Symbol>> inherited_sibling_name(const Cref& fn, const ScodeScope& scope, NodeId enclosing,
+                                                             Id<SElement> first, const ScodeScope& ds) {
+    auto is_fn = [](const SElement& el) {
+      return el.restriction == SRestriction::Function || el.restriction == SRestriction::ExternalFunction;
+    };
+    auto has_kind = [&](const SElement& el, SElementKind k) {
+      for (Id<SElement> x : el.def.elements)
+        if (I_.scode.elems[x].kind == k) return true;
+      return false;
+    };
+    // C0 语境：在发射组件路线函数 E 的体（函数体语境：enclosing 为空，scope 就是 E 的作用域链）
+    if (!fn_scope_ || !fn_home_.is_valid() || fn_emit_names_.empty()) return std::nullopt;
+    if (enclosing.is_valid() && !I_.nodes[enclosing].is_empty()) return std::nullopt;
+    const ScodeScope& fs = *fn_scope_;
+    if (fs.size() < 2 || scope.size() != fs.size()) return std::nullopt;
+    for (std::size_t i = 0; i < fs.size(); ++i)
+      if (scope[i].cls != fs[i].cls) return std::nullopt;
+    const std::pair<std::uint32_t, std::vector<Symbol>>& en = fn_emit_names_.back();
+    const std::vector<Symbol>& model = result_.model.name;
+    const std::size_t mlen = model.size();
+    const SElement& esel = I_.scode.elems[fs[0].cls];
+    if (en.first != fs[0].cls.raw || en.second.size() < mlen + 2 || !std::equal(model.begin(), model.end(), en.second.begin()) ||
+        en.second.back() != esel.name)
+      return std::nullopt;
+    // C1 调用名：单段、无前导点、无下标，不是名字特例（同 sibling_fn_name 条件 2）与 print
+    if (fn.leading_dot || fn.parts.size() != 1 || !fn.parts[0].subscripts.empty()) return std::nullopt;
+    const Symbol name = fn.parts[0].name;
+    const std::string_view nm = in_.str(name);
+    if (nm == "size" || nm == "array" || nm == "time" || nm == "Boolean" || nm == "Integer" || nm == "String" || nm == "print")
+      return std::nullopt;
+    // C2 被调者：B（fs[1]）的直接本地长定义函数，非 replaceable / partial / redeclare，自己没有本地类与 import
+    if (ds.empty() || ds[0].cls != fs[1].cls || !first.is_valid()) return std::nullopt;
+    const SElement& bsel = I_.scode.elems[fs[1].cls];
+    if (std::find(bsel.def.elements.begin(), bsel.def.elements.end(), first) == bsel.def.elements.end()) return std::nullopt;
+    const SElement& gsel = I_.scode.elems[first];
+    if (gsel.kind != SElementKind::Class || gsel.def.kind != SClassDefKind::Parts || !is_fn(gsel) || gsel.prefixes.is_replaceable ||
+        gsel.is_partial || gsel.prefixes.is_redeclare || has_kind(gsel, SElementKind::Class) || has_kind(gsel, SElementKind::Import))
+      return std::nullopt;
+    // C3 E：长定义函数、非 replaceable，没有本地类与 import（import 的目标在定义层，omc 打类路径，A2B06）
+    if (esel.kind != SElementKind::Class || esel.def.kind != SClassDefKind::Parts || !is_fn(esel) || esel.prefixes.is_replaceable ||
+        has_kind(esel, SElementKind::Class) || has_kind(esel, SElementKind::Import))
+      return std::nullopt;
+    // C4 B：本地类全是长定义、非 replaceable / redeclare 的函数（partial 的函数型类型允许：函数型形参不带类型路径打印）；
+    //    有记录 / 类型 / 枚举 / 包 / 模型（omc 按实例路径命名，ymc 的 rec_flat_name 仍打类路径）、import、constant 组件 → 不放
+    if (bsel.def.kind != SClassDefKind::Parts || has_kind(bsel, SElementKind::Import)) return std::nullopt;
+    for (Id<SElement> x : bsel.def.elements) {
+      const SElement& el = I_.scode.elems[x];
+      if (el.kind == SElementKind::Class &&
+          (el.def.kind != SClassDefKind::Parts || !is_fn(el) || el.prefixes.is_replaceable || el.prefixes.is_redeclare))
+        return std::nullopt;
+      if (el.kind == SElementKind::Component && el.attr.var == SVariability::Const) return std::nullopt;
+    }
+    // C5 E 是继承来的：作用域链任何一层都不是组件类（E 声明在组件类里是放开点 A 的地盘；B 词法嵌在组件类里不碰，A2B11）
+    for (const ScopeLevel& lv : fs)
+      if (lv.cls == fn_home_) return std::nullopt;
+    // C6 组件实例：comp_fn_uses_ 里路径 == E 的压平名中间段、类实例的定义 == fn_home_ 的项，按不同的 cls 值恰好一个；须是类实例、
+    //    实例父是组件（同 sibling_fn_name 条件 3'）
+    const std::vector<Symbol> cpath(en.second.begin() + static_cast<std::ptrdiff_t>(mlen), en.second.end() - 1);
+    NodeId cls;
+    for (const auto& [upath, ucls] : comp_fn_uses_) {
+      if (upath != cpath || !ucls.is_valid() || I_.nodes[ucls].is_empty() || I_.nodes[ucls].def != fn_home_) continue;
+      if (cls.is_valid() && cls != ucls) return std::nullopt;
+      cls = ucls;
+    }
+    if (!cls.is_valid() || !is_instance(cls)) return std::nullopt;
+    const NodeId ip = I_.nodes[cls].instance_parent;
+    if (!ip.is_valid() || I_.nodes[ip].is_empty() || I_.nodes[ip].kind != NodeKind::Component) return std::nullopt;
+    // C7 实例树不重名：组件类实例与它递归的全部基类实例里，叫 name 的本地元素恰好一个且是被调者、叫 E 名的恰好一个且是 E，B 在其中；
+    //    组件类实例类树里这两个名字须是没被重声明 / 没经改过的 extends 继承来的类项（重名 / 菱形 / 重声明属 65b 的实例树取舍）
+    {
+      std::vector<NodeId> todo{cls};
+      std::size_t n_name = 0, n_e = 0;
+      bool has_b = false;
+      while (!todo.empty()) {
+        const NodeId n = todo.back();
+        todo.pop_back();
+        if (!n.is_valid() || I_.nodes[n].is_empty() || !I_.nodes[n].cls.is_valid() || !I_.node_class(n).tree.is_valid() ||
+            !I_.nodes[n].def.is_valid())
+          return std::nullopt;
+        const SElement& d = I_.scode.elems[I_.nodes[n].def];
+        if (d.kind != SElementKind::Class || d.def.kind != SClassDefKind::Parts) return std::nullopt;
+        has_b = has_b || I_.nodes[n].def == fs[1].cls;
+        for (Id<SElement> x : d.def.elements) {
+          const SElement& el = I_.scode.elems[x];
+          if (el.kind != SElementKind::Class && el.kind != SElementKind::Component) continue;
+          if (el.name == name) {
+            if (x != first) return std::nullopt;
+            ++n_name;
+          }
+          if (el.name == esel.name) {
+            if (x != fs[0].cls) return std::nullopt;
+            ++n_e;
+          }
+        }
+        for (NodeId b : I_.trees[I_.node_class(n).tree].exts) todo.push_back(b);
+      }
+      if (n_name != 1 || n_e != 1 || !has_b) return std::nullopt;
+      const ClassTree& t = I_.trees[I_.node_class(cls).tree];
+      for (const auto& [sym, want] : {std::pair<Symbol, Id<SElement>>{name, first}, std::pair<Symbol, Id<SElement>>{esel.name, fs[0].cls}}) {
+        const auto it = t.lookup.find(sym);
+        if (it == t.lookup.end() || it->second.kind != LEntry::Kind::Class || it->second.index >= t.classes.size() ||
+            t.classes_via_mod.count(it->second.index))
+          return std::nullopt;
+        const NodeId cn = t.classes[it->second.index];
+        if (!cn.is_valid() || I_.nodes[cn].is_empty() || I_.nodes[cn].node_type.kind == NodeTypeKind::RedeclaredClass ||
+            I_.nodes[cn].def != want)
+          return std::nullopt;
+      }
+    }
+    // C8 纯度可见：原卡条件 7 的同一个只读判定，H 换成 B（A2B16）
+    if (!sibling_calls_visible(esel, bsel)) return std::nullopt;
+    std::vector<Symbol> q(en.second.begin(), en.second.end() - 1);
+    q.push_back(name);
+    YMC_ASSERT(q.size() > mlen && std::equal(model.begin(), model.end(), q.begin()),
+               "inherited sibling function name must start with the model name");
+    return q;
+  }
+  // 放开点 G 的前提：name 是正在发射的函数（*fn_scope_）[0] 的类注解 / 自身 external 段注解里某个 derivative 的绑定，且不同时
+  // 出现在 inverse 里（inverse 在函数节点自己的作用域定型，NFFunctionInverse.mo:182，未核实 → 不放，GF08）。
+  bool derivative_only_ref(Symbol name) {
+    if (!fn_scope_ || fn_scope_->empty()) return false;
+    const SElement& fe = I_.scode.elems[(*fn_scope_)[0].cls];
+    bool deriv = false;
+    for (const Id<SMod> ann : {fe.cmt.annotation, fe.def.external.annotation}) {
+      if (!ann.is_valid()) continue;
+      for (const SSubMod& sm : I_.scode.mods[ann].subs) {
+        if (!sm.mod.is_valid()) continue;
+        const std::string_view an = in_.str(sm.ident);
+        if (an == "derivative") {
+          const Id<Exp> b = I_.scode.mods[sm.mod].binding;
+          if (!b.is_valid() || I_.absyn.exps[b].kind != ExpKind::CrefExp) continue;
+          const Cref& dc = I_.absyn.crefs[I_.absyn.exps[b].cref];
+          deriv = deriv || (!dc.leading_dot && dc.parts.size() == 1 && dc.parts[0].name == name);
+        } else if (an == "inverse") {
+          std::vector<Id<Exp>> calls;
+          collect_mod_calls(sm.mod, calls);
+          for (Id<Exp> k : calls) {
+            const Cref& ic = I_.absyn.crefs[I_.absyn.exps[k].cref];
+            if (!ic.parts.empty() && ic.parts.back().name == name) return false;
+          }
+        }
+      }
+    }
+    return deriv;
+  }
+
+  // 放开点 B（卡「放开点 B」）：函数直接声明在根类里、变量类型是根类本地的记录（FunctionTupleRecord `input R r`）。omc 按类名
+  // 查（NFLookup.lookupClassName :76-88 → lookupSimpleName :434-492），类型打全路径（Type.toDAE NFType.mo:1134-1135 →
+  // toFullDAEType :1857-1887 的 fullPath）= 根类名 + 记录名（`FunctionTupleRecord.R`），构造函数块随之（NFInst.instRecordConstructor
+  // :2616-2639、NFFlatten.collectTypeFuncs :2621-2661）。rec_flat_name 对定义在根类里的记录给 nullopt（实例路径未核实），这里只收
+  // 最窄的形态：单段类型名；根不是短类别名；函数直接在根类、根类与函数都是长定义且无 extends / import；记录是根类本地的普通
+  // record 长定义（非 replaceable / partial / 重声明）、只含组件，字段是内建标量、变率 Var、维是整数字面量或 `:`、只许标量字面量
+  // 绑定（无属性修饰）。ac / ads：调用方在 fr.fscope 里对 c.type 的解析（emit_function 别名支的同一次查名，不另查）。
+  bool root_record_type(const SElement& c, const FnRef& fr, Id<SElement> ac, const ScodeScope& ads) {
+    if (c.type.leading_dot || c.type.path.size() != 1 || !ac.is_valid() || I_.root_alias.node.is_valid()) return false;
+    const Id<SElement> root_def = I_.nodes[root_].def;
+    if (!root_def.is_valid() || fr.fscope.size() < 2 || fr.fscope[0].cls != fr.fe || fr.fscope[1].cls != root_def) return false;
+    auto plain = [&](Id<SElement> k) {
+      const SElement& ke = I_.scode.elems[k];
+      if (ke.kind != SElementKind::Class || ke.def.kind != SClassDefKind::Parts) return false;
+      for (Id<SElement> x : ke.def.elements)
+        if (I_.scode.elems[x].kind == SElementKind::Extends || I_.scode.elems[x].kind == SElementKind::Import) return false;
+      return true;
+    };
+    if (!plain(root_def) || !plain(fr.fe)) return false;
+    if (ads.empty() || ads[0].cls != root_def) return false;
+    const std::vector<Id<SElement>>& rel = I_.scode.elems[root_def].def.elements;
+    if (std::find(rel.begin(), rel.end(), ac) == rel.end()) return false;
+    const SElement& r = I_.scode.elems[ac];
+    if (r.kind != SElementKind::Class || r.restriction != SRestriction::Record || r.def.kind != SClassDefKind::Parts ||
+        r.is_partial || r.prefixes.is_replaceable || I_.redeclared_classes.count(ac.raw))
+      return false;
+    for (Id<SElement> x : r.def.elements) {
+      const SElement& f = I_.scode.elems[x];
+      if (f.kind != SElementKind::Component || f.type.leading_dot || f.type.path.size() != 1) return false;
+      const std::string_view tn = in_.str(f.type.path[0]);
+      if (tn != "Real" && tn != "Integer" && tn != "Boolean" && tn != "String") return false;
+      if (f.attr.var != SVariability::Var) return false;
+      for (const std::vector<Id<Exp>>* ds : {&f.attr.dims, &f.type.dims})
+        for (Id<Exp> d : *ds)
+          if (I_.absyn.exps[d].kind != ExpKind::IntLit && I_.absyn.exps[d].kind != ExpKind::Colon) return false;
+      if (f.mod.is_valid()) {
+        const SMod& m = I_.scode.mods[f.mod];
+        if (m.kind != SModKind::Mod || !m.subs.empty()) return false;
+        if (m.binding.is_valid()) {
+          const ExpKind bk = I_.absyn.exps[m.binding].kind;
+          if (bk != ExpKind::IntLit && bk != ExpKind::RealLit && bk != ExpKind::BoolLit && bk != ExpKind::StringLit) return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  // ==== 68e A3（docs/tasks/T-S3-68e-redo-A3.md v2.1）：门控 R 与 FB 判定 ====
+  // 门控 R（卡 §6.1）：放开点 P / A / G / B 只在底线 SKIP 的地方放，放开前一切照底线，所以放开过的模型（released_68e_）底线必 SKIP。
+  // 放开前已经按底线做过"一旦放开就会错"的事（A3 形态照底线给了类路径名、FB 命中照底线回落内建）→ blocked_，之后各放开点一律
+  // 不放（= 底线 SKIP）；底线退出 0 的模型从不放开，blocked_ 也就没有作用 → 逐字节不变。推测性定型遍（raw_pass_ > 0，见
+  // emit_function 末尾）里不放：底线在那里撞到放开点的 SKIP 会被复原、模型照旧退 0，放开却会留下发射的函数 / released_68e_；
+  // released_68e_ 已为真时照常放（模型底线已必 SKIP；卡 v2.1，否则那一遍不存 fn_stmt_typed_、强制内联改用化简过的体）。
+  bool release_gate_open() const { return !blocked_ && (raw_pass_ == 0 || released_68e_); }
+
+  // FB（卡 §6.3）：底线里判定点 A / G / B 不放时，失败（fn_fail 只记子原因、不置 unsupported）一路传到最内层 call() 帧，该帧
+  // try_emit_user_call 失败 → record_ctor_call（函数名不是记录，空）→ sync_call（模型语境）→ builtin_call；帧的书写名被内建接住
+  // 就照内建继续（退 0，C10 老错；用户 11-13 定撤回到底线行为），否则 SKIP。fb_name：名字 n 会不会被这条回落链接住。超集即可
+  //（多拒只少放；漏一个就会改底线退 0 的输出，验收 b 抓）。名单照这几处 grep：lookup_builtin（本文件开头的白名单）；builtin_call
+  // 在 `!bf` 之前按名接的（cardinality size ndims scalar String getInstanceName delay ticksInState timeInState initialState
+  // transition activeState linspace transpose identity cross skew outerProduct fill zeros ones cat sum product min max inStream
+  // actualStream）；model_array_builtin / model_matrix_builtin（另有 symmetric matrix diagonal vector）；sync_call（Clock hold
+  // noClock previous backSample shiftSample subSample superSample interval firstTick sample）；omc 特名 array / time / Boolean
+  //（见 fb_special）。print 不在其中：函数语境 `!bf` 即 SKIP，模型语境走放开点 P。候选全是单段名（A 的调用名只收单段；G / B 用
+  // 元素名），卡里多段名的两条（Connections.* / uriToFilename，call() 在回落之前就按书写名接走）在这里用不上。
+  bool fb_name(Symbol n) {
+    const std::string_view s = in_.str(n);
+    if (lookup_builtin(s)) return true;
+    static constexpr std::string_view kNames[] = {
+        "cardinality", "size", "ndims", "scalar", "String", "getInstanceName", "delay", "ticksInState", "timeInState",
+        "initialState", "transition", "activeState", "linspace", "transpose", "identity", "cross", "skew", "outerProduct",
+        "fill", "zeros", "ones", "cat", "sum", "product", "min", "max", "inStream", "actualStream", "symmetric", "matrix",
+        "diagonal", "vector", "Clock", "hold", "noClock", "previous", "backSample", "shiftSample", "subSample", "superSample",
+        "interval", "firstTick", "sample", "array", "time", "Boolean"};
+    for (std::string_view k : kNames)
+      if (s == k) return true;
+    return false;
+  }
+  // omc 不按词法调用户同名函数的名字（size / array 按名特判 NFCall.mo:2321 / :2325；time / Boolean / Integer / String 先查内建
+  // NFLookup.mo:815-836 / :855）：回落内建本来就对（A15 / A16），命中也不置位。
+  bool fb_special(Symbol n) {
+    const std::string_view s = in_.str(n);
+    return s == "size" || s == "array" || s == "time" || s == "Boolean" || s == "Integer" || s == "String";
+  }
+  enum class FbHit : std::uint8_t { None, Special, Plain };   // 不命中 / 命中的全是 omc 特名 / 命中了别的
+  FbHit fb_classify(const std::vector<Symbol>& names) {
+    FbHit h = FbHit::None;
+    for (Symbol n : names) {
+      if (!fb_name(n)) continue;
+      if (!fb_special(n)) return FbHit::Plain;
+      h = FbHit::Special;
+    }
+    return h;
+  }
+  // 判定点 G / B 的候选超集（卡 §6.3、§15-2；不加 call() 帧栈，规则 (b)）：被发射 / 被引用函数 fr 的元素名 ∪ 别名链头 ∪
+  // fn_emit_names_ 全部末段（引用者 E 与更外层正在发射的函数：失败传到的帧在它们之中）∪ 整程序里目标末段等于这些名字的改名 import
+  // 别名（RVG01 `import abs = RVG01.f;`：书写名不等于元素名）。限定 import 的有效名就是目标末段、已在其中；不能"程序里有 FB 名的
+  // import 就算"（MSL 的 `import Modelica.Math.sin;` 会误挡 GenerationOfFMUs）。
+  FbHit fb_hit(const FnRef& fr) {
+    std::vector<Symbol> names{I_.scode.elems[fr.fe].name};
+    if (fr.named.is_valid()) names.push_back(I_.scode.elems[fr.named].name);
+    for (const auto& en : fn_emit_names_)
+      if (!en.second.empty()) names.push_back(en.second.back());
+    if (!import_aliases_built_) build_import_aliases();
+    const std::size_t own = names.size();
+    for (std::size_t i = 0; i < own; ++i)
+      if (const auto it = import_aliases_.find(names[i].id); it != import_aliases_.end())
+        names.insert(names.end(), it->second.begin(), it->second.end());
+    return fb_classify(names);
+  }
+  // 整程序的改名 import：目标末段 → 别名（只读 SCode；absyn_to_scode 已把组导入拆成单条，组导入的支是防御）。第一次用时建一次。
+  void build_import_aliases() {
+    import_aliases_built_ = true;
+    for (std::uint32_t i = 0; i < I_.scode.elems.size(); ++i) {
+      const SElement& el = I_.scode.elems[Id<SElement>::from_index(i)];
+      if (el.kind != SElementKind::Import || el.imp.wildcard) continue;
+      if (el.imp.multi.empty()) {
+        if (el.imp.alias.is_valid() && !el.imp.path.empty() && el.imp.alias != el.imp.path.back())
+          import_aliases_[el.imp.path.back().id].push_back(el.imp.alias);
+        continue;
+      }
+      for (std::size_t k = 0; k < el.imp.multi.size() && k < el.imp.multi_alias.size(); ++k)
+        if (el.imp.multi_alias[k].is_valid() && el.imp.multi_alias[k] != el.imp.multi[k])
+          import_aliases_[el.imp.multi[k].id].push_back(el.imp.multi_alias[k]);
+    }
+  }
+  // 判定点处理 FB 结果：不命中 → true（接着判放不放）；命中的全是 omc 特名 → false（到此为止）；否则 false，放开前置 blocked_
+  //（之后不放，照底线回落），放开后 SKIP（放开的模型底线必 SKIP，回落内建的老错不能被放开暴露出来）。
+  bool fb_allows(FbHit h) {
+    if (h == FbHit::None) return true;
+    if (h == FbHit::Plain) {
+      if (!released_68e_) blocked_ = true;
+      else set_unsupported("68e: builtin-named user function in a released model");
+    }
+    return false;
+  }
+
+  // 放开点 P（卡「放开点 P」）：模型语境里作语句的内建 print（NFModelicaBuiltin.mo:804-808 v1.25.0）。omc 查名到顶层落到内建
+  //（NFLookup.lookupSimpleCref :838-908）、不打函数块（NFFunction.new :282-299，内建 COLLECTED :296）、定型同普通调用
+  //（NFCall.typeNormalCall :274）、化简后仍是调用就留（NFSimplifyModel :223-233 / :367-377；impure 不 Ceval，P03）。只收：模型语境
+  //（函数体里的 print 要让外层函数后标 impure，归纯度桶）；无前导点、无下标的单段名，print_kind 判得清是内建；本身就是一条无返回值
+  // 语句（`x := print(…)`、`g(print(…))`、`print(print(…))` 的内层不收）；不在叫 print 的迭代变量里；恰一个位置实参、定型成标量
+  // String。前几条不满足 → nullopt（调用方照旧 "function: print" SKIP，不改任何状态）；实参类型不符 → 同一原因 SKIP。
+  // 门控（A3 卡 §6.1，见 release_gate_open）关着 → 不放（= 底线 SKIP）。
+  std::optional<Id<Expr>> model_print_call(const Exp& e, NodeId enclosing, const std::vector<Symbol>& prefix, Symbol as_builtin) {
+    if (!release_gate_open()) return std::nullopt;
+    if (fn_scope_ || as_builtin.is_valid() || !e.cref.is_valid() || e.cref != noret_stmt_cref_) return std::nullopt;
+    const Cref& fn = I_.absyn.crefs[e.cref];
+    if (fn.parts.size() != 1 || fn.leading_dot || !fn.parts[0].subscripts.empty() || in_.str(fn.parts[0].name) != "print")
+      return std::nullopt;
+    const Symbol pname = fn.parts[0].name;   // 拷贝：下面的 inst_exp 可能往 absyn 里加 cref
+    const std::uint32_t pid = pname.id;
+    bool iter = loop_vars_.count(pid) || stmt_iters_.count(pid) || stmt_iter_labels_.count(pid) || loop_labels_.count(pid) ||
+                var_iters_.count(pid) || (comp_hold_ && comp_hold_->iters.count(pid));
+    for (const auto& ci : citers_) iter = iter || ci.first == pid;
+    for (std::uint32_t ni : nf_iters_) iter = iter || ni == pid;
+    if (iter || e.args.size() != 1 || (!e.arg_names.empty() && e.arg_names[0].is_valid())) return std::nullopt;
+    if (print_kind(e, scode_scope_of(enclosing), /*allow_dot=*/false) != PrintKind::Builtin) return std::nullopt;
+    const Id<Expr> a = inst_exp(e.args[0], enclosing, prefix);
+    if (result_.unsupported) return lit_int(0);
+    if (result_.model.exprs[a].ty.kind != TypeKind::String || result_.model.exprs[a].ty.is_array()) {
+      set_unsupported_call("function: print");   // omc 报类型错（P12）/ 向量化（P16）未做：同底线原因
+      return lit_int(0);
+    }
+    Expr c;   // 同无输出的用户调用（try_emit_user_call：ty 留 Unknown）
+    c.kind = ExprKind::Call;
+    c.call_name = {pname};
+    c.args = {a};
+    released_68e_ = true;
+    return add(std::move(c));
   }
 
   // 表达式形状：数组字面量逐层数元素；if 表达式两支维不等处为未知（函数里允许，IfExpression11）；其余取类型维（非整数维 =
@@ -14086,9 +15200,10 @@ class Flattener {
       // `Modelica.Units.SI.ComplexVoltage.'*'.multiply(v[k], w[k])`，RZ6）；别名的构造函数与类型函数随之登记——只有函数形参
       // 用到这个别名时 omc 也打（RZ5）。普通记录的短类别名（构造函数带短类修饰的缺省）未做。
       RecAlias ral;
+      ScodeScope ads;   // c.type 在 fr.fscope 里的解析：下面的别名支与放开点 B 共用这一次查名
+      Id<SElement> ac;
       if (!rpath) {
-        ScodeScope ads;
-        const Id<SElement> ac = resolve_class_path(c.type.path, c.type.leading_dot, fr.fscope, ads);
+        ac = resolve_class_path(c.type.path, c.type.leading_dot, fr.fscope, ads);
         if (ac.is_valid() && I_.scode.elems[ac].kind == SElementKind::Class &&
             I_.scode.elems[ac].def.kind == SClassDefKind::Derived) {
           ScodeScope bs = ads;
@@ -14102,6 +15217,19 @@ class Flattener {
               ral = RecAlias{ac, ads};
             }
         }
+      }
+      // 放开点 B：根类本地的记录（见 root_record_type），压平名 = 根类名 + 记录名，rs 同 rec_flat_name（定义作用域链前插记录类）。
+      // 判定点 B（A3 卡 §6.3）：rpath 为空处不论放不放都先判 FB（F 的名字超集里有内建接得住的名字 → 底线在 F 的调用帧回落内建，
+      // 不放；见 fb_allows），再过门控（见 release_gate_open）。
+      if (!rpath && !result_.unsupported && fb_allows(fb_hit(fr)) && release_gate_open() && root_record_type(c, fr, ac, ads)) {
+        YMC_ASSERT(I_.scode.elems[ac].restriction == SRestriction::Record && I_.scode.elems[ac].def.kind == SClassDefKind::Parts,
+                   "68e B: root-local function variable type must be a long record class");
+        rec = ac;
+        rs = ads;
+        rs.insert(rs.begin(), ScopeLevel{ac});
+        rpath = result_.model.name;
+        rpath->push_back(I_.scode.elems[ac].name);
+        released_68e_ = true;
       }
       if (!rpath) return fn_fail<std::optional<std::size_t>>("function variable type (enumeration / derived / unresolved)");
       // 记录数组（MSL Complex 的 scalarProduct：`input Complex[:] c1`、`input Complex[size(c1, 1)] c2`）：维照内建类型的
@@ -14342,9 +15470,15 @@ class Flattener {
         const std::string saved_reason = result_.unsupported_reason, saved_detail = result_.unsupported_detail,
                           saved_fdetail = frozen_detail_;
         const char* const saved_why = fn_why_;
-        raw_typing_ = true;
-        const Id<Expr> t = inst_exp(I_.scode.stmts[s0].b, Inst::empty_node(), {});
-        raw_typing_ = false;
+        Id<Expr> t;
+        {
+          // 推测性定型遍的深度（A3 卡 §6.1，见 release_gate_open）：这一遍里（含它触发的被调函数发射，RawOff 不碰它）不放开，
+          // 否则底线在这里撞到放开点的 SKIP 被下面复原掉、模型照旧退 0，新代码却留下了放开的痕迹。
+          const ScopedSet<int> raw_pass(raw_pass_, raw_pass_ + 1);
+          raw_typing_ = true;
+          t = inst_exp(I_.scode.stmts[s0].b, Inst::empty_node(), {});
+          raw_typing_ = false;
+        }
         if (!result_.unsupported && record_def_of(t) == record_def_of(fs0.b)) fn_stmt_typed_[b0.raw] = t;
         result_.unsupported = saved_unsup;
         result_.unsupported_reason = saved_reason;
@@ -14832,8 +15966,20 @@ class Flattener {
     Id<SElement> home;
     // 在包实例里找到的（引用它的函数本身经包实例命名，MSL Media MoistAir 的 `derivative = saturationPressureLiquid_der`）：同普通
     // 调用按实例路径命名（`RoomCO2.boundary1.Medium.saturationPressureLiquid_der`，omc 同）。
-    const std::optional<std::vector<Symbol>> qname =
+    std::optional<std::vector<Symbol>> qname =
         fr->node.is_valid() ? scope_path(fr->node) : fn_flat_name(fn, sc, Inst::empty_node(), {}, home);
+    // 放开点 G：derivative 注解引实例类里的兄弟函数（GenerationOfFMUs 的 position_der）。omc 在函数节点的父节点里实例化导数函数
+    //（NFFunctionDerivative.instDerivatives :68-82 的 scope = InstNode.parent(fnNode) :77 → instDerivativeMod :257），压平名同 A
+    //（见 sibling_fn_name、derivative_only_ref；inverse 不放）。条件不满足 → 照旧 SKIP。
+    // 判定点 G（A3 卡 §6.3）：qname 为空处（含 inverse 引用、包实例节点给不出名的）不论放不放都先判 FB（失败一路传到引用者 E
+    // 的调用帧回落内建，见 fb_allows），再过门控（见 release_gate_open）。
+    if (!qname && !result_.unsupported && fb_allows(fb_hit(*fr)) && release_gate_open() && !fr->node.is_valid() &&
+        fn.parts.size() == 1 && !fn.leading_dot && fn.parts[0].subscripts.empty() && derivative_only_ref(fn.parts[0].name))
+      if (std::optional<std::vector<Symbol>> sn = sibling_fn_name(*fr, fn.parts[0].name)) {
+        qname = std::move(sn);
+        home = fn_home_;
+        released_68e_ = true;
+      }
     if (!qname || !alias_name_agrees(*fr, *qname)) return std::nullopt;
     const std::optional<std::size_t> li = emit_function(*fr, sig, *qname, {}, home);
     return result_.unsupported ? std::nullopt : li;
@@ -15230,6 +16376,16 @@ class Flattener {
     } else {
       qname = fn_flat_name(fn, sc, enclosing, prefix, home);
       if (qname && !alias_name_agrees(*fr, *qname)) return fn_fail<Id<Expr>>("function alias found in instance");
+      // 放开点 A：实例类里函数体调兄弟函数（AssertTest4-7，见 sibling_fn_name；条件不满足 → 照旧 SKIP / 回落）
+      // 判定点 A（A3 卡 §6.3）：这里不论放不放都先判 FB——候选就是调用名本身（失败传回的正是本调用帧，底线在这里回落内建；
+      // 见 fb_allows），再过门控（见 release_gate_open）。
+      if (!qname && !result_.unsupported && fn.parts.size() == 1 && !fn.leading_dot && fn.parts[0].subscripts.empty() &&
+          fb_allows(fb_classify({fn.parts[0].name})) && release_gate_open())
+        if (std::optional<std::vector<Symbol>> sn = sibling_fn_name(*fr, fn.parts[0].name)) {
+          qname = std::move(sn);
+          home = fn_home_;
+          released_68e_ = true;
+        }
     }
     if (!qname) return fn_fail<Id<Expr>>("flattened function name");
     // 别名修饰（`function g = f(r = x)`）在别名定义处定型：只做单层别名；模型语境里别名定义在调用实例自身类里或调用名经过的
@@ -21667,6 +22823,8 @@ class Flattener {
     noret_call_ = true;
     sm_stmt_ = true;         // initialState / transition 只能作语句（见 state_machine_call）
     array_call_ok_ = true;   // 语句位置 = 整个式子，返回数组的函数也行（OperationSubEW2 `f(r1, r2);`）
+    // 这条语句本身的调用名（只传数据）：放开点 P 只收它，实参里的 print 不收（见 model_print_call）。
+    const ScopedSet<Id<Cref>> stmt_cref(noret_stmt_cref_, e.cref);
     Id<Expr> c = inst_exp(ce, enclosing, prefix);
     noret_call_ = false;
     sm_stmt_ = false;
@@ -25694,6 +26852,8 @@ class Flattener {
     if (supported) {
       bf = lookup_builtin(builtin_name);
       if (!bf) {
+        // 放开点 P：模型语境里作语句的内建 print（见 model_print_call；条件不满足 → 照旧 SKIP）
+        if (const std::optional<Id<Expr>> pc = model_print_call(e, enclosing, prefix, as_builtin)) return *pc;
         const std::string why = "function: " + std::string(builtin_name);
         set_unsupported_call(why.c_str());
         supported = false;
@@ -32975,6 +34135,16 @@ class Flattener {
   std::unordered_map<std::uint32_t, std::vector<Id<Exp>>> fn_dim_exps_;   // 形参 / 局部名 → 各维的书写表达式（隐式范围用）
   const ScodeScope* fn_scope_ = nullptr;                        // 函数体名字解析作用域（函数定义处）
   Id<SElement> fn_home_;                                        // 当前函数压平名所出自的实例类（fn_flat_name）
+  // 68e：noret_call 正在定型的那条无返回值语句的调用名（放开点 P 的条件 2，ScopedSet 设 / 复原，只传数据）；本次压平走过
+  // 68e 的放开点 P / A / G / B（G0 只在这样的模型上扫，见 scan_program_print）。
+  Id<Cref> noret_stmt_cref_;
+  bool released_68e_ = false;
+  // 68e A3 门控（见 release_gate_open）：本次压平已按底线做过"一旦放开就会错"的事；推测性定型遍的深度；FB 超集用的改名 import 表
+  //（见 build_import_aliases）。都只在一遍 Flattener 内有效（两遍压平各算各的）。
+  bool blocked_ = false;
+  int raw_pass_ = 0;
+  bool import_aliases_built_ = false;
+  std::unordered_map<std::uint32_t, std::vector<Symbol>> import_aliases_;
   bool fn_impure_ = false;                                      // 当前函数是 impure（体内调 impure 函数不告警）
   Id<Expr> fn_end_;                                             // 函数体下标里 `end` 的值（所在维大小）
   int fn_loops_ = 0;                                            // 函数体 for / while 嵌套深度（break 只许在循环里）

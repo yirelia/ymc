@@ -2884,11 +2884,13 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
       顺带修了一个基线就有的静默错：`vector(引用)` omc 留调用（simplifyVector），ymc 原来一律展开；3 维以上非字面量的 `matrix(A)` 同样留调用。
       探针 pk-p53（248）、pk-p53a（110，评审手写）；slice 731 例 PASS 697；scodeinst PASS 691→698；testsuite PASS 1902→1918；探针 18892 个 干净；单测 578→585。
       留 SKIP：Bug3187 下一层（初始算法给 discrete 赋值，checkAssignment NFTyping.mo:3381-3436）、Size7（枚举类型转换函数）、ArrayConstructorRecord1 / 2（推导式范围是记录数组引用，定型期 Ceval）、CevalRecordArray6 / 9 和 DimUnknown14（记录绑定链求值）、DimUnknown16 / gc（维要经 FFI 实调外部函数）；vector / matrix 用在运算数、内建和函数实参里，参数数组上的 matrix；方程里的运行时切片；推导式的体是引用 / 调用；声明在后的变量数组（非参数）。
-- [ ] (68e / 68f 收敛方案，2026-11-11 用户纠正"方案总是在反复"后重定；根因见 lessons 同日条)
+- [x] (68e / 68f 收敛方案，2026-11-11 用户纠正"方案总是在反复"后重定；根因见 lessons 同日条)
+      完成（2026-11-13）：门 68ef 全绿，68f、68e 各一个提交并推送；目标 68e 10 个、68f 10 个全部 SKIP→PASS，三语料别的用例 0 变化。
       规则，定一次，之后不改，要改先问用户：
       (a) 底线：9bd9f02 有输出（退出 0）的用例，输出逐字节不变。
           例外（用户 2026-11-11 定"变成与 omc 一致的都允许"）：照 OMC v1.25.0 文件:行移植、变化后与 omc 逐字节一致的（FAIL→PASS、ACCEPTS-INVALID→两拒），逐个列名记账；
           FAIL→SKIP（错输出变成如实未实现）按评审一向的口径算进步，也逐个列名（主代理补注，用户可否决）；开工时点名、经用户同意的碰巧对的个例。其它任何变化都算退步。
+          用户 11-13 定（68e 对抗评审决定 2 选 B，严格）：底线 FAIL → 另一个 FAIL 一律算退步，不加例外，哪怕变化部分与 omc 一致。
           检查方法：全部探针 + scodeinst / testsuite / MSL 对 9bd9f02 做机械差分，每个"旧输出被改"的用例逐个对 omc 核。
       (b) 范围：新代码只挂在 9bd9f02 以本桶原因 SKIP（退出 66）的点之后；共用查找 / 实例化函数不为本桶加新判定。
       (c) 评审结果的处理：
@@ -2900,25 +2902,49 @@ ymc 对不支持的特性以**退出码 66 + `ymc: not implemented: <特性>`** 
           每桶探索评审一轮 + 核对评审一轮（只核收窄点与 (a) 的差分）即收口。
   用户选定（2026-11-11）：两桶都从 9bd9f02 重做，现有返工代码（W1 agent-a31f1c44ca4d7e1b0、W2 agent-a50f554362667d4c5）只作参考、不删。
   佐证：68e 第一版就拿到的 10 个 testsuite PASS，六轮返工后一个没多；第六 / 七轮复评仍查出本桶退步 11（68e）与本桶 FAIL 26 / AI 2（68f）。
-  - [ ] 先把已完成的 s1fix、Alias 单独过门、提交、推送（两者不碰 flatten / inst）。重做以新 HEAD 为底线 (a)。
-  - [ ] 目标定死，只做这些（来自单桶全语料扫，SKIP→PASS 且与 omc 逐字节一致）：
-        - 68e（11）：内建 print（AlgorithmNoRetCall、AssertTest4-7、IntegerTest），函数变量类型（FunctionTupleRecord、RecordMemberArguments、Ticket5134、ExtRecordMemberArguments）；MSL GenerationOfFMUs（用户 11-11 改归 68e）。
-        - 68f（11）：BreakModifier1-3、ModClass4、ModClass6、RedeclareClass2、RedeclareMod11、RedeclareMod12、const15、Bug2727、RedeclareInClassModification。
+  - [x] 先把已完成的 s1fix、Alias 单独过门、提交、推送（两者不碰 flatten / inst）。重做以新 HEAD 为底线 (a)。（门 s1al，推送 9bd9f02..5c7cd5b；底线 = 5c7cd5b）
+  - [x] 目标定死，只做这些（来自单桶全语料扫，SKIP→PASS 且与 omc 逐字节一致）：
+        - 68e（10）：内建 print（AssertTest4-7、IntegerTest），函数变量类型（FunctionTupleRecord、RecordMemberArguments、Ticket5134、ExtRecordMemberArguments）；MSL GenerationOfFMUs（用户 11-11 改归 68e）。
+          AlgorithmNoRetCall 用户 11-11 放弃（不批准纯度改动所需的试发射兜底），归纯度桶。
+        - 68f（11 → 10）：BreakModifier1-3、ModClass4、ModClass6、RedeclareClass2、RedeclareMod11、RedeclareMod12、Bug2727、RedeclareInClassModification。
+          const15 用户 11-12 移出（随 F7 退路第一步：const15 族整个不放，保持底线 SKIP）。
         其余写法一律保持底线行为（SKIP 就 SKIP），规则 (c) 补齐的老路线除外。
   - 用户已批准的越界改动与范围决定（2026-11-11，评审以本节为准）：
-        - 68e：AlgorithmNoRetCall 的两处共用纯度路径（纯度判定、常量求值前的纯度检查）。
+        - ~~68e：AlgorithmNoRetCall 的两处共用纯度路径~~（11-11 随 AlgorithmNoRetCall 放弃而撤销）。
+        - ~~68e：纯度配套两处（Q-D5、Q-D6）~~（同上撤销）。68e 现在不改任何共用纯度路径。
         - 68f：RICM 的新代码放在 SKIP 点之前（门控与原 SKIP 条件等价）；partial 组改共用 inst_component（组件栈记账、撞 partial 由停改挂起）；两项各带退路——机械比对里底线有输出的用例变一个就整项放弃。
         - 68f：PP 族本桶做（经限定名进类建包实例、包实例化查 partial、补 instExpressions 等价遍历），作最后阶段，退路同上。
         - 老路线补齐范围：只补消费本桶放开数据的路线；同一模型里无关的底线老错仍 KNOWN。
+        - 68f 的 F1-F6（用户 11-11 定"按类修饰触发，不分新旧"）：类修饰在 extends（只读被直接点名节点的修饰、类节点修饰在外层）、短类链、本地类重新克隆展开、被外层重声明顶替时丢弃等处照 omc 生效，
+          底线已支持的普通类修饰也走新代码。批准的改动点：expand 的 ClassTree.ext_named、inst_class 的 extends 处理、inst_component 类型链循环与 Component.chain_layers、apply_class_mod、instantiate 的 refresh、
+          flatten find_scode_element_at 的 pkg_instance 分支；兜底仍是规则 (a) 的机械比对，底线有输出的用例变得与 omc 不同就撤该项。
+        - 68f 的 S0（用户 11-11 批准精确做法）：inst_class 改成与 omc 同序——先实例化全部 extends、再按声明序实例化本地组件（NFInst.mo:1181-1190），输出顺序不变；作为最先的实现阶段，机械比对或 MSL 专项不过就整项撤（再问用户是否改窄做法）。
+        - 68f 的 F7（用户 11-11 批准）：类修饰在实例化基类之前挂上（omc modifyExtends 先于实例化），改 instantiate 的 cmods 支（目标是继承来的类就往对应 extends 转发，头插改追加）与给 inst_class 加 cmods 形参；删掉事后挂。退路先退到只对新写法预挂，仍不行整项撤。
+          用户 11-12 定：**执行 F7 退路第一步**（实现中 F7 的已知风险兑现：自写探针 XF721 / XF722 底线碰巧 PASS → SKIP，用户不同意列例外）。
+          只对新写法（CM-2 嵌套、RICM redecl-only）预挂；plain 形态恢复事后挂，CM-3 / CM-4 的 plain 门撤，rid 只拷新形态条目；F7 / 依赖预挂的 F1 列名的 FAIL→PASS 回到底线。
+          随之用户 11-12 定：**const15 族整个不放**（经 extends 类修饰改基类本地类的常量、再经限定名 `B.i` 取值这一族，CM-3 / CM-4 的 const-literal 与 plain 门都撤），const15 目标退出 68f；
+          不采用"排除基类里有组件用到被改类的写法、其余放开"的收窄。
+        - 68e 的 A2（主代理按规则 (c) 第二条定，11-12）：A68eIN58 放开后 FAIL，根因是组件路线调继承来的函数、体内兄弟调用走老类路径（只调 c.f 的变体底线就 FAIL）——与放开点 A 同一机制，照 OMC 补齐；
+          改 fn_flat_name 类路径支末尾一个只读判定，边界见补充卡 $S/redo/68e/T-S3-68e-redo-A2.md（评审通过后实现）。
+          A2 评审指出它与"老路线补齐范围"口径冲突（c.f 与 b.f 不共享数据、改共用函数、会改 5 个未走 68e 放开点的底线 FAIL 模型）；
+          **用户 11-12 批准 A2**（认可同一机制，照 OMC 补，改共用路径）。开工前补扫描：兄弟函数当函数值出现也要算（RVA2F1）。
+        - 68e 的 A3 / A2（用户 11-13 定：决定 1 选 A、决定 2 选 B）：
+          · A2 作为共用路径改动整项撤掉（它让 XF01-XF04 底线 FAIL 变成另一个 FAIL）；内建函数同名回落那一批（A 的 C10 族、B 的同名回落，含 XF05、XB35 / XB36）在放开点入口撤掉，回到底线行为。
+          · XE01 族 8 个（A / G 放开的函数体里调"被实例化的外层类 S / 根的基类"里的函数，老类路径支打 `S.h`，omc `M.s.h` / `M.h`）和 A2 原来要修的 IN58 类，照 omc 实例树查名规则统一补一次（A3）；按规则 (b)，A3 只在这次压平走过 68e 放开点时生效，底线有输出的模型逐字节不变（A2 顺带修好的底线 FAIL，如 IN51 / V01，回到底线 FAIL，登记 KNOWN）。
+          · 止损：之后核对评审再找出的变种一律在入口收窄成 SKIP，留给 65b，不再补。走第 1–3 步（补充卡 → 独立评审）再实现。
+          · 主代理按规则定（11-13，A3 卡 §15 与第 3 步评审）：不重跑压平（IN58 类入口 SKIP）；不改共用 call()（规则 (b)），C10 判定用书写名 / 元素名 / 别名链头 / 发射名末段 / 指向这些函数的改名 import 别名组成的 FB 超集，在 A / G / B 判定点不论放不放都判；G1（深处可能不纯调用 → SKIP）扫放开模型的全部函数，含记录字段修饰与多段记录类型（规则 (c) 第一条）；放开模型里与放开点无关的回落暴露、继承来的函数里的外层实例调用登记 KNOWN（老路线补齐范围）；缺实例树数据的形态一律 SKIP 留给 65b（止损）。
+        - 68e 的 G0（随放弃纯度而来的收窄，主代理按用户"不改纯度"的决定定）：压平走过 68e 任一放开点时，若本次解析过的函数里有体含内建 print 的，SKIP（omc 会后标 impure 留调用，ymc 不做纯度就不能放）。
         - 主代理按上面规则定的：68f 非 partial 的 instPackage 错误不进本桶；检查实例化用确定性预算、宁漏报不误报；照 OMC 移植的判定报真错误。
   按 §7.4 五步走（2026-11-11 用户定），两桶并行，各自一张任务卡：
-  - [ ] 第 1 步 学 OMC 逻辑：沿 22 个目标在 omc v1.25.0 里走的路径读到底（文件:行）+ 探针实跑；标出 9bd9f02 对每个目标的 not_implemented 点；读相关 lessons。
-  - [ ] 第 2 步 任务卡（docs/tasks/T-S3-68e-*.md、T-S3-68f-*.md）：方案逐条对到第 1 步来源，放开条件收到目标需要的最窄；验收 a–e 照 §7.4（例外按规则 (a)：照 OMC 移植、变化后与 omc 一致的逐个列名）。
+  - [x] 第 1 步 学 OMC 逻辑：沿 22 个目标在 omc v1.25.0 里走的路径读到底（文件:行）+ 探针实跑；标出 9bd9f02 对每个目标的 not_implemented 点；读相关 lessons。
+  - [x] 第 2 步 任务卡（docs/tasks/T-S3-68e-*.md、T-S3-68f-*.md）：方案逐条对到第 1 步来源，放开条件收到目标需要的最窄；验收 a–e 照 §7.4（例外按规则 (a)：照 OMC 移植、变化后与 omc 一致的逐个列名）。
         旧评审探针（pk-p54..54h、pk-p55..55g）当回归床：重做版与底线输出相同的老错不入库，转交 65b / 65c；入库的只要 PASS / 两拒 / SKIP。
-  - [ ] 第 3 步 独立 agent 评审两张任务卡，通过才开工。
-  - [ ] 第 4 步 实现（新 worktree，从提交 s1fix / Alias 后的 HEAD 起）→ 自检 a–c → 对抗评审一轮 + 核对评审一轮（按 e 处理）→ 集成 → 正式门 → 2 个提交 → 推送。
-  - [ ] 第 5 步 经验写进 lessons；老错族归到 65b / 65c（查找迁移到实例树）：DUP 留存（W1 的 OmcTree 可复用）、经限定名进包时 instPackage 的 partial 检查、记录构造器按实例命名、包常量 break 后的引用。
-- [ ] (纯度桶，68e 重做后) 照 omc 的纯度语义收尾：声明为 impure 的函数在 Ceval 语境 omc 照求值、ymc SKIP（68e 探针 U16）；flatten.cpp:31691 与 visit_nf_ 看了后标纯度，omc 实例化期只看声明纯度（NFCall.mo:591、NFStructural.mo:212）。
+  - [x] 第 3 步 独立 agent 评审两张任务卡，通过才开工。
+  - [x] 第 4 步 实现（新 worktree，从提交 s1fix / Alias 后的 HEAD 起）→ 自检 a–c → 对抗评审一轮 + 核对评审一轮（按 e 处理）→ 集成 → 正式门 → 2 个提交 → 推送。
+        门 68ef（集成树）：四套构建 ctest 17/17；slice PASS 705 FAIL 0、oracle-live 不一致 0；探针 20160 无 FAIL / AI / CRASH；scodeinst 只变 68f 的 8 个、testsuite 只变 19 个目标、MSL 只变 GenerationOfFMUs；
+        bdae 六段 FAIL / CRASH 0，探针变化只是 11 个含 print 的 SKIP / 未准入→PASS；ASan 与 gcc 全部相同。组合检查：22503 个探针里两桶同时变 0，集成版 = 两桶变化之并。
+  - [x] 第 5 步 经验写进 lessons；老错族归到 65b / 65c（查找迁移到实例树）：DUP 留存（W1 的 OmcTree 可复用）、经限定名进包时 instPackage 的 partial 检查、记录构造器按实例命名、包常量 break 后的引用。
+- [ ] (纯度桶，68e 重做后) AlgorithmNoRetCall（函数体里的内建 print 让外层函数后标 impure，NFFunction.mo:1645-1682）——68e 任务卡 v3 的 Q 节与两轮评审意见（$S/redo/68e/、$S/redo/68e-review/）可直接复用；需要先解决"拒折后发射被调函数失败如何回滚"（用户不批准在 68e 里加试发射兜底）。另外照 omc 的纯度语义收尾：声明为 impure 的函数在 Ceval 语境 omc 照求值、ymc SKIP（68e 探针 U16）；flatten.cpp:31691 与 visit_nf_ 看了后标纯度，omc 实例化期只看声明纯度（NFCall.mo:591、NFStructural.mo:212）。
 - [ ] (65b) 函数解析迁移（`resolve_fn` 等）：打印路径照实例链（`P.f`）；重声明的函数（MultiBody gravityAcceleration /
       surfaceCharacteristic）。
 - [ ] (65c) 包常量 / 类型迁移（`resolve_qual_const` / `resolve_class_path` / `eval_scode` 的限定 cref）→ Fluid / Media。

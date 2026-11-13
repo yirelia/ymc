@@ -6,14 +6,14 @@
 - 记事实和数字（门的结果、提交号、worktree、子代理 id），不写推测；子代理的工作笔记在会话临时目录，任务结束时把要紧的结论摘进本节。
 - 计划和完成摘要仍在 `tasks/todo.md`，踩坑规则在 `tasks/lessons.md`；本文件记的是过程。
 
-## 当前状态（2026-11-11 10:00）
+## 当前状态（2026-11-13）
 
 | 任务 | 状态 | 执行 | 下一步 |
 |---|---|---|---|
-| 68e 函数调用的压平名与内建 print | 排队：从 9bd9f02 重做（用户 11-11 选定；目标 10 个 testsuite） | 旧版 W1 `agent-a31f1c44ca4d7e1b0` 只作参考 | s1fix / Alias 提交后按 todo「68e / 68f 收敛方案」开工 |
-| 68f 修饰 / 重声明 / 短类 / extends 的剩余 SKIP | 排队：从 9bd9f02 重做（用户 11-11 选定；目标 12 个） | 旧版 W2 `agent-a50f554362667d4c5` 只作参考 | 同上 |
-| S5a-2e 后端 Alias 模块 | 等门：补修完成 | worktree `agent-a5dbe5f9368975a92` | 与另一桶单独过门 → 提交 → 推送（不再等 68e / 68f） |
-| s1fix 修饰名带下标的错误位置 + testsuite 全扫错误位置 | 等门：补修完成 | worktree `agent-afeb631e73fae5ed7` | 与另一桶单独过门 → 提交 → 推送（不再等 68e / 68f） |
+| 68e 函数调用的压平名与内建 print | 已提交（门 68ef 全绿），随 68f 一起推送 | — | — |
+| 68f 修饰 / 重声明 / 短类 / extends 的剩余 SKIP | 已提交（门 68ef 全绿），随 68e 一起推送 | — | — |
+| S5a-2e 后端 Alias 模块 | 已推送 132bab3 | — | — |
+| s1fix 修饰名带下标的错误位置 + testsuite 全扫错误位置 | 已推送 b73b1c1（break 去留待用户定 TBD-13） | — | — |
 | S1 / S2 专项复验 + 加进 gate | 完成：s12.sh gate 版已接进 gate.sh（门 i2 里 S1 / S2 全绿） | 主代理 | 随下一道门生效 |
 
 ## 日志
@@ -262,3 +262,137 @@
 - 门 s1al（HEAD + s1fix + Alias，$S/gates1al.out）**全绿**：四套构建 ctest 17/17、零警告；S1 / S2 专项全绿（parse-scan MISMATCH 0，KNOWN 27）；slice PASS 697 FAIL 0、oracle-live 不一致 0；
   探针 18944 无 FAIL / AI / CRASH；scodeinst / MSL 变化 0，testsuite 只 2 个 SKIP→两拒；bdae 六段 FAIL / CRASH 0，探针变化只是新集 s5a2e / s5a2e-adv（649）；ASan 与 gcc 全部相同；pk-s1a 0 FAIL / AI。
   提交三个：s1fix、Alias、docs（五步流程 / 收敛方案 / 进度账），随后推送。
+- 推送 9bd9f02..5c7cd5b（b73b1c1 s1fix、132bab3 Alias、5c7cd5b docs）。基线滚到门 s1al 的结果（sweep / ts / msl / bdae / bnd / fa / ei / s1 / al 的 *_cur.json）。
+  重做底线二进制 = HEAD 5c7cd5b 的 gcc-debug 构建，拷到 $S/redo/ymc_base_5c7.exe（flatten / inst 与 9bd9f02 相同）。
+- 用户同意（2026-11-11）68e 纯度配套的两处共用改动：Q-D5（结构参数判定等三个读者跳过只因 print 才 impure 的函数）、Q-D6（函数体求值器走到内建 print 判 SKIP）。已进 todo 已批准清单。
+- 68e 任务卡交回规划子代理按评审意见改（第 2 步返工）：Q-D2 按"给哪个分量的绑定求值"判语境、新 RAII 标志、深度 0 入口逐个归类；sibling_fn_name 收窄到组件自己的类实例；新口径对 print 来源深遍历；r1-r3 并入验收。
+- 68f 任务卡第四版（丙-2 / 丙-4 都能精确补：F1 改为只读被 extends 直接点名的节点的修饰，新增 F6 本地类在挂了类修饰的实例里重新展开；例外清单 16 个 FAIL→PASS）送第 3 步独立评审。
+- 68e 任务卡 v3（Q-D2 改为位置三类 C / S / L + 新 RAII 标志 ceval_owner_，记录绑定按绑定变率整段归 Ceval（NFFlatten.mo:961）；条件 3' 要求组件自己的类实例；Q1 对 print 来源深遍历；Q-D6 改不粘；深度 0 入口 67 处全表归类）。
+  主代理按已定规则处理其待定项：试发射兜底只在新纯度检查拒折后运行，暂归已批准范围、请复评判断；L 类收尾 SKIP 是如实未实现、不违反 (c)；U05 KNOWN。v3 送原评审员复评。
+- 68f 任务卡第四版独立评审（$S/redo/68f-review/，rv1-rv8 + RVR）：**不通过**。严重三条：① F1 补不到"实例化基类之后才挂"的 extends 类修饰（RVC2 / RVC3 放开后新 FAIL）；
+  ② omc 先实例化 extends 再实例化本地组件（NFInst.mo:1181-1190），ymc 按声明序，包实例缓存的语境不同 → RV05 新 AI、RV03 / RV04 底线 PASS 变拒；③ 漏了 lookupRootClass 的 RELAXED 语境（NFInst.mo:362），根路径上的包不报 PP，按卡 MSL 会退步。
+  中：F4 定型不了就 SKIP 会退步（RV40-46 / 49）、数组与 startOrigin 没写；S2 依赖没拆开无法归因；F1-F6 改动面超出已批准范围；沙盒漏 synth_cap_ / depth_ / short_active_，flatten 期 pp_enter 有悬垂引用风险。
+  用户定（11-11）：F1-F6 按类修饰触发、不分新旧，改动点进 todo 已批准清单。交回 68f 规划子代理改卡。
+- 68e 任务卡 v3 复评：**有条件通过**——上轮四条主体已关；剩 4 处都在纯度部分（试发射兜底复原不全会残留空体函数、L 类收尾即时判误伤、C 类 owner 过宽、深遍历漏混合来源），且试发射兜底超出批准范围。
+  用户定（11-11）：**不批准试发射兜底，放弃 AlgorithmNoRetCall**，纯度改动（Q-D1 / D2 / D5 / D6）全部撤出 68e，归纯度桶（todo 已改，评审材料留作复用）。68e 剩 10 个目标：AssertTest4-7、IntegerTest、4 个记录类型、GenerationOfFMUs。
+  交规划子代理出 v4（删 Q 节与 P 的函数体扩展），评审员快速核对后开工。
+- 68f 任务卡第五版（新增 F7 类修饰预挂、删 F3 / chain_layers；新增 S0 实例化与 omc 同序；PP-F 根路径 RELAXED；F4 定型失败静默照底线、数组不进、startOrigin 报真错；阶段 S0 → S1a / S1b → S2.1-2.4 → S3 → S4 → S5，依赖与连带撤项写明；
+  沙盒补 synth_cap_ / depth_ / short_active_，flatten 期钩子改排队、返回后统一检查；例外 FAIL→PASS 31、PP AI→两拒 47）。用户批准 S0 精确做法与 F7（已进 todo）。送原评审员复评。
+- 68e 任务卡 v4（10 个目标，纯度全删，P 只在模型语境；新增 G0：走过放开点且本次解析过的函数体含内建 print 就 SKIP，防 RV4P10 类放开后 FAIL）。送原评审员快速核对（重点 G0 与删得是否干净）。
+- 68e 任务卡 v4 快速核对：**不通过**，3 处小改——G0 要认 `.print`（RV8G3）、G0 要从 enc_fns_ 做静态调用传递闭包（RV9G6）、A / G 在 E 的绑定 / 维深处调到不纯兄弟时不放（RV8G2；照 OMC 补齐要改纯度，用户已排除，故收窄）；
+  B / G 放开模型里与放开无关的深处 impure 调用记 KNOWN。纯度删得干净、AssertTest 的 impure 打法、10 个目标不受 G0 影响、例外清单只剩 C10 族都已核过。交规划子代理出 v5。
+- 68e 任务卡 v5（G0 认 `.print`、G0 改为从 enc_fns_ 出发的静态调用传递扫描 check_print_reach（包在 LookupSnapshot 里，放在 check_enclosing_refs 前一行）、sibling_fn_name 条件 7（E 的绑定 / 维 / 记录字段深处调到不纯兄弟不放）；
+  operator record 'constructor' 在模型里直接调被折叠的情形留作已知漏洞）。送评审员快速核对，并请其判断该漏洞能否构造出静默 FAIL、能否不碰共用路径补上（G0 起点加模型方程 / 绑定的静态调用）。
+- 68f 任务卡第五版复评：**有条件通过**——上轮七条全关（F7 预挂次序、F5、RVC2 / RVC3 / XST04-06、S0 推演 RV01-07 与 5 对前后序探针、PP-F、沙盒、拆阶段、范围）。
+  开工前必改：N1 F4 只核胜出来源的值（RF1-RF3 底线 PASS 会被误拒）；N2 class_mods 多条时组件子修饰逆序施加；N3 主代理定把 F1 / F2 挪到 S1b 之前，避免放开模型中途 FAIL。
+  注记：N4 RW3（重声明链上类修饰不跟到 rid）主代理定按规则 (c) 补上；N5 队列处理在丢弃模式下跑；N6 截断判定时机；N7 S0 风险点名。交规划子代理出第六版，之后评审员快速核对。
+- 68e 任务卡 v5 核对：**不通过**，3 处——P 把 encapsulated 类里的 print 当内建（NFLookup.mo:885-887，RVEP1 / 2 会误收）；operator record constructor 起点漏洞能造出静默 FAIL（RVAD1）；LookupSnapshot 复原不了 Instantiator 的粘性 unsupported。
+  G0 连着两轮被找出漏洞，根子是沿 resolve_fn 追踪传递闭包（有漏路径、有副作用）。主代理定改成全程序静态扫描：放开过的模型里，已加载程序的全部函数元素只读扫一遍，任一内建 print 就 SKIP，不调 resolve_fn、不碰 Instantiator。交规划子代理出 v6（含 MSL 扫描核实）。
+- 68f 任务卡第六版（N1 F4 只核胜出来源、startOrigin 任何一层都报；N2 组件子修饰逆序施加；N3 新阶段表 S0 → S1a F7+F5 → S1b F1 → S1c F2 → S1d F6 → S1e 放开 → S2 F4 → S3 → S4 → S5；
+  N4 补上：rid 拷 class_mods / class_modded（NFInst.mo:1735-1737 / :1787），RW3 FAIL→PASS；例外 FAIL→PASS 32、F4 AI→两拒加 RF4-RF9）。送评审员快速核对。
+- 68f 任务卡第六版快速核对：**通过**（N1 / N2 / N4 / N5-N7 已解决，RF6-RF9 复跑底线 AI、omc 拒）。开工前改一处写法：S1a 的 plain 门会放开 const15 形态而 F1 在 S1b，RVC3 会中途 FAIL——主代理定 F1 并进 S1a。
+  另补：N4 还会让 RW7 / RW8（组件修饰路线）FAIL→PASS，列进例外；F7 退路连带撤 N4 的 plain 拷贝。交规划子代理出定稿，之后开第 4 步实现。
+- 68e 任务卡 v6（print_kind 三值纯语法判定、G0 = scan_program_print 全程序只读扫描、条件 5 / 7 改只读、LookupSnapshot 删除；MSL 4.0.0 不带限定的 print 81 处全经 import Streams.print，无内建 print；10 个目标不受影响）。送评审员快速核对。
+  子代理误在 F:\Git\ 写了临时文件 tmp_ag.txt（删除被安全检查拦下），已请用户手动删除，主代理不代删。
+- 68f 任务卡定稿（1208 行；阶段 S0 → S1a F7+F5+F1 → S1b F2 → S1c F6 → S1d 放开 → S2 F4 → S3 RICM → S4 P 组 → S5 PP；例外 FAIL→PASS 34、AI→两拒 59；中途豁免 OR7 / OR19 / G1 / G2，S1c 结束清零）。
+  第 4 步实现已派（通用说明 $S/redo/impl_common.txt，isolation worktree，阶段二进制 $S/redo/68f/stage_*.exe）。
+- 68e 任务卡 v6 快速核对：**通过**（print_kind 判定顺序不误伤 AssertTest、IntegerTest 能放；G0 覆盖全部评审探针、MSL 抽查无误挡；条件 7 / 5 不挡 AssertTest / GenerationOfFMUs；条件 3 是重复调用）。
+  两条小建议主代理定实现时采纳：条件 7(b) 改为兄弟首输出书写类型不是 Real 就不放；核 MSL 在 program 里的嵌套形态。第 4 步实现已派（isolation worktree，阶段二进制 $S/redo/68e/stage_*.exe）。
+- 68e 第 4 步实现完成（11-12）：10 目标全部与实跑 omc 逐字节一致；阶段 B+G0 → P → A → G 每阶段机械差分，底线有输出的变化只有例外清单的 C10（FAIL→PASS）；
+  终版对底线探针 20013 个变 251（248 SKIP→PASS、2 FAIL→PASS、1 SKIP→FAIL）；scodeinst 0 变、MSL 只 GenerationOfFMUs、testsuite 只 9 目标。gcc / MSVC 0 警告，ctest 17/17。
+  实现订正 6 条（条件 7(a) 补属性修饰、extends 经 H 类名限定路径收窄等，均只少放）；新探针 pk-p54r 225 个；与底线输出相同的老错按 todo"不入库"记 TBD-16。
+  唯一 SKIP→FAIL：A68eIN58（`c.f` 的 f 继承自组件类的基类，体内兄弟调用走老类路径打 `B.g`，omc 打 `…c.g`；只调 c.f 的变体底线就 FAIL）。
+  主代理定性：与放开点 A 同一机制（组件路线函数体里的兄弟调用命名），卡漏了继承情形 → 规则 (c) 第二条照 OMC 补齐；补卡交原规划代理，之后原评审员核，再交实现者。
+- 68f 第 4 步停在 S1a（11-12）：S0 对 B0 探针 12 处变化、底线退出 0 无变化、三语料 0 变，不撤；S1a（F7+F5+F1+F2+F6）差分里 plain 门放开的底线 SKIP 出 AI / FAIL，按 e 收窄成 S1a2，例外 34 个兑现。
+  F7 已知风险兑现：自写探针 XF721 / XF722 底线碰巧 PASS → SKIP（同形态 XF724 底线 FAIL）。
+  用户定：**执行 F7 退路第一步**（不列例外）；随之 **const15 族整个不放**，const15 移出 68f（目标 11 → 10），不采用部分排除的收窄。已写进 todo，交实现者重做 S1a3 后继续。
+- 68e A2 补充卡（规划代理，11-12）：fn_flat_name 类路径支末尾加只读判定 inherited_sibling_name（C0–C9），预测底线退出 0 变化只 IN51 / IN56 / IN59 / Z54（FAIL→PASS）+ 目标 IN58、V01，语料 0 变；交原评审员独立评审。
+- 68e A2 评审（11-12）：**有条件通过**——OMC 依据逐行核对无误、C0–C8 下反例都没打出与 omc 不同的名字、插入点只碰底线本来就返回类路径名的分支；
+  条件：① A2 与"老路线补齐范围"口径冲突，需用户确认 → **用户批准 A2**；② 扫描只认调用形式，漏了兄弟函数当函数值（RVA2F1）→ 交规划代理补扫、更新预测清单，之后交实现者。
+- 68e A2 补充卡 v2（11-12）：扫描改为整词出现（含函数值实参），快照命中 53→123，新增 70 个都是记录类型名、A2 无名可改；预测清单不变（IN51 / IN56 / IN59 / Z54 + 目标 IN58，语料 0 变），新增评审探针 RVA2F1 / RVA2W1 FAIL→PASS（模拟改名与 omc 逐字节）。
+  交 68e 实现者做 stage_A2（对 ymc_final 机械差分，清单外变化整项退回），终版另存 ymc_final2.exe。
+- 68e stage_A2 实现完成（11-12）：fn_flat_name 类路径支加 inherited_sibling_name；对 ymc_final 探针 20137 个变 37 个，全部 FAIL→PASS、全在卡 §6 清单内（IN51 / IN56 / IN58 / IN59 / Z54 及副本、a2 / a2b / r13 新探针、V01），清单外 0；三语料 changed 0。
+  pk-p54r 225 → 280，KNOWN 加 IN70 / IN73 / A2R04；单测 flatten_68e_redo_a2；gcc / MSVC 0 警告、ctest 17/17。终版 $S/redo/68e/ymc_final2.exe。派独立对抗评审（只给 diff、前后二进制、卡与规则）。
+- 68e 对抗评审（11-12，独立代理，217 个探针三方实跑）：无 CRASH、无底线 PASS→非 PASS。
+  ① 1 类 XE01 族 8 个：A / G 放开的函数体里调"被实例化的外层类"里的函数（`S.h`，omc `XE01.s.h`），走老类路径支 → SKIP→FAIL；去掉兄弟调用的 XE01b 底线就 FAIL（老错暴露），与 A2 同族（omc 实例树查名）。
+  ② 2 类 7 个：底线退 0 FAIL → 另一个 FAIL（变化部分与 omc 一致，残差是负零 / impure 标记 / print 折叠等已登记老错），规则 (a) 字面算退步。
+  ③ 3 类记账漏项：B 的同名内建回落 FAIL→PASS（XB30-32 / 34 / 41）、G0 FAIL→SKIP（XF06 / XB33）、A2 新形态 FAIL→PASS 25 个——按现有规则逐个列名。
+  ①② 需用户定（规则边界），已报用户。
+- 68f 第 4 步实现完成（11-12）：阶段 S0 → S1a4（F7 只对新写法预挂 + F5 / F1 / F2 / F6；S1a3 的 early 守卫过宽、RV18 B0 FAIL→SKIP，收窄成与底线同条件）→ S1d → S2（F4）→ S3（RICM）→ S4（partial 组），每阶段对上阶段机械差分，均不撤。
+  S5（PP 族）撤：MSL `Modelica.Electrical.Digital.Examples.RAM` 底线 PASS → 被拒（DLATRAM 不限定调继承来的 getMemory，S5 按定义路径进 partial MemoryBase；omc 经实例继承元素取函数）。照规则不修，源码回 S4，最小形入库 pk-p55r-pp/R68fPRAM01，记 TBD-18 转 65b / 65c。
+  终版对 B0：探针 19858 个 130 处变化——FAIL→PASS 5（A68fXSB01、EQ06、PX02、RV15、Q07）、AI→两拒 13（F4 名单 12 + UTU08）、SKIP→PASS 86、只换 SKIP 原因 13；无底线 PASS 变化、无新 FAIL / AI / CRASH。三语料：scodeinst 698→706、testsuite 1918→1928（都只是目标）、MSL 500→500。gcc / MSVC 零警告，ctest 17/17；slice 门 FAIL 0、oracle=live 不一致 0。
+  UTU08（`type T = Real(startOrigin = "x")`）补列：主代理三方核过——omc 拒（Modified element startOrigin not found in class Real，NFInst.mo:1547 MISSING_MODIFIED_ELEMENT）、底线收、终版拒，属规则 (a) AI→两拒逐个列名。新开放问题 TBD-16（const15 族）/ 17（F4 没做的两种）/ 18（PP 族）——与 68e worktree 的 TBD-16 撞号，集成时 68f 这三条顺延改号（连带 KNOWN.txt / 卡 / 探针 README 的引用）。
+  对抗评审已派（说明 $S/redo/brief_adv_68f.txt，笔记 $S/redo/68f-adv/）。
+- 68f 对抗评审（11-12，独立代理，22 集 410 个探针三方实跑；主代理抽查 S006 / V011 / Z001 属实）：无 CRASH、无底线 PASS→非 PASS、const15 仍 SKIP。
+  1 类-A 12 个（S006 等）：派生类本地类 `E extends B` 的组件写在 `extends A(B(x=2))` 之前，S0 改序后底线 tree_class 守卫不触发，F1 只读预挂、plain 事后挂被丢 → SKIP→FAIL（根因 = TBD-16，用户已定不做 plain 预挂）。
+  1 类-B 3 个（F709 / V011 / M013）：同一类节点既有新写法预挂、又被外层 plain 事后挂，早建消费者读不到 → SKIP→FAIL。
+  2 类 7 个（Z001 等）：F1 把组件修饰路线条目的子修饰当 extends 修饰施加，绑定按 a.b2 前缀解析（`a.b2.q`，omc `q`）→ 底线 FAIL 变另一个 FAIL。
+  3 类约 70 个记账漏项（S0 族 FAIL→PASS 10、F1 / F2 组件修饰路线 FAIL→PASS 约 35、F4 AI→两拒 21、AI→SKIP 3）。
+  主代理按规则 (c) 第一条定收窄（2 类的错输出也是本桶引入，收窄后为 FAIL→SKIP，(a) 允许）：N1 F1 遇事后挂条目即 SKIP；N2 事后挂点目标已有预挂条目即 SKIP；N3 组件修饰路线子修饰绑定含查名（cref / 调用）即 SKIP。AI→SKIP 按"错输出变如实未实现"同 FAIL→SKIP 口径列名（主代理补注，用户可否决）。已交实现者，之后核对评审。
+- 68f 收窄轮完成（11-13）：N1（F1 遇事后挂条目即 SKIP，取代并删掉 S1a4 的 early 守卫）、N2（事后挂点目标已有预挂条目即 SKIP）、N3（组件子修饰绑定 literal_only_mod：字面量及其运算 / 括号 / 字面量数组 / `= break` 照施加，其余 SKIP）。实现者自定两处（括号与 `= break` 算不查名；删 early 守卫），主代理认可。
+  评审 1 / 2 类 22 个全成 SKIP；N2 附带 H028 / M012 由 S4 PASS 回到底线 SKIP（底线就 SKIP，不违规则）。终版对 B0 探针 20286 个：底线 PASS 变化 0、SKIP→FAIL / AI / CRASH 0；底线退 0 的变化只有 FAIL→PASS 51、AI→两拒 43、FAIL→SKIP 42、AI→SKIP 3，全部列名进卡 §20。
+  三语料：scodeinst 706（只 8 目标）、testsuite 1928（只 10 目标）、MSL 500 不变；gcc / MSVC 零警告、ctest 17/17、slice FAIL 0 / oracle=live 不一致 0；probe_recheck 683 个无 FAIL / AI / CRASH（KNOWN 2）。新探针集 pk-p55r（202）、pk-p55r-adv（416）。
+  核对评审已派（说明 $S/redo/brief_ver_68f.txt，工作目录 $S/redo/68f-ver/）：独立重算对 B0 的机械差分 + 三收窄点贴边探针。
+- 68f 核对评审（11-13，独立代理）：机械差分独立重算与实现者自报逐项相同（410 处变化），§20 四类例外 125 个名字全准，N1 / N2 / N3 贴边探针无漏网无误伤，omc 缓存抽查 38/38 一致。
+  不通过 1 条（S0，stage_S0 起就有）：写在 extends 前、类型经被修饰 extends 继承来的本地组件（`B b0; extends A(B(x=2));`），底线先实例化撞 tree_class 守卫整模型 SKIP；S0 改序后守卫不触发，模型放出来，别处底线老错露出——基类里 `E extends B` / `B2 = B` 读不到事后挂（TBD-16）→ SKIP→FAIL 5 个（VN1C VC01 VC07 VC08 VD02）；无关老 AI（`Integer i(unbounded=true)`）→ SKIP→AI 3 个（VC04 VD01 VE01）。
+  主代理按规则 (c) 第一条定 N4：S0 第二遍入口对"声明在 extends 前"的本地组件照底线守卫条件 mark_unsupported（原因串同底线），不写新识别逻辑；S0 的同形态 SKIP→PASS（OR2 / OR4 / A68cIH02 / R68cIH2 / SA5 等）随之退回底线 SKIP。目标掉 PASS 或底线 PASS 变化即停报。已交实现者；完成后请核对评审员只复核 N4。
+- 68f N4 完成（11-13）：复原底线状态让守卫照原样触发——第一遍记下各 extends 的 adopt 换掉的类项与 via_mod 标记，第二遍实例化 extends 前的本地组件时重标并记 pending_adopted_，实例化完撤销；守卫条件不变。
+  核对评审点名的 8 个全部 SKIP、与底线逐字节相同；对 N3b 41 处变化全成与 B0 相同的 SKIP（S0 同形态收益 23 个退回底线 SKIP，含 OR2 / OR4 / A68cIH02 / R68cIH2 / SA5）；10 目标仍 PASS，S0 族 FAIL→PASS 10 个保留。
+  终版对 B0（20377 个）：FAIL→PASS 68、AI→两拒 43、FAIL→SKIP 56、AI→SKIP 4，其余为底线 SKIP 侧；底线 PASS 变化 0、SKIP→FAIL / AI / CRASH 0。三语料只目标变；零警告、ctest 17/17、slice FAIL 0 / oracle 不一致 0；probe_recheck 746 个无 FAIL / AI / CRASH。新探针集 pk-p55r-ver（63）。已请核对评审员只复核 N4。
+- 68f N4 复核通过（11-13）：N3b→N4 在 21137 个模型上 84 处变化全是与 B0 逐字节相同的 SKIP；终版对 B0 分类逐项与实现者相同；底线 PASS 变化 0、SKIP→FAIL / AI / CRASH 0；N4 贴边 19 个（泄漏 / 两条 extends / 深处守卫 / 嵌套 / 重复实例化）18 个与底线同；代码核对撤销在所有出口执行（src/inst 无 throw），守卫只多一项模拟"父亲还不是实例"。
+  记账 1 项：VG03（S0 族，底线 FAIL→PASS 与 omc 一致）补列 §20；vn4 / vn4b 探针并进 pk-p55r-ver。已交实现者。68f 第 4 步收口。
+- 68f 记账完成（11-13）：§20 S0 族补 VG03（11 个），终版对 B0 合计 424、FAIL→PASS 69；pk-p55r-ver 63→79（并进 vn4 / vn4b 16 个，老 AI VF11 / VF14 / VG04 不收转 TBD-17）；probe_recheck 79 个 PASS 29 / 两拒 4 / SKIP 46，无 FAIL / AI / CRASH。源码与终版二进制不变。
+- 用户 11-13 回"A"，按两件都取推荐项 1A 2A 执行（todo「68e / 68f 收敛方案」已记）：
+  1A：XE01 族 8 个照 omc 实例树查名规则统一补一次（A3），A2 收编进同一判定；之后核对评审再找出的变种一律入口收窄成 SKIP，留给 65b。
+  2A：规则 (a) 例外扩一条——底线 FAIL → 另一个 FAIL，变化部分与 omc 逐字节一致、残差逐个对到已登记老错的，按名字记账（XF01-XF05、XB35 / XB36）。
+  A3 第 1–2 步已派规划代理（产出 $S/redo/68e/A3/T-S3-68e-redo-A3.md）；之后独立评审 → 实现者（worktree agent-a604f892029abe22b）→ 68e 核对评审 → 与 68f 集成。
+- 用户 11-13 更正决定 2 为 B（"2 选择B"），即 1A 2B：规则 (a) 不加 FAIL→FAIL′ 例外；A2 作为共用路径改动整项撤掉，C10 同名回落那一批在放开点入口撤掉；
+  A3 照 omc 实例树查名统一修 XE01 族与 IN58 类，但按规则 (b) 只在这次压平走过 68e 放开点时生效（底线有输出的模型逐字节不变）。todo 已改，规划代理已收到更正。
+- 68e A3 补充卡 v1 完成（11-13，$S/redo/68e/A3/T-S3-68e-redo-A3.md，新探针 a3x 27 / a3y 5 / a3c 7 三方实跑）：
+  - XE01 族 8 个全能 PASS：fn_flat_name 类路径支末尾用统一判定 X / Y 支，照作用域链上的实例节点 scope_path 拼名，A2 收编为 Y 支。
+  - IN58 类名字先于放开落定，放开点入口 SKIP；XE08 / A3X20 / A3X33 由 G1 收窄；A2、C10 回落撤回 B0 字节。
+  - 门控：blocked_ 加 released_68e_，B0 退出 0 的模型 0 变化。对 final2 预测：回 B0 104、FAIL→PASS 21、FAIL→SKIP 11、PASS→SKIP 7（B0 都 SKIP）。
+  - 主代理按规则定 §9 越界五条（卡 §15）：
+    - 不重跑压平；
+    - 不加 call() 帧栈，用 FB 超集退路；
+    - G1 扫全部 enc_fns_（规则 (c) 第一条）；
+    - 别处回落暴露登记 KNOWN（老路线补齐范围）；
+    - 缺实例树数据的一律 U → SKIP（1A 止损）。
+  - 第 3 步独立评审已派（$S/redo/68e/A3/brief_review_a3.txt，工作目录 review/）。
+- 68e A3 卡第 3 步独立评审（11-13，$S/redo/68e/A3/review/，探针 rv_g / x / c / i / j / k / l 三方实跑）：**有条件通过**。
+  OMC 依据 O1-O9 核对正确；XE01 族推导成立；final2 对 B0 的退 0 变化与 §7.1 逐个对上。
+  必须先改 4 处：
+  1. FB 超集漏 import 改名，RVG01-04 会改 B0 退 0 的输出；
+  2. X0 不成立又带实例层时误判 N，RVL01 / 02 仍 FAIL；
+  3. 拒放的内建同名兄弟照旧回落，RVC01 / RVX01 FAIL，要求 A / G / B 判定点不论放不放都判 FB；
+  4. G1 漏记录字段修饰与多段记录类型，RVI01 / 03 FAIL。
+  同步改 5-8：raw_typing_ 门控、N 的论述与 RVX07 KNOWN、§15 进 todo（主代理已补）、rv_* 并入验收。
+  全部按规则 (c) 第一条（收窄 / 入口判定）处理，交回规划代理改 v2（意见转录 review/REPORT.md），之后原评审员快速核对。
+- 68e A3 卡 v2（11-13）：评审 1-9 全改。
+  - FB 超集加改名 import 别名项；X0 不成立且有实例层判 U；A / G / B 判定点不论放不放都判 FB；G1 补记录字段修饰与多段类型逐段下降；新计数 raw_pass_ 门控。
+  - 新门控探针 a3g 5 个。对 final2 预测：回 B0 110、FAIL→PASS 26、FAIL→SKIP 22、PASS→SKIP 7；对 B0 退 0 变化 0。
+  - 已交原评审员快速核对。
+- 68e A3 卡 v2 快速核对（11-13）：不通过只差 1 条——"X0 不成立 → U"写宽（含传入 scope，模型语境会一律 U、置 blocked_ 挡掉正确放开）；改完不再评。
+  主代理直接改成 v2.1：只在函数体语境且 ds 本身有实例层时 U；采纳建议 raw 遍在 released_68e_ 已为真时照常放（卡 §16）。评审 1-4 全部收住、10 目标与 B0 退 0 零变化论证成立。
+- 68e A3 第 4 步实现已派（$S/redo/68e/A3/brief_impl_a3.txt；worktree agent-a604f892029abe22b 上改；阶段 A3a 撤 A2 + 门控 + FB → A3b 统一改名 → A3c G1；终版 ymc_final3.exe）。
+- 68e A3 实现完成（11-13，ymc_final3.exe；阶段 A3a / A3b / A3c 各自对上一阶段差分全部归项）：
+  - 对 B0：全部 20766 个探针里 B0 退 0 的变化 0（主代理独立重算：只有 pk-p34 URZ* 7 个是输出里的临时目录名噪声，规范后 0）；B0 退 66 而新 FAIL / AI / CRASH 0。
+  - 对 final2：变 167，与卡 §7.1 逐个吻合（A 节 110 回 B0 字节，B 节 56）；清单外 1 个 XA62（H 的兄弟函数叫 sample，A 判定点 FB 命中 → blocked_，PASS→SKIP，与 B0 逐字节同）。
+    主代理认可：B0 本是 SKIP，合规则 (a)，是决定 2B「FB 超集多拒只少放」的直接后果，补进卡 §17 清单（PASS→SKIP 共 8）。
+  - 卡 §7.1 三个待核 A3X09 / RVK03 / RVX07 都是 PASS（RVX07 入库，不进 KNOWN）。语料对 5c7 只变 10 个目标（scodeinst 0、MSL 1、testsuite 9）；gcc 0 警告、ctest 17/17、MSVC /W4 改过的 TU 0 个 C 警告。
+  - 入库 pk-p54r 280 → 326（去 31：27 个回 B0 FAIL 的 A2 条目 + R68eC10 + KNOWN 3；追加 77），probe_recheck 无 FAIL / AI / CRASH；open-questions 68e 的 TBD-16 ③ 改 G1 口径、④ A2 撤后回 B0 FAIL 的条目转 65b、新 TBD-17 记 C10 族老错（集成时顺延为 TBD-19 / 20）。
+- 68e 核对评审已派（$S/redo/brief_ver_68e.txt）：门控 / 收窄边界、对 B0 规则 (a) 差分重算、对 final2 预测清单逐个核。
+- 68e 核对评审（11-13，独立代理，137 个边界探针三方实跑）：**通过**。
+  - 四个放开点门控、FB 判定、a3_classify、G1 位置都对。对 B0 重算（21092 个）：B0 退 0 变化 0；B0 非 0 而有输出的 635 个实跑 omc 全 PASS；omc 缓存 729 个逐个比对一致。
+  - 对 final2 的 167 个与卡 §7.1 + §17 逐个相同，清单外 0。卡 §7.1 两处标题数笔误（FAIL→PASS 名单 25、FAIL→SKIP 21）已订正（卡 §18）。
+  - raw 遍"只有这一遍才到得了放开点"的写法 12 种都没构造出来，那条门控只能读代码确认。
+  - 边界探针 128 个入库 pk-p54r-ver（前缀 R68eV；PASS 57 / 两拒 13 / SKIP 58）；与底线同输出的老错 9 个不入库：VF20a / 21a / 23a / 30a / 31a、VR06 记 C10 族那条，VG07-09 记纯度那条 ③。
+- 68e / 68f 集成（11-13，$S/redo/integ.py）：68f 先拷进主仓库、保留 TBD-16 / 17 / 18；68e 三方合并（flatten.cpp 干净合并；单测、open-questions、探针 README 都是同处追加，两边都留），68e 的 TBD-16 / 17 顺延为 TBD-19 / 20。
+  gcc-debug 零警告、ctest 17/17。组合检查已起（$S/redo/integ_check.sh：B0 / 68e final3 / 68f final / 集成版四个二进制跑同一批探针，判集成版变化 = 两桶变化的并集）。
+- 组合检查（$S/redo/integ_chk/run.out）：22503 个探针，68e 单独变 644、68f 单独变 520、两桶同时变 0；集成版逐个等于预期，不一致 0。
+- 门 68ef（集成树，$S/gate68ef.out）**全绿**：
+  - 四套构建 ctest 17/17；S1 / S2 专项全绿（parse-scan MISMATCH 0，KNOWN 27）。
+  - slice PASS 705 FAIL 0、oracle-live 不一致 0；探针 20160 无 FAIL / AI / CRASH，新集 1216 个 ASan 复查也干净。
+  - scodeinst 只变 68f 的 8 个；testsuite 只变 19 个目标（68f 10 + 68e 9）；MSL 只变 GenerationOfFMUs。
+  - bdae 六段 FAIL / CRASH 0，变化只是探针里 11 个含 print 的模型 SKIP / 未准入→PASS（68e 放开 print 的直接结果）；ASan 与 gcc 全部相同。
+- 提交两个：先 68f（共用文件按 68f worktree 版本暂存，不动工作区），再 68e + tasks 文档。

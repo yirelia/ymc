@@ -1,0 +1,6950 @@
+//// set: pk-p54r — 68e 重做（T-S3-68e-redo v6）：模型语境的内建 print（P）、实例类里函数体调兄弟函数 / derivative 引兄弟（A / G，sibling_fn_name 条件 1-7）、根类本地记录作函数变量类型（B）、放开过的模型里程序有内建 print 函数即 SKIP（G0）。来源：规划探针 p1-p5 / p7 / gf1、评审探针 r3 / r4 / r8-r12、实现期 n1 / n2 / v1；补充卡 A3（T-S3-68e-redo-A3 v2.1）：被实例化的外层里的函数按实例路径命名（X：`M.s.h` / 根基类 `M.h`）、A2 形并入（Y）、门控 blocked_ / raw 遍、C10 与同名回落撤回（FB 判定点 A / G / B）、G1 放开模型函数形参 / 局部深处的可能不纯调用 SKIP，来源 A3 规划 a3x / a3y / a3c / a3g、评审 rv_x / c / i / j / k / l、对抗评审 adv_x / x2 / x3；只收 PASS / BOTH-REJECT / SKIP
+//// model: R68eP01
+model R68eP01
+  Integer z;
+algorithm
+  z := 3;
+  print("z: " + String(z) + "\n");
+end R68eP01;
+//// model: R68eP02
+model R68eP02
+  Real x = time;
+equation
+  print("eq\n");
+end R68eP02;
+//// model: R68eP03
+model R68eP03
+  Real x = time;
+algorithm
+  print("const");
+end R68eP03;
+//// model: R68eP04
+model R68eP04
+  Real x = time;
+algorithm
+  .print("dot");
+end R68eP04;
+//// model: R68eP05
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := x;
+  print("v");
+end f;
+model R68eP05
+  Real y = f(time);
+end R68eP05;
+//// model: R68eP06
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := x;
+  print("v");
+end f;
+function g
+  input Real x;
+  output Real y;
+algorithm
+  y := f(x);
+end g;
+model R68eP06
+  Real y = g(time);
+end R68eP06;
+//// model: R68eP07
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := x;
+  print("v");
+end f;
+function g
+  input Real x;
+  output Real y;
+algorithm
+  y := f(x) + 1;
+end g;
+model R68eP07
+  Real y = g(time);
+end R68eP07;
+//// model: R68eP08
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := x;
+  if x > 10 then
+    print("big");
+  end if;
+end f;
+model R68eP08
+  constant Real c = f(1.0);
+  Real y = c;
+end R68eP08;
+//// model: R68eP11
+model R68eP11
+  Real x;
+algorithm
+  x := print("a");
+end R68eP11;
+//// model: R68eP12
+model R68eP12
+  Real x = time;
+algorithm
+  print(1);
+end R68eP12;
+//// model: R68eP13
+model R68eP13
+  Real x = time;
+algorithm
+  print("a", "b");
+end R68eP13;
+//// model: R68eP14
+model R68eP14
+  Real x = time;
+algorithm
+  print();
+end R68eP14;
+//// model: R68eP15
+model R68eP15
+  Real x = time;
+algorithm
+  print(str = "named");
+end R68eP15;
+//// model: R68eP16
+model R68eP16
+  Real x = time;
+algorithm
+  print({"a", "b"});
+end R68eP16;
+//// model: R68eP17
+model R68eP17
+  Real print = time;
+algorithm
+  print("x");
+end R68eP17;
+//// model: R68eP18
+model R68eP18
+  Real x = time;
+algorithm
+  when x > 0.5 then
+    print("w");
+  end when;
+end R68eP18;
+//// model: R68eP19
+model R68eP19
+  Real x = time;
+algorithm
+  if x > 0.5 then
+    print("i");
+  else
+    print("e");
+  end if;
+end R68eP19;
+//// model: R68eP20
+model R68eP20
+  Real x = time;
+algorithm
+  for i in 1:2 loop
+    print(String(i));
+  end for;
+end R68eP20;
+//// model: R68eP21
+model R68eP21
+  Real x = time;
+initial algorithm
+  print("init");
+end R68eP21;
+//// model: R68eP22
+model R68eP22
+  Real x = time;
+equation
+  when x > 0.5 then
+    print("weq");
+  end when;
+end R68eP22;
+//// model: R68eP23
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := x;
+  .print("v");
+end f;
+model R68eP23
+  Real y = f(time);
+end R68eP23;
+//// model: R68eP24
+impure function f
+  input Real x;
+  output Real y;
+algorithm
+  y := x;
+  print("v");
+end f;
+model R68eP24
+  Real y = f(time);
+end R68eP24;
+//// model: R68eP25
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := x;
+  print("v");
+end f;
+model R68eP25
+  Real y = f(1.0);
+end R68eP25;
+//// model: R68eP26
+function f
+  input String s;
+algorithm
+  print(s);
+end f;
+model R68eP26
+  Real x = time;
+algorithm
+  f("a");
+end R68eP26;
+//// model: R68eP27
+model R68eP27
+  Real x = time;
+  String s = "a";
+algorithm
+  print(s + "b");
+end R68eP27;
+//// model: R68eP28
+model R68eP28
+  Real x = time;
+algorithm
+  print(if x > 0.5 then "a" else "b");
+end R68eP28;
+//// model: R68eP29
+model R68eP29
+  Real x = time;
+algorithm
+  print("a" + "b");
+end R68eP29;
+//// model: R68eP30
+model R68eP30
+  type print = enumeration(a, b);
+  Real x = time;
+algorithm
+  print(1);
+end R68eP30;
+//// model: R68eA01
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eA01
+  C c;
+end R68eA01;
+//// model: R68eA02
+class C
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u + 3;
+  end h;
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := h(u) * 2;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eA02
+  C c;
+end R68eA02;
+//// model: R68eA03
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eA03
+  C c1, c2;
+end R68eA03;
+//// model: R68eA04
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eA04
+  C c[2];
+end R68eA04;
+//// model: R68eA05
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+class B
+  C c;
+end B;
+model R68eA05
+  B b;
+end R68eA05;
+//// model: R68eA06
+class B
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+end B;
+class C
+  extends B;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eA06
+  C c;
+end R68eA06;
+//// model: R68eA07
+class B
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+end B;
+class C
+  extends B;
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eA07
+  C c;
+end R68eA07;
+//// model: R68eA08
+class C
+  replaceable function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+function g2
+  input Real u;
+  output Real v;
+algorithm
+  v := 3 * u;
+end g2;
+model R68eA08
+  C c(redeclare function g = g2);
+end R68eA08;
+//// model: R68eA09
+class C
+  replaceable function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eA09
+  C c;
+end R68eA09;
+//// model: R68eA10
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    import C.g;
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eA10
+  C c;
+end R68eA10;
+//// model: R68eA11
+class C
+  constant Real k = 1;
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := k * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eA11
+  C c(k = 2);
+end R68eA11;
+//// model: R68eA12
+class C
+  constant Real k = 1;
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := k * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eA12
+  C c;
+end R68eA12;
+//// model: R68eA13
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+end C;
+model R68eA13
+  C c;
+  Real y = c.f(time);
+end R68eA13;
+//// model: R68eA14
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  function f2 = f;
+  Real x = time;
+  Real y;
+equation
+  y = f2(x);
+end C;
+model R68eA14
+  C c;
+end R68eA14;
+//// model: R68eA15
+class C
+  function size
+    input Real u;
+    input Integer i;
+    output Integer v;
+  algorithm
+    v := 7;
+  end size;
+  function f
+    input Real x[:];
+    output Real y;
+  algorithm
+    y := size(x, 1);
+  end f;
+  Real x[2] = {time, time};
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eA15
+  C c;
+end R68eA15;
+//// model: R68eA16
+class C
+  function String
+    input Real u;
+    output String s;
+  algorithm
+    s := "x";
+  end String;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    assert(x > 0, String(x));
+    y := x;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eA16
+  C c;
+end R68eA16;
+//// model: R68eA17
+class C
+  function g
+    input Real u;
+    input Real w = 3;
+    output Real v;
+  algorithm
+    v := 2 * u + w;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(w = 1, u = x);
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eA17
+  C c;
+end R68eA17;
+//// model: R68eA18
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eA18
+  C c(x = 2 * time);
+end R68eA18;
+//// model: R68eA19
+class C
+protected
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+public
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eA19
+  C c;
+end R68eA19;
+//// model: R68eA20
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+algorithm
+  y := f(x);
+end C;
+model R68eA20
+  C c;
+end R68eA20;
+//// model: R68eA21
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y = g(x);
+  Real z;
+equation
+  z = f(x);
+end C;
+model R68eA21
+  C c;
+end R68eA21;
+//// model: R68eA22
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eA22
+  extends C;
+end R68eA22;
+//// model: R68eA23
+class C
+  package P
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := 2 * u;
+    end g;
+  end P;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := P.g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eA23
+  C c;
+end R68eA23;
+//// model: R68eA24
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eA24
+  replaceable C c;
+end R68eA24;
+//// model: R68eA25
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+class D = C;
+model R68eA25
+  D d;
+end R68eA25;
+//// model: R68eA26
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eA26
+  outer C c;
+end R68eA26;
+//// model: R68eA27
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eA27
+  inner C c;
+end R68eA27;
+//// model: R68eA28
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+class E
+  C c(x = 3 * time);
+end E;
+model R68eA28
+  E e1, e2;
+end R68eA28;
+//// model: R68eA29
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + g(2 * x);
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eA29
+  C c;
+end R68eA29;
+//// model: R68eA30
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  parameter Real p = f(2);
+  Real y = p * time;
+end C;
+model R68eA30
+  C c;
+end R68eA30;
+//// model: R68eB01
+model R68eB01
+  record R
+    Real r1;
+    Integer r2;
+  end R;
+  function f
+    input Real x;
+    input R r;
+    output R y;
+  algorithm
+    y.r1 := x + r.r1;
+    y.r2 := r.r2;
+  end f;
+  R a, b;
+equation
+  a = R(time, 2);
+  b = f(time, a);
+end R68eB01;
+//// model: R68eB02
+model R68eB02
+  record R
+    Integer i = 2;
+  end R;
+  parameter R r(i = 3);
+  function f
+    input R r;
+    output Real y;
+    external "C" y = doSomething(r);
+  end f;
+  Real y = f(r);
+end R68eB02;
+//// model: R68eB03
+model R68eB03
+  constant Real k = 4;
+  record R
+    Real a = k;
+  end R;
+  function f
+    input R r;
+    output Real y;
+  algorithm
+    y := r.a;
+  end f;
+  R r;
+  Real y = f(r);
+end R68eB03;
+//// model: R68eB04
+package P
+  function f
+    input R68eB04.R r;
+    output Real y;
+  algorithm
+    y := r.a;
+  end f;
+end P;
+model R68eB04
+  record R
+    Real a;
+  end R;
+  R r(a = time);
+  Real y = P.f(r);
+end R68eB04;
+//// model: R68eB05
+model Base
+  record R
+    Real a;
+  end R;
+end Base;
+model R68eB05
+  extends Base;
+  function f
+    input R r;
+    output Real y;
+  algorithm
+    y := r.a;
+  end f;
+  R r(a = time);
+  Real y = f(r);
+end R68eB05;
+//// model: R68eB06
+model R68eB06
+  package P
+    record R
+      Real a;
+    end R;
+  end P;
+  function f
+    input P.R r;
+    output Real y;
+  algorithm
+    y := r.a;
+  end f;
+  P.R r(a = time);
+  Real y = f(r);
+end R68eB06;
+//// model: R68eB07
+model R68eB07
+  record R
+    Real a;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    output Real y;
+  protected
+    R tmp;
+  algorithm
+    tmp.a := x;
+    tmp.b := 2 * x;
+    y := tmp.a + tmp.b;
+  end f;
+  Real y = f(time);
+end R68eB07;
+//// model: R68eB08
+model R68eB08
+  record R
+    Real a;
+  end R;
+  record R2
+    R r;
+    Real b;
+  end R2;
+  function f
+    input R2 r;
+    output Real y;
+  algorithm
+    y := r.r.a + r.b;
+  end f;
+  R2 q(r(a = time), b = 1);
+  Real y = f(q);
+end R68eB08;
+//// model: R68eB09
+model R68eB09
+  record R
+    Real a;
+    Integer b;
+  end R;
+  R r;
+equation
+  r = R(time, 2);
+end R68eB09;
+//// model: R68eB10
+model R68eB10
+  record R0
+    Real a;
+  end R0;
+  record R
+    extends R0;
+    Real b;
+  end R;
+  function f
+    input R r;
+    output Real y;
+  algorithm
+    y := r.a + r.b;
+  end f;
+  R r(a = time, b = 2);
+  Real y = f(r);
+end R68eB10;
+//// model: R68eB11
+model R68eB11
+  type E = enumeration(one, two);
+  record R
+    E e;
+    Real a;
+  end R;
+  function f
+    input R r;
+    output Real y;
+  algorithm
+    y := if r.e == E.one then r.a else -r.a;
+  end f;
+  R r(e = E.two, a = time);
+  Real y = f(r);
+end R68eB11;
+//// model: R68eB12
+model Other
+  Real z = 1;
+end Other;
+model R68eB12
+  extends Other;
+  record R
+    Real a;
+  end R;
+  function f
+    input R r;
+    output Real y;
+  algorithm
+    y := r.a;
+  end f;
+  R r(a = time);
+  Real y = f(r);
+end R68eB12;
+//// model: R68eB14
+model R68eB14
+  record R
+    Real a;
+  end R;
+  function f
+    input R r[2];
+    output Real y;
+  algorithm
+    y := r[1].a + r[2].a;
+  end f;
+  R r[2](each a = time);
+  Real y = f(r);
+end R68eB14;
+//// model: R68eB15
+model R68eB15
+  record R
+    Real a[2] = {1, 2};
+    Boolean b[:];
+  end R;
+  function f
+    input R r;
+    output Real y;
+  algorithm
+    y := r.a[1] + size(r.b, 1);
+  end f;
+  R r(b = {true, false, true});
+  Real y = f(r);
+end R68eB15;
+//// model: R68eB16
+model R68eB16
+  replaceable record R
+    Real a;
+  end R;
+  function f
+    input R r;
+    output Real y;
+  algorithm
+    y := r.a;
+  end f;
+  R r(a = time);
+  Real y = f(r);
+end R68eB16;
+//// model: R68eB17
+record R
+  Real q;
+end R;
+model R68eB17
+  record R
+    Real a;
+  end R;
+  function f
+    input R r;
+    output Real y;
+  algorithm
+    y := r.a;
+  end f;
+  R r(a = time);
+  Real y = f(r);
+end R68eB17;
+//// model: R68eB18
+class C
+  record R
+    Real a;
+  end R;
+  function f
+    input R r;
+    output Real y;
+  algorithm
+    y := r.a;
+  end f;
+  R r(a = time);
+  Real y = f(r);
+end C;
+model R68eB18
+  C c;
+end R68eB18;
+//// model: R68eB19
+model R68eB19
+  record R
+    Real a = 1;
+    Real b = 2 * a;
+  end R;
+  function f
+    input R r;
+    output Real y;
+  algorithm
+    y := r.a + r.b;
+  end f;
+  R r;
+  Real y = f(r) * time;
+end R68eB19;
+//// model: R68eB20
+model R68eB20
+  record R
+    Real a;
+  end R;
+  record R2 = R;
+  function f
+    input R2 r;
+    output Real y;
+  algorithm
+    y := r.a;
+  end f;
+  R r(a = time);
+  Real y = f(r);
+end R68eB20;
+//// model: R68eB21
+model R68eB21
+  record R
+    Real a;
+    Real b;
+  end R;
+  function f
+    input Real x;
+    input R r = R(1, 2);
+    output Real y;
+  algorithm
+    y := x + r.a + r.b;
+  end f;
+  Real y = f(time);
+end R68eB21;
+//// model: R68eB23
+model R68eB23
+  record R
+    Real a;
+  end R;
+  function f
+    input R r;
+    output Real y;
+  algorithm
+    y := r.a;
+  end f;
+  function g
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+  end g;
+  Real y = f(g(time));
+end R68eB23;
+//// model: R68eB24
+model R68eB24
+  record R
+    constant Real c = 3;
+    parameter Real p = 4;
+    Real a;
+  end R;
+  function f
+    input R r;
+    output Real y;
+  algorithm
+    y := r.a + r.c + r.p;
+  end f;
+  R r(a = time);
+  Real y = f(r);
+end R68eB24;
+//// model: R68eB25
+model R68eB25
+  record R
+    String s;
+    Real a;
+  end R;
+  function f
+    input R r;
+    output Real y;
+  algorithm
+    y := r.a;
+  end f;
+  R r(s = "x", a = time);
+  Real y = f(r);
+end R68eB25;
+//// model: R68eB26
+model R68eB26
+  record R
+    Real a;
+  end R;
+  function f
+    input R r;
+    output Real y;
+  algorithm
+    y := r.a;
+  end f;
+  Real y = f(R(time));
+end R68eB26;
+//// model: R68eB27
+model R68eB27
+  record R
+    Real a;
+  end R;
+  function f
+    import RR = R68eB27.R;
+    input RR r;
+    output Real y;
+  algorithm
+    y := r.a;
+  end f;
+  R r(a = time);
+  Real y = f(r);
+end R68eB27;
+//// model: R68eB28
+model R68eB28
+  record R
+    Real a;
+  end R;
+  function f
+    input .R68eB28.R r;
+    output Real y;
+  algorithm
+    y := r.a;
+  end f;
+  R r(a = time);
+  Real y = f(r);
+end R68eB28;
+//// model: R68eB29
+model R68eB29
+  record R
+    Real a;
+  end R;
+  function f
+    input R68eB29.R r;
+    output Real y;
+  algorithm
+    y := r.a;
+  end f;
+  R r(a = time);
+  Real y = f(r);
+end R68eB29;
+//// model: R68eB30
+model R68eB30
+  record R
+    Real a;
+  end R;
+  package P
+    function f
+      input R r;
+      output Real y;
+    algorithm
+      y := r.a;
+    end f;
+  end P;
+  R r(a = time);
+  Real y = P.f(r);
+end R68eB30;
+//// model: R68eC01
+model B
+  Real print = 1;
+end B;
+model R68eC01
+  extends B;
+algorithm
+  print("a");
+end R68eC01;
+//// model: R68eC02
+class C
+  Real x = time;
+algorithm
+  print("c");
+end C;
+model R68eC02
+  Real print = 1;
+  C c;
+end R68eC02;
+//// model: R68eC03
+package P
+  function print
+    input String s;
+  algorithm
+    .print(s + "!");
+  end print;
+end P;
+model R68eC03
+  import P.print;
+  Real x = time;
+algorithm
+  print("u");
+end R68eC03;
+//// model: R68eC04
+model R68eC04
+  parameter String s = "p";
+  Real x = time;
+algorithm
+  print(s);
+end R68eC04;
+//// model: R68eC05
+model R68eC05
+  parameter Boolean b = true;
+  Real x = time;
+equation
+  if b then
+    print("t");
+  end if;
+end R68eC05;
+//// model: R68eC06
+class C
+  function f
+    input Integer n;
+    output Integer y;
+  algorithm
+    y := if n <= 1 then 1 else n * f(n - 1);
+  end f;
+  Integer k(start = 3);
+  Integer y;
+equation
+  y = f(k);
+  when time > 1 then k = 2; end when;
+end C;
+model R68eC06
+  C c;
+end R68eC06;
+//// model: R68eC07
+class B
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+end B;
+class C
+  extends B;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eC07
+  C c;
+end R68eC07;
+//// model: R68eC08
+class B
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+end B;
+class C
+  extends B;
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 3 * u;
+  end g;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eC08
+  C c;
+end R68eC08;
+//// model: R68eC09
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eC09
+  C c;
+  Real z = c.g(time);
+end R68eC09;
+//// model: R68eC11
+class C
+  function print
+    input String s;
+    external "C" myPuts(s);
+  end print;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := x;
+    print("v");
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eC11
+  C c;
+  Real z = c.f(time);
+end R68eC11;
+//// model: R68eC12
+class C
+  function print
+    input String s;
+    external "C" myPuts(s);
+  end print;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := x;
+    print("v");
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(1.0);
+end C;
+model R68eC12
+  C c;
+end R68eC12;
+//// model: R68eC13
+class C
+  function print
+    input String s;
+    external "C" myPuts(s);
+  end print;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := x;
+    print("v");
+  end f;
+  constant Real k = f(1.0);
+  Real y = k * time;
+end C;
+model R68eC13
+  C c;
+end R68eC13;
+//// model: R68eC14
+model R68eC14
+  Real x = time;
+initial equation
+  print("ie");
+end R68eC14;
+//// model: R68eD01
+class C
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eD01
+  C c;
+end R68eD01;
+//// model: R68eD02
+model R68eD02
+  function f
+    input R r;
+    output Real y;
+  algorithm
+    y := r.a;
+  end f;
+  record R
+    Real a;
+  end R;
+  R r(a = time);
+  Real y = f(r);
+end R68eD02;
+//// model: R68eD03
+block C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  input Real x;
+  output Real y;
+equation
+  y = f(x);
+end C;
+model R68eD03
+  C c(x = time);
+end R68eD03;
+//// model: R68eD04
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  encapsulated function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eD04
+  C c;
+end R68eD04;
+//// model: R68eD05
+block R68eD05
+  record R
+    Real a;
+  end R;
+  function f
+    input R r;
+    output Real y;
+  algorithm
+    y := r.a;
+  end f;
+  R r(a = time);
+  output Real y = f(r);
+end R68eD05;
+//// model: R68eD06
+model R68eD06
+  Real x = time;
+algorithm
+  when x > 0.5 then
+    print("a");
+  elsewhen x > 0.7 then
+    print("b");
+  end when;
+end R68eD06;
+//// model: R68eD07
+model R68eD07
+  record R
+    Real a;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r.a := x;
+  end f;
+  R r = f(time);
+end R68eD07;
+//// model: R68eD08
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eD08
+  C c;
+  C d;
+  Real z = c.y + d.y;
+end R68eD08;
+//// model: R68eD09
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  protected
+    Real t;
+  algorithm
+    t := g(x);
+    y := t + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eD09
+  C c;
+end R68eD09;
+//// model: R68eD10
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y = g(x);
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eD10
+  C c;
+end R68eD10;
+//// model: R68eE01
+class Base
+  Real b = 1;
+end Base;
+class C
+  extends Base;
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eE01
+  C c;
+end R68eE01;
+//// model: R68eE02
+class Base
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 5 * x;
+  end f;
+end Base;
+class C
+  extends Base;
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eE02
+  C c;
+end R68eE02;
+//// model: R68eE03
+class Base
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 7 * u;
+  end g;
+end Base;
+class C
+  extends Base;
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model R68eE03
+  C c;
+end R68eE03;
+//// model: R68eE04
+class Base
+  Real b = 1;
+end Base;
+class M
+  extends Base;
+  function f
+    input Real x[2];
+    input Real d;
+    output Real y;
+  algorithm
+    y := x[1];
+    annotation(derivative(noDerivative = x) = f_der);
+  end f;
+  function f_der
+    input Real x[2];
+    input Real d;
+    input Real dd;
+    output Real y;
+  algorithm
+    y := x[2];
+    annotation(derivative(noDerivative = x, order = 2) = f_der2);
+  end f_der;
+  function f_der2
+    input Real x[2];
+    input Real d;
+    input Real dd;
+    input Real ddd;
+    output Real y;
+  algorithm
+    y := 0;
+  end f_der2;
+  Real u[2] = {time, 1};
+  Real z = f(u, time);
+end M;
+model R68eE04
+  M m;
+end R68eE04;
+//// model: R68eE05
+class Base
+  function f_der
+    input Real x[2];
+    input Real d;
+    input Real dd;
+    output Real y;
+  algorithm
+    y := 9;
+  end f_der;
+end Base;
+class M
+  extends Base;
+  function f
+    input Real x[2];
+    input Real d;
+    output Real y;
+  algorithm
+    y := x[1];
+    annotation(derivative(noDerivative = x) = f_der);
+  end f;
+  function f_der
+    input Real x[2];
+    input Real d;
+    input Real dd;
+    output Real y;
+  algorithm
+    y := x[2];
+  end f_der;
+  Real u[2] = {time, 1};
+  Real z = f(u, time);
+end M;
+model R68eE05
+  M m;
+end R68eE05;
+//// model: R68eE06
+class M
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := x;
+    annotation(inverse(x = f_inv(y)));
+  end f;
+  function f_inv
+    input Real y;
+    output Real x;
+  algorithm
+    x := y;
+  end f_inv;
+  Real z = f(time);
+end M;
+model R68eE06
+  M m;
+end R68eE06;
+//// model: R68eE07
+class M
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := x;
+    annotation(derivative = f_der);
+  end f;
+  function f_der
+    input Real x;
+    input Real dx;
+    output Real dy;
+  algorithm
+    dy := dx;
+  end f_der;
+  Real z = f(time);
+end M;
+model R68eE07
+  M m1, m2;
+end R68eE07;
+//// model: R68eE08
+class M
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := x;
+    annotation(derivative = f_der);
+  end f;
+  function f_der
+    input Real x;
+    input Real dx;
+    output Real dy;
+  algorithm
+    dy := dx;
+  end f_der;
+  Real z = f(time);
+end M;
+model R68eE08
+  M m[2];
+end R68eE08;
+//// model: GF01
+model M
+  function f
+    input Real x[2];
+    input Real d;
+    output Real y;
+  algorithm
+    y := x[1];
+    annotation(derivative(noDerivative = x) = f_der);
+  end f;
+  function f_der
+    input Real x[2];
+    input Real d;
+    input Real dd;
+    output Real y;
+  algorithm
+    y := x[2];
+  end f_der;
+  Real u[2] = {time, 1};
+  Real z = f(u, time);
+end M;
+model GF01
+  M m;
+end GF01;
+//// model: GF02
+model GF02
+  function f
+    input Real x[2];
+    input Real d;
+    output Real y;
+  algorithm
+    y := x[1];
+    annotation(derivative(noDerivative = x) = f_der);
+  end f;
+  function f_der
+    input Real x[2];
+    input Real d;
+    input Real dd;
+    output Real y;
+  algorithm
+    y := x[2];
+  end f_der;
+  Real u[2] = {time, 1};
+  Real z = f(u, time);
+end GF02;
+//// model: GF03
+package P
+  model M
+    function f
+      input Real x[2];
+      input Real d;
+      output Real y;
+    algorithm
+      y := x[1];
+      annotation(derivative(noDerivative = x) = f_der);
+    end f;
+    function f_der
+      input Real x[2];
+      input Real d;
+      input Real dd;
+      output Real y;
+    algorithm
+      y := x[2];
+    end f_der;
+    Real u[2] = {time, 1};
+    Real z = f(u, time);
+  end M;
+end P;
+model GF03
+  P.M m;
+end GF03;
+//// model: GF04
+model A
+  model M
+    function f
+      input Real x[2];
+      input Real d;
+      output Real y;
+    algorithm
+      y := x[1];
+      annotation(derivative(noDerivative = x) = f_der);
+    end f;
+    function f_der
+      input Real x[2];
+      input Real d;
+      input Real dd;
+      output Real y;
+    algorithm
+      y := x[2];
+    end f_der;
+    Real u[2] = {time, 1};
+    Real z = f(u, time);
+  end M;
+protected
+  M m;
+end A;
+model GF04
+  A a1;
+  A a2;
+end GF04;
+//// model: GF05
+model M
+  function f
+    input Real x[2];
+    input Real d;
+    output Real y;
+  algorithm
+    y := x[1];
+    annotation(derivative(noDerivative = x) = f_der);
+  end f;
+  function f_der
+    input Real x[2];
+    input Real d;
+    input Real dd;
+    output Real y;
+  algorithm
+    y := x[2];
+    annotation(derivative(noDerivative = x, order = 2) = f_der2);
+  end f_der;
+  function f_der2
+    input Real x[2];
+    input Real d;
+    input Real dd;
+    input Real ddd;
+    output Real y;
+  algorithm
+    y := 0;
+  end f_der2;
+  Real u[2] = {time, 1};
+  Real z = f(u, time);
+end M;
+model GF05
+  M m;
+end GF05;
+//// model: GF06
+package Q
+  function g_der
+    input Real x[2];
+    input Real d;
+    input Real dd;
+    output Real y;
+  algorithm
+    y := x[2];
+  end g_der;
+end Q;
+model M
+  function f
+    input Real x[2];
+    input Real d;
+    output Real y;
+  algorithm
+    y := x[1];
+    annotation(derivative(noDerivative = x) = Q.g_der);
+  end f;
+  Real u[2] = {time, 1};
+  Real z = f(u, time);
+end M;
+model GF06
+  M m;
+end GF06;
+//// model: GF07
+model B
+  function f_der
+    input Real x[2];
+    input Real d;
+    input Real dd;
+    output Real y;
+  algorithm
+    y := x[2];
+  end f_der;
+end B;
+model M
+  extends B;
+  function f
+    input Real x[2];
+    input Real d;
+    output Real y;
+  algorithm
+    y := x[1];
+    annotation(derivative(noDerivative = x) = f_der);
+  end f;
+  Real u[2] = {time, 1};
+  Real z = f(u, time);
+end M;
+model GF07
+  M m;
+end GF07;
+//// model: GF08
+model M
+  function f
+    input Real x[2];
+    input Real d;
+    output Real y;
+  algorithm
+    y := x[1];
+    annotation(inverse(d = f_inv(x, y)));
+  end f;
+  function f_inv
+    input Real x[2];
+    input Real y;
+    output Real d;
+  algorithm
+    d := y;
+  end f_inv;
+  Real u[2] = {time, 1};
+  Real z = f(u, time);
+end M;
+model GF08
+  M m;
+end GF08;
+//// model: GF09
+model M
+  package Inner
+    function f_der
+      input Real x[2];
+      input Real d;
+      input Real dd;
+      output Real y;
+    algorithm
+      y := x[2];
+    end f_der;
+  end Inner;
+  function f
+    input Real x[2];
+    input Real d;
+    output Real y;
+  algorithm
+    y := x[1];
+    annotation(derivative(noDerivative = x) = Inner.f_der);
+  end f;
+  Real u[2] = {time, 1};
+  Real z = f(u, time);
+end M;
+model GF09
+  M m;
+end GF09;
+//// model: GF10
+model M
+  replaceable function f_der
+    input Real x[2];
+    input Real d;
+    input Real dd;
+    output Real y;
+  algorithm
+    y := x[2];
+  end f_der;
+  function f
+    input Real x[2];
+    input Real d;
+    output Real y;
+  algorithm
+    y := x[1];
+    annotation(derivative(noDerivative = x) = f_der);
+  end f;
+  Real u[2] = {time, 1};
+  Real z = f(u, time);
+end M;
+model GF10
+  M m(redeclare function f_der = g);
+  function g
+    input Real x[2];
+    input Real d;
+    input Real dd;
+    output Real y;
+  algorithm
+    y := -x[2];
+  end g;
+end GF10;
+//// model: RV3A1
+class B
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end B;
+class C
+  extends B;
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 3 * u;
+  end g;
+end C;
+model RV3A1
+  C c;
+end RV3A1;
+//// model: RV3A2
+class B
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end B;
+class C
+  extends B;
+end C;
+model RV3A2
+  C c;
+end RV3A2;
+//// model: RV3A3
+class A
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 5 * u;
+  end g;
+end A;
+class B
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end B;
+class C
+  extends B;
+  extends A;
+end C;
+model RV3A3
+  C c;
+end RV3A3;
+//// model: RV3A4
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model RV3A4
+  extends C;
+end RV3A4;
+//// model: RV3A5
+class B
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end B;
+class C
+  extends B;
+  Real g = 1;
+end C;
+model RV3A5
+  C c;
+end RV3A5;
+//// model: RV3A6
+class C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+class D
+  extends C;
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 7 * u;
+  end g;
+end D;
+model RV3A6
+  D d;
+end RV3A6;
+//// model: RV3A7
+class B
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end B;
+model RV3A7
+  B b1;
+  extends B;
+end RV3A7;
+//// model: RV3G1
+class B
+  function f_der
+    input Real x;
+    input Real dx;
+    output Real dy;
+  algorithm
+    dy := 2 * dx;
+  end f_der;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := 2 * x;
+    annotation(derivative = f_der);
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end B;
+class C
+  extends B;
+  function f_der
+    input Real x;
+    input Real dx;
+    output Real dy;
+  algorithm
+    dy := 3 * dx;
+  end f_der;
+end C;
+model RV3G1
+  C c;
+end RV3G1;
+//// model: RV4P01
+package P
+  function print
+    input String s;
+  algorithm
+  end print;
+  model B
+    Real x = time;
+  algorithm
+    print("b");
+  end B;
+end P;
+model RV4P01
+  extends P.B;
+end RV4P01;
+//// model: RV4P02
+package P
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  model B
+    Real x = g(time);
+  end B;
+end P;
+model RV4P02
+  extends P.B;
+end RV4P02;
+//// model: RV4P03
+model B
+  Real x = time;
+algorithm
+  print("b");
+end B;
+model RV4P03
+  extends B;
+  Real print = 1;
+end RV4P03;
+//// model: RV4P04
+package P
+  constant String print = "x";
+  model B
+    Real x = time;
+  algorithm
+    print("b");
+  end B;
+end P;
+model RV4P04
+  extends P.B;
+end RV4P04;
+//// model: RV4P05
+package P
+  function print
+    input String s;
+  algorithm
+  end print;
+  model B
+    Real x = time;
+  algorithm
+    print("b");
+  end B;
+end P;
+model RV4P05
+  P.B b;
+end RV4P05;
+//// model: RV4P06
+package Q
+  constant String print = "q";
+end Q;
+model RV4P06
+  import Q.*;
+  Real x = time;
+algorithm
+  print("a");
+end RV4P06;
+//// model: RV4P07
+model RV4P07
+  parameter String s = "a";
+  Real x = time;
+algorithm
+  print(s);
+end RV4P07;
+//// model: RV4P08
+function g
+  input Real x;
+  output Real y;
+algorithm
+  y := x;
+  while y > 100 loop
+    print("loop");
+    y := y - 1;
+  end while;
+end g;
+model RV4P08
+  Real y = g(time);
+end RV4P08;
+//// model: RV4P09
+model RV4P09
+  parameter Boolean b = true;
+  Real x = time;
+algorithm
+  print(if b then "a" else "b");
+end RV4P09;
+//// model: RV4P10
+function fs
+  input String x;
+  output String y;
+algorithm
+  y := x + "!";
+  if x == "zz" then
+    print("big");
+  end if;
+end fs;
+model RV4P10
+  Real x = time;
+algorithm
+  print(fs("a"));
+end RV4P10;
+//// model: RV4P11
+model B
+  function print
+    input String s;
+  algorithm
+  end print;
+end B;
+model RV4P11
+  extends B;
+  Real x = time;
+algorithm
+  .print("a");
+end RV4P11;
+//// model: RV4P12
+model C
+  Real x = time;
+algorithm
+  print("c");
+end C;
+model RV4P12
+  C c[2];
+end RV4P12;
+//// model: RV4P13
+function g
+  input Real x;
+  output Real y;
+algorithm
+  y := x;
+  print(String(x));
+end g;
+model RV4P13
+  Real y = g(time);
+end RV4P13;
+//// model: RV4P14
+model RV4P14
+  Real x = time;
+equation
+  when x > 0.5 then
+    print("w");
+  elsewhen x > 0.7 then
+    print("e");
+  end when;
+end RV4P14;
+//// model: RV4P15
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := x;
+  print("always");
+end f;
+model RV4P15
+  parameter Real p = f(1.0);
+  Real y = p * time;
+end RV4P15;
+//// model: RV8G1
+function h
+  input Real x;
+  output Real y;
+algorithm
+  y := x;
+  print("h");
+end h;
+function f
+  input Real x;
+  output Real y;
+algorithm
+  if x > 10 then
+    y := h(x);
+  else
+    y := x;
+  end if;
+end f;
+model RV8G1
+  parameter Real p = f(1.0);
+  Real y = p * time;
+algorithm
+  print("a");
+end RV8G1;
+//// model: RV8G2
+class C
+  impure function sib
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end sib;
+  function f
+    input Real x;
+    output Real y;
+  protected
+    Real t = sib(x) + 1;
+  algorithm
+    y := t;
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+model RV8G2
+  C c;
+end RV8G2;
+//// model: RV8G3
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := x;
+  if x > 10 then
+    .print("big");
+  end if;
+end f;
+model RV8G3
+  parameter Real p = f(1.0);
+  Real y = p * time;
+algorithm
+  print("a");
+end RV8G3;
+//// model: RV8G4
+function f
+  input Real x;
+  output Real y;
+algorithm
+  y := x;
+  if x > 10 then
+    print("big");
+  end if;
+end f;
+model RV8G4
+  parameter Real p = f(1.0);
+  Real y = p * time;
+algorithm
+  print("a");
+end RV8G4;
+//// model: RV8G5
+class C
+  function sib
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end sib;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := sib(x) + k(1.0);
+  end f;
+  Real x = time;
+  Real y;
+equation
+  y = f(x);
+end C;
+function h
+  input Real x;
+  output Real y;
+algorithm
+  y := x;
+  print("h");
+end h;
+function k
+  input Real x;
+  output Real y;
+algorithm
+  if x > 10 then
+    y := h(x);
+  else
+    y := x;
+  end if;
+end k;
+model RV8G5
+  C c;
+end RV8G5;
+//// model: RV9G6
+function h
+  input Real x;
+  output Real y;
+algorithm
+  y := x;
+  print("h");
+end h;
+function k
+  input Real x;
+  output Real y;
+algorithm
+  if x > 10 then
+    y := h(x);
+  else
+    y := x;
+  end if;
+end k;
+function g
+  input Real x;
+  output Real y;
+protected
+  Real t = k(x) + 1;
+algorithm
+  y := t;
+end g;
+model RV9G6
+  parameter Real p = g(1.0);
+  Real y = p * time;
+algorithm
+  print("a");
+end RV9G6;
+//// model: RVAO1
+operator record C
+  Real re;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      output C result(re = re);
+    algorithm
+      if re > 10 then
+        print("big");
+      end if;
+    end fromReal;
+  end 'constructor';
+end C;
+function g
+  input C c;
+  output Real y;
+algorithm
+  y := c.re;
+end g;
+model RVAO1
+  Real y = g(C(1.0)) * time;
+algorithm
+  print("a");
+end RVAO1;
+//// model: RVAO2
+operator record C
+  Real re;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      output C result(re = re);
+    algorithm
+      if re > 10 then
+        print("big");
+      end if;
+    end fromReal;
+  end 'constructor';
+end C;
+model RVAO2
+  C c;
+equation
+  c = C(1.0);
+algorithm
+  print("a");
+end RVAO2;
+//// model: RVAD1
+operator record C
+  Real re;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      output C result(re = re);
+    algorithm
+      if re > 10 then
+        .print("big");
+      end if;
+    end fromReal;
+  end 'constructor';
+end C;
+function g
+  input C c;
+  output Real y;
+algorithm
+  y := c.re;
+end g;
+model RVAD1
+  Real y = g(C(1.0)) * time;
+algorithm
+  print("a");
+end RVAD1;
+//// model: RVAD2
+operator record C
+  Real re;
+  encapsulated operator 'constructor'
+    import C;
+    function fromReal
+      input Real re;
+      output C result(re = re);
+    algorithm
+      if re > 10 then
+        .print("big");
+      end if;
+    end fromReal;
+  end 'constructor';
+end C;
+model RVAD2
+  C c;
+equation
+  c = C(1.0);
+algorithm
+  print("a");
+end RVAD2;
+//// model: RVEP1
+encapsulated model RVEP1
+  Real x = time;
+algorithm
+  print("a");
+end RVEP1;
+//// model: RVEP2
+package P
+  encapsulated model M
+    Real x = time;
+  algorithm
+    print("m");
+  end M;
+end P;
+model RVEP2
+  P.M m;
+end RVEP2;
+//// model: RVEP3
+encapsulated model RVEP3
+  Real x = time;
+algorithm
+  .print("a");
+end RVEP3;
+//// model: RVEP4
+encapsulated function f
+  input Real x;
+  output Real y;
+algorithm
+  y := x;
+  if x > 10 then
+    print("big");
+  end if;
+end f;
+model RVEP4
+  parameter Real p = f(1.0);
+  Real y = p * time;
+algorithm
+  print("a");
+end RVEP4;
+//// model: R68eN01
+model R68eN01
+  model C
+    impure function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u;
+    end g;
+    function f
+      input Real x;
+      output Real y(start = g(1.0));
+    algorithm
+      y := x;
+    end f;
+    Real y = f(time);
+  end C;
+  C c;
+end R68eN01;
+//// model: R68eN02
+model R68eN02
+  model C
+    impure function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    protected
+      Real t(min = g(0.0)) = x;
+    algorithm
+      y := t;
+    end f;
+    Real y = f(time);
+  end C;
+  C c;
+end R68eN02;
+//// model: R68eN03
+model R68eN03
+  model C
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u;
+    end g;
+    function f
+      input Real x;
+      output Real y(start = g(1.0));
+    algorithm
+      y := x;
+    end f;
+    Real y = f(time);
+  end C;
+  C c;
+end R68eN03;
+//// model: R68eN04
+model R68eN04
+  model C
+    impure function g
+      input Real u;
+      output Integer v;
+    algorithm
+      v := integer(u);
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    protected
+      Real t = g(x);
+    algorithm
+      y := t;
+    end f;
+    Real y = f(time);
+  end C;
+  C c;
+end R68eN04;
+//// model: R68eN05
+model R68eN05
+  model C
+    impure function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    protected
+      Real t = g(x);
+    algorithm
+      y := t;
+    end f;
+    Real y = f(time);
+  end C;
+  C c;
+end R68eN05;
+//// model: R68eRP01
+package Pk
+  constant Integer print = 1;
+  model M
+    Real x = time;
+  algorithm
+    print("a");
+  end M;
+end Pk;
+model R68eRP01
+  extends Pk.M;
+end R68eRP01;
+//// model: R68eRP02
+package Q
+  type print = enumeration(a, b);
+end Q;
+model R68eRP02
+  import Q.print;
+  Real x = time;
+algorithm
+  print("a");
+end R68eRP02;
+//// model: R68eRP03
+model R68eRP03
+  Real x = time;
+algorithm
+  for print in 1:2 loop
+    print("a");
+  end for;
+end R68eRP03;
+//// model: R68eRP04
+model R68eRP04
+  Real x = time;
+algorithm
+  noEvent(print("a"));
+end R68eRP04;
+//// model: R68eRP05
+function g
+  input String s;
+algorithm
+end g;
+model R68eRP05
+  Real x = time;
+algorithm
+  g(print("a"));
+end R68eRP05;
+//// model: R68eRP06
+function f
+  input String s;
+  output String t;
+algorithm
+  t := s + "b";
+end f;
+model R68eRP06
+  Real x = time;
+algorithm
+  print(f("a"));
+end R68eRP06;
+//// model: R68eRP07
+function fs
+  input String s;
+  output String t;
+algorithm
+  print(s);
+  t := s + "b";
+end fs;
+model R68eRP07
+  Real x = time;
+algorithm
+  print(fs("a"));
+end R68eRP07;
+//// model: R68eRP08
+function fp
+  input Real u;
+  output Real v;
+algorithm
+  print("in fp");
+  v := 2 * u;
+end fp;
+model R68eRP08
+  parameter Real p = fp(1.0);
+  Real x = time;
+algorithm
+  print("m");
+end R68eRP08;
+//// model: R68eRP09
+encapsulated model R68eRP09
+  Real x = time;
+algorithm
+  print("a");
+end R68eRP09;
+//// model: R68eRP10
+package Pk
+  encapsulated model M
+    Real x = time;
+  algorithm
+    print("a");
+  end M;
+end Pk;
+model R68eRP10
+  Pk.M m;
+end R68eRP10;
+//// model: R68eRP11
+model B
+  Real y = 1;
+end B;
+model R68eRP11
+  extends B;
+  Real x = time;
+algorithm
+  print("a");
+end R68eRP11;
+//// model: R68eRP12
+function unused
+  input Real x;
+  output Real y;
+algorithm
+  print("never");
+  y := x;
+end unused;
+model R68eRP12
+  Real x = time;
+algorithm
+  print("a");
+end R68eRP12;
+//// model: R68eRP13
+model R68eRP13
+  Integer n(start = 1);
+algorithm
+  when sample(0, 1) then
+    n := pre(n) + 1;
+    print("tick " + String(n) + "\n");
+  end when;
+end R68eRP13;
+//// model: R68eRP14
+model R68eRP14
+  Real x = time;
+algorithm
+  if x > 0.5 then
+    print("hi");
+  else
+    print("lo");
+  end if;
+end R68eRP14;
+//// model: R68eRP15
+model R68eRP15
+  Real x = time;
+algorithm
+  print({"a", "b"});
+end R68eRP15;
+//// model: R68eRP16
+model R68eRP16
+  Real x = time;
+algorithm
+  print(1);
+end R68eRP16;
+//// model: R68eRG01
+function h
+  input Real x;
+  output Real y;
+algorithm
+  y := x;
+  print("h");
+end h;
+model R68eRG01
+  model C
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := 2 * u;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y = f(time);
+  end C;
+  C c;
+  parameter Real p = h(1.0);
+end R68eRG01;
+//// model: R68eRG02
+function k
+  input Real x;
+  output Real y = x;
+protected
+  Real t;
+algorithm
+  t := x;
+end k;
+function h
+  input Real x;
+  input Real d = 1;
+  output Real y;
+algorithm
+  y := x;
+end h;
+package Pk
+  function w
+    input Real x;
+    output Real y;
+  algorithm
+    print("w");
+    y := x;
+  end w;
+end Pk;
+model R68eRG02
+  model C
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := 2 * u;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y = f(time);
+  end C;
+  C c;
+end R68eRG02;
+//// model: R68eRG03
+function print
+  input String s;
+algorithm
+end print;
+function h
+  input Real x;
+  output Real y;
+algorithm
+  .print("h");
+  y := x;
+end h;
+model R68eRG03
+  model C
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := 2 * u;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y = f(time);
+  end C;
+  C c;
+  parameter Real p = h(1.0);
+end R68eRG03;
+//// model: R68eRG04
+function base
+  input Real x;
+  output Real y;
+end base;
+function h
+  extends base;
+algorithm
+  print("h");
+  y := x;
+end h;
+model R68eRG04
+  model C
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := 2 * u;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y = f(time);
+  end C;
+  C c;
+end R68eRG04;
+//// model: R68eRG05
+package Lib
+  function print
+    input String s;
+  algorithm
+  end print;
+end Lib;
+function h
+  import Lib.*;
+  input Real x;
+  output Real y;
+algorithm
+  print("h");
+  y := x;
+end h;
+model R68eRG05
+  model C
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := 2 * u;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y = f(time);
+  end C;
+  C c;
+end R68eRG05;
+//// model: R68eRG06
+operator record Cx
+  Real re;
+  encapsulated operator '+'
+    function add
+      input Cx a;
+      input Cx b;
+      output Cx c;
+    algorithm
+      print("add");
+      c := Cx(a.re + b.re);
+    end add;
+  end '+';
+end Cx;
+model R68eRG06
+  model C
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := 2 * u;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y = f(time);
+  end C;
+  C c;
+end R68eRG06;
+//// model: R68eRG07
+function h
+  input Real x;
+  input Real d = 1;
+  output Real y;
+algorithm
+  y := x;
+end h;
+model R68eRG07
+  model C
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := 2 * u;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y = f(time);
+  end C;
+  C c;
+  parameter Real p = h(1.0);
+end R68eRG07;
+//// model: R68eRS01
+model R68eRS01
+  model C
+    impure function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    protected
+      Real t[size({g(1.0)}, 1)];
+    algorithm
+      t := fill(x, size(t, 1));
+      y := t[1];
+    end f;
+    Real y = f(time);
+  end C;
+  C c;
+end R68eRS01;
+//// model: R68eRS02
+model R68eRS02
+  model C
+    impure function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y = f(time);
+  end C;
+  C c;
+end R68eRS02;
+//// model: R68eRS03
+model R68eRS03
+  model C
+    impure function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      g(x);
+      y := x;
+    end f;
+    Real y = f(time);
+  end C;
+  C c;
+end R68eRS03;
+//// model: R68eRS04
+model R68eRS04
+  model C
+    impure function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    protected
+      Real t = g(x) + 1;
+    algorithm
+      y := t;
+    end f;
+    Real y = f(time);
+  end C;
+  C c;
+end R68eRS04;
+//// model: R68eRA01
+model R68eRA01
+  model C
+    constant Real k = 1;
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := k * u;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y = f(time);
+  end C;
+  C c(k = 2);
+end R68eRA01;
+//// model: R68eRA02
+model R68eRA02
+  model C
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + 1;
+    end f;
+    Real y = f(time);
+  protected
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := 2 * u;
+    end g;
+  end C;
+  C c;
+end R68eRA02;
+//// model: R68eRA03
+model R68eRA03
+  model C
+    function g
+      input Integer n;
+      output Integer m;
+    algorithm
+      m := if n <= 0 then 0 else n + g(n - 1);
+    end g;
+    function f
+      input Integer x;
+      output Integer y;
+    algorithm
+      y := g(x);
+    end f;
+    Integer k = integer(time);
+    Integer y = f(k);
+  end C;
+  C c;
+end R68eRA03;
+//// model: R68eRA04
+model R68eRA04
+  model C
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := 2 * u;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y = f(time);
+  end C;
+  C a, b, c;
+end R68eRA04;
+//// model: R68eRA05
+model R68eRA05
+  C c;
+  model C
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := 2 * u;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y = f(time);
+  end C;
+end R68eRA05;
+//// model: R68eRA06
+model C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x);
+  end f;
+  Real y = f(time);
+end C;
+model D
+  extends C;
+end D;
+model R68eRA06
+  replaceable C c;
+end R68eRA06;
+//// model: R68eRA07
+model C
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x);
+  end f;
+  Real y = f(time);
+end C;
+model D
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 3 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x);
+  end f;
+  Real y = f(time);
+end D;
+model R68eRA07
+  replaceable model CC = C;
+  CC c;
+end R68eRA07;
+//// model: R68eRA08
+model B
+  constant Real g = 1;
+end B;
+model C
+  extends B;
+  function g2
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g2;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g2(x);
+  end f;
+  Real y = f(time);
+end C;
+model R68eRA08
+  C c;
+end R68eRA08;
+//// model: R68eRA09
+model R68eRA09
+  model C
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := 2 * u;
+      print("g");
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y = f(time);
+  end C;
+  C c;
+end R68eRA09;
+//// model: R68eRA10
+model R68eRA10
+  model W
+    model C
+      function g
+        input Real u;
+        output Real v;
+      algorithm
+        v := 2 * u;
+      end g;
+      function f
+        input Real x;
+        output Real y;
+      algorithm
+        y := g(x);
+      end f;
+      Real y = f(time);
+    end C;
+    C c;
+  end W;
+  W w;
+end R68eRA10;
+//// model: R68eRA11
+model R68eRA11
+  model C
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := 2 * u;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y = f(time);
+  end C;
+  C c[2];
+end R68eRA11;
+//// model: R68eRA12
+model R68eRA12
+  model C
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := 2 * u;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y;
+  end C;
+  C c;
+equation
+  c.y = c.f(time);
+end R68eRA12;
+//// model: R68eRD01
+model R68eRD01
+  model C
+    function f
+      input Real x;
+      input Real n;
+      output Real y;
+      annotation(derivative(order = 1) = fd);
+    algorithm
+      y := x * n;
+    end f;
+    function fd
+      input Real x;
+      input Real n;
+      input Real dx;
+      output Real dy;
+    algorithm
+      dy := dx * n;
+    end fd;
+    Real y = f(time, 2);
+  end C;
+  C c;
+end R68eRD01;
+//// model: R68eRD02
+model R68eRD02
+  model C
+    function f
+      input Real x;
+      input Real n;
+      output Real y;
+      annotation(derivative(zeroDerivative = n) = fd);
+    algorithm
+      y := x * n;
+    end f;
+    function fd
+      input Real x;
+      input Real n;
+      input Real dx;
+      output Real dy;
+    algorithm
+      dy := dx * n;
+    end fd;
+    Real y = f(time, 2);
+  end C;
+  C c;
+end R68eRD02;
+//// model: R68eRD03
+model B
+  function fd
+    input Real x;
+    input Real dx;
+    output Real dy;
+  algorithm
+    dy := dx;
+  end fd;
+end B;
+model C
+  extends B;
+  function f
+    input Real x;
+    output Real y;
+    annotation(derivative = fd);
+  algorithm
+    y := x;
+  end f;
+  Real y = f(time);
+end C;
+model R68eRD03
+  C c;
+end R68eRD03;
+//// model: R68eRD04
+model R68eRD04
+  model C
+    function f
+      input Real x;
+      output Real y;
+      annotation(derivative = fd);
+    algorithm
+      y := x;
+    end f;
+    function fd
+      input Real x;
+      input Real dx;
+      output Real dy;
+    algorithm
+      dy := dx;
+      print("fd");
+    end fd;
+    Real y = f(time);
+  end C;
+  C c;
+end R68eRD04;
+//// model: R68eRD05
+model R68eRD05
+  model C
+    function f
+      input Real x;
+      output Real y;
+      annotation(derivative = fd, inverse(x = fd(y, y)));
+    algorithm
+      y := x;
+    end f;
+    function fd
+      input Real x;
+      input Real dx;
+      output Real dy;
+    algorithm
+      dy := dx;
+    end fd;
+    Real y = f(time);
+  end C;
+  C c;
+end R68eRD05;
+//// model: R68eRB01
+package Pk
+  model R68eRB01
+    record R
+      Real a;
+      Integer b;
+    end R;
+    function f
+      input R r;
+      output Real y;
+    algorithm
+      y := r.a + r.b;
+    end f;
+    Real y = f(R(time, 2));
+  end R68eRB01;
+end Pk;
+model R68eRB01
+  extends Pk.R68eRB01;
+end R68eRB01;
+//// model: R68eRB02
+model R68eRB02
+  record R
+    Real a[2] = {1, 2};
+  end R;
+  function f
+    input R r;
+    output Real y;
+  algorithm
+    y := r.a[1];
+  end f;
+  Real y = f(R({time, 2}));
+end R68eRB02;
+//// model: R68eRB03
+model R68eRB03
+  record R
+    Real a;
+    Integer b = 3;
+  end R;
+  function f
+    input R r;
+    output Real y;
+  algorithm
+    y := r.a + r.b;
+  end f;
+  function g
+    input R r;
+    input Real k;
+    output R s;
+  algorithm
+    s := R(r.a * k, r.b);
+  end g;
+  R s = g(R(time, 2), 2.0);
+  Real y = f(R(time, 1));
+end R68eRB03;
+//// model: R68eRB04
+model R68eRB04
+  record R
+    Real a;
+    Integer b;
+  end R;
+  function f
+    input Real x;
+    output R r;
+    output Real z;
+  algorithm
+    r := R(x, 1);
+    z := 2 * x;
+  end f;
+  R r;
+  Real z;
+equation
+  (r, z) = f(time);
+end R68eRB04;
+//// model: R68eRB05
+model R68eRB05
+  record R
+    Real a(start = 1);
+  end R;
+  function f
+    input R r;
+    output Real y;
+  algorithm
+    y := r.a;
+  end f;
+  Real y = f(R(time));
+end R68eRB05;
+//// model: R68eRB06
+model R68eRB06
+  record R
+    Real a = 1.5;
+    Boolean on = true;
+    String s = "x";
+  end R;
+  function f
+    input R r;
+    output Real y;
+  algorithm
+    y := if r.on then r.a else 0;
+  end f;
+  Real y = f(R(time, true, "z"));
+end R68eRB06;
+//// model: R68eRB07
+model R68eRB07
+  record R
+    Real a;
+  end R;
+  function f
+    input R r;
+    output Real y;
+  algorithm
+    y := r.a;
+  end f;
+  model M
+    Real y = f(R(time));
+  end M;
+  M m;
+end R68eRB07;
+//// model: R68eV02
+class B
+  function g
+    input Real u;
+    output Real v = u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y = g(x);
+  end f;
+end B;
+class C
+  extends B;
+  Real y = f(time);
+end C;
+model R68eV02
+  C c;
+end R68eV02;
+//// model: R68eV03
+class C
+  function m
+    input Real u;
+    output Real v = u + 3;
+  end m;
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := m(x) * 2;
+  end g;
+  function f2
+    extends g;
+  end f2;
+  Real z = f2(time);
+end C;
+model R68eV03
+  C c;
+end R68eV03;
+//// model: R68eV04
+package Pk
+  model C
+    function m
+      input Real u;
+      output Real v = u + 3;
+    end m;
+    function g
+      input Real x;
+      output Real y;
+    algorithm
+      y := m(x) * 2;
+    end g;
+    function f2
+      extends Pk.C.g;
+    end f2;
+    Real z = f2(time);
+  end C;
+end Pk;
+model R68eV04
+  Pk.C c;
+end R68eV04;
+//// model: R68eV05
+class C
+  function m
+    input Real u;
+    output Real v = u + 3;
+  end m;
+  function g
+    input Real x;
+    output Real y;
+  algorithm
+    y := m(x) * 2;
+  end g;
+  function f2
+    extends C.g;
+  end f2;
+  Real z = f2(time);
+end C;
+model R68eV05
+  C c;
+  Real w = c.m(time);
+end R68eV05;
+//// model: A2M02
+class H
+  function g
+    input Real u;
+    output Real v = u + 1;
+  end g;
+end H;
+class B
+  extends H;
+  function f
+    input Real x;
+    output Real y = g(x);
+  end f;
+end B;
+class C
+  extends B;
+end C;
+model A2M02
+  C c;
+  Real y = c.f(time);
+end A2M02;
+//// model: A2S01
+class B
+  function g
+    input Real u;
+    output Real v = u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y = g(x);
+  end f;
+end B;
+class C = B;
+model A2S01
+  C c;
+  Real y = c.f(time);
+end A2S01;
+//// model: A2S02
+class B
+  parameter Real p = 1;
+  function g
+    input Real u;
+    output Real v = u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y = g(x);
+  end f;
+end B;
+class C = B(p = 2);
+model A2S02
+  C c;
+  Real y = c.f(time);
+end A2S02;
+//// model: A2X02
+class B
+  constant Real k = 1;
+  function g
+    input Real u;
+    output Real v = u + k;
+  end g;
+  function f
+    input Real x;
+    output Real y = g(x);
+  end f;
+end B;
+class C
+  extends B(k = 3);
+end C;
+model A2X02
+  C c;
+  Real y = c.f(time);
+end A2X02;
+//// model: A2A01
+class B
+  function g
+    input Real u;
+    output Real v = u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y = g(x);
+  end f;
+end B;
+class C
+  extends B;
+end C;
+model A2A01
+  C c[2];
+  Real y = c[2].f(time);
+end A2A01;
+//// model: A2A02
+class B
+  function g
+    input Real u;
+    output Real v = u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y = g(x);
+  end f;
+end B;
+class C
+  extends B;
+end C;
+model M
+  C c;
+  Real y = c.f(time);
+end M;
+model A2A02
+  M m[2];
+end A2A02;
+//// model: A2R01
+class B
+  replaceable function g
+    input Real u;
+    output Real v = u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y = g(x);
+  end f;
+end B;
+function gg
+  input Real u;
+  output Real v = u + 10;
+end gg;
+class C
+  extends B(redeclare function g = gg);
+end C;
+model A2R01
+  C c;
+  Real y = c.f(time);
+end A2R01;
+//// model: A2R03
+class B
+  replaceable function g
+    input Real u;
+    output Real v = u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y = g(x);
+  end f;
+end B;
+class C
+  extends B;
+  redeclare function g
+    input Real u;
+    output Real v = u + 5;
+  end g;
+end C;
+model A2R03
+  C c;
+  Real y = c.f(time);
+end A2R03;
+//// model: A2T01
+class B
+  record R
+    Real a;
+  end R;
+  function f
+    input Real x;
+    output R r;
+  algorithm
+    r := R(x);
+  end f;
+end B;
+class C
+  extends B;
+end C;
+model A2T01
+  C c;
+  Real y = c.f(time).a;
+end A2T01;
+//// model: A2Q02
+model A2Q02
+  class B
+    function g
+      input Real u;
+      output Real v = u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y = g(x);
+    end f;
+  end B;
+  class C
+    extends B;
+  end C;
+  C c;
+  Real y = c.f(time);
+end A2Q02;
+//// model: A2E02
+class B
+  function g
+    input Real u;
+    output Real v = u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y = g(x);
+  end f;
+end B;
+class C
+  protected
+  extends B;
+end C;
+model A2E02
+  C c;
+  Real y = c.f(time);
+end A2E02;
+//// model: A2E04
+class B
+  function g
+    input Real u;
+    output Real v = u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y = g(x);
+  end f;
+end B;
+class C
+  extends B;
+  function f2
+    input Real x;
+    output Real y = g(x) + f(x);
+  end f2;
+end C;
+model A2E04
+  C c;
+  Real y = c.f2(time) + c.f(time);
+end A2E04;
+//// model: A2E05
+class B
+  function g
+    input Real u;
+    output Real v = u + 1;
+  end g;
+  function f
+    input Real x;
+    input Real k = g(1.0);
+    output Real y = x + k;
+  end f;
+end B;
+class C
+  extends B;
+end C;
+model A2E05
+  C c;
+  Real y = c.f(time);
+end A2E05;
+//// model: A2E07
+class B
+  function g
+    input Real u;
+    output Real v = u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := x;
+    if x > 10 then
+      print("big");
+    end if;
+    y := g(y);
+  end f;
+end B;
+class C
+  extends B;
+end C;
+model A2E07
+  C c;
+  Real y = c.f(time);
+end A2E07;
+//// model: A2E09
+class B
+  function g
+    input Real u;
+    output Real v = u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y = g(x);
+  end f;
+end B;
+class C
+  extends B;
+  Real z = f(time);
+end C;
+model A2E09
+  C c;
+  Real y = c.f(time);
+end A2E09;
+//// model: A2E10
+class B
+  function g
+    input Real u;
+    output Real v = u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y = g(x);
+  end f;
+end B;
+class C
+  extends B;
+end C;
+model A2E10
+  C c;
+  B b;
+  Real y = c.f(time) + b.f(time);
+end A2E10;
+//// model: A2B03
+partial function PF
+  input Real u;
+  output Real v;
+end PF;
+function app
+  input Real x;
+  input PF fn;
+  output Real y;
+algorithm
+  y := fn(x);
+end app;
+class B
+  function g
+    input Real u;
+    output Real v = u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y = app(x, g);
+  end f;
+end B;
+class C
+  extends B;
+end C;
+model A2B03
+  C c;
+  Real y = c.f(time);
+end A2B03;
+//// model: A2B05
+class B
+  type E = enumeration(one, two);
+  function g
+    input Real u;
+    input E e;
+    output Real v = if e == E.one then u else 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y = g(x, E.two);
+  end f;
+end B;
+class C
+  extends B;
+end C;
+model A2B05
+  C c;
+  Real y = c.f(time);
+end A2B05;
+//// model: A2B06
+class B
+  function g
+    input Real u;
+    output Real v = u + 1;
+  end g;
+  function f
+    import B.g;
+    input Real x;
+    output Real y = g(x);
+  end f;
+end B;
+class C
+  extends B;
+end C;
+model A2B06
+  C c;
+  Real y = c.f(time);
+end A2B06;
+//// model: A2B17
+class B
+  function g
+    input Real u;
+    output Real v = u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y = g(x);
+  end f;
+end B;
+class C
+  extends B;
+  Real g;
+end C;
+model A2B17
+  C c;
+  Real y = c.f(time);
+end A2B17;
+//// model: A2B19
+class B
+  function g
+    input Real u;
+    output Real v = u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y = g(x);
+  end f;
+end B;
+class C
+  extends B;
+end C;
+model M
+  C c;
+end M;
+model A2B19
+  M m(c(g(u = 2)));
+  Real y = m.c.f(time);
+end A2B19;
+//// model: A2B21
+class B
+  constant Real k[2] = {1, 2};
+  function g
+    input Real u;
+    input Integer i;
+    output Real v = u + k[i];
+  end g;
+  function f
+    input Real x;
+    input Integer i;
+    output Real y = g(x, i);
+  end f;
+end B;
+class C
+  extends B;
+end C;
+model A2B21
+  C c;
+  Integer i = if time > 0.5 then 1 else 2;
+  Real y = c.f(time, i);
+end A2B21;
+//// model: RVA2H1
+class H
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+end H;
+class B
+  extends H;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+end B;
+class C
+  extends B;
+end C;
+model RVA2H1
+  C c;
+  Real y = c.f(time);
+end RVA2H1;
+//// model: RVA2K1
+class H
+  constant Real k = 1;
+end H;
+class B
+  extends H;
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := k * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+end B;
+class C
+  extends B;
+end C;
+model RVA2K1
+  C c(k = 3);
+  Real y = c.f(time);
+end RVA2K1;
+//// model: RVA2E1
+class B
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := 2 * u;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x) + 1;
+  end f;
+end B;
+class C
+  extends B;
+end C;
+model RVA2E1
+  extends C;
+  C c;
+  Real y = c.f(time);
+  Real z = f(time);
+end RVA2E1;
+//// model: A3X01
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := h(x) + g(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model A3X01
+  S s;
+end A3X01;
+//// model: A3X02
+model T
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  model S
+    class H
+      function g
+        input Real u;
+        output Real v;
+      algorithm
+        v := u + 1;
+      end g;
+      function f
+        input Real x;
+        output Real y;
+      algorithm
+        y := g(x) + h(x);
+      end f;
+      Real y = f(time);
+    end H;
+    H c;
+  end S;
+  S s;
+end T;
+model A3X02
+  T t;
+end A3X02;
+//// model: A3X03
+model SB
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+end SB;
+model S
+  extends SB;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model A3X03
+  S s;
+end A3X03;
+//// model: A3X04
+package S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  model H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+end S;
+model A3X04
+  S.H c;
+end A3X04;
+//// model: A3X05
+model S
+  replaceable function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model A3X05
+  S s;
+end A3X05;
+//// model: A3X06
+function h2
+  input Real u;
+  output Real v;
+algorithm
+  v := u * 20;
+end h2;
+model S
+  replaceable function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model A3X06
+  S s(redeclare function h = h2);
+end A3X06;
+//// model: A3X07
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model S2
+  extends S;
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 30;
+  end h;
+end S2;
+model A3X07
+  S2 s;
+end A3X07;
+//// model: A3X09
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model S2 = S;
+model A3X09
+  S2 s;
+end A3X09;
+//// model: A3X10
+package P
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+end P;
+model S
+  import P.h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model A3X10
+  S s;
+end A3X10;
+//// model: A3X11
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  encapsulated class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model A3X11
+  S s;
+end A3X11;
+//// model: A3X12
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u / 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) * 10;
+      annotation(inverse(x = h(y)));
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model A3X12
+  S s;
+end A3X12;
+//// model: A3X13
+model S
+  partial function PF
+    input Real u;
+    output Real v;
+  end PF;
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  function app
+    input PF p;
+    input Real x;
+    output Real y;
+  algorithm
+    y := p(x);
+  end app;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + app(h, x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model A3X13
+  S s;
+end A3X13;
+//// model: A3X14
+model S
+  function k
+    input Real u;
+    output Real v;
+  algorithm
+    v := u - 1;
+  end k;
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := k(u) * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model A3X14
+  extends S;
+end A3X14;
+//// model: A3X15
+model S
+  function k
+    input Real u;
+    output Real v;
+  algorithm
+    v := u - 1;
+  end k;
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := k(u) * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model A3X15
+  S s;
+end A3X15;
+//// model: A3X16
+model S
+  package Q
+    function k
+      input Real u;
+      output Real v;
+    algorithm
+      v := u - 1;
+    end k;
+    function h
+      input Real u;
+      output Real v;
+    algorithm
+      v := k(u) * 10;
+    end h;
+  end Q;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + Q.h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model A3X16
+  S s;
+end A3X16;
+//// model: A3X17
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model A3X17
+  S s[2];
+end A3X17;
+//// model: A3X20
+impure function ti
+  input Real u;
+  output Real v;
+algorithm
+  v := u;
+end ti;
+function q
+  input Real x;
+  output Real y;
+protected
+  Real t = 1 + ti(x);
+algorithm
+  y := t;
+end q;
+class H
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x);
+  end f;
+  Real y = f(time);
+end H;
+model A3X20
+  H c;
+  Real z = q(time);
+end A3X20;
+//// model: A3X21
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    function f2
+      input Real x;
+      output Real y;
+    algorithm
+      y := h(x);
+    end f2;
+    Real y = f(time) + f2(time);
+  end H;
+  H c;
+end S;
+model A3X21
+  S s;
+end A3X21;
+//// model: A3X22
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    function f2
+      input Real x;
+      output Real y;
+    algorithm
+      y := h(x);
+    end f2;
+    Real y = f2(time) + f(time);
+  end H;
+  H c;
+end S;
+model A3X22
+  S s;
+end A3X22;
+//// model: A3X26
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  model W
+    class H
+      function g
+        input Real u;
+        output Real v;
+      algorithm
+        v := u + 1;
+      end g;
+      function f
+        input Real x;
+        output Real y;
+      algorithm
+        y := g(x) + h(x);
+      end f;
+      Real y = f(time);
+    end H;
+    H c;
+  end W;
+  W w;
+end S;
+model A3X26
+  S s;
+end A3X26;
+//// model: A3X27
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model S2
+  extends S;
+end S2;
+model A3X27
+  extends S2;
+end A3X27;
+//// model: A3X29
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model T
+  S s;
+end T;
+model A3X29
+  T t;
+end A3X29;
+//// model: A3X30
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + S.h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model A3X30
+  S s;
+end A3X30;
+//// model: A3X31
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time) + h(time);
+  end H;
+  H c;
+end S;
+model A3X31
+  S s;
+end A3X31;
+//// model: A3X32
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+  Real z = h(time);
+end S;
+model A3X32
+  S s;
+end A3X32;
+//// model: A3X33
+model S
+  function h
+    input Real u;
+    output Real v;
+  protected
+    Real t = 1 + ti(u);
+  algorithm
+    v := u * 10 + t;
+  end h;
+  impure function ti
+    input Real u;
+    output Real v;
+  algorithm
+    v := u;
+  end ti;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model A3X33
+  S s;
+end A3X33;
+//// model: A3X34
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+      annotation(derivative = df);
+    end f;
+    function df
+      input Real x;
+      input Real dx;
+      output Real dy;
+    algorithm
+      dy := h(dx);
+    end df;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model A3X34
+  S s;
+end A3X34;
+//// model: A3Y01
+class B
+  function g
+    input Real u;
+    output Real v = u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y = g(x);
+  end f;
+end B;
+class C
+  extends B;
+  function g2
+    input Real u;
+    output Real v = u + 2;
+  end g2;
+end C;
+model A3Y01
+  C c;
+  B b;
+  Real y = b.f(time) + c.f(time) + c.g2(1);
+end A3Y01;
+//// model: A3Y02
+class B
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x);
+  end f;
+end B;
+class C
+  extends B;
+end C;
+model A3Y02
+  B b;
+  C c;
+  Real y1 = b.f(time);
+  Real y2 = c.f(time);
+end A3Y02;
+//// model: A3Y03
+class B
+  record R
+    Real a;
+  end R;
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x);
+  end f;
+end B;
+class C
+  extends B;
+end C;
+model A3Y03
+  B b;
+  C c;
+  Real y1 = b.f(time);
+  Real y2 = c.f(time);
+end A3Y03;
+//// model: A3Y04
+class A
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x);
+  end f;
+end A;
+class B
+  extends A;
+end B;
+class C
+  extends B;
+end C;
+model A3Y04
+  A a;
+  C c;
+  Real y1 = a.f(time);
+  Real y2 = c.f(time);
+end A3Y04;
+//// model: A3Y05
+class B
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x);
+  end f;
+end B;
+class C
+  extends B;
+end C;
+class H
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := u + 5;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := g(x);
+  end f;
+  Real y = f(time);
+end H;
+model A3Y05
+  H h;
+  C c;
+  Real y2 = c.f(time);
+end A3Y05;
+//// model: A3C01
+class C
+  function sin
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 2;
+  end sin;
+  function f
+    input Real x;
+    output Real y;
+  algorithm
+    y := sin(x);
+  end f;
+  Real y = f(time);
+end C;
+model A3C01
+  C c;
+algorithm
+  print("x");
+end A3C01;
+//// model: A3C02
+model A3C02
+  record R
+    Real a = 1;
+  end R;
+  function abs
+    input Real x;
+    input R r = R(2);
+    output Real y;
+  algorithm
+    y := x * r.a;
+  end abs;
+  Real y = abs(time);
+algorithm
+  print("x");
+end A3C02;
+//// model: A3C03
+function q
+  input Real x;
+  output Real y;
+algorithm
+  y := x * 3;
+end q;
+class H
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  protected
+    Real t = 1 + q(x);
+  algorithm
+    y := g(x) + t;
+  end f;
+  Real y = f(time);
+end H;
+model A3C03
+  H c;
+end A3C03;
+//// model: A3C04
+function q
+  input Real x;
+  output Real y;
+algorithm
+  y := sin(x) * 3;
+end q;
+class H
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  protected
+    Real t = 1 + q(x);
+  algorithm
+    y := g(x) + t;
+  end f;
+  Real y = f(time);
+end H;
+model A3C04
+  H c;
+end A3C04;
+//// model: A3C05
+model S
+  constant Real k = 4;
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * k;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model A3C05
+  S s;
+end A3C05;
+//// model: A3C06
+model S
+  record R
+    Real a;
+  end R;
+  function h
+    input Real u;
+    output Real v;
+  protected
+    R r;
+  algorithm
+    r := R(u);
+    v := r.a * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model A3C06
+  S s;
+end A3C06;
+//// model: A3C07
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model A3C07
+  S s;
+algorithm
+  print("x");
+end A3C07;
+//// model: A3G03
+model A3G03
+  record R
+    Real a = 1;
+  end R;
+  partial function PF
+    input Real x;
+    output Real y;
+  end PF;
+  function g
+    input Real x;
+    input R r = R(2);
+    output Real y;
+  algorithm
+    y := x * r.a;
+  end g;
+  function max
+    input PF p;
+    input Real x;
+    output Real y;
+  algorithm
+    y := p(x);
+  end max;
+  Real y = max(g, time);
+end A3G03;
+//// model: A3G04
+model A3G04
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    replaceable function sin
+      input Real u;
+      output Real v;
+    algorithm
+      v := u * 3;
+    end sin;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := sin(x) + g(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end A3G04;
+//// model: RVX01
+model S
+  function abs
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 3;
+  end abs;
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := abs(u) * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model RVX01
+  extends S;
+end RVX01;
+//// model: RVX02
+model S
+  function abs
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 3;
+  end abs;
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := abs(u) * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model RVX02
+  S s;
+end RVX02;
+//// model: RVX03
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+end S;
+model RVX03
+  S.H c;
+end RVX03;
+//// model: RVX04
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  package Q
+    class H
+      function g
+        input Real u;
+        output Real v;
+      algorithm
+        v := u + 1;
+      end g;
+      function f
+        input Real x;
+        output Real y;
+      algorithm
+        y := g(x) + h(x);
+      end f;
+      Real y = f(time);
+    end H;
+  end Q;
+  Q.H c;
+end S;
+model RVX04
+  S s;
+end RVX04;
+//// model: RVX05
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model T
+  S s;
+end T;
+model RVX05 = T;
+//// model: RVX06
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  class W
+    H c;
+  end W;
+  W w;
+end S;
+model RVX06
+  S s;
+end RVX06;
+//// model: RVX07
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class B
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := h(x);
+    end f;
+  end B;
+  class H
+    extends B;
+    Real y = f(time);
+  end H;
+  class K
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y = f(time);
+  end K;
+  K k;
+  H c;
+end S;
+model RVX07
+  S s;
+end RVX07;
+//// model: RVX08
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model RVX08
+  model S2
+    extends S;
+  end S2;
+  S2 s;
+end RVX08;
+//// model: RVC01
+model RVC01
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    replaceable function sin
+      input Real u;
+      output Real v;
+    algorithm
+      v := u * 3;
+    end sin;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + sin(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end RVC01;
+//// model: RVC02
+model RVC02
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    impure function abs
+      input Real u;
+      output Real v;
+    algorithm
+      v := u * 3;
+    end abs;
+    function f
+      input Real x;
+      output Real y;
+    protected
+      Real t = 1 + abs(x);
+    algorithm
+      y := g(x) + t;
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end RVC02;
+//// model: RVI01
+package P
+  impure function ti
+    input Real x;
+    output Real y;
+  algorithm
+    y := x;
+  end ti;
+  record R
+    Real a = ti(1);
+  end R;
+end P;
+model RVI01
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    protected
+      P.R r;
+    algorithm
+      y := g(x) + r.a;
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end RVI01;
+//// model: RVI02
+model RVI02
+  impure function ti
+    input Real x;
+    output Real y;
+  algorithm
+    y := x;
+  end ti;
+  record R2
+    Real b = 1 + ti(1);
+  end R2;
+  record R
+    R2 q;
+  end R;
+  function k
+    input Real x;
+    output Real y;
+  protected
+    R r;
+  algorithm
+    y := x + r.q.b;
+  end k;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+  Real z = k(time);
+end RVI02;
+//// model: RVI03
+model RVI03
+  impure function ti
+    input Real x;
+    output Real y;
+  algorithm
+    y := x;
+  end ti;
+  record R
+    Real a = 1;
+  end R;
+  function k
+    input Real x;
+    output Real y;
+  protected
+    R r(a = 1 + ti(x));
+  algorithm
+    y := x + r.a;
+  end k;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+  Real z = k(time);
+end RVI03;
+//// model: RVI04
+package P
+  impure function ti
+    input Real x;
+    output Real y;
+  algorithm
+    y := x;
+  end ti;
+end P;
+model RVI04
+  function k
+    input Real x;
+    output Real y;
+  protected
+    Real t = 1 + P.ti(x);
+  algorithm
+    y := x + t;
+  end k;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+  Real z = k(time);
+end RVI04;
+//// model: RVJ01
+package P
+  impure function ti
+    input Real x;
+    output Real y;
+  algorithm
+    y := x;
+  end ti;
+  operator record C
+    Real re;
+    encapsulated operator 'constructor'
+      import P.C;
+      import P.ti;
+      function fromReal
+        input Real r;
+        output C c;
+      protected
+        Real t = 1 + ti(r);
+      algorithm
+        c.re := r + t;
+      end fromReal;
+    end 'constructor';
+  end C;
+end P;
+model RVJ01
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+  P.C z = P.C(2.0);
+end RVJ01;
+//// model: RVJ02
+model RVJ02
+  impure function ti
+    input Real x;
+    output Real y;
+  algorithm
+    y := x;
+  end ti;
+  function q
+    input Real x;
+    output Real y;
+  protected
+    Real t = 1 + ti(x);
+  algorithm
+    y := x + t;
+  end q;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+  Real z = q(2.0);
+end RVJ02;
+//// model: RVJ03
+model S
+  constant Real k = 2;
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * k;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model RVJ03
+  extends S(k = 7);
+end RVJ03;
+//// model: RVK01
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class B
+    function h
+      input Real u;
+      output Real v;
+    algorithm
+      v := u * 20;
+    end h;
+  end B;
+  class H
+    extends B;
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model RVK01
+  S s;
+end RVK01;
+//// model: RVK02
+package P
+  model B
+    function h
+      input Real u;
+      output Real v;
+    algorithm
+      v := u * 20;
+    end h;
+  end B;
+end P;
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    extends P.B;
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model RVK02
+  S s;
+end RVK02;
+//// model: RVK03
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model RVK03
+  model S3 = S;
+  S3 s;
+end RVK03;
+//// model: RVL01
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  function f1
+    input Real x;
+    input Real a = h(x);
+    output Real y;
+  end f1;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f2
+      extends f1;
+    algorithm
+      y := g(x) + a;
+    end f2;
+    Real y = f2(time);
+  end H;
+  H c;
+end S;
+model RVL01
+  S s;
+end RVL01;
+//// model: RVL02
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  function f1
+    input Real x;
+    output Real y;
+  protected
+    Real a = h(x);
+  end f1;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f2
+      extends f1;
+    algorithm
+      y := g(x) + a;
+    end f2;
+    Real y = f2(time);
+  end H;
+  H c;
+end S;
+model RVL02
+  S s;
+end RVL02;
+//// model: XE01
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model XE01
+  S s;
+end XE01;
+//// model: XE08
+impure function ti
+  input Real u;
+  output Real v;
+algorithm
+  v := u;
+end ti;
+class H
+  function g
+    input Real u;
+    output Real v;
+  algorithm
+    v := u + 1;
+  end g;
+  function f
+    input Real x;
+    output Real y;
+  protected
+    Real t = 1 + ti(x);
+  algorithm
+    y := g(x) + t;
+  end f;
+  Real y = f(time);
+end H;
+model XE08
+  H c;
+end XE08;
+//// model: XE01c
+package P
+  model S
+    function h
+      input Real u;
+      output Real v;
+    algorithm
+      v := u * 10;
+    end h;
+    class H
+      function g
+        input Real u;
+        output Real v;
+      algorithm
+        v := u + 1;
+      end g;
+      function f
+        input Real x;
+        output Real y;
+      algorithm
+        y := g(x) + h(x);
+      end f;
+      Real y = f(time);
+    end H;
+    H c;
+  end S;
+end P;
+model XE01c
+  P.S s;
+end XE01c;
+//// model: XE01d
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+      annotation(derivative = h);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model XE01d
+  S s;
+end XE01d;
+//// model: XE01e
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  model H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := h(u) + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model XE01e
+  S s;
+end XE01e;
+//// model: XE01f
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model XE01f
+  S s1, s2;
+end XE01f;
+//// model: XE01g
+model S
+  constant Real k = 2;
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * k;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model XE01g
+  S s(k = 7);
+end XE01g;
+//// model: XE01h
+model S
+  package Q
+    function h
+      input Real u;
+      output Real v;
+    algorithm
+      v := u * 10;
+    end h;
+  end Q;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + Q.h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model XE01h
+  S s;
+end XE01h;
+//// model: XE11
+model S
+  type E = enumeration(a, b);
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      input E e;
+      output Real y;
+    algorithm
+      y := if e == E.a then g(x) else x;
+    end f;
+    Real y = f(time, E.b);
+  end H;
+  H c;
+end S;
+model XE11
+  S s;
+end XE11;
+//// model: XE12
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model XE12
+  extends S;
+end XE12;
+//// model: XE13
+model S
+  type T = Real(unit = "m");
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input T x;
+      output T y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model XE13
+  S s;
+end XE13;
+//// model: XE14
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y = f(time) + h(time);
+  end H;
+  H c;
+end S;
+model XE14
+  S s;
+end XE14;
+//// model: XE15
+model S
+  constant Real k = 3;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + k;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x);
+    end f;
+    Real y = f(time);
+  end H;
+  H c;
+end S;
+model XE15
+  S s;
+end XE15;
+//// model: XE16
+model S
+  function h
+    input Real u;
+    output Real v;
+  algorithm
+    v := u * 10;
+  end h;
+  class H
+    function g
+      input Real u;
+      output Real v;
+    algorithm
+      v := u + 1;
+    end g;
+    function f
+      input Real x;
+      output Real y;
+    algorithm
+      y := g(x) + h(x);
+    end f;
+  end H;
+  H c;
+  Real y = c.f(time);
+end S;
+model XE16
+  S s;
+end XE16;
