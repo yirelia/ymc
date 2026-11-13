@@ -38,6 +38,34 @@ const std::vector<BuiltinEnum>& builtin_enum_table() {
                                              {"AssertionLevel", {"warning", "error"}}};
   return t;
 }
+
+// 不用查名就能定值的表达式：字面量，及其上的一元 / 二元运算、括号（单元素 Tuple，见 parser）、字面量数组 / 矩阵；`= break` 也不查名
+//（68f 收窄 N3 用，见 inst_class 的 F1）。
+bool literal_tree(const Absyn& A, Id<Exp> e) {
+  if (!e.is_valid()) return false;
+  const Exp& x = A.exps[e];
+  switch (x.kind) {
+    case ExpKind::IntLit: case ExpKind::RealLit: case ExpKind::BoolLit: case ExpKind::StringLit: case ExpKind::Break: return true;
+    case ExpKind::Tuple: return x.args.size() == 1 && literal_tree(A, x.args[0]);
+    case ExpKind::Unary: return literal_tree(A, x.a);
+    case ExpKind::Binary: return literal_tree(A, x.a) && literal_tree(A, x.b);
+    case ExpKind::Array: case ExpKind::Matrix:
+      for (Id<Exp> a : x.args)
+        if (!literal_tree(A, a)) return false;
+      return true;
+    default: return false;
+  }
+}
+
+// 修饰树里的绑定全是 literal_tree（逐层子修饰）；不是普通修饰（重声明 / break）的不算。
+bool literal_only_mod(const Inst& I, Id<SMod> m) {
+  const SMod& sm = I.scode.mods[m];
+  if (sm.kind != SModKind::Mod) return false;
+  if (sm.binding.is_valid() && !literal_tree(I.absyn, sm.binding)) return false;
+  for (const SSubMod& s : sm.subs)
+    if (!literal_only_mod(I, s.mod)) return false;
+  return true;
+}
 }  // namespace
 
 // -------------------------------------------------------------- 内建
@@ -281,7 +309,8 @@ NodeId Instantiator::class_in(NodeId cls, ClassTreeId tid, Symbol name, NodeId o
 // 里查 BaseProperties 等于查 P.Water 的（ADR-007 第 2 阶段 65a，PK 探针）。短类带修饰的：omc 的基类是带着修饰实例化出来的那份
 //（包常量 / 类重声明随之改），ymc 的基类节点是共享的未改那份 → SKIP。partial：链上有一层是 partial（派生自 partial 类的短类
 // 本身也是 partial，expandClassDerived NFInst.mo:1046-1049）。
-NodeId Instantiator::through_short_classes(NodeId cls, bool& partial, std::vector<std::pair<Id<SMod>, NodeId>>* mods) {
+NodeId Instantiator::through_short_classes(NodeId cls, bool& partial, std::vector<std::pair<Id<SMod>, NodeId>>* mods,
+                                           std::vector<std::pair<NodeId, std::size_t>>* layers) {
   NodeId cur = cls;
   for (int guard = 0; guard < 32; ++guard) {
     if (!cur.is_valid() || I_.nodes[cur].is_empty() || I_.nodes[cur].kind != NodeKind::Class || !I_.nodes[cur].def.is_valid())
@@ -299,7 +328,11 @@ NodeId Instantiator::through_short_classes(NodeId cls, bool& partial, std::vecto
       mods->insert(mods->end(), cc.begin(), cc.end());
       return true;
     };
-    if (ce.kind != SElementKind::Class || ce.def.kind != SClassDefKind::Derived) return take_cc() ? cur : Inst::empty_node();
+    if (ce.kind != SElementKind::Class || ce.def.kind != SClassDefKind::Derived) {
+      if (!take_cc()) return Inst::empty_node();
+      if (layers) layers->push_back({cur, mods ? mods->size() : 0});
+      return cur;
+    }
     if (ce.def.derived_mod.is_valid()) {
       const SMod& dm = I_.scode.mods[ce.def.derived_mod];
       if (!dm.subs.empty() || dm.binding.is_valid()) {
@@ -311,6 +344,7 @@ NodeId Instantiator::through_short_classes(NodeId cls, bool& partial, std::vecto
       }
     }
     if (!take_cc()) return Inst::empty_node();
+    if (layers) layers->push_back({cur, mods ? mods->size() : 0});
     // 递归的短类定义（`class A type Env = Env.Env; …`：基类名查回自己，others/RecursiveShort）→ omc 报 "Recursive short class
     // definition"；正在解析的短类再被解析到 → SKIP（此前无界递归、栈溢出）。
     if (std::find(short_active_.begin(), short_active_.end(), cur.raw) != short_active_.end()) {
@@ -437,15 +471,65 @@ bool class_body_illegal(const Inst& I, const SElement& c) {
 // PROCESSING 返回节点本身）→ empty，调用方照定义的类树查。实例及其各层基类实例记进 Inst::package_instances（见那里）。
 NodeId Instantiator::inst_package(NodeId cls) {
   if (const auto it = pkg_cache_.find(cls.raw); it != pkg_cache_.end()) return it->second;
+  struct DepthGuard {
+    int& d;
+    explicit DepthGuard(int& x) : d(x) { ++d; }
+    ~DepthGuard() { --d; }
+  } depth_guard(pkg_depth_);
   // 挂了类修饰的类（`A a(B(i = 4))` 后经 `B.i` 查）：omc 的包实例带着修饰，ymc 未做 → SKIP（不按未改的查，免得静默取声明值）。
+  // （68f：const15 族整个不放，用户 2026-11-12 定；只含类重声明的新形态见 CM-4。）
+  // 被改的类是 model、修饰全是只含类重声明的（ModClass4 的 `B(redeclare model C = D)`、RICM 的 `B2(redeclare type P = Integer)`，§6.4
+  // CM-4）：omc 的包实例带着修饰建（instPackage → instantiate → instClass 把类节点自己的修饰当外层修饰并进来，NFInst.mo:1360 /
+  // :1158-1170 v1.25.0）——排在短类修饰最前（类节点上的修饰 > 短类自己的修饰，:1205-1217），交给下面的短类修饰代码（:482 收重声明）。
+  std::vector<std::pair<Id<SMod>, NodeId>> cls_mods;
   if (I_.class_modded.count(cls.raw)) {
-    mark_unsupported("lookup into modified class", std::string(I_.interner.str(I_.nodes[cls].name)));
-    return Inst::empty_node();
+    const auto it = I_.class_mods.find(cls.raw);
+    bool ok = it != I_.class_mods.end() && !it->second.empty();
+    if (ok)
+      for (const auto& [m, sc] : it->second) ok = ok && redecl_only_class_mod(I_.nodes[cls].def, m);
+    if (!ok) {
+      mark_unsupported("lookup into modified class", std::string(I_.interner.str(I_.nodes[cls].name)));
+      return Inst::empty_node();
+    }
+    cls_mods = it->second;   // 拷贝
   }
   pkg_cache_[cls.raw] = Inst::empty_node();
   bool partial = false;
   std::vector<std::pair<Id<SMod>, NodeId>> short_mods;   // 链上短类的修饰（外层在前）
-  const NodeId l = through_short_classes(cls, partial, &short_mods);
+  std::vector<std::pair<NodeId, std::size_t>> layers;
+  const NodeId l = through_short_classes(cls, partial, &short_mods, &layers);
+  // 链上节点（不含 cls 本身）挂的类修饰（§6.4 CM-5，ModClass6 的 `D.C`：D = B(C(x = 2))，B 被 `extends A(B(C(z = 2)))` 预挂过）：omc 的
+  // instClassDef EXPANDED_DERIVED 支逐层并修饰——短类节点上的类修饰 > 短类自己的修饰 > 基类节点上的类修饰 > 基类自己的修饰（NFInst.mo:
+  // 1205-1217 v1.25.0），所以 n 的类修饰插在 n 自己那层之后。只认本桶的新形态；链上只有底线 plain 形态的不动（底线行为）；两者混着、或别的
+  // 形态 → SKIP。
+  {
+    bool any_new = false, any_plain = false, other = false;
+    for (const auto& [n, at] : layers) {
+      if (n == cls || !I_.class_modded.count(n.raw)) continue;
+      const auto it = I_.class_mods.find(n.raw);
+      if (it == I_.class_mods.end()) continue;
+      bool all_plain = true, all_new = true;
+      for (const auto& [m, sc] : it->second) {
+        const bool pl = plain_class_mod(n, m);
+        all_plain = all_plain && pl;
+        all_new = all_new && !pl && new_class_mod(I_.nodes[n].def, m);
+      }
+      if (all_plain) any_plain = true;
+      else if (all_new) any_new = true;
+      else other = true;
+    }
+    if (other || (any_new && any_plain)) {
+      mark_unsupported("class modifier form", std::string(I_.interner.str(I_.nodes[cls].name)));
+      return Inst::empty_node();
+    }
+    if (any_new)
+      for (auto it = layers.rbegin(); it != layers.rend(); ++it) {   // 从后往前插，前面的下标不动
+        if (it->first == cls || !I_.class_modded.count(it->first.raw)) continue;
+        const std::vector<std::pair<Id<SMod>, NodeId>> v = I_.class_mods[it->first.raw];   // 拷贝
+        short_mods.insert(short_mods.begin() + static_cast<std::ptrdiff_t>(it->second), v.begin(), v.end());
+      }
+  }
+  short_mods.insert(short_mods.begin(), cls_mods.begin(), cls_mods.end());
   if (!l.is_valid() || I_.nodes[l].is_empty() || partial || !I_.nodes[l].def.is_valid() ||
       I_.scode.elems[I_.nodes[l].def].kind != SElementKind::Class ||
       I_.scode.elems[I_.nodes[l].def].def.kind != SClassDefKind::Parts)
@@ -508,6 +592,7 @@ NodeId Instantiator::inst_package(NodeId cls) {
         std::vector<std::pair<Id<SMod>, NodeId>>& v = I_.class_mods[k.raw];
         v.insert(v.begin(), {s.mod, it->second});
         I_.class_modded.insert(k.raw);
+        posthoc_cmods_.insert(s.mod.raw);   // 事后挂（见 posthoc_cmods_）
         apply_class_mod(inst, k, s.mod, it->second, 0);
       }
     }
@@ -587,6 +672,24 @@ NodeId Instantiator::class_extends_builtin(NodeId cls) {
   return {};
 }
 
+bool Instantiator::bases_class_modded(NodeId cls, int depth) {
+  if (depth > 32 || !cls.is_valid() || I_.nodes[cls].is_empty() || I_.nodes[cls].kind != NodeKind::Class ||
+      !I_.nodes[cls].cls.is_valid() || !I_.nodes[cls].def.is_valid() || I_.scode.elems[I_.nodes[cls].def].kind != SElementKind::Class)
+    return false;
+  const SClassDefKind dk = I_.scode.elems[I_.nodes[cls].def].def.kind;
+  if (dk != SClassDefKind::Parts && dk != SClassDefKind::ClassExtends) return false;   // 只有长类有 extends
+  if (I_.node_class(cls).state == ClassState::NotInstantiated) partial_inst(cls);
+  if (I_.node_class(cls).state == ClassState::PartialClass) expand(cls);
+  const ClassTreeId t = I_.node_class(cls).tree;
+  if (!t.is_valid()) return false;
+  const std::vector<NodeId> named = I_.trees[t].ext_named;   // 拷贝（递归会扩 arena）
+  for (NodeId n : named) {
+    if (!n.is_valid() || I_.nodes[n].is_empty()) continue;
+    if ((I_.class_modded.count(n.raw) && !preattached_class_mods(n).empty()) || bases_class_modded(n, depth + 1)) return true;
+  }
+  return false;
+}
+
 void Instantiator::mark_package_instance(NodeId inst) {
   if (!inst.is_valid() || I_.nodes[inst].is_empty() || !I_.package_instances.insert(inst.raw).second) return;
   if (!I_.nodes[inst].cls.is_valid() || !I_.node_class(inst).tree.is_valid()) return;
@@ -620,7 +723,7 @@ NodeId Instantiator::lookup_class_name(const std::vector<Symbol>& path, NodeId s
     // PKP 探针：`P.PM.T x`、没被重声明的 `replaceable package M = PM` 里的 `M.T x` → omc "name lookup is not allowed in
     // partial classes" / "contains the definition of a partial class"）→ SKIP。omc 对自引用（首段是书写处的外层类本身）、
     // 要被 redeclare 换掉的元素不查，ymc 一律 SKIP（保守）。
-    if (partial) {
+    if (partial && !defer_partial("lookup in partial class", std::string(I_.interner.str(I_.nodes[cur].name)))) {
       mark_unsupported("lookup in partial class", std::string(I_.interner.str(I_.nodes[cur].name)));
       return Inst::empty_node();
     }
@@ -628,7 +731,15 @@ NodeId Instantiator::lookup_class_name(const std::vector<Symbol>& path, NodeId s
     // 的那份，看得到 extends 修饰改过的常量（Medium 包里经 `extends PartialMedium(nX = 2)` 继承的 MassFlowRate / ThermodynamicState，
     // PK 探针 PK4 / PK5）。定义节点照旧查定义的类树（同 SCode 查找；ponytail: omc 对每个进的类都 instPackage，ymc 先只做实例语境的）。
     if (in_instance_context(entered)) {
-      if (I_.class_modded.count(entered.raw)) {   // 挂了类修饰的类（见 inst_package）
+      // 挂了类修饰的类（见 inst_package）：model 上只含类重声明的（ModClass4 的 `B.C`、RICM 的 `B2.P`，§6.4 CM-3）走包实例。
+      auto redecl_only_all = [&]() {
+        const auto it = I_.class_mods.find(entered.raw);
+        if (it == I_.class_mods.end() || it->second.empty() || pkg_cache_.count(entered.raw)) return false;
+        for (const auto& [m, sc] : it->second)
+          if (!redecl_only_class_mod(I_.nodes[entered].def, m)) return false;
+        return true;
+      };
+      if (I_.class_modded.count(entered.raw) && !redecl_only_all()) {
         mark_unsupported("lookup into modified class", std::string(I_.interner.str(I_.nodes[entered].name)));
         return Inst::empty_node();
       }
@@ -856,6 +967,7 @@ void Instantiator::expand(NodeId cls) {
   const std::vector<NodeId> exts = I_.trees[tree_id].exts;   // 拷一份避免遍历中 arena 变动
   std::vector<NodeId> bases(exts.size(), Inst::empty_node());   // 各 extends 解析到的基类（记进 ext_bases，之后不重查）
   std::vector<const char*> short_gaps(exts.size(), nullptr);    // 见 extends_long_class
+  std::vector<NodeId> named(exts.size(), Inst::empty_node());   // extends 名直接查到的节点（见 ClassTree::ext_named）
   for (std::size_t xi = 0; xi < exts.size(); ++xi) {
     const SElement& ee = I_.scode.elems[I_.nodes[exts[xi]].def];
     // extends 带整体绑定 `extends A = expr` 不合法/未做；子修饰 `extends A(x=1)` 在 inst_class 合并（见下）。
@@ -901,6 +1013,7 @@ void Instantiator::expand(NodeId cls) {
       const Id<SElement> bd = I_.nodes[bn].def;
       if (bd.is_valid() && I_.scode.elems[bd].prefixes.is_replaceable) mark_unsupported("replaceable base class");
     }
+    if (!ce_ext_elems_.count(I_.nodes[exts[xi]].def.raw)) named[xi] = base;   // 顺短类链之前（F1）
     // 基类是短类：取链底的类（见 extends_long_class）。checkReplaceableBaseClass 只看名字的各段（上面），链上的 replaceable 不算
     //（scodeinst ExtendReplaceable4：`class B = A; extends B`，A 是 replaceable，omc 照收）。
     // settle：omc 在定义节点上展开了 cls（见 settled_classes_），它写的单段基类名同样落在定义节点上（查名从定义节点的类树走）；限定名经包实例，
@@ -1001,6 +1114,7 @@ void Instantiator::expand(NodeId cls) {
     }
   }
   I_.trees[tree_id].ext_bases = std::move(bases);
+  I_.trees[tree_id].ext_named = std::move(named);
   I_.trees[tree_id].ext_short_gaps = std::move(short_gaps);
   I_.trees[tree_id].state = TreeState::ExpandedTree;
 }
@@ -1245,6 +1359,8 @@ NodeId Instantiator::instantiate(NodeId def_node, NodeId parent, const ClassRede
   //   继承来的类等各基类实例化完换成基类实例里的（见 adopt_inherited_classes）。
   bool specialized = false;
   std::vector<std::uint32_t> replaced;   // 顶替掉的原类（记进 Inst::replaced_in）
+  std::vector<ClassMod> fwd_cmods;       // 目标不是本地类的类修饰：交给 inst_class 转发（F7）
+  bool cmods_seen = false;
   if (const ClassTreeId dtid = I_.node_class(inst_node).tree; dtid.is_valid()) {
     const std::size_t nlocal = local_class_count(def_node);
     if (!I_.trees[dtid].classes.empty() || (redecls && !redecls->empty())) {
@@ -1252,8 +1368,45 @@ NodeId Instantiator::instantiate(NodeId def_node, NodeId parent, const ClassRede
       const SRestriction res = I_.scode.elems[I_.nodes[def_node].def].restriction;
       const bool typish = res == SRestriction::Type || res == SRestriction::OperatorRecord || res == SRestriction::Operator;
       const bool refresh = redecls && !redecls->empty();
+      // 挂了类修饰的实例里，受影响的本地类克隆重新展开（任务卡 T-S3-68f-redo §6.6 F6，§3.4-9）：omc 每次实例化都先克隆本地类
+      //（ClassTree.instantiate，NFClassTree.mo:518-524 v1.25.0），克隆第一次用到时才展开，基类名在本实例的类树里查，看得到本实例上挂的
+      // 类修饰；定义层查名进 A 时 omc 先 instPackage(A)，展开的是 A 的克隆（NFLookup.mo:700 / :767 → NFInst.mo:1360），A 定义节点上的
+      // 本地类不展开（Q05 / Q06 / Q07：先写 `A.E pre;`，`extends A(B(i = 4))` / `A a1(B(i = 4))` 里的 e 仍取 4）。ymc 的定义层查名直接
+      // 展开定义节点，克隆时复制了旧展开（基类指向定义节点）→ 这里重展开。名字集 N = 本实例收到的类修饰的目标名（本地挂的 + 要转发的）
+      // ∪ 本类各条 extends 修饰里类修饰子修饰的目标名；类体首段写到 N 中名字的本地类、以及写到这些类名的（迭代到不再增加）重展开，
+      // omc 也在定义节点上展开过的（settled_classes_）照共用（instance_class 里判）。其余本地类照旧共用定义层展开。
+      std::vector<bool> fresh_local(nlocal, false);
+      if (!refresh) {
+        ClassRedecls names;   // 只用名字
+        if (cmods)
+          for (const ClassMod& cm : *cmods) names.push_back({cm.name, NodeId{}});
+        const std::vector<Id<SElement>> delems = I_.scode.elems[I_.nodes[def_node].def].def.elements;   // 拷贝
+        for (Id<SElement> e : delems) {
+          if (I_.scode.elems[e].kind != SElementKind::Extends || !I_.scode.elems[e].mod.is_valid()) continue;
+          const std::vector<SSubMod> subs = I_.scode.mods[I_.scode.elems[e].mod].subs;   // 拷贝
+          for (const SSubMod& sm : subs) {
+            const SMod& m = I_.scode.mods[sm.mod];
+            if (m.kind != SModKind::Mod || m.binding.is_valid()) continue;
+            const Id<SElement> me = member_def(def_node, sm.ident, 0);
+            // 只算会预挂的新形态（底线 plain 形态事后挂，F7 退路第一步）。
+            if (me.is_valid() && I_.scode.elems[me].kind == SElementKind::Class && !plain_class_mod_def(me, sm.mod) &&
+                (redecl_only_class_mod(me, sm.mod) || nested_class_mod(me, sm.mod)))
+              names.push_back({sm.ident, NodeId{}});
+          }
+        }
+        for (std::size_t round = 0; !names.empty() && round <= nlocal; ++round) {
+          bool grew = false;
+          for (std::size_t i = 0; i < nlocal && i < t.classes.size(); ++i) {
+            if (fresh_local[i] || !mentions_any(I_.nodes[t.classes[i]].def, names, 0)) continue;
+            fresh_local[i] = true;
+            names.push_back({I_.nodes[t.classes[i]].name, NodeId{}});
+            grew = true;
+          }
+          if (!grew) break;
+        }
+      }
       for (std::size_t i = 0; i < nlocal && i < t.classes.size(); ++i)
-        t.classes[i] = instance_class(t.classes[i], inst_node, typish, refresh);
+        t.classes[i] = instance_class(t.classes[i], inst_node, typish, refresh || fresh_local[i]);
       if (redecls)
         for (const auto& [n, node] : *redecls) {
           const auto it = t.lookup.find(n);
@@ -1270,6 +1423,22 @@ NodeId Instantiator::instantiate(NodeId def_node, NodeId parent, const ClassRede
           rn.node_type.parent = inst_node;
           const NodeId rid = I_.nodes.add(std::move(rn));
           redecl_orig_[rid.raw] = t.classes[it->second.index];   // 顶替前的原类（class extends 的目标，见 inherited_in_bases）
+          // 顶替进来的元素自己身上的类修饰照带（任务卡 §6.6 F7 第 6 步，N4）：redeclareClass 取新类自己的修饰 Class.getModifier(rdcl_cls)，
+          // 与外来的 outerMod 合并（NFInst.mo:1735-1737 v1.25.0）、写回新类（:1787）。类修饰按节点记，不拷就丢在原节点上（RW3：D1 里元素级
+          // `redeclare model B = B5`，外层 `extends D1(B(i = 6))` 挂在 D1 的克隆上，A 拷出 rid 时带上 → b.i = 6；RW7 / RW8 组件修饰路线同理）。
+          // F7 退路第一步：只拷新形态的条目（只含类重声明 / 嵌套类修饰），拷完没有条目就不标 class_modded（plain 门已撤，标了经它查名会撞
+          // :631 / :441 变 SKIP）。底线 plain 形态（RW3 / RW7 / RW8）回到 B0。
+          if (const auto ncm = I_.class_mods.find(node.raw); ncm != I_.class_mods.end()) {
+            std::vector<std::pair<Id<SMod>, NodeId>> copy;
+            for (const auto& e : ncm->second)
+              if (!plain_class_mod(node, e.first) &&
+                  (redecl_only_class_mod(I_.nodes[node].def, e.first) || nested_class_mod(I_.nodes[node].def, e.first)))
+                copy.push_back(e);
+            if (!copy.empty()) {
+              I_.class_mods[rid.raw] = std::move(copy);
+              I_.class_modded.insert(rid.raw);
+            }
+          }
           // 修饰里的类重声明带约束修饰（redeclareClasses，NFInst.mo:1618-1646 v1.25.0；元素级重声明走 redeclareElements，没有这一步，CMR4）：
           // 新类自己 constrainedby 的修饰（Modifier.createConstrainingMod，NFModifier.mo:212-229，写修饰处求值）> 原声明的约束修饰
           //（getConstrainingMod :2064-2081 + SCodeUtil.getConstrainingMod :5273-5286：有 constrainedby 取它的，否则短类取自身的修饰，在被顶替的
@@ -1306,16 +1475,22 @@ NodeId Instantiator::instantiate(NodeId def_node, NodeId parent, const ClassRede
           t.classes_via_mod.erase(it->second.index);
           specialized = true;
         }
-      // 组件修饰里的类修饰（`A a(B(x = 2.0))`，见 inst_component）：挂到这个实例类树里那个本地类（克隆）上，组件循环里实例化它的
-      // 组件时并进类型修饰（applyModifier → mergeModifier，NFInst.mo:2116-2160 v1.25.0）。
-      if (cmods)
+      // 类修饰（组件修饰里的 `A a(B(x = 2.0))`，见 inst_component；extends 修饰里的，见 inst_class）：挂到这个实例类树里那个本地类
+      //（克隆，或已顶替进来的新类）上，组件循环里实例化它的组件时并进类型修饰（applyModifier → mergeModifier，NFInst.mo:2116-2160
+      // v1.25.0）。传入次序外层在前，按次序追加（F7）。目标不是本地类的（经 extends 继承来的）交给 inst_class 往对应的 extends 转发。
+      if (cmods) {
         for (const ClassMod& cm : *cmods) {
           const auto it = t.lookup.find(cm.name);
-          if (it == t.lookup.end() || it->second.kind != LEntry::Kind::Class || it->second.index >= nlocal) continue;
-          std::vector<std::pair<Id<SMod>, NodeId>>& v = I_.class_mods[t.classes[it->second.index].raw];
-          v.insert(v.begin(), {cm.mod, cm.scope});
+          if (it == t.lookup.end() || it->second.kind != LEntry::Kind::Class || it->second.index >= nlocal) {
+            fwd_cmods.push_back(cm);
+            continue;
+          }
+          YMC_ASSERT(t.state != TreeState::FlatTree, "instantiate: 类修饰须在实例的组件实例化之前挂上（F7）");
+          I_.class_mods[t.classes[it->second.index].raw].push_back({cm.mod, cm.scope});
           I_.class_modded.insert(t.classes[it->second.index].raw);
         }
+        cmods_seen = true;
+      }
       I_.node_class(inst_node).tree = I_.trees.add(std::move(t));
     }
   }
@@ -1323,7 +1498,8 @@ NodeId Instantiator::instantiate(NodeId def_node, NodeId parent, const ClassRede
     inst_redecls_[inst_node.raw] = *redecls;
     I_.replaced_in[inst_node.raw].insert(replaced.begin(), replaced.end());
   }
-  inst_class(inst_node, def_node, redecls);
+  if (cmods && !cmods_seen) fwd_cmods = *cmods;   // 定义没有类树 / 没有类：全部转发
+  inst_class(inst_node, def_node, redecls, fwd_cmods.empty() ? nullptr : &fwd_cmods);
   --depth_;
   return inst_node;
 }
@@ -1457,7 +1633,8 @@ void Instantiator::collect_class_redecls(Id<SMod> m, NodeId scope, NodeId base, 
   }
 }
 
-void Instantiator::inst_class(NodeId inst_node, NodeId def_node, const ClassRedecls* redecls) {
+void Instantiator::inst_class(NodeId inst_node, NodeId def_node, const ClassRedecls* redecls,
+                              const std::vector<ClassMod>* cmods) {
   ClassTreeId def_tree_id = I_.node_class(def_node).tree;
   // 传给各基类实例的类重声明集 = 外来的（更外层派生类的，优先）+ 本类自己的元素级类重声明（`redeclare model B … end B;` /
   // `redeclare model B = X;`，本类查找表里的本地项，词法作用域 = 本类，R15 §1）。class extends 形态（`redeclare model extends B`）
@@ -1497,10 +1674,23 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node, const ClassRede
   std::unordered_set<std::uint32_t> adopted;   // 已从某个基类实例换进来的继承类名（先到先得）
   ClassTree flat;
   flat.state = TreeState::FlatTree;
+  // 实例化序照 omc（任务卡 T-S3-68f-redo §6.9 S0）：instClassDef 先 instExtends 全部 extends（NFInst.mo:1181-1184 v1.25.0），再实例化
+  // 本地组件（:1186-1190）；instExtends 递归同样先 extends 后组件（:1489-1497）。包实例第一次在哪种语境建、继承类上的类修饰挂没挂好都看
+  // 这个次序（RV01-RV07、OR1）。输出次序不变（omc 也按声明序打，RV03 / OR11）：第一遍只处理 extends，基类组件按条存起来（拷贝 id，
+  // instantiate 会扩 arena）；第二遍按声明序拼回各条 extends 的组件、实例化本地组件。
+  std::vector<std::vector<NodeId>> ext_comps(I_.trees[def_tree_id].exts.size());
+  std::vector<bool> ext_done(I_.trees[def_tree_id].exts.size(), false);
+  struct AdoptRec {
+    std::uint32_t index;   // 实例类树里的类项下标
+    NodeId clone;          // adopt 换进来的基类实例里的类
+    bool via_mod;          // 换之前在 classes_via_mod 里
+  };
+  std::vector<std::vector<AdoptRec>> ext_adopted(I_.trees[def_tree_id].exts.size());   // 各条 extends 的 adopt 记录（收窄 N4）
   for (NodeId cn : def_comps) {
     if (I_.nodes[cn].kind == NodeKind::Ref) {
       // extends 就地展开：实例化基类，把它的 FlatTree 组件整段拼进来（R11 §3.3 instExtendsComps）。
       std::uint32_t ext_i = I_.nodes[cn].ext_index;
+      ext_done[ext_i] = true;
       NodeId ext = I_.trees[def_tree_id].exts[ext_i];
       const SElement& ee = I_.scode.elems[I_.nodes[ext].def];
       // expand 解析好的基类（从扩展类自身、只看本地类查的，T-S3-07）；此时再查会看到继承来的同名类。
@@ -1529,9 +1719,127 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node, const ClassRede
       // 同名的照那个），新类的词法作用域 = 本类的这个实例（写修饰处；右边的名字读到实例上顶替过的类，NCR 探针 NCR20
       // `extends A(redeclare type T = U)` 里 `B b2(redeclare type U = …)`）。
       ClassRedecls ext_redecls = base_redecls;
+      // 类修饰在实例化基类之前挂上（任务卡 T-S3-68f-redo §6.6 F7）：omc 的 instClassDef 先 modifyExtends（NFInst.mo:1163 v1.25.0）——
+      // extends 修饰经 applyModifier（:1421）并到基类类树里的类节点上，之后才 instExtends（:1181-1184）、实例化本地组件（:1186-1190）。
+      // F7 退路第一步（用户 2026-11-12 定）：只对本桶放开的新形态预挂（CM-2 嵌套、RICM 只含类重声明）；底线 plain 形态照旧在 instantiate
+      // 返回之后挂、apply_class_mod 补 type_node 相同的组件（下面"事后挂"）。ext_cmods 外层在前，交给 instantiate：目标是基类本地类的挂到
+      // 克隆上，其余由基类的 inst_class 往对应的 extends 转发（继承类与基类共用槽，NFClassTree.mo:492-556）。
+      // F5：目标名在本层 base_redecls（外来的类重声明 + 本类的元素级类重声明）里的类修饰丢弃——被顶替类上内层的类修饰 omc 都丢
+      //（redeclareClasses 只带 REDECLARE 的 outerMod，NFInst.mo:1636 / :1735-1737，NFModifier.mo:419；元素级 redeclareClassElement 传
+      // NOMOD，:1687；OR18、A68fYLP03 / YLP04）。更内层 extends 修饰里的顶替（OR17）不在本层 base_redecls 里，照转发，在那一层顶替之后
+      // 挂到新类上（instantiate 先做 redecls 再做 cmods）。
+      auto outer_redecl = [&](Symbol n) {
+        for (const auto& [rn, node] : base_redecls)
+          if (rn == n) return true;
+        return false;
+      };
+      auto member_is_class = [&](NodeId base, Symbol n) {
+        const Id<SElement> e = member_def(base, n, 0);
+        return e.is_valid() && I_.scode.elems[e].kind == SElementKind::Class;
+      };
+      std::vector<ClassMod> ext_cmods;
+      // F7 外来的：本实例收到、目标经 extends 继承来的类修饰（instantiate 转发来的），交给第一条继承到它的 extends（同 adopt 的先到先得）。
+      if (cmods)
+        for (const ClassMod& cm : *cmods) {
+          std::size_t owner = I_.trees[def_tree_id].ext_bases.size();
+          for (std::size_t k = 0; k < I_.trees[def_tree_id].ext_bases.size(); ++k) {
+            const NodeId b = I_.trees[def_tree_id].ext_bases[k];
+            if (b.is_valid() && !I_.nodes[b].is_empty() && member_is_class(b, cm.name)) { owner = k; break; }
+          }
+          if (owner == I_.trees[def_tree_id].ext_bases.size()) {   // 转发来的必在某个基类里（发出方已核过），到不了就是没做的形态
+            mark_unsupported("extends modifier names non-component (nested class)", std::string(I_.interner.str(cm.name)));
+            continue;
+          }
+          if (owner == ext_i && !outer_redecl(cm.name)) ext_cmods.push_back(cm);
+        }
+      // F1（§6.6 F1）：extends 直接点名的那个类节点（ClassTree::ext_named，顺短类链之前）挂了类修饰 → 当这个基类实例最外层的修饰
+      //（modifyExtends 取 InstNode.getModifier(extendsNode) 放在外层，NFInst.mo:1391-1392；施加到 Class.classTree，短类取基类的树，
+      // :1421、NFClass.mo:345；instExtends :1475-1517 不再读修饰）。只看被点名的节点，链下长类上的类修饰不读（Q01 / Q08 / RV10）。
+      // class_mods 外层在前：重声明与类修饰子修饰正序收（外层先：collect_class_redecls 先收者胜、ext_cmods 外层在前），组件子修饰逆序施加
+      //（apply_extends_modifier 后写者胜），与 modifyExtends 内层先施加、外层后施加一致（§3.4-10，N2）。
+      // F7 退路第一步之后只读预挂的条目（组件修饰路线的、新形态的）：事后挂的条目挂上时基类实例里先建的组件已经读不到，这里读了只会让
+      // 后建的那部分变（XF716 一类：A 里的 e 不变、派生类的 e3 变），照底线不读；被点名的节点上有事后挂的条目就 SKIP（收窄 N1，见下）。
+      const NodeId named = ext_i < I_.trees[def_tree_id].ext_named.size() ? I_.trees[def_tree_id].ext_named[ext_i] : NodeId{};
+      std::vector<std::pair<Id<SMod>, NodeId>> named_mods;
+      if (named.is_valid() && !I_.nodes[named].is_empty() && I_.class_modded.count(named.raw)) {
+        bool named_posthoc = false;
+        named_mods = preattached_class_mods(named, &named_posthoc);
+        // 收窄 N1（68f 对抗评审 1 类-A：S006 / T002 / M002 / E005 等）：被点名的节点上有事后挂的条目（底线 plain 形态）→ 一律 SKIP。事后挂的
+        // 条目这里读不到（见上），S0 改序后写在 extends 之前、经本地类 `model E extends B; end E; E e;` 用到 B 的组件不再撞底线的 tree_class
+        // 守卫，取的是未改的值（omc 取改后的）。根因是 plain 形态没有预挂（TBD-16，用户定不做），只能在入口收窄，不分早晚一律 SKIP。
+        if (named_posthoc)
+          mark_unsupported("inherited class seen through modifier / redeclare", std::string(I_.interner.str(I_.nodes[named].name)));
+      }
+      for (const auto& [m, sc] : named_mods) collect_class_redecls(m, sc, base_def, ext_redecls);
       collect_class_redecls(ext_mod, inst_node, base_def, ext_redecls);
-      NodeId base_inst = instantiate(base_def, inst_node, ext_redecls.empty() ? nullptr : &ext_redecls);
-      adopt_inherited_classes(inst_node, base_inst, nlocal_classes, adopted);
+      for (const auto& [m, sc] : named_mods) {
+        const std::vector<SSubMod> subs = I_.scode.mods[m].subs;   // 拷贝
+        for (const SSubMod& s : subs) {
+          const SMod& sm = I_.scode.mods[s.mod];
+          // 收窄 N3（68f 对抗评审 2 类：Z001 / Z002 / Y008 等）：组件子修饰下面按 extends 修饰施加（apply_extends_modifier），flatten 对 extends
+          // 修饰的绑定按继承组件所在实例的前缀解析名字（`a.b2.q`），而条目写在别处（`A a(B(x = q))` 的外层，omc 取 `q`）。只放行绑定全是
+          // 字面量（及其运算 / 取负 / 字面量数组）的，其余要查名的（cref——含常量、time——函数调用、重声明等）→ SKIP。
+          if (!member_is_class(base_def, s.ident) && !literal_only_mod(I_, s.mod)) {
+            mark_unsupported("class modifier with non-literal binding through extends", std::string(I_.interner.str(s.ident)));
+            continue;
+          }
+          if (sm.kind != SModKind::Mod || sm.binding.is_valid() || !member_is_class(base_def, s.ident)) continue;
+          if (outer_redecl(s.ident)) continue;   // F5
+          bool fin = sm.is_final;
+          for (const SSubMod& cs : sm.subs) fin = fin || I_.scode.mods[cs.mod].is_final;
+          if (fin || sm.is_each || !plain_class_mod_def(member_def(base_def, s.ident, 0), s.mod)) {
+            mark_unsupported("extends modifier names non-component (nested class)", std::string(I_.interner.str(s.ident)));
+            continue;
+          }
+          ext_cmods.push_back({s.ident, s.mod, sc});
+        }
+      }
+      // 本条 extends 修饰里的类修饰：新形态在这里预挂（S1d：CM-2 嵌套；S3：RICM 只含类重声明）；底线 plain 形态与其余形态照旧走下面的
+      // 事后挂 / SKIP。pre_subs 记预挂（或按 F5 丢掉）的子修饰，事后挂那一段跳过它们。
+      std::unordered_set<std::uint32_t> pre_subs;
+      if (ext_mod.is_valid()) {
+        const std::vector<SSubMod> subs = I_.scode.mods[ext_mod].subs;   // 拷贝
+        for (const SSubMod& s : subs) {
+          if (I_.applied_redecls.count(s.mod.raw)) continue;
+          const Id<SElement> me = member_def(base_def, s.ident, 0);
+          if (!me.is_valid() || I_.scode.elems[me].kind != SElementKind::Class || plain_class_mod_def(me, s.mod)) continue;
+          bool fin = I_.scode.mods[s.mod].is_final;
+          for (const SSubMod& cs : I_.scode.mods[s.mod].subs) fin = fin || I_.scode.mods[cs.mod].is_final;
+          if (fin) continue;
+          bool redecl_here = false;   // 同一修饰里顶替了它：不预挂，照旧（事后挂那段 SKIP）
+          for (std::size_t k = base_redecls.size(); k < ext_redecls.size(); ++k) redecl_here = redecl_here || ext_redecls[k].first == s.ident;
+          if (redecl_here) continue;
+          bool local = false;
+          for (Id<SElement> e : I_.scode.elems[I_.nodes[base_def].def].def.elements) local = local || e == me;
+          int same = 0;
+          for (const SSubMod& t2 : subs) same += t2.ident == s.ident ? 1 : 0;
+          // 嵌套类修饰（ModClass6 的 `extends A(B(C(z = 2)))`，§6.4 CM-2）：预挂（F7），C 的克隆在基类实例化时读到。cond_CM2：目标是基类的
+          // 本地类、派生类没有对它的元素级重声明（有就照 F5 丢）、同一 extends 修饰里没有同名的另一个子修饰。
+          if (local && same == 1 && nested_class_mod(me, s.mod)) {
+            pre_subs.insert(s.mod.raw);
+            if (!outer_redecl(s.ident)) ext_cmods.push_back({s.ident, s.mod, inst_node});
+          } else if (local && redecl_only_class_mod(me, s.mod)) {
+            // 只含类重声明的（redeclare/RedeclareInClassModification 的 `extends B(B2(redeclare type P = Integer))`，§6.5 RICM）：同样预挂——
+            // omc 先 modifyExtends（NFInst.mo:1163 v1.25.0）、后实例化基类（:1181），B2 的克隆在基类实例化时就带着修饰，`b2` 经类型链读到
+            // P → Integer，`B2.P p` 走包实例（CM-3 / CM-4）。条件同 cond_CM2 前两条（本地类；派生类有元素级重声明的照 F5 丢）。
+            pre_subs.insert(s.mod.raw);
+            if (!outer_redecl(s.ident)) ext_cmods.push_back({s.ident, s.mod, inst_node});
+          }
+        }
+      }
+      NodeId base_inst = instantiate(base_def, inst_node, ext_redecls.empty() ? nullptr : &ext_redecls,
+                                     ext_cmods.empty() ? nullptr : &ext_cmods);
+      {
+        // 收窄 N4 用：记下这条 extends 的 adopt 换掉了哪些类项（下标、换进来的克隆、换之前在不在 classes_via_mod），第二遍给写在它前面的
+        // 本地组件复原底线守卫看到的状态（见第二遍）。
+        const std::vector<NodeId> before = I_.trees[I_.node_class(inst_node).tree].classes;   // 拷贝
+        const std::unordered_set<std::uint32_t> via_before = I_.trees[I_.node_class(inst_node).tree].classes_via_mod;
+        adopt_inherited_classes(inst_node, base_inst, nlocal_classes, adopted);
+        const std::vector<NodeId>& after = I_.trees[I_.node_class(inst_node).tree].classes;
+        for (std::size_t i = 0; i < before.size() && i < after.size(); ++i)
+          if (after[i].raw != before[i].raw)
+            ext_adopted[ext_i].push_back({static_cast<std::uint32_t>(i), after[i], via_before.count(static_cast<std::uint32_t>(i)) > 0});
+      }
       // 基类实例按 extends 出现序记进本实例的类树：基类的方程 / 算法段由 flatten 的 collect_inherited_sections 收
       //（段序 = 本类在前、各 extends 按**逆序**在后，NFInst.instExpressions + Sections.join 头插，NFInst.mo:2511-2514 /
       // NFSections.mo:192-209；名字在基类实例里解析，前缀与本实例相同）。只记实例化后的基类节点（FlatTree），不记 Ref /
@@ -1545,17 +1853,19 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node, const ClassRede
         // 继承成员的词法作用域 = 基类（限定名/常量按基类作用域解析，const16 的 `P.P.i` 要在 P.M 里找）。
         I_.nodes[bc].parent_scope = base_inst;
         apply_extends_modifier(bc, ext_mod, inst_node);              // extends 修饰合并到继承组件
-        flat.components.push_back(bc);
+        // F1 的组件子修饰：比 extends 子句自己的修饰外一层，逆序施加（内层先、外层后，见上）。
+        for (auto it = named_mods.rbegin(); it != named_mods.rend(); ++it) apply_extends_modifier(bc, it->first, it->second);
+        ext_comps[ext_i].push_back(bc);
       }
-      // extends 修饰里改嵌套类（类修饰：scodeinst mod9 `extends A(MyReal(start = y))`、MSL Media 的 `extends PartialTwoPhaseMedium(
-      // Temperature(min = 273.15, …))`）：OMC 把修饰挂到 extends 实例类树里的那个类上（NFInst.applyModifier → InstNode.mergeModifier，
-      // :2116-2160 v1.25.0），用这个类型的组件实例化时并进类型修饰（见 inst_component 的短类链）。记进 Inst::class_mods（外层的 extends 在
-      // 前），修饰在写 extends 的类里求值；基类实例里已实例化的这类组件补上（apply_class_mod）。名字不是组件也不是类（写错名）、修饰
-      // 带绑定（`MyReal = …`，omc MISSING_REDECLARE_IN_CLASS_MOD）/ each / 不是普通修饰 → SKIP。
+      // extends 修饰里改嵌套类的底线 plain 形态（类修饰：scodeinst mod9 `extends A(MyReal(start = y))`、MSL Media 的 `extends
+      // PartialTwoPhaseMedium(Temperature(min = 273.15, …))`）：事后挂（F7 退路第一步恢复底线）——OMC 把修饰挂到 extends 实例类树里的那个类上
+      //（NFInst.applyModifier → InstNode.mergeModifier，:2116-2160 v1.25.0），用这个类型的组件实例化时并进类型修饰（见 inst_component 的短类链）。
+      // 记进 Inst::class_mods（外层的 extends 在前），修饰在写 extends 的类里求值；基类实例里已实例化的这类组件补上（apply_class_mod）。名字
+      // 不是组件也不是类（写错名）、修饰带绑定（`MyReal = …`，omc MISSING_REDECLARE_IN_CLASS_MOD）/ each / 不是普通修饰 → SKIP。
       if (ext_mod.is_valid()) {
         const std::vector<SSubMod> subs = I_.scode.mods[ext_mod].subs;   // 拷贝
         for (const SSubMod& s : subs) {
-          if (I_.applied_redecls.count(s.mod.raw)) continue;   // 施加过的类重声明（见上）
+          if (I_.applied_redecls.count(s.mod.raw) || pre_subs.count(s.mod.raw)) continue;   // 施加过的类重声明 / 预挂过的新形态
           bool comp = false;
           for (NodeId bc : base_comps) comp = comp || I_.nodes[bc].name == s.ident;
           if (comp) continue;
@@ -1574,12 +1884,28 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node, const ClassRede
             mark_unsupported("extends modifier names non-component (nested class)");
             continue;
           }
+          // 收窄 N2（68f 对抗评审 1 类-B：F709 / V011 / M013）：同一个类节点上已有预挂的条目（新形态 / 组件修饰路线）又要事后挂 plain 条目——
+          // 预挂条目的消费者（F1、经短类别名的组件）已建好、读不到事后挂的（F1 只读预挂；apply_class_mod 只补 type_node 相同的组件）→ SKIP。
+          if (!preattached_class_mods(cls).empty()) {
+            mark_unsupported("class modified both before and after base instantiation", std::string(I_.interner.str(s.ident)));
+            continue;
+          }
           std::vector<std::pair<Id<SMod>, NodeId>>& v = I_.class_mods[cls.raw];
           v.insert(v.begin(), {s.mod, inst_node});
           I_.class_modded.insert(cls.raw);
+          posthoc_cmods_.insert(s.mod.raw);
           apply_class_mod(base_inst, cls, s.mod, inst_node, 0);
         }
       }
+    }
+  }
+  // 第二遍：按声明序拼组件。到这里本类全部 extends 已处理完（S0 不变量）。
+  for (std::size_t p = 0; p < def_comps.size(); ++p) {
+    const NodeId cn = def_comps[p];
+    if (I_.nodes[cn].kind == NodeKind::Ref) {
+      const std::uint32_t ext_i = I_.nodes[cn].ext_index;
+      YMC_ASSERT(ext_done[ext_i], "inst_class: extends 须在本地组件之前处理完（S0）");
+      flat.components.insert(flat.components.end(), ext_comps[ext_i].begin(), ext_comps[ext_i].end());
     } else {  // 普通组件：克隆 + 实例化
       const INode& dc = I_.nodes[cn];
       Component nc = I_.comps[dc.comp];   // 拷贝（CompDef）
@@ -1589,7 +1915,26 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node, const ClassRede
       NodeId icomp = I_.nodes.add(std::move(nn));
       // 元素级组件重声明等基类都展开了再与继承来的原组件合并（见 redeclare_local_components）。
       const bool rdcl = I_.scode.elems[I_.comps[I_.nodes[icomp].comp].def].prefixes.is_redeclare;
-      if (!rdcl) inst_component(icomp, inst_node);
+      // 收窄 N4（68f 核对评审 VN1C / VC01 / VC04 / VC07 / VC08 / VD01 / VD02 / VE01）：写在某条 extends 之前的本地组件，底线按声明序
+      // 先于那条 extends 实例化，实例类树里那条 extends 要 adopt 的类项还是定义里的、带着 classes_via_mod 标记——查到就撞 tree_class
+      // 的守卫（"inherited class seen through modifier / redeclare"），类型是还没 adopt 的继承嵌套类就撞 inst_component 的守卫
+      //（"redeclared class seen from nested class"，SA5），整个模型 SKIP。S0 把它挪到全部 extends 之后，守卫不再触发，模型被放出来，
+      // 别处的底线老错（TBD-16 的 M010 族、与类修饰无关的老 AI）就露出来。这里在实例化它期间复原底线守卫看到的状态：重新标上它后面那些
+      // extends 的 adopt 抹掉的 classes_via_mod，把那些 adopt 换进来的克隆记进 pending_adopted_（inst_component 的守卫按"父亲还不是
+      // 实例"看），完了再撤。查到的类本身照旧是 adopt 进来的那份（S0 的收益不动）。
+      if (!rdcl) {
+        std::vector<std::uint32_t> remarked, pended;
+        for (std::size_t q = p + 1; q < def_comps.size(); ++q) {
+          if (I_.nodes[def_comps[q]].kind != NodeKind::Ref) continue;
+          for (const AdoptRec& a : ext_adopted[I_.nodes[def_comps[q]].ext_index]) {
+            if (a.via_mod && I_.trees[I_.node_class(inst_node).tree].classes_via_mod.insert(a.index).second) remarked.push_back(a.index);
+            if (pending_adopted_.insert(a.clone.raw).second) pended.push_back(a.clone.raw);
+          }
+        }
+        inst_component(icomp, inst_node);
+        for (std::uint32_t i : remarked) I_.trees[I_.node_class(inst_node).tree].classes_via_mod.erase(i);
+        for (std::uint32_t c : pended) pending_adopted_.erase(c);
+      }
       flat.components.push_back(icomp);
     }
   }
@@ -1613,10 +1958,143 @@ void Instantiator::inst_class(NodeId inst_node, NodeId def_node, const ClassRede
 
 // 能当类修饰施加的：普通修饰（不带绑定 / each，omc 对 `B = …` 报 MISSING_REDECLARE_IN_CLASS_MOD），子修饰里没有重声明、不再改 cls
 // 的嵌套类（`B(redeclare model C = D)`、`B(C(z = 2))`：经 `B.C` 查到的要按带修饰的包实例查，未做，scodeinst ModClass4 / ModClass6）。
-bool Instantiator::plain_class_mod(NodeId cls, Id<SMod> m) const {
+bool Instantiator::plain_class_mod(NodeId cls, Id<SMod> m) const { return plain_class_mod_def(I_.nodes[cls].def, m); }
+
+std::vector<std::pair<Id<SMod>, NodeId>> Instantiator::preattached_class_mods(NodeId n, bool* posthoc) const {
+  std::vector<std::pair<Id<SMod>, NodeId>> out;
+  if (posthoc) *posthoc = false;
+  const auto it = I_.class_mods.find(n.raw);
+  if (it == I_.class_mods.end()) return out;
+  for (const auto& e : it->second) {
+    if (posthoc_cmods_.count(e.first.raw)) {
+      if (posthoc) *posthoc = true;
+      continue;
+    }
+    out.push_back(e);
+  }
+  return out;
+}
+
+namespace {
+// 字面量（数值取负也算），kind 给出种类。
+bool literal_kind(const Absyn& A, Id<Exp> e, ExpKind& kind) {
+  if (!e.is_valid()) return false;
+  const Exp& x = A.exps[e];
+  if (x.kind == ExpKind::IntLit || x.kind == ExpKind::RealLit || x.kind == ExpKind::BoolLit || x.kind == ExpKind::StringLit) {
+    kind = x.kind;
+    return true;
+  }
+  if (x.kind == ExpKind::Unary && x.op == Op::UMinus && x.a.is_valid() &&
+      (A.exps[x.a].kind == ExpKind::IntLit || A.exps[x.a].kind == ExpKind::RealLit)) {
+    kind = A.exps[x.a].kind;
+    return true;
+  }
+  return false;
+}
+
+// 本桶放开的类修饰形态的公共限制（§6.4）：被改的类是 public 的 model；修饰本身是不带绑定 / final / each 的普通修饰、子修饰非空、同名子修饰
+// 只有一个。
+bool class_mod_common(const Inst& I, Id<SElement> cd, Id<SMod> m) {
+  if (!cd.is_valid() || !m.is_valid()) return false;
+  const SElement& c = I.scode.elems[cd];
+  if (c.kind != SElementKind::Class || c.restriction != SRestriction::Model || c.prefixes.vis != SVisibility::Public) return false;
+  const SMod& sm = I.scode.mods[m];
+  if (sm.kind != SModKind::Mod || sm.binding.is_valid() || sm.is_final || sm.is_each || sm.subs.empty()) return false;
+  for (std::size_t i = 0; i < sm.subs.size(); ++i)
+    for (std::size_t j = 0; j < i; ++j)
+      if (sm.subs[i].ident == sm.subs[j].ident) return false;
+  return true;
+}
+
+// 类 cd 的本地 public 类元素 name；没有 → invalid。
+Id<SElement> local_public_class(const Inst& I, Id<SElement> cd, Symbol name) {
+  for (Id<SElement> e : I.scode.elems[cd].def.elements) {
+    const SElement& x = I.scode.elems[e];
+    if (x.kind == SElementKind::Class && x.name == name && x.prefixes.vis == SVisibility::Public) return e;
+  }
+  return {};
+}
+}  // namespace
+
+// 只含类重声明（ModClass4 / RICM）：每个子修饰都是短形态类重声明 `= 名字`（无修饰、无维、无前缀，restriction ∈ {model, type}），重声明
+// 的是 cd 的本地 public 类。
+bool Instantiator::redecl_only_class_mod(Id<SElement> cd, Id<SMod> m) const {
+  if (!class_mod_common(I_, cd, m)) return false;
+  for (const SSubMod& s : I_.scode.mods[m].subs) {
+    const SMod& r = I_.scode.mods[s.mod];
+    if (r.kind != SModKind::Redecl || !r.element.is_valid() || r.is_final || r.is_each) return false;
+    const SElement& re = I_.scode.elems[r.element];
+    if (re.kind != SElementKind::Class || re.def.kind != SClassDefKind::Derived) return false;
+    if (re.restriction != SRestriction::Model && re.restriction != SRestriction::Type) return false;
+    if (re.def.derived_mod.is_valid() &&
+        (!I_.scode.mods[re.def.derived_mod].subs.empty() || I_.scode.mods[re.def.derived_mod].binding.is_valid()))
+      return false;
+    const SAttributes& da = re.def.derived_attr;
+    if (!da.dims.empty() || !re.def.derived_type.dims.empty() || da.var != SVariability::Var || da.dir != SDirection::Bidir ||
+        da.ct != SConnectorType::Potential)
+      return false;
+    if (re.prefixes.is_final || re.prefixes.io != SInnerOuter::None || re.prefixes.is_replaceable || re.prefixes.has_cc ||
+        re.is_partial || re.is_encapsulated)
+      return false;
+    if (!local_public_class(I_, cd, s.ident).is_valid()) return false;
+  }
+  return true;
+}
+
+// 嵌套类修饰（ModClass6）：每个子修饰改 cd 的本地 public model 类 C，再下一层每个子修饰都是 `名字 = 字面量`，名字是 C 的 public 组件。
+bool Instantiator::nested_class_mod(Id<SElement> cd, Id<SMod> m) const {
+  if (!class_mod_common(I_, cd, m)) return false;
+  for (const SSubMod& s : I_.scode.mods[m].subs) {
+    const Id<SElement> c = local_public_class(I_, cd, s.ident);
+    if (!c.is_valid() || I_.scode.elems[c].restriction != SRestriction::Model || I_.scode.elems[c].def.kind != SClassDefKind::Parts ||
+        !class_mod_common(I_, c, s.mod))
+      return false;
+    for (const SSubMod& t : I_.scode.mods[s.mod].subs) {
+      const SMod& tm = I_.scode.mods[t.mod];
+      ExpKind k;
+      if (tm.kind != SModKind::Mod || !tm.subs.empty() || tm.is_final || tm.is_each || !literal_kind(I_.absyn, tm.binding, k))
+        return false;
+      bool comp = false;
+      for (Id<SElement> e : I_.scode.elems[c].def.elements) {
+        const SElement& x = I_.scode.elems[e];
+        comp = comp || (x.kind == SElementKind::Component && x.name == t.ident && x.prefixes.vis == SVisibility::Public);
+      }
+      if (!comp) return false;
+    }
+  }
+  return true;
+}
+
+// cond_RA（§6.2）：被换掉的组件 bc 的每条内层 extends 修饰都是 `名字(子 = 值, …)`（无绑定 / final / each），每个子修饰带绑定、无子修饰、
+// 无 final / each，名字是原组件类实例里的 public 组件；组件本身不是 final，原声明不带维。
+bool Instantiator::ra_drop_ok(NodeId bc) const {
+  const Component& comp = I_.comps[I_.nodes[bc].comp];
+  if (comp.attributes.is_final) return false;
+  const Id<SElement> od = comp.orig_def.is_valid() ? comp.orig_def : comp.def;
+  if (!I_.scode.elems[od].attr.dims.empty() || !I_.scode.elems[od].type.dims.empty()) return false;
+  const NodeId ci = comp.class_inst;
+  if (!ci.is_valid() || I_.nodes[ci].is_empty() || I_.nodes[ci].kind != NodeKind::Class || !I_.nodes[ci].cls.is_valid() ||
+      !I_.classes[I_.nodes[ci].cls].tree.is_valid())
+    return false;
+  const std::vector<NodeId>& comps = I_.trees[I_.classes[I_.nodes[ci].cls].tree].components;
+  for (Id<SMod> m : comp.extends_mods) {
+    const SMod& sm = I_.scode.mods[m];
+    if (sm.kind != SModKind::Mod || sm.binding.is_valid() || sm.is_final || sm.is_each || sm.subs.empty()) return false;
+    for (const SSubMod& s : sm.subs) {
+      const SMod& x = I_.scode.mods[s.mod];
+      if (x.kind != SModKind::Mod || !x.binding.is_valid() || !x.subs.empty() || x.is_final || x.is_each) return false;
+      bool hit = false;
+      for (NodeId c : comps)
+        hit = hit || (I_.nodes[c].kind == NodeKind::Component && I_.nodes[c].name == s.ident && I_.nodes[c].visibility == Visibility::Public);
+      if (!hit) return false;
+    }
+  }
+  return true;
+}
+
+bool Instantiator::plain_class_mod_def(Id<SElement> d, Id<SMod> m) const {
   const SMod& sm = I_.scode.mods[m];
   if (sm.kind != SModKind::Mod || sm.binding.is_valid() || sm.is_each) return false;
-  const Id<SElement> d = I_.nodes[cls].def;
   for (const SSubMod& s : sm.subs) {
     if (I_.scode.mods[s.mod].kind != SModKind::Mod) return false;
     if (d.is_valid() && I_.scode.elems[d].kind == SElementKind::Class)
@@ -1673,6 +2151,18 @@ void Instantiator::apply_extends_modifier(NodeId bc, Id<SMod> mod, NodeId scope)
     if (s.ident != name) continue;
     const SMod& sm = I_.scode.mods[s.mod];
     if (sm.kind == SModKind::Redecl && sm.element.is_valid()) {
+      // 内层 extends 修饰改过、外层 extends 再重声明（redeclare/Bug2727，§6.2）：内层修饰并进 REDECLARE 的 innerMod（NFModifier.mo:411-415
+      // v1.25.0），只用来在 REDECLARED 语境里实例化原组件（NFInst.mo:1894-1907）；新组件由 redeclareComponent 建、不用 innerMod（:1906-1907）
+      // → 内层修饰丢掉（omc 1.25.0 与文件 Result 不同，分歧账本）。被丢的修饰 omc 仍核名字（:1540-1592，RAX01 / RAX02 报错）→ 只在
+      // cond_RA 成立时丢（ra_drop_ok），否则照旧在 redeclare_component 里 SKIP。
+      if (!I_.comps[cid].extends_mods.empty() && ra_drop_ok(bc)) {
+        I_.comps[cid].extends_mods.clear();
+        I_.comps[cid].extends_scopes.clear();
+      }
+      // 原组件 bc 被 extends 修饰重声明换掉：它子树里挂起的 partial 丢掉（REDECLARE 支，§6.3-4）。只这一个调用点丢。
+      std::erase_if(redecl_pending_, [&](const RedeclPending& rp) {
+        return std::find(rp.stack.begin(), rp.stack.end(), bc) != rp.stack.end();
+      });
       redeclare_component(bc, sm.element, scope);
       continue;
     }
@@ -1917,7 +2407,19 @@ void Instantiator::redeclare_local_components(ClassTree& flat, NodeId inst_node)
   }
 }
 
+bool Instantiator::defer_partial(const char* why, std::string detail) {
+  if (!root_phase_ || comp_stack_.empty()) return false;
+  redecl_pending_.push_back({why, std::move(detail), comp_stack_, unsupported_});
+  return true;
+}
+
 void Instantiator::inst_component(NodeId comp_node, NodeId enclosing, bool generated_inner) {
+  // 组件栈（P 组，纯记账，不改任何判断）。
+  struct StackGuard {
+    std::vector<NodeId>& st;
+    StackGuard(std::vector<NodeId>& s, NodeId n) : st(s) { st.push_back(n); }
+    ~StackGuard() { st.pop_back(); }
+  } stack_guard(comp_stack_, comp_node);
   // 纪律（arena.h 头注）：不持有 Component 引用跨越任何 arena add——lookup_class_name / instantiate
   // 都会往 comps/nodes/... 里 add 触发扩容，使旧引用失效。这里每次触碰组件都重新取引用。
   const CompId cid = I_.nodes[comp_node].comp;
@@ -1977,8 +2479,9 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing, bool gener
   if (const auto rit = inst_redecls_.find(enclosing.raw); rit != inst_redecls_.end()) {
     bool replacement = false;
     for (const auto& [n, node] : rit->second) replacement = replacement || I_.nodes[node].def == I_.nodes[ty_node].def;
-    if (!replacement && !instances_.count(I_.nodes[ty_node].parent_scope.raw) && nested_in(ty_node, enclosing) &&
-        mentions_any(I_.nodes[ty_node].def, rit->second, 0)) {
+    // pending_adopted_：写在 extends 之前的本地组件实例化期间，后面那些 extends 换进来的克隆按底线看还是定义里的那份（收窄 N4，见 inst_class）。
+    const bool def_parent = !instances_.count(I_.nodes[ty_node].parent_scope.raw) || pending_adopted_.count(ty_node.raw) > 0;
+    if (!replacement && def_parent && nested_in(ty_node, enclosing) && mentions_any(I_.nodes[ty_node].def, rit->second, 0)) {
       mark_unsupported("redeclared class seen from nested class", std::string(I_.interner.str(el.name)));
       return;
     }
@@ -2181,7 +2684,8 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing, bool gener
     //   connect 在 1.25.0 报 "c1 is not a valid connector"；`type B = A(k = 2)`（A 是 model）1.25.0 把 b 整个丢掉（SC 探针
     //   s1）。未做 → SKIP。
     const SElement& be = I_.scode.elems[I_.nodes[base].def];
-    if (!alias_res.empty() && (be.is_partial || alias_partial)) mark_unsupported("partial type");   // 直接写的类型归 bad_type_path
+    if (!alias_res.empty() && (be.is_partial || alias_partial) && !defer_partial("partial type", {}))
+      mark_unsupported("partial type");   // 直接写的类型归 bad_type_path
     // 例外：operator record 的短类别名换成记录 / 连接器（`connector ComplexOutput = output Complex`、`record R2 = Complex`，
     // MSL ComplexBlocks / SI.Complex*）——类型仍是记录（makeRecordComplexType 取最外层短类作记录类型，NFInst.mo:2580-2591
     // v1.25.0），组件按短类的受限类型算连接器（flatten 的 short_class_connector）；rp62x SPEC OR2，探针 a08 / d02 / d07。
@@ -2206,9 +2710,23 @@ void Instantiator::inst_component(NodeId comp_node, NodeId enclosing, bool gener
       for (const SSubMod& s : subs) {
         const ClassTree& bt = I_.trees[I_.node_class(base).tree];
         const auto it = bt.lookup.find(s.ident);
-        if (it == bt.lookup.end() || it->second.kind != LEntry::Kind::Class || it->second.index >= nlocal ||
-            !plain_class_mod(bt.classes[it->second.index], s.mod))
-          continue;
+        if (it == bt.lookup.end() || it->second.kind != LEntry::Kind::Class || it->second.index >= nlocal) continue;
+        const NodeId k = bt.classes[it->second.index];
+        if (!plain_class_mod(k, s.mod)) {
+          // 只含类重声明的类修饰（ModClass4 的 `A a1(B(redeclare model C = D))`，§6.4 CM-1）：同 plain 的做法挂到类实例里 B 的克隆上，
+          // `B b` 经类型链读到、collect_class_redecls 得 C → D，`B.C c` 走包实例（CM-3 / CM-4）。omc：applyModifier 对类元素做
+          // Class.mergeModifier（NFInst.mo:1604-1608 v1.25.0），类节点被实例化时把修饰当外层修饰并进来（:1158-1170 / :1200-1222）。
+          // cond_CM1 保证底线必 SKIP（flatten 走得到的组件在 check_modifier_names 报）：组件不是 replaceable / constrainedby / 数组 / 条件
+          // 组件、不是重声明合成的、目标类 public（CMX03）、不在 inst_package 的实例化里。
+          if (!redecl_only_class_mod(I_.nodes[k].def, s.mod)) continue;
+          const bool ok = !el.prefixes.is_replaceable && !el.prefixes.has_cc && el.attr.dims.empty() && el.type.dims.empty() &&
+                          type_dims.empty() && !el.condition.is_valid() && !I_.comps[cid].orig_def.is_valid() &&
+                          I_.nodes[k].visibility == Visibility::Public && pkg_depth_ == 0;
+          if (ok ? new_cmods_refused_.count(s.mod.raw) > 0 : new_cmods_applied_.count(s.mod.raw) > 0)
+            mark_unsupported("class modifier across instances", std::string(I_.interner.str(s.ident)));
+          (ok ? new_cmods_applied_ : new_cmods_refused_).insert(s.mod.raw);
+          if (!ok) continue;
+        }
         comp_cmods.push_back({s.ident, s.mod, enclosing});
         I_.applied_class_mods.insert(s.mod.raw);
       }
@@ -2586,8 +3104,21 @@ NodeId Instantiator::instantiate_root_class(NodeId def_node) {
   for (std::size_t k = 0; k < I_.root_alias.mods.size(); ++k)
     collect_class_redecls(I_.root_alias.mods[k], I_.root_alias.scopes[k], cur, root_redecls);
   settled_classes_.insert(I_.nodes[cur].cls.raw);   // 根类在定义节点上展开（instantiateRootClass，见 settled_classes_）
+  root_phase_ = true;
   const NodeId root = instantiate(cur, Inst::empty_node(), root_redecls.empty() ? nullptr : &root_redecls);
   insert_generated_inners(root);
+  root_phase_ = false;
+  YMC_ASSERT(comp_stack_.empty(), "instantiate_root_class: 根实例化返回时组件栈须为空");
+  // 根阶段结束仍挂着的（没被换掉 / 换成的仍 partial）照报：SKIP，原因取最早发生的那件。
+  if (!redecl_pending_.empty()) {
+    const RedeclPending& first = redecl_pending_.front();
+    if (!unsupported_ || !first.after_unsup) {
+      unsupported_ = true;
+      unsupported_reason_ = first.why;
+      unsupported_detail_ = first.detail;
+    }
+    redecl_pending_.clear();
+  }
   return root;
 }
 

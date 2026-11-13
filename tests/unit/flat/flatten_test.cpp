@@ -54,6 +54,30 @@ std::string flatten_src(const char* src, bool* unsupported = nullptr,
   return dump_flat(fr.model, in);
 }
 
+
+// 同 driver 的完整流水线（任务卡 T-S3-68f-redo §13 的单测用）：根阶段报的真错误、flatten 期的真错误（被丢弃属性的核查）→ "<error>"；
+// 未实现 → "<unsupported:…>"。
+std::string flatten_src_driver(const char* src) {
+  Interner in;
+  Diagnostics d;
+  Absyn a(in);
+  Lexer lx(src, 0, in, d);
+  std::vector<Token> toks = lx.tokenize();
+  Parser p(toks, a, d);
+  p.parse_program();
+  SCode sc(a);
+  translate_program(sc, a.top);
+  Inst inst(in, a, sc);
+  Instantiator I(inst, d);
+  I.make_top_node();
+  NodeId root = I.instantiate_root(sc.elems[sc.program.back()].name);
+  if (I.unsupported()) return "<unsupported:" + I.unsupported_reason() + ">";
+  if (!root.is_valid() || inst.nodes[root].is_empty() || d.has_errors()) return "<error>";
+  FlattenResult fr = flatten(inst, in, root, &I);
+  if (fr.unsupported) return "<unsupported:" + fr.unsupported_reason + ">";
+  if (d.has_errors()) return "<error>";
+  return dump_flat(fr.model, in);
+}
 }  // namespace
 
 YMC_TEST(flatten_scalar_bindings_and_int_promotion) {
@@ -13693,6 +13717,605 @@ YMC_TEST(flatten_vector_matrix_kept_as_call) {
                std::string("class A68dMV03\n  Real m3[1,1,1];\n  Real m3[1,2,1];\n  Real m3[2,1,1];\n  Real m3[2,2,1];\n"
                            "  Real m4[1,1];\n  Real m4[1,2];\n  Real m4[2,1];\n  Real m4[2,2];\nequation\n"
                            "  m3 = {{{1.0}, {2.0}}, {{3.0}, {4.0}}};\n  m4 = matrix(m3);\nend A68dMV03;\n"));
+}
+
+// ---- 68f 重做（任务卡 T-S3-68f-redo §13）：期望串逐字取自安装版 omc 1.25.0 实跑输出 ----
+
+YMC_TEST(flatten_68f_break_modifier) {
+  // `= break`（MLS §7.2.2；任务卡 T-S3-68f-redo §6.1）：Real 标量变量的组件绑定与属性绑定变无绑定（NFInst.mo:2742、NFTyping.mo:1275-1280 v1.25.0）。
+  YMC_CHECK_EQ(flatten_src_driver("model BreakModifier1\n"
+      "  Real x = break;\n"
+      "end BreakModifier1;\n"),
+               std::string("class BreakModifier1\n"
+      "  Real x;\n"
+      "end BreakModifier1;\n"));
+  YMC_CHECK_EQ(flatten_src_driver("model A\n"
+      "  Real x = 1;\n"
+      "  Real y = 2;\n"
+      "  Real z = 3;\n"
+      "  Real w = 4;\n"
+      "end A;\n"
+      "\n"
+      "model BreakModifier2\n"
+      "  A a(x = break, y = 5, z = break);\n"
+      "end BreakModifier2;\n"),
+               std::string("class BreakModifier2\n"
+      "  Real a.x;\n"
+      "  Real a.y = 5.0;\n"
+      "  Real a.z;\n"
+      "  Real a.w = 4.0;\n"
+      "end BreakModifier2;\n"));
+  YMC_CHECK_EQ(flatten_src_driver("model A\n"
+      "  Real x(start = 1.0, unit = \"s\", displayUnit=\"s\");\n"
+      "end A;\n"
+      "\n"
+      "model BreakModifier3\n"
+      "  A a(x(start = break, displayUnit = break));\n"
+      "end BreakModifier3;\n"),
+               std::string("class BreakModifier3\n"
+      "  Real a.x(unit = \"s\");\n"
+      "end BreakModifier3;\n"));
+  YMC_CHECK_EQ(flatten_src_driver("model A\n"
+      "  Real x(start = 1, nominal = 2);\n"
+      "end A;\n"
+      "model BV41\n"
+      "  A a(x(start = break, nominal = 3));\n"
+      "end BV41;\n"),
+               std::string("class BV41\n"
+      "  Real a.x(nominal = 3.0);\n"
+      "end BV41;\n"));
+  YMC_CHECK_EQ(flatten_src_driver("model A\n"
+      "  Real x = 1;\n"
+      "  Real y = x + 1;\n"
+      "end A;\n"
+      "model BV43\n"
+      "  A a(x = break);\n"
+      "equation\n"
+      "  a.x = time;\n"
+      "end BV43;\n"),
+               std::string("class BV43\n"
+      "  Real a.x;\n"
+      "  Real a.y = a.x + 1.0;\n"
+      "equation\n"
+      "  a.x = time;\n"
+      "end BV43;\n"));
+  YMC_CHECK_EQ(flatten_src_driver("type T = Real(start = 1, unit = \"m\");\n"
+      "model A\n"
+      "  T t;\n"
+      "end A;\n"
+      "model A68fBR36\n"
+      "  A a(t(start = break));\n"
+      "end A68fBR36;\n"),
+               std::string("class A68fBR36\n"
+      "  Real a.t(unit = \"m\");\n"
+      "end A68fBR36;\n"));
+}
+
+YMC_TEST(flatten_68f_redeclare_after_extends_mod) {
+  // 内层 extends 修饰改过、外层 extends 再重声明：内层修饰丢掉（NFInst.mo:1894-1907；§6.2 cond_RA）。
+  YMC_CHECK_EQ(flatten_src_driver("model C\n"
+      "  parameter Real offset = 0;\n"
+      "  parameter Real startTime = 0;\n"
+      "end C;\n"
+      "model E\n"
+      "  parameter Real offset = 0;\n"
+      "  parameter Real startTime = 0;\n"
+      "  parameter Real amp = 1;\n"
+      "end E;\n"
+      "model M1\n"
+      "  replaceable C clock;\n"
+      "end M1;\n"
+      "model M2\n"
+      "  extends M1(clock(offset = 10), clock(startTime = 20));\n"
+      "end M2;\n"
+      "model A68fRA03\n"
+      "  extends M2(redeclare E clock);\n"
+      "end A68fRA03;\n"),
+               std::string("class A68fRA03\n"
+      "  parameter Real clock.offset = 0.0;\n"
+      "  parameter Real clock.startTime = 0.0;\n"
+      "  parameter Real clock.amp = 1.0;\n"
+      "end A68fRA03;\n"));
+  YMC_CHECK_EQ(flatten_src_driver("model C\n"
+      "  parameter Real offset = 0;\n"
+      "end C;\n"
+      "model E\n"
+      "  parameter Real offset = 0;\n"
+      "end E;\n"
+      "model M1\n"
+      "  replaceable C clock;\n"
+      "end M1;\n"
+      "model M2\n"
+      "  extends M1(clock(offset = 10));\n"
+      "end M2;\n"
+      "model M3\n"
+      "  extends M2(redeclare E clock);\n"
+      "end M3;\n"
+      "model RAX05\n"
+      "  extends M3(clock(offset = 7));\n"
+      "end RAX05;\n"),
+               std::string("class RAX05\n"
+      "  parameter Real clock.offset = 7.0;\n"
+      "end RAX05;\n"));
+}
+
+YMC_TEST(flatten_68f_class_mod_new_forms) {
+  // 只含类重声明 / 嵌套类修饰（§6.4 CM-1 / CM-2 / CM-3 / CM-4 / CM-5、§6.5 RICM）。
+  YMC_CHECK_EQ(flatten_src_driver("model A\n"
+      "  model B\n"
+      "    replaceable model C\n"
+      "      Real x;\n"
+      "    end C;\n"
+      "\n"
+      "    C c;\n"
+      "  end B;\n"
+      "\n"
+      "  B.C c;\n"
+      "  B b;\n"
+      "end A;\n"
+      "\n"
+      "model ModClass4\n"
+      "  model D\n"
+      "    Real x = 1.0;\n"
+      "  end D;\n"
+      "\n"
+      "  A a1(B(redeclare model C = D));\n"
+      "  A a2;\n"
+      "end ModClass4;\n"),
+               std::string("class ModClass4\n"
+      "  Real a1.c.x = 1.0;\n"
+      "  Real a1.b.c.x = 1.0;\n"
+      "  Real a2.c.x;\n"
+      "  Real a2.b.c.x;\n"
+      "end ModClass4;\n"));
+  YMC_CHECK_EQ(flatten_src_driver("model A\n"
+      "  model B\n"
+      "    model C\n"
+      "      Real x = 1;\n"
+      "      Real y = 1;\n"
+      "      Real z = 1;\n"
+      "    end C;\n"
+      "  end B;\n"
+      "end A;\n"
+      "\n"
+      "model ModClass6\n"
+      "  extends A(B(C(z = 2)));\n"
+      "  model D = B(C(x = 2));\n"
+      "  \n"
+      "  D.C b(y = 2);\n"
+      "end ModClass6;\n"),
+               std::string("class ModClass6\n"
+      "  Real b.x = 2.0;\n"
+      "  Real b.y = 2.0;\n"
+      "  Real b.z = 2.0;\n"
+      "end ModClass6;\n"));
+  YMC_CHECK_EQ(flatten_src_driver("model B\n"
+      "  model B2\n"
+      "  replaceable type P = Real;\n"
+      "  P p;\n"
+      "  end B2;\n"
+      "  B2 b2;\n"
+      "end B;\n"
+      "\n"
+      "model RedeclareInClassModification\n"
+      "  extends B(B2(redeclare type P = Integer));\n"
+      "  B2.P p;\n"
+      "\n"
+      "end RedeclareInClassModification;\n"),
+               std::string("class RedeclareInClassModification\n"
+      "  Integer b2.p;\n"
+      "  Integer p;\n"
+      "end RedeclareInClassModification;\n"));
+}
+
+YMC_TEST(flatten_68f_redeclared_partial) {
+  // REDECLARED 语境下的 partial：被 extends 重声明换掉的原组件子树里的 partial 不报（§6.3；NFInst.mo:1898、NFLookup.mo:703 / :772）。
+  YMC_CHECK_EQ(flatten_src_driver("partial package PartialMedium\n"
+      "  type MassFraction = Real;\n"
+      "end PartialMedium;\n"
+      "\n"
+      "package StandardWater\n"
+      "  extends PartialMedium;\n"
+      "end StandardWater;\n"
+      "\n"
+      "connector FluidPort\n"
+      "  replaceable package Medium = PartialMedium;\n"
+      "  flow Real Q;\n"
+      "  Medium.MassFraction P;\n"
+      "end FluidPort;\n"
+      "\n"
+      "connector Outlet\n"
+      "  extends FluidPort(redeclare package Medium = StandardWater);\n"
+      "end Outlet;\n"
+      "\n"
+      "model FluidSource\n"
+      "  replaceable FluidPort p;\n"
+      "end FluidSource;\n"
+      "\n"
+      "model RedeclareMod11\n"
+      "  extends FluidSource(redeclare Outlet p);\n"
+      "end RedeclareMod11;\n"),
+               std::string("class RedeclareMod11\n"
+      "  Real p.Q;\n"
+      "  Real p.P;\n"
+      "equation\n"
+      "  p.Q = 0.0;\n"
+      "end RedeclareMod11;\n"));
+  YMC_CHECK_EQ(flatten_src_driver("model LosslessPipe\n"
+      "  extends PartialTwoPortInterface;\n"
+      "end LosslessPipe;\n"
+      "\n"
+      "partial model PartialTwoPortInterface\n"
+      "  parameter Real m_flow_nominal;\n"
+      "end PartialTwoPortInterface;\n"
+      "\n"
+      "partial model PartialConnection2Pipe\n"
+      "  replaceable model Model_pipCon = PartialTwoPortInterface(final m_flow_nominal = mCon_flow_nominal);\n"
+      "  parameter Real mCon_flow_nominal;\n"
+      "  Model_pipCon pipCon;\n"
+      "end PartialConnection2Pipe;\n"
+      "\n"
+      "model Connection2PipeLossless\n"
+      "  extends PartialConnection2Pipe(redeclare model Model_pipCon = LosslessPipe);\n"
+      "end Connection2PipeLossless;\n"
+      "\n"
+      "partial model PartialDistribution2Pipe\n"
+      "  parameter Integer nCon = 1;\n"
+      "  parameter Real[nCon] mCon_flow_nominal = ones(nCon);\n"
+      "  replaceable PartialConnection2Pipe[nCon] con(final mCon_flow_nominal = mCon_flow_nominal);\n"
+      "end PartialDistribution2Pipe;\n"
+      "\n"
+      "model RedeclareClass2\n"
+      "  extends PartialDistribution2Pipe(redeclare Connection2PipeLossless con[nCon]);\n"
+      "end RedeclareClass2;\n"),
+               std::string("class RedeclareClass2\n"
+      "  final parameter Integer nCon = 1;\n"
+      "  parameter Real mCon_flow_nominal[1] = 1.0;\n"
+      "  final parameter Real con[1].mCon_flow_nominal = mCon_flow_nominal[1];\n"
+      "  final parameter Real con[1].pipCon.m_flow_nominal = con[1].mCon_flow_nominal;\n"
+      "end RedeclareClass2;\n"));
+  YMC_CHECK_EQ(flatten_src_driver("partial package PM\n"
+      "  type MF = Real;\n"
+      "end PM;\n"
+      "package W\n"
+      "  extends PM;\n"
+      "end W;\n"
+      "model FP\n"
+      "  replaceable package Medium = PM;\n"
+      "  Medium.MF p = 1;\n"
+      "end FP;\n"
+      "model Outlet\n"
+      "  extends FP(redeclare package Medium = W);\n"
+      "end Outlet;\n"
+      "model Src\n"
+      "  replaceable FP port;\n"
+      "end Src;\n"
+      "model Mid\n"
+      "  extends Src;\n"
+      "end Mid;\n"
+      "model PR10\n"
+      "  extends Mid(redeclare Outlet port);\n"
+      "end PR10;\n"),
+               std::string("class PR10\n"
+      "  Real port.p = 1.0;\n"
+      "end PR10;\n"));
+}
+
+YMC_TEST(flatten_68f_extends_named_class_mods) {
+  // extends 直接点名的类节点上预挂的类修饰（F1，§6.6；NFInst.mo:1391-1392 / :1421）、本地类克隆重展开（F6，§3.4-9）；经短类别名点名、只有链下挂修饰的不读（Q02）。
+  YMC_CHECK_EQ(flatten_src_driver("model A\n"
+      "  model B\n"
+      "    constant Integer i = 3;\n"
+      "  end B;\n"
+      "  model E\n"
+      "    extends B(i = 5);\n"
+      "  end E;\n"
+      "  E e;\n"
+      "end A;\n"
+      "model PX02\n"
+      "  A a(B(i = 4));\n"
+      "end PX02;\n"),
+               std::string("class PX02\n"
+      "  constant Integer a.e.i = 4;\n"
+      "end PX02;\n"));
+  YMC_CHECK_EQ(flatten_src_driver("model A\n"
+      "  model B\n"
+      "    replaceable model C\n"
+      "      Real x;\n"
+      "    end C;\n"
+      "    C c;\n"
+      "  end B;\n"
+      "  model B3\n"
+      "    extends B;\n"
+      "  end B3;\n"
+      "  B3 b3;\n"
+      "end A;\n"
+      "model A68fXSB02\n"
+      "  model D\n"
+      "    Real x = 1.0;\n"
+      "  end D;\n"
+      "  A a(B(redeclare model C = D));\n"
+      "end A68fXSB02;\n"),
+               std::string("class A68fXSB02\n"
+      "  Real a.b3.c.x = 1.0;\n"
+      "end A68fXSB02;\n"));
+  YMC_CHECK_EQ(flatten_src_driver("model A\n"
+      "  model B\n"
+      "    model C\n"
+      "      Real x = 1;\n"
+      "    end C;\n"
+      "    C c;\n"
+      "  end B;\n"
+      "  model B3\n"
+      "    extends B;\n"
+      "  end B3;\n"
+      "  B3 b3;\n"
+      "end A;\n"
+      "model RVC2\n"
+      "  extends A(B(C(x = 2)));\n"
+      "end RVC2;\n"),
+               std::string("class RVC2\n"
+      "  Real b3.c.x = 2.0;\n"
+      "end RVC2;\n"));
+  YMC_CHECK_EQ(flatten_src_driver("model A\n"
+      "  model B\n"
+      "    replaceable model C\n"
+      "      Real x;\n"
+      "    end C;\n"
+      "    C c;\n"
+      "  end B;\n"
+      "  model B2 = B;\n"
+      "  model B3\n"
+      "    extends B2;\n"
+      "  end B3;\n"
+      "  B3 b3;\n"
+      "end A;\n"
+      "model D\n"
+      "  Real x = 1.0;\n"
+      "end D;\n"
+      "model Q02\n"
+      "  A a1(B(redeclare model C = D));\n"
+      "end Q02;\n"),
+               std::string("class Q02\n"
+      "  Real a1.b3.c.x;\n"
+      "end Q02;\n"));
+  YMC_CHECK_EQ(flatten_src_driver("model A\n"
+      "  model B\n"
+      "    constant Integer i = 3;\n"
+      "  end B;\n"
+      "  model E\n"
+      "    extends B;\n"
+      "  end E;\n"
+      "  E e;\n"
+      "end A;\n"
+      "model Q07\n"
+      "  A.E pre;\n"
+      "  A a1(B(i = 4));\n"
+      "end Q07;\n"),
+               std::string("class Q07\n"
+      "  constant Integer pre.i = 3;\n"
+      "  constant Integer a1.e.i = 4;\n"
+      "end Q07;\n"));
+  YMC_CHECK_EQ(flatten_src_driver("model A\n"
+      "  model B\n"
+      "    replaceable model C\n"
+      "      Real x;\n"
+      "    end C;\n"
+      "    C c;\n"
+      "  end B;\n"
+      "  model B3\n"
+      "    extends B;\n"
+      "  end B3;\n"
+      "  B3 b3;\n"
+      "end A;\n"
+      "model D\n"
+      "  Real x = 1.0;\n"
+      "end D;\n"
+      "model Q06\n"
+      "  A.B3 pre;\n"
+      "  A a1(B(redeclare model C = D));\n"
+      "end Q06;\n"),
+               std::string("class Q06\n"
+      "  Real pre.c.x;\n"
+      "  Real a1.b3.c.x = 1.0;\n"
+      "end Q06;\n"));
+}
+
+YMC_TEST(flatten_68f_inst_order) {
+  // 实例化序：先全部 extends、后本地组件（S0，§6.9；NFInst.mo:1181-1190）：基类 A 里写在 extends A0 之前的 `B b1` 取到 adopt 进来的 B，
+  // 外层事后挂的类修饰补得到（对抗评审 S016，期望串取自 omc 1.25.0 实跑）。
+  YMC_CHECK_EQ(flatten_src_driver("model A0\n"
+      "  model B\n"
+      "    Real x = 1;\n"
+      "  end B;\n"
+      "end A0;\n"
+      "model A\n"
+      "  B b1;\n"
+      "  extends A0;\n"
+      "end A;\n"
+      "model S016\n"
+      "  extends A(B(x = 2));\n"
+      "end S016;\n"),
+               std::string("class S016\n"
+      "  Real b1.x = 2.0;\n"
+      "end S016;\n"));
+}
+
+YMC_TEST(flatten_68f_narrow_early_comp) {
+  // 收窄 N4（68f 核对评审 VC04 / VE01）：写在 extends 之前、类型经被修饰的 extends 继承来的本地组件照底线 SKIP（底线先实例化它，撞
+  // tree_class 的 classes_via_mod 守卫 / 嵌套类看不到重声明的守卫）；S0 不再把模型放出来露出别处的老错（`unbounded` 老 AI）。
+  const std::string t1 = flatten_src_driver("model A\n"
+      "  model B\n"
+      "    Real x = 1;\n"
+      "  end B;\n"
+      "end A;\n"
+      "model VC04\n"
+      "  B b0;\n"
+      "  extends A(B(x = 2));\n"
+      "  Integer i(unbounded = true);\n"
+      "end VC04;\n");
+  YMC_CHECK(t1.rfind("<unsupported:", 0) == 0);
+  const std::string t2 = flatten_src_driver("model A\n"
+      "  replaceable model Y\n"
+      "    Real v = 1;\n"
+      "  end Y;\n"
+      "  model W\n"
+      "    Y y;\n"
+      "  end W;\n"
+      "end A;\n"
+      "model Z\n"
+      "  Real v = 3;\n"
+      "end Z;\n"
+      "model D\n"
+      "  W w;\n"
+      "  extends A;\n"
+      "end D;\n"
+      "model VE01\n"
+      "  D d(redeclare model Y = Z);\n"
+      "  Integer i(unbounded = true);\n"
+      "end VE01;\n");
+  YMC_CHECK(t2.rfind("<unsupported:", 0) == 0);
+}
+
+YMC_TEST(flatten_68f_dropped_attr_ok) {
+  // 被丢弃属性：被外层盖掉的内层值、非字面量值、数组照底线丢弃（F4，§6.6；NFModifier.mo:402-408、NFTyping.mo:1288-1289）。
+  YMC_CHECK_EQ(flatten_src_driver("model RV40\n"
+      "  parameter Boolean b = true;\n"
+      "  Real x(unbounded = b) = time;\n"
+      "end RV40;\n"),
+               std::string("class RV40\n"
+      "  parameter Boolean b = true;\n"
+      "  Real x = time;\n"
+      "end RV40;\n"));
+  YMC_CHECK_EQ(flatten_src_driver("model RV41\n"
+      "  Real x[2](unbounded = {true, false}) = {time, time};\n"
+      "end RV41;\n"),
+               std::string("class RV41\n"
+      "  Real x[1];\n"
+      "  Real x[2];\n"
+      "equation\n"
+      "  x = {time, time};\n"
+      "end RV41;\n"));
+  YMC_CHECK_EQ(flatten_src_driver("function f\n"
+      "  output Boolean y = true;\n"
+      "end f;\n"
+      "model RV43\n"
+      "  Real x(unbounded = f()) = time;\n"
+      "end RV43;\n"),
+               std::string("class RV43\n"
+      "  Real x = time;\n"
+      "end RV43;\n"));
+  YMC_CHECK_EQ(flatten_src_driver("type T = Real(unbounded = 1);\n"
+      "model RF1\n"
+      "  T x(unbounded = true) = time;\n"
+      "end RF1;\n"),
+               std::string("class RF1\n"
+      "  Real x = time;\n"
+      "end RF1;\n"));
+  YMC_CHECK_EQ(flatten_src_driver("model A\n"
+      "  Real x(unbounded = 1) = time;\n"
+      "end A;\n"
+      "model RF2\n"
+      "  extends A(x(unbounded = false));\n"
+      "end RF2;\n"),
+               std::string("class RF2\n"
+      "  Real x = time;\n"
+      "end RF2;\n"));
+}
+
+YMC_TEST(flatten_68f_dropped_attr_reject) {
+  // 被丢弃属性：startOrigin 不在 Real 属性表（NFInst.mo:1547）、胜出值是非 Boolean 字面量（omc 拒）。
+  YMC_CHECK_EQ(flatten_src_driver("model A68fTAU01\n"
+      "  Real x(unbounded = 3) = time;\n"
+      "end A68fTAU01;\n"),
+               std::string("<error>"));   // omc 拒
+  YMC_CHECK_EQ(flatten_src_driver("model RV48\n"
+      "  Real x(startOrigin = \"binding\") = time;\n"
+      "end RV48;\n"),
+               std::string("<error>"));   // omc 拒
+  YMC_CHECK_EQ(flatten_src_driver("model RF6\n"
+      "  Real x(final startOrigin) = time;\n"
+      "end RF6;\n"),
+               std::string("<error>"));   // omc 拒
+  YMC_CHECK_EQ(flatten_src_driver("type T = Real(unbounded = true);\n"
+      "model RF8\n"
+      "  T x(unbounded = 2) = time;\n"
+      "end RF8;\n"),
+               std::string("<error>"));   // omc 拒
+}
+
+YMC_TEST(flatten_68f_narrow_posthoc_named) {
+  // 收窄 N1（68f 对抗评审 S006）：extends 点名的 B 上有事后挂的 plain 类修饰（`extends A(B(x = 2))`），本地类 E 写在 extends 之前 → SKIP
+  //（omc 取 e.x = 2.0，F1 读不到事后挂的条目，见 inst_class）。
+  const std::string t = flatten_src_driver("model A\n"
+      "  model B\n"
+      "    Real x = 1;\n"
+      "  end B;\n"
+      "end A;\n"
+      "model S006\n"
+      "  model E\n"
+      "    extends B;\n"
+      "  end E;\n"
+      "  E e;\n"
+      "  extends A(B(x = 2));\n"
+      "end S006;\n");
+  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+}
+
+YMC_TEST(flatten_68f_narrow_pre_and_posthoc) {
+  // 收窄 N2（68f 对抗评审 V011）：B2 上先预挂 RICM 条目、外层又事后挂 plain 条目 `extends M1(B2(w = 4))` → SKIP（omc 取 b3.w = 4.0）。
+  const std::string t = flatten_src_driver("model B\n"
+      "  model B2\n"
+      "    replaceable type P = Real;\n"
+      "    P p;\n"
+      "    Real w = 1;\n"
+      "  end B2;\n"
+      "  model B3\n"
+      "    extends B2;\n"
+      "  end B3;\n"
+      "  B3 b3;\n"
+      "end B;\n"
+      "model M1\n"
+      "  extends B(B2(redeclare type P = Integer));\n"
+      "end M1;\n"
+      "model V011\n"
+      "  extends M1(B2(w = 4));\n"
+      "end V011;\n");
+  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+}
+
+YMC_TEST(flatten_68f_narrow_nonliteral_binding) {
+  // 收窄 N3（68f 对抗评审 Z001）：组件修饰路线的类修饰经 F1 按 extends 修饰施加，绑定要查名（q）→ SKIP（omc 取 `a.b2.x = q`）。
+  const std::string t = flatten_src_driver("model A\n"
+      "  model B\n"
+      "    Real x = 1;\n"
+      "  end B;\n"
+      "  model B2\n"
+      "    extends B;\n"
+      "  end B2;\n"
+      "  B2 b2;\n"
+      "end A;\n"
+      "model Z001\n"
+      "  parameter Real q = 4;\n"
+      "  A a(B(x = q));\n"
+      "end Z001;\n");
+  YMC_CHECK(t.rfind("<unsupported:", 0) == 0);
+  // 绑定是字面量的运算：照施加（期望串取自 omc 1.25.0 实跑）。
+  YMC_CHECK_EQ(flatten_src_driver("model A\n"
+      "  model B\n"
+      "    Real x = 1;\n"
+      "  end B;\n"
+      "  model B2\n"
+      "    extends B;\n"
+      "  end B2;\n"
+      "  B2 b2;\n"
+      "end A;\n"
+      "model N3X07\n"
+      "  A a(B(x = 2 * 3 + 1));\n"
+      "end N3X07;\n"),
+               std::string("class N3X07\n"
+      "  Real a.b2.x = 7.0;\n"
+      "end N3X07;\n"));
 }
 
 YMC_TEST_MAIN

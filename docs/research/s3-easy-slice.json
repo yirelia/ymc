@@ -730,5 +730,9 @@
 "EnumRangeBinding1.mo",
 "PackageConstant6.mo",
 "RecordBinding10.mo",
-"Subscript7.mo"
+"Subscript7.mo",
+"ModClass4.mo",
+"RedeclareClass2.mo",
+"RedeclareMod11.mo",
+"RedeclareMod12.mo"
 ]

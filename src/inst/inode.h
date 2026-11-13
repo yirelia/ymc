@@ -157,6 +157,9 @@ struct ClassTree {
   std::vector<NodeId> components;           // 含 Ref 占位；顺序 = SCode 声明序（保序！压平变量顺序的根）
   std::vector<NodeId> exts;                 // 各 extends 节点，按源码顺序
   std::vector<NodeId> ext_bases;            // 与 exts 平行：expand 时解析到的基类（短类顺链到底的长类；解析不到 = empty）；之后不再重查
+  // 与 exts 平行：extends 名直接查到的节点（顺短类链之前；class extends 的隐式基类 / 解析不到 = empty）。omc 的 modifyExtends 读的是这个
+  // 被点名节点自己的修饰（NFInst.mo:1391-1392 v1.25.0），见 Instantiator::inst_class（任务卡 T-S3-68f-redo §6.6 F1）。
+  std::vector<NodeId> ext_named;
   // 与 exts 平行：经短类继承、而 1.25.0 与 MLS 结果不同的形态（Instantiator::extends_long_class），实例化这条 extends 时 SKIP；nullptr = 没有。
   std::vector<const char*> ext_short_gaps;
   std::vector<std::uint32_t> local_components;  // 本类自己声明的组件在 components 里的下标

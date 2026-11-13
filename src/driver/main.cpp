@@ -316,11 +316,20 @@ int dump_flat_pipeline(ymc::Absyn& absyn, ymc::Diagnostics& diags, ymc::Interner
   }
   diags.print(stderr, "");
   if (!root.is_valid() || inst.nodes[root].is_empty() || diags.has_errors()) return 1;
+  const std::size_t items_before = diags.items().size();
   ymc::FlattenResult fr = ymc::flatten(inst, interner, root, &instr);
   if (fr.unsupported) {
     if (fr.unsupported_detail.empty()) std::fprintf(stderr, "ymc: not implemented: %s\n", fr.unsupported_reason.c_str());
     else std::fprintf(stderr, "ymc: not implemented: %s [%s]\n", fr.unsupported_reason.c_str(), fr.unsupported_detail.c_str());
     return 66;
+  }
+  // 压平期照 OMC 移植的判定报的真错误（被丢弃属性的核查等，任务卡 T-S3-68f-redo §6.6 F4）：同 omc，有错误就不打印模型，退出 1。
+  if (diags.has_errors()) {
+    ymc::Diagnostics late;
+    for (std::size_t i = items_before; i < diags.items().size(); ++i)
+      late.report(diags.items()[i].level, diags.items()[i].loc, diags.items()[i].msg);
+    late.print(stderr, "");
+    return 1;
   }
   std::string text;
   if (stage != nullptr) {

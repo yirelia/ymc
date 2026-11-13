@@ -48,6 +48,10 @@ class Instantiator {
   // 基类实例里的同名原类（inherited_in_bases），定义层的 → class_extends_target；没展开的先展开。不是 class extends / 取不到 →
   // invalid。flatten 按它的作用域解析 class extends 记录继承来的字段（ADR-007 第 2 阶段 66d）。
   NodeId class_extends_base(NodeId cls);
+  // 类节点 cls 的 extends 直接点名的节点（ClassTree::ext_named，递归到它们各自的 extends）里有挂了类修饰的（任务卡 T-S3-68f-redo
+  // §6.6 F2）：flatten 经限定名进这样的类克隆（`E.i`，E extends 被类修饰改过的 B）要走包实例（omc 进类先 instPackage，NFLookup.mo:767
+  // v1.25.0；E 的基类带着修饰实例化，同 F1）。必要时展开 cls。经短类别名点名、只有链下节点挂修饰的不算（同 F1 的口径，Q01）。
+  bool bases_class_modded(NodeId cls, int depth = 0);
 
   // 类节点的 InstNode.scopePath（NFInstNode.mo:1217-1290 v1.25.0，ScopeType.RELATIVE）。见 inst.cpp。
   [[nodiscard]] std::vector<Symbol> scope_path(NodeId cls) const;
@@ -60,6 +64,8 @@ class Instantiator {
   [[nodiscard]] const std::string& unsupported_reason() const noexcept { return unsupported_reason_; }
   // 子原因（查不到的类名等），driver 打在 `[…]` 里，供 nf_live_sweep 排桶；主原因不变。
   [[nodiscard]] const std::string& unsupported_detail() const noexcept { return unsupported_detail_; }
+  // 照 OMC 移植、条件逐条对到 OMC 文件:行的判定报真错误（模型错，driver 退出 1；任务卡 T-S3-68f-redo §6.6 F4 / §6.8 PP-E）。
+  void report_error(SourceLoc loc, std::string msg) { diags_.error(loc, std::move(msg)); }
 
  private:
   // ---- 三趟 ----
@@ -81,7 +87,9 @@ class Instantiator {
   NodeId instance_class(NodeId c, NodeId inst, bool typish, bool refresh);
   void adopt_inherited_classes(NodeId inst, NodeId base, std::size_t nlocal, std::unordered_set<std::uint32_t>& taken);
   NodeId instantiate_root_class(NodeId def_node);      // 根类：短类别名顺链到长类、补生成的 inner（见 inst.cpp）
-  void inst_class(NodeId inst_node, NodeId def_node, const ClassRedecls* redecls = nullptr);  // 建 FlatTree：递归组件 + extends 就地展开
+  // 建 FlatTree：递归组件 + extends 就地展开。cmods：instantiate 转发来的、目标经 extends 继承来的类修饰（见 instantiate，F7）。
+  void inst_class(NodeId inst_node, NodeId def_node, const ClassRedecls* redecls = nullptr,
+                  const std::vector<ClassMod>* cmods = nullptr);
   bool mentions_any(Id<SElement> cls, const ClassRedecls& r, int depth) const;   // 类体里写到 r 的名字（见 inst_component）
   // 修饰里的类重声明（`redeclare model B = X(p = 4)`）：元素的类节点（词法作用域 scope = 写修饰的类，按元素缓存）；修饰 m 里的
   // 这类子修饰追加进 r（已有的名字不覆盖 = 外层优先），base 里没有这个类 → SKIP。见 inst.cpp。
@@ -96,6 +104,15 @@ class Instantiator {
   void apply_extends_modifier(NodeId bc, Id<SMod> mod, NodeId scope);
   void apply_class_mod(NodeId inst, NodeId cls, Id<SMod> m, NodeId scope, int depth);   // 类修饰补到已实例化的组件（见 inst.cpp）
   bool plain_class_mod(NodeId cls, Id<SMod> m) const;   // 能当类修饰施加的形态（见 inst.cpp）
+  bool plain_class_mod_def(Id<SElement> d, Id<SMod> m) const;   // 同上，按类定义元素判
+  // 本桶放开的类修饰新形态（任务卡 T-S3-68f-redo §6.4，按被改类的定义元素判；见 inst.cpp）。
+  bool redecl_only_class_mod(Id<SElement> cd, Id<SMod> m) const;
+  bool nested_class_mod(Id<SElement> cd, Id<SMod> m) const;
+  bool new_class_mod(Id<SElement> cd, Id<SMod> m) const { return redecl_only_class_mod(cd, m) || nested_class_mod(cd, m); }
+  bool ra_drop_ok(NodeId bc) const;   // Bug2727 形态：被 extends 重声明换掉的组件，内层 extends 修饰可丢（§6.2 cond_RA）
+  // 预挂（instantiate 的 cmods 支挂上 / rid 拷来）的类修饰条目；事后挂的（底线 plain 形态的 extends 类修饰、inst_package 的短类修饰，见
+  // posthoc_cmods_）不算。posthoc：给了就报有没有事后挂的条目。
+  std::vector<std::pair<Id<SMod>, NodeId>> preattached_class_mods(NodeId n, bool* posthoc = nullptr) const;
   // 长类型只有一个 extends（`type TypeReal extends Real; end TypeReal;`）：返回那个 extends 元素；否则 invalid。
   Id<SElement> type_extends_only(Id<SElement> ce) const;
   // extends 修饰里的组件重声明（见 inst.cpp 的说明）。scope = 写 extends 的类的实例。
@@ -113,7 +130,9 @@ class Instantiator {
   void mark_package_instance(NodeId inst);
   NodeId inherited_in_bases(NodeId inst, Symbol name, int depth) const;   // class extends 的目标（见 inst.cpp）
   // 进类查名前顺短类链到底；partial：链上有 partial 的；mods：给了就收链上短类的修饰（外层在前，各带写处）而不当 SKIP（见 inst.cpp）。
-  NodeId through_short_classes(NodeId cls, bool& partial, std::vector<std::pair<Id<SMod>, NodeId>>* mods = nullptr);
+  // layers：给了就记链上各节点（含链底长类）与这一层修饰收完时 mods 的长度（CM-5 按层插类修饰用）。
+  NodeId through_short_classes(NodeId cls, bool& partial, std::vector<std::pair<Id<SMod>, NodeId>>* mods = nullptr,
+                               std::vector<std::pair<NodeId, std::size_t>>* layers = nullptr);
   // extends 的基类 cls 顺短类链到底的类；gap：链上有 1.25.0 与 MLS 结果不同的形态（见 inst.cpp）。
   NodeId extends_long_class(NodeId cls, const char*& gap, bool settle);
   void check_short_settled(Id<SElement> short_def, NodeId next);   // 见 inst.cpp
@@ -173,6 +192,31 @@ class Instantiator {
   std::unordered_map<std::uint32_t, Id<SElement>> ce_ext_elem_;
   std::unordered_set<std::uint32_t> ce_ext_elems_;
   std::size_t synth_cap_ = 0;
+  // 事后挂的类修饰（SMod raw）：底线 plain 形态的 extends 类修饰（inst_class，F7 退路第一步恢复）、inst_package 的短类修饰。挂上时基类实例里
+  // 已经实例化的东西看不到它们，F1 / F2 / F6 不读（读了只会让后建的那部分变、先建的不变，见 inst_class）。
+  std::unordered_set<std::uint32_t> posthoc_cmods_;
+  // 收窄 N4：写在某条 extends 之前的本地组件正在实例化时，它后面那些 extends 的 adopt 换进来的克隆（NodeId raw）——底线里它们此时还没
+  // 换进来，inst_component 的"嵌套类看不到重声明"守卫照"父亲还不是实例"判（见 inst_class 第二遍）。
+  std::unordered_set<std::uint32_t> pending_adopted_;
+  // inst_package 的实例化深度（CM-1：包实例里的组件不放开新形态类修饰，见 inst_component）。
+  int pkg_depth_ = 0;
+  // P 组（任务卡 T-S3-68f-redo §6.3）：根阶段撞上 partial 时组件栈上的组件可能之后被 extends 重声明换掉（omc 在 REDECLARED 语境里实例化
+  // 原组件，NFInst.mo:1894-1907 v1.25.0，这个语境放过 partial 检查：NFLookup.mo:703 / :772 / :979、NFInst.mo:2000-2002 / :429-431）。
+  // 先挂起，被换掉就丢，根阶段结束仍在 → SKIP。
+  struct RedeclPending {
+    const char* why;
+    std::string detail;
+    std::vector<NodeId> stack;   // 撞上时的组件栈（拷贝）
+    bool after_unsup;            // 挂起时 unsupported_ 已置位（flush 时 SKIP 原因取最早发生的那件）
+  };
+  std::vector<NodeId> comp_stack_;   // inst_component 正在实例化的组件（RAII 压 / 弹，纯记账）
+  std::vector<RedeclPending> redecl_pending_;
+  bool root_phase_ = false;
+  // 撞 partial：根阶段且组件栈非空 → 挂起、返回 true（调用方照常往下走）；否则 false（调用方照旧当场 SKIP）。
+  bool defer_partial(const char* why, std::string detail);
+  // CM-1 的跨实例一致性：新形态的组件类修饰（SMod raw）放开过 / 拒过的。flatten 按 SMod 判 applied_class_mods，同一 SMod 在一个实例
+  // 里放开、在另一个里拒了，拒的那份会被当成已施加 → 两边一旦冲突就 SKIP（旧 CT 族）。
+  std::unordered_set<std::uint32_t> new_cmods_applied_, new_cmods_refused_;
 };
 
 }  // namespace ymc

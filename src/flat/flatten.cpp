@@ -5908,6 +5908,12 @@ class Flattener {
         defer_bind = needs_forward_shape(I_.comps[cid].binding.raw_exp, bind_lex(cid, enclosing), prefix);
       if (defer_bind) need_second_pass_ = true;
     }
+    // `= break`（MLS 3.6 §7.2.2，任务卡 T-S3-68f-redo §6.1 B-1）：合并期 break 是普通的 RAW_BINDING（外层绑定盖内层，NFModifier.mo:402-408
+    // v1.25.0），胜出的是 break → instBinding 换成 UNBOUND（NFInst.mo:2742）。只放 Real 标量变量（Var / Discrete）、不在记录里：变量没有
+    // "有无绑定"的前置检查（updateParameterBinding 只对参数 :2014-2017，verifyBinding 只查 var < DISCRETE 的 NFFlatten.mo:746-750，
+    // useBinding 只对复合组件 NFInst.mo:1982-1983）。其余（参数 / 常量 / 记录 / 非 Real）照旧定型 → SKIP。
+    const SVariability bvar = var_min(var_floor, I_.comps[cid].attributes.variability);
+    const bool break_ok = (bvar == SVariability::Var || bvar == SVariability::Discrete) && cty.kind == TypeKind::Real && !ctx.in_record;
     // 定型 / 求值绑定时碰到的向前引用（下面 constant 的字面量检查用）：外层的标记先存着、事后并回（同 call() 的做法）。
     const bool saved_fm = std::exchange(forward_miss_, false);
     if (!defer_bind) {
@@ -5941,14 +5947,15 @@ class Flattener {
       if (binding.is_valid()) {
         // 已按值求得
       } else if (mraw.is_valid()) {
-        binding = (cty.kind == TypeKind::Enumeration && enum_literal_cref(mraw, mod_scope)) ? enum_lit_value(mraw, mod_scope, mod_prefix)
-                                                                           : inst_exp(mraw, mod_scope, mod_prefix);
+        if (!(break_ok && is_break_exp(mraw)))   // `= break`：无绑定（见 break_ok）
+          binding = (cty.kind == TypeKind::Enumeration && enum_literal_cref(mraw, mod_scope)) ? enum_lit_value(mraw, mod_scope, mod_prefix)
+                                                                             : inst_exp(mraw, mod_scope, mod_prefix);
       } else {
         const Binding& b = I_.comps[cid].binding;
         const BindingKind bk = b.kind;
         const Id<Exp> raw = b.raw_exp;
         const NodeId bs = bind_lex(cid, enclosing);   // 声明绑定 = 声明所在类，extends 覆盖的 = 写 extends 的类
-        if (bk == BindingKind::Raw && raw.is_valid())
+        if (bk == BindingKind::Raw && raw.is_valid() && !(break_ok && is_break_exp(raw)))
           binding = (cty.kind == TypeKind::Enumeration && enum_literal_cref(raw, bs)) ? enum_lit_value(raw, bs, prefix)
                                                                             : inst_exp(raw, bs, prefix);
       }
@@ -6092,7 +6099,7 @@ class Flattener {
     }
     for (Id<SMod> cc : I_.comps[cid].cc_mods) asrc.push_back({cc, enclosing, prefix});   // 重声明的约束修饰
     if (!leaf_derived_sources(cid, enclosing, prefix, /*arr=*/false, asrc)) return;
-    std::vector<FlatVarAttr> attrs = collect_attributes(cid, asrc);
+    std::vector<FlatVarAttr> attrs = collect_attributes(cid, asrc, break_ok);
     // 带 fixed 属性还当结构参数的只剩 `each fixed = true`（见 eval_fixed）：照打的形态未逐一核实 → SKIP。
     if (eval_true && struct_final)
       for (const FlatVarAttr& a : attrs)
@@ -7547,8 +7554,8 @@ class Flattener {
   }
 
   // 收集标量叶组件的内建属性（R13 §4.2）：数组叶组件的特例（零维，每个属性值整取）。
-  std::vector<FlatVarAttr> collect_attributes(CompId cid, const std::vector<ModSource>& sources) {
-    const std::vector<AttrPlan> plans = plan_attributes(cid, sources, {});
+  std::vector<FlatVarAttr> collect_attributes(CompId cid, const std::vector<ModSource>& sources, bool break_ok = false) {
+    const std::vector<AttrPlan> plans = plan_attributes(cid, sources, {}, break_ok);
     if (result_.unsupported) return {};
     return attributes_at(plans, {});
   }
@@ -7651,8 +7658,10 @@ class Flattener {
   // applySubscripts，NFFlatten.mo:1625-1683），值须恰是该形状的数组（标量 → MODIFIER_NON_ARRAY_TYPE_ERROR，Each3；维不符 →
   // VARIABLE_BINDING_DIMS_MISMATCH，BuiltinAttribute24/25/26）；each 属性每元素同值、须是标量。
   // v1 范围外的修饰形态（嵌套子修饰 / final / redeclare / break、或类型无此属性名）→ 标 unsupported。
+  bool is_break_exp(Id<Exp> e) const { return e.is_valid() && I_.absyn.exps[e].kind == ExpKind::Break; }
+
   std::vector<AttrPlan> plan_attributes(CompId cid, const std::vector<ModSource>& sources,
-                                        const std::vector<std::int64_t>& dims) {
+                                        const std::vector<std::int64_t>& dims, bool break_ok = false) {
     std::vector<AttrPlan> out;
     const Type ty = I_.comps[cid].ty;
     const std::vector<AttrSpec>& table = attr_table(ty.kind);
@@ -7668,6 +7677,13 @@ class Flattener {
     // final element"（修饰由内向外逐层 merge，内层是 final 就 checkFinalOverride 报错，NFModifier.mo:399-405 / :691-709
     // v1.25.0；FA 探针 f1 的 `V v(unit = "V")`）→ SKIP。
     std::vector<Symbol> outer_names;   // 已看过的（更外层）来源修饰过的属性名
+    // 被丢弃属性的核查（任务卡 T-S3-68f-redo §6.6 F4）。startOrigin 不在 v1.25.0 的 Real 属性表里（NFBuiltin.mo:165 FLAT_TREE / :209
+    // REAL_NODE），合并后的修饰在 applyModifier 的 FLAT_TREE 支里找不到元素 → MISSING_MODIFIED_ELEMENT（NFInst.mo:1547）：哪一层写的、
+    // 有没有值都一样（RV48、RF6、RF7）。放在"无值无子修饰就跳过"之前判。
+    auto report = [&](const std::string& msg) {
+      if (instr_) instr_->report_error(I_.comps[cid].loc, msg);
+      else set_unsupported("attribute modifier");
+    };
     for (const ModSource& src : sources) {
       const std::size_t n_outer = outer_names.size();
       for (const SSubMod& s : I_.scode.mods[src.mod].subs) {
@@ -7679,6 +7695,10 @@ class Flattener {
           return out;
         }
         outer_names.push_back(s.ident);
+        if (s.ident == in_.intern("startOrigin")) {
+          report("Modified element startOrigin not found in class " + std::string(ty.kind == TypeKind::Real ? "Real" : "builtin type") + ".");
+          return out;
+        }
         if (sm.kind == SModKind::Mod && sm.subs.empty() && !sm.binding.is_valid()) continue;
         bool simple = sm.kind == SModKind::Mod && sm.subs.empty();
         bool named = droppable(s.ident);
@@ -7687,6 +7707,31 @@ class Flattener {
         if (!simple || !named) { set_unsupported("attribute modifier"); return out; }
       }
     }
+    // Real 的 unbounded、String 的 fixed 是 Boolean 属性（NFBuiltin.mo 的属性表）：修饰先逐层合并、外层绑定胜（NFModifier.mo:402-408），
+    // typeTypeAttribute 只对合并后胜出的那个绑定定型 + matchBinding（NFTyping.mo:1250 起、:1288-1289）——被盖掉的内层值不核（RF1-RF3 omc
+    // 收）。照属性值的选法取胜出来源（优先级从高到低、第一个带值的同名子修饰），只在标量组件上核：值是非 Boolean 字面量 → 类型不符，omc
+    // 拒（RF4 / RF5 / RF8 / RF9、A68fTAU01-04 / 06）。非字面量（cref / 调用 / 表达式 / 枚举）定型要走 inst_exp、有副作用，照底线丢弃
+    //（RV40 / RV43 / RV44 / RV49、A68fTAU05 KNOWN）；数组组件照底线丢弃（RV41 / RV42，RV47 KNOWN）。
+    if (dims.empty())
+      for (const char* dn : {"unbounded", "fixed"}) {
+        if ((std::string_view(dn) == "unbounded") != (ty.kind == TypeKind::Real)) continue;
+        if (std::string_view(dn) == "fixed" && ty.kind != TypeKind::String) continue;
+        const Symbol dsym = in_.intern(dn);
+        Id<Exp> win;
+        for (const ModSource& src : sources) {
+          for (const SSubMod& sub : I_.scode.mods[src.mod].subs)
+            if (sub.ident == dsym && I_.scode.mods[sub.mod].binding.is_valid()) { win = I_.scode.mods[sub.mod].binding; break; }
+          if (win.is_valid()) break;
+        }
+        if (!win.is_valid()) continue;
+        const Exp& wx = I_.absyn.exps[win];
+        const bool neg_num = wx.kind == ExpKind::Unary && wx.op == Op::UMinus && wx.a.is_valid() &&
+                             (I_.absyn.exps[wx.a].kind == ExpKind::IntLit || I_.absyn.exps[wx.a].kind == ExpKind::RealLit);
+        if (wx.kind == ExpKind::IntLit || wx.kind == ExpKind::RealLit || wx.kind == ExpKind::StringLit || neg_num) {
+          report("Type mismatch in binding " + std::string(dn) + ", expected subtype of Boolean.");
+          return out;
+        }
+      }
     for (const AttrSpec& a : table) {
       const Symbol an = in_.intern(a.name);
       const ModSource* src = nullptr;
@@ -7702,6 +7747,9 @@ class Flattener {
       }
       if (!smid.is_valid()) continue;
       const SMod sm = I_.scode.mods[smid];   // 拷贝（下面 inst 可能扩 arena）
+      // 胜出来源的值是 `break`（§6.1 B-2）：属性绑定变 UNBOUND（NFInst.mo:2652 + :2742 v1.25.0）后换成 NOMOD、不打印（NFTyping.mo:1275-1280），
+      // 不再往内层来源找。只在 B-1 放开的变量上（break_ok）、标量；fixed / stateSelect 另有按来源扫的路线，不放。
+      if (break_ok && dims.empty() && is_break_exp(sm.binding) && a.vk != AttrVK::StateSel && in_.str(an) != "fixed") continue;
       // stateSelect 的值引用参数时，参数的 final 只在 flatten_class 的预扫里打（组件声明、嵌套修饰、本类 extends 修饰）；来源
       // 没被扫过的（更深一层基类的 extends 修饰、类型链修饰、合成的修饰）打出来的参数会少个 final → SKIP。
       if (a.vk == AttrVK::StateSel && !is_qualified_cref(I_.absyn.exps[sm.binding], I_.absyn) &&
@@ -15758,6 +15806,15 @@ class Flattener {
           if (node_out) *node_out = ic;
           return I_.nodes[ic].def;
         }
+      }
+      // 基类挂了类修饰的类克隆（`model E extends B; end E;`，B 被 `extends A(B(i = 4))` 改过；经 `E.i` 取值）：omc 进 E 先 instPackage
+      //（NFLookup.mo:767 v1.25.0），E 的基类带着修饰（任务卡 T-S3-68f-redo §6.6 F2，EQ09 / CMX14 omc 取 4）。SCode 层下降取的是 B 定义里的
+      // 声明值 → 报出节点，经它往下走包实例（inst 侧 F1 施加）。
+      if (node_out && instr_ && ic.is_valid() && I_.nodes[ic].node_type.kind != NodeTypeKind::RedeclaredClass &&
+          !I_.class_modded.count(ic.raw) && instr_->bases_class_modded(ic)) {
+        def_scope = scode_scope_of(I_.nodes[ic].parent_scope);
+        *node_out = ic;
+        return I_.nodes[ic].def;
       }
       if (ic.is_valid() && I_.nodes[ic].node_type.kind == NodeTypeKind::RedeclaredClass) {
         const SElement& rel = I_.scode.elems[I_.nodes[ic].def];

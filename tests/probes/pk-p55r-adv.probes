@@ -1,0 +1,5677 @@
+//// set: pk-p55r-adv — 68f 对抗评审探针（S0 次序、F7 / F1 / F2 / F6 组件修饰路线、CM / RICM、break、F4、R / P 组）与收窄 N1-N3 的顺查
+//// model: R68fAK001
+model R68fAK001
+  Real x[2] = break;
+end R68fAK001;
+//// model: R68fAK002
+model A
+  Real x = 1;
+end A;
+model R68fAK002
+  A a[2](each x = break);
+end R68fAK002;
+//// model: R68fAK003
+model A
+  Real x[2] = {1, 2};
+end A;
+model R68fAK003
+  A a(x = break);
+end R68fAK003;
+//// model: R68fAK004
+model A
+  Real x = 1;
+end A;
+model R68fAK004
+  A a[2](x = {break, 3});
+end R68fAK004;
+//// model: R68fAK005
+model R68fAK005
+  Real x = if time > 1 then break else 1;
+end R68fAK005;
+//// model: R68fAK006
+model R68fAK006
+  input Real u = break;
+  output Real y = break;
+end R68fAK006;
+//// model: R68fAK007
+connector C
+  Real e = break;
+  flow Real f = break;
+end C;
+model R68fAK007
+  C c;
+end R68fAK007;
+//// model: R68fAK008
+model R68fAK008
+  discrete Real x = break;
+end R68fAK008;
+//// model: R68fAK009
+model A
+  Real x(start = 1) = 2;
+end A;
+model R68fAK009
+  A a(x(start = break) = break);
+end R68fAK009;
+//// model: R68fAK010
+model A
+  Real x(start = 1, fixed = true);
+end A;
+model R68fAK010
+  A a(x(fixed = break));
+end R68fAK010;
+//// model: R68fAK011
+model A
+  Real x(stateSelect = StateSelect.prefer);
+equation
+  der(x) = 1;
+end A;
+model R68fAK011
+  A a(x(stateSelect = break));
+end R68fAK011;
+//// model: R68fAK012
+model A
+  Real x(min = 0, max = 10, nominal = 2, unit = "m", quantity = "Length");
+end A;
+model R68fAK012
+  A a(x(min = break, max = break, nominal = break, unit = break, quantity = break));
+end R68fAK012;
+//// model: R68fAK013
+type T = Real(start = 3, unit = "s");
+model R68fAK013
+  T x(start = break) = break;
+end R68fAK013;
+//// model: R68fAK014
+model A
+  Real x = 1;
+end A;
+model R68fAK014
+  extends A(x = break);
+end R68fAK014;
+//// model: R68fAK015
+model A
+  Real x = break;
+end A;
+model R68fAK015
+  A a(x = 4);
+end R68fAK015;
+//// model: R68fAK016
+model A
+  Real x(start = break);
+end A;
+model R68fAK016
+  A a(x(start = 4));
+end R68fAK016;
+//// model: R68fAK017
+model A
+  Real x = 1;
+end A;
+model B
+  A a(x = 2);
+end B;
+model R68fAK017
+  B b(a(x = break));
+end R68fAK017;
+//// model: R68fAK018
+model A
+  Real x = 1;
+  Real y = x;
+end A;
+model R68fAK018
+  A a(x = break);
+equation
+  a.x = time;
+end R68fAK018;
+//// model: R68fAK019
+model A
+  parameter Real p = 1;
+  Real x = 1;
+end A;
+model R68fAK019
+  A a(p = break, x = break);
+end R68fAK019;
+//// model: R68fAK020
+model R68fAK020
+  Real x(start = break);
+end R68fAK020;
+//// model: R68fAK021
+model A
+  Real x(start = 1);
+end A;
+model R68fAK021
+  A a[2](x(each start = break));
+end R68fAK021;
+//// model: R68fAK022
+model A
+  Real x(start = 1);
+end A;
+model R68fAK022
+  A a[2](each x(start = break));
+end R68fAK022;
+//// model: R68fAK023
+model R68fAK023
+  Real x(start = break, fixed = true);
+end R68fAK023;
+//// model: R68fAK024
+model A
+  final Real x = 1;
+end A;
+model R68fAK024
+  A a(x = break);
+end R68fAK024;
+//// model: R68fAK025
+model A
+  Real x(final start = 1);
+end A;
+model R68fAK025
+  A a(x(start = break));
+end R68fAK025;
+//// model: R68fAK026
+model A
+  Real x = 1;
+end A;
+model R68fAK026
+  A a(final x = break);
+end R68fAK026;
+//// model: R68fAK027
+model A
+  Real x = 1;
+equation
+  when time > 1 then
+    reinit(x, 2);
+  end when;
+end A;
+model R68fAK027
+  A a(x = break);
+end R68fAK027;
+//// model: R68fAK028
+model A
+  Real x(start = 1);
+  Real y = 2 * x;
+equation
+  der(x) = -x;
+end A;
+model R68fAK028
+  A a(x(start = break));
+end R68fAK028;
+//// model: R68fAK029
+model A
+  Real x(start = 1) = 3;
+end A;
+model R68fAK029
+  A a(x(start = 2) = break);
+end R68fAK029;
+//// model: R68fAK030
+model A
+  Real x(displayUnit = "s", unit = "s");
+end A;
+model R68fAK030
+  A a(x(unit = break));
+end R68fAK030;
+//// model: R68fAK031
+model A
+  replaceable Real x = 1;
+end A;
+model R68fAK031
+  A a(redeclare Real x = break);
+end R68fAK031;
+//// model: R68fAK032
+record R
+  Real a = 1;
+end R;
+model R68fAK032
+  R r(a = break);
+end R68fAK032;
+//// model: R68fAK033
+model A
+  Real x = 1;
+end A;
+model R68fAK033
+  A a(x = break) if true;
+end R68fAK033;
+//// model: R68fAK034
+model A
+  Real x = 1;
+end A;
+model R68fAK034
+  A a(x(start = break));
+end R68fAK034;
+//// model: R68fAK035
+model A
+  Real x(start = 1, min = 0);
+end A;
+model R68fAK035
+  A a(x(start = break, min = break)) annotation(Evaluate = true);
+end R68fAK035;
+//// model: R68fAH001
+model A
+  model B
+    replaceable model C
+      Real x;
+    end C;
+    C c;
+  end B;
+  B.C c;
+  B b;
+end A;
+model R68fAH001
+  model D
+    Real x = 1.0;
+    Real y = 2.0;
+  end D;
+  A a1(B(redeclare model C = D));
+end R68fAH001;
+//// model: R68fAH002
+model A
+  model B
+    replaceable model C
+      Real x;
+    end C;
+    C c;
+  end B;
+  B.C c1;
+  B.C c2;
+end A;
+model R68fAH002
+  model D
+    Real x = 1.0;
+  end D;
+  A a1(B(redeclare model C = D));
+end R68fAH002;
+//// model: R68fAH003
+model A
+  model B
+    replaceable model C
+      Real x;
+    end C;
+    model E
+      C c;
+    end E;
+  end B;
+  B.E e;
+end A;
+model R68fAH003
+  model D
+    Real x = 1.0;
+  end D;
+  A a1(B(redeclare model C = D));
+end R68fAH003;
+//// model: R68fAH004
+model A
+  model B
+    replaceable model C
+      Real x;
+    end C;
+    C c;
+  end B;
+  model F
+    extends B.C;
+  end F;
+  F f;
+end A;
+model R68fAH004
+  model D
+    Real x = 1.0;
+  end D;
+  A a1(B(redeclare model C = D));
+end R68fAH004;
+//// model: R68fAH005
+model A
+  model B
+    replaceable model C
+      Real x;
+    end C;
+    C c;
+  end B;
+  B.C c(x = 3);
+end A;
+model R68fAH005
+  model D
+    Real x = 1.0;
+  end D;
+  A a1(B(redeclare model C = D));
+end R68fAH005;
+//// model: R68fAH006
+model A
+  model B
+    replaceable type T = Real;
+    T t;
+  end B;
+  B.T t2;
+  B b;
+end A;
+model R68fAH006
+  A a1(B(redeclare type T = Integer));
+end R68fAH006;
+//// model: R68fAH007
+model A
+  model B
+    replaceable type T = Real;
+    T t = 1.5;
+  end B;
+  B b;
+end A;
+model R68fAH007
+  A a1(B(redeclare type T = Integer));
+end R68fAH007;
+//// model: R68fAH008
+model A
+  model B
+    replaceable model C
+      Real x;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model D0
+  Real x = 1.0;
+  Real z = 4;
+end D0;
+model R68fAH008
+  model D = D0(z = 5);
+  A a1(B(redeclare model C = D));
+end R68fAH008;
+//// model: R68fAH009
+model A
+  model B
+    replaceable model C
+      Real x;
+    end C;
+    C c;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAH009
+  model D
+    Real x = 1.0;
+  end D;
+  A a1(B(redeclare model C = D));
+end R68fAH009;
+//// model: R68fAH010
+model A
+  model B
+    replaceable model C
+      Real x;
+    end C;
+    C c;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2.C c2;
+end A;
+model R68fAH010
+  model D
+    Real x = 1.0;
+  end D;
+  A a1(B(redeclare model C = D));
+end R68fAH010;
+//// model: R68fAH011
+model A
+  model B
+    replaceable model C
+      Real x;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model R68fAH011
+  model D
+    Real x = 1.0;
+  end D;
+  A a1(B(redeclare model C = D));
+  A a2(B(redeclare model C = D));
+end R68fAH011;
+//// model: R68fAH012
+model A
+  model B
+    replaceable model C
+      Real x;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model W
+  model D
+    Real x = 1.0;
+  end D;
+  A a1(B(redeclare model C = D));
+end W;
+model R68fAH012
+  W w1;
+  W w2;
+end R68fAH012;
+//// model: R68fAH013
+model A
+  model B
+    replaceable model C
+      Real x;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model R68fAH013
+  model D
+    Real x = 1.0;
+  end D;
+  A a1(B(redeclare model C = D)) if true;
+end R68fAH013;
+//// model: R68fAH014
+model A
+  model B
+    replaceable model C
+      Real x;
+    end C;
+    C c;
+  end B;
+  B.C c;
+end A;
+package P
+  model D
+    Real x = 7;
+  end D;
+end P;
+model R68fAH014
+  A a1(B(redeclare model C = P.D));
+end R68fAH014;
+//// model: R68fAH015
+model A
+  model B
+    replaceable model C
+      Real x;
+    end C;
+    C c;
+  end B;
+  B.C c;
+  model D
+    Real x = 8;
+  end D;
+end A;
+model D
+  Real x = 9;
+end D;
+model R68fAH015
+  A a1(B(redeclare model C = D));
+end R68fAH015;
+//// model: R68fAH016
+model A
+  model B
+    replaceable model C
+      Real x;
+    end C;
+    replaceable model C2
+      Real y;
+    end C2;
+    C c;
+    C2 c2;
+  end B;
+  B b;
+end A;
+model R68fAH016
+  model D
+    Real x = 1.0;
+  end D;
+  model D2
+    Real y = 2.0;
+  end D2;
+  A a1(B(redeclare model C = D, redeclare model C2 = D2));
+end R68fAH016;
+//// model: R68fAH017
+model B
+  model B2
+    replaceable type P = Real;
+    P p;
+  end B2;
+  B2 b2;
+end B;
+model R68fAH017
+  extends B(B2(redeclare type P = Integer));
+  B2.P p;
+  B2 b3;
+end R68fAH017;
+//// model: R68fAH018
+model B
+  model B2
+    replaceable type P = Real;
+    P p;
+  end B2;
+  model B3
+    extends B2;
+  end B3;
+  B3 b3;
+end B;
+model R68fAH018
+  extends B(B2(redeclare type P = Integer));
+end R68fAH018;
+//// model: R68fAH019
+model B0
+  model B2
+    replaceable type P = Real;
+    P p;
+  end B2;
+end B0;
+model B
+  extends B0;
+  B2 b2;
+end B;
+model R68fAH019
+  extends B(B2(redeclare type P = Integer));
+end R68fAH019;
+//// model: R68fAH020
+model B
+  model B2
+    replaceable type P = Real;
+    replaceable type Q = Real;
+    P p;
+    Q q;
+  end B2;
+  B2 b2;
+end B;
+model R68fAH020
+  extends B(B2(redeclare type P = Integer, redeclare type Q = Boolean));
+end R68fAH020;
+//// model: R68fAH021
+model B
+  model B2
+    replaceable type P = Real;
+    P p = 1.5;
+  end B2;
+  B2 b2;
+end B;
+model R68fAH021
+  extends B(B2(redeclare type P = Integer));
+end R68fAH021;
+//// model: R68fAH022
+model B
+  model B2
+    replaceable type P = Real;
+    P p;
+  end B2;
+  B2 b2;
+end B;
+model M1
+  extends B(B2(redeclare type P = Integer));
+end M1;
+model R68fAH022
+  extends M1;
+  B2.P p;
+end R68fAH022;
+//// model: R68fAH023
+model B
+  model B2
+    replaceable type P = Real;
+    P p;
+  end B2;
+  B2 b2;
+end B;
+model M1
+  extends B(B2(redeclare type P = Integer));
+end M1;
+model R68fAH023
+  M1 m;
+end R68fAH023;
+//// model: R68fAH024
+model B
+  model B2
+    replaceable type P = Real;
+    P p;
+  end B2;
+  B2 b2;
+end B;
+model R68fAH024
+  extends B(B2(redeclare type P = Integer));
+  model B4 = B2;
+  B4 b4;
+  B4.P q;
+end R68fAH024;
+//// model: R68fAH025
+model B
+  model B2
+    replaceable model C
+      Real x = 1;
+    end C;
+    C c;
+  end B2;
+  B2 b2;
+end B;
+model D
+  Real x = 2;
+  Real w = 3;
+end D;
+model R68fAH025
+  extends B(B2(redeclare model C = D));
+  B2.C cc;
+end R68fAH025;
+//// model: R68fAH026
+model B
+  model B2
+    replaceable type P = Real;
+    P p;
+  end B2;
+  B2 b2;
+end B;
+model R68fAH026
+  extends B(B2(redeclare type P = Integer));
+  extends B(B2(redeclare type P = Integer));
+end R68fAH026;
+//// model: R68fAH027
+model B
+  model B2
+    replaceable type P = Real;
+    P p;
+  end B2;
+  B2 b2;
+end B;
+model R68fAH027
+  extends B(B2(redeclare type P = Integer), b2(p = 3));
+end R68fAH027;
+//// model: R68fAH028
+model B
+  model B2
+    replaceable type P = Real;
+    P p;
+  end B2;
+  B2 b2;
+end B;
+model R68fAH028
+  extends B(B2(redeclare type P = Integer), B2(p = 3));
+end R68fAH028;
+//// model: R68fAH029
+model B
+  replaceable model B2
+    replaceable type P = Real;
+    P p;
+  end B2;
+  B2 b2;
+end B;
+model B5
+  replaceable type P = Real;
+  P p;
+  Real r;
+end B5;
+model R68fAH029
+  extends B(B2(redeclare type P = Integer), redeclare model B2 = B5);
+end R68fAH029;
+//// model: R68fAH030
+model B
+  replaceable model B2
+    replaceable type P = Real;
+    P p;
+  end B2;
+  B2 b2;
+end B;
+model B5
+  replaceable type P = Real;
+  P p;
+  Real r;
+end B5;
+model R68fAH030
+  extends B(B2(redeclare type P = Integer));
+  redeclare model B2 = B5;
+end R68fAH030;
+//// model: R68fAV001
+model A
+  model B
+    replaceable model C
+      Real x = 0;
+    end C;
+    constant Real k = 3;
+  end B;
+  Real y = B.k;
+end A;
+model D
+  Real x = 1.0;
+end D;
+model R68fAV001
+  A a1(B(redeclare model C = D));
+end R68fAV001;
+//// model: R68fAV002
+model A
+  model B
+    replaceable model C
+      constant Real k = 0;
+    end C;
+  end B;
+  Real y = B.C.k;
+end A;
+model D
+  constant Real k = 5;
+end D;
+model R68fAV002
+  A a1(B(redeclare model C = D));
+end R68fAV002;
+//// model: R68fAV003
+model A
+  model B
+    replaceable type T = Real;
+    function f
+      input T u;
+      output T y = u;
+    end f;
+  end B;
+  B.T t = B.f(1);
+end A;
+model R68fAV003
+  A a1(B(redeclare type T = Integer));
+end R68fAV003;
+//// model: R68fAV004
+model A
+  model B
+    replaceable model C
+      Real x = 0;
+    end C;
+    constant Real k = 3;
+  end B;
+  Real y = B.k;
+end A;
+model D
+  Real x = 1.0;
+end D;
+model R68fAV004
+  A a1(B(redeclare model C = D));
+  A a2;
+end R68fAV004;
+//// model: R68fAV005
+model B
+  model B2
+    replaceable type P = Real;
+    P p;
+    constant Integer n = 2;
+  end B2;
+  B2 b2;
+end B;
+model R68fAV005
+  extends B(B2(redeclare type P = Integer));
+  Real y = B2.n;
+end R68fAV005;
+//// model: R68fAV006
+model B
+  model B2
+    replaceable type P = Real;
+    P p;
+  end B2;
+  B2 b2;
+end B;
+model M1
+  extends B(B2(redeclare type P = Integer));
+end M1;
+model R68fAV006
+  M1 m(B2(p(start = 2)));
+end R68fAV006;
+//// model: R68fAV007
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+    Real x = 1;
+  end B;
+  B b;
+end A;
+model M1
+  extends A(B(C(z = 2)));
+end M1;
+model R68fAV007
+  M1 m(B(x = 3));
+end R68fAV007;
+//// model: R68fAV008
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+    Real x = 1;
+  end B;
+  model E
+    extends B;
+  end E;
+  E e;
+end A;
+model M1
+  extends A(B(C(z = 2)));
+end M1;
+model R68fAV008
+  M1 m(B(x = 3));
+end R68fAV008;
+//// model: R68fAV009
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+    Real x = 1;
+  end B;
+  model E
+    extends B;
+  end E;
+  E e;
+end A;
+model R68fAV009
+  extends A(B(C(z = 2)), B(x = 3));
+end R68fAV009;
+//// model: R68fAV010
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+    Real x = 1;
+  end B;
+  model E
+    extends B;
+  end E;
+  E e;
+end A;
+model A2
+  extends A(B(x = 3));
+end A2;
+model R68fAV010
+  extends A2(B(C(z = 2)));
+end R68fAV010;
+//// model: R68fAV011
+model B
+  model B2
+    replaceable type P = Real;
+    P p;
+    Real w = 1;
+  end B2;
+  model B3
+    extends B2;
+  end B3;
+  B3 b3;
+end B;
+model M1
+  extends B(B2(redeclare type P = Integer));
+end M1;
+model R68fAV011
+  extends M1(B2(w = 4));
+end R68fAV011;
+//// model: R68fAV012
+model B
+  model B2
+    replaceable type P = Real;
+    P p;
+    Real w = 1;
+  end B2;
+  B2 b2;
+end B;
+model M1
+  extends B(B2(w = 4));
+end M1;
+model R68fAV012
+  extends M1(B2(redeclare type P = Integer));
+  B2.P q;
+end R68fAV012;
+//// model: R68fAV013
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+  end B;
+  model E
+    extends B;
+    Real x = 1;
+  end E;
+  E e;
+end A;
+model M1
+  extends A(B(C(z = 2)));
+end M1;
+model R68fAV013
+  extends M1(E(x = 3));
+end R68fAV013;
+//// model: R68fAV014
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+  end B;
+  model E
+    extends B;
+  end E;
+  E e;
+end A;
+model M1
+  extends A(B(C(z = 2)));
+end M1;
+model R68fAV014
+  extends M1(e(c(z = 6)));
+end R68fAV014;
+//// model: R68fAV015
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model R68fAV015
+  extends A(B(C(z = 2)));
+  model E
+    extends B;
+  end E;
+  E e;
+end R68fAV015;
+//// model: R68fAV016
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model R68fAV016
+  model E
+    extends B;
+  end E;
+  E e;
+  extends A(B(C(z = 2)));
+end R68fAV016;
+//// model: R68fAX001
+model A
+  model B
+    model C
+      Real x = 0;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model D
+  Real x = 1.0;
+end D;
+model R68fAX001
+  A a1(B(redeclare model C = D));
+end R68fAX001;
+//// model: R68fAX002
+model A
+  model B
+    replaceable model C
+      Real x = 0;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+partial model D
+  Real x = 1.0;
+end D;
+model R68fAX002
+  A a1(B(redeclare model C = D));
+end R68fAX002;
+//// model: R68fAX003
+model A
+  model B
+    replaceable model C
+      Real x = 0;
+      Real y = 0;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model D
+  Real x = 1.0;
+end D;
+model R68fAX003
+  A a1(B(redeclare model C = D));
+end R68fAX003;
+//// model: R68fAX004
+model C0
+  Real x = 0;
+end C0;
+model A
+  model B
+    replaceable model C = C0(x = 2);
+    C c;
+  end B;
+  B b;
+end A;
+model D
+  Real x = 1.0;
+end D;
+model R68fAX004
+  A a1(B(redeclare model C = D));
+end R68fAX004;
+//// model: R68fAX005
+model C0
+  Real x = 0;
+end C0;
+model A
+  model B
+    replaceable model C = C0 constrainedby C0(x = 3);
+    C c;
+  end B;
+  B b;
+end A;
+model D
+  Real x = 1.0;
+end D;
+model R68fAX005
+  A a1(B(redeclare model C = D));
+end R68fAX005;
+//// model: R68fAX006
+model A
+  model B
+    replaceable type P = Real(min = 0);
+    P p;
+  end B;
+  B b;
+end A;
+model R68fAX006
+  A a1(B(redeclare type P = Integer));
+end R68fAX006;
+//// model: R68fAX007
+model B
+  model B2
+    type P = Real;
+    P p;
+  end B2;
+  B2 b2;
+end B;
+model R68fAX007
+  extends B(B2(redeclare type P = Integer));
+end R68fAX007;
+//// model: R68fAX008
+model B
+  model B2
+    replaceable type P = Real;
+    P p;
+  end B2;
+  B2 b2;
+end B;
+model R68fAX008
+  extends B(B2(redeclare type P = String));
+end R68fAX008;
+//// model: R68fAX009
+model B
+  model B2
+    replaceable model P
+      Real r = 1;
+    end P;
+    P p;
+  end B2;
+  B2 b2;
+end B;
+model Q
+  Integer r = 2;
+end Q;
+model R68fAX009
+  extends B(B2(redeclare model P = Q));
+end R68fAX009;
+//// model: R68fAX010
+model A
+  model B
+    replaceable model C
+      Real x = 0;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model R68fAX010
+  A a1(B(redeclare model C = Undefined));
+end R68fAX010;
+//// model: R68fAX011
+model A
+  model B
+    replaceable model C
+      Real x = 0;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+package D
+  constant Real x = 1;
+end D;
+model R68fAX011
+  A a1(B(redeclare model C = D));
+end R68fAX011;
+//// model: R68fAX012
+model A
+  model B
+    replaceable model C
+      Real x = 0;
+    end C;
+  end B;
+  B b;
+end A;
+model D
+  Real x = 1.0;
+end D;
+model R68fAX012
+  A a1(B(redeclare model C = D));
+end R68fAX012;
+//// model: R68fAX013
+model A
+  model B
+    replaceable model C
+      Real x = 0;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model D
+  Real x = 1.0;
+end D;
+model R68fAX013
+  A a1(B(redeclare model C = D, redeclare model C = D));
+end R68fAX013;
+//// model: R68fAX014
+model A
+  model B
+    replaceable model C
+      Real x = 0;
+    end C;
+    C c;
+  end B;
+  B b;
+  B b2;
+end A;
+model D
+  Real x = 1.0;
+end D;
+model R68fAX014
+  A a1(B(redeclare model C = D), b2(redeclare model C = A.B.C));
+end R68fAX014;
+//// model: R68fAX015
+model B
+  model B2
+    replaceable type P = Real;
+    P p;
+  end B2;
+  B2 b2;
+end B;
+model R68fAX015
+  extends B(B2(redeclare type P = Undefined));
+end R68fAX015;
+//// model: R68fAX016
+model B
+  model B2
+    replaceable type P = Real;
+    P p;
+  end B2;
+  B2 b2;
+end B;
+model R68fAX016
+  extends B(B2(redeclare type P = Integer), b2(redeclare type P = Boolean));
+end R68fAX016;
+//// model: R68fAX017
+model B
+  model B2
+    replaceable type P = Real;
+    P p;
+  end B2;
+  B2 b2;
+end B;
+model R68fAX017
+  extends B(B2(redeclare type P = Integer));
+  redeclare model B2
+    Real q;
+  end B2;
+end R68fAX017;
+//// model: R68fAX018
+model B
+  model B2
+    replaceable type P = Real;
+    P p;
+  end B2;
+  B2 b2;
+  protected
+  model B4
+    replaceable type P = Real;
+    P p;
+  end B4;
+end B;
+model R68fAX018
+  extends B(B4(redeclare type P = Integer));
+end R68fAX018;
+//// model: R68fAC001
+package P
+  model A
+    model B
+      Real x = 1;
+    end B;
+    B b;
+  end A;
+end P;
+model R68fAC001
+  package Q = P;
+  Q.A a(B(x = 2));
+end R68fAC001;
+//// model: R68fAC002
+package P
+  model A
+    model B
+      replaceable model C
+        Real x = 0;
+      end C;
+      C c;
+    end B;
+    B b;
+  end A;
+end P;
+model D
+  Real x = 1;
+end D;
+model R68fAC002
+  package Q = P;
+  Q.A a(B(redeclare model C = D));
+end R68fAC002;
+//// model: R68fAC003
+model A
+  model B
+    replaceable model C
+      Real x = 0;
+    end C;
+    C c;
+  end B;
+  replaceable model C2
+    Real y = 0;
+  end C2;
+  B b;
+  C2 c2;
+end A;
+model D
+  Real x = 1;
+end D;
+model D2
+  Real y = 2;
+end D2;
+model R68fAC003
+  A a(redeclare model C2 = D2, B(redeclare model C = D));
+end R68fAC003;
+//// model: R68fAC004
+model A
+  replaceable model B
+    replaceable model C
+      Real x = 0;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model B5
+  replaceable model C
+    Real x = 5;
+  end C;
+  C c;
+end B5;
+model D
+  Real x = 1;
+end D;
+model R68fAC004
+  A a(redeclare model B = B5, B(redeclare model C = D));
+end R68fAC004;
+//// model: R68fAC005
+partial package PM
+  type T = Real;
+end PM;
+package W
+  extends PM;
+end W;
+connector Port
+  replaceable package M = PM;
+  M.NotThere z;
+  flow Real f;
+end Port;
+connector Out
+  extends Port(redeclare package M = W);
+end Out;
+model Src
+  replaceable Port p;
+end Src;
+model R68fAC005
+  extends Src(redeclare Out p);
+end R68fAC005;
+//// model: R68fAC006
+partial package PM
+  type T = Real;
+  replaceable function f
+    input Real u;
+    output Real y;
+  end f;
+end PM;
+package W
+  extends PM;
+  redeclare function extends f
+  algorithm
+    y := u;
+  end f;
+end W;
+connector Port
+  replaceable package M = PM;
+  M.T z = M.f(1);
+  flow Real f;
+end Port;
+connector Out
+  extends Port(redeclare package M = W);
+end Out;
+model Src
+  replaceable Port p;
+end Src;
+model R68fAC006
+  extends Src(redeclare Out p);
+end R68fAC006;
+//// model: R68fAC007
+partial model PM
+  Real x;
+end PM;
+model Holder
+  replaceable PM c[2];
+end Holder;
+model M
+  extends PM;
+equation
+  x = 1;
+end M;
+model R68fAC007
+  extends Holder(redeclare M c[2]);
+end R68fAC007;
+//// model: R68fAC008
+partial package PM
+  type T = Real;
+end PM;
+package W
+  extends PM;
+end W;
+model Src
+  replaceable package M = PM;
+  M.T t;
+end Src;
+model Holder
+  replaceable Src s;
+end Holder;
+model Src2
+  extends Src(redeclare package M = W);
+end Src2;
+model R68fAC008
+  extends Holder(redeclare Src2 s);
+  Src2 s2;
+end R68fAC008;
+//// model: R68fAC009
+partial package PM
+  type T = Real;
+end PM;
+package W
+  extends PM;
+end W;
+model Src
+  replaceable package M = PM;
+  M.T t;
+end Src;
+model Holder
+  replaceable Src s if false;
+end Holder;
+model Src2
+  extends Src(redeclare package M = W);
+end Src2;
+model R68fAC009
+  extends Holder(redeclare Src2 s);
+end R68fAC009;
+//// model: R68fAC010
+partial package PM
+  type T = Real;
+end PM;
+package W
+  extends PM;
+end W;
+model Src
+  replaceable package M = PM;
+  M.T t;
+end Src;
+model Holder
+  replaceable Src s;
+  Real v = s.t;
+end Holder;
+model Src2
+  extends Src(redeclare package M = W);
+end Src2;
+model R68fAC010
+  extends Holder(redeclare Src2 s);
+end R68fAC010;
+//// model: R68fAC011
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model R68fAC011
+  extends A(B(C(z = 2)));
+  extends A(B(C(z = 2)));
+end R68fAC011;
+//// model: R68fAC012
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model R68fAC012
+  extends A(B(C(z = 2)));
+  A inner_a(B(x = 1));
+end R68fAC012;
+//// model: R68fAC013
+model A
+  model B
+    replaceable model C
+      Real x = 0;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model R68fAC013
+  A a1(B(redeclare model C = R68fAC013));
+end R68fAC013;
+//// model: R68fAC014
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model R68fAC014
+  extends A(B(C(z = 2)));
+  B.C cc;
+  B bb;
+end R68fAC014;
+//// model: R68fAE001
+model A
+  model B
+    model C
+      Real x = 1;
+    end C;
+  end B;
+end A;
+model R68fAE001
+  B.C c;
+  extends A(B(C(x = 2)));
+end R68fAE001;
+//// model: R68fAE002
+model B
+  Real x = 7;
+end B;
+model A
+  model B
+    Real x = 1;
+  end B;
+end A;
+model R68fAE002
+  .B b;
+  extends A(B(x = 2));
+end R68fAE002;
+//// model: R68fAE003
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2 = B;
+end A;
+model R68fAE003
+  B2 b;
+  extends A(B(x = 2));
+end R68fAE003;
+//// model: R68fAE004
+model A
+  model B
+    Real x = 1;
+  end B;
+end A;
+model R68fAE004
+  model E = B(x = 3);
+  E e;
+  extends A(B(x = 2));
+end R68fAE004;
+//// model: R68fAE005
+package P
+  model A
+    model B
+      Real x = 1;
+    end B;
+  end A;
+end P;
+model R68fAE005
+  import P.A;
+  model E
+    extends B;
+  end E;
+  E e;
+  extends A(B(x = 2));
+end R68fAE005;
+//// model: R68fAE006
+model A
+  model B
+    Real x = 1;
+  end B;
+end A;
+model R68fAE006
+  model E
+    extends R68fAE006.B;
+  end E;
+  E e;
+  extends A(B(x = 2));
+end R68fAE006;
+//// model: R68fAE007
+model A
+  model B
+    Real x = 1;
+    Real y = 1;
+  end B;
+end A;
+model R68fAE007
+  model E
+    extends B(y = 2);
+  end E;
+  E e;
+  extends A(B(x = 2));
+end R68fAE007;
+//// model: R68fAE008
+model A
+  model B
+    Real x = 1;
+  end B;
+end A;
+model R68fAE008
+  model E
+    B b;
+    extends B;
+  end E;
+  E e;
+  extends A(B(x = 2));
+end R68fAE008;
+//// model: R68fAG001
+model A
+  type T = Real(min = 0);
+  function f
+    input T u;
+    output T y;
+  algorithm
+    y := 2 * u;
+  end f;
+  Real z = f(time);
+end A;
+model R68fAG001
+  A a(T(max = 10));
+end R68fAG001;
+//// model: R68fAG002
+model A
+  type T = Real(min = 0);
+  record R
+    T t = 1;
+  end R;
+  R r;
+end A;
+model R68fAG002
+  A a(T(max = 10));
+end R68fAG002;
+//// model: R68fAG003
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B(x = 3);
+  end B2;
+  B2 b2;
+end A;
+model R68fAG003
+  A a(B(x = 2));
+end R68fAG003;
+//// model: R68fAG004
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  model B3
+    extends B2;
+  end B3;
+  B3 b3;
+end A;
+model R68fAG004
+  A a(B(x = 2));
+end R68fAG004;
+//// model: R68fAG005
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+    Real y = 2;
+  end B2;
+  B2 b2;
+end A;
+model R68fAG005
+  A a(B(x = 2), B2(y = 5));
+end R68fAG005;
+//// model: R68fAG006
+model A
+  model B
+    Real x(start = 1);
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAG006
+  A a(B(x(start = 2)));
+end R68fAG006;
+//// model: R68fAG007
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+  B b;
+end A;
+model R68fAG007
+  A a1(B(x = 2));
+  A a2;
+end R68fAG007;
+//// model: R68fAG008
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+end A;
+model R68fAG008
+  A.B2 pre;
+  A a(B(x = 2));
+end R68fAG008;
+//// model: R68fAG009
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAG009
+  A.B2 pre;
+  A a(B(x = 2));
+end R68fAG009;
+//// model: R68fAG010
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model W
+  A a(B(x = 2));
+end W;
+model R68fAG010
+  W w1;
+  W w2;
+end R68fAG010;
+//// model: R68fAG011
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAG011
+  A a[2](B(x = 2));
+end R68fAG011;
+//// model: R68fAG012
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model A1
+  extends A;
+end A1;
+model R68fAG012
+  A1 a(B(x = 2));
+end R68fAG012;
+//// model: R68fAG013
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAG013
+  A a(B(x = 2));
+  A a2(B(x = 3));
+end R68fAG013;
+//// model: R68fAG014
+model A
+  model B
+    constant Real k = 1;
+  end B;
+  model B2
+    extends B;
+    constant Real j = k + 1;
+  end B2;
+  Real y = B2.j;
+end A;
+model R68fAG014
+  A a(B(k = 2));
+end R68fAG014;
+//// model: R68fAG015
+model A
+  model B
+    constant Real k = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  Real y = B2.k;
+  Real w = B.k;
+end A;
+model R68fAG015
+  A a(B(k = 2));
+end R68fAG015;
+//// model: R68fAG016
+model A
+  package B
+    constant Real k = 1;
+  end B;
+  package B2
+    extends B;
+  end B2;
+  Real y = B2.k;
+end A;
+model R68fAG016
+  A a(B(k = 2));
+end R68fAG016;
+//// model: R68fAG017
+model A
+  model B
+    constant Real k = 1;
+    function f
+      input Real u;
+      output Real y = u + k;
+    end f;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  Real y = B2.k;
+end A;
+model R68fAG017
+  A a(B(k = 2));
+end R68fAG017;
+//// model: R68fAG018
+model A
+  model B
+    constant Real k = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  model B3
+    extends B2;
+  end B3;
+  Real y = B3.k;
+end A;
+model R68fAG018
+  A a(B(k = 2));
+end R68fAG018;
+//// model: R68fAG019
+model A
+  model B
+    constant Real k = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  Real y = B2.k;
+end A;
+model R68fAG019
+  A a(B2(k = 2));
+end R68fAG019;
+//// model: R68fAG020
+model A
+  model B
+    constant Real k = 1;
+  end B;
+  model B2
+    extends B(k = 5);
+  end B2;
+  Real y = B2.k;
+end A;
+model R68fAG020
+  A a(B(k = 2));
+end R68fAG020;
+//// model: R68fAG021
+package P
+  model B
+    constant Real k = 1;
+  end B;
+end P;
+model A
+  model B2
+    extends P.B;
+  end B2;
+  Real y = B2.k;
+end A;
+model R68fAG021
+  A a(B2(k = 2));
+end R68fAG021;
+//// model: R68fAG022
+model A
+  type T = Real(min = 0);
+  type T2 = T(max = 3);
+  T2 t;
+end A;
+model R68fAG022
+  A a(T(nominal = 2));
+end R68fAG022;
+//// model: R68fAG023
+model A
+  type T = Real(min = 0);
+  connector C
+    T e;
+    flow T f;
+  end C;
+  C c;
+end A;
+model R68fAG023
+  A a(T(nominal = 2));
+end R68fAG023;
+//// model: R68fAG024
+model A
+  type T = Real(min = 0);
+  model M
+    T t;
+  end M;
+  M m;
+end A;
+model R68fAG024
+  A.M pre;
+  A a(T(nominal = 2));
+end R68fAG024;
+//// model: R68fAG025
+model A
+  model B
+    constant Integer i = 3;
+  end B;
+  model E
+    extends B;
+  end E;
+  Real y = E.i;
+  Real w[E.i];
+end A;
+model R68fAG025
+  A a(B(i = 4));
+end R68fAG025;
+//// model: R68fAY001
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B(final x = 3);
+  end B2;
+  B2 b2;
+end A;
+model R68fAY001
+  A a(B(x = 2));
+end R68fAY001;
+//// model: R68fAY002
+model A
+  model B
+    Real x = 1;
+  protected
+    Real h = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAY002
+  A a(B(h = 2));
+end R68fAY002;
+//// model: R68fAY004
+model A
+  model B
+    final Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAY004
+  A a(B(x = 2));
+end R68fAY004;
+//// model: R68fAY005
+model A
+  model B
+    Real x[2] = {1, 1};
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAY005
+  A a(B(x = {2, 3}));
+end R68fAY005;
+//// model: R68fAY006
+model A
+  model B
+    Real x[2](start = {1, 1});
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAY006
+  A a(B(x(each start = 5)));
+end R68fAY006;
+//// model: R68fAY007
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2(x = 7);
+end A;
+model R68fAY007
+  A a(B(x = 2));
+end R68fAY007;
+//// model: R68fAY008
+model A
+  parameter Real p = 9;
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAY008
+  parameter Real q = 4;
+  A a(B(x = q), p = 1);
+end R68fAY008;
+//// model: R68fAY009
+model A
+  parameter Real p = 9;
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAY009
+  A a(B(x = p));
+end R68fAY009;
+//// model: R68fAY010
+model A
+  model B
+    Real x = 1;
+    Real y = 1;
+  end B;
+  model B2
+    extends B(y = x);
+  end B2;
+  B2 b2;
+end A;
+model R68fAY010
+  A a(B(x = 2, y = 3));
+end R68fAY010;
+//// model: R68fAY011
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAY011
+  A a(B(x = 2), B2(x = 5));
+end R68fAY011;
+//// model: R68fAY012
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+    extends B3;
+  end B2;
+  model B3
+    Real z = 1;
+  end B3;
+  B2 b2;
+end A;
+model R68fAY012
+  A a(B(x = 2), B3(z = 4));
+end R68fAY012;
+//// model: R68fAY013
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAY013
+  A a(B(final x = 2));
+end R68fAY013;
+//// model: R68fAY014
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAY014
+  A a(B(x = 2), b2(x = 8));
+end R68fAY014;
+//// model: R68fAY015
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAY015
+  A a(B(x = 2, x = 3));
+end R68fAY015;
+//// model: R68fAY016
+model A
+  model B
+    Real x(start = 1, min = 0);
+  end B;
+  model B2
+    extends B(x(start = 4));
+  end B2;
+  B2 b2;
+end A;
+model R68fAY016
+  A a(B(x(min = -1)));
+end R68fAY016;
+//// model: R68fAY017
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAY017
+  A a(B(x = break));
+end R68fAY017;
+//// model: R68fAY018
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAY018
+  A a(B(x(unbounded = 1)));
+end R68fAY018;
+//// model: R68fAY019
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAY019
+  A a(B(x(startOrigin = "a")));
+end R68fAY019;
+//// model: R68fAY020
+model A
+  model B
+    replaceable Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAY020
+  A a(B(redeclare Real x = 3));
+end R68fAY020;
+//// model: R68fAZ001
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAZ001
+  parameter Real q = 4;
+  A a(B(x = q));
+end R68fAZ001;
+//// model: R68fAZ002
+model A
+  model B
+    Real x = 1;
+    parameter Real q = 7;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAZ002
+  parameter Real q = 4;
+  A a(B(x = q));
+end R68fAZ002;
+//// model: R68fAZ003
+model A
+  model B
+    Real x = 1;
+  end B;
+  B b;
+end A;
+model R68fAZ003
+  parameter Real q = 4;
+  A a(B(x = q));
+end R68fAZ003;
+//// model: R68fAZ004
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model W
+  parameter Real q = 4;
+  A a(B(x = q));
+end W;
+model R68fAZ004
+  W w;
+end R68fAZ004;
+//// model: R68fAZ005
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAZ005
+  A a(B(x = time));
+end R68fAZ005;
+//// model: R68fAZ006
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAZ006
+  Real q = 4;
+  A a(B(x = 2 * q + 1));
+end R68fAZ006;
+//// model: R68fAZ007
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAZ007
+  constant Real q = 4;
+  A a(B(x = q));
+end R68fAZ007;
+//// model: R68fAZ008
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+package P
+  constant Real c = 3;
+end P;
+model R68fAZ008
+  A a(B(x = P.c));
+end R68fAZ008;
+//// model: R68fAZ009
+model B
+  model B2
+    replaceable type P = Real;
+    P p;
+  end B2;
+  model B3
+    extends B2;
+  end B3;
+  B3 b3;
+end B;
+model M1
+  type LT = Integer;
+  extends B(B2(redeclare type P = LT));
+end M1;
+model R68fAZ009
+  M1 m;
+end R68fAZ009;
+//// model: R68fAZ010
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2[2];
+end A;
+model R68fAZ010
+  parameter Real q = 4;
+  A a(B(x = q));
+end R68fAZ010;
+//// model: R68fAZ011
+model A
+  model B
+    Real x = 1;
+  end B;
+  model E
+    extends B;
+  end E;
+  Real y = E.x;
+end A;
+model R68fAZ011
+  parameter Real q = 4;
+  A a(B(x = q));
+end R68fAZ011;
+//// model: R68fAZ012
+model A
+  model B
+    constant Real k = 1;
+  end B;
+  model E
+    extends B;
+  end E;
+  Real y = E.k;
+end A;
+model R68fAZ012
+  constant Real q = 4;
+  A a(B(k = q));
+end R68fAZ012;
+//// model: R68fAZ013
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAZ013
+  parameter Real q = 4;
+  A a1(B(x = q)), a2(B(x = 2 * q));
+end R68fAZ013;
+//// model: R68fAQ001
+model A
+  model B
+    Real x = 1;
+    constant Real k = 3;
+  end B;
+  model E
+    extends B;
+  end E;
+  Real y = E.k;
+end A;
+model R68fAQ001
+  A a(B(x = 2));
+end R68fAQ001;
+//// model: R68fAQ002
+model A
+  model B
+    Real x = 1;
+    constant Real k = 3;
+  end B;
+  partial model E
+    extends B;
+  end E;
+  Real y = E.k;
+end A;
+model R68fAQ002
+  A a(B(x = 2));
+end R68fAQ002;
+//// model: R68fAQ003
+model A
+  model B
+    Real x = 1;
+    constant Real k = 3;
+  end B;
+  model E
+    extends B;
+    outer Real T;
+  end E;
+  Real y = E.k;
+end A;
+model R68fAQ003
+  inner Real T = 1;
+  A a(B(x = 2));
+end R68fAQ003;
+//// model: R68fAQ004
+model A
+  model B
+    Real x = 1;
+    constant Real k = 3;
+  end B;
+  model E
+    extends B;
+    replaceable model M = B;
+    M m;
+  end E;
+  Real y = E.k;
+end A;
+model R68fAQ004
+  A a(B(x = 2));
+end R68fAQ004;
+//// model: R68fAQ005
+model A
+  parameter Real p = 5;
+  model B
+    Real x = 1;
+    constant Real k = 3;
+  end B;
+  model E
+    extends B(x = p);
+  end E;
+  Real y = E.k;
+end A;
+model R68fAQ005
+  A a(B(x = 2));
+end R68fAQ005;
+//// model: R68fAQ006
+model A
+  model B
+    Real x = 1;
+    constant Real k = 3;
+  end B;
+  model E
+    extends B;
+    Real z;
+  equation
+    z = x;
+  end E;
+  Real y = E.k;
+  E e;
+end A;
+model R68fAQ006
+  A a(B(x = 2));
+end R68fAQ006;
+//// model: R68fAQ007
+model A
+  model B
+    Real x = 1;
+    constant Real k = 3;
+    function f
+      input Real u;
+      output Real v = u * k;
+    end f;
+  end B;
+  model E
+    extends B;
+  end E;
+  Real y = E.f(time);
+end A;
+model R68fAQ007
+  A a(B(x = 2));
+end R68fAQ007;
+//// model: R68fAQ008
+model A
+  model B
+    Real x = 1;
+    type T = Real(unit = "m");
+  end B;
+  model E
+    extends B;
+  end E;
+  E.T t;
+end A;
+model R68fAQ008
+  A a(B(x = 2));
+end R68fAQ008;
+//// model: R68fAQ009
+model A
+  model B
+    Real x = 1;
+    constant Real k = 3;
+  end B;
+  model E
+    extends B;
+    constant Real j = k * 2;
+  end E;
+  Real y = E.j;
+end A;
+model R68fAQ009
+  A a(B(x = 2));
+end R68fAQ009;
+//// model: R68fAQ010
+model A
+  model B
+    Real x = 1;
+    constant Real k = 3;
+  end B;
+  model E
+    extends B;
+  end E;
+  model F
+    extends E;
+  end F;
+  Real y = F.k;
+end A;
+model R68fAQ010
+  A a(B(x = 2));
+end R68fAQ010;
+//// model: R68fAQ011
+model A
+  model B
+    Real x = 1;
+    constant Real k[2] = {3, 4};
+  end B;
+  model E
+    extends B;
+  end E;
+  Real y = E.k[2];
+  Real w[2] = E.k;
+end A;
+model R68fAQ011
+  A a(B(x = 2));
+end R68fAQ011;
+//// model: R68fAQ012
+model A
+  model B
+    Real x = 1;
+    constant Real k = 3;
+  end B;
+  model E
+    extends B;
+    E2 e2;
+  end E;
+  model E2
+    Real q;
+  end E2;
+  Real y = E.k;
+end A;
+model R68fAQ012
+  A a(B(x = 2));
+end R68fAQ012;
+//// model: R68fAQ013
+model A
+  model B
+    Real x = 1;
+    constant Real k = 3;
+  end B;
+  model E
+    extends B;
+    Real big[1000];
+  end E;
+  Real y = E.k;
+end A;
+model R68fAQ013
+  A a(B(x = 2));
+end R68fAQ013;
+//// model: R68fAQ014
+model A
+  model B
+    Real x = 1;
+    constant Real k = 3;
+  end B;
+  model E
+    extends B;
+    parameter Integer n = 2;
+    Real v[n];
+  end E;
+  Real y = E.k;
+  Real w = E.n;
+end A;
+model R68fAQ014
+  A a(B(x = 2));
+end R68fAQ014;
+//// model: R68fAQ015
+model A
+  model B
+    Real x = 1;
+    constant Real k = 3;
+  end B;
+  model E
+    extends B;
+    Real r = noEvent(time);
+  end E;
+  Real y = E.k;
+end A;
+model R68fAQ015
+  A a(B(x = 2));
+end R68fAQ015;
+//// model: R68fAQ016
+model A
+  model B
+    Real x = 1;
+    constant Real k = 3;
+  end B;
+  model E
+    extends B;
+    Real u if false;
+  end E;
+  Real y = E.k;
+end A;
+model R68fAQ016
+  A a(B(x = 2));
+end R68fAQ016;
+//// model: R68fAQ017
+model A
+  model B
+    Real x = 1;
+    constant Real k = 3;
+  end B;
+  model E
+    extends B;
+    connector C
+      Real e;
+      flow Real f;
+    end C;
+    C c1, c2;
+  equation
+    connect(c1, c2);
+  end E;
+  Real y = E.k;
+end A;
+model R68fAQ017
+  A a(B(x = 2));
+end R68fAQ017;
+//// model: R68fAQ018
+model A
+  model B
+    Real x = 1;
+    constant Real k = 3;
+  end B;
+  model E
+    extends B;
+    protected
+      constant Real h = 4;
+  end E;
+  Real y = E.k;
+end A;
+model R68fAQ018
+  A a(B(x = 2));
+end R68fAQ018;
+//// model: R68fAQ019
+model A
+  model B
+    Real x = 1;
+    constant Real k = 3;
+  end B;
+  model E
+    extends B;
+    Real s = sum(fill(1.0, 3));
+    Real d = delay(time, 1);
+  end E;
+  Real y = E.k;
+end A;
+model R68fAQ019
+  A a(B(x = 2));
+end R68fAQ019;
+//// model: R68fAQ020
+model A
+  model B
+    Real x = 1;
+    constant Real k = 3;
+  end B;
+  model E
+    extends B;
+    Real s(start = 1);
+  equation
+    der(s) = -s;
+    when s < 0.5 then
+      reinit(s, 1);
+    end when;
+  end E;
+  Real y = E.k;
+end A;
+model R68fAQ020
+  A a(B(x = 2));
+end R68fAQ020;
+//// model: R68fAN001
+package Q
+  constant Real k = 3;
+end Q;
+model A
+  package P
+    extends Q;
+  end P;
+  Real x = P.k;
+end A;
+model R68fAN001
+  A a;
+end R68fAN001;
+//// model: R68fAN003
+package Q
+  constant Real k = 3;
+end Q;
+model A
+  package Q2 = Q;
+  package P
+    extends Q2;
+  end P;
+  Real x = P.k;
+end A;
+model R68fAN003
+  A a;
+end R68fAN003;
+//// model: R68fAN005
+partial package PQ
+  constant Real k = 3;
+end PQ;
+model A
+  package P
+    extends PQ;
+  end P;
+  Real x = P.k;
+end A;
+model R68fAN005
+  A a;
+end R68fAN005;
+//// model: R68fAN006
+package Lib
+  package Q
+    constant Real k = 3;
+  end Q;
+end Lib;
+model A
+  package P
+    extends Lib.Q;
+    function f
+      input Real u;
+      output Real y = u * k;
+    end f;
+  end P;
+  Real x = P.f(time);
+end A;
+model R68fAN006
+  A a;
+end R68fAN006;
+//// model: R68fAL001
+record R
+  Real a(unbounded = 1);
+end R;
+model R68fAL001
+  R r;
+end R68fAL001;
+//// model: R68fAL003
+function f
+  input Real u(unbounded = 1);
+  output Real y = u;
+end f;
+model R68fAL003
+  Real z = f(time);
+end R68fAL003;
+//// model: R68fAL004
+model A
+  outer Real T(unbounded = 1);
+end A;
+model R68fAL004
+  inner Real T = 1;
+  A a;
+end R68fAL004;
+//// model: R68fAL005
+model A
+  outer Real T(startOrigin = "x");
+end A;
+model R68fAL005
+  inner Real T = 1;
+  A a;
+end R68fAL005;
+//// model: R68fAL006
+type T
+  extends Real(startOrigin = "x");
+end T;
+model R68fAL006
+  T t;
+end R68fAL006;
+//// model: R68fAL007
+model R68fAL007
+  Boolean b(startOrigin = "x");
+end R68fAL007;
+//// model: R68fAL009
+model R68fAL009
+  String s(fixed = 1);
+end R68fAL009;
+//// model: R68fAL010
+model R68fAL010
+  String s(fixed = true);
+end R68fAL010;
+//// model: R68fAL011
+model A
+  Real x(unbounded = 1);
+end A;
+model R68fAL011
+  A a[2];
+end R68fAL011;
+//// model: R68fAL012
+model A
+  Real x;
+end A;
+model R68fAL012
+  A a[2](each x(unbounded = 1));
+end R68fAL012;
+//// model: R68fAL013
+model A
+  Real x(unbounded = 1);
+end A;
+model R68fAL013
+  A a if false;
+end R68fAL013;
+//// model: R68fAL014
+model A
+  replaceable Real x(unbounded = 1);
+end A;
+model R68fAL014
+  extends A(redeclare Real x);
+end R68fAL014;
+//// model: R68fAL015
+package P
+  constant Real c(unbounded = 1) = 2;
+end P;
+model R68fAL015
+  Real x = P.c;
+end R68fAL015;
+//// model: R68fAL016
+model R68fAL016
+  Real x(unbounded = -1.5);
+end R68fAL016;
+//// model: R68fAL017
+model R68fAL017
+  parameter Real x(unbounded = 1) = 2;
+end R68fAL017;
+//// model: R68fAL018
+model R68fAL018
+  Real x(unbounded = 1);
+  Integer k = integer(time);
+equation
+  when time > 1 then
+    terminate("x");
+  end when;
+end R68fAL018;
+//// model: R68fAL019
+type T1 = Real(unbounded = 1);
+type T2 = T1(min = 0);
+model R68fAL019
+  T2 x;
+end R68fAL019;
+//// model: R68fAL020
+type T1 = Real(unbounded = 1);
+type T2 = T1(unbounded = false);
+model R68fAL020
+  T2 x;
+end R68fAL020;
+//// model: R68fAL021
+model A
+  Real x(unbounded = 2);
+end A;
+model R68fAL021
+  extends A(x(unbounded = true));
+end R68fAL021;
+//// model: R68fAL022
+model A
+  Real x(unbounded = true);
+end A;
+model R68fAL022
+  A a(x(unbounded = 1.0));
+end R68fAL022;
+//// model: R68fAL023
+model R68fAL023
+  Real x(unbounded = 1) annotation(HideResult = true);
+  Real y = x;
+equation
+  x = 1;
+end R68fAL023;
+//// model: R68fAL024
+model R68fAL024
+  Real x(each unbounded = 1);
+end R68fAL024;
+//// model: R68fAL025
+model R68fAL025
+  Real x(final unbounded = 1);
+end R68fAL025;
+//// model: R68fAL026
+model R68fAL026
+  Real x(unbounded = "a");
+end R68fAL026;
+//// model: R68fAL027
+model R68fAL027
+  Real x(startOrigin);
+end R68fAL027;
+//// model: R68fAL028
+model R68fAL028
+  Real x(startOrigin(start = 1));
+end R68fAL028;
+//// model: R68fAL029
+connector C
+  Real e(unbounded = 1);
+  flow Real f;
+end C;
+model R68fAL029
+  C c;
+end R68fAL029;
+//// model: R68fAL030
+model R68fAL030
+  Real x(unbounded = 1);
+  Real y(start = 1, fixed = 2);
+end R68fAL030;
+//// model: R68fAL031
+model R68fAL031
+  Real x(fixed = 1);
+end R68fAL031;
+//// model: R68fAL032
+model R68fAL032
+  Real x(min = "a");
+end R68fAL032;
+//// model: R68fAL033
+model R68fAL033
+  String s(fixed = 1.5, start = "x");
+end R68fAL033;
+//// model: R68fAL034
+type E = enumeration(a, b);
+model R68fAL034
+  E e(startOrigin = "x");
+end R68fAL034;
+//// model: R68fAL035
+model A
+  Real x(unbounded = true);
+end A;
+model R68fAL035
+  A a(x(unbounded = break));
+end R68fAL035;
+//// model: R68fAU001
+model A
+  type T = Real(min = 0);
+  package P
+    function f
+      input T u;
+      output Real y = u;
+    end f;
+  end P;
+  Real z = P.f(time);
+end A;
+model R68fAU001
+  A a(T(max = 1));
+end R68fAU001;
+//// model: R68fAU002
+model A
+  type T = Real(min = 0);
+  package P
+    constant T c = 2;
+  end P;
+  Real z = P.c;
+end A;
+model R68fAU002
+  A a(T(max = 1));
+end R68fAU002;
+//// model: R68fAU003
+model A
+  type T = Real(min = 0);
+  model M
+    T t;
+  end M;
+  package P
+    model N
+      extends M;
+    end N;
+  end P;
+  P.N n;
+end A;
+model R68fAU003
+  A a(T(max = 1));
+end R68fAU003;
+//// model: R68fAU004
+model A
+  model B
+    Real x = 1;
+  end B;
+  function g
+    input Real u;
+    output Real y = u + 1;
+  end g;
+  model E
+    extends B;
+    Real w = g(x);
+  end E;
+  E e;
+end A;
+model R68fAU004
+  A a(B(x = 2));
+end R68fAU004;
+//// model: R68fAU005
+model A
+  model B
+    Real x = 1;
+  end B;
+  model E
+    extends B;
+  end E;
+  E e;
+end A;
+model R68fAU005
+  A.E pre;
+  A a(B(x = 2));
+  A.E post;
+end R68fAU005;
+//// model: R68fAU006
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model D
+  extends A(B(C(z = 2)));
+  redeclare model B
+    Real q = 4;
+  end B;
+end D;
+model R68fAU006
+  D d;
+end R68fAU006;
+//// model: R68fAU007
+model A
+  replaceable model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model B5
+  Real q = 4;
+end B5;
+model R68fAU007
+  extends A(B(C(z = 2)), redeclare model B = B5);
+end R68fAU007;
+//// model: R68fAU008
+model A
+  replaceable model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model B5
+  model C
+    Real z = 7;
+  end C;
+  C c;
+end B5;
+model R68fAU008
+  extends A(B(C(z = 2)));
+  redeclare model B = B5;
+end R68fAU008;
+//// model: R68fAU009
+model A
+  replaceable model B
+    replaceable type P = Real;
+    P p;
+  end B;
+  B b;
+end A;
+model B5
+  replaceable type P = Real;
+  P p;
+  Real r;
+end B5;
+model M1
+  extends A(redeclare model B = B5);
+end M1;
+model R68fAU009
+  extends M1(B(redeclare type P = Integer));
+end R68fAU009;
+//// model: R68fAU010
+model A0
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+  end B;
+end A0;
+model A
+  extends A0;
+  model E
+    extends B;
+  end E;
+  E e;
+end A;
+model R68fAU010
+  extends A(B(C(z = 2)));
+end R68fAU010;
+//// model: R68fAU011
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+  end B;
+  model E
+    extends B;
+  end E;
+end A;
+model A2
+  extends A;
+  E e;
+end A2;
+model R68fAU011
+  extends A2(B(C(z = 2)));
+end R68fAU011;
+//// model: R68fAU012
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+  end B;
+end A;
+model A2
+  extends A;
+  model E
+    extends B;
+  end E;
+  E e;
+end A2;
+model R68fAU012
+  A2 a(B(C(z = 2)));
+end R68fAU012;
+//// model: R68fAU013
+model A
+  model B
+    replaceable model C
+      Real x = 0;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model D
+  Real x = 1.0;
+end D;
+model R68fAU013
+  A a1(B(redeclare model C = D));
+  A.B pre;
+end R68fAU013;
+//// model: R68fAU014
+model A
+  model B
+    replaceable model C
+      Real x = 0;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model D
+  Real x = 1.0;
+end D;
+package Pk
+  model W
+    A a1(B(redeclare model C = D));
+  end W;
+end Pk;
+model R68fAU014
+  Pk.W w;
+end R68fAU014;
+//// model: R68fAU015
+model A
+  model B
+    replaceable model C
+      Real x = 0;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model D
+  Real x = 1.0;
+end D;
+model W
+  A a1(B(redeclare model C = D));
+end W;
+model R68fAU015
+  W w;
+  A a2(B(redeclare model C = D));
+end R68fAU015;
+//// model: R68fAU016
+model A
+  model B
+    replaceable model C
+      Real x = 0;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model D
+  Real x = 1.0;
+end D;
+model R68fAU016
+  A a1(B(redeclare model C = D)), a2(B(redeclare model C = D));
+end R68fAU016;
+//// model: R68fAU017
+model A
+  model B
+    replaceable model C
+      Real x = 0;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model D
+  Real x = 1.0;
+end D;
+model R68fAU017
+  A a1[2](B(redeclare model C = D));
+end R68fAU017;
+//// model: R68fAU018
+model A
+  model B
+    replaceable model C
+      Real x = 0;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model D
+  Real x = 1.0;
+end D;
+model AA
+  extends A;
+end AA;
+model R68fAU018
+  AA a1(B(redeclare model C = D));
+end R68fAU018;
+//// model: R68fAU019
+model A
+  model B
+    replaceable model C
+      Real x = 0;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model D
+  Real x = 1.0;
+end D;
+model R68fAU019
+  replaceable A a1(B(redeclare model C = D));
+end R68fAU019;
+//// model: R68fAU020
+model A
+  model B
+    replaceable model C
+      Real x = 0;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model D
+  Real x = 1.0;
+end D;
+model R68fAU020
+  model AL = A(B(redeclare model C = D));
+  AL a1;
+end R68fAU020;
+//// model: R68fAF701
+model A
+  model B
+    constant Integer i = 3;
+  end B;
+end A;
+model R68fAF701
+  extends A(B(i = 4));
+  Real x = B.i;
+end R68fAF701;
+//// model: R68fAF702
+model A
+  model B
+    constant Integer i = 3;
+  end B;
+  B b;
+end A;
+model R68fAF702
+  extends A(B(i = 4));
+  Real x = B.i;
+end R68fAF702;
+//// model: R68fAF703
+model A
+  model B
+    constant Integer i = 3;
+  end B;
+  Real y = B.i;
+end A;
+model R68fAF703
+  extends A(B(i = 4));
+end R68fAF703;
+//// model: R68fAF704
+model A
+  model B
+    constant Integer i = 3;
+  end B;
+  Real y = B.i;
+end A;
+model R68fAF704
+  A a(B(i = 4));
+end R68fAF704;
+//// model: R68fAF705
+model A
+  model B
+    constant Integer i = 3;
+  end B;
+  model E
+    extends B;
+  end E;
+  Real y = E.i;
+end A;
+model R68fAF705
+  A a(B(i = 4));
+end R68fAF705;
+//// model: R68fAF706
+model A
+  model B
+    constant Integer i = 3;
+  end B;
+  model E
+    extends B;
+  end E;
+end A;
+model R68fAF706
+  extends A(B(i = 4));
+  Real y = E.i;
+end R68fAF706;
+//// model: R68fAF707
+model A
+  model B
+    constant Integer i = 3;
+    Real x = i;
+  end B;
+  model E
+    extends B;
+  end E;
+  E e;
+end A;
+model R68fAF707
+  A a(B(i = 4));
+end R68fAF707;
+//// model: R68fAF708
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+    Real x = 1;
+  end B;
+  B b;
+end A;
+model M1
+  extends A(B(C(z = 2)));
+end M1;
+model R68fAF708
+  extends M1(B(x = 3));
+end R68fAF708;
+//// model: R68fAF709
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+    Real x = 1;
+  end B;
+  model E
+    extends B;
+  end E;
+  E e;
+end A;
+model M1
+  extends A(B(C(z = 2)));
+end M1;
+model R68fAF709
+  extends M1(B(x = 3));
+end R68fAF709;
+//// model: R68fAF710
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+  end B;
+  model E
+    extends B;
+  end E;
+  E e;
+end A;
+model R68fAF710
+  extends A(B(C(z = 2)));
+end R68fAF710;
+//// model: R68fAF711
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model R68fAF711
+  extends A(B(C(z = 2)));
+  B b2;
+end R68fAF711;
+//// model: R68fAF712
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+  end B;
+end A;
+model R68fAF712
+  B b2;
+  extends A(B(C(z = 2)));
+end R68fAF712;
+//// model: R68fAF713
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+  end B;
+end A;
+model R68fAF713
+  extends A(B(C(z = 2)));
+  B.C c;
+end R68fAF713;
+//// model: R68fAF714
+model A
+  model B
+    model C
+      Real z = 1;
+      Real w = 1;
+    end C;
+  end B;
+end A;
+model R68fAF714
+  extends A(B(C(z = 2)));
+  model D = B(C(w = 3));
+  D.C c;
+end R68fAF714;
+//// model: R68fAF715
+model A
+  model B
+    model C
+      Real z = 1;
+      Real w = 1;
+    end C;
+  end B;
+end A;
+model R68fAF715
+  extends A(B(C(z = 2)));
+  model D = B;
+  D.C c;
+end R68fAF715;
+//// model: R68fAF716
+model A
+  model B
+    model C
+      Real z = 1;
+      Real w = 1;
+    end C;
+  end B;
+end A;
+model R68fAF716
+  extends A(B(C(z = 2)));
+  model D = B(C(w = 3));
+  model D2 = D;
+  D2.C c;
+end R68fAF716;
+//// model: R68fAF717
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model R68fAF717
+  extends A(B(C(z = 2)));
+  extends A2;
+end R68fAF717;
+model A2
+  Real q = 1;
+end A2;
+//// model: R68fAF718
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model M1
+  extends A(B(C(z = 2)));
+end M1;
+model R68fAF718
+  extends M1(B(C(z = 5)));
+end R68fAF718;
+//// model: R68fAF719
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model M1
+  extends A(B(C(z = 2)));
+end M1;
+model R68fAF719
+  M1 m(B(C(z = 5)));
+end R68fAF719;
+//// model: R68fAF720
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model R68fAF720
+  extends A(B(C(z = -2)));
+end R68fAF720;
+//// model: R68fAF721
+model A
+  model B
+    model C
+      Integer z = 1;
+      Boolean q = false;
+      String s = "a";
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model R68fAF721
+  extends A(B(C(z = 2, q = true, s = "b")));
+end R68fAF721;
+//// model: R68fAF722
+model A
+  model B
+    model C
+      Integer z = 1;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model R68fAF722
+  extends A(B(C(z = 2.5)));
+end R68fAF722;
+//// model: R68fAF723
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c[2];
+  end B;
+  B b;
+end A;
+model R68fAF723
+  extends A(B(C(z = 2)));
+end R68fAF723;
+//// model: R68fAF724
+model A
+  model B
+    model C
+      parameter Real z = 1;
+    end C;
+    C c;
+  end B;
+  B b;
+end A;
+model R68fAF724
+  extends A(B(C(z = 2)));
+end R68fAF724;
+//// model: R68fAF725
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c(z = 7);
+  end B;
+  B b;
+end A;
+model R68fAF725
+  extends A(B(C(z = 2)));
+end R68fAF725;
+//// model: R68fAF726
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+  end B;
+  B b(c(z = 9));
+end A;
+model R68fAF726
+  extends A(B(C(z = 2)));
+end R68fAF726;
+//// model: R68fAF727
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+  end B;
+  model B2 = B;
+  B2 b;
+end A;
+model R68fAF727
+  extends A(B(C(z = 2)));
+end R68fAF727;
+//// model: R68fAF728
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    model C2 = C;
+    C2 c;
+  end B;
+  B b;
+end A;
+model R68fAF728
+  extends A(B(C(z = 2)));
+end R68fAF728;
+//// model: R68fAF729
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    model C3
+      extends C;
+    end C3;
+    C3 c;
+  end B;
+  B b;
+end A;
+model R68fAF729
+  extends A(B(C(z = 2)));
+end R68fAF729;
+//// model: R68fAF730
+model A
+  model B
+    model C
+      constant Real z = 1;
+    end C;
+    Real y = C.z;
+  end B;
+  B b;
+end A;
+model R68fAF730
+  extends A(B(C(z = 2)));
+end R68fAF730;
+//// model: R68fAM001
+model A0
+  model B
+    Real x = 1;
+  end B;
+end A0;
+model A
+  B b1;
+  extends A0;
+end A;
+model R68fAM001
+  parameter Real q = 4;
+  extends A(B(x = q));
+end R68fAM001;
+//// model: R68fAM002
+model A
+  model B
+    Real x = 1;
+  end B;
+end A;
+model R68fAM002
+  parameter Real q = 4;
+  model E
+    extends B;
+  end E;
+  E e;
+  extends A(B(x = q));
+end R68fAM002;
+//// model: R68fAM003
+model A
+  model B
+    Real x = 1;
+  end B;
+end A;
+model R68fAM003
+  model E
+    extends B;
+  end E;
+  E e if true;
+  extends A(B(x = 2));
+end R68fAM003;
+//// model: R68fAM004
+model A
+  model B
+    Real x = 1;
+  end B;
+end A;
+model R68fAM004
+  model E
+    extends B;
+  end E;
+  E e[2];
+  extends A(B(x = 2));
+end R68fAM004;
+//// model: R68fAM005
+model A
+  model B
+    Real x = 1;
+  end B;
+end A;
+model R68fAM005
+  model E
+    extends B;
+  end E;
+  model F
+    E e;
+  end F;
+  F f;
+  extends A(B(x = 2));
+end R68fAM005;
+//// model: R68fAM006
+model A
+  model B
+    Real x = 1;
+  end B;
+end A;
+model R68fAM006
+  record R
+    Real y = 1;
+  end R;
+  model E
+    extends B;
+  end E;
+  E e;
+  R r;
+  extends A(B(x = 2));
+end R68fAM006;
+//// model: R68fAM007
+model A
+  type T = Real(min = 0);
+end A;
+model R68fAM007
+  model E
+    T t;
+  end E;
+  E e;
+  extends A(T(max = 3));
+end R68fAM007;
+//// model: R68fAM008
+model A
+  type T = Real(min = 0);
+end A;
+model R68fAM008
+  type T2 = T(nominal = 2);
+  T2 t;
+  extends A(T(max = 3));
+end R68fAM008;
+//// model: R68fAM009
+model A
+  model B
+    Real x = 1;
+  end B;
+end A;
+model R68fAM009
+  model E
+    extends B;
+  end E;
+  extends A(B(x = 2));
+  E e;
+end R68fAM009;
+//// model: R68fAM011
+model B
+  model B2
+    replaceable type P = Real;
+    P p;
+    Real w = 1;
+  end B2;
+  model B3
+    extends B2;
+  end B3;
+  B3 b3;
+end B;
+model M1
+  extends B(B2(redeclare type P = Integer));
+end M1;
+model R68fAM011
+  M1 m(B2(w = 4));
+end R68fAM011;
+//// model: R68fAM012
+model B
+  model B2
+    replaceable type P = Real;
+    P p;
+    Real w = 1;
+  end B2;
+  B2 b2;
+end B;
+model M1
+  extends B(B2(redeclare type P = Integer));
+end M1;
+model R68fAM012
+  extends M1(B2(w = 4));
+end R68fAM012;
+//// model: R68fAM013
+model B
+  model B2
+    replaceable type P = Real;
+    P p;
+    Real w = 1;
+  end B2;
+  model B4 = B2;
+  B4 b4;
+end B;
+model M1
+  extends B(B2(redeclare type P = Integer));
+end M1;
+model R68fAM013
+  extends M1(B2(w = 4));
+end R68fAM013;
+//// model: R68fAM014
+model B
+  model B2
+    replaceable type P = Real;
+    P p;
+    Real w = 1;
+  end B2;
+  model B3
+    extends B2;
+  end B3;
+  B3 b3;
+end B;
+model M1
+  extends B(B2(w = 4));
+end M1;
+model R68fAM014
+  extends M1(B2(redeclare type P = Integer));
+end R68fAM014;
+//// model: R68fAN3X01
+model A
+  model B
+    constant Integer i = 3;
+  end B;
+  model E
+    extends B;
+  end E;
+  Real y = E.i;
+end A;
+model R68fAN3X01
+  constant Integer c = 4;
+  A a(B(i = c));
+end R68fAN3X01;
+//// model: R68fAN3X02
+model A
+  model B
+    constant Integer i = 3;
+  end B;
+  model E
+    extends B;
+  end E;
+  E e;
+end A;
+model R68fAN3X02
+  constant Integer c = 4;
+  A a(B(i = c));
+end R68fAN3X02;
+//// model: R68fAN3X03
+model A
+  model B
+    constant Integer i = 3;
+  end B;
+  model E
+    extends B;
+  end E;
+  E e;
+end A;
+model R68fAN3X03
+  constant Integer c = 4;
+  A.E pre;
+  A a1(B(i = c));
+end R68fAN3X03;
+//// model: R68fAN3X04
+model A
+  model B
+    constant Integer c = 9;
+    constant Integer i = 3;
+  end B;
+  model E
+    extends B;
+  end E;
+  Real y = E.i;
+end A;
+model R68fAN3X04
+  constant Integer c = 4;
+  A a(B(i = c));
+end R68fAN3X04;
+//// model: R68fAN3X05
+model A
+  model B
+    constant Integer c = 9;
+    constant Integer i = 3;
+  end B;
+  model E
+    extends B;
+  end E;
+  E e;
+end A;
+model R68fAN3X05
+  constant Integer c = 4;
+  A a(B(i = c));
+end R68fAN3X05;
+//// model: R68fAN3X06
+model A
+  model B
+    constant Integer c = 9;
+    constant Integer i = 3;
+  end B;
+  model E
+    extends B;
+  end E;
+  E e;
+end A;
+model R68fAN3X06
+  constant Integer c = 4;
+  A.E pre;
+  A a1(B(i = c));
+end R68fAN3X06;
+//// model: R68fAN3X07
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAN3X07
+  A a(B(x = 2 * 3 + 1));
+end R68fAN3X07;
+//// model: R68fAN3X08
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAN3X08
+  A a(B(x = -2.5));
+end R68fAN3X08;
+//// model: R68fAN3X09
+model A
+  model B
+    Real x[2] = {1, 1};
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAN3X09
+  A a(B(x = {2, 3}));
+end R68fAN3X09;
+//// model: R68fAN3X10
+model A
+  model B
+    Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAN3X10
+  A a(B(x = sin(0.5)));
+end R68fAN3X10;
+//// model: R68fAN3X11
+model A
+  model B
+    constant Integer i = 3;
+  end B;
+  model E
+    extends B;
+  end E;
+  Real y = E.i;
+end A;
+model R68fAN3X11
+  A a(B(i = integer(4.0)));
+end R68fAN3X11;
+//// model: R68fAN3X12
+model A
+  model B
+    model C
+      Real z = 1;
+    end C;
+    C c;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAN3X12
+  parameter Real q = 4;
+  A a(B(C(z = q)));
+end R68fAN3X12;
+//// model: R68fAN3X13
+model A
+  model B
+    Real x(start = 1) = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAN3X13
+  parameter Real q = 4;
+  A a(B(x(start = q)));
+end R68fAN3X13;
+//// model: R68fAN3X14
+model A
+  model B
+    Real x(start = 1) = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAN3X14
+  A a(B(x(start = 5)));
+end R68fAN3X14;
+//// model: R68fAN3X15
+model A
+  model B
+    Real x = 1;
+    Real w = 0;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAN3X15
+  A a(B(x = 2, w = time));
+end R68fAN3X15;
+//// model: R68fAN3X16
+model A
+  model B
+    parameter Real x = 1;
+  end B;
+  model B2
+    extends B;
+  end B2;
+  B2 b2;
+end A;
+model R68fAN3X16
+  A a(B(x = 2 + 3 * (4 - 1) / 2));
+end R68fAN3X16;
+//// model: R68fAN3X17
+model A
+  model B
+    constant Integer i = 3;
+  end B;
+  model E
+    extends B;
+  end E;
+  Real y = E.i;
+end A;
+model R68fAN3X17
+  A a(B(i = 2 + 5));
+end R68fAN3X17;
+//// model: R68fAN3X18
+model A
+  model B
+    constant Integer i = 3;
+  end B;
+  model E
+    extends B;
+  end E;
+  E e;
+end A;
+model R68fAN3X18
+  constant Integer c = 4;
+  A.E pre;
+  A a1(B(i = c + 1));
+end R68fAN3X18;
+//// model: R68fAPB01
+partial model PM
+  Real x;
+end PM;
+model PA = PM;
+model M
+  extends PM;
+equation
+  x = 1;
+end M;
+model H
+  replaceable PA c;
+end H;
+model R68fAPB01
+  extends H(redeclare M c);
+end R68fAPB01;
+//// model: R68fAPB02
+partial model PM
+  Real x;
+end PM;
+model PA = PM;
+model H
+  replaceable PA c;
+end H;
+model R68fAPB02
+  extends H;
+end R68fAPB02;
+//// model: R68fAPB03
+package P
+  partial model PM
+    Real x;
+  end PM;
+end P;
+model M
+  extends P.PM;
+equation
+  x = 1;
+end M;
+model H
+  replaceable P.PM c;
+end H;
+model H2
+  extends H;
+end H2;
+model R68fAPB03
+  extends H2(redeclare M c);
+end R68fAPB03;
+//// model: R68fAPB04
+partial model PM
+  Real x;
+end PM;
+model PA = PM(x(start = 1));
+model M
+  extends PM;
+equation
+  x = 1;
+end M;
+model H
+  replaceable PA c;
+end H;
+model R68fAPB04
+  extends H(redeclare M c);
+end R68fAPB04;
+//// model: R68fAPB06
+partial model PM
+  Real x;
+end PM;
+model M
+  extends PM;
+equation
+  x = 1;
+end M;
+model H
+  replaceable PM c;
+end H;
+model R68fAPB06
+  H h(redeclare M c);
+end R68fAPB06;
+//// model: R68fAPB08
+partial model PM
+  Real x;
+end PM;
+model M
+  extends PM;
+equation
+  x = 1;
+end M;
+model H
+  model In
+    replaceable PM c;
+  end In;
+  In i;
+end H;
+model R68fAPB08
+  extends H(i(redeclare M c));
+end R68fAPB08;
+//// model: R68fAR001
+model Clock
+  parameter Real offset = 0;
+  parameter Real startTime = 0;
+  Real y = offset + startTime;
+end Clock;
+model Sine
+  parameter Real amplitude = 1;
+  Real y = amplitude;
+end Sine;
+model M1
+  replaceable Clock clock;
+end M1;
+model M2
+  extends M1(clock(offset = 10), clock(startTime = 20));
+end M2;
+model R68fAR001
+  extends M2(redeclare Sine clock);
+end R68fAR001;
+//// model: R68fAR002
+model Clock
+  parameter Real offset = 0;
+  Real y = offset;
+end Clock;
+model Clock2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clock2;
+model M1
+  replaceable Clock clock;
+end M1;
+model M2
+  extends M1(clock(offset = 10));
+end M2;
+model R68fAR002
+  extends M2(redeclare Clock2 clock);
+end R68fAR002;
+//// model: R68fAR003
+model Clock
+  parameter Real offset = 0;
+  Real y = offset;
+end Clock;
+model Clock2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clock2;
+model M1
+  replaceable Clock clock;
+end M1;
+model M2
+  extends M1(clock(offset = 10));
+end M2;
+model M3
+  extends M2;
+end M3;
+model R68fAR003
+  extends M3(redeclare Clock2 clock);
+end R68fAR003;
+//// model: R68fAR004
+model Clock
+  parameter Real offset = 0;
+  Real y = offset;
+end Clock;
+model Clock2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clock2;
+model M1
+  replaceable Clock clock;
+end M1;
+model M2
+  extends M1(clock(offset = 10));
+end M2;
+model R68fAR004
+  extends M2(redeclare Clock2 clock(offset = 7));
+end R68fAR004;
+//// model: R68fAR005
+model Clock
+  parameter Real offset = 0;
+  Real y = offset;
+end Clock;
+model Clock2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clock2;
+model M1
+  replaceable Clock clock;
+end M1;
+model M2
+  extends M1(clock(offset = "a"));
+end M2;
+model R68fAR005
+  extends M2(redeclare Clock2 clock);
+end R68fAR005;
+//// model: R68fAR006
+model Clock
+  parameter Real offset = 0;
+  Real y = offset;
+end Clock;
+model Clock2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clock2;
+model M1
+  replaceable Clock clock;
+end M1;
+model M2
+  extends M1(clock(offset = undefinedName));
+end M2;
+model R68fAR006
+  extends M2(redeclare Clock2 clock);
+end R68fAR006;
+//// model: R68fAR007
+model Clock
+  parameter Real offset = 0;
+  Real y = offset;
+end Clock;
+model Clock2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clock2;
+model M1
+  replaceable Clock clock;
+end M1;
+model M2
+  extends M1(clock(offset = 10));
+end M2;
+model R68fAR007
+  M2 m(redeclare Clock2 clock);
+end R68fAR007;
+//// model: R68fAR008
+model Clock
+  parameter Real offset = 0;
+  Real y = offset;
+end Clock;
+model Clock2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clock2;
+model M1
+  replaceable Clock clock(offset = 3);
+end M1;
+model M2
+  extends M1(clock(offset = 10));
+end M2;
+model R68fAR008
+  extends M2(redeclare Clock2 clock);
+end R68fAR008;
+//// model: R68fAR009
+model Clock
+  parameter Real offset = 0;
+  Real y = offset;
+end Clock;
+model Clock2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clock2;
+model M1
+  replaceable Clock clock;
+end M1;
+model M2
+  extends M1(clock(offset = 10));
+end M2;
+model M3
+  extends M2(redeclare Clock2 clock);
+end M3;
+model R68fAR009
+  M3 m;
+end R68fAR009;
+//// model: R68fAR010
+model Clock
+  parameter Real offset = 0;
+  Real y = offset;
+end Clock;
+model Clock2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clock2;
+model M1
+  replaceable Clock clock;
+end M1;
+model M2
+  extends M1(clock(offset = 10));
+end M2;
+model R68fAR010
+  extends M2(redeclare replaceable Clock2 clock);
+end R68fAR010;
+//// model: R68fAR011
+model Clock
+  parameter Real offset = 0;
+  Real y = offset;
+end Clock;
+model Clock2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clock2;
+model M1
+  replaceable Clock clock;
+end M1;
+model M2
+  extends M1(clock(offset = 10));
+  Real z = clock.offset;
+end M2;
+model R68fAR011
+  extends M2(redeclare Clock2 clock);
+end R68fAR011;
+//// model: R68fAP001
+partial package PartialMedium
+  type MassFraction = Real;
+end PartialMedium;
+package StandardWater
+  extends PartialMedium;
+end StandardWater;
+connector FluidPort
+  replaceable package Medium = PartialMedium;
+  flow Real Q;
+  Medium.MassFraction P;
+end FluidPort;
+connector Outlet
+  extends FluidPort(redeclare package Medium = StandardWater);
+end Outlet;
+model FluidSource
+  replaceable FluidPort p;
+  FluidPort q;
+end FluidSource;
+model R68fAP001
+  extends FluidSource(redeclare Outlet p);
+end R68fAP001;
+//// model: R68fAP002
+partial package PartialMedium
+  type MassFraction = Real;
+end PartialMedium;
+package StandardWater
+  extends PartialMedium;
+end StandardWater;
+connector FluidPort
+  replaceable package Medium = PartialMedium;
+  flow Real Q;
+  Medium.MassFraction P;
+end FluidPort;
+connector Outlet
+  extends FluidPort(redeclare package Medium = StandardWater);
+end Outlet;
+model FluidSource
+  replaceable FluidPort p;
+end FluidSource;
+model FS2
+  extends FluidSource;
+end FS2;
+model R68fAP002
+  extends FS2(redeclare Outlet p);
+end R68fAP002;
+//// model: R68fAP003
+partial package PartialMedium
+  type MassFraction = Real;
+end PartialMedium;
+connector FluidPort
+  replaceable package Medium = PartialMedium;
+  flow Real Q;
+  Medium.MassFraction P;
+end FluidPort;
+connector Outlet2
+  extends FluidPort;
+end Outlet2;
+model FluidSource
+  replaceable FluidPort p;
+end FluidSource;
+model R68fAP003
+  extends FluidSource(redeclare Outlet2 p);
+end R68fAP003;
+//// model: R68fAP004
+partial package PartialMedium
+  type MassFraction = Real;
+end PartialMedium;
+package StandardWater
+  extends PartialMedium;
+end StandardWater;
+connector FluidPort
+  replaceable package Medium = PartialMedium;
+  flow Real Q;
+  Medium.MassFraction P;
+end FluidPort;
+connector Outlet
+  extends FluidPort(redeclare package Medium = StandardWater);
+end Outlet;
+model FluidSource
+  replaceable FluidPort p;
+end FluidSource;
+model R68fAP004
+  extends FluidSource(redeclare Outlet p);
+  FluidPort q;
+end R68fAP004;
+//// model: R68fAP005
+partial package PartialMedium
+  type MassFraction = Real;
+end PartialMedium;
+package StandardWater
+  extends PartialMedium;
+end StandardWater;
+connector FluidPort
+  replaceable package Medium = PartialMedium;
+  flow Real Q;
+  Medium.MassFraction P;
+end FluidPort;
+connector Outlet
+  extends FluidPort(redeclare package Medium = StandardWater);
+end Outlet;
+model FluidSource
+  replaceable FluidPort p;
+end FluidSource;
+model R68fAP005
+  FluidPort q;
+  extends FluidSource(redeclare Outlet p);
+end R68fAP005;
+//// model: R68fAP006
+partial model PM
+  Real x;
+end PM;
+model M
+  extends PM;
+equation
+  x = 1;
+end M;
+model Holder
+  replaceable PM c;
+end Holder;
+model R68fAP006
+  extends Holder(redeclare M c);
+end R68fAP006;
+//// model: R68fAP008
+partial package PartialMedium
+  constant Integer n = 2;
+  type MassFraction = Real;
+end PartialMedium;
+package StandardWater
+  extends PartialMedium(n = 3);
+end StandardWater;
+connector FluidPort
+  replaceable package Medium = PartialMedium;
+  flow Real Q;
+  Medium.MassFraction P[Medium.n];
+end FluidPort;
+connector Outlet
+  extends FluidPort(redeclare package Medium = StandardWater);
+end Outlet;
+model FluidSource
+  replaceable FluidPort p;
+end FluidSource;
+model R68fAP008
+  extends FluidSource(redeclare Outlet p);
+end R68fAP008;
+//// model: R68fAP009
+partial package PartialMedium
+  type MassFraction = Real;
+end PartialMedium;
+package StandardWater
+  extends PartialMedium;
+end StandardWater;
+connector FluidPort
+  replaceable package Medium = PartialMedium;
+  flow Real Q;
+  Medium.MassFraction P;
+end FluidPort;
+connector Outlet
+  extends FluidPort(redeclare package Medium = StandardWater);
+end Outlet;
+model FluidSource
+  replaceable FluidPort p;
+  FluidPort q = p;
+end FluidSource;
+model R68fAP009
+  extends FluidSource(redeclare Outlet p);
+end R68fAP009;
+//// model: R68fAP010
+partial package PartialMedium
+  type MassFraction = Real;
+  replaceable function f
+    input Real u;
+    output Real y;
+  end f;
+end PartialMedium;
+package StandardWater
+  extends PartialMedium;
+  redeclare function extends f
+  algorithm
+    y := 2 * u;
+  end f;
+end StandardWater;
+model Src
+  replaceable package Medium = PartialMedium;
+  Real y = Medium.f(time);
+end Src;
+model Src2
+  extends Src(redeclare package Medium = StandardWater);
+end Src2;
+model Holder
+  replaceable Src s;
+end Holder;
+model R68fAP010
+  extends Holder(redeclare Src2 s);
+end R68fAP010;
+//// model: R68fARR001
+model Clk
+  parameter Real offset = 0;
+  parameter Real startTime = 0;
+  Real y = offset + startTime;
+end Clk;
+model Sine
+  parameter Real amplitude = 1;
+  Real y = amplitude;
+end Sine;
+model M1
+  replaceable Clk clock;
+end M1;
+model M2
+  extends M1(clock(offset = 10), clock(startTime = 20));
+end M2;
+model R68fARR001
+  extends M2(redeclare Sine clock);
+end R68fARR001;
+//// model: R68fARR002
+model Clk
+  parameter Real offset = 0;
+  Real y = offset;
+end Clk;
+model Clk2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clk2;
+model M1
+  replaceable Clk clock;
+end M1;
+model M2
+  extends M1(clock(offset = 10));
+end M2;
+model R68fARR002
+  extends M2(redeclare Clk2 clock);
+end R68fARR002;
+//// model: R68fARR003
+model Clk
+  parameter Real offset = 0;
+  Real y = offset;
+end Clk;
+model Clk2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clk2;
+model M1
+  replaceable Clk clock;
+end M1;
+model M2
+  extends M1(clock(offset = 10));
+end M2;
+model M3
+  extends M2;
+end M3;
+model R68fARR003
+  extends M3(redeclare Clk2 clock);
+end R68fARR003;
+//// model: R68fARR004
+model Clk
+  parameter Real offset = 0;
+  Real y = offset;
+end Clk;
+model Clk2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clk2;
+model M1
+  replaceable Clk clock;
+end M1;
+model M2
+  extends M1(clock(offset = 10));
+end M2;
+model R68fARR004
+  extends M2(redeclare Clk2 clock(offset = 7));
+end R68fARR004;
+//// model: R68fARR005
+model Clk
+  parameter Real offset = 0;
+  Real y = offset;
+end Clk;
+model Clk2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clk2;
+model M1
+  replaceable Clk clock;
+end M1;
+model M2
+  extends M1(clock(offset = "a"));
+end M2;
+model R68fARR005
+  extends M2(redeclare Clk2 clock);
+end R68fARR005;
+//// model: R68fARR006
+model Clk
+  parameter Real offset = 0;
+  Real y = offset;
+end Clk;
+model Clk2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clk2;
+model M1
+  replaceable Clk clock;
+end M1;
+model M2
+  extends M1(clock(offset = undefinedName));
+end M2;
+model R68fARR006
+  extends M2(redeclare Clk2 clock);
+end R68fARR006;
+//// model: R68fARR007
+model Clk
+  parameter Real offset = 0;
+  Real y = offset;
+end Clk;
+model Clk2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clk2;
+model M1
+  replaceable Clk clock;
+end M1;
+model M2
+  extends M1(clock(offset = 10));
+end M2;
+model R68fARR007
+  M2 m(redeclare Clk2 clock);
+end R68fARR007;
+//// model: R68fARR008
+model Clk
+  parameter Real offset = 0;
+  Real y = offset;
+end Clk;
+model Clk2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clk2;
+model M1
+  replaceable Clk clock(offset = 3);
+end M1;
+model M2
+  extends M1(clock(offset = 10));
+end M2;
+model R68fARR008
+  extends M2(redeclare Clk2 clock);
+end R68fARR008;
+//// model: R68fARR009
+model Clk
+  parameter Real offset = 0;
+  Real y = offset;
+end Clk;
+model Clk2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clk2;
+model M1
+  replaceable Clk clock;
+end M1;
+model M2
+  extends M1(clock(offset = 10));
+end M2;
+model M3
+  extends M2(redeclare Clk2 clock);
+end M3;
+model R68fARR009
+  M3 m;
+end R68fARR009;
+//// model: R68fARR010
+model Clk
+  parameter Real offset = 0;
+  Real y = offset;
+end Clk;
+model Clk2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clk2;
+model M1
+  replaceable Clk clock;
+end M1;
+model M2
+  extends M1(clock(offset = 10));
+end M2;
+model R68fARR010
+  extends M2(redeclare replaceable Clk2 clock);
+end R68fARR010;
+//// model: R68fARR011
+model Clk
+  parameter Real offset = 0;
+  Real y = offset;
+end Clk;
+model Clk2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clk2;
+model M1
+  replaceable Clk clock;
+end M1;
+model M2
+  extends M1(clock(offset = 10));
+  Real z = clock.offset;
+end M2;
+model R68fARR011
+  extends M2(redeclare Clk2 clock);
+end R68fARR011;
+//// model: R68fARB01
+model Clk
+  parameter Real offset = 0;
+  Real y = offset;
+end Clk;
+model Clk2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clk2;
+model M1
+  replaceable Clk clock;
+end M1;
+model R68fARB01
+  extends M1(clock(offset = 10), redeclare Clk2 clock);
+end R68fARB01;
+//// model: R68fARB02
+model Clk
+  parameter Real offset = 0;
+  Real y = offset;
+end Clk;
+model Clk2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clk2;
+model M1
+  replaceable Clk clock;
+end M1;
+model M2
+  extends M1(clock(offset = 10));
+end M2;
+model R68fARB02
+  extends M2(redeclare Clk2 clock);
+  Real z = clock.offset;
+end R68fARB02;
+//// model: R68fARB03
+model Clk
+  parameter Real offset = 0;
+  Real y = offset;
+protected
+  parameter Real h = 1;
+end Clk;
+model Clk2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clk2;
+model M1
+  replaceable Clk clock;
+end M1;
+model M2
+  extends M1(clock(h = 10));
+end M2;
+model R68fARB03
+  extends M2(redeclare Clk2 clock);
+end R68fARB03;
+//// model: R68fARB04
+model Clk
+  parameter Real offset = 0;
+  Real y = offset;
+end Clk;
+model Clk2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clk2;
+model M1
+  replaceable Clk clock;
+end M1;
+model M2
+  extends M1(clock(offset = 10));
+end M2;
+model M3
+  extends M2(clock(offset = 20));
+end M3;
+model R68fARB04
+  extends M3(redeclare Clk2 clock);
+end R68fARB04;
+//// model: R68fARB05
+model Clk
+  parameter Real offset = 0;
+  Real y = offset;
+end Clk;
+model Clk2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clk2;
+model M1
+  replaceable Clk clock;
+end M1;
+model M2
+  extends M1(clock(offset = 10));
+end M2;
+model M3
+  extends M2(redeclare Clk2 clock);
+end M3;
+model R68fARB05
+  extends M3(clock(offset = 30));
+end R68fARB05;
+//// model: R68fARB06
+model Clk
+  parameter Real offset = 0;
+  Real y = offset;
+end Clk;
+model Clk2
+  parameter Real offset = 5;
+  Real y = offset;
+end Clk2;
+model M1
+  replaceable Clk clock;
+end M1;
+model M2
+  extends M1(clock(offset = 10));
+end M2;
+model R68fARB06
+  extends M2(redeclare Clk2 clock(y(start = 1)));
+end R68fARB06;
+//// model: R68fAS001
+model A
+  Real x = 1;
+end A;
+model R68fAS001
+  Real y = x + 1;
+  extends A;
+end R68fAS001;
+//// model: R68fAS002
+model A
+  constant Integer n = 2;
+  Real x[n];
+end A;
+model R68fAS002
+  Real y[n] = fill(1.0, n);
+  extends A;
+end R68fAS002;
+//// model: R68fAS003
+model A
+  Real x = 1;
+end A;
+model R68fAS003
+  Real x = 1;
+  extends A;
+end R68fAS003;
+//// model: R68fAS004
+model A
+  outer Real T;
+  Real y = T;
+end A;
+model R68fAS004
+  inner Real T = 300;
+  extends A;
+end R68fAS004;
+//// model: R68fAS005
+model A
+  inner Real T = 300;
+end A;
+model B
+  outer Real T;
+  Real y = T;
+end B;
+model R68fAS005
+  B b;
+  extends A;
+end R68fAS005;
+//// model: R68fAS006
+model A
+  model B
+    Real x = 1;
+  end B;
+end A;
+model R68fAS006
+  model E
+    extends B;
+  end E;
+  E e;
+  extends A(B(x = 2));
+end R68fAS006;
+//// model: R68fAS007
+model A
+  model B
+    Real x = 1;
+  end B;
+end A;
+model R68fAS007
+  model E
+    B b;
+  end E;
+  E e;
+  extends A(B(x = 2));
+end R68fAS007;
+//// model: R68fAS008
+model A
+  model B
+    Real x = 1;
+  end B;
+end A;
+model R68fAS008
+  E e;
+  model E
+    B b;
+  end E;
+  extends A(B(x = 2));
+  E e2;
+end R68fAS008;
+//// model: R68fAS009
+model A
+  parameter Real p = 1;
+  Real x = p;
+end A;
+model R68fAS009
+  parameter Real q = 3;
+  extends A(p = q);
+  Real z = q;
+end R68fAS009;
+//// model: R68fAS010
+model A
+  Real x = 1;
+end A;
+model C
+  Real y = 2;
+end C;
+model R68fAS010
+  Real a = 0;
+  extends A;
+  Real b = 0;
+  extends C;
+  Real c = 0;
+end R68fAS010;
+//// model: R68fAS011
+model A
+  replaceable model B
+    Real x = 1;
+  end B;
+  B b;
+end A;
+model R68fAS011
+  model B2
+    Real x = 2;
+    Real y = 3;
+  end B2;
+  B2 bb;
+  extends A(redeclare model B = B2);
+end R68fAS011;
+//// model: R68fAS012
+model A
+  parameter Boolean c = true;
+  Real x if c;
+end A;
+model R68fAS012
+  Real y if c;
+  extends A(c = false);
+end R68fAS012;
+//// model: R68fAS013
+package P
+  constant Real k = 2;
+end P;
+model A
+  package Q = P;
+end A;
+model R68fAS013
+  Real x = Q.k;
+  extends A;
+end R68fAS013;
+//// model: R68fAS014
+model A
+  replaceable package M = P;
+end A;
+package P
+  constant Real k = 2;
+end P;
+package P2
+  constant Real k = 5;
+end P2;
+model R68fAS014
+  Real x = M.k;
+  extends A(redeclare package M = P2);
+end R68fAS014;
+//// model: R68fAS015
+model A
+  model B
+    Real x = 1;
+  end B;
+  B b;
+end A;
+model R68fAS015
+  B b2;
+  extends A;
+end R68fAS015;
+//// model: R68fAS016
+model A0
+  model B
+    Real x = 1;
+  end B;
+end A0;
+model A
+  B b1;
+  extends A0;
+end A;
+model R68fAS016
+  extends A(B(x = 2));
+end R68fAS016;
+//// model: R68fAS017
+model A0
+  model B
+    Real x = 1;
+  end B;
+end A0;
+model A
+  extends A0;
+  B b1;
+end A;
+model R68fAS017
+  extends A(B(x = 2));
+end R68fAS017;
+//// model: R68fAS018
+connector C
+  Real e;
+  flow Real f;
+end C;
+model A
+  C c1;
+end A;
+model R68fAS018
+  C c2;
+  extends A;
+equation
+  connect(c1, c2);
+end R68fAS018;
+//// model: R68fAS019
+model A
+  Real x;
+equation
+  x = 1;
+end A;
+model R68fAS019
+  Real y;
+  extends A;
+equation
+  y = x;
+end R68fAS019;
+//// model: R68fAS020
+type T = Real(unit = "m");
+model A
+  type T2 = T(min = 0);
+end A;
+model R68fAS020
+  T2 t;
+  extends A;
+end R68fAS020;
+//// model: R68fAS021
+model A
+  type T2 = Real(min = 0);
+end A;
+model R68fAS021
+  T2 t;
+  extends A(T2(max = 3));
+end R68fAS021;
+//// model: R68fAS022
+model A
+  type T2 = Real(min = 0);
+  T2 t0;
+end A;
+model R68fAS022
+  extends A(T2(max = 3));
+  T2 t;
+end R68fAS022;
+//// model: R68fAS023
+model A
+  function f
+    input Real u;
+    output Real y = 2 * u;
+  end f;
+end A;
+model R68fAS023
+  Real z = f(time);
+  extends A;
+end R68fAS023;
+//// model: R68fAS024
+record R
+  Real a = 1;
+end R;
+model A
+  record R2 = R(a = 2);
+end A;
+model R68fAS024
+  R2 r;
+  extends A;
+end R68fAS024;
+//// model: R68fAS025
+model A
+  Real x = 1;
+end A;
+model B
+  extends A;
+  Real y = x;
+end B;
+model R68fAS025
+  Real z = y;
+  extends B;
+  Real w = x;
+end R68fAS025;
+//// model: R68fAT001
+model A
+  model B
+    Real x = 1;
+  end B;
+end A;
+model R68fAT001
+  extends A(B(x = 2));
+  model E
+    extends B;
+  end E;
+  E e;
+end R68fAT001;
+//// model: R68fAT002
+model A
+  model B
+    Real x = 1;
+  end B;
+end A;
+model R68fAT002
+  model E
+    extends B(x = 3);
+  end E;
+  E e;
+  extends A(B(x = 2));
+end R68fAT002;
+//// model: R68fAT003
+model A
+  model B
+    Real x = 1;
+  end B;
+end A;
+model R68fAT003
+  model F
+    extends B;
+  end F;
+  model E
+    extends F;
+  end E;
+  E e;
+  extends A(B(x = 2));
+end R68fAT003;
+//// model: R68fAT004
+model A
+  model B
+    Real x = 1;
+  end B;
+end A;
+model R68fAT004
+  model E = B;
+  E e;
+  extends A(B(x = 2));
+end R68fAT004;
+//// model: R68fAT005
+model A
+  model B
+    Real x = 1;
+    Real y = 1;
+  end B;
+end A;
+model R68fAT005
+  model E
+    extends B(y = 5);
+    Real z = x;
+  end E;
+  E e;
+  extends A(B(x = 2));
+  E e2;
+end R68fAT005;
+//// model: R68fAT006
+model A
+  replaceable model B
+    Real x = 1;
+  end B;
+end A;
+model C
+  Real x = 2;
+end C;
+model R68fAT006
+  model E
+    extends B;
+  end E;
+  E e;
+  extends A(redeclare model B = C);
+end R68fAT006;
+//// model: R68fAT007
+model A
+  constant Integer k = 1;
+  model B
+    Real x = k;
+  end B;
+end A;
+model R68fAT007
+  model E
+    extends B;
+  end E;
+  E e;
+  extends A(k = 2);
+end R68fAT007;
+//// model: R68fAT008
+model A0
+  model B
+    Real x = 1;
+  end B;
+end A0;
+model A
+  B b1;
+  extends A0;
+end A;
+model R68fAT008
+  A a(B(x = 2));
+end R68fAT008;
+//// model: R68fAT009
+model A0
+  model B
+    Real x = 1;
+  end B;
+end A0;
+model A
+  B b1;
+  extends A0;
+  B b2;
+end A;
+model R68fAT009
+  extends A(B(x = 2));
+end R68fAT009;
+//// model: R68fAT012
+model A0
+  type T = Real(min = 0);
+end A0;
+model A
+  T t1;
+  extends A0;
+end A;
+model R68fAT012
+  extends A(T(max = 3));
+end R68fAT012;
+//// model: R68fAT013
+model A0
+  model B
+    Real x = 1;
+  end B;
+end A0;
+model A
+  B b1;
+  extends A0;
+end A;
+model R68fAT013
+  extends A(B(x = 2));
+  B b3;
+end R68fAT013;
+//// model: R68fAT014
+model A0
+  model B
+    Real x = 1;
+  end B;
+end A0;
+model A1
+  B b0;
+  extends A0;
+end A1;
+model A
+  B b1;
+  extends A1;
+end A;
+model R68fAT014
+  extends A(B(x = 2));
+end R68fAT014;
+//// model: R68fAT015
+model A0
+  record R
+    Real a = 1;
+  end R;
+end A0;
+model A
+  R r;
+  extends A0;
+end A;
+model R68fAT015
+  extends A(R(a = 2));
+end R68fAT015;
+//// model: R68fAT016
+model A0
+  connector C
+    Real e;
+    flow Real f;
+  end C;
+end A0;
+model A
+  C c1;
+  extends A0;
+end A;
+model R68fAT016
+  extends A(C(e(start = 2)));
+end R68fAT016;
+//// model: R68fAT017
+model A0
+  model B
+    Real x = 1;
+  end B;
+end A0;
+model A
+  B b1[2];
+  extends A0;
+end A;
+model R68fAT017
+  extends A(B(x = 2));
+end R68fAT017;
+//// model: R68fAT018
+model A0
+  model B
+    Real x(start = 1);
+  end B;
+end A0;
+model A
+  B b1;
+  extends A0;
+end A;
+model R68fAT018
+  extends A(B(x(start = 2)));
+end R68fAT018;
+//// model: R68fAT019
+model A0
+  replaceable model B
+    Real x = 1;
+  end B;
+end A0;
+model C
+  Real x = 3;
+end C;
+model A
+  B b1;
+  extends A0;
+end A;
+model R68fAT019
+  extends A(redeclare model B = C);
+end R68fAT019;
+//// model: R68fAT020
+model A0
+  model B
+    Real x = 1;
+  end B;
+end A0;
+model A
+  B b1;
+  extends A0(B(x = 5));
+end A;
+model R68fAT020
+  extends A;
+end R68fAT020;
+//// model: R68fAW001
+type T = Real(unit = "m");
+model A
+  T t0;
+end A;
+model R68fAW001
+  T t;
+  extends A;
+end R68fAW001;
+//// model: R68fAW002
+model A
+  parameter Boolean use = true;
+  parameter Real p = 1;
+end A;
+model R68fAW002
+  Real y = p if use;
+  extends A(use = false);
+end R68fAW002;
+//// model: R68fAW003
+model A
+  replaceable Real x = 1;
+end A;
+model R68fAW003
+  Real y = x;
+  extends A(redeclare Real x = 3);
+end R68fAW003;
+//// model: R68fAW005
+package P
+  type T = Real(unit = "K");
+end P;
+model A
+  replaceable package M = P;
+  M.T t1;
+end A;
+model R68fAW005
+  M.T t2;
+  extends A;
+end R68fAW005;
+//// model: R68fAW006
+package P
+  type T = Real(unit = "K");
+end P;
+package P2
+  type T = Real(unit = "C");
+end P2;
+model A
+  replaceable package M = P;
+  M.T t1;
+end A;
+model R68fAW006
+  M.T t2;
+  extends A(redeclare package M = P2);
+end R68fAW006;
+//// model: R68fAW007
+model A
+  replaceable model B
+    Real x = 1;
+  end B;
+  B b;
+end A;
+model C
+  Real x = 5;
+end C;
+model R68fAW007
+  replaceable C c;
+  extends A(redeclare model B = C);
+end R68fAW007;
+//// model: R68fAW008
+model A
+  Real x;
+equation
+  x = 1;
+end A;
+model R68fAW008
+  Real x;
+  extends A;
+end R68fAW008;
+//// model: R68fAW009
+model A
+  parameter Integer n = 3;
+end A;
+model R68fAW009
+  Real v[n] = ones(n);
+  extends A(n = 2);
+end R68fAW009;
+//// model: R68fAW010
+model A
+  model B
+    Real x = 1;
+  end B;
+end A;
+model R68fAW010
+  replaceable model B2 = B;
+  B2 b;
+  extends A;
+end R68fAW010;
+//// model: R68fAW011
+type T = Real(unit = "m");
+type T2 = T(min = 0);
+model A
+  T2 t0;
+end A;
+model R68fAW011
+  T2 t;
+  T u;
+  extends A;
+end R68fAW011;
+//// model: R68fAW012
+model A
+  Real x = 1;
+end A;
+model R68fAW012
+  A a;
+  extends A;
+end R68fAW012;
+//// model: R68fAW013
+model A
+  Real x = 1;
+end A;
+model B
+  extends A;
+end B;
+model R68fAW013
+  B b;
+  extends B(x = 2);
+end R68fAW013;
+//// model: R68fAW014
+partial model A
+  Real x;
+end A;
+model R68fAW014
+  Real y;
+  extends A;
+equation
+  x = 1;
+  y = 2;
+end R68fAW014;
+//// model: R68fAW015
+model A
+  Real x = 1;
+end A;
+model R68fAW015
+  Real z;
+  extends A annotation(IconMap(primitivesVisible = false));
+equation
+  z = x;
+end R68fAW015;

@@ -1,0 +1,1223 @@
+//// set: pk-p55r-pp — 68f 重做 S5 已撤：PP 族（omc 整包实例化里的 partial 检查）的控制组与语境用例，留作以后做 PP 的回归守卫
+//// model: R68fPPP02
+package Lib
+  partial package PM
+    type T = Real;
+  end PM;
+  package P
+    constant PM.T bad = 1;
+    constant Real b = 2;
+  end P;
+end Lib;
+model R68fPPP02
+  Real x = time;
+end R68fPPP02;
+//// model: R68fPPP04
+package Lib
+  partial package PM
+    constant Real k = 1;
+  end PM;
+  package Q
+    function f
+      input Real u;
+      output Real y = u * PM.k;
+    end f;
+    constant Real c = 3;
+  end Q;
+end Lib;
+model R68fPPP04
+  Real x = Lib.Q.c * time;
+end R68fPPP04;
+//// model: R68fPPP05
+package Lib
+  partial package PM
+    constant Real k = 1;
+  end PM;
+  package Q
+    function f
+      input Real u;
+      output Real y = u * PM.k;
+    end f;
+  end Q;
+end Lib;
+model R68fPPP05
+  Real x = Lib.Q.f(time);
+end R68fPPP05;
+//// model: R68fPPP06
+package Lib
+  partial package PM
+    type T = Real;
+  end PM;
+  package Q
+    constant PM.T bad = 1;
+    type L = Real(unit = "m");
+  end Q;
+end Lib;
+model Orig
+  Lib.Q.L x = time;
+end Orig;
+model New
+  Real x = time;
+end New;
+model Src
+  replaceable Orig o;
+end Src;
+model R68fPPP06
+  extends Src(redeclare New o);
+end R68fPPP06;
+//// model: R68fPPP07
+package Lib
+  partial package PM
+    type T = Real;
+  end PM;
+  package Q
+    constant PM.T bad = 1;
+    type L = Real(unit = "m");
+  end Q;
+end Lib;
+model R68fPPP07
+  outer Lib.Q.L x;
+end R68fPPP07;
+//// model: R68fPPP08
+package Lib
+  partial package PM
+    type T = Real;
+  end PM;
+  package Q
+    outer PM.T bad;
+    constant Real c = 3;
+  end Q;
+end Lib;
+model R68fPPP08
+  Real x = Lib.Q.c * time;
+end R68fPPP08;
+//// model: R68fPPP10
+package Lib
+  partial package PM
+    type T = Real;
+  end PM;
+  package Q
+    partial package Inner
+      constant PM.T bad = 1;
+    end Inner;
+    constant Real c = 3;
+  end Q;
+end Lib;
+model R68fPPP10
+  Real x = Lib.Q.c * time;
+end R68fPPP10;
+//// model: R68fPPP11
+type E = enumeration(a, b);
+package Lib
+  partial package PM
+    type T = Real;
+  end PM;
+end Lib;
+model R68fPPP11
+  E e = E.a;
+  Real x(stateSelect = StateSelect.prefer) = time;
+end R68fPPP11;
+//// model: R68fPPP12
+package Lib
+  partial package PM
+    type T = Real;
+  end PM;
+  package Q
+    constant Real c = 3;
+    package Sub
+      constant PM.T bad = 1;
+    end Sub;
+  end Q;
+end Lib;
+model R68fPPP12
+  Real x = Lib.Q.c * time;
+end R68fPPP12;
+//// model: R68fPZSR01
+partial package PM
+  type T = Real;
+  constant PM.T c = 1;
+end PM;
+package W
+  extends PM;
+end W;
+model R68fPZSR01
+  Real y = W.c * time;
+end R68fPZSR01;
+//// model: R68fPZSR02
+partial package PM
+  package Types
+    type T = Real;
+  end Types;
+  constant PM.Types.T c = 1;
+end PM;
+package W
+  extends PM;
+end W;
+model R68fPZSR02
+  Real y = W.c * time;
+end R68fPZSR02;
+//// model: R68fPZSR03
+package Lib
+  partial package PM
+    type T = Real;
+    constant PM.T c = 2;
+  end PM;
+  package W
+    extends PM;
+  end W;
+end Lib;
+model R68fPZSR03
+  Real y = Lib.W.c * time;
+end R68fPZSR03;
+//// model: R68fPZSR04
+partial package PM
+  type T = Real;
+  constant PM.T c[2] = {1, 2};
+end PM;
+package W
+  extends PM;
+end W;
+model R68fPZSR04
+  Real y = W.c[2] * time;
+end R68fPZSR04;
+//// model: R68fPZSR05
+partial package PM
+  type T = Real;
+  constant PM.T c = 1;
+end PM;
+package W
+  extends PM;
+end W;
+model R68fPZSR05
+  parameter Real p = W.c;
+  Real y = p * time;
+end R68fPZSR05;
+//// model: R68fPZSR06
+partial package PM
+  type T = Real;
+  constant T c0 = 2;
+  constant PM.T c = c0 * 2;
+end PM;
+package W
+  extends PM;
+end W;
+model R68fPZSR06
+  Real y = W.c * time;
+end R68fPZSR06;
+//// model: R68fPWSS01
+package Lib
+  partial package PM
+    type T = Real;
+    type T2 = PM.T(unit = "m");
+    constant T2 c = 3;
+  end PM;
+  package W
+    extends PM;
+  end W;
+end Lib;
+model R68fPWSS01
+  Real x = Lib.W.c * time;
+end R68fPWSS01;
+//// model: R68fPWSS02
+package Lib
+  partial package PM
+    type T = Real;
+    type T2 = PM.T;
+    constant T2 c = 3;
+  end PM;
+  package W
+    extends PM;
+  end W;
+end Lib;
+model R68fPWSS02
+  Real x = Lib.W.c * time;
+end R68fPWSS02;
+//// model: R68fPWSS03
+package Lib
+  partial package PM
+    type T0 = Real;
+    type T = PM.T0(min = 0);
+    constant PM.T c = 3;
+  end PM;
+  package W
+    extends PM;
+  end W;
+end Lib;
+model R68fPWSS03
+  Real x = Lib.W.c * time;
+end R68fPWSS03;
+//// model: R68fPWSS04
+package Lib
+  partial package PM
+    type T = Real;
+    type V = PM.T[2];
+    constant V c = {3, 4};
+  end PM;
+  package W
+    extends PM;
+  end W;
+end Lib;
+model R68fPWSS04
+  Real x[2] = Lib.W.c * time;
+end R68fPWSS04;
+//// model: R68fPWSS05
+package Lib
+  partial package PM
+    type T = Real;
+    type T2 = PM.T(unit = "m");
+    constant T2 c = 3;
+  end PM;
+  package W
+    extends PM;
+  end W;
+end Lib;
+model R68fPWSS05
+  parameter Real p = Lib.W.c;
+end R68fPWSS05;
+//// model: R68fPWSS06
+package Lib
+  partial package PM
+    type T = Real;
+    type T2 = PM.T(unit = "m");
+  end PM;
+  package W
+    extends PM;
+    constant T2 c = 3;
+  end W;
+end Lib;
+model R68fPWSS06
+  Real x = Lib.W.c * time;
+end R68fPWSS06;
+//// model: R68fPWPG01
+package B
+  constant Real c = 1;
+protected
+  constant Real pc = 2;
+end B;
+package B2 = B(pc = 3);
+model R68fPWPG01
+  Real z = B2.c * time;
+end R68fPWPG01;
+//// model: R68fPWPG05
+model A
+  package B
+    constant Real c = 1;
+  protected
+    constant Real pc = 2;
+  end B;
+  package B2 = B;
+  Real z = B2.c * time;
+end A;
+model R68fPWPG05
+  A a(B(pc = 3));
+end R68fPWPG05;
+//// model: R68fPWPG06
+model A
+  package B
+    constant Real c = 1;
+  protected
+    constant Real pc = 2;
+  end B;
+  Real z = 2 * time;
+end A;
+model R68fPWPG06
+  A a(B(pc = 3));
+end R68fPWPG06;
+//// model: R68fPVPP08
+package Lib
+  partial package PS
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable package S = PS;
+    constant S.T t = 3;
+  end Base;
+  package Mid
+    extends Base(redeclare package S = CS);
+  end Mid;
+  package Cfg
+    extends Mid;
+    constant Real k = 2;
+  end Cfg;
+end Lib;
+model R68fPVPP08
+  Real x = Lib.Cfg.k * time;
+end R68fPVPP08;
+//// model: R68fPVPP09
+package Lib
+  partial package PS
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable package S = PS;
+    constant S.T t = 3;
+  end Base;
+  package Mid
+    extends Base(redeclare package S = CS);
+  end Mid;
+  package Cfg
+    extends Mid;
+    function f
+      input Real u;
+      output Real y = 3 * u;
+    end f;
+  end Cfg;
+end Lib;
+model R68fPVPP09
+  Real x = Lib.Cfg.f(time);
+end R68fPVPP09;
+//// model: R68fPVPP10
+package Lib
+  partial package PS
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable package S = PS;
+    constant S.T t = 3;
+  end Base;
+  package Mid
+    extends Base(redeclare package S = CS);
+  end Mid;
+  package Cfg
+    extends Mid;
+    type L = Real(unit = "m");
+  end Cfg;
+end Lib;
+model R68fPVPP10
+  Lib.Cfg.L x = time;
+end R68fPVPP10;
+//// model: R68fPVPT01
+package Lib
+  partial package PS
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable package S = PS;
+    constant S.T t = 3;
+  end Base;
+  package Cfg
+    extends Base(redeclare package S = CS);
+    type L = Real(unit = "m");
+  end Cfg;
+end Lib;
+model R68fPVPT01
+  Lib.Cfg.L x = time;
+end R68fPVPT01;
+//// model: R68fPVPT02
+package Lib
+  partial package PS
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable package S = PS;
+    constant S.T t = 3;
+  end Base;
+  package Cfg
+    extends Base;
+    redeclare package S = CS;
+    type L = Real(unit = "m");
+  end Cfg;
+end Lib;
+model R68fPVPT02
+  Lib.Cfg.L x = time;
+end R68fPVPT02;
+//// model: R68fPVPT03
+package Lib
+  partial package PS
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable package S = PS;
+    constant S.T t = 3;
+  end Base;
+  package Cfg
+    extends Base(redeclare package S = CS);
+    connector C
+      Real v;
+      flow Real i;
+    end C;
+  end Cfg;
+end Lib;
+model R68fPVPT03
+  Lib.Cfg.C c;
+equation
+  c.v = time;
+end R68fPVPT03;
+//// model: R68fPVPT05
+package Lib
+  partial package PS
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable package S = PS;
+    constant S.T t = 3;
+  end Base;
+  package Cfg
+    extends Base(redeclare package S = CS);
+    record R
+      Real a;
+    end R;
+  end Cfg;
+end Lib;
+model R68fPVPT05
+  Lib.Cfg.R r(a = time);
+end R68fPVPT05;
+//// model: R68fPVPT07
+package Lib
+  partial package PS
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable package S = PS;
+    constant S.T t = 3;
+  end Base;
+  package Cfg
+    extends Base(redeclare package S = CS);
+    type L = Real(unit = "m");
+  end Cfg;
+end Lib;
+model R68fPVPT07
+  import Lib.Cfg;
+  Cfg.L x = time;
+end R68fPVPT07;
+//// model: R68fPVPT08
+package Lib
+  partial package PS
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable package S = PS;
+    constant S.T t = 3;
+  end Base;
+  package Cfg
+    extends Base(redeclare package S = CS);
+    package Units
+      type L = Real(unit = "m");
+    end Units;
+  end Cfg;
+end Lib;
+model R68fPVPT08
+  Lib.Cfg.Units.L x = time;
+end R68fPVPT08;
+//// model: R68fPVPT09
+package Lib
+  partial package PS
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable package S = PS;
+    constant S.T t = 3;
+  end Base;
+  package Cfg
+    extends Base(redeclare package S = CS);
+    type L = Real(unit = "m");
+  end Cfg;
+end Lib;
+model R68fPVPT09
+  type L2 = Lib.Cfg.L;
+  L2 x = time;
+end R68fPVPT09;
+//// model: R68fPVMC02
+package Lib
+  partial package PS
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  model MBase
+    replaceable package S = PS;
+    S.T t = 1;
+    type L = Real(unit = "m");
+  end MBase;
+  model M2
+    extends MBase(redeclare package S = CS);
+  end M2;
+end Lib;
+model R68fPVMC02
+  Lib.M2.L x = time;
+end R68fPVMC02;
+//// model: R68fPUPU01
+package Lib
+  partial package PS
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable package S = PS;
+    constant S.T t = 3;
+    type L = Real(unit = "m");
+  end Base;
+  package Cfg = Base(redeclare package S = CS);
+end Lib;
+model R68fPUPU01
+  Lib.Cfg.L x = time;
+end R68fPUPU01;
+//// model: R68fPUPU02
+package Lib
+  partial package PS
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable package S = PS;
+    type T2 = S.T;
+    constant T2 t = 3;
+  end Base;
+  package Cfg
+    extends Base(redeclare package S = CS);
+    type L = Real(unit = "m");
+  end Cfg;
+end Lib;
+model R68fPUPU02
+  Lib.Cfg.L x = time;
+end R68fPUPU02;
+//// model: R68fPUPU04
+package Lib
+  partial package PS
+    function f
+      input Real u;
+      output Real y = 2 * u;
+    end f;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable package S = PS;
+    constant Real c = S.f(2);
+  end Base;
+  package Cfg
+    extends Base(redeclare package S = CS);
+    type L = Real(unit = "m");
+  end Cfg;
+end Lib;
+model R68fPUPU04
+  Lib.Cfg.L x = time;
+end R68fPUPU04;
+//// model: R68fPUPU05
+package Lib
+  partial package PS
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable package S = PS;
+    record R
+      S.T a;
+    end R;
+    constant R r = R(a = 1);
+  end Base;
+  package Cfg
+    extends Base(redeclare package S = CS);
+    type L = Real(unit = "m");
+  end Cfg;
+end Lib;
+model R68fPUPU05
+  Lib.Cfg.L x = time;
+end R68fPUPU05;
+//// model: R68fPUPU11
+package Lib
+  partial package PS
+    constant Integer n = 2;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable partial package S
+      constant Integer n = 2;
+    end S;
+    constant Real c[S.n] = {1, 2};
+  end Base;
+  package Cfg
+    extends Base(redeclare package S = CS);
+    type L = Real(unit = "m");
+  end Cfg;
+end Lib;
+model R68fPUPU11
+  Lib.Cfg.L x = time;
+end R68fPUPU11;
+//// model: R68fPUPU12
+package Lib
+  partial package PS
+    constant Real k = 2;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable partial package S
+      constant Real k = 2;
+    end S;
+    constant Real c = S.k;
+  end Base;
+  package Cfg
+    extends Base(redeclare package S = CS);
+    type L = Real(unit = "m");
+  end Cfg;
+end Lib;
+model R68fPUPU12
+  Lib.Cfg.L x = time;
+end R68fPUPU12;
+//// model: R68fPUPU13
+package Lib
+  partial package PS
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable package S = PS;
+    package S2 = S;
+    constant S2.T t = 3;
+  end Base;
+  package Cfg
+    extends Base(redeclare package S = CS);
+    type L = Real(unit = "m");
+  end Cfg;
+end Lib;
+model R68fPUPU13
+  Lib.Cfg.L x = time;
+end R68fPUPU13;
+//// model: R68fPUPU16
+package Lib
+  partial package PS
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    package In
+      replaceable package S = PS;
+    end In;
+    constant In.S.T t = 3;
+  end Base;
+  package Cfg
+    extends Base(In(redeclare package S = CS));
+    type L = Real(unit = "m");
+  end Cfg;
+end Lib;
+model R68fPUPU16
+  Lib.Cfg.L x = time;
+end R68fPUPU16;
+//// model: R68fPUPU17
+package Lib
+  partial package PS
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable package S = PS;
+    constant S.T t = 3;
+  end Base;
+  package Cfg
+    extends Base(redeclare replaceable package S = CS constrainedby PS);
+    type L = Real(unit = "m");
+  end Cfg;
+end Lib;
+model R68fPUPU17
+  Lib.Cfg.L x = time;
+end R68fPUPU17;
+//// model: R68fPUPU18
+package Lib
+  partial package PS
+    constant Real k = 1;
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  model Cfg
+    replaceable package S = PS;
+    S.T t = 3;
+    parameter Real p = S.k;
+  end Cfg;
+end Lib;
+model R68fPUPU18
+  Lib.Cfg c(redeclare package S = Lib.CS);
+end R68fPUPU18;
+//// model: R68fPUPV01
+package Lib
+  partial package PS
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable package S = PS;
+    type T2 = S.T;
+    constant T2 t = 3;
+  end Base;
+  package Cfg
+    extends Base(redeclare package S = CS);
+    function f
+      input Real u;
+      output Real y = 2 * u;
+    end f;
+  end Cfg;
+end Lib;
+model R68fPUPV01
+  Real x = Lib.Cfg.f(time);
+end R68fPUPV01;
+//// model: R68fPUPV02
+package Lib
+  partial package PS
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable package S = PS;
+    type T2 = S.T;
+    constant T2 t = 3;
+  end Base;
+  package Cfg
+    extends Base(redeclare package S = CS);
+    constant Real k = 4;
+  end Cfg;
+end Lib;
+model R68fPUPV02
+  Real x = Lib.Cfg.k * time;
+end R68fPUPV02;
+//// model: R68fPUPV03
+package Lib
+  partial package PS
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable package S = PS;
+    type T2 = S.T;
+    constant T2 t = 3;
+  end Base;
+  package Cfg
+    extends Base(redeclare package S = CS);
+    type E = enumeration(a, b);
+  end Cfg;
+end Lib;
+model R68fPUPV03
+  Lib.Cfg.E e = Lib.Cfg.E.b;
+  Real x = time;
+end R68fPUPV03;
+//// model: R68fPUPV05
+package Lib
+  partial package PM
+    function f
+      input Real u;
+      output Real y = 2 * u;
+    end f;
+  end PM;
+  package CM
+    extends PM;
+  end CM;
+  model MBase
+    replaceable package Medium = PM;
+    parameter Real p = Medium.f(1);
+  end MBase;
+  model M2
+    extends MBase(redeclare package Medium = CM);
+    type L = Real(unit = "m");
+  end M2;
+end Lib;
+model R68fPUPV05
+  Lib.M2.L x = time;
+end R68fPUPV05;
+//// model: R68fPUPV06
+package Lib
+  partial package PS
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable package S = PS;
+    type T2 = S.T;
+    constant T2 t = 3;
+  end Base;
+  package Cfg
+    extends Base(redeclare package S = CS);
+    record R
+      Real a;
+    end R;
+  end Cfg;
+end Lib;
+model R68fPUPV06
+  Lib.Cfg.R r = Lib.Cfg.R(time);
+end R68fPUPV06;
+//// model: R68fPUPV07
+package Lib
+  partial package PS
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable package S = PS;
+    type T2 = S.T;
+    constant T2 t = 3;
+  end Base;
+  package Cfg
+    extends Base(redeclare package S = CS);
+    type L = Real(unit = "m");
+  end Cfg;
+end Lib;
+model R68fPUPV07
+  type L2 = Lib.Cfg.L;
+  L2 x = time;
+end R68fPUPV07;
+//// model: R68fPUPV08
+package Lib
+  partial package PS
+    type T = Real;
+  end PS;
+  package CS
+    extends PS;
+  end CS;
+  package Base
+    replaceable package S = PS;
+    type T2 = S.T;
+    constant T2 t = 3;
+  end Base;
+  package Cfg
+    extends Base(redeclare package S = CS);
+    connector C
+      Real e;
+      flow Real f;
+    end C;
+  end Cfg;
+end Lib;
+model R68fPUPV08
+  Lib.Cfg.C c;
+equation
+  c.e = time;
+end R68fPUPV08;
+//// model: R68fPUMB01
+package Lib
+  partial package PM
+    constant String substanceNames[:] = {"a"};
+    final constant Integer nS = size(substanceNames, 1);
+    constant Real k = 1;
+  end PM;
+  package W
+    extends PM(substanceNames = {"a", "b"});
+  end W;
+end Lib;
+model R68fPUMB01
+  Real y = Lib.W.nS * time;
+end R68fPUMB01;
+//// model: R68fPUMB06
+package Lib
+  package P
+    replaceable constant Real c = 1;
+    constant Real d = c * 2;
+  end P;
+  package P2
+    extends P(redeclare constant Real c = 3);
+  end P2;
+end Lib;
+model R68fPUMB06
+  Real y = Lib.P2.d * time;
+end R68fPUMB06;
+//// model: R68fPTTP01
+package Lib
+  partial package PM
+    type T = Real(unit = "m");
+  end PM;
+  package W
+    extends PM;
+  end W;
+  package P
+    replaceable package Medium = PM;
+    constant Medium.T c = 1;
+  end P;
+  package P2 = P(redeclare package Medium = W);
+end Lib;
+model R68fPTTP01
+  Real y = Lib.P2.c * time;
+end R68fPTTP01;
+//// model: R68fPTTP02
+package Lib
+  partial package PM
+    type T = Real(unit = "m");
+  end PM;
+  package W
+    extends PM;
+  end W;
+  partial package PB
+    replaceable package Medium = PM;
+    constant Medium.T c = 1;
+  end PB;
+  package Q
+    extends PB(redeclare package Medium = W);
+  end Q;
+end Lib;
+model R68fPTTP02
+  Real y = Lib.Q.c * time;
+end R68fPTTP02;
+//// model: R68fPTTP03
+package Lib
+  partial package PM
+    type T = Real(unit = "m");
+    record R
+      T a;
+      Real b;
+    end R;
+  end PM;
+  package W
+    extends PM;
+  end W;
+  package P
+    replaceable package Medium = PM;
+    constant Medium.R r = Medium.R(a = 1, b = 2);
+  end P;
+  package P2 = P(redeclare package Medium = W);
+end Lib;
+model R68fPTTP03
+  Real y = Lib.P2.r.b * time;
+end R68fPTTP03;
+//// model: R68fPTTP04
+package Lib
+  partial package PM
+    type T = Real(unit = "m");
+  end PM;
+  package W
+    extends PM;
+  end W;
+  partial package PB
+    replaceable package Medium = PM;
+    constant Medium.T c = 1;
+  end PB;
+  package Q
+    extends PB(redeclare package Medium = W);
+  end Q;
+end Lib;
+model A
+  replaceable package M = Lib.Q;
+  Real y = M.c * time;
+end A;
+model R68fPTTP04
+  A a;
+end R68fPTTP04;
+//// model: R68fPPR01
+partial package PM
+  type MF = Real;
+end PM;
+package P
+  replaceable package Medium = PM;
+  constant Medium.MF c = 2;
+  type T = Real;
+end P;
+model FP
+  P.T q = 1;
+end FP;
+model Src
+  replaceable FP port;
+end Src;
+model Outlet
+  Real q = 1;
+end Outlet;
+model R68fPPR01
+  extends Src(redeclare Outlet port);
+  Real x = P.c;
+end R68fPPR01;
+//// model: R68fPRV03
+partial package PM
+  type MF = Real;
+end PM;
+package P
+  replaceable package Medium = PM;
+  constant Medium.MF c = 2;
+  type T = Real;
+end P;
+model FP
+  P.T q = 1;
+end FP;
+model Src
+  replaceable FP port;
+end Src;
+model Outlet
+  Real q = 1;
+end Outlet;
+model R68fPRV03
+  P.T t = 3;
+  extends Src(redeclare Outlet port);
+end R68fPRV03;
+//// model: R68fPRV04
+partial package PM
+  type MF = Real;
+end PM;
+package P
+  replaceable package Medium = PM;
+  constant Medium.MF c = 2;
+  type T = Real;
+end P;
+model FP
+  P.T q = 1;
+end FP;
+model Src
+  replaceable FP port;
+end Src;
+model Outlet
+  Real q = 1;
+end Outlet;
+model Mid
+  P.T t = 3;
+end Mid;
+model R68fPRV04
+  Mid m;
+  extends Src(redeclare Outlet port);
+end R68fPRV04;
+//// model: R68fPRV05
+partial package PM
+  type MF = Real;
+end PM;
+model M
+  package P
+    replaceable package Medium = PM;
+    constant Medium.MF c = 2;
+    type T = Real;
+  end P;
+  model FP
+    P.T q = 1;
+  end FP;
+  model Base2
+    P.T q2 = 1;
+  end Base2;
+  model Src
+    replaceable FP port;
+    extends Base2;
+  end Src;
+  model Outlet
+    Real q = 1;
+  end Outlet;
+  model Inner
+    extends Src(redeclare Outlet port);
+  end Inner;
+  Inner i;
+end M;
+model R68fPRV05
+  M m;
+end R68fPRV05;
+//// model: R68fPRV06
+partial package PM
+  type MF = Real;
+end PM;
+model M
+  package P
+    replaceable package Medium = PM;
+    constant Medium.MF c = 2;
+    type T = Real;
+  end P;
+  model FP
+    P.T q = 1;
+  end FP;
+  model Src
+    replaceable FP port;
+  end Src;
+  model Outlet
+    Real q = 1;
+  end Outlet;
+  model Inner
+    P.T t = 3;
+    extends Src(redeclare Outlet port);
+  end Inner;
+  Inner i;
+end M;
+model R68fPRV06
+  M m;
+end R68fPRV06;
+//// model: R68fPRV07
+partial package PM
+  type MF = Real;
+end PM;
+model M
+  package P
+    replaceable package Medium = PM;
+    constant Medium.MF c = 2;
+    type T = Real;
+  end P;
+  model FP
+    P.T q = 1;
+  end FP;
+  model Src
+    replaceable FP port;
+  end Src;
+  model Outlet
+    Real q = 1;
+  end Outlet;
+  model Inner
+    extends Src(redeclare Outlet port);
+  end Inner;
+  Inner i;
+  P.T t = 3;
+end M;
+model R68fPRV07
+  M m;
+end R68fPRV07;
+//// model: R68fPRAM01
+package Lib
+  partial model PB
+    function f
+      input Real u;
+      output Real y;
+    algorithm
+      y := 2 * u;
+    end f;
+  end PB;
+  model M
+    extends PB;
+    Real x;
+  algorithm
+    x := f(time);
+  end M;
+end Lib;
+model R68fPRAM01
+  Lib.M m;
+end R68fPRAM01;
